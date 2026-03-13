@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lパチスロ ダンベル何キロ持てる？ 天井・狙い目まとめ｜やめどき・リセット恩恵も解説</title>
+<meta name="description" content="スマスロ ダンベル何キロ持てる？の天井・狙い目を解説。CZ間天井750G・AT間天井1500G。リセット後1000Gに短縮。CZスルー別狙い目・やめどきまで網羅。2024年12月導入。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@700;800&family=Noto+Sans+JP:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0c0c0e;--surface:#111115;--surface2:#18181e;--border:#222230;--accent:#c8972a;--accent2:#e8b84a;--text:#ddd8cc;--text-muted:#7a7870;--text-sub:#aaa49a}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:'Noto Sans JP',sans-serif;font-weight:300;line-height:1.8;font-size:15px;overflow-x:hidden}
+  body > *:not(header) { max-width: 600px; margin-left: auto; margin-right: auto; }
+  a, button { touch-action: manipulation; }
+header{position:fixed;top:0;left:0;right:0;z-index:200;height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;background:rgba(12,12,14,.96);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+.logo{font-family:'Shippori Mincho',serif;font-size:1.05rem;font-weight:800;color:var(--accent);text-decoration:none;letter-spacing:.08em}
+.header-back{font-size:.75rem;color:var(--text-muted);text-decoration:none}
+.mv{padding:72px 16px 32px;border-bottom:1px solid var(--border)}
+.mv-label{font-size:.6rem;color:var(--accent);letter-spacing:.3em;text-transform:uppercase;margin-bottom:10px}
+.mv-title{font-family:'Shippori Mincho',serif;font-size:clamp(1.4rem,6vw,2rem);font-weight:800;line-height:1.4;margin-bottom:12px}
+.mv-title em{color:var(--accent);font-style:normal}
+.mv-desc{font-size:.8rem;color:var(--text-sub);line-height:1.9;margin-bottom:16px}
+.mv-tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{border:1px solid var(--border);color:var(--text-muted);font-size:.62rem;padding:3px 8px;border-radius:20px}
+.toc{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin:20px 16px}
+.toc-title{font-size:.72rem;color:var(--accent);font-weight:700;letter-spacing:.1em;margin-bottom:10px}
+.toc a{display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--text-sub);text-decoration:none;padding:6px 0;border-bottom:1px solid var(--border)}
+.toc a:last-child{border-bottom:none}
+.toc a::before{content:'';display:block;width:4px;height:4px;border-radius:50%;background:var(--accent);flex-shrink:0}
+.cb{background:linear-gradient(135deg,#1a1508,#0c0c0e);border:1px solid var(--accent);border-radius:12px;padding:16px;text-decoration:none;display:flex;align-items:center;gap:14px;margin:0 16px 4px}
+.cb-icon{font-size:2rem;flex-shrink:0}
+.cb-body{flex:1;min-width:0}
+.cb-label{font-size:.58rem;color:var(--accent);font-weight:700;letter-spacing:.15em;margin-bottom:3px}
+.cb-title{font-size:.9rem;font-weight:700;color:var(--accent2);margin-bottom:3px}
+.cb-desc{font-size:.68rem;color:var(--text-muted);line-height:1.5}
+.cb-arr{color:var(--accent);font-size:1.2rem;flex-shrink:0}
+section{padding:28px 16px;border-bottom:1px solid var(--border)}
+.section-label{font-size:.58rem;color:var(--accent);letter-spacing:.25em;text-transform:uppercase;margin-bottom:6px}
+h2{font-family:'Shippori Mincho',serif;font-size:1.2rem;font-weight:800;margin-bottom:16px;line-height:1.4}
+h3{font-size:.85rem;font-weight:700;color:var(--accent2);margin:20px 0 10px;padding-left:10px;border-left:2px solid var(--accent)}
+p{font-size:.85rem;color:var(--text-sub);margin-bottom:12px;line-height:1.9}
+table{width:100%;border-collapse:collapse;font-size:.78rem;margin:12px 0}
+th{background:var(--surface2);color:var(--accent);font-weight:700;padding:8px 10px;text-align:left;border:1px solid var(--border);font-size:.72rem}
+td{padding:8px 10px;border:1px solid var(--border);color:var(--text-sub);vertical-align:top;line-height:1.6}
+tr:nth-child(even) td{background:rgba(255,255,255,.02)}
+.badge-good{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.68rem;font-weight:700;background:rgba(74,158,106,.2);color:#6ec48a;border:1px solid rgba(74,158,106,.4)}
+.badge-warn{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.68rem;font-weight:700;background:rgba(200,151,42,.2);color:var(--accent2);border:1px solid rgba(200,151,42,.4)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin:12px 0}
+.card-title{font-size:.72rem;font-weight:700;color:var(--accent);margin-bottom:8px}
+.card-body{font-size:.82rem;color:var(--text-sub);line-height:1.8}
+.card-special{border-color:var(--accent);background:linear-gradient(135deg,#1a1508,#111115)}
+.card-warn{border-color:rgba(158,74,74,.5);background:rgba(158,74,74,.05)}
+.note{background:rgba(200,151,42,.07);border-left:3px solid var(--accent);border-radius:0 6px 6px 0;padding:10px 12px;font-size:.78rem;color:var(--text-sub);margin:12px 0;line-height:1.7}
+.note strong{color:var(--accent2)}
+.spec-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.spec-item{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center}
+.spec-label{font-size:.6rem;color:var(--text-muted);margin-bottom:4px}
+.spec-value{font-size:1rem;font-weight:700;color:var(--accent2)}
+.spec-unit{font-size:.6rem;color:var(--text-muted)}
+.back-btn{display:flex;align-items:center;justify-content:center;gap:8px;margin:20px 16px 8px;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text-sub);text-decoration:none;font-size:.85rem}
+footer{padding:20px 16px 36px;text-align:center;font-size:.7rem;color:var(--text-muted);border-top:1px solid var(--border)}
+.hi td:first-child{color:var(--accent2);font-weight:700}
+</style>
+</head>
+<body>
+<header>
+  <a href="index.html" class="logo">狙い目手帖</a>
+  <a href="index.html" class="header-back">← 機種一覧</a>
+</header>
+
+<div class="mv">
+  <div class="mv-label">SLOT GUIDE</div>
+  <h1 class="mv-title">Lパチスロ<br><em>ダンベル何キロ持てる？</em><br>天井・狙い目まとめ</h1>
+  <p class="mv-desc">やめどき・リセット恩恵も解説。2024年12月導入。純増約8.5枚の高純増AT搭載。CZ間天井750G・AT間天井1500G。リセット後はAT間天井が1000Gに短縮。CZスルー数による狙い目の調整が重要。</p>
+  <div class="mv-tags">
+    <span class="tag">SANKYO</span>
+    <span class="tag">2024年12月導入</span>
+    <span class="tag">AT純増 約8.5枚</span>
+    <span class="tag">AT間天井 1500G</span>
+  </div>
+</div>
+
+<div style="margin:16px 16px 0;">
+  <a href="index.html" class="cb">
+    <div class="cb-icon">🎰</div>
+    <div class="cb-body">
+      <div class="cb-label">FREE TOOL</div>
+      <div class="cb-title">狙い目チェッカー</div>
+      <div class="cb-desc">G数を入力するだけで今すぐ打つべきか判定。無料。</div>
+    </div>
+    <div class="cb-arr">›</div>
+  </a>
+</div>
+
+<div class="toc">
+  <div class="toc-title">▶ もくじ</div>
+  <a href="#spec">基本スペック</a>
+  <a href="#tenjou">天井・リセット恩恵</a>
+  <a href="#mode">カロリーシステムとゾーン</a>
+  <a href="#neraime">狙い目まとめ</a>
+  <a href="#yameoki">やめどき</a>
+  <a href="#special">特殊狙い目</a>
+</div>
+
+<section id="spec">
+  <div class="section-label">SPEC</div>
+  <h2>基本スペック</h2>
+  <div class="spec-grid">
+    <div class="spec-item"><div class="spec-label">AT純増</div><div class="spec-value">約8.5<span class="spec-unit">枚/G</span></div></div>
+    <div class="spec-item"><div class="spec-label">AT継続</div><div class="spec-value">30<span class="spec-unit">G+α</span></div></div>
+    <div class="spec-item"><div class="spec-label">CZ間天井</div><div class="spec-value">750<span class="spec-unit">G+α</span></div></div>
+    <div class="spec-item"><div class="spec-label">AT間天井</div><div class="spec-value">1500<span class="spec-unit">G+α</span></div></div>
+  </div>
+  <p>SANKYOが送り出した純増約8.5枚の超高純増AT機。通常時は「摂取カロリー」を溜めてCZ「マッスルゾーン」を目指し、CZを突破してAT「ダンベル何キロ持てる？ BONUS」を獲得する流れ。AT中にゲーム数上乗せを重ね、一部で上位CZ「ゴールデンチャレンジ」に突入して上位AT「ゴールデンタイム」を目指す。</p>
+  <p>AT間天井1500Gは現行機の中でもかなり深いが、純増8.5枚という出玉性能の裏返し。天井到達時の出玉期待値は高く、天井狙いに非常に向いた機種。</p>
+</section>
+
+<section id="tenjou">
+  <div class="section-label">CEILING</div>
+  <h2>天井・リセット恩恵</h2>
+
+  <h3>天井の種類と恩恵</h3>
+  <table>
+    <tr><th>種類</th><th>天井条件</th><th>恩恵</th><th>確認方法</th></tr>
+    <tr>
+      <td>① CZ間天井</td>
+      <td>750G+α（またはカロリー10万kcal）</td>
+      <td>CZ「マッスルゾーン」当選</td>
+      <td>データカウンターのAT間G数</td>
+    </tr>
+    <tr>
+      <td>② AT間天井</td>
+      <td>1500G+α</td>
+      <td>AT「ダンベル何キロ持てる？BONUS」当選</td>
+      <td>データカウンターのAT間G数</td>
+    </tr>
+  </table>
+
+  <div class="note">
+    <strong>液晶G数とデータカウンターは別管理</strong><br>
+    液晶上に表示されるゲーム数はCZ当選でリセットされる。天井管理はデータカウンターの「AT間G数」で行う。液晶G数を見て判断しないよう注意。
+  </div>
+
+  <h3>リセット（設定変更）時の恩恵</h3>
+  <table>
+    <tr><th>項目</th><th>通常時</th><th>リセット後</th></tr>
+    <tr class="hi"><td>AT間天井</td><td>1500G+α</td><td><strong>1000G+αに短縮</strong></td></tr>
+    <tr><td>内部ゲーム数</td><td>そのまま</td><td>ランダムに加算（浅め当選の可能性UP）</td></tr>
+  </table>
+
+  <div class="note">
+    <strong>電源OFF/ONと設定変更は別物</strong><br>
+    電源OFF/ONはゲーム数・摂取カロリーを引き継ぐ（液晶上は0になるが内部は保持）。設定変更のみ天井が短縮される。朝イチの台が設定変更かOFF/ONかで対応が変わるため注意。
+  </div>
+</section>
+
+<section id="mode">
+  <div class="section-label">SYSTEM</div>
+  <h2>カロリーシステムとゾーン</h2>
+  <p>通常時は小役やリプレイで「摂取カロリー」を獲得し、10000kcalごとにCZを抽選する独自システムが搭載されている。ステージが神社ステージ（CZ高確）になるとリプレイでもCZ当選期待度が約14%まで上がる。</p>
+
+  <h3>主なゾーン・ステージ</h3>
+  <table>
+    <tr><th>ゾーン・ステージ</th><th>特徴</th><th>立ち回り</th></tr>
+    <tr class="hi"><td>神社ステージ（CZ高確）</td><td>200/300/500/600G付近で発生</td><td><span class="badge-good">積極的に続行</span></td></tr>
+    <tr><td>焼肉屋ステージ</td><td>CZ前兆</td><td><span class="badge-good">CZ突入まで続行</span></td></tr>
+    <tr><td>道場ステージ</td><td>AT後のチートデイ高確</td><td><span class="badge-warn">終了まで確認後やめ</span></td></tr>
+    <tr><td>チートデイ（カロリー特化）</td><td>摂取カロリーを大量獲得</td><td><span class="badge-good">継続中は打ち続ける</span></td></tr>
+  </table>
+
+  <div class="card card-warn">
+    <div class="card-title">⚠ ホールに落ちている台は3万カロリー以下は注意</div>
+    <div class="card-body">カロリーが3万kcal以下で他の客がやめた台は、天井まで距離がある可能性が高い。カロリーが5万kcal以上蓄積されている台は狙い目が前倒しになる場合があるため、液晶のカロリー表示も確認してから着席すること。</div>
+  </div>
+</section>
+
+<section id="neraime">
+  <div class="section-label">TARGET</div>
+  <h2>狙い目まとめ</h2>
+  <p><strong style="color:var(--accent2)">天井G数はデータカウンターのAT間G数で確認。液晶G数は参考にしない。</strong></p>
+
+  <h3>CZスルー回数別の狙い目（AT間G数基準）</h3>
+  <table>
+    <tr><th>CZスルー回数</th><th>狙い始めAT間G数</th><th>補足</th></tr>
+    <tr class="hi"><td>0スルー（CZ未当選）</td><td>400G〜</td><td>CZ当選まで続行</td></tr>
+    <tr class="hi"><td>1スルー</td><td>CZ間200G〜（AT間600G〜）</td><td>AT当選まで続行</td></tr>
+    <tr class="hi"><td>2スルー以上</td><td>CZ間100G以上なら200G〜</td><td>AT当選まで続行</td></tr>
+    <tr class="hi"><td>3スルー以上</td><td>0G〜</td><td>スルー天井が近い可能性あり</td></tr>
+  </table>
+
+  <h3>リセット後の狙い目</h3>
+  <table>
+    <tr><th>条件</th><th>狙い始めAT間G数</th></tr>
+    <tr class="hi"><td>設定変更確認済み</td><td>80G〜（天井1000Gに短縮）</td></tr>
+  </table>
+
+  <h3>上位AT後の狙い目</h3>
+  <table>
+    <tr><th>条件</th><th>狙い始めAT間G数</th></tr>
+    <tr class="hi"><td>上位AT「ゴールデンタイム」終了後</td><td>100G〜（引き戻し抽選あり）</td></tr>
+  </table>
+</section>
+
+<section id="yameoki">
+  <div class="section-label">QUIT TIMING</div>
+  <h2>やめどき</h2>
+
+  <h3>状況別やめどき一覧</h3>
+  <table>
+    <tr><th>状況</th><th>やめどき</th><th>補足</th></tr>
+    <tr>
+      <td>AT終了後（通常）</td>
+      <td>道場ステージ（チートデイ高確）終了後やめ</td>
+      <td>道場中にCZ当選することがある。終了まで確認</td>
+    </tr>
+    <tr>
+      <td>AT終了後（サウナ背景で1人）</td>
+      <td>次回CZまで続行</td>
+      <td>高モード示唆。早いCZが期待できる</td>
+    </tr>
+    <tr>
+      <td>上位AT「ゴールデンタイム」終了後</td>
+      <td>終了画面確認後、ゼウス街雄背景ならCZまで続行</td>
+      <td>ゼウス街雄 赤→チャンス、金→引き戻し濃厚</td>
+    </tr>
+    <tr>
+      <td>CZ失敗後</td>
+      <td>AT間G数を確認してやめ判断</td>
+      <td>液晶G数はリセットされるがAT間G数は引き継ぎ</td>
+    </tr>
+  </table>
+
+  <div class="card card-warn">
+    <div class="card-title">⚠ CZ失敗後の液晶G数リセットに注意</div>
+    <div class="card-body">CZに失敗すると液晶のゲーム数は0にリセットされるが、AT間の天井ゲーム数は引き継がれている。CZ失敗後にやめた台を「AT後0G台」と勘違いして着席しないよう注意。必ずデータカウンターのAT間G数を確認すること。</div>
+  </div>
+</section>
+
+<section id="special">
+  <div class="section-label">SPECIAL</div>
+  <h2>特殊狙い目</h2>
+
+  <div class="card card-special">
+    <div class="card-title">🎯 3スルー以上の台（0G〜）</div>
+    <div class="card-body">
+      CZを3回以上スルーしている台は実践上スルー天井（5〜6回目で当選が多い）が近い可能性がある。AT間G数が浅くても0Gから狙う価値がある。データカウンターのAT間履歴でCZスルー回数を推測してから判断。
+    </div>
+  </div>
+
+  <div class="card card-special">
+    <div class="card-title">🎯 上位AT後（ゼウス街雄 金背景）の台</div>
+    <div class="card-body">
+      「ゴールデンタイム」や「ライジングアッパーチャレンジ」終了後の終了画面でゼウス街雄が金背景で出現していた台は、引き戻し抽選当選濃厚。他の客がやめた直後なら0Gから拾う価値がある。
+    </div>
+  </div>
+
+  <div class="card card-special">
+    <div class="card-title">🎯 朝イチ（設定変更確定）80G〜</div>
+    <div class="card-body">
+      設定変更後はAT間天井が1000Gに短縮される。また内部G数もランダムに加算されるため、実際の初当たりは1000Gよりかなり早くなる場合が多い。朝イチは80G〜から狙い始めてOK。
+    </div>
+  </div>
+
+  <div class="card card-special">
+    <div class="card-title">🎯 カロリー5万kcal以上の台（天井前倒し）</div>
+    <div class="card-body">
+      液晶のカロリー表示が5万kcal以上になっている台は、次の10万kcal到達でCZ当選が近い。AT間G数が浅くてもカロリー天井が先に来る可能性があるため、通常の狙い目G数より前から着席できる。
+    </div>
+  </div>
+</section>
+
+<div style="margin:16px 16px 0;">
+  <a href="index.html" class="cb">
+    <div class="cb-icon">📊</div>
+    <div class="cb-body">
+      <div class="cb-label">FREE TOOL</div>
+      <div class="cb-title">狙い目チェッカー</div>
+      <div class="cb-desc">G数入力するだけで今すぐ打つべきか瞬時に判定。</div>
+    </div>
+    <div class="cb-arr">›</div>
+  </a>
+</div>
+
+<a href="index.html" class="back-btn">← 機種一覧へ戻る</a>
+
+<footer>
+  <p>狙い目手帖 ／ スロット攻略情報サイト</p>
+  <p style="margin-top:6px;">掲載情報は解析公開時点のものです。最新情報は各解析サイトをご確認ください。</p>
+</footer>
+</body>
+</html>

@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>スマスロ 革命機ヴァルヴレイヴ2 天井・狙い目まとめ｜やめどき・リセット恩恵も解説</title>
+<meta name="description" content="スマスロ革命機ヴァルヴレイヴ2の天井・狙い目を初心者向けにわかりやすく解説。天井1500G・リセット短縮1000G、換金率別の狙い目、やめどきまで網羅。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@700;800&family=Noto+Sans+JP:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0c0c0e;--surface:#111115;--surface2:#18181e;--border:#222230;--accent:#c8972a;--accent2:#e8b84a;--text:#ddd8cc;--text-muted:#7a7870;--text-sub:#aaa49a;--good:#4a9e6a;--warn:#c8972a;--bad:#9e4a4a}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--text);font-family:'Noto Sans JP',sans-serif;font-weight:300;line-height:1.8;font-size:15px;overflow-x:hidden}
+  body > *:not(header) { max-width: 600px; margin-left: auto; margin-right: auto; }
+  a, button { touch-action: manipulation; }
+  header{position:fixed;top:0;left:0;right:0;z-index:200;height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;background:rgba(12,12,14,0.96);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+  .logo{font-family:'Shippori Mincho',serif;font-size:1.05rem;font-weight:800;color:var(--accent);text-decoration:none;letter-spacing:.08em}
+  .header-back{font-size:.75rem;color:var(--text-muted);text-decoration:none;display:flex;align-items:center;gap:4px}
+  .mv{padding:72px 16px 32px;border-bottom:1px solid var(--border)}
+  .mv-label{font-size:.6rem;color:var(--accent);letter-spacing:.3em;text-transform:uppercase;margin-bottom:10px}
+  .mv-title{font-family:'Shippori Mincho',serif;font-size:clamp(1.4rem,6vw,2rem);font-weight:800;line-height:1.4;margin-bottom:12px}
+  .mv-title em{color:var(--accent);font-style:normal}
+  .mv-desc{font-size:.8rem;color:var(--text-sub);line-height:1.9;margin-bottom:16px}
+  .mv-tags{display:flex;flex-wrap:wrap;gap:6px}
+  .tag{border:1px solid var(--border);color:var(--text-muted);font-size:.62rem;padding:3px 8px;border-radius:20px}
+  .toc{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin:20px 16px}
+  .toc-title{font-size:.72rem;color:var(--accent);font-weight:700;letter-spacing:.1em;margin-bottom:10px}
+  .toc a{display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--text-sub);text-decoration:none;padding:6px 0;border-bottom:1px solid var(--border)}
+  .toc a:last-child{border-bottom:none}
+  .toc a::before{content:'';display:block;width:4px;height:4px;border-radius:50%;background:var(--accent);flex-shrink:0}
+  .checker-banner{margin:0 16px 4px;background:linear-gradient(135deg,#1a1508 0%,#0c0c0e 100%);border:1px solid var(--accent);border-radius:12px;padding:16px;text-decoration:none;display:flex;align-items:center;gap:14px}
+  .checker-banner:active{opacity:.85}
+  .cb-icon{font-size:2rem;flex-shrink:0}
+  .cb-body{flex:1;min-width:0}
+  .cb-label{font-size:.58rem;color:var(--accent);font-weight:700;letter-spacing:.15em;margin-bottom:3px}
+  .cb-title{font-size:.9rem;font-weight:700;color:var(--accent2);margin-bottom:3px}
+  .cb-desc{font-size:.68rem;color:var(--text-muted);line-height:1.5}
+  .cb-arr{color:var(--accent);font-size:1.2rem;flex-shrink:0}
+  section{padding:28px 16px;border-bottom:1px solid var(--border)}
+  .section-label{font-size:.58rem;color:var(--accent);letter-spacing:.25em;text-transform:uppercase;margin-bottom:6px}
+  h2{font-family:'Shippori Mincho',serif;font-size:1.2rem;font-weight:800;margin-bottom:16px;line-height:1.4}
+  h3{font-size:.85rem;font-weight:700;color:var(--accent2);margin:20px 0 10px;padding-left:10px;border-left:2px solid var(--accent)}
+  p{font-size:.85rem;color:var(--text-sub);margin-bottom:12px;line-height:1.9}
+  table{width:100%;border-collapse:collapse;font-size:.78rem;margin:12px 0}
+  th{background:var(--surface2);color:var(--accent);font-weight:700;padding:8px 10px;text-align:left;border:1px solid var(--border);font-size:.72rem}
+  td{padding:8px 10px;border:1px solid var(--border);color:var(--text-sub);vertical-align:top;line-height:1.6}
+  tr:nth-child(even) td{background:rgba(255,255,255,.02)}
+  .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.68rem;font-weight:700}
+  .badge-good{background:rgba(74,158,106,.2);color:#6ec48a;border:1px solid rgba(74,158,106,.4)}
+  .badge-warn{background:rgba(200,151,42,.2);color:var(--accent2);border:1px solid rgba(200,151,42,.4)}
+  .badge-bad{background:rgba(158,74,74,.2);color:#c48080;border:1px solid rgba(158,74,74,.4)}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin:12px 0}
+  .card-title{font-size:.72rem;font-weight:700;color:var(--accent);margin-bottom:8px;letter-spacing:.05em}
+  .card-body{font-size:.82rem;color:var(--text-sub);line-height:1.8}
+  .card-special{border-color:var(--accent);background:linear-gradient(135deg,#1a1508 0%,#111115 100%)}
+  .card-warn{border-color:rgba(158,74,74,.5);background:rgba(158,74,74,.05)}
+  .note{background:rgba(200,151,42,.07);border-left:3px solid var(--accent);border-radius:0 6px 6px 0;padding:10px 12px;font-size:.78rem;color:var(--text-sub);margin:12px 0;line-height:1.7}
+  .note strong{color:var(--accent2)}
+  .spec-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+  .spec-item{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center}
+  .spec-label{font-size:.6rem;color:var(--text-muted);margin-bottom:4px}
+  .spec-value{font-size:1rem;font-weight:700;color:var(--accent2)}
+  .spec-unit{font-size:.6rem;color:var(--text-muted)}
+  .back-btn{display:flex;align-items:center;justify-content:center;gap:8px;margin:20px 16px 8px;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text-sub);text-decoration:none;font-size:.85rem}
+  footer{padding:20px 16px 36px;text-align:center;font-size:.7rem;color:var(--text-muted);border-top:1px solid var(--border)}
+  .highlight-row td:first-child{color:var(--accent2);font-weight:700}
+</style>
+</head>
+<body>
+
+<header>
+  <a href="index.html" class="logo">狙い目手帖</a>
+  <a href="index.html" class="header-back">← 機種一覧</a>
+</header>
+
+<div class="mv">
+  <div class="mv-label">SLOT GUIDE</div>
+  <h1 class="mv-title">スマスロ<br><em>革命機ヴァルヴレイヴ2</em><br>天井・狙い目まとめ</h1>
+  <p class="mv-desc">やめどき・リセット恩恵も解説。純増約9.0枚の高純増AT機。天井は複数あるが、ゲーム数天井（1500G）がメインの狙い目。</p>
+  <div class="mv-tags">
+    <span class="tag">SANKYO</span>
+    <span class="tag">2025年11月導入</span>
+    <span class="tag">純増 約9.0枚</span>
+    <span class="tag">コイン単価 4.2円</span>
+  </div>
+</div>
+
+<div style="margin:16px 16px 0;">
+  <a href="index.html" class="checker-banner">
+    <div class="cb-icon">🎰</div>
+    <div class="cb-body">
+      <div class="cb-label">FREE TOOL</div>
+      <div class="cb-title">狙い目チェッカー</div>
+      <div class="cb-desc">G数を入力するだけで今すぐ打つべきか判定。無料。</div>
+    </div>
+    <div class="cb-arr">›</div>
+  </a>
+</div>
+
+<div class="toc">
+  <div class="toc-title">▶ もくじ</div>
+  <a href="#spec">基本スペック</a>
+  <a href="#tenjou">天井・リセット恩恵</a>
+  <a href="#mode">モード・周期の仕組み</a>
+  <a href="#neraime">狙い目まとめ（換金率別）</a>
+  <a href="#yameoki">やめどき</a>
+  <a href="#special">特殊狙い目</a>
+</div>
+
+<section id="spec">
+  <div class="section-label">SPEC</div>
+  <h2>基本スペック</h2>
+  <div class="spec-grid">
+    <div class="spec-item"><div class="spec-label">AT純増</div><div class="spec-value">約9.0<span class="spec-unit">枚/G</span></div></div>
+    <div class="spec-item"><div class="spec-label">コイン持ち</div><div class="spec-value">32.7<span class="spec-unit">G/50枚</span></div></div>
+    <div class="spec-item"><div class="spec-label">コイン単価</div><div class="spec-value">4.2<span class="spec-unit">円</span></div></div>
+    <div class="spec-item"><div class="spec-label">機械割（設定6）</div><div class="spec-value">114.9<span class="spec-unit">%</span></div></div>
+  </div>
+  <table>
+    <tr><th>設定</th><th>機械割</th></tr>
+    <tr><td>設定1</td><td>97.5%</td></tr>
+    <tr><td>設定6</td><td>114.9%</td></tr>
+  </table>
+  <p>前作ヴァルヴレイヴの正統後継機。AT「革命RUSH」「超革命RUSH X」が主な出玉源。純増9.0枚と非常に爆発力が高い反面、通常時のコイン消費は激しく荒波スペックの代表格。</p>
+</section>
+
+<section id="tenjou">
+  <div class="section-label">CEILING</div>
+  <h2>天井・リセット恩恵</h2>
+  <p>天井は4種類あるが、立ち回りでメインに使うのは<strong style="color:var(--accent2)">ゲーム数天井（ボーナス間1500G）</strong>と<strong style="color:var(--accent2)">周期天井（6周期）</strong>の2つ。</p>
+
+  <h3>天井の種類と恩恵</h3>
+  <table>
+    <tr><th>種類</th><th>天井条件</th><th>恩恵</th></tr>
+    <tr>
+      <td>① ゲーム数天井<br><span style="font-size:.7rem;color:var(--text-muted)">メニュー画面で確認</span></td>
+      <td>ボーナス間<br><strong>最大1500G+α</strong></td>
+      <td>革命ボーナス / 決戦ボーナス / 革命RUSH<br>（各約1/3で振り分け）</td>
+    </tr>
+    <tr>
+      <td>② CZ間ゲーム数天井</td>
+      <td>最大999G+α</td>
+      <td>CZ「ドルシア攻防戦」当選</td>
+    </tr>
+    <tr>
+      <td>③ 周期天井</td>
+      <td>最大6周期</td>
+      <td>CZ「ドルシア攻防戦」当選</td>
+    </tr>
+    <tr>
+      <td>④ 決戦ボーナス天井</td>
+      <td>3回連続スルー後<br>（4回目）</td>
+      <td>次回ボーナスで革命ボーナス以上確定</td>
+    </tr>
+  </table>
+
+  <div class="note">
+    <strong>⚠ 天井①が最重要</strong><br>
+    4種の中で最も安定して狙えるのがゲーム数天井（1500G）。前作と違い、恩恵が革命ボーナス・決戦ボーナス・AT直撃に均等振り分けされた点が大幅改善。
+  </div>
+
+  <h3>リセット（設定変更）時の恩恵</h3>
+  <table>
+    <tr><th>項目</th><th>通常時</th><th>リセット後</th></tr>
+    <tr><td>ゲーム数天井</td><td>最大1500G+α</td><td class="highlight-row"><strong>最大1000G+αに短縮</strong></td></tr>
+    <tr><td>周期天井</td><td>最大6周期</td><td><strong>最大3周期以内に短縮</strong></td></tr>
+    <tr><td>1周期目の規定pt</td><td>最大600pt</td><td><strong>最大300ptに短縮（早期到達）</strong></td></tr>
+  </table>
+</section>
+
+<section id="mode">
+  <div class="section-label">MODE</div>
+  <h2>モード・周期の仕組み</h2>
+  <p>通常時は毎ゲーム1pt以上を獲得し、最大600ptで1周期到達。周期到達のたびにCZ当選を抽選する。平均100G程度で1周期に到達する。</p>
+
+  <h3>モード別の特徴と立ち回り</h3>
+  <table>
+    <tr><th>モード</th><th>周期天井</th><th>特徴</th><th>立ち回り</th></tr>
+    <tr>
+      <td>通常（低確・高確）</td>
+      <td>最大6周期</td>
+      <td>標準的な当選率</td>
+      <td><span class="badge badge-warn">G数基準で判断</span></td>
+    </tr>
+    <tr>
+      <td>天国</td>
+      <td>1周期目でCZ確定</td>
+      <td>最も浅い天井</td>
+      <td><span class="badge badge-good">最優先で続行</span></td>
+    </tr>
+    <tr>
+      <td>マリエモード</td>
+      <td>—</td>
+      <td>ボーナス当選時にAT直行確定</td>
+      <td><span class="badge badge-good">0G〜全ツ</span></td>
+    </tr>
+  </table>
+
+  <div class="note">
+    <strong>マギウスマーク付き周期のポイント</strong><br>
+    マギウスマークが付いた周期はCZ以上の期待度50%。スルーしても次の天井周期が1周期短縮される。周期到達時の演出「地球脱出作戦」でスルーした場合も天井が1周期短縮。
+  </div>
+
+  <h3>モード示唆の確認方法</h3>
+  <table>
+    <tr><th>示唆要素</th><th>内容</th></tr>
+    <tr><td>電脳ゾーン終了時 PUSHボタン</td><td>セリフでモードや次周期の期待度を示唆</td></tr>
+    <tr><td>サブモニター（リール左）にヴァルヴレイヴ表示</td><td>滞在モードを示唆</td></tr>
+    <tr><td>アイキャッチ 白背景＋ピノ</td><td>100pt周期到達 → 次周期まで続行推奨</td></tr>
+    <tr><td>アイキャッチ 赤背景＋シルエット</td><td>マリエモード滞在の示唆</td></tr>
+  </table>
+</section>
+
+<section id="neraime">
+  <div class="section-label">TARGET</div>
+  <h2>狙い目まとめ（換金率別）</h2>
+  <p>ゲーム数はメニュー画面で確認できる「ボーナス間実ゲーム数」を基準にする。スルー回数（決戦ボーナス＝REGの連続スルー数）が多いほど天井が浅くなるため、必ずスルー数も確認する。</p>
+
+  <h3>ゲーム数天井狙い（ボーナス間）</h3>
+  <table>
+    <tr><th>換金率</th><th>狙い始めG数</th><th>備考</th></tr>
+    <tr class="highlight-row"><td>等価（5円）</td><td>950G〜</td><td>プラス域。スルー多いほど浅く調整</td></tr>
+    <tr class="highlight-row"><td>5.6枚持ちメダル</td><td>1000G〜</td><td>同上</td></tr>
+  </table>
+
+  <h3>CZ間天井狙い</h3>
+  <table>
+    <tr><th>換金率</th><th>狙い始めG数</th></tr>
+    <tr class="highlight-row"><td>等価（5円）</td><td>550G〜</td></tr>
+    <tr class="highlight-row"><td>5.6枚持ちメダル</td><td>600G〜</td></tr>
+  </table>
+
+  <h3>リセット後の狙い目</h3>
+  <table>
+    <tr><th>条件</th><th>狙い始めG数</th></tr>
+    <tr class="highlight-row"><td>設定変更確認済み</td><td>480G〜（ボーナス間）</td></tr>
+    <tr><td>全台リセット確定店（朝一）</td><td>0G〜（1周期目のゾーンが強め）</td></tr>
+  </table>
+
+  <h3>決戦ボーナス（REG）スルー回数別の狙い目</h3>
+  <table>
+    <tr><th>スルー回数<br>（液晶表示）</th><th>狙い始めG数</th><th>備考</th></tr>
+    <tr><td>0スルー（表示：1）</td><td>ゲーム数天井準拠</td><td></td></tr>
+    <tr><td>2スルー（表示：3）</td><td>よりG数を浅く設定可</td><td>次の次でBB確定</td></tr>
+    <tr class="highlight-row"><td>3スルー（表示：4）</td><td>0G〜</td><td>次回ボーナスが革命ボーナス（BIG）確定</td></tr>
+  </table>
+
+  <div class="note">
+    <strong>液晶右下の周期数表示の見方</strong><br>
+    「4」と表示 → 3スルー → 次回ボーナスがBB確定。「3」は2スルーなので間違えないこと。
+  </div>
+</section>
+
+<section id="yameoki">
+  <div class="section-label">QUIT TIMING</div>
+  <h2>やめどき</h2>
+
+  <h3>状況別やめどき一覧</h3>
+  <table>
+    <tr><th>状況</th><th>やめどき</th><th>補足</th></tr>
+    <tr>
+      <td>CZ「ドルシア攻防戦」失敗後</td>
+      <td>ゲーム数天井確認後やめ</td>
+      <td>ゲーム数が深くなければ即やめ</td>
+    </tr>
+    <tr>
+      <td>革命ボーナス（BIG）終了後</td>
+      <td><strong>引き戻し区間66G後やめ</strong></td>
+      <td>筐体上部ランプが紫・下パネル点滅中は続行</td>
+    </tr>
+    <tr>
+      <td>決戦ボーナス（REG）終了後</td>
+      <td>1G回してやめ</td>
+      <td>スルー天井を考慮してスルー数確認</td>
+    </tr>
+    <tr>
+      <td>革命RUSH（AT）終了後</td>
+      <td><strong>引き戻し区間66G後やめ</strong></td>
+      <td>ランプ紫・下パネル点滅中は絶対にやめない</td>
+    </tr>
+  </table>
+
+  <div class="card card-warn">
+    <div class="card-title">⚠ 引き戻し区間（66G）中はやめ禁止</div>
+    <div class="card-body">AT・BIG終了後の66Gは引き戻し区間。筐体上部ランプが紫色に変化、下パネルが点滅している間は絶対にやめてはいけない。この区間を飛ばすと期待値を大きく捨てることになる。</div>
+  </div>
+
+  <h3>マリエモード滞在中のやめどき</h3>
+  <p>アイキャッチが「赤背景＋ヴァルヴレイヴシルエット」またはマリエ紫セリフが発生した場合はマリエモード示唆。次回ボーナスでAT直行確定のため、ボーナス当選まで続行。</p>
+</section>
+
+<section id="special">
+  <div class="section-label">SPECIAL</div>
+  <h2>特殊狙い目</h2>
+
+  <div class="card card-special">
+    <div class="card-title">🎯 マリエモード滞在台（0G〜）</div>
+    <div class="card-body">
+      アイキャッチが「赤背景＋ヴァルヴレイヴシルエット」の台はマリエモード示唆。次回ボーナスでAT直行が確定するため、G数不問でボーナス当選まで続行。拾える機会は少ないが最も強力な狙い目。
+    </div>
+  </div>
+
+  <div class="card card-special">
+    <div class="card-title">🎯 決戦ボーナス3スルー台（0G〜）</div>
+    <div class="card-body">
+      液晶右下の周期数表示が「4」の台は、決戦ボーナスを3回連続スルーした状態。次回のボーナスは必ず革命ボーナス（BIG）確定。0Gから打ち始めてOK。
+    </div>
+  </div>
+
+  <div class="card card-special">
+    <div class="card-title">🎯 アイキャッチ 白背景＋ピノ確認台</div>
+    <div class="card-body">
+      白背景＋ピノのアイキャッチが出た台は100pt周期到達の示唆。次の1周期は早めに当たりやすい可能性があるため、少なくとも1周期消化するまで続行が推奨。
+    </div>
+  </div>
+</section>
+
+<div style="margin:16px 16px 0;">
+  <a href="index.html" class="checker-banner">
+    <div class="cb-icon">📊</div>
+    <div class="cb-body">
+      <div class="cb-label">FREE TOOL</div>
+      <div class="cb-title">狙い目チェッカー</div>
+      <div class="cb-desc">G数入力するだけで今すぐ打つべきか瞬時に判定。</div>
+    </div>
+    <div class="cb-arr">›</div>
+  </a>
+</div>
+
+<a href="index.html" class="back-btn">← 機種一覧へ戻る</a>
+
+<footer>
+  <p>狙い目手帖 ／ スロット攻略情報サイト</p>
+  <p style="margin-top:6px;">掲載情報は解析公開時点のものです。最新情報は各解析サイトをご確認ください。</p>
+</footer>
+
+</body>
+</html>

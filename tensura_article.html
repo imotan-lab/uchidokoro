@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>スマスロ 転生したらスライムだった件 天井・狙い目まとめ｜やめどき・転生状態も解説</title>
+<meta name="description" content="スマスロ転生したらスライムだった件の天井・狙い目を解説。転スラポイント1200pt天井・ゲーム数1000G天井の仕組み、換金率別狙い目、転生状態・ヴェルドラ狙い、転生ループのやめどきまで網羅。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@700;800&family=Noto+Sans+JP:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0c0c0e;
+    --surface: #111115;
+    --surface2: #18181e;
+    --border: #222230;
+    --accent: #c8972a;
+    --accent2: #e8b84a;
+    --text: #ddd8cc;
+    --text-muted: #7a7870;
+    --text-sub: #aaa49a;
+    --good: #4a9e6a;
+    --warn: #c8972a;
+    --bad: #9e4a4a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans JP', sans-serif;
+    font-weight: 300;
+    line-height: 1.8;
+    font-size: 15px;
+    overflow-x: hidden;
+  }
+  body > *:not(header) { max-width: 600px; margin-left: auto; margin-right: auto; }
+  a, button { touch-action: manipulation; }
+
+  header {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 200;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    background: rgba(12,12,14,0.96);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo { font-family: 'Shippori Mincho', serif; font-size: 1.05rem; font-weight: 800; color: var(--accent); text-decoration: none; letter-spacing: 0.08em; }
+  .header-back { font-size: 0.75rem; color: var(--text-muted); text-decoration: none; display: flex; align-items: center; gap: 4px; }
+
+  .mv { padding: 72px 16px 32px; border-bottom: 1px solid var(--border); }
+  .mv-label { font-size: 0.6rem; color: var(--accent); letter-spacing: 0.3em; text-transform: uppercase; margin-bottom: 10px; }
+  .mv-title { font-family: 'Shippori Mincho', serif; font-size: clamp(1.4rem, 6vw, 2rem); font-weight: 800; line-height: 1.4; margin-bottom: 12px; }
+  .mv-title em { color: var(--accent); font-style: normal; }
+  .mv-desc { font-size: 0.8rem; color: var(--text-sub); line-height: 1.9; margin-bottom: 16px; }
+  .mv-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag { border: 1px solid var(--border); color: var(--text-muted); font-size: 0.62rem; padding: 3px 8px; border-radius: 20px; }
+
+  .toc { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin: 20px 16px; }
+  .toc-title { font-size: 0.72rem; color: var(--accent); font-weight: 700; letter-spacing: 0.1em; margin-bottom: 10px; }
+  .toc a { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--text-sub); text-decoration: none; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .toc a:last-child { border-bottom: none; }
+  .toc a::before { content: ''; display: block; width: 4px; height: 4px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+
+  .checker-banner { margin: 0 16px 4px; background: linear-gradient(135deg, #1a1508 0%, #0c0c0e 100%); border: 1px solid var(--accent); border-radius: 12px; padding: 16px; text-decoration: none; display: flex; align-items: center; gap: 14px; }
+  .checker-banner:active { opacity: 0.85; }
+  .cb-icon { font-size: 2rem; flex-shrink: 0; }
+  .cb-body { flex: 1; min-width: 0; }
+  .cb-label { font-size: 0.58rem; color: var(--accent); font-weight: 700; letter-spacing: 0.15em; margin-bottom: 3px; }
+  .cb-title { font-size: 0.9rem; font-weight: 700; color: var(--accent2); margin-bottom: 3px; }
+  .cb-desc { font-size: 0.68rem; color: var(--text-muted); line-height: 1.5; }
+  .cb-arr { color: var(--accent); font-size: 1.2rem; flex-shrink: 0; }
+
+  .article { padding: 0 16px; }
+  .section { padding: 32px 0 0; }
+  .section-title { font-family: 'Shippori Mincho', serif; font-size: 1.15rem; font-weight: 700; padding-bottom: 10px; border-bottom: 2px solid var(--accent); margin-bottom: 18px; display: flex; align-items: center; gap: 8px; }
+  .section-title .icon { font-size: 1rem; }
+  .h3 { font-size: 0.92rem; font-weight: 700; color: var(--accent2); margin: 20px 0 10px; padding-left: 10px; border-left: 3px solid var(--accent); }
+
+  p { font-size: 0.84rem; color: var(--text-sub); line-height: 2; margin-bottom: 14px; }
+  p.note { font-size: 0.76rem; color: var(--text-muted); background: var(--surface); border-left: 3px solid var(--accent); padding: 10px 12px; border-radius: 0 6px 6px 0; margin-bottom: 14px; line-height: 1.8; }
+  strong { color: var(--text); font-weight: 700; }
+
+  .info-box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+  .info-box-title { font-size: 0.72rem; font-weight: 700; color: var(--accent); letter-spacing: 0.1em; margin-bottom: 10px; }
+
+  .aim-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; margin-bottom: 14px; }
+  .aim-table th { background: var(--surface2); color: var(--text-muted); font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em; padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  .aim-table td { padding: 10px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
+  .aim-table tr:last-child td { border-bottom: none; }
+  .aim-table .num { font-weight: 700; font-size: 0.9rem; color: var(--accent2); white-space: nowrap; }
+
+  .aim-cards { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+  .aim-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: flex; gap: 12px; align-items: flex-start; }
+  .aim-card.special { border-color: var(--accent); background: linear-gradient(135deg, #1a1508 0%, #111115 100%); }
+  .aim-badge { font-size: 0.62rem; font-weight: 700; padding: 3px 7px; border-radius: 4px; white-space: nowrap; flex-shrink: 0; margin-top: 2px; }
+  .badge-normal { background: rgba(200,151,42,0.15); color: var(--accent); }
+  .badge-special { background: rgba(200,151,42,0.3); color: var(--accent2); }
+  .badge-reset { background: rgba(74,158,106,0.15); color: var(--good); }
+  .aim-card-title { font-size: 0.86rem; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+  .aim-card-desc { font-size: 0.74rem; color: var(--text-muted); line-height: 1.8; }
+
+  .stop-list { display: flex; flex-direction: column; gap: 1px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--border); margin-bottom: 14px; }
+  .stop-row { background: var(--surface); padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+  .stop-row-head { font-size: 0.8rem; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .stop-row-body { font-size: 0.73rem; color: var(--text-muted); line-height: 1.7; }
+  .dot-good { color: var(--good); }
+  .dot-warn { color: var(--warn); }
+  .dot-bad  { color: var(--bad); }
+
+  footer { border-top: 1px solid var(--border); padding: 24px 16px; text-align: center; }
+  .footer-logo { font-family: 'Shippori Mincho', serif; font-size: 0.95rem; color: var(--accent); font-weight: 800; margin-bottom: 12px; }
+  .footer-links { display: flex; justify-content: center; gap: 20px; margin-bottom: 12px; }
+  .footer-links a { font-size: 0.7rem; color: var(--text-muted); text-decoration: none; }
+  .footer-copy { font-size: 0.6rem; color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <a href="index.html" class="logo">狙い目手帖</a>
+  <a href="index.html" class="header-back">← 機種一覧へ</a>
+</header>
+
+<div class="mv">
+  <p class="mv-label">Slot Strategy</p>
+  <h1 class="mv-title">スマスロ<em>転生したらスライムだった件</em><br>天井・狙い目まとめ</h1>
+  <p class="mv-desc">
+    転スラポイント1200pt天井・ゲーム数1000G天井の仕組みから<br>
+    換金率別の狙い目、転生状態・ヴェルドラ狙い、<br>
+    転生ループのやめどきまでまとめました。
+  </p>
+  <div class="mv-tags">
+    <span class="tag">天井狙い</span>
+    <span class="tag">転スラポイント</span>
+    <span class="tag">転生状態</span>
+    <span class="tag">ヴェルドラ</span>
+    <span class="tag">転生ループ</span>
+    <span class="tag">やめどき</span>
+  </div>
+</div>
+
+<div class="toc">
+  <div class="toc-title">📋 目次</div>
+  <a href="#tenjo">天井・基本スペック</a>
+  <a href="#mode">内部モードとポイント管理</a>
+  <a href="#neraiime">換金率別の狙い目</a>
+  <a href="#tenseistate">転生状態・ヴェルドラ狙い</a>
+  <a href="#reset">リセット（朝一）の注意点</a>
+  <a href="#yametime">やめどき</a>
+  <a href="#checker">狙い目チェッカーを使う</a>
+</div>
+
+<a href="tensura_checker.html" class="checker-banner">
+  <div class="cb-icon">⚡</div>
+  <div class="cb-body">
+    <div class="cb-label">無料ツール</div>
+    <div class="cb-title">転スラ 狙い目チェッカー</div>
+    <div class="cb-desc">ポイント数・転生状態を入れるだけで即判定</div>
+  </div>
+  <span class="cb-arr">›</span>
+</a>
+
+<div class="article">
+
+  <!-- 天井・基本スペック -->
+  <div class="section" id="tenjo">
+    <h2 class="section-title"><span class="icon">🌟</span>天井・基本スペック</h2>
+
+    <div class="info-box">
+      <table class="aim-table">
+        <thead><tr><th></th><th>内容</th></tr></thead>
+        <tr><td>天井①（ポイント）</td><td class="num">転スラポイント1200pt到達でAT確定</td></tr>
+        <tr><td>天井②（ゲーム数）</td><td class="num">1000G消化でAT確定</td></tr>
+        <tr><td>天井恩恵</td><td>特級魔族討伐戦（勝利確定）突入 or AT直撃</td></tr>
+        <tr><td>ポイント確認方法</td><td>メニュー画面（PUSHボタンで表示）</td></tr>
+        <tr><td>注意点</td><td>液晶G数とデータカウンターはズレることがある。必ず液晶G数で確認</td></tr>
+        <tr><td>AT「転スラっしゅ」純増</td><td class="num">約2.5枚/G</td></tr>
+        <tr><td>コイン持ち</td><td class="num">約36G/50枚</td></tr>
+        <tr><td>機械割</td><td>設定1：約97.5% ～ 設定6：約113%</td></tr>
+      </table>
+    </div>
+
+    <p class="note">💡 天井管理は<strong>ゲーム数ではなく転スラポイント</strong>が基準。1G消化で基本1pt獲得ですが、特化ゾーン「夜の蝶」「転スラクエスト」でまとめてポイントを獲得できるため、実ゲーム数より早く天井に到達するケースが多いです。</p>
+
+    <p>通常時は転スラポイントを貯めてAT当選を目指すシンプルな仕様。モードによって規定ポイントが異なり、<strong>天国モードなら100pt+α</strong>で当選が濃厚になります。</p>
+  </div>
+
+  <!-- 内部モードとポイント管理 -->
+  <div class="section" id="mode">
+    <h2 class="section-title"><span class="icon">🎮</span>内部モードとポイント管理</h2>
+
+    <p>台の内部には複数の<strong>モード</strong>が存在し、AT当選までの規定ポイントが異なります。</p>
+
+    <div class="info-box">
+      <table class="aim-table">
+        <thead><tr><th>モード</th><th>規定ポイント目安</th><th>特徴</th></tr></thead>
+        <tr>
+          <td><strong>通常A</strong></td>
+          <td>比較的浅め</td>
+          <td style="color:var(--text-muted)">最短でAT当選</td>
+        </tr>
+        <tr>
+          <td><strong>通常B・C</strong></td>
+          <td class="num">1000pt</td>
+          <td>通常Cは100pt毎にゾーンあり</td>
+        </tr>
+        <tr>
+          <td><strong>天国モード ★</strong></td>
+          <td class="num">100pt+α</td>
+          <td style="color:var(--good)"><strong>当選まで続行必須</strong></td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="h3">📊 モード示唆の確認方法</div>
+
+    <div class="info-box">
+      <table class="aim-table">
+        <thead><tr><th>示唆演出</th><th>内容</th></tr></thead>
+        <tr>
+          <td>要チェックさんの色</td>
+          <td>青：デフォルト／緑：通常B以上濃厚／<span style="color:var(--good)">赤：天国濃厚</span></td>
+        </tr>
+        <tr>
+          <td>ゾーン外での<strong>作戦会議（前兆示唆）</strong>発生</td>
+          <td style="color:var(--good)">据え置きの可能性アップ</td>
+        </tr>
+        <tr>
+          <td>500ptゾーン</td>
+          <td style="color:var(--good)">強めのゾーン。この手前から狙うのが有効</td>
+        </tr>
+      </table>
+    </div>
+
+    <p class="note">⚠️ 要チェックさんの<strong>赤</strong>が出れば天国モード濃厚。天国の天井は100pt+αなので当選まで絶対に続行しましょう。</p>
+  </div>
+
+  <!-- 換金率別の狙い目 -->
+  <div class="section" id="neraiime">
+    <h2 class="section-title"><span class="icon">🎯</span>換金率別の狙い目</h2>
+
+    <div class="info-box">
+      <table class="aim-table">
+        <thead><tr><th>種別</th><th>等価</th><th>5.6枚交換</th></tr></thead>
+        <tr>
+          <td>通常天井狙い<br><small>（ポイント基準・モード不問）</small></td>
+          <td class="num">約500pt〜</td>
+          <td class="num">約550pt〜</td>
+        </tr>
+        <tr>
+          <td>通常天井狙い<br><small>（ゲーム数基準・暫定）</small></td>
+          <td class="num">約250G〜</td>
+          <td class="num">約400G〜</td>
+        </tr>
+        <tr>
+          <td>期待値1000円以上<br><small>（等価基準）</small></td>
+          <td class="num">約400G（500pt）〜</td>
+          <td class="num">約550G〜</td>
+        </tr>
+        <tr>
+          <td>天国モード確認後</td>
+          <td class="num">即着席</td>
+          <td class="num">即着席</td>
+        </tr>
+      </table>
+    </div>
+
+    <p class="note">💡 <strong>ポイントはメニュー画面のPUSHボタンで確認</strong>できます。ゲーム数よりポイント数を優先して判断しましょう。500pt付近に強めのゾーンがあるため、450〜500pt台の台は特に優先して確保したいところです。</p>
+
+    <p>液晶のG数とホールのデータカウンターがズレているケースが本機は特に多いです。<strong>必ず液晶G数またはポイント数で判断</strong>してください。データカウンターだけを信じると損をすることがあります。</p>
+  </div>
+
+  <!-- 転生状態・ヴェルドラ狙い -->
+  <div class="section" id="tenseistate">
+    <h2 class="section-title"><span class="icon">✨</span>転生状態・ヴェルドラ狙い</h2>
+
+    <p>本機最大の特徴が<strong>転生状態</strong>。転生チャンス成立で移行し、レア役の出現率が大幅アップする有利な状態です。そして最強形態が<strong>ヴェルドラ状態</strong>（全レア役確率が大幅アップ）です。</p>
+
+    <div class="aim-cards">
+      <div class="aim-card special">
+        <span class="aim-badge badge-special">最強狙い目</span>
+        <div class="aim-card-body">
+          <div class="aim-card-title">前日ヴェルドラ状態で閉店した台</div>
+          <div class="aim-card-desc">
+            転生状態は<strong>設定変更（リセット）をしても引き継がれます</strong>。前日に液晶下部ランプが黒の常時点灯（ヴェルドラ）で閉店した台は、翌日も転生状態のまま。全レア役確率が大幅アップしているため初当たり期待度・AT性能ともに大きく優遇されます。
+          </div>
+        </div>
+      </div>
+      <div class="aim-card special">
+        <span class="aim-badge badge-reset">転生ループ中</span>
+        <div class="aim-card-body">
+          <div class="aim-card-title">強くてニューゲーム演出が出たら転生ループ確定</div>
+          <div class="aim-card-desc">
+            AT終了後に<strong>強くてニューゲーム演出</strong>が発生すれば転生ループ確定。次回が天国モード濃厚になるため、絶対にやめてはいけません。天国モードの天井（100pt+α）まで必ず続行を。
+          </div>
+        </div>
+      </div>
+      <div class="aim-card">
+        <span class="aim-badge badge-normal">転生状態確認</span>
+        <div class="aim-card-body">
+          <div class="aim-card-title">転生チャンス成立でレア役確率アップ</div>
+          <div class="aim-card-desc">
+            転生チャンスは通常時・AT中問わず発生する可能性があります。成立時は50%で転生状態に移行。転生状態は再度転生チャンスが発生するまで継続するため、転生状態の台は狙い目ラインを下げて対応できます。
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-box">
+      <div class="info-box-title">🔍 転生状態・ヴェルドラの見分け方</div>
+      <table class="aim-table">
+        <tr><td>液晶下部ランプが<strong>黒の常時点灯</strong></td><td style="color:var(--good)"><strong>ヴェルドラ状態（最強）</strong></td></tr>
+        <tr><td>AT開始時に「等級」が表示される</td><td style="color:var(--good)">有利区間引き継ぎ台（据え置き濃厚）</td></tr>
+        <tr><td>当日1回目のATで等級が「スライム級」以外</td><td style="color:var(--text-muted)">必ずしも据え置きとは限らない（要注意）</td></tr>
+        <tr><td>ゾーン外での作戦会議発生</td><td style="color:var(--good)">据え置き・転生引き継ぎの可能性アップ</td></tr>
+      </table>
+    </div>
+
+    <p class="note">⚠️ ホール側が転生状態の台を朝一から回して転生状態を終了させてから開放するケースもあります。ホールの特性を把握した上で狙いましょう。</p>
+  </div>
+
+  <!-- リセット -->
+  <div class="section" id="reset">
+    <h2 class="section-title"><span class="icon">🔄</span>リセット（朝一）の注意点</h2>
+
+    <div class="info-box">
+      <table class="aim-table">
+        <thead><tr><th>項目</th><th>リセット時の挙動</th></tr></thead>
+        <tr>
+          <td>転スラポイント</td>
+          <td style="color:var(--bad)">リセット（0ptからスタート）</td>
+        </tr>
+        <tr>
+          <td>転生状態・ヴェルドラ</td>
+          <td style="color:var(--good)"><strong>引き継ぎ（リセットされない）</strong></td>
+        </tr>
+        <tr>
+          <td>モンスターランク</td>
+          <td>再抽選（高設定ほど高ランク優遇）</td>
+        </tr>
+        <tr>
+          <td>天井ゲーム数短縮</td>
+          <td style="color:var(--text-muted)">なし（ほぼすべてリセット or 再抽選）</td>
+        </tr>
+      </table>
+    </div>
+
+    <p>リセット時に注目すべきは<strong>転生状態の引き継ぎ</strong>のみです。ポイントはリセットされるため、リセット確定台を朝一から狙う旨みはほとんどありません。</p>
+
+    <p class="note">⚠️ 本機は<strong>朝一リセット台よりも前日の転生状態引き継ぎ台の方が価値が高い</strong>機種です。朝一は転生状態・ランプの色を最優先で確認しましょう。</p>
+  </div>
+
+  <!-- やめどき -->
+  <div class="section" id="yametime">
+    <h2 class="section-title"><span class="icon">🚪</span>やめどき</h2>
+
+    <p>本機のやめどきは比較的シンプルですが、<strong>転生ループ・天国モード</strong>のフォローだけは絶対に忘れないようにしましょう。</p>
+
+    <div class="info-box">
+      <div class="info-box-title">AT終了後のやめどき判断</div>
+      <table class="aim-table">
+        <thead><tr><th>状況</th><th>判断</th></tr></thead>
+        <tr>
+          <td><strong>強くてニューゲーム演出</strong>発生</td>
+          <td style="color:var(--good)"><strong>転生ループ確定→天国天井まで続行</strong></td>
+        </tr>
+        <tr>
+          <td>AT終了後に<strong>要チェックさん赤</strong></td>
+          <td style="color:var(--good)"><strong>天国モード濃厚→100pt+αまで続行</strong></td>
+        </tr>
+        <tr>
+          <td>ヴェルドラ状態継続中</td>
+          <td style="color:var(--good)"><strong>転生状態転落まで続行</strong></td>
+        </tr>
+        <tr>
+          <td>上記なし・転生ループなし</td>
+          <td style="color:var(--warn)">AT終了後即やめでOK</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="stop-list">
+      <div class="stop-row">
+        <div class="stop-row-head"><span class="dot-good">🟢</span>即やめOKなパターン</div>
+        <div class="stop-row-body">
+          ・AT終了後、強くてニューゲーム演出なし<br>
+          ・要チェックさんが青（天国示唆なし）<br>
+          ・転生状態でない通常のAT終了後
+        </div>
+      </div>
+      <div class="stop-row">
+        <div class="stop-row-head"><span class="dot-warn">🟡</span>様子を見るべきパターン</div>
+        <div class="stop-row-body">
+          ・AT後に要チェックさんが緑（通常B以上示唆）<br>
+          ・天国モード中（100pt+αまで続行推奨）<br>
+          ・AT終了後のトロフィー演出で緑以上が出た場合
+        </div>
+      </div>
+      <div class="stop-row">
+        <div class="stop-row-head"><span class="dot-bad">🔴</span>絶対やめないパターン</div>
+        <div class="stop-row-body">
+          ・AT終了後に強くてニューゲーム演出（転生ループ確定）<br>
+          ・要チェックさんが赤（天国モード濃厚）<br>
+          ・ヴェルドラ状態中（転生状態転落まで続行）<br>
+          ・天国モード滞在中（100pt+α天井まで続行）
+        </div>
+      </div>
+    </div>
+
+    <p class="note">📝 天国モードを毎回100ptまで追う必要はありません。前兆演出が長いため、毎回追いすぎると枚数損失が積み重なります。<strong>要チェックさんの赤</strong>など明確な天国示唆がある場合のみフォローを推奨します。</p>
+  </div>
+
+  <!-- チェッカー誘導 -->
+  <div class="section" id="checker">
+    <h2 class="section-title"><span class="icon">⚡</span>狙い目チェッカーを使う</h2>
+    <p>ポイント数・転生状態を入れるだけで◎○△×で即判定。ホールでその場でチェックできます。</p>
+  </div>
+
+</div><!-- /article -->
+
+<a href="tensura_checker.html" class="checker-banner" style="margin: 16px 16px 32px;">
+  <div class="cb-icon">⚡</div>
+  <div class="cb-body">
+    <div class="cb-label">無料ツール</div>
+    <div class="cb-title">転スラ 狙い目チェッカー</div>
+    <div class="cb-desc">ポイント数・転生状態を入れて即判定</div>
+  </div>
+  <span class="cb-arr">›</span>
+</a>
+
+<div style="margin: 0 16px 32px; text-align: center;">
+  <a href="index.html" style="display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 24px;color:var(--accent);text-decoration:none;font-size:0.85rem;font-weight:700;">
+    ← 機種一覧へ戻る
+  </a>
+</div>
+
+<footer>
+  <div class="footer-logo">狙い目手帖</div>
+  <div class="footer-links">
+    <a href="#">プライバシーポリシー</a>
+    <a href="#">お問い合わせ</a>
+  </div>
+  <p class="footer-copy">掲載内容は公開情報をもとにした考察です。実際の立ち回りはご自身の判断でお願いします。</p>
+  <p class="footer-copy" style="margin-top:6px;">© 2025 狙い目手帖</p>
+</footer>
+
+</body>
+</html>

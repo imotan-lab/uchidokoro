@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>スマスロ バイオハザード ヴィレッジ 天井・狙い目まとめ｜やめどき・リセット恩恵も解説</title>
+<meta name="description" content="スマスロ バイオハザード ヴィレッジの天井・狙い目を解説。通常時最大天井750G。リセット後550Gに短縮。モード別狙い目・ATスルー天井・やめどきまで網羅。2024年1月導入。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@700;800&family=Noto+Sans+JP:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0c0c0e;--surface:#111115;--surface2:#18181e;--border:#222230;--accent:#c8972a;--accent2:#e8b84a;--text:#ddd8cc;--text-muted:#7a7870;--text-sub:#aaa49a}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:'Noto Sans JP',sans-serif;font-weight:300;line-height:1.8;font-size:15px;overflow-x:hidden}
+  body > *:not(header) { max-width: 600px; margin-left: auto; margin-right: auto; }
+  a, button { touch-action: manipulation; }
+header{position:fixed;top:0;left:0;right:0;z-index:200;height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;background:rgba(12,12,14,.96);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+.logo{font-family:'Shippori Mincho',serif;font-size:1.05rem;font-weight:800;color:var(--accent);text-decoration:none;letter-spacing:.08em}
+.header-back{font-size:.75rem;color:var(--text-muted);text-decoration:none}
+.mv{padding:72px 16px 32px;border-bottom:1px solid var(--border)}
+.mv-label{font-size:.6rem;color:var(--accent);letter-spacing:.3em;text-transform:uppercase;margin-bottom:10px}
+.mv-title{font-family:'Shippori Mincho',serif;font-size:clamp(1.4rem,6vw,2rem);font-weight:800;line-height:1.4;margin-bottom:12px}
+.mv-title em{color:var(--accent);font-style:normal}
+.mv-desc{font-size:.8rem;color:var(--text-sub);line-height:1.9;margin-bottom:16px}
+.mv-tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{border:1px solid var(--border);color:var(--text-muted);font-size:.62rem;padding:3px 8px;border-radius:20px}
+.toc{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin:20px 16px}
+.toc-title{font-size:.72rem;color:var(--accent);font-weight:700;letter-spacing:.1em;margin-bottom:10px}
+.toc a{display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--text-sub);text-decoration:none;padding:6px 0;border-bottom:1px solid var(--border)}
+.toc a:last-child{border-bottom:none}
+.toc a::before{content:'';display:block;width:4px;height:4px;border-radius:50%;background:var(--accent);flex-shrink:0}
+.cb{background:linear-gradient(135deg,#1a1508,#0c0c0e);border:1px solid var(--accent);border-radius:12px;padding:16px;text-decoration:none;display:flex;align-items:center;gap:14px;margin:0 16px 4px}
+.cb-icon{font-size:2rem;flex-shrink:0}
+.cb-body{flex:1;min-width:0}
+.cb-label{font-size:.58rem;color:var(--accent);font-weight:700;letter-spacing:.15em;margin-bottom:3px}
+.cb-title{font-size:.9rem;font-weight:700;color:var(--accent2);margin-bottom:3px}
+.cb-desc{font-size:.68rem;color:var(--text-muted);line-height:1.5}
+.cb-arr{color:var(--accent);font-size:1.2rem;flex-shrink:0}
+section{padding:28px 16px;border-bottom:1px solid var(--border)}
+.section-label{font-size:.58rem;color:var(--accent);letter-spacing:.25em;text-transform:uppercase;margin-bottom:6px}
+h2{font-family:'Shippori Mincho',serif;font-size:1.2rem;font-weight:800;margin-bottom:16px;line-height:1.4}
+h3{font-size:.85rem;font-weight:700;color:var(--accent2);margin:20px 0 10px;padding-left:10px;border-left:2px solid var(--accent)}
+p{font-size:.85rem;color:var(--text-sub);margin-bottom:12px;line-height:1.9}
+table{width:100%;border-collapse:collapse;font-size:.78rem;margin:12px 0}
+th{background:var(--surface2);color:var(--accent);font-weight:700;padding:8px 10px;text-align:left;border:1px solid var(--border);font-size:.72rem}
+td{padding:8px 10px;border:1px solid var(--border);color:var(--text-sub);vertical-align:top;line-height:1.6}
+tr:nth-child(even) td{background:rgba(255,255,255,.02)}
+.badge-good{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.68rem;font-weight:700;background:rgba(74,158,106,.2);color:#6ec48a;border:1px solid rgba(74,158,106,.4)}
+.badge-warn{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.68rem;font-weight:700;background:rgba(200,151,42,.2);color:var(--accent2);border:1px solid rgba(200,151,42,.4)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin:12px 0}
+.card-title{font-size:.72rem;font-weight:700;color:var(--accent);margin-bottom:8px}
+.card-body{font-size:.82rem;color:var(--text-sub);line-height:1.8}
+.card-special{border-color:var(--accent);background:linear-gradient(135deg,#1a1508,#111115)}
+.card-warn{border-color:rgba(158,74,74,.5);background:rgba(158,74,74,.05)}
+.note{background:rgba(200,151,42,.07);border-left:3px solid var(--accent);border-radius:0 6px 6px 0;padding:10px 12px;font-size:.78rem;color:var(--text-sub);margin:12px 0;line-height:1.7}
+.note strong{color:var(--accent2)}
+.spec-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.spec-item{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center}
+.spec-label{font-size:.6rem;color:var(--text-muted);margin-bottom:4px}
+.spec-value{font-size:1rem;font-weight:700;color:var(--accent2)}
+.spec-unit{font-size:.6rem;color:var(--text-muted)}
+.back-btn{display:flex;align-items:center;justify-content:center;gap:8px;margin:20px 16px 8px;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text-sub);text-decoration:none;font-size:.85rem}
+footer{padding:20px 16px 36px;text-align:center;font-size:.7rem;color:var(--text-muted);border-top:1px solid var(--border)}
+.hi td:first-child{color:var(--accent2);font-weight:700}
+</style>
+</head>
+<body>
+<header>
+  <a href="index.html" class="logo">狙い目手帖</a>
+  <a href="index.html" class="header-back">← 機種一覧</a>
+</header>
+
+<div class="mv">
+  <div class="mv-label">SLOT GUIDE</div>
+  <h1 class="mv-title">スマスロ<br><em>バイオハザード ヴィレッジ</em><br>天井・狙い目まとめ</h1>
+  <p class="mv-desc">やめどき・リセット恩恵も解説。2024年1月導入。天井最大750G。リセット後は550Gに短縮。モードによって狙い目が大きく変わる機種。実践データ上ATスルー天井（8回目で当選）が存在する可能性あり。</p>
+  <div class="mv-tags">
+    <span class="tag">アデリオン（エンターライズ）</span>
+    <span class="tag">2024年1月導入</span>
+    <span class="tag">AT純増 約2.5枚</span>
+    <span class="tag">コイン持ち 約32.9G/50枚</span>
+  </div>
+</div>
+
+<div style="margin:16px 16px 0;">
+  <a href="index.html" class="cb">
+    <div class="cb-icon">🎰</div>
+    <div class="cb-body">
+      <div class="cb-label">FREE TOOL</div>
+      <div class="cb-title">狙い目チェッカー</div>
+      <div class="cb-desc">G数を入力するだけで今すぐ打つべきか判定。無料。</div>
+    </div>
+    <div class="cb-arr">›</div>
+  </a>
+</div>
+
+<div class="toc">
+  <div class="toc-title">▶ もくじ</div>
+  <a href="#spec">基本スペック</a>
+  <a href="#tenjou">天井・リセット恩恵</a>
+  <a href="#mode">モードの仕組み</a>
+  <a href="#neraime">狙い目まとめ</a>
+  <a href="#yameoki">やめどき</a>
+  <a href="#special">特殊狙い目</a>
+</div>
+
+<section id="spec">
+  <div class="section-label">SPEC</div>
+  <h2>基本スペック</h2>
+  <div class="spec-grid">
+    <div class="spec-item"><div class="spec-label">AT純増</div><div class="spec-value">約2.5<span class="spec-unit">枚/G</span></div></div>
+    <div class="spec-item"><div class="spec-label">コイン持ち</div><div class="spec-value">約32.9<span class="spec-unit">G/50枚</span></div></div>
+    <div class="spec-item"><div class="spec-label">通常時天井</div><div class="spec-value">最大750<span class="spec-unit">G+α</span></div></div>
+    <div class="spec-item"><div class="spec-label">リセット後天井</div><div class="spec-value">550<span class="spec-unit">G+α</span></div></div>
+  </div>
+  <p>アデリオン（エンターライズ）製のスマスロ。通常時は規定ゲーム数の消化とパニックゾーン（PZ）からクライマックスバトル（CB）突入を目指す。CBに勝利するとATへ突入する流れ。</p>
+  <p>天井狙いは比較的甘めで、350G付近から期待値がプラスになる。モードが判明している場合はさらに浅いG数から打ち始めることができる。</p>
+</section>
+
+<section id="tenjou">
+  <div class="section-label">CEILING</div>
+  <h2>天井・リセット恩恵</h2>
+
+  <h3>天井の種類</h3>
+  <table>
+    <tr><th>種類</th><th>天井条件</th><th>恩恵</th></tr>
+    <tr>
+      <td>ゲーム数天井（通常時）</td>
+      <td>最大750G+α</td>
+      <td>クライマックスバトル当選（AT抽選）</td>
+    </tr>
+    <tr class="hi">
+      <td>ATスルー天井（実践値）</td>
+      <td>AT7スルー後（8回目）で当選濃厚</td>
+      <td>AT当選確定</td>
+    </tr>
+  </table>
+
+  <div class="note">
+    <strong>ATスルー天井は解析未公式・実践値ベース</strong><br>
+    実践データ上、ATを7回スルーした後の8回目でAT当選する傾向が確認されている。ただし公式解析での裏付けはなく確定情報ではないため参考程度に。
+  </div>
+
+  <h3>リセット（設定変更）後の恩恵</h3>
+  <table>
+    <tr><th>項目</th><th>内容</th></tr>
+    <tr class="hi"><td>天井G数</td><td>550G+αに短縮（設定変更専用モードへ移行）</td></tr>
+    <tr><td>有利区間ランプ</td><td>リセット判別不可（ランプで判断できない）</td></tr>
+  </table>
+
+  <div class="note">
+    <strong>設定変更モードは100G以内の当選率が低め</strong><br>
+    設定変更直後は100G以内での当選が若干しにくい傾向がある。0Gからの着席より、天国ゾーン（150G付近）をカバーできる80G〜から狙い始めるのが安全。有利区間ランプではリセット判別ができないため、ホールの開店状況や癖から判断すること。
+  </div>
+</section>
+
+<section id="mode">
+  <div class="section-label">MODE</div>
+  <h2>モードの仕組み</h2>
+  <p>通常モードは通常A〜C・天国の4種類と設定変更専用モードがある。モードによって規定ゲーム数（天井）が変わる。</p>
+
+  <h3>モード別の天井と特徴</h3>
+  <table>
+    <tr><th>モード</th><th>天井G数</th><th>立ち回り</th></tr>
+    <tr><td>通常A（最深）</td><td>最大750G+α</td><td><span class="badge-warn">380G〜から狙う</span></td></tr>
+    <tr><td>通常B</td><td>最大約550G+α</td><td><span class="badge-good">200G〜から狙える</span></td></tr>
+    <tr class="hi"><td>通常C・天国</td><td>最大約350G以下</td><td><span class="badge-good">0G〜から狙える</span></td></tr>
+    <tr class="hi"><td>設定変更モード</td><td>最大550G+α</td><td><span class="badge-good">80G〜から狙う</span></td></tr>
+  </table>
+
+  <div class="card card-warn">
+    <div class="card-title">⚠ 前任者がモード推測してやめている台が多い</div>
+    <div class="card-body">通常時に前の客が「モードB以上が確定した」と判断してやめた台の場合、実際には通常Aの可能性もある。安全のため、モードが判明していない台はすべて通常Aとして扱い、380G〜から狙うのが基本。</div>
+  </div>
+</section>
+
+<section id="neraime">
+  <div class="section-label">TARGET</div>
+  <h2>狙い目まとめ</h2>
+
+  <h3>通常時（モード不明）</h3>
+  <table>
+    <tr><th>換金率</th><th>狙い始めG数</th><th>補足</th></tr>
+    <tr class="hi"><td>等価（5円）・5.6枚共通</td><td>380G〜</td><td>350G付近から期待値プラスの傾向あり</td></tr>
+  </table>
+
+  <h3>モードが判明している場合</h3>
+  <table>
+    <tr><th>条件</th><th>狙い始めG数</th></tr>
+    <tr class="hi"><td>モードB以上確定</td><td>200G〜</td></tr>
+    <tr class="hi"><td>モードC以上確定</td><td>0G〜</td></tr>
+    <tr class="hi"><td>リセット確定（設定変更後）</td><td>80G〜</td></tr>
+  </table>
+
+  <h3>ATスルー回数別（実践値ベース）</h3>
+  <table>
+    <tr><th>ATスルー回数</th><th>立ち回り</th></tr>
+    <tr><td>0〜6スルー</td><td>G数ベースで通常通り判断</td></tr>
+    <tr class="hi"><td>7スルー（8回目のAT抽選）</td><td>G数に関わらず0Gから狙う価値あり（実践値ベース）</td></tr>
+  </table>
+</section>
+
+<section id="yameoki">
+  <div class="section-label">QUIT TIMING</div>
+  <h2>やめどき</h2>
+
+  <h3>状況別やめどき一覧</h3>
+  <table>
+    <tr><th>状況</th><th>やめどき</th><th>補足</th></tr>
+    <tr>
+      <td>CB（クライマックスバトル）終了後</td>
+      <td>1G回してやめ</td>
+      <td>引き戻し確認のため1G消化してからやめる</td>
+    </tr>
+    <tr>
+      <td>AT終了後（通常）</td>
+      <td>1G回してやめ</td>
+      <td>引き戻しゾーン確認後やめ</td>
+    </tr>
+    <tr>
+      <td>AT終了後（エンディング到達）</td>
+      <td>リザルト画面後のCB消化後やめ</td>
+      <td>エンディング後は必ずCB（ミランダ戦）に突入。やめないこと</td>
+    </tr>
+  </table>
+
+  <div class="card card-warn">
+    <div class="card-title">⚠ エンディング後のリザルト画面でやめてはいけない</div>
+    <div class="card-body">ATでエンディングに到達すると、その後に必ずクライマックスバトル（ミランダ戦・成功期待度約55%）が発生する。成功すれば上乗せ特化ゾーン「シューティングアタック」経由でATを引き戻す。リザルト画面が表示されても、その場でやめると引き戻しを逃す。</div>
+  </div>
+</section>
+
+<section id="special">
+  <div class="section-label">SPECIAL</div>
+  <h2>特殊狙い目</h2>
+
+  <div class="card card-special">
+    <div class="card-title">🎯 モードC以上確定台（0G〜）</div>
+    <div class="card-body">
+      他の客が通常C以上のモード確定を確認してやめた台があれば0Gから打ち始めてOK。天国モードは150G以内での当選が濃厚のため、0Gから着席しても期待値がプラスになる。
+    </div>
+  </div>
+
+  <div class="card card-special">
+    <div class="card-title">🎯 ATスルー7回の台（0G〜）</div>
+    <div class="card-body">
+      実践データ上、ATを7回スルーした台（8回目の抽選）は天井に近い可能性がある。データカウンターでATの初当たり回数を確認し、スルーが多い台は浅いG数でも拾う価値がある。
+    </div>
+  </div>
+
+  <div class="card card-special">
+    <div class="card-title">🎯 朝イチ（設定変更確定）80G〜</div>
+    <div class="card-body">
+      設定変更後は天井が550G+αに短縮。ただし100G以内の当選率が若干低いため0Gからではなく80G〜から着席するのが無難。有利区間ランプでのリセット判別はできないため、ホールの台番ごとの癖や開店時の状況から判断すること。
+    </div>
+  </div>
+</section>
+
+<div style="margin:16px 16px 0;">
+  <a href="index.html" class="cb">
+    <div class="cb-icon">📊</div>
+    <div class="cb-body">
+      <div class="cb-label">FREE TOOL</div>
+      <div class="cb-title">狙い目チェッカー</div>
+      <div class="cb-desc">G数入力するだけで今すぐ打つべきか瞬時に判定。</div>
+    </div>
+    <div class="cb-arr">›</div>
+  </a>
+</div>
+
+<a href="index.html" class="back-btn">← 機種一覧へ戻る</a>
+
+<footer>
+  <p>狙い目手帖 ／ スロット攻略情報サイト</p>
+  <p style="margin-top:6px;">掲載情報は解析公開時点のものです。最新情報は各解析サイトをご確認ください。</p>
+</footer>
+</body>
+</html>

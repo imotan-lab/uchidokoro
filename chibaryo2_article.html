@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>スマスロ チバリヨ2 天井・狙い目まとめ｜やめどき・モード示唆・リセット恩恵も解説</title>
+<meta name="description" content="スマスロ チバリヨ2の天井・狙い目を解説。ゲーム数天井999G・チェリー回数天井の仕組み、リセット恩恵、モード示唆（花笠点灯パターン）、やめどきまで網羅。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@700;800&family=Noto+Sans+JP:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0c0c0e;
+    --surface: #111115;
+    --surface2: #18181e;
+    --border: #222230;
+    --accent: #c8972a;
+    --accent2: #e8b84a;
+    --text: #ddd8cc;
+    --text-muted: #7a7870;
+    --text-sub: #aaa49a;
+    --good: #4a9e6a;
+    --warn: #c8972a;
+    --bad: #9e4a4a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-weight: 300; line-height: 1.8; font-size: 15px; overflow-x: hidden; }
+  body > *:not(header) { max-width: 600px; margin-left: auto; margin-right: auto; }
+  a, button { touch-action: manipulation; }
+  header { position: fixed; top: 0; left: 0; right: 0; z-index: 200; height: 52px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; background: rgba(12,12,14,0.96); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+  .logo { font-family: 'Shippori Mincho', serif; font-size: 1.05rem; font-weight: 800; color: var(--accent); text-decoration: none; letter-spacing: 0.08em; }
+  .header-back { font-size: 0.75rem; color: var(--text-muted); text-decoration: none; display: flex; align-items: center; gap: 4px; }
+  .mv { padding: 72px 16px 32px; border-bottom: 1px solid var(--border); }
+  .mv-label { font-size: 0.6rem; color: var(--accent); letter-spacing: 0.3em; text-transform: uppercase; margin-bottom: 10px; }
+  .mv-title { font-family: 'Shippori Mincho', serif; font-size: clamp(1.4rem, 6vw, 2rem); font-weight: 800; line-height: 1.4; margin-bottom: 12px; }
+  .mv-title em { color: var(--accent); font-style: normal; }
+  .mv-desc { font-size: 0.8rem; color: var(--text-sub); line-height: 1.9; margin-bottom: 16px; }
+  .mv-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag { border: 1px solid var(--border); color: var(--text-muted); font-size: 0.62rem; padding: 3px 8px; border-radius: 20px; }
+  .toc { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin: 20px 16px; }
+  .toc-title { font-size: 0.72rem; color: var(--accent); font-weight: 700; letter-spacing: 0.1em; margin-bottom: 10px; }
+  .toc a { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--text-sub); text-decoration: none; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .toc a:last-child { border-bottom: none; }
+  .toc a::before { content: ''; display: block; width: 4px; height: 4px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+  .checker-banner { margin: 0 16px 4px; background: linear-gradient(135deg, #1a1508 0%, #0c0c0e 100%); border: 1px solid var(--accent); border-radius: 12px; padding: 16px; text-decoration: none; display: flex; align-items: center; gap: 14px; }
+  .checker-banner:active { opacity: 0.85; }
+  .cb-icon { font-size: 2rem; flex-shrink: 0; }
+  .cb-body { flex: 1; min-width: 0; }
+  .cb-label { font-size: 0.58rem; color: var(--accent); font-weight: 700; letter-spacing: 0.15em; margin-bottom: 3px; }
+  .cb-title { font-size: 0.9rem; font-weight: 700; color: var(--accent2); margin-bottom: 3px; }
+  .cb-desc { font-size: 0.68rem; color: var(--text-muted); line-height: 1.5; }
+  .cb-arr { color: var(--accent); font-size: 1.2rem; flex-shrink: 0; }
+  .article { padding: 0 16px; }
+  .section { padding: 32px 0 0; }
+  .section-title { font-family: 'Shippori Mincho', serif; font-size: 1.15rem; font-weight: 700; padding-bottom: 10px; border-bottom: 2px solid var(--accent); margin-bottom: 18px; display: flex; align-items: center; gap: 8px; }
+  .section-title .icon { font-size: 1rem; }
+  .h3 { font-size: 0.92rem; font-weight: 700; color: var(--accent2); margin: 20px 0 10px; padding-left: 10px; border-left: 3px solid var(--accent); }
+  p { font-size: 0.84rem; color: var(--text-sub); line-height: 2; margin-bottom: 14px; }
+  p.note { font-size: 0.76rem; color: var(--text-muted); background: var(--surface); border-left: 3px solid var(--accent); padding: 10px 12px; border-radius: 0 6px 6px 0; margin-bottom: 14px; line-height: 1.8; }
+  strong { color: var(--text); font-weight: 700; }
+  .info-box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+  .info-box-title { font-size: 0.72rem; font-weight: 700; color: var(--accent); letter-spacing: 0.1em; margin-bottom: 10px; }
+  .aim-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; margin-bottom: 14px; }
+  .aim-table th { background: var(--surface2); color: var(--text-muted); font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em; padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  .aim-table td { padding: 10px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
+  .aim-table tr:last-child td { border-bottom: none; }
+  .aim-table .num { font-weight: 700; font-size: 0.9rem; color: var(--accent2); white-space: nowrap; }
+  .aim-cards { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+  .aim-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: flex; gap: 12px; align-items: flex-start; }
+  .aim-card.special { border-color: var(--accent); background: linear-gradient(135deg, #1a1508 0%, #111115 100%); }
+  .aim-badge { font-size: 0.62rem; font-weight: 700; padding: 3px 7px; border-radius: 4px; white-space: nowrap; flex-shrink: 0; margin-top: 2px; }
+  .badge-normal { background: rgba(200,151,42,0.15); color: var(--accent); }
+  .badge-special { background: rgba(200,151,42,0.3); color: var(--accent2); }
+  .badge-reset { background: rgba(74,158,106,0.15); color: var(--good); }
+  .aim-card-title { font-size: 0.86rem; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+  .aim-card-desc { font-size: 0.74rem; color: var(--text-muted); line-height: 1.8; }
+  .stop-list { display: flex; flex-direction: column; gap: 1px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--border); margin-bottom: 14px; }
+  .stop-row { background: var(--surface); padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+  .stop-row-head { font-size: 0.8rem; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .stop-row-body { font-size: 0.73rem; color: var(--text-muted); line-height: 1.7; }
+  .dot-good { color: var(--good); }
+  .dot-warn { color: var(--warn); }
+  .dot-bad  { color: var(--bad); }
+  .mode-badge { display: inline-block; font-size: 0.65rem; font-weight: 700; padding: 2px 7px; border-radius: 3px; margin-right: 4px; }
+  .mode-a { background: rgba(74,158,106,0.2); color: var(--good); }
+  .mode-b { background: rgba(200,151,42,0.2); color: var(--warn); }
+  .mode-c { background: rgba(200,100,50,0.2); color: #e88a4a; }
+  .mode-rainbow { background: linear-gradient(90deg, rgba(200,151,42,0.3), rgba(74,158,200,0.3)); color: var(--accent2); }
+  footer { border-top: 1px solid var(--border); padding: 24px 16px; text-align: center; }
+  .footer-logo { font-family: 'Shippori Mincho', serif; font-size: 0.95rem; color: var(--accent); font-weight: 800; margin-bottom: 12px; }
+  .footer-links { display: flex; justify-content: center; gap: 20px; margin-bottom: 12px; }
+  .footer-links a { font-size: 0.7rem; color: var(--text-muted); text-decoration: none; }
+  .footer-copy { font-size: 0.6rem; color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <a href="index.html" class="logo">狙い目手帖</a>
+  <a href="index.html" class="header-back">← 機種一覧へ</a>
+</header>
+
+<div class="mv">
+  <p class="mv-label">Slot Strategy</p>
+  <h1 class="mv-title"><em>スマスロ チバリヨ2</em><br>天井・狙い目まとめ</h1>
+  <p class="mv-desc">
+    ゲーム数天井999G・チェリー回数天井の2軸、<br>
+    リセット天井短縮、花笠点灯パターンによるモード示唆、<br>
+    リミットレス狙いまで解説します。
+  </p>
+  <div class="mv-tags">
+    <span class="tag">天井狙い</span>
+    <span class="tag">チェリー回数天井</span>
+    <span class="tag">花笠モード示唆</span>
+    <span class="tag">リセット狙い</span>
+    <span class="tag">リミットレス</span>
+    <span class="tag">虹パト</span>
+  </div>
+</div>
+
+<div class="toc">
+  <div class="toc-title">📋 目次</div>
+  <a href="#tenjo">天井・基本スペック</a>
+  <a href="#mode">モード・連チャン構造</a>
+  <a href="#neraiime">換金率別の狙い目</a>
+  <a href="#mode-hint">花笠点灯パターン｜モード示唆</a>
+  <a href="#reset">リセット（朝一）恩恵</a>
+  <a href="#limitless">リミットレスモード狙い</a>
+  <a href="#yametime">やめどき</a>
+  <a href="#checker">狙い目チェッカーを使う</a>
+</div>
+
+<a href="chibaryo2_checker.html" class="checker-banner">
+  <div class="cb-icon">🌺</div>
+  <div class="cb-body">
+    <div class="cb-label">無料ツール</div>
+    <div class="cb-title">チバリヨ2 狙い目チェッカー</div>
+    <div class="cb-desc">G数・チェリー回数を入れるだけで今すぐ狙えるか即判定</div>
+  </div>
+  <span class="cb-arr">›</span>
+</a>
+
+<div class="article">
+
+  <!-- 天井・基本スペック -->
+  <div class="section" id="tenjo">
+    <h2 class="section-title"><span class="icon">📊</span>天井・基本スペック</h2>
+
+    <div class="info-box">
+      <table class="aim-table">
+        <thead><tr><th></th><th>内容</th></tr></thead>
+        <tr><td>ゲーム数天井</td><td class="num">最大999G+α（350G・600Gへの振り分けあり）</td></tr>
+        <tr><td>チェリー回数天井</td><td class="num">最大45回（5の倍数ごとにチャンス）</td></tr>
+        <tr><td>天井恩恵</td><td>ボーナス当選</td></tr>
+        <tr><td>設定変更時天井</td><td class="num">最大600G+αに短縮</td></tr>
+        <tr><td>コイン持ち</td><td class="num">約27.9G/50枚（非常に低く荒れやすい）</td></tr>
+        <tr><td>設定1 万枚突破率</td><td class="num">約10%（高い一撃性が特徴）</td></tr>
+        <tr><td>メーカー</td><td>NET（2024年3月4日導入）</td></tr>
+      </table>
+    </div>
+
+    <p>ボーナスはSBB・BB・RBの3種類。消化中は(S)BBの<strong>1G連</strong>を抽選します。チェリーが当たりのカギを握る沖スロ系ゲーム性で、<strong>チェリー5の倍数回目</strong>（5・10・15…）は特にチャンスです。</p>
+
+    <p class="note">⚠️ コイン持ちが約27.9G/50枚と現行スマスロの中でも特に低く、非常に荒れやすい台です。天井狙いは資金に余裕を持って実践しましょう。</p>
+
+    <div class="h3">天井の2軸を理解する</div>
+    <div class="info-box">
+      <table class="aim-table">
+        <thead><tr><th>天井種別</th><th>条件</th><th>注意点</th></tr></thead>
+        <tr>
+          <td><strong>ゲーム数天井</strong></td>
+          <td>最大999G（350G・600Gへの振り分けあり）</td>
+          <td>モードにより天井が異なる</td>
+        </tr>
+        <tr>
+          <td><strong>チェリー回数天井</strong></td>
+          <td>最大45回（5回ごとにチャンス抽選）</td>
+          <td>データカウンターに反映されない擬似遊技あり（チェリー後の擬似遊技G数も加算して考えること）</td>
+        </tr>
+      </table>
+    </div>
+
+    <p class="note">📝 チェリー成立後の<strong>擬似遊技はデータカウンターに反映されません</strong>。実際のG数はデータ表示より多くなっている場合があるため、液晶表示で確認するのが確実です。</p>
+  </div>
+
+  <!-- モード・連チャン構造 -->
+  <div class="section" id="mode">
+    <h2 class="section-title"><span class="icon">🔄</span>モード・連チャン構造</h2>
+
+    <p>ボーナス後のモード移行が出玉の核心です。天国モード以上に移行すると<strong>32G以内のボーナス当選が確定</strong>し、ループ率に応じた連チャンが続きます。</p>
+
+    <div class="info-box">
+      <table class="aim-table">
+        <thead><tr><th>連チャンモード</th><th>継続率</th><th>特徴</th></tr></thead>
+        <tr>
+          <td><strong>天国モード</strong></td>
+          <td class="num">32G以内確定</td>
+          <td>66・75・80・88・92%のループ率から選択</td>
+        </tr>
+        <tr>
+          <td><strong>赤パトモード</strong></td>
+          <td style="color:var(--good)">高継続</td>
+          <td>ボーナス当選時にパトランプ点灯→赤パト+1G連濃厚</td>
+        </tr>
+        <tr>
+          <td><strong>虹パトモード ★</strong></td>
+          <td class="num" style="color:var(--good)">92%ループ</td>
+          <td>最上位モード。ボーナス当選時レインボーパトランプ点灯→虹パト+1G連濃厚</td>
+        </tr>
+        <tr>
+          <td><strong>リミットレスモード ★★</strong></td>
+          <td class="num" style="color:var(--good)">約88%ループ</td>
+          <td>虹パト終了後または有利区間完走後に突入。ボーナス毎に有利区間リセット→上限なしで出玉獲得可能</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="aim-cards">
+      <div class="aim-card special">
+        <span class="aim-badge badge-special">最強ループ</span>
+        <div>
+          <div class="aim-card-title">イキスギループとは</div>
+          <div class="aim-card-desc">
+            リミットレスモード中のボーナスは<strong>約15%で虹パトモード昇格</strong>抽選を行い、虹パト終了後は再びリミットレスモードへ戻ります。
+            これにより<strong>88%→92%→88%→92%…の無限ループ</strong>（イキスギループ）で上限なく出玉を積み上げられます。
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 換金率別の狙い目 -->
+  <div class="section" id="neraiime">
+    <h2 class="section-title"><span class="icon">🎯</span>換金率別の狙い目</h2>
+
+    <div class="info-box">
+      <table class="aim-table">
+        <thead><tr><th>種別</th><th>等価</th><th>5.6枚交換</th></tr></thead>
+        <tr>
+          <td><strong>通常天井狙い（0スルー）</strong></td>
+          <td class="num">500G〜</td>
+          <td class="num">700G〜</td>
+        </tr>
+        <tr>
+          <td>350G天井振り分け狙い</td>
+          <td class="num">250G〜</td>
+          <td class="num">300G〜</td>
+        </tr>
+        <tr>
+          <td><strong>リセット台（朝一）</strong></td>
+          <td class="num">0G〜350G（天井600G短縮）</td>
+          <td class="num">100G〜</td>
+        </tr>
+        <tr>
+          <td>リミットレス後台</td>
+          <td class="num">0Gから（天国まで）</td>
+          <td class="num">0Gから（天国まで）</td>
+        </tr>
+      </table>
+    </div>
+
+    <p class="note">💡 本機は<strong>350Gの天井が選択される振り分け</strong>があります。250G台の台も条件次第で狙い目になります。ただしスルー回数・チェリー回数・差枚数によって期待値が大きく変動するため、単純なG数だけで判断するのは危険です。</p>
+
+    <p class="note">⚠️ チェリー回数の末尾が「5または0」の台はチャンス抽選が絡む可能性があり、期待値が上がる場合があります。前任者がどのくらいチェリーを引いているか、できる限り確認してから着席しましょう。</p>
+  </div>
+
+  <!-- 花笠点灯パターン｜モード示唆 -->
+  <div class="section" id="mode-hint">
+    <h2 class="section-title"><span class="icon">🌺</span>花笠点灯パターン｜モード示唆</h2>
+
+    <p>本機最大の特徴が<strong>花笠点灯パターン</strong>によるモード示唆です。ボーナス終了時・レア役成立時などに発生し、滞在モードを教えてくれます。</p>
+
+    <div class="info-box">
+      <div class="info-box-title">花笠点灯パターン一覧</div>
+      <table class="aim-table">
+        <thead><tr><th>点灯パターン</th><th>示唆内容</th><th>立ち回り</th></tr></thead>
+        <tr>
+          <td>通常点灯・下パネ消灯・スロー・同時</td>
+          <td><span class="mode-badge mode-b">通常B以上</span>示唆</td>
+          <td style="color:var(--good)">天井狙いを浅くできる</td>
+        </tr>
+        <tr>
+          <td>咲き・渦巻き・流星</td>
+          <td><span class="mode-badge mode-c">チャンスA以上</span>示唆</td>
+          <td style="color:var(--good)">狙い目を大幅に短縮</td>
+        </tr>
+        <tr>
+          <td>鼓動・高速鼓動・セグ文字・花笠のみ</td>
+          <td><span class="mode-badge mode-rainbow">チャンスB以上</span>示唆</td>
+          <td style="color:var(--good)">最優先で追う</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="info-box">
+      <div class="info-box-title">その他のモード示唆</div>
+      <table class="aim-table">
+        <thead><tr><th>示唆演出</th><th>内容</th></tr></thead>
+        <tr>
+          <td>ボーナス終了時のトップランプ<strong>赤</strong></td>
+          <td><span class="mode-badge mode-b">通常B以上</span>確定</td>
+        </tr>
+        <tr>
+          <td>チェリー＋小スベリでボーナス非当選</td>
+          <td><span class="mode-badge mode-b">通常B以上</span>示唆</td>
+        </tr>
+        <tr>
+          <td>単チェリー出現時</td>
+          <td><span class="mode-badge mode-b">通常B以上</span>示唆</td>
+        </tr>
+        <tr>
+          <td>SBB当選時</td>
+          <td><span class="mode-badge mode-b">通常B以上</span>示唆</td>
+        </tr>
+        <tr>
+          <td><strong>具志堅ボイス</strong>発生</td>
+          <td><span class="mode-badge mode-b">通常B以上</span>確定</td>
+        </tr>
+        <tr>
+          <td>ボーナス当選時レインボーパトランプ点灯</td>
+          <td style="color:var(--good)">虹パト＋1G連濃厚</td>
+        </tr>
+      </table>
+    </div>
+
+    <p class="note">📝 通常Bモード以上が確定した場合、天井が350G以下になる可能性が高いためゲーム数が浅くても続行価値があります。チャンスB以上示唆はさらに優遇されているため、ボーナス後に示唆が出たら即やめは厳禁です。</p>
+  </div>
+
+  <!-- リセット -->
+  <div class="section" id="reset">
+    <h2 class="section-title"><span class="icon">🔄</span>リセット（朝一）恩恵</h2>
+
+    <div class="info-box">
+      <table class="aim-table">
+        <thead><tr><th>項目</th><th>リセット時の挙動</th></tr></thead>
+        <tr>
+          <td>ゲーム数天井</td>
+          <td style="color:var(--good)"><strong>最大600G+αに短縮</strong>（通常は最大999G）</td>
+        </tr>
+        <tr>
+          <td>モード移行</td>
+          <td style="color:var(--good)"><strong>50%以上で通常B以上に移行</strong>。350G天井の選択率もアップ</td>
+        </tr>
+        <tr>
+          <td>チェリー回数</td>
+          <td style="color:var(--bad)">リセット</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="aim-cards">
+      <div class="aim-card special">
+        <span class="aim-badge badge-reset">リセット狙い</span>
+        <div>
+          <div class="aim-card-title">朝一リセット台は0G〜350Gが狙い目</div>
+          <div class="aim-card-desc">
+            設定変更後は天井が600Gに短縮され、50%以上で通常B以上への移行優遇があります。
+            等価なら朝一から90G〜を目安に狙えます。浅いG数から350Gゾーンの天井を抱えており、リセット台は非常においしい状況です。
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- リミットレスモード狙い -->
+  <div class="section" id="limitless">
+    <h2 class="section-title"><span class="icon">💥</span>リミットレスモード狙い</h2>
+
+    <p>本機で最も注目すべき特殊狙い目が<strong>リミットレスモード後の台</strong>です。有利区間完走または虹パトモード終了後に突入するリミットレスモードは、ボーナスごとに有利区間がリセットされる特殊仕様で出玉上限がありません。</p>
+
+    <div class="aim-cards">
+      <div class="aim-card special">
+        <span class="aim-badge badge-special">特殊狙い</span>
+        <div>
+          <div class="aim-card-title">リミットレス後・虹パト後の台は天国まで追う</div>
+          <div class="aim-card-desc">
+            前任者が差枚2400枚付近（有利区間完走）または虹パトモードを経由していた台は、リミットレスモード中の可能性があります。
+            <strong>リミットレス中はボーナス当選のたびに有利区間がリセットされ、88%のループが続く</strong>ため、天国モード突入まで追い続けることが重要です。やめどきは天国モード終了後（32G）です。
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="note">💡 データカウンターで「有利区間ランプが短期間で複数回消灯している台」「差枚数が2400枚前後で何度もリセットされている台」はリミットレス候補として要チェックです。</p>
+  </div>
+
+  <!-- やめどき -->
+  <div class="section" id="yametime">
+    <h2 class="section-title"><span class="icon">🚪</span>やめどき</h2>
+
+    <div class="info-box">
+      <div class="info-box-title">通常時・ボーナス後のやめどき基本</div>
+      <table class="aim-table">
+        <thead><tr><th>状況</th><th>判断</th></tr></thead>
+        <tr>
+          <td>ボーナス後（天国・パトモード示唆なし）</td>
+          <td style="color:var(--warn)"><strong>32G回してやめ</strong></td>
+        </tr>
+        <tr>
+          <td>ボーナス後（花笠パターン示唆あり）</td>
+          <td style="color:var(--good)">次回ボーナスまで続行</td>
+        </tr>
+        <tr>
+          <td>天国・パトモード後<br>（アゲインモード）</td>
+          <td style="color:var(--good)"><strong>チェリー10回まで追う</strong><br>（アゲインモード天井）</td>
+        </tr>
+        <tr>
+          <td>リミットレスモード中</td>
+          <td style="color:var(--good)"><strong>天国突入まで続行</strong></td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="stop-list">
+      <div class="stop-row">
+        <div class="stop-row-head"><span class="dot-good">🟢</span>32Gでやめてよいパターン</div>
+        <div class="stop-row-body">
+          ・ボーナス終了後に花笠示唆なし・トップランプ通常<br>
+          ・具志堅ボイスなし・モード示唆なし<br>
+          ・天国フォロー中（32G）にボーナス非当選でやめ
+        </div>
+      </div>
+      <div class="stop-row">
+        <div class="stop-row-head"><span class="dot-warn">🟡</span>様子を見るパターン</div>
+        <div class="stop-row-body">
+          ・花笠点灯パターンで通常B以上示唆→次回ボーナスまで<br>
+          ・ボーナス終了時トップランプ赤→次回ボーナスまで続行<br>
+          ・天国・赤パト終了後→アゲインモード（チェリー10回）まで追う
+        </div>
+      </div>
+      <div class="stop-row">
+        <div class="stop-row-head"><span class="dot-bad">🔴</span>絶対やめないパターン</div>
+        <div class="stop-row-body">
+          ・花笠でチャンスB以上示唆（鼓動・高速鼓動・セグ文字など）<br>
+          ・虹パトモード中（92%ループ消化中）<br>
+          ・リミットレスモード中（88%ループ・天国突入まで必須）<br>
+          ・ボーナス当選時にレインボーパトランプ点灯（虹パト+1G連濃厚）
+        </div>
+      </div>
+    </div>
+
+    <p class="note">📝 チェリー成立後の擬似遊技は<strong>データカウンターに加算されません</strong>。32G回してやめる際は実際のゲーム数を液晶の表示で確認してください。データカウンターの数値より実際は多く消化している場合があります。</p>
+  </div>
+
+  <!-- チェッカー誘導 -->
+  <div class="section" id="checker">
+    <h2 class="section-title"><span class="icon">🌺</span>狙い目チェッカーを使う</h2>
+    <p>G数・チェリー回数・モード示唆を入れるだけで今すぐ狙えるか◎○△×で即判定できます。</p>
+  </div>
+
+</div><!-- /article -->
+
+<a href="chibaryo2_checker.html" class="checker-banner" style="margin: 16px 16px 32px;">
+  <div class="cb-icon">🌺</div>
+  <div class="cb-body">
+    <div class="cb-label">無料ツール</div>
+    <div class="cb-title">チバリヨ2 狙い目チェッカー</div>
+    <div class="cb-desc">G数・チェリー回数・モード示唆状況を入れて即判定</div>
+  </div>
+  <span class="cb-arr">›</span>
+</a>
+
+<div style="margin: 0 16px 32px; text-align: center;">
+  <a href="index.html" style="display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 24px;color:var(--accent);text-decoration:none;font-size:0.85rem;font-weight:700;">
+    ← 機種一覧へ戻る
+  </a>
+</div>
+
+<footer>
+  <div class="footer-logo">狙い目手帖</div>
+  <div class="footer-links">
+    <a href="#">プライバシーポリシー</a>
+    <a href="#">お問い合わせ</a>
+  </div>
+  <p class="footer-copy">掲載内容は公開情報をもとにした考察です。実際の立ち回りはご自身の判断でお願いします。</p>
+  <p class="footer-copy" style="margin-top:6px;">© 2025 狙い目手帖</p>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>スマスロ 北斗の拳 転生の章2 天井・狙い目まとめ｜やめどき・リセット恩恵も解説</title>
+<meta name="description" content="スマスロ北斗の拳 転生の章2の天井・狙い目をわかりやすく解説。あべし天井1536・リセット短縮1280、換金率別の狙い目、天撃（上位CZ）後の続行条件、やめどきまで網羅。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@700;800&family=Noto+Sans+JP:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0c0c0e;
+    --surface: #111115;
+    --surface2: #18181e;
+    --border: #222230;
+    --accent: #c8972a;
+    --accent2: #e8b84a;
+    --text: #ddd8cc;
+    --text-muted: #7a7870;
+    --text-sub: #aaa49a;
+    --good: #4a9e6a;
+    --warn: #c8972a;
+    --bad: #9e4a4a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-weight: 300; line-height: 1.8; font-size: 15px; overflow-x: hidden; }
+  body > *:not(header) { max-width: 600px; margin-left: auto; margin-right: auto; }
+  a, button { touch-action: manipulation; }
+  header { position: fixed; top: 0; left: 0; right: 0; z-index: 200; height: 52px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; background: rgba(12,12,14,0.96); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+  .logo { font-family: 'Shippori Mincho', serif; font-size: 1.05rem; font-weight: 800; color: var(--accent); text-decoration: none; letter-spacing: 0.08em; }
+  .header-back { font-size: 0.75rem; color: var(--text-muted); text-decoration: none; display: flex; align-items: center; gap: 4px; }
+  .mv { padding: 72px 16px 32px; border-bottom: 1px solid var(--border); }
+  .mv-label { font-size: 0.6rem; color: var(--accent); letter-spacing: 0.3em; text-transform: uppercase; margin-bottom: 10px; }
+  .mv-title { font-family: 'Shippori Mincho', serif; font-size: clamp(1.4rem, 6vw, 2rem); font-weight: 800; line-height: 1.4; margin-bottom: 12px; }
+  .mv-title em { color: var(--accent); font-style: normal; }
+  .mv-desc { font-size: 0.8rem; color: var(--text-sub); line-height: 1.9; }
+  .page-nav { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin: 20px 16px; padding: 16px; }
+  .page-nav-title { font-size: 0.7rem; color: var(--accent); letter-spacing: 0.2em; margin-bottom: 10px; }
+  .page-nav ul { list-style: none; }
+  .page-nav ul li { border-bottom: 1px solid var(--border); }
+  .page-nav ul li:last-child { border-bottom: none; }
+  .page-nav ul li a { display: block; padding: 8px 4px; font-size: 0.82rem; color: var(--text-sub); text-decoration: none; }
+  .page-nav ul li a::before { content: "→ "; color: var(--accent); }
+  .checker-banner { margin: 20px 16px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); border: 1px solid #2a4080; border-radius: 10px; padding: 18px 16px; text-align: center; text-decoration: none; display: block; }
+  .checker-banner-label { font-size: 0.6rem; color: #6a9fd8; letter-spacing: 0.3em; margin-bottom: 6px; }
+  .checker-banner-title { font-family: 'Shippori Mincho', serif; font-size: 1.1rem; font-weight: 800; color: #fff; margin-bottom: 6px; }
+  .checker-banner-desc { font-size: 0.75rem; color: #8ab4e8; }
+  .checker-banner-btn { display: inline-block; margin-top: 12px; padding: 8px 20px; background: #2a5fd8; color: #fff; border-radius: 20px; font-size: 0.8rem; font-weight: 700; }
+  .section { padding: 32px 16px 0; }
+  .section-title { font-family: 'Shippori Mincho', serif; font-size: 1.1rem; font-weight: 800; color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px; margin-bottom: 16px; }
+  .section-sub { font-size: 0.85rem; font-weight: 700; color: var(--text-sub); margin: 20px 0 10px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+  p { font-size: 0.88rem; margin-bottom: 12px; line-height: 1.9; }
+  .tbl-wrap { overflow-x: auto; margin-bottom: 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.8rem; white-space: nowrap; }
+  th { background: var(--surface2); color: var(--accent); padding: 9px 10px; text-align: center; border: 1px solid var(--border); font-weight: 700; font-size: 0.75rem; }
+  td { padding: 8px 10px; border: 1px solid var(--border); text-align: center; color: var(--text); background: var(--surface); }
+  tr:nth-child(even) td { background: var(--surface2); }
+  .td-good { color: var(--good) !important; font-weight: 700; }
+  .td-warn { color: var(--warn) !important; font-weight: 700; }
+  .td-bad  { color: var(--bad)  !important; }
+  .td-left { text-align: left !important; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+  .card-title { font-size: 0.8rem; font-weight: 700; color: var(--accent); margin-bottom: 8px; }
+  .card p { margin-bottom: 0; }
+  .note { background: rgba(200,151,42,0.07); border-left: 3px solid var(--warn); border-radius: 0 4px 4px 0; padding: 10px 12px; font-size: 0.78rem; color: var(--text-sub); margin-bottom: 14px; line-height: 1.8; }
+  .aim-block { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+  .aim-block-head { font-size: 0.72rem; color: var(--accent); letter-spacing: 0.15em; margin-bottom: 8px; font-weight: 700; }
+  .aim-block-val { font-family: 'Shippori Mincho', serif; font-size: 1.8rem; font-weight: 800; color: var(--text); line-height: 1.2; }
+  .aim-block-val span { font-size: 0.9rem; color: var(--text-sub); margin-left: 4px; }
+  .aim-block-desc { font-size: 0.78rem; color: var(--text-sub); margin-top: 6px; line-height: 1.7; }
+  footer { margin-top: 48px; padding: 24px 16px; border-top: 1px solid var(--border); text-align: center; }
+  .back-btn { display: inline-block; padding: 10px 24px; border: 1px solid var(--border); border-radius: 24px; color: var(--text-sub); text-decoration: none; font-size: 0.82rem; margin-bottom: 20px; }
+  .footer-note { font-size: 0.68rem; color: var(--text-muted); line-height: 1.8; }
+  .spec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .spec-item { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px; text-align: center; }
+  .spec-label { font-size: 0.65rem; color: var(--text-muted); letter-spacing: 0.1em; margin-bottom: 4px; }
+  .spec-val { font-family: 'Shippori Mincho', serif; font-size: 1.15rem; font-weight: 800; color: var(--accent); }
+  .spec-val small { font-size: 0.72rem; color: var(--text-sub); }
+  .divider { height: 1px; background: var(--border); margin: 28px 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="logo" href="index.html">狙い目手帖</a>
+  <a class="header-back" href="index.html">← 機種一覧</a>
+</header>
+
+<!-- 上部チェッカーバナー -->
+<a class="checker-banner" href="hokuto_tensei2_checker.html">
+  <div class="checker-banner-label">FREE TOOL</div>
+  <div class="checker-banner-title">北斗転生2　狙い目チェッカー</div>
+  <div class="checker-banner-desc">あべし数を入力するだけで今すぐ打てるか判定</div>
+  <div class="checker-banner-btn">▶ チェッカーを使う</div>
+</a>
+
+<div class="mv">
+  <div class="mv-label">SMARTPACHISLO GUIDE</div>
+  <h1 class="mv-title">スマスロ<br><em>北斗の拳 転生の章2</em><br>天井・狙い目まとめ</h1>
+  <p class="mv-desc">やめどき・リセット恩恵も解説｜2026年1月導入</p>
+</div>
+
+<nav class="page-nav">
+  <div class="page-nav-title">CONTENTS</div>
+  <ul>
+    <li><a href="#spec">基本スペック</a></li>
+    <li><a href="#abeshi">あべしシステムとは</a></li>
+    <li><a href="#tenjou">天井の種類と恩恵</a></li>
+    <li><a href="#neraime">狙い目まとめ</a></li>
+    <li><a href="#reset">リセット（朝一）恩恵</a></li>
+    <li><a href="#mode">モード・ゾーン</a></li>
+    <li><a href="#yameoki">やめどき</a></li>
+    <li><a href="#tokushu">特殊狙い目</a></li>
+  </ul>
+</nav>
+
+<!-- 基本スペック -->
+<section class="section" id="spec">
+  <h2 class="section-title">基本スペック</h2>
+  <div class="spec-grid">
+    <div class="spec-item">
+      <div class="spec-label">AT純増</div>
+      <div class="spec-val">約4.0<small>枚/G</small></div>
+    </div>
+    <div class="spec-item">
+      <div class="spec-label">機械割（設定1）</div>
+      <div class="spec-val">97.6<small>%</small></div>
+    </div>
+    <div class="spec-item">
+      <div class="spec-label">機械割（設定6）</div>
+      <div class="spec-val">114.9<small>%</small></div>
+    </div>
+    <div class="spec-item">
+      <div class="spec-label">導入日</div>
+      <div class="spec-val" style="font-size:0.85rem;">2026年<small>1/5</small></div>
+    </div>
+  </div>
+  <p>5号機で人気を博した「北斗の拳 転生の章」のスマスロ後継機。通常時は毎ゲーム「あべし」（擬似ポイント）を1以上獲得し、規定あべし到達でAT「闘神演舞」に当選する仕組み。AT中は勝舞魂をバトルで消費して継続を目指す。上位AT「裏闘神演舞」へ突入すれば期待枚数は3000枚超。</p>
+</section>
+
+<div class="divider"></div>
+
+<!-- あべしシステム -->
+<section class="section" id="abeshi">
+  <h2 class="section-title">あべしシステムとは</h2>
+  <p>「あべし」とは本機独自の擬似ゲーム数カウント。通常時は毎ゲーム最低1あべし以上が加算されるほか、特化ゾーン「天破の刻」で大量獲得が狙える。<strong>液晶左上</strong>に現在のあべし数が常時表示されているため、台を選ぶ際の重要な指標になる。</p>
+  <div class="note">
+    💡 あべしは余剰分が同一有利区間内で引き継ぎされる。たくさんのあべしを抱えてATに当選した場合、AT後の次の初当たりが早くなる可能性がある。
+  </div>
+  <p>あべし数はゲーム数に換算すると<strong>1536あべし ≒ 平均750G前後</strong>が目安。</p>
+</section>
+
+<div class="divider"></div>
+
+<!-- 天井 -->
+<section class="section" id="tenjou">
+  <h2 class="section-title">天井の種類と恩恵</h2>
+
+  <div class="tbl-wrap">
+    <table>
+      <tr>
+        <th>天井の種類</th>
+        <th>発動条件</th>
+        <th>恩恵</th>
+      </tr>
+      <tr>
+        <td class="td-left">AT間あべし天井</td>
+        <td>最大1536あべし</td>
+        <td>AT「闘神演舞」に当選</td>
+      </tr>
+      <tr>
+        <td class="td-left">リセット時のあべし天井</td>
+        <td>最大1280あべし</td>
+        <td>AT「闘神演舞」に当選（天井短縮）</td>
+      </tr>
+      <tr>
+        <td class="td-left">上位CZ「天撃」失敗後</td>
+        <td>失敗直後</td>
+        <td>天国モードへ移行（128あべしでAT濃厚）</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="aim-block">
+    <div class="aim-block-head">1473あべし以降の特別恩恵</div>
+    <div class="aim-block-val">ATレベル3以上<span>確定</span></div>
+    <div class="aim-block-desc">1473あべし以降に当選したATはATレベル3以上が確定する。レベル3以上は継続率・勝舞魂上乗せ率が大幅に優遇され、期待枚数が大きく跳ね上がる。1473あべし付近で拾える台は非常に美味しい。</div>
+  </div>
+
+  <h3 class="section-sub">モード別の天井あべし数</h3>
+  <p>最大規定あべしは滞在モードによって変わる。モードAが最深で1536あべし、高モードほど天井が浅くなる。</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <tr>
+        <th>モード</th>
+        <th>最大あべし（天井）</th>
+        <th>特徴</th>
+      </tr>
+      <tr>
+        <td><strong>モードA（通常）</strong></td>
+        <td class="td-bad">1536あべし</td>
+        <td class="td-left">最もスルーしやすい最深モード</td>
+      </tr>
+      <tr>
+        <td><strong>モードB</strong></td>
+        <td class="td-warn">768あべし相当</td>
+        <td class="td-left">比較的当選が早い</td>
+      </tr>
+      <tr>
+        <td><strong>モードC</strong></td>
+        <td class="td-good">短縮</td>
+        <td class="td-left">さらに早い当選が期待できる</td>
+      </tr>
+      <tr>
+        <td><strong>天国</strong></td>
+        <td class="td-good">128あべし</td>
+        <td class="td-left">上位CZ「天撃」失敗後など</td>
+      </tr>
+    </table>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- 狙い目 -->
+<section class="section" id="neraime">
+  <h2 class="section-title">狙い目まとめ（換金率別）</h2>
+  <p>あべし数（液晶左上の数値）を確認して着席するかどうかを判断する。</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <tr>
+        <th>換金率</th>
+        <th>通常時の天井狙い</th>
+        <th>リセット後（天井短縮）</th>
+      </tr>
+      <tr>
+        <td><strong>等価（5円）</strong></td>
+        <td class="td-good">950あべし〜<br><small>（約580G相当〜）</small></td>
+        <td class="td-good">400あべし〜</td>
+      </tr>
+      <tr>
+        <td><strong>5.6枚交換</strong></td>
+        <td class="td-warn">1150あべし〜<br><small>（約700G相当〜）</small></td>
+        <td class="td-warn">500あべし〜</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="note">
+    ⚠ あべしの進み方は滞在モードによって異なる。同じあべし数でも「天破の刻」（特化ゾーン）を経由していれば残り少ない可能性あり。液晶左上のあべし数は常に確認しよう。
+  </div>
+
+  <h3 class="section-sub">全モード共通のゾーン</h3>
+  <p><strong>193〜256あべし</strong>のゾーンはモードを問わずAT当選期待度が高い。この区間の台が空いていれば狙い目になる場合がある。</p>
+</section>
+
+<div class="divider"></div>
+
+<!-- リセット恩恵 -->
+<section class="section" id="reset">
+  <h2 class="section-title">リセット（朝一）恩恵</h2>
+
+  <div class="aim-block">
+    <div class="aim-block-head">朝一リセット時の天井短縮</div>
+    <div class="aim-block-val">1280あべし<span>（通常1536から短縮）</span></div>
+    <div class="aim-block-desc">リセット時は最大あべし数が1280に短縮される。さらに256あべし以内のゾーン当選率が若干上昇する。</div>
+  </div>
+
+  <p>リセット判別はデータカウンターとの比較で行う。また液晶左上にあべしが「0」または非常に少ない台が朝一から見受けられれば、リセット可能性を考慮してから着席するとよい。</p>
+
+  <div class="note">
+    ⚠ 256あべし以内での当選を否定しても高設定を否定するわけではない。設定1でも約1/2の確率で256あべし以内を選択しないため、ゾーンを外れたからといって即判断するのは禁物。
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- モード・ゾーン -->
+<section class="section" id="mode">
+  <h2 class="section-title">モード・ゾーン</h2>
+
+  <h3 class="section-sub">モードの示唆方法</h3>
+  <p>通常時は<strong>100G消化ごと</strong>に筐体上部の左右ランプが点灯してモードを示唆する。光り方によって高モード滞在の可能性を把握できる。また、フェイク前兆（天命の刻）に移行した際のあべし数でもモード示唆が行われる場合がある。</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <tr>
+        <th>モード</th>
+        <th>ゾーン（あべし）</th>
+        <th>立ち回り</th>
+      </tr>
+      <tr>
+        <td><strong>モードA</strong></td>
+        <td>193〜256 / 1217〜1280（最重要）</td>
+        <td class="td-bad">最深。1217あべし以降まで粘らない</td>
+      </tr>
+      <tr>
+        <td><strong>モードB・C</strong></td>
+        <td>193〜256 / より浅め</td>
+        <td class="td-good">積極的に狙える</td>
+      </tr>
+      <tr>
+        <td><strong>天国</strong></td>
+        <td>128あべし（即当選）</td>
+        <td class="td-good">上位CZ失敗後は必ず続行</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="note">
+    ⚠ モードAの1217〜1280あべしゾーンは最深部への入口。ここから1536あべしまで「いつ当たってもおかしくない」状態が続く。この区間を抱えた台は狙い目になりやすい。
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- やめどき -->
+<section class="section" id="yameoki">
+  <h2 class="section-title">やめどき</h2>
+
+  <div class="tbl-wrap">
+    <table>
+      <tr>
+        <th>状況</th>
+        <th>やめどき</th>
+        <th>注意点</th>
+      </tr>
+      <tr>
+        <td class="td-left">AT「闘神演舞」終了後（通常）</td>
+        <td>終了画面確認後に即やめ</td>
+        <td class="td-left">サミートロフィーが出た場合は設定示唆あり</td>
+      </tr>
+      <tr>
+        <td class="td-left">AT「闘神演舞」終了後（上位CZ「天撃」発生時）</td>
+        <td class="td-bad">天撃失敗するまで続行！</td>
+        <td class="td-left">天撃失敗後は天国モードへ移行。128あべしで当選濃厚</td>
+      </tr>
+      <tr>
+        <td class="td-left">上位AT「裏闘神演舞」終了後</td>
+        <td>終了後に天撃（上位CZ）発生するため続行</td>
+        <td class="td-left">天撃失敗後 → 天国モードへ移行</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">✅ 上位CZ「天撃」失敗後は必ず続行</div>
+    <p>上位AT「裏闘神演舞」終了後に発生する上位CZ「天撃（ツラヌキCZ）」が失敗した場合、<strong>天国モードへの移行が濃厚</strong>。天国モードは128あべし（実ゲームで平均65G前後）でATに当選するため、必ず次のAT当選まで続行すること。</p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">✅ AT終了時のサミートロフィー確認</div>
+    <p>AT終了時にサミートロフィーが出現した場合は高設定の示唆となる。トロフィーの色（銅＜銀＜金＜プラチナ＜レインボー）で設定の高さを判断する材料になる。</p>
+  </div>
+
+  <h3 class="section-sub">上位AT後の見抜き方</h3>
+  <p>データカウンターでBB（ビッグボーナス）履歴の中に<strong>5G前後の超短い当選履歴</strong>がある場合、それが上位AT（裏闘神演舞）に突入した証拠。上位AT後は天撃から天国モードへの引き戻しルートがあるため、続行価値が非常に高い。</p>
+</section>
+
+<div class="divider"></div>
+
+<!-- 特殊狙い目 -->
+<section class="section" id="tokushu">
+  <h2 class="section-title">特殊狙い目</h2>
+
+  <div class="card">
+    <div class="card-title">🎯 上位CZ「天撃」失敗直後台（0あべし〜）</div>
+    <p>上位CZ「天撃」が失敗した直後の台は<strong>天国モードへの移行が濃厚</strong>。天国モードでは128あべし（実ゲーム約65G）でATに当選する。失敗直後に捨てられた台が空いていれば、G数を問わず即着席してAT当選まで続行する。</p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🎯 1473あべし以降の台（天井直前）</div>
+    <p>液晶左上のあべし数が<strong>1473あべし以上</strong>の台は、この後のAT当選で「ATレベル3以上確定」の天井恩恵が付与される。等価であれば積極的に着席して打ちきる価値がある。</p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🎯 193〜256あべしゾーン（全モード共通）</div>
+    <p>193〜256あべしは全4モード共通でAT当選期待度が高い。この区間の途中で台が空いていれば（残り少ないG数でも）狙う価値がある場合がある。特に257あべしを超えたばかりの台は除外してよい。</p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🎯 リセット後の256あべし以内台（朝一）</div>
+    <p>朝一リセット後は256あべし以内での当選率が若干上昇している。さらに最大天井が1280あべし（通常比256あべし短縮）のため、リセット台は等価400あべし前後から打ち始めても期待値がプラスになる。</p>
+  </div>
+
+  <div class="note">
+    ⚠ 本機はモードAが最も多く滞在する。1217あべしに到達した台がモードA滞在の場合、1536あべしまで深追いになるリスクがある。モードの示唆演出（100G枠ランプ、フェイク前兆のあべし数）も参考にしながら押し引きを判断しよう。
+  </div>
+</section>
+
+<!-- 下部チェッカーバナー -->
+<a class="checker-banner" href="hokuto_tensei2_checker.html" style="margin: 28px 16px;">
+  <div class="checker-banner-label">FREE TOOL</div>
+  <div class="checker-banner-title">北斗転生2　狙い目チェッカー</div>
+  <div class="checker-banner-desc">今打っている台・狙っている台が打てるかすぐ判定</div>
+  <div class="checker-banner-btn">▶ チェッカーを使う</div>
+</a>
+
+<footer>
+  <a class="back-btn" href="index.html">← 機種一覧へ戻る</a>
+  <div class="footer-note">
+    ※掲載データは独自調査・各解析サイト情報をもとにまとめています。実際の遊技は自己責任でお願いします。<br>
+    ©武論尊・原哲夫／コアミックス 1983, ©COAMIX 2007 版権許諾証YJN-815 ©Sammy<br>
+    狙い目手帖 — スマスロ攻略まとめ
+  </div>
+</footer>
+
+</body>
+</html>

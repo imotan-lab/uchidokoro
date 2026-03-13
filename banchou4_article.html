@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>押忍！番長4 天井・狙い目まとめ｜やめどき・リセット恩恵も解説</title>
+<meta name="description" content="スマスロ押忍！番長4の天井・狙い目を初心者向けにわかりやすく解説。ボーナス間699G天井・スルー回数天井（最大9スルー）、換金率別の狙い目、リセット押忍モード恩恵、やめどきまで網羅。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@700;800&family=Noto+Sans+JP:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0c0c0e;
+    --surface: #111115;
+    --surface2: #18181e;
+    --border: #222230;
+    --accent: #c8972a;
+    --accent2: #e8b84a;
+    --text: #ddd8cc;
+    --text-muted: #7a7870;
+    --text-sub: #aaa49a;
+    --good: #4a9e6a;
+    --warn: #c8972a;
+    --bad: #9e4a4a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans JP', sans-serif;
+    font-weight: 300;
+    line-height: 1.8;
+    font-size: 15px;
+    overflow-x: hidden;
+  }
+  body > *:not(header) { max-width: 600px; margin-left: auto; margin-right: auto; }
+  a, button { touch-action: manipulation; }
+
+  header {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 200;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    background: rgba(12,12,14,0.96);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo {
+    font-family: 'Shippori Mincho', serif;
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: var(--accent);
+    text-decoration: none;
+    letter-spacing: 0.08em;
+  }
+
+  .header-back {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .mv {
+    padding: 72px 16px 32px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .mv-label {
+    font-size: 0.6rem;
+    color: var(--accent);
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .mv-title {
+    font-family: 'Shippori Mincho', serif;
+    font-size: clamp(1.4rem, 6vw, 2rem);
+    font-weight: 800;
+    line-height: 1.4;
+    margin-bottom: 12px;
+  }
+
+  .mv-title em { color: var(--accent); font-style: normal; }
+
+  .mv-desc {
+    font-size: 0.8rem;
+    color: var(--text-sub);
+    line-height: 1.9;
+    margin-bottom: 16px;
+  }
+
+  .mv-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  .tag {
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 0.62rem;
+    padding: 3px 8px;
+    border-radius: 20px;
+  }
+
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin: 20px 16px;
+  }
+
+  .toc-title {
+    font-size: 0.72rem;
+    color: var(--accent);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    margin-bottom: 10px;
+  }
+
+  .toc a {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+    color: var(--text-sub);
+    text-decoration: none;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .toc a:last-child { border-bottom: none; }
+  .toc a::before {
+    content: '';
+    display: block;
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .checker-banner {
+    margin: 0 16px 4px;
+    background: linear-gradient(135deg, #1a1508 0%, #0c0c0e 100%);
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    padding: 16px;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .checker-banner:active { opacity: 0.85; }
+  .cb-icon { font-size: 2rem; flex-shrink: 0; }
+  .cb-body { flex: 1; min-width: 0; }
+  .cb-label { font-size: 0.58rem; color: var(--accent); font-weight: 700; letter-spacing: 0.15em; margin-bottom: 3px; }
+  .cb-title { font-size: 0.9rem; font-weight: 700; color: var(--accent2); margin-bottom: 3px; }
+  .cb-desc { font-size: 0.68rem; color: var(--text-muted); line-height: 1.5; }
+  .cb-arr { color: var(--accent); font-size: 1.2rem; flex-shrink: 0; }
+
+  .article { padding: 0 16px; }
+
+  .section { padding: 32px 0 0; }
+
+  .section-title {
+    font-family: 'Shippori Mincho', serif;
+    font-size: 1.15rem;
+    font-weight: 700;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--accent);
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-title .icon { font-size: 1rem; }
+
+  .h3 {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--accent2);
+    margin: 20px 0 10px;
+    padding-left: 10px;
+    border-left: 3px solid var(--accent);
+  }
+
+  p {
+    font-size: 0.84rem;
+    color: var(--text-sub);
+    line-height: 2;
+    margin-bottom: 14px;
+  }
+
+  p.note {
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    background: var(--surface);
+    border-left: 3px solid var(--accent);
+    padding: 10px 12px;
+    border-radius: 0 6px 6px 0;
+    margin-bottom: 14px;
+    line-height: 1.8;
+  }
+
+  strong { color: var(--text); font-weight: 700; }
+
+  .info-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+
+  .info-box-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    margin-bottom: 10px;
+  }
+
+  .aim-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+    margin-bottom: 14px;
+  }
+
+  .aim-table th {
+    background: var(--surface2);
+    color: var(--text-muted);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    padding: 8px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .aim-table td {
+    padding: 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    vertical-align: middle;
+  }
+
+  .aim-table tr:last-child td { border-bottom: none; }
+
+  .aim-table .num {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--accent2);
+    white-space: nowrap;
+  }
+
+  .aim-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .aim-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .aim-card.special {
+    border-color: var(--accent);
+    background: linear-gradient(135deg, #1a1508 0%, #111115 100%);
+  }
+
+  .aim-badge {
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 3px 7px;
+    border-radius: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .badge-normal { background: rgba(200,151,42,0.15); color: var(--accent); }
+  .badge-special { background: rgba(200,151,42,0.3); color: var(--accent2); }
+  .badge-reset { background: rgba(74,158,106,0.15); color: var(--good); }
+
+  .aim-card-body {}
+  .aim-card-title { font-size: 0.86rem; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+  .aim-card-desc { font-size: 0.74rem; color: var(--text-muted); line-height: 1.8; }
+
+  .stop-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--border);
+    margin-bottom: 14px;
+  }
+
+  .stop-row {
+    background: var(--surface);
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .stop-row-head {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .stop-row-body {
+    font-size: 0.73rem;
+    color: var(--text-muted);
+    line-height: 1.7;
+  }
+
+  .dot-good { color: var(--good); }
+  .dot-warn { color: var(--warn); }
+  .dot-bad  { color: var(--bad); }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 24px 16px;
+    text-align: center;
+  }
+
+  .footer-logo {
+    font-family: 'Shippori Mincho', serif;
+    font-size: 0.95rem;
+    color: var(--accent);
+    font-weight: 800;
+    margin-bottom: 12px;
+  }
+
+  .footer-links {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin-bottom: 12px;
+  }
+
+  .footer-links a { font-size: 0.7rem; color: var(--text-muted); text-decoration: none; }
+  .footer-copy { font-size: 0.6rem; color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <a href="index.html" class="logo">狙い目手帖</a>
+  <a href="index.html" class="header-back">← 機種一覧へ</a>
+</header>
+
+<div class="mv">
+  <p class="mv-label">Slot Strategy</p>
+  <h1 class="mv-title"><em>押忍！番長4</em><br>天井・狙い目まとめ</h1>
+  <p class="mv-desc">
+    ボーナス間699G天井・スルー回数天井の仕組みから<br>
+    換金率別の狙い目、リセット押忍モード恩恵、<br>
+    やめどきまで。初心者でもわかるようにまとめました。
+  </p>
+  <div class="mv-tags">
+    <span class="tag">天井狙い</span>
+    <span class="tag">スルー回数</span>
+    <span class="tag">押忍モード</span>
+    <span class="tag">やめどき</span>
+    <span class="tag">リセット</span>
+    <span class="tag">引き戻し</span>
+  </div>
+</div>
+
+<div class="toc">
+  <div class="toc-title">📋 目次</div>
+  <a href="#tenjo">天井・基本スペック</a>
+  <a href="#mode">内部モードと天井の仕組み</a>
+  <a href="#neraiime">換金率別の狙い目</a>
+  <a href="#suruu">スルー回数狙い</a>
+  <a href="#reset">リセット（朝一）狙い</a>
+  <a href="#yametime">やめどき</a>
+  <a href="#checker">狙い目チェッカーを使う</a>
+</div>
+
+<a href="banchou4_checker.html" class="checker-banner">
+  <div class="cb-icon">⚡</div>
+  <div class="cb-body">
+    <div class="cb-label">無料ツール</div>
+    <div class="cb-title">番長4 狙い目チェッカー</div>
+    <div class="cb-desc">G数・スルー回数を入れるだけで今すぐ狙えるか即判定</div>
+  </div>
+  <span class="cb-arr">›</span>
+</a>
+
+<div class="article">
+
+  <!-- 天井・基本スペック -->
+  <div class="section" id="tenjo">
+    <h2 class="section-title"><span class="icon">👊</span>天井・基本スペック</h2>
+
+    <div class="info-box">
+      <table class="aim-table">
+        <thead><tr><th></th><th>内容</th></tr></thead>
+        <tr><td>ゲーム数天井</td><td class="num">ボーナス間699G+α</td></tr>
+        <tr><td>スルー回数天井</td><td class="num">最大9スルーでAT確定</td></tr>
+        <tr><td>特訓間天井</td><td class="num">249G+α（特訓に当選）</td></tr>
+        <tr><td>天井恩恵</td><td>ボーナス確定（AT突入は抽選）</td></tr>
+        <tr><td>G数の確認</td><td>液晶左側（大きい数字が特訓間・小さい数字がボーナス間）</td></tr>
+        <tr><td>AT「頂RISE」純増</td><td class="num">約2.7枚/G</td></tr>
+        <tr><td>コイン持ち</td><td class="num">約33G/50枚</td></tr>
+        <tr><td>機械割</td><td>設定1：97.5%前後 ～ 設定6：109%前後</td></tr>
+      </table>
+    </div>
+
+    <p class="note">💡 天井はボーナス間のカウントで、途中でATを挟んでも継続します。ただしAT終了後に<strong>有利区間がリセットされた場合（頂RISE UP突入）</strong>はボーナス間天井もリセットされます。</p>
+
+    <p>本機はCZがなく<strong>通常時→特訓→対決→ボーナス→AT</strong>という流れが基本。ボーナスを何度スルーしてもAT非当選が続けば救済ポイントが蓄積され、最大9スルーでAT確定します。</p>
+  </div>
+
+  <!-- 内部モードと天井の仕組み -->
+  <div class="section" id="mode">
+    <h2 class="section-title"><span class="icon">🎮</span>内部モードと天井の仕組み</h2>
+
+    <p>本機には複数の<strong>内部モード</strong>が存在し、滞在モードによって対決の当選期待度や特訓の発生しやすさが大きく変わります。</p>
+
+    <div class="info-box">
+      <table class="aim-table">
+        <thead><tr><th>モード</th><th>特徴</th><th>立ち回り</th></tr></thead>
+        <tr>
+          <td><strong>通常モード</strong></td>
+          <td>レア役や規定G数消化で特訓へ</td>
+          <td style="color:var(--text-muted)">G数次第</td>
+        </tr>
+        <tr>
+          <td><strong>押忍モード ★</strong></td>
+          <td>特訓天井149G・対決勝利期待度50%超</td>
+          <td style="color:var(--good)"><strong>特訓まで続行</strong></td>
+        </tr>
+        <tr>
+          <td><strong>天国モード ★</strong></td>
+          <td>特訓天井49G・対決勝利でほぼ確定</td>
+          <td style="color:var(--good)"><strong>当選まで続行</strong></td>
+        </tr>
+        <tr>
+          <td><strong>引き戻しモード</strong></td>
+          <td>AT終了後に必ず移行。99G以内に特訓発生</td>
+          <td style="color:var(--good)"><strong>対決まで続行</strong></td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="h3">🔍 モードの見分け方</div>
+
+    <div class="info-box">
+      <table class="aim-table">
+        <thead><tr><th>示唆演出</th><th>意味</th></tr></thead>
+        <tr>
+          <td>轟の<strong>赤オーラ</strong></td>
+          <td style="color:var(--good)">押忍モード or 天国濃厚</td>
+        </tr>
+        <tr>
+          <td>轟の<strong>青オーラ</strong></td>
+          <td style="color:var(--good)">青7ボーナス or AT本前兆濃厚</td>
+        </tr>
+        <tr>
+          <td>ステージチェンジ時に<strong>轟シルエット</strong></td>
+          <td>通常B以上のモード示唆</td>
+        </tr>
+        <tr>
+          <td>ステージチェンジ時に<strong>轟パンチ</strong></td>
+          <td style="color:var(--good)">天国 or 本前兆濃厚</td>
+        </tr>
+        <tr>
+          <td>ボーナス終了後ステージが<strong>夕方</strong></td>
+          <td style="color:var(--good)">天国 or AT濃厚</td>
+        </tr>
+        <tr>
+          <td>ボーナス終了後ステージが<strong>夜</strong></td>
+          <td style="color:var(--good)">AT本前兆濃厚</td>
+        </tr>
+        <tr>
+          <td>BB開始時に<strong>過去シリーズ楽曲</strong>に変化</td>
+          <td style="color:var(--good)">次回天国濃厚</td>
+        </tr>
+      </table>
+    </div>
+
+    <p class="note">⚠️ ステージチェンジ発生時のアイキャッチは<strong>自動表示</strong>です。取りこぼしに注意して確認しましょう。</p>
+  </div>
+
+  <!-- 換金率別の狙い目 -->
+  <div class="section" id="neraiime">
+    <h2 class="section-title"><span class="icon">🎯</span>換金率別の狙い目</h2>
+
+    <div class="info-box">
+      <table class="aim-table">
+        <thead><tr><th>種別</th><th>等価</th><th>5.6枚交換</th></tr></thead>
+        <tr>
+          <td>通常天井狙い<br><small>（0スルー・モード不問）</small></td>
+          <td class="num">約400G〜</td>
+          <td class="num">約500G〜</td>
+        </tr>
+        <tr>
+          <td>特訓間天井狙い</td>
+          <td class="num">190G〜</td>
+          <td class="num">190G〜</td>
+        </tr>
+        <tr>
+          <td>リセット確定<br><small>（押忍モード確定）</small></td>
+          <td class="num">0G〜（即着席）</td>
+          <td class="num">0G〜（即着席）</td>
+        </tr>
+        <tr>
+          <td>押忍モード確認後</td>
+          <td class="num">50G〜</td>
+          <td class="num">50G〜</td>
+        </tr>
+      </table>
+    </div>
+
+    <p class="note">💡 モードが悪い（通常モード濃厚）と推測できる場合は狙い目ラインをさらに深く設定しましょう。液晶左側のゲーム数は<strong>大きい数字が特訓間・小さい数字がボーナス間</strong>です。</p>
+
+    <p>天井到達時の恩恵は<strong>ボーナス確定のみ</strong>でAT突入は別途抽選です。ただし救済ポイントが蓄積されているほどAT期待度は上がります。ゲーム数天井と同時にスルー回数も積み重なっているケースが多いため、深ハマり台ほど期待値は高くなります。</p>
+  </div>
+
+  <!-- スルー回数狙い -->
+  <div class="section" id="suruu">
+    <h2 class="section-title"><span class="icon">🔢</span>スルー回数狙い</h2>
+
+    <p>本機最大の特徴が<strong>ボーナスのスルー回数天井</strong>。AT非当選のボーナスが続くたびに救済ポイントが蓄積し、最大9スルーでAT確定します。</p>
+
+    <div class="info-box">
+      <table class="aim-table">
+        <thead><tr><th>スルー回数</th><th>狙い目の目安</th><th>備考</th></tr></thead>
+        <tr>
+          <td>1スルー<br><small>（700G超履歴なし）</small></td>
+          <td class="num">170G〜</td>
+          <td>救済ポイント蓄積中</td>
+        </tr>
+        <tr>
+          <td>2スルー</td>
+          <td class="num">0G〜（即着席）</td>
+          <td>AT当選まで続行推奨</td>
+        </tr>
+        <tr>
+          <td>3スルー〜</td>
+          <td class="num">即着席</td>
+          <td>深いほど期待度アップ</td>
+        </tr>
+        <tr>
+          <td>7〜9スルー</td>
+          <td class="num">AT確定</td>
+          <td style="color:var(--good)"><strong>最優先で着席</strong></td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="aim-cards">
+      <div class="aim-card special">
+        <span class="aim-badge badge-special">700G天井履歴あり</span>
+        <div class="aim-card-body">
+          <div class="aim-card-title">3スルー〜で狙い目に</div>
+          <div class="aim-card-desc">
+            過去にボーナス間700G以上ハマった履歴がある台は救済ポイントがより多く蓄積されている可能性があります。データカウンターで最大ハマりG数を確認しましょう。
+          </div>
+        </div>
+      </div>
+      <div class="aim-card special">
+        <span class="aim-badge badge-special">600G以上ハマり実績</span>
+        <div class="aim-card-body">
+          <div class="aim-card-title">赤7以上選択率アップの可能性</div>
+          <div class="aim-card-desc">
+            ボーナス間600G以上のハマりがあった台では、次回ボーナス当選時に赤7以上のボーナスが選ばれやすくなる傾向が実戦データで確認されています。
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="note">⚠️ スルー回数はデータカウンターの「スランプグラフ」や「ボーナス履歴」から推測するのが基本です。AT当選でリセットされるので注意。</p>
+  </div>
+
+  <!-- リセット狙い -->
+  <div class="section" id="reset">
+    <h2 class="section-title"><span class="icon">🔄</span>リセット（朝一）狙い</h2>
+
+    <div class="aim-cards">
+      <div class="aim-card special">
+        <span class="aim-badge badge-reset">リセット確定</span>
+        <div class="aim-card-body">
+          <div class="aim-card-title">朝一着席でOK（押忍モード確定）</div>
+          <div class="aim-card-desc">
+            設定変更後は必ず<strong>押忍モードからスタート</strong>。特訓天井149G・対決勝利期待度50%超の有利な状態が確定しています。また<strong>スルー回数天井も6スルーに短縮</strong>されるため、リセット確定台は積極的に狙えます。
+          </div>
+        </div>
+      </div>
+      <div class="aim-card">
+        <span class="aim-badge badge-normal">据え置き濃厚</span>
+        <div class="aim-card-body">
+          <div class="aim-card-title">押忍モードを超えた台は据え置き濃厚</div>
+          <div class="aim-card-desc">
+            リセット時は必ず押忍モードからスタートするため、朝一から特訓天井の149Gを超えて当選がなかった台は<strong>据え置きが濃厚</strong>。G数天井まで残りゲーム数で判断しましょう。
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-box">
+      <div class="info-box-title">🔍 リセットの見分け方</div>
+      <table class="aim-table">
+        <tr><td>✅ 朝一・轟の赤オーラ確認</td><td style="color:var(--good)">押忍モード確定（リセット or ボーナス後）</td></tr>
+        <tr><td>✅ 前日深ハマりで当日0Gスタート</td><td style="color:var(--good)">リセット濃厚</td></tr>
+        <tr><td>⚠️ 朝一・赤オーラなし</td><td style="color:var(--text-muted)">据え置きの可能性あり</td></tr>
+        <tr><td>⚠️ ガックンチェック</td><td style="color:var(--text-muted)">スマスロはガックンしない</td></tr>
+      </table>
+    </div>
+
+    <p class="note">⚠️ リセット時の<strong>天井ゲーム数短縮などの恩恵は確認されていません</strong>。朝一の恩恵は「押忍モード確定」と「スルー回数天井の6スルー短縮」の2点です。</p>
+  </div>
+
+  <!-- やめどき -->
+  <div class="section" id="yametime">
+    <h2 class="section-title"><span class="icon">🚪</span>やめどき</h2>
+
+    <p>本機はボーナス終了後・AT終了後ともにモード確認が重要。状況を見誤ると大きな損失になります。</p>
+
+    <div class="info-box">
+      <div class="info-box-title">ボーナス終了後（AT非当選時）のやめどき</div>
+      <table class="aim-table">
+        <thead><tr><th>状況</th><th>示唆</th><th>判断</th></tr></thead>
+        <tr>
+          <td>ステージが<strong>夕方</strong></td>
+          <td>天国 or AT濃厚</td>
+          <td style="color:var(--good)"><strong>当選まで続行</strong></td>
+        </tr>
+        <tr>
+          <td>ステージが<strong>夜</strong></td>
+          <td>AT本前兆濃厚</td>
+          <td style="color:var(--good)"><strong>当選まで続行</strong></td>
+        </tr>
+        <tr>
+          <td><strong>轟の赤オーラ</strong>確認</td>
+          <td>押忍モード or 天国</td>
+          <td style="color:var(--good)"><strong>特訓まで続行（149G目安）</strong></td>
+        </tr>
+        <tr>
+          <td>BB開始時に<strong>過去シリーズ楽曲</strong></td>
+          <td>次回天国濃厚</td>
+          <td style="color:var(--good)"><strong>次回当選まで続行</strong></td>
+        </tr>
+        <tr>
+          <td>示唆なし・河川敷ステージ継続</td>
+          <td>通常モード濃厚</td>
+          <td style="color:var(--warn)">即やめ推奨</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="info-box">
+      <div class="info-box-title">AT終了後のやめどき</div>
+      <p style="font-size:0.78rem;color:var(--text-sub);margin-bottom:10px;">AT終了後は必ず<strong>引き戻しモード</strong>に移行。99G以内に特訓が発生します。</p>
+      <table class="aim-table">
+        <thead><tr><th>状況</th><th>判断</th></tr></thead>
+        <tr>
+          <td>特訓発生</td>
+          <td style="color:var(--good)"><strong>対決まで続行（勝利でAT再突入）</strong></td>
+        </tr>
+        <tr>
+          <td>特訓経由の<strong>対決に敗北</strong></td>
+          <td style="color:var(--warn)">ここでやめてOK（天国移行なし）</td>
+        </tr>
+        <tr>
+          <td>AT中にボーナス未当選→通常に戻った</td>
+          <td style="color:var(--good)">ボーナス間天井が近い可能性→G数確認して継続判断</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="stop-list">
+      <div class="stop-row">
+        <div class="stop-row-head"><span class="dot-good">🟢</span>即やめOKなパターン</div>
+        <div class="stop-row-body">
+          ・ボーナス終了後、示唆演出なし＋河川敷ステージ継続<br>
+          ・AT終了後、引き戻し特訓の対決に敗北した直後<br>
+          ・G数天井・スルー回数天井のどちらにも遠い台
+        </div>
+      </div>
+      <div class="stop-row">
+        <div class="stop-row-head"><span class="dot-warn">🟡</span>様子を見るべきパターン</div>
+        <div class="stop-row-body">
+          ・ボーナス後に轟の赤オーラ確認→押忍モード濃厚（149Gまで様子見）<br>
+          ・ボーナス後ステージが夕方 or 夜→天国 or AT本前兆の可能性<br>
+          ・AT中にボーナスを引けずに終了→ボーナス間天井が近いかもしれない
+        </div>
+      </div>
+      <div class="stop-row">
+        <div class="stop-row-head"><span class="dot-bad">🔴</span>絶対やめないパターン</div>
+        <div class="stop-row-body">
+          ・ボーナス後ステージが夜（AT本前兆濃厚）<br>
+          ・BB開始時に過去シリーズ楽曲（次回天国確定級）<br>
+          ・AT終了後の引き戻し特訓の対決前<br>
+          ・スルー回数が7〜9回（AT当選確定 or 直近で確定）
+        </div>
+      </div>
+    </div>
+
+    <p class="note">📝 AT後の引き戻しは<strong>引き戻しモード中の最初の特訓後の対決が勝負</strong>。対決に敗北した時点でモード移行の可能性がなくなるので、そこがやめどきの明確なラインです。</p>
+  </div>
+
+  <!-- チェッカー誘導 -->
+  <div class="section" id="checker">
+    <h2 class="section-title"><span class="icon">⚡</span>狙い目チェッカーを使う</h2>
+    <p>G数・スルー回数を入れるだけで◎○△×で即判定。ホールでその場でチェックできます。</p>
+  </div>
+
+</div><!-- /article -->
+
+<a href="banchou4_checker.html" class="checker-banner" style="margin: 16px 16px 32px;">
+  <div class="cb-icon">⚡</div>
+  <div class="cb-body">
+    <div class="cb-label">無料ツール</div>
+    <div class="cb-title">番長4 狙い目チェッカー</div>
+    <div class="cb-desc">G数・スルー回数・モードを入れて即判定</div>
+  </div>
+  <span class="cb-arr">›</span>
+</a>
+
+<div style="margin: 0 16px 32px; text-align: center;">
+  <a href="index.html" style="display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 24px;color:var(--accent);text-decoration:none;font-size:0.85rem;font-weight:700;">
+    ← 機種一覧へ戻る
+  </a>
+</div>
+
+<footer>
+  <div class="footer-logo">狙い目手帖</div>
+  <div class="footer-links">
+    <a href="#">プライバシーポリシー</a>
+    <a href="#">お問い合わせ</a>
+  </div>
+  <p class="footer-copy">掲載内容は公開情報をもとにした考察です。実際の立ち回りはご自身の判断でお願いします。</p>
+  <p class="footer-copy" style="margin-top:6px;">© 2025 狙い目手帖</p>
+</footer>
+
+</body>
+</html>

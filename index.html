@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>狙い目手帖 | スロット天井・狙い目・オカルト考察</title>
+<meta name="description" content="スロット天井狙い・期待値・オカルト立ち回りをまとめた攻略サイト。スマスロ各機種の狙い目チェッカーも公開中。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@700;800&family=Noto+Sans+JP:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0c0c0e;
+    --surface: #111115;
+    --surface2: #18181e;
+    --border: #222230;
+    --accent: #c8972a;
+    --accent2: #e8b84a;
+    --text: #ddd8cc;
+    --text-muted: #7a7870;
+    --text-sub: #aaa49a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans JP', sans-serif;
+    font-weight: 300;
+    line-height: 1.7;
+    font-size: 15px;
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* コンテンツ最大幅（タブレット・PC対応） */
+  body > *:not(header):not(nav) {
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  /* ボタン・リンク全般のタップ最適化 */
+  a, button {
+    touch-action: manipulation;
+  }
+
+  /* ===== ヘッダー ===== */
+  header {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 200;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    background: rgba(12,12,14,0.96);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  .logo {
+    font-family: 'Shippori Mincho', serif;
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: var(--accent);
+    text-decoration: none;
+    letter-spacing: 0.08em;
+  }
+  .menu-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 10px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .menu-btn span {
+    display: block;
+    width: 22px;
+    height: 1.5px;
+    background: var(--text-muted);
+    transition: all 0.25s;
+    transform-origin: center;
+  }
+  .menu-btn.open span:nth-child(1) { transform: rotate(45deg) translate(4.6px, 4.6px); }
+  .menu-btn.open span:nth-child(2) { opacity: 0; transform: scaleX(0); }
+  .menu-btn.open span:nth-child(3) { transform: rotate(-45deg) translate(4.6px, -4.6px); }
+
+  /* ドロワー */
+  .drawer {
+    position: fixed;
+    top: 52px; left: 0; right: 0; bottom: 0;
+    background: rgba(12,12,14,0.98);
+    z-index: 190;
+    padding: 24px 20px;
+    transform: translateX(100%);
+    transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
+    overflow-y: auto;
+  }
+  .drawer.open { transform: translateX(0); }
+  .drawer a {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--text);
+    text-decoration: none;
+    font-size: 1.05rem;
+    font-weight: 700;
+    padding: 18px 0;
+    min-height: 44px;
+    border-bottom: 1px solid var(--border);
+    letter-spacing: 0.03em;
+  }
+  .drawer a .arr { color: var(--accent); }
+
+  /* ===== ヒーロー ===== */
+  .hero {
+    padding: 80px 20px 48px;
+    min-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::after {
+    content: '';
+    position: absolute;
+    top: -60px; right: -60px;
+    width: 260px; height: 260px;
+    background: radial-gradient(circle, rgba(200,151,42,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-label {
+    font-size: 0.6rem;
+    color: var(--accent);
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    opacity: 0;
+    animation: fadeUp 0.5s 0.2s forwards;
+  }
+  .hero-title {
+    font-family: 'Shippori Mincho', serif;
+    font-size: clamp(3.2rem, 16vw, 5rem);
+    font-weight: 800;
+    line-height: 1.0;
+    margin-bottom: 22px;
+    opacity: 0;
+    animation: fadeUp 0.5s 0.35s forwards;
+  }
+  .hero-title em { color: var(--accent); font-style: normal; }
+  .hero-desc {
+    font-size: 0.82rem;
+    color: var(--text-sub);
+    line-height: 2.1;
+    margin-bottom: 28px;
+    opacity: 0;
+    animation: fadeUp 0.5s 0.5s forwards;
+  }
+  .hero-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    opacity: 0;
+    animation: fadeUp 0.5s 0.65s forwards;
+  }
+  .tag {
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 0.65rem;
+    padding: 4px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.04em;
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ===== セクション共通 ===== */
+  .section { padding: 44px 16px; }
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 18px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-title {
+    font-family: 'Shippori Mincho', serif;
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+  .section-en {
+    font-size: 0.58rem;
+    color: var(--accent);
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+  }
+  .section-count {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    margin-left: auto;
+  }
+
+  /* ===== バッジ ===== */
+  .badge {
+    display: inline-block;
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 2px 7px;
+    border-radius: 3px;
+    margin-bottom: 5px;
+  }
+  .badge-tenjo { background: rgba(200,151,42,0.15); color: var(--accent); }
+  .badge-okult { background: rgba(176,48,48,0.15); color: #d06060; }
+  .badge-tool  { background: rgba(52,152,219,0.15); color: #5aacdd; }
+  .badge-notenjo { background: rgba(100,100,180,0.15); color: #9090dd; }
+
+  /* ===== 機種カード ===== */
+  .card-list { display: flex; flex-direction: column; gap: 10px; }
+
+  .kinou-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 68px;
+    transition: background 0.12s;
+  }
+  .kinou-card:active { background: var(--surface2); }
+
+  .k-body { flex: 1; min-width: 0; }
+  .k-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.3;
+    margin-bottom: 3px;
+  }
+  .k-meta {
+    font-size: 0.66rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .k-arr { color: var(--text-muted); font-size: 1.1rem; flex-shrink: 0; }
+
+  /* ===== 記事リスト ===== */
+  .article-list {
+    display: flex; flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    gap: 1px;
+    background: var(--border);
+  }
+  .article-row {
+    background: var(--surface);
+    padding: 16px;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 62px;
+  }
+  .article-row:active { background: var(--surface2); }
+  .a-body { flex: 1; min-width: 0; }
+  .a-title {
+    font-size: 0.86rem;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.45;
+  }
+  .a-meta { font-size: 0.65rem; color: var(--text-muted); margin-top: 3px; }
+
+  /* ===== ツールカード ===== */
+  .tool-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 12px;
+    padding: 16px;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 10px;
+    min-height: 68px;
+  }
+  .tool-card:active { background: var(--surface2); }
+  .t-body { flex: 1; min-width: 0; }
+  .t-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--accent2);
+    margin-bottom: 4px;
+  }
+  .t-desc { font-size: 0.7rem; color: var(--text-muted); line-height: 1.55; }
+
+  /* ===== フッター ===== */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 28px 16px;
+    text-align: center;
+  }
+  .footer-logo {
+    font-family: 'Shippori Mincho', serif;
+    font-size: 1rem;
+    color: var(--accent);
+    font-weight: 800;
+    margin-bottom: 14px;
+  }
+  .footer-links {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    margin-bottom: 14px;
+  }
+  .footer-links a { font-size: 0.72rem; color: var(--text-muted); text-decoration: none; }
+  .footer-copy { font-size: 0.62rem; color: var(--text-muted); }
+
+  .divider { height: 1px; background: var(--border); }
+
+  /* ===== サイト紹介ブロック ===== */
+  .intro {
+    padding: 32px 16px 40px;
+    background: var(--surface);
+  }
+  .intro-catch {
+    font-family: 'Shippori Mincho', serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.7;
+    margin-bottom: 20px;
+  }
+  .intro-catch em { color: var(--accent); font-style: normal; }
+  .intro-features { display: flex; flex-direction: column; gap: 12px; }
+  .intro-feat { padding: 4px 0; }
+  .feat-title { font-size: 0.84rem; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+  .feat-desc { font-size: 0.72rem; color: var(--text-muted); line-height: 1.7; }
+</style>
+</head>
+<body>
+
+<!-- ヘッダー -->
+<header>
+  <a href="/" class="logo">狙い目手帖</a>
+  <button class="menu-btn" id="menuBtn" aria-label="メニューを開く">
+    <span></span><span></span><span></span>
+  </button>
+</header>
+
+<!-- ドロワー -->
+<nav class="drawer" id="drawer">
+  <a href="#intro" onclick="closeMenu()">このサイトについて <span class="arr">›</span></a>
+  <a href="#kinou" onclick="closeMenu()">機種別攻略 <span class="arr">›</span></a>
+  <a href="#okult" onclick="closeMenu()">オカルト考察 <span class="arr">›</span></a>
+  <a href="#tools" onclick="closeMenu()">狙い目チェッカー <span class="arr">›</span></a>
+</nav>
+
+<!-- ヒーロー -->
+<div class="hero">
+  <p class="hero-label">Slot Strategy &amp; Occult</p>
+  <h1 class="hero-title">狙い目<br><em>手帖</em></h1>
+  <p class="hero-desc">
+    難しい計算はいらない。<br>
+    G数を入れるだけで狙い目がわかる。<br>
+    初心者からガチ勢まで使えるスロット攻略帖。
+  </p>
+  <div class="hero-tags">
+    <span class="tag">天井狙い</span>
+    <span class="tag">期待値</span>
+    <span class="tag">リセット</span>
+    <span class="tag">オカルト</span>
+    <span class="tag">スマスロ</span>
+    <span class="tag">チェッカー</span>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- サイト紹介 -->
+<div class="intro" id="intro">
+  <p class="intro-catch">
+    <em>G数を入れるだけ。</em><br>
+    今すぐ狙うべき台かどうか、<br>その場でわかる。
+  </p>
+  <div class="intro-features">
+    <div class="intro-feat">
+      <div class="feat-title">機種別の天井・狙い目をまとめて掲載</div>
+      <div class="feat-desc">リセット恩恵・やめどき・ゾーンまで、初心者でもわかるようにまとめています</div>
+    </div>
+    <div class="intro-feat">
+      <div class="feat-title">ホールで即使えるチェッカーつき</div>
+      <div class="feat-desc">換金率・G数を入力するだけで期待値と狙い目を◎○△×で判定。計算不要</div>
+    </div>
+    <div class="intro-feat">
+      <div class="feat-title">オカルトも本気で考察</div>
+      <div class="feat-desc">数字で割り切れないジンクスや体感も、読み物として正直にまとめています</div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- 機種別攻略 -->
+<div class="section" id="kinou">
+  <div class="section-header">
+    <h2 class="section-title">機種別攻略</h2>
+    <span class="section-en">Strategy</span>
+    <span class="section-count">全18機種</span>
+  </div>
+  <div class="card-list">
+
+    <!-- 北斗の拳 -->
+    <a href="hokuto_article.html" class="kinou-card">
+      
+      <div class="k-body">
+        <div class="badge badge-tenjo">天井・狙い目</div>
+        <div class="k-title">スマスロ 北斗の拳</div>
+        <div class="k-meta">天井1268G / リセット800G / 777G短縮</div>
+      </div>
+      <span class="k-arr">›</span>
+    </a>
+
+    <!-- 北斗転生2 -->
+    <a href="hokuto_tensei2_article.html" class="kinou-card">
+      
+      <div class="k-body">
+        <div class="badge badge-tenjo">天井・狙い目</div>
+        <div class="k-title">スマスロ 北斗の拳 転生の章2</div>
+        <div class="k-meta">あべしシステム / モードA最大1536G / リセット短縮</div>
+      </div>
+      <span class="k-arr">›</span>
+    </a>
+
+    <!-- 東京喰種 -->
+    <a href="tokyo_ghoul_article.html" class="kinou-card">
+      
+      <div class="k-body">
+        <div class="badge badge-tenjo">天井・狙い目</div>
+        <div class="k-title">L 東京喰種</div>
+        <div class="k-meta">CZ間600G / AT間1200G / 喰ポイント</div>
+      </div>
+      <span class="k-arr">›</span>
+    </a>
+
+    <!-- ヴァルヴレイヴ2 -->
+    <a href="valvrave2_article.html" class="kinou-card">
+      
+      <div class="k-body">
+        <div class="badge badge-tenjo">天井・狙い目</div>
+        <div class="k-title">Lパチスロ 革命機ヴァルヴレイヴ2</div>
+        <div class="k-meta">BIG間1500G / CZ間999G / 3スルー確定</div>
+      </div>
+      <span class="k-arr">›</span>
+    </a>
+
+    <!-- カバネリ -->
+    <a href="kabaneri_article.html" class="kinou-card">
+      
+      <div class="k-body">
+        <div class="badge badge-tenjo">天井・狙い目</div>
+        <div class="k-title">スマスロ 甲鉄城のカバネリ 海門決戦</div>
+        <div class="k-meta">AT間天井 / リセット恩恵あり</div>
+      </div>
+      <span class="k-arr">›</span>
+    </a>
+
+    <!-- 攻殻機動隊 -->
+    <a href="koukaku_article.html" class="kinou-card">
+      
+      <div class="k-body">
+        <div class="badge badge-tenjo">天井・狙い目</div>
+        <div class="k-title">スマスロ 攻殻機動隊</div>
+        <div class="k-meta">天井・狙い目・やめどき</div>
+      </div>
+      <span class="k-arr">›</span>
+    </a>
+
+    <!-- ダンベル -->
+    <a href="dumbbell_article.html" class="kinou-card">
+      
+      <div class="k-body">
+        <div class="badge badge-tenjo">天井・狙い目</div>
+        <div class="k-title">スマスロ ダンベル何キロ持てる？</div>
+        <div class="k-meta">天井・狙い目・やめどき</div>
+      </div>
+      <span class="k-arr">›</span>
+    </a>
+
+    <!-- ゴブリンスレイヤー -->
+    <a href="goblin_article.html" class="kinou-card">
+      
+      <div class="k-body">
+        <div class="badge badge-tenjo">天井・狙い目</div>
+        <div class="k-title">スマスロ ゴブリンスレイヤー</div>
+        <div class="k-meta">天井・狙い目・やめどき</div>
+      </div>
+      <span class="k-arr">›</span>
+    </a>
+
+    <!-- バイオハザードヴィレッジ -->
+    <a href="biohazard_article.html" class="kinou-card">
+      
+      <div class="k-body">
+        <div class="badge badge-tenjo">天井・狙い目</div>
+        <div class="k-title">スマスロ バイオハザード ヴィレッジ</div>
+        <div class="k-meta">天井・狙い目・やめどき</div>
+      </div>
+      <span class="k-arr">›</span>
+    </a>
+
+    <!-- かぐや様 -->
+    <a href="kaguya_article.html" class="kinou-card">
+      
+      <div class="k-body">
+        <div class="badge badge-tenjo">天井・狙い目</div>
+        <div class="k-title">スマスロ かぐや様は告らせたい</div>
+        <div class="k-meta">BIG後1100G / REG後900G / リセット800G</div>
+      </div>
+      <span class="k-arr">›</span>
+    </a>
+
+    <!-- モンキーターンV -->
+    <a href="monkeyv_article.html" class="kinou-card">
+      
+      <div class="k-body">
+        <div class="badge badge-tenjo">天井・狙い目</div>
+        <div class="k-title">スマスロ モンキーターンV</div>
+        <div class="k-meta">ゲーム数795G / 周期6回 / リセット495G</div>
+      </div>
+      <span class="k-arr">›</span>
+    </a>
+
+    <!-- 鉄拳6 -->
+    <a href="tekken6_article.html" class="kinou-card">
+      
+      <div class="k-body">
+        <div class="badge badge-tenjo">天井・狙い目</div>
+        <div class="k-title">スマスロ 鉄拳6</div>
+        <div class="k-meta">ポイント天井900pt / 3スルー後AT確定 / リセット500pt</div>
+      </div>
+      <span class="k-arr">›</span>
+    </a>
+
+    <!-- ゴッドイーター -->
+    <a href="godeater_article.html" class="kinou-card">
+      
+      <div class="k-body">
+        <div class="badge badge-tenjo">天井・狙い目</div>
+        <div class="k-title">スマスロ ゴッドイーター リザレクション</div>
+        <div class="k-meta">CZ間600G / AT間1200G / リセット600G</div>
+      </div>
+      <span class="k-arr">›</span>
+    </a>
+
+    <!-- 番長4 -->
+    <a href="banchou4_article.html" class="kinou-card">
+      
+      <div class="k-body">
+        <div class="badge badge-tenjo">天井・狙い目</div>
+        <div class="k-title">スマスロ 押忍！番長4</div>
+        <div class="k-meta">ボーナス間699G / 最大9スルー / リセット押忍モード確定</div>
+      </div>
+      <span class="k-arr">›</span>
+    </a>
+
+    <!-- 転スラ -->
+    <a href="tensura_article.html" class="kinou-card">
+      
+      <div class="k-body">
+        <div class="badge badge-tenjo">天井・狙い目</div>
+        <div class="k-title">スマスロ 転生したらスライムだった件</div>
+        <div class="k-meta">転スラPt1200pt / ゲーム数1000G / ヴェルドラ引き継ぎ</div>
+      </div>
+      <span class="k-arr">›</span>
+    </a>
+
+    <!-- バキ -->
+    <a href="baki_article.html" class="kinou-card">
+      
+      <div class="k-body">
+        <div class="badge badge-tenjo">天井・狙い目</div>
+        <div class="k-title">Lバキ 強くなりたくば喰らえ!!!</div>
+        <div class="k-meta">CZ間600G / 3スルーAT確定 / エンドルフィン</div>
+      </div>
+      <span class="k-arr">›</span>
+    </a>
+
+    <!-- チバリヨ2 -->
+    <a href="chibaryo2_article.html" class="kinou-card">
+      
+      <div class="k-body">
+        <div class="badge badge-tenjo">天井・狙い目</div>
+        <div class="k-title">スマスロ チバリヨ2</div>
+        <div class="k-meta">ゲーム数999G / チェリー45回 / リミットレス狙い</div>
+      </div>
+      <span class="k-arr">›</span>
+    </a>
+
+    <!-- スト5 -->
+    <a href="sf5_article.html" class="kinou-card">
+      
+      <div class="k-body">
+        <div class="badge badge-notenjo">天井なし・立ち回り</div>
+        <div class="k-title">スマスロ ストリートファイターV 挑戦者の道</div>
+        <div class="k-meta">天井非搭載 / 高確ステージ狙い / 技術介入103.4%</div>
+      </div>
+      <span class="k-arr">›</span>
+    </a>
+
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- オカルト考察 -->
+<div class="section" id="okult">
+  <div class="section-header">
+    <h2 class="section-title">オカルト考察</h2>
+    <span class="section-en">Occult</span>
+  </div>
+  <div class="article-list">
+    <a href="#" class="article-row">
+      <div class="a-body">
+        <div class="badge badge-okult">オカルト</div>
+        <div class="a-title">東京喰種のオカルト立ち回りまとめ｜理論派には語れない話</div>
+        <div class="a-meta">ジンクス / 体感 / 立ち回り考察</div>
+      </div>
+      <span class="k-arr">›</span>
+    </a>
+    <a href="#" class="article-row">
+      <div class="a-body">
+        <div class="badge badge-okult">オカルト</div>
+        <div class="a-title">北斗の拳 オカルト派 vs 期待値派 どっちが正解？</div>
+        <div class="a-meta">比較考察 / 立ち回り</div>
+      </div>
+      <span class="k-arr">›</span>
+    </a>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ツール -->
+<div class="section" id="tools">
+  <div class="section-header">
+    <h2 class="section-title">狙い目チェッカー</h2>
+    <span class="section-en">Tools</span>
+  </div>
+
+  <a href="tokyo_ghoul_checker.html" class="tool-card">
+    <div class="t-body">
+      <div class="badge badge-tool">無料ツール</div>
+      <div class="t-title">東京喰種 狙い目チェッカー</div>
+      <div class="t-desc">換金率・G数・有馬貴将ジャッジメント失敗後・喰ポイントで即判定</div>
+    </div>
+    <span class="k-arr">›</span>
+  </a>
+  <a href="hokuto_checker.html" class="tool-card">
+    <div class="t-body">
+      <div class="badge badge-tool">無料ツール</div>
+      <div class="t-title">北斗の拳 狙い目チェッカー</div>
+      <div class="t-desc">換金率・G数・リセット確定・777G短縮で即判定</div>
+    </div>
+    <span class="k-arr">›</span>
+  </a>
+  <a href="godeater_checker.html" class="tool-card">
+    <div class="t-body">
+      <div class="badge badge-tool">無料ツール</div>
+      <div class="t-title">ゴッドイーター 狙い目チェッカー</div>
+      <div class="t-desc">換金率・G数・駆け抜け後・バカンスモードで即判定</div>
+    </div>
+    <span class="k-arr">›</span>
+  </a>
+</div>
+
+<!-- フッター -->
+<footer>
+  <div class="footer-logo">狙い目手帖</div>
+  <div class="footer-links">
+    <a href="#">プライバシーポリシー</a>
+    <a href="#">お問い合わせ</a>
+  </div>
+  <p class="footer-copy">© 2025 狙い目手帖</p>
+</footer>
+
+<script>
+  const menuBtn = document.getElementById('menuBtn');
+  const drawer  = document.getElementById('drawer');
+
+  menuBtn.addEventListener('click', () => {
+    const isOpen = drawer.classList.toggle('open');
+    menuBtn.classList.toggle('open', isOpen);
+    document.body.style.overflow = isOpen ? 'hidden' : '';
+  });
+
+  function closeMenu() {
+    drawer.classList.remove('open');
+    menuBtn.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  document.addEventListener('click', (e) => {
+    if (!menuBtn.contains(e.target) && !drawer.contains(e.target)) closeMenu();
+  });
+</script>
+</body>
+</html>

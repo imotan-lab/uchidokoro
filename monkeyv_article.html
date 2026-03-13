@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>スマスロ モンキーターンV 天井・狙い目まとめ｜やめどき・リセット恩恵も解説</title>
+<meta name="description" content="スマスロ モンキーターンVの天井・狙い目を解説。ゲーム数天井795G・周期天井6周期。換金率別狙い目・リセット恩恵・やめどきまで網羅。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@700;800&family=Noto+Sans+JP:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0c0c0e;--surface:#111115;--surface2:#18181e;--border:#222230;--accent:#c8972a;--accent2:#e8b84a;--text:#ddd8cc;--text-muted:#7a7870;--text-sub:#aaa49a}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:'Noto Sans JP',sans-serif;font-weight:300;line-height:1.8;font-size:15px;overflow-x:hidden}
+  body > *:not(header) { max-width: 600px; margin-left: auto; margin-right: auto; }
+  a, button { touch-action: manipulation; }
+header{position:fixed;top:0;left:0;right:0;z-index:200;height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;background:rgba(12,12,14,.96);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+.logo{font-family:'Shippori Mincho',serif;font-size:1.05rem;font-weight:800;color:var(--accent);text-decoration:none;letter-spacing:.08em}
+.header-back{font-size:.75rem;color:var(--text-muted);text-decoration:none}
+.mv{padding:72px 16px 32px;border-bottom:1px solid var(--border)}
+.mv-label{font-size:.6rem;color:var(--accent);letter-spacing:.3em;text-transform:uppercase;margin-bottom:10px}
+.mv-title{font-family:'Shippori Mincho',serif;font-size:clamp(1.4rem,6vw,2rem);font-weight:800;line-height:1.4;margin-bottom:12px}
+.mv-title em{color:var(--accent);font-style:normal}
+.mv-desc{font-size:.8rem;color:var(--text-sub);line-height:1.9;margin-bottom:16px}
+.mv-tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{border:1px solid var(--border);color:var(--text-muted);font-size:.62rem;padding:3px 8px;border-radius:20px}
+.toc{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin:20px 16px}
+.toc-title{font-size:.72rem;color:var(--accent);font-weight:700;letter-spacing:.1em;margin-bottom:10px}
+.toc a{display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--text-sub);text-decoration:none;padding:6px 0;border-bottom:1px solid var(--border)}
+.toc a:last-child{border-bottom:none}
+.toc a::before{content:'';display:block;width:4px;height:4px;border-radius:50%;background:var(--accent);flex-shrink:0}
+.cb{background:linear-gradient(135deg,#1a1508,#0c0c0e);border:1px solid var(--accent);border-radius:12px;padding:16px;text-decoration:none;display:flex;align-items:center;gap:14px;margin:0 16px 4px}
+.cb-icon{font-size:2rem;flex-shrink:0}
+.cb-body{flex:1;min-width:0}
+.cb-label{font-size:.58rem;color:var(--accent);font-weight:700;letter-spacing:.15em;margin-bottom:3px}
+.cb-title{font-size:.9rem;font-weight:700;color:var(--accent2);margin-bottom:3px}
+.cb-desc{font-size:.68rem;color:var(--text-muted);line-height:1.5}
+.cb-arr{color:var(--accent);font-size:1.2rem;flex-shrink:0}
+section{padding:28px 16px;border-bottom:1px solid var(--border)}
+.section-label{font-size:.58rem;color:var(--accent);letter-spacing:.25em;text-transform:uppercase;margin-bottom:6px}
+h2{font-family:'Shippori Mincho',serif;font-size:1.2rem;font-weight:800;margin-bottom:16px;line-height:1.4}
+h3{font-size:.85rem;font-weight:700;color:var(--accent2);margin:20px 0 10px;padding-left:10px;border-left:2px solid var(--accent)}
+p{font-size:.85rem;color:var(--text-sub);margin-bottom:12px;line-height:1.9}
+table{width:100%;border-collapse:collapse;font-size:.78rem;margin:12px 0}
+th{background:var(--surface2);color:var(--accent);font-weight:700;padding:8px 10px;text-align:left;border:1px solid var(--border);font-size:.72rem}
+td{padding:8px 10px;border:1px solid var(--border);color:var(--text-sub);vertical-align:top;line-height:1.6}
+tr:nth-child(even) td{background:rgba(255,255,255,.02)}
+.badge-good{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.68rem;font-weight:700;background:rgba(74,158,106,.2);color:#6ec48a;border:1px solid rgba(74,158,106,.4)}
+.badge-warn{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.68rem;font-weight:700;background:rgba(200,151,42,.2);color:var(--accent2);border:1px solid rgba(200,151,42,.4)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin:12px 0}
+.card-title{font-size:.72rem;font-weight:700;color:var(--accent);margin-bottom:8px}
+.card-body{font-size:.82rem;color:var(--text-sub);line-height:1.8}
+.card-special{border-color:var(--accent);background:linear-gradient(135deg,#1a1508,#111115)}
+.card-warn{border-color:rgba(158,74,74,.5);background:rgba(158,74,74,.05)}
+.note{background:rgba(200,151,42,.07);border-left:3px solid var(--accent);border-radius:0 6px 6px 0;padding:10px 12px;font-size:.78rem;color:var(--text-sub);margin:12px 0;line-height:1.7}
+.note strong{color:var(--accent2)}
+.spec-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.spec-item{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center}
+.spec-label{font-size:.6rem;color:var(--text-muted);margin-bottom:4px}
+.spec-value{font-size:1rem;font-weight:700;color:var(--accent2)}
+.spec-unit{font-size:.6rem;color:var(--text-muted)}
+.back-btn{display:flex;align-items:center;justify-content:center;gap:8px;margin:20px 16px 8px;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text-sub);text-decoration:none;font-size:.85rem}
+footer{padding:20px 16px 36px;text-align:center;font-size:.7rem;color:var(--text-muted);border-top:1px solid var(--border)}
+.hi td:first-child{color:var(--accent2);font-weight:700}
+</style>
+</head>
+<body>
+<header>
+  <a href="index.html" class="logo">狙い目手帖</a>
+  <a href="index.html" class="header-back">← 機種一覧</a>
+</header>
+
+<div class="mv">
+  <div class="mv-label">SLOT GUIDE</div>
+  <h1 class="mv-title">スマスロ<br><em>モンキーターンV</em><br>天井・狙い目まとめ</h1>
+  <p class="mv-desc">やめどき・リセット恩恵も解説。ゲーム数天井と周期天井の2本立て。リセット後は天井が大幅短縮されるため、朝イチ狙いが非常に強い機種。</p>
+  <div class="mv-tags">
+    <span class="tag">オリンピア</span>
+    <span class="tag">2023年12月導入</span>
+    <span class="tag">純増 約2.5枚</span>
+    <span class="tag">コイン持ち 32G/50枚</span>
+  </div>
+</div>
+
+<div style="margin:16px 16px 0;">
+  <a href="index.html" class="cb">
+    <div class="cb-icon">🎰</div>
+    <div class="cb-body">
+      <div class="cb-label">FREE TOOL</div>
+      <div class="cb-title">狙い目チェッカー</div>
+      <div class="cb-desc">G数を入力するだけで今すぐ打つべきか判定。無料。</div>
+    </div>
+    <div class="cb-arr">›</div>
+  </a>
+</div>
+
+<div class="toc">
+  <div class="toc-title">▶ もくじ</div>
+  <a href="#spec">基本スペック</a>
+  <a href="#tenjou">天井・リセット恩恵</a>
+  <a href="#mode">周期とモードの仕組み</a>
+  <a href="#neraime">狙い目まとめ</a>
+  <a href="#yameoki">やめどき</a>
+  <a href="#special">特殊狙い目</a>
+</div>
+
+<section id="spec">
+  <div class="section-label">SPEC</div>
+  <h2>基本スペック</h2>
+  <div class="spec-grid">
+    <div class="spec-item"><div class="spec-label">AT純増</div><div class="spec-value">約2.5<span class="spec-unit">枚/G</span></div></div>
+    <div class="spec-item"><div class="spec-label">コイン持ち</div><div class="spec-value">32<span class="spec-unit">G/50枚</span></div></div>
+    <div class="spec-item"><div class="spec-label">ゲーム数天井</div><div class="spec-value">795<span class="spec-unit">G+α</span></div></div>
+    <div class="spec-item"><div class="spec-label">周期天井</div><div class="spec-value">6<span class="spec-unit">周期</span></div></div>
+  </div>
+  <p>競艇をテーマにしたオリンピアのスマスロ。周期管理タイプで通常時は1周期666ptを目安に当選を目指す。ATは「超抜チャレンジ」「激走チャージ」で構成され、コンプリート機能搭載。</p>
+  <p>液晶右下に現在のゲーム数と周期カウンターが表示される。天井管理はゲーム数と周期の両方を把握してから狙いに行くこと。</p>
+</section>
+
+<section id="tenjou">
+  <div class="section-label">CEILING</div>
+  <h2>天井・リセット恩恵</h2>
+
+  <h3>天井の種類と恩恵</h3>
+  <table>
+    <tr><th>種類</th><th>天井条件</th><th>恩恵</th><th>確認方法</th></tr>
+    <tr>
+      <td>① ゲーム数天井</td>
+      <td>795G+α</td>
+      <td>AT当選</td>
+      <td>液晶右下のG数表示</td>
+    </tr>
+    <tr>
+      <td>② 周期天井</td>
+      <td>最大6周期（1周期=666pt）</td>
+      <td>AT当選</td>
+      <td>液晶右下の周期カウンター</td>
+    </tr>
+    <tr>
+      <td>③ 激走チャージ天井</td>
+      <td>激走チャージ突入後81G</td>
+      <td>レア役から激走チャージ or 超抜チャレンジ濃厚</td>
+      <td>激走チャージ内のG数</td>
+    </tr>
+  </table>
+
+  <h3>リセット（設定変更 or 青島VS波多野敗北後）の恩恵</h3>
+  <table>
+    <tr><th>項目</th><th>通常時</th><th>リセット後</th></tr>
+    <tr class="hi"><td>ゲーム数天井</td><td>795G+α</td><td><strong>495G+αに短縮</strong></td></tr>
+    <tr class="hi"><td>周期天井</td><td>最大6周期</td><td><strong>最大4周期に短縮</strong></td></tr>
+  </table>
+
+  <div class="note">
+    <strong>リセット確認の方法</strong><br>
+    朝イチ（設定変更確定）か、AT「青島VS波多野」戦で波多野が勝利するとリセット状態になる。リセット後は0Gから打ち始めてOK。
+  </div>
+</section>
+
+<section id="mode">
+  <div class="section-label">MODE</div>
+  <h2>周期とモードの仕組み</h2>
+  <p>1周期は最大666ptで構成される。周期消化中にレア役やCZ（超抜チャレンジ）に当選することでAT「激走チャージ」を目指す。</p>
+
+  <h3>内部モードの種類</h3>
+  <table>
+    <tr><th>モード</th><th>特徴</th><th>立ち回り</th></tr>
+    <tr><td>通常A</td><td>周期天井6周期・低当選</td><td><span class="badge-warn">ゲーム数天井優先</span></td></tr>
+    <tr><td>通常B</td><td>周期天井4〜5周期・中当選</td><td><span class="badge-warn">周期とG数両方意識</span></td></tr>
+    <tr><td>チャンス</td><td>周期天井2〜3周期・高当選</td><td><span class="badge-good">浅めから狙い目</span></td></tr>
+    <tr><td>天国</td><td>次周期以内に当選確定</td><td><span class="badge-good">0Gから続行</span></td></tr>
+  </table>
+
+  <div class="card card-warn">
+    <div class="card-title">⚠ チャンスモードの罠に注意</div>
+    <div class="card-body">チャンスモード滞在中でも周期2〜3回スルーが発生することがある。チャンスモード示唆が出ても600G以上回っている場合は、次周期到達まで様子を見て判断すること。モード示唆だけを根拠に深追いしないよう注意。</div>
+  </div>
+
+  <h3>モード示唆の確認方法</h3>
+  <table>
+    <tr><th>示唆要素</th><th>内容</th></tr>
+    <tr><td>周期終了時のレース結果</td><td>1着なら高モード示唆</td></tr>
+    <tr><td>ボート番号（赤・青）</td><td>赤ボートはチャンス以上示唆</td></tr>
+    <tr><td>ヘルメットの柄</td><td>AT後のやめどき判断にも使用</td></tr>
+  </table>
+</section>
+
+<section id="neraime">
+  <div class="section-label">TARGET</div>
+  <h2>狙い目まとめ</h2>
+  <p>ゲーム数と周期カウンターを両方確認してから着席すること。どちらの天井に近いかで立ち回りが変わる。</p>
+
+  <h3>ゲーム数天井狙い</h3>
+  <table>
+    <tr><th>換金率</th><th>狙い始めG数</th></tr>
+    <tr class="hi"><td>等価（5円）・5.6枚共通</td><td>400G〜</td></tr>
+  </table>
+
+  <h3>周期天井狙い</h3>
+  <table>
+    <tr><th>換金率</th><th>狙い始め周期数</th></tr>
+    <tr class="hi"><td>等価（5円）・5.6枚共通</td><td>4周期〜</td></tr>
+  </table>
+
+  <h3>リセット後の狙い目</h3>
+  <table>
+    <tr><th>条件</th><th>狙い始めG数</th><th>備考</th></tr>
+    <tr class="hi"><td>設定変更確認済み</td><td>0G〜</td><td>天井495G・周期4回に短縮</td></tr>
+    <tr class="hi"><td>青島VS波多野 波多野勝利後</td><td>0G〜</td><td>同上</td></tr>
+  </table>
+</section>
+
+<section id="yameoki">
+  <div class="section-label">QUIT TIMING</div>
+  <h2>やめどき</h2>
+
+  <h3>AT後のやめどき（ヘルメット確認）</h3>
+  <table>
+    <tr><th>AT終了後のヘルメット</th><th>やめどき</th><th>表示方法</th></tr>
+    <tr>
+      <td>通常ヘルメット（無地）</td>
+      <td>1G回して確認後 即やめ</td>
+      <td>AT終了後 自動表示</td>
+    </tr>
+    <tr>
+      <td>ロゴ入り（チャンスヘルメット）</td>
+      <td>即やめ（次周期まで続行しない）</td>
+      <td>AT終了後 自動表示</td>
+    </tr>
+    <tr>
+      <td>ロゴ＋キラキラ</td>
+      <td>1周期まで続行</td>
+      <td>AT終了後 自動表示</td>
+    </tr>
+    <tr>
+      <td>ロゴ＋V</td>
+      <td>1周期まで続行</td>
+      <td>AT終了後 自動表示</td>
+    </tr>
+  </table>
+
+  <div class="note">
+    <strong>ヘルメットはAT終了後に自動表示</strong><br>
+    ボタン操作は不要で、AT終了後に自動でヘルメット画面が出る。1G回すと確認できる。「ロゴ＋キラキラ」「ロゴ＋V」は天国モードが濃厚なため、1周期（最大666G）まで続行する価値がある。
+  </div>
+</section>
+
+<section id="special">
+  <div class="section-label">SPECIAL</div>
+  <h2>特殊狙い目</h2>
+
+  <div class="card card-special">
+    <div class="card-title">🎯 朝イチ（設定変更確定）0G〜</div>
+    <div class="card-body">
+      開店直後の朝イチは全台設定変更確定のため、リセット恩恵（天井495G・周期4回）が確定している。朝イチ狙いが最も効率よく、他の機種でハズレた場合でも着席できる。
+    </div>
+  </div>
+
+  <div class="card card-special">
+    <div class="card-title">🎯 青島VS波多野の結果確認</div>
+    <div class="card-body">
+      AT中の「青島VS波多野」バトルで波多野が勝利するとリセット状態になる。この直後の台は0Gから狙い始めてOK。他の客がやめた直後に該当台を確認する価値がある。
+    </div>
+  </div>
+
+  <div class="card card-special">
+    <div class="card-title">🎯 激走チャージ81G到達台（継続中）</div>
+    <div class="card-body">
+      激走チャージ中に81Gを超えた台は、次のレア役でさらに激走チャージか超抜チャレンジに当選する可能性が高い。他の客が途中でやめた激走チャージ台があれば0G（残りG数）から狙える。
+    </div>
+  </div>
+</section>
+
+<div style="margin:16px 16px 0;">
+  <a href="index.html" class="cb">
+    <div class="cb-icon">📊</div>
+    <div class="cb-body">
+      <div class="cb-label">FREE TOOL</div>
+      <div class="cb-title">狙い目チェッカー</div>
+      <div class="cb-desc">G数入力するだけで今すぐ打つべきか瞬時に判定。</div>
+    </div>
+    <div class="cb-arr">›</div>
+  </a>
+</div>
+
+<a href="index.html" class="back-btn">← 機種一覧へ戻る</a>
+
+<footer>
+  <p>狙い目手帖 ／ スロット攻略情報サイト</p>
+  <p style="margin-top:6px;">掲載情報は解析公開時点のものです。最新情報は各解析サイトをご確認ください。</p>
+</footer>
+</body>
+</html>

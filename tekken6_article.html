@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>スマスロ 鉄拳6 天井・狙い目まとめ｜やめどき・リセット恩恵も解説</title>
+<meta name="description" content="スマスロ鉄拳6の天井・狙い目を解説。天井900pt（実G数約750G）、スルー天井3回、換金率別狙い目・やめどきまで網羅。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@700;800&family=Noto+Sans+JP:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0c0c0e;--surface:#111115;--surface2:#18181e;--border:#222230;--accent:#c8972a;--accent2:#e8b84a;--text:#ddd8cc;--text-muted:#7a7870;--text-sub:#aaa49a;--good:#4a9e6a;--bad:#9e4a4a}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:'Noto Sans JP',sans-serif;font-weight:300;line-height:1.8;font-size:15px;overflow-x:hidden}
+  body > *:not(header) { max-width: 600px; margin-left: auto; margin-right: auto; }
+  a, button { touch-action: manipulation; }
+header{position:fixed;top:0;left:0;right:0;z-index:200;height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;background:rgba(12,12,14,.96);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+.logo{font-family:'Shippori Mincho',serif;font-size:1.05rem;font-weight:800;color:var(--accent);text-decoration:none;letter-spacing:.08em}
+.header-back{font-size:.75rem;color:var(--text-muted);text-decoration:none}
+.mv{padding:72px 16px 32px;border-bottom:1px solid var(--border)}
+.mv-label{font-size:.6rem;color:var(--accent);letter-spacing:.3em;text-transform:uppercase;margin-bottom:10px}
+.mv-title{font-family:'Shippori Mincho',serif;font-size:clamp(1.4rem,6vw,2rem);font-weight:800;line-height:1.4;margin-bottom:12px}
+.mv-title em{color:var(--accent);font-style:normal}
+.mv-desc{font-size:.8rem;color:var(--text-sub);line-height:1.9;margin-bottom:16px}
+.mv-tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{border:1px solid var(--border);color:var(--text-muted);font-size:.62rem;padding:3px 8px;border-radius:20px}
+.toc{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin:20px 16px}
+.toc-title{font-size:.72rem;color:var(--accent);font-weight:700;letter-spacing:.1em;margin-bottom:10px}
+.toc a{display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--text-sub);text-decoration:none;padding:6px 0;border-bottom:1px solid var(--border)}
+.toc a:last-child{border-bottom:none}
+.toc a::before{content:'';display:block;width:4px;height:4px;border-radius:50%;background:var(--accent);flex-shrink:0}
+.cb{margin:0 16px 4px;background:linear-gradient(135deg,#1a1508,#0c0c0e);border:1px solid var(--accent);border-radius:12px;padding:16px;text-decoration:none;display:flex;align-items:center;gap:14px}
+.cb-icon{font-size:2rem;flex-shrink:0}
+.cb-body{flex:1;min-width:0}
+.cb-label{font-size:.58rem;color:var(--accent);font-weight:700;letter-spacing:.15em;margin-bottom:3px}
+.cb-title{font-size:.9rem;font-weight:700;color:var(--accent2);margin-bottom:3px}
+.cb-desc{font-size:.68rem;color:var(--text-muted);line-height:1.5}
+.cb-arr{color:var(--accent);font-size:1.2rem;flex-shrink:0}
+section{padding:28px 16px;border-bottom:1px solid var(--border)}
+.section-label{font-size:.58rem;color:var(--accent);letter-spacing:.25em;text-transform:uppercase;margin-bottom:6px}
+h2{font-family:'Shippori Mincho',serif;font-size:1.2rem;font-weight:800;margin-bottom:16px;line-height:1.4}
+h3{font-size:.85rem;font-weight:700;color:var(--accent2);margin:20px 0 10px;padding-left:10px;border-left:2px solid var(--accent)}
+p{font-size:.85rem;color:var(--text-sub);margin-bottom:12px;line-height:1.9}
+table{width:100%;border-collapse:collapse;font-size:.78rem;margin:12px 0}
+th{background:var(--surface2);color:var(--accent);font-weight:700;padding:8px 10px;text-align:left;border:1px solid var(--border);font-size:.72rem}
+td{padding:8px 10px;border:1px solid var(--border);color:var(--text-sub);vertical-align:top;line-height:1.6}
+tr:nth-child(even) td{background:rgba(255,255,255,.02)}
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.68rem;font-weight:700}
+.badge-good{background:rgba(74,158,106,.2);color:#6ec48a;border:1px solid rgba(74,158,106,.4)}
+.badge-warn{background:rgba(200,151,42,.2);color:var(--accent2);border:1px solid rgba(200,151,42,.4)}
+.badge-bad{background:rgba(158,74,74,.2);color:#c48080;border:1px solid rgba(158,74,74,.4)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin:12px 0}
+.card-title{font-size:.72rem;font-weight:700;color:var(--accent);margin-bottom:8px}
+.card-body{font-size:.82rem;color:var(--text-sub);line-height:1.8}
+.card-special{border-color:var(--accent);background:linear-gradient(135deg,#1a1508,#111115)}
+.card-warn{border-color:rgba(158,74,74,.5);background:rgba(158,74,74,.05)}
+.note{background:rgba(200,151,42,.07);border-left:3px solid var(--accent);border-radius:0 6px 6px 0;padding:10px 12px;font-size:.78rem;color:var(--text-sub);margin:12px 0;line-height:1.7}
+.note strong{color:var(--accent2)}
+.spec-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.spec-item{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center}
+.spec-label{font-size:.6rem;color:var(--text-muted);margin-bottom:4px}
+.spec-value{font-size:1rem;font-weight:700;color:var(--accent2)}
+.spec-unit{font-size:.6rem;color:var(--text-muted)}
+.back-btn{display:flex;align-items:center;justify-content:center;gap:8px;margin:20px 16px 8px;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text-sub);text-decoration:none;font-size:.85rem}
+footer{padding:20px 16px 36px;text-align:center;font-size:.7rem;color:var(--text-muted);border-top:1px solid var(--border)}
+.hi td:first-child{color:var(--accent2);font-weight:700}
+</style>
+</head>
+<body>
+<header>
+  <a href="index.html" class="logo">狙い目手帖</a>
+  <a href="index.html" class="header-back">← 機種一覧</a>
+</header>
+
+<div class="mv">
+  <div class="mv-label">SLOT GUIDE</div>
+  <h1 class="mv-title">スマスロ<br><em>鉄拳6</em><br>天井・狙い目まとめ</h1>
+  <p class="mv-desc">やめどき・リセット恩恵も解説。パチスロ鉄拳シリーズの集大成がスマスロで登場。ポイント天井900pt＋スルー天井3回の2本立て。</p>
+  <div class="mv-tags">
+    <span class="tag">山佐</span>
+    <span class="tag">2026年1月導入</span>
+    <span class="tag">純増 約2.75枚</span>
+    <span class="tag">コイン持ち 31.0G/50枚</span>
+  </div>
+</div>
+
+<div style="margin:16px 16px 0;">
+  <a href="index.html" class="cb">
+    <div class="cb-icon">🎰</div>
+    <div class="cb-body">
+      <div class="cb-label">FREE TOOL</div>
+      <div class="cb-title">狙い目チェッカー</div>
+      <div class="cb-desc">G数を入力するだけで今すぐ打つべきか判定。無料。</div>
+    </div>
+    <div class="cb-arr">›</div>
+  </a>
+</div>
+
+<div class="toc">
+  <div class="toc-title">▶ もくじ</div>
+  <a href="#spec">基本スペック</a>
+  <a href="#tenjou">天井・リセット恩恵</a>
+  <a href="#mode">モードの仕組み</a>
+  <a href="#neraime">狙い目まとめ</a>
+  <a href="#yameoki">やめどき</a>
+  <a href="#special">特殊狙い目</a>
+</div>
+
+<section id="spec">
+  <div class="section-label">SPEC</div>
+  <h2>基本スペック</h2>
+  <div class="spec-grid">
+    <div class="spec-item"><div class="spec-label">AT純増</div><div class="spec-value">約2.75<span class="spec-unit">枚/G</span></div></div>
+    <div class="spec-item"><div class="spec-label">コイン持ち</div><div class="spec-value">31.0<span class="spec-unit">G/50枚</span></div></div>
+    <div class="spec-item"><div class="spec-label">実G数換算天井</div><div class="spec-value">約750<span class="spec-unit">G</span></div></div>
+    <div class="spec-item"><div class="spec-label">スルー天井</div><div class="spec-value">3<span class="spec-unit">スルー後</span></div></div>
+  </div>
+  <p>山佐のパチスロ鉄拳シリーズ集大成。通常時は鉄拳ポイントを貯めてボーナスを目指し、ボーナスからAT「鉄拳ラッシュ」「デビルラッシュ」を狙う。AT中の「鉄拳チャンス」「拳奪バトル」が主な出玉源。コンプリート機能搭載。</p>
+</section>
+
+<section id="tenjou">
+  <div class="section-label">CEILING</div>
+  <h2>天井・リセット恩恵</h2>
+
+  <h3>天井の種類と恩恵</h3>
+  <table>
+    <tr><th>種類</th><th>天井条件</th><th>恩恵</th></tr>
+    <tr>
+      <td>① ポイント天井<br><span style="font-size:.7rem;color:var(--text-muted)">リール右横で確認</span></td>
+      <td>最大900pt+α<br>（実G数 約750G相当）</td>
+      <td>ボーナス当選</td>
+    </tr>
+    <tr>
+      <td>② スルー回数天井</td>
+      <td>AT非当選ボーナスが3回連続<br>（4回目のボーナス）</td>
+      <td>赤7ボーナス（AT確定）</td>
+    </tr>
+  </table>
+
+  <div class="note">
+    <strong>ポイント天井の実ゲーム数換算</strong><br>
+    最大規定ポイント900ptは実ゲーム数に換算すると平均約630G。実戦上の最大ハマりは約750Gで収束しているため、実ゲーム数でも意識できる。ポイントはリール右横に表示される。
+  </div>
+
+  <h3>リセット（設定変更）時の恩恵</h3>
+  <table>
+    <tr><th>項目</th><th>通常時</th><th>リセット後</th></tr>
+    <tr><td>ポイント天井</td><td>最大900pt+α</td><td><strong>最大500pt+αに短縮</strong></td></tr>
+    <tr><td>AT間天井</td><td>通常</td><td><strong>2回連続に短縮</strong></td></tr>
+  </table>
+  <p>デビルロード・デビルラッシュ終了後もAT間天井が2回連続に短縮される。</p>
+</section>
+
+<section id="mode">
+  <div class="section-label">MODE</div>
+  <h2>モードの仕組み</h2>
+  <p>通常時は7種類の内部モードで管理され、滞在モードに応じて最大規定ポイントが変化する。CZモードも5種類あり、CZ当選率に影響する。</p>
+
+  <h3>モード示唆の確認方法</h3>
+  <table>
+    <tr><th>示唆要素</th><th>確認タイミング</th><th>内容</th></tr>
+    <tr><td>ボーナス終了画面</td><td>BIG / AT終了後</td><td>モード・規定ポイントを示唆</td></tr>
+    <tr><td>鉄拳ゾーン終了後 木人をタッチ</td><td>前兆スルー後</td><td>段位が出現→残り規定ポイントの近さを示唆</td></tr>
+    <tr><td>木人の色</td><td>鉄拳ゾーン終了後</td><td>金木人なら「鉄拳王」出現濃厚（残り僅か）</td></tr>
+  </table>
+
+  <div class="note">
+    <strong>鉄拳ゾーン終了後の木人チェックは必須</strong><br>
+    前兆演出（鉄拳ゾーン）がスルーしたら、サブ液晶に木人が出ていないか確認してタッチ。「鉄拳王」が出れば次のポイント到達まで残り僅か。「修羅」以上なら続行を検討。
+  </div>
+
+  <h3>引き戻しモード</h3>
+  <p>AT終了後に引き戻しモードへ移行することがある。引き戻しモード滞在時は規定ポイントが40〜49ptの短縮天井になるため、99G+α以内にAT当選する。</p>
+</section>
+
+<section id="neraime">
+  <div class="section-label">TARGET</div>
+  <h2>狙い目まとめ</h2>
+  <p>ポイントはリール右横の表示で確認。スルー回数は液晶や台の状況から判断する。</p>
+
+  <h3>ポイント天井狙い（AT間・実G数換算）</h3>
+  <table>
+    <tr><th>換金率</th><th>狙い始めG数</th><th>備考</th></tr>
+    <tr class="hi"><td>等価（5円）</td><td>490G〜</td><td>プラス域</td></tr>
+    <tr class="hi"><td>5.6枚持ちメダル</td><td>500G〜</td><td>プラス域</td></tr>
+  </table>
+
+  <h3>リセット後の狙い目</h3>
+  <table>
+    <tr><th>条件</th><th>狙い始めG数</th></tr>
+    <tr class="hi"><td>設定変更確認済み（AT後）</td><td>0G〜（AT間天井2回連続狙い）</td></tr>
+    <tr class="hi"><td>設定変更確認済み（通常）</td><td>300G〜（ポイント天井500ptに短縮）</td></tr>
+  </table>
+
+  <h3>スルー回数別の狙い目</h3>
+  <table>
+    <tr><th>スルー回数</th><th>狙い始めG数</th><th>備考</th></tr>
+    <tr><td>0スルー</td><td>ポイント天井狙い準拠</td><td></td></tr>
+    <tr class="hi"><td>2スルー（3回目）</td><td>浅めに調整可</td><td>次でAT確定</td></tr>
+    <tr class="hi"><td>3スルー（4回目）</td><td>0G〜</td><td>次回ボーナスが赤7（AT確定）</td></tr>
+  </table>
+</section>
+
+<section id="yameoki">
+  <div class="section-label">QUIT TIMING</div>
+  <h2>やめどき</h2>
+
+  <h3>状況別やめどき一覧</h3>
+  <table>
+    <tr><th>状況</th><th>やめどき</th><th>補足</th></tr>
+    <tr>
+      <td>ボーナス（青7）終了後</td>
+      <td>10〜30G回して鉄拳ゾーン確認後やめ</td>
+      <td>鉄拳ゾーンをスルーしたらサブ液晶の木人を確認してやめ</td>
+    </tr>
+    <tr>
+      <td>AT（鉄拳ラッシュ / デビルラッシュ）終了後</td>
+      <td>即やめ</td>
+      <td>引き戻しは設定1でも約10%。終了画面紫は要確認</td>
+    </tr>
+    <tr>
+      <td>鉄拳ゾーン（前兆）スルー後</td>
+      <td>木人タッチして段位確認後やめ</td>
+      <td>鉄拳王が出たら次回CZまで続行</td>
+    </tr>
+  </table>
+
+  <div class="card card-warn">
+    <div class="card-title">⚠ AT終了画面が紫の場合は続行を検討</div>
+    <div class="card-body">AT終了後に終了画面が紫になった場合、有利区間リセットの可能性あり。リセット後はAT間天井が2回連続に短縮されるため、一定G数続行する価値がある。詳細は解析更新を確認。</div>
+  </div>
+</section>
+
+<section id="special">
+  <div class="section-label">SPECIAL</div>
+  <h2>特殊狙い目</h2>
+
+  <div class="card card-special">
+    <div class="card-title">🎯 スルー3回台（AT確定）0G〜</div>
+    <div class="card-body">
+      AT非当選のボーナス（青7）が3回連続している台は次回のボーナスが赤7（AT確定）になる。G数不問で0Gから打ち始めてOK。落ちているケースは少ないが最も旨みのある狙い目。
+    </div>
+  </div>
+
+  <div class="card card-special">
+    <div class="card-title">🎯 鉄拳ゾーン後「鉄拳王」出現台</div>
+    <div class="card-body">
+      鉄拳ゾーン（前兆）がスルーした後にサブ液晶をタッチして「鉄拳王」が出た台は、次の規定ポイント到達まで残りが僅か。その台が空いていれば低G数から狙う価値あり。
+    </div>
+  </div>
+
+  <div class="card card-special">
+    <div class="card-title">🎯 差枚数が大きなマイナスの台（有利区間リセット狙い）</div>
+    <div class="card-body">
+      差枚数が大幅なマイナスになっている台は有利区間リセット（デビルロード突入確定）が近い可能性がある。デビルロード突入後はAT間天井が2回連続に短縮されるため、条件を満たした台は0Gから狙える。
+    </div>
+  </div>
+</section>
+
+<div style="margin:16px 16px 0;">
+  <a href="index.html" class="cb">
+    <div class="cb-icon">📊</div>
+    <div class="cb-body">
+      <div class="cb-label">FREE TOOL</div>
+      <div class="cb-title">狙い目チェッカー</div>
+      <div class="cb-desc">G数入力するだけで今すぐ打つべきか瞬時に判定。</div>
+    </div>
+    <div class="cb-arr">›</div>
+  </a>
+</div>
+
+<a href="index.html" class="back-btn">← 機種一覧へ戻る</a>
+
+<footer>
+  <p>狙い目手帖 ／ スロット攻略情報サイト</p>
+  <p style="margin-top:6px;">掲載情報は解析公開時点のものです。最新情報は各解析サイトをご確認ください。</p>
+</footer>
+</body>
+</html>
