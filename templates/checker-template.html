@@ -10,7 +10,22 @@
 <link rel="stylesheet" href="assets/css/base.css">
 <link rel="stylesheet" href="assets/css/checker.css">
 <style>
-  /* 判定UIの固有スタイルだけここへ残す */
+  .checker-form { display:grid; gap:14px; }
+  .checker-field label { display:block; margin-bottom:6px; font-size:.84rem; color:var(--text-sub); }
+  .checker-field input, .checker-field select {
+    width:100%; min-height:46px; border-radius:10px; border:1px solid var(--border);
+    background:var(--surface2); color:var(--text); padding:0 14px; font-size:1rem;
+  }
+  .checker-output { margin-top:14px; }
+  .checker-result { border-radius:14px; padding:16px; border:1px solid var(--border); }
+  .checker-result-rank { font-size:1.2rem; font-weight:700; margin-bottom:6px; }
+  .checker-result-title { font-size:1rem; font-weight:700; margin-bottom:8px; }
+  .checker-result-message { font-size:.9rem; color:var(--text-sub); }
+  .checker-result-excellent { background:rgba(200,151,42,.12); }
+  .checker-result-good { background:rgba(232,184,74,.08); }
+  .checker-result-caution { background:rgba(255,255,255,.04); }
+  .checker-result-ng { background:rgba(120,120,120,.08); }
+  .checker-result-info { background:rgba(255,255,255,.03); }
 </style>
 </head>
 <body class="machine-checker">
@@ -26,7 +41,21 @@
 <div class="checker-wrap">
   <div class="checker-card">
     <div class="checker-card-title">⚡ 条件を入力してください</div>
-    <!-- 入力欄 -->
+    <form class="checker-form" id="checkerForm">
+      <div class="checker-field">
+        <label for="game">現在のゲーム数</label>
+        <input id="game" name="game" type="number" min="0" step="1" placeholder="例: 520">
+      </div>
+      <div class="checker-field">
+        <label for="mode">任意の追加条件</label>
+        <select id="mode" name="mode">
+          <option value="0">通常</option>
+          <option value="1">リセット狙い</option>
+          <option value="2">特殊条件あり</option>
+        </select>
+      </div>
+    </form>
+    <div class="checker-output" id="checkerOutput"></div>
   </div>
 </div>
 <a href="{{slug}}_article.html" class="article-link">
@@ -43,8 +72,56 @@
   <div class="footer-links"><a href="privacy.html">プライバシーポリシー</a><a href="contact.html">お問い合わせ</a></div>
   <p class="footer-copy">掲載内容は参考情報です。最終判断はご自身でお願いいたします。</p>
 </footer>
+<script src="assets/js/checker-common.js"></script>
 <script>
-// ここに機種別判定ロジックを記述
+  SlotChecker.create({
+    formSelector: '#checkerForm',
+    outputSelector: '#checkerOutput',
+    config: {
+      thresholds: {
+        excellent: 650,
+        good: 500,
+        caution: 350
+      }
+    },
+    judge(values, config) {
+      const game = values.game;
+      const mode = values.mode;
+
+      if (game === null) {
+        return {
+          rank: 'info',
+          badge: '入力待ち',
+          title: '条件を入力してください',
+          message: '最低でもゲーム数を入力すると判定が表示されます。'
+        };
+      }
+
+      if (mode === 1 && game >= 280) {
+        return {
+          rank: 'good',
+          badge: '○',
+          title: 'リセット狙い条件を加味すると狙い目候補',
+          message: 'この分岐を機種ごとのリセット条件に差し替えて使います。'
+        };
+      }
+
+      const excellent = config.thresholds.excellent;
+      const good = config.thresholds.good;
+      const caution = config.thresholds.caution;
+
+      if (game >= excellent) {
+        return { rank: 'excellent', badge: '◎', title: `${excellent}G以上`, message: '強めの狙い目として扱うテンプレートです。' };
+      }
+      if (game >= good) {
+        return { rank: 'good', badge: '○', title: `${good}G以上`, message: '狙い目候補としてチェックしてください。' };
+      }
+      if (game >= caution) {
+        return { rank: 'caution', badge: '△', title: `${caution}G以上`, message: 'ホール状況次第で判断するラインです。' };
+      }
+      return { rank: 'ng', badge: '×', title: '見送り寄り', message: 'テンプレート基準ではまだ浅めです。' };
+    }
+  });
 </script>
 </body>
 </html>
