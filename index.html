@@ -2,31 +2,144 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>狙い目手帖</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>狙い目手帖｜スロット機種別の狙い目・天井・チェッカー</title>
+<meta name="description" content="スロット・スマスロの機種ごとの狙い目、天井、やめどき、チェッカーをまとめたサイトです。気になる機種を選んで、立ち回りの判断に役立ててください。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@700;800&family=Noto+Sans+JP:wght@300;400;700&display=swap" rel="stylesheet">
 <style>
-body{font-family:Arial;background:#0c0c0e;color:#ddd;max-width:700px;margin:auto;padding:20px}
-a{color:#c8972a;text-decoration:none;font-weight:bold}
-.card{background:#111;padding:16px;border-radius:10px;margin-bottom:12px}
+  :root{
+    --bg:#0c0c0e; --surface:#111115; --surface2:#18181e; --border:#222230; --accent:#c8972a; --accent2:#e8b84a;
+    --text:#ddd8cc; --text-muted:#7a7870; --text-sub:#aaa49a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  body{
+    background:var(--bg); color:var(--text); font-family:'Noto Sans JP',sans-serif; font-weight:300;
+    line-height:1.8; font-size:15px; overflow-x:hidden;
+  }
+  header{
+    position:sticky; top:0; z-index:50; background:rgba(12,12,14,0.96); backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--border);
+  }
+  .header-inner,.hero,.section,.footer-inner{max-width:1100px;margin:0 auto;padding:0 16px;}
+  .header-inner{
+    min-height:56px; display:flex; align-items:center; justify-content:space-between;
+  }
+  .logo{
+    font-family:'Shippori Mincho',serif; font-size:1.1rem; font-weight:800; color:var(--accent);
+    text-decoration:none; letter-spacing:0.08em;
+  }
+  .header-links{display:flex; gap:16px; flex-wrap:wrap;}
+  .header-links a{color:var(--text-muted); text-decoration:none; font-size:0.8rem;}
+  .hero{padding:36px 16px 24px;}
+  .hero-label{font-size:0.65rem; color:var(--accent); letter-spacing:0.25em; margin-bottom:10px;}
+  .hero h1{
+    font-family:'Shippori Mincho',serif; font-size:clamp(1.6rem,4vw,2.4rem);
+    line-height:1.4; margin-bottom:12px; font-weight:800;
+  }
+  .hero p{font-size:0.92rem; color:var(--text-sub); max-width:760px;}
+  .notice{
+    margin-top:18px; background:var(--surface); border:1px solid var(--border); border-radius:12px;
+    padding:14px 16px; color:var(--text-sub); font-size:0.82rem;
+  }
+  .section{padding:12px 16px 32px;}
+  .section-title{
+    font-family:'Shippori Mincho',serif; font-size:1.05rem; color:var(--accent); margin-bottom:14px;
+    padding-left:12px; border-left:3px solid var(--accent);
+  }
+  .machine-grid{
+    display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px;
+  }
+  .machine-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px;
+    display:flex; flex-direction:column; gap:12px;
+  }
+  .machine-name{font-size:0.95rem; font-weight:700; color:var(--text);}
+  .machine-sub{font-size:0.72rem; color:var(--text-muted);}
+  .links{display:flex; gap:10px; flex-wrap:wrap;}
+  .btn{
+    flex:1 1 140px; display:flex; align-items:center; justify-content:center; min-height:44px;
+    border-radius:10px; text-decoration:none; font-size:0.82rem; font-weight:700; padding:10px 12px;
+  }
+  .btn-main{
+    background:linear-gradient(135deg,#c8972a 0%,#a07320 100%); color:#0c0c0e;
+  }
+  .btn-sub{
+    background:var(--surface2); border:1px solid var(--border); color:var(--text);
+  }
+  footer{border-top:1px solid var(--border); margin-top:24px;}
+  .footer-inner{padding:28px 16px 40px; text-align:center;}
+  .footer-logo{
+    font-family:'Shippori Mincho',serif; font-size:1rem; color:var(--accent); font-weight:800; margin-bottom:12px;
+  }
+  .footer-links{display:flex; gap:20px; justify-content:center; flex-wrap:wrap; margin-bottom:10px;}
+  .footer-links a{font-size:0.76rem; color:var(--text-muted); text-decoration:none;}
+  .footer-copy{font-size:0.7rem; color:var(--text-muted);}
+  @media (max-width:900px){
+    .machine-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+  }
+  @media (max-width:560px){
+    .machine-grid{grid-template-columns:1fr;}
+  }
 </style>
 </head>
 <body>
+<header>
+  <div class="header-inner">
+    <a href="index.html" class="logo">狙い目手帖</a>
+    <nav class="header-links">
+      <a href="privacy.html">プライバシーポリシー</a>
+      <a href="contact.html">お問い合わせ</a>
+    </nav>
+  </div>
+</header>
 
-<h1>狙い目手帖</h1>
-<p>スロット狙い目チェッカーサイト</p>
+<section class="hero">
+  <div class="hero-label">SLOT GUIDE & CHECKER</div>
+  <h1>機種別の狙い目・天井・チェッカーを<br>まとめて確認できるサイト</h1>
+  <p>スマスロ・パチスロの機種ごとに、狙い目、天井、やめどき、チェッカーを整理しています。まずは使う人が多い機種を見やすくまとめ、順次機種数を増やしていく前提のトップページです。</p>
+  <div class="notice">北斗転生2は、記事とチェッカーを1ページにまとめた新方式で掲載しています。既存機種は現在の構成のまま記事・チェッカーへの導線を整理しています。</div>
+</section>
 
-<div class="card">
-<a href="hokuto_tensei2_article.html">北斗の拳 転生の章2 攻略記事</a>
-</div>
+<section class="section">
+  <h2 class="section-title">掲載機種一覧</h2>
+  <div class="machine-grid">
+    <article class="machine-card">
+      <div><div class="machine-name">北斗の拳 転生の章2</div><div class="machine-sub">新方式 / 記事＋チェッカー一体型</div></div>
+      <div class="links">
+        <a class="btn btn-main" href="hokuto_tensei2.html">この機種を見る</a>
+      </div>
+    </article>
 
-<div class="card">
-<a href="hokuto_tensei2_checker.html">北斗の拳 転生の章2 狙い目チェッカー</a>
-</div>
+    <article class="machine-card"><div><div class="machine-name">バキ</div><div class="machine-sub">既存構成</div></div><div class="links"><a class="btn btn-main" href="baki_article.html">記事を見る</a><a class="btn btn-sub" href="baki_checker.html">チェッカー</a></div></article>
+    <article class="machine-card"><div><div class="machine-name">番長4</div><div class="machine-sub">既存構成</div></div><div class="links"><a class="btn btn-main" href="banchou4_article.html">記事を見る</a><a class="btn btn-sub" href="banchou4_checker.html">チェッカー</a></div></article>
+    <article class="machine-card"><div><div class="machine-name">バイオハザード</div><div class="machine-sub">既存構成</div></div><div class="links"><a class="btn btn-main" href="biohazard_article.html">記事を見る</a><a class="btn btn-sub" href="biohazard_checker.html">チェッカー</a></div></article>
+    <article class="machine-card"><div><div class="machine-name">チバリヨ2</div><div class="machine-sub">既存構成</div></div><div class="links"><a class="btn btn-main" href="chibaryo2_article.html">記事を見る</a><a class="btn btn-sub" href="chibaryo2_checker.html">チェッカー</a></div></article>
+    <article class="machine-card"><div><div class="machine-name">ダンベル何キロ持てる？</div><div class="machine-sub">既存構成</div></div><div class="links"><a class="btn btn-main" href="dumbbell_article.html">記事を見る</a><a class="btn btn-sub" href="dumbbell_checker.html">チェッカー</a></div></article>
+    <article class="machine-card"><div><div class="machine-name">ゴブリンスレイヤー</div><div class="machine-sub">既存構成</div></div><div class="links"><a class="btn btn-main" href="goblin_article.html">記事を見る</a><a class="btn btn-sub" href="goblin_checker.html">チェッカー</a></div></article>
+    <article class="machine-card"><div><div class="machine-name">ゴッドイーター</div><div class="machine-sub">既存構成</div></div><div class="links"><a class="btn btn-main" href="godeater_article.html">記事を見る</a><a class="btn btn-sub" href="godeater_checker.html">チェッカー</a></div></article>
+    <article class="machine-card"><div><div class="machine-name">北斗の拳</div><div class="machine-sub">既存構成</div></div><div class="links"><a class="btn btn-main" href="hokuto_article.html">記事を見る</a><a class="btn btn-sub" href="hokuto_checker.html">チェッカー</a></div></article>
+    <article class="machine-card"><div><div class="machine-name">甲鉄城のカバネリ</div><div class="machine-sub">既存構成</div></div><div class="links"><a class="btn btn-main" href="kabaneri_article.html">記事を見る</a><a class="btn btn-sub" href="kabaneri_checker.html">チェッカー</a></div></article>
+    <article class="machine-card"><div><div class="machine-name">かぐや様は告らせたい</div><div class="machine-sub">既存構成</div></div><div class="links"><a class="btn btn-main" href="kaguya_article.html">記事を見る</a><a class="btn btn-sub" href="kaguya_checker.html">チェッカー</a></div></article>
+    <article class="machine-card"><div><div class="machine-name">攻殻機動隊</div><div class="machine-sub">既存構成</div></div><div class="links"><a class="btn btn-main" href="koukaku_article.html">記事を見る</a><a class="btn btn-sub" href="koukaku_checker.html">チェッカー</a></div></article>
+    <article class="machine-card"><div><div class="machine-name">モンキーターンV</div><div class="machine-sub">既存構成</div></div><div class="links"><a class="btn btn-main" href="monkeyv_article.html">記事を見る</a><a class="btn btn-sub" href="monkeyv_checker.html">チェッカー</a></div></article>
+    <article class="machine-card"><div><div class="machine-name">ストリートファイター5</div><div class="machine-sub">既存構成</div></div><div class="links"><a class="btn btn-main" href="sf5_article.html">記事を見る</a><a class="btn btn-sub" href="sf5_checker.html">チェッカー</a></div></article>
+    <article class="machine-card"><div><div class="machine-name">鉄拳6</div><div class="machine-sub">既存構成</div></div><div class="links"><a class="btn btn-main" href="tekken6_article.html">記事を見る</a><a class="btn btn-sub" href="tekken6_checker.html">チェッカー</a></div></article>
+    <article class="machine-card"><div><div class="machine-name">転生したらスライムだった件</div><div class="machine-sub">既存構成</div></div><div class="links"><a class="btn btn-main" href="tensura_article.html">記事を見る</a><a class="btn btn-sub" href="tensura_checker.html">チェッカー</a></div></article>
+    <article class="machine-card"><div><div class="machine-name">東京喰種</div><div class="machine-sub">既存構成</div></div><div class="links"><a class="btn btn-main" href="tokyo_ghoul_article.html">記事を見る</a><a class="btn btn-sub" href="tokyo_ghoul_checker.html">チェッカー</a></div></article>
+    <article class="machine-card"><div><div class="machine-name">ヴァルヴレイヴ2</div><div class="machine-sub">既存構成</div></div><div class="links"><a class="btn btn-main" href="valvrave2_article.html">記事を見る</a><a class="btn btn-sub" href="valvrave2_checker.html">チェッカー</a></div></article>
+  </div>
+</section>
 
-<p>
-<a href="privacy.html">プライバシーポリシー</a> |
-<a href="contact.html">お問い合わせ</a>
-</p>
-
+<footer>
+  <div class="footer-inner">
+    <div class="footer-logo">狙い目手帖</div>
+    <div class="footer-links">
+      <a href="privacy.html">プライバシーポリシー</a>
+      <a href="contact.html">お問い合わせ</a>
+    </div>
+    <p class="footer-copy">掲載内容は公開情報をもとにした考察です。実際の立ち回りはご自身の判断でお願いします。</p>
+  </div>
+</footer>
 </body>
 </html>
