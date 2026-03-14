@@ -25,10 +25,13 @@ header{position:fixed;top:0;left:0;right:0;z-index:200;height:52px;display:flex;
 .mv-tags{display:flex;flex-wrap:wrap;gap:6px}
 .tag{border:1px solid var(--border);color:var(--text-muted);font-size:.62rem;padding:3px 8px;border-radius:20px}
 .toc{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin:20px 16px}
+.toc-title{font-size:.72rem;color:var(--accent);font-weight:700;letter-spacing:.1em;margin-bottom:10px}
 .toc a{display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--text-sub);text-decoration:none;padding:6px 0;border-bottom:1px solid var(--border)}
 .toc a:last-child{border-bottom:none}
 .toc a::before{content:'';display:block;width:4px;height:4px;border-radius:50%;background:var(--accent);flex-shrink:0}
-.checker-banner {background:linear-gradient(135deg,#1a1508,#0c0c0e);border:1px solid var(--accent);border-radius:12px;padding:16px;text-decoration:none;display:flex;align-items:center;gap:14px;margin: 0 16px 4px;flex-shrink:0}
+.checker-banner{background:linear-gradient(135deg,#1a1508,#0c0c0e);border:1px solid var(--accent);border-radius:12px;padding:16px;text-decoration:none;display:flex;align-items:center;gap:14px;margin:0 16px 4px}
+.checker-banner:active{opacity:.85}
+.cb-icon{font-size:2rem;flex-shrink:0}
 .cb-body{flex:1;min-width:0}
 .cb-label{font-size:.58rem;color:var(--accent);font-weight:700;letter-spacing:.15em;margin-bottom:3px}
 .cb-title{font-size:.9rem;font-weight:700;color:var(--accent);margin-bottom:3px}
@@ -57,7 +60,7 @@ tr:nth-child(even) td{background:rgba(255,255,255,.02)}
 .spec-label{font-size:.6rem;color:var(--text-muted);margin-bottom:4px}
 .spec-value{font-size:1rem;font-weight:700;color:var(--accent2)}
 .spec-unit{font-size:.6rem;color:var(--text-muted)}
-.back-btn{display:flex;align-items:center;justify-content:center;gap:8px;margin:20px 0 8px;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text-sub);text-decoration:none;font-size:.85rem}
+.back-btn{display:flex;align-items:center;justify-content:center;gap:8px;margin:20px 16px 8px;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text-sub);text-decoration:none;font-size:.85rem}
 footer{padding:20px 16px 36px;text-align:center;font-size:.7rem;color:var(--text-muted);border-top:1px solid var(--border)}
 .hi td:first-child{color:var(--accent2);font-weight:700}
 </style>
@@ -81,7 +84,8 @@ footer{padding:20px 16px 36px;text-align:center;font-size:.7rem;color:var(--text
   </div>
 </div>
 
-<a href="goblin_checker.html" class="checker-banner">
+<div style="margin:16px 16px 0;">
+  <a href="goblin_checker.html" class="checker-banner">
     <div class="cb-icon">⚡</div>
     <div class="cb-body">
       <div class="cb-label">無料ツール</div>
@@ -89,7 +93,8 @@ footer{padding:20px 16px 36px;text-align:center;font-size:.7rem;color:var(--text
       <div class="cb-desc">G数を入れるだけで今すぐ狙えるか◎○△×で判定</div>
     </div>
     <span class="cb-arr">›</span>
-</a>
+  </a>
+</div>
 
 <div class="toc">
   <div class="toc-title">▶ 目次</div>
@@ -261,7 +266,8 @@ footer{padding:20px 16px 36px;text-align:center;font-size:.7rem;color:var(--text
   </div>
 </section>
 
-<a href="goblin_checker.html" class="checker-banner">
+<div style="margin:16px 16px 0;">
+  <a href="goblin_checker.html" class="checker-banner">
     <div class="cb-icon">⚡</div>
     <div class="cb-body">
       <div class="cb-label">無料ツール</div>
@@ -270,6 +276,7 @@ footer{padding:20px 16px 36px;text-align:center;font-size:.7rem;color:var(--text
     </div>
     <span class="cb-arr">›</span>
   </a>
+</div>
 
 <a href="index.html" class="back-btn">← 機種一覧へ戻る</a>
 
