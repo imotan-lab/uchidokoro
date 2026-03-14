@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>北斗の拳 転生の章2 狙い目チェッカー｜あべし数入力で即判定</title>
-<meta name="description" content="スマスロ北斗の拳 転生の章2の狙い目チェッカー。あべし数・リセット有無・換金率を入力するだけで◎○△×で即判定。">
+<title>スマスロ 北斗の拳 転生の章2 狙い目チェッカー｜あべし数・リセット・換金率で即判定</title>
+<meta name="description" content="スマスロ北斗の拳 転生の章2の狙い目チェッカー。あべし数・リセット有無・換金率を入力するだけで、今打てるかを◎○△×で即判定。天井1536あべし、リセット短縮1280にも対応。">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@700;800&family=Noto+Sans+JP:wght@300;400;700&display=swap" rel="stylesheet">
 <style>
@@ -72,7 +72,51 @@
   .footer-links{display:flex;justify-content:center;gap:20px;margin-bottom:12px;}
   .footer-links a{font-size:0.72rem;color:var(--text-muted);text-decoration:none;}
   .footer-copy{font-size:0.68rem;color:var(--text-muted);}
+
+  body{padding-bottom:24px;}
+  .judge-btn{position:sticky;bottom:12px;z-index:20;box-shadow:0 6px 18px rgba(0,0,0,0.28);}
+  .quick-links{padding:0 16px 18px;}
+  .quick-links-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;}
+  .quick-links-title{font-size:0.7rem;font-weight:700;color:var(--accent);letter-spacing:0.1em;margin-bottom:10px;}
+  .quick-links a{display:block;color:var(--text);text-decoration:none;font-size:0.84rem;padding:9px 0;border-bottom:1px solid var(--border);}
+  .quick-links a:last-child{border-bottom:none;padding-bottom:0;}
+  .quick-links a:first-of-type{padding-top:0;}
+  .input-help{font-size:0.68rem;color:var(--text-muted);margin-top:6px;line-height:1.7;}
+
 </style>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "北斗の拳 転生の章2 狙い目チェッカー",
+  "applicationCategory": "UtilitiesApplication",
+  "operatingSystem": "Web",
+  "inLanguage": "ja",
+  "description": "あべし数・リセット有無・換金率を入力するだけで、スマスロ北斗の拳 転生の章2の狙い目を判定できるWebチェッカー。",
+  "about": [
+    "スマスロ 北斗の拳 転生の章2",
+    "狙い目",
+    "天井",
+    "リセット",
+    "あべし"
+  ],
+  "publisher": {
+    "@type": "Organization",
+    "name": "狙い目手帖"
+  }
+}
+
+  document.getElementById('aInput').addEventListener('input', function(){
+    if(this.value === '') return;
+    judge();
+  });
+  document.getElementById('aInput').addEventListener('keydown', function(e){
+    if(e.key === 'Enter') judge();
+  });
+
+</script>
+
 </head>
 <body>
 <header>
@@ -96,6 +140,7 @@
         <input type="number" id="aInput" class="g-input" placeholder="0" min="0" max="2000" inputmode="numeric">
         <span class="g-unit">あべし</span>
       </div>
+      <div class="input-help">液晶左上の「あべし」表示をそのまま入力してください。</div>
     </div>
 
     <div class="form-group">
@@ -115,6 +160,15 @@
     </div>
 
     <button class="judge-btn" onclick="judge()">◎○△× 今すぐ判定する</button>
+  </div>
+</div>
+
+
+<div class="quick-links">
+  <div class="quick-links-card">
+    <div class="quick-links-title">📌 すぐ使える導線</div>
+    <a href="hokuto_tensei2_article.html">北斗転生2の解説記事を見る</a>
+    <a href="index.html">機種一覧に戻る</a>
   </div>
 </div>
 
@@ -239,14 +293,6 @@
     document.getElementById('resultWrap').classList.remove('show');
     document.querySelector('.checker-wrap').scrollIntoView({behavior:'smooth'});
   }
-  document.getElementById('aInput').addEventListener('input', function(){
-    if(this.value === '') return;
-    judge();
-  });
-  document.getElementById('aInput').addEventListener('keydown', function(e){
-    if(e.key === 'Enter') judge();
-  });
-
 </script>
 </body>
 </html>
