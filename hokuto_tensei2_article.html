@@ -84,21 +84,28 @@
 
 .fixed-checker-btn{
 position:fixed;
-left:16px;
-right:16px;
-bottom:16px;
+left:12px;
+right:12px;
+bottom:12px;
 z-index:300;
-display:block;
-text-align:center;
-padding:15px 16px;
+display:flex;
+align-items:center;
+justify-content:center;
+min-height:48px;
+padding:12px 14px;
 border-radius:12px;
 background:linear-gradient(135deg,#c8972a 0%,#a07320 100%);
 color:#0c0c0e;
 font-weight:700;
-font-size:0.9rem;
-letter-spacing:0.05em;
+font-size:0.82rem;
+line-height:1.4;
+letter-spacing:0;
 text-decoration:none;
 box-shadow:0 6px 18px rgba(0,0,0,0.35);
+text-align:center;
+white-space:normal;
+word-break:keep-all;
+overflow-wrap:break-word;
 }
 .fixed-checker-btn:active{
 transform:scale(0.97);
@@ -459,7 +466,7 @@ transform:scale(0.97);
 
 
 <a href="hokuto_tensei2_checker.html" class="fixed-checker-btn">
-⚡ 今すぐ狙い目を判定する
+今すぐ狙い目を判定する
 </a>
 
 </body>
