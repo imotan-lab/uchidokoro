@@ -21,8 +21,8 @@
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html { scroll-behavior: smooth; }
-  body { background: var(--bg); color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-weight: 300; line-height: 1.8; font-size: 15px; }
-  body > *:not(header) { max-width: 600px; margin-left: auto; margin-right: auto; }
+  body { background: var(--bg); color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-weight: 300; line-height: 1.8; font-size: 15px; display: flex; flex-direction: column; align-items: center; }
+  body > *:not(header) { display: block; width: 100%; max-width: 600px; margin-left: auto; margin-right: auto; padding-left: 16px; padding-right: 16px; }
   a { touch-action: manipulation; }
   header { position: fixed; top: 0; left: 0; right: 0; z-index: 200; height: 52px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; background: rgba(12,12,14,0.96); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
   .logo { font-family: 'Shippori Mincho', serif; font-size: 1.05rem; font-weight: 800; color: var(--accent); text-decoration: none; letter-spacing: 0.08em; }
@@ -37,7 +37,7 @@
   .field { margin-bottom: 20px; }
   .field label { display: block; font-size: 0.78rem; font-weight: 700; color: var(--text); margin-bottom: 8px; }
   .field label .req { color: var(--accent); margin-left: 4px; }
-  .field input, .field textarea { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; font-size: 0.88rem; color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-weight: 300; outline: none; transition: border-color 0.2s; -webkit-appearance: none; }
+  .field input, .field textarea { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; font-size: 0.88rem; color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-weight: 300; outline: none; transition: border-color 0.2s; appearance: none; -webkit-appearance: none; }
   .field input:focus, .field textarea:focus { border-color: var(--accent); }
   .field textarea { resize: vertical; min-height: 140px; line-height: 1.8; }
   .submit-btn { width: 100%; padding: 16px; background: linear-gradient(135deg, var(--accent) 0%, #a07320 100%); border: none; border-radius: 10px; color: #0c0c0e; font-size: 1rem; font-weight: 700; font-family: 'Noto Sans JP', sans-serif; cursor: pointer; letter-spacing: 0.05em; transition: opacity 0.2s, transform 0.1s; }

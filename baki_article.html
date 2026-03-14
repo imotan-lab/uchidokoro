@@ -34,10 +34,27 @@
   .mv-label { font-size: 0.6rem; color: var(--accent); letter-spacing: 0.3em; text-transform: uppercase; margin-bottom: 10px; }
   .mv-title { font-family: 'Shippori Mincho', serif; font-size: clamp(1.4rem, 6vw, 2rem); font-weight: 800; line-height: 1.4; margin-bottom: 12px; }
   .mv-title em { color: var(--accent); font-style: normal; }
-  .mv-desc { font-size: 0.8rem; color: var(--text-sub); line-height: 1.9; margin-bottom: 16px; }
+  .mv-desc {
+    font-size: 0.8rem;
+    color: var(--text-sub);
+    line-height: 1.9;
+    margin-bottom: 16px;
+    text-align: left;
+  }
   .mv-tags { display: flex; flex-wrap: wrap; gap: 6px; }
   .tag { border: 1px solid var(--border); color: var(--text-muted); font-size: 0.62rem; padding: 3px 8px; border-radius: 20px; }
-  .toc { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin: 20px 16px; width: calc(100% - 32px); }
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-top: 20px;
+    margin-bottom: 20px;
+    width: calc(100% - 32px);
+    margin-left: 16px;
+    margin-right: 16px;
+    box-sizing: border-box;
+  }
   .toc-title { font-size: 0.72rem; color: var(--accent); font-weight: 700; letter-spacing: 0.1em; margin-bottom: 10px; }
   .toc a { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--text-sub); text-decoration: none; padding: 6px 0; border-bottom: 1px solid var(--border); }
   .toc a:last-child { border-bottom: none; }

@@ -1,0 +1,213 @@
+/* ===== 機種共通コンポーネント ===== */
+
+/* 基本コンテナ */
+.info-box { 
+  background: var(--surface); 
+  border: 1px solid var(--border); 
+  border-radius: 10px; 
+  padding: 16px; 
+  margin-bottom: 14px; 
+}
+
+.info-box-title { 
+  font-size: 0.72rem; 
+  font-weight: 700; 
+  color: var(--accent); 
+  letter-spacing: 0.1em; 
+  margin-bottom: 10px; 
+}
+
+/* テーブル統一 */
+.aim-table { 
+  width: 100%; 
+  border-collapse: collapse; 
+  font-size: 0.78rem; 
+  margin-bottom: 14px; 
+}
+
+.aim-table th { 
+  background: var(--surface2); 
+  color: var(--text-muted); 
+  font-size: 0.65rem; 
+  font-weight: 700; 
+  letter-spacing: 0.05em; 
+  padding: 8px 10px; 
+  text-align: left; 
+  border-bottom: 1px solid var(--border); 
+}
+
+.aim-table td { 
+  padding: 10px; 
+  border-bottom: 1px solid var(--border); 
+  color: var(--text); 
+  vertical-align: middle; 
+  line-height: 1.7; 
+}
+
+.aim-table tr:last-child td { border-bottom: none; }
+.aim-table .num { font-weight: 700; font-size: 0.9rem; color: var(--accent2); white-space: nowrap; }
+
+/* 狙い目カード */
+.aim-cards { 
+  display: flex; 
+  flex-direction: column; 
+  gap: 10px; 
+  margin-bottom: 14px; 
+}
+
+.aim-card { 
+  background: var(--surface); 
+  border: 1px solid var(--border); 
+  border-radius: 10px; 
+  padding: 14px; 
+  display: flex; 
+  gap: 12px; 
+  align-items: flex-start; 
+}
+
+.aim-card.special { 
+  border-color: var(--accent); 
+  background: linear-gradient(135deg, rgba(200,151,42,0.1) 0%, var(--surface) 100%); 
+}
+
+.aim-badge { 
+  font-size: 0.62rem; 
+  font-weight: 700; 
+  padding: 3px 7px; 
+  border-radius: 4px; 
+  white-space: nowrap; 
+  flex-shrink: 0; 
+  margin-top: 2px; 
+}
+
+.badge-normal { background: rgba(200,151,42,0.15); color: var(--accent); }
+.badge-special { background: rgba(200,151,42,0.3); color: var(--accent2); }
+.badge-reset { background: rgba(74,158,106,0.15); color: var(--good); }
+
+.aim-card-title { 
+  font-size: 0.85rem; 
+  font-weight: 700; 
+  color: var(--text); 
+  margin-bottom: 8px; 
+}
+
+.aim-card-desc { 
+  font-size: 0.75rem; 
+  color: var(--text-sub); 
+  line-height: 1.6; 
+}
+
+/* ステージカード（SF5など） */
+.stage-list { 
+  display: flex; 
+  flex-direction: column; 
+  gap: 1px; 
+  border: 1px solid var(--border); 
+  border-radius: 10px; 
+  overflow: hidden; 
+  background: var(--border); 
+  margin-bottom: 14px; 
+}
+
+.stage-row { 
+  background: var(--surface); 
+  padding: 11px 14px; 
+  display: grid; 
+  grid-template-columns: 1fr auto; 
+  gap: 8px; 
+  align-items: center; 
+}
+
+.stage-name { 
+  font-size: 0.82rem; 
+  font-weight: 700; 
+  color: var(--text); 
+}
+
+.stage-desc { 
+  font-size: 0.72rem; 
+  color: var(--text-muted); 
+  margin-top: 2px; 
+}
+
+.stage-badge { 
+  font-size: 0.62rem; 
+  font-weight: 700; 
+  padding: 3px 8px; 
+  border-radius: 4px; 
+  white-space: nowrap; 
+  text-align: center; 
+}
+
+.sb-normal { background: rgba(122,120,112,0.2); color: var(--text-muted); }
+.sb-high { background: rgba(200,151,42,0.2); color: var(--warn); }
+.sb-super { background: rgba(200,151,42,0.4); color: var(--accent2); }
+.sb-danger { background: rgba(158,74,74,0.2); color: var(--bad); }
+
+/* 狙い目ブロック（転生2など） */
+.aim-block { 
+  background: var(--surface2); 
+  border: 1px solid var(--border); 
+  border-radius: 10px; 
+  padding: 16px; 
+  margin-bottom: 14px; 
+}
+
+.aim-block-head { 
+  font-size: 0.72rem; 
+  color: var(--accent); 
+  letter-spacing: 0.15em; 
+  margin-bottom: 8px; 
+  font-weight: 700; 
+}
+
+.aim-block-val { 
+  font-family: 'Shippori Mincho', serif; 
+  font-size: 1.8rem; 
+  font-weight: 800; 
+  color: var(--text); 
+  line-height: 1.2; 
+}
+
+.aim-block-val span { 
+  font-size: 0.9rem; 
+  color: var(--text-sub); 
+  margin-left: 4px; 
+}
+
+.aim-block-desc { 
+  font-size: 0.78rem; 
+  color: var(--text-sub); 
+  margin-top: 6px; 
+  line-height: 1.7; 
+}
+
+/* カードコンポーネント */
+.card { 
+  background: var(--surface); 
+  border: 1px solid var(--border); 
+  border-radius: 8px; 
+  padding: 14px; 
+  margin-bottom: 12px; 
+}
+
+.card-title { 
+  font-size: 0.8rem; 
+  font-weight: 700; 
+  color: var(--accent); 
+  margin-bottom: 8px; 
+}
+
+.card p { margin-bottom: 0; }
+
+/* 注意書き */
+.note { 
+  background: rgba(200,151,42,0.07); 
+  border-left: 3px solid var(--warn); 
+  border-radius: 0 4px 4px 0; 
+  padding: 10px 12px; 
+  font-size: 0.78rem; 
+  color: var(--text-sub); 
+  margin-bottom: 14px; 
+  line-height: 1.8; 
+}

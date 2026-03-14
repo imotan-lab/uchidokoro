@@ -35,7 +35,6 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 0 16px;
   }
 
   /* 左端を「16px」で統一するための修正：
@@ -77,11 +76,53 @@
   }
   .logo { font-family: 'Shippori Mincho', serif; font-size: 1.05rem; font-weight: 800; color: var(--accent); text-decoration: none; letter-spacing: 0.08em; }
   .header-back { font-size: 0.75rem; color: var(--text-muted); text-decoration: none; display: flex; align-items: center; gap: 4px; }
-  .mv { padding: 72px 16px 32px; border-bottom: 1px solid var(--border); }
-  .mv-label { font-size: 0.6rem; color: var(--accent); letter-spacing: 0.3em; text-transform: uppercase; margin-bottom: 10px; }
-  .mv-title { font-family: 'Shippori Mincho', serif; font-size: clamp(1.4rem, 6vw, 2rem); font-weight: 800; line-height: 1.4; margin-bottom: 12px; }
+  .mv {
+    padding-top: 72px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .mv-label {
+    font-size: 0.6rem;
+    color: var(--accent);
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    text-align: left;
+  }
+
+  .mv-title {
+    font-family: 'Shippori Mincho', serif;
+    font-size: clamp(1.4rem, 6vw, 2rem);
+    font-weight: 800;
+    line-height: 1.4;
+    margin-bottom: 12px;
+    text-align: left;
+  }
+
   .mv-title em { color: var(--accent); font-style: normal; }
-  .mv-desc { font-size: 0.8rem; color: var(--text-sub); line-height: 1.9; }
+
+  .mv-desc {
+    font-size: 0.8rem;
+    color: var(--text-sub);
+    line-height: 1.9;
+    margin-bottom: 16px;
+    text-align: left;
+  }
+  .mv-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: flex-start; /* 左寄せ */
+  }
+
+  .tag {
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 0.62rem;
+    padding: 3px 8px;
+    border-radius: 20px;
+  }
   /* ===== 目次・バナーの幅調整 ===== */
   .toc, .checker-banner {
     width: calc(100% - 32px) !important; /* padding分の32pxを引く */
@@ -180,9 +221,16 @@
 
 
 <div class="mv">
-  <div class="mv-label">SMARTPACHISLO GUIDE</div>
+  <p class="mv-label">Slot Strategy</p>
   <h1 class="mv-title">スマスロ<br><em>北斗の拳 転生の章2</em><br>天井・狙い目まとめ</h1>
-  <p class="mv-desc">やめどき・リセット恩恵も解説｜2026年1月導入</p>
+  <p class="mv-desc">5号機で人気を博した「北斗の拳 転生の章」のスマスロ後継機。通常時は毎ゲーム「あべし」（擬似ポイント）を1以上獲得し、規定あべし到達でAT「闘神演舞」に当選する仕組み。AT中は勝舞魂をバトルで消費して継続を目指す。上位AT「裏闘神演舞」へ突入すれば期待枚数は3000枚超。</p>
+  <div class="mv-tags">
+    <span class="tag">あべしシステム</span>
+    <span class="tag">天井狙い</span>
+    <span class="tag">AT継続率</span>
+    <span class="tag">裏闘神演舞</span>
+    <span class="tag">リセット恩恵</span>
+  </div>
 </div>
 
 <!-- 上部チェッカーバナー -->

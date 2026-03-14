@@ -22,8 +22,8 @@
 
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   html { scroll-behavior: smooth; }
-  body { background: var(--bg); color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-weight: 300; line-height: 1.7; font-size: 15px; overflow-x: hidden; }
-  body > *:not(header):not(nav) { max-width: 600px; margin-left: auto; margin-right: auto; }
+  body { background: var(--bg); color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-weight: 300; line-height: 1.7; font-size: 15px; overflow-x: hidden; display: flex; flex-direction: column; align-items: center; }
+  body > *:not(header):not(nav) { display: block; width: 100%; max-width: 600px; margin-left: auto; margin-right: auto; padding-left: 16px; padding-right: 16px; }
   a, button { touch-action: manipulation; }
 
   /* ヘッダー */
@@ -76,7 +76,7 @@
 
   /* 検索ボックス */
   .search-wrap { margin-bottom: 14px; position: relative; }
-  .search-input { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px 12px 40px; font-size: 0.88rem; color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-weight: 300; outline: none; transition: border-color 0.2s; -webkit-appearance: none; }
+  .search-input { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px 12px 40px; font-size: 0.88rem; color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-weight: 300; outline: none; transition: border-color 0.2s; appearance: none; -webkit-appearance: none; }
   .search-input:focus { border-color: var(--accent); }
   .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.9rem; pointer-events: none; }
   .no-result { text-align: center; padding: 24px; font-size: 0.82rem; color: var(--text-muted); display: none; }

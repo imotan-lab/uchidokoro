@@ -34,11 +34,18 @@
     line-height: 1.8;
     font-size: 15px;
     overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
   }
   body > *:not(header) {
+    display: block;
+    width: 100%;
     max-width: 600px;
     margin-left: auto;
     margin-right: auto;
+    padding-left: 16px;
+    padding-right: 16px;
   }
   a, button { touch-action: manipulation; }
 
@@ -166,6 +173,7 @@
     font-family: 'Noto Sans JP', sans-serif;
     outline: none;
     transition: border-color 0.2s;
+    appearance: textfield;
     -moz-appearance: textfield;
   }
 
