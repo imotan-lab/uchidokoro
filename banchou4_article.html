@@ -34,8 +34,11 @@
     line-height: 1.8;
     font-size: 15px;
     overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
   }
-  body > *:not(header) { display: block; max-width: 600px; margin-left: auto; margin-right: auto; }
+  body > *:not(header) { display: block; width: 100%; max-width: 600px; margin-left: auto; margin-right: auto; }
   a, button { touch-action: manipulation; }
 
   header {
