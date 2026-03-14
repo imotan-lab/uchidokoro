@@ -24,7 +24,7 @@
   }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   html { scroll-behavior: smooth; }
-  body { background: var(--bg); color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-weight: 300; line-height: 1.8; font-size: 15px; overflow-x: hidden; display: flex; flex-direction: column; align-items: center; padding-bottom: 120px; }
+  body{padding-bottom:180px; background: var(--bg); color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-weight: 300; line-height: 1.8; font-size: 15px; overflow-x: hidden; display: flex; flex-direction: column; align-items: center; padding-bottom:180px; }
   body > *:not(header) { display: block; width: 100%; max-width: 600px; margin-left: auto; margin-right: auto; }
   a, button { touch-action: manipulation; }
   header { position: fixed; top: 0; left: 0; right: 0; z-index: 200; height: 52px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; background: rgba(12,12,14,0.96); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
@@ -52,7 +52,7 @@
   .cb-arr { color: var(--accent); font-size: 1.2rem; flex-shrink: 0; }
   .section { padding: 32px 16px 0; }
   .section-title { font-family: 'Shippori Mincho', serif; font-size: 1.1rem; font-weight: 800; color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px; margin-bottom: 16px; }
-  .section-sub { font-size: 0.85rem; font-weight: 700; color: var(--text-sub); margin: 20px 0 10px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+  .section-sub { font-size: 0.85rem; font-weight: 700; color: var(--text-sub); margin: 20px 0 10px; padding-bottom:180px; border-bottom: 1px solid var(--border); }
   p { font-size: 0.88rem; margin-bottom: 12px; line-height: 1.9; }
   .tbl-wrap { overflow-x: auto; margin-bottom: 20px; }
   table { width: 100%; border-collapse: collapse; font-size: 0.8rem; white-space: nowrap; }
@@ -82,7 +82,7 @@
   .spec-val small { font-size: 0.72rem; color: var(--text-sub); }
   .divider { height: 1px; background: var(--border); margin: 28px 0; }
 
-.fixed-checker-btn{
+.fixed-checker-btn{bottom:calc(16px + env(safe-area-inset-bottom));bottom:80px;
 position:fixed;
 left:12px;
 right:12px;
@@ -519,7 +519,7 @@ box-shadow:0 6px 18px rgba(0,0,0,0.25);
 </footer>
 
 
-<a href="hokuto_tensei2_checker.html" class="fixed-checker-btn" aria-label="北斗転生2のチェッカーを開く">今すぐ狙い目を判定する</a>
+<a href="hokuto_tensei2_checker.html" class="fixed-checker-btn">今すぐチェッカーを開く</a>
 
 </body>
 </html>
