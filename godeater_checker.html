@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ゴッドイーター リザレクション 狙い目チェッカー｜G数入力で即判定</title>
+<meta name="description" content="スマスロ ゴッドイーター リザレクションの狙い目チェッカー。G数・リセット有無入力で◎○△×即判定。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@700;800&family=Noto+Sans+JP:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0c0c0e;--surface:#111115;--surface2:#18181e;--border:#222230;--accent:#c8972a;--accent2:#e8b84a;--text:#ddd8cc;--text-muted:#7a7870;--text-sub:#aaa49a;--good:#4a9e6a;--warn:#c8972a;--bad:#9e4a4a;}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}html{scroll-behavior:smooth;}
+  body{background:var(--bg);color:var(--text);font-family:'Noto Sans JP',sans-serif;font-weight:300;line-height:1.8;font-size:15px;overflow-x:hidden;}
+  body>*:not(header){max-width:600px;margin-left:auto;margin-right:auto;}a,button{touch-action:manipulation;}
+  header{position:fixed;top:0;left:0;right:0;z-index:200;height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;background:rgba(12,12,14,0.96);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);}
+  .logo{font-family:'Shippori Mincho',serif;font-size:1.05rem;font-weight:800;color:var(--accent);text-decoration:none;letter-spacing:0.08em;}
+  .header-back{font-size:0.75rem;color:var(--text-muted);text-decoration:none;display:flex;align-items:center;gap:4px;}
+  .mv{padding:72px 16px 28px;border-bottom:1px solid var(--border);}
+  .mv-label{font-size:0.6rem;color:var(--accent);letter-spacing:0.3em;text-transform:uppercase;margin-bottom:10px;}
+  .mv-title{font-family:'Shippori Mincho',serif;font-size:clamp(1.3rem,5.5vw,1.8rem);font-weight:800;line-height:1.4;margin-bottom:10px;}
+  .mv-title em{color:var(--accent);font-style:normal;}
+  .mv-desc{font-size:0.8rem;color:var(--text-sub);line-height:1.9;}
+  .checker-wrap{padding:24px 16px 0;}
+  .checker-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px 18px;margin-bottom:16px;}
+  .checker-card-title{font-size:0.72rem;font-weight:700;color:var(--accent);letter-spacing:0.12em;margin-bottom:16px;}
+  .form-group{margin-bottom:18px;}
+  .form-label{display:block;font-size:0.78rem;font-weight:700;color:var(--text);margin-bottom:8px;}
+  .form-label span{font-size:0.68rem;font-weight:300;color:var(--text-muted);margin-left:6px;}
+  .g-input-row{display:flex;align-items:center;gap:10px;}
+  .g-input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-size:1.4rem;font-weight:700;color:var(--text);text-align:right;font-family:'Noto Sans JP',sans-serif;outline:none;transition:border-color 0.2s;-moz-appearance:textfield;}
+  .g-input::-webkit-outer-spin-button,.g-input::-webkit-inner-spin-button{-webkit-appearance:none;}.g-input:focus{border-color:var(--accent);}
+  .g-unit{font-size:0.85rem;color:var(--text-muted);flex-shrink:0;}
+  .toggle-group{display:flex;gap:8px;flex-wrap:wrap;}
+  .toggle-btn{flex:1;min-width:80px;padding:11px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text-muted);font-size:0.8rem;font-family:'Noto Sans JP',sans-serif;font-weight:700;cursor:pointer;transition:all 0.18s;text-align:center;}
+  .toggle-btn.active{border-color:var(--accent);background:rgba(200,151,42,0.1);color:var(--accent2);}
+  .judge-btn{width:100%;padding:16px;background:linear-gradient(135deg,var(--accent) 0%,#a07320 100%);border:none;border-radius:10px;color:#0c0c0e;font-size:1rem;font-weight:700;font-family:'Noto Sans JP',sans-serif;cursor:pointer;letter-spacing:0.05em;transition:opacity 0.2s,transform 0.1s;margin-top:4px;}
+  .judge-btn:active{opacity:0.85;transform:scale(0.98);}
+  .result-wrap{padding:0 16px;display:none;}.result-wrap.show{display:block;}
+  .result-card{border-radius:14px;padding:22px 18px;margin-bottom:16px;border:2px solid transparent;animation:fadeIn 0.3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+  .result-card.rank-S{background:linear-gradient(135deg,#0e1f12 0%,#111115 100%);border-color:var(--good);}
+  .result-card.rank-A{background:linear-gradient(135deg,#1a1c0e 0%,#111115 100%);border-color:#7ab83e;}
+  .result-card.rank-B{background:linear-gradient(135deg,#1a1508 0%,#111115 100%);border-color:var(--warn);}
+  .result-card.rank-C{background:var(--surface);border-color:var(--border);}
+  .result-card.rank-X{background:linear-gradient(135deg,#1f0e0e 0%,#111115 100%);border-color:var(--bad);}
+  .result-rank{font-size:3.2rem;font-weight:700;font-family:'Shippori Mincho',serif;line-height:1;margin-bottom:6px;}
+  .rank-S .result-rank{color:var(--good);}.rank-A .result-rank{color:#7ab83e;}.rank-B .result-rank{color:var(--warn);}.rank-C .result-rank{color:var(--text-muted);}.rank-X .result-rank{color:var(--bad);}
+  .result-label{font-size:0.72rem;font-weight:700;letter-spacing:0.12em;margin-bottom:12px;}
+  .rank-S .result-label{color:var(--good);}.rank-A .result-label{color:#7ab83e;}.rank-B .result-label{color:var(--warn);}.rank-C .result-label{color:var(--text-muted);}.rank-X .result-label{color:var(--bad);}
+  .result-title{font-size:1rem;font-weight:700;color:var(--text);margin-bottom:10px;line-height:1.5;}
+  .result-detail{font-size:0.8rem;color:var(--text-sub);line-height:1.9;}
+  .result-info{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:16px;}
+  .result-info-title{font-size:0.7rem;font-weight:700;color:var(--accent);letter-spacing:0.1em;margin-bottom:10px;}
+  .result-info table{width:100%;border-collapse:collapse;font-size:0.8rem;}
+  .result-info td{padding:7px 6px;border-bottom:1px solid var(--border);color:var(--text-sub);vertical-align:middle;}
+  .result-info tr:last-child td{border-bottom:none;}
+  .result-info td:first-child{color:var(--text-muted);font-size:0.74rem;}.result-info td:last-child{text-align:right;font-weight:700;}
+  .note-box{background:var(--surface);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:12px 14px;font-size:0.78rem;color:var(--text-muted);line-height:1.8;margin-bottom:16px;}
+  .special-badge{display:inline-block;background:rgba(200,151,42,0.15);border:1px solid var(--accent);border-radius:20px;padding:2px 10px;font-size:0.65rem;font-weight:700;color:var(--accent2);letter-spacing:0.1em;margin-bottom:10px;}
+  .reset-btn{width:100%;padding:13px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text-muted);font-size:0.82rem;font-family:'Noto Sans JP',sans-serif;cursor:pointer;margin-bottom:8px;transition:border-color 0.2s;}.reset-btn:active{border-color:var(--accent);}
+  .article-link{margin:0 16px 32px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;text-decoration:none;display:flex;align-items:center;gap:14px;}.article-link:active{opacity:0.85;}
+  .al-icon{font-size:1.6rem;flex-shrink:0;}.al-body{flex:1;min-width:0;}.al-label{font-size:0.58rem;color:var(--accent);font-weight:700;letter-spacing:0.15em;margin-bottom:3px;}.al-title{font-size:0.88rem;font-weight:700;color:var(--text);margin-bottom:2px;}.al-desc{font-size:0.68rem;color:var(--text-muted);}.al-arr{color:var(--accent);font-size:1.2rem;flex-shrink:0;}
+  footer{max-width:600px;margin:0 auto;padding:32px 16px;border-top:1px solid var(--border);text-align:center;}
+  .footer-logo{font-family:'Shippori Mincho',serif;font-size:1rem;color:var(--accent);font-weight:800;margin-bottom:12px;}
+  .footer-links{display:flex;justify-content:center;gap:20px;margin-bottom:12px;}.footer-links a{font-size:0.72rem;color:var(--text-muted);text-decoration:none;}
+  .footer-copy{font-size:0.68rem;color:var(--text-muted);}
+</style>
+</head>
+<body>
+<header>
+  <a href="index.html" class="logo">狙い目手帖</a>
+  <a href="godeater_article.html" class="header-back">← ゴッドイーター リザレクション記事へ</a>
+</header>
+<div class="mv">
+  <div class="mv-label">FREE TOOL · GOD EATER RESURRECTION</div>
+  <h1 class="mv-title">ゴッドイーター リザレクション<br><em>狙い目チェッカー</em></h1>
+  <p class="mv-desc">G数・台の状態・換金率を入力するだけで<br>今すぐ狙えるか <strong>◎○△×</strong> で即判定します。</p>
+</div>
+<div class="checker-wrap">
+  <div class="checker-card">
+    <div class="checker-card-title">⚡ 条件を入力してください</div>
+    <div class="form-group">
+      <label class="form-label" for="gInput">現在のG数<span>液晶表示のAT間G数</span></label>
+      <div class="g-input-row"><input type="number" id="gInput" class="g-input" placeholder="0" min="0" max="2000" inputmode="numeric"><span class="g-unit">G</span></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">台の状態</label>
+      <div class="toggle-group">
+        <button class="toggle-btn active" id="btn-m0" onclick="selectM('normal')">通常</button>
+        <button class="toggle-btn" id="btn-m1" onclick="selectM('reset')">リセット確定</button>
+        <button class="toggle-btn" id="btn-m2" onclick="selectM('shikkoku')">漆黒終了後</button>
+        <button class="toggle-btn" id="btn-m3" onclick="selectM('hannibaru')">逆鱗ハンニバル敗北後</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">換金率</label>
+      <div class="toggle-group">
+        <button class="toggle-btn active" id="btn-eq" onclick="selectE(true)">等価</button>
+        <button class="toggle-btn" id="btn-56" onclick="selectE(false)">5.6枚交換</button>
+      </div>
+    </div>
+    <button class="judge-btn" onclick="judge()">◎○△× 今すぐ判定する</button>
+  </div>
+</div>
+
+<div class="result-wrap" id="resultWrap">
+  <div class="result-card" id="resultCard">
+    <div class="special-badge" id="specialBadge" style="display:none;"></div>
+    <div class="result-rank" id="resultRank"></div>
+    <div class="result-label" id="resultLabel"></div>
+    <div class="result-title" id="resultTitle"></div>
+    <div class="result-detail" id="resultDetail"></div>
+  </div>
+  <div class="result-info"><div class="result-info-title">📊 判定根拠</div><table id="resultTable"></table></div>
+  <div class="note-box" id="resultNote"></div>
+  <button class="reset-btn" onclick="resetForm()">↩ もう一度入力する</button>
+</div>
+<a href="godeater_article.html" class="article-link">
+  <div class="al-icon">📖</div>
+  <div class="al-body">
+    <div class="al-label">解説記事</div>
+    <div class="al-title">ゴッドイーター リザレクション 天井・狙い目まとめ</div>
+    <div class="al-desc">天井・リセット恩恵・ゾーン狙い解説</div>
+  </div>
+  <span class="al-arr">›</span>
+</a>
+<div style="margin:0 16px 32px;text-align:center;">
+  <a href="index.html" style="display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 24px;color:var(--accent);text-decoration:none;font-size:0.85rem;font-weight:700;">← 機種一覧へ戻る</a>
+</div>
+
+<footer>
+  <div class="footer-logo">狙い目手帖</div>
+  <div class="footer-links"><a href="#">プライバシーポリシー</a><a href="#">お問い合わせ</a></div>
+  <p class="footer-copy">掲載内容は公開情報をもとにした考察です。実際の立ち回りはご自身の判断でお願いします。</p>
+  <p class="footer-copy" style="margin-top:6px;">© 2025 狙い目手帖</p>
+</footer>
+
+<script>
+
+  function showResult(rank,rankClass,label,title,detail,note,rows,special){
+    const card=document.getElementById('resultCard');card.className='result-card '+rankClass;
+    const sb=document.getElementById('specialBadge');
+    if(special){sb.textContent=special;sb.style.display='inline-block';}else{sb.style.display='none';}
+    document.getElementById('resultRank').textContent=rank;
+    document.getElementById('resultLabel').textContent=label;
+    document.getElementById('resultTitle').textContent=title;
+    document.getElementById('resultDetail').textContent=detail;
+    document.getElementById('resultNote').textContent=note;
+    document.getElementById('resultTable').innerHTML=rows.map(([k,v])=>'<tr><td>'+k+'</td><td>'+v+'</td></tr>').join('');
+    const wrap=document.getElementById('resultWrap');wrap.classList.add('show');wrap.scrollIntoView({behavior:'smooth',block:'start'});
+  }
+  function resetForm(){
+    document.querySelectorAll('.g-input').forEach(el=>el.value='');
+    document.getElementById('resultWrap').classList.remove('show');
+    document.querySelector('.checker-wrap').scrollIntoView({behavior:'smooth'});
+  }
+
+  let mMode='normal',eMode=true;
+  function selectM(v){mMode=v;['normal','reset','shikkoku','hannibaru'].forEach((t,i)=>document.getElementById('btn-m'+i).classList.toggle('active',t===v));}
+  function selectE(v){eMode=v;document.getElementById('btn-eq').classList.toggle('active',v);document.getElementById('btn-56').classList.toggle('active',!v);}
+  function judge(){
+    const g=parseInt(document.getElementById('gInput').value)||0;
+    let rank,rc,label,title,detail,note,rows=[],sp=null;
+    if(mMode==='hannibaru'){
+      rank='◎';rc='rank-S';sp='🔥 逆鱗ハンニバル敗北後 — 100GゾーンでAT当選濃厚';
+      label='即着席でOK';title='逆鱗ハンニバル敗北後 — 0〜100GでAT当選濃厚';
+      detail='逆鱗ハンニバルとのバトルに敗北後は100GゾーンでAT当選が濃厚。G数問わず0Gから即着席でOK。';
+      note='💡 100G到達後に当選しない場合は見切りを検討。';
+      rows=[['台の状態','逆鱗ハンニバル敗北後'],['当選濃厚ゾーン','0〜100G'],['推奨','0G〜即着席'],['換金率',eMode?'等価':'5.6枚交換']];
+    } else if(mMode==='shikkoku'){
+      rank='◎';rc='rank-S';sp='⭐ 漆黒の捕喰者終了後 — 天井600Gに短縮';
+      label='即着席でOK';title='漆黒の捕喰者終了後 — 天井600Gに短縮';
+      detail='上位AT「漆黒の捕喰者」終了直後の台は天井600Gに短縮。前回AT獲得枚数1101枚以上が該当。G数浅めから狙い始める価値あり。';
+      note='💡 等価なら180G〜でプラス期待値。リセット台と同様の好条件。';
+      rows=[['台の状態','漆黒の捕喰者終了後'],['天井','600G（短縮）'],['推奨','0G〜（180G〜でプラス）'],['換金率',eMode?'等価':'5.6枚交換']];
+    } else if(mMode==='reset'){
+      const line=180;
+      if(g>=line){rank='◎';rc='rank-S';label='即着席推奨';title=`リセット確定 ${g}G — 狙い目ライン超え（天井600G）`;detail='リセット後は天井600Gに短縮。等価なら180G〜からプラス期待値。浅いハマりを渡り歩くスタイルが効率的。';note='💡 朝イチはリセット確定。天井600Gに短縮されており0Gから打ち始めてOK。';}
+      else{rank='○';rc='rank-A';label='条件付きで狙える';title=`リセット確定 ${g}G — あと${line-g}Gで推奨ライン`;detail='リセット台で天井短縮あり。等価なら180G〜がプラス期待値ライン。もう少し待つのが理想。';note='💡 100Gゾーン（80G〜）や300Gゾーン（280G〜）は特に当選期待度が高い。';}
+      rows=[['台の状態','リセット確定'],['天井','600G（短縮）'],['推奨ライン','180G〜（等価）'],['換金率',eMode?'等価':'5.6枚交換']];
+    } else {
+      const lineZ=[[80,100],[280,300]];
+      let zHit=null;for(const [s,e] of lineZ){if(g>=s&&g<e){zHit=`${s}G`;break;}}
+      if(g>=580){rank='◎';rc='rank-S';label='即着席推奨';title=`${g}G — 狙い目ライン超え（天井最大1000G）`;detail='通常時の狙い目ライン（580G〜、等価・5.6共通）を超えています。';note='💡 規定G数は100/200/300/450/600/750/1000Gの振り分け。深いほど期待値大。';}
+      else if(zHit){rank='△';rc='rank-B';sp=`📍 ゾーン直前（${zHit}付近）`;label='ゾーン狙い検討';title=`${g}G — ゾーン（${zHit}）直前`;detail=`本機は${zHit}付近が特に強いゾーン。ゾーン抜けたらすぐやめ推奨。天井狙いラインには届いていないため長追いは禁物。`;note='⚠️ ゾーン外れ後は必ずやめること。';}
+      else if(g>=420){rank='○';rc='rank-A';label='条件付きで狙える';title=`${g}G — ラインまであと${580-g}G`;detail='まだ狙い目ラインに届いていません。台の状態（漆黒終了後等）も確認しましょう。';note='💡 300Gゾーン（280G〜）通過後なら少し余裕があります。';}
+      else{rank='×';rc='rank-X';label='見送り';title=`${g}G — ラインまであと${580-g}G`;detail='見送りが賢明です。リセット確定台や特殊状態の台を優先しましょう。';note='💡 朝イチはリセット確定（天井600G短縮）。ゾーン狙いも有効な機種。';}
+      rows=[['現在G数',`${g}G`],['天井','最大1000G（振り分け）'],['狙い目ライン','580G〜（等価・5.6共通）'],['換金率',eMode?'等価':'5.6枚交換']];
+    }
+    showResult(rank,rc,label,title,detail,note,rows,sp);
+  }
+</script>
+</body>
+</html>
