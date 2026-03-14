@@ -42,11 +42,14 @@
   .page-nav ul li:last-child { border-bottom: none; }
   .page-nav ul li a { display: block; padding: 8px 4px; font-size: 0.82rem; color: var(--text-sub); text-decoration: none; }
   .page-nav ul li a::before { content: "→ "; color: var(--accent); }
-  .checker-banner { margin: 20px 16px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); border: 1px solid #2a4080; border-radius: 10px; padding: 18px 16px; text-align: center; text-decoration: none; display: block; }
-  .checker-banner-label { font-size: 0.6rem; color: #6a9fd8; letter-spacing: 0.3em; margin-bottom: 6px; }
-  .checker-banner-title { font-family: 'Shippori Mincho', serif; font-size: 1.1rem; font-weight: 800; color: #fff; margin-bottom: 6px; }
-  .checker-banner-desc { font-size: 0.75rem; color: #8ab4e8; }
-  .checker-banner-btn { display: inline-block; margin-top: 12px; padding: 8px 20px; background: #2a5fd8; color: #fff; border-radius: 20px; font-size: 0.8rem; font-weight: 700; }
+  .checker-banner { margin: 0 16px 4px; background: linear-gradient(135deg, #1a1508 0%, #0c0c0e 100%); border: 1px solid var(--accent); border-radius: 12px; padding: 16px; text-decoration: none; display: flex; align-items: center; gap: 14px; }
+  .checker-banner:active { opacity: 0.85; }
+  .cb-icon { font-size: 2rem; flex-shrink: 0; }
+  .cb-body { flex: 1; min-width: 0; }
+  .cb-label { font-size: 0.58rem; color: var(--accent); font-weight: 700; letter-spacing: 0.15em; margin-bottom: 3px; }
+  .cb-title { font-size: 0.9rem; font-weight: 700; color: var(--accent); margin-bottom: 3px; }
+  .cb-desc { font-size: 0.68rem; color: var(--text-muted); line-height: 1.5; }
+  .cb-arr { color: var(--accent); font-size: 1.2rem; flex-shrink: 0; }
   .section { padding: 32px 16px 0; }
   .section-title { font-family: 'Shippori Mincho', serif; font-size: 1.1rem; font-weight: 800; color: var(--accent); border-left: 3px solid var(--accent); padding-left: 12px; margin-bottom: 16px; }
   .section-sub { font-size: 0.85rem; font-weight: 700; color: var(--text-sub); margin: 20px 0 10px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
@@ -95,11 +98,14 @@
 </div>
 
 <!-- 上部チェッカーバナー -->
-<a class="checker-banner" href="hokuto_tensei2_checker.html">
-  <div class="checker-banner-label">FREE TOOL</div>
-  <div class="checker-banner-title">北斗転生2　狙い目チェッカー</div>
-  <div class="checker-banner-desc">あべし数を入力するだけで今すぐ打てるか判定</div>
-  <div class="checker-banner-btn">▶ チェッカーを使う</div>
+<a href="hokuto_tensei2_checker.html" class="checker-banner">
+  <div class="cb-icon">⚡</div>
+  <div class="cb-body">
+    <div class="cb-label">無料ツール</div>
+    <div class="cb-title">北斗転生2 狙い目チェッカー</div>
+    <div class="cb-desc">あべし数を入れるだけで今すぐ狙えるか◎○△×で判定</div>
+  </div>
+  <span class="cb-arr">›</span>
 </a>
 
 <nav class="page-nav">
@@ -393,11 +399,14 @@
 </section>
 
 <!-- 下部チェッカーバナー -->
-<a class="checker-banner" href="hokuto_tensei2_checker.html" style="margin: 28px 16px;">
-  <div class="checker-banner-label">FREE TOOL</div>
-  <div class="checker-banner-title">北斗転生2　狙い目チェッカー</div>
-  <div class="checker-banner-desc">今打っている台・狙っている台が打てるかすぐ判定</div>
-  <div class="checker-banner-btn">▶ チェッカーを使う</div>
+<a href="hokuto_tensei2_checker.html" class="checker-banner" style="margin: 16px 16px 32px;">
+  <div class="cb-icon">⚡</div>
+  <div class="cb-body">
+    <div class="cb-label">無料ツール</div>
+    <div class="cb-title">北斗転生2 狙い目チェッカー</div>
+    <div class="cb-desc">あべし数を入れるだけで今すぐ狙えるか◎○△×で判定</div>
+  </div>
+  <span class="cb-arr">›</span>
 </a>
 
 <footer>

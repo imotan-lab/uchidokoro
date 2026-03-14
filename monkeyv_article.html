@@ -29,11 +29,12 @@ header{position:fixed;top:0;left:0;right:0;z-index:200;height:52px;display:flex;
 .toc a{display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--text-sub);text-decoration:none;padding:6px 0;border-bottom:1px solid var(--border)}
 .toc a:last-child{border-bottom:none}
 .toc a::before{content:'';display:block;width:4px;height:4px;border-radius:50%;background:var(--accent);flex-shrink:0}
-.cb{background:linear-gradient(135deg,#1a1508,#0c0c0e);border:1px solid var(--accent);border-radius:12px;padding:16px;text-decoration:none;display:flex;align-items:center;gap:14px;margin:0 16px 4px}
+.checker-banner{background:linear-gradient(135deg,#1a1508,#0c0c0e);border:1px solid var(--accent);border-radius:12px;padding:16px;text-decoration:none;display:flex;align-items:center;gap:14px;margin:0 16px 4px}
+.checker-banner:active{opacity:.85}
 .cb-icon{font-size:2rem;flex-shrink:0}
 .cb-body{flex:1;min-width:0}
 .cb-label{font-size:.58rem;color:var(--accent);font-weight:700;letter-spacing:.15em;margin-bottom:3px}
-.cb-title{font-size:.9rem;font-weight:700;color:var(--accent2);margin-bottom:3px}
+.cb-title{font-size:.9rem;font-weight:700;color:var(--accent);margin-bottom:3px}
 .cb-desc{font-size:.68rem;color:var(--text-muted);line-height:1.5}
 .cb-arr{color:var(--accent);font-size:1.2rem;flex-shrink:0}
 section{padding:28px 16px;border-bottom:1px solid var(--border)}
@@ -84,13 +85,13 @@ footer{padding:20px 16px 36px;text-align:center;font-size:.7rem;color:var(--text
 
 <div style="margin:16px 16px 0;">
   <a href="monkeyv_checker.html" class="checker-banner">
-    <div class="cb-icon">🎰</div>
+    <div class="cb-icon">⚡</div>
     <div class="cb-body">
-      <div class="cb-label">FREE TOOL</div>
+      <div class="cb-label">無料ツール</div>
       <div class="cb-title">モンキーターンV 狙い目チェッカー</div>
-      <div class="cb-desc">G数を入力するだけで今すぐ打つべきか判定。無料。</div>
+      <div class="cb-desc">G数を入れるだけで今すぐ狙えるか◎○△×で判定</div>
     </div>
-    <div class="cb-arr">›</div>
+    <span class="cb-arr">›</span>
   </a>
 </div>
 
@@ -273,13 +274,13 @@ footer{padding:20px 16px 36px;text-align:center;font-size:.7rem;color:var(--text
 
 <div style="margin:16px 16px 0;">
   <a href="monkeyv_checker.html" class="checker-banner">
-    <div class="cb-icon">📊</div>
+    <div class="cb-icon">⚡</div>
     <div class="cb-body">
-      <div class="cb-label">FREE TOOL</div>
+      <div class="cb-label">無料ツール</div>
       <div class="cb-title">モンキーターンV 狙い目チェッカー</div>
-      <div class="cb-desc">G数入力するだけで今すぐ打つべきか瞬時に判定。</div>
+      <div class="cb-desc">G数を入れるだけで今すぐ狙えるか◎○△×で判定</div>
     </div>
-    <div class="cb-arr">›</div>
+    <span class="cb-arr">›</span>
   </a>
 </div>
 
