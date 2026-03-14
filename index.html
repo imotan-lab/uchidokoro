@@ -517,14 +517,58 @@
     if (!menuBtn.contains(e.target) && !drawer.contains(e.target)) closeMenu();
   });
 
+  // カタカナ→ひらがな変換
+  function toHira(str) {
+    return str.replace(/[\u30A1-\u30F6]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60));
+  }
+  // ひらがな→カタカナ変換
+  function toKata(str) {
+    return str.replace(/[\u3041-\u3096]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 0x60));
+  }
+
+  // 略称・読みデータ（機種ファイル名 → 追加キーワード）
+  const aliases = {
+    'hokuto_article':        'ほくとのけん けん',
+    'hokuto_tensei2_article':'ほくとてんせい てんせい',
+    'tokyo_ghoul_article':   'とうきょうぐーる ぐーる くーる',
+    'valvrave2_article':     'ヴヴヴ ばるぶれいぶ valvrave',
+    'kabaneri_article':      'かばねり かばね',
+    'koukaku_article':       'こうかく こうかくきどうたい',
+    'dumbbell_article':      'だんべる なんきろ',
+    'goblin_article':        'ごぶりん ごぶすれ',
+    'biohazard_article':     'ばいお びれっじ bio',
+    'kaguya_article':        'かぐや さよならせんせい',
+    'monkeyv_article':       'もんきー もんきーたーん モンキー',
+    'tekken6_article':       'てっけん てっけんろく',
+    'godeater_article':      'ごっどいーたー ごどいー',
+    'banchou4_article':      'ばんちょう おっす おしゅ',
+    'tensura_article':       'てんすら すらいむ スライム',
+    'baki_article':          'ばき くらえ',
+    'chibaryo2_article':     'ちばりよ ちばりょ',
+    'sf5_article':           'すとりーとふぁいたー すとふぁい スト5 sf',
+  };
+
+  function normalize(str) {
+    return toHira(str.toLowerCase());
+  }
+
+  function search(q, card, titleSelector) {
+    if (!q) return true;
+    const nq = normalize(q);
+    const name = normalize(card.dataset.name || '');
+    const title = normalize(card.querySelector(titleSelector).textContent);
+    // href からファイルキーを取得
+    const href = (card.getAttribute('href') || '').replace('.html', '');
+    const alias = normalize(aliases[href] || '');
+    return name.includes(nq) || title.includes(nq) || alias.includes(nq);
+  }
+
   function filterKinou() {
-    const q = document.getElementById('kinouSearch').value.trim().toLowerCase();
+    const q = document.getElementById('kinouSearch').value.trim();
     const cards = document.querySelectorAll('#kinouList .kinou-card');
     let count = 0;
     cards.forEach(card => {
-      const name = card.dataset.name.toLowerCase();
-      const title = card.querySelector('.k-title').textContent.toLowerCase();
-      const hit = !q || name.includes(q) || title.includes(q);
+      const hit = search(q, card, '.k-title');
       card.style.display = hit ? '' : 'none';
       if (hit) count++;
     });
@@ -532,13 +576,11 @@
   }
 
   function filterTools() {
-    const q = document.getElementById('toolSearch').value.trim().toLowerCase();
+    const q = document.getElementById('toolSearch').value.trim();
     const cards = document.querySelectorAll('#toolList .tool-card');
     let count = 0;
     cards.forEach(card => {
-      const name = card.dataset.name.toLowerCase();
-      const title = card.querySelector('.t-title').textContent.toLowerCase();
-      const hit = !q || name.includes(q) || title.includes(q);
+      const hit = search(q, card, '.t-title');
       card.style.display = hit ? '' : 'none';
       if (hit) count++;
     });
