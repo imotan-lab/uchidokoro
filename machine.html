@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>狙い目手帳 | 機種記事</title>
+  <meta name="description" content="狙い目手帳の機種記事ページです。">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@700;800&family=Noto+Sans+JP:wght@300;400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/site.css">
+  <script src="assets/js/machine-common.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-header-inner">
+      <a class="brand" href="index.html">狙い目手帖</a>
+      <nav class="header-nav">
+        <a href="index.html">トップ</a>
+        <a id="checkerNavLink" href="checker.html">チェッカー</a>
+        <a href="contact.html">お問い合わせ</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page legacy-shell">
+    <section class="hero page-narrow">
+      <div class="eyebrow">ARTICLE</div>
+      <h1 id="machineTitle" class="page-title">機種記事を読み込み中です</h1>
+      <p id="machineLead" class="lead">旧ページを共通URLで表示しています。</p>
+    </section>
+
+    <section class="legacy-page">
+      <div class="legacy-topbar">
+        <a class="back-link" href="index.html">← 機種一覧へ戻る</a>
+        <div id="machineMeta" class="shell-meta">共通URL: machine.html?slug=...</div>
+      </div>
+      <div id="legacyStatus" class="legacy-loading">記事を読み込んでいます...</div>
+      <div id="legacyFrameWrap" class="legacy-frame-wrap" hidden>
+        <iframe id="legacyFrame" class="legacy-frame" title="機種記事"></iframe>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="site-footer-inner">© 狙い目手帖</div>
+  </footer>
+</body>
+</html>
