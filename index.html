@@ -3,47 +3,285 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>狙い目手帳 | 機種一覧</title>
-  <meta name="description" content="スロット機種ごとの狙い目記事とチェッカーを一覧で確認できます。">
-  <link rel="stylesheet" href="assets/css/site.css">
-  <script src="assets/js/index.js" defer></script>
+  <title>狙い目手帖 | 機種一覧</title>
+  <style>
+    :root{
+      --bg:#0d0d0f;
+      --panel:#17171a;
+      --panel2:#1e1f23;
+      --line:#34353a;
+      --gold:#c9a13d;
+      --gold2:#e5c56e;
+      --text:#f3efe4;
+      --muted:#c9c0ae;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0}
+    body{
+      background:
+        radial-gradient(circle at top, rgba(201,161,61,.12), transparent 25%),
+        linear-gradient(180deg,#09090a 0%, #121316 100%);
+      color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+    }
+    a{text-decoration:none}
+    .site-wrap{
+      width:min(1100px, calc(100% - 32px));
+      margin:0 auto;
+    }
+    .site-header{
+      background:rgba(8,8,9,.95);
+      border-bottom:1px solid rgba(201,161,61,.35);
+      position:sticky;
+      top:0;
+      z-index:10;
+    }
+    .header-inner{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:16px;
+      padding:16px 0;
+    }
+    .brand{
+      font-size:30px;
+      font-weight:800;
+      color:var(--gold2);
+    }
+    .nav-links{
+      display:flex;
+      gap:18px;
+      flex-wrap:wrap;
+    }
+    .nav-links a{
+      color:var(--text);
+      font-weight:700;
+    }
+    .page-main{
+      padding:36px 0 56px;
+    }
+    .hero{
+      margin-bottom:24px;
+      padding:28px;
+      border:1px solid rgba(201,161,61,.2);
+      border-radius:20px;
+      background:linear-gradient(180deg, rgba(201,161,61,.08), rgba(201,161,61,.02));
+    }
+    .eyebrow{
+      margin:0 0 10px;
+      font-size:12px;
+      letter-spacing:.18em;
+      font-weight:800;
+      color:var(--gold2);
+    }
+    .page-title{
+      margin:0 0 12px;
+      font-size:52px;
+      line-height:1.15;
+      color:#fff8e6;
+    }
+    .lead{
+      margin:0;
+      color:var(--muted);
+      line-height:1.8;
+      font-size:16px;
+    }
+    .toolbar{
+      display:grid;
+      grid-template-columns:1fr 320px;
+      gap:20px;
+      margin-bottom:24px;
+    }
+    .card{
+      background:linear-gradient(180deg, var(--panel), var(--panel2));
+      border:1px solid var(--line);
+      border-radius:20px;
+      padding:24px;
+      box-shadow:0 14px 36px rgba(0,0,0,.28);
+    }
+    .section-title{
+      margin:0 0 14px;
+      padding-left:12px;
+      border-left:5px solid var(--gold);
+      font-size:28px;
+      color:var(--gold2);
+    }
+    .count{
+      font-size:28px;
+      font-weight:800;
+    }
+    .field-label{
+      display:block;
+      margin-bottom:10px;
+      color:var(--muted);
+      font-weight:700;
+    }
+    .field-input{
+      width:100%;
+      height:52px;
+      padding:0 16px;
+      border-radius:14px;
+      border:1px solid #5d5132;
+      background:#0d0d0f;
+      color:var(--text);
+      font-size:18px;
+    }
+    .machine-grid{
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:20px;
+    }
+    .machine-card{
+      background:linear-gradient(180deg, var(--panel), var(--panel2));
+      border:1px solid var(--line);
+      border-radius:20px;
+      padding:24px;
+      box-shadow:0 14px 36px rgba(0,0,0,.28);
+    }
+    .machine-name{
+      margin:0 0 8px;
+      font-size:30px;
+      color:#fff8e6;
+    }
+    .machine-slug{
+      margin:0 0 16px;
+      color:var(--muted);
+      font-size:14px;
+    }
+    .machine-meta{
+      margin:0 0 18px;
+      color:var(--text);
+      font-weight:700;
+      min-height:28px;
+    }
+    .btn-row{
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+    .btn-primary,.btn-sub{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:48px;
+      padding:0 20px;
+      border-radius:999px;
+      font-size:16px;
+      font-weight:900;
+    }
+    .btn-primary{
+      background:linear-gradient(180deg, #e5c56e 0%, #b98c24 100%);
+      color:#17120a;
+    }
+    .btn-sub{
+      background:#0d0d0f;
+      color:var(--text);
+      border:1px solid #5d5132;
+    }
+    .empty{
+      display:none;
+      margin-top:20px;
+    }
+    @media (max-width:900px){
+      .toolbar{grid-template-columns:1fr}
+      .machine-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+    }
+    @media (max-width:640px){
+      .header-inner{flex-direction:column;align-items:flex-start}
+      .page-title{font-size:40px}
+      .machine-grid{grid-template-columns:1fr}
+      .btn-row>*{flex:1 1 100%}
+    }
+  </style>
 </head>
 <body>
   <header class="site-header">
-    <div class="site-header-inner">
-      <a class="brand" href="index.html">狙い目手帳</a>
-      <nav class="header-nav">
+    <div class="site-wrap header-inner">
+      <a class="brand" href="index.html">狙い目手帖</a>
+      <nav class="nav-links">
         <a href="index.html">トップ</a>
         <a href="contact.html">お問い合わせ</a>
-        <a href="privacy.html">プライバシーポリシー</a>
       </nav>
     </div>
   </header>
 
-  <main class="page">
+  <main class="site-wrap page-main">
     <section class="hero">
-      <div class="eyebrow">INDEX</div>
+      <p class="eyebrow">INDEX</p>
       <h1 class="page-title">機種一覧</h1>
-      <p class="lead">記事とチェッカーを機種ごとにまとめています。新機種は machines.json に追加すると一覧へ自動反映されます。</p>
+      <p class="lead">machines.json に追加した機種をこの一覧へ自動表示します。</p>
     </section>
 
-    <section class="card index-toolbar">
-      <div>
+    <section class="toolbar">
+      <article class="card">
         <h2 class="section-title">掲載機種</h2>
-        <p class="lead-inline">現在の掲載数: <strong id="machineCount">読み込み中...</strong></p>
-      </div>
-      <div class="search-wrap">
-        <label class="search-label" for="machineSearch">機種名検索</label>
-        <input id="machineSearch" type="search" class="search-input" placeholder="例: 北斗 / godeater / バキ">
-      </div>
+        <div id="machineCount" class="count">読み込み中...</div>
+      </article>
+      <article class="card">
+        <label class="field-label" for="machineSearch">機種名検索</label>
+        <input id="machineSearch" class="field-input" type="search" placeholder="例: 北斗 / goblin / 東京喰種">
+      </article>
     </section>
 
-    <section id="machineList" class="machine-grid" aria-live="polite"></section>
-    <p id="machineEmpty" class="empty-message card" hidden>該当する機種がありません。</p>
+    <section id="machineList" class="machine-grid"></section>
+    <div id="machineEmpty" class="card empty">該当する機種がありません。</div>
   </main>
 
-  <footer class="site-footer">
-    <div class="site-footer-inner">© 狙い目手帳</div>
-  </footer>
+  <script>
+    async function loadMachines() {
+      const list = document.getElementById("machineList");
+      const count = document.getElementById("machineCount");
+      const search = document.getElementById("machineSearch");
+      const empty = document.getElementById("machineEmpty");
+
+      try {
+        const res = await fetch("assets/data/machines.json");
+        const machines = await res.json();
+
+        const render = (keyword = "") => {
+          const q = keyword.trim().toLowerCase();
+          const filtered = machines.filter((m) =>
+            (m.name || "").toLowerCase().includes(q) ||
+            (m.slug || "").toLowerCase().includes(q)
+          );
+
+          count.textContent = filtered.length + "機種";
+          list.innerHTML = "";
+
+          if (!filtered.length) {
+            empty.style.display = "block";
+            return;
+          }
+
+          empty.style.display = "none";
+
+          filtered.forEach((m) => {
+            const card = document.createElement("article");
+            card.className = "machine-card";
+            card.innerHTML = `
+              <h2 class="machine-name">${m.name}</h2>
+              <p class="machine-slug">${m.slug}</p>
+              <p class="machine-meta">${m.strategy || ""}</p>
+              <div class="btn-row">
+                <a class="btn-primary" href="machine.html?slug=${m.slug}">記事を見る</a>
+                <a class="btn-sub" href="checker.html?slug=${m.slug}">チェッカー</a>
+              </div>
+            `;
+            list.appendChild(card);
+          });
+        };
+
+        search.addEventListener("input", (e) => render(e.target.value));
+        render();
+      } catch (e) {
+        count.textContent = "エラー";
+        list.innerHTML = "";
+        empty.style.display = "block";
+        empty.textContent = "machines.json の読み込みに失敗しました。";
+      }
+    }
+
+    loadMachines();
+  </script>
 </body>
 </html>
