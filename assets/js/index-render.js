@@ -1,0 +1,1 @@
+/* index rendering helper */

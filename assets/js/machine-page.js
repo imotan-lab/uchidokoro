@@ -1,15 +1,15 @@
-(async () => {
+
+(async()=>{
 
 const machine = await getMachine()
-if(!machine) return
+if(!machine)return
 
 document.title = machine.seo.title
 
-document.getElementById("machine-title").textContent = machine.name
-document.getElementById("machine-info").textContent = machine.info
-document.getElementById("strategy").textContent = machine.strategy
+machineTitle.textContent = machine.name
+machineInfo.textContent = machine.info
+strategy.textContent = machine.strategy
 
-document.getElementById("checker-link").href =
-"checker.html?slug=" + machine.slug
+checkerLink.href="checker.html?slug="+machine.slug
 
 })()

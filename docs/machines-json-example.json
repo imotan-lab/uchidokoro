@@ -1,0 +1,16 @@
+[
+  {
+    "slug": "baki",
+    "name": "バキ",
+    "seo": {
+      "title": "バキ 狙い目"
+    },
+    "info": "スマスロ",
+    "strategy": "400G〜",
+    "checker": {
+      "target": 400,
+      "ok": "狙い目OK",
+      "ng": "まだ打てない"
+    }
+  }
+]

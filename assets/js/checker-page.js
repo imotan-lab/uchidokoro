@@ -1,22 +1,21 @@
-(async () => {
+
+(async()=>{
 
 const machine = await getMachine()
-if(!machine) return
+if(!machine)return
 
-document.getElementById("checker-title").textContent =
-machine.name + " チェッカー"
+checkerTitle.textContent = machine.name+" チェッカー"
 
 const target = machine.checker.target
 
-document.getElementById("check-btn").onclick = () => {
+checkBtn.onclick=()=>{
 
-const game = Number(document.getElementById("game").value)
-const result = document.getElementById("result")
+const game = Number(gameInput.value)
 
-if(game >= target){
-result.textContent = machine.checker.ok
+if(game>=target){
+result.textContent=machine.checker.ok
 }else{
-result.textContent = machine.checker.ng
+result.textContent=machine.checker.ng
 }
 
 }
