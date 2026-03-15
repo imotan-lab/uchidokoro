@@ -1,16 +1,3 @@
 {
-  "machine": "Lバキ 強くなりたくば喰らえ!!!",
-  "slug": "baki",
-  "ceiling": 600,
-  "exchangeLines": {
-    "equal": { "normal": 340, "caution": 250 },
-    "fiveSix": { "normal": 450, "caution": 350 }
-  },
-  "throughLines": {
-    "twoThrough": 250
-  },
-  "notes": {
-    "endorphin": "エンドルフィン示唆や天国示唆がある台は、通常ラインより浅めから検討できます。",
-    "threeThrough": "CZ3スルー確定台は4回目のCZでAT確定なので、0Gからでも優先度が高いです。"
-  }
+  "target": 500
 }
