@@ -1,15 +1,42 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>チェッカー</title>
+<style>
+body{background:#0d0d0f;color:#fff;font-family:sans-serif;margin:0;padding:40px}
+.box{max-width:600px;margin:auto;background:#1a1a1d;padding:30px;border-radius:12px}
+input{width:100%;padding:12px;font-size:18px;margin-top:10px}
+button{margin-top:20px;padding:12px 20px;font-size:18px}
+.result{margin-top:20px;font-size:24px}
+</style>
+</head>
+<body>
+<div class="box">
+<h1 id="title">チェッカー</h1>
+<input id="game" type="number" placeholder="現在G数">
+<button onclick="check()">判定する</button>
+<div id="result" class="result">ここに結果</div>
+</div>
 
-(async()=>{
-
-const machine = await getMachine()
-if(!machine)return
-
-document.title = machine.seo.title
-
-machineTitle.textContent = machine.name
-machineInfo.textContent = machine.info
-strategy.textContent = machine.strategy
-
-checkerLink.href="checker.html?slug="+machine.slug
-
-})()
+<script>
+async function init(){
+ const slug=new URLSearchParams(location.search).get("slug");
+ const res=await fetch("assets/data/machines.json");
+ const data=await res.json();
+ const m=data.find(v=>v.slug===slug);
+ if(!m){document.getElementById("title").textContent="機種が見つかりません";return;}
+ document.getElementById("title").textContent=m.name+" チェッカー";
+ window.target=m.checker?.target ?? 0;
+ window.ok=m.checker?.ok ?? "OK";
+ window.ng=m.checker?.ng ?? "NG";
+}
+function check(){
+ const g=Number(document.getElementById("game").value||0);
+ document.getElementById("result").textContent = g>=target ? ok : ng;
+}
+init();
+</script>
+</body>
+</html>
