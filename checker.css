@@ -1,0 +1,8 @@
+
+body.machine-article{display:flex;flex-direction:column;align-items:center;}
+body.machine-article > *:not(header):not(script){display:block;width:100%;max-width:600px;margin-left:auto;margin-right:auto;}
+body.machine-article .site-header{position:fixed;left:0;right:0;top:0;}
+body.machine-article .header-inner{max-width:600px;min-height:52px;padding-left:16px;padding-right:16px;}
+body.machine-article .header-back{display:flex;align-items:center;gap:4px;}
+body.machine-article .mv{padding:72px 16px 32px;border-bottom:1px solid var(--border);}
+body.machine-article .article-footer{max-width:600px;margin:0 auto;padding:32px 16px;border-top:1px solid var(--border);text-align:center;}

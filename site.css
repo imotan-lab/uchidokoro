@@ -1,63 +1,31 @@
 
-body{
-  margin:0;
-  font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
-  background:#111;
-  color:#e6e6e6;
+.hero-shell{padding-top:36px;padding-bottom:24px;}
+.notice{
+  margin-top:18px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:14px 16px;
+  color:var(--text-sub);
+  font-size:.82rem;
 }
-
-a{
-  color:#d4af37;
+.section-shell{padding-top:12px;padding-bottom:32px;}
+.section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;}
+.section-note{font-size:.76rem;color:var(--text-muted);}
+.machine-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;}
+.machine-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:16px;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
 }
-
-header{
-  background:#000;
-  border-bottom:2px solid #d4af37;
-  padding:15px 25px;
-}
-
-main{
-  max-width:900px;
-  margin:40px auto;
-  padding:40px;
-  background:#1b1b1b;
-  border:1px solid #333;
-}
-
-h1{
-  font-size:34px;
-  color:#d4af37;
-  margin-bottom:20px;
-}
-
-h2{
-  font-size:22px;
-  margin-top:35px;
-  padding-bottom:6px;
-  border-bottom:1px solid #444;
-  color:#d4af37;
-}
-
-p{
-  line-height:1.8;
-}
-
-button,
-.button,
-a.button,
-a.button-checker{
-  display:inline-block;
-  margin-top:20px;
-  padding:14px 22px;
-  background:#d4af37;
-  color:#000;
-  text-decoration:none;
-  font-weight:bold;
-  border-radius:4px;
-}
-
-footer{
-  text-align:center;
-  padding:40px 0;
-  color:#888;
-}
+.machine-name{font-size:.95rem;font-weight:700;color:var(--text);}
+.machine-sub{font-size:.72rem;color:var(--text-muted);}
+.machine-links{display:flex;gap:10px;flex-wrap:wrap;}
+.machine-links .btn{flex:1 1 140px;}
+.empty-state{padding:24px;border:1px dashed var(--border);border-radius:14px;color:var(--text-muted);text-align:center;}
+@media (max-width:900px){.machine-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media (max-width:560px){.machine-grid{grid-template-columns:1fr;}}

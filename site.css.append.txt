@@ -1,0 +1,2 @@
+
+body.simple-info-page .site-header{position:sticky;top:0;}

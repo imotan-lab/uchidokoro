@@ -1,0 +1,5 @@
+
+body.machine-checker{background:var(--bg);color:var(--text);font-family:'Noto Sans JP',sans-serif;font-weight:300;line-height:1.8;font-size:15px;overflow-x:hidden;}
+body.machine-checker .site-header{position:fixed;left:0;right:0;top:0;}
+body.machine-checker header{max-width:600px;margin:0 auto;}
+body.machine-checker footer{max-width:600px;margin:0 auto;padding:32px 16px;border-top:1px solid var(--border);text-align:center;}

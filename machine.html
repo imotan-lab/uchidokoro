@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>機種ページ</title>
+  <title>チェッカー</title>
   
 <style>
 :root{
@@ -161,45 +161,42 @@ a{text-decoration:none}
       <a class="brand" href="index.html">狙い目手帖</a>
       <nav class="nav-links">
         <a href="index.html">トップ</a>
-        <a id="checker-link-nav" href="checker.html">チェッカー</a>
+        <a id="articleBackLink" href="machine.html">記事へ戻る</a>
       </nav>
     </div>
   </header>
 
   <main class="site-wrap page-main">
     <section class="hero">
-      <p class="eyebrow">ARTICLE</p>
-      <h1 id="machine-title" class="page-title">機種名</h1>
+      <p class="eyebrow">CHECKER</p>
+      <h1 id="checkerTitle" class="page-title">チェッカー</h1>
     </section>
 
     <section class="cards">
       <article class="card">
-        <h2 class="section-title">基本情報</h2>
-        <div id="machine-info" class="body-large"></div>
+        <h2 class="section-title">入力</h2>
+        <label class="field-label" for="gameInput">現在G数</label>
+        <input id="gameInput" class="field-input" type="number" placeholder="例: 400">
+        <div class="action-row">
+          <button id="checkBtn" class="btn-primary" type="button">判定する</button>
+        </div>
       </article>
 
       <article class="card">
-        <h2 class="section-title">狙い目</h2>
-        <div id="strategy" class="body-large"></div>
-        <div class="action-row">
-          <a id="checker-link-card" class="btn-primary" href="checker.html">狙い目チェッカー</a>
-        </div>
+        <h2 class="section-title">判定結果</h2>
+        <div id="result" class="result-box">ここに結果が表示されます。</div>
       </article>
     </section>
   </main>
 
   <script src="assets/js/machine-data.js"></script>
-  <script src="assets/js/machine-page.js"></script>
+  <script src="assets/js/checker-page.js"></script>
   <script>
     (function () {
-      const navLink = document.getElementById("checker-link-nav");
-      const cardLink = document.getElementById("checker-link-card");
-      const sync = () => {
-        if (navLink && cardLink) cardLink.href = navLink.href;
-      };
-      const observer = new MutationObserver(sync);
-      if (navLink) observer.observe(navLink, { attributes: true, attributeFilter: ["href"] });
-      sync();
+      const params = new URLSearchParams(location.search);
+      const slug = params.get("slug");
+      const back = document.getElementById("articleBackLink");
+      if (back && slug) back.href = "machine.html?slug=" + slug;
     })();
   </script>
 </body>

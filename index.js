@@ -1,11 +1,13 @@
-
-fetch("assets/data/machines.json")
-.then(r=>r.json())
-.then(data=>{
-const list=document.getElementById("machine-list")
-data.forEach(m=>{
-const li=document.createElement("li")
-li.innerHTML=`<a href="machine.html?slug=${m.slug}">${m.name}</a> | <a href="checker.html?slug=${m.slug}">チェッカー</a>`
-list.appendChild(li)
-})
-})
+{
+  "slug": "example_machine",
+  "name": "機種名サンプル",
+  "thresholds": {
+    "excellent": 650,
+    "good": 500,
+    "caution": 350
+  },
+  "notes": [
+    "上位AT後などの特殊条件がある場合は個別ページに注記してください。",
+    "リセット時やゾーン狙いを加える場合は checker テンプレート内の judge 関数で分岐できます。"
+  ]
+}
