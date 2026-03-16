@@ -2,62 +2,62 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>チェッカー</title>
 <style>
-body{background:#111;color:#fff;font-family:sans-serif;padding:40px}
-.box{max-width:600px;margin:auto}
-input{padding:10px;font-size:18px;width:100%}
-button{margin-top:20px;padding:10px 20px;font-size:18px}
+body{margin:0;background:#0d0d0f;color:#f3efe4;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif}
+.wrap{max-width:900px;margin:0 auto;padding:32px}
+.hero{border:1px solid #5d5132;border-radius:20px;padding:24px;background:#17171a;margin-bottom:24px}
+.card{border:1px solid #34353a;border-radius:20px;padding:24px;background:#1e1f23}
+h1{margin:0 0 8px;font-size:48px;color:#fff8e6}
+label{display:block;margin-bottom:10px;color:#c9c0ae;font-weight:700}
+input{width:100%;height:54px;padding:0 16px;border-radius:14px;border:1px solid #5d5132;background:#0d0d0f;color:#f3efe4;font-size:18px}
+button{margin-top:20px;min-height:54px;padding:0 24px;border:none;border-radius:999px;background:linear-gradient(180deg,#e5c56e 0%,#b98c24 100%);color:#17120a;font-size:18px;font-weight:900;cursor:pointer}
+#result{margin-top:20px;min-height:80px;padding:18px;border-radius:16px;border:1px solid rgba(201,161,61,.24);background:rgba(0,0,0,.22);font-size:28px;font-weight:800}
+small{color:#c9a13d}
 </style>
 </head>
-
 <body>
+<div class="wrap">
+  <section class="hero">
+    <small>CHECKER FIX 2</small>
+    <h1 id="title">チェッカー</h1>
+  </section>
 
-<div class="box">
-
-<h1 id="title">チェッカー</h1>
-
-<input id="game" type="number" placeholder="現在G数">
-
-<button onclick="check()">判定する</button>
-
-<div id="result">ここに結果</div>
-
+  <section class="card">
+    <label for="game">現在G数</label>
+    <input id="game" type="number" placeholder="例: 400">
+    <button id="btn" type="button">判定する</button>
+    <div id="result">ここに結果が表示されます。</div>
+  </section>
 </div>
 
 <script>
+(async function () {
+  const slug = new URLSearchParams(location.search).get("slug");
+  const res = await fetch("assets/data/machines.json");
+  const data = await res.json();
+  const m = data.find(v => v.slug === slug);
 
-async function init(){
+  if (!m) {
+    document.getElementById("title").textContent = "機種が見つかりません";
+    return;
+  }
 
-const slug=new URLSearchParams(location.search).get("slug")
+  document.title = m.name + " チェッカー";
+  document.getElementById("title").textContent = m.name + " チェッカー";
 
-const res=await fetch("assets/data/machines.json")
+  const target = Number(m.checker?.target ?? 0);
+  const ok = m.checker?.ok ?? "OK";
+  const ng = m.checker?.ng ?? "NG";
 
-const data=await res.json()
-
-const m=data.find(v=>v.slug===slug)
-
-if(!m)return
-
-document.getElementById("title").textContent=m.name+" チェッカー"
-
-window.target=m.checker?.target ?? 0
-window.ok=m.checker?.ok ?? "OK"
-window.ng=m.checker?.ng ?? "NG"
-
-}
-
-function check(){
-
-const g=Number(document.getElementById("game").value||0)
-
-document.getElementById("result").textContent = g>=target ? ok : ng
-
-}
-
-init()
-
+  document.getElementById("btn").addEventListener("click", function () {
+    const g = Number(document.getElementById("game").value || 0);
+    document.getElementById("result").textContent = g >= target ? ok : ng;
+  });
+})().catch(function () {
+  document.getElementById("title").textContent = "読み込み失敗";
+});
 </script>
-
 </body>
 </html>
