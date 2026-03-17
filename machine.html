@@ -136,8 +136,8 @@
     const enrichText = (value) => {
       if (!value) return '準備中';
       return String(value)
-        .replace(/(◎|○|△|×)/g, '<span class="table-rank">$1</span>')
-        .replace(/(\d+[G枚%]|\d+G\+α|\d+G|\d+枚|\d+%|\d+pt|\d+あべし)/g, '<span class="u-num">$1</span>')
+        .replace(/(◎|○|△|×)/g, (_, mark) => { const cls = ({ '◎': 'rank-mark rank-mark--excellent', '○': 'rank-mark rank-mark--ok', '△': 'rank-mark rank-mark--caution', '×': 'rank-mark rank-mark--ng' })[mark] || 'rank-mark'; return '<span class="' + cls + '">' + mark + '</span>'; })
+        .replace(/(\d+[G枚%]|\d+G\+α|\d+G|\d+枚|\d+%|\d+pt)/g, '<span class="u-num">$1</span>')
         .replace(/(重要|高期待|要注意|即ヤメ|天国|本前兆|通常A|通常B|地獄)/g, '<strong>$1</strong>');
     };
 

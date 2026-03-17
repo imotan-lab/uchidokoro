@@ -1,1 +1,288 @@
-<!DOCTYPE html><html lang='ja'><head><meta charset='UTF-8'><title>article template</title></head><body>article template</body></html>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>機種ページ | 狙い目手帖</title>
+  <meta name="description" content="機種ごとの狙い目・やめどき・リセット情報を掲載しています。">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <header class="page-header">
+    <div class="wrap">
+      <a class="back-link" href="./">← 一覧に戻る</a>
+      <p id="pageInfo" class="page-eyebrow">機種情報</p>
+      <h1 id="pageTitle" class="page-title">読み込み中...</h1>
+      <p id="pageStrategy" class="page-strategy"></p>
+    </div>
+  </header>
+
+  <main class="wrap article-wrap article-wrap--priority-checker">
+    <div class="article-main">
+      <section class="article-card checker-hero-card" id="checker-section">
+        <div class="checker-hero-card__head">
+          <div>
+            <p class="section-kicker">quick checker</p>
+            <h2>まずはチェッカーで今の台を判定</h2>
+            <p id="checkerLead" class="checker-hero-lead">ホールで見ながらすぐ判断できるように、先にチェッカーを使う流れを基準にしています。</p>
+          </div>
+          <a class="btn btn-main checker-hero-btn" id="checkerLinkHero" href="#">狙い目チェッカーを開く</a>
+        </div>
+        <div id="quickSummary" class="summary-badges"></div>
+      </section>
+
+      <section class="article-card article-card--compact" id="quick-guide">
+        <p class="section-kicker">quick guide</p>
+        <h2>立ち回り早見表</h2>
+        <div id="quickCards" class="quick-card-grid"></div>
+      </section>
+
+      <section class="article-card" id="overview-section">
+        <p class="section-kicker">overview</p>
+        <h2>この機種の見方</h2>
+        <p id="overview">読み込み中...</p>
+      </section>
+
+      <section class="article-card article-grid article-grid--emphasis" id="basic-data">
+        <article class="mini-card mini-card--key">
+          <p class="mini-card__kicker">basic</p>
+          <h2>天井</h2>
+          <p id="tenjo">読み込み中...</p>
+        </article>
+        <article class="mini-card mini-card--key">
+          <p class="mini-card__kicker">benefit</p>
+          <h2>天井恩恵</h2>
+          <p id="tenjoBenefit">読み込み中...</p>
+        </article>
+        <article class="mini-card mini-card--key">
+          <p class="mini-card__kicker">normal</p>
+          <h2>通常狙い目</h2>
+          <p id="strategy">読み込み中...</p>
+        </article>
+        <article class="mini-card mini-card--key">
+          <p class="mini-card__kicker">reset</p>
+          <h2>リセット狙い目</h2>
+          <p id="reset">読み込み中...</p>
+        </article>
+      </section>
+
+      <section id="modeSection" class="article-card optional-section" hidden>
+        <p class="section-kicker">mode</p>
+        <h2>モード別の見方</h2>
+        <div id="modeGrid" class="info-list-grid"></div>
+      </section>
+
+      <section id="zoneSection" class="article-card optional-section" hidden>
+        <p class="section-kicker">zone</p>
+        <h2>意識したいゾーン</h2>
+        <div id="zoneGrid" class="info-list-grid"></div>
+      </section>
+
+      <section class="article-card article-grid" id="play-tips">
+        <article class="mini-card">
+          <p class="mini-card__kicker">stop</p>
+          <h2>やめどき</h2>
+          <p id="yametoki">読み込み中...</p>
+        </article>
+        <article class="mini-card">
+          <p class="mini-card__kicker">morning</p>
+          <h2>有利区間・リセット仕様</h2>
+          <p id="resetSpec">読み込み中...</p>
+        </article>
+      </section>
+
+      <section class="article-card" id="reason-section">
+        <p class="section-kicker">reason</p>
+        <h2>この狙い目にしている理由</h2>
+        <p id="reason">読み込み中...</p>
+      </section>
+
+      <section class="article-card caution-card" id="caution-section">
+        <p class="section-kicker">caution</p>
+        <h2>注意点</h2>
+        <p id="caution">読み込み中...</p>
+      </section>
+
+      <section id="reviewSection" class="article-card optional-section" hidden>
+        <p class="section-kicker">review</p>
+        <h2>ユーザー傾向まとめ</h2>
+        <div id="reviewGrid" class="review-grid"></div>
+      </section>
+    </div>
+
+    <aside class="article-side">
+      <section class="toc-card">
+        <h2 class="toc-card__title">目次</h2>
+        <nav>
+          <ul class="toc-list" id="tocList"></ul>
+        </nav>
+      </section>
+
+      <section class="side-card side-card--primary">
+        <p class="section-kicker">how to use</p>
+        <h2>ホールでの使い方</h2>
+        <div id="checkerSteps" class="step-list"></div>
+        <div class="side-actions">
+          <a class="btn btn-main btn-block" id="checkerLink" href="#">狙い目チェッカーへ</a>
+          <a class="btn btn-sub btn-block" href="./">掲載機種一覧へ</a>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <script>
+    const slug = new URLSearchParams(location.search).get('slug');
+
+    const enrichText = (value) => {
+      if (!value) return '準備中';
+      return String(value)
+        .replace(/(◎|○|△|×)/g, (_, mark) => { const cls = ({ '◎': 'rank-mark rank-mark--excellent', '○': 'rank-mark rank-mark--ok', '△': 'rank-mark rank-mark--caution', '×': 'rank-mark rank-mark--ng' })[mark] || 'rank-mark'; return '<span class="' + cls + '">' + mark + '</span>'; })
+        .replace(/(\d+[G枚%]|\d+G\+α|\d+G|\d+枚|\d+%|\d+pt)/g, '<span class="u-num">$1</span>')
+        .replace(/(重要|高期待|要注意|即ヤメ|天国|本前兆|通常A|通常B|地獄)/g, '<strong>$1</strong>');
+    };
+
+    const fillHTML = (id, value, fallback = '準備中') => {
+      document.getElementById(id).innerHTML = enrichText(value || fallback);
+    };
+
+    const renderQuickCards = (cards) => {
+      const root = document.getElementById('quickCards');
+      const items = Array.isArray(cards) ? cards : [];
+      if (!items.length) {
+        root.innerHTML = '<article class="quick-card"><h3>通常狙い目</h3><p>準備中</p></article>';
+        return;
+      }
+      root.innerHTML = items.map(card => `
+        <article class="quick-card">
+          <p class="quick-card__label">${card.label || ''}</p>
+          <h3>${enrichText(card.value || '準備中')}</h3>
+          <p>${enrichText(card.note || '')}</p>
+        </article>
+      `).join('');
+    };
+
+    const renderSummaryBadges = (items) => {
+      const root = document.getElementById('quickSummary');
+      const badges = Array.isArray(items) ? items : [];
+      root.innerHTML = badges.map(item => `
+        <div class="summary-badge">
+          <span class="summary-badge__label">${item.label || ''}</span>
+          <strong>${enrichText(item.value || '')}</strong>
+        </div>
+      `).join('');
+    };
+
+    const renderSteps = (items) => {
+      const root = document.getElementById('checkerSteps');
+      const steps = Array.isArray(items) ? items : [];
+      if (!steps.length) {
+        root.innerHTML = '<div class="step-item"><strong>1</strong><p>チェッカーでゲーム数を確認</p></div>';
+        return;
+      }
+      root.innerHTML = steps.map((text, index) => `
+        <div class="step-item">
+          <strong>${index + 1}</strong>
+          <p>${enrichText(text)}</p>
+        </div>
+      `).join('');
+    };
+
+    const renderInfoGrid = (sectionId, gridId, items) => {
+      const section = document.getElementById(sectionId);
+      const grid = document.getElementById(gridId);
+      const data = Array.isArray(items) ? items.filter(item => item && (item.title || item.name)) : [];
+      if (!data.length) {
+        section.hidden = true;
+        return;
+      }
+      section.hidden = false;
+      grid.innerHTML = data.map(item => `
+        <article class="info-card">
+          <h3>${item.title || item.name}</h3>
+          ${item.point ? `<p class="info-card__point">${enrichText(item.point)}</p>` : ''}
+          ${item.detail ? `<p>${enrichText(item.detail)}</p>` : ''}
+        </article>
+      `).join('');
+    };
+
+    const renderReviews = (items) => {
+      const section = document.getElementById('reviewSection');
+      const grid = document.getElementById('reviewGrid');
+      const data = Array.isArray(items) ? items.filter(item => item && item.title) : [];
+      if (!data.length) {
+        section.hidden = true;
+        return;
+      }
+      section.hidden = false;
+      grid.innerHTML = data.map(item => `
+        <article class="review-card">
+          <p class="review-card__label">${item.title}</p>
+          <p>${enrichText(item.text || '')}</p>
+        </article>
+      `).join('');
+    };
+
+    const buildToc = () => {
+      const tocItems = [
+        ['checker-section', 'チェッカー'],
+        ['quick-guide', '早見表'],
+        ['overview-section', '機種概要'],
+        ['basic-data', '基本情報'],
+        ['modeSection', 'モード'],
+        ['zoneSection', 'ゾーン'],
+        ['play-tips', 'やめどき・朝イチ'],
+        ['reason-section', '狙い目の理由'],
+        ['caution-section', '注意点'],
+        ['reviewSection', 'ユーザー傾向']
+      ];
+      const root = document.getElementById('tocList');
+      root.innerHTML = tocItems
+        .map(([id, label], index) => {
+          const el = document.getElementById(id);
+          if (!el || el.hidden) return '';
+          return `<li><a class="toc-link" href="#${id}"><span>${label}</span><span>${String(index + 1).padStart(2, '0')}</span></a></li>`;
+        })
+        .join('');
+    };
+
+    Promise.all([
+      fetch('assets/data/machines.json').then(r => r.json()),
+      fetch('assets/data/machine-details/' + slug + '.json').then(r => r.json())
+    ]).then(([machines, details]) => {
+      const machine = machines.find(x => x.slug === slug);
+      if (!machine) {
+        document.getElementById('pageTitle').textContent = '機種が見つかりません';
+        return;
+      }
+
+      document.title = machine.name + ' | 狙い目手帖';
+      document.getElementById('pageTitle').textContent = machine.name;
+      document.getElementById('pageInfo').textContent = machine.info || '機種情報';
+      document.getElementById('pageStrategy').innerHTML = '現在の狙い目：' + enrichText(machine.strategy || '準備中');
+      document.getElementById('checkerLink').href = 'checker.html?slug=' + machine.slug;
+      document.getElementById('checkerLinkHero').href = 'checker.html?slug=' + machine.slug;
+
+      fillHTML('checkerLead', details.checkerLead, 'ホールで見ながらすぐ判断できるように、先にチェッカーを使う流れを基準にしています。');
+      fillHTML('overview', details.overview);
+      fillHTML('tenjo', details.tenjo);
+      fillHTML('tenjoBenefit', details.tenjoBenefit);
+      fillHTML('strategy', details.strategy || machine.strategy);
+      fillHTML('yametoki', details.yametoki);
+      fillHTML('reset', details.reset);
+      fillHTML('resetSpec', details.resetSpec);
+      fillHTML('reason', details.reason);
+      fillHTML('caution', details.caution);
+
+      renderQuickCards(details.quickCards);
+      renderSummaryBadges(details.summaryBadges);
+      renderSteps(details.checkerSteps);
+      renderInfoGrid('modeSection', 'modeGrid', details.modes);
+      renderInfoGrid('zoneSection', 'zoneGrid', details.zones);
+      renderReviews(details.reviews);
+      buildToc();
+    }).catch(() => {
+      document.getElementById('pageTitle').textContent = '読み込みに失敗しました';
+    });
+  </script>
+</body>
+</html>

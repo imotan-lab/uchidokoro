@@ -18,98 +18,48 @@
   </header>
 
   <main class="wrap checker-wrap checker-wrap--enhanced">
-    <section class="checker-card checker-card--hero">
+    <section class="checker-card checker-card--hero checker-card--minimal">
       <div class="checker-card__intro">
         <div>
-          <p class="section-kicker">1秒判定</p>
-          <h2>現在のゲーム数で判定</h2>
+          <p class="section-kicker">quick checker</p>
+          <h2>現在のゲーム数で即判定</h2>
         </div>
-        <p id="checkerCatch" class="checker-catch">大きい記号で結論を先に表示し、下に短い理由を出します。</p>
       </div>
+      <p id="checkerCatch" class="checker-simple-note">G数を入れると自動で判定します。</p>
+      <div class="checker-state-switch" id="stateSwitch">
+        <button type="button" class="state-btn is-active" data-state="unknown">朝イチ不明</button>
+        <button type="button" class="state-btn" data-state="reset">朝イチリセット台</button>
+        <button type="button" class="state-btn" data-state="held">据え置き</button>
+      </div>
+      <p id="stateHelp" class="checker-state-help">不明なら安全側で判定します。</p>
       <label class="field-label" for="currentGame">現在のゲーム数</label>
       <div class="checker-form checker-form--stack-mobile">
-        <input id="currentGame" class="input" type="number" min="0" step="1" placeholder="例：620">
-        <button id="judgeBtn" class="btn btn-main" type="button">判定する</button>
+        <input id="currentGame" class="input" type="number" min="0" step="1" inputmode="numeric" placeholder="例：620">
       </div>
       <div id="judgeResult" class="judge-panel judge-panel--muted">
         <div class="judge-mark">-</div>
         <div>
-          <p class="judge-title">数値を入れて判定してください。</p>
-          <p class="judge-reason">現在のG数から、打てるかどうかを簡易表示します。</p>
+          <p class="judge-title">ゲーム数を入力してください。</p>
+          <p class="judge-reason">入力すると自動で判定します。</p>
         </div>
       </div>
-    </section>
-
-    <section class="checker-card article-card--compact">
-      <p class="section-kicker">結論早見表</p>
-      <h2>狙い目ライン</h2>
-      <div id="checkerSummary" class="quick-card-grid"></div>
-    </section>
-
-    <section class="checker-card checker-meta-grid checker-meta-grid--wide">
-      <article class="mini-card">
-        <p class="mini-card__kicker">通常時</p>
-        <h2>通常狙い目</h2>
-        <p id="normalThreshold">準備中</p>
-      </article>
-      <article class="mini-card">
-        <p class="mini-card__kicker">朝イチ</p>
-        <h2>リセット狙い目</h2>
-        <p id="resetThreshold">準備中</p>
-      </article>
-      <article class="mini-card">
-        <p class="mini-card__kicker">補足</p>
-        <h2>モード・判定基準</h2>
-        <ul id="modeNotes" class="notes-list"></ul>
-      </article>
-      <article class="mini-card checker-notes">
-        <p class="mini-card__kicker">メモ</p>
-        <h2>実戦メモ</h2>
-        <ul id="notesList" class="notes-list"></ul>
-      </article>
     </section>
   </main>
 
   <script>
     const slug = new URLSearchParams(location.search).get('slug');
     let checkerData = null;
-
-    const setThresholdText = (value, label = '') => {
-      if (label) return label;
-      return value && Number(value) > 0 ? value + 'G〜' : '準備中';
-    };
-
-    const renderList = (targetId, items, fallback = '準備中') => {
-      const root = document.getElementById(targetId);
-      const list = Array.isArray(items) ? items : [];
-      if (!list.length) {
-        root.innerHTML = '<li>' + fallback + '</li>';
-        return;
-      }
-      root.innerHTML = list.map(note => '<li>' + note + '</li>').join('');
-    };
-
-    const renderSummary = (items) => {
-      const root = document.getElementById('checkerSummary');
-      const list = Array.isArray(items) ? items : [];
-      if (!list.length) {
-        root.innerHTML = '<article class="quick-card"><h3>通常狙い目</h3><p>準備中</p></article>';
-        return;
-      }
-      root.innerHTML = list.map(item => `
-        <article class="quick-card quick-card--compact">
-          <p class="quick-card__label">${item.label || ''}</p>
-          <h3>${item.value || ''}</h3>
-          <p>${item.note || ''}</p>
-        </article>
-      `).join('');
+    let currentState = 'unknown';
+    const rankMarkup = (mark) => {
+      const classes = { '◎': 'rank-mark rank-mark--excellent', '○': 'rank-mark rank-mark--ok', '△': 'rank-mark rank-mark--caution', '×': 'rank-mark rank-mark--ng' };
+      return '<span class="' + (classes[mark] || 'rank-mark') + '">' + mark + '</span>';
     };
 
     const setJudgeResult = (state, mark, title, reason) => {
       const result = document.getElementById('judgeResult');
       result.className = 'judge-panel ' + state;
       result.innerHTML = `
-        <div class="judge-mark">${mark}</div>
+        <div class="judge-mark">${mark ? rankMarkup(mark) : '-'}</div>
         <div>
           <p class="judge-title">${title}</p>
           <p class="judge-reason">${reason}</p>
@@ -126,60 +76,110 @@
 
       document.getElementById('checkerTitle').textContent = machineData ? machineData.name : 'チェッカー';
       document.title = (machineData ? machineData.name + ' ' : '') + '狙い目チェッカー | 狙い目手帖';
-      document.getElementById('checkerCatch').textContent = checker.catchCopy || '大きい記号で結論を先に表示し、下に短い理由を出します。';
-
-      document.getElementById('normalThreshold').textContent = setThresholdText(checker.gameThreshold);
-      document.getElementById('resetThreshold').textContent = setThresholdText(checker.resetThreshold, checker.resetLabel || '');
-
-      renderList('notesList', checker.notes);
-      renderList('modeNotes', checker.modeNotes);
-      renderSummary(checker.summaryCards);
+      document.getElementById('checkerCatch').textContent = checker.catchCopy || 'G数を入れると自動で判定します。';
     }).catch(() => {
       document.getElementById('checkerTitle').textContent = '読み込みに失敗しました';
       setJudgeResult('judge-panel--muted', '-', 'チェッカーデータの読み込みに失敗しました。', '時間を置いて再度お試しください。');
     });
 
-    document.getElementById('judgeBtn').addEventListener('click', () => {
+    const getThresholdConfig = () => {
+      const normal = Number(checkerData?.gameThreshold || 0);
+      const recommended = Number(checkerData?.recommendedThreshold || normal || 0);
+      const caution = Number(checkerData?.cautionThreshold || Math.max(0, normal - 150));
+      const reset = Number(checkerData?.resetThreshold || 0);
+
+      if (currentState === 'reset') {
+        if (reset > 0) {
+          return {
+            threshold: reset,
+            recommended: Math.max(reset, reset + Math.max(50, Math.round((recommended - normal) || 50))),
+            caution: Math.max(0, reset - 80),
+            title: '朝イチリセット台として判定',
+            help: 'リセット前提の基準で見ます。'
+          };
+        }
+        return {
+          threshold: 0,
+          recommended: 0,
+          caution: 0,
+          title: '朝イチリセット台として判定',
+          help: checkerData?.resetLabel || 'この機種はリセット時の固定狙い目がありません。'
+        };
+      }
+
+      if (currentState === 'held') {
+        return {
+          threshold: normal,
+          recommended,
+          caution,
+          title: '据え置きとして判定',
+          help: '通常時の基準で見ます。'
+        };
+      }
+
+      return {
+        threshold: normal,
+        recommended,
+        caution,
+        title: '朝イチ不明として判定',
+        help: '不明なら安全側で通常時基準を優先します。'
+      };
+    };
+
+    const runJudge = () => {
       const input = document.getElementById('currentGame');
-      const value = Number(input.value);
+      const raw = input.value.trim();
+      const help = document.getElementById('stateHelp');
 
       if (!checkerData) {
-        setJudgeResult('judge-panel--muted', '-', 'データ読み込み後にもう一度お試しください。', '通信完了後に判定できます。');
+        setJudgeResult('judge-panel--muted', '', 'データ読み込み後に自動判定します。', '通信完了まで少しお待ちください。');
         return;
       }
 
-      if (!input.value) {
-        setJudgeResult('judge-panel--muted', '-', 'ゲーム数を入力してください。', '例：620 のように入力してください。');
+      const config = getThresholdConfig();
+      help.textContent = config.help;
+
+      if (!raw) {
+        setJudgeResult('judge-panel--muted', '', config.title, 'ゲーム数を入力すると自動で判定します。');
         return;
       }
 
-      if (!checkerData.gameThreshold || Number(checkerData.gameThreshold) <= 0) {
-        setJudgeResult('judge-panel--muted', '-', 'この機種の通常時狙い目はまだ準備中です。', '別機種のチェッカーをお試しください。');
+      const value = Number(raw);
+      if (!Number.isFinite(value) || value < 0) {
+        setJudgeResult('judge-panel--muted', '', '入力値を確認してください。', '0以上の数字で入力してください。');
         return;
       }
 
-      const threshold = Number(checkerData.gameThreshold);
-      const diff = threshold - value;
-      const heavyLine = Number(checkerData.recommendedThreshold || threshold);
-      const cautionLine = Number(checkerData.cautionThreshold || Math.max(0, threshold - 150));
-
-      if (value >= heavyLine) {
-        setJudgeResult('judge-panel--excellent', '◎', 'かなり狙いやすい水準です。', '天井までの距離が短く、通常狙い目をしっかり超えています。');
+      if (!config.threshold || config.threshold <= 0) {
+        setJudgeResult('judge-panel--muted', '', config.title, config.help);
         return;
       }
 
-      if (value >= threshold) {
-        setJudgeResult('judge-panel--ok', '○', '狙い目ラインです。', '通常狙い目に到達しているため、候補として打てる水準です。');
+      const diff = Math.max(0, config.threshold - value);
+      if (value >= config.recommended) {
+        setJudgeResult('judge-panel--excellent', '◎', 'かなり狙いやすいです。', '基準をしっかり超えているため、優先度は高めです。');
         return;
       }
-
-      if (value >= cautionLine) {
-        setJudgeResult('judge-panel--caution', '△', 'あと少しで候補です。', '通常狙い目まであと' + diff + 'Gです。店内を見ながら他候補と比較してください。');
+      if (value >= config.threshold) {
+        setJudgeResult('judge-panel--ok', '○', '狙い目ラインです。', 'この条件なら候補として見やすい水準です。');
         return;
       }
+      if (value >= config.caution) {
+        setJudgeResult('judge-panel--caution', '△', 'あと少しです。', '基準まであと' + diff + 'Gです。');
+        return;
+      }
+      setJudgeResult('judge-panel--ng', '×', 'まだ浅めです。', '基準まであと' + diff + 'Gあるため、基本は見送りです。');
+    };
 
-      setJudgeResult('judge-panel--ng', '×', 'まだ浅めです。', '通常狙い目まであと' + diff + 'Gあるため、基本は見送り寄りです。');
+    document.getElementById('currentGame').addEventListener('input', runJudge);
+    document.getElementById('stateSwitch').addEventListener('click', (event) => {
+      const button = event.target.closest('.state-btn');
+      if (!button) return;
+      currentState = button.dataset.state || 'unknown';
+      document.querySelectorAll('.state-btn').forEach(btn => btn.classList.toggle('is-active', btn === button));
+      runJudge();
     });
+
   </script>
 </body>
 </html>

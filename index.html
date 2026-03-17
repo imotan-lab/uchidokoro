@@ -29,7 +29,8 @@
   <script>
     const formatStrategy = (text) => {
       if (!text) return '準備中';
-      return text.replace(/[◎○△×]/g, mark => `<span class="summary-rank">${mark}</span>`);
+      const rankClass = (mark) => ({ '◎': 'rank-mark rank-mark--excellent', '○': 'rank-mark rank-mark--ok', '△': 'rank-mark rank-mark--caution', '×': 'rank-mark rank-mark--ng' }[mark] || 'rank-mark');
+      return text.replace(/[◎○△×]/g, mark => `<span class="${rankClass(mark)}">${mark}</span>`);
     };
 
     fetch('assets/data/machines.json')
