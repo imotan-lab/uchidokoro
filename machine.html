@@ -11,7 +11,6 @@
   <div class="nav-backdrop" id="navBackdrop"></div>
   <nav class="site-nav" id="siteNav" aria-hidden="true">
     <button class="nav-close" id="navClose" aria-label="メニューを閉じる">×</button>
-    <p class="nav-eyebrow">menu</p>
     <div class="nav-links">
       <a class="nav-link" href="./"><span>トップ</span><small>home</small></a>
       <a class="nav-link" id="navCheckerLink" href="#"><span>チェッカー</span><small>checker</small></a>
@@ -25,7 +24,7 @@
       <div class="header-top">
         <div class="brand-lockup">
           <a class="back-link" href="./">← 一覧に戻る</a>
-          <p id="pageInfo" class="page-eyebrow">機種情報</p>
+          <p id="pageInfo" class="page-strategy">機種情報</p>
           <h1 id="pageTitle" class="page-title">読み込み中...</h1>
         </div>
         <div class="header-actions">
@@ -36,114 +35,87 @@
     </div>
   </header>
 
-  <main class="wrap article-wrap article-wrap--priority-checker">
+  <main class="wrap article-wrap">
     <div class="article-main">
-      <section class="article-card checker-hero-card" id="checker-section">
+      <section class="checker-hero-card article-section" id="checker-section">
         <div class="checker-hero-card__head">
           <div>
-            <p class="section-kicker">checker</p>
-            <h2>狙い目チェッカー</h2>
+            <h2 class="section-title">狙い目チェッカー</h2>
             <p id="checkerLead" class="checker-hero-lead"></p>
           </div>
-          <a class="btn btn-main checker-hero-btn" id="checkerLinkHero" href="#">狙い目チェッカー</a>
+          <a class="btn btn-main" id="checkerLinkHero" href="#">チェッカーへ</a>
         </div>
         <div id="quickSummary" class="summary-badges"></div>
       </section>
 
-      <section class="article-card article-card--compact" id="quick-guide">
-        <p class="section-kicker">quick guide</p>
-        <h2>立ち回り早見表</h2>
-        <div id="quickCards" class="quick-card-grid"></div>
+      <section class="article-section" id="quick-guide">
+        <h2 class="section-title">立ち回り早見表</h2>
+        <div id="quickCards" class="quick-grid"></div>
       </section>
 
-      <section class="article-card" id="overview-section">
-        <p class="section-kicker">overview</p>
-        <h2>この機種の見方</h2>
-        <p id="overview">読み込み中...</p>
+      <section class="article-section" id="overview-section">
+        <h2 class="section-title">機種概要</h2>
+        <p id="overview" class="section-text">読み込み中...</p>
       </section>
 
-      <section class="article-card article-grid article-grid--emphasis" id="basic-data">
-        <article class="mini-card mini-card--key">
-          <p class="mini-card__kicker">basic</p>
-          <h2>天井</h2>
-          <p id="tenjo">読み込み中...</p>
-        </article>
-        <article class="mini-card mini-card--key">
-          <p class="mini-card__kicker">benefit</p>
-          <h2>天井恩恵</h2>
-          <p id="tenjoBenefit">読み込み中...</p>
-        </article>
-        <article class="mini-card mini-card--key">
-          <p class="mini-card__kicker">normal</p>
-          <h2>通常狙い目</h2>
-          <p id="strategy">読み込み中...</p>
-        </article>
-        <article class="mini-card mini-card--key">
-          <p class="mini-card__kicker">reset</p>
-          <h2>リセット狙い目</h2>
-          <p id="reset">読み込み中...</p>
-        </article>
+      <section class="article-section table-block" id="basic-data">
+        <h2 class="table-title">基本情報</h2>
+        <table class="info-table">
+          <tbody>
+            <tr><th>天井</th><td id="tenjo">読み込み中...</td></tr>
+            <tr><th>天井恩恵</th><td id="tenjoBenefit">読み込み中...</td></tr>
+            <tr><th>通常狙い目</th><td id="strategy">読み込み中...</td></tr>
+            <tr><th>リセット狙い目</th><td id="reset">読み込み中...</td></tr>
+          </tbody>
+        </table>
       </section>
 
-      <section id="modeSection" class="article-card optional-section" hidden>
-        <p class="section-kicker">mode</p>
-        <h2>モード別の見方</h2>
-        <div id="modeGrid" class="info-list-grid"></div>
+      <section id="modeSection" class="article-section table-block optional-section" hidden>
+        <h2 class="table-title">モード別の見方</h2>
+        <div id="modeGrid"></div>
       </section>
 
-      <section id="zoneSection" class="article-card optional-section" hidden>
-        <p class="section-kicker">zone</p>
-        <h2>意識したいゾーン</h2>
-        <div id="zoneGrid" class="info-list-grid"></div>
+      <section id="zoneSection" class="article-section table-block optional-section" hidden>
+        <h2 class="table-title">ゾーン</h2>
+        <div id="zoneGrid"></div>
       </section>
 
-      <section class="article-card article-grid" id="play-tips">
-        <article class="mini-card">
-          <p class="mini-card__kicker">stop</p>
-          <h2>やめどき</h2>
-          <p id="yametoki">読み込み中...</p>
-        </article>
-        <article class="mini-card">
-          <p class="mini-card__kicker">morning</p>
-          <h2>有利区間・リセット仕様</h2>
-          <p id="resetSpec">読み込み中...</p>
-        </article>
+      <section class="article-section table-block" id="play-tips">
+        <h2 class="table-title">やめどき・リセット</h2>
+        <table class="info-table">
+          <tbody>
+            <tr><th>やめどき</th><td id="yametoki">読み込み中...</td></tr>
+            <tr><th>有利区間・リセット仕様</th><td id="resetSpec">読み込み中...</td></tr>
+          </tbody>
+        </table>
       </section>
 
-      <section class="article-card" id="reason-section">
-        <p class="section-kicker">reason</p>
-        <h2>この狙い目にしている理由</h2>
-        <p id="reason">読み込み中...</p>
+      <section class="article-section" id="reason-section">
+        <h2 class="section-title">狙い目の理由</h2>
+        <p id="reason" class="section-text">読み込み中...</p>
       </section>
 
-      <section class="article-card caution-card" id="caution-section">
-        <p class="section-kicker">caution</p>
-        <h2>注意点</h2>
-        <p id="caution">読み込み中...</p>
+      <section class="article-section" id="caution-section">
+        <h2 class="section-title">注意点</h2>
+        <p id="caution" class="section-text">読み込み中...</p>
       </section>
 
-      <section id="reviewSection" class="article-card optional-section" hidden>
-        <p class="section-kicker">review</p>
-        <h2>ユーザー傾向まとめ</h2>
-        <div id="reviewGrid" class="review-grid"></div>
+      <section id="reviewSection" class="article-section optional-section" hidden>
+        <h2 class="section-title">ユーザー傾向まとめ</h2>
+        <div id="reviewGrid" class="stack-list"></div>
       </section>
     </div>
 
     <aside class="article-side">
       <section class="top-action-card">
-        <div class="top-action-row">
-          <div>
-            <p class="section-kicker">open checker</p>
-            <h2>狙い目チェッカー</h2>
-          </div>
-        </div>
+        <h2 class="section-title">狙い目チェッカー</h2>
         <div class="side-actions">
-          <a class="btn btn-main btn-block" id="checkerLink" href="#">狙い目チェッカー</a>
+          <a class="btn btn-main btn-block" id="checkerLink" href="#">チェッカーへ</a>
         </div>
       </section>
 
       <section class="toc-card">
-        <h2 class="toc-card__title">目次</h2>
+        <h2 class="toc-title">目次</h2>
         <nav>
           <ul class="toc-list" id="tocList"></ul>
         </nav>
@@ -162,7 +134,7 @@
           return '<span class="' + cls + '">' + mark + '</span>';
         })
         .replace(/(\d+[G枚%]\/\d+|\d+G\+α|\d+G|\d+枚|\d+%|\d+pt|\d+あべし)/g, '<span class="u-num">$1</span>')
-        .replace(/(重要|高期待|要注意|即ヤメ|天国|本前兆|通常A|通常B|地獄)/g, '<strong>$1</strong>');
+        .replace(/(重要|高期待|要注意|即ヤメ|天国|本前兆|通常A|通常B|地獄)/g, '<strong class="u-line">$1</strong>');
     };
 
     const fillHTML = (id, value, fallback = '準備中') => {
@@ -174,13 +146,13 @@
       const items = Array.isArray(cards) ? cards : [];
       root.innerHTML = items.length
         ? items.map(card => `
-            <article class="quick-card">
-              <p class="quick-card__label">${card.label || ''}</p>
-              <h3>${enrichText(card.value || '準備中')}</h3>
-              <p>${enrichText(card.note || '')}</p>
+            <article class="quick-item">
+              <span class="quick-item__label">${card.label || ''}</span>
+              <h3 class="quick-item__value">${enrichText(card.value || '準備中')}</h3>
+              <p class="quick-item__note">${enrichText(card.note || '')}</p>
             </article>
           `).join('')
-        : '<article class="quick-card"><h3>準備中</h3></article>';
+        : '<article class="quick-item"><h3 class="quick-item__value">準備中</h3></article>';
     };
 
     const renderSummaryBadges = (items) => {
@@ -203,13 +175,18 @@
         return;
       }
       section.hidden = false;
-      grid.innerHTML = data.map(item => `
-        <article class="info-card">
-          <h3>${item.title || item.name}</h3>
-          ${item.point ? `<p class="info-card__point">${enrichText(item.point)}</p>` : ''}
-          ${item.detail ? `<p>${enrichText(item.detail)}</p>` : ''}
-        </article>
-      `).join('');
+      grid.innerHTML = `
+        <table class="info-table info-table--list">
+          <tbody>
+            ${data.map(item => `
+              <tr>
+                <th>${item.title || item.name}</th>
+                <td>${item.point ? `<p>${enrichText(item.point)}</p>` : ''}${item.detail ? `<p class="table-cell-note">${enrichText(item.detail)}</p>` : ''}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
     };
 
     const renderReviews = (items) => {
@@ -222,8 +199,8 @@
       }
       section.hidden = false;
       grid.innerHTML = data.map(item => `
-        <article class="review-card">
-          <p class="review-card__label">${item.title}</p>
+        <article class="stack-item">
+          <h3>${item.title}</h3>
           <p>${enrichText(item.text || '')}</p>
         </article>
       `).join('');
@@ -231,13 +208,12 @@
 
     const buildToc = () => {
       const tocItems = [
-        ['checker-section', 'チェッカー'],
         ['quick-guide', '早見表'],
         ['overview-section', '機種概要'],
         ['basic-data', '基本情報'],
         ['modeSection', 'モード'],
         ['zoneSection', 'ゾーン'],
-        ['play-tips', 'やめどき・朝イチ'],
+        ['play-tips', 'やめどき・リセット'],
         ['reason-section', '狙い目の理由'],
         ['caution-section', '注意点'],
         ['reviewSection', 'ユーザー傾向']

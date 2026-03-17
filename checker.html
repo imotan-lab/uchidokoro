@@ -11,7 +11,6 @@
   <div class="nav-backdrop" id="navBackdrop"></div>
   <nav class="site-nav" id="siteNav" aria-hidden="true">
     <button class="nav-close" id="navClose" aria-label="メニューを閉じる">×</button>
-    <p class="nav-eyebrow">menu</p>
     <div class="nav-links">
       <a class="nav-link" href="./"><span>トップ</span><small>home</small></a>
       <a class="nav-link" id="navArticleLink" href="#"><span>記事ページ</span><small>article</small></a>
@@ -25,20 +24,17 @@
       <div class="header-top">
         <div class="brand-lockup">
           <a class="back-link" href="./">← 一覧に戻る</a>
-          <p class="page-eyebrow">狙い目チェッカー</p>
           <h1 id="checkerTitle" class="page-title">読み込み中...</h1>
         </div>
         <div class="header-actions">
           <button class="menu-toggle" id="menuToggle" aria-label="メニューを開く"><span></span></button>
         </div>
       </div>
-      <p id="checkerSubtitle" class="page-strategy is-empty"></p>
     </div>
   </header>
 
-  <main class="wrap checker-wrap checker-wrap--enhanced">
-    <section class="checker-card checker-card--hero checker-card--minimal">
-      <label class="field-label" for="currentGame">current game</label>
+  <main class="wrap checker-wrap">
+    <section class="checker-card">
       <div class="checker-input-row">
         <div class="checker-state-switch" id="stateSwitch">
           <button type="button" class="state-btn is-active" data-state="normal">通常</button>
@@ -47,10 +43,10 @@
         <input id="currentGame" class="input" type="number" min="0" step="1" inputmode="numeric" placeholder="ゲーム数を入力">
       </div>
       <div id="judgeResult" class="judge-panel judge-panel--muted">
-        <div class="judge-mark">×</div>
+        <div class="judge-mark judge-mark--cross">×</div>
         <div>
           <p class="judge-title">入力待ち</p>
-          <p class="judge-reason"> </p>
+          <p class="judge-reason"></p>
         </div>
       </div>
     </section>
@@ -63,9 +59,10 @@
 
     const setJudgeResult = (state, mark, title, reason = '') => {
       const result = document.getElementById('judgeResult');
+      const markClass = mark === '×' ? 'judge-mark judge-mark--cross' : 'judge-mark';
       result.className = 'judge-panel ' + state;
       result.innerHTML = `
-        <div class="judge-mark">${mark || '×'}</div>
+        <div class="${markClass}">${mark || '×'}</div>
         <div>
           <p class="judge-title">${title}</p>
           <p class="judge-reason">${reason}</p>
@@ -79,14 +76,13 @@
       const caution = Number(checkerData?.cautionThreshold || Math.max(0, normal - 150));
       const reset = Number(checkerData?.resetThreshold || 0);
       if (currentState === 'reset') {
-        if (reset > 0) {
+        if (reset >= 0) {
           return {
             threshold: reset,
-            recommended: Math.max(reset, reset + Math.max(50, Math.round((recommended - normal) || 50))),
-            caution: Math.max(0, reset - 80)
+            recommended: Number(checkerData?.resetRecommendedThreshold ?? reset),
+            caution: Math.max(0, Number(checkerData?.resetCautionThreshold ?? reset))
           };
         }
-        return { threshold: 0, recommended: 0, caution: 0 };
       }
       return { threshold: normal, recommended, caution };
     };
@@ -108,7 +104,8 @@
       }
 
       const config = getThresholdConfig();
-      if (!config.threshold || config.threshold <= 0) {
+      const resetZeroAllowed = currentState === 'reset' && Number(checkerData?.resetThreshold) === 0;
+      if ((!resetZeroAllowed && !config.threshold) || config.threshold < 0) {
         setJudgeResult('judge-panel--muted', '×', '判定対象外');
         return;
       }
@@ -135,7 +132,7 @@
     ]).then(([machines, checker]) => {
       checkerData = checker;
       const machineData = machines.find(x => x.slug === slug);
-      document.getElementById('checkerTitle').textContent = machineData ? machineData.name : 'チェッカー';
+      document.getElementById('checkerTitle').textContent = machineData ? machineData.name + ' チェッカー' : 'チェッカー';
       document.title = (machineData ? machineData.name + ' ' : '') + '狙い目チェッカー | 狙い目手帖';
       document.getElementById('navArticleLink').href = machineData ? ('machine.html?slug=' + machineData.slug) : './';
       runJudge();
