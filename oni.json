@@ -1,0 +1,12 @@
+{
+  "gameThreshold": 500,
+  "resetThreshold": 300,
+  "czThreshold": null,
+  "atAfterMemo": "AT後即ヤメ",
+  "notes": [
+    "等価ベース"
+  ],
+  "caution": [
+    "内部G数ズレ注意"
+  ]
+}

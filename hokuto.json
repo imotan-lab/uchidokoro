@@ -1,0 +1,257 @@
+[
+  {
+    "slug": "baki",
+    "name": "バキ",
+    "info": "スマスロ AT",
+    "maker": "オリンピア",
+    "releaseDate": "2023-01",
+    "strategy": "400G〜",
+    "resetStrategy": "240G〜",
+    "yametoki": "前兆確認後ヤメ",
+    "features": [
+      "天井狙いメイン",
+      "ゾーン弱め"
+    ],
+    "updatedAt": "2026-03-17"
+  },
+  {
+    "slug": "hokuto",
+    "name": "北斗の拳",
+    "info": "スマスロ AT",
+    "maker": "サミー",
+    "releaseDate": "2023-04",
+    "strategy": "450G〜",
+    "resetStrategy": "250G〜",
+    "yametoki": "前兆確認後ヤメ",
+    "features": [
+      "モード管理",
+      "天国移行あり"
+    ],
+    "updatedAt": "2026-03-17"
+  },
+  {
+    "slug": "godeater",
+    "name": "ゴッドイーター",
+    "info": "スマスロ AT",
+    "maker": "山佐",
+    "releaseDate": "2024-02",
+    "strategy": "350G〜",
+    "resetStrategy": "200G〜",
+    "yametoki": "即ヤメ推奨",
+    "features": [
+      "初当たり軽め",
+      "ゾーンあり"
+    ],
+    "updatedAt": "2026-03-17"
+  },
+  {
+    "slug": "vvv",
+    "name": "ヴァルヴレイヴ",
+    "info": "スマスロ AT",
+    "maker": "SANKYO",
+    "releaseDate": "2022-11",
+    "strategy": "500G〜",
+    "resetStrategy": "300G〜",
+    "yametoki": "AT後即ヤメ",
+    "features": [
+      "一撃性能高",
+      "荒波"
+    ],
+    "updatedAt": "2026-03-17"
+  },
+  {
+    "slug": "kabaneri",
+    "name": "カバネリ",
+    "info": "AT機",
+    "maker": "サミー",
+    "releaseDate": "2022-07",
+    "strategy": "250G〜",
+    "resetStrategy": "150G〜",
+    "yametoki": "即ヤメ",
+    "features": [
+      "ゾーン狙い",
+      "STタイプ"
+    ],
+    "updatedAt": "2026-03-17"
+  },
+  {
+    "slug": "rezero",
+    "name": "リゼロ",
+    "info": "AT機",
+    "maker": "大都",
+    "releaseDate": "2019-03",
+    "strategy": "450G〜",
+    "resetStrategy": "250G〜",
+    "yametoki": "即ヤメ",
+    "features": [
+      "モード管理",
+      "白鯨攻略"
+    ],
+    "updatedAt": "2026-03-17"
+  },
+  {
+    "slug": "oni",
+    "name": "鬼武者",
+    "info": "AT機",
+    "maker": "エンターライズ",
+    "releaseDate": "2020-03",
+    "strategy": "400G〜",
+    "resetStrategy": "200G〜",
+    "yametoki": "前兆確認",
+    "features": [
+      "ゲーム数管理",
+      "ゾーンあり"
+    ],
+    "updatedAt": "2026-03-17"
+  },
+  {
+    "slug": "madoka",
+    "name": "まどマギ",
+    "info": "AT機",
+    "maker": "ユニバ",
+    "releaseDate": "2021-08",
+    "strategy": "350G〜",
+    "resetStrategy": "200G〜",
+    "yametoki": "前兆確認",
+    "features": [
+      "穢れ要素",
+      "ゾーンあり"
+    ],
+    "updatedAt": "2026-03-17"
+  },
+  {
+    "slug": "eva",
+    "name": "エヴァ",
+    "info": "AT機",
+    "maker": "ビスティ",
+    "releaseDate": "2023-02",
+    "strategy": "300G〜",
+    "resetStrategy": "200G〜",
+    "yametoki": "即ヤメ",
+    "features": [
+      "初当たり軽め",
+      "安定型"
+    ],
+    "updatedAt": "2026-03-17"
+  },
+  {
+    "slug": "lupin",
+    "name": "ルパン",
+    "info": "AT機",
+    "maker": "平和",
+    "releaseDate": "2023-06",
+    "strategy": "300G〜",
+    "resetStrategy": "200G〜",
+    "yametoki": "前兆確認",
+    "features": [
+      "ゾーンあり",
+      "軽め"
+    ],
+    "updatedAt": "2026-03-17"
+  },
+  {
+    "slug": "dumbbell",
+    "name": "ダンベル",
+    "info": "AT機",
+    "maker": "SANKYO",
+    "releaseDate": "2023-05",
+    "strategy": "350G〜",
+    "resetStrategy": "200G〜",
+    "yametoki": "即ヤメ",
+    "features": [
+      "周期管理",
+      "軽め"
+    ],
+    "updatedAt": "2026-03-17"
+  },
+  {
+    "slug": "banchou4",
+    "name": "番長4",
+    "info": "スマスロ AT",
+    "maker": "大都",
+    "releaseDate": "2024-04",
+    "strategy": "400G〜",
+    "resetStrategy": "250G〜",
+    "yametoki": "前兆確認",
+    "features": [
+      "モード管理",
+      "ゾーンあり"
+    ],
+    "updatedAt": "2026-03-17"
+  },
+  {
+    "slug": "bio",
+    "name": "バイオ",
+    "info": "AT機",
+    "maker": "エンターライズ",
+    "releaseDate": "2022-09",
+    "strategy": "350G〜",
+    "resetStrategy": "200G〜",
+    "yametoki": "即ヤメ",
+    "features": [
+      "軽め",
+      "ゾーンあり"
+    ],
+    "updatedAt": "2026-03-17"
+  },
+  {
+    "slug": "goblin",
+    "name": "ゴブリン",
+    "info": "AT機",
+    "maker": "サミー",
+    "releaseDate": "2023-03",
+    "strategy": "300G〜",
+    "resetStrategy": "200G〜",
+    "yametoki": "前兆確認",
+    "features": [
+      "軽め",
+      "ゾーンあり"
+    ],
+    "updatedAt": "2026-03-17"
+  },
+  {
+    "slug": "chibaryo",
+    "name": "チバリヨ",
+    "info": "AT機",
+    "maker": "ネット",
+    "releaseDate": "2021-06",
+    "strategy": "350G〜",
+    "resetStrategy": "200G〜",
+    "yametoki": "即ヤメ",
+    "features": [
+      "荒波",
+      "連チャン"
+    ],
+    "updatedAt": "2026-03-17"
+  },
+  {
+    "slug": "tenzen",
+    "name": "天膳",
+    "info": "スマスロ AT",
+    "maker": "ユニバ",
+    "releaseDate": "2023-11",
+    "strategy": "450G〜",
+    "resetStrategy": "250G〜",
+    "yametoki": "前兆確認",
+    "features": [
+      "モード管理",
+      "高純増"
+    ],
+    "updatedAt": "2026-03-17"
+  },
+  {
+    "slug": "sao",
+    "name": "SAO",
+    "info": "AT機",
+    "maker": "アニプレ",
+    "releaseDate": "2023-05",
+    "strategy": "300G〜",
+    "resetStrategy": "200G〜",
+    "yametoki": "即ヤメ",
+    "features": [
+      "軽め",
+      "安定型"
+    ],
+    "updatedAt": "2026-03-17"
+  }
+]
