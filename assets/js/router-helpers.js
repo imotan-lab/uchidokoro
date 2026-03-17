@@ -1,1 +1,0 @@
-export function slug(){return new URLSearchParams(location.search).get('slug')}
