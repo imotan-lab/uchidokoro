@@ -4,60 +4,166 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>狙い目手帖</title>
-  <meta name="description" content="スロットの狙い目・やめどき・リセット情報を機種別に確認できる狙い目情報サイトです。">
+  <meta name="description" content="スマホで見やすいスロット狙い目サイト。機種記事とチェッカーをすぐ開けます。">
   <link rel="stylesheet" href="site.css">
 </head>
 <body>
+  <div class="nav-backdrop" id="navBackdrop"></div>
+  <nav class="site-nav" id="siteNav" aria-hidden="true">
+    <button class="nav-close" id="navClose" aria-label="メニューを閉じる">×</button>
+    <p class="nav-eyebrow">menu</p>
+    <div class="nav-links">
+      <a class="nav-link" href="./"><span>トップ</span><small>home</small></a>
+      <a class="nav-link" href="./#machine-search"><span>機種検索</span><small>search</small></a>
+      <a class="nav-link" href="./contact.html"><span>お問い合わせ</span><small>contact</small></a>
+      <a class="nav-link" href="./privacy.html"><span>プライバシーポリシー</span><small>policy</small></a>
+    </div>
+  </nav>
+
   <header class="site-header">
     <div class="wrap">
-      <p class="site-eyebrow">slot strategy archive</p>
-      <h1 class="site-title">狙い目手帖</h1>
-      <p class="site-lead">ホールでスマホを開いた瞬間に判断しやすいよう、<strong class="u-em">狙い目・やめどき・チェッカー</strong>を見やすく整理しています。</p>
+      <div class="header-top">
+        <div class="brand-lockup">
+          <p class="site-eyebrow">slot strategy archive</p>
+          <h1 class="site-title">狙い目手帖</h1>
+        </div>
+        <div class="header-actions">
+          <button class="menu-toggle" id="menuToggle" aria-label="メニューを開く"><span></span></button>
+        </div>
+      </div>
+
+      <div class="hero-copy">
+        <p class="site-lead">記事で判断材料を確認しつつ、チェッカーでその場のゲーム数をすぐ見られるように整理しています。</p>
+      </div>
     </div>
   </header>
 
   <main class="wrap">
+    <section class="intro-panel">
+      <h2>このサイトについて</h2>
+      <p>ホールでスマホを開いた時に、必要な情報へ最短で触れやすい構成を目指しています。まず機種を探して、記事を見るか、チェッカーへ進むかをその場で選べます。</p>
+      <div class="intro-points">
+        <div class="intro-point">
+          <strong>記事で確認</strong>
+          <p>天井・やめどき・モード・ゾーンなどを機種ごとに整理。</p>
+        </div>
+        <div class="intro-point">
+          <strong>チェッカーで即確認</strong>
+          <p>ゲーム数を入れるだけで、その場の判定がすぐ出ます。</p>
+        </div>
+        <div class="intro-point">
+          <strong>スマホ前提</strong>
+          <p>ホールで片手でも追いやすい見た目を優先しています。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="search-panel" id="machine-search">
+      <label class="search-label" for="searchInput">machine search</label>
+      <div class="search-shell">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10.5 18a7.5 7.5 0 1 1 5.14-12.96A7.5 7.5 0 0 1 10.5 18Zm0 0 7 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <input id="searchInput" class="search-input" type="search" placeholder="機種名・略称で検索">
+      </div>
+      <p class="search-help">入力した文字にあわせて自動で絞り込みます。</p>
+    </section>
+
     <section class="section-head">
       <div>
         <h2>掲載機種一覧</h2>
-        <p><span class="u-line">先に記事を見るか、すぐにチェッカーへ進むか</span>を選べる構成です。スマホでも縦に追いやすいよう、情報はできるだけ短くまとめています。</p>
+        <p>気になる機種を選ぶと、記事とチェッカーの両方へ進めます。</p>
       </div>
     </section>
+
     <div id="machineGrid" class="machine-grid"></div>
+    <p id="machineEmpty" class="machine-empty u-hidden">一致する機種がありません。</p>
   </main>
 
   <script>
+    const aliasMap = {
+      baki: ['刃牙','baki'],
+      banchou4: ['番長','番長4','ばんちょう4','bancho'],
+      biohazard: ['バイオ','bio'],
+      chibaryo2: ['チバリヨ','ちばりよ','チバ2'],
+      dumbbell: ['ダンベル何キロ持てる','ダンベル何キロ','だんべる'],
+      goblin: ['ゴブスレ','ゴブリン'],
+      godeater: ['ゴッドイーター','ゴッド','god eater','ge'],
+      hokuto: ['北斗','hokuto'],
+      hokuto_tensei2: ['転生2','北斗転生','てんせい2'],
+      kabaneri: ['カバネリ','甲鉄城'],
+      kaguya: ['かぐや','かぐや様','カグヤ'],
+      koukaku: ['攻殻','こうかく','攻殻機動隊'],
+      monkeyv: ['モンキー','モンキー5','monkey'],
+      sf5: ['スト5','ストV','sf5','ストファイ'],
+      tekken6: ['鉄拳','tekken'],
+      tensura: ['転スラ','てんすら','スライム'],
+      tokyo_ghoul: ['喰種','グール','東京グール','ghoul'],
+      valvrave2: ['ヴヴヴ','ヴヴヴ2','vvv','ヴァルヴ','ヴァル2','valvrave']
+    };
+
     const formatStrategy = (text) => {
       if (!text) return '準備中';
       const rankClass = (mark) => ({ '◎': 'rank-mark rank-mark--excellent', '○': 'rank-mark rank-mark--ok', '△': 'rank-mark rank-mark--caution', '×': 'rank-mark rank-mark--ng' }[mark] || 'rank-mark');
-      return text.replace(/[◎○△×]/g, mark => `<span class="${rankClass(mark)}">${mark}</span>`);
+      return String(text)
+        .replace(/[◎○△×]/g, mark => `<span class="${rankClass(mark)}">${mark}</span>`)
+        .replace(/(\d+G\+α|\d+G|\d+枚|\d+%|\d+pt)/g, '<span class="u-num">$1</span>');
+    };
+
+    const normalize = (value) => String(value || '').toLowerCase().replace(/[\s　]+/g, '');
+    let machineList = [];
+
+    const renderList = (query = '') => {
+      const q = normalize(query);
+      const grid = document.getElementById('machineGrid');
+      const empty = document.getElementById('machineEmpty');
+      const filtered = machineList.filter(machine => {
+        if (!q) return true;
+        const aliases = aliasMap[machine.slug] || [];
+        const corpus = [machine.name, machine.info, machine.strategy, machine.slug, ...aliases].map(normalize).join('|');
+        return corpus.includes(q);
+      });
+
+      grid.innerHTML = filtered.map(machine => `
+        <article class="machine-card">
+          <div class="machine-card__body">
+            <p class="machine-card__eyebrow">${machine.info || 'slot data'}</p>
+            <h3 class="machine-card__title">${machine.name}</h3>
+            <p class="machine-card__strategy">${formatStrategy('狙い目：' + (machine.strategy || '準備中'))}</p>
+          </div>
+          <div class="machine-card__actions">
+            <a class="btn btn-main" href="machine.html?slug=${machine.slug}">記事を見る</a>
+            <a class="btn btn-sub" href="checker.html?slug=${machine.slug}">チェッカー</a>
+          </div>
+        </article>
+      `).join('');
+
+      empty.classList.toggle('u-hidden', filtered.length > 0);
     };
 
     fetch('assets/data/machines.json')
       .then(r => r.json())
       .then(list => {
-        const grid = document.getElementById('machineGrid');
-        grid.innerHTML = '';
-        list.forEach(machine => {
-          const card = document.createElement('article');
-          card.className = 'machine-card';
-          card.innerHTML = `
-            <div class="machine-card__body">
-              <p class="machine-card__eyebrow">${machine.info || 'slot data'}</p>
-              <h3 class="machine-card__title">${machine.name}</h3>
-              <p class="machine-card__strategy">${formatStrategy('狙い目：' + (machine.strategy || '準備中'))}</p>
-            </div>
-            <div class="machine-card__actions">
-              <a class="btn btn-main" href="machine.html?slug=${machine.slug}">記事を見る</a>
-              <a class="btn btn-sub" href="checker.html?slug=${machine.slug}">チェッカー</a>
-            </div>
-          `;
-          grid.appendChild(card);
-        });
+        machineList = Array.isArray(list) ? list : [];
+        renderList();
       })
       .catch(() => {
         document.getElementById('machineGrid').innerHTML = '<p class="notice">機種データの読み込みに失敗しました。</p>';
       });
+
+    document.getElementById('searchInput').addEventListener('input', (event) => renderList(event.target.value));
+
+    const menuToggle = document.getElementById('menuToggle');
+    const nav = document.getElementById('siteNav');
+    const navBackdrop = document.getElementById('navBackdrop');
+    const navClose = document.getElementById('navClose');
+    const setMenu = (open) => {
+      nav.classList.toggle('is-open', open);
+      navBackdrop.classList.toggle('is-open', open);
+      menuToggle.classList.toggle('is-open', open);
+      nav.setAttribute('aria-hidden', open ? 'false' : 'true');
+    };
+    menuToggle.addEventListener('click', () => setMenu(!nav.classList.contains('is-open')));
+    navClose.addEventListener('click', () => setMenu(false));
+    navBackdrop.addEventListener('click', () => setMenu(false));
   </script>
 </body>
 </html>

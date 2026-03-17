@@ -8,11 +8,30 @@
   <link rel="stylesheet" href="site.css">
 </head>
 <body>
+  <div class="nav-backdrop" id="navBackdrop"></div>
+  <nav class="site-nav" id="siteNav" aria-hidden="true">
+    <button class="nav-close" id="navClose" aria-label="メニューを閉じる">×</button>
+    <p class="nav-eyebrow">menu</p>
+    <div class="nav-links">
+      <a class="nav-link" href="./"><span>トップ</span><small>home</small></a>
+      <a class="nav-link" id="navCheckerLink" href="#"><span>チェッカー</span><small>checker</small></a>
+      <a class="nav-link" href="./contact.html"><span>お問い合わせ</span><small>contact</small></a>
+      <a class="nav-link" href="./privacy.html"><span>プライバシーポリシー</span><small>policy</small></a>
+    </div>
+  </nav>
+
   <header class="page-header">
     <div class="wrap">
-      <a class="back-link" href="./">← 一覧に戻る</a>
-      <p id="pageInfo" class="page-eyebrow">機種情報</p>
-      <h1 id="pageTitle" class="page-title">読み込み中...</h1>
+      <div class="header-top">
+        <div class="brand-lockup">
+          <a class="back-link" href="./">← 一覧に戻る</a>
+          <p id="pageInfo" class="page-eyebrow">機種情報</p>
+          <h1 id="pageTitle" class="page-title">読み込み中...</h1>
+        </div>
+        <div class="header-actions">
+          <button class="menu-toggle" id="menuToggle" aria-label="メニューを開く"><span></span></button>
+        </div>
+      </div>
       <p id="pageStrategy" class="page-strategy"></p>
     </div>
   </header>
@@ -22,11 +41,11 @@
       <section class="article-card checker-hero-card" id="checker-section">
         <div class="checker-hero-card__head">
           <div>
-            <p class="section-kicker">quick checker</p>
-            <h2>まずはチェッカーで今の台を判定</h2>
-            <p id="checkerLead" class="checker-hero-lead">ホールで見ながらすぐ判断できるように、先にチェッカーを使う流れを基準にしています。</p>
+            <p class="section-kicker">checker</p>
+            <h2>狙い目チェッカー</h2>
+            <p id="checkerLead" class="checker-hero-lead"></p>
           </div>
-          <a class="btn btn-main checker-hero-btn" id="checkerLinkHero" href="#">狙い目チェッカーを開く</a>
+          <a class="btn btn-main checker-hero-btn" id="checkerLinkHero" href="#">狙い目チェッカー</a>
         </div>
         <div id="quickSummary" class="summary-badges"></div>
       </section>
@@ -111,21 +130,23 @@
     </div>
 
     <aside class="article-side">
+      <section class="top-action-card">
+        <div class="top-action-row">
+          <div>
+            <p class="section-kicker">open checker</p>
+            <h2>狙い目チェッカー</h2>
+          </div>
+        </div>
+        <div class="side-actions">
+          <a class="btn btn-main btn-block" id="checkerLink" href="#">狙い目チェッカー</a>
+        </div>
+      </section>
+
       <section class="toc-card">
         <h2 class="toc-card__title">目次</h2>
         <nav>
           <ul class="toc-list" id="tocList"></ul>
         </nav>
-      </section>
-
-      <section class="side-card side-card--primary">
-        <p class="section-kicker">how to use</p>
-        <h2>ホールでの使い方</h2>
-        <div id="checkerSteps" class="step-list"></div>
-        <div class="side-actions">
-          <a class="btn btn-main btn-block" id="checkerLink" href="#">狙い目チェッカーへ</a>
-          <a class="btn btn-sub btn-block" href="./">掲載機種一覧へ</a>
-        </div>
       </section>
     </aside>
   </main>
@@ -136,8 +157,11 @@
     const enrichText = (value) => {
       if (!value) return '準備中';
       return String(value)
-        .replace(/(◎|○|△|×)/g, (_, mark) => { const cls = ({ '◎': 'rank-mark rank-mark--excellent', '○': 'rank-mark rank-mark--ok', '△': 'rank-mark rank-mark--caution', '×': 'rank-mark rank-mark--ng' })[mark] || 'rank-mark'; return '<span class="' + cls + '">' + mark + '</span>'; })
-        .replace(/(\d+[G枚%]|\d+G\+α|\d+G|\d+枚|\d+%|\d+pt)/g, '<span class="u-num">$1</span>')
+        .replace(/(◎|○|△|×)/g, (_, mark) => {
+          const cls = ({ '◎': 'rank-mark rank-mark--excellent', '○': 'rank-mark rank-mark--ok', '△': 'rank-mark rank-mark--caution', '×': 'rank-mark rank-mark--ng' })[mark] || 'rank-mark';
+          return '<span class="' + cls + '">' + mark + '</span>';
+        })
+        .replace(/(\d+[G枚%]\/\d+|\d+G\+α|\d+G|\d+枚|\d+%|\d+pt|\d+あべし)/g, '<span class="u-num">$1</span>')
         .replace(/(重要|高期待|要注意|即ヤメ|天国|本前兆|通常A|通常B|地獄)/g, '<strong>$1</strong>');
     };
 
@@ -148,17 +172,15 @@
     const renderQuickCards = (cards) => {
       const root = document.getElementById('quickCards');
       const items = Array.isArray(cards) ? cards : [];
-      if (!items.length) {
-        root.innerHTML = '<article class="quick-card"><h3>通常狙い目</h3><p>準備中</p></article>';
-        return;
-      }
-      root.innerHTML = items.map(card => `
-        <article class="quick-card">
-          <p class="quick-card__label">${card.label || ''}</p>
-          <h3>${enrichText(card.value || '準備中')}</h3>
-          <p>${enrichText(card.note || '')}</p>
-        </article>
-      `).join('');
+      root.innerHTML = items.length
+        ? items.map(card => `
+            <article class="quick-card">
+              <p class="quick-card__label">${card.label || ''}</p>
+              <h3>${enrichText(card.value || '準備中')}</h3>
+              <p>${enrichText(card.note || '')}</p>
+            </article>
+          `).join('')
+        : '<article class="quick-card"><h3>準備中</h3></article>';
     };
 
     const renderSummaryBadges = (items) => {
@@ -168,21 +190,6 @@
         <div class="summary-badge">
           <span class="summary-badge__label">${item.label || ''}</span>
           <strong>${enrichText(item.value || '')}</strong>
-        </div>
-      `).join('');
-    };
-
-    const renderSteps = (items) => {
-      const root = document.getElementById('checkerSteps');
-      const steps = Array.isArray(items) ? items : [];
-      if (!steps.length) {
-        root.innerHTML = '<div class="step-item"><strong>1</strong><p>チェッカーでゲーム数を確認</p></div>';
-        return;
-      }
-      root.innerHTML = steps.map((text, index) => `
-        <div class="step-item">
-          <strong>${index + 1}</strong>
-          <p>${enrichText(text)}</p>
         </div>
       `).join('');
     };
@@ -236,13 +243,11 @@
         ['reviewSection', 'ユーザー傾向']
       ];
       const root = document.getElementById('tocList');
-      root.innerHTML = tocItems
-        .map(([id, label], index) => {
-          const el = document.getElementById(id);
-          if (!el || el.hidden) return '';
-          return `<li><a class="toc-link" href="#${id}"><span>${label}</span><span>${String(index + 1).padStart(2, '0')}</span></a></li>`;
-        })
-        .join('');
+      root.innerHTML = tocItems.map(([id, label], index) => {
+        const el = document.getElementById(id);
+        if (!el || el.hidden) return '';
+        return `<li><a class="toc-link" href="#${id}"><span>${label}</span><span>${String(index + 1).padStart(2, '0')}</span></a></li>`;
+      }).join('');
     };
 
     Promise.all([
@@ -252,37 +257,60 @@
       const machine = machines.find(x => x.slug === slug);
       if (!machine) {
         document.getElementById('pageTitle').textContent = '機種が見つかりません';
+        document.getElementById('pageStrategy').classList.add('is-empty');
         return;
       }
 
       document.title = machine.name + ' | 狙い目手帖';
       document.getElementById('pageTitle').textContent = machine.name;
       document.getElementById('pageInfo').textContent = machine.info || '機種情報';
-      document.getElementById('pageStrategy').innerHTML = '現在の狙い目：' + enrichText(machine.strategy || '準備中');
-      document.getElementById('checkerLink').href = 'checker.html?slug=' + machine.slug;
-      document.getElementById('checkerLinkHero').href = 'checker.html?slug=' + machine.slug;
+      const strategy = machine.strategy ? '狙い目：' + machine.strategy : '';
+      if (strategy) {
+        document.getElementById('pageStrategy').innerHTML = enrichText(strategy);
+      } else {
+        document.getElementById('pageStrategy').classList.add('is-empty');
+      }
 
-      fillHTML('checkerLead', details.checkerLead, 'ホールで見ながらすぐ判断できるように、先にチェッカーを使う流れを基準にしています。');
+      document.getElementById('checkerLead').textContent = details.checkerLead || '現在の台を先に判定したい時はチェッカーから見られます。';
+
       fillHTML('overview', details.overview);
       fillHTML('tenjo', details.tenjo);
       fillHTML('tenjoBenefit', details.tenjoBenefit);
-      fillHTML('strategy', details.strategy || machine.strategy);
-      fillHTML('yametoki', details.yametoki);
+      fillHTML('strategy', details.strategy);
       fillHTML('reset', details.reset);
+      fillHTML('yametoki', details.yametoki);
       fillHTML('resetSpec', details.resetSpec);
       fillHTML('reason', details.reason);
       fillHTML('caution', details.caution);
-
       renderQuickCards(details.quickCards);
       renderSummaryBadges(details.summaryBadges);
-      renderSteps(details.checkerSteps);
       renderInfoGrid('modeSection', 'modeGrid', details.modes);
       renderInfoGrid('zoneSection', 'zoneGrid', details.zones);
       renderReviews(details.reviews);
       buildToc();
+
+      const checkerHref = 'checker.html?slug=' + machine.slug;
+      document.getElementById('checkerLink').href = checkerHref;
+      document.getElementById('checkerLinkHero').href = checkerHref;
+      document.getElementById('navCheckerLink').href = checkerHref;
     }).catch(() => {
-      document.getElementById('pageTitle').textContent = '読み込みに失敗しました';
+      document.getElementById('pageTitle').textContent = 'データの読み込みに失敗しました';
+      document.getElementById('pageStrategy').classList.add('is-empty');
     });
+
+    const menuToggle = document.getElementById('menuToggle');
+    const nav = document.getElementById('siteNav');
+    const navBackdrop = document.getElementById('navBackdrop');
+    const navClose = document.getElementById('navClose');
+    const setMenu = (open) => {
+      nav.classList.toggle('is-open', open);
+      navBackdrop.classList.toggle('is-open', open);
+      menuToggle.classList.toggle('is-open', open);
+      nav.setAttribute('aria-hidden', open ? 'false' : 'true');
+    };
+    menuToggle.addEventListener('click', () => setMenu(!nav.classList.contains('is-open')));
+    navClose.addEventListener('click', () => setMenu(false));
+    navBackdrop.addEventListener('click', () => setMenu(false));
   </script>
 </body>
 </html>
