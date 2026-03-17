@@ -10,9 +10,9 @@
 <body>
   <header class="site-header">
     <div class="wrap">
-      <p class="site-eyebrow">スロット狙い目情報サイト</p>
+      <p class="site-eyebrow">slot strategy archive</p>
       <h1 class="site-title">狙い目手帖</h1>
-      <p class="site-lead">機種ごとの狙い目・やめどき・チェッカーを、黒×金ベースで見やすく整理しています。</p>
+      <p class="site-lead">ホールでスマホを開いた瞬間に判断しやすいよう、<strong class="u-em">狙い目・やめどき・チェッカー</strong>を見やすく整理しています。</p>
     </div>
   </header>
 
@@ -20,13 +20,18 @@
     <section class="section-head">
       <div>
         <h2>掲載機種一覧</h2>
-        <p>現在の掲載機種は18機種です。準備中の機種も順次内容を整えていきます。</p>
+        <p><span class="u-line">先に記事を見るか、すぐにチェッカーへ進むか</span>を選べる構成です。スマホでも縦に追いやすいよう、情報はできるだけ短くまとめています。</p>
       </div>
     </section>
     <div id="machineGrid" class="machine-grid"></div>
   </main>
 
   <script>
+    const formatStrategy = (text) => {
+      if (!text) return '準備中';
+      return text.replace(/[◎○△×]/g, mark => `<span class="summary-rank">${mark}</span>`);
+    };
+
     fetch('assets/data/machines.json')
       .then(r => r.json())
       .then(list => {
@@ -37,9 +42,9 @@
           card.className = 'machine-card';
           card.innerHTML = `
             <div class="machine-card__body">
-              <p class="machine-card__eyebrow">${machine.info || 'スロット'}</p>
+              <p class="machine-card__eyebrow">${machine.info || 'slot data'}</p>
               <h3 class="machine-card__title">${machine.name}</h3>
-              <p class="machine-card__strategy">狙い目：${machine.strategy || '準備中'}</p>
+              <p class="machine-card__strategy">${formatStrategy('狙い目：' + (machine.strategy || '準備中'))}</p>
             </div>
             <div class="machine-card__actions">
               <a class="btn btn-main" href="machine.html?slug=${machine.slug}">記事を見る</a>
