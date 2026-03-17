@@ -1,7 +1,3 @@
 {
-  "gameThreshold": 0,
-  "resetThreshold": 0,
-  "notes": [
-    "準備中"
-  ]
+  "target": 450
 }

@@ -1,161 +1,142 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>狙い目手帖</title>
-  <meta name="description" content="スロットの狙い目・やめどき・リセット情報を機種別に確認できる狙い目情報サイトです。">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&family=Oswald:wght@500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="site.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>狙い目手帖 | 機種一覧</title>
+<meta name="description" content="スマホで使いやすいスロット狙い目一覧。機種名検索から記事とチェッカーへすぐ移動できます。">
+<link rel="stylesheet" href="assets/css/practical.css">
 </head>
 <body>
-  <header class="site-header">
-    <div class="wrap header-inner">
-      <a class="brand" href="./">
-        <p class="site-eyebrow">Slot Strategy Guide</p>
-        <h1 class="site-title">狙い目手帖</h1>
-      </a>
-      <nav class="top-nav">
-        <a href="#machines">機種一覧</a>
-        <a href="machine.html?slug=hokuto">北斗の記事</a>
-        <a href="checker.html?slug=hokuto">北斗チェッカー</a>
-      </nav>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html">狙い目手帖</a>
+    <nav class="nav-links">
+      <a href="index.html">機種一覧</a>
+      <a href="contact.html">お問い合わせ</a>
+      <a href="privacy.html">ポリシー</a>
+    </nav>
+  </div>
+</header>
+
+<main class="site-main">
+  <section class="hero-panel">
+    <p class="eyebrow">MACHINE INDEX</p>
+    <h1 class="page-title">ホールで即判断できる機種一覧</h1>
+    <p class="hero-sub">検索して、記事を見るか、すぐチェッカーに入るだけの実用寄りUIに整理しました。</p>
+    <div class="hero-meta">
+      <div class="meta-chip"><span class="meta-label">優先</span><span class="meta-value">スマホ操作</span></div>
+      <div class="meta-chip"><span class="meta-label">主役</span><span class="meta-value">チェッカー</span></div>
+      <div class="meta-chip"><span class="meta-label">表示</span><span id="heroCount" class="meta-value">読込中</span></div>
     </div>
-  </header>
+  </section>
 
-  <main class="wrap">
-    <section class="hero">
-      <div class="hero-grid">
-        <section class="hero-card">
-          <div class="hero-copy">
-            <p class="hero-lead">Play smarter, check faster.</p>
-            <h2 class="hero-headline">狙い目を<span>すぐ判断。</span></h2>
-            <p class="hero-text">ホールで迷わないための、機種別まとめと狙い目チェッカー。まずは機種名で探して、記事で確認、チェッカーで最終判断できる形にしています。</p>
-            <ul class="hero-points">
-              <li>記事とチェッカーを往復しやすい</li>
-              <li>スマホで見やすい黒基調</li>
-              <li>機種名検索ですぐ絞り込み</li>
-            </ul>
-          </div>
-        </section>
-        <aside class="hero-side">
-          <div>
-            <h2>このサイトの使い方</h2>
-            <p>気になる機種を検索して記事を開く → 天井や狙い目を確認 → 右側のチェッカーボタンから現在G数を入力、という流れを基本にしています。</p>
-          </div>
-          <div class="side-kpis">
-            <div class="kpi"><strong>18</strong><span>掲載機種</span></div>
-            <div class="kpi"><strong>1秒</strong><span>チェッカー判定</span></div>
-            <div class="kpi"><strong>記事</strong><span>基準を確認</span></div>
-            <div class="kpi"><strong>表</strong><span>要点を整理</span></div>
-          </div>
-        </aside>
-      </div>
-    </section>
+  <section class="toolbar" aria-label="検索エリア">
+    <label class="visually-hidden" for="machineSearch">機種名検索</label>
+    <input id="machineSearch" class="search-input" type="search" placeholder="機種名検索 例: 北斗 / ほくと / hokuto / 東京喰種">
+    <div id="machineCount" class="count-box">読込中</div>
+  </section>
 
-    <section id="machines" class="section">
-      <div class="section-head">
-        <div>
-          <h2>機種一覧</h2>
-          <p>機種名をタップで記事、右側ボタンからチェッカーへ移動できます。</p>
-        </div>
-      </div>
+  <section id="machineList" class="machine-list"></section>
+  <div id="machineEmpty" class="empty-card">該当する機種がありません。</div>
+</main>
 
-      <label class="search-bar" aria-label="機種検索">
-        <span>🔎</span>
-        <input id="machineSearch" type="search" placeholder="機種名で検索">
-      </label>
+<footer>
+  <div class="site-footer-inner">© 2026 狙い目手帖</div>
+</footer>
 
-      <div class="machine-table">
-        <div class="machine-table__head">
-          <div>機種名</div>
-          <div>記事</div>
-          <div>チェッカー</div>
-        </div>
-        <div id="machineRows"></div>
-      </div>
-    </section>
-  </main>
+<script>
+function normalizeText(value){
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[\u3041-\u3096]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 0x60))
+    .replace(/[\s\-_ー]/g, "");
+}
 
-  <footer class="footer wrap">
-    記事で基準を確認し、最後はチェッカーで現在のG数をチェックする使い方を想定しています。
-  </footer>
+function buildKeywords(machine){
+  const base = [machine.name, machine.slug, machine.info, machine.strategy];
+  const map = {
+    hokuto: ["ほくと", "北斗", "北斗の拳"],
+    hokuto_tensei2: ["転生", "てんせい", "北斗転生2", "ほくとてんせい2"],
+    tokyo_ghoul: ["とうきょうぐーる", "ぐーる", "グール"],
+    sf5: ["すと5", "スト5", "streetfighter5"],
+    monkeyv: ["モンキー", "monkey", "モンキーターン"],
+    godeater: ["ごっどいーたー", "ge", "god eater"],
+    goblin: ["ゴブスレ", "ごぶすれ"],
+    valvrave2: ["vvv", "ヴヴヴ2", "v2"],
+    kabaneri: ["かばねり", "甲鉄城"],
+    kaguya: ["かぐや", "かぐやさま"],
+    koukaku: ["こうかく", "攻殻"],
+    tensura: ["てんすら"],
+    tekken6: ["てっけん", "鉄拳"],
+    chibaryo2: ["ちばりよ", "チバリヨ"],
+    banchou4: ["ばんちょう4", "番長"],
+    biohazard: ["ばいお", "バイオ"],
+    dumbbell: ["だんべる"],
+    baki: ["ばき"]
+  };
+  return [...base, ...(map[machine.slug] || [])].map(normalizeText).join("|");
+}
 
-  <script>
-    let machineList = [];
+(async function loadMachines(){
+  const list = document.getElementById("machineList");
+  const count = document.getElementById("machineCount");
+  const heroCount = document.getElementById("heroCount");
+  const search = document.getElementById("machineSearch");
+  const empty = document.getElementById("machineEmpty");
 
-    function toHira(str) {
-      return (str || '').replace(/[\u30A1-\u30F6]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60));
-    }
+  try {
+    const res = await fetch("assets/data/machines.json");
+    if (!res.ok) throw new Error("machines.json load failed");
+    const machines = await res.json();
+    const prepared = machines.map(machine => ({ ...machine, __keywords: buildKeywords(machine) }));
 
-    function normalize(str) {
-      return toHira(String(str || '').toLowerCase()).replace(/\s+/g, '');
-    }
+    function render(keyword = "") {
+      const query = normalizeText(keyword);
+      const filtered = prepared.filter(machine => !query || machine.__keywords.includes(query));
+      count.textContent = filtered.length + "機種";
+      heroCount.textContent = filtered.length + "機種";
+      list.innerHTML = "";
 
-    const aliases = {
-      hokuto: 'ほくとのけん けん',
-      hokuto_tensei2: 'ほくとてんせい てんせい あべし',
-      kabaneri: 'かばねり かば',
-      valvrave2: 'ゔゔゔ vvv ばるぶれいぶ ヴヴヴ',
-      sf5: 'すと5 すとふぁい すとりーとふぁいたー',
-      monkeyv: 'もんきー',
-      kaguya: 'かぐや',
-      goblin: 'ごぶすれ',
-      godeater: 'ごっどいーたー',
-      tokyo_ghoul: 'ぐーる',
-      banchou4: 'ばんちょう',
-      baki: 'ばき',
-      biohazard: 'ばいお',
-      chibaryo2: 'ちばりよ',
-      dumbbell: 'だんべる',
-      koukaku: 'こうかく',
-      tekken6: 'てっけん',
-      tensura: 'てんすら'
-    };
-
-    function renderRows(list) {
-      const wrap = document.getElementById('machineRows');
-      if (!list.length) {
-        wrap.innerHTML = '<div class="machine-row"><div class="machine-main"><strong class="machine-name">該当する機種が見つかりません</strong><span class="machine-info">別のキーワードでもお試しください。</span></div></div>';
+      if (!filtered.length) {
+        empty.style.display = "block";
         return;
       }
-      wrap.innerHTML = list.map(machine => `
-        <div class="machine-row">
+
+      empty.style.display = "none";
+
+      filtered.forEach(machine => {
+        const isReady = machine.strategy && machine.strategy !== "準備中";
+        const row = document.createElement("article");
+        row.className = "list-row";
+        row.innerHTML = `
           <div class="machine-main">
-            <a class="machine-name" href="machine.html?slug=${machine.slug}">${machine.name}</a>
-            <span class="machine-info">${machine.info || 'スロット'}${machine.strategy ? ' / 狙い目 ' + machine.strategy : ''}</span>
+            <h2 class="machine-name">${machine.name}</h2>
+            <div class="machine-sub">
+              <span class="slug-chip">${machine.slug}</span>
+              <span class="status-chip ${isReady ? "status-ready" : "status-wip"}">${isReady ? "公開中" : "準備中"}</span>
+              <span class="type-chip">${machine.info || "未設定"}</span>
+            </div>
+            <p class="machine-strategy">${machine.strategy || "狙い目未設定"}</p>
           </div>
-          <div class="machine-actions"><a class="btn btn-ghost" href="machine.html?slug=${machine.slug}">記事を見る</a></div>
-          <div class="machine-actions"><a class="btn btn-main" href="checker.html?slug=${machine.slug}">チェッカー</a></div>
-        </div>
-      `).join('');
+          <div class="row-actions">
+            <a class="btn-sub" href="machine.html?slug=${machine.slug}">記事</a>
+            <a class="btn-main" href="checker.html?slug=${machine.slug}">チェッカー</a>
+          </div>
+        `;
+        list.appendChild(row);
+      });
     }
 
-    function filterRows() {
-      const q = normalize(document.getElementById('machineSearch').value);
-      if (!q) {
-        renderRows(machineList);
-        return;
-      }
-      const filtered = machineList.filter(machine => {
-        const target = normalize(machine.name + ' ' + (machine.info || '') + ' ' + (aliases[machine.slug] || ''));
-        return target.includes(q);
-      });
-      renderRows(filtered);
-    }
-
-    fetch('assets/data/machines.json')
-      .then(r => r.json())
-      .then(list => {
-        machineList = list;
-        renderRows(machineList);
-        document.getElementById('machineSearch').addEventListener('input', filterRows);
-      })
-      .catch(() => {
-        document.getElementById('machineRows').innerHTML = '<div class="machine-row"><div class="machine-main"><strong class="machine-name">機種データの読み込みに失敗しました</strong></div></div>';
-      });
-  </script>
+    search.addEventListener("input", event => render(event.target.value));
+    render();
+  } catch (error) {
+    count.textContent = "エラー";
+    heroCount.textContent = "エラー";
+    empty.style.display = "block";
+    empty.textContent = "機種一覧の読み込みに失敗しました。";
+  }
+})();
+</script>
 </body>
 </html>

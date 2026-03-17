@@ -1,136 +1,202 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>狙い目チェッカー | 狙い目手帖</title>
-  <meta name="description" content="現在のゲーム数から狙い目かどうかを簡易判定するチェッカーです。">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&family=Oswald:wght@500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="site.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>チェッカー | 狙い目手帖</title>
+<meta name="description" content="通常時・リセット後のG数を入力して狙い目を即判定します。">
+<link rel="stylesheet" href="assets/css/practical.css">
 </head>
 <body>
-  <header class="page-header">
-    <div class="wrap header-inner">
-      <a class="brand" href="./">
-        <p class="page-eyebrow">Checker Tool</p>
-        <h1 class="site-title">狙い目手帖</h1>
-      </a>
-      <a id="articleBack" class="back-link" href="./">← 記事へ戻る</a>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html">狙い目手帖</a>
+    <nav class="nav-links">
+      <a id="articleLinkNav" href="machine.html">記事</a>
+      <a href="index.html">機種一覧</a>
+    </nav>
+  </div>
+</header>
+
+<main class="site-main">
+  <section class="hero-panel">
+    <p class="eyebrow">CHECKER</p>
+    <h1 id="checkerTitle" class="page-title">チェッカー</h1>
+    <p id="checkerLead" class="hero-sub">通常 / リセットを選んで現在G数を入力してください。</p>
+    <div class="hero-meta">
+      <div class="meta-chip"><span class="meta-label">入力</span><span class="meta-value">G数</span></div>
+      <div class="meta-chip"><span class="meta-label">判定</span><span class="meta-value">◎ ◯ △ ×</span></div>
+      <div class="meta-chip"><span class="meta-label">基準</span><span id="checkerTargetView" class="meta-value">読込中</span></div>
     </div>
-  </header>
+  </section>
 
-  <main class="wrap">
-    <section class="page-hero">
-      <div class="page-summary">
-        <section class="lead-card article-card">
-          <h1 id="checkerTitle" class="page-title">読み込み中...</h1>
-          <p class="page-strategy">現在のゲーム数と台の状態を入れると、自動で簡易判定します。</p>
-        </section>
-        <aside class="toc-card">
-          <h2>入力項目</h2>
-          <nav>
-            <a href="#checkerMain">通常 / リセット</a>
-            <a href="#checkerMain">現在のゲーム数</a>
-            <a href="#checkerMain">判定結果</a>
-          </nav>
-        </aside>
-      </div>
-    </section>
-
-    <div class="checker-wrap">
-      <section id="checkerMain" class="checker-card">
-        <h2>狙い目チェッカー</h2>
-        <div class="checker-form">
-          <div>
-            <label class="field-label" for="stateSelect">台の状態</label>
-            <div class="inline-fields">
-              <select id="stateSelect" class="select">
-                <option value="normal">通常</option>
-                <option value="reset">リセット</option>
-              </select>
-              <input id="currentGame" class="input" type="number" min="0" step="1" placeholder="現在のゲーム数を入力">
-            </div>
+  <section class="section-stack">
+    <article class="checker-card">
+      <h2 class="section-title">入力</h2>
+      <div class="control-grid">
+        <div>
+          <div class="mode-toggle">
+            <input id="modeNormal" name="mode" type="radio" value="normal" checked>
+            <label for="modeNormal">通常</label>
+            <input id="modeReset" name="mode" type="radio" value="reset">
+            <label for="modeReset">リセット</label>
           </div>
         </div>
-
-        <div id="judgeResult" class="judge-panel judge-panel--muted">
-          <p class="judge-rank">-</p>
-          <p class="judge-title">数値を入力するとここに判定が出ます</p>
-          <p class="judge-text">記事ページで基準を見ながら、最後の確認として使う想定です。</p>
+        <div class="control-row">
+          <div>
+            <label class="visually-hidden" for="game">現在G数</label>
+            <input id="game" class="game-input" inputmode="numeric" type="number" placeholder="現在G数">
+          </div>
+          <button id="judgeBtn" class="btn-main" type="button">判定する</button>
         </div>
-      </section>
+        <p class="hint-text">データが通常 / リセット別に未設定の機種は、共通基準で判定します。</p>
+      </div>
+    </article>
 
-      <aside class="side-card">
-        <h2>判定の見方</h2>
-        <div class="info-table">
-          <div class="info-row"><div class="info-label">◎</div><div class="info-value">狙い目ライン到達</div></div>
-          <div class="info-row"><div class="info-label">○</div><div class="info-value">あと少しで狙い目</div></div>
-          <div class="info-row"><div class="info-label">×</div><div class="info-value">まだ浅め</div></div>
-        </div>
-        <p class="note">機種ごとの補足は記事ページで確認し、このページは最終判断に絞っています。</p>
-      </aside>
-    </div>
-  </main>
+    <article id="resultCard" class="result-card">
+      <div class="result-top">
+        <p id="resultTitle" class="result-title">判定待ち</p>
+        <div id="resultBadge" class="result-badge result-mid">△</div>
+      </div>
+      <p id="resultCopy" class="result-copy">G数を入力して判定してください。</p>
+      <p id="resultNote" class="result-note">最終判断は液晶・示唆・当日状況を優先してください。</p>
+    </article>
 
-  <script>
-    const slug = new URLSearchParams(location.search).get('slug');
-    let checkerData = null;
-    let machineData = null;
+    <article class="surface-card table-card">
+      <h2 class="section-title">基準表</h2>
+      <table class="info-table">
+        <tbody>
+          <tr><th>通常</th><td id="tableNormal">-</td></tr>
+          <tr><th>リセット</th><td id="tableReset">-</td></tr>
+          <tr><th>共通メモ</th><td id="tableMemo">簡易チェッカー</td></tr>
+        </tbody>
+      </table>
+    </article>
 
-    function renderResult(mode, value) {
-      const result = document.getElementById('judgeResult');
-      if (!checkerData) {
-        result.className = 'judge-panel judge-panel--muted';
-        result.innerHTML = '<p class="judge-rank">-</p><p class="judge-title">データ読み込み中です</p><p class="judge-text">少し待ってからもう一度確認してください。</p>';
-        return;
-      }
-      if (!value && value !== 0) {
-        result.className = 'judge-panel judge-panel--muted';
-        result.innerHTML = '<p class="judge-rank">-</p><p class="judge-title">数値を入力すると判定します</p><p class="judge-text">記事ページで基準を確認しながら最後の判断に使う想定です。</p>';
-        return;
-      }
-      const threshold = mode === 'reset' ? Number(checkerData.resetThreshold || 0) : Number(checkerData.gameThreshold || 0);
-      if (!threshold) {
-        result.className = 'judge-panel judge-panel--muted';
-        result.innerHTML = '<p class="judge-rank">-</p><p class="judge-title">この機種の基準は確認中です</p><p class="judge-text">詳細は記事ページでご確認ください。</p>';
-        return;
-      }
-      const diff = threshold - value;
-      if (value >= threshold) {
-        result.className = 'judge-panel judge-panel--ok';
-        result.innerHTML = `<p class="judge-rank">◎</p><p class="judge-title">狙い目ラインに到達しています</p><p class="judge-text">${mode === 'reset' ? 'リセット時' : '通常時'}の目安 ${threshold}G〜 を満たしています。` + (machineData && machineData.strategy ? `記事の基準は ${machineData.strategy} です。` : '') + '</p>';
-      } else if (diff <= 100) {
-        result.className = 'judge-panel judge-panel--warn';
-        result.innerHTML = `<p class="judge-rank">○</p><p class="judge-title">あと少しで狙い目ラインです</p><p class="judge-text">${mode === 'reset' ? 'リセット時' : '通常時'}の目安 ${threshold}G〜 まであと ${diff}G です。</p>`;
-      } else {
-        result.className = 'judge-panel judge-panel--ng';
-        result.innerHTML = `<p class="judge-rank">×</p><p class="judge-title">まだ浅めです</p><p class="judge-text">${mode === 'reset' ? 'リセット時' : '通常時'}の目安 ${threshold}G〜 まであと ${diff}G あります。</p>`;
-      }
-    }
+    <article class="surface-card">
+      <h2 class="section-title">移動</h2>
+      <div class="action-stack">
+        <a id="articleLinkCard" class="btn-sub" href="machine.html">記事を見る</a>
+        <a class="btn-main" href="index.html">一覧へ戻る</a>
+      </div>
+    </article>
+  </section>
+</main>
 
-    Promise.all([
-      fetch('assets/data/machines.json').then(r => r.json()),
-      fetch('assets/data/checkers/' + slug + '.json').then(r => r.json())
-    ]).then(([machines, checker]) => {
-      checkerData = checker;
-      machineData = machines.find(x => x.slug === slug);
-      document.getElementById('checkerTitle').textContent = machineData ? machineData.name + ' チェッカー' : '狙い目チェッカー';
-      document.getElementById('articleBack').href = machineData ? 'machine.html?slug=' + machineData.slug : './';
-      document.title = (machineData ? machineData.name + ' ' : '') + '狙い目チェッカー | 狙い目手帖';
-      renderResult(document.getElementById('stateSelect').value, Number(document.getElementById('currentGame').value));
-    }).catch(() => {
-      document.getElementById('checkerTitle').textContent = '読み込みに失敗しました';
+<footer>
+  <div class="site-footer-inner">© 2026 狙い目手帖</div>
+</footer>
+
+<script>
+function getThreshold(machine, mode){
+  const checker = machine.checker || {};
+  if (typeof checker[mode] === "number") return checker[mode];
+  if (checker[mode] && typeof checker[mode].target === "number") return checker[mode].target;
+  if (typeof checker.target === "number") return checker.target;
+  return null;
+}
+
+function evaluate(game, target){
+  if (target === null || !Number.isFinite(target) || target >= 99999999) {
+    return { symbol:"△", title:"準備中", copy:"この機種はまだ詳細設定前です。", className:"result-mid" };
+  }
+  if (!Number.isFinite(game) || game < 0) {
+    return { symbol:"△", title:"入力待ち", copy:"現在G数を正しく入力してください。", className:"result-mid" };
+  }
+  if (game >= target + 100) {
+    return { symbol:"◎", title:"強め", copy:`${target}G基準を大きく超えています。`, className:"result-ok" };
+  }
+  if (game >= target) {
+    return { symbol:"◯", title:"狙い目", copy:`${target}G基準に到達しています。`, className:"result-ok" };
+  }
+  if (game >= Math.max(target - 50, 0)) {
+    return { symbol:"△", title:"もう少し", copy:`基準の ${target}G まであと少しです。`, className:"result-caution" };
+  }
+  return { symbol:"×", title:"まだ早い", copy:`現状は ${target}G からを基準にしてください。`, className:"result-ng" };
+}
+
+(function(){
+  const params = new URLSearchParams(location.search);
+  const slug = params.get("slug");
+  const titleEl = document.getElementById("checkerTitle");
+  const leadEl = document.getElementById("checkerLead");
+  const targetViewEl = document.getElementById("checkerTargetView");
+  const articleLinkNav = document.getElementById("articleLinkNav");
+  const articleLinkCard = document.getElementById("articleLinkCard");
+  const resultTitle = document.getElementById("resultTitle");
+  const resultBadge = document.getElementById("resultBadge");
+  const resultCopy = document.getElementById("resultCopy");
+  const tableNormal = document.getElementById("tableNormal");
+  const tableReset = document.getElementById("tableReset");
+  const tableMemo = document.getElementById("tableMemo");
+  const gameInput = document.getElementById("game");
+  const judgeBtn = document.getElementById("judgeBtn");
+
+  let currentMachine = null;
+
+  function applyResult(result){
+    resultTitle.textContent = result.title;
+    resultCopy.textContent = result.copy;
+    resultBadge.textContent = result.symbol;
+    resultBadge.className = "result-badge " + result.className;
+  }
+
+  function currentMode(){
+    return document.querySelector('input[name="mode"]:checked').value;
+  }
+
+  function judge(){
+    if (!currentMachine) return;
+    const mode = currentMode();
+    const target = getThreshold(currentMachine, mode);
+    const game = Number(gameInput.value);
+    applyResult(evaluate(game, target));
+    targetViewEl.textContent = target === null || target >= 99999999 ? "準備中" : `${mode === "reset" ? "R" : "通"} ${target}G`;
+  }
+
+  fetch("assets/data/machines.json")
+    .then(res => {
+      if (!res.ok) throw new Error("load failed");
+      return res.json();
+    })
+    .then(machines => {
+      currentMachine = machines.find(machine => machine.slug === slug);
+      if (!currentMachine) throw new Error("not found");
+
+      const articleHref = "machine.html?slug=" + currentMachine.slug;
+      articleLinkNav.href = articleHref;
+      articleLinkCard.href = articleHref;
+      document.title = currentMachine.name + " チェッカー | 狙い目手帖";
+      titleEl.textContent = currentMachine.name + " チェッカー";
+      leadEl.textContent = currentMachine.strategy && currentMachine.strategy !== "準備中"
+        ? "通常 / リセットを選んで現在G数を入力してください。"
+        : "この機種は現在データ調整中です。";
+
+      const normalTarget = getThreshold(currentMachine, "normal");
+      const resetTarget = getThreshold(currentMachine, "reset");
+      tableNormal.textContent = normalTarget === null || normalTarget >= 99999999 ? "準備中" : normalTarget + "G〜";
+      tableReset.textContent = resetTarget === null || resetTarget >= 99999999 ? (normalTarget === null || normalTarget >= 99999999 ? "準備中" : "通常と同じ") : resetTarget + "G〜";
+      tableMemo.textContent = currentMachine.strategy || "簡易チェッカー";
+      judge();
+    })
+    .catch(() => {
+      titleEl.textContent = "機種が見つかりません";
+      leadEl.textContent = "一覧から選び直してください。";
+      targetViewEl.textContent = "-";
+      tableNormal.textContent = "-";
+      tableReset.textContent = "-";
+      tableMemo.textContent = "-";
+      applyResult({ symbol:"×", title:"エラー", copy:"機種データを読み込めませんでした。", className:"result-ng" });
+      judgeBtn.disabled = true;
+      gameInput.disabled = true;
     });
 
-    document.getElementById('stateSelect').addEventListener('change', () => {
-      renderResult(document.getElementById('stateSelect').value, Number(document.getElementById('currentGame').value));
-    });
-    document.getElementById('currentGame').addEventListener('input', (e) => {
-      const raw = e.target.value;
-      renderResult(document.getElementById('stateSelect').value, raw === '' ? null : Number(raw));
-    });
-  </script>
+  judgeBtn.addEventListener("click", judge);
+  gameInput.addEventListener("keydown", event => {
+    if (event.key === "Enter") judge();
+  });
+  document.querySelectorAll('input[name="mode"]').forEach(input => input.addEventListener("change", judge));
+})();
+</script>
 </body>
 </html>

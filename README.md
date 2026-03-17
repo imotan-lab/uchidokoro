@@ -2,11 +2,19 @@
 
 GitHub Pages 用の静的サイトです。
 
-## 構造
-- assets/data/machines.json
-- assets/data/machine-details/*.json
-- assets/data/checkers/*.json
+## 現在の整理方針
 
-## 運用
-Show in Explorer で開いたフォルダの中身を毎回空にして、
-この一式を丸ごと入れてから Commit / Push する前提です。
+- トップの掲載機種一覧は `assets/data/machines.json` で管理
+- `index.html` は JSON を読み込んで一覧を自動描画
+- 新機種追加は `templates/` のテンプレートを複製して対応
+- checker は `assets/js/checker-common.js` を土台にして量産しやすくする
+
+## 新機種追加の最短手順
+
+1. `templates/article-template.html` を複製
+2. `templates/checker-template.html` を複製
+3. 機種名と slug を置換
+4. `assets/data/machines.json` に追加
+5. GitHub にアップロード
+
+詳しくは `docs/ADD_MACHINE_GUIDE.md` を参照。
