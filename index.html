@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>狙い目手帖</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <header class="wrap">
+    <h1>狙い目手帖</h1>
+  </header>
+  <main class="wrap">
+    <ul id="list" class="grid"></ul>
+  </main>
+<script>
+fetch('assets/data/machines.json').then(r=>r.json()).then(list=>{
+  const ul = document.getElementById('list');
+  list.forEach(m=>{
+    const li = document.createElement('li');
+    li.className = 'card';
+    li.innerHTML = `
+      <h2>${m.name}</h2>
+      <p class="meta">${m.info}</p>
+      <p class="strategy">狙い目：${m.strategy}</p>
+      <div class="links">
+        <a href="machine.html?slug=${m.slug}">記事を見る</a>
+        <a href="checker.html?slug=${m.slug}">チェッカー</a>
+      </div>`;
+    ul.appendChild(li);
+  });
+});
+</script>
+</body>
+</html>
