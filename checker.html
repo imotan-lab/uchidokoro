@@ -74,7 +74,8 @@
     const slug = new URLSearchParams(location.search).get('slug');
     let checkerData = null;
 
-    const setThresholdText = (value) => {
+    const setThresholdText = (value, label = '') => {
+      if (label) return label;
       return value && Number(value) > 0 ? value + 'G〜' : '準備中';
     };
 
@@ -128,7 +129,7 @@
       document.getElementById('checkerCatch').textContent = checker.catchCopy || '大きい記号で結論を先に表示し、下に短い理由を出します。';
 
       document.getElementById('normalThreshold').textContent = setThresholdText(checker.gameThreshold);
-      document.getElementById('resetThreshold').textContent = setThresholdText(checker.resetThreshold);
+      document.getElementById('resetThreshold').textContent = setThresholdText(checker.resetThreshold, checker.resetLabel || '');
 
       renderList('notesList', checker.notes);
       renderList('modeNotes', checker.modeNotes);

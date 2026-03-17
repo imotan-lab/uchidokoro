@@ -111,3 +111,26 @@ a{color:inherit}
 .checker-meta-grid--wide{grid-template-columns:repeat(2,minmax(0,1fr))}
 @media (max-width:980px){.summary-badges{grid-template-columns:1fr}.checker-card__intro,.checker-hero-card__head{flex-direction:column;align-items:flex-start}.quick-card-grid{grid-template-columns:1fr 1fr}}
 @media (max-width:640px){.checker-hero-card,.checker-card--hero,.checker-card,.article-card,.mini-card,.side-card{border-radius:16px}.page-header{padding:18px 0 18px}.checker-wrap{padding:18px 0 28px}.article-wrap{padding:18px 0 28px}.quick-card-grid,.checker-meta-grid--wide{grid-template-columns:1fr}.judge-panel{grid-template-columns:1fr;justify-items:start;padding:16px}.judge-mark{width:100%;min-height:72px;font-size:48px}.judge-title{font-size:20px}.checker-form--stack-mobile .btn,.checker-form--stack-mobile .input{width:100%}.quick-card h3{font-size:22px}.summary-badge strong{font-size:17px}.site-title,.page-title{font-size:34px}}
+
+
+/* 2026-03-17 refinement: reduce box-heavy look on article/checker pages */
+.article-card,.mini-card,.side-card{background:rgba(255,255,255,.02);border:0;box-shadow:none;border-radius:22px}
+.article-card,.side-card{padding:24px 2px 22px}
+.article-card + .article-card,.checker-card + .checker-card,.side-card + .side-card{margin-top:0}
+.article-main>.article-card{border-top:1px solid rgba(201,158,71,.16)}
+.article-main>.article-card:first-child{border-top:1px solid rgba(201,158,71,.30)}
+.article-main>.article-card:last-child{border-bottom:1px solid rgba(201,158,71,.12);padding-bottom:26px}
+.article-grid,.checker-meta-grid{gap:12px}
+.mini-card{padding:18px 18px 16px;background:linear-gradient(180deg,rgba(255,255,255,.03) 0%,rgba(255,255,255,.015) 100%);border:1px solid rgba(201,158,71,.10)}
+.checker-card{padding:22px;background:linear-gradient(180deg,rgba(255,255,255,.03) 0%,rgba(255,255,255,.015) 100%);border:1px solid rgba(201,158,71,.12);border-radius:22px;box-shadow:0 10px 30px rgba(0,0,0,.18)}
+.checker-card--hero,.checker-hero-card{background:linear-gradient(180deg,rgba(62,44,16,.82) 0%,rgba(22,18,12,.96) 100%);border:1px solid rgba(224,174,76,.26);box-shadow:0 14px 34px rgba(0,0,0,.28)}
+.summary-badge,.quick-card,.info-card,.review-card,.step-item{background:rgba(255,255,255,.03);border:1px solid rgba(201,158,71,.10)}
+.summary-badge strong,.quick-card h3,.info-card h3,.review-card__label,.article-card h2,.mini-card h2,.checker-card h2,.side-card h2{letter-spacing:.01em}
+.article-card p,.mini-card p,.checker-card p,.side-card p,.info-card p,.review-card p,.step-item p{color:#eadfc8}
+.side-card--primary{background:linear-gradient(180deg,rgba(255,255,255,.04) 0%,rgba(255,255,255,.02) 100%);border:1px solid rgba(224,174,76,.14)}
+.caution-card{background:linear-gradient(180deg,rgba(57,37,13,.40) 0%,rgba(255,255,255,.015) 100%);border-top:1px solid rgba(224,174,76,.26)}
+@media (max-width:640px){
+  .article-card,.side-card{padding:20px 0 18px}
+  .checker-card,.checker-hero-card{padding:18px}
+  .mini-card{padding:16px}
+}
