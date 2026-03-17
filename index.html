@@ -21,23 +21,16 @@
 
 <main class="site-main">
   <section class="hero-panel">
-    <p class="eyebrow">MACHINE INDEX</p>
-    <h1 class="page-title">ホールで即判断できる機種一覧</h1>
-    <p class="hero-sub">検索して即移動、要点を見て即判定。黒ベースのまま、ホールで使いやすい一覧に寄せています。</p>
-    <div class="hero-meta">
-      <div class="meta-chip"><span class="meta-label">優先</span><span class="meta-value">スマホ操作</span></div>
-      <div class="meta-chip"><span class="meta-label">主役</span><span class="meta-value">チェッカー</span></div>
-      <div class="meta-chip"><span class="meta-label">表示</span><span id="heroCount" class="meta-value">読込中</span></div>
-    </div>
+    <p class="eyebrow">SLOT AIMING TOOL</p>
+    <h1 class="page-title">ホールで即判断。<br>G数を入れるだけ。</h1>
+    <p class="hero-sub">機種を選んでG数を入力するだけで、打っていいか即判定できます。<br>通常・リセット別対応。</p>
   </section>
 
   <section class="toolbar" aria-label="検索エリア">
     <label class="visually-hidden" for="machineSearch">機種名検索</label>
-    <input id="machineSearch" class="search-input" type="search" placeholder="機種名検索 例: 北斗 / ほくと / hokuto / 東京喰種">
-    <div id="machineCount" class="count-box">読込中</div>
+    <input id="machineSearch" class="search-input" type="search" placeholder="機種名で検索（例: 北斗、バキ、ゴッドイーター）">
+    <div class="count-box"><span id="heroCount">--</span><span id="machineCount" class="visually-hidden">読込中</span><span aria-hidden="true">機種</span></div>
   </section>
-
-  <p class="helper-note">表示順は作業ベースです。狙い目確認は各機種ページとチェッカーを優先してください。</p>
 
   <section id="machineList" class="machine-list"></section>
   <div id="machineEmpty" class="empty-card">該当する機種がありません。</div>
@@ -113,16 +106,15 @@ function buildKeywords(machine){
         row.className = "list-row";
         row.innerHTML = `
           <div class="machine-main">
-            <h2 class="machine-name">${machine.name}</h2>
+            <a class="machine-name-link" href="machine.html?slug=${machine.slug}">
+              <h2 class="machine-name">${machine.name}</h2>
+            </a>
             <div class="machine-sub">
-              <span class="slug-chip">${machine.slug}</span>
               <span class="status-chip ${isReady ? "status-ready" : "status-wip"}">${isReady ? "公開中" : "準備中"}</span>
               <span class="type-chip">${machine.info || "未設定"}</span>
             </div>
-            <p class="machine-strategy">${machine.strategy || "狙い目未設定"}</p>
           </div>
           <div class="row-actions">
-            <a class="btn-sub" href="machine.html?slug=${machine.slug}">記事</a>
             <a class="btn-main" href="checker.html?slug=${machine.slug}">チェッカー</a>
           </div>
         `;
