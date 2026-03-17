@@ -62,7 +62,6 @@
 
   <script>
     const slug = new URLSearchParams(location.search).get('slug');
-
     const fillText = (id, value) => {
       document.getElementById(id).textContent = value || '準備中';
     };
@@ -72,7 +71,6 @@
       fetch('assets/data/machine-details/' + slug + '.json').then(r => r.json())
     ]).then(([machines, details]) => {
       const machine = machines.find(x => x.slug === slug);
-
       if (!machine) {
         document.getElementById('pageTitle').textContent = '機種が見つかりません';
         return;
