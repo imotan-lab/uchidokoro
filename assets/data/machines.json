@@ -3,108 +3,108 @@
     "slug": "baki",
     "name": "バキ",
     "info": "スマスロ",
-    "strategy": "400G〜"
+    "strategy": "通常400G〜 / リセ150G〜"
   },
   {
     "slug": "banchou4",
     "name": "番長4",
     "info": "スマスロ",
-    "strategy": "準備中"
+    "strategy": "通常400G〜 / リセ200G〜"
   },
   {
     "slug": "biohazard",
     "name": "バイオハザード",
     "info": "スマスロ",
-    "strategy": "準備中"
+    "strategy": "通常600G〜 / リセ270G〜"
   },
   {
     "slug": "chibaryo2",
     "name": "チバリヨ2",
     "info": "スマスロ",
-    "strategy": "準備中"
+    "strategy": "通常700G〜 / リセ250G〜"
   },
   {
     "slug": "dumbbell",
     "name": "ダンベル",
     "info": "スマスロ",
-    "strategy": "準備中"
+    "strategy": "通常600G〜 / リセ300G〜"
   },
   {
     "slug": "goblin",
     "name": "ゴブリンスレイヤー",
     "info": "スマスロ",
-    "strategy": "準備中"
+    "strategy": "通常900G〜 / リセ350G〜"
   },
   {
     "slug": "godeater",
     "name": "ゴッドイーター",
     "info": "スマスロ",
-    "strategy": "準備中"
+    "strategy": "通常480G〜 / リセ280G〜"
   },
   {
     "slug": "hokuto",
     "name": "北斗の拳",
     "info": "スマスロ",
-    "strategy": "450G〜"
+    "strategy": "通常450G〜 / リセ250G〜"
   },
   {
     "slug": "hokuto_tensei2",
     "name": "北斗の拳 転生2",
     "info": "スマスロ",
-    "strategy": "準備中"
+    "strategy": "通常350G〜 / リセ200G〜"
   },
   {
     "slug": "kabaneri",
     "name": "カバネリ",
     "info": "スマスロ",
-    "strategy": "準備中"
+    "strategy": "通常350G〜 / リセ150G〜"
   },
   {
     "slug": "kaguya",
     "name": "かぐや様",
     "info": "スマスロ",
-    "strategy": "準備中"
+    "strategy": "通常650G〜 / リセ350G〜"
   },
   {
     "slug": "koukaku",
     "name": "攻殻機動隊",
     "info": "スマスロ",
-    "strategy": "準備中"
+    "strategy": "通常250G〜 / リセ150G〜"
   },
   {
     "slug": "monkeyv",
     "name": "モンキーV",
     "info": "スマスロ",
-    "strategy": "準備中"
+    "strategy": "通常500G〜 / リセ50G〜"
   },
   {
     "slug": "sf5",
     "name": "ストV",
     "info": "スマスロ",
-    "strategy": "準備中"
+    "strategy": "天井非搭載"
   },
   {
     "slug": "tekken6",
     "name": "鉄拳6",
     "info": "スマスロ",
-    "strategy": "準備中"
+    "strategy": "通常500pt〜 / リセ300pt〜"
   },
   {
     "slug": "tensura",
     "name": "転スラ",
     "info": "スマスロ",
-    "strategy": "準備中"
+    "strategy": "通常250G〜 / リセ150G〜"
   },
   {
     "slug": "tokyo_ghoul",
     "name": "東京喰種",
     "info": "スマスロ",
-    "strategy": "準備中"
+    "strategy": "通常400G〜 / リセ250G〜"
   },
   {
     "slug": "valvrave2",
     "name": "ヴァルヴレイヴ2",
     "info": "スマスロ",
-    "strategy": "準備中"
+    "strategy": "通常650G〜 / リセ350G〜"
   }
 ]

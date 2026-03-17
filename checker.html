@@ -52,6 +52,11 @@
       return value && Number(value) > 0 ? value + 'G〜' : '準備中';
     };
 
+    const getThresholdText = (checker, key, textKey) => {
+      if (checker && checker[textKey]) return checker[textKey];
+      return setThresholdText(checker ? checker[key] : 0);
+    };
+
     Promise.all([
       fetch('assets/data/machines.json').then(r => r.json()),
       fetch('assets/data/checkers/' + slug + '.json').then(r => r.json())
@@ -62,8 +67,8 @@
       document.getElementById('checkerTitle').textContent = machineData ? machineData.name : 'チェッカー';
       document.title = (machineData ? machineData.name + ' ' : '') + '狙い目チェッカー | 狙い目手帖';
 
-      document.getElementById('normalThreshold').textContent = setThresholdText(checker.gameThreshold);
-      document.getElementById('resetThreshold').textContent = setThresholdText(checker.resetThreshold);
+      document.getElementById('normalThreshold').textContent = getThresholdText(checker, 'gameThreshold', 'gameThresholdText');
+      document.getElementById('resetThreshold').textContent = getThresholdText(checker, 'resetThreshold', 'resetThresholdText');
 
       const notesList = document.getElementById('notesList');
       const notes = Array.isArray(checker.notes) ? checker.notes : [];
@@ -96,7 +101,9 @@
 
       if (!checkerData.gameThreshold || Number(checkerData.gameThreshold) <= 0) {
         result.className = 'judge-panel judge-panel--muted';
-        result.textContent = 'この機種の通常時狙い目はまだ準備中です。';
+        result.textContent = checkerData.gameThresholdText === '天井非搭載'
+          ? 'この機種はゲーム数天井の簡易判定対象外です。'
+          : 'この機種の通常時狙い目はまだ準備中です。';
         return;
       }
 
