@@ -25,47 +25,45 @@
     <h1 id="machineTitle" class="page-title">機種名</h1>
     <p id="heroSub" class="hero-sub">結論を先に確認できます。</p>
     <div class="hero-meta">
-      <div class="meta-chip"><span class="meta-label">結論</span><span id="heroStrategy" class="meta-value">読込中</span></div>
+      <div class="meta-chip"><span class="meta-label">狙い目</span><span id="heroStrategy" class="meta-value">読込中</span></div>
       <div class="meta-chip"><span class="meta-label">タイプ</span><span id="heroType" class="meta-value">読込中</span></div>
       <div class="meta-chip"><span class="meta-label">判定</span><span class="meta-value">チェッカーあり</span></div>
     </div>
   </section>
 
   <section class="section-stack">
-
     <article class="top-cta-bar">
-      <p class="top-cta-copy"><strong>まずはチェッカーで即判定</strong>空き台の現在G数が分かるなら、記事を読む前にそのまま判定できます。</p>
+      <p class="top-cta-copy"><strong>まずはチェッカーで即判定</strong>空き台の現在あべし数が分かるなら、記事を読む前にそのまま判定できます。</p>
       <a class="btn-main" id="checkerLinkTop" href="checker.html">今すぐ判定</a>
     </article>
+
     <article class="surface-card table-card compact-table">
-      <h2 class="section-title">結論</h2>
-      <div class="quick-grid">
-        <div class="quick-card">
-          <span class="quick-label">狙い目</span>
-          <span id="quickStrategy" class="quick-value">-</span>
-        </div>
-        <div class="quick-card">
-          <span class="quick-label">機種区分</span>
-          <span id="quickType" class="quick-value">-</span>
-        </div>
-      </div>
+      <h2 class="section-title">要点</h2>
+      <div id="quickGrid" class="quick-grid"></div>
     </article>
 
     <article class="surface-card table-card">
-      <h2 class="section-title">要点表</h2>
-      <div class="summary-strip">
-        <div class="summary-box"><span class="summary-head">狙い目</span><span id="summaryStrategy" class="summary-body">-</span></div>
-        <div class="summary-box"><span class="summary-head">天井確認</span><span class="summary-body muted-strong">詳細反映中</span></div>
-        <div class="summary-box"><span class="summary-head">推奨導線</span><span class="summary-body muted-strong">先にチェッカー</span></div>
-      </div>
+      <h2 class="section-title">基本情報</h2>
       <table class="info-table">
-        <tbody>
-          <tr><th>機種名</th><td id="infoName">-</td></tr>
-          <tr><th>タイプ</th><td id="infoType">-</td></tr>
-          <tr><th>狙い目</th><td id="infoStrategy">-</td></tr>
-          <tr><th>メモ</th><td id="infoMemo">チェッカーで現在G数を入れて確認</td></tr>
-        </tbody>
+        <tbody id="summaryBody"></tbody>
       </table>
+    </article>
+
+    <article id="zoneCard" class="surface-card table-card">
+      <h2 class="section-title">狙い目ゾーン</h2>
+      <div class="zone-table">
+        <div id="zoneRows"></div>
+      </div>
+    </article>
+
+    <article class="surface-card article-block">
+      <h2 class="section-title">本文</h2>
+      <div id="articleSections" class="article-sections"></div>
+    </article>
+
+    <article class="surface-card">
+      <h2 class="section-title">情報確認元</h2>
+      <p id="sourceText" class="source-text">-</p>
     </article>
 
     <article class="surface-card">
@@ -85,6 +83,12 @@
 <script>
 (async () => {
   const slug = new URLSearchParams(location.search).get("slug");
+  const quickGrid = document.getElementById("quickGrid");
+  const summaryBody = document.getElementById("summaryBody");
+  const articleSections = document.getElementById("articleSections");
+  const zoneRowsWrap = document.getElementById("zoneRows");
+  const zoneCard = document.getElementById("zoneCard");
+
   try {
     const res = await fetch("assets/data/machines.json");
     if (!res.ok) throw new Error("load failed");
@@ -95,22 +99,58 @@
       return;
     }
 
+    const article = machine.article || {};
     const strategy = machine.strategy || "準備中";
     const info = machine.info || "未設定";
     const href = "checker.html?slug=" + machine.slug;
 
     document.title = ((machine.seo && machine.seo.title) || machine.name) + " | 狙い目手帖";
     document.getElementById("machineTitle").textContent = machine.name;
-    document.getElementById("heroSub").textContent = strategy === "準備中" ? "この機種は現在調整中です。" : "記事より先に結論とチェッカー導線を確認できます。";
+    document.getElementById("heroSub").textContent = article.lead || (strategy === "準備中" ? "この機種は現在調整中です。" : "記事より先に結論とチェッカー導線を確認できます。");
     document.getElementById("heroStrategy").textContent = strategy;
     document.getElementById("heroType").textContent = info;
-    document.getElementById("quickStrategy").textContent = strategy;
-    document.getElementById("quickType").textContent = info;
-    document.getElementById("summaryStrategy").textContent = strategy;
-    document.getElementById("infoName").textContent = machine.name;
-    document.getElementById("infoType").textContent = info;
-    document.getElementById("infoStrategy").textContent = strategy;
-    document.getElementById("infoMemo").textContent = strategy === "準備中" ? "詳細作成中" : "通常 / リセットを選んでG数判定";
+
+    const quickItems = (article.quick && article.quick.length) ? article.quick : [
+      { label: "狙い目", value: strategy },
+      { label: "タイプ", value: info }
+    ];
+    quickGrid.innerHTML = quickItems.map(item => `
+      <div class="quick-card">
+        <span class="quick-label">${item.label}</span>
+        <span class="quick-value">${item.value}</span>
+      </div>
+    `).join("");
+
+    const summaryRows = (article.summaryRows && article.summaryRows.length) ? article.summaryRows : [
+      ["機種名", machine.name],
+      ["タイプ", info],
+      ["狙い目", strategy]
+    ];
+    summaryBody.innerHTML = summaryRows.map(row => `<tr><th>${row[0]}</th><td>${row[1]}</td></tr>`).join("");
+
+    if (article.zoneRows && article.zoneRows.length) {
+      zoneRowsWrap.innerHTML = article.zoneRows.map(row => `
+        <div class="zone-row">
+          <div class="zone-cell zone-range">${row[0]}</div>
+          <div class="zone-cell"><span class="zone-badge zone-${row[1]}">${row[1]}</span></div>
+          <div class="zone-cell zone-memo">${row[2]}</div>
+        </div>
+      `).join("");
+    } else {
+      zoneCard.style.display = "none";
+    }
+
+    const sections = (article.sections && article.sections.length) ? article.sections : [
+      { title: "結論", body: strategy }
+    ];
+    articleSections.innerHTML = sections.map(section => `
+      <section class="article-section">
+        <h3>${section.title}</h3>
+        <p>${section.body}</p>
+      </section>
+    `).join("");
+
+    document.getElementById("sourceText").textContent = (article.sources || ["内部データ"]).join(" / ");
     document.getElementById("checkerLinkNav").href = href;
     document.getElementById("checkerLinkTop").href = href;
     document.getElementById("checkerLinkCard").href = href;

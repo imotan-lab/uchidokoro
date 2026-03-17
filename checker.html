@@ -22,7 +22,7 @@
   <section class="hero-panel">
     <p class="eyebrow">CHECKER</p>
     <h1 id="checkerTitle" class="page-title">チェッカー</h1>
-    <p id="checkerLead" class="hero-sub">通常 / リセットを選んで現在G数を入力してください。</p>
+    <p id="checkerLead" class="hero-sub">通常 / リセットを選んで現在あべし数を入力してください。</p>
     <div class="hero-meta">
       <div class="meta-chip"><span class="meta-label">入力</span><span class="meta-value">G数</span></div>
       <div class="meta-chip"><span class="meta-label">判定</span><span class="meta-value">◎ ◯ △ ×</span></div>
@@ -32,7 +32,7 @@
 
   <section class="section-stack">
     <article class="top-cta-bar">
-      <p class="top-cta-copy"><strong>通常かリセットかを先に選択</strong>入力はG数だけ。判定記号と基準表を上下で見比べやすくしています。</p>
+      <p class="top-cta-copy"><strong>通常かリセットかを先に選択</strong>入力はあべし数だけ。判定記号と基準表を上下で見比べやすくしています。</p>
       <a id="articleLinkTop" class="btn-sub" href="machine.html">記事を見る</a>
     </article>
     <article class="checker-card">
@@ -48,12 +48,12 @@
         </div>
         <div class="control-row">
           <div>
-            <label class="visually-hidden" for="game">現在G数</label>
-            <input id="game" class="game-input" inputmode="numeric" type="number" placeholder="現在G数">
+            <label class="visually-hidden" for="game">現在あべし数</label>
+            <input id="game" class="game-input" inputmode="numeric" type="number" placeholder="現在あべし数">
           </div>
           <button id="judgeBtn" class="btn-main" type="button">判定する</button>
         </div>
-        <p class="hint-text">データが通常 / リセット別に未設定の機種は、共通基準で判定します。</p>
+        <p class="hint-text">通常 / リセット別に差が出ていない機種は共通基準で表示します。</p>
       </div>
     </article>
 
@@ -62,8 +62,8 @@
         <p id="resultTitle" class="result-title">判定待ち</p>
         <div id="resultBadge" class="result-badge result-mid">△</div>
       </div>
-      <p id="resultCopy" class="result-copy">G数を入力して判定してください。</p>
-      <p id="resultNote" class="result-note">最終判断は液晶・示唆・当日状況を優先してください。</p>
+      <p id="resultCopy" class="result-copy">あべし数を入力して判定してください。</p>
+      <p id="resultNote" class="result-note">最終判断は液晶・前兆・示唆・当日状況を優先してください。</p>
     </article>
 
     <article class="surface-card table-card compact-table">
@@ -110,7 +110,7 @@ function evaluate(game, target){
     return { symbol:"△", title:"準備中", copy:"この機種はまだ詳細設定前です。", className:"result-mid" };
   }
   if (!Number.isFinite(game) || game < 0) {
-    return { symbol:"△", title:"入力待ち", copy:"現在G数を正しく入力してください。", className:"result-mid" };
+    return { symbol:"△", title:"入力待ち", copy:"現在あべし数を正しく入力してください。", className:"result-mid" };
   }
   if (game >= target + 100) {
     return { symbol:"◎", title:"強め", copy:`${target}G基準を大きく超えています。`, className:"result-ok" };
@@ -119,9 +119,9 @@ function evaluate(game, target){
     return { symbol:"◯", title:"狙い目", copy:`${target}G基準に到達しています。`, className:"result-ok" };
   }
   if (game >= Math.max(target - 50, 0)) {
-    return { symbol:"△", title:"もう少し", copy:`基準の ${target}G まであと少しです。`, className:"result-caution" };
+    return { symbol:"△", title:"もう少し", copy:`目安の ${target}G まであと少しです。`, className:"result-caution" };
   }
-  return { symbol:"×", title:"まだ早い", copy:`現状は ${target}G からを基準にしてください。`, className:"result-ng" };
+  return { symbol:"×", title:"まだ早い", copy:`現状は ${target}G からを目安にしてください。`, className:"result-ng" };
 }
 
 (function(){
@@ -180,7 +180,7 @@ function evaluate(game, target){
       document.title = currentMachine.name + " チェッカー | 狙い目手帖";
       titleEl.textContent = currentMachine.name + " チェッカー";
       leadEl.textContent = currentMachine.strategy && currentMachine.strategy !== "準備中"
-        ? "通常 / リセットを選んで現在G数を入力してください。"
+        ? "通常 / リセットを選んで現在あべし数を入力してください。"
         : "この機種は現在データ調整中です。";
 
       const normalTarget = getThreshold(currentMachine, "normal");
