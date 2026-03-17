@@ -14,13 +14,14 @@ label{display:block;margin-bottom:10px;color:#c9c0ae;font-weight:700}
 input{width:100%;height:54px;padding:0 16px;border-radius:14px;border:1px solid #5d5132;background:#0d0d0f;color:#f3efe4;font-size:18px}
 button{margin-top:20px;min-height:54px;padding:0 24px;border:none;border-radius:999px;background:linear-gradient(180deg,#e5c56e 0%,#b98c24 100%);color:#17120a;font-size:18px;font-weight:900;cursor:pointer}
 #result{margin-top:20px;min-height:80px;padding:18px;border-radius:16px;border:1px solid rgba(201,161,61,.24);background:rgba(0,0,0,.22);font-size:28px;font-weight:800}
+#memo{margin-top:16px;color:#c9c0ae;line-height:1.8}
 small{color:#c9a13d}
 </style>
 </head>
 <body>
 <div class="wrap">
   <section class="hero">
-    <small>CHECKER FIX 2</small>
+    <small>CHECKER</small>
     <h1 id="title">チェッカー</h1>
   </section>
 
@@ -29,27 +30,38 @@ small{color:#c9a13d}
     <input id="game" type="number" placeholder="例: 400">
     <button id="btn" type="button">判定する</button>
     <div id="result">ここに結果が表示されます。</div>
+    <div id="memo"></div>
   </section>
 </div>
 
 <script>
 (async function () {
   const slug = new URLSearchParams(location.search).get("slug");
-  const res = await fetch("assets/data/machines.json");
-  const data = await res.json();
-  const m = data.find(v => v.slug === slug);
+  const [machinesRes, checkerRes] = await Promise.all([
+    fetch("assets/data/machines.json"),
+    fetch("assets/data/checkers/" + slug + ".json").catch(() => null)
+  ]);
+  const machines = await machinesRes.json();
+  const m = machines.find(v => v.slug === slug);
 
   if (!m) {
     document.getElementById("title").textContent = "機種が見つかりません";
     return;
   }
 
+  let checker = {};
+  try {
+    if (checkerRes && checkerRes.ok) checker = await checkerRes.json();
+  } catch (e) {}
+
   document.title = m.name + " チェッカー";
   document.getElementById("title").textContent = m.name + " チェッカー";
 
-  const target = Number(m.checker?.target ?? 0);
-  const ok = m.checker?.ok ?? "OK";
-  const ng = m.checker?.ng ?? "NG";
+  const target = Number(checker.target ?? 0);
+  const ok = checker.ok ?? "OK";
+  const ng = checker.ng ?? "NG";
+  const memo = checker.memo ?? "";
+  document.getElementById("memo").textContent = memo;
 
   document.getElementById("btn").addEventListener("click", function () {
     const g = Number(document.getElementById("game").value || 0);

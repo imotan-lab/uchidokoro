@@ -6,12 +6,7 @@
       "title": "バキ 狙い目"
     },
     "info": "スマスロ",
-    "strategy": "400G〜",
-    "checker": {
-      "target": 400,
-      "ok": "狙い目OK",
-      "ng": "まだ打てない"
-    }
+    "strategy": "400G〜"
   },
   {
     "slug": "banchou4",
@@ -20,12 +15,7 @@
       "title": "番長4 狙い目"
     },
     "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
+    "strategy": "準備中"
   },
   {
     "slug": "biohazard",
@@ -34,12 +24,7 @@
       "title": "バイオハザード 狙い目"
     },
     "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
+    "strategy": "準備中"
   },
   {
     "slug": "chibaryo2",
@@ -48,12 +33,7 @@
       "title": "チバリヨ2 狙い目"
     },
     "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
+    "strategy": "準備中"
   },
   {
     "slug": "dumbbell",
@@ -62,12 +42,7 @@
       "title": "ダンベル 狙い目"
     },
     "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
+    "strategy": "準備中"
   },
   {
     "slug": "goblin",
@@ -76,12 +51,7 @@
       "title": "ゴブリンスレイヤー 狙い目"
     },
     "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
+    "strategy": "準備中"
   },
   {
     "slug": "godeater",
@@ -90,12 +60,7 @@
       "title": "ゴッドイーター 狙い目"
     },
     "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
+    "strategy": "準備中"
   },
   {
     "slug": "hokuto",
@@ -104,12 +69,7 @@
       "title": "北斗の拳 狙い目"
     },
     "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
+    "strategy": "準備中"
   },
   {
     "slug": "hokuto_tensei2",
@@ -118,12 +78,7 @@
       "title": "北斗の拳 転生2 狙い目"
     },
     "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
+    "strategy": "準備中"
   },
   {
     "slug": "kabaneri",
@@ -132,12 +87,7 @@
       "title": "カバネリ 狙い目"
     },
     "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
+    "strategy": "準備中"
   },
   {
     "slug": "kaguya",
@@ -146,12 +96,7 @@
       "title": "かぐや様 狙い目"
     },
     "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
+    "strategy": "準備中"
   },
   {
     "slug": "koukaku",
@@ -160,12 +105,7 @@
       "title": "攻殻機動隊 狙い目"
     },
     "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
+    "strategy": "準備中"
   },
   {
     "slug": "monkeyv",
@@ -174,12 +114,7 @@
       "title": "モンキーV 狙い目"
     },
     "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
+    "strategy": "準備中"
   },
   {
     "slug": "sf5",
@@ -188,12 +123,7 @@
       "title": "ストV 狙い目"
     },
     "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
+    "strategy": "準備中"
   },
   {
     "slug": "tekken6",
@@ -202,12 +132,7 @@
       "title": "鉄拳6 狙い目"
     },
     "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
+    "strategy": "準備中"
   },
   {
     "slug": "tensura",
@@ -216,12 +141,7 @@
       "title": "転スラ 狙い目"
     },
     "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
+    "strategy": "準備中"
   },
   {
     "slug": "tokyo_ghoul",
@@ -230,12 +150,7 @@
       "title": "東京喰種 狙い目"
     },
     "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
+    "strategy": "準備中"
   },
   {
     "slug": "valvrave2",
@@ -244,11 +159,6 @@
       "title": "ヴァルヴレイヴ2 狙い目"
     },
     "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
+    "strategy": "準備中"
   }
 ]
