@@ -60,7 +60,7 @@ button, input, select { font: inherit; }
   padding: 8px 0;
 }
 .brand { display: block; flex-shrink: 0; }
-.brand img { height: 52px; width: auto; display: block; }
+.brand img { height: 44px; width: auto; display: block; max-width: 160px; object-fit: contain; }
 
 .header-search-wrap {
   position: relative;
@@ -314,7 +314,7 @@ button, input, select { font: inherit; }
 
 /* RESPONSIVE */
 @media (max-width: 480px) {
-  .brand img { height: 40px; }
+  .brand img { height: 38px; max-width: 130px; }
   .header-search-wrap { max-width: 150px; }
   .summary-grid { gap: 12px; }
   .info-table th { width: 80px; }
