@@ -139,19 +139,24 @@ button, input, select { font: inherit; }
 
 /* INDEX PAGE */
 .index-toolbar { padding: 14px 0; }
-.machine-list { display: grid; gap: 8px; }
-.list-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-  background: var(--panel);
+.machine-list {
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
   cursor: pointer;
 }
-.list-row:hover { border-color: var(--gold); }
+.list-row:last-child { border-bottom: none; }
+.list-row:hover { background: var(--bg2); }
 .machine-name { margin: 0; font-size: 17px; font-weight: 800; color: var(--text); }
 .machine-sub { margin-top: 4px; }
 .type-chip {
@@ -347,3 +352,7 @@ button, input, select { font: inherit; }
   width: 100%;
 }
 .btn-show-all:hover { border-color: var(--gold); }
+
+/* LIST RANK */
+.list-rank { font-size: 11px; color: var(--muted); min-width: 18px; text-align: right; }
+.list-arrow { font-size: 14px; color: var(--muted); }
