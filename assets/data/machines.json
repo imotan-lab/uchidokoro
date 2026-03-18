@@ -1,9 +1,107 @@
 [
   {
+    "slug": "baki",
+    "name": "Lバキ 強くなりたくば喰らえ!!!",
+    "seo": {
+      "title": "Lバキ 強くなりたくば喰らえ!!! 狙い目"
+    },
+    "info": "スマスロ",
+    "strategy": "400G〜",
+    "checker": {
+      "target": 400,
+      "ok": "狙い目OK",
+      "ng": "まだ打てない"
+    }
+  },
+  {
+    "slug": "banchou4",
+    "name": "押忍！番長4",
+    "seo": {
+      "title": "押忍！番長4 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "biohazard",
+    "name": "スマスロ バイオハザード5",
+    "seo": {
+      "title": "スマスロ バイオハザード5 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "chibaryo2",
+    "name": "チバリヨ2",
+    "seo": {
+      "title": "チバリヨ2 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "dumbbell",
+    "name": "Lパチスロ ダンベル何キロ持てる?",
+    "seo": {
+      "title": "Lパチスロ ダンベル何キロ持てる? 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "goblin",
+    "name": "スマスロ ゴブリンスレイヤーII",
+    "seo": {
+      "title": "スマスロ ゴブリンスレイヤーII 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "godeater",
+    "name": "スマスロ ゴッドイーター リザレクション",
+    "seo": {
+      "title": "スマスロ ゴッドイーター リザレクション 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
     "slug": "hokuto",
     "name": "スマスロ北斗の拳",
     "seo": {
-      "title": "スマスロ北斗の拳 狙い目・天井・やめどき"
+      "title": "スマスロ北斗の拳 狙い目"
     },
     "info": "スマスロAT",
     "strategy": "等価600G〜 / 5.6枚650G〜 / 現金700G〜",
@@ -37,9 +135,9 @@
   },
   {
     "slug": "hokuto_tensei2",
-    "name": "北斗の拳 転生2",
+    "name": "スマスロ 北斗の拳 転生の章2",
     "seo": {
-      "title": "北斗の拳 転生2 狙い目"
+      "title": "スマスロ 北斗の拳 転生の章2 狙い目"
     },
     "info": "準備中",
     "strategy": "準備中",
@@ -51,121 +149,9 @@
   },
   {
     "slug": "kabaneri",
-    "name": "カバネリ",
+    "name": "スマスロ 甲鉄城のカバネリ 海門(うなと)決戦",
     "seo": {
-      "title": "カバネリ 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
-    "slug": "tokyo_ghoul",
-    "name": "東京喰種",
-    "seo": {
-      "title": "東京喰種 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
-    "slug": "monkeyv",
-    "name": "モンキーV",
-    "seo": {
-      "title": "モンキーV 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
-    "slug": "valvrave2",
-    "name": "ヴァルヴレイヴ2",
-    "seo": {
-      "title": "ヴァルヴレイヴ2 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
-    "slug": "biohazard",
-    "name": "バイオハザード",
-    "seo": {
-      "title": "バイオハザード 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
-    "slug": "godeater",
-    "name": "ゴッドイーター",
-    "seo": {
-      "title": "ゴッドイーター 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
-    "slug": "koukaku",
-    "name": "攻殻機動隊",
-    "seo": {
-      "title": "攻殻機動隊 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
-    "slug": "tekken6",
-    "name": "鉄拳6",
-    "seo": {
-      "title": "鉄拳6 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
-    "slug": "banchou4",
-    "name": "番長4",
-    "seo": {
-      "title": "番長4 狙い目"
+      "title": "スマスロ 甲鉄城のカバネリ 海門(うなと)決戦 狙い目"
     },
     "info": "準備中",
     "strategy": "準備中",
@@ -177,9 +163,37 @@
   },
   {
     "slug": "kaguya",
-    "name": "かぐや様",
+    "name": "パチスロ かぐや様は告らせたい",
     "seo": {
-      "title": "かぐや様 狙い目"
+      "title": "パチスロ かぐや様は告らせたい 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "koukaku",
+    "name": "スマスロ 攻殻機動隊",
+    "seo": {
+      "title": "スマスロ 攻殻機動隊 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "monkeyv",
+    "name": "スマスロモンキーターンV",
+    "seo": {
+      "title": "スマスロモンキーターンV 狙い目"
     },
     "info": "準備中",
     "strategy": "準備中",
@@ -191,9 +205,9 @@
   },
   {
     "slug": "sf5",
-    "name": "ストV",
+    "name": "スマスロ ストリートファイターV 挑戦者の道",
     "seo": {
-      "title": "ストV 狙い目"
+      "title": "スマスロ ストリートファイターV 挑戦者の道 狙い目"
     },
     "info": "準備中",
     "strategy": "準備中",
@@ -204,10 +218,10 @@
     }
   },
   {
-    "slug": "chibaryo2",
-    "name": "チバリヨ2",
+    "slug": "tekken6",
+    "name": "スマスロ鉄拳6",
     "seo": {
-      "title": "チバリヨ2 狙い目"
+      "title": "スマスロ鉄拳6 狙い目"
     },
     "info": "準備中",
     "strategy": "準備中",
@@ -215,55 +229,41 @@
       "target": 99999999,
       "ok": "準備中",
       "ng": "準備中"
-    }
-  },
-  {
-    "slug": "goblin",
-    "name": "ゴブリンスレイヤー",
-    "seo": {
-      "title": "ゴブリンスレイヤー 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
-    "slug": "dumbbell",
-    "name": "ダンベル",
-    "seo": {
-      "title": "ダンベル 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
-    "slug": "baki",
-    "name": "バキ",
-    "seo": {
-      "title": "バキ 狙い目"
-    },
-    "info": "スマスロ",
-    "strategy": "400G〜",
-    "checker": {
-      "target": 400,
-      "ok": "狙い目OK",
-      "ng": "まだ打てない"
     }
   },
   {
     "slug": "tensura",
-    "name": "転スラ",
+    "name": "スマスロ転生したらスライムだった件",
     "seo": {
-      "title": "転スラ 狙い目"
+      "title": "スマスロ転生したらスライムだった件 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "tokyo_ghoul",
+    "name": "L 東京喰種",
+    "seo": {
+      "title": "L 東京喰種 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "valvrave2",
+    "name": "Lパチスロ 革命機ヴァルヴレイヴ2",
+    "seo": {
+      "title": "Lパチスロ 革命機ヴァルヴレイヴ2 狙い目"
     },
     "info": "準備中",
     "strategy": "準備中",
