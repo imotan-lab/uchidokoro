@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>うちどころ | 機種一覧</title>
+<meta name="description" content="スマホで使いやすいスロット狙い目一覧。機種名検索から記事とチェッカーへすぐ移動できます。">
+<link rel="stylesheet" href="assets/css/practical.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html">
+      <img src="assets/img/logo.png" alt="うちどころ。">
+    </a>
+    <div class="header-search-wrap">
+      <span class="header-search-icon">🔍</span>
+      <input id="machineSearch" class="header-search-input" type="search" placeholder="機種を検索">
+      <div id="headerDropdown" class="header-dropdown"></div>
+    </div>
+  </div>
+</header>
+<main class="site-main">
+  <div class="index-toolbar">
+    <label class="visually-hidden" for="machineSearch">機種名検索</label>
+  </div>
+  <section id="machineList" class="machine-list"></section>
+  <div id="machineEmpty" class="empty-card">該当する機種がありません。</div>
+</main>
+<footer class="site-footer">
+  <div class="site-footer-inner">
+    <div class="footer-links">
+      <a href="contact.html">お問い合わせ</a>
+      <a href="privacy.html">プライバシーポリシー</a>
+    </div>
+    <p class="footer-copy">© 2026 うちどころ</p>
+  </div>
+</footer>
+<script>
+function normalizeText(value){
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[\u3041-\u3096]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 0x60))
+    .replace(/[\s\-\_ー]/g, "");
+}
+function buildKeywords(machine){
+  const base = [machine.name, machine.slug, machine.info, machine.strategy];
+  const map = {
+    hokuto: ["ほくと","北斗","北斗の拳","スマスロ北斗","スマスロ北斗の拳"],
+    hokuto_tensei2: ["転生","てんせい","北斗転生2","ほくとてんせい2"],
+    tokyo_ghoul: ["とうきょうぐーる","ぐーる","グール"],
+    sf5: ["すと5","スト5","streetfighter5"],
+    monkeyv: ["モンキー","monkey","モンキーターン"],
+    godeater: ["ごっどいーたー","ge","god eater"],
+    goblin: ["ゴブスレ","ごぶすれ"],
+    valvrave2: ["vvv","ヴヴヴ2","v2","ヴァルヴレイヴ"],
+    kabaneri: ["かばねり","甲鉄城"],
+    kaguya: ["かぐや","かぐやさま"],
+    koukaku: ["こうかく","攻殻"],
+    tensura: ["てんすら"],
+    tekken6: ["てっけん","鉄拳"],
+    chibaryo2: ["ちばりよ","チバリヨ"],
+    banchou4: ["ばんちょう4","番長"],
+    biohazard: ["ばいお","バイオ"],
+    dumbbell: ["だんべる"],
+    baki: ["ばき"]
+  };
+  return [...base, ...(map[machine.slug] || [])].map(normalizeText).join("|");
+}
+(async function loadMachines(){
+  const list = document.getElementById("machineList");
+  const search = document.getElementById("machineSearch");
+  const dropdown = document.getElementById("headerDropdown");
+  const empty = document.getElementById("machineEmpty");
+  try {
+    const res = await fetch("assets/data/machines.json");
+    if (!res.ok) throw new Error("load failed");
+    const machines = await res.json();
+    const readyMachines = machines.filter(m => m.strategy && m.strategy !== "準備中");
+    const prepared = readyMachines.map(machine => ({ ...machine, __keywords: buildKeywords(machine) }));
+    function render(keyword = "") {
+      const query = normalizeText(keyword);
+      const filtered = prepared.filter(machine => !query || machine.__keywords.includes(query));
+      list.innerHTML = "";
+      if (!filtered.length) { empty.style.display = "block"; return; }
+      empty.style.display = "none";
+      filtered.forEach(machine => {
+        const row = document.createElement("article");
+        row.className = "list-row";
+        row.addEventListener("click", () => { location.href = "machine.html?slug=" + machine.slug; });
+        row.innerHTML = `
+          <div class="machine-main">
+            <h2 class="machine-name">${machine.name}</h2>
+            <div class="machine-sub"><span class="type-chip">${machine.info || ""}</span></div>
+          </div>
+          <div class="row-arrow">›</div>
+        `;
+        list.appendChild(row);
+      });
+    }
+    // ヘッダー検索（一覧ページ）
+    search.addEventListener("input", e => {
+      const q = normalizeText(e.target.value.trim());
+      render(e.target.value);
+      if (!q) { dropdown.classList.remove("show"); return; }
+      const hits = prepared.filter(m => m.__keywords.includes(q));
+      dropdown.innerHTML = hits.length
+        ? hits.map(m => `<a class="dropdown-item" href="machine.html?slug=${m.slug}">${m.name}</a>`).join("")
+        : '<div class="dropdown-empty">見つかりません</div>';
+      dropdown.classList.add("show");
+    });
+    search.addEventListener("blur", () => setTimeout(() => dropdown.classList.remove("show"), 150));
+    render();
+  } catch (error) {
+    empty.style.display = "block";
+    empty.textContent = "機種一覧の読み込みに失敗しました。";
+  }
+})();
+</script>
+</body>
+</html>
