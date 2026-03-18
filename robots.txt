@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://imotan-lab.github.io/neraime-techou/sitemap.xml
+Sitemap: https://imotan-lab.github.io/uchidokoro/sitemap.xml
