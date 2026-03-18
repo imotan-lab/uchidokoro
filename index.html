@@ -26,8 +26,15 @@
     <div class="count-box"><span id="heroCount">--</span><span id="machineCount" class="visually-hidden">読込中</span><span aria-hidden="true">機種</span></div>
   </section>
 
+  <div id="listHeader" class="list-header">
+    <p class="list-header-title">人気機種 TOP10</p>
+    <p class="list-header-sub">直近7日間のYouTube動画数をもとに毎日自動更新</p>
+  </div>
   <section id="machineList" class="machine-list"></section>
   <div id="machineEmpty" class="empty-card">該当する機種がありません。</div>
+  <div id="showAllWrap" class="show-all-wrap">
+    <button id="showAllBtn" class="btn-show-all">全<span id="totalCount">--</span>機種を見る ›</button>
+  </div>
 </main>
 
 <footer>
@@ -87,14 +94,39 @@ function buildKeywords(machine){
     const prepared = machines.map(machine => ({ ...machine, __keywords: buildKeywords(machine) }));
 
     const TOP_COUNT = 10;
+    let showAll = false;
+
+    const listHeader = document.getElementById("listHeader");
+    const showAllWrap = document.getElementById("showAllWrap");
+    const showAllBtn = document.getElementById("showAllBtn");
+    const totalCountEl = document.getElementById("totalCount");
+
+    showAllBtn.addEventListener("click", () => {
+      showAll = true;
+      showAllWrap.style.display = "none";
+      listHeader.querySelector(".list-header-title").textContent = "全機種一覧";
+      listHeader.querySelector(".list-header-sub").textContent = "";
+      render(search.value);
+    });
 
     function render(keyword = "") {
       const query = normalizeText(keyword);
       const allFiltered = prepared.filter(machine => !query || machine.__keywords.includes(query));
-      // 検索時は全件、非検索時は上位10機種のみ表示
-      const filtered = query ? allFiltered : allFiltered.slice(0, TOP_COUNT);
+      // 検索時・全件表示時は全件、それ以外は上位10機種のみ
+      const filtered = (query || showAll) ? allFiltered : allFiltered.slice(0, TOP_COUNT);
       count.textContent = prepared.length + "機種";
       heroCount.textContent = prepared.length + "機種";
+      totalCountEl.textContent = prepared.length;
+      // 検索中・全件表示中はヘッダーとボタンを制御
+      if (query) {
+        listHeader.querySelector(".list-header-title").textContent = `「${keyword}」の検索結果`;
+        listHeader.querySelector(".list-header-sub").textContent = allFiltered.length + "件";
+        showAllWrap.style.display = "none";
+      } else if (!showAll) {
+        listHeader.querySelector(".list-header-title").textContent = "人気機種 TOP10";
+        listHeader.querySelector(".list-header-sub").textContent = "直近7日間のYouTube動画数をもとに毎日自動更新";
+        showAllWrap.style.display = allFiltered.length > TOP_COUNT ? "block" : "none";
+      }
       list.innerHTML = "";
       if (!filtered.length) {
         empty.style.display = "block";
