@@ -323,8 +323,9 @@ button, input, select { font: inherit; }
 .settei-table { width: 100%; border-collapse: collapse; border: 1px solid var(--line2); margin-bottom: 4px; }
 .settei-table th { background: var(--panel); color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; padding: 8px 10px; border: 1px solid var(--line2); text-align: left; }
 .settei-table td { color: var(--text); font-size: 13px; font-weight: 700; padding: 9px 10px; border: 1px solid var(--line2); line-height: 1.5; vertical-align: middle; }
+.settei-table td:last-child { white-space: nowrap; width: 1%; }
 .settei-note { font-size: 11px; color: var(--muted); margin: 4px 0 0; }
-.settei-badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 700; }
+.settei-badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 700; white-space: nowrap; }
 .settei-hint { color: var(--muted); font-size: 11px; font-weight: 400; }
 .settei-weak { background: rgba(245,185,65,.12); color: var(--gold); border: 1px solid var(--gold-line); }
 .settei-mid { background: rgba(245,185,65,.22); color: var(--gold); border: 1px solid var(--gold-line); }
