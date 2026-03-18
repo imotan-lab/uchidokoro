@@ -16,55 +16,49 @@
       <input id="headerSearch" class="header-search-input" type="search" placeholder="機種を検索">
       <div id="headerDropdown" class="header-dropdown"></div>
     </div>
-    <nav class="nav-links">
-      <a id="articleLinkNav" href="machine.html">記事</a>
+    <nav style="flex-shrink:0;">
+      <a id="articleLinkNav" href="machine.html" style="color:var(--muted);font-size:13px;font-weight:700;">記事</a>
     </nav>
   </div>
 </header>
 <main class="site-main">
-  <section class="hero-panel">
-    <p class="eyebrow"><a href="index.html" style="color:var(--muted);text-decoration:none;">‹ 一覧</a></p>
+
+  <section class="article-hero">
+    <p class="eyebrow"><a href="index.html" style="color:var(--muted);text-decoration:none;">‹ 一覧</a>&nbsp;&nbsp;CHECKER</p>
     <h1 id="checkerTitle" class="page-title">チェッカー</h1>
   </section>
 
-  <section class="section-stack">
-    <article class="checker-card">
-      <div class="control-grid">
-        <div>
-          <div class="mode-toggle">
-            <input id="modeNormal" name="mode" type="radio" value="normal" checked>
-            <label for="modeNormal">通常</label>
-            <input id="modeReset" name="mode" type="radio" value="reset">
-            <label for="modeReset">リセット</label>
-          </div>
-        </div>
-        <div class="control-row">
-          <div>
-            <label class="visually-hidden" for="game">現在G数</label>
-            <input id="game" class="game-input" inputmode="numeric" type="number" placeholder="現在G数">
-          </div>
-        </div>
-        <p id="hintText" class="hint-text">データが通常 / リセット別に未設定の機種は、共通基準で判定します。</p>
-      </div>
-    </article>
+  <section class="article-section-wrap">
 
-    <article id="resultCard" class="result-card">
-      <div class="result-top">
-        <p id="resultTitle" class="result-title">判定待ち</p>
-        <div id="resultBadge" class="result-badge result-mid">△</div>
+    <div class="article-block">
+      <p class="block-label">▶ 狙い目チェッカー</p>
+      <div class="checker-card">
+        <div class="mode-toggle">
+          <input id="modeNormal" name="mode" type="radio" value="normal" checked>
+          <label for="modeNormal">通常</label>
+          <input id="modeReset" name="mode" type="radio" value="reset">
+          <label for="modeReset">リセット</label>
+        </div>
+        <label class="visually-hidden" for="game">現在G数</label>
+        <input id="game" class="game-input" inputmode="numeric" type="number" placeholder="現在G数を入力">
+        <div id="checkerResult" class="checker-result result-wait">
+          <p class="result-label">判定</p>
+          <p class="result-text">G数を入力してください</p>
+        </div>
+        <p id="hintText" class="hint-text"></p>
       </div>
-      <p id="resultCopy" class="result-copy">入力中に自動で判定します。</p>
-      <p id="resultNote" class="result-note">最終判断は液晶・示唆・当日状況を優先してください。</p>
-    </article>
+    </div>
 
-    <article class="surface-card">
-      <h2 class="section-title">移動</h2>
-      <div class="action-stack">
-        <a id="articleLinkCard" class="btn-sub" href="machine.html">記事を見る</a>
-        <a class="btn-main" href="index.html">一覧へ戻る</a>
+    <div class="article-block">
+      <p class="block-label">▶ 移動</p>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <a id="articleLinkCard" class="btn-show-all" href="machine.html" style="text-align:center;">記事を見る</a>
+        <a href="index.html" class="btn-show-all" style="text-align:center;color:var(--muted);">一覧へ戻る</a>
       </div>
-    </article>
+    </div>
+
   </section>
+
 </main>
 
 <footer>
@@ -78,7 +72,6 @@
 </footer>
 
 <script>
-// ヘッダー検索
 (function(){
   function normalizeText(value){
     return String(value || "")
@@ -86,143 +79,100 @@
       .replace(/[\u3041-\u3096]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 0x60))
       .replace(/[\s\-\_ー]/g, "");
   }
-
   const searchInput = document.getElementById("headerSearch");
   const dropdown = document.getElementById("headerDropdown");
   let allMachines = [];
-
-  fetch("assets/data/machines.json")
-    .then(res => res.json())
-    .then(machines => { allMachines = machines; });
-
+  fetch("assets/data/machines.json").then(r => r.json()).then(m => { allMachines = m; });
   searchInput.addEventListener("input", function(){
     const query = normalizeText(this.value);
     dropdown.innerHTML = "";
     if (!query) { dropdown.style.display = "none"; return; }
-
     const matched = allMachines.filter(m => {
-      const keywords = [m.name, m.slug, ...(m.aliases || [])].map(normalizeText).join("|");
-      return keywords.includes(query);
+      return [m.name, m.slug, ...(m.aliases||[])].map(normalizeText).join("|").includes(query);
     }).slice(0, 6);
-
     if (!matched.length) { dropdown.style.display = "none"; return; }
-
     matched.forEach(m => {
-      const item = document.createElement("a");
-      item.className = "header-dropdown-item";
-      item.href = "checker.html?slug=" + m.slug;
-      item.textContent = m.name;
-      dropdown.appendChild(item);
+      const a = document.createElement("a");
+      a.className = "header-dropdown-item";
+      a.href = "checker.html?slug=" + m.slug;
+      a.textContent = m.name;
+      dropdown.appendChild(a);
     });
     dropdown.style.display = "block";
   });
-
-  document.addEventListener("click", function(e){
-    if (!e.target.closest(".header-search-wrap")) dropdown.style.display = "none";
-  });
+  document.addEventListener("click", e => { if (!e.target.closest(".header-search-wrap")) dropdown.style.display = "none"; });
 })();
 
 function readModeConfig(machine, mode){
-  const checker = machine.checker || {};
-  if (checker[mode] && typeof checker[mode] === "object") return checker[mode];
-  return checker;
+  const c = machine.checker || {};
+  return (c[mode] && typeof c[mode] === "object") ? c[mode] : c;
 }
 
-function thresholdText(config, unit){
-  if (!config || (!Number.isFinite(config.caution) && !Number.isFinite(config.target))) return "準備中";
-  if (Number.isFinite(config.excellent) && Number.isFinite(config.good) && Number.isFinite(config.caution)) {
-    return `${config.caution}${unit}〜 △ / ${config.good}${unit}〜 ◯ / ${config.excellent}${unit}〜 ◎`;
-  }
-  if (Number.isFinite(config.target)) return `${config.target}${unit}〜`;
-  return "準備中";
-}
-
-function evaluate(game, config, unit){
-  if (!config || (!Number.isFinite(config.caution) && !Number.isFinite(config.target))) {
-    return { symbol:"△", title:"準備中", copy:"この機種はまだ詳細設定前です。", className:"result-mid" };
+function evaluate(game, config){
+  if (!config || (!Number.isFinite(config.good) && !Number.isFinite(config.target))) {
+    return { cls:"result-wait", text:"準備中" };
   }
   if (!Number.isFinite(game) || game < 0) {
-    return { symbol:"△", title:"入力待ち", copy:`現在${unit === "G" ? "G数" : unit}を正しく入力してください。`, className:"result-mid" };
+    return { cls:"result-wait", text:"G数を入力してください" };
   }
   if (Number.isFinite(config.excellent) && game >= config.excellent) {
-    return { symbol:"◎", title:"優先して確認", copy:`${config.excellent}${unit}以上です。かなり打ちやすいラインです。`, className:"result-ok" };
+    return { cls:"result-ok", text:"◎ 狙い目OK！積極的に着席を検討" };
   }
   if (Number.isFinite(config.good) && game >= config.good) {
-    return { symbol:"◯", title:"狙い目", copy:`${config.good}${unit}以上です。候補として見られます。`, className:"result-ok" };
+    return { cls:"result-ok", text:"◯ 狙い目OK　交換率次第で候補" };
   }
-  const caution = Number.isFinite(config.caution) ? config.caution : config.target;
-  if (Number.isFinite(caution) && game >= caution) {
-    return { symbol:"△", title:"条件次第", copy:`${caution}${unit}以上です。交換率や状況しだいで候補です。`, className:"result-caution" };
+  const t = Number.isFinite(config.caution) ? config.caution : (config.target || config.good);
+  if (Number.isFinite(t) && game >= t) {
+    return { cls:"result-wait", text:`△ 条件次第　${t}G以上で候補` };
   }
-  return { symbol:"×", title:"まだ早い", copy:`現状は${caution}${unit}以上を目安にしてください。`, className:"result-ng" };
+  const thr = Number.isFinite(config.good) ? config.good : t;
+  return { cls:"result-ng", text:`× まだ早い　${thr}G以上を目安に` };
 }
 
 (function(){
-  const params = new URLSearchParams(location.search);
-  const slug = params.get("slug");
+  const slug = new URLSearchParams(location.search).get("slug");
   const titleEl = document.getElementById("checkerTitle");
   const articleLinkNav = document.getElementById("articleLinkNav");
   const articleLinkCard = document.getElementById("articleLinkCard");
-  const resultTitle = document.getElementById("resultTitle");
-  const resultBadge = document.getElementById("resultBadge");
-  const resultCopy = document.getElementById("resultCopy");
-  const resultNote = document.getElementById("resultNote");
+  const checkerResult = document.getElementById("checkerResult");
   const gameInput = document.getElementById("game");
   const hintText = document.getElementById("hintText");
   let currentMachine = null;
 
-  function applyResult(result){
-    resultTitle.textContent = result.title;
-    resultCopy.textContent = result.copy;
-    resultBadge.textContent = result.symbol;
-    resultBadge.className = "result-badge " + result.className;
-  }
-
-  function currentMode(){
-    return document.querySelector('input[name="mode"]:checked').value;
+  function applyResult(r){
+    checkerResult.className = "checker-result " + r.cls;
+    checkerResult.querySelector(".result-text").textContent = r.text;
   }
 
   function judge(){
     if (!currentMachine) return;
-    const mode = currentMode();
-    const checker = currentMachine.checker || {};
-    const unit = checker.unit || "G";
+    const mode = document.querySelector('input[name="mode"]:checked').value;
     const config = readModeConfig(currentMachine, mode);
-    const game = Number(gameInput.value);
-    applyResult(evaluate(game, config, unit));
-    resultNote.textContent = config.note || "最終判断は液晶・示唆・当日状況を優先してください。";
-    hintText.textContent = config.note || "データが通常 / リセット別に未設定の機種は、共通基準で判定します。";
+    applyResult(evaluate(Number(gameInput.value), config));
+    hintText.textContent = config.note || "";
   }
 
   fetch("assets/data/machines.json")
-    .then(res => { if (!res.ok) throw new Error("load failed"); return res.json(); })
+    .then(r => { if (!r.ok) throw new Error(); return r.json(); })
     .then(machines => {
-      currentMachine = machines.find(machine => machine.slug === slug);
-      if (!currentMachine) throw new Error("not found");
-
-      const articleHref = "machine.html?slug=" + currentMachine.slug;
-      articleLinkNav.href = articleHref;
-      articleLinkCard.href = articleHref;
+      currentMachine = machines.find(m => m.slug === slug);
+      if (!currentMachine) throw new Error();
+      const href = "machine.html?slug=" + currentMachine.slug;
+      articleLinkNav.href = href;
+      articleLinkCard.href = href;
       document.title = currentMachine.name + " チェッカー | うちどころ。";
       titleEl.textContent = currentMachine.name + " チェッカー";
-
-      const checker = currentMachine.checker || {};
-      const normalConfig = readModeConfig(currentMachine, "normal");
-      const resetConfig = readModeConfig(currentMachine, "reset");
-      hintText.textContent = `通常: ${thresholdText(normalConfig, "G")} / リセット: ${thresholdText(resetConfig, "G")}`;
-
       judge();
     })
     .catch(() => {
       titleEl.textContent = "機種が見つかりません";
-      hintText.textContent = "-";
-      applyResult({ symbol:"×", title:"エラー", copy:"機種データを読み込めませんでした。", className:"result-ng" });
+      applyResult({ cls:"result-ng", text:"機種データを読み込めませんでした。" });
       gameInput.disabled = true;
     });
 
   gameInput.addEventListener("input", judge);
-  gameInput.addEventListener("keydown", event => { if (event.key === "Enter") judge(); });
-  document.querySelectorAll('input[name="mode"]').forEach(input => input.addEventListener("change", judge));
+  gameInput.addEventListener("keydown", e => { if (e.key === "Enter") judge(); });
+  document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener("change", () => { gameInput.value = ""; judge(); }));
 })();
 </script>
 </body>
