@@ -7,17 +7,20 @@
 <meta name="description" content="機種ごとの狙い目記事ページです。結論と要点をスマホ向けに表示します。">
 <link rel="stylesheet" href="assets/css/practical.css">
 <script src="meta-auto.js"></script>
-
 <style>
 .settei-table{
   width:100%;
-  max-width:100%;
+  table-layout:fixed;
 }
-.article-item table{
-  width:100%;
+.settei-table th:first-child,
+.settei-table td:first-child{
+  width:82%;
+}
+.settei-table th:last-child,
+.settei-table td:last-child{
+  width:18%;
 }
 </style>
-
 </head>
 <body>
 <header class="site-header">
