@@ -43,15 +43,18 @@
           <p class="result-label">判定</p>
           <p class="result-text">G数を入力してください</p>
         </div>
-        <a id="settingLink" class="setting-dummy-link" href="#">
-          設定判別ツール（準備中）<span>›</span>
-        </a>
+        <p id="checkerNote" class="hint-text"></p>
       </div>
     </div>
 
     <div class="article-block">
-      <p class="block-label">▶ 要点</p>
-      <div id="summaryGrid" class="summary-grid"></div>
+      <p class="block-label">▶ 設定判別ツール</p>
+      <a id="settingLink" class="setting-dummy-link" href="#">設定判別ツール（準備中）<span>›</span></a>
+    </div>
+
+    <div class="article-block">
+      <p class="block-label">▶ 狙い目早見表</p>
+      <table id="summaryGrid" class="summary-grid"></table>
     </div>
 
     <div class="article-block">
@@ -152,8 +155,9 @@ async function loadJson(path){
   document.getElementById("machineTitle").textContent = machine.name;
   document.getElementById("heroSub").textContent = detail?.lead || "";
 
-  // 設定判別リンク（将来差し替え用）
-  document.getElementById("settingLink").href = `setting.html?slug=${slug}`;
+  // 設定判別リンク
+  const settingLink = document.getElementById("settingLink");
+  if (settingLink) settingLink.href = `setting.html?slug=${slug}`;
 
   // チェッカー
   const checkerData = machine.checker || {};
@@ -164,6 +168,8 @@ async function loadJson(path){
     const g = parseInt(gameInput.value);
     const mode = document.querySelector('input[name="mode"]:checked').value;
     const data = mode === "reset" ? checkerData.reset : checkerData.normal;
+    const noteEl = document.getElementById("checkerNote");
+    if (noteEl && data?.note) noteEl.textContent = data.note;
     if (!data || isNaN(g)) {
       checkerResult.className = "checker-result result-wait";
       checkerResult.querySelector(".result-text").textContent = "G数を入力してください";
@@ -184,17 +190,23 @@ async function loadJson(path){
   gameInput.addEventListener("input", judge);
   document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener("change", () => { gameInput.value = ""; judge(); }));
 
-  // 要点BOX
+  // 狙い目早見表（田の字テーブル）
   const summaryGrid = document.getElementById("summaryGrid");
-  (detail?.summaryBoxes || [
+  const boxes = detail?.summaryBoxes || [
     { label: "天井", value: machine.strategy || "-" },
     { label: "ヤメ時", value: "-" }
-  ]).forEach(box => {
-    const div = document.createElement("div");
-    div.className = "summary-item";
-    div.innerHTML = `<span class="s-label">${box.label}</span><span class="s-value">${box.value}</span>`;
-    summaryGrid.appendChild(div);
-  });
+  ];
+  let rows = "";
+  for (let i = 0; i < boxes.length; i += 2) {
+    const a = boxes[i];
+    const b = boxes[i + 1];
+    if (b) {
+      rows += `<tr><td><span class="s-label">${a.label}</span><span class="s-value">${a.value}</span></td><td><span class="s-label">${b.label}</span><span class="s-value">${b.value}</span></td></tr>`;
+    } else {
+      rows += `<tr><td class="full" colspan="2"><span class="s-label">${a.label}</span><span class="s-value">${a.value}</span></td></tr>`;
+    }
+  }
+  summaryGrid.innerHTML = rows;
 
   // 基本情報テーブル
   const infoBody = document.getElementById("infoTableBody");
