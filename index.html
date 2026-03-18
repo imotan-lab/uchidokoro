@@ -16,7 +16,7 @@
 <main class="site-main">
   <section class="hero-panel">
     <p class="eyebrow">SLOT AIMING TOOL</p>
-    <h1 class="page-title">ホールで即判断<br>G数を入れるだけ。</h1>
+    <h1 class="page-title">ホールで即判断<br>G数を入れるだけ</h1>
     <p class="hero-sub">機種を選んでG数を入力するだけで、打っていいか即判定できます。<br>通常・リセット別対応。</p>
   </section>
 
@@ -98,7 +98,6 @@ function buildKeywords(machine){
       }
       empty.style.display = "none";
       filtered.forEach(machine => {
-        const isReady = machine.strategy && machine.strategy !== "準備中";
         const row = document.createElement("article");
         row.className = "list-row";
         row.innerHTML = `
@@ -107,7 +106,6 @@ function buildKeywords(machine){
               <h2 class="machine-name">${machine.name}</h2>
             </a>
             <div class="machine-sub">
-              <span class="status-chip ${isReady ? "status-ready" : "status-wip"}">${isReady ? "公開中" : "準備中"}</span>
               <span class="type-chip">${machine.info || "未設定"}</span>
             </div>
           </div>
