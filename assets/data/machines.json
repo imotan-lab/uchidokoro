@@ -1,103 +1,5 @@
 [
   {
-    "slug": "baki",
-    "name": "バキ",
-    "seo": {
-      "title": "バキ 狙い目"
-    },
-    "info": "スマスロ",
-    "strategy": "400G〜",
-    "checker": {
-      "target": 400,
-      "ok": "狙い目OK",
-      "ng": "まだ打てない"
-    }
-  },
-  {
-    "slug": "banchou4",
-    "name": "番長4",
-    "seo": {
-      "title": "番長4 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
-    "slug": "biohazard",
-    "name": "バイオハザード",
-    "seo": {
-      "title": "バイオハザード 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
-    "slug": "chibaryo2",
-    "name": "チバリヨ2",
-    "seo": {
-      "title": "チバリヨ2 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
-    "slug": "dumbbell",
-    "name": "ダンベル",
-    "seo": {
-      "title": "ダンベル 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
-    "slug": "goblin",
-    "name": "ゴブリンスレイヤー",
-    "seo": {
-      "title": "ゴブリンスレイヤー 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
-    "slug": "godeater",
-    "name": "ゴッドイーター",
-    "seo": {
-      "title": "ゴッドイーター 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
     "slug": "hokuto",
     "name": "スマスロ北斗の拳",
     "seo": {
@@ -162,24 +64,10 @@
     }
   },
   {
-    "slug": "kaguya",
-    "name": "かぐや様",
+    "slug": "tokyo_ghoul",
+    "name": "東京喰種",
     "seo": {
-      "title": "かぐや様 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
-    "slug": "koukaku",
-    "name": "攻殻機動隊",
-    "seo": {
-      "title": "攻殻機動隊 狙い目"
+      "title": "東京喰種 狙い目"
     },
     "info": "準備中",
     "strategy": "準備中",
@@ -204,10 +92,52 @@
     }
   },
   {
-    "slug": "sf5",
-    "name": "ストV",
+    "slug": "valvrave2",
+    "name": "ヴァルヴレイヴ2",
     "seo": {
-      "title": "ストV 狙い目"
+      "title": "ヴァルヴレイヴ2 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "biohazard",
+    "name": "バイオハザード",
+    "seo": {
+      "title": "バイオハザード 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "godeater",
+    "name": "ゴッドイーター",
+    "seo": {
+      "title": "ゴッドイーター 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "koukaku",
+    "name": "攻殻機動隊",
+    "seo": {
+      "title": "攻殻機動隊 狙い目"
     },
     "info": "準備中",
     "strategy": "準備中",
@@ -232,38 +162,108 @@
     }
   },
   {
+    "slug": "banchou4",
+    "name": "番長4",
+    "seo": {
+      "title": "番長4 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "kaguya",
+    "name": "かぐや様",
+    "seo": {
+      "title": "かぐや様 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "sf5",
+    "name": "ストV",
+    "seo": {
+      "title": "ストV 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "chibaryo2",
+    "name": "チバリヨ2",
+    "seo": {
+      "title": "チバリヨ2 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "goblin",
+    "name": "ゴブリンスレイヤー",
+    "seo": {
+      "title": "ゴブリンスレイヤー 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "dumbbell",
+    "name": "ダンベル",
+    "seo": {
+      "title": "ダンベル 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "baki",
+    "name": "バキ",
+    "seo": {
+      "title": "バキ 狙い目"
+    },
+    "info": "スマスロ",
+    "strategy": "400G〜",
+    "checker": {
+      "target": 400,
+      "ok": "狙い目OK",
+      "ng": "まだ打てない"
+    }
+  },
+  {
     "slug": "tensura",
     "name": "転スラ",
     "seo": {
       "title": "転スラ 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
-    "slug": "tokyo_ghoul",
-    "name": "東京喰種",
-    "seo": {
-      "title": "東京喰種 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
-    "slug": "valvrave2",
-    "name": "ヴァルヴレイヴ2",
-    "seo": {
-      "title": "ヴァルヴレイヴ2 狙い目"
     },
     "info": "準備中",
     "strategy": "準備中",
