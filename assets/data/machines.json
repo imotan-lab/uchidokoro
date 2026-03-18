@@ -1,103 +1,5 @@
 [
   {
-    "slug": "baki",
-    "name": "Lバキ 強くなりたくば喰らえ!!!",
-    "seo": {
-      "title": "Lバキ 強くなりたくば喰らえ!!! 狙い目"
-    },
-    "info": "スマスロ",
-    "strategy": "400G〜",
-    "checker": {
-      "target": 400,
-      "ok": "狙い目OK",
-      "ng": "まだ打てない"
-    }
-  },
-  {
-    "slug": "banchou4",
-    "name": "押忍！番長4",
-    "seo": {
-      "title": "押忍！番長4 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
-    "slug": "biohazard",
-    "name": "スマスロ バイオハザード5",
-    "seo": {
-      "title": "スマスロ バイオハザード5 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
-    "slug": "chibaryo2",
-    "name": "チバリヨ2",
-    "seo": {
-      "title": "チバリヨ2 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
-    "slug": "dumbbell",
-    "name": "Lパチスロ ダンベル何キロ持てる?",
-    "seo": {
-      "title": "Lパチスロ ダンベル何キロ持てる? 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
-    "slug": "goblin",
-    "name": "スマスロ ゴブリンスレイヤーII",
-    "seo": {
-      "title": "スマスロ ゴブリンスレイヤーII 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
-    "slug": "godeater",
-    "name": "スマスロ ゴッドイーター リザレクション",
-    "seo": {
-      "title": "スマスロ ゴッドイーター リザレクション 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
     "slug": "hokuto",
     "name": "スマスロ北斗の拳",
     "seo": {
@@ -162,10 +64,10 @@
     }
   },
   {
-    "slug": "kaguya",
-    "name": "パチスロ かぐや様は告らせたい",
+    "slug": "monkeyv",
+    "name": "スマスロモンキーターンV",
     "seo": {
-      "title": "パチスロ かぐや様は告らせたい 狙い目"
+      "title": "スマスロモンキーターンV 狙い目"
     },
     "info": "準備中",
     "strategy": "準備中",
@@ -190,24 +92,10 @@
     }
   },
   {
-    "slug": "monkeyv",
-    "name": "スマスロモンキーターンV",
+    "slug": "tokyo_ghoul",
+    "name": "L 東京喰種",
     "seo": {
-      "title": "スマスロモンキーターンV 狙い目"
-    },
-    "info": "準備中",
-    "strategy": "準備中",
-    "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
-    }
-  },
-  {
-    "slug": "sf5",
-    "name": "スマスロ ストリートファイターV 挑戦者の道",
-    "seo": {
-      "title": "スマスロ ストリートファイターV 挑戦者の道 狙い目"
+      "title": "L 東京喰種 狙い目"
     },
     "info": "準備中",
     "strategy": "準備中",
@@ -232,10 +120,10 @@
     }
   },
   {
-    "slug": "tensura",
-    "name": "スマスロ転生したらスライムだった件",
+    "slug": "banchou4",
+    "name": "押忍！番長4",
     "seo": {
-      "title": "スマスロ転生したらスライムだった件 狙い目"
+      "title": "押忍！番長4 狙い目"
     },
     "info": "準備中",
     "strategy": "準備中",
@@ -246,10 +134,10 @@
     }
   },
   {
-    "slug": "tokyo_ghoul",
-    "name": "L 東京喰種",
+    "slug": "kaguya",
+    "name": "パチスロ かぐや様は告らせたい",
     "seo": {
-      "title": "L 東京喰種 狙い目"
+      "title": "パチスロ かぐや様は告らせたい 狙い目"
     },
     "info": "準備中",
     "strategy": "準備中",
@@ -264,6 +152,118 @@
     "name": "Lパチスロ 革命機ヴァルヴレイヴ2",
     "seo": {
       "title": "Lパチスロ 革命機ヴァルヴレイヴ2 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "biohazard",
+    "name": "スマスロ バイオハザード5",
+    "seo": {
+      "title": "スマスロ バイオハザード5 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "chibaryo2",
+    "name": "チバリヨ2",
+    "seo": {
+      "title": "チバリヨ2 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "dumbbell",
+    "name": "Lパチスロ ダンベル何キロ持てる?",
+    "seo": {
+      "title": "Lパチスロ ダンベル何キロ持てる? 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "sf5",
+    "name": "スマスロ ストリートファイターV 挑戦者の道",
+    "seo": {
+      "title": "スマスロ ストリートファイターV 挑戦者の道 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "godeater",
+    "name": "スマスロ ゴッドイーター リザレクション",
+    "seo": {
+      "title": "スマスロ ゴッドイーター リザレクション 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "goblin",
+    "name": "スマスロ ゴブリンスレイヤーII",
+    "seo": {
+      "title": "スマスロ ゴブリンスレイヤーII 狙い目"
+    },
+    "info": "準備中",
+    "strategy": "準備中",
+    "checker": {
+      "target": 99999999,
+      "ok": "準備中",
+      "ng": "準備中"
+    }
+  },
+  {
+    "slug": "baki",
+    "name": "Lバキ 強くなりたくば喰らえ!!!",
+    "seo": {
+      "title": "Lバキ 強くなりたくば喰らえ!!! 狙い目"
+    },
+    "info": "スマスロ",
+    "strategy": "400G〜",
+    "checker": {
+      "target": 400,
+      "ok": "狙い目OK",
+      "ng": "まだ打てない"
+    }
+  },
+  {
+    "slug": "tensura",
+    "name": "スマスロ転生したらスライムだった件",
+    "seo": {
+      "title": "スマスロ転生したらスライムだった件 狙い目"
     },
     "info": "準備中",
     "strategy": "準備中",
