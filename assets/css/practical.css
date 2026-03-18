@@ -317,6 +317,20 @@ button, input, select { font: inherit; }
 .article-body { color: var(--soft); font-size: 13px; line-height: 1.85; margin: 0 0 10px; }
 .article-body:last-child { margin-bottom: 0; }
 
+/* SETTEI TABLE */
+.settei-sub-label { color: var(--muted); font-size: 10px; letter-spacing: .1em; font-weight: 700; margin: 16px 0 8px; }
+.article-item .settei-sub-label:first-of-type { margin-top: 4px; }
+.settei-table { width: 100%; border-collapse: collapse; border: 1px solid var(--line2); margin-bottom: 4px; }
+.settei-table th { background: var(--panel); color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; padding: 8px 10px; border: 1px solid var(--line2); text-align: left; }
+.settei-table td { color: var(--text); font-size: 13px; font-weight: 700; padding: 9px 10px; border: 1px solid var(--line2); line-height: 1.5; vertical-align: middle; }
+.settei-note { font-size: 11px; color: var(--muted); margin: 4px 0 0; }
+.settei-badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 700; }
+.settei-hint { color: var(--muted); font-size: 11px; font-weight: 400; }
+.settei-weak { background: rgba(245,185,65,.12); color: var(--gold); border: 1px solid var(--gold-line); }
+.settei-mid { background: rgba(245,185,65,.22); color: var(--gold); border: 1px solid var(--gold-line); }
+.settei-strong { background: rgba(245,185,65,.35); color: #f5d041; border: 1px solid rgba(245,185,65,.5); }
+.settei-ok { background: var(--ok-bg); color: var(--ok); border: 1px solid var(--ok-line); }
+
 /* BACK LINK */
 .back-link { color: var(--muted); font-size: 13px; font-weight: 700; }
 .back-link:hover { color: var(--gold); }
