@@ -3,38 +3,39 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>狙い目手帖 | 機種一覧</title>
+<title>うちどころ | 機種一覧</title>
 <meta name="description" content="スマホで使いやすいスロット狙い目一覧。機種名検索から記事とチェッカーへすぐ移動できます。">
 <link rel="stylesheet" href="assets/css/practical.css">
 </head>
 <body>
-
 <header class="site-header">
   <div class="header-inner">
-    <a class="brand" href="index.html">狙い目手帖</a>
-    <nav class="nav-links">
-      <a href="contact.html">お問い合わせ</a>
-      <a href="privacy.html">ポリシー</a>
-    </nav>
+    <a class="brand" href="index.html">
+      <img src="assets/img/logo.png" alt="うちどころ。">
+    </a>
+    <div class="header-search-wrap">
+      <span class="header-search-icon">🔍</span>
+      <input id="machineSearch" class="header-search-input" type="search" placeholder="機種を検索">
+      <div id="headerDropdown" class="header-dropdown"></div>
+    </div>
   </div>
 </header>
-
 <main class="site-main">
-
-  <section class="toolbar" aria-label="検索エリア">
+  <div class="index-toolbar">
     <label class="visually-hidden" for="machineSearch">機種名検索</label>
-    <input id="machineSearch" class="search-input" type="search" placeholder="機種名で検索（例: 北斗、バキ、ゴッドイーター）">
-  </section>
-
+  </div>
   <section id="machineList" class="machine-list"></section>
   <div id="machineEmpty" class="empty-card">該当する機種がありません。</div>
-
 </main>
-
-<footer>
-  <div class="site-footer-inner">© 2026 狙い目手帖</div>
+<footer class="site-footer">
+  <div class="site-footer-inner">
+    <div class="footer-links">
+      <a href="contact.html">お問い合わせ</a>
+      <a href="privacy.html">プライバシーポリシー</a>
+    </div>
+    <p class="footer-copy">© 2026 うちどころ</p>
+  </div>
 </footer>
-
 <script>
 function normalizeText(value){
   return String(value || "")
@@ -42,107 +43,79 @@ function normalizeText(value){
     .replace(/[\u3041-\u3096]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 0x60))
     .replace(/[\s\-\_ー]/g, "");
 }
-
 function buildKeywords(machine){
   const base = [machine.name, machine.slug, machine.info, machine.strategy];
   const map = {
-    hokuto: ["ほくと", "北斗", "北斗の拳", "スマスロ北斗", "スマスロ北斗の拳"],
-    hokuto_tensei2: ["転生", "てんせい", "北斗転生2", "ほくとてんせい2"],
-    tokyo_ghoul: ["とうきょうぐーる", "ぐーる", "グール"],
-    sf5: ["すと5", "スト5", "streetfighter5"],
-    monkeyv: ["モンキー", "monkey", "モンキーターン"],
-    godeater: ["ごっどいーたー", "ge", "god eater"],
-    goblin: ["ゴブスレ", "ごぶすれ"],
-    valvrave2: ["vvv", "ヴヴヴ2", "v2"],
-    kabaneri: ["かばねり", "甲鉄城"],
-    kaguya: ["かぐや", "かぐやさま"],
-    koukaku: ["こうかく", "攻殻"],
+    hokuto: ["ほくと","北斗","北斗の拳","スマスロ北斗","スマスロ北斗の拳"],
+    hokuto_tensei2: ["転生","てんせい","北斗転生2","ほくとてんせい2"],
+    tokyo_ghoul: ["とうきょうぐーる","ぐーる","グール"],
+    sf5: ["すと5","スト5","streetfighter5"],
+    monkeyv: ["モンキー","monkey","モンキーターン"],
+    godeater: ["ごっどいーたー","ge","god eater"],
+    goblin: ["ゴブスレ","ごぶすれ"],
+    valvrave2: ["vvv","ヴヴヴ2","v2","ヴァルヴレイヴ"],
+    kabaneri: ["かばねり","甲鉄城"],
+    kaguya: ["かぐや","かぐやさま"],
+    koukaku: ["こうかく","攻殻"],
     tensura: ["てんすら"],
-    tekken6: ["てっけん", "鉄拳"],
-    chibaryo2: ["ちばりよ", "チバリヨ"],
-    banchou4: ["ばんちょう4", "番長"],
-    biohazard: ["ばいお", "バイオ"],
+    tekken6: ["てっけん","鉄拳"],
+    chibaryo2: ["ちばりよ","チバリヨ"],
+    banchou4: ["ばんちょう4","番長"],
+    biohazard: ["ばいお","バイオ"],
     dumbbell: ["だんべる"],
     baki: ["ばき"]
   };
   return [...base, ...(map[machine.slug] || [])].map(normalizeText).join("|");
 }
-
 (async function loadMachines(){
   const list = document.getElementById("machineList");
   const search = document.getElementById("machineSearch");
+  const dropdown = document.getElementById("headerDropdown");
   const empty = document.getElementById("machineEmpty");
-
   try {
     const res = await fetch("assets/data/machines.json");
-    if (!res.ok) throw new Error("machines.json load failed");
+    if (!res.ok) throw new Error("load failed");
     const machines = await res.json();
-
-    // 準備中を除外（strategy が「準備中」または未設定のものは表示しない）
     const readyMachines = machines.filter(m => m.strategy && m.strategy !== "準備中");
-
     const prepared = readyMachines.map(machine => ({ ...machine, __keywords: buildKeywords(machine) }));
-
     function render(keyword = "") {
       const query = normalizeText(keyword);
       const filtered = prepared.filter(machine => !query || machine.__keywords.includes(query));
-
       list.innerHTML = "";
-
-      if (!filtered.length) {
-        empty.style.display = "block";
-        return;
-      }
+      if (!filtered.length) { empty.style.display = "block"; return; }
       empty.style.display = "none";
-
       filtered.forEach(machine => {
         const row = document.createElement("article");
         row.className = "list-row";
-        row.style.cursor = "pointer";
-        row.addEventListener("click", () => {
-          location.href = "machine.html?slug=" + machine.slug;
-        });
+        row.addEventListener("click", () => { location.href = "machine.html?slug=" + machine.slug; });
         row.innerHTML = `
           <div class="machine-main">
             <h2 class="machine-name">${machine.name}</h2>
-            <div class="machine-sub">
-              <span class="type-chip">${machine.info || ""}</span>
-            </div>
+            <div class="machine-sub"><span class="type-chip">${machine.info || ""}</span></div>
           </div>
           <div class="row-arrow">›</div>
         `;
         list.appendChild(row);
       });
     }
-
-    search.addEventListener("input", event => render(event.target.value));
+    // ヘッダー検索（一覧ページ）
+    search.addEventListener("input", e => {
+      const q = normalizeText(e.target.value.trim());
+      render(e.target.value);
+      if (!q) { dropdown.classList.remove("show"); return; }
+      const hits = prepared.filter(m => m.__keywords.includes(q));
+      dropdown.innerHTML = hits.length
+        ? hits.map(m => `<a class="dropdown-item" href="machine.html?slug=${m.slug}">${m.name}</a>`).join("")
+        : '<div class="dropdown-empty">見つかりません</div>';
+      dropdown.classList.add("show");
+    });
+    search.addEventListener("blur", () => setTimeout(() => dropdown.classList.remove("show"), 150));
     render();
-
   } catch (error) {
     empty.style.display = "block";
     empty.textContent = "機種一覧の読み込みに失敗しました。";
   }
 })();
 </script>
-
-<style>
-.toolbar {
-  grid-template-columns: 1fr;
-}
-.list-row {
-  grid-template-columns: 1fr auto;
-}
-.row-arrow {
-  color: var(--gold);
-  font-size: 22px;
-  display: flex;
-  align-items: center;
-  padding-left: 8px;
-}
-.machine-name-link {
-  pointer-events: none;
-}
-</style>
-
 </body>
 </html>
