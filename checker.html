@@ -3,152 +3,171 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>チェッカー | うちどころ</title>
+<title>チェッカー | うちどころ。</title>
 <meta name="description" content="通常時・リセット後のG数を入力して狙い目を即判定します。">
 <link rel="stylesheet" href="assets/css/practical.css">
 </head>
 <body>
 <header class="site-header">
   <div class="header-inner">
-    <a class="brand" href="index.html">
-      <img src="assets/img/logo.png" alt="うちどころ。">
-    </a>
-    <div class="header-search-wrap">
-      <span class="header-search-icon">🔍</span>
-      <input id="headerSearch" class="header-search-input" type="search" placeholder="機種を検索">
-      <div id="headerDropdown" class="header-dropdown"></div>
-    </div>
+    <a class="brand" href="index.html"><img src="assets/img/logo.png" alt="うちどころ。" style="height:36px;width:auto;display:block;"></a>
+    <nav class="nav-links">
+      <a id="articleLinkNav" href="machine.html">記事</a>
+      <a href="index.html">機種一覧</a>
+    </nav>
   </div>
 </header>
 <main class="site-main">
-  <section class="article-hero">
-    <p class="eyebrow">CHECKER</p>
+  <section class="hero-panel">
     <h1 id="checkerTitle" class="page-title">チェッカー</h1>
   </section>
-  <section class="article-section-wrap">
-    <div class="article-block">
-      <div class="checker-card">
-        <div class="mode-toggle">
-          <input id="modeNormal" name="mode" type="radio" value="normal" checked>
-          <label for="modeNormal">通常</label>
-          <input id="modeReset" name="mode" type="radio" value="reset">
-          <label for="modeReset">リセット</label>
+
+  <section class="section-stack">
+    <article class="checker-card">
+      <div class="control-grid">
+        <div>
+          <div class="mode-toggle">
+            <input id="modeNormal" name="mode" type="radio" value="normal" checked>
+            <label for="modeNormal">通常</label>
+            <input id="modeReset" name="mode" type="radio" value="reset">
+            <label for="modeReset">リセット</label>
+          </div>
         </div>
-        <label class="visually-hidden" for="game">現在G数</label>
-        <input id="game" class="game-input" inputmode="numeric" type="number" placeholder="現在G数を入力">
-        <div id="checkerResult" class="checker-result result-wait">
-          <p class="result-label">判定</p>
-          <p class="result-text">G数を入力してください</p>
+        <div class="control-row">
+          <div>
+            <label class="visually-hidden" for="game">現在G数</label>
+            <input id="game" class="game-input" inputmode="numeric" type="number" placeholder="現在G数">
+          </div>
         </div>
-        <p id="hintText" class="hint-text"></p>
+        <p id="hintText" class="hint-text">データが通常 / リセット別に未設定の機種は、共通基準で判定します。</p>
       </div>
-    </div>
-    <div class="article-block">
-      <a id="articleLink" class="back-link" href="machine.html">← 記事を見る</a>
-    </div>
+    </article>
+
+    <article id="resultCard" class="result-card">
+      <div class="result-top">
+        <p id="resultTitle" class="result-title">判定待ち</p>
+        <div id="resultBadge" class="result-badge result-mid">△</div>
+      </div>
+      <p id="resultCopy" class="result-copy">入力中に自動で判定します。</p>
+      <p id="resultNote" class="result-note">最終判断は液晶・示唆・当日状況を優先してください。</p>
+    </article>
+
+    <article class="surface-card">
+      <h2 class="section-title">移動</h2>
+      <div class="action-stack">
+        <a id="articleLinkCard" class="btn-sub" href="machine.html">記事を見る</a>
+        <a class="btn-main" href="index.html">一覧へ戻る</a>
+      </div>
+    </article>
   </section>
 </main>
-<footer class="site-footer">
-  <div class="site-footer-inner">
-    <div class="footer-links">
-      <a href="contact.html">お問い合わせ</a>
-      <a href="privacy.html">プライバシーポリシー</a>
-    </div>
-    <p class="footer-copy">© 2026 うちどころ</p>
-  </div>
-</footer>
-<script>
-const MACHINES = [
-  { name: 'スマスロ北斗の拳', slug: 'hokuto', aliases: ['北斗','ほくと','スマスロ北斗'] },
-  { name: 'バキ', slug: 'baki', aliases: ['ばき'] },
-  { name: '番長4', slug: 'banchou4', aliases: ['ばんちょう','番長'] },
-  { name: 'バイオハザード', slug: 'biohazard', aliases: ['ばいお','バイオ'] },
-  { name: 'チバリヨ2', slug: 'chibaryo2', aliases: ['ちばりよ'] },
-  { name: 'ダンベル', slug: 'dumbbell', aliases: ['だんべる'] },
-  { name: 'ゴブリンスレイヤー', slug: 'goblin', aliases: ['ゴブスレ','ごぶすれ'] },
-  { name: 'ゴッドイーター', slug: 'godeater', aliases: ['ごっどいーたー'] },
-  { name: '北斗の拳 転生2', slug: 'hokuto_tensei2', aliases: ['転生2','てんせい2'] },
-  { name: 'カバネリ', slug: 'kabaneri', aliases: ['かばねり','甲鉄城'] },
-  { name: 'かぐや様', slug: 'kaguya', aliases: ['かぐや'] },
-  { name: '攻殻機動隊', slug: 'koukaku', aliases: ['こうかく','攻殻'] },
-  { name: 'モンキーV', slug: 'monkeyv', aliases: ['モンキー','もんきー'] },
-  { name: 'ストV', slug: 'sf5', aliases: ['スト5','すと5'] },
-  { name: '鉄拳6', slug: 'tekken6', aliases: ['てっけん'] },
-  { name: '転スラ', slug: 'tensura', aliases: ['てんすら'] },
-  { name: '東京喰種', slug: 'tokyo_ghoul', aliases: ['グール','ぐーる','とうきょうぐーる'] },
-  { name: 'ヴァルヴレイヴ2', slug: 'valvrave2', aliases: ['ヴヴヴ','vvv','v2'] },
-];
-function normalize(str) {
-  return String(str || '').toLowerCase()
-    .replace(/[\u3041-\u3096]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60))
-    .replace(/[\s\-\_]/g, '');
-}
-const headerSearch = document.getElementById('headerSearch');
-const headerDropdown = document.getElementById('headerDropdown');
-headerSearch.addEventListener('input', () => {
-  const q = normalize(headerSearch.value.trim());
-  if (!q) { headerDropdown.classList.remove('show'); return; }
-  const hits = MACHINES.filter(m => [m.name, ...m.aliases].some(k => normalize(k).includes(q)));
-  headerDropdown.innerHTML = hits.length
-    ? hits.map(m => `<a class="dropdown-item" href="machine.html?slug=${m.slug}">${m.name}</a>`).join('')
-    : '<div class="dropdown-empty">見つかりません</div>';
-  headerDropdown.classList.add('show');
-});
-headerSearch.addEventListener('blur', () => setTimeout(() => headerDropdown.classList.remove('show'), 150));
 
+<footer>
+  <div class="site-footer-inner">© 2026 うちどころ。</div>
+</footer>
+
+<script>
 function readModeConfig(machine, mode){
   const checker = machine.checker || {};
   if (checker[mode] && typeof checker[mode] === "object") return checker[mode];
   return checker;
 }
-function evaluate(game, config){
-  if (!config || (!Number.isFinite(config.caution) && !Number.isFinite(config.target) && !Number.isFinite(config.good))) {
-    return { text: '準備中', cls: 'result-wait' };
+
+function thresholdText(config, unit){
+  if (!config || (!Number.isFinite(config.caution) && !Number.isFinite(config.target))) return "準備中";
+  if (Number.isFinite(config.excellent) && Number.isFinite(config.good) && Number.isFinite(config.caution)) {
+    return `${config.caution}${unit}〜 △ / ${config.good}${unit}〜 ◯ / ${config.excellent}${unit}〜 ◎`;
+  }
+  if (Number.isFinite(config.target)) return `${config.target}${unit}〜`;
+  return "準備中";
+}
+
+function evaluate(game, config, unit){
+  if (!config || (!Number.isFinite(config.caution) && !Number.isFinite(config.target))) {
+    return { symbol:"△", title:"準備中", copy:"この機種はまだ詳細設定前です。", className:"result-mid" };
   }
   if (!Number.isFinite(game) || game < 0) {
-    return { text: 'G数を入力してください', cls: 'result-wait' };
+    return { symbol:"△", title:"入力待ち", copy:`現在${unit === "G" ? "G数" : unit}を正しく入力してください。`, className:"result-mid" };
   }
   if (Number.isFinite(config.excellent) && game >= config.excellent) {
-    return { text: '◎ 狙い目OK！積極的に着席を検討', cls: 'result-ok' };
+    return { symbol:"◎", title:"優先して確認", copy:`${config.excellent}${unit}以上です。かなり打ちやすいラインです。`, className:"result-ok" };
   }
   if (Number.isFinite(config.good) && game >= config.good) {
-    return { text: '◯ 狙い目OK　交換率次第で候補', cls: 'result-ok' };
+    return { symbol:"◯", title:"狙い目", copy:`${config.good}${unit}以上です。候補として見られます。`, className:"result-ok" };
   }
   const caution = Number.isFinite(config.caution) ? config.caution : config.target;
   if (Number.isFinite(caution) && game >= caution) {
-    return { text: `× まだ早い　${caution}G以上を目安に`, cls: 'result-ng' };
+    return { symbol:"△", title:"条件次第", copy:`${caution}${unit}以上です。交換率や状況しだいで候補です。`, className:"result-caution" };
   }
-  return { text: `× まだ早い　${caution}G以上を目安に`, cls: 'result-ng' };
+  return { symbol:"×", title:"まだ早い", copy:`現状は${caution}${unit}以上を目安にしてください。`, className:"result-ng" };
 }
+
 (function(){
-  const slug = new URLSearchParams(location.search).get('slug');
-  const titleEl = document.getElementById('checkerTitle');
-  const articleLink = document.getElementById('articleLink');
-  const gameInput = document.getElementById('game');
-  const checkerResult = document.getElementById('checkerResult');
-  const hintText = document.getElementById('hintText');
-  function judge(){
-    const mode = document.querySelector('input[name="mode"]:checked').value;
-    const g = parseFloat(gameInput.value);
-    const config = readModeConfig(window.__machine || {}, mode);
-    const r = evaluate(g, config);
-    checkerResult.className = 'checker-result ' + r.cls;
-    checkerResult.querySelector('.result-text').textContent = r.text;
-    hintText.textContent = config.note || '';
+  const params = new URLSearchParams(location.search);
+  const slug = params.get("slug");
+  const titleEl = document.getElementById("checkerTitle");
+  const articleLinkNav = document.getElementById("articleLinkNav");
+  const articleLinkCard = document.getElementById("articleLinkCard");
+  const resultTitle = document.getElementById("resultTitle");
+  const resultBadge = document.getElementById("resultBadge");
+  const resultCopy = document.getElementById("resultCopy");
+  const resultNote = document.getElementById("resultNote");
+  const gameInput = document.getElementById("game");
+  const hintText = document.getElementById("hintText");
+  let currentMachine = null;
+
+  function applyResult(result){
+    resultTitle.textContent = result.title;
+    resultCopy.textContent = result.copy;
+    resultBadge.textContent = result.symbol;
+    resultBadge.className = "result-badge " + result.className;
   }
-  fetch('assets/data/machines.json')
-    .then(r => r.json())
+
+  function currentMode(){
+    return document.querySelector('input[name="mode"]:checked').value;
+  }
+
+  function judge(){
+    if (!currentMachine) return;
+    const mode = currentMode();
+    const checker = currentMachine.checker || {};
+    const unit = checker.unit || "G";
+    const config = readModeConfig(currentMachine, mode);
+    const game = Number(gameInput.value);
+    applyResult(evaluate(game, config, unit));
+    resultNote.textContent = config.note || "最終判断は液晶・示唆・当日状況を優先してください。";
+    hintText.textContent = config.note || "データが通常 / リセット別に未設定の機種は、共通基準で判定します。";
+  }
+
+  fetch("assets/data/machines.json")
+    .then(res => { if (!res.ok) throw new Error("load failed"); return res.json(); })
     .then(machines => {
-      const machine = machines.find(m => m.slug === slug);
-      if (!machine) { titleEl.textContent = '機種が見つかりません'; return; }
-      window.__machine = machine;
-      document.title = machine.name + ' チェッカー | うちどころ';
-      titleEl.textContent = machine.name + ' チェッカー';
-      articleLink.href = 'machine.html?slug=' + slug;
+      currentMachine = machines.find(machine => machine.slug === slug);
+      if (!currentMachine) throw new Error("not found");
+
+      const articleHref = "machine.html?slug=" + currentMachine.slug;
+      articleLinkNav.href = articleHref;
+      articleLinkCard.href = articleHref;
+      document.title = currentMachine.name + " チェッカー | うちどころ。";
+      titleEl.textContent = currentMachine.name + " チェッカー";
+
+      const checker = currentMachine.checker || {};
+      const normalConfig = readModeConfig(currentMachine, "normal");
+      const resetConfig = readModeConfig(currentMachine, "reset");
+      hintText.textContent = `通常: ${thresholdText(normalConfig, "G")} / リセット: ${thresholdText(resetConfig, "G")}`;
+
       judge();
+    })
+    .catch(() => {
+      titleEl.textContent = "機種が見つかりません";
+      hintText.textContent = "-";
+      applyResult({ symbol:"×", title:"エラー", copy:"機種データを読み込めませんでした。", className:"result-ng" });
+      gameInput.disabled = true;
     });
-  gameInput.addEventListener('input', judge);
-  document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener('change', () => { gameInput.value = ''; judge(); }));
+
+  gameInput.addEventListener("input", judge);
+  gameInput.addEventListener("keydown", event => { if (event.key === "Enter") judge(); });
+  document.querySelectorAll('input[name="mode"]').forEach(input => input.addEventListener("change", judge));
 })();
 </script>
 </body>

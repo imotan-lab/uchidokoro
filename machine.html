@@ -3,222 +3,157 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>機種ページ | うちどころ</title>
-<meta name="description" content="機種ごとの狙い目・天井・ヤメ時をまとめた攻略ページです。">
+<title>機種ページ | うちどころ。</title>
+<meta name="description" content="機種ごとの狙い目記事ページです。結論と要点をスマホ向けに表示します。">
 <link rel="stylesheet" href="assets/css/practical.css">
-<script src="meta-auto.js" defer></script>
+<script src="meta-auto.js"></script>
 </head>
 <body>
-
 <header class="site-header">
   <div class="header-inner">
-    <a class="brand" href="index.html">
-      <img src="assets/img/logo.png" alt="うちどころ。">
-    </a>
-    <div class="header-search-wrap">
-      <span class="header-search-icon">🔍</span>
-      <input id="headerSearch" class="header-search-input" type="search" placeholder="機種を検索">
-      <div id="headerDropdown" class="header-dropdown"></div>
-    </div>
+    <a class="brand" href="index.html"><img src="assets/img/logo.png" alt="うちどころ。" style="height:36px;width:auto;display:block;"></a>
+    <nav class="nav-links">
+      <a href="index.html">機種一覧</a>
+      <a id="checkerLinkNav" href="checker.html">チェッカー</a>
+    </nav>
   </div>
 </header>
-
 <main class="site-main">
-
-  <section class="article-hero">
+  <section class="hero-panel article-hero">
     <p class="eyebrow">ARTICLE</p>
     <h1 id="machineTitle" class="page-title">機種名</h1>
-    <p id="heroSub" class="hero-sub"></p>
+    <p id="heroSub" class="hero-sub">結論を先に確認できます。</p>
   </section>
 
-  <section class="article-section-wrap">
+  <section class="section-stack">
+    <article class="top-cta-bar">
+      <p class="top-cta-copy"><strong>まずはチェッカーで即判定</strong>空き台の現在G数が分かるなら、記事を読む前にそのまま判定できます。</p>
+      <a class="btn-main" id="checkerLinkTop" href="checker.html">今すぐ判定</a>
+    </article>
 
-    <div class="article-block">
-      <p class="block-label">▶ 狙い目チェッカー</p>
-      <div class="checker-card">
-        <div class="mode-toggle">
-          <input type="radio" name="mode" id="modeNormal" value="normal" checked>
-          <label for="modeNormal">通常</label>
-          <input type="radio" name="mode" id="modeReset" value="reset">
-          <label for="modeReset">リセット</label>
-        </div>
-        <input id="gameInput" class="game-input" type="number" inputmode="numeric" placeholder="現在G数を入力">
-        <div id="checkerResult" class="checker-result result-wait">
-          <p class="result-label">判定</p>
-          <p class="result-text">G数を入力してください</p>
-        </div>
-        <a id="settingLink" class="setting-dummy-link" href="#">
-          設定判別ツール（準備中）<span>›</span>
-        </a>
-      </div>
-    </div>
+    <article class="surface-card table-card">
+      <h2 class="section-title">要点BOX</h2>
+      <div id="summaryStrip" class="summary-strip"></div>
+    </article>
 
-    <div class="article-block">
-      <p class="block-label">▶ 要点</p>
-      <div id="summaryGrid" class="summary-grid"></div>
-    </div>
-
-    <div class="article-block">
-      <p class="block-label">▶ 基本情報</p>
+    <article class="surface-card table-card">
+      <h2 class="section-title">基本情報</h2>
       <table class="info-table">
         <tbody id="infoTableBody"></tbody>
       </table>
-    </div>
+    </article>
 
-    <div class="article-block">
-      <p class="block-label">▶ 詳細</p>
-      <div id="articleSections"></div>
-    </div>
+    <article class="surface-card table-card">
+      <h2 class="section-title">最大天井までの目安</h2>
+      <table class="info-table compact-invest-table">
+        <tbody id="investBody"></tbody>
+      </table>
+    </article>
 
+    <div id="articleSections" class="article-sections"></div>
+
+    <article class="surface-card">
+      <h2 class="section-title">移動</h2>
+      <div class="action-stack">
+        <a class="btn-main" id="checkerLinkCard" href="checker.html">チェッカーを開く</a>
+        <a class="btn-sub" href="index.html">一覧へ戻る</a>
+      </div>
+    </article>
   </section>
-
 </main>
 
-<footer class="site-footer">
-  <div class="site-footer-inner">
-    <div class="footer-links">
-      <a href="contact.html">お問い合わせ</a>
-      <a href="privacy.html">プライバシーポリシー</a>
-    </div>
-    <p class="footer-copy">© 2026 うちどころ</p>
-  </div>
+<footer>
+  <div class="site-footer-inner">© 2026 うちどころ。</div>
 </footer>
 
 <script>
-// 機種データ（検索用）
-const MACHINES = [
-  { name: 'スマスロ北斗の拳', slug: 'hokuto', aliases: ['北斗','ほくと','スマスロ北斗'] },
-  { name: 'バキ', slug: 'baki', aliases: ['ばき'] },
-  { name: '番長4', slug: 'banchou4', aliases: ['ばんちょう','番長'] },
-  { name: 'バイオハザード', slug: 'biohazard', aliases: ['ばいお','バイオ'] },
-  { name: 'チバリヨ2', slug: 'chibaryo2', aliases: ['ちばりよ'] },
-  { name: 'ダンベル', slug: 'dumbbell', aliases: ['だんべる'] },
-  { name: 'ゴブリンスレイヤー', slug: 'goblin', aliases: ['ゴブスレ','ごぶすれ'] },
-  { name: 'ゴッドイーター', slug: 'godeater', aliases: ['ごっどいーたー'] },
-  { name: '北斗の拳 転生2', slug: 'hokuto_tensei2', aliases: ['転生2','てんせい2'] },
-  { name: 'カバネリ', slug: 'kabaneri', aliases: ['かばねり','甲鉄城'] },
-  { name: 'かぐや様', slug: 'kaguya', aliases: ['かぐや'] },
-  { name: '攻殻機動隊', slug: 'koukaku', aliases: ['こうかく','攻殻'] },
-  { name: 'モンキーV', slug: 'monkeyv', aliases: ['モンキー','もんきー'] },
-  { name: 'ストV', slug: 'sf5', aliases: ['スト5','すと5'] },
-  { name: '鉄拳6', slug: 'tekken6', aliases: ['てっけん'] },
-  { name: '転スラ', slug: 'tensura', aliases: ['てんすら'] },
-  { name: '東京喰種', slug: 'tokyo_ghoul', aliases: ['グール','ぐーる','とうきょうぐーる'] },
-  { name: 'ヴァルヴレイヴ2', slug: 'valvrave2', aliases: ['ヴヴヴ','vvv','v2'] },
-];
-
-function normalize(str) {
-  return String(str || '').toLowerCase()
-    .replace(/[\u3041-\u3096]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60))
-    .replace(/[\s\-\_]/g, '');
-}
-
-// ヘッダー検索
-const headerSearch = document.getElementById('headerSearch');
-const headerDropdown = document.getElementById('headerDropdown');
-
-headerSearch.addEventListener('input', () => {
-  const q = normalize(headerSearch.value.trim());
-  if (!q) { headerDropdown.classList.remove('show'); return; }
-  const hits = MACHINES.filter(m => [m.name, ...m.aliases].some(k => normalize(k).includes(q)));
-  if (!hits.length) {
-    headerDropdown.innerHTML = '<div class="dropdown-empty">見つかりません</div>';
-  } else {
-    headerDropdown.innerHTML = hits.map(m =>
-      `<a class="dropdown-item" href="machine.html?slug=${m.slug}">${m.name}</a>`
-    ).join('');
-  }
-  headerDropdown.classList.add('show');
-});
-headerSearch.addEventListener('blur', () => setTimeout(() => headerDropdown.classList.remove('show'), 150));
-
-// データ読み込み
-async function loadJson(path) {
+async function loadJson(path){
   const res = await fetch(path);
   if (!res.ok) return null;
   return res.json();
 }
 
+function appendSummary(boxes){
+  const strip = document.getElementById("summaryStrip");
+  strip.innerHTML = "";
+  (boxes || []).forEach(box => {
+    const el = document.createElement("div");
+    el.className = "summary-box";
+    el.innerHTML = `<span class="summary-head">${box.label}</span><span class="summary-body">${box.value}</span>`;
+    strip.appendChild(el);
+  });
+}
+
+function appendInfo(rows){
+  const body = document.getElementById("infoTableBody");
+  body.innerHTML = "";
+  rows.forEach(([th, td]) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<th>${th}</th><td>${td}</td>`;
+    body.appendChild(tr);
+  });
+}
+
+function appendInvest(rows){
+  const body = document.getElementById("investBody");
+  body.innerHTML = "";
+  rows.forEach(row => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<th>${row[0]}</th><td>${row[1]}</td>`;
+    body.appendChild(tr);
+  });
+}
+
+function appendSections(sections){
+  const wrap = document.getElementById("articleSections");
+  wrap.innerHTML = "";
+  sections.forEach(section => {
+    const article = document.createElement("article");
+    article.className = "surface-card article-section";
+    const bodyHtml = (section.body || []).map(text => `<p>${text}</p>`).join("");
+    article.innerHTML = `<h2 class="section-title section-title-line">${section.title}</h2>${bodyHtml}`;
+    wrap.appendChild(article);
+  });
+}
+
 (async () => {
-  const slug = new URLSearchParams(location.search).get('slug');
-  const machines = await loadJson('assets/data/machines.json');
-  if (!machines) return;
+  const slug = new URLSearchParams(location.search).get("slug");
+  const machines = await loadJson("assets/data/machines.json");
+  if (!machines) {
+    document.body.innerHTML = '<div class="simple-center"><div class="simple-box"><h1>読み込み失敗</h1><p>データの取得に失敗しました。</p><p><a class="btn-main" href="index.html">機種一覧へ戻る</a></p></div></div>';
+    return;
+  }
 
   const machine = machines.find(m => m.slug === slug);
   if (!machine) {
-    document.body.innerHTML = '<div style="padding:40px;text-align:center;color:#667788;">機種が見つかりません。<br><a href="index.html" style="color:#f5b941;">一覧へ戻る</a></div>';
+    document.body.innerHTML = '<div class="simple-center"><div class="simple-box"><h1>機種が見つかりません</h1><p>一覧から選び直してください。</p><p><a class="btn-main" href="index.html">機種一覧へ戻る</a></p></div></div>';
     return;
   }
 
   const detail = await loadJson(`assets/data/machine-details/${slug}.json`);
+  const strategy = machine.strategy || "準備中";
+  const info = machine.info || "未設定";
+  const href = "checker.html?slug=" + machine.slug;
 
-  // タイトル
-  document.title = ((machine.seo && machine.seo.title) || machine.name) + ' | 狙い目手帖';
-  document.getElementById('machineTitle').textContent = machine.name;
-  document.getElementById('heroSub').textContent = detail?.lead || '';
+  document.title = ((machine.seo && machine.seo.title) || machine.name) + " | うちどころ。";
+  document.getElementById("machineTitle").textContent = machine.name;
+  document.getElementById("heroSub").textContent = detail?.lead || (strategy === "準備中" ? "この機種は現在調整中です。" : "記事より先に結論とチェッカー導線を確認できます。");
+  document.getElementById("checkerLinkNav").href = href;
+  document.getElementById("checkerLinkTop").href = href;
+  document.getElementById("checkerLinkCard").href = href;
 
-  // 設定判別リンク（将来差し替え用）
-  document.getElementById('settingLink').href = `setting.html?slug=${slug}`;
-
-  // チェッカー
-  const checkerData = machine.checker || {};
-  const gameInput = document.getElementById('gameInput');
-  const checkerResult = document.getElementById('checkerResult');
-
-  function judge() {
-    const g = parseInt(gameInput.value);
-    const mode = document.querySelector('input[name="mode"]:checked').value;
-    const data = mode === 'reset' ? checkerData.reset : checkerData.normal;
-    if (!data || isNaN(g)) {
-      checkerResult.className = 'checker-result result-wait';
-      checkerResult.querySelector('.result-text').textContent = 'G数を入力してください';
-      return;
-    }
-    if (g >= data.excellent) {
-      checkerResult.className = 'checker-result result-ok';
-      checkerResult.querySelector('.result-text').textContent = '◎ 狙い目OK！積極的に着席を検討';
-    } else if (g >= data.good) {
-      checkerResult.className = 'checker-result result-ok';
-      checkerResult.querySelector('.result-text').textContent = '◯ 狙い目OK　交換率次第で候補';
-    } else {
-      checkerResult.className = 'checker-result result-ng';
-      checkerResult.querySelector('.result-text').textContent = `× まだ早い　${data.good}G以上を目安に`;
-    }
+  if (detail) {
+    appendSummary(detail.summaryBoxes || []);
+    appendInfo(detail.factTable || [["機種名", machine.name], ["タイプ", info], ["狙い目", strategy]]);
+    appendInvest(detail.investTable || []);
+    appendSections(detail.sections || []);
+  } else {
+    appendSummary([{ label:"狙い目", value:strategy }, { label:"機種区分", value:info }, { label:"状態", value:"詳細反映中" }]);
+    appendInfo([["機種名", machine.name], ["タイプ", info], ["狙い目", strategy], ["メモ", "詳細作成中"]]);
+    appendInvest([]);
+    appendSections([{ title:"メモ", body:["この機種は現在、記事本文の詳細調整中です。"] }]);
   }
-
-  gameInput.addEventListener('input', judge);
-  document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener('change', () => { gameInput.value = ''; judge(); }));
-
-  // 要点BOX
-  const summaryGrid = document.getElementById('summaryGrid');
-  (detail?.summaryBoxes || [
-    { label: '天井', value: machine.strategy || '-' },
-    { label: 'ヤメ時', value: '-' }
-  ]).forEach(box => {
-    const div = document.createElement('div');
-    div.className = 'summary-item';
-    div.innerHTML = `<span class="s-label">${box.label}</span><span class="s-value">${box.value}</span>`;
-    summaryGrid.appendChild(div);
-  });
-
-  // 基本情報テーブル
-  const infoBody = document.getElementById('infoTableBody');
-  (detail?.factTable || [['機種名', machine.name]]).forEach(([th, td]) => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<th>${th}</th><td>${td}</td>`;
-    infoBody.appendChild(tr);
-  });
-
-  // 詳細セクション
-  const articleSections = document.getElementById('articleSections');
-  (detail?.sections || []).forEach(section => {
-    const div = document.createElement('div');
-    div.className = 'article-item';
-    div.innerHTML = `<p class="article-title">${section.title}</p>${(section.body || []).map(t => `<p class="article-body">${t}</p>`).join('')}`;
-    articleSections.appendChild(div);
-  });
 })();
 </script>
-
 </body>
 </html>

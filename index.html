@@ -3,39 +3,42 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>うちどころ | 機種一覧</title>
+<title>うちどころ。| 機種一覧</title>
 <meta name="description" content="スマホで使いやすいスロット狙い目一覧。機種名検索から記事とチェッカーへすぐ移動できます。">
 <link rel="stylesheet" href="assets/css/practical.css">
 </head>
 <body>
 <header class="site-header">
   <div class="header-inner">
-    <a class="brand" href="index.html">
-      <img src="assets/img/logo.png" alt="うちどころ。">
-    </a>
-    <div class="header-search-wrap">
-      <span class="header-search-icon">🔍</span>
-      <input id="machineSearch" class="header-search-input" type="search" placeholder="機種を検索">
-      <div id="headerDropdown" class="header-dropdown"></div>
-    </div>
+    <a class="brand" href="index.html"><img src="assets/img/logo.png" alt="うちどころ。" style="height:36px;width:auto;display:block;"></a>
+    <nav class="nav-links">
+      <a href="index.html">機種一覧</a>
+      <a href="contact.html">お問い合わせ</a>
+      <a href="privacy.html">ポリシー</a>
+    </nav>
   </div>
 </header>
 <main class="site-main">
-  <div class="index-toolbar">
+  <section class="hero-panel">
+    <p class="eyebrow">SLOT AIMING TOOL</p>
+    <h1 class="page-title">ホールで即判断。<br>G数を入れるだけ。</h1>
+    <p class="hero-sub">機種を選んでG数を入力するだけで、打っていいか即判定できます。<br>通常・リセット別対応。</p>
+  </section>
+
+  <section class="toolbar" aria-label="検索エリア">
     <label class="visually-hidden" for="machineSearch">機種名検索</label>
-  </div>
+    <input id="machineSearch" class="search-input" type="search" placeholder="機種名で検索（例: 北斗、バキ、ゴッドイーター）">
+    <div class="count-box"><span id="heroCount">--</span><span id="machineCount" class="visually-hidden">読込中</span><span aria-hidden="true">機種</span></div>
+  </section>
+
   <section id="machineList" class="machine-list"></section>
   <div id="machineEmpty" class="empty-card">該当する機種がありません。</div>
 </main>
-<footer class="site-footer">
-  <div class="site-footer-inner">
-    <div class="footer-links">
-      <a href="contact.html">お問い合わせ</a>
-      <a href="privacy.html">プライバシーポリシー</a>
-    </div>
-    <p class="footer-copy">© 2026 うちどころ</p>
-  </div>
+
+<footer>
+  <div class="site-footer-inner">© 2026 うちどころ。</div>
 </footer>
+
 <script>
 function normalizeText(value){
   return String(value || "")
@@ -43,75 +46,84 @@ function normalizeText(value){
     .replace(/[\u3041-\u3096]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 0x60))
     .replace(/[\s\-\_ー]/g, "");
 }
+
 function buildKeywords(machine){
   const base = [machine.name, machine.slug, machine.info, machine.strategy];
   const map = {
-    hokuto: ["ほくと","北斗","北斗の拳","スマスロ北斗","スマスロ北斗の拳"],
-    hokuto_tensei2: ["転生","てんせい","北斗転生2","ほくとてんせい2"],
-    tokyo_ghoul: ["とうきょうぐーる","ぐーる","グール"],
-    sf5: ["すと5","スト5","streetfighter5"],
-    monkeyv: ["モンキー","monkey","モンキーターン"],
-    godeater: ["ごっどいーたー","ge","god eater"],
-    goblin: ["ゴブスレ","ごぶすれ"],
-    valvrave2: ["vvv","ヴヴヴ2","v2","ヴァルヴレイヴ"],
-    kabaneri: ["かばねり","甲鉄城"],
-    kaguya: ["かぐや","かぐやさま"],
-    koukaku: ["こうかく","攻殻"],
+    hokuto: ["ほくと", "北斗", "北斗の拳", "スマスロ北斗", "スマスロ北斗の拳"],
+    hokuto_tensei2: ["転生", "てんせい", "北斗転生2", "ほくとてんせい2"],
+    tokyo_ghoul: ["とうきょうぐーる", "ぐーる", "グール"],
+    sf5: ["すと5", "スト5", "streetfighter5"],
+    monkeyv: ["モンキー", "monkey", "モンキーターン"],
+    godeater: ["ごっどいーたー", "ge", "god eater"],
+    goblin: ["ゴブスレ", "ごぶすれ"],
+    valvrave2: ["vvv", "ヴヴヴ2", "v2"],
+    kabaneri: ["かばねり", "甲鉄城"],
+    kaguya: ["かぐや", "かぐやさま"],
+    koukaku: ["こうかく", "攻殻"],
     tensura: ["てんすら"],
-    tekken6: ["てっけん","鉄拳"],
-    chibaryo2: ["ちばりよ","チバリヨ"],
-    banchou4: ["ばんちょう4","番長"],
-    biohazard: ["ばいお","バイオ"],
+    tekken6: ["てっけん", "鉄拳"],
+    chibaryo2: ["ちばりよ", "チバリヨ"],
+    banchou4: ["ばんちょう4", "番長"],
+    biohazard: ["ばいお", "バイオ"],
     dumbbell: ["だんべる"],
     baki: ["ばき"]
   };
   return [...base, ...(map[machine.slug] || [])].map(normalizeText).join("|");
 }
+
 (async function loadMachines(){
   const list = document.getElementById("machineList");
+  const count = document.getElementById("machineCount");
+  const heroCount = document.getElementById("heroCount");
   const search = document.getElementById("machineSearch");
-  const dropdown = document.getElementById("headerDropdown");
   const empty = document.getElementById("machineEmpty");
+
   try {
     const res = await fetch("assets/data/machines.json");
-    if (!res.ok) throw new Error("load failed");
+    if (!res.ok) throw new Error("machines.json load failed");
     const machines = await res.json();
-    const readyMachines = machines.filter(m => m.strategy && m.strategy !== "準備中");
-    const prepared = readyMachines.map(machine => ({ ...machine, __keywords: buildKeywords(machine) }));
+    const prepared = machines.map(machine => ({ ...machine, __keywords: buildKeywords(machine) }));
+
     function render(keyword = "") {
       const query = normalizeText(keyword);
       const filtered = prepared.filter(machine => !query || machine.__keywords.includes(query));
+      count.textContent = filtered.length + "機種";
+      heroCount.textContent = filtered.length + "機種";
       list.innerHTML = "";
-      if (!filtered.length) { empty.style.display = "block"; return; }
+      if (!filtered.length) {
+        empty.style.display = "block";
+        return;
+      }
       empty.style.display = "none";
       filtered.forEach(machine => {
+        const isReady = machine.strategy && machine.strategy !== "準備中";
         const row = document.createElement("article");
         row.className = "list-row";
-        row.addEventListener("click", () => { location.href = "machine.html?slug=" + machine.slug; });
         row.innerHTML = `
           <div class="machine-main">
-            <h2 class="machine-name">${machine.name}</h2>
-            <div class="machine-sub"><span class="type-chip">${machine.info || ""}</span></div>
+            <a class="machine-name-link" href="machine.html?slug=${machine.slug}">
+              <h2 class="machine-name">${machine.name}</h2>
+            </a>
+            <div class="machine-sub">
+              <span class="status-chip ${isReady ? "status-ready" : "status-wip"}">${isReady ? "公開中" : "準備中"}</span>
+              <span class="type-chip">${machine.info || "未設定"}</span>
+            </div>
           </div>
-          <div class="row-arrow">›</div>
+          <div class="row-actions">
+            <a class="btn-main" href="checker.html?slug=${machine.slug}">チェッカー</a>
+          </div>
         `;
         list.appendChild(row);
       });
     }
-    // ヘッダー検索（一覧ページ）
-    search.addEventListener("input", e => {
-      const q = normalizeText(e.target.value.trim());
-      render(e.target.value);
-      if (!q) { dropdown.classList.remove("show"); return; }
-      const hits = prepared.filter(m => m.__keywords.includes(q));
-      dropdown.innerHTML = hits.length
-        ? hits.map(m => `<a class="dropdown-item" href="machine.html?slug=${m.slug}">${m.name}</a>`).join("")
-        : '<div class="dropdown-empty">見つかりません</div>';
-      dropdown.classList.add("show");
-    });
-    search.addEventListener("blur", () => setTimeout(() => dropdown.classList.remove("show"), 150));
+
+    search.addEventListener("input", event => render(event.target.value));
     render();
+
   } catch (error) {
+    count.textContent = "エラー";
+    heroCount.textContent = "エラー";
     empty.style.display = "block";
     empty.textContent = "機種一覧の読み込みに失敗しました。";
   }
@@ -119,3 +131,4 @@ function buildKeywords(machine){
 </script>
 </body>
 </html>
+<!-- updated v2 -->
