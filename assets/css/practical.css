@@ -324,9 +324,10 @@ button, input, select { font: inherit; }
 .header-inner--center { justify-content: center; }
 
 /* SEARCH INPUT (トップページ用・site.css.appendの#fff上書き) */
+.toolbar { padding-top: 28px; }
 .search-input {
   background: var(--bg2);
-  border: 1px solid var(--line);
+  border: 1px solid var(--gold-line);
   color: var(--text);
   border-radius: 14px;
   padding: 14px 16px;
