@@ -11,10 +11,11 @@
 <header class="site-header">
   <div class="header-inner">
     <a class="brand" href="index.html"><img src="assets/img/logo.png" alt="うちどころ。" style="height:36px;width:auto;display:block;"></a>
-    <nav class="nav-links">
-      <a id="articleLinkNav" href="machine.html">記事</a>
-      <a href="index.html">機種一覧</a>
-    </nav>
+    <div class="header-search-wrap">
+      <span class="header-search-icon">🔍</span>
+      <input id="headerSearch" class="header-search-input" type="search" placeholder="機種を検索">
+      <div id="headerDropdown" class="header-dropdown"></div>
+    </div>
   </div>
 </header>
 <main class="site-main">
@@ -67,6 +68,50 @@
 </footer>
 
 <script>
+// ヘッダー検索
+(function(){
+  function normalizeText(value){
+    return String(value || "")
+      .toLowerCase()
+      .replace(/[\u3041-\u3096]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 0x60))
+      .replace(/[\s\-\_ー]/g, "");
+  }
+
+  const searchInput = document.getElementById("headerSearch");
+  const dropdown = document.getElementById("headerDropdown");
+  let allMachines = [];
+
+  fetch("assets/data/machines.json")
+    .then(res => res.json())
+    .then(machines => { allMachines = machines; });
+
+  searchInput.addEventListener("input", function(){
+    const query = normalizeText(this.value);
+    dropdown.innerHTML = "";
+    if (!query) { dropdown.style.display = "none"; return; }
+
+    const matched = allMachines.filter(m => {
+      const keywords = [m.name, m.slug, ...(m.aliases || [])].map(normalizeText).join("|");
+      return keywords.includes(query);
+    }).slice(0, 6);
+
+    if (!matched.length) { dropdown.style.display = "none"; return; }
+
+    matched.forEach(m => {
+      const item = document.createElement("a");
+      item.className = "header-dropdown-item";
+      item.href = "checker.html?slug=" + m.slug;
+      item.textContent = m.name;
+      dropdown.appendChild(item);
+    });
+    dropdown.style.display = "block";
+  });
+
+  document.addEventListener("click", function(e){
+    if (!e.target.closest(".header-search-wrap")) dropdown.style.display = "none";
+  });
+})();
+
 function readModeConfig(machine, mode){
   const checker = machine.checker || {};
   if (checker[mode] && typeof checker[mode] === "object") return checker[mode];
