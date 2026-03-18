@@ -310,3 +310,6 @@ button, input, select { font: inherit; }
 /* BACK LINK */
 .back-link { color: var(--muted); font-size: 13px; font-weight: 700; }
 .back-link:hover { color: var(--gold); }
+
+/* HEADER CENTER (トップページ用) */
+.header-inner--center { justify-content: center; }
