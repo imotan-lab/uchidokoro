@@ -23,7 +23,6 @@
   <section class="toolbar" aria-label="検索エリア">
     <label class="visually-hidden" for="machineSearch">機種名検索</label>
     <input id="machineSearch" class="search-input" type="search" placeholder="機種名で検索（例: 北斗、バキ、ゴッドイーター）">
-    <div class="count-box"><span id="heroCount">--</span><span id="machineCount" class="visually-hidden">読込中</span><span aria-hidden="true">機種</span></div>
   </section>
 
   <div id="listHeader" class="list-header">
@@ -33,7 +32,7 @@
   <section id="machineList" class="machine-list"></section>
   <div id="machineEmpty" class="empty-card">該当する機種がありません。</div>
   <div id="showAllWrap" class="show-all-wrap">
-    <button id="showAllBtn" class="btn-show-all">全<span id="totalCount">--</span>機種を見る ›</button>
+    <button id="showAllBtn" class="btn-show-all">全機種を見る ›</button>
   </div>
 </main>
 
@@ -99,7 +98,6 @@ function buildKeywords(machine){
     const listHeader = document.getElementById("listHeader");
     const showAllWrap = document.getElementById("showAllWrap");
     const showAllBtn = document.getElementById("showAllBtn");
-    const totalCountEl = document.getElementById("totalCount");
 
     showAllBtn.addEventListener("click", () => {
       showAll = true;
@@ -114,9 +112,6 @@ function buildKeywords(machine){
       const allFiltered = prepared.filter(machine => !query || machine.__keywords.includes(query));
       // 検索時・全件表示時は全件、それ以外は上位10機種のみ
       const filtered = (query || showAll) ? allFiltered : allFiltered.slice(0, TOP_COUNT);
-      count.textContent = prepared.length + "機種";
-      heroCount.textContent = prepared.length + "機種";
-      totalCountEl.textContent = prepared.length;
       // 検索中・全件表示中はヘッダーとボタンを制御
       if (query) {
         listHeader.querySelector(".list-header-title").textContent = `「${keyword}」の検索結果`;
