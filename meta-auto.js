@@ -10,8 +10,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!m) return;
 
     document.title = (m.seo && m.seo.title)
-      ? m.seo.title + " | 狙い目手帖"
-      : m.name + " 狙い目・天井・やめどき | 狙い目手帖";
+      ? m.seo.title + " | うちどころ。"
+      : m.name + " 狙い目・天井・やめどき | うちどころ。";
 
     let meta = document.querySelector('meta[name="description"]');
     if (!meta) {
@@ -20,8 +20,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       document.head.appendChild(meta);
     }
 
-    const strategy = m.strategy || "狙い目情報";
-    meta.content = `${m.name}の天井・狙い目・やめどき・判定ツールを掲載。現在の狙い目は ${strategy}。`;
+    const strategy = m.strategy || "詳細準備中";
+    meta.content = `${m.name}の狙い目・天井・やめどきをまとめた攻略ページ。G数を入力するだけで打っていいか即判定できます。現在の狙い目の目安：${strategy}。`;
   } catch (e) {
     console.log(e);
   }

@@ -148,8 +148,7 @@ async function loadJson(path){
 
   const detail = await loadJson(`assets/data/machine-details/${slug}.json`);
 
-  // タイトル
-  document.title = ((machine.seo && machine.seo.title) || machine.name) + " | うちどころ。";
+  // タイトル（document.titleはmeta-auto.jsが担当）
   document.getElementById("machineTitle").textContent = machine.name;
   document.getElementById("heroSub").textContent = detail?.lead || "";
 
