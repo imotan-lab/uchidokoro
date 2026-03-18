@@ -55,18 +55,19 @@ button, input, select { font: inherit; }
   width: var(--wrap);
   margin: 0 auto;
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 12px;
   padding: 8px 0;
 }
 .brand { display: block; flex-shrink: 0; }
-.brand img { height: 44px; width: auto; display: block; max-width: 160px; object-fit: contain; }
+.brand img { height: 52px; width: auto; display: block; max-width: 300px; object-fit: contain; }
 
 .header-search-wrap {
   position: relative;
-  flex: 1;
-  max-width: 200px;
-  margin-left: auto;
+  
+  max-width: 100%;
+  
 }
 .header-search-icon {
   position: absolute;
@@ -130,6 +131,7 @@ button, input, select { font: inherit; }
 }
 .footer-links {
   display: flex;
+  flex-direction: column;
   justify-content: center;
   gap: 24px;
   margin-bottom: 10px;
@@ -229,6 +231,7 @@ button, input, select { font: inherit; }
 .mode-toggle input { display: none; }
 .mode-toggle label {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   min-height: 46px;
@@ -274,6 +277,7 @@ button, input, select { font: inherit; }
 
 .setting-dummy-link {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: space-between;
   background: var(--bg2);
@@ -314,7 +318,7 @@ button, input, select { font: inherit; }
 
 /* RESPONSIVE */
 @media (max-width: 480px) {
-  .brand img { height: 44px; max-width: 220px; }
+  .brand img { height: 44px; max-width: 300px; }
   .header-search-wrap { max-width: 150px; }
   .summary-grid { gap: 12px; }
   .info-table th { width: 80px; }
