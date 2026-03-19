@@ -31,7 +31,7 @@
 
   <section class="article-hero" style="border-bottom:none;padding-bottom:12px;">
     <p class="eyebrow"><a href="machine.html" id="backLink" style="color:var(--muted);text-decoration:none;">‹ 狙い目に戻る</a>&nbsp;&nbsp;POCHI POCHI</p>
-    <h1 id="pageTitle" class="page-title">設定判別 ポチポチくん</h1>
+      <h1 id="pageTitle" class="page-title">設定判別 ポチポチくん</h1>
     <p class="hero-sub" id="heroSub">ゲーム数・小役をカウントしながら入力すると設定期待度がリアルタイムで更新されます。</p>
   </section>
 
@@ -197,7 +197,7 @@ const STORAGE_KEY = "uchidokoro_setting_" + slug;
 fetch("assets/data/machines.json").then(r=>r.json()).then(machines=>{
   const m = machines.find(x=>x.slug===slug);
   if(!m) return;
-  document.getElementById("pageTitle").textContent = m.name + " 設定判別 ポチポチくん";
+  document.getElementById("pageTitle").innerHTML = m.name + "<br>設定判別 ポチポチくん";
   document.getElementById("heroSub").textContent = m.name + "の設定判別ツール。ゲーム数・小役をカウントしながら入力すると設定期待度がリアルタイムで更新されます。";
   document.getElementById("articleLinkNav").href = "machine.html?slug=" + slug;
   document.getElementById("backLink").href = "machine.html?slug=" + slug;
