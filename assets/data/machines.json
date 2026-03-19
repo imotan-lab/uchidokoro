@@ -168,12 +168,70 @@
     "seo": {
       "title": "スマスロ鉄拳6 狙い目"
     },
-    "info": "準備中",
-    "strategy": "準備中",
+    "info": "スマスロAT",
+    "strategy": "G数間450G〜（等価）/ 2スルー〜",
     "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "suru",
+          "label": "スルー天井",
+          "hasSuru": true
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 650,
+        "good": 450,
+        "caution": 300,
+        "note": "鉄拳ポイント最大900pt＋α（平均約747G）。等価450G〜で1000円以上の期待値。液晶右下のptを確認。"
+      },
+      "suru": {
+        "suruMax": 3,
+        "suru": [
+          {
+            "count": 0,
+            "excellent": 650,
+            "good": 450,
+            "caution": 300,
+            "note": "0スルー。通常と同じ450G〜が目安。"
+          },
+          {
+            "count": 1,
+            "excellent": 500,
+            "good": 350,
+            "caution": 200,
+            "note": "1スルー。ボーダー下げて350G〜でも候補。"
+          },
+          {
+            "count": 2,
+            "excellent": 300,
+            "good": 100,
+            "caution": 0,
+            "note": "2スルー。積極的に。0G〜でプラス域（次のボーナスを目指す）。"
+          },
+          {
+            "count": 3,
+            "excellent": 50,
+            "good": 0,
+            "caution": 0,
+            "note": "3スルー。次回ボーナスがAT確定（赤7）。0G〜で着席OK。"
+          }
+        ]
+      },
+      "reset": {
+        "excellent": 350,
+        "good": 200,
+        "caution": 100,
+        "note": "設定変更後はポイント天井500pt+α（約416G）に短縮。スルー天井も2スルーに短縮。200G〜でプラス域。"
+      }
     }
   },
   {
@@ -210,12 +268,108 @@
     "seo": {
       "title": "パチスロ かぐや様は告らせたい 狙い目"
     },
-    "info": "準備中",
-    "strategy": "準備中",
+    "info": "スマスロ擬似ボーナス",
+    "strategy": "BIG後650G〜 / 5スルー〜",
     "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "BIG後"
+        },
+        {
+          "key": "reg",
+          "label": "REG後"
+        },
+        {
+          "key": "suru",
+          "label": "スルー天井",
+          "hasSuru": true
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 1000,
+        "good": 650,
+        "caution": 500,
+        "note": "BIG後の天井1100G+α。650G〜で1000円以上の期待値。液晶右下のG数カウンタで確認。"
+      },
+      "reg": {
+        "excellent": 800,
+        "good": 450,
+        "caution": 350,
+        "note": "REG後は天井900G+αに短縮。450G〜がプラス域。"
+      },
+      "suru": {
+        "suruMax": 7,
+        "suru": [
+          {
+            "count": 0,
+            "excellent": 1000,
+            "good": 650,
+            "caution": 500,
+            "note": "0スルー。BIG後と同じ650G〜が目安。"
+          },
+          {
+            "count": 1,
+            "excellent": 900,
+            "good": 600,
+            "caution": 450,
+            "note": "1スルー。600G〜でプラス域。"
+          },
+          {
+            "count": 2,
+            "excellent": 800,
+            "good": 550,
+            "caution": 400,
+            "note": "2スルー。550G〜でプラス域。"
+          },
+          {
+            "count": 3,
+            "excellent": 700,
+            "good": 500,
+            "caution": 350,
+            "note": "3スルー。500G〜でプラス域。"
+          },
+          {
+            "count": 4,
+            "excellent": 600,
+            "good": 400,
+            "caution": 250,
+            "note": "4スルー。400G〜でプラス域。"
+          },
+          {
+            "count": 5,
+            "excellent": 400,
+            "good": 200,
+            "caution": 100,
+            "note": "5スルー。200G〜で積極的に狙える。"
+          },
+          {
+            "count": 6,
+            "excellent": 200,
+            "good": 50,
+            "caution": 0,
+            "note": "6スルー。浅いG数から狙える。"
+          },
+          {
+            "count": 7,
+            "excellent": 50,
+            "good": 0,
+            "caution": 0,
+            "note": "7スルー。次回CZでBIG以上確定（天井到達）。0G〜で着席OK。"
+          }
+        ]
+      },
+      "reset": {
+        "excellent": 500,
+        "good": 200,
+        "caution": 100,
+        "note": "設定変更後は天井800G+αに短縮。200G〜でプラス域。リセット判別が難しい点に注意。"
+      }
     }
   },
   {
@@ -238,12 +392,32 @@
     "seo": {
       "title": "チバリヨ2 狙い目"
     },
-    "info": "準備中",
-    "strategy": "準備中",
+    "info": "スマスロAT",
+    "strategy": "通常550G〜 / リセット100G〜",
     "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 600,
+        "good": 550,
+        "caution": 450,
+        "note": "G数天井600G。550G〜が基本の狙い目ライン。"
+      },
+      "reset": {
+        "excellent": 200,
+        "good": 100,
+        "caution": 50,
+        "note": "設定変更後は天井短縮。100G〜でプラス域。"
+      }
     }
   },
   {
@@ -294,12 +468,32 @@
     "seo": {
       "title": "スマスロ ゴブリンスレイヤーII 狙い目"
     },
-    "info": "準備中",
-    "strategy": "準備中",
+    "info": "スマスロAT",
+    "strategy": "宵越し1200G〜 / リセット200G〜",
     "checker": {
-      "target": 99999999,
-      "ok": "準備中",
-      "ng": "準備中"
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 1500,
+        "good": 1200,
+        "caution": 900,
+        "note": "天井1500Gで恩恵AT+ストック1〜5個。前日のハマりを宵越しで狙うのが基本。1200G〜が狙い目ライン。"
+      },
+      "reset": {
+        "excellent": 300,
+        "good": 200,
+        "caution": 100,
+        "note": "設定変更後は天井短縮。200G〜でプラス域。"
+      }
     }
   },
   {
@@ -308,12 +502,70 @@
     "seo": {
       "title": "Lバキ 強くなりたくば喰らえ!!! 狙い目"
     },
-    "info": "スマスロ",
-    "strategy": "400G〜",
+    "info": "スマスロAT",
+    "strategy": "CZ間340G〜 / 2スルー〜",
     "checker": {
-      "target": 400,
-      "ok": "狙い目OK",
-      "ng": "まだ打てない"
+      "unit": "G",
+      "modes": [
+        {
+          "key": "cz",
+          "label": "CZ間"
+        },
+        {
+          "key": "suru",
+          "label": "スルー天井",
+          "hasSuru": true
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "cz": {
+        "excellent": 500,
+        "good": 340,
+        "caution": 250,
+        "note": "CZ間天井600G+α。340G〜でプラス域。100G・200G付近のゾーンも強め。"
+      },
+      "suru": {
+        "suruMax": 3,
+        "suru": [
+          {
+            "count": 0,
+            "excellent": 500,
+            "good": 340,
+            "caution": 250,
+            "note": "0スルー。CZ間ボーダーと同じ340G〜が目安。"
+          },
+          {
+            "count": 1,
+            "excellent": 400,
+            "good": 300,
+            "caution": 200,
+            "note": "1スルー。ボーダー下げて300G〜でも候補。"
+          },
+          {
+            "count": 2,
+            "excellent": 300,
+            "good": 200,
+            "caution": 100,
+            "note": "2スルー。積極的に狙える。200G〜で候補。"
+          },
+          {
+            "count": 3,
+            "excellent": 100,
+            "good": 0,
+            "caution": 0,
+            "note": "3スルー。次回CZでAT確定（天井到達）。0G〜で着席OK。"
+          }
+        ]
+      },
+      "reset": {
+        "excellent": 150,
+        "good": 50,
+        "caution": 20,
+        "note": "設定変更後は50%で100G以内にCZ当選。50G〜でプラス域。"
+      }
     }
   },
   {
