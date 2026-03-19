@@ -321,8 +321,7 @@ button, input, select { font: inherit; }
 .settei-sub-label { color: var(--muted); font-size: 10px; letter-spacing: .1em; font-weight: 700; margin: 16px 0 8px; }
 .article-item .settei-sub-label:first-of-type { margin-top: 4px; }
 .settei-table { width: calc(100% + 14px); margin-left: -14px; border-collapse: collapse; border: 1px solid var(--line2); margin-bottom: 4px; table-layout: fixed; }
-.settei-table th:first-child { width: 70%; }
-.settei-table th:last-child { width: 30%; }
+.settei-table th:last-child { width: 150px; }
 .settei-table th { background: var(--panel); color: var(--muted); font-size: 10px; font-weight: 700; padding: 7px 8px; border: 1px solid var(--line2); text-align: left; }
 .settei-table td { color: var(--text); font-size: 12px; font-weight: 700; padding: 4px 4px; border: 1px solid var(--line2); line-height: 1.5; vertical-align: middle; }
 .settei-table td:last-child { text-align: center; padding: 2px; }
