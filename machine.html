@@ -1,49 +1,408 @@
-<script>
-(function(){
-  const params = new URLSearchParams(location.search);
-  const slug = params.get("slug");
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>機種ページ | うちどころ。</title>
+<meta name="description" content="機種ごとの狙い目記事ページです。結論と要点をスマホ向けに表示します。">
+<link rel="stylesheet" href="assets/css/practical.css">
+<script src="meta-auto.js"></script>
+<link rel="manifest" href="/uchidokoro/manifest.json">
+<meta name="theme-color" content="#07090c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="うちどころ。">
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html"><img src="assets/img/logo.png" alt="うちどころ。" style="height:36px;width:auto;display:block;"></a>
+    <div class="header-search-wrap">
+      <span class="header-search-icon">🔍</span>
+      <input id="headerSearch" class="header-search-input" type="search" placeholder="機種を検索">
+      <div id="headerDropdown" class="header-dropdown"></div>
+    </div>
+  </div>
+</header>
+<main class="site-main">
 
-  if (!slug) return;
+  <section class="article-hero">
+    <p class="eyebrow"><a href="index.html" style="color:var(--muted);text-decoration:none;">‹ 一覧</a>&nbsp;&nbsp;ARTICLE</p>
+    <h1 id="machineTitle" class="page-title">機種名</h1>
+    <p id="heroSub" class="hero-sub"></p>
+    <div style="display:flex;gap:8px;margin-top:12px;">
+      <a id="settingHeroLink" href="setting.html" class="btn-settei" style="flex:1;justify-content:center;min-height:44px;">設定判別ツール ポチポチくんを使う →</a>
+    </div>
+  </section>
+
+  <section class="article-section-wrap">
+
+    <div class="article-block">
+      <p class="block-label">▶ 狙い目チェッカー</p>
+      <div class="checker-card">
+        <div id="modeToggle" class="mode-toggle"></div>
+        <div id="suruWrap" style="display:none;margin-bottom:10px;">
+          <p style="font-size:12px;color:var(--muted);margin-bottom:6px;">CZスルー回数</p>
+          <div class="setting-counter-wrap">
+            <button class="setting-cnt-btn" id="suruDec">－</button>
+            <span id="suruVal" style="min-width:40px;text-align:center;font-size:20px;font-weight:700;color:var(--gold);">0</span>
+            <button class="setting-cnt-btn" id="suruInc">＋</button>
+          </div>
+        </div>
+        <input id="gameInput" class="game-input" type="number" inputmode="numeric" placeholder="現在G数を入力">
+        <div id="checkerResult" class="checker-result result-wait">
+          <p class="result-label">判定</p>
+          <p class="result-text">G数を入力してください</p>
+        </div>
+        <p id="checkerNote" class="hint-text"></p>
+      </div>
+    </div>
+
+    <div class="article-block">
+      <p class="block-label">▶ 狙い目早見表</p>
+      <table id="summaryGrid" class="summary-grid"></table>
+    </div>
+
+    <div class="article-block">
+      <p class="block-label">▶ 基本情報</p>
+      <table class="info-table">
+        <tbody id="infoTableBody"></tbody>
+      </table>
+    </div>
+
+    <div class="article-block">
+      <p class="block-label">▶ 詳細</p>
+      <div id="articleSections"></div>
+    </div>
+
+    <div class="article-block">
+      <p class="block-label">▶ 設定判別ツール</p>
+      <a id="settingToolLink" href="setting.html" class="btn-show-all" style="display:block;text-align:center;">設定判別ツール ポチポチくんを使う →</a>
+    </div>
+
+  </section>
+
+</main>
+
+<footer>
+  <div class="site-footer-inner">
+    <div class="footer-links">
+      <a href="contact.html">お問い合わせ</a>
+      <a href="privacy.html">プライバシーポリシー</a>
+    </div>
+    <p class="footer-copy">© 2026 うちどころ。</p>
+  </div>
+</footer>
+
+<script>
+// ヘッダー検索
+(function(){
+  function normalizeText(value){
+    return String(value || "")
+      .toLowerCase()
+      .replace(/[\u3041-\u3096]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 0x60))
+      .replace(/[\s\-\_ー]/g, "");
+  }
+
+  const searchInput = document.getElementById("headerSearch");
+  const dropdown = document.getElementById("headerDropdown");
+  let allMachines = [];
 
   fetch("assets/data/machines.json")
     .then(res => res.json())
-    .then(list => {
-      const m = list.find(x => x.slug === slug);
-      if (!m) return;
+    .then(machines => { allMachines = machines; });
 
-      // ===== SF5専用処理 =====
-      if (slug === "sf5") {
-        const checkerArea = document.getElementById("checker-area");
-        if (checkerArea) {
-          checkerArea.innerHTML = `
-            <div style="
-              border:1px solid #d4af37;
-              padding:16px;
-              margin:16px 0;
-              font-size:14px;
-              line-height:1.6;
-              background:#111;
-              color:#fff;
-            ">
-              この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。高設定をつかめる環境（イベント・特定日）での使用を推奨します。
-            </div>
-          `;
-        }
-        return;
-      }
+  searchInput.addEventListener("input", function(){
+    const query = normalizeText(this.value);
+    dropdown.innerHTML = "";
+    if (!query) { dropdown.style.display = "none"; return; }
 
-      // ===== 通常のチェッカー処理（既存そのまま） =====
-      renderChecker(m);
+    const matched = allMachines.filter(m => {
+      const keywords = [m.name, m.slug, ...(m.aliases || [])].map(normalizeText).join("|");
+      return keywords.includes(query);
+    }).slice(0, 6);
+
+    if (!matched.length) { dropdown.style.display = "none"; return; }
+
+    matched.forEach(m => {
+      const item = document.createElement("a");
+      item.className = "header-dropdown-item";
+      item.href = "machine.html?slug=" + m.slug;
+      item.textContent = m.name;
+      dropdown.appendChild(item);
     });
+    dropdown.style.display = "block";
+  });
 
-  function renderChecker(machine){
-    const checkerArea = document.getElementById("checker-area");
-    if (!checkerArea) return;
+  document.addEventListener("click", function(e){
+    if (!e.target.closest(".header-search-wrap")) dropdown.style.display = "none";
+  });
+})();
 
-    checkerArea.innerHTML = `
-      <div>（ここは既存のままでOK）</div>
-    `;
+// データ読み込み
+async function loadJson(path){
+  const res = await fetch(path);
+  if (!res.ok) return null;
+  return res.json();
+}
+
+(async () => {
+  const slug = new URLSearchParams(location.search).get("slug");
+  const machines = await loadJson("assets/data/machines.json");
+  if (!machines) {
+    document.body.innerHTML = '<div style="padding:40px;text-align:center;color:#667788;">データの取得に失敗しました。<br><a href="index.html" style="color:#f5b941;">一覧へ戻る</a></div>';
+    return;
   }
 
+  const machine = machines.find(m => m.slug === slug);
+  if (!machine) {
+    document.body.innerHTML = '<div style="padding:40px;text-align:center;color:#667788;">機種が見つかりません。<br><a href="index.html" style="color:#f5b941;">一覧へ戻る</a></div>';
+    return;
+  }
+
+  const detail = await loadJson(`assets/data/machine-details/${slug}.json`);
+
+  // タイトル（document.titleはmeta-auto.jsが担当）
+  document.getElementById("machineTitle").textContent = machine.name;
+  document.getElementById("heroSub").textContent = detail?.lead || "";
+  const settingToolLink = document.getElementById("settingToolLink");
+  if (settingToolLink) settingToolLink.href = `setting.html?slug=${slug}`;
+  const settingHeroLink = document.getElementById("settingHeroLink");
+  if (settingHeroLink) settingHeroLink.href = `setting.html?slug=${slug}`;
+
+  // チェッカー
+  const checker = machine.checker || {};
+  const gameInput = document.getElementById("gameInput");
+  const checkerResult = document.getElementById("checkerResult");
+  const modeToggle = document.getElementById("modeToggle");
+  const suruWrap = document.getElementById("suruWrap");
+  const suruVal = document.getElementById("suruVal");
+  const checkerNote = document.getElementById("checkerNote");
+  let suruCount = 0;
+
+  function getMachineLimit(modeKey) {
+    if (Number.isFinite(machine.limit)) return machine.limit;
+    if (machine.limit && typeof machine.limit === "object" && Number.isFinite(machine.limit[modeKey])) return machine.limit[modeKey];
+    if (Number.isFinite(checker.limit)) return checker.limit;
+    if (checker[modeKey] && Number.isFinite(checker[modeKey].limit)) return checker[modeKey].limit;
+    return null;
+  }
+
+  function applyInputLimit(modeKey) {
+    const limit = getMachineLimit(modeKey);
+    if (Number.isFinite(limit)) {
+      gameInput.max = String(limit);
+      gameInput.placeholder = `現在G数を入力（最大${limit}G）`;
+      const current = parseInt(gameInput.value, 10);
+      if (!Number.isNaN(current) && current > limit) gameInput.value = String(limit);
+    } else {
+      gameInput.removeAttribute("max");
+      gameInput.placeholder = "現在G数を入力";
+    }
+  }
+
+  if (slug === "sf5") {
+    modeToggle.style.display = "none";
+    suruWrap.style.display = "none";
+    gameInput.style.display = "none";
+    checkerResult.className = "checker-result result-wait";
+    checkerResult.querySelector(".result-label").textContent = "案内";
+    checkerResult.querySelector(".result-text").textContent = "この機種は天井非搭載のため、ハイエナ狙いには向きません。";
+    if (checkerNote) checkerNote.textContent = "設定狙い主体の機種です。高設定をつかめる環境（イベント・特定日）での使用を推奨します。";
+  } else {
+    document.getElementById("suruInc").addEventListener("click", () => {
+      const checked = document.querySelector('input[name="mode"]:checked');
+      const modeKey = checked ? checked.value : null;
+      const suruMax = modeKey && checker[modeKey] && Number.isFinite(checker[modeKey].suruMax) ? checker[modeKey].suruMax : 99;
+      suruCount = Math.min(suruMax, suruCount + 1);
+      suruVal.textContent = suruCount;
+      judge();
+    });
+
+    document.getElementById("suruDec").addEventListener("click", () => {
+      suruCount = Math.max(0, suruCount - 1);
+      suruVal.textContent = suruCount;
+      judge();
+    });
+  }
+
+  function getModes(c) {
+    if (c.modes) return c.modes;
+    const m = [];
+    if (c.normal) m.push({ key: "normal", label: "通常" });
+    if (c.reset) m.push({ key: "reset", label: "リセット" });
+    if (!m.length) m.push({ key: "normal", label: "通常" });
+    return m;
+  }
+
+  function getConfig(c, modeKey, suru) {
+    const modeData = c[modeKey];
+    if (!modeData) return c;
+    if (modeData.suru && Array.isArray(modeData.suru)) {
+      const list = modeData.suru;
+      const max = list[list.length - 1].count;
+      const idx = Math.min(suru, max);
+      return list.find(s => s.count === idx) || list[list.length - 1];
+    }
+    return modeData;
+  }
+
+  function judge() {
+    const checked = document.querySelector('input[name="mode"]:checked');
+    if (!checked) return;
+    const modeKey = checked.value;
+    const modedef = (checker.modes || []).find(m => m.key === modeKey);
+    suruWrap.style.display = (modedef && modedef.hasSuru) ? "block" : "none";
+    const config = getConfig(checker, modeKey, suruCount);
+    if (checkerNote) checkerNote.textContent = config.note || "";
+    const g = parseInt(gameInput.value, 10);
+
+    if (!config || isNaN(g)) {
+      checkerResult.className = "checker-result result-wait";
+      checkerResult.querySelector(".result-text").textContent = "G数を入力してください";
+      return;
+    }
+
+    if (Number.isFinite(config.excellent) && g >= config.excellent) {
+      checkerResult.className = "checker-result result-ok";
+      checkerResult.querySelector(".result-text").textContent = "◎ 狙い目OK！積極的に着席を検討";
+    } else if (Number.isFinite(config.good) && g >= config.good) {
+      checkerResult.className = "checker-result result-ok";
+      checkerResult.querySelector(".result-text").textContent = "◯ 狙い目OK　交換率次第で候補";
+    } else {
+      const t = Number.isFinite(config.caution) ? config.caution : (config.target || config.good);
+      if (Number.isFinite(t) && g >= t) {
+        checkerResult.className = "checker-result result-wait";
+        checkerResult.querySelector(".result-text").textContent = `△ 条件次第　${t}G以上で候補`;
+      } else {
+        checkerResult.className = "checker-result result-ng";
+        const thr = Number.isFinite(config.good) ? config.good : t;
+        checkerResult.querySelector(".result-text").textContent = `× まだ早い　${thr}G以上を目安に`;
+      }
+    }
+  }
+
+  // モード動的生成
+  if (slug !== "sf5") {
+    getModes(checker).forEach((mode, i) => {
+      const id = "mode_" + mode.key;
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "mode";
+      input.id = id;
+      input.value = mode.key;
+      if (i === 0) input.checked = true;
+
+      const label = document.createElement("label");
+      label.htmlFor = id;
+      label.textContent = mode.label;
+
+      input.addEventListener("change", () => {
+        suruCount = 0;
+        suruVal.textContent = 0;
+        gameInput.value = "";
+        applyInputLimit(mode.key);
+        judge();
+      });
+
+      modeToggle.appendChild(input);
+      modeToggle.appendChild(label);
+    });
+
+    const firstMode = getModes(checker)[0]?.key || "normal";
+    applyInputLimit(firstMode);
+
+    gameInput.addEventListener("input", function(){
+      const checked = document.querySelector('input[name="mode"]:checked');
+      const modeKey = checked ? checked.value : firstMode;
+      const limit = getMachineLimit(modeKey);
+      if (Number.isFinite(limit)) {
+        const value = parseInt(gameInput.value, 10);
+        if (!Number.isNaN(value) && value > limit) gameInput.value = String(limit);
+      }
+      judge();
+    });
+
+    gameInput.addEventListener("blur", function(){
+      const checked = document.querySelector('input[name="mode"]:checked');
+      const modeKey = checked ? checked.value : firstMode;
+      const limit = getMachineLimit(modeKey);
+      const value = parseInt(gameInput.value, 10);
+      if (Number.isFinite(limit) && !Number.isNaN(value) && value > limit) {
+        gameInput.value = String(limit);
+      }
+      judge();
+    });
+
+    judge();
+  }
+
+  // 狙い目早見表（田の字テーブル）
+  const summaryGrid = document.getElementById("summaryGrid");
+  const boxes = detail?.summaryBoxes || [
+    { label: "天井", value: machine.strategy || "-" },
+    { label: "ヤメ時", value: "-" }
+  ];
+  let rows = "";
+  for (let i = 0; i < boxes.length; i += 2) {
+    const a = boxes[i];
+    const b = boxes[i + 1];
+    if (b) {
+      rows += `<tr><td><span class="s-label">${a.label}</span><span class="s-value">${a.value}</span></td><td><span class="s-label">${b.label}</span><span class="s-value">${b.value}</span></td></tr>`;
+    } else {
+      rows += `<tr><td class="full" colspan="2"><span class="s-label">${a.label}</span><span class="s-value">${a.value}</span></td></tr>`;
+    }
+  }
+  summaryGrid.innerHTML = rows;
+
+  // 基本情報テーブル
+  const infoBody = document.getElementById("infoTableBody");
+  (detail?.factTable || [["機種名", machine.name]]).forEach(([th, td]) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<th>${th}</th><td>${td}</td>`;
+    infoBody.appendChild(tr);
+  });
+
+  // 詳細セクション
+  const articleSections = document.getElementById("articleSections");
+  (detail?.sections || []).forEach(section => {
+    const div = document.createElement("div");
+    div.className = "article-item";
+
+    if (section.type === "settei") {
+      const badgeClass = { hint: "settei-hint", weak: "settei-weak", mid: "settei-mid", strong: "settei-strong", ok: "settei-ok" };
+      let html = `<p class="article-title">${section.title}</p>`;
+      (section.tables || []).forEach(tbl => {
+        html += `<p class="settei-sub-label">${tbl.label}</p>`;
+        html += `<table class="settei-table"><tr>${tbl.headers.map(h => `<th>${h}</th>`).join("")}</tr>`;
+        tbl.rows.forEach(row => {
+          const cell0 = row[0];
+          const cell1 = row[1];
+          const badge = typeof cell1 === "object"
+            ? `<span class="settei-badge ${badgeClass[cell1.badge] || ""}">${cell1.text}</span>`
+            : cell1;
+          html += `<tr><td>${cell0}</td><td>${badge}</td></tr>`;
+        });
+        html += `</table>`;
+        if (tbl.note) html += `<p class="settei-note">${tbl.note}</p>`;
+      });
+      div.innerHTML = html;
+    } else {
+      div.innerHTML = `<p class="article-title">${section.title}</p>${(section.body || []).map(t => `<p class="article-body">${t}</p>`).join("")}`;
+    }
+
+    articleSections.appendChild(div);
+  });
 })();
 </script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/uchidokoro/service-worker.js")
+      .catch(err => console.warn("SW登録失敗:", err));
+  });
+}
+</script>
+</body>
+</html>
