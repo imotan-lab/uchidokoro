@@ -327,7 +327,7 @@ button, input, select { font: inherit; }
 .settei-table td { color: var(--text); font-size: 12px; font-weight: 700; padding: 4px 4px; border: 1px solid var(--line2); line-height: 1.5; vertical-align: middle; }
 .settei-table td:last-child { text-align: center; padding: 2px; }
 .settei-note { font-size: 11px; color: var(--muted); margin: 4px 0 0; }
-.settei-badge { display: block; width: 100%; box-sizing: border-box; padding: 3px 2px; border-radius: 3px; font-size: 10px; font-weight: 700; text-align: center; line-height: 1.3; white-space: nowrap; overflow: hidden; }
+.settei-badge { display: block; width: 100%; box-sizing: border-box; padding: 2px 1px; border-radius: 3px; font-size: 10px; font-weight: 700; text-align: center; line-height: 1.2; white-space: nowrap; overflow: hidden; }
 .settei-hint { display: block; color: var(--muted); font-size: 10px; font-weight: 400; text-align: center; }
 .settei-weak { background: rgba(245,185,65,.12); color: var(--gold); border: 1px solid var(--gold-line); }
 .settei-mid { background: rgba(245,185,65,.22); color: var(--gold); border: 1px solid var(--gold-line); }
@@ -422,17 +422,17 @@ button, input, select { font: inherit; }
 .btn-settei:hover { background: rgba(245,185,65,.18); }
 .machine-name { font-size: 18px; font-weight: 800; color: var(--text); line-height: 1.3; }
 
-.is-landscape .setting-input-grid { grid-template-columns: 1fr 1fr 1fr; gap: 8px 12px; }
-.is-landscape .setting-input-item { padding: 5px 0; gap: 4px; border-bottom: 1px solid var(--line); }
+.is-landscape .site-header { position: static; }
+.is-landscape .setting-input-grid { grid-template-columns: 1fr 1fr 1fr; gap: 6px 16px; }
+.is-landscape .setting-input-item { padding: 6px 0; gap: 6px; border-bottom: 1px solid var(--line); }
 .is-landscape .setting-input-label-wrap { flex: 1; min-width: 0; }
-.is-landscape .setting-input-label { font-size: 13px; }
+.is-landscape .setting-input-label { font-size: 15px; }
 .is-landscape .setting-input-sub { display: none; }
-.is-landscape .setting-counter-wrap { gap: 3px; flex-shrink: 0; }
-.is-landscape .setting-num-input { width: 50px; height: 40px; font-size: 15px; padding: 0 4px; }
-.is-landscape .setting-cnt-btn { width: 40px; height: 40px; font-size: 18px; }
+.is-landscape .setting-counter-wrap { gap: 5px; flex-shrink: 0; }
+.is-landscape .setting-num-input { width: 58px; height: 46px; font-size: 17px; padding: 0 4px; }
+.is-landscape .setting-cnt-btn { width: 46px; height: 46px; font-size: 22px; }
 .is-landscape .setting-current-val { display: none; }
-.is-landscape .landscape-hint { display: block; }
-.is-landscape .portrait-hint { display: none; }
+.is-landscape .hint-text { display: none; }
 .setting-current-val { display: none; }
 .landscape-hint { display: none; }
 .portrait-hint { display: block; }
