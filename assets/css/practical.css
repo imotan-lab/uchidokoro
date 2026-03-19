@@ -422,19 +422,17 @@ button, input, select { font: inherit; }
 .btn-settei:hover { background: rgba(245,185,65,.18); }
 .machine-name { font-size: 18px; font-weight: 800; color: var(--text); line-height: 1.3; }
 
-@media (max-height: 500px) {
-  .setting-input-grid { grid-template-columns: 1fr 1fr 1fr; gap: 0; }
-  .setting-input-item { padding: 6px 4px 6px 0; gap: 4px; border-bottom: 1px solid var(--line); justify-content: flex-start; }
-  .setting-input-label-wrap { flex: 1; min-width: 0; }
-  .setting-input-label { font-size: 11px; }
-  .setting-input-sub { display: none; }
-  .setting-counter-wrap { gap: 4px; flex-shrink: 0; }
-  .setting-num-input { display: none; }
-  .setting-cnt-btn { width: 40px; height: 40px; font-size: 18px; }
-  .setting-current-val { display: inline-block; min-width: 28px; text-align: center; font-size: 15px; font-weight: 800; color: var(--text); }
-  .landscape-hint { display: block; }
-  .portrait-hint { display: none; }
-}
+.is-landscape .setting-input-grid { grid-template-columns: 1fr 1fr 1fr; gap: 0; }
+.is-landscape .setting-input-item { padding: 6px 4px 6px 0; gap: 4px; border-bottom: 1px solid var(--line); }
+.is-landscape .setting-input-label-wrap { flex: 1; min-width: 0; }
+.is-landscape .setting-input-label { font-size: 11px; }
+.is-landscape .setting-input-sub { display: none; }
+.is-landscape .setting-counter-wrap { gap: 4px; flex-shrink: 0; }
+.is-landscape .setting-num-input { display: none; }
+.is-landscape .setting-cnt-btn { width: 40px; height: 40px; font-size: 18px; }
+.is-landscape .setting-current-val { display: inline-block; min-width: 28px; text-align: center; font-size: 15px; font-weight: 800; color: var(--text); }
+.is-landscape .landscape-hint { display: block; }
+.is-landscape .portrait-hint { display: none; }
 .setting-current-val { display: none; }
 .landscape-hint { display: none; }
 .portrait-hint { display: block; }

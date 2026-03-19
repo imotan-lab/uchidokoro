@@ -317,6 +317,15 @@ if('serviceWorker' in navigator){
       .catch(err=>console.warn('SW登録失敗:',err));
   });
 }
+
+// 横向き検知（JS）
+function checkOrientation(){
+  const isLandscape = window.innerWidth > window.innerHeight;
+  document.body.classList.toggle('is-landscape', isLandscape);
+}
+checkOrientation();
+window.addEventListener('resize', checkOrientation);
+window.addEventListener('orientationchange', ()=>{ setTimeout(checkOrientation, 100); });
 </script>
 </body>
 </html>
