@@ -1,41 +1,42 @@
-document.addEventListener("DOMContentLoaded", async () => {
-  try {
-    const params = new URLSearchParams(location.search);
-    const slug = params.get("slug");
-    if (!slug) return;
+(function(){
+  const params = new URLSearchParams(location.search);
+  const slug = params.get("slug");
+  if(!slug) return;
 
-    const res = await fetch("assets/data/machines.json");
-    const machines = await res.json();
-    const m = machines.find((x) => x.slug === slug);
-    if (!m) return;
+  fetch("assets/data/machines.json")
+    .then(res => res.json())
+    .then(list => {
+      const m = list.find(x => x.slug === slug);
+      if(!m) return;
 
-    const siteName = "うちどころ。";
-    const baseTitle = (m.seo && m.seo.title) ? m.seo.title : m.name;
-    const fullTitle = `${baseTitle} 天井・狙い目・やめどき・設定判別まとめ | ${siteName}`;
-    document.title = fullTitle;
+      const title = `${m.name} 狙い目・天井・期待値まとめ`;
+      const desc = `${m.name}の狙い目・天井・やめどき・設定判別を分かりやすく解説。期待値重視で立ち回るための情報を掲載しています。`;
 
-    const strategy = m.strategy || "詳細準備中";
-    const description = `${m.name}の天井・狙い目・やめどき・設定判別をまとめた攻略ページです。狙い目チェッカーとポチポチくんに対応。現在の狙い目目安は${strategy}。`;
-    const pageUrl = `${location.origin}${location.pathname}?slug=${encodeURIComponent(slug)}`;
+      document.title = title;
 
-    function ensureMeta(selector, attrs) {
-      let el = document.querySelector(selector);
-      if (!el) {
-        el = document.createElement("meta");
-        Object.entries(attrs).forEach(([key, value]) => el.setAttribute(key, value));
-        document.head.appendChild(el);
+      let metaDesc = document.querySelector('meta[name="description"]');
+      if(!metaDesc){
+        metaDesc = document.createElement("meta");
+        metaDesc.name = "description";
+        document.head.appendChild(metaDesc);
       }
-      return el;
-    }
+      metaDesc.content = desc;
 
-    ensureMeta('meta[name="description"]', { name: "description" }).setAttribute("content", description);
-    ensureMeta('meta[property="og:title"]', { property: "og:title" }).setAttribute("content", fullTitle);
-    ensureMeta('meta[property="og:description"]', { property: "og:description" }).setAttribute("content", description);
-    ensureMeta('meta[property="og:type"]', { property: "og:type" }).setAttribute("content", "article");
-    ensureMeta('meta[property="og:url"]', { property: "og:url" }).setAttribute("content", pageUrl);
-    ensureMeta('meta[name="twitter:title"]', { name: "twitter:title" }).setAttribute("content", fullTitle);
-    ensureMeta('meta[name="twitter:description"]', { name: "twitter:description" }).setAttribute("content", description);
-  } catch (e) {
-    console.log(e);
-  }
-});
+      // OG
+      let ogTitle = document.querySelector('meta[property="og:title"]');
+      if(!ogTitle){
+        ogTitle = document.createElement("meta");
+        ogTitle.setAttribute("property","og:title");
+        document.head.appendChild(ogTitle);
+      }
+      ogTitle.content = title;
+
+      let ogDesc = document.querySelector('meta[property="og:description"]');
+      if(!ogDesc){
+        ogDesc = document.createElement("meta");
+        ogDesc.setAttribute("property","og:description");
+        document.head.appendChild(ogDesc);
+      }
+      ogDesc.content = desc;
+    });
+})();
