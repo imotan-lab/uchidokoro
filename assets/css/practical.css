@@ -325,9 +325,9 @@ button, input, select { font: inherit; }
 .settei-table th:last-child { width: 30%; }
 .settei-table th { background: var(--panel); color: var(--muted); font-size: 10px; font-weight: 700; padding: 7px 8px; border: 1px solid var(--line2); text-align: left; }
 .settei-table td { color: var(--text); font-size: 12px; font-weight: 700; padding: 4px 4px; border: 1px solid var(--line2); line-height: 1.5; vertical-align: middle; }
-.settei-table td:last-child { text-align: center; padding: 4px; }
+.settei-table td:last-child { text-align: center; padding: 2px; }
 .settei-note { font-size: 11px; color: var(--muted); margin: 4px 0 0; }
-.settei-badge { display: block; width: 100%; box-sizing: border-box; padding: 4px 2px; border-radius: 3px; font-size: 10px; font-weight: 700; text-align: center; line-height: 1.4; white-space: nowrap; }
+.settei-badge { display: block; width: 100%; box-sizing: border-box; padding: 3px 2px; border-radius: 3px; font-size: 10px; font-weight: 700; text-align: center; line-height: 1.3; white-space: nowrap; overflow: hidden; }
 .settei-hint { display: block; color: var(--muted); font-size: 10px; font-weight: 400; text-align: center; }
 .settei-weak { background: rgba(245,185,65,.12); color: var(--gold); border: 1px solid var(--gold-line); }
 .settei-mid { background: rgba(245,185,65,.22); color: var(--gold); border: 1px solid var(--gold-line); }
@@ -423,14 +423,15 @@ button, input, select { font: inherit; }
 .machine-name { font-size: 18px; font-weight: 800; color: var(--text); line-height: 1.3; }
 
 .is-landscape .setting-input-grid { grid-template-columns: 1fr 1fr 1fr; gap: 0; }
-.is-landscape .setting-input-item { padding: 6px 4px 6px 0; gap: 4px; border-bottom: 1px solid var(--line); }
+.is-landscape .setting-input-item { padding: 5px 0; gap: 4px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line2); margin-right: 8px; }
+.is-landscape .setting-input-item:nth-child(3n) { border-right: none; margin-right: 0; }
 .is-landscape .setting-input-label-wrap { flex: 1; min-width: 0; }
 .is-landscape .setting-input-label { font-size: 11px; }
 .is-landscape .setting-input-sub { display: none; }
-.is-landscape .setting-counter-wrap { gap: 4px; flex-shrink: 0; }
-.is-landscape .setting-num-input { display: none; }
-.is-landscape .setting-cnt-btn { width: 40px; height: 40px; font-size: 18px; }
-.is-landscape .setting-current-val { display: inline-block; min-width: 28px; text-align: center; font-size: 15px; font-weight: 800; color: var(--text); }
+.is-landscape .setting-counter-wrap { gap: 3px; flex-shrink: 0; }
+.is-landscape .setting-num-input { width: 36px; height: 36px; font-size: 12px; padding: 0 2px; }
+.is-landscape .setting-cnt-btn { width: 36px; height: 36px; font-size: 16px; }
+.is-landscape .setting-current-val { display: none; }
 .is-landscape .landscape-hint { display: block; }
 .is-landscape .portrait-hint { display: none; }
 .setting-current-val { display: none; }
