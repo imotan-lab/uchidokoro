@@ -424,10 +424,11 @@ button, input, select { font: inherit; }
 
 @media (orientation: landscape) {
   .setting-input-grid { grid-template-columns: 1fr 1fr 1fr; gap: 0; }
-  .setting-input-item { padding: 5px 0; }
-  .setting-cnt-btn { width: 40px; height: 40px; font-size: 18px; }
-  .setting-num-input { width: 60px; height: 40px; font-size: 13px; }
-  .setting-input-label { font-size: 12px; }
+  .setting-input-item { padding: 5px 0; gap: 4px; }
+  .setting-counter-wrap { gap: 2px; }
+  .setting-cnt-btn { width: 34px; height: 34px; font-size: 16px; }
+  .setting-num-input { width: 40px; height: 34px; font-size: 12px; }
+  .setting-input-label { font-size: 11px; }
   .setting-input-sub { font-size: 10px; }
   .landscape-hint { display: block; }
   .portrait-hint { display: none; }
