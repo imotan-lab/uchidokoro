@@ -215,63 +215,37 @@ async function loadJson(path){
     return modeData;
   }
 
-  function getModeInputMax(slug, modeKey) {
-    const modeMaxMap = {
-      hokuto: { normal: 800, reset: 800 },
-      hokuto_tensei2: { normal: 1200, reset: 400 },
-      kabaneri: { normal: 800, reset: 500 },
-      monkeyv: { normal: 800, reset: 800 },
-      koukaku: { cz: 600, at: 1000, reset: 300 },
-      tokyo_ghoul: { cz: 600, at: 1200, reset: 200 },
-      tekken6: { normal: 900, suru: 900, reset: 500 },
-      banchou4: { normal: 700, suru: 700, reset: 700 },
-      valvrave2: { cz: 1000, bonus: 1500, suru: 1500, reset: 300 },
-      kaguya: { normal: 1100, reg: 900, suru: 1100, reset: 800 },
-      biohazard: { normal: 999, tenkoku: 99, reset: 666 },
-      chibaryo2: { normal: 600, reset: 200 },
-      dumbbell: { cz: 600, suru: 600, reset: 600 },
-      sf5: {},
-      godeater: { normal: 800, nukete: 350, reset: 350 },
-      goblin: { normal: 1500, reset: 200 },
-      baki: { cz: 600, suru: 600, reset: 100 },
-      tensura: { normal: 600, reset: 600 }
-    };
-    const machineMax = modeMaxMap[slug] || {};
-    return Number.isFinite(machineMax[modeKey]) ? machineMax[modeKey] : null;
+  function clampGameInput() {
+    const raw = parseInt(gameInput.value, 10);
+    const limit = Number.isFinite(machine.limit) ? machine.limit : null;
+    if (isNaN(raw)) return NaN;
+    if (raw < 0) {
+      gameInput.value = "0";
+      return 0;
+    }
+    if (limit !== null && raw > limit) {
+      gameInput.value = String(limit);
+      return limit;
+    }
+    return raw;
   }
 
-  function applyInputMax() {
-    const checked = document.querySelector('input[name="mode"]:checked');
-    const modeKey = checked ? checked.value : null;
-    const max = modeKey ? getModeInputMax(slug, modeKey) : null;
-    if (Number.isFinite(max)) {
-      gameInput.max = String(max);
-      gameInput.placeholder = `現在G数を入力（最大${max}G）`;
-      const current = parseInt(gameInput.value, 10);
-      if (!Number.isNaN(current) && current > max) {
-        gameInput.value = String(max);
-      }
-    } else {
-      gameInput.removeAttribute('max');
-      gameInput.placeholder = '現在G数を入力';
-    }
+  const inputLimit = Number.isFinite(machine.limit) ? machine.limit : null;
+  if (inputLimit !== null) {
+    gameInput.max = String(inputLimit);
+    gameInput.placeholder = `現在G数を入力（最大${inputLimit}G）`;
   }
 
   function judge() {
     const checked = document.querySelector('input[name="mode"]:checked');
     if (!checked) return;
     const modeKey = checked.value;
-    const inputMax = getModeInputMax(slug, modeKey);
     const modedef = (checker.modes || []).find(m => m.key === modeKey);
     suruWrap.style.display = (modedef && modedef.hasSuru) ? "block" : "none";
     const config = getConfig(checker, modeKey, suruCount);
     const noteEl = document.getElementById("checkerNote");
     if (noteEl) noteEl.textContent = config.note || "";
-    const gRaw = parseInt(gameInput.value, 10);
-    if (Number.isFinite(inputMax) && !Number.isNaN(gRaw) && gRaw > inputMax) {
-      gameInput.value = String(inputMax);
-    }
-    const g = parseInt(gameInput.value, 10);
+    const g = clampGameInput();
     if (!config || isNaN(g)) {
       checkerResult.className = "checker-result result-wait";
       checkerResult.querySelector(".result-text").textContent = "G数を入力してください";
@@ -304,12 +278,11 @@ async function loadJson(path){
     if (i === 0) input.checked = true;
     const label = document.createElement("label");
     label.htmlFor = id; label.textContent = mode.label;
-    input.addEventListener("change", () => { suruCount = 0; suruVal.textContent = 0; gameInput.value = ""; applyInputMax(); judge(); });
+    input.addEventListener("change", () => { suruCount = 0; suruVal.textContent = 0; gameInput.value = ""; judge(); });
     modeToggle.appendChild(input);
     modeToggle.appendChild(label);
   });
 
-  applyInputMax();
   gameInput.addEventListener("input", judge);
   gameInput.addEventListener("blur", judge);
 
