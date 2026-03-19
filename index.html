@@ -6,6 +6,12 @@
 <title>うちどころ。| 機種一覧</title>
 <meta name="description" content="スマホで使いやすいスロット狙い目一覧。機種名検索から記事とチェッカーへすぐ移動できます。">
 <link rel="stylesheet" href="assets/css/practical.css">
+<link rel="manifest" href="/uchidokoro/manifest.json">
+<meta name="theme-color" content="#07090c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="うちどころ。">
 </head>
 <body>
 <header class="site-header">
@@ -160,6 +166,14 @@ function buildKeywords(machine){
     empty.textContent = "機種一覧の読み込みに失敗しました。";
   }
 })();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/uchidokoro/service-worker.js")
+      .catch(err => console.warn("SW登録失敗:", err));
+  });
+}
 </script>
 </body>
 </html>

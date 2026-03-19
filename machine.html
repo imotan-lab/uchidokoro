@@ -21,6 +21,12 @@
   width:18%;
 }
 </style>
+<link rel="manifest" href="/uchidokoro/manifest.json">
+<meta name="theme-color" content="#07090c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="うちどころ。">
 </head>
 <body>
 <header class="site-header">
@@ -252,6 +258,14 @@ async function loadJson(path){
     articleSections.appendChild(div);
   });
 })();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/uchidokoro/service-worker.js")
+      .catch(err => console.warn("SW登録失敗:", err));
+  });
+}
 </script>
 </body>
 </html>

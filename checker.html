@@ -6,6 +6,12 @@
 <title>チェッカー | うちどころ。</title>
 <meta name="description" content="通常時・リセット後のG数を入力して狙い目を即判定します。">
 <link rel="stylesheet" href="assets/css/practical.css">
+<link rel="manifest" href="/uchidokoro/manifest.json">
+<meta name="theme-color" content="#07090c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="うちどころ。">
 </head>
 <body>
 <header class="site-header">
@@ -174,6 +180,14 @@ function evaluate(game, config){
   gameInput.addEventListener("keydown", e => { if (e.key === "Enter") judge(); });
   document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener("change", () => { gameInput.value = ""; judge(); }));
 })();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/uchidokoro/service-worker.js")
+      .catch(err => console.warn("SW登録失敗:", err));
+  });
+}
 </script>
 </body>
 </html>
