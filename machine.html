@@ -84,6 +84,11 @@
       <div id="articleSections"></div>
     </div>
 
+    <div class="article-block">
+      <p class="block-label">▶ 設定判別ツール</p>
+      <a id="settingToolLink" href="setting.html" class="btn-show-all" style="display:block;text-align:center;">設定判別ツールを使う →</a>
+    </div>
+
   </section>
 
 </main>
@@ -169,6 +174,8 @@ async function loadJson(path){
   // タイトル（document.titleはmeta-auto.jsが担当）
   document.getElementById("machineTitle").textContent = machine.name;
   document.getElementById("heroSub").textContent = detail?.lead || "";
+  const settingToolLink = document.getElementById("settingToolLink");
+  if (settingToolLink) settingToolLink.href = `setting.html?slug=${slug}`;
 
   // チェッカー
   const checkerData = machine.checker || {};

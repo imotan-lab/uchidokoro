@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>設定判別 | うちどころ。</title>
+<meta name="description" content="設定判別ツール。ゲーム数・小役をカウントしながら入力すると設定期待度がリアルタイムで更新されます。">
+<link rel="stylesheet" href="assets/css/practical.css">
+<link rel="manifest" href="/uchidokoro/manifest.json">
+<meta name="theme-color" content="#07090c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="うちどころ。">
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html"><img src="assets/img/logo.png" alt="うちどころ。" style="height:36px;width:auto;display:block;"></a>
+    <div class="header-search-wrap">
+      <span class="header-search-icon">🔍</span>
+      <input id="headerSearch" class="header-search-input" type="search" placeholder="機種を検索">
+      <div id="headerDropdown" class="header-dropdown"></div>
+    </div>
+    <nav style="flex-shrink:0;">
+      <a id="articleLinkNav" href="machine.html" style="color:var(--muted);font-size:13px;font-weight:700;">記事</a>
+    </nav>
+  </div>
+</header>
+<main class="site-main">
+
+  <section class="article-hero">
+    <p class="eyebrow"><a href="machine.html" id="backLink" style="color:var(--muted);text-decoration:none;">‹ 記事に戻る</a>&nbsp;&nbsp;SETTING JUDGE</p>
+    <h1 id="pageTitle" class="page-title">設定判別</h1>
+    <p class="hero-sub" id="heroSub">ゲーム数・小役をカウントしながら入力すると設定期待度がリアルタイムで更新されます。</p>
+  </section>
+
+  <section class="article-section-wrap">
+
+    <div class="article-block">
+      <p class="block-label">▶ カウント入力</p>
+      <p class="hint-text" style="margin-bottom:12px;">BB回数は初当たりのみ。小役・共通ベルは通常時のみカウント（BB中は除く）。ページを閉じても同じ端末・ブラウザであればデータが保持されます。</p>
+      <div class="setting-input-grid">
+        <div class="setting-input-item">
+          <span class="setting-input-label">総ゲーム数</span>
+          <span class="setting-input-sub">通常時の近似値</span>
+          <div class="setting-counter-wrap">
+            <button class="setting-cnt-btn" onclick="dec('totalG')">－</button>
+            <input class="setting-num-input" id="totalG" type="number" inputmode="numeric" placeholder="0">
+            <button class="setting-cnt-btn" onclick="inc('totalG')">＋</button>
+          </div>
+          <span class="setting-calc-disp" id="totalGDisp"></span>
+        </div>
+        <div class="setting-input-item">
+          <span class="setting-input-label">BB回数</span>
+          <span class="setting-input-sub">初当たりのみ</span>
+          <div class="setting-counter-wrap">
+            <button class="setting-cnt-btn" onclick="dec('bbCount')">－</button>
+            <input class="setting-num-input" id="bbCount" type="number" inputmode="numeric" placeholder="0">
+            <button class="setting-cnt-btn" onclick="inc('bbCount')">＋</button>
+          </div>
+          <span class="setting-calc-disp" id="bbDisp"></span>
+        </div>
+        <div class="setting-input-item">
+          <span class="setting-input-label">中段チェリー</span>
+          <span class="setting-input-sub">通常時のみ</span>
+          <div class="setting-counter-wrap">
+            <button class="setting-cnt-btn" onclick="dec('cherryCount')">－</button>
+            <input class="setting-num-input" id="cherryCount" type="number" inputmode="numeric" placeholder="0">
+            <button class="setting-cnt-btn" onclick="inc('cherryCount')">＋</button>
+          </div>
+          <span class="setting-calc-disp" id="cherryDisp"></span>
+        </div>
+        <div class="setting-input-item">
+          <span class="setting-input-label">弱スイカ</span>
+          <span class="setting-input-sub">通常時・目押し必須</span>
+          <div class="setting-counter-wrap">
+            <button class="setting-cnt-btn" onclick="dec('weakWmCount')">－</button>
+            <input class="setting-num-input" id="weakWmCount" type="number" inputmode="numeric" placeholder="0">
+            <button class="setting-cnt-btn" onclick="inc('weakWmCount')">＋</button>
+          </div>
+          <span class="setting-calc-disp" id="weakWmDisp"></span>
+        </div>
+        <div class="setting-input-item">
+          <span class="setting-input-label">強スイカ</span>
+          <span class="setting-input-sub">通常時・目押し必須</span>
+          <div class="setting-counter-wrap">
+            <button class="setting-cnt-btn" onclick="dec('strongWmCount')">－</button>
+            <input class="setting-num-input" id="strongWmCount" type="number" inputmode="numeric" placeholder="0">
+            <button class="setting-cnt-btn" onclick="inc('strongWmCount')">＋</button>
+          </div>
+          <span class="setting-calc-disp" id="strongWmDisp"></span>
+        </div>
+        <div class="setting-input-item">
+          <span class="setting-input-label">共通ベル <span style="color:var(--muted2);font-size:10px;">参考値</span></span>
+          <span class="setting-input-sub">通常時・中→右→左</span>
+          <div class="setting-counter-wrap">
+            <button class="setting-cnt-btn" onclick="dec('bellCount')">－</button>
+            <input class="setting-num-input" id="bellCount" type="number" inputmode="numeric" placeholder="0">
+            <button class="setting-cnt-btn" onclick="inc('bellCount')">＋</button>
+          </div>
+          <span class="setting-calc-disp" id="bellDisp"></span>
+        </div>
+        <div class="setting-input-item">
+          <span class="setting-input-label">リーチ目役</span>
+          <span class="setting-input-sub">通常時のみ</span>
+          <div class="setting-counter-wrap">
+            <button class="setting-cnt-btn" onclick="dec('reachCount')">－</button>
+            <input class="setting-num-input" id="reachCount" type="number" inputmode="numeric" placeholder="0">
+            <button class="setting-cnt-btn" onclick="inc('reachCount')">＋</button>
+          </div>
+          <span class="setting-calc-disp" id="reachDisp"></span>
+        </div>
+      </div>
+      <button class="setting-reset-btn" onclick="resetAll()">データをリセット</button>
+    </div>
+
+    <div class="article-block">
+      <p class="block-label">▶ 設定期待度</p>
+      <div class="setting-result-wrap">
+        <div class="setting-result-row"><span class="setting-result-name">設定1</span><div class="setting-bar-wrap"><div class="setting-bar" id="bar1" style="width:20%"></div></div><span class="setting-result-pct" id="pct1">—</span></div>
+        <div class="setting-result-row"><span class="setting-result-name">設定2</span><div class="setting-bar-wrap"><div class="setting-bar" id="bar2" style="width:20%"></div></div><span class="setting-result-pct" id="pct2">—</span></div>
+        <div class="setting-result-row"><span class="setting-result-name">設定4</span><div class="setting-bar-wrap"><div class="setting-bar" id="bar4" style="width:20%"></div></div><span class="setting-result-pct" id="pct4">—</span></div>
+        <div class="setting-result-row"><span class="setting-result-name">設定5</span><div class="setting-bar-wrap"><div class="setting-bar" id="bar5" style="width:20%"></div></div><span class="setting-result-pct" id="pct5">—</span></div>
+        <div class="setting-result-row"><span class="setting-result-name">設定6</span><div class="setting-bar-wrap"><div class="setting-bar" id="bar6" style="width:20%"></div></div><span class="setting-result-pct" id="pct6">—</span></div>
+      </div>
+      <div class="checker-card" style="margin-top:12px;">
+        <p class="result-label">判定コメント</p>
+        <p class="result-text" id="hintText" style="font-size:13px;font-weight:700;color:var(--soft);">ゲーム数と各小役をカウントしながら入力してください。データが増えるほど精度が上がります。</p>
+      </div>
+      <div style="background:rgba(255,98,98,.06);border:1px solid rgba(255,98,98,.2);border-radius:var(--radius-sm);padding:11px 13px;margin-top:10px;">
+        <p style="font-size:11px;color:#ff9090;line-height:1.7;">このツールは「設定ごとの理論確率にどれだけ近いか」をベイズ推定で計算しています。2000G未満ではサンプル不足で精度が低くなります。高設定でも低設定っぽい数値が出ることがあるため、あくまで参考値としてご利用ください。設定2と設定4は確率差が小さく区別しにくいです。</p>
+      </div>
+      <p class="hint-text" style="margin-top:8px;">※共通ベルは公式未公表の実戦値のため参考程度にご利用ください。</p>
+    </div>
+
+  </section>
+
+</main>
+
+<footer>
+  <div class="site-footer-inner">
+    <div class="footer-links">
+      <a href="contact.html">お問い合わせ</a>
+      <a href="privacy.html">プライバシーポリシー</a>
+    </div>
+    <p class="footer-copy">© 2026 うちどころ。</p>
+  </div>
+</footer>
+
+<script>
+// ヘッダー検索
+(function(){
+  function normalizeText(v){
+    return String(v||"").toLowerCase()
+      .replace(/[\u3041-\u3096]/g,ch=>String.fromCharCode(ch.charCodeAt(0)+0x60))
+      .replace(/[\s\-\_ー]/g,"");
+  }
+  const searchInput=document.getElementById("headerSearch");
+  const dropdown=document.getElementById("headerDropdown");
+  let allMachines=[];
+  fetch("assets/data/machines.json").then(r=>r.json()).then(m=>{allMachines=m;});
+  searchInput.addEventListener("input",function(){
+    const query=normalizeText(this.value);
+    dropdown.innerHTML="";
+    if(!query){dropdown.style.display="none";return;}
+    const matched=allMachines.filter(m=>[m.name,m.slug,...(m.aliases||[])].map(normalizeText).join("|").includes(query)).slice(0,6);
+    if(!matched.length){dropdown.style.display="none";return;}
+    matched.forEach(m=>{
+      const a=document.createElement("a");
+      a.className="header-dropdown-item";
+      a.href="setting.html?slug="+m.slug;
+      a.textContent=m.name;
+      dropdown.appendChild(a);
+    });
+    dropdown.style.display="block";
+  });
+  document.addEventListener("click",e=>{if(!e.target.closest(".header-search-wrap"))dropdown.style.display="none";});
+})();
+
+// slug読み込みとmeta設定
+const slug = new URLSearchParams(location.search).get("slug") || "hokuto";
+const STORAGE_KEY = "uchidokoro_setting_" + slug;
+
+fetch("assets/data/machines.json").then(r=>r.json()).then(machines=>{
+  const m = machines.find(x=>x.slug===slug);
+  if(!m) return;
+  document.getElementById("pageTitle").textContent = m.name + " 設定判別";
+  document.getElementById("heroSub").textContent = m.name + "の設定判別ツール。ゲーム数・小役をカウントしながら入力すると設定期待度がリアルタイムで更新されます。";
+  document.getElementById("articleLinkNav").href = "machine.html?slug=" + slug;
+  document.getElementById("backLink").href = "machine.html?slug=" + slug;
+  document.title = m.name + " 設定判別 | うちどころ。";
+  const meta = document.querySelector('meta[name="description"]');
+  if(meta) meta.content = m.name + "の設定判別ツール。BB確率・小役確率をリアルタイムで計算し、設定1〜6の期待度をベイズ推定で表示します。";
+});
+
+// 判別ロジック
+const FIELDS = ['totalG','bbCount','cherryCount','weakWmCount','strongWmCount','bellCount','reachCount'];
+const SETTINGS = [1,2,4,5,6];
+const RATES = {
+  bb:      {1:1/383.4,2:1/370.5,4:1/297.8,5:1/258.7,6:1/235.1},
+  cherry:  {1:1/210.1,2:1/204.8,4:1/199.8,5:1/195.0,6:1/190.5},
+  weakWm:  {1:1/109.0,2:1/108.7,4:1/105.9,5:1/100.7,6:1/98.3},
+  strongWm:{1:1/409.6,2:1/404.5,4:1/376.6,5:1/352.3,6:1/337.8},
+  reach:   {1:1/16384,2:1/13107,4:1/10922,5:1/9362, 6:1/8192},
+  bell:    {1:1/165,  2:1/145,  4:1/130,  5:1/115,  6:1/100}
+};
+const COLORS = {1:'#667788',2:'#7788aa',4:'#f5b941',5:'#e8a020',6:'#3fc87a'};
+
+function val(id){return parseInt(document.getElementById(id).value)||0;}
+function save(){
+  const data={};
+  FIELDS.forEach(id=>{data[id]=val(id);});
+  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(data));}catch(e){}
+}
+function load(){
+  try{
+    const raw=localStorage.getItem(STORAGE_KEY);
+    if(!raw)return;
+    const data=JSON.parse(raw);
+    FIELDS.forEach(id=>{if(data[id])document.getElementById(id).value=data[id];});
+  }catch(e){}
+}
+function inc(id){document.getElementById(id).value=(val(id)+1);save();calcAll();}
+function dec(id){document.getElementById(id).value=Math.max(0,val(id)-1);save();calcAll();}
+
+function poisson(k,lambda){
+  if(k<0||lambda<=0)return k===0?1:0;
+  let logP=-lambda+k*Math.log(lambda);
+  for(let i=1;i<=k;i++)logP-=Math.log(i);
+  return Math.exp(logP);
+}
+function dispRate(id,totalG,count){
+  const el=document.getElementById(id);
+  if(!totalG||!count){el.textContent='';return;}
+  el.textContent='実測: 1/'+Math.round(totalG/count);
+}
+function calcAll(){
+  const totalG=val('totalG'),bb=val('bbCount'),cherry=val('cherryCount');
+  const weakWm=val('weakWmCount'),strongWm=val('strongWmCount');
+  const reach=val('reachCount'),bell=val('bellCount');
+  dispRate('bbDisp',totalG,bb);
+  dispRate('cherryDisp',totalG,cherry);
+  dispRate('weakWmDisp',totalG,weakWm);
+  dispRate('strongWmDisp',totalG,strongWm);
+  dispRate('reachDisp',totalG,reach);
+  dispRate('bellDisp',totalG,bell);
+  if(!totalG){resetBars();return;}
+  let scores={},total=0;
+  SETTINGS.forEach(s=>{
+    let L=1;
+    if(bb)       L*=poisson(bb,      totalG*RATES.bb[s]);
+    if(cherry)   L*=poisson(cherry,  totalG*RATES.cherry[s]);
+    if(weakWm)   L*=poisson(weakWm,  totalG*RATES.weakWm[s]);
+    if(strongWm) L*=poisson(strongWm,totalG*RATES.strongWm[s]);
+    if(reach)    L*=poisson(reach,   totalG*RATES.reach[s]);
+    if(bell)     L*=poisson(bell,    totalG*RATES.bell[s]);
+    scores[s]=L;total+=L;
+  });
+  if(total===0){resetBars();return;}
+  let maxPct=0,maxS=1;
+  SETTINGS.forEach(s=>{
+    const pct=scores[s]/total*100;
+    if(pct>maxPct){maxPct=pct;maxS=s;}
+    document.getElementById('bar'+s).style.width=pct+'%';
+    document.getElementById('bar'+s).style.background=COLORS[s];
+    document.getElementById('pct'+s).textContent=pct.toFixed(1)+'%';
+  });
+  let comment='';
+  if(totalG<2000)comment=`現在${totalG}G。2000G以上積み上げると精度が上がります。参考程度にご覧ください。`;
+  else if(maxPct>=60)comment=`設定${maxS}の可能性が高いです（${maxPct.toFixed(1)}%）。`;
+  else if(maxPct>=40)comment=`設定${maxS}がやや優勢ですが、まだ絞り込めていません。カウントを続けましょう。`;
+  else comment='設定を絞り込めていません。ゲーム数を重ねながらカウントを続けてください。';
+  document.getElementById('hintText').textContent=comment;
+}
+function resetBars(){
+  SETTINGS.forEach(s=>{
+    document.getElementById('bar'+s).style.width='20%';
+    document.getElementById('bar'+s).style.background='var(--muted2)';
+    document.getElementById('pct'+s).textContent='—';
+  });
+  document.getElementById('hintText').textContent='ゲーム数と各小役をカウントしながら入力してください。データが増えるほど精度が上がります。';
+}
+function resetAll(){
+  if(!confirm('データをリセットしますか？'))return;
+  FIELDS.forEach(id=>{document.getElementById(id).value='';});
+  FIELDS.forEach(id=>{
+    const d=document.getElementById(id.replace('Count','Disp'));
+    if(d)d.textContent='';
+  });
+  try{localStorage.removeItem(STORAGE_KEY);}catch(e){}
+  resetBars();
+}
+document.querySelectorAll('.setting-num-input').forEach(el=>el.addEventListener('input',()=>{save();calcAll();}));
+load();
+calcAll();
+</script>
+
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('/uchidokoro/service-worker.js')
+      .catch(err=>console.warn('SW登録失敗:',err));
+  });
+}
+</script>
+</body>
+</html>
