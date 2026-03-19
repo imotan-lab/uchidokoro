@@ -179,6 +179,7 @@ async function loadJson(path){
   const suruWrap = document.getElementById("suruWrap");
   const suruVal = document.getElementById("suruVal");
   const checkerNote = document.getElementById("checkerNote");
+  const checkerCard = document.querySelector(".checker-card");
   let suruCount = 0;
 
   function getMachineLimit(modeKey) {
@@ -203,10 +204,13 @@ async function loadJson(path){
   }
 
   if (slug === "sf5") {
-    modeToggle.style.display = "none";
-    suruWrap.style.display = "none";
-    gameInput.style.display = "none";
+    checkerCard.classList.add("checker-card--guide");
+    modeToggle.classList.add("is-hidden");
+    suruWrap.classList.add("is-hidden");
+    gameInput.classList.add("is-hidden");
     checkerResult.className = "checker-result result-wait";
+    checkerResult.classList.add("checker-result--guide");
+    if (checkerNote) checkerNote.classList.add("hint-text--guide");
     checkerResult.querySelector(".result-label").textContent = "案内";
     checkerResult.querySelector(".result-text").textContent = "この機種は天井非搭載のため、ハイエナ狙いには向きません。";
     if (checkerNote) checkerNote.textContent = "設定狙い主体の機種です。高設定をつかめる環境（イベント・特定日）での使用を推奨します。";

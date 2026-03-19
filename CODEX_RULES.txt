@@ -1,0 +1,333 @@
+
+このプロジェクトのルール:
+
+■ 基本
+・いきなりファイルを書き換えない
+・必ず先に修正方針を提示する
+・変更するファイル名を明記する
+・差分は最小限にする
+・不要なファイルは追加しない
+・削除が必要な場合は必ず事前確認する
+・既存構造を壊さない
+・GitHub Pagesの静的サイトとして正常動作を最優先とする
+・回答は日本語で行う
+
+■ 作業手順
+・まず変更せずに、修正方針と変更ファイル名だけ出す
+・ユーザーのOKが出てから実装する
+・実装後は以下を必ずまとめる
+  - 変更内容
+  - 影響範囲
+  - 確認ポイント
+
+■ 回答ルール
+・聞かれていない改善提案は出さない
+・推測ではなく実際の記述ベースで答える
+・素人にもわかりやすい説明をする
+
+その他構造やルール
+
+## サイト情報
+
+- **サイト名**：うちどころ。
+- **GitHub**：https://github.com/imotan-lab/uchidokoro
+- **公開URL**：https://imotan-lab.github.io/uchidokoro/
+- **運営**：GitHub Pages（静的サイト）
+- **現在のファイル一式はGitHubから渡される**
+
+---
+
+## 作業ルール（必ず守ること）
+
+- ファイル変更前に必ず現在のファイルを確認してから作業する
+- 変更は差分のみ。新規作成で上書きしない
+- 大きな変更前はプレビューを見せてから進める
+- アップ先ディレクトリとコミットサマリー文をセットで記載する
+- コミットサマリーはコードブロック（```）で囲んで1クリックでコピーできるようにする
+- アップ先ディレクトリのファイルは名前順で並べる
+- **ファイル名ではなくページ名で話す**（例：`machine.html` → 「記事ページ」）
+- わからないことはわからないと言う
+- 辛口でアドバイスする
+- 常に敬語で話す
+- ユーザーはコードの素人。ユーザーがやることは動作確認のみ
+- 確認してほしいことは「どのページのどこを見てほしいか」を具体的に伝える
+
+---
+
+## ページの呼び方（ファイル名禁止）
+
+| 呼び方 | 実ファイル | 説明 |
+|--------|-----------|------|
+| トップページ | index.html | 機種一覧・検索 |
+| 記事ページ | machine.html | 狙い目チェッカー埋め込み・記事 |
+| ポチポチくん | setting.html | 設定判別ツール |
+| チェッカーページ | checker.html | 現状どこからもリンクされていない・未使用 |
+
+---
+
+## 技術構成
+
+- HTML / CSS（assets/css/practical.css）/ JavaScript
+- 機種一覧データ：assets/data/machines.json
+- 機種詳細記事データ：assets/data/machine-details/機種名.json
+- 設定判別データ：ポチポチくん（機種ごとにslugで切り替え）
+- Google Fonts（Orbitron）をpractical.cssの先頭で@import
+
+---
+
+## ファイル構成
+
+```
+uchidokoro/
+├── index.html            トップページ
+├── machine.html          記事ページ（全機種共通、slugで切り替え）
+├── checker.html          チェッカーページ（未使用・要整理）
+├── setting.html          ポチポチくん（全機種共通、slugで切り替え）
+├── meta-auto.js          title/meta descriptionを機種ごとに動的生成
+├── manifest.json         PWA設定
+├── service-worker.js     オフラインキャッシュ
+├── assets/
+│   ├── css/
+│   │   └── practical.css     全ページ共通CSS（唯一のCSS）
+│   ├── data/
+│   │   ├── machines.json                  機種一覧
+│   │   └── machine-details/
+│   │       └── hokuto.json                北斗の記事データ（完成済み）
+│   └── img/
+│       └── logo.png
+├── machines/
+│   └── 機種名/
+│       ├── index.html    machine.html?slug=機種名 へリダイレクト
+│       └── checker.html  checker.html?slug=機種名 へリダイレクト
+├── scripts/
+│   └── update_ranking.py    YouTube APIで毎日機種ランキングを自動更新
+└── .github/
+    └── workflows/
+        └── update-ranking.yml   毎日UTC18:00（日本時間3:00）に自動実行
+```
+
+---
+
+## 環境・運用メモ
+
+- GitHub Desktopでローカル管理、エクスプローラーでファイル操作
+- スマホはiOS・Braveブラウザで確認（プライベートブラウズで毎回確認）
+- YouTube APIのランキング自動更新は正常動作確認済み（GitHub Actions）
+- PWA対応済み（オフライン動作・ホーム追加可能）
+- localStorageでデータ保存（同端末・同ブラウザ限定）
+- 横向き検知はCSSのmedia queryではなくJSでwindow.innerWidth > window.innerHeightで判定（iOS Braveではmedia queryが効かないため）
+
+---
+
+## デザイン方針
+
+- ダークトーン（背景#07090c系）
+- ゴールドアクセント（var(--gold)）
+- スマホファースト・スマホ幅390px基準
+- フォント：本文はヒラギノ角ゴ、キャッチコピーのみOrbitron
+- CSSクラスはすべてpractical.cssに集約（インラインstyleは極力使わない、記事ページには絶対書かない）
+
+---
+
+## CSSの重要ポイント（practical.css）
+
+### settei-table（設定示唆テーブル）
+```css
+.settei-table { width: 100%; table-layout: fixed; }
+.settei-table th:last-child { width: 90px; }
+.settei-badge { display: block; width: 100%; box-sizing: border-box; white-space: nowrap; overflow: hidden; }
+```
+- 記事ページにインラインstyleを絶対に書かない（過去に18%固定が埋め込まれて長期間ハマった）
+- 右列90pxは「設定4以上期待大」（9文字・font-size:10px）がギリギリ収まるサイズ
+
+### 横向き検知
+```javascript
+function checkOrientation(){
+  const isLandscape = window.innerWidth > window.innerHeight;
+  document.body.classList.toggle('is-landscape', isLandscape);
+}
+```
+- .is-landscape クラスをbodyに付与してCSSで切り替え
+
+### summary-grid（狙い目早見表）
+```css
+.summary-grid { width: 100%; border-collapse: collapse; border: 1px solid var(--line2); }
+```
+- `<table>`タグを使用（divグリッドではない）
+
+---
+
+## 完成しているもの
+
+### トップページ
+- キャッチコピー「READ THE FLOOR.」、説明文、検索窓
+- 検索窓の下に「全機種を見る」ボタン
+- 人気機種TOP10リスト（「狙い目」「設定判別」ボタン付き・右寄せ）
+- 機種名は18px・ボタンは44px以上・ランク番号なし
+
+### 記事ページ
+- ‹ 一覧 ARTICLE の戻るリンク
+- タイトル直下に「設定判別ツール ポチポチくんを使う →」ボタン
+- 狙い目チェッカー（モード動的生成・スルー回数カウンター対応）
+- 狙い目早見表（田の字テーブル）
+- 基本情報テーブル（th/td間に縦線）
+- 詳細セクション（設定示唆はtype:setteiで専用テーブル描画）
+- ポチポチくんへのリンク（一番下）
+
+### ポチポチくん（setting.html）
+- ‹ 狙い目に戻る POCHI POCHI
+- 横向き案内を別枠（ゴールド）で表示・横向き時はJS制御で非表示
+- 入力項目：総ゲーム数・BB回数・中段チェリー・弱スイカ・強スイカ・リーチ目役・共通ベル
+- ベイズ推定でリアルタイム設定期待度表示（設定1/2/4/5/6）
+- localStorageで自動保存・リセット時確認ダイアログあり
+- 現状は北斗の確率テーブルのみ実装
+
+### 北斗の記事データ（hokuto.json）完成
+- summaryBoxes（狙い目早見表）
+- factTable（基本情報）
+- sections（詳細・設定示唆まとめ含む）
+- 設定示唆はtype:setteiのテーブル形式
+
+---
+
+## machines.jsonの構造（重要）
+
+### 基本構造
+```json
+{
+  "slug": "hokuto",
+  "name": "スマスロ北斗の拳",
+  "seo": { "title": "スマスロ北斗の拳 狙い目" },
+  "info": "スマスロAT",
+  "strategy": "等価600G〜 / 5.6枚650G〜 / 現金700G〜",
+  "aliases": ["北斗", "ほくと"],
+  "checker": { ... }
+}
+```
+
+### checkerの新形式（全18機種対応済み）
+モードはmodesフィールドの配列から動的生成される。
+
+```json
+"checker": {
+  "unit": "G",
+  "modes": [
+    { "key": "normal", "label": "通常" },
+    { "key": "reset",  "label": "リセット" }
+  ],
+  "normal": {
+    "excellent": 700,
+    "good": 650,
+    "caution": 600,
+    "note": "通常時は..."
+  },
+  "reset": {
+    "excellent": 170,
+    "good": 100,
+    "caution": 90,
+    "note": "リセット時は..."
+  }
+}
+```
+
+### スルー回数対応モード（hasSuru: true）
+```json
+{ "key": "suru", "label": "スルー天井", "hasSuru": true }
+```
+スルーモード選択時にカウンターUIが表示される。suruMaxで上限設定。
+```json
+"suru": {
+  "suruMax": 3,
+  "suru": [
+    { "count": 0, "excellent": 600, "good": 400, "caution": 200, "note": "0スルー。" },
+    { "count": 1, "excellent": 500, "good": 350, "caution": 150, "note": "1スルー。" },
+    { "count": 2, "excellent": 400, "good": 300, "caution": 100, "note": "2スルー以上。" }
+  ]
+}
+```
+
+### 全18機種のcheckerモード構成
+| 機種slug | モード構成 |
+|---------|-----------|
+| hokuto | normal / reset |
+| hokuto_tensei2 | normal / reset |
+| kabaneri | normal / reset |
+| monkeyv | normal / reset |
+| koukaku | cz / at / reset |
+| tokyo_ghoul | cz / at / reset（atはhasSuru・上限2） |
+| tekken6 | normal / suru / reset（suru上限3） |
+| banchou4 | normal / suru / reset（suru上限2） |
+| valvrave2 | cz / bonus / suru / reset（suru上限3） |
+| kaguya | normal / reg / suru / reset（suru上限7） |
+| biohazard | normal / tenkoku / reset |
+| chibaryo2 | normal / reset |
+| dumbbell | cz / suru / reset（suru上限5） |
+| sf5 | normal（天井なし・設定狙い主体） |
+| godeater | normal / nukete / reset |
+| goblin | normal / reset |
+| baki | cz / suru / reset（suru上限3） |
+| tensura | normal / reset |
+
+---
+
+## 現在の未完了タスクと今後の方針
+
+### 優先度1：sitemap.xmlの整備
+全機種のURLをsitemap.xmlに追加する。現状は一部の機種しか記載されていない可能性がある。
+
+### 優先度2：交換率4パターン対応（大規模改修）
+**背景**：知り合いのプロスロプレイヤーから「等価・非等価の切替がないとハイエナユーザーには使えない」との指摘あり。
+
+**設計方針**：
+- 交換率は「等価（5.6枚）」「5.5枚」「5.0枚」「4.5枚」の4択
+- 初回だけ選択してlocalStorageに保存・以後自動適用
+- machines.jsonの各モードの数値を4交換率分持つ構造に変更
+- 全18機種 × 4交換率 × モード数分の数値調査が必要
+
+**実装手順**（この順番で進めること）：
+1. 全機種の調査未完了分を終わらせる
+2. 全機種の数値を4交換率×モード別で一覧表にまとめる
+3. machines.jsonのJSON構造を設計・一括反映する
+4. 記事ページとチェッカーページに交換率セレクターUIを追加する
+
+### 優先度3：判定ロジックの見直し・入力上限設定
+- 現状の判定（excellent/good/caution）の閾値がユーザーに伝わりにくい
+- G数の入力上限が設定されていない（天井を超えても入力できてしまう）
+- 機種ごとの天井G数を上限として設定する
+
+### 優先度4：機種データ追加（コンテンツ展開）
+- 現状は北斗（hokuto.json）のみ記事データが完成
+- 残り17機種の記事データ（machine-details/機種名.json）を作成する
+- ポチポチくんも現状は北斗の確率テーブルのみ。機種ごとのベイズ推定データを追加する
+- 記事データのJSONフォーマットは hokuto.json を参照
+- 信頼できる情報源：たらればさんのnote（https://note.com/g1slotapple）・ちょんぼりすた（設定判別データ）
+
+### 優先度5：周期カウンター対応
+- モンキーターンV・ヴァルヴレイヴ2は周期天井があるが現状はG数天井のみ対応
+- hasCycle: true フラグとカウンターUIを追加する（スルー回数と同じ設計で対応可能）
+
+### 優先度6：checker.htmlの整理
+- 現状どこからもリンクされていない未使用ページ
+- 削除するか、記事ページから独立したチェッカーページとして活用するか要検討
+
+### 収益化に向けて
+- AdSense申請前にコンテンツのある機種ページを最低5〜10機種揃える必要がある
+- プライバシーポリシーの内容確認（AdSense審査で見られる）
+- contact.htmlの動作確認
+- sitemap.xmlの整備はSEO上急ぎで対応が必要
+
+---
+
+## 期待値テーブル表示機能（検討中）
+知り合いのプロスロプレイヤーから以下の提案あり。
+- 狙い目チェッカーに期待値テーブル（何Gから打って機械割何%）を追加したい
+- スルー回数・交換率別の期待値表の表示
+- 参考：スロラボの有料情報のような表（ただしスロラボの情報は使用不可）
+- データソースとしてたらればさんのnoteを検討中（利用規約確認が必要）
+
+---
+
+## 情報源メモ
+- **たらればさんのnote**：https://note.com/g1slotapple　無料で機械割まで公開。信頼性が高い。
+- **ちょんぼりすた**：設定判別データの参照先として有力。ポチポチくんの確率テーブル精度向上に活用検討中。
+- **スロラボ**：有料サイト。スクショ・情報の転用は不可。

@@ -231,6 +231,10 @@ button, input, select { font: inherit; }
   border-radius: var(--radius);
   padding: 16px;
 }
+.checker-card--guide {
+  padding: 20px;
+}
+.is-hidden { display: none !important; }
 .mode-toggle {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -274,6 +278,10 @@ button, input, select { font: inherit; }
   padding: 12px 14px;
   margin-bottom: 10px;
 }
+.checker-result--guide {
+  padding: 18px 20px;
+  margin-bottom: 0;
+}
 .result-wait { background: var(--bg2); border: 1px solid var(--line); }
 .result-ok { background: var(--ok-bg); border: 1px solid var(--ok-line); }
 .result-ng { background: var(--ng-bg); border: 1px solid var(--ng-line); }
@@ -282,6 +290,20 @@ button, input, select { font: inherit; }
 .result-ng .result-label { color: var(--ng); }
 .result-text { margin: 0; font-size: 15px; font-weight: 800; color: var(--text); }
 .hint-text { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.checker-result--guide .result-label {
+  margin-bottom: 8px;
+  font-size: 12px;
+  letter-spacing: .14em;
+}
+.checker-result--guide .result-text {
+  font-size: clamp(20px, 4.8vw, 28px);
+  line-height: 1.5;
+}
+.hint-text--guide {
+  margin-top: 12px;
+  font-size: 14px;
+  line-height: 1.9;
+}
 
 .setting-dummy-link {
   display: flex;
