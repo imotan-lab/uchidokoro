@@ -167,6 +167,7 @@ function evaluate(game, config) {
   const modeToggle = document.getElementById("modeToggle");
   const suruWrap = document.getElementById("suruWrap");
   const suruVal = document.getElementById("suruVal");
+  const checkerCard = document.querySelector(".checker-card");
   let currentMachine = null;
   let suruCount = 0;
 
@@ -265,6 +266,21 @@ function evaluate(game, config) {
       articleLinkCard.href = href;
       document.title = currentMachine.name + " チェッカー | うちどころ。";
       titleEl.textContent = currentMachine.name + " チェッカー";
+
+      if (currentMachine.slug === "sf5") {
+        checkerCard.classList.add("checker-card--guide");
+        modeToggle.classList.add("is-hidden");
+        suruWrap.classList.add("is-hidden");
+        gameInput.classList.add("is-hidden");
+        checkerResult.className = "checker-result result-wait";
+        checkerResult.classList.add("checker-result--guide");
+        hintText.classList.add("hint-text--guide");
+        checkerResult.querySelector(".result-label").textContent = "案内";
+        checkerResult.querySelector(".result-text").textContent = "ゲーム数狙いには向きません。";
+        hintText.textContent = "設定狙い向けの機種です。高設定をつかめる環境（イベント・特定日）での使用を推奨します。";
+        return;
+      }
+
       buildModes(currentMachine);
       applyInputLimit(getCurrentMode() || "normal");
       judge();
