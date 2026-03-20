@@ -919,28 +919,148 @@
                                                       "excellent":  650,
                                                       "good":  450,
                                                       "caution":  300,
-                                                      "note":  "0スルー。通常と同じ450G〜が目安。"
+                                                      "note":  "0スルー。通常と同じ450G〜が目安。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "caution":  300,
+                                                                                  "excellent":  650,
+                                                                                  "target":  450,
+                                                                                  "good":  450,
+                                                                                  "note":  "5.6枚交換の0スルーは通常と同じ450G基準です。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "caution":  300,
+                                                                                    "excellent":  650,
+                                                                                    "target":  450,
+                                                                                    "good":  450,
+                                                                                    "note":  "5.5枚交換の0スルーも通常と同じ450G基準です。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "caution":  380,
+                                                                                    "excellent":  750,
+                                                                                    "target":  550,
+                                                                                    "good":  550,
+                                                                                    "note":  "5.0枚交換の0スルーは550G前後からを目安にしてください。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "caution":  450,
+                                                                                    "excellent":  850,
+                                                                                    "target":  650,
+                                                                                    "good":  650,
+                                                                                    "note":  "4.5枚交換の0スルーは650Gからが実戦ラインです。"
+                                                                                }
+                                                                 }
                                                   },
                                                   {
                                                       "count":  1,
                                                       "excellent":  500,
                                                       "good":  350,
                                                       "caution":  200,
-                                                      "note":  "1スルー。ボーダー下げて350G〜でも候補。"
+                                                      "note":  "1スルー。ボーダー下げて350G〜でも候補。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "caution":  200,
+                                                                                  "excellent":  500,
+                                                                                  "target":  350,
+                                                                                  "good":  350,
+                                                                                  "note":  "5.6枚交換の1スルーは350Gから候補です。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "caution":  200,
+                                                                                    "excellent":  500,
+                                                                                    "target":  350,
+                                                                                    "good":  350,
+                                                                                    "note":  "5.5枚交換の1スルーも350G前後から見られます。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "caution":  300,
+                                                                                    "excellent":  650,
+                                                                                    "target":  450,
+                                                                                    "good":  450,
+                                                                                    "note":  "5.0枚交換の1スルーは450Gからを基準にしてください。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "caution":  400,
+                                                                                    "excellent":  750,
+                                                                                    "target":  550,
+                                                                                    "good":  550,
+                                                                                    "note":  "4.5枚交換の1スルーは550Gまで待つ方が安全です。"
+                                                                                }
+                                                                 }
                                                   },
                                                   {
                                                       "count":  2,
                                                       "excellent":  300,
                                                       "good":  100,
                                                       "caution":  0,
-                                                      "note":  "2スルー。積極的に。0G〜でプラス域（次のボーナスを目指す）。"
+                                                      "note":  "2スルー。積極的に。0G〜でプラス域（次のボーナスを目指す）。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "caution":  0,
+                                                                                  "excellent":  300,
+                                                                                  "target":  0,
+                                                                                  "good":  0,
+                                                                                  "note":  "5.6枚交換の2スルーは0Gから候補です。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "caution":  0,
+                                                                                    "excellent":  300,
+                                                                                    "target":  0,
+                                                                                    "good":  0,
+                                                                                    "note":  "5.5枚交換の2スルーも0Gから見られます。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "caution":  50,
+                                                                                    "excellent":  380,
+                                                                                    "target":  80,
+                                                                                    "good":  80,
+                                                                                    "note":  "5.0枚交換の2スルーは80G前後からが目安です。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "caution":  120,
+                                                                                    "excellent":  450,
+                                                                                    "target":  150,
+                                                                                    "good":  150,
+                                                                                    "note":  "4.5枚交換の2スルーは150G前後からを基準にしてください。"
+                                                                                }
+                                                                 }
                                                   },
                                                   {
                                                       "count":  3,
                                                       "excellent":  50,
                                                       "good":  0,
                                                       "caution":  0,
-                                                      "note":  "3スルー。次回ボーナスがAT確定（赤7）。0G〜で着席OK。"
+                                                      "note":  "3スルー。次回ボーナスがAT確定（赤7）。0G〜で着席OK。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "caution":  0,
+                                                                                  "excellent":  50,
+                                                                                  "target":  0,
+                                                                                  "good":  0,
+                                                                                  "note":  "3スルーは交換率不問で0Gから着席OKです。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "caution":  0,
+                                                                                    "excellent":  50,
+                                                                                    "target":  0,
+                                                                                    "good":  0,
+                                                                                    "note":  "3スルーは交換率不問で0Gから着席OKです。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "caution":  0,
+                                                                                    "excellent":  50,
+                                                                                    "target":  0,
+                                                                                    "good":  0,
+                                                                                    "note":  "3スルーは交換率不問で0Gから着席OKです。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "caution":  0,
+                                                                                    "excellent":  50,
+                                                                                    "target":  0,
+                                                                                    "good":  0,
+                                                                                    "note":  "3スルーは交換率不問で0Gから着席OKです。"
+                                                                                }
+                                                                 }
                                                   }
                                               ]
                                  },
@@ -1077,21 +1197,111 @@
                                                       "excellent":  600,
                                                       "good":  460,
                                                       "caution":  350,
-                                                      "note":  "0スルー。通常と同じ460G〜が目安。"
+                                                      "note":  "0スルー。通常と同じ460G〜が目安。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "caution":  320,
+                                                                                  "excellent":  560,
+                                                                                  "target":  420,
+                                                                                  "good":  420,
+                                                                                  "note":  "5.6枚交換の0スルーは420Gから見られます。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "caution":  350,
+                                                                                    "excellent":  600,
+                                                                                    "target":  460,
+                                                                                    "good":  460,
+                                                                                    "note":  "5.5枚交換の0スルーは460Gが基準です。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "caution":  400,
+                                                                                    "excellent":  680,
+                                                                                    "target":  520,
+                                                                                    "good":  520,
+                                                                                    "note":  "5.0枚交換の0スルーは520Gからを基準にしてください。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "caution":  460,
+                                                                                    "excellent":  760,
+                                                                                    "target":  580,
+                                                                                    "good":  580,
+                                                                                    "note":  "4.5枚交換の0スルーは580Gからが実戦ラインです。"
+                                                                                }
+                                                                 }
                                                   },
                                                   {
                                                       "count":  1,
                                                       "excellent":  300,
                                                       "good":  170,
                                                       "caution":  100,
-                                                      "note":  "1スルー。170G〜でプラス域。積極的に狙える。"
+                                                      "note":  "1スルー。170G〜でプラス域。積極的に狙える。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "caution":  70,
+                                                                                  "excellent":  250,
+                                                                                  "target":  120,
+                                                                                  "good":  120,
+                                                                                  "note":  "5.6枚交換の1スルーは120Gからが本線です。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "caution":  100,
+                                                                                    "excellent":  300,
+                                                                                    "target":  170,
+                                                                                    "good":  170,
+                                                                                    "note":  "5.5枚交換の1スルーは170G基準です。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "caution":  150,
+                                                                                    "excellent":  380,
+                                                                                    "target":  220,
+                                                                                    "good":  220,
+                                                                                    "note":  "5.0枚交換の1スルーは220Gからを目安にしてください。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "caution":  220,
+                                                                                    "excellent":  460,
+                                                                                    "target":  280,
+                                                                                    "good":  280,
+                                                                                    "note":  "4.5枚交換の1スルーは280G前後からが実戦ラインです。"
+                                                                                }
+                                                                 }
                                                   },
                                                   {
                                                       "count":  2,
                                                       "excellent":  50,
                                                       "good":  0,
                                                       "caution":  0,
-                                                      "note":  "2スルー。次回ATが確定（スルー天井到達）。0G〜で着席OK。"
+                                                      "note":  "2スルー。次回ATが確定（スルー天井到達）。0G〜で着席OK。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "caution":  0,
+                                                                                  "excellent":  50,
+                                                                                  "target":  0,
+                                                                                  "good":  0,
+                                                                                  "note":  "2スルーは交換率不問で0Gから着席OKです。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "caution":  0,
+                                                                                    "excellent":  50,
+                                                                                    "target":  0,
+                                                                                    "good":  0,
+                                                                                    "note":  "2スルーは交換率不問で0Gから着席OKです。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "caution":  0,
+                                                                                    "excellent":  120,
+                                                                                    "target":  30,
+                                                                                    "good":  30,
+                                                                                    "note":  "5.0枚交換の2スルーもほぼ即候補で、30G前後から見られます。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "caution":  20,
+                                                                                    "excellent":  180,
+                                                                                    "target":  80,
+                                                                                    "good":  80,
+                                                                                    "note":  "4.5枚交換の2スルーは80G前後からを目安にしてください。"
+                                                                                }
+                                                                 }
                                                   }
                                               ]
                                  },
@@ -1268,56 +1478,296 @@
                                                       "excellent":  1000,
                                                       "good":  650,
                                                       "caution":  500,
-                                                      "note":  "0スルー。BIG後と同じ650G〜が目安。"
+                                                      "note":  "0スルー。BIG後と同じ650G〜が目安。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "caution":  450,
+                                                                                  "excellent":  950,
+                                                                                  "target":  600,
+                                                                                  "good":  600,
+                                                                                  "note":  "5.6枚交換の0スルーはBIG後と同じ600G基準です。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "caution":  500,
+                                                                                    "excellent":  1000,
+                                                                                    "target":  650,
+                                                                                    "good":  650,
+                                                                                    "note":  "5.5枚交換の0スルーはBIG後650Gが基準です。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "caution":  560,
+                                                                                    "excellent":  1100,
+                                                                                    "target":  720,
+                                                                                    "good":  720,
+                                                                                    "note":  "5.0枚交換の0スルーは720Gから見てください。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "caution":  650,
+                                                                                    "excellent":  1200,
+                                                                                    "target":  800,
+                                                                                    "good":  800,
+                                                                                    "note":  "4.5枚交換の0スルーは800Gまで待つ方が安全です。"
+                                                                                }
+                                                                 }
                                                   },
                                                   {
                                                       "count":  1,
                                                       "excellent":  900,
                                                       "good":  600,
                                                       "caution":  450,
-                                                      "note":  "1スルー。600G〜でプラス域。"
+                                                      "note":  "1スルー。600G〜でプラス域。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "caution":  400,
+                                                                                  "excellent":  850,
+                                                                                  "target":  550,
+                                                                                  "good":  550,
+                                                                                  "note":  "5.6枚交換の1スルーは550Gから候補です。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "caution":  450,
+                                                                                    "excellent":  900,
+                                                                                    "target":  600,
+                                                                                    "good":  600,
+                                                                                    "note":  "5.5枚交換の1スルーは600G基準です。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "caution":  510,
+                                                                                    "excellent":  1000,
+                                                                                    "target":  670,
+                                                                                    "good":  670,
+                                                                                    "note":  "5.0枚交換の1スルーは670G前後からを目安にしてください。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "caution":  600,
+                                                                                    "excellent":  1100,
+                                                                                    "target":  750,
+                                                                                    "good":  750,
+                                                                                    "note":  "4.5枚交換の1スルーは750G近辺まで待つ方が安全です。"
+                                                                                }
+                                                                 }
                                                   },
                                                   {
                                                       "count":  2,
                                                       "excellent":  800,
                                                       "good":  550,
                                                       "caution":  400,
-                                                      "note":  "2スルー。550G〜でプラス域。"
+                                                      "note":  "2スルー。550G〜でプラス域。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "caution":  350,
+                                                                                  "excellent":  750,
+                                                                                  "target":  500,
+                                                                                  "good":  500,
+                                                                                  "note":  "5.6枚交換の2スルーは500Gから見られます。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "caution":  400,
+                                                                                    "excellent":  800,
+                                                                                    "target":  550,
+                                                                                    "good":  550,
+                                                                                    "note":  "5.5枚交換の2スルーは550Gが基準です。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "caution":  460,
+                                                                                    "excellent":  900,
+                                                                                    "target":  620,
+                                                                                    "good":  620,
+                                                                                    "note":  "5.0枚交換の2スルーは620G前後からを目安にしてください。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "caution":  550,
+                                                                                    "excellent":  1000,
+                                                                                    "target":  700,
+                                                                                    "good":  700,
+                                                                                    "note":  "4.5枚交換の2スルーは700G近辺まで待つ方が安全です。"
+                                                                                }
+                                                                 }
                                                   },
                                                   {
                                                       "count":  3,
                                                       "excellent":  700,
                                                       "good":  500,
                                                       "caution":  350,
-                                                      "note":  "3スルー。500G〜でプラス域。"
+                                                      "note":  "3スルー。500G〜でプラス域。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "caution":  300,
+                                                                                  "excellent":  650,
+                                                                                  "target":  450,
+                                                                                  "good":  450,
+                                                                                  "note":  "5.6枚交換の3スルーは450Gから候補です。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "caution":  350,
+                                                                                    "excellent":  700,
+                                                                                    "target":  500,
+                                                                                    "good":  500,
+                                                                                    "note":  "5.5枚交換の3スルーは500G基準です。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "caution":  410,
+                                                                                    "excellent":  800,
+                                                                                    "target":  570,
+                                                                                    "good":  570,
+                                                                                    "note":  "5.0枚交換の3スルーは570G前後からを目安にしてください。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "caution":  500,
+                                                                                    "excellent":  900,
+                                                                                    "target":  650,
+                                                                                    "good":  650,
+                                                                                    "note":  "4.5枚交換の3スルーは650G近辺まで待つ方が安全です。"
+                                                                                }
+                                                                 }
                                                   },
                                                   {
                                                       "count":  4,
                                                       "excellent":  600,
                                                       "good":  400,
                                                       "caution":  250,
-                                                      "note":  "4スルー。400G〜でプラス域。"
+                                                      "note":  "4スルー。400G〜でプラス域。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "caution":  200,
+                                                                                  "excellent":  550,
+                                                                                  "target":  350,
+                                                                                  "good":  350,
+                                                                                  "note":  "5.6枚交換の4スルーは350Gから見られます。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "caution":  250,
+                                                                                    "excellent":  600,
+                                                                                    "target":  400,
+                                                                                    "good":  400,
+                                                                                    "note":  "5.5枚交換の4スルーは400G基準です。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "caution":  310,
+                                                                                    "excellent":  700,
+                                                                                    "target":  470,
+                                                                                    "good":  470,
+                                                                                    "note":  "5.0枚交換の4スルーは470G前後からを目安にしてください。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "caution":  400,
+                                                                                    "excellent":  800,
+                                                                                    "target":  550,
+                                                                                    "good":  550,
+                                                                                    "note":  "4.5枚交換の4スルーは550G近辺まで待つ方が安全です。"
+                                                                                }
+                                                                 }
                                                   },
                                                   {
                                                       "count":  5,
                                                       "excellent":  400,
                                                       "good":  200,
                                                       "caution":  100,
-                                                      "note":  "5スルー。200G〜で積極的に狙える。"
+                                                      "note":  "5スルー。200G〜で積極的に狙える。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "caution":  50,
+                                                                                  "excellent":  300,
+                                                                                  "target":  150,
+                                                                                  "good":  150,
+                                                                                  "note":  "5.6枚交換の5スルーは150Gから積極的に見られます。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "caution":  100,
+                                                                                    "excellent":  400,
+                                                                                    "target":  200,
+                                                                                    "good":  200,
+                                                                                    "note":  "5.5枚交換の5スルーは200G基準です。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "caution":  170,
+                                                                                    "excellent":  500,
+                                                                                    "target":  270,
+                                                                                    "good":  270,
+                                                                                    "note":  "5.0枚交換の5スルーは270G前後からを目安にしてください。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "caution":  250,
+                                                                                    "excellent":  600,
+                                                                                    "target":  350,
+                                                                                    "good":  350,
+                                                                                    "note":  "4.5枚交換の5スルーは350G近辺からが実戦ラインです。"
+                                                                                }
+                                                                 }
                                                   },
                                                   {
                                                       "count":  6,
                                                       "excellent":  200,
                                                       "good":  50,
                                                       "caution":  0,
-                                                      "note":  "6スルー。浅いG数から狙える。"
+                                                      "note":  "6スルー。浅いG数から狙える。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "caution":  0,
+                                                                                  "excellent":  200,
+                                                                                  "target":  0,
+                                                                                  "good":  0,
+                                                                                  "note":  "5.6枚交換の6スルーは0Gから候補です。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "caution":  0,
+                                                                                    "excellent":  200,
+                                                                                    "target":  50,
+                                                                                    "good":  50,
+                                                                                    "note":  "5.5枚交換の6スルーは50G前後から見られます。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "caution":  40,
+                                                                                    "excellent":  300,
+                                                                                    "target":  120,
+                                                                                    "good":  120,
+                                                                                    "note":  "5.0枚交換の6スルーは120G前後からを目安にしてください。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "caution":  100,
+                                                                                    "excellent":  400,
+                                                                                    "target":  200,
+                                                                                    "good":  200,
+                                                                                    "note":  "4.5枚交換の6スルーは200G前後からが実戦ラインです。"
+                                                                                }
+                                                                 }
                                                   },
                                                   {
                                                       "count":  7,
                                                       "excellent":  50,
                                                       "good":  0,
                                                       "caution":  0,
-                                                      "note":  "7スルー。次回CZでBIG以上確定（天井到達）。0G〜で着席OK。"
+                                                      "note":  "7スルー。次回CZでBIG以上確定（天井到達）。0G〜で着席OK。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "caution":  0,
+                                                                                  "excellent":  50,
+                                                                                  "target":  0,
+                                                                                  "good":  0,
+                                                                                  "note":  "7スルーは交換率不問で0Gから着席OKです。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "caution":  0,
+                                                                                    "excellent":  50,
+                                                                                    "target":  0,
+                                                                                    "good":  0,
+                                                                                    "note":  "7スルーは交換率不問で0Gから着席OKです。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "caution":  0,
+                                                                                    "excellent":  50,
+                                                                                    "target":  0,
+                                                                                    "good":  0,
+                                                                                    "note":  "7スルーは交換率不問で0Gから着席OKです。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "caution":  0,
+                                                                                    "excellent":  50,
+                                                                                    "target":  0,
+                                                                                    "good":  0,
+                                                                                    "note":  "7スルーは交換率不問で0Gから着席OKです。"
+                                                                                }
+                                                                 }
                                                   }
                                               ]
                                  },
@@ -1494,28 +1944,148 @@
                                                       "excellent":  800,
                                                       "good":  600,
                                                       "caution":  400,
-                                                      "note":  "0スルー。CZ間ボーダーと同じ600G〜が目安。"
+                                                      "note":  "0スルー。CZ間ボーダーと同じ600G〜が目安。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "caution":  380,
+                                                                                  "excellent":  750,
+                                                                                  "target":  550,
+                                                                                  "good":  550,
+                                                                                  "note":  "5.6枚交換の0スルーはCZ間と同じ550G基準です。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "caution":  400,
+                                                                                    "excellent":  800,
+                                                                                    "target":  600,
+                                                                                    "good":  600,
+                                                                                    "note":  "5.5枚交換の0スルーは600Gが基準です。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "caution":  500,
+                                                                                    "excellent":  900,
+                                                                                    "target":  700,
+                                                                                    "good":  700,
+                                                                                    "note":  "5.0枚交換の0スルーは700Gから見ます。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "caution":  600,
+                                                                                    "excellent":  1000,
+                                                                                    "target":  800,
+                                                                                    "good":  800,
+                                                                                    "note":  "4.5枚交換の0スルーは800Gからが実戦ラインです。"
+                                                                                }
+                                                                 }
                                                   },
                                                   {
                                                       "count":  1,
                                                       "excellent":  600,
                                                       "good":  400,
                                                       "caution":  200,
-                                                      "note":  "1スルー。400G〜でプラス域。"
+                                                      "note":  "1スルー。400G〜でプラス域。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "caution":  180,
+                                                                                  "excellent":  550,
+                                                                                  "target":  350,
+                                                                                  "good":  350,
+                                                                                  "note":  "5.6枚交換の1スルーは350Gから候補です。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "caution":  200,
+                                                                                    "excellent":  600,
+                                                                                    "target":  400,
+                                                                                    "good":  400,
+                                                                                    "note":  "5.5枚交換の1スルーは400G基準です。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "caution":  280,
+                                                                                    "excellent":  700,
+                                                                                    "target":  500,
+                                                                                    "good":  500,
+                                                                                    "note":  "5.0枚交換の1スルーは500G前後からを目安にしてください。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "caution":  380,
+                                                                                    "excellent":  800,
+                                                                                    "target":  600,
+                                                                                    "good":  600,
+                                                                                    "note":  "4.5枚交換の1スルーは600G近辺からが実戦ラインです。"
+                                                                                }
+                                                                 }
                                                   },
                                                   {
                                                       "count":  2,
                                                       "excellent":  300,
                                                       "good":  100,
                                                       "caution":  0,
-                                                      "note":  "2スルー。100G〜で積極的に狙える。"
+                                                      "note":  "2スルー。100G〜で積極的に狙える。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "caution":  0,
+                                                                                  "excellent":  300,
+                                                                                  "target":  50,
+                                                                                  "good":  50,
+                                                                                  "note":  "5.6枚交換の2スルーは50G前後から積極的に見られます。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "caution":  0,
+                                                                                    "excellent":  300,
+                                                                                    "target":  100,
+                                                                                    "good":  100,
+                                                                                    "note":  "5.5枚交換の2スルーは100G基準です。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "caution":  40,
+                                                                                    "excellent":  380,
+                                                                                    "target":  150,
+                                                                                    "good":  150,
+                                                                                    "note":  "5.0枚交換の2スルーは150G前後からを目安にしてください。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "caution":  100,
+                                                                                    "excellent":  460,
+                                                                                    "target":  200,
+                                                                                    "good":  200,
+                                                                                    "note":  "4.5枚交換の2スルーは200G前後からが実戦ラインです。"
+                                                                                }
+                                                                 }
                                                   },
                                                   {
                                                       "count":  3,
                                                       "excellent":  50,
                                                       "good":  0,
                                                       "caution":  0,
-                                                      "note":  "3スルー。次回決戦ボーナスでAT確定。0G〜で着席OK。"
+                                                      "note":  "3スルー。次回決戦ボーナスでAT確定。0G〜で着席OK。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "caution":  0,
+                                                                                  "excellent":  50,
+                                                                                  "target":  0,
+                                                                                  "good":  0,
+                                                                                  "note":  "3スルーは交換率不問で0Gから着席OKです。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "caution":  0,
+                                                                                    "excellent":  50,
+                                                                                    "target":  0,
+                                                                                    "good":  0,
+                                                                                    "note":  "3スルーは交換率不問で0Gから着席OKです。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "caution":  0,
+                                                                                    "excellent":  50,
+                                                                                    "target":  0,
+                                                                                    "good":  0,
+                                                                                    "note":  "3スルーは交換率不問で0Gから着席OKです。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "caution":  0,
+                                                                                    "excellent":  50,
+                                                                                    "target":  0,
+                                                                                    "good":  0,
+                                                                                    "note":  "3スルーは交換率不問で0Gから着席OKです。"
+                                                                                }
+                                                                 }
                                                   }
                                               ]
                                  },
@@ -1668,7 +2238,33 @@
                                         "excellent":  99,
                                         "good":  50,
                                         "caution":  0,
-                                        "note":  "前回天井到達台は次回99G+α天国濃厚。0G〜で着席OK。クライマックスウェスカーゾーン経由の場合は無効なので注意。"
+                                        "note":  "前回天井到達台は次回99G+α天国濃厚。0G〜で着席OK。クライマックスウェスカーゾーン経由の場合は無効なので注意。",
+                                        "byRate":  {
+                                                       "eq56":  {
+                                                                    "excellent":  99,
+                                                                    "good":  50,
+                                                                    "caution":  0,
+                                                                    "note":  "天国後は交換率不問で0Gから候補です。前回天井到達台かどうかを優先して確認してください。"
+                                                                },
+                                                       "rate55":  {
+                                                                      "excellent":  99,
+                                                                      "good":  50,
+                                                                      "caution":  0,
+                                                                      "note":  "天国後は交換率不問で0Gから候補です。前回天井到達台かどうかを優先して確認してください。"
+                                                                  },
+                                                       "rate50":  {
+                                                                      "excellent":  99,
+                                                                      "good":  50,
+                                                                      "caution":  0,
+                                                                      "note":  "天国後は交換率不問で0Gから候補です。前回天井到達台かどうかを優先して確認してください。"
+                                                                  },
+                                                       "rate45":  {
+                                                                      "excellent":  99,
+                                                                      "good":  50,
+                                                                      "caution":  0,
+                                                                      "note":  "天国後は交換率不問で0Gから候補です。前回天井到達台かどうかを優先して確認してください。"
+                                                                  }
+                                                   }
                                     },
                         "reset":  {
                                       "excellent":  450,
@@ -1795,42 +2391,222 @@
                                                       "excellent":  550,
                                                       "good":  400,
                                                       "caution":  300,
-                                                      "note":  "0スルー。CZ間と同じ400G〜が目安。"
+                                                      "note":  "0スルー。CZ間と同じ400G〜が目安。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "excellent":  500,
+                                                                                  "target":  350,
+                                                                                  "good":  350,
+                                                                                  "caution":  250,
+                                                                                  "note":  "5.6枚交換の0スルーはCZ間と同じ350G基準です。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "excellent":  550,
+                                                                                    "target":  400,
+                                                                                    "good":  400,
+                                                                                    "caution":  300,
+                                                                                    "note":  "5.5枚交換の0スルーは400G基準です。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "excellent":  600,
+                                                                                    "target":  450,
+                                                                                    "good":  450,
+                                                                                    "caution":  350,
+                                                                                    "note":  "5.0枚交換の0スルーは450G前後からを目安にしてください。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "excellent":  650,
+                                                                                    "target":  500,
+                                                                                    "good":  500,
+                                                                                    "caution":  400,
+                                                                                    "note":  "4.5枚交換の0スルーは500G近辺からが実戦ラインです。"
+                                                                                }
+                                                                 }
                                                   },
                                                   {
                                                       "count":  1,
                                                       "excellent":  400,
                                                       "good":  200,
                                                       "caution":  100,
-                                                      "note":  "1スルー。200G〜で積極的に。"
+                                                      "note":  "1スルー。200G〜で積極的に。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "excellent":  350,
+                                                                                  "target":  150,
+                                                                                  "good":  150,
+                                                                                  "caution":  50,
+                                                                                  "note":  "5.6枚交換の1スルーは150Gから積極的に見られます。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "excellent":  400,
+                                                                                    "target":  200,
+                                                                                    "good":  200,
+                                                                                    "caution":  100,
+                                                                                    "note":  "5.5枚交換の1スルーは200G基準です。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "excellent":  450,
+                                                                                    "target":  250,
+                                                                                    "good":  250,
+                                                                                    "caution":  150,
+                                                                                    "note":  "5.0枚交換の1スルーは250G前後からを目安にしてください。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "excellent":  500,
+                                                                                    "target":  300,
+                                                                                    "good":  300,
+                                                                                    "caution":  200,
+                                                                                    "note":  "4.5枚交換の1スルーは300G近辺からが実戦ラインです。"
+                                                                                }
+                                                                 }
                                                   },
                                                   {
                                                       "count":  2,
                                                       "excellent":  300,
                                                       "good":  150,
                                                       "caution":  50,
-                                                      "note":  "2スルー。150G〜でプラス域。"
+                                                      "note":  "2スルー。150G〜でプラス域。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "excellent":  250,
+                                                                                  "target":  100,
+                                                                                  "good":  100,
+                                                                                  "caution":  0,
+                                                                                  "note":  "5.6枚交換の2スルーは100Gから見られます。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "excellent":  300,
+                                                                                    "target":  150,
+                                                                                    "good":  150,
+                                                                                    "caution":  50,
+                                                                                    "note":  "5.5枚交換の2スルーは150G基準です。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "excellent":  350,
+                                                                                    "target":  200,
+                                                                                    "good":  200,
+                                                                                    "caution":  100,
+                                                                                    "note":  "5.0枚交換の2スルーは200G前後からを目安にしてください。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "excellent":  400,
+                                                                                    "target":  250,
+                                                                                    "good":  250,
+                                                                                    "caution":  150,
+                                                                                    "note":  "4.5枚交換の2スルーは250G近辺からが実戦ラインです。"
+                                                                                }
+                                                                 }
                                                   },
                                                   {
                                                       "count":  3,
                                                       "excellent":  200,
                                                       "good":  100,
                                                       "caution":  0,
-                                                      "note":  "3スルー。100G〜でプラス域。"
+                                                      "note":  "3スルー。100G〜でプラス域。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "excellent":  180,
+                                                                                  "target":  50,
+                                                                                  "good":  50,
+                                                                                  "caution":  0,
+                                                                                  "note":  "5.6枚交換の3スルーは50G前後から見られます。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "excellent":  200,
+                                                                                    "target":  100,
+                                                                                    "good":  100,
+                                                                                    "caution":  0,
+                                                                                    "note":  "5.5枚交換の3スルーは100G基準です。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "excellent":  250,
+                                                                                    "target":  150,
+                                                                                    "good":  150,
+                                                                                    "caution":  50,
+                                                                                    "note":  "5.0枚交換の3スルーは150G前後からを目安にしてください。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "excellent":  300,
+                                                                                    "target":  200,
+                                                                                    "good":  200,
+                                                                                    "caution":  100,
+                                                                                    "note":  "4.5枚交換の3スルーは200G近辺からが実戦ラインです。"
+                                                                                }
+                                                                 }
                                                   },
                                                   {
                                                       "count":  4,
                                                       "excellent":  100,
                                                       "good":  50,
                                                       "caution":  0,
-                                                      "note":  "4スルー。50G〜でプラス域。"
+                                                      "note":  "4スルー。50G〜でプラス域。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "excellent":  100,
+                                                                                  "target":  0,
+                                                                                  "good":  0,
+                                                                                  "caution":  0,
+                                                                                  "note":  "5.6枚交換の4スルーは0Gから候補です。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "excellent":  100,
+                                                                                    "target":  50,
+                                                                                    "good":  50,
+                                                                                    "caution":  0,
+                                                                                    "note":  "5.5枚交換の4スルーは50G基準です。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "excellent":  150,
+                                                                                    "target":  100,
+                                                                                    "good":  100,
+                                                                                    "caution":  0,
+                                                                                    "note":  "5.0枚交換の4スルーは100G前後からを目安にしてください。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "excellent":  200,
+                                                                                    "target":  150,
+                                                                                    "good":  150,
+                                                                                    "caution":  50,
+                                                                                    "note":  "4.5枚交換の4スルーは150G近辺からが実戦ラインです。"
+                                                                                }
+                                                                 }
                                                   },
                                                   {
                                                       "count":  5,
                                                       "excellent":  50,
                                                       "good":  0,
                                                       "caution":  0,
-                                                      "note":  "5スルー。次回CZでAT確定。0G〜で着席OK。"
+                                                      "note":  "5スルー。次回CZでAT確定。0G〜で着席OK。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "excellent":  50,
+                                                                                  "target":  0,
+                                                                                  "good":  0,
+                                                                                  "caution":  0,
+                                                                                  "note":  "5スルーは交換率不問で0Gから着席OKです。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "excellent":  50,
+                                                                                    "target":  0,
+                                                                                    "good":  0,
+                                                                                    "caution":  0,
+                                                                                    "note":  "5スルーは交換率不問で0Gから着席OKです。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "excellent":  50,
+                                                                                    "target":  0,
+                                                                                    "good":  0,
+                                                                                    "caution":  0,
+                                                                                    "note":  "5スルーは交換率不問で0Gから着席OKです。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "excellent":  50,
+                                                                                    "target":  0,
+                                                                                    "good":  0,
+                                                                                    "caution":  0,
+                                                                                    "note":  "5スルーは交換率不問で0Gから着席OKです。"
+                                                                                }
+                                                                 }
                                                   }
                                               ]
                                  },
@@ -2343,28 +3119,148 @@
                                                       "excellent":  500,
                                                       "good":  340,
                                                       "caution":  250,
-                                                      "note":  "0スルー。CZ間ボーダーと同じ340G〜が目安。"
+                                                      "note":  "0スルー。CZ間ボーダーと同じ340G〜が目安。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "caution":  220,
+                                                                                  "excellent":  450,
+                                                                                  "target":  300,
+                                                                                  "good":  300,
+                                                                                  "note":  "5.6枚交換の0スルーはCZ間と同じ300G基準です。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "caution":  250,
+                                                                                    "excellent":  500,
+                                                                                    "target":  340,
+                                                                                    "good":  340,
+                                                                                    "note":  "5.5枚交換の0スルーは340G基準です。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "caution":  300,
+                                                                                    "excellent":  560,
+                                                                                    "target":  390,
+                                                                                    "good":  390,
+                                                                                    "note":  "5.0枚交換の0スルーは390G前後からを目安にしてください。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "caution":  350,
+                                                                                    "excellent":  620,
+                                                                                    "target":  450,
+                                                                                    "good":  450,
+                                                                                    "note":  "4.5枚交換の0スルーは450G近辺からが実戦ラインです。"
+                                                                                }
+                                                                 }
                                                   },
                                                   {
                                                       "count":  1,
                                                       "excellent":  400,
                                                       "good":  300,
                                                       "caution":  200,
-                                                      "note":  "1スルー。ボーダー下げて300G〜でも候補。"
+                                                      "note":  "1スルー。ボーダー下げて300G〜でも候補。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "caution":  180,
+                                                                                  "excellent":  380,
+                                                                                  "target":  260,
+                                                                                  "good":  260,
+                                                                                  "note":  "5.6枚交換の1スルーは260Gから候補です。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "caution":  200,
+                                                                                    "excellent":  400,
+                                                                                    "target":  300,
+                                                                                    "good":  300,
+                                                                                    "note":  "5.5枚交換の1スルーは300G基準です。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "caution":  250,
+                                                                                    "excellent":  460,
+                                                                                    "target":  350,
+                                                                                    "good":  350,
+                                                                                    "note":  "5.0枚交換の1スルーは350G前後からを目安にしてください。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "caution":  300,
+                                                                                    "excellent":  520,
+                                                                                    "target":  400,
+                                                                                    "good":  400,
+                                                                                    "note":  "4.5枚交換の1スルーは400G近辺からが実戦ラインです。"
+                                                                                }
+                                                                 }
                                                   },
                                                   {
                                                       "count":  2,
                                                       "excellent":  300,
                                                       "good":  200,
                                                       "caution":  100,
-                                                      "note":  "2スルー。積極的に狙える。200G〜で候補。"
+                                                      "note":  "2スルー。積極的に狙える。200G〜で候補。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "caution":  80,
+                                                                                  "excellent":  280,
+                                                                                  "target":  150,
+                                                                                  "good":  150,
+                                                                                  "note":  "5.6枚交換の2スルーは150Gから積極的に見られます。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "caution":  100,
+                                                                                    "excellent":  300,
+                                                                                    "target":  200,
+                                                                                    "good":  200,
+                                                                                    "note":  "5.5枚交換の2スルーは200G基準です。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "caution":  150,
+                                                                                    "excellent":  360,
+                                                                                    "target":  250,
+                                                                                    "good":  250,
+                                                                                    "note":  "5.0枚交換の2スルーは250G前後からを目安にしてください。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "caution":  200,
+                                                                                    "excellent":  420,
+                                                                                    "target":  300,
+                                                                                    "good":  300,
+                                                                                    "note":  "4.5枚交換の2スルーは300G近辺からが実戦ラインです。"
+                                                                                }
+                                                                 }
                                                   },
                                                   {
                                                       "count":  3,
                                                       "excellent":  100,
                                                       "good":  0,
                                                       "caution":  0,
-                                                      "note":  "3スルー。次回CZでAT確定（天井到達）。0G〜で着席OK。"
+                                                      "note":  "3スルー。次回CZでAT確定（天井到達）。0G〜で着席OK。",
+                                                      "byRate":  {
+                                                                     "eq56":  {
+                                                                                  "caution":  0,
+                                                                                  "excellent":  100,
+                                                                                  "target":  0,
+                                                                                  "good":  0,
+                                                                                  "note":  "3スルーは交換率不問で0Gから着席OKです。"
+                                                                              },
+                                                                     "rate55":  {
+                                                                                    "caution":  0,
+                                                                                    "excellent":  100,
+                                                                                    "target":  0,
+                                                                                    "good":  0,
+                                                                                    "note":  "3スルーは交換率不問で0Gから着席OKです。"
+                                                                                },
+                                                                     "rate50":  {
+                                                                                    "caution":  0,
+                                                                                    "excellent":  100,
+                                                                                    "target":  0,
+                                                                                    "good":  0,
+                                                                                    "note":  "3スルーは交換率不問で0Gから着席OKです。"
+                                                                                },
+                                                                     "rate45":  {
+                                                                                    "caution":  0,
+                                                                                    "excellent":  100,
+                                                                                    "target":  0,
+                                                                                    "good":  0,
+                                                                                    "note":  "3スルーは交換率不問で0Gから着席OKです。"
+                                                                                }
+                                                                 }
                                                   }
                                               ]
                                  },
