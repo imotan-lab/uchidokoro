@@ -158,19 +158,8 @@ function resolveMachineSlug() {
   return null;
 }
 
-function resolvePreviewState() {
-  const params = new URLSearchParams(location.search);
-  const suruValue = parseInt(params.get("suru"), 10);
-  return {
-    rate: params.get("rate"),
-    mode: params.get("mode"),
-    suru: Number.isNaN(suruValue) ? null : Math.max(0, suruValue)
-  };
-}
-
 (async () => {
   const slug = resolveMachineSlug();
-  const previewState = resolvePreviewState();
   const machines = await loadJson("assets/data/machines.json");
   if (!machines) {
     document.body.innerHTML = '<div style="padding:40px;text-align:center;color:#667788;">データの取得に失敗しました。<br><a href="index.html" style="color:#f5b941;">一覧へ戻る</a></div>';
@@ -310,9 +299,7 @@ function resolvePreviewState() {
     }
 
     rateToggle.style.display = "grid";
-    const initialRateKey = rates.some(rate => rate.key === previewState.rate)
-      ? previewState.rate
-      : (checker.defaultRate || rates[0].key);
+    const initialRateKey = checker.defaultRate || rates[0].key;
     rates.forEach((rate, i) => {
       const id = "rate_" + rate.key;
       const input = document.createElement("input");
@@ -416,9 +403,7 @@ function resolvePreviewState() {
   if (slug !== "sf5") {
     buildRateOptions(machine);
     const modes = getModes(checker);
-    const firstMode = modes.some(mode => mode.key === previewState.mode)
-      ? previewState.mode
-      : (modes[0]?.key || "normal");
+    const firstMode = modes[0]?.key || "normal";
     modes.forEach((mode) => {
       const id = "mode_" + mode.key;
       const input = document.createElement("input");
@@ -447,9 +432,7 @@ function resolvePreviewState() {
     applyInputLimit(firstMode);
     const firstModeData = checker[firstMode];
     if (firstModeData && firstModeData.suru && Array.isArray(firstModeData.suru)) {
-      const fallbackMax = firstModeData.suru[firstModeData.suru.length - 1].count;
-      const suruMax = Number.isFinite(firstModeData.suruMax) ? firstModeData.suruMax : fallbackMax;
-      suruCount = Math.min(suruMax, previewState.suru ?? 0);
+      suruCount = 0;
       suruVal.textContent = suruCount;
     }
 
