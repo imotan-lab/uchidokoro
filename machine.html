@@ -171,6 +171,7 @@ async function loadJson(path){
   if (settingToolLink) settingToolLink.href = `setting.html?slug=${slug}`;
   const settingHeroLink = document.getElementById("settingHeroLink");
   if (settingHeroLink) settingHeroLink.href = `setting.html?slug=${slug}`;
+  const summaryGrid = document.getElementById("summaryGrid");
 
   // チェッカー
   const checker = machine.checker || {};
@@ -192,6 +193,11 @@ async function loadJson(path){
   function getCurrentRateKey() {
     const checked = document.querySelector('input[name="exchangeRate"]:checked');
     return checked ? checked.value : currentRateKey;
+  }
+
+  function getRateLabel(rateKey) {
+    const rate = getRateOptions(checker).find(item => item.key === rateKey);
+    return rate ? rate.label : "";
   }
 
   function getMachineLimit(modeKey) {
@@ -301,12 +307,51 @@ async function loadJson(path){
 
       input.addEventListener("change", () => {
         currentRateKey = rate.key;
+        renderSummaryGrid();
         judge();
       });
 
       rateToggle.appendChild(input);
       rateToggle.appendChild(label);
     });
+  }
+
+  function renderSummaryGrid() {
+    const sourceBoxes = detail?.summaryBoxes || [
+      { label: "螟ｩ莠・, value: machine.strategy || "-" },
+      { label: "繝､繝｡譎・, value: "-" }
+    ];
+    const boxes = sourceBoxes.map(box => ({ ...box }));
+
+    if (machine.slug === "hokuto" && machine.strategyByRate && getCurrentRateKey()) {
+      const rateKey = getCurrentRateKey();
+      const rateLabel = getRateLabel(rateKey);
+      const normalText = machine.strategyByRate[rateKey];
+      const resetConfig = checker.reset && checker.reset.byRate ? checker.reset.byRate[rateKey] : null;
+
+      if (boxes[1] && normalText) {
+        boxes[1].label = `${rateLabel}迢吶＞逶ｮ`;
+        boxes[1].value = normalText;
+      }
+      if (boxes[2]) {
+        boxes[2].label = "豺ｱ繧√・遲我ｾ｡";
+      }
+      if (boxes[3] && resetConfig && Number.isFinite(resetConfig.good)) {
+        boxes[3].value = `${resetConfig.good}G縲懶ｼ域耳螂ｨ${resetConfig.excellent}G縲懶ｼ・`;
+      }
+    }
+
+    let rows = "";
+    for (let i = 0; i < boxes.length; i += 2) {
+      const a = boxes[i];
+      const b = boxes[i + 1];
+      if (b) {
+        rows += `<tr><td><span class="s-label">${a.label}</span><span class="s-value">${a.value}</span></td><td><span class="s-label">${b.label}</span><span class="s-value">${b.value}</span></td></tr>`;
+      } else {
+        rows += `<tr><td><span class="s-label">${a.label}</span><span class="s-value">${a.value}</span></td><td></td></tr>`;
+      }
+    }
+    summaryGrid.innerHTML = rows;
   }
 
   function judge() {
@@ -457,6 +502,8 @@ async function loadJson(path){
 
     articleSections.appendChild(div);
   });
+
+  renderSummaryGrid();
 })();
 </script>
 <script>
