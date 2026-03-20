@@ -376,10 +376,11 @@ async function loadJson(path){
 
     if (section.type === "settei") {
       const badgeClass = { hint: "settei-hint", weak: "settei-weak", mid: "settei-mid", strong: "settei-strong", ok: "settei-ok" };
+      const sectionWide = (section.tables || []).some(tbl => tbl.wide);
       let html = `<p class="article-title">${section.title}</p>`;
       (section.tables || []).forEach(tbl => {
         html += `<p class="settei-sub-label">${tbl.label}</p>`;
-        html += `<table class="settei-table${tbl.wide ? " settei-table--wide" : ""}"><tr>${tbl.headers.map(h => `<th>${h}</th>`).join("")}</tr>`;
+        html += `<table class="settei-table${sectionWide ? " settei-table--wide" : ""}"><tr>${tbl.headers.map(h => `<th>${h}</th>`).join("")}</tr>`;
         tbl.rows.forEach(row => {
           const cell0 = row[0];
           const cell1 = row[1];
