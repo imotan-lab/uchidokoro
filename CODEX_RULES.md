@@ -408,3 +408,8 @@ function checkOrientation(){
   - 作業前の手順 回答ルール 守るべき運用を見る
 - `HANDOFF.md`
   - どこで躓いたか どう直したか 未完了事項 今後100機種以上へ増やす時の注意点を見る
+
+## 新スレ移行ルール
+
+- 新しいスレッドへ移る前には `CODEX_RULES.md` `README.md` `HANDOFF.md` に再開地点と完了範囲を書く
+- 新スレッド開始時は まず `CODEX_RULES.md` と `HANDOFF.md` を確認してから作業を再開する

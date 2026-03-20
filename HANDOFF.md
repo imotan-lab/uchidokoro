@@ -274,3 +274,15 @@
 - machine.html checker.html setting.html の直アクセスURL対応は済み
 - 次回は残り機種のスクショ確認結果を見て微調整するか、交換率対応の細部（スルー系モード）を詰める
 - 今回 machines.json を一度壊したが、公開中サイトの ssets/data/machines.json を取得して復旧後に再適用済み
+
+## 2026-03-21 引っ越し前の再開地点
+
+- 交換率4パターン対応は `sf5` を除く対象機種へ一通り実装済み
+- 対応済み機種は `hokuto` `hokuto_tensei2` `biohazard` `godeater` `goblin` `kabaneri` `dumbbell` `monkeyv` `koukaku` `baki` `banchou4` `chibaryo2` `kaguya` `tekken6` `tensura` `tokyo_ghoul` `valvrave2`
+- 今夜貼られたスクショ確認では 記事ページとチェッカーページの表示崩れは見当たらなかった
+- 直アクセスURL対応は `machine.html` `checker.html` `setting.html` で維持済み
+- 次スレで最初にやること
+  - 交換率対応後の細部調整
+  - 必要ならスルー系モードの交換率別数値や文言の詰め
+  - 文章整合の最終確認
+- 新スレッド開始時は まず `CODEX_RULES.md` とこの `HANDOFF.md` を確認する
