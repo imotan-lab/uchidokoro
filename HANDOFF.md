@@ -179,6 +179,12 @@
 - 交換率4パターン対応を4機種へ拡張
   - `hokuto_tensei2` `biohazard` `godeater` `goblin` に交換率別 `strategyByRate` と `byRate` を追加
   - `machine.html` の早見表連動は北斗専用分岐を外し 交換率データがある機種で共通動作するよう整理
+- 交換率4パターン対応をさらに4機種へ拡張
+  - `kabaneri` `dumbbell` `monkeyv` `koukaku` に交換率別 `strategyByRate` と `byRate` を追加
+  - 記事ページとチェッカーの両方でスクショ確認済み 問題なし
+- 直アクセスURLの補強
+  - `machine.html` `checker.html` `setting.html` で `?slug=` なしでも URL パスから機種slugを解決できるように修正済み
+  - `hokuto` の記事ページ構文エラーも解消済み
 - `狙い目早見表` と `基本情報` の役割整理
 - 交換率4パターン対応
 - 周期カウンター対応
@@ -225,6 +231,22 @@
 - 細かい違和感は 次の便でまとめて回収する
 - 速度を優先する間は `まず仮完成まで一気に進める → 後でブラッシュアップ` の順で進める
 
+## 今夜の区切り
+
+- ここまでで交換率4パターン対応は `hokuto` `hokuto_tensei2` `biohazard` `godeater` `goblin` `kabaneri` `dumbbell` `monkeyv` `koukaku` まで完了
+- 上記9機種は記事ページとチェッカーのスクショ確認まで完了
+- 次回再開時は 残り未対応8機種
+  - `baki`
+  - `banchou4`
+  - `chibaryo2`
+  - `kaguya`
+  - `tekken6`
+  - `tensura`
+  - `tokyo_ghoul`
+  - `valvrave2`
+  から交換率4パターン対応を広げる
+- 返答の重複が1回あったため 今後は送信前に直前回答との重複確認を入れる
+
 ## 情報源の使い分け
 
 - たらればさんのnote
@@ -243,3 +265,12 @@
 3. `README.md`
 
 この順で見れば ルール 現在地 概要 の順に把握できる。
+
+## 2026-03-21 夜メモ
+
+- 交換率4パターン対応を残り8機種にも追加完了
+- 今夜で対応済みは hokuto hokuto_tensei2 iohazard godeater goblin kabaneri dumbbell monkeyv koukaku aki anchou4 chibaryo2 kaguya 	ekken6 	ensura 	okyo_ghoul alvrave2
+- sf5 は設定狙い専用のため交換率セレクター対象外のまま
+- machine.html checker.html setting.html の直アクセスURL対応は済み
+- 次回は残り機種のスクショ確認結果を見て微調整するか、交換率対応の細部（スルー系モード）を詰める
+- 今回 machines.json を一度壊したが、公開中サイトの ssets/data/machines.json を取得して復旧後に再適用済み
