@@ -445,24 +445,6 @@ async function loadJson(path){
     judge();
   }
 
-  // 狙い目早見表（田の字テーブル）
-  const summaryGrid = document.getElementById("summaryGrid");
-  const boxes = detail?.summaryBoxes || [
-    { label: "天井", value: machine.strategy || "-" },
-    { label: "ヤメ時", value: "-" }
-  ];
-  let rows = "";
-  for (let i = 0; i < boxes.length; i += 2) {
-    const a = boxes[i];
-    const b = boxes[i + 1];
-    if (b) {
-      rows += `<tr><td><span class="s-label">${a.label}</span><span class="s-value">${a.value}</span></td><td><span class="s-label">${b.label}</span><span class="s-value">${b.value}</span></td></tr>`;
-    } else {
-      rows += `<tr><td><span class="s-label">${a.label}</span><span class="s-value">${a.value}</span></td><td></td></tr>`;
-    }
-  }
-  summaryGrid.innerHTML = rows;
-
   // 基本情報テーブル
   const infoBody = document.getElementById("infoTableBody");
   (detail?.factTable || [["機種名", machine.name]]).forEach(([th, td]) => {
