@@ -408,89 +408,6 @@
     "limit": 1000
   },
   {
-    "slug": "valvrave2",
-    "name": "Lパチスロ 革命機ヴァルヴレイヴ2",
-    "seo": {
-      "title": "Lパチスロ 革命機ヴァルヴレイヴ2 狙い目"
-    },
-    "info": "スマスロAT",
-    "strategy": "CZ間600G〜 / 決戦2スルー〜",
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "cz",
-          "label": "CZ間"
-        },
-        {
-          "key": "bonus",
-          "label": "ボーナス間"
-        },
-        {
-          "key": "suru",
-          "label": "決戦スルー",
-          "hasSuru": true
-        },
-        {
-          "key": "reset",
-          "label": "リセット"
-        }
-      ],
-      "cz": {
-        "excellent": 800,
-        "good": 600,
-        "caution": 400,
-        "note": "CZ間天井1000G+α。600G〜でプラス域。液晶のG数カウンタで確認。"
-      },
-      "bonus": {
-        "excellent": 1200,
-        "good": 1000,
-        "caution": 700,
-        "note": "ボーナス間天井1500G+α。1000G〜でプラス域。長期ハマり台を宵越しで狙う形が基本。"
-      },
-      "suru": {
-        "suruMax": 3,
-        "suru": [
-          {
-            "count": 0,
-            "excellent": 800,
-            "good": 600,
-            "caution": 400,
-            "note": "0スルー。CZ間ボーダーと同じ600G〜が目安。"
-          },
-          {
-            "count": 1,
-            "excellent": 600,
-            "good": 400,
-            "caution": 200,
-            "note": "1スルー。400G〜でプラス域。"
-          },
-          {
-            "count": 2,
-            "excellent": 300,
-            "good": 100,
-            "caution": 0,
-            "note": "2スルー。100G〜で積極的に狙える。"
-          },
-          {
-            "count": 3,
-            "excellent": 50,
-            "good": 0,
-            "caution": 0,
-            "note": "3スルー。次回決戦ボーナスでAT確定。0G〜で着席OK。"
-          }
-        ]
-      },
-      "reset": {
-        "excellent": 400,
-        "good": 300,
-        "caution": 200,
-        "note": "設定変更後は周期3周期短縮。300G〜でプラス域。周期カウンターは今後対応予定。"
-      }
-    },
-    "limit": 1500
-  },
-  {
     "slug": "kaguya",
     "name": "パチスロ かぐや様は告らせたい",
     "seo": {
@@ -602,6 +519,89 @@
     "limit": 999
   },
   {
+    "slug": "valvrave2",
+    "name": "Lパチスロ 革命機ヴァルヴレイヴ2",
+    "seo": {
+      "title": "Lパチスロ 革命機ヴァルヴレイヴ2 狙い目"
+    },
+    "info": "スマスロAT",
+    "strategy": "CZ間600G〜 / 決戦2スルー〜",
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "cz",
+          "label": "CZ間"
+        },
+        {
+          "key": "bonus",
+          "label": "ボーナス間"
+        },
+        {
+          "key": "suru",
+          "label": "決戦スルー",
+          "hasSuru": true
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "cz": {
+        "excellent": 800,
+        "good": 600,
+        "caution": 400,
+        "note": "CZ間天井1000G+α。600G〜でプラス域。液晶のG数カウンタで確認。"
+      },
+      "bonus": {
+        "excellent": 1200,
+        "good": 1000,
+        "caution": 700,
+        "note": "ボーナス間天井1500G+α。1000G〜でプラス域。長期ハマり台を宵越しで狙う形が基本。"
+      },
+      "suru": {
+        "suruMax": 3,
+        "suru": [
+          {
+            "count": 0,
+            "excellent": 800,
+            "good": 600,
+            "caution": 400,
+            "note": "0スルー。CZ間ボーダーと同じ600G〜が目安。"
+          },
+          {
+            "count": 1,
+            "excellent": 600,
+            "good": 400,
+            "caution": 200,
+            "note": "1スルー。400G〜でプラス域。"
+          },
+          {
+            "count": 2,
+            "excellent": 300,
+            "good": 100,
+            "caution": 0,
+            "note": "2スルー。100G〜で積極的に狙える。"
+          },
+          {
+            "count": 3,
+            "excellent": 50,
+            "good": 0,
+            "caution": 0,
+            "note": "3スルー。次回決戦ボーナスでAT確定。0G〜で着席OK。"
+          }
+        ]
+      },
+      "reset": {
+        "excellent": 400,
+        "good": 300,
+        "caution": 200,
+        "note": "設定変更後は周期3周期短縮。300G〜でプラス域。周期カウンターは今後対応予定。"
+      }
+    },
+    "limit": 1500
+  },
+  {
     "slug": "biohazard",
     "name": "スマスロ バイオハザード5",
     "seo": {
@@ -642,41 +642,6 @@
         "good": 300,
         "caution": 150,
         "note": "設定変更後は天井666G+αに短縮。300G〜でプラス域。リセット判別は666Gを超えたかどうかで確認。"
-      }
-    },
-    "limit": 999
-  },
-  {
-    "slug": "chibaryo2",
-    "name": "チバリヨ2",
-    "seo": {
-      "title": "チバリヨ2 狙い目"
-    },
-    "info": "スマスロAT",
-    "strategy": "通常550G〜 / リセット100G〜",
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "normal",
-          "label": "通常"
-        },
-        {
-          "key": "reset",
-          "label": "リセット"
-        }
-      ],
-      "normal": {
-        "excellent": 600,
-        "good": 550,
-        "caution": 450,
-        "note": "G数天井600G。550G〜が基本の狙い目ライン。"
-      },
-      "reset": {
-        "excellent": 200,
-        "good": 100,
-        "caution": 50,
-        "note": "設定変更後は天井短縮。100G〜でプラス域。"
       }
     },
     "limit": 999
@@ -769,6 +734,41 @@
     "limit": 999
   },
   {
+    "slug": "chibaryo2",
+    "name": "チバリヨ2",
+    "seo": {
+      "title": "チバリヨ2 狙い目"
+    },
+    "info": "スマスロAT",
+    "strategy": "通常550G〜 / リセット100G〜",
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 600,
+        "good": 550,
+        "caution": 450,
+        "note": "G数天井600G。550G〜が基本の狙い目ライン。"
+      },
+      "reset": {
+        "excellent": 200,
+        "good": 100,
+        "caution": 50,
+        "note": "設定変更後は天井短縮。100G〜でプラス域。"
+      }
+    },
+    "limit": 999
+  },
+  {
     "slug": "sf5",
     "name": "スマスロ ストリートファイターV 挑戦者の道",
     "seo": {
@@ -792,6 +792,41 @@
       }
     },
     "limit": null
+  },
+  {
+    "slug": "goblin",
+    "name": "スマスロ ゴブリンスレイヤーII",
+    "seo": {
+      "title": "スマスロ ゴブリンスレイヤーII 狙い目"
+    },
+    "info": "スマスロAT",
+    "strategy": "宵越し1200G〜 / リセット200G〜",
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 1500,
+        "good": 1200,
+        "caution": 900,
+        "note": "天井1500Gで恩恵AT+ストック1〜5個。前日のハマりを宵越しで狙うのが基本。1200G〜が狙い目ライン。"
+      },
+      "reset": {
+        "excellent": 300,
+        "good": 200,
+        "caution": 100,
+        "note": "設定変更後は天井短縮。200G〜でプラス域。"
+      }
+    },
+    "limit": 999
   },
   {
     "slug": "godeater",
@@ -834,41 +869,6 @@
         "good": 180,
         "caution": 100,
         "note": "設定変更後は天井350G+αに短縮。180G〜でプラス域。"
-      }
-    },
-    "limit": 999
-  },
-  {
-    "slug": "goblin",
-    "name": "スマスロ ゴブリンスレイヤーII",
-    "seo": {
-      "title": "スマスロ ゴブリンスレイヤーII 狙い目"
-    },
-    "info": "スマスロAT",
-    "strategy": "宵越し1200G〜 / リセット200G〜",
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "normal",
-          "label": "通常"
-        },
-        {
-          "key": "reset",
-          "label": "リセット"
-        }
-      ],
-      "normal": {
-        "excellent": 1500,
-        "good": 1200,
-        "caution": 900,
-        "note": "天井1500Gで恩恵AT+ストック1〜5個。前日のハマりを宵越しで狙うのが基本。1200G〜が狙い目ライン。"
-      },
-      "reset": {
-        "excellent": 300,
-        "good": 200,
-        "caution": 100,
-        "note": "設定変更後は天井短縮。200G〜でプラス域。"
       }
     },
     "limit": 999
