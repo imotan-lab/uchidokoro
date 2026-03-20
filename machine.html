@@ -333,21 +333,20 @@ function resolveMachineSlug() {
     ];
     const boxes = sourceBoxes.map(box => ({ ...box }));
 
-    if (machine.slug === "hokuto" && machine.strategyByRate && getCurrentRateKey()) {
+    if (machine.strategyByRate && getCurrentRateKey()) {
       const rateKey = getCurrentRateKey();
       const rateLabel = getRateLabel(rateKey);
       const normalText = machine.strategyByRate[rateKey];
       const resetConfig = checker.reset && checker.reset.byRate ? checker.reset.byRate[rateKey] : null;
+      const resetIndex = boxes.findIndex(box => String(box.label || "").includes("リセット"));
 
       if (boxes[1] && normalText) {
         boxes[1].label = `${rateLabel}狙い目`;
         boxes[1].value = normalText;
       }
-      if (boxes[2]) {
-        boxes[2].label = "リセット狙い";
-      }
-      if (boxes[3] && resetConfig && Number.isFinite(resetConfig.good)) {
-        boxes[3].value = `${resetConfig.good}G〜（積極${resetConfig.excellent}G〜）`;
+      if (resetIndex >= 0 && resetConfig && Number.isFinite(resetConfig.good)) {
+        boxes[resetIndex].label = "リセット狙い";
+        boxes[resetIndex].value = `${resetConfig.good}G〜（積極${resetConfig.excellent}G〜）`;
       }
     }
 
