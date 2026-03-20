@@ -41,6 +41,7 @@
     <div class="article-block">
       <p class="block-label">▶ 狙い目チェッカー</p>
       <div class="checker-card">
+        <div id="rateToggle" class="mode-toggle" style="display:none;margin-bottom:10px;"></div>
         <div id="modeToggle" class="mode-toggle"></div>
         <div id="suruWrap" style="display:none;margin-bottom:10px;">
           <p style="font-size:12px;color:var(--muted);margin-bottom:6px;">CZスルー回数</p>
@@ -176,11 +177,22 @@ async function loadJson(path){
   const gameInput = document.getElementById("gameInput");
   const checkerResult = document.getElementById("checkerResult");
   const modeToggle = document.getElementById("modeToggle");
+  const rateToggle = document.getElementById("rateToggle");
   const suruWrap = document.getElementById("suruWrap");
   const suruVal = document.getElementById("suruVal");
   const checkerNote = document.getElementById("checkerNote");
   const checkerCard = document.querySelector(".checker-card");
   let suruCount = 0;
+  let currentRateKey = null;
+
+  function getRateOptions(c) {
+    return Array.isArray(c.exchangeRates) ? c.exchangeRates : [];
+  }
+
+  function getCurrentRateKey() {
+    const checked = document.querySelector('input[name="exchangeRate"]:checked');
+    return checked ? checked.value : currentRateKey;
+  }
 
   function getMachineLimit(modeKey) {
     if (Number.isFinite(machine.limit)) return machine.limit;
@@ -252,13 +264,58 @@ async function loadJson(path){
     return modeData;
   }
 
+  function resolveRateConfig(config, rateKey) {
+    if (!config) return config;
+    if (config.byRate && rateKey && config.byRate[rateKey]) {
+      return { ...config, ...config.byRate[rateKey] };
+    }
+    return config;
+  }
+
+  function buildRateOptions(machine) {
+    const checker = machine.checker || {};
+    const rates = getRateOptions(checker);
+    rateToggle.innerHTML = "";
+    if (!rates.length) {
+      rateToggle.style.display = "none";
+      currentRateKey = null;
+      return;
+    }
+
+    rateToggle.style.display = "grid";
+    rates.forEach((rate, i) => {
+      const id = "rate_" + rate.key;
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "exchangeRate";
+      input.id = id;
+      input.value = rate.key;
+      if (rate.key === checker.defaultRate || (!checker.defaultRate && i === 0)) {
+        input.checked = true;
+        currentRateKey = rate.key;
+      }
+
+      const label = document.createElement("label");
+      label.htmlFor = id;
+      label.textContent = rate.label;
+
+      input.addEventListener("change", () => {
+        currentRateKey = rate.key;
+        judge();
+      });
+
+      rateToggle.appendChild(input);
+      rateToggle.appendChild(label);
+    });
+  }
+
   function judge() {
     const checked = document.querySelector('input[name="mode"]:checked');
     if (!checked) return;
     const modeKey = checked.value;
     const modedef = (checker.modes || []).find(m => m.key === modeKey);
     suruWrap.style.display = (modedef && modedef.hasSuru) ? "block" : "none";
-    const config = getConfig(checker, modeKey, suruCount);
+    const config = resolveRateConfig(getConfig(checker, modeKey, suruCount), getCurrentRateKey());
     if (checkerNote) checkerNote.textContent = config.note || "";
     const g = parseInt(gameInput.value, 10);
 
@@ -289,6 +346,7 @@ async function loadJson(path){
 
   // モード動的生成
   if (slug !== "sf5") {
+    buildRateOptions(machine);
     getModes(checker).forEach((mode, i) => {
       const id = "mode_" + mode.key;
       const input = document.createElement("input");
