@@ -327,6 +327,12 @@
 - 対象は `banchou4` `kaguya` `valvrave2` `dumbbell` `biohazard` `baki` `tekken6`
 - このメモ行は GitHub Desktop で差分が見えない場合の確認用として追加
 
+## 2026-03-21 交換率文言の再点検
+
+- `machines.json` の交換率別 `note` を最小差分で再調整
+- 対象は `chibaryo2` `tensura` `tokyo_ghoul`
+- 数値は変更せず 通常 リセット CZ間 AT間 スルー回数の入口差が文だけで伝わる形へ寄せた
+
 ## 2026-03-21 コミットサマリー運用の再確認
 
 - スレ終盤で コミット可能な便なのにコミットサマリー文の提示を漏らした
