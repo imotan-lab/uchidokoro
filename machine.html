@@ -38,6 +38,13 @@
 
   <section class="article-section-wrap">
 
+    <div class="article-block" id="evTableBlock">
+      <p class="block-label">▶ 期待値早見表</p>
+      <div id="evModeToggle" class="mode-toggle ev-mode-toggle"></div>
+      <table id="evTable" class="ev-table"></table>
+      <p class="hint-text" id="evTableNote"></p>
+    </div>
+
     <div class="article-block">
       <p class="block-label">▶ 狙い目チェッカー</p>
       <div class="checker-card">
@@ -206,6 +213,7 @@ function resolveMachineSlug() {
   let suruCount = 0;
   let cycleCount = 1;
   let currentRateKey = null;
+  let evModeKey = null;
 
   function getRateOptions(c) {
     return Array.isArray(c.exchangeRates) ? c.exchangeRates : [];
@@ -285,6 +293,76 @@ function resolveMachineSlug() {
     });
   }
 
+  function renderEvTable(modeKey, rateKey) {
+    const evTable = document.getElementById("evTable");
+    if (!modeKey || !evTable) return;
+    const modeData = checker[modeKey];
+    if (!modeData || modeData.cycle || modeData.suru) return;
+    let config = modeData;
+    if (modeData.byRate && rateKey && modeData.byRate[rateKey]) {
+      config = { ...modeData, ...modeData.byRate[rateKey] };
+    }
+    const caution = config.caution;
+    const good = config.good;
+    const excellent = config.excellent;
+    const limit = getMachineLimit(modeKey);
+    const limitStr = Number.isFinite(limit) ? `（天井${limit}G）` : "";
+    const rows = [];
+    if (Number.isFinite(caution) && caution > 0) {
+      rows.push({ range: `0 〜 ${caution - 1}G`, label: "× まだ早い", cls: "ev-row-ng" });
+    }
+    if (Number.isFinite(caution) && Number.isFinite(good) && good > caution) {
+      rows.push({ range: `${caution} 〜 ${good - 1}G`, label: "△ 条件次第", cls: "ev-row-wait" });
+    }
+    if (Number.isFinite(good) && Number.isFinite(excellent) && excellent > good) {
+      rows.push({ range: `${good} 〜 ${excellent - 1}G`, label: "○ 狙い目", cls: "ev-row-ok" });
+    }
+    if (Number.isFinite(excellent)) {
+      rows.push({ range: `${excellent}G 〜${limitStr}`, label: "◎ 積極的", cls: "ev-row-great" });
+    }
+    let html = `<thead><tr><th>G数帯</th><th>判定</th></tr></thead><tbody>`;
+    rows.forEach(r => { html += `<tr class="${r.cls}"><td>${r.range}</td><td>${r.label}</td></tr>`; });
+    html += `</tbody>`;
+    evTable.innerHTML = html;
+  }
+
+  function buildEvTable() {
+    const evBlock = document.getElementById("evTableBlock");
+    const evModeToggle = document.getElementById("evModeToggle");
+    const evTableNote = document.getElementById("evTableNote");
+    if (slug === "sf5") {
+      evBlock.style.display = "none";
+      return;
+    }
+    const modes = getModes(checker).filter(m => !m.hasSuru && !m.hasCycle);
+    if (!modes.length) { evBlock.style.display = "none"; return; }
+    evModeKey = modes[0].key;
+    if (modes.length > 1) {
+      modes.forEach((mode, i) => {
+        const id = "evmode_" + mode.key;
+        const input = document.createElement("input");
+        input.type = "radio";
+        input.name = "evMode";
+        input.id = id;
+        input.value = mode.key;
+        if (i === 0) input.checked = true;
+        const label = document.createElement("label");
+        label.htmlFor = id;
+        label.textContent = mode.label;
+        input.addEventListener("change", () => {
+          evModeKey = mode.key;
+          renderEvTable(evModeKey, getCurrentRateKey());
+        });
+        evModeToggle.appendChild(input);
+        evModeToggle.appendChild(label);
+      });
+    } else {
+      evModeToggle.style.display = "none";
+    }
+    if (evTableNote) evTableNote.textContent = "スルー・周期は変動要素があるためチェッカーで確認してください。";
+    renderEvTable(evModeKey, getCurrentRateKey());
+  }
+
   function getModes(c) {
     if (c.modes) return c.modes;
     const m = [];
@@ -351,6 +429,7 @@ function resolveMachineSlug() {
       input.addEventListener("change", () => {
         currentRateKey = rate.key;
         renderSummaryGrid();
+        renderEvTable(evModeKey, rate.key);
         judge();
       });
 
@@ -435,6 +514,7 @@ function resolveMachineSlug() {
   // モード動的生成
   if (slug !== "sf5") {
     buildRateOptions(machine);
+    buildEvTable();
     const modes = getModes(checker);
     const firstMode = modes[0]?.key || "normal";
     modes.forEach((mode) => {
