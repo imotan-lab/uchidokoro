@@ -51,6 +51,14 @@
             <button class="setting-cnt-btn" id="suruInc">＋</button>
           </div>
         </div>
+        <div id="cycleWrap" class="suru-wrap" style="display:none;">
+          <p class="suru-label">周期回数</p>
+          <div class="setting-counter-wrap">
+            <button class="setting-cnt-btn" id="cycleDec">－</button>
+            <span id="cycleVal" class="suru-val">1</span>
+            <button class="setting-cnt-btn" id="cycleInc">＋</button>
+          </div>
+        </div>
         <input id="gameInput" class="game-input" type="number" inputmode="numeric" placeholder="現在G数を入力">
         <div id="checkerResult" class="checker-result result-wait">
           <p class="result-label">判定</p>
@@ -191,9 +199,12 @@ function resolveMachineSlug() {
   const rateToggle = document.getElementById("rateToggle");
   const suruWrap = document.getElementById("suruWrap");
   const suruVal = document.getElementById("suruVal");
+  const cycleWrap = document.getElementById("cycleWrap");
+  const cycleVal = document.getElementById("cycleVal");
   const checkerNote = document.getElementById("checkerNote");
   const checkerCard = document.querySelector(".checker-card");
   let suruCount = 0;
+  let cycleCount = 1;
   let currentRateKey = null;
 
   function getRateOptions(c) {
@@ -257,6 +268,21 @@ function resolveMachineSlug() {
       suruVal.textContent = suruCount;
       judge();
     });
+
+    document.getElementById("cycleInc").addEventListener("click", () => {
+      const checked = document.querySelector('input[name="mode"]:checked');
+      const modeKey = checked ? checked.value : null;
+      const cycleMax = modeKey && checker[modeKey] && checker[modeKey].cycle ? checker[modeKey].cycle.length : 6;
+      cycleCount = Math.min(cycleMax, cycleCount + 1);
+      cycleVal.textContent = cycleCount;
+      judge();
+    });
+
+    document.getElementById("cycleDec").addEventListener("click", () => {
+      cycleCount = Math.max(1, cycleCount - 1);
+      cycleVal.textContent = cycleCount;
+      judge();
+    });
   }
 
   function getModes(c) {
@@ -268,13 +294,19 @@ function resolveMachineSlug() {
     return m;
   }
 
-  function getConfig(c, modeKey, suru) {
+  function getConfig(c, modeKey, suru, cycle) {
     const modeData = c[modeKey];
     if (!modeData) return c;
     if (modeData.suru && Array.isArray(modeData.suru)) {
       const list = modeData.suru;
       const max = list[list.length - 1].count;
       const idx = Math.min(suru, max);
+      return list.find(s => s.count === idx) || list[list.length - 1];
+    }
+    if (modeData.cycle && Array.isArray(modeData.cycle)) {
+      const list = modeData.cycle;
+      const max = list[list.length - 1].count;
+      const idx = Math.min(cycle, max);
       return list.find(s => s.count === idx) || list[list.length - 1];
     }
     return modeData;
@@ -370,7 +402,8 @@ function resolveMachineSlug() {
     const modeKey = checked.value;
     const modedef = (checker.modes || []).find(m => m.key === modeKey);
     suruWrap.style.display = (modedef && modedef.hasSuru) ? "block" : "none";
-    const config = resolveRateConfig(getConfig(checker, modeKey, suruCount), getCurrentRateKey());
+    cycleWrap.style.display = (modedef && modedef.hasCycle) ? "block" : "none";
+    const config = resolveRateConfig(getConfig(checker, modeKey, suruCount, cycleCount), getCurrentRateKey());
     if (checkerNote) checkerNote.textContent = config.note || "";
     const g = parseInt(gameInput.value, 10);
 
@@ -420,6 +453,8 @@ function resolveMachineSlug() {
       input.addEventListener("change", () => {
         suruCount = 0;
         suruVal.textContent = 0;
+        cycleCount = 1;
+        cycleVal.textContent = 1;
         gameInput.value = "";
         applyInputLimit(mode.key);
         judge();

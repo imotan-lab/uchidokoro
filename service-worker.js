@@ -4,7 +4,6 @@ const STATIC_CACHE = [
   '/uchidokoro/',
   '/uchidokoro/index.html',
   '/uchidokoro/machine.html',
-  '/uchidokoro/checker.html',
   '/uchidokoro/setting.html',
   '/uchidokoro/contact.html',
   '/uchidokoro/privacy.html',

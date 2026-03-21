@@ -398,6 +398,11 @@
                                       {
                                           "key":  "reset",
                                           "label":  "リセット"
+                                      },
+                                      {
+                                          "key":  "cycle",
+                                          "label":  "周期",
+                                          "hasCycle":  true
                                       }
                                   ],
                         "normal":  {
@@ -430,7 +435,7 @@
                                                                      "note":  "4.5枚交換はG数500G基準です。G数だけでなく4周期目以降かどうかを重ねて、深め優先で使う方が安全です。"
                                                                  }
                                                   },
-                                       "note":  "G数天井800G+α。400G〜でプラス域。周期天井（5周期目でAT確定）も並行して確認推奨。周期カウンターは今後対応予定。"
+                                       "note":  "G数天井800G+α。400G〜でプラス域。周期天井（6周期目でAT確定）も並行して確認推奨。4周期目以降が本命ゾーン。"
                                    },
                         "reset":  {
                                       "excellent":  100,
@@ -463,6 +468,208 @@
                                                                 }
                                                  },
                                       "note":  "設定変更後は最大4周期目スタート。0G〜でプラス域の場合あり。周期状態を確認してから着席。"
+                                  },
+                        "cycle":  {
+                                      "cycle":  [
+                                                    {
+                                                        "count":  1,
+                                                        "excellent":  700,
+                                                        "good":  600,
+                                                        "caution":  500,
+                                                        "note":  "1周期目。G数ベースの基本狙いです。周期が浅いぶん、G数500G以上を目安に。",
+                                                        "byRate":  {
+                                                                       "eq56":  {
+                                                                                    "excellent":  650,
+                                                                                    "good":  550,
+                                                                                    "caution":  450,
+                                                                                    "note":  "5.6枚交換の1周期目は550G〜が基準です。"
+                                                                                },
+                                                                       "rate55":  {
+                                                                                      "excellent":  700,
+                                                                                      "good":  600,
+                                                                                      "caution":  500,
+                                                                                      "note":  "5.5枚交換の1周期目は600G基準です。"
+                                                                                  },
+                                                                       "rate50":  {
+                                                                                      "excellent":  750,
+                                                                                      "good":  650,
+                                                                                      "caution":  550,
+                                                                                      "note":  "5.0枚交換の1周期目は650G〜を目安にしてください。"
+                                                                                  },
+                                                                       "rate45":  {
+                                                                                      "excellent":  800,
+                                                                                      "good":  700,
+                                                                                      "caution":  600,
+                                                                                      "note":  "4.5枚交換の1周期目は700G〜からが実戦ラインです。"
+                                                                                  }
+                                                                   }
+                                                    },
+                                                    {
+                                                        "count":  2,
+                                                        "excellent":  650,
+                                                        "good":  550,
+                                                        "caution":  450,
+                                                        "note":  "2周期目。1周期目より少し浅めに狙えます。G数450G以上を目安に。",
+                                                        "byRate":  {
+                                                                       "eq56":  {
+                                                                                    "excellent":  600,
+                                                                                    "good":  500,
+                                                                                    "caution":  400,
+                                                                                    "note":  "5.6枚交換の2周期目は500G〜が基準です。"
+                                                                                },
+                                                                       "rate55":  {
+                                                                                      "excellent":  650,
+                                                                                      "good":  550,
+                                                                                      "caution":  450,
+                                                                                      "note":  "5.5枚交換の2周期目は550G基準です。"
+                                                                                  },
+                                                                       "rate50":  {
+                                                                                      "excellent":  700,
+                                                                                      "good":  600,
+                                                                                      "caution":  500,
+                                                                                      "note":  "5.0枚交換の2周期目は600G〜を目安にしてください。"
+                                                                                  },
+                                                                       "rate45":  {
+                                                                                      "excellent":  750,
+                                                                                      "good":  650,
+                                                                                      "caution":  550,
+                                                                                      "note":  "4.5枚交換の2周期目は650G〜からが実戦ラインです。"
+                                                                                  }
+                                                                   }
+                                                    },
+                                                    {
+                                                        "count":  3,
+                                                        "excellent":  550,
+                                                        "good":  450,
+                                                        "caution":  380,
+                                                        "note":  "3周期目。次の4周期目が本命なので、G数380G〜を目安に拾えます。",
+                                                        "byRate":  {
+                                                                       "eq56":  {
+                                                                                    "excellent":  500,
+                                                                                    "good":  400,
+                                                                                    "caution":  320,
+                                                                                    "note":  "5.6枚交換の3周期目は400G〜が基準です。"
+                                                                                },
+                                                                       "rate55":  {
+                                                                                      "excellent":  550,
+                                                                                      "good":  450,
+                                                                                      "caution":  380,
+                                                                                      "note":  "5.5枚交換の3周期目は450G基準です。"
+                                                                                  },
+                                                                       "rate50":  {
+                                                                                      "excellent":  600,
+                                                                                      "good":  500,
+                                                                                      "caution":  420,
+                                                                                      "note":  "5.0枚交換の3周期目は500G〜を目安にしてください。"
+                                                                                  },
+                                                                       "rate45":  {
+                                                                                      "excellent":  650,
+                                                                                      "good":  550,
+                                                                                      "caution":  460,
+                                                                                      "note":  "4.5枚交換の3周期目は550G〜からが実戦ラインです。"
+                                                                                  }
+                                                                   }
+                                                    },
+                                                    {
+                                                        "count":  4,
+                                                        "excellent":  500,
+                                                        "good":  400,
+                                                        "caution":  300,
+                                                        "note":  "4周期目。本命ゾーン。400G〜で等価ベースのプラス域。G数と周期が重なる台を最優先。",
+                                                        "byRate":  {
+                                                                       "eq56":  {
+                                                                                    "excellent":  450,
+                                                                                    "good":  350,
+                                                                                    "caution":  250,
+                                                                                    "note":  "5.6枚交換の4周期目は350G〜から積極的に狙えます。"
+                                                                                },
+                                                                       "rate55":  {
+                                                                                      "excellent":  500,
+                                                                                      "good":  400,
+                                                                                      "caution":  300,
+                                                                                      "note":  "5.5枚交換の4周期目は400G基準です。周期とG数が重なる台を優先してください。"
+                                                                                  },
+                                                                       "rate50":  {
+                                                                                      "excellent":  550,
+                                                                                      "good":  450,
+                                                                                      "caution":  350,
+                                                                                      "note":  "5.0枚交換の4周期目は450G〜を目安にしてください。"
+                                                                                  },
+                                                                       "rate45":  {
+                                                                                      "excellent":  600,
+                                                                                      "good":  500,
+                                                                                      "caution":  400,
+                                                                                      "note":  "4.5枚交換の4周期目は500G〜からが実戦ラインです。"
+                                                                                  }
+                                                                   }
+                                                    },
+                                                    {
+                                                        "count":  5,
+                                                        "excellent":  200,
+                                                        "good":  100,
+                                                        "caution":  0,
+                                                        "note":  "5周期目。確実な利益ゾーン。0G〜から着席検討OK。G数が浅くてもプラスで完結しやすい。",
+                                                        "byRate":  {
+                                                                       "eq56":  {
+                                                                                    "excellent":  150,
+                                                                                    "good":  50,
+                                                                                    "caution":  0,
+                                                                                    "note":  "5.6枚交換の5周期目は0Gから着席OKです。"
+                                                                                },
+                                                                       "rate55":  {
+                                                                                      "excellent":  200,
+                                                                                      "good":  100,
+                                                                                      "caution":  0,
+                                                                                      "note":  "5.5枚交換の5周期目は100G基準ですが、0Gから候補です。"
+                                                                                  },
+                                                                       "rate50":  {
+                                                                                      "excellent":  250,
+                                                                                      "good":  150,
+                                                                                      "caution":  0,
+                                                                                      "note":  "5.0枚交換の5周期目は150G〜から本線です。0Gから候補でもあります。"
+                                                                                  },
+                                                                       "rate45":  {
+                                                                                      "excellent":  300,
+                                                                                      "good":  200,
+                                                                                      "caution":  50,
+                                                                                      "note":  "4.5枚交換の5周期目は200G〜からが実戦ラインです。"
+                                                                                  }
+                                                                   }
+                                                    },
+                                                    {
+                                                        "count":  6,
+                                                        "excellent":  0,
+                                                        "good":  0,
+                                                        "caution":  0,
+                                                        "note":  "6周期目。AT確定。G数不問で着席OK。即着席を推奨します。",
+                                                        "byRate":  {
+                                                                       "eq56":  {
+                                                                                    "excellent":  0,
+                                                                                    "good":  0,
+                                                                                    "caution":  0,
+                                                                                    "note":  "6周期目は交換率不問でAT確定。即着席OK。"
+                                                                                },
+                                                                       "rate55":  {
+                                                                                      "excellent":  0,
+                                                                                      "good":  0,
+                                                                                      "caution":  0,
+                                                                                      "note":  "6周期目は交換率不問でAT確定。即着席OK。"
+                                                                                  },
+                                                                       "rate50":  {
+                                                                                      "excellent":  0,
+                                                                                      "good":  0,
+                                                                                      "caution":  0,
+                                                                                      "note":  "6周期目は交換率不問でAT確定。即着席OK。"
+                                                                                  },
+                                                                       "rate45":  {
+                                                                                      "excellent":  0,
+                                                                                      "good":  0,
+                                                                                      "caution":  0,
+                                                                                      "note":  "6周期目は交換率不問でAT確定。即着席OK。"
+                                                                                  }
+                                                                   }
+                                                    }
+                                                ]
                                   }
                     },
         "limit":  1280
@@ -2105,7 +2312,7 @@
                                       "excellent":  400,
                                       "good":  300,
                                       "caution":  200,
-                                      "note":  "設定変更後は周期3周期短縮。300G〜でプラス域。周期カウンターは今後対応予定。",
+                                      "note":  "設定変更後は周期3周期短縮。300G〜でプラス域。",
                                       "byRate":  {
                                                      "eq56":  {
                                                                   "caution":  80,
