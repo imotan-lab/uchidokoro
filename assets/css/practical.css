@@ -495,7 +495,7 @@ button, input, select { font: inherit; }
 .btn-settei:hover { background: rgba(245,185,65,.18); }
 .machine-name { font-size: 18px; font-weight: 800; color: var(--text); line-height: 1.3; }
 
-/* RATE TOGGLE SHARED - 交換率トグルをEV表上部に移動 */
+/* RATE TOGGLE SHARED */
 .rate-toggle-shared { margin: 0 0 12px; }
 
 /* EV TABLE */
