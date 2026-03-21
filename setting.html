@@ -42,7 +42,14 @@
       <p class="landscape-hint-text">横画面にすると3列表示になります。<br>スマホ置き場のある台でそのまま使えます。</p>
     </div>
 
-    <div class="article-block">
+    <div id="preparingBlock" class="article-block" style="display:none;">
+      <div class="caution-box">
+        <p class="caution-text">この機種のポチポチくんは現在準備中です。<br>対応機種は順次追加していきます。</p>
+      </div>
+      <p class="hint-text" style="margin-top:12px;">現在対応している機種: 北斗の拳（スマスロ）</p>
+    </div>
+
+    <div id="settingInputBlock" class="article-block">
       <p class="block-label">▶ カウント入力</p>
         <p class="hint-text compact-note">BB回数は初当たりのみ。小役・共通ベルは通常時のみカウント（BB中は除く）。データはこの端末に保存され、ネット接続なしでも使えます。</p>
       <div class="setting-input-grid">
@@ -127,7 +134,7 @@
       <button class="setting-reset-btn" onclick="resetAll()">データをリセット</button>
     </div>
 
-    <div class="article-block">
+    <div id="settingResultBlock" class="article-block">
       <p class="block-label">▶ 設定期待度</p>
       <div class="setting-result-wrap">
         <div class="setting-result-row"><span class="setting-result-name">設定1</span><div class="setting-bar-wrap"><div class="setting-bar" id="bar1" style="width:20%"></div></div><span class="setting-result-pct" id="pct1">—</span></div>
@@ -208,7 +215,9 @@ fetch("assets/data/machines.json").then(r=>r.json()).then(machines=>{
   const m = machines.find(x=>x.slug===slug);
   if(!m) return;
   document.getElementById("pageTitle").innerHTML = m.name + "<br>設定判別 ポチポチくん";
-  document.getElementById("heroSub").textContent = m.name + "の設定判別ツール。ゲーム数・小役をカウントしながら入力すると設定期待度がリアルタイムで更新されます。";
+  document.getElementById("heroSub").textContent = machineConfig
+    ? m.name + "の設定判別ツール。ゲーム数・小役をカウントしながら入力すると設定期待度がリアルタイムで更新されます。"
+    : m.name + "の設定判別ツール。現在データ準備中です。対応機種は順次追加していきます。";
   document.getElementById("articleLinkNav").href = "machine.html?slug=" + slug;
   document.getElementById("backLink").href = "machine.html?slug=" + slug;
   document.title = m.name + " 設定判別 ポチポチくん | うちどころ。";
@@ -216,18 +225,36 @@ fetch("assets/data/machines.json").then(r=>r.json()).then(machines=>{
   if(meta) meta.content = m.name + "の設定判別ツール。BB確率・小役確率をリアルタイムで計算し、設定1〜6の期待度をベイズ推定で表示します。";
 });
 
+// 機種別設定判別データ（追加機種はここに追記）
+const MACHINE_CONFIGS = {
+  hokuto: {
+    rates: {
+      bb:       {1:1/383.4,2:1/370.5,4:1/297.8,5:1/258.7,6:1/235.1},
+      cherry:   {1:1/210.1,2:1/204.8,4:1/199.8,5:1/195.0,6:1/190.5},
+      weakWm:   {1:1/109.0,2:1/108.7,4:1/105.9,5:1/100.7,6:1/98.3},
+      strongWm: {1:1/409.6,2:1/404.5,4:1/376.6,5:1/352.3,6:1/337.8},
+      reach:    {1:1/16384,2:1/13107,4:1/10922,5:1/9362, 6:1/8192},
+      bell:     {1:1/165,  2:1/145,  4:1/130,  5:1/115,  6:1/100}
+    }
+  }
+  // 他機種対応は順次追加予定
+};
+
 // 判別ロジック
 const FIELDS = ['totalG','bbCount','cherryCount','weakWmCount','strongWmCount','bellCount','reachCount'];
 const SETTINGS = [1,2,4,5,6];
-const RATES = {
-  bb:      {1:1/383.4,2:1/370.5,4:1/297.8,5:1/258.7,6:1/235.1},
-  cherry:  {1:1/210.1,2:1/204.8,4:1/199.8,5:1/195.0,6:1/190.5},
-  weakWm:  {1:1/109.0,2:1/108.7,4:1/105.9,5:1/100.7,6:1/98.3},
-  strongWm:{1:1/409.6,2:1/404.5,4:1/376.6,5:1/352.3,6:1/337.8},
-  reach:   {1:1/16384,2:1/13107,4:1/10922,5:1/9362, 6:1/8192},
-  bell:    {1:1/165,  2:1/145,  4:1/130,  5:1/115,  6:1/100}
-};
 const COLORS = {1:'#667788',2:'#7788aa',4:'#f5b941',5:'#e8a020',6:'#3fc87a'};
+
+// 機種対応チェック
+const machineConfig = MACHINE_CONFIGS[slug];
+if (!machineConfig) {
+  document.getElementById('preparingBlock').style.display = '';
+  document.getElementById('settingInputBlock').style.display = 'none';
+  document.getElementById('settingResultBlock').style.display = 'none';
+  document.getElementById('landscapeHint').style.display = 'none';
+}
+
+const RATES = machineConfig ? machineConfig.rates : MACHINE_CONFIGS.hokuto.rates;
 
 function val(id){return parseInt(document.getElementById(id).value)||0;}
 function save(){

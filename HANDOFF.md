@@ -153,6 +153,11 @@
 - バキにも `ヤメ時` を追加して ハイエナ寄りの記事枠はひと通りそろえた
 - SF5 は設定狙い専用ページとして扱い `ヤメ時` ではなく `区切り方` を入れて別枠で整理する
 - SF5 の固定案内文も `ゲーム数狙いには向きません / 設定狙い向けの機種です` に統一済み
+- モンキーV の周期カウンター対応を完了（machine.html に cycleWrap UI 追加・getConfig() 拡張・machines.json に hasCycle と cycle データ追加）
+- checker.html を削除し service-worker.js から静的キャッシュ対象から除外済み（v3 に更新）
+- machine.html に 期待値早見表（`evTableBlock`）を追加 — machines.json の caution/good/excellent 閾値から色分けテーブルを生成
+- 交換率トグル（`rateToggle`）をチェッカーcard内から早見表の上位置へ移動し 早見表とチェッカーで共用する形へ変更
+- practical.css に EV テーブル用スタイル追加（`.ev-table` `.ev-row-great` `.ev-row-ok` `.ev-row-wait` `.ev-row-ng` など）
 
 ## 現在地
 
@@ -209,8 +214,6 @@
   - `hokuto` の記事ページ構文エラーも解消済み
 - `狙い目早見表` と `基本情報` の役割整理
 - 交換率4パターン対応
-- 周期カウンター対応
-- checker.html の整理
 - ポチポチくんの機種別データ拡張
 
 ### 収益化まわり
@@ -383,3 +386,25 @@
 - service worker のキャッシュ名を更新し 補助ページ3枚も静的キャッシュ対象へ追加
 - 補助ページ3枚にも service worker 登録を追加して 公開確認時の反映差を減らす方向で整理
 - さらに 共通CSSへ寄せられる見た目指定を回収し 主要ページと補助ページのナビ順 フッター順 ロゴ余白をまとめて統一
+
+## 2026-03-22 今回の作業まとめ
+
+- monkeyv の周期カウンター対応を完了
+  - machines.json に hasCycle フラグと cycle データ（6周期分・byRate あり）を追加
+  - machine.html に cycleWrap UI 追加・getConfig() に cycle 分岐追加・judge() で表示制御
+  - monkeyv.json 記事文言を 6周期目AT確定・チェッカー周期カウンター対応済みへ更新
+- checker.html を削除済み（サイトのチェッカー機能は machine.html に統合）
+  - service-worker.js のキャッシュを v3 へ更新し checker.html を静的キャッシュから除外
+- machine.html に期待値早見表ブロックを追加
+  - machines.json の caution/good/excellent 閾値データから色分けテーブルを自動生成
+  - hasSuru / hasCycle のモードは早見表から除外
+  - sf5 は早見表ブロック自体を非表示
+  - evModeToggle でモード切り替えが可能
+- 交換率トグルをチェッカー card 内から early 見表の上へ移動
+  - 早見表とチェッカーの両方に共通で連動する配置へ変更
+- practical.css に EV テーブル用スタイルを追加
+
+## 未完了 追記
+
+- 記事内容ブラッシュアップ（全18機種 machine-details JSON）は依然未着手
+- ポチポチくんの機種別データ拡張（RATES/FIELDS の動的化）は依然未着手
