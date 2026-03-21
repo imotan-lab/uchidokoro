@@ -471,22 +471,6 @@ function resolveMachineSlug() {
       suruVal.textContent = suruCount;
     }
 
-    // [PREVIEW] URLパラメータで初期状態を設定（確認用・後で削除）
-    const previewParams = new URLSearchParams(location.search);
-    const previewMode = previewParams.get("previewMode");
-    const previewG = previewParams.get("previewG");
-    const previewCycle = previewParams.get("previewCycle");
-    if (previewMode) {
-      const modeInput = document.querySelector(`input[name="mode"][value="${previewMode}"]`);
-      if (modeInput) { modeInput.checked = true; applyInputLimit(previewMode); }
-    }
-    if (previewCycle) {
-      cycleCount = parseInt(previewCycle, 10);
-      cycleVal.textContent = cycleCount;
-    }
-    if (previewG) {
-      gameInput.value = previewG;
-    }
 
     gameInput.addEventListener("input", function(){
       const checked = document.querySelector('input[name="mode"]:checked');
