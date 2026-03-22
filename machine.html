@@ -595,7 +595,13 @@ function resolveMachineSlug() {
     if (section.type === "settei") {
       const badgeClass = { hint: "settei-hint", weak: "settei-weak", mid: "settei-mid", strong: "settei-strong", ok: "settei-ok" };
       const sectionWide = (section.tables || []).some(tbl => tbl.wide);
-      let html = `<p class="article-title">${section.title}</p>`;
+      const legend = `<div class="settei-legend">` +
+        `<span class="settei-legend-item"><span class="settei-legend-badge settei-weak">弱</span>弱示唆</span>` +
+        `<span class="settei-legend-item"><span class="settei-legend-badge settei-mid">中</span>中示唆</span>` +
+        `<span class="settei-legend-item"><span class="settei-legend-badge settei-strong">強</span>強示唆</span>` +
+        `<span class="settei-legend-item"><span class="settei-legend-badge settei-ok">確</span>高設定確定/有力</span>` +
+        `</div>`;
+      let html = `<p class="article-title">${section.title}</p>${legend}`;
       (section.tables || []).forEach(tbl => {
         html += `<p class="settei-sub-label">${tbl.label}</p>`;
         html += `<table class="settei-table${sectionWide ? " settei-table--wide" : ""}"><tr>${tbl.headers.map(h => `<th>${h}</th>`).join("")}</tr>`;
