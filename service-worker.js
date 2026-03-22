@@ -1,4 +1,4 @@
-const CACHE_NAME = 'uchidokoro-v4';
+const CACHE_NAME = 'uchidokoro-v5';
 
 const STATIC_CACHE = [
   '/uchidokoro/',
@@ -12,6 +12,7 @@ const STATIC_CACHE = [
   '/uchidokoro/meta-auto.js',
   '/uchidokoro/assets/css/practical.css',
   '/uchidokoro/assets/img/logo.png',
+  '/uchidokoro/assets/img/ogp.png',
   '/uchidokoro/assets/data/machines.json',
   '/uchidokoro/assets/data/machine-details/hokuto.json'
 ];

@@ -26,7 +26,8 @@ GitHub Pages で運用する静的スロット狙い目サイトです。
 - `index.html` トップページ（機種一覧・検索・人気TOP10）
 - `machine.html` 記事ページ（全機種共通・slugで切り替え）
 - `setting.html` ポチポチくん（全機種共通・slugで切り替え）
-- `contact.html` お問い合わせページ
+- `about.html` このサイトについて（運営者情報・免責事項）
+- `contact.html` お問い合わせページ（Googleフォーム埋め込み）
 - `privacy.html` プライバシーポリシーページ
 - `404.html` 404ページ
 - `meta-auto.js` title/meta descriptionを機種ごとに動的生成
@@ -72,10 +73,12 @@ GitHub Actions により毎日UTC18:00（日本時間3:00）にYouTube APIで人
 - 全18機種の記事データJSON・チェッカー・ポチポチくん完成済み
 - 交換率4パターン対応は sf5 を除く17機種で実装済み
 - 設定示唆バッジ凡例・早見表と基本情報の役割整理も完了
-- 補助ページ3枚の整備・共通トーン統一完了
+- 補助ページ整備完了（about.html / contact.html / privacy.html / 404.html）
+- お問い合わせページはGoogleフォーム埋め込み・ダークテーマ対応済み
 - 今後は既存記事の精度と厚みを上げる段階
 
 ## 残タスク
 
 - 記事内容の最終ブラッシュアップ（情報源との突き合わせ）
-- AdSense申請（privacy.html整備済み・コンテンツ充実後に申請）
+- SEO強化（OGPタグ整備など）
+- AdSense申請（補助ページ整備済み・コンテンツ充実後に申請）
