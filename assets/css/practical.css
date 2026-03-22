@@ -164,7 +164,6 @@ button, input, select { font: inherit; }
 .btn-settei--wide { flex: 1; justify-content: center; }
 .btn-show-all--center { display: block; text-align: center; }
 .btn-show-all--muted { color: var(--muted); }
-.stack-links { display: flex; flex-direction: column; gap: 10px; }
 .compact-note { margin-bottom: 12px; }
 .landscape-hint-box {
   background: var(--gold-bg);
@@ -195,20 +194,6 @@ button, input, select { font: inherit; }
 }
 .list-row:last-child { border-bottom: none; }
 .list-row:hover { background: var(--bg2); }
-.machine-name { margin: 0; font-size: 17px; font-weight: 800; color: var(--text); }
-.machine-sub { margin-top: 4px; }
-.type-chip {
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
-  padding: 0 8px;
-  border: 1px solid var(--line2);
-  border-radius: 999px;
-  background: var(--bg2);
-  color: var(--muted);
-  font-size: 11px;
-}
-.row-arrow { color: var(--gold); font-size: 20px; }
 .empty-card {
   display: none;
   padding: 20px;
@@ -405,10 +390,6 @@ button, input, select { font: inherit; }
 /* RESULT TEXT VARIANTS */
 .result-text--comment { font-size: 13px; font-weight: 700; color: var(--soft); }
 
-/* BACK LINK */
-.back-link { color: var(--muted); font-size: 13px; font-weight: 700; }
-.back-link:hover { color: var(--gold); }
-
 /* HEADER CENTER (トップページ用) */
 .header-inner--center { justify-content: center; }
 
@@ -448,10 +429,6 @@ button, input, select { font: inherit; }
 }
 .btn-show-all:hover { border-color: var(--gold); }
 
-/* LIST RANK */
-.list-rank { font-size: 11px; color: var(--muted); min-width: 18px; text-align: right; }
-.list-arrow { font-size: 14px; color: var(--muted); }
-
 /* HERO CATCH */
 .hero-catch { font-size: 28px; font-weight: 900; font-family: "Orbitron", sans-serif; color: var(--text); letter-spacing: .04em; line-height: 1.1; margin: 0 0 6px; }
 .hero-catch-sub { font-size: 16px; font-weight: 700; color: var(--muted); letter-spacing: .04em; margin: 0 0 20px; }
@@ -475,7 +452,6 @@ button, input, select { font: inherit; }
 .setting-num-input:focus { outline: none; border-color: var(--gold); }
 .setting-num-input::-webkit-inner-spin-button, .setting-num-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .setting-num-input { -moz-appearance: textfield; }
-.setting-calc-disp { font-size: 10px; color: var(--muted); min-height: 14px; }
 .setting-result-wrap { display: flex; flex-direction: column; gap: 8px; }
 .setting-result-row { display: flex; align-items: center; gap: 10px; }
 .setting-result-name { font-size: 12px; font-weight: 800; color: var(--muted); min-width: 36px; }
@@ -518,8 +494,6 @@ button, input, select { font: inherit; }
 .is-landscape .setting-current-val { display: none; }
 .is-landscape .hint-text { display: none; }
 .setting-current-val { display: none; }
-.landscape-hint { display: none; }
-.portrait-hint { display: block; }
 
 @media (max-width: 520px) {
   .header-inner { gap: 8px; flex-wrap: wrap; }
