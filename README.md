@@ -64,9 +64,12 @@ GitHub Actions により毎日UTC18:00（日本時間3:00）にYouTube APIで人
 - checker.html 削除済み・service-worker.js を v3 へ更新済み
 - machine.html に期待値早見表（色分けテーブル）追加済み
 - 交換率トグルを早見表の上へ移動し チェッカーと共用する配置へ変更済み
+- 全18機種の記事ブラッシュアップ（機種固有の設定示唆テーブル・立ち回りメモ更新）完了
+- ポチポチくん MACHINE_CONFIGS 構造化・FIELDS動的化・sf5対応追加完了
+- 共通導線整備（aria-current対応・フッター統一確認）完了
+- privacy.html AdSense対応（広告配信・Cookie・アクセス解析セクション追加）完了
 - 次の残り作業
-  - 記事内容ブラッシュアップ（全18機種 machine-details JSON の加筆・精度向上）
-  - ポチポチくんの機種別データ拡張（setting.html の RATES/FIELDS を動的化）
-  - 共通導線の最終固定（ナビ順・フッター順・導線文言の横断統一）
+  - ポチポチくんの追加機種データ（sf5以外。多くの機種は小役確率に設定差なしのため難易度高）
+  - AdSense申請（privacy.html整備済み・コンテンツ充実後に申請）
 - `sf5` は設定狙い専用のため 交換率セレクター対象外のまま
 - 新スレッドでは最初に `CODEX_RULES.md` と `HANDOFF.md` を確認する
