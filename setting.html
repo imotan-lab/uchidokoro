@@ -51,86 +51,8 @@
 
     <div id="settingInputBlock" class="article-block">
       <p class="block-label">▶ カウント入力</p>
-        <p class="hint-text compact-note">BB回数は初当たりのみ。小役・共通ベルは通常時のみカウント（BB中は除く）。データはこの端末に保存され、ネット接続なしでも使えます。</p>
-      <div class="setting-input-grid">
-        <div class="setting-input-item">
-          <div class="setting-input-label-wrap">
-            <span class="setting-input-label">総ゲーム数</span>
-            <span class="setting-input-sub">通常時の近似値</span>
-          </div>
-          <div class="setting-counter-wrap">
-            <button class="setting-cnt-btn" onclick="dec('totalG')">－</button>
-            <span class="setting-current-val" id="cur_totalG">0</span><input class="setting-num-input" id="totalG" type="number" inputmode="numeric" placeholder="0">
-            <button class="setting-cnt-btn" onclick="inc('totalG')">＋</button>
-          </div>
-        </div>
-        <div class="setting-input-item">
-          <div class="setting-input-label-wrap">
-            <span class="setting-input-label">BB回数</span>
-            <span class="setting-input-sub" id="bbDisp">初当たりのみ</span>
-          </div>
-          <div class="setting-counter-wrap">
-            <button class="setting-cnt-btn" onclick="dec('bbCount')">－</button>
-            <span class="setting-current-val" id="cur_bbCount">0</span><input class="setting-num-input" id="bbCount" type="number" inputmode="numeric" placeholder="0">
-            <button class="setting-cnt-btn" onclick="inc('bbCount')">＋</button>
-          </div>
-        </div>
-        <div class="setting-input-item">
-          <div class="setting-input-label-wrap">
-            <span class="setting-input-label">中段チェリー</span>
-            <span class="setting-input-sub" id="cherryDisp">通常時のみ</span>
-          </div>
-          <div class="setting-counter-wrap">
-            <button class="setting-cnt-btn" onclick="dec('cherryCount')">－</button>
-            <span class="setting-current-val" id="cur_cherryCount">0</span><input class="setting-num-input" id="cherryCount" type="number" inputmode="numeric" placeholder="0">
-            <button class="setting-cnt-btn" onclick="inc('cherryCount')">＋</button>
-          </div>
-        </div>
-        <div class="setting-input-item">
-          <div class="setting-input-label-wrap">
-            <span class="setting-input-label">弱スイカ</span>
-            <span class="setting-input-sub" id="weakWmDisp">通常時・目押し必須</span>
-          </div>
-          <div class="setting-counter-wrap">
-            <button class="setting-cnt-btn" onclick="dec('weakWmCount')">－</button>
-            <span class="setting-current-val" id="cur_weakWmCount">0</span><input class="setting-num-input" id="weakWmCount" type="number" inputmode="numeric" placeholder="0">
-            <button class="setting-cnt-btn" onclick="inc('weakWmCount')">＋</button>
-          </div>
-        </div>
-        <div class="setting-input-item">
-          <div class="setting-input-label-wrap">
-            <span class="setting-input-label">強スイカ</span>
-            <span class="setting-input-sub" id="strongWmDisp">通常時・目押し必須</span>
-          </div>
-          <div class="setting-counter-wrap">
-            <button class="setting-cnt-btn" onclick="dec('strongWmCount')">－</button>
-            <span class="setting-current-val" id="cur_strongWmCount">0</span><input class="setting-num-input" id="strongWmCount" type="number" inputmode="numeric" placeholder="0">
-            <button class="setting-cnt-btn" onclick="inc('strongWmCount')">＋</button>
-          </div>
-        </div>
-        <div class="setting-input-item">
-          <div class="setting-input-label-wrap">
-            <span class="setting-input-label">リーチ目役</span>
-            <span class="setting-input-sub" id="reachDisp">通常時のみ</span>
-          </div>
-          <div class="setting-counter-wrap">
-            <button class="setting-cnt-btn" onclick="dec('reachCount')">－</button>
-            <span class="setting-current-val" id="cur_reachCount">0</span><input class="setting-num-input" id="reachCount" type="number" inputmode="numeric" placeholder="0">
-            <button class="setting-cnt-btn" onclick="inc('reachCount')">＋</button>
-          </div>
-        </div>
-        <div class="setting-input-item">
-          <div class="setting-input-label-wrap">
-            <span class="setting-input-label">共通ベル <span style="color:var(--muted2);font-size:10px;">参考値</span></span>
-            <span class="setting-input-sub" id="bellDisp">通常時・中→右→左</span>
-          </div>
-          <div class="setting-counter-wrap">
-            <button class="setting-cnt-btn" onclick="dec('bellCount')">－</button>
-            <span class="setting-current-val" id="cur_bellCount">0</span><input class="setting-num-input" id="bellCount" type="number" inputmode="numeric" placeholder="0">
-            <button class="setting-cnt-btn" onclick="inc('bellCount')">＋</button>
-          </div>
-        </div>
-      </div>
+        <p class="hint-text compact-note" id="inputNote"></p>
+      <div class="setting-input-grid" id="settingInputGrid"></div>
       <button class="setting-reset-btn" onclick="resetAll()">データをリセット</button>
     </div>
 
@@ -150,7 +72,7 @@
       <div class="caution-box">
         <p class="caution-text">このツールは「設定ごとの理論確率にどれだけ近いか」をベイズ推定で計算しています。2000G未満ではサンプル不足で精度が低くなります。高設定でも低設定っぽい数値が出ることがあるため、あくまで参考値としてご利用ください。設定2と設定4は確率差が小さく区別しにくいです。</p>
       </div>
-      <p class="hint-text">※共通ベルは公式未公表の実戦値のため参考程度にご利用ください。</p>
+      <p class="hint-text" id="resultNote"></p>
     </div>
 
   </section>
@@ -217,7 +139,7 @@ fetch("assets/data/machines.json").then(r=>r.json()).then(machines=>{
   if(!m) return;
   document.getElementById("pageTitle").innerHTML = m.name + "<br>設定判別 ポチポチくん";
   document.getElementById("heroSub").textContent = machineConfig
-    ? m.name + "の設定判別ツール。ゲーム数・小役をカウントしながら入力すると設定期待度がリアルタイムで更新されます。"
+    ? m.name + "の設定判別ツール。" + (machineConfig.heroText || "ゲーム数・小役をカウントしながら入力すると設定期待度がリアルタイムで更新されます。")
     : m.name + "の設定判別ツール。現在データ準備中です。対応機種は順次追加していきます。";
   document.getElementById("articleLinkNav").href = "machine.html?slug=" + slug;
   document.getElementById("backLink").href = "machine.html?slug=" + slug;
@@ -229,6 +151,16 @@ fetch("assets/data/machines.json").then(r=>r.json()).then(machines=>{
 // 機種別設定判別データ（追加機種はここに追記）
 const MACHINE_CONFIGS = {
   hokuto: {
+    note: 'BB回数は初当たりのみ。小役・共通ベルは通常時のみカウント（BB中は除く）。',
+    fields: [
+      { id: 'bb',       label: 'BB回数',       sub: '初当たりのみ',        rateKey: 'bb' },
+      { id: 'cherry',   label: '中段チェリー',  sub: '通常時のみ',          rateKey: 'cherry' },
+      { id: 'weakWm',   label: '弱スイカ',      sub: '通常時・目押し必須',  rateKey: 'weakWm' },
+      { id: 'strongWm', label: '強スイカ',      sub: '通常時・目押し必須',  rateKey: 'strongWm' },
+      { id: 'reach',    label: 'リーチ目役',    sub: '通常時のみ',          rateKey: 'reach' },
+      { id: 'bell',     label: '共通ベル',      sub: '通常時・中→右→左',  rateKey: 'bell', ref: true }
+    ],
+    resultNote: '※共通ベルは公式未公表の実戦値のため参考程度にご利用ください。',
     rates: {
       bb:       {1:1/383.4,2:1/370.5,4:1/297.8,5:1/258.7,6:1/235.1},
       cherry:   {1:1/210.1,2:1/204.8,4:1/199.8,5:1/195.0,6:1/190.5},
@@ -237,12 +169,22 @@ const MACHINE_CONFIGS = {
       reach:    {1:1/16384,2:1/13107,4:1/10922,5:1/9362, 6:1/8192},
       bell:     {1:1/165,  2:1/145,  4:1/130,  5:1/115,  6:1/100}
     }
+  },
+  sf5: {
+    heroText: 'BB回数をカウントしながら入力すると設定期待度がリアルタイムで更新されます。',
+    note: 'BB（バトルボーナス）は初当たりのみカウント。AT間の通常時G数を総ゲーム数として入力してください。',
+    fields: [
+      { id: 'bb', label: 'BB（バトルボーナス）', sub: '初当たりのみ', rateKey: 'bb' }
+    ],
+    resultNote: '※BB確率ベースの推定です。設定間の差は小さめなので2000G以上のデータで精度が上がります。',
+    rates: {
+      bb: {1:1/296.9, 2:1/291.8, 4:1/268.3, 5:1/254.3, 6:1/234.5}
+    }
   }
   // 他機種対応は順次追加予定
 };
 
 // 判別ロジック
-const FIELDS = ['totalG','bbCount','cherryCount','weakWmCount','strongWmCount','bellCount','reachCount'];
 const SETTINGS = [1,2,4,5,6];
 const COLORS = {1:'#667788',2:'#7788aa',4:'#f5b941',5:'#e8a020',6:'#3fc87a'};
 
@@ -255,101 +197,141 @@ if (!machineConfig) {
   document.getElementById('landscapeHint').style.display = 'none';
 }
 
-const RATES = machineConfig ? machineConfig.rates : MACHINE_CONFIGS.hokuto.rates;
+const RATES = machineConfig ? machineConfig.rates : null;
+const FIELDS = machineConfig ? ['totalG', ...machineConfig.fields.map(f => f.id + 'Count')] : ['totalG'];
 
-function val(id){return parseInt(document.getElementById(id).value)||0;}
-function save(){
-  const data={};
-  FIELDS.forEach(id=>{data[id]=val(id);});
-  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(data));}catch(e){}
+// 入力フィールドを動的生成
+function generateInputs() {
+  if (!machineConfig) return;
+  const noteEl = document.getElementById('inputNote');
+  if (noteEl) noteEl.textContent = (machineConfig.note || '') + 'データはこの端末に保存され、ネット接続なしでも使えます。';
+  const resultNoteEl = document.getElementById('resultNote');
+  if (resultNoteEl) resultNoteEl.textContent = machineConfig.resultNote || '';
+  const grid = document.getElementById('settingInputGrid');
+  let html = `<div class="setting-input-item">
+      <div class="setting-input-label-wrap">
+        <span class="setting-input-label">総ゲーム数</span>
+        <span class="setting-input-sub">通常時の近似値</span>
+      </div>
+      <div class="setting-counter-wrap">
+        <button class="setting-cnt-btn" onclick="dec('totalG')">－</button>
+        <span class="setting-current-val" id="cur_totalG">0</span><input class="setting-num-input" id="totalG" type="number" inputmode="numeric" placeholder="0">
+        <button class="setting-cnt-btn" onclick="inc('totalG')">＋</button>
+      </div>
+    </div>`;
+  machineConfig.fields.forEach(f => {
+    const id = f.id + 'Count';
+    const labelHtml = f.ref
+      ? f.label + ' <span style="color:var(--muted2);font-size:10px;">参考値</span>'
+      : f.label;
+    html += `<div class="setting-input-item">
+      <div class="setting-input-label-wrap">
+        <span class="setting-input-label">${labelHtml}</span>
+        <span class="setting-input-sub" id="${f.id}Disp">${f.sub}</span>
+      </div>
+      <div class="setting-counter-wrap">
+        <button class="setting-cnt-btn" onclick="dec('${id}')">－</button>
+        <span class="setting-current-val" id="cur_${id}">0</span><input class="setting-num-input" id="${id}" type="number" inputmode="numeric" placeholder="0">
+        <button class="setting-cnt-btn" onclick="inc('${id}')">＋</button>
+      </div>
+    </div>`;
+  });
+  grid.innerHTML = html;
+  document.querySelectorAll('.setting-num-input').forEach(el => el.addEventListener('input', () => { save(); calcAll(); }));
 }
-function load(){
-  try{
-    const raw=localStorage.getItem(STORAGE_KEY);
-    if(!raw)return;
-    const data=JSON.parse(raw);
-    FIELDS.forEach(id=>{if(data[id])document.getElementById(id).value=data[id];});
-  }catch(e){}
-}
-function updateCurrentVal(id){
-  const cur=document.getElementById('cur_'+id);
-  if(cur) cur.textContent=val(id);
-}
-function inc(id){document.getElementById(id).value=(val(id)+1);save();calcAll();updateCurrentVal(id);}
-function dec(id){document.getElementById(id).value=Math.max(0,val(id)-1);save();calcAll();updateCurrentVal(id);}
 
-function poisson(k,lambda){
-  if(k<0||lambda<=0)return k===0?1:0;
-  let logP=-lambda+k*Math.log(lambda);
-  for(let i=1;i<=k;i++)logP-=Math.log(i);
+function val(id) { return parseInt(document.getElementById(id).value) || 0; }
+function save() {
+  const data = {};
+  FIELDS.forEach(id => { data[id] = val(id); });
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    FIELDS.forEach(id => { if (data[id]) { const el = document.getElementById(id); if (el) el.value = data[id]; } });
+  } catch(e) {}
+}
+function updateCurrentVal(id) {
+  const cur = document.getElementById('cur_' + id);
+  if (cur) cur.textContent = val(id);
+}
+function inc(id) { document.getElementById(id).value = (val(id) + 1); save(); calcAll(); updateCurrentVal(id); }
+function dec(id) { document.getElementById(id).value = Math.max(0, val(id) - 1); save(); calcAll(); updateCurrentVal(id); }
+
+function poisson(k, lambda) {
+  if (k < 0 || lambda <= 0) return k === 0 ? 1 : 0;
+  let logP = -lambda + k * Math.log(lambda);
+  for (let i = 1; i <= k; i++) logP -= Math.log(i);
   return Math.exp(logP);
 }
-function dispRate(id,totalG,count,baseSub){
-  const el=document.getElementById(id);
-  if(!el)return;
-  if(!totalG||!count){el.innerHTML=baseSub;return;}
-  el.innerHTML=baseSub+'<br><span style="color:var(--gold);font-weight:800;">実測: 1/'+Math.round(totalG/count)+'</span>';
+function dispRate(id, totalG, count, baseSub) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (!totalG || !count) { el.innerHTML = baseSub; return; }
+  el.innerHTML = baseSub + '<br><span style="color:var(--gold);font-weight:800;">実測: 1/' + Math.round(totalG / count) + '</span>';
 }
-function calcAll(){
-  const totalG=val('totalG'),bb=val('bbCount'),cherry=val('cherryCount');
-  const weakWm=val('weakWmCount'),strongWm=val('strongWmCount');
-  const reach=val('reachCount'),bell=val('bellCount');
-  dispRate('bbDisp',totalG,bb,'初当たりのみ');
-  dispRate('cherryDisp',totalG,cherry,'通常時のみ');
-  dispRate('weakWmDisp',totalG,weakWm,'通常時・目押し必須');
-  dispRate('strongWmDisp',totalG,strongWm,'通常時・目押し必須');
-  dispRate('reachDisp',totalG,reach,'通常時のみ');
-  dispRate('bellDisp',totalG,bell,'通常時・中→右→左');
-  if(!totalG){resetBars();return;}
-  let scores={},total=0;
-  SETTINGS.forEach(s=>{
-    let L=1;
-    if(bb)       L*=poisson(bb,      totalG*RATES.bb[s]);
-    if(cherry)   L*=poisson(cherry,  totalG*RATES.cherry[s]);
-    if(weakWm)   L*=poisson(weakWm,  totalG*RATES.weakWm[s]);
-    if(strongWm) L*=poisson(strongWm,totalG*RATES.strongWm[s]);
-    if(reach)    L*=poisson(reach,   totalG*RATES.reach[s]);
-    if(bell)     L*=poisson(bell,    totalG*RATES.bell[s]);
-    scores[s]=L;total+=L;
+function calcAll() {
+  if (!machineConfig) return;
+  const totalG = val('totalG');
+  machineConfig.fields.forEach(f => {
+    const count = val(f.id + 'Count');
+    dispRate(f.id + 'Disp', totalG, count, f.sub);
   });
-  if(total===0){resetBars();return;}
-  let maxPct=0,maxS=1;
-  SETTINGS.forEach(s=>{
-    const pct=scores[s]/total*100;
-    if(pct>maxPct){maxPct=pct;maxS=s;}
-    document.getElementById('bar'+s).style.width=pct+'%';
-    document.getElementById('bar'+s).style.background=COLORS[s];
-    document.getElementById('pct'+s).textContent=pct.toFixed(1)+'%';
+  if (!totalG) { resetBars(); return; }
+  let scores = {}, total = 0;
+  SETTINGS.forEach(s => {
+    let L = 1;
+    machineConfig.fields.forEach(f => {
+      const count = val(f.id + 'Count');
+      if (count && RATES[f.rateKey] && RATES[f.rateKey][s]) {
+        L *= poisson(count, totalG * RATES[f.rateKey][s]);
+      }
+    });
+    scores[s] = L; total += L;
   });
-  let comment='';
-  if(totalG<2000)comment=`現在${totalG}G。2000G以上積み上げると精度が上がります。参考程度にご覧ください。`;
-  else if(maxPct>=60)comment=`設定${maxS}の可能性が高いです（${maxPct.toFixed(1)}%）。`;
-  else if(maxPct>=40)comment=`設定${maxS}がやや優勢ですが、まだ絞り込めていません。カウントを続けましょう。`;
-  else comment='設定を絞り込めていません。ゲーム数を重ねながらカウントを続けてください。';
-  document.getElementById('hintText').textContent=comment;
+  if (total === 0) { resetBars(); return; }
+  let maxPct = 0, maxS = 1;
+  SETTINGS.forEach(s => {
+    const pct = scores[s] / total * 100;
+    if (pct > maxPct) { maxPct = pct; maxS = s; }
+    document.getElementById('bar' + s).style.width = pct + '%';
+    document.getElementById('bar' + s).style.background = COLORS[s];
+    document.getElementById('pct' + s).textContent = pct.toFixed(1) + '%';
+  });
+  let comment = '';
+  if (totalG < 2000) comment = `現在${totalG}G。2000G以上積み上げると精度が上がります。参考程度にご覧ください。`;
+  else if (maxPct >= 60) comment = `設定${maxS}の可能性が高いです（${maxPct.toFixed(1)}%）。`;
+  else if (maxPct >= 40) comment = `設定${maxS}がやや優勢ですが、まだ絞り込めていません。カウントを続けましょう。`;
+  else comment = '設定を絞り込めていません。ゲーム数を重ねながらカウントを続けてください。';
+  document.getElementById('hintText').textContent = comment;
 }
-function resetBars(){
-  SETTINGS.forEach(s=>{
-    document.getElementById('bar'+s).style.width='20%';
-    document.getElementById('bar'+s).style.background='var(--muted2)';
-    document.getElementById('pct'+s).textContent='—';
+function resetBars() {
+  SETTINGS.forEach(s => {
+    document.getElementById('bar' + s).style.width = '20%';
+    document.getElementById('bar' + s).style.background = 'var(--muted2)';
+    document.getElementById('pct' + s).textContent = '—';
   });
-  document.getElementById('hintText').textContent='ゲーム数と各小役をカウントしながら入力してください。データが増えるほど精度が上がります。';
+  document.getElementById('hintText').textContent = 'ゲーム数と各小役をカウントしながら入力してください。データが増えるほど精度が上がります。';
 }
-function resetAll(){
-  if(!confirm('データをリセットしますか？'))return;
-  FIELDS.forEach(id=>{document.getElementById(id).value='';});
-  FIELDS.forEach(id=>{
-    const d=document.getElementById(id.replace('Count','Disp'));
-    if(d)d.textContent='';
-  });
-  try{localStorage.removeItem(STORAGE_KEY);}catch(e){}
+function resetAll() {
+  if (!confirm('データをリセットしますか？')) return;
+  FIELDS.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  if (machineConfig) {
+    machineConfig.fields.forEach(f => {
+      const d = document.getElementById(f.id + 'Disp');
+      if (d) d.textContent = f.sub;
+    });
+  }
+  try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
   resetBars();
 }
-document.querySelectorAll('.setting-num-input').forEach(el=>el.addEventListener('input',()=>{save();calcAll();}));
+generateInputs();
 load();
 calcAll();
-FIELDS.forEach(id=>updateCurrentVal(id));
+FIELDS.forEach(id => updateCurrentVal(id));
 </script>
 
 <script>
