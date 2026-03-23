@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-YouTube Data API v3 を使って各機種のスロット動画数を取得し、
-machines.json を人気順（動画数順）に並び替えるスクリプト。
+YouTube Data API v3 を使って各機種のスロット動画の直近7日間の再生数合計を取得し、
+machines.json を人気順（再生数順）に並び替えるスクリプト。
 """
 
 import os
 import json
 import time
+import datetime
 import urllib.request
 import urllib.parse
 
@@ -35,48 +36,69 @@ SEARCH_KEYWORDS = {
     "valvrave2":     "Lパチスロ ヴァルヴレイヴ2 スロット",
 }
 
-def get_video_count(keyword):
-    """指定キーワードでYouTube検索して過去7日間の動画数を返す"""
+def get_7days_ago():
+    """7日前のRFC3339形式の日時を返す"""
+    dt = datetime.datetime.utcnow() - datetime.timedelta(days=7)
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+def search_video_ids(keyword):
+    """指定キーワードでYouTube検索して過去7日間の動画IDリストを返す"""
     params = urllib.parse.urlencode({
         "part": "snippet",
         "q": keyword,
         "type": "video",
         "publishedAfter": get_7days_ago(),
-        "maxResults": 50,
+        "maxResults": 20,
         "key": API_KEY,
     })
     url = f"https://www.googleapis.com/youtube/v3/search?{params}"
     try:
         with urllib.request.urlopen(url, timeout=10) as res:
             data = json.loads(res.read())
-            return data.get("pageInfo", {}).get("totalResults", 0)
+            return [item["id"]["videoId"] for item in data.get("items", [])]
     except Exception as e:
-        print(f"  ERROR: {keyword} -> {e}")
-        return 0
+        print(f"  ERROR (search): {keyword} -> {e}")
+        return []
 
-def get_7days_ago():
-    """7日前のRFC3339形式の日時を返す"""
-    import datetime
-    dt = datetime.datetime.utcnow() - datetime.timedelta(days=7)
-    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+def get_total_views(video_ids):
+    """動画IDリストから再生数の合計を返す"""
+    if not video_ids:
+        return 0
+    params = urllib.parse.urlencode({
+        "part": "statistics",
+        "id": ",".join(video_ids),
+        "key": API_KEY,
+    })
+    url = f"https://www.googleapis.com/youtube/v3/videos?{params}"
+    try:
+        with urllib.request.urlopen(url, timeout=10) as res:
+            data = json.loads(res.read())
+            total = 0
+            for item in data.get("items", []):
+                total += int(item["statistics"].get("viewCount", 0))
+            return total
+    except Exception as e:
+        print(f"  ERROR (views): {e}")
+        return 0
 
 def main():
     # machines.json を読み込む
     with open(MACHINES_PATH, "r", encoding="utf-8") as f:
         machines = json.load(f)
 
-    # 各機種のYouTube動画数を取得
+    # 各機種の直近7日間の再生数合計を取得
     scores = {}
     for machine in machines:
         slug = machine["slug"]
         keyword = SEARCH_KEYWORDS.get(slug, machine["name"] + " スロット")
         print(f"検索中: {machine['name']} ({keyword})")
-        count = get_video_count(keyword)
-        scores[slug] = count
-        print(f"  -> {count}件")
+        video_ids = search_video_ids(keyword)
+        views = get_total_views(video_ids)
+        scores[slug] = views
+        print(f"  -> {len(video_ids)}件 / 再生数合計 {views:,}")
         time.sleep(0.5)  # API制限対策
 
-    # 動画数順（降順）に並び替え
+    # 再生数順（降順）に並び替え
     machines.sort(key=lambda m: scores.get(m["slug"], 0), reverse=True)
 
     # machines.json を上書き保存
@@ -85,7 +107,7 @@ def main():
 
     print("\n並び替え完了:")
     for i, m in enumerate(machines, 1):
-        print(f"  {i}. {m['name']} ({scores.get(m['slug'], 0)}件)")
+        print(f"  {i}. {m['name']} (再生数 {scores.get(m['slug'], 0):,})")
 
 if __name__ == "__main__":
     main()
