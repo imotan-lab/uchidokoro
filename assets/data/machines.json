@@ -3873,6 +3873,101 @@
                                "rate50":  "5.0枚通常520G〜 / リセット50G〜",
                                "rate45":  "4.5枚通常600G〜 / リセット100G〜"
                            }
+    },
+    {
+        "slug":  "my_juggler_v",
+        "name":  "マイジャグラーV",
+        "seo":  { "title":  "マイジャグラーV 設定判別" },
+        "info":  "Aタイプ",
+        "strategy":  "設定狙い主体・天井なし",
+        "aliases":  ["マイジャグ", "マイジャグ5"],
+        "checker":  {
+                        "unit":  "G",
+                        "modes":  [{ "key":  "normal", "label":  "設定狙い" }],
+                        "normal":  {
+                                       "excellent":  99999,
+                                       "good":  99999,
+                                       "caution":  99999,
+                                       "note":  "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
+                                   }
+                    },
+        "limit":  null
+    },
+    {
+        "slug":  "neo_aim_juggler",
+        "name":  "ネオアイムジャグラーEX",
+        "seo":  { "title":  "ネオアイムジャグラーEX 設定判別" },
+        "info":  "Aタイプ",
+        "strategy":  "設定狙い主体・天井なし",
+        "aliases":  ["アイム", "ネオアイム"],
+        "checker":  {
+                        "unit":  "G",
+                        "modes":  [{ "key":  "normal", "label":  "設定狙い" }],
+                        "normal":  {
+                                       "excellent":  99999,
+                                       "good":  99999,
+                                       "caution":  99999,
+                                       "note":  "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
+                                   }
+                    },
+        "limit":  null
+    },
+    {
+        "slug":  "gogo_juggler3",
+        "name":  "ゴーゴージャグラー3",
+        "seo":  { "title":  "ゴーゴージャグラー3 設定判別" },
+        "info":  "Aタイプ",
+        "strategy":  "設定狙い主体・天井なし",
+        "aliases":  ["ゴージャグ", "ゴーゴー3"],
+        "checker":  {
+                        "unit":  "G",
+                        "modes":  [{ "key":  "normal", "label":  "設定狙い" }],
+                        "normal":  {
+                                       "excellent":  99999,
+                                       "good":  99999,
+                                       "caution":  99999,
+                                       "note":  "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
+                                   }
+                    },
+        "limit":  null
+    },
+    {
+        "slug":  "funky_juggler2",
+        "name":  "ファンキージャグラー2",
+        "seo":  { "title":  "ファンキージャグラー2 設定判別" },
+        "info":  "Aタイプ",
+        "strategy":  "設定狙い主体・天井なし",
+        "aliases":  ["ファンキー", "ファンジャグ"],
+        "checker":  {
+                        "unit":  "G",
+                        "modes":  [{ "key":  "normal", "label":  "設定狙い" }],
+                        "normal":  {
+                                       "excellent":  99999,
+                                       "good":  99999,
+                                       "caution":  99999,
+                                       "note":  "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
+                                   }
+                    },
+        "limit":  null
+    },
+    {
+        "slug":  "happy_juggler_v3",
+        "name":  "ハッピージャグラーV III",
+        "seo":  { "title":  "ハッピージャグラーV III 設定判別" },
+        "info":  "Aタイプ",
+        "strategy":  "設定狙い主体・天井なし",
+        "aliases":  ["ハッピー", "ハピジャグ"],
+        "checker":  {
+                        "unit":  "G",
+                        "modes":  [{ "key":  "normal", "label":  "設定狙い" }],
+                        "normal":  {
+                                       "excellent":  99999,
+                                       "good":  99999,
+                                       "caution":  99999,
+                                       "note":  "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
+                                   }
+                    },
+        "limit":  null
     }
 ]
 

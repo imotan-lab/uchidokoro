@@ -34,6 +34,11 @@ SEARCH_KEYWORDS = {
     "tensura":       "スマスロ転スラ スロット",
     "tokyo_ghoul":   "L東京喰種 スロット",
     "valvrave2":     "Lパチスロ ヴァルヴレイヴ2 スロット",
+    "my_juggler_v":  "マイジャグラーV スロット",
+    "neo_aim_juggler":"ネオアイムジャグラーEX スロット",
+    "gogo_juggler3": "ゴーゴージャグラー3 スロット",
+    "funky_juggler2":"ファンキージャグラー2 スロット",
+    "happy_juggler_v3":"ハッピージャグラーV III スロット",
 }
 
 def get_7days_ago():
