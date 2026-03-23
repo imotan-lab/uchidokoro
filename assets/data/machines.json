@@ -2061,7 +2061,7 @@
                     "title":  "Lパチスロ 革命機ヴァルヴレイヴ2 狙い目"
                 },
         "info":  "スマスロAT",
-        "strategy":  "CZ間600G〜 / 決戦2スルー〜",
+        "strategy":  "CZ間600G〜 / 決戦2スルー〜 / 5周期目〜",
         "checker":  {
                         "unit":  "G",
                         "modes":  [
@@ -2077,6 +2077,11 @@
                                           "key":  "suru",
                                           "label":  "決戦スルー",
                                           "hasSuru":  true
+                                      },
+                                      {
+                                          "key":  "cycle",
+                                          "label":  "周期",
+                                          "hasCycle":  true
                                       },
                                       {
                                           "key":  "reset",
@@ -2308,6 +2313,208 @@
                                                   }
                                               ]
                                  },
+                        "cycle":  {
+                                      "cycle":  [
+                                                    {
+                                                        "count":  1,
+                                                        "excellent":  800,
+                                                        "good":  600,
+                                                        "caution":  400,
+                                                        "note":  "1周期目。CZ間天井狙いと同じ基準です。周期が浅いのでG数重視で見てください。",
+                                                        "byRate":  {
+                                                                       "eq56":  {
+                                                                                    "excellent":  750,
+                                                                                    "good":  550,
+                                                                                    "caution":  380,
+                                                                                    "note":  "5.6枚交換の1周期目はCZ間と同じ550G基準です。"
+                                                                                },
+                                                                       "rate55":  {
+                                                                                      "excellent":  800,
+                                                                                      "good":  600,
+                                                                                      "caution":  400,
+                                                                                      "note":  "5.5枚交換の1周期目は600G基準です。"
+                                                                                  },
+                                                                       "rate50":  {
+                                                                                      "excellent":  900,
+                                                                                      "good":  700,
+                                                                                      "caution":  500,
+                                                                                      "note":  "5.0枚交換の1周期目は700Gから見ます。"
+                                                                                  },
+                                                                       "rate45":  {
+                                                                                      "excellent":  1000,
+                                                                                      "good":  800,
+                                                                                      "caution":  600,
+                                                                                      "note":  "4.5枚交換の1周期目は800Gからが実戦ラインです。"
+                                                                                  }
+                                                                   }
+                                                    },
+                                                    {
+                                                        "count":  2,
+                                                        "excellent":  700,
+                                                        "good":  500,
+                                                        "caution":  300,
+                                                        "note":  "2周期目。通常Aなら約30%でCZ当選のゾーンですが、まだG数も必要です。",
+                                                        "byRate":  {
+                                                                       "eq56":  {
+                                                                                    "excellent":  600,
+                                                                                    "good":  400,
+                                                                                    "caution":  250,
+                                                                                    "note":  "5.6枚交換の2周期目は400Gから候補です。"
+                                                                                },
+                                                                       "rate55":  {
+                                                                                      "excellent":  700,
+                                                                                      "good":  500,
+                                                                                      "caution":  300,
+                                                                                      "note":  "5.5枚交換の2周期目は500G基準です。"
+                                                                                  },
+                                                                       "rate50":  {
+                                                                                      "excellent":  800,
+                                                                                      "good":  600,
+                                                                                      "caution":  400,
+                                                                                      "note":  "5.0枚交換の2周期目は600Gから見ます。"
+                                                                                  },
+                                                                       "rate45":  {
+                                                                                      "excellent":  900,
+                                                                                      "good":  700,
+                                                                                      "caution":  500,
+                                                                                      "note":  "4.5枚交換の2周期目は700Gからが実戦ラインです。"
+                                                                                  }
+                                                                   }
+                                                    },
+                                                    {
+                                                        "count":  3,
+                                                        "excellent":  500,
+                                                        "good":  300,
+                                                        "caution":  150,
+                                                        "note":  "3周期目。通常Bなら天井ですがモード判別は困難。G数300G〜なら候補に入ります。",
+                                                        "byRate":  {
+                                                                       "eq56":  {
+                                                                                    "excellent":  400,
+                                                                                    "good":  250,
+                                                                                    "caution":  100,
+                                                                                    "note":  "5.6枚交換の3周期目は250Gから候補です。"
+                                                                                },
+                                                                       "rate55":  {
+                                                                                      "excellent":  500,
+                                                                                      "good":  300,
+                                                                                      "caution":  150,
+                                                                                      "note":  "5.5枚交換の3周期目は300G基準です。"
+                                                                                  },
+                                                                       "rate50":  {
+                                                                                      "excellent":  600,
+                                                                                      "good":  400,
+                                                                                      "caution":  200,
+                                                                                      "note":  "5.0枚交換の3周期目は400Gから見ます。"
+                                                                                  },
+                                                                       "rate45":  {
+                                                                                      "excellent":  700,
+                                                                                      "good":  500,
+                                                                                      "caution":  300,
+                                                                                      "note":  "4.5枚交換の3周期目は500Gからが実戦ラインです。"
+                                                                                  }
+                                                                   }
+                                                    },
+                                                    {
+                                                        "count":  4,
+                                                        "excellent":  300,
+                                                        "good":  150,
+                                                        "caution":  0,
+                                                        "note":  "4周期目。狙い目に入り始めます。G数150G〜でプラス域の目安です。",
+                                                        "byRate":  {
+                                                                       "eq56":  {
+                                                                                    "excellent":  200,
+                                                                                    "good":  100,
+                                                                                    "caution":  0,
+                                                                                    "note":  "5.6枚交換の4周期目は100Gから候補です。"
+                                                                                },
+                                                                       "rate55":  {
+                                                                                      "excellent":  300,
+                                                                                      "good":  150,
+                                                                                      "caution":  0,
+                                                                                      "note":  "5.5枚交換の4周期目は150G基準です。"
+                                                                                  },
+                                                                       "rate50":  {
+                                                                                      "excellent":  400,
+                                                                                      "good":  200,
+                                                                                      "caution":  50,
+                                                                                      "note":  "5.0枚交換の4周期目は200Gから見ます。"
+                                                                                  },
+                                                                       "rate45":  {
+                                                                                      "excellent":  500,
+                                                                                      "good":  300,
+                                                                                      "caution":  100,
+                                                                                      "note":  "4.5枚交換の4周期目は300Gからが実戦ラインです。"
+                                                                                  }
+                                                                   }
+                                                    },
+                                                    {
+                                                        "count":  5,
+                                                        "excellent":  100,
+                                                        "good":  0,
+                                                        "caution":  0,
+                                                        "note":  "5周期目。通常Cなら天井。0G近辺から積極的に狙えます。",
+                                                        "byRate":  {
+                                                                       "eq56":  {
+                                                                                    "excellent":  50,
+                                                                                    "good":  0,
+                                                                                    "caution":  0,
+                                                                                    "note":  "5.6枚交換の5周期目は0Gから積極的に見られます。"
+                                                                                },
+                                                                       "rate55":  {
+                                                                                      "excellent":  100,
+                                                                                      "good":  0,
+                                                                                      "caution":  0,
+                                                                                      "note":  "5.5枚交換の5周期目は0Gから候補です。"
+                                                                                  },
+                                                                       "rate50":  {
+                                                                                      "excellent":  150,
+                                                                                      "good":  50,
+                                                                                      "caution":  0,
+                                                                                      "note":  "5.0枚交換の5周期目は50G前後から見てください。"
+                                                                                  },
+                                                                       "rate45":  {
+                                                                                      "excellent":  200,
+                                                                                      "good":  100,
+                                                                                      "caution":  0,
+                                                                                      "note":  "4.5枚交換の5周期目は100Gからが目安です。"
+                                                                                  }
+                                                                   }
+                                                    },
+                                                    {
+                                                        "count":  6,
+                                                        "excellent":  0,
+                                                        "good":  0,
+                                                        "caution":  0,
+                                                        "note":  "6周期目。CZ天井確定。G数不問で着席OK。",
+                                                        "byRate":  {
+                                                                       "eq56":  {
+                                                                                    "excellent":  0,
+                                                                                    "good":  0,
+                                                                                    "caution":  0,
+                                                                                    "note":  "6周期目は交換率不問で0Gから着席OKです。"
+                                                                                },
+                                                                       "rate55":  {
+                                                                                      "excellent":  0,
+                                                                                      "good":  0,
+                                                                                      "caution":  0,
+                                                                                      "note":  "6周期目は交換率不問で0Gから着席OKです。"
+                                                                                  },
+                                                                       "rate50":  {
+                                                                                      "excellent":  0,
+                                                                                      "good":  0,
+                                                                                      "caution":  0,
+                                                                                      "note":  "6周期目は交換率不問で0Gから着席OKです。"
+                                                                                  },
+                                                                       "rate45":  {
+                                                                                      "excellent":  0,
+                                                                                      "good":  0,
+                                                                                      "caution":  0,
+                                                                                      "note":  "6周期目は交換率不問で0Gから着席OKです。"
+                                                                                  }
+                                                                   }
+                                                    }
+                                                ]
+                                  },
                         "reset":  {
                                       "excellent":  400,
                                       "good":  300,
@@ -2366,10 +2573,10 @@
                     },
         "limit":  1500,
         "strategyByRate":  {
-                               "eq56":  "5.6枚CZ間550G〜 / ボーナス間950G〜 / 決戦スルー50G〜",
-                               "rate55":  "5.5枚CZ間600G〜 / ボーナス間1000G〜 / 決戦スルー100G〜",
-                               "rate50":  "5.0枚CZ間700G〜 / ボーナス間1100G〜 / 決戦スルー150G〜",
-                               "rate45":  "4.5枚CZ間800G〜 / ボーナス間1200G〜 / 決戦スルー200G〜"
+                               "eq56":  "5.6枚CZ間550G〜 / ボーナス間950G〜 / 決戦スルー50G〜 / 5周期目〜",
+                               "rate55":  "5.5枚CZ間600G〜 / ボーナス間1000G〜 / 決戦スルー100G〜 / 5周期目〜",
+                               "rate50":  "5.0枚CZ間700G〜 / ボーナス間1100G〜 / 決戦スルー150G〜 / 5周期目〜",
+                               "rate45":  "4.5枚CZ間800G〜 / ボーナス間1200G〜 / 決戦スルー200G〜 / 5周期目〜"
                            }
     },
     {
