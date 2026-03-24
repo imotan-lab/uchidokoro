@@ -20,8 +20,8 @@
       "value": "CZ間550G以上<br>AT間900G以上"
     },
     {
-      "label": "確認上限",
-      "value": "999G"
+      "label": "天井",
+      "value": "AT間999G<br>リセット後は699Gに短縮"
     },
     {
       "label": "ヤメ時",
