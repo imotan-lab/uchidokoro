@@ -210,10 +210,16 @@ function resolveMachineSlug() {
   // タイトル（document.titleはmeta-auto.jsが担当）
   document.getElementById("machineTitle").textContent = machine.name;
   document.getElementById("heroSub").textContent = detail?.lead || "";
+  const noPochiPochi = ['enen2','karakuri','kaguya','valvrave2'];
   const settingToolLink = document.getElementById("settingToolLink");
-  if (settingToolLink) settingToolLink.href = `setting.html?slug=${slug}`;
   const settingHeroLink = document.getElementById("settingHeroLink");
-  if (settingHeroLink) settingHeroLink.href = `setting.html?slug=${slug}`;
+  if (noPochiPochi.includes(slug)) {
+    if (settingHeroLink) { settingHeroLink.textContent = '小役による設定差なし'; settingHeroLink.removeAttribute('href'); settingHeroLink.style.opacity = '0.5'; settingHeroLink.style.cursor = 'default'; }
+    if (settingToolLink) settingToolLink.parentElement.style.display = 'none';
+  } else {
+    if (settingToolLink) settingToolLink.href = `setting.html?slug=${slug}`;
+    if (settingHeroLink) settingHeroLink.href = `setting.html?slug=${slug}`;
+  }
   const summaryGrid = document.getElementById("summaryGrid");
 
   // チェッカー
