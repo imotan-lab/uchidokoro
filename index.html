@@ -123,6 +123,11 @@ function buildKeywords(machine){
     const TOP_COUNT = 10;
     let showAll = false;
 
+    // ボタンに機種数を表示
+    const totalCount = prepared.length;
+    document.getElementById("showAllBtnTop").textContent = `全${totalCount}機種を見る ›`;
+    document.getElementById("showAllBtn").textContent = `全${totalCount}機種を見る ›`;
+
     const listHeader = document.getElementById("listHeader");
     const showAllWrap = document.getElementById("showAllWrap");
     const showAllBtn = document.getElementById("showAllBtn");
@@ -134,7 +139,7 @@ function buildKeywords(machine){
       showAll = true;
       showAllWrap.style.display = "none";
       if (showAllWrapTop) showAllWrapTop.style.display = "none";
-      listHeader.querySelector(".list-header-title").textContent = "全機種一覧";
+      listHeader.querySelector(".list-header-title").textContent = `全${prepared.length}機種一覧`;
       listHeader.querySelector(".list-header-sub").textContent = "";
       render(search.value);
     }
