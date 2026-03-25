@@ -384,6 +384,12 @@ button, input, select { font: inherit; }
 .caution-box { background: rgba(255,98,98,.06); border: 1px solid rgba(255,98,98,.2); border-radius: var(--radius-sm); padding: 11px 13px; margin-top: 10px; }
 .caution-text { font-size: 11px; color: #ff9090; line-height: 1.7; margin: 0; }
 
+/* RUMOR BOX (噂・未確定情報) */
+.rumor-box { background: rgba(255,200,60,.08); border: 1px solid rgba(255,200,60,.3); border-radius: var(--radius-sm); padding: 14px 15px; margin-top: 18px; }
+.rumor-label { font-size: 12px; font-weight: 700; color: #f0c040; margin: 0 0 10px 0; letter-spacing: .03em; }
+.rumor-body { font-size: 13px; color: var(--soft); line-height: 1.8; margin: 0 0 8px 0; }
+.rumor-body:last-child { margin-bottom: 0; }
+
 /* CHECKER CARD VARIANTS */
 .checker-card--mt { margin-top: 12px; }
 

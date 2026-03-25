@@ -615,7 +615,9 @@ function resolveMachineSlug() {
     const div = document.createElement("div");
     div.className = "article-item";
 
-    if (section.type === "settei") {
+    if (section.type === "rumor") {
+      div.innerHTML = `<p class="article-title">${section.title}</p><div class="rumor-box"><p class="rumor-label">⚠ 噂・未確定情報</p>${(section.body || []).map(t => `<p class="rumor-body">${t}</p>`).join("")}</div>`;
+    } else if (section.type === "settei") {
       const badgeClass = { hint: "settei-hint", weak: "settei-weak", mid: "settei-mid", strong: "settei-strong", ok: "settei-ok" };
       const sectionWide = (section.tables || []).some(tbl => tbl.wide);
       const legend = `<div class="settei-legend">` +
