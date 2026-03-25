@@ -39,6 +39,16 @@ SEARCH_KEYWORDS = {
     "gogo_juggler3": "ゴーゴージャグラー3 スロット",
     "funky_juggler2":"ファンキージャグラー2 スロット",
     "happy_juggler_v3":"ハッピージャグラーV III スロット",
+    "enen2":"炎炎ノ消防隊2 スロット",
+    "karakuri":"からくりサーカス スロット",
+    "revengers":"東京リベンジャーズ スロット",
+    "onimusha3":"新鬼武者3 スロット",
+    "bakemonogatari":"化物語 スマスロ",
+    "magireco":"マギアレコード スロット",
+    "okidoki_encore":"沖ドキDUO アンコール スロット",
+    "umineko2":"うみねこのなく頃に2 スロット",
+    "thunder_v":"サンダーV スロット",
+    "hihou":"秘宝伝 スマスロ",
 }
 
 def get_7days_ago():
