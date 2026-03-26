@@ -49,6 +49,11 @@ SEARCH_KEYWORDS = {
     "umineko2":"うみねこのなく頃に2 スロット",
     "thunder_v":"サンダーV スロット",
     "hihou":"秘宝伝 スマスロ",
+    "okidoki_gold":"沖ドキGOLD スロット",
+    "okidoki_black":"沖ドキBLACK スロット",
+    "hanabi":"スマスロ ハナビ HANABI",
+    "onepunchman":"ワンパンマン スロット",
+    "kizumonogatari":"傷物語 スロット",
 }
 
 def get_7days_ago():

@@ -5171,5 +5171,427 @@
       "rate50": "5.0枚CZ390G〜 / 2スルー〜",
       "rate45": "4.5枚CZ450G〜 / 2スルー〜"
     }
+  },
+  {
+    "slug": "okidoki_gold",
+    "name": "沖ドキ！GOLD",
+    "seo": {
+      "title": "沖ドキGOLD 狙い目・天井・期待値まとめ"
+    },
+    "info": "6.5号機 疑似ボーナス",
+    "strategy": "等価550G〜 / スルー4回〜",
+    "strategyByRate": {
+      "eq56": "5.6枚600G〜",
+      "rate55": "5.5枚620G〜",
+      "rate50": "5.0枚650G〜",
+      "rate45": "4.5枚700G〜"
+    },
+    "aliases": [
+      "沖ドキゴールド",
+      "GOLD",
+      "沖ドキG"
+    ],
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        { "key": "eq56", "label": "5.6枚" },
+        { "key": "rate55", "label": "5.5枚" },
+        { "key": "rate50", "label": "5.0枚" },
+        { "key": "rate45", "label": "4.5枚" }
+      ],
+      "modes": [
+        { "key": "normal", "label": "通常" },
+        { "key": "through", "label": "スルー" }
+      ],
+      "normal": {
+        "excellent": 850,
+        "good": 550,
+        "caution": 400,
+        "byRate": {
+          "eq56": {
+            "excellent": 850,
+            "good": 600,
+            "caution": 420,
+            "note": "5.6枚交換なら600Gから狙い目。天井999G。"
+          },
+          "rate55": {
+            "excellent": 850,
+            "good": 620,
+            "caution": 440,
+            "note": "5.5枚交換なら620Gから。"
+          },
+          "rate50": {
+            "excellent": 900,
+            "good": 650,
+            "caution": 470,
+            "note": "5.0枚交換なら650Gから。"
+          },
+          "rate45": {
+            "excellent": 900,
+            "good": 700,
+            "caution": 520,
+            "note": "4.5枚交換なら700Gから。"
+          }
+        },
+        "note": "G数天井999G。チャンス・引き戻し滞在時は天井200G。"
+      },
+      "through": {
+        "excellent": 5,
+        "good": 4,
+        "caution": 3,
+        "byRate": {
+          "eq56": {
+            "excellent": 5,
+            "good": 4,
+            "caution": 3,
+            "note": "4スルーから天国移行率約50%。"
+          },
+          "rate55": {
+            "excellent": 5,
+            "good": 4,
+            "caution": 3,
+            "note": "4スルーから天国移行率約50%。"
+          },
+          "rate50": {
+            "excellent": 5,
+            "good": 4,
+            "caution": 3,
+            "note": "4スルーから天国移行率約50%。"
+          },
+          "rate45": {
+            "excellent": 5,
+            "good": 4,
+            "caution": 3,
+            "note": "4スルーから天国移行率約50%。"
+          }
+        },
+        "note": "4スルーから天国移行率約50%。有利区間1700G以上も狙い目。"
+      }
+    },
+    "limit": 999
+  },
+  {
+    "slug": "okidoki_black",
+    "name": "沖ドキ！BLACK",
+    "seo": {
+      "title": "沖ドキBLACK 狙い目・天井・期待値まとめ"
+    },
+    "info": "6.5号機 AT",
+    "strategy": "等価550G〜 / スルー4回〜",
+    "strategyByRate": {
+      "eq56": "5.6枚600G〜",
+      "rate55": "5.5枚620G〜",
+      "rate50": "5.0枚650G〜",
+      "rate45": "4.5枚700G〜"
+    },
+    "aliases": [
+      "沖ドキブラック",
+      "BLACK",
+      "沖ドキB"
+    ],
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        { "key": "eq56", "label": "5.6枚" },
+        { "key": "rate55", "label": "5.5枚" },
+        { "key": "rate50", "label": "5.0枚" },
+        { "key": "rate45", "label": "4.5枚" }
+      ],
+      "modes": [
+        { "key": "normal", "label": "通常" },
+        { "key": "through", "label": "スルー" }
+      ],
+      "normal": {
+        "excellent": 850,
+        "good": 550,
+        "caution": 400,
+        "byRate": {
+          "eq56": {
+            "excellent": 850,
+            "good": 600,
+            "caution": 420,
+            "note": "5.6枚交換なら600Gから狙い目。天井999G。"
+          },
+          "rate55": {
+            "excellent": 850,
+            "good": 620,
+            "caution": 440,
+            "note": "5.5枚交換なら620Gから。"
+          },
+          "rate50": {
+            "excellent": 900,
+            "good": 650,
+            "caution": 470,
+            "note": "5.0枚交換なら650Gから。"
+          },
+          "rate45": {
+            "excellent": 900,
+            "good": 700,
+            "caution": 520,
+            "note": "4.5枚交換なら700Gから。"
+          }
+        },
+        "note": "G数天井999G。チャンス・引き戻し滞在時は天井200G。"
+      },
+      "through": {
+        "excellent": 5,
+        "good": 4,
+        "caution": 3,
+        "byRate": {
+          "eq56": {
+            "excellent": 5,
+            "good": 4,
+            "caution": 3,
+            "note": "4スルーから天国移行率約50%。"
+          },
+          "rate55": {
+            "excellent": 5,
+            "good": 4,
+            "caution": 3,
+            "note": "4スルーから天国移行率約50%。"
+          },
+          "rate50": {
+            "excellent": 5,
+            "good": 4,
+            "caution": 3,
+            "note": "4スルーから天国移行率約50%。"
+          },
+          "rate45": {
+            "excellent": 5,
+            "good": 4,
+            "caution": 3,
+            "note": "4スルーから天国移行率約50%。"
+          }
+        },
+        "note": "4スルーから天国移行率約50%。有利区間1600G以上も狙い目。"
+      }
+    },
+    "limit": 999
+  },
+  {
+    "slug": "hanabi",
+    "name": "Lハナビ",
+    "seo": {
+      "title": "スマスロハナビ 設定判別・スペックまとめ"
+    },
+    "info": "スマスロ ノーマル",
+    "strategy": "設定狙い主体・天井なし",
+    "aliases": [
+      "ハナビ",
+      "HANABI",
+      "花火"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        { "key": "normal", "label": "設定狙い" }
+      ],
+      "normal": {
+        "excellent": 99999,
+        "good": 99999,
+        "caution": 99999,
+        "note": "ノーマルタイプのため天井非搭載。設定狙い主体の機種です。完全攻略で設定1から機械割100.2%。高設定が見込める環境での使用を推奨。"
+      }
+    },
+    "limit": null
+  },
+  {
+    "slug": "onepunchman",
+    "name": "Lワンパンマン",
+    "seo": {
+      "title": "ワンパンマン 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価CZ間150G〜 / スルー2回〜",
+    "strategyByRate": {
+      "eq56": "5.6枚CZ間170G〜",
+      "rate55": "5.5枚CZ間180G〜",
+      "rate50": "5.0枚CZ間200G〜",
+      "rate45": "4.5枚CZ間230G〜"
+    },
+    "aliases": [
+      "ワンパンマン",
+      "ワンパン"
+    ],
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        { "key": "eq56", "label": "5.6枚" },
+        { "key": "rate55", "label": "5.5枚" },
+        { "key": "rate50", "label": "5.0枚" },
+        { "key": "rate45", "label": "4.5枚" }
+      ],
+      "modes": [
+        { "key": "normal", "label": "CZ間" },
+        { "key": "suru", "label": "スルー天井", "hasSuru": true }
+      ],
+      "normal": {
+        "excellent": 280,
+        "good": 150,
+        "caution": 100,
+        "byRate": {
+          "eq56": {
+            "excellent": 280,
+            "good": 170,
+            "caution": 110,
+            "note": "5.6枚交換ならCZ間170Gから狙い目。天井320G+α。"
+          },
+          "rate55": {
+            "excellent": 280,
+            "good": 180,
+            "caution": 120,
+            "note": "5.5枚交換ならCZ間180Gから。"
+          },
+          "rate50": {
+            "excellent": 290,
+            "good": 200,
+            "caution": 140,
+            "note": "5.0枚交換ならCZ間200Gから。"
+          },
+          "rate45": {
+            "excellent": 300,
+            "good": 230,
+            "caution": 160,
+            "note": "4.5枚交換ならCZ間230Gから。"
+          }
+        },
+        "note": "CZ間天井320G+α。128G以内のCZ当選率60%超。"
+      },
+      "suru": {
+        "excellent": 5,
+        "good": 2,
+        "caution": 1,
+        "byRate": {
+          "eq56": {
+            "excellent": 5,
+            "good": 2,
+            "caution": 1,
+            "note": "CZ6スルー後（7回目）でマジBIG確定。2スルーから狙い目。"
+          },
+          "rate55": {
+            "excellent": 5,
+            "good": 2,
+            "caution": 1,
+            "note": "2スルーから狙い目。"
+          },
+          "rate50": {
+            "excellent": 5,
+            "good": 3,
+            "caution": 2,
+            "note": "3スルーから狙い目。"
+          },
+          "rate45": {
+            "excellent": 5,
+            "good": 3,
+            "caution": 2,
+            "note": "3スルーから狙い目。"
+          }
+        },
+        "note": "CZ6スルー後（7回目）でマジBIG確定（実質AT濃厚）。"
+      }
+    },
+    "limit": 320
+  },
+  {
+    "slug": "kizumonogatari",
+    "name": "パチスロ傷物語 -始マリノ刻-",
+    "seo": {
+      "title": "傷物語 狙い目・天井・期待値まとめ"
+    },
+    "info": "6.5号機 AT",
+    "strategy": "等価450G〜 / リセット0G〜",
+    "strategyByRate": {
+      "eq56": "5.6枚480G〜",
+      "rate55": "5.5枚500G〜",
+      "rate50": "5.0枚530G〜",
+      "rate45": "4.5枚570G〜"
+    },
+    "aliases": [
+      "傷物語",
+      "キズモノ",
+      "きずものがたり"
+    ],
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        { "key": "eq56", "label": "5.6枚" },
+        { "key": "rate55", "label": "5.5枚" },
+        { "key": "rate50", "label": "5.0枚" },
+        { "key": "rate45", "label": "4.5枚" }
+      ],
+      "modes": [
+        { "key": "normal", "label": "通常" },
+        { "key": "reset", "label": "リセット" }
+      ],
+      "normal": {
+        "excellent": 700,
+        "good": 450,
+        "caution": 300,
+        "byRate": {
+          "eq56": {
+            "excellent": 700,
+            "good": 480,
+            "caution": 320,
+            "note": "5.6枚交換なら480Gから狙い目。天井999G+α。700G以降のAT当選で約50%降臨ノ儀。"
+          },
+          "rate55": {
+            "excellent": 700,
+            "good": 500,
+            "caution": 340,
+            "note": "5.5枚交換なら500Gから。"
+          },
+          "rate50": {
+            "excellent": 750,
+            "good": 530,
+            "caution": 370,
+            "note": "5.0枚交換なら530Gから。"
+          },
+          "rate45": {
+            "excellent": 800,
+            "good": 570,
+            "caution": 400,
+            "note": "4.5枚交換なら570Gから。"
+          }
+        },
+        "note": "天井999G+α。700G以降のAT当選で約50%降臨ノ儀突入。CZ規定回数天井は最大12回。"
+      },
+      "reset": {
+        "excellent": 300,
+        "good": 0,
+        "caution": 0,
+        "byRate": {
+          "eq56": {
+            "excellent": 300,
+            "good": 0,
+            "caution": 0,
+            "note": "リセット後は天井400G+αに短縮。0Gから狙える。AT当選時約25%で降臨ノ儀。"
+          },
+          "rate55": {
+            "excellent": 300,
+            "good": 0,
+            "caution": 0,
+            "note": "リセット後は天井400G+αに短縮。0Gから狙える。"
+          },
+          "rate50": {
+            "excellent": 300,
+            "good": 0,
+            "caution": 0,
+            "note": "リセット後は天井400G+αに短縮。0Gから狙える。"
+          },
+          "rate45": {
+            "excellent": 350,
+            "good": 50,
+            "caution": 0,
+            "note": "4.5枚現金投資でも50Gから十分。"
+          }
+        },
+        "note": "設定変更後は天井400G+αに短縮。AT当選時約25%で降臨ノ儀突入。"
+      }
+    },
+    "limit": 999
   }
 ]
