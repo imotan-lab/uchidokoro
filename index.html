@@ -64,7 +64,7 @@
 
   <div id="listHeader" class="list-header">
     <p class="list-header-title">人気機種 TOP10</p>
-    <p class="list-header-sub">直近7日間のYouTube再生数をもとに毎日自動更新</p>
+    <p class="list-header-sub">稼働率をもとに毎週自動更新</p>
   </div>
   <section id="machineList" class="machine-list"></section>
   <div id="machineEmpty" class="empty-card">該当する機種がありません。</div>
@@ -148,7 +148,7 @@ function buildKeywords(machine){
         showAllWrap.style.display = "none";
       } else if (!showAll) {
         listHeader.querySelector(".list-header-title").textContent = "人気機種 TOP10";
-        listHeader.querySelector(".list-header-sub").textContent = "直近7日間のYouTube再生数をもとに毎日自動更新";
+        listHeader.querySelector(".list-header-sub").textContent = "稼働率をもとに毎週自動更新";
         showAllWrap.style.display = allFiltered.length > TOP_COUNT ? "block" : "none";
       }
       list.innerHTML = "";
