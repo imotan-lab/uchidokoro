@@ -6574,5 +6574,503 @@
       "強くなりたくば",
       "BAKI"
     ]
+  },
+  {
+    "slug": "sao",
+    "name": "スロット ソードアート・オンライン",
+    "seo": {
+      "title": "スロット ソードアート・オンライン 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "CZ間220G〜 / ボーナス間580G〜 / 4スルー〜",
+    "strategyByRate": {
+      "eq56": "CZ間220G〜 / ボーナス間580G〜",
+      "rate55": "CZ間230G〜 / ボーナス間600G〜",
+      "rate50": "CZ間260G〜 / ボーナス間650G〜",
+      "rate45": "CZ間300G〜 / ボーナス間720G〜"
+    },
+    "aliases": [
+      "SAO",
+      "ソードアートオンライン",
+      "さお",
+      "ソードアート",
+      "さおしゅーむ"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        "cz",
+        "suru",
+        "bonus_gap",
+        "reset"
+      ],
+      "hasSuru": true,
+      "suruMax": 6,
+      "defaultRate": "equal",
+      "exchangeRates": [
+        {
+          "id": "equal",
+          "label": "等価"
+        },
+        {
+          "id": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "id": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "id": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "id": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "modeData": {
+        "cz": {
+          "label": "CZ間",
+          "excellent": 350,
+          "good": 220,
+          "caution": 150,
+          "note": "AT中・CZ中はカウント対象外。CZ失敗後からカウント。",
+          "byRate": {
+            "eq56": {
+              "excellent": 350,
+              "good": 220,
+              "caution": 150
+            },
+            "rate55": {
+              "excellent": 360,
+              "good": 230,
+              "caution": 160
+            },
+            "rate50": {
+              "excellent": 400,
+              "good": 260,
+              "caution": 180
+            },
+            "rate45": {
+              "excellent": 460,
+              "good": 300,
+              "caution": 210
+            }
+          }
+        },
+        "suru": {
+          "label": "スルー",
+          "suru": [
+            {
+              "count": 1,
+              "excellent": 600,
+              "good": 450,
+              "caution": 300
+            },
+            {
+              "count": 2,
+              "excellent": 500,
+              "good": 350,
+              "caution": 220
+            },
+            {
+              "count": 3,
+              "excellent": 400,
+              "good": 280,
+              "caution": 170
+            },
+            {
+              "count": 4,
+              "excellent": 300,
+              "good": 200,
+              "caution": 100
+            },
+            {
+              "count": 5,
+              "excellent": 200,
+              "good": 130,
+              "caution": 50
+            },
+            {
+              "count": 6,
+              "excellent": 100,
+              "good": 50,
+              "caution": 0
+            }
+          ],
+          "note": "CZ（バトルミッション）スルー回数。AT後はリセットされる場合あり。"
+        },
+        "bonus_gap": {
+          "label": "ボーナス間",
+          "excellent": 700,
+          "good": 580,
+          "caution": 450,
+          "note": "ボーナス（AT・CZ）間ゲーム数。設定変更後はリセット。",
+          "byRate": {
+            "eq56": {
+              "excellent": 700,
+              "good": 580,
+              "caution": 450
+            },
+            "rate55": {
+              "excellent": 720,
+              "good": 600,
+              "caution": 470
+            },
+            "rate50": {
+              "excellent": 790,
+              "good": 650,
+              "caution": 520
+            },
+            "rate45": {
+              "excellent": 880,
+              "good": 720,
+              "caution": 590
+            }
+          }
+        },
+        "reset": {
+          "label": "リセット後",
+          "excellent": 150,
+          "good": 50,
+          "caution": 20,
+          "note": "設定変更後（朝イチ）はATが当選しやすい状態。早めに見切ること。",
+          "byRate": {
+            "eq56": {
+              "excellent": 150,
+              "good": 50,
+              "caution": 20
+            },
+            "rate55": {
+              "excellent": 150,
+              "good": 50,
+              "caution": 20
+            },
+            "rate50": {
+              "excellent": 150,
+              "good": 50,
+              "caution": 20
+            },
+            "rate45": {
+              "excellent": 150,
+              "good": 50,
+              "caution": 20
+            }
+          }
+        }
+      }
+    },
+    "limit": 800
+  },
+  {
+    "slug": "bandori",
+    "name": "Lバンドリ！",
+    "seo": {
+      "title": "Lバンドリ！ 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "通常550G〜（6周期〜）/ 上位CZ失敗後即",
+    "strategyByRate": {
+      "eq56": "5.6枚通常560G〜",
+      "rate55": "5.5枚通常570G〜",
+      "rate50": "5.0枚通常620G〜",
+      "rate45": "4.5枚通常690G〜"
+    },
+    "aliases": [
+      "バンドリ",
+      "ばんどり",
+      "BanGDream",
+      "バンドリーム",
+      "BANDORI"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        "normal",
+        "suru",
+        "reset"
+      ],
+      "hasSuru": true,
+      "suruMax": 4,
+      "defaultRate": "equal",
+      "exchangeRates": [
+        {
+          "id": "equal",
+          "label": "等価"
+        },
+        {
+          "id": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "id": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "id": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "id": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "modeData": {
+        "normal": {
+          "label": "通常",
+          "excellent": 700,
+          "good": 550,
+          "caution": 400,
+          "note": "AT後・ボーナス後からカウント。周期管理のため6周期（約550G）が目安。",
+          "byRate": {
+            "eq56": {
+              "excellent": 700,
+              "good": 560,
+              "caution": 410
+            },
+            "rate55": {
+              "excellent": 720,
+              "good": 570,
+              "caution": 420
+            },
+            "rate50": {
+              "excellent": 790,
+              "good": 620,
+              "caution": 470
+            },
+            "rate45": {
+              "excellent": 880,
+              "good": 690,
+              "caution": 540
+            }
+          }
+        },
+        "suru": {
+          "label": "スルー",
+          "suru": [
+            {
+              "count": 1,
+              "excellent": 600,
+              "good": 450,
+              "caution": 300
+            },
+            {
+              "count": 2,
+              "excellent": 450,
+              "good": 320,
+              "caution": 200
+            },
+            {
+              "count": 3,
+              "excellent": 300,
+              "good": 200,
+              "caution": 100
+            },
+            {
+              "count": 4,
+              "excellent": 150,
+              "good": 80,
+              "caution": 0
+            }
+          ],
+          "note": "CZスルー回数。上位CZ（CLIMAX LIVE）失敗後は即ヤメも可。"
+        },
+        "reset": {
+          "label": "リセット後",
+          "excellent": 200,
+          "good": 130,
+          "caution": 60,
+          "note": "設定変更後（朝イチ）は優遇状態の可能性あり。早めに見切ること。",
+          "byRate": {
+            "eq56": {
+              "excellent": 200,
+              "good": 130,
+              "caution": 60
+            },
+            "rate55": {
+              "excellent": 200,
+              "good": 130,
+              "caution": 60
+            },
+            "rate50": {
+              "excellent": 200,
+              "good": 130,
+              "caution": 60
+            },
+            "rate45": {
+              "excellent": 200,
+              "good": 130,
+              "caution": 60
+            }
+          }
+        }
+      }
+    },
+    "limit": 900
+  },
+  {
+    "slug": "hanma_baki",
+    "name": "L範馬刃牙",
+    "seo": {
+      "title": "L範馬刃牙 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価360G〜 / リセット150G〜 / 5スルー〜",
+    "strategyByRate": {
+      "eq56": "5.6枚370G〜",
+      "rate55": "5.5枚380G〜",
+      "rate50": "5.0枚420G〜",
+      "rate45": "4.5枚470G〜"
+    },
+    "aliases": [
+      "範馬刃牙",
+      "はんまばき",
+      "はんまバキ",
+      "L範馬バキ",
+      "範馬"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        "normal",
+        "suru",
+        "reset"
+      ],
+      "hasSuru": true,
+      "suruMax": 7,
+      "defaultRate": "equal",
+      "exchangeRates": [
+        {
+          "id": "equal",
+          "label": "等価"
+        },
+        {
+          "id": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "id": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "id": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "id": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "modeData": {
+        "normal": {
+          "label": "通常",
+          "excellent": 500,
+          "good": 360,
+          "caution": 250,
+          "note": "AT後・ボーナス後からカウント。天井は600G（AT間）。",
+          "byRate": {
+            "eq56": {
+              "excellent": 510,
+              "good": 370,
+              "caution": 260
+            },
+            "rate55": {
+              "excellent": 520,
+              "good": 380,
+              "caution": 270
+            },
+            "rate50": {
+              "excellent": 570,
+              "good": 420,
+              "caution": 300
+            },
+            "rate45": {
+              "excellent": 640,
+              "good": 470,
+              "caution": 340
+            }
+          }
+        },
+        "suru": {
+          "label": "スルー",
+          "suru": [
+            {
+              "count": 1,
+              "excellent": 500,
+              "good": 360,
+              "caution": 250
+            },
+            {
+              "count": 2,
+              "excellent": 450,
+              "good": 320,
+              "caution": 210
+            },
+            {
+              "count": 3,
+              "excellent": 380,
+              "good": 270,
+              "caution": 170
+            },
+            {
+              "count": 4,
+              "excellent": 300,
+              "good": 210,
+              "caution": 130
+            },
+            {
+              "count": 5,
+              "excellent": 220,
+              "good": 150,
+              "caution": 80
+            },
+            {
+              "count": 6,
+              "excellent": 150,
+              "good": 90,
+              "caution": 40
+            },
+            {
+              "count": 7,
+              "excellent": 80,
+              "good": 40,
+              "caution": 0
+            }
+          ],
+          "note": "CZスルー回数。AT後はリセットされる場合あり。"
+        },
+        "reset": {
+          "label": "リセット後",
+          "excellent": 250,
+          "good": 150,
+          "caution": 50,
+          "note": "設定変更後（朝イチ）は天井が短縮される。150G以内を目安にヤメ判断。",
+          "byRate": {
+            "eq56": {
+              "excellent": 250,
+              "good": 150,
+              "caution": 50
+            },
+            "rate55": {
+              "excellent": 250,
+              "good": 150,
+              "caution": 50
+            },
+            "rate50": {
+              "excellent": 250,
+              "good": 150,
+              "caution": 50
+            },
+            "rate45": {
+              "excellent": 250,
+              "good": 150,
+              "caution": 50
+            }
+          }
+        }
+      }
+    },
+    "limit": 700
   }
 ]
