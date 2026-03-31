@@ -6582,9 +6582,9 @@
       "title": "スロット ソードアート・オンライン 狙い目・天井・期待値まとめ"
     },
     "info": "スマスロAT",
-    "strategy": "CZ間220G〜 / ボーナス間580G〜 / 4スルー〜",
+    "strategy": "CZ間210G〜 / ボーナス間500G〜 / 4スルー〜",
     "strategyByRate": {
-      "eq56": "CZ間220G〜 / ボーナス間580G〜",
+      "eq56": "CZ間210G〜 / ボーナス間500G〜",
       "rate55": "CZ間230G〜 / ボーナス間600G〜",
       "rate50": "CZ間260G〜 / ボーナス間650G〜",
       "rate45": "CZ間300G〜 / ボーナス間720G〜"
@@ -6632,14 +6632,14 @@
       "modeData": {
         "cz": {
           "label": "CZ間",
-          "excellent": 350,
-          "good": 220,
+          "excellent": 300,
+          "good": 210,
           "caution": 150,
-          "note": "AT中・CZ中はカウント対象外。CZ失敗後からカウント。",
+          "note": "AT中・CZ中はカウント対象外。CZ失敗後からカウント。天井400G。",
           "byRate": {
             "eq56": {
-              "excellent": 350,
-              "good": 220,
+              "excellent": 300,
+              "good": 210,
               "caution": 150
             },
             "rate55": {
@@ -6704,13 +6704,13 @@
         "bonus_gap": {
           "label": "ボーナス間",
           "excellent": 700,
-          "good": 580,
+          "good": 500,
           "caution": 450,
-          "note": "ボーナス（AT・CZ）間ゲーム数。設定変更後はリセット。",
+          "note": "ボーナス（AT・CZ）間ゲーム数。天井999G。設定変更後はリセット。",
           "byRate": {
             "eq56": {
               "excellent": 700,
-              "good": 580,
+              "good": 500,
               "caution": 450
             },
             "rate55": {
@@ -6761,7 +6761,7 @@
         }
       }
     },
-    "limit": 800
+    "limit": 999
   },
   {
     "slug": "bandori",
@@ -6770,7 +6770,7 @@
       "title": "Lバンドリ！ 狙い目・天井・期待値まとめ"
     },
     "info": "スマスロAT",
-    "strategy": "通常550G〜（6周期〜）/ 上位CZ失敗後即",
+    "strategy": "7周期以降〜 / 上位CZ失敗後即",
     "strategyByRate": {
       "eq56": "5.6枚通常560G〜",
       "rate55": "5.5枚通常570G〜",
@@ -6822,7 +6822,7 @@
           "excellent": 700,
           "good": 550,
           "caution": 400,
-          "note": "AT後・ボーナス後からカウント。周期管理のため6周期（約550G）が目安。",
+          "note": "AT後・ボーナス後からカウント。周期管理のため7周期以降が目安。1周期＝250スター（平均約62G）。",
           "byRate": {
             "eq56": {
               "excellent": 700,
@@ -6968,7 +6968,7 @@
           "excellent": 500,
           "good": 360,
           "caution": 250,
-          "note": "AT後・ボーナス後からカウント。天井は600G（AT間）。",
+          "note": "AT後・ボーナス後からカウント。天井は最大700G（仮天井500G）。",
           "byRate": {
             "eq56": {
               "excellent": 510,
