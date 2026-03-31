@@ -7072,5 +7072,202 @@
       }
     },
     "limit": 700
+  },
+  {
+    "slug": "yorumungando",
+    "name": "スマスロヨルムンガンド",
+    "seo": {
+      "title": "スマスロヨルムンガンド 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "解析待ち（AT間999G+αで天井）",
+    "aliases": [
+      "ヨルムンガンド",
+      "よるむんがんど",
+      "ヨルムン",
+      "jormungand"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 999,
+        "good": 700,
+        "caution": 500,
+        "note": "天井AT間999G+α。狙い目ラインは解析待ちです。※情報が判明次第更新します。"
+      },
+      "reset": {
+        "excellent": 450,
+        "good": 300,
+        "caution": 150,
+        "note": "設定変更後は天井450G+αに短縮。リセット台なら浅いラインから候補です。"
+      }
+    },
+    "limit": 999
+  },
+  {
+    "slug": "akudama",
+    "name": "Lアクダマドライブ",
+    "seo": {
+      "title": "Lアクダマドライブ 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "解析待ち（AT間967G+α / 6スルー〜）",
+    "aliases": [
+      "アクダマ",
+      "アクダマドライブ",
+      "あくだま",
+      "AKUDAMA"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "suru",
+          "label": "スルー天井",
+          "hasSuru": true
+        }
+      ],
+      "normal": {
+        "excellent": 967,
+        "good": 700,
+        "caution": 500,
+        "note": "天井AT間967G+α。745G以降はAT当選まで589G+αに短縮。狙い目ラインは解析待ちです。"
+      },
+      "suru": {
+        "suruMax": 7,
+        "excellent": 7,
+        "good": 6,
+        "caution": 5,
+        "note": "ボーナス6スルーで7回目AT確定。スルー回数天井あり。"
+      }
+    },
+    "limit": 967
+  },
+  {
+    "slug": "kyokousuiri",
+    "name": "L虚構推理",
+    "seo": {
+      "title": "L虚構推理 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "解析待ち（虚構真偽間1000Gで天井）",
+    "aliases": [
+      "虚構推理",
+      "きょこうすいり",
+      "きょこす",
+      "虚構"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 1000,
+        "good": 700,
+        "caution": 500,
+        "note": "天井虚構真偽間1000G。恩恵はボーナス+雪女ストック1個以上。狙い目ラインは解析待ちです。"
+      },
+      "reset": {
+        "excellent": 700,
+        "good": 500,
+        "caution": 300,
+        "note": "設定変更後は天井が最大700G（または300G）に短縮。"
+      }
+    },
+    "limit": 1000
+  },
+  {
+    "slug": "shinuchi_yoshimune",
+    "name": "真打 吉宗",
+    "seo": {
+      "title": "真打 吉宗 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "解析待ち（CZ間1000G or 6周期 / AT間1500G）",
+    "aliases": [
+      "真打吉宗",
+      "しんうちよしむね",
+      "吉宗真打",
+      "しんうち"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "CZ間"
+        },
+        {
+          "key": "at",
+          "label": "AT間"
+        }
+      ],
+      "normal": {
+        "excellent": 1000,
+        "good": 700,
+        "caution": 500,
+        "note": "CZ間天井1000G+α（6周期）でCZ当選。狙い目ラインは解析待ちです。"
+      },
+      "at": {
+        "excellent": 1500,
+        "good": 1000,
+        "caution": 800,
+        "note": "AT間天井1500G+αでAT当選。狙い目ラインは解析待ちです。"
+      }
+    },
+    "limit": 1500
+  },
+  {
+    "slug": "isekai_quattro_bt",
+    "name": "A-SLOT+ 異世界かるてっとBT",
+    "seo": {
+      "title": "A-SLOT+ 異世界かるてっとBT スペックまとめ"
+    },
+    "info": "スマスロBT",
+    "strategy": "設定狙い主体・天井なし（BT合算約1/99）",
+    "aliases": [
+      "異世界かるてっと",
+      "いせかい",
+      "いせかる",
+      "かるてっと",
+      "異世界カルテット"
+    ]
+  },
+  {
+    "slug": "triple_crown_7",
+    "name": "LBトリプルクラウンセブン",
+    "seo": {
+      "title": "LBトリプルクラウンセブン スペックまとめ"
+    },
+    "info": "スマスロBT",
+    "strategy": "設定狙い主体・天井なし（BIG比率70%）",
+    "aliases": [
+      "トリプルクラウン",
+      "トリクラ",
+      "トリプルクラウンセブン",
+      "トリクラ7"
+    ]
   }
 ]
