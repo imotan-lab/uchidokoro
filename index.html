@@ -165,9 +165,9 @@ function buildKeywords(machine){
             <span class="machine-name">${machine.name}</span>
             <span class="machine-strategy">${machine.strategy || ''}</span>
           </a>
-          ${['enen2','karakuri','kaguya','valvrave2','sf5','chibaryo2','tekken6','tokyo_ghoul','koukaku','biohazard','tensura','dumbbell','monhun_rise','sengoku_otome4','sao','bandori','hanma_baki','yorumungando','tolove_darkness'].includes(machine.slug)
+          ${['enen2','karakuri','kaguya','valvrave2','sf5','chibaryo2','tekken6','tokyo_ghoul','koukaku','biohazard','tensura','dumbbell','monhun_rise','sengoku_otome4','sao','bandori','hanma_baki','yorumungando','tolove_darkness','zenigata5','enen'].includes(machine.slug)
             ? '<span class="btn-settei" style="opacity:0.4;cursor:default;font-size:0.7em;">小役による設定差なし</span>'
-            : ['iza_bancho','akudama','kyokousuiri','shinuchi_yoshimune','isekai_quattro_bt','triple_crown_7','revue_starlight','mr_juggler'].includes(machine.slug)
+            : ['iza_bancho','akudama','kyokousuiri','shinuchi_yoshimune','isekai_quattro_bt','triple_crown_7','revue_starlight','mr_juggler','mushoku'].includes(machine.slug)
               ? '<span class="btn-settei" style="opacity:0.4;cursor:default;font-size:0.7em;">小役確率が未解析のため非対応</span>'
               : `<a class="btn-settei" href="setting.html?slug=${machine.slug}">小役カウンター<br>ポチポチくん</a>`}
         `;

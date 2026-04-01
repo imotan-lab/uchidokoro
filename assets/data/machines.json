@@ -7374,5 +7374,96 @@
       }
     },
     "limit": null
+  },
+  {
+    "slug": "zenigata5",
+    "name": "L主役は銭形5",
+    "seo": {
+      "title": "L主役は銭形5 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価750G〜 / 5.6枚800G〜（前回1000G超えは等価600G〜）",
+    "aliases": [
+      "銭形5",
+      "ぜにがた5",
+      "主役は銭形5",
+      "ぜにがた",
+      "銭形ルパン5",
+      "ゼニガタ5"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        { "key": "normal", "label": "通常" },
+        { "key": "reset", "label": "リセット後" }
+      ],
+      "normal": {
+        "excellent": 1250,
+        "good": 750,
+        "caution": 500,
+        "limit": 1250
+      },
+      "reset": {
+        "excellent": 850,
+        "good": 600,
+        "caution": 400,
+        "limit": 850
+      },
+      "limit": 1250
+    }
+  },
+  {
+    "slug": "mushoku",
+    "name": "L無職転生 〜異世界行ったら本気だす〜",
+    "seo": {
+      "title": "L無職転生 狙い目・天井・攻略まとめ"
+    },
+    "info": "スマスロAT（ステチェン管理）",
+    "strategy": "AT間残りステチェン10回以上 / ボーナス間残り6回以上（等価）",
+    "aliases": [
+      "無職転生",
+      "むしょくてんせい",
+      "ルーデウス",
+      "異世界本気",
+      "無職"
+    ],
+    "checker": null,
+    "limit": null
+  },
+  {
+    "slug": "enen",
+    "name": "Lパチスロ炎炎ノ消防隊",
+    "seo": {
+      "title": "Lパチスロ炎炎ノ消防隊 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価550G〜 / リセット後400G〜",
+    "aliases": [
+      "炎炎ノ消防隊",
+      "えんえんのしょうぼうたい",
+      "炎炎消防隊",
+      "炎炎",
+      "enen"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        { "key": "normal", "label": "通常" },
+        { "key": "reset", "label": "リセット後" }
+      ],
+      "normal": {
+        "excellent": 850,
+        "good": 550,
+        "caution": 350,
+        "limit": 850
+      },
+      "reset": {
+        "excellent": 650,
+        "good": 400,
+        "caution": 250,
+        "limit": 650
+      },
+      "limit": 850
+    }
   }
 ]
