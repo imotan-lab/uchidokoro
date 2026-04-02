@@ -7465,5 +7465,490 @@
       },
       "limit": 850
     }
+  },
+  {
+    "slug": "railgun2",
+    "name": "スマスロ とある科学の超電磁砲2",
+    "seo": {
+      "title": "スマスロ とある科学の超電磁砲2 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価500G〜 / 5.6枚550G〜",
+    "aliases": [
+      "レールガン",
+      "超電磁砲",
+      "れーるがん",
+      "とある"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        { "key": "normal", "label": "通常" },
+        { "key": "reset", "label": "リセット後" }
+      ],
+      "normal": {
+        "excellent": 800,
+        "good": 500,
+        "caution": 350,
+        "limit": 1050
+      },
+      "reset": {
+        "excellent": 550,
+        "good": 350,
+        "caution": 200,
+        "limit": 750
+      },
+      "limit": 1050
+    }
+  },
+  {
+    "slug": "gundam_seed",
+    "name": "Lパチスロ 機動戦士ガンダムSEED",
+    "seo": {
+      "title": "Lパチスロ 機動戦士ガンダムSEED 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "CZ間等価550G〜 / AT間等価700G〜（1スルー以降）",
+    "aliases": [
+      "ガンダム",
+      "SEED",
+      "シード",
+      "がんだむ"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        { "key": "normal", "label": "CZ間（通常）" },
+        {
+          "key": "suru",
+          "label": "スルー天井",
+          "hasSuru": true
+        },
+        { "key": "reset", "label": "リセット後" }
+      ],
+      "normal": {
+        "excellent": 700,
+        "good": 550,
+        "caution": 400,
+        "note": "CZ間777Gで天井。CZ当選。等価550G〜が狙い目。"
+      },
+      "suru": {
+        "suruMax": 3,
+        "suru": [
+          {
+            "count": 0,
+            "excellent": 700,
+            "good": 550,
+            "caution": 400,
+            "note": "0スルー：CZ間550G〜が目安。"
+          },
+          {
+            "count": 1,
+            "excellent": 500,
+            "good": 300,
+            "caution": 150,
+            "note": "1スルー以降：AT間700G〜を基準に。"
+          },
+          {
+            "count": 2,
+            "excellent": 300,
+            "good": 150,
+            "caution": 0,
+            "note": "2スルー：浅めから狙える。"
+          },
+          {
+            "count": 3,
+            "excellent": 0,
+            "good": 0,
+            "caution": 0,
+            "note": "3スルー：AT間1280Gで天井。BAR BIG当選。即打ち推奨。"
+          }
+        ]
+      },
+      "reset": {
+        "excellent": 600,
+        "good": 400,
+        "caution": 250,
+        "note": "リセット・ST駆け抜け後は天井750Gに短縮。400G〜が狙い目。"
+      },
+      "limit": 800
+    }
+  },
+  {
+    "slug": "youjitsu",
+    "name": "スマスロ ようこそ実力至上主義の教室へ",
+    "seo": {
+      "title": "スマスロ ようこそ実力至上主義の教室へ 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "CZ間等価300G〜 / AT間等価550G〜 / CZスルー5回〜",
+    "aliases": [
+      "よう実",
+      "実力至上主義",
+      "ようじつ"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        { "key": "normal", "label": "AT間（通常）" },
+        {
+          "key": "suru",
+          "label": "スルー天井",
+          "hasSuru": true
+        },
+        { "key": "reset", "label": "リセット後" }
+      ],
+      "normal": {
+        "excellent": 800,
+        "good": 550,
+        "caution": 400,
+        "note": "AT間980G+αで天井。AT当選（約50%で追加恩恵）。等価550G〜が狙い目。"
+      },
+      "suru": {
+        "suruMax": 7,
+        "suru": [
+          {
+            "count": 0,
+            "excellent": 800,
+            "good": 550,
+            "caution": 400,
+            "note": "0スルー：AT間550G〜が目安。"
+          },
+          {
+            "count": 1,
+            "excellent": 700,
+            "good": 450,
+            "caution": 300,
+            "note": "1スルー：450G〜が目安。"
+          },
+          {
+            "count": 2,
+            "excellent": 600,
+            "good": 400,
+            "caution": 250,
+            "note": "2スルー：400G〜が目安。"
+          },
+          {
+            "count": 3,
+            "excellent": 500,
+            "good": 350,
+            "caution": 200,
+            "note": "3スルー：350G〜が目安。"
+          },
+          {
+            "count": 4,
+            "excellent": 400,
+            "good": 250,
+            "caution": 100,
+            "note": "4スルー：250G〜が目安。"
+          },
+          {
+            "count": 5,
+            "excellent": 300,
+            "good": 150,
+            "caution": 0,
+            "note": "5スルー以降：浅めから狙い目。"
+          },
+          {
+            "count": 6,
+            "excellent": 150,
+            "good": 0,
+            "caution": 0,
+            "note": "6スルー：即打ち推奨。"
+          },
+          {
+            "count": 7,
+            "excellent": 0,
+            "good": 0,
+            "caution": 0,
+            "note": "7スルー：CZ7スルーで天井。AT当選確定。即打ち。"
+          }
+        ]
+      },
+      "reset": {
+        "excellent": 500,
+        "good": 300,
+        "caution": 150,
+        "note": "リセット後は天井630G+αに短縮。300G〜が狙い目。"
+      },
+      "limit": 1030
+    }
+  },
+  {
+    "slug": "midoridon_viva",
+    "name": "スマスロ 緑ドン VIVA!情熱南米編 REVIVAL",
+    "seo": {
+      "title": "スマスロ 緑ドン VIVA!情熱南米編 REVIVAL 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価750G〜 / リセット等価270G〜",
+    "aliases": [
+      "緑ドン",
+      "みどりどん",
+      "VIVA",
+      "南米"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        { "key": "normal", "label": "通常" },
+        { "key": "reset", "label": "リセット後" }
+      ],
+      "normal": {
+        "excellent": 1050,
+        "good": 750,
+        "caution": 550,
+        "limit": 1330
+      },
+      "reset": {
+        "excellent": 600,
+        "good": 270,
+        "caution": 150,
+        "limit": 850
+      },
+      "limit": 1330
+    }
+  },
+  {
+    "slug": "godzilla",
+    "name": "Lゴジラ",
+    "seo": {
+      "title": "Lゴジラ 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "通常時等価500G〜 / リセット後50G〜",
+    "aliases": [
+      "ゴジラ",
+      "ごじら",
+      "GODZILLA"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        { "key": "normal", "label": "通常" }
+      ],
+      "normal": {
+        "excellent": 800,
+        "good": 500,
+        "caution": 350,
+        "limit": 1050
+      },
+      "limit": 1050
+    }
+  },
+  {
+    "slug": "code_geass",
+    "name": "スマスロ コードギアス 反逆のルルーシュ/復活のルルーシュ",
+    "seo": {
+      "title": "コードギアス 反逆のルルーシュ/復活のルルーシュ 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価550G〜",
+    "aliases": [
+      "ギアス",
+      "コードギアス",
+      "ルルーシュ",
+      "こーどぎあす"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        { "key": "normal", "label": "通常" },
+        { "key": "reset", "label": "リセット後" }
+      ],
+      "normal": {
+        "excellent": 800,
+        "good": 550,
+        "caution": 400,
+        "limit": 1050
+      },
+      "reset": {
+        "excellent": 550,
+        "good": 400,
+        "caution": 250,
+        "limit": 750
+      },
+      "limit": 1050
+    }
+  },
+  {
+    "slug": "kengan_ashura",
+    "name": "パチスロ ケンガンアシュラ",
+    "seo": {
+      "title": "パチスロ ケンガンアシュラ 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "CZ間等価250G〜 / CZスルー5回〜",
+    "aliases": [
+      "ケンガン",
+      "アシュラ",
+      "けんがん"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        { "key": "normal", "label": "CZ間（通常）" },
+        {
+          "key": "suru",
+          "label": "スルー天井",
+          "hasSuru": true
+        }
+      ],
+      "normal": {
+        "excellent": 350,
+        "good": 250,
+        "caution": 150,
+        "note": "CZ間400Gで天井。CZ当選。等価250G〜が狙い目。",
+        "limit": 450
+      },
+      "suru": {
+        "suruMax": 7,
+        "suru": [
+          {
+            "count": 0,
+            "excellent": 350,
+            "good": 250,
+            "caution": 150,
+            "note": "0スルー：CZ間250G〜が目安。"
+          },
+          {
+            "count": 1,
+            "excellent": 300,
+            "good": 200,
+            "caution": 100,
+            "note": "1スルー：200G〜が目安。"
+          },
+          {
+            "count": 2,
+            "excellent": 250,
+            "good": 150,
+            "caution": 50,
+            "note": "2スルー：150G〜が目安。"
+          },
+          {
+            "count": 3,
+            "excellent": 200,
+            "good": 100,
+            "caution": 0,
+            "note": "3スルー：100G〜が目安。"
+          },
+          {
+            "count": 4,
+            "excellent": 150,
+            "good": 50,
+            "caution": 0,
+            "note": "4スルー：50G〜が目安。"
+          },
+          {
+            "count": 5,
+            "excellent": 100,
+            "good": 0,
+            "caution": 0,
+            "note": "5スルー以降：浅めから狙い目。"
+          },
+          {
+            "count": 6,
+            "excellent": 50,
+            "good": 0,
+            "caution": 0,
+            "note": "6スルー：即打ち推奨。"
+          },
+          {
+            "count": 7,
+            "excellent": 0,
+            "good": 0,
+            "caution": 0,
+            "note": "7スルー：CZ7スルーで天井。AT当選確定。即打ち。"
+          }
+        ]
+      },
+      "limit": 450
+    }
+  },
+  {
+    "slug": "discup_ur",
+    "name": "A-SLOT+ ディスクアップ ULTRAREMIX",
+    "seo": {
+      "title": "A-SLOT+ ディスクアップ ULTRAREMIX 狙い目"
+    },
+    "info": "スマスロA+RT",
+    "strategy": "設定狙い主体・天井なし",
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "設定狙い"
+        }
+      ],
+      "normal": {
+        "excellent": 99999,
+        "good": 99999,
+        "caution": 99999,
+        "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。高設定をつかめる環境（イベント・特定日）での使用を推奨。"
+      }
+    },
+    "limit": null,
+    "aliases": [
+      "ディスクアップ",
+      "ディスク",
+      "でぃすくあっぷ",
+      "ULTRAREMIX"
+    ]
+  },
+  {
+    "slug": "rezero2",
+    "name": "スロット Re:ゼロから始める異世界生活 season2",
+    "seo": {
+      "title": "スロット Re:ゼロから始める異世界生活 season2 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価550G〜",
+    "aliases": [
+      "リゼロ",
+      "リゼロ2",
+      "Re:ゼロ",
+      "りぜろ"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        { "key": "normal", "label": "通常" }
+      ],
+      "normal": {
+        "excellent": 800,
+        "good": 550,
+        "caution": 400,
+        "limit": 1050
+      },
+      "limit": 1050
+    }
+  },
+  {
+    "slug": "goji_eva",
+    "name": "スマスロ ゴジラvsエヴァンゲリオン",
+    "seo": {
+      "title": "スマスロ ゴジラvsエヴァンゲリオン 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価450G〜 / ゾーン250G付近・400G付近",
+    "aliases": [
+      "ゴジエヴァ",
+      "ゴジラエヴァ",
+      "ごじえば"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        { "key": "normal", "label": "通常" }
+      ],
+      "normal": {
+        "excellent": 650,
+        "good": 450,
+        "caution": 300,
+        "limit": 850
+      },
+      "limit": 850
+    }
   }
 ]
