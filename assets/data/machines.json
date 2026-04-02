@@ -7290,8 +7290,14 @@
     "checker": {
       "unit": "G",
       "modes": [
-        { "key": "normal", "label": "通常（ボーナス・AT間）" },
-        { "key": "reset", "label": "リセット後" }
+        {
+          "key": "normal",
+          "label": "通常（ボーナス・AT間）"
+        },
+        {
+          "key": "reset",
+          "label": "リセット後"
+        }
       ],
       "normal": {
         "excellent": 800,
@@ -7328,8 +7334,14 @@
     "checker": {
       "unit": "G",
       "modes": [
-        { "key": "normal", "label": "ST間（通常）" },
-        { "key": "reset", "label": "リセット後" }
+        {
+          "key": "normal",
+          "label": "ST間（通常）"
+        },
+        {
+          "key": "reset",
+          "label": "リセット後"
+        }
       ],
       "normal": {
         "excellent": 700,
@@ -7364,7 +7376,10 @@
     "checker": {
       "unit": "G",
       "modes": [
-        { "key": "normal", "label": "設定狙い" }
+        {
+          "key": "normal",
+          "label": "設定狙い"
+        }
       ],
       "normal": {
         "excellent": 99999,
@@ -7394,8 +7409,14 @@
     "checker": {
       "unit": "G",
       "modes": [
-        { "key": "normal", "label": "通常" },
-        { "key": "reset", "label": "リセット後" }
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット後"
+        }
       ],
       "normal": {
         "excellent": 1250,
@@ -7448,8 +7469,14 @@
     "checker": {
       "unit": "G",
       "modes": [
-        { "key": "normal", "label": "通常" },
-        { "key": "reset", "label": "リセット後" }
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット後"
+        }
       ],
       "normal": {
         "excellent": 850,
@@ -7483,8 +7510,14 @@
     "checker": {
       "unit": "G",
       "modes": [
-        { "key": "normal", "label": "通常" },
-        { "key": "reset", "label": "リセット後" }
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット後"
+        }
       ],
       "normal": {
         "excellent": 800,
@@ -7508,7 +7541,7 @@
       "title": "Lパチスロ 機動戦士ガンダムSEED 狙い目・天井・期待値まとめ"
     },
     "info": "スマスロAT",
-    "strategy": "CZ間等価550G〜 / AT間等価700G〜（1スルー以降）",
+    "strategy": "CZ間等価500G〜 / AT間等価700G〜（1スルー以降）",
     "aliases": [
       "ガンダム",
       "SEED",
@@ -7518,17 +7551,23 @@
     "checker": {
       "unit": "G",
       "modes": [
-        { "key": "normal", "label": "CZ間（通常）" },
+        {
+          "key": "normal",
+          "label": "CZ間（通常）"
+        },
         {
           "key": "suru",
           "label": "スルー天井",
           "hasSuru": true
         },
-        { "key": "reset", "label": "リセット後" }
+        {
+          "key": "reset",
+          "label": "リセット後"
+        }
       ],
       "normal": {
         "excellent": 700,
-        "good": 550,
+        "good": 500,
         "caution": 400,
         "note": "CZ間777Gで天井。CZ当選。等価550G〜が狙い目。"
       },
@@ -7567,7 +7606,7 @@
       },
       "reset": {
         "excellent": 600,
-        "good": 400,
+        "good": 300,
         "caution": 250,
         "note": "リセット・ST駆け抜け後は天井750Gに短縮。400G〜が狙い目。"
       },
@@ -7590,13 +7629,19 @@
     "checker": {
       "unit": "G",
       "modes": [
-        { "key": "normal", "label": "AT間（通常）" },
+        {
+          "key": "normal",
+          "label": "AT間（通常）"
+        },
         {
           "key": "suru",
           "label": "スルー天井",
           "hasSuru": true
         },
-        { "key": "reset", "label": "リセット後" }
+        {
+          "key": "reset",
+          "label": "リセット後"
+        }
       ],
       "normal": {
         "excellent": 800,
@@ -7691,8 +7736,14 @@
     "checker": {
       "unit": "G",
       "modes": [
-        { "key": "normal", "label": "通常" },
-        { "key": "reset", "label": "リセット後" }
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット後"
+        }
       ],
       "normal": {
         "excellent": 1050,
@@ -7725,8 +7776,14 @@
     "checker": {
       "unit": "G",
       "modes": [
-        { "key": "normal", "label": "通常" },
-        { "key": "reset", "label": "リセット後" }
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット後"
+        }
       ],
       "normal": {
         "excellent": 2000,
@@ -7760,8 +7817,14 @@
     "checker": {
       "unit": "G",
       "modes": [
-        { "key": "normal", "label": "通常" },
-        { "key": "reset", "label": "リセット後" }
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット後"
+        }
       ],
       "normal": {
         "excellent": 800,
@@ -7794,7 +7857,10 @@
     "checker": {
       "unit": "G",
       "modes": [
-        { "key": "normal", "label": "CZ間（通常）" },
+        {
+          "key": "normal",
+          "label": "CZ間（通常）"
+        },
         {
           "key": "suru",
           "label": "スルー天井",
@@ -7913,7 +7979,10 @@
     "checker": {
       "unit": "G",
       "modes": [
-        { "key": "normal", "label": "通常" }
+        {
+          "key": "normal",
+          "label": "通常"
+        }
       ],
       "normal": {
         "excellent": 1000,
@@ -7931,7 +8000,7 @@
       "title": "スマスロ ゴジラvsエヴァンゲリオン 狙い目・天井・期待値まとめ"
     },
     "info": "スマスロAT",
-    "strategy": "等価600G〜（状況不問） / リセット時380G〜",
+    "strategy": "等価640G〜（状況不問） / リセット時360G〜",
     "aliases": [
       "ゴジエヴァ",
       "ゴジラエヴァ",
@@ -7940,8 +8009,14 @@
     "checker": {
       "unit": "G",
       "modes": [
-        { "key": "normal", "label": "通常" },
-        { "key": "reset", "label": "リセット後" },
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット後"
+        },
         {
           "key": "suru",
           "label": "スルー天井",
@@ -7950,13 +8025,13 @@
       ],
       "normal": {
         "excellent": 800,
-        "good": 600,
+        "good": 640,
         "caution": 450,
         "limit": 1050
       },
       "reset": {
         "excellent": 550,
-        "good": 380,
+        "good": 360,
         "caution": 250,
         "limit": 750
       },
