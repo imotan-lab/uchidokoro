@@ -8237,5 +8237,104 @@
       "ng": "まだ早い"
     },
     "limit": 899
+  },
+  {
+    "slug": "basilisk_tenzen",
+    "name": "スマスロバジリスク～甲賀忍法帖～絆2 天膳 BLACK EDITION",
+    "seo": {
+      "title": "バジリスク絆2 天膳 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT（BT機）",
+    "strategy": "等価BC間0スルー230G〜 / BC3スルー以上G数不問",
+    "aliases": [
+      "バジリスク天膳",
+      "絆2天膳",
+      "天膳",
+      "ばじりすく天膳",
+      "バジリスク絆2天膳",
+      "絆天膳",
+      "バジリスク絆2"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "BC間"
+        },
+        {
+          "key": "through",
+          "label": "スルー数"
+        }
+      ],
+      "normal": {
+        "excellent": 333,
+        "good": 230,
+        "caution": 150,
+        "note": "BC間333G+αで天井（BC当選）。等価230G〜から狙い目。BC7スルー後8回目でBT確定。"
+      },
+      "through": {
+        "excellent": 7,
+        "good": 3,
+        "caution": 2,
+        "note": "BC7スルー後8回目でBT確定（天井）。BC3スルー以上でG数不問から狙い目。"
+      }
+    },
+    "limit": 333
+  },
+  {
+    "slug": "madomagi_forte",
+    "name": "スマスロ劇場版 魔法少女まどか☆マギカ フォルテ",
+    "seo": {
+      "title": "まどマギフォルテ(まどかf) 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT（BIG機）",
+    "strategy": "等価BIG間620G〜 / CZ6スルー以上G数不問",
+    "aliases": [
+      "まどマギf",
+      "まどかフォルテ",
+      "まどかf",
+      "まどマギフォルテ",
+      "まどか",
+      "まどかマギカフォルテ",
+      "まどマギ",
+      "まほうしょうじょまどか"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "BIG間"
+        },
+        {
+          "key": "through",
+          "label": "スルー数"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 999,
+        "good": 620,
+        "caution": 400,
+        "note": "BIG間999G+αで天井。等価620G〜から狙い目。プチボーナスで天井リセットなし。"
+      },
+      "through": {
+        "excellent": 6,
+        "good": 4,
+        "caution": 2,
+        "note": "CZ「舞台装置の魔女」6連続失敗でボーナス確定。スルー数が多いほど狙い目が浅くなる。"
+      },
+      "reset": {
+        "excellent": 500,
+        "good": 100,
+        "caution": 50,
+        "note": "リセット後はゾーン100G・500Gが優遇。0Gから期待値プラス。"
+      }
+    },
+    "limit": 999
   }
 ]
