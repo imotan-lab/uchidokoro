@@ -1,22 +1,139 @@
 [
   {
-    "slug": "karakuri",
-    "name": "LからくりサーカスG",
+    "slug": "kabaneri",
+    "name": "スマスロ 甲鉄城のカバネリ 海門(うなと)決戦",
     "seo": {
-      "title": "からくりサーカス 狙い目・天井・期待値まとめ"
+      "title": "スマスロ 甲鉄城のカバネリ 海門(うなと)決戦 狙い目"
     },
     "info": "スマスロAT",
-    "strategy": "等価CZ間590G〜 / スルー3回〜",
+    "strategy": "ST間580G〜 / リセット100G〜",
     "strategyByRate": {
-      "eq56": "5.6枚CZ間590G〜",
-      "rate55": "5.5枚CZ間600G〜",
-      "rate50": "5.0枚CZ間650G〜",
-      "rate45": "4.5枚CZ間730G〜"
+      "eq56": "5.6枚450G〜 / リセット200G〜",
+      "rate55": "5.5枚500G〜 / リセット250G〜",
+      "rate50": "5.0枚550G〜 / リセット300G〜",
+      "rate45": "4.5枚600G〜 / リセット350G〜"
+    },
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "modes": [
+        {
+          "key": "normal",
+          "label": "ST間"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 700,
+        "good": 500,
+        "caution": 350,
+        "byRate": {
+          "eq56": {
+            "excellent": 650,
+            "good": 450,
+            "caution": 300,
+            "note": "5.6枚交換ならST間450Gから狙い目、300Gから候補です。ST後の前兆と引き戻しを見ながら、通常台として見てよいかを先に整理してください。"
+          },
+          "rate55": {
+            "excellent": 700,
+            "good": 500,
+            "caution": 350,
+            "note": "5.5枚交換はST間500G基準です。リセット250G基準と混ぜず、今の台がどちらの前提かを固定した方が使いやすいです。"
+          },
+          "rate50": {
+            "excellent": 750,
+            "good": 550,
+            "caution": 400,
+            "note": "5.0枚交換ではST間550Gからが本線です。浅い通常台に広げず、ST間G数をしっかり確認して深め優先にしてください。"
+          },
+          "rate45": {
+            "excellent": 800,
+            "good": 600,
+            "caution": 450,
+            "note": "4.5枚交換はST間600G基準です。深い通常台だけに絞り、リセットの浅いラインとは切り分けて使う方が安全です。"
+          }
+        },
+        "note": "ST間天井996G+α。500G〜でプラス域。ST間G数はメニュー画面で確認。"
+      },
+      "reset": {
+        "excellent": 400,
+        "good": 100,
+        "caution": 0,
+        "byRate": {
+          "eq56": {
+            "excellent": 350,
+            "good": 200,
+            "caution": 120,
+            "note": "5.6枚交換のリセット台は200Gから候補です。朝一の根拠が弱い台は250G前後まで待つとズレにくいです。"
+          },
+          "rate55": {
+            "excellent": 400,
+            "good": 250,
+            "caution": 150,
+            "note": "5.5枚交換はリセット250G基準です。通常ST後の流れと混ぜず、朝一台として別で見る方が使いやすいです。"
+          },
+          "rate50": {
+            "excellent": 450,
+            "good": 300,
+            "caution": 180,
+            "note": "5.0枚交換ではリセット300Gからが本線です。浅い朝一台に広げすぎず、前兆や履歴も含めて判断してください。"
+          },
+          "rate45": {
+            "excellent": 500,
+            "good": 350,
+            "caution": 220,
+            "note": "4.5枚交換のリセット台は350G基準です。通常500Gラインとの差を意識して、朝一の根拠がある台に絞る方が安全です。"
+          }
+        },
+        "note": "設定変更後は天井596G+αに短縮。0G〜100Gから狙える。"
+      }
+    },
+    "limit": 996,
+    "aliases": [
+      "カバネリ",
+      "かばねり",
+      "甲鉄城",
+      "海門決戦"
+    ]
+  },
+  {
+    "slug": "umineko2",
+    "name": "Lパチスロうみねこのなく頃に2",
+    "seo": {
+      "title": "うみねこのなく頃に2 狙い目・天井・期待値まとめ"
+    },
+    "info": "A+完走型ART",
+    "strategy": "等価CZ間100G〜 / 完全攻略で設定1機械割103%",
+    "strategyByRate": {
+      "eq56": "5.6枚CZ間100G〜",
+      "rate55": "5.5枚CZ間110G〜",
+      "rate50": "5.0枚CZ間130G〜",
+      "rate45": "4.5枚CZ間150G〜"
     },
     "aliases": [
-      "からくり",
-      "カラクリ",
-      "からくりサーカス"
+      "うみねこ",
+      "ウミネコ"
     ],
     "checker": {
       "unit": "G",
@@ -43,78 +160,42 @@
         {
           "key": "normal",
           "label": "通常"
-        },
-        {
-          "key": "through",
-          "label": "スルー"
         }
       ],
       "normal": {
-        "excellent": 1100,
-        "good": 590,
-        "caution": 400,
+        "excellent": 180,
+        "good": 100,
+        "caution": 50,
         "byRate": {
           "eq56": {
-            "excellent": 1100,
-            "good": 590,
-            "caution": 400,
-            "note": "5.6枚交換ならCZ間590Gから狙い目。液晶1200G+αでCZ確定。"
+            "excellent": 180,
+            "good": 100,
+            "caution": 50,
+            "note": "5.6枚交換ならCZ間100Gから狙い目。200G周期でCZ確定。完全攻略なら設定1でも機械割103%。"
           },
           "rate55": {
-            "excellent": 1100,
-            "good": 600,
-            "caution": 420,
-            "note": "5.5枚交換ならCZ間600Gから。"
+            "excellent": 180,
+            "good": 110,
+            "caution": 60,
+            "note": "5.5枚交換なら110Gから。"
           },
           "rate50": {
-            "excellent": 1200,
-            "good": 650,
-            "caution": 450,
-            "note": "5.0枚交換ならCZ間650Gから。"
+            "excellent": 180,
+            "good": 130,
+            "caution": 80,
+            "note": "5.0枚交換なら130Gから。"
           },
           "rate45": {
-            "excellent": 1200,
-            "good": 730,
-            "caution": 500,
-            "note": "4.5枚交換ならCZ間730Gから。"
+            "excellent": 180,
+            "good": 150,
+            "caution": 100,
+            "note": "4.5枚交換なら150Gから。"
           }
         },
-        "note": "CZ間天井は液晶1200G+α。1400G以上でAT直撃確定。"
-      },
-      "through": {
-        "excellent": 4,
-        "good": 3,
-        "caution": 2,
-        "byRate": {
-          "eq56": {
-            "excellent": 4,
-            "good": 3,
-            "caution": 2,
-            "note": "CZ4スルー（5回目）でAT直撃。3スルーから狙い目。"
-          },
-          "rate55": {
-            "excellent": 4,
-            "good": 3,
-            "caution": 2,
-            "note": "3スルーから狙い目。"
-          },
-          "rate50": {
-            "excellent": 4,
-            "good": 3,
-            "caution": 2,
-            "note": "3スルーから狙い目。"
-          },
-          "rate45": {
-            "excellent": 4,
-            "good": 3,
-            "caution": 2,
-            "note": "3スルーから狙い目。"
-          }
-        },
-        "note": "CZ4スルー（5回目）でAT直撃。"
+        "note": "CZ間200G周期で運命分岐モード確定。完全攻略で設定1でも機械割103%。"
       }
     },
-    "limit": 1400
+    "limit": 200
   },
   {
     "slug": "koukaku",
@@ -387,6 +468,1776 @@
       }
     },
     "limit": 850
+  },
+  {
+    "slug": "tokyo_ghoul",
+    "name": "L 東京喰種",
+    "seo": {
+      "title": "L 東京喰種 狙い目"
+    },
+    "info": "スマスロAT",
+    "strategy": "CZ間250G〜 / AT間450G〜",
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "cz",
+          "label": "CZ間"
+        },
+        {
+          "key": "at",
+          "label": "AT間",
+          "hasSuru": true
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "cz": {
+        "excellent": 450,
+        "good": 250,
+        "caution": 180,
+        "note": "液晶右下のG数カウンタで確認。スイカ成立時に複数G加算あり。CZ天井600G+α。250G〜でプラス域。",
+        "byRate": {
+          "eq56": {
+            "caution": 200,
+            "excellent": 400,
+            "target": 300,
+            "good": 300,
+            "note": "5.6枚交換ならCZ間300Gから狙い目、250Gから候補です。"
+          },
+          "rate55": {
+            "caution": 250,
+            "excellent": 450,
+            "target": 350,
+            "good": 350,
+            "note": "5.5枚交換ではCZ間350Gが基準です。"
+          },
+          "rate50": {
+            "caution": 300,
+            "excellent": 520,
+            "target": 420,
+            "good": 420,
+            "note": "5.0枚交換ではCZ間420G前後から見てください。"
+          },
+          "rate45": {
+            "caution": 380,
+            "excellent": 600,
+            "target": 500,
+            "good": 500,
+            "note": "4.5枚交換ではCZ間500Gからが実戦ラインです。"
+          }
+        }
+      },
+      "at": {
+        "suru": [
+          {
+            "count": 0,
+            "excellent": 600,
+            "good": 400,
+            "caution": 200,
+            "note": "0スルー。400G〜で候補。AT間G数はメニュー画面で確認。",
+            "byRate": {
+              "eq56": {
+                "caution": 180,
+                "excellent": 550,
+                "target": 350,
+                "good": 350,
+                "note": "5.6枚交換のAT間0スルーは350G基準です。CZ間300G基準とは分けて、AT間台として見てください。"
+              },
+              "rate55": {
+                "caution": 200,
+                "excellent": 600,
+                "target": 400,
+                "good": 400,
+                "note": "5.5枚交換のAT間0スルーは400G基準です。CZ間より少し深く、入口を混ぜない方が使いやすいです。"
+              },
+              "rate50": {
+                "caution": 250,
+                "excellent": 680,
+                "target": 470,
+                "good": 470,
+                "note": "5.0枚交換のAT間0スルーは470G基準です。浅いCZ間台とは切り分けて、AT間側の深さで見てください。"
+              },
+              "rate45": {
+                "caution": 320,
+                "excellent": 760,
+                "target": 550,
+                "good": 550,
+                "note": "4.5枚交換のAT間0スルーは550G基準です。CZ間500G基準と近く見えても、前提は分けて判断した方が安全です。"
+              }
+            }
+          },
+          {
+            "count": 1,
+            "excellent": 550,
+            "good": 350,
+            "caution": 150,
+            "note": "1スルー。350G〜で候補。スルーが増えるほど当選G数が軽くなる傾向。",
+            "byRate": {
+              "eq56": {
+                "caution": 150,
+                "excellent": 500,
+                "target": 300,
+                "good": 300,
+                "note": "5.6枚交換のAT間1スルーは300G基準です。0スルーより浅く見られるので、回数込みで判断してください。"
+              },
+              "rate55": {
+                "caution": 150,
+                "excellent": 550,
+                "target": 350,
+                "good": 350,
+                "note": "5.5枚交換のAT間1スルーは350G基準です。AT間0スルーやCZ間と混ぜず、1スルー台として見る方がぶれにくいです。"
+              },
+              "rate50": {
+                "caution": 220,
+                "excellent": 620,
+                "target": 420,
+                "good": 420,
+                "note": "5.0枚交換のAT間1スルーは420G基準です。回数が進んだ分だけ浅くなる前提を意識してください。"
+              },
+              "rate45": {
+                "caution": 280,
+                "excellent": 700,
+                "target": 500,
+                "good": 500,
+                "note": "4.5枚交換のAT間1スルーは500G基準です。AT間0スルーより浅い入口として整理すると使いやすいです。"
+              }
+            }
+          },
+          {
+            "count": 2,
+            "excellent": 500,
+            "good": 300,
+            "caution": 100,
+            "note": "2スルー以上。300G〜で積極的に。AT間天井1200G+α。",
+            "byRate": {
+              "eq56": {
+                "caution": 80,
+                "excellent": 450,
+                "target": 250,
+                "good": 250,
+                "note": "5.6枚交換のAT間2スルー以上は250G基準です。回数差が大きいので、AT間0スルーとは別物として見てください。"
+              },
+              "rate55": {
+                "caution": 100,
+                "excellent": 500,
+                "target": 300,
+                "good": 300,
+                "note": "5.5枚交換のAT間2スルー以上は300G基準です。スルー回数が読める台ほど価値が上がります。"
+              },
+              "rate50": {
+                "caution": 150,
+                "excellent": 570,
+                "target": 370,
+                "good": 370,
+                "note": "5.0枚交換のAT間2スルー以上は370G基準です。CZ間や0スルーより浅く見られるので、回数を先に確認してください。"
+              },
+              "rate45": {
+                "caution": 220,
+                "excellent": 650,
+                "target": 450,
+                "good": 450,
+                "note": "4.5枚交換のAT間2スルー以上は450G基準です。AT間の中でも入口差が大きいので、回数込みで判断する方が安全です。"
+              }
+            }
+          }
+        ],
+        "suruMax": 2
+      },
+      "reset": {
+        "excellent": 150,
+        "good": 80,
+        "caution": 30,
+        "note": "設定変更後はCZ天井200G+αに短縮。30G〜でプラス域。",
+        "byRate": {
+          "eq56": {
+            "caution": 0,
+            "excellent": 150,
+            "target": 60,
+            "good": 60,
+            "note": "5.6枚交換ならリセット60G前後から候補です。"
+          },
+          "rate55": {
+            "caution": 30,
+            "excellent": 150,
+            "target": 80,
+            "good": 80,
+            "note": "5.5枚交換ではリセット80Gが基準です。"
+          },
+          "rate50": {
+            "caution": 50,
+            "excellent": 220,
+            "target": 120,
+            "good": 120,
+            "note": "5.0枚交換ではリセット120G前後を目安にします。"
+          },
+          "rate45": {
+            "caution": 100,
+            "excellent": 280,
+            "target": 180,
+            "good": 180,
+            "note": "4.5枚交換ではリセット180Gからが実戦ラインです。"
+          }
+        }
+      },
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ]
+    },
+    "aliases": [
+      "東京喰種",
+      "とうきょうぐーる",
+      "グール",
+      "ぐーる"
+    ],
+    "limit": 1000,
+    "strategyByRate": {
+      "eq56": "5.6枚CZ間300G〜 / AT間350G〜 / スルー回数込みで判断",
+      "rate55": "5.5枚CZ間350G〜 / AT間400G〜 / スルー回数込みで判断",
+      "rate50": "5.0枚CZ間420G〜 / AT間470G〜 / スルー回数込みで判断",
+      "rate45": "4.5枚CZ間500G〜 / AT間550G〜 / スルー回数込みで判断"
+    }
+  },
+  {
+    "slug": "monkeyv",
+    "name": "スマスロモンキーターンV",
+    "seo": {
+      "title": "スマスロモンキーターンV 狙い目"
+    },
+    "info": "スマスロAT",
+    "strategy": "G数400G〜 / 4周期目〜",
+    "strategyByRate": {
+      "eq56": "5.6枚G数350G〜 / 4周期目〜",
+      "rate55": "5.5枚G数400G〜 / 4周期目〜",
+      "rate50": "5.0枚G数450G〜 / 4周期目〜",
+      "rate45": "4.5枚G数500G〜 / 4周期目〜"
+    },
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        },
+        {
+          "key": "cycle",
+          "label": "周期",
+          "hasCycle": true
+        }
+      ],
+      "normal": {
+        "excellent": 600,
+        "good": 400,
+        "caution": 300,
+        "byRate": {
+          "eq56": {
+            "excellent": 550,
+            "good": 350,
+            "caution": 250,
+            "note": "5.6枚交換ならG数350Gから狙い目、250Gから候補です。4周期目以降の価値も高いので、G数だけで切らず周期も並行して確認してください。"
+          },
+          "rate55": {
+            "excellent": 600,
+            "good": 400,
+            "caution": 300,
+            "note": "5.5枚交換はG数400G基準です。周期4周期目以降の価値と重なる台を優先すると使いやすいです。"
+          },
+          "rate50": {
+            "excellent": 650,
+            "good": 450,
+            "caution": 350,
+            "note": "5.0枚交換ではG数450Gからが本線です。周期が見えない台は少し安全側で見た方が収まりやすいです。"
+          },
+          "rate45": {
+            "excellent": 700,
+            "good": 500,
+            "caution": 400,
+            "note": "4.5枚交換はG数500G基準です。G数だけでなく4周期目以降かどうかを重ねて、深め優先で使う方が安全です。"
+          }
+        },
+        "note": "G数天井795G+α。400G〜でプラス域。周期天井（6周期目でAT確定）も並行して確認推奨。4周期目以降が本命ゾーン。"
+      },
+      "reset": {
+        "excellent": 100,
+        "good": 0,
+        "caution": 0,
+        "byRate": {
+          "eq56": {
+            "excellent": 100,
+            "good": 0,
+            "caution": 0,
+            "note": "5.6枚交換のリセット台は0Gから候補です。最大4周期目スタート前提なので、周期優遇が見える台だけを狙う方が安全です。"
+          },
+          "rate55": {
+            "excellent": 150,
+            "good": 50,
+            "caution": 0,
+            "note": "5.5枚交換は0Gから候補ですが、実戦では50G前後まで様子を見る方が使いやすいです。通常台とは別前提で扱ってください。"
+          },
+          "rate50": {
+            "excellent": 200,
+            "good": 100,
+            "caution": 30,
+            "note": "5.0枚交換では100Gからが本線です。浅いG数に引っ張られすぎず、周期優遇と合わせて判断してください。"
+          },
+          "rate45": {
+            "excellent": 250,
+            "good": 150,
+            "caution": 50,
+            "note": "4.5枚交換のリセット台は150G基準です。周期が見えない台は安全側に寄せて、通常台と混ぜない方が安定します。"
+          }
+        },
+        "note": "設定変更後は最大4周期目スタート。0G〜でプラス域の場合あり。周期状態を確認してから着席。"
+      },
+      "cycle": {
+        "cycle": [
+          {
+            "count": 1,
+            "excellent": 700,
+            "good": 600,
+            "caution": 500,
+            "note": "1周期目。G数ベースの基本狙いです。周期が浅いぶん、G数500G以上を目安に。",
+            "byRate": {
+              "eq56": {
+                "excellent": 650,
+                "good": 550,
+                "caution": 450,
+                "note": "5.6枚交換の1周期目は550G〜が基準です。"
+              },
+              "rate55": {
+                "excellent": 700,
+                "good": 600,
+                "caution": 500,
+                "note": "5.5枚交換の1周期目は600G基準です。"
+              },
+              "rate50": {
+                "excellent": 750,
+                "good": 650,
+                "caution": 550,
+                "note": "5.0枚交換の1周期目は650G〜を目安にしてください。"
+              },
+              "rate45": {
+                "excellent": 800,
+                "good": 700,
+                "caution": 600,
+                "note": "4.5枚交換の1周期目は700G〜からが実戦ラインです。"
+              }
+            }
+          },
+          {
+            "count": 2,
+            "excellent": 650,
+            "good": 550,
+            "caution": 450,
+            "note": "2周期目。1周期目より少し浅めに狙えます。G数450G以上を目安に。",
+            "byRate": {
+              "eq56": {
+                "excellent": 600,
+                "good": 500,
+                "caution": 400,
+                "note": "5.6枚交換の2周期目は500G〜が基準です。"
+              },
+              "rate55": {
+                "excellent": 650,
+                "good": 550,
+                "caution": 450,
+                "note": "5.5枚交換の2周期目は550G基準です。"
+              },
+              "rate50": {
+                "excellent": 700,
+                "good": 600,
+                "caution": 500,
+                "note": "5.0枚交換の2周期目は600G〜を目安にしてください。"
+              },
+              "rate45": {
+                "excellent": 750,
+                "good": 650,
+                "caution": 550,
+                "note": "4.5枚交換の2周期目は650G〜からが実戦ラインです。"
+              }
+            }
+          },
+          {
+            "count": 3,
+            "excellent": 550,
+            "good": 450,
+            "caution": 380,
+            "note": "3周期目。次の4周期目が本命なので、G数380G〜を目安に拾えます。",
+            "byRate": {
+              "eq56": {
+                "excellent": 500,
+                "good": 400,
+                "caution": 320,
+                "note": "5.6枚交換の3周期目は400G〜が基準です。"
+              },
+              "rate55": {
+                "excellent": 550,
+                "good": 450,
+                "caution": 380,
+                "note": "5.5枚交換の3周期目は450G基準です。"
+              },
+              "rate50": {
+                "excellent": 600,
+                "good": 500,
+                "caution": 420,
+                "note": "5.0枚交換の3周期目は500G〜を目安にしてください。"
+              },
+              "rate45": {
+                "excellent": 650,
+                "good": 550,
+                "caution": 460,
+                "note": "4.5枚交換の3周期目は550G〜からが実戦ラインです。"
+              }
+            }
+          },
+          {
+            "count": 4,
+            "excellent": 500,
+            "good": 400,
+            "caution": 300,
+            "note": "4周期目。本命ゾーン。400G〜で等価ベースのプラス域。G数と周期が重なる台を最優先。",
+            "byRate": {
+              "eq56": {
+                "excellent": 450,
+                "good": 350,
+                "caution": 250,
+                "note": "5.6枚交換の4周期目は350G〜から積極的に狙えます。"
+              },
+              "rate55": {
+                "excellent": 500,
+                "good": 400,
+                "caution": 300,
+                "note": "5.5枚交換の4周期目は400G基準です。周期とG数が重なる台を優先してください。"
+              },
+              "rate50": {
+                "excellent": 550,
+                "good": 450,
+                "caution": 350,
+                "note": "5.0枚交換の4周期目は450G〜を目安にしてください。"
+              },
+              "rate45": {
+                "excellent": 600,
+                "good": 500,
+                "caution": 400,
+                "note": "4.5枚交換の4周期目は500G〜からが実戦ラインです。"
+              }
+            }
+          },
+          {
+            "count": 5,
+            "excellent": 200,
+            "good": 100,
+            "caution": 0,
+            "note": "5周期目。確実な利益ゾーン。0G〜から着席検討OK。G数が浅くてもプラスで完結しやすい。",
+            "byRate": {
+              "eq56": {
+                "excellent": 150,
+                "good": 50,
+                "caution": 0,
+                "note": "5.6枚交換の5周期目は0Gから着席OKです。"
+              },
+              "rate55": {
+                "excellent": 200,
+                "good": 100,
+                "caution": 0,
+                "note": "5.5枚交換の5周期目は100G基準ですが、0Gから候補です。"
+              },
+              "rate50": {
+                "excellent": 250,
+                "good": 150,
+                "caution": 0,
+                "note": "5.0枚交換の5周期目は150G〜から本線です。0Gから候補でもあります。"
+              },
+              "rate45": {
+                "excellent": 300,
+                "good": 200,
+                "caution": 50,
+                "note": "4.5枚交換の5周期目は200G〜からが実戦ラインです。"
+              }
+            }
+          },
+          {
+            "count": 6,
+            "excellent": 0,
+            "good": 0,
+            "caution": 0,
+            "note": "6周期目。AT確定。G数不問で着席OK。即着席を推奨します。",
+            "byRate": {
+              "eq56": {
+                "excellent": 0,
+                "good": 0,
+                "caution": 0,
+                "note": "6周期目は交換率不問でAT確定。即着席OK。"
+              },
+              "rate55": {
+                "excellent": 0,
+                "good": 0,
+                "caution": 0,
+                "note": "6周期目は交換率不問でAT確定。即着席OK。"
+              },
+              "rate50": {
+                "excellent": 0,
+                "good": 0,
+                "caution": 0,
+                "note": "6周期目は交換率不問でAT確定。即着席OK。"
+              },
+              "rate45": {
+                "excellent": 0,
+                "good": 0,
+                "caution": 0,
+                "note": "6周期目は交換率不問でAT確定。即着席OK。"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "limit": 800,
+    "aliases": [
+      "モンキーターン",
+      "モンキー",
+      "もんきー",
+      "モンキーV"
+    ]
+  },
+  {
+    "slug": "karakuri",
+    "name": "LからくりサーカスG",
+    "seo": {
+      "title": "からくりサーカス 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価CZ間590G〜 / スルー3回〜",
+    "strategyByRate": {
+      "eq56": "5.6枚CZ間590G〜",
+      "rate55": "5.5枚CZ間600G〜",
+      "rate50": "5.0枚CZ間650G〜",
+      "rate45": "4.5枚CZ間730G〜"
+    },
+    "aliases": [
+      "からくり",
+      "カラクリ",
+      "からくりサーカス"
+    ],
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "through",
+          "label": "スルー"
+        }
+      ],
+      "normal": {
+        "excellent": 1100,
+        "good": 590,
+        "caution": 400,
+        "byRate": {
+          "eq56": {
+            "excellent": 1100,
+            "good": 590,
+            "caution": 400,
+            "note": "5.6枚交換ならCZ間590Gから狙い目。液晶1200G+αでCZ確定。"
+          },
+          "rate55": {
+            "excellent": 1100,
+            "good": 600,
+            "caution": 420,
+            "note": "5.5枚交換ならCZ間600Gから。"
+          },
+          "rate50": {
+            "excellent": 1200,
+            "good": 650,
+            "caution": 450,
+            "note": "5.0枚交換ならCZ間650Gから。"
+          },
+          "rate45": {
+            "excellent": 1200,
+            "good": 730,
+            "caution": 500,
+            "note": "4.5枚交換ならCZ間730Gから。"
+          }
+        },
+        "note": "CZ間天井は液晶1200G+α。1400G以上でAT直撃確定。"
+      },
+      "through": {
+        "excellent": 4,
+        "good": 3,
+        "caution": 2,
+        "byRate": {
+          "eq56": {
+            "excellent": 4,
+            "good": 3,
+            "caution": 2,
+            "note": "CZ4スルー（5回目）でAT直撃。3スルーから狙い目。"
+          },
+          "rate55": {
+            "excellent": 4,
+            "good": 3,
+            "caution": 2,
+            "note": "3スルーから狙い目。"
+          },
+          "rate50": {
+            "excellent": 4,
+            "good": 3,
+            "caution": 2,
+            "note": "3スルーから狙い目。"
+          },
+          "rate45": {
+            "excellent": 4,
+            "good": 3,
+            "caution": 2,
+            "note": "3スルーから狙い目。"
+          }
+        },
+        "note": "CZ4スルー（5回目）でAT直撃。"
+      }
+    },
+    "limit": 1400
+  },
+  {
+    "slug": "hokuto",
+    "name": "スマスロ北斗の拳",
+    "seo": {
+      "title": "スマスロ北斗の拳 狙い目"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価600G〜 / 5.6枚650G〜 / 現金700G〜",
+    "strategyByRate": {
+      "eq56": "5.6枚600G〜",
+      "rate55": "5.5枚650G〜",
+      "rate50": "5.0枚700G〜",
+      "rate45": "4.5枚750G〜"
+    },
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "normal": {
+        "excellent": 700,
+        "good": 650,
+        "caution": 600,
+        "target": 650,
+        "byRate": {
+          "eq56": {
+            "excellent": 650,
+            "good": 600,
+            "caution": 500,
+            "target": 600,
+            "note": "5.6枚交換なら500Gから候補、600Gから本線です。液晶G数だけでなく、やめた直後の台かも合わせて確認してください。"
+          },
+          "rate55": {
+            "excellent": 700,
+            "good": 650,
+            "caution": 550,
+            "target": 650,
+            "note": "5.5枚交換は650G基準で見る形です。通常は深め優先で、浅い台は前兆や即やめ状況が弱いときだけ候補に残してください。"
+          },
+          "rate50": {
+            "excellent": 750,
+            "good": 700,
+            "caution": 600,
+            "target": 700,
+            "note": "5.0枚交換は700Gからが本線です。持ちメダルがない場面ではさらに慎重に見て、深い通常台を優先した方が使いやすいです。"
+          },
+          "rate45": {
+            "excellent": 800,
+            "good": 750,
+            "caution": 650,
+            "target": 750,
+            "note": "4.5枚交換は750Gからを基本線にしてください。浅い台に広げず、やめどきが明確な深い通常台だけに絞るのが安全です。"
+          }
+        },
+        "note": "通常時は深めの天井なので、600G台後半から優先度アップで見る形です。"
+      },
+      "reset": {
+        "excellent": 170,
+        "good": 100,
+        "caution": 90,
+        "target": 100,
+        "byRate": {
+          "eq56": {
+            "excellent": 170,
+            "good": 100,
+            "caution": 90,
+            "target": 100,
+            "note": "5.6枚交換のリセット台は100Gから候補です。リセット根拠が弱いときは150G前後まで様子を見る方が安全です。"
+          },
+          "rate55": {
+            "excellent": 220,
+            "good": 150,
+            "caution": 120,
+            "target": 150,
+            "note": "5.5枚交換のリセット台は150G基準です。朝一の挙動と店の傾向が弱いなら、少し深めに寄せてください。"
+          },
+          "rate50": {
+            "excellent": 270,
+            "good": 200,
+            "caution": 170,
+            "target": 200,
+            "note": "5.0枚交換では200Gからが本線です。リセット確信がない台は通常と混ぜて見ず、朝一台として別管理した方がぶれません。"
+          },
+          "rate45": {
+            "excellent": 320,
+            "good": 250,
+            "caution": 220,
+            "target": 250,
+            "note": "4.5枚交換のリセット台は250G基準です。根拠が弱い朝一台に広げず、店の強い日だけ触るくらいが安全です。"
+          }
+        },
+        "note": "リセット時は800G+α天井短縮を反映し、通常より浅め基準で判定します。"
+      },
+      "ok": "狙い目OK",
+      "ng": "まだ早い",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ]
+    },
+    "aliases": [
+      "北斗",
+      "ほくと",
+      "hokuto",
+      "スマスロ北斗",
+      "スマスロ北斗の拳",
+      "北斗の拳"
+    ],
+    "limit": 1268
+  },
+  {
+    "slug": "my_juggler_v",
+    "name": "マイジャグラーV",
+    "seo": {
+      "title": "マイジャグラーV 設定判別"
+    },
+    "info": "Aタイプ",
+    "strategy": "設定狙い主体・天井なし",
+    "aliases": [
+      "マイジャグ",
+      "マイジャグ5"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "設定狙い"
+        }
+      ],
+      "normal": {
+        "excellent": 99999,
+        "good": 99999,
+        "caution": 99999,
+        "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
+      }
+    },
+    "limit": null
+  },
+  {
+    "slug": "discup_ur",
+    "name": "A-SLOT+ ディスクアップ ULTRAREMIX",
+    "seo": {
+      "title": "A-SLOT+ ディスクアップ ULTRAREMIX 狙い目"
+    },
+    "info": "スマスロA+RT",
+    "strategy": "設定狙い主体・天井なし",
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "設定狙い"
+        }
+      ],
+      "normal": {
+        "excellent": 99999,
+        "good": 99999,
+        "caution": 99999,
+        "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。高設定をつかめる環境（イベント・特定日）での使用を推奨。"
+      }
+    },
+    "limit": null,
+    "aliases": [
+      "ディスクアップ",
+      "ディスク",
+      "でぃすくあっぷ",
+      "ULTRAREMIX"
+    ]
+  },
+  {
+    "slug": "kaguya",
+    "name": "パチスロ かぐや様は告らせたい",
+    "seo": {
+      "title": "パチスロ かぐや様は告らせたい 狙い目"
+    },
+    "info": "スマスロ擬似ボーナス",
+    "strategy": "BIG後650G〜 / 5スルー〜",
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "BIG後"
+        },
+        {
+          "key": "reg",
+          "label": "REG後"
+        },
+        {
+          "key": "suru",
+          "label": "スルー天井",
+          "hasSuru": true
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 1000,
+        "good": 650,
+        "caution": 500,
+        "note": "BIG後の天井1100G+α。650G〜で1000円以上の期待値。液晶右下のG数カウンタで確認。",
+        "byRate": {
+          "eq56": {
+            "caution": 450,
+            "excellent": 950,
+            "target": 600,
+            "good": 600,
+            "note": "5.6枚交換ならBIG後600Gから狙い目です。"
+          },
+          "rate55": {
+            "caution": 500,
+            "excellent": 1000,
+            "target": 650,
+            "good": 650,
+            "note": "5.5枚交換ではBIG後650Gが基準です。"
+          },
+          "rate50": {
+            "caution": 560,
+            "excellent": 1100,
+            "target": 720,
+            "good": 720,
+            "note": "5.0枚交換ではBIG後720Gから見てください。"
+          },
+          "rate45": {
+            "caution": 650,
+            "excellent": 1200,
+            "target": 800,
+            "good": 800,
+            "note": "4.5枚交換ではBIG後800Gまで待つ方が安全です。"
+          }
+        }
+      },
+      "reg": {
+        "excellent": 800,
+        "good": 450,
+        "caution": 350,
+        "note": "REG後は天井900G+αに短縮。450G〜がプラス域。",
+        "byRate": {
+          "eq56": {
+            "caution": 300,
+            "excellent": 700,
+            "target": 400,
+            "good": 400,
+            "note": "5.6枚交換ならREG後400G前後から候補です。"
+          },
+          "rate55": {
+            "caution": 350,
+            "excellent": 800,
+            "target": 450,
+            "good": 450,
+            "note": "5.5枚交換ではREG後450Gが基準です。"
+          },
+          "rate50": {
+            "caution": 400,
+            "excellent": 900,
+            "target": 520,
+            "good": 520,
+            "note": "5.0枚交換ではREG後520Gからを目安にします。"
+          },
+          "rate45": {
+            "caution": 450,
+            "excellent": 1000,
+            "target": 600,
+            "good": 600,
+            "note": "4.5枚交換ではREG後600G前後まで待つ方が安全です。"
+          }
+        }
+      },
+      "suru": {
+        "suruMax": 7,
+        "suru": [
+          {
+            "count": 0,
+            "excellent": 1000,
+            "good": 650,
+            "caution": 500,
+            "note": "0スルー。BIG後と同じ650G〜が目安です。REG後の浅いラインと混ぜず、BIG後台として見てください。",
+            "byRate": {
+              "eq56": {
+                "caution": 450,
+                "excellent": 950,
+                "target": 600,
+                "good": 600,
+                "note": "5.6枚交換の0スルーはBIG後と同じ600G基準です。"
+              },
+              "rate55": {
+                "caution": 500,
+                "excellent": 1000,
+                "target": 650,
+                "good": 650,
+                "note": "5.5枚交換の0スルーはBIG後650Gが基準です。"
+              },
+              "rate50": {
+                "caution": 560,
+                "excellent": 1100,
+                "target": 720,
+                "good": 720,
+                "note": "5.0枚交換の0スルーは720Gから見てください。"
+              },
+              "rate45": {
+                "caution": 650,
+                "excellent": 1200,
+                "target": 800,
+                "good": 800,
+                "note": "4.5枚交換の0スルーは800Gまで待つ方が安全です。"
+              }
+            }
+          },
+          {
+            "count": 1,
+            "excellent": 900,
+            "good": 600,
+            "caution": 450,
+            "note": "1スルー。600G〜でプラス域。",
+            "byRate": {
+              "eq56": {
+                "caution": 400,
+                "excellent": 850,
+                "target": 550,
+                "good": 550,
+                "note": "5.6枚交換の1スルーは550Gから候補です。"
+              },
+              "rate55": {
+                "caution": 450,
+                "excellent": 900,
+                "target": 600,
+                "good": 600,
+                "note": "5.5枚交換の1スルーは600G基準です。"
+              },
+              "rate50": {
+                "caution": 510,
+                "excellent": 1000,
+                "target": 670,
+                "good": 670,
+                "note": "5.0枚交換の1スルーは670G前後からを目安にしてください。"
+              },
+              "rate45": {
+                "caution": 600,
+                "excellent": 1100,
+                "target": 750,
+                "good": 750,
+                "note": "4.5枚交換の1スルーは750G近辺まで待つ方が安全です。"
+              }
+            }
+          },
+          {
+            "count": 2,
+            "excellent": 800,
+            "good": 550,
+            "caution": 400,
+            "note": "2スルー。550G〜でプラス域。",
+            "byRate": {
+              "eq56": {
+                "caution": 350,
+                "excellent": 750,
+                "target": 500,
+                "good": 500,
+                "note": "5.6枚交換の2スルーは500Gから見られます。"
+              },
+              "rate55": {
+                "caution": 400,
+                "excellent": 800,
+                "target": 550,
+                "good": 550,
+                "note": "5.5枚交換の2スルーは550Gが基準です。"
+              },
+              "rate50": {
+                "caution": 460,
+                "excellent": 900,
+                "target": 620,
+                "good": 620,
+                "note": "5.0枚交換の2スルーは620G前後からを目安にしてください。"
+              },
+              "rate45": {
+                "caution": 550,
+                "excellent": 1000,
+                "target": 700,
+                "good": 700,
+                "note": "4.5枚交換の2スルーは700G近辺まで待つ方が安全です。"
+              }
+            }
+          },
+          {
+            "count": 3,
+            "excellent": 700,
+            "good": 500,
+            "caution": 350,
+            "note": "3スルー。500G〜でプラス域。",
+            "byRate": {
+              "eq56": {
+                "caution": 300,
+                "excellent": 650,
+                "target": 450,
+                "good": 450,
+                "note": "5.6枚交換の3スルーは450Gから候補です。"
+              },
+              "rate55": {
+                "caution": 350,
+                "excellent": 700,
+                "target": 500,
+                "good": 500,
+                "note": "5.5枚交換の3スルーは500G基準です。"
+              },
+              "rate50": {
+                "caution": 410,
+                "excellent": 800,
+                "target": 570,
+                "good": 570,
+                "note": "5.0枚交換の3スルーは570G前後からを目安にしてください。"
+              },
+              "rate45": {
+                "caution": 500,
+                "excellent": 900,
+                "target": 650,
+                "good": 650,
+                "note": "4.5枚交換の3スルーは650G近辺まで待つ方が安全です。"
+              }
+            }
+          },
+          {
+            "count": 4,
+            "excellent": 600,
+            "good": 400,
+            "caution": 250,
+            "note": "4スルー。400G〜でプラス域。",
+            "byRate": {
+              "eq56": {
+                "caution": 200,
+                "excellent": 550,
+                "target": 350,
+                "good": 350,
+                "note": "5.6枚交換の4スルーは350Gから見られます。"
+              },
+              "rate55": {
+                "caution": 250,
+                "excellent": 600,
+                "target": 400,
+                "good": 400,
+                "note": "5.5枚交換の4スルーは400G基準です。"
+              },
+              "rate50": {
+                "caution": 310,
+                "excellent": 700,
+                "target": 470,
+                "good": 470,
+                "note": "5.0枚交換の4スルーは470G前後からを目安にしてください。"
+              },
+              "rate45": {
+                "caution": 400,
+                "excellent": 800,
+                "target": 550,
+                "good": 550,
+                "note": "4.5枚交換の4スルーは550G近辺まで待つ方が安全です。"
+              }
+            }
+          },
+          {
+            "count": 5,
+            "excellent": 400,
+            "good": 200,
+            "caution": 100,
+            "note": "5スルー。200G〜で積極的に狙えます。履歴から5回分見えている台を優先するとブレにくいです。",
+            "byRate": {
+              "eq56": {
+                "caution": 50,
+                "excellent": 300,
+                "target": 150,
+                "good": 150,
+                "note": "5.6枚交換の5スルーは150Gから積極的に見られます。"
+              },
+              "rate55": {
+                "caution": 100,
+                "excellent": 400,
+                "target": 200,
+                "good": 200,
+                "note": "5.5枚交換の5スルーは200G基準です。"
+              },
+              "rate50": {
+                "caution": 170,
+                "excellent": 500,
+                "target": 270,
+                "good": 270,
+                "note": "5.0枚交換の5スルーは270G前後からを目安にしてください。"
+              },
+              "rate45": {
+                "caution": 250,
+                "excellent": 600,
+                "target": 350,
+                "good": 350,
+                "note": "4.5枚交換の5スルーは350G近辺からが実戦ラインです。"
+              }
+            }
+          },
+          {
+            "count": 6,
+            "excellent": 200,
+            "good": 50,
+            "caution": 0,
+            "note": "6スルー。かなり浅いG数から狙えます。BIG後かREG後かより、回数が見えていることを優先してください。",
+            "byRate": {
+              "eq56": {
+                "caution": 0,
+                "excellent": 200,
+                "target": 0,
+                "good": 0,
+                "note": "5.6枚交換の6スルーは0Gから候補です。"
+              },
+              "rate55": {
+                "caution": 0,
+                "excellent": 200,
+                "target": 50,
+                "good": 50,
+                "note": "5.5枚交換の6スルーは50G前後から見られます。"
+              },
+              "rate50": {
+                "caution": 40,
+                "excellent": 300,
+                "target": 120,
+                "good": 120,
+                "note": "5.0枚交換の6スルーは120G前後からを目安にしてください。"
+              },
+              "rate45": {
+                "caution": 100,
+                "excellent": 400,
+                "target": 200,
+                "good": 200,
+                "note": "4.5枚交換の6スルーは200G前後からが実戦ラインです。"
+              }
+            }
+          },
+          {
+            "count": 7,
+            "excellent": 50,
+            "good": 0,
+            "caution": 0,
+            "note": "7スルー。次回CZでBIG以上確定です。交換率不問の最優先候補として見て問題ありません。",
+            "byRate": {
+              "eq56": {
+                "caution": 0,
+                "excellent": 50,
+                "target": 0,
+                "good": 0,
+                "note": "7スルーは交換率不問で0Gから着席OKです。"
+              },
+              "rate55": {
+                "caution": 0,
+                "excellent": 50,
+                "target": 0,
+                "good": 0,
+                "note": "7スルーは交換率不問で0Gから着席OKです。"
+              },
+              "rate50": {
+                "caution": 0,
+                "excellent": 50,
+                "target": 0,
+                "good": 0,
+                "note": "7スルーは交換率不問で0Gから着席OKです。"
+              },
+              "rate45": {
+                "caution": 0,
+                "excellent": 50,
+                "target": 0,
+                "good": 0,
+                "note": "7スルーは交換率不問で0Gから着席OKです。"
+              }
+            }
+          }
+        ]
+      },
+      "reset": {
+        "excellent": 500,
+        "good": 200,
+        "caution": 100,
+        "note": "設定変更後は天井800G+αに短縮。200G〜でプラス域。リセット判別が難しい点に注意。",
+        "byRate": {
+          "eq56": {
+            "caution": 80,
+            "excellent": 400,
+            "target": 150,
+            "good": 150,
+            "note": "5.6枚交換ならリセット150Gから候補です。"
+          },
+          "rate55": {
+            "caution": 100,
+            "excellent": 500,
+            "target": 200,
+            "good": 200,
+            "note": "5.5枚交換ではリセット200Gが基準です。通常450Gやスルー狙いとは入口が違うので、朝一台として別で見てください。"
+          },
+          "rate50": {
+            "caution": 140,
+            "excellent": 600,
+            "target": 260,
+            "good": 260,
+            "note": "5.0枚交換はリセット260G前後を目安にしてください。"
+          },
+          "rate45": {
+            "caution": 180,
+            "excellent": 700,
+            "target": 320,
+            "good": 320,
+            "note": "4.5枚交換ではリセット320Gからが実戦ラインです。"
+          }
+        }
+      },
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ]
+    },
+    "limit": 1100,
+    "strategyByRate": {
+      "eq56": "5.6枚BIG後600G〜 / REG後400G〜 / 5スルー〜",
+      "rate55": "5.5枚BIG後650G〜 / REG後450G〜 / 5スルー〜",
+      "rate50": "5.0枚BIG後720G〜 / REG後520G〜 / 5スルー〜",
+      "rate45": "4.5枚BIG後800G〜 / REG後600G〜 / 5スルー〜"
+    },
+    "aliases": [
+      "かぐや様",
+      "かぐや",
+      "カグヤ",
+      "告らせたい"
+    ]
+  },
+  {
+    "slug": "sengoku_otome4",
+    "name": "L戦国乙女4 戦乱に閃く炯眼の軍師",
+    "seo": {
+      "title": "戦国乙女4 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価400G〜 / スルー5回〜",
+    "strategyByRate": {
+      "eq56": "5.6枚420G〜",
+      "rate55": "5.5枚440G〜",
+      "rate50": "5.0枚470G〜",
+      "rate45": "4.5枚500G〜"
+    },
+    "aliases": [
+      "戦国乙女",
+      "乙女4",
+      "おとめ",
+      "せんごくおとめ"
+    ],
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "suru",
+          "label": "スルー天井",
+          "hasSuru": true
+        }
+      ],
+      "normal": {
+        "excellent": 700,
+        "good": 400,
+        "caution": 270,
+        "byRate": {
+          "eq56": {
+            "excellent": 700,
+            "good": 420,
+            "caution": 280,
+            "note": "5.6枚交換なら420Gから狙い目。天井799G+前兆。300Gゾーンが強い。"
+          },
+          "rate55": {
+            "excellent": 700,
+            "good": 440,
+            "caution": 300,
+            "note": "5.5枚交換なら440Gから。"
+          },
+          "rate50": {
+            "excellent": 720,
+            "good": 470,
+            "caution": 330,
+            "note": "5.0枚交換なら470Gから。"
+          },
+          "rate45": {
+            "excellent": 750,
+            "good": 500,
+            "caution": 360,
+            "note": "4.5枚交換なら500Gから。"
+          }
+        },
+        "note": "天井799G+前兆。300Gゾーンが複数モード天井重複で強い。AT終了後30G引き戻し確認でヤメ。"
+      },
+      "suru": {
+        "excellent": 6,
+        "good": 5,
+        "caution": 4,
+        "suruMax": 6,
+        "note": "ボーナス6スルー後の7回目でエピソードボーナス確定（AT濃厚）。5スルーから狙い目。"
+      }
+    },
+    "limit": 799
+  },
+  {
+    "slug": "godeater",
+    "name": "スマスロ ゴッドイーター リザレクション",
+    "seo": {
+      "title": "スマスロ ゴッドイーター リザレクション 狙い目"
+    },
+    "info": "スマスロAT",
+    "strategy": "通常520G〜 / 駆け抜け後280G〜",
+    "strategyByRate": {
+      "eq56": "5.6枚550G〜 / 駆け抜け後150G〜",
+      "rate55": "5.5枚590G〜 / 駆け抜け後170G〜",
+      "rate50": "5.0枚650G〜 / 駆け抜け後200G〜",
+      "rate45": "4.5枚700G〜 / 駆け抜け後230G〜"
+    },
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "nukete",
+          "label": "駆け抜け後"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 750,
+        "good": 590,
+        "caution": 450,
+        "byRate": {
+          "eq56": {
+            "excellent": 700,
+            "good": 550,
+            "caution": 400,
+            "note": "5.6枚交換なら通常550Gから狙い目、400Gから候補です。駆け抜け後の浅いラインと混ぜず、通常台として見る前提を先に固めてください。"
+          },
+          "rate55": {
+            "excellent": 750,
+            "good": 590,
+            "caution": 450,
+            "note": "5.5枚交換は通常590G基準です。駆け抜け後170G基準と入口差が大きいので、今の台がどちらかを先に分けるのが重要です。"
+          },
+          "rate50": {
+            "excellent": 800,
+            "good": 650,
+            "caution": 500,
+            "note": "5.0枚交換は通常650Gからが本線です。浅い通常台に広げず、液晶G数と履歴を見て深い台を優先した方が収まりやすいです。"
+          },
+          "rate45": {
+            "excellent": 850,
+            "good": 700,
+            "caution": 550,
+            "note": "4.5枚交換は通常700G基準です。駆け抜け後やリセットの浅い台とは切り分けて、深い通常台だけに絞る方が安全です。"
+          }
+        },
+        "note": "天井1000G+α。590G〜でプラス域。液晶右下のG数で確認。"
+      },
+      "nukete": {
+        "excellent": 300,
+        "good": 280,
+        "caution": 180,
+        "byRate": {
+          "eq56": {
+            "excellent": 260,
+            "good": 150,
+            "caution": 80,
+            "note": "5.6枚交換の駆け抜け後は150Gから候補です。AT駆け抜け後として見てよい台だけを拾うと精度が上がります。"
+          },
+          "rate55": {
+            "excellent": 300,
+            "good": 170,
+            "caution": 100,
+            "note": "5.5枚交換は駆け抜け後170G基準です。通常台と混ぜず、短縮天井前提の台として見る方が使いやすいです。"
+          },
+          "rate50": {
+            "excellent": 340,
+            "good": 200,
+            "caution": 120,
+            "note": "5.0枚交換では駆け抜け後200Gからが本線です。浅い台に広げすぎず、履歴で駆け抜け後が見える台を優先してください。"
+          },
+          "rate45": {
+            "excellent": 380,
+            "good": 230,
+            "caution": 150,
+            "note": "4.5枚交換の駆け抜け後は230G基準です。通常590G基準との差を意識して、前提が曖昧な台は見送る方が安全です。"
+          }
+        },
+        "note": "AT駆け抜け後は天井600G+αに短縮。280G〜でプラス域。"
+      },
+      "reset": {
+        "excellent": 300,
+        "good": 180,
+        "caution": 100,
+        "byRate": {
+          "eq56": {
+            "excellent": 260,
+            "good": 150,
+            "caution": 80,
+            "note": "5.6枚交換のリセット台は150Gから候補です。朝一の根拠が弱い台は180G近辺まで待つとズレにくいです。"
+          },
+          "rate55": {
+            "excellent": 300,
+            "good": 180,
+            "caution": 100,
+            "note": "5.5枚交換はリセット180G基準です。通常や駆け抜け後のラインとは別で管理してください。"
+          },
+          "rate50": {
+            "excellent": 340,
+            "good": 220,
+            "caution": 130,
+            "note": "5.0枚交換ではリセット220Gからが本線です。朝一の根拠が弱い日は通常や駆け抜け後基準に寄せる方が安全です。"
+          },
+          "rate45": {
+            "excellent": 380,
+            "good": 250,
+            "caution": 150,
+            "note": "4.5枚交換のリセット台は250G基準です。浅い朝一台に広げず、店の強い日や根拠のある台に絞ってください。"
+          }
+        },
+        "note": "設定変更後は天井600G+αに短縮。180G〜でプラス域。"
+      }
+    },
+    "limit": 1000,
+    "aliases": [
+      "ゴッドイーター",
+      "ゴドイタ",
+      "GE",
+      "ゴッイー"
+    ]
+  },
+  {
+    "slug": "chibaryo2",
+    "name": "チバリヨ2",
+    "seo": {
+      "title": "チバリヨ2 狙い目"
+    },
+    "info": "スマスロAT",
+    "strategy": "通常550G〜 / リセット100G〜",
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 600,
+        "good": 550,
+        "caution": 450,
+        "note": "G数天井600G。550G〜が基本の狙い目ライン。",
+        "byRate": {
+          "eq56": {
+            "caution": 420,
+            "excellent": 550,
+            "target": 500,
+            "good": 500,
+            "note": "5.6枚交換なら通常500Gからが狙い目です。リセット50G基準とは混ぜず、通常台として深めを優先してください。"
+          },
+          "rate55": {
+            "caution": 450,
+            "excellent": 600,
+            "target": 550,
+            "good": 550,
+            "note": "5.5枚交換では通常550Gが基準です。朝一の浅い台とは切り分けて、通常側の深さで見る方が使いやすいです。"
+          },
+          "rate50": {
+            "caution": 520,
+            "excellent": 680,
+            "target": 620,
+            "good": 620,
+            "note": "5.0枚交換では通常620Gから見てください。通常とリセットの入口差が大きいので、前提を固定して使う方が安全です。"
+          },
+          "rate45": {
+            "caution": 600,
+            "excellent": 760,
+            "target": 700,
+            "good": 700,
+            "note": "4.5枚交換は通常700G前後まで待つ方が安全です。浅いリセット台に引っ張られず、通常側は深め優先で見てください。"
+          }
+        }
+      },
+      "reset": {
+        "excellent": 200,
+        "good": 100,
+        "caution": 50,
+        "note": "設定変更後は天井短縮。100G〜でプラス域。",
+        "byRate": {
+          "eq56": {
+            "caution": 0,
+            "excellent": 120,
+            "target": 50,
+            "good": 50,
+            "note": "5.6枚交換ならリセット50Gから候補です。通常500G基準とは別で、朝一台として見てよい根拠がある台を優先してください。"
+          },
+          "rate55": {
+            "caution": 50,
+            "excellent": 200,
+            "target": 100,
+            "good": 100,
+            "note": "5.5枚交換ではリセット100Gが基準です。通常550G基準とは混ぜず、朝一の浅い入口として整理するとぶれにくいです。"
+          },
+          "rate50": {
+            "caution": 80,
+            "excellent": 260,
+            "target": 150,
+            "good": 150,
+            "note": "5.0枚交換はリセット150G基準です。根拠が弱い日は通常側で見て、朝一前提が取れる台だけ浅めに触る方が安全です。"
+          },
+          "rate45": {
+            "caution": 120,
+            "excellent": 320,
+            "target": 200,
+            "good": 200,
+            "note": "4.5枚交換ではリセット200Gからを目安にしてください。通常700G基準との差を意識して、朝一台として別で見る方が使いやすいです。"
+          }
+        }
+      },
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ]
+    },
+    "limit": 999,
+    "strategyByRate": {
+      "eq56": "5.6枚通常500G〜 / リセット50G〜",
+      "rate55": "5.5枚通常550G〜 / リセット100G〜",
+      "rate50": "5.0枚通常620G〜 / リセット150G〜",
+      "rate45": "4.5枚通常700G〜 / リセット200G〜"
+    },
+    "aliases": [
+      "チバリヨ",
+      "ちばりよ",
+      "チバリヨ2"
+    ]
+  },
+  {
+    "slug": "tolove_darkness",
+    "name": "L ToLOVEるダークネス",
+    "seo": {
+      "title": "L ToLOVEるダークネス 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価420G〜 / リセット100G〜",
+    "aliases": [
+      "とらぶるダークネス",
+      "ToLOVEる",
+      "とらぶる",
+      "ダークネス",
+      "トラブル",
+      "とらぶるだーくねす",
+      "とらぶるスロット"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "ST間（通常）"
+        },
+        {
+          "key": "reset",
+          "label": "リセット後"
+        }
+      ],
+      "normal": {
+        "excellent": 700,
+        "good": 420,
+        "caution": 280,
+        "note": "ST（楽園計画）間でカウント。天井999G+α。ST終了後280G〜から期待値プラス。420G〜が推奨狙い目。"
+      },
+      "reset": {
+        "excellent": 500,
+        "good": 200,
+        "caution": 100,
+        "note": "設定変更後は天井650G+αに短縮。リセット100G〜から期待値プラス（朝一台は積極的に狙う）。"
+      }
+    },
+    "limit": 999
   },
   {
     "slug": "tekken6",
@@ -1356,725 +3207,6 @@
     ]
   },
   {
-    "slug": "tokyo_ghoul",
-    "name": "L 東京喰種",
-    "seo": {
-      "title": "L 東京喰種 狙い目"
-    },
-    "info": "スマスロAT",
-    "strategy": "CZ間250G〜 / AT間450G〜",
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "cz",
-          "label": "CZ間"
-        },
-        {
-          "key": "at",
-          "label": "AT間",
-          "hasSuru": true
-        },
-        {
-          "key": "reset",
-          "label": "リセット"
-        }
-      ],
-      "cz": {
-        "excellent": 450,
-        "good": 250,
-        "caution": 180,
-        "note": "液晶右下のG数カウンタで確認。スイカ成立時に複数G加算あり。CZ天井600G+α。250G〜でプラス域。",
-        "byRate": {
-          "eq56": {
-            "caution": 200,
-            "excellent": 400,
-            "target": 300,
-            "good": 300,
-            "note": "5.6枚交換ならCZ間300Gから狙い目、250Gから候補です。"
-          },
-          "rate55": {
-            "caution": 250,
-            "excellent": 450,
-            "target": 350,
-            "good": 350,
-            "note": "5.5枚交換ではCZ間350Gが基準です。"
-          },
-          "rate50": {
-            "caution": 300,
-            "excellent": 520,
-            "target": 420,
-            "good": 420,
-            "note": "5.0枚交換ではCZ間420G前後から見てください。"
-          },
-          "rate45": {
-            "caution": 380,
-            "excellent": 600,
-            "target": 500,
-            "good": 500,
-            "note": "4.5枚交換ではCZ間500Gからが実戦ラインです。"
-          }
-        }
-      },
-      "at": {
-        "suru": [
-          {
-            "count": 0,
-            "excellent": 600,
-            "good": 400,
-            "caution": 200,
-            "note": "0スルー。400G〜で候補。AT間G数はメニュー画面で確認。",
-            "byRate": {
-              "eq56": {
-                "caution": 180,
-                "excellent": 550,
-                "target": 350,
-                "good": 350,
-                "note": "5.6枚交換のAT間0スルーは350G基準です。CZ間300G基準とは分けて、AT間台として見てください。"
-              },
-              "rate55": {
-                "caution": 200,
-                "excellent": 600,
-                "target": 400,
-                "good": 400,
-                "note": "5.5枚交換のAT間0スルーは400G基準です。CZ間より少し深く、入口を混ぜない方が使いやすいです。"
-              },
-              "rate50": {
-                "caution": 250,
-                "excellent": 680,
-                "target": 470,
-                "good": 470,
-                "note": "5.0枚交換のAT間0スルーは470G基準です。浅いCZ間台とは切り分けて、AT間側の深さで見てください。"
-              },
-              "rate45": {
-                "caution": 320,
-                "excellent": 760,
-                "target": 550,
-                "good": 550,
-                "note": "4.5枚交換のAT間0スルーは550G基準です。CZ間500G基準と近く見えても、前提は分けて判断した方が安全です。"
-              }
-            }
-          },
-          {
-            "count": 1,
-            "excellent": 550,
-            "good": 350,
-            "caution": 150,
-            "note": "1スルー。350G〜で候補。スルーが増えるほど当選G数が軽くなる傾向。",
-            "byRate": {
-              "eq56": {
-                "caution": 150,
-                "excellent": 500,
-                "target": 300,
-                "good": 300,
-                "note": "5.6枚交換のAT間1スルーは300G基準です。0スルーより浅く見られるので、回数込みで判断してください。"
-              },
-              "rate55": {
-                "caution": 150,
-                "excellent": 550,
-                "target": 350,
-                "good": 350,
-                "note": "5.5枚交換のAT間1スルーは350G基準です。AT間0スルーやCZ間と混ぜず、1スルー台として見る方がぶれにくいです。"
-              },
-              "rate50": {
-                "caution": 220,
-                "excellent": 620,
-                "target": 420,
-                "good": 420,
-                "note": "5.0枚交換のAT間1スルーは420G基準です。回数が進んだ分だけ浅くなる前提を意識してください。"
-              },
-              "rate45": {
-                "caution": 280,
-                "excellent": 700,
-                "target": 500,
-                "good": 500,
-                "note": "4.5枚交換のAT間1スルーは500G基準です。AT間0スルーより浅い入口として整理すると使いやすいです。"
-              }
-            }
-          },
-          {
-            "count": 2,
-            "excellent": 500,
-            "good": 300,
-            "caution": 100,
-            "note": "2スルー以上。300G〜で積極的に。AT間天井1200G+α。",
-            "byRate": {
-              "eq56": {
-                "caution": 80,
-                "excellent": 450,
-                "target": 250,
-                "good": 250,
-                "note": "5.6枚交換のAT間2スルー以上は250G基準です。回数差が大きいので、AT間0スルーとは別物として見てください。"
-              },
-              "rate55": {
-                "caution": 100,
-                "excellent": 500,
-                "target": 300,
-                "good": 300,
-                "note": "5.5枚交換のAT間2スルー以上は300G基準です。スルー回数が読める台ほど価値が上がります。"
-              },
-              "rate50": {
-                "caution": 150,
-                "excellent": 570,
-                "target": 370,
-                "good": 370,
-                "note": "5.0枚交換のAT間2スルー以上は370G基準です。CZ間や0スルーより浅く見られるので、回数を先に確認してください。"
-              },
-              "rate45": {
-                "caution": 220,
-                "excellent": 650,
-                "target": 450,
-                "good": 450,
-                "note": "4.5枚交換のAT間2スルー以上は450G基準です。AT間の中でも入口差が大きいので、回数込みで判断する方が安全です。"
-              }
-            }
-          }
-        ],
-        "suruMax": 2
-      },
-      "reset": {
-        "excellent": 150,
-        "good": 80,
-        "caution": 30,
-        "note": "設定変更後はCZ天井200G+αに短縮。30G〜でプラス域。",
-        "byRate": {
-          "eq56": {
-            "caution": 0,
-            "excellent": 150,
-            "target": 60,
-            "good": 60,
-            "note": "5.6枚交換ならリセット60G前後から候補です。"
-          },
-          "rate55": {
-            "caution": 30,
-            "excellent": 150,
-            "target": 80,
-            "good": 80,
-            "note": "5.5枚交換ではリセット80Gが基準です。"
-          },
-          "rate50": {
-            "caution": 50,
-            "excellent": 220,
-            "target": 120,
-            "good": 120,
-            "note": "5.0枚交換ではリセット120G前後を目安にします。"
-          },
-          "rate45": {
-            "caution": 100,
-            "excellent": 280,
-            "target": 180,
-            "good": 180,
-            "note": "4.5枚交換ではリセット180Gからが実戦ラインです。"
-          }
-        }
-      },
-      "defaultRate": "eq56",
-      "exchangeRates": [
-        {
-          "key": "eq56",
-          "label": "5.6枚"
-        },
-        {
-          "key": "rate55",
-          "label": "5.5枚"
-        },
-        {
-          "key": "rate50",
-          "label": "5.0枚"
-        },
-        {
-          "key": "rate45",
-          "label": "4.5枚"
-        }
-      ]
-    },
-    "aliases": [
-      "東京喰種",
-      "とうきょうぐーる",
-      "グール",
-      "ぐーる"
-    ],
-    "limit": 1000,
-    "strategyByRate": {
-      "eq56": "5.6枚CZ間300G〜 / AT間350G〜 / スルー回数込みで判断",
-      "rate55": "5.5枚CZ間350G〜 / AT間400G〜 / スルー回数込みで判断",
-      "rate50": "5.0枚CZ間420G〜 / AT間470G〜 / スルー回数込みで判断",
-      "rate45": "4.5枚CZ間500G〜 / AT間550G〜 / スルー回数込みで判断"
-    }
-  },
-  {
-    "slug": "kaguya",
-    "name": "パチスロ かぐや様は告らせたい",
-    "seo": {
-      "title": "パチスロ かぐや様は告らせたい 狙い目"
-    },
-    "info": "スマスロ擬似ボーナス",
-    "strategy": "BIG後650G〜 / 5スルー〜",
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "normal",
-          "label": "BIG後"
-        },
-        {
-          "key": "reg",
-          "label": "REG後"
-        },
-        {
-          "key": "suru",
-          "label": "スルー天井",
-          "hasSuru": true
-        },
-        {
-          "key": "reset",
-          "label": "リセット"
-        }
-      ],
-      "normal": {
-        "excellent": 1000,
-        "good": 650,
-        "caution": 500,
-        "note": "BIG後の天井1100G+α。650G〜で1000円以上の期待値。液晶右下のG数カウンタで確認。",
-        "byRate": {
-          "eq56": {
-            "caution": 450,
-            "excellent": 950,
-            "target": 600,
-            "good": 600,
-            "note": "5.6枚交換ならBIG後600Gから狙い目です。"
-          },
-          "rate55": {
-            "caution": 500,
-            "excellent": 1000,
-            "target": 650,
-            "good": 650,
-            "note": "5.5枚交換ではBIG後650Gが基準です。"
-          },
-          "rate50": {
-            "caution": 560,
-            "excellent": 1100,
-            "target": 720,
-            "good": 720,
-            "note": "5.0枚交換ではBIG後720Gから見てください。"
-          },
-          "rate45": {
-            "caution": 650,
-            "excellent": 1200,
-            "target": 800,
-            "good": 800,
-            "note": "4.5枚交換ではBIG後800Gまで待つ方が安全です。"
-          }
-        }
-      },
-      "reg": {
-        "excellent": 800,
-        "good": 450,
-        "caution": 350,
-        "note": "REG後は天井900G+αに短縮。450G〜がプラス域。",
-        "byRate": {
-          "eq56": {
-            "caution": 300,
-            "excellent": 700,
-            "target": 400,
-            "good": 400,
-            "note": "5.6枚交換ならREG後400G前後から候補です。"
-          },
-          "rate55": {
-            "caution": 350,
-            "excellent": 800,
-            "target": 450,
-            "good": 450,
-            "note": "5.5枚交換ではREG後450Gが基準です。"
-          },
-          "rate50": {
-            "caution": 400,
-            "excellent": 900,
-            "target": 520,
-            "good": 520,
-            "note": "5.0枚交換ではREG後520Gからを目安にします。"
-          },
-          "rate45": {
-            "caution": 450,
-            "excellent": 1000,
-            "target": 600,
-            "good": 600,
-            "note": "4.5枚交換ではREG後600G前後まで待つ方が安全です。"
-          }
-        }
-      },
-      "suru": {
-        "suruMax": 7,
-        "suru": [
-          {
-            "count": 0,
-            "excellent": 1000,
-            "good": 650,
-            "caution": 500,
-            "note": "0スルー。BIG後と同じ650G〜が目安です。REG後の浅いラインと混ぜず、BIG後台として見てください。",
-            "byRate": {
-              "eq56": {
-                "caution": 450,
-                "excellent": 950,
-                "target": 600,
-                "good": 600,
-                "note": "5.6枚交換の0スルーはBIG後と同じ600G基準です。"
-              },
-              "rate55": {
-                "caution": 500,
-                "excellent": 1000,
-                "target": 650,
-                "good": 650,
-                "note": "5.5枚交換の0スルーはBIG後650Gが基準です。"
-              },
-              "rate50": {
-                "caution": 560,
-                "excellent": 1100,
-                "target": 720,
-                "good": 720,
-                "note": "5.0枚交換の0スルーは720Gから見てください。"
-              },
-              "rate45": {
-                "caution": 650,
-                "excellent": 1200,
-                "target": 800,
-                "good": 800,
-                "note": "4.5枚交換の0スルーは800Gまで待つ方が安全です。"
-              }
-            }
-          },
-          {
-            "count": 1,
-            "excellent": 900,
-            "good": 600,
-            "caution": 450,
-            "note": "1スルー。600G〜でプラス域。",
-            "byRate": {
-              "eq56": {
-                "caution": 400,
-                "excellent": 850,
-                "target": 550,
-                "good": 550,
-                "note": "5.6枚交換の1スルーは550Gから候補です。"
-              },
-              "rate55": {
-                "caution": 450,
-                "excellent": 900,
-                "target": 600,
-                "good": 600,
-                "note": "5.5枚交換の1スルーは600G基準です。"
-              },
-              "rate50": {
-                "caution": 510,
-                "excellent": 1000,
-                "target": 670,
-                "good": 670,
-                "note": "5.0枚交換の1スルーは670G前後からを目安にしてください。"
-              },
-              "rate45": {
-                "caution": 600,
-                "excellent": 1100,
-                "target": 750,
-                "good": 750,
-                "note": "4.5枚交換の1スルーは750G近辺まで待つ方が安全です。"
-              }
-            }
-          },
-          {
-            "count": 2,
-            "excellent": 800,
-            "good": 550,
-            "caution": 400,
-            "note": "2スルー。550G〜でプラス域。",
-            "byRate": {
-              "eq56": {
-                "caution": 350,
-                "excellent": 750,
-                "target": 500,
-                "good": 500,
-                "note": "5.6枚交換の2スルーは500Gから見られます。"
-              },
-              "rate55": {
-                "caution": 400,
-                "excellent": 800,
-                "target": 550,
-                "good": 550,
-                "note": "5.5枚交換の2スルーは550Gが基準です。"
-              },
-              "rate50": {
-                "caution": 460,
-                "excellent": 900,
-                "target": 620,
-                "good": 620,
-                "note": "5.0枚交換の2スルーは620G前後からを目安にしてください。"
-              },
-              "rate45": {
-                "caution": 550,
-                "excellent": 1000,
-                "target": 700,
-                "good": 700,
-                "note": "4.5枚交換の2スルーは700G近辺まで待つ方が安全です。"
-              }
-            }
-          },
-          {
-            "count": 3,
-            "excellent": 700,
-            "good": 500,
-            "caution": 350,
-            "note": "3スルー。500G〜でプラス域。",
-            "byRate": {
-              "eq56": {
-                "caution": 300,
-                "excellent": 650,
-                "target": 450,
-                "good": 450,
-                "note": "5.6枚交換の3スルーは450Gから候補です。"
-              },
-              "rate55": {
-                "caution": 350,
-                "excellent": 700,
-                "target": 500,
-                "good": 500,
-                "note": "5.5枚交換の3スルーは500G基準です。"
-              },
-              "rate50": {
-                "caution": 410,
-                "excellent": 800,
-                "target": 570,
-                "good": 570,
-                "note": "5.0枚交換の3スルーは570G前後からを目安にしてください。"
-              },
-              "rate45": {
-                "caution": 500,
-                "excellent": 900,
-                "target": 650,
-                "good": 650,
-                "note": "4.5枚交換の3スルーは650G近辺まで待つ方が安全です。"
-              }
-            }
-          },
-          {
-            "count": 4,
-            "excellent": 600,
-            "good": 400,
-            "caution": 250,
-            "note": "4スルー。400G〜でプラス域。",
-            "byRate": {
-              "eq56": {
-                "caution": 200,
-                "excellent": 550,
-                "target": 350,
-                "good": 350,
-                "note": "5.6枚交換の4スルーは350Gから見られます。"
-              },
-              "rate55": {
-                "caution": 250,
-                "excellent": 600,
-                "target": 400,
-                "good": 400,
-                "note": "5.5枚交換の4スルーは400G基準です。"
-              },
-              "rate50": {
-                "caution": 310,
-                "excellent": 700,
-                "target": 470,
-                "good": 470,
-                "note": "5.0枚交換の4スルーは470G前後からを目安にしてください。"
-              },
-              "rate45": {
-                "caution": 400,
-                "excellent": 800,
-                "target": 550,
-                "good": 550,
-                "note": "4.5枚交換の4スルーは550G近辺まで待つ方が安全です。"
-              }
-            }
-          },
-          {
-            "count": 5,
-            "excellent": 400,
-            "good": 200,
-            "caution": 100,
-            "note": "5スルー。200G〜で積極的に狙えます。履歴から5回分見えている台を優先するとブレにくいです。",
-            "byRate": {
-              "eq56": {
-                "caution": 50,
-                "excellent": 300,
-                "target": 150,
-                "good": 150,
-                "note": "5.6枚交換の5スルーは150Gから積極的に見られます。"
-              },
-              "rate55": {
-                "caution": 100,
-                "excellent": 400,
-                "target": 200,
-                "good": 200,
-                "note": "5.5枚交換の5スルーは200G基準です。"
-              },
-              "rate50": {
-                "caution": 170,
-                "excellent": 500,
-                "target": 270,
-                "good": 270,
-                "note": "5.0枚交換の5スルーは270G前後からを目安にしてください。"
-              },
-              "rate45": {
-                "caution": 250,
-                "excellent": 600,
-                "target": 350,
-                "good": 350,
-                "note": "4.5枚交換の5スルーは350G近辺からが実戦ラインです。"
-              }
-            }
-          },
-          {
-            "count": 6,
-            "excellent": 200,
-            "good": 50,
-            "caution": 0,
-            "note": "6スルー。かなり浅いG数から狙えます。BIG後かREG後かより、回数が見えていることを優先してください。",
-            "byRate": {
-              "eq56": {
-                "caution": 0,
-                "excellent": 200,
-                "target": 0,
-                "good": 0,
-                "note": "5.6枚交換の6スルーは0Gから候補です。"
-              },
-              "rate55": {
-                "caution": 0,
-                "excellent": 200,
-                "target": 50,
-                "good": 50,
-                "note": "5.5枚交換の6スルーは50G前後から見られます。"
-              },
-              "rate50": {
-                "caution": 40,
-                "excellent": 300,
-                "target": 120,
-                "good": 120,
-                "note": "5.0枚交換の6スルーは120G前後からを目安にしてください。"
-              },
-              "rate45": {
-                "caution": 100,
-                "excellent": 400,
-                "target": 200,
-                "good": 200,
-                "note": "4.5枚交換の6スルーは200G前後からが実戦ラインです。"
-              }
-            }
-          },
-          {
-            "count": 7,
-            "excellent": 50,
-            "good": 0,
-            "caution": 0,
-            "note": "7スルー。次回CZでBIG以上確定です。交換率不問の最優先候補として見て問題ありません。",
-            "byRate": {
-              "eq56": {
-                "caution": 0,
-                "excellent": 50,
-                "target": 0,
-                "good": 0,
-                "note": "7スルーは交換率不問で0Gから着席OKです。"
-              },
-              "rate55": {
-                "caution": 0,
-                "excellent": 50,
-                "target": 0,
-                "good": 0,
-                "note": "7スルーは交換率不問で0Gから着席OKです。"
-              },
-              "rate50": {
-                "caution": 0,
-                "excellent": 50,
-                "target": 0,
-                "good": 0,
-                "note": "7スルーは交換率不問で0Gから着席OKです。"
-              },
-              "rate45": {
-                "caution": 0,
-                "excellent": 50,
-                "target": 0,
-                "good": 0,
-                "note": "7スルーは交換率不問で0Gから着席OKです。"
-              }
-            }
-          }
-        ]
-      },
-      "reset": {
-        "excellent": 500,
-        "good": 200,
-        "caution": 100,
-        "note": "設定変更後は天井800G+αに短縮。200G〜でプラス域。リセット判別が難しい点に注意。",
-        "byRate": {
-          "eq56": {
-            "caution": 80,
-            "excellent": 400,
-            "target": 150,
-            "good": 150,
-            "note": "5.6枚交換ならリセット150Gから候補です。"
-          },
-          "rate55": {
-            "caution": 100,
-            "excellent": 500,
-            "target": 200,
-            "good": 200,
-            "note": "5.5枚交換ではリセット200Gが基準です。通常450Gやスルー狙いとは入口が違うので、朝一台として別で見てください。"
-          },
-          "rate50": {
-            "caution": 140,
-            "excellent": 600,
-            "target": 260,
-            "good": 260,
-            "note": "5.0枚交換はリセット260G前後を目安にしてください。"
-          },
-          "rate45": {
-            "caution": 180,
-            "excellent": 700,
-            "target": 320,
-            "good": 320,
-            "note": "4.5枚交換ではリセット320Gからが実戦ラインです。"
-          }
-        }
-      },
-      "defaultRate": "eq56",
-      "exchangeRates": [
-        {
-          "key": "eq56",
-          "label": "5.6枚"
-        },
-        {
-          "key": "rate55",
-          "label": "5.5枚"
-        },
-        {
-          "key": "rate50",
-          "label": "5.0枚"
-        },
-        {
-          "key": "rate45",
-          "label": "4.5枚"
-        }
-      ]
-    },
-    "limit": 1100,
-    "strategyByRate": {
-      "eq56": "5.6枚BIG後600G〜 / REG後400G〜 / 5スルー〜",
-      "rate55": "5.5枚BIG後650G〜 / REG後450G〜 / 5スルー〜",
-      "rate50": "5.0枚BIG後720G〜 / REG後520G〜 / 5スルー〜",
-      "rate45": "4.5枚BIG後800G〜 / REG後600G〜 / 5スルー〜"
-    },
-    "aliases": [
-      "かぐや様",
-      "かぐや",
-      "カグヤ",
-      "告らせたい"
-    ]
-  },
-  {
     "slug": "valvrave2",
     "name": "Lパチスロ 革命機ヴァルヴレイヴ2",
     "seo": {
@@ -2723,256 +3855,6 @@
     "limit": 1000
   },
   {
-    "slug": "hokuto",
-    "name": "スマスロ北斗の拳",
-    "seo": {
-      "title": "スマスロ北斗の拳 狙い目"
-    },
-    "info": "スマスロAT",
-    "strategy": "等価600G〜 / 5.6枚650G〜 / 現金700G〜",
-    "strategyByRate": {
-      "eq56": "5.6枚600G〜",
-      "rate55": "5.5枚650G〜",
-      "rate50": "5.0枚700G〜",
-      "rate45": "4.5枚750G〜"
-    },
-    "checker": {
-      "unit": "G",
-      "defaultRate": "eq56",
-      "exchangeRates": [
-        {
-          "key": "eq56",
-          "label": "5.6枚"
-        },
-        {
-          "key": "rate55",
-          "label": "5.5枚"
-        },
-        {
-          "key": "rate50",
-          "label": "5.0枚"
-        },
-        {
-          "key": "rate45",
-          "label": "4.5枚"
-        }
-      ],
-      "normal": {
-        "excellent": 700,
-        "good": 650,
-        "caution": 600,
-        "target": 650,
-        "byRate": {
-          "eq56": {
-            "excellent": 650,
-            "good": 600,
-            "caution": 500,
-            "target": 600,
-            "note": "5.6枚交換なら500Gから候補、600Gから本線です。液晶G数だけでなく、やめた直後の台かも合わせて確認してください。"
-          },
-          "rate55": {
-            "excellent": 700,
-            "good": 650,
-            "caution": 550,
-            "target": 650,
-            "note": "5.5枚交換は650G基準で見る形です。通常は深め優先で、浅い台は前兆や即やめ状況が弱いときだけ候補に残してください。"
-          },
-          "rate50": {
-            "excellent": 750,
-            "good": 700,
-            "caution": 600,
-            "target": 700,
-            "note": "5.0枚交換は700Gからが本線です。持ちメダルがない場面ではさらに慎重に見て、深い通常台を優先した方が使いやすいです。"
-          },
-          "rate45": {
-            "excellent": 800,
-            "good": 750,
-            "caution": 650,
-            "target": 750,
-            "note": "4.5枚交換は750Gからを基本線にしてください。浅い台に広げず、やめどきが明確な深い通常台だけに絞るのが安全です。"
-          }
-        },
-        "note": "通常時は深めの天井なので、600G台後半から優先度アップで見る形です。"
-      },
-      "reset": {
-        "excellent": 170,
-        "good": 100,
-        "caution": 90,
-        "target": 100,
-        "byRate": {
-          "eq56": {
-            "excellent": 170,
-            "good": 100,
-            "caution": 90,
-            "target": 100,
-            "note": "5.6枚交換のリセット台は100Gから候補です。リセット根拠が弱いときは150G前後まで様子を見る方が安全です。"
-          },
-          "rate55": {
-            "excellent": 220,
-            "good": 150,
-            "caution": 120,
-            "target": 150,
-            "note": "5.5枚交換のリセット台は150G基準です。朝一の挙動と店の傾向が弱いなら、少し深めに寄せてください。"
-          },
-          "rate50": {
-            "excellent": 270,
-            "good": 200,
-            "caution": 170,
-            "target": 200,
-            "note": "5.0枚交換では200Gからが本線です。リセット確信がない台は通常と混ぜて見ず、朝一台として別管理した方がぶれません。"
-          },
-          "rate45": {
-            "excellent": 320,
-            "good": 250,
-            "caution": 220,
-            "target": 250,
-            "note": "4.5枚交換のリセット台は250G基準です。根拠が弱い朝一台に広げず、店の強い日だけ触るくらいが安全です。"
-          }
-        },
-        "note": "リセット時は800G+α天井短縮を反映し、通常より浅め基準で判定します。"
-      },
-      "ok": "狙い目OK",
-      "ng": "まだ早い",
-      "modes": [
-        {
-          "key": "normal",
-          "label": "通常"
-        },
-        {
-          "key": "reset",
-          "label": "リセット"
-        }
-      ]
-    },
-    "aliases": [
-      "北斗",
-      "ほくと",
-      "hokuto",
-      "スマスロ北斗",
-      "スマスロ北斗の拳",
-      "北斗の拳"
-    ],
-    "limit": 1268
-  },
-  {
-    "slug": "kabaneri",
-    "name": "スマスロ 甲鉄城のカバネリ 海門(うなと)決戦",
-    "seo": {
-      "title": "スマスロ 甲鉄城のカバネリ 海門(うなと)決戦 狙い目"
-    },
-    "info": "スマスロAT",
-    "strategy": "ST間580G〜 / リセット100G〜",
-    "strategyByRate": {
-      "eq56": "5.6枚450G〜 / リセット200G〜",
-      "rate55": "5.5枚500G〜 / リセット250G〜",
-      "rate50": "5.0枚550G〜 / リセット300G〜",
-      "rate45": "4.5枚600G〜 / リセット350G〜"
-    },
-    "checker": {
-      "unit": "G",
-      "defaultRate": "eq56",
-      "exchangeRates": [
-        {
-          "key": "eq56",
-          "label": "5.6枚"
-        },
-        {
-          "key": "rate55",
-          "label": "5.5枚"
-        },
-        {
-          "key": "rate50",
-          "label": "5.0枚"
-        },
-        {
-          "key": "rate45",
-          "label": "4.5枚"
-        }
-      ],
-      "modes": [
-        {
-          "key": "normal",
-          "label": "ST間"
-        },
-        {
-          "key": "reset",
-          "label": "リセット"
-        }
-      ],
-      "normal": {
-        "excellent": 700,
-        "good": 500,
-        "caution": 350,
-        "byRate": {
-          "eq56": {
-            "excellent": 650,
-            "good": 450,
-            "caution": 300,
-            "note": "5.6枚交換ならST間450Gから狙い目、300Gから候補です。ST後の前兆と引き戻しを見ながら、通常台として見てよいかを先に整理してください。"
-          },
-          "rate55": {
-            "excellent": 700,
-            "good": 500,
-            "caution": 350,
-            "note": "5.5枚交換はST間500G基準です。リセット250G基準と混ぜず、今の台がどちらの前提かを固定した方が使いやすいです。"
-          },
-          "rate50": {
-            "excellent": 750,
-            "good": 550,
-            "caution": 400,
-            "note": "5.0枚交換ではST間550Gからが本線です。浅い通常台に広げず、ST間G数をしっかり確認して深め優先にしてください。"
-          },
-          "rate45": {
-            "excellent": 800,
-            "good": 600,
-            "caution": 450,
-            "note": "4.5枚交換はST間600G基準です。深い通常台だけに絞り、リセットの浅いラインとは切り分けて使う方が安全です。"
-          }
-        },
-        "note": "ST間天井996G+α。500G〜でプラス域。ST間G数はメニュー画面で確認。"
-      },
-      "reset": {
-        "excellent": 400,
-        "good": 100,
-        "caution": 0,
-        "byRate": {
-          "eq56": {
-            "excellent": 350,
-            "good": 200,
-            "caution": 120,
-            "note": "5.6枚交換のリセット台は200Gから候補です。朝一の根拠が弱い台は250G前後まで待つとズレにくいです。"
-          },
-          "rate55": {
-            "excellent": 400,
-            "good": 250,
-            "caution": 150,
-            "note": "5.5枚交換はリセット250G基準です。通常ST後の流れと混ぜず、朝一台として別で見る方が使いやすいです。"
-          },
-          "rate50": {
-            "excellent": 450,
-            "good": 300,
-            "caution": 180,
-            "note": "5.0枚交換ではリセット300Gからが本線です。浅い朝一台に広げすぎず、前兆や履歴も含めて判断してください。"
-          },
-          "rate45": {
-            "excellent": 500,
-            "good": 350,
-            "caution": 220,
-            "note": "4.5枚交換のリセット台は350G基準です。通常500Gラインとの差を意識して、朝一の根拠がある台に絞る方が安全です。"
-          }
-        },
-        "note": "設定変更後は天井596G+αに短縮。0G〜100Gから狙える。"
-      }
-    },
-    "limit": 996,
-    "aliases": [
-      "カバネリ",
-      "かばねり",
-      "甲鉄城",
-      "海門決戦"
-    ]
-  },
-  {
     "slug": "revengers",
     "name": "L東京リベンジャーズ",
     "seo": {
@@ -3124,411 +4006,6 @@
       }
     },
     "limit": 1190
-  },
-  {
-    "slug": "umineko2",
-    "name": "Lパチスロうみねこのなく頃に2",
-    "seo": {
-      "title": "うみねこのなく頃に2 狙い目・天井・期待値まとめ"
-    },
-    "info": "A+完走型ART",
-    "strategy": "等価CZ間100G〜 / 完全攻略で設定1機械割103%",
-    "strategyByRate": {
-      "eq56": "5.6枚CZ間100G〜",
-      "rate55": "5.5枚CZ間110G〜",
-      "rate50": "5.0枚CZ間130G〜",
-      "rate45": "4.5枚CZ間150G〜"
-    },
-    "aliases": [
-      "うみねこ",
-      "ウミネコ"
-    ],
-    "checker": {
-      "unit": "G",
-      "defaultRate": "eq56",
-      "exchangeRates": [
-        {
-          "key": "eq56",
-          "label": "5.6枚"
-        },
-        {
-          "key": "rate55",
-          "label": "5.5枚"
-        },
-        {
-          "key": "rate50",
-          "label": "5.0枚"
-        },
-        {
-          "key": "rate45",
-          "label": "4.5枚"
-        }
-      ],
-      "modes": [
-        {
-          "key": "normal",
-          "label": "通常"
-        }
-      ],
-      "normal": {
-        "excellent": 180,
-        "good": 100,
-        "caution": 50,
-        "byRate": {
-          "eq56": {
-            "excellent": 180,
-            "good": 100,
-            "caution": 50,
-            "note": "5.6枚交換ならCZ間100Gから狙い目。200G周期でCZ確定。完全攻略なら設定1でも機械割103%。"
-          },
-          "rate55": {
-            "excellent": 180,
-            "good": 110,
-            "caution": 60,
-            "note": "5.5枚交換なら110Gから。"
-          },
-          "rate50": {
-            "excellent": 180,
-            "good": 130,
-            "caution": 80,
-            "note": "5.0枚交換なら130Gから。"
-          },
-          "rate45": {
-            "excellent": 180,
-            "good": 150,
-            "caution": 100,
-            "note": "4.5枚交換なら150Gから。"
-          }
-        },
-        "note": "CZ間200G周期で運命分岐モード確定。完全攻略で設定1でも機械割103%。"
-      }
-    },
-    "limit": 200
-  },
-  {
-    "slug": "monkeyv",
-    "name": "スマスロモンキーターンV",
-    "seo": {
-      "title": "スマスロモンキーターンV 狙い目"
-    },
-    "info": "スマスロAT",
-    "strategy": "G数400G〜 / 4周期目〜",
-    "strategyByRate": {
-      "eq56": "5.6枚G数350G〜 / 4周期目〜",
-      "rate55": "5.5枚G数400G〜 / 4周期目〜",
-      "rate50": "5.0枚G数450G〜 / 4周期目〜",
-      "rate45": "4.5枚G数500G〜 / 4周期目〜"
-    },
-    "checker": {
-      "unit": "G",
-      "defaultRate": "eq56",
-      "exchangeRates": [
-        {
-          "key": "eq56",
-          "label": "5.6枚"
-        },
-        {
-          "key": "rate55",
-          "label": "5.5枚"
-        },
-        {
-          "key": "rate50",
-          "label": "5.0枚"
-        },
-        {
-          "key": "rate45",
-          "label": "4.5枚"
-        }
-      ],
-      "modes": [
-        {
-          "key": "normal",
-          "label": "通常"
-        },
-        {
-          "key": "reset",
-          "label": "リセット"
-        },
-        {
-          "key": "cycle",
-          "label": "周期",
-          "hasCycle": true
-        }
-      ],
-      "normal": {
-        "excellent": 600,
-        "good": 400,
-        "caution": 300,
-        "byRate": {
-          "eq56": {
-            "excellent": 550,
-            "good": 350,
-            "caution": 250,
-            "note": "5.6枚交換ならG数350Gから狙い目、250Gから候補です。4周期目以降の価値も高いので、G数だけで切らず周期も並行して確認してください。"
-          },
-          "rate55": {
-            "excellent": 600,
-            "good": 400,
-            "caution": 300,
-            "note": "5.5枚交換はG数400G基準です。周期4周期目以降の価値と重なる台を優先すると使いやすいです。"
-          },
-          "rate50": {
-            "excellent": 650,
-            "good": 450,
-            "caution": 350,
-            "note": "5.0枚交換ではG数450Gからが本線です。周期が見えない台は少し安全側で見た方が収まりやすいです。"
-          },
-          "rate45": {
-            "excellent": 700,
-            "good": 500,
-            "caution": 400,
-            "note": "4.5枚交換はG数500G基準です。G数だけでなく4周期目以降かどうかを重ねて、深め優先で使う方が安全です。"
-          }
-        },
-        "note": "G数天井795G+α。400G〜でプラス域。周期天井（6周期目でAT確定）も並行して確認推奨。4周期目以降が本命ゾーン。"
-      },
-      "reset": {
-        "excellent": 100,
-        "good": 0,
-        "caution": 0,
-        "byRate": {
-          "eq56": {
-            "excellent": 100,
-            "good": 0,
-            "caution": 0,
-            "note": "5.6枚交換のリセット台は0Gから候補です。最大4周期目スタート前提なので、周期優遇が見える台だけを狙う方が安全です。"
-          },
-          "rate55": {
-            "excellent": 150,
-            "good": 50,
-            "caution": 0,
-            "note": "5.5枚交換は0Gから候補ですが、実戦では50G前後まで様子を見る方が使いやすいです。通常台とは別前提で扱ってください。"
-          },
-          "rate50": {
-            "excellent": 200,
-            "good": 100,
-            "caution": 30,
-            "note": "5.0枚交換では100Gからが本線です。浅いG数に引っ張られすぎず、周期優遇と合わせて判断してください。"
-          },
-          "rate45": {
-            "excellent": 250,
-            "good": 150,
-            "caution": 50,
-            "note": "4.5枚交換のリセット台は150G基準です。周期が見えない台は安全側に寄せて、通常台と混ぜない方が安定します。"
-          }
-        },
-        "note": "設定変更後は最大4周期目スタート。0G〜でプラス域の場合あり。周期状態を確認してから着席。"
-      },
-      "cycle": {
-        "cycle": [
-          {
-            "count": 1,
-            "excellent": 700,
-            "good": 600,
-            "caution": 500,
-            "note": "1周期目。G数ベースの基本狙いです。周期が浅いぶん、G数500G以上を目安に。",
-            "byRate": {
-              "eq56": {
-                "excellent": 650,
-                "good": 550,
-                "caution": 450,
-                "note": "5.6枚交換の1周期目は550G〜が基準です。"
-              },
-              "rate55": {
-                "excellent": 700,
-                "good": 600,
-                "caution": 500,
-                "note": "5.5枚交換の1周期目は600G基準です。"
-              },
-              "rate50": {
-                "excellent": 750,
-                "good": 650,
-                "caution": 550,
-                "note": "5.0枚交換の1周期目は650G〜を目安にしてください。"
-              },
-              "rate45": {
-                "excellent": 800,
-                "good": 700,
-                "caution": 600,
-                "note": "4.5枚交換の1周期目は700G〜からが実戦ラインです。"
-              }
-            }
-          },
-          {
-            "count": 2,
-            "excellent": 650,
-            "good": 550,
-            "caution": 450,
-            "note": "2周期目。1周期目より少し浅めに狙えます。G数450G以上を目安に。",
-            "byRate": {
-              "eq56": {
-                "excellent": 600,
-                "good": 500,
-                "caution": 400,
-                "note": "5.6枚交換の2周期目は500G〜が基準です。"
-              },
-              "rate55": {
-                "excellent": 650,
-                "good": 550,
-                "caution": 450,
-                "note": "5.5枚交換の2周期目は550G基準です。"
-              },
-              "rate50": {
-                "excellent": 700,
-                "good": 600,
-                "caution": 500,
-                "note": "5.0枚交換の2周期目は600G〜を目安にしてください。"
-              },
-              "rate45": {
-                "excellent": 750,
-                "good": 650,
-                "caution": 550,
-                "note": "4.5枚交換の2周期目は650G〜からが実戦ラインです。"
-              }
-            }
-          },
-          {
-            "count": 3,
-            "excellent": 550,
-            "good": 450,
-            "caution": 380,
-            "note": "3周期目。次の4周期目が本命なので、G数380G〜を目安に拾えます。",
-            "byRate": {
-              "eq56": {
-                "excellent": 500,
-                "good": 400,
-                "caution": 320,
-                "note": "5.6枚交換の3周期目は400G〜が基準です。"
-              },
-              "rate55": {
-                "excellent": 550,
-                "good": 450,
-                "caution": 380,
-                "note": "5.5枚交換の3周期目は450G基準です。"
-              },
-              "rate50": {
-                "excellent": 600,
-                "good": 500,
-                "caution": 420,
-                "note": "5.0枚交換の3周期目は500G〜を目安にしてください。"
-              },
-              "rate45": {
-                "excellent": 650,
-                "good": 550,
-                "caution": 460,
-                "note": "4.5枚交換の3周期目は550G〜からが実戦ラインです。"
-              }
-            }
-          },
-          {
-            "count": 4,
-            "excellent": 500,
-            "good": 400,
-            "caution": 300,
-            "note": "4周期目。本命ゾーン。400G〜で等価ベースのプラス域。G数と周期が重なる台を最優先。",
-            "byRate": {
-              "eq56": {
-                "excellent": 450,
-                "good": 350,
-                "caution": 250,
-                "note": "5.6枚交換の4周期目は350G〜から積極的に狙えます。"
-              },
-              "rate55": {
-                "excellent": 500,
-                "good": 400,
-                "caution": 300,
-                "note": "5.5枚交換の4周期目は400G基準です。周期とG数が重なる台を優先してください。"
-              },
-              "rate50": {
-                "excellent": 550,
-                "good": 450,
-                "caution": 350,
-                "note": "5.0枚交換の4周期目は450G〜を目安にしてください。"
-              },
-              "rate45": {
-                "excellent": 600,
-                "good": 500,
-                "caution": 400,
-                "note": "4.5枚交換の4周期目は500G〜からが実戦ラインです。"
-              }
-            }
-          },
-          {
-            "count": 5,
-            "excellent": 200,
-            "good": 100,
-            "caution": 0,
-            "note": "5周期目。確実な利益ゾーン。0G〜から着席検討OK。G数が浅くてもプラスで完結しやすい。",
-            "byRate": {
-              "eq56": {
-                "excellent": 150,
-                "good": 50,
-                "caution": 0,
-                "note": "5.6枚交換の5周期目は0Gから着席OKです。"
-              },
-              "rate55": {
-                "excellent": 200,
-                "good": 100,
-                "caution": 0,
-                "note": "5.5枚交換の5周期目は100G基準ですが、0Gから候補です。"
-              },
-              "rate50": {
-                "excellent": 250,
-                "good": 150,
-                "caution": 0,
-                "note": "5.0枚交換の5周期目は150G〜から本線です。0Gから候補でもあります。"
-              },
-              "rate45": {
-                "excellent": 300,
-                "good": 200,
-                "caution": 50,
-                "note": "4.5枚交換の5周期目は200G〜からが実戦ラインです。"
-              }
-            }
-          },
-          {
-            "count": 6,
-            "excellent": 0,
-            "good": 0,
-            "caution": 0,
-            "note": "6周期目。AT確定。G数不問で着席OK。即着席を推奨します。",
-            "byRate": {
-              "eq56": {
-                "excellent": 0,
-                "good": 0,
-                "caution": 0,
-                "note": "6周期目は交換率不問でAT確定。即着席OK。"
-              },
-              "rate55": {
-                "excellent": 0,
-                "good": 0,
-                "caution": 0,
-                "note": "6周期目は交換率不問でAT確定。即着席OK。"
-              },
-              "rate50": {
-                "excellent": 0,
-                "good": 0,
-                "caution": 0,
-                "note": "6周期目は交換率不問でAT確定。即着席OK。"
-              },
-              "rate45": {
-                "excellent": 0,
-                "good": 0,
-                "caution": 0,
-                "note": "6周期目は交換率不問でAT確定。即着席OK。"
-              }
-            }
-          }
-        ]
-      }
-    },
-    "limit": 800,
-    "aliases": [
-      "モンキーターン",
-      "モンキー",
-      "もんきー",
-      "モンキーV"
-    ]
   },
   {
     "slug": "neo_aim_juggler",
@@ -3779,100 +4256,6 @@
     "limit": 350
   },
   {
-    "slug": "sengoku_otome4",
-    "name": "L戦国乙女4 戦乱に閃く炯眼の軍師",
-    "seo": {
-      "title": "戦国乙女4 狙い目・天井・期待値まとめ"
-    },
-    "info": "スマスロAT",
-    "strategy": "等価400G〜 / スルー5回〜",
-    "strategyByRate": {
-      "eq56": "5.6枚420G〜",
-      "rate55": "5.5枚440G〜",
-      "rate50": "5.0枚470G〜",
-      "rate45": "4.5枚500G〜"
-    },
-    "aliases": [
-      "戦国乙女",
-      "乙女4",
-      "おとめ",
-      "せんごくおとめ"
-    ],
-    "checker": {
-      "unit": "G",
-      "defaultRate": "eq56",
-      "exchangeRates": [
-        {
-          "key": "eq56",
-          "label": "5.6枚"
-        },
-        {
-          "key": "rate55",
-          "label": "5.5枚"
-        },
-        {
-          "key": "rate50",
-          "label": "5.0枚"
-        },
-        {
-          "key": "rate45",
-          "label": "4.5枚"
-        }
-      ],
-      "modes": [
-        {
-          "key": "normal",
-          "label": "通常"
-        },
-        {
-          "key": "suru",
-          "label": "スルー天井",
-          "hasSuru": true
-        }
-      ],
-      "normal": {
-        "excellent": 700,
-        "good": 400,
-        "caution": 270,
-        "byRate": {
-          "eq56": {
-            "excellent": 700,
-            "good": 420,
-            "caution": 280,
-            "note": "5.6枚交換なら420Gから狙い目。天井799G+前兆。300Gゾーンが強い。"
-          },
-          "rate55": {
-            "excellent": 700,
-            "good": 440,
-            "caution": 300,
-            "note": "5.5枚交換なら440Gから。"
-          },
-          "rate50": {
-            "excellent": 720,
-            "good": 470,
-            "caution": 330,
-            "note": "5.0枚交換なら470Gから。"
-          },
-          "rate45": {
-            "excellent": 750,
-            "good": 500,
-            "caution": 360,
-            "note": "4.5枚交換なら500Gから。"
-          }
-        },
-        "note": "天井799G+前兆。300Gゾーンが複数モード天井重複で強い。AT終了後30G引き戻し確認でヤメ。"
-      },
-      "suru": {
-        "excellent": 6,
-        "good": 5,
-        "caution": 4,
-        "suruMax": 6,
-        "note": "ボーナス6スルー後の7回目でエピソードボーナス確定（AT濃厚）。5スルーから狙い目。"
-      }
-    },
-    "limit": 799
-  },
-  {
     "slug": "magireco",
     "name": "Lスマスロマギアレコード",
     "seo": {
@@ -3988,160 +4371,6 @@
       }
     },
     "limit": 633
-  },
-  {
-    "slug": "godeater",
-    "name": "スマスロ ゴッドイーター リザレクション",
-    "seo": {
-      "title": "スマスロ ゴッドイーター リザレクション 狙い目"
-    },
-    "info": "スマスロAT",
-    "strategy": "通常520G〜 / 駆け抜け後280G〜",
-    "strategyByRate": {
-      "eq56": "5.6枚550G〜 / 駆け抜け後150G〜",
-      "rate55": "5.5枚590G〜 / 駆け抜け後170G〜",
-      "rate50": "5.0枚650G〜 / 駆け抜け後200G〜",
-      "rate45": "4.5枚700G〜 / 駆け抜け後230G〜"
-    },
-    "checker": {
-      "unit": "G",
-      "defaultRate": "eq56",
-      "exchangeRates": [
-        {
-          "key": "eq56",
-          "label": "5.6枚"
-        },
-        {
-          "key": "rate55",
-          "label": "5.5枚"
-        },
-        {
-          "key": "rate50",
-          "label": "5.0枚"
-        },
-        {
-          "key": "rate45",
-          "label": "4.5枚"
-        }
-      ],
-      "modes": [
-        {
-          "key": "normal",
-          "label": "通常"
-        },
-        {
-          "key": "nukete",
-          "label": "駆け抜け後"
-        },
-        {
-          "key": "reset",
-          "label": "リセット"
-        }
-      ],
-      "normal": {
-        "excellent": 750,
-        "good": 590,
-        "caution": 450,
-        "byRate": {
-          "eq56": {
-            "excellent": 700,
-            "good": 550,
-            "caution": 400,
-            "note": "5.6枚交換なら通常550Gから狙い目、400Gから候補です。駆け抜け後の浅いラインと混ぜず、通常台として見る前提を先に固めてください。"
-          },
-          "rate55": {
-            "excellent": 750,
-            "good": 590,
-            "caution": 450,
-            "note": "5.5枚交換は通常590G基準です。駆け抜け後170G基準と入口差が大きいので、今の台がどちらかを先に分けるのが重要です。"
-          },
-          "rate50": {
-            "excellent": 800,
-            "good": 650,
-            "caution": 500,
-            "note": "5.0枚交換は通常650Gからが本線です。浅い通常台に広げず、液晶G数と履歴を見て深い台を優先した方が収まりやすいです。"
-          },
-          "rate45": {
-            "excellent": 850,
-            "good": 700,
-            "caution": 550,
-            "note": "4.5枚交換は通常700G基準です。駆け抜け後やリセットの浅い台とは切り分けて、深い通常台だけに絞る方が安全です。"
-          }
-        },
-        "note": "天井1000G+α。590G〜でプラス域。液晶右下のG数で確認。"
-      },
-      "nukete": {
-        "excellent": 300,
-        "good": 280,
-        "caution": 180,
-        "byRate": {
-          "eq56": {
-            "excellent": 260,
-            "good": 150,
-            "caution": 80,
-            "note": "5.6枚交換の駆け抜け後は150Gから候補です。AT駆け抜け後として見てよい台だけを拾うと精度が上がります。"
-          },
-          "rate55": {
-            "excellent": 300,
-            "good": 170,
-            "caution": 100,
-            "note": "5.5枚交換は駆け抜け後170G基準です。通常台と混ぜず、短縮天井前提の台として見る方が使いやすいです。"
-          },
-          "rate50": {
-            "excellent": 340,
-            "good": 200,
-            "caution": 120,
-            "note": "5.0枚交換では駆け抜け後200Gからが本線です。浅い台に広げすぎず、履歴で駆け抜け後が見える台を優先してください。"
-          },
-          "rate45": {
-            "excellent": 380,
-            "good": 230,
-            "caution": 150,
-            "note": "4.5枚交換の駆け抜け後は230G基準です。通常590G基準との差を意識して、前提が曖昧な台は見送る方が安全です。"
-          }
-        },
-        "note": "AT駆け抜け後は天井600G+αに短縮。280G〜でプラス域。"
-      },
-      "reset": {
-        "excellent": 300,
-        "good": 180,
-        "caution": 100,
-        "byRate": {
-          "eq56": {
-            "excellent": 260,
-            "good": 150,
-            "caution": 80,
-            "note": "5.6枚交換のリセット台は150Gから候補です。朝一の根拠が弱い台は180G近辺まで待つとズレにくいです。"
-          },
-          "rate55": {
-            "excellent": 300,
-            "good": 180,
-            "caution": 100,
-            "note": "5.5枚交換はリセット180G基準です。通常や駆け抜け後のラインとは別で管理してください。"
-          },
-          "rate50": {
-            "excellent": 340,
-            "good": 220,
-            "caution": 130,
-            "note": "5.0枚交換ではリセット220Gからが本線です。朝一の根拠が弱い日は通常や駆け抜け後基準に寄せる方が安全です。"
-          },
-          "rate45": {
-            "excellent": 380,
-            "good": 250,
-            "caution": 150,
-            "note": "4.5枚交換のリセット台は250G基準です。浅い朝一台に広げず、店の強い日や根拠のある台に絞ってください。"
-          }
-        },
-        "note": "設定変更後は天井600G+αに短縮。180G〜でプラス域。"
-      }
-    },
-    "limit": 1000,
-    "aliases": [
-      "ゴッドイーター",
-      "ゴドイタ",
-      "GE",
-      "ゴッイー"
-    ]
   },
   {
     "slug": "biohazard",
@@ -4831,35 +5060,6 @@
     "limit": 999
   },
   {
-    "slug": "my_juggler_v",
-    "name": "マイジャグラーV",
-    "seo": {
-      "title": "マイジャグラーV 設定判別"
-    },
-    "info": "Aタイプ",
-    "strategy": "設定狙い主体・天井なし",
-    "aliases": [
-      "マイジャグ",
-      "マイジャグ5"
-    ],
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "normal",
-          "label": "設定狙い"
-        }
-      ],
-      "normal": {
-        "excellent": 99999,
-        "good": 99999,
-        "caution": 99999,
-        "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
-      }
-    },
-    "limit": null
-  },
-  {
     "slug": "fujiko_bt",
     "name": "LB不二子BT",
     "seo": {
@@ -4890,131 +5090,6 @@
       }
     },
     "limit": null
-  },
-  {
-    "slug": "chibaryo2",
-    "name": "チバリヨ2",
-    "seo": {
-      "title": "チバリヨ2 狙い目"
-    },
-    "info": "スマスロAT",
-    "strategy": "通常550G〜 / リセット100G〜",
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "normal",
-          "label": "通常"
-        },
-        {
-          "key": "reset",
-          "label": "リセット"
-        }
-      ],
-      "normal": {
-        "excellent": 600,
-        "good": 550,
-        "caution": 450,
-        "note": "G数天井600G。550G〜が基本の狙い目ライン。",
-        "byRate": {
-          "eq56": {
-            "caution": 420,
-            "excellent": 550,
-            "target": 500,
-            "good": 500,
-            "note": "5.6枚交換なら通常500Gからが狙い目です。リセット50G基準とは混ぜず、通常台として深めを優先してください。"
-          },
-          "rate55": {
-            "caution": 450,
-            "excellent": 600,
-            "target": 550,
-            "good": 550,
-            "note": "5.5枚交換では通常550Gが基準です。朝一の浅い台とは切り分けて、通常側の深さで見る方が使いやすいです。"
-          },
-          "rate50": {
-            "caution": 520,
-            "excellent": 680,
-            "target": 620,
-            "good": 620,
-            "note": "5.0枚交換では通常620Gから見てください。通常とリセットの入口差が大きいので、前提を固定して使う方が安全です。"
-          },
-          "rate45": {
-            "caution": 600,
-            "excellent": 760,
-            "target": 700,
-            "good": 700,
-            "note": "4.5枚交換は通常700G前後まで待つ方が安全です。浅いリセット台に引っ張られず、通常側は深め優先で見てください。"
-          }
-        }
-      },
-      "reset": {
-        "excellent": 200,
-        "good": 100,
-        "caution": 50,
-        "note": "設定変更後は天井短縮。100G〜でプラス域。",
-        "byRate": {
-          "eq56": {
-            "caution": 0,
-            "excellent": 120,
-            "target": 50,
-            "good": 50,
-            "note": "5.6枚交換ならリセット50Gから候補です。通常500G基準とは別で、朝一台として見てよい根拠がある台を優先してください。"
-          },
-          "rate55": {
-            "caution": 50,
-            "excellent": 200,
-            "target": 100,
-            "good": 100,
-            "note": "5.5枚交換ではリセット100Gが基準です。通常550G基準とは混ぜず、朝一の浅い入口として整理するとぶれにくいです。"
-          },
-          "rate50": {
-            "caution": 80,
-            "excellent": 260,
-            "target": 150,
-            "good": 150,
-            "note": "5.0枚交換はリセット150G基準です。根拠が弱い日は通常側で見て、朝一前提が取れる台だけ浅めに触る方が安全です。"
-          },
-          "rate45": {
-            "caution": 120,
-            "excellent": 320,
-            "target": 200,
-            "good": 200,
-            "note": "4.5枚交換ではリセット200Gからを目安にしてください。通常700G基準との差を意識して、朝一台として別で見る方が使いやすいです。"
-          }
-        }
-      },
-      "defaultRate": "eq56",
-      "exchangeRates": [
-        {
-          "key": "eq56",
-          "label": "5.6枚"
-        },
-        {
-          "key": "rate55",
-          "label": "5.5枚"
-        },
-        {
-          "key": "rate50",
-          "label": "5.0枚"
-        },
-        {
-          "key": "rate45",
-          "label": "4.5枚"
-        }
-      ]
-    },
-    "limit": 999,
-    "strategyByRate": {
-      "eq56": "5.6枚通常500G〜 / リセット50G〜",
-      "rate55": "5.5枚通常550G〜 / リセット100G〜",
-      "rate50": "5.0枚通常620G〜 / リセット150G〜",
-      "rate45": "4.5枚通常700G〜 / リセット200G〜"
-    },
-    "aliases": [
-      "チバリヨ",
-      "ちばりよ",
-      "チバリヨ2"
-    ]
   },
   {
     "slug": "gogo_juggler3",
@@ -7315,50 +7390,6 @@
     "limit": 900
   },
   {
-    "slug": "tolove_darkness",
-    "name": "L ToLOVEるダークネス",
-    "seo": {
-      "title": "L ToLOVEるダークネス 狙い目・天井・期待値まとめ"
-    },
-    "info": "スマスロAT",
-    "strategy": "等価420G〜 / リセット100G〜",
-    "aliases": [
-      "とらぶるダークネス",
-      "ToLOVEる",
-      "とらぶる",
-      "ダークネス",
-      "トラブル",
-      "とらぶるだーくねす",
-      "とらぶるスロット"
-    ],
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "normal",
-          "label": "ST間（通常）"
-        },
-        {
-          "key": "reset",
-          "label": "リセット後"
-        }
-      ],
-      "normal": {
-        "excellent": 700,
-        "good": 420,
-        "caution": 280,
-        "note": "ST（楽園計画）間でカウント。天井999G+α。ST終了後280G〜から期待値プラス。420G〜が推奨狙い目。"
-      },
-      "reset": {
-        "excellent": 500,
-        "good": 200,
-        "caution": 100,
-        "note": "設定変更後は天井650G+αに短縮。リセット100G〜から期待値プラス（朝一台は積極的に狙う）。"
-      }
-    },
-    "limit": 999
-  },
-  {
     "slug": "mr_juggler",
     "name": "ミスタージャグラー",
     "seo": {
@@ -7930,37 +7961,6 @@
       },
       "limit": 450
     }
-  },
-  {
-    "slug": "discup_ur",
-    "name": "A-SLOT+ ディスクアップ ULTRAREMIX",
-    "seo": {
-      "title": "A-SLOT+ ディスクアップ ULTRAREMIX 狙い目"
-    },
-    "info": "スマスロA+RT",
-    "strategy": "設定狙い主体・天井なし",
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "normal",
-          "label": "設定狙い"
-        }
-      ],
-      "normal": {
-        "excellent": 99999,
-        "good": 99999,
-        "caution": 99999,
-        "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。高設定をつかめる環境（イベント・特定日）での使用を推奨。"
-      }
-    },
-    "limit": null,
-    "aliases": [
-      "ディスクアップ",
-      "ディスク",
-      "でぃすくあっぷ",
-      "ULTRAREMIX"
-    ]
   },
   {
     "slug": "rezero2",
