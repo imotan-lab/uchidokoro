@@ -8336,5 +8336,107 @@
       }
     },
     "limit": 999
+  },
+  {
+    "slug": "burning_express",
+    "name": "スマスロバーニングエクスプレス",
+    "seo": {
+      "title": "スマスロバーニングエクスプレス 狙い目"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価630G〜 / 5.6枚640G〜 / リセット後100G〜",
+    "aliases": [
+      "バーニングエクスプレス",
+      "バーニング",
+      "北電子AT"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット後"
+        }
+      ],
+      "normal": {
+        "excellent": 820,
+        "good": 630,
+        "caution": 500,
+        "limit": 999,
+        "note": "天井ボーナス間999G+α。等価630G〜、5.6枚640G〜が狙い目ライン。99.8%が999Gに振り分けられるため浅い天井はほぼなし。"
+      },
+      "reset": {
+        "excellent": 300,
+        "good": 180,
+        "caution": 100,
+        "limit": 666,
+        "note": "リセット後は最大666G+αに短縮。スロパチクエスト基準でリセット後100G〜から狙い目。"
+      }
+    }
+  },
+  {
+    "slug": "shake_bt",
+    "name": "SHAKE BONUS TRIGGER",
+    "seo": {
+      "title": "SHAKE BONUS TRIGGER（シェイクBT）スペックまとめ"
+    },
+    "info": "スマスロBT",
+    "strategy": "設定狙い専用（天井なし）",
+    "aliases": [
+      "シェイク",
+      "シェイクBT",
+      "SHAKE",
+      "シェイクボーナストリガー"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "設定狙い"
+        }
+      ],
+      "normal": {
+        "excellent": 99999,
+        "good": 99999,
+        "caution": 99999,
+        "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い専用の機種です。ボーナス確率・トロフィー・REG中ボイスで設定推測。"
+      }
+    }
+  },
+  {
+    "slug": "kurea_bt",
+    "name": "LBクレアの秘宝伝 ボーナストリガーver.",
+    "seo": {
+      "title": "LBクレアの秘宝伝 ボーナストリガーver. スペックまとめ"
+    },
+    "info": "スマスロBT",
+    "strategy": "設定狙い専用（天井なし）",
+    "aliases": [
+      "クレア秘宝伝BT",
+      "クレアBT",
+      "クレアの秘宝伝BT",
+      "クレア",
+      "秘宝伝BT"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "設定狙い"
+        }
+      ],
+      "normal": {
+        "excellent": 99999,
+        "good": 99999,
+        "caution": 99999,
+        "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い専用の機種です。BB終了スタンプ・RB中カード色・トロフィーで設定推測。"
+      }
+    }
   }
 ]
