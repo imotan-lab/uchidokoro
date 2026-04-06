@@ -143,4 +143,40 @@
   <url><loc>https://uchidokoro.com/machines/shake_bt/</loc></url>
   <url><loc>https://uchidokoro.com/machine.html?slug=kurea_bt</loc></url>
   <url><loc>https://uchidokoro.com/machines/kurea_bt/</loc></url>
+
+  <url>
+    <loc>https://uchidokoro.com/machine.html?slug=okidoki_duo_encore</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://uchidokoro.com/machines/okidoki_duo_encore/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://uchidokoro.com/setting.html?slug=okidoki_duo_encore</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://uchidokoro.com/machine.html?slug=mhrise</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://uchidokoro.com/machines/mhrise/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://uchidokoro.com/machine.html?slug=zenigata5</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://uchidokoro.com/machines/zenigata5/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
 </urlset>
