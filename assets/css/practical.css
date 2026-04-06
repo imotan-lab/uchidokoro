@@ -151,10 +151,11 @@ button, input, select { font: inherit; }
 .footer-links {
   display: flex;
   justify-content: center;
-  gap: 24px;
+  flex-wrap: wrap;
+  gap: 12px 24px;
   margin-bottom: 10px;
 }
-.footer-links a { color: var(--muted); font-size: 13px; }
+.footer-links a { color: var(--muted); font-size: 13px; white-space: nowrap; }
 .footer-links a:hover { color: var(--soft); }
 .footer-copy { color: var(--muted2); font-size: 12px; }
 .eyebrow-link { color: var(--muted); text-decoration: none; }
