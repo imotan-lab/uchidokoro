@@ -2050,6 +2050,48 @@
     "limit": 799
   },
   {
+    "slug": "gineiden_dnt",
+    "name": "スマスロ 銀河英雄伝説 Die Neue These",
+    "seo": {
+      "title": "スマスロ 銀河英雄伝説 Die Neue These 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT・6段階",
+    "strategy": "等価650G〜 / 56枚660G〜 / 現金720G〜",
+    "aliases": [
+      "銀河英雄伝説",
+      "ぎんえいでんせつ",
+      "銀英伝",
+      "ぎんえいでん",
+      "DieNeueThese"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "ST間（通常）"
+        },
+        {
+          "key": "reset",
+          "label": "リセット後"
+        }
+      ],
+      "normal": {
+        "excellent": 800,
+        "good": 650,
+        "caution": 500,
+        "note": "ST間1000G+αで天井。等価650G〜が狙い目。"
+      },
+      "reset": {
+        "excellent": 650,
+        "good": 400,
+        "caution": 300,
+        "note": "リセット後はST間800G+αで天井。400G〜が狙い目。"
+      },
+      "limit": 1000
+    }
+  },
+  {
     "slug": "monkeyv",
     "name": "スマスロモンキーターンV",
     "seo": {
