@@ -198,6 +198,152 @@
     "limit": 200
   },
   {
+    "slug": "enen2",
+    "name": "Lパチスロ炎炎ノ消防隊2",
+    "seo": {
+      "title": "炎炎ノ消防隊2 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロST",
+    "strategy": "等価630G〜 / 5.6枚640G〜 / 現金690G〜",
+    "strategyByRate": {
+      "eq56": "5.6枚630G〜",
+      "rate55": "5.5枚640G〜",
+      "rate50": "5.0枚670G〜",
+      "rate45": "4.5枚690G〜"
+    },
+    "aliases": [
+      "炎炎",
+      "消防隊",
+      "enen"
+    ],
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 800,
+        "good": 630,
+        "caution": 500,
+        "byRate": {
+          "eq56": {
+            "excellent": 800,
+            "good": 630,
+            "caution": 500,
+            "note": "5.6枚交換なら630Gから狙い目。通常A天井850G+α。"
+          },
+          "rate55": {
+            "excellent": 800,
+            "good": 640,
+            "caution": 510,
+            "note": "5.5枚交換なら640Gから。"
+          },
+          "rate50": {
+            "excellent": 800,
+            "good": 670,
+            "caution": 540,
+            "note": "5.0枚交換なら670Gから。"
+          },
+          "rate45": {
+            "excellent": 800,
+            "good": 690,
+            "caution": 560,
+            "note": "4.5枚交換なら690Gから。"
+          }
+        },
+        "note": "通常A天井850G+α。650G超えは通常A濃厚で天井狙い向き。"
+      },
+      "reset": {
+        "excellent": 250,
+        "good": 88,
+        "caution": 45,
+        "byRate": {
+          "eq56": {
+            "excellent": 250,
+            "good": 88,
+            "caution": 45,
+            "note": "リセット時は天井650G+αに短縮。45G〜88Gと155G〜250Gにゾーン。"
+          },
+          "rate55": {
+            "excellent": 250,
+            "good": 88,
+            "caution": 45,
+            "note": "リセット時は天井650G+αに短縮。"
+          },
+          "rate50": {
+            "excellent": 250,
+            "good": 100,
+            "caution": 50,
+            "note": "リセット時は天井650G+αに短縮。"
+          },
+          "rate45": {
+            "excellent": 250,
+            "good": 100,
+            "caution": 50,
+            "note": "リセット時は天井650G+αに短縮。"
+          }
+        },
+        "note": "リセット時は天井650G+α。45G〜88Gと155G〜250Gにゾーン。"
+      }
+    },
+    "limit": 850
+  },
+  {
+    "slug": "my_juggler_v",
+    "name": "マイジャグラーV",
+    "seo": {
+      "title": "マイジャグラーV 設定判別"
+    },
+    "info": "Aタイプ",
+    "strategy": "設定狙い主体・天井なし",
+    "aliases": [
+      "マイジャグ",
+      "マイジャグ5"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "設定狙い"
+        }
+      ],
+      "normal": {
+        "excellent": 99999,
+        "good": 99999,
+        "caution": 99999,
+        "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
+      }
+    },
+    "limit": null
+  },
+  {
     "slug": "koukaku",
     "name": "スマスロ 攻殻機動隊",
     "seo": {
@@ -351,123 +497,6 @@
       "コウカク",
       "攻殻機動隊SAC"
     ]
-  },
-  {
-    "slug": "enen2",
-    "name": "Lパチスロ炎炎ノ消防隊2",
-    "seo": {
-      "title": "炎炎ノ消防隊2 狙い目・天井・期待値まとめ"
-    },
-    "info": "スマスロST",
-    "strategy": "等価630G〜 / 5.6枚640G〜 / 現金690G〜",
-    "strategyByRate": {
-      "eq56": "5.6枚630G〜",
-      "rate55": "5.5枚640G〜",
-      "rate50": "5.0枚670G〜",
-      "rate45": "4.5枚690G〜"
-    },
-    "aliases": [
-      "炎炎",
-      "消防隊",
-      "enen"
-    ],
-    "checker": {
-      "unit": "G",
-      "defaultRate": "eq56",
-      "exchangeRates": [
-        {
-          "key": "eq56",
-          "label": "5.6枚"
-        },
-        {
-          "key": "rate55",
-          "label": "5.5枚"
-        },
-        {
-          "key": "rate50",
-          "label": "5.0枚"
-        },
-        {
-          "key": "rate45",
-          "label": "4.5枚"
-        }
-      ],
-      "modes": [
-        {
-          "key": "normal",
-          "label": "通常"
-        },
-        {
-          "key": "reset",
-          "label": "リセット"
-        }
-      ],
-      "normal": {
-        "excellent": 800,
-        "good": 630,
-        "caution": 500,
-        "byRate": {
-          "eq56": {
-            "excellent": 800,
-            "good": 630,
-            "caution": 500,
-            "note": "5.6枚交換なら630Gから狙い目。通常A天井850G+α。"
-          },
-          "rate55": {
-            "excellent": 800,
-            "good": 640,
-            "caution": 510,
-            "note": "5.5枚交換なら640Gから。"
-          },
-          "rate50": {
-            "excellent": 800,
-            "good": 670,
-            "caution": 540,
-            "note": "5.0枚交換なら670Gから。"
-          },
-          "rate45": {
-            "excellent": 800,
-            "good": 690,
-            "caution": 560,
-            "note": "4.5枚交換なら690Gから。"
-          }
-        },
-        "note": "通常A天井850G+α。650G超えは通常A濃厚で天井狙い向き。"
-      },
-      "reset": {
-        "excellent": 250,
-        "good": 88,
-        "caution": 45,
-        "byRate": {
-          "eq56": {
-            "excellent": 250,
-            "good": 88,
-            "caution": 45,
-            "note": "リセット時は天井650G+αに短縮。45G〜88Gと155G〜250Gにゾーン。"
-          },
-          "rate55": {
-            "excellent": 250,
-            "good": 88,
-            "caution": 45,
-            "note": "リセット時は天井650G+αに短縮。"
-          },
-          "rate50": {
-            "excellent": 250,
-            "good": 100,
-            "caution": 50,
-            "note": "リセット時は天井650G+αに短縮。"
-          },
-          "rate45": {
-            "excellent": 250,
-            "good": 100,
-            "caution": 50,
-            "note": "リセット時は天井650G+αに短縮。"
-          }
-        },
-        "note": "リセット時は天井650G+α。45G〜88Gと155G〜250Gにゾーン。"
-      }
-    },
-    "limit": 850
   },
   {
     "slug": "tokyo_ghoul",
@@ -715,6 +744,1310 @@
       "rate50": "5.0枚CZ間420G〜 / AT間470G〜 / スルー回数込みで判断",
       "rate45": "4.5枚CZ間500G〜 / AT間550G〜 / スルー回数込みで判断"
     }
+  },
+  {
+    "slug": "new_king_hanahana_v",
+    "name": "SBニューキングハナハナV-30",
+    "seo": {
+      "title": "ニューキングハナハナV 狙い目・設定差まとめ"
+    },
+    "info": "A+BT（設定1/2/3/4/V）",
+    "strategy": "設定狙い主体・天井なし",
+    "aliases": [
+      "ニューキングハナハナ",
+      "キンハナ",
+      "キンハナV",
+      "ハナハナV",
+      "きんはな",
+      "にゅーきんぐ"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "設定狙い"
+        }
+      ],
+      "normal": {
+        "excellent": 99999,
+        "good": 99999,
+        "caution": 99999,
+        "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。ベル確率・BIG中スイカ・サイドランプで設定推測。"
+      }
+    },
+    "limit": null
+  },
+  {
+    "slug": "thunder_v",
+    "name": "スマスロ サンダーV",
+    "seo": {
+      "title": "サンダーV 設定判別・狙い目まとめ"
+    },
+    "info": "スマスロノーマル",
+    "strategy": "設定狙い主体・天井なし",
+    "aliases": [
+      "サンダー",
+      "サンダーV"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "設定狙い"
+        }
+      ],
+      "normal": {
+        "excellent": 99999,
+        "good": 99999,
+        "caution": 99999,
+        "note": "ノーマルタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBB・RB・ベルをカウントしてください。"
+      }
+    },
+    "limit": null
+  },
+  {
+    "slug": "hokuto_tensei2",
+    "name": "スマスロ 北斗の拳 転生の章2",
+    "seo": {
+      "title": "スマスロ 北斗の拳 転生の章2 狙い目"
+    },
+    "info": "スマスロAT",
+    "strategy": "あべし間780〜 / リセット短縮あり",
+    "strategyByRate": {
+      "eq56": "5.6枚850G〜",
+      "rate55": "5.5枚900G〜",
+      "rate50": "5.0枚950G〜",
+      "rate45": "4.5枚1000G〜"
+    },
+    "checker": {
+      "unit": "あべし",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "modes": [
+        {
+          "key": "normal",
+          "label": "あべし間"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 1100,
+        "good": 780,
+        "caution": 700,
+        "byRate": {
+          "eq56": {
+            "excellent": 1050,
+            "good": 850,
+            "caution": 650,
+            "note": "5.6枚交換ならあべし間850Gから狙い目、650Gから候補です。900G未満は液晶右下のG数確認を丁寧にして浅い台に広げすぎない方が安全です。"
+          },
+          "rate55": {
+            "excellent": 1100,
+            "good": 900,
+            "caution": 700,
+            "note": "5.5枚交換はあべし間900G基準です。700G台は候補止まりとして、深い通常台を優先した方が使いやすいです。"
+          },
+          "rate50": {
+            "excellent": 1150,
+            "good": 950,
+            "caution": 750,
+            "note": "5.0枚交換はあべし間950Gからが本線です。浅い台に広げず、900G近辺でも根拠が弱い台は見送る方が収まりやすいです。"
+          },
+          "rate45": {
+            "excellent": 1200,
+            "good": 1000,
+            "caution": 800,
+            "note": "4.5枚交換はあべし間1000Gからを基本線にしてください。深い通常台だけに絞って使う方が期待値を取りやすいです。"
+          }
+        },
+        "note": "あべし間天井1536で恩恵AT直撃。780あべし〜が狙い目ライン。"
+      },
+      "reset": {
+        "excellent": 400,
+        "good": 250,
+        "caution": 150,
+        "byRate": {
+          "eq56": {
+            "excellent": 350,
+            "good": 200,
+            "caution": 120,
+            "note": "5.6枚交換のリセット台は200Gから候補です。根拠が弱い朝一台は250G近辺まで待つとブレにくいです。"
+          },
+          "rate55": {
+            "excellent": 400,
+            "good": 250,
+            "caution": 150,
+            "note": "5.5枚交換はリセット250G基準です。通常と混ぜず、朝一短縮台として別で見る方が使いやすいです。"
+          },
+          "rate50": {
+            "excellent": 450,
+            "good": 300,
+            "caution": 180,
+            "note": "5.0枚交換ではリセット300Gからが本線です。朝一の挙動が弱い日は通常寄りに見て深め優先にしてください。"
+          },
+          "rate45": {
+            "excellent": 500,
+            "good": 350,
+            "caution": 220,
+            "note": "4.5枚交換のリセット台は350G基準です。浅い台に広げず、リセット根拠のある台だけに絞る方が安全です。"
+          }
+        },
+        "note": "設定変更後は天井短縮。250G〜でプラス域。"
+      }
+    },
+    "limit": 1536,
+    "aliases": [
+      "北斗転生",
+      "転生の章",
+      "てんせい",
+      "北斗転生2",
+      "転生2"
+    ]
+  },
+  {
+    "slug": "discup_ur",
+    "name": "A-SLOT+ ディスクアップ ULTRAREMIX",
+    "seo": {
+      "title": "A-SLOT+ ディスクアップ ULTRAREMIX 狙い目"
+    },
+    "info": "スマスロA+RT",
+    "strategy": "設定狙い主体・天井なし",
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "設定狙い"
+        }
+      ],
+      "normal": {
+        "excellent": 99999,
+        "good": 99999,
+        "caution": 99999,
+        "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。高設定をつかめる環境（イベント・特定日）での使用を推奨。"
+      }
+    },
+    "limit": null,
+    "aliases": [
+      "ディスクアップ",
+      "ディスク",
+      "でぃすくあっぷ",
+      "ULTRAREMIX"
+    ]
+  },
+  {
+    "slug": "magireco",
+    "name": "Lスマスロマギアレコード",
+    "seo": {
+      "title": "マギアレコード 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価360G(540pt)〜 / リセット150G〜",
+    "strategyByRate": {
+      "eq56": "5.6枚360G〜",
+      "rate55": "5.5枚370G〜",
+      "rate50": "5.0枚400G〜",
+      "rate45": "4.5枚450G〜"
+    },
+    "aliases": [
+      "マギレコ",
+      "マギアレコード",
+      "まどマギ外伝"
+    ],
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 580,
+        "good": 360,
+        "caution": 280,
+        "byRate": {
+          "eq56": {
+            "excellent": 580,
+            "good": 360,
+            "caution": 280,
+            "note": "5.6枚交換なら360G(540pt)から狙い目。天井950pt+α(約633G)。"
+          },
+          "rate55": {
+            "excellent": 580,
+            "good": 370,
+            "caution": 290,
+            "note": "5.5枚交換なら370Gから。"
+          },
+          "rate50": {
+            "excellent": 600,
+            "good": 400,
+            "caution": 320,
+            "note": "5.0枚交換なら400Gから。"
+          },
+          "rate45": {
+            "excellent": 600,
+            "good": 450,
+            "caution": 360,
+            "note": "4.5枚交換なら450Gから。"
+          }
+        },
+        "note": "pt管理天井950pt+α（約633G相当）。"
+      },
+      "reset": {
+        "excellent": 400,
+        "good": 150,
+        "caution": 80,
+        "byRate": {
+          "eq56": {
+            "excellent": 400,
+            "good": 150,
+            "caution": 80,
+            "note": "リセット時は天井600〜699pt+αに短縮。150Gから狙い目。"
+          },
+          "rate55": {
+            "excellent": 400,
+            "good": 200,
+            "caution": 100,
+            "note": "リセット時は600pt台に短縮。"
+          },
+          "rate50": {
+            "excellent": 400,
+            "good": 230,
+            "caution": 120,
+            "note": "リセット時は600pt台に短縮。"
+          },
+          "rate45": {
+            "excellent": 400,
+            "good": 260,
+            "caution": 150,
+            "note": "リセット時は600pt台に短縮。"
+          }
+        },
+        "note": "リセット時は天井600〜699pt+αに短縮。"
+      }
+    },
+    "limit": 633
+  },
+  {
+    "slug": "bakemonogatari",
+    "name": "Lスマスロ化物語KH",
+    "seo": {
+      "title": "化物語 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価640G〜 / リセット250G〜",
+    "strategyByRate": {
+      "eq56": "5.6枚640G〜",
+      "rate55": "5.5枚650G〜",
+      "rate50": "5.0枚680G〜",
+      "rate45": "4.5枚700G〜"
+    },
+    "aliases": [
+      "化物語",
+      "バケモノガタリ",
+      "物語"
+    ],
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 900,
+        "good": 640,
+        "caution": 500,
+        "byRate": {
+          "eq56": {
+            "excellent": 900,
+            "good": 640,
+            "caution": 500,
+            "note": "5.6枚交換なら640Gから狙い目。天井1000G+倍倍チャンス濃厚。"
+          },
+          "rate55": {
+            "excellent": 900,
+            "good": 650,
+            "caution": 510,
+            "note": "5.5枚交換なら650Gから。"
+          },
+          "rate50": {
+            "excellent": 900,
+            "good": 680,
+            "caution": 540,
+            "note": "5.0枚交換なら680Gから。"
+          },
+          "rate45": {
+            "excellent": 900,
+            "good": 700,
+            "caution": 560,
+            "note": "4.5枚交換なら700Gから。"
+          }
+        },
+        "note": "G数天井1000G。AT倖時間+倍倍チャンス濃厚。"
+      },
+      "reset": {
+        "excellent": 500,
+        "good": 250,
+        "caution": 150,
+        "byRate": {
+          "eq56": {
+            "excellent": 500,
+            "good": 250,
+            "caution": 150,
+            "note": "リセット時は天井600G+αに短縮。250Gから狙い目。"
+          },
+          "rate55": {
+            "excellent": 500,
+            "good": 350,
+            "caution": 200,
+            "note": "リセット時は600G+α。"
+          },
+          "rate50": {
+            "excellent": 500,
+            "good": 380,
+            "caution": 230,
+            "note": "リセット時は600G+α。"
+          },
+          "rate45": {
+            "excellent": 500,
+            "good": 400,
+            "caution": 250,
+            "note": "リセット時は600G+α。"
+          }
+        },
+        "note": "リセット時は天井600G+αに短縮。"
+      }
+    },
+    "limit": 1000
+  },
+  {
+    "slug": "revengers",
+    "name": "L東京リベンジャーズ",
+    "seo": {
+      "title": "東京リベンジャーズ 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価450G〜 / スルー3回〜",
+    "strategyByRate": {
+      "eq56": "5.6枚450G〜",
+      "rate55": "5.5枚460G〜",
+      "rate50": "5.0枚500G〜",
+      "rate45": "4.5枚540G〜"
+    },
+    "aliases": [
+      "リベンジャーズ",
+      "トーリベ",
+      "東リベ"
+    ],
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        },
+        {
+          "key": "through",
+          "label": "スルー"
+        }
+      ],
+      "normal": {
+        "excellent": 1000,
+        "good": 450,
+        "caution": 350,
+        "byRate": {
+          "eq56": {
+            "excellent": 1000,
+            "good": 450,
+            "caution": 350,
+            "note": "5.6枚交換ならAT間450Gから狙い目。天井1190G+α。"
+          },
+          "rate55": {
+            "excellent": 1000,
+            "good": 460,
+            "caution": 360,
+            "note": "5.5枚交換なら460Gから。"
+          },
+          "rate50": {
+            "excellent": 1000,
+            "good": 500,
+            "caution": 400,
+            "note": "5.0枚交換なら500Gから。"
+          },
+          "rate45": {
+            "excellent": 1000,
+            "good": 540,
+            "caution": 430,
+            "note": "4.5枚交換なら540Gから。"
+          }
+        },
+        "note": "AT間天井1190G+α。"
+      },
+      "reset": {
+        "excellent": 500,
+        "good": 240,
+        "caution": 150,
+        "byRate": {
+          "eq56": {
+            "excellent": 500,
+            "good": 240,
+            "caution": 150,
+            "note": "リセット時はAT間天井900G+αに短縮。240Gから狙い目。"
+          },
+          "rate55": {
+            "excellent": 500,
+            "good": 250,
+            "caution": 160,
+            "note": "リセット時は900G+α。"
+          },
+          "rate50": {
+            "excellent": 600,
+            "good": 300,
+            "caution": 200,
+            "note": "リセット時は900G+α。"
+          },
+          "rate45": {
+            "excellent": 600,
+            "good": 350,
+            "caution": 250,
+            "note": "リセット時は900G+α。"
+          }
+        },
+        "note": "リセット時はAT間天井900G+αに短縮。"
+      },
+      "through": {
+        "excellent": 4,
+        "good": 3,
+        "caution": 2,
+        "byRate": {
+          "eq56": {
+            "excellent": 4,
+            "good": 3,
+            "caution": 2,
+            "note": "東卍チャンス4スルー（5回目）でAT当選。3スルーから狙い目。"
+          },
+          "rate55": {
+            "excellent": 4,
+            "good": 3,
+            "caution": 2,
+            "note": "3スルーから狙い目。"
+          },
+          "rate50": {
+            "excellent": 4,
+            "good": 3,
+            "caution": 2,
+            "note": "3スルーから狙い目。"
+          },
+          "rate45": {
+            "excellent": 4,
+            "good": 3,
+            "caution": 2,
+            "note": "3スルーから狙い目。"
+          }
+        },
+        "note": "東卍チャンス4スルー（5回目）でAT当選確定。"
+      }
+    },
+    "limit": 1190
+  },
+  {
+    "slug": "yorumungando",
+    "name": "スマスロヨルムンガンド",
+    "seo": {
+      "title": "スマスロヨルムンガンド 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価650G~ / 5.6枚660G~ / 現金720G~（AT間999G+α）",
+    "aliases": [
+      "ヨルムンガンド",
+      "よるむんがんど",
+      "ヨルムン",
+      "jormungand"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 999,
+        "good": 700,
+        "caution": 500,
+        "note": "天井AT間999G+α。等価650G~・5.6枚660G~・現金720G~から狙い目。"
+      },
+      "reset": {
+        "excellent": 450,
+        "good": 300,
+        "caution": 150,
+        "note": "設定変更後は天井450G+αに短縮。リセット台なら浅いラインから候補です。"
+      }
+    },
+    "limit": 999
+  },
+  {
+    "slug": "godeater",
+    "name": "スマスロ ゴッドイーター リザレクション",
+    "seo": {
+      "title": "スマスロ ゴッドイーター リザレクション 狙い目"
+    },
+    "info": "スマスロAT",
+    "strategy": "通常520G〜 / 駆け抜け後280G〜",
+    "strategyByRate": {
+      "eq56": "5.6枚550G〜 / 駆け抜け後150G〜",
+      "rate55": "5.5枚590G〜 / 駆け抜け後170G〜",
+      "rate50": "5.0枚650G〜 / 駆け抜け後200G〜",
+      "rate45": "4.5枚700G〜 / 駆け抜け後230G〜"
+    },
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "nukete",
+          "label": "駆け抜け後"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 750,
+        "good": 590,
+        "caution": 450,
+        "byRate": {
+          "eq56": {
+            "excellent": 700,
+            "good": 550,
+            "caution": 400,
+            "note": "5.6枚交換なら通常550Gから狙い目、400Gから候補です。駆け抜け後の浅いラインと混ぜず、通常台として見る前提を先に固めてください。"
+          },
+          "rate55": {
+            "excellent": 750,
+            "good": 590,
+            "caution": 450,
+            "note": "5.5枚交換は通常590G基準です。駆け抜け後170G基準と入口差が大きいので、今の台がどちらかを先に分けるのが重要です。"
+          },
+          "rate50": {
+            "excellent": 800,
+            "good": 650,
+            "caution": 500,
+            "note": "5.0枚交換は通常650Gからが本線です。浅い通常台に広げず、液晶G数と履歴を見て深い台を優先した方が収まりやすいです。"
+          },
+          "rate45": {
+            "excellent": 850,
+            "good": 700,
+            "caution": 550,
+            "note": "4.5枚交換は通常700G基準です。駆け抜け後やリセットの浅い台とは切り分けて、深い通常台だけに絞る方が安全です。"
+          }
+        },
+        "note": "天井1000G+α。590G〜でプラス域。液晶右下のG数で確認。"
+      },
+      "nukete": {
+        "excellent": 300,
+        "good": 280,
+        "caution": 180,
+        "byRate": {
+          "eq56": {
+            "excellent": 260,
+            "good": 150,
+            "caution": 80,
+            "note": "5.6枚交換の駆け抜け後は150Gから候補です。AT駆け抜け後として見てよい台だけを拾うと精度が上がります。"
+          },
+          "rate55": {
+            "excellent": 300,
+            "good": 170,
+            "caution": 100,
+            "note": "5.5枚交換は駆け抜け後170G基準です。通常台と混ぜず、短縮天井前提の台として見る方が使いやすいです。"
+          },
+          "rate50": {
+            "excellent": 340,
+            "good": 200,
+            "caution": 120,
+            "note": "5.0枚交換では駆け抜け後200Gからが本線です。浅い台に広げすぎず、履歴で駆け抜け後が見える台を優先してください。"
+          },
+          "rate45": {
+            "excellent": 380,
+            "good": 230,
+            "caution": 150,
+            "note": "4.5枚交換の駆け抜け後は230G基準です。通常590G基準との差を意識して、前提が曖昧な台は見送る方が安全です。"
+          }
+        },
+        "note": "AT駆け抜け後は天井600G+αに短縮。280G〜でプラス域。"
+      },
+      "reset": {
+        "excellent": 300,
+        "good": 180,
+        "caution": 100,
+        "byRate": {
+          "eq56": {
+            "excellent": 260,
+            "good": 150,
+            "caution": 80,
+            "note": "5.6枚交換のリセット台は150Gから候補です。朝一の根拠が弱い台は180G近辺まで待つとズレにくいです。"
+          },
+          "rate55": {
+            "excellent": 300,
+            "good": 180,
+            "caution": 100,
+            "note": "5.5枚交換はリセット180G基準です。通常や駆け抜け後のラインとは別で管理してください。"
+          },
+          "rate50": {
+            "excellent": 340,
+            "good": 220,
+            "caution": 130,
+            "note": "5.0枚交換ではリセット220Gからが本線です。朝一の根拠が弱い日は通常や駆け抜け後基準に寄せる方が安全です。"
+          },
+          "rate45": {
+            "excellent": 380,
+            "good": 250,
+            "caution": 150,
+            "note": "4.5枚交換のリセット台は250G基準です。浅い朝一台に広げず、店の強い日や根拠のある台に絞ってください。"
+          }
+        },
+        "note": "設定変更後は天井600G+αに短縮。180G〜でプラス域。"
+      }
+    },
+    "limit": 1000,
+    "aliases": [
+      "ゴッドイーター",
+      "ゴドイタ",
+      "GE",
+      "ゴッイー"
+    ]
+  },
+  {
+    "slug": "onimusha3",
+    "name": "L新鬼武者3",
+    "seo": {
+      "title": "新鬼武者3 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価550G〜 / 5周期目〜",
+    "strategyByRate": {
+      "eq56": "5.6枚550G〜",
+      "rate55": "5.5枚560G〜",
+      "rate50": "5.0枚600G〜",
+      "rate45": "4.5枚630G〜"
+    },
+    "aliases": [
+      "鬼武者",
+      "オニムシャ",
+      "新鬼武者"
+    ],
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        },
+        {
+          "key": "cycle",
+          "label": "周期",
+          "hasCycle": true
+        }
+      ],
+      "normal": {
+        "excellent": 900,
+        "good": 550,
+        "caution": 400,
+        "byRate": {
+          "eq56": {
+            "excellent": 900,
+            "good": 550,
+            "caution": 400,
+            "note": "5.6枚交換なら550Gから狙い目。G数天井1000G+α。"
+          },
+          "rate55": {
+            "excellent": 900,
+            "good": 560,
+            "caution": 410,
+            "note": "5.5枚交換なら560Gから。"
+          },
+          "rate50": {
+            "excellent": 900,
+            "good": 600,
+            "caution": 450,
+            "note": "5.0枚交換なら600Gから。"
+          },
+          "rate45": {
+            "excellent": 900,
+            "good": 630,
+            "caution": 480,
+            "note": "4.5枚交換なら630Gから。"
+          }
+        },
+        "note": "G数天井1000G+α。周期天井は最大6周期。"
+      },
+      "reset": {
+        "excellent": 500,
+        "good": 350,
+        "caution": 200,
+        "byRate": {
+          "eq56": {
+            "excellent": 500,
+            "good": 350,
+            "caution": 200,
+            "note": "リセット時は周期天井が最大4周期に短縮。"
+          },
+          "rate55": {
+            "excellent": 500,
+            "good": 360,
+            "caution": 210,
+            "note": "リセット時は最大4周期に短縮。"
+          },
+          "rate50": {
+            "excellent": 500,
+            "good": 400,
+            "caution": 250,
+            "note": "リセット時は最大4周期に短縮。"
+          },
+          "rate45": {
+            "excellent": 500,
+            "good": 420,
+            "caution": 280,
+            "note": "リセット時は最大4周期に短縮。"
+          }
+        },
+        "note": "リセット時は周期天井が最大4周期に短縮。"
+      },
+      "cycle": {
+        "excellent": 6,
+        "good": 5,
+        "caution": 4,
+        "byRate": {
+          "eq56": {
+            "excellent": 6,
+            "good": 5,
+            "caution": 4,
+            "note": "周期天井は最大6周期。5周期目から狙い目。"
+          },
+          "rate55": {
+            "excellent": 6,
+            "good": 5,
+            "caution": 4,
+            "note": "5周期目から狙い目。"
+          },
+          "rate50": {
+            "excellent": 6,
+            "good": 5,
+            "caution": 4,
+            "note": "5周期目から狙い目。"
+          },
+          "rate45": {
+            "excellent": 6,
+            "good": 5,
+            "caution": 4,
+            "note": "5周期目から狙い目。"
+          }
+        },
+        "note": "周期天井は最大6周期。上位AT後は1周期天国濃厚。"
+      }
+    },
+    "limit": 1000
+  },
+  {
+    "slug": "iza_bancho",
+    "name": "Lいざ！番長",
+    "seo": {
+      "title": "いざ！番長 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価470G〜 / リセット200G〜",
+    "strategyByRate": {
+      "eq56": "5.6枚480G〜",
+      "rate55": "5.5枚500G〜",
+      "rate50": "5.0枚530G〜",
+      "rate45": "4.5枚560G〜"
+    },
+    "aliases": [
+      "いざ番長",
+      "イザバンチョウ",
+      "いざばんちょう",
+      "番長いざ"
+    ],
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 850,
+        "good": 470,
+        "caution": 350,
+        "byRate": {
+          "eq56": {
+            "excellent": 850,
+            "good": 480,
+            "caution": 360,
+            "note": "5.6枚交換なら480Gから狙い目。天井999G+α。"
+          },
+          "rate55": {
+            "excellent": 850,
+            "good": 500,
+            "caution": 380,
+            "note": "5.5枚交換なら500Gから。"
+          },
+          "rate50": {
+            "excellent": 900,
+            "good": 530,
+            "caution": 400,
+            "note": "5.0枚交換なら530Gから。"
+          },
+          "rate45": {
+            "excellent": 900,
+            "good": 560,
+            "caution": 430,
+            "note": "4.5枚交換なら560Gから。"
+          }
+        },
+        "note": "天井999G+α。AT終了後アイキャッチ確認でヤメ。"
+      },
+      "reset": {
+        "excellent": 500,
+        "good": 200,
+        "caution": 100,
+        "byRate": {
+          "eq56": {
+            "excellent": 500,
+            "good": 200,
+            "caution": 100,
+            "note": "リセット後は天井600G+αに短縮。チャンスA以上濃厚・25%で天国移行。"
+          },
+          "rate55": {
+            "excellent": 500,
+            "good": 220,
+            "caution": 120,
+            "note": "リセット後は天井600G+αに短縮。"
+          },
+          "rate50": {
+            "excellent": 530,
+            "good": 250,
+            "caution": 150,
+            "note": "リセット後は天井600G+αに短縮。"
+          },
+          "rate45": {
+            "excellent": 550,
+            "good": 280,
+            "caution": 180,
+            "note": "リセット後は天井600G+αに短縮。"
+          }
+        },
+        "note": "設定変更後は天井600G+αに短縮。チャンスA以上濃厚で25%天国移行。"
+      }
+    },
+    "limit": 999
+  },
+  {
+    "slug": "okidoki_duo_encore",
+    "name": "スマスロ 沖ドキ！DUO アンコール",
+    "seo": {
+      "title": "スマスロ 沖ドキ！DUO アンコール 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロ",
+    "strategy": "等価520G~ / 5.6枚530G~ / 現金600G~（ボーナス間800G）",
+    "aliases": [
+      "沖ドキDUOアンコール",
+      "おきどきあんこーる",
+      "沖ドキDUO",
+      "沖ドキアンコール",
+      "OKIDOKI"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "suru",
+          "label": "スルー天井"
+        }
+      ],
+      "normal": {
+        "excellent": 800,
+        "good": 520,
+        "caution": 350,
+        "note": "天井ボーナス間800G。等価520G~/5.6枚530G~/現金600G~から狙い目。のるカナチャンス突入濃厚。"
+      },
+      "suru": {
+        "suruMax": 9,
+        "excellent": 9,
+        "good": 7,
+        "caution": 5,
+        "note": "9スルーで10回目確定。スルー回数が多いほど天国移行が近い。4スルー以上は積極的に狙い候補。"
+      }
+    },
+    "limit": 800
+  },
+  {
+    "slug": "mhrise",
+    "name": "スマスロ モンスターハンターライズ",
+    "seo": {
+      "title": "スマスロ モンスターハンターライズ 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価660G~ / 5.6枚670G~ / 現金740G~（AT間999G+α）",
+    "aliases": [
+      "モンハンライズ",
+      "もんはんらいず",
+      "MHRise",
+      "モンハン",
+      "モンスターハンターライズ"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "suru",
+          "label": "クエストスルー"
+        }
+      ],
+      "normal": {
+        "excellent": 999,
+        "good": 660,
+        "caution": 450,
+        "note": "天井AT間999G+α。等価660G~/5.6枚670G~/現金740G~から狙い目。カムラポイント天井（最大600pt）もあり。"
+      },
+      "suru": {
+        "suruMax": 6,
+        "excellent": 6,
+        "good": 5,
+        "caution": 4,
+        "note": "6スルーで7回目クエスト成功確定。等価・持ちメダルは5スルー~/現金は6スルー~から狙い目。"
+      }
+    },
+    "limit": 999
+  },
+  {
+    "slug": "hihou",
+    "name": "スマスロ秘宝伝",
+    "seo": {
+      "title": "秘宝伝 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価BIG後480G〜 / REG後330G〜 / リセット180G〜",
+    "strategyByRate": {
+      "eq56": "5.6枚BIG後480G〜 / REG後330G〜",
+      "rate55": "5.5枚BIG後490G〜 / REG後340G〜",
+      "rate50": "5.0枚BIG後520G〜 / REG後370G〜",
+      "rate45": "4.5枚BIG後550G〜 / REG後400G〜"
+    },
+    "aliases": [
+      "秘宝伝",
+      "ヒホウデン"
+    ],
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常(BIG後)"
+        },
+        {
+          "key": "reg",
+          "label": "REG後"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 750,
+        "good": 480,
+        "caution": 380,
+        "byRate": {
+          "eq56": {
+            "excellent": 750,
+            "good": 480,
+            "caution": 380,
+            "note": "5.6枚交換ならBIG後480Gから狙い目。天井799G+α。"
+          },
+          "rate55": {
+            "excellent": 750,
+            "good": 490,
+            "caution": 390,
+            "note": "5.5枚交換ならBIG後490Gから。"
+          },
+          "rate50": {
+            "excellent": 750,
+            "good": 520,
+            "caution": 420,
+            "note": "5.0枚交換ならBIG後520Gから。"
+          },
+          "rate45": {
+            "excellent": 750,
+            "good": 550,
+            "caution": 450,
+            "note": "4.5枚交換ならBIG後550Gから。"
+          }
+        },
+        "note": "BIG後天井799G+α。"
+      },
+      "reg": {
+        "excellent": 600,
+        "good": 330,
+        "caution": 250,
+        "byRate": {
+          "eq56": {
+            "excellent": 600,
+            "good": 330,
+            "caution": 250,
+            "note": "5.6枚交換ならREG後330Gから狙い目。REG後天井649G+α。"
+          },
+          "rate55": {
+            "excellent": 600,
+            "good": 340,
+            "caution": 260,
+            "note": "5.5枚交換ならREG後340Gから。"
+          },
+          "rate50": {
+            "excellent": 600,
+            "good": 370,
+            "caution": 290,
+            "note": "5.0枚交換ならREG後370Gから。"
+          },
+          "rate45": {
+            "excellent": 600,
+            "good": 400,
+            "caution": 310,
+            "note": "4.5枚交換ならREG後400Gから。"
+          }
+        },
+        "note": "REG後天井649G+α。BIG後より150G短縮。"
+      },
+      "reset": {
+        "excellent": 450,
+        "good": 180,
+        "caution": 100,
+        "byRate": {
+          "eq56": {
+            "excellent": 450,
+            "good": 180,
+            "caution": 100,
+            "note": "リセット時は天井499G+αに短縮。180Gから狙い目。"
+          },
+          "rate55": {
+            "excellent": 450,
+            "good": 200,
+            "caution": 120,
+            "note": "リセット時は499G+α。"
+          },
+          "rate50": {
+            "excellent": 450,
+            "good": 230,
+            "caution": 150,
+            "note": "リセット時は499G+α。"
+          },
+          "rate45": {
+            "excellent": 450,
+            "good": 260,
+            "caution": 170,
+            "note": "リセット時は499G+α。"
+          }
+        },
+        "note": "リセット時は天井499G+αに短縮。"
+      }
+    },
+    "limit": 799
   },
   {
     "slug": "monkeyv",
@@ -1291,66 +2624,6 @@
     "limit": 1268
   },
   {
-    "slug": "my_juggler_v",
-    "name": "マイジャグラーV",
-    "seo": {
-      "title": "マイジャグラーV 設定判別"
-    },
-    "info": "Aタイプ",
-    "strategy": "設定狙い主体・天井なし",
-    "aliases": [
-      "マイジャグ",
-      "マイジャグ5"
-    ],
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "normal",
-          "label": "設定狙い"
-        }
-      ],
-      "normal": {
-        "excellent": 99999,
-        "good": 99999,
-        "caution": 99999,
-        "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
-      }
-    },
-    "limit": null
-  },
-  {
-    "slug": "discup_ur",
-    "name": "A-SLOT+ ディスクアップ ULTRAREMIX",
-    "seo": {
-      "title": "A-SLOT+ ディスクアップ ULTRAREMIX 狙い目"
-    },
-    "info": "スマスロA+RT",
-    "strategy": "設定狙い主体・天井なし",
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "normal",
-          "label": "設定狙い"
-        }
-      ],
-      "normal": {
-        "excellent": 99999,
-        "good": 99999,
-        "caution": 99999,
-        "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。高設定をつかめる環境（イベント・特定日）での使用を推奨。"
-      }
-    },
-    "limit": null,
-    "aliases": [
-      "ディスクアップ",
-      "ディスク",
-      "でぃすくあっぷ",
-      "ULTRAREMIX"
-    ]
-  },
-  {
     "slug": "kaguya",
     "name": "パチスロ かぐや様は告らせたい",
     "seo": {
@@ -1915,160 +3188,6 @@
       }
     },
     "limit": 799
-  },
-  {
-    "slug": "godeater",
-    "name": "スマスロ ゴッドイーター リザレクション",
-    "seo": {
-      "title": "スマスロ ゴッドイーター リザレクション 狙い目"
-    },
-    "info": "スマスロAT",
-    "strategy": "通常520G〜 / 駆け抜け後280G〜",
-    "strategyByRate": {
-      "eq56": "5.6枚550G〜 / 駆け抜け後150G〜",
-      "rate55": "5.5枚590G〜 / 駆け抜け後170G〜",
-      "rate50": "5.0枚650G〜 / 駆け抜け後200G〜",
-      "rate45": "4.5枚700G〜 / 駆け抜け後230G〜"
-    },
-    "checker": {
-      "unit": "G",
-      "defaultRate": "eq56",
-      "exchangeRates": [
-        {
-          "key": "eq56",
-          "label": "5.6枚"
-        },
-        {
-          "key": "rate55",
-          "label": "5.5枚"
-        },
-        {
-          "key": "rate50",
-          "label": "5.0枚"
-        },
-        {
-          "key": "rate45",
-          "label": "4.5枚"
-        }
-      ],
-      "modes": [
-        {
-          "key": "normal",
-          "label": "通常"
-        },
-        {
-          "key": "nukete",
-          "label": "駆け抜け後"
-        },
-        {
-          "key": "reset",
-          "label": "リセット"
-        }
-      ],
-      "normal": {
-        "excellent": 750,
-        "good": 590,
-        "caution": 450,
-        "byRate": {
-          "eq56": {
-            "excellent": 700,
-            "good": 550,
-            "caution": 400,
-            "note": "5.6枚交換なら通常550Gから狙い目、400Gから候補です。駆け抜け後の浅いラインと混ぜず、通常台として見る前提を先に固めてください。"
-          },
-          "rate55": {
-            "excellent": 750,
-            "good": 590,
-            "caution": 450,
-            "note": "5.5枚交換は通常590G基準です。駆け抜け後170G基準と入口差が大きいので、今の台がどちらかを先に分けるのが重要です。"
-          },
-          "rate50": {
-            "excellent": 800,
-            "good": 650,
-            "caution": 500,
-            "note": "5.0枚交換は通常650Gからが本線です。浅い通常台に広げず、液晶G数と履歴を見て深い台を優先した方が収まりやすいです。"
-          },
-          "rate45": {
-            "excellent": 850,
-            "good": 700,
-            "caution": 550,
-            "note": "4.5枚交換は通常700G基準です。駆け抜け後やリセットの浅い台とは切り分けて、深い通常台だけに絞る方が安全です。"
-          }
-        },
-        "note": "天井1000G+α。590G〜でプラス域。液晶右下のG数で確認。"
-      },
-      "nukete": {
-        "excellent": 300,
-        "good": 280,
-        "caution": 180,
-        "byRate": {
-          "eq56": {
-            "excellent": 260,
-            "good": 150,
-            "caution": 80,
-            "note": "5.6枚交換の駆け抜け後は150Gから候補です。AT駆け抜け後として見てよい台だけを拾うと精度が上がります。"
-          },
-          "rate55": {
-            "excellent": 300,
-            "good": 170,
-            "caution": 100,
-            "note": "5.5枚交換は駆け抜け後170G基準です。通常台と混ぜず、短縮天井前提の台として見る方が使いやすいです。"
-          },
-          "rate50": {
-            "excellent": 340,
-            "good": 200,
-            "caution": 120,
-            "note": "5.0枚交換では駆け抜け後200Gからが本線です。浅い台に広げすぎず、履歴で駆け抜け後が見える台を優先してください。"
-          },
-          "rate45": {
-            "excellent": 380,
-            "good": 230,
-            "caution": 150,
-            "note": "4.5枚交換の駆け抜け後は230G基準です。通常590G基準との差を意識して、前提が曖昧な台は見送る方が安全です。"
-          }
-        },
-        "note": "AT駆け抜け後は天井600G+αに短縮。280G〜でプラス域。"
-      },
-      "reset": {
-        "excellent": 300,
-        "good": 180,
-        "caution": 100,
-        "byRate": {
-          "eq56": {
-            "excellent": 260,
-            "good": 150,
-            "caution": 80,
-            "note": "5.6枚交換のリセット台は150Gから候補です。朝一の根拠が弱い台は180G近辺まで待つとズレにくいです。"
-          },
-          "rate55": {
-            "excellent": 300,
-            "good": 180,
-            "caution": 100,
-            "note": "5.5枚交換はリセット180G基準です。通常や駆け抜け後のラインとは別で管理してください。"
-          },
-          "rate50": {
-            "excellent": 340,
-            "good": 220,
-            "caution": 130,
-            "note": "5.0枚交換ではリセット220Gからが本線です。朝一の根拠が弱い日は通常や駆け抜け後基準に寄せる方が安全です。"
-          },
-          "rate45": {
-            "excellent": 380,
-            "good": 250,
-            "caution": 150,
-            "note": "4.5枚交換のリセット台は250G基準です。浅い朝一台に広げず、店の強い日や根拠のある台に絞ってください。"
-          }
-        },
-        "note": "設定変更後は天井600G+αに短縮。180G〜でプラス域。"
-      }
-    },
-    "limit": 1000,
-    "aliases": [
-      "ゴッドイーター",
-      "ゴドイタ",
-      "GE",
-      "ゴッイー"
-    ]
   },
   {
     "slug": "chibaryo2",
@@ -2722,124 +3841,6 @@
     ]
   },
   {
-    "slug": "iza_bancho",
-    "name": "Lいざ！番長",
-    "seo": {
-      "title": "いざ！番長 狙い目・天井・期待値まとめ"
-    },
-    "info": "スマスロAT",
-    "strategy": "等価470G〜 / リセット200G〜",
-    "strategyByRate": {
-      "eq56": "5.6枚480G〜",
-      "rate55": "5.5枚500G〜",
-      "rate50": "5.0枚530G〜",
-      "rate45": "4.5枚560G〜"
-    },
-    "aliases": [
-      "いざ番長",
-      "イザバンチョウ",
-      "いざばんちょう",
-      "番長いざ"
-    ],
-    "checker": {
-      "unit": "G",
-      "defaultRate": "eq56",
-      "exchangeRates": [
-        {
-          "key": "eq56",
-          "label": "5.6枚"
-        },
-        {
-          "key": "rate55",
-          "label": "5.5枚"
-        },
-        {
-          "key": "rate50",
-          "label": "5.0枚"
-        },
-        {
-          "key": "rate45",
-          "label": "4.5枚"
-        }
-      ],
-      "modes": [
-        {
-          "key": "normal",
-          "label": "通常"
-        },
-        {
-          "key": "reset",
-          "label": "リセット"
-        }
-      ],
-      "normal": {
-        "excellent": 850,
-        "good": 470,
-        "caution": 350,
-        "byRate": {
-          "eq56": {
-            "excellent": 850,
-            "good": 480,
-            "caution": 360,
-            "note": "5.6枚交換なら480Gから狙い目。天井999G+α。"
-          },
-          "rate55": {
-            "excellent": 850,
-            "good": 500,
-            "caution": 380,
-            "note": "5.5枚交換なら500Gから。"
-          },
-          "rate50": {
-            "excellent": 900,
-            "good": 530,
-            "caution": 400,
-            "note": "5.0枚交換なら530Gから。"
-          },
-          "rate45": {
-            "excellent": 900,
-            "good": 560,
-            "caution": 430,
-            "note": "4.5枚交換なら560Gから。"
-          }
-        },
-        "note": "天井999G+α。AT終了後アイキャッチ確認でヤメ。"
-      },
-      "reset": {
-        "excellent": 500,
-        "good": 200,
-        "caution": 100,
-        "byRate": {
-          "eq56": {
-            "excellent": 500,
-            "good": 200,
-            "caution": 100,
-            "note": "リセット後は天井600G+αに短縮。チャンスA以上濃厚・25%で天国移行。"
-          },
-          "rate55": {
-            "excellent": 500,
-            "good": 220,
-            "caution": 120,
-            "note": "リセット後は天井600G+αに短縮。"
-          },
-          "rate50": {
-            "excellent": 530,
-            "good": 250,
-            "caution": 150,
-            "note": "リセット後は天井600G+αに短縮。"
-          },
-          "rate45": {
-            "excellent": 550,
-            "good": 280,
-            "caution": 180,
-            "note": "リセット後は天井600G+αに短縮。"
-          }
-        },
-        "note": "設定変更後は天井600G+αに短縮。チャンスA以上濃厚で25%天国移行。"
-      }
-    },
-    "limit": 999
-  },
-  {
     "slug": "banchou4",
     "name": "押忍！番長4",
     "seo": {
@@ -3085,125 +4086,6 @@
       "バンチョウ",
       "番長4",
       "押忍番長"
-    ]
-  },
-  {
-    "slug": "hokuto_tensei2",
-    "name": "スマスロ 北斗の拳 転生の章2",
-    "seo": {
-      "title": "スマスロ 北斗の拳 転生の章2 狙い目"
-    },
-    "info": "スマスロAT",
-    "strategy": "あべし間780〜 / リセット短縮あり",
-    "strategyByRate": {
-      "eq56": "5.6枚850G〜",
-      "rate55": "5.5枚900G〜",
-      "rate50": "5.0枚950G〜",
-      "rate45": "4.5枚1000G〜"
-    },
-    "checker": {
-      "unit": "あべし",
-      "defaultRate": "eq56",
-      "exchangeRates": [
-        {
-          "key": "eq56",
-          "label": "5.6枚"
-        },
-        {
-          "key": "rate55",
-          "label": "5.5枚"
-        },
-        {
-          "key": "rate50",
-          "label": "5.0枚"
-        },
-        {
-          "key": "rate45",
-          "label": "4.5枚"
-        }
-      ],
-      "modes": [
-        {
-          "key": "normal",
-          "label": "あべし間"
-        },
-        {
-          "key": "reset",
-          "label": "リセット"
-        }
-      ],
-      "normal": {
-        "excellent": 1100,
-        "good": 780,
-        "caution": 700,
-        "byRate": {
-          "eq56": {
-            "excellent": 1050,
-            "good": 850,
-            "caution": 650,
-            "note": "5.6枚交換ならあべし間850Gから狙い目、650Gから候補です。900G未満は液晶右下のG数確認を丁寧にして浅い台に広げすぎない方が安全です。"
-          },
-          "rate55": {
-            "excellent": 1100,
-            "good": 900,
-            "caution": 700,
-            "note": "5.5枚交換はあべし間900G基準です。700G台は候補止まりとして、深い通常台を優先した方が使いやすいです。"
-          },
-          "rate50": {
-            "excellent": 1150,
-            "good": 950,
-            "caution": 750,
-            "note": "5.0枚交換はあべし間950Gからが本線です。浅い台に広げず、900G近辺でも根拠が弱い台は見送る方が収まりやすいです。"
-          },
-          "rate45": {
-            "excellent": 1200,
-            "good": 1000,
-            "caution": 800,
-            "note": "4.5枚交換はあべし間1000Gからを基本線にしてください。深い通常台だけに絞って使う方が期待値を取りやすいです。"
-          }
-        },
-        "note": "あべし間天井1536で恩恵AT直撃。780あべし〜が狙い目ライン。"
-      },
-      "reset": {
-        "excellent": 400,
-        "good": 250,
-        "caution": 150,
-        "byRate": {
-          "eq56": {
-            "excellent": 350,
-            "good": 200,
-            "caution": 120,
-            "note": "5.6枚交換のリセット台は200Gから候補です。根拠が弱い朝一台は250G近辺まで待つとブレにくいです。"
-          },
-          "rate55": {
-            "excellent": 400,
-            "good": 250,
-            "caution": 150,
-            "note": "5.5枚交換はリセット250G基準です。通常と混ぜず、朝一短縮台として別で見る方が使いやすいです。"
-          },
-          "rate50": {
-            "excellent": 450,
-            "good": 300,
-            "caution": 180,
-            "note": "5.0枚交換ではリセット300Gからが本線です。朝一の挙動が弱い日は通常寄りに見て深め優先にしてください。"
-          },
-          "rate45": {
-            "excellent": 500,
-            "good": 350,
-            "caution": 220,
-            "note": "4.5枚交換のリセット台は350G基準です。浅い台に広げず、リセット根拠のある台だけに絞る方が安全です。"
-          }
-        },
-        "note": "設定変更後は天井短縮。250G〜でプラス域。"
-      }
-    },
-    "limit": 1536,
-    "aliases": [
-      "北斗転生",
-      "転生の章",
-      "てんせい",
-      "北斗転生2",
-      "転生2"
     ]
   },
   {
@@ -3738,276 +4620,6 @@
     ]
   },
   {
-    "slug": "bakemonogatari",
-    "name": "Lスマスロ化物語KH",
-    "seo": {
-      "title": "化物語 狙い目・天井・期待値まとめ"
-    },
-    "info": "スマスロAT",
-    "strategy": "等価640G〜 / リセット250G〜",
-    "strategyByRate": {
-      "eq56": "5.6枚640G〜",
-      "rate55": "5.5枚650G〜",
-      "rate50": "5.0枚680G〜",
-      "rate45": "4.5枚700G〜"
-    },
-    "aliases": [
-      "化物語",
-      "バケモノガタリ",
-      "物語"
-    ],
-    "checker": {
-      "unit": "G",
-      "defaultRate": "eq56",
-      "exchangeRates": [
-        {
-          "key": "eq56",
-          "label": "5.6枚"
-        },
-        {
-          "key": "rate55",
-          "label": "5.5枚"
-        },
-        {
-          "key": "rate50",
-          "label": "5.0枚"
-        },
-        {
-          "key": "rate45",
-          "label": "4.5枚"
-        }
-      ],
-      "modes": [
-        {
-          "key": "normal",
-          "label": "通常"
-        },
-        {
-          "key": "reset",
-          "label": "リセット"
-        }
-      ],
-      "normal": {
-        "excellent": 900,
-        "good": 640,
-        "caution": 500,
-        "byRate": {
-          "eq56": {
-            "excellent": 900,
-            "good": 640,
-            "caution": 500,
-            "note": "5.6枚交換なら640Gから狙い目。天井1000G+倍倍チャンス濃厚。"
-          },
-          "rate55": {
-            "excellent": 900,
-            "good": 650,
-            "caution": 510,
-            "note": "5.5枚交換なら650Gから。"
-          },
-          "rate50": {
-            "excellent": 900,
-            "good": 680,
-            "caution": 540,
-            "note": "5.0枚交換なら680Gから。"
-          },
-          "rate45": {
-            "excellent": 900,
-            "good": 700,
-            "caution": 560,
-            "note": "4.5枚交換なら700Gから。"
-          }
-        },
-        "note": "G数天井1000G。AT倖時間+倍倍チャンス濃厚。"
-      },
-      "reset": {
-        "excellent": 500,
-        "good": 250,
-        "caution": 150,
-        "byRate": {
-          "eq56": {
-            "excellent": 500,
-            "good": 250,
-            "caution": 150,
-            "note": "リセット時は天井600G+αに短縮。250Gから狙い目。"
-          },
-          "rate55": {
-            "excellent": 500,
-            "good": 350,
-            "caution": 200,
-            "note": "リセット時は600G+α。"
-          },
-          "rate50": {
-            "excellent": 500,
-            "good": 380,
-            "caution": 230,
-            "note": "リセット時は600G+α。"
-          },
-          "rate45": {
-            "excellent": 500,
-            "good": 400,
-            "caution": 250,
-            "note": "リセット時は600G+α。"
-          }
-        },
-        "note": "リセット時は天井600G+αに短縮。"
-      }
-    },
-    "limit": 1000
-  },
-  {
-    "slug": "revengers",
-    "name": "L東京リベンジャーズ",
-    "seo": {
-      "title": "東京リベンジャーズ 狙い目・天井・期待値まとめ"
-    },
-    "info": "スマスロAT",
-    "strategy": "等価450G〜 / スルー3回〜",
-    "strategyByRate": {
-      "eq56": "5.6枚450G〜",
-      "rate55": "5.5枚460G〜",
-      "rate50": "5.0枚500G〜",
-      "rate45": "4.5枚540G〜"
-    },
-    "aliases": [
-      "リベンジャーズ",
-      "トーリベ",
-      "東リベ"
-    ],
-    "checker": {
-      "unit": "G",
-      "defaultRate": "eq56",
-      "exchangeRates": [
-        {
-          "key": "eq56",
-          "label": "5.6枚"
-        },
-        {
-          "key": "rate55",
-          "label": "5.5枚"
-        },
-        {
-          "key": "rate50",
-          "label": "5.0枚"
-        },
-        {
-          "key": "rate45",
-          "label": "4.5枚"
-        }
-      ],
-      "modes": [
-        {
-          "key": "normal",
-          "label": "通常"
-        },
-        {
-          "key": "reset",
-          "label": "リセット"
-        },
-        {
-          "key": "through",
-          "label": "スルー"
-        }
-      ],
-      "normal": {
-        "excellent": 1000,
-        "good": 450,
-        "caution": 350,
-        "byRate": {
-          "eq56": {
-            "excellent": 1000,
-            "good": 450,
-            "caution": 350,
-            "note": "5.6枚交換ならAT間450Gから狙い目。天井1190G+α。"
-          },
-          "rate55": {
-            "excellent": 1000,
-            "good": 460,
-            "caution": 360,
-            "note": "5.5枚交換なら460Gから。"
-          },
-          "rate50": {
-            "excellent": 1000,
-            "good": 500,
-            "caution": 400,
-            "note": "5.0枚交換なら500Gから。"
-          },
-          "rate45": {
-            "excellent": 1000,
-            "good": 540,
-            "caution": 430,
-            "note": "4.5枚交換なら540Gから。"
-          }
-        },
-        "note": "AT間天井1190G+α。"
-      },
-      "reset": {
-        "excellent": 500,
-        "good": 240,
-        "caution": 150,
-        "byRate": {
-          "eq56": {
-            "excellent": 500,
-            "good": 240,
-            "caution": 150,
-            "note": "リセット時はAT間天井900G+αに短縮。240Gから狙い目。"
-          },
-          "rate55": {
-            "excellent": 500,
-            "good": 250,
-            "caution": 160,
-            "note": "リセット時は900G+α。"
-          },
-          "rate50": {
-            "excellent": 600,
-            "good": 300,
-            "caution": 200,
-            "note": "リセット時は900G+α。"
-          },
-          "rate45": {
-            "excellent": 600,
-            "good": 350,
-            "caution": 250,
-            "note": "リセット時は900G+α。"
-          }
-        },
-        "note": "リセット時はAT間天井900G+αに短縮。"
-      },
-      "through": {
-        "excellent": 4,
-        "good": 3,
-        "caution": 2,
-        "byRate": {
-          "eq56": {
-            "excellent": 4,
-            "good": 3,
-            "caution": 2,
-            "note": "東卍チャンス4スルー（5回目）でAT当選。3スルーから狙い目。"
-          },
-          "rate55": {
-            "excellent": 4,
-            "good": 3,
-            "caution": 2,
-            "note": "3スルーから狙い目。"
-          },
-          "rate50": {
-            "excellent": 4,
-            "good": 3,
-            "caution": 2,
-            "note": "3スルーから狙い目。"
-          },
-          "rate45": {
-            "excellent": 4,
-            "good": 3,
-            "caution": 2,
-            "note": "3スルーから狙い目。"
-          }
-        },
-        "note": "東卍チャンス4スルー（5回目）でAT当選確定。"
-      }
-    },
-    "limit": 1190
-  },
-  {
     "slug": "neo_aim_juggler",
     "name": "ネオアイムジャグラーEX",
     "seo": {
@@ -4256,123 +4868,6 @@
     "limit": 350
   },
   {
-    "slug": "magireco",
-    "name": "Lスマスロマギアレコード",
-    "seo": {
-      "title": "マギアレコード 狙い目・天井・期待値まとめ"
-    },
-    "info": "スマスロAT",
-    "strategy": "等価360G(540pt)〜 / リセット150G〜",
-    "strategyByRate": {
-      "eq56": "5.6枚360G〜",
-      "rate55": "5.5枚370G〜",
-      "rate50": "5.0枚400G〜",
-      "rate45": "4.5枚450G〜"
-    },
-    "aliases": [
-      "マギレコ",
-      "マギアレコード",
-      "まどマギ外伝"
-    ],
-    "checker": {
-      "unit": "G",
-      "defaultRate": "eq56",
-      "exchangeRates": [
-        {
-          "key": "eq56",
-          "label": "5.6枚"
-        },
-        {
-          "key": "rate55",
-          "label": "5.5枚"
-        },
-        {
-          "key": "rate50",
-          "label": "5.0枚"
-        },
-        {
-          "key": "rate45",
-          "label": "4.5枚"
-        }
-      ],
-      "modes": [
-        {
-          "key": "normal",
-          "label": "通常"
-        },
-        {
-          "key": "reset",
-          "label": "リセット"
-        }
-      ],
-      "normal": {
-        "excellent": 580,
-        "good": 360,
-        "caution": 280,
-        "byRate": {
-          "eq56": {
-            "excellent": 580,
-            "good": 360,
-            "caution": 280,
-            "note": "5.6枚交換なら360G(540pt)から狙い目。天井950pt+α(約633G)。"
-          },
-          "rate55": {
-            "excellent": 580,
-            "good": 370,
-            "caution": 290,
-            "note": "5.5枚交換なら370Gから。"
-          },
-          "rate50": {
-            "excellent": 600,
-            "good": 400,
-            "caution": 320,
-            "note": "5.0枚交換なら400Gから。"
-          },
-          "rate45": {
-            "excellent": 600,
-            "good": 450,
-            "caution": 360,
-            "note": "4.5枚交換なら450Gから。"
-          }
-        },
-        "note": "pt管理天井950pt+α（約633G相当）。"
-      },
-      "reset": {
-        "excellent": 400,
-        "good": 150,
-        "caution": 80,
-        "byRate": {
-          "eq56": {
-            "excellent": 400,
-            "good": 150,
-            "caution": 80,
-            "note": "リセット時は天井600〜699pt+αに短縮。150Gから狙い目。"
-          },
-          "rate55": {
-            "excellent": 400,
-            "good": 200,
-            "caution": 100,
-            "note": "リセット時は600pt台に短縮。"
-          },
-          "rate50": {
-            "excellent": 400,
-            "good": 230,
-            "caution": 120,
-            "note": "リセット時は600pt台に短縮。"
-          },
-          "rate45": {
-            "excellent": 400,
-            "good": 260,
-            "caution": 150,
-            "note": "リセット時は600pt台に短縮。"
-          }
-        },
-        "note": "リセット時は天井600〜699pt+αに短縮。"
-      }
-    },
-    "limit": 633
-  },
-  {
     "slug": "biohazard",
     "name": "スマスロ バイオハザード5",
     "seo": {
@@ -4525,35 +5020,6 @@
       "バイハ",
       "バイオ5"
     ]
-  },
-  {
-    "slug": "thunder_v",
-    "name": "スマスロ サンダーV",
-    "seo": {
-      "title": "サンダーV 設定判別・狙い目まとめ"
-    },
-    "info": "スマスロノーマル",
-    "strategy": "設定狙い主体・天井なし",
-    "aliases": [
-      "サンダー",
-      "サンダーV"
-    ],
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "normal",
-          "label": "設定狙い"
-        }
-      ],
-      "normal": {
-        "excellent": 99999,
-        "good": 99999,
-        "caution": 99999,
-        "note": "ノーマルタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBB・RB・ベルをカウントしてください。"
-      }
-    },
-    "limit": null
   },
   {
     "slug": "okidoki_black",
@@ -4788,158 +5254,6 @@
       }
     },
     "limit": 800
-  },
-  {
-    "slug": "hihou",
-    "name": "スマスロ秘宝伝",
-    "seo": {
-      "title": "秘宝伝 狙い目・天井・期待値まとめ"
-    },
-    "info": "スマスロAT",
-    "strategy": "等価BIG後480G〜 / REG後330G〜 / リセット180G〜",
-    "strategyByRate": {
-      "eq56": "5.6枚BIG後480G〜 / REG後330G〜",
-      "rate55": "5.5枚BIG後490G〜 / REG後340G〜",
-      "rate50": "5.0枚BIG後520G〜 / REG後370G〜",
-      "rate45": "4.5枚BIG後550G〜 / REG後400G〜"
-    },
-    "aliases": [
-      "秘宝伝",
-      "ヒホウデン"
-    ],
-    "checker": {
-      "unit": "G",
-      "defaultRate": "eq56",
-      "exchangeRates": [
-        {
-          "key": "eq56",
-          "label": "5.6枚"
-        },
-        {
-          "key": "rate55",
-          "label": "5.5枚"
-        },
-        {
-          "key": "rate50",
-          "label": "5.0枚"
-        },
-        {
-          "key": "rate45",
-          "label": "4.5枚"
-        }
-      ],
-      "modes": [
-        {
-          "key": "normal",
-          "label": "通常(BIG後)"
-        },
-        {
-          "key": "reg",
-          "label": "REG後"
-        },
-        {
-          "key": "reset",
-          "label": "リセット"
-        }
-      ],
-      "normal": {
-        "excellent": 750,
-        "good": 480,
-        "caution": 380,
-        "byRate": {
-          "eq56": {
-            "excellent": 750,
-            "good": 480,
-            "caution": 380,
-            "note": "5.6枚交換ならBIG後480Gから狙い目。天井799G+α。"
-          },
-          "rate55": {
-            "excellent": 750,
-            "good": 490,
-            "caution": 390,
-            "note": "5.5枚交換ならBIG後490Gから。"
-          },
-          "rate50": {
-            "excellent": 750,
-            "good": 520,
-            "caution": 420,
-            "note": "5.0枚交換ならBIG後520Gから。"
-          },
-          "rate45": {
-            "excellent": 750,
-            "good": 550,
-            "caution": 450,
-            "note": "4.5枚交換ならBIG後550Gから。"
-          }
-        },
-        "note": "BIG後天井799G+α。"
-      },
-      "reg": {
-        "excellent": 600,
-        "good": 330,
-        "caution": 250,
-        "byRate": {
-          "eq56": {
-            "excellent": 600,
-            "good": 330,
-            "caution": 250,
-            "note": "5.6枚交換ならREG後330Gから狙い目。REG後天井649G+α。"
-          },
-          "rate55": {
-            "excellent": 600,
-            "good": 340,
-            "caution": 260,
-            "note": "5.5枚交換ならREG後340Gから。"
-          },
-          "rate50": {
-            "excellent": 600,
-            "good": 370,
-            "caution": 290,
-            "note": "5.0枚交換ならREG後370Gから。"
-          },
-          "rate45": {
-            "excellent": 600,
-            "good": 400,
-            "caution": 310,
-            "note": "4.5枚交換ならREG後400Gから。"
-          }
-        },
-        "note": "REG後天井649G+α。BIG後より150G短縮。"
-      },
-      "reset": {
-        "excellent": 450,
-        "good": 180,
-        "caution": 100,
-        "byRate": {
-          "eq56": {
-            "excellent": 450,
-            "good": 180,
-            "caution": 100,
-            "note": "リセット時は天井499G+αに短縮。180Gから狙い目。"
-          },
-          "rate55": {
-            "excellent": 450,
-            "good": 200,
-            "caution": 120,
-            "note": "リセット時は499G+α。"
-          },
-          "rate50": {
-            "excellent": 450,
-            "good": 230,
-            "caution": 150,
-            "note": "リセット時は499G+α。"
-          },
-          "rate45": {
-            "excellent": 450,
-            "good": 260,
-            "caution": 170,
-            "note": "リセット時は499G+α。"
-          }
-        },
-        "note": "リセット時は天井499G+αに短縮。"
-      }
-    },
-    "limit": 799
   },
   {
     "slug": "okidoki_gorgeous",
@@ -5267,193 +5581,6 @@
       }
     },
     "limit": null
-  },
-  {
-    "slug": "new_king_hanahana_v",
-    "name": "SBニューキングハナハナV-30",
-    "seo": {
-      "title": "ニューキングハナハナV 狙い目・設定差まとめ"
-    },
-    "info": "A+BT（設定1/2/3/4/V）",
-    "strategy": "設定狙い主体・天井なし",
-    "aliases": [
-      "ニューキングハナハナ",
-      "キンハナ",
-      "キンハナV",
-      "ハナハナV",
-      "きんはな",
-      "にゅーきんぐ"
-    ],
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "normal",
-          "label": "設定狙い"
-        }
-      ],
-      "normal": {
-        "excellent": 99999,
-        "good": 99999,
-        "caution": 99999,
-        "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。ベル確率・BIG中スイカ・サイドランプで設定推測。"
-      }
-    },
-    "limit": null
-  },
-  {
-    "slug": "onimusha3",
-    "name": "L新鬼武者3",
-    "seo": {
-      "title": "新鬼武者3 狙い目・天井・期待値まとめ"
-    },
-    "info": "スマスロAT",
-    "strategy": "等価550G〜 / 5周期目〜",
-    "strategyByRate": {
-      "eq56": "5.6枚550G〜",
-      "rate55": "5.5枚560G〜",
-      "rate50": "5.0枚600G〜",
-      "rate45": "4.5枚630G〜"
-    },
-    "aliases": [
-      "鬼武者",
-      "オニムシャ",
-      "新鬼武者"
-    ],
-    "checker": {
-      "unit": "G",
-      "defaultRate": "eq56",
-      "exchangeRates": [
-        {
-          "key": "eq56",
-          "label": "5.6枚"
-        },
-        {
-          "key": "rate55",
-          "label": "5.5枚"
-        },
-        {
-          "key": "rate50",
-          "label": "5.0枚"
-        },
-        {
-          "key": "rate45",
-          "label": "4.5枚"
-        }
-      ],
-      "modes": [
-        {
-          "key": "normal",
-          "label": "通常"
-        },
-        {
-          "key": "reset",
-          "label": "リセット"
-        },
-        {
-          "key": "cycle",
-          "label": "周期",
-          "hasCycle": true
-        }
-      ],
-      "normal": {
-        "excellent": 900,
-        "good": 550,
-        "caution": 400,
-        "byRate": {
-          "eq56": {
-            "excellent": 900,
-            "good": 550,
-            "caution": 400,
-            "note": "5.6枚交換なら550Gから狙い目。G数天井1000G+α。"
-          },
-          "rate55": {
-            "excellent": 900,
-            "good": 560,
-            "caution": 410,
-            "note": "5.5枚交換なら560Gから。"
-          },
-          "rate50": {
-            "excellent": 900,
-            "good": 600,
-            "caution": 450,
-            "note": "5.0枚交換なら600Gから。"
-          },
-          "rate45": {
-            "excellent": 900,
-            "good": 630,
-            "caution": 480,
-            "note": "4.5枚交換なら630Gから。"
-          }
-        },
-        "note": "G数天井1000G+α。周期天井は最大6周期。"
-      },
-      "reset": {
-        "excellent": 500,
-        "good": 350,
-        "caution": 200,
-        "byRate": {
-          "eq56": {
-            "excellent": 500,
-            "good": 350,
-            "caution": 200,
-            "note": "リセット時は周期天井が最大4周期に短縮。"
-          },
-          "rate55": {
-            "excellent": 500,
-            "good": 360,
-            "caution": 210,
-            "note": "リセット時は最大4周期に短縮。"
-          },
-          "rate50": {
-            "excellent": 500,
-            "good": 400,
-            "caution": 250,
-            "note": "リセット時は最大4周期に短縮。"
-          },
-          "rate45": {
-            "excellent": 500,
-            "good": 420,
-            "caution": 280,
-            "note": "リセット時は最大4周期に短縮。"
-          }
-        },
-        "note": "リセット時は周期天井が最大4周期に短縮。"
-      },
-      "cycle": {
-        "excellent": 6,
-        "good": 5,
-        "caution": 4,
-        "byRate": {
-          "eq56": {
-            "excellent": 6,
-            "good": 5,
-            "caution": 4,
-            "note": "周期天井は最大6周期。5周期目から狙い目。"
-          },
-          "rate55": {
-            "excellent": 6,
-            "good": 5,
-            "caution": 4,
-            "note": "5周期目から狙い目。"
-          },
-          "rate50": {
-            "excellent": 6,
-            "good": 5,
-            "caution": 4,
-            "note": "5周期目から狙い目。"
-          },
-          "rate45": {
-            "excellent": 6,
-            "good": 5,
-            "caution": 4,
-            "note": "5周期目から狙い目。"
-          }
-        },
-        "note": "周期天井は最大6周期。上位AT後は1周期天国濃厚。"
-      }
-    },
-    "limit": 1000
   },
   {
     "slug": "dumbbell",
@@ -7149,47 +7276,6 @@
     "limit": 700
   },
   {
-    "slug": "yorumungando",
-    "name": "スマスロヨルムンガンド",
-    "seo": {
-      "title": "スマスロヨルムンガンド 狙い目・天井・期待値まとめ"
-    },
-    "info": "スマスロAT",
-    "strategy": "等価650G~ / 5.6枚660G~ / 現金720G~（AT間999G+α）",
-    "aliases": [
-      "ヨルムンガンド",
-      "よるむんがんど",
-      "ヨルムン",
-      "jormungand"
-    ],
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "normal",
-          "label": "通常"
-        },
-        {
-          "key": "reset",
-          "label": "リセット"
-        }
-      ],
-      "normal": {
-        "excellent": 999,
-        "good": 700,
-        "caution": 500,
-        "note": "天井AT間999G+α。等価650G~・5.6枚660G~・現金720G~から狙い目。"
-      },
-      "reset": {
-        "excellent": 450,
-        "good": 300,
-        "caution": 150,
-        "note": "設定変更後は天井450G+αに短縮。リセット台なら浅いラインから候補です。"
-      }
-    },
-    "limit": 999
-  },
-  {
     "slug": "akudama",
     "name": "Lアクダマドライブ",
     "seo": {
@@ -8439,91 +8525,5 @@
         "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い専用の機種です。BB終了スタンプ・RB中カード色・トロフィーで設定推測。"
       }
     }
-  },
-  {
-    "slug": "okidoki_duo_encore",
-    "name": "スマスロ 沖ドキ！DUO アンコール",
-    "seo": {
-      "title": "スマスロ 沖ドキ！DUO アンコール 狙い目・天井・期待値まとめ"
-    },
-    "info": "スマスロ",
-    "strategy": "等価520G~ / 5.6枚530G~ / 現金600G~（ボーナス間800G）",
-    "aliases": [
-      "沖ドキDUOアンコール",
-      "おきどきあんこーる",
-      "沖ドキDUO",
-      "沖ドキアンコール",
-      "OKIDOKI"
-    ],
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "normal",
-          "label": "通常"
-        },
-        {
-          "key": "suru",
-          "label": "スルー天井"
-        }
-      ],
-      "normal": {
-        "excellent": 800,
-        "good": 520,
-        "caution": 350,
-        "note": "天井ボーナス間800G。等価520G~/5.6枚530G~/現金600G~から狙い目。のるカナチャンス突入濃厚。"
-      },
-      "suru": {
-        "suruMax": 9,
-        "excellent": 9,
-        "good": 7,
-        "caution": 5,
-        "note": "9スルーで10回目確定。スルー回数が多いほど天国移行が近い。4スルー以上は積極的に狙い候補。"
-      }
-    },
-    "limit": 800
-  },
-  {
-    "slug": "mhrise",
-    "name": "スマスロ モンスターハンターライズ",
-    "seo": {
-      "title": "スマスロ モンスターハンターライズ 狙い目・天井・期待値まとめ"
-    },
-    "info": "スマスロAT",
-    "strategy": "等価660G~ / 5.6枚670G~ / 現金740G~（AT間999G+α）",
-    "aliases": [
-      "モンハンライズ",
-      "もんはんらいず",
-      "MHRise",
-      "モンハン",
-      "モンスターハンターライズ"
-    ],
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "normal",
-          "label": "通常"
-        },
-        {
-          "key": "suru",
-          "label": "クエストスルー"
-        }
-      ],
-      "normal": {
-        "excellent": 999,
-        "good": 660,
-        "caution": 450,
-        "note": "天井AT間999G+α。等価660G~/5.6枚670G~/現金740G~から狙い目。カムラポイント天井（最大600pt）もあり。"
-      },
-      "suru": {
-        "suruMax": 6,
-        "excellent": 6,
-        "good": 5,
-        "caution": 4,
-        "note": "6スルーで7回目クエスト成功確定。等価・持ちメダルは5スルー~/現金は6スルー~から狙い目。"
-      }
-    },
-    "limit": 999
   }
 ]
