@@ -1628,12 +1628,12 @@
       },
       "reset": {
         "excellent": 500,
-        "good": 350,
+        "good": 400,
         "caution": 200,
         "byRate": {
           "eq56": {
             "excellent": 500,
-            "good": 350,
+            "good": 400,
             "caution": 200,
             "note": "リセット時は周期天井が最大4周期に短縮。"
           },
@@ -1700,7 +1700,7 @@
       "title": "いざ！番長 狙い目・天井・期待値まとめ"
     },
     "info": "スマスロAT",
-    "strategy": "等価470G〜 / リセット200G〜",
+    "strategy": "等価470G〜 / リセット180G〜",
     "strategyByRate": {
       "eq56": "5.6枚480G〜",
       "rate55": "5.5枚500G〜",
@@ -1778,12 +1778,12 @@
       },
       "reset": {
         "excellent": 500,
-        "good": 200,
+        "good": 180,
         "caution": 100,
         "byRate": {
           "eq56": {
             "excellent": 500,
-            "good": 200,
+            "good": 180,
             "caution": 100,
             "note": "リセット後は天井600G+αに短縮。チャンスA以上濃厚・25%で天国移行。"
           },
