@@ -8599,5 +8599,135 @@
       }
     },
     "limit": null
+  },
+  {
+    "slug": "neoplanet",
+    "name": "スマスロネオプラネット",
+    "seo": {
+      "title": "スマスロネオプラネット 狙い目・天井・設定判別まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価600G〜 / 5.6枚650G〜 / 現金700G〜",
+    "strategyByRate": {
+      "eq56": "5.6枚600G〜",
+      "rate55": "5.5枚630G〜",
+      "rate50": "5.0枚660G〜",
+      "rate45": "4.5枚700G〜"
+    },
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "normal": {
+        "excellent": 700,
+        "good": 650,
+        "caution": 600,
+        "target": 650,
+        "byRate": {
+          "eq56": {
+            "excellent": 700,
+            "good": 650,
+            "caution": 600,
+            "target": 650,
+            "note": "5.6枚交換なら600Gから候補、650G以上で本線です。天井は777G+αなので終盤は強めに狙えます。"
+          },
+          "rate55": {
+            "excellent": 730,
+            "good": 680,
+            "caution": 630,
+            "target": 680,
+            "note": "5.5枚交換は680G基準です。600G台は候補止まりにして、深い台を優先してください。"
+          },
+          "rate50": {
+            "excellent": 760,
+            "good": 710,
+            "caution": 660,
+            "target": 710,
+            "note": "5.0枚交換は710G基準です。持ちメダルのない場面は700G以深に絞ってください。"
+          },
+          "rate45": {
+            "excellent": 800,
+            "good": 750,
+            "caution": 700,
+            "target": 750,
+            "note": "4.5枚交換は750G基準です。浅い台には広げず、700G超えの深め台だけに絞るのが安全です。"
+          }
+        },
+        "note": "天井777G+αのAT機。600G台後半〜700Gが狙い目の目安です（期待値詳細は調査中）。"
+      },
+      "reset": {
+        "excellent": 450,
+        "good": 400,
+        "caution": 350,
+        "target": 400,
+        "byRate": {
+          "eq56": {
+            "excellent": 450,
+            "good": 400,
+            "caution": 350,
+            "target": 400,
+            "note": "設定変更後は天井500G短縮。5.6枚なら350G〜候補、400G以上で本線です。"
+          },
+          "rate55": {
+            "excellent": 460,
+            "good": 420,
+            "caution": 370,
+            "target": 420,
+            "note": "5.5枚の設定変更台は420G基準です。朝一確認が弱い台は深めに寄せてください。"
+          },
+          "rate50": {
+            "excellent": 480,
+            "good": 440,
+            "caution": 390,
+            "target": 440,
+            "note": "5.0枚の設定変更台は440G基準です。朝一根拠が弱ければ通常モードと混ぜず別管理してください。"
+          },
+          "rate45": {
+            "excellent": 500,
+            "good": 460,
+            "caution": 410,
+            "target": 460,
+            "note": "4.5枚の設定変更台は460G基準です。根拠が薄い場合は500G以深に絞ってください。"
+          }
+        },
+        "note": "設定変更後は天井が500G+αに短縮。朝一リセット確認が取れた台は300G台後半から狙えます。"
+      },
+      "ok": "狙い目OK",
+      "ng": "まだ早い",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ]
+    },
+    "aliases": [
+      "ネオプラネット",
+      "ねおぷらねっと",
+      "neoplanet",
+      "スマスロネオプラネット"
+    ],
+    "limit": 777
   }
 ]
