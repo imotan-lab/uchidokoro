@@ -564,9 +564,9 @@
           {
             "count": 0,
             "excellent": 600,
-            "good": 400,
+            "good": 450,
             "caution": 200,
-            "note": "0スルー。400G〜で候補。AT間G数はメニュー画面で確認。",
+            "note": "0スルー。450G〜で候補。AT間G数はメニュー画面で確認。",
             "byRate": {
               "eq56": {
                 "caution": 180,
