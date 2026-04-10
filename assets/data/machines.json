@@ -9564,5 +9564,157 @@
       }
     },
     "limit": 1050
+  },
+  {
+    "slug": "valvrave",
+    "name": "パチスロ 革命機ヴァルヴレイヴ",
+    "seo": {
+      "title": "パチスロ 革命機ヴァルヴレイヴ 狙い目"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価780G〜（AT&ボーナス間）/ CZ間400G〜 / 4スルー以降即打ち",
+    "aliases": [
+      "革命機ヴァルヴレイヴ",
+      "ヴァルヴレイヴ",
+      "ヴヴヴ",
+      "valvrave初代",
+      "初代ヴァルヴレイヴ"
+    ],
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "modes": [
+        {
+          "key": "at_bonus",
+          "label": "AT&ボーナス間"
+        },
+        {
+          "key": "cz",
+          "label": "CZ間（液晶）"
+        },
+        {
+          "key": "suru",
+          "label": "スルー天井",
+          "hasSuru": true
+        }
+      ],
+      "hasSuru": true,
+      "suruMax": 6,
+      "at_bonus": {
+        "excellent": 1100,
+        "good": 780,
+        "caution": 550,
+        "byRate": {
+          "eq56": {
+            "excellent": 1100,
+            "good": 780,
+            "caution": 550,
+            "note": "等価/5.6枚はAT&ボーナス間780G〜が狙い目。天井1500G+α。"
+          },
+          "rate55": {
+            "excellent": 1150,
+            "good": 850,
+            "caution": 620,
+            "note": "5.5枚交換は850G〜。"
+          },
+          "rate50": {
+            "excellent": 1200,
+            "good": 930,
+            "caution": 700,
+            "note": "5.0枚交換は930G〜。"
+          },
+          "rate45": {
+            "excellent": 1280,
+            "good": 1000,
+            "caution": 780,
+            "note": "4.5枚交換は1000G〜。"
+          }
+        },
+        "note": "AT&ボーナス間天井1500G+α。等価/5.6枚は780G〜が狙い目。"
+      },
+      "cz": {
+        "excellent": 700,
+        "good": 400,
+        "caution": 280,
+        "byRate": {
+          "eq56": {
+            "excellent": 700,
+            "good": 400,
+            "caution": 280,
+            "note": "CZ間（液晶ゲーム数）天井1000G+α。400G〜が狙い目。"
+          },
+          "rate55": {
+            "excellent": 750,
+            "good": 450,
+            "caution": 320,
+            "note": "5.5枚交換は450G〜。"
+          },
+          "rate50": {
+            "excellent": 800,
+            "good": 510,
+            "caution": 370,
+            "note": "5.0枚交換は510G〜。"
+          },
+          "rate45": {
+            "excellent": 850,
+            "good": 570,
+            "caution": 420,
+            "note": "4.5枚交換は570G〜。"
+          }
+        },
+        "note": "CZ間天井1000G+α（液晶ゲーム数）。スルー回数が増えるほど浅い狙い目になる。"
+      },
+      "suru": {
+        "excellent": 6,
+        "good": 4,
+        "caution": 2,
+        "byRate": {
+          "eq56": {
+            "excellent": 6,
+            "good": 4,
+            "caution": 2,
+            "note": "7スルーで次回CZ成功濃厚。4スルー以降はG数関係なく即打ち可。"
+          },
+          "rate55": {
+            "excellent": 6,
+            "good": 4,
+            "caution": 2,
+            "note": "4スルー以降を基準に。"
+          },
+          "rate50": {
+            "excellent": 6,
+            "good": 5,
+            "caution": 3,
+            "note": "5.0枚は5スルー〜が基準。"
+          },
+          "rate45": {
+            "excellent": 6,
+            "good": 5,
+            "caution": 4,
+            "note": "4.5枚は5スルー〜が基準。"
+          }
+        },
+        "note": "CZ7スルーで次回CZ成功濃厚。4スルー以降はG数関係なく即打ち推奨。"
+      }
+    },
+    "limit": 1600
   }
 ]
