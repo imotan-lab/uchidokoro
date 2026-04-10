@@ -350,9 +350,9 @@
       "title": "スマスロ 攻殻機動隊 狙い目"
     },
     "info": "スマスロAT",
-    "strategy": "CZ間290G〜 / AT間700G〜",
+    "strategy": "CZ間300G〜 / AT間650G〜",
     "strategyByRate": {
-      "eq56": "5.6枚CZ350G〜 / AT間650G〜",
+      "eq56": "5.6枚CZ310G〜 / AT間660G〜",
       "rate55": "5.5枚CZ400G〜 / AT間700G〜",
       "rate50": "5.0枚CZ450G〜 / AT間750G〜",
       "rate45": "4.5枚CZ500G〜 / AT間800G〜"
@@ -394,12 +394,12 @@
       ],
       "cz": {
         "excellent": 550,
-        "good": 290,
+        "good": 300,
         "caution": 200,
         "byRate": {
           "eq56": {
             "excellent": 500,
-            "good": 350,
+            "good": 310,
             "caution": 250,
             "note": "5.6枚交換ならCZ間350Gから狙い目、250Gから候補です。AT間と混ぜず、CZ間台として見る前提を先に固めてください。"
           },
@@ -426,12 +426,12 @@
       },
       "at": {
         "excellent": 900,
-        "good": 700,
+        "good": 650,
         "caution": 500,
         "byRate": {
           "eq56": {
             "excellent": 850,
-            "good": 650,
+            "good": 660,
             "caution": 450,
             "note": "5.6枚交換ならAT間650Gから狙い目、450Gから候補です。CZ間より深いラインなので、AT間台として見てよいかを先に分けてください。"
           },
