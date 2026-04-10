@@ -9263,5 +9263,157 @@
       "七つの魔剣が支配する"
     ],
     "limit": 1050
+  },
+  {
+    "slug": "shaman_king",
+    "name": "スマスロ シャーマンキング",
+    "seo": {
+      "title": "スマスロ シャーマンキング 狙い目"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価500G〜 / リセット後250G〜 / 8スルー以上即打ち",
+    "aliases": [
+      "シャーマンキング",
+      "マンキン",
+      "シャーマン",
+      "Shaman King",
+      "shaman"
+    ],
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "suru",
+          "label": "スルー天井",
+          "hasSuru": true
+        },
+        {
+          "key": "reset",
+          "label": "リセット後"
+        }
+      ],
+      "hasSuru": true,
+      "suruMax": 10,
+      "normal": {
+        "excellent": 700,
+        "good": 500,
+        "caution": 350,
+        "byRate": {
+          "eq56": {
+            "excellent": 700,
+            "good": 500,
+            "caution": 350,
+            "note": "等価/5.6枚は500G〜が狙い目。天井ボーナス間800G+α。"
+          },
+          "rate55": {
+            "excellent": 720,
+            "good": 530,
+            "caution": 370,
+            "note": "5.5枚交換は530G〜。"
+          },
+          "rate50": {
+            "excellent": 750,
+            "good": 560,
+            "caution": 400,
+            "note": "5.0枚交換は560G〜。"
+          },
+          "rate45": {
+            "excellent": 780,
+            "good": 600,
+            "caution": 430,
+            "note": "4.5枚交換は600G〜。"
+          }
+        },
+        "note": "天井ボーナス間800G+α。等価/5.6枚は500G〜が狙い目。スルー天井と組み合わせて判断する。"
+      },
+      "suru": {
+        "excellent": 8,
+        "good": 6,
+        "caution": 4,
+        "byRate": {
+          "eq56": {
+            "excellent": 8,
+            "good": 6,
+            "caution": 4,
+            "note": "8スルー以上は0Gから即打ち。6スルーは200G〜から狙い目。"
+          },
+          "rate55": {
+            "excellent": 8,
+            "good": 6,
+            "caution": 4,
+            "note": "8スルー以上は0Gから即打ち。"
+          },
+          "rate50": {
+            "excellent": 9,
+            "good": 7,
+            "caution": 5,
+            "note": "5.0枚は7スルー〜が基準。"
+          },
+          "rate45": {
+            "excellent": 9,
+            "good": 8,
+            "caution": 6,
+            "note": "4.5枚は8スルー〜が基準。"
+          }
+        },
+        "note": "10スルー後（11回目のボーナス）でAT確定。8スルー以上はG数関係なく即打ち可能。"
+      },
+      "reset": {
+        "excellent": 400,
+        "good": 250,
+        "caution": 150,
+        "byRate": {
+          "eq56": {
+            "excellent": 400,
+            "good": 250,
+            "caution": 150,
+            "note": "リセット後天井500G+α。等価/5.6枚は250G〜から狙い目。"
+          },
+          "rate55": {
+            "excellent": 420,
+            "good": 280,
+            "caution": 170,
+            "note": "5.5枚交換は280G〜。"
+          },
+          "rate50": {
+            "excellent": 450,
+            "good": 320,
+            "caution": 200,
+            "note": "5.0枚交換は320G〜。"
+          },
+          "rate45": {
+            "excellent": 480,
+            "good": 350,
+            "caution": 220,
+            "note": "4.5枚交換は350G〜。"
+          }
+        },
+        "note": "リセット後天井500G+αに短縮。等価/5.6枚は250G〜が狙い目。"
+      }
+    },
+    "limit": 900
   }
 ]
