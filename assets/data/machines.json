@@ -9415,5 +9415,154 @@
       }
     },
     "limit": 900
+  },
+  {
+    "slug": "tenken",
+    "name": "パチスロ 転生したら剣でした",
+    "seo": {
+      "title": "パチスロ 転生したら剣でした 狙い目"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価530G〜 / 5.5枚610G〜 / リセット後160G〜",
+    "aliases": [
+      "転生したら剣でした",
+      "転剣",
+      "てんけん",
+      "転生剣",
+      "tenken"
+    ],
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "modes": [
+        {
+          "key": "normal",
+          "label": "AT間"
+        },
+        {
+          "key": "bonus_gap",
+          "label": "ボーナス間"
+        },
+        {
+          "key": "reset",
+          "label": "リセット後"
+        }
+      ],
+      "normal": {
+        "excellent": 750,
+        "good": 530,
+        "caution": 380,
+        "byRate": {
+          "eq56": {
+            "excellent": 750,
+            "good": 530,
+            "caution": 380,
+            "note": "AT間天井970G+α。等価/5.6枚は530G〜が狙い目。"
+          },
+          "rate55": {
+            "excellent": 780,
+            "good": 610,
+            "caution": 430,
+            "note": "5.5枚交換は610G〜。"
+          },
+          "rate50": {
+            "excellent": 800,
+            "good": 650,
+            "caution": 460,
+            "note": "5.0枚交換は650G〜。"
+          },
+          "rate45": {
+            "excellent": 820,
+            "good": 700,
+            "caution": 500,
+            "note": "4.5枚交換は700G〜。"
+          }
+        },
+        "note": "AT間天井970G+α。ボーナス後でATに入れていない台はボーナス間天井（1000G〜）も確認。"
+      },
+      "bonus_gap": {
+        "excellent": 1200,
+        "good": 1000,
+        "caution": 750,
+        "byRate": {
+          "eq56": {
+            "excellent": 1200,
+            "good": 1000,
+            "caution": 750,
+            "note": "ボーナス間天井1280G+α。1000G〜から狙い目。"
+          },
+          "rate55": {
+            "excellent": 1220,
+            "good": 1020,
+            "caution": 780,
+            "note": "5.5枚交換は1020G〜。"
+          },
+          "rate50": {
+            "excellent": 1240,
+            "good": 1050,
+            "caution": 800,
+            "note": "5.0枚交換は1050G〜。"
+          },
+          "rate45": {
+            "excellent": 1260,
+            "good": 1070,
+            "caution": 820,
+            "note": "4.5枚交換は1070G〜。"
+          }
+        },
+        "note": "ボーナス間天井1280G+α。ATに入らずボーナスのみ当選している台に適用。"
+      },
+      "reset": {
+        "excellent": 400,
+        "good": 160,
+        "caution": 80,
+        "byRate": {
+          "eq56": {
+            "excellent": 400,
+            "good": 160,
+            "caution": 80,
+            "note": "リセット後AT間天井600G+αに短縮。等価/5.6枚は160G〜から狙い目。"
+          },
+          "rate55": {
+            "excellent": 430,
+            "good": 200,
+            "caution": 100,
+            "note": "5.5枚交換は200G〜。"
+          },
+          "rate50": {
+            "excellent": 460,
+            "good": 240,
+            "caution": 130,
+            "note": "5.0枚交換は240G〜。"
+          },
+          "rate45": {
+            "excellent": 490,
+            "good": 280,
+            "caution": 160,
+            "note": "4.5枚交換は280G〜。"
+          }
+        },
+        "note": "リセット後AT間天井600G+αに短縮。等価/5.6枚は160G〜が狙い目。"
+      }
+    },
+    "limit": 1050
   }
 ]
