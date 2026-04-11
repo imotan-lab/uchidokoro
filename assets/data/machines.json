@@ -9820,5 +9820,46 @@
       }
     },
     "limit": 900
+  },
+  {
+    "slug": "babel",
+    "name": "スマスロ バベル",
+    "seo": {
+      "title": "スマスロ バベル 狙い目"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価730G〜 / 5.6枚740G〜 / 現金820G〜",
+    "aliases": [
+      "バベル",
+      "ばべる",
+      "babel",
+      "BABEL"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 1280,
+        "good": 900,
+        "caution": 730,
+        "note": "天井1280G+α（ボーナス間）。等価730G〜・5.6枚740G〜・現金820G〜が狙い目。"
+      },
+      "reset": {
+        "excellent": 900,
+        "good": 500,
+        "caution": 360,
+        "note": "設定変更後は900G+αに短縮。360G〜が狙い目（スロパチクエスト基準）。"
+      }
+    },
+    "limit": 1280
   }
 ]
