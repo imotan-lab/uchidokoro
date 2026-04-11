@@ -9734,5 +9734,48 @@
       "ルパン大航海者",
       "lupin"
     ]
+  },
+  {
+    "slug": "zombieland_saga",
+    "name": "スロット ゾンビランドサガ",
+    "seo": {
+      "title": "スロット ゾンビランドサガ 狙い目"
+    },
+    "info": "スマスロST",
+    "strategy": "等価450G〜 / 5.6枚460G〜 / 現金580G〜",
+    "aliases": [
+      "ゾンビランドサガ",
+      "ゾンサガ",
+      "ぞんさが",
+      "ぞんびらんどさが",
+      "zombie",
+      "zombieland"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 777,
+        "good": 550,
+        "caution": 450,
+        "note": "天井ボーナス&ST間777G。等価450G〜狙い目。有利区間ランプで状態確認可。"
+      },
+      "reset": {
+        "excellent": 555,
+        "good": 200,
+        "caution": 100,
+        "note": "設定変更後は555Gに短縮。朝一は超高確の可能性があるため100G〜様子見。"
+      }
+    },
+    "limit": 800
   }
 ]
