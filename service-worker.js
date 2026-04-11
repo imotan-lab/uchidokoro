@@ -1,4 +1,4 @@
-const CACHE_NAME = 'uchidokoro-v36';
+const CACHE_NAME = 'uchidokoro-v37';
 
 const STATIC_CACHE = [
   '/',

@@ -9777,5 +9777,48 @@
       }
     },
     "limit": 800
+  },
+  {
+    "slug": "zettai_shougeki4",
+    "name": "L 絶対衝激Ⅳ",
+    "seo": {
+      "title": "L 絶対衝激Ⅳ 狙い目"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価520G〜 / 5.6枚530G〜 / 現金670G〜",
+    "aliases": [
+      "絶対衝激",
+      "絶対衝激4",
+      "ぜったいしょうげき",
+      "ぜったいしょうげき4",
+      "zettai",
+      "idol"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 900,
+        "good": 600,
+        "caution": 520,
+        "note": "天井最大9周期（約900G）。等価520G〜・5.6枚530G〜・現金670G〜から狙い目。1周期は約80〜100G。"
+      },
+      "reset": {
+        "excellent": 500,
+        "good": 250,
+        "caution": 150,
+        "note": "設定変更後は最大5周期（約500G）に短縮。150G〜が狙い目（スロパチクエスト基準）。"
+      }
+    },
+    "limit": 900
   }
 ]
