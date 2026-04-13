@@ -9650,7 +9650,7 @@
         "note": "リセット後AT間天井600G+αに短縮。等価/5.6枚は160G〜が狙い目。"
       }
     },
-    "limit": 1050
+    "limit": 1400
   },
   {
     "slug": "valvrave",
@@ -9704,7 +9704,7 @@
         }
       ],
       "hasSuru": true,
-      "suruMax": 6,
+      "suruMax": 7,
       "at_bonus": {
         "excellent": 1100,
         "good": 780,
@@ -9770,30 +9770,30 @@
         "note": "CZ間天井1000G+α（液晶ゲーム数）。スルー回数が増えるほど浅い狙い目になる。"
       },
       "suru": {
-        "excellent": 6,
+        "excellent": 7,
         "good": 4,
         "caution": 2,
         "byRate": {
           "eq56": {
-            "excellent": 6,
+            "excellent": 7,
             "good": 4,
             "caution": 2,
             "note": "7スルーで次回CZ成功濃厚。4スルー以降はG数関係なく即打ち可。"
           },
           "rate55": {
-            "excellent": 6,
+            "excellent": 7,
             "good": 4,
             "caution": 2,
             "note": "4スルー以降を基準に。"
           },
           "rate50": {
-            "excellent": 6,
+            "excellent": 7,
             "good": 5,
             "caution": 3,
             "note": "5.0枚は5スルー〜が基準。"
           },
           "rate45": {
-            "excellent": 6,
+            "excellent": 7,
             "good": 5,
             "caution": 4,
             "note": "4.5枚は5スルー〜が基準。"
