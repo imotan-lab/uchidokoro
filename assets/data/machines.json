@@ -7423,7 +7423,7 @@
         "reset"
       ],
       "hasSuru": true,
-      "suruMax": 7,
+      "suruMax": 6,
       "defaultRate": "equal",
       "exchangeRates": [
         {
@@ -7514,13 +7514,8 @@
               "count": 6,
               "excellent": 150,
               "good": 90,
-              "caution": 40
-            },
-            {
-              "count": 7,
-              "excellent": 80,
-              "good": 40,
-              "caution": 0
+              "caution": 40,
+              "note": "6スルー。次回ボーナスでAT確定。0G〜で着席OK。"
             }
           ],
           "note": "CZスルー回数。AT後はリセットされる場合あり。"

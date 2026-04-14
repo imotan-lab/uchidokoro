@@ -652,6 +652,18 @@ function resolveMachineSlug() {
         html += `</table>`;
         if (tbl.note) html += `<p class="settei-note">${tbl.note}</p>`;
       });
+      if (!section.tables && section.rows) {
+        html += `<table class="settei-table"><tr><th>要素</th><th>示唆</th></tr>`;
+        section.rows.forEach(row => {
+          const cell0 = row[0];
+          const cell1 = row[1];
+          const badge = typeof cell1 === "object"
+            ? `<span class="settei-badge ${badgeClass[cell1.badge] || ""}">${cell1.text}</span>`
+            : cell1;
+          html += `<tr><td>${cell0}</td><td>${badge}</td></tr>`;
+        });
+        html += `</table>`;
+      }
       div.innerHTML = html;
     } else {
       div.innerHTML = `<p class="article-title">${section.title}</p>${(section.body || []).map(t => `<p class="article-body">${t}</p>`).join("")}`;
