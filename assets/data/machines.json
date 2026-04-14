@@ -274,7 +274,8 @@
         "good": 180,
         "caution": 100,
         "note": "設定変更後は天井450G+αに短縮。リセット台なら浅いラインから候補です。"
-      }
+      },
+      "limit": 999
     },
     "limit": 999
   },
@@ -750,7 +751,8 @@
           }
         },
         "note": "設定変更後は天井短縮。250G〜でプラス域。"
-      }
+      },
+      "limit": 1536
     },
     "limit": 1536,
     "aliases": [
@@ -1335,7 +1337,8 @@
           "key": "rate45",
           "label": "4.5枚"
         }
-      ]
+      ],
+      "limit": 1500
     },
     "limit": 1500,
     "strategyByRate": {
@@ -1403,8 +1406,8 @@
       ],
       "normal": {
         "excellent": 600,
-        "good": 400,
-        "caution": 300,
+        "good": 410,
+        "caution": 310,
         "byRate": {
           "eq56": {
             "excellent": 550,
@@ -1666,7 +1669,8 @@
             }
           }
         ]
-      }
+      },
+      "limit": 795
     },
     "limit": 800,
     "aliases": [
@@ -2186,9 +2190,9 @@
         }
       ],
       "normal": {
-        "excellent": 1000,
-        "good": 650,
-        "caution": 500,
+        "excellent": 1100,
+        "good": 620,
+        "caution": 520,
         "note": "BIG後の天井1100G+α。650G〜で1000円以上の期待値。液晶右下のG数カウンタで確認。",
         "byRate": {
           "eq56": {
@@ -2612,7 +2616,10 @@
           "key": "rate45",
           "label": "4.5枚"
         }
-      ]
+      ],
+      "limit": 1100,
+      "hasSuru": true,
+      "suruMax": 6
     },
     "limit": 1100,
     "strategyByRate": {
@@ -2679,7 +2686,7 @@
         }
       ],
       "normal": {
-        "excellent": 900,
+        "excellent": 1000,
         "good": 640,
         "caution": 500,
         "byRate": {
@@ -2741,7 +2748,8 @@
           }
         },
         "note": "リセット時は天井600G+αに短縮。"
-      }
+      },
+      "limit": 1000
     },
     "limit": 1000
   },
@@ -2800,7 +2808,7 @@
         }
       ],
       "normal": {
-        "excellent": 1000,
+        "excellent": 1190,
         "good": 450,
         "caution": 350,
         "byRate": {
@@ -2894,7 +2902,10 @@
           }
         },
         "note": "東卍チャンス4スルー（5回目）でAT当選確定。"
-      }
+      },
+      "limit": 1190,
+      "hasSuru": true,
+      "suruMax": 3
     },
     "limit": 1190
   },
@@ -2948,30 +2959,30 @@
         }
       ],
       "normal": {
-        "excellent": 750,
+        "excellent": 1000,
         "good": 590,
         "caution": 450,
         "byRate": {
           "eq56": {
-            "excellent": 700,
+            "excellent": 1000,
             "good": 550,
             "caution": 400,
             "note": "5.6枚交換なら通常550Gから狙い目、400Gから候補です。駆け抜け後の浅いラインと混ぜず、通常台として見る前提を先に固めてください。"
           },
           "rate55": {
-            "excellent": 750,
+            "excellent": 1000,
             "good": 590,
             "caution": 450,
             "note": "5.5枚交換は通常590G基準です。駆け抜け後170G基準と入口差が大きいので、今の台がどちらかを先に分けるのが重要です。"
           },
           "rate50": {
-            "excellent": 800,
+            "excellent": 1000,
             "good": 650,
             "caution": 500,
             "note": "5.0枚交換は通常650Gからが本線です。浅い通常台に広げず、液晶G数と履歴を見て深い台を優先した方が収まりやすいです。"
           },
           "rate45": {
-            "excellent": 850,
+            "excellent": 1000,
             "good": 700,
             "caution": 550,
             "note": "4.5枚交換は通常700G基準です。駆け抜け後やリセットの浅い台とは切り分けて、深い通常台だけに絞る方が安全です。"
@@ -3042,7 +3053,8 @@
           }
         },
         "note": "設定変更後は天井600G+αに短縮。180G〜でプラス域。"
-      }
+      },
+      "limit": 1000
     },
     "limit": 1000,
     "aliases": [
@@ -3165,7 +3177,8 @@
           }
         },
         "note": "リセット時は天井600〜699pt+αに短縮。"
-      }
+      },
+      "limit": 700
     },
     "limit": 633
   },
