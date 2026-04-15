@@ -485,6 +485,23 @@ button, input, select { font: inherit; }
 }
 .header-x:hover { opacity: 0.8; }
 
+.x-follow-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 14px 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gold);
+  border: 1px solid var(--gold);
+  background: rgba(212,175,55,0.08);
+  border-radius: 8px;
+  line-height: 1.4;
+  transition: background .2s;
+}
+.x-follow-btn:hover { background: rgba(212,175,55,0.16); }
+
 /* SETTING JUDGE */
 .setting-input-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 12px; }
 .setting-input-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); }
