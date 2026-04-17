@@ -9956,5 +9956,147 @@
       }
     },
     "limit": 1280
+  },
+  {
+    "slug": "milliongod_kiseki",
+    "name": "スマスロ ミリオンゴッド-神々の軌跡-",
+    "seo": {
+      "title": "スマスロ ミリオンゴッド-神々の軌跡- 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "※解析待ち — 情報が判明次第更新します",
+    "aliases": [
+      "ミリオンゴッド",
+      "神々の軌跡",
+      "みりおんごっど",
+      "ゴッド",
+      "god",
+      "milliongod"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 1480,
+        "good": 1000,
+        "caution": 700,
+        "note": "GG間天井1480G。狙い目ライン解析待ち（スロパチクエスト基準確認中）。等価550G〜・5.6枚750G〜が目安（ナナプレス参考値）。"
+      },
+      "reset": {
+        "excellent": 1480,
+        "good": 700,
+        "caution": 400,
+        "note": "設定変更後は510G / 1000G / 1480G から抽選（15.2% / 20.3% / 64.5%）。リセット狙いの狙い目は解析待ち。"
+      }
+    },
+    "limit": 1480
+  },
+  {
+    "slug": "gundam_uc2",
+    "name": "Lパチスロ 機動戦士ガンダムユニコーン 覚醒DRIVE",
+    "seo": {
+      "title": "ガンダムユニコーン 覚醒DRIVE 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "※解析待ち — 情報が判明次第更新します",
+    "aliases": [
+      "ガンダムユニコーン",
+      "ガンダムUC",
+      "UC2",
+      "覚醒DRIVE",
+      "ユニコーン",
+      "gundam_uc",
+      "ガンダム"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "CZ間"
+        },
+        {
+          "key": "at",
+          "label": "AT間"
+        },
+        {
+          "key": "suru",
+          "label": "スルー天井",
+          "hasSuru": true
+        }
+      ],
+      "normal": {
+        "excellent": 700,
+        "good": 400,
+        "caution": 300,
+        "note": "CZ間天井800G（リセット後400G）。等価400G〜・5.6枚500G〜が目安（ナナプレス参考値・スロパチ解析待ち）。"
+      },
+      "at": {
+        "excellent": 1200,
+        "good": 600,
+        "caution": 450,
+        "note": "AT間天井1400G（液晶G数・リセット後1000G）。等価600G〜・5.6枚800G〜が目安（ナナプレス参考値・スロパチ解析待ち）。"
+      },
+      "suru": {
+        "excellent": 5,
+        "good": 3,
+        "caution": 2,
+        "note": "CZ6スルーで7回目確定（ボーナス当選）。2スルー以上から候補入り。",
+        "suruMax": 6
+      }
+    },
+    "limit": 1400
+  },
+  {
+    "slug": "animal_dotch",
+    "name": "Lアニマルスロット ドッチ",
+    "seo": {
+      "title": "アニマルスロット ドッチ 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "※解析待ち — 情報が判明次第更新します",
+    "aliases": [
+      "アニマルスロットドッチ",
+      "アニマルドッチ",
+      "ドッチ",
+      "どっち",
+      "animal",
+      "dotch"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "BIG後"
+        },
+        {
+          "key": "reset",
+          "label": "REG後/リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 999,
+        "good": 700,
+        "caution": 500,
+        "note": "BIG後天井999G。狙い目ライン解析待ち（スロパチクエスト基準確認中）。"
+      },
+      "reset": {
+        "excellent": 499,
+        "good": 350,
+        "caution": 200,
+        "note": "REG後または設定変更後は天井499Gに短縮。狙い目ライン解析待ち。"
+      }
+    },
+    "limit": 999
   }
 ]
