@@ -4709,7 +4709,7 @@
         }
       },
       "suru": {
-        "suruMax": 2,
+        "suruMax": 9,
         "suru": [
           {
             "count": 0,
@@ -4790,7 +4790,7 @@
             "excellent": 50,
             "good": 0,
             "caution": 0,
-            "note": "2スルー。次回ATが確定するので、交換率が落ちても最優先候補です。",
+            "note": "2スルー。期待値がかなり高い段階です。G数問わず積極的に着席検討してください。",
             "byRate": {
               "eq56": {
                 "caution": 0,
@@ -4819,6 +4819,43 @@
                 "target": 80,
                 "good": 80,
                 "note": "4.5枚交換の2スルーは80G前後からを目安にしてください。"
+              }
+            }
+          },
+          {
+            "count": 9,
+            "excellent": 0,
+            "good": 0,
+            "caution": 0,
+            "note": "9スルー。次回（10回目）AT確定。交換率・G数不問で即着席OKです。",
+            "byRate": {
+              "eq56": {
+                "caution": 0,
+                "excellent": 0,
+                "target": 0,
+                "good": 0,
+                "note": "9スルーは交換率不問で0Gから即着席OKです。"
+              },
+              "rate55": {
+                "caution": 0,
+                "excellent": 0,
+                "target": 0,
+                "good": 0,
+                "note": "9スルーは交換率不問で0Gから即着席OKです。"
+              },
+              "rate50": {
+                "caution": 0,
+                "excellent": 0,
+                "target": 0,
+                "good": 0,
+                "note": "9スルーは交換率不問で0Gから即着席OKです。"
+              },
+              "rate45": {
+                "caution": 0,
+                "excellent": 0,
+                "target": 0,
+                "good": 0,
+                "note": "9スルーは交換率不問で0Gから即着席OKです。"
               }
             }
           }
