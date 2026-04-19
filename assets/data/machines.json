@@ -1,5 +1,46 @@
 [
   {
+    "slug": "kyokousuiri",
+    "name": "L虚構推理",
+    "seo": {
+      "title": "L虚構推理 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価500G~ / 5.6枚510G~ / 現金590G~（虚構真偽間1000G）",
+    "aliases": [
+      "虚構推理",
+      "きょこうすいり",
+      "きょこす",
+      "虚構"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 1000,
+        "good": 500,
+        "caution": 400,
+        "note": "天井虚構真偽間1000G。等価500G~・5.6枚510G~・現金590G~から狙い目。恩恵はボーナス+雪女ストック1個以上。"
+      },
+      "reset": {
+        "excellent": 700,
+        "good": 500,
+        "caution": 300,
+        "note": "設定変更後は天井が最大700G（または300G）に短縮。"
+      }
+    },
+    "limit": 1000
+  },
+  {
     "slug": "shinuchi_yoshimune",
     "name": "真打 吉宗",
     "seo": {
@@ -238,6 +279,49 @@
     ]
   },
   {
+    "slug": "akudama",
+    "name": "Lアクダマドライブ",
+    "seo": {
+      "title": "Lアクダマドライブ 狙い目・天井・期待値まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "等価530G~ / 5.6枚550G~ / 現金690G~（AT間967G+α / 6スルー〜）",
+    "aliases": [
+      "アクダマ",
+      "アクダマドライブ",
+      "あくだま",
+      "AKUDAMA"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "suru",
+          "label": "スルー天井",
+          "hasSuru": true
+        }
+      ],
+      "normal": {
+        "excellent": 967,
+        "good": 530,
+        "caution": 500,
+        "note": "天井AT間967G+α。等価530G~・5.6枚550G~・現金690G~から狙い目。745G以降はAT当選まで589G+αに短縮。"
+      },
+      "suru": {
+        "suruMax": 6,
+        "excellent": 6,
+        "good": 4,
+        "caution": 2,
+        "note": "ボーナス6スルーで7回目AT確定。スルー回数天井あり。"
+      }
+    },
+    "limit": 967
+  },
+  {
     "slug": "yorumungando",
     "name": "スマスロヨルムンガンド",
     "seo": {
@@ -278,6 +362,319 @@
       "limit": 999
     },
     "limit": 999
+  },
+  {
+    "slug": "umineko2",
+    "name": "Lパチスロうみねこのなく頃に2",
+    "seo": {
+      "title": "うみねこのなく頃に2 狙い目・天井・期待値まとめ"
+    },
+    "info": "A+完走型ART",
+    "strategy": "等価CZ間100G〜 / 完全攻略で設定1機械割103%",
+    "strategyByRate": {
+      "eq56": "5.6枚CZ間100G〜",
+      "rate55": "5.5枚CZ間110G〜",
+      "rate50": "5.0枚CZ間130G〜",
+      "rate45": "4.5枚CZ間150G〜"
+    },
+    "aliases": [
+      "うみねこ",
+      "ウミネコ"
+    ],
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        }
+      ],
+      "normal": {
+        "excellent": 180,
+        "good": 100,
+        "caution": 50,
+        "byRate": {
+          "eq56": {
+            "excellent": 180,
+            "good": 100,
+            "caution": 50,
+            "note": "5.6枚交換ならCZ間100Gから狙い目。200G周期でCZ確定。完全攻略なら設定1でも機械割103%。"
+          },
+          "rate55": {
+            "excellent": 180,
+            "good": 110,
+            "caution": 60,
+            "note": "5.5枚交換なら110Gから。"
+          },
+          "rate50": {
+            "excellent": 180,
+            "good": 130,
+            "caution": 80,
+            "note": "5.0枚交換なら130Gから。"
+          },
+          "rate45": {
+            "excellent": 180,
+            "good": 150,
+            "caution": 100,
+            "note": "4.5枚交換なら150Gから。"
+          }
+        },
+        "note": "CZ間200G周期で運命分岐モード確定。完全攻略で設定1でも機械割103%。"
+      }
+    },
+    "limit": 200
+  },
+  {
+    "slug": "isekai_quattro_bt",
+    "name": "A-SLOT+ 異世界かるてっとBT",
+    "seo": {
+      "title": "A-SLOT+ 異世界かるてっとBT スペックまとめ"
+    },
+    "info": "スマスロBT",
+    "strategy": "設定狙い主体・天井なし（BT合算約1/99）",
+    "aliases": [
+      "異世界かるてっと",
+      "いせかい",
+      "いせかる",
+      "かるてっと",
+      "異世界カルテット"
+    ]
+  },
+  {
+    "slug": "my_juggler_v",
+    "name": "マイジャグラーV",
+    "seo": {
+      "title": "マイジャグラーV 設定判別"
+    },
+    "info": "Aタイプ",
+    "strategy": "設定狙い主体・天井なし",
+    "aliases": [
+      "マイジャグ",
+      "マイジャグ5"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "設定狙い"
+        }
+      ],
+      "normal": {
+        "excellent": 99999,
+        "good": 99999,
+        "caution": 99999,
+        "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
+      }
+    },
+    "limit": null
+  },
+  {
+    "slug": "koukaku",
+    "name": "スマスロ 攻殻機動隊",
+    "seo": {
+      "title": "スマスロ 攻殻機動隊 狙い目"
+    },
+    "info": "スマスロAT",
+    "strategy": "CZ間300G〜 / AT間650G〜",
+    "strategyByRate": {
+      "eq56": "5.6枚CZ310G〜 / AT間660G〜",
+      "rate55": "5.5枚CZ400G〜 / AT間700G〜",
+      "rate50": "5.0枚CZ450G〜 / AT間750G〜",
+      "rate45": "4.5枚CZ500G〜 / AT間800G〜"
+    },
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "modes": [
+        {
+          "key": "cz",
+          "label": "CZ間"
+        },
+        {
+          "key": "at",
+          "label": "AT間"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "cz": {
+        "excellent": 550,
+        "good": 300,
+        "caution": 200,
+        "byRate": {
+          "eq56": {
+            "excellent": 500,
+            "good": 310,
+            "caution": 250,
+            "note": "5.6枚交換ならCZ間350Gから狙い目、250Gから候補です。AT間と混ぜず、CZ間台として見る前提を先に固めてください。"
+          },
+          "rate55": {
+            "excellent": 550,
+            "good": 400,
+            "caution": 300,
+            "note": "5.5枚交換はCZ間400G基準です。AT間700G基準との差が大きいので、入口を固定した方が使いやすいです。"
+          },
+          "rate50": {
+            "excellent": 600,
+            "good": 450,
+            "caution": 350,
+            "note": "5.0枚交換ではCZ間450Gからが本線です。浅いCZ間台に広げず、液晶G数を確認して深め優先にしてください。"
+          },
+          "rate45": {
+            "excellent": 650,
+            "good": 500,
+            "caution": 400,
+            "note": "4.5枚交換はCZ間500G基準です。AT間やリセットの浅いラインと混ぜずに使う方が安全です。"
+          }
+        },
+        "note": "CZ間天井550G+α。290G〜でプラス域。液晶のCZ間G数で確認。"
+      },
+      "at": {
+        "excellent": 900,
+        "good": 650,
+        "caution": 500,
+        "byRate": {
+          "eq56": {
+            "excellent": 850,
+            "good": 660,
+            "caution": 450,
+            "note": "5.6枚交換ならAT間650Gから狙い目、450Gから候補です。CZ間より深いラインなので、AT間台として見てよいかを先に分けてください。"
+          },
+          "rate55": {
+            "excellent": 900,
+            "good": 700,
+            "caution": 500,
+            "note": "5.5枚交換はAT間700G基準です。CZ間400Gラインと混ぜず、メニュー画面でAT間G数を確認してから使う方が安全です。"
+          },
+          "rate50": {
+            "excellent": 950,
+            "good": 750,
+            "caution": 550,
+            "note": "5.0枚交換ではAT間750Gからが本線です。CZ間よりひと回り深く、同じ感覚で見ないことが重要です。"
+          },
+          "rate45": {
+            "excellent": 1000,
+            "good": 800,
+            "caution": 600,
+            "note": "4.5枚交換はAT間800G基準です。入口差が大きい機種なので、AT間台として見る根拠を固めてから使ってください。"
+          }
+        },
+        "note": "AT間天井1000G+α。700G〜でプラス域。メニュー画面でAT間G数を確認。"
+      },
+      "reset": {
+        "excellent": 300,
+        "good": 150,
+        "caution": 80,
+        "byRate": {
+          "eq56": {
+            "excellent": 260,
+            "good": 120,
+            "caution": 50,
+            "note": "5.6枚交換のリセット台は120Gから候補です。CZ天井短縮とAT間699G短縮の前提が見える台に絞る方が安全です。"
+          },
+          "rate55": {
+            "excellent": 300,
+            "good": 150,
+            "caution": 80,
+            "note": "5.5枚交換はリセット150G基準です。CZ間とAT間の通常ラインとは別で整理してください。"
+          },
+          "rate50": {
+            "excellent": 350,
+            "good": 200,
+            "caution": 100,
+            "note": "5.0枚交換ではリセット200Gからが本線です。浅い朝一台に広げすぎず、前提確認を先にやる方がブレにくいです。"
+          },
+          "rate45": {
+            "excellent": 400,
+            "good": 250,
+            "caution": 120,
+            "note": "4.5枚交換のリセット台は250G基準です。通常時の複数入口と混ざりやすいので、朝一台として見る根拠を固めてから使う方が安全です。"
+          }
+        },
+        "note": "設定変更後はCZ天井350G+αに短縮。AT間天井も699Gに短縮。150G〜でプラス域。"
+      }
+    },
+    "limit": 999,
+    "aliases": [
+      "攻殻機動隊",
+      "攻殻",
+      "こうかく",
+      "コウカク",
+      "攻殻機動隊SAC"
+    ]
+  },
+  {
+    "slug": "new_king_hanahana_v",
+    "name": "SBニューキングハナハナV-30",
+    "seo": {
+      "title": "ニューキングハナハナV 狙い目・設定差まとめ"
+    },
+    "info": "A+BT（設定1/2/3/4/V）",
+    "strategy": "設定狙い主体・天井なし",
+    "aliases": [
+      "ニューキングハナハナ",
+      "キンハナ",
+      "キンハナV",
+      "ハナハナV",
+      "きんはな",
+      "にゅーきんぐ"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "設定狙い"
+        }
+      ],
+      "normal": {
+        "excellent": 99999,
+        "good": 99999,
+        "caution": 99999,
+        "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。ベル確率・BIG中スイカ・サイドランプで設定推測。"
+      }
+    },
+    "limit": null
   },
   {
     "slug": "enen2",
@@ -644,6 +1041,35 @@
     }
   },
   {
+    "slug": "gogo_juggler3",
+    "name": "ゴーゴージャグラー3",
+    "seo": {
+      "title": "ゴーゴージャグラー3 設定判別"
+    },
+    "info": "Aタイプ",
+    "strategy": "設定狙い主体・天井なし",
+    "aliases": [
+      "ゴージャグ",
+      "ゴーゴー3"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "設定狙い"
+        }
+      ],
+      "normal": {
+        "excellent": 99999,
+        "good": 99999,
+        "caution": 99999,
+        "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
+      }
+    },
+    "limit": null
+  },
+  {
     "slug": "hokuto_tensei2",
     "name": "スマスロ 北斗の拳 転生の章2",
     "seo": {
@@ -764,63 +1190,273 @@
     ]
   },
   {
-    "slug": "isekai_quattro_bt",
-    "name": "A-SLOT+ 異世界かるてっとBT",
+    "slug": "thunder_v",
+    "name": "スマスロ サンダーV",
     "seo": {
-      "title": "A-SLOT+ 異世界かるてっとBT スペックまとめ"
+      "title": "サンダーV 設定判別・狙い目まとめ"
     },
-    "info": "スマスロBT",
-    "strategy": "設定狙い主体・天井なし（BT合算約1/99）",
+    "info": "スマスロノーマル",
+    "strategy": "設定狙い主体・天井なし",
     "aliases": [
-      "異世界かるてっと",
-      "いせかい",
-      "いせかる",
-      "かるてっと",
-      "異世界カルテット"
-    ]
-  },
-  {
-    "slug": "akudama",
-    "name": "Lアクダマドライブ",
-    "seo": {
-      "title": "Lアクダマドライブ 狙い目・天井・期待値まとめ"
-    },
-    "info": "スマスロAT",
-    "strategy": "等価530G~ / 5.6枚550G~ / 現金690G~（AT間967G+α / 6スルー〜）",
-    "aliases": [
-      "アクダマ",
-      "アクダマドライブ",
-      "あくだま",
-      "AKUDAMA"
+      "サンダー",
+      "サンダーV"
     ],
     "checker": {
       "unit": "G",
       "modes": [
         {
           "key": "normal",
-          "label": "通常"
-        },
-        {
-          "key": "suru",
-          "label": "スルー天井",
-          "hasSuru": true
+          "label": "設定狙い"
         }
       ],
       "normal": {
-        "excellent": 967,
-        "good": 530,
-        "caution": 500,
-        "note": "天井AT間967G+α。等価530G~・5.6枚550G~・現金690G~から狙い目。745G以降はAT当選まで589G+αに短縮。"
-      },
-      "suru": {
-        "suruMax": 6,
-        "excellent": 6,
-        "good": 4,
-        "caution": 2,
-        "note": "ボーナス6スルーで7回目AT確定。スルー回数天井あり。"
+        "excellent": 99999,
+        "good": 99999,
+        "caution": 99999,
+        "note": "ノーマルタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBB・RB・ベルをカウントしてください。"
       }
     },
-    "limit": 967
+    "limit": null
+  },
+  {
+    "slug": "okidoki_gorgeous",
+    "name": "S沖ドキ！ゴージャス-30",
+    "seo": {
+      "title": "沖ドキ！ゴージャス 狙い目・天井・期待値まとめ"
+    },
+    "info": "6.6号機 AT",
+    "strategy": "等価600G〜 / 天国後32Gヤメ",
+    "strategyByRate": {
+      "eq56": "5.6枚650G〜",
+      "rate55": "5.5枚670G〜",
+      "rate50": "5.0枚700G〜",
+      "rate45": "4.5枚750G〜"
+    },
+    "aliases": [
+      "沖ドキゴージャス",
+      "ゴージャス",
+      "沖ゴジャ",
+      "おきどきごーじゃす"
+    ],
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 850,
+        "good": 600,
+        "caution": 450,
+        "byRate": {
+          "eq56": {
+            "excellent": 850,
+            "good": 650,
+            "caution": 470,
+            "note": "5.6枚交換なら650Gから狙い目。天井999G。ボーナス後32G天国フォロー必須。"
+          },
+          "rate55": {
+            "excellent": 850,
+            "good": 670,
+            "caution": 490,
+            "note": "5.5枚交換なら670Gから。"
+          },
+          "rate50": {
+            "excellent": 900,
+            "good": 700,
+            "caution": 520,
+            "note": "5.0枚交換なら700Gから。"
+          },
+          "rate45": {
+            "excellent": 900,
+            "good": 750,
+            "caution": 560,
+            "note": "4.5枚交換なら750Gから。"
+          }
+        },
+        "note": "天井999G。ボーナス後32G回して天国否定でヤメ。リセット後は25%で天井399Gに短縮。"
+      },
+      "reset": {
+        "excellent": 350,
+        "good": 0,
+        "caution": 0,
+        "byRate": {
+          "eq56": {
+            "excellent": 350,
+            "good": 0,
+            "caution": 0,
+            "note": "リセット後は25%で天井399Gに短縮。380G付近まで回して当たらなければヤメ。"
+          },
+          "rate55": {
+            "excellent": 350,
+            "good": 0,
+            "caution": 0,
+            "note": "リセット後は25%で天井399Gに短縮。"
+          },
+          "rate50": {
+            "excellent": 380,
+            "good": 0,
+            "caution": 0,
+            "note": "リセット後は25%で天井399Gに短縮。"
+          },
+          "rate45": {
+            "excellent": 380,
+            "good": 50,
+            "caution": 0,
+            "note": "現金投資でも50Gから。"
+          }
+        },
+        "note": "設定変更後は25%で天井が399Gに短縮。0Gから打てる。"
+      }
+    },
+    "limit": 999
+  },
+  {
+    "slug": "king_hanahana",
+    "name": "Sキングハナハナ-30",
+    "seo": {
+      "title": "キングハナハナ 狙い目・設定差まとめ"
+    },
+    "info": "Aタイプ（設定1〜6）",
+    "strategy": "設定狙い主体・天井なし",
+    "aliases": [
+      "キングハナハナ",
+      "キンハナ",
+      "きんぐはなはな",
+      "キンハナ30"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "設定狙い"
+        }
+      ],
+      "normal": {
+        "excellent": 99999,
+        "good": 99999,
+        "caution": 99999,
+        "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。ベル確率・BIG中スイカ・REG中サイドランプ・フェザーランプで設定推測。"
+      }
+    },
+    "limit": null
+  },
+  {
+    "slug": "dragon_hanahana_senko",
+    "name": "ドラゴンハナハナ～閃光～-30",
+    "seo": {
+      "title": "ドラゴンハナハナ閃光 狙い目・設定差まとめ"
+    },
+    "info": "Aタイプ（設定1〜6）",
+    "strategy": "設定狙い主体・天井なし",
+    "aliases": [
+      "ドラハナ",
+      "ドラゴンハナハナ",
+      "閃光",
+      "どらはな",
+      "ドラハナ閃光"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "設定狙い"
+        }
+      ],
+      "normal": {
+        "excellent": 99999,
+        "good": 99999,
+        "caution": 99999,
+        "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。ベル確率・BIG中スイカ・REG中サイドランプ・フェザーランプで設定推測。"
+      }
+    },
+    "limit": null
+  },
+  {
+    "slug": "neo_aim_juggler",
+    "name": "ネオアイムジャグラーEX",
+    "seo": {
+      "title": "ネオアイムジャグラーEX 設定判別"
+    },
+    "info": "Aタイプ",
+    "strategy": "設定狙い主体・天井なし",
+    "aliases": [
+      "アイム",
+      "ネオアイム"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "設定狙い"
+        }
+      ],
+      "normal": {
+        "excellent": 99999,
+        "good": 99999,
+        "caution": 99999,
+        "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
+      }
+    },
+    "limit": null
+  },
+  {
+    "slug": "hanabi",
+    "name": "Lハナビ",
+    "seo": {
+      "title": "スマスロハナビ 設定判別・スペックまとめ"
+    },
+    "info": "スマスロ ノーマル",
+    "strategy": "設定狙い主体・天井なし",
+    "aliases": [
+      "ハナビ",
+      "HANABI",
+      "花火"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "設定狙い"
+        }
+      ],
+      "normal": {
+        "excellent": 99999,
+        "good": 99999,
+        "caution": 99999,
+        "note": "ノーマルタイプのため天井非搭載。設定狙い主体の機種です。完全攻略で設定1から機械割100.2%。高設定が見込める環境での使用を推奨。"
+      }
+    },
+    "limit": null
   },
   {
     "slug": "valvrave2",
@@ -1962,202 +2598,6 @@
       "てっけん",
       "テッケン",
       "鉄拳6"
-    ]
-  },
-  {
-    "slug": "kyokousuiri",
-    "name": "L虚構推理",
-    "seo": {
-      "title": "L虚構推理 狙い目・天井・期待値まとめ"
-    },
-    "info": "スマスロAT",
-    "strategy": "等価500G~ / 5.6枚510G~ / 現金590G~（虚構真偽間1000G）",
-    "aliases": [
-      "虚構推理",
-      "きょこうすいり",
-      "きょこす",
-      "虚構"
-    ],
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "normal",
-          "label": "通常"
-        },
-        {
-          "key": "reset",
-          "label": "リセット"
-        }
-      ],
-      "normal": {
-        "excellent": 1000,
-        "good": 500,
-        "caution": 400,
-        "note": "天井虚構真偽間1000G。等価500G~・5.6枚510G~・現金590G~から狙い目。恩恵はボーナス+雪女ストック1個以上。"
-      },
-      "reset": {
-        "excellent": 700,
-        "good": 500,
-        "caution": 300,
-        "note": "設定変更後は天井が最大700G（または300G）に短縮。"
-      }
-    },
-    "limit": 1000
-  },
-  {
-    "slug": "koukaku",
-    "name": "スマスロ 攻殻機動隊",
-    "seo": {
-      "title": "スマスロ 攻殻機動隊 狙い目"
-    },
-    "info": "スマスロAT",
-    "strategy": "CZ間300G〜 / AT間650G〜",
-    "strategyByRate": {
-      "eq56": "5.6枚CZ310G〜 / AT間660G〜",
-      "rate55": "5.5枚CZ400G〜 / AT間700G〜",
-      "rate50": "5.0枚CZ450G〜 / AT間750G〜",
-      "rate45": "4.5枚CZ500G〜 / AT間800G〜"
-    },
-    "checker": {
-      "unit": "G",
-      "defaultRate": "eq56",
-      "exchangeRates": [
-        {
-          "key": "eq56",
-          "label": "5.6枚"
-        },
-        {
-          "key": "rate55",
-          "label": "5.5枚"
-        },
-        {
-          "key": "rate50",
-          "label": "5.0枚"
-        },
-        {
-          "key": "rate45",
-          "label": "4.5枚"
-        }
-      ],
-      "modes": [
-        {
-          "key": "cz",
-          "label": "CZ間"
-        },
-        {
-          "key": "at",
-          "label": "AT間"
-        },
-        {
-          "key": "reset",
-          "label": "リセット"
-        }
-      ],
-      "cz": {
-        "excellent": 550,
-        "good": 300,
-        "caution": 200,
-        "byRate": {
-          "eq56": {
-            "excellent": 500,
-            "good": 310,
-            "caution": 250,
-            "note": "5.6枚交換ならCZ間350Gから狙い目、250Gから候補です。AT間と混ぜず、CZ間台として見る前提を先に固めてください。"
-          },
-          "rate55": {
-            "excellent": 550,
-            "good": 400,
-            "caution": 300,
-            "note": "5.5枚交換はCZ間400G基準です。AT間700G基準との差が大きいので、入口を固定した方が使いやすいです。"
-          },
-          "rate50": {
-            "excellent": 600,
-            "good": 450,
-            "caution": 350,
-            "note": "5.0枚交換ではCZ間450Gからが本線です。浅いCZ間台に広げず、液晶G数を確認して深め優先にしてください。"
-          },
-          "rate45": {
-            "excellent": 650,
-            "good": 500,
-            "caution": 400,
-            "note": "4.5枚交換はCZ間500G基準です。AT間やリセットの浅いラインと混ぜずに使う方が安全です。"
-          }
-        },
-        "note": "CZ間天井550G+α。290G〜でプラス域。液晶のCZ間G数で確認。"
-      },
-      "at": {
-        "excellent": 900,
-        "good": 650,
-        "caution": 500,
-        "byRate": {
-          "eq56": {
-            "excellent": 850,
-            "good": 660,
-            "caution": 450,
-            "note": "5.6枚交換ならAT間650Gから狙い目、450Gから候補です。CZ間より深いラインなので、AT間台として見てよいかを先に分けてください。"
-          },
-          "rate55": {
-            "excellent": 900,
-            "good": 700,
-            "caution": 500,
-            "note": "5.5枚交換はAT間700G基準です。CZ間400Gラインと混ぜず、メニュー画面でAT間G数を確認してから使う方が安全です。"
-          },
-          "rate50": {
-            "excellent": 950,
-            "good": 750,
-            "caution": 550,
-            "note": "5.0枚交換ではAT間750Gからが本線です。CZ間よりひと回り深く、同じ感覚で見ないことが重要です。"
-          },
-          "rate45": {
-            "excellent": 1000,
-            "good": 800,
-            "caution": 600,
-            "note": "4.5枚交換はAT間800G基準です。入口差が大きい機種なので、AT間台として見る根拠を固めてから使ってください。"
-          }
-        },
-        "note": "AT間天井1000G+α。700G〜でプラス域。メニュー画面でAT間G数を確認。"
-      },
-      "reset": {
-        "excellent": 300,
-        "good": 150,
-        "caution": 80,
-        "byRate": {
-          "eq56": {
-            "excellent": 260,
-            "good": 120,
-            "caution": 50,
-            "note": "5.6枚交換のリセット台は120Gから候補です。CZ天井短縮とAT間699G短縮の前提が見える台に絞る方が安全です。"
-          },
-          "rate55": {
-            "excellent": 300,
-            "good": 150,
-            "caution": 80,
-            "note": "5.5枚交換はリセット150G基準です。CZ間とAT間の通常ラインとは別で整理してください。"
-          },
-          "rate50": {
-            "excellent": 350,
-            "good": 200,
-            "caution": 100,
-            "note": "5.0枚交換ではリセット200Gからが本線です。浅い朝一台に広げすぎず、前提確認を先にやる方がブレにくいです。"
-          },
-          "rate45": {
-            "excellent": 400,
-            "good": 250,
-            "caution": 120,
-            "note": "4.5枚交換のリセット台は250G基準です。通常時の複数入口と混ざりやすいので、朝一台として見る根拠を固めてから使う方が安全です。"
-          }
-        },
-        "note": "設定変更後はCZ天井350G+αに短縮。AT間天井も699Gに短縮。150G〜でプラス域。"
-      }
-    },
-    "limit": 999,
-    "aliases": [
-      "攻殻機動隊",
-      "攻殻",
-      "こうかく",
-      "コウカク",
-      "攻殻機動隊SAC"
     ]
   },
   {
@@ -3335,177 +3775,6 @@
       }
     },
     "limit": 1000
-  },
-  {
-    "slug": "umineko2",
-    "name": "Lパチスロうみねこのなく頃に2",
-    "seo": {
-      "title": "うみねこのなく頃に2 狙い目・天井・期待値まとめ"
-    },
-    "info": "A+完走型ART",
-    "strategy": "等価CZ間100G〜 / 完全攻略で設定1機械割103%",
-    "strategyByRate": {
-      "eq56": "5.6枚CZ間100G〜",
-      "rate55": "5.5枚CZ間110G〜",
-      "rate50": "5.0枚CZ間130G〜",
-      "rate45": "4.5枚CZ間150G〜"
-    },
-    "aliases": [
-      "うみねこ",
-      "ウミネコ"
-    ],
-    "checker": {
-      "unit": "G",
-      "defaultRate": "eq56",
-      "exchangeRates": [
-        {
-          "key": "eq56",
-          "label": "5.6枚"
-        },
-        {
-          "key": "rate55",
-          "label": "5.5枚"
-        },
-        {
-          "key": "rate50",
-          "label": "5.0枚"
-        },
-        {
-          "key": "rate45",
-          "label": "4.5枚"
-        }
-      ],
-      "modes": [
-        {
-          "key": "normal",
-          "label": "通常"
-        }
-      ],
-      "normal": {
-        "excellent": 180,
-        "good": 100,
-        "caution": 50,
-        "byRate": {
-          "eq56": {
-            "excellent": 180,
-            "good": 100,
-            "caution": 50,
-            "note": "5.6枚交換ならCZ間100Gから狙い目。200G周期でCZ確定。完全攻略なら設定1でも機械割103%。"
-          },
-          "rate55": {
-            "excellent": 180,
-            "good": 110,
-            "caution": 60,
-            "note": "5.5枚交換なら110Gから。"
-          },
-          "rate50": {
-            "excellent": 180,
-            "good": 130,
-            "caution": 80,
-            "note": "5.0枚交換なら130Gから。"
-          },
-          "rate45": {
-            "excellent": 180,
-            "good": 150,
-            "caution": 100,
-            "note": "4.5枚交換なら150Gから。"
-          }
-        },
-        "note": "CZ間200G周期で運命分岐モード確定。完全攻略で設定1でも機械割103%。"
-      }
-    },
-    "limit": 200
-  },
-  {
-    "slug": "my_juggler_v",
-    "name": "マイジャグラーV",
-    "seo": {
-      "title": "マイジャグラーV 設定判別"
-    },
-    "info": "Aタイプ",
-    "strategy": "設定狙い主体・天井なし",
-    "aliases": [
-      "マイジャグ",
-      "マイジャグ5"
-    ],
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "normal",
-          "label": "設定狙い"
-        }
-      ],
-      "normal": {
-        "excellent": 99999,
-        "good": 99999,
-        "caution": 99999,
-        "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
-      }
-    },
-    "limit": null
-  },
-  {
-    "slug": "new_king_hanahana_v",
-    "name": "SBニューキングハナハナV-30",
-    "seo": {
-      "title": "ニューキングハナハナV 狙い目・設定差まとめ"
-    },
-    "info": "A+BT（設定1/2/3/4/V）",
-    "strategy": "設定狙い主体・天井なし",
-    "aliases": [
-      "ニューキングハナハナ",
-      "キンハナ",
-      "キンハナV",
-      "ハナハナV",
-      "きんはな",
-      "にゅーきんぐ"
-    ],
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "normal",
-          "label": "設定狙い"
-        }
-      ],
-      "normal": {
-        "excellent": 99999,
-        "good": 99999,
-        "caution": 99999,
-        "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。ベル確率・BIG中スイカ・サイドランプで設定推測。"
-      }
-    },
-    "limit": null
-  },
-  {
-    "slug": "thunder_v",
-    "name": "スマスロ サンダーV",
-    "seo": {
-      "title": "サンダーV 設定判別・狙い目まとめ"
-    },
-    "info": "スマスロノーマル",
-    "strategy": "設定狙い主体・天井なし",
-    "aliases": [
-      "サンダー",
-      "サンダーV"
-    ],
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "normal",
-          "label": "設定狙い"
-        }
-      ],
-      "normal": {
-        "excellent": 99999,
-        "good": 99999,
-        "caution": 99999,
-        "note": "ノーマルタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBB・RB・ベルをカウントしてください。"
-      }
-    },
-    "limit": null
   },
   {
     "slug": "discup_ur",
@@ -4933,35 +5202,6 @@
     ]
   },
   {
-    "slug": "neo_aim_juggler",
-    "name": "ネオアイムジャグラーEX",
-    "seo": {
-      "title": "ネオアイムジャグラーEX 設定判別"
-    },
-    "info": "Aタイプ",
-    "strategy": "設定狙い主体・天井なし",
-    "aliases": [
-      "アイム",
-      "ネオアイム"
-    ],
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "normal",
-          "label": "設定狙い"
-        }
-      ],
-      "normal": {
-        "excellent": 99999,
-        "good": 99999,
-        "caution": 99999,
-        "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
-      }
-    },
-    "limit": null
-  },
-  {
     "slug": "funky_juggler2",
     "name": "ファンキージャグラー2",
     "seo": {
@@ -5111,36 +5351,6 @@
       }
     },
     "limit": 320
-  },
-  {
-    "slug": "hanabi",
-    "name": "Lハナビ",
-    "seo": {
-      "title": "スマスロハナビ 設定判別・スペックまとめ"
-    },
-    "info": "スマスロ ノーマル",
-    "strategy": "設定狙い主体・天井なし",
-    "aliases": [
-      "ハナビ",
-      "HANABI",
-      "花火"
-    ],
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "normal",
-          "label": "設定狙い"
-        }
-      ],
-      "normal": {
-        "excellent": 99999,
-        "good": 99999,
-        "caution": 99999,
-        "note": "ノーマルタイプのため天井非搭載。設定狙い主体の機種です。完全攻略で設定1から機械割100.2%。高設定が見込める環境での使用を推奨。"
-      }
-    },
-    "limit": null
   },
   {
     "slug": "azurlane",
@@ -5576,124 +5786,6 @@
     "limit": 800
   },
   {
-    "slug": "okidoki_gorgeous",
-    "name": "S沖ドキ！ゴージャス-30",
-    "seo": {
-      "title": "沖ドキ！ゴージャス 狙い目・天井・期待値まとめ"
-    },
-    "info": "6.6号機 AT",
-    "strategy": "等価600G〜 / 天国後32Gヤメ",
-    "strategyByRate": {
-      "eq56": "5.6枚650G〜",
-      "rate55": "5.5枚670G〜",
-      "rate50": "5.0枚700G〜",
-      "rate45": "4.5枚750G〜"
-    },
-    "aliases": [
-      "沖ドキゴージャス",
-      "ゴージャス",
-      "沖ゴジャ",
-      "おきどきごーじゃす"
-    ],
-    "checker": {
-      "unit": "G",
-      "defaultRate": "eq56",
-      "exchangeRates": [
-        {
-          "key": "eq56",
-          "label": "5.6枚"
-        },
-        {
-          "key": "rate55",
-          "label": "5.5枚"
-        },
-        {
-          "key": "rate50",
-          "label": "5.0枚"
-        },
-        {
-          "key": "rate45",
-          "label": "4.5枚"
-        }
-      ],
-      "modes": [
-        {
-          "key": "normal",
-          "label": "通常"
-        },
-        {
-          "key": "reset",
-          "label": "リセット"
-        }
-      ],
-      "normal": {
-        "excellent": 850,
-        "good": 600,
-        "caution": 450,
-        "byRate": {
-          "eq56": {
-            "excellent": 850,
-            "good": 650,
-            "caution": 470,
-            "note": "5.6枚交換なら650Gから狙い目。天井999G。ボーナス後32G天国フォロー必須。"
-          },
-          "rate55": {
-            "excellent": 850,
-            "good": 670,
-            "caution": 490,
-            "note": "5.5枚交換なら670Gから。"
-          },
-          "rate50": {
-            "excellent": 900,
-            "good": 700,
-            "caution": 520,
-            "note": "5.0枚交換なら700Gから。"
-          },
-          "rate45": {
-            "excellent": 900,
-            "good": 750,
-            "caution": 560,
-            "note": "4.5枚交換なら750Gから。"
-          }
-        },
-        "note": "天井999G。ボーナス後32G回して天国否定でヤメ。リセット後は25%で天井399Gに短縮。"
-      },
-      "reset": {
-        "excellent": 350,
-        "good": 0,
-        "caution": 0,
-        "byRate": {
-          "eq56": {
-            "excellent": 350,
-            "good": 0,
-            "caution": 0,
-            "note": "リセット後は25%で天井399Gに短縮。380G付近まで回して当たらなければヤメ。"
-          },
-          "rate55": {
-            "excellent": 350,
-            "good": 0,
-            "caution": 0,
-            "note": "リセット後は25%で天井399Gに短縮。"
-          },
-          "rate50": {
-            "excellent": 380,
-            "good": 0,
-            "caution": 0,
-            "note": "リセット後は25%で天井399Gに短縮。"
-          },
-          "rate45": {
-            "excellent": 380,
-            "good": 50,
-            "caution": 0,
-            "note": "現金投資でも50Gから。"
-          }
-        },
-        "note": "設定変更後は25%で天井が399Gに短縮。0Gから打てる。"
-      }
-    },
-    "limit": 999
-  },
-  {
     "slug": "fujiko_bt",
     "name": "LB不二子BT",
     "seo": {
@@ -5721,35 +5813,6 @@
         "good": 99999,
         "caution": 99999,
         "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。プラム確率・チェリー確率・ボーナス合算で設定推測。"
-      }
-    },
-    "limit": null
-  },
-  {
-    "slug": "gogo_juggler3",
-    "name": "ゴーゴージャグラー3",
-    "seo": {
-      "title": "ゴーゴージャグラー3 設定判別"
-    },
-    "info": "Aタイプ",
-    "strategy": "設定狙い主体・天井なし",
-    "aliases": [
-      "ゴージャグ",
-      "ゴーゴー3"
-    ],
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "normal",
-          "label": "設定狙い"
-        }
-      ],
-      "normal": {
-        "excellent": 99999,
-        "good": 99999,
-        "caution": 99999,
-        "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
       }
     },
     "limit": null
@@ -5870,37 +5933,6 @@
       }
     },
     "limit": 999
-  },
-  {
-    "slug": "king_hanahana",
-    "name": "Sキングハナハナ-30",
-    "seo": {
-      "title": "キングハナハナ 狙い目・設定差まとめ"
-    },
-    "info": "Aタイプ（設定1〜6）",
-    "strategy": "設定狙い主体・天井なし",
-    "aliases": [
-      "キングハナハナ",
-      "キンハナ",
-      "きんぐはなはな",
-      "キンハナ30"
-    ],
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "normal",
-          "label": "設定狙い"
-        }
-      ],
-      "normal": {
-        "excellent": 99999,
-        "good": 99999,
-        "caution": 99999,
-        "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。ベル確率・BIG中スイカ・REG中サイドランプ・フェザーランプで設定推測。"
-      }
-    },
-    "limit": null
   },
   {
     "slug": "dumbbell",
@@ -6780,38 +6812,6 @@
       "SF5",
       "すとふぁい"
     ]
-  },
-  {
-    "slug": "dragon_hanahana_senko",
-    "name": "ドラゴンハナハナ～閃光～-30",
-    "seo": {
-      "title": "ドラゴンハナハナ閃光 狙い目・設定差まとめ"
-    },
-    "info": "Aタイプ（設定1〜6）",
-    "strategy": "設定狙い主体・天井なし",
-    "aliases": [
-      "ドラハナ",
-      "ドラゴンハナハナ",
-      "閃光",
-      "どらはな",
-      "ドラハナ閃光"
-    ],
-    "checker": {
-      "unit": "G",
-      "modes": [
-        {
-          "key": "normal",
-          "label": "設定狙い"
-        }
-      ],
-      "normal": {
-        "excellent": 99999,
-        "good": 99999,
-        "caution": 99999,
-        "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。ベル確率・BIG中スイカ・REG中サイドランプ・フェザーランプで設定推測。"
-      }
-    },
-    "limit": null
   },
   {
     "slug": "baki",
