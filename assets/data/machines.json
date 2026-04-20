@@ -4330,7 +4330,7 @@
       "title": "スマスロ北斗の拳 狙い目"
     },
     "info": "スマスロAT",
-    "strategy": "等価600G〜 / 5.6枚650G〜 / 現金700G〜",
+    "strategy": "等価550G〜 / 5.6枚570G〜 / 現金680G〜 / リセット後100G〜",
     "strategyByRate": {
       "eq56": "5.6枚600G〜",
       "rate55": "5.5枚650G〜",
@@ -4360,36 +4360,36 @@
       ],
       "normal": {
         "excellent": 700,
-        "good": 650,
-        "caution": 600,
-        "target": 650,
+        "good": 570,
+        "caution": 450,
+        "target": 570,
         "byRate": {
           "eq56": {
-            "excellent": 650,
-            "good": 600,
-            "caution": 500,
-            "target": 600,
-            "note": "5.6枚交換なら500Gから候補、600Gから本線です。液晶G数だけでなく、やめた直後の台かも合わせて確認してください。"
+            "excellent": 680,
+            "good": 570,
+            "caution": 450,
+            "target": 570,
+            "note": "5.6枚なら570G〜（スロパチクエスト基準）。現金680G〜。等価550G〜。深い通常台優先。"
           },
           "rate55": {
-            "excellent": 700,
-            "good": 650,
-            "caution": 550,
-            "target": 650,
+            "excellent": 710,
+            "good": 600,
+            "caution": 480,
+            "target": 600,
             "note": "5.5枚交換は650G基準で見る形です。通常は深め優先で、浅い台は前兆や即やめ状況が弱いときだけ候補に残してください。"
           },
           "rate50": {
-            "excellent": 750,
-            "good": 700,
-            "caution": 600,
-            "target": 700,
+            "excellent": 780,
+            "good": 650,
+            "caution": 530,
+            "target": 650,
             "note": "5.0枚交換は700Gからが本線です。持ちメダルがない場面ではさらに慎重に見て、深い通常台を優先した方が使いやすいです。"
           },
           "rate45": {
-            "excellent": 800,
-            "good": 750,
-            "caution": 650,
-            "target": 750,
+            "excellent": 850,
+            "good": 720,
+            "caution": 590,
+            "target": 720,
             "note": "4.5枚交換は750Gからを基本線にしてください。浅い台に広げず、やめどきが明確な深い通常台だけに絞るのが安全です。"
           }
         },
@@ -8374,9 +8374,9 @@
       "title": "スマスロ まじかるすいーとプリズム・ナナ 狙い目"
     },
     "info": "スマスロAT",
-    "strategy": "等価500G〜 / 5.6枚510G〜 / 現金590G〜 / リセット後280G〜",
+    "strategy": "等価500G〜 / 5.6枚510G〜 / 現金590G〜 / リセット後90G〜 / ST駆け抜け後180G〜",
     "strategyByRate": {
-      "eq56": "5.6枚500G〜 / リセット後280G〜",
+      "eq56": "5.6枚500G〜 / リセット後90G〜 / ST駆け抜け後180G〜",
       "rate55": "5.5枚510G〜 / リセット後290G〜",
       "rate50": "5.0枚570G〜 / リセット後340G〜",
       "rate45": "4.5枚640G〜 / リセット後400G〜"
@@ -8458,39 +8458,39 @@
         }
       },
       "reset": {
-        "excellent": 420,
-        "good": 280,
-        "caution": 150,
-        "target": 280,
+        "excellent": 140,
+        "good": 90,
+        "caution": 50,
+        "target": 90,
         "note": "リセット後（設定変更・ST駆け抜け後）は天井555G+αに短縮。モード通常B以上確定。",
         "byRate": {
           "eq56": {
-            "excellent": 420,
-            "good": 280,
-            "caution": 150,
-            "target": 280,
-            "note": "等価リセット後280G〜。天井555G+α。"
+            "excellent": 140,
+            "good": 90,
+            "caution": 50,
+            "target": 90,
+            "note": "リセット後90G〜（スロパチクエスト基準）。天井555G+α・モード通常B以上確定。"
           },
           "rate55": {
-            "excellent": 430,
-            "good": 290,
-            "caution": 160,
-            "target": 290,
-            "note": "5.5枚リセット後290G〜。"
+            "excellent": 140,
+            "good": 90,
+            "caution": 50,
+            "target": 90,
+            "note": "5.5枚リセット後90G〜。"
           },
           "rate50": {
-            "excellent": 480,
-            "good": 340,
-            "caution": 190,
-            "target": 340,
-            "note": "5.0枚リセット後340G〜。"
+            "excellent": 150,
+            "good": 90,
+            "caution": 50,
+            "target": 90,
+            "note": "5.0枚リセット後90G〜。"
           },
           "rate45": {
-            "excellent": 540,
-            "good": 400,
-            "caution": 240,
-            "target": 400,
-            "note": "4.5枚リセット後400G〜。"
+            "excellent": 150,
+            "good": 90,
+            "caution": 50,
+            "target": 90,
+            "note": "4.5枚リセット後90G〜。"
           }
         }
       },
