@@ -24,14 +24,17 @@ assets/data/machines.json と scripts/machines_prev.json を比較し、
 
 import argparse
 import json
+import random
 import re
 import sys
+import time
 from pathlib import Path
 
 # x_poster.py, refresh_x_cookies.py を import パスに追加
 sys.path.insert(0, "C:/Users/imao_/.claude")
 from x_poster import post_tweet, count_x_weight, MAX_TWEET_WEIGHT  # noqa: E402
 from refresh_x_cookies import refresh_with_auto_chrome  # noqa: E402
+from clear_x_cache import clear_account, human_size  # noqa: E402
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 MACHINES_PATH = PROJECT_DIR / "assets" / "data" / "machines.json"
@@ -150,13 +153,26 @@ def main():
         save_json(PREV_PATH, current)
         return 0
 
+    # 投稿時刻のランダム化（bot検出対策）
+    # タスクは23時固定だが、実投稿時刻を0〜30分の範囲でずらす
+    if not args.dry_run:
+        jitter_sec = random.randint(0, 1800)
+        print(f"Posting jitter: {jitter_sec}秒待機（{jitter_sec // 60}分{jitter_sec % 60}秒）")
+        time.sleep(jitter_sec)
+
     # 投稿前にCookieをリフレッシュ（専用Chromeを一時起動→取得→終了、失敗しても続行）
     if not args.dry_run:
         ok, msg = refresh_with_auto_chrome(ACCOUNT)
         print(f"Cookie refresh: {'OK' if ok else 'SKIP'} - {msg}")
 
     posts = []
-    for entry in added:
+    for i, entry in enumerate(added):
+        # 2件目以降は投稿間に30〜120秒のランダム待機（連投パターン回避）
+        if i > 0 and not args.dry_run:
+            gap = random.randint(30, 120)
+            print(f"Inter-post jitter: {gap}秒待機")
+            time.sleep(gap)
+
         slug = entry.get("slug", "")
         release_date = dates.get(slug)
         text = build_post_text(entry, release_date)
@@ -194,6 +210,17 @@ def main():
     # 実投稿モードなら prev を更新（次回以降の差分基準にする）
     if not args.dry_run:
         save_json(PREV_PATH, current)
+
+        # 投稿でChromeを起動してキャッシュが増えたのでクリア（ログイン情報は残る）
+        # Chromeが動いているケース（想定外）は clear_account 側でスキップされる
+        try:
+            r = clear_account(ACCOUNT)
+            if r["skipped"]:
+                print(f"Cache clear: SKIP ({r['reason']})")
+            else:
+                print(f"Cache clear: OK ({human_size(r['freed_bytes'])} 解放)")
+        except Exception as e:
+            print(f"Cache clear: ERR ({type(e).__name__}: {e})")
 
     return 0
 
