@@ -24,8 +24,10 @@ assets/data/machines.json と scripts/machines_prev.json を比較し、
 
 import argparse
 import json
+import os
 import random
 import re
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -138,12 +140,44 @@ def parse_dates(s: str | None) -> dict:
         return {}
 
 
+def _relaunch_detached(argv: list):
+    """自分自身を detached サブプロセスとして再起動し、親は即終了する。
+    Windows の DETACHED_PROCESS を使うので、呼び出し元のタスクは待たずに完了できる。"""
+    DETACHED_PROCESS = 0x00000008
+    CREATE_NEW_PROCESS_GROUP = 0x00000200
+    flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    # 標準入出力を切り離してログファイルに書く
+    log_dir = Path("C:/Users/imao_/Documents/uchidokoro/logs")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "post_to_x_detached.log"
+    with open(log_path, "ab") as logf:
+        subprocess.Popen(
+            [sys.executable, __file__] + argv,
+            stdin=subprocess.DEVNULL,
+            stdout=logf,
+            stderr=logf,
+            creationflags=flags,
+            close_fds=True,
+            cwd=str(PROJECT_DIR),
+        )
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true", help="投稿せず文面だけ出力")
     parser.add_argument("--dates", type=str, default="",
                         help='slug→導入日のJSON辞書（例: \'{"slug1":"4/22（火）"}\'）')
+    parser.add_argument("--detach", action="store_true",
+                        help="実投稿処理をバックグラウンドプロセスで実行し親は即終了（タスクがブロックされるのを防ぐ）")
+    parser.add_argument("--_child", action="store_true", help=argparse.SUPPRESS)  # 内部利用
     args = parser.parse_args()
+
+    # --detach 指定時は自身を detached 子プロセスとして起動し親は即終了
+    if args.detach and not args._child and not args.dry_run:
+        child_argv = [a for a in sys.argv[1:] if a != "--detach"] + ["--_child"]
+        _relaunch_detached(child_argv)
+        print(f"[detach] バックグラウンドで投稿処理を開始しました。ログ: C:/Users/imao_/Documents/uchidokoro/logs/post_to_x_detached.log")
+        return 0
 
     current = load_json(MACHINES_PATH, [])
     prev = load_json(PREV_PATH, None)
@@ -165,11 +199,14 @@ def main():
         save_json(PREV_PATH, current)
         return 0
 
-    # 投稿時刻のランダム化（bot検出対策）
-    # タスクは23時固定だが、実投稿時刻を0〜30分の範囲でずらす
+    # 投稿時刻のランダム化（bot検出対策：0〜180分）
+    # タスクは23:30固定だが、実投稿時刻を0〜3時間後まで広くずらす
+    # （23:30〜翌2:30の広い範囲にバラけるので深夜一斉投稿パターンを回避）
     if not args.dry_run:
-        jitter_sec = random.randint(0, 1800)
-        print(f"Posting jitter: {jitter_sec}秒待機（{jitter_sec // 60}分{jitter_sec % 60}秒）")
+        jitter_sec = random.randint(0, 10800)
+        h, rem = divmod(jitter_sec, 3600)
+        m, s = divmod(rem, 60)
+        print(f"Posting jitter: {jitter_sec}秒待機（約{h}時間{m}分{s}秒）")
         time.sleep(jitter_sec)
 
     # 投稿前にCookieをリフレッシュ（専用Chromeを一時起動→取得→終了、失敗しても続行）

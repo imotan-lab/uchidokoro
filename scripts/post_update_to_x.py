@@ -26,7 +26,9 @@
 
 import argparse
 import json
+import os
 import random
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -168,9 +170,12 @@ def do_post(text: str, slug: str, mode: str, dry_run: bool) -> int:
         save_result(mode, slug, text, None, "dry-run")
         return 0
 
-    # ランダム待機（bot検出対策）
-    jitter_sec = random.randint(0, 1800)
-    print(f"Posting jitter: {jitter_sec}秒待機")
+    # ランダム待機（bot検出対策：0〜180分）
+    # auto-addタスクは0時実行なので、0〜3時の間に投稿がバラける
+    jitter_sec = random.randint(0, 10800)
+    h, rem = divmod(jitter_sec, 3600)
+    m, s = divmod(rem, 60)
+    print(f"Posting jitter: {jitter_sec}秒待機（約{h}時間{m}分{s}秒）")
     time.sleep(jitter_sec)
 
     # Cookieリフレッシュ
@@ -195,6 +200,26 @@ def do_post(text: str, slug: str, mode: str, dry_run: bool) -> int:
     return 0 if ok else 1
 
 
+def _relaunch_detached(argv: list):
+    """自分自身を detached サブプロセスとして再起動し、親は即終了する。"""
+    DETACHED_PROCESS = 0x00000008
+    CREATE_NEW_PROCESS_GROUP = 0x00000200
+    flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    log_dir = Path("C:/Users/imao_/Documents/uchidokoro/logs")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "post_update_to_x_detached.log"
+    with open(log_path, "ab") as logf:
+        subprocess.Popen(
+            [sys.executable, __file__] + argv,
+            stdin=subprocess.DEVNULL,
+            stdout=logf,
+            stderr=logf,
+            creationflags=flags,
+            close_fds=True,
+            cwd=str(PROJECT_DIR),
+        )
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=["promotion", "correction"], help="投稿モード")
@@ -203,7 +228,17 @@ def main():
     parser.add_argument("--strategy", default="", help="[promotion] 狙い目（例: 等価700G〜）")
     parser.add_argument("--change", default="", help="[correction] 変更内容（例: 天井を1000pt→1200ptに訂正）")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--detach", action="store_true",
+                        help="実投稿処理をバックグラウンドプロセスで実行し親は即終了")
+    parser.add_argument("--_child", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
+
+    # --detach 指定時は自身を detached 子プロセスとして起動し親は即終了
+    if args.detach and not args._child and not args.dry_run:
+        child_argv = [a for a in sys.argv[1:] if a != "--detach"] + ["--_child"]
+        _relaunch_detached(child_argv)
+        print(f"[detach] バックグラウンドで投稿処理を開始しました。ログ: C:/Users/imao_/Documents/uchidokoro/logs/post_update_to_x_detached.log")
+        return 0
 
     machine = find_machine(args.slug)
     if not machine:
