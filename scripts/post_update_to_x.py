@@ -66,24 +66,24 @@ def _log(msg: str):
 
 
 def _notify_completion(mode: str, slug: str, machine_name: str, text: str, ok: bool, msg: str):
+    """投稿完了後にメール通知を送る（失敗時のみ）。成功時はログのみ（メール通数削減）。"""
+    if ok:
+        _log(f"投稿成功のためメール通知スキップ（{machine_name}）")
+        return
+
     now = datetime.now().strftime("%Y年%m月%d日 %H:%M")
     mode_label = "解析判明" if mode == "promotion" else "データ修正"
+    subject = f"【うちどころ。X】❌ {mode_label}投稿 失敗（{machine_name}）"
 
-    if ok:
-        subject = f"【うちどころ。X】✅ {mode_label}投稿 成功（{machine_name}）"
-    else:
-        subject = f"【うちどころ。X】❌ {mode_label}投稿 失敗（{machine_name}）"
-
-    status = "✅ 成功" if ok else "❌ 失敗"
+    status = "❌ 失敗"
     lines = [
         f"{now} のX投稿結果（{mode_label}）",
         "",
         f"機種: {machine_name}（{slug}）",
         f"結果: {status}",
     ]
-    if not ok:
-        lines.append(f"失敗理由: {msg}")
-        lines.append("↓ 以下を手動でXに投稿してください ↓")
+    lines.append(f"失敗理由: {msg}")
+    lines.append("↓ 以下を手動でXに投稿してください ↓")
     lines += [
         "",
         "--- 投稿本文 ---",
@@ -217,7 +217,7 @@ def _safe_print(s: str):
         print(s.encode(enc, errors="replace").decode(enc, errors="replace"))
 
 
-def do_post(text: str, slug: str, machine_name: str, mode: str, dry_run: bool) -> int:
+def do_post(text: str, slug: str, machine_name: str, mode: str, dry_run: bool, skip_jitter: bool = False) -> int:
     weight = count_x_weight(text)
     if dry_run:
         _safe_print(f"--- [{mode}] {slug} ---")
@@ -226,15 +226,18 @@ def do_post(text: str, slug: str, machine_name: str, mode: str, dry_run: bool) -
         save_result(mode, slug, text, None, "dry-run")
         return 0
 
-    _log(f"=== post_update_to_x 開始 === mode={mode}, slug={slug}, name={machine_name}")
+    _log(f"=== post_update_to_x 開始 === mode={mode}, slug={slug}, name={machine_name}, skip_jitter={skip_jitter}")
 
-    # ランダム待機（bot検出対策：0〜180分）
-    jitter_sec = random.randint(0, 10800)
-    h, rem = divmod(jitter_sec, 3600)
-    m, s = divmod(rem, 60)
-    _log(f"ランダム待機開始: {jitter_sec}秒（約{h}時間{m}分{s}秒）")
-    time.sleep(jitter_sec)
-    _log("ランダム待機完了、投稿処理に入る")
+    # ランダム待機（bot検出対策：0〜180分）※テスト時はスキップ
+    if skip_jitter:
+        _log("ランダム待機スキップ（--skip-jitter 指定）")
+    else:
+        jitter_sec = random.randint(0, 10800)
+        h, rem = divmod(jitter_sec, 3600)
+        m, s = divmod(rem, 60)
+        _log(f"ランダム待機開始: {jitter_sec}秒（約{h}時間{m}分{s}秒）")
+        time.sleep(jitter_sec)
+        _log("ランダム待機完了、投稿処理に入る")
 
     # Cookieリフレッシュ
     ok, msg = refresh_with_auto_chrome(ACCOUNT)
@@ -290,6 +293,8 @@ def main():
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--detach", action="store_true",
                         help="実投稿処理をバックグラウンドプロセスで実行し親は即終了")
+    parser.add_argument("--skip-jitter", action="store_true",
+                        help="0〜180分のランダム待機をスキップ（テスト用）")
     parser.add_argument("--_child", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
 
@@ -313,7 +318,7 @@ def main():
         # --change も現行の本文方針では未使用
         text = build_correction_text(machine)
 
-    return do_post(text, args.slug, machine.get("name", args.slug), args.mode, args.dry_run)
+    return do_post(text, args.slug, machine.get("name", args.slug), args.mode, args.dry_run, args.skip_jitter)
 
 
 if __name__ == "__main__":

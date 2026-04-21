@@ -68,7 +68,8 @@ def _log(msg: str):
 
 
 def _notify_completion(posts: list):
-    """投稿完了後にメール通知を送る。全件成功/一部失敗/全件失敗で件名を分ける。"""
+    """投稿完了後にメール通知を送る（失敗または一部失敗時のみ）。
+    全件成功時はメールせずログに書くだけ（メール通数削減）。"""
     if not posts:
         return
     succ = [p for p in posts if p.get("success")]
@@ -77,8 +78,11 @@ def _notify_completion(posts: list):
     now = datetime.now().strftime("%Y年%m月%d日 %H:%M")
 
     if not fail:
-        subject = f"【うちどころ。X】✅ 新台投稿 {len(succ)}/{total}件 成功"
-    elif not succ:
+        # 全件成功時はメール送らない（ログのみ）
+        _log(f"全件成功のためメール通知スキップ（成功{len(succ)}/{total}件）")
+        return
+
+    if not succ:
         subject = f"【うちどころ。X】❌ 新台投稿 {total}件 全て失敗"
     else:
         subject = f"【うちどころ。X】⚠ 新台投稿 成功{len(succ)}/失敗{len(fail)}件"
