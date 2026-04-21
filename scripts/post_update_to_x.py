@@ -79,20 +79,26 @@ def build_hashtags(machine: dict) -> str:
     return " ".join(tags)
 
 
-def build_promotion_text(machine: dict, ceiling: str, strategy: str) -> str:
-    """先行記事 → 完全記事 昇格の告知文。"""
+def build_promotion_text(machine: dict, ceiling: str = "", strategy: str = "") -> str:
+    """先行記事 → 完全記事 昇格の告知文。
+    方針：具体的な数値（天井G数・狙い目G数等）は載せない（誤情報が残るリスク回避）。
+    引数 ceiling/strategy は後方互換のため受け取るだけで文面には使わない。"""
     name = machine.get("name", "")
     slug = machine.get("slug", "")
     url = f"{MACHINE_URL_BASE}{slug}"
     hashtags = build_hashtags(machine)
 
     def build(nm: str) -> str:
-        lines = ["🔔 解析データ判明", nm]
-        if ceiling:
-            lines.append(f"天井: {ceiling}")
-        if strategy:
-            lines.append(f"狙い目: {strategy}")
-        lines += ["", "先行公開していた記事を本記事に更新しました", url, "", hashtags]
+        lines = [
+            "🔔 解析データ判明",
+            nm,
+            "",
+            "先行公開していた記事を本記事に更新しました",
+            "天井・狙い目・小役カウンターはこちら",
+            url,
+            "",
+            hashtags,
+        ]
         return "\n".join(lines)
 
     while count_x_weight(build(name)) > MAX_TWEET_WEIGHT and len(name) > 10:
@@ -100,23 +106,30 @@ def build_promotion_text(machine: dict, ceiling: str, strategy: str) -> str:
     return build(name)
 
 
-def build_correction_text(machine: dict, change: str) -> str:
-    """データ修正告知文。"""
+def build_correction_text(machine: dict, change: str = "") -> str:
+    """データ修正告知文。
+    方針：具体的な変更内容（どの数値をどう変えたか）は載せない（誤情報が残るリスク回避）。
+    引数 change は後方互換のため受け取るだけで文面には使わない。"""
     name = machine.get("name", "")
     slug = machine.get("slug", "")
     url = f"{MACHINE_URL_BASE}{slug}"
     hashtags = build_hashtags(machine)
 
-    def build(nm: str, ch: str) -> str:
-        lines = ["⚙️ データ更新", nm, ch, "", "最新情報に訂正しました", url, "", hashtags]
+    def build(nm: str) -> str:
+        lines = [
+            "⚙️ データ更新",
+            nm,
+            "",
+            "最新情報に訂正しました",
+            url,
+            "",
+            hashtags,
+        ]
         return "\n".join(lines)
 
-    # 機種名 or 変更内容が長すぎたら変更内容から削る
-    while count_x_weight(build(name, change)) > MAX_TWEET_WEIGHT and len(change) > 20:
-        change = change[:-1]
-    if count_x_weight(build(name, change)) > MAX_TWEET_WEIGHT:
-        name = name[:-1] if len(name) > 10 else name
-    return build(name, change)
+    while count_x_weight(build(name)) > MAX_TWEET_WEIGHT and len(name) > 10:
+        name = name[:-1]
+    return build(name)
 
 
 def save_result(mode: str, slug: str, text: str, success: bool, message: str):
@@ -198,14 +211,12 @@ def main():
         return 1
 
     if args.mode == "promotion":
-        if not args.ceiling and not args.strategy:
-            print("WARN: --ceiling・--strategy が両方空。最低どちらか指定推奨")
-        text = build_promotion_text(machine, args.ceiling, args.strategy)
+        # --ceiling/--strategy は現行の本文方針では未使用（誤情報リスク回避のため数値を載せない）
+        # 互換のため引数は受け取るがbuild側で無視される
+        text = build_promotion_text(machine)
     else:  # correction
-        if not args.change:
-            print("ERR: --change は必須（例: --change '天井を1000pt→1200ptに訂正'）")
-            return 1
-        text = build_correction_text(machine, args.change)
+        # --change も現行の本文方針では未使用
+        text = build_correction_text(machine)
 
     return do_post(text, args.slug, args.mode, args.dry_run)
 
