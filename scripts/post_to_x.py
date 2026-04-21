@@ -51,9 +51,11 @@ ACCOUNT = "uchidokoro"
 MACHINE_URL_BASE = "https://uchidokoro.com/machine.html?slug="
 
 
-def _log(msg: str):
-    """詳細ログをdetached logに時刻付きで追記＋標準出力にも出す。"""
-    line = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}"
+def _log(msg: str, level: str = "INFO"):
+    """詳細ログをdetached logに時刻・レベル・PID付きで追記＋標準出力にも出す。
+    level: INFO / WARN / ERROR / DEBUG"""
+    pid = os.getpid()
+    line = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [{level}] [pid={pid}] {msg}"
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     try:
         with open(DETACHED_LOG, "a", encoding="utf-8") as f:
@@ -65,6 +67,15 @@ def _log(msg: str):
     except UnicodeEncodeError:
         enc = sys.stdout.encoding or "utf-8"
         print(line.encode(enc, errors="replace").decode(enc, errors="replace"))
+
+
+def _log_exception(msg: str, exc: Exception):
+    """例外のスタックトレースを含めてログに記録する"""
+    import traceback
+    tb = traceback.format_exc()
+    _log(f"{msg}: {type(exc).__name__}: {exc}", level="ERROR")
+    for tb_line in tb.splitlines():
+        _log(f"  {tb_line}", level="ERROR")
 
 
 def _notify_completion(posts: list):
@@ -235,26 +246,52 @@ def main():
         print(f"[detach] バックグラウンドで投稿処理を開始しました。ログ: C:/Users/imao_/Documents/uchidokoro/logs/post_to_x_detached.log")
         return 0
 
-    _log(f"=== post_to_x 開始 === args: dry_run={args.dry_run}, dates={args.dates}, child={args._child}")
+    _log("=" * 60)
+    _log(f"=== post_to_x 開始 ===")
+    _log(f"実行引数: dry_run={args.dry_run}, dates={args.dates!r}, child={args._child}, detach={args.detach}")
+    _log(f"実行環境: python={sys.version.split()[0]}, cwd={os.getcwd()}")
 
-    current = load_json(MACHINES_PATH, [])
+    # machines.json 読み込み
+    try:
+        current = load_json(MACHINES_PATH, [])
+        _log(f"machines.json 読み込み成功: {len(current)}件")
+        preview_count = sum(1 for e in current if e.get("status") == "preview")
+        complete_count = len(current) - preview_count
+        _log(f"内訳: 完全記事{complete_count}件 / 先行記事{preview_count}件")
+    except Exception as e:
+        _log_exception("machines.json 読み込み失敗", e)
+        return 1
+
+    # prev 読み込み
     prev = load_json(PREV_PATH, None)
+    if prev is not None:
+        _log(f"machines_prev.json 読み込み成功: {len(prev)}件（前回基準）")
+    else:
+        _log("machines_prev.json なし（初回実行）", level="WARN")
+
     dates = parse_dates(args.dates)
+    if dates:
+        _log(f"導入日辞書: {dates}")
 
     # 初回実行: prev がなければ現在値をコピーして終了（全件を新規扱いしない）
     if prev is None:
         save_json(PREV_PATH, current)
         save_json(RESULT_PATH, {"initialized": True, "posts": []})
-        _log("初回実行: machines_prev.json を初期化しました（投稿なし）")
+        _log(f"初回実行: machines_prev.json を {len(current)}件で初期化（投稿なし）")
+        _log("=== post_to_x 完了（初回）===")
         return 0
 
     added = diff_added(current, prev)
-    _log(f"差分検出: 新規 {len(added)} 件 {[e.get('slug') for e in added]}")
+    _log(f"差分検出: 新規 {len(added)} 件")
+    for e in added:
+        status = e.get("status", "complete")
+        _log(f"  - {e.get('slug','?')} / {e.get('name','?')} / status={status} / info={e.get('info','')}")
 
     if not added:
         save_json(RESULT_PATH, {"posts": []})
-        _log("投稿対象なし（新規追加された機種なし）→ 終了")
         save_json(PREV_PATH, current)
+        _log(f"投稿対象なし → 結果JSON空・prev更新（{len(current)}件）→ 終了")
+        _log("=== post_to_x 完了（投稿なし）===")
         return 0
 
     # 投稿時刻のランダム化（bot検出対策：0〜180分）
@@ -262,14 +299,17 @@ def main():
         jitter_sec = random.randint(0, 10800)
         h, rem = divmod(jitter_sec, 3600)
         m, s = divmod(rem, 60)
-        _log(f"ランダム待機開始: {jitter_sec}秒（約{h}時間{m}分{s}秒）")
+        wake_at = datetime.now().timestamp() + jitter_sec
+        wake_str = datetime.fromtimestamp(wake_at).strftime('%H:%M:%S')
+        _log(f"ランダム待機開始: {jitter_sec}秒（約{h}時間{m}分{s}秒）→ 再開予定 {wake_str}")
         time.sleep(jitter_sec)
         _log("ランダム待機完了、投稿処理に入る")
 
-    # 投稿前にCookieをリフレッシュ（専用Chromeを一時起動→取得→終了、失敗しても続行）
+    # 投稿前にCookieをリフレッシュ
     if not args.dry_run:
+        _log("Cookie refresh 開始")
         ok, msg = refresh_with_auto_chrome(ACCOUNT)
-        _log(f"Cookie refresh: {'OK' if ok else 'SKIP'} - {msg}")
+        _log(f"Cookie refresh 結果: {'OK' if ok else 'SKIP'} - {msg}", level="INFO" if ok else "WARN")
 
     posts = []
     for i, entry in enumerate(added):
@@ -279,59 +319,64 @@ def main():
             time.sleep(gap)
 
         slug = entry.get("slug", "")
+        name = entry.get("name", "")
+        status = entry.get("status", "complete")
         release_date = dates.get(slug)
         text = build_post_text(entry, release_date)
+        weight = count_x_weight(text)
+        _log(f"[{i+1}/{len(added)}] 投稿準備: slug={slug}, name={name}, status={status}, release_date={release_date}, weight={weight}/{MAX_TWEET_WEIGHT}")
 
         if args.dry_run:
             posts.append({
-                "slug": slug,
-                "name": entry.get("name", ""),
-                "change_type": "追加",
-                "location": entry.get("name", ""),
-                "text": text,
-                "success": None,
-                "message": "dry-run",
+                "slug": slug, "name": name, "change_type": "追加",
+                "location": name, "text": text, "success": None, "message": "dry-run",
             })
             print(f"--- [追加] {slug} ---")
             print(text)
-            print(f"(weight: {count_x_weight(text)}/{MAX_TWEET_WEIGHT})")
+            print(f"(weight: {weight}/{MAX_TWEET_WEIGHT})")
             print()
             continue
 
-        _log(f"[投稿開始] {slug} ({entry.get('name','')})")
-        ok, msg = post_tweet(ACCOUNT, text)
+        _log(f"[{i+1}/{len(added)}] 投稿開始: {slug}")
+        t0 = time.time()
+        try:
+            ok, msg = post_tweet(ACCOUNT, text)
+        except Exception as e:
+            _log_exception(f"[{i+1}/{len(added)}] post_tweet で例外", e)
+            ok, msg = False, f"例外: {type(e).__name__}"
+        elapsed = time.time() - t0
         posts.append({
-            "slug": slug,
-            "name": entry.get("name", ""),
-            "change_type": "追加",
-            "location": entry.get("name", ""),
-            "text": text,
-            "success": ok,
-            "message": msg,
+            "slug": slug, "name": name, "change_type": "追加",
+            "location": name, "text": text, "success": ok, "message": msg,
         })
-        _log(f"[投稿結果] {slug}: {'OK' if ok else 'NG'} - {msg}")
+        _log(f"[{i+1}/{len(added)}] 投稿結果: {slug} → {'OK' if ok else 'NG'} ({elapsed:.1f}秒) - {msg}",
+             level="INFO" if ok else "ERROR")
 
     save_json(RESULT_PATH, {"posts": posts})
-    _log(f"結果JSON保存: {RESULT_PATH}")
+    _log(f"結果JSON保存: {RESULT_PATH}（{len(posts)}件）")
+    succ = sum(1 for p in posts if p.get("success"))
+    fail = sum(1 for p in posts if p.get("success") is False)
+    _log(f"投稿サマリー: 成功{succ}件 / 失敗{fail}件 / 総{len(posts)}件")
 
-    # 実投稿モードなら prev を更新（次回以降の差分基準にする）
     if not args.dry_run:
         save_json(PREV_PATH, current)
-        _log("machines_prev.json を更新")
+        _log(f"machines_prev.json 更新: {len(current)}件で上書き（次回の差分基準）")
 
         try:
             r = clear_account(ACCOUNT)
             if r["skipped"]:
-                _log(f"Cache clear: SKIP ({r['reason']})")
+                _log(f"Cache clear: SKIP ({r['reason']})", level="WARN")
             else:
-                _log(f"Cache clear: OK ({human_size(r['freed_bytes'])} 解放)")
+                _log(f"Cache clear: OK ({human_size(r['freed_bytes'])} 解放 / {len(r['details'])}ディレクトリ)")
+                for d in r['details']:
+                    _log(f"  - {d['subdir']}: {human_size(d['freed'])} 削除", level="DEBUG")
         except Exception as e:
-            _log(f"Cache clear: ERR ({type(e).__name__}: {e})")
+            _log_exception("Cache clear で例外", e)
 
-        # 投稿完了通知メール（detachedバックグラウンドでも親タスクとは別途送信）
         _notify_completion(posts)
 
     _log("=== post_to_x 完了 ===")
+    _log("=" * 60)
     return 0
 
 

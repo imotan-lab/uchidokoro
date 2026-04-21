@@ -50,8 +50,9 @@ ACCOUNT = "uchidokoro"
 MACHINE_URL_BASE = "https://uchidokoro.com/machine.html?slug="
 
 
-def _log(msg: str):
-    line = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}"
+def _log(msg: str, level: str = "INFO"):
+    pid = os.getpid()
+    line = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [{level}] [pid={pid}] {msg}"
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     try:
         with open(DETACHED_LOG, "a", encoding="utf-8") as f:
@@ -63,6 +64,14 @@ def _log(msg: str):
     except UnicodeEncodeError:
         enc = sys.stdout.encoding or "utf-8"
         print(line.encode(enc, errors="replace").decode(enc, errors="replace"))
+
+
+def _log_exception(msg: str, exc: Exception):
+    import traceback
+    tb = traceback.format_exc()
+    _log(f"{msg}: {type(exc).__name__}: {exc}", level="ERROR")
+    for tb_line in tb.splitlines():
+        _log(f"  {tb_line}", level="ERROR")
 
 
 def _notify_completion(mode: str, slug: str, machine_name: str, text: str, ok: bool, msg: str):
@@ -226,43 +235,61 @@ def do_post(text: str, slug: str, machine_name: str, mode: str, dry_run: bool, s
         save_result(mode, slug, text, None, "dry-run")
         return 0
 
-    _log(f"=== post_update_to_x 開始 === mode={mode}, slug={slug}, name={machine_name}, skip_jitter={skip_jitter}")
+    _log("=" * 60)
+    _log(f"=== post_update_to_x 開始 ===")
+    _log(f"実行引数: mode={mode}, slug={slug}, name={machine_name}, skip_jitter={skip_jitter}")
+    _log(f"実行環境: python={sys.version.split()[0]}, cwd={os.getcwd()}")
+    _log(f"投稿本文長: weight={weight}/{MAX_TWEET_WEIGHT}")
 
     # ランダム待機（bot検出対策：0〜180分）※テスト時はスキップ
     if skip_jitter:
-        _log("ランダム待機スキップ（--skip-jitter 指定）")
+        _log("ランダム待機スキップ（--skip-jitter 指定）", level="WARN")
     else:
         jitter_sec = random.randint(0, 10800)
         h, rem = divmod(jitter_sec, 3600)
         m, s = divmod(rem, 60)
-        _log(f"ランダム待機開始: {jitter_sec}秒（約{h}時間{m}分{s}秒）")
+        wake_str = datetime.fromtimestamp(datetime.now().timestamp() + jitter_sec).strftime('%H:%M:%S')
+        _log(f"ランダム待機開始: {jitter_sec}秒（約{h}時間{m}分{s}秒）→ 再開予定 {wake_str}")
         time.sleep(jitter_sec)
         _log("ランダム待機完了、投稿処理に入る")
 
     # Cookieリフレッシュ
+    _log("Cookie refresh 開始")
     ok, msg = refresh_with_auto_chrome(ACCOUNT)
-    _log(f"Cookie refresh: {'OK' if ok else 'SKIP'} - {msg}")
+    _log(f"Cookie refresh 結果: {'OK' if ok else 'SKIP'} - {msg}",
+         level="INFO" if ok else "WARN")
 
     # 投稿
-    _log(f"[投稿開始] {slug} ({machine_name})")
-    ok, msg = post_tweet(ACCOUNT, text)
-    _log(f"[投稿結果] {slug}: {'OK' if ok else 'NG'} - {msg}")
+    _log(f"投稿開始: {slug} ({machine_name})")
+    t0 = time.time()
+    try:
+        ok, msg = post_tweet(ACCOUNT, text)
+    except Exception as e:
+        _log_exception("post_tweet で例外", e)
+        ok, msg = False, f"例外: {type(e).__name__}"
+    elapsed = time.time() - t0
+    _log(f"投稿結果: {slug} → {'OK' if ok else 'NG'} ({elapsed:.1f}秒) - {msg}",
+         level="INFO" if ok else "ERROR")
     save_result(mode, slug, text, ok, msg)
+    _log(f"結果JSON保存: {RESULT_PATH}")
 
     # キャッシュクリア
     try:
         r = clear_account(ACCOUNT)
         if r["skipped"]:
-            _log(f"Cache clear: SKIP ({r['reason']})")
+            _log(f"Cache clear: SKIP ({r['reason']})", level="WARN")
         else:
-            _log(f"Cache clear: OK ({human_size(r['freed_bytes'])} 解放)")
+            _log(f"Cache clear: OK ({human_size(r['freed_bytes'])} 解放 / {len(r['details'])}ディレクトリ)")
+            for d in r['details']:
+                _log(f"  - {d['subdir']}: {human_size(d['freed'])} 削除", level="DEBUG")
     except Exception as e:
-        _log(f"Cache clear: ERR ({type(e).__name__}: {e})")
+        _log_exception("Cache clear で例外", e)
 
-    # 通知メール送信
+    # 通知メール送信（失敗時のみ）
     _notify_completion(mode, slug, machine_name, text, ok, msg)
 
     _log("=== post_update_to_x 完了 ===")
+    _log("=" * 60)
     return 0 if ok else 1
 
 
