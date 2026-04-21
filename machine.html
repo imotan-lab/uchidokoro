@@ -51,6 +51,11 @@
     <p class="eyebrow"><a href="index.html" class="eyebrow-link">‹ 一覧</a>&nbsp;&nbsp;ARTICLE</p>
     <h1 id="machineTitle" class="page-title">機種名</h1>
     <p id="heroSub" class="hero-sub"></p>
+    <div id="previewBanner" class="preview-banner" style="display:none;">
+      <p class="preview-banner-label">⚠ 先行記事（解析待ち）</p>
+      <p class="preview-banner-body">この機種はまだ解析データが出揃っていません。天井・狙い目・設定差は判明次第、随時更新します。</p>
+      <p id="previewReleaseDate" class="preview-banner-date"></p>
+    </div>
     <div class="hero-actions">
       <a id="settingHeroLink" href="setting.html" class="btn-settei btn-settei--wide">小役カウンター ポチポチくん →</a>
     </div>
@@ -226,6 +231,27 @@ function resolveMachineSlug() {
   // タイトル（document.titleはmeta-auto.jsが担当）
   document.getElementById("machineTitle").textContent = machine.name;
   document.getElementById("heroSub").textContent = detail?.lead || "";
+
+  // 先行記事モード：status === "preview" の場合、バナーを表示し狙い目チェッカー系を隠す
+  if (machine.status === "preview") {
+    const banner = document.getElementById("previewBanner");
+    if (banner) banner.style.display = "";
+    const dateEl = document.getElementById("previewReleaseDate");
+    if (dateEl && machine.release_date) dateEl.textContent = `導入予定日: ${machine.release_date}`;
+    // 解析データが必要なブロックを非表示
+    const evBlock = document.getElementById("evTableBlock");
+    if (evBlock) evBlock.style.display = "none";
+    const checkerBlockLabel = document.querySelectorAll(".article-block");
+    checkerBlockLabel.forEach(block => {
+      const label = block.querySelector(".block-label");
+      if (label && (label.textContent.includes("狙い目チェッカー") || label.textContent.includes("狙い目早見表"))) {
+        block.style.display = "none";
+      }
+    });
+    // 小役カウンター導線も隠す（データなしなので機能しない）
+    const settingHero = document.getElementById("settingHeroLink");
+    if (settingHero) settingHero.parentElement.style.display = "none";
+  }
   const noPochiPochi = ['enen2','karakuri','kaguya','valvrave2'];
   const settingToolLink = document.getElementById("settingToolLink");
   const settingHeroLink = document.getElementById("settingHeroLink");

@@ -391,6 +391,12 @@ button, input, select { font: inherit; }
 .rumor-body { font-size: 13px; color: var(--soft); line-height: 1.8; margin: 0 0 8px 0; }
 .rumor-body:last-child { margin-bottom: 0; }
 
+/* PREVIEW BANNER (先行記事・解析待ち) */
+.preview-banner { background: rgba(245,185,65,.10); border: 1px solid rgba(245,185,65,.35); border-radius: var(--radius-sm); padding: 14px 16px; margin: 16px 0 8px 0; }
+.preview-banner-label { font-size: 13px; font-weight: 700; color: var(--gold); margin: 0 0 8px 0; letter-spacing: .03em; }
+.preview-banner-body { font-size: 13px; color: var(--soft); line-height: 1.7; margin: 0 0 6px 0; }
+.preview-banner-date { font-size: 12px; color: var(--gold); font-weight: 600; margin: 6px 0 0 0; }
+
 /* CHECKER CARD VARIANTS */
 .checker-card--mt { margin-top: 12px; }
 
