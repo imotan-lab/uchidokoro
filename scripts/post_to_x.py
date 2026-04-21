@@ -93,17 +93,29 @@ def diff_added(current: list, prev: list) -> list:
 
 
 def build_post_text(entry: dict, release_date: str | None) -> str:
-    """新台エントリから投稿本文を生成。導入日なしなら該当行を省略。"""
+    """新台エントリから投稿本文を生成。
+    status: "preview" の場合は解析待ち向けの文面に切り替える。
+    """
     name = entry.get("name", "")
     slug = entry.get("slug", "")
+    status = entry.get("status", "complete")
     url = f"{MACHINE_URL_BASE}{slug}"
     hashtags = build_hashtags(entry)
+    is_preview = status == "preview"
 
     def build(nm: str) -> str:
-        lines = ["【新台追加】", nm]
-        if release_date:
-            lines.append(f"導入日: {release_date}")
-        lines += ["", "狙い目・天井・小役カウンターはこちら", url, "", hashtags]
+        if is_preview:
+            # 先行記事モード：解析前の早期告知
+            lines = ["【新台情報・先行記事】", nm]
+            if release_date:
+                lines.append(f"導入予定: {release_date}")
+            lines += ["", "機種概要を先行公開（解析データは判明次第更新）", url, "", hashtags]
+        else:
+            # 完全記事モード：通常の新台追加告知
+            lines = ["【新台追加】", nm]
+            if release_date:
+                lines.append(f"導入日: {release_date}")
+            lines += ["", "狙い目・天井・小役カウンターはこちら", url, "", hashtags]
         return "\n".join(lines)
 
     # 機種名が長すぎる場合のみ切り詰める
