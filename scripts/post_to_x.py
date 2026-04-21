@@ -34,17 +34,73 @@ from pathlib import Path
 
 # x_poster.py, refresh_x_cookies.py を import パスに追加
 sys.path.insert(0, "C:/Users/imao_/.claude")
+from datetime import datetime  # noqa: E402
 from x_poster import post_tweet, count_x_weight, MAX_TWEET_WEIGHT  # noqa: E402
 from refresh_x_cookies import refresh_with_auto_chrome  # noqa: E402
 from clear_x_cache import clear_account, human_size  # noqa: E402
+from send_notify import send_mail  # noqa: E402
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 MACHINES_PATH = PROJECT_DIR / "assets" / "data" / "machines.json"
 PREV_PATH = PROJECT_DIR / "scripts" / "machines_prev.json"
 RESULT_PATH = PROJECT_DIR / "scripts" / "x_post_result.json"
+LOG_DIR = Path("C:/Users/imao_/Documents/uchidokoro/logs")
+DETACHED_LOG = LOG_DIR / "post_to_x_detached.log"
 
 ACCOUNT = "uchidokoro"
 MACHINE_URL_BASE = "https://uchidokoro.com/machine.html?slug="
+
+
+def _log(msg: str):
+    """詳細ログをdetached logに時刻付きで追記＋標準出力にも出す。"""
+    line = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}"
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(DETACHED_LOG, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
+    try:
+        print(line)
+    except UnicodeEncodeError:
+        enc = sys.stdout.encoding or "utf-8"
+        print(line.encode(enc, errors="replace").decode(enc, errors="replace"))
+
+
+def _notify_completion(posts: list):
+    """投稿完了後にメール通知を送る。全件成功/一部失敗/全件失敗で件名を分ける。"""
+    if not posts:
+        return
+    succ = [p for p in posts if p.get("success")]
+    fail = [p for p in posts if p.get("success") is False]
+    total = len(posts)
+    now = datetime.now().strftime("%Y年%m月%d日 %H:%M")
+
+    if not fail:
+        subject = f"【うちどころ。X】✅ 新台投稿 {len(succ)}/{total}件 成功"
+    elif not succ:
+        subject = f"【うちどころ。X】❌ 新台投稿 {total}件 全て失敗"
+    else:
+        subject = f"【うちどころ。X】⚠ 新台投稿 成功{len(succ)}/失敗{len(fail)}件"
+
+    lines = [f"{now} のX投稿結果（新台追加）", "",
+             f"成功: {len(succ)}件 / 失敗: {len(fail)}件"]
+    for p in posts:
+        status = "✅ 成功" if p.get("success") else ("❌ 失敗" if p.get("success") is False else "・未投稿")
+        lines += ["", f"【{p.get('slug','')}】{p.get('name','')}  {status}"]
+        if p.get("success") is False:
+            lines.append(f"失敗理由: {p.get('message','')}")
+            lines.append("↓ 以下を手動でXに投稿してください ↓")
+        lines.append("--- 投稿本文 ---")
+        lines.append(p.get("text", ""))
+        lines.append("----------------")
+    lines += ["", f"詳細ログ: {DETACHED_LOG}", "", "サイト: https://uchidokoro.com"]
+    body = "\n".join(lines)
+    try:
+        send_mail(subject, body)
+        _log(f"通知メール送信完了: {subject}")
+    except Exception as e:
+        _log(f"通知メール送信失敗: {type(e).__name__}: {e}")
 
 
 def detect_machine_type(info: str) -> str:
@@ -142,24 +198,20 @@ def parse_dates(s: str | None) -> dict:
 
 def _relaunch_detached(argv: list):
     """自分自身を detached サブプロセスとして再起動し、親は即終了する。
-    Windows の DETACHED_PROCESS を使うので、呼び出し元のタスクは待たずに完了できる。"""
+    Windows の DETACHED_PROCESS を使うので、呼び出し元のタスクは待たずに完了できる。
+    子プロセスの stdout/stderr は DEVNULL に捨てる（ログは _log() 経由で直接ファイルに書く）。"""
     DETACHED_PROCESS = 0x00000008
     CREATE_NEW_PROCESS_GROUP = 0x00000200
     flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
-    # 標準入出力を切り離してログファイルに書く
-    log_dir = Path("C:/Users/imao_/Documents/uchidokoro/logs")
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_path = log_dir / "post_to_x_detached.log"
-    with open(log_path, "ab") as logf:
-        subprocess.Popen(
-            [sys.executable, __file__] + argv,
-            stdin=subprocess.DEVNULL,
-            stdout=logf,
-            stderr=logf,
-            creationflags=flags,
-            close_fds=True,
-            cwd=str(PROJECT_DIR),
-        )
+    subprocess.Popen(
+        [sys.executable, __file__] + argv,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=flags,
+        close_fds=True,
+        cwd=str(PROJECT_DIR),
+    )
 
 
 def main():
@@ -179,6 +231,8 @@ def main():
         print(f"[detach] バックグラウンドで投稿処理を開始しました。ログ: C:/Users/imao_/Documents/uchidokoro/logs/post_to_x_detached.log")
         return 0
 
+    _log(f"=== post_to_x 開始 === args: dry_run={args.dry_run}, dates={args.dates}, child={args._child}")
+
     current = load_json(MACHINES_PATH, [])
     prev = load_json(PREV_PATH, None)
     dates = parse_dates(args.dates)
@@ -187,39 +241,37 @@ def main():
     if prev is None:
         save_json(PREV_PATH, current)
         save_json(RESULT_PATH, {"initialized": True, "posts": []})
-        print("初回実行: machines_prev.json を初期化しました（投稿なし）")
+        _log("初回実行: machines_prev.json を初期化しました（投稿なし）")
         return 0
 
     added = diff_added(current, prev)
+    _log(f"差分検出: 新規 {len(added)} 件 {[e.get('slug') for e in added]}")
 
     if not added:
         save_json(RESULT_PATH, {"posts": []})
-        print("投稿対象なし（新規追加された機種なし）")
-        # prev を最新で上書き（削除や更新があった場合も追従）
+        _log("投稿対象なし（新規追加された機種なし）→ 終了")
         save_json(PREV_PATH, current)
         return 0
 
     # 投稿時刻のランダム化（bot検出対策：0〜180分）
-    # タスクは23:30固定だが、実投稿時刻を0〜3時間後まで広くずらす
-    # （23:30〜翌2:30の広い範囲にバラけるので深夜一斉投稿パターンを回避）
     if not args.dry_run:
         jitter_sec = random.randint(0, 10800)
         h, rem = divmod(jitter_sec, 3600)
         m, s = divmod(rem, 60)
-        print(f"Posting jitter: {jitter_sec}秒待機（約{h}時間{m}分{s}秒）")
+        _log(f"ランダム待機開始: {jitter_sec}秒（約{h}時間{m}分{s}秒）")
         time.sleep(jitter_sec)
+        _log("ランダム待機完了、投稿処理に入る")
 
     # 投稿前にCookieをリフレッシュ（専用Chromeを一時起動→取得→終了、失敗しても続行）
     if not args.dry_run:
         ok, msg = refresh_with_auto_chrome(ACCOUNT)
-        print(f"Cookie refresh: {'OK' if ok else 'SKIP'} - {msg}")
+        _log(f"Cookie refresh: {'OK' if ok else 'SKIP'} - {msg}")
 
     posts = []
     for i, entry in enumerate(added):
-        # 2件目以降は投稿間に30〜120秒のランダム待機（連投パターン回避）
         if i > 0 and not args.dry_run:
             gap = random.randint(30, 120)
-            print(f"Inter-post jitter: {gap}秒待機")
+            _log(f"投稿間待機: {gap}秒")
             time.sleep(gap)
 
         slug = entry.get("slug", "")
@@ -242,6 +294,7 @@ def main():
             print()
             continue
 
+        _log(f"[投稿開始] {slug} ({entry.get('name','')})")
         ok, msg = post_tweet(ACCOUNT, text)
         posts.append({
             "slug": slug,
@@ -252,25 +305,29 @@ def main():
             "success": ok,
             "message": msg,
         })
-        print(f"[追加] {slug}: {'OK' if ok else 'NG'} - {msg}")
+        _log(f"[投稿結果] {slug}: {'OK' if ok else 'NG'} - {msg}")
 
     save_json(RESULT_PATH, {"posts": posts})
+    _log(f"結果JSON保存: {RESULT_PATH}")
 
     # 実投稿モードなら prev を更新（次回以降の差分基準にする）
     if not args.dry_run:
         save_json(PREV_PATH, current)
+        _log("machines_prev.json を更新")
 
-        # 投稿でChromeを起動してキャッシュが増えたのでクリア（ログイン情報は残る）
-        # Chromeが動いているケース（想定外）は clear_account 側でスキップされる
         try:
             r = clear_account(ACCOUNT)
             if r["skipped"]:
-                print(f"Cache clear: SKIP ({r['reason']})")
+                _log(f"Cache clear: SKIP ({r['reason']})")
             else:
-                print(f"Cache clear: OK ({human_size(r['freed_bytes'])} 解放)")
+                _log(f"Cache clear: OK ({human_size(r['freed_bytes'])} 解放)")
         except Exception as e:
-            print(f"Cache clear: ERR ({type(e).__name__}: {e})")
+            _log(f"Cache clear: ERR ({type(e).__name__}: {e})")
 
+        # 投稿完了通知メール（detachedバックグラウンドでも親タスクとは別途送信）
+        _notify_completion(posts)
+
+    _log("=== post_to_x 完了 ===")
     return 0
 
 
