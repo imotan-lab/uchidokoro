@@ -10135,5 +10135,87 @@
       }
     },
     "limit": 999
+  },
+  {
+    "slug": "biohazard_re3",
+    "name": "スマスロ バイオハザードRE:3",
+    "status": "preview",
+    "release_date": "2026-05-11",
+    "seo": {
+      "title": "スマスロ バイオハザードRE:3 狙い目・天井・解析まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "解析待ち",
+    "aliases": [
+      "バイオハザードRE3",
+      "バイオRE3",
+      "バイオRE:3",
+      "RE3",
+      "re3",
+      "バイオre3",
+      "biohazard_re3"
+    ],
+    "checker": null,
+    "limit": null
+  },
+  {
+    "slug": "takt_opus",
+    "name": "Lタクトオーパス デスティニー",
+    "status": "preview",
+    "release_date": "2026-05-11",
+    "seo": {
+      "title": "Lタクトオーパス デスティニー 狙い目・天井・解析まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "解析待ち",
+    "aliases": [
+      "タクトオーパス",
+      "タクトオーパスデスティニー",
+      "タクトデスティニー",
+      "takt",
+      "taktopus"
+    ],
+    "checker": null,
+    "limit": null
+  },
+  {
+    "slug": "bigdream_pusher",
+    "name": "スマスロ ビッグドリーム THE GOLDEN PUSHER",
+    "status": "preview",
+    "release_date": "2026-05-11",
+    "seo": {
+      "title": "スマスロ ビッグドリーム THE GOLDEN PUSHER 狙い目・天井・解析まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "解析待ち",
+    "aliases": [
+      "ビッグドリーム",
+      "ビッグドリームプッシャー",
+      "ゴールデンプッシャー",
+      "bigdream",
+      "goldenpusher"
+    ],
+    "checker": null,
+    "limit": null
+  },
+  {
+    "slug": "super_rio_ace2",
+    "name": "スマスロスーパーリオエース2",
+    "status": "preview",
+    "release_date": "2026-05-11",
+    "seo": {
+      "title": "スマスロスーパーリオエース2 狙い目・天井・解析まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "解析待ち",
+    "aliases": [
+      "スーパーリオエース2",
+      "リオエース2",
+      "スーパーリオ",
+      "rioace2",
+      "superrioace2"
+    ],
+    "checker": null,
+    "limit": null
   }
 ]
