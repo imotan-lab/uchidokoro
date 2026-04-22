@@ -248,16 +248,39 @@ function resolveMachineSlug() {
         block.style.display = "none";
       }
     });
-    // 小役カウンター導線も隠す（データなしなので機能しない）
-    const settingHero = document.getElementById("settingHeroLink");
-    if (settingHero) settingHero.parentElement.style.display = "none";
+    // 小役カウンター導線は下のpochipochiStatusで「解析データ判明後に対応」と無効化表示される
   }
-  const noPochiPochi = ['enen2','karakuri','kaguya','valvrave2'];
+  // ポチポチくん対応状況（ポチポチくんに飛んでも機能しない機種は無効化して理由を表示）
+  const pochipochiStatus = (function() {
+    // 先行記事（解析待ち）
+    if (machine.status === "preview") return { available: false, reason: "解析データ判明後に対応" };
+    // 小役による設定差が元々ない機種（ジャグラー系・ノーマル系・一部AT）
+    const noSettingDiff = ['enen2','karakuri','kaguya','valvrave2','sf5','chibaryo2','tekken6','tokyo_ghoul','koukaku','biohazard','tensura','dumbbell','monhun_rise','sengoku_otome4','sao','bandori','hanma_baki','yorumungando','tolove_darkness','zenigata5','enen','madomagi_forte','burning_express','akudama','neoplanet','lupin_daikokaisha','zettai_shougeki4','babel','milliongod_kiseki','animal_dotch'];
+    if (noSettingDiff.includes(slug)) return { available: false, reason: "小役による設定差なし" };
+    // 小役確率がまだ解析されていない機種
+    const noAnalysis = ['iza_bancho','kyokousuiri','shinuchi_yoshimune','isekai_quattro_bt','triple_crown_7','revue_starlight','mr_juggler','mushoku','railgun2','gundam_seed','youjitsu','midoridon_viva','godzilla','code_geass','kengan_ashura','discup_ur','rezero2','goji_eva','prismnana','basilisk_tenzen','shake_bt','kurea_bt','mhrise','gineiden_dnt','eva_yakusoku','bofuri','dmc5_st','darlifra','nanatsuma','tenken','valvrave','zombieland_saga','gundam_uc2'];
+    if (noAnalysis.includes(slug)) return { available: false, reason: "小役確率が未解析のため非対応" };
+    // ポチポチくん利用可能
+    return { available: true, reason: "" };
+  })();
+
   const settingToolLink = document.getElementById("settingToolLink");
   const settingHeroLink = document.getElementById("settingHeroLink");
-  if (noPochiPochi.includes(slug)) {
-    if (settingHeroLink) { settingHeroLink.textContent = '小役による設定差なし'; settingHeroLink.removeAttribute('href'); settingHeroLink.style.opacity = '0.5'; settingHeroLink.style.cursor = 'default'; }
-    if (settingToolLink) settingToolLink.parentElement.style.display = 'none';
+
+  function disableSettingLink(el, reason) {
+    if (!el) return;
+    el.textContent = `小役カウンター ポチポチくん（${reason}）`;
+    el.removeAttribute('href');
+    el.style.opacity = '0.5';
+    el.style.cursor = 'default';
+    el.style.pointerEvents = 'none';
+    el.setAttribute('aria-disabled', 'true');
+    el.title = reason;
+  }
+
+  if (!pochipochiStatus.available) {
+    disableSettingLink(settingHeroLink, pochipochiStatus.reason);
+    disableSettingLink(settingToolLink, pochipochiStatus.reason);
   } else {
     if (settingToolLink) settingToolLink.href = `setting.html?slug=${slug}`;
     if (settingHeroLink) settingHeroLink.href = `setting.html?slug=${slug}`;
