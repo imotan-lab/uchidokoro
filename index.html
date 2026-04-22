@@ -72,6 +72,14 @@
     </div>
   </section>
 
+  <section id="upcomingSection" class="upcoming-section" style="display:none;" aria-label="近日導入の新台">
+    <div class="upcoming-header">
+      <p class="upcoming-title">🗓 近日導入の新台</p>
+      <p class="upcoming-sub">導入日順・今後30日以内</p>
+    </div>
+    <section id="upcomingList" class="machine-list"></section>
+  </section>
+
   <div id="listHeader" class="list-header">
     <p class="list-header-title">人気機種 TOP10</p>
     <p class="list-header-sub">稼働率をもとに毎週自動更新</p>
@@ -113,6 +121,40 @@ function buildKeywords(machine){
   return [...base, ...aliases].map(normalizeText).join("|");
 }
 
+// release_date（"YYYY-MM-DD"）と今日の差分日数を返す。release_dateがなければ null
+function daysUntilRelease(machine){
+  if (!machine.release_date) return null;
+  const m = String(machine.release_date).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const rel = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const diffMs = rel - today;
+  return Math.round(diffMs / (1000 * 60 * 60 * 24));
+}
+
+// 「近日導入」判定：今日〜30日後
+function isUpcoming(machine){
+  const d = daysUntilRelease(machine);
+  return d !== null && d >= 0 && d <= 30;
+}
+
+// 「新台バッジ対象」判定：release_date が過去30日〜未来30日
+function isNewMachine(machine){
+  const d = daysUntilRelease(machine);
+  return d !== null && d >= -30 && d <= 30;
+}
+
+// release_date を "M/D（曜日）" 形式に整形
+function formatReleaseDate(dateStr){
+  if (!dateStr) return "";
+  const m = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return dateStr;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const days = ["日","月","火","水","木","金","土"];
+  return `${d.getMonth()+1}/${d.getDate()}（${days[d.getDay()]}）`;
+}
+
 (async function loadMachines(){
   const list = document.getElementById("machineList");
   const search = document.getElementById("machineSearch");
@@ -151,6 +193,40 @@ function buildKeywords(machine){
     showAllBtn.addEventListener("click", activateShowAll);
     if (showAllBtnTop) showAllBtnTop.addEventListener("click", activateShowAll);
 
+    // 近日導入セクション描画（初回のみ）
+    function renderUpcoming(){
+      const section = document.getElementById("upcomingSection");
+      const listEl = document.getElementById("upcomingList");
+      if (!section || !listEl) return;
+      const upcoming = prepared
+        .filter(isUpcoming)
+        .sort((a, b) => String(a.release_date).localeCompare(String(b.release_date)));
+      if (!upcoming.length) {
+        section.style.display = "none";
+        return;
+      }
+      section.style.display = "";
+      listEl.innerHTML = "";
+      upcoming.forEach(machine => {
+        const row = document.createElement("article");
+        row.className = "list-row";
+        const isPreview = machine.status === "preview";
+        const relLabel = formatReleaseDate(machine.release_date);
+        const statusBadge = isPreview
+          ? '<span class="badge badge--preview">⚠ 先行記事</span>'
+          : '<span class="badge badge--new">🆕 新台</span>';
+        row.innerHTML = `
+          <a class="list-row-main" href="machine.html?slug=${machine.slug}">
+            <span class="machine-name">${machine.name} ${statusBadge}</span>
+            <span class="machine-strategy machine-strategy--upcoming">導入予定: ${relLabel}</span>
+          </a>
+          <a class="btn-settei btn-settei--ghost" href="machine.html?slug=${machine.slug}">記事へ</a>
+        `;
+        listEl.appendChild(row);
+      });
+    }
+    renderUpcoming();
+
     function render(keyword = "") {
       const query = normalizeText(keyword);
       const allFiltered = prepared.filter(machine => !query || machine.__keywords.includes(query));
@@ -176,6 +252,10 @@ function buildKeywords(machine){
         const row = document.createElement("article");
         row.className = "list-row";
         const isPreview = machine.status === "preview";
+        const isNew = isNewMachine(machine);
+        const nameBadge = isPreview
+          ? ' <span class="badge badge--preview">⚠ 先行記事</span>'
+          : (isNew ? ' <span class="badge badge--new">🆕 新台</span>' : '');
         const stretegyCell = isPreview
           ? '<span class="machine-strategy machine-strategy--preview">⚠ 先行記事（解析待ち）</span>'
           : `<span class="machine-strategy">${machine.strategy || ''}</span>`;
@@ -188,7 +268,7 @@ function buildKeywords(machine){
               : `<a class="btn-settei" href="setting.html?slug=${machine.slug}">小役カウンター<br>ポチポチくん</a>`);
         row.innerHTML = `
           <a class="list-row-main" href="machine.html?slug=${machine.slug}">
-            <span class="machine-name">${machine.name}</span>
+            <span class="machine-name">${machine.name}${nameBadge}</span>
             ${stretegyCell}
           </a>
           ${setteiCell}
