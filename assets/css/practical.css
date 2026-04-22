@@ -410,8 +410,6 @@ button, input, select { font: inherit; }
 .badge--new { background: rgba(245,185,65,.15); color: var(--gold); border: 1px solid rgba(245,185,65,.4); }
 .badge--preview { background: rgba(255,200,60,.08); color: #f0c040; border: 1px solid rgba(255,200,60,.3); }
 
-/* 近日導入セクション用のghostボタン */
-.btn-settei--ghost { background: transparent; border: 1px solid rgba(245,185,65,.4); color: var(--gold); font-size: 0.75em; }
 
 /* CHECKER CARD VARIANTS */
 .checker-card--mt { margin-top: 12px; }
