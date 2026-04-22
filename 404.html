@@ -27,6 +27,18 @@
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2097489177716087" crossorigin="anonymous"></script>
 </head>
 <body>
+<script>
+// 旧GitHub Pages（imotan-lab.github.io/uchidokoro/xxx）からの古いリンク救済
+// /uchidokoro/xxx パターンを検知したら /xxx に自動リダイレクト
+(function(){
+  var path = window.location.pathname;
+  if (path.indexOf("/uchidokoro/") === 0) {
+    var newPath = path.replace(/^\/uchidokoro\//, "/");
+    var newUrl = newPath + window.location.search + window.location.hash;
+    window.location.replace(newUrl);
+  }
+})();
+</script>
 <header class="site-header">
   <div class="header-inner">
     <a class="brand" href="index.html"><img src="assets/img/logo.png" alt="うちどころ。"></a>
