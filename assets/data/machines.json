@@ -7750,7 +7750,7 @@
       "title": "Lパチスロ炎炎ノ消防隊 狙い目・天井・期待値まとめ"
     },
     "info": "スマスロAT",
-    "strategy": "等価550G〜 / リセット後400G〜",
+    "strategy": "等価520G〜 / リセット後370G〜",
     "aliases": [
       "炎炎ノ消防隊",
       "えんえんのしょうぼうたい",
@@ -7772,18 +7772,19 @@
       ],
       "normal": {
         "excellent": 850,
-        "good": 550,
-        "caution": 350,
+        "good": 520,
+        "caution": 320,
         "limit": 850
       },
       "reset": {
         "excellent": 650,
-        "good": 400,
-        "caution": 250,
+        "good": 370,
+        "caution": 220,
         "limit": 650
       },
       "limit": 850
-    }
+    },
+    "limit": 850
   },
   {
     "slug": "railgun2",
@@ -7824,7 +7825,8 @@
         "limit": 750
       },
       "limit": 1050
-    }
+    },
+    "limit": 999
   },
   {
     "slug": "gundam_seed",
