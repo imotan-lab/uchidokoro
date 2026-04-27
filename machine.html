@@ -709,8 +709,8 @@ function resolveMachineSlug() {
       if (!section.tables && section.rows) {
         html += `<table class="settei-table"><tr><th>要素</th><th>示唆</th></tr>`;
         section.rows.forEach(row => {
-          const cell0 = row[0];
-          const cell1 = row[1];
+          const cell0 = Array.isArray(row) ? row[0] : row.trigger;
+          const cell1 = Array.isArray(row) ? row[1] : row.hint;
           const badge = typeof cell1 === "object"
             ? `<span class="settei-badge ${badgeClass[cell1.badge] || ""}">${cell1.text}</span>`
             : cell1;
