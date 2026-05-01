@@ -10160,6 +10160,26 @@
     },
     "info": "スマスロAT",
     "strategy": "等価660G〜 / 5.6枚670G〜 / 現金720G〜 / リセット後280G〜",
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {"key": "normal", "label": "通常"},
+        {"key": "reset", "label": "リセット"}
+      ],
+      "normal": {
+        "excellent": 850,
+        "good": 720,
+        "caution": 660,
+        "note": "AT間天井1000G+α。等価660G〜・5.6枚670G〜・現金720G〜が狙い目（スロパチクエスト基準）。"
+      },
+      "reset": {
+        "excellent": 500,
+        "good": 350,
+        "caution": 280,
+        "note": "設定変更後は天井700G+αに短縮。280G〜が狙い目。"
+      }
+    },
+    "limit": 1000,
     "aliases": [
       "ルパン三世",
       "ルパン",
