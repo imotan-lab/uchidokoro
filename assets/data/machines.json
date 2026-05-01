@@ -38,7 +38,12 @@
         "note": "設定変更後は天井が最大700G（または300G）に短縮。"
       }
     },
-    "limit": 1000
+    "limit": 1000,
+    "original": {
+      "title": "虚構推理",
+      "kind": "漫画",
+      "search": "虚構推理 漫画"
+    }
   },
   {
     "slug": "shinuchi_yoshimune",
@@ -276,7 +281,12 @@
       "かばねり",
       "甲鉄城",
       "海門決戦"
-    ]
+    ],
+    "original": {
+      "title": "甲鉄城のカバネリ",
+      "kind": "アニメ",
+      "search": "甲鉄城のカバネリ Blu-ray"
+    }
   },
   {
     "slug": "umineko2",
@@ -356,7 +366,12 @@
         "note": "CZ間200G周期で運命分岐モード確定。完全攻略で設定1でも機械割103%。"
       }
     },
-    "limit": 200
+    "limit": 200,
+    "original": {
+      "title": "うみねこのなく頃に",
+      "kind": "ゲーム",
+      "search": "うみねこのなく頃に"
+    }
   },
   {
     "slug": "isekai_quattro_bt",
@@ -372,7 +387,12 @@
       "いせかる",
       "かるてっと",
       "異世界カルテット"
-    ]
+    ],
+    "original": {
+      "title": "異世界かるてっと",
+      "kind": "アニメ",
+      "search": "異世界かるてっと Blu-ray"
+    }
   },
   {
     "slug": "akudama",
@@ -415,7 +435,12 @@
         "note": "ボーナス6スルーで7回目AT確定。スルー回数天井あり。"
       }
     },
-    "limit": 967
+    "limit": 967,
+    "original": {
+      "title": "アクダマドライブ",
+      "kind": "アニメ",
+      "search": "アクダマドライブ Blu-ray"
+    }
   },
   {
     "slug": "yorumungando",
@@ -431,6 +456,11 @@
       "ヨルムン",
       "jormungand"
     ],
+    "original": {
+      "title": "ヨルムンガンド",
+      "kind": "漫画",
+      "search": "ヨルムンガンド 漫画"
+    },
     "checker": {
       "unit": "G",
       "modes": [
@@ -641,7 +671,12 @@
       "こうかく",
       "コウカク",
       "攻殻機動隊SAC"
-    ]
+    ],
+    "original": {
+      "title": "攻殻機動隊",
+      "kind": "漫画",
+      "search": "攻殻機動隊 士郎正宗"
+    }
   },
   {
     "slug": "new_king_hanahana_v",
@@ -921,6 +956,11 @@
       "rate55": "5.5枚CZ間350G〜 / AT間400G〜 / スルー回数込みで判断",
       "rate50": "5.0枚CZ間420G〜 / AT間470G〜 / スルー回数込みで判断",
       "rate45": "4.5枚CZ間500G〜 / AT間550G〜 / スルー回数込みで判断"
+    },
+    "original": {
+      "title": "東京喰種",
+      "kind": "漫画",
+      "search": "東京喰種 漫画"
     }
   },
   {
@@ -1038,7 +1078,12 @@
         "note": "リセット時は天井650G+α。45G〜88Gと155G〜250Gにゾーン。"
       }
     },
-    "limit": 850
+    "limit": 850,
+    "original": {
+      "title": "炎炎ノ消防隊",
+      "kind": "漫画",
+      "search": "炎炎ノ消防隊 漫画"
+    }
   },
   {
     "slug": "okidoki_gorgeous",
@@ -1305,7 +1350,12 @@
       "てんせい",
       "北斗転生2",
       "転生2"
-    ]
+    ],
+    "original": {
+      "title": "北斗の拳",
+      "kind": "漫画",
+      "search": "北斗の拳 漫画"
+    }
   },
   {
     "slug": "gogo_juggler3",
@@ -1988,7 +2038,12 @@
       "バルブレイブ",
       "ヴヴヴ",
       "VVV"
-    ]
+    ],
+    "original": {
+      "title": "革命機ヴァルヴレイヴ",
+      "kind": "アニメ",
+      "search": "革命機ヴァルヴレイヴ Blu-ray"
+    }
   },
   {
     "slug": "monkeyv",
@@ -2314,7 +2369,12 @@
       "モンキー",
       "もんきー",
       "モンキーV"
-    ]
+    ],
+    "original": {
+      "title": "モンキーターン",
+      "kind": "漫画",
+      "search": "モンキーターン 漫画"
+    }
   },
   {
     "slug": "tekken6",
@@ -2598,7 +2658,12 @@
       "てっけん",
       "テッケン",
       "鉄拳6"
-    ]
+    ],
+    "original": {
+      "title": "鉄拳",
+      "kind": "ゲーム",
+      "search": "鉄拳 ゲーム"
+    }
   },
   {
     "slug": "kaguya",
@@ -3073,7 +3138,12 @@
       "かぐや",
       "カグヤ",
       "告らせたい"
-    ]
+    ],
+    "original": {
+      "title": "かぐや様は告らせたい",
+      "kind": "漫画",
+      "search": "かぐや様は告らせたい 漫画"
+    }
   },
   {
     "slug": "bakemonogatari",
@@ -3191,7 +3261,12 @@
       },
       "limit": 1000
     },
-    "limit": 1000
+    "limit": 1000,
+    "original": {
+      "title": "化物語",
+      "kind": "小説",
+      "search": "化物語 西尾維新"
+    }
   },
   {
     "slug": "revengers",
@@ -3347,7 +3422,12 @@
       "hasSuru": true,
       "suruMax": 3
     },
-    "limit": 1190
+    "limit": 1190,
+    "original": {
+      "title": "東京卍リベンジャーズ",
+      "kind": "漫画",
+      "search": "東京リベンジャーズ 漫画"
+    }
   },
   {
     "slug": "godeater",
@@ -3502,7 +3582,12 @@
       "ゴドイタ",
       "GE",
       "ゴッイー"
-    ]
+    ],
+    "original": {
+      "title": "GOD EATER",
+      "kind": "ゲーム",
+      "search": "ゴッドイーター ゲーム"
+    }
   },
   {
     "slug": "magireco",
@@ -3620,7 +3705,12 @@
       },
       "limit": 700
     },
-    "limit": 633
+    "limit": 633,
+    "original": {
+      "title": "マギアレコード",
+      "kind": "ゲーム",
+      "search": "マギアレコード"
+    }
   },
   {
     "slug": "onimusha3",
@@ -3774,7 +3864,12 @@
         "note": "周期天井は最大6周期。上位AT後は1周期天国濃厚。"
       }
     },
-    "limit": 1000
+    "limit": 1000,
+    "original": {
+      "title": "鬼武者",
+      "kind": "ゲーム",
+      "search": "鬼武者 ゲーム"
+    }
   },
   {
     "slug": "discup_ur",
@@ -4009,7 +4104,12 @@
         "note": "6スルーで7回目クエスト成功確定。等価・持ちメダルは5スルー~/現金は6スルー~から狙い目。"
       }
     },
-    "limit": 999
+    "limit": 999,
+    "original": {
+      "title": "モンスターハンターライズ",
+      "kind": "ゲーム",
+      "search": "モンスターハンターライズ"
+    }
   },
   {
     "slug": "hihou",
@@ -4204,7 +4304,12 @@
       },
       "limit": 1000
     },
-    "limit": 1000
+    "limit": 1000,
+    "original": {
+      "title": "銀河英雄伝説",
+      "kind": "小説",
+      "search": "銀河英雄伝説 田中芳樹"
+    }
   },
   {
     "slug": "karakuri",
@@ -4321,7 +4426,12 @@
         "note": "CZ4スルー（5回目）でAT直撃。"
       }
     },
-    "limit": 1400
+    "limit": 1400,
+    "original": {
+      "title": "からくりサーカス",
+      "kind": "漫画",
+      "search": "からくりサーカス 漫画"
+    }
   },
   {
     "slug": "hokuto",
@@ -4453,7 +4563,12 @@
       "スマスロ北斗の拳",
       "北斗の拳"
     ],
-    "limit": 1268
+    "limit": 1268,
+    "original": {
+      "title": "北斗の拳",
+      "kind": "漫画",
+      "search": "北斗の拳 漫画"
+    }
   },
   {
     "slug": "sengoku_otome4",
@@ -4716,7 +4831,12 @@
         "note": "設定変更後は天井650G+αに短縮。リセット100G〜から期待値プラス（朝一台は積極的に狙う）。"
       }
     },
-    "limit": 999
+    "limit": 999,
+    "original": {
+      "title": "To LOVEる -とらぶる- ダークネス",
+      "kind": "漫画",
+      "search": "ToLOVEるダークネス 漫画"
+    }
   },
   {
     "slug": "yoshimune",
@@ -4914,7 +5034,12 @@
       "ゴブリンスレイヤー",
       "ゴブスレ",
       "ごぶすれ"
-    ]
+    ],
+    "original": {
+      "title": "ゴブリンスレイヤー",
+      "kind": "ライトノベル",
+      "search": "ゴブリンスレイヤー 小説"
+    }
   },
   {
     "slug": "banchou4",
@@ -5350,7 +5475,12 @@
         "suruMax": 6
       }
     },
-    "limit": 320
+    "limit": 320,
+    "original": {
+      "title": "ワンパンマン",
+      "kind": "漫画",
+      "search": "ワンパンマン 漫画"
+    }
   },
   {
     "slug": "azurlane",
@@ -5393,7 +5523,12 @@
         "note": "9スルー後の10回目でAT確定。6スルーから積極的に。リセット後は最大6スルー（7回目）に短縮。"
       }
     },
-    "limit": 350
+    "limit": 350,
+    "original": {
+      "title": "アズールレーン",
+      "kind": "ゲーム",
+      "search": "アズールレーン"
+    }
   },
   {
     "slug": "biohazard",
@@ -5547,7 +5682,12 @@
       "バイオ",
       "バイハ",
       "バイオ5"
-    ]
+    ],
+    "original": {
+      "title": "バイオハザード",
+      "kind": "ゲーム",
+      "search": "バイオハザード5 ゲーム"
+    }
   },
   {
     "slug": "okidoki_black",
@@ -5815,7 +5955,12 @@
         "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。プラム確率・チェリー確率・ボーナス合算で設定推測。"
       }
     },
-    "limit": null
+    "limit": null,
+    "original": {
+      "title": "ルパン三世（峰不二子）",
+      "kind": "漫画",
+      "search": "ルパン三世 不二子"
+    }
   },
   {
     "slug": "okidoki_gold",
@@ -6282,7 +6427,12 @@
       "だんべる",
       "ダン何キロ",
       "ダンベル何キロ"
-    ]
+    ],
+    "original": {
+      "title": "ダンベル何キロ持てる?",
+      "kind": "漫画",
+      "search": "ダンベル何キロ持てる 漫画"
+    }
   },
   {
     "slug": "monhun_rise",
@@ -6376,7 +6526,12 @@
         "note": "クエスト6スルー後の7回目で赤7ボーナス以上確定。5スルーから狙い目。"
       }
     },
-    "limit": 999
+    "limit": 999,
+    "original": {
+      "title": "モンスターハンターライズ",
+      "kind": "ゲーム",
+      "search": "モンスターハンターライズ"
+    }
   },
   {
     "slug": "happy_juggler_v3",
@@ -6531,7 +6686,12 @@
       "てんすら",
       "テンスラ",
       "スライム"
-    ]
+    ],
+    "original": {
+      "title": "転生したらスライムだった件",
+      "kind": "ライトノベル",
+      "search": "転生したらスライムだった件 小説"
+    }
   },
   {
     "slug": "super_blackjack",
@@ -6779,7 +6939,12 @@
         "note": "設定変更後は天井400G+αに短縮。AT当選時約25%で降臨ノ儀突入。"
       }
     },
-    "limit": 999
+    "limit": 999,
+    "original": {
+      "title": "傷物語",
+      "kind": "小説",
+      "search": "傷物語 西尾維新"
+    }
   },
   {
     "slug": "sf5",
@@ -6811,7 +6976,12 @@
       "ストリートファイター",
       "SF5",
       "すとふぁい"
-    ]
+    ],
+    "original": {
+      "title": "ストリートファイターV",
+      "kind": "ゲーム",
+      "search": "ストリートファイターV"
+    }
   },
   {
     "slug": "baki",
@@ -7095,7 +7265,12 @@
       "ばき",
       "強くなりたくば",
       "BAKI"
-    ]
+    ],
+    "original": {
+      "title": "バキ",
+      "kind": "漫画",
+      "search": "バキ 板垣恵介"
+    }
   },
   {
     "slug": "sao",
@@ -7283,7 +7458,12 @@
         }
       }
     },
-    "limit": 999
+    "limit": 999,
+    "original": {
+      "title": "ソードアート・オンライン",
+      "kind": "ライトノベル",
+      "search": "ソードアートオンライン 小説"
+    }
   },
   {
     "slug": "bandori",
@@ -7429,7 +7609,12 @@
         }
       }
     },
-    "limit": 900
+    "limit": 900,
+    "original": {
+      "title": "BanG Dream!",
+      "kind": "アニメ",
+      "search": "バンドリ Blu-ray"
+    }
   },
   {
     "slug": "hanma_baki",
@@ -7588,7 +7773,12 @@
         }
       }
     },
-    "limit": 700
+    "limit": 700,
+    "original": {
+      "title": "範馬刃牙",
+      "kind": "漫画",
+      "search": "範馬刃牙 漫画"
+    }
   },
   {
     "slug": "triple_crown_7",
@@ -7647,7 +7837,12 @@
         "note": "設定変更後は天井600G+αに短縮。恩恵：上位AT「レヴューデュエット」当選。リセット後は250G〜が狙い目。"
       }
     },
-    "limit": 900
+    "limit": 900,
+    "original": {
+      "title": "少女☆歌劇 レヴュースタァライト",
+      "kind": "アニメ",
+      "search": "レヴュースタァライト Blu-ray"
+    }
   },
   {
     "slug": "mr_juggler",
@@ -7723,7 +7918,12 @@
         "note": "設定変更後は天井が850G+αに短縮。リセット台は550G~から候補。"
       }
     },
-    "limit": 1250
+    "limit": 1250,
+    "original": {
+      "title": "銭形平次",
+      "kind": "小説",
+      "search": "銭形平次 野村胡堂"
+    }
   },
   {
     "slug": "mushoku",
@@ -7741,7 +7941,12 @@
       "無職"
     ],
     "checker": null,
-    "limit": null
+    "limit": null,
+    "original": {
+      "title": "無職転生",
+      "kind": "ライトノベル",
+      "search": "無職転生 小説"
+    }
   },
   {
     "slug": "enen",
@@ -7784,7 +7989,12 @@
       },
       "limit": 850
     },
-    "limit": 850
+    "limit": 850,
+    "original": {
+      "title": "炎炎ノ消防隊",
+      "kind": "漫画",
+      "search": "炎炎ノ消防隊 漫画"
+    }
   },
   {
     "slug": "railgun2",
@@ -7826,7 +8036,12 @@
       },
       "limit": 1050
     },
-    "limit": 999
+    "limit": 999,
+    "original": {
+      "title": "とある科学の超電磁砲",
+      "kind": "漫画",
+      "search": "とある科学の超電磁砲 漫画"
+    }
   },
   {
     "slug": "gundam_seed",
@@ -7905,6 +8120,11 @@
         "note": "リセット・ST駆け抜け後は天井750Gに短縮。400G〜が狙い目。"
       },
       "limit": 800
+    },
+    "original": {
+      "title": "機動戦士ガンダムSEED",
+      "kind": "アニメ",
+      "search": "ガンダムSEED Blu-ray"
     }
   },
   {
@@ -8011,6 +8231,11 @@
         "note": "リセット後は天井630G+αに短縮。300G〜が狙い目。"
       },
       "limit": 1030
+    },
+    "original": {
+      "title": "ようこそ実力至上主義の教室へ",
+      "kind": "ライトノベル",
+      "search": "ようこそ実力至上主義の教室へ 小説"
     }
   },
   {
@@ -8092,6 +8317,11 @@
         "limit": 1050
       },
       "limit": 2550
+    },
+    "original": {
+      "title": "ゴジラ",
+      "kind": "映画",
+      "search": "ゴジラ Blu-ray"
     }
   },
   {
@@ -8133,6 +8363,11 @@
         "limit": 750
       },
       "limit": 1050
+    },
+    "original": {
+      "title": "コードギアス 反逆のルルーシュ",
+      "kind": "アニメ",
+      "search": "コードギアス Blu-ray"
     }
   },
   {
@@ -8223,6 +8458,11 @@
         ]
       },
       "limit": 450
+    },
+    "original": {
+      "title": "ケンガンアシュラ",
+      "kind": "漫画",
+      "search": "ケンガンアシュラ 漫画"
     }
   },
   {
@@ -8254,6 +8494,11 @@
         "limit": 1350
       },
       "limit": 1350
+    },
+    "original": {
+      "title": "Re:ゼロから始める異世界生活",
+      "kind": "ライトノベル",
+      "search": "Re:ゼロから始める異世界生活 小説"
     }
   },
   {
@@ -8499,7 +8744,12 @@
       "ok": "狙いOK",
       "ng": "まだ早い"
     },
-    "limit": 899
+    "limit": 899,
+    "original": {
+      "title": "まじかるすいーと プリズム・ナナ",
+      "kind": "アニメ",
+      "search": "まじかるすいーと プリズム ナナ Blu-ray"
+    }
   },
   {
     "slug": "basilisk_tenzen",
@@ -8543,7 +8793,12 @@
         "note": "BC7スルー後8回目でBT確定（天井）。BC3スルー以上でG数不問から狙い目。"
       }
     },
-    "limit": 333
+    "limit": 333,
+    "original": {
+      "title": "バジリスク 〜甲賀忍法帖〜",
+      "kind": "漫画",
+      "search": "バジリスク 漫画"
+    }
   },
   {
     "slug": "madomagi_forte",
@@ -8598,7 +8853,12 @@
         "note": "リセット後はゾーン100G・500Gが優遇。0Gから期待値プラス。"
       }
     },
-    "limit": 999
+    "limit": 999,
+    "original": {
+      "title": "魔法少女まどか☆マギカ",
+      "kind": "アニメ",
+      "search": "魔法少女まどか マギカ Blu-ray"
+    }
   },
   {
     "slug": "burning_express",
@@ -8733,7 +8993,12 @@
         "note": "この機種は天井非搭載のボーナストリガー（BT）機です。設定狙い主体の機種です。高設定をつかめる環境（イベント・特定日）での使用を推奨します。"
       }
     },
-    "limit": null
+    "limit": null,
+    "original": {
+      "title": "新世紀エヴァンゲリオン",
+      "kind": "アニメ",
+      "search": "新世紀エヴァンゲリオン Blu-ray"
+    }
   },
   {
     "slug": "neoplanet",
@@ -8995,7 +9260,12 @@
       "防御力に極振り",
       "スマスロ防振り"
     ],
-    "limit": 1000
+    "limit": 1000,
+    "original": {
+      "title": "痛いのは嫌なので防御力に極振りしたいと思います。",
+      "kind": "ライトノベル",
+      "search": "防振り 小説"
+    }
   },
   {
     "slug": "dmc5_st",
@@ -9117,7 +9387,12 @@
       "dmc",
       "スタイリッシュトライブ"
     ],
-    "limit": 1050
+    "limit": 1050,
+    "original": {
+      "title": "デビル メイ クライ5",
+      "kind": "ゲーム",
+      "search": "デビルメイクライ5"
+    }
   },
   {
     "slug": "darlifra",
@@ -9276,7 +9551,12 @@
       "ダーリン・イン・ザ・フランキス",
       "フランキス"
     ],
-    "limit": 700
+    "limit": 700,
+    "original": {
+      "title": "ダーリン・イン・ザ・フランキス",
+      "kind": "アニメ",
+      "search": "ダーリン イン ザ フランキス Blu-ray"
+    }
   },
   {
     "slug": "nanatsuma",
@@ -9397,7 +9677,12 @@
       "七魔剣",
       "七つの魔剣が支配する"
     ],
-    "limit": 1050
+    "limit": 1050,
+    "original": {
+      "title": "七つの魔剣が支配する",
+      "kind": "ライトノベル",
+      "search": "七つの魔剣が支配する 小説"
+    }
   },
   {
     "slug": "shaman_king",
@@ -9549,7 +9834,12 @@
         "note": "リセット後天井500G+αに短縮。等価/5.6枚は250G〜が狙い目。"
       }
     },
-    "limit": 900
+    "limit": 900,
+    "original": {
+      "title": "シャーマンキング",
+      "kind": "漫画",
+      "search": "シャーマンキング 漫画"
+    }
   },
   {
     "slug": "tenken",
@@ -9698,7 +9988,12 @@
         "note": "リセット後AT間天井600G+αに短縮。等価/5.6枚は160G〜が狙い目。"
       }
     },
-    "limit": 1400
+    "limit": 1400,
+    "original": {
+      "title": "転生したら剣でした",
+      "kind": "ライトノベル",
+      "search": "転生したら剣でした 小説"
+    }
   },
   {
     "slug": "valvrave",
@@ -9850,7 +10145,12 @@
         "note": "CZ7スルーで次回CZ成功濃厚。4スルー以降はG数関係なく即打ち推奨。"
       }
     },
-    "limit": 1600
+    "limit": 1600,
+    "original": {
+      "title": "革命機ヴァルヴレイヴ",
+      "kind": "アニメ",
+      "search": "革命機ヴァルヴレイヴ Blu-ray"
+    }
   },
   {
     "slug": "lupin_daikokaisha",
@@ -9867,7 +10167,12 @@
       "大航海者",
       "ルパン大航海者",
       "lupin"
-    ]
+    ],
+    "original": {
+      "title": "ルパン三世",
+      "kind": "漫画",
+      "search": "ルパン三世 漫画"
+    }
   },
   {
     "slug": "zombieland_saga",
@@ -9910,7 +10215,12 @@
         "note": "設定変更後は555Gに短縮。朝一は240G〜が狙い目ライン（スロパチクエスト基準）。300G以上で本命。"
       }
     },
-    "limit": 800
+    "limit": 800,
+    "original": {
+      "title": "ゾンビランドサガ",
+      "kind": "アニメ",
+      "search": "ゾンビランドサガ Blu-ray"
+    }
   },
   {
     "slug": "zettai_shougeki4",
@@ -10037,7 +10347,12 @@
         "note": "設定変更後は510G / 1000G / 1480G から抽選（15.2% / 20.3% / 64.5%）。等価300G〜が狙い目（スロパチクエスト基準）。"
       }
     },
-    "limit": 1480
+    "limit": 1480,
+    "original": {
+      "title": "ミリオンゴッド",
+      "kind": "シリーズ",
+      "search": "ミリオンゴッド"
+    }
   },
   {
     "slug": "gundam_uc2",
@@ -10093,7 +10408,12 @@
         "suruMax": 6
       }
     },
-    "limit": 1400
+    "limit": 1400,
+    "original": {
+      "title": "機動戦士ガンダムUC",
+      "kind": "小説",
+      "search": "機動戦士ガンダムUC 小説"
+    }
   },
   {
     "slug": "animal_dotch",
@@ -10158,7 +10478,12 @@
       "biohazard_re3"
     ],
     "checker": null,
-    "limit": null
+    "limit": null,
+    "original": {
+      "title": "バイオハザード RE:3",
+      "kind": "ゲーム",
+      "search": "バイオハザード RE:3"
+    }
   },
   {
     "slug": "takt_opus",
@@ -10178,7 +10503,12 @@
       "taktopus"
     ],
     "checker": null,
-    "limit": null
+    "limit": null,
+    "original": {
+      "title": "takt op.",
+      "kind": "アニメ",
+      "search": "takt op Blu-ray"
+    }
   },
   {
     "slug": "bigdream_pusher",
