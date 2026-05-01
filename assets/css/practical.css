@@ -407,6 +407,12 @@ button, input, select { font: inherit; }
 .affiliate-desc { font-size: 12px; color: var(--soft); line-height: 1.5; }
 .affiliate-disclosure { text-align: center; font-size: 10px; color: var(--soft); opacity: 0.5; margin: 14px 0 0 0; }
 
+/* アフィリエイト・控えめバージョン（1行インライン） */
+.affiliate-mini { text-align: center; font-size: 12px; color: var(--soft); margin: 4px 0 2px 0; line-height: 1.8; }
+.affiliate-mini a { color: var(--gold); text-decoration: none; margin: 0 2px; }
+.affiliate-mini a:hover { text-decoration: underline; }
+.affiliate-mini-note { text-align: center; font-size: 10px; color: var(--soft); opacity: 0.4; margin: 0; }
+
 /* 近日導入セクション */
 .upcoming-section { margin: 0 0 18px 0; padding: 14px 0 6px 0; border-top: 1px solid rgba(245,185,65,.25); border-bottom: 1px solid rgba(245,185,65,.25); background: rgba(245,185,65,.04); }
 .upcoming-header { padding: 0 14px 10px 14px; }
