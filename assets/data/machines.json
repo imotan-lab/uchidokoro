@@ -5362,12 +5362,12 @@
       "title": "ワンパンマン 狙い目・天井・期待値まとめ"
     },
     "info": "スマスロAT",
-    "strategy": "等価CZ間150G〜 / スルー2回〜",
+    "strategy": "等価CZ間230G〜 / 4スルー〜",
     "strategyByRate": {
-      "eq56": "5.6枚CZ間170G〜",
-      "rate55": "5.5枚CZ間180G〜",
-      "rate50": "5.0枚CZ間200G〜",
-      "rate45": "4.5枚CZ間230G〜"
+      "eq56": "5.6枚CZ間250G〜",
+      "rate55": "5.5枚CZ間280G〜",
+      "rate50": "5.0枚CZ間310G〜",
+      "rate45": "4.5枚CZ間天井狙いほぼ不可"
     },
     "aliases": [
       "ワンパンマン",
@@ -5407,71 +5407,71 @@
       ],
       "normal": {
         "excellent": 280,
-        "good": 150,
-        "caution": 100,
+        "good": 230,
+        "caution": 180,
         "byRate": {
           "eq56": {
             "excellent": 280,
-            "good": 170,
-            "caution": 110,
-            "note": "5.6枚交換ならCZ間170Gから狙い目。天井320G+α。"
+            "good": 250,
+            "caution": 200,
+            "note": "5.6枚現金ならCZ間250G〜が狙い目。天井320G+α。"
           },
           "rate55": {
-            "excellent": 280,
-            "good": 180,
-            "caution": 120,
-            "note": "5.5枚交換ならCZ間180Gから。"
+            "excellent": 290,
+            "good": 280,
+            "caution": 220,
+            "note": "5.5枚ならCZ間280G〜から。天井に近い。"
           },
           "rate50": {
-            "excellent": 290,
-            "good": 200,
-            "caution": 140,
-            "note": "5.0枚交換ならCZ間200Gから。"
+            "excellent": 300,
+            "good": 310,
+            "caution": 270,
+            "note": "5.0枚は天井付近の310G〜のみ。"
           },
           "rate45": {
-            "excellent": 300,
-            "good": 230,
-            "caution": 160,
-            "note": "4.5枚交換ならCZ間230Gから。"
+            "excellent": 310,
+            "good": 320,
+            "caution": 290,
+            "note": "4.5枚は天井狙い不可レベル。"
           }
         },
-        "note": "CZ間天井320G+α。128G以内のCZ当選率60%超。"
+        "note": "CZ間天井320G+α。スロパチクエスト基準で等価230G〜・4スルー〜が狙い目。"
       },
       "suru": {
         "excellent": 5,
-        "good": 2,
-        "caution": 1,
+        "good": 4,
+        "caution": 2,
         "byRate": {
           "eq56": {
             "excellent": 5,
-            "good": 2,
-            "caution": 1,
-            "note": "CZ6スルー後（7回目）でマジBIG確定。2スルーから狙い目。",
+            "good": 4,
+            "caution": 2,
+            "note": "等価/5.6枚持ちメダルは4スルー〜が狙い目。",
             "suruMax": 6
           },
           "rate55": {
             "excellent": 5,
-            "good": 2,
-            "caution": 1,
-            "note": "2スルーから狙い目。",
+            "good": 5,
+            "caution": 3,
+            "note": "5.6枚現金/5.5枚は5スルー〜。",
             "suruMax": 6
           },
           "rate50": {
             "excellent": 5,
-            "good": 3,
-            "caution": 2,
-            "note": "3スルーから狙い目。",
+            "good": 5,
+            "caution": 4,
+            "note": "5.0枚は5スルー〜が目安。",
             "suruMax": 6
           },
           "rate45": {
             "excellent": 5,
-            "good": 3,
-            "caution": 2,
-            "note": "3スルーから狙い目。",
+            "good": 5,
+            "caution": 4,
+            "note": "4.5枚は5スルー〜が目安。",
             "suruMax": 6
           }
         },
-        "note": "CZ6スルー後（7回目）でマジBIG確定（実質AT濃厚）。",
+        "note": "CZ6スルー後（7回目）でマジBIG確定（実質AT濃厚）。スロパチクエスト基準で4スルー〜（等価）/5スルー〜（5.6枚現金）。",
         "suruMax": 6
       }
     },
