@@ -10575,5 +10575,39 @@
     ],
     "checker": null,
     "limit": null
+  },
+  {
+    "slug": "galfy",
+    "name": "LBスロットGALFY",
+    "release_date": "2026-05-25",
+    "seo": {
+      "title": "LBスロットGALFY 設定狙い・スペックまとめ"
+    },
+    "info": "スマスロBT",
+    "strategy": "設定狙い主体・天井なし",
+    "aliases": [
+      "GALFY",
+      "ガルフィー",
+      "ガルフィ",
+      "LBガルフィー",
+      "スマスロガルフィー",
+      "スマスロガルフィ"
+    ],
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "設定狙い"
+        }
+      ],
+      "normal": {
+        "excellent": 99999,
+        "good": 99999,
+        "caution": 99999,
+        "note": "BTタイプのため天井非搭載。設定狙い主体の機種です。完全攻略時の機械割は設定1で100.3%、設定6で108.7%。高設定が見込める環境での使用を推奨。"
+      }
+    },
+    "limit": null
   }
 ]
