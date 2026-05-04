@@ -8556,7 +8556,7 @@
         "limit": 450
       },
       "suru": {
-        "suruMax": 6,
+        "suruMax": 7,
         "suru": [
           {
             "count": 0,
@@ -8602,10 +8602,17 @@
           },
           {
             "count": 6,
+            "excellent": 50,
+            "good": 0,
+            "caution": 0,
+            "note": "6スルー：即打ち推奨（残り1スルーで天井）。"
+          },
+          {
+            "count": 7,
             "excellent": 0,
             "good": 0,
             "caution": 0,
-            "note": "6スルー：CZ6スルーで天井。AT当選確定。即打ち。"
+            "note": "7スルー：CZ7スルーで天井。8回目のCZでAT当選確定。即打ち。"
           }
         ]
       },
