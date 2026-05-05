@@ -3276,7 +3276,7 @@
       ],
       "limit": 1100,
       "hasSuru": true,
-      "suruMax": 6
+      "suruMax": 7
     },
     "limit": 1100,
     "strategyByRate": {
@@ -3572,7 +3572,7 @@
       },
       "limit": 1190,
       "hasSuru": true,
-      "suruMax": 3
+      "suruMax": 4
     },
     "limit": 1190,
     "original": {
