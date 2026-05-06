@@ -1,4 +1,4 @@
-const CACHE_NAME = 'uchidokoro-v56';
+const CACHE_NAME = 'uchidokoro-v57';
 
 const STATIC_CACHE = [
   '/',
@@ -13,8 +13,7 @@ const STATIC_CACHE = [
   '/assets/css/practical.css',
   '/assets/img/logo.png',
   '/assets/img/ogp.png',
-  '/assets/data/machines.json',
-  '/assets/data/machine-details/hokuto.json'
+  '/assets/data/machines.json'
 ];
 
 // インストール時：静的ファイルをキャッシュ

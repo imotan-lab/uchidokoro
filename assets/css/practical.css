@@ -252,6 +252,9 @@ button, input, select { font: inherit; }
   padding: 20px;
 }
 .is-hidden { display: none !important; }
+.fallback-msg { padding: 40px; text-align: center; color: #667788; }
+.fallback-msg a { color: #f5b941; }
+.aff-pixel { border: none; }
 .mode-toggle {
   display: grid;
   grid-template-columns: 1fr 1fr;

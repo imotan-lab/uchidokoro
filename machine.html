@@ -51,7 +51,7 @@
     <p class="eyebrow"><a href="index.html" class="eyebrow-link">‹ 一覧</a>&nbsp;&nbsp;ARTICLE</p>
     <h1 id="machineTitle" class="page-title">機種名</h1>
     <p id="heroSub" class="hero-sub"></p>
-    <div id="previewBanner" class="preview-banner" style="display:none;">
+    <div id="previewBanner" class="preview-banner is-hidden">
       <p class="preview-banner-label">⚠ 先行記事（解析待ち）</p>
       <p class="preview-banner-body">この機種はまだ解析データが出揃っていません。天井・狙い目・設定差は判明次第、随時更新します。</p>
       <p id="previewReleaseDate" class="preview-banner-date"></p>
@@ -63,7 +63,7 @@
 
   <section class="article-section-wrap">
 
-    <div id="rateToggle" class="mode-toggle rate-toggle-shared" style="display:none;"></div>
+    <div id="rateToggle" class="mode-toggle rate-toggle-shared is-hidden"></div>
 
     <div class="article-block" id="evTableBlock">
       <p class="block-label">▶ 期待値早見表</p>
@@ -76,7 +76,7 @@
       <p class="block-label">▶ 狙い目チェッカー</p>
       <div class="checker-card">
         <div id="modeToggle" class="mode-toggle"></div>
-        <div id="suruWrap" class="suru-wrap" style="display:none;">
+        <div id="suruWrap" class="suru-wrap is-hidden">
           <p class="suru-label">CZスルー回数</p>
           <div class="setting-counter-wrap">
             <button class="setting-cnt-btn" id="suruDec">－</button>
@@ -84,7 +84,7 @@
             <button class="setting-cnt-btn" id="suruInc">＋</button>
           </div>
         </div>
-        <div id="cycleWrap" class="suru-wrap" style="display:none;">
+        <div id="cycleWrap" class="suru-wrap is-hidden">
           <p class="suru-label">周期回数</p>
           <div class="setting-counter-wrap">
             <button class="setting-cnt-btn" id="cycleDec">－</button>
@@ -131,13 +131,13 @@
         <a href="https://px.a8.net/svt/ejp?a8mat=4AZMKM+402X6A+2VX4+BX3J6" rel="nofollow noopener" target="_blank">わっしょい</a> /
         <a href="//af.moshimo.com/af/c/click?a_id=5526246&p_id=54&pc_id=54&pl_id=621" rel="nofollow noopener" target="_blank" referrerpolicy="no-referrer-when-downgrade">楽天市場</a>
       </p>
-      <p class="affiliate-mini" id="originalLine" style="display:none;"></p>
+      <p class="affiliate-mini is-hidden" id="originalLine"></p>
       <p class="affiliate-mini-note">※アフィリエイトリンクを含みます</p>
       <img border="0" width="1" height="1" src="https://www17.a8.net/0.gif?a8mat=4AZMKM+34IY42+2SY6+62U36" alt="">
       <img border="0" width="1" height="1" src="https://www17.a8.net/0.gif?a8mat=4AZMKM+2T7PMA+5RYY+5YJRM" alt="">
       <img border="0" width="1" height="1" src="https://www15.a8.net/0.gif?a8mat=4AZMKM+40OCS2+2VX4+62ENM" alt="">
       <img border="0" width="1" height="1" src="https://www11.a8.net/0.gif?a8mat=4AZMKM+402X6A+2VX4+BX3J6" alt="">
-      <img src="//i.moshimo.com/af/i/impression?a_id=5526246&p_id=54&pc_id=54&pl_id=621" width="1" height="1" style="border:none;" loading="lazy" alt="">
+      <img src="//i.moshimo.com/af/i/impression?a_id=5526246&p_id=54&pc_id=54&pl_id=621" width="1" height="1" class="aff-pixel" loading="lazy" alt="">
     </div>
 
     <div class="article-block">
@@ -229,13 +229,13 @@ function resolveMachineSlug() {
   const slug = resolveMachineSlug();
   const machines = await loadJson("assets/data/machines.json");
   if (!machines) {
-    document.body.innerHTML = '<div style="padding:40px;text-align:center;color:#667788;">データの取得に失敗しました。<br><a href="index.html" style="color:#f5b941;">一覧へ戻る</a></div>';
+    document.body.innerHTML = '<div class="fallback-msg">データの取得に失敗しました。<br><a href="index.html">一覧へ戻る</a></div>';
     return;
   }
 
   const machine = machines.find(m => m.slug === slug);
   if (!machine) {
-    document.body.innerHTML = '<div style="padding:40px;text-align:center;color:#667788;">機種が見つかりません。<br><a href="index.html" style="color:#f5b941;">一覧へ戻る</a></div>';
+    document.body.innerHTML = '<div class="fallback-msg">機種が見つかりません。<br><a href="index.html">一覧へ戻る</a></div>';
     return;
   }
 
@@ -254,24 +254,24 @@ function resolveMachineSlug() {
       const searchUrl = "https://search.rakuten.co.jp/search/mall/" + encodeURIComponent(o.search || o.title) + "/";
       const moshimoUrl = "https://af.moshimo.com/af/c/click?a_id=5526246&p_id=54&pc_id=54&pl_id=621&url=" + encodeURIComponent(searchUrl);
       origEl.innerHTML = `原作: 「${o.title}」${kindLabel} → <a href="${moshimoUrl}" rel="nofollow noopener" target="_blank" referrerpolicy="no-referrer-when-downgrade">楽天で探す</a>`;
-      origEl.style.display = "";
+      origEl.classList.remove("is-hidden");
     }
   }
 
   // 先行記事モード：status === "preview" の場合、バナーを表示し狙い目チェッカー系を隠す
   if (machine.status === "preview") {
     const banner = document.getElementById("previewBanner");
-    if (banner) banner.style.display = "";
+    if (banner) banner.classList.remove("is-hidden");
     const dateEl = document.getElementById("previewReleaseDate");
     if (dateEl && machine.release_date) dateEl.textContent = `導入予定日: ${machine.release_date}`;
     // 解析データが必要なブロックを非表示
     const evBlock = document.getElementById("evTableBlock");
-    if (evBlock) evBlock.style.display = "none";
+    if (evBlock) evBlock.classList.add("is-hidden");
     const checkerBlockLabel = document.querySelectorAll(".article-block");
     checkerBlockLabel.forEach(block => {
       const label = block.querySelector(".block-label");
       if (label && (label.textContent.includes("狙い目チェッカー") || label.textContent.includes("狙い目早見表"))) {
-        block.style.display = "none";
+        block.classList.add("is-hidden");
       }
     });
     // 小役カウンター導線は下のpochipochiStatusで「解析データ判明後に対応」と無効化表示される
@@ -519,12 +519,12 @@ function resolveMachineSlug() {
     const rates = getRateOptions(checker);
     rateToggle.innerHTML = "";
     if (!rates.length) {
-      rateToggle.style.display = "none";
+      rateToggle.classList.add("is-hidden");
       currentRateKey = null;
       return;
     }
 
-    rateToggle.style.display = "grid";
+    rateToggle.classList.remove("is-hidden");
     const initialRateKey = checker.defaultRate || rates[0].key;
     rates.forEach((rate, i) => {
       const id = "rate_" + rate.key;
@@ -596,8 +596,8 @@ function resolveMachineSlug() {
     if (!checked) return;
     const modeKey = checked.value;
     const modedef = (checker.modes || []).find(m => m.key === modeKey);
-    suruWrap.style.display = (modedef && modedef.hasSuru) ? "block" : "none";
-    cycleWrap.style.display = (modedef && modedef.hasCycle) ? "block" : "none";
+    suruWrap.classList.toggle("is-hidden", !(modedef && modedef.hasSuru));
+    cycleWrap.classList.toggle("is-hidden", !(modedef && modedef.hasCycle));
     const config = resolveRateConfig(getConfig(checker, modeKey, suruCount, cycleCount), getCurrentRateKey());
     if (checkerNote) checkerNote.textContent = config.note || "";
     const g = parseInt(gameInput.value, 10);
