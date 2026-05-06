@@ -82,7 +82,7 @@
         canonical.rel = "canonical";
         document.head.appendChild(canonical);
       }
-      canonical.href = `https://uchidokoro.com/machine.html?slug=${slug}`;
+      canonical.href = `https://uchidokoro.com/machines/${slug}/`;
 
       // 日付情報（JSON-LDに使う）
       const todayIso = new Date().toISOString().split('T')[0];
@@ -113,7 +113,7 @@
         },
         "mainEntityOfPage": {
           "@type": "WebPage",
-          "@id": `https://uchidokoro.com/machine.html?slug=${slug}`
+          "@id": `https://uchidokoro.com/machines/${slug}/`
         }
       };
       const ldScript = document.createElement("script");
