@@ -99,56 +99,28 @@
   <url><loc>https://uchidokoro.com/setting.html?slug=super_blackjack</loc></url>
   <url><loc>https://uchidokoro.com/setting.html?slug=yoshimune</loc></url>
   <url><loc>https://uchidokoro.com/setting.html?slug=azurlane</loc></url>
-  <url><loc>https://uchidokoro.com/machine.html?slug=revue_starlight</loc></url>
   <url><loc>https://uchidokoro.com/machines/revue_starlight/</loc></url>
-  <url><loc>https://uchidokoro.com/machine.html?slug=tolove_darkness</loc></url>
   <url><loc>https://uchidokoro.com/machines/tolove_darkness/</loc></url>
-  <url><loc>https://uchidokoro.com/machine.html?slug=mr_juggler</loc></url>
   <url><loc>https://uchidokoro.com/machines/mr_juggler/</loc></url>
-  <url><loc>https://uchidokoro.com/machine.html?slug=zenigata5</loc></url>
   <url><loc>https://uchidokoro.com/machines/zenigata5/</loc></url>
-  <url><loc>https://uchidokoro.com/machine.html?slug=mushoku</loc></url>
   <url><loc>https://uchidokoro.com/machines/mushoku/</loc></url>
-  <url><loc>https://uchidokoro.com/machine.html?slug=enen</loc></url>
   <url><loc>https://uchidokoro.com/machines/enen/</loc></url>
-  <url><loc>https://uchidokoro.com/machine.html?slug=railgun2</loc></url>
   <url><loc>https://uchidokoro.com/machines/railgun2/</loc></url>
-  <url><loc>https://uchidokoro.com/machine.html?slug=gundam_seed</loc></url>
   <url><loc>https://uchidokoro.com/machines/gundam_seed/</loc></url>
-  <url><loc>https://uchidokoro.com/machine.html?slug=youjitsu</loc></url>
   <url><loc>https://uchidokoro.com/machines/youjitsu/</loc></url>
-  <url><loc>https://uchidokoro.com/machine.html?slug=midoridon_viva</loc></url>
   <url><loc>https://uchidokoro.com/machines/midoridon_viva/</loc></url>
-  <url><loc>https://uchidokoro.com/machine.html?slug=godzilla</loc></url>
   <url><loc>https://uchidokoro.com/machines/godzilla/</loc></url>
-  <url><loc>https://uchidokoro.com/machine.html?slug=code_geass</loc></url>
   <url><loc>https://uchidokoro.com/machines/code_geass/</loc></url>
-  <url><loc>https://uchidokoro.com/machine.html?slug=kengan_ashura</loc></url>
   <url><loc>https://uchidokoro.com/machines/kengan_ashura/</loc></url>
-  <url><loc>https://uchidokoro.com/machine.html?slug=discup_ur</loc></url>
   <url><loc>https://uchidokoro.com/machines/discup_ur/</loc></url>
-  <url><loc>https://uchidokoro.com/machine.html?slug=rezero2</loc></url>
   <url><loc>https://uchidokoro.com/machines/rezero2/</loc></url>
-  <url><loc>https://uchidokoro.com/machine.html?slug=goji_eva</loc></url>
   <url><loc>https://uchidokoro.com/machines/goji_eva/</loc></url>
-  <url><loc>https://uchidokoro.com/machine.html?slug=prismnana</loc></url>
   <url><loc>https://uchidokoro.com/machines/prismnana/</loc></url>
-  <url><loc>https://uchidokoro.com/machine.html?slug=basilisk_tenzen</loc></url>
   <url><loc>https://uchidokoro.com/machines/basilisk_tenzen/</loc></url>
-  <url><loc>https://uchidokoro.com/machine.html?slug=madomagi_forte</loc></url>
   <url><loc>https://uchidokoro.com/machines/madomagi_forte/</loc></url>
-  <url><loc>https://uchidokoro.com/machine.html?slug=burning_express</loc></url>
   <url><loc>https://uchidokoro.com/machines/burning_express/</loc></url>
-  <url><loc>https://uchidokoro.com/machine.html?slug=shake_bt</loc></url>
   <url><loc>https://uchidokoro.com/machines/shake_bt/</loc></url>
-  <url><loc>https://uchidokoro.com/machine.html?slug=kurea_bt</loc></url>
   <url><loc>https://uchidokoro.com/machines/kurea_bt/</loc></url>
-
-  <url>
-    <loc>https://uchidokoro.com/machine.html?slug=okidoki_duo_encore</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
   <url>
     <loc>https://uchidokoro.com/machines/okidoki_duo_encore/</loc>
     <changefreq>monthly</changefreq>
@@ -160,29 +132,9 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://uchidokoro.com/machine.html?slug=mhrise</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
     <loc>https://uchidokoro.com/machines/mhrise/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://uchidokoro.com/machine.html?slug=zenigata5</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://uchidokoro.com/machines/zenigata5/</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://uchidokoro.com/machine.html?slug=gineiden_dnt</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://uchidokoro.com/machines/gineiden_dnt/</loc>
@@ -190,19 +142,9 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://uchidokoro.com/machine.html?slug=eva_yakusoku</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
     <loc>https://uchidokoro.com/machines/eva_yakusoku/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://uchidokoro.com/machine.html?slug=neoplanet</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://uchidokoro.com/machines/neoplanet/</loc>
@@ -210,19 +152,9 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://uchidokoro.com/machine.html?slug=bofuri</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
     <loc>https://uchidokoro.com/machines/bofuri/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://uchidokoro.com/machine.html?slug=dmc5_st</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://uchidokoro.com/machines/dmc5_st/</loc>
@@ -230,29 +162,14 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://uchidokoro.com/machine.html?slug=darlifra</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
     <loc>https://uchidokoro.com/machines/darlifra/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://uchidokoro.com/machine.html?slug=nanatsuma</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
     <loc>https://uchidokoro.com/machines/nanatsuma/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://uchidokoro.com/machine.html?slug=shaman_king</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://uchidokoro.com/machines/shaman_king/</loc>
@@ -265,19 +182,9 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://uchidokoro.com/machine.html?slug=tenken</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
     <loc>https://uchidokoro.com/machines/tenken/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://uchidokoro.com/machine.html?slug=valvrave</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://uchidokoro.com/machines/valvrave/</loc>
@@ -285,19 +192,9 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://uchidokoro.com/machine.html?slug=lupin_daikokaisha</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
     <loc>https://uchidokoro.com/machines/lupin_daikokaisha/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://uchidokoro.com/machine.html?slug=zombieland_saga</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://uchidokoro.com/machines/zombieland_saga/</loc>
@@ -305,19 +202,9 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://uchidokoro.com/machine.html?slug=zettai_shougeki4</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
     <loc>https://uchidokoro.com/machines/zettai_shougeki4/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://uchidokoro.com/machine.html?slug=babel</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://uchidokoro.com/machines/babel/</loc>
@@ -325,19 +212,9 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://uchidokoro.com/machine.html?slug=milliongod_kiseki</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
     <loc>https://uchidokoro.com/machines/milliongod_kiseki/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://uchidokoro.com/machine.html?slug=gundam_uc2</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://uchidokoro.com/machines/gundam_uc2/</loc>
@@ -345,19 +222,9 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://uchidokoro.com/machine.html?slug=animal_dotch</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
     <loc>https://uchidokoro.com/machines/animal_dotch/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://uchidokoro.com/machine.html?slug=biohazard_re3</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://uchidokoro.com/machines/biohazard_re3/</loc>
@@ -365,19 +232,9 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://uchidokoro.com/machine.html?slug=takt_opus</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
     <loc>https://uchidokoro.com/machines/takt_opus/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://uchidokoro.com/machine.html?slug=bigdream_pusher</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://uchidokoro.com/machines/bigdream_pusher/</loc>
@@ -385,19 +242,9 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://uchidokoro.com/machine.html?slug=super_rio_ace2</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
     <loc>https://uchidokoro.com/machines/super_rio_ace2/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://uchidokoro.com/machine.html?slug=galfy</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://uchidokoro.com/machines/galfy/</loc>
