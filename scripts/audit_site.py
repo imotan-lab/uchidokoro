@@ -17,8 +17,15 @@ NGがあれば exit code 1。メール通知や自動修正は呼び出し側の
     4. canonical / og:url / sitemap の3点整合性
     5. service-worker.js の STATIC_CACHE が全て実在
     6. machines.json と machines/{slug}/index.html / machine-details/{slug}.json の整合性
-    7. sitemap.xml の機種URL件数と machines.json 件数の一致
+    7. sitemap.xml の機種URL件数と machines.json 件数の一致＋重複検知
     8. README.md の機種数記載と実数の一致
+
+AdSense審査向け（コンテンツ品質）:
+    9. machine-details の本文文字数（先行記事除いて1500字以上）
+    10. 必須法的ページ（about/privacy/contact）の本文文字量（500字以上）
+    11. メタディスクリプションが全HTMLにあり50〜160字
+    12. 全HTMLの <img> に alt属性
+    13. HTML内の内部リンクが実在ファイルを指しているか
 """
 
 from __future__ import annotations
@@ -197,6 +204,146 @@ def check_8_readme_count(machines: list) -> list[str]:
     return ngs
 
 
+def _section_text(section: dict) -> str:
+    """sectionから本文相当のテキストを抽出（body/items/rows等）"""
+    parts = []
+    body = section.get("body")
+    if body:
+        if isinstance(body, list):
+            parts.extend(str(x) for x in body)
+        elif isinstance(body, str):
+            parts.append(body)
+    for it in section.get("items", []) or []:
+        if isinstance(it, str):
+            parts.append(it)
+        elif isinstance(it, dict):
+            parts.append(str(it.get("text", "") or it.get("body", "") or ""))
+    for row in section.get("rows", []) or []:
+        if isinstance(row, list):
+            parts.extend(str(x) for x in row)
+        elif isinstance(row, dict):
+            parts.extend(str(v) for v in row.values())
+    return " ".join(parts)
+
+
+def check_9_article_length(machines: list) -> list[str]:
+    """machine-details の本文文字数（先行記事除き1500字以上）"""
+    ngs = []
+    detail_dir = BASE / "assets" / "data" / "machine-details"
+    for m in machines:
+        if m.get("status") == "preview":
+            continue
+        slug = m["slug"]
+        p = detail_dir / f"{slug}.json"
+        try:
+            d = load_json(p)
+        except Exception:
+            continue
+        total = sum(len(_section_text(s)) for s in d.get("sections", []))
+        # lead もカウント
+        total += len(d.get("lead", "") or "")
+        if total < 1500:
+            ngs.append(f"{slug}: 本文{total}字 (1500字未満)")
+    return ngs
+
+
+def check_10_legal_pages(machines: list) -> list[str]:
+    """必須法的ページの本文文字量（500字以上）"""
+    ngs = []
+    for fname in ["about.html", "privacy.html", "contact.html"]:
+        p = BASE / fname
+        if not p.is_file():
+            ngs.append(f"{fname}: ファイルが存在しない")
+            continue
+        text = load_text(p)
+        # <main>...</main> の中身の文字数を計測
+        m = re.search(r"<main[^>]*>(.*?)</main>", text, re.S)
+        body = m.group(1) if m else text
+        # タグ除去
+        plain = re.sub(r"<[^>]+>", "", body)
+        plain = re.sub(r"\s+", "", plain)
+        if len(plain) < 500:
+            ngs.append(f"{fname}: 本文{len(plain)}字 (500字未満)")
+    return ngs
+
+
+def check_11_meta_description(machines: list) -> list[str]:
+    """全HTMLにmeta descriptionがあり50〜160字"""
+    ngs = []
+    # 除外：404ページ・Google Search Console認証ファイル・redirectページ
+    skip_files = {"404.html"}
+    targets = []
+    for p in BASE.glob("*.html"):
+        if p.name in skip_files:
+            continue
+        # Search Console所有権確認ファイル（googleXXXX.html）は除外
+        if p.name.startswith("google") and p.name.endswith(".html"):
+            continue
+        targets.append(p)
+    for p in targets:
+        text = load_text(p)
+        m = re.search(r'<meta\s+name="description"\s+content="([^"]*)"', text)
+        if not m:
+            ngs.append(f"{p.name}: meta description なし")
+            continue
+        desc = m.group(1)
+        # machine.html / setting.html はmeta-auto.jsで動的生成されるのでテンプレ値はOK
+        if p.name in ("machine.html", "setting.html"):
+            continue
+        if len(desc) < 50:
+            ngs.append(f"{p.name}: meta description {len(desc)}字 (50字未満)")
+        elif len(desc) > 160:
+            ngs.append(f"{p.name}: meta description {len(desc)}字 (160字超)")
+    return ngs
+
+
+def check_12_img_alt(machines: list) -> list[str]:
+    """全HTMLの<img>にalt属性"""
+    ngs = []
+    targets = list(BASE.glob("*.html"))
+    for p in targets:
+        text = load_text(p)
+        # img タグを抽出
+        for m in re.finditer(r"<img\b([^>]*)>", text):
+            attrs = m.group(1)
+            if not re.search(r"\balt\s*=", attrs):
+                # 行番号
+                line = text[: m.start()].count("\n") + 1
+                ngs.append(f"{p.name}:{line}: <img> に alt属性なし")
+    return ngs
+
+
+def check_13_internal_links(machines: list) -> list[str]:
+    """HTML内の内部リンクが実在ファイルを指しているか"""
+    ngs = []
+    targets = list(BASE.glob("*.html"))
+    seen = set()
+    for p in targets:
+        text = load_text(p)
+        for m in re.finditer(r'(?:href|src)="([^"#?]+?)(?:[?#][^"]*)?"', text):
+            url = m.group(1)
+            # 外部URL・データURL・テンプレ変数・ハッシュは除外
+            if url.startswith(("http://", "https://", "//", "data:", "mailto:", "tel:", "javascript:", "${")):
+                continue
+            if url == "" or url == "/":
+                continue
+            key = (p.name, url)
+            if key in seen:
+                continue
+            seen.add(key)
+            # 絶対パス /xxx は BASE 起点
+            if url.startswith("/"):
+                target = BASE / url.lstrip("/")
+            else:
+                target = (p.parent / url).resolve()
+            # ディレクトリ参照（末尾/）はindex.htmlを想定
+            if str(target).endswith(("/", "\\")) or target.is_dir():
+                target = Path(str(target).rstrip("/\\")) / "index.html"
+            if not target.exists():
+                ngs.append(f"{p.name}: 内部リンク切れ → '{url}'")
+    return ngs
+
+
 CHECKS = [
     ("1_インラインstyle", check_1_inline_style),
     ("2_サブパス残骸", check_2_old_subpath),
@@ -206,6 +353,11 @@ CHECKS = [
     ("6_機種ファイル整合", check_6_machine_files),
     ("7_sitemap件数", check_7_sitemap_count),
     ("8_README機種数", check_8_readme_count),
+    ("9_記事文字数", check_9_article_length),
+    ("10_法的ページ文字量", check_10_legal_pages),
+    ("11_metaディスクリプション", check_11_meta_description),
+    ("12_img_alt属性", check_12_img_alt),
+    ("13_内部リンク切れ", check_13_internal_links),
 ]
 
 
