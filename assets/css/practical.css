@@ -613,3 +613,6 @@ button, input, select { font: inherit; }
   filter: invert(.92) saturate(0) brightness(0.55);
   border-radius: var(--radius-sm);
 }
+.contact-iframe { border: none; }
+.contact-types { padding-left: 1.2em; line-height: 1.8; }
+.contact-types li { margin-bottom: 8px; }
