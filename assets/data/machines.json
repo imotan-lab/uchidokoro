@@ -99,7 +99,9 @@
         "caution": 4,
         "note": "CZ6スルーで7回目確定（ボーナス当選）。等価4スルー以上から狙い目（スロパチクエスト基準）。",
         "suruMax": 6
-      }
+      },
+      "hasSuru": true,
+      "suruMax": 6
     },
     "limit": 1400,
     "original": {
