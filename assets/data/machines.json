@@ -8273,7 +8273,9 @@
         "caution": 250,
         "note": "リセット・ST駆け抜け後は天井750Gに短縮。400G〜が狙い目。"
       },
-      "limit": 800
+      "limit": 800,
+      "hasSuru": true,
+      "suruMax": 3
     },
     "original": {
       "title": "機動戦士ガンダムSEED",
@@ -8431,7 +8433,8 @@
         "limit": 850
       },
       "limit": 1330
-    }
+    },
+    "limit": 1280
   },
   {
     "slug": "godzilla",
@@ -8522,7 +8525,8 @@
       "title": "コードギアス 反逆のルルーシュ",
       "kind": "アニメ",
       "search": "コードギアス Blu-ray"
-    }
+    },
+    "limit": 1000
   },
   {
     "slug": "kengan_ashura",
@@ -8618,7 +8622,9 @@
           }
         ]
       },
-      "limit": 450
+      "limit": 450,
+      "hasSuru": true,
+      "suruMax": 7
     },
     "original": {
       "title": "ケンガンアシュラ",
