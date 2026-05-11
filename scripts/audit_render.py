@@ -146,16 +146,19 @@ def check_one(page, machine: dict) -> list[str]:
         snippet = body_text[max(0, idx - 20):idx + 30].replace("\n", " ")
         ngs.append(f"R9: body内に '**' 記号を検出 (Markdown未解釈の可能性・周辺: ...{snippet}...)")
 
-    # R10: セクションtitleが統一形と一致しているか
-    allowed_titles = {
-        "天井・恩恵", "基本スペック", "期待値の目安", "朝一・リセット情報",
-        "設定示唆まとめ", "狙い目の根拠", "ヤメ時の判断", "立ち回りのコツ",
-        "噂・未確定情報",
+    # R10: 既に統一されているはずの旧titleが残っていないか（揺れ検知）
+    # normalize_sections.py の TITLE_RENAME マッピングと同期
+    deprecated_titles = {
+        "ヤメ時", "やめどき", "リセット・ヤメ時",
+        "立ち回りメモ",
+        "朝一 リセット情報", "リセット狙い", "リセット恩恵",
+        "判明しているスペック",
+        "狙い目・ヤメ時", "狙い目の目安", "狙い目",
     }
     titles = page.evaluate("""() => Array.from(document.querySelectorAll('.article-title')).map(e => e.textContent.trim())""")
     for t in titles:
-        if t and t not in allowed_titles:
-            ngs.append(f"R10: 統一形外のtitle: '{t}'")
+        if t in deprecated_titles:
+            ngs.append(f"R10: 統一前の旧title残留: '{t}' → 正規化スクリプト実行が必要")
 
     return ngs
 
