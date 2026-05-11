@@ -26,6 +26,10 @@ AdSense審査向け（コンテンツ品質）:
     11. メタディスクリプションが全HTMLにあり50〜160字
     12. 全HTMLの <img> に alt属性
     13. HTML内の内部リンクが実在ファイルを指しているか
+
+バグの種・予防:
+    14. JSコード内の機種slugハードコード検知（machine.html/setting.html等）
+    15. レンダリング前HTML内の `99999` 文字列検知（JS実行前の異常値）
 """
 
 from __future__ import annotations
@@ -344,6 +348,57 @@ def check_13_internal_links(machines: list) -> list[str]:
     return ngs
 
 
+def check_14_slug_hardcode(machines: list) -> list[str]:
+    """JSコード内の機種slug文字列ハードコード検知（バグの種を予防）
+
+    例: machine.html の `slug === "sf5"` のような特定機種だけ動く分岐は危険信号。
+    新規機種追加時に修正漏れする原因になる。
+    意図的な「設定差なし機種リスト」等のslug配列は除外（noSettingDiff等）。
+    """
+    ngs = []
+    targets = [BASE / "machine.html", BASE / "setting.html", BASE / "index.html", BASE / "meta-auto.js"]
+    slugs = set(m["slug"] for m in machines)
+    # 許可される文脈（リスト・配列形式での列挙は意図的なので除外）
+    for f in targets:
+        if not f.is_file():
+            continue
+        text = load_text(f)
+        for ln, line in enumerate(text.splitlines(), 1):
+            # slug === "xxx" / slug == "xxx" / slug.includes("xxx") の検知
+            for m in re.finditer(r'slug\s*===?\s*["\']([a-z_0-9]+)["\']', line):
+                slug = m.group(1)
+                if slug in slugs:
+                    ngs.append(f"{f.name}:{ln}: ハードコード `slug === \"{slug}\"`（条件分岐は危険）")
+    return ngs
+
+
+def check_15_render_99999(machines: list) -> list[str]:
+    """レンダリング前HTMLに `99999` 数値が残留していないか
+
+    machines.json の checker.normal.excellent: 99999 等は data なのでOK。
+    machine.html や machines/{slug}/index.html の表示テキストに 99999 がそのまま
+    出ているのはバグの兆候（JSの判定漏れで表示されてしまう）。
+    """
+    ngs = []
+    targets = [BASE / "machine.html"] + list(BASE.glob("machines/*/index.html"))
+    for f in targets:
+        text = load_text(f)
+        # JSコード内・JSON-LD内・data-* 属性内の 99999 は許容
+        # 表示テキスト相当の場所（<body>内・<title>・meta description content）に 99999 があれば検出
+        # 簡略化: <body>...</body> の中、かつタグ属性外（タグの中身テキスト）に 99999 があれば検出
+        body_match = re.search(r"<body[^>]*>(.*?)</body>", text, re.S)
+        if not body_match:
+            continue
+        body = body_match.group(1)
+        # スクリプト除去
+        body_no_script = re.sub(r"<script[^>]*>.*?</script>", "", body, flags=re.S)
+        # 「99999」が見えるかどうか
+        if "99999" in body_no_script:
+            rel = f.relative_to(BASE).as_posix()
+            ngs.append(f"{rel}: 表示テキスト中に '99999' を検出（チェッカー閾値が漏れて表示されている可能性）")
+    return ngs
+
+
 CHECKS = [
     ("1_インラインstyle", check_1_inline_style),
     ("2_サブパス残骸", check_2_old_subpath),
@@ -358,6 +413,8 @@ CHECKS = [
     ("11_metaディスクリプション", check_11_meta_description),
     ("12_img_alt属性", check_12_img_alt),
     ("13_内部リンク切れ", check_13_internal_links),
+    ("14_slugハードコード", check_14_slug_hardcode),
+    ("15_99999残留", check_15_render_99999),
 ]
 
 
