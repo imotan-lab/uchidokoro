@@ -386,6 +386,9 @@ function resolveMachineSlug() {
     if (checkerNote) {
       checkerNote.textContent = checkerNormal.note || "設定狙い向けの機種です。高設定をつかめる環境（イベント・特定日）での使用を推奨します。";
     }
+    // 期待値早見表ブロック自体も非表示（ラベル「▶ 期待値早見表」も含めて消す）
+    const evBlockHide = document.getElementById("evTableBlock");
+    if (evBlockHide) evBlockHide.classList.add("is-hidden");
   } else {
     document.getElementById("suruInc").addEventListener("click", () => {
       const checked = document.querySelector('input[name="mode"]:checked');
