@@ -1,4 +1,4 @@
-const CACHE_NAME = 'uchidokoro-v66';
+const CACHE_NAME = 'uchidokoro-v67';
 
 const STATIC_CACHE = [
   '/',
@@ -34,23 +34,41 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
-// フェッチ時：キャッシュ優先 → なければネット取得してキャッシュ更新
+// フェッチ時の戦略
+// - データJSON (/assets/data/) は network-first（古いキャッシュリスク回避）
+// - それ以外は cache-first（オフライン対応・既存挙動）
 self.addEventListener('fetch', event => {
   // GETリクエスト以外はスキップ
   if (event.request.method !== 'GET') return;
 
-  event.respondWith(
-    caches.match(event.request).then(cached => {
-      const fetchPromise = fetch(event.request).then(response => {
-        // 正常なレスポンスのみキャッシュ更新
+  const url = new URL(event.request.url);
+
+  // ★ データJSONは network-first：ネット優先・失敗時のみキャッシュにフォールバック
+  // machines.json / machine-details/*.json は頻繁に更新されるため、
+  // SWキャッシュ→cache-firstだと古いデータが残り続ける問題があった。
+  if (url.pathname.startsWith('/assets/data/')) {
+    event.respondWith(
+      fetch(event.request).then(response => {
         if (response && response.status === 200) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
         }
         return response;
-      }).catch(() => cached); // オフライン時はキャッシュを返す
+      }).catch(() => caches.match(event.request))
+    );
+    return;
+  }
 
-      // キャッシュがあれば即返す（バックグラウンドで更新）
+  // その他リソースは cache-first（オフライン対応）
+  event.respondWith(
+    caches.match(event.request).then(cached => {
+      const fetchPromise = fetch(event.request).then(response => {
+        if (response && response.status === 200) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        }
+        return response;
+      }).catch(() => cached);
       return cached || fetchPromise;
     })
   );
