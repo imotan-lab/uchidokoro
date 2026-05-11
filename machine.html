@@ -366,7 +366,14 @@ function resolveMachineSlug() {
     }
   }
 
-  if (slug === "sf5") {
+  // 設定狙い専用機種（天井なし）の判定：limitが未設定 or checker閾値が99999 = 実質無効
+  const checkerNormal = checker.normal || {};
+  const isSettingOnly = (
+    (machine.limit === null || machine.limit === undefined) &&
+    Number(checkerNormal.excellent) >= 99999
+  );
+
+  if (isSettingOnly) {
     checkerCard.classList.add("checker-card--guide");
     modeToggle.classList.add("is-hidden");
     suruWrap.classList.add("is-hidden");
@@ -376,7 +383,9 @@ function resolveMachineSlug() {
     if (checkerNote) checkerNote.classList.add("hint-text--guide");
     checkerResult.querySelector(".result-label").textContent = "案内";
     checkerResult.querySelector(".result-text").textContent = "ゲーム数狙いには向きません。";
-    if (checkerNote) checkerNote.textContent = "設定狙い向けの機種です。高設定をつかめる環境（イベント・特定日）での使用を推奨します。";
+    if (checkerNote) {
+      checkerNote.textContent = checkerNormal.note || "設定狙い向けの機種です。高設定をつかめる環境（イベント・特定日）での使用を推奨します。";
+    }
   } else {
     document.getElementById("suruInc").addEventListener("click", () => {
       const checked = document.querySelector('input[name="mode"]:checked');
@@ -446,8 +455,8 @@ function resolveMachineSlug() {
     const evBlock = document.getElementById("evTableBlock");
     const evModeToggle = document.getElementById("evModeToggle");
     const evTableNote = document.getElementById("evTableNote");
-    if (slug === "sf5") {
-      evBlock.style.display = "none";
+    if (isSettingOnly) {
+      evBlock.classList.add("is-hidden");
       return;
     }
     const modes = getModes(checker).filter(m => !m.hasSuru && !m.hasCycle);
