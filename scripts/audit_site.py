@@ -30,6 +30,7 @@ AdSense審査向け（コンテンツ品質）:
 バグの種・予防:
     14. JSコード内の機種slugハードコード検知（machine.html/setting.html等）
     15. レンダリング前HTML内の `99999` 文字列検知（JS実行前の異常値）
+    16. machine-details の文体混在検知（です・ます調と だ・である調の混在）
 """
 
 from __future__ import annotations
@@ -399,6 +400,54 @@ def check_15_render_99999(machines: list) -> list[str]:
     return ngs
 
 
+def check_16_writing_style(machines: list) -> list[str]:
+    """machine-details の文体混在検知（です・ます と だ・である の混在）
+
+    機種記事は「です・ます」調で統一する。1機種内で常体（だ・である調）の文が
+    1文以上あれば NG。文体ルールはプロジェクトCLAUDE.md「セクションtitle・文体の統一ルール」参照。
+    """
+    import re as _re
+    ngs = []
+    detail_dir = BASE / "assets" / "data" / "machine-details"
+
+    def _is_plain(sent: str) -> bool:
+        s = sent.rstrip("。、,!?").strip()
+        if not s:
+            return False
+        last = s[-5:]
+        if _re.search(r"(?:です|ます|でしょう|ません|でした|ました|ください|でしょ)$", last):
+            return False
+        return bool(_re.search(r"(?:だ|である|した|する|った|ない|だが|だろう|だろ|なる|させる|られる|られた)$", last))
+
+    for m in machines:
+        if m.get("status") == "preview":
+            continue
+        slug = m["slug"]
+        p = detail_dir / f"{slug}.json"
+        if not p.is_file():
+            continue
+        try:
+            d = load_json(p)
+        except Exception:
+            continue
+        plain_sentences = []
+        for s in d.get("sections", []):
+            if s.get("type") == "settei":
+                continue
+            body = s.get("body")
+            text = " ".join(body) if isinstance(body, list) else (body if isinstance(body, str) else "")
+            if not text or len(text) < 30:
+                continue
+            sents = [x for x in _re.split(r"(?<=。)", text) if x.strip()]
+            for sent in sents:
+                if _is_plain(sent):
+                    plain_sentences.append((s.get("title", ""), sent.strip()))
+        if plain_sentences:
+            for title, sent in plain_sentences[:2]:  # 機種ごとに最大2件
+                ngs.append(f"{slug}: 常体文混在 [{title}] {sent[:50]}...")
+    return ngs
+
+
 CHECKS = [
     ("1_インラインstyle", check_1_inline_style),
     ("2_サブパス残骸", check_2_old_subpath),
@@ -415,6 +464,7 @@ CHECKS = [
     ("13_内部リンク切れ", check_13_internal_links),
     ("14_slugハードコード", check_14_slug_hardcode),
     ("15_99999残留", check_15_render_99999),
+    ("16_文体混在", check_16_writing_style),
 ]
 
 
