@@ -10504,13 +10504,12 @@
   {
     "slug": "biohazard_re3",
     "name": "スマスロ バイオハザードRE:3",
-    "status": "preview",
     "release_date": "2026-05-11",
     "seo": {
       "title": "スマスロ バイオハザードRE:3 狙い目・天井・解析まとめ"
     },
     "info": "スマスロAT",
-    "strategy": "解析待ち",
+    "strategy": "等価400G〜 / 5.6枚500G〜 / リセット時150G〜 / CZ4スルー〜",
     "aliases": [
       "バイオハザードRE3",
       "バイオRE3",
@@ -10520,8 +10519,46 @@
       "バイオre3",
       "biohazard_re3"
     ],
-    "checker": null,
-    "limit": null,
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        },
+        {
+          "key": "suru",
+          "label": "スルー回数",
+          "hasSuru": true
+        }
+      ],
+      "normal": {
+        "excellent": 800,
+        "good": 500,
+        "caution": 400,
+        "note": "AT間1000G+α天井。等価400G〜・5.6枚500G〜が狙い目（スロパチクエスト基準）。"
+      },
+      "reset": {
+        "excellent": 500,
+        "good": 250,
+        "caution": 150,
+        "note": "設定変更時は650G+αに短縮。等価150G〜・5.6枚250G〜が狙い目（スロパチクエスト基準）。"
+      },
+      "suru": {
+        "excellent": 6,
+        "good": 5,
+        "caution": 4,
+        "note": "CZ最大6スルーで7回目成功濃厚。4スルー以降から狙い目（暫定）。",
+        "suruMax": 6
+      },
+      "hasSuru": true,
+      "suruMax": 6
+    },
+    "limit": 1100,
     "original": {
       "title": "バイオハザード RE:3",
       "kind": "ゲーム",
