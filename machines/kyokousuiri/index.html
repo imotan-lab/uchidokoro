@@ -1,14 +1,769 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+<base href="/">
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-MSXLEMX2VJ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-MSXLEMX2VJ');
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="refresh" content="0;url=https://uchidokoro.com/machine.html?slug=kyokousuiri">
+<title>機種ページ | うちどころ。</title>
+<meta name="description" content="機種ごとの狙い目記事ページです。結論と要点をスマホ向けに表示します。">
+<meta property="og:title" content="機種ページ | うちどころ。">
+<meta property="og:description" content="機種ごとの狙い目記事ページです。結論と要点をスマホ向けに表示します。">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://uchidokoro.com/machine.html">
+<meta property="og:image" content="https://uchidokoro.com/assets/img/ogp.png">
+<meta property="og:site_name" content="うちどころ。">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="/assets/img/favicon-32.png" sizes="32x32">
+<link rel="icon" type="image/png" href="/assets/img/favicon-16.png" sizes="16x16">
+<link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png">
+<link rel="stylesheet" href="assets/css/practical.css">
+<script src="meta-auto.js"></script>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#07090c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="うちどころ。">
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2097489177716087" crossorigin="anonymous"></script>
 <link rel="canonical" href="https://uchidokoro.com/machines/kyokousuiri/">
-<title>リダイレクト中... | うちどころ。</title>
-<script>location.replace("https://uchidokoro.com/machine.html?slug=kyokousuiri");</script>
 </head>
 <body>
-<p><a href="https://uchidokoro.com/machine.html?slug=kyokousuiri">うちどころ。の機種ページへ移動</a></p>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html"><img src="assets/img/logo.png" alt="うちどころ。"></a>
+    <div class="header-search-wrap">
+      <span class="header-search-icon">🔍</span>
+      <input id="headerSearch" class="header-search-input" type="search" placeholder="機種を検索">
+      <div id="headerDropdown" class="header-dropdown"></div>
+    </div>
+  </div>
+</header>
+<main class="site-main">
+
+  <section class="article-hero">
+    <p class="eyebrow"><a href="index.html" class="eyebrow-link">‹ 一覧</a>&nbsp;&nbsp;ARTICLE</p>
+    <h1 id="machineTitle" class="page-title">機種名</h1>
+    <p id="heroSub" class="hero-sub"></p>
+    <div id="previewBanner" class="preview-banner is-hidden">
+      <p class="preview-banner-label">⚠ 先行記事（解析待ち）</p>
+      <p class="preview-banner-body">この機種はまだ解析データが出揃っていません。天井・狙い目・設定差は判明次第、随時更新します。</p>
+      <p id="previewReleaseDate" class="preview-banner-date"></p>
+    </div>
+    <div class="hero-actions">
+      <a id="settingHeroLink" href="setting.html" class="btn-settei btn-settei--wide">小役カウンター ポチポチくん →</a>
+    </div>
+  </section>
+
+  <section class="article-section-wrap">
+
+    <div id="rateToggle" class="mode-toggle rate-toggle-shared is-hidden"></div>
+
+    <div class="article-block" id="evTableBlock">
+      <p class="block-label">▶ 期待値早見表</p>
+      <div id="evModeToggle" class="mode-toggle ev-mode-toggle"></div>
+      <table id="evTable" class="ev-table"></table>
+      <p class="hint-text" id="evTableNote"></p>
+    </div>
+
+    <div class="article-block">
+      <p class="block-label">▶ 狙い目チェッカー</p>
+      <div class="checker-card">
+        <div id="modeToggle" class="mode-toggle"></div>
+        <div id="suruWrap" class="suru-wrap is-hidden">
+          <p class="suru-label">CZスルー回数</p>
+          <div class="setting-counter-wrap">
+            <button class="setting-cnt-btn" id="suruDec">－</button>
+            <span id="suruVal" class="suru-val">0</span>
+            <button class="setting-cnt-btn" id="suruInc">＋</button>
+          </div>
+        </div>
+        <div id="cycleWrap" class="suru-wrap is-hidden">
+          <p class="suru-label">周期回数</p>
+          <div class="setting-counter-wrap">
+            <button class="setting-cnt-btn" id="cycleDec">－</button>
+            <span id="cycleVal" class="suru-val">1</span>
+            <button class="setting-cnt-btn" id="cycleInc">＋</button>
+          </div>
+        </div>
+        <input id="gameInput" class="game-input" type="number" inputmode="numeric" placeholder="現在G数を入力">
+        <div id="checkerResult" class="checker-result result-wait">
+          <p class="result-label">判定</p>
+          <p class="result-text">G数を入力してください</p>
+        </div>
+        <p id="checkerNote" class="hint-text"></p>
+      </div>
+    </div>
+
+    <div class="article-block">
+      <p class="block-label">▶ 狙い目早見表</p>
+      <table id="summaryGrid" class="summary-grid"></table>
+    </div>
+
+    <div class="article-block">
+      <p class="block-label">▶ 基本情報</p>
+      <table class="info-table">
+        <tbody id="infoTableBody"></tbody>
+      </table>
+    </div>
+
+    <div class="article-block">
+      <p class="block-label">▶ 詳細</p>
+      <div id="articleSections"></div>
+    </div>
+
+    <div class="article-block">
+      <p class="block-label">▶ 小役カウンター</p>
+      <a id="settingToolLink" href="setting.html" class="btn-show-all btn-show-all--center">小役カウンター ポチポチくん →</a>
+    </div>
+
+    <div class="article-block" id="affiliateBlock">
+      <p class="affiliate-mini">実機を探す:
+        <a href="https://px.a8.net/svt/ejp?a8mat=4AZMKM+34IY42+2SY6+62U36" rel="nofollow noopener" target="_blank">A-SLOT</a> /
+        <a href="https://px.a8.net/svt/ejp?a8mat=4AZMKM+2T7PMA+5RYY+5YJRM" rel="nofollow noopener" target="_blank">中一商事</a> /
+        <a href="https://px.a8.net/svt/ejp?a8mat=4AZMKM+40OCS2+2VX4+62ENM" rel="nofollow noopener" target="_blank">パチスロバンク</a> /
+        <a href="https://px.a8.net/svt/ejp?a8mat=4AZMKM+402X6A+2VX4+BX3J6" rel="nofollow noopener" target="_blank">わっしょい</a> /
+        <a href="//af.moshimo.com/af/c/click?a_id=5526246&p_id=54&pc_id=54&pl_id=621" rel="nofollow noopener" target="_blank" referrerpolicy="no-referrer-when-downgrade">楽天市場</a>
+      </p>
+      <p class="affiliate-mini is-hidden" id="originalLine"></p>
+      <p class="affiliate-mini-note">※アフィリエイトリンクを含みます</p>
+      <img border="0" width="1" height="1" src="https://www17.a8.net/0.gif?a8mat=4AZMKM+34IY42+2SY6+62U36" alt="">
+      <img border="0" width="1" height="1" src="https://www17.a8.net/0.gif?a8mat=4AZMKM+2T7PMA+5RYY+5YJRM" alt="">
+      <img border="0" width="1" height="1" src="https://www15.a8.net/0.gif?a8mat=4AZMKM+40OCS2+2VX4+62ENM" alt="">
+      <img border="0" width="1" height="1" src="https://www11.a8.net/0.gif?a8mat=4AZMKM+402X6A+2VX4+BX3J6" alt="">
+      <img src="//i.moshimo.com/af/i/impression?a_id=5526246&p_id=54&pc_id=54&pl_id=621" width="1" height="1" class="aff-pixel" loading="lazy" alt="">
+    </div>
+
+    <div class="article-block">
+      <a href="https://x.com/uchidokoro" target="_blank" rel="noopener" class="x-follow-btn">𝕏 新台情報をフォロー（@uchidokoro）</a>
+    </div>
+
+  </section>
+
+</main>
+
+<footer>
+  <div class="site-footer-inner">
+    <div class="footer-links">
+      <a href="about.html">このサイトについて</a>
+      <a href="guide-haena.html">ハイエナ講座</a>
+      <a href="guide-rate.html">交換率と期待値</a>
+      <a href="guide-pochipochi.html">ポチポチくんの使い方</a>
+      <a href="contact.html">お問い合わせ</a>
+      <a href="privacy.html">プライバシーポリシー</a>
+      <a href="https://x.com/uchidokoro" target="_blank" rel="noopener">X (@uchidokoro)</a>
+    </div>
+    <p class="footer-copy">© 2026 うちどころ。</p>
+  </div>
+</footer>
+
+<script>
+// ヘッダー検索
+(function(){
+  function normalizeText(value){
+    return String(value || "")
+      .toLowerCase()
+      .replace(/[\u3041-\u3096]/g, ch => String.fromCharCode(ch.charCodeAt(0) + 0x60))
+      .replace(/[\s\-\_ー]/g, "");
+  }
+
+  const searchInput = document.getElementById("headerSearch");
+  const dropdown = document.getElementById("headerDropdown");
+  let allMachines = [];
+
+  fetch("assets/data/machines.json")
+    .then(res => res.json())
+    .then(machines => { allMachines = machines; });
+
+  searchInput.addEventListener("input", function(){
+    const query = normalizeText(this.value);
+    dropdown.innerHTML = "";
+    if (!query) { dropdown.style.display = "none"; return; }
+
+    const matched = allMachines.filter(m => {
+      const keywords = [m.name, m.slug, ...(m.aliases || [])].map(normalizeText).join("|");
+      return keywords.includes(query);
+    }).slice(0, 6);
+
+    if (!matched.length) { dropdown.style.display = "none"; return; }
+
+    matched.forEach(m => {
+      const item = document.createElement("a");
+      item.className = "header-dropdown-item";
+      item.href = "machine.html?slug=" + m.slug;
+      item.textContent = m.name;
+      dropdown.appendChild(item);
+    });
+    dropdown.style.display = "block";
+  });
+
+  document.addEventListener("click", function(e){
+    if (!e.target.closest(".header-search-wrap")) dropdown.style.display = "none";
+  });
+})();
+
+// データ読み込み
+async function loadJson(path){
+  const res = await fetch(path);
+  if (!res.ok) return null;
+  return res.json();
+}
+
+function resolveMachineSlug() {
+  const paramsSlug = new URLSearchParams(location.search).get("slug");
+  if (paramsSlug) return paramsSlug;
+
+  const match = location.pathname.match(/\/machines\/([^\/]+)\/?(?:index\.html)?$/);
+  if (match) return match[1];
+
+  return null;
+}
+
+(async () => {
+  const slug = resolveMachineSlug();
+  const machines = await loadJson("assets/data/machines.json");
+  if (!machines) {
+    document.body.innerHTML = '<div class="fallback-msg">データの取得に失敗しました。<br><a href="index.html">一覧へ戻る</a></div>';
+    return;
+  }
+
+  const machine = machines.find(m => m.slug === slug);
+  if (!machine) {
+    document.body.innerHTML = '<div class="fallback-msg">機種が見つかりません。<br><a href="index.html">一覧へ戻る</a></div>';
+    return;
+  }
+
+  const detail = await loadJson(`assets/data/machine-details/${slug}.json`);
+
+  // タイトル（document.titleはmeta-auto.jsが担当）
+  document.getElementById("machineTitle").textContent = machine.name;
+  document.getElementById("heroSub").textContent = detail?.lead || "";
+
+  // 原作リンク表示（machine.original があれば）
+  if (machine.original && machine.original.title) {
+    const origEl = document.getElementById("originalLine");
+    if (origEl) {
+      const o = machine.original;
+      const kindLabel = o.kind ? `（${o.kind}）` : "";
+      const searchUrl = "https://search.rakuten.co.jp/search/mall/" + encodeURIComponent(o.search || o.title) + "/";
+      const moshimoUrl = "https://af.moshimo.com/af/c/click?a_id=5526246&p_id=54&pc_id=54&pl_id=621&url=" + encodeURIComponent(searchUrl);
+      origEl.innerHTML = `原作: 「${o.title}」${kindLabel} → <a href="${moshimoUrl}" rel="nofollow noopener" target="_blank" referrerpolicy="no-referrer-when-downgrade">楽天で探す</a>`;
+      origEl.classList.remove("is-hidden");
+    }
+  }
+
+  // 先行記事モード：status === "preview" の場合、バナーを表示し狙い目チェッカー系を隠す
+  if (machine.status === "preview") {
+    const banner = document.getElementById("previewBanner");
+    if (banner) banner.classList.remove("is-hidden");
+    const dateEl = document.getElementById("previewReleaseDate");
+    if (dateEl && machine.release_date) dateEl.textContent = `導入予定日: ${machine.release_date}`;
+    // 解析データが必要なブロックを非表示
+    const evBlock = document.getElementById("evTableBlock");
+    if (evBlock) evBlock.classList.add("is-hidden");
+    const checkerBlockLabel = document.querySelectorAll(".article-block");
+    checkerBlockLabel.forEach(block => {
+      const label = block.querySelector(".block-label");
+      if (label && (label.textContent.includes("狙い目チェッカー") || label.textContent.includes("狙い目早見表"))) {
+        block.classList.add("is-hidden");
+      }
+    });
+    // 小役カウンター導線は下のpochipochiStatusで「解析データ判明後に対応」と無効化表示される
+  }
+  // ポチポチくん対応状況（ポチポチくんに飛んでも機能しない機種は無効化して理由を表示）
+  const pochipochiStatus = (function() {
+    // 先行記事（解析待ち）
+    if (machine.status === "preview") return { available: false, reason: "解析データ判明後に対応" };
+    // 小役による設定差が元々ない機種（ジャグラー系・ノーマル系・一部AT）
+    const noSettingDiff = ['enen2','karakuri','kaguya','valvrave2','sf5','chibaryo2','tekken6','tokyo_ghoul','koukaku','biohazard','tensura','dumbbell','monhun_rise','sengoku_otome4','sao','bandori','hanma_baki','yorumungando','tolove_darkness','zenigata5','enen','madomagi_forte','burning_express','akudama','neoplanet','lupin_daikokaisha','zettai_shougeki4','babel','milliongod_kiseki','animal_dotch'];
+    if (noSettingDiff.includes(slug)) return { available: false, reason: "小役による設定差なし" };
+    // 小役確率がまだ解析されていない機種
+    const noAnalysis = ['iza_bancho','kyokousuiri','shinuchi_yoshimune','isekai_quattro_bt','triple_crown_7','revue_starlight','mr_juggler','mushoku','railgun2','gundam_seed','youjitsu','midoridon_viva','godzilla','code_geass','kengan_ashura','discup_ur','rezero2','goji_eva','prismnana','basilisk_tenzen','shake_bt','kurea_bt','mhrise','gineiden_dnt','eva_yakusoku','bofuri','dmc5_st','darlifra','nanatsuma','tenken','valvrave','zombieland_saga','gundam_uc2'];
+    if (noAnalysis.includes(slug)) return { available: false, reason: "小役確率が未解析のため非対応" };
+    // ポチポチくん利用可能
+    return { available: true, reason: "" };
+  })();
+
+  const settingToolLink = document.getElementById("settingToolLink");
+  const settingHeroLink = document.getElementById("settingHeroLink");
+
+  function disableSettingLink(el, reason) {
+    if (!el) return;
+    el.textContent = `小役カウンター ポチポチくん（${reason}）`;
+    el.removeAttribute('href');
+    el.style.opacity = '0.5';
+    el.style.cursor = 'default';
+    el.style.pointerEvents = 'none';
+    el.setAttribute('aria-disabled', 'true');
+    el.title = reason;
+  }
+
+  if (!pochipochiStatus.available) {
+    disableSettingLink(settingHeroLink, pochipochiStatus.reason);
+    disableSettingLink(settingToolLink, pochipochiStatus.reason);
+  } else {
+    if (settingToolLink) settingToolLink.href = `setting.html?slug=${slug}`;
+    if (settingHeroLink) settingHeroLink.href = `setting.html?slug=${slug}`;
+  }
+  const summaryGrid = document.getElementById("summaryGrid");
+
+  // チェッカー
+  const checker = machine.checker || {};
+  const gameInput = document.getElementById("gameInput");
+  const checkerResult = document.getElementById("checkerResult");
+  const modeToggle = document.getElementById("modeToggle");
+  const rateToggle = document.getElementById("rateToggle");
+  const suruWrap = document.getElementById("suruWrap");
+  const suruVal = document.getElementById("suruVal");
+  const cycleWrap = document.getElementById("cycleWrap");
+  const cycleVal = document.getElementById("cycleVal");
+  const checkerNote = document.getElementById("checkerNote");
+  const checkerCard = document.querySelector(".checker-card");
+  let suruCount = 0;
+  let cycleCount = 1;
+  let currentRateKey = null;
+  let evModeKey = null;
+
+  function getRateOptions(c) {
+    return Array.isArray(c.exchangeRates) ? c.exchangeRates : [];
+  }
+
+  function getCurrentRateKey() {
+    const checked = document.querySelector('input[name="exchangeRate"]:checked');
+    return checked ? checked.value : currentRateKey;
+  }
+
+  function getRateLabel(rateKey) {
+    const rate = getRateOptions(checker).find(item => item.key === rateKey);
+    return rate ? rate.label : "";
+  }
+
+  function getMachineLimit(modeKey) {
+    if (Number.isFinite(machine.limit)) return machine.limit;
+    if (machine.limit && typeof machine.limit === "object" && Number.isFinite(machine.limit[modeKey])) return machine.limit[modeKey];
+    if (Number.isFinite(checker.limit)) return checker.limit;
+    if (checker[modeKey] && Number.isFinite(checker[modeKey].limit)) return checker[modeKey].limit;
+    return null;
+  }
+
+  function applyInputLimit(modeKey) {
+    const unit = checker.unit || "G";
+    const limit = getMachineLimit(modeKey);
+    if (Number.isFinite(limit)) {
+      gameInput.max = String(limit);
+      gameInput.placeholder = `現在${unit}を入力（最大${limit}${unit}）`;
+      const current = parseInt(gameInput.value, 10);
+      if (!Number.isNaN(current) && current > limit) gameInput.value = String(limit);
+    } else {
+      gameInput.removeAttribute("max");
+      gameInput.placeholder = `現在${unit}を入力`;
+    }
+  }
+
+  if (slug === "sf5") {
+    checkerCard.classList.add("checker-card--guide");
+    modeToggle.classList.add("is-hidden");
+    suruWrap.classList.add("is-hidden");
+    gameInput.classList.add("is-hidden");
+    checkerResult.className = "checker-result result-wait";
+    checkerResult.classList.add("checker-result--guide");
+    if (checkerNote) checkerNote.classList.add("hint-text--guide");
+    checkerResult.querySelector(".result-label").textContent = "案内";
+    checkerResult.querySelector(".result-text").textContent = "ゲーム数狙いには向きません。";
+    if (checkerNote) checkerNote.textContent = "設定狙い向けの機種です。高設定をつかめる環境（イベント・特定日）での使用を推奨します。";
+  } else {
+    document.getElementById("suruInc").addEventListener("click", () => {
+      const checked = document.querySelector('input[name="mode"]:checked');
+      const modeKey = checked ? checked.value : null;
+      const suruMax = modeKey && checker[modeKey] && Number.isFinite(checker[modeKey].suruMax) ? checker[modeKey].suruMax : 99;
+      suruCount = Math.min(suruMax, suruCount + 1);
+      suruVal.textContent = suruCount;
+      judge();
+    });
+
+    document.getElementById("suruDec").addEventListener("click", () => {
+      suruCount = Math.max(0, suruCount - 1);
+      suruVal.textContent = suruCount;
+      judge();
+    });
+
+    document.getElementById("cycleInc").addEventListener("click", () => {
+      const checked = document.querySelector('input[name="mode"]:checked');
+      const modeKey = checked ? checked.value : null;
+      const cycleMax = modeKey && checker[modeKey] && checker[modeKey].cycle ? checker[modeKey].cycle.length : 6;
+      cycleCount = Math.min(cycleMax, cycleCount + 1);
+      cycleVal.textContent = cycleCount;
+      judge();
+    });
+
+    document.getElementById("cycleDec").addEventListener("click", () => {
+      cycleCount = Math.max(1, cycleCount - 1);
+      cycleVal.textContent = cycleCount;
+      judge();
+    });
+  }
+
+  function renderEvTable(modeKey, rateKey) {
+    const evTable = document.getElementById("evTable");
+    if (!modeKey || !evTable) return;
+    const modeData = checker[modeKey];
+    if (!modeData || modeData.cycle || modeData.suru) return;
+    let config = modeData;
+    if (modeData.byRate && rateKey && modeData.byRate[rateKey]) {
+      config = { ...modeData, ...modeData.byRate[rateKey] };
+    }
+    const caution = config.caution;
+    const good = config.good;
+    const excellent = config.excellent;
+    const limit = getMachineLimit(modeKey);
+    const limitStr = Number.isFinite(limit) ? `（天井${limit}G）` : "";
+    const rows = [];
+    if (Number.isFinite(caution) && caution > 0) {
+      rows.push({ range: `0 〜 ${caution - 1}G`, label: "× まだ早い", cls: "ev-row-ng" });
+    }
+    if (Number.isFinite(caution) && Number.isFinite(good) && good > caution) {
+      rows.push({ range: `${caution} 〜 ${good - 1}G`, label: "△ 条件次第", cls: "ev-row-wait" });
+    }
+    if (Number.isFinite(good) && Number.isFinite(excellent) && excellent > good) {
+      rows.push({ range: `${good} 〜 ${excellent - 1}G`, label: "○ 狙い目", cls: "ev-row-ok" });
+    }
+    if (Number.isFinite(excellent)) {
+      rows.push({ range: `${excellent}G 〜${limitStr}`, label: "◎ 積極的", cls: "ev-row-great" });
+    }
+    let html = `<thead><tr><th>G数帯</th><th>判定</th></tr></thead><tbody>`;
+    rows.forEach(r => { html += `<tr class="${r.cls}"><td>${r.range}</td><td>${r.label}</td></tr>`; });
+    html += `</tbody>`;
+    evTable.innerHTML = html;
+  }
+
+  function buildEvTable() {
+    const evBlock = document.getElementById("evTableBlock");
+    const evModeToggle = document.getElementById("evModeToggle");
+    const evTableNote = document.getElementById("evTableNote");
+    if (slug === "sf5") {
+      evBlock.style.display = "none";
+      return;
+    }
+    const modes = getModes(checker).filter(m => !m.hasSuru && !m.hasCycle);
+    if (!modes.length) { evBlock.style.display = "none"; return; }
+    evModeKey = modes[0].key;
+    if (modes.length > 1) {
+      modes.forEach((mode, i) => {
+        const id = "evmode_" + mode.key;
+        const input = document.createElement("input");
+        input.type = "radio";
+        input.name = "evMode";
+        input.id = id;
+        input.value = mode.key;
+        if (i === 0) input.checked = true;
+        const label = document.createElement("label");
+        label.htmlFor = id;
+        label.textContent = mode.label;
+        input.addEventListener("change", () => {
+          evModeKey = mode.key;
+          renderEvTable(evModeKey, getCurrentRateKey());
+        });
+        evModeToggle.appendChild(input);
+        evModeToggle.appendChild(label);
+      });
+    } else {
+      evModeToggle.style.display = "none";
+    }
+    if (evTableNote) evTableNote.textContent = "スルー・周期は変動要素があるためチェッカーで確認してください。";
+    renderEvTable(evModeKey, getCurrentRateKey());
+  }
+
+  function getModes(c) {
+    if (c.modes) return c.modes;
+    const m = [];
+    if (c.normal) m.push({ key: "normal", label: "通常" });
+    if (c.reset) m.push({ key: "reset", label: "リセット" });
+    if (!m.length) m.push({ key: "normal", label: "通常" });
+    return m;
+  }
+
+  function getConfig(c, modeKey, suru, cycle) {
+    const modeData = c[modeKey];
+    if (!modeData) return c;
+    if (modeData.suru && Array.isArray(modeData.suru)) {
+      const list = modeData.suru;
+      const max = list[list.length - 1].count;
+      const idx = Math.min(suru, max);
+      return list.find(s => s.count === idx) || list[list.length - 1];
+    }
+    if (modeData.cycle && Array.isArray(modeData.cycle)) {
+      const list = modeData.cycle;
+      const max = list[list.length - 1].count;
+      const idx = Math.min(cycle, max);
+      return list.find(s => s.count === idx) || list[list.length - 1];
+    }
+    return modeData;
+  }
+
+  function resolveRateConfig(config, rateKey) {
+    if (!config) return config;
+    if (config.byRate && rateKey && config.byRate[rateKey]) {
+      return { ...config, ...config.byRate[rateKey] };
+    }
+    return config;
+  }
+
+  function buildRateOptions(machine) {
+    const checker = machine.checker || {};
+    const rates = getRateOptions(checker);
+    rateToggle.innerHTML = "";
+    if (!rates.length) {
+      rateToggle.classList.add("is-hidden");
+      currentRateKey = null;
+      return;
+    }
+
+    rateToggle.classList.remove("is-hidden");
+    const initialRateKey = checker.defaultRate || rates[0].key;
+    rates.forEach((rate, i) => {
+      const id = "rate_" + rate.key;
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "exchangeRate";
+      input.id = id;
+      input.value = rate.key;
+      if (rate.key === initialRateKey || (!initialRateKey && i === 0)) {
+        input.checked = true;
+        currentRateKey = rate.key;
+      }
+
+      const label = document.createElement("label");
+      label.htmlFor = id;
+      label.textContent = rate.label;
+
+      input.addEventListener("change", () => {
+        currentRateKey = rate.key;
+        renderSummaryGrid();
+        renderEvTable(evModeKey, rate.key);
+        judge();
+      });
+
+      rateToggle.appendChild(input);
+      rateToggle.appendChild(label);
+    });
+  }
+
+  function renderSummaryGrid() {
+    const sourceBoxes = detail?.summaryBoxes || [
+      { label: "天井", value: machine.strategy || "-" },
+      { label: "ヤメ時", value: "-" }
+    ];
+    const boxes = sourceBoxes.map(box => ({ ...box }));
+
+    if (machine.strategyByRate && getCurrentRateKey()) {
+      const rateKey = getCurrentRateKey();
+      const rateLabel = getRateLabel(rateKey);
+      const normalText = machine.strategyByRate[rateKey];
+      const resetConfig = checker.reset && checker.reset.byRate ? checker.reset.byRate[rateKey] : null;
+      const resetIndex = boxes.findIndex(box => String(box.label || "").includes("リセット"));
+
+      if (boxes[1] && normalText) {
+        boxes[1].label = `${rateLabel}狙い目`;
+        boxes[1].value = normalText;
+      }
+      if (resetIndex >= 0 && resetConfig && Number.isFinite(resetConfig.good)) {
+        boxes[resetIndex].label = "リセット狙い";
+        boxes[resetIndex].value = `${resetConfig.good}G〜（積極${resetConfig.excellent}G〜）`;
+      }
+    }
+
+    let rows = "";
+    for (let i = 0; i < boxes.length; i += 2) {
+      const a = boxes[i];
+      const b = boxes[i + 1];
+      if (b) {
+        rows += `<tr><td><span class="s-label">${a.label}</span><span class="s-value">${a.value}</span></td><td><span class="s-label">${b.label}</span><span class="s-value">${b.value}</span></td></tr>`;
+      } else {
+        rows += `<tr><td><span class="s-label">${a.label}</span><span class="s-value">${a.value}</span></td><td></td></tr>`;
+      }
+    }
+    summaryGrid.innerHTML = rows;
+  }
+
+  function judge() {
+    const checked = document.querySelector('input[name="mode"]:checked');
+    if (!checked) return;
+    const modeKey = checked.value;
+    const modedef = (checker.modes || []).find(m => m.key === modeKey);
+    suruWrap.classList.toggle("is-hidden", !(modedef && modedef.hasSuru));
+    cycleWrap.classList.toggle("is-hidden", !(modedef && modedef.hasCycle));
+    const config = resolveRateConfig(getConfig(checker, modeKey, suruCount, cycleCount), getCurrentRateKey());
+    if (checkerNote) checkerNote.textContent = config.note || "";
+    const g = parseInt(gameInput.value, 10);
+
+    if (!config || isNaN(g)) {
+      checkerResult.className = "checker-result result-wait";
+      checkerResult.querySelector(".result-text").textContent = `${checker.unit || "G"}を入力してください`;
+      return;
+    }
+
+    if (Number.isFinite(config.excellent) && g >= config.excellent) {
+      checkerResult.className = "checker-result result-ok";
+      checkerResult.querySelector(".result-text").textContent = "◎ 狙い目OK！積極的に着席を検討";
+    } else if (Number.isFinite(config.good) && g >= config.good) {
+      checkerResult.className = "checker-result result-ok";
+      checkerResult.querySelector(".result-text").textContent = "◯ 狙い目OK　交換率次第で候補";
+    } else {
+      const t = Number.isFinite(config.caution) ? config.caution : (config.target || config.good);
+      if (Number.isFinite(t) && g >= t) {
+        checkerResult.className = "checker-result result-wait";
+        checkerResult.querySelector(".result-text").textContent = `△ 条件次第　${t}G以上で候補`;
+      } else {
+        checkerResult.className = "checker-result result-ng";
+        const thr = Number.isFinite(config.good) ? config.good : t;
+        checkerResult.querySelector(".result-text").textContent = `× まだ早い　${thr}G以上を目安に`;
+      }
+    }
+  }
+
+  // モード動的生成
+  if (slug !== "sf5") {
+    buildRateOptions(machine);
+    buildEvTable();
+    const modes = getModes(checker);
+    const firstMode = modes[0]?.key || "normal";
+    modes.forEach((mode) => {
+      const id = "mode_" + mode.key;
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "mode";
+      input.id = id;
+      input.value = mode.key;
+      if (mode.key === firstMode) input.checked = true;
+
+      const label = document.createElement("label");
+      label.htmlFor = id;
+      label.textContent = mode.label;
+
+      input.addEventListener("change", () => {
+        suruCount = 0;
+        suruVal.textContent = 0;
+        cycleCount = 1;
+        cycleVal.textContent = 1;
+        gameInput.value = "";
+        applyInputLimit(mode.key);
+        judge();
+      });
+
+      modeToggle.appendChild(input);
+      modeToggle.appendChild(label);
+    });
+
+    applyInputLimit(firstMode);
+    const firstModeData = checker[firstMode];
+    if (firstModeData && firstModeData.suru && Array.isArray(firstModeData.suru)) {
+      suruCount = 0;
+      suruVal.textContent = suruCount;
+    }
+
+    gameInput.addEventListener("input", function(){
+      const checked = document.querySelector('input[name="mode"]:checked');
+      const modeKey = checked ? checked.value : firstMode;
+      const limit = getMachineLimit(modeKey);
+      if (Number.isFinite(limit)) {
+        const value = parseInt(gameInput.value, 10);
+        if (!Number.isNaN(value) && value > limit) gameInput.value = String(limit);
+      }
+      judge();
+    });
+
+    gameInput.addEventListener("blur", function(){
+      const checked = document.querySelector('input[name="mode"]:checked');
+      const modeKey = checked ? checked.value : firstMode;
+      const limit = getMachineLimit(modeKey);
+      const value = parseInt(gameInput.value, 10);
+      if (Number.isFinite(limit) && !Number.isNaN(value) && value > limit) {
+        gameInput.value = String(limit);
+      }
+      judge();
+    });
+
+    judge();
+  }
+
+  // 基本情報テーブル
+  const infoBody = document.getElementById("infoTableBody");
+  (detail?.factTable || [["機種名", machine.name]]).forEach(([th, td]) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<th>${th}</th><td>${td}</td>`;
+    infoBody.appendChild(tr);
+  });
+
+  // 詳細セクション
+  const articleSections = document.getElementById("articleSections");
+  (detail?.sections || []).forEach(section => {
+    const div = document.createElement("div");
+    div.className = "article-item";
+
+    if (section.type === "rumor") {
+      div.innerHTML = `<p class="article-title">${section.title}</p><div class="rumor-box"><p class="rumor-label">⚠ 噂・未確定情報</p>${(section.body || []).map(t => `<p class="rumor-body">${t}</p>`).join("")}</div>`;
+    } else if (section.type === "settei") {
+      const badgeClass = { hint: "settei-hint", weak: "settei-weak", mid: "settei-mid", strong: "settei-strong", ok: "settei-ok" };
+      const sectionWide = (section.tables || []).some(tbl => tbl.wide);
+      const legend = `<div class="settei-legend">` +
+        `<span class="settei-legend-item"><span class="settei-legend-badge settei-weak">弱</span>弱示唆</span>` +
+        `<span class="settei-legend-item"><span class="settei-legend-badge settei-mid">中</span>中示唆</span>` +
+        `<span class="settei-legend-item"><span class="settei-legend-badge settei-strong">強</span>強示唆</span>` +
+        `<span class="settei-legend-item"><span class="settei-legend-badge settei-ok">確</span>高設定確定/有力</span>` +
+        `</div>`;
+      let html = `<p class="article-title">${section.title}</p>${legend}`;
+      (section.tables || []).forEach(tbl => {
+        html += `<p class="settei-sub-label">${tbl.label}</p>`;
+        html += `<table class="settei-table${sectionWide ? " settei-table--wide" : ""}"><tr>${tbl.headers.map(h => `<th>${h}</th>`).join("")}</tr>`;
+        tbl.rows.forEach(row => {
+          const cell0 = row[0];
+          const cell1 = row[1];
+          const badge = typeof cell1 === "object"
+            ? `<span class="settei-badge ${badgeClass[cell1.badge] || ""}">${cell1.text}</span>`
+            : cell1;
+          html += `<tr><td>${cell0}</td><td>${badge}</td></tr>`;
+        });
+        html += `</table>`;
+        if (tbl.note) html += `<p class="settei-note">${tbl.note}</p>`;
+      });
+      if (!section.tables && section.rows) {
+        html += `<table class="settei-table"><tr><th>要素</th><th>示唆</th></tr>`;
+        section.rows.forEach(row => {
+          const cell0 = Array.isArray(row) ? row[0] : row.trigger;
+          const cell1 = Array.isArray(row) ? row[1] : row.hint;
+          const badge = typeof cell1 === "object"
+            ? `<span class="settei-badge ${badgeClass[cell1.badge] || ""}">${cell1.text}</span>`
+            : cell1;
+          html += `<tr><td>${cell0}</td><td>${badge}</td></tr>`;
+        });
+        html += `</table>`;
+      }
+      div.innerHTML = html;
+    } else {
+      div.innerHTML = `<p class="article-title">${section.title}</p>${(section.body || []).map(t => `<p class="article-body">${t}</p>`).join("")}`;
+    }
+
+    articleSections.appendChild(div);
+  });
+
+  renderSummaryGrid();
+})();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/service-worker.js")
+      .catch(err => console.warn("SW登録失敗:", err));
+  });
+}
+</script>
 </body>
 </html>

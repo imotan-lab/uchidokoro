@@ -1,9 +1,14 @@
 (function(){
+  // slug を URLクエリ（?slug=xxx）または URLパス（/machines/{slug}/）から取得
   const params = new URLSearchParams(location.search);
-  const slug = params.get("slug");
+  let slug = params.get("slug");
+  if(!slug){
+    const m = location.pathname.match(/\/machines\/([^\/]+)\/?(?:index\.html)?$/);
+    if(m) slug = m[1];
+  }
   if(!slug) return;
 
-  fetch("assets/data/machines.json")
+  fetch("/assets/data/machines.json")
     .then(res => res.json())
     .then(list => {
       const m = list.find(x => x.slug === slug);
