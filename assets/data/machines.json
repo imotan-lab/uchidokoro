@@ -10626,5 +10626,82 @@
       }
     },
     "limit": null
+  },
+  {
+    "slug": "sao2",
+    "name": "スマスロ ソードアート・オンラインⅡ",
+    "status": "preview",
+    "release_date": "2026-06-08",
+    "seo": {
+      "title": "スマスロ ソードアート・オンラインⅡ 狙い目・天井・解析まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "解析待ち",
+    "aliases": [
+      "SAO2",
+      "ソードアート・オンラインⅡ",
+      "ソードアートオンライン2",
+      "ソードアート・オンライン2",
+      "sao2",
+      "ソードアート2",
+      "そーどあーとおんらいん2"
+    ],
+    "checker": null,
+    "limit": null,
+    "original": {
+      "title": "ソードアート・オンラインII",
+      "kind": "ライトノベル",
+      "search": "ソードアートオンライン ライトノベル"
+    }
+  },
+  {
+    "slug": "sengoku_otome5",
+    "name": "L戦国乙女5 業火を穿つ宿焔の双刃",
+    "status": "preview",
+    "release_date": "2026-06-08",
+    "seo": {
+      "title": "L戦国乙女5 業火を穿つ宿焔の双刃 狙い目・天井・解析まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "解析待ち",
+    "aliases": [
+      "戦国乙女5",
+      "乙女5",
+      "せんごくおとめ5",
+      "戦国乙女業火",
+      "L戦国乙女5",
+      "戦国乙女5 業火を穿つ宿焔の双刃",
+      "宿焔の双刃"
+    ],
+    "checker": null,
+    "limit": null
+  },
+  {
+    "slug": "birdie_wing",
+    "name": "スマスロ BIRDIE WING -Golf Girls' Story-",
+    "status": "preview",
+    "release_date": "2026-06-08",
+    "seo": {
+      "title": "スマスロ BIRDIE WING -Golf Girls' Story- 狙い目・天井・解析まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "解析待ち",
+    "aliases": [
+      "BIRDIE WING",
+      "バーディーウイング",
+      "バーディウィング",
+      "バーディーウィング",
+      "バディゴル",
+      "ばーでぃーういんぐ",
+      "ゴルフガールズストーリー",
+      "Golf Girls Story"
+    ],
+    "checker": null,
+    "limit": null,
+    "original": {
+      "title": "BIRDIE WING -Golf Girls' Story-",
+      "kind": "アニメ",
+      "search": "BIRDIE WING バーディーウイング アニメ"
+    }
   }
 ]
