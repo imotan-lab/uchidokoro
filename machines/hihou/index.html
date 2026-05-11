@@ -714,6 +714,12 @@ function resolveMachineSlug() {
     infoBody.appendChild(tr);
   });
 
+  // 簡易Markdown変換（**xxx** → <strong>xxx</strong>）
+  function md(text){
+    if(typeof text !== "string") return text;
+    return text.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
+  }
+
   // 詳細セクション
   const articleSections = document.getElementById("articleSections");
   (detail?.sections || []).forEach(section => {
@@ -721,7 +727,7 @@ function resolveMachineSlug() {
     div.className = "article-item";
 
     if (section.type === "rumor") {
-      div.innerHTML = `<p class="article-title">${section.title}</p><div class="rumor-box"><p class="rumor-label">⚠ 噂・未確定情報</p>${(section.body || []).map(t => `<p class="rumor-body">${t}</p>`).join("")}</div>`;
+      div.innerHTML = `<p class="article-title">${section.title}</p><div class="rumor-box"><p class="rumor-label">⚠ 噂・未確定情報</p>${(section.body || []).map(t => `<p class="rumor-body">${md(t)}</p>`).join("")}</div>`;
     } else if (section.type === "settei") {
       const badgeClass = { hint: "settei-hint", weak: "settei-weak", mid: "settei-mid", strong: "settei-strong", ok: "settei-ok" };
       const sectionWide = (section.tables || []).some(tbl => tbl.wide);
@@ -760,7 +766,7 @@ function resolveMachineSlug() {
       }
       div.innerHTML = html;
     } else {
-      div.innerHTML = `<p class="article-title">${section.title}</p>${(section.body || []).map(t => `<p class="article-body">${t}</p>`).join("")}`;
+      div.innerHTML = `<p class="article-title">${section.title}</p>${(section.body || []).map(t => `<p class="article-body">${md(t)}</p>`).join("")}`;
     }
 
     articleSections.appendChild(div);
