@@ -636,8 +636,8 @@ function resolveMachineSlug() {
     }
   }
 
-  // モード動的生成
-  if (slug !== "sf5") {
+  // モード動的生成（設定狙い専用機種ではスキップ）
+  if (!isSettingOnly) {
     buildRateOptions(machine);
     buildEvTable();
     const modes = getModes(checker);
