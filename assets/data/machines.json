@@ -10568,13 +10568,11 @@
   {
     "slug": "takt_opus",
     "name": "Lタクトオーパス デスティニー",
-    "status": "preview",
-    "release_date": "2026-05-11",
     "seo": {
       "title": "Lタクトオーパス デスティニー 狙い目・天井・解析まとめ"
     },
     "info": "スマスロAT",
-    "strategy": "解析待ち",
+    "strategy": "等価400G〜 / 5.6枚550G〜 / 現金700G〜",
     "aliases": [
       "タクトオーパス",
       "タクトオーパスデスティニー",
@@ -10582,8 +10580,32 @@
       "takt",
       "taktopus"
     ],
-    "checker": null,
-    "limit": null,
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 999,
+        "good": 600,
+        "caution": 400,
+        "note": "AT間999G+αでAT当選。CZ天井500G+α。等価400G〜・5.6枚550G〜が狙い目（スロパチクエスト基準）。"
+      },
+      "reset": {
+        "excellent": 699,
+        "good": 400,
+        "caution": 0,
+        "note": "設定変更後はAT天井699G・CZ天井300G+αに短縮。リセット判別できれば0Gからでも狙える。"
+      }
+    },
+    "limit": 999,
     "original": {
       "title": "takt op.",
       "kind": "アニメ",
