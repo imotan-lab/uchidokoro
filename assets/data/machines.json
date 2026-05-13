@@ -10615,13 +10615,12 @@
   {
     "slug": "bigdream_pusher",
     "name": "スマスロ ビッグドリーム THE GOLDEN PUSHER",
-    "status": "preview",
     "release_date": "2026-05-11",
     "seo": {
       "title": "スマスロ ビッグドリーム THE GOLDEN PUSHER 狙い目・天井・解析まとめ"
     },
     "info": "スマスロAT",
-    "strategy": "解析待ち",
+    "strategy": "等価550G〜 / 5.6枚650G〜 / 現金700G〜（暫定）",
     "aliases": [
       "ビッグドリーム",
       "ビッグドリームプッシャー",
@@ -10629,8 +10628,33 @@
       "bigdream",
       "goldenpusher"
     ],
-    "checker": null,
-    "limit": null
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 999,
+        "good": 700,
+        "caution": 550,
+        "note": "天井は最大1499G（333/555/999/1499のいずれか抽選）。等価550G〜・5.6枚650G〜・現金700G〜から狙い目（スロパチクエスト暫定基準）。"
+      },
+      "reset": {
+        "excellent": 500,
+        "good": 200,
+        "caution": 100,
+        "note": "設定変更後・上位AT終了後は天井最大999Gに短縮。リセット台は早めから狙い目になります。"
+      },
+      "limit": 1499
+    },
+    "limit": 1499
   },
   {
     "slug": "super_rio_ace2",
