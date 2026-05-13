@@ -70,11 +70,31 @@ def merge_body(existing, incoming):
     return existing
 
 
+# 統一titleの並び順（ideal order）
+IDEAL_ORDER = [
+    "天井・恩恵",
+    "基本スペック",
+    "期待値の目安",
+    "朝一・リセット情報",
+    "狙い目の根拠",
+    "ヤメ時の判断",
+    "立ち回りのコツ",
+    "設定示唆まとめ",
+    "噂・未確定情報",
+]
+
+
 def normalize(detail: dict) -> tuple[dict, list[str]]:
-    """1機種のsectionsを正規化。変更内容のログを返す。"""
+    """1機種のsectionsを正規化。変更内容のログを返す。
+
+    処理:
+    1. titleの揺れを統一形にrename
+    2. 重複セクションのbodyをmerge
+    3. 統一titleの並びを IDEAL_ORDER に揃える
+    4. 機種固有titleは統一titleの後に元の相対順序で残す
+    """
     sections = detail.get("sections", [])
     log = []
-    new_sections = []
     # 統一後titleでグルーピング
     by_title: dict[str, dict] = {}
     order: list[str] = []
@@ -92,10 +112,33 @@ def normalize(detail: dict) -> tuple[dict, list[str]]:
             by_title[new_title] = sec
             order.append(new_title)
 
-    # 順序通りに再構築
-    for t in order:
-        new_sections.append(by_title[t])
+    # 並び順を統一形に整理
+    # ①IDEAL_ORDER順に既存のものを並べる
+    # ②機種固有title（IDEAL_ORDER外）は元の相対順序を保ったまま、IDEAL_ORDER末尾の前か後に
+    #   分かりやすく「噂・未確定情報」だけは最後固定、それ以外の機種固有はその直前にまとめる
+    unified_set = set(IDEAL_ORDER)
+    has_rumor = "噂・未確定情報" in by_title
 
+    new_order = []
+    # IDEAL_ORDER順（噂以外）
+    for t in IDEAL_ORDER:
+        if t == "噂・未確定情報":
+            continue
+        if t in by_title:
+            new_order.append(t)
+    # 機種固有title（元の相対順序保持）
+    for t in order:
+        if t not in unified_set:
+            new_order.append(t)
+    # 噂・未確定情報は最後
+    if has_rumor:
+        new_order.append("噂・未確定情報")
+
+    # 順序変更があったか判定
+    if new_order != order:
+        log.append(f"  reorder: {order} → {new_order}")
+
+    new_sections = [by_title[t] for t in new_order]
     detail["sections"] = new_sections
     return detail, log
 
