@@ -31,6 +31,7 @@ AdSense審査向け（コンテンツ品質）:
     14. JSコード内の機種slugハードコード検知（machine.html/setting.html等）
     15. レンダリング前HTML内の `99999` 文字列検知（JS実行前の異常値）
     16. machine-details の文体混在検知（です・ます調と だ・である調の混在）
+    17. 他サイト名の露出検知（スロパチクエスト/ちょんぼりすた/ナナプレス/DMM/ぱちタウン/スロラボ）
 """
 
 from __future__ import annotations
@@ -448,6 +449,40 @@ def check_16_writing_style(machines: list) -> list[str]:
     return ngs
 
 
+def check_17_external_site_names(machines: list) -> list[str]:
+    """他サイト名の露出検知
+
+    記事本文・公開HTMLに「スロパチクエスト」「ちょんぼりすた」「ナナプレス」「DMM」
+    「ぱちタウン」「スロラボ」などの他サイト名が出てないかチェック。
+    競合サイト誘導・著作権リスク回避のため、本文に出さないルール。
+
+    自動タスクのSKILL.md・スクリプト・CLAUDE.md内（読まれない領域）は対象外。
+    audit対象は assets/data/machine-details/*.json と *.html のみ。
+    """
+    import re as _re
+    ngs = []
+    sites = ["スロパチクエスト", "ちょんぼりすた", "ナナプレス", "DMM", "ぱちタウン", "スロラボ"]
+    # 業界用語と区別：「DMM」は「DMM ぱちタウン」サイト名のみ検出（他用途は無いと仮定）
+    detail_dir = BASE / "assets" / "data" / "machine-details"
+    for jf in sorted(detail_dir.glob("*.json")):
+        text = load_text(jf)
+        for s in sites:
+            c = text.count(s)
+            if c:
+                ngs.append(f"machine-details/{jf.name}: '{s}' × {c}件 露出")
+    # HTMLファイル（machines/{slug}/index.html は machine.html のコピーなので除外）
+    for hf in BASE.glob("*.html"):
+        # 404.html の旧サブパスリダイレクト処理は除外
+        if hf.name == "404.html":
+            continue
+        text = load_text(hf)
+        for s in sites:
+            c = text.count(s)
+            if c:
+                ngs.append(f"{hf.name}: '{s}' × {c}件 露出")
+    return ngs
+
+
 CHECKS = [
     ("1_インラインstyle", check_1_inline_style),
     ("2_サブパス残骸", check_2_old_subpath),
@@ -465,6 +500,7 @@ CHECKS = [
     ("14_slugハードコード", check_14_slug_hardcode),
     ("15_99999残留", check_15_render_99999),
     ("16_文体混在", check_16_writing_style),
+    ("17_他サイト名露出", check_17_external_site_names),
 ]
 
 
