@@ -10659,13 +10659,12 @@
   {
     "slug": "super_rio_ace2",
     "name": "スマスロスーパーリオエース2",
-    "status": "preview",
     "release_date": "2026-05-11",
     "seo": {
       "title": "スマスロスーパーリオエース2 狙い目・天井・解析まとめ"
     },
     "info": "スマスロAT",
-    "strategy": "解析待ち",
+    "strategy": "等価450G〜 / 5.6枚500G〜 / 7スルー〜",
     "aliases": [
       "スーパーリオエース2",
       "リオエース2",
@@ -10673,8 +10672,46 @@
       "rioace2",
       "superrioace2"
     ],
-    "checker": null,
-    "limit": null
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "ボーナス間"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        },
+        {
+          "key": "suru",
+          "label": "スルー天井",
+          "hasSuru": true
+        }
+      ],
+      "normal": {
+        "excellent": 600,
+        "good": 500,
+        "caution": 450,
+        "note": "ボーナス間天井750G+α。等価450G〜・5.6枚500G〜が狙い目（スロパチクエスト基準）。"
+      },
+      "reset": {
+        "excellent": 400,
+        "good": 300,
+        "caution": 200,
+        "note": "設定変更時はボーナス間天井500G+αに短縮、スルー天井も4スルー後5回目に短縮。"
+      },
+      "suru": {
+        "excellent": 7,
+        "good": 7,
+        "caution": 6,
+        "note": "ボーナス7回スルー後の8回目でAT当選。設定変更後は4スルー後5回目に短縮。",
+        "suruMax": 7
+      },
+      "hasSuru": true,
+      "suruMax": 7
+    },
+    "limit": 800
   },
   {
     "slug": "galfy",
