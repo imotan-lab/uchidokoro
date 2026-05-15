@@ -59,13 +59,22 @@ def load_json(path: Path):
 
 
 def check_1_inline_style(machines: list) -> list[str]:
-    """machine.html にインラインstyle（style="..."）が無いか"""
+    """全HTMLファイルにインラインstyle（style="..."）が無いか
+
+    CLAUDE.mdルール：機種ページに限らず、全HTMLファイルで `style="..."` 直書きを禁止。
+    全スタイルは practical.css に集約する。
+    machines/{slug}/index.html は machine.html のコピーなので親で検知すれば十分。
+    """
     ngs = []
-    p = BASE / "machine.html"
-    text = load_text(p)
-    matches = re.findall(r'style="[^"]*"', text)
-    if matches:
-        ngs.append(f"machine.htmlにインラインstyle {len(matches)}箇所: {matches[:3]}")
+    targets = list(BASE.glob("*.html"))
+    for p in targets:
+        # googleafe... は Search Console 認証ファイルなので除外
+        if p.name.startswith("google") and p.name.endswith(".html"):
+            continue
+        text = load_text(p)
+        matches = re.findall(r'style="[^"]*"', text)
+        if matches:
+            ngs.append(f"{p.name}: インラインstyle {len(matches)}箇所: {matches[:3]}")
     return ngs
 
 

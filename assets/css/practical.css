@@ -255,6 +255,14 @@ button, input, select { font: inherit; }
 .fallback-msg { padding: 40px; text-align: center; color: #667788; }
 .fallback-msg a { color: #f5b941; }
 .aff-pixel { border: none; }
+/* 段落・テーブル間の細かい余白（インラインstyle排除のためのユーティリティ） */
+.spacing-sm { margin-top: 8px; }
+.spacing-md { margin-top: 12px; }
+/* setting.htmlの確率表示セル幅 */
+.cell-20 { width: 20%; }
+/* setting.htmlの注記スタイル */
+.note-small { color: var(--muted2); font-size: 10px; }
+.note-strong { color: var(--gold); font-weight: 800; }
 .mode-toggle {
   display: grid;
   grid-template-columns: 1fr 1fr;

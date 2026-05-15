@@ -62,11 +62,11 @@
       <p class="landscape-hint-text">横画面にすると3列表示になります。<br>スマホ置き場のある台でそのまま使えます。</p>
     </div>
 
-    <div id="preparingBlock" class="article-block" style="display:none;">
+    <div id="preparingBlock" class="article-block is-hidden">
       <div class="caution-box">
         <p class="caution-text">この機種は小役確率に大きな設定差がないため、ポチポチくんは非対応です。<br>設定判別はボーナス確率やAT初当り確率などで行ってください。</p>
       </div>
-      <p class="hint-text" style="margin-top:12px;">現在対応している機種: 北斗の拳・北斗の拳 転生の章2・番長4・カバネリ・モンキーターンV・ゴブリンスレイヤー・ゴッドイーター・バキ・マイジャグラーV・ネオアイムジャグラーEX・ゴーゴージャグラー3・ファンキージャグラー2・ハッピージャグラーV III・沖ドキ！GOLD・沖ドキ！BLACK・ハナビ・ワンパンマン・傷物語・サンダーV・秘宝伝・東京リベンジャーズ・新鬼武者3・化物語・マギアレコード・沖ドキDUOアンコール・うみねこ2・ニューキングハナハナV・沖ドキ！ゴージャス・キングハナハナ・不二子BT・ドラゴンハナハナ閃光・スーパーブラックジャック・吉宗・アズールレーン・シャーマンキング</p>
+      <p class="hint-text spacing-md">現在対応している機種: 北斗の拳・北斗の拳 転生の章2・番長4・カバネリ・モンキーターンV・ゴブリンスレイヤー・ゴッドイーター・バキ・マイジャグラーV・ネオアイムジャグラーEX・ゴーゴージャグラー3・ファンキージャグラー2・ハッピージャグラーV III・沖ドキ！GOLD・沖ドキ！BLACK・ハナビ・ワンパンマン・傷物語・サンダーV・秘宝伝・東京リベンジャーズ・新鬼武者3・化物語・マギアレコード・沖ドキDUOアンコール・うみねこ2・ニューキングハナハナV・沖ドキ！ゴージャス・キングハナハナ・不二子BT・ドラゴンハナハナ閃光・スーパーブラックジャック・吉宗・アズールレーン・シャーマンキング</p>
     </div>
 
     <div id="settingInputBlock" class="article-block">
@@ -79,11 +79,11 @@
     <div id="settingResultBlock" class="article-block">
       <p class="block-label">▶ 設定期待度</p>
       <div class="setting-result-wrap">
-        <div class="setting-result-row"><span class="setting-result-name">設定1</span><div class="setting-bar-wrap"><div class="setting-bar" id="bar1" style="width:20%"></div></div><span class="setting-result-pct" id="pct1">—</span></div>
-        <div class="setting-result-row"><span class="setting-result-name">設定2</span><div class="setting-bar-wrap"><div class="setting-bar" id="bar2" style="width:20%"></div></div><span class="setting-result-pct" id="pct2">—</span></div>
-        <div class="setting-result-row"><span class="setting-result-name">設定4</span><div class="setting-bar-wrap"><div class="setting-bar" id="bar4" style="width:20%"></div></div><span class="setting-result-pct" id="pct4">—</span></div>
-        <div class="setting-result-row"><span class="setting-result-name">設定5</span><div class="setting-bar-wrap"><div class="setting-bar" id="bar5" style="width:20%"></div></div><span class="setting-result-pct" id="pct5">—</span></div>
-        <div class="setting-result-row"><span class="setting-result-name">設定6</span><div class="setting-bar-wrap"><div class="setting-bar" id="bar6" style="width:20%"></div></div><span class="setting-result-pct" id="pct6">—</span></div>
+        <div class="setting-result-row"><span class="setting-result-name">設定1</span><div class="setting-bar-wrap"><div class="setting-bar cell-20" id="bar1"></div></div><span class="setting-result-pct" id="pct1">—</span></div>
+        <div class="setting-result-row"><span class="setting-result-name">設定2</span><div class="setting-bar-wrap"><div class="setting-bar cell-20" id="bar2"></div></div><span class="setting-result-pct" id="pct2">—</span></div>
+        <div class="setting-result-row"><span class="setting-result-name">設定4</span><div class="setting-bar-wrap"><div class="setting-bar cell-20" id="bar4"></div></div><span class="setting-result-pct" id="pct4">—</span></div>
+        <div class="setting-result-row"><span class="setting-result-name">設定5</span><div class="setting-bar-wrap"><div class="setting-bar cell-20" id="bar5"></div></div><span class="setting-result-pct" id="pct5">—</span></div>
+        <div class="setting-result-row"><span class="setting-result-name">設定6</span><div class="setting-bar-wrap"><div class="setting-bar cell-20" id="bar6"></div></div><span class="setting-result-pct" id="pct6">—</span></div>
       </div>
       <div class="checker-card checker-card--mt">
         <p class="result-label">判定コメント</p>
@@ -667,7 +667,7 @@ function generateInputs() {
   machineConfig.fields.forEach(f => {
     const id = f.id + 'Count';
     const labelHtml = f.ref
-      ? f.label + ' <span style="color:var(--muted2);font-size:10px;">参考値</span>'
+      ? f.label + ' <span class="note-small">参考値</span>'
       : f.label;
     html += `<div class="setting-input-item">
       <div class="setting-input-label-wrap">
@@ -716,7 +716,7 @@ function dispRate(id, totalG, count, baseSub) {
   const el = document.getElementById(id);
   if (!el) return;
   if (!totalG || !count) { el.innerHTML = baseSub; return; }
-  el.innerHTML = baseSub + '<br><span style="color:var(--gold);font-weight:800;">実測: 1/' + Math.round(totalG / count) + '</span>';
+  el.innerHTML = baseSub + '<br><span class="note-strong">実測: 1/' + Math.round(totalG / count) + '</span>';
 }
 function calcAll() {
   if (!machineConfig) return;
