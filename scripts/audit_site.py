@@ -479,6 +479,14 @@ def check_17_external_site_names(machines: list) -> list[str]:
             c = text.count(s)
             if c:
                 ngs.append(f"machine-details/{jf.name}: '{s}' × {c}件 露出")
+    # machines.json も対象（checker.note / strategy / seo.title 等）
+    mj = BASE / "assets" / "data" / "machines.json"
+    if mj.is_file():
+        text = load_text(mj)
+        for s in sites:
+            c = text.count(s)
+            if c:
+                ngs.append(f"machines.json: '{s}' × {c}件 露出")
     # HTMLファイル（machines/{slug}/index.html は machine.html のコピーなので除外）
     for hf in BASE.glob("*.html"):
         # 404.html の旧サブパスリダイレクト処理は除外
