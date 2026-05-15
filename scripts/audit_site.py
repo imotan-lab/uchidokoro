@@ -470,7 +470,12 @@ def check_17_external_site_names(machines: list) -> list[str]:
     """
     import re as _re
     ngs = []
-    sites = ["スロパチクエスト", "ちょんぼりすた", "ナナプレス", "DMM", "ぱちタウン", "スロラボ"]
+    sites = [
+        # 競合解析サイト
+        "スロパチクエスト", "ちょんぼりすた", "ナナプレス", "DMM", "ぱちタウン", "スロラボ",
+        # 削除されたアフィリエイトサービス（もしもアフィリエイト・パチスロでは利用不可）
+        "もしもアフィリエイト", "moshimo.com", "af.moshimo", "i.moshimo",
+    ]
     # 業界用語と区別：「DMM」は「DMM ぱちタウン」サイト名のみ検出（他用途は無いと仮定）
     detail_dir = BASE / "assets" / "data" / "machine-details"
     for jf in sorted(detail_dir.glob("*.json")):
