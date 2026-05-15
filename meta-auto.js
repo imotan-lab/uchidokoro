@@ -90,8 +90,11 @@
       canonical.href = `https://uchidokoro.com/machines/${slug}/`;
 
       // 日付情報（JSON-LDに使う）
-      const todayIso = new Date().toISOString().split('T')[0];
-      const datePublished = releaseDate || todayIso;
+      // ISO 8601形式（タイムゾーン付き）。Google Rich Results推奨形式
+      // 日付のみの release_date は東京時刻のT00:00:00+09:00として補完
+      const nowIso = new Date().toISOString(); // 例: 2026-05-15T14:30:00.000Z（UTC）
+      const datePublished = releaseDate ? `${releaseDate}T00:00:00+09:00` : nowIso;
+      const todayIso = nowIso;
 
       // JSON-LD 構造化データ（強化版）
       const jsonLd = {
