@@ -32,6 +32,7 @@ AdSense審査向け（コンテンツ品質）:
     15. レンダリング前HTML内の `99999` 文字列検知（JS実行前の異常値）
     16. machine-details の文体混在検知（です・ます調と だ・である調の混在）
     17. 他サイト名の露出検知（スロパチクエスト/ちょんぼりすた/ナナプレス/DMM/ぱちタウン/スロラボ）
+    18. サブディレクトリ配下のHTMLに <base href="/"> が入っているか（パス解決事故予防）
 """
 
 from __future__ import annotations
@@ -505,6 +506,31 @@ def check_17_external_site_names(machines: list) -> list[str]:
     return ngs
 
 
+def check_18_subdir_base_href(machines: list) -> list[str]:
+    """サブディレクトリ配下のHTMLに <base href="/"> が入っているか
+
+    サブディレクトリ（machines/{slug}/ 等）配下のHTMLは `<base href="/">` が無いと、
+    相対パス（href="index.html" / src="assets/img/logo.png" 等）がそのディレクトリ
+    起点で解決されてしまい、ロゴ・ナビ・footer内リンクが全て404になる事故が起きる。
+
+    対象：BASE直下を除いたすべての *.html。
+    例外：<head>タグを持たない単純なリダイレクトスクリプト（checker.html 等の1行JS）。
+    """
+    ngs = []
+    for f in BASE.glob("**/*.html"):
+        # ルート直下は対象外（<base>無しでも相対パスが正しく解決されるため）
+        if f.parent == BASE:
+            continue
+        text = load_text(f)
+        # <head>タグが無いHTMLは単純なリダイレクト等として対象外（checker.html等）
+        if "<head" not in text.lower():
+            continue
+        if not re.search(r'<base\s+href\s*=\s*["\']/["\']', text, re.IGNORECASE):
+            rel = f.relative_to(BASE).as_posix()
+            ngs.append(f"{rel}: <base href=\"/\"> が無い（サブディレクトリ配下のHTMLには必須）")
+    return ngs
+
+
 CHECKS = [
     ("1_インラインstyle", check_1_inline_style),
     ("2_サブパス残骸", check_2_old_subpath),
@@ -523,6 +549,7 @@ CHECKS = [
     ("15_99999残留", check_15_render_99999),
     ("16_文体混在", check_16_writing_style),
     ("17_他サイト名露出", check_17_external_site_names),
+    ("18_サブディレクトリbase_href", check_18_subdir_base_href),
 ]
 
 
