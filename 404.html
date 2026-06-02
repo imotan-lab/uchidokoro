@@ -34,6 +34,9 @@
   var path = window.location.pathname;
   if (path.indexOf("/uchidokoro/") === 0) {
     var newPath = path.replace(/^\/uchidokoro\//, "/");
+    // 先頭の連続スラッシュ（//evil.com 形式のプロトコル相対URL）を1個に潰し、
+    // 同一オリジン内のパスに固定する（オープンリダイレクト対策）
+    newPath = "/" + newPath.replace(/^\/+/, "");
     var newUrl = newPath + window.location.search + window.location.hash;
     window.location.replace(newUrl);
   }
