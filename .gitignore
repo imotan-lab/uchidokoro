@@ -9,3 +9,6 @@ scripts/x_post_result.json
 # Python キャッシュ
 scripts/__pycache__/
 __pycache__/
+
+# Claude Code ローカル設定（公開リポジトリに含めない）
+.claude/
