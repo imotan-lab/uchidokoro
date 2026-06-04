@@ -624,3 +624,26 @@ button, input, select { font: inherit; }
 .contact-iframe { border: none; }
 .contact-types { padding-left: 1.2em; line-height: 1.8; }
 .contact-types li { margin-bottom: 8px; }
+
+/* RELATED MACHINES (内部リンク・関連機種) */
+.related-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.related-item {
+  display: inline-block;
+  padding: 8px 14px;
+  background: var(--panel2);
+  border: 1px solid var(--gold-line);
+  border-radius: var(--radius-sm);
+  color: var(--soft);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  transition: background .15s, color .15s;
+}
+.related-item:hover {
+  background: var(--gold-bg);
+  color: var(--gold);
+}

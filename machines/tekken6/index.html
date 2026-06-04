@@ -125,6 +125,11 @@
       <a id="settingToolLink" href="setting.html" class="btn-show-all btn-show-all--center">小役カウンター ポチポチくん →</a>
     </div>
 
+    <div class="article-block is-hidden" id="relatedBlock">
+      <p class="block-label">▶ 関連機種</p>
+      <div id="relatedList" class="related-list"></div>
+    </div>
+
     <div class="article-block" id="affiliateBlock">
       <p class="affiliate-mini">実機を探す:
         <a href="https://px.a8.net/svt/ejp?a8mat=4AZMKM+34IY42+2SY6+62U36" rel="nofollow noopener" target="_blank">A-SLOT</a> /
@@ -770,6 +775,46 @@ function resolveMachineSlug() {
   });
 
   renderSummaryGrid();
+
+  // 関連機種リンク（内部リンク強化・SEO/回遊向上）
+  // 関連の判定：①同じ原作（original.search/title が一致） ②同じシリーズ系（名前のキーワード一致）
+  (function renderRelated(){
+    const relatedBlock = document.getElementById("relatedBlock");
+    const relatedList = document.getElementById("relatedList");
+    if (!relatedBlock || !relatedList || !Array.isArray(machines)) return;
+
+    // シリーズ系の判定キーワード（原作を持たないパチスロ固有シリーズ中心。誤マッチ防止で限定）
+    const SERIES = [
+      { id: "okidoki",  kw: ["沖ドキ"] },
+      { id: "juggler",  kw: ["ジャグラー"] },
+      { id: "hanahana", kw: ["ハナハナ"] },
+      { id: "banchou",  kw: ["番長"] },
+      { id: "yoshimune",kw: ["吉宗"] },
+      { id: "sengoku",  kw: ["戦国乙女"] },
+      { id: "god",      kw: ["ミリオンゴッド", "神々"] }
+    ];
+    function origKey(m){ return (m.original && (m.original.search || m.original.title)) || null; }
+    function seriesId(m){
+      const hay = (m.name || "") + " " + ((m.seo && m.seo.title) || "");
+      for (const s of SERIES){ if (s.kw.some(k => hay.includes(k))) return s.id; }
+      return null;
+    }
+    const curOrig = origKey(machine);
+    const curSeries = seriesId(machine);
+
+    const related = machines.filter(x => {
+      if (x.slug === slug) return false;
+      const sameOrig = curOrig && origKey(x) === curOrig;
+      const sameSeries = curSeries && seriesId(x) === curSeries;
+      return sameOrig || sameSeries;
+    });
+
+    if (!related.length) return;
+    relatedList.innerHTML = related.slice(0, 6).map(x =>
+      `<a class="related-item" href="/machines/${x.slug}/">${x.name}</a>`
+    ).join("");
+    relatedBlock.classList.remove("is-hidden");
+  })();
 })();
 </script>
 <script>

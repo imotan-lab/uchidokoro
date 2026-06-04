@@ -341,6 +341,9 @@ def check_13_internal_links(machines: list) -> list[str]:
             # 外部URL・データURL・テンプレ変数・ハッシュは除外
             if url.startswith(("http://", "https://", "//", "data:", "mailto:", "tel:", "javascript:", "${")):
                 continue
+            # JSテンプレートリテラル（href="/machines/${x.slug}/" 等）はJS生成リンクなので静的検証対象外
+            if "${" in url:
+                continue
             if url == "" or url == "/":
                 continue
             key = (p.name, url)
