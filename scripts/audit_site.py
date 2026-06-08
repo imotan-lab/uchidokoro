@@ -534,6 +534,27 @@ def check_18_subdir_base_href(machines: list) -> list[str]:
     return ngs
 
 
+def check_19_lead_markdown(machines: list) -> list[str]:
+    """machine-details の lead に Markdown記法（**強調**）が残っていないか
+
+    lead は machine.html の heroSub に textContent で描画されるため、sections と違って
+    Markdown（**強調** → <strong>）が解釈されず `**` がそのまま画面に出る。
+    新台追加・昇格時に lead へ `**` を書くと表示崩れになるので静的に検知する。
+    （レンダリング後監査 audit_render.py R9 でも捕捉できるが、こちらは数秒で判明する）
+    """
+    ngs = []
+    detail_dir = BASE / "assets" / "data" / "machine-details"
+    for jf in sorted(detail_dir.glob("*.json")):
+        try:
+            d = load_json(jf)
+        except Exception:
+            continue
+        lead = d.get("lead") or ""
+        if "**" in lead:
+            ngs.append(f"machine-details/{jf.name}: lead に '**'（Markdown未解釈で表示される）")
+    return ngs
+
+
 CHECKS = [
     ("1_インラインstyle", check_1_inline_style),
     ("2_サブパス残骸", check_2_old_subpath),
@@ -553,6 +574,7 @@ CHECKS = [
     ("16_文体混在", check_16_writing_style),
     ("17_他サイト名露出", check_17_external_site_names),
     ("18_サブディレクトリbase_href", check_18_subdir_base_href),
+    ("19_lead内Markdown残留", check_19_lead_markdown),
 ]
 
 
