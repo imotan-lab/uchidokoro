@@ -10777,13 +10777,12 @@
   {
     "slug": "sengoku_otome5",
     "name": "L戦国乙女5 業火を穿つ宿焔の双刃",
-    "status": "preview",
     "release_date": "2026-06-08",
     "seo": {
       "title": "L戦国乙女5 業火を穿つ宿焔の双刃 狙い目・天井・解析まとめ"
     },
     "info": "スマスロAT",
-    "strategy": "解析待ち",
+    "strategy": "5.6枚580G〜 / 5.0枚650G〜 / 4.5枚710G〜 / リセット350G〜",
     "aliases": [
       "戦国乙女5",
       "乙女5",
@@ -10793,8 +10792,117 @@
       "戦国乙女5 業火を穿つ宿焔の双刃",
       "宿焔の双刃"
     ],
-    "checker": null,
-    "limit": null
+    "checker": {
+      "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ],
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        },
+        {
+          "key": "cycle",
+          "label": "周期",
+          "hasCycle": true
+        }
+      ],
+      "normal": {
+        "excellent": 780,
+        "good": 580,
+        "caution": 400,
+        "byRate": {
+          "eq56": {
+            "excellent": 780,
+            "good": 580,
+            "caution": 400,
+            "note": "5.6枚以下なら580G〜が狙い目。G数天井999G+α。"
+          },
+          "rate55": {
+            "excellent": 790,
+            "good": 600,
+            "caution": 420,
+            "note": "5.5枚なら600G〜。"
+          },
+          "rate50": {
+            "excellent": 840,
+            "good": 650,
+            "caution": 470,
+            "note": "5.0枚なら650G〜。"
+          },
+          "rate45": {
+            "excellent": 900,
+            "good": 710,
+            "caution": 530,
+            "note": "4.5枚なら710G〜。"
+          }
+        },
+        "note": "G数天井999G+α。周期天井は最大6周期（1周期最大500G+α）。1周期目引き戻し（200G+α・期待度約40%）を確認してヤメ。"
+      },
+      "reset": {
+        "excellent": 480,
+        "good": 350,
+        "caution": 200,
+        "byRate": {
+          "eq56": {
+            "excellent": 480,
+            "good": 350,
+            "caution": 200,
+            "note": "リセット時はG数天井650G+α・周期最大4周期に短縮。"
+          },
+          "rate55": {
+            "excellent": 490,
+            "good": 360,
+            "caution": 210,
+            "note": "リセット時650G+α短縮。"
+          },
+          "rate50": {
+            "excellent": 520,
+            "good": 400,
+            "caution": 250,
+            "note": "リセット時650G+α短縮。"
+          },
+          "rate45": {
+            "excellent": 560,
+            "good": 440,
+            "caution": 290,
+            "note": "リセット時650G+α短縮。"
+          }
+        },
+        "note": "設定変更時はG数天井650G+α・周期天井最大4周期に短縮。巫女ポイントもランダム加算で優遇。"
+      },
+      "cycle": {
+        "note": "周期天井は最大6周期（リセット時は最大4周期）。1周期最大500G+α。CZ「乙女アタック」突入時の周期数を確認。"
+      }
+    },
+    "limit": 999,
+    "strategyByRate": {
+      "eq56": "5.6枚580G〜",
+      "rate55": "5.5枚600G〜",
+      "rate50": "5.0枚650G〜",
+      "rate45": "4.5枚710G〜"
+    }
   },
   {
     "slug": "birdie_wing",
