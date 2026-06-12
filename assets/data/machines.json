@@ -11128,5 +11128,31 @@
       }
     },
     "limit": null
+  },
+  {
+    "slug": "karakuri2",
+    "name": "Lからくりサーカス2",
+    "status": "preview",
+    "release_date": "2026-07-06",
+    "seo": {
+      "title": "Lからくりサーカス2 狙い目・天井・解析まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "解析待ち",
+    "aliases": [
+      "からくりサーカス2",
+      "カラサー2",
+      "カラクリサーカス2",
+      "からくり2",
+      "karakuri2",
+      "からくりサーカス2スマスロ"
+    ],
+    "checker": null,
+    "limit": null,
+    "original": {
+      "title": "からくりサーカス",
+      "kind": "漫画",
+      "search": "からくりサーカス 漫画"
+    }
   }
 ]
