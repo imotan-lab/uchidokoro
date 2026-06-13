@@ -11154,5 +11154,48 @@
       "kind": "漫画",
       "search": "からくりサーカス 漫画"
     }
+  },
+  {
+    "slug": "kerot5bt",
+    "name": "スマスロケロット5BT",
+    "status": "preview",
+    "release_date": "2026-07-06",
+    "seo": {
+      "title": "スマスロケロット5BT 天井・狙い目・噂まとめ"
+    },
+    "info": "スマスロノーマル",
+    "strategy": "解析待ち",
+    "aliases": [
+      "ケロット5BT",
+      "ケロット5",
+      "けろっと5BT",
+      "ケロット",
+      "kerot5bt",
+      "ケロット5BTスマスロ"
+    ],
+    "checker": null,
+    "limit": null
+  },
+  {
+    "slug": "nangoku_special",
+    "name": "L南国育ちSPECIAL",
+    "status": "preview",
+    "release_date": "2026-07-06",
+    "seo": {
+      "title": "L南国育ちSPECIAL 天井・狙い目・噂まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "解析待ち",
+    "aliases": [
+      "南国育ちSPECIAL",
+      "南国育ちスペシャル",
+      "南国SP",
+      "なんごくそだちすぺしゃる",
+      "ナンゴクソダチ",
+      "nangoku_special",
+      "L南国育ちSPECIALスマスロ"
+    ],
+    "checker": null,
+    "limit": null
   }
 ]
