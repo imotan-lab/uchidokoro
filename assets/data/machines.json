@@ -11130,6 +11130,35 @@
     "limit": null
   },
   {
+    "slug": "ultraman_final",
+    "name": "L ULTRAMAN 最終決戦",
+    "status": "preview",
+    "release_date": "2026-07-05",
+    "seo": {
+      "title": "L ULTRAMAN 最終決戦 狙い目・天井・噂まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "解析待ち",
+    "aliases": [
+      "ULTRAMAN",
+      "ウルトラマン",
+      "ウルトラマン最終決戦",
+      "うるとらまん",
+      "ultraman",
+      "Lウルトラマン最終決戦",
+      "ウルトラマンスマスロ",
+      "最終決戦",
+      "うるとらまんさいしゅうけっせん"
+    ],
+    "checker": null,
+    "limit": null,
+    "original": {
+      "title": "ウルトラマン",
+      "kind": "特撮",
+      "search": "ウルトラマン"
+    }
+  },
+  {
     "slug": "karakuri2",
     "name": "Lからくりサーカス2",
     "status": "preview",
