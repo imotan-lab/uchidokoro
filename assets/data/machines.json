@@ -11185,6 +11185,34 @@
     }
   },
   {
+    "slug": "sengoku_collection6",
+    "name": "L戦国コレクション6",
+    "status": "preview",
+    "release_date": "2026-07-06",
+    "seo": {
+      "title": "L戦国コレクション6 天井・狙い目・解析まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "解析待ち",
+    "aliases": [
+      "戦国コレクション6",
+      "戦コレ6",
+      "せんごくコレクション6",
+      "せんこれ6",
+      "sengoku_collection6",
+      "sencolle6",
+      "L戦国コレクション6",
+      "戦国コレクション6スマスロ"
+    ],
+    "checker": null,
+    "limit": null,
+    "original": {
+      "title": "戦国コレクション",
+      "kind": "ゲーム",
+      "search": "戦国コレクション ゲーム"
+    }
+  },
+  {
     "slug": "kerot5bt",
     "name": "スマスロケロット5BT",
     "status": "preview",
