@@ -1,4 +1,4 @@
-const CACHE_NAME = 'uchidokoro-v95';
+const CACHE_NAME = 'uchidokoro-v96';
 
 const STATIC_CACHE = [
   '/',
@@ -8,6 +8,10 @@ const STATIC_CACHE = [
   '/about.html',
   '/contact.html',
   '/privacy.html',
+  '/guide-tenjo-ranking.html',
+  '/guide-reset-ranking.html',
+  '/guide-suru-tenjo.html',
+  '/guide-ichiran.html',
   '/404.html',
   '/meta-auto.js',
   '/assets/css/practical.css',

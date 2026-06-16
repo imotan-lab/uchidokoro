@@ -647,3 +647,43 @@ button, input, select { font: inherit; }
   background: var(--gold-bg);
   color: var(--gold);
 }
+
+/* HUB / RANKING PAGES (guide-tenjo-ranking / guide-reset-ranking / guide-suru-tenjo / guide-ichiran) */
+.rank-list, .spec-list { list-style: none; margin: 12px 0 0; padding: 0; }
+.rank-item {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+.spec-item { padding: 11px 0; border-bottom: 1px solid var(--line); }
+.rank-item:last-child, .spec-item:last-child { border-bottom: none; }
+.rank-num {
+  color: var(--gold);
+  font-weight: 800;
+  font-size: 15px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+.rank-body { min-width: 0; }
+.rank-name, .spec-name {
+  display: inline-block;
+  color: var(--text);
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.45;
+  text-decoration: none;
+}
+.rank-name:hover, .spec-name:hover { color: var(--gold); text-decoration: underline; }
+.rank-meta, .spec-meta {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.rank-meta strong, .spec-meta strong { color: var(--soft); font-weight: 700; }
+.list-note { margin: 12px 0 0; color: var(--muted2); font-size: 11px; line-height: 1.6; }
+.list-count { color: var(--gold); font-weight: 700; }
