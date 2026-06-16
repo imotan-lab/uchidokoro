@@ -11254,5 +11254,49 @@
     ],
     "checker": null,
     "limit": null
+  },
+  {
+    "slug": "yabachiba",
+    "name": "Lヤバチバ",
+    "status": "preview",
+    "release_date": "2026-07-06",
+    "seo": {
+      "title": "Lヤバチバ 狙い目・天井・スペックまとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "解析待ち",
+    "aliases": [
+      "ヤバチバ",
+      "やばちば",
+      "ヤバチバスマスロ",
+      "Lヤバチバ",
+      "yabachiba",
+      "ヤバチバループ",
+      "虹7ボーナス"
+    ],
+    "checker": null,
+    "limit": null
+  },
+  {
+    "slug": "rotis",
+    "name": "スマスロ ローティス",
+    "status": "preview",
+    "release_date": "2026-07-06",
+    "seo": {
+      "title": "スマスロ ローティス 狙い目・天井・スペックまとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "解析待ち",
+    "aliases": [
+      "ローティス",
+      "ろーてぃす",
+      "ローティススマスロ",
+      "Lローティス",
+      "rotis",
+      "SBB",
+      "SBBストックシステム"
+    ],
+    "checker": null,
+    "limit": null
   }
 ]
