@@ -1,19 +1,31 @@
 """
-machine.html を元に、各 machines/{slug}/index.html を実コンテンツとして生成する。
+machine.html を元に、各 machines/{slug}/index.html を「中身が静的HTMLに焼き込まれた」実コンテンツページとして生成する。
 
-これにより /machines/{slug}/ がリダイレクトページではなく、machine.html と同等の実コンテンツを持つページになる。
-Google から「クロール済み・インデックス未登録」と判定される問題（中身が空のリダイレクト判定）を解消する。
+【プリレンダリングの目的（2026-06 収益化/SEO対応）】
+従来は machine.html を丸ごとコピーするだけで、本文・title・h1 は JS が machines.json /
+machine-details を fetch して後から描画する「空シェル」だった。若いサイトは Google が JS を
+後回しにするため「クロール済み・インデックス未登録」が多発し、AdSense にも「中身の無いページ」
+に見えていた。本スクリプトはビルド時に下記を静的HTMLへ直接書き出し、クローラが JS 実行を待たずに
+本文を読めるようにする（チェッカー等の動的UIは従来通り JS のまま）。
 
-変換ルール:
-1. <head> 直後に <base href="/"> を追加（相対リソースをルート基準に）
-2. <link rel="canonical"> を /machines/{slug}/ に書き換え（無ければ追加）
-3. machine.html のJSはURLパスから slug を自動取得するので、その他は変更不要
+書き込む要素:
+1. <base href="/"> を <head> 直後に挿入
+2. <title> / <meta name="description"> を機種別に生成（meta-auto.js と同じロジック）
+3. <link rel="canonical"> を /machines/{slug}/ に
+4. <h1 id="machineTitle"> に機種名
+5. <p id="heroSub"> に lead
+6. <div id="articleSections"> に各セクション（machine.html の JS と同じ構造）
+7. <tbody id="infoTableBody"> に factTable
+
+machine.html 側の JS は articleSections / infoTableBody を innerHTML="" でクリアしてから再描画する
+ため、プリレンダHTMLと二重描画にはならない（最終表示はJS版が権威）。
 
 使い方:
     python scripts/build_machine_pages.py
 """
 
 from __future__ import annotations
+import html
 import json
 import re
 import sys
@@ -21,42 +33,195 @@ from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent
 
+# settei バッジのクラス対応（machine.html の badgeClass と一致させる）
+BADGE_CLASS = {"hint": "settei-hint", "weak": "settei-weak", "mid": "settei-mid",
+               "strong": "settei-strong", "ok": "settei-ok"}
+
+
+def esc(s) -> str:
+    """テキストをHTMLエスケープ（& < > とダブルクォート）。"""
+    return html.escape("" if s is None else str(s), quote=True)
+
+
+def md(text) -> str:
+    """簡易Markdown：エスケープ後に **xxx** → <strong>xxx</strong>（machine.html の md() 相当）。"""
+    if not isinstance(text, str):
+        return esc(text)
+    out = esc(text)
+    # esc後でも ** は不変なので強調変換できる
+    return re.sub(r"\*\*([^*]+?)\*\*", r"<strong>\1</strong>", out)
+
+
+def jp_date(date_str: str) -> str:
+    if not date_str:
+        return ""
+    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", str(date_str))
+    if not m:
+        return ""
+    return f"{int(m.group(2))}月{int(m.group(3))}日"
+
+
+def build_title_desc(machine: dict) -> tuple[str, str]:
+    """meta-auto.js と同じ title / description を生成。"""
+    name = machine.get("name", "")
+    strategy = machine.get("strategy", "") or ""
+    info = machine.get("info", "") or ""
+    is_preview = machine.get("status") == "preview"
+    release_jp = jp_date(machine.get("release_date", ""))
+
+    if is_preview:
+        if release_jp:
+            title = f"【先行】{name} {release_jp}導入｜天井・狙い目予想・解析判明次第更新"
+            desc = f"{release_jp}導入予定の{name}の機種概要を先行公開。天井・狙い目・設定差などの解析データが判明次第、随時更新します。導入前から最新情報をチェック。"
+        else:
+            title = f"【先行】{name} 天井・狙い目予想｜解析判明次第更新"
+            desc = f"{name}の機種概要を先行公開。天井・狙い目・設定差などの解析データが判明次第、随時更新します。導入前から最新情報をチェック。"
+    else:
+        title = f"{name} 天井・狙い目・やめどき｜小役カウンター ポチポチくん対応"
+        if strategy:
+            desc = f"{name}の天井・狙い目・やめどき・設定差を徹底解説。{strategy}。小役カウンター ポチポチくんで設定判別も可能。期待値重視の立ち回りガイド。"
+        else:
+            desc = f"{name}の天井・狙い目・やめどき・設定差を徹底解説。小役カウンター ポチポチくんで設定判別も可能。{info}の立ち回りを期待値重視でサポート。"
+    return title, desc
+
+
+def render_section(section: dict) -> str:
+    """1セクションを machine.html の JS と同じ構造の静的HTMLに。"""
+    title = section.get("title", "")
+    stype = section.get("type")
+    body = section.get("body") or []
+
+    if stype == "rumor":
+        paras = "".join(f'<p class="rumor-body">{md(t)}</p>' for t in body)
+        inner = (f'<p class="article-title">{esc(title)}</p>'
+                 f'<div class="rumor-box"><p class="rumor-label">⚠ 噂・未確定情報</p>{paras}</div>')
+        return f'<div class="article-item">{inner}</div>'
+
+    if stype == "settei":
+        tables = section.get("tables")
+        legend = ('<div class="settei-legend">'
+                  '<span class="settei-legend-item"><span class="settei-legend-badge settei-weak">弱</span>弱示唆</span>'
+                  '<span class="settei-legend-item"><span class="settei-legend-badge settei-mid">中</span>中示唆</span>'
+                  '<span class="settei-legend-item"><span class="settei-legend-badge settei-strong">強</span>強示唆</span>'
+                  '<span class="settei-legend-item"><span class="settei-legend-badge settei-ok">確</span>高設定確定/有力</span>'
+                  '</div>')
+        h = f'<p class="article-title">{esc(title)}</p>{legend}'
+        wide = " settei-table--wide" if (tables and any(t.get("wide") for t in tables)) else ""
+        if tables:
+            for tbl in tables:
+                h += f'<p class="settei-sub-label">{esc(tbl.get("label",""))}</p>'
+                headers = "".join(f"<th>{esc(hh)}</th>" for hh in tbl.get("headers", []))
+                h += f'<table class="settei-table{wide}"><tr>{headers}</tr>'
+                for row in tbl.get("rows", []):
+                    c0 = row[0] if len(row) > 0 else ""
+                    c1 = row[1] if len(row) > 1 else ""
+                    if isinstance(c1, dict):
+                        badge = f'<span class="settei-badge {BADGE_CLASS.get(c1.get("badge",""), "")}">{esc(c1.get("text",""))}</span>'
+                    else:
+                        badge = esc(c1)
+                    h += f"<tr><td>{esc(c0)}</td><td>{badge}</td></tr>"
+                h += "</table>"
+                if tbl.get("note"):
+                    h += f'<p class="settei-note">{esc(tbl["note"])}</p>'
+        elif section.get("rows"):
+            h += '<table class="settei-table"><tr><th>要素</th><th>示唆</th></tr>'
+            for row in section["rows"]:
+                if isinstance(row, list):
+                    c0, c1 = (row + ["", ""])[:2]
+                else:
+                    c0, c1 = row.get("trigger", ""), row.get("hint", "")
+                if isinstance(c1, dict):
+                    badge = f'<span class="settei-badge {BADGE_CLASS.get(c1.get("badge",""), "")}">{esc(c1.get("text",""))}</span>'
+                else:
+                    badge = esc(c1)
+                h += f"<tr><td>{esc(c0)}</td><td>{badge}</td></tr>"
+            h += "</table>"
+        return f'<div class="article-item">{h}</div>'
+
+    # default
+    paras = "".join(f'<p class="article-body">{md(t)}</p>' for t in body)
+    return f'<div class="article-item"><p class="article-title">{esc(title)}</p>{paras}</div>'
+
 
 def main():
-    # 機種一覧
     machines = json.loads((BASE / "assets" / "data" / "machines.json").read_text(encoding="utf-8"))
-    slugs = [m["slug"] for m in machines]
-
-    # machine.html を読み込み
     template = (BASE / "machine.html").read_text(encoding="utf-8")
 
     # <base href="/"> を <head> 直後に挿入
-    if '<base ' not in template:
+    if "<base " not in template:
         template = re.sub(r"(<head[^>]*>)", r'\1\n<base href="/">', template, count=1)
 
+    detail_dir = BASE / "assets" / "data" / "machine-details"
     generated = 0
-    for slug in slugs:
+    prerendered = 0
+    for machine in machines:
+        slug = machine["slug"]
+        html_out = template
         canonical_url = f"https://uchidokoro.com/machines/{slug}/"
-        # canonical タグを置換 or 追加
-        html = template
-        if 'rel="canonical"' in html:
-            html = re.sub(
-                r'<link\s+rel="canonical"[^>]*>',
-                f'<link rel="canonical" href="{canonical_url}">',
-                html,
-                count=1,
-            )
-        else:
-            # </head> の直前に追加
-            html = html.replace("</head>", f'<link rel="canonical" href="{canonical_url}">\n</head>', 1)
 
-        # 出力先ディレクトリを作成
+        # canonical
+        if 'rel="canonical"' in html_out:
+            html_out = re.sub(r'<link\s+rel="canonical"[^>]*>',
+                              f'<link rel="canonical" href="{canonical_url}">', html_out, count=1)
+        else:
+            html_out = html_out.replace("</head>", f'<link rel="canonical" href="{canonical_url}">\n</head>', 1)
+
+        # title / description（meta-auto.js 同等）
+        title, desc = build_title_desc(machine)
+        html_out = html_out.replace("<title>機種ページ | うちどころ。</title>",
+                                    f"<title>{esc(title)}</title>", 1)
+        html_out = html_out.replace(
+            '<meta name="description" content="機種ごとの狙い目記事ページです。結論と要点をスマホ向けに表示します。">',
+            f'<meta name="description" content="{esc(desc)}">', 1)
+
+        # OGP（SNSシェア用・meta-auto.js も後で更新するが静的にも焼く）
+        html_out = html_out.replace(
+            '<meta property="og:title" content="機種ページ | うちどころ。">',
+            f'<meta property="og:title" content="{esc(title)}">', 1)
+        html_out = html_out.replace(
+            '<meta property="og:description" content="機種ごとの狙い目記事ページです。結論と要点をスマホ向けに表示します。">',
+            f'<meta property="og:description" content="{esc(desc)}">', 1)
+        html_out = html_out.replace(
+            '<meta property="og:url" content="https://uchidokoro.com/machine.html">',
+            f'<meta property="og:url" content="{canonical_url}">', 1)
+
+        # h1 機種名
+        html_out = html_out.replace(
+            '<h1 id="machineTitle" class="page-title">機種名</h1>',
+            f'<h1 id="machineTitle" class="page-title">{esc(machine["name"])}</h1>', 1)
+
+        # 本文（lead / sections / factTable）をプリレンダ
+        dp = detail_dir / f"{slug}.json"
+        if dp.is_file():
+            try:
+                detail = json.loads(dp.read_text(encoding="utf-8"))
+            except Exception:
+                detail = {}
+            lead = detail.get("lead", "") or ""
+            if lead:
+                html_out = html_out.replace(
+                    '<p id="heroSub" class="hero-sub"></p>',
+                    f'<p id="heroSub" class="hero-sub">{esc(lead)}</p>', 1)
+            sections = detail.get("sections") or []
+            if sections:
+                sections_html = "".join(render_section(s) for s in sections)
+                html_out = html_out.replace(
+                    '<div id="articleSections"></div>',
+                    f'<div id="articleSections">{sections_html}</div>', 1)
+            fact = detail.get("factTable") or [["機種名", machine["name"]]]
+            rows_html = "".join(f"<tr><th>{esc(r[0])}</th><td>{esc(r[1])}</td></tr>"
+                                for r in fact if len(r) >= 2)
+            html_out = html_out.replace(
+                '<tbody id="infoTableBody"></tbody>',
+                f'<tbody id="infoTableBody">{rows_html}</tbody>', 1)
+            prerendered += 1
+
         out_dir = BASE / "machines" / slug
         out_dir.mkdir(parents=True, exist_ok=True)
-        (out_dir / "index.html").write_text(html, encoding="utf-8", newline="\n")
+        (out_dir / "index.html").write_text(html_out, encoding="utf-8", newline="\n")
         generated += 1
 
-    print(f"生成完了: {generated} 機種 / machines/{{slug}}/index.html")
+    print(f"生成完了: {generated} 機種 / machines/{{slug}}/index.html（うち本文プリレンダ {prerendered} 機種）")
 
 
 if __name__ == "__main__":

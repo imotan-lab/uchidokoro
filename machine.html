@@ -199,7 +199,7 @@
     matched.forEach(m => {
       const item = document.createElement("a");
       item.className = "header-dropdown-item";
-      item.href = "machine.html?slug=" + m.slug;
+      item.href = "/machines/" + m.slug + "/";
       item.textContent = m.name;
       dropdown.appendChild(item);
     });
@@ -706,8 +706,9 @@ function resolveMachineSlug() {
     judge();
   }
 
-  // 基本情報テーブル
+  // 基本情報テーブル（プリレンダ済みHTMLをクリアしてJS版で置換・二重描画防止）
   const infoBody = document.getElementById("infoTableBody");
+  infoBody.innerHTML = "";
   (detail?.factTable || [["機種名", machine.name]]).forEach(([th, td]) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `<th>${th}</th><td>${td}</td>`;
@@ -720,8 +721,9 @@ function resolveMachineSlug() {
     return text.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
   }
 
-  // 詳細セクション
+  // 詳細セクション（プリレンダ済みHTMLをクリアしてJS版で置換・二重描画防止）
   const articleSections = document.getElementById("articleSections");
+  articleSections.innerHTML = "";
   (detail?.sections || []).forEach(section => {
     const div = document.createElement("div");
     div.className = "article-item";

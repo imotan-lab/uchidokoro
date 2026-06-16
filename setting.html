@@ -166,8 +166,8 @@ fetch("assets/data/machines.json").then(r=>r.json()).then(machines=>{
   document.getElementById("heroSub").textContent = machineConfig
     ? m.name + "の小役カウンターツール。" + (machineConfig.heroText || "ゲーム数・小役をカウントしながら入力すると設定期待度がリアルタイムで更新されます。")
     : m.name + "の小役カウンターツール。現在データ準備中です。対応機種は順次追加していきます。";
-  document.getElementById("articleLinkNav").href = "machine.html?slug=" + slug;
-  document.getElementById("backLink").href = "machine.html?slug=" + slug;
+  document.getElementById("articleLinkNav").href = "/machines/" + slug + "/";
+  document.getElementById("backLink").href = "/machines/" + slug + "/";
   document.title = m.name + " 小役カウンター ポチポチくん | うちどころ。";
   const meta = document.querySelector('meta[name="description"]');
   if(meta) meta.content = m.name + "の小役カウンターツール。BB確率・小役確率をリアルタイムで計算し、設定1〜6の期待度をベイズ推定で表示します。";

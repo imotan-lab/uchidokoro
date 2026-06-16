@@ -555,6 +555,50 @@ def check_19_lead_markdown(machines: list) -> list[str]:
     return ngs
 
 
+def check_20_old_url_links(machines: list) -> list[str]:
+    """HTML内に旧URL形式 machine.html?slug= の内部リンクが残っていないか
+
+    トップ(index.html)等から旧URLへリンクすると、canonicalで正規化はされても
+    内部リンク評価が分散しインデックス促進が弱まる。正規URL /machines/{slug}/ に統一する。
+    sitemap.xml は check_4 が担当。404.html の旧パス救済は別物なので対象外。
+    """
+    ngs = []
+    targets = list(BASE.glob("*.html")) + list(BASE.glob("machines/*/index.html"))
+    for f in targets:
+        if not f.is_file() or f.name == "404.html":
+            continue
+        text = load_text(f)
+        c = text.count("machine.html?slug=")
+        if c:
+            rel = f.relative_to(BASE).as_posix()
+            ngs.append(f"{rel}: 旧URLリンク machine.html?slug= が{c}箇所 → /machines/{{slug}}/ に統一")
+    return ngs
+
+
+def check_21_prerender(machines: list) -> list[str]:
+    """機種ページが静的HTMLにプリレンダ済みか（空シェル再発防止）
+
+    build_machine_pages.py 未実行や旧ビルドだと title/h1/本文が JS待ちの空シェルに戻り、
+    「クロール済み・インデックス未登録」やAdSense「中身なし」を招く。静的HTMLに
+    機種名h1・本文が焼かれているかを検査する。
+    """
+    ngs = []
+    for m in machines:
+        slug = m["slug"]
+        p = BASE / "machines" / slug / "index.html"
+        if not p.is_file():
+            continue  # check_6 が担当
+        text = load_text(p)
+        if "<title>機種ページ | うちどころ。</title>" in text:
+            ngs.append(f"machines/{slug}/index.html: title が空シェルのまま（build_machine_pages.py 要実行）")
+        if '>機種名</h1>' in text:
+            ngs.append(f"machines/{slug}/index.html: h1 が『機種名』プレースホルダのまま（要プリレンダ）")
+        # articleSections が空（先行記事除く・本文があるはず）
+        if '<div id="articleSections"></div>' in text and m.get("status") != "preview":
+            ngs.append(f"machines/{slug}/index.html: 本文(articleSections)が空シェルのまま（要プリレンダ）")
+    return ngs
+
+
 CHECKS = [
     ("1_インラインstyle", check_1_inline_style),
     ("2_サブパス残骸", check_2_old_subpath),
@@ -575,6 +619,8 @@ CHECKS = [
     ("17_他サイト名露出", check_17_external_site_names),
     ("18_サブディレクトリbase_href", check_18_subdir_base_href),
     ("19_lead内Markdown残留", check_19_lead_markdown),
+    ("20_旧URLリンク残留", check_20_old_url_links),
+    ("21_プリレンダ検証", check_21_prerender),
 ]
 
 
