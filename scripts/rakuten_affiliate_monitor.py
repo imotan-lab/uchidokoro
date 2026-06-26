@@ -270,7 +270,8 @@ def run_check(dry_run=False):
             or rk["uriage_kensu"] > prev_rk.get("uriage_kensu", 0)
         ):
             earned.append(
-                f"【楽天アフィリエイト】\n"
+                f"【楽天アフィリエイト（うちどころ＋わんさかんさい合算）】\n"
+                f"  ※楽天はアカウント単位の合算成果。どちらのサイト分かは区別不可\n"
                 f"  成果報酬: ¥{prev_rk.get('seika_hoshu', 0):,} → ¥{rk['seika_hoshu']:,}\n"
                 f"  売上件数: {prev_rk.get('uriage_kensu', 0)} → {rk['uriage_kensu']}件\n"
                 f"  レポート: https://affiliate.rakuten.co.jp/"
