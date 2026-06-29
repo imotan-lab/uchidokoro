@@ -164,7 +164,7 @@ def check_6_machine_files(machines: list) -> list[str]:
             ngs.append(f"machine-details/{slug}.json がない")
     # 重複解消でリダイレクト化した旧slug（machines.jsonからは削除済みだが /machines/{slug}/ に
     # mhrise等への client-side リダイレクトを残しているため孤児扱いしない）
-    REDIRECT_SLUGS = {"monhun_rise"}  # → mhrise に統合(2026-06-29)
+    REDIRECT_SLUGS = {"monhun_rise", "okidoki_duo_encore"}  # → mhrise / okidoki_encore に統合(2026-06-29)
     # 逆: machinesディレクトリにあるが machines.json にない
     machines_dir = BASE / "machines"
     if machines_dir.is_dir():
@@ -602,6 +602,33 @@ def check_21_prerender(machines: list) -> list[str]:
     return ngs
 
 
+def check_22_duplicate_machines(machines: list) -> list[str]:
+    """同一機種が複数slugで二重登録されていないか（名前正規化での衝突検知）。
+    monhun_rise/mhrise・okidoki系のような重複コンテンツ(AdSense上の重複ページ)を防ぐ。
+    プレフィックス(スマスロ/L等)と記号を除いた正規化名が一致する複数slugを『重複の疑い』として報告。
+    別シリーズの別機種(北斗2種・炎炎1/2等)は正規化名が異なるため誤検知しない。"""
+    import unicodedata
+    prefix = re.compile(r"^(スマスロ|スマパチ|パチスロ|ぱちすろ|L|Ｌ|P|Ｐ|新|新台)\s*")
+
+    def norm(name: str) -> str:
+        s = unicodedata.normalize("NFKC", name or "")
+        prev = None
+        while prev != s:
+            prev = s
+            s = prefix.sub("", s).strip()
+        s = re.sub(r"[\s　・/／!！?？()（）\-—~〜【】\[\]、。,.'\"]+", "", s)
+        return s.lower()
+
+    by_norm: dict[str, list] = {}
+    for m in machines:
+        by_norm.setdefault(norm(m["name"]), []).append(m["slug"])
+    ngs = []
+    for n, slugs in by_norm.items():
+        if len(slugs) > 1:
+            ngs.append(f"同一機種が複数slugで二重登録の疑い: {sorted(slugs)}（正規化名='{n}'）→統合＋リダイレクト要")
+    return ngs
+
+
 CHECKS = [
     ("1_インラインstyle", check_1_inline_style),
     ("2_サブパス残骸", check_2_old_subpath),
@@ -624,6 +651,7 @@ CHECKS = [
     ("19_lead内Markdown残留", check_19_lead_markdown),
     ("20_旧URLリンク残留", check_20_old_url_links),
     ("21_プリレンダ検証", check_21_prerender),
+    ("22_機種重複検知", check_22_duplicate_machines),
 ]
 
 
