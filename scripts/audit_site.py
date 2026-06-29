@@ -162,11 +162,14 @@ def check_6_machine_files(machines: list) -> list[str]:
             ngs.append(f"machines/{slug}/index.html がない")
         if not (BASE / "assets" / "data" / "machine-details" / f"{slug}.json").is_file():
             ngs.append(f"machine-details/{slug}.json がない")
+    # 重複解消でリダイレクト化した旧slug（machines.jsonからは削除済みだが /machines/{slug}/ に
+    # mhrise等への client-side リダイレクトを残しているため孤児扱いしない）
+    REDIRECT_SLUGS = {"monhun_rise"}  # → mhrise に統合(2026-06-29)
     # 逆: machinesディレクトリにあるが machines.json にない
     machines_dir = BASE / "machines"
     if machines_dir.is_dir():
         for d in machines_dir.iterdir():
-            if d.is_dir() and d.name not in slugs:
+            if d.is_dir() and d.name not in slugs and d.name not in REDIRECT_SLUGS:
                 ngs.append(f"machines/{d.name}/ がmachines.jsonに無い（孤児ディレクトリ）")
     # 逆: machine-detailsにあるが machines.json にない
     detail_dir = BASE / "assets" / "data" / "machine-details"

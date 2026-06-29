@@ -4230,10 +4230,31 @@
       "もんはんらいず",
       "MHRise",
       "モンハン",
-      "モンスターハンターライズ"
+      "モンスターハンターライズ",
+      "もんはん",
+      "MHR"
     ],
     "checker": {
       "unit": "G",
+      "defaultRate": "eq56",
+      "exchangeRates": [
+        {
+          "key": "eq56",
+          "label": "5.6枚"
+        },
+        {
+          "key": "rate55",
+          "label": "5.5枚"
+        },
+        {
+          "key": "rate50",
+          "label": "5.0枚"
+        },
+        {
+          "key": "rate45",
+          "label": "4.5枚"
+        }
+      ],
       "modes": [
         {
           "key": "normal",
@@ -4241,21 +4262,48 @@
         },
         {
           "key": "suru",
-          "label": "クエストスルー"
+          "label": "スルー天井",
+          "hasSuru": true
         }
       ],
       "normal": {
-        "excellent": 999,
+        "excellent": 850,
         "good": 660,
-        "caution": 450,
-        "note": "天井AT間999G+α。等価660G~/5.6枚670G~/現金740G~から狙い目。カムラポイント天井（最大600pt）もあり。"
+        "caution": 500,
+        "byRate": {
+          "eq56": {
+            "excellent": 850,
+            "good": 670,
+            "caution": 520,
+            "note": "5.6枚交換なら670Gから狙い目。天井999G+前兆で赤7以上確定。"
+          },
+          "rate55": {
+            "excellent": 850,
+            "good": 690,
+            "caution": 540,
+            "note": "5.5枚交換なら690Gから。"
+          },
+          "rate50": {
+            "excellent": 900,
+            "good": 720,
+            "caution": 560,
+            "note": "5.0枚交換なら720Gから。"
+          },
+          "rate45": {
+            "excellent": 900,
+            "good": 740,
+            "caution": 580,
+            "note": "4.5枚交換なら740Gから。"
+          }
+        },
+        "note": "天井999G+前兆で赤7ボーナス以上確定。AT終了後1G回してヤメ。"
       },
       "suru": {
-        "suruMax": 6,
         "excellent": 6,
         "good": 5,
         "caution": 4,
-        "note": "6スルーで7回目クエスト成功確定。等価・持ちメダルは5スルー~/現金は6スルー~から狙い目。"
+        "suruMax": 6,
+        "note": "クエスト6スルー後の7回目で赤7ボーナス以上確定。5スルーから狙い目。"
       }
     },
     "limit": 999,
@@ -4263,6 +4311,12 @@
       "title": "モンスターハンターライズ",
       "kind": "ゲーム",
       "search": "モンスターハンターライズ"
+    },
+    "strategyByRate": {
+      "eq56": "5.6枚670G〜",
+      "rate55": "5.5枚690G〜",
+      "rate50": "5.0枚720G〜",
+      "rate45": "4.5枚740G〜"
     }
   },
   {
@@ -6586,105 +6640,6 @@
       "title": "ダンベル何キロ持てる?",
       "kind": "漫画",
       "search": "ダンベル何キロ持てる 漫画"
-    }
-  },
-  {
-    "slug": "monhun_rise",
-    "name": "Lモンスターハンターライズ",
-    "seo": {
-      "title": "モンスターハンターライズ 狙い目・天井・期待値まとめ"
-    },
-    "info": "スマスロAT",
-    "strategy": "等価660G〜 / スルー5回〜 / ポイント380pt〜",
-    "strategyByRate": {
-      "eq56": "5.6枚670G〜",
-      "rate55": "5.5枚690G〜",
-      "rate50": "5.0枚720G〜",
-      "rate45": "4.5枚740G〜"
-    },
-    "aliases": [
-      "モンハン",
-      "モンハンライズ",
-      "もんはん",
-      "MHR"
-    ],
-    "checker": {
-      "unit": "G",
-      "defaultRate": "eq56",
-      "exchangeRates": [
-        {
-          "key": "eq56",
-          "label": "5.6枚"
-        },
-        {
-          "key": "rate55",
-          "label": "5.5枚"
-        },
-        {
-          "key": "rate50",
-          "label": "5.0枚"
-        },
-        {
-          "key": "rate45",
-          "label": "4.5枚"
-        }
-      ],
-      "modes": [
-        {
-          "key": "normal",
-          "label": "通常"
-        },
-        {
-          "key": "suru",
-          "label": "スルー天井",
-          "hasSuru": true
-        }
-      ],
-      "normal": {
-        "excellent": 850,
-        "good": 660,
-        "caution": 500,
-        "byRate": {
-          "eq56": {
-            "excellent": 850,
-            "good": 670,
-            "caution": 520,
-            "note": "5.6枚交換なら670Gから狙い目。天井999G+前兆で赤7以上確定。"
-          },
-          "rate55": {
-            "excellent": 850,
-            "good": 690,
-            "caution": 540,
-            "note": "5.5枚交換なら690Gから。"
-          },
-          "rate50": {
-            "excellent": 900,
-            "good": 720,
-            "caution": 560,
-            "note": "5.0枚交換なら720Gから。"
-          },
-          "rate45": {
-            "excellent": 900,
-            "good": 740,
-            "caution": 580,
-            "note": "4.5枚交換なら740Gから。"
-          }
-        },
-        "note": "天井999G+前兆で赤7ボーナス以上確定。AT終了後1G回してヤメ。"
-      },
-      "suru": {
-        "excellent": 6,
-        "good": 5,
-        "caution": 4,
-        "suruMax": 6,
-        "note": "クエスト6スルー後の7回目で赤7ボーナス以上確定。5スルーから狙い目。"
-      }
-    },
-    "limit": 999,
-    "original": {
-      "title": "モンスターハンターライズ",
-      "kind": "ゲーム",
-      "search": "モンスターハンターライズ"
     }
   },
   {
