@@ -6328,7 +6328,7 @@
             "note": "4.5枚交換はCZ間500G基準です。スルー天井やリセットの浅いラインとは切り分けて使う方が安全です。"
           }
         },
-        "note": "CZ間天井600G+α。400G〜でプラス域。液晶のG数カウンタで確認。"
+        "note": "CZ間天井750G+α。400G〜でプラス域。液晶のG数カウンタで確認。"
       },
       "suru": {
         "suruMax": 5,
@@ -7349,9 +7349,9 @@
       "title": "スロット ソードアート・オンライン 狙い目・天井・期待値まとめ"
     },
     "info": "スマスロAT",
-    "strategy": "CZ間210G〜 / ボーナス間500G〜 / 4スルー〜",
+    "strategy": "CZ間210G〜 / ボーナス間580G〜 / 4スルー〜",
     "strategyByRate": {
-      "eq56": "CZ間210G〜 / ボーナス間500G〜",
+      "eq56": "CZ間210G〜 / ボーナス間580G〜",
       "rate55": "CZ間230G〜 / ボーナス間600G〜",
       "rate50": "CZ間260G〜 / ボーナス間650G〜",
       "rate45": "CZ間300G〜 / ボーナス間720G〜"
@@ -7471,13 +7471,13 @@
         "bonus_gap": {
           "label": "ボーナス間",
           "excellent": 700,
-          "good": 500,
+          "good": 580,
           "caution": 450,
           "note": "ボーナス（AT・CZ）間ゲーム数。天井999G。設定変更後はリセット。",
           "byRate": {
             "eq56": {
               "excellent": 700,
-              "good": 500,
+              "good": 580,
               "caution": 450
             },
             "rate55": {
@@ -7983,9 +7983,9 @@
       },
       "reset": {
         "excellent": 850,
-        "good": 600,
-        "caution": 400,
-        "note": "設定変更後は天井が850G+αに短縮。リセット台は550G~から候補。"
+        "good": 350,
+        "caution": 200,
+        "note": "設定変更後は天井が850G+αに短縮。リセット台は350G~から候補。"
       }
     },
     "limit": 1250,
@@ -8366,7 +8366,7 @@
       "GODZILLA"
     ],
     "checker": {
-      "unit": "G",
+      "unit": "pt",
       "modes": [
         {
           "key": "normal",
@@ -8378,18 +8378,18 @@
         }
       ],
       "normal": {
-        "excellent": 2000,
-        "good": 1500,
-        "caution": 1000,
-        "limit": 2550
+        "excellent": 800,
+        "good": 570,
+        "caution": 400,
+        "limit": 1000
       },
       "reset": {
-        "excellent": 700,
-        "good": 500,
-        "caution": 150,
-        "limit": 1050
+        "excellent": 350,
+        "good": 150,
+        "caution": 80,
+        "limit": 450
       },
-      "limit": 2550
+      "limit": 1000
     },
     "original": {
       "title": "ゴジラ",
