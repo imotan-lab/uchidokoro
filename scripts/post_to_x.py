@@ -48,7 +48,7 @@ LOG_DIR = Path("C:/Users/imao_/Documents/uchidokoro/logs")
 DETACHED_LOG = LOG_DIR / "post_to_x_detached.log"
 
 ACCOUNT = "uchidokoro"
-MACHINE_URL_BASE = "https://uchidokoro.com/machine.html?slug="
+MACHINE_URL_BASE = "https://uchidokoro.com/machines/"
 
 
 def _log(msg: str, level: str = "INFO"):
@@ -172,7 +172,7 @@ def build_post_text(entry: dict, release_date: str | None) -> str:
     name = entry.get("name", "")
     slug = entry.get("slug", "")
     status = entry.get("status", "complete")
-    url = f"{MACHINE_URL_BASE}{slug}"
+    url = f"{MACHINE_URL_BASE}{slug}/"
     hashtags = build_hashtags(entry)
     is_preview = status == "preview"
 
