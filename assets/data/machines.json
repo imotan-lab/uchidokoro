@@ -11048,13 +11048,12 @@
   {
     "slug": "ultraman_final",
     "name": "L ULTRAMAN 最終決戦",
-    "status": "preview",
     "release_date": "2026-07-05",
     "seo": {
       "title": "L ULTRAMAN 最終決戦 狙い目・天井・噂まとめ"
     },
     "info": "スマスロAT",
-    "strategy": "解析待ち",
+    "strategy": "CZ間 等価390G〜 / AT間 等価840G〜",
     "aliases": [
       "ULTRAMAN",
       "ウルトラマン",
@@ -11066,8 +11065,32 @@
       "最終決戦",
       "うるとらまんさいしゅうけっせん"
     ],
-    "checker": null,
-    "limit": null,
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "CZ間"
+        },
+        {
+          "key": "at",
+          "label": "AT間"
+        }
+      ],
+      "normal": {
+        "excellent": 700,
+        "good": 450,
+        "caution": 390,
+        "note": "CZ間天井700G+α。等価390G〜・5.6枚400G〜・現金450G〜が狙い目。リセット後は500G+αに短縮。"
+      },
+      "at": {
+        "excellent": 1500,
+        "good": 920,
+        "caution": 840,
+        "note": "AT間天井1500G+α。等価840G〜・5.6枚850G〜・現金920G〜が狙い目。リセット後は1000G+αに短縮。CZ間と混同しないよう、どちらの基準で見るかを先に固定してください。"
+      }
+    },
+    "limit": 1500,
     "original": {
       "title": "ウルトラマン",
       "kind": "特撮",
@@ -11077,13 +11100,12 @@
   {
     "slug": "karakuri2",
     "name": "Lからくりサーカス2",
-    "status": "preview",
     "release_date": "2026-07-06",
     "seo": {
       "title": "Lからくりサーカス2 狙い目・天井・解析まとめ"
     },
     "info": "スマスロAT",
-    "strategy": "解析待ち",
+    "strategy": "等価 液晶680G〜 / 5.6枚690G〜 / 現金760G〜",
     "aliases": [
       "からくりサーカス2",
       "カラサー2",
@@ -11092,8 +11114,22 @@
       "karakuri2",
       "からくりサーカス2スマスロ"
     ],
-    "checker": null,
-    "limit": null,
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        }
+      ],
+      "normal": {
+        "excellent": 1101,
+        "good": 760,
+        "caution": 680,
+        "note": "CZ間天井は液晶1200G+α（実ゲーム数890G+α）・AT間天井2500G。等価は液晶680G〜・5.6枚690G〜・現金760G〜が狙い目。チェッカーは液晶G数基準。リセット後は液晶天井500G+αに短縮（リセット狙い目は解析待ち）。"
+      }
+    },
+    "limit": 1200,
     "original": {
       "title": "からくりサーカス",
       "kind": "漫画",
@@ -11144,13 +11180,12 @@
   {
     "slug": "kerot5bt",
     "name": "スマスロケロット5BT",
-    "status": "preview",
     "release_date": "2026-07-06",
     "seo": {
       "title": "スマスロケロット5BT 天井・狙い目・噂まとめ"
     },
     "info": "スマスロノーマル",
-    "strategy": "解析待ち",
+    "strategy": "設定狙い主体・天井なし",
     "aliases": [
       "ケロット5BT",
       "ケロット5",
@@ -11159,19 +11194,32 @@
       "kerot5bt",
       "ケロット5BTスマスロ"
     ],
-    "checker": null,
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "設定狙い"
+        }
+      ],
+      "normal": {
+        "excellent": 99999,
+        "good": 99999,
+        "caution": 99999,
+        "note": "ノーマルタイプのため天井はありません。設定狙い主体の機種です。ボーナス合算とRB確率で設定を判断してください。"
+      }
+    },
     "limit": null
   },
   {
     "slug": "nangoku_special",
     "name": "L南国育ちSPECIAL",
-    "status": "preview",
     "release_date": "2026-07-06",
     "seo": {
       "title": "L南国育ちSPECIAL 天井・狙い目・噂まとめ"
     },
     "info": "スマスロAT",
-    "strategy": "解析待ち",
+    "strategy": "等価470G〜 / 5.6枚480G〜 / 現金550G〜 / リセット台0G〜",
     "aliases": [
       "南国育ちSPECIAL",
       "南国育ちスペシャル",
@@ -11181,19 +11229,42 @@
       "nangoku_special",
       "L南国育ちSPECIALスマスロ"
     ],
-    "checker": null,
-    "limit": null
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        },
+        {
+          "key": "reset",
+          "label": "リセット"
+        }
+      ],
+      "normal": {
+        "excellent": 799,
+        "good": 550,
+        "caution": 470,
+        "note": "天井最大799G+α＋ボーナス間スイカ9回。等価470G〜・5.6枚480G〜・現金550G〜が狙い目。"
+      },
+      "reset": {
+        "excellent": 500,
+        "good": 0,
+        "caution": 0,
+        "note": "設定変更後は天井最大500G+αに短縮＋約70%でチャンスモード以上。リセット濃厚台は0G〜から狙えます。"
+      }
+    },
+    "limit": 799
   },
   {
     "slug": "yabachiba",
     "name": "Lヤバチバ",
-    "status": "preview",
     "release_date": "2026-07-06",
     "seo": {
       "title": "Lヤバチバ 狙い目・天井・スペックまとめ"
     },
     "info": "スマスロAT",
-    "strategy": "解析待ち",
+    "strategy": "等価700G〜 / 5.6枚710G〜 / 現金790G〜",
     "aliases": [
       "ヤバチバ",
       "やばちば",
@@ -11203,19 +11274,32 @@
       "ヤバチバループ",
       "虹7ボーナス"
     ],
-    "checker": null,
-    "limit": null
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        }
+      ],
+      "normal": {
+        "excellent": 999,
+        "good": 790,
+        "caution": 700,
+        "note": "天井999G+α or ボーナス間チェリー40回。等価700G〜・5.6枚710G〜・現金790G〜が狙い目。リセット後はチェリー規定回数が30回に短縮（G数のリセット狙い目は解析待ち）。"
+      }
+    },
+    "limit": 999
   },
   {
     "slug": "rotis",
     "name": "スマスロ ローティス",
-    "status": "preview",
     "release_date": "2026-07-06",
     "seo": {
       "title": "スマスロ ローティス 狙い目・天井・スペックまとめ"
     },
     "info": "スマスロAT",
-    "strategy": "解析待ち",
+    "strategy": "等価580G〜 / 5.6枚590G〜 / 現金650G〜",
     "aliases": [
       "ローティス",
       "ろーてぃす",
@@ -11225,7 +11309,21 @@
       "SBB",
       "SBBストックシステム"
     ],
-    "checker": null,
-    "limit": null
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        }
+      ],
+      "normal": {
+        "excellent": 900,
+        "good": 650,
+        "caution": 580,
+        "note": "天井最大900G（モードにより短縮あり）。等価580G〜・5.6枚590G〜・現金650G〜が狙い目。リセット後は約25%で天井200Gの朝一モードへ。"
+      }
+    },
+    "limit": 900
   }
 ]
