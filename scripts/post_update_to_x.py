@@ -47,7 +47,7 @@ LOG_DIR = Path("C:/Users/imao_/Documents/uchidokoro/logs")
 DETACHED_LOG = LOG_DIR / "post_update_to_x_detached.log"
 
 ACCOUNT = "uchidokoro"
-MACHINE_URL_BASE = "https://uchidokoro.com/machine.html?slug="
+MACHINE_URL_BASE = "https://uchidokoro.com/machines/"  # 正規canonical（旧machine.html?slug=形式は使わない）
 
 
 def _log(msg: str, level: str = "INFO"):
@@ -152,7 +152,7 @@ def build_promotion_text(machine: dict, ceiling: str = "", strategy: str = "") -
     引数 ceiling/strategy は後方互換のため受け取るだけで文面には使わない。"""
     name = machine.get("name", "")
     slug = machine.get("slug", "")
-    url = f"{MACHINE_URL_BASE}{slug}"
+    url = f"{MACHINE_URL_BASE}{slug}/"
     hashtags = build_hashtags(machine)
 
     def build(nm: str) -> str:
@@ -179,7 +179,7 @@ def build_correction_text(machine: dict, change: str = "") -> str:
     引数 change は後方互換のため受け取るだけで文面には使わない。"""
     name = machine.get("name", "")
     slug = machine.get("slug", "")
-    url = f"{MACHINE_URL_BASE}{slug}"
+    url = f"{MACHINE_URL_BASE}{slug}/"
     hashtags = build_hashtags(machine)
 
     def build(nm: str) -> str:
