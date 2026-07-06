@@ -11103,13 +11103,12 @@
   {
     "slug": "sengoku_collection6",
     "name": "L戦国コレクション6",
-    "status": "preview",
     "release_date": "2026-07-06",
     "seo": {
       "title": "L戦国コレクション6 天井・狙い目・解析まとめ"
     },
     "info": "スマスロAT",
-    "strategy": "天井999G+α/最大6周期 リセット後3周期短縮(朝一リセット狙い)",
+    "strategy": "等価580G〜 / 5.6枚590G〜 / 現金720G〜",
     "aliases": [
       "戦国コレクション6",
       "戦コレ6",
@@ -11120,8 +11119,22 @@
       "L戦国コレクション6",
       "戦国コレクション6スマスロ"
     ],
-    "checker": null,
-    "limit": null,
+    "checker": {
+      "unit": "G",
+      "modes": [
+        {
+          "key": "normal",
+          "label": "通常"
+        }
+      ],
+      "normal": {
+        "excellent": 850,
+        "good": 720,
+        "caution": 580,
+        "note": "G数天井999G+αと周期天井最大6周期の複合型。等価580G〜・5.6枚590G〜・現金720G〜が狙い目。リセット後は周期天井が最大3周期に短縮（リセット狙い目ラインは解析待ち）。"
+      }
+    },
+    "limit": 999,
     "original": {
       "title": "戦国コレクション",
       "kind": "ゲーム",

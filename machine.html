@@ -290,7 +290,7 @@ function resolveMachineSlug() {
     const noSettingDiff = ['enen2','karakuri','kaguya','valvrave2','sf5','chibaryo2','tekken6','tokyo_ghoul','koukaku','biohazard','tensura','dumbbell','mhrise','sengoku_otome4','sao','bandori','hanma_baki','yorumungando','tolove_darkness','zenigata5','enen','madomagi_forte','burning_express','akudama','neoplanet','lupin_daikokaisha','zettai_shougeki4','babel','milliongod_kiseki','animal_dotch'];
     if (noSettingDiff.includes(slug)) return { available: false, reason: "小役による設定差なし" };
     // 小役確率がまだ解析されていない機種
-    const noAnalysis = ['iza_bancho','kyokousuiri','shinuchi_yoshimune','isekai_quattro_bt','triple_crown_7','revue_starlight','mr_juggler','mushoku','railgun2','gundam_seed','youjitsu','midoridon_viva','godzilla','code_geass','kengan_ashura','discup_ur','rezero2','goji_eva','prismnana','basilisk_tenzen','shake_bt','kurea_bt','gineiden_dnt','eva_yakusoku','bofuri','dmc5_st','darlifra','nanatsuma','tenken','valvrave','zombieland_saga','gundam_uc2','dark_haibi'];
+    const noAnalysis = ['iza_bancho','kyokousuiri','shinuchi_yoshimune','isekai_quattro_bt','triple_crown_7','revue_starlight','mr_juggler','mushoku','railgun2','gundam_seed','youjitsu','midoridon_viva','godzilla','code_geass','kengan_ashura','discup_ur','rezero2','goji_eva','prismnana','basilisk_tenzen','shake_bt','kurea_bt','gineiden_dnt','eva_yakusoku','bofuri','dmc5_st','darlifra','nanatsuma','tenken','valvrave','zombieland_saga','gundam_uc2','dark_haibi','sengoku_collection6'];
     if (noAnalysis.includes(slug)) return { available: false, reason: "小役確率が未解析のため非対応" };
     // ポチポチくん利用可能
     return { available: true, reason: "" };
