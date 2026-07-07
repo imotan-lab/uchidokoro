@@ -817,7 +817,9 @@ function resolveMachineSlug() {
 
     if (!related.length) return;
     relatedList.innerHTML = related.slice(0, 6).map(x =>
-      `<a class="related-item" href="/machines/${x.slug}/">${x.name}</a>`
+      // hrefをjoinで組み立てる（テンプレート文字列に「/machines/${...}/」を書くと、Googlebotが
+      // JSソース内のURLらしき文字列として拾い、幽霊URL /machines/$%7Bx.slug%7D/ をクロール→404になるため）
+      `<a class="related-item" href="${["", "machines", x.slug, ""].join("/")}">${x.name}</a>`
     ).join("");
     relatedBlock.classList.remove("is-hidden");
   })();

@@ -223,7 +223,7 @@ function formatReleaseDate(dateStr){
           ? '<span class="badge badge--preview">⚠ 先行記事</span>'
           : '<span class="badge badge--new">🆕 新台</span>';
         row.innerHTML = `
-          <a class="list-row-main" href="/machines/${machine.slug}/">
+          <a class="list-row-main" href="${["", "machines", machine.slug, ""].join("/")}">
             <span class="machine-name">${machine.name} ${statusBadge}</span>
             <span class="machine-strategy machine-strategy--upcoming">導入予定: ${relLabel}</span>
           </a>
@@ -266,7 +266,7 @@ function formatReleaseDate(dateStr){
           ? '<span class="machine-strategy machine-strategy--preview">⚠ 先行記事（解析待ち）</span>'
           : `<span class="machine-strategy">${machine.strategy || ''}</span>`;
         row.innerHTML = `
-          <a class="list-row-main" href="/machines/${machine.slug}/">
+          <a class="list-row-main" href="${["", "machines", machine.slug, ""].join("/")}">
             <span class="machine-name">${machine.name}${nameBadge}</span>
             ${stretegyCell}
           </a>
