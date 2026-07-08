@@ -8,44 +8,62 @@
 ★これが防ぐもの★
   2026-04のokidoki_gorgeous事故: 自動タスクが5サイト照合したと主張した上で
   「スロパチ=580G」という実在しない値を報告した（幻覚）。本スクリプトなら
-  スロパチのページを実際に取得→「580」をgrep→存在しない→不合格で止まる。
+  スロパチのページを実際に取得→quoteの中に「580」が無い→不合格で止まる。
 
 検証内容（1クレームごと）:
+  C0. クレームの体裁（quoteがラベル語を含む8文字以上 / value・identityが退化していない /
+      アーカイブ・キャッシュ・翻訳経由URLでない）＝退化クレームによる骨抜きを拒否
   C1. 出典URLが実在しHTTP 200で取得できる
-  C2. ページに機種の同定文字列（identity.must_contain 全て）が存在する
-      ＝旧機種・別機種のページを出典にしていないか（新旧混同ガード）
+  C2. ページ本文と<title>の★両方★に機種の同定文字列（identity.must_contain 全て）が存在する
+      ＝旧機種・別機種・一覧ページを出典にしていないか（新旧混同ガード。
+        旧機種ページの本文には後継機の告知が載ることがあるため、titleでの一致を必須にする）
   C3. 引用文（quote）が正規化一致でページ本文に実在する（逐語引用のみ合格）
-  C4. 主張値（value）がページ本文に存在する
+  C4. 主張値（value）の数値が★quoteの中に★存在する（引用文がその値の証拠になっているか。
+      ページのどこかに同じ数字がある、では合格しない）
 集計判定:
   critical=true のフィールドは「合格クレームの出典ドメインが min-domains 種類以上」必須。
-  critical=false は1ドメイン合格でOK。1つでも不足があれば exit 1（昇格禁止）。
+  ドメインはリダイレクト後の最終URLで数え、サブドメイン違い（m./www.等）は同一とみなす。
+  ★フィールド名に 天井/機械割/恩恵/短縮 を含むもの（「狙い目」を含む場合を除く）は、
+    claims側で critical:false と申告されていても critical=true に強制する（自己申告での緩和は不可）★
+  critical=false は1ドメイン合格でOK。
+  1つでも不合格クレームがあれば exit 1（昇格禁止）→ claimsは最小構成
+  （フィールドごとに必要ドメイン数ちょうど）で書くこと。冗長クレームの失敗も全体不合格になる。
 
 使い方:
   python scripts/verify_claims.py --file claims.json [--min-domains 2]
+  python scripts/verify_claims.py --selftest   （ネット不要の内蔵テスト）
   exit 0 = 全関門通過（無人昇格を許可してよい）/ exit 1 = 不合格（preview維持＋台帳へ）
 
 claims.json の形式:
 {
   "slug": "yabachiba",
-  "identity": { "must_contain": ["ヤバチバ", "2026"] },
+  "identity": { "must_contain": ["ヤバチバ"] },
   "claims": [
     { "field": "天井G数", "value": "999", "critical": true,
-      "url": "https://...", "quote": "999G+α" },
-    { "field": "狙い目等価", "value": "700", "critical": true,
+      "url": "https://...", "quote": "天井は999G+α" },
+    { "field": "狙い目等価", "value": "700", "critical": false,
       "url": "https://...", "quote": "狙い目(等価) 700G~" }
   ]
 }
-※quoteは出典ページの原文を一字一句そのまま書くこと（要約・言い換えは不合格になる）
-※同一フィールドを複数URL（別ドメイン）で複数クレームにするとドメイン数が満たせる
+★claims作成ルール（スクリプトが機械拒否する）★
+  ・quoteは出典ページの原文を一字一句そのまま。かつ数値だけでなくラベル語を含めて
+    正規化後8文字以上（例:「天井は999G+α」○ /「999G+α」×＝短すぎ不合格）
+  ・identity.must_contain は「対象機種の解析ページの<title>にも現れる語」だけを選ぶ
+    （機種名＋新旧判別トークン。例: ["からくりサーカス","2"]。年号・導入日は入れない）
+  ・アーカイブ（web.archive.org等）・Googleキャッシュ・翻訳経由のURLは出典に使えない
+  ・同一フィールドを複数URL（別ドメイン）で複数クレームにするとドメイン数が満たせる
 """
 import argparse
+import gzip
 import html
 import json
+import os
 import re
 import sys
 import unicodedata
 import urllib.parse
 import urllib.request
+from collections import namedtuple
 from datetime import datetime
 
 try:
@@ -54,41 +72,91 @@ except Exception:
     pass
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) uchidokoro-claim-verifier/1.0"
+LOG_DIR = "C:/Users/imao_/Documents/uchidokoro/logs"
+Page = namedtuple("Page", "text title final_url")
 _page_cache = {}
+_fetch_errors = {}
+
+_CJK = re.compile(r"[ぁ-ゟァ-ヿ一-鿿々]")
+_FORCE_CRITICAL = ("天井", "機械割", "恩恵", "短縮")
+_BLOCKED_HOSTS = (
+    "web.archive.org", "archive.org", "archive.today", "archive.ph", "archive.is",
+    "megalodon.jp", "webcache.googleusercontent.com", "translate.goog",
+)
+_JP_SLD = {"co.jp", "ne.jp", "or.jp", "go.jp", "ac.jp", "ed.jp", "lg.jp"}
 
 
 def _now():
     return datetime.now().strftime("%H:%M:%S")
 
 
-def fetch_text(url):
-    """URLを取得しタグを除去したプレーンテキストを返す。失敗はNone（安全側）。"""
+def log(msg):
+    """コンソールとファイルの両方に出力（鉄則: 全スクリプトにファイルログ）。"""
+    line = f"[{_now()}] {msg}"
+    print(line)
+    try:
+        path = os.path.join(LOG_DIR, f"verify_claims_{datetime.now().strftime('%Y-%m-%d')}.log")
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass  # ログ失敗で検証自体は止めない
+
+
+def _decode(raw, header_charset):
+    """charset宣言（HTTPヘッダ→meta）を優先し、最後は置換デコードで必ず文字列を返す。"""
+    candidates = []
+    if header_charset:
+        candidates.append(header_charset)
+    m = re.search(rb"charset=[\"\']?([A-Za-z0-9_\-]+)", raw[:4096])
+    if m:
+        candidates.append(m.group(1).decode("ascii", "ignore"))
+    candidates += ["utf-8", "cp932", "euc-jp"]
+    for enc in candidates:
+        try:
+            return raw.decode(enc)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return raw.decode("utf-8", errors="replace")  # 文字化けはC2同定で安全側不合格になる
+
+
+def fetch_page(url):
+    """URLを取得し (本文テキスト, title, 最終URL) を返す。失敗はNone（安全側）。"""
     if url in _page_cache:
         return _page_cache[url]
-    text = None
+    page = None
+    last_err = ""
     for attempt in range(2):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": UA})
+            req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Encoding": "gzip"})
             with urllib.request.urlopen(req, timeout=25) as res:
                 if res.status != 200:
+                    last_err = f"HTTP {res.status}"
                     continue
                 raw = res.read()
-            for enc in ("utf-8", "cp932", "euc-jp"):
+                final_url = res.geturl()
+                enc_hdr = (res.headers.get("Content-Encoding") or "").lower()
+                header_charset = res.headers.get_content_charset()
+            if enc_hdr == "gzip" or raw[:2] == b"\x1f\x8b":
                 try:
-                    text = raw.decode(enc)
-                    break
-                except UnicodeDecodeError:
-                    continue
-            if text is not None:
-                break
-        except Exception:
+                    raw = gzip.decompress(raw)
+                except Exception:
+                    pass
+            text = _decode(raw, header_charset)
+            tm = re.search(r"(?is)<title[^>]*>(.*?)</title>", text)
+            title = html.unescape(tm.group(1)) if tm else ""
+            body = re.sub(r"(?s)<!--.*?-->", " ", text)  # コメントアウトされた旧スペックを本文扱いしない
+            body = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", body)
+            body = re.sub(r"(?s)<[^>]+>", " ", body)
+            body = html.unescape(body)
+            page = Page(body, title, final_url)
+            break
+        except Exception as e:
+            last_err = f"{type(e).__name__}: {e}"
             continue
-    if text is not None:
-        text = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", text)
-        text = re.sub(r"(?s)<[^>]+>", " ", text)
-        text = html.unescape(text)
-    _page_cache[url] = text
-    return text
+    if page is None:
+        _fetch_errors[url] = last_err or "不明"
+    _page_cache[url] = page
+    return page
 
 
 _TRANS = str.maketrans({
@@ -107,21 +175,57 @@ def normalize(s):
 
 
 def domain_of(url):
-    d = urllib.parse.urlparse(url).netloc.lower()
-    return d[4:] if d.startswith("www.") else d
+    """ドメインをeTLD+1相当に丸める（m./www.等のサブドメイン違いを同一ソース扱いにする）。"""
+    d = urllib.parse.urlparse(url).netloc.lower().split(":")[0]
+    labels = [x for x in d.split(".") if x]
+    if len(labels) >= 3 and ".".join(labels[-2:]) in _JP_SLD:
+        return ".".join(labels[-3:])
+    if len(labels) >= 2:
+        return ".".join(labels[-2:])
+    return d
 
 
-def run(path, min_domains):
-    data = json.loads(open(path, encoding="utf-8").read())
+def is_blocked_source(url):
+    d = urllib.parse.urlparse(url).netloc.lower().split(":")[0]
+    return any(d == b or d.endswith("." + b) for b in _BLOCKED_HOSTS)
+
+
+def _value_tokens(nvalue):
+    return re.findall(r"\d+(?:\.\d+)?", nvalue)
+
+
+def _token_in(token, hay):
+    """数字トークンを桁境界付きで探す（"700"が"1700"や"70023"に誤一致しない）。"""
+    return re.search(rf"(?<![0-9.]){re.escape(token)}(?![0-9.])", hay) is not None
+
+
+def _ident_in(s, hay):
+    if s.isdigit():
+        return _token_in(s, hay)  # "2"等の判別トークンは桁境界付きで（"2026"に誤一致しない）
+    return s in hay
+
+
+def run_data(data, min_domains):
     slug = data.get("slug", "?")
-    identity = [normalize(s) for s in (data.get("identity") or {}).get("must_contain", [])]
+    raw_identity = (data.get("identity") or {}).get("must_contain", [])
     claims = data.get("claims") or []
-    print(f"[{_now()}] === 出典実在チェック開始: {slug}（クレーム{len(claims)}件・critical必要ドメイン数{min_domains}） ===")
+    log(f"=== 出典実在チェック開始: {slug}（クレーム{len(claims)}件・critical必要ドメイン数{min_domains}） ===")
+
+    identity = []
+    for s in raw_identity:
+        ns = normalize(str(s))
+        if not ns:
+            log("❌ identity.must_contain に正規化後空になる要素（空文字/空白のみ）→不合格")
+            return 1
+        identity.append(ns)
     if not identity:
-        print(f"[{_now()}] ❌ identity.must_contain が空（同定ガード必須）→不合格")
+        log("❌ identity.must_contain が空（同定ガード必須）→不合格")
+        return 1
+    if not any(len(s) >= 3 for s in identity):
+        log("❌ identity.must_contain に機種名に相当する3文字以上の要素が無い→不合格")
         return 1
     if not claims:
-        print(f"[{_now()}] ❌ クレーム0件→不合格")
+        log("❌ クレーム0件→不合格")
         return 1
 
     field_pass_domains = {}
@@ -129,39 +233,90 @@ def run(path, min_domains):
     any_fail = False
 
     for i, c in enumerate(claims):
+        if not isinstance(c, dict):
+            log(f"❌ claims[{i}] がオブジェクトでない→不合格")
+            any_fail = True
+            continue
         field = c.get("field", f"claim{i}")
         url = c.get("url", "")
         quote = c.get("quote", "")
         value = str(c.get("value", ""))
-        critical = bool(c.get("critical", True))
+
+        # criticalの自己申告での緩和は不可（天井/機械割/恩恵/短縮はコード側で強制）
+        declared = bool(c.get("critical", True))
+        forced = any(p in field for p in _FORCE_CRITICAL) and ("狙い目" not in field)
+        critical = declared or forced
+        if forced and not declared:
+            log(f"⚠ [{field}]: critical:false申告だがフィールド名により critical=true に強制（自己申告での緩和は不可）")
         field_critical[field] = field_critical.get(field, False) or critical
         tag = f"[{field}] {domain_of(url)}"
 
-        if not url or not quote or not value:
-            print(f"[{_now()}] ❌ {tag}: url/quote/value のいずれかが空→不合格")
+        # C0: クレームの体裁（退化クレーム拒否）
+        nquote = normalize(quote)
+        nvalue = normalize(value)
+        if not url or not nquote or not nvalue:
+            log(f"❌ {tag}: C0 url/quote/value のいずれかが空（正規化後空を含む）→不合格")
             any_fail = True
             continue
-        text = fetch_text(url)
-        if text is None:
-            print(f"[{_now()}] ❌ {tag}: C1 URL取得失敗（{url}）")
+        if len(nquote) < 8 or not _CJK.search(nquote):
+            log(f"❌ {tag}: C0 quoteが退化引用（8文字未満 or ラベル語なし）。数値だけでなく「天井」「狙い目」等のラベル語を含む原文を引用すること: 「{quote}」")
             any_fail = True
             continue
-        ntext = normalize(text)
-        missing_id = [s for s in identity if s not in ntext]
+        if is_blocked_source(url):
+            log(f"❌ {tag}: C0 アーカイブ/キャッシュ/翻訳経由のURLは出典に使えない（{url}）")
+            any_fail = True
+            continue
+
+        # C4: 値がquoteの中に実在するか（引用が値の証拠か）※C3より先に検査できる決定論チェック
+        tokens = _value_tokens(nvalue)
+        if tokens:
+            missing_tok = [t for t in tokens if not _token_in(t, nquote)]
+            if missing_tok:
+                log(f"❌ {tag}: C4 値の数値 {missing_tok} が引用文の中に無い（引用が値の証拠になっていない・取り違え/幻覚の疑い）")
+                any_fail = True
+                continue
+        elif nvalue not in nquote:
+            log(f"❌ {tag}: C4 値「{value}」が引用文の中に無い")
+            any_fail = True
+            continue
+
+        # C1: 取得
+        page = fetch_page(url)
+        if page is None:
+            log(f"❌ {tag}: C1 URL取得失敗（{url} / 理由: {_fetch_errors.get(url, '不明')}）")
+            any_fail = True
+            continue
+        if is_blocked_source(page.final_url):
+            log(f"❌ {tag}: C0 リダイレクト先がアーカイブ/キャッシュ（{page.final_url}）→出典に使えない")
+            any_fail = True
+            continue
+        ntext = normalize(page.text)
+        ntitle = normalize(page.title)
+
+        # C2: 同定（本文＋titleの両方。旧機種ページ・一覧ページ対策）
+        missing_id = [s for s in identity if not _ident_in(s, ntext)]
         if missing_id:
-            print(f"[{_now()}] ❌ {tag}: C2 同定文字列がページに無い {missing_id}（別機種/旧機種ページの疑い）")
+            log(f"❌ {tag}: C2 同定文字列がページ本文に無い {missing_id}（別機種/旧機種ページの疑い）")
             any_fail = True
             continue
-        if normalize(quote) not in ntext:
-            print(f"[{_now()}] ❌ {tag}: C3 引用文がページに実在しない（幻覚/言い換えの疑い）: 「{quote}」")
+        if not ntitle:
+            log(f"❌ {tag}: C2 <title>が取得できない（一覧/異常ページの疑い）→不合格")
             any_fail = True
             continue
-        if normalize(value) not in ntext:
-            print(f"[{_now()}] ❌ {tag}: C4 値 {value} がページに存在しない")
+        missing_title = [s for s in identity if not _ident_in(s, ntitle)]
+        if missing_title:
+            log(f"❌ {tag}: C2 同定文字列がページタイトルに無い {missing_title}（旧機種ページに後継機告知が載っているだけ・一覧ページ等の疑い。title=「{page.title.strip()[:60]}」）")
             any_fail = True
             continue
-        field_pass_domains.setdefault(field, set()).add(domain_of(url))
-        print(f"[{_now()}] ✅ {tag}: C1〜C4通過（quote実在確認）")
+
+        # C3: 逐語引用がページに実在
+        if nquote not in ntext:
+            log(f"❌ {tag}: C3 引用文がページに実在しない（幻覚/言い換えの疑い）: 「{quote}」")
+            any_fail = True
+            continue
+
+        field_pass_domains.setdefault(field, set()).add(domain_of(page.final_url))
+        log(f"✅ {tag}: C0〜C4通過（quote実在・値はquote内・title同定OK）")
 
     verdict_fail = any_fail
     for field, critical in field_critical.items():
@@ -170,21 +325,141 @@ def run(path, min_domains):
         status = "✅" if got >= need else "❌"
         if got < need:
             verdict_fail = True
-        print(f"[{_now()}] {status} 集計[{field}]: 合格ドメイン{got}/{need}必要{'（critical）' if critical else ''}")
+        log(f"{status} 集計[{field}]: 合格ドメイン{got}/{need}必要{'（critical）' if critical else ''}")
 
     if verdict_fail:
-        print(f"[{_now()}] === 判定: ❌ 不合格 → 無人昇格禁止（preview維持＋要確認台帳へ） ===")
+        log("=== 判定: ❌ 不合格 → 無人昇格禁止（preview維持＋要確認台帳へ） ===")
         return 1
-    print(f"[{_now()}] === 判定: ✅ 全関門通過 → 検証済みの値のみで昇格可 ===")
+    log("=== 判定: ✅ 全関門通過 → 検証済みの値のみで昇格可 ===")
     return 0
+
+
+def run(path, min_domains):
+    with open(path, encoding="utf-8") as f:
+        data = json.loads(f.read())
+    return run_data(data, min_domains)
+
+
+# ------------------------------------------------------------------
+# 内蔵セルフテスト（ネット不要・_page_cacheに合成ページを注入して検証）
+# ------------------------------------------------------------------
+def selftest():
+    new_body = ("Lからくりサーカス2の解析ページです。天井は999G+αでAT直撃の恩恵。"
+                "狙い目(等価) 700G~ が目安。機械割は97.7%～114.9%。設定6は114.9%。"
+                "参考: 中古価格 15800円")
+    new_title = "Lからくりサーカス2 天井・狙い目・やめどき解析"
+    old_body = ("からくりサーカスの解析ページです。天井は777G+α。"
+                "後継機『からくりサーカス2』が2026年に登場予定です。")
+    old_title = "からくりサーカス 天井・狙い目解析"
+
+    _page_cache.clear()
+    _page_cache["https://sloquest.test/karakuri2"] = Page(new_body, new_title, "https://sloquest.test/karakuri2")
+    _page_cache["https://m.sloquest.test/karakuri2"] = Page(new_body, new_title, "https://m.sloquest.test/karakuri2")
+    _page_cache["https://chonborista.jp/karakuri2"] = Page(new_body, new_title, "https://chonborista.jp/karakuri2")
+    _page_cache["https://sloquest.test/karakuri-old"] = Page(old_body, old_title, "https://sloquest.test/karakuri-old")
+    _page_cache["https://notitle.test/karakuri2"] = Page(new_body, "", "https://notitle.test/karakuri2")
+
+    IDENT = {"must_contain": ["からくりサーカス", "2"]}
+
+    def case(name, data, expect, min_domains=2):
+        got = run_data(data, min_domains)
+        ok = got == expect
+        log(f"{'✅' if ok else '❌'} selftest[{name}]: expect={expect} got={got}")
+        return ok
+
+    results = []
+    # 1. 正常系: critical天井2ドメイン＋狙い目1ドメイン → 合格
+    results.append(case("正常系合格", {
+        "slug": "karakuri2", "identity": IDENT, "claims": [
+            {"field": "天井G数", "value": "999", "critical": True,
+             "url": "https://sloquest.test/karakuri2", "quote": "天井は999G+α"},
+            {"field": "天井G数", "value": "999", "critical": True,
+             "url": "https://chonborista.jp/karakuri2", "quote": "天井は999G+α"},
+            {"field": "狙い目等価", "value": "700", "critical": False,
+             "url": "https://sloquest.test/karakuri2", "quote": "狙い目(等価) 700G~"},
+            {"field": "機械割", "value": "97.7~114.9", "critical": True,
+             "url": "https://sloquest.test/karakuri2", "quote": "機械割は97.7%～114.9%"},
+            {"field": "機械割", "value": "97.7~114.9", "critical": True,
+             "url": "https://chonborista.jp/karakuri2", "quote": "機械割は97.7%～114.9%"},
+        ]}, 0))
+    # 2. 幻覚値: 実在quote＋捏造value(580はページの15800円に部分一致するがquoteに無い) → 不合格
+    results.append(case("幻覚値はC4で不合格", {
+        "slug": "karakuri2", "identity": IDENT, "claims": [
+            {"field": "狙い目等価", "value": "580", "critical": False,
+             "url": "https://sloquest.test/karakuri2", "quote": "狙い目(等価) 700G~"},
+        ]}, 1))
+    # 3. 退化quote（全角スペース） → 不合格
+    results.append(case("退化quote不合格", {
+        "slug": "karakuri2", "identity": IDENT, "claims": [
+            {"field": "天井G数", "value": "999", "url": "https://sloquest.test/karakuri2", "quote": "　"},
+        ]}, 1))
+    # 4. 数値のみの短quote → 不合格
+    results.append(case("数値のみquote不合格", {
+        "slug": "karakuri2", "identity": IDENT, "claims": [
+            {"field": "天井G数", "value": "999", "url": "https://sloquest.test/karakuri2", "quote": "999"},
+        ]}, 1))
+    # 5. 天井にcritical:false申告 → 強制criticalで1ドメインでは不合格
+    results.append(case("critical自己申告の緩和は不可", {
+        "slug": "karakuri2", "identity": IDENT, "claims": [
+            {"field": "天井G数", "value": "999", "critical": False,
+             "url": "https://sloquest.test/karakuri2", "quote": "天井は999G+α"},
+        ]}, 1))
+    # 6. 旧機種ページ（本文に後継機告知あり・titleに"2"なし） → C2で不合格
+    results.append(case("旧機種ページはtitle同定で不合格", {
+        "slug": "karakuri2", "identity": IDENT, "claims": [
+            {"field": "天井G数", "value": "777", "critical": False,
+             "url": "https://sloquest.test/karakuri-old", "quote": "天井は777G+α"},
+        ]}, 1))
+    # 7. モバイル版＋PC版の同一サイト2URL → 1ドメイン扱いでcritical不合格
+    results.append(case("サブドメイン水増し無効", {
+        "slug": "karakuri2", "identity": IDENT, "claims": [
+            {"field": "天井G数", "value": "999", "critical": True,
+             "url": "https://sloquest.test/karakuri2", "quote": "天井は999G+α"},
+            {"field": "天井G数", "value": "999", "critical": True,
+             "url": "https://m.sloquest.test/karakuri2", "quote": "天井は999G+α"},
+        ]}, 1))
+    # 8. アーカイブURL → 不合格
+    results.append(case("アーカイブURL不合格", {
+        "slug": "karakuri2", "identity": IDENT, "claims": [
+            {"field": "天井G数", "value": "999",
+             "url": "https://web.archive.org/web/2026/https://sloquest.test/karakuri2",
+             "quote": "天井は999G+α"},
+        ]}, 1))
+    # 9. titleが取得できないページ → 不合格
+    results.append(case("title無しページ不合格", {
+        "slug": "karakuri2", "identity": IDENT, "claims": [
+            {"field": "天井G数", "value": "999",
+             "url": "https://notitle.test/karakuri2", "quote": "天井は999G+α"},
+        ]}, 1))
+    # 10. identityが空/退化 → 不合格
+    results.append(case("identity退化不合格", {
+        "slug": "karakuri2", "identity": {"must_contain": ["　"]}, "claims": [
+            {"field": "天井G数", "value": "999",
+             "url": "https://sloquest.test/karakuri2", "quote": "天井は999G+α"},
+        ]}, 1))
+
+    _page_cache.clear()
+    ok = all(results)
+    log(f"=== selftest: {sum(results)}/{len(results)} 合格 → {'✅ 全テスト成功' if ok else '❌ 失敗あり'} ===")
+    return 0 if ok else 1
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--file", required=True, help="claims.json のパス")
+    ap.add_argument("--file", help="claims.json のパス")
     ap.add_argument("--min-domains", type=int, default=2, help="criticalフィールドに必要な合格ドメイン数（既定2）")
+    ap.add_argument("--selftest", action="store_true", help="ネット不要の内蔵テストを実行")
     args = ap.parse_args()
-    sys.exit(run(args.file, args.min_domains))
+    if args.selftest:
+        sys.exit(selftest())
+    if not args.file:
+        ap.error("--file か --selftest のどちらかを指定")
+    try:
+        code = run(args.file, args.min_domains)
+    except Exception as e:
+        log(f"❌ claims形式エラー/実行エラー: {type(e).__name__}: {e} → 不合格扱い（無人昇格禁止）")
+        code = 1
+    sys.exit(code)
 
 
 if __name__ == "__main__":
