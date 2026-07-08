@@ -133,6 +133,7 @@ def cmd_digest(path, args):
             first_line = str(it["detail"]).splitlines()[0]
             print(f"    {first_line}")
     print(f"（計{len(items)}件。対応後は python scripts/open_issues.py close --id N --reason \"...\" でクローズ）")
+    print("（対応方法: このメールをClaude Codeのセッションに貼り付けて「対応して」と伝えるだけでOK。裏取り→修正→closeまで処理されます）")
     return 0
 
 
