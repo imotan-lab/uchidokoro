@@ -5,6 +5,8 @@
 自動タスク（new-machine/auto-add/verify/quality-review）がエスカレーションを add で積み、
 verify の毎朝メールに digest（未解決一覧・経過日数付き）を再掲し続ける。
 解決したら close する（人間または対応したセッションのClaude）。
+無人タスクのcloseは原則禁止。唯一の例外＝verify STEP 2.8のホワイトリスト型quality修正
+（audit/validate機械確認済みの場合のみ。数値転記を含む案件は例外の対象外）。
 
 ★このスクリプトは機種データを一切触らない（台帳ファイルの読み書きのみ）★
 
