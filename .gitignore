@@ -1,6 +1,7 @@
 CODEX_RULES.md
 HANDOFF.md
 CLAUDE.md
+CLAUDE_history.md
 
 # X自動投稿の実行時状態（コミット不要）
 scripts/machines_prev.json
