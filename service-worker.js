@@ -1,4 +1,4 @@
-const CACHE_NAME = 'uchidokoro-v120';
+const CACHE_NAME = 'uchidokoro-v121';
 
 const STATIC_CACHE = [
   '/',
@@ -8,6 +8,9 @@ const STATIC_CACHE = [
   '/about.html',
   '/contact.html',
   '/privacy.html',
+  '/guide-haena.html',
+  '/guide-rate.html',
+  '/guide-pochipochi.html',
   '/guide-tenjo-ranking.html',
   '/guide-reset-ranking.html',
   '/guide-suru-tenjo.html',

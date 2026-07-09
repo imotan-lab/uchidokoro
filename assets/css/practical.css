@@ -688,3 +688,12 @@ button, input, select { font: inherit; }
 .rank-meta strong, .spec-meta strong { color: var(--soft); font-weight: 700; }
 .list-note { margin: 12px 0 0; color: var(--muted2); font-size: 11px; line-height: 1.6; }
 .list-count { color: var(--gold); font-weight: 700; }
+
+/* TOP: H1・使い方ガイドセクション（2026-07 SEO/AdSense改善 Phase1） */
+.hero-h1 { font-size: 14px; font-weight: 800; color: var(--gold); letter-spacing: .02em; line-height: 1.5; margin: 0 0 10px; }
+.btn-guide { display: inline-block; margin-top: 12px; padding: 10px 16px; border: 1px solid var(--gold); border-radius: 8px; color: var(--gold); font-size: 13px; font-weight: 700; text-decoration: none; }
+.btn-guide:hover { background: rgba(212, 175, 55, .08); }
+.toolbar-note { font-size: 12px; color: var(--muted); line-height: 1.7; margin: 0 0 10px; }
+.site-guide { margin-top: 36px; }
+.guide-list { margin: 0; padding-left: 18px; color: var(--soft); font-size: 13px; line-height: 1.9; }
+.guide-list a { color: var(--gold); }

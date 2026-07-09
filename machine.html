@@ -33,6 +33,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="うちどころ。">
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2097489177716087" crossorigin="anonymous"></script>
+<link rel="canonical" href="https://uchidokoro.com/machine.html">
 </head>
 <body>
 <header class="site-header">
@@ -66,14 +67,14 @@
     <div id="rateToggle" class="mode-toggle rate-toggle-shared is-hidden"></div>
 
     <div class="article-block" id="evTableBlock">
-      <p class="block-label">▶ 期待値早見表</p>
+      <h2 class="block-label">▶ 期待値早見表</h2>
       <div id="evModeToggle" class="mode-toggle ev-mode-toggle"></div>
       <table id="evTable" class="ev-table"></table>
       <p class="hint-text" id="evTableNote"></p>
     </div>
 
     <div class="article-block">
-      <p class="block-label">▶ 狙い目チェッカー</p>
+      <h2 class="block-label">▶ 狙い目チェッカー</h2>
       <div class="checker-card">
         <div id="modeToggle" class="mode-toggle"></div>
         <div id="suruWrap" class="suru-wrap is-hidden">
@@ -102,29 +103,29 @@
     </div>
 
     <div class="article-block">
-      <p class="block-label">▶ 狙い目早見表</p>
+      <h2 class="block-label">▶ 狙い目早見表</h2>
       <table id="summaryGrid" class="summary-grid"></table>
     </div>
 
     <div class="article-block">
-      <p class="block-label">▶ 基本情報</p>
+      <h2 class="block-label">▶ 基本情報</h2>
       <table class="info-table">
         <tbody id="infoTableBody"></tbody>
       </table>
     </div>
 
     <div class="article-block">
-      <p class="block-label">▶ 詳細</p>
+      <h2 class="block-label">▶ 詳細</h2>
       <div id="articleSections"></div>
     </div>
 
     <div class="article-block">
-      <p class="block-label">▶ 小役カウンター</p>
+      <h2 class="block-label">▶ 小役カウンター</h2>
       <a id="settingToolLink" href="setting.html" class="btn-show-all btn-show-all--center">小役カウンター ポチポチくん →</a>
     </div>
 
     <div class="article-block is-hidden" id="relatedBlock">
-      <p class="block-label">▶ 関連機種</p>
+      <h2 class="block-label">▶ 関連機種</h2>
       <div id="relatedList" class="related-list"></div>
     </div>
 
@@ -733,7 +734,7 @@ function resolveMachineSlug() {
     div.className = "article-item";
 
     if (section.type === "rumor") {
-      div.innerHTML = `<p class="article-title">${section.title}</p><div class="rumor-box"><p class="rumor-label">⚠ 噂・未確定情報</p>${(section.body || []).map(t => `<p class="rumor-body">${md(t)}</p>`).join("")}</div>`;
+      div.innerHTML = `<h3 class="article-title">${section.title}</h3><div class="rumor-box"><p class="rumor-label">⚠ 噂・未確定情報</p>${(section.body || []).map(t => `<p class="rumor-body">${md(t)}</p>`).join("")}</div>`;
     } else if (section.type === "settei") {
       const badgeClass = { hint: "settei-hint", weak: "settei-weak", mid: "settei-mid", strong: "settei-strong", ok: "settei-ok" };
       const sectionWide = (section.tables || []).some(tbl => tbl.wide);
@@ -743,7 +744,7 @@ function resolveMachineSlug() {
         `<span class="settei-legend-item"><span class="settei-legend-badge settei-strong">強</span>強示唆</span>` +
         `<span class="settei-legend-item"><span class="settei-legend-badge settei-ok">確</span>高設定確定/有力</span>` +
         `</div>`;
-      let html = `<p class="article-title">${section.title}</p>${legend}`;
+      let html = `<h3 class="article-title">${section.title}</h3>${legend}`;
       (section.tables || []).forEach(tbl => {
         html += `<p class="settei-sub-label">${tbl.label}</p>`;
         html += `<table class="settei-table${sectionWide ? " settei-table--wide" : ""}"><tr>${tbl.headers.map(h => `<th>${h}</th>`).join("")}</tr>`;
@@ -772,7 +773,7 @@ function resolveMachineSlug() {
       }
       div.innerHTML = html;
     } else {
-      div.innerHTML = `<p class="article-title">${section.title}</p>${(section.body || []).map(t => `<p class="article-body">${md(t)}</p>`).join("")}`;
+      div.innerHTML = `<h3 class="article-title">${section.title}</h3>${(section.body || []).map(t => `<p class="article-body">${md(t)}</p>`).join("")}`;
     }
 
     articleSections.appendChild(div);

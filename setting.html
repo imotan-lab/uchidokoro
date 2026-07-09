@@ -20,6 +20,8 @@
 <meta property="og:image" content="https://uchidokoro.com/assets/img/ogp.png">
 <meta property="og:site_name" content="うちどころ。">
 <meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="https://uchidokoro.com/setting.html">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"小役カウンター ポチポチくん","url":"https://uchidokoro.com/setting.html","description":"ボーナス・小役の出現回数をカウントすると設定期待度をベイズ推定で自動計算する無料の小役カウンターツール","publisher":{"@type":"Organization","name":"うちどころ。","url":"https://uchidokoro.com"}}</script>
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" href="/assets/img/favicon-32.png" sizes="32x32">
 <link rel="icon" type="image/png" href="/assets/img/favicon-16.png" sizes="16x16">
@@ -66,18 +68,18 @@
       <div class="caution-box">
         <p class="caution-text">この機種は小役確率に大きな設定差がないため、ポチポチくんは非対応です。<br>設定判別はボーナス確率やAT初当り確率などで行ってください。</p>
       </div>
-      <p class="hint-text spacing-md">現在対応している機種: 北斗の拳・北斗の拳 転生の章2・番長4・カバネリ・モンキーターンV・ゴブリンスレイヤー・ゴッドイーター・バキ・マイジャグラーV・ネオアイムジャグラーEX・ゴーゴージャグラー3・ファンキージャグラー2・ハッピージャグラーV III・沖ドキ！GOLD・沖ドキ！BLACK・ハナビ・ワンパンマン・傷物語・サンダーV・秘宝伝・東京リベンジャーズ・新鬼武者3・化物語・マギアレコード・沖ドキDUOアンコール・うみねこ2・ニューキングハナハナV・沖ドキ！ゴージャス・キングハナハナ・不二子BT・ドラゴンハナハナ閃光・スーパーブラックジャック・吉宗・アズールレーン・シャーマンキング</p>
+      <p class="hint-text spacing-md">対応機種は、このページ下部の「対応機種一覧」をご覧ください。</p>
     </div>
 
     <div id="settingInputBlock" class="article-block">
-      <p class="block-label">▶ カウント入力</p>
+      <h2 class="block-label">▶ カウント入力</h2>
         <p class="hint-text compact-note" id="inputNote"></p>
       <div class="setting-input-grid" id="settingInputGrid"></div>
       <button class="setting-reset-btn" onclick="resetAll()">データをリセット</button>
     </div>
 
     <div id="settingResultBlock" class="article-block">
-      <p class="block-label">▶ 設定期待度</p>
+      <h2 class="block-label">▶ 設定期待度</h2>
       <div class="setting-result-wrap">
         <div class="setting-result-row"><span class="setting-result-name">設定1</span><div class="setting-bar-wrap"><div class="setting-bar cell-20" id="bar1"></div></div><span class="setting-result-pct" id="pct1">—</span></div>
         <div class="setting-result-row"><span class="setting-result-name">設定2</span><div class="setting-bar-wrap"><div class="setting-bar cell-20" id="bar2"></div></div><span class="setting-result-pct" id="pct2">—</span></div>
@@ -95,6 +97,34 @@
       <p class="hint-text" id="resultNote"></p>
     </div>
 
+  </section>
+
+  <section class="site-guide" aria-label="ポチポチくんの説明">
+    <div class="article-item">
+      <h2 class="article-title">ポチポチくんとは（このページでできること）</h2>
+      <p class="article-body">小役カウンター ポチポチくんは、実戦中にボーナス回数や小役の出現回数をカウントすると、設定ごとの理論確率と照らし合わせて設定期待度を自動計算する無料ツールです。紙のメモや電卓を使わずに、打ちながらスマホだけで設定判別の補助ができます。</p>
+    </div>
+    <div class="article-item">
+      <h2 class="article-title">使い方</h2>
+      <p class="article-body">①機種ページの「小役カウンター ポチポチくん →」からその機種用のカウンター画面を開きます。②総ゲーム数と、画面に表示された各項目（BIG・REG・ぶどうなど、機種によって異なります）を実戦しながら入力してください。③入力に応じて設定1〜6の期待度がリアルタイムで更新されます。横画面にすると3列表示になり、スマホ置き場のある台でそのまま使えます。</p>
+    </div>
+    <div class="article-item">
+      <h2 class="article-title">入力項目の意味</h2>
+      <ul class="guide-list">
+        <li><strong>総ゲーム数</strong>：通常時に回したゲーム数です。カウント精度の土台になります</li>
+        <li><strong>BIG・REG回数</strong>：初当たりのみカウントします（機種により対象が異なる場合は画面の注記に従ってください）</li>
+        <li><strong>小役回数（ぶどう・ベルなど）</strong>：通常時のみカウントします。ボーナス中の成立分は含めません</li>
+      </ul>
+    </div>
+    <div class="article-item">
+      <h2 class="article-title">対応機種一覧</h2>
+      <p class="article-body">小役確率などに設定差がある機種に対応しています（新機種は順次追加）。機種名を押すと、その機種の天井・狙い目記事ページへ移動できます。</p>
+      <ul class="guide-list" id="supportedMachinesList"></ul>
+    </div>
+    <div class="article-item">
+      <h2 class="article-title">注意事項</h2>
+      <p class="article-body">ポチポチくんは「設定ごとの理論確率にどれだけ近いか」をベイズ推定で計算する参考ツールです。2000G未満はサンプル不足で精度が低く、高設定でも低設定寄りの数値が出ることがあります。小役確率だけで設定を断定せず、ボーナス確率・示唆演出など複数の要素とあわせて判断してください。遊技は自己責任で、娯楽の範囲でお楽しみください。20歳未満の方は遊技できません。</p>
+    </div>
   </section>
 
 </main>
@@ -148,20 +178,24 @@
 function resolveMachineSlug() {
   const params = new URLSearchParams(location.search);
   const paramsSlug = params.get("slug") || params.get("machine");
-  if (paramsSlug) return paramsSlug;
+  if (paramsSlug) return { slug: paramsSlug, explicit: true };
 
   const match = location.pathname.match(/\/machines\/([^\/]+)\/?(?:setting\.html)?$/);
-  if (match) return match[1];
+  if (match) return { slug: match[1], explicit: true };
 
-  return "hokuto";
+  return { slug: "hokuto", explicit: false };
 }
 
-const slug = resolveMachineSlug();
+const slugInfo = resolveMachineSlug();
+const slug = slugInfo.slug;
 const STORAGE_KEY = "uchidokoro_setting_" + slug;
 
 fetch("assets/data/machines.json").then(r=>r.json()).then(machines=>{
   const m = machines.find(x=>x.slug===slug);
   if(!m) return;
+  // 素の setting.html（slug指定なし）は「小役カウンター総合ページ」なので
+  // title/h1/description は静的のまま維持する（sitemap掲載の正規URL。北斗専用表示への書き換えはしない）
+  if (!slugInfo.explicit) return;
   document.getElementById("pageTitle").innerHTML = m.name + "<br>小役カウンター ポチポチくん";
   document.getElementById("heroSub").textContent = machineConfig
     ? m.name + "の小役カウンターツール。" + (machineConfig.heroText || "ゲーム数・小役をカウントしながら入力すると設定期待度がリアルタイムで更新されます。")
@@ -793,6 +827,30 @@ checkOrientation();
 window.addEventListener('resize', checkOrientation);
 window.addEventListener('orientationchange', function(){ setTimeout(checkOrientation, 150); });
 document.addEventListener('DOMContentLoaded', checkOrientation);
+
+// 対応機種一覧を MACHINE_CONFIGS から自動生成（機種追加時のメンテ不要・machines.jsonから表示名を取得）
+(function renderSupportedMachines(){
+  const listEl = document.getElementById("supportedMachinesList");
+  if (!listEl || typeof MACHINE_CONFIGS === "undefined") return;
+  fetch("/assets/data/machines.json")
+    .then(res => res.json())
+    .then(machines => {
+      const nameBySlug = {};
+      machines.forEach(m => { nameBySlug[m.slug] = m.name; });
+      Object.keys(MACHINE_CONFIGS)
+        .filter(slug => nameBySlug[slug])
+        .sort((a, b) => nameBySlug[a].localeCompare(nameBySlug[b], "ja"))
+        .forEach(slug => {
+          const li = document.createElement("li");
+          const a = document.createElement("a");
+          a.href = "/machines/" + slug + "/";
+          a.textContent = nameBySlug[slug];
+          li.appendChild(a);
+          listEl.appendChild(li);
+        });
+    })
+    .catch(() => {});
+})();
 </script>
 </body>
 </html>

@@ -150,7 +150,7 @@ def render_blocks(blocks):
     html = []
     for b in blocks:
         html.append('    <article class="article-block">')
-        html.append(f'      <p class="block-label">▶ {md(b["label"])}</p>')
+        html.append(f'      <h2 class="block-label">▶ {md(b["label"])}</h2>')
         for i, para in enumerate(b.get("paras", [])):
             cls = "hint-text" if i == 0 else "hint-text spacing-sm"
             html.append(f'      <p class="{cls}">{md(para)}</p>')
@@ -308,7 +308,7 @@ def build_page(file, prose, data_html):
     parts.append(render_blocks(prose.get("outro_blocks", [])))
     # 関連
     parts.append('    <article class="article-block">')
-    parts.append('      <p class="block-label">▶ 関連ガイド・ランキング</p>')
+    parts.append('      <h2 class="block-label">▶ 関連ガイド・ランキング</h2>')
     parts.append(related_html(file))
     parts.append("    </article>")
     parts.append(FOOT_TPL)

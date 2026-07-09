@@ -93,7 +93,10 @@
       // ISO 8601形式（タイムゾーン付き）。Google Rich Results推奨形式
       // 日付のみの release_date は東京時刻のT00:00:00+09:00として補完
       const nowIso = new Date().toISOString(); // 例: 2026-05-15T14:30:00.000Z（UTC）
-      const datePublished = releaseDate ? `${releaseDate}T00:00:00+09:00` : nowIso;
+      // 未来のrelease_date（先行記事）はdatePublishedを当日にクランプ（未来公開日はリッチリザルト警告対象）
+      const todayYmd = nowIso.slice(0, 10);
+      const pubYmd = releaseDate && releaseDate <= todayYmd ? releaseDate : todayYmd;
+      const datePublished = releaseDate ? `${pubYmd}T00:00:00+09:00` : nowIso;
       const todayIso = nowIso;
 
       // JSON-LD 構造化データ（強化版）
@@ -124,9 +127,13 @@
           "@id": `https://uchidokoro.com/machines/${slug}/`
         }
       };
-      const ldScript = document.createElement("script");
-      ldScript.type = "application/ld+json";
-      ldScript.textContent = JSON.stringify(jsonLd);
-      document.head.appendChild(ldScript);
+      // プリレンダ済みページには build_machine_pages.py がJSON-LDを静的に焼き込み済み。
+      // 二重出力を避けるため、既にある場合は追加しない（クエリURL等の旧シェル表示時のみ動的追加）
+      if (!document.querySelector('script[type="application/ld+json"]')) {
+        const ldScript = document.createElement("script");
+        ldScript.type = "application/ld+json";
+        ldScript.textContent = JSON.stringify(jsonLd);
+        document.head.appendChild(ldScript);
+      }
     });
 })();

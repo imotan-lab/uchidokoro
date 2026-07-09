@@ -1,6 +1,6 @@
 """
 サイト構造整合性チェックスクリプト
-verifyタスク（毎日5:05）から呼ばれる。8項目をチェックしてNG項目を標準出力に出す。
+verifyタスク（毎日5:05）から呼ばれる。24項目をチェックしてNG項目を標準出力に出す。
 
 NGがあれば exit code 1。メール通知や自動修正は呼び出し側のSKILL.mdで判定。
 
@@ -33,6 +33,14 @@ AdSense審査向け（コンテンツ品質）:
     16. machine-details の文体混在検知（です・ます調と だ・である調の混在）
     17. 他サイト名の露出検知（スロパチクエスト/ちょんぼりすた/ナナプレス/DMM/ぱちタウン/スロラボ）
     18. サブディレクトリ配下のHTMLに <base href="/"> が入っているか（パス解決事故予防）
+    19. machine-details の lead 内 Markdown 残留
+    20. 旧URL（machine.html?slug=）形式の内部リンク残留
+    21. プリレンダ検証（machines/{slug}/index.html に本文が焼き込まれているか）
+    22. 機種重複検知（名前正規化での衝突＝同一機種の別名義二重登録）
+
+SEO・運用:
+    23. CLAUDE.md肥大検知（50KB超＋履歴退避ルールの生存確認）
+    24. 機種ページ noindex 整合（preview=noindex / complete=index の恒久ポリシー）
 """
 
 from __future__ import annotations
@@ -186,11 +194,17 @@ def check_7_sitemap_count(machines: list) -> list[str]:
     sm = load_text(BASE / "sitemap.xml")
     sitemap_machine_slugs_list = re.findall(r"/machines/([^/]+)/", sm)
     sitemap_machine_slugs = set(sitemap_machine_slugs_list)
-    machine_slugs = set(m["slug"] for m in machines)
-    missing_in_sitemap = sorted(machine_slugs - sitemap_machine_slugs)
+    complete_slugs = set(m["slug"] for m in machines if m.get("status") != "preview")
+    preview_slugs = set(m["slug"] for m in machines if m.get("status") == "preview")
+    machine_slugs = complete_slugs | preview_slugs
+    missing_in_sitemap = sorted(complete_slugs - sitemap_machine_slugs)
     extra_in_sitemap = sorted(sitemap_machine_slugs - machine_slugs)
+    # preview機種はnoindex恒久ポリシー（2026-07-09）＝sitemap掲載はnoindexと信号矛盾になるため禁止
+    preview_in_sitemap = sorted(preview_slugs & sitemap_machine_slugs)
+    if preview_in_sitemap:
+        ngs.append(f"sitemap.xml にpreview機種が掲載（noindexと矛盾・昇格時にauto-addが追加する運用）: {preview_in_sitemap[:5]}")
     if missing_in_sitemap:
-        ngs.append(f"sitemap.xml に未登録の機種 {len(missing_in_sitemap)}件: {missing_in_sitemap[:5]}")
+        ngs.append(f"sitemap.xml に未登録のcomplete機種 {len(missing_in_sitemap)}件: {missing_in_sitemap[:5]}")
     if extra_in_sitemap:
         ngs.append(f"sitemap.xml に余分な機種URL {len(extra_in_sitemap)}件: {extra_in_sitemap[:5]}")
     # 機種URL重複
@@ -202,6 +216,9 @@ def check_7_sitemap_count(machines: list) -> list[str]:
     loc_dups = sorted(set(u for u in all_locs if all_locs.count(u) > 1))
     if loc_dups:
         ngs.append(f"sitemap.xml 内でURL重複 {len(loc_dups)}件: {loc_dups[:5]}")
+    # ポチポチくんのクエリURL再混入検知（2026-07-09 SEO整理: ツールは検索対象外・setting.html本体のみ掲載）
+    if "setting.html?slug=" in sm:
+        ngs.append("sitemap.xml に setting.html?slug= のクエリURLが再混入（ツールページは検索対象外＝本体のみ掲載。2026-07-09整理）")
     return ngs
 
 
@@ -306,7 +323,7 @@ def check_11_meta_description(machines: list) -> list[str]:
             ngs.append(f"{p.name}: meta description なし")
             continue
         desc = m.group(1)
-        # machine.html / setting.html はmeta-auto.jsで動的生成されるのでテンプレ値はOK
+        # machine.html はmeta-auto.js、setting.html は自前JSで動的更新されるためテンプレ値はOK
         if p.name in ("machine.html", "setting.html"):
             continue
         if len(desc) < 50:
@@ -650,6 +667,25 @@ def check_23_claude_md_size(machines: list) -> list[str]:
     return ngs
 
 
+def check_24_robots_noindex(machines: list) -> list[str]:
+    """機種ページの noindex 整合（2026-07-09 恒久ポリシー: preview=noindex / complete=index）。
+    complete ページへの noindex 残留は検索から消える重大事故なので毎日検知する。"""
+    ngs = []
+    for m in machines:
+        slug = m["slug"]
+        page = BASE / "machines" / slug / "index.html"
+        if not page.is_file():
+            continue  # 実在チェックは check_6 の担当
+        text = load_text(page)
+        has_noindex = bool(re.search(r"<meta[^>]*name=[\"']robots[\"'][^>]*content=[\"'][^\"']*noindex", text, re.I))
+        is_preview = m.get("status") == "preview"
+        if is_preview and not has_noindex:
+            ngs.append(f"{slug}: preview なのに noindex が無い（build_machine_pages.py 再実行で付与される）")
+        if (not is_preview) and has_noindex:
+            ngs.append(f"{slug}: complete なのに noindex が残留（検索から消える事故。build_machine_pages.py 再実行で解除される）")
+    return ngs
+
+
 CHECKS = [
     ("1_インラインstyle", check_1_inline_style),
     ("2_サブパス残骸", check_2_old_subpath),
@@ -674,6 +710,7 @@ CHECKS = [
     ("21_プリレンダ検証", check_21_prerender),
     ("22_機種重複検知", check_22_duplicate_machines),
     ("23_CLAUDE_md肥大検知", check_23_claude_md_size),
+    ("24_noindex整合", check_24_robots_noindex),
 ]
 
 
