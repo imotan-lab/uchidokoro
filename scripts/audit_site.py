@@ -629,6 +629,27 @@ def check_22_duplicate_machines(machines: list) -> list[str]:
     return ngs
 
 
+def check_23_claude_md_size(machines: list) -> list[str]:
+    """CLAUDE.md（毎セッション読み込まれるルールファイル）の肥大化検知。
+    50KB超でNG＝対話セッションで圧縮する合図（履歴・完了施策の詳細をCLAUDE_history.mdへ退避。
+    手順は2026-07-09の実施例＝退避→別エージェントで欠損検証。★無人タスクはCLAUDE.mdを書き換えない★）。
+    2026-07-09に76KB→42KBへ圧縮した際の再発防止（日次履歴行の本体追記が肥大の主因だった）。
+    あわせて履歴退避ルールの生存確認（CLAUDE_history.mdへの参照が消えていないか）も行う。"""
+    ngs = []
+    path = BASE / "CLAUDE.md"
+    if not path.is_file():
+        return ngs  # 家PC等でファイルが無い環境では検査しない
+    size = path.stat().st_size
+    if size > 50 * 1024:
+        ngs.append(
+            f"CLAUDE.mdが{size/1024:.1f}KB（閾値50KB超）→対話セッションで圧縮する"
+            "（履歴をCLAUDE_history.mdへ退避→欠損検証。無人タスクは書き換え禁止）")
+    text = path.read_text(encoding="utf-8", errors="replace")
+    if "CLAUDE_history.md" not in text:
+        ngs.append("CLAUDE.mdからCLAUDE_history.mdへの参照が消えている（履歴退避ルールの喪失疑い）→「修正履歴について」セクションを復元する")
+    return ngs
+
+
 CHECKS = [
     ("1_インラインstyle", check_1_inline_style),
     ("2_サブパス残骸", check_2_old_subpath),
@@ -652,6 +673,7 @@ CHECKS = [
     ("20_旧URLリンク残留", check_20_old_url_links),
     ("21_プリレンダ検証", check_21_prerender),
     ("22_機種重複検知", check_22_duplicate_machines),
+    ("23_CLAUDE_md肥大検知", check_23_claude_md_size),
 ]
 
 
