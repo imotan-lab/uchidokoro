@@ -11,6 +11,8 @@ const STATIC_CACHE = [
   '/guide-haena.html',
   '/guide-rate.html',
   '/guide-pochipochi.html',
+  '/guide-yamedoki.html',
+  '/guide-reset.html',
   '/guide-tenjo-ranking.html',
   '/guide-reset-ranking.html',
   '/guide-suru-tenjo.html',
