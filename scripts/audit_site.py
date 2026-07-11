@@ -686,6 +686,25 @@ def check_24_robots_noindex(machines: list) -> list[str]:
     return ngs
 
 
+def check_25_section_body_type(machines: list) -> list[str]:
+    """machine-details の sections[].body が配列か（文字列だと生成側が1文字ずつ<p>化する不具合。
+    2026-07-10に biohazard_re3/takt_opus/super_rio_ace2 で実発生・本番で数千段落に崩壊した）。"""
+    ngs = []
+    for m in machines:
+        p = BASE / "assets" / "data" / "machine-details" / f"{m['slug']}.json"
+        if not p.is_file():
+            continue
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        for i, s in enumerate(d.get("sections", [])):
+            b = s.get("body")
+            if isinstance(b, str):
+                ngs.append(f"{m['slug']}: sections[{i}]({s.get('title')}) の body が文字列→配列であるべき（1文字ずつ段落化する不具合）")
+    return ngs
+
+
 CHECKS = [
     ("1_インラインstyle", check_1_inline_style),
     ("2_サブパス残骸", check_2_old_subpath),
@@ -711,6 +730,7 @@ CHECKS = [
     ("22_機種重複検知", check_22_duplicate_machines),
     ("23_CLAUDE_md肥大検知", check_23_claude_md_size),
     ("24_noindex整合", check_24_robots_noindex),
+    ("25_body型", check_25_section_body_type),
 ]
 
 

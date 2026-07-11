@@ -20,6 +20,7 @@
 <meta property="og:image" content="https://uchidokoro.com/assets/img/ogp.png">
 <meta property="og:site_name" content="うちどころ。">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="robots" content="noindex,follow"><!-- 素のテンプレート/レガシーURLはnoindex。生成時にbuild_machine_pages.pyが除去し、complete機種はindex・preview機種はnoindexを再付与する -->
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" href="/assets/img/favicon-32.png" sizes="32x32">
 <link rel="icon" type="image/png" href="/assets/img/favicon-16.png" sizes="16x16">
@@ -732,6 +733,12 @@ function resolveMachineSlug() {
   (detail?.sections || []).forEach(section => {
     const div = document.createElement("div");
     div.className = "article-item";
+
+    // body が文字列で保存された不具合の防御（配列化・1文字ずつ<p>化を防ぐ）
+    if (typeof section.body === "string") {
+      section.body = section.body.split("\n").map(s => s.trim()).filter(Boolean);
+      if (section.body.length === 0) section.body = [];
+    }
 
     if (section.type === "rumor") {
       div.innerHTML = `<h3 class="article-title">${section.title}</h3><div class="rumor-box"><p class="rumor-label">⚠ 噂・未確定情報</p>${(section.body || []).map(t => `<p class="rumor-body">${md(t)}</p>`).join("")}</div>`;

@@ -91,6 +91,8 @@ def render_section(section: dict) -> str:
     title = section.get("title", "")
     stype = section.get("type")
     body = section.get("body") or []
+    if isinstance(body, str):  # 文字列を1文字ずつ<p>化する不具合の防御（2026-07-10）
+        body = [x.strip() for x in body.splitlines() if x.strip()] or [body]
 
     if stype == "rumor":
         paras = "".join(f'<p class="rumor-body">{md(t)}</p>' for t in body)
@@ -188,6 +190,10 @@ def main():
     # <base href="/"> を <head> 直後に挿入
     if "<base " not in template:
         template = re.sub(r"(<head[^>]*>)", r'\1\n<base href="/">', template, count=1)
+
+    # テンプレ由来の robots meta（machine.html自体のnoindex）を除去。
+    # complete機種はnoindex無し(index)、preview機種は下で noindex,follow を再付与する
+    template = re.sub(r'<meta name="robots"[^>]*>(<!--.*?-->)?\n?', "", template)
 
     detail_dir = BASE / "assets" / "data" / "machine-details"
     generated = 0
