@@ -92,6 +92,7 @@ def render_section(section: dict) -> str:
     body = section.get("body") or []
     if isinstance(body, str):  # 文字列を1文字ずつ<p>化する不具合の防御（2026-07-10）
         body = [x.strip() for x in body.splitlines() if x.strip()] or [body]
+    body = [t for t in body if isinstance(t, str) and t.strip()]  # 空段落<p></p>の防御（2026-07-12）
 
     if stype == "rumor":
         paras = "".join(f'<p class="rumor-body">{md(t)}</p>' for t in body)

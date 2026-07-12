@@ -81,17 +81,17 @@
         <div id="suruWrap" class="suru-wrap is-hidden">
           <p class="suru-label">CZスルー回数</p>
           <div class="setting-counter-wrap">
-            <button class="setting-cnt-btn" id="suruDec">－</button>
+            <button class="setting-cnt-btn" id="suruDec" aria-label="CZスルー回数を1減らす">－</button>
             <span id="suruVal" class="suru-val">0</span>
-            <button class="setting-cnt-btn" id="suruInc">＋</button>
+            <button class="setting-cnt-btn" id="suruInc" aria-label="CZスルー回数を1増やす">＋</button>
           </div>
         </div>
         <div id="cycleWrap" class="suru-wrap is-hidden">
           <p class="suru-label">周期回数</p>
           <div class="setting-counter-wrap">
-            <button class="setting-cnt-btn" id="cycleDec">－</button>
+            <button class="setting-cnt-btn" id="cycleDec" aria-label="周期回数を1減らす">－</button>
             <span id="cycleVal" class="suru-val">1</span>
-            <button class="setting-cnt-btn" id="cycleInc">＋</button>
+            <button class="setting-cnt-btn" id="cycleInc" aria-label="周期回数を1増やす">＋</button>
           </div>
         </div>
         <input id="gameInput" class="game-input" type="number" inputmode="numeric" placeholder="現在G数を入力">
@@ -738,6 +738,10 @@ function resolveMachineSlug() {
     if (typeof section.body === "string") {
       section.body = section.body.split("\n").map(s => s.trim()).filter(Boolean);
       if (section.body.length === 0) section.body = [];
+    }
+    // 空要素の防御（空の<p></p>を出さない）
+    if (Array.isArray(section.body)) {
+      section.body = section.body.filter(t => typeof t === "string" && t.trim());
     }
 
     if (section.type === "rumor") {

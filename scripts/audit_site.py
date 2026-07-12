@@ -705,6 +705,90 @@ def check_25_section_body_type(machines: list) -> list[str]:
     return ngs
 
 
+def check_26_empty_paragraph(machines: list) -> list[str]:
+    """machine-details の body に空・空白のみの段落が無いか（空<p></p>として焼き込まれる。
+    2026-07-12に lupin_daikokaisha で実発生・外部レビューで指摘された）。lead空も検知。"""
+    ngs = []
+    for m in machines:
+        p = BASE / "assets" / "data" / "machine-details" / f"{m['slug']}.json"
+        if not p.is_file():
+            continue
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not str(d.get("lead", "x")).strip():
+            ngs.append(f"{m['slug']}: lead が空")
+        for i, s in enumerate(d.get("sections", [])):
+            b = s.get("body")
+            if not isinstance(b, list):
+                continue  # 型不正は項目25の担当
+            for j, t in enumerate(b):
+                if not isinstance(t, str) or not t.strip():
+                    ngs.append(f"{m['slug']}: sections[{i}]({s.get('title')}) body[{j}] が空段落")
+    return ngs
+
+
+def check_27_hub_counts(machines: list) -> list[str]:
+    """ハブ/ランキング4ページ内の件数表記が machines.json の実数と一致するか
+    （散文の手書き件数がデータ更新に追従せずズレた事故の再発検知・2026-07-12外部レビュー指摘）。
+    build_hub_pages.py と同じロジックで A/C/D/ALL を再計算し、HTML中の件数数字と突合する。"""
+    ngs = []
+
+    # build_hub_pages.py の load_rows/dataset_A/C/D と同一ロジック（ズレると誤検知するため変更時は両方直す）
+    def _mode_key(x):
+        return x.get("key") if isinstance(x, dict) else x
+
+    def _ck(m, mode, key):
+        c = m.get("checker") or {}
+        if not isinstance(c, dict):
+            return None
+        sub = c.get(mode) or {}
+        return sub.get(key) if isinstance(sub, dict) else None
+
+    rows = []
+    for m in machines:
+        c = m.get("checker") or {}
+        if not isinstance(c, dict):
+            c = {}
+        modes = [_mode_key(x) for x in (c.get("modes") or [])]
+        rows.append(dict(
+            unit=c.get("unit"),
+            limit=m.get("limit"),
+            has_suru=bool(c.get("hasSuru") or "suru" in modes),
+            has_cycle=bool(c.get("hasCycle") or "cycle" in modes),
+            ncau=_ck(m, "normal", "caution"),
+            rcau=_ck(m, "reset", "caution"),
+        ))
+    ALL = rows
+    A = [r for r in rows
+         if r["unit"] == "G" and isinstance(r["limit"], (int, float))
+         and not r["has_suru"] and not r["has_cycle"] and r["limit"] < 1000]
+    C = [r for r in rows
+         if isinstance(r["rcau"], (int, float)) and isinstance(r["ncau"], (int, float))
+         and r["ncau"] - r["rcau"] > 0]
+    D = [r for r in rows if r["has_suru"]]
+    expected = {
+        "guide-tenjo-ranking.html": len(A),
+        "guide-reset-ranking.html": len(C),
+        "guide-suru-tenjo.html": len(D),
+        "guide-ichiran.html": len(ALL),
+    }
+    for file, exp in expected.items():
+        p = BASE / file
+        if not p.is_file():
+            ngs.append(f"{file}: ファイルが存在しない")
+            continue
+        html_src = p.read_text(encoding="utf-8")
+        # 自動生成の件数（list-count span）と散文中の「全N機種」「全部でN機種」を全て抽出して突合
+        nums = set(int(x) for x in re.findall(r'list-count">(\d+)<', html_src))
+        nums |= set(int(x) for x in re.findall(r"全(?:部で)?(?:<strong>)?(\d+)(?:</strong>)?機種", html_src))
+        bad = sorted(n for n in nums if n != exp)
+        if bad:
+            ngs.append(f"{file}: 件数表記 {bad} が実数 {exp} と不一致（build_hub_pages.py 再実行かhub_prose.jsonの手書き数字残り）")
+    return ngs
+
+
 CHECKS = [
     ("1_インラインstyle", check_1_inline_style),
     ("2_サブパス残骸", check_2_old_subpath),
@@ -731,6 +815,8 @@ CHECKS = [
     ("23_CLAUDE_md肥大検知", check_23_claude_md_size),
     ("24_noindex整合", check_24_robots_noindex),
     ("25_body型", check_25_section_body_type),
+    ("26_空段落", check_26_empty_paragraph),
+    ("27_ハブ件数整合", check_27_hub_counts),
 ]
 
 

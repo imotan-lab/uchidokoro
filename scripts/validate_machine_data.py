@@ -14,6 +14,10 @@
   V3. （保留）天井の構造化フィールド間照合: 機種は正当に複数天井(CZ間/AT間・通常A/B/C・
       G数/ポイント)を持つため単純比較は誤検知だらけ。天井種別マッチングが要るので v1 では未実装
   V4. 機械割の異常: factTableの機械割が 85〜120% の範囲外、または 設定1 ≥ 設定6（高設定の方が低い）
+  V5. 差枚表現の理論値乖離: 本文の「約N枚相当」を直前の機械割%とペアリングし、
+      8000G×3枚×(機械割-100%) の理論値から2倍超/半分未満に乖離していたら検知
+      （2026-07-12外部レビューで16機種が約3倍に膨張していた事故の再発防止。
+        差枚を書くときは「8000G想定」で機械割から算出するのがサイトのルール）
 
 使い方:
   python scripts/validate_machine_data.py            # 全機種を検査（NG合計>0でexit1）
@@ -133,6 +137,36 @@ def check_machine(machine, detail):
                 ngs.append(f"V4 機械割が異常レンジ: {label}={p}%（85〜120%想定）")
         if "1" in kw and "6" in kw and kw["1"] >= kw["6"]:
             ngs.append(f"V4 機械割の高低逆転: 設定1={kw['1']}% ≥ 設定6={kw['6']}%")
+
+    # --- V5: 差枚表現の理論値乖離（「約N枚相当」×直前の機械割%） ---
+    # 3枚掛け8000Gの理論差枚 = 8000×3×(機械割-100%)。記載値がその2倍超/半分未満なら異常。
+    # ペアリングは「同一段落内で枚数の直前80文字以内にある最後の%」（レイアウト前提はサイトの執筆ルール側で統一）
+    if detail:
+        for si, sec in enumerate(detail.get("sections") or []):
+            body = sec.get("body")
+            if not isinstance(body, list):
+                continue
+            for t in body:
+                if not isinstance(t, str):
+                    continue
+                for m5 in re.finditer(r"約([\d,]+)枚相当", t):
+                    stated = int(m5.group(1).replace(",", ""))
+                    window = t[max(0, m5.start() - 80):m5.start()]
+                    pcts = re.findall(r"(\d+(?:\.\d+)?)\s*%", window)
+                    if not pcts:
+                        continue
+                    p = float(pcts[-1])
+                    if not (85 <= p <= 120) or p == 100:
+                        continue
+                    theory = abs(8000 * 3 * (p - 100) / 100)
+                    if theory < 100:
+                        continue
+                    ratio = stated / theory
+                    if ratio > 2.0 or ratio < 0.5:
+                        ngs.append(
+                            f"V5 差枚が理論値から乖離 [{sec.get('title')}]: 機械割{p}%→8000G理論値約{round(theory):,}枚に対し"
+                            f"記載約{stated:,}枚（{ratio:.1f}倍）"
+                        )
 
     return ngs
 

@@ -174,6 +174,17 @@ def normalize(s):
     return re.sub(r"\s+", "", s)
 
 
+def normalize_spaced(s):
+    """C4の桁境界判定用：空白を除去せず1個に圧縮する正規化（2026-07-13追加）。
+    空白全除去のnormalize()だと、表組みページで隣接セルの数字同士が連結し
+    （例: 合算「1/163.9」の直後に出玉率「97.0%」→「163.997.0%」）、ページに実在する値まで
+    桁境界NGになる偽陰性があった。値の同定(C4)はこちらで判定する。
+    C3の逐語一致は従来どおりnormalize()＝引用の厳格さは緩めない。"""
+    s = unicodedata.normalize("NFKC", s or "")
+    s = s.translate(_TRANS)
+    return re.sub(r"\s+", " ", s).strip()
+
+
 def domain_of(url):
     """ドメインをeTLD+1相当に丸める（m./www.等のサブドメイン違いを同一ソース扱いにする）。"""
     d = urllib.parse.urlparse(url).netloc.lower().split(":")[0]
@@ -270,7 +281,9 @@ def run_data(data, min_domains):
         # C4: 値がquoteの中に実在するか（引用が値の証拠か）※C3より先に検査できる決定論チェック
         tokens = _value_tokens(nvalue)
         if tokens:
-            missing_tok = [t for t in tokens if not _token_in(t, nquote)]
+            # 桁境界は空白保持の正規化で判定（表出典で隣接セルと数字連結する偽陰性の回避・2026-07-13）
+            nquote_sp = normalize_spaced(quote)
+            missing_tok = [t for t in tokens if not _token_in(t, nquote_sp)]
             if missing_tok:
                 log(f"❌ {tag}: C4 値の数値 {missing_tok} が引用文の中に無い（引用が値の証拠になっていない・取り違え/幻覚の疑い）")
                 any_fail = True

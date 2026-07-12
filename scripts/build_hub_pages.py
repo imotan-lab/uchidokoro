@@ -324,6 +324,28 @@ def main():
     D = dataset_D(rows)
     ALL = rows  # machines.json 順（稼働率順）
 
+    # 散文内の件数はプレースホルダで持ち、生成時に実数を埋める
+    # （手書き数字がデータ更新に追従せずズレる事故の恒久対策・2026-07-12）
+    counts = {
+        "{COUNT_A}": str(len(A)),
+        "{COUNT_C}": str(len(C)),
+        "{COUNT_D}": str(len(D)),
+        "{COUNT_ALL}": str(len(ALL)),
+    }
+
+    def fill(obj):
+        if isinstance(obj, str):
+            for k, v in counts.items():
+                obj = obj.replace(k, v)
+            return obj
+        if isinstance(obj, list):
+            return [fill(x) for x in obj]
+        if isinstance(obj, dict):
+            return {k: fill(v) for k, v in obj.items()}
+        return obj
+
+    prose_all = fill(prose_all)
+
     # --- tenjo ---
     tenjo_list = render_rank_list(
         A, lambda r: f'天井 <strong>{tenjo_disp(r)}</strong> ／ 狙い目 {esc(yome(r))}'

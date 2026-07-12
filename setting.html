@@ -81,13 +81,7 @@
 
     <div id="settingResultBlock" class="article-block">
       <h2 class="block-label">▶ 設定期待度</h2>
-      <div class="setting-result-wrap">
-        <div class="setting-result-row"><span class="setting-result-name">設定1</span><div class="setting-bar-wrap"><div class="setting-bar cell-20" id="bar1"></div></div><span class="setting-result-pct" id="pct1">—</span></div>
-        <div class="setting-result-row"><span class="setting-result-name">設定2</span><div class="setting-bar-wrap"><div class="setting-bar cell-20" id="bar2"></div></div><span class="setting-result-pct" id="pct2">—</span></div>
-        <div class="setting-result-row"><span class="setting-result-name">設定4</span><div class="setting-bar-wrap"><div class="setting-bar cell-20" id="bar4"></div></div><span class="setting-result-pct" id="pct4">—</span></div>
-        <div class="setting-result-row"><span class="setting-result-name">設定5</span><div class="setting-bar-wrap"><div class="setting-bar cell-20" id="bar5"></div></div><span class="setting-result-pct" id="pct5">—</span></div>
-        <div class="setting-result-row"><span class="setting-result-name">設定6</span><div class="setting-bar-wrap"><div class="setting-bar cell-20" id="bar6"></div></div><span class="setting-result-pct" id="pct6">—</span></div>
-      </div>
+      <div class="setting-result-wrap" id="settingResultRows"></div>
       <div class="checker-card checker-card--mt">
         <p class="result-label">判定コメント</p>
         <p class="result-text result-text--comment" id="hintText">ゲーム数と各小役をカウントしながら入力してください。データが増えるほど精度が上がります。</p>
@@ -269,6 +263,7 @@ const MACHINE_CONFIGS = {
       { id: 'bell', label: '下段ベル',             sub: '通常時のみ',   rateKey: 'bell' }
     ],
     resultNote: '※下段ベルは目押し不要で確認できます。ボーナス確率との複合で精度が上がります。',
+    settings: [1,2,3,4,5,6],
     rates: {
       bb:   {1:1/254.2, 2:1/242.3, 3:1/239.6, 4:1/214.0, 5:1/203.2, 6:1/195.1},
       bell: {1:1/121.1, 2:1/114.4, 3:1/112.8, 4:1/106.2, 5:1/104.2, 6:1/99.1}
@@ -331,11 +326,12 @@ const MACHINE_CONFIGS = {
       { id: 'cherry', label: 'チェリー回数', sub: '通常時のみ', rateKey: 'cherry', ref: true }
     ],
     resultNote: '※ぶどう・チェリー確率はメーカー非公表の推定値です。参考程度にご利用ください。',
+    settings: [1,2,3,4,5,6],
     rates: {
-      big:    {1:1/273.1, 2:1/270.8, 4:1/254.0, 5:1/240.1, 6:1/229.1},
-      reg:    {1:1/409.6, 2:1/385.5, 4:1/290.0, 5:1/268.6, 6:1/229.1},
-      grape:  {1:1/5.90,  2:1/5.85,  4:1/5.78,  5:1/5.76,  6:1/5.66},
-      cherry: {1:1/38.10, 2:1/38.10, 4:1/35.62, 5:1/35.62, 6:1/35.62}
+      big:    {1:1/273.1, 2:1/270.8, 3:1/266.4, 4:1/254.0, 5:1/240.1, 6:1/229.1},
+      reg:    {1:1/409.6, 2:1/385.5, 3:1/336.1, 4:1/290.0, 5:1/268.6, 6:1/229.1},
+      grape:  {1:1/5.90,  2:1/5.85,  3:1/5.80,  4:1/5.78,  5:1/5.76,  6:1/5.66},
+      cherry: {1:1/38.10, 2:1/38.10, 3:1/36.82, 4:1/35.62, 5:1/35.62, 6:1/35.62}
     }
   },
   neo_aim_juggler: {
@@ -346,10 +342,11 @@ const MACHINE_CONFIGS = {
       { id: 'grape', label: 'ぶどう回数', sub: '通常時のみ',    rateKey: 'grape', ref: true }
     ],
     resultNote: '※ぶどう確率は設定1〜5が共通(1/6.02)で設定6のみ1/5.78です。設定6判別の鍵はぶどうです。',
+    settings: [1,2,3,4,5,6],
     rates: {
-      big:   {1:1/273.1, 2:1/269.7, 4:1/259.0, 5:1/259.0, 6:1/255.0},
-      reg:   {1:1/439.8, 2:1/399.6, 4:1/315.1, 5:1/255.0, 6:1/255.0},
-      grape: {1:1/6.02,  2:1/6.02,  4:1/6.02,  5:1/6.02,  6:1/5.78}
+      big:   {1:1/273.1, 2:1/269.7, 3:1/269.7, 4:1/259.0, 5:1/259.0, 6:1/255.0},
+      reg:   {1:1/439.8, 2:1/399.6, 3:1/331.0, 4:1/315.1, 5:1/255.0, 6:1/255.0},
+      grape: {1:1/6.02,  2:1/6.02,  3:1/6.02,  4:1/6.02,  5:1/6.02,  6:1/5.78}
     }
   },
   gogo_juggler3: {
@@ -360,10 +357,11 @@ const MACHINE_CONFIGS = {
       { id: 'grape', label: 'ぶどう回数', sub: '通常時のみ',    rateKey: 'grape', ref: true }
     ],
     resultNote: '※ぶどう確率の設定差はジャグラー中トップクラスです。カウント精度が判別精度に直結します。',
+    settings: [1,2,3,4,5,6],
     rates: {
-      big:   {1:1/259.0, 2:1/258.0, 4:1/254.0, 5:1/247.3, 6:1/234.9},
-      reg:   {1:1/354.2, 2:1/332.7, 4:1/268.6, 5:1/247.3, 6:1/234.9},
-      grape: {1:1/6.25,  2:1/6.20,  4:1/6.07,  5:1/6.00,  6:1/5.92}
+      big:   {1:1/259.0, 2:1/258.0, 3:1/257.0, 4:1/254.0, 5:1/247.3, 6:1/234.9},
+      reg:   {1:1/354.2, 2:1/332.7, 3:1/306.2, 4:1/268.6, 5:1/247.3, 6:1/234.9},
+      grape: {1:1/6.25,  2:1/6.20,  3:1/6.15,  4:1/6.07,  5:1/6.00,  6:1/5.92}
     }
   },
   funky_juggler2: {
@@ -374,10 +372,11 @@ const MACHINE_CONFIGS = {
       { id: 'grape', label: 'ぶどう回数', sub: '通常時のみ',    rateKey: 'grape', ref: true }
     ],
     resultNote: '※設定1〜5の差が緩やかで判別難度が高い機種です。設定6はBIG確率が突出するのが特徴です。',
+    settings: [1,2,3,4,5,6],
     rates: {
-      big:   {1:1/266.4, 2:1/259.0, 4:1/249.2, 5:1/240.1, 6:1/219.9},
-      reg:   {1:1/439.8, 2:1/407.1, 4:1/322.8, 5:1/299.3, 6:1/262.1},
-      grape: {1:1/5.94,  2:1/5.92,  4:1/5.83,  5:1/5.76,  6:1/5.67}
+      big:   {1:1/266.4, 2:1/259.0, 3:1/256.0, 4:1/249.2, 5:1/240.1, 6:1/219.9},
+      reg:   {1:1/439.8, 2:1/407.1, 3:1/366.1, 4:1/322.8, 5:1/299.3, 6:1/262.1},
+      grape: {1:1/5.94,  2:1/5.92,  3:1/5.88,  4:1/5.83,  5:1/5.76,  6:1/5.67}
     }
   },
   happy_juggler_v3: {
@@ -389,11 +388,12 @@ const MACHINE_CONFIGS = {
       { id: 'cherry', label: 'チェリー回数', sub: '通常時のみ', rateKey: 'cherry', ref: true }
     ],
     resultNote: '※ぶどう・チェリー確率はメーカー非公表の推定値です。チェリーは高設定ほど出にくい逆パターンの機種です。',
+    settings: [1,2,3,4,5,6],
     rates: {
-      big:    {1:1/273.1, 2:1/270.8, 4:1/254.0, 5:1/239.2, 6:1/226.0},
-      reg:    {1:1/397.2, 2:1/362.1, 4:1/300.6, 5:1/273.1, 6:1/256.0},
-      grape:  {1:1/6.04,  2:1/6.01,  4:1/5.84,  5:1/5.81,  6:1/5.79},
-      cherry: {1:1/62.24, 2:1/62.47, 4:1/64.00, 5:1/64.57, 6:1/65.34}
+      big:    {1:1/273.1, 2:1/270.8, 3:1/263.2, 4:1/254.0, 5:1/239.2, 6:1/226.0},
+      reg:    {1:1/397.2, 2:1/362.1, 3:1/332.7, 4:1/300.6, 5:1/273.1, 6:1/256.0},
+      grape:  {1:1/6.04,  2:1/6.01,  3:1/5.98,  4:1/5.84,  5:1/5.81,  6:1/5.79},
+      cherry: {1:1/62.24, 2:1/62.47, 3:1/62.95, 4:1/64.00, 5:1/64.57, 6:1/65.34}
     }
   },
   revengers: {
@@ -455,11 +455,12 @@ const MACHINE_CONFIGS = {
       { id: 'reg', label: 'RB回数', sub: '初当たりのみ', rateKey: 'reg' },
       { id: 'bell', label: 'ベル合算回数', sub: '通常時のみ', rateKey: 'bell', ref: true }
     ],
-    resultNote: '※設定3/4は存在しません。設定4の欄は参考値として設定2の値を表示。',
+    settings: [1,2,5,6],
+    resultNote: '※設定3/4は存在しない4段階設定です。',
     rates: {
-      big:  {1:1/277.7, 2:1/275.4, 4:1/275.4, 5:1/270.8, 6:1/264.3},
-      reg:  {1:1/434.0, 2:1/394.8, 4:1/394.8, 5:1/344.9, 6:1/313.6},
-      bell: {1:1/12.5,  2:1/12.6,  4:1/12.6,  5:1/11.9,  6:1/11.2}
+      big:  {1:1/277.7, 2:1/275.4, 5:1/270.8, 6:1/264.3},
+      reg:  {1:1/434.0, 2:1/394.8, 5:1/344.9, 6:1/313.6},
+      bell: {1:1/12.5,  2:1/12.6,  5:1/11.9,  6:1/11.2}
     }
   },
   hihou: {
@@ -508,15 +509,16 @@ const MACHINE_CONFIGS = {
   },
   hanabi: {
     heroText: '風鈴確率をメインに設定判別。逆押しで中段揃い=風鈴A、斜め揃い=風鈴B。',
-    note: '風鈴Aは逆押し中段揃い、風鈴Bは逆押し斜め揃い。設定は1/2/5/6の4段階（設定4欄は設定2の値を表示）。',
+    note: '風鈴Aは逆押し中段揃い、風鈴Bは逆押し斜め揃い。設定は1/2/5/6の4段階。',
     fields: [
       { id: 'bellA', label: '風鈴A', sub: '逆押し中段揃い', rateKey: 'bellA' },
       { id: 'bellB', label: '風鈴B', sub: '逆押し斜め揃い', rateKey: 'bellB' }
     ],
-    resultNote: '※設定3/4は存在しません。設定4の欄は設定2の値を表示。',
+    settings: [1,2,5,6],
+    resultNote: '※設定3/4は存在しない4段階設定です。',
     rates: {
-      bellA: {1:1/12.9, 2:1/12.5, 4:1/12.5, 5:1/12.1, 6:1/11.5},
-      bellB: {1:1/38.4, 2:1/38.7, 4:1/38.7, 5:1/36.2, 6:1/34.5}
+      bellA: {1:1/12.9, 2:1/12.5, 5:1/12.1, 6:1/11.5},
+      bellB: {1:1/38.4, 2:1/38.7, 5:1/36.2, 6:1/34.5}
     }
   },
   onepunchman: {
@@ -547,13 +549,14 @@ const MACHINE_CONFIGS = {
   ,
   new_king_hanahana_v: {
     heroText: 'ベル確率とBIG中スイカでじっくり設定推測。設定は1/2/3/4/Vの5段階です。',
-    note: 'ベルは通常時のみカウント（BIG・REG中は除く）。BIG中スイカはBIG消化中にスイカが揃った回数。設定は1/2/3/4/V（ツール上は1/2/4/5/6欄に対応）。',
+    note: 'ベルは通常時のみカウント（BIG・REG中は除く）。BIG中スイカはBIG消化中にスイカが揃った回数。設定は1/2/3/4/Vの5段階です。',
+    settingLabels: {1:'設定1', 2:'設定2', 4:'設定3', 5:'設定4', 6:'設定V'},
     fields: [
       { id: 'big',   label: 'BIG回数',   sub: '初当たりのみ',  rateKey: 'big' },
       { id: 'reg',   label: 'REG回数',   sub: '初当たりのみ',  rateKey: 'reg' },
       { id: 'bell',  label: 'ベル回数',   sub: '通常時のみ',    rateKey: 'bell', ref: true }
     ],
-    resultNote: '※ベル確率はメーカー非公表の推定値です。設定欄の1/2/4/5/6は実際の設定1/2/3/4/Vに対応しています。',
+    resultNote: '※ベル確率はメーカー非公表の推定値です。',
     rates: {
       big:  {1:1/299, 2:1/291, 4:1/281, 5:1/268, 6:1/253},
       reg:  {1:1/496, 2:1/471, 4:1/442, 5:1/409, 6:1/372},
@@ -561,15 +564,16 @@ const MACHINE_CONFIGS = {
     }
   },
   okidoki_gorgeous: {
-    note: 'チェリーBと確定役Bに設定差あり。チェリーは通常時のみカウント。設定は1/2/3/5/6（設定4なし）。ツール上の設定4欄は設定3の値を表示。',
+    note: 'チェリーBと確定役Bに設定差あり。チェリーは通常時のみカウント。設定は1/2/3/5/6（設定4なし）。',
     fields: [
       { id: 'cherryB', label: 'チェリーB', sub: '通常時のみ', rateKey: 'cherryB' },
       { id: 'cherry',  label: 'チェリー合算', sub: '通常時のみ', rateKey: 'cherry' }
     ],
-    resultNote: '※設定4は存在しません。設定4の欄は設定3の値を表示しています。チェリーBは見た目上の区別が難しいため、チェリー合算もあわせて参考にしてください。',
+    resultNote: '※設定4は存在しない5段階設定（1/2/3/5/6）です。チェリーBは見た目上の区別が難しいため、チェリー合算もあわせて参考にしてください。',
+    settings: [1,2,3,5,6],
     rates: {
-      cherryB: {1:1/168.0, 2:1/152.4, 4:1/145.6, 5:1/136.5, 6:1/128.5},
-      cherry:  {1:1/35.0,  2:1/34.3,  4:1/34.0,  5:1/33.4,  6:1/32.9}
+      cherryB: {1:1/168.0, 2:1/152.4, 3:1/145.6, 5:1/136.5, 6:1/128.5},
+      cherry:  {1:1/35.0,  2:1/34.3,  3:1/34.0,  5:1/33.4,  6:1/32.9}
     }
   },
   king_hanahana: {
@@ -580,7 +584,7 @@ const MACHINE_CONFIGS = {
       { id: 'reg',   label: 'REG回数',   sub: '初当たりのみ',  rateKey: 'reg' },
       { id: 'bell',  label: 'ベル回数',   sub: '通常時のみ',    rateKey: 'bell', ref: true }
     ],
-    resultNote: '※ベル確率はメーカー非公表の推定値です。設定3の値: BIG 1/235、REG 1/537、ベル 約1/7.09。',
+    resultNote: '※ベル確率はメーカー非公表の推定値です。設定3の値: BIG 1/268、REG 1/420（ツールは設定3を除く5段階で表示）。',
     rates: {
       big:  {1:1/292, 2:1/280, 4:1/257, 5:1/244, 6:1/232},
       reg:  {1:1/489, 2:1/452, 4:1/390, 5:1/360, 6:1/332},
@@ -663,8 +667,11 @@ const MACHINE_CONFIGS = {
 };
 
 // 判別ロジック
-const SETTINGS = [1,2,4,5,6];
-const COLORS = {1:'#667788',2:'#7788aa',4:'#f5b941',5:'#e8a020',6:'#3fc87a'};
+// 計算・表示対象の設定は機種ごとの実在設定に従う（machineConfig.settings で機種別に指定）。
+// 未指定の機種は従来どおり 1/2/4/5/6 の5段階。設定3を含む6段階のデータを持つ機種は
+// settings: [1,2,3,4,5,6] を MACHINE_CONFIGS に明示する（2026-07-12）
+const DEFAULT_SETTINGS = [1,2,4,5,6];
+const COLORS = {1:'#667788',2:'#7788aa',3:'#88a0c0',4:'#f5b941',5:'#e8a020',6:'#3fc87a'};
 
 // 機種対応チェック
 const machineConfig = MACHINE_CONFIGS[slug];
@@ -675,6 +682,7 @@ if (!machineConfig) {
   document.getElementById('landscapeHint').style.display = 'none';
 }
 
+const ACTIVE_SETTINGS = (machineConfig && machineConfig.settings) || DEFAULT_SETTINGS;
 const RATES = machineConfig ? machineConfig.rates : null;
 const FIELDS = machineConfig ? ['totalG', ...machineConfig.fields.map(f => f.id + 'Count')] : ['totalG'];
 
@@ -760,7 +768,7 @@ function calcAll() {
   });
   if (!totalG) { resetBars(); return; }
   let scores = {}, total = 0;
-  SETTINGS.forEach(s => {
+  ACTIVE_SETTINGS.forEach(s => {
     let L = 1;
     machineConfig.fields.forEach(f => {
       const count = val(f.id + 'Count');
@@ -772,7 +780,7 @@ function calcAll() {
   });
   if (total === 0) { resetBars(); return; }
   let maxPct = 0, maxS = 1;
-  SETTINGS.forEach(s => {
+  ACTIVE_SETTINGS.forEach(s => {
     const pct = scores[s] / total * 100;
     if (pct > maxPct) { maxPct = pct; maxS = s; }
     document.getElementById('bar' + s).style.width = pct + '%';
@@ -781,13 +789,13 @@ function calcAll() {
   });
   let comment = '';
   if (totalG < 2000) comment = `現在${totalG}G。2000G以上積み上げると精度が上がります。参考程度にご覧ください。`;
-  else if (maxPct >= 60) comment = `設定${maxS}の可能性が高いです（${maxPct.toFixed(1)}%）。`;
-  else if (maxPct >= 40) comment = `設定${maxS}がやや優勢ですが、まだ絞り込めていません。カウントを続けましょう。`;
+  else if (maxPct >= 60) comment = `${settingLabel(maxS)}の可能性が高いです（${maxPct.toFixed(1)}%）。`;
+  else if (maxPct >= 40) comment = `${settingLabel(maxS)}がやや優勢ですが、まだ絞り込めていません。カウントを続けましょう。`;
   else comment = '設定を絞り込めていません。ゲーム数を重ねながらカウントを続けてください。';
   document.getElementById('hintText').textContent = comment;
 }
 function resetBars() {
-  SETTINGS.forEach(s => {
+  ACTIVE_SETTINGS.forEach(s => {
     document.getElementById('bar' + s).style.width = '20%';
     document.getElementById('bar' + s).style.background = 'var(--muted2)';
     document.getElementById('pct' + s).textContent = '—';
@@ -806,7 +814,22 @@ function resetAll() {
   try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
   resetBars();
 }
+// 結果行を機種の実在設定から動的生成（従来は設定1/2/4/5/6の静的5行固定で、
+// 設定3を含む機種でも設定3が表示されなかった）
+// settingLabels: 内部キーと実際の設定名が異なる機種用（例: ニューキングハナハナの設定1/2/3/4/V）
+function settingLabel(s) {
+  const lab = machineConfig && machineConfig.settingLabels && machineConfig.settingLabels[s];
+  return lab || ('設定' + s);
+}
+function generateResultRows() {
+  const wrap = document.getElementById('settingResultRows');
+  if (!wrap) return;
+  wrap.innerHTML = ACTIVE_SETTINGS.map(s =>
+    `<div class="setting-result-row"><span class="setting-result-name">${settingLabel(s)}</span><div class="setting-bar-wrap"><div class="setting-bar cell-20" id="bar${s}"></div></div><span class="setting-result-pct" id="pct${s}">—</span></div>`
+  ).join('');
+}
 generateInputs();
+generateResultRows();
 load();
 calcAll();
 FIELDS.forEach(id => updateCurrentVal(id));
