@@ -89,25 +89,14 @@
       }
       canonical.href = `https://uchidokoro.com/machines/${slug}/`;
 
-      // 日付情報（JSON-LDに使う）
-      // ISO 8601形式（タイムゾーン付き）。Google Rich Results推奨形式
-      // 日付のみの release_date は東京時刻のT00:00:00+09:00として補完
-      const nowIso = new Date().toISOString(); // 例: 2026-05-15T14:30:00.000Z（UTC）
-      // 未来のrelease_date（先行記事）はdatePublishedを当日にクランプ（未来公開日はリッチリザルト警告対象）
-      const todayYmd = nowIso.slice(0, 10);
-      const pubYmd = releaseDate && releaseDate <= todayYmd ? releaseDate : todayYmd;
-      const datePublished = releaseDate ? `${pubYmd}T00:00:00+09:00` : nowIso;
-      const todayIso = nowIso;
-
-      // JSON-LD 構造化データ（強化版）
+      // JSON-LD 構造化データ
+      // 日付は出力しない（release_date=導入日は記事の公開日ではないため。build_machine_pages.pyと同一方針）
       const jsonLd = {
         "@context": "https://schema.org",
         "@type": "Article",
         "headline": title,
         "description": desc,
         "image": "https://uchidokoro.com/assets/img/ogp.png",
-        "datePublished": datePublished,
-        "dateModified": todayIso,
         "author": {
           "@type": "Organization",
           "name": "うちどころ。",

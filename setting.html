@@ -73,6 +73,7 @@
 
     <div id="settingInputBlock" class="article-block">
       <h2 class="block-label">▶ カウント入力</h2>
+      <p class="hint-text is-hidden" id="genericMachineNote"></p>
         <p class="hint-text compact-note" id="inputNote"></p>
       <div class="setting-input-grid" id="settingInputGrid"></div>
       <button class="setting-reset-btn" onclick="resetAll()">データをリセット</button>
@@ -195,7 +196,15 @@ fetch("assets/data/machines.json").then(r=>r.json()).then(machines=>{
   if(!m) return;
   // 素の setting.html（slug指定なし）は「小役カウンター総合ページ」なので
   // title/h1/description は静的のまま維持する（sitemap掲載の正規URL。北斗専用表示への書き換えはしない）
-  if (!slugInfo.explicit) return;
+  // ただし、初期表示のカウンターがどの機種用かは画面上に明示する（誤カウント防止）
+  if (!slugInfo.explicit) {
+    const note = document.getElementById("genericMachineNote");
+    if (note) {
+      note.textContent = "いま表示しているカウンターは「" + m.name + "」用です。他の機種で使う場合は、各機種ページの「小役カウンター ポチポチくん →」か、このページ下部の対応機種一覧から開いてください。";
+      note.classList.remove("is-hidden");
+    }
+    return;
+  }
   document.getElementById("pageTitle").innerHTML = m.name + "<br>小役カウンター ポチポチくん";
   document.getElementById("heroSub").textContent = machineConfig
     ? m.name + "の小役カウンターツール。" + (machineConfig.heroText || "ゲーム数・小役をカウントしながら入力すると設定期待度がリアルタイムで更新されます。")
@@ -683,9 +692,9 @@ function generateInputs() {
         <span class="setting-input-sub">通常時の近似値</span>
       </div>
       <div class="setting-counter-wrap">
-        <button class="setting-cnt-btn" onclick="dec('totalG')">－</button>
-        <span class="setting-current-val" id="cur_totalG">0</span><input class="setting-num-input" id="totalG" type="number" inputmode="numeric" placeholder="0">
-        <button class="setting-cnt-btn" onclick="inc('totalG')">＋</button>
+        <button class="setting-cnt-btn" onclick="dec('totalG')" aria-label="総ゲーム数を1減らす">－</button>
+        <span class="setting-current-val" id="cur_totalG">0</span><input class="setting-num-input" id="totalG" type="number" inputmode="numeric" placeholder="0" aria-label="総ゲーム数">
+        <button class="setting-cnt-btn" onclick="inc('totalG')" aria-label="総ゲーム数を1増やす">＋</button>
       </div>
     </div>`;
   machineConfig.fields.forEach(f => {
@@ -699,9 +708,9 @@ function generateInputs() {
         <span class="setting-input-sub" id="${f.id}Disp">${f.sub}</span>
       </div>
       <div class="setting-counter-wrap">
-        <button class="setting-cnt-btn" onclick="dec('${id}')">－</button>
-        <span class="setting-current-val" id="cur_${id}">0</span><input class="setting-num-input" id="${id}" type="number" inputmode="numeric" placeholder="0">
-        <button class="setting-cnt-btn" onclick="inc('${id}')">＋</button>
+        <button class="setting-cnt-btn" onclick="dec('${id}')" aria-label="${f.label}を1減らす">－</button>
+        <span class="setting-current-val" id="cur_${id}">0</span><input class="setting-num-input" id="${id}" type="number" inputmode="numeric" placeholder="0" aria-label="${f.label}の回数">
+        <button class="setting-cnt-btn" onclick="inc('${id}')" aria-label="${f.label}を1増やす">＋</button>
       </div>
     </div>`;
   });
