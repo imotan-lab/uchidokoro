@@ -241,6 +241,14 @@ def main():
         if machine.get("status") == "preview":
             html_out = html_out.replace(
                 "</head>", '<meta name="robots" content="noindex,follow">\n</head>', 1)
+        else:
+            # AdSenseローダーはcomplete機種のみ注入（2026-07-13・外部レビュー反映）。
+            # テンプレのmachine.html自体は素アクセスで本文が空になるnoindexページのため
+            # ローダーを持たせず、生成時にここで足す＝preview/エラーページを広告対象にしない。
+            html_out = html_out.replace(
+                "</head>",
+                '<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js'
+                '?client=ca-pub-2097489177716087" crossorigin="anonymous"></script>\n</head>', 1)
 
         # 本文（lead / sections / factTable）をプリレンダ
         dp = detail_dir / f"{slug}.json"
