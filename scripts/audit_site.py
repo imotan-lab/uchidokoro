@@ -735,16 +735,21 @@ def check_27_hub_counts(machines: list) -> list[str]:
     build_hub_pages.py と同じロジックで A/C/D/ALL を再計算し、HTML中の件数数字と突合する。"""
     ngs = []
 
-    # build_hub_pages.py の load_rows/dataset_A/C/D と同一ロジック（ズレると誤検知するため変更時は両方直す）
+    # build_hub_pages.py の mode_conf/base_caution/dataset_A/C/D と同一ロジック（ズレると誤検知するため変更時は両方直す）
     def _mode_key(x):
         return x.get("key") if isinstance(x, dict) else x
 
-    def _ck(m, mode, key):
-        c = m.get("checker") or {}
+    def _mode_conf(c, key):
+        # checker直下とchecker.modeData配下の両形式に対応（modeData形式3機種の漏れ事故対策・2026-07-13）
         if not isinstance(c, dict):
             return None
-        sub = c.get(mode) or {}
-        return sub.get(key) if isinstance(sub, dict) else None
+        v = c.get(key)
+        if isinstance(v, dict):
+            return v
+        md = c.get("modeData")
+        if isinstance(md, dict) and isinstance(md.get(key), dict):
+            return md[key]
+        return None
 
     rows = []
     for m in machines:
@@ -752,11 +757,29 @@ def check_27_hub_counts(machines: list) -> list[str]:
         if not isinstance(c, dict):
             c = {}
         modes = [_mode_key(x) for x in (c.get("modes") or [])]
-        # 基準モード: normal優先、無ければreset系以外の最初のモード（cz等）＝build_hub_pages.pyのbase_cautionと同一
-        ncau = _ck(m, "normal", "caution")
+        # ★構造カバレッジ検出: modes宣言に対応する設定がどこにも無い機種＝集計・表示から黙って漏れる★
+        for x in (c.get("modes") or []):
+            k = _mode_key(x)
+            if isinstance(x, dict) and len(x) > 2:
+                continue  # モード定義がエントリ内に直書きされている形式は対象外
+            if isinstance(k, str) and _mode_conf(c, k) is None:
+                ngs.append(f"{m['slug']}: modes宣言 '{k}' に対応する設定がchecker直下にもmodeDataにも無い（集計から漏れる・データ形式の確認要）")
+        # 基準モード: normal優先→modes宣言順のreset系以外→直下キー走査
+        ncau = None
+        v = _mode_conf(c, "normal")
+        if isinstance(v, dict) and isinstance(v.get("caution"), (int, float)):
+            ncau = v["caution"]
+        if not isinstance(ncau, (int, float)):
+            for k in modes:
+                if not isinstance(k, str) or "reset" in k.lower():
+                    continue
+                v = _mode_conf(c, k)
+                if isinstance(v, dict) and isinstance(v.get("caution"), (int, float)):
+                    ncau = v["caution"]
+                    break
         if not isinstance(ncau, (int, float)):
             for k, v in c.items():
-                if k == "reset" or "reset" in str(k).lower() or not isinstance(v, dict):
+                if k in ("reset", "modeData") or "reset" in str(k).lower() or not isinstance(v, dict):
                     continue
                 cv = v.get("caution")
                 if isinstance(cv, (int, float)):
@@ -768,7 +791,7 @@ def check_27_hub_counts(machines: list) -> list[str]:
             has_suru=bool(c.get("hasSuru") or "suru" in modes or "through" in modes),
             has_cycle=bool(c.get("hasCycle") or "cycle" in modes),
             ncau=ncau,
-            rcau=_ck(m, "reset", "caution"),
+            rcau=(_mode_conf(c, "reset") or {}).get("caution"),
         ))
     ALL = rows
     A = [r for r in rows

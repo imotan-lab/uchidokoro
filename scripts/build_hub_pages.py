@@ -80,19 +80,41 @@ def ck(m, mode, key):
     return sub.get(key) if isinstance(sub, dict) else None
 
 
+def mode_conf(c, key):
+    """モード設定の共通アクセサ。checker直下（checker.normal等）と
+    checker.modeData配下（新形式・sao/bandori/hanma_baki等）の両方を探す
+    （modeData形式の3機種が全集計から漏れていた事故の修正・2026-07-13）。"""
+    if not isinstance(c, dict):
+        return None
+    v = c.get(key)
+    if isinstance(v, dict):
+        return v
+    md = c.get("modeData")
+    if isinstance(md, dict) and isinstance(md.get(key), dict):
+        return md[key]
+    return None
+
+
 def base_caution(m):
     """リセット比較の基準となる通常時系モードのcaution値。
-    normalを優先し、無ければreset系以外の最初のモード（cz等）を使う
+    normalを優先し、無ければmodes宣言順にreset系以外のモード（cz等）を使う
     （基準モードがnormalでない機種＝東京喰種/攻殻/ヴヴヴ2/ダンベル/バキが
     リセットランキングから漏れていた事故の修正・2026-07-13）。"""
     c = m.get("checker") or {}
     if not isinstance(c, dict):
         return None
-    sub = c.get("normal")
-    if isinstance(sub, dict) and isinstance(sub.get("caution"), (int, float)):
-        return sub["caution"]
+    v = mode_conf(c, "normal")
+    if isinstance(v, dict) and isinstance(v.get("caution"), (int, float)):
+        return v["caution"]
+    for x in (c.get("modes") or []):
+        k = mode_key(x)
+        if not isinstance(k, str) or "reset" in k.lower():
+            continue
+        v = mode_conf(c, k)
+        if isinstance(v, dict) and isinstance(v.get("caution"), (int, float)):
+            return v["caution"]
     for k, v in c.items():
-        if k == "reset" or "reset" in str(k).lower() or not isinstance(v, dict):
+        if k in ("reset", "modeData") or "reset" in str(k).lower() or not isinstance(v, dict):
             continue
         cv = v.get("caution")
         if isinstance(cv, (int, float)):
@@ -122,7 +144,7 @@ def load_rows():
                 has_suru=bool(c.get("hasSuru") or "suru" in modes or "through" in modes),
                 has_cycle=bool(c.get("hasCycle") or "cycle" in modes),
                 ncau=base_caution(m),
-                rcau=ck(m, "reset", "caution"),
+                rcau=(mode_conf(c, "reset") or {}).get("caution"),
             )
         )
     return rows
