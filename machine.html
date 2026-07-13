@@ -41,7 +41,7 @@
     <a class="brand" href="index.html"><img src="assets/img/logo.png" alt="うちどころ。"></a>
     <div class="header-search-wrap">
       <span class="header-search-icon">🔍</span>
-      <input id="headerSearch" class="header-search-input" type="search" placeholder="機種を検索">
+      <input id="headerSearch" class="header-search-input" type="search" placeholder="機種を検索" aria-label="機種を検索">
       <div id="headerDropdown" class="header-dropdown"></div>
     </div>
   </div>
@@ -93,7 +93,7 @@
             <button class="setting-cnt-btn" id="cycleInc" aria-label="周期回数を1増やす">＋</button>
           </div>
         </div>
-        <input id="gameInput" class="game-input" type="number" inputmode="numeric" placeholder="現在G数を入力">
+        <input id="gameInput" class="game-input" type="number" inputmode="numeric" placeholder="現在G数を入力" aria-label="現在のゲーム数">
         <div id="checkerResult" class="checker-result result-wait">
           <p class="result-label">判定</p>
           <p class="result-text">G数を入力してください</p>
@@ -759,12 +759,14 @@ function resolveMachineSlug() {
         html += `<p class="settei-sub-label">${tbl.label}</p>`;
         html += `<table class="settei-table${sectionWide ? " settei-table--wide" : ""}"><tr>${tbl.headers.map(h => `<th>${h}</th>`).join("")}</tr>`;
         tbl.rows.forEach(row => {
-          const cell0 = row[0];
-          const cell1 = row[1];
-          const badge = typeof cell1 === "object"
-            ? `<span class="settei-badge ${badgeClass[cell1.badge] || ""}">${cell1.text}</span>`
-            : cell1;
-          html += `<tr><td>${cell0}</td><td>${badge}</td></tr>`;
+          // 行の全セルを出力（旧実装は2セル固定で、4列表のREG・合算列が消えていた）
+          const cells = Array.isArray(row) ? row : [row];
+          html += `<tr>` + cells.map(c => {
+            const v = (typeof c === "object" && c !== null)
+              ? `<span class="settei-badge ${badgeClass[c.badge] || ""}">${c.text}</span>`
+              : c;
+            return `<td>${v}</td>`;
+          }).join("") + `</tr>`;
         });
         html += `</table>`;
         if (tbl.note) html += `<p class="settei-note">${tbl.note}</p>`;

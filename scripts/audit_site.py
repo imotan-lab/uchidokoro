@@ -752,18 +752,29 @@ def check_27_hub_counts(machines: list) -> list[str]:
         if not isinstance(c, dict):
             c = {}
         modes = [_mode_key(x) for x in (c.get("modes") or [])]
+        # 基準モード: normal優先、無ければreset系以外の最初のモード（cz等）＝build_hub_pages.pyのbase_cautionと同一
+        ncau = _ck(m, "normal", "caution")
+        if not isinstance(ncau, (int, float)):
+            for k, v in c.items():
+                if k == "reset" or "reset" in str(k).lower() or not isinstance(v, dict):
+                    continue
+                cv = v.get("caution")
+                if isinstance(cv, (int, float)):
+                    ncau = cv
+                    break
         rows.append(dict(
             unit=c.get("unit"),
             limit=m.get("limit"),
-            has_suru=bool(c.get("hasSuru") or "suru" in modes),
+            has_suru=bool(c.get("hasSuru") or "suru" in modes or "through" in modes),
             has_cycle=bool(c.get("hasCycle") or "cycle" in modes),
-            ncau=_ck(m, "normal", "caution"),
+            ncau=ncau,
             rcau=_ck(m, "reset", "caution"),
         ))
     ALL = rows
     A = [r for r in rows
          if r["unit"] == "G" and isinstance(r["limit"], (int, float))
-         and not r["has_suru"] and not r["has_cycle"] and r["limit"] < 1000]
+         and not r["has_cycle"] and r["limit"] < 1000
+         and isinstance(r["ncau"], (int, float))]
     C = [r for r in rows
          if isinstance(r["rcau"], (int, float)) and isinstance(r["ncau"], (int, float))
          and r["ncau"] - r["rcau"] > 0]
@@ -786,6 +797,34 @@ def check_27_hub_counts(machines: list) -> list[str]:
         bad = sorted(n for n in nums if n != exp)
         if bad:
             ngs.append(f"{file}: 件数表記 {bad} が実数 {exp} と不一致（build_hub_pages.py 再実行かhub_prose.jsonの手書き数字残り）")
+    return ngs
+
+
+def check_28_settei_table_shape(machines: list) -> list[str]:
+    """settei表の headers 数と各行のセル数が一致しているか（データレベル）。
+    2026-07-13外部レビューで「4列見出しなのに2セルしか描画されない」レンダラーバグが発覚。
+    レンダラーは全セル出力に修正済みだが、データ側の列数不揃いも表示崩れになるため毎日検知する。"""
+    ngs = []
+    for m in machines:
+        p = BASE / "assets" / "data" / "machine-details" / f"{m['slug']}.json"
+        if not p.is_file():
+            continue
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        for si, s in enumerate(d.get("sections", [])):
+            if s.get("type") != "settei":
+                continue
+            for ti, tbl in enumerate(s.get("tables") or []):
+                headers = tbl.get("headers") or []
+                for ri, row in enumerate(tbl.get("rows") or []):
+                    cells = row if isinstance(row, list) else [row]
+                    if headers and len(cells) != len(headers):
+                        ngs.append(
+                            f"{m['slug']}: sections[{si}].tables[{ti}]({tbl.get('label')}) 行{ri}が"
+                            f"{len(cells)}セル（見出しは{len(headers)}列）"
+                        )
     return ngs
 
 
@@ -817,6 +856,7 @@ CHECKS = [
     ("25_body型", check_25_section_body_type),
     ("26_空段落", check_26_empty_paragraph),
     ("27_ハブ件数整合", check_27_hub_counts),
+    ("28_settei表の列数整合", check_28_settei_table_shape),
 ]
 
 

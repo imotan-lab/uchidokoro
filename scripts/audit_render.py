@@ -160,6 +160,27 @@ def check_one(page, machine: dict) -> list[str]:
         if t in deprecated_titles:
             ngs.append(f"R10: 統一前の旧title残留: '{t}' → 正規化スクリプト実行が必要")
 
+    # R11: 全tableで見出しth数と各行のtd数が一致しているか
+    # （2026-07-13外部レビュー: settei表レンダラーが2セル固定で4列表のREG・合算列が消えていた事故の再発検知）
+    bad_tables = page.evaluate("""() => {
+        const out = [];
+        document.querySelectorAll('table').forEach((tbl, ti) => {
+            const firstTr = tbl.querySelector('tr');
+            if (!firstTr) return;
+            const headTh = firstTr.querySelectorAll('th').length;
+            // 対象は「先頭行が全thのヘッダー行型」テーブルのみ（info-table等の行見出し型は対象外）
+            if (headTh < 2 || firstTr.querySelectorAll('td').length) return;
+            Array.from(tbl.querySelectorAll('tr')).forEach((tr, ri) => {
+                if (ri === 0 || tr.querySelectorAll('th').length) return;
+                const tds = tr.querySelectorAll('td').length;
+                if (tds && tds !== headTh) out.push(`table${ti} 行${ri}: th${headTh}列に対しtd${tds}セル`);
+            });
+        });
+        return out.slice(0, 3);
+    }""")
+    for b in bad_tables:
+        ngs.append(f"R11: 表の列数不整合: {b}")
+
     return ngs
 
 

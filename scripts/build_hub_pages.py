@@ -80,6 +80,26 @@ def ck(m, mode, key):
     return sub.get(key) if isinstance(sub, dict) else None
 
 
+def base_caution(m):
+    """リセット比較の基準となる通常時系モードのcaution値。
+    normalを優先し、無ければreset系以外の最初のモード（cz等）を使う
+    （基準モードがnormalでない機種＝東京喰種/攻殻/ヴヴヴ2/ダンベル/バキが
+    リセットランキングから漏れていた事故の修正・2026-07-13）。"""
+    c = m.get("checker") or {}
+    if not isinstance(c, dict):
+        return None
+    sub = c.get("normal")
+    if isinstance(sub, dict) and isinstance(sub.get("caution"), (int, float)):
+        return sub["caution"]
+    for k, v in c.items():
+        if k == "reset" or "reset" in str(k).lower() or not isinstance(v, dict):
+            continue
+        cv = v.get("caution")
+        if isinstance(cv, (int, float)):
+            return cv
+    return None
+
+
 def load_rows():
     machines = json.loads(MACHINES.read_text(encoding="utf-8"))
     rows = []
@@ -97,9 +117,11 @@ def load_rows():
                 limit=m.get("limit"),
                 status=m.get("status", "complete"),
                 unit=c.get("unit"),
-                has_suru=bool(c.get("hasSuru") or "suru" in modes),
+                # スルー天井はモードキー'suru'に加え'through'表記の機種がある
+                # （バジ天膳/からくり/まどマギフォルテ/沖ドキDUOアンコールが漏れていた・2026-07-13修正）
+                has_suru=bool(c.get("hasSuru") or "suru" in modes or "through" in modes),
                 has_cycle=bool(c.get("hasCycle") or "cycle" in modes),
-                ncau=ck(m, "normal", "caution"),
+                ncau=base_caution(m),
                 rcau=ck(m, "reset", "caution"),
             )
         )
@@ -122,12 +144,17 @@ def tenjo_disp(r) -> str:
 # ---- データセット算出（analyze と同一ロジック） ----
 
 def dataset_A(rows):
+    # G数でカウントする天井（基準モードのcautionがG数で構造化されている機種）が対象。
+    # スルー天井を併せ持つ機種も、G数天井があればランキングに含める
+    # （旧実装はスルー併用機を一律除外しており、番長4/mhrise等が漏れていた・2026-07-13修正）。
+    # 周期天井の機種と、G数天井の構造化データが無い機種（スルー専用チェッカー等）は対象外。
     a = [
         r for r in rows
         if r["unit"] == "G" and isinstance(r["limit"], (int, float))
-        and not r["has_suru"] and not r["has_cycle"] and r["limit"] < 1000
+        and not r["has_cycle"] and r["limit"] < 1000
+        and isinstance(r["ncau"], (int, float))
     ]
-    a.sort(key=lambda r: (r["limit"], r["ncau"] if isinstance(r["ncau"], (int, float)) else 99999))
+    a.sort(key=lambda r: (r["limit"], r["ncau"]))
     return a
 
 
@@ -352,7 +379,8 @@ def main():
     )
     tenjo_note = (
         "※同じ天井ゲーム数の機種は、狙い目ゲーム数が浅い順に掲載しています。"
-        f"天井1000G未満の機種は全<span class=\"list-count\">{len(A)}</span>機種です。"
+        f"G数でカウントする天井が1000G未満の機種は全<span class=\"list-count\">{len(A)}</span>機種です"
+        "（周期天井の機種と、G数天井のチェッカーデータが無い機種は集計対象外です）。"
     )
 
     # --- reset ---
@@ -362,14 +390,14 @@ def main():
         lambda r: f'通常 <strong>{r["ncau"]}G〜</strong> → リセット後 <strong>{r["rcau"]}G〜</strong>（短縮 {r["diff"]}G）',
     )
     reset_note = (
-        "※短縮幅（通常時の狙い目ライン − リセット後の狙い目ライン）が大きい順。"
-        f"リセット恩恵のある機種は全<span class=\"list-count\">{len(C)}</span>機種で、上位{len(C_top)}機種を掲載しています。"
+        "※短縮幅（通常時の狙い目ライン − リセット後の狙い目ライン）が大きい順。比較の基準は各機種の主要カウンターモード（通常時またはCZ間）です。"
+        f"チェッカーのデータで短縮を確認できる機種は全<span class=\"list-count\">{len(C)}</span>機種で、上位{len(C_top)}機種を掲載しています。"
     )
 
     # --- suru ---
     suru_list = render_spec_list(D, lambda r: esc(yome(r)))
     suru_note = (
-        f"スルー天井を持つ機種は全<span class=\"list-count\">{len(D)}</span>機種です。"
+        f"チェッカー対応データのあるスルー天井機種は全<span class=\"list-count\">{len(D)}</span>機種です。"
         "「N回目で確定」という表記は（N−1）スルーの状態を指す点に注意してください。"
     )
 

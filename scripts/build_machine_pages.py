@@ -116,13 +116,15 @@ def render_section(section: dict) -> str:
                 headers = "".join(f"<th>{esc(hh)}</th>" for hh in tbl.get("headers", []))
                 h += f'<table class="settei-table{wide}"><tr>{headers}</tr>'
                 for row in tbl.get("rows", []):
-                    c0 = row[0] if len(row) > 0 else ""
-                    c1 = row[1] if len(row) > 1 else ""
-                    if isinstance(c1, dict):
-                        badge = f'<span class="settei-badge {BADGE_CLASS.get(c1.get("badge",""), "")}">{esc(c1.get("text",""))}</span>'
-                    else:
-                        badge = esc(c1)
-                    h += f"<tr><td>{esc(c0)}</td><td>{badge}</td></tr>"
+                    # 行の全セルを出力（旧実装は2セル固定で、4列表のREG・合算列が消えていた・2026-07-13修正）
+                    cells = row if isinstance(row, list) else [row]
+                    tds = []
+                    for c in cells:
+                        if isinstance(c, dict):
+                            tds.append(f'<td><span class="settei-badge {BADGE_CLASS.get(c.get("badge",""), "")}">{esc(c.get("text",""))}</span></td>')
+                        else:
+                            tds.append(f"<td>{esc(c)}</td>")
+                    h += "<tr>" + "".join(tds) + "</tr>"
                 h += "</table>"
                 if tbl.get("note"):
                     h += f'<p class="settei-note">{esc(tbl["note"])}</p>'

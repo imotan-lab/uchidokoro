@@ -41,7 +41,7 @@
     <a class="brand" href="index.html"><img src="assets/img/logo.png" alt="うちどころ。"></a>
     <div class="header-search-wrap">
       <span class="header-search-icon">🔍</span>
-      <input id="headerSearch" class="header-search-input" type="search" placeholder="機種を検索">
+      <input id="headerSearch" class="header-search-input" type="search" placeholder="機種を検索" aria-label="機種を検索">
       <div id="headerDropdown" class="header-dropdown"></div>
     </div>
     <nav class="header-nav">
@@ -87,7 +87,7 @@
         <p class="result-text result-text--comment" id="hintText">ゲーム数と各小役をカウントしながら入力してください。データが増えるほど精度が上がります。</p>
       </div>
       <div class="caution-box">
-        <p class="caution-text">このツールは「設定ごとの理論確率にどれだけ近いか」をベイズ推定で計算しています。2000G未満ではサンプル不足で精度が低くなります。高設定でも低設定っぽい数値が出ることがあるため、あくまで参考値としてご利用ください。設定2と設定4は確率差が小さく区別しにくいです。</p>
+        <p class="caution-text">このツールは「設定ごとの理論確率にどれだけ近いか」をベイズ推定で計算しています。2000G未満ではサンプル不足で精度が低くなります。高設定でも低設定っぽい数値が出ることがあるため、あくまで参考値としてご利用ください。隣接する設定同士（特に中間設定）は確率差が小さく区別しにくいです。</p>
       </div>
       <p class="hint-text" id="resultNote"></p>
     </div>
@@ -101,7 +101,7 @@
     </div>
     <div class="article-item">
       <h2 class="article-title">使い方</h2>
-      <p class="article-body">①機種ページの「小役カウンター ポチポチくん →」からその機種用のカウンター画面を開きます。②総ゲーム数と、画面に表示された各項目（BIG・REG・ぶどうなど、機種によって異なります）を実戦しながら入力してください。③入力に応じて設定1〜6の期待度がリアルタイムで更新されます。横画面にすると3列表示になり、スマホ置き場のある台でそのまま使えます。</p>
+      <p class="article-body">①機種ページの「小役カウンター ポチポチくん →」からその機種用のカウンター画面を開きます。②総ゲーム数と、画面に表示された各項目（BIG・REG・ぶどうなど、機種によって異なります）を実戦しながら入力してください。③入力に応じて各設定の期待度がリアルタイムで更新されます（表示される設定は機種の実在設定構成に合わせています）。横画面にすると3列表示になり、スマホ置き場のある台でそのまま使えます。</p>
     </div>
     <div class="article-item">
       <h2 class="article-title">入力項目の意味</h2>
@@ -427,13 +427,14 @@ const MACHINE_CONFIGS = {
     }
   },
   okidoki_encore: {
-    note: 'チェリーは通常時のみカウント。設定4は存在しません（設定L/1/2/3/5/6構成）。',
+    note: 'チェリーは通常時のみカウント。設定4は存在しません（設定L/1/2/3/5/6構成・設定Lはツール対象外）。',
     fields: [
       { id: 'cherry', label: 'チェリー回数', sub: '通常時のみ', rateKey: 'cherry' }
     ],
     resultNote: '※設定4は存在しない機種です。設定4の欄は参考値。',
+    settings: [1,2,3,5,6],
     rates: {
-      cherry: {1:1/46.8, 2:1/45.0, 4:1/43.3, 5:1/41.7, 6:1/40.3}
+      cherry: {1:1/46.8, 2:1/45.0, 3:1/43.3, 5:1/41.7, 6:1/40.3}
     }
   },
   umineko2: {
@@ -484,27 +485,29 @@ const MACHINE_CONFIGS = {
     }
   },
   okidoki_gold: {
-    note: 'チェリーBは左リール第1停止時にチェリーが下段テンパイで判別。確定役Bはスイカ小V型停止。',
+    note: 'チェリーBは左リール第1停止時にチェリーが下段テンパイで判別。確定役Bはスイカ小V型停止。設定は1/2/3/5/6（設定4なし）。',
     fields: [
       { id: 'cherryB', label: 'チェリーB', sub: '下段テンパイ', rateKey: 'cherryB' },
       { id: 'kakuteiB', label: '確定役B', sub: 'スイカ小V型', rateKey: 'kakuteiB' }
     ],
     resultNote: '※確定役Bは出現率が非常に低いため参考程度。チェリーBをメインに判別してください。',
+    settings: [1,2,3,5,6],
     rates: {
-      cherryB:  {1:1/168.0, 2:1/152.4, 4:1/145.6, 5:1/136.5, 6:1/128.0},
-      kakuteiB: {1:1/16384.0, 2:1/13107.2, 4:1/10922.7, 5:1/8192.0, 6:1/6553.6}
+      cherryB:  {1:1/168.0, 2:1/152.4, 3:1/145.6, 5:1/136.5, 6:1/128.0},
+      kakuteiB: {1:1/16384.0, 2:1/13107.2, 3:1/10922.7, 5:1/8192.0, 6:1/6553.6}
     }
   },
   okidoki_black: {
-    note: 'チェリーBは順押し時にチェリーが下段テンパイで判別。確定役Bはスイカ小V型停止。',
+    note: 'チェリーBは順押し時にチェリーが下段テンパイで判別。確定役Bはスイカ小V型停止。設定は1/2/3/5/6（設定4なし）。',
     fields: [
       { id: 'cherryB', label: 'チェリーB', sub: '下段テンパイ', rateKey: 'cherryB' },
       { id: 'kakuteiB', label: '確定役B', sub: 'スイカ小V型', rateKey: 'kakuteiB' }
     ],
     resultNote: '※確定役Bは出現率が非常に低いため参考程度。チェリーBをメインに判別してください。',
+    settings: [1,2,3,5,6],
     rates: {
-      cherryB:  {1:1/168.0, 2:1/152.4, 4:1/145.6, 5:1/136.5, 6:1/128.5},
-      kakuteiB: {1:1/16384.0, 2:1/13107.2, 4:1/10922.7, 5:1/8192.0, 6:1/6553.6}
+      cherryB:  {1:1/168.0, 2:1/152.4, 3:1/145.6, 5:1/136.5, 6:1/128.5},
+      kakuteiB: {1:1/16384.0, 2:1/13107.2, 3:1/10922.7, 5:1/8192.0, 6:1/6553.6}
     }
   },
   hanabi: {
@@ -727,9 +730,15 @@ function generateInputs() {
 }
 
 function val(id) { return parseInt(document.getElementById(id).value) || 0; }
+// 「未計測（空欄）」と「計測した結果0回」を区別する。0回も設定推測上の情報のため、
+// 明示的に値が入っている（"0"含む）フィールドだけを尤度計算に含める（2026-07-13）
+function isMeasured(id) {
+  const el = document.getElementById(id);
+  return !!el && String(el.value).trim() !== "";
+}
 function save() {
   const data = {};
-  FIELDS.forEach(id => { data[id] = val(id); });
+  FIELDS.forEach(id => { const el = document.getElementById(id); data[id] = el ? String(el.value) : ""; });
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
 }
 function load() {
@@ -737,7 +746,10 @@ function load() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
     const data = JSON.parse(raw);
-    FIELDS.forEach(id => { if (data[id]) { const el = document.getElementById(id); if (el) el.value = data[id]; } });
+    FIELDS.forEach(id => {
+      // 文字列"0"（計測済み0回）は復元する。旧保存形式の数値0（未計測）は復元しない
+      if (data[id] || data[id] === "0") { const el = document.getElementById(id); if (el) el.value = data[id]; }
+    });
   } catch(e) {}
 }
 function updateCurrentVal(id) {
@@ -772,7 +784,7 @@ function calcAll() {
     let L = 1;
     machineConfig.fields.forEach(f => {
       const count = val(f.id + 'Count');
-      if (count && RATES[f.rateKey] && RATES[f.rateKey][s]) {
+      if (RATES[f.rateKey] && RATES[f.rateKey][s] && isMeasured(f.id + 'Count')) {
         L *= poisson(count, totalG * RATES[f.rateKey][s]);
       }
     });
