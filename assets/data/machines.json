@@ -11325,5 +11325,147 @@
       }
     },
     "limit": 900
+  },
+  {
+    "slug": "toaru_index2",
+    "name": "スマスロ とある魔術の禁書目録2",
+    "status": "preview",
+    "release_date": "2026-08-03",
+    "seo": {
+      "title": "スマスロ とある魔術の禁書目録2 狙い目・天井・解析まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "解析待ち",
+    "aliases": [
+      "禁書目録2",
+      "とある魔術の禁書目録2",
+      "インデックス2",
+      "きんしょもくろく2",
+      "とある2",
+      "とあるまじゅつのきんしょもくろく2"
+    ],
+    "checker": null,
+    "limit": null,
+    "original": {
+      "title": "とある魔術の禁書目録",
+      "kind": "ライトノベル",
+      "search": "とある魔術の禁書目録 小説"
+    }
+  },
+  {
+    "slug": "yajikita_mairu",
+    "name": "スマスロ やじきた道中記参る！",
+    "status": "preview",
+    "release_date": "2026-08-03",
+    "seo": {
+      "title": "スマスロ やじきた道中記参る！ 狙い目・天井・解析まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "解析待ち",
+    "aliases": [
+      "やじきた道中記参る",
+      "やじきた",
+      "やじきた道中記",
+      "やじきた参る",
+      "やじきたどうちゅうき",
+      "参る"
+    ],
+    "checker": null,
+    "limit": null
+  },
+  {
+    "slug": "sf6",
+    "name": "スマスロ ストリートファイター6",
+    "status": "preview",
+    "release_date": "2026-08-03",
+    "seo": {
+      "title": "スマスロ ストリートファイター6 狙い目・天井・解析まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "解析待ち",
+    "aliases": [
+      "ストリートファイター6",
+      "スト6",
+      "SF6",
+      "ストリートファイターシックス",
+      "すとりーとふぁいたー6"
+    ],
+    "checker": null,
+    "limit": null,
+    "original": {
+      "title": "ストリートファイター6",
+      "kind": "ゲーム",
+      "search": "ストリートファイター6"
+    }
+  },
+  {
+    "slug": "world_dai_star",
+    "name": "スマスロ ワールドダイスター",
+    "status": "preview",
+    "release_date": "2026-08-03",
+    "seo": {
+      "title": "スマスロ ワールドダイスター 狙い目・天井・解析まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "解析待ち",
+    "aliases": [
+      "ワールドダイスター",
+      "ワルスタ",
+      "わーるどだいすたー",
+      "ワールドダイスタァ"
+    ],
+    "checker": null,
+    "limit": null,
+    "original": {
+      "title": "ワールドダイスター",
+      "kind": "アニメ",
+      "search": "ワールドダイスター"
+    }
+  },
+  {
+    "slug": "jashinchan",
+    "name": "L邪神ちゃんドロップキック",
+    "status": "preview",
+    "release_date": "2026-08-03",
+    "seo": {
+      "title": "L邪神ちゃんドロップキック 狙い目・天井・解析まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "解析待ち",
+    "aliases": [
+      "邪神ちゃんドロップキック",
+      "邪神ちゃん",
+      "じゃしんちゃん",
+      "ドロップキック",
+      "じゃしんちゃんどろっぷきっく"
+    ],
+    "checker": null,
+    "limit": null,
+    "original": {
+      "title": "邪神ちゃんドロップキック",
+      "kind": "漫画",
+      "search": "邪神ちゃんドロップキック 漫画"
+    }
+  },
+  {
+    "slug": "super_binmusume",
+    "name": "Lすーぱぁびん娘",
+    "status": "preview",
+    "release_date": "2026-08-03",
+    "seo": {
+      "title": "Lすーぱぁびん娘 狙い目・天井・解析まとめ"
+    },
+    "info": "スマスロAT",
+    "strategy": "解析待ち",
+    "aliases": [
+      "すーぱぁびん娘",
+      "びん娘",
+      "すーぱあびん娘",
+      "スーパービン娘",
+      "すーぱーびんむすめ",
+      "びんむすめ"
+    ],
+    "checker": null,
+    "limit": null
   }
 ]
