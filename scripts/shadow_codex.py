@@ -71,8 +71,20 @@ ERROR_CLASSES = ("ERR_QUOTA", "ERR_AUTH", "ERR_MODEL", "ERR_CLI_VERSION", "ERR_T
 
 # codex実行ファイルは直指定（shell経由の引数破壊で-c web_search="live"が壊れ、
 # 検索なしのcan_not_verifyが量産された実測事故あり＝2026-07-16 canary初回）
+# SHADOW_CODEX_EXE 環境変数はエラー注入テスト専用のスタブ差し替え口（本番では未設定）
 _WINGET_CODEX = Path(os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\WinGet\Links\codex.exe"))
-CODEX_EXE = str(_WINGET_CODEX) if _WINGET_CODEX.exists() else "codex"
+CODEX_EXE = os.environ.get("SHADOW_CODEX_EXE") or (
+    str(_WINGET_CODEX) if _WINGET_CODEX.exists() else "codex")
+
+
+def _etld1(url: str) -> str:
+    """eTLD+1近似（verify_claims.pyと同思想: m./www.等のサブドメイン水増しを無効化）"""
+    m = re.match(r"https?://([^/]+)", url or "")
+    if not m:
+        return ""
+    host = m.group(1).lower().split(":")[0]
+    parts = host.split(".")
+    return ".".join(parts[-2:]) if len(parts) >= 2 else host
 
 
 def now() -> datetime.datetime:
@@ -237,10 +249,20 @@ def take_snapshot(slugs: list[str], run_id: str) -> dict:
         git = subprocess.run(["git", "-C", str(BASE), "rev-parse", "HEAD"],
                              capture_output=True, text=True, timeout=30)
         commit = (git.stdout or "").strip()
-        manifest = {"run_id": run_id, "taken_at": iso(), "git_commit": commit, "files": []}
+        schema_path = RESEARCH / f"codex_schema_{EPOCH['schema_version']}.json"
+        if not schema_path.exists():
+            atomic_write_json(schema_path, CODEX_SCHEMA)
+        manifest = {"run_id": run_id, "taken_at": iso(), "git_commit": commit,
+                    "python_version": sys.version.split()[0],
+                    # 実行結果を左右する全ロジックのハッシュが正本（epoch 1条件・2026-07-16）:
+                    # 比較器/共通アクセサ/正規化=shadow_claims.py、プロンプト原本/機種同定規則/
+                    # 選定/エラー分類=shadow_codex.py、出典検証・同定・ドメイン許可・eTLD+1
+                    # (Public Suffix相当は内蔵実装)=verify_claims.py、出力Schema=codex_schema_*.json
+                    "files": []}
         src_files = [BASE / "assets" / "data" / "machines.json"] + \
                     [BASE / "assets" / "data" / "machine-details" / f"{s}.json" for s in slugs] + \
-                    [SCRIPTS / "shadow_claims.py", SCRIPTS / "shadow_codex.py"]
+                    [SCRIPTS / "shadow_claims.py", SCRIPTS / "shadow_codex.py",
+                     SCRIPTS / "verify_claims.py", schema_path]
         for src in src_files:
             dst = snap / src.name
             dst.write_bytes(src.read_bytes())
@@ -356,20 +378,29 @@ def run_codex(machine: dict, run_id: str, deadline: datetime.datetime) -> dict:
 
     remain = (deadline - now()).total_seconds()
     timeout = min(MACHINE_TIMEOUT_SEC, max(60, int(remain)))
-    ver = subprocess.run([CODEX_EXE, "--version"], capture_output=True, text=True,
-                         encoding="utf-8", errors="replace", timeout=30)
-    cli_version = (ver.stdout or "").strip()
+    codex_exe = os.environ.get("SHADOW_CODEX_EXE") or CODEX_EXE  # 注入テスト時のみスタブ
+    # スタブが.pyの場合はpython経由で起動（注入テスト用。本番はexe直接）
+    base_cmd = [sys.executable, codex_exe] if codex_exe.lower().endswith(".py") else [codex_exe]
+    try:
+        ver = subprocess.run(base_cmd + ["--version"], capture_output=True, text=True,
+                             encoding="utf-8", errors="replace", timeout=30)
+        cli_version = (ver.stdout or "").strip()
+    except subprocess.TimeoutExpired:
+        cli_version = "(version取得timeout)"
 
-    args = [CODEX_EXE, "exec", "--ephemeral", "--ignore-user-config", "--strict-config",
+    args = base_cmd + ["exec", "--ephemeral", "--ignore-user-config", "--strict-config",
             "--skip-git-repo-check", "-C", str(WORKDIR), "-s", "read-only",
             "-m", EPOCH["model"],
             "-c", f'web_search="{EPOCH["web_search"]}"',
             "-c", f'model_reasoning_effort="{EPOCH["reasoning_effort"]}"',
             "--output-schema", str(schema_path), "-o", str(out_json),
             "--json", build_prompt(machine)]
+    timeout = int(os.environ.get("SHADOW_TIMEOUT_SEC") or timeout)  # 注入テスト用の上書き口
     meta = {"cli_version": cli_version, "args_digest": hashlib.sha256(
         json.dumps(args, ensure_ascii=False).encode()).hexdigest()[:16],
-        "model_requested": EPOCH["model"], "started_at": iso(), "timeout_sec": timeout}
+        # requested_model: サーバー側の実行モデル名はイベントから取得できない制約のため
+        # 「要求したモデル」であることを名前で明示（週次canaryは挙動変化の検知と位置づけ）
+        "requested_model": EPOCH["model"], "started_at": iso(), "timeout_sec": timeout}
     started = now()
     try:
         with open(events_path, "w", encoding="utf-8") as ev:
@@ -493,19 +524,41 @@ def process_machine(machine: dict, run_id: str, manifest: dict,
                         and machine["name"] not in (ev.get("raw_quote") or ""):
                     ev["identity_warning"] = True
         # 出典再取得検証 → 未検証assertedはcannot_verifyへ降格（未検証MATCH禁止）
+        # 出典強度の段階化（epoch 1条件・2026-07-16）: 検証合格した独立ドメイン数で
+        # cannot_verify(0) / verified_single(1) / verified_policy(既存公開基準=2以上)
         for c in claims:
             c["evidence_results"] = verify_evidence(machine, c, run_id)
             c["ai_observed_at"] = meta.get("started_at")
+            ok_domains = sorted({_etld1(er["source_url"]) for er in c["evidence_results"]
+                                 if er.get("verified")} - {""})
+            c["verified_domains"] = ok_domains
             if c.get("assertion_status") == "asserted":
-                if not any(er["verified"] for er in c["evidence_results"]):
+                if not ok_domains:
+                    c["evidence_strength"] = "cannot_verify"
                     c["original_assertion_status"] = "asserted"
                     c["assertion_status"] = "cannot_verify"
                     c["downgrade_reason"] = "出典再取得検証に全滅（未検証値をMATCH/MISMATCH判定に使わない）"
+                elif len(ok_domains) == 1:
+                    c["evidence_strength"] = "verified_single"   # 調査評価・記録のみ
+                else:
+                    c["evidence_strength"] = "verified_policy"   # 将来の拒否判定候補になり得る
         try:
             site_claims = shadow_claims.extract_site_claims(machine)
             result["site_baseline"] = site_claims
             result["codex_claims"] = claims
             result["comparison"] = shadow_claims.compare_claims(site_claims, claims)
+            # MISMATCH_CONFIRMED: 将来の公開停止に使えるのは
+            # 「verified_policy ＋ 必須属性の完全一致（attrs_unverified空）」のMISMATCHのみ。
+            # verified_single以下のMISMATCHは台帳候補どまり（公開停止に使わない）
+            by_key = {c.get("claim_key"): c for c in claims}
+            for r in result["comparison"]:
+                if r["verdict"] == "MISMATCH":
+                    cc = by_key.get(r["claim_key"]) or {}
+                    r["mismatch_confirmed"] = (
+                        cc.get("evidence_strength") == "verified_policy"
+                        and not r.get("attrs_unverified"))
+                else:
+                    r["mismatch_confirmed"] = False
         except Exception as e:
             result["error"] = "ERR_COMPARATOR"
             result["detail"] = f"{type(e).__name__}: {e}"
@@ -692,6 +745,80 @@ def selftest() -> int:
                          "selftest")
     t("evidence検証: 非assertedはverify_claimsを呼ばずskip",
       len(ev) == 1 and ev[0]["rule"] == "skip:非asserted" and ev[0]["verified"] is False)
+
+    # 7. ★エラー注入（偽実行器＝実アカウント・実枠に一切触れない安全注入）★
+    #    run_codexの実経路（version取得→Popen→分類）をスタブで通す
+    global RESULTDIR, RESEARCH, WORKDIR
+    orig_dirs = (RESULTDIR, RESEARCH, WORKDIR)
+    inj_root = Path(tempfile.mkdtemp())
+    RESULTDIR, RESEARCH, WORKDIR = inj_root / "res", inj_root / "rsch", inj_root / "wk"
+    WORKDIR.mkdir(parents=True)
+    stub_machine = {"slug": "stub", "name": "スタブ機", "aliases": []}
+    deadline = now() + datetime.timedelta(minutes=30)
+    try:
+        # Pythonスタブ実行器（STUB_MODE環境変数で挙動を切替・実アカウントに触れない）
+        stub_py = inj_root / "stub_codex.py"
+        stub_py.write_text(
+            "import sys, os, json, time\n"
+            "mode = os.environ.get('STUB_MODE', '')\n"
+            "if '--version' in sys.argv:\n"
+            "    print('stub-codex 0.0.0'); sys.exit(0)\n"
+            "if mode == 'err':\n"
+            "    sys.stderr.write(open(os.environ['STUB_ERR_FILE'], encoding='ascii').read())\n"
+            "    sys.exit(1)\n"
+            "if mode == 'empty':\n"
+            "    sys.exit(0)\n"
+            "if mode == 'nosearch':\n"
+            "    a = sys.argv[1:]\n"
+            "    out = a[a.index('-o')+1]\n"
+            "    json.dump({'machine_id':'stub','can_not_verify':False,'claims':[]},\n"
+            "              open(out, 'w', encoding='utf-8'))\n"
+            "    print('{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}')\n"
+            "    sys.exit(0)\n"
+            "if mode == 'sleep':\n"
+            "    time.sleep(60)\n",
+            encoding="utf-8")
+        os.environ["SHADOW_CODEX_EXE"] = str(stub_py)
+
+        # 7a. stderr文面→分類（QUOTA/AUTH/CLI_VERSION/MODEL/CONFIG）
+        err_file = inj_root / "err.txt"
+        os.environ["STUB_ERR_FILE"] = str(err_file)
+        os.environ["STUB_MODE"] = "err"
+        cases = [("429 Too Many Requests: usage limit reached", "ERR_QUOTA"),
+                 ("HTTP 401 unauthorized: please login", "ERR_AUTH"),
+                 ("The 'x' model requires a newer version of Codex.", "ERR_CLI_VERSION"),
+                 ("The model 'fake-model-x' is not supported here", "ERR_MODEL"),
+                 ("Error loading config.toml: unknown key", "ERR_CONFIG")]
+        inj_ok = True
+        for text_, expect in cases:
+            err_file.write_text(text_, encoding="ascii")
+            meta = run_codex(stub_machine, "inj", deadline)
+            if meta.get("error") != expect:
+                inj_ok = False
+                print(f"   ❌ 注入[{expect}]: 実際={meta.get('error')}")
+        t("注入: QUOTA/AUTH/CLI_VERSION/MODEL/CONFIGを実経路で分類", inj_ok)
+
+        # 7b. ERR_SCHEMA（正常終了だが出力なし）
+        os.environ["STUB_MODE"] = "empty"
+        meta = run_codex(stub_machine, "inj", deadline)
+        t("注入: 出力なし正常終了 → ERR_SCHEMA", meta.get("error") == "ERR_SCHEMA")
+
+        # 7c. ERR_SEARCH（検索0件で値あり主張）
+        os.environ["STUB_MODE"] = "nosearch"
+        meta = run_codex(stub_machine, "inj", deadline)
+        t("注入: web_search 0件＋can_not_verify=false → ERR_SEARCH",
+          meta.get("error") == "ERR_SEARCH")
+
+        # 7d. ERR_TIMEOUT（安全な長時間子プロセス＋ツリー終了確認）
+        os.environ["STUB_MODE"] = "sleep"
+        os.environ["SHADOW_TIMEOUT_SEC"] = "4"
+        meta = run_codex(stub_machine, "inj", deadline)
+        t("注入: タイムアウト → ERR_TIMEOUT＋子プロセス終了確認",
+          meta.get("error") == "ERR_TIMEOUT" and meta.get("killed_confirmed") is True)
+    finally:
+        for k in ("SHADOW_CODEX_EXE", "STUB_ERR_FILE", "SHADOW_TIMEOUT_SEC"):
+            os.environ.pop(k, None)
+        RESULTDIR, RESEARCH, WORKDIR = orig_dirs
 
     ok = all(c for _, c in results)
     print(f"\nselftest: {sum(1 for _, c in results if c)}/{len(results)} 合格")
