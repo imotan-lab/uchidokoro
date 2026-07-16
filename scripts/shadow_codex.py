@@ -266,8 +266,11 @@ def take_snapshot(slugs: list[str], run_id: str) -> dict:
         for src in src_files:
             dst = snap / src.name
             dst.write_bytes(src.read_bytes())
-            manifest["files"].append({"path": str(src.relative_to(BASE)),
-                                      "sha256": sha256_file(dst)})
+            try:
+                rel = str(src.relative_to(BASE))
+            except ValueError:
+                rel = str(src)  # リポジトリ外（出力Schema等）は絶対パスで記録
+            manifest["files"].append({"path": rel, "sha256": sha256_file(dst)})
         atomic_write_json(snap / "manifest.json", manifest)
         return manifest
     finally:
