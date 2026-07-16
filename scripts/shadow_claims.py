@@ -23,9 +23,21 @@ canonical claim（dict）:
     MATCH / MISMATCH / UNKNOWN / MISSING_IN_CODEX / MISSING_IN_SITE / ERROR
 
 ★サイト側はsite_baseline（真実源ではない・サイト自体も検証対象）★
-★scope等がサイト側で構造的に存在しない場合は「サイト側は制約しない」扱いで
-  値・単位の比較は行い、判定レコードに scope_unverified=True を残す
-  （両者がscopeを主張して食い違う場合のみscope起因のMISMATCH/UNKNOWNにする）★
+
+属性の比較規則（2026-07-16チャッピー判定表・nullをワイルドカードにしない）:
+  - 両方が具体値で一致 → その属性は一致
+  - 両方が具体値で不一致 → MISMATCH（値が同じでも）
+  - 片方がnullで、その属性がclaimの意味に影響する（scope/plus_alpha/operator）
+    → 正式なMATCH/MISMATCHにせず **UNKNOWN**（sub=numeric_alignment（値一致）/
+      numeric_divergence（値不一致候補））
+  - 属性が本当に不要なclaim型では null でなく "not_applicable" を明示（比較スキップ）
+
+集計区分（comparability）:
+  - baseline_comparable: サイトとCodexを厳密比較できるclaim（分母に使えるのはこれのみ）
+  - discovery_only:      サイト側が未構造化（no_site_field）＝Codex主張は記録のみ
+  - structure_gap:       複合天井の構成要素候補（claimではない・分母に含めない・
+                         MISSING_IN_CODEXを発生させない・Codexが値を返した時のみ
+                         MISSING_IN_SITEで記録・「CZ天井が存在する」と解釈しない）
 """
 from __future__ import annotations
 import argparse
@@ -42,6 +54,8 @@ BASE = Path(__file__).resolve().parent.parent
 
 VALID_UNITS = {"G", "pt", "Gpt", "cycle", "through", "times"}
 VERDICTS = ("MATCH", "MISMATCH", "UNKNOWN", "MISSING_IN_CODEX", "MISSING_IN_SITE", "ERROR")
+NA = "not_applicable"  # 属性がそのclaim型に本当に不要な場合の明示値（nullと区別）
+MEANING_ATTRS = ("scope", "plus_alpha", "operator")  # claimの意味に影響する属性
 
 
 # ─────────────────────────────────────────────
@@ -136,10 +150,12 @@ def extract_site_claims(machine: dict) -> list[dict]:
                                  status="no_site_field"))
 
     # 3) スルー天井（構造化: hasSuru + suruMax）
+    #    scope/plus_alphaはスルー回数claimには不要＝not_applicable明示（operatorは未構造化=null）
     if has_suru:
         if isinstance(suru_max, (int, float)):
             claims.append(_claim("ceiling.normal.through", "through", "suru",
-                                 unit="through", value=suru_max))
+                                 unit="through", value=suru_max,
+                                 scope=NA, plus_alpha=NA))
         else:
             claims.append(_claim("ceiling.normal.through", "through", "suru",
                                  status="no_site_field"))
@@ -148,7 +164,8 @@ def extract_site_claims(machine: dict) -> list[dict]:
     if has_cycle:
         if isinstance(cycle_max, (int, float)):
             claims.append(_claim("ceiling.normal.cycle", "cycle", "cycle",
-                                 unit="cycle", value=cycle_max))
+                                 unit="cycle", value=cycle_max,
+                                 scope=NA, plus_alpha=NA))
         else:
             claims.append(_claim("ceiling.normal.cycle", "cycle", "cycle",
                                  status="no_site_field"))
@@ -194,18 +211,46 @@ def _norm_scope(s):
     return s
 
 
-def compare_one(site: dict, codex: dict | None) -> dict:
-    """同一claim_keyのsite/codexペアを判定する。codex=Noneは欠落。"""
+def _attr_norm(name, v):
+    if v == NA:
+        return NA
+    if name == "scope":
+        return _norm_scope(v)
+    if name == "plus_alpha":
+        return None if v is None else bool(v)
+    if name == "operator":
+        return None if v in (None, "") else str(v).strip().lower()
+    return v
+
+
+def compare_one(site: dict, codex: dict | None) -> dict | None:
+    """同一claim_keyのsite/codexペアを判定する。codex=Noneは欠落。
+    戻り値None＝レコードを発生させない（structure_gapでCodex主張なしの場合のみ）。"""
     key = site["claim_key"]
-    rec = {"claim_key": key, "verdict": None, "detail": "", "scope_unverified": False}
+    is_gap = site.get("ceiling_type") == "combined_component"
+    rec = {"claim_key": key, "verdict": None, "detail": "", "sub": None,
+           "attrs_unverified": [],
+           "comparability": "structure_gap" if is_gap else (
+               "discovery_only" if site.get("assertion_status") == "no_site_field"
+               else "baseline_comparable")}
 
     s_status = site.get("assertion_status")
     c_status = (codex or {}).get("assertion_status")
 
-    # サイト側に構造化項目がない → 比較不能（Codex側の主張は記録価値あり）
+    # 複合天井の構成要素候補（claimではない）: Codexが値を返した時だけ記録。
+    # MISSING_IN_CODEXを発生させない・分母に含めない・「天井が存在する」と解釈しない
+    if is_gap:
+        if codex is not None and c_status == "asserted":
+            rec.update(verdict="MISSING_IN_SITE",
+                       detail="複合構成要素候補（サイト未構造化）へのCodex主張。記録のみ・"
+                              "自動修正/公開停止に使用しない")
+            return rec
+        return None
+
+    # サイト側に構造化項目がない（discovery_only） → 比較不能・Codex主張は発見として記録
     if s_status == "no_site_field":
         if codex is None or c_status in (None, "cannot_verify"):
-            rec.update(verdict="UNKNOWN", detail="サイト構造化なし・Codex確認不能")
+            rec.update(verdict="UNKNOWN", detail="サイト構造化なし・Codex側も主張なし/確認不能")
         else:
             rec.update(verdict="MISSING_IN_SITE",
                        detail="サイトに構造化項目なし（Codex主張は記録のみ・正誤判定はしない）")
@@ -228,11 +273,10 @@ def compare_one(site: dict, codex: dict | None) -> dict:
             rec.update(verdict="MISMATCH", detail=f"なし/あり不一致（site={s_status}, codex={c_status}）")
         return rec
     if c_status == "not_published":
-        rec.update(verdict="MISMATCH",
-                   detail="サイトは値を持つがCodexは未公表と主張")
+        rec.update(verdict="MISMATCH", detail="サイトは値を持つがCodexは未公表と主張")
         return rec
 
-    # 値の比較（両者asserted）
+    # ── 両者asserted ──
     s_val, c_val = site.get("value"), codex.get("value")
     s_unit, c_unit = _norm_unit(site.get("unit")), _norm_unit(codex.get("unit"))
     if s_val is None or c_val is None:
@@ -245,29 +289,42 @@ def compare_one(site: dict, codex: dict | None) -> dict:
         rec.update(verdict="MISMATCH", detail=f"単位不一致（site={s_unit}, codex={c_unit}）")
         return rec
 
-    # scope: 両者が主張して食い違う場合のみ不一致。サイト側None=構造上の制約なし
-    s_scope, c_scope = _norm_scope(site.get("scope")), _norm_scope(codex.get("scope"))
-    if s_scope is not None and c_scope is not None and s_scope != c_scope:
-        rec.update(verdict="MISMATCH", detail=f"scope不一致（site={s_scope}, codex={c_scope}）")
-        return rec
-    if s_scope is None and c_scope is not None:
-        rec["scope_unverified"] = True  # サイト側にscopeが構造化されていない（設計判断・記録）
+    # 意味に影響する属性（scope/plus_alpha/operator）: nullをワイルドカードにしない
+    # 両方具体で不一致→MISMATCH / 片方でもnull→正式判定不可（UNKNOWNへ） / NA→比較不要
+    for attr in MEANING_ATTRS:
+        s_a, c_a = _attr_norm(attr, site.get(attr)), _attr_norm(attr, codex.get(attr))
+        if s_a == NA:
+            continue
+        if s_a is not None and c_a is not None and c_a != NA:
+            if s_a != c_a:
+                rec.update(verdict="MISMATCH",
+                           detail=f"{attr}不一致（site={s_a}, codex={c_a}）")
+                return rec
+        else:
+            rec["attrs_unverified"].append(attr)
 
-    # plus_alpha: 三値。どちらかがNone（記載なし）なら比較しない
-    s_pa, c_pa = site.get("plus_alpha"), codex.get("plus_alpha")
-    if s_pa is not None and c_pa is not None and bool(s_pa) != bool(c_pa):
-        rec.update(verdict="MISMATCH", detail=f"+α有無の不一致（site={s_pa}, codex={c_pa}）")
+    values_equal = float(s_val) == float(c_val)
+    if rec["attrs_unverified"]:
+        # 属性未検証のまま正式なMATCH/MISMATCHにしない（将来の拒否ゲート誤作動防止）
+        if values_equal:
+            rec.update(verdict="UNKNOWN", sub="numeric_alignment",
+                       detail=f"値・単位一致（{c_val}{c_unit}）だが未検証属性あり: "
+                              f"{','.join(rec['attrs_unverified'])}")
+        else:
+            rec.update(verdict="UNKNOWN", sub="numeric_divergence",
+                       detail=f"値不一致候補（site={s_val} / codex={c_val} {c_unit}）だが"
+                              f"未検証属性あり: {','.join(rec['attrs_unverified'])}＝同一claimと確定できない")
         return rec
 
-    if float(s_val) == float(c_val):
-        rec.update(verdict="MATCH", detail=f"{c_val}{c_unit} 一致")
+    if values_equal:
+        rec.update(verdict="MATCH", detail=f"{c_val}{c_unit} 一致（全必須属性検証済み）")
     else:
         rec.update(verdict="MISMATCH", detail=f"値不一致（site={s_val} / codex={c_val} {c_unit}）")
     return rec
 
 
 def compare_claims(site_claims: list[dict], codex_claims: list[dict]) -> list[dict]:
-    """全claimの突き合わせ（双方向）。"""
+    """全claimの突き合わせ（双方向）。structure_gapでCodex主張なしはレコード自体を出さない。"""
     results = []
     codex_by_key = {}
     for c in codex_claims:
@@ -275,12 +332,15 @@ def compare_claims(site_claims: list[dict], codex_claims: list[dict]) -> list[di
     seen = set()
     for s in site_claims:
         seen.add(s["claim_key"])
-        results.append(compare_one(s, codex_by_key.get(s["claim_key"])))
+        r = compare_one(s, codex_by_key.get(s["claim_key"]))
+        if r is not None:
+            results.append(r)
     for key, c in codex_by_key.items():
         if key not in seen:
             results.append({"claim_key": key, "verdict": "MISSING_IN_SITE",
                             "detail": "Codexのみが主張（サイトにclaim_keyなし）。記録のみ",
-                            "scope_unverified": False})
+                            "sub": None, "attrs_unverified": [],
+                            "comparability": "discovery_only"})
     return results
 
 
@@ -289,20 +349,23 @@ def compare_claims(site_claims: list[dict], codex_claims: list[dict]) -> list[di
 # ─────────────────────────────────────────────
 
 def _synthetic_bases() -> list[tuple[str, list[dict]]]:
-    """全属性を持つ合成site_baseline（比較ルールを全て運動させるため）"""
+    """全属性を明示した合成site_baseline（正コントロールが厳密MATCHになる条件＝
+    意味に影響する属性は全て具体値かnot_applicable）"""
     return [
         ("G数天井機", [_claim("ceiling.normal.game", "game", "normal", unit="G",
-                              value=1268, scope="BB間", plus_alpha=True)]),
+                              value=1268, scope="BB間", plus_alpha=True, operator="exact")]),
         ("pt天井機", [_claim("ceiling.normal.point", "point", "normal", unit="pt",
-                             value=1400, plus_alpha=False)]),
+                             value=1400, scope="液晶", plus_alpha=False, operator="exact")]),
         ("スルー機", [_claim("ceiling.normal.through", "through", "suru",
-                             unit="through", value=6)]),
+                             unit="through", value=6, scope=NA, plus_alpha=NA,
+                             operator="exact")]),
         ("周期機", [_claim("ceiling.normal.cycle", "cycle", "cycle",
-                           unit="cycle", value=10)]),
+                           unit="cycle", value=10, scope=NA, plus_alpha=NA,
+                           operator="exact")]),
         ("複合機", [_claim("ceiling.normal.game", "game", "normal", unit="G",
-                           value=1500, scope="AT間", plus_alpha=True),
+                           value=1500, scope="AT間", plus_alpha=True, operator="exact"),
                     _claim("ceiling.normal.cz", "game", "cz", unit="G",
-                           value=700, scope="CZ間", plus_alpha=True)]),
+                           value=700, scope="CZ間", plus_alpha=True, operator="exact")]),
         ("天井なし機", [_claim("ceiling.normal.none", "none", "normal",
                                status="asserted_none")]),
     ]
@@ -347,14 +410,18 @@ def selftest() -> int:
         for u2 in VALID_UNITS - {claim["unit"]}:
             m = dict(claim); m["unit"] = u2
             muts.append((f"単位→{u2}", m, "MISMATCH"))
-        # scopeすり替え（サイト側がscopeを持つ場合のみMISMATCH要求）
-        if claim.get("scope"):
+        # scopeすり替え（両者具体値の不一致＝MISMATCH）
+        if claim.get("scope") not in (None, NA):
             m = dict(claim); m["scope"] = "CZ間" if claim["scope"] != "CZ間" else "AT間"
             muts.append(("scopeすり替え", m, "MISMATCH"))
-        # +α反転（サイト側が明示する場合のみ）
-        if claim.get("plus_alpha") is not None:
+        # +α反転（両者具体値の不一致＝MISMATCH）
+        if claim.get("plus_alpha") not in (None, NA):
             m = dict(claim); m["plus_alpha"] = not claim["plus_alpha"]
             muts.append(("+α反転", m, "MISMATCH"))
+        # operatorすり替え（両者具体値の不一致＝MISMATCH）
+        if claim.get("operator") not in (None, NA):
+            m = dict(claim); m["operator"] = "max" if claim["operator"] != "max" else "about"
+            muts.append(("operatorすり替え", m, "MISMATCH"))
         # 値あり→「なし」主張
         m = dict(claim); m.update(assertion_status="asserted_none", value=None)
         muts.append(("値→なし主張", m, "MISMATCH"))
@@ -390,16 +457,66 @@ def selftest() -> int:
     t("Codexのみの主張はMISSING_IN_SITE", any(
         r["claim_key"] == "ceiling.reset.game" and r["verdict"] == "MISSING_IN_SITE" for r in rs))
 
-    # UNKNOWN系: cannot_verify / scope両者主張の欠落はUNKNOWNに倒す
+    # UNKNOWN系: cannot_verify
     cv = dict(g); cv.update(assertion_status="cannot_verify", value=None)
     rs = compare_claims([g], [cv])
     t("cannot_verifyはUNKNOWN（MATCHに押し込まない）", rs[0]["verdict"] == "UNKNOWN")
 
-    # scope_unverifiedフラグ（サイト側scope=Noneの設計判断の記録）
+    # ★nullワイルドカード禁止テスト群（2026-07-16チャッピー必須修正）★
+    def one(site, codex):
+        return compare_claims([site], [codex])[0]
+
+    # plus_alpha: null vs true/false → UNKNOWN（MATCHにもMISMATCHにもしない）
+    s_pa_null = dict(g); s_pa_null["plus_alpha"] = None
+    r = one(s_pa_null, dict(g))
+    t("plus_alpha null vs true（値一致）→ UNKNOWN/numeric_alignment",
+      r["verdict"] == "UNKNOWN" and r["sub"] == "numeric_alignment"
+      and "plus_alpha" in r["attrs_unverified"])
+    c_diff = dict(g); c_diff["value"] = g["value"] + 100
+    r = one(s_pa_null, c_diff)
+    t("plus_alpha null＋値不一致 → UNKNOWN/numeric_divergence（MISMATCHにしない）",
+      r["verdict"] == "UNKNOWN" and r["sub"] == "numeric_divergence")
+
+    # scope: null vs 具体値 → UNKNOWN（値が一致していてもMATCHにしない）
     s_noscope = dict(g); s_noscope["scope"] = None
-    rs = compare_claims([s_noscope], [dict(g)])
-    t("サイト側scope欠落は比較可＋scope_unverified記録",
-      rs[0]["verdict"] == "MATCH" and rs[0]["scope_unverified"] is True)
+    r = one(s_noscope, dict(g))
+    t("scope null vs 具体値（値一致）→ UNKNOWN/numeric_alignment",
+      r["verdict"] == "UNKNOWN" and r["sub"] == "numeric_alignment"
+      and "scope" in r["attrs_unverified"])
+    r = one(s_noscope, c_diff)
+    t("scope未検証＋値不一致 → UNKNOWN/numeric_divergence（拒否ゲート誤作動防止）",
+      r["verdict"] == "UNKNOWN" and r["sub"] == "numeric_divergence")
+
+    # operator: null vs 具体値 → UNKNOWN
+    c_op_null = dict(g); c_op_null["operator"] = None
+    r = one(g, c_op_null)
+    t("operator null vs exact → UNKNOWN（Codex属性不足）",
+      r["verdict"] == "UNKNOWN" and "operator" in r["attrs_unverified"])
+
+    # 両側null（属性必須）→ MATCHにしない
+    s_both = dict(g); s_both["plus_alpha"] = None
+    c_both = dict(g); c_both["plus_alpha"] = None
+    r = one(s_both, c_both)
+    t("両側null（必須属性）→ UNKNOWN（nullをワイルドカードにしない）",
+      r["verdict"] == "UNKNOWN")
+
+    # not_applicable は比較をスキップしMATCHを妨げない（スルー機）
+    su = bases[2][1][0]
+    c_su = dict(su); c_su["scope"] = None  # Codex側がscope未記載でもNAなら影響しない
+    r = one(su, c_su)
+    t("not_applicable属性はMATCHを妨げない", r["verdict"] == "MATCH")
+
+    # 複合構成要素候補（structure_gap）: Codex主張なし→レコード無し / あり→MISSING_IN_SITEのみ
+    gap = _claim("ceiling.normal.cz", "combined_component", "cz", scope="CZ間",
+                 status="no_site_field")
+    rs = compare_claims([gap], [])
+    t("structure_gapはMISSING_IN_CODEXを発生させない", len(rs) == 0)
+    c_gap = _claim("ceiling.normal.cz", "game", "cz", unit="G", value=700,
+                   scope="CZ間", plus_alpha=True, operator="exact")
+    rs = compare_claims([gap], [c_gap])
+    t("structure_gapへのCodex主張はMISSING_IN_SITE（分母外・記録のみ）",
+      len(rs) == 1 and rs[0]["verdict"] == "MISSING_IN_SITE"
+      and rs[0]["comparability"] == "structure_gap")
 
     # 実ファイルsmoke: 全機種でアダプターが例外なく走り、claim在庫を数える
     try:
