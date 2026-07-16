@@ -176,6 +176,7 @@ def is_allowlisted(basename: str) -> bool:
 
 def cmd_copy(src: str, dst: str, optional: bool) -> int:
     base = os.path.basename(src)
+    dst_base = os.path.basename(dst)
     if not os.path.exists(src):
         if optional:
             _log(f"copy: src不存在（optional・スキップ）: {base}")
@@ -185,11 +186,15 @@ def cmd_copy(src: str, dst: str, optional: bool) -> int:
         print("SRC_MISSING")
         return 2
     findings = []
-    if not is_allowlisted(base):
+    # 許可リストは「バックアップ先に存在してよい名前」の一覧なのでdst名で照合する
+    # （例: state.json → uchidokoro_state.json にリネームコピーする運用のため。
+    #   ただし秘密パターンの名前検査はsrc/dst両方に掛ける＝リネームによるすり替えを防ぐ）
+    if not is_allowlisted(dst_base):
         findings.append("allowlist:リスト外")
-    if os.path.splitext(base.lower())[1] in ARCHIVE_EXTENSIONS:
-        findings.append("archive:圧縮ファイルは原則バックアップ禁止")
-    findings.extend(f for f in name_findings(base))
+    for b in {base, dst_base}:
+        if os.path.splitext(b.lower())[1] in ARCHIVE_EXTENSIONS:
+            findings.append("archive:圧縮ファイルは原則バックアップ禁止")
+        findings.extend(name_findings(b))
     findings.extend(content_findings(src))
     if findings:
         _log(f"copy: ❌拒否 {base} → 検知ルール: {', '.join(findings)}")
@@ -266,6 +271,15 @@ def selftest() -> int:
     with contextlib.redirect_stdout(io.StringIO()):
         rc = cmd_copy(p, os.path.join(dst_dir, "uchidokoro_state.json"), False)
     t("許可リスト名でも秘密キー入りJSONは拒否", rc == 1)
+    # 4.5 リネームコピー: src=state.json → dst=uchidokoro_state.json は許可（実運用の形）
+    p = w("state.json", json.dumps({"pending_recheck": [], "rotation_check": {}}))
+    with contextlib.redirect_stdout(io.StringIO()):
+        rc = cmd_copy(p, os.path.join(dst_dir, "uchidokoro_state.json"), False)
+    t("state.json→uchidokoro_state.jsonのリネームコピーは成功", rc == 0)
+    # 4.6 リネームすり替え: 秘密ファイルを許可された名前にリネームしても拒否
+    with contextlib.redirect_stdout(io.StringIO()):
+        rc = cmd_copy(p2, os.path.join(dst_dir, "uchidokoro_state.json"), False)
+    t("x_storageを許可名にリネームしても拒否（src名で検知）", rc == 1)
     # 5. 許可リスト名でも値パターン（PAT）があれば拒否
     p = w("send_notify.py", "TOKEN = 'ghp_" + "a" * 30 + "'")
     with contextlib.redirect_stdout(io.StringIO()):
