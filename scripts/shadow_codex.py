@@ -77,13 +77,33 @@ CODEX_EXE = os.environ.get("SHADOW_CODEX_EXE") or (
     str(_WINGET_CODEX) if _WINGET_CODEX.exists() else "codex")
 
 
+# 票の単位の明示表（チャッピー推奨・2026-07-16）: 既知の解析ドメインはここが正
+# ＝完全な自作PSLを持たず、未知ドメインは多階層サフィックス表つきのeTLD+1近似で処理
+VOTE_UNIT_DOMAINS = {
+    "chonborista.com": "chonborista.com",
+    "1geki.jp": "1geki.jp",
+    "nana-press.com": "nana-press.com",
+    "slopachi-quest.com": "slopachi-quest.com",
+    "p-town.dmm.com": "dmm.com",  # DMM配下はdmm.comとして1票
+    "dmm.com": "dmm.com",
+}
+_MULTI_SUFFIX = {"co.jp", "ne.jp", "or.jp", "go.jp", "ac.jp", "ad.jp", "lg.jp", "gr.jp",
+                 "ed.jp", "co.uk", "com.au"}
+
+
 def _etld1(url: str) -> str:
-    """eTLD+1近似（verify_claims.pyと同思想: m./www.等のサブドメイン水増しを無効化）"""
+    """票の単位（登録可能ドメイン）判定。sub1/sub2.example.com は同一票、
+    example.co.jp 等の多階層サフィックスは3ラベルで判定する。"""
     m = re.match(r"https?://([^/]+)", url or "")
     if not m:
         return ""
     host = m.group(1).lower().split(":")[0]
+    for dom, unit in VOTE_UNIT_DOMAINS.items():
+        if host == dom or host.endswith("." + dom):
+            return unit
     parts = host.split(".")
+    if len(parts) >= 3 and ".".join(parts[-2:]) in _MULTI_SUFFIX:
+        return ".".join(parts[-3:])
     return ".".join(parts[-2:]) if len(parts) >= 2 else host
 
 
@@ -593,6 +613,64 @@ def process_machine(machine: dict, run_id: str, manifest: dict,
     return result
 
 
+LAUNCH_ERRORS = {"ERR_CLI_VERSION", "ERR_CONFIG", "ERR_AUTH", "ERR_QUOTA",
+                 "ERR_MODEL", "ERR_TIMEOUT"}
+
+
+def stats_summary() -> str:
+    """成功率の分解集計（チャッピー指定・2026-07-16）。1つの成功率にまとめない。"""
+    runs = launch_ok = search_ok = schema_ok = 0
+    ev_total = ev_verified = 0
+    asserted = downgraded = 0
+    verdicts, strengths = {}, {}
+    for f in sorted(RESULTDIR.glob("*.json")):
+        try:
+            r = json.loads(f.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        runs += 1
+        err = r.get("error")
+        if err in LAUNCH_ERRORS:
+            continue
+        launch_ok += 1
+        if (r.get("codex_meta") or {}).get("web_search_events", 0) > 0:
+            search_ok += 1
+        if err != "ERR_SCHEMA":
+            schema_ok += 1
+        for c in r.get("codex_claims", []):
+            was_asserted = (c.get("original_assertion_status") == "asserted"
+                            or c.get("assertion_status") == "asserted")
+            if was_asserted:
+                asserted += 1
+                if c.get("assertion_status") == "cannot_verify":
+                    downgraded += 1
+            s = c.get("evidence_strength")
+            if s:
+                strengths[s] = strengths.get(s, 0) + 1
+            for er in c.get("evidence_results", []):
+                if str(er.get("rule", "")).startswith("verify_claims"):
+                    ev_total += 1
+                    ev_verified += 1 if er.get("verified") else 0
+        for cm in r.get("comparison", []):
+            verdicts[cm["verdict"]] = verdicts.get(cm["verdict"], 0) + 1
+
+    def pct(a, b):
+        return f"{a}/{b}（{a / b * 100:.0f}%）" if b else "0/0（N/A）"
+
+    lines = [
+        f"epoch: {EPOCH['epoch_id']} / 実行数: {runs}",
+        f"CLI実行成功率: {pct(launch_ok, runs)}",
+        f"live検索実行率: {pct(search_ok, launch_ok)}",
+        f"Schema合格率: {pct(schema_ok, launch_ok)}",
+        f"出典検証成功率（evidence単位）: {pct(ev_verified, ev_total)}",
+        f"cannot_verify率（asserted claim単位）: {pct(downgraded, asserted)}",
+        "検証済みclaimの正答率: gold set未整備のためN/A（Phase 3で測定）",
+        f"出典強度分布: {json.dumps(strengths, ensure_ascii=False)}",
+        f"判定分布: {json.dumps(verdicts, ensure_ascii=False)}",
+    ]
+    return "\n".join(lines)
+
+
 def notify(subject: str, body: str) -> None:
     try:
         bf = RESEARCH / "notify_body.txt"
@@ -650,18 +728,9 @@ def run(slugs_override: list[str] | None, deadline_str: str, dry_run: bool,
             f"{s}: {r['claim_key']} {r['detail']}" for s, r in mismatches)
         notify("【うちどころ。シャドー】⚠ 出典検証済みMISMATCH検出", body +
                "\n※シャドー期間中＝公開への影響なし・記録のみ")
-    if today.weekday() == 0:  # 月曜サマリー
-        stats = {}
-        for f in sorted(RESULTDIR.glob("*.json")):
-            try:
-                rr = json.loads(f.read_text(encoding="utf-8"))
-                for r in rr.get("comparison", []):
-                    stats[r["verdict"]] = stats.get(r["verdict"], 0) + 1
-            except Exception:
-                pass
+    if today.weekday() == 0:  # 月曜サマリー（分解集計）
         notify("【うちどころ。シャドー】週次サマリー",
-               f"epoch={EPOCH['epoch_id']}\n累計判定分布: {json.dumps(stats, ensure_ascii=False)}\n"
-               f"本日: {slugs} エラー{len(errors)}件")
+               stats_summary() + f"\n本日: {slugs} エラー{len(errors)}件")
     log(f"=== shadow_codex {label} 完了 run_id={run_id} エラー{len(errors)}件 ===")
     return 0
 
@@ -749,6 +818,15 @@ def selftest() -> int:
     t("evidence検証: 非assertedはverify_claimsを呼ばずskip",
       len(ev) == 1 and ev[0]["rule"] == "skip:非asserted" and ev[0]["verified"] is False)
 
+    # 6.5 票の単位（eTLD+1）判定
+    t("eTLD+1: sub1/sub2は同一票",
+      _etld1("https://sub1.example.com/a") == _etld1("https://sub2.example.com/b") == "example.com")
+    t("eTLD+1: 多階層サフィックス（example.co.jp≠co.jp）",
+      _etld1("https://foo.example.co.jp/x") == "example.co.jp")
+    t("eTLD+1: 明示表（m.nana-press.com→nana-press.com / p-town.dmm.com→dmm.com）",
+      _etld1("https://m.nana-press.com/k") == "nana-press.com"
+      and _etld1("https://p-town.dmm.com/machine") == "dmm.com")
+
     # 7. ★エラー注入（偽実行器＝実アカウント・実枠に一切触れない安全注入）★
     #    run_codexの実経路（version取得→Popen→分類）をスタブで通す
     global RESULTDIR, RESEARCH, WORKDIR
@@ -834,6 +912,7 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--canary", action="store_true", help="既知機種(hokuto)1件の定点再実行")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--stats", action="store_true", help="成功率の分解集計を表示")
     ap.add_argument("--slugs", help="カンマ区切りで対象を指定（--run時）")
     ap.add_argument("--deadline", default=DEFAULT_DEADLINE)
     ap.add_argument("--max-machines", type=int, default=3)
@@ -841,6 +920,9 @@ def main() -> int:
 
     if args.selftest:
         return selftest()
+    if args.stats:
+        print(stats_summary())
+        return 0
     if args.canary:
         return run(["hokuto"], args.deadline, dry_run=False, label="canary")
     if args.dry_run:
