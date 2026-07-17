@@ -110,28 +110,113 @@ def migrate_claim_key(claim_key: str, ceiling_type: str) -> str:
     return claim_key
 
 
-def _title_of(url: str, _cache={}) -> str:
+def _ident_fields_of_html(html_text: str) -> dict:
+    """禁止トークン照合に使うページ同定フィールド（title・H1・canonical）。
+    ★本文全体は使わない＝「前作○○と比べて」等の比較記述での誤検出を防ぐ
+    （2026-07-17 チャッピー条件）★"""
+    m = re.search(r"<title[^>]*>([\s\S]*?)</title>", html_text, re.I)
+    title = m.group(1) if m else ""
+    h1s = re.findall(r"<h1[^>]*>([\s\S]*?)</h1>", html_text, re.I)
+    h1 = " ".join(re.sub(r"<[^>]+>", " ", x) for x in h1s)
+    m = re.search(r'<link[^>]+rel=["\']canonical["\'][^>]*href=["\']([^"\']+)', html_text, re.I) \
+        or re.search(r'<link[^>]+href=["\']([^"\']+)["\'][^>]*rel=["\']canonical["\']', html_text, re.I)
+    canonical = m.group(1) if m else ""
+    # casefold＝canonical URL内の英字トークン（GOLD/BLACK等）を大文字小文字無視で照合
+    return {"title": _norm(title).casefold(), "h1": _norm(h1).casefold(),
+            "canonical": _norm(canonical).casefold()}
+
+
+def _ident_fields_of(url: str, _cache={}) -> dict:
     if url in _cache:
         return _cache[url]
     try:
-        html_text = _fetch(url)
-        m = re.search(r"<title[^>]*>([\s\S]*?)</title>", html_text, re.I)
-        _cache[url] = _norm(m.group(1)) if m else ""
+        _cache[url] = _ident_fields_of_html(_fetch(url))
     except Exception:
-        _cache[url] = ""
+        _cache[url] = {"title": "", "h1": "", "canonical": ""}
     return _cache[url]
 
 
-def forbidden_hit(slug: str, url: str) -> str | None:
-    """禁止トークンがページtitleにあればそのトークンを返す（旧作・別機種ガード）"""
+def forbidden_hit(slug: str, url: str, html_text: str | None = None) -> str | None:
+    """禁止トークンがページのtitle・H1・canonicalのいずれかにあればそのトークンを返す
+    （旧作・別機種ページのガード。html_text指定時は再取得しない＝テスト用）"""
     ov = IDENTITY_OVERRIDES.get(slug)
     if not ov or not ov.get("forbidden"):
         return None
-    title = _title_of(url)
+    fields = _ident_fields_of_html(html_text) if html_text is not None else _ident_fields_of(url)
     for tok in ov["forbidden"]:
-        if _norm(tok) in title:
+        needle = _norm(tok).casefold()
+        if any(needle in v for v in fields.values()):
             return tok
     return None
+
+
+def canonical_claim_id(slug: str, claim_key: str, exp: dict) -> tuple:
+    """claimを特定する属性のみでID化（URL・valueは含めない・2026-07-17チャッピー条件）。
+    valueを重複キーに含めると777/778のような競合値が両方goldに入ってしまうため"""
+    scope, mode = exp.get("scope"), exp.get("mode")
+    return (slug, claim_key,
+            _norm(str(scope)) if scope not in (None, "") else None,
+            _norm(str(mode)) if mode not in (None, "") else None)
+
+
+def consolidate_entries(entries: list[dict]) -> tuple[list[dict], list[dict]]:
+    """同一canonical claim IDのエントリを統合/隔離する（決定論・再取得なし）。
+    - 同一ID・同一(値, unit, assertion_status) → 1件へ統合し出典をevidence[]へまとめる。
+      出典間で表記が割れた副属性（operator/plus_alpha）はnullへ（採点で要求しない＝安全側）
+    - 同一ID・異なる値/unit/assertion_status → 全メンバーをGOLD_CONFLICTとして隔離
+    - scopeが異なるCZ間/AT間等はIDが異なるので別claimとして保持される
+    戻り値: (統合済みentries（gold_idは呼び出し側で再採番）, conflicts)"""
+    groups: dict[tuple, list[dict]] = {}
+    order: list[tuple] = []
+    for e in entries:
+        cid = canonical_claim_id(e["slug"], e["claim_key"], e["expected"])
+        if cid not in groups:
+            groups[cid] = []
+            order.append(cid)
+        groups[cid].append(e)
+
+    def _evs(x):
+        raw = x["evidence"]
+        return raw if isinstance(raw, list) else [raw]
+
+    merged, conflicts = [], []
+    for cid in order:
+        es = groups[cid]
+        sig = {(x["expected"].get("value"), x["expected"].get("unit"),
+                x["expected"].get("assertion_status") or "asserted") for x in es}
+        if len(sig) > 1:
+            conflicts.append({
+                "canonical_claim_id": [x if x is not None else None for x in cid],
+                "reason": "GOLD_CONFLICT: 同一claimに異なる値/unit/assertion_status",
+                "members": [{"gold_id": x.get("gold_id"),
+                             "value": x["expected"].get("value"),
+                             "unit": x["expected"].get("unit"),
+                             "assertion_status": x["expected"].get("assertion_status"),
+                             "url": _evs(x)[0].get("url")} for x in es]})
+            continue
+        base = es[0]
+        exp = dict(base["expected"])
+        relaxed = []
+        for attr in ("operator", "plus_alpha"):
+            if len({x["expected"].get(attr) for x in es}) > 1:
+                exp[attr] = None
+                relaxed.append(attr)
+        evs, seen_urls = [], set()
+        for x in es:
+            for ev in _evs(x):
+                if ev.get("url") not in seen_urls:
+                    seen_urls.add(ev.get("url"))
+                    evs.append(ev)
+        notes = " ｜ ".join(dict.fromkeys(
+            n for n in ((x.get("notes") or "").strip() for x in es) if n))
+        if relaxed:
+            notes = (notes + " ｜ " if notes else "") + \
+                f"統合時に出典間で割れた属性をnull化: {','.join(relaxed)}"
+        merged.append({"slug": base["slug"], "name": base["name"],
+                       "claim_key": base["claim_key"],
+                       "canonical_claim_id": "|".join(str(x) for x in cid),
+                       "expected": exp, "evidence": evs, "notes": notes})
+    return merged, conflicts
 
 
 def _identity_tokens(name: str) -> list[str]:
@@ -275,16 +360,21 @@ def freeze(candidates_path: Path, out_path: Path) -> int:
                 rejects.append((slug, ckey, rule, url))
                 continue
             entries.append({
-                "gold_id": f"g{len(entries)+1:03d}",
                 "slug": slug, "name": name,
                 "claim_key": ckey,
                 "expected": exp,
-                "evidence": {"url": url, "quote": quote,
-                             "identity_evidence": c.get("identity_evidence", ""),
-                             "verified_at": now_iso(), "verifier": rule},
+                "evidence": [{"url": url, "quote": quote,
+                              "identity_evidence": c.get("identity_evidence", ""),
+                              "verified_at": now_iso(), "verifier": rule}],
                 "notes": c.get("notes", ""),
             })
             print(f"✅ {slug} {ckey} {exp.get('value')}{exp.get('unit') or ''} ({rule})")
+
+    # ★canonical claim ID統合（同一値マージ・GOLD_CONFLICT隔離・2026-07-17）★
+    passed = len(entries)
+    entries, conflicts = consolidate_entries(entries)
+    for i, e in enumerate(entries):
+        e["gold_id"] = f"g{i+1:03d}"
 
     from collections import Counter
     by_type = Counter(e["expected"].get("ceiling_type") for e in entries)
@@ -312,25 +402,81 @@ def freeze(candidates_path: Path, out_path: Path) -> int:
                    "machines": len({e['slug'] for e in entries}),
                    "total_candidates": total_candidates,
                    "duplicates_skipped": duplicates_skipped,
+                   "verified_passed": passed,
+                   "merged_away": passed - len(entries)
+                   - sum(len(c["members"]) for c in conflicts),
+                   "conflicts_quarantined": sum(len(c["members"]) for c in conflicts),
                    "rejected_by_reason": dict(by_reason),
-                   "gold_collection_coverage": round(len(entries) / total_candidates, 3)
+                   "gold_collection_coverage": round(passed / total_candidates, 3)
                    if total_candidates else None},
         "rejected": len(rejects),
+        "conflicts": conflicts,
         "entries": entries,
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(gold, ensure_ascii=False, indent=1), encoding="utf-8")
     digest = hashlib.sha256(out_path.read_bytes()).hexdigest()
-    print(f"\n=== 凍結完了: 候補{total_candidates}件 → 合格{len(entries)} / "
-          f"不合格{len(rejects)} / 重複除外{duplicates_skipped} ===")
+    print(f"\n=== 凍結完了: 候補{total_candidates}件 → 検証合格{passed} → 統合後{len(entries)}"
+          f"（統合{gold['counts']['merged_away']}・競合隔離{gold['counts']['conflicts_quarantined']}）"
+          f" / 不合格{len(rejects)} / 重複除外{duplicates_skipped} ===")
     print(f"型分布: {dict(by_type)}")
     print(f"不合格の理由内訳: {dict(by_reason)}")
     print(f"gold_collection_coverage: {gold['counts']['gold_collection_coverage']}")
     print(f"機種数: {gold['counts']['machines']} / SHA256: {digest}")
+    if conflicts:
+        print("--- GOLD_CONFLICT（要人間判断・goldに入れない）---")
+        for c in conflicts:
+            print(f"  ⚠ {c['canonical_claim_id']}: " +
+                  " vs ".join(f"{m['value']}{m['unit'] or ''}" for m in c["members"]))
     if rejects:
         print("--- 不合格一覧（値・quoteはログに出さない設計＝ルール名のみ）---")
         for slug, key, rule, url in rejects:
             print(f"  ✗ {slug} {key}: {rule} {url[:60]}")
+    return 0
+
+
+def consolidate(in_path: Path, out_path: Path) -> int:
+    """既存gold setにcanonical claim ID統合を適用して新版を凍結（決定論・再取得なし。
+    各エントリは元の凍結時に機械検証済み＝検証結果を引き継ぐ）"""
+    if out_path.exists():
+        print(f"❌ {out_path} は既に存在する（gold setは凍結後変更不可。新版は別名で）")
+        return 1
+    g = json.loads(in_path.read_text(encoding="utf-8"))
+    entries, conflicts = consolidate_entries(g["entries"])
+    for i, e in enumerate(entries):
+        e["gold_id"] = f"g{i+1:03d}"
+    from collections import Counter
+    by_type = Counter(e["expected"].get("ceiling_type") for e in entries)
+    by_key = Counter(e["claim_key"] for e in entries)
+    src_total = len(g["entries"])
+    quarantined = sum(len(c["members"]) for c in conflicts)
+    out = {
+        "frozen_at": now_iso(),
+        "purpose": g.get("purpose", ""),
+        "target_epoch": g.get("target_epoch", "epoch1"),
+        "derived_from": {
+            "path": in_path.name,
+            "sha256": hashlib.sha256(in_path.read_bytes()).hexdigest(),
+            "rule": "canonical_claim_id統合（同一値マージ・GOLD_CONFLICT隔離・再取得なし）"},
+        "counts": {"total": len(entries), "by_ceiling_type": dict(by_type),
+                   "by_claim_key": dict(by_key),
+                   "machines": len({e["slug"] for e in entries}),
+                   "source_entries": src_total,
+                   "merged_away": src_total - len(entries) - quarantined,
+                   "conflicts_quarantined": quarantined},
+        "conflicts": conflicts,
+        "entries": entries,
+    }
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
+    digest = hashlib.sha256(out_path.read_bytes()).hexdigest()
+    print(f"=== 統合凍結完了: {in_path.name} {src_total}件 → {len(entries)}件"
+          f"（統合{out['counts']['merged_away']}・競合隔離{quarantined}） ===")
+    print(f"型分布: {dict(by_type)} / 機種数: {out['counts']['machines']}")
+    for c in conflicts:
+        print(f"  ⚠ GOLD_CONFLICT {c['canonical_claim_id']}: " +
+              " vs ".join(f"{m['value']}{m['unit'] or ''}" for m in c["members"]))
+    print(f"SHA256: {digest}")
     return 0
 
 
@@ -367,6 +513,55 @@ def selftest() -> int:
     gp.write_text("{}", encoding="utf-8")
     t("freeze: 既存gold setへの上書きを拒否", freeze(p, gp) == 1)
 
+    # ★canonical claim ID統合（2026-07-17 チャッピー条件）★
+    def mke(slug, value, scope=None, url="https://1geki.jp/a", operator=None,
+            status="asserted", unit="G"):
+        return {"gold_id": "gx", "slug": slug, "name": slug,
+                "claim_key": "ceiling.normal.game",
+                "expected": {"ceiling_type": "game", "scope": scope, "operator": operator,
+                             "value": value, "unit": unit, "plus_alpha": None,
+                             "assertion_status": status, "mode": None},
+                "evidence": {"url": url, "quote": "q", "identity_evidence": "i",
+                             "verified_at": "t", "verifier": "v"}, "notes": ""}
+
+    # 同一機種・同一scopeに777と778 → GOLD_CONFLICTとして隔離（チャッピー指定テスト）
+    merged, conflicts = consolidate_entries([mke("m1", 777), mke("m1", 778,
+                                            url="https://nana-press.com/b")])
+    t("統合: 同一claimの777/778は競合検出され隔離（goldに入らない）",
+      len(merged) == 0 and len(conflicts) == 1 and len(conflicts[0]["members"]) == 2)
+    # 同一ID・同一値の別URL → 1件へ統合し出典をevidence[]にまとめる
+    merged, conflicts = consolidate_entries([mke("m2", 800), mke("m2", 800,
+                                            url="https://nana-press.com/b")])
+    t("統合: 同一値の別出典は1件にマージされevidence[]が2本",
+      len(merged) == 1 and not conflicts and len(merged[0]["evidence"]) == 2)
+    # scopeが異なるCZ間/AT間は別claimとして保持
+    merged, conflicts = consolidate_entries([mke("m3", 800, scope="CZ間"),
+                                             mke("m3", 1500, scope="AT間")])
+    t("統合: scope違い（CZ間/AT間）は競合にせず別claimとして保持",
+      len(merged) == 2 and not conflicts)
+    # 同一値だがoperatorが割れた → マージしつつ属性をnull化（採点で要求しない）
+    merged, _ = consolidate_entries([mke("m4", 800, operator="max"),
+                                     mke("m4", 800, operator="exact",
+                                         url="https://nana-press.com/b")])
+    t("統合: 出典間で割れたoperatorはnull化して安全側マージ",
+      len(merged) == 1 and merged[0]["expected"]["operator"] is None
+      and "null化" in merged[0]["notes"])
+
+    # ★禁止トークンの照合対象＝title・H1・canonical（本文は使わない）★
+    html_h1 = "<html><head><title>沖ドキ！天井</title></head><body><h1>沖ドキ！GOLD 天井解析</h1></body></html>"
+    t("禁止トークン: H1で検出（okidoki_encore vs GOLD）",
+      forbidden_hit("okidoki_encore", "https://x/", html_text=html_h1) == "GOLD")
+    html_canon = ('<html><head><title>沖ドキ！天井</title>'
+                  '<link rel="canonical" href="https://example.com/okidoki-gold-tenjou/">'
+                  "</head><body><h1>沖ドキ！天井</h1></body></html>")
+    t("禁止トークン: canonical URLで検出（大文字小文字無視）",
+      forbidden_hit("okidoki_encore", "https://x/", html_text=html_canon) == "GOLD")
+    html_body = ("<html><head><title>沖ドキ！アンコール 天井</title></head>"
+                 "<body><h1>沖ドキ！アンコール 天井解析</h1>"
+                 "<p>前作の沖ドキ！GOLDと比べて天井が浅い</p></body></html>")
+    t("禁止トークン: 本文中の前作比較では誤検出しない",
+      forbidden_hit("okidoki_encore", "https://x/", html_text=html_body) is None)
+
     ok = all(c for _, c in results)
     print(f"\nselftest: {sum(1 for _, c in results if c)}/{len(results)} 合格")
     return 0 if ok else 1
@@ -374,10 +569,10 @@ def selftest() -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("command", nargs="?", choices=["freeze", "stats"])
+    ap.add_argument("command", nargs="?", choices=["freeze", "stats", "consolidate"])
     ap.add_argument("--candidates")
+    ap.add_argument("--gold", help="consolidate/statsの入力gold set")
     ap.add_argument("--out", default=str(DOC / "gpt_research" / "gold_set_v1.json"))
-    ap.add_argument("--gold")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
     if args.selftest:
@@ -386,9 +581,13 @@ def main() -> int:
         if not args.candidates:
             ap.error("freeze には --candidates が必要")
         return freeze(Path(args.candidates), Path(args.out))
+    if args.command == "consolidate":
+        if not args.gold:
+            ap.error("consolidate には --gold（入力gold set）が必要")
+        return consolidate(Path(args.gold), Path(args.out))
     if args.command == "stats":
         return stats(Path(args.gold or args.out))
-    ap.error("freeze / stats / --selftest を指定")
+    ap.error("freeze / consolidate / stats / --selftest を指定")
     return 2
 
 

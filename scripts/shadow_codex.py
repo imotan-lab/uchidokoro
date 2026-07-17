@@ -750,7 +750,7 @@ def run(slugs_override: list[str] | None, deadline_str: str, dry_run: bool,
 #     （凍結ファイルは変更しない・Codex結果を見た後の正解差し替え禁止）
 # ─────────────────────────────────────────────
 
-GOLD_PATH_DEFAULT = RESEARCH / "gold_set_v2.json"
+GOLD_PATH_DEFAULT = RESEARCH / "gold_set_v3.json"  # v3=canonical claim ID統合版（2026-07-17）
 GOLD_DIR = RESEARCH / "gold_eval"
 GOLD_STATE_PATH = GOLD_DIR / "gold_eval_state.json"
 GOLD_RESULT_DIR = GOLD_DIR / "results"
@@ -792,6 +792,8 @@ def gold_load(gold_path: Path) -> tuple[dict, dict]:
     g = json.loads(gold_path.read_text(encoding="utf-8"))
     by_slug: dict[str, list] = {}
     for e in g["entries"]:
+        if not isinstance(e["evidence"], list):  # v2互換（単一obj→リスト正規化）
+            e["evidence"] = [e["evidence"]]
         by_slug.setdefault(e["slug"], []).append(e)
     return g, by_slug
 
@@ -863,20 +865,29 @@ def gold_freshness_check(st: dict, by_slug: dict, batch: list[str]) -> bool:
             gid = e["gold_id"]
             if gid in st["stale_gold_ids"] or gid in st["fresh_checked"]:
                 continue
-            exp, ev = e["expected"], e["evidence"]
-            if exp.get("assertion_status") == "asserted_none":
-                ok, rule = shadow_gold.verify_none_claim(
-                    e["name"], ev["url"], ev["quote"], slug_hint=slug)
-            else:
-                ok, rule = shadow_gold.verify_asserted_claim(
-                    slug, e["name"], e["claim_key"], exp.get("value"),
-                    ev["url"], ev["quote"], 900 + i)
+            exp = e["expected"]
+            evs = e["evidence"] if isinstance(e["evidence"], list) else [e["evidence"]]
+            # 複数出典のエントリは、どれか1本でも再取得検証に通れば鮮度OK
+            ok_any, rules = False, []
+            for j, ev in enumerate(evs):
+                if exp.get("assertion_status") == "asserted_none":
+                    ok, rule = shadow_gold.verify_none_claim(
+                        e["name"], ev["url"], ev["quote"], slug_hint=slug)
+                else:
+                    ok, rule = shadow_gold.verify_asserted_claim(
+                        slug, e["name"], e["claim_key"], exp.get("value"),
+                        ev["url"], ev["quote"], 900 + i * 10 + j)
+                rules.append(rule)
+                if ok:
+                    ok_any = True
+                    break
             checked += 1
-            if ok:
+            if ok_any:
                 st["fresh_checked"][gid] = iso()
             else:
-                stale_now.append((gid, rule))
-                if "取得失敗" in rule or rule.endswith(":C1"):
+                joined = " / ".join(rules)
+                stale_now.append((gid, joined))
+                if all("取得失敗" in r or r.endswith(":C1") for r in rules):
                     fetch_fail += 1
     if checked and fetch_fail == checked:
         log("gold鮮度チェック: 全件フェッチ失敗＝ネットワーク障害の疑い。隔離せず中断")
@@ -1399,6 +1410,17 @@ def selftest() -> int:
     sc = gold_score_machine([], [mkc(value=700)])
     t("gold採点: gold未収録のCodex主張→EXTRA（分母外）",
       len(sc) == 1 and sc[0]["category"] == "EXTRA")
+
+    # gold_load: v2互換（単一evidence obj→リスト正規化）とv3（リスト）を両方吸収
+    with tempfile.TemporaryDirectory() as d:
+        gp = Path(d) / "g.json"
+        gp.write_text(json.dumps({"entries": [
+            {"gold_id": "g1", "slug": "a", "evidence": {"url": "u", "quote": "q"}},
+            {"gold_id": "g2", "slug": "a", "evidence": [{"url": "u2", "quote": "q2"}]},
+        ]}, ensure_ascii=False), encoding="utf-8")
+        _, bys = gold_load(gp)
+        t("gold_load: v2単一evidence/v3リストの両形式をリストへ正規化",
+          all(isinstance(e["evidence"], list) for e in bys["a"]))
 
     # 構成ハッシュの差異検出（分割実行の同一性ゲート）
     with tempfile.TemporaryDirectory() as d:

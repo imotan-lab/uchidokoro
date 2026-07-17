@@ -9,25 +9,31 @@ fencing token（run_id照合）」をコードで保証する。
 
 サブコマンド:
     acquire   --task <名前>          ロック取得を1回試行。
-                                     exit 0: 取得成功（stdoutに run_id を1行出力＋
-                                     実行コンテキスト task_ctx_<名前>.json に自動保存）
+                                     exit 0: 取得成功。stdoutは
+                                       CTX=<実行コンテキストのパス>（1行目）
+                                       <run_id>（最終行）
                                      exit 1: 他タスクが保持中（heartbeatが新しい）
                                      stale（heartbeat 30分超）は退避して奪取を試みる
-    heartbeat --task <名前>          自分のリースを延長（heartbeat更新）。
-                                     run_idはacquireが保存したコンテキストから自動で読む
-                                     （★LLMがrun_idを手で転記しない＝2026-07-17改訂。
-                                     --run-id <ID> での明示指定も引き続き可）
+    heartbeat --ctx <パス>           自分のリースを延長（heartbeat更新）。
+                                     ★acquireが出力したCTXパス（実行ごとに一意・不変）を
+                                     そのまま渡す。--run-id <ID> の明示指定も可★
                                      exit 0: 更新 / exit 1: 所有者不一致・ロック消失
-    check     --task <名前>          fencing確認（書き込み・commit・push直前に呼ぶ）。
+    check     --ctx <パス>           fencing確認（書き込み・commit・push直前に呼ぶ）。
                                      exit 0: 自分が所有者 / exit 1: 不一致・消失＝書き込み中止
-    release   --task <名前>          解放。所有者一致の場合のみ削除。
+    release   --ctx <パス>           解放。所有者一致の場合のみ削除。
                                      exit 0: 解放 / exit 1: 不一致・消失（削除しない）
     status                           現在のロック内容を表示（診断用・exit 0固定）
     --selftest                       一時ファイルで全動作を自己検証（ネット不要）
 
-コンテキスト方式の残存リスク（設計判断）: 同一タスク名が同時に二重起動した場合のみ、
-古い実行が新しいrun_idを読んでfencingを通過し得る。スケジューラは同一タスクの
-多重起動を抑止しており（2026-06実測）、異なるタスク同士のゾンビは従来通り防げる。
+★2026-07-17改訂（チャッピー指摘＝同一タスクの世代交代競合）★
+旧方式の task_ctx_<タスク名>.json は「タスク名→現在のrun_id」の共有ポインタで、
+同一タスク名のrun Bが取得した後に遅延復帰した旧run Aが --task 参照でBのrun_idを
+読み、fencingを通過できる穴があった。現方式:
+  - acquireは実行ごとに一意な task_ctx_<名前>_<runid8>.json を作る（内容は以後不変。
+    後続runは別ファイルを作るだけで旧runのcontextを書き換えない）
+  - heartbeat/check/releaseは --ctx（または--run-id）だけを認可に使う。
+    タスク名からrun_idを引く共有ポインタは廃止（表示用にも作らない）
+  - CTXパス/run_idを紛失した実行は認可を回復できない（安全側＝書き込み中止）
 
 設計要点（チャッピー指摘の3つの穴への対応）:
     穴1（STEP内で30分超）  → heartbeatは機種ごと・外部検索前後などSTEPより細かく呼ぶ（SKILL.md側）
@@ -58,25 +64,45 @@ CTX_DIR = r"C:/Users/imao_/Documents/uchidokoro"
 STALE_MINUTES = 30  # 最終heartbeatからこの分数を超えたら異常終了の残骸とみなす
 
 
-def _ctx_path(task: str, lock_path: str) -> str:
-    """実行コンテキストの置き場（selftest時はロックと同じ一時フォルダ）"""
+def _ctx_path(task: str, run_id: str, lock_path: str) -> str:
+    """実行ごとに一意なコンテキストファイル（selftest時はロックと同じ一時フォルダ）。
+    run_id断片を名前に含める＝後続runは別ファイルを作るだけで旧runの内容を書き換えない"""
     base = os.path.dirname(lock_path) if lock_path != LOCK_PATH else CTX_DIR
     safe = re.sub(r"[^A-Za-z0-9_-]", "_", task)
-    return os.path.join(base, f"task_ctx_{safe}.json")
+    return os.path.join(base, f"task_ctx_{safe}_{run_id[:8]}.json")
 
 
-def _save_ctx(task: str, run_id: str, lock_path: str) -> None:
-    p = _ctx_path(task, lock_path)
+def _save_ctx(task: str, run_id: str, lock_path: str) -> str:
+    p = _ctx_path(task, run_id, lock_path)
     with open(p, "w", encoding="utf-8") as f:
-        json.dump({"task": task, "run_id": run_id, "saved_at": _now_iso()}, f)
+        json.dump({"task": task, "run_id": run_id, "created_at": _now_iso(),
+                   "note": "実行ごとに一意・内容不変。--ctxでこのパスを渡す"}, f,
+                  ensure_ascii=False)
+    return p
 
 
-def _load_ctx_run_id(task: str, lock_path: str) -> str | None:
+def _load_ctx_run_id(ctx_file: str) -> str | None:
+    """--ctxで渡された実行コンテキストからrun_idを読む（このファイルだけを認可に使う）"""
     try:
-        with open(_ctx_path(task, lock_path), encoding="utf-8") as f:
+        with open(ctx_file, encoding="utf-8") as f:
             return json.load(f).get("run_id")
     except Exception:
         return None
+
+
+def _cleanup_old_ctx(task: str, lock_path: str, keep_days: int = 7) -> None:
+    """古い実行コンテキストの掃除（認可には無関係・失敗しても無視）"""
+    base = os.path.dirname(lock_path) if lock_path != LOCK_PATH else CTX_DIR
+    safe = re.sub(r"[^A-Za-z0-9_-]", "_", task)
+    cutoff = _now() - datetime.timedelta(days=keep_days)
+    try:
+        for name in os.listdir(base):
+            if name.startswith(f"task_ctx_{safe}_") and name.endswith(".json"):
+                p = os.path.join(base, name)
+                if datetime.datetime.fromtimestamp(os.path.getmtime(p)) < cutoff:
+                    os.remove(p)
+    except Exception:
+        pass
 
 
 def _now() -> datetime.datetime:
@@ -173,9 +199,11 @@ def cmd_acquire(task: str, lock_path: str) -> int:
         "heartbeat": _now_iso(),
     }
     if _atomic_create(lock_path, payload):
-        _save_ctx(task, run_id, lock_path)  # heartbeat/check/releaseが--taskで自動参照
-        _log(f"acquire({task}): 取得成功 run_id={run_id}")
-        print(run_id)
+        ctx = _save_ctx(task, run_id, lock_path)  # 実行ごとに一意・不変（--ctxで渡す）
+        _cleanup_old_ctx(task, lock_path)
+        _log(f"acquire({task}): 取得成功 run_id={run_id} ctx={os.path.basename(ctx)}")
+        print(f"CTX={ctx}")
+        print(run_id)  # 互換のため最終行はrun_id（既存呼び出しがsplitlines()[-1]で読む）
         return 0
     # O_EXCL負け＝同時に別タスクが取得した
     winner = _read_lock(lock_path) or {}
@@ -256,7 +284,7 @@ def selftest() -> int:
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         rc = cmd_acquire("taskA", p)
-    rid_a = buf.getvalue().strip()
+    rid_a = buf.getvalue().strip().splitlines()[-1]  # 最終行=run_id（互換仕様）
     t("初回acquireが成功しrun_idを返す", rc == 0 and len(rid_a) == 36)
     # 2. 保持中の二重取得は失敗
     with contextlib.redirect_stdout(io.StringIO()):
@@ -285,7 +313,7 @@ def selftest() -> int:
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         rc = cmd_acquire("taskB", p)
-    rid_b = buf.getvalue().strip()
+    rid_b = buf.getvalue().strip().splitlines()[-1]
     stale_files = [x for x in os.listdir(d) if ".stale." in x]
     t("staleロックは退避されて奪取できる", rc == 0 and len(stale_files) == 1)
     # 7. ゾンビ（taskAの旧run_id）のcheck/releaseは失敗＝fencing機能
@@ -297,28 +325,57 @@ def selftest() -> int:
     with contextlib.redirect_stdout(io.StringIO()):
         rc = cmd_release(rid_b, p)
     t("新所有者のreleaseは成功しロック消滅", rc == 0 and not os.path.exists(p))
+    def acquire_ctx(task):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = cmd_acquire(task, p)
+        lines = buf.getvalue().strip().splitlines()
+        ctx = next((ln[4:] for ln in lines if ln.startswith("CTX=")), None)
+        return rc, ctx, (lines[-1] if lines else "")
+
     # 9. 壊れたロックはstale扱いで奪取できる
     with open(p, "w", encoding="utf-8") as f:
         f.write("{broken json")
-    with contextlib.redirect_stdout(io.StringIO()):
-        rc = cmd_acquire("taskC", p)
+    rc, ctx_c9, rid_c9 = acquire_ctx("taskC")
     t("壊れたロックは退避して奪取できる", rc == 0)
+    with contextlib.redirect_stdout(io.StringIO()):
+        cmd_release(rid_c9, p)
 
-    # 10. コンテキスト方式: acquireが保存したrun_idをheartbeat/check/releaseが自動参照
-    rid_c = _load_ctx_run_id("taskC", p)
-    t("acquireがコンテキストにrun_idを保存する", rid_c is not None and len(rid_c) == 36)
+    # 10. コンテキスト方式: acquireがCTXパスとrun_idを出力し、CTXから認可できる
+    rc, ctx_c, rid_c_out = acquire_ctx("taskC2")
+    rid_c = _load_ctx_run_id(ctx_c) if ctx_c else None
+    t("acquireがCTXパスを出力し最終行はrun_id（互換）",
+      rc == 0 and ctx_c and rid_c == rid_c_out and len(rid_c) == 36)
     with contextlib.redirect_stdout(io.StringIO()):
         rc1 = cmd_heartbeat(rid_c, p)
         rc2 = cmd_check(rid_c, p)
-    t("コンテキストのrun_idでheartbeat/checkが成功", rc1 == 0 and rc2 == 0)
-    # 別タスクのコンテキストは他人のロックに使えない（fencing維持）
+    t("CTXのrun_idでheartbeat/checkが成功", rc1 == 0 and rc2 == 0)
+
+    # 11. ★同一タスクの世代交代競合（チャッピー指定シナリオ・2026-07-17）★
+    #     A取得→A解放→B取得→遅延復帰したAがheartbeat→AはNOT_OWNER・Bは継続
     with contextlib.redirect_stdout(io.StringIO()):
         cmd_release(rid_c, p)
-        cmd_acquire("taskD", p)
-    stale_ctx = _load_ctx_run_id("taskC", p)  # taskCの古いコンテキスト
+    rc, ctx_a, _ = acquire_ctx("verify")          # run A 取得
+    ctx_a_content = open(ctx_a, encoding="utf-8").read()
+    rid_a2 = _load_ctx_run_id(ctx_a)
     with contextlib.redirect_stdout(io.StringIO()):
-        rc = cmd_check(stale_ctx, p)
-    t("旧タスクのコンテキストではfencingを通れない", rc == 1)
+        cmd_release(rid_a2, p)                     # A 解放
+    rc, ctx_b, _ = acquire_ctx("verify")          # 同名タスクの run B 取得
+    rid_b2 = _load_ctx_run_id(ctx_b)
+    t("世代交代: 後続runは旧runのcontextを書き換えない（別ファイル・内容不変）",
+      ctx_a != ctx_b and open(ctx_a, encoding="utf-8").read() == ctx_a_content)
+    with contextlib.redirect_stdout(io.StringIO()):
+        rc_a = cmd_heartbeat(_load_ctx_run_id(ctx_a), p)   # 遅延復帰したA
+        rc_b1 = cmd_heartbeat(rid_b2, p)                   # Bは継続
+        rc_b2 = cmd_check(rid_b2, p)
+    t("世代交代: 旧run AのheartbeatはNOT_OWNER・run Bは継続できる",
+      rc_a == 1 and rc_b1 == 0 and rc_b2 == 0)
+    with contextlib.redirect_stdout(io.StringIO()):
+        rc_a2 = cmd_release(_load_ctx_run_id(ctx_a), p)    # Aのreleaseも拒否
+    t("世代交代: 旧run Aのreleaseも拒否されBのロックが残る",
+      rc_a2 == 1 and os.path.exists(p))
+    with contextlib.redirect_stdout(io.StringIO()):
+        cmd_release(rid_b2, p)
 
     ok = all(c for _, c in results)
     print(f"\nselftest: {sum(1 for _, c in results if c)}/{len(results)} 合格")
@@ -328,8 +385,9 @@ def selftest() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="うちどころ自動タスクの排他ロック")
     parser.add_argument("command", nargs="?", choices=["acquire", "heartbeat", "check", "release", "status"])
-    parser.add_argument("--task", help="タスク名（heartbeat/check/releaseはコンテキストからrun_id自動取得）")
-    parser.add_argument("--run-id", help="run_idの明示指定（省略時は--taskのコンテキストを使用）")
+    parser.add_argument("--task", help="タスク名（acquire時に必要）")
+    parser.add_argument("--ctx", help="acquireが出力した実行コンテキストのパス（CTX=行）")
+    parser.add_argument("--run-id", help="run_idの明示指定（--ctxの代わり）")
     parser.add_argument("--lock-path", default=LOCK_PATH)
     parser.add_argument("--selftest", action="store_true")
     args = parser.parse_args()
@@ -342,9 +400,12 @@ def main() -> int:
         return cmd_acquire(args.task, args.lock_path)
 
     def resolve_run_id() -> str:
-        rid = args.run_id or (args.task and _load_ctx_run_id(args.task, args.lock_path))
+        # 認可に使えるのは実行ごとの秘密（--ctx / --run-id）だけ。
+        # タスク名からの共有ポインタ参照は世代交代競合の穴になるため廃止（2026-07-17）
+        rid = args.run_id or (args.ctx and _load_ctx_run_id(args.ctx))
         if not rid:
-            parser.error(f"{args.command} には --task（コンテキスト自動参照）か --run-id が必要")
+            parser.error(f"{args.command} には --ctx <acquireが出力したCTXパス> か --run-id が必要"
+                         "（--task だけでは認可できない）")
         return rid
 
     if args.command == "heartbeat":
