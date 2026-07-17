@@ -933,11 +933,21 @@ def gold_verify_codex_claim(slug: str, name: str, claim: dict) -> None:
     claim["gold_identity_confusion"] = confusion
 
 
+def gold_class_of(entry: dict) -> str:
+    """gold entryの等級（チャッピー指定・2026-07-17）:
+    - strict_gold: 収集・検証時の属性がそのまま（厳密MATCHの分母に使える）
+    - partial_gold: v3統合時に出典間で副属性が割れてnull化されたclaim
+      （値・単位の一致率には使えるが厳密MATCHの分母には含めない）"""
+    return "partial_gold" if "null化:" in (entry.get("notes") or "") else "strict_gold"
+
+
 def gold_score_machine(entries: list[dict], claims: list[dict]) -> list[dict]:
     """凍結期待値と（gold検証済みの）Codex claimを採点（決定論・LLM判断なし）。
     割当て: ①claim_key＋scope完全一致 ②同claim_keyの残り（gold順・各claim最大1回）。
     Codex側のclaim_keyはceiling_typeで決定論移行（凍結と同じ規則。プロンプトp1が
-    reset系キーをgameしか列挙していないため、pt機のリセット等をキー名で落とさない）"""
+    reset系キーをgameしか列挙していないため、pt機のリセット等をキー名で落とさない）。
+    ★nullをワイルドカードにしない（チャッピー指定）: gold=null×codex=具体値は
+    正式MATCHにせず未検証属性扱い。partial_goldはCORRECT_STRICTに到達させない★"""
     def norm_key(c):
         return shadow_gold.migrate_claim_key(c.get("claim_key") or "",
                                              c.get("ceiling_type") or "")
@@ -965,6 +975,7 @@ def gold_score_machine(entries: list[dict], claims: list[dict]) -> list[dict]:
     for gi, e in enumerate(entries):
         exp = e["expected"]
         rec = {"gold_id": e["gold_id"], "claim_key": e["claim_key"],
+               "gold_class": gold_class_of(e),
                "expected_value": exp.get("value"), "category": None, "detail": ""}
         c = claims[assign[gi]] if gi in assign else None
         if c is None:
@@ -1018,10 +1029,11 @@ def gold_score_machine(entries: list[dict], claims: list[dict]) -> list[dict]:
         unattrs, mism = [], []
         for attr in ("scope", "operator", "plus_alpha"):
             g_a = shadow_claims._attr_norm(attr, exp.get(attr))
-            if g_a is None:
-                continue  # goldが未指定の属性は要求しない（quoteに明記がなかった属性）
             c_a = shadow_claims._attr_norm(attr, c.get(attr))
-            if c_a is None:
+            if g_a is None and c_a is None:
+                continue  # 双方未指定＝比較対象なし
+            if g_a is None or c_a is None:
+                # ★nullをワイルドカードにしない: 片方null×片方具体値は正式MATCH不可★
                 unattrs.append(attr)
             elif c_a != g_a:
                 mism.append(f"{attr}(gold={g_a}/codex={c_a})")
@@ -1030,6 +1042,10 @@ def gold_score_machine(entries: list[dict], claims: list[dict]) -> list[dict]:
         elif unattrs:
             rec.update(category="VALUE_ALIGNED",
                        detail=f"値一致（{c['value']}{c_unit}）・未検証属性: {','.join(unattrs)}")
+        elif rec["gold_class"] == "partial_gold":
+            # 統合時に副属性が割れたgoldは厳密MATCHに使えない（値・単位一致まで）
+            rec.update(category="VALUE_ALIGNED",
+                       detail=f"値一致（{c['value']}{c_unit}）・partial_goldのため厳密MATCH対象外")
         else:
             rec.update(category="CORRECT_STRICT", detail=f"{c['value']}{c_unit} 完全一致")
         out.append(rec)
@@ -1058,11 +1074,20 @@ def gold_stats_summary(st: dict | None = None) -> str:
     for s in scored:
         for k, v in (st["machines"][s].get("score_summary") or {}).items():
             cats[k] = cats.get(k, 0) + v
-    denom = sum(v for k, v in cats.items() if k != "EXTRA")
-    strict = cats.get("CORRECT_STRICT", 0)
-    aligned = strict + cats.get("VALUE_ALIGNED", 0)
-    wrong = cats.get("WRONG_VALUE", 0) + cats.get("WRONG_ATTR", 0) + cats.get("WRONG_STATUS", 0)
-    idconf = cats.get("IDENTITY_CONFUSION", 0)
+
+    def cls(prefix, cat=None):
+        if cat:
+            return cats.get(f"{prefix}:{cat}", 0)
+        return sum(v for k, v in cats.items() if k.startswith(prefix + ":"))
+
+    strict_denom = cls("strict_gold")
+    partial_denom = cls("partial_gold")
+    strict_ok = cls("strict_gold", "CORRECT_STRICT")
+    partial_numeric = cls("partial_gold", "VALUE_ALIGNED") + cls("partial_gold", "CORRECT_STRICT")
+    unknown = cls("strict_gold", "UNVERIFIED") + cls("partial_gold", "UNVERIFIED")
+    wrong = sum(cls(p, c) for p in ("strict_gold", "partial_gold")
+                for c in ("WRONG_VALUE", "WRONG_ATTR", "WRONG_STATUS"))
+    idconf = cls("strict_gold", "IDENTITY_CONFUSION") + cls("partial_gold", "IDENTITY_CONFUSION")
 
     def pct(a, b):
         return f"{a}/{b}（{a / b * 100:.0f}%）" if b else "0/0（N/A）"
@@ -1073,11 +1098,24 @@ def gold_stats_summary(st: dict | None = None) -> str:
         f"（QUOTA分離: {len(quota_only)}機種 / その他エラー: {len(err_others)}機種）",
         f"GOLD_EVIDENCE_STALE隔離: {len(st['stale_gold_ids'])}件（凍結内容は不変・分母外）",
         f"カテゴリ内訳: {json.dumps(cats, ensure_ascii=False)}",
-        f"strict正答率: {pct(strict, denom)}",
-        f"値一致まで含む正答率: {pct(aligned, denom)}",
+        f"strict_gold_accuracy: {pct(strict_ok, strict_denom)}",
+        f"partial_gold_numeric_accuracy: {pct(partial_numeric, partial_denom)}",
+        f"gold_unknown_rate: {pct(unknown, strict_denom + partial_denom)}",
         f"検証済み誤答（preflight条件=0件）: {wrong}件",
         f"別機種混同（preflight条件=0件）: {idconf}件",
     ]
+    # gold set構成（canonical claim単位のcoverage・候補単位とは別指標＝2026-07-17名称分離）
+    try:
+        g = json.loads(Path(st["gold_path"]).read_text(encoding="utf-8"))
+        cg = g.get("counts", {})
+        n_groups = cg.get("total", 0) + len(g.get("conflicts", []))
+        lines.append(
+            f"gold構成: {cg.get('total')}claim/{cg.get('machines')}機種 / "
+            f"canonical_gold_coverage: {pct(cg.get('total', 0), n_groups)} / "
+            f"競合隔離: {len(g.get('conflicts', []))}グループ/{cg.get('conflicts_quarantined', 0)}エントリ"
+            "（candidate_evidence_pass_rate=候補エントリ単位の検証通過率とは別指標）")
+    except Exception:
+        pass
     if err_others:
         lines.append(f"エラー内訳: {json.dumps(err_others, ensure_ascii=False)}")
     return "\n".join(lines)
@@ -1172,7 +1210,9 @@ def gold_eval(gold_path: Path, batch_size: int, slugs_override: list[str] | None
         atomic_write_json(rp, result)
         summary: dict[str, int] = {}
         for s in scores:
-            summary[s["category"]] = summary.get(s["category"], 0) + 1
+            key = s["category"] if s.get("gold_id") is None \
+                else f"{s['gold_class']}:{s['category']}"
+            summary[key] = summary.get(key, 0) + 1
         rec.update(status="scored", attempts=rec.get("attempts", 0) + 1,
                    last_error=None, result_path=str(rp), score_summary=summary)
         batch_rec["done"].append(slug)
@@ -1410,6 +1450,22 @@ def selftest() -> int:
     sc = gold_score_machine([], [mkc(value=700)])
     t("gold採点: gold未収録のCodex主張→EXTRA（分母外）",
       len(sc) == 1 and sc[0]["category"] == "EXTRA")
+
+    # ★2026-07-17チャッピー固定2条件★
+    sc = gold_score_machine(
+        [{"gold_id": "g5", "claim_key": "ceiling.normal.game",
+          "expected": {"assertion_status": "asserted", "value": 800, "unit": "G",
+                       "scope": None, "operator": None, "plus_alpha": None}}],
+        [mkc(value=800, operator="max")])
+    t("gold採点: gold=null×codex=具体値は正式MATCHにしない→VALUE_ALIGNED",
+      sc[0]["category"] == "VALUE_ALIGNED" and sc[0]["gold_class"] == "strict_gold")
+    partial_entry = {"gold_id": "g6", "claim_key": "ceiling.normal.game",
+                     "notes": "統合時に出典間で割れた属性をnull化: operator",
+                     "expected": {"assertion_status": "asserted", "value": 800, "unit": "G",
+                                  "scope": None, "operator": None, "plus_alpha": None}}
+    sc = gold_score_machine([partial_entry], [mkc(value=800)])
+    t("gold採点: partial_goldは厳密MATCHに到達しない（値一致でもVALUE_ALIGNEDまで）",
+      sc[0]["gold_class"] == "partial_gold" and sc[0]["category"] == "VALUE_ALIGNED")
 
     # gold_load: v2互換（単一evidence obj→リスト正規化）とv3（リスト）を両方吸収
     with tempfile.TemporaryDirectory() as d:

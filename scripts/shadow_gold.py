@@ -405,10 +405,15 @@ def freeze(candidates_path: Path, out_path: Path) -> int:
                    "verified_passed": passed,
                    "merged_away": passed - len(entries)
                    - sum(len(c["members"]) for c in conflicts),
+                   "conflict_groups": len(conflicts),
                    "conflicts_quarantined": sum(len(c["members"]) for c in conflicts),
                    "rejected_by_reason": dict(by_reason),
-                   "gold_collection_coverage": round(passed / total_candidates, 3)
-                   if total_candidates else None},
+                   # 名称分離（2026-07-17チャッピー条件）: 候補エントリ単位とcanonical claim単位は別指標
+                   "candidate_evidence_pass_rate": round(passed / total_candidates, 3)
+                   if total_candidates else None,
+                   "canonical_gold_coverage": round(
+                       len(entries) / (len(entries) + len(conflicts)), 3)
+                   if (entries or conflicts) else None},
         "rejected": len(rejects),
         "conflicts": conflicts,
         "entries": entries,
@@ -421,7 +426,10 @@ def freeze(candidates_path: Path, out_path: Path) -> int:
           f" / 不合格{len(rejects)} / 重複除外{duplicates_skipped} ===")
     print(f"型分布: {dict(by_type)}")
     print(f"不合格の理由内訳: {dict(by_reason)}")
-    print(f"gold_collection_coverage: {gold['counts']['gold_collection_coverage']}")
+    print(f"candidate_evidence_pass_rate（候補エントリ単位）: "
+          f"{gold['counts']['candidate_evidence_pass_rate']}")
+    print(f"canonical_gold_coverage（統合後claimグループ単位）: "
+          f"{gold['counts']['canonical_gold_coverage']}")
     print(f"機種数: {gold['counts']['machines']} / SHA256: {digest}")
     if conflicts:
         print("--- GOLD_CONFLICT（要人間判断・goldに入れない）---")
@@ -463,7 +471,13 @@ def consolidate(in_path: Path, out_path: Path) -> int:
                    "machines": len({e["slug"] for e in entries}),
                    "source_entries": src_total,
                    "merged_away": src_total - len(entries) - quarantined,
-                   "conflicts_quarantined": quarantined},
+                   "conflict_groups": len(conflicts),
+                   "conflicts_quarantined": quarantined,
+                   # canonical claim単位のcoverage（候補エントリ単位の
+                   # candidate_evidence_pass_rateとは別指標＝2026-07-17名称分離）
+                   "canonical_gold_coverage": round(
+                       len(entries) / (len(entries) + len(conflicts)), 3)
+                   if (entries or conflicts) else None},
         "conflicts": conflicts,
         "entries": entries,
     }
