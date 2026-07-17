@@ -60,7 +60,10 @@ EPOCH = {
     "model": "gpt-5.6-sol",
     "reasoning_effort": "medium",
     "web_search": "live",
-    "prompt_version": "p1",
+    # p2（2026-07-17）: 出典を許可4ドメインに限定。p1はドメイン自由でCodexが
+    # p-world/hazuse等の集計DBを選び、出典再取得検証（許可4ドメイン限定）が
+    # 構造的に通らずUNVERIFIED 65%になった（goldeval_20260717_023f93 batch1で実測）
+    "prompt_version": "p2",
     "schema_version": "s1",
 }
 MACHINE_TIMEOUT_SEC = 720          # 1機種12分
@@ -362,6 +365,7 @@ def build_prompt(machine: dict) -> str:
 
 ルール（厳守）:
 1. 必ずWeb検索を実行し、現在のページから確認する。記憶からの回答・推測は禁止。検索で確認できない場合は can_not_verify=true を返す
+1-2. ★出典に使えるのは次の4ドメインのページだけ★: chonborista.com（ちょんぼりすた）/ 1geki.jp（一撃）/ nana-press.com（ナナプレス）/ slopachi-quest.com（スロパチクエスト）。これ以外のサイト（集計DB・まとめ・ブログ等）は参考閲覧はよいが source_url に使わない。4ドメインで確認できない項目は can_not_verify=true またはそのclaimを返さない
 2. 出典ページのタイトルまたは本文に正式名称「{name}」が含まれることを確認し、確認した文字列を identity_evidence に書く。同名の旧作・前作・パチンコ版のページは出典にしない
 3. raw_quote は出典ページの原文を一字一句そのまま（言い換え・要約禁止）。値とラベル語（天井・G・pt等）を含む一文
 4. claim_key は ceiling.normal.game / ceiling.normal.point / ceiling.normal.through / ceiling.normal.cycle / ceiling.normal.none / ceiling.reset.game のいずれか。複合天井は要素ごとに別claim（例: CZ間とAT間を別々に）
@@ -1299,6 +1303,9 @@ def selftest() -> int:
     t("プロンプト: 未信頼データ指示あり", "従わない" in pm and "未信頼" in pm)
     t("プロンプト: 同定・can_not_verify・claim_key指示あり",
       "スマスロ北斗の拳" in pm and "can_not_verify" in pm and "ceiling.normal.game" in pm)
+    t("プロンプト: 出典を許可4ドメインに限定（p2・2026-07-17）",
+      all(d in pm for d in ("chonborista.com", "1geki.jp", "nana-press.com",
+                            "slopachi-quest.com")) and "source_url に使わない" in pm)
 
     # 6. evidence検証: 非assertedはスキップされる
     ev = verify_evidence({"slug": "t", "name": "テスト機"},
