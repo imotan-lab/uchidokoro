@@ -69,6 +69,29 @@ def _fetch(url: str, timeout=30) -> str:
     return text
 
 
+_PREFIX_RE = re.compile(
+    r"^(Lパチスロ|Lアニマルスロット|A-SLOT\+?|SB|スマスロ|パチスロ|スロット|L|S)\s*")
+
+
+def _identity_tokens(name: str) -> list[str]:
+    """同定トークン候補（強い順）。①型式接頭辞を除いた本体 ②その第1セグメント。
+    フル名は解析ページにサブタイトルまで書かれないことが多い（kabaneri等で実測）ため、
+    決定論の段階的フォールバックにする（判別digitは本体・第1セグメント双方に残る）"""
+    stripped = name
+    for _ in range(3):
+        new = _PREFIX_RE.sub("", stripped).strip()
+        if new == stripped:
+            break
+        stripped = new
+    tokens = []
+    if len(_norm(stripped)) >= 3:
+        tokens.append(stripped)
+    first = stripped.split()[0] if stripped.split() else ""
+    if len(_norm(first)) >= 3 and _norm(first) != _norm(stripped):
+        tokens.append(first)
+    return tokens or [name]
+
+
 def verify_none_claim(name: str, url: str, quote: str) -> tuple[bool, str]:
     """天井非搭載（値なし）claimの軽量検証: quote逐語＋機種同定"""
     if not any(d in url for d in ALLOWED_DOMAINS):
@@ -84,35 +107,39 @@ def verify_none_claim(name: str, url: str, quote: str) -> tuple[bool, str]:
         return False, "quoteが本文に逐語一致しない"
     m = re.search(r"<title[^>]*>([\s\S]*?)</title>", html_text, re.I)
     title = _norm(m.group(1)) if m else ""
-    ident = _norm(name)
-    if ident not in title and ident not in body:
-        # 完全名が長い機種はコア部分で再判定（先頭の型式記号を除いた主要部）
-        core = _norm(re.sub(r"^(L|S|SB|A-SLOT\+?|スマスロ|パチスロ|Lパチスロ|スロット)\s*", "", name))
-        if not core or (core not in title and core not in body):
-            return False, "機種同定不可（title/本文に機種名なし）"
-    return True, "none_check:合格"
+    for tok in _identity_tokens(name):
+        t = _norm(tok)
+        if t in title or t in body:
+            return True, f"none_check:合格（同定={tok}）"
+    return False, "機種同定不可（title/本文に機種名なし）"
 
 
 def verify_asserted_claim(slug: str, name: str, claim_key: str, value,
                           url: str, quote: str, idx: int) -> tuple[bool, str]:
-    """値ありclaimはverify_claims.pyで検証（既存の関所を正として流用）"""
+    """値ありclaimはverify_claims.pyで検証（既存の関所を正として流用）。
+    同定トークンは強い順のカスケード（本体→第1セグメント）で試す"""
     TMP_CLAIMS.mkdir(parents=True, exist_ok=True)
     v = value
     if isinstance(v, float) and v.is_integer():
         v = int(v)
-    cf = {"slug": slug, "identity": {"must_contain": [name]},
-          "claims": [{"field": f"天井_{claim_key}", "value": str(v), "critical": False,
-                      "url": url, "quote": quote}]}
-    p = TMP_CLAIMS / f"gold_{slug}_{claim_key.replace('.', '_')}_{idx}.json"
-    p.write_text(json.dumps(cf, ensure_ascii=False), encoding="utf-8")
-    try:
-        r = subprocess.run([sys.executable, str(SCRIPTS / "verify_claims.py"),
-                            "--file", str(p), "--min-domains", "1"],
-                           capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", timeout=120)
-        return r.returncode == 0, f"verify_claims:exit{r.returncode}"
-    except Exception as e:
-        return False, f"検証実行失敗: {type(e).__name__}"
+    last = "検証未実行"
+    for ti, tok in enumerate(_identity_tokens(name)):
+        cf = {"slug": slug, "identity": {"must_contain": [tok]},
+              "claims": [{"field": f"天井_{claim_key}", "value": str(v), "critical": False,
+                          "url": url, "quote": quote}]}
+        p = TMP_CLAIMS / f"gold_{slug}_{claim_key.replace('.', '_')}_{idx}_{ti}.json"
+        p.write_text(json.dumps(cf, ensure_ascii=False), encoding="utf-8")
+        try:
+            r = subprocess.run([sys.executable, str(SCRIPTS / "verify_claims.py"),
+                                "--file", str(p), "--min-domains", "1"],
+                               capture_output=True, text=True,
+                               encoding="utf-8", errors="replace", timeout=120)
+            if r.returncode == 0:
+                return True, f"verify_claims:exit0（同定={tok}）"
+            last = f"verify_claims:exit{r.returncode}"
+        except Exception as e:
+            last = f"検証実行失敗: {type(e).__name__}"
+    return False, last
 
 
 def load_candidates(path: Path) -> list[dict]:
