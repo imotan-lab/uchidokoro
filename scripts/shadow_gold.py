@@ -72,6 +72,67 @@ def _fetch(url: str, timeout=30) -> str:
 _PREFIX_RE = re.compile(
     r"^(Lパチスロ|Lアニマルスロット|A-SLOT\+?|SB|スマスロ|パチスロ|スロット|L|S)\s*")
 
+# ★同シリーズ・類似名機種の同定強化表（2026-07-17 チャッピー条件）★
+# required: must_containに必ず加える識別トークン / forbidden: ページtitleに
+# 含まれていたら旧作・別機種ページとして不合格にするトークン
+IDENTITY_OVERRIDES = {
+    "karakuri2":        {"required": ["からくりサーカス", "2"], "forbidden": []},
+    "valvrave2":        {"required": ["ヴァルヴレイヴ", "2"], "forbidden": []},
+    "enen2":            {"required": ["炎炎", "2"], "forbidden": []},
+    "umineko2":         {"required": ["うみねこ", "2"], "forbidden": []},
+    "hokuto_tensei2":   {"required": ["転生", "2"], "forbidden": []},
+    "okidoki_gorgeous": {"required": ["沖ドキ", "ゴージャス"],
+                         "forbidden": ["アンコール", "GOLD", "BLACK"]},
+    "okidoki_encore":   {"required": ["沖ドキ", "アンコール"],
+                         "forbidden": ["ゴージャス", "GOLD", "BLACK"]},
+    "gundam_seed":      {"required": ["ガンダムSEED"], "forbidden": ["ユニコーン"]},
+    "gundam_uc2":       {"required": ["ユニコーン"], "forbidden": ["SEED"]},
+    "ultraman_final":   {"required": ["ULTRAMAN", "最終決戦"], "forbidden": []},
+    "nangoku_special":  {"required": ["南国育ち", "SPECIAL"], "forbidden": []},
+    "thunder_v":        {"required": ["サンダーV"], "forbidden": ["リボルト"]},
+}
+
+# claim_key末尾とceiling_type・unitの整合表（2026-07-17 チャッピー条件）
+KEY_SUFFIX_BY_TYPE = {"game": "game", "point": "point", "cycle": "cycle",
+                      "through": "through", "none": "none"}
+UNIT_COMPAT = {"game": {"G"}, "point": {"pt", "Gpt"}, "cycle": {"cycle"},
+               "through": {"through"}, "none": {None, ""}}
+
+
+def migrate_claim_key(claim_key: str, ceiling_type: str) -> str:
+    """キー末尾をceiling_typeに一致させる決定論移行（例: reset.game+point→reset.point）"""
+    suffix = KEY_SUFFIX_BY_TYPE.get(ceiling_type)
+    if not suffix:
+        return claim_key
+    parts = (claim_key or "").split(".")
+    if len(parts) == 3 and parts[0] == "ceiling" and parts[2] != suffix:
+        return f"{parts[0]}.{parts[1]}.{suffix}"
+    return claim_key
+
+
+def _title_of(url: str, _cache={}) -> str:
+    if url in _cache:
+        return _cache[url]
+    try:
+        html_text = _fetch(url)
+        m = re.search(r"<title[^>]*>([\s\S]*?)</title>", html_text, re.I)
+        _cache[url] = _norm(m.group(1)) if m else ""
+    except Exception:
+        _cache[url] = ""
+    return _cache[url]
+
+
+def forbidden_hit(slug: str, url: str) -> str | None:
+    """禁止トークンがページtitleにあればそのトークンを返す（旧作・別機種ガード）"""
+    ov = IDENTITY_OVERRIDES.get(slug)
+    if not ov or not ov.get("forbidden"):
+        return None
+    title = _title_of(url)
+    for tok in ov["forbidden"]:
+        if _norm(tok) in title:
+            return tok
+    return None
+
 
 def _identity_tokens(name: str) -> list[str]:
     """同定トークン候補（強い順）。①型式接頭辞を除いた本体 ②その第1セグメント。
@@ -92,8 +153,9 @@ def _identity_tokens(name: str) -> list[str]:
     return tokens or [name]
 
 
-def verify_none_claim(name: str, url: str, quote: str) -> tuple[bool, str]:
-    """天井非搭載（値なし）claimの軽量検証: quote逐語＋機種同定"""
+def verify_none_claim(name: str, url: str, quote: str,
+                      slug_hint: str | None = None) -> tuple[bool, str]:
+    """天井非搭載（値なし）claimの軽量検証: quote逐語＋機種同定（title∧本文）"""
     if not any(d in url for d in ALLOWED_DOMAINS):
         return False, "許可外ドメイン"
     if len(_norm(quote)) < 8:
@@ -107,11 +169,14 @@ def verify_none_claim(name: str, url: str, quote: str) -> tuple[bool, str]:
         return False, "quoteが本文に逐語一致しない"
     m = re.search(r"<title[^>]*>([\s\S]*?)</title>", html_text, re.I)
     title = _norm(m.group(1)) if m else ""
+    required = [_norm(t) for t in (IDENTITY_OVERRIDES.get(slug_hint or "", {}) or {}).get("required", [])]
     for tok in _identity_tokens(name):
         t = _norm(tok)
-        if t in title or t in body:
+        # verify_claims C2と同じ強度: title・本文の両方に同定トークン（＋必須トークン全部）
+        if (t in title and t in body
+                and all(rq in title and rq in body for rq in required)):
             return True, f"none_check:合格（同定={tok}）"
-    return False, "機種同定不可（title/本文に機種名なし）"
+    return False, "機種同定不可（title+本文の両方に機種名が必要）"
 
 
 def verify_asserted_claim(slug: str, name: str, claim_key: str, value,
@@ -123,8 +188,10 @@ def verify_asserted_claim(slug: str, name: str, claim_key: str, value,
     if isinstance(v, float) and v.is_integer():
         v = int(v)
     last = "検証未実行"
+    required = (IDENTITY_OVERRIDES.get(slug, {}) or {}).get("required", [])
     for ti, tok in enumerate(_identity_tokens(name)):
-        cf = {"slug": slug, "identity": {"must_contain": [tok]},
+        must = list(dict.fromkeys([tok] + required))  # 順序保持で重複除去
+        cf = {"slug": slug, "identity": {"must_contain": must},
               "claims": [{"field": f"天井_{claim_key}", "value": str(v), "critical": False,
                           "url": url, "quote": quote}]}
         p = TMP_CLAIMS / f"gold_{slug}_{claim_key.replace('.', '_')}_{idx}_{ti}.json"
@@ -135,8 +202,10 @@ def verify_asserted_claim(slug: str, name: str, claim_key: str, value,
                                capture_output=True, text=True,
                                encoding="utf-8", errors="replace", timeout=120)
             if r.returncode == 0:
-                return True, f"verify_claims:exit0（同定={tok}）"
-            last = f"verify_claims:exit{r.returncode}"
+                return True, f"verify_claims:exit0（同定={'+'.join(must)}）"
+            # 不合格理由のC分類を出力から抽出（内訳集計用・秘密値は含まない）
+            m = re.search(r"(C[0-4])[ :：]", r.stdout or "")
+            last = f"verify_claims:exit{r.returncode}" + (f":{m.group(1)}" if m else "")
         except Exception as e:
             last = f"検証実行失敗: {type(e).__name__}"
     return False, last
@@ -163,61 +232,100 @@ def freeze(candidates_path: Path, out_path: Path) -> int:
         names[m["slug"]] = m["name"]
 
     entries, rejects, seen = [], [], set()
+    total_candidates = duplicates_skipped = 0
     for block in collected:
         slug = block.get("slug")
         name = names.get(slug, slug)
         for i, c in enumerate(block.get("candidates") or []):
+            total_candidates += 1
             url = (c.get("url") or "").strip()
             quote = (c.get("quote") or "").strip()
             exp = c.get("expected") or {}
-            key = (slug, c.get("claim_key"), url)
+            # ★claim_key移行（末尾をceiling_typeに一致させる・2026-07-17チャッピー条件）★
+            ckey = migrate_claim_key(c.get("claim_key") or "", exp.get("ceiling_type") or "")
+            # ★重複判定はscope・valueまで含める（複合天井の別要素を捨てない）★
+            key = (slug, ckey, url, exp.get("scope"), exp.get("value"))
             if key in seen:
+                duplicates_skipped += 1
                 continue
             seen.add(key)
             if not any(d in url for d in ALLOWED_DOMAINS):
-                rejects.append((slug, c.get("claim_key"), "許可外ドメイン", url))
+                rejects.append((slug, ckey, "許可外ドメイン", url))
+                continue
+            # unit整合（キー末尾＝ceiling_type⇔unitの互換）
+            ctype = exp.get("ceiling_type") or ""
+            if exp.get("assertion_status") != "asserted_none" and \
+                    exp.get("unit") not in UNIT_COMPAT.get(ctype, set()):
+                rejects.append((slug, ckey, f"key_unit_mismatch:{ctype}/{exp.get('unit')}", url))
+                continue
+            # 禁止トークン（旧作・別機種ページのガード）
+            fb = forbidden_hit(slug, url)
+            if fb:
+                rejects.append((slug, ckey, f"forbidden_token:{fb}", url))
                 continue
             if exp.get("assertion_status") == "asserted_none":
-                ok, rule = verify_none_claim(name, url, quote)
+                ok, rule = verify_none_claim(name, url, quote, slug_hint=slug)
             elif exp.get("value") is None:
-                rejects.append((slug, c.get("claim_key"), "value欠落", url))
+                rejects.append((slug, ckey, "value欠落", url))
                 continue
             else:
-                ok, rule = verify_asserted_claim(slug, name, c["claim_key"],
+                ok, rule = verify_asserted_claim(slug, name, ckey,
                                                  exp["value"], url, quote, i)
             if not ok:
-                rejects.append((slug, c.get("claim_key"), rule, url))
+                rejects.append((slug, ckey, rule, url))
                 continue
             entries.append({
                 "gold_id": f"g{len(entries)+1:03d}",
                 "slug": slug, "name": name,
-                "claim_key": c["claim_key"],
+                "claim_key": ckey,
                 "expected": exp,
                 "evidence": {"url": url, "quote": quote,
                              "identity_evidence": c.get("identity_evidence", ""),
                              "verified_at": now_iso(), "verifier": rule},
                 "notes": c.get("notes", ""),
             })
-            print(f"✅ {slug} {c['claim_key']} {exp.get('value')}{exp.get('unit') or ''} ({rule})")
+            print(f"✅ {slug} {ckey} {exp.get('value')}{exp.get('unit') or ''} ({rule})")
 
     from collections import Counter
     by_type = Counter(e["expected"].get("ceiling_type") for e in entries)
     by_key = Counter(e["claim_key"] for e in entries)
+
+    def _reason_class(rule: str) -> str:
+        for pat, label in (("C2", "同定不能(C2)"), ("C3", "quote不一致(C3)"),
+                           ("C4", "値がquote外(C4)"), ("C1", "URL取得不能(C1)"),
+                           ("C0", "体裁不備(C0)"), ("forbidden_token", "禁止トークン"),
+                           ("key_unit_mismatch", "key/unit不整合"),
+                           ("許可外ドメイン", "許可外ドメイン"), ("value欠落", "value欠落"),
+                           ("取得失敗", "URL取得不能"), ("同定不可", "同定不能"),
+                           ("逐語一致しない", "quote不一致"), ("短すぎる", "体裁不備")):
+            if pat in rule:
+                return label
+        return "その他"
+
+    by_reason = Counter(_reason_class(r[2]) for r in rejects)
     gold = {
         "frozen_at": now_iso(),
         "purpose": "Codexシャドー運用 epoch 1 の実Web正解セット（凍結後変更不可）",
         "target_epoch": "epoch1",
         "counts": {"total": len(entries), "by_ceiling_type": dict(by_type),
                    "by_claim_key": dict(by_key),
-                   "machines": len({e['slug'] for e in entries})},
+                   "machines": len({e['slug'] for e in entries}),
+                   "total_candidates": total_candidates,
+                   "duplicates_skipped": duplicates_skipped,
+                   "rejected_by_reason": dict(by_reason),
+                   "gold_collection_coverage": round(len(entries) / total_candidates, 3)
+                   if total_candidates else None},
         "rejected": len(rejects),
         "entries": entries,
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(gold, ensure_ascii=False, indent=1), encoding="utf-8")
     digest = hashlib.sha256(out_path.read_bytes()).hexdigest()
-    print(f"\n=== 凍結完了: {len(entries)}件合格 / {len(rejects)}件不合格 ===")
+    print(f"\n=== 凍結完了: 候補{total_candidates}件 → 合格{len(entries)} / "
+          f"不合格{len(rejects)} / 重複除外{duplicates_skipped} ===")
     print(f"型分布: {dict(by_type)}")
+    print(f"不合格の理由内訳: {dict(by_reason)}")
+    print(f"gold_collection_coverage: {gold['counts']['gold_collection_coverage']}")
     print(f"機種数: {gold['counts']['machines']} / SHA256: {digest}")
     if rejects:
         print("--- 不合格一覧（値・quoteはログに出さない設計＝ルール名のみ）---")

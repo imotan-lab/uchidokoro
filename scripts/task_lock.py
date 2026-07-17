@@ -9,17 +9,25 @@ fencing token（run_id照合）」をコードで保証する。
 
 サブコマンド:
     acquire   --task <名前>          ロック取得を1回試行。
-                                     exit 0: 取得成功（stdoutに run_id を1行出力）
+                                     exit 0: 取得成功（stdoutに run_id を1行出力＋
+                                     実行コンテキスト task_ctx_<名前>.json に自動保存）
                                      exit 1: 他タスクが保持中（heartbeatが新しい）
                                      stale（heartbeat 30分超）は退避して奪取を試みる
-    heartbeat --run-id <ID>          自分のリースを延長（heartbeat更新）。
+    heartbeat --task <名前>          自分のリースを延長（heartbeat更新）。
+                                     run_idはacquireが保存したコンテキストから自動で読む
+                                     （★LLMがrun_idを手で転記しない＝2026-07-17改訂。
+                                     --run-id <ID> での明示指定も引き続き可）
                                      exit 0: 更新 / exit 1: 所有者不一致・ロック消失
-    check     --run-id <ID>          fencing確認（書き込み・commit・push直前に呼ぶ）。
+    check     --task <名前>          fencing確認（書き込み・commit・push直前に呼ぶ）。
                                      exit 0: 自分が所有者 / exit 1: 不一致・消失＝書き込み中止
-    release   --run-id <ID>          解放。所有者一致の場合のみ削除。
+    release   --task <名前>          解放。所有者一致の場合のみ削除。
                                      exit 0: 解放 / exit 1: 不一致・消失（削除しない）
     status                           現在のロック内容を表示（診断用・exit 0固定）
     --selftest                       一時ファイルで全動作を自己検証（ネット不要）
+
+コンテキスト方式の残存リスク（設計判断）: 同一タスク名が同時に二重起動した場合のみ、
+古い実行が新しいrun_idを読んでfencingを通過し得る。スケジューラは同一タスクの
+多重起動を抑止しており（2026-06実測）、異なるタスク同士のゾンビは従来通り防げる。
 
 設計要点（チャッピー指摘の3つの穴への対応）:
     穴1（STEP内で30分超）  → heartbeatは機種ごと・外部検索前後などSTEPより細かく呼ぶ（SKILL.md側）
@@ -35,6 +43,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import sys
 import uuid
 
@@ -45,7 +54,29 @@ except Exception:
 
 LOCK_PATH = r"C:/Users/imao_/Documents/uchidokoro/task.lock"
 LOG_PATH = r"C:/Users/imao_/Documents/uchidokoro/logs/task_lock.log"
+CTX_DIR = r"C:/Users/imao_/Documents/uchidokoro"
 STALE_MINUTES = 30  # 最終heartbeatからこの分数を超えたら異常終了の残骸とみなす
+
+
+def _ctx_path(task: str, lock_path: str) -> str:
+    """実行コンテキストの置き場（selftest時はロックと同じ一時フォルダ）"""
+    base = os.path.dirname(lock_path) if lock_path != LOCK_PATH else CTX_DIR
+    safe = re.sub(r"[^A-Za-z0-9_-]", "_", task)
+    return os.path.join(base, f"task_ctx_{safe}.json")
+
+
+def _save_ctx(task: str, run_id: str, lock_path: str) -> None:
+    p = _ctx_path(task, lock_path)
+    with open(p, "w", encoding="utf-8") as f:
+        json.dump({"task": task, "run_id": run_id, "saved_at": _now_iso()}, f)
+
+
+def _load_ctx_run_id(task: str, lock_path: str) -> str | None:
+    try:
+        with open(_ctx_path(task, lock_path), encoding="utf-8") as f:
+            return json.load(f).get("run_id")
+    except Exception:
+        return None
 
 
 def _now() -> datetime.datetime:
@@ -142,6 +173,7 @@ def cmd_acquire(task: str, lock_path: str) -> int:
         "heartbeat": _now_iso(),
     }
     if _atomic_create(lock_path, payload):
+        _save_ctx(task, run_id, lock_path)  # heartbeat/check/releaseが--taskで自動参照
         _log(f"acquire({task}): 取得成功 run_id={run_id}")
         print(run_id)
         return 0
@@ -272,6 +304,22 @@ def selftest() -> int:
         rc = cmd_acquire("taskC", p)
     t("壊れたロックは退避して奪取できる", rc == 0)
 
+    # 10. コンテキスト方式: acquireが保存したrun_idをheartbeat/check/releaseが自動参照
+    rid_c = _load_ctx_run_id("taskC", p)
+    t("acquireがコンテキストにrun_idを保存する", rid_c is not None and len(rid_c) == 36)
+    with contextlib.redirect_stdout(io.StringIO()):
+        rc1 = cmd_heartbeat(rid_c, p)
+        rc2 = cmd_check(rid_c, p)
+    t("コンテキストのrun_idでheartbeat/checkが成功", rc1 == 0 and rc2 == 0)
+    # 別タスクのコンテキストは他人のロックに使えない（fencing維持）
+    with contextlib.redirect_stdout(io.StringIO()):
+        cmd_release(rid_c, p)
+        cmd_acquire("taskD", p)
+    stale_ctx = _load_ctx_run_id("taskC", p)  # taskCの古いコンテキスト
+    with contextlib.redirect_stdout(io.StringIO()):
+        rc = cmd_check(stale_ctx, p)
+    t("旧タスクのコンテキストではfencingを通れない", rc == 1)
+
     ok = all(c for _, c in results)
     print(f"\nselftest: {sum(1 for _, c in results if c)}/{len(results)} 合格")
     return 0 if ok else 1
@@ -280,8 +328,8 @@ def selftest() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="うちどころ自動タスクの排他ロック")
     parser.add_argument("command", nargs="?", choices=["acquire", "heartbeat", "check", "release", "status"])
-    parser.add_argument("--task", help="acquire: タスク名")
-    parser.add_argument("--run-id", help="heartbeat/check/release: 自分のrun_id")
+    parser.add_argument("--task", help="タスク名（heartbeat/check/releaseはコンテキストからrun_id自動取得）")
+    parser.add_argument("--run-id", help="run_idの明示指定（省略時は--taskのコンテキストを使用）")
     parser.add_argument("--lock-path", default=LOCK_PATH)
     parser.add_argument("--selftest", action="store_true")
     args = parser.parse_args()
@@ -292,18 +340,19 @@ def main() -> int:
         if not args.task:
             parser.error("acquire には --task が必要")
         return cmd_acquire(args.task, args.lock_path)
+
+    def resolve_run_id() -> str:
+        rid = args.run_id or (args.task and _load_ctx_run_id(args.task, args.lock_path))
+        if not rid:
+            parser.error(f"{args.command} には --task（コンテキスト自動参照）か --run-id が必要")
+        return rid
+
     if args.command == "heartbeat":
-        if not args.run_id:
-            parser.error("heartbeat には --run-id が必要")
-        return cmd_heartbeat(args.run_id, args.lock_path)
+        return cmd_heartbeat(resolve_run_id(), args.lock_path)
     if args.command == "check":
-        if not args.run_id:
-            parser.error("check には --run-id が必要")
-        return cmd_check(args.run_id, args.lock_path)
+        return cmd_check(resolve_run_id(), args.lock_path)
     if args.command == "release":
-        if not args.run_id:
-            parser.error("release には --run-id が必要")
-        return cmd_release(args.run_id, args.lock_path)
+        return cmd_release(resolve_run_id(), args.lock_path)
     if args.command == "status":
         return cmd_status(args.lock_path)
     parser.error("コマンドを指定（acquire/heartbeat/check/release/status か --selftest）")
