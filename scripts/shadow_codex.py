@@ -2124,5 +2124,38 @@ def main() -> int:
     return 2
 
 
+def _crash_log(exc: BaseException) -> None:
+    """★pythonw起動では例外が画面にもstderrにも出ないため、未処理例外を必ずファイルへ残す
+    （2026-07-18チャッピー指摘）。log()やatomic_write_jsonに依存しない最小実装で二重に保全★"""
+    import traceback
+    ts = datetime.datetime.now()
+    try:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        with open(LOG_DIR / f"shadow_codex_crash_{ts:%Y-%m-%d}.log", "a", encoding="utf-8") as f:
+            f.write(f"[{ts:%Y/%m/%d %H:%M:%S}] 未処理例外（プロセス異常終了・exit 1）:\n")
+            f.write(traceback.format_exc() + "\n")
+    except Exception:
+        pass
+    # 通常ログにも1行（watchdog/人間が気付けるように）
+    try:
+        with open(LOG_DIR / f"shadow_codex_{ts:%Y-%m-%d}.log", "a", encoding="utf-8") as f:
+            f.write(f"[{ts:%H:%M:%S}] === shadow-codex 異常終了 ===（{type(exc).__name__}: {exc}）\n")
+    except Exception:
+        pass
+    # 完走マーカーにCRASHEDを残す（可能な範囲で・watchdogが正常完走と誤認しないため）
+    try:
+        write_completion_marker("CRASHED", "unknown", ts.strftime("%Y-%m-%dT%H:%M:%S"),
+                                ts.strftime("%Y-%m-%dT%H:%M:%S"), [], 0, 1,
+                                note=type(exc).__name__)
+    except Exception:
+        pass
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except SystemExit:
+        raise  # main()の正規のexitコードはそのまま尊重
+    except BaseException as _e:
+        _crash_log(_e)
+        sys.exit(1)  # 未処理例外は必ず非0で終了（成功と誤認させない）
