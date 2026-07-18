@@ -799,17 +799,33 @@ def notify(subject: str, body: str) -> None:
 COMPLETION_MARKER = RESEARCH / "shadow_codex_last_run.json"
 
 
+def decide_status(n_selected: int, done: int, errors: int, skipped: int) -> str:
+    """★完走STATUSの厳密判定（2026-07-18再指摘2）★
+    選定0→COMPLETED_NO_CHANGE / 成功=選定 かつ エラー0 かつ 未実施0→COMPLETED / それ以外→PARTIAL。
+    （遅延起動=COMPLETED_NO_RUN・ロック不可=SKIPPED_LOCKED は呼び出し側で別扱い）"""
+    if n_selected == 0:
+        return "COMPLETED_NO_CHANGE"
+    if done == n_selected and errors == 0 and skipped == 0:
+        return "COMPLETED"
+    return "PARTIAL"
+
+
 def write_completion_marker(status: str, run_id: str, started, ended,
-                            selected, success: int, errors: int, note: str = "") -> None:
+                            selected, success: int, errors: int, note: str = "",
+                            skipped: int = 0) -> None:
     """★完走マーカーを原子的に保存（2026-07-18再指摘5・watchdogが参照）★
-    STATUS/run_id/開始終了/対象数/成功数/エラー数を残す。"""
+    STATUS/run_id/開始終了/対象数/成功数/エラー数/未実施数を残す。
+    毎朝 対象＝成功＋エラー＋未実施 を機械照合できる（再指摘2）。"""
+    tally_ok = (len(selected) == success + errors + skipped)
     atomic_write_json(COMPLETION_MARKER, {
         "status": status, "run_id": run_id, "epoch": EPOCH["epoch_id"],
         "started_at": started, "ended_at": ended,
         "target_count": len(selected), "success_count": success,
-        "error_count": errors, "selected": list(selected), "note": note})
+        "error_count": errors, "skipped_count": skipped,
+        "tally_ok": tally_ok, "selected": list(selected), "note": note})
     log(f"=== shadow-codex 完了 ===（STATUS: {status} / run_id={run_id} / "
-        f"対象{len(selected)}・成功{success}・エラー{errors}{('・' + note) if note else ''}）")
+        f"対象{len(selected)}・成功{success}・エラー{errors}・未実施{skipped}"
+        f"{('・' + note) if note else ''}）")
 
 
 def run(slugs_override: list[str] | None, deadline_str: str, dry_run: bool,
@@ -845,10 +861,11 @@ def run(slugs_override: list[str] | None, deadline_str: str, dry_run: bool,
 
     by_slug = {m["slug"]: m for m in machines}
     errors, mismatches = [], []
-    done = 0
+    done = skipped = 0
     for slug in slugs:
         if (deadline - now()).total_seconds() < 120:
             log(f"{slug}: 全体期限まで2分未満のためスキップ（未実施扱い）")
+            skipped += 1
             continue
         result = process_machine(by_slug[slug], run_id, manifest, deadline, state)
         save_state(state)
@@ -874,10 +891,9 @@ def run(slugs_override: list[str] | None, deadline_str: str, dry_run: bool,
     if started.weekday() == 0:  # 月曜サマリー（分解集計）
         notify("【うちどころ。シャドー】週次サマリー",
                stats_summary() + f"\n本日: {slugs} エラー{len(errors)}件")
-    status = "COMPLETED" if (done or errors) else "COMPLETED_NO_CHANGE"
-    if errors and done == 0:
-        status = "PARTIAL"
-    write_completion_marker(status, run_id, iso(started), iso(), slugs, done, len(errors))
+    status = decide_status(len(slugs), done, len(errors), skipped)
+    write_completion_marker(status, run_id, iso(started), iso(), slugs, done, len(errors),
+                            skipped=skipped)
     return 0
 
 
@@ -2023,6 +2039,13 @@ def selftest() -> int:
       and r1["quota_hits"] == 1)
     t("goldエラー規則: システム系(ERR_AUTH)はattempts消費なし＋中断",
       gold_record_error(r2, "ERR_AUTH") is not None and r2["attempts"] == 0)
+    # ★STATUS判定（2026-07-18第2次再指摘2）: 一部成功をCOMPLETEDにしない★
+    t("STATUS: 選定0→COMPLETED_NO_CHANGE", decide_status(0, 0, 0, 0) == "COMPLETED_NO_CHANGE")
+    t("STATUS: 全件成功エラー0未実施0→COMPLETED", decide_status(3, 3, 0, 0) == "COMPLETED")
+    t("STATUS: 2成功+1エラー→PARTIAL（COMPLETEDにしない）",
+      decide_status(3, 2, 1, 0) == "PARTIAL")
+    t("STATUS: 期限切れ未実施あり→PARTIAL", decide_status(3, 2, 0, 1) == "PARTIAL")
+    t("STATUS: 全件エラー→PARTIAL", decide_status(2, 0, 2, 0) == "PARTIAL")
     t("goldエラー規則: パイプライン系(ERR_TIMEOUT)はattempts消費＋続行",
       gold_record_error(r3, "ERR_TIMEOUT") is None and r3["attempts"] == 1)
 

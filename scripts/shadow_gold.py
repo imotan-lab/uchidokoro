@@ -58,16 +58,27 @@ def _norm(s: str) -> str:
     return s.replace("〜", "~").replace("～", "~")
 
 
-def _fetch(url: str, timeout=30) -> str:
-    ok, why = verify_claims.is_public_fetchable_url(url)  # SSRF対策（取得前検査）
+def _fetch(url: str, timeout=30, allowed=None) -> str:
+    """生HTMLを取得（title/H1/canonical抽出用）。★allowed指定時は取得前URL・
+    全リダイレクトホップ・最終URLで許可ドメインを強制（2026-07-18チャッピー第2次再指摘1）。
+    否定claim（天井なし/未公表）の検証もこの経路を通すため、許可4ドメイン外への
+    リダイレクトで「検証済み」扱いになる穴を塞ぐ★"""
+    ok, why = (verify_claims.validate_source_url(url, allowed=allowed) if allowed
+               else verify_claims.is_public_fetchable_url(url))  # SSRF＋許可ドメイン（取得前）
     if not ok:
         raise ValueError(f"unsafe_url: {why}")
     req = urllib.request.Request(url, headers={"User-Agent": UA,
                                                "Accept-Encoding": "gzip"})
-    with verify_claims._SAFE_OPENER.open(req, timeout=timeout) as resp:  # リダイレクトも検査
+    # allowed指定時は各リダイレクトホップも許可ドメインを強制するopenerを使う
+    opener = verify_claims._opener_for(allowed)
+    with opener.open(req, timeout=timeout) as resp:
+        final_url = resp.geturl()
         raw = resp.read()
         if resp.headers.get("Content-Encoding") == "gzip":
             raw = gzip.decompress(raw)
+    # 最終URLの許可ドメイン再確認（リダイレクトで許可外へ出ていないか＝全ホップ強制の総仕上げ）
+    if allowed and not verify_claims.host_matches_allowlist(final_url, allowed):
+        raise ValueError(f"redirect_out_of_allowlist: {final_url}")
     text = raw.decode("utf-8", errors="replace")
     text = re.sub(r"<script[\s\S]*?</script>|<style[\s\S]*?</style>|<!--[\s\S]*?-->",
                   " ", text)
@@ -135,7 +146,7 @@ def _ident_fields_of(url: str, _cache={}) -> dict:
     if url in _cache:
         return _cache[url]
     try:
-        _cache[url] = _ident_fields_of_html(_fetch(url))
+        _cache[url] = _ident_fields_of_html(_fetch(url, allowed=ALLOWED_DOMAINS))
     except Exception:
         _cache[url] = {"title": "", "h1": "", "canonical": ""}
     return _cache[url]
@@ -279,7 +290,7 @@ def verify_none_claim(name: str, url: str, quote: str,
     if len(_norm(quote)) < 8:
         return False, "quoteが短すぎる"
     try:
-        html_text = _fetch(url)
+        html_text = _fetch(url, allowed=ALLOWED_DOMAINS)  # 否定claimも許可4ドメイン全ホップ強制
     except Exception as e:
         return False, f"取得失敗: {type(e).__name__}"
     body = _norm(re.sub(r"<[^>]+>", " ", html_text))
@@ -613,6 +624,44 @@ def selftest() -> int:
                  "<p>前作の沖ドキ！GOLDと比べて天井が浅い</p></body></html>")
     t("禁止トークン: 本文中の前作比較では誤検出しない",
       forbidden_hit("okidoki_encore", "https://x/", html_text=html_body) is None)
+
+    # ★否定claimの取得も許可4ドメイン全ホップ強制（2026-07-18第2次再指摘1）★
+    # 許可URL→許可外の公開ドメインへリダイレクトされたら_fetchが拒否すること
+    import urllib.request as _ur
+
+    class _FakeResp:
+        def __init__(self, final):
+            self._final = final
+        def geturl(self):
+            return self._final
+        def read(self):
+            return "<html><title>x</title>天井なし</html>".encode("utf-8")
+        @property
+        def headers(self):
+            return {}
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+
+    class _RedirOpener:  # 許可外ドメインへリダイレクトした最終URLを返す模擬opener
+        def open(self, req, timeout=None):
+            return _FakeResp("https://evil-aggregator.example.com/redirected")
+
+    _orig_opener_for = verify_claims._opener_for
+    _orig_validate = verify_claims.validate_source_url
+    try:
+        verify_claims._opener_for = lambda allowed: _RedirOpener()
+        verify_claims.validate_source_url = lambda u, allowed=None, resolve=True: (True, "ok")
+        raised = False
+        try:
+            _fetch("https://nana-press.com/ok", allowed=ALLOWED_DOMAINS)
+        except ValueError as e:
+            raised = "redirect_out_of_allowlist" in str(e)
+        t("否定claim経路: 許可URL→許可外リダイレクトは最終URL検査で拒否", raised)
+    finally:
+        verify_claims._opener_for = _orig_opener_for
+        verify_claims.validate_source_url = _orig_validate
 
     ok = all(c for _, c in results)
     print(f"\nselftest: {sum(1 for _, c in results if c)}/{len(results)} 合格")
