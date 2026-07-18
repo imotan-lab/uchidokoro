@@ -56,8 +56,10 @@ LOG_DIR = DOC / "logs"
 SEND_NOTIFY = r"C:/Users/imao_/.claude/send_notify.py"
 
 # ── epoch定義（変更したら新epoch。異なるepochの成績は混算しない）──
+# epoch1-shadow: 本運転（シャドー隔離）開始epoch。CLI/モデル/effort/prompt/Schema/
+# 比較器/verifierのfingerprintを固定し、resultに保存。statsは同一epoch_idのみ集計。
 EPOCH = {
-    "epoch_id": "epoch0-preflight",
+    "epoch_id": "epoch1-shadow",
     "model": "gpt-5.6-sol",
     "reasoning_effort": "medium",
     "web_search": "live",
@@ -593,8 +595,10 @@ def verify_evidence(machine: dict, claim: dict, run_id: str) -> list[dict]:
         cf_path = EVIDENCE_DIR / f"{run_id}_{machine['slug']}_{claim.get('claim_key','c').replace('.', '_')}_{i}.json"
         atomic_write_json(cf_path, cf)
         try:
+            # ★許可4ドメインを明示的に渡す（数値claimの日次経路でも全ホップ強制・再指摘1）★
             r = subprocess.run([sys.executable, str(SCRIPTS / "verify_claims.py"),
-                                "--file", str(cf_path), "--min-domains", "1"],
+                                "--file", str(cf_path), "--min-domains", "1",
+                                "--allowed-domains", ",".join(shadow_gold.ALLOWED_DOMAINS)],
                                capture_output=True, text=True,
                                encoding="utf-8", errors="replace", timeout=120)
             rec["verified"] = (r.returncode == 0)
@@ -721,15 +725,21 @@ LAUNCH_ERRORS = {"ERR_CLI_VERSION", "ERR_CONFIG", "ERR_AUTH", "ERR_QUOTA",
 
 
 def stats_summary() -> str:
-    """成功率の分解集計（チャッピー指定・2026-07-16）。1つの成功率にまとめない。"""
+    """成功率の分解集計（チャッピー指定・2026-07-16）。1つの成功率にまとめない。
+    ★同一epoch_idの結果のみ集計する（epoch混算を防ぐ・2026-07-18再指摘）★"""
     runs = launch_ok = search_ok = schema_ok = 0
     ev_total = ev_verified = 0
     asserted = downgraded = 0
+    skipped_other_epoch = 0
     verdicts, strengths = {}, {}
     for f in sorted(RESULTDIR.glob("*.json")):
         try:
             r = json.loads(f.read_text(encoding="utf-8"))
         except Exception:
+            continue
+        # epoch混算防止: 現行epoch_id以外の結果は集計しない
+        if (r.get("epoch") or {}).get("epoch_id") != EPOCH["epoch_id"]:
+            skipped_other_epoch += 1
             continue
         runs += 1
         err = r.get("error")
@@ -761,7 +771,8 @@ def stats_summary() -> str:
         return f"{a}/{b}（{a / b * 100:.0f}%）" if b else "0/0（N/A）"
 
     lines = [
-        f"epoch: {EPOCH['epoch_id']} / 実行数: {runs}",
+        f"epoch: {EPOCH['epoch_id']} / 実行数: {runs}"
+        + (f" / 他epoch除外: {skipped_other_epoch}件" if skipped_other_epoch else ""),
         f"CLI実行成功率: {pct(launch_ok, runs)}",
         f"live検索実行率: {pct(search_ok, launch_ok)}",
         f"Schema合格率: {pct(schema_ok, launch_ok)}",
@@ -785,20 +796,47 @@ def notify(subject: str, body: str) -> None:
         log(f"メール送信失敗（処理は継続）: {e}")
 
 
+COMPLETION_MARKER = RESEARCH / "shadow_codex_last_run.json"
+
+
+def write_completion_marker(status: str, run_id: str, started, ended,
+                            selected, success: int, errors: int, note: str = "") -> None:
+    """★完走マーカーを原子的に保存（2026-07-18再指摘5・watchdogが参照）★
+    STATUS/run_id/開始終了/対象数/成功数/エラー数を残す。"""
+    atomic_write_json(COMPLETION_MARKER, {
+        "status": status, "run_id": run_id, "epoch": EPOCH["epoch_id"],
+        "started_at": started, "ended_at": ended,
+        "target_count": len(selected), "success_count": success,
+        "error_count": errors, "selected": list(selected), "note": note})
+    log(f"=== shadow-codex 完了 ===（STATUS: {status} / run_id={run_id} / "
+        f"対象{len(selected)}・成功{success}・エラー{errors}{('・' + note) if note else ''}）")
+
+
 def run(slugs_override: list[str] | None, deadline_str: str, dry_run: bool,
         max_machines: int = 3, label: str = "run") -> int:
     run_id = str(uuid.uuid4())[:8]
-    today = now()
-    deadline = today.replace(hour=int(deadline_str[:2]), minute=int(deadline_str[3:5]),
-                             second=0)
-    if deadline <= today:
-        deadline = today + datetime.timedelta(minutes=55)
+    started = now()
+    deadline = started.replace(hour=int(deadline_str[:2]), minute=int(deadline_str[3:5]),
+                               second=0)
+    # ★遅延起動（期限を過ぎての起動）は当日スキップ＝05:05 verifyに食い込まない（再指摘5）★
+    #   now+55の期限延長は廃止。04:00〜期限内なら期限を固定してそのまま実行。
+    if started >= deadline:
+        log(f"=== shadow_codex {label} 遅延起動（現在{started:%H:%M} >= 期限{deadline:%H:%M}）→ 当日スキップ ===")
+        write_completion_marker("COMPLETED_NO_RUN", run_id, iso(started), iso(),
+                                [], 0, 0, note="LATE_START")
+        return 0
     log(f"=== shadow_codex {label} 開始 run_id={run_id} epoch={EPOCH['epoch_id']} 期限={deadline:%H:%M} ===")
 
     state = load_state()
-    # ★ロック下で読み込み・選定・スナップショット確定（入力の一貫性）→以後snapshotのみ使う★
-    manifest, machines, slugs = snapshot_under_lock(run_id, slugs_override,
-                                                    max_machines, state)
+    try:
+        # ★ロック下で読み込み・選定・スナップショット確定（入力の一貫性）→以後snapshotのみ使う★
+        manifest, machines, slugs = snapshot_under_lock(run_id, slugs_override,
+                                                        max_machines, state)
+    except RuntimeError as e:
+        log(f"ロック取得不可: {e}")
+        write_completion_marker("SKIPPED_LOCKED", run_id, iso(started), iso(),
+                                [], 0, 0, note=str(e))
+        return 0
     log(f"選定: {slugs}")
     log(f"スナップショット確定: {len(manifest['files'])}ファイル commit={manifest['git_commit'][:8]}")
     if dry_run:
@@ -807,6 +845,7 @@ def run(slugs_override: list[str] | None, deadline_str: str, dry_run: bool,
 
     by_slug = {m["slug"]: m for m in machines}
     errors, mismatches = [], []
+    done = 0
     for slug in slugs:
         if (deadline - now()).total_seconds() < 120:
             log(f"{slug}: 全体期限まで2分未満のためスキップ（未実施扱い）")
@@ -815,6 +854,8 @@ def run(slugs_override: list[str] | None, deadline_str: str, dry_run: bool,
         save_state(state)
         if result.get("error"):
             errors.append((slug, result["error"]))
+        else:
+            done += 1
         for r in result.get("comparison", []):
             if r["verdict"] == "MISMATCH":
                 mismatches.append((slug, r))
@@ -830,10 +871,13 @@ def run(slugs_override: list[str] | None, deadline_str: str, dry_run: bool,
             f"{s}: {r['claim_key']} {r['detail']}" for s, r in mismatches)
         notify("【うちどころ。シャドー】⚠ 出典検証済みMISMATCH検出", body +
                "\n※シャドー期間中＝公開への影響なし・記録のみ")
-    if today.weekday() == 0:  # 月曜サマリー（分解集計）
+    if started.weekday() == 0:  # 月曜サマリー（分解集計）
         notify("【うちどころ。シャドー】週次サマリー",
                stats_summary() + f"\n本日: {slugs} エラー{len(errors)}件")
-    log(f"=== shadow_codex {label} 完了 run_id={run_id} エラー{len(errors)}件 ===")
+    status = "COMPLETED" if (done or errors) else "COMPLETED_NO_CHANGE"
+    if errors and done == 0:
+        status = "PARTIAL"
+    write_completion_marker(status, run_id, iso(started), iso(), slugs, done, len(errors))
     return 0
 
 

@@ -122,22 +122,38 @@ def _decode(raw, header_charset):
     return raw.decode("utf-8", errors="replace")  # 文字化けはC2同定で安全側不合格になる
 
 
-def fetch_page(url):
-    """URLを取得し (本文テキスト, title, 最終URL) を返す。失敗はNone（安全側）。"""
-    if url in _page_cache:
+_allowed_openers = {}
+
+
+def _opener_for(allowed):
+    """許可ドメインごとにリダイレクト検査opener をキャッシュ（allowed=Noneは公開IP検査のみ）。"""
+    key = None if not allowed else tuple(sorted(str(d).lower() for d in allowed))
+    if key not in _allowed_openers:
+        _allowed_openers[key] = urllib.request.build_opener(_ValidatingRedirect(allowed))
+    return _allowed_openers[key]
+
+
+def fetch_page(url, allowed=None):
+    """URLを取得し (本文テキスト, title, 最終URL) を返す。失敗はNone（安全側）。
+    allowed指定時は取得前URL・全リダイレクト・最終URLの全ホップで許可ドメインを強制。"""
+    ck = (url, None if not allowed else tuple(sorted(str(d).lower() for d in allowed)))
+    if ck in _page_cache:
+        return _page_cache[ck]
+    if url in _page_cache:  # 後方互換（selftestの合成ページ・素のurlキー）
         return _page_cache[url]
-    # SSRF対策: 取得前に安全検査（https/公開IP/userinfo無し）。リダイレクト先も検査opener。
-    safe, why = is_public_fetchable_url(url)
+    # SSRF対策＋許可ドメイン: 取得前に安全検査（https/公開IP/userinfo無し＋allowed）
+    safe, why = (validate_source_url(url, allowed=allowed) if allowed
+                 else is_public_fetchable_url(url))
     if not safe:
         _fetch_errors[url] = f"取得拒否: {why}"
-        _page_cache[url] = None
+        _page_cache[ck] = None
         return None
     page = None
     last_err = ""
     for attempt in range(2):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Encoding": "gzip"})
-            with _SAFE_OPENER.open(req, timeout=25) as res:
+            with _opener_for(allowed).open(req, timeout=25) as res:
                 if res.status != 200:
                     last_err = f"HTTP {res.status}"
                     continue
@@ -162,9 +178,13 @@ def fetch_page(url):
         except Exception as e:
             last_err = f"{type(e).__name__}: {e}"
             continue
-    if page is None:
+    # 最終URLの許可ドメイン再確認（リダイレクトで許可外へ出ていないか・全ホップ強制の総仕上げ）
+    if page is not None and allowed and not host_matches_allowlist(page.final_url, allowed):
+        _fetch_errors[url] = f"最終URLが許可ドメイン外: {page.final_url}"
+        page = None
+    if page is None and url not in _fetch_errors:
         _fetch_errors[url] = last_err or "不明"
-    _page_cache[url] = page
+    _page_cache[ck] = page
     return page
 
 
@@ -285,9 +305,15 @@ def validate_source_url(url: str, allowed=None, resolve=True):
 
 
 class _ValidatingRedirect(urllib.request.HTTPRedirectHandler):
-    """リダイレクト先も同じ安全検査にかける（SSRFのリダイレクト回避を塞ぐ）。"""
+    """リダイレクト先も同じ安全検査にかける（SSRFのリダイレクト回避を塞ぐ）。
+    allowed指定時は各リダイレクトホップで許可ドメインも強制する。"""
+    def __init__(self, allowed=None):
+        self.allowed = allowed
+
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         ok, reason = is_public_fetchable_url(newurl)
+        if ok and self.allowed and not host_matches_allowlist(newurl, self.allowed):
+            ok, reason = False, "許可ドメイン外へのリダイレクト"
         if not ok:
             raise urllib.error.HTTPError(newurl, code,
                                          f"redirect blocked: {reason}", headers, fp)
@@ -312,11 +338,14 @@ def _ident_in(s, hay):
     return s in hay
 
 
-def run_data(data, min_domains):
+def run_data(data, min_domains, allowed_domains=None):
     slug = data.get("slug", "?")
     raw_identity = (data.get("identity") or {}).get("must_contain", [])
     claims = data.get("claims") or []
-    log(f"=== 出典実在チェック開始: {slug}（クレーム{len(claims)}件・critical必要ドメイン数{min_domains}） ===")
+    # ★許可ドメイン: dataのfieldでも上書き可（呼び出し側がJSONに埋めても、CLIで渡してもよい）★
+    allowed_domains = allowed_domains or data.get("allowed_domains")
+    log(f"=== 出典実在チェック開始: {slug}（クレーム{len(claims)}件・critical必要ドメイン数{min_domains}"
+        + (f"・許可ドメイン{list(allowed_domains)}" if allowed_domains else "") + "） ===")
 
     identity = []
     for s in raw_identity:
@@ -373,6 +402,11 @@ def run_data(data, min_domains):
             log(f"❌ {tag}: C0 アーカイブ/キャッシュ/翻訳経由のURLは出典に使えない（{url}）")
             any_fail = True
             continue
+        # C0: 許可ドメイン強制（取得前・部分文字列でなく完全一致/正規サブドメイン）
+        if allowed_domains and not host_matches_allowlist(url, allowed_domains):
+            log(f"❌ {tag}: C0 出典URLが許可ドメイン外（{url}）→不合格")
+            any_fail = True
+            continue
 
         # C4: 値がquoteの中に実在するか（引用が値の証拠か）※C3より先に検査できる決定論チェック
         tokens = _value_tokens(nvalue)
@@ -389,8 +423,8 @@ def run_data(data, min_domains):
             any_fail = True
             continue
 
-        # C1: 取得
-        page = fetch_page(url)
+        # C1: 取得（allowed指定時は取得前・全リダイレクト・最終URLで許可ドメイン強制）
+        page = fetch_page(url, allowed=allowed_domains)
         if page is None:
             log(f"❌ {tag}: C1 URL取得失敗（{url} / 理由: {_fetch_errors.get(url, '不明')}）")
             any_fail = True
@@ -399,13 +433,14 @@ def run_data(data, min_domains):
             log(f"❌ {tag}: C0 リダイレクト先がアーカイブ/キャッシュ（{page.final_url}）→出典に使えない")
             any_fail = True
             continue
-        # ★リダイレクトで最終URLが変わった場合はSSRF再検査（プライベート/ローカルIP到達拒否・指摘3）★
+        # ★リダイレクトで最終URLが変わった場合はSSRF＋許可ドメイン再検査（最終URL・指摘3/再指摘1）★
         #   各リダイレクトホップは_ValidatingRedirectが検査済み。ここは最終URLの明示再確認。
-        #   リダイレクト無し（final_url==url）は取得前に検査済みなので再解決しない。
         if page.final_url != url:
             fu_ok, fu_why = is_public_fetchable_url(page.final_url)
+            if fu_ok and allowed_domains and not host_matches_allowlist(page.final_url, allowed_domains):
+                fu_ok, fu_why = False, "最終URLが許可ドメイン外"
             if not fu_ok:
-                log(f"❌ {tag}: C1 リダイレクト最終URLが安全検査に不合格（{page.final_url} / {fu_why}）")
+                log(f"❌ {tag}: C1 リダイレクト最終URLが不合格（{page.final_url} / {fu_why}）")
                 any_fail = True
                 continue
         ntext = normalize(page.text)
@@ -452,10 +487,10 @@ def run_data(data, min_domains):
     return 0
 
 
-def run(path, min_domains):
+def run(path, min_domains, allowed_domains=None):
     with open(path, encoding="utf-8") as f:
         data = json.loads(f.read())
-    return run_data(data, min_domains)
+    return run_data(data, min_domains, allowed_domains=allowed_domains)
 
 
 # ------------------------------------------------------------------
@@ -587,6 +622,29 @@ def selftest():
           validate_source_url("https://web.archive.org/1geki.jp", allowed=None,
                               resolve=False)[0] is False)
 
+    # ★許可4ドメイン強制（数値claim経路・再指摘1）: 許可外ドメインのURLはC0で不合格★
+    _page_cache.clear()
+    good_body = ("Lからくりサーカス2の解析。天井は999G+αでAT直撃の恩恵。"
+                 "設定6は114.9%。")
+    good_title = "Lからくりサーカス2 天井解析"
+    # 許可外ドメイン(evil.example.com)にページが実在してもallowed指定で弾く
+    _page_cache[("https://evil.example.com/k", ("1geki.jp",))] = Page(
+        good_body, good_title, "https://evil.example.com/k")
+    rc_dis = run_data({"slug": "k", "identity": {"must_contain": ["からくりサーカス", "2"]},
+                       "claims": [{"field": "天井G数", "value": "999", "critical": True,
+                                   "url": "https://evil.example.com/k",
+                                   "quote": "天井は999G+α"}]}, 1, allowed_domains=["1geki.jp"])
+    ucase("許可4ドメイン強制: 許可外ドメインの数値claimはC0不合格", rc_dis == 1)
+    # 許可ドメインなら同じ内容が通る（allowedキー付きキャッシュ）
+    _page_cache[("https://1geki.jp/k", ("1geki.jp",))] = Page(
+        good_body, good_title, "https://1geki.jp/k")
+    rc_ok = run_data({"slug": "k", "identity": {"must_contain": ["からくりサーカス", "2"]},
+                      "claims": [{"field": "天井G数", "value": "999", "critical": True,
+                                  "url": "https://1geki.jp/k",
+                                  "quote": "天井は999G+α"}]}, 1, allowed_domains=["1geki.jp"])
+    ucase("許可4ドメイン強制: 許可ドメインの数値claimは通過", rc_ok == 0)
+    _page_cache.clear()
+
     ok = all(results)
     log(f"=== selftest: {sum(results)}/{len(results)} 合格 → {'✅ 全テスト成功' if ok else '❌ 失敗あり'} ===")
     return 0 if ok else 1
@@ -596,14 +654,16 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--file", help="claims.json のパス")
     ap.add_argument("--min-domains", type=int, default=2, help="criticalフィールドに必要な合格ドメイン数（既定2）")
+    ap.add_argument("--allowed-domains", help="カンマ区切りの許可ドメイン（全ホップで完全一致/正規サブドメインを強制）")
     ap.add_argument("--selftest", action="store_true", help="ネット不要の内蔵テストを実行")
     args = ap.parse_args()
     if args.selftest:
         sys.exit(selftest())
     if not args.file:
         ap.error("--file か --selftest のどちらかを指定")
+    allowed = [d.strip() for d in args.allowed_domains.split(",")] if args.allowed_domains else None
     try:
-        code = run(args.file, args.min_domains)
+        code = run(args.file, args.min_domains, allowed_domains=allowed)
     except Exception as e:
         log(f"❌ claims形式エラー/実行エラー: {type(e).__name__}: {e} → 不合格扱い（無人昇格禁止）")
         code = 1

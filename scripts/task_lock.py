@@ -178,35 +178,64 @@ def _atomic_create(path: str, payload: dict) -> bool:
 # ガード取得後に所有者を再読込してから更新する。
 # ─────────────────────────────────────────────
 
+try:
+    import msvcrt  # Windows OSファイルロック
+except ImportError:  # pragma: no cover
+    msvcrt = None
+try:
+    import fcntl   # POSIX（クロス環境用）
+except ImportError:
+    fcntl = None
+
+
 class _Guard:
+    """★OSファイルロックでクリティカルセクションを直列化（2026-07-18 再指摘2でABA解消）★
+    旧実装（O_EXCL作成＋60秒staleファイル削除）は、A取得→Aのguardがstale化→Bが回収して
+    新guard→A復帰時に__exit__が「その時点のguard」を無条件削除しBのguardを消すABA競合が
+    残った。OSロックはプロセス死亡時にOSが自動解放し、保持者のhandleでのみunlockされる＝
+    他世代のロックに触れないためstaleファイル削除自体が不要になる。"""
     def __init__(self, lock_path: str, timeout: float = 15.0):
         self.gp = lock_path + ".guard"
         self.timeout = timeout
+        self.fh = None
+
+    def _try_lock(self) -> bool:
+        try:
+            if msvcrt is not None:
+                self.fh.seek(0)
+                msvcrt.locking(self.fh.fileno(), msvcrt.LK_NBLCK, 1)
+            elif fcntl is not None:
+                fcntl.flock(self.fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
+        except OSError:
+            return False
 
     def __enter__(self):
         end = time.time() + self.timeout
+        # ガードファイルは常設（内容は使わない）。排他はOSが握り、プロセス死亡で自動解放。
+        self.fh = open(self.gp, "a+b")
         while True:
-            try:
-                fd = os.open(self.gp, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                os.write(fd, str(os.getpid()).encode())
-                os.close(fd)
+            if self._try_lock():
                 return self
-            except FileExistsError:
-                try:  # 60秒以上前のガードは残骸として除去（保持プロセス死亡）
-                    if time.time() - os.path.getmtime(self.gp) > 60:
-                        os.remove(self.gp)
-                        continue
-                except FileNotFoundError:
-                    continue
-                if time.time() > end:
-                    raise TimeoutError(f"guard取得タイムアウト: {self.gp}")
-                time.sleep(0.02)
+            if time.time() > end:
+                self.fh.close()
+                self.fh = None
+                raise TimeoutError(f"guard取得タイムアウト: {self.gp}")
+            time.sleep(0.02)
 
     def __exit__(self, *exc):
         try:
-            os.remove(self.gp)
-        except FileNotFoundError:
+            if msvcrt is not None:
+                self.fh.seek(0)
+                msvcrt.locking(self.fh.fileno(), msvcrt.LK_UNLCK, 1)
+            elif fcntl is not None:
+                fcntl.flock(self.fh.fileno(), fcntl.LOCK_UN)
+        except OSError:
             pass
+        finally:
+            if self.fh is not None:
+                self.fh.close()
+                self.fh = None
         return False
 
 
@@ -477,31 +506,59 @@ def selftest() -> int:
     after = _read_lock(p)
     t("競合窓: takeover後の旧run heartbeat/releaseは拒否されBのロックが無傷",
       rc_hb == 1 and rc_rel == 1 and after and after.get("run_id") == b_run)
-    # ガードはクリティカルセクション後に必ず解放される（残骸なし）
-    t("ガードファイルは操作後に残らない", not os.path.exists(p + ".guard"))
     with contextlib.redirect_stdout(io.StringIO()):
         cmd_heartbeat(b_run, p)  # 正所有者Bは継続可能
     t("競合窓: 正所有者Bのheartbeatは成功", _read_lock(p).get("run_id") == b_run)
 
-    # 14. ★ガード保持プロセスが異常終了→ガードが永久残留しない（stale回収・指摘1）★
-    #     古いガードファイル（>60秒前）を作り、正所有者Bのheartbeatが回収して成功すること
-    gp = p + ".guard"
-    with open(gp, "w") as f:
-        f.write("99999")  # 死んだプロセスが残したガードを模擬
-    old = time.time() - 120
-    os.utime(gp, (old, old))
-    with contextlib.redirect_stdout(io.StringIO()):
-        rc_recover = cmd_heartbeat(b_run, p)  # staleガードを回収し所有者再確認して更新
-    t("ガード: 60秒超のstaleガードは回収され所有者操作が成功（永久残留しない）",
-      rc_recover == 0 and not os.path.exists(gp))
-    # 新しいガード（60秒以内）は保持中とみなす＝短命の非所有者acquireはガード待ちにならず
-    # ロック保持で普通に失敗する（ガードは即時解放されるため）。ここではstale境界のみ検証
-    with open(gp, "w") as f:
-        f.write("88888")  # 新しいガード（回収されない）
-    with contextlib.redirect_stdout(io.StringIO()):
-        rc_fresh = cmd_check(b_run, p)  # checkはガード不要（読取専用）で所有者確認は通る
-    t("ガード: 新しいガードは回収されず残る（stale境界）", os.path.exists(gp) and rc_fresh == 0)
-    os.remove(gp)
+    # 14. ★OSロックガード: 相互排他（保持中は他者が待つ）＝ABAの前提を断つ（再指摘2）★
+    import threading
+    hold_started = threading.Event()
+    release_now = threading.Event()
+
+    def holder():
+        with _Guard(p):
+            hold_started.set()
+            release_now.wait(2.0)  # 明示解放まで保持
+
+    th = threading.Thread(target=holder)
+    th.start()
+    hold_started.wait(2.0)
+    # 保持中は非ブロッキングロックが取れない＝相互排他
+    g2 = _Guard(p, timeout=0.2)
+    blocked = False
+    try:
+        with g2:
+            pass
+    except TimeoutError:
+        blocked = True
+    t("OSガード: 保持中は他の取得がブロックされる（相互排他）", blocked)
+    release_now.set()
+    th.join(2.0)
+    # 解放後は取得できる
+    got = False
+    with _Guard(p, timeout=1.0):
+        got = True
+    t("OSガード: 解放後は取得できる", got)
+
+    # 15. ★ABAシナリオ: OSロックは保持者handleでのみunlock＝旧世代が新世代を消せない★
+    #    旧実装のstaleファイル削除ABA（A→stale→B回収→A復帰でB削除）が再現不能なことを確認。
+    #    Bがロック保持中、旧AがGuardを「別インスタンスで」抜けてもBのロックは無傷。
+    gpath = p + ".guard"
+    gB = _Guard(p)
+    gB.__enter__()                    # B がOSロック保持
+    gA_stale = _Guard(p)              # 旧A（別インスタンス・未ロック）
+    gA_stale.fh = open(gpath, "a+b")  # ロックは取れていない状態を模擬
+    gA_stale.__exit__()               # 旧Aが終了処理（自分のhandleを閉じるだけ）
+    # Bはまだ保持中＝他者はロック取得できない
+    gC = _Guard(p, timeout=0.2)
+    still_locked = False
+    try:
+        with gC:
+            pass
+    except TimeoutError:
+        still_locked = True
+    gB.__exit__()
+    t("OSガード: 旧世代の終了処理は現世代のロックを解放しない（ABA解消）", still_locked)
 
     ok = all(c for _, c in results)
     print(f"\nselftest: {sum(1 for _, c in results if c)}/{len(results)} 合格")

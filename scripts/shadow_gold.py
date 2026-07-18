@@ -316,7 +316,8 @@ def verify_asserted_claim(slug: str, name: str, claim_key: str, value,
         p.write_text(json.dumps(cf, ensure_ascii=False), encoding="utf-8")
         try:
             r = subprocess.run([sys.executable, str(SCRIPTS / "verify_claims.py"),
-                                "--file", str(p), "--min-domains", "1"],
+                                "--file", str(p), "--min-domains", "1",
+                                "--allowed-domains", ",".join(ALLOWED_DOMAINS)],
                                capture_output=True, text=True,
                                encoding="utf-8", errors="replace", timeout=120)
             if r.returncode == 0:
