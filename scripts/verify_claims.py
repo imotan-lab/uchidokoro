@@ -56,11 +56,14 @@ claims.json の形式:
 import argparse
 import gzip
 import html
+import ipaddress
 import json
 import os
 import re
+import socket
 import sys
 import unicodedata
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections import namedtuple
@@ -123,12 +126,18 @@ def fetch_page(url):
     """URLを取得し (本文テキスト, title, 最終URL) を返す。失敗はNone（安全側）。"""
     if url in _page_cache:
         return _page_cache[url]
+    # SSRF対策: 取得前に安全検査（https/公開IP/userinfo無し）。リダイレクト先も検査opener。
+    safe, why = is_public_fetchable_url(url)
+    if not safe:
+        _fetch_errors[url] = f"取得拒否: {why}"
+        _page_cache[url] = None
+        return None
     page = None
     last_err = ""
     for attempt in range(2):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Encoding": "gzip"})
-            with urllib.request.urlopen(req, timeout=25) as res:
+            with _SAFE_OPENER.open(req, timeout=25) as res:
                 if res.status != 200:
                     last_err = f"HTTP {res.status}"
                     continue
@@ -199,6 +208,93 @@ def domain_of(url):
 def is_blocked_source(url):
     d = urllib.parse.urlparse(url).netloc.lower().split(":")[0]
     return any(d == b or d.endswith("." + b) for b in _BLOCKED_HOSTS)
+
+
+# ─────────────────────────────────────────────
+# 共有URL検証（SSRF対策・gold/日次/verify_claimsで同一関数を使う・2026-07-18）
+# チャッピー第2次シャドーレビュー指摘3への対応。`d in url` の部分文字列一致は
+# 「許可ドメイン名をクエリ等に含む無関係URL」を通すためSSRFにならない。
+# ─────────────────────────────────────────────
+
+def _ip_is_public(host: str):
+    """hostがIPリテラルならグローバルか判定。IPでなければNone（＝ホスト名）。"""
+    try:
+        return ipaddress.ip_address(host).is_global
+    except ValueError:
+        return None
+
+
+def is_public_fetchable_url(url: str, _resolve=True):
+    """取得許可の安全判定。戻り値 (ok, reason)。
+    https限定・userinfo禁止・localhost/IPリテラル(loopback/private)拒否・
+    ホスト名はDNS解決先が全てグローバルIPであることを確認（SSRF防御）。"""
+    try:
+        u = urllib.parse.urlparse(url)
+    except Exception as e:
+        return False, f"URL解析不能: {type(e).__name__}"
+    if u.scheme != "https":
+        return False, f"httpsのみ許可（scheme={u.scheme or 'なし'}）"
+    if u.username or u.password or "@" in (u.netloc or ""):
+        return False, "userinfo付きURLは拒否"
+    host = (u.hostname or "").lower().rstrip(".")
+    if not host:
+        return False, "hostnameなし"
+    if host == "localhost" or host.endswith(".localhost") or host.endswith(".local"):
+        return False, "localhost系は拒否"
+    lit = _ip_is_public(host)
+    if lit is False:
+        return False, "非グローバルIP(loopback/private/reserved)は拒否"
+    if lit is None and _resolve:
+        try:
+            infos = socket.getaddrinfo(host, u.port or 443, proto=socket.IPPROTO_TCP)
+        except Exception as e:
+            return False, f"DNS解決失敗: {type(e).__name__}"
+        for info in infos:
+            ip = info[4][0]
+            try:
+                if not ipaddress.ip_address(ip).is_global:
+                    return False, f"解決先が非グローバルIP({ip})"
+            except ValueError:
+                return False, "解決IP判定不能"
+    return True, "ok"
+
+
+def host_matches_allowlist(url: str, allowed) -> bool:
+    """hostnameが許可ドメインと完全一致 or 正規サブドメインか（部分文字列一致は使わない）。"""
+    host = (urllib.parse.urlparse(url).hostname or "").lower().rstrip(".")
+    if not host:
+        return False
+    for d in allowed:
+        d = str(d).lower().strip(".")
+        if host == d or host.endswith("." + d):
+            return True
+    return False
+
+
+def validate_source_url(url: str, allowed=None, resolve=True):
+    """出典URLの総合検査（安全＋許可リスト）。戻り値 (ok, reason)。
+    allowed指定時は許可ドメイン完全一致/正規サブドメインを追加要求する。"""
+    ok, reason = is_public_fetchable_url(url, _resolve=resolve)
+    if not ok:
+        return False, reason
+    if is_blocked_source(url):
+        return False, "アーカイブ/キャッシュ/翻訳経由URLは拒否"
+    if allowed is not None and not host_matches_allowlist(url, allowed):
+        return False, "許可ドメイン外（完全一致/正規サブドメインのみ）"
+    return True, "ok"
+
+
+class _ValidatingRedirect(urllib.request.HTTPRedirectHandler):
+    """リダイレクト先も同じ安全検査にかける（SSRFのリダイレクト回避を塞ぐ）。"""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        ok, reason = is_public_fetchable_url(newurl)
+        if not ok:
+            raise urllib.error.HTTPError(newurl, code,
+                                         f"redirect blocked: {reason}", headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_SAFE_OPENER = urllib.request.build_opener(_ValidatingRedirect())
 
 
 def _value_tokens(nvalue):
@@ -452,6 +548,36 @@ def selftest():
         ]}, 1))
 
     _page_cache.clear()
+
+    # 11. ★共有URL検証（SSRF対策・2026-07-18）★
+    def ucase(name, cond):
+        results.append(cond)
+        log(f"{'✅' if cond else '❌'} selftest[{name}]: {cond}")
+
+    ucase("https以外を拒否", is_public_fetchable_url("http://1geki.jp/a", _resolve=False)[0] is False)
+    ucase("userinfo付きを拒否",
+          is_public_fetchable_url("https://user@1geki.jp/a", _resolve=False)[0] is False)
+    ucase("localhostを拒否", is_public_fetchable_url("https://localhost/a", _resolve=False)[0] is False)
+    ucase("プライベートIPを拒否",
+          is_public_fetchable_url("https://192.168.0.1/a", _resolve=False)[0] is False)
+    ucase("loopback IPを拒否",
+          is_public_fetchable_url("https://127.0.0.1/a", _resolve=False)[0] is False)
+    ucase("許可ドメイン部分文字列は不一致（SSRF芽）",
+          host_matches_allowlist("https://evil.example.com/?x=1geki.jp",
+                                 ["1geki.jp"]) is False)
+    ucase("許可ドメイン完全一致",
+          host_matches_allowlist("https://1geki.jp/a", ["1geki.jp"]) is True)
+    ucase("正規サブドメインは一致",
+          host_matches_allowlist("https://m.nana-press.com/a", ["nana-press.com"]) is True)
+    ucase("別ドメインは不一致",
+          host_matches_allowlist("https://1geki.jp.evil.com/a", ["1geki.jp"]) is False)
+    ucase("validate_source_url: 許可外ドメイン拒否",
+          validate_source_url("https://example.com/a", allowed=["1geki.jp"],
+                              resolve=False)[0] is False)
+    ucase("validate_source_url: アーカイブ拒否",
+          validate_source_url("https://web.archive.org/1geki.jp", allowed=None,
+                              resolve=False)[0] is False)
+
     ok = all(results)
     log(f"=== selftest: {sum(results)}/{len(results)} 合格 → {'✅ 全テスト成功' if ok else '❌ 失敗あり'} ===")
     return 0 if ok else 1

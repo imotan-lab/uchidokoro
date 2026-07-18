@@ -51,6 +51,7 @@ import json
 import os
 import re
 import sys
+import time
 import uuid
 
 try:
@@ -170,7 +171,51 @@ def _atomic_create(path: str, payload: dict) -> bool:
         raise
 
 
+# ─────────────────────────────────────────────
+# クリティカルセクションの直列化ガード（2026-07-18 チャッピー第2次レビュー指摘5）
+# acquire/stale退避/heartbeat/releaseの read-modify-write を別のOSロック（O_EXCL）で
+# 直列化し、「所有者確認→更新」の間にstale takeoverが割り込む競合窓を塞ぐ。
+# ガード取得後に所有者を再読込してから更新する。
+# ─────────────────────────────────────────────
+
+class _Guard:
+    def __init__(self, lock_path: str, timeout: float = 15.0):
+        self.gp = lock_path + ".guard"
+        self.timeout = timeout
+
+    def __enter__(self):
+        end = time.time() + self.timeout
+        while True:
+            try:
+                fd = os.open(self.gp, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.write(fd, str(os.getpid()).encode())
+                os.close(fd)
+                return self
+            except FileExistsError:
+                try:  # 60秒以上前のガードは残骸として除去（保持プロセス死亡）
+                    if time.time() - os.path.getmtime(self.gp) > 60:
+                        os.remove(self.gp)
+                        continue
+                except FileNotFoundError:
+                    continue
+                if time.time() > end:
+                    raise TimeoutError(f"guard取得タイムアウト: {self.gp}")
+                time.sleep(0.02)
+
+    def __exit__(self, *exc):
+        try:
+            os.remove(self.gp)
+        except FileNotFoundError:
+            pass
+        return False
+
+
 def cmd_acquire(task: str, lock_path: str) -> int:
+    with _Guard(lock_path):  # stale退避＋作成を直列化（heartbeat/releaseと排他）
+        return _acquire_locked(task, lock_path)
+
+
+def _acquire_locked(task: str, lock_path: str) -> int:
     existing = _read_lock(lock_path)
     if existing is not None:
         age = _age_minutes(existing)
@@ -235,20 +280,21 @@ def _owned(run_id: str, lock_path: str) -> tuple[bool, dict | None]:
 
 
 def cmd_heartbeat(run_id: str, lock_path: str) -> int:
-    ok, data = _owned(run_id, lock_path)
-    if not ok:
-        _log(f"heartbeat: 所有者不一致または消失（自分={run_id[:8]}… 現在={(data or {}).get('run_id','なし')}）")
-        print("NOT_OWNER")
-        return 1
-    data["heartbeat"] = _now_iso()
-    tmp = lock_path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, lock_path)
-    print("OK")
-    return 0
+    with _Guard(lock_path):  # 所有者再読込→更新を直列化（takeoverによる旧runの上書きを防ぐ）
+        ok, data = _owned(run_id, lock_path)  # ★ガード内で再読込★
+        if not ok:
+            _log(f"heartbeat: 所有者不一致または消失（自分={run_id[:8]}… 現在={(data or {}).get('run_id','なし')}）")
+            print("NOT_OWNER")
+            return 1
+        data["heartbeat"] = _now_iso()
+        tmp = lock_path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, lock_path)
+        print("OK")
+        return 0
 
 
 def cmd_check(run_id: str, lock_path: str) -> int:
@@ -263,15 +309,16 @@ def cmd_check(run_id: str, lock_path: str) -> int:
 
 
 def cmd_release(run_id: str, lock_path: str) -> int:
-    ok, data = _owned(run_id, lock_path)
-    if not ok:
-        _log(f"release: 所有者不一致または消失のため削除しない（自分={run_id[:8]}…）")
-        print("NOT_OWNER_KEPT")
-        return 1
-    os.remove(lock_path)
-    _log(f"release({(data or {}).get('task','?')}): 解放 run_id={run_id[:8]}…")
-    print("RELEASED")
-    return 0
+    with _Guard(lock_path):  # 所有者再読込→削除を直列化（takeover後の他run削除を防ぐ）
+        ok, data = _owned(run_id, lock_path)  # ★ガード内で再読込★
+        if not ok:
+            _log(f"release: 所有者不一致または消失のため削除しない（自分={run_id[:8]}…）")
+            print("NOT_OWNER_KEPT")
+            return 1
+        os.remove(lock_path)
+        _log(f"release({(data or {}).get('task','?')}): 解放 run_id={run_id[:8]}…")
+        print("RELEASED")
+        return 0
 
 
 def cmd_status(lock_path: str) -> int:
@@ -413,6 +460,28 @@ def selftest() -> int:
           and not os.path.exists(p))
     finally:
         uuid.uuid4 = orig_uuid4
+
+    # 13. ★check後の競合窓（stale takeover）でも旧runが新ロックを壊さない（指摘5）★
+    #    A取得 → 別runへtakeover（Bのロックへ置換） → 直後にAのheartbeat/releaseを挟む
+    rc, ctx_ta, rid_ta = acquire_ctx("verify")
+    # takeover: Aのロックを別run_idのロック（新しいheartbeat）に原子的に置換
+    b_run = "bbbbbbbb-2222-3333-4444-555555555555"
+    tmp_take = p + ".take"
+    with open(tmp_take, "w", encoding="utf-8") as f:
+        json.dump({"task": "verify", "run_id": b_run,
+                   "started_at": _now_iso(), "heartbeat": _now_iso()}, f)
+    os.replace(tmp_take, p)
+    with contextlib.redirect_stdout(io.StringIO()):
+        rc_hb = cmd_heartbeat(rid_ta, p)   # takeover直後の旧A heartbeat
+        rc_rel = cmd_release(rid_ta, p)    # takeover直後の旧A release
+    after = _read_lock(p)
+    t("競合窓: takeover後の旧run heartbeat/releaseは拒否されBのロックが無傷",
+      rc_hb == 1 and rc_rel == 1 and after and after.get("run_id") == b_run)
+    # ガードはクリティカルセクション後に必ず解放される（残骸なし）
+    t("ガードファイルは操作後に残らない", not os.path.exists(p + ".guard"))
+    with contextlib.redirect_stdout(io.StringIO()):
+        cmd_heartbeat(b_run, p)  # 正所有者Bは継続可能
+    t("競合窓: 正所有者Bのheartbeatは成功", _read_lock(p).get("run_id") == b_run)
 
     ok = all(c for _, c in results)
     print(f"\nselftest: {sum(1 for _, c in results if c)}/{len(results)} 合格")

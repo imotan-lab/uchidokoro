@@ -39,6 +39,8 @@ except Exception:
 
 BASE = Path(__file__).resolve().parent.parent
 SCRIPTS = BASE / "scripts"
+sys.path.insert(0, str(SCRIPTS))
+import verify_claims  # noqa: E402（共有URL検証＝SSRF対策の単一実装を使う・2026-07-18）
 DOC = Path(r"C:/Users/imao_/Documents/uchidokoro")
 TMP_CLAIMS = DOC / "gpt_research" / "claims_check"
 ALLOWED_DOMAINS = ("chonborista.com", "1geki.jp", "nana-press.com", "slopachi-quest.com")
@@ -57,9 +59,12 @@ def _norm(s: str) -> str:
 
 
 def _fetch(url: str, timeout=30) -> str:
+    ok, why = verify_claims.is_public_fetchable_url(url)  # SSRF対策（取得前検査）
+    if not ok:
+        raise ValueError(f"unsafe_url: {why}")
     req = urllib.request.Request(url, headers={"User-Agent": UA,
                                                "Accept-Encoding": "gzip"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    with verify_claims._SAFE_OPENER.open(req, timeout=timeout) as resp:  # リダイレクトも検査
         raw = resp.read()
         if resp.headers.get("Content-Encoding") == "gzip":
             raw = gzip.decompress(raw)
@@ -152,11 +157,38 @@ def forbidden_hit(slug: str, url: str, html_text: str | None = None) -> str | No
 
 def canonical_claim_id(slug: str, claim_key: str, exp: dict) -> tuple:
     """claimを特定する属性のみでID化（URL・valueは含めない・2026-07-17チャッピー条件）。
-    valueを重複キーに含めると777/778のような競合値が両方goldに入ってしまうため"""
+    valueを重複キーに含めると777/778のような競合値が両方goldに入ってしまうため。
+    ★null scopeは「不明」であり「別scope」ではない（2026-07-18チャッピー指摘）→
+    自動で別claim扱いにせず、null-scope分割は detect_null_scope_splits で検出し
+    人間の証拠確認に回す（凍結時に自動統合すると誤マージのリスクがあるため）★"""
     scope, mode = exp.get("scope"), exp.get("mode")
     return (slug, claim_key,
             _norm(str(scope)) if scope not in (None, "") else None,
             _norm(str(mode)) if mode not in (None, "") else None)
+
+
+def detect_null_scope_splits(entries: list[dict]) -> list[dict]:
+    """★null scope と 具体scope に分かれた同一主張候補を検出（2026-07-18チャッピー）★
+    同じ (slug, claim_key, mode, value, unit) で scope が「null」と「具体」に割れている組は、
+    nullが『別scope』ではなく『不明』の可能性が高い＝独立claimとして分母に入れるべきでない。
+    自動統合はせず（証拠再確認が必要）、検出結果を凍結出力に載せて人間判断に回す。"""
+    from collections import defaultdict
+    groups: dict = defaultdict(list)
+    for e in entries:
+        exp = e["expected"]
+        k = (e["slug"], e["claim_key"],
+             _norm(str(exp.get("mode"))) if exp.get("mode") not in (None, "") else None,
+             exp.get("value"), exp.get("unit"))
+        groups[k].append(e)
+    splits = []
+    for k, es in groups.items():
+        scopes = {(_norm(str(x["expected"].get("scope")))
+                   if x["expected"].get("scope") not in (None, "") else None) for x in es}
+        if None in scopes and len(scopes) > 1:
+            splits.append({"slug": k[0], "claim_key": k[1], "value": k[3], "unit": k[4],
+                           "gold_ids": [x.get("gold_id") for x in es],
+                           "scopes": sorted(str(s) for s in scopes)})
+    return splits
 
 
 def consolidate_entries(entries: list[dict]) -> tuple[list[dict], list[dict]]:
@@ -241,8 +273,9 @@ def _identity_tokens(name: str) -> list[str]:
 def verify_none_claim(name: str, url: str, quote: str,
                       slug_hint: str | None = None) -> tuple[bool, str]:
     """天井非搭載（値なし）claimの軽量検証: quote逐語＋機種同定（title∧本文）"""
-    if not any(d in url for d in ALLOWED_DOMAINS):
-        return False, "許可外ドメイン"
+    ok, why = verify_claims.validate_source_url(url, allowed=ALLOWED_DOMAINS)
+    if not ok:
+        return False, f"URL不許可: {why}"
     if len(_norm(quote)) < 8:
         return False, "quoteが短すぎる"
     try:
@@ -334,8 +367,10 @@ def freeze(candidates_path: Path, out_path: Path) -> int:
                 duplicates_skipped += 1
                 continue
             seen.add(key)
-            if not any(d in url for d in ALLOWED_DOMAINS):
-                rejects.append((slug, ckey, "許可外ドメイン", url))
+            ok_url, why_url = verify_claims.validate_source_url(
+                url, allowed=ALLOWED_DOMAINS, resolve=False)  # 凍結時はネット無しでも構文/許可検査
+            if not ok_url:
+                rejects.append((slug, ckey, f"URL不許可:{why_url}", url))
                 continue
             # unit整合（キー末尾＝ceiling_type⇔unitの互換）
             ctype = exp.get("ceiling_type") or ""
@@ -473,11 +508,13 @@ def consolidate(in_path: Path, out_path: Path) -> int:
                    "merged_away": src_total - len(entries) - quarantined,
                    "conflict_groups": len(conflicts),
                    "conflicts_quarantined": quarantined,
-                   # canonical claim単位のcoverage（候補エントリ単位の
-                   # candidate_evidence_pass_rateとは別指標＝2026-07-17名称分離）
-                   "canonical_gold_coverage": round(
+                   # ★名称明確化（2026-07-18チャッピー指摘）: これは「検証済みグループ内の
+                   # 非競合解決率」であり一般的なcoverageではない（凍結時不合格候補を含まない）★
+                   "nonconflict_resolution_rate": round(
                        len(entries) / (len(entries) + len(conflicts)), 3)
-                   if (entries or conflicts) else None},
+                   if (entries or conflicts) else None,
+                   # null scope分割の検出（自動統合はしない・人間の証拠確認へ）
+                   "null_scope_splits": detect_null_scope_splits(entries)},
         "conflicts": conflicts,
         "entries": entries,
     }

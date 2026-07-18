@@ -323,24 +323,87 @@ def compare_one(site: dict, codex: dict | None) -> dict | None:
     return rec
 
 
-def compare_claims(site_claims: list[dict], codex_claims: list[dict]) -> list[dict]:
-    """全claimの突き合わせ（双方向）。structure_gapでCodex主張なしはレコード自体を出さない。"""
+def assign_by_identity(entries: list, claims: list, e_key, e_scope, c_key, c_scope):
+    """★値を使わない一意割当て（チャッピー第2次レビュー・2026-07-18／合致バイアス排除）★
+    識別子は claim_key＋具体scope（claim_keyがnormal/resetを内包＝mode次元を含む）。
+      1. claim_key一致かつ具体scope完全一致で一意に決まるものを割当て（値は見ない）
+      2. 残りが「site 1件 対 codex 1件」の時だけ部分割当て（scope未検証を許す）
+      3. 複数候補が残り一意に決められない → 割り当てず AMBIGUOUS（候補全件保存）
+    戻り値: (assign{ei:ci}, ambiguous{ei:[ci...]}, used{ci})。
+    ※gold採点・日次比較器の双方がこの単一実装を使う（識別属性の一元管理）。"""
+    from collections import defaultdict
+    e_by_key: dict = defaultdict(list)
+    c_by_key: dict = defaultdict(list)
+    for ei, e in enumerate(entries):
+        e_by_key[e_key(e)].append(ei)
+    for ci, c in enumerate(claims):
+        c_by_key[c_key(c)].append(ci)
+    assign: dict = {}
+    ambiguous: dict = {}
+    used: set = set()
+    for key, eis in e_by_key.items():
+        cis = list(c_by_key.get(key, []))
+        for ei in eis:
+            es = _norm_scope(e_scope(entries[ei]))
+            if es is None:
+                continue
+            match = [ci for ci in cis if ci not in used
+                     and _norm_scope(c_scope(claims[ci])) == es]
+            if len(match) == 1:
+                assign[ei] = match[0]
+                used.add(match[0])
+        rem_e = [ei for ei in eis if ei not in assign]
+        rem_c = [ci for ci in cis if ci not in used]
+        if not rem_e or not rem_c:
+            continue
+        if len(rem_e) == 1 and len(rem_c) == 1:
+            assign[rem_e[0]] = rem_c[0]
+            used.add(rem_c[0])
+        else:
+            for ei in rem_e:
+                ambiguous[ei] = list(rem_c)
+    return assign, ambiguous, used
+
+
+def compare_claims(site_claims: list[dict], codex_claims: list[dict],
+                   codex_key=None) -> list[dict]:
+    """全claimの突き合わせ（双方向）。★値を使わない一意割当て＋AMBIGUOUS＝2026-07-18
+    チャッピー指摘（同一claim_key複数天井の先勝ちバグ／mismatch_confirmedのkey引き直し）
+    への対応。各レコードに割り当てた実Codex claimの参照(codex_ref)を付ける。★
+    structure_gapでCodex主張なしはレコード自体を出さない。"""
+    ck = codex_key or (lambda c: c.get("claim_key"))
+    assign, ambiguous, used = assign_by_identity(
+        site_claims, codex_claims,
+        e_key=lambda s: s["claim_key"], e_scope=lambda s: s.get("scope"),
+        c_key=ck, c_scope=lambda c: c.get("scope"))
+    amb_used = {x for v in ambiguous.values() for x in v}
     results = []
-    codex_by_key = {}
-    for c in codex_claims:
-        codex_by_key.setdefault(c.get("claim_key"), c)  # 同一keyの重複は先勝ち（重複はERROR記録）
-    seen = set()
-    for s in site_claims:
-        seen.add(s["claim_key"])
-        r = compare_one(s, codex_by_key.get(s["claim_key"]))
+    for si, s in enumerate(site_claims):
+        if si in ambiguous:
+            results.append({
+                "claim_key": s["claim_key"], "verdict": "AMBIGUOUS_ASSIGNMENT",
+                "detail": f"値以外の識別属性で一意割当て不可（候補{len(ambiguous[si])}件）",
+                "sub": None, "attrs_unverified": [], "comparability": "ambiguous",
+                "candidate_count": len(ambiguous[si]), "codex_ref": None})
+            continue
+        codex = codex_claims[assign[si]] if si in assign else None
+        r = compare_one(s, codex)
         if r is not None:
+            # ★割り当てた実claimを参照（mismatch_confirmedがkey引き直しで別claimの
+            #   出典強度を借りるのを防ぐ）★
+            r["codex_ref"] = ({"claim_key": ck(codex),
+                               "evidence_strength": codex.get("evidence_strength"),
+                               "value": codex.get("value")} if codex else None)
             results.append(r)
-    for key, c in codex_by_key.items():
-        if key not in seen:
-            results.append({"claim_key": key, "verdict": "MISSING_IN_SITE",
-                            "detail": "Codexのみが主張（サイトにclaim_keyなし）。記録のみ",
+    for ci, c in enumerate(codex_claims):
+        if ci not in used and ci not in amb_used:
+            results.append({"claim_key": ck(c), "verdict": "MISSING_IN_SITE",
+                            "detail": "Codexのみが主張（サイトに対応claimなし）。記録のみ",
                             "sub": None, "attrs_unverified": [],
-                            "comparability": "discovery_only"})
+                            "comparability": "discovery_only",
+                            "codex_ref": {"claim_key": ck(c),
+                                          "evidence_strength": c.get("evidence_strength"),
+                                          "value": c.get("value")}})
     return results
 
 
@@ -533,6 +596,43 @@ def selftest() -> int:
         t("実ファイルsmoke: 全機種で例外なし・claim生成あり", total >= len(machines))
     except Exception as e:
         t(f"実ファイルsmoke: 例外 {e}", False)
+
+    # ★値を使わない割当て＋AMBIGUOUS＋codex_ref（2026-07-18チャッピー指摘1）★
+    def mksite(key, scope, val, unit="G"):
+        return _claim(key, "game", "normal", unit=unit, value=val, scope=scope,
+                      operator=None, status="asserted")
+
+    def mkcod(val, scope, key="ceiling.normal.game", strength="verified_policy",
+              operator=None, plus_alpha=None):
+        return {"claim_key": key, "ceiling_type": "game", "scope": scope, "mode": None,
+                "operator": operator, "value": val, "unit": "G", "plus_alpha": plus_alpha,
+                "assertion_status": "asserted", "evidence_strength": strength}
+
+    # 同一claim_keyに複数天井（scope別）→ 先勝ちで捨てず、scope一致で正しく割当て
+    site = [mksite("ceiling.normal.game", "CZ間", 800),
+            mksite("ceiling.normal.game", "AT間", 1500)]
+    cod = [mkcod(1500, "AT間"), mkcod(800, "CZ間")]
+    rs = compare_claims(site, cod)
+    refval = {r["codex_ref"]["value"] for r in rs if r.get("codex_ref")}
+    t("日次: 同一claim_key複数天井を先勝ちで捨てずscope一致で正しく割当て",
+      len(rs) == 2 and not any(r["verdict"] in ("MISSING_IN_CODEX", "AMBIGUOUS_ASSIGNMENT")
+                               for r in rs) and refval == {800, 1500})
+
+    # scope欠落で複数候補 → AMBIGUOUS（値で拾わない）
+    cod2 = [mkcod(800, None), mkcod(1500, None)]
+    rs2 = compare_claims(site, cod2)
+    t("日次: scope欠落の複数候補はAMBIGUOUS_ASSIGNMENT（値で拾わない）",
+      all(r["verdict"] == "AMBIGUOUS_ASSIGNMENT" for r in rs2 if r["claim_key"].endswith("game")))
+
+    # mismatch_confirmedの材料: 全属性具体で値だけ違う→MISMATCH＋割当て実claimのcodex_ref
+    site3 = [mksite("ceiling.normal.game", "CZ間", 800)]
+    site3[0].update(operator="max", plus_alpha=True)
+    cod3 = [mkcod(999, "CZ間", strength="verified_policy", operator="max", plus_alpha=True)]
+    rs3 = compare_claims(site3, cod3)
+    mm = [r for r in rs3 if r["verdict"] == "MISMATCH"]
+    t("日次: MISMATCHに割当てた実claimのcodex_ref（出典強度）が付く",
+      len(mm) == 1 and mm[0]["codex_ref"]["evidence_strength"] == "verified_policy"
+      and mm[0]["codex_ref"]["value"] == 999)
 
     ok = all(c for _, c in results)
     print(f"\nselftest: {sum(1 for _, c in results if c)}/{len(results)} 合格（改変{cases}件込み）")
