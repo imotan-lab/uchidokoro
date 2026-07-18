@@ -938,21 +938,26 @@ def gold_verify_codex_claim(slug: str, name: str, claim: dict) -> None:
 
 
 def operator_from_quote(quote: str) -> str | None:
-    """quoteの表現からoperatorを機械判定（決定論・2026-07-17チャッピー判定）。
+    """quoteの表現からoperatorを機械判定（決定論・2026-07-17チャッピー判定改訂）。
+    ★「限定辞なし＝exact」の暗黙既定は廃止（禁止した暗黙デフォルトに相当）。
+    exactは明示的な到達表現がある時だけ★
     - 「最大」「上限」「MAX」→ max
-    - 「約」「およそ」→ about
-    - 両方あり → None（一意に判定できない）
-    - どれも無し → exact（天井解析の文脈では限定辞なし＝固定G数到達の表現）"""
+    - 「約」「およそ」「前後」→ about
+    - 明示的到達表現（「到達で/消化で当選」「ちょうど/きっかり/ジャスト」
+      「Gで天井/当選/発動/放出/突入」）→ exact
+    - 単に「天井は1000G」等、限定辞も到達動詞もない → None（OPERATOR_UNVERIFIED）
+    - 複数シグナルが立つ（例: 最大＋約） → None（一意に判定できない）"""
     q = shadow_gold._norm(quote or "")
-    has_max = bool(re.search(r"最大|上限", q)) or bool(re.search(r"max", q, re.I))
-    has_about = bool(re.search(r"約|およそ", q))
-    if has_max and has_about:
-        return None
-    if has_max:
-        return "max"
-    if has_about:
-        return "about"
-    return "exact"
+    signals = set()
+    if re.search(r"最大|上限", q) or re.search(r"max", q, re.I):
+        signals.add("max")
+    if re.search(r"約|およそ|前後", q):
+        signals.add("about")
+    if (re.search(r"ちょうど|きっかり|ジャスト", q)
+            or re.search(r"到達で|到達時|消化で|消化時", q)
+            or re.search(r"G(?:で|にて)(?:天井|当選|発動|放出|突入|到達|ストップ)", q)):
+        signals.add("exact")
+    return signals.pop() if len(signals) == 1 else None
 
 
 def codex_operator_quote_check(claim: dict) -> str | None:
@@ -976,35 +981,67 @@ def gold_class_of(entry: dict) -> str:
     return "partial_gold" if "null化:" in (entry.get("notes") or "") else "strict_gold"
 
 
-def gold_score_machine(entries: list[dict], claims: list[dict]) -> list[dict]:
-    """凍結期待値と（gold検証済みの）Codex claimを採点（決定論・LLM判断なし）。
-    割当て: ①claim_key＋scope完全一致 ②同claim_keyの残り（gold順・各claim最大1回）。
-    Codex側のclaim_keyはceiling_typeで決定論移行（凍結と同じ規則。プロンプトp1が
-    reset系キーをgameしか列挙していないため、pt機のリセット等をキー名で落とさない）。
-    ★nullをワイルドカードにしない（チャッピー指定）: gold=null×codex=具体値は
-    正式MATCHにせず未検証属性扱い。partial_goldはCORRECT_STRICTに到達させない★"""
-    def norm_key(c):
-        return shadow_gold.migrate_claim_key(c.get("claim_key") or "",
-                                             c.get("ceiling_type") or "")
+def _norm_key(c):
+    return shadow_gold.migrate_claim_key(c.get("claim_key") or "",
+                                         c.get("ceiling_type") or "")
+
+
+def assign_claims(entries: list[dict], claims: list[dict]) -> tuple[dict, dict, set]:
+    """★値を使わない決定論割当て（2026-07-17チャッピー判定・合致バイアス排除）★
+    gold値を使って対応付けると候補を多数返すほど正解を拾いやすくなるため、
+    値以外の識別属性（claim_key・具体scope）だけで割り当てる。
+      1. claim_key一致かつ具体scope完全一致で一意に決まるものを割当て
+      2. 残りが「gold 1件 対 codex 1件」の時だけ部分割当てを許す（scope未検証）
+      3. 複数候補が残り一意に決められない場合は割り当てない → AMBIGUOUS（候補全件保存）
+    戻り値: (assign{gi:ci}, ambiguous{gi:[ci...]}, used{ci})"""
+    from collections import defaultdict
+    gold_by_key: dict = defaultdict(list)
+    codex_by_key: dict = defaultdict(list)
+    for gi, e in enumerate(entries):
+        gold_by_key[e["claim_key"]].append(gi)
+    for ci, c in enumerate(claims):
+        codex_by_key[_norm_key(c)].append(ci)
 
     assign: dict[int, int] = {}
+    ambiguous: dict[int, list] = {}
     used: set[int] = set()
-    for gi, e in enumerate(entries):
-        gscope = shadow_claims._norm_scope(e["expected"].get("scope"))
-        for ci, c in enumerate(claims):
-            if ci not in used and norm_key(c) == e["claim_key"] \
-                    and shadow_claims._norm_scope(c.get("scope")) == gscope:
-                assign[gi] = ci
-                used.add(ci)
-                break
-    for gi, e in enumerate(entries):
-        if gi in assign:
+    for key, gis in gold_by_key.items():
+        cis = list(codex_by_key.get(key, []))
+        # パス1: 具体scope完全一致で一意に決まるものを割当て（値は見ない）
+        for gi in gis:
+            gs = shadow_claims._norm_scope(entries[gi]["expected"].get("scope"))
+            if gs is None:
+                continue
+            match = [ci for ci in cis if ci not in used
+                     and shadow_claims._norm_scope(claims[ci].get("scope")) == gs]
+            if len(match) == 1:
+                assign[gi] = match[0]
+                used.add(match[0])
+        rem_g = [gi for gi in gis if gi not in assign]
+        rem_c = [ci for ci in cis if ci not in used]
+        if not rem_g or not rem_c:
             continue
-        for ci, c in enumerate(claims):
-            if ci not in used and norm_key(c) == e["claim_key"]:
-                assign[gi] = ci
-                used.add(ci)
-                break
+        # パス2: gold1対codex1のみ部分割当て（scope未検証を許す）
+        if len(rem_g) == 1 and len(rem_c) == 1:
+            assign[rem_g[0]] = rem_c[0]
+            used.add(rem_c[0])
+        else:
+            # パス3: 複数候補・一意不能 → 割り当てず候補全件を残す
+            for gi in rem_g:
+                ambiguous[gi] = list(rem_c)
+    return assign, ambiguous, used
+
+
+def gold_score_machine(entries: list[dict], claims: list[dict]) -> list[dict]:
+    """凍結期待値と（gold検証済みの）Codex claimを採点（決定論・LLM判断なし）。
+    割当ては assign_claims（値を使わない）に委譲。
+    ★nullをワイルドカードにしない（チャッピー指定）: gold=null×codex=具体値は
+    正式MATCHにせず未検証属性扱い。partial_goldはCORRECT_STRICTに到達させない★"""
+    norm_key = _norm_key
+    assign, ambiguous, used = assign_claims(entries, claims)
+    amb_used: set[int] = set()
+    for cand in ambiguous.values():
+        amb_used.update(cand)
 
     out = []
     for gi, e in enumerate(entries):
@@ -1012,6 +1049,23 @@ def gold_score_machine(entries: list[dict], claims: list[dict]) -> list[dict]:
         rec = {"gold_id": e["gold_id"], "claim_key": e["claim_key"],
                "gold_class": gold_class_of(e),
                "expected_value": exp.get("value"), "category": None, "detail": ""}
+        if gi in ambiguous:
+            cand = ambiguous[gi]
+            g_unit = shadow_claims._norm_unit(exp.get("unit"))
+            present = any(claims[ci].get("value") is not None
+                          and exp.get("value") is not None
+                          and float(claims[ci]["value"]) == float(exp["value"])
+                          and shadow_claims._norm_unit(claims[ci].get("unit")) == g_unit
+                          for ci in cand)
+            rec.update(category="AMBIGUOUS_ASSIGNMENT",
+                       gold_value_present=present,
+                       candidates=[{"value": claims[ci].get("value"),
+                                    "unit": claims[ci].get("unit"),
+                                    "scope": claims[ci].get("scope")} for ci in cand],
+                       detail=f"値以外の識別属性で一意に割当てできない候補{len(cand)}件"
+                              f"（gold_value_present={present}・正解にもWRONG_VALUEにもしない）")
+            out.append(rec)
+            continue
         c = claims[assign[gi]] if gi in assign else None
         if c is None:
             rec.update(category="MISSING", detail="Codexがこのclaimを返さなかった")
@@ -1118,8 +1172,9 @@ def gold_score_machine(entries: list[dict], claims: list[dict]) -> list[dict]:
         out.append(rec)
 
     # goldに割当てられなかったCodex claim＝EXTRA（分母外・発見として記録のみ）
+    # AMBIGUOUSの候補として記録済みのものは二重計上しない
     for ci, c in enumerate(claims):
-        if ci not in used:
+        if ci not in used and ci not in amb_used:
             out.append({"gold_id": None, "claim_key": norm_key(c),
                         "category": "EXTRA", "codex_value": c.get("value"),
                         "detail": "goldに対応エントリなし（分母外・記録のみ）"})
@@ -1155,11 +1210,13 @@ def gold_stats_summary(st: dict | None = None) -> str:
     strict_denom_all = cls("strict_gold")
     partial_denom = cls("partial_gold")
     all_denom = strict_denom_all + partial_denom
-    # OPERATOR_DIVERGENT/UNVERIFIEDはstrict accuracyの分母からも除外（チャッピー判定）
+    # OPERATOR_*とAMBIGUOUS_ASSIGNMENTはstrict accuracyの分母から除外（チャッピー判定）
     op_div = cboth("OPERATOR_DIVERGENT")
     op_unv = cboth("OPERATOR_UNVERIFIED")
-    strict_denom = strict_denom_all - cls("strict_gold", "OPERATOR_DIVERGENT") \
-        - cls("strict_gold", "OPERATOR_UNVERIFIED")
+    ambiguous = cboth("AMBIGUOUS_ASSIGNMENT")
+    strict_denom = (strict_denom_all - cls("strict_gold", "OPERATOR_DIVERGENT")
+                    - cls("strict_gold", "OPERATOR_UNVERIFIED")
+                    - cls("strict_gold", "AMBIGUOUS_ASSIGNMENT"))
     strict_ok = cls("strict_gold", "CORRECT_STRICT")
     partial_numeric = sum(cls("partial_gold", c) for c in
                           ("VALUE_ALIGNED", "CORRECT_STRICT",
@@ -1171,6 +1228,8 @@ def gold_stats_summary(st: dict | None = None) -> str:
     idconf = cboth("IDENTITY_CONFUSION")
     false_match = sum(int((st["machines"][s] or {}).get("false_match_flags", 0))
                       for s in scored)
+    gold_present = sum(int((st["machines"][s] or {}).get("gold_value_present_count", 0))
+                       for s in scored)
     # 件数整合検査: 判定区分の合計＝採点機種のgold対象件数（2026-07-17チャッピー条件）
     expected = sum(int((st["machines"][s] or {}).get("gold_scorable", 0)) for s in scored)
     tally = "OK" if all_denom == expected else f"NG（判定{all_denom} vs 対象{expected}）"
@@ -1180,17 +1239,23 @@ def gold_stats_summary(st: dict | None = None) -> str:
 
     lines = [
         f"eval_id: {st['eval_id']} / 開始 {st['started_at']} / 期限 {st['deadline_at']}",
+        f"scoring_epoch: {st.get('scoring_epoch', '(初回)')}"
+        + (f" / derived_from={st['derived_from_eval_id']}"
+           if st.get("derived_from_eval_id") else ""),
         f"バッチ: {len(st['batches'])}回 / 採点済み {len(scored)}/{total_machines}機種"
         f"（QUOTA分離: {len(quota_only)}機種 / その他エラー: {len(err_others)}機種）",
         f"GOLD_EVIDENCE_STALE隔離: {len(st['stale_gold_ids'])}件（凍結内容は不変・分母外）",
         f"件数整合検査: {tally}",
         f"カテゴリ内訳: {json.dumps(cats, ensure_ascii=False)}",
-        f"strict_gold_accuracy: {pct(strict_ok, strict_denom)}（分母からOPERATOR_*除外）",
+        f"strict_gold_accuracy: {pct(strict_ok, strict_denom)}"
+        "（分母からOPERATOR_*・AMBIGUOUS除外）",
         f"partial_gold_numeric_accuracy: {pct(partial_numeric, partial_denom)}",
         f"claim_recall: {pct(all_denom - missing, all_denom)}",
         f"gold_unknown_rate: {pct(unknown, all_denom)}",
         f"operator_divergent_count/rate: {pct(op_div, all_denom)} / operator_unverified: {op_unv}件"
         "（UNKNOWN相当の記録・公開停止/自動修正に使わない）",
+        f"ambiguous_assignment_count: {ambiguous}件（うちgold_value_present={gold_present}件"
+        "＝候補中にgold値あり・ただし正解に数えない）",
         f"false_match_count（必須0＝誤った回答を比較器がMATCHで通した機械検出数）: {false_match}件",
         f"wrong_value_count: {wrong_value}件 / wrong_attr_count: {wrong_attr}件 / "
         f"missing_count: {missing}件",
@@ -1318,7 +1383,9 @@ def gold_eval(gold_path: Path, batch_size: int, slugs_override: list[str] | None
         rec.update(status="scored", attempts=rec.get("attempts", 0) + 1,
                    last_error=None, result_path=str(rp), score_summary=summary,
                    gold_scorable=len(entries_active),
-                   false_match_flags=sum(1 for s in scores if s.get("false_match_flag")))
+                   false_match_flags=sum(1 for s in scores if s.get("false_match_flag")),
+                   gold_value_present_count=sum(1 for s in scores
+                                                if s.get("gold_value_present")))
         batch_rec["done"].append(slug)
         log(f"── {slug} 採点: {json.dumps(summary, ensure_ascii=False)}")
         atomic_write_json(GOLD_STATE_PATH, st)
@@ -1328,6 +1395,91 @@ def gold_eval(gold_path: Path, batch_size: int, slugs_override: list[str] | None
     log(f"=== batch{batch_id} 終了: 採点{len(batch_rec['done'])}/{len(batch)}機種 ===")
     print()
     print(gold_stats_summary(st))
+    return 0
+
+
+def gold_rescore(src_eval_id: str | None = None) -> int:
+    """★保存済みraw出力を新しい比較器で全件再採点（Codex再実行なし・2026-07-17）★
+    プロンプト/モデル/raw出力が同じなら、Codexを再度走らせるとサンプルが変わり
+    都合のよい再回答を選んだように見えるため、不変raw出力を新比較器で採点し直す。
+    新しいscoring epochを発行・derived_from_eval_id記録・raw SHA256引き継ぎ・
+    旧採点結果は退避・全件の件数整合を再確認する。"""
+    if not GOLD_STATE_PATH.exists():
+        log("❌ 再採点対象のstateがない")
+        return 1
+    old = json.loads(GOLD_STATE_PATH.read_text(encoding="utf-8"))
+    if src_eval_id and old["eval_id"] != src_eval_id:
+        log(f"❌ activeなeval_id={old['eval_id']} が指定{src_eval_id}と不一致")
+        return 1
+    gold_path = Path(old["gold_path"])
+    if old["gold_sha256"] != sha256_file(gold_path):
+        log("❌ gold setのSHA256が採点時と不一致（凍結違反）")
+        return 1
+    gold, by_slug = gold_load(gold_path)
+
+    scoring_epoch = f"rescore_{now():%Y%m%d%H%M%S}"
+    new = dict(old)
+    new["scoring_epoch"] = scoring_epoch
+    new["derived_from_eval_id"] = old["eval_id"]
+    new["eval_id"] = old["eval_id"]  # gold実行epochは不変（採点器だけ差し替え）
+    new["rescored_at"] = iso()
+    new["comparator_sha"] = sha256_file(SCRIPTS / "shadow_codex.py")
+    new["machines"] = {}
+    new["raw_carryover"] = {}
+
+    scored_src = {s: r for s, r in old["machines"].items() if r.get("status") == "scored"}
+    total_recs = total_expected = 0
+    for slug, rec in scored_src.items():
+        rp = Path(rec["result_path"])
+        r = json.loads(rp.read_text(encoding="utf-8"))
+        claims = r["codex_claims"]  # gold_verified_domains・evidence.gold_check付き（不変）
+        raw_path = (r.get("codex_meta") or {}).get("out_path")
+        raw_sha = sha256_file(Path(raw_path)) if raw_path and Path(raw_path).exists() \
+            else sha256_file(rp)
+        new["raw_carryover"][slug] = {"result_path": str(rp), "raw_sha256": raw_sha}
+        entries_active = [e for e in by_slug[slug]
+                          if e["gold_id"] not in old["stale_gold_ids"]]
+        scores = gold_score_machine(entries_active, claims)
+        gold_recs = [s for s in scores if s.get("gold_id")]
+        total_recs += len(gold_recs)
+        total_expected += len(entries_active)
+        if len(gold_recs) != len(entries_active):
+            log(f"❌ {slug}: 件数不整合 判定{len(gold_recs)} vs 対象{len(entries_active)}")
+            return 1
+        result = {"eval_id": old["eval_id"], "scoring_epoch": scoring_epoch,
+                  "derived_from_eval_id": old["eval_id"], "slug": slug,
+                  "machine_name": r.get("machine_name"), "epoch": r.get("epoch"),
+                  "rescored_at": iso(), "raw_sha256": raw_sha,
+                  "codex_meta": r.get("codex_meta"), "codex_claims": claims,
+                  "scores": scores}
+        ts = f"{now():%Y%m%d%H%M%S}"
+        nrp = GOLD_RESULT_DIR / f"{ts}_{slug}_{scoring_epoch}.json"
+        atomic_write_json(nrp, result)
+        summary: dict[str, int] = {}
+        for s in scores:
+            k = s["category"] if s.get("gold_id") is None \
+                else f"{s['gold_class']}:{s['category']}"
+            summary[k] = summary.get(k, 0) + 1
+        new["machines"][slug] = {
+            "status": "scored", "result_path": str(nrp), "score_summary": summary,
+            "gold_scorable": len(entries_active),
+            "false_match_flags": sum(1 for s in scores if s.get("false_match_flag")),
+            "gold_value_present_count": sum(1 for s in scores if s.get("gold_value_present")),
+            "last_attempt_at": rec.get("last_attempt_at")}
+
+    if total_recs != total_expected:
+        log(f"❌ 全体件数不整合: 判定{total_recs} vs 対象{total_expected}")
+        return 1
+    # 旧stateを退避してから新採点stateを確定
+    retired = GOLD_DIR / f"gold_eval_state_{old['eval_id']}_{old.get('scoring_epoch', 'orig')}.json"
+    if not retired.exists():
+        atomic_write_json(retired, old)
+    atomic_write_json(GOLD_STATE_PATH, new)
+    log(f"=== 再採点完了: scoring_epoch={scoring_epoch} "
+        f"derived_from={old['eval_id']} 機種{len(new['machines'])} "
+        f"件数整合={total_recs}/{total_expected} 旧state退避={retired.name} ===")
+    print()
+    print(gold_stats_summary(new))
     return 0
 
 
@@ -1527,9 +1679,18 @@ def selftest() -> int:
     t("gold採点: 複合2scopeの割当て＋全属性一致→CORRECT_STRICT×2",
       bg["g1"]["category"] == "CORRECT_STRICT" and bg["g2"]["category"] == "CORRECT_STRICT")
 
-    sc = gold_score_machine(g_entries, [mkc(value=800)])  # scope/operator未申告
+    # 1gold対1codex（別claim_key併存）: scope未申告でも1:1なら部分割当て→VALUE_ALIGNED、
+    # 対応codexなしのkeyはMISSING
+    two_key_gold = [
+        {"gold_id": "g1", "claim_key": "ceiling.normal.game",
+         "expected": {"assertion_status": "asserted", "value": 800, "unit": "G",
+                      "scope": "CZ間", "operator": None, "plus_alpha": None}},
+        {"gold_id": "g2", "claim_key": "ceiling.normal.point",
+         "expected": {"assertion_status": "asserted", "value": 1000, "unit": "pt",
+                      "scope": None, "operator": None, "plus_alpha": None}}]
+    sc = gold_score_machine(two_key_gold, [mkc(value=800)])  # scope未申告・1:1
     bg = {r["gold_id"]: r for r in sc if r.get("gold_id")}
-    t("gold採点: 値一致・属性未申告→VALUE_ALIGNED／claim欠落→MISSING",
+    t("gold採点: 1gold対1codex（scope未申告）→VALUE_ALIGNED／別keyはMISSING",
       bg["g1"]["category"] == "VALUE_ALIGNED" and bg["g2"]["category"] == "MISSING")
 
     sc = gold_score_machine(g_entries[:1], [mkc(value=999, scope="CZ間", operator="max")])
@@ -1574,12 +1735,21 @@ def selftest() -> int:
     t("gold採点: partial_goldは厳密MATCHに到達しない（値一致でもVALUE_ALIGNEDまで）",
       sc[0]["gold_class"] == "partial_gold" and sc[0]["category"] == "VALUE_ALIGNED")
 
-    # ★OPERATOR_DIVERGENT/OPERATOR_UNVERIFIED（2026-07-17チャッピー判定）★
-    t("operator機械判定: 最大→max / 約→about / 限定辞なし→exact / 両方→None",
-      operator_from_quote("天井は最大1000Gで当選") == "max"
-      and operator_from_quote("約1000Gで到達") == "about"
-      and operator_from_quote("天井は999Gで当選します") == "exact"
-      and operator_from_quote("最大で約1000G") is None)
+    # ★operator機械判定（2026-07-17チャッピー改訂・暗黙exact廃止）★
+    t("operator判定: 最大→max / 約→about",
+      operator_from_quote("天井は最大1000G+α") == "max"
+      and operator_from_quote("約1000Gで放出") is None)  # 約+到達=2signal→None
+    t("operator判定: 明示到達表現→exact",
+      operator_from_quote("1000Gで天井到達") == "exact"
+      and operator_from_quote("ちょうど1000G") == "exact"
+      and operator_from_quote("1000G消化で当選") == "exact")
+    t("operator判定: 限定辞なし「天井は1000G」→None（暗黙exact廃止）",
+      operator_from_quote("天井は1000G") is None
+      and operator_from_quote("天井1000G+α") is None)
+    t("operator判定: 複数シグナル→None",
+      operator_from_quote("最大で約1000G") is None
+      and operator_from_quote("最大1000Gで当選") is None)  # max+exact
+    t("operator判定: 純about→about", operator_from_quote("1000G前後") == "about")
 
     def mkc_op(op, quote, **kw):
         return mkc(value=800, scope="CZ間", operator=op, plus_alpha=True,
@@ -1590,27 +1760,40 @@ def selftest() -> int:
     op_gold = [{"gold_id": "g7", "claim_key": "ceiling.normal.game",
                 "expected": {"assertion_status": "asserted", "value": 800, "unit": "G",
                              "scope": "CZ間", "operator": "exact", "plus_alpha": True}}]
-    sc = gold_score_machine(op_gold, [mkc_op("max", "CZ間は最大800Gで当選（+α）")])
-    t("gold採点: max⇄exactのみ相違＋quote整合→OPERATOR_DIVERGENT",
+    sc = gold_score_machine(op_gold, [mkc_op("max", "CZ間は最大800G+α")])
+    t("gold採点: max⇄exactのみ相違＋quote整合(max)→OPERATOR_DIVERGENT",
       sc[0]["category"] == "OPERATOR_DIVERGENT")
     sc = gold_score_machine(op_gold, [mkc_op("max", "CZ間は800Gちょうどで当選+α")])
     t("gold採点: codex operatorが自quoteと矛盾（max申告×exact表現）→WRONG_ATTR",
       sc[0]["category"] == "WRONG_ATTR" and "矛盾" in sc[0]["detail"])
-    sc = gold_score_machine(op_gold, [mkc_op("max", "CZ間は最大で約800G+α")])
-    t("gold採点: quoteから一意判定不能→OPERATOR_UNVERIFIED",
+    sc = gold_score_machine(op_gold, [mkc_op("max", "CZ間は800G+α")])
+    t("gold採点: quoteから一意判定不能（限定辞なし）→OPERATOR_UNVERIFIED",
       sc[0]["category"] == "OPERATOR_UNVERIFIED")
-    # operator相違に加えて他の未検証属性がある場合はDIVERGENT条件を満たさない
-    sc = gold_score_machine(op_gold, [mkc(value=800, operator="max", plus_alpha=True,
-                                          evidence=[{"source_url": "https://1geki.jp/a",
-                                                     "raw_quote": "最大800G+α",
-                                                     "identity_evidence": "i",
-                                                     "gold_check": "verify_claims:exit0"}])])
-    t("gold採点: operator相違＋scope未検証あり→DIVERGENT条件不成立でWRONG_ATTR",
-      sc[0]["category"] == "WRONG_ATTR")
-    # false_match検査: goldとoperator一致だがquote表現と矛盾→フラグ
     sc = gold_score_machine(op_gold, [mkc_op("exact", "CZ間は最大800G+α")])
     t("gold採点: gold一致operatorがquote表現と矛盾→CORRECT_STRICT＋false_matchフラグ",
       sc[0]["category"] == "CORRECT_STRICT" and sc[0].get("false_match_flag") is True)
+
+    # ★AMBIGUOUS_ASSIGNMENT（値を使わない割当て・2026-07-17チャッピー判定）★
+    amb_gold = [{"gold_id": "g8", "claim_key": "ceiling.normal.game",
+                 "expected": {"assertion_status": "asserted", "value": 2500, "unit": "G",
+                              "scope": "AT間", "operator": None, "plus_alpha": None}}]
+    # gold=AT間2500 / codexにAT間なし・scope無し候補が2つ（890,2500）→一意不能
+    amb_c = [mkc(value=890, scope=None), mkc(value=2500, scope=None)]
+    sc = gold_score_machine(amb_gold, amb_c)
+    g8 = [s for s in sc if s.get("gold_id") == "g8"][0]
+    t("gold採点: 複数候補でscope欠落→AMBIGUOUS_ASSIGNMENT（値で拾わない）",
+      g8["category"] == "AMBIGUOUS_ASSIGNMENT" and g8["gold_value_present"] is True
+      and len(g8["candidates"]) == 2)
+    t("gold採点: AMBIGUOUSの候補はEXTRAに二重計上されない",
+      not any(s["category"] == "EXTRA" for s in sc))
+    # 値以外で一意に決まる場合は割当てる（scope一致）
+    sc = gold_score_machine(
+        [{"gold_id": "g9", "claim_key": "ceiling.normal.game",
+          "expected": {"assertion_status": "asserted", "value": 2500, "unit": "G",
+                       "scope": "AT間", "operator": None, "plus_alpha": None}}],
+        [mkc(value=2500, scope="AT間"), mkc(value=890, scope="CZ間")])
+    t("gold採点: 具体scope一致で一意割当て→CORRECT/VALUE系（AMBIGUOUSにしない）",
+      [s for s in sc if s.get("gold_id") == "g9"][0]["category"] != "AMBIGUOUS_ASSIGNMENT")
 
     # gold_load: v2互換（単一evidence obj→リスト正規化）とv3（リスト）を両方吸収
     with tempfile.TemporaryDirectory() as d:
@@ -1670,6 +1853,8 @@ def main() -> int:
     ap.add_argument("--max-machines", type=int, default=3)
     ap.add_argument("--gold-eval", action="store_true",
                     help="gold set採点（分割実行可・状態はgold_eval_state.json）")
+    ap.add_argument("--gold-rescore", nargs="?", const="", metavar="EVAL_ID",
+                    help="保存済みraw出力を新比較器で全件再採点（Codex再実行なし）")
     ap.add_argument("--gold-stats", action="store_true", help="gold採点の集計表示")
     ap.add_argument("--gold-path", default=str(GOLD_PATH_DEFAULT))
     ap.add_argument("--batch-size", type=int, default=10, help="1回の採点機種数（gold-eval時）")
@@ -1685,6 +1870,8 @@ def main() -> int:
     if args.stats:
         print(stats_summary())
         return 0
+    if args.gold_rescore is not None:
+        return gold_rescore(args.gold_rescore or None)
     if args.gold_stats:
         print(gold_stats_summary())
         return 0
