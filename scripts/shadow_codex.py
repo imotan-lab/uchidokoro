@@ -1247,11 +1247,13 @@ def gold_stats_summary(st: dict | None = None) -> str:
         f"GOLD_EVIDENCE_STALE隔離: {len(st['stale_gold_ids'])}件（凍結内容は不変・分母外）",
         f"件数整合検査: {tally}",
         f"カテゴリ内訳: {json.dumps(cats, ensure_ascii=False)}",
-        f"strict_gold_accuracy: {pct(strict_ok, strict_denom)}"
-        "（分母からOPERATOR_*・AMBIGUOUS除外）",
+        f"strict_gold_accuracy【条件付き】: {pct(strict_ok, strict_denom)}"
+        "（分母からOPERATOR_*・AMBIGUOUS除外＝実運用性能を高めに見せ得る参考値）",
+        f"e2e_strict_success_rate【全strict gold分母】: {pct(strict_ok, strict_denom_all)}"
+        "（分母は全strict gold・MISSING/UNVERIFIED/AMBIGUOUS/OP_*も不成功として算入）",
         f"partial_gold_numeric_accuracy: {pct(partial_numeric, partial_denom)}",
         f"claim_recall: {pct(all_denom - missing, all_denom)}",
-        f"gold_unknown_rate: {pct(unknown, all_denom)}",
+        f"gold_unknown_rate【UNVERIFIED区分のみ・MISSING等は含まない】: {pct(unknown, all_denom)}",
         f"operator_divergent_count/rate: {pct(op_div, all_denom)} / operator_unverified: {op_unv}件"
         "（UNKNOWN相当の記録・公開停止/自動修正に使わない）",
         f"ambiguous_assignment_count: {ambiguous}件（うちgold_value_present={gold_present}件"
@@ -1273,6 +1275,14 @@ def gold_stats_summary(st: dict | None = None) -> str:
             "（candidate_evidence_pass_rate=候補エントリ単位の検証通過率とは別指標）")
     except Exception:
         pass
+    # ★相互排他な判定区分表（合計＝gold対象件数・チャッピー条件2026-07-17）★
+    excl = {k: v for k, v in cats.items() if ":" in k}  # gold_id付き（EXTRAはgold_id無し=除外）
+    excl_total = sum(excl.values())
+    lines.append(f"── 相互排他区分表（合計={excl_total} / gold対象={expected}・"
+                 f"{'一致' if excl_total == expected else '不一致⚠'}）──")
+    for k in sorted(excl):
+        lines.append(f"    {k}: {excl[k]}")
+    lines.append(f"    （参考・分母外）EXTRA: {cats.get('EXTRA', 0)}")
     if err_others:
         lines.append(f"エラー内訳: {json.dumps(err_others, ensure_ascii=False)}")
     return "\n".join(lines)
