@@ -211,6 +211,26 @@ def _norm_scope(s):
     return s
 
 
+# ★既知scopeのホワイトリスト（2026-07-18 チャッピー条件）★
+# 未知scopeは文字列一致だけで厳密MATCH/割当てに使わない。既知に正規化できなければ
+# 「scope未検証」扱いにする（UNKNOWN/scope_unverified）。
+KNOWN_SCOPES = {
+    "通常時", "AT間", "BB間", "CZ間", "ボーナス間", "液晶", "GG間", "RB間", "BIG間",
+    "レギュラー間", "ボーナス後", "有利区間", "AT終了後", "CZ間短縮",
+}
+_SCOPE_MAXLEN = 20  # 型・文字数制限（想定外の長大/非文字列scopeを弾く）
+
+
+def scope_is_known(scope) -> bool:
+    """正規化後のscopeが既知セットにあり、型・文字数が妥当か（厳密一致に使ってよいか）。"""
+    if not isinstance(scope, str):
+        return False
+    ns = _norm_scope(scope)
+    if ns is None or len(ns) > _SCOPE_MAXLEN:
+        return False
+    return ns in KNOWN_SCOPES
+
+
 def _attr_norm(name, v):
     if v == NA:
         return NA
@@ -291,9 +311,16 @@ def compare_one(site: dict, codex: dict | None) -> dict | None:
 
     # 意味に影響する属性（scope/plus_alpha/operator）: nullをワイルドカードにしない
     # 両方具体で不一致→MISMATCH / 片方でもnull→正式判定不可（UNKNOWNへ） / NA→比較不要
+    # ★scopeは既知セットに正規化できない未知値を「文字列一致だけで厳密MATCH」しない
+    #   （2026-07-18チャッピー条件）＝未知scopeが絡めばscope_unverifiedとして未検証扱い★
     for attr in MEANING_ATTRS:
         s_a, c_a = _attr_norm(attr, site.get(attr)), _attr_norm(attr, codex.get(attr))
         if s_a == NA:
+            continue
+        if attr == "scope" and ((s_a is not None and not scope_is_known(s_a))
+                                or (c_a is not None and not scope_is_known(c_a))):
+            # 具体値だが既知語彙でない未知scopeが混じる→文字列一致で厳密判定しない
+            rec["attrs_unverified"].append("scope_unverified")
             continue
         if s_a is not None and c_a is not None and c_a != NA:
             if s_a != c_a:
@@ -345,9 +372,11 @@ def assign_by_identity(entries: list, claims: list, e_key, e_scope, c_key, c_sco
         cis = list(c_by_key.get(key, []))
         for ei in eis:
             es = _norm_scope(e_scope(entries[ei]))
-            if es is None:
+            # ★既知scopeのみ「具体scope一致」割当てに使う（未知scope同士の厳密一致割当てを禁止）★
+            if es is None or not scope_is_known(es):
                 continue
             match = [ci for ci in cis if ci not in used
+                     and scope_is_known(c_scope(claims[ci]))
                      and _norm_scope(c_scope(claims[ci])) == es]
             if len(match) == 1:
                 assign[ei] = match[0]
@@ -633,6 +662,24 @@ def selftest() -> int:
     t("日次: MISMATCHに割当てた実claimのcodex_ref（出典強度）が付く",
       len(mm) == 1 and mm[0]["codex_ref"]["evidence_strength"] == "verified_policy"
       and mm[0]["codex_ref"]["value"] == 999)
+
+    # ★未知scopeは文字列一致だけで厳密MATCHにしない（2026-07-18チャッピー条件）★
+    t("scope_is_known: 既知scopeはTrue・未知はFalse・型/文字数制限",
+      scope_is_known("AT間") and scope_is_known("CZ間")
+      and not scope_is_known("謎ゾーン間") and not scope_is_known(12345)
+      and not scope_is_known("あ" * 30))
+    # site/codex両方が同じ未知scope文字列でも、厳密MATCHにせずscope_unverified→UNKNOWN
+    s_uk = [mksite("ceiling.normal.game", "謎ゾーン間", 800)]
+    s_uk[0].update(operator="max", plus_alpha=True)
+    c_uk = [mkcod(800, "謎ゾーン間", operator="max", plus_alpha=True)]
+    r_uk = compare_one(s_uk[0], c_uk[0])
+    t("未知scope同士の文字列一致は厳密MATCHにしない（scope_unverified→UNKNOWN）",
+      r_uk["verdict"] == "UNKNOWN" and "scope_unverified" in r_uk["attrs_unverified"])
+    # 既知scope同士（全属性一致）はMATCH（正常系の非回帰）
+    s_k = [mksite("ceiling.normal.game", "AT間", 800)]
+    s_k[0].update(operator="max", plus_alpha=True)
+    r_k = compare_one(s_k[0], mkcod(800, "AT間", operator="max", plus_alpha=True))
+    t("既知scope同士（全属性一致）はMATCH（非回帰）", r_k["verdict"] == "MATCH")
 
     ok = all(c for _, c in results)
     print(f"\nselftest: {sum(1 for _, c in results if c)}/{len(results)} 合格（改変{cases}件込み）")

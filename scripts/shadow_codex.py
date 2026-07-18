@@ -1210,6 +1210,11 @@ def gold_score_machine(entries: list[dict], claims: list[dict]) -> list[dict]:
             c_a = shadow_claims._attr_norm(attr, c.get(attr))
             if g_a is None and c_a is None:
                 continue  # 双方未指定＝比較対象なし
+            # ★未知scope（具体値だが既知語彙でない）は文字列一致で厳密判定しない★
+            if attr == "scope" and ((g_a is not None and not shadow_claims.scope_is_known(g_a))
+                                    or (c_a is not None and not shadow_claims.scope_is_known(c_a))):
+                unattrs.append("scope_unverified")
+                continue
             if g_a is None or c_a is None:
                 # ★nullをワイルドカードにしない: 片方null×片方具体値は正式MATCH不可★
                 unattrs.append(attr)

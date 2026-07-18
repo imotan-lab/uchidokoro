@@ -483,6 +483,26 @@ def selftest() -> int:
         cmd_heartbeat(b_run, p)  # 正所有者Bは継続可能
     t("競合窓: 正所有者Bのheartbeatは成功", _read_lock(p).get("run_id") == b_run)
 
+    # 14. ★ガード保持プロセスが異常終了→ガードが永久残留しない（stale回収・指摘1）★
+    #     古いガードファイル（>60秒前）を作り、正所有者Bのheartbeatが回収して成功すること
+    gp = p + ".guard"
+    with open(gp, "w") as f:
+        f.write("99999")  # 死んだプロセスが残したガードを模擬
+    old = time.time() - 120
+    os.utime(gp, (old, old))
+    with contextlib.redirect_stdout(io.StringIO()):
+        rc_recover = cmd_heartbeat(b_run, p)  # staleガードを回収し所有者再確認して更新
+    t("ガード: 60秒超のstaleガードは回収され所有者操作が成功（永久残留しない）",
+      rc_recover == 0 and not os.path.exists(gp))
+    # 新しいガード（60秒以内）は保持中とみなす＝短命の非所有者acquireはガード待ちにならず
+    # ロック保持で普通に失敗する（ガードは即時解放されるため）。ここではstale境界のみ検証
+    with open(gp, "w") as f:
+        f.write("88888")  # 新しいガード（回収されない）
+    with contextlib.redirect_stdout(io.StringIO()):
+        rc_fresh = cmd_check(b_run, p)  # checkはガード不要（読取専用）で所有者確認は通る
+    t("ガード: 新しいガードは回収されず残る（stale境界）", os.path.exists(gp) and rc_fresh == 0)
+    os.remove(gp)
+
     ok = all(c for _, c in results)
     print(f"\nselftest: {sum(1 for _, c in results if c)}/{len(results)} 合格")
     return 0 if ok else 1

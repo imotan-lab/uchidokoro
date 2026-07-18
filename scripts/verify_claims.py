@@ -399,6 +399,15 @@ def run_data(data, min_domains):
             log(f"❌ {tag}: C0 リダイレクト先がアーカイブ/キャッシュ（{page.final_url}）→出典に使えない")
             any_fail = True
             continue
+        # ★リダイレクトで最終URLが変わった場合はSSRF再検査（プライベート/ローカルIP到達拒否・指摘3）★
+        #   各リダイレクトホップは_ValidatingRedirectが検査済み。ここは最終URLの明示再確認。
+        #   リダイレクト無し（final_url==url）は取得前に検査済みなので再解決しない。
+        if page.final_url != url:
+            fu_ok, fu_why = is_public_fetchable_url(page.final_url)
+            if not fu_ok:
+                log(f"❌ {tag}: C1 リダイレクト最終URLが安全検査に不合格（{page.final_url} / {fu_why}）")
+                any_fail = True
+                continue
         ntext = normalize(page.text)
         ntitle = normalize(page.title)
 
