@@ -38,6 +38,10 @@ try:
 except Exception:
     pass
 
+# ★Windowsタスクスケジューラでの黒い画面（コンソール窓）防止（2026-07-18・登録承認条件）★
+# 子プロセス（codex.exe・git・taskkill等）を無窓で起動する。InteractiveTokenでも窓が出ない。
+_NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+
 BASE = Path(__file__).resolve().parent.parent
 SCRIPTS = BASE / "scripts"
 sys.path.insert(0, str(SCRIPTS))
@@ -164,10 +168,11 @@ def atomic_write_json(path: Path, obj) -> None:
 def kill_tree(pid: int) -> bool:
     """Windowsでプロセスツリーごと終了し、消滅を確認する（ERR_TIMEOUT時）"""
     subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
-                   capture_output=True, timeout=30)
+                   capture_output=True, timeout=30, creationflags=_NO_WINDOW)
     for _ in range(10):
         r = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
-                           capture_output=True, text=True, timeout=30)
+                           capture_output=True, text=True, timeout=30,
+                           creationflags=_NO_WINDOW)
         if str(pid) not in (r.stdout or ""):
             return True
         import time
@@ -262,7 +267,8 @@ def _acquire_lock_or_retry() -> str:
         r = subprocess.run([sys.executable, str(SCRIPTS / "task_lock.py"),
                             "acquire", "--task", "shadow-codex"],
                            capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", timeout=60)
+                           encoding="utf-8", errors="replace", timeout=60,
+                           creationflags=_NO_WINDOW)
         if r.returncode == 0:
             return (r.stdout or "").strip().splitlines()[-1]  # 最終行=run_id
         if attempt == 1:
@@ -294,7 +300,8 @@ def snapshot_under_lock(run_id: str, slugs_override, max_machines: int,
         machines_live = live["machines"] if isinstance(live, dict) else live
         slugs = slugs_override or select_slugs(machines_live, state, n=max_machines)
         git = subprocess.run(["git", "-C", str(BASE), "rev-parse", "HEAD"],
-                             capture_output=True, text=True, timeout=30)
+                             capture_output=True, text=True, timeout=30,
+                             creationflags=_NO_WINDOW)
         commit = (git.stdout or "").strip()
         schema_path = RESEARCH / f"codex_schema_{EPOCH['schema_version']}.json"
         if not schema_path.exists():
@@ -325,7 +332,8 @@ def snapshot_under_lock(run_id: str, slugs_override, max_machines: int,
     finally:
         subprocess.run([sys.executable, str(SCRIPTS / "task_lock.py"),
                         "release", "--run-id", lock_rid],
-                       capture_output=True, text=True, timeout=60)
+                       capture_output=True, text=True, timeout=60,
+                       creationflags=_NO_WINDOW)
     # ★以後はスナップショットから読み直す（ライブ再読み込みしない）★
     snap_data = json.loads((snap / "machines.json").read_text(encoding="utf-8"))
     machines_snap = snap_data["machines"] if isinstance(snap_data, dict) else snap_data
@@ -458,7 +466,8 @@ def run_codex(machine: dict, run_id: str, deadline: datetime.datetime) -> dict:
     base_cmd = [sys.executable, codex_exe] if codex_exe.lower().endswith(".py") else [codex_exe]
     try:
         ver = subprocess.run(base_cmd + ["--version"], capture_output=True, text=True,
-                             encoding="utf-8", errors="replace", timeout=30)
+                             encoding="utf-8", errors="replace", timeout=30,
+                             creationflags=_NO_WINDOW)
         cli_version = (ver.stdout or "").strip()
     except subprocess.TimeoutExpired:
         cli_version = "(version取得timeout)"
@@ -482,7 +491,7 @@ def run_codex(machine: dict, run_id: str, deadline: datetime.datetime) -> dict:
             proc = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=ev,
                                     stderr=subprocess.PIPE, text=True,
                                     encoding="utf-8", errors="replace",
-                                    cwd=str(WORKDIR))
+                                    cwd=str(WORKDIR), creationflags=_NO_WINDOW)
             try:
                 _, stderr = proc.communicate(timeout=timeout)
             except subprocess.TimeoutExpired:
@@ -600,7 +609,8 @@ def verify_evidence(machine: dict, claim: dict, run_id: str) -> list[dict]:
                                 "--file", str(cf_path), "--min-domains", "1",
                                 "--allowed-domains", ",".join(shadow_gold.ALLOWED_DOMAINS)],
                                capture_output=True, text=True,
-                               encoding="utf-8", errors="replace", timeout=120)
+                               encoding="utf-8", errors="replace", timeout=120,
+                               creationflags=_NO_WINDOW)
             rec["verified"] = (r.returncode == 0)
             rec["rule"] = "verify_claims:exit0" if r.returncode == 0 else \
                 f"verify_claims:exit{r.returncode}"
@@ -791,7 +801,8 @@ def notify(subject: str, body: str) -> None:
         bf.write_text(body, encoding="utf-8")
         subprocess.run([sys.executable, SEND_NOTIFY, "notify",
                         "--subject", subject, "--body-file", str(bf)],
-                       capture_output=True, text=True, timeout=120)
+                       capture_output=True, text=True, timeout=120,
+                       creationflags=_NO_WINDOW)
     except Exception as e:
         log(f"メール送信失敗（処理は継続）: {e}")
 
@@ -953,7 +964,8 @@ def gold_config_fingerprint(gold_path: Path, cli_version: str | None = None) -> 
         base_cmd = [sys.executable, codex_exe] if codex_exe.lower().endswith(".py") else [codex_exe]
         try:
             r = subprocess.run(base_cmd + ["--version"], capture_output=True, text=True,
-                               encoding="utf-8", errors="replace", timeout=30)
+                               encoding="utf-8", errors="replace", timeout=30,
+                               creationflags=_NO_WINDOW)
             cli_version = (r.stdout or "").strip()
         except Exception:
             cli_version = "(取得失敗)"
