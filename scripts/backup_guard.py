@@ -207,6 +207,73 @@ def cmd_copy(src: str, dst: str, optional: bool) -> int:
     return 0
 
 
+# ── gpt_research のバックアップ対象定義（2026-07-18 チャッピー限定許可）──
+#   触ってよいDropboxルート（ユーザー厳命: この階層より上へ出ない）
+DROPBOX_ROOT_ALLOWED = r"C:/Users/imao_/今電 Dropbox/今電　今尾笙夢"
+TREE_INCLUDE_DIRS = {"gold_eval", "results", "input_snapshot"}
+TREE_INCLUDE_GLOBS = ["gold_set_v*.json", "codex_schema_*.json",
+                      "gold_freeze_log*.txt", "shadow_state.json"]
+TREE_EXCLUDE_DIRS = {"claims_check", "workdir", ".codex", ".claude", "notify_body.txt"}
+TREE_EXCLUDE_EXT = {".tmp"}
+
+
+def _under(path: str, root: str) -> bool:
+    try:
+        return os.path.commonpath([os.path.abspath(path), os.path.abspath(root)]) \
+            == os.path.abspath(root)
+    except ValueError:
+        return False
+
+
+def _tree_included(rel_parts: tuple, basename: str) -> bool:
+    import fnmatch
+    top = rel_parts[0] if rel_parts else ""
+    if top in TREE_INCLUDE_DIRS:
+        return True
+    if len(rel_parts) == 1:  # ルート直下のファイルはglob許可のみ
+        return any(fnmatch.fnmatch(basename, g) for g in TREE_INCLUDE_GLOBS)
+    return False
+
+
+def cmd_backup_tree(src_root: str, dst_root: str) -> int:
+    """gpt_research配下の許可サブセットをDropboxへ秘密検査つきでバックアップ。
+    ★宛先は認可Dropboxルート配下に限定（それより上には出ない）★。
+    許可リスト(basename)は使わずinclude/exclude規則＋秘密パターン検査で判定する。"""
+    if not _under(dst_root, DROPBOX_ROOT_ALLOWED):
+        print(f"REFUSED_DST_OUT_OF_ROOT dst={dst_root}")
+        _log(f"backup-tree: ❌宛先が認可ルート外 → 中止: {dst_root}")
+        return 2
+    copied = blocked = skipped = 0
+    blocks = []
+    for dirpath, dirs, files in os.walk(src_root):
+        dirs[:] = [d for d in dirs if d not in TREE_EXCLUDE_DIRS]
+        for fn in files:
+            src = os.path.join(dirpath, fn)
+            rel = os.path.relpath(src, src_root).replace("\\", "/")
+            rel_parts = tuple(rel.split("/"))
+            if os.path.splitext(fn)[1].lower() in TREE_EXCLUDE_EXT \
+                    or fn in TREE_EXCLUDE_DIRS or not _tree_included(rel_parts, fn):
+                skipped += 1
+                continue
+            findings = name_findings(fn) + content_findings(src)
+            if os.path.splitext(fn.lower())[1] in ARCHIVE_EXTENSIONS:
+                findings.append("archive")
+            if findings:
+                blocked += 1
+                blocks.append((rel, findings))
+                _log(f"backup-tree: ❌拒否 {rel} → {', '.join(findings)}")
+                continue
+            dst = os.path.join(dst_root, rel)
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copy2(src, dst)
+            copied += 1
+    print(f"BACKUP_TREE copied={copied} blocked={blocked} skipped={skipped}")
+    for rel, f in blocks:
+        print(f"  BLOCKED {rel} RULES={','.join(f)}")
+    _log(f"backup-tree: ✅ copied={copied} blocked={blocked} skipped={skipped} → {dst_root}")
+    return 0 if blocked == 0 else 1
+
+
 def cmd_scan(root: str) -> int:
     total = 0
     hits = []
@@ -314,6 +381,38 @@ def selftest() -> int:
         pass
     t("ログに秘密値そのものが出ていない", "smuggled" not in logtxt and "xxxx xxxx" not in logtxt)
 
+    # 11. ★backup-tree（gpt_research限定バックアップ・2026-07-18）★
+    src_root = os.path.join(d, "gpt_research")
+    os.makedirs(os.path.join(src_root, "gold_eval"), exist_ok=True)
+    os.makedirs(os.path.join(src_root, "claims_check"), exist_ok=True)  # 除外対象
+    os.makedirs(os.path.join(src_root, "workdir"), exist_ok=True)       # 除外対象
+    open(os.path.join(src_root, "gold_set_v3.json"), "w").write('{"ok":1}')
+    open(os.path.join(src_root, "gold_eval", "state.json"), "w").write('{"pending":[]}')
+    open(os.path.join(src_root, "claims_check", "tmp.json"), "w").write('{"x":1}')
+    open(os.path.join(src_root, "gold_eval", "leak.json"), "w").write(
+        json.dumps({"app_password": "should_block"}))
+    # 認可ルート外への宛先は拒否
+    with contextlib.redirect_stdout(io.StringIO()) as b:
+        rc_out = cmd_backup_tree(src_root, os.path.join(d, "outside_dropbox"))
+    t("backup-tree: 認可ルート外の宛先を拒否", rc_out == 2)
+    # 認可ルート配下を一時的に模してinclude/exclude/秘密検知を確認
+    global DROPBOX_ROOT_ALLOWED
+    orig_root = DROPBOX_ROOT_ALLOWED
+    DROPBOX_ROOT_ALLOWED = d
+    try:
+        dst_root = os.path.join(d, "dropbox_dst")
+        with contextlib.redirect_stdout(io.StringIO()) as b:
+            rc_bt = cmd_backup_tree(src_root, dst_root)
+        out = b.getvalue()
+    finally:
+        DROPBOX_ROOT_ALLOWED = orig_root
+    copied_ok = os.path.exists(os.path.join(dst_root, "gold_set_v3.json")) \
+        and os.path.exists(os.path.join(dst_root, "gold_eval", "state.json"))
+    excluded_ok = not os.path.exists(os.path.join(dst_root, "claims_check", "tmp.json"))
+    leak_blocked = not os.path.exists(os.path.join(dst_root, "gold_eval", "leak.json"))
+    t("backup-tree: 許可対象コピー・除外dir無視・秘密混入は拒否",
+      copied_ok and excluded_ok and leak_blocked and rc_bt == 1)
+
     ok = all(c for _, c in results)
     print(f"\nselftest: {sum(1 for _, c in results if c)}/{len(results)} 合格")
     return 0 if ok else 1
@@ -321,7 +420,7 @@ def selftest() -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Dropboxバックアップの秘密情報ガード")
-    parser.add_argument("command", nargs="?", choices=["copy", "scan"])
+    parser.add_argument("command", nargs="?", choices=["copy", "scan", "backup-tree"])
     parser.add_argument("src", nargs="?")
     parser.add_argument("dst", nargs="?")
     parser.add_argument("--dir", help="scan: 走査対象ディレクトリ")
@@ -331,6 +430,10 @@ def main() -> int:
 
     if args.selftest:
         return selftest()
+    if args.command == "backup-tree":
+        if not args.src or not args.dst:
+            parser.error("backup-tree には src(gpt_researchルート) と dst(Dropbox宛先) が必要")
+        return cmd_backup_tree(args.src, args.dst)
     if args.command == "copy":
         if not args.src or not args.dst:
             parser.error("copy には <src> <dst> が必要")
