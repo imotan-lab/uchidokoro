@@ -33,13 +33,21 @@ import tempfile
 import uuid
 from pathlib import Path
 
+# ★pythonw.exe（窓なしPython）で起動された場合 sys.stdout/stderr が None になる。
+#   print()がクラッシュするのでdevnullへ差し替える（ログはファイルに残るので情報欠落なし）。
+#   Task Schedulerはpythonw.exeで起動＝黒いコンソール窓を出さないため（2026-07-18登録承認条件）★
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w", encoding="utf-8")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w", encoding="utf-8")
 try:
     sys.stdout.reconfigure(encoding="utf-8")
 except Exception:
     pass
 
 # ★Windowsタスクスケジューラでの黒い画面（コンソール窓）防止（2026-07-18・登録承認条件）★
-# 子プロセス（codex.exe・git・taskkill等）を無窓で起動する。InteractiveTokenでも窓が出ない。
+# 親はpythonw.exe（窓なし）＋子プロセス（codex.exe・git・taskkill等）はCREATE_NO_WINDOWで
+# 無窓起動する二段構え。InteractiveTokenでも一切窓が出ない。
 _NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 BASE = Path(__file__).resolve().parent.parent
