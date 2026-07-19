@@ -309,7 +309,8 @@ def check_claim_identity(item, mode, scope, value, unit, quote,
 #   1) ハード制約 → REJECT（型/単位/小数桁/物理的に不可能な範囲）
 #   2) 関係制約  → REVIEW（設定間の単調性等・機種仕様依存なので断定しない）
 #   3) 異常値検知 → REVIEW（前回公開値との差/小数点移動/一桁置換/典型帯外）
-#   公開の必要条件: C5==PASS かつ hard==PASS かつ relational!=REJECT かつ anomaly空
+#   公開の必要条件: C5==PASS かつ anomaly_check==PASS かつ 配列検査==PASS
+#   （REJECTもREVIEWも自動公開を止める。関係制約REVIEWは人手確認へ・Codex指摘で修正）
 # ══════════════════════════════════════════════════════════════
 
 ITEM_SPEC = {
@@ -330,13 +331,6 @@ def _as_num(v):
     return f
 
 
-def _digits_only(v) -> str:
-    """数値の有効数字列（小数点・符号を除く。桁比較用）。末尾ゼロは保持しない小数のため
-    Decimal的でなく単純str化＝一桁置換/桁移動の近似検知に使う。"""
-    s = ("%g" % float(v))
-    return re.sub(r"[^0-9]", "", s)
-
-
 def _is_decimal_shift(a: float, b: float) -> bool:
     """a が b の10倍/1/10（小数点移動）に近いか。"""
     if b == 0:
@@ -347,15 +341,21 @@ def _is_decimal_shift(a: float, b: float) -> bool:
     return False
 
 
-def anomaly_check(item_key: str, value, current=None) -> tuple[str, list[str]]:
+def anomaly_check(item_key: str, value, current=None, unit=None) -> tuple[str, list[str]]:
     """単一値の異常検知。戻り値 (verdict, flags)。
     verdict: REJECT(ハード違反) / REVIEW(異常フラグあり) / PASS(問題なし)。"""
     spec = ITEM_SPEC.get(item_key)
     if spec is None:
         return REVIEW, [f"未知の項目 {item_key}（仕様未定義＝自動採用しない）"]
+    if isinstance(value, bool):  # ★True/Falseはfloat()で1.0/0.0になり素通りするので明示REJECT
+        return REJECT, ["真偽値は数値でない"]
     x = _as_num(value)
     if x is None:
         return REJECT, ["数値でない"]
+    # 単位不一致（指定時）→ REJECT（ceiling.game=1000pt のような単位取り違え）
+    if unit is not None and spec.get("unit") and \
+            normalize(str(unit)) != normalize(str(spec["unit"])):
+        return REJECT, [f"単位不一致: {unit}（{item_key}は{spec['unit']}）"]
     # (1) ハード: 型
     if spec["kind"] == "int" and abs(x - round(x)) > 1e-9:
         return REJECT, [f"整数であるべき項目に小数 {value}"]
@@ -380,17 +380,21 @@ def anomaly_check(item_key: str, value, current=None) -> tuple[str, list[str]]:
         if _is_decimal_shift(x, c):
             flags.append(f"小数点/桁移動の疑い（{current}→{value}）")
         jabs = abs(x - c)
-        if jabs > spec["jump_abs"] or (c and jabs > spec["jump_rel"] * abs(c)):
+        # 閾値ちょうども異常側に倒す（>= ・Codex指摘: >だと境界の誤入力を見逃す）
+        if jabs >= spec["jump_abs"] or (c and jabs >= spec["jump_rel"] * abs(c)):
             flags.append(f"前回公開値から大きく変化（{current}→{value}）")
     return (REVIEW if flags else PASS), flags
 
 
-def anomaly_check_setting_array(item_key: str, settings: dict) -> tuple[str, list[str]]:
-    """設定別の値配列（{設定番号: 値}）の関係制約＋各値のハード検査。
+def anomaly_check_setting_array(item_key: str, settings: dict,
+                                current: dict | None = None) -> tuple[str, list[str]]:
+    """設定別の値配列（{設定番号: 値}）の関係制約＋各値のハード/異常検査。
+    ★前回の設定別配列 current を渡すと、各設定を前回値と比較する（配列一括+10化けを検知）★
     単調性・同一値は REVIEW（機種仕様依存＝断定しない）。各値のハード違反は REJECT。"""
     flags = []
     for s, v in settings.items():
-        vd, fl = anomaly_check(item_key, v)
+        cur = (current or {}).get(s)
+        vd, fl = anomaly_check(item_key, v, current=cur)
         if vd == REJECT:
             return REJECT, [f"設定{s}: " + "; ".join(fl)]
         flags += [f"設定{s}: {f}" for f in fl]
@@ -503,6 +507,20 @@ def selftest() -> int:
     t("機械割配列 設定6が設定1より低い（単調崩れ）→ REVIEW",
       anomaly_check_setting_array("kikaiwari",
                                   {1: 105.0, 2: 103.0, 6: 98.0})[0] == REVIEW)
+    # ★Codex第2次: 設定配列に前回値を渡し、一括+10化けを検知★
+    t("★設定配列 全設定が前回から+10化け → REVIEW",
+      anomaly_check_setting_array(
+          "kikaiwari", {1: 107.8, 2: 108.0, 5: 115.0, 6: 118.0},
+          current={1: 97.8, 2: 98.0, 5: 105.0, 6: 108.0})[0] == REVIEW)
+    t("設定配列 前回値と整合（微変化）→ PASS",
+      anomaly_check_setting_array(
+          "kikaiwari", {1: 97.9, 2: 98.1, 5: 105.1, 6: 108.2},
+          current={1: 97.8, 2: 98.0, 5: 105.0, 6: 108.0})[0] == PASS)
+    t("真偽値 True は数値でない → REJECT", A("ceiling.through", True)[0] == REJECT)
+    t("単位取り違え ceiling.game=1000pt → REJECT",
+      A("ceiling.game", 1000, unit="pt")[0] == REJECT)
+    t("境界ちょうど 100.0→103.0(diff=jump_abs) → REVIEW",
+      A("kikaiwari", 103.0, current=100.0)[0] == REVIEW)
 
     # ★mutation test★: gold値の"意味のある変異"（桁移動/大跳ね/高位桁置換）は必ず非PASS。
     # 下1桁の微差は正常変化なので変異に含めない（それはPASSでよい）。
