@@ -406,6 +406,72 @@ def anomaly_check_setting_array(item_key: str, settings: dict,
     return (REVIEW if flags else PASS), flags
 
 
+# ══════════════════════════════════════════════════════════════
+# B-3: 出典の格による決着（決定論・AIのメンツは0点・2026-07-19）
+#   入力: 同一claimに対する候補値のリスト。各候補は複数の source を持つ。
+#     source = {domain, verified(C5+再取得OK), group(転載系列=独立票の単位), official}
+#   規則: ①verified な source だけ数える ②転載系列(group)は1票 ③項目別の格付けと
+#         複数独立一致で勝者 ④決まらねば REVIEW（無理に勝者を作らない）
+#   ★どちらのAIが言ったかは一切見ない（source の格と裏取りだけ）★
+# ══════════════════════════════════════════════════════════════
+
+# 大手解析ドメイン（tier2）。公式は source.official=True で tier1。狙い目はスロパチが基準(tier1)。
+MAJOR_DOMAINS = {"chonborista.com", "1geki.jp", "nana-press.com",
+                 "slopachi-quest.com", "dmm.com"}
+NERAI_BASIS = "slopachi-quest.com"
+# 項目別の必要独立ドメイン数（critical=2・狙い目=1）。公式tier1があれば緩和。
+MIN_DOMAINS = {"ceiling.game": 2, "ceiling.point": 2, "ceiling.through": 2,
+               "ceiling.cycle": 2, "kikaiwari": 2, "nerai": 1}
+
+
+def classify_source(item_key: str, domain: str, official: bool = False) -> int:
+    """source の格（tier・小さいほど強い）。1=公式/基準 2=大手解析 3=その他。"""
+    if official:
+        return 1
+    d = (domain or "").lower()
+    if item_key == "nerai" and d.endswith(NERAI_BASIS):
+        return 1  # 狙い目はスロパチクエストが基準＝最上位
+    if any(d == m or d.endswith("." + m) for m in MAJOR_DOMAINS):
+        return 2
+    return 3
+
+
+def resolve(item_key: str, candidates: list) -> tuple[str, object, str, list]:
+    """候補値を出典の格で決着。戻り値 (verdict, winning_value|None, reason, scored)。
+    verdict: PASS(採用値決定) / REVIEW(決まらない=止める)。"""
+    scored = []
+    for cand in candidates:
+        ver = [s for s in (cand.get("sources") or []) if s.get("verified")]
+        if not ver:
+            continue  # 裏取り0の候補は勝負に参加できない
+        groups = {(s.get("group") or s.get("domain") or "") for s in ver}
+        tiers = [classify_source(item_key, s.get("domain", ""), s.get("official", False))
+                 for s in ver]
+        scored.append({"value": cand.get("value"), "best_tier": min(tiers),
+                       "indep": len(groups), "has_official": 1 in tiers})
+    if not scored:
+        return REVIEW, None, "裏取り済みの候補が無い（自動採用しない）", scored
+
+    scored.sort(key=lambda c: (c["best_tier"], -c["indep"]))
+    top = scored[0]
+    min_dom = MIN_DOMAINS.get(item_key, 2)
+    # 裏取り強度: 公式(tier1)があれば独立数を緩和、無ければ必要独立数を満たすこと
+    if not top["has_official"] and top["indep"] < min_dom:
+        return REVIEW, None, \
+            f"裏取り不足（独立ドメイン{top['indep']}<必要{min_dom}・公式なし）", scored
+    if len(scored) == 1:
+        return PASS, top["value"], \
+            f"単独裏取り勝ち（tier{top['best_tier']}・独立{top['indep']}）", scored
+    second = scored[1]
+    strictly_better = (top["best_tier"] < second["best_tier"]) or \
+        (top["best_tier"] == second["best_tier"] and top["indep"] > second["indep"])
+    if strictly_better:
+        return PASS, top["value"], \
+            f"格上/複数一致で決着（{top['value']} 採用・対抗 {second['value']}）", scored
+    return REVIEW, None, \
+        f"信頼出典間で競合＝DISPUTED（{top['value']} vs {second['value']}・同格同数）", scored
+
+
 def selftest() -> int:
     results = []
 
@@ -540,6 +606,40 @@ def selftest() -> int:
                 mut_ok = False
                 print(f"   NG 変異値がPASSされた: {item} {good}→{mv}")
     t("mutation test: gold変異(桁移動/大跳ね/高位桁置換)は全て非PASS・原値PASS", mut_ok)
+
+    # ── B-3 出典の格による決着 ──────────────────────
+    def src(dom, verified=True, group=None, official=False):
+        return {"domain": dom, "verified": verified, "group": group, "official": official}
+
+    R = resolve
+    v, val = R("ceiling.game", [{"value": 1268, "sources": [
+        src("chonborista.com"), src("1geki.jp")]}])[:2]
+    t("1値・大手2独立 → PASS(1268)", v == PASS and val == 1268)
+    t("1値・大手1のみ(要2) → REVIEW",
+      R("ceiling.game", [{"value": 1268, "sources": [src("chonborista.com")]}])[0] == REVIEW)
+    v, val = R("kikaiwari", [{"value": 108.0, "sources": [
+        src("kita-denshi.example", official=True)]}])[:2]
+    t("1値・公式1 → PASS(108.0)", v == PASS and val == 108.0)
+    v, val = R("kikaiwari", [
+        {"value": 108.0, "sources": [src("メーカー公式", official=True)]},
+        {"value": 110.0, "sources": [src("chonborista.com"), src("1geki.jp")]}])[:2]
+    t("2値・公式108 vs 大手110 → PASS(公式108)", v == PASS and val == 108.0)
+    t("2値・同格2独立ずつ → DISPUTED REVIEW",
+      R("ceiling.game", [
+          {"value": 1268, "sources": [src("chonborista.com"), src("nana-press.com")]},
+          {"value": 1300, "sources": [src("1geki.jp"), src("dmm.com")]}])[0] == REVIEW)
+    v, val = R("ceiling.game", [
+        {"value": 1268, "sources": [src("chonborista.com"), src("nana-press.com"), src("1geki.jp")]},
+        {"value": 1300, "sources": [src("dmm.com")]}])[:2]
+    t("2値・3独立 vs 1独立 → PASS(多い方1268)", v == PASS and val == 1268)
+    t("裏取り0の候補のみ → REVIEW",
+      R("ceiling.game", [{"value": 1268, "sources": [src("blog.x", verified=False)]}])[0] == REVIEW)
+    v, val = R("nerai", [{"value": 650, "sources": [src("slopachi-quest.com")]}])[:2]
+    t("狙い目・スロパチ1つ → PASS(650)", v == PASS and val == 650)
+    t("同一ドメイン2回引用は独立1票 → REVIEW",
+      R("ceiling.game", [{"value": 1268, "sources": [
+          src("chonborista.com", group="chonborista.com"),
+          src("chonborista.com", group="chonborista.com")]}])[0] == REVIEW)
 
     ok_all = all(c for _, c in results)
     print(f"\nselftest: {sum(1 for _, c in results if c)}/{len(results)} 合格")
