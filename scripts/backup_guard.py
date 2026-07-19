@@ -53,6 +53,7 @@ ALLOW_BASENAMES = {
     "post_to_x_detached.log",
     "post_update_to_x_detached.log",
     "復旧手順.md",
+    "consensus_design.md",   # コンセンサス設計書(gpt_research直下・ローカルのみ→Dropbox保全・秘密でない)
 }
 # 日付つきタスクログ（例: new_machine_2026-07-16.log）
 ALLOW_LOG_RE = re.compile(r"^[a-z0-9_]+_\d{4}-\d{2}-\d{2}\.log$")
