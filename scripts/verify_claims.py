@@ -82,6 +82,7 @@ Page = namedtuple("Page", "text title final_url")
 # ★D-1a構造保持取得用: 生HTML＋title＋最終URL＋本文hash（fetch_html が返す・fetch_pageは不変）
 HtmlSnapshot = namedtuple("HtmlSnapshot", "html title final_url html_sha256")
 _page_cache = {}
+_html_cache = {}   # fetch_html の取得キャッシュ＋selftestモック差込口（_page_cache と対称）
 _fetch_errors = {}
 _MAX_FETCH_BYTES = 5_000_000        # 圧縮取得の上限（DoS/非HTML巨大対策・Codex E10/D-1a-2-1）
 _MAX_DECODED_BYTES = 30_000_000     # gzip展開後の上限
@@ -234,13 +235,22 @@ def _fetch_decoded_html(url, allowed=None):
 
 def fetch_html(url, allowed=None):
     """★D-1a構造保持取得用: 生HTML(decoded)＋title＋最終URL＋hash を返す（SSRF等はfetch_pageと共通）。★
-    失敗はNone。fetch_pageと同一検証内で別々に呼ばないこと（同一スナップショット要件）。"""
+    失敗はNone。fetch_pageと同一検証内で別々に呼ばないこと（同一スナップショット要件）。
+    キャッシュ/モックは _html_cache（fetch_page の _page_cache と対称・selftestの合成HTML差込口）。"""
+    ck = (url, None if not allowed else tuple(sorted(str(d).lower() for d in allowed)))
+    if ck in _html_cache:
+        return _html_cache[ck]
+    if url in _html_cache:  # 後方互換（selftestの合成HtmlSnapshot・素のurlキー）
+        return _html_cache[url]
     r = _fetch_decoded_html(url, allowed)
     if r is None:
+        _html_cache[ck] = None
         return None
     text, title, final_url = r
-    return HtmlSnapshot(text, title, final_url,
+    snap = HtmlSnapshot(text, title, final_url,
                         hashlib.sha256(text.encode("utf-8", "replace")).hexdigest())
+    _html_cache[ck] = snap
+    return snap
 
 
 def fetch_page(url, allowed=None):
@@ -734,6 +744,14 @@ def selftest():
           _gunzip_limited(gzip.compress(b"12345"), 5) == b"12345")
     ucase("gunzip: 上限+1バイトはNone",
           _gunzip_limited(gzip.compress(b"123456"), 5) is None)
+
+    # ★fetch_html のキャッシュ/モック契約（_html_cache 経由・D-1a-2-2）★
+    _html_cache.clear()
+    _hs = HtmlSnapshot("<h1>x</h1>", "T", "https://x.test/a", "deadbeef")
+    _html_cache["https://x.test/a"] = _hs
+    ucase("fetch_html: _html_cacheの合成HtmlSnapshotを返す",
+          fetch_html("https://x.test/a") is _hs)
+    _html_cache.clear()
 
     ok = all(results)
     log(f"=== selftest: {sum(results)}/{len(results)} 合格 → {'✅ 全テスト成功' if ok else '❌ 失敗あり'} ===")
