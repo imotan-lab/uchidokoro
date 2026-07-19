@@ -304,6 +304,104 @@ def check_claim_identity(item, mode, scope, value, unit, quote,
     return REVIEW, review_reason
 
 
+# ══════════════════════════════════════════════════════════════
+# B-2: 項目別 異常検知（Codex 3段設計・2026-07-19）
+#   1) ハード制約 → REJECT（型/単位/小数桁/物理的に不可能な範囲）
+#   2) 関係制約  → REVIEW（設定間の単調性等・機種仕様依存なので断定しない）
+#   3) 異常値検知 → REVIEW（前回公開値との差/小数点移動/一桁置換/典型帯外）
+#   公開の必要条件: C5==PASS かつ hard==PASS かつ relational!=REJECT かつ anomaly空
+# ══════════════════════════════════════════════════════════════
+
+ITEM_SPEC = {
+    # key:            kind   unit  hard範囲(物理限界)   典型帯(soft)       小数  跳ね閾値(絶対,相対)
+    "ceiling.game":  {"kind": "int",   "unit": "G",  "hard": (50, 5000),   "typical": (150, 2800), "jump_abs": 400,  "jump_rel": 0.2},
+    "ceiling.point": {"kind": "int",   "unit": "pt", "hard": (100, 9000),  "typical": (300, 5000), "jump_abs": 1000, "jump_rel": 0.3},
+    "ceiling.through": {"kind": "int", "unit": None, "hard": (1, 40),      "typical": (1, 20),     "jump_abs": 3,    "jump_rel": 0.5},
+    "ceiling.cycle": {"kind": "int",   "unit": None, "hard": (1, 40),      "typical": (1, 20),     "jump_abs": 3,    "jump_rel": 0.5},
+    "kikaiwari":     {"kind": "float", "unit": "%",  "hard": (90.0, 135.0), "typical": (95.0, 120.0), "decimals": 1, "jump_abs": 3.0, "jump_rel": 0.05},
+}
+
+
+def _as_num(v):
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f
+
+
+def _digits_only(v) -> str:
+    """数値の有効数字列（小数点・符号を除く。桁比較用）。末尾ゼロは保持しない小数のため
+    Decimal的でなく単純str化＝一桁置換/桁移動の近似検知に使う。"""
+    s = ("%g" % float(v))
+    return re.sub(r"[^0-9]", "", s)
+
+
+def _is_decimal_shift(a: float, b: float) -> bool:
+    """a が b の10倍/1/10（小数点移動）に近いか。"""
+    if b == 0:
+        return False
+    for factor in (10.0, 0.1):
+        if abs(a - b * factor) <= max(1e-9, abs(b * factor) * 1e-6):
+            return True
+    return False
+
+
+def anomaly_check(item_key: str, value, current=None) -> tuple[str, list[str]]:
+    """単一値の異常検知。戻り値 (verdict, flags)。
+    verdict: REJECT(ハード違反) / REVIEW(異常フラグあり) / PASS(問題なし)。"""
+    spec = ITEM_SPEC.get(item_key)
+    if spec is None:
+        return REVIEW, [f"未知の項目 {item_key}（仕様未定義＝自動採用しない）"]
+    x = _as_num(value)
+    if x is None:
+        return REJECT, ["数値でない"]
+    # (1) ハード: 型
+    if spec["kind"] == "int" and abs(x - round(x)) > 1e-9:
+        return REJECT, [f"整数であるべき項目に小数 {value}"]
+    if spec["kind"] == "float" and "decimals" in spec:
+        # 小数桁が仕様を超える（例: 機械割 97.85 は桁過多）
+        frac = ("%.10f" % x).rstrip("0").split(".")[1] if "." in ("%.10f" % x) else ""
+        if len(frac.rstrip("0")) > spec["decimals"]:
+            return REJECT, [f"小数桁が仕様({spec['decimals']})超過: {value}"]
+    # (1) ハード: 物理的に不可能な範囲
+    lo, hi = spec["hard"]
+    if not (lo <= x <= hi):
+        return REJECT, [f"物理的に不可能な範囲: {value}（許容 {lo}〜{hi}）"]
+
+    flags = []
+    # (3) 異常値: 典型帯外（soft）
+    tlo, thi = spec["typical"]
+    if not (tlo <= x <= thi):
+        flags.append(f"典型帯({tlo}〜{thi})外: {value}")
+    # (3) 異常値: 前回公開値との比較
+    c = _as_num(current)
+    if c is not None:
+        if _is_decimal_shift(x, c):
+            flags.append(f"小数点/桁移動の疑い（{current}→{value}）")
+        jabs = abs(x - c)
+        if jabs > spec["jump_abs"] or (c and jabs > spec["jump_rel"] * abs(c)):
+            flags.append(f"前回公開値から大きく変化（{current}→{value}）")
+    return (REVIEW if flags else PASS), flags
+
+
+def anomaly_check_setting_array(item_key: str, settings: dict) -> tuple[str, list[str]]:
+    """設定別の値配列（{設定番号: 値}）の関係制約＋各値のハード検査。
+    単調性・同一値は REVIEW（機種仕様依存＝断定しない）。各値のハード違反は REJECT。"""
+    flags = []
+    for s, v in settings.items():
+        vd, fl = anomaly_check(item_key, v)
+        if vd == REJECT:
+            return REJECT, [f"設定{s}: " + "; ".join(fl)]
+        flags += [f"設定{s}: {f}" for f in fl]
+    vals = [settings[s] for s in sorted(settings)]
+    if len(set(vals)) < len(vals):
+        flags.append("設定間で同一値あり（要確認）")
+    if vals != sorted(vals):
+        flags.append("設定順で単調増加でない（機種仕様なら可・要確認）")
+    return (REVIEW if flags else PASS), flags
+
+
 def selftest() -> int:
     results = []
 
@@ -376,6 +474,54 @@ def selftest() -> int:
       C("天井", "normal", None, 1000, "G", "旧情報では1000Gだったが正しくは1200G") == REVIEW)
     t("同一文脈に複数mode → REVIEW",
       C("天井", "normal", None, 1000, "G", "通常時とリセットで天井は1000G") == REVIEW)
+
+    # ── B-2 異常検知 ──────────────────────────────
+    A = anomaly_check
+    t("★機械割 97.8→107.8（範囲内だが大変化）→ REVIEW",
+      A("kikaiwari", 107.8, current=97.8)[0] == REVIEW)
+    t("機械割 97.8→97.9（正常な微変化）→ PASS",
+      A("kikaiwari", 97.9, current=97.8)[0] == PASS)
+    t("機械割 300%（物理的に不可能）→ REJECT", A("kikaiwari", 300)[0] == REJECT)
+    t("機械割 小数桁過多 97.85 → REJECT", A("kikaiwari", 97.85)[0] == REJECT)
+    t("天井 1268→12680（桁移動）→ REVIEW",
+      A("ceiling.game", 12680, current=1268)[0] in (REVIEW, REJECT))  # 12680は範囲外→REJECTでも可
+    t("天井 1268→126.8（小数点移動）→ REVIEW",
+      A("ceiling.game", 126.8, current=1268)[0] in (REVIEW, REJECT))
+    t("天井 1268→1258（下位桁の微修正10G）→ PASS",
+      A("ceiling.game", 1258, current=1268)[0] == PASS)
+    t("天井 1268→2268（高位桁の打ち間違い）→ REVIEW",
+      A("ceiling.game", 2268, current=1268)[0] == REVIEW)
+    t("天井 1268→1280（正常な微修正）→ PASS",
+      A("ceiling.game", 1280, current=1268)[0] == PASS)
+    t("天井 整数項目に小数 1268.5 → REJECT", A("ceiling.game", 1268.5)[0] == REJECT)
+    t("スルー天井 7回（正常）→ PASS", A("ceiling.through", 7)[0] == PASS)
+    t("スルー天井 99回（不可能）→ REJECT", A("ceiling.through", 99)[0] == REJECT)
+    # 設定配列: 単調でない/同一値は REVIEW、範囲外は REJECT
+    t("機械割配列 単調増加 → PASS",
+      anomaly_check_setting_array("kikaiwari",
+                                  {1: 97.8, 2: 98.5, 5: 105.0, 6: 110.0})[0] == PASS)
+    t("機械割配列 設定6が設定1より低い（単調崩れ）→ REVIEW",
+      anomaly_check_setting_array("kikaiwari",
+                                  {1: 105.0, 2: 103.0, 6: 98.0})[0] == REVIEW)
+
+    # ★mutation test★: gold値の"意味のある変異"（桁移動/大跳ね/高位桁置換）は必ず非PASS。
+    # 下1桁の微差は正常変化なので変異に含めない（それはPASSでよい）。
+    GOLD = [("ceiling.game", 1268), ("ceiling.game", 800), ("kikaiwari", 97.8),
+            ("kikaiwari", 110.0), ("ceiling.point", 1000), ("ceiling.through", 6)]
+    mut_ok = True
+    for item, good in GOLD:
+        if A(item, good, current=good)[0] != PASS:
+            mut_ok = False
+            print(f"   NG 原値がPASSでない: {item} {good}")
+        g = float(good)
+        muts = {g * 10, g / 10.0, g + ITEM_SPEC[item]["jump_abs"] * 2}  # 桁移動＋大跳ね（必ず異常）
+        for mv in muts:
+            if abs(mv - g) < 1e-9:
+                continue
+            if A(item, mv, current=good)[0] == PASS:
+                mut_ok = False
+                print(f"   NG 変異値がPASSされた: {item} {good}→{mv}")
+    t("mutation test: gold変異(桁移動/大跳ね/高位桁置換)は全て非PASS・原値PASS", mut_ok)
 
     ok_all = all(c for _, c in results)
     print(f"\nselftest: {sum(1 for _, c in results if c)}/{len(results)} 合格")
