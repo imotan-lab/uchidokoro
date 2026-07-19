@@ -775,14 +775,37 @@ def build_document_snapshot(hs, page) -> DocumentSnapshot:
     )
 
 
-_SENT_SPLIT = re.compile(r"[。！？\n；;]")  # 文区切り（★半角 . は小数点(97.4)保護のため使わない）
+# ── D-1a-2-3 増分B: 構造単位を唯一の局所束縛元にする（平坦 _sentences_with_value は撤去）──
+
+def _unit_contains_value(unit_text: str, raw: str) -> bool:
+    """構造単位のテキストが値(raw)を数字境界つきで含むか（C4と同じ規則・隣接連結の誤検出も回避）。"""
+    nsp = vc.normalize_spaced(unit_text)
+    toks = vc._value_tokens(vc.normalize(raw))
+    if toks:
+        return all(vc._token_in(t, nsp) for t in toks)
+    return vc.normalize(raw) in vc.normalize(unit_text)
 
 
-def _sentences_with_value(ntext: str, raw: str):
-    """正規化本文を文単位に割り、値(raw)を桁境界つきで含む文を返す（機種×値の意味束縛用・Codex Critical）。
-    ★束縛はページ由来の「値を含む文」で行う＝claimantのquote水増しで別機種を束縛できない★"""
-    pat = re.compile(r"(?<![0-9.])" + re.escape(vc.normalize(raw)) + r"(?![0-9.])")
-    return [s for s in _SENT_SPLIT.split(ntext) if pat.search(s)]
+def _unit_heading_text(unit) -> str:
+    return " ".join(t for _lv, t in unit.heading_path if t)
+
+
+def _unit_bound_to_identity(unit, strong_ids) -> bool:
+    """★対象identityが「その単位の本文」に在るか★（兄弟単位も見出しパスも使わない・Codex増分B#1）。
+    見出しパスを identity 束縛に使うと、祖先見出しに対象機種名があるだけで、より近い別機種見出し配下の
+    別機種の値まで束縛してしまう（<h1>アクダマ><h2>バベル><p>バベルの天井967G>）＝誤PASS。
+    従って identity は必ず単位本文に要求する（見出しは _synth_for_c5 で mode/scope 供給にのみ使う）。"""
+    nunit = vc.normalize(unit.text)
+    return all(vc._ident_in(sid, nunit) for sid in strong_ids)
+
+
+def _synth_for_c5(unit) -> str:
+    """★C5へ渡す合成文脈（設計書v1.7 Q4）★＝見出し(mode/scope語)を値の直前文節に置いた1テキスト。
+    ／(SOFT区切り)で見出しを単位本文の直前に連結＝C5の支配文脈が「見出し＋値の文節」を拾える
+    （例: 見出し『朝一・リセット』＋単位『745Gで当選』→ reset を検出）。兄弟単位は結合しない。
+    ★見出しは mode/scope 供給専用＝identity 束縛には使わない（_unit_bound_to_identity 参照）★。"""
+    heads = _unit_heading_text(unit)
+    return ("見出し:" + heads + "／" + unit.text) if heads else unit.text
 
 
 def verify_evidence(field_key, evidence, identity, allowed_domains=None,
@@ -852,8 +875,8 @@ def verify_evidence(field_key, evidence, identity, allowed_domains=None,
     snapshot = fetch(url, allowed=allowed_domains)
     if snapshot is None:
         return _src(cval, "", False, REVIEW, "C1_FETCH_FAILED", field_key, raw)
-    page = vc.page_from_html_snapshot(snapshot)   # 平坦Page（再取得しない・同一スナップショット由来）
-    doc = build_document_snapshot(snapshot, page)  # ★D-1a-2-2 二重化：構造snapshotを併走（束縛には未使用）
+    page = vc.page_from_html_snapshot(snapshot)   # 平坦Page（C2/C3の同定・逐語確認に使う・再取得しない）
+    doc = build_document_snapshot(snapshot, page)  # ★D-1a-2-3 増分B：構造単位が束縛の唯一の局所束縛元★
     if vc.is_blocked_source(page.final_url):
         return _src(cval, "", False, REJECT, "C0_REDIRECT_BLOCKED", field_key, raw)
     # ★最終URLの許可ドメイン再検査（verify_evidence側の多層確認・キャッシュ経路も塞ぐ・Codex E8）
@@ -878,31 +901,38 @@ def verify_evidence(field_key, evidence, identity, allowed_domains=None,
     if nquote not in ntext:
         return _src(cval, dom, False, REJECT, "C3_QUOTE_NOT_ON_PAGE", field_key, raw)
 
-    # ★機種×値の意味束縛（Codex Critical・quote水増し攻撃対策）★
-    #   claimantのquote全体を束縛単位にせず、★ページ本文から「値を含む文」を抽出★し、その文に
-    #   canonical identity(3文字以上)があり、かつ C5 がその文でPASSすることを要求する。
-    #   別機種の値の文には対象名が同じ文に無いので弾ける。判定はページ由来の原子単位で行う
-    #   （claimantが値と対象名を1つのquoteに詰め込んでも、値の"文"に対象名が無ければ通らない）。
-    strong_ids = [s for s in nids if len(s) >= 3]     # 短縮語/一般語は束縛に使わない（Codex）
+    # ★機種×値の構造保持束縛（D-1a-2-3 増分B・平坦文束縛を置換／Codex増分A合格時の前提10項目）★
+    #   束縛元は DocumentSnapshot の構造単位のみ（★兄弟単位を結合しない★）。値を含む単位のうち、
+    #   ★対象identityが「その単位本文」に在り★（見出しは mode/scope 供給のみ・identity束縛には使わない）、
+    #   合成文脈(見出し＋単位)でC5がPASSするものだけを採用。
+    #   parse_warnings/truncated/意味割れ/対象外文脈での同値出現は全てREVIEW（fail-closed）。
+    strong_ids = [s for s in nids if len(s) >= 3]     # 短縮語/一般語は束縛に使わない（部分一致誤同定回避）
     if not strong_ids:
         return _src(cval, dom, False, REVIEW, "NO_STRONG_IDENTITY", field_key, raw, snapshot=snap)
-    sents = _sentences_with_value(ntext, raw)
-    if not sents:
+    value_units = [u for u in doc.units if _unit_contains_value(u.text, raw)]
+    # ★UNIT_TRUNCATED を PARSE_WARNINGS より先に判定（truncatedも警告に入るため到達不能を回避・Codex増分B#2）
+    if any("truncated" in u.parse_flags for u in value_units):   # 切り詰めた値単位はREVIEW（前提②）
+        return _src(cval, dom, False, REVIEW, "UNIT_TRUNCATED", field_key, raw, snapshot=snap)
+    if doc.parse_warnings:                            # 解析警告のある文書は自動公開しない（前提①）
+        return _src(cval, dom, False, REVIEW, "PARSE_WARNINGS", field_key, raw, snapshot=snap)
+    if not value_units:
         return _src(cval, dom, False, REVIEW, "VALUE_NOT_ON_PAGE", field_key, raw, snapshot=snap)
     # 項目別C5が未実装なら（値のページ実在は確認済みだが）自動公開しない
     if not reg["c5_ready"]:
         return _src(cval, dom, False, REVIEW, "C5_NOT_IMPLEMENTED", field_key, raw, snapshot=snap)
-    # 「値を含む文に対象identityがあり、その文でC5がPASS」する主張が1つでもあれば verified
-    for sent in sents:
-        if not any(sid in sent for sid in strong_ids):
-            continue   # 別機種の値の文（同一文に対象名が無い）
+    bound_units = [u for u in value_units if _unit_bound_to_identity(u, strong_ids)]
+    if not bound_units:                               # 値はあるが対象機種の単位でない（別機種文脈）
+        return _src(cval, dom, False, REVIEW, "C5_NO_LOCAL_MATCH", field_key, raw, snapshot=snap)
+    if len(bound_units) != len(value_units):          # 同値が対象外文脈にも出現＝意味割れ（前提⑦・fail-closed）
+        return _src(cval, dom, False, REVIEW, "VALUE_IN_OTHER_CONTEXT", field_key, raw, snapshot=snap)
+    # 合成文脈(見出し＋単位)でC5を評価。★全 bound 単位が PASS のときだけ verified（1つでも非PASSはREVIEW）★
+    for u in bound_units:
         verdict, _reason, c5code = check_claim_identity(
-            reg["c5_item"], reg["mode"], reg["scope"], cval, reg["unit"], sent)
-        if verdict == PASS:
-            # 返す value は evidence 側（検証器は値を書き換えない・cvalと一致確認済み）
-            return _src(ev_val, dom, True, PASS, "OK", field_key, raw, snapshot=snap)
-    # 対象機種と同一文で C5 PASS する値の主張が見つからない → 自動公開しない
-    return _src(cval, dom, False, REVIEW, "C5_NO_LOCAL_MATCH", field_key, raw, snapshot=snap)
+            reg["c5_item"], reg["mode"], reg["scope"], cval, reg["unit"], _synth_for_c5(u))
+        if verdict != PASS:
+            return _src(cval, dom, False, REVIEW, "C5_NO_LOCAL_MATCH", field_key, raw, snapshot=snap)
+    # 返す value は evidence 側（検証器は値を書き換えない・cvalと一致確認済み）
+    return _src(ev_val, dom, True, PASS, "OK", field_key, raw, snapshot=snap)
 
 
 def make_verifier(field_key, identity, allowed_domains=None, fetch_fn=None):
@@ -1047,6 +1077,58 @@ def selftest() -> int:
                                "アクダマの解析情報はこちら。バベルの通常時の天井は745Gで当選する", raw="745"), IDENT)
     t("★quote水増し(対象名を別文に混ぜる) → REVIEW(C5_NO_LOCAL_MATCH)",
       r["verified"] is False and r["c5_code"] == "C5_NO_LOCAL_MATCH")
+
+    # ── ★D-1a-2-3 増分B: 構造保持束縛（見出しがmode/scopeを供給・平坦束縛では不可）★ ──
+    # 見出し『朝一・リセット』が単位に reset 文脈を供給 → reset claim が PASS（単位本文に reset 語は無い）
+    mock_page("https://chonborista.com/hb-reset",
+              "<h2>朝一・リセット</h2><p>アクダマの天井は745G</p>", title="アクダマ 天井")
+    r = V("ceiling.reset", ev(745, "https://chonborista.com/hb-reset",
+                             "アクダマの天井は745G", raw="745"), IDENT)
+    t("★増分B: 見出しがreset文脈を供給→reset claimがPASS（構造保持束縛の核心）",
+      r["verified"] is True and r["c5_verdict"] == PASS)
+    # 見出しが通常時 → 同じ745でも reset claim は通らない（見出しの mode が効く）
+    mock_page("https://chonborista.com/hb-normal",
+              "<h2>通常時の天井</h2><p>アクダマの天井は745G</p>", title="アクダマ 天井")
+    r = V("ceiling.reset", ev(745, "https://chonborista.com/hb-normal",
+                             "アクダマの天井は745G", raw="745"), IDENT)
+    t("★増分B: 見出しが通常時→reset claimは非PASS（見出しmodeで弾く）",
+      r["verified"] is False)
+    # parse_warnings のある文書は値が正当単位にあっても REVIEW（前提①）
+    mock_page("https://chonborista.com/warn",
+              "<div>アクダマの天井は967G</div><ul><p>x</p></ul>", title="アクダマ 天井")
+    r = V("ceiling.normal", ev(967, "https://chonborista.com/warn",
+                              "アクダマの天井は967G", raw="967"), IDENT)
+    t("★増分B: parse_warnings(ul>p misplaced)のある文書は REVIEW(PARSE_WARNINGS)",
+      r["verified"] is False and r["c5_code"] == "PARSE_WARNINGS")
+    # 同値が対象外機種の単位にも出現 → 意味割れで REVIEW（前提⑦）
+    mock_page("https://chonborista.com/other",
+              "<p>アクダマの天井は967G</p><p>バベルの天井は967G</p>", title="アクダマ 天井")
+    r = V("ceiling.normal", ev(967, "https://chonborista.com/other",
+                              "アクダマの天井は967G", raw="967"), IDENT)
+    t("★増分B: 同値が別機種単位にも出現→REVIEW(VALUE_IN_OTHER_CONTEXT・意味割れ)",
+      r["verified"] is False and r["c5_code"] == "VALUE_IN_OTHER_CONTEXT")
+    # 値の単位に identity 無し（identity は兄弟単位）→ 兄弟結合しない＝REVIEW（前提⑥）
+    mock_page("https://chonborista.com/sib",
+              "<p>アクダマの解説はこちら</p><p>この機種の天井は967Gです</p>", title="アクダマ 天井")
+    r = V("ceiling.normal", ev(967, "https://chonborista.com/sib",
+                              "この機種の天井は967Gです", raw="967"), IDENT)
+    t("★増分B: 値の単位にidentity無し(兄弟単位にあるだけ)→兄弟結合せず REVIEW(C5_NO_LOCAL_MATCH)",
+      r["verified"] is False and r["c5_code"] == "C5_NO_LOCAL_MATCH")
+    # ★祖先見出しに対象機種名があっても、より近い別機種見出し配下の別機種値は束縛しない（Codex増分B#1）
+    mock_page("https://chonborista.com/ancestor",
+              "<h1>アクダマ</h1><p>アクダマの通常時の天井は967G</p>"
+              "<h2>バベル</h2><p>バベルの通常時の天井は967G</p>", title="アクダマ 天井")
+    r = V("ceiling.normal", ev(967, "https://chonborista.com/ancestor",
+                              "バベルの通常時の天井は967G", raw="967"), IDENT)
+    t("★増分B: 祖先h1がアクダマでも、値がバベル単位にも出る→identity単位本文要求で REVIEW(VALUE_IN_OTHER_CONTEXT)",
+      r["verified"] is False and r["c5_code"] == "VALUE_IN_OTHER_CONTEXT")
+    # ★truncated 単位（>2000字の単一文）を含む値は UNIT_TRUNCATED（PARSE_WARNINGSより先に到達・Codex増分B#2）
+    _big = "アクダマの天井は967Gで" + ("あ" * 2100)   # 句点を挟まない単一文＝2000字超で truncated
+    mock_page("https://chonborista.com/trunc", "<p>" + _big + "</p>", title="アクダマ 天井")
+    r = V("ceiling.normal", ev(967, "https://chonborista.com/trunc",
+                              "アクダマの天井は967Gで", raw="967"), IDENT)
+    t("★増分B: 切り詰め単位を含む値は UNIT_TRUNCATED（到達可能）",
+      r["verified"] is False and r["c5_code"] == "UNIT_TRUNCATED")
 
     # ── ★item_key一致強制（confused-deputy・Codex A3/再レビューHigh）──
     verify_kw = make_verifier("ceiling.normal.at", IDENT)
