@@ -55,6 +55,7 @@ claims.json の形式:
 """
 import argparse
 import gzip
+import hashlib
 import html
 import ipaddress
 import json
@@ -66,6 +67,7 @@ import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
+import zlib
 from collections import namedtuple
 from datetime import datetime
 
@@ -77,8 +79,12 @@ except Exception:
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) uchidokoro-claim-verifier/1.0"
 LOG_DIR = "C:/Users/imao_/Documents/uchidokoro/logs"
 Page = namedtuple("Page", "text title final_url")
+# ★D-1a構造保持取得用: 生HTML＋title＋最終URL＋本文hash（fetch_html が返す・fetch_pageは不変）
+HtmlSnapshot = namedtuple("HtmlSnapshot", "html title final_url html_sha256")
 _page_cache = {}
 _fetch_errors = {}
+_MAX_FETCH_BYTES = 5_000_000        # 圧縮取得の上限（DoS/非HTML巨大対策・Codex E10/D-1a-2-1）
+_MAX_DECODED_BYTES = 30_000_000     # gzip展開後の上限
 
 _CJK = re.compile(r"[ぁ-ゟァ-ヿ一-鿿々]")
 _FORCE_CRITICAL = ("天井", "機械割", "恩恵", "短縮")
@@ -133,22 +139,55 @@ def _opener_for(allowed):
     return _allowed_openers[key]
 
 
-def fetch_page(url, allowed=None):
-    """URLを取得し (本文テキスト, title, 最終URL) を返す。失敗はNone（安全側）。
-    allowed指定時は取得前URL・全リダイレクト・最終URLの全ホップで許可ドメインを強制。"""
-    ck = (url, None if not allowed else tuple(sorted(str(d).lower() for d in allowed)))
-    if ck in _page_cache:
-        return _page_cache[ck]
-    if url in _page_cache:  # 後方互換（selftestの合成ページ・素のurlキー）
-        return _page_cache[url]
-    # SSRF対策＋許可ドメイン: 取得前に安全検査（https/公開IP/userinfo無し＋allowed）
+def _gunzip_limited(raw, limit):
+    """gzip(連結メンバー対応)を limit バイトまでストリーミング展開。上限超過(gzip爆弾)・破損・途中切れ・空 は None。"""
+    if not raw:
+        return None  # 空入力（Content-Encoding: gzip なのに本文空＝途中切れ）は展開成功扱いしない
+    out = bytearray()
+    remaining = raw
+    while remaining:
+        d = zlib.decompressobj(31)   # 31 = gzip ヘッダ付き
+        try:
+            while True:
+                chunk = d.decompress(remaining, 1 << 16)
+                out.extend(chunk)
+                if len(out) > limit:
+                    return None
+                remaining = d.unconsumed_tail
+                if d.eof:
+                    break
+                if not chunk and not remaining:
+                    return None
+            remaining = d.unused_data
+        except zlib.error:
+            return None
+    return bytes(out)
+
+
+def _flatten_html(text):
+    """HTMLタグ/コメント/script/styleを除去して本文テキストへ平坦化（fetch_page/selftest共通）。"""
+    body = re.sub(r"(?s)<!--.*?-->", " ", text)
+    body = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", body)
+    body = re.sub(r"(?s)<[^>]+>", " ", body)
+    return html.unescape(body)
+
+
+def page_from_html_snapshot(snapshot):
+    """HtmlSnapshot(生HTML) を fetch_page 相当の Page(平坦本文) に変換（同一スナップショット再利用）。"""
+    return Page(_flatten_html(snapshot.html), snapshot.title, snapshot.final_url)
+
+
+def _fetch_decoded_html(url, allowed=None):
+    """★fetch_page/fetch_html 共通の取得実装（取得処理を複製しない）★
+    取得＋SSRF＋許可ドメイン＋取得/展開サイズ上限＋gzip＋charset＋最終URL許可再検査。
+    戻り (decoded_html, title, final_url) または None（失敗・安全側）。
+    ※同一スナップショットの共有は fetch_html→page_from_html_snapshot 経由の時のみ成立
+      （fetch_page と fetch_html を別々に呼ぶと2回取得になる＝呼出側の契約）。"""
     safe, why = (validate_source_url(url, allowed=allowed) if allowed
                  else is_public_fetchable_url(url))
     if not safe:
         _fetch_errors[url] = f"取得拒否: {why}"
-        _page_cache[ck] = None
         return None
-    page = None
     last_err = ""
     for attempt in range(2):
         try:
@@ -157,33 +196,68 @@ def fetch_page(url, allowed=None):
                 if res.status != 200:
                     last_err = f"HTTP {res.status}"
                     continue
-                raw = res.read()
+                raw = res.read(_MAX_FETCH_BYTES + 1)          # ★取得サイズ上限
+                if len(raw) > _MAX_FETCH_BYTES:
+                    _fetch_errors[url] = "取得サイズ上限超過"
+                    return None
                 final_url = res.geturl()
-                enc_hdr = (res.headers.get("Content-Encoding") or "").lower()
+                enc_hdr = (res.headers.get("Content-Encoding") or "").strip().lower()
                 header_charset = res.headers.get_content_charset()
-            if enc_hdr == "gzip" or raw[:2] == b"\x1f\x8b":
-                try:
-                    raw = gzip.decompress(raw)
-                except Exception:
-                    pass
+            # ★Content-Encodingはヘッダー優先で判定（未対応encodingをマジック詮索より先に拒否）★
+            #   gzip のみ展開。identity/空/未宣言はそのまま（HTTP準拠＝宣言なくgzip本文を送る鯖は想定外→
+            #   デコード失敗しC2同定で安全側不合格になる）。br/deflate等は取得段階で拒否。
+            if enc_hdr not in ("", "identity", "gzip"):
+                last_err = f"未対応のContent-Encoding: {enc_hdr}"
+                continue
+            if enc_hdr == "gzip":
+                raw = _gunzip_limited(raw, _MAX_DECODED_BYTES)  # ★gzip爆弾対策: 上限までストリーミング展開
+                if raw is None:
+                    last_err = "gzip展開失敗/上限超過/空"
+                    continue
+            if len(raw) > _MAX_DECODED_BYTES:                 # ★展開後サイズ上限（非圧縮も含む）
+                _fetch_errors[url] = "展開後サイズ上限超過"
+                return None
             text = _decode(raw, header_charset)
             tm = re.search(r"(?is)<title[^>]*>(.*?)</title>", text)
             title = html.unescape(tm.group(1)) if tm else ""
-            body = re.sub(r"(?s)<!--.*?-->", " ", text)  # コメントアウトされた旧スペックを本文扱いしない
-            body = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", body)
-            body = re.sub(r"(?s)<[^>]+>", " ", body)
-            body = html.unescape(body)
-            page = Page(body, title, final_url)
-            break
+            # 最終URLの許可ドメイン再確認（リダイレクトで許可外へ出ていないか・全ホップ強制の総仕上げ）
+            if allowed and not host_matches_allowlist(final_url, allowed):
+                _fetch_errors[url] = f"最終URLが許可ドメイン外: {final_url}"
+                return None
+            return (text, title, final_url)
         except Exception as e:
             last_err = f"{type(e).__name__}: {e}"
             continue
-    # 最終URLの許可ドメイン再確認（リダイレクトで許可外へ出ていないか・全ホップ強制の総仕上げ）
-    if page is not None and allowed and not host_matches_allowlist(page.final_url, allowed):
-        _fetch_errors[url] = f"最終URLが許可ドメイン外: {page.final_url}"
-        page = None
-    if page is None and url not in _fetch_errors:
-        _fetch_errors[url] = last_err or "不明"
+    _fetch_errors[url] = last_err or "不明"
+    return None
+
+
+def fetch_html(url, allowed=None):
+    """★D-1a構造保持取得用: 生HTML(decoded)＋title＋最終URL＋hash を返す（SSRF等はfetch_pageと共通）。★
+    失敗はNone。fetch_pageと同一検証内で別々に呼ばないこと（同一スナップショット要件）。"""
+    r = _fetch_decoded_html(url, allowed)
+    if r is None:
+        return None
+    text, title, final_url = r
+    return HtmlSnapshot(text, title, final_url,
+                        hashlib.sha256(text.encode("utf-8", "replace")).hexdigest())
+
+
+def fetch_page(url, allowed=None):
+    """URLを取得し (本文テキスト, title, 最終URL) を返す。失敗はNone（安全側）。★外部挙動は従来と不変★
+    allowed指定時は取得前URL・全リダイレクト・最終URLの全ホップで許可ドメインを強制。
+    取得処理は _fetch_decoded_html に集約（複製しない・2026-07-19 D-1a-2-1）。"""
+    ck = (url, None if not allowed else tuple(sorted(str(d).lower() for d in allowed)))
+    if ck in _page_cache:
+        return _page_cache[ck]
+    if url in _page_cache:  # 後方互換（selftestの合成ページ・素のurlキー）
+        return _page_cache[url]
+    r = _fetch_decoded_html(url, allowed)
+    if r is None:
+        _page_cache[ck] = None
+        return None
+    text, title, final_url = r
+    page = Page(_flatten_html(text), title, final_url)  # コメント/script/style除去→タグ平坦化
     _page_cache[ck] = page
     return page
 
@@ -644,6 +718,22 @@ def selftest():
                                   "quote": "天井は999G+α"}]}, 1, allowed_domains=["1geki.jp"])
     ucase("許可4ドメイン強制: 許可ドメインの数値claimは通過", rc_ok == 0)
     _page_cache.clear()
+
+    # ★gzip爆弾対策（_gunzip_limited・2026-07-19 D-1a-2-1）★
+    ucase("gunzip: 正常gzipを展開",
+          _gunzip_limited(gzip.compress(b"hello world"), 1000) == b"hello world")
+    ucase("gunzip: gzip爆弾は上限超過でNone",
+          _gunzip_limited(gzip.compress(b"x" * 10000), 100) is None)
+    ucase("gunzip: 破損gzipはNone",
+          _gunzip_limited(b"\x1f\x8b" + b"\x00" * 40, 1000) is None)
+    ucase("gunzip: 空入力はNone（途中切れ扱い）",
+          _gunzip_limited(b"", 1000) is None)
+    ucase("gunzip: 連結メンバーを結合展開",
+          _gunzip_limited(gzip.compress(b"aaa") + gzip.compress(b"bbb"), 1000) == b"aaabbb")
+    ucase("gunzip: 展開後が上限ちょうどはOK",
+          _gunzip_limited(gzip.compress(b"12345"), 5) == b"12345")
+    ucase("gunzip: 上限+1バイトはNone",
+          _gunzip_limited(gzip.compress(b"123456"), 5) is None)
 
     ok = all(results)
     log(f"=== selftest: {sum(results)}/{len(results)} 合格 → {'✅ 全テスト成功' if ok else '❌ 失敗あり'} ===")
