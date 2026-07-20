@@ -129,6 +129,37 @@ def _decode(raw, header_charset):
     return raw.decode("utf-8", errors="replace")  # 文字化けはC2同定で安全側不合格になる
 
 
+# 実在するUnicode符号位置は最大 0x10FFFF＝10進7桁/16進6桁。20桁超の数値文字参照は異常＝整数化DoS狙い。
+_CHARREF_MAX_DIGITS = 20
+
+
+def _has_overlong_numeric_charref(s):
+    """★生HTMLに「桁数が異常に長い数値文字参照 &#…; / &#x…;」があるか（html.unescape/HTMLParser前に線形検査）★
+    html.unescape と HTMLParser(convert_charrefs=True) は数値文字参照を int() で復号するため、数百万桁の
+    &#999…; を通すと（Pythonの整数文字列変換桁数制限が無効化された環境で）整数化CPU DoSになる。
+    ★取得直後・title/本文の unescape・平坦化・parser の前にこれで検出し取得拒否する（桁制限に依存しない安全弁）★。
+    計算量は O(len(s))＝str.find は前回一致位置以降のみ走査／桁計上は上限で早期打ち切り。"""
+    n = len(s)
+    i = s.find("&#")
+    while i != -1:
+        j = i + 2
+        if j < n and s[j] in ("x", "X"):     # 16進 &#x...
+            j += 1
+            k = j
+            while k < n and s[k] in "0123456789abcdefABCDEF":
+                k += 1
+                if k - j > _CHARREF_MAX_DIGITS:
+                    return True
+        else:                                 # 10進 &#... （ASCII 0-9 のみ・html仕様の[0-9]+と同義）
+            k = j
+            while k < n and "0" <= s[k] <= "9":
+                k += 1
+                if k - j > _CHARREF_MAX_DIGITS:
+                    return True
+        i = s.find("&#", i + 2)               # 次の &# へ（前回位置以降のみ＝全体で線形）
+    return False
+
+
 _allowed_openers = {}
 
 
@@ -219,6 +250,11 @@ def _fetch_decoded_html(url, allowed=None):
                 _fetch_errors[url] = "展開後サイズ上限超過"
                 return None
             text = _decode(raw, header_charset)
+            # ★title/本文の html.unescape・平坦化・parser の前に巨大数値文字参照を止める（整数化DoS防止・
+            #   Pythonの桁数制限に依存しない）。fetch_page(本番)・fetch_html(consensus) 双方をここで保護。★
+            if _has_overlong_numeric_charref(text):
+                _fetch_errors[url] = "巨大な数値文字参照（整数化DoS）→取得拒否"
+                return None
             tm = re.search(r"(?is)<title[^>]*>(.*?)</title>", text)
             title = html.unescape(tm.group(1)) if tm else ""
             # 最終URLの許可ドメイン再確認（リダイレクトで許可外へ出ていないか・全ホップ強制の総仕上げ）
@@ -752,6 +788,60 @@ def selftest():
     ucase("fetch_html: _html_cacheの合成HtmlSnapshotを返す",
           fetch_html("https://x.test/a") is _hs)
     _html_cache.clear()
+
+    # ★巨大数値文字参照の整数化DoS（Codex第5次）: 検出関数＋fetch層の関所（title unescape 前）★
+    ucase("charref: 巨大10進 &#…; を検出", _has_overlong_numeric_charref("<td x='&#" + "9" * 100 + ";'>"))
+    ucase("charref: 巨大16進 &#x…; を検出", _has_overlong_numeric_charref("a&#x" + "9" * 100 + ";b"))
+    ucase("charref: <title>内の巨大charrefも検出", _has_overlong_numeric_charref("<title>&#" + "9" * 100 + ";</title>"))
+    ucase("charref: 正常な短いcharrefは誤検知しない", not _has_overlong_numeric_charref("a&#12539;b&#x5929;c"))
+
+    import time as _t_mod
+
+    class _FakeHeaders:
+        def get(self, k, default=None):
+            return default
+        def get_content_charset(self):
+            return "utf-8"
+
+    class _FakeResp:
+        def __init__(self, data, url):
+            self._d, self._u, self.status, self.headers = data, url, 200, _FakeHeaders()
+        def read(self, n=-1):
+            return self._d
+        def geturl(self):
+            return self._u
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+
+    class _FakeOpener:
+        def __init__(self, d, u):
+            self._d, self._u = d, u
+        def open(self, req, timeout=None):
+            return _FakeResp(self._d, self._u)
+
+    _g = globals()
+    _save_ipf, _save_open = _g["is_public_fetchable_url"], _g["_opener_for"]
+    _save_limit = sys.get_int_max_str_digits() if hasattr(sys, "get_int_max_str_digits") else None
+    try:
+        if _save_limit is not None:
+            sys.set_int_max_str_digits(0)   # 桁制限を無効化＝int() DoSが顕在化する条件（この状態で有界を実証）
+        _url = "https://example.test/hugetitle"
+        _big = ("<html><head><title>&#" + "9" * 3_000_000
+                + ";</title></head><body>x</body></html>").encode("utf-8")
+        _g["is_public_fetchable_url"] = lambda u, _resolve=True: (True, "ok")
+        _g["_opener_for"] = lambda allowed: _FakeOpener(_big, _url)
+        _t0 = _t_mod.time()
+        _res = _fetch_decoded_html(_url)
+        _dt = _t_mod.time() - _t0
+        ucase("fetch層: <title>巨大charrefは unescape 前に取得拒否(None)＋短時間（桁制限無効でもDoSなし）",
+              _res is None and _dt < 3.0)
+    finally:
+        _g["is_public_fetchable_url"] = _save_ipf
+        _g["_opener_for"] = _save_open
+        if _save_limit is not None:
+            sys.set_int_max_str_digits(_save_limit)
 
     ok = all(results)
     log(f"=== selftest: {sum(results)}/{len(results)} 合格 → {'✅ 全テスト成功' if ok else '❌ 失敗あり'} ===")
