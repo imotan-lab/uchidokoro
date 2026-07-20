@@ -45,6 +45,11 @@ _TYPE_PREFIX_RE = re.compile(r"^[lsｌｓ](?=[^a-z]|$)", re.IGNORECASE)
 #     補助見出し「天井・設定判別」の判定も狂う）。長音「ー」は名前の一部なので残す。
 _NONCORE_RE = re.compile(r"[^0-9a-zぁ-ゖァ-ヺーｦ-ﾟ一-鿿]+")
 
+_NAME_CHAR = r"0-9a-zぁ-ゖァ-ヺー一-鿿"
+_PLATFORM_RE = re.compile(
+    rf"(?<![{_NAME_CHAR}])(?:" + "|".join(_PLATFORM_WORDS) + rf")(?![{_NAME_CHAR}])",
+    re.IGNORECASE)
+
 MIN_ALIAS_CORE = 3   # 同定に使ってよい別名の芯の最短長（汎用語よけ）
 
 
@@ -53,10 +58,26 @@ def normalize_core(s: str) -> str:
     if not s:
         return ""
     s = unicodedata.normalize("NFKC", str(s)).lower()
+    # ★販売区分語は「独立した語」としてだけ落とす（2026-07-21 Codex8巡目 指摘3）★
+    #   位置を問わず消すと「Lアニマルスロット ドッチ」の芯が「アニマルドッチ」になり、
+    #   別機種「Lアニマルドッチ」のページを本人と誤認してしまう。
+    #   前後が名前の文字でない時だけ削る（「アニマルスロット」の"スロット"は残る）。
+    #   ①先頭に付く場合は無条件で落とす（「スマスロ北斗の拳」）
+    #   ②途中にある場合は独立した語の時だけ落とす（「バベル（スマスロ/スロット）」）
+    #     ＝「アニマルスロット」の"スロット"は名前の一部なので残る
     s = _TYPE_PREFIX_RE.sub("", s)
-    for w in _PLATFORM_WORDS:
-        s = s.replace(w.lower(), "")
-        s = s.replace(unicodedata.normalize("NFKC", w).lower(), "")
+    changed = True
+    while changed:
+        changed = False
+        t = s.lstrip(" 　")
+        for w in _PLATFORM_WORDS:
+            wl = unicodedata.normalize("NFKC", w).lower()
+            if t.startswith(wl):
+                s, t, changed = t[len(wl):], t[len(wl):], True
+        t2 = _TYPE_PREFIX_RE.sub("", t)
+        if t2 != t:
+            s, changed = t2, True
+    s = _PLATFORM_RE.sub("", s)
     s = _NONCORE_RE.sub("", s)
     return s
 
@@ -287,6 +308,8 @@ _ARTICLE_TERMS = (
     "演出", "仕様", "性能", "確率", "法則", "抽選", "継続", "期待", "数値", "解説",
     "実践", "実戦", "導入", "価格", "中古", "基本", "通常時", "有利", "概要", "感想",
     "打感", "完全", "詳細", "一覧", "比率", "振り分け", "示唆", "契機", "条件",
+    "配列", "リール", "状態", "内部", "上位", "下位", "到達", "移行", "突入", "獲得",
+    "枚数", "純増", "区間", "参考", "考察", "検証", "動画", "画像", "note", "メモ",
 )
 _LEAD_PARTICLE_RE = re.compile(r"^(の|は|が|を|に|で|と|も|や|へ|から|まで|なら|って)+")
 
@@ -308,8 +331,10 @@ def tail_verdict(tail: str) -> str:
     # ★短く助詞を含まない余りは「機種名の続き」とみなす（2026-07-21 Codex6巡目 指摘7）★
     #   例「北斗の拳 宿命」「○○ 覚醒」「○○ 絆」。派生語を列挙し切るのは不可能なので、
     #   長さと助詞の有無という構造で判定する。説明文（「搭載ATの抽選」）は助詞を含む。
-    if body and any(body.startswith(t) for t in _ARTICLE_TERMS):
-        return "unknown"                      # AT性能 / CZ確率 / 演出法則 ＝記事の内容
+    # ★記事用語を「含む」なら記事の内容とみなす（Codex8巡目 指摘5）★
+    #   先頭一致だけだと「上位AT性能」「リール配列」「内部状態」を派生機扱いしていた。
+    if body and any(t in body for t in _ARTICLE_TERMS):
+        return "unknown"                      # AT性能 / 上位AT性能 / 演出法則 ＝記事の内容
     # ★短く助詞を含まない余りは機種名の続きとみなす（上限を12文字へ・指摘5）★
     #   天昇スペシャル・アルティメット等の長い派生名を取り逃がさないため。
     if body and len(body) <= 12 and not re.search(r"[のはがをにでともやへ]", body):
@@ -957,6 +982,24 @@ def selftest() -> int:
            "aliases": ["モンキーターン"]}
     eq("モンキーターン" in accept_cores_for(mk2, [mk2]), True,
        "名前に世代表記があれば別名も使える")
+
+    # --- 8巡目Codexレビュー ---
+    eq(normalize_core("Lアニマルスロット ドッチ"), "アニマルスロットドッチ",
+       "名前の中の「スロット」は消さない")
+    eq(normalize_core("Lアニマルドッチ"), "アニマルドッチ", "別機種は別の芯になる")
+    eq(normalize_core("スマスロアニマルスロット ドッチ"), "アニマルスロットドッチ",
+       "先頭のスマスロは消す")
+    eq(normalize_core("バベル（スマスロ/スロット）"), "バベル", "括弧内の区分語は消す")
+    eq(check_title("【Lアニマルドッチ】天井・解析", ["アニマルスロットドッチ"], [], [])[0],
+       False, "似た名前の別機種は不合格")
+    eq(check_title("【Lバンドリ！】バンドリ 上位AT性能 天井", ["バンドリ"], [], [])[0], True,
+       "記事テーマ（上位AT性能）は落とさない")
+    eq(check_title("【Lバンドリ！】バンドリ リール配列", ["バンドリ"], [], [])[0], True,
+       "記事テーマ（リール配列）は落とさない")
+    eq(check_title("【Lバンドリ！】バンドリ 内部状態", ["バンドリ"], [], [])[0], True,
+       "記事テーマ（内部状態）は落とさない")
+    eq(tail_verdict("上位at性能"), "unknown", "記事用語を含む余り")
+    eq(tail_verdict("リール配列"), "unknown", "記事用語を含む余り2")
 
     # --- 危険パターンは必ず落ちること ---
     # 芯が一致しないのに部分一致で通る、を許さない

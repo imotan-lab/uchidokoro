@@ -112,6 +112,50 @@ def conditional_hit(text: str) -> str | None:
     return m.group(0) if m else None
 
 
+# ★「主天井である」ことを肯定的に確認する（2026-07-21 Codex8巡目 指摘1）★
+#   限定条件語の除外リストは原理的に取りこぼす（設定6のみ／CZ失敗時／2回目のみ…）。
+#   そこで発想を逆にし、【値の前に書かれている語が、主天井を表す定型語だけであること】を
+#   要求する。日本語では条件は値より前に来る（「設定変更時は…800G」）ため、
+#   値より前の部分（prefix）だけを見れば条件の有無が判定できる。
+#   値より後ろ（恩恵の説明）は判定に使わない＝正しい出典を落とさない。
+_PREFIX_ALLOWED = (
+    "通常時", "通常", "最大", "約", "天井", "規定", "ゲーム数", "g数", "消化", "到達",
+    "まで", "また", "なお", "この", "その", "本機", "は", "を", "で", "に", "の", "が",
+    "と", "も", "や", "へ", "から", "・", "、", "。", "「", "」", "※", "→", "-", "—",
+    "＋", "+", "(", ")", "[", "]", "…", "！", "!", "／", "/",
+)
+_PREFIX_RESIDUAL_MAX = 2       # 定型語を除いた残りがこれ以下なら「主天井の記述」とみなす
+
+
+def quote_prefix(quote: str, value) -> str | None:
+    """引用文のうち★値より前★の部分を返す（値が見つからなければ None）。"""
+    n = _norm_text(quote)
+    v = str(int(float(value))) if float(value).is_integer() else str(value)
+    m = re.search(rf"(?<![0-9.,]){re.escape(v)}(?![0-9])", n)
+    if not m:
+        m = re.search(rf"(?<![0-9.,]){re.escape(f'{int(float(value)):,}')}(?![0-9])", n)             if float(value).is_integer() else None
+    return n[:m.start()] if m else None
+
+
+def main_ceiling_quote(quote: str, value, cores=()) -> str | None:
+    """主天井の記述だと肯定的に確認できなければ理由を返す（＝修正に使わない）。"""
+    prefix = quote_prefix(quote, value)
+    if prefix is None:
+        return f"引用の中に値({value})が見つからない"
+    hit = conditional_hit(prefix)
+    if hit:
+        return f"値の前に限定条件「{hit}」がある"
+    rest = prefix
+    for c in sorted([c for c in (cores or ()) if c], key=len, reverse=True):
+        rest = rest.replace(_norm_text(c), "")
+    for w in sorted(_PREFIX_ALLOWED, key=len, reverse=True):
+        rest = rest.replace(_norm_text(w), "")
+    rest = re.sub(r"[\s　]", "", rest)
+    if len(rest) > _PREFIX_RESIDUAL_MAX:
+        return f"値の前に定型語以外の記述がある（「{rest[:20]}」）＝主天井と断定できない"
+    return None
+
+
 # 矛盾スキャンで使う単位表記（旧値がページに載っていないかを見る）
 UNIT_WORDS = {
     "game": ("G", "ゲーム"), "point": ("pt", "ポイント"),
@@ -313,9 +357,13 @@ def classify(site_claims: list[dict], codex_claims: list[dict],
         elif codex.get("scope") not in PLAIN_SCOPES:
             why = f"条件付きの天井（scope={codex.get('scope')}）＝サイトの値と同じものか決まらない"
         # ★引用文に限定条件が書かれていれば主天井の置き換えに使わない（指摘7）★
-        elif conditional_hit(quotes):
-            why = (f"出典の引用に限定条件（{conditional_hit(quotes)}）が含まれる"
-                   f"＝主天井と同じものか決まらない")
+        # ★全ての引用が「主天井の記述」だと肯定的に確認できること（Codex8巡目 指摘1）★
+        elif any(main_ceiling_quote(e.get("raw_quote"), codex.get("value"))
+                 for e in ev_used):
+            bad = next(main_ceiling_quote(e.get("raw_quote"), codex.get("value"))
+                       for e in ev_used if main_ceiling_quote(e.get("raw_quote"),
+                                                             codex.get("value")))
+            why = f"引用を主天井の記述と確認できない（{bad}）"
         elif site.get("value") is None or codex.get("value") is None:
             why = "値が欠けている"
         elif shadow_claims._norm_unit(site.get("unit")) != shadow_claims._norm_unit(codex.get("unit")):
@@ -331,6 +379,11 @@ def classify(site_claims: list[dict], codex_claims: list[dict],
         #   理由にしない。代わりに「Codexが限定条件を名乗っていないこと（PLAIN_SCOPES）」と
         #   「引用文に限定条件語が無いこと」で守る（上の2条件）。
         #   ただしCodexが★既知の語彙に無いscope★を出した場合は意味が確定しないので止める。
+        elif any(site.get(a) is not None and codex.get(a) is not None
+                 and site.get(a) != codex.get(a) for a in ("operator", "plus_alpha")):
+            why = ("operator/plus_alpha が食い違う"
+                   f"（site={site.get('operator')}/{site.get('plus_alpha')} "
+                   f"codex={codex.get('operator')}/{codex.get('plus_alpha')}）")
         elif "scope_unverified" in (r.get("attrs_unverified") or []):
             why = f"Codexのscopeが未知の語（{codex.get('scope')}）＝同じ項目と確定できない"
         else:
@@ -400,10 +453,15 @@ def contradiction_scan(cand: dict, allowed, pairs=()) -> str | None:
             # 同じ引用がページ内に複数ある＝どの文脈の値か決められない（指摘4）
             return f"引用がページ内に複数ある（{url}）＝どの文脈の値か決められない"
         i = hits[0]
-        ctx = ntext[max(0, i - CONTEXT_BEFORE):i + len(nq) + CONTEXT_AFTER]
+        # ★固定文字数の窓ではなく「同じ文の中」に限定する（Codex8巡目 指摘6）★
+        #   窓方式だとページ共通の見出し（朝一・リセット・天井まとめ）を拾って
+        #   正しい主天井まで落としてしまう。文の区切りで切って直前の文脈だけ見る。
+        head = ntext[max(0, i - CONTEXT_BEFORE):i]
+        seg_start = max(head.rfind(d) for d in ("。", "！", "？", "】", "」", "・", "\n"))
+        ctx = head[seg_start + 1:] if seg_start >= 0 else head
         hit = conditional_hit(ctx)
         if hit:
-            return (f"引用の前後に限定条件「{hit}」がある（{url}）"
+            return (f"引用と同じ文に限定条件「{hit}」がある（{url}）"
                     f"＝主天井の値か決められない")
     return None
 
@@ -830,6 +888,26 @@ def selftest() -> int:
     empty_ev["evidence"] = []
     c = classify([S(K, 900)], [empty_ev], [R(K, "UNKNOWN", "numeric_divergence")])
     eq(len(c["fix_candidates"]), 0, "引用が無いものは修正しない")
+
+    # 9.99 主天井であることの肯定確認（Codex8巡目 指摘1）
+    for q, v in (("通常時を最大1268G+α消化で天井到達", 1268),
+                 ("・通常時最大 1268G+α で天井到達", 1268),
+                 ("通常時は最大10周期到達でAT当選。", 10),
+                 ("天井は1268G＋α消化でバトルボーナスに当選。天井ATは継続率優遇", 1268)):
+        eq(main_ceiling_quote(q, v), None, f"主天井と確認できる: {q[:20]}")
+    for q, v in (("設定変更時は天井G数が短縮され、800G+αで天井到達となる。", 800),
+                 ("設定6のみ天井は800G", 800), ("AT終了時は800G", 800),
+                 ("CZ失敗時の天井は800G", 800), ("2回目のみ800G", 800),
+                 ("AT天井は1000G", 1000), ("駆け抜け後は800G", 800),
+                 ("ST単発終了4連続後にST当選でスルー回数天井に到達し、", 4)):
+        eq(bool(main_ceiling_quote(q, v)), True, f"主天井と確認できない: {q[:20]}")
+    eq(bool(main_ceiling_quote("天井はG数管理", 900)), True, "値が無い引用は不合格")
+    c = classify([S(K, 900)], [C(K, 800, quote="設定6のみ天井は{v}G")],
+                 [R(K, "UNKNOWN", "numeric_divergence")])
+    eq(len(c["fix_candidates"]), 0, "設定限定の引用では修正しない")
+    c = classify([S(K, 900)], [C(K, 1000, quote="通常時を最大{v}G消化で天井到達")],
+                 [R(K, "UNKNOWN", "numeric_divergence")])
+    eq(len(c["fix_candidates"]), 1, "主天井の引用なら修正候補になる")
 
     # 10. 選定は評価日が古い順・preview機種は対象外
     ms = [{"slug": "a"}, {"slug": "b"}, {"slug": "c", "status": "preview"}]
