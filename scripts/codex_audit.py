@@ -103,13 +103,34 @@ def _norm_text(s: str) -> str:
     return re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(s or ""))).lower()
 
 
-def conditional_hit(text: str) -> str | None:
-    """限定条件つき（主天井ではない）を示す表現があれば、その語を返す。"""
+# ★天井種別ごとに「その機種では主天井を表す語」（2026-07-21 実データ較正）★
+#   周期天井の機種にとって「周期天井」は主天井そのものであり条件語ではない。
+#   逆にG数天井の機種で「周期天井」が出てきたら別系統なので条件語のまま。
+_TYPE_VOCAB = {
+    "game": ("g数天井", "ゲーム数天井", "ゲーム数", "g数"),
+    "point": ("ポイント天井", "pt天井", "ポイント", "pt", "gポイント"),
+    "cycle": ("周期天井", "周期数", "周期"),
+    "through": ("スルー回数天井", "スルー天井", "スルー回数", "スルー"),
+}
+
+
+def conditional_hit(text: str, ceiling_type: str = "") -> str | None:
+    """限定条件つき（主天井ではない）を示す表現があれば、その語を返す。
+
+    ceiling_type を渡すと、その種別自身を表す語（周期天井・スルー天井等）は
+    条件語とみなさない（＝周期天井の機種で「周期天井」を条件扱いしない）。
+    """
     global _COND_RE
     if _COND_RE is None:
         _COND_RE = re.compile("|".join(_COND_PATTERNS))
-    m = _COND_RE.search(_norm_text(text))
-    return m.group(0) if m else None
+    n = _norm_text(text)
+    own = [_norm_text(w) for w in _TYPE_VOCAB.get(ceiling_type or "", ())]
+    for m in _COND_RE.finditer(n):
+        g = m.group(0)
+        if any(g in w or w in g for w in own if len(w) >= 2):
+            continue          # その機種自身の天井種別を指す語
+        return g
+    return None
 
 
 # ★「主天井である」ことを肯定的に確認する（2026-07-21 Codex8巡目 指摘1）★
@@ -208,6 +229,8 @@ def _until_sentence_end(text: str) -> str:
 
 def main_ceiling_quote(quote: str, value, cores=(), ceiling_type: str = "game") -> str | None:
     """主天井の記述だと肯定的に確認できなければ理由を返す（＝修正に使わない）。"""
+    if value is None or not isinstance(value, (int, float)) or isinstance(value, bool):
+        return f'値が数値でない（{value!r}）'
     n_all = _norm_text(quote)
     if not any(_norm_text(w) in n_all for w in _CEILING_WORDS):
         # 「最大100pt獲得」「最大4回転継続」等＝天井の記述ではない（指摘6）
@@ -219,16 +242,17 @@ def main_ceiling_quote(quote: str, value, cores=(), ceiling_type: str = "game") 
     #   例「設定変更時は800G、通常時の天井も800G」
     reasons = []
     for prefix, suffix in splits:
-        hit = conditional_hit(prefix)
+        hit = conditional_hit(prefix, ceiling_type)
         if hit:
             reasons.append(f"値の前に限定条件「{hit}」がある")
             continue
         # ★値の直後の注記も見る（指摘2: 「天井は800G（設定変更時のみ）」）★
-        hit2 = conditional_hit(_until_sentence_end(suffix or ""))
+        hit2 = conditional_hit(_until_sentence_end(suffix or ""), ceiling_type)
         if hit2:
             reasons.append(f"値の直後に限定条件「{hit2}」がある")
             continue
-        rest = _consume_allowed(prefix, cores)
+        rest = _consume_allowed(prefix, list(cores or ()) +
+                                list(_TYPE_VOCAB.get(ceiling_type or "", ())))
         if rest:
             reasons.append(f"値の前に定型語以外の記述がある（「{rest[:20]}」）")
             continue
@@ -1044,6 +1068,19 @@ def selftest() -> int:
     eq(main_ceiling_quote(
         "天井は1268G＋α消化でバトルボーナスに当選。天井ATは継続率優遇。本前兆中に天井到達",
         1268, ceiling_type="game"), None, "次の文の語では落とさない")
+
+    # 9.997 天井種別ごとの語彙（実データ較正・周期/スルー機の主天井表現）
+    eq(main_ceiling_quote("最大10周期到達で周期天井に到達し、STに当選する。", 10,
+                          ceiling_type="cycle"), None, "周期機の「周期天井」は条件語でない")
+    eq(main_ceiling_quote("スルー回数天井は最大6スルー到達で発動する。", 6,
+                          ceiling_type="through"), None, "スルー機の「スルー回数天井」も同様")
+    eq(bool(main_ceiling_quote("最大10周期到達で周期天井に到達する。", 10,
+                               ceiling_type="game")), True,
+       "G数天井の機種で周期天井が出たら別系統として拒否")
+    eq(bool(main_ceiling_quote("AT間を最大2500G消化でCZに突入する。", 2500,
+                               ceiling_type="game")), True, "AT間は種別に関係なく拒否")
+    eq(bool(main_ceiling_quote("ボーナス間967G＋αが通常天井です。", 967,
+                               ceiling_type="game")), True, "ボーナス間も拒否")
 
     # 9.995 ページ本文側の文脈検査（Codex10巡目: 引用の外に条件を追い出す攻撃）
     def _scan(page_text, quote, new=800, old=900):
