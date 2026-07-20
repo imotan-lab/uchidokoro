@@ -34,7 +34,8 @@ from pathlib import Path
 # ★「5号機」「6号機」「パチンコ」等は落とさない★＝それ自体が別機種を意味する語なので、
 #   落とすと「【北斗の拳（5号機）】」を「北斗の拳」と誤認してしまう（2026-07-21 Codex指摘）。
 _PLATFORM_WORDS = (
-    "スマスロ", "パチスロ", "ぱちスロ", "スロット", "メダルレス",
+    "スマートパチスロ", "スマートスロット", "スマスロ", "パチスロ", "ぱちスロ",
+    "スロット", "メダルレス",
 )
 # 名前の先頭に付くL/S等の型式記号（例: Lバンドリ！ / Sゴジラ）
 _TYPE_PREFIX_RE = re.compile(r"^[lsｌｓ](?=[^a-z]|$)", re.IGNORECASE)
@@ -131,31 +132,53 @@ _SPLIT_RE = re.compile(r"[()（）｜|／,、，]+")
 # ─────────────────────────────────────────────
 # 世代・媒体タグ（同名の旧機種／パチンコ版と混ざらないための必須条件）
 # ─────────────────────────────────────────────
-# 2026-07-21 Codexレビュー指摘: 「パチスロ北斗の拳(2003)」「パチスロ化物語(2013)」など
+# 2026-07-21 Codexレビュー: 「パチスロ北斗の拳(2003)」「吉宗(2003/2013/2025)」など
 # 【うちのカタログに無い同名の旧機種】は、販売区分語を落とすと芯が完全に同じになる。
-# タイトルの世代タグが自機種と食い違う場合は不合格にする。
-_TAG_WORDS = {
-    "smart": ("スマスロ", "スマートスロット", "スマート遊技機"),
-    "legacy": ("パチスロ", "ぱちスロ", "5号機", "6号機", "6.5号機", "新基準", "aタイプ"),
-    "pachinko": ("パチンコ", "スマパチ", "cr", "ぱちんこ"),
-}
+#
+# ★2巡目の是正★: 「スマスロ」と「パチスロ/6号機」は排他ではない（正式名称
+#   「Lパチスロ 炎炎ノ消防隊」、メーカー分類「6号機（スマスロ）」が実在する）。
+#   そこで判定は次の2点だけに絞る:
+#     ・パチンコ機の表記があれば不合格（当サイトはパチスロのみ）
+#     ・スマスロ機かどうかが自機種とタイトルで食い違えば不合格
+#   自機種がスマスロかは machines.json の info（例「スマスロAT」「6.5号機 AT」
+#   「Aタイプ」）を第一の根拠にする＝名前の表記ゆれに依存しない。
+_SMART_WORDS = ("スマスロ", "スマートパチスロ", "スマートスロット", "スマート遊技機")
+_PACHINKO_WORDS = ("パチンコ", "ぱちんこ", "スマパチ", "cr機", "cr ")
+# 「L」「Lパチスロ」等の型式接頭辞（スマスロ機に付く）。語の先頭にある L のみ。
+_L_PREFIX_RE = re.compile(r"(?:^|[\s　【\[(（])[lｌ](?=[^a-z]|$)", re.IGNORECASE)
+# 「スマスロ○○」「L○○」＝機種名が名指しされている箇所（比較記事の検出に使う）
+_MARKER_RE = re.compile(
+    r"(?:スマスロ|スマートパチスロ|スマートスロット|(?<![0-9a-z])[lｌ](?=[^0-9a-z]))"
+    r"\s*([^\s、。｜|【】]{2,20})", re.IGNORECASE)
+
+
+def is_smart_text(s: str) -> bool:
+    """文字列がスマスロ機を指しているか（スマスロ表記 or 型式接頭辞L）。"""
+    t = unicodedata.normalize("NFKC", str(s or "")).lower()
+    if any(unicodedata.normalize("NFKC", w).lower() in t for w in _SMART_WORDS):
+        return True
+    return bool(_L_PREFIX_RE.search(t))
+
+
+def is_pachinko_text(s: str) -> bool:
+    t = unicodedata.normalize("NFKC", str(s or "")).lower()
+    return any(unicodedata.normalize("NFKC", w).lower() in t for w in _PACHINKO_WORDS)
 
 
 def detect_tags(s: str) -> set[str]:
-    """文字列に含まれる世代・媒体タグ（複数可）。"""
-    t = unicodedata.normalize("NFKC", str(s or "")).lower()
+    """文字列から読み取れるタグ（smart / pachinko）。"""
     tags = set()
-    for tag, words in _TAG_WORDS.items():
-        if any(unicodedata.normalize("NFKC", w).lower() in t for w in words):
-            tags.add(tag)
+    if is_smart_text(s):
+        tags.add("smart")
+    if is_pachinko_text(s):
+        tags.add("pachinko")
     return tags
 
 
 def machine_tags(machine: dict) -> set[str]:
-    """自機種の世代タグ。名前が「L…」で始まる型式もスマスロ世代とみなす。"""
-    name = str(machine.get("name") or "")
-    tags = detect_tags(name)
-    if _TYPE_PREFIX_RE.match(unicodedata.normalize("NFKC", name).lower()):
+    """自機種のタグ。★info（スマスロAT等）を第一の根拠にする★"""
+    tags = set()
+    if is_smart_text(machine.get("info") or "") or is_smart_text(machine.get("name") or ""):
         tags.add("smart")
     return tags
 
@@ -240,26 +263,17 @@ def check_tags(title: str, my_tags, cores=()) -> tuple[bool, str]:
         タイトルはほぼ必ず「スマスロ」「L」を含むので取りこぼしは小さい）
     """
     my_tags = set(my_tags or ())
-    title = name_region(title, cores) or title
-    t_tags = detect_tags(title)
-    # ★食い違いの定義★（自機種名に世代表記が無い機種も多いので「無い＝旧世代」とは扱わない）
-    #   ・パチンコ表記 → 常に不合格（当サイトはパチスロのみ）
-    #   ・自分がスマスロ世代なのに相手が旧世代表記 → 不合格（同名旧機種）
-    #   ・自分が旧世代表記なのに相手がスマスロ表記 → 不合格（後継のスマスロ版）
-    conflict = None
+    region = name_region(title, cores) or title
+    t_tags = detect_tags(region)
     if "pachinko" in t_tags:
-        conflict = "パチンコ版のページ"
-    elif "legacy" in t_tags and "smart" in my_tags:
-        conflict = "旧世代（パチスロ/号機表記）のページ"
-    elif "smart" in t_tags and "legacy" in my_tags:
-        conflict = "スマスロ版のページ（自機種は旧世代）"
-    if conflict:
-        return False, (f"世代・媒体が違う（{conflict} / タイトル={sorted(t_tags)}"
-                       f" / 自機種={sorted(my_tags)}）")
-    if "smart" in my_tags and "smart" not in t_tags:
-        nt = unicodedata.normalize("NFKC", str(title)).lower()
-        if not re.search(r"(?:^|[^a-z0-9])l[^a-z0-9]", nt):
-            return False, "自機種はスマスロ世代だがタイトルに世代表記が無い（同名の旧機種の疑い）"
+        return False, f"パチンコ版のページ（機種名区間=「{region[:40]}」）"
+    my_smart, t_smart = ("smart" in my_tags), ("smart" in t_tags)
+    if my_smart and not t_smart:
+        return False, ("自機種はスマスロだがタイトルにスマスロ表記が無い"
+                       f"（同名の旧機種の疑い・機種名区間=「{region[:40]}」）")
+    if t_smart and not my_smart:
+        return False, ("タイトルはスマスロ版だが自機種はスマスロではない"
+                       f"（後継機のページの疑い・機種名区間=「{region[:40]}」）")
     return True, "世代タグOK"
 
 
@@ -302,6 +316,47 @@ def check_title(title: str, cores, reject_cores=()) -> tuple[bool, str]:
             if any(c for c in bc):
                 return False, (f"他機種らしい区間が併記されている（{[c for c in bc if c][:2]}）"
                                f"→比較記事等の疑いで不合格")
+
+    # ★タイトル全体に他機種の名前が埋まっていないか（括弧の外の比較・続編表記）★
+    #   例「【スマスロ北斗の拳】VS L吉宗 天井比較」「【スマスロ炎炎ノ消防隊】2 天井」
+    #   （2026-07-21 Codex指摘3・4: まとまり単位の検査だけでは括弧の外を見逃す）
+    longest_hit = max(hit, key=len)
+    # (0) 「スマスロ○○」「L○○」の形で【自機種以外の機種名】がタイトル中に出てくる
+    #     （例「【スマスロ北斗の拳】天井性能をL吉宗と比較」＝比較記事）。
+    #     自機種の芯を含む断片は自分の話なので除外する。
+    for mk in _MARKER_RE.finditer(t_norm):
+        seg = normalize_core(mk.group(1))
+        if not seg or any(c and c in seg for c in cores):
+            continue
+        for rc in rej:
+            if len(rc) >= 2 and rc in seg and not any(rc in c for c in cores):
+                return False, (f"タイトルに他機種の名前がある（{rc}）→比較記事等の疑いで不合格")
+
+    for g in title_groups(title):
+        gcore = normalize_core(" ".join(g))
+        if not gcore:
+            continue
+        is_hit_group = any(normalize_core(p) in cores for p in g)
+        # (a) 他機種の名前が区間の中に埋まっている（例「VS L吉宗」）
+        for rc in rej:
+            # 2文字の機種名（吉宗・番長等）も検出するため長さ2から見る
+            if len(rc) < 2 or rc in longest_hit or any(rc in c for c in cores):
+                continue
+            if rc in gcore:
+                return False, (f"タイトルに他機種の名前が埋まっている（{rc}）"
+                               f"→比較記事等の疑いで不合格")
+        # (b) 一致した芯の直後に英数字・世代語が続く（続編・派生機の疑い）
+        if is_hit_group:
+            pos = gcore.find(longest_hit)
+            if pos >= 0:
+                nxt = gcore[pos + len(longest_hit):pos + len(longest_hit) + 1]
+                # ★日本語の文字は isalnum() が True になるので使わない（英数字だけ見る）★
+                if nxt and (re.match(r"[0-9a-z]", nxt) or nxt in "改真新極零"):
+                    return False, (f"機種名の直後に「{nxt}」が続く（{longest_hit}{nxt}…）"
+                                   f"→続編・派生機の疑いで不合格")
+        # (c) 機種名区間の外に「2」「V」等の続編記号だけが置かれている
+        elif re.fullmatch(r"[0-9]{1,2}|v|vi|ex|z|改|真|新", gcore):
+            return False, (f"機種名の外に続編記号「{gcore}」がある→別機種の疑いで不合格")
 
     # ★同じまとまりの中に「自機種で説明できない語」が混じっていたら不合格★
     #   例「【北斗の拳（パチンコ）】」「【北斗の拳（5号機）】」＝別媒体・別世代のページ。
@@ -490,6 +545,46 @@ def selftest() -> int:
     eq(check_title("【スマスロ北斗の拳】天井の恩恵", ["北斗の拳"], [])[0], True,
        "単独の区間は通る")
 
+    # --- 2巡目Codexレビュー: スマスロ判定は info を根拠にする ---
+    yoshimune_new = {"slug": "yoshimune_new", "name": "真打 吉宗", "info": "スマスロAT",
+                     "aliases": ["吉宗"]}
+    yoshimune_old = {"slug": "yoshimune_old", "name": "吉宗", "info": "5号機 AT"}
+    eq(machine_tags(yoshimune_new), {"smart"}, "info=スマスロATならスマスロ扱い")
+    eq(machine_tags(yoshimune_old), set(), "info=5号機ならスマスロではない")
+    eq(check_tags("【吉宗】天井・解析", machine_tags(yoshimune_new))[0], False,
+       "スマスロ機に無印タイトルは不合格")
+    eq(check_tags("【スマスロ吉宗】天井・解析", machine_tags(yoshimune_old))[0], False,
+       "旧機種にスマスロ版タイトルは不合格")
+    eq(check_tags("【スマスロ吉宗】天井・解析", machine_tags(yoshimune_new))[0], True,
+       "スマスロ同士は合格")
+    # 正式名称に「パチスロ」を含むスマスロ機が自己不合格にならない（Codex指摘6）
+    enen_l = {"slug": "enen_l", "name": "Lパチスロ 炎炎ノ消防隊", "info": "スマスロAT"}
+    eq(machine_tags(enen_l), {"smart"}, "Lパチスロ…はスマスロ扱い")
+    eq(check_tags("【Lパチスロ 炎炎ノ消防隊】天井", machine_tags(enen_l))[0], True,
+       "Lパチスロ表記の正しいタイトルが通る（自己不合格しない）")
+    valv = {"slug": "v2", "name": "Lパチスロ 革命機ヴァルヴレイヴ2", "info": "スマスロAT"}
+    eq(check_tags("【Lパチスロ 革命機ヴァルヴレイヴ2】天井", machine_tags(valv))[0], True,
+       "Lパチスロ+続編番号の正式名称が通る")
+    # メダル機に対してスマスロ版タイトルは不合格（Codex指摘2）
+    enen_medal = {"slug": "enen_m", "name": "パチスロ 炎炎ノ消防隊", "info": "6.5号機 AT"}
+    eq(check_tags("【Lパチスロ 炎炎ノ消防隊】天井", machine_tags(enem := enen_medal))[0], False,
+       "メダル機にスマスロ版タイトルは不合格")
+    # スマートパチスロ表記（Codex指摘7）
+    eq(is_smart_text("スマートパチスロ北斗の拳"), True, "スマートパチスロを認識")
+    eq(normalize_core("スマートパチスロ北斗の拳"), "北斗の拳", "スマートパチスロを芯から落とす")
+    eq(check_tags("【スマートパチスロ北斗の拳】天井", {"smart"})[0], True, "正式名称表記が通る")
+    # L+数字（Codex指摘8）
+    eq(check_tags("【L009 RE:CYBORG】天井", {"smart"})[0], True, "L009がスマスロと認識される")
+    # 括弧の外の比較・続編（Codex指摘3・4）
+    eq(check_title("【スマスロ北斗の拳】VS L吉宗 天井比較", ["北斗の拳"], ["吉宗"])[0], False,
+       "括弧の外の他機種併記は不合格")
+    eq(check_title("【スマスロ北斗の拳】天井性能をL吉宗と比較", ["北斗の拳"], ["吉宗"])[0], False,
+       "文中の他機種併記も不合格")
+    eq(check_title("【スマスロ炎炎ノ消防隊】2 天井", ["炎炎ノ消防隊"], [])[0], False,
+       "括弧外の続編番号は不合格")
+    eq(check_title("【スマスロ炎炎ノ消防隊2】天井", ["炎炎ノ消防隊2"], ["炎炎ノ消防隊"])[0], True,
+       "続編機種自身のページは通る")
+
     # --- 危険パターンは必ず落ちること ---
     # 芯が一致しないのに部分一致で通る、を許さない
     eq(title_ok("hokuto", "【スマスロ北斗の拳 修羅の国篇】天井の恩恵"), False, "続編ページは不合格")
@@ -535,6 +630,31 @@ def selftest() -> int:
             namedup.setdefault(nc, []).append(m["slug"])
         eq({k: v for k, v in namedup.items() if len(v) > 1}, {}, "機種名の芯が衝突（二重登録の疑い）")
         # 全機種が最低1つは同定に使える芯を持つこと（持たない機種は検証不能になる）
+        # ★負例の総当たり（2026-07-21 Codex指摘: 「落とす能力」を測っていない）★
+        #   全機種について、別機種を意味する定型パターンのタイトルを機械生成し、
+        #   1件でも合格したら不合格とする。
+        neg_fail = []
+        for m in real_ms:
+            cs, rj, tg = accept_cores_for(m, real_ms), reject_cores_for(m, real_ms), machine_tags(m)
+            if not cs:
+                continue
+            base = m["name"]
+            other = next((o["name"] for o in real_ms
+                          if not set(machine_cores(o)) & set(cs)), "スマスロ北斗の拳")
+            for pat in (f"【{base}（パチンコ）】天井・解析",
+                        f"【{base}（修羅の国篇）】天井",
+                        f"【{base}2】天井とやめどき",
+                        f"【{base}】【{other}】天井比較",
+                        f"【{base}（5号機）】天井"):
+                if check_tags(pat, tg, cs)[0] and check_title(pat, cs, rj)[0]:
+                    neg_fail.append((m["slug"], pat))
+            # スマスロ機に「世代表記の無い同名タイトル」を当てる（同名旧機種の代表例）
+            if "smart" in tg:
+                plain = normalize_core(base)
+                if check_tags(f"【{plain}】天井・解析", tg, cs)[0]:
+                    neg_fail.append((m["slug"], f"世代表記なし:{plain}"))
+        eq(neg_fail[:5], [], f"負例が合格した（{len(neg_fail)}件）")
+
         blind = [m["slug"] for m in real_ms if not accept_cores_for(m, real_ms)]
         eq(blind, [], f"同定に使える芯が無い機種: {blind}")
         slugs = [m.get("slug") for m in real_ms]
