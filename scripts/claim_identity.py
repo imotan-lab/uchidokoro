@@ -40,7 +40,10 @@ _PLATFORM_WORDS = (
 # 名前の先頭に付くL/S等の型式記号（例: Lバンドリ！ / Sゴジラ）
 _TYPE_PREFIX_RE = re.compile(r"^[lsｌｓ](?=[^a-z]|$)", re.IGNORECASE)
 # 芯から落とす記号・空白（英数字とCJKだけ残す）
-_NONCORE_RE = re.compile(r"[^0-9a-z぀-ヿ一-鿿ｦ-ﾟ]+")
+# ★「・」(U+30FB)は片仮名ブロック内だが区切り記号なので芯から落とす★
+#   （落とさないと「ソードアート・オンライン」と「ソードアートオンライン」が別物になり、
+#     補助見出し「天井・設定判別」の判定も狂う）。長音「ー」は名前の一部なので残す。
+_NONCORE_RE = re.compile(r"[^0-9a-zぁ-ゖァ-ヺーｦ-ﾟ一-鿿]+")
 
 MIN_ALIAS_CORE = 3   # 同定に使ってよい別名の芯の最短長（汎用語よけ）
 
@@ -127,10 +130,27 @@ _STOP_WORDS = (
 _SEPARATORS = ("|", "｜", "／", "»", "≫", "・パチスロ", " - ", " ‐ ", " – ", " — ", " / ")
 _BRACKET_RE = re.compile(r"【(.+?)】")
 # 機種名ではない補助見出し（これ【だけ】なら併記されていても本人ページとみなす）
-_META_BRACKET_RE = re.compile(
-    r"(設定[0-9v]*|実戦値?|実践値?|更新|最新|速報|注目|保存版|完全版|随時更新|検証|"
-    r"データ|画像|動画|新台|[0-9]{1,4}|pr|new|nEW|重要|必見|独自|口コミ|評判)",
-    re.IGNORECASE)
+_META_WORDS = (
+    "設定", "実戦", "実践", "データ", "値", "更新", "最新", "速報", "注目", "保存版",
+    "完全版", "随時", "検証", "画像", "動画", "新台", "重要", "必見", "独自", "口コミ",
+    "評判", "解析", "まとめ", "無料", "公開", "版", "pr", "new", "特集", "詳細",
+)
+_META_TAIL_RE = re.compile(r"^(?:[0-9]{4}年?|[0-9]{1,2}[月日]|[0-9a-z]{1,2})?$",
+                           re.IGNORECASE)
+
+
+def is_meta_heading(text: str) -> bool:
+    """【設定6】【実戦データ】【天井・設定判別】等の補助見出しか（機種名ではない）。
+
+    ★語の完全一致リストでは複合見出し（実戦データ）を落としてしまう（Codex6巡目 指摘8）。
+      メタ語と停止語を取り除いて何も残らなければ補助見出しとみなす。★
+    """
+    t = normalize_core(text)
+    if not t:
+        return True
+    for w in sorted(_META_WORDS + _STOP_WORDS, key=len, reverse=True):
+        t = t.replace(normalize_core(w), "")
+    return bool(_META_TAIL_RE.match(t))
 # 区間をさらに割る記号（「アズールレーン スマスロ(アズレン)」→ 両方を候補にする）
 _SPLIT_RE = re.compile(r"[()（）｜|／,、，]+")
 
@@ -268,6 +288,11 @@ def tail_verdict(tail: str) -> str:
         return "mine"
     body = _LEAD_PARTICLE_RE.sub("", tail)   # 先頭の助詞を落としてから続編語を見る
     if body and _SEQUEL_TAIL_RE.match(body):
+        return "other"
+    # ★短く助詞を含まない余りは「機種名の続き」とみなす（2026-07-21 Codex6巡目 指摘7）★
+    #   例「北斗の拳 宿命」「○○ 覚醒」「○○ 絆」。派生語を列挙し切るのは不可能なので、
+    #   長さと助詞の有無という構造で判定する。説明文（「搭載ATの抽選」）は助詞を含む。
+    if body and len(body) <= 6 and not re.search(r"[のはがをにでともやへ]", body):
         return "other"
     return "unknown"
 
@@ -408,7 +433,7 @@ def check_title(title: str, cores, reject_cores=(), reject_name_cores=()) -> tup
             # ★補助見出し【設定6】【実戦値】【更新】等だけを許可する（Codex5巡目 指摘1）★
             #   「機種名らしいか」を推測する方式では、カタログ外の機種名
             #   （【SLOT魔法少女まどか☆マギカ】等）を素通りさせてしまう。
-            if all(_META_BRACKET_RE.fullmatch(c) for c in bc if c):
+            if all(is_meta_heading(p_) for p_ in pieces):
                 continue
             if True:
                 return False, (f"他機種らしい区間が併記されている（{[c for c in bc if c][:2]}）"
@@ -870,6 +895,25 @@ def selftest() -> int:
     eq(named_machine_parts("SLOT魔法少女まどか☆マギカ"), ["魔法少女まどか☆マギカ"],
        "名指し部分の抽出")
     eq(named_machine_parts("ちょんぼりすた パチスロ"), [], "後ろに名前が無ければ抽出しない")
+
+    # --- 6巡目Codexレビュー（続き）: 派生語の網羅不能・補助見出しの幅 ---
+    eq(check_title("【スマスロ北斗の拳】北斗の拳 宿命 天井", ["北斗の拳"], [], [])[0], False,
+       "未登録の派生機（宿命）は不合格")
+    eq(check_title("【スマスロ北斗の拳】北斗の拳 覚醒 解析", ["北斗の拳"], [], [])[0], False,
+       "未登録の派生機（覚醒）は不合格")
+    eq(tail_verdict("宿命"), "other", "短く助詞の無い余り＝機種名の続き")
+    eq(tail_verdict("搭載atの抽選"), "unknown", "助詞を含む長い余り＝説明文")
+    eq(check_title("【Lバンドリ！】【天井・設定判別】解析", ["バンドリ"], [], [])[0], True,
+       "複合見出し【天井・設定判別】は許可")
+    eq(check_title("【Lバンドリ！】【実戦データ】天井", ["バンドリ"], [], [])[0], True,
+       "複合見出し【実戦データ】は許可")
+    eq(check_title("【Lバンドリ！】【設定L】天井", ["バンドリ"], [], [])[0], True,
+       "【設定L】は許可")
+    eq(check_title("【Lバンドリ！】【2026年】天井", ["バンドリ"], [], [])[0], True,
+       "【2026年】は許可")
+    eq(is_meta_heading("実戦データ"), True, "複合メタ語")
+    eq(is_meta_heading("スマスロ北斗の拳"), False, "機種名はメタ語でない")
+    eq(normalize_core("ソードアート・オンライン"), "ソードアートオンライン", "中黒は芯から落とす")
 
     # --- 危険パターンは必ず落ちること ---
     # 芯が一致しないのに部分一致で通る、を許さない
