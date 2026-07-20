@@ -265,12 +265,9 @@ def main_ceiling_quote(quote: str, value, cores=(), ceiling_type: str = "game") 
         # 「最大100pt獲得」「最大4回転継続」「最大800G継続、AT当選率は1/300」等
         # ＝天井の記述ではない（Codex10巡目 指摘6 / 11巡目 指摘3）
         return "天井を表す語（天井・到達・規定・消化・当選）が無い＝天井の記述と確認できない"
-    # ★同じ引用に同単位の値が複数あるなら、どれが天井か決められない（指摘1）★
-    #   「最大800G：通常時の天井は1000G」「最大800G／通常時の天井は1000G」等、
-    #   区切り記号を変えるだけの迂回を、区切りの列挙ではなく個数で止める。
-    if len(re.findall(rf"(?<![0-9.,])[0-9]{{1,5}}\s*(?:[＋+]\s*[αa])?(?:{_unit_pat(ceiling_type)})",
-                      n_all)) > 1:
-        return "同じ引用に同じ単位の値が複数あり、どれが天井か決められない"
+    # ※「同単位の値が複数ある」ことだけを理由に拒否はしない。
+    #   「天井は1280G+α、設定変更時は900G+α」のような頻出表記を救うため、
+    #   ★値ごとに、その値が属する節だけを見て判定する★（節の切り出しは下記）。
     splits = quote_splits(quote, value, ceiling_type)
     if not splits:
         return f"引用の中に値({value})が単位付きで見つからない"
@@ -280,11 +277,22 @@ def main_ceiling_quote(quote: str, value, cores=(), ceiling_type: str = "game") 
     for prefix, suffix in splits:
         # ★天井語は「値と同じ節」に無ければならない（2026-07-21 Codex13巡目 指摘1）★
         #   「最大800G継続、通常時の天井は1000G」で後半の「天井」を借りるのを防ぐ。
-        # ★読点では割らない（「通常時の天井は、最大1000Gです」を落とさない）★
-        #   2026-07-21 Codex14巡目 指摘11。別の値からの天井語の借用は、
-        #   「同じ引用に同単位の値が複数あれば拒否」で別途止めている。
-        clause_pre = re.split(r"[。！？：:／/]", prefix)[-1]
-        clause_suf = re.split(r"[。！？：:／/]", suffix or "")[0]
+        # ★節の切り出し（2026-07-21 実データ較正）★
+        #   読点でも割る。ただし直前の節に【同単位の値が無い】場合だけ連結する。
+        #   ・「通常時の天井は、最大1000Gです」→ 直前節に値が無いので連結して天井語を認める
+        #   ・「最大800G継続、通常時の天井は1000G」→ 800の節は先頭で連結相手が無く、
+        #     「継続」もあるので不合格（別の値の天井語を借りられない）
+        _clauses = re.split(r"[、。！？：:／/]", prefix)
+        clause_pre = _clauses[-1]
+        up_ = _unit_pat(ceiling_type)
+        for k in range(len(_clauses) - 2, -1, -1):
+            prev = _clauses[k]
+            if re.search(rf"(?<![0-9.,])[0-9]{{1,5}}\s*(?:[＋+]\s*[αa])?(?:{up_})", prev):
+                break                     # 直前節に別の値がある＝そこは別の主張
+            clause_pre = prev + clause_pre
+            if not re.search(r"[はがも]$", prev.strip()):
+                break                     # 主題提示（〜は/が/も）でなければ連結を止める
+        clause_suf = re.split(r"[、。！？：:／/]", suffix or "")[0]
         clause = clause_pre + clause_suf
         strong = bool(_CEILING_RE.search(clause))
         weak = bool(_CEILING_WEAK_RE.search(clause)) and "通常時" in clause
@@ -317,9 +325,15 @@ def main_ceiling_quote(quote: str, value, cores=(), ceiling_type: str = "game") 
         if m_note:
             note_txt = m_note.group(1)
         else:
-            m_note2 = re.match(r"^[^。！？]{0,4}?[※／/：:、]\s*([^。！？]{1,40})", suffix or "")
+            m_note2 = re.match(r"^[^。！？]{0,4}?[※／/：:、]\s*([^。！？、]{1,40})", suffix or "")
             if m_note2:
-                note_txt = m_note2.group(1)
+                # ★その区間に【別の値】があるなら、注記ではなく独立した主張★
+                #   「天井は1280G+α、設定変更時は900G+αまで短縮」＝リセット天井の記述であり
+                #   1280G に掛かる注記ではない。「、設定6のみ」のように値が無ければ注記。
+                seg = m_note2.group(1)
+                if not re.search(rf"(?<![0-9.,])[0-9]{{1,5}}\s*(?:[＋+]\s*[αa])?"
+                                 rf"(?:{_unit_pat(ceiling_type)})", seg):
+                    note_txt = seg
         if note_txt:
             rest_note = _consume_allowed(_norm_text(note_txt),
                                          list(cores or ()) +
@@ -329,7 +343,10 @@ def main_ceiling_quote(quote: str, value, cores=(), ceiling_type: str = "game") 
             if rest_note:
                 reasons.append(f"値の直後の注記が定型語で説明できない（「{note_txt[:16]}」）")
                 continue
-        hit2 = conditional_hit(_until_sentence_end(suffix or ""), ceiling_type)
+        # ★条件語の検査も「同じ節」まで（次の読点以降は独立した主張）★
+        #   値を持たない断り書きは上の注記検査が捕まえるので、ここを節単位にしても
+        #   「天井は800G、設定6のみ」のような迂回は塞がったまま。
+        hit2 = conditional_hit(_until_sentence_end(clause_suf), ceiling_type)
         if hit2:
             reasons.append(f"値の直後に限定条件「{hit2}」がある")
             continue
