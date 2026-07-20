@@ -81,6 +81,35 @@ UNIT_WORDS = {
     "cycle": ("周期",), "through": ("スルー", "回"),
 }
 
+# 天井の種類ごとに「あり得る値の範囲」（2026-07-21 Codex5巡目 指摘10）
+# これを外れる値は、たとえ2ドメインで裏取りできても書かない（要確認へ）。
+VALUE_RANGE = {
+    "game": (100, 3000), "point": (10, 20000),
+    "cycle": (1, 50), "through": (1, 20),
+}
+MAX_CHANGE_RATIO = 3.0   # 旧値の3倍超／3分の1未満になる修正は人の確認へ
+
+
+def value_sanity(ceiling_type: str, old, new) -> str | None:
+    """値そのものの妥当性。問題があれば理由文字列を返す（＝修正しない）。"""
+    import math
+    for label, v in (("旧値", old), ("新値", new)):
+        if v is None or not isinstance(v, (int, float)) or isinstance(v, bool):
+            return f"{label}が数値でない（{v!r}）"
+        if not math.isfinite(float(v)):
+            return f"{label}が有限の数値でない（{v!r}）"
+        if float(v) != int(float(v)):
+            return f"{label}が整数でない（{v!r}）"
+        if float(v) <= 0:
+            return f"{label}が正の数でない（{v!r}）"
+    lo, hi = VALUE_RANGE.get(ceiling_type or "", (1, 100000))
+    if not (lo <= float(new) <= hi):
+        return f"新値{new}が{ceiling_type}の想定範囲({lo}〜{hi})の外"
+    ratio = float(new) / float(old)
+    if ratio > MAX_CHANGE_RATIO or ratio < 1 / MAX_CHANGE_RATIO:
+        return f"変化が大きすぎる（{old}→{new}）＝人の確認が必要"
+    return None
+
 EXTRA_RULES = """
 
 追加ルール（重要）:
@@ -185,7 +214,13 @@ def classify(site_claims: list[dict], codex_claims: list[dict],
         key = shadow_gold.migrate_claim_key(c.get("claim_key") or "",
                                             c.get("ceiling_type") or "")
         by_key.setdefault(key, []).append(c)
-    site_by_key = {s["claim_key"]: s for s in site_claims}
+    site_by_key = {}
+    dup_site_keys = set()
+    for sc in site_claims:
+        k = sc.get("claim_key")
+        if k in site_by_key:
+            dup_site_keys.add(k)     # 同じ項目が2つ＝構造が曖昧（黙って上書きしない）
+        site_by_key[k] = sc
 
     out = {"fix_candidates": [], "reviews": [], "unchanged": []}
     for r in comparison:
@@ -204,6 +239,12 @@ def classify(site_claims: list[dict], codex_claims: list[dict],
                 # 値の差し替えでは直らない＝人が構造を判断する必要がある
                 out["reviews"].append({"claim_key": key, "kind": "structure",
                                        "detail": r["detail"], "auto_fixable": False})
+            else:
+                # ★どの分類にも入らない判定を黙って捨てない（Codex5巡目 指摘12）★
+                #   捨てると「確認もされず誤りが残る」状態になる。
+                out["reviews"].append({"claim_key": key, "kind": "other",
+                                       "detail": r["detail"], "auto_fixable": False,
+                                       "reason": f"判定={verdict}/{sub}（自動修正の対象外）"})
             continue
 
         why = None
@@ -236,6 +277,8 @@ def classify(site_claims: list[dict], codex_claims: list[dict],
         elif shadow_claims._norm_unit(site.get("unit")) != shadow_claims._norm_unit(codex.get("unit")):
             why = f"単位が違う（site={site.get('unit')} / codex={codex.get('unit')}）"
         # ★天井の種類が一致していること（指摘9: 単位すり替えでの誤修正を防ぐ）★
+        elif key in dup_site_keys:
+            why = "サイト側に同じ項目が複数あり、どれを直すか決まらない（構造の要確認）"
         elif (site.get("ceiling_type") or "") != (codex.get("ceiling_type") or ""):
             why = (f"天井の種類が違う（site={site.get('ceiling_type')} / "
                    f"codex={codex.get('ceiling_type')}）")
@@ -246,6 +289,8 @@ def classify(site_claims: list[dict], codex_claims: list[dict],
         #   ただしCodexが★既知の語彙に無いscope★を出した場合は意味が確定しないので止める。
         elif "scope_unverified" in (r.get("attrs_unverified") or []):
             why = f"Codexのscopeが未知の語（{codex.get('scope')}）＝同じ項目と確定できない"
+        else:
+            why = value_sanity(site.get("ceiling_type"), site.get("value"), codex.get("value"))
 
         rec = {"claim_key": key, "site_value": site.get("value"),
                "codex_value": (codex or {}).get("value"),
@@ -295,8 +340,14 @@ def contradiction_scan(cand: dict, allowed) -> str | None:
 # 台帳・通知
 # ─────────────────────────────────────────────
 
+ISSUE_FAILURES: list[str] = []
+
+
 def add_issue(slug: str, kind: str, title: str, detail: str) -> None:
-    """要確認台帳へ登録。★無人タスクはcloseしない（登録のみ）★"""
+    """要確認台帳へ登録。★無人タスクはcloseしない（登録のみ）★
+
+    ★登録に失敗したら記録して後で異常として扱う（黙って消さない）★
+    """
     try:
         r = subprocess.run([sys.executable, str(OPEN_ISSUES), "add",
                             "--source", "codex-audit", "--slug", slug,
@@ -304,8 +355,10 @@ def add_issue(slug: str, kind: str, title: str, detail: str) -> None:
                            capture_output=True, text=True, timeout=60,
                            creationflags=_NO_WINDOW)
         if r.returncode != 0:
+            ISSUE_FAILURES.append(f"{slug}:{title[:40]}")
             log(f"台帳登録が失敗（処理は継続）: {(r.stderr or r.stdout or '')[:200]}")
     except Exception as e:
+        ISSUE_FAILURES.append(f"{slug}:{title[:40]}")
         log(f"台帳登録に失敗（処理は継続）: {e}")
 
 
@@ -352,6 +405,8 @@ def audit_machine(machine: dict, machines: list[dict], run_id: str,
         site_claims, claims,
         codex_key=lambda c: shadow_gold.migrate_claim_key(
             c.get("claim_key") or "", c.get("ceiling_type") or ""))
+    if not comparison:
+        res["empty_comparison"] = True
     res["classified"] = classify(site_claims, claims, comparison,
                                  auto_fix_allowed=("smart" in claim_identity.machine_tags(machine)))
     res["site_claims"] = site_claims
@@ -549,6 +604,30 @@ def selftest() -> int:
     eq(len(c["fix_candidates"]), 0, "非スマスロ機は自動修正しない")
     eq("スマスロ機ではない" in c["reviews"][0]["reason"], True, "非スマスロ機の理由")
 
+    # 9.6 値そのものの妥当性（Codex5巡目 指摘10）
+    eq(value_sanity("game", 900, 1000), None, "妥当な値はNone")
+    eq(bool(value_sanity("game", 900, -1)), True, "負の値は却下")
+    eq(bool(value_sanity("game", 900, float("inf"))), True, "無限大は却下")
+    eq(bool(value_sanity("game", 900, float("nan"))), True, "NaNは却下")
+    eq(bool(value_sanity("game", 900, 999999999)), True, "桁外れは却下")
+    eq(bool(value_sanity("game", 900, 1000.5)), True, "整数でない値は却下")
+    eq(bool(value_sanity("game", 900, 50)), True, "範囲外(50G)は却下")
+    eq(bool(value_sanity("game", 900, 2900)), True, "変化が大きすぎる（3倍超）は却下")
+    eq(value_sanity("cycle", 10, 8), None, "周期の妥当な値")
+    eq(bool(value_sanity("cycle", 10, 80)), True, "周期の範囲外は却下")
+    c = classify([S(K, 900)], [C(K, 5000)], [R(K, "UNKNOWN", "numeric_divergence")])
+    eq(len(c["fix_candidates"]), 0, "桁外れの新値は修正しない")
+
+    # 9.7 サイト側に同じ項目が2つ→修正しない（黙って上書きしない・指摘11）
+    c = classify([S(K, 900), S(K, 950)], [C(K, 1000)],
+                 [R(K, "UNKNOWN", "numeric_divergence")])
+    eq(len(c["fix_candidates"]), 0, "サイト側の重複項目は修正しない")
+
+    # 9.8 どの分類にも入らない判定も要確認へ落ちる（黙って消さない・指摘12）
+    c = classify([S(K, 900)], [], [R(K, "UNKNOWN", None, "サイト構造化なし")])
+    eq(len(c["reviews"]), 1, "分類外の判定も要確認へ")
+    eq(c["reviews"][0]["kind"], "other", "分類外の種別")
+
     # 10. 選定は評価日が古い順・preview機種は対象外
     ms = [{"slug": "a"}, {"slug": "b"}, {"slug": "c", "status": "preview"}]
     st = {"codex_audit": {"last_audited": {"a": "2026-07-20", "b": "2026-07-01"}}}
@@ -586,11 +665,19 @@ def run(slugs_override, n_machines: int, apply_mode: bool) -> int:
     for slug in slugs:
         if now() >= deadline:
             timeout_hit = True
-            log(f"⏰ 時間切れ: {slug} 以降は実施しない（現状維持）")
+            rest = slugs[slugs.index(slug):]
+            log(f"⏰ 時間切れ: {rest} は実施しない（現状維持）")
+            if apply_mode:
+                add_issue("site", "environment", "[codex-audit] 時間切れで未点検の機種がある",
+                          f"run_id={run_id} / 未点検={rest}")
             break
         m = by.get(slug)
         if not m:
             log(f"⚠ {slug}: machines.json に無い")
+            errors.append((slug, "ERR_UNKNOWN_SLUG"))
+            if apply_mode:
+                add_issue(slug, "other", "[codex-audit] 対象slugがmachines.jsonに無い",
+                          f"指定slug={slug}")
             continue
         log(f"── {slug} 点検開始")
         heartbeat(ctx, f"{slug} 点検開始")
@@ -599,7 +686,14 @@ def run(slugs_override, n_machines: int, apply_mode: bool) -> int:
         if r["error"]:
             errors.append((slug, r["error"]))
             log(f"── {slug} エラー: {r['error']}")
+            if apply_mode:
+                add_issue(slug, "environment", f"[codex-audit] 点検できなかった（{r['error']}）",
+                          f"run_id={run_id} / error={r['error']} / detail={str(r.get('detail'))[:300]}")
             continue
+        if r.get("empty_comparison") and apply_mode:
+            add_issue(slug, "other", "[codex-audit] 比較結果が空（点検が成立していない）",
+                      f"run_id={run_id} / site_claims={len(r.get('site_claims') or [])} "
+                      f"/ codex_claims={len(r.get('codex_claims') or [])}")
         cls = r["classified"]
         log(f"── {slug} 一致{len(cls['unchanged'])}件 / 修正候補{len(cls['fix_candidates'])}件 "
             f"/ 要確認{len(cls['reviews'])}件")
@@ -639,8 +733,8 @@ def run(slugs_override, n_machines: int, apply_mode: bool) -> int:
         published, pub_note = publish(all_fixes, ctx)
         log(f"公開: {'✅' if published else '❌'} {pub_note}")
         if not published:
-            add_issue(all_fixes[0]["slug"], "other",
-                      "[codex-audit] 自動修正の公開に失敗", pub_note[:1500])
+            for sl in sorted({f["slug"] for f in all_fixes}):
+                add_issue(sl, "other", "[codex-audit] 自動修正の公開に失敗", pub_note[:1500])
 
     # 要確認は台帳へ（自動修正できなかったもの全て）★無人タスクはcloseしない★
     if apply_mode:
@@ -658,13 +752,14 @@ def run(slugs_override, n_machines: int, apply_mode: bool) -> int:
     log(f"=== codex_audit 完了 {summary} ===")
 
     if apply_mode:
-        status = ("PARTIAL" if (errors or timeout_hit or (all_fixes and not published))
+        status = ("PARTIAL" if (errors or timeout_hit or ISSUE_FAILURES
+                                or (all_fixes and not published))
                   else ("COMPLETED" if slugs else "COMPLETED_NO_CHANGE"))
         write_marker(status, run_id, started, now(), slugs, len(slugs) - len(errors),
                      len(errors), note=pub_note)
         # ★「静かなのが正常」＝修正した/台帳に載せた/異常が出た時だけメール★
         if all_fixes or all_reviews or errors or timeout_hit:
-            icon = "🔴" if errors or (all_fixes and not published) else (
+            icon = "🔴" if errors or ISSUE_FAILURES or (all_fixes and not published) else (
                 "🟡" if all_reviews or timeout_hit else "🟢")
             body = [f"対象: {', '.join(slugs)}", summary, f"公開: {pub_note}", ""]
             for f in all_fixes:
@@ -675,6 +770,8 @@ def run(slugs_override, n_machines: int, apply_mode: bool) -> int:
                             f"{rv.get('reason') or rv.get('detail')}")
             for s, e in errors:
                 body.append(f"❌ エラー {s}: {e}")
+            if ISSUE_FAILURES:
+                body.append(f"🔴 台帳登録に失敗（見落としの恐れ）: {ISSUE_FAILURES[:10]}")
             notify(f"{icon} codex-audit: {summary}", "\n".join(body))
         if ctx:
             _lock("release", "--ctx", ctx)
