@@ -76,6 +76,13 @@ try:
 except Exception:
     pass
 
+# 機種同定（表記ゆれ吸収）モジュール。無くても従来モードは動く。
+try:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import claim_identity
+except Exception:
+    claim_identity = None
+
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) uchidokoro-claim-verifier/1.0"
 LOG_DIR = "C:/Users/imao_/Documents/uchidokoro/logs"
 Page = namedtuple("Page", "text title final_url")
@@ -431,6 +438,21 @@ def run_data(data, min_domains, allowed_domains=None):
     log(f"=== 出典実在チェック開始: {slug}（クレーム{len(claims)}件・critical必要ドメイン数{min_domains}"
         + (f"・許可ドメイン{list(allowed_domains)}" if allowed_domains else "") + "） ===")
 
+    # ★同定モード2種★
+    #  legacy : identity.must_contain の文字列が本文とtitleの両方に含まれること（従来）
+    #  core   : identity.machine_cores（claim_identity.pyが作る「芯」）で
+    #           titleの機種名区間と**完全一致**判定する。表記ゆれ（L/スマスロ/全角記号）を
+    #           吸収しつつ、続編・シリーズ違い・他機種混在は落とす。
+    #           ★緩めるのは表記ゆれだけ。部分一致では通さない★
+    ident_conf = data.get("identity") or {}
+    core_mode = bool(ident_conf.get("machine_cores"))
+    cores = list(ident_conf.get("machine_cores") or [])
+    reject_cores = list(ident_conf.get("reject_cores") or [])
+    machine_tags = list(ident_conf.get("machine_tags") or [])
+    if core_mode and claim_identity is None:
+        log("❌ identity.machine_cores 指定だが claim_identity.py を読み込めない→不合格")
+        return 1
+
     identity = []
     for s in raw_identity:
         ns = normalize(str(s))
@@ -438,12 +460,18 @@ def run_data(data, min_domains, allowed_domains=None):
             log("❌ identity.must_contain に正規化後空になる要素（空文字/空白のみ）→不合格")
             return 1
         identity.append(ns)
-    if not identity:
-        log("❌ identity.must_contain が空（同定ガード必須）→不合格")
-        return 1
-    if not any(len(s) >= 3 for s in identity):
-        log("❌ identity.must_contain に機種名に相当する3文字以上の要素が無い→不合格")
-        return 1
+    if core_mode:
+        if not [c for c in cores if len(c) >= 3]:
+            log("❌ identity.machine_cores に3文字以上の芯が無い（汎用語での誤同定を防ぐため必須）→不合格")
+            return 1
+        log(f"・同定モード: core（芯={cores[:4]} / 除外芯{len(reject_cores)}件）")
+    else:
+        if not identity:
+            log("❌ identity.must_contain が空（同定ガード必須）→不合格")
+            return 1
+        if not any(len(s) >= 3 for s in identity):
+            log("❌ identity.must_contain に機種名に相当する3文字以上の要素が無い→不合格")
+            return 1
     if not claims:
         log("❌ クレーム0件→不合格")
         return 1
@@ -531,20 +559,37 @@ def run_data(data, min_domains, allowed_domains=None):
         ntitle = normalize(page.title)
 
         # C2: 同定（本文＋titleの両方。旧機種ページ・一覧ページ対策）
-        missing_id = [s for s in identity if not _ident_in(s, ntext)]
-        if missing_id:
-            log(f"❌ {tag}: C2 同定文字列がページ本文に無い {missing_id}（別機種/旧機種ページの疑い）")
-            any_fail = True
-            continue
         if not ntitle:
             log(f"❌ {tag}: C2 <title>が取得できない（一覧/異常ページの疑い）→不合格")
             any_fail = True
             continue
-        missing_title = [s for s in identity if not _ident_in(s, ntitle)]
-        if missing_title:
-            log(f"❌ {tag}: C2 同定文字列がページタイトルに無い {missing_title}（旧機種ページに後継機告知が載っているだけ・一覧ページ等の疑い。title=「{page.title.strip()[:60]}」）")
-            any_fail = True
-            continue
+        if core_mode:
+            body_ok, body_why = claim_identity.check_body(page.text, cores)
+            if not body_ok:
+                log(f"❌ {tag}: C2 {body_why}（別機種/旧機種ページの疑い）")
+                any_fail = True
+                continue
+            tag_ok, tag_why = claim_identity.check_tags(page.title, machine_tags, cores)
+            if not tag_ok:
+                log(f"❌ {tag}: C2 {tag_why}。title=「{page.title.strip()[:60]}」")
+                any_fail = True
+                continue
+            title_ok, title_why = claim_identity.check_title(page.title, cores, reject_cores)
+            if not title_ok:
+                log(f"❌ {tag}: C2 {title_why}。title=「{page.title.strip()[:60]}」")
+                any_fail = True
+                continue
+        else:
+            missing_id = [s for s in identity if not _ident_in(s, ntext)]
+            if missing_id:
+                log(f"❌ {tag}: C2 同定文字列がページ本文に無い {missing_id}（別機種/旧機種ページの疑い）")
+                any_fail = True
+                continue
+            missing_title = [s for s in identity if not _ident_in(s, ntitle)]
+            if missing_title:
+                log(f"❌ {tag}: C2 同定文字列がページタイトルに無い {missing_title}（旧機種ページに後継機告知が載っているだけ・一覧ページ等の疑い。title=「{page.title.strip()[:60]}」）")
+                any_fail = True
+                continue
 
         # C3: 逐語引用がページに実在
         if nquote not in ntext:
@@ -673,6 +718,67 @@ def selftest():
         "slug": "karakuri2", "identity": {"must_contain": ["　"]}, "claims": [
             {"field": "天井G数", "value": "999",
              "url": "https://sloquest.test/karakuri2", "quote": "天井は999G+α"},
+        ]}, 1))
+
+    # 10.5 ★同定モード core（表記ゆれ吸収・2026-07-21）★
+    #   うちの表記「Lからくりサーカス2」と出典側「からくりサーカス2（スマスロ）」の差で
+    #   落ちていた分を通す。ただし旧機種・別機種・部分一致は従来どおり落ちること。
+    _page_cache.clear()
+    c_body = ("Lからくりサーカス2の解析。天井は999G+αでAT直撃の恩恵。設定6は114.9%。")
+    _page_cache["https://sloquest.test/k2"] = Page(
+        c_body, "【からくりサーカス2（スマスロ）】天井とやめどき・朝一（リセット）恩恵",
+        "https://sloquest.test/k2")
+    _page_cache["https://chonborista.jp/k2"] = Page(
+        c_body, "スマスロ からくりサーカス2 天井 スペック 設定判別 | ちょんぼりすた",
+        "https://chonborista.jp/k2")
+    _page_cache["https://sloquest.test/k1"] = Page(
+        "からくりサーカスの解析。天井は777G+α。後継機『Lからくりサーカス2』が登場予定。",
+        "からくりサーカス 天井・狙い目解析", "https://sloquest.test/k1")
+    _page_cache["https://sloquest.test/mix"] = Page(
+        c_body, "【Lからくりサーカス2】と【スマスロ北斗の拳】天井比較まとめ",
+        "https://sloquest.test/mix")
+    CORE_ID = {"must_contain": ["Lからくりサーカス2"],
+               "machine_cores": ["からくりサーカス2"],
+               "reject_cores": ["からくりサーカス", "北斗の拳"],
+               "machine_tags": ["smart"]}
+    results.append(case("core: 表記ゆれタイトルでも2ドメイン合格", {
+        "slug": "karakuri2", "identity": CORE_ID, "claims": [
+            {"field": "天井G数", "value": "999", "url": "https://sloquest.test/k2",
+             "quote": "天井は999G+αでAT直撃の恩恵"},
+            {"field": "天井G数", "value": "999", "url": "https://chonborista.jp/k2",
+             "quote": "天井は999G+αでAT直撃の恩恵"},
+        ]}, 0))
+    results.append(case("core: 旧機種ページは不合格", {
+        "slug": "karakuri2", "identity": CORE_ID, "claims": [
+            {"field": "天井G数", "value": "777", "url": "https://sloquest.test/k1",
+             "quote": "天井は777G+α"},
+        ]}, 1))
+    results.append(case("core: 他機種が混ざるタイトルは不合格", {
+        "slug": "karakuri2", "identity": CORE_ID, "claims": [
+            {"field": "天井G数", "value": "999", "url": "https://sloquest.test/mix",
+             "quote": "天井は999G+αでAT直撃の恩恵"},
+        ]}, 1))
+    results.append(case("core: 引用捏造はC3で不合格（同定を緩めても効く）", {
+        "slug": "karakuri2", "identity": CORE_ID, "claims": [
+            {"field": "天井G数", "value": "999", "url": "https://sloquest.test/k2",
+             "quote": "天井は999Gで確定的にAT直撃"},
+        ]}, 1))
+    results.append(case("core: 値がquote外はC4で不合格（同定を緩めても効く）", {
+        "slug": "karakuri2", "identity": CORE_ID, "claims": [
+            {"field": "天井G数", "value": "114.9", "url": "https://sloquest.test/k2",
+             "quote": "天井は999G+αでAT直撃の恩恵"},
+        ]}, 1))
+    results.append(case("core: 3文字未満の芯しか無ければ不合格", {
+        "slug": "karakuri2",
+        "identity": {"must_contain": ["Lからくりサーカス2"], "machine_cores": ["から"]},
+        "claims": [
+            {"field": "天井G数", "value": "999", "url": "https://sloquest.test/k2",
+             "quote": "天井は999G+αでAT直撃の恩恵"},
+        ]}, 1))
+    results.append(case("core: 1ドメインではcritical天井は不合格（2ドメイン必須は不変）", {
+        "slug": "karakuri2", "identity": CORE_ID, "claims": [
+            {"field": "天井G数", "value": "999", "url": "https://sloquest.test/k2",
+             "quote": "天井は999G+αでAT直撃の恩恵"},
         ]}, 1))
 
     _page_cache.clear()
