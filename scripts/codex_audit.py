@@ -254,7 +254,7 @@ def main_ceiling_quote(quote: str, value, cores=(), ceiling_type: str = "game") 
     n_all = _norm_text(quote)
     # ★複数の文にまたがる引用は拒否（2026-07-21 Codex12巡目 指摘1）★
     #   2文目に条件を隠せば前後文の検査を迂回できるため。
-    if re.search(r"[。！？].", n_all):
+    if re.search(r"[。！？](?=[^\s。！？」』）)】\]・…]) ?", n_all):
         return "引用が複数の文にまたがる＝どの文の値か決められない"
     if not _CEILING_RE.search(n_all):
         # 「最大100pt獲得」「最大4回転継続」「最大800G継続、AT当選率は1/300」等
@@ -494,8 +494,13 @@ def classify(site_claims: list[dict], codex_claims: list[dict],
         #   evidence と evidence_results が対応していないと、検証していない引用で
         #   条件検査を通してしまう。URLで突き合わせ、対応が取れない場合は修正しない。
         ok_urls = {e.get("source_url") for e in ev_ok}
-        ev_used = [e for e in ((codex or {}).get("evidence") or [])
-                   if e.get("source_url") in ok_urls]
+        # ★URLごとに1件へ正規化（2026-07-21 Codex13巡目 指摘7）★
+        #   同じURLの引用を2件入れて件数だけ揃える水増しを防ぐ。
+        _by_url = {}
+        for e in ((codex or {}).get("evidence") or []):
+            if e.get("source_url") in ok_urls and e.get("raw_quote"):
+                _by_url.setdefault(e.get("source_url"), e)
+        ev_used = list(_by_url.values())
         quotes = " / ".join((e.get("raw_quote") or "") for e in ev_used)
         if not auto_fix_allowed:
             why = ("スマスロ機ではないため自動修正の対象外"
@@ -505,8 +510,8 @@ def classify(site_claims: list[dict], codex_claims: list[dict],
         # ★申告を信用せず、実際の検証結果から数え直す（2026-07-21 Codex5巡目 指摘8）★
         elif codex.get("assertion_status") != "asserted":
             why = f"Codexの主張が確定でない（assertion_status={codex.get('assertion_status')}）"
-        elif len(ev_used) < len(ev_ok) or not all(e.get("raw_quote") for e in ev_used):
-            why = "検証に成功した出典と引用文の対応が取れない（内部不整合）"
+        elif {e.get("source_url") for e in ev_used} != ok_urls:
+            why = "検証に成功した出典と引用文が1対1で対応していない（内部不整合）"
         elif len(ev_domains) < 2:
             why = (f"裏取りが独立2ドメインに届かない"
                    f"（検証成功ドメイン={ev_domains} / 申告={codex.get('evidence_strength')}）")
@@ -658,6 +663,10 @@ def contradiction_scan(cand: dict, allowed, pairs=()) -> str | None:
             return st, en, seg
 
         s_start, s_end, sentence = _sentence_bounds(ntext, i, len(nq))
+        # ★平坦化でページ見出し（<title>）が本文と連結された分は取り除く（指摘9）★
+        ntitle = _norm_text(page.title or "")
+        if ntitle and sentence.startswith(ntitle):
+            sentence = sentence[len(ntitle):]
         why = main_ceiling_quote(sentence, cand.get("codex_value"),
                                  cand.get("cores") or (),
                                  cand.get("site_ceiling_type") or "")
@@ -1267,6 +1276,18 @@ def selftest() -> int:
     eq(alpha_mismatch("hokuto", {**_acand, "plus_alpha": True}), None, "＋αが一致すれば可")
     eq(alpha_mismatch("hokuto", {**_acand, "plus_alpha": None}), None,
        "出典が言及しなければ判定しない")
+
+    # 9.991 Codex13巡目の残り（複数文判定の精度・URL1対1・見出し除去）
+    for q in ("「通常時の天井は1000G。」", "通常時の天井は1000G!!"):
+        eq(main_ceiling_quote(q, 1000, ceiling_type="game"), None,
+           f"閉じ括弧・感嘆符を2文目と誤認しない: {q}")
+    dup = C(K, 1000, quote="通常時の天井は{v}G")
+    dup["evidence"] = [{"source_url": "https://a.com/x", "raw_quote": "通常時の天井は1000G"},
+                       {"source_url": "https://a.com/x", "raw_quote": "通常時の天井は1000G"}]
+    dup["evidence_results"] = [{"source_url": "https://a.com/x", "verified": True},
+                               {"source_url": "https://b.com/x", "verified": True}]
+    c = classify([S(K, 900)], [dup], [R(K, "UNKNOWN", "numeric_divergence")])
+    eq(len(c["fix_candidates"]), 0, "同一URLの引用で2ドメインを水増しできない")
 
     # 9.992 Codex13巡目: 天井語の借用・接尾の注記・非断定表現
     for q, v in (("最大800G継続、通常時の天井は1000G", 800),
