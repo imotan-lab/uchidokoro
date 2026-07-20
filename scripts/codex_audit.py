@@ -150,6 +150,14 @@ _PREFIX_ALLOWED = (
 _PREFIX_RESIDUAL_MAX = 2       # 定型語を除いた残りがこれ以下なら「主天井の記述」とみなす
 
 
+# 肯定確認で「値の単位」と認める表記（★スルーは裸の「回」を認めない★）
+#  2026-07-21 Codex11巡目 指摘4: 「最大4回継続でAT当選」の"4回"をスルー天井と誤読していた
+_POSITIVE_UNITS = {
+    "game": ("G", "ゲーム"), "point": ("pt", "ポイント"),
+    "cycle": ("周期",), "through": ("スルー",),
+}
+
+
 def _unit_pat(ceiling_type: str) -> str:
     """その天井種別で値の直後に来る単位表記の正規表現。
 
@@ -157,7 +165,7 @@ def _unit_pat(ceiling_type: str) -> str:
       「4回転継続」の"4回"をスルー天井4回と誤読していた。単位の直後に
       続きの文字（転・数・目・分…）が来る場合は単位として認めない。
     """
-    units = UNIT_WORDS.get(ceiling_type or "", ())
+    units = _POSITIVE_UNITS.get(ceiling_type or "", ())
     pat = "|".join(_norm_text(u) for u in units) or "g|ゲーム"
     return f"(?:{pat})(?![転数目分列個])"
 
@@ -165,7 +173,7 @@ def _unit_pat(ceiling_type: str) -> str:
 # 天井の話だと分かる語（これが無い文は天井の記述として認めない）
 # 「最大967G＋α消化でボーナスに当選」のように天井の語が無い書き方もあるため
 # 「消化」「当選」も天井の記述を示す語に含める（「最大100pt獲得」「最大4回転継続」は除外）
-_CEILING_WORDS = ("天井", "到達", "ハマり", "はまり", "規定", "消化", "当選")
+_CEILING_RE = re.compile(r"天井|到達|ハマり|はまり|規定|消化(?!率)|当選(?!率|確率|割合|時の)")
 
 
 def quote_splits(quote: str, value, ceiling_type: str):
@@ -190,6 +198,13 @@ def quote_splits(quote: str, value, ceiling_type: str):
     return out
 
 
+def _page_furniture() -> tuple:
+    """ページ見出し・パンくずに出る定型語（平坦化で本文と連結されるため許可する）。
+    2026-07-21 Codex11巡目 指摘6: 「スマスロ北斗の拳 天井・設定判別」＋本文の連結で
+    正しい出典を落としていた。条件語（設定変更・AT間等）は含まれないので安全側は保たれる。"""
+    return tuple(claim_identity._STOP_WORDS)
+
+
 def _consume_allowed(prefix: str, cores=()) -> str:
     """先頭から定型語・機種名を1語ずつ食べていき、残りを返す。
 
@@ -198,7 +213,8 @@ def _consume_allowed(prefix: str, cores=()) -> str:
       未知語の内部を削って条件を見逃す。
     """
     toks = sorted([_norm_text(c) for c in (cores or ()) if c] +
-                  [_norm_text(w) for w in _PREFIX_ALLOWED], key=len, reverse=True)
+                  [_norm_text(w) for w in _PREFIX_ALLOWED] +
+                  [_norm_text(w) for w in _page_furniture()], key=len, reverse=True)
     rest = prefix
     changed = True
     while changed and rest:
@@ -232,9 +248,10 @@ def main_ceiling_quote(quote: str, value, cores=(), ceiling_type: str = "game") 
     if value is None or not isinstance(value, (int, float)) or isinstance(value, bool):
         return f'値が数値でない（{value!r}）'
     n_all = _norm_text(quote)
-    if not any(_norm_text(w) in n_all for w in _CEILING_WORDS):
-        # 「最大100pt獲得」「最大4回転継続」等＝天井の記述ではない（指摘6）
-        return "天井を表す語（天井・到達・規定）が無い＝天井の記述と確認できない"
+    if not _CEILING_RE.search(n_all):
+        # 「最大100pt獲得」「最大4回転継続」「最大800G継続、AT当選率は1/300」等
+        # ＝天井の記述ではない（Codex10巡目 指摘6 / 11巡目 指摘3）
+        return "天井を表す語（天井・到達・規定・消化・当選）が無い＝天井の記述と確認できない"
     splits = quote_splits(quote, value, ceiling_type)
     if not splits:
         return f"引用の中に値({value})が単位付きで見つからない"
@@ -502,6 +519,7 @@ def classify(site_claims: list[dict], codex_claims: list[dict],
                "evidence": [e.get("source_url") for e in ev_used],
                "pairs": [(e.get("source_url"), e.get("raw_quote")) for e in ev_used],
                "cores": list(cores or ()),
+               "plus_alpha": (codex or {}).get("plus_alpha"),
                "verified_domains": (codex or {}).get("verified_domains") or [],
                "detail": r["detail"]}
         if why:
@@ -543,7 +561,8 @@ def contradiction_scan(cand: dict, allowed, pairs=()) -> str | None:
         for o in olds:
             for u in units:
                 # ★桁境界つきで探す（Codex9巡目 指摘11: 旧値600が1600Gに一致していた）★
-                if re.search(rf"(?<![0-9.,]){re.escape(o)}\s*(?:\+?α?)?{re.escape(u)}", text):
+                if re.search(rf"(?<![0-9.,]){re.escape(o)}\s*(?:\+?α?)?{re.escape(u)}"
+                             rf"(?![転数目分列個])", text):
                     return (f"裏取りページに旧値「{o}{u}」も載っている（{url}）"
                             f"＝どちらが正しいか機械で決められない")
         # ★ページ本文そのものに「主天井の文法」を当てる（2026-07-21 Codex10巡目）★
@@ -563,16 +582,50 @@ def contradiction_scan(cand: dict, allowed, pairs=()) -> str | None:
             # 同じ引用がページ内に複数ある＝どの文脈の値か決められない（指摘4）
             return f"引用がページ内に複数ある（{url}）＝どの文脈の値か決められない"
         i = hits[0]
-        s_start = max(ntext.rfind(d, 0, i) for d in ("。", "！", "？"))
-        s_end = min([x for x in (ntext.find(d, i + len(nq)) for d in ("。", "！", "？"))
-                     if x >= 0] or [len(ntext)])
-        sentence = ntext[s_start + 1:s_end + 1]
+        # ★引用を含む「文」＋前後の文まで見る（2026-07-21 Codex11巡目 指摘1・2）★
+        #   ・引用の文 → 主天井の文法で肯定確認
+        #   ・前後の文 → 条件語があり、かつ別の値が書かれていなければ、その条件は
+        #     この値に掛かっているとみなして不合格（「設定変更時だけ適用される短縮天井
+        #     です。天井は800G」／「天井は800G。※設定変更時のみ適用」）
+        #   ・括弧が開いたままなら閉じ括弧まで文を伸ばす（括弧内の句点対策）
+        def _sentence_bounds(text: str, pos: int, length: int):
+            st = max(text.rfind(d, 0, pos) for d in ("。", "！", "？"))
+            ends = [x for x in (text.find(d, pos + length) for d in ("。", "！", "？"))
+                    if x >= 0]
+            en = min(ends) if ends else len(text) - 1
+            seg = text[st + 1:en + 1]
+            while seg.count("(") > seg.count(")") or seg.count("（") > seg.count("）"):
+                rest = text[en + 1:]
+                nxt = min([x for x in (rest.find(")"), rest.find("）")) if x >= 0] or [-1])
+                if nxt < 0:
+                    en = len(text) - 1
+                    break
+                en = en + 1 + nxt
+                seg = text[st + 1:en + 1]
+            return st, en, seg
+
+        s_start, s_end, sentence = _sentence_bounds(ntext, i, len(nq))
         why = main_ceiling_quote(sentence, cand.get("codex_value"),
                                  cand.get("cores") or (),
                                  cand.get("site_ceiling_type") or "")
         if why:
             return (f"ページ上の該当文を主天井の記述と確認できない（{url}）: {why}"
                     f"／該当文=「{sentence[:60]}」")
+        # 前後の文に「この値に掛かる条件」が書かれていないか
+        units = UNIT_WORDS.get(cand.get("site_ceiling_type") or "", ())
+        for label, seg in (("直前の文", ntext[max(0, s_start - 200):s_start + 1]),
+                           ("直後の文", _sentence_bounds(ntext, min(s_end + 1, len(ntext) - 1), 0)[2])):
+            hit = conditional_hit(seg, cand.get("site_ceiling_type") or "")
+            if not hit:
+                continue
+            # その文に【別の値】が書かれていれば、条件はそちらの話とみなす
+            other = re.search(rf"(?<![0-9.,])(?!{re.escape(str(int(float(cand['codex_value']))))}"
+                              rf"(?![0-9]))[0-9]{{2,5}}\s*(?:\+?α?)?(?:{_unit_pat(cand.get('site_ceiling_type') or '')})",
+                              seg)
+            if other:
+                continue
+            return (f"{label}に限定条件「{hit}」があり、別の値も書かれていない（{url}）"
+                    f"＝この値に掛かる条件の可能性がある／該当文=「{seg[-50:]}」")
     return None
 
 
@@ -662,11 +715,51 @@ def audit_machine(machine: dict, machines: list[dict], run_id: str,
 # 修正の適用（1件ずつ・全部通ってから書く）
 # ─────────────────────────────────────────────
 
+_ALPHA_RE = re.compile(r"[＋+]\s*[αa]|プラスアルファ")
+
+
+def alpha_mismatch(slug: str, cand: dict) -> str | None:
+    """記事本文の「+α」の有無と、出典側の plus_alpha 主張が食い違えば理由を返す。"""
+    want = cand.get("plus_alpha")
+    if want is None:
+        return None                      # 出典が言及していなければ判定しない
+    path = BASE / "assets" / "data" / "machine-details" / f"{slug}.json"
+    if not path.exists():
+        return None
+    text = path.read_text(encoding="utf-8")
+    units = UNIT_WORDS.get(cand.get("site_ceiling_type") or "", ())
+    old = cand.get("site_value")
+    found = None
+    for o in apply_external_fix._num_variants(old):
+        for u in units:
+            m = re.search(rf"(?<![0-9.,]){re.escape(o)}\s*(?:\+?α?)?{re.escape(u)}[^\"]{{0,12}}",
+                          text)
+            if m:
+                found = m.group(0)
+                break
+        if found:
+            break
+    if found is None:
+        return None                      # 本文に該当表記が無ければ判定しない
+    has_alpha = bool(_ALPHA_RE.search(found))
+    if bool(want) != has_alpha:
+        return (f"本文の表記（{found[:16]}）と出典の＋αの有無（{want}）が食い違う"
+                f"＝数字だけ置換すると意味が変わる")
+    return None
+
+
 def apply_one(slug: str, cand: dict, allowed, apply_mode: bool) -> dict:
     field = cand["claim_key"]
     why = contradiction_scan(cand, allowed, cand.get("pairs") or ())
     if why:
         return {"applied": False, "reason": why, "field": field, **_cand_view(cand)}
+    # ★記事本文の「＋α」の有無が出典の主張と一致するか（Codex11巡目 指摘5）★
+    #   数字だけ置換すると「800G＋α」の出典で記事を「800Gちょうど」と読ませてしまう。
+    #   本文側の表記と出典側の plus_alpha が食い違うなら直さず要確認へ回す。
+    why_alpha = alpha_mismatch(slug, cand)
+    if why_alpha:
+        return {"applied": False, "reason": why_alpha, "field": field,
+                "struct_path": None, "prose_edits": [], **_cand_view(cand)}
     r = apply_external_fix.run(BASE, slug, field, float(cand["site_value"]),
                                float(cand["codex_value"]), apply_mode)
     # ★書き込み後、記事データから claim を抽出し直して承認内容と一致するか確認する★
@@ -1054,6 +1147,49 @@ def selftest() -> int:
                  [R(K, "UNKNOWN", "numeric_divergence")])
     eq(len(c["fix_candidates"]), 1, "主天井の引用なら修正候補になる")
 
+    def _scan(page_text, quote, new=800, old=900):
+        verify_claims._page_cache.clear()
+        verify_claims._page_cache["https://t.test/x"] = verify_claims.Page(
+            page_text, "【スマスロ テスト】天井", "https://t.test/x")
+        cand = {"site_value": old, "codex_value": new, "site_ceiling_type": "game",
+                "ceiling_type": "game", "evidence": ["https://t.test/x"], "cores": []}
+        try:
+            return contradiction_scan(cand, None, [("https://t.test/x", quote)])
+        finally:
+            verify_claims._page_cache.clear()
+
+    # 9.993 Codex11巡目の残り（単位の厳格化・見出し連結・＋α整合）
+    eq(bool(main_ceiling_quote("最大4回継続でAT当選", 4, ceiling_type="through")), True,
+       "スルーは裸の「回」を単位と認めない")
+    eq(main_ceiling_quote("スルー回数天井は最大6スルー到達で発動する。", 6,
+                          ceiling_type="through"), None, "「スルー」付きなら認める")
+    eq(main_ceiling_quote("スマスロ北斗の拳 天井・設定判別 通常時は最大800Gで天井到達。",
+                          800, ["北斗の拳"], "game"), None,
+       "ページ見出しが本文と連結されても落とさない")
+    eq(bool(main_ceiling_quote("スマスロ北斗の拳 天井・設定判別 設定変更時は最大800Gで天井到達。",
+                               800, ["北斗の拳"], "game")), True,
+       "見出しがあっても条件は検出する")
+    eq(bool(alpha_mismatch("hokuto", {"site_value": 1268, "site_ceiling_type": "game",
+                                      "plus_alpha": False})), True,
+       "本文が＋α表記なのに出典が＋α無しなら修正しない")
+    eq(alpha_mismatch("hokuto", {"site_value": 1268, "site_ceiling_type": "game",
+                                 "plus_alpha": True}), None, "＋αが一致すれば可")
+    eq(alpha_mismatch("hokuto", {"site_value": 1268, "site_ceiling_type": "game",
+                                 "plus_alpha": None}), None, "出典が言及しなければ判定しない")
+
+    # 9.994 前後の文・括弧内に条件を追い出す迂回（Codex11巡目 指摘1・2）
+    for pt, q in (("設定変更時だけ適用される短縮天井です。天井は800GでAT当選。", "天井は800GでAT当選"),
+                  ("天井は800GでAT当選。※この天井は設定変更時のみ適用されます。", "天井は800GでAT当選"),
+                  ("天井は800G（適用条件は次項を参照。設定変更時のみ）", "天井は800G")):
+        eq(bool(_scan(pt, q)), True, f"前後の文/括弧内の条件を検出: {pt[:20]}")
+    for pt, q in (("本機の解説。通常時は最大800Gで天井到達となります。狙い目は600Gから。",
+                   "通常時は最大800Gで天井到達"),
+                  ("通常時の天井は800Gです。設定変更時は450Gに短縮されます。",
+                   "通常時の天井は800Gです")):
+        eq(_scan(pt, q), None, f"別の値が書かれた隣接文では落とさない: {pt[:20]}")
+    eq(bool(main_ceiling_quote("最大800G継続、AT当選率は1/300。", 800, ceiling_type="game")),
+       True, "当選率は天井語として数えない（Codex11巡目 指摘3）")
+
     # 9.996 天井の記述であることの肯定確認（Codex10巡目 指摘6）
     for q, v, ct in (("最大100pt獲得", 100, "point"), ("最大4回転継続", 4, "through"),
                      ("最大800G継続", 800, "game"), ("最大10周期遊技", 10, "cycle")):
@@ -1083,17 +1219,6 @@ def selftest() -> int:
                                ceiling_type="game")), True, "ボーナス間も拒否")
 
     # 9.995 ページ本文側の文脈検査（Codex10巡目: 引用の外に条件を追い出す攻撃）
-    def _scan(page_text, quote, new=800, old=900):
-        verify_claims._page_cache.clear()
-        verify_claims._page_cache["https://t.test/x"] = verify_claims.Page(
-            page_text, "【スマスロ テスト】天井", "https://t.test/x")
-        cand = {"site_value": old, "codex_value": new, "site_ceiling_type": "game",
-                "ceiling_type": "game", "evidence": ["https://t.test/x"], "cores": []}
-        try:
-            return contradiction_scan(cand, None, [("https://t.test/x", quote)])
-        finally:
-            verify_claims._page_cache.clear()
-
     for pt, q in (("天井は800G（設定変更時のみ）", "天井は800G"),
                   ("【設定変更時】天井は800GでAT当選", "天井は800GでAT当選"),
                   ("設定変更時・天井は800G", "天井は800G"),
