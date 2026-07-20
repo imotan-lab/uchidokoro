@@ -163,6 +163,18 @@ _MARKER_RE = re.compile(
     r"\s*([^\s、。｜|【】]{2,20})", re.IGNORECASE)
 
 
+# 「SLOT○○」「スロット○○」「パチスロ○○」＝機種名が名指しされている形
+# （2026-07-21 Codex6巡目 指摘6: カタログ外の機種が括弧の外にあると素通りしていた）
+# ★語の直後に名前が続く場合だけ★（「ちょんぼりすた パチスロ解析」のようなサイト名は対象外）
+_NAMED_MACHINE_RE = re.compile(r"(?:slot|スロット|パチスロ)\s*([^\s]{4,})", re.IGNORECASE)
+
+
+def named_machine_parts(tok: str) -> list[str]:
+    """断片の中で「機種名として名指しされている部分」を返す。"""
+    t = unicodedata.normalize("NFKC", str(tok or ""))
+    return [m.group(1) for m in _NAMED_MACHINE_RE.finditer(t)]
+
+
 def is_smart_text(s: str) -> bool:
     """文字列がスマスロ機を指しているか（スマスロ表記 or 型式接頭辞L）。"""
     t = unicodedata.normalize("NFKC", str(s or "")).lower()
@@ -450,6 +462,12 @@ def check_title(title: str, cores, reject_cores=(), reject_name_cores=()) -> tup
             if len(rc) >= 2 and rc in tc:
                 return False, (f"タイトルに他機種の名前がある（{rc}）"
                                f"→比較記事・別機種の疑いで不合格")
+        # 「SLOT○○」形式でカタログ外の機種が名指しされていないか（指摘6）
+        for part in named_machine_parts(tok):
+            pc = normalize_core(part)
+            if pc and not any(c and c in pc for c in cores):
+                return False, (f"タイトルで別の機種が名指しされている（{part[:20]}）"
+                               f"→比較・一覧記事の疑いで不合格")
         if is_smart_text(tok) or is_pachinko_text(tok):
             for rc in rej:
                 if len(rc) >= 2 and rc in tc:
@@ -843,6 +861,15 @@ def selftest() -> int:
     eq(check_title("【スマスロ ゴジラvsエヴァンゲリオン】天井・解析",
                    [normalize_core("スマスロ ゴジラvsエヴァンゲリオン")], [], [])[0], True,
        "機種名に含まれる vs では比較記事扱いしない")
+
+    # --- 6巡目Codexレビュー: 括弧の外で他機種が名指しされる ---
+    eq(check_title("【Lバンドリ！】SLOT魔法少女まどか☆マギカ 天井", ["バンドリ"], [], [])[0],
+       False, "括弧の外でカタログ外機種が名指しされたら不合格")
+    eq(check_title("スマスロ バンドリ！ 天井 スペック | ちょんぼりすた パチスロ解析",
+                   ["バンドリ"], [], [])[0], True, "サイト名の「パチスロ解析」では落とさない")
+    eq(named_machine_parts("SLOT魔法少女まどか☆マギカ"), ["魔法少女まどか☆マギカ"],
+       "名指し部分の抽出")
+    eq(named_machine_parts("ちょんぼりすた パチスロ"), [], "後ろに名前が無ければ抽出しない")
 
     # --- 危険パターンは必ず落ちること ---
     # 芯が一致しないのに部分一致で通る、を許さない

@@ -28,6 +28,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import subprocess
 import sys
 import uuid
@@ -72,8 +73,34 @@ TASK_BUDGET_SEC = 900         # 1タスク15分（★時間切れは必ず現状
 PLAIN_SCOPES = (None, "", "通常時", "not_applicable", "液晶")
 # 引用文にこれらが含まれる＝限定条件つきの天井なので、主天井の置き換えには使わない
 # （2026-07-21 Codex5巡目 指摘7: scope=null と申告しても引用が「AT間天井は1000G」なら別物）
-CONDITIONAL_WORDS = ("AT間", "at間", "CZ間", "cz間", "ボーナス間", "BB間", "bb間",
-                     "RB間", "有利区間", "AT後", "ボーナス後", "前兆中", "引き戻し")
+# ★限定条件の検出（2026-07-21 Codex6巡目 指摘2・3）★
+# 単語の完全一致では取りこぼす（AT後↔AT終了後 / 全角ＡＴ / 空白入り）ため、
+# NFKC正規化＋空白除去＋小文字化した上で【パターン】で判定する。
+_COND_PATTERNS = (
+    r"[a-z]{2,4}間",                       # at間 / cz間 / st間 / art間 / reg間 / big間
+    r"(ボーナス|ｂｏｎｕｓ|初当たり|初当り|bb|rb|ct)間",
+    r"有利区間",
+    r"(終了後|当選後|後は|抜け後)",         # AT終了後 / ボーナス終了後
+    r"(設定変更|リセット|朝一|据え置き)",   # リセット時の天井
+    r"モード[a-zａ-ｚ0-9]",                 # モードB/モード2の天井
+    r"(短縮|初回のみ|初回限定|前兆|引き戻し|引戻し)",
+)
+_COND_RE = None
+
+
+def _norm_text(s: str) -> str:
+    import unicodedata
+    return re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(s or ""))).lower()
+
+
+def conditional_hit(text: str) -> str | None:
+    """限定条件つき（主天井ではない）を示す表現があれば、その語を返す。"""
+    global _COND_RE
+    if _COND_RE is None:
+        _COND_RE = re.compile("|".join(_COND_PATTERNS))
+    m = _COND_RE.search(_norm_text(text))
+    return m.group(0) if m else None
+
 
 # 矛盾スキャンで使う単位表記（旧値がページに載っていないかを見る）
 UNIT_WORDS = {
@@ -251,8 +278,13 @@ def classify(site_claims: list[dict], codex_claims: list[dict],
         ev_ok = [e for e in (codex or {}).get("evidence_results") or [] if e.get("verified")]
         ev_domains = sorted({shadow_codex._etld1(e.get("source_url") or "")
                              for e in ev_ok} - {""})
-        quotes = " / ".join((e.get("raw_quote") or "")
-                            for e in ((codex or {}).get("evidence") or []))
+        # ★検証に成功したURLの引用だけを使う（Codex6巡目 指摘5）★
+        #   evidence と evidence_results が対応していないと、検証していない引用で
+        #   条件検査を通してしまう。URLで突き合わせ、対応が取れない場合は修正しない。
+        ok_urls = {e.get("source_url") for e in ev_ok}
+        ev_used = [e for e in ((codex or {}).get("evidence") or [])
+                   if e.get("source_url") in ok_urls]
+        quotes = " / ".join((e.get("raw_quote") or "") for e in ev_used)
         if not auto_fix_allowed:
             why = ("スマスロ機ではないため自動修正の対象外"
                    "（同名の旧世代機とページを機械的に区別できない）")
@@ -261,6 +293,8 @@ def classify(site_claims: list[dict], codex_claims: list[dict],
         # ★申告を信用せず、実際の検証結果から数え直す（2026-07-21 Codex5巡目 指摘8）★
         elif codex.get("assertion_status") != "asserted":
             why = f"Codexの主張が確定でない（assertion_status={codex.get('assertion_status')}）"
+        elif len(ev_used) < len(ev_ok) or not all(e.get("raw_quote") for e in ev_used):
+            why = "検証に成功した出典と引用文の対応が取れない（内部不整合）"
         elif len(ev_domains) < 2:
             why = (f"裏取りが独立2ドメインに届かない"
                    f"（検証成功ドメイン={ev_domains} / 申告={codex.get('evidence_strength')}）")
@@ -269,9 +303,9 @@ def classify(site_claims: list[dict], codex_claims: list[dict],
         elif codex.get("scope") not in PLAIN_SCOPES:
             why = f"条件付きの天井（scope={codex.get('scope')}）＝サイトの値と同じものか決まらない"
         # ★引用文に限定条件が書かれていれば主天井の置き換えに使わない（指摘7）★
-        elif any(w in quotes for w in CONDITIONAL_WORDS):
-            why = (f"出典の引用に限定条件（{[w for w in CONDITIONAL_WORDS if w in quotes][:2]}）"
-                   f"が含まれる＝主天井と同じものか決まらない")
+        elif conditional_hit(quotes):
+            why = (f"出典の引用に限定条件（{conditional_hit(quotes)}）が含まれる"
+                   f"＝主天井と同じものか決まらない")
         elif site.get("value") is None or codex.get("value") is None:
             why = "値が欠けている"
         elif shadow_claims._norm_unit(site.get("unit")) != shadow_claims._norm_unit(codex.get("unit")):
@@ -297,7 +331,8 @@ def classify(site_claims: list[dict], codex_claims: list[dict],
                "unit": (codex or {}).get("unit") or site.get("unit"),
                "ceiling_type": (codex or {}).get("ceiling_type") or site.get("ceiling_type"),
                "site_ceiling_type": site.get("ceiling_type"),
-               "evidence": [e.get("source_url") for e in ((codex or {}).get("evidence") or [])],
+               "evidence": [e.get("source_url") for e in ev_used],
+               "quotes": [e.get("raw_quote") for e in ev_used],
                "verified_domains": (codex or {}).get("verified_domains") or [],
                "detail": r["detail"]}
         if why:
@@ -313,8 +348,17 @@ def classify(site_claims: list[dict], codex_claims: list[dict],
 # 矛盾スキャン（旧値も同じページに載っていないか）
 # ─────────────────────────────────────────────
 
-def contradiction_scan(cand: dict, allowed) -> str | None:
-    """裏取りに使ったページに旧値も同単位で載っていれば理由文字列を返す（＝修正しない）。"""
+CONTEXT_CHARS = 160    # 引用の前後どれだけを「文脈」として見るか
+
+
+def contradiction_scan(cand: dict, allowed, quotes=()) -> str | None:
+    """裏取りページを実際に開いて2つを見る（問題があれば理由文字列＝修正しない）。
+
+    1. 旧値が同じ単位でページに載っていないか（どちらが正か機械で決まらない）
+    2. ★引用の前後（見出し・直前文）に限定条件が書かれていないか★
+       （2026-07-21 Codex6巡目 指摘3: 「設定変更時の天井」という見出しの下に
+         「天井は800GでAT当選。」とある場合、引用文だけ見ても条件が分からない）
+    """
     old = cand.get("site_value")
     if old is None:
         return "旧値が無い"
@@ -333,6 +377,18 @@ def contradiction_scan(cand: dict, allowed) -> str | None:
                 if f"{o}{u}" in text:
                     return (f"裏取りページに旧値「{o}{u}」も載っている（{url}）"
                             f"＝どちらが正しいか機械で決められない")
+        # 引用の前後文脈（見出し・直前文）に限定条件が無いか
+        ntext = _norm_text(page.text)
+        for q in quotes or ():
+            nq = _norm_text(q)
+            i = ntext.find(nq)
+            if i < 0:
+                return f"引用がページ上で見つからない（{url}）＝文脈を確認できない"
+            ctx = ntext[max(0, i - CONTEXT_CHARS):i + len(nq) + CONTEXT_CHARS]
+            hit = conditional_hit(ctx)
+            if hit:
+                return (f"引用の前後に限定条件「{hit}」がある（{url}）"
+                        f"＝主天井の値か決められない")
     return None
 
 
@@ -421,7 +477,7 @@ def audit_machine(machine: dict, machines: list[dict], run_id: str,
 
 def apply_one(slug: str, cand: dict, allowed, apply_mode: bool) -> dict:
     field = cand["claim_key"]
-    why = contradiction_scan(cand, allowed)
+    why = contradiction_scan(cand, allowed, cand.get("quotes") or ())
     if why:
         return {"applied": False, "reason": why, "field": field, **_cand_view(cand)}
     r = apply_external_fix.run(BASE, slug, field, float(cand["site_value"]),
@@ -437,12 +493,68 @@ def _sh(cmd: list[str], timeout=600) -> subprocess.CompletedProcess:
                           creationflags=_NO_WINDOW)
 
 
+def _git_show(path: str) -> str | None:
+    r = _sh(["git", "show", f"HEAD:{path}"])
+    return r.stdout if r.returncode == 0 else None
+
+
+def semantic_diff_ok(fixes: list[dict]) -> tuple[bool, str]:
+    """★コミット直前に「中身の差分」を検査する（2026-07-21 Codex6巡目 指摘1）★
+
+    ファイル単位の git add では、実行前から作業ツリーにあった【未検証の変更】まで
+    一緒に公開してしまう。そこで HEAD の内容と現在の内容を読み比べ、
+    ★今回直すと決めた (slug, 項目) 以外に値の変化が無いこと★を確認する。
+    """
+    intended = {(f["slug"], f["field"]): (float(f["old"]), float(f["new"])) for f in fixes}
+    cur_raw = (BASE / "assets" / "data" / "machines.json").read_text(encoding="utf-8")
+    head_raw = _git_show("assets/data/machines.json")
+    if head_raw is None:
+        return False, "HEADのmachines.jsonを読めない"
+    try:
+        cur = {m["slug"]: m for m in json.loads(cur_raw)}
+        head = {m["slug"]: m for m in json.loads(head_raw)}
+    except Exception as e:
+        return False, f"machines.jsonを読めない: {e}"
+    if set(cur) != set(head):
+        return False, f"機種の増減がある（{sorted(set(cur) ^ set(head))[:5]}）"
+    for slug in cur:
+        a, b = json.dumps(head[slug], ensure_ascii=False, sort_keys=True),             json.dumps(cur[slug], ensure_ascii=False, sort_keys=True)
+        if a == b:
+            continue
+        keys = [k for (sl, k) in intended if sl == slug]
+        if not keys:
+            return False, f"今回の対象でない機種に変更がある（{slug}）→公開しない"
+        # 変更が「意図した項目の値」だけであることを確認する
+        try:
+            cont_h, key_h, val_h, _ = apply_external_fix.locate_struct(head[slug], keys[0])
+            cont_c, key_c, val_c, _ = apply_external_fix.locate_struct(cur[slug], keys[0])
+        except Exception as e:
+            return False, f"{slug}: 変更箇所を特定できない（{e}）"
+        exp_old, exp_new = intended[(slug, keys[0])]
+        if float(val_h) != exp_old or float(val_c) != exp_new:
+            return False, (f"{slug}: 想定外の値変化（HEAD={val_h} / 現在={val_c} / "
+                           f"想定={exp_old}→{exp_new}）")
+        probe = json.loads(json.dumps(cur[slug]))
+        try:
+            c2, k2, _, _ = apply_external_fix.locate_struct(probe, keys[0])
+            c2[k2] = val_h                     # 値を戻したらHEADと一致するはず
+        except Exception as e:
+            return False, f"{slug}: 差分検査に失敗（{e}）"
+        if json.dumps(probe, ensure_ascii=False, sort_keys=True) != a:
+            return False, f"{slug}: 値以外の変更が混ざっている→公開しない"
+    return True, "差分は今回の修正だけ"
+
+
 def publish(fixes: list[dict], ctx: str) -> tuple[bool, str]:
     """修正後の再ビルド→検査→コミット→push。★検査が通らなければコミットしない★
 
     戻り値 (公開したか, 説明)。失敗時は作業ツリーを元に戻す（中途半端に公開しない）。
     """
     slugs = sorted({f["slug"] for f in fixes})
+    ok, why = semantic_diff_ok(fixes)
+    if not ok:
+        _sh(["git", "checkout", "--", "assets/data/machines.json"])
+        return False, f"差分検査で不合格（{why}）→修正を取り消した"
     steps = [
         (["python", "scripts/build_machine_pages.py"], "記事ページ再生成"),
         (["python", "scripts/build_hub_pages.py"], "ハブ4ページ再生成"),
@@ -628,6 +740,29 @@ def selftest() -> int:
     eq(len(c["reviews"]), 1, "分類外の判定も要確認へ")
     eq(c["reviews"][0]["kind"], "other", "分類外の種別")
 
+    # 9.9 限定条件の検出（表記ゆれ・言い換えを含む・Codex6巡目 指摘2）
+    for t in ("設定変更時の天井は800G", "リセット時の天井は800G", "朝一は800Gで天井",
+              "AT終了後は800Gで天井", "CZ終了後は800Gで天井", "ボーナス終了後は800G",
+              "モードBの天井は800G", "短縮天井は800G", "初回のみ800G",
+              "ST間天井は800G", "ART間天井は800G", "初当たり間800G", "REG間800G",
+              "ＡＴ間天井は800G", "AT 間天井は800G", "有利区間の天井は800G"):
+        eq(bool(conditional_hit(t)), True, f"限定条件を検出: {t}")
+    for t in ("天井は1000Gで直撃", "通常時の天井は1000G", "天井到達で1000G消化"):
+        eq(bool(conditional_hit(t)), False, f"主天井は素通し: {t}")
+    c = classify([S(K, 900)], [C(K, 800, quote="設定変更時の天井は{v}G")],
+                 [R(K, "UNKNOWN", "numeric_divergence")])
+    eq(len(c["fix_candidates"]), 0, "設定変更時の引用では修正しない")
+
+    # 9.95 検証成功URLと引用の対応が取れないものは修正しない（指摘5）
+    broken = C(K, 1000)
+    broken["evidence"] = [{"source_url": "https://zzz.com/x", "raw_quote": "天井は1000G"}]
+    c = classify([S(K, 900)], [broken], [R(K, "UNKNOWN", "numeric_divergence")])
+    eq(len(c["fix_candidates"]), 0, "検証URLと引用が対応しないものは修正しない")
+    empty_ev = C(K, 1000)
+    empty_ev["evidence"] = []
+    c = classify([S(K, 900)], [empty_ev], [R(K, "UNKNOWN", "numeric_divergence")])
+    eq(len(c["fix_candidates"]), 0, "引用が無いものは修正しない")
+
     # 10. 選定は評価日が古い順・preview機種は対象外
     ms = [{"slug": "a"}, {"slug": "b"}, {"slug": "c", "status": "preview"}]
     st = {"codex_audit": {"last_audited": {"a": "2026-07-20", "b": "2026-07-01"}}}
@@ -653,6 +788,15 @@ def run(slugs_override, n_machines: int, apply_mode: bool) -> int:
         log("=== codex_audit 中止（ロックが取れない＝他タスク実行中） STATUS=SKIPPED_LOCKED ===")
         write_marker("SKIPPED_LOCKED", run_id, started, now(), [], 0, 0)
         return 0
+    # ★開始時に作業ツリーの汚れを確認（Codex6巡目 指摘1）★
+    #   既に未検証の変更があるなら、それを巻き込んで公開しないよう自動修正を止める。
+    dirty = [ln for ln in (_sh(["git", "status", "--porcelain"]).stdout or "").splitlines()
+             if ln.strip() and not ln.startswith("??")]
+    if dirty and apply_mode:
+        log(f"⚠ 作業ツリーに未コミットの変更あり→自動修正は行わず点検のみ: {dirty[:5]}")
+        add_issue("site", "environment", "[codex-audit] 作業ツリーが汚れていて自動修正を中止",
+                  " / ".join(dirty)[:1000])
+    dirty_tree = bool(dirty)
     machines = json.loads((BASE / "assets" / "data" / "machines.json").read_text(encoding="utf-8"))
     by = {m["slug"]: m for m in machines}
     state = load_json(STATE_PATH, {}) or {}
@@ -703,7 +847,7 @@ def run(slugs_override, n_machines: int, apply_mode: bool) -> int:
                 cls["reviews"].append({**cand, "kind": "value", "auto_fixable": False,
                                        "reason": f"本日の自動修正上限（{MAX_FIXES_PER_RUN}件）に到達"})
                 continue
-            fr = apply_one(slug, cand, allowed, apply_mode)
+            fr = apply_one(slug, cand, allowed, apply_mode and not dirty_tree)
             fr["slug"] = slug
             if fr["applied"]:
                 fixes_done += 1
