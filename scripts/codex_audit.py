@@ -202,7 +202,11 @@ def _page_furniture() -> tuple:
     """ページ見出し・パンくずに出る定型語（平坦化で本文と連結されるため許可する）。
     2026-07-21 Codex11巡目 指摘6: 「スマスロ北斗の拳 天井・設定判別」＋本文の連結で
     正しい出典を落としていた。条件語（設定変更・AT間等）は含まれないので安全側は保たれる。"""
-    return tuple(claim_identity._STOP_WORDS)
+    # ★条件に化ける語（高設定・モード・ゾーン・リセット・朝一・有利区間・スルー等）は
+    #   許可しない（2026-07-21 Codex12巡目 指摘2）★
+    ng = {"高設定", "モード", "ゾーン", "リセット", "朝一", "有利区間", "スルー",
+          "設定示唆", "設定差", "有利", "天国"}
+    return tuple(w for w in claim_identity._STOP_WORDS if w not in ng)
 
 
 def _consume_allowed(prefix: str, cores=()) -> str:
@@ -248,6 +252,10 @@ def main_ceiling_quote(quote: str, value, cores=(), ceiling_type: str = "game") 
     if value is None or not isinstance(value, (int, float)) or isinstance(value, bool):
         return f'値が数値でない（{value!r}）'
     n_all = _norm_text(quote)
+    # ★複数の文にまたがる引用は拒否（2026-07-21 Codex12巡目 指摘1）★
+    #   2文目に条件を隠せば前後文の検査を迂回できるため。
+    if re.search(r"[。！？].", n_all):
+        return "引用が複数の文にまたがる＝どの文の値か決められない"
     if not _CEILING_RE.search(n_all):
         # 「最大100pt獲得」「最大4回転継続」「最大800G継続、AT当選率は1/300」等
         # ＝天井の記述ではない（Codex10巡目 指摘6 / 11巡目 指摘3）
@@ -501,6 +509,9 @@ def classify(site_claims: list[dict], codex_claims: list[dict],
         #   理由にしない。代わりに「Codexが限定条件を名乗っていないこと（PLAIN_SCOPES）」と
         #   「引用文に限定条件語が無いこと」で守る（上の2条件）。
         #   ただしCodexが★既知の語彙に無いscope★を出した場合は意味が確定しないので止める。
+        elif (codex.get("operator") or "exact") not in ("exact", "max"):
+            # 「約」「以上」等は数値を断定表記へ置き換えると意味が変わる（指摘5）
+            why = f"出典の表現が断定でない（operator={codex.get('operator')}）"
         elif any(site.get(a) is not None and codex.get(a) != site.get(a)
                  for a in ("operator", "plus_alpha")):
             why = ("operator/plus_alpha が食い違う"
@@ -613,8 +624,9 @@ def contradiction_scan(cand: dict, allowed, pairs=()) -> str | None:
                     f"／該当文=「{sentence[:60]}」")
         # 前後の文に「この値に掛かる条件」が書かれていないか
         units = UNIT_WORDS.get(cand.get("site_ceiling_type") or "", ())
-        for label, seg in (("直前の文", ntext[max(0, s_start - 200):s_start + 1]),
-                           ("直後の文", _sentence_bounds(ntext, min(s_end + 1, len(ntext) - 1), 0)[2])):
+        prev_seg = _sentence_bounds(ntext, max(0, s_start), 0)[2] if s_start > 0 else ""
+        next_seg = _sentence_bounds(ntext, min(s_end + 1, len(ntext) - 1), 0)[2]
+        for label, seg in (("直前の文", prev_seg), ("直後の文", next_seg)):
             hit = conditional_hit(seg, cand.get("site_ceiling_type") or "")
             if not hit:
                 continue
@@ -719,31 +731,45 @@ _ALPHA_RE = re.compile(r"[＋+]\s*[αa]|プラスアルファ")
 
 
 def alpha_mismatch(slug: str, cand: dict) -> str | None:
-    """記事本文の「+α」の有無と、出典側の plus_alpha 主張が食い違えば理由を返す。"""
+    """記事本文の「+α」の有無と、出典側の plus_alpha 主張が食い違えば理由を返す。
+
+    ★判定は「実際に書き換える箇所」だけで行う（2026-07-21 Codex12巡目 指摘4）★
+      記事JSON全体から最初の同値表記を拾うと、別機能の「900G+α継続」を
+      主天井の表記と取り違える。
+    """
     want = cand.get("plus_alpha")
     if want is None:
         return None                      # 出典が言及していなければ判定しない
     path = BASE / "assets" / "data" / "machine-details" / f"{slug}.json"
     if not path.exists():
         return None
-    text = path.read_text(encoding="utf-8")
-    units = UNIT_WORDS.get(cand.get("site_ceiling_type") or "", ())
-    old = cand.get("site_value")
-    found = None
-    for o in apply_external_fix._num_variants(old):
-        for u in units:
-            m = re.search(rf"(?<![0-9.,]){re.escape(o)}\s*(?:\+?α?)?{re.escape(u)}[^\"]{{0,12}}",
-                          text)
-            if m:
-                found = m.group(0)
-                break
-        if found:
-            break
-    if found is None:
+    try:
+        detail = json.loads(path.read_text(encoding="utf-8"))
+        edits = apply_external_fix.plan_prose_edits(
+            detail, cand["claim_key"], float(cand["site_value"]),
+            float(cand["codex_value"]))
+    except Exception as e:
+        return f"本文の置換箇所を特定できない（{type(e).__name__}: {e}）"
+    if not edits:
         return None                      # 本文に該当表記が無ければ判定しない
-    has_alpha = bool(_ALPHA_RE.search(found))
-    if bool(want) != has_alpha:
-        return (f"本文の表記（{found[:16]}）と出典の＋αの有無（{want}）が食い違う"
+    units = UNIT_WORDS.get(cand.get("site_ceiling_type") or "", ())
+    olds = apply_external_fix._num_variants(cand["site_value"])
+    seen = set()
+    for e in edits:
+        for o in olds:
+            for u in units:
+                # ★+α は単位の前後どちらにも来る（1268G+α / 1268+αG）。
+                #   長い方を先に試すのではなく、1つのパターンで両方を吸収する。
+                for m in re.finditer(
+                        rf"(?<![0-9.,]){re.escape(o)}\s*(?:[＋+]\s*[αa])?"
+                        rf"{re.escape(u)}(?:\s*[＋+]\s*[αa])?", e["before"]):
+                    seen.add(bool(_ALPHA_RE.search(m.group(0))))
+    if not seen:
+        return None
+    if len(seen) > 1:
+        return "本文の同値表記で＋αの有無が混在している＝どれを直すか決められない"
+    if bool(want) != seen.pop():
+        return (f"本文の表記と出典の＋αの有無（{want}）が食い違う"
                 f"＝数字だけ置換すると意味が変わる")
     return None
 
@@ -1117,7 +1143,7 @@ def selftest() -> int:
                      ("・通常時最大 1268G+α で天井到達", 1268, "game"),
                      ("通常時は最大10周期到達でAT当選。", 10, "cycle"),
                      ("通常時を最大967G＋α消化でボーナスに当選。", 967, "game"),
-                     ("天井は1268G＋α消化でバトルボーナスに当選。天井ATは継続率優遇", 1268, "game")):
+                     ("天井は1268G＋α消化でバトルボーナスに当選", 1268, "game")):
         eq(main_ceiling_quote(q, v, ceiling_type=ct), None, f"主天井と確認できる: {q[:20]}")
     for q, v, ct in (("設定変更時は天井G数が短縮され、800G+αで天井到達となる。", 800, "game"),
                      ("設定6のみ天井は800G", 800, "game"), ("AT終了時は800G", 800, "game"),
@@ -1169,13 +1195,13 @@ def selftest() -> int:
     eq(bool(main_ceiling_quote("スマスロ北斗の拳 天井・設定判別 設定変更時は最大800Gで天井到達。",
                                800, ["北斗の拳"], "game")), True,
        "見出しがあっても条件は検出する")
-    eq(bool(alpha_mismatch("hokuto", {"site_value": 1268, "site_ceiling_type": "game",
-                                      "plus_alpha": False})), True,
+    _acand = {"claim_key": "ceiling.normal.game", "site_value": 1268,
+              "codex_value": 1300, "site_ceiling_type": "game"}
+    eq(bool(alpha_mismatch("hokuto", {**_acand, "plus_alpha": False})), True,
        "本文が＋α表記なのに出典が＋α無しなら修正しない")
-    eq(alpha_mismatch("hokuto", {"site_value": 1268, "site_ceiling_type": "game",
-                                 "plus_alpha": True}), None, "＋αが一致すれば可")
-    eq(alpha_mismatch("hokuto", {"site_value": 1268, "site_ceiling_type": "game",
-                                 "plus_alpha": None}), None, "出典が言及しなければ判定しない")
+    eq(alpha_mismatch("hokuto", {**_acand, "plus_alpha": True}), None, "＋αが一致すれば可")
+    eq(alpha_mismatch("hokuto", {**_acand, "plus_alpha": None}), None,
+       "出典が言及しなければ判定しない")
 
     # 9.994 前後の文・括弧内に条件を追い出す迂回（Codex11巡目 指摘1・2）
     for pt, q in (("設定変更時だけ適用される短縮天井です。天井は800GでAT当選。", "天井は800GでAT当選"),
@@ -1201,9 +1227,17 @@ def selftest() -> int:
     eq(bool(main_ceiling_quote(
         "天井は800G（詳しい適用条件については別項の注意事項を必ず確認してください。設定変更時のみ）",
         800, ceiling_type="game")), True, "括弧内の句点をまたいで条件を検出")
-    eq(main_ceiling_quote(
+    eq(bool(main_ceiling_quote(
         "天井は1268G＋α消化でバトルボーナスに当選。天井ATは継続率優遇。本前兆中に天井到達",
-        1268, ceiling_type="game"), None, "次の文の語では落とさない")
+        1268, ceiling_type="game")), True,
+       "複数文の引用は拒否（2文目に条件を隠せるため・Codex12巡目 指摘1）")
+    eq(bool(main_ceiling_quote("天井は800G。※設定変更時のみ適用。", 800,
+                               ceiling_type="game")), True, "2文目に条件を置く迂回を拒否")
+    eq(bool(main_ceiling_quote("最大800G継続。通常時の天井は1000G。", 800,
+                               ceiling_type="game")), True, "別の文の天井語を借りる迂回を拒否")
+    for q in ("高設定では天井は800G", "モード天井は800G", "ゾーン天井は800G"):
+        eq(bool(main_ceiling_quote(q, 800, ceiling_type="game")), True,
+           f"見出し語に化けた条件を拒否: {q}")
 
     # 9.997 天井種別ごとの語彙（実データ較正・周期/スルー機の主天井表現）
     eq(main_ceiling_quote("最大10周期到達で周期天井に到達し、STに当選する。", 10,
