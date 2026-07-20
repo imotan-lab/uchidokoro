@@ -383,6 +383,29 @@ def title_groups(title: str) -> list[list[str]]:
     return groups
 
 
+def primary_group(title: str) -> list[str]:
+    """タイトルの【主題】にあたるまとまりを返す。
+
+    ★2026-07-21 Codex13巡目 指摘6★
+      「超電磁砲2 天井解析【Lバンドリ！】」のように、別機種が主題で自機種名が
+      後ろに添えられているだけのページを本人扱いしていた。
+      先頭の本文（【】の外）が機種名らしければそれを主題とし、
+      先頭が空（＝【…】で始まるタイトル）なら最初の【…】を主題とする。
+    """
+    if not title:
+        return []
+    t = unicodedata.normalize("NFKC", str(title)).strip()
+    lead = t.split("【")[0].strip() if "【" in t else t
+    head = _cut_at_stopword(lead).strip()
+    if head:
+        pieces = [p_.strip() for p_ in _SPLIT_RE.split(head) if p_.strip()]
+        # 括弧入りの正式名（海門(うなと)決戦）は割らない形も候補に含める
+        return [head] + [x for x in pieces if x != head]
+    groups = title_groups(title)
+    g = groups[0] if groups else []
+    return ([" ".join(g)] + g) if len(g) > 1 else g
+
+
 def title_candidates(title: str) -> list[str]:
     """タイトルから機種名候補の文字列を列挙する（芯にする前の生の断片）。"""
     out: list[str] = []
@@ -464,6 +487,13 @@ def check_title(title: str, cores, reject_cores=(), reject_name_cores=()) -> tup
     hit = [c for c in cand_cores if c in cores]
     if not hit:
         return False, f"タイトルの機種名が一致しない（候補={cand_cores[:4]} / 期待={cores[:4]}）"
+
+    # ★タイトルの主題が自機種であること（指摘6）★
+    prim = [normalize_core(x) for x in primary_group(title)]
+    prim = [c for c in prim if c]
+    if prim and not any(c in cores for c in prim):
+        return False, (f"タイトルの主題が自機種でない（主題={prim[:2]}）"
+                       f"→別機種の記事に自機種名が添えられているだけの疑い")
 
     # ★複数の【…】区間があり、そのうち1つでも自機種と無関係な機種名らしき区間なら不合格★
     #   （2026-07-21 Codex指摘6: カタログ外の他機種と並ぶ比較記事を通してしまう）
@@ -1000,6 +1030,15 @@ def selftest() -> int:
        "記事テーマ（内部状態）は落とさない")
     eq(tail_verdict("上位at性能"), "unknown", "記事用語を含む余り")
     eq(tail_verdict("リール配列"), "unknown", "記事用語を含む余り2")
+
+    # --- 13巡目Codexレビュー: タイトルの主題 ---
+    eq(check_title("超電磁砲2 天井解析【Lバンドリ！】", ["バンドリ"], [], [])[0], False,
+       "別機種が主題で自機種名が添えられているだけなら不合格")
+    eq(check_title("【スマスロ北斗の拳】天井の恩恵", ["北斗の拳"], [], [])[0], True,
+       "【…】始まりのタイトルは中身が主題")
+    eq(check_title("スマスロ北斗の拳 天井狙いまとめ｜天井解析", ["北斗の拳"], [], [])[0], True,
+       "先頭が機種名のタイトルも通る")
+    eq(primary_group("超電磁砲2 天井解析【Lバンドリ！】")[0], "超電磁砲2", "主題の切り出し")
 
     # --- 危険パターンは必ず落ちること ---
     # 芯が一致しないのに部分一致で通る、を許さない

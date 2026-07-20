@@ -282,7 +282,7 @@ def main_ceiling_quote(quote: str, value, cores=(), ceiling_type: str = "game") 
             reasons.append(f"値と同じ節が天井ではない挙動の説明（「{ng.group(0)}」）")
             continue
         # ★非断定の表現は使わない（指摘3: 「約1000G」から断定表記へ直さない）★
-        if re.search(r"約|およそ|程度|前後|くらい|ほど", clause_pre):
+        if re.search(r"約|およそ|程度|前後|くらい|ほど|以上|以下|超|未満", clause_pre + clause_suf[:6]):
             reasons.append("値が非断定の表現（約・程度・前後）で書かれている")
             continue
         hit = conditional_hit(clause_pre, ceiling_type)
@@ -537,6 +537,17 @@ def classify(site_claims: list[dict], codex_claims: list[dict],
         #   理由にしない。代わりに「Codexが限定条件を名乗っていないこと（PLAIN_SCOPES）」と
         #   「引用文に限定条件語が無いこと」で守る（上の2条件）。
         #   ただしCodexが★既知の語彙に無いscope★を出した場合は意味が確定しないので止める。
+        elif len({alpha_in_quote(e.get("raw_quote"), codex.get("value"),
+                                 site.get("ceiling_type") or "") for e in ev_used}) > 1:
+            why = "出典ごとに＋αの有無が食い違う"
+        elif (codex.get("plus_alpha") is not None
+              and next(iter({alpha_in_quote(e.get("raw_quote"), codex.get("value"),
+                                            site.get("ceiling_type") or "")
+                             for e in ev_used}), None) is not None
+              and bool(codex.get("plus_alpha")) != next(iter(
+                  {alpha_in_quote(e.get("raw_quote"), codex.get("value"),
+                                  site.get("ceiling_type") or "") for e in ev_used}))):
+            why = "Codexの＋α申告と引用文の表記が食い違う"
         elif (codex.get("operator") or "exact") not in ("exact", "max"):
             # 「約」「以上」等は数値を断定表記へ置き換えると意味が変わる（指摘5）
             why = f"出典の表現が断定でない（operator={codex.get('operator')}）"
@@ -558,7 +569,10 @@ def classify(site_claims: list[dict], codex_claims: list[dict],
                "evidence": [e.get("source_url") for e in ev_used],
                "pairs": [(e.get("source_url"), e.get("raw_quote")) for e in ev_used],
                "cores": list(cores or ()),
-               "plus_alpha": (codex or {}).get("plus_alpha"),
+               "plus_alpha": next(iter({alpha_in_quote(
+                   e.get("raw_quote"), (codex or {}).get("value"),
+                   site.get("ceiling_type") or "") for e in ev_used}), None)
+               if ev_used else (codex or {}).get("plus_alpha"),
                "verified_domains": (codex or {}).get("verified_domains") or [],
                "detail": r["detail"]}
         if why:
@@ -658,11 +672,19 @@ def contradiction_scan(cand: dict, allowed, pairs=()) -> str | None:
             hit = conditional_hit(seg, cand.get("site_ceiling_type") or "")
             if not hit:
                 continue
-            # その文に【別の値】が書かれていれば、条件はそちらの話とみなす
-            other = re.search(rf"(?<![0-9.,])(?!{re.escape(str(int(float(cand['codex_value']))))}"
-                              rf"(?![0-9]))[0-9]{{2,5}}\s*(?:\+?α?)?(?:{_unit_pat(cand.get('site_ceiling_type') or '')})",
-                              seg)
-            if other:
+            # ★条件語と【同じ節】に別の値があるときだけ「その値の話」とみなす★
+            #   （2026-07-21 Codex13巡目 指摘5: 文のどこかに別の値があるだけで
+            #     迂回できた。「設定変更時のみ適用（狙い目は500Gから）。天井は800G」）
+            exempt = False
+            for cl in re.split(r"[、。！？（）()]", seg):
+                if not conditional_hit(cl, cand.get("site_ceiling_type") or ""):
+                    continue
+                if re.search(rf"(?<![0-9.,])(?!{re.escape(str(int(float(cand['codex_value']))))}"
+                             rf"(?![0-9]))[0-9]{{2,5}}\s*(?:\+?α?)?"
+                             rf"(?:{_unit_pat(cand.get('site_ceiling_type') or '')})", cl):
+                    exempt = True
+                    break
+            if exempt:
                 continue
             return (f"{label}に限定条件「{hit}」があり、別の値も書かれていない（{url}）"
                     f"＝この値に掛かる条件の可能性がある／該当文=「{seg[-50:]}」")
@@ -755,7 +777,20 @@ def audit_machine(machine: dict, machines: list[dict], run_id: str,
 # 修正の適用（1件ずつ・全部通ってから書く）
 # ─────────────────────────────────────────────
 
-_ALPHA_RE = re.compile(r"[＋+]\s*[αa]|プラスアルファ")
+_ALPHA_RE = re.compile(r"[＋+]\s*(?:[αa]|ａ|アルファ)|プラスアルファ")
+
+
+def alpha_in_quote(quote: str, value, ceiling_type: str) -> bool | None:
+    """引用の中で、その値に＋αが付いているか（判定できなければ None）。
+    2026-07-21 Codex13巡目 指摘4: Codexの申告だけを信じず引用から独立抽出する。"""
+    n = _norm_text(quote)
+    up = _unit_pat(ceiling_type)
+    v = str(int(float(value))) if float(value).is_integer() else str(value)
+    m = re.search(rf"(?<![0-9.,]){re.escape(v)}(?![0-9])\s*(?:[＋+]\s*[αa])?(?:{up})"
+                  rf"(?:\s*(?:[＋+]\s*(?:[αa]|アルファ)|プラスアルファ))?", n)
+    if not m:
+        return None
+    return bool(re.search(r"[＋+]\s*(?:[αa]|アルファ)|プラスアルファ", m.group(0)))
 
 
 def alpha_mismatch(slug: str, cand: dict) -> str | None:
@@ -790,7 +825,9 @@ def alpha_mismatch(slug: str, cand: dict) -> str | None:
                 #   長い方を先に試すのではなく、1つのパターンで両方を吸収する。
                 for m in re.finditer(
                         rf"(?<![0-9.,]){re.escape(o)}\s*(?:[＋+]\s*[αa])?"
-                        rf"{re.escape(u)}(?:\s*[＋+]\s*[αa])?", e["before"]):
+                        rf"{re.escape(u)}"
+                        rf"(?:\s*(?:[＋+]\s*(?:[αa]|ａ|アルファ)|プラスアルファ))?",
+                        e["before"]):
                     seen.add(bool(_ALPHA_RE.search(m.group(0))))
     if not seen:
         return None
