@@ -542,7 +542,34 @@ def semantic_diff_ok(fixes: list[dict]) -> tuple[bool, str]:
             return False, f"{slug}: 差分検査に失敗（{e}）"
         if json.dumps(probe, ensure_ascii=False, sort_keys=True) != a:
             return False, f"{slug}: 値以外の変更が混ざっている→公開しない"
-    return True, "差分は今回の修正だけ"
+
+    # ★記事本文（machine-details）側も、今回の置換以外に変化が無いことを確認する★
+    #   置換は「旧値→新値」の文字列差し替えだけのはずなので、
+    #   新値を旧値へ戻したらHEADの内容と一致しなければならない。
+    for f in fixes:
+        rel = f"assets/data/machine-details/{f['slug']}.json"
+        head_txt = _git_show(rel)
+        cur_txt = (BASE / rel).read_text(encoding="utf-8")
+        if head_txt is None:
+            return False, f"HEADの{rel}を読めない"
+        if head_txt == cur_txt:
+            continue                      # 本文に該当表記が無かった機種（構造化値のみ修正）
+        try:
+            head_j, cur_j = json.loads(head_txt), json.loads(cur_txt)
+        except Exception as e:
+            return False, f"{rel}を読めない: {e}"
+        # ★HEADの本文に「同じ決定論の置換」を適用したら現在の本文と一致するはず★
+        #   （置換記録の文字列に頼らず、同じ関数で再現して突き合わせる）
+        try:
+            edits = apply_external_fix.plan_prose_edits(
+                head_j, f["field"], float(f["old"]), float(f["new"]))
+        except apply_external_fix.Abort as e:
+            return False, f"{rel}: 置換を再現できない（{e}）→公開しない"
+        for e in edits:
+            e["container"][e["key"]] = e["after"]
+        if json.dumps(head_j, ensure_ascii=False, sort_keys=True) !=                 json.dumps(cur_j, ensure_ascii=False, sort_keys=True):
+            return False, f"{rel}: 本文に今回の置換以外の変更がある→公開しない"
+    return True, "差分は今回の修正だけ（機種データ・記事本文とも）"
 
 
 def publish(fixes: list[dict], ctx: str) -> tuple[bool, str]:
