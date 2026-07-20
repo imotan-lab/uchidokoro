@@ -145,9 +145,11 @@ _SPLIT_RE = re.compile(r"[()（）｜|／,、，]+")
 _SMART_WORDS = ("スマスロ", "スマートパチスロ", "スマートスロット", "スマート遊技機")
 _PACHINKO_WORDS = ("パチンコ", "ぱちんこ", "スマパチ", "cr機", "cr ")
 # P機・e機の接頭辞（「Pバンドリ」「e北斗の拳10」）＝パチンコ機（2026-07-21 Codex指摘4）
-_PACHINKO_PREFIX_RE = re.compile(r"(?<![0-9a-z])[pe](?=[^0-9a-z\s])", re.IGNORECASE)
+_PACHINKO_PREFIX_RE = re.compile(r"(?<![0-9a-z])[pe][ 　]?(?=[^0-9a-z\s])", re.IGNORECASE)
 # 比較記事の語（単一機種の値の出典には使わない・指摘1/3/5）
-_COMPARE_WORDS = ("比較", "VS", "ｖｓ", "vs", "どっち", "違い", "対決", "どちらが")
+# ★2026-07-21 Codex4巡目★「対決」「違い」は演出名や同一機種内の説明にも普通に使うので外す
+#   （例「対決演出の法則」「設定変更と電源OFF・ONの違い」＝正しい単独ページ）。
+_COMPARE_WORDS = ("比較", "比べ", "VS", "ｖｓ", "vs", "どっち", "どちらが")
 # 「L」「Lパチスロ」等の型式接頭辞（スマスロ機に付く）。語の先頭にある L のみ。
 _L_PREFIX_RE = re.compile(r"(?:^|[\s　【\[(（])[lｌ](?=[^a-z]|$)", re.IGNORECASE)
 # 「スマスロ○○」「L○○」＝機種名が名指しされている箇所（比較記事の検出に使う）
@@ -187,6 +189,32 @@ def machine_tags(machine: dict) -> set[str]:
     if is_smart_text(machine.get("info") or "") or is_smart_text(machine.get("name") or ""):
         tags.add("smart")
     return tags
+
+
+def title_tokens(title: str) -> list[str]:
+    """タイトルを「区切りをまたがない断片」に割る。
+
+    ★2026-07-21 Codex4巡目の是正★: 記号を消してから隣接を見ると
+    「スマスロ北斗の拳 ｜Sammy」→「北斗の拳sammy」となり、サイト名の S を
+    続編記号と誤認して【正しい公式ページを落とす】。区切り（括弧・｜・／・停止語）で
+    先に割り、断片の中だけで隣接を判定する。
+    ★空白では割らない★（機種名の中に空白が入る: 「アニマルスロット ドッチ」）。
+    """
+    if not title:
+        return []
+    t = unicodedata.normalize("NFKC", str(title))
+    parts = [t]
+    for sep in ("【", "】", "[", "]", "(", ")", "「", "」", "|", "/", "・", "、",
+                ",", "。", "»", "≫", "<", ">", "＋", "+", "~", "〜"):
+        parts = [q for p_ in parts for q in p_.split(sep)]
+    for w in _STOP_WORDS:
+        parts = [q for p_ in parts for q in p_.split(w)]
+    return [p_.strip() for p_ in parts if p_.strip()]
+
+
+# 自機種の芯の後ろに続いてよい文字（助詞・送り仮名の平仮名）。
+# それ以外（漢字・カタカナ・英数字）が続く断片は別機種名とみなす。
+_OK_TAIL_RE = re.compile(r"^[ぁ-ゖー]")
 
 
 def _cut_at_stopword(s: str) -> str:
@@ -319,7 +347,12 @@ def check_title(title: str, cores, reject_cores=(), reject_name_cores=()) -> tup
             bc = [normalize_core(p) for p in pieces]
             if any(c in cores for c in bc):
                 continue
-            if any(c for c in bc):
+            # ★「機種名らしい区間」だけを疑う（2026-07-21 Codex4巡目）★
+            #   【設定6】【実戦値】【更新】等の補助見出しを他機種扱いして落とさない。
+            looks_machine = (is_smart_text(b) or is_pachinko_text(b)
+                             or any(c in rej or c in set(reject_name_cores or ())
+                                    for c in bc if c))
+            if looks_machine:
                 return False, (f"他機種らしい区間が併記されている（{[c for c in bc if c][:2]}）"
                                f"→比較記事等の疑いで不合格")
 
@@ -333,38 +366,44 @@ def check_title(title: str, cores, reject_cores=(), reject_name_cores=()) -> tup
         if w.lower() in tl:
             return False, f"比較記事の疑い（タイトルに「{w}」）→単一機種の出典に使わない"
 
-    # ★(0-b) タイトル全体を位置つきで走査する★（停止語で切らない・包含で除外しない）
-    #   ・他機種の【正式名の芯】が、自機種名と重ならない位置に出てきたら不合格
-    #     （親機種⇔続編の比較が両方向で抜けていた・指摘2/3）
-    #   ・自機種名の直後に英数字や世代語が続く出現があれば不合格
-    #     （まだカタログに無い続編「バンドリ2」等・指摘6）
-    full = normalize_core(t_norm)
-    mine_spans = []
-    for c in cores:
-        st = full.find(c)
-        while st >= 0:
-            mine_spans.append((st, st + len(c)))
-            st = full.find(c, st + 1)
-    for rc in reject_name_cores or ():
-        if len(rc) < 2:
+    # ★(0-b) 断片ごとの走査（区切りをまたがない）★
+    #   ・断片の芯が「自機種の芯＋余り」で、余りが平仮名（助詞）以外なら別機種
+    #     （続編「バンドリ2」・外伝「バンドリ外伝」・派生「バンドリ改」）
+    #   ・断片に他機種の正式名の芯が入っていたら併記（比較記事・別機種）
+    #   ・型式マーカー（L/スマスロ/P/e）つきの断片は、別名一致でも別機種とみなす
+    for tok in title_tokens(title):
+        tc = normalize_core(tok)
+        if not tc or tc in cores:
             continue
-        st = full.find(rc)
-        while st >= 0:
-            en = st + len(rc)
-            covered = any(s <= st and en <= e for s, e in mine_spans)
-            if not covered:
+        # この断片は「自機種名＋送り仮名」か？（例「バンドリの」）→ 自分の話として扱う
+        mine_here = False
+        for c in cores:
+            if c and tc.startswith(c) and len(tc) > len(c):
+                if _OK_TAIL_RE.match(tc[len(c):]):
+                    mine_here = True
+                else:
+                    return False, (f"機種名の後ろに別の語が続く（{tc}）"
+                                   f"→続編・派生機・別機種の疑いで不合格")
+        if mine_here:
+            continue
+        # ★他機種名の検出で「自分の芯に含まれるから」という理由の除外はしない★
+        #   （前作の芯は続編の芯に含まれるため、除外すると親子の比較記事を通してしまう。
+        #     2026-07-21 Codex3巡目 指摘2の再発防止）
+        for rc in reject_name_cores or ():
+            if len(rc) >= 2 and rc in tc:
                 return False, (f"タイトルに他機種の名前がある（{rc}）"
                                f"→比較記事・別機種の疑いで不合格")
-            st = full.find(rc, st + 1)
-    for s_, e in mine_spans:
-        nxt = full[e:e + 1]
-        # 「新台」「新基準」等は続編記号ではなく記事の定型語（誤って落とさない）
-        if full[e:e + 2] in ("新台", "新基", "新装"):
-            continue
-        if nxt and (re.match(r"[0-9a-z]", nxt) or nxt in "改真新極零"):
-            if not any(full[s_:e] + nxt == c[:e - s_ + 1] and len(c) > e - s_ for c in cores):
-                return False, (f"機種名の直後に「{nxt}」が続く（…{full[s_:e + 3]}…）"
-                               f"→続編・派生機の疑いで不合格")
+        if is_smart_text(tok) or is_pachinko_text(tok):
+            for rc in rej:
+                if len(rc) >= 2 and rc in tc:
+                    return False, (f"型式表記つきで他機種が名指しされている（{rc}）"
+                                   f"→比較記事・別機種の疑いで不合格")
+        # パチンコ表記つきの断片に【自機種名】が入っている＝同名のパチンコ版の話
+        #  （例「【Lバンドリ！】天井／P バンドリ！のスペック」）。機種名を含まない
+        #  「パチンコ・パチスロ解析」等のサイト定型文は対象外。
+        if is_pachinko_text(tok) and any(c and c in tc for c in cores):
+            return False, ("同名のパチンコ版が併記されている"
+                           f"（{tok[:24]}）→別媒体の混在で不合格")
 
     for g in title_groups(title):
         gcore = normalize_core(" ".join(g))
@@ -673,6 +712,46 @@ def selftest() -> int:
        "カタログに無い続編表記も不合格")
     eq(check_title("【スマスロ バンドリ！】バンドリ改 天井", ["バンドリ"], [], [])[0], False,
        "未登録の派生機表記も不合格")
+
+    # --- 4巡目Codexレビュー: 区切りをまたいだ隣接判定で正しい出典を落としていた ---
+    hok2 = {"slug": "hokuto2", "name": "スマスロ北斗の拳", "info": "スマスロAT",
+            "aliases": ["北斗の拳"]}
+    valv_a = {"slug": "va", "name": "L革命機ヴァルヴレイヴ", "info": "スマスロAT"}
+    valv_b = {"slug": "vb", "name": "Lパチスロ 革命機ヴァルヴレイヴ2", "info": "スマスロAT"}
+    monkey = {"slug": "mk", "name": "スマスロモンキーターンV", "info": "スマスロAT"}
+    band = {"slug": "bd", "name": "Lバンドリ！", "info": "スマスロAT", "aliases": ["バンドリ"]}
+    cat4 = [hok2, valv_a, valv_b, monkey, band]
+
+    def t4(m, title):
+        sp = identity_spec(m, cat4)
+        if not check_tags(title, machine_tags(m), sp["machine_cores"])[0]:
+            return False
+        return check_title(title, sp["machine_cores"], sp["reject_cores"],
+                           sp["reject_name_cores"])[0]
+
+    # 正しい出典を落とさない
+    eq(t4(hok2, "スマスロ北斗の拳 ｜Sammy"), True, "サイト名区切りつき公式タイトルが通る")
+    eq(t4(hok2, "【スマスロ北斗の拳】AT終了後のモード移行率"), True, "英字で始まる記事テーマが通る")
+    eq(t4(hok2, "【スマスロ北斗の拳】【設定6】天井・設定判別"), True, "補助見出し【設定6】が通る")
+    eq(t4(hok2, "【スマスロ北斗の拳】設定変更と電源OFF・ONの違い"), True, "「違い」単独では落とさない")
+    eq(t4(monkey, "【スマスロモンキーターンV】対決演出の法則・期待度"), True,
+       "「対決」（演出名）では落とさない")
+    eq(t4(valv_b, "【Lパチスロ 革命機ヴァルヴレイヴ2】天井の恩恵と狙い目"), True, "続編の単独ページ")
+    eq(t4(valv_a, "【L革命機ヴァルヴレイヴ】天井の恩恵と狙い目"), True, "前作の単独ページ")
+    # 別機種混在は落とす
+    eq(t4(valv_b, "【Lパチスロ 革命機ヴァルヴレイヴ2】天井／L革命機ヴァルヴレイヴ・2機種の差"),
+       False, "前作名が併記された記事は不合格（包含による除外をしない）")
+    eq(t4(band, "【スマスロ バンドリ！】天井／バンドリ外伝の変更点"), False,
+       "未登録の派生機（外伝）併記は不合格")
+    eq(t4(hok2, "【スマスロ北斗の拳】天井性能をLヴヴヴ2と打ち比べ"), False,
+       "「打ち比べ」の比較記事は不合格")
+    eq(t4(band, "【Lバンドリ！】天井／P バンドリ！のスペック"), False,
+       "空白つきP機表記の併記は不合格")
+    eq(is_pachinko_text("e 北斗の拳11"), True, "空白つきe機表記を検出")
+    eq(is_pachinko_text("L D4DJ Pachi-Slot Mix"), False, "英字名の中のPを誤検出しない")
+    eq(title_tokens("スマスロ北斗の拳 ｜Sammy"), ["スマスロ北斗の拳", "Sammy"], "区切りで断片化")
+    eq(title_tokens("【スマスロ バンドリ！】天井の恩恵")[0], "スマスロ バンドリ!",
+       "空白では割らない")
 
     # --- 危険パターンは必ず落ちること ---
     # 芯が一致しないのに部分一致で通る、を許さない
