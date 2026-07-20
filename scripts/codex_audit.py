@@ -588,6 +588,23 @@ def semantic_diff_ok(fixes: list[dict]) -> tuple[bool, str]:
     return True, "差分は今回の修正だけ（機種データ・記事本文とも）"
 
 
+def _restore(fixes: list[dict]) -> None:
+    """★書き込み後に公開できなかった時は作業ツリーを必ず元へ戻す★
+
+    残したままにすると、翌朝5:05のverifyタスクが「未公開・未検証の変更」を
+    巻き込んでコミットしてしまう（自動タスク同士の事故）。
+    """
+    slugs = sorted({f["slug"] for f in fixes})
+    paths = ["assets/data/machines.json", "sitemap.xml", "service-worker.js"]
+    paths += [f"assets/data/machine-details/{s_}.json" for s_ in slugs]
+    paths += [f"machines/{s_}/index.html" for s_ in slugs]
+    paths += ["guide-tenjo-ranking.html", "guide-reset-ranking.html",
+              "guide-suru-tenjo.html", "guide-ichiran.html"]
+    exist = [q for q in paths if (BASE / q).exists()]
+    _sh(["git", "reset", "--"] + exist)
+    _sh(["git", "checkout", "--"] + exist)
+
+
 def publish(fixes: list[dict], ctx: str) -> tuple[bool, str]:
     """修正後の再ビルド→検査→コミット→push。★検査が通らなければコミットしない★
 
@@ -596,7 +613,7 @@ def publish(fixes: list[dict], ctx: str) -> tuple[bool, str]:
     slugs = sorted({f["slug"] for f in fixes})
     ok, why = semantic_diff_ok(fixes)
     if not ok:
-        _sh(["git", "checkout", "--", "assets/data/machines.json"])
+        _restore(fixes)
         return False, f"差分検査で不合格（{why}）→修正を取り消した"
     steps = [
         (["python", "scripts/build_machine_pages.py"], "記事ページ再生成"),
@@ -635,11 +652,13 @@ def publish(fixes: list[dict], ctx: str) -> tuple[bool, str]:
            "\n\n出典は verify_claims.py の関所を独立2ドメインで通過したもののみ。\n\n"
            "Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>")
     if not fencing_ok(ctx):
-        _sh(["git", "reset"])
+        _restore(fixes)
         return False, "ロックの世代が変わっている（別実行に交代済み）→書き込みを中止した"
     r = _sh(["git", "commit", "-m", msg])
     if r.returncode != 0:
-        return False, f"コミット失敗: {((r.stdout or '') + (r.stderr or ''))[-400:]}"
+        out = ((r.stdout or "") + (r.stderr or ""))[-400:]
+        _restore(fixes)
+        return False, f"コミット失敗（修正は取り消した）: {out}"
     r = _sh(["git", "push"], timeout=300)
     if r.returncode != 0:
         return False, f"push失敗（コミットは済み・次回再送）: {((r.stderr or ''))[-400:]}"
@@ -923,7 +942,11 @@ def run(slugs_override, n_machines: int, apply_mode: bool) -> int:
     # 修正を公開（再ビルド→検査→コミット→push）。検査が通らなければ取り消す
     published, pub_note = False, "修正なし"
     if all_fixes and apply_mode:
-        published, pub_note = publish(all_fixes, ctx)
+        try:
+            published, pub_note = publish(all_fixes, ctx)
+        except Exception as e:
+            _restore(all_fixes)
+            published, pub_note = False, f"公開中に例外（修正は取り消した）: {type(e).__name__}: {e}"
         log(f"公開: {'✅' if published else '❌'} {pub_note}")
         if not published:
             for sl in sorted({f["slug"] for f in all_fixes}):
