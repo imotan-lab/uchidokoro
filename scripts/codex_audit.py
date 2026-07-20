@@ -80,10 +80,20 @@ _COND_PATTERNS = (
     r"[a-z]{2,4}間",                       # at間 / cz間 / st間 / art間 / reg間 / big間
     r"(ボーナス|ｂｏｎｕｓ|初当たり|初当り|bb|rb|ct)間",
     r"有利区間",
-    r"(終了後|当選後|後は|抜け後)",         # AT終了後 / ボーナス終了後
-    r"(設定変更|リセット|朝一|据え置き)",   # リセット時の天井
-    r"モード[a-zａ-ｚ0-9]",                 # モードB/モード2の天井
-    r"(短縮|初回のみ|初回限定|前兆|引き戻し|引戻し)",
+    # ★「後は」単独は主天井の説明（天井到達後はAT当選）まで巻き込むので使わない★
+    #   限定の対象を明示した形だけを条件とする（2026-07-21 Codex7巡目 指摘2）
+    r"(at|cz|art|st|bb|rb|ボーナス|ｂｏｎｕｓ|有利区間|設定変更|リセット|リセ)"
+    r"(終了後|当選後|抜け後|後)",
+    r"(設定変更|リセット|朝一|朝イチ|据え置き|据置)",
+    r"モード[a-zａ-ｚ0-9]",                 # モードB / モード2 の天井
+    r"(通常|天国|準備)[a-zａ-ｚ0-9]",       # 通常B / 通常2 等のモード限定
+    r"(天国|準備モード|高確|低確|チャンスモード)",  # モード名が出たら主天井ではない
+    # ★「前兆」単独は主天井の説明にも出る（規定ゲーム数消化後は前兆へ）ので前兆中に限定★
+    r"(短縮|初回のみ|初回限定|前兆中|引き戻し|引戻し)",
+    # ★「AT天井」「CZ天井」「ボーナス天井」＝主天井ではない別系統の天井（指摘3）★
+    r"(at|cz|art|st|bb|rb|reg|big|ボーナス|ｂｏｎｕｓ|周期|スルー)天井",
+    r"(非当選|非経由|未経由)",
+    r"[0-9]周目",
 )
 _COND_RE = None
 
@@ -332,7 +342,7 @@ def classify(site_claims: list[dict], codex_claims: list[dict],
                "ceiling_type": (codex or {}).get("ceiling_type") or site.get("ceiling_type"),
                "site_ceiling_type": site.get("ceiling_type"),
                "evidence": [e.get("source_url") for e in ev_used],
-               "quotes": [e.get("raw_quote") for e in ev_used],
+               "pairs": [(e.get("source_url"), e.get("raw_quote")) for e in ev_used],
                "verified_domains": (codex or {}).get("verified_domains") or [],
                "detail": r["detail"]}
         if why:
@@ -348,10 +358,11 @@ def classify(site_claims: list[dict], codex_claims: list[dict],
 # 矛盾スキャン（旧値も同じページに載っていないか）
 # ─────────────────────────────────────────────
 
-CONTEXT_CHARS = 160    # 引用の前後どれだけを「文脈」として見るか
+CONTEXT_BEFORE = 400   # 引用の前どれだけを「文脈」として見るか（見出しは前にある）
+CONTEXT_AFTER = 200
 
 
-def contradiction_scan(cand: dict, allowed, quotes=()) -> str | None:
+def contradiction_scan(cand: dict, allowed, pairs=()) -> str | None:
     """裏取りページを実際に開いて2つを見る（問題があれば理由文字列＝修正しない）。
 
     1. 旧値が同じ単位でページに載っていないか（どちらが正か機械で決まらない）
@@ -367,7 +378,7 @@ def contradiction_scan(cand: dict, allowed, quotes=()) -> str | None:
     if not units:
         return f"単位が特定できない（ceiling_type={cand.get('ceiling_type')}）"
     olds = apply_external_fix._num_variants(old)
-    for url in cand.get("evidence") or []:
+    for url, quote in (pairs or [(u, None) for u in (cand.get("evidence") or [])]):
         page = verify_claims.fetch_page(url, allowed=allowed)
         if page is None:
             return f"矛盾スキャンでページを取得できない（{url}）"
@@ -377,18 +388,23 @@ def contradiction_scan(cand: dict, allowed, quotes=()) -> str | None:
                 if f"{o}{u}" in text:
                     return (f"裏取りページに旧値「{o}{u}」も載っている（{url}）"
                             f"＝どちらが正しいか機械で決められない")
-        # 引用の前後文脈（見出し・直前文）に限定条件が無いか
+        # ★そのURLの引用★の前後文脈（見出し・直前文）に限定条件が無いか
+        if not quote:
+            continue
         ntext = _norm_text(page.text)
-        for q in quotes or ():
-            nq = _norm_text(q)
-            i = ntext.find(nq)
-            if i < 0:
-                return f"引用がページ上で見つからない（{url}）＝文脈を確認できない"
-            ctx = ntext[max(0, i - CONTEXT_CHARS):i + len(nq) + CONTEXT_CHARS]
-            hit = conditional_hit(ctx)
-            if hit:
-                return (f"引用の前後に限定条件「{hit}」がある（{url}）"
-                        f"＝主天井の値か決められない")
+        nq = _norm_text(quote)
+        hits = [i for i in range(len(ntext)) if ntext.startswith(nq, i)]
+        if not hits:
+            return f"引用がページ上で見つからない（{url}）＝文脈を確認できない"
+        if len(hits) > 1:
+            # 同じ引用がページ内に複数ある＝どの文脈の値か決められない（指摘4）
+            return f"引用がページ内に複数ある（{url}）＝どの文脈の値か決められない"
+        i = hits[0]
+        ctx = ntext[max(0, i - CONTEXT_BEFORE):i + len(nq) + CONTEXT_AFTER]
+        hit = conditional_hit(ctx)
+        if hit:
+            return (f"引用の前後に限定条件「{hit}」がある（{url}）"
+                    f"＝主天井の値か決められない")
     return None
 
 
@@ -477,7 +493,7 @@ def audit_machine(machine: dict, machines: list[dict], run_id: str,
 
 def apply_one(slug: str, cand: dict, allowed, apply_mode: bool) -> dict:
     field = cand["claim_key"]
-    why = contradiction_scan(cand, allowed, cand.get("quotes") or ())
+    why = contradiction_scan(cand, allowed, cand.get("pairs") or ())
     if why:
         return {"applied": False, "reason": why, "field": field, **_cand_view(cand)}
     r = apply_external_fix.run(BASE, slug, field, float(cand["site_value"]),
@@ -774,7 +790,13 @@ def selftest() -> int:
               "ST間天井は800G", "ART間天井は800G", "初当たり間800G", "REG間800G",
               "ＡＴ間天井は800G", "AT 間天井は800G", "有利区間の天井は800G"):
         eq(bool(conditional_hit(t)), True, f"限定条件を検出: {t}")
-    for t in ("天井は1000Gで直撃", "通常時の天井は1000G", "天井到達で1000G消化"):
+    for t in ("AT天井は1000G", "朝イチは800G", "リセ後は800G", "据置時は900G",
+              "ボーナス非当選のまま1000G", "AT非経由で1000G", "天国準備モードは800G",
+              "通常Bは800G", "2周目のみ天井短縮", "CZ天井は300G", "前兆中は加算されない"):
+        eq(bool(conditional_hit(t)), True, f"限定条件を検出(7巡目): {t}")
+    for t in ("天井は1000Gで直撃", "通常時の天井は1000G", "天井到達で1000G消化",
+              "天井は1000G。天井到達後はATに当選する", "規定ゲーム数消化後は前兆へ",
+              "天井当選時は上位ATが確定"):
         eq(bool(conditional_hit(t)), False, f"主天井は素通し: {t}")
     c = classify([S(K, 900)], [C(K, 800, quote="設定変更時の天井は{v}G")],
                  [R(K, "UNKNOWN", "numeric_divergence")])

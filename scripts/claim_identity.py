@@ -92,7 +92,15 @@ def accept_cores_for(machine: dict, machines: list[dict]) -> list[str]:
     """
     idx = catalog_cores(machines)
     slug = machine.get("slug")
-    return [c for c in machine_cores(machine) if idx.get(c, set()) == {slug}]
+    cores = [c for c in machine_cores(machine) if idx.get(c, set()) == {slug}]
+    # ★名前に世代表記が無いスマスロ機は【別名を同定に使わない】（Codex7巡目 指摘7）★
+    #   「真打 モンキーターン」の別名「モンキーターン」で旧機種のページを本人と
+    #   認めてしまうため。正式名の芯だけなら世代を区別できる。
+    tags = machine_tags(machine)
+    if "smart" in tags and "smart_name" not in tags:
+        name_core = normalize_core(machine.get("name", ""))
+        cores = [c for c in cores if c == name_core]
+    return cores
 
 
 def reject_cores_for(machine: dict, machines: list[dict]) -> list[str]:
@@ -186,7 +194,7 @@ _MARKER_RE = re.compile(
 # 「SLOT○○」「スロット○○」「パチスロ○○」＝機種名が名指しされている形
 # （2026-07-21 Codex6巡目 指摘6: カタログ外の機種が括弧の外にあると素通りしていた）
 # ★語の直後に名前が続く場合だけ★（「ちょんぼりすた パチスロ解析」のようなサイト名は対象外）
-_NAMED_MACHINE_RE = re.compile(r"(?:slot|スロット|パチスロ)\s*([^\s]{4,})", re.IGNORECASE)
+_NAMED_MACHINE_RE = re.compile(r"(?:slot|スロット|パチスロ)\s*([^\s]{2,})", re.IGNORECASE)
 
 
 def named_machine_parts(tok: str) -> list[str]:
@@ -271,7 +279,15 @@ def title_tokens(title: str, cores=()) -> list[str]:
 _OK_TAIL_RE = re.compile(r"^(の|は|が|を|に|で|と|も|や|へ|から|まで|なら|って)$")
 # 機種名の後ろに付くと【別機種】を意味する語（続編・派生機）。
 # これ以外の語（例「バンドリ搭載ATの抽選」の「搭載」）は記事の説明文なので落とさない。
-_SEQUEL_TAIL_RE = re.compile(r"^([0-9]|[a-z]|改|真|新|外伝|続|極|零|神|覇|ver)")
+_SEQUEL_TAIL_RE = re.compile(r"^([0-9]|改|真|新|外伝|続|極|零|神|覇|ver|ex|z)")
+# 機種名の後ろに来ても「記事の内容」を指す語（別機種ではない）。
+# ★ASCII全部を続編記号扱いすると AT性能 / CZ確率 / REG確率 が落ちる（Codex7巡目 指摘6）★
+_ARTICLE_TERMS = (
+    "at", "cz", "art", "st", "bb", "rb", "reg", "big", "ct", "pt", "ug", "ab",
+    "演出", "仕様", "性能", "確率", "法則", "抽選", "継続", "期待", "数値", "解説",
+    "実践", "実戦", "導入", "価格", "中古", "基本", "通常時", "有利", "概要", "感想",
+    "打感", "完全", "詳細", "一覧", "比率", "振り分け", "示唆", "契機", "条件",
+)
 _LEAD_PARTICLE_RE = re.compile(r"^(の|は|が|を|に|で|と|も|や|へ|から|まで|なら|って)+")
 
 
@@ -292,7 +308,11 @@ def tail_verdict(tail: str) -> str:
     # ★短く助詞を含まない余りは「機種名の続き」とみなす（2026-07-21 Codex6巡目 指摘7）★
     #   例「北斗の拳 宿命」「○○ 覚醒」「○○ 絆」。派生語を列挙し切るのは不可能なので、
     #   長さと助詞の有無という構造で判定する。説明文（「搭載ATの抽選」）は助詞を含む。
-    if body and len(body) <= 6 and not re.search(r"[のはがをにでともやへ]", body):
+    if body and any(body.startswith(t) for t in _ARTICLE_TERMS):
+        return "unknown"                      # AT性能 / CZ確率 / 演出法則 ＝記事の内容
+    # ★短く助詞を含まない余りは機種名の続きとみなす（上限を12文字へ・指摘5）★
+    #   天昇スペシャル・アルティメット等の長い派生名を取り逃がさないため。
+    if body and len(body) <= 12 and not re.search(r"[のはがをにでともやへ]", body):
         return "other"
     return "unknown"
 
@@ -914,6 +934,29 @@ def selftest() -> int:
     eq(is_meta_heading("実戦データ"), True, "複合メタ語")
     eq(is_meta_heading("スマスロ北斗の拳"), False, "機種名はメタ語でない")
     eq(normalize_core("ソードアート・オンライン"), "ソードアートオンライン", "中黒は芯から落とす")
+
+    # --- 7巡目Codexレビュー ---
+    eq(check_title("【スマスロ北斗の拳】北斗の拳 天昇スペシャル 天井", ["北斗の拳"], [], [])[0],
+       False, "長い派生名（天昇スペシャル）も不合格")
+    eq(check_title("【Lバンドリ！】バンドリ AT性能 天井", ["バンドリ"], [], [])[0], True,
+       "記事テーマ（AT性能）は落とさない")
+    eq(check_title("【スマスロ北斗の拳】北斗の拳 REG確率", ["北斗の拳"], [], [])[0], True,
+       "記事テーマ（REG確率）は落とさない")
+    eq(check_title("【スマスロ北斗の拳】北斗の拳 演出法則", ["北斗の拳"], [], [])[0], True,
+       "記事テーマ（演出法則）は落とさない")
+    eq(check_title("【Lバンドリ！】SLOT吉宗 天井", ["バンドリ"], [], [])[0], False,
+       "短い名指し機種（SLOT吉宗）も検出")
+    eq(tail_verdict("at性能"), "unknown", "記事用語で始まる余り")
+    eq(tail_verdict("天昇スペシャル"), "other", "長い派生名")
+    # 名前に世代表記が無いスマスロ機は別名を同定に使わない（指摘7）
+    mk = {"slug": "mk_new", "name": "真打 モンキーターン", "info": "スマスロAT",
+          "aliases": ["モンキーターン"]}
+    eq(accept_cores_for(mk, [mk]), [normalize_core("真打 モンキーターン")],
+       "info由来のスマスロ機は別名を使わない")
+    mk2 = {"slug": "mk2", "name": "スマスロモンキーターンV", "info": "スマスロAT",
+           "aliases": ["モンキーターン"]}
+    eq("モンキーターン" in accept_cores_for(mk2, [mk2]), True,
+       "名前に世代表記があれば別名も使える")
 
     # --- 危険パターンは必ず落ちること ---
     # 芯が一致しないのに部分一致で通る、を許さない
