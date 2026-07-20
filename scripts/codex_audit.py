@@ -70,6 +70,10 @@ TASK_BUDGET_SEC = 900         # 1タスク15分（★時間切れは必ず現状
 # 自動修正してよいscope（限定条件のない主天井のみ）。
 # 「AT間」「CZ間」等の部分天井は、サイト側の構造化値が同じものを指す保証がないので対象外。
 PLAIN_SCOPES = (None, "", "通常時", "not_applicable", "液晶")
+# 引用文にこれらが含まれる＝限定条件つきの天井なので、主天井の置き換えには使わない
+# （2026-07-21 Codex5巡目 指摘7: scope=null と申告しても引用が「AT間天井は1000G」なら別物）
+CONDITIONAL_WORDS = ("AT間", "at間", "CZ間", "cz間", "ボーナス間", "BB間", "bb間",
+                     "RB間", "有利区間", "AT後", "ボーナス後", "前兆中", "引き戻し")
 
 # 矛盾スキャンで使う単位表記（旧値がページに載っていないかを見る）
 UNIT_WORDS = {
@@ -203,25 +207,51 @@ def classify(site_claims: list[dict], codex_claims: list[dict],
             continue
 
         why = None
+        ev_ok = [e for e in (codex or {}).get("evidence_results") or [] if e.get("verified")]
+        ev_domains = sorted({shadow_codex._etld1(e.get("source_url") or "")
+                             for e in ev_ok} - {""})
+        quotes = " / ".join((e.get("raw_quote") or "")
+                            for e in ((codex or {}).get("evidence") or []))
         if not auto_fix_allowed:
             why = ("スマスロ機ではないため自動修正の対象外"
                    "（同名の旧世代機とページを機械的に区別できない）")
         elif codex is None:
             why = "同じ項目にCodexの主張が複数あり一意に決まらない" if cands else "Codex主張が取れない"
-        elif codex.get("evidence_strength") != "verified_policy":
+        # ★申告を信用せず、実際の検証結果から数え直す（2026-07-21 Codex5巡目 指摘8）★
+        elif codex.get("assertion_status") != "asserted":
+            why = f"Codexの主張が確定でない（assertion_status={codex.get('assertion_status')}）"
+        elif len(ev_domains) < 2:
             why = (f"裏取りが独立2ドメインに届かない"
-                   f"（{codex.get('evidence_strength')} / {codex.get('verified_domains')}）")
+                   f"（検証成功ドメイン={ev_domains} / 申告={codex.get('evidence_strength')}）")
+        elif codex.get("evidence_strength") != "verified_policy":
+            why = f"出典強度の申告が不足（{codex.get('evidence_strength')}）"
         elif codex.get("scope") not in PLAIN_SCOPES:
             why = f"条件付きの天井（scope={codex.get('scope')}）＝サイトの値と同じものか決まらない"
+        # ★引用文に限定条件が書かれていれば主天井の置き換えに使わない（指摘7）★
+        elif any(w in quotes for w in CONDITIONAL_WORDS):
+            why = (f"出典の引用に限定条件（{[w for w in CONDITIONAL_WORDS if w in quotes][:2]}）"
+                   f"が含まれる＝主天井と同じものか決まらない")
         elif site.get("value") is None or codex.get("value") is None:
             why = "値が欠けている"
         elif shadow_claims._norm_unit(site.get("unit")) != shadow_claims._norm_unit(codex.get("unit")):
             why = f"単位が違う（site={site.get('unit')} / codex={codex.get('unit')}）"
+        # ★天井の種類が一致していること（指摘9: 単位すり替えでの誤修正を防ぐ）★
+        elif (site.get("ceiling_type") or "") != (codex.get("ceiling_type") or ""):
+            why = (f"天井の種類が違う（site={site.get('ceiling_type')} / "
+                   f"codex={codex.get('ceiling_type')}）")
+        # ★scopeについて★: サイト側の構造化データに scope は無い（machines.json の
+        #   limit は定義上「主天井」）。したがって scope 未構造化そのものは修正を止める
+        #   理由にしない。代わりに「Codexが限定条件を名乗っていないこと（PLAIN_SCOPES）」と
+        #   「引用文に限定条件語が無いこと」で守る（上の2条件）。
+        #   ただしCodexが★既知の語彙に無いscope★を出した場合は意味が確定しないので止める。
+        elif "scope_unverified" in (r.get("attrs_unverified") or []):
+            why = f"Codexのscopeが未知の語（{codex.get('scope')}）＝同じ項目と確定できない"
 
         rec = {"claim_key": key, "site_value": site.get("value"),
                "codex_value": (codex or {}).get("value"),
                "unit": (codex or {}).get("unit") or site.get("unit"),
                "ceiling_type": (codex or {}).get("ceiling_type") or site.get("ceiling_type"),
+               "site_ceiling_type": site.get("ceiling_type"),
                "evidence": [e.get("source_url") for e in ((codex or {}).get("evidence") or [])],
                "verified_domains": (codex or {}).get("verified_domains") or [],
                "detail": r["detail"]}
@@ -243,7 +273,8 @@ def contradiction_scan(cand: dict, allowed) -> str | None:
     old = cand.get("site_value")
     if old is None:
         return "旧値が無い"
-    units = UNIT_WORDS.get(cand.get("ceiling_type") or "", ())
+    # ★サイト側の天井種別で単位を決める（Codexの申告でのすり替えを防ぐ・指摘9）★
+    units = UNIT_WORDS.get(cand.get("site_ceiling_type") or cand.get("ceiling_type") or "", ())
     if not units:
         return f"単位が特定できない（ceiling_type={cand.get('ceiling_type')}）"
     olds = apply_external_fix._num_variants(old)
@@ -427,12 +458,16 @@ def selftest() -> int:
             print(f"  NG {label}: got={got!r} want={want!r}")
 
     def C(key, value, strength="verified_policy", scope=None, unit="G",
-          ctype="game", ev=2):
+          ctype="game", ev=2, status="asserted", quote="天井は{v}Gで直撃"):
+        doms = ["a.com", "b.com"][:ev]
         return {"claim_key": key, "ceiling_type": ctype, "value": value, "unit": unit,
-                "scope": scope, "assertion_status": "asserted",
+                "scope": scope, "assertion_status": status,
                 "evidence_strength": strength,
-                "verified_domains": ["a.com", "b.com"][:ev],
-                "evidence": [{"source_url": f"https://{d}/x"} for d in ["a.com", "b.com"][:ev]]}
+                "verified_domains": doms,
+                "evidence": [{"source_url": f"https://{d}/x",
+                              "raw_quote": quote.format(v=value)} for d in doms],
+                "evidence_results": [{"source_url": f"https://{d}/x", "verified": True}
+                                     for d in doms]}
 
     def S(key, value, unit="G", ctype="game"):
         return {"claim_key": key, "ceiling_type": ctype, "value": value, "unit": unit,
@@ -482,6 +517,31 @@ def selftest() -> int:
     # 9. MISMATCH（属性まで検証済み）も修正候補になる
     c = classify([S(K, 900)], [C(K, 1000)], [R(K, "MISMATCH")])
     eq(len(c["fix_candidates"]), 1, "MISMATCHも修正候補")
+
+    # 9.1 引用に限定条件（AT間）が入っていれば主天井の置き換えに使わない
+    c = classify([S(K, 900)], [C(K, 1000, quote="AT間天井は{v}G")],
+                 [R(K, "UNKNOWN", "numeric_divergence")])
+    eq(len(c["fix_candidates"]), 0, "AT間の引用は修正しない")
+    eq("限定条件" in c["reviews"][0]["reason"], True, "AT間の理由")
+    # 9.2 検証済みドメインが実は1件（申告だけverified_policy）→ 修正しない
+    fake = C(K, 1000)
+    fake["evidence_results"] = [{"source_url": "https://a.com/x", "verified": True},
+                                {"source_url": "https://b.com/x", "verified": False}]
+    c = classify([S(K, 900)], [fake], [R(K, "UNKNOWN", "numeric_divergence")])
+    eq(len(c["fix_candidates"]), 0, "申告だけの2ドメインは信用しない")
+    # 9.3 assertion_status が asserted でない → 修正しない
+    c = classify([S(K, 900)], [C(K, 1000, status="cannot_verify")],
+                 [R(K, "UNKNOWN", "numeric_divergence")])
+    eq(len(c["fix_candidates"]), 0, "cannot_verifyは修正しない")
+    # 9.4 天井の種類が違う（G数天井 vs スルー天井）→ 修正しない
+    c = classify([S(K, 900)], [C(K, 1000, ctype="through")],
+                 [R(K, "UNKNOWN", "numeric_divergence")])
+    eq(len(c["fix_candidates"]), 0, "天井の種類違いは修正しない")
+    # 9.45 Codexのscopeが未知語→修正しない
+    r_unknown = R(K, "UNKNOWN", "numeric_divergence")
+    r_unknown["attrs_unverified"] = ["scope_unverified"]
+    c = classify([S(K, 900)], [C(K, 1000, scope="謎の区間")], [r_unknown])
+    eq(len(c["fix_candidates"]), 0, "未知のscopeは修正しない")
 
     # 9.5 スマスロ機でなければ自動修正しない（同名旧機種と区別できないため）
     c = classify([S(K, 900)], [C(K, 1000)], [R(K, "UNKNOWN", "numeric_divergence")],
