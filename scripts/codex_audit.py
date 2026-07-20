@@ -173,7 +173,12 @@ def _unit_pat(ceiling_type: str) -> str:
 # 天井の話だと分かる語（これが無い文は天井の記述として認めない）
 # 「最大967G＋α消化でボーナスに当選」のように天井の語が無い書き方もあるため
 # 「消化」「当選」も天井の記述を示す語に含める（「最大100pt獲得」「最大4回転継続」は除外）
-_CEILING_RE = re.compile(r"天井|到達|ハマり|はまり|規定|消化(?!率)|当選(?!率|確率|割合|時の)")
+# ★2026-07-21 Codex14巡目 指摘3★「消化」「当選」は一般的な遊技挙動の説明にも出るため
+#   天井の語から外す（「最大800G消化でCZに突入」を主天井として通していた）。
+_CEILING_RE = re.compile(r"天井|到達|規定ゲーム|規定g|ハマり|はまり")
+# 「消化」「当選」は一般的な挙動説明にも出るため単独では認めず、
+# 「通常時」の明示がある場合だけ天井の記述として扱う（Codex14巡目 指摘3への折衷）。
+_CEILING_WEAK_RE = re.compile(r"消化(?!率)|当選(?!率|確率|割合)")
 
 
 def quote_splits(quote: str, value, ceiling_type: str):
@@ -256,10 +261,16 @@ def main_ceiling_quote(quote: str, value, cores=(), ceiling_type: str = "game") 
     #   2文目に条件を隠せば前後文の検査を迂回できるため。
     if re.search(r"[。！？](?=[^\s。！？」』）)】\]・…]) ?", n_all):
         return "引用が複数の文にまたがる＝どの文の値か決められない"
-    if not _CEILING_RE.search(n_all):
+    if not (_CEILING_RE.search(n_all) or _CEILING_WEAK_RE.search(n_all)):
         # 「最大100pt獲得」「最大4回転継続」「最大800G継続、AT当選率は1/300」等
         # ＝天井の記述ではない（Codex10巡目 指摘6 / 11巡目 指摘3）
         return "天井を表す語（天井・到達・規定・消化・当選）が無い＝天井の記述と確認できない"
+    # ★同じ引用に同単位の値が複数あるなら、どれが天井か決められない（指摘1）★
+    #   「最大800G：通常時の天井は1000G」「最大800G／通常時の天井は1000G」等、
+    #   区切り記号を変えるだけの迂回を、区切りの列挙ではなく個数で止める。
+    if len(re.findall(rf"(?<![0-9.,])[0-9]{{1,5}}\s*(?:[＋+]\s*[αa])?(?:{_unit_pat(ceiling_type)})",
+                      n_all)) > 1:
+        return "同じ引用に同じ単位の値が複数あり、どれが天井か決められない"
     splits = quote_splits(quote, value, ceiling_type)
     if not splits:
         return f"引用の中に値({value})が単位付きで見つからない"
@@ -269,20 +280,29 @@ def main_ceiling_quote(quote: str, value, cores=(), ceiling_type: str = "game") 
     for prefix, suffix in splits:
         # ★天井語は「値と同じ節」に無ければならない（2026-07-21 Codex13巡目 指摘1）★
         #   「最大800G継続、通常時の天井は1000G」で後半の「天井」を借りるのを防ぐ。
-        clause_pre = re.split(r"[、。！？]", prefix)[-1]
-        clause_suf = re.split(r"[、。！？]", suffix or "")[0]
+        # ★読点では割らない（「通常時の天井は、最大1000Gです」を落とさない）★
+        #   2026-07-21 Codex14巡目 指摘11。別の値からの天井語の借用は、
+        #   「同じ引用に同単位の値が複数あれば拒否」で別途止めている。
+        clause_pre = re.split(r"[。！？：:／/]", prefix)[-1]
+        clause_suf = re.split(r"[。！？：:／/]", suffix or "")[0]
         clause = clause_pre + clause_suf
-        if not _CEILING_RE.search(clause):
+        strong = bool(_CEILING_RE.search(clause))
+        weak = bool(_CEILING_WEAK_RE.search(clause)) and "通常時" in clause
+        if not (strong or weak):
             reasons.append("値と同じ節に天井を表す語が無い")
             continue
-        # ★「消化でAT終了」「継続」等＝天井ではなく別の挙動の説明（Codex13巡目 指摘1）★
-        #   「消化」「当選」を天井語に含めた分、終了・継続・獲得系の節は除外する。
-        ng = re.search(r"終了|継続|獲得|上乗せ|払い?出し|純増|枚数|突破|完走", clause)
-        if ng:
-            reasons.append(f"値と同じ節が天井ではない挙動の説明（「{ng.group(0)}」）")
-            continue
+        # ★「消化」「当選」だけで天井とみなす場合は、別の挙動の説明でないことを確認する★
+        #   （天井・到達・規定が明示されている節はその語を信頼し、この検査を行わない。
+        #     「スルー回数天井は最大6スルー到達で発動する」を落とさないため）
+        if not strong:
+            ng = re.search(r"終了|継続|獲得|上乗せ|払い?出し|純増|枚数|突破|完走|"
+                           r"突入|移行|発動|昇格|転落", clause)
+            if ng:
+                reasons.append(f"値と同じ節が天井ではない挙動の説明（「{ng.group(0)}」）")
+                continue
         # ★非断定の表現は使わない（指摘3: 「約1000G」から断定表記へ直さない）★
-        if re.search(r"約|およそ|程度|前後|くらい|ほど|以上|以下|超|未満", clause_pre + clause_suf[:6]):
+        if re.search(r"約|およそ|程度|前後|くらい|ほど|以上|以下|超|未満|目安|付近|"
+                     r"弱|強|以内|相当|クラス|レベル", clause_pre + clause_suf[:8]):
             reasons.append("値が非断定の表現（約・程度・前後）で書かれている")
             continue
         hit = conditional_hit(clause_pre, ceiling_type)
@@ -291,14 +311,23 @@ def main_ceiling_quote(quote: str, value, cores=(), ceiling_type: str = "game") 
             continue
         # ★値の直後の括弧注記は、定型語だけで説明できなければ拒否（指摘2）★
         #   列挙方式では未知の条件（設定6のみ／偶数設定のみ／仮天井）を取り逃がす。
-        note = re.match(r"^\s*[（(]([^）)]*)[）)]", suffix or "")
-        if note:
-            rest_note = _consume_allowed(_norm_text(note.group(1)),
+        # ★注記は括弧に限らない（※ ／ ： 、 で導かれる断り書きも同じ扱い・指摘2）★
+        note_txt = None
+        m_note = re.match(r"^\s*[（(]([^）)]*)[）)]", suffix or "")
+        if m_note:
+            note_txt = m_note.group(1)
+        else:
+            m_note2 = re.match(r"^[^。！？]{0,4}?[※／/：:、]\s*([^。！？]{1,40})", suffix or "")
+            if m_note2:
+                note_txt = m_note2.group(1)
+        if note_txt:
+            rest_note = _consume_allowed(_norm_text(note_txt),
                                          list(cores or ()) +
                                          list(_TYPE_VOCAB.get(ceiling_type or "", ())))
             rest_note = _CEILING_RE.sub("", rest_note)
+            rest_note = re.sub(r"[a-z0-9]", "", rest_note)   # AT/BB等の機能名は許す
             if rest_note:
-                reasons.append(f"値の直後の注記が定型語で説明できない（「{note.group(1)[:16]}」）")
+                reasons.append(f"値の直後の注記が定型語で説明できない（「{note_txt[:16]}」）")
                 continue
         hit2 = conditional_hit(_until_sentence_end(suffix or ""), ceiling_type)
         if hit2:
@@ -553,6 +582,11 @@ def classify(site_claims: list[dict], codex_claims: list[dict],
                   {alpha_in_quote(e.get("raw_quote"), codex.get("value"),
                                   site.get("ceiling_type") or "") for e in ev_used}))):
             why = "Codexの＋α申告と引用文の表記が食い違う"
+        elif (codex.get("operator") and any(
+                operator_in_quote(e.get("raw_quote"), codex.get("value"),
+                                  site.get("ceiling_type") or "") not in
+                (None, codex.get("operator")) for e in ev_used)):
+            why = "Codexのoperator申告と引用文の表現が食い違う"
         elif (codex.get("operator") or "exact") not in ("exact", "max"):
             # 「約」「以上」等は数値を断定表記へ置き換えると意味が変わる（指摘5）
             why = f"出典の表現が断定でない（operator={codex.get('operator')}）"
@@ -688,6 +722,10 @@ def contradiction_scan(cand: dict, allowed, pairs=()) -> str | None:
             for cl in re.split(r"[、。！？（）()]", seg):
                 if not conditional_hit(cl, cand.get("site_ceiling_type") or ""):
                     continue
+                # ★別の値があるだけでは緩和しない。その節が【天井の話】であること★
+                #   （2026-07-21 Codex14巡目 指摘5: 「狙い目は500Gから」で迂回できた）
+                if not (_CEILING_RE.search(cl) or "短縮" in cl):
+                    continue
                 if re.search(rf"(?<![0-9.,])(?!{re.escape(str(int(float(cand['codex_value']))))}"
                              rf"(?![0-9]))[0-9]{{2,5}}\s*(?:\+?α?)?"
                              rf"(?:{_unit_pat(cand.get('site_ceiling_type') or '')})", cl):
@@ -787,6 +825,19 @@ def audit_machine(machine: dict, machines: list[dict], run_id: str,
 # ─────────────────────────────────────────────
 
 _ALPHA_RE = re.compile(r"[＋+]\s*(?:[αa]|ａ|アルファ)|プラスアルファ")
+
+
+def operator_in_quote(quote: str, value, ceiling_type: str) -> str | None:
+    """引用から operator を独立抽出する（最大→max / それ以外→exact）。
+    2026-07-21 Codex14巡目 指摘4: Codexの申告と引用の食い違いを検出するため。"""
+    n = _norm_text(quote)
+    up = _unit_pat(ceiling_type)
+    v = str(int(float(value))) if float(value).is_integer() else str(value)
+    m = re.search(rf"(?<![0-9.,]){re.escape(v)}(?![0-9])\s*(?:[＋+]\s*[αa])?(?:{up})", n)
+    if not m:
+        return None
+    pre = re.split(r"[、。！？]", n[:m.start()])[-1]
+    return "max" if re.search(r"最大|max", pre) else "exact"
 
 
 def alpha_in_quote(quote: str, value, ceiling_type: str) -> bool | None:
@@ -1276,6 +1327,26 @@ def selftest() -> int:
     eq(alpha_mismatch("hokuto", {**_acand, "plus_alpha": True}), None, "＋αが一致すれば可")
     eq(alpha_mismatch("hokuto", {**_acand, "plus_alpha": None}), None,
        "出典が言及しなければ判定しない")
+
+    # 9.990 Codex14巡目
+    for q, v, ct in (("最大800G：通常時の天井は1000G", 800, "game"),
+                     ("最大800G／通常時の天井は1000G", 800, "game"),
+                     ("通常時の天井は800G ※設定6のみ", 800, "game"),
+                     ("通常時の天井は800G、設定6のみ", 800, "game"),
+                     ("通常時の天井は800G／仮天井", 800, "game"),
+                     ("最大800G消化でCZに突入", 800, "game"),
+                     ("通常時、最大800G消化でCZに突入", 800, "game"),
+                     ("最大800G消化で上位ATへ移行", 800, "game"),
+                     ("最大10周期消化でCZに突入", 10, "cycle"),
+                     ("通常時の天井は1000Gが目安", 1000, "game")):
+        eq(bool(main_ceiling_quote(q, v, ceiling_type=ct)), True,
+           f"14巡目の攻撃を拒否: {q[:22]}")
+    for q, v, ct in (("通常時の天井は、最大1000Gです", 1000, "game"),
+                     ("スルー回数天井は最大6スルー到達で発動する。", 6, "through"),
+                     ("通常時を最大967G＋α消化でボーナスに当選。", 967, "game")):
+        eq(main_ceiling_quote(q, v, ceiling_type=ct), None, f"正しい引用は通す: {q[:22]}")
+    eq(operator_in_quote("通常時は最大1000Gで天井到達", 1000, "game"), "max", "operatorの抽出:max")
+    eq(operator_in_quote("通常時の天井は1000G", 1000, "game"), "exact", "operatorの抽出:exact")
 
     # 9.991 Codex13巡目の残り（複数文判定の精度・URL1対1・見出し除去）
     for q in ("「通常時の天井は1000G。」", "通常時の天井は1000G!!"):

@@ -335,9 +335,10 @@ def tail_verdict(tail: str) -> str:
     #   先頭一致だけだと「上位AT性能」「リール配列」「内部状態」を派生機扱いしていた。
     if body and any(t in body for t in _ARTICLE_TERMS):
         return "unknown"                      # AT性能 / 上位AT性能 / 演出法則 ＝記事の内容
-    # ★短く助詞を含まない余りは機種名の続きとみなす（上限を12文字へ・指摘5）★
-    #   天昇スペシャル・アルティメット等の長い派生名を取り逃がさないため。
-    if body and len(body) <= 12 and not re.search(r"[のはがをにでともやへ]", body):
+    # ★短い余りは機種名の続きとみなす（助詞の有無は問わない）★
+    #   2026-07-21 Codex14巡目 指摘10: 「バンドリ 蒼天の物語」のように助詞を含む
+    #   未登録の副題を通していた。記事の内容語（AT性能等）は上で除外済み。
+    if body and len(body) <= 12:
         return "other"
     return "unknown"
 
@@ -489,8 +490,11 @@ def check_title(title: str, cores, reject_cores=(), reject_name_cores=()) -> tup
         return False, f"タイトルの機種名が一致しない（候補={cand_cores[:4]} / 期待={cores[:4]}）"
 
     # ★タイトルの主題が自機種であること（指摘6）★
-    prim = [normalize_core(x) for x in primary_group(title)]
-    prim = [c for c in prim if c]
+    prim_raw = primary_group(title)
+    prim = [c for c in (normalize_core(x) for x in prim_raw) if c]
+    if prim_raw and not prim:
+        # 主題が販売区分語だけ（「スマスロ天井一覧：…」）＝主題を決められない（指摘8）
+        return False, "タイトルの主題を決められない（販売区分語のみ）→不合格"
     if prim and not any(c in cores for c in prim):
         return False, (f"タイトルの主題が自機種でない（主題={prim[:2]}）"
                        f"→別機種の記事に自機種名が添えられているだけの疑い")
@@ -521,8 +525,11 @@ def check_title(title: str, cores, reject_cores=(), reject_name_cores=()) -> tup
     #   そもそも比較記事は単一機種の値の出典に向かないので、語の存在だけで落とす。
     tl = t_norm.lower()
     for w in _COMPARE_WORDS:
-        if any(w.lower() in c for c in cores):
-            continue          # 機種名の一部（例「ゴジラvsエヴァンゲリオン」）は比較語にしない
+        # ★機種名に含まれる比較語（ゴジラvsエヴァンゲリオン）は、名前の分だけ差し引く★
+        #   （2026-07-21 Codex14巡目 指摘9: 名前に vs があると全ての VS 検査が無効化された）
+        own = sum(c.lower().count(w.lower()) for c in cores if w.lower() in c.lower())
+        if own and tl.count(w.lower()) <= own:
+            continue
         if w.lower() in tl:
             return False, f"比較記事の疑い（タイトルに「{w}」）→単一機種の出典に使わない"
 
@@ -1039,6 +1046,19 @@ def selftest() -> int:
     eq(check_title("スマスロ北斗の拳 天井狙いまとめ｜天井解析", ["北斗の拳"], [], [])[0], True,
        "先頭が機種名のタイトルも通る")
     eq(primary_group("超電磁砲2 天井解析【Lバンドリ！】")[0], "超電磁砲2", "主題の切り出し")
+
+    # --- 14巡目Codexレビュー ---
+    eq(check_title("スマスロ天井一覧：超電磁砲2【Lバンドリ！】", ["バンドリ"], [], [])[0], False,
+       "主題が販売区分語だけなら不合格")
+    _gvse = normalize_core("スマスロ ゴジラvsエヴァンゲリオン")
+    eq(check_title("【スマスロ ゴジラvsエヴァンゲリオン】天井・解析", [_gvse], [], [])[0], True,
+       "機種名のvsでは落とさない")
+    eq(check_title("【スマスロ ゴジラvsエヴァンゲリオン】VS 超電磁砲2 天井", [_gvse], [], [])[0],
+       False, "名前のvsを差し引いても比較語が残れば不合格")
+    eq(check_title("【Lバンドリ！】バンドリ 蒼天の物語 天井", ["バンドリ"], [], [])[0], False,
+       "助詞を含む未登録の副題も不合格")
+    eq(check_title("【Lバンドリ！】バンドリ 上位AT性能 天井", ["バンドリ"], [], [])[0], True,
+       "記事テーマは引き続き通す")
 
     # --- 危険パターンは必ず落ちること ---
     # 芯が一致しないのに部分一致で通る、を許さない
