@@ -169,8 +169,13 @@ def select_slugs(machines: list[dict], state: dict, n: int) -> list[str]:
 # ─────────────────────────────────────────────
 
 def classify(site_claims: list[dict], codex_claims: list[dict],
-             comparison: list[dict]) -> dict:
-    """比較結果を「修正候補 / 要確認 / 変更なし」に仕分ける。書き込みはしない。"""
+             comparison: list[dict], auto_fix_allowed: bool = True) -> dict:
+    """比較結果を「修正候補 / 要確認 / 変更なし」に仕分ける。書き込みはしない。
+
+    auto_fix_allowed=False の機種（＝スマスロ機でない機種）は、同名の旧世代機と
+    ページを区別する材料がタイトルに無いため【自動修正しない】（要確認へ回す）。
+    2026-07-21 Codex3巡目 指摘7・8: 4号機/5号機/6号機や増台版は表記だけでは判別不能。
+    """
     by_key = {}
     for c in codex_claims:
         key = shadow_gold.migrate_claim_key(c.get("claim_key") or "",
@@ -198,7 +203,10 @@ def classify(site_claims: list[dict], codex_claims: list[dict],
             continue
 
         why = None
-        if codex is None:
+        if not auto_fix_allowed:
+            why = ("スマスロ機ではないため自動修正の対象外"
+                   "（同名の旧世代機とページを機械的に区別できない）")
+        elif codex is None:
             why = "同じ項目にCodexの主張が複数あり一意に決まらない" if cands else "Codex主張が取れない"
         elif codex.get("evidence_strength") != "verified_policy":
             why = (f"裏取りが独立2ドメインに届かない"
@@ -313,7 +321,8 @@ def audit_machine(machine: dict, machines: list[dict], run_id: str,
         site_claims, claims,
         codex_key=lambda c: shadow_gold.migrate_claim_key(
             c.get("claim_key") or "", c.get("ceiling_type") or ""))
-    res["classified"] = classify(site_claims, claims, comparison)
+    res["classified"] = classify(site_claims, claims, comparison,
+                                 auto_fix_allowed=("smart" in claim_identity.machine_tags(machine)))
     res["site_claims"] = site_claims
     res["codex_claims"] = claims
     res["comparison"] = comparison
@@ -473,6 +482,12 @@ def selftest() -> int:
     # 9. MISMATCH（属性まで検証済み）も修正候補になる
     c = classify([S(K, 900)], [C(K, 1000)], [R(K, "MISMATCH")])
     eq(len(c["fix_candidates"]), 1, "MISMATCHも修正候補")
+
+    # 9.5 スマスロ機でなければ自動修正しない（同名旧機種と区別できないため）
+    c = classify([S(K, 900)], [C(K, 1000)], [R(K, "UNKNOWN", "numeric_divergence")],
+                 auto_fix_allowed=False)
+    eq(len(c["fix_candidates"]), 0, "非スマスロ機は自動修正しない")
+    eq("スマスロ機ではない" in c["reviews"][0]["reason"], True, "非スマスロ機の理由")
 
     # 10. 選定は評価日が古い順・preview機種は対象外
     ms = [{"slug": "a"}, {"slug": "b"}, {"slug": "c", "status": "preview"}]

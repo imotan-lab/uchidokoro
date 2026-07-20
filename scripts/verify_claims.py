@@ -449,6 +449,7 @@ def run_data(data, min_domains, allowed_domains=None):
     cores = list(ident_conf.get("machine_cores") or [])
     reject_cores = list(ident_conf.get("reject_cores") or [])
     machine_tags = list(ident_conf.get("machine_tags") or [])
+    reject_name_cores = list(ident_conf.get("reject_name_cores") or [])
     if core_mode and claim_identity is None:
         log("❌ identity.machine_cores 指定だが claim_identity.py を読み込めない→不合格")
         return 1
@@ -574,7 +575,7 @@ def run_data(data, min_domains, allowed_domains=None):
                 log(f"❌ {tag}: C2 {tag_why}。title=「{page.title.strip()[:60]}」")
                 any_fail = True
                 continue
-            title_ok, title_why = claim_identity.check_title(page.title, cores, reject_cores)
+            title_ok, title_why = claim_identity.check_title(page.title, cores, reject_cores, reject_name_cores)
             if not title_ok:
                 log(f"❌ {tag}: C2 {title_why}。title=「{page.title.strip()[:60]}」")
                 any_fail = True

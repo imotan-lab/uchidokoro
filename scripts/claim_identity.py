@@ -144,6 +144,10 @@ _SPLIT_RE = re.compile(r"[()（）｜|／,、，]+")
 #   「Aタイプ」）を第一の根拠にする＝名前の表記ゆれに依存しない。
 _SMART_WORDS = ("スマスロ", "スマートパチスロ", "スマートスロット", "スマート遊技機")
 _PACHINKO_WORDS = ("パチンコ", "ぱちんこ", "スマパチ", "cr機", "cr ")
+# P機・e機の接頭辞（「Pバンドリ」「e北斗の拳10」）＝パチンコ機（2026-07-21 Codex指摘4）
+_PACHINKO_PREFIX_RE = re.compile(r"(?<![0-9a-z])[pe](?=[^0-9a-z\s])", re.IGNORECASE)
+# 比較記事の語（単一機種の値の出典には使わない・指摘1/3/5）
+_COMPARE_WORDS = ("比較", "VS", "ｖｓ", "vs", "どっち", "違い", "対決", "どちらが")
 # 「L」「Lパチスロ」等の型式接頭辞（スマスロ機に付く）。語の先頭にある L のみ。
 _L_PREFIX_RE = re.compile(r"(?:^|[\s　【\[(（])[lｌ](?=[^a-z]|$)", re.IGNORECASE)
 # 「スマスロ○○」「L○○」＝機種名が名指しされている箇所（比較記事の検出に使う）
@@ -162,7 +166,9 @@ def is_smart_text(s: str) -> bool:
 
 def is_pachinko_text(s: str) -> bool:
     t = unicodedata.normalize("NFKC", str(s or "")).lower()
-    return any(unicodedata.normalize("NFKC", w).lower() in t for w in _PACHINKO_WORDS)
+    if any(unicodedata.normalize("NFKC", w).lower() in t for w in _PACHINKO_WORDS):
+        return True
+    return bool(_PACHINKO_PREFIX_RE.search(t))
 
 
 def detect_tags(s: str) -> set[str]:
@@ -277,7 +283,7 @@ def check_tags(title: str, my_tags, cores=()) -> tuple[bool, str]:
     return True, "世代タグOK"
 
 
-def check_title(title: str, cores, reject_cores=()) -> tuple[bool, str]:
+def check_title(title: str, cores, reject_cores=(), reject_name_cores=()) -> tuple[bool, str]:
     """タイトルがこの機種のページを指しているか。(合格?, 理由) を返す。
 
     合格条件（すべて満たす）:
@@ -317,20 +323,48 @@ def check_title(title: str, cores, reject_cores=()) -> tuple[bool, str]:
                 return False, (f"他機種らしい区間が併記されている（{[c for c in bc if c][:2]}）"
                                f"→比較記事等の疑いで不合格")
 
-    # ★タイトル全体に他機種の名前が埋まっていないか（括弧の外の比較・続編表記）★
-    #   例「【スマスロ北斗の拳】VS L吉宗 天井比較」「【スマスロ炎炎ノ消防隊】2 天井」
-    #   （2026-07-21 Codex指摘3・4: まとまり単位の検査だけでは括弧の外を見逃す）
     longest_hit = max(hit, key=len)
-    # (0) 「スマスロ○○」「L○○」の形で【自機種以外の機種名】がタイトル中に出てくる
-    #     （例「【スマスロ北斗の拳】天井性能をL吉宗と比較」＝比較記事）。
-    #     自機種の芯を含む断片は自分の話なので除外する。
-    for mk in _MARKER_RE.finditer(t_norm):
-        seg = normalize_core(mk.group(1))
-        if not seg or any(c and c in seg for c in cores):
+
+    # ★(0-a) 比較記事そのものを拒否する（2026-07-21 Codex3巡目 指摘1・3・5）★
+    #   停止語より後ろは切り落とされるため「天井性能を吉宗と比較」型は名前検査で拾えない。
+    #   そもそも比較記事は単一機種の値の出典に向かないので、語の存在だけで落とす。
+    tl = t_norm.lower()
+    for w in _COMPARE_WORDS:
+        if w.lower() in tl:
+            return False, f"比較記事の疑い（タイトルに「{w}」）→単一機種の出典に使わない"
+
+    # ★(0-b) タイトル全体を位置つきで走査する★（停止語で切らない・包含で除外しない）
+    #   ・他機種の【正式名の芯】が、自機種名と重ならない位置に出てきたら不合格
+    #     （親機種⇔続編の比較が両方向で抜けていた・指摘2/3）
+    #   ・自機種名の直後に英数字や世代語が続く出現があれば不合格
+    #     （まだカタログに無い続編「バンドリ2」等・指摘6）
+    full = normalize_core(t_norm)
+    mine_spans = []
+    for c in cores:
+        st = full.find(c)
+        while st >= 0:
+            mine_spans.append((st, st + len(c)))
+            st = full.find(c, st + 1)
+    for rc in reject_name_cores or ():
+        if len(rc) < 2:
             continue
-        for rc in rej:
-            if len(rc) >= 2 and rc in seg and not any(rc in c for c in cores):
-                return False, (f"タイトルに他機種の名前がある（{rc}）→比較記事等の疑いで不合格")
+        st = full.find(rc)
+        while st >= 0:
+            en = st + len(rc)
+            covered = any(s <= st and en <= e for s, e in mine_spans)
+            if not covered:
+                return False, (f"タイトルに他機種の名前がある（{rc}）"
+                               f"→比較記事・別機種の疑いで不合格")
+            st = full.find(rc, st + 1)
+    for s_, e in mine_spans:
+        nxt = full[e:e + 1]
+        # 「新台」「新基準」等は続編記号ではなく記事の定型語（誤って落とさない）
+        if full[e:e + 2] in ("新台", "新基", "新装"):
+            continue
+        if nxt and (re.match(r"[0-9a-z]", nxt) or nxt in "改真新極零"):
+            if not any(full[s_:e] + nxt == c[:e - s_ + 1] and len(c) > e - s_ for c in cores):
+                return False, (f"機種名の直後に「{nxt}」が続く（…{full[s_:e + 3]}…）"
+                               f"→続編・派生機の疑いで不合格")
 
     for g in title_groups(title):
         gcore = normalize_core(" ".join(g))
@@ -406,6 +440,12 @@ def identity_spec(machine: dict, machines: list[dict]) -> dict:
         "machine_cores": accept_cores_for(machine, machines),
         "reject_cores": reject_cores_for(machine, machines),
         "machine_tags": sorted(machine_tags(machine)),
+        # ★他機種の「正式名の芯」だけの一覧（別名は含めない）★
+        #   タイトル全体を走査する検査に使う。別名（例「ディスク」）は汎用語に当たるため
+        #   全体走査には使わない（正しい出典を誤って落とすため）。
+        "reject_name_cores": sorted({normalize_core(m.get("name", "")) for m in machines
+                                     if m.get("slug") != machine.get("slug")}
+                                    - set(accept_cores_for(machine, machines)) - {""}),
     }
 
 
@@ -469,7 +509,9 @@ def selftest() -> int:
         m = by[slug]
         if not check_tags(title, machine_tags(m), accept_cores_for(m, cat))[0]:
             return False
-        return check_title(title, accept_cores_for(m, cat), reject_cores_for(m, cat))[0]
+        spec = identity_spec(m, cat)
+        return check_title(title, spec["machine_cores"], spec["reject_cores"],
+                           spec["reject_name_cores"])[0]
 
     real = [
         ("bandori", "【スマスロ バンドリ！】天井の恩恵や発動条件・天井期待値について"),
@@ -585,6 +627,53 @@ def selftest() -> int:
     eq(check_title("【スマスロ炎炎ノ消防隊2】天井", ["炎炎ノ消防隊2"], ["炎炎ノ消防隊"])[0], True,
        "続編機種自身のページは通る")
 
+    # --- 3巡目Codexレビュー: 停止語の後ろ・親子機種・P/e機・未登録続編 ---
+    valv2 = {"slug": "valv2", "name": "Lパチスロ 革命機ヴァルヴレイヴ2", "info": "スマスロAT"}
+    valv1 = {"slug": "valv1", "name": "L革命機ヴァルヴレイヴ", "info": "スマスロAT"}
+    vcat = [valv1, valv2]
+
+    def vcheck(m, title):
+        sp = identity_spec(m, vcat)
+        if not check_tags(title, machine_tags(m), sp["machine_cores"])[0]:
+            return False
+        return check_title(title, sp["machine_cores"], sp["reject_cores"],
+                           sp["reject_name_cores"])[0]
+
+    eq(vcheck(valv2, "【Lパチスロ 革命機ヴァルヴレイヴ2】天井・解析"), True, "続編自身のページは通る")
+    eq(vcheck(valv1, "【L革命機ヴァルヴレイヴ】天井・解析"), True, "前作自身のページは通る")
+    eq(vcheck(valv2, "【Lパチスロ 革命機ヴァルヴレイヴ2】VS L革命機ヴァルヴレイヴ 天井比較"),
+       False, "続編→前作の比較記事は不合格")
+    eq(vcheck(valv1, "【L革命機ヴァルヴレイヴ】天井性能をL革命機ヴァルヴレイヴ2と比較"),
+       False, "前作→続編の比較記事は不合格")
+    # 停止語の後ろに他機種名がある比較記事（指摘1）
+    hok = {"slug": "hokuto", "name": "スマスロ北斗の拳", "info": "スマスロAT", "aliases": ["北斗の拳"]}
+    yos = {"slug": "yoshi", "name": "真打 吉宗", "info": "スマスロAT"}
+    hcat = [hok, yos]
+
+    def hcheck(title):
+        sp = identity_spec(hok, hcat)
+        if not check_tags(title, machine_tags(hok), sp["machine_cores"])[0]:
+            return False
+        return check_title(title, sp["machine_cores"], sp["reject_cores"],
+                           sp["reject_name_cores"])[0]
+
+    eq(hcheck("【スマスロ北斗の拳】天井性能を吉宗と比較"), False,
+       "停止語の後ろの他機種併記も不合格")
+    eq(hcheck("【スマスロ北斗の拳】VS SLOT魔法少女まどか☆マギカ 天井比較"), False,
+       "カタログ外の他機種との比較記事も不合格（比較語で落とす）")
+    eq(hcheck("【スマスロ北斗の拳】天井の恩恵や発動条件"), True, "単独ページは通る")
+    # P機・e機（指摘4）
+    eq(is_pachinko_text("【Pバンドリ！】スペック"), True, "P機を検出")
+    eq(is_pachinko_text("【e北斗の拳10】天井"), True, "e機を検出")
+    eq(is_pachinko_text("【スマスロ北斗の拳】天井"), False, "スマスロをP/e機と誤検出しない")
+    eq(is_pachinko_text("【Lバキ 強くなりたくば喰らえ!!!】解析"), False, "L機を誤検出しない")
+    eq(check_tags("【Pバンドリ！】スペック", {"smart"})[0], False, "P機タイトルは不合格")
+    # カタログ未登録の続編（指摘6）
+    eq(check_title("【スマスロ バンドリ！】バンドリ2 天井", ["バンドリ"], [], [])[0], False,
+       "カタログに無い続編表記も不合格")
+    eq(check_title("【スマスロ バンドリ！】バンドリ改 天井", ["バンドリ"], [], [])[0], False,
+       "未登録の派生機表記も不合格")
+
     # --- 危険パターンは必ず落ちること ---
     # 芯が一致しないのに部分一致で通る、を許さない
     eq(title_ok("hokuto", "【スマスロ北斗の拳 修羅の国篇】天井の恩恵"), False, "続編ページは不合格")
@@ -646,7 +735,9 @@ def selftest() -> int:
                         f"【{base}2】天井とやめどき",
                         f"【{base}】【{other}】天井比較",
                         f"【{base}（5号機）】天井"):
-                if check_tags(pat, tg, cs)[0] and check_title(pat, cs, rj)[0]:
+                spec = identity_spec(m, real_ms)
+                if check_tags(pat, tg, cs)[0] and check_title(
+                        pat, cs, rj, spec["reject_name_cores"])[0]:
                     neg_fail.append((m["slug"], pat))
             # スマスロ機に「世代表記の無い同名タイトル」を当てる（同名旧機種の代表例）
             if "smart" in tg:
