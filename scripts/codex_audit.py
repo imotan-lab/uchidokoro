@@ -140,7 +140,7 @@ def conditional_hit(text: str, ceiling_type: str = "") -> str | None:
 #   値より前の部分（prefix）だけを見れば条件の有無が判定できる。
 #   値より後ろ（恩恵の説明）は判定に使わない＝正しい出典を落とさない。
 _PREFIX_ALLOWED = (
-    "通常時", "通常", "最大", "約", "天井", "規定", "ゲーム数", "g数", "消化", "到達",
+    "通常時", "通常", "最大", "天井", "規定", "ゲーム数", "g数", "消化", "到達",
     "まで", "また", "なお", "この", "その", "本機", "は", "を", "で", "に", "の", "が",
     "と", "も", "や", "へ", "から", "・", "、", "。", "「", "」", "※", "→", "-", "—",
     "＋", "+", "(", ")", "[", "]", "…", "！", "!", "／", "/",
@@ -267,11 +267,39 @@ def main_ceiling_quote(quote: str, value, cores=(), ceiling_type: str = "game") 
     #   例「設定変更時は800G、通常時の天井も800G」
     reasons = []
     for prefix, suffix in splits:
-        hit = conditional_hit(prefix, ceiling_type)
+        # ★天井語は「値と同じ節」に無ければならない（2026-07-21 Codex13巡目 指摘1）★
+        #   「最大800G継続、通常時の天井は1000G」で後半の「天井」を借りるのを防ぐ。
+        clause_pre = re.split(r"[、。！？]", prefix)[-1]
+        clause_suf = re.split(r"[、。！？]", suffix or "")[0]
+        clause = clause_pre + clause_suf
+        if not _CEILING_RE.search(clause):
+            reasons.append("値と同じ節に天井を表す語が無い")
+            continue
+        # ★「消化でAT終了」「継続」等＝天井ではなく別の挙動の説明（Codex13巡目 指摘1）★
+        #   「消化」「当選」を天井語に含めた分、終了・継続・獲得系の節は除外する。
+        ng = re.search(r"終了|継続|獲得|上乗せ|払い?出し|純増|枚数|突破|完走", clause)
+        if ng:
+            reasons.append(f"値と同じ節が天井ではない挙動の説明（「{ng.group(0)}」）")
+            continue
+        # ★非断定の表現は使わない（指摘3: 「約1000G」から断定表記へ直さない）★
+        if re.search(r"約|およそ|程度|前後|くらい|ほど", clause_pre):
+            reasons.append("値が非断定の表現（約・程度・前後）で書かれている")
+            continue
+        hit = conditional_hit(clause_pre, ceiling_type)
         if hit:
             reasons.append(f"値の前に限定条件「{hit}」がある")
             continue
-        # ★値の直後の注記も見る（指摘2: 「天井は800G（設定変更時のみ）」）★
+        # ★値の直後の括弧注記は、定型語だけで説明できなければ拒否（指摘2）★
+        #   列挙方式では未知の条件（設定6のみ／偶数設定のみ／仮天井）を取り逃がす。
+        note = re.match(r"^\s*[（(]([^）)]*)[）)]", suffix or "")
+        if note:
+            rest_note = _consume_allowed(_norm_text(note.group(1)),
+                                         list(cores or ()) +
+                                         list(_TYPE_VOCAB.get(ceiling_type or "", ())))
+            rest_note = _CEILING_RE.sub("", rest_note)
+            if rest_note:
+                reasons.append(f"値の直後の注記が定型語で説明できない（「{note.group(1)[:16]}」）")
+                continue
         hit2 = conditional_hit(_until_sentence_end(suffix or ""), ceiling_type)
         if hit2:
             reasons.append(f"値の直後に限定条件「{hit2}」がある")
@@ -1202,6 +1230,21 @@ def selftest() -> int:
     eq(alpha_mismatch("hokuto", {**_acand, "plus_alpha": True}), None, "＋αが一致すれば可")
     eq(alpha_mismatch("hokuto", {**_acand, "plus_alpha": None}), None,
        "出典が言及しなければ判定しない")
+
+    # 9.992 Codex13巡目: 天井語の借用・接尾の注記・非断定表現
+    for q, v in (("最大800G継続、通常時の天井は1000G", 800),
+                 ("最大800G消化でAT終了、通常時の天井は1000G", 800),
+                 ("最大800G継続、規定ゲーム数の天井は1000G", 800),
+                 ("天井は800G（設定6のみ）", 800), ("天井は800G（偶数設定のみ）", 800),
+                 ("天井は800G（CZ失敗時のみ）", 800), ("天井は800G（2回目のみ）", 800),
+                 ("天井は800G（仮天井）", 800), ("通常時の天井は約1000G", 1000)):
+        eq(bool(main_ceiling_quote(q, v, ceiling_type="game")), True,
+           f"天井語の借用・注記・非断定を拒否: {q[:22]}")
+    for q, v, ct in (("通常時を最大967G＋α消化でボーナスに当選。", 967, "game"),
+                     ("天井は1268G＋α消化でバトルボーナスに当選", 1268, "game"),
+                     ("通常時は最大10周期到達でAT当選。", 10, "cycle")):
+        eq(main_ceiling_quote(q, v, ceiling_type=ct), None,
+           f"正しい引用は通す: {q[:22]}")
 
     # 9.994 前後の文・括弧内に条件を追い出す迂回（Codex11巡目 指摘1・2）
     for pt, q in (("設定変更時だけ適用される短縮天井です。天井は800GでAT当選。", "天井は800GでAT当選"),
