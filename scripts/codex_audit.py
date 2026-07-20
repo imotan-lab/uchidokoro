@@ -123,37 +123,87 @@ _PREFIX_ALLOWED = (
     "まで", "また", "なお", "この", "その", "本機", "は", "を", "で", "に", "の", "が",
     "と", "も", "や", "へ", "から", "・", "、", "。", "「", "」", "※", "→", "-", "—",
     "＋", "+", "(", ")", "[", "]", "…", "！", "!", "／", "/",
+    # 機種名に付く型式記号・販売区分語（引用文が機種名から始まる場合）
+    "スマートパチスロ", "スマスロ", "パチスロ", "スロット", "l", "s",
 )
 _PREFIX_RESIDUAL_MAX = 2       # 定型語を除いた残りがこれ以下なら「主天井の記述」とみなす
 
 
-def quote_prefix(quote: str, value) -> str | None:
-    """引用文のうち★値より前★の部分を返す（値が見つからなければ None）。"""
+def _unit_pat(ceiling_type: str) -> str:
+    """その天井種別で値の直後に来る単位表記の正規表現。"""
+    units = UNIT_WORDS.get(ceiling_type or "", ())
+    return "|".join(_norm_text(u) for u in units) or "g|ゲーム"
+
+
+def quote_splits(quote: str, value, ceiling_type: str):
+    """引用文を「値の前」「値の後」に割る。★値は単位とセットで探す★
+
+    2026-07-21 Codex9巡目 指摘1: 値だけで探すと「最大800枚獲得。設定変更時の天井は800G」の
+    最初の「800枚」を天井値だと解釈してしまう。単位付きの出現だけを値とみなす。
+    戻り値 (prefix, suffix) / 見つからなければ (None, None)
+    """
     n = _norm_text(quote)
-    v = str(int(float(value))) if float(value).is_integer() else str(value)
-    m = re.search(rf"(?<![0-9.,]){re.escape(v)}(?![0-9])", n)
-    if not m:
-        m = re.search(rf"(?<![0-9.,]){re.escape(f'{int(float(value)):,}')}(?![0-9])", n)             if float(value).is_integer() else None
-    return n[:m.start()] if m else None
+    vals = []
+    if float(value).is_integer():
+        vals = [str(int(float(value))), f"{int(float(value)):,}"]
+    else:
+        vals = [str(value)]
+    up = _unit_pat(ceiling_type)
+    out = []
+    for v in vals:
+        for m in re.finditer(
+                rf"(?<![0-9.,]){re.escape(_norm_text(v))}(?![0-9])\s*(?:\+?α?)?(?:{up})", n):
+            out.append((n[:m.start()], n[m.end():]))
+    return out
 
 
-def main_ceiling_quote(quote: str, value, cores=()) -> str | None:
-    """主天井の記述だと肯定的に確認できなければ理由を返す（＝修正に使わない）。"""
-    prefix = quote_prefix(quote, value)
-    if prefix is None:
-        return f"引用の中に値({value})が見つからない"
-    hit = conditional_hit(prefix)
-    if hit:
-        return f"値の前に限定条件「{hit}」がある"
+def _consume_allowed(prefix: str, cores=()) -> str:
+    """先頭から定型語・機種名を1語ずつ食べていき、残りを返す。
+
+    ★全体置換ではなく先頭からの消費にする（Codex9巡目 指摘3）★
+      全体置換だと「裏天井」から「天井」を抜いて「裏」だけにする等、
+      未知語の内部を削って条件を見逃す。
+    """
+    toks = sorted([_norm_text(c) for c in (cores or ()) if c] +
+                  [_norm_text(w) for w in _PREFIX_ALLOWED], key=len, reverse=True)
     rest = prefix
-    for c in sorted([c for c in (cores or ()) if c], key=len, reverse=True):
-        rest = rest.replace(_norm_text(c), "")
-    for w in sorted(_PREFIX_ALLOWED, key=len, reverse=True):
-        rest = rest.replace(_norm_text(w), "")
-    rest = re.sub(r"[\s　]", "", rest)
-    if len(rest) > _PREFIX_RESIDUAL_MAX:
-        return f"値の前に定型語以外の記述がある（「{rest[:20]}」）＝主天井と断定できない"
-    return None
+    changed = True
+    while changed and rest:
+        changed = False
+        for t in toks:
+            if t and rest.startswith(t):
+                rest, changed = rest[len(t):], True
+                break
+    return rest
+
+
+SUFFIX_CHECK_CHARS = 25    # 値の直後どれだけを条件の注記として見るか
+
+
+def main_ceiling_quote(quote: str, value, cores=(), ceiling_type: str = "game") -> str | None:
+    """主天井の記述だと肯定的に確認できなければ理由を返す（＝修正に使わない）。"""
+    splits = quote_splits(quote, value, ceiling_type)
+    if not splits:
+        return f"引用の中に値({value})が単位付きで見つからない"
+    # ★値が複数回出るなら、どれか1つが主天井の文法に合えばよい（Codex9巡目 指摘8）★
+    #   例「設定変更時は800G、通常時の天井も800G」
+    reasons = []
+    for prefix, suffix in splits:
+        hit = conditional_hit(prefix)
+        if hit:
+            reasons.append(f"値の前に限定条件「{hit}」がある")
+            continue
+        # ★値の直後の注記も見る（指摘2: 「天井は800G（設定変更時のみ）」）★
+        hit2 = conditional_hit((suffix or "")[:SUFFIX_CHECK_CHARS])
+        if hit2:
+            reasons.append(f"値の直後に限定条件「{hit2}」がある")
+            continue
+        rest = _consume_allowed(prefix, cores)
+        if rest:
+            reasons.append(f"値の前に定型語以外の記述がある（「{rest[:20]}」）")
+            continue
+        return None            # 1つでも主天井の文法に合えば合格
+    return "主天井と断定できない（" + " / ".join(reasons[:2]) + "）"
 
 
 # 矛盾スキャンで使う単位表記（旧値がページに載っていないかを見る）
@@ -283,7 +333,8 @@ def select_slugs(machines: list[dict], state: dict, n: int) -> list[str]:
 # ─────────────────────────────────────────────
 
 def classify(site_claims: list[dict], codex_claims: list[dict],
-             comparison: list[dict], auto_fix_allowed: bool = True) -> dict:
+             comparison: list[dict], auto_fix_allowed: bool = True,
+             cores=()) -> dict:
     """比較結果を「修正候補 / 要確認 / 変更なし」に仕分ける。書き込みはしない。
 
     auto_fix_allowed=False の機種（＝スマスロ機でない機種）は、同名の旧世代機と
@@ -358,11 +409,11 @@ def classify(site_claims: list[dict], codex_claims: list[dict],
             why = f"条件付きの天井（scope={codex.get('scope')}）＝サイトの値と同じものか決まらない"
         # ★引用文に限定条件が書かれていれば主天井の置き換えに使わない（指摘7）★
         # ★全ての引用が「主天井の記述」だと肯定的に確認できること（Codex8巡目 指摘1）★
-        elif any(main_ceiling_quote(e.get("raw_quote"), codex.get("value"))
-                 for e in ev_used):
-            bad = next(main_ceiling_quote(e.get("raw_quote"), codex.get("value"))
-                       for e in ev_used if main_ceiling_quote(e.get("raw_quote"),
-                                                             codex.get("value")))
+        elif any(main_ceiling_quote(e.get("raw_quote"), codex.get("value"), cores,
+                                    site.get("ceiling_type") or "") for e in ev_used):
+            bad = next(x for x in (main_ceiling_quote(
+                e.get("raw_quote"), codex.get("value"), cores,
+                site.get("ceiling_type") or "") for e in ev_used) if x)
             why = f"引用を主天井の記述と確認できない（{bad}）"
         elif site.get("value") is None or codex.get("value") is None:
             why = "値が欠けている"
@@ -379,8 +430,8 @@ def classify(site_claims: list[dict], codex_claims: list[dict],
         #   理由にしない。代わりに「Codexが限定条件を名乗っていないこと（PLAIN_SCOPES）」と
         #   「引用文に限定条件語が無いこと」で守る（上の2条件）。
         #   ただしCodexが★既知の語彙に無いscope★を出した場合は意味が確定しないので止める。
-        elif any(site.get(a) is not None and codex.get(a) is not None
-                 and site.get(a) != codex.get(a) for a in ("operator", "plus_alpha")):
+        elif any(site.get(a) is not None and codex.get(a) != site.get(a)
+                 for a in ("operator", "plus_alpha")):
             why = ("operator/plus_alpha が食い違う"
                    f"（site={site.get('operator')}/{site.get('plus_alpha')} "
                    f"codex={codex.get('operator')}/{codex.get('plus_alpha')}）")
@@ -438,13 +489,16 @@ def contradiction_scan(cand: dict, allowed, pairs=()) -> str | None:
         text = verify_claims.normalize(page.text)
         for o in olds:
             for u in units:
-                if f"{o}{u}" in text:
+                # ★桁境界つきで探す（Codex9巡目 指摘11: 旧値600が1600Gに一致していた）★
+                if re.search(rf"(?<![0-9.,]){re.escape(o)}\s*(?:\+?α?)?{re.escape(u)}", text):
                     return (f"裏取りページに旧値「{o}{u}」も載っている（{url}）"
                             f"＝どちらが正しいか機械で決められない")
         # ★そのURLの引用★の前後文脈（見出し・直前文）に限定条件が無いか
         if not quote:
             continue
-        ntext = _norm_text(page.text)
+        # ★改行は文の境界として残す（Codex9巡目 指摘10）★
+        #   _norm_text は空白を全て消すため、先に改行を「。」へ置換しておく
+        ntext = _norm_text(page.text.replace(chr(13), chr(12290)).replace(chr(10), chr(12290)))
         nq = _norm_text(quote)
         hits = [i for i in range(len(ntext)) if ntext.startswith(nq, i)]
         if not hits:
@@ -537,8 +591,11 @@ def audit_machine(machine: dict, machines: list[dict], run_id: str,
             c.get("claim_key") or "", c.get("ceiling_type") or ""))
     if not comparison:
         res["empty_comparison"] = True
-    res["classified"] = classify(site_claims, claims, comparison,
-                                 auto_fix_allowed=("smart" in claim_identity.machine_tags(machine)))
+    all_ms = json.loads((BASE / "assets" / "data" / "machines.json").read_text(encoding="utf-8"))
+    res["classified"] = classify(
+        site_claims, claims, comparison,
+        auto_fix_allowed=("smart" in claim_identity.machine_tags(machine)),
+        cores=claim_identity.accept_cores_for(machine, all_ms))
     res["site_claims"] = site_claims
     res["codex_claims"] = claims
     res["comparison"] = comparison
@@ -556,6 +613,21 @@ def apply_one(slug: str, cand: dict, allowed, apply_mode: bool) -> dict:
         return {"applied": False, "reason": why, "field": field, **_cand_view(cand)}
     r = apply_external_fix.run(BASE, slug, field, float(cand["site_value"]),
                                float(cand["codex_value"]), apply_mode)
+    # ★書き込み後、記事データから claim を抽出し直して承認内容と一致するか確認する★
+    #   （2026-07-21 Codex9巡目 指摘7: 数値だけ書き換えて意味の組を再検証していない）
+    if r["applied"]:
+        ms = json.loads((BASE / "assets" / "data" / "machines.json").read_text(encoding="utf-8"))
+        m2 = next((x for x in ms if x.get("slug") == slug), None)
+        got = next((c for c in shadow_claims.extract_site_claims(m2 or {})
+                    if c.get("claim_key") == field), None)
+        expect_unit = shadow_claims._norm_unit(cand.get("unit"))
+        if (got is None or float(got.get("value") or -1) != float(cand["codex_value"])
+                or shadow_claims._norm_unit(got.get("unit")) != expect_unit
+                or (got.get("ceiling_type") or "") != (cand.get("site_ceiling_type") or "")):
+            return {"applied": False, "field": field,
+                    "reason": f"書き込み後の再抽出が承認内容と一致しない（{got}）",
+                    "struct_path": r["struct_path"], "prose_edits": r["prose_edits"],
+                    **_cand_view(cand)}
     return {"applied": r["applied"], "reason": r["reason"], "field": field,
             "struct_path": r["struct_path"], "prose_edits": r["prose_edits"],
             **_cand_view(cand)}
@@ -890,18 +962,33 @@ def selftest() -> int:
     eq(len(c["fix_candidates"]), 0, "引用が無いものは修正しない")
 
     # 9.99 主天井であることの肯定確認（Codex8巡目 指摘1）
-    for q, v in (("通常時を最大1268G+α消化で天井到達", 1268),
-                 ("・通常時最大 1268G+α で天井到達", 1268),
-                 ("通常時は最大10周期到達でAT当選。", 10),
-                 ("天井は1268G＋α消化でバトルボーナスに当選。天井ATは継続率優遇", 1268)):
-        eq(main_ceiling_quote(q, v), None, f"主天井と確認できる: {q[:20]}")
-    for q, v in (("設定変更時は天井G数が短縮され、800G+αで天井到達となる。", 800),
-                 ("設定6のみ天井は800G", 800), ("AT終了時は800G", 800),
-                 ("CZ失敗時の天井は800G", 800), ("2回目のみ800G", 800),
-                 ("AT天井は1000G", 1000), ("駆け抜け後は800G", 800),
-                 ("ST単発終了4連続後にST当選でスルー回数天井に到達し、", 4)):
-        eq(bool(main_ceiling_quote(q, v)), True, f"主天井と確認できない: {q[:20]}")
+    for q, v, ct in (("通常時を最大1268G+α消化で天井到達", 1268, "game"),
+                     ("・通常時最大 1268G+α で天井到達", 1268, "game"),
+                     ("通常時は最大10周期到達でAT当選。", 10, "cycle"),
+                     ("通常時を最大967G＋α消化でボーナスに当選。", 967, "game"),
+                     ("天井は1268G＋α消化でバトルボーナスに当選。天井ATは継続率優遇", 1268, "game")):
+        eq(main_ceiling_quote(q, v, ceiling_type=ct), None, f"主天井と確認できる: {q[:20]}")
+    for q, v, ct in (("設定変更時は天井G数が短縮され、800G+αで天井到達となる。", 800, "game"),
+                     ("設定6のみ天井は800G", 800, "game"), ("AT終了時は800G", 800, "game"),
+                     ("CZ失敗時の天井は800G", 800, "game"), ("AT天井は1000G", 1000, "game"),
+                     # 値を単位とセットで探す（Codex9巡目 指摘1: 800枚を天井値としない）
+                     ("最大800枚獲得。設定変更時の天井は800G", 800, "game"),
+                     # 値の直後の注記（指摘2）
+                     ("天井は800G（設定変更時のみ）", 800, "game"),
+                     # 残余を0文字必須にした分（指摘3）
+                     ("初回は800G", 800, "game"), ("裏天井は800G", 800, "game"),
+                     ("第2天井は800G", 800, "game"), ("非通常時は800G", 800, "game"),
+                     ("天井Aは800G", 800, "game"),
+                     ("ST単発終了4連続後にST当選でスルー回数天井に到達し、", 4, "through"),
+                     # ★同じ文の中に条件があれば、後半に主天井の記述があっても安全側で落とす★
+                     #   （値は同じなので実害は無く、他の出典で拾える。Codex9巡目 指摘8への判断）
+                     ("設定変更時は800G、通常時の天井も800G", 800, "game")):
+        eq(bool(main_ceiling_quote(q, v, ceiling_type=ct)), True,
+           f"主天井と確認できない: {q[:20]}")
     eq(bool(main_ceiling_quote("天井はG数管理", 900)), True, "値が無い引用は不合格")
+    # 機種名が引用に入っていても落とさない（指摘9）
+    eq(main_ceiling_quote("「Lバンドリ！」の通常時天井は1000G", 1000,
+                          ["バンドリ"], "game"), None, "引用中の機種名は除去して判定")
     c = classify([S(K, 900)], [C(K, 800, quote="設定6のみ天井は{v}G")],
                  [R(K, "UNKNOWN", "numeric_divergence")])
     eq(len(c["fix_candidates"]), 0, "設定限定の引用では修正しない")
