@@ -536,11 +536,105 @@ def save_json_atomic(p: Path, obj) -> None:
 # 対象選定（評価日が最も古い順＝日付ベース。位置番号方式は使わない）
 # ─────────────────────────────────────────────
 
+# ─────────────────────────────────────────────
+# 自動再試行キュー（2026-07-21 運営者承認）
+# ─────────────────────────────────────────────
+# 要確認を「人が読む箱」にせず、状態を持った再挑戦キューにする。
+# 今日直せなかったものが、後日「2サイト目が見つかった／ルールが良くなった」時点で
+# 自動的に再判定され、通れば直る。人手ゼロのまま件数が積み上がる（Codex提案）。
+#
+#   codex_audit_queue: { "slug|claim_key": {code, values, first_seen, last_tried,
+#                                            tries, next_eligible, detail} }
+# code の意味:
+#   missing_second_domain … 裏取りが1ドメイン止まり。別URL/別サイトを次回探す
+#   semantic_ambiguity    … 主天井の記述と確認できない。ルール/判定改善時に再判定
+#   over_limit            … 1日の修正上限に達した。翌日再挑戦
+#   （structure/conditional は自動再試行しても解決しないのでキューに載せない＝台帳のみ）
+QUEUE_RETRY_CODES = ("missing_second_domain", "semantic_ambiguity", "over_limit")
+QUEUE_BACKOFF_DAYS = [1, 2, 4, 7, 14]     # tries に応じて再挑戦間隔を伸ばす
+
+
+def _add_days(iso_s: str, days: int) -> str:
+    return iso(datetime.datetime.fromisoformat(iso_s) + datetime.timedelta(days=days))
+
+
+def reason_code(rv: dict) -> str:
+    """要確認レコードから再試行の分類コードを決める（純関数）。"""
+    if rv.get("kind") == "structure":
+        return "structure"
+    reason = rv.get("reason") or ""
+    if "2ドメインに届かない" in reason or "1対1で対応" in reason:
+        return "missing_second_domain"
+    if ("主天井の記述と確認できない" in reason
+            or "厳格な検査を通る出典が1件も無い" in reason
+            or "主天井と確認できない" in reason):
+        return "semantic_ambiguity"
+    if "自動修正上限" in reason:
+        return "over_limit"
+    if "条件付き" in reason or "限定条件" in reason or "AT間" in reason:
+        return "conditional"
+    return "other"
+
+
+def update_queue(queue: dict, slug: str, classified: dict, now_iso: str) -> dict:
+    """点検結果を再試行キューへ反映する（純関数・通信なし）。
+
+    ・今回も要確認だったもの → tries を増やして next_eligible を後ろへ
+    ・今回は要確認に出なかった（＝解決した or 値が一致した）このslugのエントリ → 削除
+    """
+    still_keys = set()
+    for rv in classified.get("reviews", []):
+        code = reason_code(rv)
+        if code not in QUEUE_RETRY_CODES:
+            continue                      # 自動再試行が意味を持つものだけキューに載せる
+        key = f"{slug}|{rv.get('claim_key')}"
+        still_keys.add(key)
+        cur = queue.get(key, {})
+        tries = cur.get("tries", 0) + 1
+        back = QUEUE_BACKOFF_DAYS[min(tries, len(QUEUE_BACKOFF_DAYS)) - 1]
+        queue[key] = {
+            "slug": slug, "claim_key": rv.get("claim_key"), "code": code,
+            "site_value": rv.get("site_value"), "codex_value": rv.get("codex_value"),
+            "first_seen": cur.get("first_seen", now_iso),
+            "last_tried": now_iso, "tries": tries,
+            "next_eligible": _add_days(now_iso, back),
+            "detail": (rv.get("reason") or rv.get("detail") or "")[:200],
+        }
+    # このslugを点検した以上、キューに残っていて今回出なかったものは解決済み＝削除
+    for key in [k for k, v in queue.items()
+                if v.get("slug") == slug and k not in still_keys]:
+        del queue[key]
+    return queue
+
+
+def queue_due_slugs(queue: dict, now_iso: str) -> list[str]:
+    """再挑戦の期日が来たキュー内のslug（重複除去・古い順）。"""
+    due = [(v.get("next_eligible") or "", v["slug"]) for v in queue.values()
+           if (v.get("next_eligible") or "") <= now_iso]
+    out = []
+    for _, slug in sorted(due):
+        if slug not in out:
+            out.append(slug)
+    return out
+
+
 def select_slugs(machines: list[dict], state: dict, n: int) -> list[str]:
+    """点検対象を選ぶ。★再挑戦の期日が来たキュー内のslugを優先★し、
+    残り枠を評価日が最も古い順（日付ベース）で埋める。"""
+    complete = {m["slug"] for m in machines
+                if (m.get("status") or "complete") == "complete"}
+    now_iso = iso()
+    queue = (state.get("codex_audit") or {}).get("retry_queue") or {}
+    picked = [s for s in queue_due_slugs(queue, now_iso) if s in complete][:n]
+
     seen = (state.get("codex_audit") or {}).get("last_audited") or {}
-    cands = [m for m in machines if (m.get("status") or "complete") == "complete"]
+    cands = [m for m in machines if m["slug"] in complete and m["slug"] not in picked]
     cands.sort(key=lambda m: (seen.get(m["slug"], ""), m["slug"]))
-    return [m["slug"] for m in cands[:n]]
+    for m in cands:
+        if len(picked) >= n:
+            break
+        picked.append(m["slug"])
+    return picked
 
 
 # ─────────────────────────────────────────────
@@ -1558,6 +1652,39 @@ def selftest() -> int:
     eq(select_slugs(ms, st, 3), ["b", "a"], "古い順・previewは除外")
     eq(select_slugs(ms, {}, 1), ["a"], "未点検が最優先")
 
+    # 10.5 自動再試行キュー
+    def RV(slug, ck, reason, kind="value"):
+        return {"slug": slug, "claim_key": ck, "reason": reason, "kind": kind,
+                "site_value": 900, "codex_value": 1000}
+    # 裏取り1ドメイン→キューに載る
+    q = update_queue({}, "a", {"reviews": [
+        RV("a", K, "裏取りが独立2ドメインに届かない（検証成功ドメイン=['x.com']）")]}, "2026-07-21T02:30:00")
+    eq(q["a|" + K]["code"], "missing_second_domain", "1ドメインはキューへ")
+    eq(q["a|" + K]["next_eligible"], "2026-07-22T02:30:00", "1回目は翌日再挑戦")
+    # 構造の食い違いはキューに載せない（自動再試行しても解決しない）
+    q2 = update_queue({}, "a", {"reviews": [
+        {"slug": "a", "claim_key": K, "kind": "structure", "detail": "x"}]}, "2026-07-21T02:30:00")
+    eq(q2, {}, "構造の食い違いはキューに載せない")
+    # 再挑戦で tries が増え間隔が伸びる
+    q = update_queue(q, "a", {"reviews": [
+        RV("a", K, "裏取りが独立2ドメインに届かない")]}, "2026-07-22T02:30:00")
+    eq(q["a|" + K]["tries"], 2, "再挑戦でtries増加")
+    eq(q["a|" + K]["next_eligible"], "2026-07-24T02:30:00", "2回目は2日後")
+    # 解決したら（今回は要確認に出なかった）キューから消える
+    q = update_queue(q, "a", {"reviews": []}, "2026-07-24T02:30:00")
+    eq(q, {}, "解決したらキューから消える")
+    # 期日が来たキューslugは選定で優先
+    ms2 = [{"slug": "a"}, {"slug": "b"}, {"slug": "d"}]
+    st2 = {"codex_audit": {
+        "last_audited": {"a": "2026-01-01", "b": "2026-01-01", "d": "2026-01-01"},
+        "retry_queue": {"d|" + K: {"slug": "d", "next_eligible": "2000-01-01T00:00:00"}}}}
+    eq(select_slugs(ms2, st2, 1), ["d"], "期日が来たキューslugを優先")
+    # 期日が未来のキューslugは優先しない（古い順で選ばれる）
+    ms3 = [{"slug": "a"}, {"slug": "b"}]
+    st3 = {"codex_audit": {"last_audited": {"a": "2026-01-02", "b": "2026-01-01"},
+           "retry_queue": {"a|" + K: {"slug": "a", "next_eligible": "2999-01-01T00:00:00"}}}}
+    eq(select_slugs(ms3, st3, 1), ["b"], "未来の期日は優先しない（古い順のbが先）")
+
     print(f"codex_audit selftest: {ok}/{ok + fail}")
     return 0 if fail == 0 else 1
 
@@ -1651,6 +1778,11 @@ def run(slugs_override, n_machines: int, apply_mode: bool) -> int:
         for rv in cls["reviews"]:
             rv["slug"] = slug
             all_reviews.append(rv)
+
+        # ★自動再試行キューを更新（このslugの解決分は消え、未解決分は次回期日つきで残る）★
+        cq = state.setdefault("codex_audit", {})
+        cq["retry_queue"] = update_queue(cq.get("retry_queue") or {},
+                                         slug, cls, iso())
 
         # 状態更新（1機種終わるごと＝途中で落ちても進捗が残る）
         state.setdefault("codex_audit", {}).setdefault("last_audited", {})[slug] = \
