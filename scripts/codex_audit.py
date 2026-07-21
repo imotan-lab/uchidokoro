@@ -641,6 +641,25 @@ def select_slugs(machines: list[dict], state: dict, n: int) -> list[str]:
 # 判定（純関数・通信なし＝selftestで検証できる）
 # ─────────────────────────────────────────────
 
+def _at_based_ceiling(machine: dict) -> bool:
+    """machines.json の limit が【AT間天井】になっている機種か（2026-07-21 実データ確認）。
+
+    ★これらは自動修正の対象外にする★。AT間とCZ間の取り違えは最も事故が起きやすく、
+    「AT間を主天井として扱う」機種を自動化すると誤修正リスクが跳ね上がるため。
+    （真打吉宗・東京喰種・攻殻・ガンダムUC2・ウルトラマン最終決戦の5機種が該当）
+    判定は checker.at（またはmodeData.at）の note に「AT間天井」表記があるかで行う。
+    """
+    checker = machine.get("checker") or {}
+    at = checker.get("at") or (checker.get("modeData") or {}).get("at")
+    if not isinstance(at, dict):
+        return False
+    note = str(at.get("note") or "")
+    # スルー配列型（東京喰種）は各要素のnoteも見る
+    for item in at.get("suru") or []:
+        note += " " + str((item or {}).get("note") or "")
+    return "AT間天井" in note or "at間天井" in note.lower()
+
+
 def classify(site_claims: list[dict], codex_claims: list[dict],
              comparison: list[dict], auto_fix_allowed: bool = True,
              cores=()) -> dict:
@@ -993,7 +1012,8 @@ def audit_machine(machine: dict, machines: list[dict], run_id: str,
     all_ms = json.loads((BASE / "assets" / "data" / "machines.json").read_text(encoding="utf-8"))
     res["classified"] = classify(
         site_claims, claims, comparison,
-        auto_fix_allowed=("smart" in claim_identity.machine_tags(machine)),
+        auto_fix_allowed=("smart" in claim_identity.machine_tags(machine))
+        and not _at_based_ceiling(machine),
         cores=claim_identity.accept_cores_for(machine, all_ms))
     res["site_claims"] = site_claims
     res["codex_claims"] = claims
@@ -1384,6 +1404,16 @@ def selftest() -> int:
     r_unknown["attrs_unverified"] = ["scope_unverified"]
     c = classify([S(K, 900)], [C(K, 1000, scope="謎の区間")], [r_unknown])
     eq(len(c["fix_candidates"]), 0, "未知のscopeは修正しない")
+
+    # 9.4 AT間天井を主天井に持つ機種は自動修正の対象外
+    at_m = {"slug": "x", "name": "スマスロX", "info": "スマスロAT",
+            "checker": {"at": {"note": "AT間天井1400G。等価950G〜。"}}}
+    eq(_at_based_ceiling(at_m), True, "AT間天井の機種を検出")
+    eq(_at_based_ceiling({"slug": "y", "checker": {"normal": {"note": "天井1268G"}}}), False,
+       "通常の機種は対象内")
+    c = classify([S(K, 1400)], [C(K, 1500)], [R(K, "UNKNOWN", "numeric_divergence")],
+                 auto_fix_allowed=False)
+    eq(len(c["fix_candidates"]), 0, "AT間天井の機種は修正候補にしない")
 
     # 9.5 スマスロ機でなければ自動修正しない（同名旧機種と区別できないため）
     c = classify([S(K, 900)], [C(K, 1000)], [R(K, "UNKNOWN", "numeric_divergence")],
