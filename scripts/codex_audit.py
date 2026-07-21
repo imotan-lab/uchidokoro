@@ -1018,7 +1018,64 @@ def audit_machine(machine: dict, machines: list[dict], run_id: str,
     res["site_claims"] = site_claims
     res["codex_claims"] = claims
     res["comparison"] = comparison
+
+    # ★意味判定AIをシャドー併走（2026-07-21 Codex設計・運営者承認）★
+    #   値が食い違い、独立2ドメインで裏取りできた候補について、意味判定AIが
+    #   「通常時の主天井」と確認できるかを記録する（★公開判断は左右しない★）。
+    #   実データで判定の質を測ってから live へ昇格する。全経路 fail-closed・best-effort。
+    try:
+        res["semantic_shadow"] = _semantic_shadow(machine, claims, res["classified"], deadline)
+    except Exception as e:
+        res["semantic_shadow_error"] = f"{type(e).__name__}: {e}"
     return res
+
+
+SEMANTIC_MODE = os.environ.get("CODEX_AUDIT_SEMANTIC_MODE", "shadow")  # shadow / live
+SEMANTIC_MIN_SEC = 90     # これ未満しか残っていなければ判定を始めない（Codex: 絶対デッドライン）
+
+
+def _semantic_shadow(machine: dict, claims: list[dict], classified: dict,
+                     deadline: datetime.datetime) -> list[dict]:
+    """値が食い違った候補を意味判定AIにかけ、結果を記録する（公開判断は変えない）。"""
+    import semantic_judge
+    targets = classified.get("fix_candidates", []) + [
+        r for r in classified.get("reviews", [])
+        if r.get("kind") == "value" and (r.get("verified_domains") or [])]
+    by_key = {}
+    for c in claims:
+        by_key.setdefault(shadow_gold.migrate_claim_key(
+            c.get("claim_key") or "", c.get("ceiling_type") or ""), []).append(c)
+    out = []
+    for cand in targets:
+        if (deadline - now()).total_seconds() < SEMANTIC_MIN_SEC:
+            out.append({"claim_key": cand.get("claim_key"), "skipped": "時間不足で判定せず"})
+            break
+        cc = (by_key.get(cand.get("claim_key")) or [None])[0]
+        if not cc:
+            continue
+        oks = {er["source_url"] for er in (cc.get("evidence_results") or []) if er.get("verified")}
+        sources = []
+        for e in cc.get("evidence") or []:
+            url = e.get("source_url")
+            if url not in oks or not e.get("raw_quote"):
+                continue
+            page = verify_claims.fetch_page(url, allowed=list(shadow_gold.ALLOWED_DOMAINS))
+            sources.append({"source_id": f"S{len(sources) + 1}", "quote": e["raw_quote"],
+                            "page_text": (page.text if page else ""),
+                            "page_title": (page.title if page else "")})
+        unit_words = UNIT_WORDS.get(cand.get("site_ceiling_type")
+                                    or cand.get("ceiling_type") or "game", ("G",))
+        verdict = semantic_judge.judge_candidate(
+            machine, sources, cand.get("codex_value"), list(unit_words),
+            cand.get("ceiling_type") or "game")
+        det = cand.get("auto_fixable", False) and not cand.get("reason")
+        out.append({"claim_key": cand.get("claim_key"),
+                    "deterministic_eligible": bool(det),
+                    "semantic_eligible": verdict.get("eligible"),
+                    "semantic_reason": verdict.get("reason"),
+                    "per_source": [{"source_id": p["source_id"], "ok": p["ok"],
+                                    "reason": p["reason"]} for p in verdict.get("per_source", [])]})
+    return out
 
 
 # ─────────────────────────────────────────────
