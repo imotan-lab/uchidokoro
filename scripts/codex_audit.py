@@ -17,7 +17,7 @@
   上記を1つでも欠けば【現状維持】し、要確認台帳（open_issues）へ登録する。
 
 使い方:
-  python scripts/codex_audit.py --run                 # 本番（既定3機種・修正上限2件）
+  python scripts/codex_audit.py --run                 # 本番（新台優先→高稼働メイン→その他・点検6/日目標・修正2/日）
   python scripts/codex_audit.py --run --slugs a,b     # 対象指定
   python scripts/codex_audit.py --dry-run --slugs a   # Codexは呼ぶが書き込まない
   python scripts/codex_audit.py --selftest            # 判定ロジックの内蔵テスト（通信なし）
@@ -63,10 +63,20 @@ SEND_NOTIFY = r"C:/Users/imao_/.claude/send_notify.py"
 OPEN_ISSUES = SCRIPTS / "open_issues.py"
 TASK_ID = "uchidokoro-codex-audit"
 
-DEFAULT_MACHINES = 3          # 1日の点検機種数（約40日で全120機種を1巡）
-MAX_FIXES_PER_RUN = 2         # 1日の自動修正上限（verify STEP2.9と同じ保守的な上限）
-MACHINE_BUDGET_SEC = 180      # 1機種3分
-TASK_BUDGET_SEC = 900         # 1タスク15分（★時間切れは必ず現状維持＋台帳。公開しない★）
+# 選定・件数（2026-07-22 Codex設計相談＝新台の鮮度優先。正本: Documents/uchidokoro/codex_audit/reviews/design_selection_priority_2026-07-22.txt）
+DAILY_TARGET_MACHINES = 6     # 通常日の目標点検数（新台もこの枠を先取り）
+MAX_MACHINES_PER_RUN  = 8     # 1実行の物理上限（新台バースト対応・時間予算の内側）
+MAX_RETRY_PER_RUN     = 2     # 再挑戦キューの1実行上限（新台を押し退けない）
+MAIN_TOP_N            = 30    # machines.json上位＝高稼働「メイン」機種
+MAIN_REAUDIT_DAYS     = 14    # メインの再点検間隔（日）
+OTHER_REAUDIT_DAYS    = 45    # その他の再点検間隔（日）
+FRESH_DAYS            = 45    # 新台とみなす発売後日数
+FRESH_CHECKPOINTS     = (0, 1, 3, 7, 14, 21, 30, 45)  # 新台の固定点検日（発売後日数）
+MAX_FIXES_PER_DAY     = 2     # 1日の自動修正上限（★run単位でなく日単位＝2回目起動でも合算・verify STEP2.9と同じ保守的な上限★）
+MACHINE_BUDGET_SEC    = 180   # 1機種（Codex＋裏取りまで含む）3分
+TASK_BUDGET_SEC       = 1500  # 点検フェーズ25分（★時間切れは必ず現状維持＋台帳。公開しない★）
+HARD_WALL_SEC         = 2100  # 公開開始前の目安期限35分（★真の強制はWindowsタスク ExecutionTimeLimit=40分・AllowHardTerminate。これは公開前の一度きり判定＝build/push中の超過は防げないベストエフォート★）
+DEFAULT_MACHINES      = MAX_MACHINES_PER_RUN  # --max-machines 既定（1実行の上限）
 
 # 自動修正してよいscope（限定条件のない主天井のみ）。
 # 「AT間」「CZ間」等の部分天井は、サイト側の構造化値が同じものを指す保証がないので対象外。
@@ -618,23 +628,136 @@ def queue_due_slugs(queue: dict, now_iso: str) -> list[str]:
     return out
 
 
-def select_slugs(machines: list[dict], state: dict, n: int) -> list[str]:
-    """点検対象を選ぶ。★再挑戦の期日が来たキュー内のslugを優先★し、
-    残り枠を評価日が最も古い順（日付ベース）で埋める。"""
-    complete = {m["slug"] for m in machines
-                if (m.get("status") or "complete") == "complete"}
-    now_iso = iso()
-    queue = (state.get("codex_audit") or {}).get("retry_queue") or {}
-    picked = [s for s in queue_due_slugs(queue, now_iso) if s in complete][:n]
+def _pdate(s):
+    """'YYYY-MM-DD'（やISO日時文字列）を date に。空/不正は None。"""
+    if not s:
+        return None
+    s = str(s)
+    if len(s) > 10 and s[10] not in ("T", " "):   # ★'2026-07-01BROKEN' のような末尾ゴミを弾く（#16詰め）★
+        return None
+    try:
+        return datetime.date.fromisoformat(s[:10])
+    except Exception:
+        return None
 
-    seen = (state.get("codex_audit") or {}).get("last_audited") or {}
-    cands = [m for m in machines if m["slug"] in complete and m["slug"] not in picked]
-    cands.sort(key=lambda m: (seen.get(m["slug"], ""), m["slug"]))
-    for m in cands:
-        if len(picked) >= n:
-            break
-        picked.append(m["slug"])
-    return picked
+
+def _days_since(date_s, today: datetime.date) -> int:
+    """成功監査からの経過日数。未監査(None/不正)や未来日(時計ずれ)は十分大きい値＝必ず期日到来。"""
+    d = _pdate(date_s)
+    if d is None or d > today:          # ★未来日は異常＝選定を凍結させず期日到来扱い（#16）★
+        return 10 ** 6
+    return (today - d).days
+
+
+def _latest_checkpoint(release: datetime.date, today: datetime.date):
+    """発売日＋FRESH_CHECKPOINTS のうち today 以下で最も新しい点検日。無ければ None。"""
+    passed = [release + datetime.timedelta(days=c) for c in FRESH_CHECKPOINTS
+              if release + datetime.timedelta(days=c) <= today]
+    return max(passed) if passed else None
+
+
+def _is_fresh_due(m: dict, first_complete, last_ok, today: datetime.date) -> bool:
+    """新台の必須点検が期日到来か。
+    (a) preview→complete 昇格後、まだ成功監査していない（＝品質上の"新規"を1回必須）
+    (b) 発売後 FRESH_DAYS 以内で、直近の固定チェックポイントが最後の成功監査より後。"""
+    fc, lo = _pdate(first_complete), _pdate(last_ok)
+    if lo and lo > today:                         # ★未来日の監査履歴(時計ずれ)は無効扱い＝期日を隠さない（#16）★
+        lo = None
+    if fc and (lo is None or lo < fc):            # (a) 昇格直後の必須1回
+        return True
+    rd = _pdate(m.get("release_date"))            # (b) 発売後の固定チェックポイント
+    if rd and 0 <= (today - rd).days <= FRESH_DAYS:
+        cp = _latest_checkpoint(rd, today)
+        if cp and (lo is None or lo < cp):
+            return True
+    return False
+
+
+def reconcile_status(machines: list[dict], state: dict, today_s: str) -> None:
+    """毎回：status変化を検知して known_status / first_complete_at を更新する。
+    ★初回導入時は既存機種を『昇格直後』扱いにしない（statusスナップショットのみ）★。
+    preview→complete への遷移だけ first_complete_at を刻む（＝品質上の"新規"シグナル）。"""
+    ca = state.setdefault("codex_audit", {})
+    known = ca.setdefault("known_status", {})
+    first = ca.setdefault("first_complete_at", {})
+    for m in machines:
+        slug = m["slug"]
+        cur = (m.get("status") or "complete")
+        prev = known.get(slug)
+        if prev is None:                          # 初見＝移行：スナップショットのみ・昇格扱いしない
+            known[slug] = cur
+            continue
+        if prev != "complete" and cur == "complete":   # preview→complete 昇格（再昇格も含む）
+            first[slug] = today_s                        # ★毎回の昇格日で更新＝再昇格でも必須監査が発火（#5）★
+        known[slug] = cur
+
+
+def select_slugs(machines: list[dict], state: dict, cap: int = None,
+                 today: datetime.date = None) -> list[str]:
+    """点検対象を『新台(絶対)→再挑戦→高稼働メイン→その他』の優先で選ぶ。
+    ★新台は通常枠(DAILY_TARGET)を超えても cap まで全件★（運営方針＝新台の鮮度が命）。
+    ※先に reconcile_status を呼んでおくこと（first_complete_at を使う）。"""
+    cap = MAX_MACHINES_PER_RUN if cap is None else min(max(cap, 0), MAX_MACHINES_PER_RUN)  # ★物理上限を厳守（#1）★
+    today = today or datetime.date.today()
+    ca = state.setdefault("codex_audit", {})
+    rank = {m["slug"]: i for i, m in enumerate(machines)}   # ★machines.json原配列のindex＝稼働率順位（#4）★
+    complete = [m for m in machines if (m.get("status") or "complete") == "complete"]
+    complete_set = {m["slug"] for m in complete}
+    last_ok = ca.get("last_successful_audit") or {}
+    last_att = ca.get("last_audited") or {}                 # 試行日（失敗・空振りでも更新）＝新台の公平ローテ用
+    first = ca.get("first_complete_at") or {}
+
+    picked: list[str] = []
+
+    def add_until(items, limit):
+        cutoff = min(limit, cap)
+        for slug in items:
+            if len(picked) >= cutoff:
+                break
+            if slug not in picked:
+                picked.append(slug)
+
+    def _ok_key(slug):                                     # ★ソート用: 未来日/不正は ""(最古)扱い＝後回しにしない（#16）★
+        d = _pdate(last_ok.get(slug))
+        return "" if (d is None or d > today) else last_ok.get(slug)
+
+    # 1. 新台（絶対）＝期日到来分を全件。昇格直後→発売日が新しい順→試行が古い順（失敗機種を巡回・#2）
+    fresh = [m for m in complete
+             if _is_fresh_due(m, first.get(m["slug"]), last_ok.get(m["slug"]), today)]
+
+    def _fkey(m):
+        lo = _pdate(last_ok.get(m["slug"]))
+        if lo and lo > today:
+            lo = None
+        fc = _pdate(first.get(m["slug"]))
+        transition = 0 if (fc and (lo is None or lo < fc)) else 1
+        rd = _pdate(m.get("release_date"))
+        return (transition, -(rd.toordinal() if rd else 0),
+                last_att.get(m["slug"], ""), _ok_key(m["slug"]))
+
+    fresh.sort(key=_fkey)
+    add_until([m["slug"] for m in fresh], cap)             # 新台は cap まで全件（通常枠を超えてよい）
+
+    # 2. 再挑戦キュー（新台と重複を除いてから最大 MAX_RETRY_PER_RUN・通常枠の内側・#3）
+    retry = [s for s in queue_due_slugs(ca.get("retry_queue") or {}, iso())
+             if s in complete_set and s not in picked][:MAX_RETRY_PER_RUN]
+    add_until(retry, DAILY_TARGET_MACHINES)
+
+    # 3. 高稼働メイン（machines.json上位 MAIN_TOP_N・成功監査から MAIN_REAUDIT_DAYS 以上）
+    main = [m for m in complete
+            if rank[m["slug"]] < MAIN_TOP_N
+            and _days_since(last_ok.get(m["slug"]), today) >= MAIN_REAUDIT_DAYS]
+    main.sort(key=lambda m: (_ok_key(m["slug"]), rank[m["slug"]]))
+    add_until([m["slug"] for m in main], DAILY_TARGET_MACHINES)
+
+    # 4. その他（成功監査から OTHER_REAUDIT_DAYS 以上）
+    other = [m for m in complete
+             if rank[m["slug"]] >= MAIN_TOP_N
+             and _days_since(last_ok.get(m["slug"]), today) >= OTHER_REAUDIT_DAYS]
+    other.sort(key=lambda m: (_ok_key(m["slug"]), rank[m["slug"]]))
+    add_until([m["slug"] for m in other], DAILY_TARGET_MACHINES)
+
+    return picked[:cap]
 
 
 # ─────────────────────────────────────────────
@@ -1733,11 +1856,59 @@ def selftest() -> int:
     eq(bool(_scan("通常時は最大800Gで天井到達。旧解析では900Gだった", "通常時は最大800Gで天井到達")),
        True, "旧値もページにあれば不合格")
 
-    # 10. 選定は評価日が古い順・preview機種は対象外
-    ms = [{"slug": "a"}, {"slug": "b"}, {"slug": "c", "status": "preview"}]
-    st = {"codex_audit": {"last_audited": {"a": "2026-07-20", "b": "2026-07-01"}}}
-    eq(select_slugs(ms, st, 3), ["b", "a"], "古い順・previewは除外")
-    eq(select_slugs(ms, {}, 1), ["a"], "未点検が最優先")
+    # 10. 選定＝新台(絶対)→再挑戦→高稼働メイン→その他。preview除外・稼働率順(先頭ほど上位)
+    TODAY = datetime.date(2026, 8, 1)
+    # 全機種未監査(last_successful空)＝全部期日到来→cap内で稼働率上位から(メインtier・空last_okはrank順)
+    eq(select_slugs([{"slug": "a"}, {"slug": "b"}, {"slug": "c"}, {"slug": "d"}],
+                    {"codex_audit": {}}, cap=3, today=TODAY), ["a", "b", "c"],
+       "未監査は稼働率上位から")
+    eq(select_slugs([{"slug": "a"}, {"slug": "b", "status": "preview"}, {"slug": "c"}],
+                    {"codex_audit": {}}, cap=3, today=TODAY), ["a", "c"], "previewは除外")
+    # 新台(release_date≤45日・直近チェックポイント未消化)が最優先。監査済みメインは非期日
+    st_fresh = {"codex_audit": {"last_successful_audit": {"old1": "2026-08-01", "new1": "2026-07-29"}}}
+    eq(select_slugs([{"slug": "old1"}, {"slug": "new1", "release_date": "2026-07-30"}],
+                    st_fresh, cap=6, today=TODAY), ["new1"], "新台が最優先・監査済みメインは非期日")
+    # 新台9件でも1実行 MAX_MACHINES_PER_RUN(8) で打ち切り(残りは翌日/2回目)
+    many = [{"slug": f"n{i}", "release_date": "2026-07-31"} for i in range(9)]
+    eq(len(select_slugs(many, {"codex_audit": {}}, cap=8, today=TODAY)), 8,
+       "新台9件でも1実行8件で打ち切り")
+    # 新台7件で通常枠6を超えてもメインは足さない(cap8内で新台優先)
+    m7 = [{"slug": f"f{i}", "release_date": "2026-07-31"} for i in range(7)] + [{"slug": "mainx"}]
+    p7 = select_slugs(m7, {"codex_audit": {}}, cap=8, today=TODAY)
+    eq(len(p7) == 7 and "mainx" not in p7, True, "新台7件優先・通常枠超でメイン足さない")
+    # reconcile: preview→complete 昇格で first_complete_at 記録→昇格直後は新台扱い
+    st_tr = {"codex_audit": {"known_status": {"x": "preview", "y": "complete"},
+                             "last_successful_audit": {"x": "2026-07-25", "y": "2026-08-01"}}}
+    reconcile_status([{"slug": "x"}, {"slug": "y"}], st_tr, "2026-08-01")
+    eq(st_tr["codex_audit"]["first_complete_at"].get("x"), "2026-08-01", "昇格でfirst_complete_at記録")
+    eq(select_slugs([{"slug": "x"}, {"slug": "y"}], st_tr, cap=6, today=TODAY), ["x"],
+       "昇格直後(新台)が最優先")
+    # 初回導入(known_status無し)＝スナップショットのみ・昇格扱いしない
+    st_mig = {"codex_audit": {}}
+    reconcile_status([{"slug": "p"}, {"slug": "q"}], st_mig, "2026-08-01")
+    eq(st_mig["codex_audit"]["known_status"], {"p": "complete", "q": "complete"}, "初見はスナップショット")
+    eq(st_mig["codex_audit"]["first_complete_at"], {}, "初見は昇格扱いしない")
+    # 回帰: 実装レビュー(2026-07-22)の修正
+    many_fresh = [{"slug": f"m{i}", "release_date": "2026-07-31"} for i in range(30)]
+    eq(len(select_slugs(many_fresh, {"codex_audit": {}}, cap=100, today=TODAY)), MAX_MACHINES_PER_RUN,
+       "#1 cap=100でも物理上限8(新台バースト)")
+    eq(select_slugs(many_fresh, {"codex_audit": {}}, cap=0, today=TODAY), [], "#1 cap=0は0件")
+    eq(select_slugs([{"slug": "a"}], {"codex_audit": {"last_successful_audit": {"a": "2099-01-01"}}},
+                    cap=6, today=TODAY), ["a"], "#16 未来日last_okでも凍結せず期日到来")
+    st_re = {"codex_audit": {"known_status": {"z": "complete"}, "first_complete_at": {"z": "2026-07-01"}}}
+    reconcile_status([{"slug": "z", "status": "preview"}], st_re, "2026-07-10")  # complete→preview
+    reconcile_status([{"slug": "z"}], st_re, "2026-07-20")                        # preview→complete 再昇格
+    eq(st_re["codex_audit"]["first_complete_at"]["z"], "2026-07-20", "#5 再昇格でfirst_complete_at更新")
+    mix = [{"slug": "pv", "status": "preview"}] + [{"slug": f"c{i}"} for i in range(31)]
+    eq(select_slugs(mix, {"codex_audit": {}}, cap=8, today=TODAY)[0], "c0",
+       "#4 rankは原index＝preview混在でも稼働率上位から")
+    st_r3 = {"codex_audit": {
+        "last_successful_audit": {"a": "2026-07-29", "b": "2026-08-01", "e": "2026-08-01"},
+        "retry_queue": {"a|" + K: {"slug": "a", "next_eligible": "2000-01-01T00:00:00"},
+                        "e|" + K: {"slug": "e", "next_eligible": "2000-01-01T00:00:00"}}}}
+    mr3 = [{"slug": "a", "release_date": "2026-07-31"}, {"slug": "b"}, {"slug": "e"}]
+    eq("e" in select_slugs(mr3, st_r3, cap=6, today=TODAY), True,
+       "#3 新台が再挑戦slugを先取りしても他の再挑戦(e)が枠を埋める")
 
     # 10.5 自動再試行キュー
     def RV(slug, ck, reason, kind="value"):
@@ -1760,17 +1931,17 @@ def selftest() -> int:
     # 解決したら（今回は要確認に出なかった）キューから消える
     q = update_queue(q, "a", {"reviews": []}, "2026-07-24T02:30:00")
     eq(q, {}, "解決したらキューから消える")
-    # 期日が来たキューslugは選定で優先
-    ms2 = [{"slug": "a"}, {"slug": "b"}, {"slug": "d"}]
-    st2 = {"codex_audit": {
-        "last_audited": {"a": "2026-01-01", "b": "2026-01-01", "d": "2026-01-01"},
+    # 期日が来た再挑戦キューslugは(新台の次に)選ばれる。全機種最近監査=メイン非期日
+    msr = [{"slug": "a"}, {"slug": "b"}, {"slug": "d"}]
+    str_ = {"codex_audit": {
+        "last_successful_audit": {"a": "2026-08-01", "b": "2026-08-01", "d": "2026-08-01"},
         "retry_queue": {"d|" + K: {"slug": "d", "next_eligible": "2000-01-01T00:00:00"}}}}
-    eq(select_slugs(ms2, st2, 1), ["d"], "期日が来たキューslugを優先")
-    # 期日が未来のキューslugは優先しない（古い順で選ばれる）
-    ms3 = [{"slug": "a"}, {"slug": "b"}]
-    st3 = {"codex_audit": {"last_audited": {"a": "2026-01-02", "b": "2026-01-01"},
-           "retry_queue": {"a|" + K: {"slug": "a", "next_eligible": "2999-01-01T00:00:00"}}}}
-    eq(select_slugs(ms3, st3, 1), ["b"], "未来の期日は優先しない（古い順のbが先）")
+    eq(select_slugs(msr, str_, cap=6, today=TODAY), ["d"], "期日到来の再挑戦slugが選ばれる")
+    # 未来期日の再挑戦は選ばれず・全機種最近監査→空(＝直すものが無い日)
+    str2 = {"codex_audit": {"last_successful_audit": {"a": "2026-08-01", "b": "2026-08-01"},
+            "retry_queue": {"a|" + K: {"slug": "a", "next_eligible": "2999-01-01T00:00:00"}}}}
+    eq(select_slugs([{"slug": "a"}, {"slug": "b"}], str2, cap=6, today=TODAY), [],
+       "未来期日は選ばれず・全非期日→空")
 
     print(f"codex_audit selftest: {ok}/{ok + fail}")
     return 0 if fail == 0 else 1
@@ -1802,17 +1973,51 @@ def run(slugs_override, n_machines: int, apply_mode: bool) -> int:
     dirty_tree = bool(dirty)
     machines = json.loads((BASE / "assets" / "data" / "machines.json").read_text(encoding="utf-8"))
     by = {m["slug"]: m for m in machines}
-    state = load_json(STATE_PATH, {}) or {}
-    slugs = slugs_override or select_slugs(machines, state, n_machines)
+    # ★state.jsonは「不在（初回）」と「破損」を分ける。破損を空扱いで上書きすると履歴・日次上限が飛ぶ（#7）★
+    if STATE_PATH.exists():
+        try:
+            state = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+            if not isinstance(state, dict):     # ★null/[]/"x"等の有効JSONも破損扱い＝空上書きしない（#2）★
+                raise ValueError(f"ルートがobjectでない({type(state).__name__})")
+            ca_chk = state.get("codex_audit", {})   # ★ネストの型破損も破損扱い（reconcile/selectのsetdefault例外死を防ぐ・#2詰め）★
+            if not isinstance(ca_chk, dict) or any(
+                    not isinstance(ca_chk.get(k, {}), dict)
+                    for k in ("known_status", "first_complete_at", "last_successful_audit",
+                              "last_audited", "fixes_by_date", "retry_queue")):
+                raise ValueError("codex_audit のネスト構造が破損")
+        except Exception as e:
+            log(f"‼ state.json が読めない（破損の疑い）: {type(e).__name__}: {e} → 自動修正せず中止")
+            if apply_mode:
+                add_issue("site", "environment", "[codex-audit] state.json破損で中止（履歴保護）",
+                          f"{type(e).__name__}: {e}"[:500])
+                if ctx:
+                    _lock("release", "--ctx", ctx)
+            write_marker("PARTIAL", run_id, started, now(), [], 0, 0, note="state.json破損で中止")
+            return 1
+    else:
+        state = {}
+    today_s = f"{now():%Y-%m-%d}"
+    reconcile_status(machines, state, today_s)          # status変化(preview→complete)を先に反映
+    slugs = slugs_override or select_slugs(machines, state, cap=n_machines)
+    slugs = slugs[:MAX_MACHINES_PER_RUN]                # ★--slugs override も物理上限を厳守（#1）★
     log(f"対象: {slugs}")
+    ca = state.setdefault("codex_audit", {})
+    fixes_by_date = ca.setdefault("fixes_by_date", {})  # ★暦日単位の修正上限（2回目起動でも合算・#8）★
+    for d in [k for k in list(fixes_by_date) if k < _add_days(today_s + "T00:00:00", -8)[:10]]:
+        del fixes_by_date[d]                            # 古い日次カウンタを掃除（直近8日だけ残す）
+    # reconcile の known_status スナップショットを即保存（今日“対象0”でも移行状態を残す）
+    if apply_mode and fencing_ok(ctx):
+        save_json_atomic(STATE_PATH, state)
 
     allowed = list(shadow_gold.ALLOWED_DOMAINS)
     fixes_done, all_reviews, all_fixes, errors = 0, [], [], []
+    processed = len(slugs)                              # 実際に点検した機種数（時間切れ前まで）＝マーカー用（#10）
     timeout_hit = False
-    for slug in slugs:
+    for i, slug in enumerate(slugs):
         if now() >= deadline:
             timeout_hit = True
-            rest = slugs[slugs.index(slug):]
+            processed = i                               # ★ここ以降は未点検＝成功に数えない（重複slugでも正確・#10）★
+            rest = slugs[i:]                            # ★enumerate の i を使う＝重複slugでも未点検一覧が正確（#10詰め）★
             log(f"⏰ 時間切れ: {rest} は実施しない（現状維持）")
             if apply_mode:
                 add_issue("site", "environment", "[codex-audit] 時間切れで未点検の機種がある",
@@ -1827,6 +2032,7 @@ def run(slugs_override, n_machines: int, apply_mode: bool) -> int:
                           f"指定slug={slug}")
             continue
         log(f"── {slug} 点検開始")
+        ca.setdefault("last_audited", {})[slug] = today_s   # ★試行日＝エラー/空振りでも記録し新台ローテを進める（#5/#2）★
         heartbeat(ctx, f"{slug} 点検開始")
         r = audit_machine(m, machines, run_id, deadline)
         heartbeat(ctx, f"{slug} Codex応答受領")
@@ -1846,14 +2052,18 @@ def run(slugs_override, n_machines: int, apply_mode: bool) -> int:
             f"/ 要確認{len(cls['reviews'])}件")
 
         for cand in cls["fix_candidates"]:
-            if fixes_done >= MAX_FIXES_PER_RUN:
+            fix_day = f"{now():%Y-%m-%d}"               # ★日跨ぎでも暦日ごとに計上（#8）★
+            if fixes_by_date.get(fix_day, 0) >= MAX_FIXES_PER_DAY:
                 cls["reviews"].append({**cand, "kind": "value", "auto_fixable": False,
-                                       "reason": f"本日の自動修正上限（{MAX_FIXES_PER_RUN}件）に到達"})
+                                       "reason": f"本日の自動修正上限（{MAX_FIXES_PER_DAY}件）に到達"})
                 continue
-            fr = apply_one(slug, cand, allowed, apply_mode and not dirty_tree)
+            # ★fencing＝この実行がまだロック所有者の時だけ書き込む（世代喪失後の書込・_restore巻き込み防止・#11）★
+            fr = apply_one(slug, cand, allowed,
+                           apply_mode and not dirty_tree and fencing_ok(ctx))
             fr["slug"] = slug
             if fr["applied"]:
                 fixes_done += 1
+                fixes_by_date[fix_day] = fixes_by_date.get(fix_day, 0) + 1
                 all_fixes.append(fr)
                 log(f"   ✅ 修正: {slug} {fr['field']} {fr['old']}→{fr['new']} "
                     f"（{fr['struct_path']} ＋本文{len(fr['prose_edits'])}箇所）")
@@ -1867,26 +2077,42 @@ def run(slugs_override, n_machines: int, apply_mode: bool) -> int:
             all_reviews.append(rv)
 
         # ★自動再試行キューを更新（このslugの解決分は消え、未解決分は次回期日つきで残る）★
-        cq = state.setdefault("codex_audit", {})
-        cq["retry_queue"] = update_queue(cq.get("retry_queue") or {},
-                                         slug, cls, iso())
+        ca["retry_queue"] = update_queue(ca.get("retry_queue") or {}, slug, cls, iso())
 
-        # 状態更新（1機種終わるごと＝途中で落ちても進捗が残る）
-        state.setdefault("codex_audit", {}).setdefault("last_audited", {})[slug] = \
-            f"{now():%Y-%m-%d}"
+        # ★実際に比較が成立した（Codexが値を返し、一致 or 数値の相違が出た）時だけ成功監査
+        #   ＝Codexが何も返さない/値欠落UNKNOWNの空振りでは新台チェックポイントを消化しない（#6）
+        #   1ドメイン止まりで自動修正できず review になった数値相違も『比較は成立』に含める★
+        # ★review側で成功監査に数えるのは『裏取り1ドメイン止まりで自動修正できなかった数値相違』だけに限定
+        #   （reason_code==missing_second_domain）＝0ドメインcannot_verify/条件違い/単位違い/bool等は除外（#6詰め）★
+        real_cmp = bool(cls.get("unchanged") or cls.get("fix_candidates") or
+                        any(reason_code(rv) == "missing_second_domain"
+                            and type(rv.get("site_value")) in (int, float)
+                            and type(rv.get("codex_value")) in (int, float)
+                            for rv in cls.get("reviews", [])))
+        if real_cmp:
+            ca.setdefault("last_successful_audit", {})[slug] = today_s
         if apply_mode and fencing_ok(ctx):
             save_json_atomic(STATE_PATH, state)
         AUDIT_DIR.mkdir(parents=True, exist_ok=True)
         save_json_atomic(AUDIT_DIR / f"{now():%Y%m%d%H%M%S}_{slug}_{run_id}.json", r)
 
+    # ★ループ後に必ず状態保存＝全機種エラーでも last_audited(試行日)を残し新台ローテを進める（#5）★
+    if apply_mode and fencing_ok(ctx):
+        save_json_atomic(STATE_PATH, state)
+
     # 修正を公開（再ビルド→検査→コミット→push）。検査が通らなければ取り消す
     published, pub_note = False, "修正なし"
     if all_fixes and apply_mode:
-        try:
-            published, pub_note = publish(all_fixes, ctx)
-        except Exception as e:
+        if (now() - started).total_seconds() > HARD_WALL_SEC:
+            # ★公開開始前に35分超なら公開せず現状維持（真の強制はWindows40分。build/push中の超過は防げないベストエフォート）★
             _restore(all_fixes)
-            published, pub_note = False, f"公開中に例外（修正は取り消した）: {type(e).__name__}: {e}"
+            published, pub_note = False, f"ハード期限({HARD_WALL_SEC // 60}分)超過のため公開見送り・現状維持"
+        else:
+            try:
+                published, pub_note = publish(all_fixes, ctx)
+            except Exception as e:
+                _restore(all_fixes)
+                published, pub_note = False, f"公開中に例外（修正は取り消した）: {type(e).__name__}: {e}"
         log(f"公開: {'✅' if published else '❌'} {pub_note}")
         if not published:
             for sl in sorted({f["slug"] for f in all_fixes}):
@@ -1911,8 +2137,9 @@ def run(slugs_override, n_machines: int, apply_mode: bool) -> int:
         status = ("PARTIAL" if (errors or timeout_hit or ISSUE_FAILURES
                                 or (all_fixes and not published))
                   else ("COMPLETED" if slugs else "COMPLETED_NO_CHANGE"))
-        write_marker(status, run_id, started, now(), slugs, len(slugs) - len(errors),
-                     len(errors), note=pub_note)
+        write_marker(status, run_id, started, now(), slugs[:processed],
+                     max(processed - len(errors), 0), len(errors),
+                     note=pub_note + (f" / 時間切れ{len(slugs) - processed}機種未点検" if timeout_hit else ""))
         # ★「静かなのが正常」＝修正した/台帳に載せた/異常が出た時だけメール★
         if all_fixes or all_reviews or errors or timeout_hit:
             icon = "🔴" if errors or ISSUE_FAILURES or (all_fixes and not published) else (
