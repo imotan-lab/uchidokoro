@@ -61,8 +61,28 @@ def jp_date(date_str: str) -> str:
     return f"{int(m.group(2))}月{int(m.group(3))}日"
 
 
-def build_title_desc(machine: dict) -> tuple[str, str]:
-    """meta-auto.js と同じ title / description を生成。"""
+def extract_pochipochi_reasons(template: str) -> dict:
+    """machine.html の pochipochiStatus ロジックから「ポチポチくん非対応」の
+    slug → 理由 を抽出する（noSettingDiff / noAnalysis）。machine.html を単一情報源とし、
+    SEO文言（title/description）とプリレンダHTMLのリンク無効化をここに同期させる（誤情報防止）。
+    preview 機種は status で別途判定するためここには含めない。"""
+    reasons = {}
+    for var in ("noSettingDiff", "noAnalysis"):
+        m = re.search(r"const\s+" + var + r"\s*=\s*\[(.*?)\]", template, re.S)
+        if not m:
+            continue
+        # 理由文字列も machine.html から読む（build側ハードコードだと二重管理でズレる）
+        rm = re.search(var + r"\.includes\(slug\)\)\s*return\s*\{[^}]*reason:\s*\"([^\"]+)\"", template)
+        reason = rm.group(1) if rm else "非対応"
+        for slug in re.findall(r"'([^']+)'", m.group(1)):
+            reasons.setdefault(slug, reason)
+    return reasons
+
+
+def build_title_desc(machine: dict, pochipochi_available: bool = True) -> tuple[str, str]:
+    """meta-auto.js と同じ title / description を生成。
+    pochipochi_available=False の機種はSEO文言に『ポチポチくん対応』を入れない
+    （非対応機種で対応と宣伝する誤情報を防ぐ）。"""
     name = machine.get("name", "")
     strategy = machine.get("strategy", "") or ""
     info = machine.get("info", "") or ""
@@ -76,12 +96,18 @@ def build_title_desc(machine: dict) -> tuple[str, str]:
         else:
             title = f"【先行】{name} 天井・狙い目予想｜解析判明次第更新"
             desc = f"{name}の機種概要を先行公開。天井・狙い目・設定差などの解析データが判明次第、随時更新します。導入前から最新情報をチェック。"
-    else:
+    elif pochipochi_available:
         title = f"{name} 天井・狙い目・やめどき｜小役カウンター ポチポチくん対応"
         if strategy:
             desc = f"{name}の天井・狙い目・やめどき・設定差を徹底解説。{strategy}。小役カウンター ポチポチくんで設定判別も可能。期待値重視の立ち回りガイド。"
         else:
             desc = f"{name}の天井・狙い目・やめどき・設定差を徹底解説。小役カウンター ポチポチくんで設定判別も可能。{info}の立ち回りを期待値重視でサポート。"
+    else:
+        title = f"{name} 天井・狙い目・やめどき｜期待値・立ち回りガイド"
+        if strategy:
+            desc = f"{name}の天井・狙い目・やめどき・設定差を徹底解説。{strategy}。期待値重視の立ち回りをサポートします。"
+        else:
+            desc = f"{name}の天井・狙い目・やめどき・設定差を徹底解説。{info}の立ち回りを期待値重視でサポートします。"
     return title, desc
 
 
@@ -195,6 +221,9 @@ def main():
     # complete機種はnoindex無し(index)、preview機種は下で noindex,follow を再付与する
     template = re.sub(r'<meta name="robots"[^>]*>(<!--.*?-->)?\n?', "", template)
 
+    # ポチポチくん非対応slug→理由（machine.htmlのpochipochiStatusと同期）
+    pochipochi_reasons = extract_pochipochi_reasons(template)
+
     detail_dir = BASE / "assets" / "data" / "machine-details"
     generated = 0
     prerendered = 0
@@ -210,8 +239,14 @@ def main():
         else:
             html_out = html_out.replace("</head>", f'<link rel="canonical" href="{canonical_url}">\n</head>', 1)
 
-        # title / description（meta-auto.js 同等）
-        title, desc = build_title_desc(machine)
+        # title / description（meta-auto.js 同等・ポチポチくん対応表記は非対応機種で外す）
+        if machine.get("status") == "preview":
+            pp_available, pp_reason = False, "解析データ判明後に対応"
+        elif slug in pochipochi_reasons:
+            pp_available, pp_reason = False, pochipochi_reasons[slug]
+        else:
+            pp_available, pp_reason = True, ""
+        title, desc = build_title_desc(machine, pp_available)
         html_out = html_out.replace("<title>機種ページ | うちどころ。</title>",
                                     f"<title>{esc(title)}</title>", 1)
         html_out = html_out.replace(
@@ -228,6 +263,26 @@ def main():
         html_out = html_out.replace(
             '<meta property="og:url" content="https://uchidokoro.com/machine.html">',
             f'<meta property="og:url" content="{canonical_url}">', 1)
+
+        # Twitter Card（meta-auto.js はプリレンダ済みで上書きしないため静的に焼く）
+        html_out = html_out.replace(
+            '<meta name="twitter:card" content="summary_large_image">',
+            '<meta name="twitter:card" content="summary_large_image">\n'
+            f'<meta name="twitter:title" content="{esc(title)}">\n'
+            f'<meta name="twitter:description" content="{esc(desc)}">\n'
+            '<meta name="twitter:site" content="@uchidokoro">\n'
+            '<meta name="twitter:image" content="https://uchidokoro.com/assets/img/ogp.png">', 1)
+
+        # ポチポチくん導線：非対応機種は初期HTML段階でリンクを無効化して焼く
+        # （JS実行前・JS無効・クローラーに「対応機能あり」と誤認させない。inline styleは使わずclassで）
+        if not pp_available:
+            for anchor_id, cls in (("settingHeroLink", "btn-settei btn-settei--wide"),
+                                   ("settingToolLink", "btn-show-all btn-show-all--center")):
+                html_out = re.sub(
+                    r'<a id="' + anchor_id + r'"[^>]*>小役カウンター ポチポチくん →</a>',
+                    f'<a id="{anchor_id}" class="{cls} is-disabled" aria-disabled="true" '
+                    f'title="{esc(pp_reason)}">小役カウンター ポチポチくん（{esc(pp_reason)}）</a>',
+                    html_out, count=1)
 
         # h1 機種名
         html_out = html_out.replace(
@@ -276,6 +331,28 @@ def main():
             html_out = html_out.replace(
                 '<tbody id="infoTableBody"></tbody>',
                 f'<tbody id="infoTableBody">{rows_html}</tbody>', 1)
+            # summaryBoxes をプリレンダ（JS未実行・データ取得失敗時も要約欄が出るように）
+            # machine.html の renderSummaryGrid と同じ2列組み。strategyByRate上書きは
+            # 実行時JSが再描画するため、静的には既定のsummaryBoxesを焼く。
+            summary_boxes = detail.get("summaryBoxes") or [
+                {"label": "天井", "value": machine.get("strategy") or "-"},
+                {"label": "ヤメ時", "value": "-"},
+            ]
+            srows = ""
+            for i in range(0, len(summary_boxes), 2):
+                a = summary_boxes[i]
+                cell_a = (f'<span class="s-label">{esc(a.get("label",""))}</span>'
+                          f'<span class="s-value">{esc(a.get("value",""))}</span>')
+                if i + 1 < len(summary_boxes):
+                    b = summary_boxes[i + 1]
+                    cell_b = (f'<span class="s-label">{esc(b.get("label",""))}</span>'
+                              f'<span class="s-value">{esc(b.get("value",""))}</span>')
+                    srows += f"<tr><td>{cell_a}</td><td>{cell_b}</td></tr>"
+                else:
+                    srows += f"<tr><td>{cell_a}</td><td></td></tr>"
+            html_out = html_out.replace(
+                '<table id="summaryGrid" class="summary-grid"></table>',
+                f'<table id="summaryGrid" class="summary-grid">{srows}</table>', 1)
             prerendered += 1
 
         out_dir = BASE / "machines" / slug

@@ -21,6 +21,10 @@
 <meta property="og:image" content="https://uchidokoro.com/assets/img/ogp.png">
 <meta property="og:site_name" content="うちどころ。">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Lアズールレーン THE ANIMATION 天井・狙い目・やめどき｜小役カウンター ポチポチくん対応">
+<meta name="twitter:description" content="Lアズールレーン THE ANIMATIONの天井・狙い目・やめどき・設定差を徹底解説。0スルー170G〜 / 6スルー〜即。小役カウンター ポチポチくんで設定判別も可能。期待値重視の立ち回りガイド。">
+<meta name="twitter:site" content="@uchidokoro">
+<meta name="twitter:image" content="https://uchidokoro.com/assets/img/ogp.png">
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" href="/assets/img/favicon-32.png" sizes="32x32">
 <link rel="icon" type="image/png" href="/assets/img/favicon-16.png" sizes="16x16">
@@ -106,7 +110,7 @@
 
     <div class="article-block">
       <h2 class="block-label">▶ 狙い目早見表</h2>
-      <table id="summaryGrid" class="summary-grid"></table>
+      <table id="summaryGrid" class="summary-grid"><tr><td><span class="s-label">天井</span><span class="s-value">350G</span></td><td><span class="s-label">スルー天井</span><span class="s-value">9スルー</span></td></tr><tr><td><span class="s-label">ヤメ時</span><span class="s-value">AT後10G</span></td><td><span class="s-label">見るポイント</span><span class="s-value">共通ベル  弱チェ  弱スイカ</span></td></tr></table>
     </div>
 
     <div class="article-block">
@@ -294,7 +298,7 @@ function resolveMachineSlug() {
     if (noSettingDiff.includes(slug)) return { available: false, reason: "小役による設定差なし" };
     // 小役確率がまだ解析されていない機種
     const noAnalysis = ['iza_bancho','kyokousuiri','shinuchi_yoshimune','isekai_quattro_bt','triple_crown_7','revue_starlight','mr_juggler','mushoku','railgun2','gundam_seed','youjitsu','midoridon_viva','godzilla','code_geass','kengan_ashura','discup_ur','rezero2','goji_eva','prismnana','basilisk_tenzen','shake_bt','kurea_bt','gineiden_dnt','eva_yakusoku','bofuri','dmc5_st','darlifra','nanatsuma','tenken','valvrave','zombieland_saga','gundam_uc2','dark_haibi','sengoku_collection6','karakuri2','nangoku_special','yabachiba','rotis','ultraman_final','kerot5bt'];
-    if (noAnalysis.includes(slug)) return { available: false, reason: "小役確率が未解析のため非対応" };
+    if (noAnalysis.includes(slug)) return { available: false, reason: "設定差のあるカウント対象小役が未判明のため非対応" };
     // ポチポチくん利用可能
     return { available: true, reason: "" };
   })();
@@ -444,6 +448,7 @@ function resolveMachineSlug() {
     const excellent = config.excellent;
     const limit = getMachineLimit(modeKey);
     const limitStr = Number.isFinite(limit) ? `（天井${limit}G）` : "";
+    const eqSuffix = checker.equivOnly ? "（等価）" : "";
     const rows = [];
     if (Number.isFinite(caution) && caution > 0) {
       rows.push({ range: `0 〜 ${caution - 1}G`, label: "× まだ早い", cls: "ev-row-ng" });
@@ -452,10 +457,10 @@ function resolveMachineSlug() {
       rows.push({ range: `${caution} 〜 ${good - 1}G`, label: "△ 条件次第", cls: "ev-row-wait" });
     }
     if (Number.isFinite(good) && Number.isFinite(excellent) && excellent > good) {
-      rows.push({ range: `${good} 〜 ${excellent - 1}G`, label: "○ 狙い目", cls: "ev-row-ok" });
+      rows.push({ range: `${good} 〜 ${excellent - 1}G`, label: "○ 狙い目" + eqSuffix, cls: "ev-row-ok" });
     }
     if (Number.isFinite(excellent)) {
-      rows.push({ range: `${excellent}G 〜${limitStr}`, label: "◎ 積極的", cls: "ev-row-great" });
+      rows.push({ range: `${excellent}G 〜${limitStr}`, label: "◎ 積極的" + eqSuffix, cls: "ev-row-great" });
     }
     let html = `<thead><tr><th>G数帯</th><th>判定</th></tr></thead><tbody>`;
     rows.forEach(r => { html += `<tr class="${r.cls}"><td>${r.range}</td><td>${r.label}</td></tr>`; });
@@ -496,7 +501,10 @@ function resolveMachineSlug() {
     } else {
       evModeToggle.style.display = "none";
     }
-    if (evTableNote) evTableNote.textContent = "スルー・周期は変動要素があるためチェッカーで確認してください。";
+    if (evTableNote) {
+      const hasVar = getModes(checker).some(m => m.hasSuru || m.hasCycle);
+      evTableNote.textContent = hasVar ? "スルー・周期は変動要素があるためチェッカーで確認してください。" : "";
+    }
     renderEvTable(evModeKey, getCurrentRateKey());
   }
 
@@ -634,10 +642,10 @@ function resolveMachineSlug() {
 
     if (Number.isFinite(config.excellent) && g >= config.excellent) {
       checkerResult.className = "checker-result result-ok";
-      checkerResult.querySelector(".result-text").textContent = "◎ 狙い目OK！積極的に着席を検討";
+      checkerResult.querySelector(".result-text").textContent = checker.equivOnly ? "◎ 狙い目OK！積極的に着席（等価交換の目安）" : "◎ 狙い目OK！積極的に着席を検討";
     } else if (Number.isFinite(config.good) && g >= config.good) {
       checkerResult.className = "checker-result result-ok";
-      checkerResult.querySelector(".result-text").textContent = "◯ 狙い目OK　交換率次第で候補";
+      checkerResult.querySelector(".result-text").textContent = checker.equivOnly ? "◯ 狙い目OK（等価交換の目安）" : "◯ 狙い目OK　交換率次第で候補";
     } else {
       const t = Number.isFinite(config.caution) ? config.caution : (config.target || config.good);
       if (Number.isFinite(t) && g >= t) {

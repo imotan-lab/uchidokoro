@@ -35,7 +35,11 @@
           ? `【先行】${m.name} ${releaseJp}導入｜天井・狙い目予想・解析判明次第更新`
           : `【先行】${m.name} 天井・狙い目予想｜解析判明次第更新`;
       } else {
-        title = `${m.name} 天井・狙い目・やめどき｜小役カウンター ポチポチくん対応`;
+        // このtitle生成が効くのはトランポリン（machine.html?slug=・noindex）のみ。
+        // プリレンダ済み正規ページは alreadyBaked で上書きしないため、機種ごとの
+        // ポチポチくん対応可否はプリレンダ側(build_machine_pages.py)が正しく焼く。
+        // ここでは対応可否を判定できないため、汎用文言で誤称を避ける。
+        title = `${m.name} 天井・狙い目・やめどき｜期待値・立ち回りガイド`;
       }
 
       // description生成
@@ -46,12 +50,16 @@
           : `${m.name}の機種概要を先行公開。天井・狙い目・設定差などの解析データが判明次第、随時更新します。導入前から最新情報をチェック。`;
       } else {
         desc = strategy
-          ? `${m.name}の天井・狙い目・やめどき・設定差を徹底解説。${strategy}。小役カウンター ポチポチくんで設定判別も可能。期待値重視の立ち回りガイド。`
-          : `${m.name}の天井・狙い目・やめどき・設定差を徹底解説。小役カウンター ポチポチくんで設定判別も可能。${info}の立ち回りを期待値重視でサポート。`;
+          ? `${m.name}の天井・狙い目・やめどき・設定差を徹底解説。${strategy}。期待値重視の立ち回りをサポートします。`
+          : `${m.name}の天井・狙い目・やめどき・設定差を徹底解説。${info}の立ち回りを期待値重視でサポートします。`;
       }
 
-      // タイトル・description反映
-      document.title = title;
+      // プリレンダ済みページ（/machines/{slug}/）は build_machine_pages.py が
+      // 正しい title/description/OGP/canonical を焼き込み済み。実行時に上書きすると
+      // 非対応機種で「ポチポチくん対応」表記が復活する等の不整合が起きるため、
+      // ベイク済み（title がテンプレ既定でない）なら上書きしない。
+      // トランポリンの machine.html?slug= 側（title がテンプレ既定）のみ動的生成する。
+      const alreadyBaked = !document.title.includes('機種ページ');
 
       function setMeta(selector, attr, name, content){
         let el = document.querySelector(selector);
@@ -63,31 +71,34 @@
         el.content = content;
       }
 
-      setMeta('meta[name="description"]', 'name', 'description', desc);
+      if (!alreadyBaked) {
+        document.title = title;
+        setMeta('meta[name="description"]', 'name', 'description', desc);
 
-      // OGP
-      setMeta('meta[property="og:title"]', 'property', 'og:title', title);
-      setMeta('meta[property="og:description"]', 'property', 'og:description', desc);
-      setMeta('meta[property="og:type"]', 'property', 'og:type', 'article');
-      setMeta('meta[property="og:url"]', 'property', 'og:url', `https://uchidokoro.com/machines/${slug}/`);
-      setMeta('meta[property="og:site_name"]', 'property', 'og:site_name', 'うちどころ。');
-      setMeta('meta[property="og:image"]', 'property', 'og:image', 'https://uchidokoro.com/assets/img/ogp.png');
+        // OGP
+        setMeta('meta[property="og:title"]', 'property', 'og:title', title);
+        setMeta('meta[property="og:description"]', 'property', 'og:description', desc);
+        setMeta('meta[property="og:type"]', 'property', 'og:type', 'article');
+        setMeta('meta[property="og:url"]', 'property', 'og:url', `https://uchidokoro.com/machines/${slug}/`);
+        setMeta('meta[property="og:site_name"]', 'property', 'og:site_name', 'うちどころ。');
+        setMeta('meta[property="og:image"]', 'property', 'og:image', 'https://uchidokoro.com/assets/img/ogp.png');
 
-      // Twitter Card
-      setMeta('meta[name="twitter:card"]', 'name', 'twitter:card', 'summary_large_image');
-      setMeta('meta[name="twitter:site"]', 'name', 'twitter:site', '@uchidokoro');
-      setMeta('meta[name="twitter:title"]', 'name', 'twitter:title', title);
-      setMeta('meta[name="twitter:description"]', 'name', 'twitter:description', desc);
-      setMeta('meta[name="twitter:image"]', 'name', 'twitter:image', 'https://uchidokoro.com/assets/img/ogp.png');
+        // Twitter Card
+        setMeta('meta[name="twitter:card"]', 'name', 'twitter:card', 'summary_large_image');
+        setMeta('meta[name="twitter:site"]', 'name', 'twitter:site', '@uchidokoro');
+        setMeta('meta[name="twitter:title"]', 'name', 'twitter:title', title);
+        setMeta('meta[name="twitter:description"]', 'name', 'twitter:description', desc);
+        setMeta('meta[name="twitter:image"]', 'name', 'twitter:image', 'https://uchidokoro.com/assets/img/ogp.png');
 
-      // canonical link
-      let canonical = document.querySelector('link[rel="canonical"]');
-      if(!canonical){
-        canonical = document.createElement("link");
-        canonical.rel = "canonical";
-        document.head.appendChild(canonical);
+        // canonical link
+        let canonical = document.querySelector('link[rel="canonical"]');
+        if(!canonical){
+          canonical = document.createElement("link");
+          canonical.rel = "canonical";
+          document.head.appendChild(canonical);
+        }
+        canonical.href = `https://uchidokoro.com/machines/${slug}/`;
       }
-      canonical.href = `https://uchidokoro.com/machines/${slug}/`;
 
       // JSON-LD 構造化データ
       // 日付は出力しない（release_date=導入日は記事の公開日ではないため。build_machine_pages.pyと同一方針）

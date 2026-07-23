@@ -145,6 +145,7 @@ def load_rows():
                 info=m.get("info", ""),
                 strategy=m.get("strategy", ""),
                 limit=_scalar_limit(m.get("limit")),
+                tenjo_display=m.get("tenjo_display"),
                 status=m.get("status", "complete"),
                 unit=c.get("unit"),
                 # スルー天井はモードキー'suru'に加え'through'表記の機種がある
@@ -164,6 +165,10 @@ def yome(r) -> str:
 
 
 def tenjo_disp(r) -> str:
+    # machines.json に tenjo_display があれば優先（液晶/実など複数条件天井の一覧表記用）
+    td = r.get("tenjo_display")
+    if td:
+        return td
     lim = r.get("limit")
     if not isinstance(lim, (int, float)):
         return "—"

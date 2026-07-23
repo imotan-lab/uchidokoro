@@ -165,6 +165,7 @@ button, input, select { font: inherit; }
 .btn-settei--wide { flex: 1; justify-content: center; }
 .btn-show-all--center { display: block; text-align: center; }
 .btn-show-all--muted { color: var(--muted); }
+.btn-settei.is-disabled, .btn-show-all.is-disabled { opacity: .5; cursor: default; pointer-events: none; }
 .compact-note { margin-bottom: 12px; }
 .landscape-hint-box {
   background: var(--gold-bg);
