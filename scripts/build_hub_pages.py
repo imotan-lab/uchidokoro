@@ -122,6 +122,14 @@ def base_caution(m):
     return None
 
 
+def _scalar_limit(lim):
+    """mode別limit(dict)なら normal（無ければ最初の値）を、スカラーならそのまま返す。
+    2026-07-23 enen2 等でリセット天井を分けるため limit がモード別objectになり得る。"""
+    if isinstance(lim, dict):
+        return lim["normal"] if lim.get("normal") is not None else next(iter(lim.values()), None)
+    return lim
+
+
 def load_rows():
     machines = json.loads(MACHINES.read_text(encoding="utf-8"))
     rows = []
@@ -136,7 +144,7 @@ def load_rows():
                 name=m["name"],
                 info=m.get("info", ""),
                 strategy=m.get("strategy", ""),
-                limit=m.get("limit"),
+                limit=_scalar_limit(m.get("limit")),
                 status=m.get("status", "complete"),
                 unit=c.get("unit"),
                 # スルー天井はモードキー'suru'に加え'through'表記の機種がある

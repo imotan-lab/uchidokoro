@@ -1080,13 +1080,7 @@
       "title": "炎炎ノ消防隊2 狙い目・天井・期待値まとめ"
     },
     "info": "スマスロST",
-    "strategy": "等価630G〜 / 5.6枚640G〜 / 現金690G〜 / スルー4回〜",
-    "strategyByRate": {
-      "eq56": "5.6枚630G〜",
-      "rate55": "5.5枚640G〜",
-      "rate50": "5.0枚670G〜",
-      "rate45": "4.5枚690G〜"
-    },
+    "strategy": "5.6枚交換 630G〜 / リセット88G〜（45G〜条件次第）（他交換率は算定条件を確認中）",
     "aliases": [
       "炎炎",
       "消防隊",
@@ -1094,139 +1088,33 @@
     ],
     "checker": {
       "unit": "G",
-      "defaultRate": "eq56",
-      "exchangeRates": [
-        {
-          "key": "eq56",
-          "label": "5.6枚"
-        },
-        {
-          "key": "rate55",
-          "label": "5.5枚"
-        },
-        {
-          "key": "rate50",
-          "label": "5.0枚"
-        },
-        {
-          "key": "rate45",
-          "label": "4.5枚"
-        }
-      ],
       "modes": [
         {
           "key": "normal",
-          "label": "通常"
+          "label": "通常（5.6枚交換基準）"
         },
         {
           "key": "reset",
           "label": "リセット"
-        },
-        {
-          "key": "through",
-          "label": "スルー"
         }
       ],
       "normal": {
         "excellent": 800,
         "good": 630,
         "caution": 500,
-        "byRate": {
-          "eq56": {
-            "excellent": 800,
-            "good": 630,
-            "caution": 500,
-            "note": "5.6枚交換なら630Gから狙い目。通常A天井850G+α。"
-          },
-          "rate55": {
-            "excellent": 800,
-            "good": 640,
-            "caution": 510,
-            "note": "5.5枚交換なら640Gから。"
-          },
-          "rate50": {
-            "excellent": 800,
-            "good": 670,
-            "caution": 540,
-            "note": "5.0枚交換なら670Gから。"
-          },
-          "rate45": {
-            "excellent": 800,
-            "good": 690,
-            "caution": 560,
-            "note": "4.5枚交換なら690Gから。"
-          }
-        },
-        "note": "通常A天井850G+α。650G超えは通常A濃厚で天井狙い向き。"
+        "note": "通常A天井850G+α。5.6枚交換の当サイト基準では630G〜が狙い目（他交換率・投資方法で異なる）。650G+αの前兆・当否を抜けて非当選なら通常A濃厚。"
       },
       "reset": {
         "excellent": 250,
         "good": 88,
         "caution": 45,
-        "byRate": {
-          "eq56": {
-            "excellent": 250,
-            "good": 88,
-            "caution": 45,
-            "note": "リセット時は天井650G+αに短縮。45G〜88Gと155G〜250Gにゾーン。"
-          },
-          "rate55": {
-            "excellent": 250,
-            "good": 88,
-            "caution": 45,
-            "note": "リセット時は天井650G+αに短縮。"
-          },
-          "rate50": {
-            "excellent": 250,
-            "good": 100,
-            "caution": 50,
-            "note": "リセット時は天井650G+αに短縮。"
-          },
-          "rate45": {
-            "excellent": 250,
-            "good": 100,
-            "caution": 50,
-            "note": "リセット時は天井650G+αに短縮。"
-          }
-        },
-        "note": "リセット時は天井650G+α。45G〜88Gと155G〜250Gにゾーン。"
-      },
-      "through": {
-        "excellent": 5,
-        "good": 4,
-        "caution": 3,
-        "byRate": {
-          "eq56": {
-            "excellent": 5,
-            "good": 4,
-            "caution": 3,
-            "note": "伝導者の罠を5連続スルーでSPエピソードボーナス確定。4スルー以上から狙い目。"
-          },
-          "rate55": {
-            "excellent": 5,
-            "good": 4,
-            "caution": 3,
-            "note": "4スルー以上から狙い目。"
-          },
-          "rate50": {
-            "excellent": 5,
-            "good": 4,
-            "caution": 3,
-            "note": "4スルー以上から狙い目。"
-          },
-          "rate45": {
-            "excellent": 5,
-            "good": 4,
-            "caution": 3,
-            "note": "4スルー以上から狙い目。"
-          }
-        },
-        "note": "伝導者の罠を5連続スルーでSPエピソードボーナス確定。"
-      },
-      "hasSuru": true,
-      "suruMax": 5
+        "note": "リセット時は天井650G+α。88G・250G前後に前兆発生ポイント。45G/155Gから打ち始め。"
+      }
     },
-    "limit": 850,
+    "limit": {
+      "normal": 850,
+      "reset": 650
+    },
     "original": {
       "title": "炎炎ノ消防隊",
       "kind": "漫画",

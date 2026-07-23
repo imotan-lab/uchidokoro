@@ -785,9 +785,12 @@ def check_27_hub_counts(machines: list) -> list[str]:
                 if isinstance(cv, (int, float)):
                     ncau = cv
                     break
+        _lim = m.get("limit")
+        if isinstance(_lim, dict):  # mode別limit(2026-07-23〜)はnormalを代表値に（build_hub_pagesと同一ロジック）
+            _lim = _lim["normal"] if _lim.get("normal") is not None else next(iter(_lim.values()), None)
         rows.append(dict(
             unit=c.get("unit"),
-            limit=m.get("limit"),
+            limit=_lim,
             has_suru=bool(c.get("hasSuru") or "suru" in modes or "through" in modes),
             has_cycle=bool(c.get("hasCycle") or "cycle" in modes),
             ncau=ncau,
