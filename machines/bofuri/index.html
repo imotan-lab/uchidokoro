@@ -516,13 +516,16 @@ function resolveMachineSlug() {
       const list = modeData.suru;
       const max = list[list.length - 1].count;
       const idx = Math.min(suru, max);
-      return list.find(s => s.count === idx) || list[list.length - 1];
+      // 欠番/範囲外は「要求count以下で最大の行」へ→無ければ最浅(list[0])。
+      // 旧実装の list[最終行] は0スルー等を最深(最も甘い)判定に化けさせるバグ。単純な list[0] だと
+      // 非連続count(番長4=0,1,2,9)で3スルーがcount0に落ち◯→×逆転する。両方をこの規則で回避（2026-07-23）。
+      return list.find(s => s.count === idx) || [...list].reverse().find(s => s.count <= idx) || list[0];
     }
     if (modeData.cycle && Array.isArray(modeData.cycle)) {
       const list = modeData.cycle;
       const max = list[list.length - 1].count;
       const idx = Math.min(cycle, max);
-      return list.find(s => s.count === idx) || list[list.length - 1];
+      return list.find(s => s.count === idx) || [...list].reverse().find(s => s.count <= idx) || list[0];
     }
     return modeData;
   }
