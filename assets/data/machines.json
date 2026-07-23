@@ -1117,6 +1117,10 @@
         {
           "key": "reset",
           "label": "リセット"
+        },
+        {
+          "key": "through",
+          "label": "スルー"
         }
       ],
       "normal": {
@@ -1182,7 +1186,41 @@
           }
         },
         "note": "リセット時は天井650G+α。45G〜88Gと155G〜250Gにゾーン。"
-      }
+      },
+      "through": {
+        "excellent": 5,
+        "good": 4,
+        "caution": 3,
+        "byRate": {
+          "eq56": {
+            "excellent": 5,
+            "good": 4,
+            "caution": 3,
+            "note": "伝導者の罠を5連続スルーでSPエピソードボーナス確定。4スルー以上から狙い目。"
+          },
+          "rate55": {
+            "excellent": 5,
+            "good": 4,
+            "caution": 3,
+            "note": "4スルー以上から狙い目。"
+          },
+          "rate50": {
+            "excellent": 5,
+            "good": 4,
+            "caution": 3,
+            "note": "4スルー以上から狙い目。"
+          },
+          "rate45": {
+            "excellent": 5,
+            "good": 4,
+            "caution": 3,
+            "note": "4スルー以上から狙い目。"
+          }
+        },
+        "note": "伝導者の罠を5連続スルーでSPエピソードボーナス確定。"
+      },
+      "hasSuru": true,
+      "suruMax": 5
     },
     "limit": 850,
     "original": {
