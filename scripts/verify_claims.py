@@ -418,6 +418,14 @@ def _value_tokens(nvalue):
     return re.findall(r"\d+(?:\.\d+)?", nvalue)
 
 
+def _value_key(nvalue):
+    """裏取り集計用の値キー。数値トークンが取れればそれを使う。
+    「850G」と「850G+α」は同じ主張として束ね、「800G」と「900G」は別物として扱う。
+    数値が無い値（文字列の恩恵など）は正規化文字列そのものをキーにする。"""
+    toks = _value_tokens(nvalue)
+    return "|".join(toks) if toks else nvalue
+
+
 def _token_in(token, hay):
     """数字トークンを桁境界付きで探す（"700"が"1700"や"70023"に誤一致しない）。"""
     return re.search(rf"(?<![0-9.]){re.escape(token)}(?![0-9.])", hay) is not None
@@ -477,7 +485,11 @@ def run_data(data, min_domains, allowed_domains=None):
         log("❌ クレーム0件→不合格")
         return 1
 
-    field_pass_domains = {}
+    # ★値ごとに合格ドメインを集計する（2026-07-24修正）★
+    # 旧実装は field 名だけで集計していたため、A社「天井800G」B社「天井900G」のように
+    # 出典が食い違っていても「2ドメイン合格」になり、誤った値が自動公開され得た。
+    field_value_domains = {}   # {field: {value_key: set(domain)}}
+    field_value_samples = {}   # {field: {value_key: 代表の値文字列}}（ログ表示用）
     field_critical = {}
     any_fail = False
 
@@ -598,17 +610,32 @@ def run_data(data, min_domains, allowed_domains=None):
             any_fail = True
             continue
 
-        field_pass_domains.setdefault(field, set()).add(domain_of(page.final_url))
+        vkey = _value_key(nvalue)
+        field_value_domains.setdefault(field, {}).setdefault(vkey, set()).add(domain_of(page.final_url))
+        field_value_samples.setdefault(field, {}).setdefault(vkey, value)
         log(f"✅ {tag}: C0〜C4通過（quote実在・値はquote内・title同定OK）")
 
     verdict_fail = any_fail
     for field, critical in field_critical.items():
-        got = len(field_pass_domains.get(field, set()))
         need = min_domains if critical else 1
+        vmap = field_value_domains.get(field, {})
+        samples = field_value_samples.get(field, {})
+        # ★同一フィールドで異なる値が裏取りされた＝出典どうしが食い違っている。
+        #   どちらが正しいかは機械的に決まらないので fail-closed（自動公開禁止）★
+        if len(vmap) > 1:
+            detail = " / ".join(
+                f"「{samples.get(k, k)}」={len(d)}ドメイン" for k, d in sorted(vmap.items())
+            )
+            log(f"❌ 集計[{field}]: 出典が異なる値を支持して食い違い（{detail}）→自動公開禁止")
+            verdict_fail = True
+            continue
+        got = max((len(d) for d in vmap.values()), default=0)
         status = "✅" if got >= need else "❌"
         if got < need:
             verdict_fail = True
-        log(f"{status} 集計[{field}]: 合格ドメイン{got}/{need}必要{'（critical）' if critical else ''}")
+        vlabel = next(iter(samples.values()), "")
+        log(f"{status} 集計[{field}]: 値「{vlabel}」の合格ドメイン{got}/{need}必要"
+            f"{'（critical）' if critical else ''}")
 
     if verdict_fail:
         log("=== 判定: ❌ 不合格 → 無人昇格禁止（preview維持＋要確認台帳へ） ===")
@@ -641,6 +668,11 @@ def selftest():
     _page_cache["https://chonborista.jp/karakuri2"] = Page(new_body, new_title, "https://chonborista.jp/karakuri2")
     _page_cache["https://sloquest.test/karakuri-old"] = Page(old_body, old_title, "https://sloquest.test/karakuri-old")
     _page_cache["https://notitle.test/karakuri2"] = Page(new_body, "", "https://notitle.test/karakuri2")
+    # 別ドメインが「別の天井値」を載せているページ（値の食い違い検査用・2026-07-24）
+    conflict_body = ("Lからくりサーカス2の解析ページです。天井は1200G+αでAT直撃の恩恵。"
+                     "狙い目(等価) 700G~ が目安。")
+    _page_cache["https://nanatetsu.test/karakuri2"] = Page(
+        conflict_body, new_title, "https://nanatetsu.test/karakuri2")
 
     IDENT = {"must_contain": ["からくりサーカス", "2"]}
 
@@ -701,6 +733,23 @@ def selftest():
             {"field": "天井G数", "value": "999", "critical": True,
              "url": "https://m.sloquest.test/karakuri2", "quote": "天井は999G+α"},
         ]}, 1))
+    # 7b. ★2ドメインだが「異なる値」を支持 → 食い違いとして不合格（2026-07-24修正の本体）★
+    #     旧実装は field 名だけで集計していたため、これが「2ドメイン合格」になっていた。
+    results.append(case("出典が異なる値を支持したら不合格", {
+        "slug": "karakuri2", "identity": IDENT, "claims": [
+            {"field": "天井G数", "value": "999", "critical": True,
+             "url": "https://sloquest.test/karakuri2", "quote": "天井は999G+α"},
+            {"field": "天井G数", "value": "1200", "critical": True,
+             "url": "https://nanatetsu.test/karakuri2", "quote": "天井は1200G+α"},
+        ]}, 1))
+    # 7c. 同じ値の表記ゆれ（999 と 999G+α）は同一主張として束ね、食い違い扱いしない
+    results.append(case("同値の表記ゆれは食い違いにしない", {
+        "slug": "karakuri2", "identity": IDENT, "claims": [
+            {"field": "天井G数", "value": "999", "critical": True,
+             "url": "https://sloquest.test/karakuri2", "quote": "天井は999G+α"},
+            {"field": "天井G数", "value": "999G+α", "critical": True,
+             "url": "https://chonborista.jp/karakuri2", "quote": "天井は999G+α"},
+        ]}, 0))
     # 8. アーカイブURL → 不合格
     results.append(case("アーカイブURL不合格", {
         "slug": "karakuri2", "identity": IDENT, "claims": [
