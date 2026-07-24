@@ -61,6 +61,12 @@ ALLOW_BASENAMES = {
 # 日付つきタスクログ（例: new_machine_2026-07-16.log）
 ALLOW_LOG_RE = re.compile(r"^[a-z0-9_]+_\d{4}-\d{2}-\d{2}\.log$")
 
+# CLAUDE.md の日付つきスナップショット（圧縮など破壊的編集の前に退避する用途・2026-07-24追加）
+# 例: CLAUDE_uchidokoro_2026-07-24.md / CLAUDE_history_uchidokoro_2026-07-24.md
+# 通常のバックアップ名（CLAUDE_uchidokoro.md）を上書きせずに世代を残すために許可する。
+ALLOW_CLAUDE_SNAPSHOT_RE = re.compile(
+    r"^CLAUDE(_history)?_uchidokoro_\d{4}-\d{2}-\d{2}\.md$")
+
 # ── 秘密パターン: ファイル名（正規化後の部分一致）──
 DENY_NAME_SUBSTR = [
     "secret", "credential", "cookie", "password", "passwd",
@@ -175,7 +181,9 @@ def content_findings(path: str) -> list[str]:
 
 
 def is_allowlisted(basename: str) -> bool:
-    return basename in ALLOW_BASENAMES or bool(ALLOW_LOG_RE.match(basename))
+    return (basename in ALLOW_BASENAMES
+            or bool(ALLOW_LOG_RE.match(basename))
+            or bool(ALLOW_CLAUDE_SNAPSHOT_RE.match(basename)))
 
 
 def cmd_copy(src: str, dst: str, optional: bool) -> int:
