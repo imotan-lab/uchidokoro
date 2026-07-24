@@ -298,14 +298,13 @@ def main():
         if machine.get("status") == "preview":
             html_out = html_out.replace(
                 "</head>", '<meta name="robots" content="noindex,follow">\n</head>', 1)
-        else:
-            # AdSenseローダーはcomplete機種のみ注入（2026-07-13・外部レビュー反映）。
-            # テンプレのmachine.html自体は素アクセスで本文が空になるnoindexページのため
-            # ローダーを持たせず、生成時にここで足す＝preview/エラーページを広告対象にしない。
-            html_out = html_out.replace(
-                "</head>",
-                '<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js'
-                '?client=ca-pub-2097489177716087" crossorigin="anonymous"></script>\n</head>', 1)
+        # ★2026-07-24: AdSenseローダーの注入を全機種で停止（Phase 0・止血）★
+        #   理由: Google Publisher Policy は「人のレビュー/キュレーションが無い自動生成
+        #   コンテンツ」への広告掲載を認めていない。現状は status=complete というだけで
+        #   index・広告・チェッカーが一括で開く fail-open 設計であり、記事の検証状態を
+        #   まったく見ていない。承認ゲート（ads = public && index && page_review approved
+        #   && content_hash一致 …）の実装後、承認済みページだけで再開する。
+        #   ここを戻すときは必ずゲート参照にすること（無条件注入に戻さない）。
 
         # 本文（lead / sections / factTable）をプリレンダ
         dp = detail_dir / f"{slug}.json"

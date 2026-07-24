@@ -39,7 +39,6 @@
 <meta name="apple-mobile-web-app-title" content="うちどころ。">
 <link rel="canonical" href="https://uchidokoro.com/machines/my_juggler_v/">
 <script type="application/ld+json">[{"@context": "https://schema.org", "@type": "Article", "headline": "マイジャグラーV 天井・狙い目・やめどき｜小役カウンター ポチポチくん対応", "description": "マイジャグラーVの天井・狙い目・やめどき・設定差を徹底解説。設定狙い主体・天井なし。小役カウンター ポチポチくんで設定判別も可能。期待値重視の立ち回りガイド。", "image": "https://uchidokoro.com/assets/img/ogp.png", "author": {"@type": "Organization", "name": "うちどころ。", "url": "https://uchidokoro.com"}, "publisher": {"@type": "Organization", "name": "うちどころ。", "url": "https://uchidokoro.com", "logo": {"@type": "ImageObject", "url": "https://uchidokoro.com/assets/img/ogp.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://uchidokoro.com/machines/my_juggler_v/"}}, {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "うちどころ。", "item": "https://uchidokoro.com/"}, {"@type": "ListItem", "position": 2, "name": "マイジャグラーV", "item": "https://uchidokoro.com/machines/my_juggler_v/"}]}]</script>
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2097489177716087" crossorigin="anonymous"></script>
 </head>
 <body>
 <header class="site-header">
@@ -451,16 +450,16 @@ function resolveMachineSlug() {
     const eqSuffix = checker.equivOnly ? "（等価）" : "";
     const rows = [];
     if (Number.isFinite(caution) && caution > 0) {
-      rows.push({ range: `0 〜 ${caution - 1}G`, label: "× まだ早い", cls: "ev-row-ng" });
+      rows.push({ range: `0 〜 ${caution - 1}G`, label: "× 目安に未達", cls: "ev-row-ng" });
     }
     if (Number.isFinite(caution) && Number.isFinite(good) && good > caution) {
-      rows.push({ range: `${caution} 〜 ${good - 1}G`, label: "△ 条件次第", cls: "ev-row-wait" });
+      rows.push({ range: `${caution} 〜 ${good - 1}G`, label: "△ 目安の手前", cls: "ev-row-wait" });
     }
     if (Number.isFinite(good) && Number.isFinite(excellent) && excellent > good) {
-      rows.push({ range: `${good} 〜 ${excellent - 1}G`, label: "○ 狙い目" + eqSuffix, cls: "ev-row-ok" });
+      rows.push({ range: `${good} 〜 ${excellent - 1}G`, label: "○ 目安以上" + eqSuffix, cls: "ev-row-ok" });
     }
     if (Number.isFinite(excellent)) {
-      rows.push({ range: `${excellent}G 〜${limitStr}`, label: "◎ 積極的" + eqSuffix, cls: "ev-row-great" });
+      rows.push({ range: `${excellent}G 〜${limitStr}`, label: "◎ 目安を大きく超過" + eqSuffix, cls: "ev-row-great" });
     }
     let html = `<thead><tr><th>G数帯</th><th>判定</th></tr></thead><tbody>`;
     rows.forEach(r => { html += `<tr class="${r.cls}"><td>${r.range}</td><td>${r.label}</td></tr>`; });
@@ -640,21 +639,26 @@ function resolveMachineSlug() {
       return;
     }
 
+    // ★2026-07-24: 判定文を「行動をすすめる表現」から「当サイトの目安との比較」に変更。
+    //   閾値は確定解析ではなく当サイトの目安であり、打つ/やめるの判断は利用者が行うもの。
+    //   根拠の弱い数値でシステム側が行動を促す形にしない。
+    const eqNote = checker.equivOnly ? "（等価交換の目安）" : "";
+    const unit = checker.unit || "G";
     if (Number.isFinite(config.excellent) && g >= config.excellent) {
       checkerResult.className = "checker-result result-ok";
-      checkerResult.querySelector(".result-text").textContent = checker.equivOnly ? "◎ 狙い目OK！積極的に着席（等価交換の目安）" : "◎ 狙い目OK！積極的に着席を検討";
+      checkerResult.querySelector(".result-text").textContent = `◎ 当サイトの目安を大きく超えています${eqNote}`;
     } else if (Number.isFinite(config.good) && g >= config.good) {
       checkerResult.className = "checker-result result-ok";
-      checkerResult.querySelector(".result-text").textContent = checker.equivOnly ? "◯ 狙い目OK（等価交換の目安）" : "◯ 狙い目OK　交換率次第で候補";
+      checkerResult.querySelector(".result-text").textContent = `◯ 当サイトの目安に到達しています${eqNote}`;
     } else {
       const t = Number.isFinite(config.caution) ? config.caution : (config.target || config.good);
       if (Number.isFinite(t) && g >= t) {
         checkerResult.className = "checker-result result-wait";
-        checkerResult.querySelector(".result-text").textContent = `△ 条件次第　${t}G以上で候補`;
+        checkerResult.querySelector(".result-text").textContent = `△ 目安の手前です（目安は${t}${unit}〜）`;
       } else {
         checkerResult.className = "checker-result result-ng";
         const thr = Number.isFinite(config.good) ? config.good : t;
-        checkerResult.querySelector(".result-text").textContent = `× まだ早い　${thr}G以上を目安に`;
+        checkerResult.querySelector(".result-text").textContent = `× 目安に達していません（目安は${thr}${unit}〜）`;
       }
     }
   }
