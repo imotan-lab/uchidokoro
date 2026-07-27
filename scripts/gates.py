@@ -519,29 +519,31 @@ _COUNT_AXIS_MODES = ("suru", "through", "cycle")   # 回数・周期で数える
 _AXIS_MAX_COUNT = 30                                # 回数系の閾値がこれを超えたらG数の混入を疑う
 
 
-def _axis_conflict(mode_key: str, conf: dict) -> str | None:
-    """回数入力のmodeに、G数らしい閾値が**直接**入っていないかを検査する。
+def _axis_conflict(mode_key: str, conf: dict, unit: str | None) -> str | None:
+    """入力軸と判定軸の食い違いを、閾値の大小ではなく**構造**で検出する。
 
-    ★適用範囲を mode 直下に限定する理由（実データで確認・2026-07-27）★
-      入れ子（suru[] / cycle[] / byRate）まで広げると 686件の誤検知になる。
-      例: valvrave2 の suru[0] は {count:1, excellent:800…} ＝「1スルー目なら800G〜」で
-      正しい構造（回数で行を選び、閾値はG数）。閾値の大小から軸は判定できない。
-      Phase 0 の事故は「mode直下の閾値がG数なのに入力は回数」という形だったので、
-      ここだけを見るのが現データで意味のある検査になる。
+    ★実データで確認した判別条件（2026-07-27）★
+      Phase 0 で停止した20モード：直下に閾値(6/5/4＝スルー回数)を持ち、unit は 'G'。
+        → 利用者はG数を入力するのに、閾値は回数。これが「回数入力なのにG数判定」の実体。
+      正常な16モード（valvrave2 等）：直下に閾値を**持たず**、入れ子の suru[]/cycle[] に
+        「回数ごとのG数」を持つ。これが正しい二軸構造。
 
-    ★これは完全な軸検査ではない（自覚）★
-      本来は mode ごとに input_axis / decision_axis を明示宣言して再帰検証すべき。
-      それは台帳 #96「スルー二軸化」の作業であり、Phase 2以降に行う。
-      それまでは Phase 0 の既知事故型だけを機構で止める、という位置づけ。
+      よって判別は「回数系modeが直下に閾値を持っているか」で書ける。
+      閾値の大小で判定してはいけない（大きければ誤検知686件・小さければ事故を見逃す）。
+
+    ★この検査は _disabled マーカーに依存しない★
+      停止マーカーを消しても、構造そのものが不整合なら必ず止まる。
+      （Codex 10巡目の指摘：人が付けた印だけを根拠にしてはいけない）
     """
     if mode_key not in _COUNT_AXIS_MODES:
         return None
     if isinstance(conf.get("suru"), list) or isinstance(conf.get("cycle"), list):
-        return None                       # 回数で行を選ぶ二軸構造。直下の閾値は持たない前提
-    for k in ("excellent", "good", "caution", "target"):
-        v = conf.get(k)
-        if _is_num(v) and v > _AXIS_MAX_COUNT:
-            return f"回数系mode({mode_key})の{k}が{v}＝G数の閾値が混入している疑い"
+        return None                       # 回数で行を選ぶ二軸構造（正しい形）
+    direct = [k for k in ("excellent", "good", "caution", "target") if _is_num(conf.get(k))]
+    if direct:
+        return (f"回数系mode({mode_key})が直下に閾値{direct}を持つ"
+                f"（入力単位={unit!r}）＝入力軸と判定軸の食い違い。"
+                f"回数ごとの閾値は suru[]/cycle[] の行として持つこと")
     return None
 
 
@@ -682,7 +684,7 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
             ctx.reject(f"checker.{key}", "modes宣言に無いmodeをVERIFIEDにできない")
             continue
         # ★入力軸と判定軸の整合検査（Phase 0の事故型を機構で防ぐ）★
-        axis = _axis_conflict(key, conf)
+        axis = _axis_conflict(key, conf, checker.get("unit"))
         if axis:
             ctx.reject(f"checker.{key}", axis)
             continue
@@ -1481,13 +1483,23 @@ def selftest() -> int:
       "disclaimer" not in publish_view(base, {"lead": "数字のない紹介文です。"})["machine"]
       and publish_view({**base, "strategy": "等価600G〜"})["machine"]["disclaimer"] == LEGACY_DISCLAIMER)
     # ★入力軸と判定軸の整合（Phase 0の事故型を機構で防ぐ・方針書§6 条件3）
-    t("★回数系modeにG数の閾値が入っていたら止める（Phase 0の事故型）",
-      any("G数の閾値が混入" in e["reason"] for e in audit_view(
-          {**base, "checker_modes": {"suru": "STRUCT_OK"},
-           "checker": {"modes": [{"key": "suru"}], "suru": {"good": 400}}})["errors"]))
-    t("　回数として妥当な閾値は通す",
+    # ★軸の食い違いは閾値の大小でなく構造で判定する（実データで20/20検出・誤検知0）★
+    #   停止マーカー(_disabled)を消しても止まることが重要（人の印だけを根拠にしない）
+    for bad_val, label in ((400, "大きい閾値"), (4, "小さい閾値＝Phase 0の実データ形")):
+        t(f"★回数系modeが直下に閾値を持てば止める（{label}）",
+          any("入力軸と判定軸の食い違い" in e["reason"] for e in audit_view(
+              {**base, "checker_modes": {"suru": "STRUCT_OK"},
+               "checker": {"unit": "G", "modes": [{"key": "suru"}],
+                           "suru": {"good": bad_val}}})["errors"]))
+    t("　停止マーカーを消しても止まる（マーカー非依存）",
+      any("入力軸と判定軸の食い違い" in e["reason"] for e in audit_view(
+          {**base, "checker_modes": {"through": "STRUCT_OK"},
+           "checker": {"unit": "G", "modes": [{"key": "through"}],
+                       "through": {"excellent": 4, "good": 3, "caution": 2}}})["errors"]))
+    t("　正しい二軸構造（回数ごとのG数）は通す",
       publish_view({**base, "checker_modes": {"suru": "STRUCT_OK"},
-                    "checker": {"modes": [{"key": "suru"}], "suru": {"good": 4}}}
+                    "checker": {"unit": "G", "modes": [{"key": "suru"}],
+                                "suru": {"suru": [{"count": 1, "good": 600}]}}}
                    )["gates"]["checker"] is True)
     t("★分割された絶対禁止を台帳ALLOWで通せない",
       classify_atom(["期待値が", "プラス"],

@@ -58,6 +58,9 @@ def run() -> int:
     machines = json.load(open(os.path.join(DATA, "machines.json"), encoding="utf-8"))
     published = blocked = 0
     problems: list[str] = []
+    seen_slugs: set = set()
+    expected_public = sum(1 for m in machines
+                          if gates.compute_gates(bl.provisional(m))["public"])
 
     for m in machines:
         sim = bl.provisional(m)
@@ -75,13 +78,21 @@ def run() -> int:
             problems.append(f"{m['slug']}: 公開が止まった（{e}）")
             continue
         published += 1
-        problems.extend(audit_public.audit_machine(view["machine"]))
+        # slug重複も停止条件に含める（同じslugが2件あると上書き事故になる）
+        problems.extend(audit_public.audit_machine(view["machine"], seen_slugs))
+        # LEGACY（記事を出す状態）なのに記事が空なら、記事欠落として止める
+        if view["gates"]["profile"] != "preview_basic" and not view["detail"]:
+            problems.append(f"{m['slug']}: 記事を出す状態なのに公開記事が空")
         problems.extend(audit_public.audit_detail(
             m["slug"], view["detail"],
             has_disclaimer=isinstance(view["machine"].get("disclaimer"), str)
             and view["machine"]["disclaimer"] == audit_public.EXPECTED_DISCLAIMER))
 
-    print(f"公開できた機種: {published} / 止まった機種: {blocked}")
+    # 件数予算（黙って機種が消える事故を止める）
+    if published != expected_public:
+        problems.append(f"公開機種数が想定と違う: {published} != {expected_public}")
+
+    print(f"公開できた機種: {published} / 止まった機種: {blocked}（想定 {expected_public}）")
     print(f"独立監査の違反: {len(problems)} 件")
     for p in problems[:30]:
         print("  ✗", p)
