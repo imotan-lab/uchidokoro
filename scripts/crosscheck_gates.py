@@ -46,13 +46,13 @@ EXPECTED_PUBLIC = 120
 #   ゲートは110機種で開くが、10機種28modeは説明文に禁止表現（プラス域等）が残っており
 #   方針どおり内容除去され、結果としてcheckerが空になる（＝100機種178mode）。
 #   Phase 2 の記事再生成で禁止表現が消えれば、この数は110/206へ戻る想定。
-#   ★2026-07-27: 入力上限×閾値の整合検査で3機種を検出（台帳#128）。
-#     banchou4/kaguya/koukaku は4.5枚交換の◎閾値が天井を超え到達不能なため
-#     checkerが公開されない（99機種162mode）。閾値を直せば戻る。
+#   ★2026-07-27: 上限×閾値の整合検査は caution/good/target のみ対象。
+#     excellent が上限を超えるのは「この交換率では◎に到達しない」という正当な情報
+#     （交換率が悪いほど閾値が上がる。banchou4/kaguya/koukaku の4.5枚交換が該当）。
 #   ★162は「宣言」ではなく「実際に公開データへ入った mode」の数★
 #   （宣言178との差15は、note除去でconfigが空になったmode＝タブだけ残る状態を排除した結果）
-EXPECTED_CHECKER_MACHINES = 99
-EXPECTED_CHECKER_MODES = 162
+EXPECTED_CHECKER_MACHINES = 100
+EXPECTED_CHECKER_MODES = 163
 
 # ★公開slugの固定集合★ 件数だけだと「1件消えて1件増える」相殺を見逃すため、
 #   集合そのものを持つ。機種を増減したら意図した変更として更新すること。

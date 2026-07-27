@@ -642,10 +642,14 @@ def _limit_vs_threshold(machine: dict, checker: dict, mode_key: str, conf: dict)
     if lim is None:
         return None
     def _chk(c, where):
-        for k in ("caution", "good", "excellent", "target"):
+        # ★excellent（◎）が上限を超えるのは正当★
+        #   交換率が悪いほど閾値が上がるため「この交換率では◎に到達しない」という
+        #   意味のある情報になる（実データ banchou4/kaguya/koukaku の4.5枚交換）。
+        #   一方 caution(△)/good(○) が到達不能だと、その交換率で一切判定が出ないので実害。
+        for k in ("caution", "good", "target"):
             v = c.get(k)
             if _is_num(v) and v != _SENTINEL and v > lim:
-                return f"{where} の {k}={v} が入力上限 {lim} を超える（到達できない）"
+                return f"{where} の {k}={v} が入力上限 {lim} を超える（判定に到達できない）"
         return None
     for i, u in enumerate(conf.get("suru") or conf.get("cycle") or [conf]):
         if not isinstance(u, dict):
@@ -2238,11 +2242,17 @@ def selftest() -> int:
                        "strategyByRate": {"nope": "600G〜"}})["errors"])
       and bool(audit_view({**base, "checker": b20, "checker_modes": {"suru": "STRUCT_OK"},
                            "limit": {"nope": 999}})["errors"]))
-    t("★20-8: 入力上限を超える閾値はそのmodeを出さない（記事は公開する）",
+    t("★20-8: 入力上限を超える good はそのmodeを出さない（記事は公開する）",
       publish_view({**base, "limit": 700, "checker_modes": {"suru": "STRUCT_OK"},
                     "checker": {**b20, "suru": {"suruMax": 3,
                                                 "suru": [{"count": 0, "good": 760}]}}}
                    )["gates"]["checker"] is False)
+    t("　excellent が上限を超えるのは正当（この交換率では◎に到達しない）",
+      publish_view({**base, "limit": 700, "checker_modes": {"suru": "STRUCT_OK"},
+                    "checker": {**b20, "suru": {"suruMax": 3,
+                                                "suru": [{"count": 0, "good": 600,
+                                                          "excellent": 760}]}}}
+                   )["gates"]["checker"] is True)
     t("★20-9: 判定の主軸(good)が無ければ停止",
       ax20({**b20, "suru": {"suruMax": 3, "suru": [{"count": 0, "excellent": 600}]}}))
 
