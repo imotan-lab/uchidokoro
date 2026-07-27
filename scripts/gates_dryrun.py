@@ -58,7 +58,7 @@ def _neutralize(node):
     return node
 
 
-def schema_coverage(machines: list) -> None:
+def schema_coverage(machines: list) -> bool:
     """許可スキーマの取りこぼし検査。
 
     ★なぜ要るか★ 射影は許可リスト方式なので、実データにあるのにスキーマへ書き忘れた
@@ -109,6 +109,7 @@ def schema_coverage(machines: list) -> None:
         print("   ⚠ 上記は配線すると機能が壊れる可能性がある。gates.py の許可スキーマに追加するか、"
               "意図的に落とすなら理由をコメントすること。")
     print("-" * 64)
+    return not (missing_top or missing_mode)   # ★異常は終了コードへ反映させる★
 
 
 def main() -> int:
@@ -146,7 +147,9 @@ def main() -> int:
         dropped_total += len(d)
         # ★構造エラーを必ず集計する（見落とすと「異常なし」と誤報告してしまう）★
         for e in a["errors"]:
-            struct_errors.append({"slug": m["slug"], **e})
+            # 検証エラーは文字列、射影の構造エラーは辞書で来る（両方を受ける）
+            struct_errors.append({"slug": m["slug"], **e} if isinstance(e, dict)
+                                 else {"slug": m["slug"], "path": "-", "reason": str(e)})
         if u:
             unclassified_machines += 1
             unclassified_total += len(u)
@@ -155,7 +158,7 @@ def main() -> int:
     print("=" * 64)
     print(f"機種数: {len(machines)}    スキーマ検証エラー: {err_count} 件")
     print("-" * 64)
-    schema_coverage(machines)
+    coverage_ok = schema_coverage(machines)
     print("■ ゲートが開く機種数（暫定移行案の場合）")
     for key in ("public", "index", "ads", "checker", "affiliate"):
         print(f"   {key:<10} : {gate_counts[key]:>3} / {len(machines)}")
@@ -178,7 +181,8 @@ def main() -> int:
     print("=" * 64)
     print("※ このスクリプトは一切ファイルを書き換えていません。")
     # ★異常があれば非0終了（CI/preflightに繋げられるように）★
-    return 1 if (err_count or struct_errors) else 0
+    #   取りこぼし検査(schema_coverage)の異常も終了コードに含める
+    return 1 if (err_count or struct_errors or not coverage_ok) else 0
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@
 """gates.py — 公開ゲートの単一情報源（Phase 1・fail-closed 状態機械）
 
 設計正本: _design/site_policy_2026-07-24.md / _design/phase1_gates_design_v2_2026-07-24.md
-第3版。Codex 敵対的レビュー2巡（値漏れ計13件）を反映。
+第6版。Codex 敵対的レビュー5巡の指摘を反映。
 
 ■ 公開API（これ以外を本番経路から呼ばない）
     publish_view(machine, detail, ledger) -> {"gates":…, "machine":…, "detail":…}
@@ -52,6 +52,9 @@ ABSOLUTE_DENY = (
     "期待収支", "プラス域", "プラス圏", "プラスライン", "プラス期待値", "期待値プラス",
     "期待値がプラス", "プラスに転じ", "期待枚数", "獲得枚数期待", "期待差枚",
     "損益分岐", "時給", "利益ゾーン", "確実な利益", "プラス収支",
+    # 設計正本 §3.4 の deny-pattern（台帳ALLOWでも通さない）
+    # 活用形を取りこぼさないよう語幹で持つ（乗る/乗ります/乗って …）
+    "期待値が乗", "期待値が積み", "期待収支が積み", "期待値の絶対値が積み",
 )
 ABSOLUTE_DENY_PAT = re.compile("|".join(re.escape(t) for t in ABSOLUTE_DENY))
 
@@ -67,13 +70,23 @@ SETTING_DENY_PAT = re.compile(
 )
 
 # 設定の「列挙」で欠番を作り、暗に非搭載を主張する表現（実データ: "スマスロ A+BT（設定1/2/4/5/6）"）
-_SET_ENUM_PAT = re.compile(r"設定\s*([1-6](?:\s*[・、,／/･]\s*[1-6]){1,5})")
+# 半角/全角/漢数字、区切りだけの列挙（設定1/2/4）と各項目に設定を繰り返す形（設定1/設定2/設定4）の両方。
+_KANJI_NUM = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6}
+_ONE = r"[1-6１-６一二三四五六]"
+_SET_ENUM_PAT = re.compile(
+    r"設定\s*" + _ONE + r"(?:\s*[・、,／/･･]\s*(?:設定\s*)?" + _ONE + r"){1,5}")
+
+
+def _num_of(ch: str) -> int:
+    if ch in _KANJI_NUM:
+        return _KANJI_NUM[ch]
+    return int(str(ch).translate(str.maketrans("１２３４５６", "123456")))
 
 
 def _implies_missing_setting(text: str) -> bool:
     """設定の列挙に欠番があれば「その設定は無い」と主張しているのと同じ。"""
     for m in _SET_ENUM_PAT.finditer(text):
-        nums = sorted({int(x) for x in re.findall(r"[1-6]", m.group(1))})
+        nums = sorted({_num_of(c) for c in re.findall(_ONE, m.group(0))})
         if len(nums) >= 2 and set(range(nums[0], nums[-1] + 1)) - set(nums):
             return True
     return False
@@ -410,6 +423,12 @@ def _project_mode(conf, ctx: _Ctx, path: str, ctx_label: str) -> dict | None:
             if "note" in rv and not _is_str(rv["note"]):
                 ctx.reject(f"{path}.byRate.{rk}.note", "noteの型不正")
                 return None
+            # ★数値の型不正も止める（"600" のような文字列が黙って消えると
+            #   他の交換率だけ残り「1つでも落ちたらmodeごと」の約束が破れる）★
+            for nk in ("excellent", "good", "caution", "target", "suruMax"):
+                if nk in rv and not _is_num(rv[nk]):
+                    ctx.reject(f"{path}.byRate.{rk}.{nk}", "数値フィールドの型不正")
+                    return None
             r = {k: rv[k] for k in ("excellent", "good", "caution", "target", "suruMax")
                  if _is_num(rv.get(k))}
             rnote = rv.get("note") if _is_str(rv.get("note")) else None
@@ -436,6 +455,18 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
     if "modes" in checker and not isinstance(checker["modes"], list):
         ctx.reject("checker.modes", "modesの型不正")
         return None
+    # ★checker直下の未知フィールドを黙って捨てない★
+    #   （"warning": "未確認" のような但し書きだけ落として数値configを残す経路を塞ぐ）
+    for k, v in checker.items():
+        if k in RESERVED_CHECKER_KEYS or isinstance(v, dict):
+            continue
+        ctx.reject(f"checker.{k}", "checker直下の未知フィールド")
+        return None
+    for k, typ in (("unit", str), ("equivOnly", bool), ("exchangeRates", list),
+                   ("defaultRate", str), ("ok", str), ("ng", str)):
+        if k in checker and not isinstance(checker[k], typ):
+            ctx.reject(f"checker.{k}", "既知フィールドの型不正")
+            return None
     out: dict = {}
     if _is_str(checker.get("unit")) and ctx.atom([checker["unit"]], "checker.unit"):
         out["unit"] = checker["unit"]
@@ -599,8 +630,12 @@ def _cell_text(c, ctx: _Ctx, path: str):
         if not _only_keys(c, _CELL_ALLOWED):
             ctx.reject(path, "未知フィールドを含むセル")
             return None, None
+        if "badge" in c and not _is_str(c["badge"]):
+            ctx.reject(f"{path}.badge", "badgeの型不正（示唆の強さを失って本文だけ残るのを防ぐ）")
+            return None, None
         txt = c.get("text")
         if not _is_str(txt):
+            ctx.reject(path, "セルのtextが文字列でない")
             return None, None
         cell = {"text": txt}
         if _is_str(c.get("badge")):
@@ -615,6 +650,11 @@ def _project_settei_table(tbl, ctx: _Ctx, path: str, section_title: str) -> dict
     if not _only_keys(tbl, _TABLE_ALLOWED):
         ctx.reject(path, "未知フィールドを含むため表ごと拒否")
         return None
+    # 既知フィールドの型不正は表ごと止める（但し書きだけ失って数値表が残るのを防ぐ）
+    for k, typ in (("label", str), ("headers", list), ("rows", list), ("note", str)):
+        if k in tbl and not isinstance(tbl[k], typ):
+            ctx.reject(f"{path}.{k}", "既知フィールドの型不正")
+            return None
     out: dict = {}
     label = tbl.get("label")
     if _is_str(label):
@@ -862,8 +902,13 @@ def _numeric_surfaces(pm: dict, pd: dict) -> list[str]:
         return False
 
     for k, v in pm.items():
-        if k in ("slug", "release_date", "confirmed_at", "sources", "disclaimer",
+        if k in ("slug", "release_date", "confirmed_at", "disclaimer",
                  "display_requirements"):
+            continue
+        if k == "sources":
+            # URL・確認日は対象外だが、出典タイトルの数値は表示されるので対象にする
+            if any(has_num(s.get("title", "")) for s in v if isinstance(s, dict)):
+                found.append("sources.title")
             continue
         if has_num(v):
             found.append(k)
@@ -1223,6 +1268,53 @@ def selftest() -> int:
                                  )["machine"]["display_requirements"]["surfaces"])
     t("★sections/型不正を構造エラーにする",
       audit_view(base, {"sections": "本文"})["ok"] is False)
+
+    # ===== Codex 5巡目で不足を指摘された負例 =====
+    def _raises(machine, detail=None, ledger=None):
+        try:
+            publish_view(machine, detail, ledger)
+            return False
+        except GateError:
+            return True
+
+    ck = lambda conf, **kw: {**base, "checker_modes": {"normal": "VERIFIED"},
+                            "checker": {"modes": [{"key": "normal"}], "normal": conf, **kw}}
+    t("★modes が非list → 停止",
+      _raises({**base, "checker_modes": {"normal": "VERIFIED"},
+               "checker": {"modes": "normal", "normal": {"good": 580}}}))
+    t("★byRate 本体が非dict → 停止", _raises(ck({"good": 580, "byRate": "eq56"})))
+    t("★suru が非list → 停止", _raises(ck({"good": 580, "suru": {"1": 1}})))
+    t("★byRate配下の数値が文字列 → 停止（黙って消さない）",
+      _raises(ck({"good": 580, "byRate": {"eq56": {"excellent": "600"}}})))
+    t("★複数byRateのうち1件だけ不正でも mode ごと停止",
+      _raises(ck({"good": 580, "byRate": {"eq56": {"excellent": 600},
+                                          "rate50": {"excellent": "700"}}})))
+    t("★複数suru行のうち1行だけ不正でも停止",
+      _raises(ck({"good": 580, "suru": [{"count": 1, "good": 500},
+                                        {"count": 2, "good": "400"}]})))
+    t("★checker直下の未知フィールド（但し書き）→ 停止",
+      _raises(ck({"good": 580}, warning="未確認")))
+    t("★設定表の note が配列 → 表ごと停止",
+      _raises(base, {"sections": [{"title": "設定示唆まとめ", "type": "settei",
+                                   "tables": [{"label": "終了画面", "rows": [["白", "弱"]],
+                                               "note": ["未確認"]}]}]},
+              {atom_id("設定示唆まとめ", "legacy_safe"): {"verdict": ALLOW}}))
+    t("★セルの badge が非文字列 → 停止",
+      _raises(base, {"sections": [{"title": "設定示唆まとめ", "type": "settei",
+                                   "tables": [{"label": "終了画面",
+                                               "rows": [[{"text": "白", "badge": 1}, "弱"]]}]}]},
+              {atom_id("設定示唆まとめ", "legacy_safe"): {"verdict": ALLOW}}))
+    t("★設計正本のdeny-pattern（期待値が乗る/積み上がる）は台帳ALLOWでも通さない",
+      all(classify_atom([s], {atom_id(s, "legacy_safe"): {"verdict": ALLOW}},
+                        "legacy_safe") == DROP
+          for s in ("浅めから期待値が乗ります", "深いほど期待値が積み上がります")))
+    t("★設定欠番の暗示：漢数字・設定を繰り返す列挙も検出",
+      classify_atom(["設定一・二・四・五・六"], None, "legacy_safe") == DROP
+      and classify_atom(["設定1/設定2/設定4/設定5/設定6"], None, "legacy_safe") == DROP)
+    t("★出典タイトルの数値も目安ラベルの対象",
+      "sources.title" in publish_view(
+          {**base, "sources": [{"url": "https://a.example/x", "title": "狙い目580Gの解析"}]}
+      )["machine"]["display_requirements"]["surfaces"])
 
     # ===== 不変条件 =====
     for bad, label in (({"public": False, "index": True}, "index⇒public"),
