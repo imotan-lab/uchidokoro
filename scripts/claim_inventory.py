@@ -84,12 +84,23 @@ LABEL_RULES = [
      "NONE", "PERCENT", "%"),
     (r"^AT純増$|^純増$", "net_increase.phase", "ANY", "NONE", "COIN",
      "DECIMAL", "枚/G"),
-    (r"^BIG確率$|^BB確率$", "prob.big", "ANY", "NONE", "NONE", "PROBABILITY", "1/x"),
-    (r"^REG確率$|^RB確率$", "prob.reg", "ANY", "NONE", "NONE", "PROBABILITY", "1/x"),
+    # ★表の列見出しは短い（BIG / REG / 合算）。設定別表の列としても拾う★
+    (r"^BIG$|^BIG確率$|^BB$|^BB確率$|^BIG確率[（(]設定\d[)）]$|^BB確率[（(]設定\d[)）]$",
+     "prob.big", "ANY", "NONE", "NONE", "PROBABILITY", "1/x"),
+    (r"^REG$|^REG確率$|^RB$|^RB確率$|^REG確率[（(]設定\d[)）]$|^RB確率[（(]設定\d[)）]$",
+     "prob.reg", "ANY", "NONE", "NONE", "PROBABILITY", "1/x"),
+    (r"^初当たり確率$|^初当たり確率[（(]設定\d[)）]$|^AT初当たり確率$",
+     "prob.first_hit", "ANY", "NONE", "NONE", "PROBABILITY", "1/x"),
+    (r"^BIG獲得枚数$|^BB獲得枚数$", "payout.big", "ANY", "NONE", "COIN",
+     "INTEGER", "枚"),
+    (r"^REG獲得枚数$|^RB獲得枚数$", "payout.reg", "ANY", "NONE", "COIN",
+     "INTEGER", "枚"),
+    (r"^ベース$", "base_game", "ANY", "NONE", "COIN", "DECIMAL", "G/50枚"),
+    (r"^コイン単価$", "coin_unit_price", "ANY", "NONE", "COIN", "DECIMAL", "円"),
     (r"^ぶどう確率$|^ブドウ確率$", "prob.grape", "ANY", "NONE", "NONE",
      "PROBABILITY", "1/x"),
-    (r"^ボーナス合算確率$|^合算$|^合算確率$", "prob.bonus_total", "ANY", "NONE",
-     "NONE", "PROBABILITY", "1/x"),
+    (r"^ボーナス合算確率$|^合算$|^合算確率$|^ボーナス合算$|^ボーナス合算[（(]設定\d[)）]$",
+     "prob.bonus_total", "ANY", "NONE", "NONE", "PROBABILITY", "1/x"),
     (r"^コイン持ち$", "coin_persistence", "ANY", "NONE", "COIN", "DECIMAL", "G/50枚"),
 ]
 _LABEL_RE = [(re.compile(p), fk, m, s, cb, vk, u)
@@ -101,6 +112,12 @@ EDITORIAL_LABELS = re.compile(
     r"判別の軸|区切り方|見方|ゲーム性|とは$|"
     # ★交換率のラベルは「その交換率での狙い目」を指す行＝編集判断（B区分）★
     r"^等価|^5\.6枚|^5\.5枚|^5\.0枚|^4\.5枚|^現金|持ちメダル|交換$|投資$")
+
+# ★設定示唆の表★（トロフィー・終了画面・ボイス等）。事実だが数値ではなく、
+#   1項目ずつ型に落とすより「表ごと」で扱うべきもの。Phase 1では未分類にしない。
+HINT_TABLE_HEADERS = ("示唆", "見方", "設定示唆")
+HINT_ROW_LABELS = re.compile(
+    r"^(?:銅|銀|金|虹|レインボー)(?:トロフィー)?$|トロフィー$|^設定示唆$|^設定$")
 
 # ★数値を含まない案内文など。claim にならないが未分類でもない★
 NONCLAIM_LABELS = re.compile(
@@ -160,12 +177,23 @@ def _pairs_from_detail(detail: dict) -> list:
                 pairs.append((f"/sections/{si}/rows/{ri}", str(row["trigger"]),
                               str(val)))
         for ti, tbl in enumerate(sec.get("tables") or []):
+            headers = [str(h) for h in (tbl.get("headers") or [])]
+            # ★1列目が「設定」の表は、列見出しが項目・行が設定★
+            #   （行ラベル「設定1」だけでは何の値か決まらない。列と組にして初めて意味を持つ）
+            by_setting = bool(headers) and headers[0].strip() in ("設定", "設定値")
             for ri, row in enumerate(tbl.get("rows") or []):
-                if isinstance(row, list) and len(row) >= 2:
-                    c0 = row[0].get("text") if isinstance(row[0], dict) else row[0]
-                    c1 = row[1].get("text") if isinstance(row[1], dict) else row[1]
-                    pairs.append((f"/sections/{si}/tables/{ti}/rows/{ri}",
-                                  str(c0), str(c1)))
+                if not isinstance(row, list) or len(row) < 2:
+                    continue
+                cells = [c.get("text") if isinstance(c, dict) else c for c in row]
+                base = f"/sections/{si}/tables/{ti}/rows/{ri}"
+                if by_setting:
+                    setting = str(cells[0]).strip()
+                    for ci in range(1, min(len(cells), len(headers))):
+                        pairs.append((f"{base}/{ci}", headers[ci].strip(),
+                                      str(cells[ci]), setting,
+                                      f"{tbl.get('label') or ''}"))
+                else:
+                    pairs.append((base, str(cells[0]), str(cells[1])))
         # 「項目：値」形式の本文行（基本スペック欄など）
         for bi, body in enumerate(sec.get("body") or []):
             if not isinstance(body, str):
@@ -182,11 +210,16 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
     slots, unclassified = [], []
     seen_slots = set()
 
-    for pointer, label, value in _pairs_from_detail(detail):
+    for item in _pairs_from_detail(detail):
+        pointer, label, value = item[0], item[1], item[2]
+        setting = item[3] if len(item) > 3 else None
+        table_label = item[4] if len(item) > 4 else None
         if EDITORIAL_LABELS.search(label):
             continue                       # 編集判断（B区分）は裏取り対象外
         if NONCLAIM_LABELS.match(label.strip()):
             continue                       # 事実だが数値claimではない
+        if HINT_ROW_LABELS.match(label.strip()):
+            continue                       # 設定示唆の項目名（表ごとの扱いは後の段階）
         spec = classify_label(label)
         if spec is None:
             # ★数値を含むのに型に落ちない＝止める対象★
@@ -194,6 +227,10 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
                 unclassified.append({"pointer": pointer, "label": label,
                                      "reason": "UNKNOWN_LABEL_WITH_NUMBER"})
             continue
+        # ★設定1〜6は行単位で束ねる（1つ欠けたら行ごと止めるため）★
+        group = None
+        if setting:
+            group = f"{slug}:{spec['field_key']}:{table_label or 'by_setting'}"
         sid = slot_id(slug, spec, pointer)
         if sid in seen_slots:
             continue
@@ -202,7 +239,9 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
             "slot_id": sid,
             "field_key": spec["field_key"],
             "conditions": {"mode": spec["mode"], "scope": spec["scope"],
-                           "counter_basis": spec["counter_basis"]},
+                           "counter_basis": spec["counter_basis"],
+                           "setting": setting},
+            "atomic_group_id": group,
             "expected_value_kind": spec["value_kind"],
             "expected_unit": spec["unit"],
             "source_pointer": pointer,
