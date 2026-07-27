@@ -347,6 +347,8 @@ function resolveMachineSlug() {
     return Array.isArray(c.exchangeRates) ? c.exchangeRates : [];
   }
 
+  function evUnitOf(c) { return (c && c.unit) || "G"; }
+
   function getCurrentRateKey() {
     const checked = document.querySelector('input[name="exchangeRate"]:checked');
     return checked ? checked.value : currentRateKey;
@@ -447,22 +449,24 @@ function resolveMachineSlug() {
     const good = config.good;
     const excellent = config.excellent;
     const limit = getMachineLimit(modeKey);
-    const limitStr = Number.isFinite(limit) ? `（天井${limit}G）` : "";
+    // 入力単位はG数だけではない（pt / 周期 / あべし 等）。表の単位表記を実データに合わせる。
+    const evUnit = checker.unit || "G";
+    const limitStr = Number.isFinite(limit) ? `（天井${limit}${evUnit}）` : "";
     const eqSuffix = checker.equivOnly ? "（等価）" : "";
     const rows = [];
     if (Number.isFinite(caution) && caution > 0) {
-      rows.push({ range: `0 〜 ${caution - 1}G`, label: "× 目安に未達", cls: "ev-row-ng" });
+      rows.push({ range: `0 〜 ${caution - 1}${evUnit}`, label: "× 目安に未達", cls: "ev-row-ng" });
     }
     if (Number.isFinite(caution) && Number.isFinite(good) && good > caution) {
-      rows.push({ range: `${caution} 〜 ${good - 1}G`, label: "△ 目安の手前", cls: "ev-row-wait" });
+      rows.push({ range: `${caution} 〜 ${good - 1}${evUnit}`, label: "△ 目安の手前", cls: "ev-row-wait" });
     }
     if (Number.isFinite(good) && Number.isFinite(excellent) && excellent > good) {
-      rows.push({ range: `${good} 〜 ${excellent - 1}G`, label: "○ 目安以上" + eqSuffix, cls: "ev-row-ok" });
+      rows.push({ range: `${good} 〜 ${excellent - 1}${evUnit}`, label: "○ 目安以上" + eqSuffix, cls: "ev-row-ok" });
     }
     if (Number.isFinite(excellent)) {
-      rows.push({ range: `${excellent}G 〜${limitStr}`, label: "◎ 目安を大きく超過" + eqSuffix, cls: "ev-row-great" });
+      rows.push({ range: `${excellent}${evUnit} 〜${limitStr}`, label: "◎ 目安を大きく超過" + eqSuffix, cls: "ev-row-great" });
     }
-    let html = `<thead><tr><th>G数帯</th><th>判定</th></tr></thead><tbody>`;
+    let html = `<thead><tr><th>${evUnit === "G" ? "G数帯" : evUnit + "の範囲"}</th><th>判定</th></tr></thead><tbody>`;
     rows.forEach(r => { html += `<tr class="${r.cls}"><td>${r.range}</td><td>${r.label}</td></tr>`; });
     html += `</tbody>`;
     evTable.innerHTML = html;
@@ -597,16 +601,23 @@ function resolveMachineSlug() {
       const rateKey = getCurrentRateKey();
       const rateLabel = getRateLabel(rateKey);
       const normalText = machine.strategyByRate[rateKey];
-      const resetConfig = checker.reset && checker.reset.byRate ? checker.reset.byRate[rateKey] : null;
+      // リセットの交換率別設定は mode直下に重ねて使う（部分上書きでも欠けないように）
+      const resetBase = checker.reset || null;
+      const resetOverride = resetBase && resetBase.byRate ? resetBase.byRate[rateKey] : null;
+      const resetConfig = resetBase ? Object.assign({}, resetBase, resetOverride || {}) : null;
       const resetIndex = boxes.findIndex(box => String(box.label || "").includes("リセット"));
 
-      if (boxes[1] && normalText) {
-        boxes[1].label = `${rateLabel}狙い目`;
-        boxes[1].value = normalText;
+      // 狙い目の箱は「狙い目/天井」を指す箱だけを差し替える。
+      // 位置(boxes[1])で決め打ちすると、無関係な箱（注意書き等）を上書きしてしまう。
+      const targetIndex = boxes.findIndex(box => /狙い目|天井/.test(String(box.label || "")));
+      if (targetIndex >= 0 && normalText) {
+        boxes[targetIndex].label = `${rateLabel}狙い目`;
+        boxes[targetIndex].value = normalText;
       }
-      if (resetIndex >= 0 && resetConfig && Number.isFinite(resetConfig.good)) {
+      if (resetIndex >= 0 && resetConfig
+          && Number.isFinite(resetConfig.good) && Number.isFinite(resetConfig.excellent)) {
         boxes[resetIndex].label = "リセット狙い";
-        boxes[resetIndex].value = `${resetConfig.good}G〜（積極${resetConfig.excellent}G〜）`;
+        boxes[resetIndex].value = `${resetConfig.good}${evUnitOf(checker)}〜（積極${resetConfig.excellent}${evUnitOf(checker)}〜）`;
       }
     }
 

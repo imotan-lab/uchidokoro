@@ -137,7 +137,7 @@
               "虹色トロフィー",
               {
                 "text": "設定6濃厚",
-                "badge": "rainbow"
+                "badge": "ok"
               }
             ],
             [
@@ -158,7 +158,7 @@
               "銀色以下",
               {
                 "text": "示唆弱",
-                "badge": "normal"
+                "badge": "weak"
               }
             ]
           ],

@@ -36,6 +36,7 @@ import hashlib
 import math
 import re
 import sys
+import unicodedata
 
 # ---------------------------------------------------------------- 定数
 
@@ -428,7 +429,14 @@ def classify_atom(parts, ledger: dict | None, profile: str | None = None) -> str
     # ★区切り記号を除いた形でも絶対禁止を判定する★
     #   ["期待値が", "プラス"] → "期待値が / プラス" は文字列一致を外れるため、
     #   区切りを詰めた形も併せて見る（台帳ALLOWで通せる穴を塞ぐ）
-    variants = (text, re.sub(r"\s*[/／|｜]\s*", "", text), re.sub(r"\s*[/／|｜]\s*", " ", text))
+    # ★区切り記号だけでなく、空白・中黒・読点で分断された形も同じ文として見る★
+    #   （Codex 23巡目 #9）「期 待 値 が / プ ラ ス」は人には読めるが、
+    #   連続一致だけでは禁止語に当たらない。
+    _sep = r"[\s　/／|｜・,、.\-‐―ー~〜]"
+    variants = (text,
+                re.sub(r"\s*[/／|｜]\s*", "", text),
+                re.sub(r"\s*[/／|｜]\s*", " ", text),
+                re.sub(_sep + "+", "", text))
     if profile == "preview_basic" and any(PREVIEW_FORBIDDEN_PAT.search(v) for v in variants):
         return DROP
     if any(ABSOLUTE_DENY_PAT.search(v) or SETTING_DENY_PAT.search(v)
@@ -770,7 +778,7 @@ def _row_coverage_gap(mode_key: str, conf: dict) -> str | None:
         counts = [r.get("count") for r in rows if isinstance(r, dict)]
         if not all(isinstance(c, int) and not isinstance(c, bool) for c in counts):
             return None          # 型の問題は別の検査が止める
-        top = conf.get("suruMax") if field == "suru" and _is_num(conf.get("suruMax"))             else max(counts)
+        top = conf.get("suruMax") if field == "suru" else max(counts)
         want = set(range(first, int(top) + 1))
         missing = sorted(want - set(counts))
         if missing:
@@ -943,6 +951,13 @@ def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
         return (f"回数系mode({mode_key})の入力単位が{unit!r}＝"
                 f"行ごとのG数閾値と単位が一致しない（回数系modeでは 'G' が必須）")
 
+    # ★スルーは入力できる上限を明示させる★（Codex 23巡目 #5）
+    #   UIは mode直下に suruMax が無ければ上限99で入力させる。上限が決まらないと
+    #   「行の無い回数」が別の行の閾値で判定される。実データは全modeが suruMax を持つ。
+    if suru_rows is not None and not _is_num(conf.get("suruMax")):
+        return (f"回数系mode({mode_key})に suruMax が無い"
+                f"（画面は99スルーまで入力でき、行の無い回数が別の行で判定される）")
+
     # ★行・byRate・マージ後の閾値健全性も検査する★
     #   UIは mode直下に byRate を重ねて使うので、重ねた後の順序が壊れていないかを見る。
     for i, row in enumerate(rows if isinstance(rows, list) else []):
@@ -1084,6 +1099,15 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx,
                 return None
             out[lab] = checker[lab]
     # checker直下の hasSuru/hasCycle/suruMax はUIが参照しない（modes[]とmode直下を使う）
+
+    # ★equivOnly（等価前提）と交換率の選択肢は同時に持てない★（Codex 23巡目 #7）
+    #   UIは equivOnly が真なら判定文・早見表に「（等価）」を固定で付ける。
+    #   5.6枚を選べる状態でこれが出ると、選んだ交換率と表示が食い違う。
+    if checker.get("equivOnly") is True and (checker.get("exchangeRates")
+                                             or checker.get("defaultRate")):
+        ctx.reject("checker.equivOnly",
+                   "等価前提(equivOnly)なのに交換率を選べる（選択と表示が食い違う）")
+        return None
 
     er = checker.get("exchangeRates")
     if isinstance(er, list):
@@ -1344,6 +1368,16 @@ def _project_sections(sections, ctx: _Ctx) -> list | None:
         if sec.get("type") in ("rumor", "settei"):
             new["type"] = sec["type"]
 
+        # ★UIが描かない組み合わせを公開しない★（Codex 23巡目 #2）
+        #   machine.html の settei 分岐は body を一切描かず、tables があれば rows も描かない。
+        #   「以下の数値は未確認です」のような但し書きが公開JSONにだけ残る事故を止める。
+        if sec.get("type") == "settei" and sec.get("body"):
+            ctx.reject(f"{p}.body", "設定表セクションの本文は画面に描かれない（別セクションにする）")
+            continue
+        if sec.get("tables") and sec.get("rows"):
+            ctx.reject(f"{p}.rows", "tables と rows の併存（画面は rows を描かない）")
+            continue
+
         body = sec.get("body")
         if isinstance(body, list):
             kept, lost = [], False
@@ -1383,6 +1417,10 @@ def _project_sections(sections, ctx: _Ctx) -> list | None:
     return out or None
 
 
+# UIが装飾を持っている示唆の強さ（machine.html の badgeClass と一致させること）
+_BADGE_VALUES = ("hint", "weak", "mid", "strong", "ok")
+
+
 def _cell_text(c, ctx: _Ctx, path: str):
     """セルを (表示文字列, 出力値) に。未知フィールドがあれば None。"""
     if _is_str(c):
@@ -1393,6 +1431,13 @@ def _cell_text(c, ctx: _Ctx, path: str):
             return None, None
         if "badge" in c and not _is_str(c["badge"]):
             ctx.reject(f"{path}.badge", "badgeの型不正（示唆の強さを失って本文だけ残るのを防ぐ）")
+            return None, None
+        # ★UIが知っている値だけ許す★（Codex 23巡目 #4）
+        #   machine.html の badgeClass は hint/weak/mid/strong/ok のみ。綴り違いは
+        #   `|| ""` で無視され、強示唆の装飾が黙って消える（強度情報の欠落）。
+        if "badge" in c and c["badge"] not in _BADGE_VALUES:
+            ctx.reject(f"{path}.badge",
+                       f"未知のbadge値（画面で示唆の強さが表示されない）: {c['badge']!r}")
             return None, None
         txt = c.get("text")
         if not _is_str(txt):
@@ -1417,6 +1462,14 @@ def _project_settei_table(tbl, ctx: _Ctx, path: str, section_title: str) -> dict
                                       "note": str, "wide": bool}):
         return None
     out: dict = {}
+    # ★UIは tbl.label を無条件に表示し、tbl.headers.map(...) を呼ぶ★（Codex 23巡目 #3）
+    #   欠けていると undefined が見出しに出るか、描画処理がそこで止まる。
+    if not _is_str(tbl.get("label")) or not tbl["label"].strip():
+        ctx.reject(f"{path}.label", "表の見出し(label)が無い（画面に undefined が出る）")
+        return None
+    if not isinstance(tbl.get("headers"), list) or not tbl["headers"]:
+        ctx.reject(f"{path}.headers", "表の列見出し(headers)が無い（描画が止まる）")
+        return None
     label = tbl.get("label")
     if _is_str(label):
         if not ctx.atom([section_title, label], f"{path}.label"):
@@ -1569,6 +1622,10 @@ _MACHINE_TYPES = {
 #   status/limit … 旧形式の状態と入力上限
 _MACHINE_KNOWN = set(_MACHINE_TYPES) | {
     "limit", "status", "lifecycle", "checker_modes",
+    # ★緊急停止スイッチ（Codex 23巡目 #12）★
+    #   ゲート算出では正式に見ているのに allowlist に無く、立てた途端に
+    #   GateError で「止めた版がデプロイできない」状態になっていた。
+    "checker_kill_switch",
 }
 
 
@@ -1785,13 +1842,30 @@ _NUM_IN_TEXT = re.compile(
 )
 
 
+def _has_numeral(text: str) -> bool:
+    """★Unicodeの数値カテゴリ全体で判定する★（Codex 23巡目 #10）
+
+    列挙方式だとアラビア・インド数字（٩٩٩）などを取りこぼす。
+    unicodedata の分類（Nd/Nl/No）と数値値の有無で見る。
+    """
+    for ch in text:
+        if unicodedata.category(ch) in ("Nd", "Nl", "No"):
+            return True
+        try:
+            unicodedata.numeric(ch)
+            return True
+        except (TypeError, ValueError):
+            pass
+    return False
+
+
 def _numeric_surfaces(pm: dict, pd: dict) -> list[str]:
     """公開物のうち、実際に数値が載っている表示面を列挙する（目安ラベルの必要判定）。"""
     found: list[str] = []
 
     def has_num(node) -> bool:
         if _is_str(node):
-            return bool(_NUM_IN_TEXT.search(node))
+            return _has_numeral(node)
         if _is_num(node):
             return True
         if isinstance(node, list):
@@ -2007,12 +2081,23 @@ def selftest() -> int:
 
     badge = {"sections": [{"title": "設定示唆まとめ", "type": "settei",
                            "tables": [{"label": "終了画面", "headers": ["画面", "示唆"],
-                                       "rows": [[{"text": "白", "badge": "期待収支がプラス"}, "弱"]]}]}]}
+                                       "rows": [[{"text": "期待収支がプラス", "badge": "weak"},
+                                                 "弱"]]}]}]}
     # 「設定示唆まとめ」は 設定 を含むため台帳が要る（未分類なら止まるのが正しい挙動）
     led_badge = {atom_id(s, "legacy_safe"): {"verdict": ALLOW} for s in
                  ("設定示唆まとめ", "設定示唆まとめ / 終了画面", "設定示唆まとめ / 画面 / 示唆")}
-    t("★設定表の badge も分類される", "期待収支" not in json.dumps(
+    t("★設定表のセル本文も分類される", "期待収支" not in json.dumps(
         publish_view(base, badge, led_badge)["detail"], ensure_ascii=False))
+    t("★23-4: UIが知らない badge 値は停止（示唆の強さが黙って消える）",
+      bool(audit_view(base, {"sections": [
+          {"title": "設定示唆まとめ", "type": "settei",
+           "tables": [{"label": "終了画面", "headers": ["画面", "示唆"],
+                       "rows": [[{"text": "白", "badge": "strnog"}, "弱"]]}]}]},
+                      led_badge)["errors"]))
+    t("★23-3: 表の label / headers が無ければ停止",
+      bool(audit_view(base, {"sections": [
+          {"title": "設定示唆まとめ", "type": "settei",
+           "tables": [{"rows": [["赤", "強示唆"]]}]}]}, led_badge)["errors"]))
 
     # ===== 未知フィールドは原子ごと拒否 =====
     unk = {"summaryBoxes": [{"label": "天井", "value": "999G+α", "note": "未確認"}]}
@@ -2170,9 +2255,11 @@ def selftest() -> int:
 
     # 表label込みの複合断定
     tbl_led = {atom_id(s, "legacy_safe"): {"verdict": ALLOW}
-               for s in ("設定示唆まとめ", "設定示唆まとめ / 期待値")}
+               for s in ("設定示唆まとめ", "設定示唆まとめ / 期待値",
+                         "設定示唆まとめ / G数 / 判定")}
     tbl = {"sections": [{"title": "設定示唆まとめ", "type": "settei",
-                         "tables": [{"label": "期待値", "rows": [["580G〜", "◎"]]}]}]}
+                         "tables": [{"label": "期待値", "headers": ["G数", "判定"],
+                                     "rows": [["580G〜", "◎"]]}]}]}
     t("★表label＋行の複合断定を見逃さない",
       any(u["path"].endswith("rows[0]") for u in audit_view(base, tbl, tbl_led)["unclassified"]))
 
@@ -2246,7 +2333,7 @@ def selftest() -> int:
     t("　正しい二軸構造（回数ごとのG数）は通す",
       publish_view({**base, "checker_modes": {"suru": "STRUCT_OK"},
                     "checker": {"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
-                                "suru": {"suru": [{"count": 0, "good": 600, "excellent": 800}]}}}
+                                "suru": {"suruMax": 0, "suru": [{"count": 0, "good": 600, "excellent": 800}]}}}
                    )["gates"]["checker"] is True)
 
     # ★軸契約の完全化（Codex 11巡目の指定反例を全件固定）★
@@ -2297,7 +2384,8 @@ def selftest() -> int:
                     "checker": {"unit": "G",
                                 "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
                                 "exchangeRates": [{"key": "eq56", "label": "5.6枚"}],
-                                "suru": {"suru": [{"count": 0,
+                                "suru": {"suruMax": 0,
+                                         "suru": [{"count": 0,
                                                    "byRate": {"eq56": {"good": 600,
                                                                        "excellent": 800}}}]}}}
                    )["gates"]["checker"] is True)
@@ -2423,7 +2511,7 @@ def selftest() -> int:
     t("　交換率別の値があるのに選択肢が無い → 停止",
       ax18({**b18, "suru": {"suru": [{"count": 0, "byRate": {"eq56": {"good": 600, "excellent": 800}}}]}}))
     t("★18-5: modes宣言が無ければ停止",
-      ax18({"unit": "G", "suru": {"suru": [{"count": 0, "good": 600, "excellent": 800}]}}))
+      ax18({"unit": "G", "suru": {"suruMax": 0, "suru": [{"count": 0, "good": 600, "excellent": 800}]}}))
     t("★18-6: 行があるのに hasSuru/hasCycle 宣言が無ければ停止",
       ax18({"unit": "G", "modes": [{"key": "at", "label": "AT"}],
             "at": {"suru": [{"count": 0, "good": 600, "excellent": 800}]}}, {"at": "STRUCT_OK"}))
