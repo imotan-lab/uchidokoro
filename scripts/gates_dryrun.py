@@ -36,7 +36,7 @@ def provisional_checker_modes(m: dict) -> dict:
 # 識別子・日付・slug は置き換えない
 # （置き換えると照合や形式検査が壊れ、検査自体が誤検知する）
 # label も保持する（無害化で全ラベルが同一文字列になると「重複」検査に誤って引っかかるため）
-_IDENTIFIER_KEYS = ("key", "defaultRate", "unit", "slug", "release_date", "confirmed_at",
+_IDENTIFIER_KEYS = ("baseRateKey", "key", "defaultRate", "unit", "slug", "release_date", "confirmed_at",
                     "lifecycle", "name", "type", "label")
 
 
@@ -89,7 +89,9 @@ def schema_coverage(machines: list) -> bool:
             continue
         out.pop("_live_modes", None)
         # ★意図的に公開しないフィールド（UIが参照しない）は取りこぼしではない★
-        INTENTIONAL = {"ok", "ng", "hasSuru", "hasCycle", "suruMax"}
+        # baseRateKey は「mode直下がどの交換率か」を宣言する authoring 用の情報。
+        # UIは読まないので公開しないが、取りこぼしでもない。
+        INTENTIONAL = {"ok", "ng", "hasSuru", "hasCycle", "suruMax", "baseRateKey"}
         for k, v in c.items():
             if k in ("modeData",) or k in modes or k in INTENTIONAL:
                 continue
@@ -258,6 +260,7 @@ def schema_coverage(machines: list) -> bool:
                                     unknown_schema.add(f"{where}.byRate.{rk2}")
 
         CK_TOP_OK = {"unit", "modes", "limit", "equivOnly", "exchangeRates", "defaultRate",
+                     "baseRateKey",
                      "hasSuru", "hasCycle", "suruMax", "ok", "ng", "modeData", "_disabled"}
         for k, v in c.items():
             if k in CK_TOP_OK:

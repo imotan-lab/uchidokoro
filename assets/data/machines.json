@@ -7413,7 +7413,8 @@
             "caution": 20
           }
         }
-      }
+      },
+      "baseRateKey": "equal"
     },
     "limit": 999,
     "original": {
@@ -7570,7 +7571,8 @@
             "caution": 60
           }
         }
-      }
+      },
+      "baseRateKey": "equal"
     },
     "limit": 900,
     "original": {
@@ -7740,7 +7742,8 @@
             "caution": 50
           }
         }
-      }
+      },
+      "baseRateKey": "equal"
     },
     "limit": 700,
     "original": {

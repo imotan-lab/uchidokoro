@@ -451,7 +451,13 @@ function resolveMachineSlug() {
     const limit = getMachineLimit(modeKey);
     // 入力単位はG数だけではない（pt / 周期 / あべし 等）。表の単位表記を実データに合わせる。
     const evUnit = checker.unit || "G";
-    const limitStr = Number.isFinite(limit) ? `（天井${limit}${evUnit}）` : "";
+    // ★「天井」と「入力の上限」は別物★
+    //   machine.limit は入力欄の上限として使っており、モードごとの天井とは限らない。
+    //   例: 真打吉宗は CZ間1000G / AT間1500G だが machine.limit=1500。
+    //   そのモード固有の上限（checker[mode].limit）が分かるときだけ天井として表示する。
+    const modeLimit = checker[modeKey] && Number.isFinite(checker[modeKey].limit)
+      ? checker[modeKey].limit : null;
+    const limitStr = Number.isFinite(modeLimit) ? `（天井${modeLimit}${evUnit}）` : "";
     const eqSuffix = checker.equivOnly ? "（等価）" : "";
     const rows = [];
     if (Number.isFinite(caution) && caution > 0) {
@@ -609,7 +615,13 @@ function resolveMachineSlug() {
 
       // 狙い目の箱は「狙い目/天井」を指す箱だけを差し替える。
       // 位置(boxes[1])で決め打ちすると、無関係な箱（注意書き等）を上書きしてしまう。
-      const targetIndex = boxes.findIndex(box => /狙い目|天井/.test(String(box.label || "")));
+      // ★「狙い目」の箱だけを差し替える★
+      //   「天井」を含むラベル（天井 / リセット天井）は狙い目ではないので触らない。
+      //   ラベルの部分一致で意味を決めると、天井欄が狙い目で潰れる（bandori で実発生）。
+      const targetIndex = boxes.findIndex(box => {
+        const lb = String(box.label || "");
+        return /狙い目/.test(lb) && !/天井/.test(lb);
+      });
       if (targetIndex >= 0 && normalText) {
         boxes[targetIndex].label = `${rateLabel}狙い目`;
         boxes[targetIndex].value = normalText;

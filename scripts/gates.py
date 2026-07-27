@@ -148,6 +148,10 @@ _KEY_PAT = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,31}$")
 RESERVED_CHECKER_KEYS = frozenset({
     "unit", "modes", "limit", "equivOnly", "exchangeRates", "defaultRate",
     "hasSuru", "hasCycle", "suruMax", "ok", "ng", "modeData", "byRate",
+    # ★mode直下の値がどの交換率のものかを明示する（Codex 24巡目 #6）★
+    #   defaultRate は「最初に選ぶ交換率」であって、直下の値がその交換率だという
+    #   証明にはならない。暗黙の継承と入力漏れを区別するために別フィールドにする。
+    "baseRateKey",
 })
 
 _SLUG_PAT = re.compile(r"^[a-z0-9_]+$")
@@ -718,16 +722,17 @@ def _judgeable(conf: dict) -> bool:
 
 
 def _rate_inheritance_gap(conf: dict, rate_keys, where: str,
-                          default_rate=None) -> str | None:
+                          base_rate=None) -> str | None:
     """★交換率別の値があるのに一部の交換率が欠けている状態を止める★（Codex 22巡目 #6）
 
     UIは byRate に該当キーが無ければ mode直下の値へ落ちる。これが「意図した継承」なのか
     「入力漏れ」なのかはデータから区別できない。
 
-    ただし1つだけ例外を認める：**既定の交換率**（defaultRate）が byRate に無い場合は、
-    「mode直下の値が既定の交換率の値である」という取り決めとして扱う。実データでは
-    sao / bandori / hanma_baki の3機種がこの形（既定=equal、直下が等価の値）。
-    それ以外の交換率が欠けていれば入力漏れとして止める。
+    ただし1つだけ例外を認める：checker に `baseRateKey` が明示されていて、
+    欠けているのがちょうどその交換率だけの場合は「mode直下の値がその交換率の値」
+    という**宣言された**取り決めとして扱う（Codex 24巡目 #6）。
+    以前は defaultRate で代用していたが、既定＝最初に選ぶ交換率にすぎず、
+    直下の値がその交換率だという証明にならないので分離した。
     """
     by = conf.get("byRate") if isinstance(conf.get("byRate"), dict) else {}
     if not by or not rate_keys:
@@ -735,8 +740,8 @@ def _rate_inheritance_gap(conf: dict, rate_keys, where: str,
     missing = [k for k in rate_keys if not isinstance(by.get(k), dict)]
     if not missing:
         return None
-    if missing == [default_rate]:
-        return None          # 既定の交換率 ＝ mode直下の値（取り決め）
+    if base_rate is not None and missing == [base_rate]:
+        return None          # 宣言された基準交換率 ＝ mode直下の値
     return (f"{where} は交換率別の値を持つのに {missing} が無い"
             f"（画面では別の交換率の値で判定される）")
 
@@ -763,13 +768,12 @@ def _judgeable_all_rates(conf: dict, rate_keys) -> bool:
 
 
 def _threshold_int(conf: dict, where: str, unit) -> str | None:
-    """★入力単位がG系なら閾値も整数であること★（Codex 22巡目 #7）
+    """★閾値は整数であること（単位を問わない）★（Codex 22巡目 #7 / 24巡目 #7）
 
     早見表は小数をそのまま「600.5〜」と表示するが、利用者の入力は parseInt される。
-    表示と判定がずれるので、小数は公開しない。
+    表示と判定がずれるので小数は公開しない。入力は単位に関係なく parseInt なので、
+    G系だけでなく pt・周期・あべし でも同じ扱いにする。
     """
-    if not (_is_str(unit) and unit in ("G", "g")):
-        return None
     for k in ("caution", "good", "target", "excellent"):
         v = conf.get(k)
         if _is_num(v) and float(v) != int(v):
@@ -897,7 +901,7 @@ def _limit_vs_threshold(machine: dict, checker: dict, mode_key: str, conf: dict)
 
 def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
                    declared_flags: dict | None = None,
-                   rate_keys=None, default_rate=None) -> str | None:
+                   rate_keys=None, base_rate=None) -> str | None:
     """入力軸と判定軸の食い違いを、閾値の大小ではなく**構造**で検出する。
 
     ★実データで確認した判別条件（2026-07-27）★
@@ -946,7 +950,7 @@ def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
             return (f"mode({mode_key})が回数の行だけを持ち、G数の閾値を持たない"
                     f"＝入力軸が判別できない")
         # ★判定材料が無いmodeを公開しない（noteだけのタブを出さない）★
-        gap = _rate_inheritance_gap(conf, rate_keys, f"mode({mode_key})", default_rate)
+        gap = _rate_inheritance_gap(conf, rate_keys, f"mode({mode_key})", base_rate)
         if gap:
             return gap
         if not _judgeable_all_rates(conf, rate_keys):
@@ -1035,7 +1039,7 @@ def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
         counts.append(cv)
         # ★各行にG数の判定材料が最低1つ必要（countだけの行は判定できない）★
         gap = _rate_inheritance_gap(row, rate_keys, f"mode({mode_key})の行[{i}]",
-                                    default_rate)
+                                    base_rate)
         if gap:
             return gap
         if not _judgeable_all_rates(row, rate_keys):
@@ -1104,7 +1108,7 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx,
         ctx.reject(f"checker.{k}", "checker直下の未知フィールド（mode候補として黙って通さない）")
         return None
     for k, typ in (("unit", str), ("equivOnly", bool), ("exchangeRates", list),
-                   ("defaultRate", str), ("ok", str), ("ng", str),
+                   ("defaultRate", str), ("baseRateKey", str), ("ok", str), ("ng", str),
                    ("limit", (int, float)), ("hasSuru", bool), ("hasCycle", bool),
                    ("suruMax", (int, float)), ("modeData", dict)):
         if k in checker and not isinstance(checker[k], typ):
@@ -1149,6 +1153,13 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx,
                                              or checker.get("defaultRate")):
         ctx.reject("checker.equivOnly",
                    "等価前提(equivOnly)なのに交換率を選べる（選択と表示が食い違う）")
+        return None
+
+    # ★入力単位は必須★（Codex 24巡目 #7）
+    #   UIは `checker.unit || "G"` で補うため、pt/周期の機種で unit を書き忘れると
+    #   画面にはG数として出る。表示すると空になる値も認めない。
+    if not _is_str(checker.get("unit")) or not normalize_atom([checker["unit"]]).strip():
+        ctx.reject("checker.unit", "入力単位(unit)が無い（画面ではG数として表示される）")
         return None
 
     er = checker.get("exchangeRates")
@@ -1271,7 +1282,7 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx,
         _rate_keys = [r.get("key") for r in (checker.get("exchangeRates") or [])
                       if isinstance(r, dict) and isinstance(r.get("key"), str)]
         axis = _axis_conflict(key, conf, checker.get("unit"), _decl, _rate_keys,
-                              checker.get("defaultRate"))
+                              checker.get("baseRateKey"))
         if axis:
             ctx.reject(f"checker.{key}", axis)
             continue
@@ -1770,6 +1781,17 @@ def _project_machine(machine: dict, gates: dict, ctx: _Ctx) -> dict:
         reach = {k: v for k, v in sbr.items() if k in live_rates}
         if len(reach) != len(sbr):
             ctx.content_drop("strategyByRate", "公開される交換率に無いキーは参照されない")
+        # ★逆向きの欠落も見る★（Codex 24巡目 #6）
+        #   選べる交換率に対応する文が無いと、その交換率を選んだとき狙い目欄だけが
+        #   更新されず、別の交換率の値が残る（bandori の既定=equal で実発生）。
+        #   基準交換率（baseRateKey）は machine.strategy が担うので除く。
+        _ck = machine.get("checker") if isinstance(machine.get("checker"), dict) else {}
+        _base = _ck.get("baseRateKey")
+        _gap = sorted(r for r in live_rates if r not in sbr and r != _base)
+        if _gap:
+            ctx.reject("strategyByRate",
+                       f"選べる交換率に対応する狙い目の文が無い（画面が更新されない）: {_gap}")
+            return out
         d = {k: v for k, v in reach.items() if ctx.atom([k, v], f"strategyByRate.{k}")}
         if d:
             out["strategyByRate"] = d
@@ -1939,7 +1961,7 @@ def _numeric_surfaces(pm: dict, pd: dict) -> list[str]:
 
 
 def publish_view(machine: dict, detail: dict | None = None,
-                 ledger: dict | None = None) -> dict:
+                 ledger: dict | None = None, allow_drops: bool = False) -> dict:
     """validate → compute → project を不可分に実行。★外から gates を渡せない★
 
     - 検証エラー（lifecycle欠落・型不正など）は GateError（黙ってCANDIDATE扱いにしない）
@@ -1979,6 +2001,17 @@ def publish_view(machine: dict, detail: dict | None = None,
         raise GateError(
             f"{machine.get('slug','?')}: 未分類のリスク表現 {len(ctx.unclassified)}件 → 公開不可"
             f"（分類台帳に ALLOW/DROP を登録すること） 例: path={u['path']} id={u['atom_id']}")
+
+    # ★方針による除去（DROP）が残っている原稿は公開しない★（Codex 24巡目 #5）
+    #   従来は「その塊を出さない」だけで公開していたが、兄弟の但し書きが消えて
+    #   数値だけ残るような意味反転を、除去の粒度によっては防ぎきれない。
+    #   ゼロ基準で運用するので、除去が1件でもあれば原稿を直させる（ビルドを止める）。
+    #   ※どうしても除去のまま出す必要が生じたら、台帳で ALLOW/DROP を明示すること。
+    if ctx.dropped and not allow_drops:
+        d = ctx.dropped[0]
+        raise GateError(
+            f"{machine.get('slug','?')}: 公開できない表現 {len(ctx.dropped)}件 → 公開不可"
+            f"（原稿を直すこと） 例: path={d['path']} 理由={d.get('reason', '公開基準を満たさない表現')}")
 
     # ★狙い目・数値を出すなら「当サイトの目安」表示を必須要件として明示する★
     #   machine側だけでなく detail 側（要約・表・本文）だけに数値がある場合も対象にする。
@@ -2030,6 +2063,13 @@ def selftest() -> int:
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         import build_ledger
         return build_ledger.provisional(m).get("lifecycle")
+    def _pv(*a, **k):
+        """★selftest用★ 内容除去そのものを検証したい場面が多いので、
+        既定では除去を許して射影結果を見る。除去でビルドが止まることは
+        下の 24-5 の試験で別途確かめる。"""
+        k.setdefault("allow_drops", True)
+        return publish_view(*a, **k)
+
     results = []
 
     def t(name, cond):
@@ -2050,7 +2090,7 @@ def selftest() -> int:
     # ★検証エラーはビルドを止める（黙ってCANDIDATE扱いにしない）
     raised = False
     try:
-        publish_view({"slug": "x"})
+        _pv({"slug": "x"})
     except GateError:
         raised = True
     t("★lifecycle欠落は GateError（黙って空を返さない）", raised)
@@ -2117,7 +2157,8 @@ def selftest() -> int:
                    "checker": {"unit": "期待収支がプラス", "ok": "狙い目OK",
                                "modes": [{"key": "normal", "label": "期待収支がプラス"}],
                                "normal": {"good": 600, "excellent": 800}}}
-    pcj = json.dumps(publish_view(bad_checker)["machine"], ensure_ascii=False)
+    pcj = json.dumps(_pv(bad_checker)["machine"],
+                     ensure_ascii=False)
     t("★checker.unit も分類される（危険なら落ちる）", "期待収支" not in pcj)
     t("★modes[].label も分類される", "期待収支" not in pcj)
 
@@ -2129,7 +2170,7 @@ def selftest() -> int:
     led_badge = {atom_id(s, "legacy_safe"): {"verdict": ALLOW} for s in
                  ("設定示唆まとめ", "設定示唆まとめ / 終了画面", "設定示唆まとめ / 画面 / 示唆")}
     t("★設定表のセル本文も分類される", "期待収支" not in json.dumps(
-        publish_view(base, badge, led_badge)["detail"], ensure_ascii=False))
+        _pv(base, badge, led_badge)["detail"], ensure_ascii=False))
     t("★23-4: UIが知らない badge 値は停止（示唆の強さが黙って消える）",
       bool(audit_view(base, {"sections": [
           {"title": "設定示唆まとめ", "type": "settei",
@@ -2157,6 +2198,48 @@ def selftest() -> int:
       classify_atom(["400G〜からプラス期待値に入ります"], None, "legacy_safe") == DROP)
     t("　否定と肯定が混在する文は止める（安全側）",
       classify_atom(["プラス域には入りませんが、実質プラス域です"], None, "legacy_safe") == DROP)
+    _drop_case = {"sections": [{"title": "狙い目", "body": ["580G〜です"]},
+                               {"title": "注意",
+                                "body": ["期待収支は算出していません"]}]}
+    _stopped = False
+    try:
+        publish_view(base, _drop_case)
+    except GateError:
+        _stopped = True
+    t("★24-5: 公開できない表現が残る原稿はビルドを止める（但し書きだけ消えない）",
+      _stopped)
+    t("　除去を許す指定をすれば射影自体は動く（検査用の逃げ道）",
+      isinstance(publish_view(base, _drop_case, allow_drops=True)["detail"], dict))
+    t("★24-7: 入力単位(unit)が無い checker は停止",
+      bool(audit_view({**base, "checker_modes": {"normal": "STRUCT_OK"},
+                       "checker": {"modes": [{"key": "normal", "label": "通常"}],
+                                   "normal": {"good": 600, "excellent": 800}}})["errors"]))
+    t("　小数の閾値は単位を問わず停止（入力は整数に丸められる）",
+      bool(audit_view({**base, "checker_modes": {"normal": "STRUCT_OK"},
+                       "checker": {"unit": "pt",
+                                   "modes": [{"key": "normal", "label": "通常"}],
+                                   "normal": {"good": 10.5, "excellent": 20.5}}})["errors"]))
+    t("★24-6: 選べる交換率に狙い目の文が無ければ停止",
+      bool(audit_view({**base, "checker_modes": {"normal": "STRUCT_OK"},
+                       "strategyByRate": {"eq56": "600G〜"},
+                       "checker": {"unit": "G",
+                                   "exchangeRates": [{"key": "eq56", "label": "5.6枚"},
+                                                     {"key": "rate50", "label": "5.0枚"}],
+                                   "defaultRate": "eq56",
+                                   "modes": [{"key": "normal", "label": "通常"}],
+                                   "normal": {"byRate": {
+                                       "eq56": {"good": 600, "excellent": 800},
+                                       "rate50": {"good": 650, "excellent": 850}}}}})["errors"]))
+    t("　baseRateKey を明示すれば mode直下を基準値として認める",
+      _pv({**base, "checker_modes": {"normal": "STRUCT_OK"},
+           "checker": {"unit": "G", "baseRateKey": "equal",
+                       "exchangeRates": [{"key": "equal", "label": "等価"},
+                                         {"key": "eq56", "label": "5.6枚"}],
+                       "defaultRate": "equal",
+                       "modes": [{"key": "normal", "label": "通常"}],
+                       "normal": {"good": 600, "excellent": 800,
+                                  "byRate": {"eq56": {"good": 620, "excellent": 820}}}}}
+          )["gates"]["checker"] is True)
     t("★23-9: 空白で分断した禁止表現も止める",
       classify_atom(["期 待 値 が", "プ ラ ス"], None, "legacy_safe") == DROP
       and classify_atom(["設 定 3 は", "非 搭 載"], None, "legacy_safe") == DROP)
@@ -2198,11 +2281,11 @@ def selftest() -> int:
     t("★未知フィールド（但し書き）を含む箱は構造エラー",
       any(e["path"] == "summaryBoxes[0]" for e in audit_view(base, unk)["errors"]))
     unk2 = {**base, "checker_modes": {"normal": "VERIFIED"},
-            "checker": {"modes": [{"key": "normal", "label": "normal"}],
+            "checker": {"unit": "G", "modes": [{"key": "normal", "label": "normal"}],
                         "normal": {"good": 600, "excellent": 800, "private_note": 123}}}
     raised = False
     try:
-        publish_view(unk2)
+        _pv(unk2)
     except GateError:
         raised = True
     t("★未知フィールドを含むmodeは公開を止める", raised)
@@ -2213,7 +2296,7 @@ def selftest() -> int:
     t("★診断pathに散文キーが入らない", "秘密" not in aj)
     raised = False
     try:
-        publish_view(dyn)
+        _pv(dyn)
     except GateError:
         raised = True
     t("識別子形式でないキーは公開を止める", raised)
@@ -2222,7 +2305,7 @@ def selftest() -> int:
     # info が辞書（型不正）の場合は、射影で落とすより早く構造エラーで止まる
     raised = False
     try:
-        publish_view({"slug": "x", "lifecycle": "VERIFIED_PREVIEW", "name": "テスト機",
+        _pv({"slug": "x", "lifecycle": "VERIFIED_PREVIEW", "name": "テスト機",
                       "info": {"天井": 999, "note": "600Gから狙い目"}})
     except GateError:
         raised = True
@@ -2232,7 +2315,7 @@ def selftest() -> int:
             "manufacturer": "メーカーA", "release_date": "2026-08-01",
             "info": "天井999GのスマスロAT",
             "strategy": "等価600G〜", "limit": 999}
-    pv = publish_view(prev, {"lead": "リード", "sections": [{"title": "天井・恩恵", "body": ["天井は999Gです。"]}]})
+    pv = _pv(prev, {"lead": "リード", "sections": [{"title": "天井・恩恵", "body": ["天井は999Gです。"]}]})
     dumped = json.dumps(pv["machine"], ensure_ascii=False)
     t("preview: 禁止話題を含むinfoも狙い目も出さない",
       "999" not in dumped and "狙い目" not in dumped and "strategy" not in pv["machine"])
@@ -2241,11 +2324,11 @@ def selftest() -> int:
       pv["machine"]["name"] == "テスト機" and pv["machine"]["release_date"] == "2026-08-01")
 
     # ===== LEGACY の目安ラベル =====
-    lv = publish_view({**base, "strategy": "等価670G〜 / 5.6枚680G〜"})
+    lv = _pv({**base, "strategy": "等価670G〜 / 5.6枚680G〜"})
     t("★LEGACY: 狙い目を出すなら目安ラベルを必ず添える",
       lv["machine"].get("disclaimer") == LEGACY_DISCLAIMER)
     t("LEGACY: 狙い目が無ければラベルは付けない",
-      "disclaimer" not in publish_view(base)["machine"])
+      "disclaimer" not in _pv(base)["machine"])
 
     # ===== 実データ形状を落とさない =====
     real = {**base, "checker_modes": {"normal": "VERIFIED"},
@@ -2256,7 +2339,7 @@ def selftest() -> int:
                                    "byRate": {"eq56": {"good": 680, "target": 570,
                                                        "excellent": 880}}},
                         }}
-    rc = publish_view(real)["machine"]["checker"]
+    rc = _pv(real)["machine"]["checker"]
     t("実データ形状: exchangeRates/defaultRate/target/hasSuru を落とさない",
       rc["exchangeRates"][0]["key"] == "eq56" and rc["defaultRate"] == "eq56"
       and rc["normal"]["target"] == 570
@@ -2269,7 +2352,7 @@ def selftest() -> int:
                        "modes": [{"key": "cycle", "label": "周期", "hasCycle": True}],
                        "cycle": {"cycle": [{"count": 1, "good": 800, "excellent": 1000}]}}}
     t("実データ形状: 周期(辞書配列)を落とさない",
-      publish_view(cyc)["machine"]["checker"]["cycle"]["cycle"][0]["count"] == 1)
+      _pv(cyc)["machine"]["checker"]["cycle"]["cycle"][0]["count"] == 1)
 
     # ===== 診断に原文を出さない =====
     unc = {"sections": [{"title": "収支の話", "body": ["この台は1000円くらい得します。"]}]}
@@ -2278,7 +2361,7 @@ def selftest() -> int:
       "得します" not in json.dumps(av2, ensure_ascii=False) and len(av2["unclassified"]) >= 1)
     raised = False
     try:
-        publish_view(base, unc)
+        _pv(base, unc)
     except GateError:
         raised = True
     t("未分類があれば公開不可", raised)
@@ -2288,14 +2371,14 @@ def selftest() -> int:
            atom_id("期待値の目安", "legacy_safe"): {"verdict": ALLOW}}
     atom = {"sections": [{"title": "期待値の目安",
                           "body": ["580Gから期待収支がプラスになります。", "天井は999Gです。"]}]}
-    pa = publish_view(base, atom, led)
+    pa = _pv(base, atom, led)
     aj2 = json.dumps(pa["detail"], ensure_ascii=False)
     t("段落: 絶対禁止を含む段落は丸ごと落ちる", "期待収支" not in aj2 and "580" not in aj2)
     # ★兄弟段落との関係を保証できないため、1段落でも落ちたらセクションごと落とす★
     #   （「580G〜です」「期待収支は算出していません」の但し書きだけ消える意味反転を防ぐ）
     t("段落: 1段落でも落ちたらセクションごと落とす", "天井は999Gです。" not in aj2)
     t("　安全な段落だけのセクションは残る",
-      "天井は999Gです。" in json.dumps(publish_view(
+      "天井は999Gです。" in json.dumps(_pv(
           base, {"sections": [{"title": "天井・恩恵", "body": ["天井は999Gです。"]}]}
       )["detail"], ensure_ascii=False))
 
@@ -2316,12 +2399,12 @@ def selftest() -> int:
 
     # 注意書きだけ消して数値を残す意味反転が起きないこと
     inv = {**base, "checker_modes": {"normal": "VERIFIED"},
-           "checker": {"modes": [{"key": "normal", "label": "normal"}],
+           "checker": {"unit": "G", "modes": [{"key": "normal", "label": "normal"}],
                        "normal": {"good": 580, "excellent": 700,
                                   "note": "期待収支は算出していません"}}}
     # ★注意書きが落ちるなら、数値だけ残さず mode ごと出さない（意味反転しない）★
     #   データは壊れていないので公開自体は止めず、その塊を出さない扱いにする。
-    inv_view = publish_view(inv)
+    inv_view = _pv(inv)
     t("★注意書きが落ちる場合は数値だけ残さない（modeごと出さない）",
       "checker" not in inv_view["machine"])
     t("　ゲート表示も閉じて自己矛盾を残さない",
@@ -2339,13 +2422,13 @@ def selftest() -> int:
     ):
         raised = False
         try:
-            publish_view({**base, "checker_modes": {"normal": "VERIFIED"}, "checker": bad_checker})
+            _pv({**base, "checker_modes": {"normal": "VERIFIED"}, "checker": bad_checker})
         except GateError:
             raised = True
         t(f"★構造エラーで公開を止める（{label}）", raised)
     t("audit_view: 構造エラーを ok=False で報告",
       audit_view({**base, "checker_modes": {"normal": "VERIFIED"},
-                  "checker": {"modes": [{"key": "normal", "label": "normal"}]}})["ok"] is False)
+                  "checker": {"unit": "G", "modes": [{"key": "normal", "label": "normal"}]}})["ok"] is False)
 
     # 表label込みの複合断定
     tbl_led = {atom_id(s, "legacy_safe"): {"verdict": ALLOW}
@@ -2358,7 +2441,7 @@ def selftest() -> int:
       any(u["path"].endswith("rows[0]") for u in audit_view(base, tbl, tbl_led)["unclassified"]))
 
     # 目安ラベルは detail だけに数値がある場合も付く
-    d_only = publish_view(base, {"summaryBoxes": [{"label": "狙い目", "value": "580G〜"}]})
+    d_only = _pv(base, {"summaryBoxes": [{"label": "狙い目", "value": "580G〜"}]})
     t("★detailだけに狙い目がある場合も目安ラベルが付く",
       d_only["machine"].get("disclaimer") == LEGACY_DISCLAIMER)
 
@@ -2384,15 +2467,15 @@ def selftest() -> int:
     ):
         raised = False
         try:
-            publish_view({**base, "checker_modes": {"normal": "VERIFIED"},
-                          "checker": {"modes": [{"key": "normal", "label": "normal"}], "normal": bad_conf}})
+            _pv({**base, "checker_modes": {"normal": "VERIFIED"},
+                          "checker": {"unit": "G", "modes": [{"key": "normal", "label": "normal"}], "normal": bad_conf}})
         except GateError:
             raised = True
         t(f"★型不正で公開を止める（{label}）", raised)
 
     raised = False
     try:
-        publish_view({**base, "checker_modes": {"normal": "VERIFIED"}})   # checker本体が無い
+        _pv({**base, "checker_modes": {"normal": "VERIFIED"}})   # checker本体が無い
     except GateError:
         raised = True
     t("★VERIFIED指定なのにchecker本体が無ければ止める", raised)
@@ -2404,12 +2487,12 @@ def selftest() -> int:
           {atom_id("設定示唆まとめ", "legacy_safe"): {"verdict": ALLOW}})["errors"]))
 
     t("★出典URLのクエリ・フラグメントを落とす",
-      publish_view({**base, "sources": [{"url": "https://example.com/a?token=SECRET#x"}]}
+      _pv({**base, "sources": [{"url": "https://example.com/a?token=SECRET#x"}]}
                    )["machine"]["sources"][0]["url"] == "https://example.com/a")
 
     t("★目安ラベルは実際に数値がある時だけ付く",
-      "disclaimer" not in publish_view(base, {"lead": "数字のない紹介文です。"})["machine"]
-      and publish_view({**base, "strategy": "等価600G〜"})["machine"]["disclaimer"] == LEGACY_DISCLAIMER)
+      "disclaimer" not in _pv(base, {"lead": "数字のない紹介文です。"})["machine"]
+      and _pv({**base, "strategy": "等価600G〜"})["machine"]["disclaimer"] == LEGACY_DISCLAIMER)
     # ★入力軸と判定軸の整合（Phase 0の事故型を機構で防ぐ・方針書§6 条件3）
     # ★軸の食い違いは閾値の大小でなく構造で判定する（実データで20/20検出・誤検知0）★
     #   停止マーカー(_disabled)を消しても止まることが重要（人の印だけを根拠にしない）
@@ -2425,7 +2508,7 @@ def selftest() -> int:
            "checker": {"unit": "G", "modes": [{"key": "through", "label": "through"}],
                        "through": {"excellent": 4, "good": 3, "caution": 2}}})["errors"]))
     t("　正しい二軸構造（回数ごとのG数）は通す",
-      publish_view({**base, "checker_modes": {"suru": "STRUCT_OK"},
+      _pv({**base, "checker_modes": {"suru": "STRUCT_OK"},
                     "checker": {"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
                                 "suru": {"suruMax": 0, "suru": [{"count": 0, "good": 600, "excellent": 800}]}}}
                    )["gates"]["checker"] is True)
@@ -2474,7 +2557,7 @@ def selftest() -> int:
                    "suru": {"suru": [{"count": 1, "good": 600, "excellent": 800}],
                             "cycle": [{"count": 1, "good": 500, "excellent": 700}]}}))
     t("　行のbyRateにG数があれば判定材料として認める",
-      publish_view({**base, "checker_modes": {"suru": "STRUCT_OK"},
+      _pv({**base, "checker_modes": {"suru": "STRUCT_OK"},
                     "checker": {"unit": "G",
                                 "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
                                 "exchangeRates": [{"key": "eq56", "label": "5.6枚"}],
@@ -2491,13 +2574,13 @@ def selftest() -> int:
                     {atom_id("期待値が / プラス", "legacy_safe"): {"verdict": ALLOW}},
                     "legacy_safe") == DROP)
     t("★目安チェッカーを出すなら必ず目安ラベルの対象になる",
-      "checker" in publish_view(
+      "checker" in _pv(
           {**base, "checker_modes": {"normal": "STRUCT_OK"},
-           "checker": {"modes": [{"key": "normal", "label": "normal"}],
+           "checker": {"unit": "G", "modes": [{"key": "normal", "label": "normal"}],
                        "normal": {"good": 580, "excellent": 700}}}
       )["machine"]["display_requirements"]["surfaces"])
     t("　どの表示面に必要かを返す",
-      "strategy" in publish_view({**base, "strategy": "等価600G〜"}
+      "strategy" in _pv({**base, "strategy": "等価600G〜"}
                                  )["machine"]["display_requirements"]["surfaces"])
     t("★sections/型不正を構造エラーにする",
       audit_view(base, {"sections": "本文"})["ok"] is False)
@@ -2505,13 +2588,13 @@ def selftest() -> int:
     # ===== Codex 5巡目で不足を指摘された負例 =====
     def _raises(machine, detail=None, ledger=None):
         try:
-            publish_view(machine, detail, ledger)
+            _pv(machine, detail, ledger)
             return False
         except GateError:
             return True
 
     ck = lambda conf, **kw: {**base, "checker_modes": {"normal": "VERIFIED"},
-                            "checker": {"modes": [{"key": "normal", "label": "normal"}], "normal": conf, **kw}}
+                            "checker": {"unit": "G", "modes": [{"key": "normal", "label": "normal"}], "normal": conf, **kw}}
     t("★modes が非list → 停止",
       _raises({**base, "checker_modes": {"normal": "VERIFIED"},
                "checker": {"modes": "normal", "normal": {"good": 580}}}))
@@ -2545,7 +2628,7 @@ def selftest() -> int:
       classify_atom(["設定一・二・四・五・六"], None, "legacy_safe") == DROP
       and classify_atom(["設定1/設定2/設定4/設定5/設定6"], None, "legacy_safe") == DROP)
     t("★出典タイトルの数値も目安ラベルの対象",
-      "sources.title" in publish_view(
+      "sources.title" in _pv(
           {**base, "sources": [{"url": "https://a.example/x", "title": "狙い目580Gの解析"}]}
       )["machine"]["display_requirements"]["surfaces"])
 
@@ -2579,7 +2662,7 @@ def selftest() -> int:
     t("★17-13: 機種名が内容除去されたら公開しない",
       bool(audit_view({**base, "name": "期待収支がプラスの台"})["errors"]))
     t("★16-1: 一部modeだけ除去されたら宣言・ゲート・実体を一致させる",
-      publish_view({**base, "checker_modes": {"a": "STRUCT_OK", "b": "STRUCT_OK"},
+      _pv({**base, "checker_modes": {"a": "STRUCT_OK", "b": "STRUCT_OK"},
                     "checker": {"unit": "G",
                                 "modes": [{"key": "a", "label": "A"}, {"key": "b", "label": "B"}],
                                 "a": {"good": 600, "excellent": 800},
@@ -2623,7 +2706,7 @@ def selftest() -> int:
     t("★18-12: modeDataと直下で片方が壊れていたら停止",
       ax18({**b18, "modeData": {"suru": "壊れた値"}}))
     t("★22-5: count=1始まり（0スルーの行が無い）modeは出さない",
-      publish_view({**base, "checker_modes": {"suru": "STRUCT_OK"},
+      _pv({**base, "checker_modes": {"suru": "STRUCT_OK"},
                     "checker": {"unit": "G",
                                 "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
                                 "suru": {"suruMax": 2,
@@ -2631,7 +2714,7 @@ def selftest() -> int:
                                                   {"count": 2, "good": 500, "excellent": 700}]}}}
                    )["gates"]["checker"] is False)
     t("　0スルーの行があれば通す",
-      publish_view({**base, "checker_modes": {"suru": "STRUCT_OK"},
+      _pv({**base, "checker_modes": {"suru": "STRUCT_OK"},
                     "checker": {"unit": "G",
                                 "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
                                 "suru": {"suruMax": 2,
@@ -2690,21 +2773,21 @@ def selftest() -> int:
       bl_provisional_lifecycle({"slug": "x", "status": "compelte"}) == "CANDIDATE")
     # ★21-4: 到達性は「実際に公開された集合」で見る。型は壊れていないので記事は止めず、
     #        その値を公開しない（内容除去）。
-    _v20_7a = publish_view({**base, "checker": {**b20, "exchangeRates":
+    _v20_7a = _pv({**base, "checker": {**b20, "exchangeRates":
                                                 [{"key": "eq56", "label": "5.6枚"}]},
                             "checker_modes": {"suru": "STRUCT_OK"},
                             "strategyByRate": {"nope": "600G〜", "eq56": "600G〜"}})
     t("★20-7: UIで選べない交換率キーは公開しない",
       "nope" not in (_v20_7a["machine"].get("strategyByRate") or {})
       and _v20_7a["machine"]["strategyByRate"]["eq56"] == "600G〜")
-    _v20_7b = publish_view({**base, "checker": b20, "checker_modes": {"suru": "STRUCT_OK"},
+    _v20_7b = _pv({**base, "checker": b20, "checker_modes": {"suru": "STRUCT_OK"},
                             "limit": {"nope": 999, "suru": 900}})
     t("　公開されるmodeに無いlimitキーも公開しない",
       "nope" not in (_v20_7b["machine"].get("limit") or {})
       and _v20_7b["machine"]["limit"]["suru"] == 900)
     # ★21-4b: checker が丸ごと落ちたら、それを指す limit/strategyByRate も残らない
     # （閾値が入力上限を超えて mode が内容除去され、checker が空になる形）
-    _v21_4 = publish_view({**base, "checker": {**b20, "exchangeRates":
+    _v21_4 = _pv({**base, "checker": {**b20, "exchangeRates":
                                                [{"key": "eq56", "label": "5.6枚"}]},
                            "checker_modes": {"suru": "STRUCT_OK"},
                            "strategyByRate": {"eq56": "600G〜"}, "limit": {"suru": 500}})
@@ -2712,12 +2795,12 @@ def selftest() -> int:
       "checker" not in _v21_4["machine"]
       and "strategyByRate" not in _v21_4["machine"] and "limit" not in _v21_4["machine"])
     t("★20-8: 入力上限を超える good はそのmodeを出さない（記事は公開する）",
-      publish_view({**base, "limit": 700, "checker_modes": {"suru": "STRUCT_OK"},
+      _pv({**base, "limit": 700, "checker_modes": {"suru": "STRUCT_OK"},
                     "checker": {**b20, "suru": {"suruMax": 3,
                                                 "suru": [{"count": 0, "good": 760, "excellent": 960}]}}}
                    )["gates"]["checker"] is False)
     t("★21-1: 入力上限を超える excellent もそのmodeを出さない（早見表が到達不能な行を作る）",
-      publish_view({**base, "limit": 700, "checker_modes": {"suru": "STRUCT_OK"},
+      _pv({**base, "limit": 700, "checker_modes": {"suru": "STRUCT_OK"},
                     "checker": {**b20, "suru": {"suruMax": 3,
                                                 "suru": [{"count": 0, "good": 600,
                                                           "excellent": 760}]}}}
@@ -2735,7 +2818,7 @@ def selftest() -> int:
                                        "eq56": {"good": 600, "excellent": 800},
                                        "rate50": {"excellent": 850}}}}})["errors"]))
     t("　全交換率に判定材料が揃っていれば通す",
-      publish_view({**base, "checker_modes": {"normal": "STRUCT_OK"},
+      _pv({**base, "checker_modes": {"normal": "STRUCT_OK"},
                     "checker": {"unit": "G",
                                 "exchangeRates": [{"key": "eq56", "label": "5.6枚"},
                                                   {"key": "rate50", "label": "5.0枚"}],
