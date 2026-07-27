@@ -1828,6 +1828,15 @@ def _project_detail(detail, gates: dict, ctx: _Ctx) -> dict:
         return {}
     if detail is None:
         return {}
+    # ★記事が別の機種のものでないことを確かめる★（Codex 25巡目 #4 の最小検査5）
+    #   ファイルの取り違えは「機種Aのページに機種Bの解説が出る」という
+    #   最も分かりやすい誤情報になる。射影の入口で止める。
+    if isinstance(detail, dict) and _is_str(detail.get("slug")) and ctx.slug:
+        if detail["slug"] != ctx.slug:
+            ctx.reject("detail.slug",
+                       "記事データの機種が一致しない（別機種の記事が付いている）")
+            return {}
+
     if not isinstance(detail, dict):
         # ★記事データが壊れているのに「本文なしで正常公開」しない★
         ctx.reject("detail", "記事データが辞書でない")
@@ -2240,6 +2249,8 @@ def selftest() -> int:
                        "normal": {"good": 600, "excellent": 800,
                                   "byRate": {"eq56": {"good": 620, "excellent": 820}}}}}
           )["gates"]["checker"] is True)
+    t("★25-5: 別機種の記事が付いていたら停止",
+      bool(audit_view(base, {"slug": "別の機種", "lead": "x"})["errors"]))
     t("★23-9: 空白で分断した禁止表現も止める",
       classify_atom(["期 待 値 が", "プ ラ ス"], None, "legacy_safe") == DROP
       and classify_atom(["設 定 3 は", "非 搭 載"], None, "legacy_safe") == DROP)
