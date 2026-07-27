@@ -81,6 +81,9 @@ def schema_coverage(machines: list) -> bool:
             continue                      # 表示できるmodeが無い機種は検査対象外
         ctx = gates._Ctx("legacy_safe", None)
         out = gates._project_checker(_neutralize(c), sorted(modes), ctx)
+        if ctx.errors:                    # ★continueの前に構造エラーを回収する★
+            for e in ctx.errors:
+                missing_top.add(f"(構造エラー) {e['reason']}")
         if out is None:
             continue                      # checkerごと出ない（構造上の理由）＝取りこぼしではない
         out.pop("_live_modes", None)

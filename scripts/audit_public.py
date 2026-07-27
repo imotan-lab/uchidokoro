@@ -85,7 +85,7 @@ def _valid_date(s) -> bool:
         return False
 
 _TAG = re.compile(r"<[^>]*>")
-_ZW = re.compile(r"[​-‏⁠﻿­]")
+_ZW = re.compile("[​-‏‪-‮⁠-⁤﻿­᠎]")
 _MD = re.compile(r"[*_`~]")
 _KANJI = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6}
 _ENUM = re.compile(r"設定\s*" + _SET1 + r"(?:\s*[・、,／/･]\s*(?:設定\s*)?" + _SET1 + r"){1,5}")
@@ -228,7 +228,8 @@ def _check_url(u: str) -> str | None:
     host = u.split("/", 3)[2]
     if "@" in host:
         return "userinfo付きURL"
-    if not re.match(r"^[A-Za-z0-9.\-]+\.[A-Za-z]{2,}(?::\d+)?$", host):
+    label = r"[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?"
+    if not re.match(r"^(?:" + label + r"\.)+[A-Za-z]{2,}(?::\d{1,5})?$", host):
         return "ホスト名の形式が不正なURL"
     if re.search(r"[?#]", u) or SECRET_HINT_RE.search(u):
         return "秘密を含みうるURL（クエリ/フラグメント/認証情報）"
@@ -379,11 +380,33 @@ def _audit_checker_contract(slug: str, ck) -> list[str]:
         out.append(f"{slug}: 交換率の表示ラベルが重複している")
     rate_keys = [r.get("key") for r in rates if isinstance(r, dict)]
 
+    flags = {m["key"]: m for m in decl
+             if isinstance(m, dict) and isinstance(m.get("key"), str)}
     for mk, conf in ck.items():
         if mk in _CK_TOP or not isinstance(conf, dict):
             continue
+        for k in ("limit", "suruMax"):
+            v = conf.get(k)
+            if v is not None and (not isinstance(v, (int, float)) or isinstance(v, bool)
+                                  or not math.isfinite(v) or v < 0 or float(v) != int(v)):
+                out.append(f"{slug}: checker.{mk}.{k} が0以上の整数でない")
         rows = conf.get("suru") if isinstance(conf.get("suru"), list) else (
             conf.get("cycle") if isinstance(conf.get("cycle"), list) else None)
+        d = flags.get(mk, {})
+        is_cycle = isinstance(conf.get("cycle"), list)
+        if rows is not None:
+            if not (d.get("hasSuru") is True or d.get("hasCycle") is True):
+                out.append(f"{slug}: checker.{mk} は行を持つのに hasSuru/hasCycle 宣言が無い")
+            cs = [r.get("count") for r in rows if isinstance(r, dict)]
+            if all(isinstance(c, int) and not isinstance(c, bool) for c in cs) and cs:
+                if is_cycle and sorted(cs) != list(range(1, len(cs) + 1)):
+                    out.append(f"{slug}: checker.{mk} の周期countが1..{len(cs)}の連番でない")
+                cap = conf.get("suruMax") if isinstance(conf.get("suruMax"), int) else (
+                    None if is_cycle else 99)
+                if isinstance(cap, int) and max(cs) > cap:
+                    out.append(f"{slug}: checker.{mk} に上限({cap})を超える count がある")
+            if isinstance(conf.get("byRate"), dict) and conf["byRate"]:
+                out.append(f"{slug}: checker.{mk} の直下byRateはUIが使わない（行に持つこと）")
         units = rows if rows else [conf]
         if not rows and not has_value(conf) and not any(
                 has_value(rv) for rv in (conf.get("byRate") or {}).values()):
@@ -409,8 +432,10 @@ def _audit_checker_contract(slug: str, ck) -> list[str]:
 
 def _audit_modes_config_match(slug: str, ck) -> list[str]:
     """★宣言(modes)と実config の完全一致★（タブは出るが中身が無い状態を独立に止める）。"""
-    if not isinstance(ck, dict) or not isinstance(ck.get("modes"), list):
+    if not isinstance(ck, dict):
         return []
+    if not isinstance(ck.get("modes"), list) or not ck["modes"]:
+        return [f"{slug}: checker.modes 宣言が無い（表示するmodeが特定できない）"]
     declared = {m["key"] for m in ck["modes"]
                 if isinstance(m, dict) and isinstance(m.get("key"), str)}
     configs = {k for k, v in ck.items() if k not in _CK_TOP and isinstance(v, dict)}

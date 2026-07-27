@@ -33,6 +33,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import re
 import sys
 
@@ -164,9 +165,10 @@ def _valid_date(v) -> bool:
         return False
 # ホスト名は厳格に（.example / example..com / -example / example- を弾く）。
 # クエリ・フラグメントは「受理してから除去する」のが仕様なので、ここでは許容する。
+# 各ラベルが英数字で始まり英数字で終わること（-example / example- / a..b を拒否）
+_HOST_LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9\-]{0,61}[A-Za-z0-9])?"
 _URL_PAT = re.compile(
-    r"^https://(?![.-])[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}(?::\d{1,5})?"
-    r"(?:[/?#][^\s]*)?$")
+    r"^https://(?:" + _HOST_LABEL + r"\.)+[A-Za-z]{2,}(?::\d{1,5})?(?:[/?#][^\s]*)?$")
 
 
 class GateError(Exception):
@@ -303,7 +305,7 @@ def assert_invariants(g: dict) -> None:
 
 # ---------------------------------------------------------------- 原子の分類
 
-_ZERO_WIDTH = re.compile(r"[​-‏  ﻿­]")
+_ZERO_WIDTH = re.compile("[​-‏‪-‮⁠-⁤﻿­᠎]")
 _TAG = re.compile(r"<[^>]*>")
 _MD = re.compile(r"[*_`~]")
 
@@ -609,10 +611,12 @@ def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
     if has_cycle_flag and suru_rows is not None:
         return f"mode({mode_key})は hasCycle 宣言だが suru[] を持つ（宣言と実体の不一致）"
     # ★逆方向も検査（行を持つのに宣言が無い＝UIが回数入力欄を出さない）★
-    if suru_rows is not None and not has_suru_flag and mode_key not in ("suru", "through"):
-        return f"mode({mode_key})は suru[] を持つのに hasSuru 宣言が無い"
-    if cycle_rows is not None and not has_cycle_flag and mode_key != "cycle":
-        return f"mode({mode_key})は cycle[] を持つのに hasCycle 宣言が無い"
+    # ★mode名だけの例外を廃止★ UIは宣言フラグだけで入力欄を出すため、
+    #   宣言が無いと行はあるのにカウンターが出ず、初期行以外を選べない。
+    if suru_rows is not None and not has_suru_flag:
+        return f"mode({mode_key})は suru[] を持つのに hasSuru 宣言が無い（UIに入力欄が出ない）"
+    if cycle_rows is not None and not has_cycle_flag:
+        return f"mode({mode_key})は cycle[] を持つのに hasCycle 宣言が無い（UIに入力欄が出ない）"
     if suru_rows is not None and cycle_rows is not None:
         return f"mode({mode_key})が suru[] と cycle[] の両方を持つ（軸が一意でない）"
 
@@ -659,6 +663,11 @@ def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
                     f"回数ごとの閾値は suru[]/cycle[] の行として持つこと")
         # 閾値も行も無い（noteだけ等）＝判定できないのに表示対象になる
         return f"回数系mode({mode_key})に判定材料が無い（閾値も行も持たない）"
+
+    # ★回数系modeの直下 byRate はUIが参照しない（getConfigが選択行だけを返すため）★
+    if isinstance(conf.get("byRate"), dict) and conf["byRate"]:
+        return (f"回数系mode({mode_key})の直下に byRate がある"
+                f"（UIは行のbyRateしか使わないため反映されない）")
 
     # --- 入力単位は必須（欠落を素通りさせない）---
     if not _is_str(unit) or unit not in ("G", "g"):
@@ -718,7 +727,7 @@ def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
             #   （実データ sao/bandori/hanma_baki が count=1 始まり）。
             #   ここで見るべきは「行が昇順で、上限を超える到達不能行が無いこと」だけ。
             pass
-    cap = conf.get("suruMax")
+    cap = conf.get("suruMax") if _is_num(conf.get("suruMax")) else (99 if not is_cycle else None)
     if _is_num(cap) and counts and max(counts) > cap:
         return (f"回数系mode({mode_key})の行に上限({cap})を超える count={max(counts)} がある"
                 f"＝UIで選べず到達できない")
@@ -811,8 +820,8 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
             if not _types_ok(ctx, r, f"checker.exchangeRates[{i}]", {"key": str, "label": str}):
                 return None
             e = {"key": r["key"]}
-            if not _is_str(r.get("label")) or not r["label"].strip():
-                ctx.reject(f"checker.exchangeRates[{i}].label", "交換率の表示ラベルが無い")
+            if not _is_str(r.get("label")) or not normalize_atom([r["label"]]).strip():
+                ctx.reject(f"checker.exchangeRates[{i}].label", "交換率の表示ラベルが無い/表示すると空")
                 return None
             if _is_str(r.get("label")):
                 if not ctx.atom([r["label"]], f"checker.exchangeRates[{i}].label"):
@@ -822,7 +831,8 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
             if any(x["key"] == e["key"] for x in rates):
                 ctx.reject(f"checker.exchangeRates[{i}]", "交換率のkeyが重複している")
                 return None
-            if any(x.get("label") == e.get("label") for x in rates):
+            if any(normalize_atom([x.get("label") or ""]) == normalize_atom([e.get("label") or ""])
+                   for x in rates):
                 ctx.reject(f"checker.exchangeRates[{i}].label", "交換率の表示ラベルが重複している")
                 return None
             rates.append(e)
@@ -863,8 +873,8 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
             if m["key"] not in allowed_modes:
                 continue                 # 表示対象でないmodeの宣言は出さない（正常）
             e = {"key": m["key"]}
-            if not _is_str(m.get("label")) or not m["label"].strip():
-                ctx.reject(f"checker.modes[{i}].label", "modeの表示ラベルが無い")
+            if not _is_str(m.get("label")) or not normalize_atom([m["label"]]).strip():
+                ctx.reject(f"checker.modes[{i}].label", "modeの表示ラベルが無い/表示すると空")
                 return None
             if _is_str(m.get("label")):
                 if not ctx.atom([m["label"]], f"checker.modes[{i}].label"):
@@ -874,7 +884,8 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
             for flag in ("hasSuru", "hasCycle"):
                 if isinstance(m.get(flag), bool):
                     e[flag] = m[flag]
-            if any(x.get("label") == e.get("label") for x in kept):
+            if any(normalize_atom([x.get("label") or ""]) == normalize_atom([e.get("label") or ""])
+                   for x in kept):
                 ctx.reject(f"checker.modes[{i}].label", "modeの表示ラベルが重複している")
                 return None
             kept.append(e)
@@ -1302,9 +1313,13 @@ def _project_machine(machine: dict, gates: dict, ctx: _Ctx) -> dict:
             out["aliases"] = kept
     lim = machine.get("limit")
     if _is_num(lim):
+        if not (math.isfinite(lim) and lim >= 0 and float(lim) == int(lim)):
+            ctx.reject("limit", "limitが0以上の整数でない（UIの入力上限が壊れる）")
+            return out
         out["limit"] = lim
     elif isinstance(lim, dict):
-        if not all(_ok_key(k) and _is_num(v) for k, v in lim.items()):
+        if not all(_ok_key(k) and _is_num(v) and float(v) == int(v) and v >= 0
+                   and math.isfinite(v) for k, v in lim.items()):
             ctx.reject("limit", "limit辞書に不正なキーまたは非数値がある")
             return out
         if lim:
@@ -1850,7 +1865,7 @@ def selftest() -> int:
         t(f"★回数系modeが直下に閾値を持てば止める（{label}）",
           any("入力軸と判定軸の食い違い" in e["reason"] for e in audit_view(
               {**base, "checker_modes": {"suru": "STRUCT_OK"},
-               "checker": {"unit": "G", "modes": [{"key": "suru", "label": "suru"}],
+               "checker": {"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
                            "suru": {"good": bad_val}}})["errors"]))
     t("　停止マーカーを消しても止まる（マーカー非依存）",
       any("入力軸と判定軸の食い違い" in e["reason"] for e in audit_view(
@@ -1859,7 +1874,7 @@ def selftest() -> int:
                        "through": {"excellent": 4, "good": 3, "caution": 2}}})["errors"]))
     t("　正しい二軸構造（回数ごとのG数）は通す",
       publish_view({**base, "checker_modes": {"suru": "STRUCT_OK"},
-                    "checker": {"unit": "G", "modes": [{"key": "suru", "label": "suru"}],
+                    "checker": {"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
                                 "suru": {"suru": [{"count": 1, "good": 600}]}}}
                    )["gates"]["checker"] is True)
 
@@ -1870,31 +1885,31 @@ def selftest() -> int:
                                 "checker": ck})["errors"])
 
     t("★軸契約: 直下閾値＋suru[] の併存 → 停止",
-      _axis_stops({"unit": "G", "modes": [{"key": "suru", "label": "suru"}],
+      _axis_stops({"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
                    "suru": {"good": 4, "suru": [{"count": 1, "good": 600}]}}))
     t("★軸契約: unit='回' ＋ G数の行 → 停止",
-      _axis_stops({"unit": "回", "modes": [{"key": "suru", "label": "suru"}],
+      _axis_stops({"unit": "回", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
                    "suru": {"suru": [{"count": 1, "good": 600}]}}))
     t("★軸契約: count 欠落 → 停止",
-      _axis_stops({"unit": "G", "modes": [{"key": "suru", "label": "suru"}],
+      _axis_stops({"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
                    "suru": {"suru": [{"good": 600}]}}))
     for rows, label in (([{"count": 1, "good": 600}, {"count": 1, "good": 500}], "重複"),
                         ([{"count": 2, "good": 600}, {"count": 1, "good": 500}], "降順"),
                         ([{"count": 1.5, "good": 600}], "小数"),
                         ([{"count": -1, "good": 600}], "負数")):
         t(f"★軸契約: count {label} → 停止",
-          _axis_stops({"unit": "G", "modes": [{"key": "suru", "label": "suru"}], "suru": {"suru": rows}}))
+          _axis_stops({"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}], "suru": {"suru": rows}}))
     t("★軸契約: key='at'でも hasSuru宣言＋直下閾値 → 停止",
       _axis_stops({"unit": "G", "modes": [{"key": "at", "hasSuru": True}],
                    "at": {"good": 4}}, {"at": "STRUCT_OK"}))
     # Codex 12巡目の指定反例
     t("★軸契約: 入力単位の欠落 → 停止",
-      _axis_stops({"modes": [{"key": "suru", "label": "suru"}], "suru": {"suru": [{"count": 1, "good": 600}]}}))
+      _axis_stops({"modes": [{"key": "suru", "label": "スルー", "hasSuru": True}], "suru": {"suru": [{"count": 1, "good": 600}]}}))
     t("★軸契約: count が小数表記(1.0) → 停止",
-      _axis_stops({"unit": "G", "modes": [{"key": "suru", "label": "suru"}],
+      _axis_stops({"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
                    "suru": {"suru": [{"count": 1.0, "good": 600}]}}))
     t("★軸契約: 行にG数の判定材料が無い（countだけ）→ 停止",
-      _axis_stops({"unit": "G", "modes": [{"key": "suru", "label": "suru"}],
+      _axis_stops({"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
                    "suru": {"suru": [{"count": 1}]}}))
     t("★軸契約: 宣言と実体の不一致（hasSuru宣言なのにcycle[]）→ 停止",
       _axis_stops({"unit": "G", "modes": [{"key": "suru", "hasCycle": True}],
@@ -1903,7 +1918,7 @@ def selftest() -> int:
       _axis_stops({"unit": "G", "modes": [{"key": "suru", "hasSuru": True, "hasCycle": True}],
                    "suru": {"suru": [{"count": 1, "good": 600}]}}))
     t("★軸契約: suru[]とcycle[]の併存 → 停止",
-      _axis_stops({"unit": "G", "modes": [{"key": "suru", "label": "suru"}],
+      _axis_stops({"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
                    "suru": {"suru": [{"count": 1, "good": 600}],
                             "cycle": [{"count": 1, "good": 500}]}}))
     t("　行のbyRateにG数があれば判定材料として認める",
@@ -2059,6 +2074,36 @@ def selftest() -> int:
                                          "suru": [{"count": 1, "good": 600},
                                                   {"count": 2, "good": 500}]}}}
                    )["gates"]["checker"] is True)
+
+    # ===== Codex 19巡目の反例（回帰テスト）=====
+    b19 = {"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
+           "suru": {"suruMax": 3, "suru": [{"count": 0, "good": 600}]}}
+    ax19 = lambda ck, modes=None: bool(audit_view(
+        {**base, "checker_modes": modes or {"suru": "STRUCT_OK"}, "checker": ck})["errors"])
+    t("★19-1: mode名がsuruでも宣言フラグが無ければ停止",
+      ax19({**b19, "modes": [{"key": "suru", "label": "スルー"}]}))
+    t("★19-2: suruMax未指定なら既定上限99を超える行は停止",
+      ax19({**b19, "suru": {"suru": [{"count": 100, "good": 600}]}}))
+    t("★19-3: 回数系modeの直下byRateは停止（UIが使わない）",
+      ax19({**b19, "exchangeRates": [{"key": "eq56", "label": "5.6枚"}],
+            "suru": {"suruMax": 3, "byRate": {"eq56": {"good": 600}},
+                     "suru": [{"count": 0, "byRate": {"eq56": {"good": 600}}}]}}))
+    t("★19-5: 表示すると同じになるラベルは重複として停止",
+      ax19({"unit": "G", "modes": [{"key": "a", "label": "通常"},
+                                   {"key": "b", "label": "通​常"}],
+            "a": {"good": 600}, "b": {"good": 500}}, {"a": "STRUCT_OK", "b": "STRUCT_OK"}))
+    t("　表示すると空になるラベルも停止",
+      ax19({**b19, "modes": [{"key": "suru", "label": "⁠", "hasSuru": True}]}))
+    t("★19-6: U+2060だけの機種名も停止",
+      bool(audit_view({**base, "name": "⁠⁠"})["errors"]))
+    t("★19-7: ホスト名の不正（example-.com / a.-b.com）を停止",
+      bool(audit_view({**base, "sources": [{"url": "https://example-.com/x"}]})["errors"])
+      and bool(audit_view({**base, "sources": [{"url": "https://a.-b.com/x"}]})["errors"]))
+    t("★19-8: machine.limit が負・小数なら停止",
+      bool(audit_view({**base, "limit": -1})["errors"])
+      and bool(audit_view({**base, "limit": 1.5})["errors"]))
+    t("★19-12: 直下が非dictでmodeDataが正常でも停止",
+      ax19({**b19, "suru": "壊れた値", "modeData": {"suru": {"good": 600}}}))
 
     # ===== 不変条件 =====
     for bad, label in (({"public": False, "index": True}, "index⇒public"),
