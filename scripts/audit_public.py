@@ -90,7 +90,15 @@ _MD = re.compile(r"[*_`~]")
 _KANJI = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6}
 _ENUM = re.compile(r"設定\s*" + _SET1 + r"(?:\s*[・、,／/･]\s*(?:設定\s*)?" + _SET1 + r"){1,5}")
 _ONE = re.compile(_SET1)
-_NUM = re.compile(r"[0-9０-９]")
+# ★数値の表記は算用数字だけではない（Codex 22巡目 #8）★
+#   漢数字・丸数字・上付き/下付き・ローマ数字も数値情報として扱う。
+_NUM = re.compile(
+    r"[0-9０-９]"
+    r"|[一二三四五六七八九十百千万零壱弐参拾]"
+    r"|[①-⓿]|[⁰-₟]|[Ⅰ-ⅿ]")
+# 同定子・見出しは数値面に数えない（機種名の「絆2」「SAO Ⅱ」は判断に使う数値ではない）
+_NOT_A_SURFACE = ("slug", "name", "seo", "aliases", "release_date", "confirmed_at",
+                  "disclaimer", "display_requirements", "sources")
 
 
 # ★不可視文字はカテゴリで落とす（列挙だと U+2066 等の取りこぼしが出る・Codex 21巡目 #7）★
@@ -782,8 +790,7 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
         #   （1面でも surfaces から抜けると、その面に目安表示が付かない）
         if isinstance(dr.get("surfaces"), list):
             actual = {k for k, v in pub.items()
-                      if k not in ("slug", "release_date", "confirmed_at", "disclaimer",
-                                   "display_requirements", "sources")
+                      if k not in _NOT_A_SURFACE
                       and _NUM.search(as_displayed(json.dumps(v, ensure_ascii=False)))}
             if isinstance(pub.get("sources"), list) and any(
                     isinstance(s, dict) and _NUM.search(str(s.get("title", "")))
@@ -821,9 +828,7 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
         if any(_asserts_missing_setting(v) for v in variants):
             problems.append(f"{slug}: 設定段階の非存在断定 {path}")
         if (_NUM.search(shown)
-                and not path.startswith(("machine.slug", "machine.release_date",
-                                         "machine.confirmed_at", "machine.disclaimer",
-                                         "machine.display_requirements"))
+                and not path.startswith(tuple(f"machine.{k}" for k in _NOT_A_SURFACE))
                 and not (path.startswith("machine.sources") and not path.endswith(".title"))):
             has_number = True
 

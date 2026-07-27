@@ -50,7 +50,9 @@ EXPECTED_PUBLIC = 120
 #   天井1100Gを超え、早見表が「1200G〜（天井1100G）」という到達できない行を作るため。
 #   数値の作り直しは Phase 2 の出典検証の仕事なので、いまは止めたままにする）。
 EXPECTED_CHECKER_MACHINES = 110
-EXPECTED_CHECKER_MODES = 200
+#   2026-07-27（22巡目）: 0スルーの行が無い suru mode を止めたため 200 → 197
+#   （sao / bandori / hanma_baki。UIは0スルー入力を1スルーの閾値で判定していた）
+EXPECTED_CHECKER_MODES = 197
 
 # ★公開slugの固定集合★ 件数だけだと「1件消えて1件増える」相殺を見逃すため、
 #   集合そのものを持つ。機種を増減したら意図した変更として更新すること。

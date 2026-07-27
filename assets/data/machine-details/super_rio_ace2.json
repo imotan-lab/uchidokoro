@@ -73,44 +73,60 @@
       "title": "設定示唆まとめ",
       "rows": [
         {
-          "title": "終了画面：リオ",
-          "badge": "弱",
-          "value": "奇数設定期待度アップ"
+          "trigger": "終了画面：リオ",
+          "hint": {
+            "text": "奇数設定期待度アップ",
+            "badge": "weak"
+          }
         },
         {
-          "title": "終了画面：ミント",
-          "badge": "弱",
-          "value": "偶数設定期待度アップ"
+          "trigger": "終了画面：ミント",
+          "hint": {
+            "text": "偶数設定期待度アップ",
+            "badge": "weak"
+          }
         },
         {
-          "title": "終了画面：リナ",
-          "badge": "中",
-          "value": "高設定期待度アップ"
+          "trigger": "終了画面：リナ",
+          "hint": {
+            "text": "高設定期待度アップ",
+            "badge": "mid"
+          }
         },
         {
-          "title": "獲得枚数：246枚",
-          "badge": "中",
-          "value": "偶数設定濃厚"
+          "trigger": "獲得枚数：246枚",
+          "hint": {
+            "text": "偶数設定濃厚",
+            "badge": "mid"
+          }
         },
         {
-          "title": "獲得枚数：456枚",
-          "badge": "強",
-          "value": "設定4以上濃厚"
+          "trigger": "獲得枚数：456枚",
+          "hint": {
+            "text": "設定4以上濃厚",
+            "badge": "strong"
+          }
         },
         {
-          "title": "獲得枚数：666枚",
-          "badge": "強",
-          "value": "設定6濃厚"
+          "trigger": "獲得枚数：666枚",
+          "hint": {
+            "text": "設定6濃厚",
+            "badge": "strong"
+          }
         },
         {
-          "title": "ケロットトロフィー：銀",
-          "badge": "強",
-          "value": "設定3以上濃厚"
+          "trigger": "ケロットトロフィー：銀",
+          "hint": {
+            "text": "設定3以上濃厚",
+            "badge": "strong"
+          }
         },
         {
-          "title": "ケロットトロフィー：虹",
-          "badge": "強",
-          "value": "設定6濃厚"
+          "trigger": "ケロットトロフィー：虹",
+          "hint": {
+            "text": "設定6濃厚",
+            "badge": "strong"
+          }
         }
       ]
     },

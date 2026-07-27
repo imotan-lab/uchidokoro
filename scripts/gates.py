@@ -346,6 +346,25 @@ _TAG_OK = re.compile(r"<\s*/?\s*(?:%s)\s*/?\s*>" % "|".join(_ALLOWED_TAGS), re.I
 _DANGEROUS_ATTR = re.compile(r"(?:on[a-z]+\s*=|javascript:|data:text/html|<\s*script)", re.I)
 
 
+# ★公開文字列に含めてはいけない文字（除去ではなく拒否）★
+#   Cf(書式・双方向制御) / Cc(制御) / Co(私用) / Cs(サロゲート) / Zl,Zp(行・段落区切り)。
+#   通常の日本語記事にこれらが入る理由はない。
+_INVISIBLE_CATS = ("Cf", "Cc", "Co", "Cs", "Zl", "Zp")
+
+
+def invisible_unsafe(text: str) -> str | None:
+    """不可視・方向制御文字が含まれていれば理由を返す（原文は返さない）。"""
+    if not _is_str(text):
+        return None
+    import unicodedata as _u
+    for ch in text:
+        cat = _u.category(ch)
+        if cat in _INVISIBLE_CATS and ch not in ("\n", "\t"):
+            return (f"不可視・方向制御文字を含む（U+{ord(ch):04X} 分類{cat}）"
+                    f"＝画面上の語順が入れ替わり得る")
+    return None
+
+
 def html_unsafe(text: str) -> str | None:
     """公開してよいHTMLか。危険なら理由を返す（無害化ではなく拒否＝fail-closed）。
 
@@ -441,7 +460,13 @@ class _Ctx:
         """表示原子を判定する。落ちた場合は原子ごと出さない。"""
         # ★危険なHTMLは無害化せず拒否（innerHTML へ入るため）★
         for p_ in (parts if isinstance(parts, (list, tuple)) else [parts]):
-            why = html_unsafe(p_) if _is_str(p_) else None
+            if not _is_str(p_):
+                continue
+            # ★不可視・方向制御文字は「除いて判定」ではなく、含まれた時点で拒否★
+            #   （Codex 22巡目 #2）判定用に除去しても公開文字列には残るため、
+            #   ブラウザ上で U+202E などにより見た目の語順が逆転し、
+            #   「スラプが値待期」が「期待値がプラス」と読める形になり得る。
+            why = invisible_unsafe(p_) or html_unsafe(p_)
             if why:
                 self.reject(path, why)
                 return False
@@ -642,6 +667,30 @@ def _judgeable(conf: dict) -> bool:
     return _is_num(conf.get("good")) and _is_num(conf.get("excellent"))
 
 
+def _rate_inheritance_gap(conf: dict, rate_keys, where: str,
+                          default_rate=None) -> str | None:
+    """★交換率別の値があるのに一部の交換率が欠けている状態を止める★（Codex 22巡目 #6）
+
+    UIは byRate に該当キーが無ければ mode直下の値へ落ちる。これが「意図した継承」なのか
+    「入力漏れ」なのかはデータから区別できない。
+
+    ただし1つだけ例外を認める：**既定の交換率**（defaultRate）が byRate に無い場合は、
+    「mode直下の値が既定の交換率の値である」という取り決めとして扱う。実データでは
+    sao / bandori / hanma_baki の3機種がこの形（既定=equal、直下が等価の値）。
+    それ以外の交換率が欠けていれば入力漏れとして止める。
+    """
+    by = conf.get("byRate") if isinstance(conf.get("byRate"), dict) else {}
+    if not by or not rate_keys:
+        return None
+    missing = [k for k in rate_keys if not isinstance(by.get(k), dict)]
+    if not missing:
+        return None
+    if missing == [default_rate]:
+        return None          # 既定の交換率 ＝ mode直下の値（取り決め）
+    return (f"{where} は交換率別の値を持つのに {missing} が無い"
+            f"（画面では別の交換率の値で判定される）")
+
+
 def _judgeable_all_rates(conf: dict, rate_keys) -> bool:
     """★交換率を選び直しても判定材料が揃っているか★（Codex 21巡目 #2）
 
@@ -661,6 +710,21 @@ def _judgeable_all_rates(conf: dict, rate_keys) -> bool:
             return False
     # byRate 側に宣言外のキーがあっても、それを選べる実装ではないので見ない
     return True
+
+
+def _threshold_int(conf: dict, where: str, unit) -> str | None:
+    """★入力単位がG系なら閾値も整数であること★（Codex 22巡目 #7）
+
+    早見表は小数をそのまま「600.5〜」と表示するが、利用者の入力は parseInt される。
+    表示と判定がずれるので、小数は公開しない。
+    """
+    if not (_is_str(unit) and unit in ("G", "g")):
+        return None
+    for k in ("caution", "good", "target", "excellent"):
+        v = conf.get(k)
+        if _is_num(v) and float(v) != int(v):
+            return f"{where} の {k}={v} が整数でない（入力は整数に丸められるため判定がずれる）"
+    return None
 
 
 def _threshold_sanity(conf: dict, where: str) -> str | None:
@@ -686,6 +750,33 @@ def _threshold_sanity(conf: dict, where: str) -> str | None:
 
 
 _SENTINEL = 99999
+
+
+def _row_coverage_gap(mode_key: str, conf: dict) -> str | None:
+    """★入力できる回数がすべて行で覆われているか★（Codex 22巡目 #5）
+
+    machine.html の getConfig は、要求した回数の行が無ければ
+    「その回数以下で最大の行」→無ければ「先頭行」へ落とす。
+    したがって 0スルーの行が無いデータで 0 を入力すると、1スルーの閾値で
+    「目安に到達」と表示される。確認していない回数を別の回数の値で判定させない。
+
+    - スルー: 0 から suruMax（無ければ最大count）まで、欠番があれば止める
+    - 周期  : 1 から最大count まで連番（既存の連番検査と同じ範囲）
+    """
+    for field, first in (("suru", 0), ("cycle", 1)):
+        rows = conf.get(field)
+        if not isinstance(rows, list) or not rows:
+            continue
+        counts = [r.get("count") for r in rows if isinstance(r, dict)]
+        if not all(isinstance(c, int) and not isinstance(c, bool) for c in counts):
+            return None          # 型の問題は別の検査が止める
+        top = conf.get("suruMax") if field == "suru" and _is_num(conf.get("suruMax"))             else max(counts)
+        want = set(range(first, int(top) + 1))
+        missing = sorted(want - set(counts))
+        if missing:
+            return (f"mode({mode_key})の{field}に回数 {missing} の行が無い"
+                    f"（その回数を入力すると別の回数の閾値で判定される）")
+    return None
 
 
 def _sentinel_protocol(machine: dict, mode_key: str, conf: dict) -> str | None:
@@ -756,7 +847,7 @@ def _limit_vs_threshold(machine: dict, checker: dict, mode_key: str, conf: dict)
 
 def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
                    declared_flags: dict | None = None,
-                   rate_keys=None) -> str | None:
+                   rate_keys=None, default_rate=None) -> str | None:
     """入力軸と判定軸の食い違いを、閾値の大小ではなく**構造**で検出する。
 
     ★実データで確認した判別条件（2026-07-27）★
@@ -805,10 +896,13 @@ def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
             return (f"mode({mode_key})が回数の行だけを持ち、G数の閾値を持たない"
                     f"＝入力軸が判別できない")
         # ★判定材料が無いmodeを公開しない（noteだけのタブを出さない）★
+        gap = _rate_inheritance_gap(conf, rate_keys, f"mode({mode_key})", default_rate)
+        if gap:
+            return gap
         if not _judgeable_all_rates(conf, rate_keys):
             return (f"mode({mode_key})に判定の主軸(good/excellent)が無い交換率がある"
                     f"（その交換率を選ぶと判定が確定しない）")
-        bad = _threshold_sanity(conf, mode_key)
+        bad = _threshold_sanity(conf, mode_key) or _threshold_int(conf, mode_key, unit)
         if bad:
             return bad
         by = conf.get("byRate") if isinstance(conf.get("byRate"), dict) else {}
@@ -819,7 +913,9 @@ def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
                     if bad:
                         return bad
                     # ★UIは mode直下に byRate を重ねる。重ねた後の順序も検査★
-                    bad = _threshold_sanity({**conf, **rv}, f"{mode_key}.byRate.{rk}(適用後)")
+                    _eff = {**conf, **rv}
+                    bad = (_threshold_sanity(_eff, f"{mode_key}.byRate.{rk}(適用後)")
+                           or _threshold_int(_eff, f"{mode_key}.byRate.{rk}(適用後)", unit))
                     if bad:
                         return bad
         return None
@@ -852,7 +948,8 @@ def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
     for i, row in enumerate(rows if isinstance(rows, list) else []):
         if not isinstance(row, dict):
             continue
-        bad = _threshold_sanity(row, f"{mode_key}[{i}]")
+        bad = (_threshold_sanity(row, f"{mode_key}[{i}]")
+               or _threshold_int(row, f"{mode_key}[{i}]", unit))
         if bad:
             return bad
         for rk, rv in (row.get("byRate") or {}).items():
@@ -861,7 +958,9 @@ def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
             bad = _threshold_sanity(rv, f"{mode_key}[{i}].byRate.{rk}")
             if bad:
                 return bad
-            bad = _threshold_sanity({**row, **rv}, f"{mode_key}[{i}].byRate.{rk}(適用後)")
+            _eff = {**row, **rv}
+            bad = (_threshold_sanity(_eff, f"{mode_key}[{i}].byRate.{rk}(適用後)")
+                   or _threshold_int(_eff, f"{mode_key}[{i}].byRate.{rk}(適用後)", unit))
             if bad:
                 return bad
 
@@ -878,6 +977,10 @@ def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
             return f"回数系mode({mode_key})の行[{i}]の count={cv} が0以上でない"
         counts.append(cv)
         # ★各行にG数の判定材料が最低1つ必要（countだけの行は判定できない）★
+        gap = _rate_inheritance_gap(row, rate_keys, f"mode({mode_key})の行[{i}]",
+                                    default_rate)
+        if gap:
+            return gap
         if not _judgeable_all_rates(row, rate_keys):
             return (f"回数系mode({mode_key})の行[{i}]に判定の主軸(good/excellent)が無い交換率がある"
                     f"（その交換率を選ぶと判定が確定しない）")
@@ -1101,13 +1204,21 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx,
         # ★宣言された交換率の集合を渡す（どの交換率を選んでも判定できることを条件にする）★
         _rate_keys = [r.get("key") for r in (checker.get("exchangeRates") or [])
                       if isinstance(r, dict) and isinstance(r.get("key"), str)]
-        axis = _axis_conflict(key, conf, checker.get("unit"), _decl, _rate_keys)
+        axis = _axis_conflict(key, conf, checker.get("unit"), _decl, _rate_keys,
+                              checker.get("defaultRate"))
         if axis:
             ctx.reject(f"checker.{key}", axis)
             continue
         sent = _sentinel_protocol(machine_ref or {}, key, conf)
         if sent:
             ctx.reject(f"checker.{key}", sent)
+            continue
+        gap = _row_coverage_gap(key, conf)
+        if gap:
+            # 入力できる回数の一部に「その回数の行」が無い。UIは近い行へ落とすため、
+            # 確認していない回数を別の回数の閾値で判定してしまう（Codex 22巡目 #5）。
+            # データの型は壊れていないので、その mode を出さない扱いにする。
+            ctx.content_drop(f"checker.{key}", gap)
             continue
         bad = _limit_vs_threshold(machine_ref or {}, checker, key, conf)
         if bad:
@@ -1396,6 +1507,14 @@ def _project_simple_rows(rows, ctx: _Ctx, path: str, section_title: str):
             vals.append(val)
         if not ok:
             return None                   # セル不正は既に reject 済み
+        # ★UIは先頭2セルしか描かない（Codex 22巡目 #4）★
+        #   machine.html / build_machine_pages.py とも row[0], row[1] だけを出す。
+        #   3セル目に「未確認」のような但し書きがあると、それだけが黙って消える。
+        if len(vals) > 2:
+            ctx.reject(f"{path}[{ri}]",
+                       f"表の行が3セル以上（画面は先頭2セルしか描かないため"
+                       f"{len(vals) - 2}セルが黙って消える）")
+            return None
         if not vals:
             continue
         if not ctx.atom([section_title, *texts], f"{path}[{ri}]"):
@@ -1442,6 +1561,12 @@ _MACHINE_TYPES = {
     "aliases": list, "sources": list, "seo": dict, "original": dict,
     "strategyByRate": dict, "checker": dict,
 }
+# authoring 側に存在してよいキー（公開射影に出さないものも含む）。
+#   lifecycle/checker_modes … Phase 1 の状態軸
+#   status/limit … 旧形式の状態と入力上限
+_MACHINE_KNOWN = set(_MACHINE_TYPES) | {
+    "limit", "status", "lifecycle", "checker_modes",
+}
 
 
 def _project_machine(machine: dict, gates: dict, ctx: _Ctx) -> dict:
@@ -1450,6 +1575,13 @@ def _project_machine(machine: dict, gates: dict, ctx: _Ctx) -> dict:
     # ★機種フィールドの既知型不正は構造エラーにする（黙って落とさない）★
     if not _types_ok(ctx, machine, "machine", _MACHINE_TYPES):
         return out
+    # ★未知フィールドを黙って捨てない（Codex 22巡目 #3）★
+    #   例:「strategy_note: 誤記のため公開禁止」のような注記が黙って消え、
+    #   strategy だけが表示される事故を防ぐ。authoring 用の既知キーは列挙する。
+    for k in machine:
+        if k not in _MACHINE_KNOWN:
+            ctx.reject(f"machine.{k}", "未知フィールド（公開対象か判断できない）")
+            return out
     lim = machine.get("limit")
     if "limit" in machine and lim is not None and not (_is_num(lim) or isinstance(lim, dict)):
         ctx.reject("machine.limit", "limitが数値でも辞書でもない")
@@ -1638,7 +1770,16 @@ def _project_detail(detail, gates: dict, ctx: _Ctx) -> dict:
 
 # ---------------------------------------------------------------- 公開API
 
-_NUM_IN_TEXT = re.compile(r"[0-9０-９]")
+# ★数値の表記は算用数字だけではない（Codex 22巡目 #8）★
+#   漢数字・丸数字・上付き/下付き数字・ローマ数字も「数値情報」として扱う。
+#   これを取りこぼすと「天井九百九十九G」に目安ラベルが付かない。
+_NUM_IN_TEXT = re.compile(
+    r"[0-9０-９]"                       # 算用数字（半角・全角）
+    r"|[一二三四五六七八九十百千万零壱弐参拾]"   # 漢数字
+    r"|[①-⓿]"                  # 丸数字・囲み数字
+    r"|[⁰-₟]"                  # 上付き・下付き数字
+    r"|[Ⅰ-ⅿ]"                  # ローマ数字
+)
 
 
 def _numeric_surfaces(pm: dict, pd: dict) -> list[str]:
@@ -1657,8 +1798,13 @@ def _numeric_surfaces(pm: dict, pd: dict) -> list[str]:
         return False
 
     for k, v in pm.items():
-        if k in ("slug", "release_date", "confirmed_at", "disclaimer",
-                 "display_requirements"):
+        # ★同定子・見出しは対象外★
+        #   機種名やSEOタイトルに含まれる数字は「絆2」「SAO Ⅱ」のような名前の一部であって
+        #   判断に使う数値ではない。ここを数値面にすると機種名の隣に目安ラベルを
+        #   求めることになり、意味が合わない（Codex 22巡目 #8 の対応で漢数字・
+        #   ローマ数字も拾うようになったため、除外を明示する）。
+        if k in ("slug", "name", "seo", "aliases", "release_date", "confirmed_at",
+                 "disclaimer", "display_requirements"):
             continue
         if k == "sources":
             # URL・確認日は対象外だが、出典タイトルの数値は表示されるので対象にする
@@ -2097,7 +2243,7 @@ def selftest() -> int:
     t("　正しい二軸構造（回数ごとのG数）は通す",
       publish_view({**base, "checker_modes": {"suru": "STRUCT_OK"},
                     "checker": {"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
-                                "suru": {"suru": [{"count": 1, "good": 600, "excellent": 800}]}}}
+                                "suru": {"suru": [{"count": 0, "good": 600, "excellent": 800}]}}}
                    )["gates"]["checker"] is True)
 
     # ★軸契約の完全化（Codex 11巡目の指定反例を全件固定）★
@@ -2148,7 +2294,7 @@ def selftest() -> int:
                     "checker": {"unit": "G",
                                 "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
                                 "exchangeRates": [{"key": "eq56", "label": "5.6枚"}],
-                                "suru": {"suru": [{"count": 1,
+                                "suru": {"suru": [{"count": 0,
                                                    "byRate": {"eq56": {"good": 600,
                                                                        "excellent": 800}}}]}}}
                    )["gates"]["checker"] is True)
@@ -2257,7 +2403,7 @@ def selftest() -> int:
 
     # ===== Codex 18巡目の反例（回帰テスト）=====
     b18 = {"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
-           "suru": {"suruMax": 3, "suru": [{"count": 0, "good": 600, "excellent": 800},
+           "suru": {"suruMax": 1, "suru": [{"count": 0, "good": 600, "excellent": 800},
                                            {"count": 1, "good": 500, "excellent": 700}]}}
     ax18 = lambda ck, modes=None: bool(audit_view(
         {**base, "checker_modes": modes or {"suru": "STRUCT_OK"}, "checker": ck})["errors"])
@@ -2291,18 +2437,27 @@ def selftest() -> int:
       bool(audit_view({**base, "name": "​​"})["errors"]))
     t("★18-12: modeDataと直下で片方が壊れていたら停止",
       ax18({**b18, "modeData": {"suru": "壊れた値"}}))
-    t("　実データ形状（count=1始まり・UIは最浅へフォールバック）は通す",
+    t("★22-5: count=1始まり（0スルーの行が無い）modeは出さない",
       publish_view({**base, "checker_modes": {"suru": "STRUCT_OK"},
                     "checker": {"unit": "G",
                                 "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
-                                "suru": {"suruMax": 6,
+                                "suru": {"suruMax": 2,
                                          "suru": [{"count": 1, "good": 600, "excellent": 800},
+                                                  {"count": 2, "good": 500, "excellent": 700}]}}}
+                   )["gates"]["checker"] is False)
+    t("　0スルーの行があれば通す",
+      publish_view({**base, "checker_modes": {"suru": "STRUCT_OK"},
+                    "checker": {"unit": "G",
+                                "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
+                                "suru": {"suruMax": 2,
+                                         "suru": [{"count": 0, "good": 700, "excellent": 900},
+                                                  {"count": 1, "good": 600, "excellent": 800},
                                                   {"count": 2, "good": 500, "excellent": 700}]}}}
                    )["gates"]["checker"] is True)
 
     # ===== Codex 19巡目の反例（回帰テスト）=====
     b19 = {"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
-           "suru": {"suruMax": 3, "suru": [{"count": 0, "good": 600, "excellent": 800}]}}
+           "suru": {"suruMax": 0, "suru": [{"count": 0, "good": 600, "excellent": 800}]}}
     ax19 = lambda ck, modes=None: bool(audit_view(
         {**base, "checker_modes": modes or {"suru": "STRUCT_OK"}, "checker": ck})["errors"])
     t("★19-1: mode名がsuruでも宣言フラグが無ければ停止",
@@ -2332,7 +2487,7 @@ def selftest() -> int:
 
     # ===== Codex 20巡目の反例（回帰テスト）=====
     b20 = {"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
-           "suru": {"suruMax": 3, "suru": [{"count": 0, "good": 600, "excellent": 800}]}}
+           "suru": {"suruMax": 0, "suru": [{"count": 0, "good": 600, "excellent": 800}]}}
     ax20 = lambda ck, extra=None, modes=None: bool(audit_view(
         {**base, **(extra or {}), "checker_modes": modes or {"suru": "STRUCT_OK"},
          "checker": ck})["errors"])
