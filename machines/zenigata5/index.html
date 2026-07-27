@@ -341,6 +341,7 @@ function resolveMachineSlug() {
   let cycleCount = 1;
   let currentRateKey = null;
   let evModeKey = null;
+  let evHasTable = false;      // この機種で早見表を出すか（設定狙い専用機などは出さない）
 
   function getRateOptions(c) {
     return Array.isArray(c.exchangeRates) ? c.exchangeRates : [];
@@ -500,8 +501,16 @@ function resolveMachineSlug() {
 
   // 早見表のmodeを、指定されたmodeへ揃える（早見表に無いmodeなら何もしない）
   function syncEvMode(modeKey) {
+    const evBlock = document.getElementById("evTableBlock");
     const radio = document.querySelector(`input[name="evMode"][value="${modeKey}"]`);
-    if (!radio) return;                  // スルー・周期は早見表に出さないので対象外
+    if (!radio) {
+      // ★早見表に無いmode（スルー・周期）を選んでいる間は、早見表ごと隠す★
+      //   出したままだと「チェッカーはスルー・早見表は通常」という
+      //   食い違った画面になる（前のmodeの表が残る）。
+      if (evBlock && evHasTable) evBlock.classList.add("is-hidden");
+      return;
+    }
+    if (evBlock && evHasTable) evBlock.classList.remove("is-hidden");
     if (!radio.checked) radio.checked = true;
     if (evModeKey !== modeKey) {
       evModeKey = modeKey;
@@ -531,6 +540,7 @@ function resolveMachineSlug() {
     }
     const modes = getModes(checker).filter(m => !m.hasSuru && !m.hasCycle);
     if (!modes.length) { evBlock.style.display = "none"; return; }
+    evHasTable = true;
     evModeKey = modes[0].key;
     if (modes.length > 1) {
       modes.forEach((mode, i) => {
@@ -773,6 +783,7 @@ function resolveMachineSlug() {
     });
 
     applyInputLimit(firstMode);
+    syncEvMode(firstMode);          // 初期表示から食い違わせない
     const firstModeData = checker[firstMode];
     if (firstModeData && firstModeData.suru && Array.isArray(firstModeData.suru)) {
       suruCount = 0;

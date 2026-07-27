@@ -31,6 +31,7 @@ audit_site.py（静的解析）では捕まえられないJS実行後の表示�
     R10. セクションtitleが統一形と一致しているか（titleの揺れ検知）
     R11. ヘッダー行型テーブルのth数と各行td数の一致（settei表2セル固定バグの再発検知）
     R12. チェッカーと早見表のmode選択が双方向で同期するか（食い違った画面の再発検知）
+    R12b. 早見表に無いmode（スルー・周期）選択中に、前のmodeの表が残らないか
 """
 
 from __future__ import annotations
@@ -212,6 +213,37 @@ def check_one(page, machine: dict) -> list[str]:
                 ngs.append(f"R12: 早見表で {common[0]} を選んでもチェッカーが {now2} のまま")
         except Exception as e:                       # 操作できない形なら検査自体を失敗にする
             ngs.append(f"R12: mode同期の検査に失敗: {type(e).__name__}")
+
+    # R12b: 早見表に無いmode（スルー・周期）を選んだら、古いmodeの表が残らないこと
+    #   （2026-07-27 Codex閉鎖確認2回目: 同期の例外経路が抜けていた）
+    only_checker = [m for m in modes if m not in ev_modes]
+    if only_checker and ev_modes:
+        try:
+            page.click(f'label[for="mode_{only_checker[0]}"]')
+            page.wait_for_timeout(120)
+            shown = page.evaluate(
+                """() => {const b=document.getElementById('evTableBlock');
+                   if(!b) return false;
+                   const st=getComputedStyle(b);
+                   return st.display!=='none' && st.visibility!=='hidden';}""")
+            if shown:
+                ngs.append(f"R12b: {only_checker[0]} を選んでも早見表が出たまま"
+                           f"（前のmodeの表が残る）")
+            # 通常modeへ戻したら復帰すること
+            page.click(f'label[for="mode_{ev_modes[0]}"]')
+            page.wait_for_timeout(120)
+            back = page.evaluate(
+                """() => {const b=document.getElementById('evTableBlock');
+                   if(!b) return false;
+                   const st=getComputedStyle(b);
+                   return st.display!=='none' && st.visibility!=='hidden';}""")
+            if not back:
+                ngs.append(f"R12b: {ev_modes[0]} へ戻しても早見表が復帰しない")
+            now3 = page.eval_on_selector('input[name="evMode"]:checked', "e=>e.value")                 if len(ev_modes) > 1 else ev_modes[0]
+            if now3 != ev_modes[0]:
+                ngs.append(f"R12b: 戻したあとの早見表modeが {now3}（期待 {ev_modes[0]}）")
+        except Exception as e:
+            ngs.append(f"R12b: 検査に失敗: {type(e).__name__}")
 
     return ngs
 
