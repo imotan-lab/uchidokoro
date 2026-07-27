@@ -399,6 +399,10 @@ def _project_mode(conf, ctx: _Ctx, path: str, ctx_label: str) -> dict | None:
             if not isinstance(x, dict):
                 ctx.reject(f"{path}.{field}[{i}]", "配列要素が辞書でない")
                 return None
+            if "_disabled" in x:
+                # 停止マーカーだけ落として数値行を公開する経路を塞ぐ
+                ctx.reject(f"{path}.{field}[{i}]", "停止マーカー(_disabled)付きの行は公開しない")
+                return None
             r = _project_mode(x, ctx, f"{path}.{field}[{i}]", ctx_label)
             if r is None:
                 ctx.reject(f"{path}.{field}[{i}]", "行が公開基準を満たさない（部分的に出さない）")
@@ -456,16 +460,26 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
         ctx.reject("checker.modes", "modesの型不正")
         return None
     # ★checker直下の未知フィールドを黙って捨てない★
-    #   （"warning": "未確認" のような但し書きだけ落として数値configを残す経路を塞ぐ）
+    #   辞書だからといって mode 候補として通さない（"warning": {"text": "未確認"} を防ぐ）。
+    #   許されるのは 予約キー / VERIFIED指定された mode名 / modeData配下のmode名 のみ。
+    md_keys = set(checker.get("modeData").keys()) if isinstance(checker.get("modeData"), dict) else set()
+    known = RESERVED_CHECKER_KEYS | set(allowed_modes) | md_keys
     for k, v in checker.items():
-        if k in RESERVED_CHECKER_KEYS or isinstance(v, dict):
+        if k in known:
             continue
-        ctx.reject(f"checker.{k}", "checker直下の未知フィールド")
+        if isinstance(v, dict) and "_disabled" in v:
+            continue                     # Phase 0で意図的に停止したmode
+        ctx.reject(f"checker.{k}", "checker直下の未知フィールド（mode候補として黙って通さない）")
         return None
     for k, typ in (("unit", str), ("equivOnly", bool), ("exchangeRates", list),
-                   ("defaultRate", str), ("ok", str), ("ng", str)):
+                   ("defaultRate", str), ("ok", str), ("ng", str),
+                   ("limit", (int, float)), ("hasSuru", bool), ("hasCycle", bool),
+                   ("suruMax", (int, float)), ("modeData", dict)):
         if k in checker and not isinstance(checker[k], typ):
             ctx.reject(f"checker.{k}", "既知フィールドの型不正")
+            return None
+        if k in ("limit", "suruMax") and k in checker and isinstance(checker[k], bool):
+            ctx.reject(f"checker.{k}", "数値フィールドに真偽値")
             return None
     out: dict = {}
     if _is_str(checker.get("unit")) and ctx.atom([checker["unit"]], "checker.unit"):
@@ -487,11 +501,13 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
     if isinstance(er, list):
         rates = []
         for i, r in enumerate(er):
+            # ★1要素でも不正なら全体を止める（部分削除すると選べる交換率が黙って減る）★
             if not (isinstance(r, dict) and _ok_key(r.get("key"))):
-                continue
+                ctx.reject(f"checker.exchangeRates[{i}]", "交換率の要素が不正")
+                return None
             if not _only_keys(r, {"key", "label"}):
                 ctx.reject(f"checker.exchangeRates[{i}]", "未知フィールドを含むため拒否")
-                continue
+                return None
             e = {"key": r["key"]}
             if _is_str(r.get("label")) and ctx.atom([r["label"]], f"checker.exchangeRates[{i}].label"):
                 e["label"] = r["label"]
@@ -506,11 +522,14 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
     if isinstance(decl, list):
         kept = []
         for i, m in enumerate(decl):
-            if not (isinstance(m, dict) and m.get("key") in allowed_modes):
-                continue
+            if not isinstance(m, dict) or not _ok_key(m.get("key")):
+                ctx.reject(f"checker.modes[{i}]", "modes宣言の要素が不正")
+                return None
             if not _only_keys(m, {"key", "label", "hasSuru", "hasCycle"}):
                 ctx.reject(f"checker.modes[{i}]", "未知フィールドを含むため拒否")
-                continue
+                return None
+            if m["key"] not in allowed_modes:
+                continue                 # VERIFIEDでないmodeの宣言は出さない（正常）
             e = {"key": m["key"]}
             if _is_str(m.get("label")) and ctx.atom([m["label"]], f"checker.modes[{i}].label"):
                 e["label"] = m["label"]
@@ -641,6 +660,7 @@ def _cell_text(c, ctx: _Ctx, path: str):
         if _is_str(c.get("badge")):
             cell["badge"] = c["badge"]
         return normalize_atom([c.get("badge"), txt]), cell
+    ctx.reject(path, "セルが文字列でも辞書でもない")
     return None, None
 
 
@@ -663,7 +683,11 @@ def _project_settei_table(tbl, ctx: _Ctx, path: str, section_title: str) -> dict
         out["label"] = label
     headers = tbl.get("headers")
     head_txt = []
-    if isinstance(headers, list) and all(_is_str(h) for h in headers):
+    if isinstance(headers, list):
+        # ★1つでも非文字列なら表ごと止める（見出しだけ黙って消えて行が残るのを防ぐ）★
+        if not all(_is_str(h) for h in headers):
+            ctx.reject(f"{path}.headers", "見出しに非文字列が含まれる")
+            return None
         if not ctx.atom([section_title, *headers], f"{path}.headers"):
             return None
         out["headers"] = list(headers)
@@ -771,8 +795,11 @@ def _project_machine(machine: dict, gates: dict, ctx: _Ctx) -> dict:
         if _is_str(v) and v.strip() and ctx.atom([v], field):
             out[field] = v
 
-    if _is_str(machine.get("slug")) and _SLUG_PAT.match(machine["slug"]):
-        out["slug"] = machine["slug"]
+    # ★slug は公開物の同定子。欠落・不正のまま公開しない★
+    if not (_is_str(machine.get("slug")) and _SLUG_PAT.match(machine["slug"])):
+        ctx.reject("slug", "slugが欠落または不正（公開物を同定できない）")
+        return out
+    out["slug"] = machine["slug"]
     s("name")
     s("manufacturer")
     for f in ("release_date", "confirmed_at"):
@@ -837,7 +864,13 @@ def _project_machine(machine: dict, gates: dict, ctx: _Ctx) -> dict:
 
 
 def _project_detail(detail, gates: dict, ctx: _Ctx) -> dict:
-    if gates["profile"] == "preview_basic" or not isinstance(detail, dict):
+    if gates["profile"] == "preview_basic":
+        return {}
+    if detail is None:
+        return {}
+    if not isinstance(detail, dict):
+        # ★記事データが壊れているのに「本文なしで正常公開」しない★
+        ctx.reject("detail", "記事データが辞書でない")
         return {}
     out: dict = {}
     lead = detail.get("lead")
@@ -849,6 +882,7 @@ def _project_detail(detail, gates: dict, ctx: _Ctx) -> dict:
         kept = []
         for i, b in enumerate(boxes):
             if not isinstance(b, dict):
+                ctx.reject(f"summaryBoxes[{i}]", "要約欄の要素が辞書でない")
                 continue
             if not _only_keys(b, {"label", "value"}):
                 ctx.reject(f"summaryBoxes[{i}]", "未知フィールドを含むため箱ごと拒否")
@@ -864,13 +898,15 @@ def _project_detail(detail, gates: dict, ctx: _Ctx) -> dict:
     if isinstance(ft, list):
         rows = []
         for i, r in enumerate(ft):
-            if not isinstance(r, list):
-                continue
-            if len(r) != 2:      # ★3列目に但し書きがある行は切り捨てずに拒否する★
-                ctx.reject(f"factTable[{i}]", "2列でない行（但し書きの切り捨てを防ぐため拒否）")
+            if not isinstance(r, list) or len(r) != 2:
+                # ★3列目の但し書きを切り捨てない／不正要素を黙って飛ばさない★
+                ctx.reject(f"factTable[{i}]", "2要素の配列でない行")
                 continue
             th, td = r
-            if _is_str(th) and _is_str(td) and ctx.atom([th, td], f"factTable[{i}]"):
+            if not (_is_str(th) and _is_str(td)):
+                ctx.reject(f"factTable[{i}]", "セルが文字列でない")
+                continue
+            if ctx.atom([th, td], f"factTable[{i}]"):
                 rows.append([th, td])
         if rows:
             out["factTable"] = rows
