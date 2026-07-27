@@ -124,6 +124,13 @@ _SPEC_MECHANISM = re.compile(
     r"^(?:コンプリート機能|有利区間|規定[^。]{0,10})[^。]{0,80}$")
 
 
+# ラベルとして許さない語（行動をすすめる・評価する・収支を語る）
+_LABEL_NG = re.compile(
+    r"期待|収支|プラス|マイナス|利益|損|時給|回収|投資|勝|儲|"
+    r"狙え|狙う|打て|打つ|拾|着席|ヤメ時|やめ時|推奨|おすすめ|必ず|絶対|確実|"
+    r"有利|不利|優秀|甘い|辛い|効率|得")
+
+
 def propose(item: dict) -> tuple[str | None, str]:
     """(verdict, 理由) を返す。verdict=None は判断保留。"""
     text = item.get("text", "")
@@ -155,6 +162,13 @@ def propose(item: dict) -> tuple[str | None, str]:
             if _KOYAKU_LIST.match(body):
                 return "ALLOW", "小役確率の列挙（スペックの事実）"
         return None, "基本スペック欄だが定型でない"
+
+    # ★数字を持たない短いラベル★（表の見出し・案内の項目名など）
+    #   数値主張が無く、行動をすすめる語も評価語も含まないものだけ。
+    #   例:「設定示唆まとめ / AT終了画面」「設定判別 / ポチポチくんへ移動」
+    if (not re.search(r"[0-9０-９]", text) and len(text) <= 40
+            and not _LABEL_NG.search(text) and not re.search(r"[。！？!?]", text)):
+        return "ALLOW", "数値を含まない短いラベル（表の見出し・項目名）"
 
     # 統一セクション見出し（title 単体の原子）
     if path == "sections[].title":
