@@ -1,0 +1,42 @@
+{
+ "schema_version": "claim-allowlist/v1",
+ "version": "1.0.0",
+ "_note": "★自動採用してよい claim 型だけを列挙する。ここに無い型は必ず止まる（default deny）★ 2026-07-28 Codex設計。現時点で意味検証(C5)が実装済みなのはG数天井の3類型だけ。CZ間天井・スルー・周期・pt・機械割・純増は含まれない＝自動採用できない。追加するときは、先にC5の意味検証と反例テストを通すこと。",
+ "default_action": "DENY",
+ "auto_adopt": [
+  {
+   "field_key": "ceiling.normal",
+   "_label": "通常時のG数天井（scope指定なし）",
+   "value_kind": "INTEGER",
+   "unit": "G",
+   "operators": ["MAX"],
+   "modes": ["NORMAL"],
+   "scopes": ["NONE"]
+  },
+  {
+   "field_key": "ceiling.normal.at",
+   "_label": "通常時のAT間G数天井",
+   "value_kind": "INTEGER",
+   "unit": "G",
+   "operators": ["MAX"],
+   "modes": ["NORMAL"],
+   "scopes": ["AT_GAP"]
+  },
+  {
+   "field_key": "ceiling.reset",
+   "_label": "設定変更後のG数天井（scope指定なし）",
+   "value_kind": "INTEGER",
+   "unit": "G",
+   "operators": ["MAX"],
+   "modes": ["RESET"],
+   "scopes": ["NONE"]
+  }
+ ],
+ "_next_to_add": [
+  "1. scoped G数天井（ceiling.normal.cz / ceiling.normal.bonus / ceiling.reset.at / ceiling.reset.cz）— 東京喰種のCZ間600Gはここ",
+  "2. kikaiwari.setting（設定1〜6をatomic groupで）— ジャグラー系はここ。79機種へ広く効く",
+  "3. net_increase.phase（通常AT・上位ATを分ける。複数純増を1claimに詰めない）",
+  "4. ceiling.through / ceiling.cycle / ceiling.point",
+  "5. machine.has_ceiling（天井なしを『対象外』でなく検証済みの否定claimとして扱う）"
+ ]
+}
