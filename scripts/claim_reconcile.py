@@ -117,6 +117,25 @@ def reconcile(slug: str, machine: dict, detail: dict,
         if c.get("atomic_group_id") != slot.get("atomic_group_id"):
             problems.append(
                 f"{slot['field_key']}: 束(atomic_group)の指定が枠と違う")
+        # ★★記事に載っている値と claim の値が一致するか★★（Codex 3回目 重大1）
+        #   これが無いと、記事を1300Gに変えても1200Gの古い claim で通ってしまう。
+        cur = slot.get("current_value")
+        if cur is None:
+            problems.append(
+                f"{slot['field_key']}: 記事の値を1つに特定できない"
+                f"（{str(slot.get('current_text'))[:40]}）")
+        else:
+            amt = v.get("amount")
+            if not isinstance(amt, (int, float)) or isinstance(amt, bool):
+                problems.append(f"{slot['field_key']}: claim に数値が無い")
+            elif abs(float(amt) - cur["amount"]) > 1e-9:
+                problems.append(
+                    f"★記事と台帳の値が違う★ {slot['field_key']}: "
+                    f"記事={cur['amount']:g} / 台帳={amt:g}"
+                    f"（記事を直したら調べ直すこと）")
+            if bool(v.get("plus_alpha")) != cur["plus_alpha"]:
+                problems.append(
+                    f"{slot['field_key']}: +α の有無が記事と台帳で違う")
 
     # --- ⑤ 設定1〜6などの束（atomic group）は全員そろって初めて有効
     groups: dict = {}
@@ -150,9 +169,36 @@ def reconcile(slug: str, machine: dict, detail: dict,
     return problems
 
 
-def publishable(slug: str, machine: dict, detail: dict,
-                inventory: dict, ledger: dict) -> tuple[bool, list]:
-    """この機種を公開してよいか（三者整合＋全枠が VERIFIED）。"""
+def publish_gate(slug: str) -> tuple[bool, list]:
+    """★本番の公開判定はこれを使う★（Codex 3回目 重大2）
+
+    machine / detail / 在庫 / 台帳を**すべてゲート自身が信頼できる場所から読む**。
+    呼び出し側から渡させると、空の記事＋空の在庫＋空の台帳という
+    「形式上は正しいが中身が無い」組み合わせで公開可にできてしまう。
+    """
+    machine, detail = ci.load_machine(slug)
+    if machine is None:
+        return False, [f"機種データが無い: {slug}"]
+    if not detail:
+        return False, [f"記事データが無い: {slug}（空の記事を公開しない）"]
+    lp = os.path.join(DATA, "claim-ledgers", f"{slug}.json")
+    if not os.path.isfile(lp):
+        return False, [f"台帳が無い: {slug}（何も調べていない）"]
+    ledger = json.load(open(lp, encoding="utf-8"))
+    inventory = ci.build_inventory(slug, machine, detail)
+    if not inventory.get("slots"):
+        # ★枠が1つも作れない記事を「全部済み」と誤認しない★
+        return False, [f"検証すべき枠を1つも抽出できない: {slug}"
+                       f"（記事の書き方が想定外か、事実が載っていない）"]
+    return _publishable(slug, machine, detail, inventory, ledger)
+
+
+def _publishable(slug: str, machine: dict, detail: dict,
+                 inventory: dict, ledger: dict) -> tuple[bool, list]:
+    """三者整合＋全枠が VERIFIED。★検査用の内部関数★
+
+    本番の判定は publish_gate() を使うこと（入力を外から渡させない）。
+    """
     problems = reconcile(slug, machine, detail, inventory, ledger)
     if problems:
         return False, problems
@@ -210,7 +256,8 @@ def selftest() -> int:
         c["verify_state"] = state
         c["atomic_group_id"] = slot.get("atomic_group_id")
         c["value"] = {**c["value"], "kind": slot["expected_value_kind"],
-                      "unit": slot["expected_unit"]}
+                      "unit": slot["expected_unit"],
+                      "raw": "1200", "amount": 1200, "plus_alpha": True}
         c["conditions"] = {**c["conditions"], **slot["conditions"],
                            "counter_basis": "MENU_GAME"}
         c.update(over)
@@ -221,7 +268,7 @@ def selftest() -> int:
         led["machine_ref"]["catalog_record_sha256"] = cl.canonical_sha256(machine or m)
         return led
 
-    ok, why = publishable("x", m, d, inv, ledger([claim()]))
+    ok, why = _publishable("x", m, d, inv, ledger([claim()]))
     t("枠にぴったり合う検証済みclaimがあれば公開できる", ok or print(why))
 
     t("★台帳が空なら止まる（何も調べていないのに合格にしない）",
@@ -232,7 +279,7 @@ def selftest() -> int:
     empty = {**inv, "slots": [], "unclassified_atoms": []}
     t("★★在庫を空に書き換えても止まる（渡された在庫を信用しない）★★",
       any("作り直したもの" in w for w in reconcile("x", m, d, empty, ledger([]))))
-    ok_e, _ = publishable("x", m, d, empty, ledger([]))
+    ok_e, _ = _publishable("x", m, d, empty, ledger([]))
     t("　その場合 publishable も False", not ok_e)
 
     t("★在庫が古ければ止まる（記事を変えたら作り直す）",
@@ -296,8 +343,12 @@ def selftest() -> int:
         c["field_key"] = s2["field_key"]
         c["verify_state"] = state
         c["atomic_group_id"] = s2["atomic_group_id"]
-        c["value"] = {"kind": s2["expected_value_kind"], "raw": "1/259.0",
-                      "unit": s2["expected_unit"], "operator": "EXACT"}
+        raw = s2.get("current_text") or "1/259.0"
+        import re as _re
+        _n = _re.findall(r"\d+(?:\.\d+)?", str(raw))
+        c["value"] = {"kind": s2["expected_value_kind"], "raw": str(raw),
+                      "unit": s2["expected_unit"], "operator": "EXACT",
+                      "amount": float(_n[-1]) if _n else 0.0}
         c["conditions"] = {**c["conditions"], **s2["conditions"],
                            "counter_basis": "NONE"}
         return c
@@ -306,6 +357,15 @@ def selftest() -> int:
             for k, s2 in enumerate(gslots)]
     t("★★束の一部だけ検証済みなら止まる（設定1だけ確認して出さない）★★",
       any("束の一部だけ" in w for w in reconcile("x", m, d2, inv2, ledger(part))))
+
+    # ★★記事を直したのに古い claim が残っていたら止まる★★（Codex 3回目 重大1）
+    d_new = {"factTable": [["AT間天井", "1300G+α"]]}
+    inv_new = ci.build_inventory("x", m, d_new)      # 在庫は正しく作り直した
+    old_claim = claim()                              # claim は 1200G のまま
+    old_claim["slot_id"] = inv_new["slots"][0]["slot_id"]
+    ok_old, why_old = _publishable("x", m, d_new, inv_new, ledger([old_claim]))
+    t("★★記事を1300Gに直したのに1200Gの古いclaimでは公開できない★★",
+      not ok_old and any("記事と台帳の値が違う" in w for w in why_old))
 
     # ★★許可リストが本当に効いているか（Codex：関数はあるが呼ばれていなかった）★★
     d3 = {"factTable": [["CZ間天井", "600G+α"]]}      # CZ間は許可リストに無い型
@@ -320,12 +380,13 @@ def selftest() -> int:
         c["verify_state"] = state
         c["atomic_group_id"] = s3.get("atomic_group_id")
         c["value"] = {"kind": s3["expected_value_kind"], "raw": "600",
-                      "amount": 600, "unit": s3["expected_unit"], "operator": "MAX"}
+                      "amount": 600, "unit": s3["expected_unit"],
+                      "operator": "MAX", "plus_alpha": True}
         c["conditions"] = {**c["conditions"], **s3["conditions"],
                            "counter_basis": "LCD_GAME"}
         return c
 
-    ok3, why3 = publishable("x", m, d3, inv3, ledger([cz_claim()]))
+    ok3, why3 = _publishable("x", m, d3, inv3, ledger([cz_claim()]))
     t("★★許可リストに無い型（CZ間天井）は検証済みでも公開できない★★",
       not ok3 and any("自動採用の条件" in w for w in why3))
 
@@ -333,8 +394,19 @@ def selftest() -> int:
     exp = claim()
     exp["verified_at"] = "2020-01-01T00:00:00Z"
     exp["expires_at"] = "2020-06-01T00:00:00Z"
-    ok4, _ = publishable("x", m, d, inv, ledger([exp]))
+    ok4, _ = _publishable("x", m, d, inv, ledger([exp]))
     t("★期限切れの claim では公開できない", not ok4)
+
+    # ★★空の記事＋空の在庫＋空の台帳で公開可にならないこと★★（Codex 3回目 重大2）
+    empty_inv = ci.build_inventory("x", m, {})
+    ok_z, why_z = _publishable("x", m, {}, empty_inv, ledger([]))
+    t("　（内部関数では空入力が通ってしまう＝これが指摘された穴）", ok_z)
+    t("★★本番ゲート publish_gate は実在しない機種を通さない★★",
+      not publish_gate("__not_exist__")[0])
+    # 実データの機種で、台帳が無ければ止まることを確かめる
+    ok_t, why_t = publish_gate("tokyo_ghoul")
+    t("★★台帳が無い機種は「何も調べていない」として止まる★★",
+      not ok_t and any("台帳が無い" in w for w in why_t))
 
     ng = [n for n, ok_ in results if not ok_]
     print("")
@@ -365,7 +437,7 @@ def main() -> int:
                                      "catalog_record_sha256": "0" * 64,
                                      "identity_state": "UNVERIFIED"},
                      "claims": []})
-        ok, why = publishable(args.slug, m, d, inv, led)
+        ok, why = publish_gate(args.slug)
         print(f"公開可否: {'○' if ok else '×'}")
         for w in why[:12]:
             print("  -", w)

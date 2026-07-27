@@ -133,6 +133,12 @@ NONCLAIM_LABELS = re.compile(
 
 _NUM = re.compile(r"[0-9０-９]")
 
+# ★本文の文章に紛れた「事実らしい数値」★（構造化されていないので型に落とせない）
+#   これを黙って捨てると「未分類ゼロ」が網羅の証明にならない。
+_FACT_IN_PROSE = re.compile(
+    r"(?:天井|機械割|出玉率|純増|確率|獲得枚数|コイン持ち|スルー|周期)"
+    r"[^。]{0,20}?[0-9０-９]")
+
 
 def _sha(obj) -> str:
     return cl.canonical_sha256(obj)
@@ -204,6 +210,25 @@ def classify_label(label: str):
     return None
 
 
+_ALPHA = re.compile(r"[+＋]\s*[aαａ]", re.I)
+
+
+def normalize_value(value: str, unit: str):
+    """記事の値を「数 と 単位 と +α」に正規化する。決まらなければ None。
+
+    ★これが無いと、記事を1300Gに変えても1200Gの古い claim で通る★
+      （Codex 3回目 重大1）。slot_id には値が入らないので、値そのものを
+      突き合わせないと「記事と台帳がずれたまま公開」できてしまう。
+    """
+    if not isinstance(value, str):
+        return None
+    nums = re.findall(r"\d+(?:\.\d+)?", value)
+    if len(nums) != 1:
+        return None
+    return {"amount": float(nums[0]), "unit": unit,
+            "plus_alpha": bool(_ALPHA.search(value))}
+
+
 def slot_id(slug: str, spec: dict, pointer: str) -> str:
     """slot の同定子。★表示文ではなく「型＋条件＋出力先」で決める★"""
     key = (f"{slug}|{spec['field_key']}|mode={spec['mode']};scope={spec['scope']};"
@@ -271,10 +296,28 @@ def _pairs_from_detail(detail: dict) -> list:
 def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
     """1機種ぶんの在庫を作る。"""
     slots, unclassified = [], []
+    unsupported: list = []
     # ★除外したものを黙って捨てない★（Codex 指摘）
     #   「未分類ゼロ」が網羅の証明になるためには、除外した理由も残っている必要がある。
-    excluded_editorial, excluded_nonclaim, unsupported = [], [], []
+    excluded_editorial, excluded_nonclaim = [], []
     seen_slots = set()
+
+    # ★★構造化されていない本文の数値を取りこぼさない★★（Codex 3回目 重大3）
+    #   「AT間天井は1200Gです」のような文章は「項目：値」形式でないため
+    #   在庫にも未分類にも残らなかった。＝「抽出できなかった」と「事実が無い」を
+    #   区別できていない状態。文章中の事実らしい数値は UNSUPPORTED として残す。
+    strings: list = []
+    _walk(detail, "", strings)
+    structured = {it[0] for it in _pairs_from_detail(detail)}
+    for pointer, text in strings:
+        if pointer in structured or not _FACT_IN_PROSE.search(text or ""):
+            continue
+        if EDITORIAL_LABELS.search(text or ""):
+            continue                        # 狙い目などの編集判断は対象外
+        unsupported.append({"pointer": pointer,
+                            "reason": "FACT_IN_PROSE_NOT_EXTRACTED",
+                            "excerpt": (text or "")[:70],
+                            "content_sha256": _sha(text)})
 
     for item in _pairs_from_detail(detail):
         pointer, label, value = item[0], item[1], item[2]
@@ -341,6 +384,8 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
             "expected_unit": spec["unit"],
             "source_pointer": pointer,
             "current_text": value,
+            # ★記事に載っている値そのもの（台帳と突き合わせる）★
+            "current_value": normalize_value(value, spec["unit"]),
             "allowlisted_type": cl.allowlisted_type_candidate(
                 {"field_key": spec["field_key"],
                  "value": {"kind": spec["value_kind"], "unit": spec["unit"],
@@ -423,6 +468,19 @@ def selftest() -> int:
       build_inventory("x", {"slug": "x"},
                       {"factTable": [["AT間天井", "500pt"]]}
                       )["unclassified_atoms"][0]["reason"] == "CEILING_UNIT_MISMATCH")
+    t("★★本文の文章に紛れた事実を取りこぼさない★★（Codex 3回目 重大3）",
+      build_inventory("x", {"slug": "x"},
+                      {"sections": [{"body": ["AT間天井は1200Gです"]}]}
+                      )["coverage"]["unsupported_facts"] == 1)
+    t("　その場合は公開不可になる",
+      build_inventory("x", {"slug": "x"},
+                      {"sections": [{"body": ["AT間天井は1200Gです"]}]}
+                      )["coverage"]["publishable"] is False)
+    t("★記事の値を正規化して枠に持たせる（台帳と突き合わせるため）",
+      build_inventory("x", {"slug": "x"},
+                      {"factTable": [["AT間天井", "1200G+α"]]}
+                      )["slots"][0]["current_value"] ==
+      {"amount": 1200.0, "unit": "G", "plus_alpha": True})
     t("★未知ラベルは推測せず None（勝手に型を作らない）",
       classify_label("謎の項目") is None)
     t("編集判断のラベルは裏取り対象にしない",
