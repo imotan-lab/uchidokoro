@@ -127,6 +127,40 @@ def _walk_detail(node, path: str, edits: list, parent=None, key=None) -> None:
             _walk_detail(v, f"{path}[{i}]", edits, node, i)
 
 
+def _drop_whole_items(data, apply: bool, slug: str) -> list:
+    """★項目そのものが断定になっている箇条書きを、項目ごと外す★
+
+    「0スルー：170G〜が期待値プラスのライン」のように、文を削ると何も残らない
+    ものは、その項目を出さないのが正しい（半端に残すと意味が変わる）。
+
+    安全策:
+      - 対象は sections[].body[] の要素だけ（構造は変えない）
+      - 削った結果その節の本文が空になるなら**触らない**（空セクションを作らない）
+      - 追加も書き換えもしない
+    """
+    removed = []
+    for si, sec in enumerate(data.get("sections") or []):
+        body = sec.get("body")
+        if not isinstance(body, list) or len(body) < 2:
+            continue
+        keep, drop = [], []
+        for el in body:
+            if isinstance(el, str) and any(d in el for d in gates.ABSOLUTE_DENY):
+                # 文を削って何か残るなら、そちらは _strip_prose の担当
+                sents = [x for x in re.split(r"(?<=。)", el) if x.strip()]
+                rest = "".join(x for x in sents
+                               if not any(d in x for d in gates.ABSOLUTE_DENY)).strip()
+                if not rest:
+                    drop.append(el)
+                    continue
+            keep.append(el)
+        if drop and keep:                     # 全部消える節は触らない
+            removed.extend((f"{slug} sections[{si}].body", x) for x in drop)
+            if apply:
+                sec["body"] = keep
+    return removed
+
+
 def _run_details(apply: bool) -> int:
     """記事データ（machine-details/*.json）に同じ処理を適用する。"""
     total = 0
@@ -137,8 +171,17 @@ def _run_details(apply: bool) -> int:
         data = json.load(open(path, encoding="utf-8"))
         edits: list = []
         _walk_detail(data, "root", edits)
-        if not edits:
+        whole = _drop_whole_items(data, apply, fn[:-5])
+        for where, txt in whole:
+            print("■ %s 項目ごと削除" % where)
+            print("   %s" % txt)
+        if not edits and not whole:
             continue
+        if whole and apply:
+            json.dump(data, open(path, "w", encoding="utf-8"),
+                      ensure_ascii=False, indent=2)
+            with open(path, "a", encoding="utf-8") as f:
+                f.write("\n")
         for p, old, new, _ in edits:
             print(f"■ {fn} {p}\n   前: {old}\n   後: {new}")
         total += len(edits)
