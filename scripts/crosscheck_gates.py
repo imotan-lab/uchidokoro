@@ -43,6 +43,31 @@ MAX_ROUNDS = 40
 #   ここに人が意図した数を書く。機種を増減したら、意図した変更として必ずここを直す。
 EXPECTED_PUBLIC = 120
 
+# ★公開slugの固定集合★ 件数だけだと「1件消えて1件増える」相殺を見逃すため、
+#   集合そのものを持つ。機種を増減したら意図した変更として更新すること。
+EXPECTED_PUBLIC_SLUGS = {
+    "akudama", "animal_dotch", "azurlane", "babel", "bakemonogatari", "baki", "banchou4",
+    "bandori", "basilisk_tenzen", "bigdream_pusher", "biohazard", "biohazard_re3",
+    "birdie_wing", "bofuri", "burning_express", "chibaryo2", "code_geass", "dark_haibi",
+    "darlifra", "discup_ur", "dmc5_st", "dragon_hanahana_senko", "dumbbell", "enen", "enen2",
+    "eva_yakusoku", "fujiko_bt", "funky_juggler2", "galfy", "gineiden_dnt", "goblin",
+    "godeater", "godzilla", "gogo_juggler3", "goji_eva", "gundam_seed", "gundam_uc2", "hanabi",
+    "hanma_baki", "happy_juggler_v3", "hihou", "hokuto", "hokuto_tensei2", "isekai_quattro_bt",
+    "iza_bancho", "jashinchan", "kabaneri", "kaguya", "karakuri", "karakuri2", "kengan_ashura",
+    "kerot5bt", "king_hanahana", "kizumonogatari", "koukaku", "kurea_bt", "kyokousuiri",
+    "lupin_daikokaisha", "madomagi_forte", "magireco", "mhrise", "midoridon_viva",
+    "milliongod_kiseki", "monkeyv", "mr_juggler", "mushoku", "my_juggler_v", "nanatsuma",
+    "nangoku_special", "neo_aim_juggler", "neoplanet", "new_king_hanahana_v", "okidoki_black",
+    "okidoki_encore", "okidoki_gold", "okidoki_gorgeous", "onepunchman", "onimusha3",
+    "prismnana", "railgun2", "revengers", "revue_starlight", "rezero2", "rotis", "sao", "sao2",
+    "sengoku_collection6", "sengoku_otome4", "sengoku_otome5", "sf5", "sf6", "shake_bt",
+    "shaman_king", "shinuchi_yoshimune", "super_binmusume", "super_blackjack", "super_rio_ace2",
+    "takt_opus", "tekken6", "tenken", "tensura", "thunder_v", "toaru_index2", "tokyo_ghoul",
+    "tolove_darkness", "tonsuki", "triple_crown_7", "ultraman_final", "umineko2", "valvrave",
+    "valvrave2", "world_dai_star", "yabachiba", "yajikita_mairu", "yorumungando", "yoshimune",
+    "youjitsu", "zenigata5", "zettai_shougeki4", "zombieland_saga",
+}
+
 # ★軸契約の固定集合（件数ではなく (slug, mode) で持つ）★
 #   件数だけだと「1件止まらなくなり、別の1件が止まる」入れ替わりを検出できない。
 #   データを意図的に変えた時だけ、この集合を意図して更新すること。
@@ -120,6 +145,11 @@ def run() -> int:
     # 件数予算（黙って機種が消える事故を止める）
     if published != expected_public:
         problems.append(f"公開機種数が想定と違う: {published} != {expected_public}")
+    # ★集合そのものも突き合わせる（1件消えて1件増える相殺を見逃さない）★
+    for s in sorted(EXPECTED_PUBLIC_SLUGS - seen_slugs):
+        problems.append(f"公開されるはずの機種が公開されていない: {s}")
+    for s in sorted(seen_slugs - EXPECTED_PUBLIC_SLUGS):
+        problems.append(f"想定外の機種が公開されている: {s}")
 
     problems.extend(axis_regression())    # 軸契約の回帰も停止条件に含める
 

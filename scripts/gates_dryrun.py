@@ -95,12 +95,33 @@ def schema_coverage(machines: list) -> bool:
                 continue                  # Phase 0で意図的に停止したmode
             if k not in out:
                 missing_top.add(k)
+        def _cmp(src, dst, where):
+            """入れ子まで再帰的に突き合わせる（byRate.*・suru/cycleの各行・宣言の子まで）。"""
+            if isinstance(src, dict):
+                for k2, v2 in src.items():
+                    if k2 == "_disabled":
+                        continue
+                    if not isinstance(dst, dict) or k2 not in dst:
+                        missing_mode.add(f"{where}.{k2}" if where else k2)
+                        continue
+                    _cmp(v2, dst[k2], f"{where}.{k2}" if where else k2)
+            elif isinstance(src, list) and isinstance(dst, list):
+                for i2, v2 in enumerate(src):
+                    if i2 < len(dst):
+                        _cmp(v2, dst[i2], f"{where}[]")
+                    else:
+                        missing_mode.add(f"{where}[]")
+
         for mk in modes:
             conf = c.get(mk) if isinstance(c.get(mk), dict) else (md or {}).get(mk, {})
-            got = out.get(mk) or {}
-            for k in conf:
-                if k not in got:
-                    missing_mode.add(k)
+            _cmp(conf, out.get(mk) or {}, "")
+        # modes宣言・交換率の子フィールドも突き合わせる
+        for top in ("modes", "exchangeRates"):
+            if isinstance(c.get(top), list):
+                kept = [x for x in c[top]
+                        if isinstance(x, dict) and x.get("key") in modes] if top == "modes" \
+                    else c[top]
+                _cmp(kept, out.get(top) or [], top)
         if ctx.errors:                    # 検査中に構造エラーが出たら黙って通さない
             for e in ctx.errors:
                 missing_top.add(f"(構造エラー) {e['reason']}")

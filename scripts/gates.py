@@ -405,6 +405,8 @@ def _types_ok(ctx: "_Ctx", d: dict, path: str, spec: dict) -> bool:
         if k not in d:
             continue
         v = d[k]
+        if v is None:
+            continue        # null は「その項目は無い」の明示（実データで checker: null が実在）
         if typ in (int, float, (int, float)) and isinstance(v, bool):
             ctx.reject(f"{path}.{k}", "数値フィールドに真偽値")
             return False
@@ -989,10 +991,13 @@ def _project_sources(v, ctx: _Ctx) -> list | None:
         if not (isinstance(s, dict) and _only_keys(s, {"url", "title", "confirmed_at"})):
             ctx.reject(f"sources[{i}]", "未知フィールドを含む出典")
             continue
+        if not _types_ok(ctx, s, f"sources[{i}]",
+                         {"url": str, "title": str, "confirmed_at": str}):
+            continue
         url = s.get("url")
         if not (_is_str(url) and _URL_PAT.match(url)):
-            if url is not None:
-                ctx.reject(f"sources[{i}].url", "URLがhttpsの想定形式でない")
+            # ★URLの欠落も構造エラー（出典なのに参照先が無い）★
+            ctx.reject(f"sources[{i}].url", "URLが無い/httpsの想定形式でない")
             continue
         # ★クエリ・フラグメントを落とす★（署名付きURLや ?token=… を出典として
         #   貼ったときに、そのまま公開される事故を防ぐ。悪意なく普通に起こる）
@@ -1005,9 +1010,24 @@ def _project_sources(v, ctx: _Ctx) -> list | None:
     return out or None
 
 
+_MACHINE_TYPES = {
+    "slug": str, "name": str, "manufacturer": str, "info": str, "strategy": str,
+    "tenjo_display": str, "release_date": str, "confirmed_at": str,
+    "aliases": list, "sources": list, "seo": dict, "original": dict,
+    "strategyByRate": dict, "checker": dict,
+}
+
+
 def _project_machine(machine: dict, gates: dict, ctx: _Ctx) -> dict:
     profile = gates["profile"]
     out: dict = {}
+    # ★機種フィールドの既知型不正は構造エラーにする（黙って落とさない）★
+    if not _types_ok(ctx, machine, "machine", _MACHINE_TYPES):
+        return out
+    lim = machine.get("limit")
+    if "limit" in machine and lim is not None and not (_is_num(lim) or isinstance(lim, dict)):
+        ctx.reject("machine.limit", "limitが数値でも辞書でもない")
+        return out
 
     def s(field):
         v = machine.get(field)
@@ -1037,7 +1057,10 @@ def _project_machine(machine: dict, gates: dict, ctx: _Ctx) -> dict:
     s("tenjo_display")
     al = machine.get("aliases")
     if isinstance(al, list):
-        kept = [x for j, x in enumerate(al) if _is_str(x) and ctx.atom([x], f"aliases[{j}]")]
+        if not all(_is_str(x) for x in al):
+            ctx.reject("aliases", "別名に文字列でない要素がある")
+            return out
+        kept = [x for j, x in enumerate(al) if ctx.atom([x], f"aliases[{j}]")]
         if kept:
             out["aliases"] = kept
     lim = machine.get("limit")
@@ -1374,13 +1397,22 @@ def selftest() -> int:
     t("識別子形式でないキーは公開を止める", raised)
 
     # ===== preview =====
+    # info が辞書（型不正）の場合は、射影で落とすより早く構造エラーで止まる
+    raised = False
+    try:
+        publish_view({"slug": "x", "lifecycle": "VERIFIED_PREVIEW", "name": "テスト機",
+                      "info": {"天井": 999, "note": "600Gから狙い目"}})
+    except GateError:
+        raised = True
+    t("★入れ子になったinfo（型不正）は構造エラーで止める", raised)
+
     prev = {"slug": "x", "lifecycle": "VERIFIED_PREVIEW", "name": "テスト機",
             "manufacturer": "メーカーA", "release_date": "2026-08-01",
-            "info": {"天井": 999, "note": "600Gから狙い目"},
+            "info": "天井999GのスマスロAT",
             "strategy": "等価600G〜", "limit": 999}
     pv = publish_view(prev, {"lead": "リード", "sections": [{"title": "天井・恩恵", "body": ["天井は999Gです。"]}]})
     dumped = json.dumps(pv["machine"], ensure_ascii=False)
-    t("preview: 入れ子infoも狙い目も出さない",
+    t("preview: 禁止話題を含むinfoも狙い目も出さない",
       "999" not in dumped and "狙い目" not in dumped and "strategy" not in pv["machine"])
     t("preview: 記事本文を出さない", pv["detail"] == {})
     t("preview: 名称・メーカー・導入日は出す",

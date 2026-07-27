@@ -68,6 +68,8 @@ AUTHORING_ONLY = {"lifecycle", "status", "checker_modes", "checker_kill_switch",
 
 SECRET_HINT_RE = re.compile(r"token|key=|sig=|signature|auth|session|password", re.I)
 SLUG_RE = re.compile(r"^[a-z0-9_]+$")
+_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,31}$")   # mode名・交換率キーの形式
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 _TAG = re.compile(r"<[^>]*>")
 _ZW = re.compile(r"[​-‏⁠﻿­]")
@@ -234,7 +236,9 @@ def _audit_checker_shape(slug: str, ck, path: str = "checker") -> list[str]:
         return [f"{slug}: {path} が辞書でない"]
     for k, v in ck.items():
         if k in _CK_TOP:
-            if k in ("limit", "suruMax") and not isinstance(v, (int, float)):
+            # ★真偽値は数値として扱わない（limit: true を通さない）★
+            if k in ("limit", "suruMax") and (not isinstance(v, (int, float))
+                                              or isinstance(v, bool)):
                 out.append(f"{slug}: {path}.{k} の型が不正")
             if k in ("unit", "defaultRate", "ok", "ng") and not isinstance(v, str):
                 out.append(f"{slug}: {path}.{k} の型が不正")
@@ -254,10 +258,16 @@ def _audit_checker_shape(slug: str, ck, path: str = "checker") -> list[str]:
                 else:
                     for i, r in enumerate(v):
                         if not (isinstance(r, dict) and set(r.keys()) <= {"key", "label"}
-                                and isinstance(r.get("key"), str)):
+                                and isinstance(r.get("key"), str)
+                                and _KEY_RE.match(r.get("key", ""))):
                             out.append(f"{slug}: {path}.exchangeRates[{i}] の形が不正")
+                        elif "label" in r and not isinstance(r["label"], str):
+                            out.append(f"{slug}: {path}.exchangeRates[{i}].label の型が不正")
             continue
         # mode 設定
+        if not _KEY_RE.match(k):
+            out.append(f"{slug}: {path}.{k} のmodeキーが識別子でない")
+            continue
         if not isinstance(v, dict):
             out.append(f"{slug}: {path}.{k} が辞書でない（未知フィールドの疑い）")
             continue
@@ -274,14 +284,22 @@ def _audit_checker_shape(slug: str, ck, path: str = "checker") -> list[str]:
                     out.append(f"{slug}: {path}.{k}.{seq} の型が不正")
                 else:
                     for i, row in enumerate(v[seq]):
-                        if isinstance(row, dict):
-                            out.extend(_audit_checker_shape(slug, {"row": row},
-                                                            f"{path}.{k}.{seq}[{i}]"))
+                        if not isinstance(row, dict):
+                            out.append(f"{slug}: {path}.{k}.{seq}[{i}] が辞書でない")
+                            continue
+                        out.extend(_audit_checker_shape(slug, {"row": row},
+                                                        f"{path}.{k}.{seq}[{i}]"))
         if "byRate" in v:
             if not isinstance(v["byRate"], dict):
                 out.append(f"{slug}: {path}.{k}.byRate の型が不正")
             else:
                 for rk, rv in v["byRate"].items():
+                    if not (isinstance(rk, str) and _KEY_RE.match(rk)):
+                        out.append(f"{slug}: {path}.{k}.byRate の交換率キーが識別子でない")
+                        continue
+                    if isinstance(rv, dict) and set(rv.keys()) - {
+                            "excellent", "good", "caution", "target", "note", "suruMax"}:
+                        out.append(f"{slug}: {path}.{k}.byRate.{rk} に未知フィールド")
                     out.extend(_audit_checker_shape(slug, {rk: rv}, f"{path}.{k}.byRate"))
     return out
 
@@ -301,7 +319,20 @@ def _audit_axis(slug: str, ck) -> list[str]:
         return out
     unit = ck.get("unit")
     decl = ck.get("modes") if isinstance(ck.get("modes"), list) else []
-    flags = {m.get("key"): m for m in decl if isinstance(m, dict)}
+    # ★modes宣言の型・一意性を検査（key が非文字列だと辞書化で例外になるため先に弾く）★
+    flags: dict = {}
+    for i, m in enumerate(decl):
+        if not isinstance(m, dict):
+            out.append(f"{slug}: checker.modes[{i}] が辞書でない"); continue
+        key = m.get("key")
+        if not isinstance(key, str) or not _KEY_RE.match(key):
+            out.append(f"{slug}: checker.modes[{i}].key が識別子でない"); continue
+        if key in flags:
+            out.append(f"{slug}: checker.modes に重複した key")
+        for fk, ft in (("label", str), ("hasSuru", bool), ("hasCycle", bool)):
+            if fk in m and not isinstance(m[fk], ft):
+                out.append(f"{slug}: checker.modes[{i}].{fk} の型が不正")
+        flags[key] = m
     for k, v in ck.items():
         if k in _CK_TOP or not isinstance(v, dict):
             continue
@@ -321,7 +352,8 @@ def _audit_axis(slug: str, ck) -> list[str]:
             out.append(f"{slug}: checker.{k} は hasCycle 宣言だが suru[] を持つ")
         direct = [x for x in ("excellent", "good", "caution", "target")
                   if isinstance(v.get(x), (int, float)) and not isinstance(v.get(x), bool)]
-        if rows is None:
+        if rows is None or not rows:
+            # ★空配列も「行が無い」と同じ（rows is None だけ見ると素通りする）★
             out.append(f"{slug}: checker.{k} が回数ごとの行を持たない"
                        + ("（直下閾値のみ＝軸の食い違い）" if direct else "（判定材料が無い）"))
             continue
@@ -372,9 +404,30 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
     for k, typ in (("info", str), ("strategy", str), ("aliases", list), ("seo", dict),
                    ("checker", dict), ("sources", list), ("strategyByRate", dict),
                    ("original", dict), ("display_requirements", dict),
-                   ("manufacturer", str), ("tenjo_display", str)):
+                   ("manufacturer", str), ("tenjo_display", str),
+                   ("release_date", str), ("confirmed_at", str), ("disclaimer", str)):
         if k in pub and not isinstance(pub[k], typ):
             problems.append(f"{slug}: フィールド {k} の型が不正")
+    for k in ("release_date", "confirmed_at"):
+        if isinstance(pub.get(k), str) and not _DATE_RE.match(pub[k]):
+            problems.append(f"{slug}: {k} の日付形式が不正")
+    lim = pub.get("limit")
+    if "limit" in pub:
+        if isinstance(lim, dict):
+            if not all(isinstance(kk, str) and _KEY_RE.match(kk)
+                       and isinstance(vv, (int, float)) and not isinstance(vv, bool)
+                       for kk, vv in lim.items()):
+                problems.append(f"{slug}: limit の中身が不正")
+        elif not isinstance(lim, (int, float)) or isinstance(lim, bool):
+            problems.append(f"{slug}: limit の型が不正")
+    if isinstance(pub.get("aliases"), list) and not all(isinstance(x, str)
+                                                        for x in pub["aliases"]):
+        problems.append(f"{slug}: aliases に文字列でない要素")
+    if isinstance(pub.get("strategyByRate"), dict):
+        for kk, vv in pub["strategyByRate"].items():
+            if not (isinstance(kk, str) and _KEY_RE.match(kk) and isinstance(vv, str)):
+                problems.append(f"{slug}: strategyByRate の中身が不正")
+                break
     if not (isinstance(slug, str) and SLUG_RE.match(slug)):
         problems.append(f"{slug}: slugの形式が不正")
     elif seen_slugs is not None:
@@ -424,6 +477,23 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
             problems.append(f"{slug}: checkerが目安ラベルの表示面に含まれていない")
     if dr is not None and not isinstance(dr, dict):
         problems.append(f"{slug}: display_requirements の型が不正")
+    elif isinstance(dr, dict):
+        if "disclaimer" in dr and dr["disclaimer"] != EXPECTED_DISCLAIMER:
+            problems.append(f"{slug}: display_requirements.disclaimer が固定文言と違う")
+        # ★数値が載っている面と surfaces の完全一致を独立に検算する★
+        #   （1面でも surfaces から抜けると、その面に目安表示が付かない）
+        if isinstance(dr.get("surfaces"), list):
+            actual = {k for k, v in pub.items()
+                      if k not in ("slug", "release_date", "confirmed_at", "disclaimer",
+                                   "display_requirements", "sources")
+                      and _NUM.search(as_displayed(json.dumps(v, ensure_ascii=False)))}
+            if isinstance(pub.get("sources"), list) and any(
+                    isinstance(s, dict) and _NUM.search(str(s.get("title", "")))
+                    for s in pub["sources"]):
+                actual.add("sources.title")
+            missing = actual - set(dr["surfaces"])
+            if missing:
+                problems.append(f"{slug}: 数値のある面が表示要件に無い: {sorted(missing)}")
 
     # --- B/C. 表示内容（原子単位） ---
     leaves: list[tuple[str, str]] = []
@@ -501,12 +571,20 @@ def audit_detail(slug: str, detail: dict, has_disclaimer: bool) -> list[str]:
                            ("note", str), ("wide", bool)):
                 if f3 in tb and not isinstance(tb[f3], t3):
                     problems.append(f"{slug}: sections[{i}].tables[{ti}].{f3} の型が不正")
+            if isinstance(tb.get("headers"), list) and not all(
+                    isinstance(h, str) for h in tb["headers"]):
+                problems.append(f"{slug}: sections[{i}].tables[{ti}].headers に文字列でない要素")
             for ri, row in enumerate(tb.get("rows") or []):
                 for c in (row if isinstance(row, list) else [row]):
-                    if isinstance(c, dict) and set(c.keys()) - {"text", "badge"}:
-                        problems.append(f"{slug}: sections[{i}].tables[{ti}].rows[{ri}] のセルに未知フィールド")
-                    elif not isinstance(c, (str, dict)):
+                    if isinstance(c, dict):
+                        if set(c.keys()) - {"text", "badge"}:
+                            problems.append(f"{slug}: sections[{i}].tables[{ti}].rows[{ri}] のセルに未知フィールド")
+                        if not all(isinstance(cv, str) for cv in c.values()):
+                            problems.append(f"{slug}: sections[{i}].tables[{ti}].rows[{ri}] のセル値が文字列でない")
+                    elif not isinstance(c, str):
                         problems.append(f"{slug}: sections[{i}].tables[{ti}].rows[{ri}] のセル型が不正")
+        if isinstance(s.get("body"), list) and not all(isinstance(x, str) for x in s["body"]):
+            problems.append(f"{slug}: sections[{i}].body に文字列でない要素")
     for i, r in enumerate(detail.get("factTable") or []):
         if not (isinstance(r, list) and len(r) == 2 and all(isinstance(x, str) for x in r)):
             problems.append(f"{slug}: factTable[{i}] が2要素の文字列配列でない")
@@ -633,8 +711,9 @@ def selftest() -> int:
 
     # --- 軸契約の独立実装（Codex 12巡目 条件6）---
     def _ax(ck):
+        # strategy にも数値があるので表示要件に両方を挙げる（実装が求める正しい形）
         return audit_machine({**ok, "checker": ck,
-                              "display_requirements": {"surfaces": ["checker"]}})
+                              "display_requirements": {"surfaces": ["checker", "strategy"]}})
     good_ax = {"unit": "G", "modes": [{"key": "suru", "hasSuru": True}],
                "suru": {"suru": [{"count": 0, "good": 600}, {"count": 1, "good": 500}]}}
     t("★軸契約(監査側): 正しい二軸は通す", _ax(good_ax) == [])
@@ -653,6 +732,38 @@ def selftest() -> int:
           "cycle": {"note": "周期天井"}}, "noteだけの周期mode"),
     ):
         t(f"★軸契約(監査側): {label} → 違反", _ax(ck) != [])
+    # Codex 13巡目の指定反例
+    for ck, label in (
+        ({**good_ax, "suru": {"suru": []}}, "空の行配列"),
+        ({**good_ax, "suru": {"suru": [{"count": 1, "good": 600}, {"count": 1, "good": 500}]}}, "count重複"),
+        ({**good_ax, "suru": {"suru": [{"count": -1, "good": 600}]}}, "count負数"),
+        ({**good_ax, "modes": [{"key": "suru", "hasSuru": 1}]}, "宣言フラグの型不正"),
+        ({**good_ax, "modes": [{"key": "suru", "hasSuru": True}, {"key": "suru"}]}, "宣言キー重複"),
+        ({**good_ax, "modes": [{"key": [], "hasSuru": True}]}, "宣言キーが非文字列"),
+        ({**good_ax, "limit": True}, "トップ数値に真偽値"),
+        ({**good_ax, "exchangeRates": [{"key": "eq56", "label": 1}]}, "交換率ラベルの型不正"),
+        ({**good_ax, "不正キー": {"good": 1}}, "modeキーが識別子でない"),
+        ({**good_ax, "suru": {"suru": [{"count": 1, "good": 600, "byRate": {"e!": {"good": 1}}}]}},
+         "交換率キーが識別子でない"),
+    ):
+        t(f"★独立検査: {label} → 違反", _ax(ck) != [])
+    t("★独立検査: 数値のある面が表示要件に無い → 違反",
+      any("表示要件に無い" in p for p in audit_machine(
+          {**ok, "strategy": "600G〜", "display_requirements": {"surfaces": []}})))
+    t("★独立検査: 日付形式・limit・aliases・strategyByRate の不正を検出",
+      any("日付形式" in p for p in audit_machine({**ok, "release_date": "2026/8/1"}))
+      and any("limit" in p for p in audit_machine({**ok, "limit": True}))
+      and any("aliases" in p for p in audit_machine({**ok, "aliases": [1]}))
+      and any("strategyByRate" in p for p in audit_machine({**ok, "strategyByRate": {"eq": 1}})))
+    t("★独立検査: 記事の本文・見出し行・セル値の型不正を検出",
+      any("body に文字列でない" in p for p in audit_detail(
+          "x", {"sections": [{"title": "安全", "body": [1]}]}, True))
+      and any("headers に文字列でない" in p for p in audit_detail(
+          "x", {"sections": [{"title": "安全", "type": "settei",
+                              "tables": [{"headers": [1], "rows": [["a", "b"]]}]}]}, True))
+      and any("セル値が文字列でない" in p for p in audit_detail(
+          "x", {"sections": [{"title": "安全", "type": "settei",
+                              "tables": [{"rows": [[{"text": "a", "badge": 1}]]}]}]}, True)))
     t("★必須フィールドが型不正なら違反（name: true）",
       any("型が不正" in p for p in audit_machine({"slug": "x", "name": True})))
 
