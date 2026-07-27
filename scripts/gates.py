@@ -60,16 +60,33 @@ ABSOLUTE_DENY_PAT = re.compile("|".join(re.escape(t) for t in ABSOLUTE_DENY))
 # 数字の列挙（・、,／/～-）と原子の区切り(" / ")を跨ぐ表現も捕まえる。
 _SET_NUM = r"[1-6１-６一二三四五六]"
 SETTING_DENY_PAT = re.compile(
-    r"設定" + _SET_NUM + r"(?:\s*[・、,／/～\-〜]\s*" + _SET_NUM + r")*"
-    r"(?:\s*設定)?\s*(?:段階)?\s*(?:[はがもの]|/|\s)*\s*"
-    r"(?:搭載\s*(?:は|が)?\s*)?(?:なし|無し|ない|無い|非搭載|未搭載|存在しない|ありません|ございません)"
+    r"(?:設定\s*" + _SET_NUM + r"(?:\s*[・、,／/～\-〜と]\s*(?:設定\s*)?" + _SET_NUM + r")*"
+    r"\s*(?:設定)?\s*(?:段階)?\s*(?:[はがもをの]|/|\s)*\s*"
+    r"(?:搭載\s*(?:は|が|して)?\s*)?"
+    r"(?:なし|無し|ない|無い|非搭載|未搭載|存在しない|ありません|ございません|いない|いません))"
 )
+
+# 設定の「列挙」で欠番を作り、暗に非搭載を主張する表現（実データ: "スマスロ A+BT（設定1/2/4/5/6）"）
+_SET_ENUM_PAT = re.compile(r"設定\s*([1-6](?:\s*[・、,／/･]\s*[1-6]){1,5})")
+
+
+def _implies_missing_setting(text: str) -> bool:
+    """設定の列挙に欠番があれば「その設定は無い」と主張しているのと同じ。"""
+    for m in _SET_ENUM_PAT.finditer(text):
+        nums = sorted({int(x) for x in re.findall(r"[1-6]", m.group(1))})
+        if len(nums) >= 2 and set(range(nums[0], nums[-1] + 1)) - set(nums):
+            return True
+    return False
 
 # 【第2層】これを含む原子は台帳で明示分類されていなければ通さない（未分類=fail-closed）。
 RISK_TOKENS = (
     "期待値", "収支", "プラス", "マイナス", "黒字", "赤字", "利益", "儲", "時給", "損益",
     "分岐", "勝て", "得する", "回収", "枚数", "有利", "円", "旨味", "リターン", "費用対効果",
     "機械割", "純増", "出玉",
+    # Codex 4巡目で実データから検出（「約400G前後と試算」「投資効率は優秀」「狙うとお得」等）
+    "試算", "計算", "投資", "収益", "お得", "甘い", "アドバンテージ", "価値",
+    # 設定段階の主張は公式/複数解析の確認なしに出さない（未登録なら止める）
+    "設定",
 )
 RISK_PAT = re.compile("|".join(re.escape(t) for t in RISK_TOKENS))
 
@@ -275,7 +292,8 @@ def classify_atom(parts, ledger: dict | None, profile: str | None = None) -> str
         return ALLOW
     if profile == "preview_basic" and PREVIEW_FORBIDDEN_PAT.search(text):
         return DROP
-    if ABSOLUTE_DENY_PAT.search(text) or SETTING_DENY_PAT.search(text):
+    if (ABSOLUTE_DENY_PAT.search(text) or SETTING_DENY_PAT.search(text)
+            or _implies_missing_setting(text)):
         return DROP
     entry = (ledger or {}).get(atom_id(text, profile))
     verdict = entry.get("verdict") if isinstance(entry, dict) else None
@@ -333,6 +351,15 @@ def _project_mode(conf, ctx: _Ctx, path: str, ctx_label: str) -> dict | None:
         ctx.reject(path, "未知フィールドを含むため mode ごと拒否")
         return None
     out: dict = {}
+    # ★既知フィールドの型不正は必ず止める★（noteが配列/辞書だと「注意書き無し」と誤認して
+    #   数値だけ残る。数値フィールドが文字列でも同様。AI・運営者が普通に起こす型ミス）
+    for k in _MODE_NUM_KEYS:
+        if k in conf and not _is_num(conf[k]):
+            ctx.reject(f"{path}.{k}", "数値フィールドの型不正")
+            return None
+    if "note" in conf and not _is_str(conf["note"]):
+        ctx.reject(f"{path}.note", "noteの型不正（注意書きを失って数値だけ残るのを防ぐ）")
+        return None
     nums = {k: conf[k] for k in _MODE_NUM_KEYS if _is_num(conf.get(k))}
     note = conf.get("note") if _is_str(conf.get("note")) else None
     # ★数値と注意書きは1つの原子★
@@ -343,38 +370,53 @@ def _project_mode(conf, ctx: _Ctx, path: str, ctx_label: str) -> dict | None:
     out.update(nums)
     if note:
         out["note"] = note
-    cyc = conf.get("cycle")
-    if isinstance(cyc, list) and cyc:
-        if all(_is_num(x) for x in cyc):
-            out["cycle"] = list(cyc)
-        else:
-            rows = [r for r in (_project_mode(x, ctx, f"{path}.cycle[{i}]", ctx_label)
-                                for i, x in enumerate(cyc) if isinstance(x, dict)) if r]
-            if rows:
-                out["cycle"] = rows
-    suru = conf.get("suru")
-    if isinstance(suru, list):
-        rows = [r for r in (_project_mode(x, ctx, f"{path}.suru[{i}]", ctx_label)
-                            for i, x in enumerate(suru) if isinstance(x, dict)) if r]
-        if rows:
-            out["suru"] = rows
+    # cycle / suru は「1行でも落ちたら mode ごと落とす」（部分的に残すと段が飛んで誤判定になる）
+    for field in ("cycle", "suru"):
+        seq = conf.get(field)
+        if field not in conf:
+            continue
+        if not isinstance(seq, list) or not seq:
+            ctx.reject(f"{path}.{field}", f"{field}の型不正")
+            return None
+        if field == "cycle" and all(_is_num(x) for x in seq):
+            out["cycle"] = list(seq)
+            continue
+        rows = []
+        for i, x in enumerate(seq):
+            if not isinstance(x, dict):
+                ctx.reject(f"{path}.{field}[{i}]", "配列要素が辞書でない")
+                return None
+            r = _project_mode(x, ctx, f"{path}.{field}[{i}]", ctx_label)
+            if r is None:
+                ctx.reject(f"{path}.{field}[{i}]", "行が公開基準を満たさない（部分的に出さない）")
+                return None
+            rows.append(r)
+        out[field] = rows
     by = conf.get("byRate")
+    if "byRate" in conf and not isinstance(by, dict):
+        ctx.reject(f"{path}.byRate", "byRateの型不正")
+        return None
     if isinstance(by, dict):
         rates = {}
         for rk, rv in by.items():
+            # ★1つの交換率でも落ちたら mode ごと落とす★
+            #   （等価だけ消えて5.6枚が残る等、条件の欠けた表示は誤誘導になる）
             if not _ok_key(rk):
                 ctx.reject(f"{path}.byRate", "交換率キーが識別子形式でない")
-                continue
+                return None
             if not _only_keys(rv, _RATE_ALLOWED):
                 ctx.reject(f"{path}.byRate.{rk}", "未知フィールドを含むため拒否")
-                continue
+                return None
+            if "note" in rv and not _is_str(rv["note"]):
+                ctx.reject(f"{path}.byRate.{rk}.note", "noteの型不正")
+                return None
             r = {k: rv[k] for k in ("excellent", "good", "caution", "target", "suruMax")
                  if _is_num(rv.get(k))}
             rnote = rv.get("note") if _is_str(rv.get("note")) else None
             # 交換率別も「数値＋注意書き」で1原子（注意書きだけ消えて数値が残るのを防ぐ）
             if not ctx.atom([ctx_label, rk, rnote, *[f"{k}={v}" for k, v in r.items()]],
                             f"{path}.byRate.{rk}"):
-                continue
+                return None
             if rnote:
                 r["note"] = rnote
             if r:
@@ -385,7 +427,14 @@ def _project_mode(conf, ctx: _Ctx, path: str, ctx_label: str) -> dict | None:
 
 
 def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | None:
-    if not isinstance(checker, dict) or not allowed_modes:
+    if not allowed_modes:
+        return None
+    # ★VERIFIED指定なのに checker 本体が無い／型不正は矛盾（gateは開くのに中身が出ない）★
+    if not isinstance(checker, dict):
+        ctx.reject("checker", "VERIFIED指定だが checker 本体が無い/辞書でない")
+        return None
+    if "modes" in checker and not isinstance(checker["modes"], list):
+        ctx.reject("checker.modes", "modesの型不正")
         return None
     out: dict = {}
     if _is_str(checker.get("unit")) and ctx.atom([checker["unit"]], "checker.unit"):
@@ -484,13 +533,23 @@ _CELL_ALLOWED = {"text", "badge"}
 
 
 def _project_sections(sections, ctx: _Ctx) -> list | None:
+    if sections is None:
+        return None
     if not isinstance(sections, list):
+        ctx.reject("sections", "sectionsの型不正")
         return None
     out = []
     for i, sec in enumerate(sections):
         p = f"sections[{i}]"
         if not isinstance(sec, dict):
+            ctx.reject(p, "セクションが辞書でない")
             continue
+        for k, typ in (("body", list), ("tables", list), ("rows", list), ("title", str)):
+            if k in sec and not isinstance(sec[k], typ):
+                ctx.reject(f"{p}.{k}", "既知フィールドの型不正")
+                break
+        else:
+            pass
         if not _only_keys(sec, _SECTION_ALLOWED):
             ctx.reject(p, "未知フィールドを含むためセクションごと拒否")
             continue
@@ -612,7 +671,9 @@ def _project_simple_rows(rows, ctx: _Ctx, path: str, section_title: str):
             for keys in ({"trigger", "hint"}, {"left", "right"}, {"label", "value"},
                          {"title", "badge", "value"}, {"title", "value"},
                          {"label", "badge", "value"}):
-                if _only_keys(row, keys):
+                # ★完全一致で判定★（部分集合だと {"value": "580G"} のような片側だけの行を
+                #   通してしまい、対になる条件を失った数値が公開される）
+                if set(row.keys()) == keys:
                     cells = [row[k] for k in
                              [x for x in ("trigger", "left", "label", "title") if x in row]
                              + [x for x in ("badge",) if x in row]
@@ -647,8 +708,12 @@ def _project_sources(v, ctx: _Ctx) -> list | None:
             continue
         url = s.get("url")
         if not (_is_str(url) and _URL_PAT.match(url)):
+            if url is not None:
+                ctx.reject(f"sources[{i}].url", "URLがhttpsの想定形式でない")
             continue
-        e = {"url": url}
+        # ★クエリ・フラグメントを落とす★（署名付きURLや ?token=… を出典として
+        #   貼ったときに、そのまま公開される事故を防ぐ。悪意なく普通に起こる）
+        e = {"url": re.split(r"[?#]", url, 1)[0]}
         if _is_str(s.get("title")) and ctx.atom([s["title"]], f"sources[{i}].title"):
             e["title"] = s["title"]
         if _is_str(s.get("confirmed_at")) and _DATE_PAT.match(s["confirmed_at"]):
@@ -778,6 +843,36 @@ def _project_detail(detail, gates: dict, ctx: _Ctx) -> dict:
 
 # ---------------------------------------------------------------- 公開API
 
+_NUM_IN_TEXT = re.compile(r"[0-9０-９]")
+
+
+def _numeric_surfaces(pm: dict, pd: dict) -> list[str]:
+    """公開物のうち、実際に数値が載っている表示面を列挙する（目安ラベルの必要判定）。"""
+    found: list[str] = []
+
+    def has_num(node) -> bool:
+        if _is_str(node):
+            return bool(_NUM_IN_TEXT.search(node))
+        if _is_num(node):
+            return True
+        if isinstance(node, list):
+            return any(has_num(x) for x in node)
+        if isinstance(node, dict):
+            return any(has_num(v) for v in node.values())
+        return False
+
+    for k, v in pm.items():
+        if k in ("slug", "release_date", "confirmed_at", "sources", "disclaimer",
+                 "display_requirements"):
+            continue
+        if has_num(v):
+            found.append(k)
+    for k, v in pd.items():
+        if has_num(v):
+            found.append(f"detail.{k}")
+    return sorted(found)
+
+
 def publish_view(machine: dict, detail: dict | None = None,
                  ledger: dict | None = None) -> dict:
     """validate → compute → project を不可分に実行。★外から gates を渡せない★
@@ -809,13 +904,15 @@ def publish_view(machine: dict, detail: dict | None = None,
 
     # ★狙い目・数値を出すなら「当サイトの目安」表示を必須要件として明示する★
     #   machine側だけでなく detail 側（要約・表・本文）だけに数値がある場合も対象にする。
-    numeric_machine = any(k in pm for k in
-                          ("strategy", "strategyByRate", "checker", "tenjo_display", "limit"))
-    numeric_detail = any(k in pd for k in ("summaryBoxes", "factTable", "sections", "lead"))
-    if numeric_machine or numeric_detail:
+    # ★「キーがあるか」ではなく「実際に数値が載っているか」で判定する★
+    #   文字だけの本文に一律で目安ラベルを付けるのは品質を損ね、
+    #   info/seo/original に数値がある場合を見落とすため。
+    surfaces = _numeric_surfaces(pm, pd)
+    if surfaces:
         pm["disclaimer"] = LEGACY_DISCLAIMER
-        # レンダラーがこの表示を落とさないことは、配線時に preflight で検証すること
-        pm["display_requirements"] = {"must_render": ["disclaimer"]}
+        # どの表示面に併記が必要かをフィールド単位で返す。
+        # 実際に併記されることは配線時の preflight（最終HTML検査）で検証すること。
+        pm["display_requirements"] = {"disclaimer": LEGACY_DISCLAIMER, "surfaces": surfaces}
     return {"gates": gates, "machine": pm, "detail": pd}
 
 
@@ -923,9 +1020,11 @@ def selftest() -> int:
     badge = {"sections": [{"title": "設定示唆まとめ", "type": "settei",
                            "tables": [{"label": "終了画面", "headers": ["画面", "示唆"],
                                        "rows": [[{"text": "白", "badge": "期待収支がプラス"}, "弱"]]}]}]}
-    bj = json.dumps(audit_view(base, badge), ensure_ascii=False)
+    # 「設定示唆まとめ」は 設定 を含むため台帳が要る（未分類なら止まるのが正しい挙動）
+    led_badge = {atom_id(s, "legacy_safe"): {"verdict": ALLOW} for s in
+                 ("設定示唆まとめ", "設定示唆まとめ / 終了画面", "設定示唆まとめ / 画面 / 示唆")}
     t("★設定表の badge も分類される", "期待収支" not in json.dumps(
-        publish_view(base, badge)["detail"], ensure_ascii=False))
+        publish_view(base, badge, led_badge)["detail"], ensure_ascii=False))
 
     # ===== 未知フィールドは原子ごと拒否 =====
     unk = {"summaryBoxes": [{"label": "天井", "value": "999G+α", "note": "未確認"}]}
@@ -1059,7 +1158,8 @@ def selftest() -> int:
                   "checker": {"modes": [{"key": "normal"}]}})["ok"] is False)
 
     # 表label込みの複合断定
-    tbl_led = {atom_id("設定示唆まとめ / 期待値", "legacy_safe"): {"verdict": ALLOW}}
+    tbl_led = {atom_id(s, "legacy_safe"): {"verdict": ALLOW}
+               for s in ("設定示唆まとめ", "設定示唆まとめ / 期待値")}
     tbl = {"sections": [{"title": "設定示唆まとめ", "type": "settei",
                          "tables": [{"label": "期待値", "rows": [["580G〜", "◎"]]}]}]}
     t("★表label＋行の複合断定を見逃さない",
@@ -1069,6 +1169,60 @@ def selftest() -> int:
     d_only = publish_view(base, {"summaryBoxes": [{"label": "狙い目", "value": "580G〜"}]})
     t("★detailだけに狙い目がある場合も目安ラベルが付く",
       d_only["machine"].get("disclaimer") == LEGACY_DISCLAIMER)
+
+    # ===== Codex 4巡目 (a)反例の回帰テスト =====
+    t("★設定の列挙で欠番を作る暗示もDROP（実データ: 設定1/2/4/5/6）",
+      classify_atom(["スマスロ A+BT（設定1/2/4/5/6）"], None, "legacy_safe") == DROP)
+    t("　欠番の無い列挙は通す（設定1/2/3/4/5/6）",
+      classify_atom(["設定1/2/3/4/5/6"], {atom_id("設定1/2/3/4/5/6", "legacy_safe"):
+                                          {"verdict": ALLOW}}, "legacy_safe") == ALLOW)
+    t("★複数設定を並べた非搭載表現もDROP",
+      all(classify_atom([s], None, "legacy_safe") == DROP for s in
+          ("設定3／設定4は非搭載", "設定3、設定4がない", "設定3と4を搭載していない")))
+    t("★計算断定の語彙を追加（試算・投資効率・お得）",
+      all(classify_atom([s], None, "legacy_safe") == UNCLASSIFIED for s in
+          ("平均当選Gは約400G前後と試算されます", "投資効率は優秀です", "狙うとお得です")))
+
+    # 型不正で「注意書きだけ消えて数値が残る」ことがない
+    for bad_conf, label in (
+        ({"good": 580, "note": ["期待収支は算出していません"]}, "noteが配列"),
+        ({"good": "580", "note": "注意"}, "数値が文字列"),
+        ({"good": 580, "byRate": {"eq56": {"excellent": 600, "note": ["注意"]}}}, "byRateのnote型不正"),
+        ({"good": 580, "cycle": "1周期"}, "cycleの型不正"),
+    ):
+        raised = False
+        try:
+            publish_view({**base, "checker_modes": {"normal": "VERIFIED"},
+                          "checker": {"modes": [{"key": "normal"}], "normal": bad_conf}})
+        except GateError:
+            raised = True
+        t(f"★型不正で公開を止める（{label}）", raised)
+
+    raised = False
+    try:
+        publish_view({**base, "checker_modes": {"normal": "VERIFIED"}})   # checker本体が無い
+    except GateError:
+        raised = True
+    t("★VERIFIED指定なのにchecker本体が無ければ止める", raised)
+
+    t("★行形式は完全一致で判定（片側だけの行を通さない）",
+      any(e["path"].startswith("sections[0].rows") for e in audit_view(
+          base, {"sections": [{"title": "設定示唆まとめ", "type": "settei",
+                               "rows": [{"value": "580G"}]}]},
+          {atom_id("設定示唆まとめ", "legacy_safe"): {"verdict": ALLOW}})["errors"]))
+
+    t("★出典URLのクエリ・フラグメントを落とす",
+      publish_view({**base, "sources": [{"url": "https://example.com/a?token=SECRET#x"}]}
+                   )["machine"]["sources"][0]["url"] == "https://example.com/a")
+
+    t("★目安ラベルは実際に数値がある時だけ付く",
+      "disclaimer" not in publish_view(base, {"lead": "数字のない紹介文です。"})["machine"]
+      and publish_view({**base, "strategy": "等価600G〜"})["machine"]["disclaimer"] == LEGACY_DISCLAIMER)
+    t("　どの表示面に必要かを返す",
+      "strategy" in publish_view({**base, "strategy": "等価600G〜"}
+                                 )["machine"]["display_requirements"]["surfaces"])
+    t("★sections/型不正を構造エラーにする",
+      audit_view(base, {"sections": "本文"})["ok"] is False)
 
     # ===== 不変条件 =====
     for bad, label in (({"public": False, "index": True}, "index⇒public"),

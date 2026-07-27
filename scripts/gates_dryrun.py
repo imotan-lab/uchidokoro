@@ -73,10 +73,14 @@ def schema_coverage(machines: list) -> None:
             continue
         # 全modeを VERIFIED と仮定（スキーマの網羅性だけを見る）。
         # 本文の分類状況に左右されないよう、checker の射影だけを直接呼ぶ。
-        modes = {k for k, v in c.items() if isinstance(v, dict) and k not in ("modeData", "byRate")}
+        # ★_disabled のmodeは「意図的に公開しない」ので検査対象から外す★
+        #   （含めると gates 側が正しく拒否した結果を「取りこぼし」と誤報告してしまう）
+        modes = {k for k, v in c.items()
+                 if isinstance(v, dict) and k not in ("modeData", "byRate")
+                 and "_disabled" not in v}
         md = c.get("modeData")
         if isinstance(md, dict):
-            modes |= {k for k, v in md.items() if isinstance(v, dict)}
+            modes |= {k for k, v in md.items() if isinstance(v, dict) and "_disabled" not in v}
         # ★文章の分類による削除と、スキーマの書き忘れを混同しないため、
         #   全ての文字列を無害な文字列に置き換えてから射影する（残るのはスキーマ由来の欠落だけ）。
         ctx = gates._Ctx("legacy_safe", None)
@@ -84,16 +88,19 @@ def schema_coverage(machines: list) -> None:
         for k, v in c.items():
             if k in ("modeData",) or k in modes:
                 continue
+            if isinstance(v, dict) and "_disabled" in v:
+                continue                  # Phase 0で意図的に停止したmode
             if k not in out:
                 missing_top.add(k)
         for mk in modes:
             conf = c.get(mk) if isinstance(c.get(mk), dict) else (md or {}).get(mk, {})
             got = out.get(mk) or {}
             for k in conf:
-                if k == "_disabled":      # 意図的に落とす（Phase 0の停止マーカー）
-                    continue
                 if k not in got:
                     missing_mode.add(k)
+        if ctx.errors:                    # 検査中に構造エラーが出たら黙って通さない
+            for e in ctx.errors:
+                missing_top.add(f"(構造エラー) {e['reason']}")
 
     print("■ 許可スキーマの取りこぼし検査（実データにあるのに公開射影で消えるキー）")
     print(f"   checker直下: {sorted(missing_top) or 'なし'}")
@@ -114,6 +121,7 @@ def main() -> int:
     dropped_total = 0
     unique_ids = set()
     err_count = 0
+    struct_errors: list[dict] = []
 
     for m in machines:
         sim = dict(m)
@@ -136,6 +144,9 @@ def main() -> int:
         a = gates.audit_view(sim, detail, ledger=None)
         u, d = a["unclassified"], a["dropped"]
         dropped_total += len(d)
+        # ★構造エラーを必ず集計する（見落とすと「異常なし」と誤報告してしまう）★
+        for e in a["errors"]:
+            struct_errors.append({"slug": m["slug"], **e})
         if u:
             unclassified_machines += 1
             unclassified_total += len(u)
@@ -155,9 +166,19 @@ def main() -> int:
     print(f"   ユニーク文（重複除く）: {len(unique_ids)} 文")
     print(f"   影響機種         : {unclassified_machines} / {len(machines)}")
     print(f"   自動DROP（絶対禁止・preview禁止話題等）: {dropped_total} 箇所")
+    print("-" * 64)
+    from collections import Counter as _C
+    print("■ 射影時の構造エラー（配線前に必ず0にする）")
+    if struct_errors:
+        for reason, n in _C(e["reason"] for e in struct_errors).most_common(8):
+            print(f"   {n:>4} 件  {reason}")
+        print(f"   影響機種: {len({e['slug'] for e in struct_errors})}")
+    else:
+        print("   なし")
     print("=" * 64)
     print("※ このスクリプトは一切ファイルを書き換えていません。")
-    return 0
+    # ★異常があれば非0終了（CI/preflightに繋げられるように）★
+    return 1 if (err_count or struct_errors) else 0
 
 
 if __name__ == "__main__":
