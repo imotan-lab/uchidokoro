@@ -263,6 +263,9 @@ def _audit_checker_shape(slug: str, ck, path: str = "checker") -> list[str]:
                             out.append(f"{slug}: {path}.exchangeRates[{i}] の形が不正")
                         elif "label" in r and not isinstance(r["label"], str):
                             out.append(f"{slug}: {path}.exchangeRates[{i}].label の型が不正")
+                    keys = [r.get("key") for r in v if isinstance(r, dict)]
+                    if len(keys) != len(set(keys)):
+                        out.append(f"{slug}: {path}.exchangeRates の key が重複")
             continue
         # mode 設定
         if not _KEY_RE.match(k):
@@ -305,6 +308,17 @@ def _audit_checker_shape(slug: str, ck, path: str = "checker") -> list[str]:
 
 
 _COUNT_MODES = ("suru", "through", "cycle")
+
+
+def _audit_exchange_ref(slug: str, ck) -> list[str]:
+    """既定の交換率が選択肢に存在するか（#3の共通原因故障を独立に止める）。"""
+    if not isinstance(ck, dict) or "defaultRate" not in ck:
+        return []
+    rates = ck.get("exchangeRates")
+    keys = {r.get("key") for r in rates if isinstance(r, dict)} if isinstance(rates, list) else set()
+    if ck["defaultRate"] not in keys:
+        return [f"{slug}: 既定の交換率が選択肢に存在しない"]
+    return []
 
 
 def _audit_axis(slug: str, ck) -> list[str]:
@@ -469,6 +483,7 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
                     problems.append(f"{slug}: {fld}.{k} の型が不正")
     problems.extend(_audit_checker_shape(slug, pub.get("checker")))
     problems.extend(_audit_axis(slug, pub.get("checker")))
+    problems.extend(_audit_exchange_ref(slug, pub.get("checker")))
     # ★checkerを出すなら、目安ラベルの対象にcheckerが入っていること★
     #   （gates側の新しい不変条件を、独立にも担保する）
     dr = pub.get("display_requirements")
@@ -493,9 +508,15 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
                     isinstance(s, dict) and _NUM.search(str(s.get("title", "")))
                     for s in pub["sources"]):
                 actual.add("sources.title")
-            missing = actual - set(dr["surfaces"])
+            declared = [x for x in dr["surfaces"] if not str(x).startswith("detail.")]
+            missing = actual - set(declared)
             if missing:
                 problems.append(f"{slug}: 数値のある面が表示要件に無い: {sorted(missing)}")
+            extra = set(declared) - actual
+            if extra:
+                problems.append(f"{slug}: 数値の無い面が表示要件にある: {sorted(extra)}")
+            if len(declared) != len(set(declared)):
+                problems.append(f"{slug}: 表示要件に重複した面がある")
 
     # --- B/C. 表示内容（原子単位） ---
     leaves: list[tuple[str, str]] = []
@@ -566,6 +587,8 @@ def audit_detail(slug: str, detail: dict, has_disclaimer: bool,
             cells = row if isinstance(row, list) else [row]
             if not isinstance(row, (list, dict)):
                 problems.append(f"{slug}: sections[{i}].rows[{ri}] の行形式が不正"); continue
+            if isinstance(row, dict) and set(row.keys()) - {"trigger", "hint"}:
+                problems.append(f"{slug}: sections[{i}].rows[{ri}] の行に未知フィールド")
             for c in (cells if isinstance(row, list) else [row.get("trigger"), row.get("hint")]):
                 if isinstance(c, dict):
                     if set(c.keys()) - {"text", "badge"} or not all(
@@ -577,6 +600,8 @@ def audit_detail(slug: str, detail: dict, has_disclaimer: bool,
             problems.append(f"{slug}: sections[{i}].type が未知の値")
         if set(s.keys()) - {"title", "type", "body", "tables", "rows"}:
             problems.append(f"{slug}: sections[{i}] に未知フィールド")
+        if s.get("type") != "settei" and ("tables" in s or "rows" in s):
+            problems.append(f"{slug}: sections[{i}] は設定示唆でないのに表データを持つ")
         for f2, t2 in (("body", list), ("tables", list), ("rows", list)):
             if f2 in s and not isinstance(s[f2], t2):
                 problems.append(f"{slug}: sections[{i}].{f2} の型が不正")
@@ -635,7 +660,10 @@ def audit_detail(slug: str, detail: dict, has_disclaimer: bool,
     if has_number and not has_disclaimer:
         problems.append(f"{slug}: 記事に数値があるのに目安ラベルが無い")
     # ★記事側の数値がある面も表示要件に載っているかを独立に検算する★
-    if surfaces is not None:
+    if surfaces is None:
+        if has_number:
+            problems.append(f"{slug}: 記事に数値があるのに表示要件が渡されていない")
+    else:
         for k, v in detail.items():
             if not _NUM.search(as_displayed(json.dumps(v, ensure_ascii=False))):
                 continue
@@ -804,7 +832,12 @@ def selftest() -> int:
 
     # --- 記事データ（audit_detail）の負例 ---
     d_ok = {"lead": "紹介文です。", "sections": [{"title": "天井・恩恵", "body": ["天井は999Gです"]}]}
-    t("記事: 正常データは合格", audit_detail("x", d_ok, has_disclaimer=True) == [])
+    # 数値があるので表示要件も渡す（fail-closed: 未指定は違反）
+    t("記事: 正常データは合格",
+      audit_detail("x", d_ok, has_disclaimer=True,
+                   surfaces=["detail.sections"]) == [])
+    t("★記事: 表示要件が渡されていなければ違反（fail-closed）",
+      audit_detail("x", d_ok, has_disclaimer=True) != [])
     t("★記事: 見出しの計算断定を検出",
       any("計算断定" in p for p in audit_detail(
           "x", {"sections": [{"title": "期待収支がプラス", "body": ["本文"]}]}, True)))

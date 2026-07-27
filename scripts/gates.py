@@ -693,18 +693,19 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
             rates.append(e)
         if rates:
             out["exchangeRates"] = rates
-            dr = checker.get("defaultRate")
-            if dr is not None:
-                # ★参照整合性: 既定の交換率は選択肢の中に無ければならない★
-                #   （黙って消すと利用者の初期表示が変わってしまう）
-                if not (_is_str(dr) and any(r["key"] == dr for r in rates)):
-                    ctx.reject("checker.defaultRate", "既定の交換率が選択肢に存在しない")
-                    return None
-                out["defaultRate"] = dr
+    # ★参照整合性は exchangeRates の有無に関わらず検査する★
+    #   （選択肢が無い/空なのに defaultRate だけある場合も黙って消さない）
+    dr = checker.get("defaultRate")
+    if dr is not None:
+        if not (_is_str(dr) and any(r["key"] == dr for r in out.get("exchangeRates") or [])):
+            ctx.reject("checker.defaultRate", "既定の交換率が選択肢に存在しない")
+            return None
+        out["defaultRate"] = dr
 
     decl = checker.get("modes")
     if isinstance(decl, list):
         kept = []
+        seen_decl_keys: set = set()
         for i, m in enumerate(decl):
             if not isinstance(m, dict) or not _ok_key(m.get("key")):
                 ctx.reject(f"checker.modes[{i}]", "modes宣言の要素が不正")
@@ -715,8 +716,13 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
             if not _types_ok(ctx, m, f"checker.modes[{i}]",
                              {"key": str, "label": str, "hasSuru": bool, "hasCycle": bool}):
                 return None
+            # ★重複検査は「公開対象外を除外する前」に行う（非表示mode同士の重複も拾う）★
+            if m["key"] in seen_decl_keys:
+                ctx.reject(f"checker.modes[{i}]", "modes宣言に重複したkey")
+                return None
+            seen_decl_keys.add(m["key"])
             if m["key"] not in allowed_modes:
-                continue                 # VERIFIEDでないmodeの宣言は出さない（正常）
+                continue                 # 表示対象でないmodeの宣言は出さない（正常）
             e = {"key": m["key"]}
             if _is_str(m.get("label")):
                 if not ctx.atom([m["label"]], f"checker.modes[{i}].label"):
@@ -726,9 +732,6 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
             for flag in ("hasSuru", "hasCycle"):
                 if isinstance(m.get(flag), bool):
                     e[flag] = m[flag]
-            if any(x["key"] == e["key"] for x in kept):
-                ctx.reject(f"checker.modes[{i}]", "modes宣言に重複したkey")
-                return None
             kept.append(e)
         if kept:
             out["modes"] = kept
@@ -1023,7 +1026,10 @@ def _project_sources(v, ctx: _Ctx) -> list | None:
         e = {"url": re.split(r"[?#]", url, 1)[0]}
         if _is_str(s.get("title")) and ctx.atom([s["title"]], f"sources[{i}].title"):
             e["title"] = s["title"]
-        if _is_str(s.get("confirmed_at")) and _DATE_PAT.match(s["confirmed_at"]):
+        if s.get("confirmed_at") is not None:
+            if not (_is_str(s["confirmed_at"]) and _DATE_PAT.match(s["confirmed_at"])):
+                ctx.reject(f"sources[{i}].confirmed_at", "確認日の形式が不正（YYYY-MM-DD）")
+                continue
             e["confirmed_at"] = s["confirmed_at"]
         out.append(e)
     return out or None

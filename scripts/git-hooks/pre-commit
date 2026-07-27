@@ -1,0 +1,13 @@
+#!/bin/sh
+# ★コミット前フック: consensus_resolver.py を含むコミットは selftest 通過を必須にする。
+# 「直した」の口約束でなく、テストが通らなければコミット自体を機械が拒否する。
+if git diff --cached --name-only | grep -q "scripts/consensus_resolver.py"; then
+  echo "[pre-commit] consensus_resolver.py の selftest を実行（通らなければコミット中止）..."
+  if python scripts/consensus_resolver.py --selftest; then
+    echo "[pre-commit] ✅ selftest 合格 → コミット許可"
+  else
+    echo "[pre-commit] ❌ selftest 失敗 → コミット中止。直してから再コミットを（--no-verifyでの回避は禁止）"
+    exit 1
+  fi
+fi
+exit 0

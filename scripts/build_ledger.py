@@ -32,19 +32,24 @@ DATA = os.path.join(BASE, "assets", "data")
 
 
 def provisional(m: dict) -> dict:
-    """gates_dryrun と同じ暫定移行案（machines.json は書き換えない）。"""
+    """★暫定移行案の単一情報源★（machines.json は書き換えない）
+
+    以前は gates_dryrun 側と状態がズレており（こちらは UNVERIFIED、あちらは STRUCT_OK）、
+    突き合わせ検査でチェッカーが一度も射影されない＝検証されない穴になっていた（Codex 15巡目 #1）。
+    暫定状態はここ1箇所で決め、dryrun からもこれを使う。
+    """
     sim = dict(m)
     sim["lifecycle"] = "VERIFIED_PREVIEW" if m.get("status") == "preview" else "LEGACY_SEARCH"
     c = m.get("checker") or {}
     modes = {}
     for k, v in c.items():
         if isinstance(v, dict) and k not in ("modeData", "byRate"):
-            modes[k] = "DISABLED" if "_disabled" in v else "UNVERIFIED"
+            modes[k] = "DISABLED" if "_disabled" in v else "STRUCT_OK"
     md = c.get("modeData")
     if isinstance(md, dict):
         for k, v in md.items():
             if isinstance(v, dict):
-                modes.setdefault(k, "DISABLED" if "_disabled" in v else "UNVERIFIED")
+                modes.setdefault(k, "DISABLED" if "_disabled" in v else "STRUCT_OK")
     sim["checker_modes"] = modes
     return sim
 

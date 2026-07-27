@@ -42,6 +42,12 @@ MAX_ROUNDS = 40
 #   gates の自己算出だと「1機種が黙って非公開になった」ことを検出できないため、
 #   ここに人が意図した数を書く。機種を増減したら、意図した変更として必ずここを直す。
 EXPECTED_PUBLIC = 120
+# ★公開されるcheckerの規模（外部固定値）★ 検査が素通りしていないことの担保
+#   ゲートは110機種で開くが、10機種28modeは説明文に禁止表現（プラス域等）が残っており
+#   方針どおり内容除去され、結果としてcheckerが空になる（＝100機種178mode）。
+#   Phase 2 の記事再生成で禁止表現が消えれば、この数は110/206へ戻る想定。
+EXPECTED_CHECKER_MACHINES = 100
+EXPECTED_CHECKER_MODES = 178
 
 # ★公開slugの固定集合★ 件数だけだと「1件消えて1件増える」相殺を見逃すため、
 #   集合そのものを持つ。機種を増減したら意図した変更として更新すること。
@@ -110,6 +116,7 @@ def _all_allow_ledger(sim: dict, detail: dict, g: dict, slug: str) -> dict:
 def run() -> int:
     machines = json.load(open(os.path.join(DATA, "machines.json"), encoding="utf-8"))
     published = blocked = 0
+    checker_machines = checker_modes = 0
     problems: list[str] = []
     seen_slugs: set = set()
     # ★件数予算は gates 自身に計算させない（自己申告では機種が消えても気づけない）★
@@ -132,6 +139,9 @@ def run() -> int:
             problems.append(f"{m['slug']}: 公開が止まった（{e}）")
             continue
         published += 1
+        if view["gates"]["checker"]:
+            checker_machines += 1
+            checker_modes += len(view["gates"]["checker_modes"])
         # slug重複も停止条件に含める（同じslugが2件あると上書き事故になる）
         problems.extend(audit_public.audit_machine(view["machine"], seen_slugs))
         # LEGACY（記事を出す状態）なのに記事が空なら、記事欠落として止める
@@ -151,6 +161,17 @@ def run() -> int:
         problems.append(f"公開されるはずの機種が公開されていない: {s}")
     for s in sorted(seen_slugs - EXPECTED_PUBLIC_SLUGS):
         problems.append(f"想定外の機種が公開されている: {s}")
+
+    # ★checkerが実際に射影・監査されていることを停止条件にする★
+    #   （以前は暫定状態のズレで全checkerが未検証のまま「違反0」と表示していた）
+    if checker_machines != EXPECTED_CHECKER_MACHINES:
+        problems.append(f"checkerを公開した機種数が想定と違う: "
+                        f"{checker_machines} != {EXPECTED_CHECKER_MACHINES}")
+    if checker_modes != EXPECTED_CHECKER_MODES:
+        problems.append(f"公開したcheckerモード数が想定と違う: "
+                        f"{checker_modes} != {EXPECTED_CHECKER_MODES}")
+    if checker_machines == 0:
+        problems.append("checkerが1件も監査されていない（検査が素通りしている）")
 
     problems.extend(axis_regression())    # 軸契約の回帰も停止条件に含める
 

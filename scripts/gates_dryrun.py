@@ -48,7 +48,7 @@ def provisional_checker_modes(m: dict) -> dict:
 # 識別子・日付・slug は置き換えない
 # （置き換えると照合や形式検査が壊れ、検査自体が誤検知する）
 _IDENTIFIER_KEYS = ("key", "defaultRate", "unit", "slug", "release_date", "confirmed_at",
-                    "lifecycle", "name")
+                    "lifecycle", "name", "type")
 
 
 def _neutralize(node):
@@ -142,18 +142,57 @@ def schema_coverage(machines: list) -> bool:
         g = gates.compute_gates(sim)
         ctx = gates._Ctx("legacy_safe", None)
         pm = gates._project_machine(_neutralize(sim), g, ctx)
+        # ★入れ子まで再帰的に突き合わせる（seo.description・sources[].title 等の欠落も拾う）★
+        def _deep(src, dst, where):
+            if src is None:
+                return                    # null は「無し」の明示
+            if isinstance(src, dict):
+                if not isinstance(dst, dict):
+                    missing_other.add(where); return
+                for k2, v2 in src.items():
+                    if k2 in dst:
+                        _deep(v2, dst[k2], f"{where}.{k2}")
+                    elif v2 is not None and v2 != [] and v2 != {}:
+                        missing_other.add(f"{where}.{k2}")
+            elif isinstance(src, list):
+                if not isinstance(dst, list):
+                    missing_other.add(where); return
+                # ★位置ではなく「項目の有無」で比較する★
+                #   射影で一部の要素が正当に落ちると位置がずれ、誤検知になるため。
+                #   ここで見たいのは「スキーマから項目を書き忘れていないか」だけ。
+                if not dst:
+                    return
+                src_keys: set = set()
+                for v2 in src:
+                    if isinstance(v2, dict):
+                        src_keys |= {k3 for k3, v3 in v2.items()
+                                     if v3 is not None and v3 != [] and v3 != {}}
+                dst_keys: set = set()
+                for v2 in dst:
+                    if isinstance(v2, dict):
+                        dst_keys |= set(v2.keys())
+                for k3 in src_keys - dst_keys:
+                    missing_other.add(f"{where}[].{k3}")
         for k in m:
-            # null は「その項目が無い」の明示なので、消えて当然（取りこぼしではない）
-            if (k in PUBLIC_MACHINE and m[k] is not None
-                    and k not in pm and k not in ("checker",)):
+            if k in ("checker",) or k not in PUBLIC_MACHINE:
+                continue
+            if m[k] is None:
+                continue
+            if k not in pm:
                 missing_other.add(f"machine.{k}")
+            else:
+                _deep(m[k], pm[k], f"machine.{k}")
         dp = os.path.join(DATA, "machine-details", f"{m['slug']}.json")
         if os.path.isfile(dp):
             det = json.load(open(dp, encoding="utf-8"))
             pd_ = gates._project_detail(_neutralize(det), g, gates._Ctx("legacy_safe", None))
             for k in det:
-                if k in PUBLIC_DETAIL and k not in pd_:
+                if k not in PUBLIC_DETAIL:
+                    continue
+                if k not in pd_:
                     missing_other.add(f"detail.{k}")
+                else:
+                    _deep(det[k], pd_[k], f"detail.{k}")
     if missing_other:
         missing_top |= missing_other
 
