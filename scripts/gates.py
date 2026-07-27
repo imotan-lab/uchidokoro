@@ -2231,7 +2231,12 @@ def selftest() -> int:
     t("★複合断定: label『期待値』+value『580G〜』は素通りしない",
       classify_atom(["期待値", "580G〜"], led_kv, "legacy_safe") == UNCLASSIFIED)
     t("★複合断定: 見出し＋段落も結合判定",
-      classify_atom(["期待値の目安", "580G〜"], None, "legacy_safe") == UNCLASSIFIED)
+      classify_atom(["当サイトの狙い目",
+                     "580G〜（機械割108%）"],
+                    None, "legacy_safe") == UNCLASSIFIED)
+    t("　見出しを『当サイトの狙い目』に替えても、判断そのものは通す（B区分）",
+      classify_atom(["当サイトの狙い目", "580G〜"],
+                    None, "legacy_safe") == ALLOW)
     t("複合でも絶対禁止は必ずDROP",
       classify_atom(["目安", "580Gから期待収支がプラス"],
                     {atom_id("目安 / 580Gから期待収支がプラス", "legacy_safe"): {"verdict": ALLOW}},
@@ -2498,9 +2503,9 @@ def selftest() -> int:
     t("未分類があれば公開不可", raised)
 
     # ===== 段落の原子性 =====
-    led = {atom_id("期待値の目安 / 天井は999Gです。", "legacy_safe"): {"verdict": ALLOW},
-           atom_id("期待値の目安", "legacy_safe"): {"verdict": ALLOW}}
-    atom = {"sections": [{"title": "期待値の目安",
+    led = {atom_id("当サイトの狙い目 / 天井は999Gです。", "legacy_safe"): {"verdict": ALLOW},
+           atom_id("当サイトの狙い目", "legacy_safe"): {"verdict": ALLOW}}
+    atom = {"sections": [{"title": "当サイトの狙い目",
                           "body": ["580Gから期待収支がプラスになります。", "天井は999Gです。"]}]}
     pa = _pv(base, atom, led)
     aj2 = json.dumps(pa["detail"], ensure_ascii=False)
