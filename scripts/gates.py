@@ -339,10 +339,14 @@ def classify_atom(parts, ledger: dict | None, profile: str | None = None) -> str
     text = normalize_atom(parts if isinstance(parts, (list, tuple)) else [parts])
     if not text:
         return ALLOW
-    if profile == "preview_basic" and PREVIEW_FORBIDDEN_PAT.search(text):
+    # ★区切り記号を除いた形でも絶対禁止を判定する★
+    #   ["期待値が", "プラス"] → "期待値が / プラス" は文字列一致を外れるため、
+    #   区切りを詰めた形も併せて見る（台帳ALLOWで通せる穴を塞ぐ）
+    variants = (text, re.sub(r"\s*[/／|｜]\s*", "", text), re.sub(r"\s*[/／|｜]\s*", " ", text))
+    if profile == "preview_basic" and any(PREVIEW_FORBIDDEN_PAT.search(v) for v in variants):
         return DROP
-    if (ABSOLUTE_DENY_PAT.search(text) or SETTING_DENY_PAT.search(text)
-            or _implies_missing_setting(text)):
+    if any(ABSOLUTE_DENY_PAT.search(v) or SETTING_DENY_PAT.search(v)
+           or _implies_missing_setting(v) for v in variants):
         return DROP
     entry = (ledger or {}).get(atom_id(text, profile))
     verdict = entry.get("verdict") if isinstance(entry, dict) else None
@@ -509,6 +513,23 @@ def _project_mode(conf, ctx: _Ctx, path: str, ctx_label: str) -> dict | None:
     return out or None
 
 
+# 入力軸（何を数えて入力するか）と判定軸の対応。
+# Phase 0 の事故＝「回数入力なのにG数の閾値で判定」を機械的に防ぐ（方針書§6 条件3）。
+_COUNT_AXIS_MODES = ("suru", "through", "cycle")   # 回数・周期で数えるmode
+_AXIS_MAX_COUNT = 30                                # 回数系の閾値がこれを超えたらG数の混入を疑う
+
+
+def _axis_conflict(mode_key: str, conf: dict) -> str | None:
+    """回数入力のmodeにG数らしい閾値が入っていないかを検査する。"""
+    if mode_key not in _COUNT_AXIS_MODES:
+        return None
+    for k in ("excellent", "good", "caution", "target"):
+        v = conf.get(k)
+        if _is_num(v) and v > _AXIS_MAX_COUNT:
+            return f"回数系mode({mode_key})の{k}が{v}＝G数の閾値が混入している疑い"
+    return None
+
+
 def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | None:
     if not allowed_modes:
         return None
@@ -542,7 +563,12 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
             ctx.reject(f"checker.{k}", "数値フィールドに真偽値")
             return None
     out: dict = {}
-    if _is_str(checker.get("unit")) and ctx.atom([checker["unit"]], "checker.unit"):
+    # ★単位・ラベルが落ちたら checker 全体を閉じる★
+    #   （識別子と数値だけ残ると、何の数字か分からないまま公開される）
+    if _is_str(checker.get("unit")):
+        if not ctx.atom([checker["unit"]], "checker.unit"):
+            ctx.content_drop("checker", "単位が公開できないため checker ごと除去")
+            return None
         out["unit"] = checker["unit"]
     if isinstance(checker.get("equivOnly"), bool):
         out["equivOnly"] = checker["equivOnly"]
@@ -571,7 +597,10 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
             if not _types_ok(ctx, r, f"checker.exchangeRates[{i}]", {"key": str, "label": str}):
                 return None
             e = {"key": r["key"]}
-            if _is_str(r.get("label")) and ctx.atom([r["label"]], f"checker.exchangeRates[{i}].label"):
+            if _is_str(r.get("label")):
+                if not ctx.atom([r["label"]], f"checker.exchangeRates[{i}].label"):
+                    ctx.content_drop("checker", "交換率ラベルが公開できないため checker ごと除去")
+                    return None
                 e["label"] = r["label"]
             rates.append(e)
         if rates:
@@ -596,7 +625,10 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
             if m["key"] not in allowed_modes:
                 continue                 # VERIFIEDでないmodeの宣言は出さない（正常）
             e = {"key": m["key"]}
-            if _is_str(m.get("label")) and ctx.atom([m["label"]], f"checker.modes[{i}].label"):
+            if _is_str(m.get("label")):
+                if not ctx.atom([m["label"]], f"checker.modes[{i}].label"):
+                    ctx.content_drop("checker", "modeラベルが公開できないため checker ごと除去")
+                    return None
                 e["label"] = m["label"]
             for flag in ("hasSuru", "hasCycle"):
                 if isinstance(m.get(flag), bool):
@@ -629,6 +661,11 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
             continue
         if declared is not None and key not in declared:
             ctx.reject(f"checker.{key}", "modes宣言に無いmodeをVERIFIEDにできない")
+            continue
+        # ★入力軸と判定軸の整合検査（Phase 0の事故型を機構で防ぐ）★
+        axis = _axis_conflict(key, conf)
+        if axis:
+            ctx.reject(f"checker.{key}", axis)
             continue
         before = len(ctx.errors)
         pm = _project_mode(conf, ctx, f"checker.{key}", key)
@@ -673,6 +710,10 @@ def _project_sections(sections, ctx: _Ctx) -> list | None:
         if not _only_keys(sec, _SECTION_ALLOWED):
             ctx.reject(p, "未知フィールドを含むためセクションごと拒否")
             continue
+        # type は enum。誤型なら tables/rows が黙って消えるので構造エラーにする
+        if "type" in sec and sec["type"] not in ("rumor", "settei"):
+            ctx.reject(f"{p}.type", "セクション種別が未知の値")
+            continue
         title = sec.get("title")
         if not (_is_str(title) and title.strip() and ctx.atom([title], f"{p}.title")):
             continue                                  # 見出しが落ちたらセクションごと落とす
@@ -682,7 +723,7 @@ def _project_sections(sections, ctx: _Ctx) -> list | None:
 
         body = sec.get("body")
         if isinstance(body, list):
-            kept = []
+            kept, lost = [], False
             for j, el in enumerate(body):
                 if not _is_str(el):
                     ctx.reject(f"{p}.body[{j}]", "文字列でない本文要素")
@@ -690,6 +731,14 @@ def _project_sections(sections, ctx: _Ctx) -> list | None:
                 # ★見出し＋段落を結合して判定（単体では無害な組み合わせ断定を捕まえる）★
                 if ctx.atom([title, el], f"{p}.body[{j}]"):
                     kept.append(el)
+                else:
+                    lost = True
+            # ★1段落でも落ちたらセクションごと落とす★
+            #   「580G〜です」「期待収支は算出していません」のうち但し書きだけ消えると
+            #   意味が反転する。兄弟段落との関係を保証できないため塊ごと出さない。
+            if lost:
+                ctx.content_drop(p, "同じセクション内に公開できない段落があるためセクションごと除去")
+                continue
             if kept:
                 new["body"] = kept
 
@@ -779,9 +828,16 @@ def _project_settei_table(tbl, ctx: _Ctx, path: str, section_title: str) -> dict
                 vals.append(val)
             # ★セクション見出し＋表見出し＋表の見出し行＋行 を結合して判定★
             #   （表labelが抜けていると「表label=期待値／行=580G〜」の複合断定を見逃す）
-            if ok and vals and ctx.atom([section_title, label if _is_str(label) else None,
-                                         *head_txt, *texts], f"{path}.rows[{ri}]"):
-                kept_rows.append(vals)
+            if not ok:
+                return None              # セル不正は既に reject 済み
+            if not vals:
+                continue
+            if not ctx.atom([section_title, label if _is_str(label) else None,
+                             *head_txt, *texts], f"{path}.rows[{ri}]"):
+                # ★1行でも落ちたら表ごと落とす★（示唆の一部だけ消えると誤誘導になる）
+                ctx.content_drop(f"{path}.rows[{ri}]", "公開できない行があるため表ごと除去")
+                return None
+            kept_rows.append(vals)
     if kept_rows:
         out["rows"] = kept_rows
     note = tbl.get("note")
@@ -1281,7 +1337,13 @@ def selftest() -> int:
     pa = publish_view(base, atom, led)
     aj2 = json.dumps(pa["detail"], ensure_ascii=False)
     t("段落: 絶対禁止を含む段落は丸ごと落ちる", "期待収支" not in aj2 and "580" not in aj2)
-    t("段落: 同セクションの安全な段落は残る", "天井は999Gです。" in aj2)
+    # ★兄弟段落との関係を保証できないため、1段落でも落ちたらセクションごと落とす★
+    #   （「580G〜です」「期待収支は算出していません」の但し書きだけ消える意味反転を防ぐ）
+    t("段落: 1段落でも落ちたらセクションごと落とす", "天井は999Gです。" not in aj2)
+    t("　安全な段落だけのセクションは残る",
+      "天井は999Gです。" in json.dumps(publish_view(
+          base, {"sections": [{"title": "天井・恩恵", "body": ["天井は999Gです。"]}]}
+      )["detail"], ensure_ascii=False))
 
     # ===== 第3版で塞いだ経路（Codex 3巡目の指摘）=====
     t("★HTMLエンティティで回避できない",
@@ -1392,6 +1454,19 @@ def selftest() -> int:
     t("★目安ラベルは実際に数値がある時だけ付く",
       "disclaimer" not in publish_view(base, {"lead": "数字のない紹介文です。"})["machine"]
       and publish_view({**base, "strategy": "等価600G〜"})["machine"]["disclaimer"] == LEGACY_DISCLAIMER)
+    # ★入力軸と判定軸の整合（Phase 0の事故型を機構で防ぐ・方針書§6 条件3）
+    t("★回数系modeにG数の閾値が入っていたら止める（Phase 0の事故型）",
+      any("G数の閾値が混入" in e["reason"] for e in audit_view(
+          {**base, "checker_modes": {"suru": "STRUCT_OK"},
+           "checker": {"modes": [{"key": "suru"}], "suru": {"good": 400}}})["errors"]))
+    t("　回数として妥当な閾値は通す",
+      publish_view({**base, "checker_modes": {"suru": "STRUCT_OK"},
+                    "checker": {"modes": [{"key": "suru"}], "suru": {"good": 4}}}
+                   )["gates"]["checker"] is True)
+    t("★分割された絶対禁止を台帳ALLOWで通せない",
+      classify_atom(["期待値が", "プラス"],
+                    {atom_id("期待値が / プラス", "legacy_safe"): {"verdict": ALLOW}},
+                    "legacy_safe") == DROP)
     t("★目安チェッカーを出すなら必ず目安ラベルの対象になる",
       "checker" in publish_view(
           {**base, "checker_modes": {"normal": "STRUCT_OK"},

@@ -176,6 +176,20 @@ def _atoms(node, path, out):
                 for i, el in enumerate(seq):
                     if isinstance(el, str):
                         out.append((f"{path}.{field}[{i}]", f"{head} / {el}"))
+                    elif isinstance(el, dict):
+                        # ★見出し＋（表の中の行）まで結合する★
+                        #   labelの無い表でも「section見出し＋行」の複合断定を捕まえる
+                        for sub in ("rows", "headers", "body"):
+                            if not isinstance(el.get(sub), list):
+                                continue
+                            for j, row in enumerate(el[sub]):
+                                cells = row if isinstance(row, list) else [row]
+                                txt = [str(c) if not isinstance(c, dict)
+                                       else " ".join(str(c[k]) for k in ("badge", "text")
+                                                     if isinstance(c.get(k), str))
+                                       for c in cells]
+                                out.append((f"{path}.{field}[{i}].{sub}[{j}]",
+                                            " / ".join([head, *txt])))
                     elif isinstance(el, list):
                         cells = [str(x) if not isinstance(x, dict)
                                  else " ".join(str(x[k]) for k in ("badge", "text")
@@ -231,10 +245,22 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
         elif k not in ALLOWED_MACHINE_KEYS:
             problems.append(f"{slug}: 許可されていないフィールド {k}")
     for i, s in enumerate(pub.get("sources") or []):
-        if isinstance(s, dict):
-            why = _check_url(s.get("url", ""))
-            if why:
-                problems.append(f"{slug}: {why} sources[{i}]")
+        if not isinstance(s, dict):
+            problems.append(f"{slug}: sources[{i}] が辞書でない")
+            continue
+        why = _check_url(s.get("url", ""))
+        if why:
+            problems.append(f"{slug}: {why} sources[{i}]")
+    # ★checkerを出すなら、目安ラベルの対象にcheckerが入っていること★
+    #   （gates側の新しい不変条件を、独立にも担保する）
+    dr = pub.get("display_requirements")
+    if "checker" in pub:
+        if not isinstance(dr, dict) or not isinstance(dr.get("surfaces"), list):
+            problems.append(f"{slug}: checkerを公開しているのに表示要件が無い")
+        elif "checker" not in dr["surfaces"]:
+            problems.append(f"{slug}: checkerが目安ラベルの表示面に含まれていない")
+    if dr is not None and not isinstance(dr, dict):
+        problems.append(f"{slug}: display_requirements の型が不正")
 
     # --- B/C. 表示内容（原子単位） ---
     leaves: list[tuple[str, str]] = []
@@ -281,6 +307,28 @@ def audit_detail(slug: str, detail: dict, has_disclaimer: bool) -> list[str]:
             problems.append(f"{slug}: authoring専用フィールドの流出 {k}")
         elif k not in ALLOWED_DETAIL_KEYS:
             problems.append(f"{slug}: 記事に許可されていないフィールド {k}")
+    # 入れ子の型契約（想定と違う形のまま公開しない）
+    for k, typ in (("lead", str), ("summaryBoxes", list), ("factTable", list), ("sections", list)):
+        if k in detail and not isinstance(detail[k], typ):
+            problems.append(f"{slug}: 記事フィールド {k} の型が不正")
+    for i, s in enumerate(detail.get("sections") or []):
+        if not isinstance(s, dict):
+            problems.append(f"{slug}: sections[{i}] が辞書でない")
+            continue
+        if "title" in s and not isinstance(s["title"], str):
+            problems.append(f"{slug}: sections[{i}].title の型が不正")
+        if "type" in s and s["type"] not in ("rumor", "settei"):
+            problems.append(f"{slug}: sections[{i}].type が未知の値")
+        for f2, t2 in (("body", list), ("tables", list), ("rows", list)):
+            if f2 in s and not isinstance(s[f2], t2):
+                problems.append(f"{slug}: sections[{i}].{f2} の型が不正")
+    for i, r in enumerate(detail.get("factTable") or []):
+        if not (isinstance(r, list) and len(r) == 2 and all(isinstance(x, str) for x in r)):
+            problems.append(f"{slug}: factTable[{i}] が2要素の文字列配列でない")
+    for i, b in enumerate(detail.get("summaryBoxes") or []):
+        if not (isinstance(b, dict) and set(b.keys()) == {"label", "value"}
+                and all(isinstance(v, str) for v in b.values())):
+            problems.append(f"{slug}: summaryBoxes[{i}] の形が不正")
 
     leaves: list[tuple[str, str]] = []
     _atoms(detail, "detail", leaves)
@@ -322,6 +370,10 @@ def audit_file(path: str, expected_count: int | None = None,
                     m["slug"], json.load(open(dp, encoding="utf-8")),
                     has_disclaimer=isinstance(m.get("disclaimer"), str)
                     and m["disclaimer"] == EXPECTED_DISCLAIMER))
+            else:
+                # ★記事ファイルが無いことを「検査不要」にしない★
+                #   （ファイルを置き忘れれば検査を素通りできてしまう）
+                problems.append(f"{m['slug']}: 公開機種なのに記事データが見つからない")
     if details_dir is None:
         problems.append("記事データの検査先(--details-dir)が指定されていない")
     if expected_count is not None and len(machines) != expected_count:
