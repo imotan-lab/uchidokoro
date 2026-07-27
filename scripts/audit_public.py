@@ -225,8 +225,11 @@ def _check_url(u: str) -> str | None:
         return "URLが文字列でない"
     if not u.startswith("https://"):
         return "httpsでないURL"
-    if "@" in u.split("/", 3)[2]:
+    host = u.split("/", 3)[2]
+    if "@" in host:
         return "userinfo付きURL"
+    if not re.match(r"^[A-Za-z0-9.\-]+\.[A-Za-z]{2,}(?::\d+)?$", host):
+        return "ホスト名の形式が不正なURL"
     if re.search(r"[?#]", u) or SECRET_HINT_RE.search(u):
         return "秘密を含みうるURL（クエリ/フラグメント/認証情報）"
     return None
@@ -324,6 +327,21 @@ def _audit_checker_shape(slug: str, ck, path: str = "checker") -> list[str]:
 
 
 _COUNT_MODES = ("suru", "through", "cycle")
+
+
+def _audit_modes_config_match(slug: str, ck) -> list[str]:
+    """★宣言(modes)と実config の完全一致★（タブは出るが中身が無い状態を独立に止める）。"""
+    if not isinstance(ck, dict) or not isinstance(ck.get("modes"), list):
+        return []
+    declared = {m["key"] for m in ck["modes"]
+                if isinstance(m, dict) and isinstance(m.get("key"), str)}
+    configs = {k for k, v in ck.items() if k not in _CK_TOP and isinstance(v, dict)}
+    out = []
+    for k in sorted(declared - configs):
+        out.append(f"{slug}: mode '{k}' は宣言されているのに判定データが無い")
+    for k in sorted(configs - declared):
+        out.append(f"{slug}: mode '{k}' の判定データがあるのに宣言されていない")
+    return out
 
 
 def _audit_exchange_ref(slug: str, ck) -> list[str]:
@@ -500,6 +518,7 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
     problems.extend(_audit_checker_shape(slug, pub.get("checker")))
     problems.extend(_audit_axis(slug, pub.get("checker")))
     problems.extend(_audit_exchange_ref(slug, pub.get("checker")))
+    problems.extend(_audit_modes_config_match(slug, pub.get("checker")))
     # ★checkerを出すなら、目安ラベルの対象にcheckerが入っていること★
     #   （gates側の新しい不変条件を、独立にも担保する）
     dr = pub.get("display_requirements")
