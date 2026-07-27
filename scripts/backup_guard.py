@@ -43,6 +43,8 @@ LOG_PATH = r"C:/Users/imao_/Documents/uchidokoro/logs/backup_guard.log"
 
 # ── 前段copy用: バックアップを許可するファイル名（完全一覧・basename照合）──
 ALLOW_BASENAMES = {
+    # 自動タスクの手順書（{taskId}_SKILL.md の形で保存する）
+    "uchidokoro-fact-check_SKILL.md",
     "SKILL.md",
     "send_notify.py",
     "refresh_x_cookies.py",

@@ -1,53 +1,176 @@
 {
  "slug": "gogo_juggler3",
  "name": "ゴーゴージャグラー3",
+ "schema_version": "legacy/0",
+ "verify_state": "UNVERIFIED_LEGACY",
+ "legacy_note": "★この記録は検証済みではない★ 2026-07-28のCodexレビューで、①逐語quoteが無いsourceがある ②URLが無いsourceがある ③設定1〜6が配列で一括保存され、どの設定・条件のclaimか型付けされていない ④verify_state・mode・scope・最終URL・取得時刻・hash・検証器バージョン・TTLが無い、と指摘された。したがって公開の根拠には使えない。**判断メモとしてのみ扱う**。逐語quoteを再取得できたclaimだけを、typed claim ledger へ移行すること。",
  "checked_on": "2026-07-28",
  "checked_by": "claude+codex（それぞれ独立に検索し、突き合わせた）",
  "facts": {
   "kikaiwari": {
-   "value": ["97.2%", "98.2%", "99.4%", "101.6%", "103.8%", "106.5%"],
+   "value": [
+    "97.2%",
+    "98.2%",
+    "99.4%",
+    "101.6%",
+    "103.8%",
+    "106.5%"
+   ],
    "note": "設定1〜6の順",
    "why": "北電子公式（表記は『出玉率』）で確認。P-WORLD・なな徹・NEO・ペカセンも一致。当サイトの既存値と一致。",
    "sources": [
-    {"site": "北電子公式", "url": "https://www.kitadenshi.co.jp/slot/gogojuggler3/", "value": "97.2〜106.5%", "kind": "メーカー公式"},
-    {"site": "P-WORLD", "url": "https://www.p-world.co.jp/machine/database/9848", "value": "97.2〜106.5%"},
-    {"site": "ちょんぼりすた", "url": "https://chonborista.com/slot/kitadenshi/187825/", "value": "97.2〜106.5%"},
-    {"site": "スロベース", "url": "https://slobase.jp/machines/gogojuggler3", "value": "97.0% / 109.4%", "verdict": "外れ値のため不採用"}
+    {
+     "site": "北電子公式",
+     "url": "https://www.kitadenshi.co.jp/slot/gogojuggler3/",
+     "value": "97.2〜106.5%",
+     "kind": "メーカー公式"
+    },
+    {
+     "site": "P-WORLD",
+     "url": "https://www.p-world.co.jp/machine/database/9848",
+     "value": "97.2〜106.5%"
+    },
+    {
+     "site": "ちょんぼりすた",
+     "url": "https://chonborista.com/slot/kitadenshi/187825/",
+     "value": "97.2〜106.5%"
+    },
+    {
+     "site": "スロベース",
+     "url": "https://slobase.jp/machines/gogojuggler3",
+     "value": "97.0% / 109.4%",
+     "verdict": "外れ値のため不採用"
+    }
    ]
   },
   "big": {
-   "value": ["1/259.0", "1/258.0", "1/257.0", "1/254.0", "1/247.3", "1/234.9"],
+   "value": [
+    "1/259.0",
+    "1/258.0",
+    "1/257.0",
+    "1/254.0",
+    "1/247.3",
+    "1/234.9"
+   ],
    "why": "北電子公式・P-WORLD・なな徹・NEO・ペカセン・ちょんぼりすた・juggler7 が一致。",
    "sources": [
-    {"site": "ちょんぼりすた", "url": "https://chonborista.com/slot/kitadenshi/187825/", "value": "1/259.0〜1/234.9"},
-    {"site": "juggler7", "url": "https://juggler7.com/gogo3/kaiseki.html", "value": "1/259.0〜1/234.9"},
-    {"site": "スロベース", "url": "https://slobase.jp/machines/gogojuggler3", "value": "1/264.3〜1/230.8", "verdict": "外れ値のため不採用"}
+    {
+     "site": "ちょんぼりすた",
+     "url": "https://chonborista.com/slot/kitadenshi/187825/",
+     "value": "1/259.0〜1/234.9"
+    },
+    {
+     "site": "juggler7",
+     "url": "https://juggler7.com/gogo3/kaiseki.html",
+     "value": "1/259.0〜1/234.9"
+    },
+    {
+     "site": "スロベース",
+     "url": "https://slobase.jp/machines/gogojuggler3",
+     "value": "1/264.3〜1/230.8",
+     "verdict": "外れ値のため不採用"
+    }
    ]
   },
   "reg": {
-   "value": ["1/354.2", "1/332.7", "1/306.2", "1/268.6", "1/247.3", "1/234.9"],
+   "value": [
+    "1/354.2",
+    "1/332.7",
+    "1/306.2",
+    "1/268.6",
+    "1/247.3",
+    "1/234.9"
+   ],
    "why": "同上。設定5・6でBIG:REGが1:1になる点も各サイト一致。",
    "sources": [
-    {"site": "ちょんぼりすた", "url": "https://chonborista.com/slot/kitadenshi/187825/", "value": "1/354.2〜1/234.9"},
-    {"site": "DMM ぱちタウン", "url": "https://p-town.dmm.com/specials/3073", "value": "設定1 1/354.2"},
-    {"site": "juggler7", "url": "https://juggler7.com/gogo3/kaiseki.html", "value": "1/354.2〜1/234.9"},
-    {"site": "スロベース", "url": "https://slobase.jp/machines/gogojuggler3", "value": "1/397.2〜1/230.8", "verdict": "外れ値のため不採用"}
+    {
+     "site": "ちょんぼりすた",
+     "url": "https://chonborista.com/slot/kitadenshi/187825/",
+     "value": "1/354.2〜1/234.9"
+    },
+    {
+     "site": "DMM ぱちタウン",
+     "url": "https://p-town.dmm.com/specials/3073",
+     "value": "設定1 1/354.2"
+    },
+    {
+     "site": "juggler7",
+     "url": "https://juggler7.com/gogo3/kaiseki.html",
+     "value": "1/354.2〜1/234.9"
+    },
+    {
+     "site": "スロベース",
+     "url": "https://slobase.jp/machines/gogojuggler3",
+     "value": "1/397.2〜1/230.8",
+     "verdict": "外れ値のため不採用"
+    }
    ]
   },
   "grape": {
-   "value": ["1/6.25", "1/6.20", "1/6.15", "1/6.07", "1/6.00", "1/5.92"],
+   "value": [
+    "1/6.25",
+    "1/6.20",
+    "1/6.15",
+    "1/6.07",
+    "1/6.00",
+    "1/5.92"
+   ],
    "counting": "設定判別で実際に数えるぶどう（ポチポチくんのカウント対象）",
    "why": "★言葉ではなく実戦値で決めた★ サイトによって『単独ぶどう』の指す値が10倍違う（juggler7=1/6.25 / スロベース=1/56.0）ため、呼び名は判断根拠にできない。実際に人が数えた実戦値（P-WORLD 1/6.1・なな徹 1/6.5・一撃 1/6.2）がすべて1/6.x台で、この値と整合する。スロベースの1/5.80台は実戦値と合わず、同サイトはBIG・REG・機械割も外れ値。",
    "sources": [
-    {"site": "juggler7", "url": "https://juggler7.com/gogo3/kaiseki.html", "value": "1/6.25〜1/5.92", "counting": "『通常時の単独ぶどう』と表記"},
-    {"site": "ジャグラー設定判別ツールNEO", "url": "https://jugcheckneo.link/gogo-juggler-3/", "value": "1/6.25〜1/5.92", "counting": "明記なし"},
-    {"site": "ペカセン", "url": "https://pekasen.com/store/tokiwa-hall/gogo-juggler-3", "value": "1/6.25〜1/5.92", "counting": "明記なし"},
-    {"site": "ジャグラーの部屋", "url": "https://jugglertopics.jp/gj3/353/", "value": "1/6.33〜1/5.96", "counting": "独自調査・実戦から算出"},
-    {"site": "なな徹", "url": "https://nana-press.com/kaiseki/machine/565/15058/", "value": "設定6 1/6.5", "counting": "『共通・単独合算』・3000G実戦値"},
-    {"site": "P-WORLD", "url": "https://www.p-world.co.jp/machine/database/9848", "value": "設定6 1/6.1", "counting": "4515G実戦値"},
-    {"site": "一撃", "url": "https://1geki.jp/slot/s_gogojuggler3/4/", "value": "設定6 1/6.2", "counting": "7528G実戦値"},
-    {"site": "スロベース", "url": "https://slobase.jp/machines/gogojuggler3", "value": "合算1/5.80〜1/5.56 / 単独1/56.0", "verdict": "実戦値と合わず不採用"},
-    {"site": "北電子公式", "url": "https://www.kitadenshi.co.jp/slot/gogojuggler3/", "value": "掲載なし"}
+    {
+     "site": "juggler7",
+     "url": "https://juggler7.com/gogo3/kaiseki.html",
+     "value": "1/6.25〜1/5.92",
+     "counting": "『通常時の単独ぶどう』と表記"
+    },
+    {
+     "site": "ジャグラー設定判別ツールNEO",
+     "url": "https://jugcheckneo.link/gogo-juggler-3/",
+     "value": "1/6.25〜1/5.92",
+     "counting": "明記なし"
+    },
+    {
+     "site": "ペカセン",
+     "url": "https://pekasen.com/store/tokiwa-hall/gogo-juggler-3",
+     "value": "1/6.25〜1/5.92",
+     "counting": "明記なし"
+    },
+    {
+     "site": "ジャグラーの部屋",
+     "url": "https://jugglertopics.jp/gj3/353/",
+     "value": "1/6.33〜1/5.96",
+     "counting": "独自調査・実戦から算出"
+    },
+    {
+     "site": "なな徹",
+     "url": "https://nana-press.com/kaiseki/machine/565/15058/",
+     "value": "設定6 1/6.5",
+     "counting": "『共通・単独合算』・3000G実戦値"
+    },
+    {
+     "site": "P-WORLD",
+     "url": "https://www.p-world.co.jp/machine/database/9848",
+     "value": "設定6 1/6.1",
+     "counting": "4515G実戦値"
+    },
+    {
+     "site": "一撃",
+     "url": "https://1geki.jp/slot/s_gogojuggler3/4/",
+     "value": "設定6 1/6.2",
+     "counting": "7528G実戦値"
+    },
+    {
+     "site": "スロベース",
+     "url": "https://slobase.jp/machines/gogojuggler3",
+     "value": "合算1/5.80〜1/5.56 / 単独1/56.0",
+     "verdict": "実戦値と合わず不採用"
+    },
+    {
+     "site": "北電子公式",
+     "url": "https://www.kitadenshi.co.jp/slot/gogojuggler3/",
+     "value": "掲載なし"
+    }
    ]
   }
  },

@@ -1,6 +1,9 @@
 {
  "slug": "tokyo_ghoul",
  "name": "L 東京喰種",
+ "schema_version": "legacy/0",
+ "verify_state": "UNVERIFIED_LEGACY",
+ "legacy_note": "★この記録は検証済みではない★ 2026-07-28のCodexレビューで、①逐語quoteが無いsourceがある ②URLが無いsourceがある ③設定1〜6が配列で一括保存され、どの設定・条件のclaimか型付けされていない ④verify_state・mode・scope・最終URL・取得時刻・hash・検証器バージョン・TTLが無い、と指摘された。したがって公開の根拠には使えない。**判断メモとしてのみ扱う**。逐語quoteを再取得できたclaimだけを、typed claim ledger へ移行すること。",
  "checked_on": "2026-07-28",
  "checked_by": "claude+codex（それぞれ独立に検索し、突き合わせた）",
  "facts": {
