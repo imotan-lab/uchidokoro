@@ -45,8 +45,8 @@ MAX_ROUNDS = 40
 #   これは異常ではなく Phase 2 の作業残量。集合で固定しておき、
 #   黙って増えたら異常、減ったら進捗として表示する。
 EXPECTED_NEEDS_EDIT = {
-    # birdie_wing は表示整合の要修正が先に出るので EXPECTED_DISPLAY_FIX 側にある
     "azurlane",
+    "birdie_wing",
     "banchou4",
     "bandori",
     "bofuri",
@@ -91,16 +91,10 @@ EXPECTED_NEEDS_EDIT = {
 # ★表示整合の要修正★（要約とチェッカーの数字が食い違う／交換率を変えても
 #   要約が連動しない）。どちらの数字が正しいかは決められないので人の作業。
 EXPECTED_DISPLAY_FIX = {
-    "birdie_wing",
     "chibaryo2",
     "goblin",
     "hokuto_tensei2",
     "prismnana",
-    "sao2",
-    "shaman_king",
-    "shinuchi_yoshimune",
-    "tenken",
-    "valvrave",
 }
 
 EXPECTED_PUBLIC = 120 - len(EXPECTED_NEEDS_EDIT) - len(EXPECTED_DISPLAY_FIX - EXPECTED_NEEDS_EDIT)
@@ -111,14 +105,15 @@ EXPECTED_PUBLIC = 120 - len(EXPECTED_NEEDS_EDIT) - len(EXPECTED_DISPLAY_FIX - EX
 #   ただし kaguya は依然 checker 全モードが止まる（rate45 の excellent=1200 が
 #   天井1100Gを超え、早見表が「1200G〜（天井1100G）」という到達できない行を作るため。
 #   数値の作り直しは Phase 2 の出典検証の仕事なので、いまは止めたままにする）。
-EXPECTED_CHECKER_MACHINES = 62
-#   2026-07-27（25巡目）: 表示整合の要修正10機種を止めたため 71機種131mode → 62機種112mode
+EXPECTED_CHECKER_MACHINES = 67
+#   2026-07-27（25巡目）: 表示整合の要修正を止めたため 71機種131mode → 67機種123mode
+#     （当初10機種→UIが交換率別の狙い目をチェッカーから組み立てるようにして5機種解消）
 #   2026-07-27（24巡目）: 原稿に「公開できない表現」が残る41機種を編集待ちとして
 #     公開対象から外したため 110機種197mode → 71機種131mode。
 #     （編集が進めば EXPECTED_NEEDS_EDIT とともにこの数も戻る）
 #   2026-07-27（22巡目）: 0スルーの行が無い suru mode を止めたため 200 → 197
 #   （sao / bandori / hanma_baki。UIは0スルー入力を1スルーの閾値で判定していた）
-EXPECTED_CHECKER_MODES = 112
+EXPECTED_CHECKER_MODES = 123
 
 # ★公開slugの固定集合★ 件数だけだと「1件消えて1件増える」相殺を見逃すため、
 #   集合そのものを持つ。機種を増減したら意図した変更として更新すること。

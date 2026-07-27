@@ -343,6 +343,27 @@ function resolveMachineSlug() {
 
   function evUnitOf(c) { return (c && c.unit) || "G"; }
 
+  // 選択中の交換率で、通常系modeの狙い目（good）を組み立てる。
+  // データに無い数字は作らない（チェッカーが持っている値をそのまま出す）。
+  function buildTargetFromChecker(rateKey) {
+    const modes = getModes(checker);
+    if (!modes.length) return "";
+    const parts = [];
+    modes.forEach(md => {
+      const conf = checker[md.key];
+      if (!conf || typeof conf !== "object") return;
+      const rows = Array.isArray(conf.suru) ? conf.suru
+        : (Array.isArray(conf.cycle) ? conf.cycle : null);
+      const unit = rows ? rows[0] : conf;      // 回数系は先頭行（0スルー/1周期目）を代表にする
+      if (!unit) return;
+      const over = (unit.byRate && unit.byRate[rateKey]) || {};
+      const good = Object.assign({}, unit, over).good;
+      if (typeof good !== "number") return;
+      parts.push(`${md.label}${good}${evUnitOf(checker)}〜`);
+    });
+    return parts.join(" / ");
+  }
+
   function getCurrentRateKey() {
     const checked = document.querySelector('input[name="exchangeRate"]:checked');
     return checked ? checked.value : currentRateKey;
@@ -597,10 +618,14 @@ function resolveMachineSlug() {
     ];
     const boxes = sourceBoxes.map(box => ({ ...box }));
 
-    if (machine.strategyByRate && getCurrentRateKey()) {
+    if (getCurrentRateKey()) {
       const rateKey = getCurrentRateKey();
       const rateLabel = getRateLabel(rateKey);
-      const normalText = machine.strategyByRate[rateKey];
+      // ★交換率別の狙い目文が無いときは、選択中のチェッカーから組み立てる★
+      //   自由文を機種ごとに増やすとチェッカーと再び分岐するので、
+      //   「同じ構造化データから描く」方針にする（Codex 25巡目 #3）。
+      const normalText = (machine.strategyByRate && machine.strategyByRate[rateKey])
+        || buildTargetFromChecker(rateKey);
       // リセットの交換率別設定は mode直下に重ねて使う（部分上書きでも欠けないように）
       const resetBase = checker.reset || null;
       const resetOverride = resetBase && resetBase.byRate ? resetBase.byRate[rateKey] : null;

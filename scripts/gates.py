@@ -868,11 +868,30 @@ def _rate_sync_gap(machine: dict) -> str | None:
     if len(rates) < 2 or isinstance(machine.get("strategyByRate"), dict):
         return None
     base = checker.get("baseRateKey")
-    # 交換率ごとに判定値が変わるなら、要約も連動しなければならない
-    seen = {tuple(sorted(_effective_thresholds(checker, r, base))) for r in rates}
-    if len(seen) > 1:
-        return ("交換率ごとに判定値が変わるのに、交換率別の狙い目(strategyByRate)が無い"
-                "（交換率を変えても要約が古い数字のまま残る）")
+    # ★UIは交換率別の狙い目文が無ければ、選択中のチェッカーから組み立てる★
+    #   （machine.html buildTargetFromChecker）。したがって「文が無いこと」自体は
+    #   契約違反ではない。組み立ての材料（表示するmodeの good）が交換率ごとに
+    #   取れることだけを条件にする。取れないと要約が空になるか古い値が残る。
+    for r in rates:
+        ok = False
+        for m_ in (checker.get("modes") or []):
+            if not isinstance(m_, dict):
+                continue
+            conf = checker.get(m_.get("key"))
+            if not isinstance(conf, dict):
+                continue
+            rows = conf.get("suru") if isinstance(conf.get("suru"), list) else (
+                conf.get("cycle") if isinstance(conf.get("cycle"), list) else None)
+            unit = rows[0] if rows else conf
+            if not isinstance(unit, dict):
+                continue
+            over = (unit.get("byRate") or {}).get(r) if r != base else None
+            if _is_num({**unit, **(over or {})}.get("good")):
+                ok = True
+                break
+        if not ok:
+            return (f"交換率 {r} を選んだときに要約へ出す狙い目が取れない"
+                    f"（交換率を変えても古い数字が残る）")
     return None
 
 
