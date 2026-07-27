@@ -39,12 +39,28 @@ def provisional(m: dict) -> dict:
     暫定状態はここ1箇所で決め、dryrun からもこれを使う。
     """
     sim = dict(m)
-    sim["lifecycle"] = "VERIFIED_PREVIEW" if m.get("status") == "preview" else "LEGACY_SEARCH"
+    # ★旧statusは許容値を明示列挙し、未知値は公開しない（fail-closed）★
+    #   タイプミスや未知値が LEGACY_SEARCH（公開）へ落ちるのを防ぐ（Codex 20巡目 #4）。
+    status = m.get("status")
+    if status == "preview":
+        sim["lifecycle"] = "VERIFIED_PREVIEW"
+    elif status in (None, "complete"):
+        sim["lifecycle"] = "LEGACY_SEARCH"
+    else:
+        sim["lifecycle"] = "CANDIDATE"     # 未知の状態は非公開へ倒す
+
     c = m.get("checker") or {}
     modes = {}
+    # ★宣言にあるmodeは、configが壊れていても状態を作る★
+    #   （辞書のconfigだけ拾うと、構造異常が「checker非表示」に化ける・Codex 20巡目 #5）
+    for decl in (c.get("modes") or []) if isinstance(c.get("modes"), list) else []:
+        if isinstance(decl, dict) and isinstance(decl.get("key"), str):
+            conf = c.get(decl["key"])
+            modes[decl["key"]] = ("DISABLED" if isinstance(conf, dict) and "_disabled" in conf
+                                  else "STRUCT_OK")
     for k, v in c.items():
         if isinstance(v, dict) and k not in ("modeData", "byRate"):
-            modes[k] = "DISABLED" if "_disabled" in v else "STRUCT_OK"
+            modes.setdefault(k, "DISABLED" if "_disabled" in v else "STRUCT_OK")
     md = c.get("modeData")
     if isinstance(md, dict):
         for k, v in md.items():

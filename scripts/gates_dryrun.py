@@ -80,15 +80,18 @@ def schema_coverage(machines: list) -> bool:
         if not modes:
             continue                      # 表示できるmodeが無い機種は検査対象外
         ctx = gates._Ctx("legacy_safe", None)
-        out = gates._project_checker(_neutralize(c), sorted(modes), ctx)
+        out = gates._project_checker(_neutralize(c), sorted(modes), ctx, m)
         if ctx.errors:                    # ★continueの前に構造エラーを回収する★
             for e in ctx.errors:
                 missing_top.add(f"(構造エラー) {e['reason']}")
         if out is None:
-            continue                      # checkerごと出ない（構造上の理由）＝取りこぼしではない
+            # checkerごと出ない（天井なし機種＝判定の主軸が無い等）＝取りこぼしではない
+            continue
         out.pop("_live_modes", None)
+        # ★意図的に公開しないフィールド（UIが参照しない）は取りこぼしではない★
+        INTENTIONAL = {"ok", "ng", "hasSuru", "hasCycle", "suruMax"}
         for k, v in c.items():
-            if k in ("modeData",) or k in modes:
+            if k in ("modeData",) or k in modes or k in INTENTIONAL:
                 continue
             if isinstance(v, dict) and "_disabled" in v:
                 continue                  # Phase 0で意図的に停止したmode
@@ -105,22 +108,38 @@ def schema_coverage(machines: list) -> bool:
                         continue
                     _cmp(v2, dst[k2], f"{where}.{k2}" if where else k2)
             elif isinstance(src, list) and isinstance(dst, list):
-                for i2, v2 in enumerate(src):
-                    if i2 < len(dst):
-                        _cmp(v2, dst[i2], f"{where}[]")
-                    else:
-                        missing_mode.add(f"{where}[]")
+                # ★位置ではなくキーの有無で比較（要素が正当に落ちると位置がずれる）★
+                dst_keysets = [set(v2.keys()) for v2 in dst if isinstance(v2, dict)]
+                for v2 in src:
+                    if not isinstance(v2, dict):
+                        continue
+                    want = {k3 for k3, v3 in v2.items()
+                            if k3 != "_disabled" and v3 is not None and v3 != [] and v3 != {}}
+                    if dst_keysets and not any(want <= ks for ks in dst_keysets):
+                        best = max(dst_keysets, key=lambda ks: len(want & ks))
+                        for k3 in want - best:
+                            missing_mode.add(f"{where}[].{k3}")
 
         for mk in modes:
+            if mk not in out:
+                continue                  # そのmodeが出ない（内容・構造上の理由）
             conf = c.get(mk) if isinstance(c.get(mk), dict) else (md or {}).get(mk, {})
-            _cmp(conf, out.get(mk) or {}, "")
-        # modes宣言・交換率の子フィールドも突き合わせる
-        for top in ("modes", "exchangeRates"):
-            if isinstance(c.get(top), list):
-                kept = [x for x in c[top]
-                        if isinstance(x, dict) and x.get("key") in modes] if top == "modes" \
-                    else c[top]
-                _cmp(kept, out.get(top) or [], top)
+            _cmp(conf, out[mk], "")
+        # modes宣言・交換率の子フィールドも突き合わせる（checkerが出た機種だけ）
+        for top in ("modes", "exchangeRates") if out else ():
+            if not isinstance(c.get(top), list):
+                continue
+            if top == "modes":
+                # ★key で対応付けて比較（出力に無いmodeは内容除去で落ちたもの）★
+                got = {x.get("key"): x for x in (out.get("modes") or []) if isinstance(x, dict)}
+                for x in c["modes"]:
+                    if not isinstance(x, dict) or x.get("key") not in got:
+                        continue
+                    for k3, v3 in x.items():
+                        if v3 is not None and k3 not in got[x["key"]]:
+                            missing_mode.add("modes[]." + k3)
+            else:
+                _cmp(c[top], out.get(top) or [], top)
         if ctx.errors:                    # 検査中に構造エラーが出たら黙って通さない
             for e in ctx.errors:
                 missing_top.add(f"(構造エラー) {e['reason']}")

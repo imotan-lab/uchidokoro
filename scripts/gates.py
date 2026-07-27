@@ -305,7 +305,14 @@ def assert_invariants(g: dict) -> None:
 
 # ---------------------------------------------------------------- 原子の分類
 
-_ZERO_WIDTH = re.compile("[​-‏‪-‮⁠-⁤﻿­᠎]")
+def _strip_invisible(s: str) -> str:
+    """★不可視文字をUnicodeカテゴリ基準で除去する★
+    列挙方式だと U+2066 双方向分離記号などを取りこぼす（Codex 20巡目 #3）。
+    Cf(書式), Cc(制御), Co(私用), Cs(サロゲート) と分離子・空白カテゴリを対象にする。
+    """
+    import unicodedata as _u
+    return "".join(ch for ch in s
+                   if _u.category(ch) not in ("Cf", "Cc", "Co", "Cs", "Zl", "Zp"))
 _TAG = re.compile(r"<[^>]*>")
 _MD = re.compile(r"[*_`~]")
 
@@ -327,9 +334,29 @@ def _to_display(s: str) -> str:
         prev, s = s, _html.unescape(s)
     s = _TAG.sub("", s)                       # タグ除去（分断による回避を潰す）
     s = _MD.sub("", s)                        # Markdown記号による語中分断を潰す
-    s = _ZERO_WIDTH.sub("", s)                # ゼロ幅文字
+    s = _strip_invisible(s)                   # 不可視文字（カテゴリ基準）
     s = unicodedata.normalize("NFKC", s)      # 全角/半角・互換文字の揺れを吸収
     return re.sub(r"\s+", " ", s).strip()
+
+
+# 記事本文は innerHTML に入るため、許可タグ以外は公開しない（XSSと検査迂回の防止）
+_ALLOWED_TAGS = ("br", "strong", "b", "em", "span")
+_TAG_ANY = re.compile(r"<\s*/?\s*([A-Za-z][A-Za-z0-9]*)([^>]*)>")
+_DANGEROUS_ATTR = re.compile(r"(?:on[a-z]+\s*=|javascript:|data:text/html|<\s*script)", re.I)
+
+
+def html_unsafe(text: str) -> str | None:
+    """公開してよいHTMLか。危険なら理由を返す（無害化ではなく拒否＝fail-closed）。"""
+    if not _is_str(text):
+        return None
+    if _DANGEROUS_ATTR.search(text):
+        return "イベント属性・スクリプト等の危険なHTML"
+    for m in _TAG_ANY.finditer(text):
+        if m.group(1).lower() not in _ALLOWED_TAGS:
+            return f"許可されていないタグ <{m.group(1)}>"
+        if "=" in (m.group(2) or ""):
+            return f"タグ属性は許可しない <{m.group(1)}>"
+    return None
 
 
 def normalize_atom(parts) -> str:
@@ -390,6 +417,12 @@ class _Ctx:
 
     def atom(self, parts, path: str) -> bool:
         """表示原子を判定する。落ちた場合は原子ごと出さない。"""
+        # ★危険なHTMLは無害化せず拒否（innerHTML へ入るため）★
+        for p_ in (parts if isinstance(parts, (list, tuple)) else [parts]):
+            why = html_unsafe(p_) if _is_str(p_) else None
+            if why:
+                self.reject(path, why)
+                return False
         v = classify_atom(parts, self.ledger, self.profile)
         if v == ALLOW:
             return True
@@ -557,6 +590,15 @@ def _count_sanity(conf: dict, where: str) -> str | None:
     return None
 
 
+def _judgeable(conf: dict) -> bool:
+    """UIが全入力域で判定を確定できるか。
+
+    machine.html の判定は good を主軸にし、無いと目安値が undefined になる箇所がある
+    （Codex 20巡目 #9）。よって good を判定材料の必須条件にする。
+    """
+    return _is_num(conf.get("good"))
+
+
 def _threshold_sanity(conf: dict, where: str) -> str | None:
     """閾値の健全性（有限・非負・caution<=good<=excellent の順序）を検査する。
 
@@ -576,6 +618,46 @@ def _threshold_sanity(conf: dict, where: str) -> str | None:
     order = [vals[k] for k in ("caution", "good", "excellent") if k in vals]
     if order != sorted(order):
         return f"{where} の閾値の順序が壊れている（caution<=good<=excellent）: {order}"
+    return None
+
+
+_SENTINEL = 99999
+
+
+def _limit_vs_threshold(machine: dict, checker: dict, mode_key: str, conf: dict) -> str | None:
+    """UIの入力上限（machine.limit → checker.limit → mode.limit）と閾値の整合。
+
+    上限より大きい閾値は入力できず、その判定に到達できない（Codex 20巡目 #8）。
+    """
+    lim = None
+    ml = machine.get("limit")
+    if _is_num(ml):
+        lim = ml
+    elif isinstance(ml, dict) and _is_num(ml.get(mode_key)):
+        lim = ml[mode_key]
+    elif _is_num(checker.get("limit")):
+        lim = checker["limit"]
+    elif _is_num(conf.get("limit")):
+        lim = conf["limit"]
+    if lim is None:
+        return None
+    def _chk(c, where):
+        for k in ("caution", "good", "excellent", "target"):
+            v = c.get(k)
+            if _is_num(v) and v != _SENTINEL and v > lim:
+                return f"{where} の {k}={v} が入力上限 {lim} を超える（到達できない）"
+        return None
+    for i, u in enumerate(conf.get("suru") or conf.get("cycle") or [conf]):
+        if not isinstance(u, dict):
+            continue
+        bad = _chk(u, f"{mode_key}[{i}]")
+        if bad:
+            return bad
+        for rk, rv in (u.get("byRate") or {}).items():
+            if isinstance(rv, dict):
+                bad = _chk({**u, **rv}, f"{mode_key}[{i}].byRate.{rk}")
+                if bad:
+                    return bad
     return None
 
 
@@ -629,13 +711,10 @@ def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
             return (f"mode({mode_key})が回数の行だけを持ち、G数の閾値を持たない"
                     f"＝入力軸が判別できない")
         # ★判定材料が無いmodeを公開しない（noteだけのタブを出さない）★
-        by = conf.get("byRate")
-        has_rate = isinstance(by, dict) and any(
-            isinstance(rv, dict) and any(_is_num(rv.get(k))
-                                         for k in ("excellent", "good", "caution", "target"))
-            for rv in by.values())
-        if not direct and not has_rate:
-            return f"mode({mode_key})に判定材料が無い（閾値も交換率別の閾値も持たない）"
+        by = conf.get("byRate") if isinstance(conf.get("byRate"), dict) else {}
+        has_rate = any(_judgeable({**conf, **rv}) for rv in by.values() if isinstance(rv, dict))
+        if not (_judgeable(conf) or has_rate):
+            return f"mode({mode_key})に判定の主軸(good)が無い（全入力域で判定が確定しない）"
         bad = _threshold_sanity(conf, mode_key)
         if bad:
             return bad
@@ -705,14 +784,10 @@ def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
             return f"回数系mode({mode_key})の行[{i}]の count={cv} が0以上でない"
         counts.append(cv)
         # ★各行にG数の判定材料が最低1つ必要（countだけの行は判定できない）★
-        has_direct = any(_is_num(row.get(k)) for k in ("excellent", "good", "caution", "target"))
-        by = row.get("byRate")
-        has_rate = isinstance(by, dict) and any(
-            isinstance(rv, dict) and any(_is_num(rv.get(k))
-                                         for k in ("excellent", "good", "caution", "target"))
-            for rv in by.values())
-        if not (has_direct or has_rate):
-            return f"回数系mode({mode_key})の行[{i}]にG数の判定材料が無い"
+        by = row.get("byRate") if isinstance(row.get("byRate"), dict) else {}
+        has_rate = any(_judgeable({**row, **rv}) for rv in by.values() if isinstance(rv, dict))
+        if not (_judgeable(row) or has_rate):
+            return f"回数系mode({mode_key})の行[{i}]に判定の主軸(good)が無い"
     is_cycle = isinstance(conf.get("cycle"), list)
     if counts:
         if is_cycle:
@@ -738,7 +813,8 @@ def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
     return None
 
 
-def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | None:
+def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx,
+                     machine_ref: dict | None = None) -> dict | None:
     if not allowed_modes:
         return None
     # ★VERIFIED指定なのに checker 本体が無い／型不正は矛盾（gateは開くのに中身が出ない）★
@@ -759,6 +835,13 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
             ctx.reject(f"checker.modeData.{_k}", "modeDataの値が辞書でない")
             return None
     md_keys = set(checker.get("modeData").keys()) if isinstance(checker.get("modeData"), dict) else set()
+    # ★宣言されたmodeのconfigが非dictなら、その時点で構造矛盾として止める★
+    for _m in (checker.get("modes") or []):
+        if isinstance(_m, dict) and isinstance(_m.get("key"), str):
+            _k = _m["key"]
+            if _k in checker and not isinstance(checker[_k], dict):
+                ctx.reject(f"checker.{_k}", "宣言されたmodeのconfigが辞書でない")
+                return None
     known = RESERVED_CHECKER_KEYS | set(allowed_modes) | md_keys
     for k, v in checker.items():
         if k in known:
@@ -793,18 +876,18 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
         out["equivOnly"] = checker["equivOnly"]
     if _is_num(checker.get("limit")):
         out["limit"] = checker["limit"]
+    # ★UIが参照しないフィールドは公開しない（公開契約と消費契約を一致させる）★
+    #   判定文は固定文言・カウンター表示は modes[] のフラグ・上限は mode直下の suruMax を使う。
     for lab in ("ok", "ng"):
+        if lab in checker:
+            continue        # 実データに存在するが未使用。公開射影には含めない
         if _is_str(checker.get(lab)):
             # ★判定ラベルが落ちたら checker ごと閉じる（判定文が消えた表示にしない）★
             if not ctx.atom([checker[lab]], f"checker.{lab}"):
                 ctx.content_drop("checker", "判定ラベルが公開できないため checker ごと除去")
                 return None
             out[lab] = checker[lab]
-    for flag in ("hasSuru", "hasCycle"):
-        if isinstance(checker.get(flag), bool):
-            out[flag] = checker[flag]
-    if _is_num(checker.get("suruMax")):
-        out["suruMax"] = checker["suruMax"]
+    # checker直下の hasSuru/hasCycle/suruMax はUIが参照しない（modes[]とmode直下を使う）
 
     er = checker.get("exchangeRates")
     if isinstance(er, list):
@@ -925,6 +1008,12 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
         axis = _axis_conflict(key, conf, checker.get("unit"), _decl)
         if axis:
             ctx.reject(f"checker.{key}", axis)
+            continue
+        bad = _limit_vs_threshold(machine_ref or {}, checker, key, conf)
+        if bad:
+            # ★データの型は正しく「値が到達不能」なだけなので、記事ごと止めずに
+            #   その mode を出さない（内容による除去）。機種ページ自体は公開する。★
+            ctx.content_drop(f"checker.{key}", bad)
             continue
         before = len(ctx.errors)
         pm = _project_mode(conf, ctx, f"checker.{key}", key)
@@ -1322,12 +1411,23 @@ def _project_machine(machine: dict, gates: dict, ctx: _Ctx) -> dict:
                    and math.isfinite(v) for k, v in lim.items()):
             ctx.reject("limit", "limit辞書に不正なキーまたは非数値がある")
             return out
+        ck = machine.get("checker") if isinstance(machine.get("checker"), dict) else {}
+        declared = {m.get("key") for m in (ck.get("modes") or []) if isinstance(m, dict)}
+        if declared and set(lim) - declared:
+            ctx.reject("limit", "宣言に無いmodeのキーがある（参照されない）")
+            return out
         if lim:
             out["limit"] = dict(lim)
     sbr = machine.get("strategyByRate")
     if isinstance(sbr, dict):
         if not all(_ok_key(k) and _is_str(v) for k, v in sbr.items()):
             ctx.reject("strategyByRate", "交換率キーが識別子でない、または値が文字列でない")
+            return out
+        # ★キー到達性★ UIが選べる交換率に無いキーは参照されない
+        ck = machine.get("checker") if isinstance(machine.get("checker"), dict) else {}
+        sel = {r.get("key") for r in (ck.get("exchangeRates") or []) if isinstance(r, dict)}
+        if sel and set(sbr) - sel:
+            ctx.reject("strategyByRate", "UIで選べない交換率のキーがある（参照されない）")
             return out
         d = {k: v for k, v in sbr.items() if ctx.atom([k, v], f"strategyByRate.{k}")}
         if d:
@@ -1354,7 +1454,7 @@ def _project_machine(machine: dict, gates: dict, ctx: _Ctx) -> dict:
              if _is_str(o.get(k)) and ctx.atom([o[k]], f"original.{k}")}
         if d:
             out["original"] = d
-    pc = _project_checker(machine.get("checker"), gates.get("checker_modes", []), ctx)
+    pc = _project_checker(machine.get("checker"), gates.get("checker_modes", []), ctx, machine)
     if pc:
         out["checker"] = pc
 
@@ -1546,6 +1646,12 @@ def audit_view(machine: dict, detail: dict | None = None,
 
 def selftest() -> int:
     import json
+
+    def bl_provisional_lifecycle(m):
+        """build_ledger.provisional の lifecycle 決定を検証用に再現（依存を持ち込まない）。"""
+        st = m.get("status")
+        return ("VERIFIED_PREVIEW" if st == "preview"
+                else "LEGACY_SEARCH" if st in (None, "complete") else "CANDIDATE")
     results = []
 
     def t(name, cond):
@@ -1632,7 +1738,7 @@ def selftest() -> int:
     bad_checker = {**base, "checker_modes": {"normal": "VERIFIED"},
                    "checker": {"unit": "期待収支がプラス", "ok": "狙い目OK",
                                "modes": [{"key": "normal", "label": "期待収支がプラス"}],
-                               "normal": {"excellent": 600}}}
+                               "normal": {"good": 600}}}
     pcj = json.dumps(publish_view(bad_checker)["machine"], ensure_ascii=False)
     t("★checker.unit も分類される（危険なら落ちる）", "期待収支" not in pcj)
     t("★modes[].label も分類される", "期待収支" not in pcj)
@@ -1652,7 +1758,7 @@ def selftest() -> int:
       any(e["path"] == "summaryBoxes[0]" for e in audit_view(base, unk)["errors"]))
     unk2 = {**base, "checker_modes": {"normal": "VERIFIED"},
             "checker": {"modes": [{"key": "normal", "label": "normal"}],
-                        "normal": {"excellent": 600, "private_note": 123}}}
+                        "normal": {"good": 600, "private_note": 123}}}
     raised = False
     try:
         publish_view(unk2)
@@ -1705,19 +1811,21 @@ def selftest() -> int:
             "checker": {"unit": "G", "hasSuru": True, "suruMax": 6,
                         "exchangeRates": [{"key": "eq56", "label": "5.6枚"}],
                         "defaultRate": "eq56", "modes": [{"key": "normal", "label": "通常"}],
-                        "normal": {"excellent": 700, "target": 570,
-                                   "byRate": {"eq56": {"excellent": 680, "target": 570}}},
+                        "normal": {"good": 700, "target": 570,
+                                   "byRate": {"eq56": {"good": 680, "target": 570}}},
                         }}
     rc = publish_view(real)["machine"]["checker"]
     t("実データ形状: exchangeRates/defaultRate/target/hasSuru を落とさない",
       rc["exchangeRates"][0]["key"] == "eq56" and rc["defaultRate"] == "eq56"
-      and rc["normal"]["target"] == 570 and rc["hasSuru"] is True
+      and rc["normal"]["target"] == 570
       and rc["normal"]["byRate"]["eq56"]["target"] == 570)
+    t("　UIが参照しないchecker直下フィールドは公開しない",
+      all(k not in rc for k in ("hasSuru", "hasCycle", "suruMax", "ok", "ng")))
     # 回数系modeは入力単位(G)が必須になったので明示する
     cyc = {**base, "checker_modes": {"cycle": "VERIFIED"},
            "checker": {"unit": "G",
                        "modes": [{"key": "cycle", "label": "周期", "hasCycle": True}],
-                       "cycle": {"cycle": [{"count": 1, "excellent": 800}]}}}
+                       "cycle": {"cycle": [{"count": 1, "good": 800}]}}}
     t("実データ形状: 周期(辞書配列)を落とさない",
       publish_view(cyc)["machine"]["checker"]["cycle"]["cycle"][0]["count"] == 1)
 
@@ -1785,7 +1893,7 @@ def selftest() -> int:
         ({"modes": [{"key": "normal", "label": "normal"}], "normal": {"excellent": 600, "private": 1}}, "未知フィールド"),
         ({"modes": [{"key": "normal", "label": "normal"}]}, "configが無い"),
         ({"modes": [{"key": "normal", "label": "normal"}], "normal": {"excellent": 600, "_disabled": "停止"}}, "_disabled付き"),
-        ({"modes": [{"key": "other", "label": "other"}], "normal": {"excellent": 600}}, "modes宣言に無い"),
+        ({"modes": [{"key": "other", "label": "other"}], "normal": {"good": 600}}, "modes宣言に無い"),
     ):
         raised = False
         try:
@@ -2104,6 +2212,39 @@ def selftest() -> int:
       and bool(audit_view({**base, "limit": 1.5})["errors"]))
     t("★19-12: 直下が非dictでmodeDataが正常でも停止",
       ax19({**b19, "suru": "壊れた値", "modeData": {"suru": {"good": 600}}}))
+
+    # ===== Codex 20巡目の反例（回帰テスト）=====
+    b20 = {"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
+           "suru": {"suruMax": 3, "suru": [{"count": 0, "good": 600}]}}
+    ax20 = lambda ck, extra=None, modes=None: bool(audit_view(
+        {**base, **(extra or {}), "checker_modes": modes or {"suru": "STRUCT_OK"},
+         "checker": ck})["errors"])
+    t("★20-1: 直下が非dictならmodeDataが正常でも停止",
+      ax20({**b20, "suru": "壊れた値",
+            "modeData": {"suru": {"suruMax": 3, "suru": [{"count": 0, "good": 600}]}}}))
+    t("★20-2: 危険なHTMLは無害化せず停止",
+      bool(audit_view({**base, "name": "<img src=x onerror=alert(1)>"})["errors"])
+      and bool(audit_view({**base, "strategy": "<span class=a>600G〜</span>"})["errors"]))
+    t("　許可タグ(br/strong)は通す",
+      not audit_view({**base, "strategy": "等価600G〜<br><strong>目安</strong>"})["errors"])
+    t("★20-3: U+2066など双方向制御だけの名前も停止",
+      bool(audit_view({**base, "name": "⁦⁩"})["errors"]))
+    t("★20-4: 未知のstatusは公開しない（fail-closed）",
+      bl_provisional_lifecycle({"slug": "x", "status": "compelte"}) == "CANDIDATE")
+    t("★20-7: UIで選べない交換率キー・宣言に無いmodeキーは停止",
+      bool(audit_view({**base, "checker": {**b20, "exchangeRates":
+                                           [{"key": "eq56", "label": "5.6枚"}]},
+                       "checker_modes": {"suru": "STRUCT_OK"},
+                       "strategyByRate": {"nope": "600G〜"}})["errors"])
+      and bool(audit_view({**base, "checker": b20, "checker_modes": {"suru": "STRUCT_OK"},
+                           "limit": {"nope": 999}})["errors"]))
+    t("★20-8: 入力上限を超える閾値はそのmodeを出さない（記事は公開する）",
+      publish_view({**base, "limit": 700, "checker_modes": {"suru": "STRUCT_OK"},
+                    "checker": {**b20, "suru": {"suruMax": 3,
+                                                "suru": [{"count": 0, "good": 760}]}}}
+                   )["gates"]["checker"] is False)
+    t("★20-9: 判定の主軸(good)が無ければ停止",
+      ax20({**b20, "suru": {"suruMax": 3, "suru": [{"count": 0, "excellent": 600}]}}))
 
     # ===== 不変条件 =====
     for bad, label in (({"public": False, "index": True}, "index⇒public"),
