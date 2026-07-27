@@ -3,7 +3,7 @@
 """gates.py — 公開ゲートの単一情報源（Phase 1・fail-closed 状態機械）
 
 設計正本: _design/site_policy_2026-07-24.md / _design/phase1_gates_design_v2_2026-07-24.md
-第6版。Codex 敵対的レビュー5巡の指摘を反映。
+第8版。Codex 敵対的レビュー7巡の指摘を反映。
 
 ■ 公開API（これ以外を本番経路から呼ばない）
     publish_view(machine, detail, ledger) -> {"gates":…, "machine":…, "detail":…}
@@ -83,12 +83,32 @@ def _num_of(ch: str) -> int:
     return int(str(ch).translate(str.maketrans("１２３４５６", "123456")))
 
 
+# 「設定Nは（…）存在しない」型：介在語が長い直接断定も捕まえる（文の区切りは跨がない）
+_SET_ABSENT_LONG = re.compile(
+    r"設定\s*" + _ONE + r"(?:\s*[・、,／/･]\s*(?:設定\s*)?" + _ONE + r")*"
+    r"(?:(?!。|設定)[^。]){0,30}?"
+    r"(?:非搭載|未搭載|存在しない|搭載していない|搭載されていない|ありません|無い|ない|なし|無し)")
+# 「設定1/2/3/4/5のみ」＝残りの設定が無いという主張
+_SET_ONLY = re.compile(r"のみ|だけ|に限[らりる]")
+
+
 def _implies_missing_setting(text: str) -> bool:
-    """設定の列挙に欠番があれば「その設定は無い」と主張しているのと同じ。"""
+    """設定の列挙・断定から「その設定は無い」という主張を読み取る。"""
     for m in _SET_ENUM_PAT.finditer(text):
         nums = sorted({_num_of(c) for c in re.findall(_ONE, m.group(0))})
         if len(nums) >= 2 and set(range(nums[0], nums[-1] + 1)) - set(nums):
+            return True                    # 列挙の内部に欠番（例: 1/2/4/5/6）
+        # 端の欠番でも「のみ」が続けば非搭載の主張（例: 設定1/2/3/4/5のみ）
+        tail = text[m.end():m.end() + 8]
+        if len(nums) >= 2 and set(nums) != {1, 2, 3, 4, 5, 6} and _SET_ONLY.search(tail):
             return True
+    # 介在語が長い直接断定（「設定3はメーカー資料上の仕様として明確に存在しない」）。
+    # ただし「設定1では出現しない」のような挙動の否定は対象外。
+    for m in _SET_ABSENT_LONG.finditer(text):
+        span = m.group(0)
+        if re.search(r"設定\s*" + _ONE + r"\s*で\s*は", span):
+            continue
+        return True
     return False
 
 # 【第2層】これを含む原子は台帳で明示分類されていなければ通さない（未分類=fail-closed）。
@@ -350,6 +370,25 @@ def _only_keys(d: dict, allowed: set) -> bool:
     return isinstance(d, dict) and set(d.keys()) <= allowed
 
 
+def _types_ok(ctx: "_Ctx", d: dict, path: str, spec: dict) -> bool:
+    """★既知フィールドの型が違えば必ず構造エラーにする（黙って捨てない）★
+
+    もぐら叩きを避けるため、型検査はこの1関数に集約する。
+    spec: {フィールド名: 型 or 型のタプル}
+    """
+    for k, typ in spec.items():
+        if k not in d:
+            continue
+        v = d[k]
+        if typ in (int, float, (int, float)) and isinstance(v, bool):
+            ctx.reject(f"{path}.{k}", "数値フィールドに真偽値")
+            return False
+        if not isinstance(v, typ):
+            ctx.reject(f"{path}.{k}", "既知フィールドの型不正")
+            return False
+    return True
+
+
 # --- checker
 _MODE_NUM_KEYS = ("excellent", "good", "caution", "limit", "suruMax", "target", "count")
 _MODE_ALLOWED = set(_MODE_NUM_KEYS) | {"note", "cycle", "suru", "byRate", "_disabled"}
@@ -508,6 +547,8 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
             if not _only_keys(r, {"key", "label"}):
                 ctx.reject(f"checker.exchangeRates[{i}]", "未知フィールドを含むため拒否")
                 return None
+            if not _types_ok(ctx, r, f"checker.exchangeRates[{i}]", {"key": str, "label": str}):
+                return None
             e = {"key": r["key"]}
             if _is_str(r.get("label")) and ctx.atom([r["label"]], f"checker.exchangeRates[{i}].label"):
                 e["label"] = r["label"]
@@ -527,6 +568,9 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
                 return None
             if not _only_keys(m, {"key", "label", "hasSuru", "hasCycle"}):
                 ctx.reject(f"checker.modes[{i}]", "未知フィールドを含むため拒否")
+                return None
+            if not _types_ok(ctx, m, f"checker.modes[{i}]",
+                             {"key": str, "label": str, "hasSuru": bool, "hasCycle": bool}):
                 return None
             if m["key"] not in allowed_modes:
                 continue                 # VERIFIEDでないmodeの宣言は出さない（正常）
@@ -666,15 +710,14 @@ def _cell_text(c, ctx: _Ctx, path: str):
 
 def _project_settei_table(tbl, ctx: _Ctx, path: str, section_title: str) -> dict | None:
     if not isinstance(tbl, dict):
+        ctx.reject(path, "表が辞書でない")
         return None
     if not _only_keys(tbl, _TABLE_ALLOWED):
         ctx.reject(path, "未知フィールドを含むため表ごと拒否")
         return None
-    # 既知フィールドの型不正は表ごと止める（但し書きだけ失って数値表が残るのを防ぐ）
-    for k, typ in (("label", str), ("headers", list), ("rows", list), ("note", str)):
-        if k in tbl and not isinstance(tbl[k], typ):
-            ctx.reject(f"{path}.{k}", "既知フィールドの型不正")
-            return None
+    if not _types_ok(ctx, tbl, path, {"label": str, "headers": list, "rows": list,
+                                      "note": str, "wide": bool}):
+        return None
     out: dict = {}
     label = tbl.get("label")
     if _is_str(label):
@@ -877,6 +920,9 @@ def _project_detail(detail, gates: dict, ctx: _Ctx) -> dict:
     if _is_str(lead) and lead.strip() and ctx.atom([lead], "lead"):
         out["lead"] = lead
 
+    if not _types_ok(ctx, detail, "detail",
+                     {"lead": str, "summaryBoxes": list, "factTable": list, "sections": list}):
+        return out
     boxes = detail.get("summaryBoxes")
     if isinstance(boxes, list):
         kept = []
@@ -886,6 +932,8 @@ def _project_detail(detail, gates: dict, ctx: _Ctx) -> dict:
                 continue
             if not _only_keys(b, {"label", "value"}):
                 ctx.reject(f"summaryBoxes[{i}]", "未知フィールドを含むため箱ごと拒否")
+                continue
+            if not _types_ok(ctx, b, f"summaryBoxes[{i}]", {"label": str, "value": str}):
                 continue
             lb, vl = b.get("label"), b.get("value")
             # ★label+value を結合して判定（「期待値」＋「580G〜」を見逃さない）★

@@ -46,7 +46,8 @@ _SET1 = r"[1-6１-６一二三四五六]"
 # 設定の存在そのものを否定する形（語間が長い場合は「引用＋否定」かを見る）
 SETTING_ABSENT_RE = re.compile(
     r"設定\s*" + _SET1 + r"(?:\s*[・、,／/･]\s*(?:設定\s*)?" + _SET1 + r")*"
-    r"[^。]{0,10}?(?:非搭載|未搭載|存在しない|搭載していない|ありません|無い|ない|なし|無し)")
+    r"(?:(?!。|設定)[^。]){0,30}?"
+    r"(?:非搭載|未搭載|存在しない|搭載していない|搭載されていない|ありません|無い|ない|なし|無し)")
 # 「〜との声もありますが公式では6段階」のように、その断定を打ち消している文脈
 REFUTATION_RE = re.compile(
     r"(?:との声|とのうわさ|との噂|と言われて|とされていますが|ですが)[^。]{0,40}"
@@ -99,18 +100,34 @@ def _enum_gap(text: str) -> bool:
     return False
 
 
+_ONLY_RE = re.compile(r"のみ|だけ|に限[らりる]")
+
+
 def _asserts_missing_setting(text: str) -> bool:
-    """設定の非存在を主張しているか。挙動の否定・引用の否定は除外する。"""
+    """設定の非存在を主張しているか。挙動の否定・引用の否定は「その主張ごとに」除外する。"""
     if _enum_gap(text):
         return True
-    m = SETTING_ABSENT_RE.search(text)
-    if not m:
-        return False
-    if BEHAVIOR_NEG_RE.search(m.group(0)):
-        return False                      # 「設定1では出現しない」＝挙動の話
-    if REFUTATION_RE.search(text):
-        return False                      # 「〜との声もありますが公式では6段階」＝打ち消し
-    return True
+    # 端の欠番でも「のみ」が続けば非搭載の主張（設定1/2/3/4/5のみ）
+    for m in _ENUM.finditer(text):
+        nums = sorted({_KANJI.get(c) or int(str(c).translate(str.maketrans("１２３４５６", "123456")))
+                       for c in _ONE.findall(m.group(0))})
+        if len(nums) >= 2 and set(nums) != {1, 2, 3, 4, 5, 6} and _ONLY_RE.search(text[m.end():m.end() + 8]):
+            return True
+    # ★1件目で判断せず、全ての一致を個別に見る★
+    #   （「設定3は非搭載。設定4がないとの声もありますが公式では6段階」で
+    #     後半の打ち消しが前半の断定まで免罪してしまうのを防ぐ）
+    for m in SETTING_ABSENT_RE.finditer(text):
+        span = m.group(0)
+        if BEHAVIOR_NEG_RE.search(span):
+            continue                      # 「設定1では出現しない」＝挙動の話
+        # その主張を含む文（。区切り）の中に打ち消しがあるかだけを見る
+        start = text.rfind("。", 0, m.start()) + 1
+        end = text.find("。", m.end())
+        sentence = text[start: end if end != -1 else len(text)]
+        if REFUTATION_RE.search(sentence):
+            continue
+        return True
+    return False
 
 
 def _atoms(node, path, out):
@@ -120,9 +137,19 @@ def _atoms(node, path, out):
     elif isinstance(node, (int, float)) and not isinstance(node, bool):
         out.append((path, str(node)))     # ★数値も走査対象（limit:999 等の見落とし防止）★
     elif isinstance(node, list):
-        # 配列が「行」なら結合した原子も作る
-        if node and all(isinstance(x, (str, int, float)) and not isinstance(x, bool) for x in node):
-            out.append((path, " / ".join(str(x) for x in node)))
+        # 配列が「行」なら結合した原子も作る（辞書セル {text,badge} も文字列化して結合）
+        joined = []
+        for x in node:
+            if isinstance(x, (str, int, float)) and not isinstance(x, bool):
+                joined.append(str(x))
+            elif isinstance(x, dict):
+                cell = " ".join(str(x[k]) for k in ("badge", "text")
+                                if isinstance(x.get(k), (str, int, float))
+                                and not isinstance(x.get(k), bool))
+                if cell:
+                    joined.append(cell)
+        if len(joined) >= 2:
+            out.append((path, " / ".join(joined)))
         for i, v in enumerate(node):
             _atoms(v, f"{path}[{i}]", out)
     elif isinstance(node, dict):
@@ -138,6 +165,23 @@ def _atoms(node, path, out):
                                     and not isinstance(node.get(x), bool))
                 if joined:
                     out.append((path, joined))
+        # ★見出し＋配下の内容を結合★（gatesの「見出し＋段落」「表label＋見出し行＋行」に対応）
+        head = node.get("title") if isinstance(node.get("title"), str) else \
+            (node.get("label") if isinstance(node.get("label"), str) else None)
+        if head:
+            for field in ("body", "rows", "headers", "tables"):
+                seq = node.get(field)
+                if not isinstance(seq, list):
+                    continue
+                for i, el in enumerate(seq):
+                    if isinstance(el, str):
+                        out.append((f"{path}.{field}[{i}]", f"{head} / {el}"))
+                    elif isinstance(el, list):
+                        cells = [str(x) if not isinstance(x, dict)
+                                 else " ".join(str(x[k]) for k in ("badge", "text")
+                                               if isinstance(x.get(k), str))
+                                 for x in el]
+                        out.append((f"{path}.{field}[{i}]", " / ".join([head, *cells])))
         for k, v in node.items():
             _atoms(v, f"{path}.{k}", out)
 
@@ -163,8 +207,18 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
 
     # --- A. 公開契約 ---
     for k in REQUIRED_MACHINE_KEYS:
-        if not pub.get(k):
+        v = pub.get(k)
+        if not v:
             problems.append(f"{slug}: 必須フィールド {k} が無い")
+        elif not isinstance(v, str):      # truthy だけで通さない（name: true を弾く）
+            problems.append(f"{slug}: 必須フィールド {k} の型が不正")
+    # 入れ子の型契約（想定と違う形のまま公開しない）
+    for k, typ in (("info", str), ("strategy", str), ("aliases", list), ("seo", dict),
+                   ("checker", dict), ("sources", list), ("strategyByRate", dict),
+                   ("original", dict), ("display_requirements", dict),
+                   ("manufacturer", str), ("tenjo_display", str)):
+        if k in pub and not isinstance(pub[k], typ):
+            problems.append(f"{slug}: フィールド {k} の型が不正")
     if not (isinstance(slug, str) and SLUG_RE.match(slug)):
         problems.append(f"{slug}: slugの形式が不正")
     elif seen_slugs is not None:
@@ -249,7 +303,9 @@ def audit_detail(slug: str, detail: dict, has_disclaimer: bool) -> list[str]:
     return problems
 
 
-def audit_file(path: str, expected_count: int | None = None) -> int:
+def audit_file(path: str, expected_count: int | None = None,
+               details_dir: str | None = None) -> int:
+    import os
     data = json.load(open(path, encoding="utf-8"))
     machines = data if isinstance(data, list) else data.get("machines", [])
     problems: list[str] = []
@@ -258,6 +314,16 @@ def audit_file(path: str, expected_count: int | None = None) -> int:
     seen: set = set()
     for m in machines:
         problems.extend(audit_machine(m, seen))
+        # ★記事データも必ず検査する（機種データだけ見て合格にしない）★
+        if details_dir and isinstance(m, dict) and isinstance(m.get("slug"), str):
+            dp = os.path.join(details_dir, f"{m['slug']}.json")
+            if os.path.isfile(dp):
+                problems.extend(audit_detail(
+                    m["slug"], json.load(open(dp, encoding="utf-8")),
+                    has_disclaimer=isinstance(m.get("disclaimer"), str)
+                    and m["disclaimer"] == EXPECTED_DISCLAIMER))
+    if details_dir is None:
+        problems.append("記事データの検査先(--details-dir)が指定されていない")
     if expected_count is not None and len(machines) != expected_count:
         problems.append(f"機種数が想定と違う: {len(machines)} != {expected_count}")
     print(f"検査 {len(machines)} 機種 / 違反 {len(problems)} 件")
@@ -323,6 +389,34 @@ def selftest() -> int:
       and any("slug" in p for p in audit_machine({**ok, "slug": "BAD SLUG"}))
       and any("重複" in p for p in audit_machine(ok, {"x"})))
     t("★空の公開データを不合格にする", audit_machine({}) != [])
+    t("★必須フィールドが型不正なら違反（name: true）",
+      any("型が不正" in p for p in audit_machine({"slug": "x", "name": True})))
+
+    # --- 記事データ（audit_detail）の負例 ---
+    d_ok = {"lead": "紹介文です。", "sections": [{"title": "天井・恩恵", "body": ["天井は999Gです"]}]}
+    t("記事: 正常データは合格", audit_detail("x", d_ok, has_disclaimer=True) == [])
+    t("★記事: 見出しの計算断定を検出",
+      any("計算断定" in p for p in audit_detail(
+          "x", {"sections": [{"title": "期待収支がプラス", "body": ["本文"]}]}, True)))
+    t("★記事: 見出し＋段落の分割断定を検出",
+      any("計算断定" in p for p in audit_detail(
+          "x", {"sections": [{"title": "期待値が", "body": ["プラス"]}]}, True)))
+    t("★記事: 辞書セルの行も結合して検出",
+      any("計算断定" in p for p in audit_detail(
+          "x", {"sections": [{"title": "安全", "type": "settei",
+                              "tables": [{"rows": [[{"text": "期待値が"}, {"text": "プラス"}]]}]}]}, True)))
+    t("★記事: 数値があるのに目安ラベルが無ければ違反",
+      any("目安ラベル" in p for p in audit_detail("x", d_ok, has_disclaimer=False)))
+    t("★記事: 許可されていないフィールドを検出",
+      any("許可されていない" in p for p in audit_detail("x", {"memo": "内部"}, True)))
+    t("★1文目の断定を、後続文の打ち消しで免罪しない",
+      any("設定段階" in p for p in audit_machine(
+          {**ok, "info": "設定3は非搭載。設定4がないとの声もありますが公式では6段階です。"})))
+    t("★語間の長い直接断定・端の欠番+のみ を検出",
+      any("設定段階" in p for p in audit_machine(
+          {**ok, "info": "設定3はメーカー資料上の仕様として明確に存在しない。"}))
+      and any("設定段階" in p for p in audit_machine(
+          {**ok, "info": "搭載設定は設定1/2/3/4/5のみ。"})))
 
     ng = [n for n, c in res if not c]
     print(f"\n{len(res) - len(ng)}/{len(res)} 合格")
@@ -334,6 +428,7 @@ def selftest() -> int:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--file")
+    ap.add_argument("--details-dir", help="射影済み記事データのディレクトリ（必須級）")
     ap.add_argument("--expect-count", type=int)
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
@@ -341,7 +436,7 @@ def main() -> int:
         return selftest()
     if not args.file:
         ap.error("--file か --selftest が必要")
-    return audit_file(args.file, args.expect_count)
+    return audit_file(args.file, args.expect_count, args.details_dir)
 
 
 if __name__ == "__main__":
