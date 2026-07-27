@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""strip_checker_claims.py — チェッカーの注意書きから「計算できない断定」を文ごと削る
+"""strip_checker_claims.py — 「計算できない断定」を文ごと削る（チェッカー注意書き／記事本文）
 
 ★何をするか★
   machines.json の checker.*.note に含まれる、当サイトでは計算できない断定
@@ -35,6 +35,7 @@ sys.path.insert(0, os.path.join(BASE, "scripts"))
 import gates  # noqa: E402
 
 MACHINES = os.path.join(BASE, "assets", "data", "machines.json")
+DETAILS = os.path.join(BASE, "assets", "data", "machine-details")
 
 
 # ★削ったあとに残ってはいけない語★
@@ -80,10 +81,97 @@ def _walk(node, path: str, edits: list) -> None:
             _walk(v, f"{path}[{i}]", edits)
 
 
+# ★記事本文で、削った残りが前の文を受けている形を避ける★
+#   例:「…170Gから期待値プラスに入ります。350Gまでの投資が抑えられるため…」の
+#   前半を削ると、残りが受け手のない文になり読み手が迷う。誤情報ではないが
+#   自動では触らず、人／第二AIが書き直す対象にする。
+_BACKREF = re.compile(r"^(?:その|これ|それ|同様|また|そのため|したがって|ただし|なお|[0-9０-９])")
+
+detail_skipped: list = []
+
+
+def _strip_prose(text: str) -> str | None:
+    """記事本文用。checker の note より条件を1つ厳しくする（先頭文を削って
+    残りが前文を受けている形は自動で触らない）。"""
+    if not isinstance(text, str) or not any(d in text for d in gates.ABSOLUTE_DENY):
+        return None
+    sents = [x for x in re.split(r"(?<=。)", text) if x.strip()]
+    kept = [s for s in sents if not any(d in s for d in gates.ABSOLUTE_DENY)]
+    if len(kept) == len(sents):
+        detail_skipped.append((text, "文として切り出せない（丸ごと削除が要る）"))
+        return None
+    rest = "".join(kept).strip()
+    if not rest:
+        detail_skipped.append((text, "全部が断定（項目ごと削除が要る）"))
+        return None
+    if _RESIDUAL.search(rest):
+        detail_skipped.append((text, f"別の言い方が残る → {rest}"))
+        return None
+    if sents and any(d in sents[0] for d in gates.ABSOLUTE_DENY) and _BACKREF.match(rest):
+        detail_skipped.append((text, f"残りが前の文を受けている → {rest}"))
+        return None
+    return rest
+
+
+def _walk_detail(node, path: str, edits: list, parent=None, key=None) -> None:
+    """記事データの文字列を歩く（構造・数値には触れない）。"""
+    if isinstance(node, str):
+        new = _strip_prose(node)
+        if new is not None and new != node:
+            edits.append((path, node, new, (parent, key)))
+    elif isinstance(node, dict):
+        for k, v in node.items():
+            _walk_detail(v, f"{path}.{k}", edits, node, k)
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            _walk_detail(v, f"{path}[{i}]", edits, node, i)
+
+
+def _run_details(apply: bool) -> int:
+    """記事データ（machine-details/*.json）に同じ処理を適用する。"""
+    total = 0
+    for fn in sorted(os.listdir(DETAILS)):
+        if not fn.endswith(".json"):
+            continue
+        path = os.path.join(DETAILS, fn)
+        data = json.load(open(path, encoding="utf-8"))
+        edits: list = []
+        _walk_detail(data, "root", edits)
+        if not edits:
+            continue
+        for p, old, new, _ in edits:
+            print(f"■ {fn} {p}\n   前: {old}\n   後: {new}")
+        total += len(edits)
+        if apply:
+            for _, _, new, (parent, key) in edits:
+                parent[key] = new
+            json.dump(data, open(path, "w", encoding="utf-8"),
+                      ensure_ascii=False, indent=2)
+            with open(path, "a", encoding="utf-8") as f:
+                f.write("\n")
+    print("=" * 70)
+    print(f"記事本文の対象 {total} 件（削除のみ）")
+    if detail_skipped:
+        print(f"\n▲ 自動では触らなかったもの: {len(detail_skipped)} 件"
+              f"（人／第二AIが書き直す）")
+        for old, why in detail_skipped:
+            print(f"   - [{why}]\n     {old[:120]}")
+    if apply:
+        print(f"✅ {total} 件を書き込みました")
+    else:
+        print("（確認のみ。書き込むには --apply）")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true")
+    ap.add_argument("--details", action="store_true",
+                    help="machines.json ではなく記事データを対象にする")
     args = ap.parse_args()
+
+    if args.details:
+        return _run_details(args.apply)
 
     machines = json.load(open(MACHINES, encoding="utf-8"))
     edits: list = []
