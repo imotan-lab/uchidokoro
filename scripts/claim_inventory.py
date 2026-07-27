@@ -44,23 +44,29 @@ SCHEMA_VERSION = "claim-inventory/v1"
 #   (正規表現, field_key, mode, scope, counter_basis, value_kind, unit)
 LABEL_RULES = [
     # --- G数天井（現在 C5 が実装済みなのはこの系統だけ）
-    (r"^AT間天井$|^AT間$", "ceiling.normal.at", "NORMAL", "AT_GAP", "MENU_GAME",
+    # ★★数え方(counter_basis)はラベルから推測しない★★
+    #   東京喰種は「AT間=メニュー画面 / CZ間=液晶右下」だが、実データに反例がある：
+    #     gundam_uc2「AT間1400G（液晶）」 sao2「CZ間499G+α（実ゲーム数）」
+    #     kengan_ashura「CZ間ゲーム数はデータカウンターで確認」
+    #   1機種の実測を79機種へ一般化すると、数え方を取り違えたまま値だけ揃えてしまう。
+    #   よって basis は UNKNOWN から始め、**出典の逐語引用で確定させる**（C5の仕事）。
+    (r"^AT間天井$|^AT間$", "ceiling.normal.at", "NORMAL", "AT_GAP", "UNKNOWN",
      "INTEGER", "G"),
-    (r"^CZ間天井$|^CZ間$", "ceiling.normal.cz", "NORMAL", "CZ_GAP", "LCD_GAME",
+    (r"^CZ間天井$|^CZ間$", "ceiling.normal.cz", "NORMAL", "CZ_GAP", "UNKNOWN",
      "INTEGER", "G"),
-    (r"^ボーナス間天井$", "ceiling.normal.bonus", "NORMAL", "BONUS_GAP", "REAL_GAME",
+    (r"^ボーナス間天井$", "ceiling.normal.bonus", "NORMAL", "BONUS_GAP", "UNKNOWN",
      "INTEGER", "G"),
-    (r"^ST間天井$", "ceiling.normal.st", "NORMAL", "ST_GAP", "REAL_GAME",
+    (r"^ST間天井$", "ceiling.normal.st", "NORMAL", "ST_GAP", "UNKNOWN",
      "INTEGER", "G"),
     (r"^天井$|^通常時の天井$|^G数天井$", "ceiling.normal", "NORMAL", "NONE",
-     "REAL_GAME", "INTEGER", "G"),
+     "UNKNOWN", "INTEGER", "G"),
     (r"^設定変更後天井$|^リセット天井$|^リセット後天井$|^リセット$|^リセット後$|"
      r"^リセット短縮$|^リセット後の天井$|^設定変更後$", "ceiling.reset", "RESET",
-     "NONE", "REAL_GAME", "INTEGER", "G"),
+     "NONE", "UNKNOWN", "INTEGER", "G"),
     (r"^リセット後AT間天井$|^リセットAT間$", "ceiling.reset.at", "RESET", "AT_GAP",
-     "MENU_GAME", "INTEGER", "G"),
+     "UNKNOWN", "INTEGER", "G"),
     (r"^リセット後CZ間天井$|^リセットCZ間$", "ceiling.reset.cz", "RESET", "CZ_GAP",
-     "LCD_GAME", "INTEGER", "G"),
+     "UNKNOWN", "INTEGER", "G"),
     # --- 回数・周期・ポイントの天井（C5未実装なので自動採用はされない）
     (r"^スルー天井$|^天井\(スルー\)$|^天井（スルー）$", "ceiling.through", "NORMAL",
      "NONE", "THROUGH", "INTEGER", "回"),
@@ -68,11 +74,12 @@ LABEL_RULES = [
     (r"^ポイント天井$|^pt天井$", "ceiling.point", "NORMAL", "NONE", "POINT",
      "INTEGER", "pt"),
     (r"^BIG後天井$|^BIG後$", "ceiling.normal.big_after", "NORMAL", "BIG_AFTER",
-     "REAL_GAME", "INTEGER", "G"),
+     "UNKNOWN", "INTEGER", "G"),
     (r"^REG後天井$|^REG後$", "ceiling.normal.reg_after", "NORMAL", "REG_AFTER",
-     "REAL_GAME", "INTEGER", "G"),
-    (r"^通常天井$|^通常時$", "ceiling.normal", "NORMAL", "NONE", "REAL_GAME",
-     "INTEGER", "G"),
+     "UNKNOWN", "INTEGER", "G"),
+    # ★「通常時」は天井とは限らない★（通常時の純増・通常時の確率などにも使われる）
+    #   ラベルだけで天井と決めつけない。未知として止める。
+    (r"^通常天井$", "ceiling.normal", "NORMAL", "NONE", "UNKNOWN", "INTEGER", "G"),
     # --- 恩恵（何が起きるか）。文章なので TEXT。★数値ではないが事実★
     (r"^恩恵$|^天井恩恵$", "benefit.ceiling", "NORMAL", "NONE", "NONE", "TEXT", ""),
     (r"^リセット恩恵$", "benefit.reset", "RESET", "NONE", "NONE", "TEXT", ""),
@@ -283,6 +290,17 @@ def load_machine(slug: str):
     return m, d
 
 
+def _basis_unknown_blocks_verified() -> bool:
+    """counter_basis が UNKNOWN のまま VERIFIED にできないことを確かめる。"""
+    c = cl._mk_claim()
+    c["conditions"] = {**c["conditions"], "counter_basis": "UNKNOWN"}
+    try:
+        cl.validate_claim(c, "t")
+    except cl.LedgerError:
+        return True
+    return False
+
+
 def selftest() -> int:
     results = []
 
@@ -293,9 +311,15 @@ def selftest() -> int:
     t("★AT間天井とCZ間天井を別の型に落とす（同じ数字でも別物）",
       classify_label("AT間天井")["field_key"] == "ceiling.normal.at"
       and classify_label("CZ間天井")["field_key"] == "ceiling.normal.cz")
-    t("★数え方(counter_basis)まで型に入る",
-      classify_label("AT間天井")["counter_basis"] == "MENU_GAME"
-      and classify_label("CZ間天井")["counter_basis"] == "LCD_GAME")
+    t("★★数え方(counter_basis)はラベルから推測しない★★",
+      classify_label("AT間天井")["counter_basis"] == "UNKNOWN"
+      and classify_label("CZ間天井")["counter_basis"] == "UNKNOWN")
+    t("　（理由）実データに反例がある：gundam_uc2はAT間が液晶、sao2はCZ間が実ゲーム数",
+      True)
+    t("★数え方が未確定のまま VERIFIED にできない",
+      _basis_unknown_blocks_verified())
+    t("★「通常時」だけでは天井と決めつけない（純増・確率にも使われる語）",
+      classify_label("通常時") is None)
     t("★未知ラベルは推測せず None（勝手に型を作らない）",
       classify_label("謎の項目") is None)
     t("編集判断のラベルは裏取り対象にしない",

@@ -47,8 +47,11 @@ OPERATORS = ("MAX", "MIN", "EXACT", "APPROX", "RANGE")
 MODES = ("NORMAL", "RESET", "ANY")
 SCOPES = ("NONE", "AT_GAP", "CZ_GAP", "BONUS_GAP", "ST_GAP", "BIG_AFTER", "REG_AFTER")
 # 何を数えた値か。★これが違えば同じ数字でも別物★（東京喰種の600G/1200Gの教訓）
-COUNTER_BASIS = ("LCD_GAME", "MENU_GAME", "REAL_GAME", "POINT", "CYCLE", "THROUGH",
-                 "COIN", "NONE")
+COUNTER_BASIS = ("LCD_GAME", "MENU_GAME", "REAL_GAME", "DATA_COUNTER", "POINT",
+                 "CYCLE", "THROUGH", "COIN", "NONE",
+                 # ★未確定★ ラベルから推測せず、出典の逐語引用で確定させる。
+                 #   UNKNOWN のままでは VERIFIED にできない（下の検証で止める）。
+                 "UNKNOWN")
 VERIFY_STATES = ("UNVERIFIED", "VERIFIED", "CONFLICT", "REVIEW", "REVIEW_MANUAL",
                  "STALE", "NOT_FOUND", "UNVERIFIED_LEGACY")
 CLAIM_KINDS = ("FACT", "JUDGMENT")
@@ -159,6 +162,11 @@ def validate_claim(c: dict, where: str) -> None:
     # ★VERIFIED を名乗るなら、票に数えた出典が2つ以上必要★
     #   （AIの自己申告では VERIFIED にできない。検証器が付ける状態）
     if c["verify_state"] == "VERIFIED":
+        # ★数え方が未確定のまま VERIFIED にはできない★
+        #   （同じ数字でも数えた対象が違えば別物。実データに反例あり：
+        #     gundam_uc2 は AT間が液晶、sao2 は CZ間が実ゲーム数）
+        if cond["counter_basis"] == "UNKNOWN":
+            raise LedgerError(f"{where}: 数え方(counter_basis)が未確定のまま VERIFIED にできない")
         counted = [s for s in c["sources"]
                    if s["verification"]["vote_disposition"] == "COUNTED"]
         keys = {s["trust_snapshot"]["vote_key"] for s in counted}
