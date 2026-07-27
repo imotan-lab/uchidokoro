@@ -321,6 +321,30 @@ def negative_control() -> int:
                                        "surfaces": ["checker"]},
               "checker": {"unit": "G", "modes": [{"key": "normal", "label": "通常"}],
                           "normal": {"good": 600, "excellent": 700}}})),
+        # ===== Codex 22巡目で追加した反例 =====
+        ("視覚順序を反転させる制御文字(U+202E)", "不可視",
+         lambda: audit_public.audit_machine(
+             {"slug": "x", "name": "t", "strategy": "‮スラプが値待期‬",
+              "disclaimer": audit_public.EXPECTED_DISCLAIMER})),
+        ("記事本文の危険HTML", "HTML",
+         lambda: audit_public.audit_detail(
+             "x", {"sections": [{"title": "本文",
+                                 "body": ["<img src=x onerror=alert(1)>"]}]}, True)),
+        ("記事本文の不可視文字", "不可視",
+         lambda: audit_public.audit_detail(
+             "x", {"lead": "‮あ"}, True)),
+        ("許可タグは通す（過剰停止の回帰防止）", "",
+         lambda: [] if audit_public.html_violation(
+             "600G〜<br><strong>目安</strong>") is None else ["許可タグを弾いた"]),
+        ("上限の優先順位が machine.limit 優先", "入力上限",
+         lambda: audit_public.audit_machine(
+             {"slug": "x", "name": "t", "limit": 700,
+              "disclaimer": audit_public.EXPECTED_DISCLAIMER,
+              "display_requirements": {"disclaimer": audit_public.EXPECTED_DISCLAIMER,
+                                       "surfaces": ["checker"]},
+              "checker": {"unit": "G", "limit": 1000,
+                          "modes": [{"key": "normal", "label": "通常"}],
+                          "normal": {"good": 600, "excellent": 800, "limit": 1000}}})),
         ("UIが参照しないフィールドが mode に残る", "参照しない",
          lambda: audit_public.audit_machine(
              {"slug": "x", "name": "t",
@@ -330,9 +354,62 @@ def negative_control() -> int:
               "checker": {"unit": "G", "modes": [{"key": "normal", "label": "通常"}],
                           "normal": {"good": 600, "excellent": 700, "count": 3}}})),
     ]
+    # ===== 一次ゲート側の反例（gates.py が止めることを確かめる）=====
+    _base = {"slug": "x", "name": "t", "lifecycle": "LEGACY_SEARCH", "checker_modes": {}}
+
+    def _g(machine, detail=None):
+        """audit_view の構造エラー＋内容除去を、監査結果と同じ「文字列の一覧」にする。"""
+        a = gates.audit_view(machine, detail)
+        return ([f"構造エラー: {e['reason']}" for e in a["errors"]]
+                + [f"内容除去: {d['reason']}" for d in a["dropped"]])
+
+    cases += [
+        ("[ゲート] machine直下の未知フィールド", "未知フィールド",
+         lambda: _g({**_base, "strategy_note": "誤記のため公開禁止"})),
+        ("[ゲート] 0スルーの行が無い", "回数",
+         lambda: _g({**_base, "checker_modes": {"suru": "STRUCT_OK"},
+                     "checker": {"unit": "G",
+                                 "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
+                                 "suru": {"suruMax": 2,
+                                          "suru": [{"count": 1, "good": 600, "excellent": 800},
+                                                   {"count": 2, "good": 500, "excellent": 700}]}}})),
+        ("[ゲート] 交換率別の値が一部だけ", "交換率",
+         lambda: _g({**_base, "checker_modes": {"normal": "STRUCT_OK"},
+                     "checker": {"unit": "G",
+                                 "exchangeRates": [{"key": "eq56", "label": "5.6枚"},
+                                                   {"key": "rate45", "label": "4.5枚"}],
+                                 "defaultRate": "eq56",
+                                 "modes": [{"key": "normal", "label": "通常"}],
+                                 "normal": {"good": 600, "excellent": 800,
+                                            "byRate": {"eq56": {"good": 620,
+                                                                "excellent": 820}}}}})),
+        ("[ゲート] G数閾値に小数", "整数",
+         lambda: _g({**_base, "checker_modes": {"normal": "STRUCT_OK"},
+                     "checker": {"unit": "G",
+                                 "modes": [{"key": "normal", "label": "通常"}],
+                                 "normal": {"good": 600.5, "excellent": 700.5}}})),
+        ("[ゲート] 表の行が3セル", "3セル",
+         lambda: _g(_base, {"sections": [{"title": "仕様", "type": "settei",
+                                          "rows": [["天井", "999G", "未確認"]]}]})),
+        ("[ゲート] 視覚順序を反転させる制御文字", "不可視",
+         lambda: _g({**_base, "strategy": "‮スラプが値待期‬"})),
+        ("[ゲート] 漢数字も数値面として扱う", "",
+         lambda: [] if "strategy" in (gates.publish_view(
+             {**_base, "strategy": "天井九百九十九G"})["machine"]
+             .get("display_requirements", {}).get("surfaces", []))
+             else ["漢数字の面を拾えていない"]),
+    ]
+
     ng = []
     for name, expect, fn in cases:
         found = fn()
+        if expect == "":
+            # ★正常系（過剰停止の回帰防止）★ 1件も出ないことを確かめる
+            ok = not found
+            print(("✅" if ok else "❌") + f" {name}: {len(found)} 件（0件が正）")
+            if not ok:
+                ng.append(name)
+            continue
         # ★「何か検出した」ではなく「注入した違反そのものを検出したか」を見る★
         hit = [p for p in found if expect in p]
         print(("✅" if hit else "❌") + f" {name}: {len(hit)} 件検出（全{len(found)}件）")

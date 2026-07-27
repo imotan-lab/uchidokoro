@@ -102,7 +102,7 @@ _NOT_A_SURFACE = ("slug", "name", "seo", "aliases", "release_date", "confirmed_a
 
 
 # ★不可視文字はカテゴリで落とす（列挙だと U+2066 等の取りこぼしが出る・Codex 21巡目 #7）★
-_INVISIBLE_CATS = {"Cf", "Cc", "Co", "Cs", "Zl", "Zp"}
+_INVISIBLE_CATS = ("Cf", "Cc", "Co", "Cs", "Zl", "Zp")
 
 
 def _drop_invisible(s: str) -> str:
@@ -128,6 +128,35 @@ _OK_TAGS = ("br", "strong", "b", "em", "span")
 _OK_TAG_RE = re.compile(r"</?(?:%s)/?>" % "|".join(_OK_TAGS), re.I)
 
 
+def invisible_violation(s) -> str | None:
+    """不可視・方向制御文字が公開文字列に含まれていないか（Codex 22巡目 #2）。
+
+    gates 側とは別実装。除去して判定するのではなく、含まれていること自体を違反とする。
+    U+202E などは画面上の語順を反転させ、無害に見える文字列を危険な文にできる。
+    """
+    if not isinstance(s, str):
+        return None
+    for ch in s:
+        if unicodedata.category(ch) in _INVISIBLE_CATS and ch not in ("\n", "\t"):
+            return f"不可視・方向制御文字(U+{ord(ch):04X})を含む"
+    return None
+
+
+def _scan_strings(node, path, out, slug):
+    """入れ子を歩いて、公開文字列のHTML契約と不可視文字を検査する。"""
+    if isinstance(node, str):
+        for fn in (html_violation, invisible_violation):
+            why = fn(node)
+            if why:
+                out.append(f"{slug}: {path} {why}")
+    elif isinstance(node, dict):
+        for k, v in node.items():
+            _scan_strings(v, f"{path}.{k}", out, slug)
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            _scan_strings(v, f"{path}[{i}]", out, slug)
+
+
 def html_violation(s) -> str | None:
     """公開文字列にHTMLとして危険/未契約な要素が無いか。あれば理由を返す。"""
     if not isinstance(s, str):
@@ -138,7 +167,12 @@ def html_violation(s) -> str | None:
         if bad in low.replace(" ", ""):
             return "危険なHTML（スクリプト・イベント属性）"
     # 空白を含む書き方も潰してから許可タグを取り除く
-    rest = _OK_TAG_RE.sub("", re.sub(r"<\s*(/?)\s*([A-Za-z]+)\s*(/?)\s*>", r"<>", s))
+    # 空白を含む書き方（`< br />`）を詰めてから、許可タグだけを取り除く。
+    # ★置換文字列は必ず後方参照で組み立てる★（Codex 22巡目 #12：以前は制御文字が
+    #   入っていて、許可タグまで契約外として弾いていた）
+    packed = re.sub(r"<\s*(/?)\s*([A-Za-z]+)\s*(/?)\s*>",
+                    lambda m: "<%s%s%s>" % (m.group(1), m.group(2), m.group(3)), s)
+    rest = _OK_TAG_RE.sub("", packed)
     if "<" in rest or ">" in rest:
         return "契約外のHTML（許可タグ以外・属性つきタグ・生の不等号）"
     return None
@@ -490,8 +524,10 @@ def _audit_checker_contract(slug: str, ck, machine_limit=None) -> list[str]:
 
             # ★入力上限を超える閾値・99999センチネルを独立に検査★（Codex 21巡目 #7）
             #   上限は mode直下 → checker直下 の順で効く（machine.limit は呼び出し側で渡す）。
+            # ★優先順位はUI（machine.html getMachineLimit）と同じ順にする★
+            #   machine.limit → checker.limit → mode.limit（Codex 22巡目 #13）
             cap = None
-            for cand in (conf.get("limit"), ck.get("limit"), _machine_limit(mk)):
+            for cand in (_machine_limit(mk), ck.get("limit"), conf.get("limit")):
                 if _num(cand):
                     cap = cand
                     break
@@ -761,18 +797,7 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
                 problems.append(f"{slug}: limit.{kk} は公開されたmodeに無い（到達不能）")
 
     # ★公開文字列のHTML契約★（許可タグ以外・属性つき・生の不等号を通さない）
-    def _scan_html(o, path):
-        if isinstance(o, str):
-            why = html_violation(o)
-            if why:
-                problems.append(f"{slug}: {path} {why}")
-        elif isinstance(o, dict):
-            for k, v in o.items():
-                _scan_html(v, f"{path}.{k}")
-        elif isinstance(o, list):
-            for i, v in enumerate(o):
-                _scan_html(v, f"{path}[{i}]")
-    _scan_html(pub, "machine")
+    _scan_strings(pub, "machine", problems, slug)
     # ★checkerを出すなら、目安ラベルの対象にcheckerが入っていること★
     #   （gates側の新しい不変条件を、独立にも担保する）
     dr = pub.get("display_requirements")
@@ -856,6 +881,9 @@ def audit_detail(slug: str, detail: dict, has_disclaimer: bool,
     problems: list[str] = []
     if not isinstance(detail, dict):
         return [f"{slug}: 記事データが辞書でない"]
+    # ★記事本文にもHTML契約と不可視文字の検査を掛ける★（Codex 22巡目 #11）
+    #   機種データ側だけ検査していると、一次ゲートが回帰したとき記事は素通りする。
+    _scan_strings(detail, "detail", problems, slug)
     for k in detail:
         if k in AUTHORING_ONLY:
             problems.append(f"{slug}: authoring専用フィールドの流出 {k}")
