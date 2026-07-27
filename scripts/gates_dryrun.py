@@ -25,20 +25,23 @@ def provisional_lifecycle(m: dict) -> str:
 
 def provisional_checker_modes(m: dict) -> dict:
     """現行データからの暫定 checker_modes。
-    ★重要★ 現行 modes 配列にある＝「動く」であって「数値が裏取り済み」ではない（Codex指摘）。
-    よって **UNVERIFIED**（=非表示）を既定にし、Phase 0で停止した mode は DISABLED と明示する。
-    VERIFIED へ上げるのは裏取り後（Phase 2）。
+
+    ★運営者決定（2026-07-27）★
+      「構造が正しい(STRUCT_OK)」と「数値が裏取り済み(VERIFIED)」を分ける。
+      Phase 0 の事故は構造バグ（回数入力なのにG数判定）で、該当modeは _disabled 済み。
+      よって _disabled でないmodeは STRUCT_OK とみなし、「当サイトの目安」明示で表示する。
+      数値の裏取り（VERIFIED昇格）は Phase 2 で順次。
     """
     c = m.get("checker") or {}
     out = {}
     for k, v in c.items():
         if isinstance(v, dict) and k not in ("modeData", "byRate"):
-            out[k] = "DISABLED" if "_disabled" in v else "UNVERIFIED"
+            out[k] = "DISABLED" if "_disabled" in v else "STRUCT_OK"
     md = c.get("modeData")
     if isinstance(md, dict):
         for k, v in md.items():
             if isinstance(v, dict):
-                out.setdefault(k, "DISABLED" if "_disabled" in v else "UNVERIFIED")
+                out.setdefault(k, "DISABLED" if "_disabled" in v else "STRUCT_OK")
     return out
 
 

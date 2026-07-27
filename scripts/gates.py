@@ -40,7 +40,16 @@ import sys
 
 LIFECYCLES = ("CANDIDATE", "VERIFIED_PREVIEW", "LEGACY_SEARCH", "SEARCH_READY", "CURATED_ADS")
 PERMANENTLY_CLOSED = ("SEARCH_READY", "CURATED_ADS")
-CHECKER_MODE_STATES = ("VERIFIED", "DISABLED", "UNVERIFIED")
+# checker mode の状態。★「構造が正しい」と「数値が裏取り済み」は別の事実★
+#   STRUCT_OK … 入力軸と判定軸が一致していることを確認済み。数値は未裏取り。
+#               → 「当サイトの目安」と明示した上で表示してよい（運営者決定 2026-07-27）。
+#                 Phase 0 の事故（回数入力なのにG数判定）は構造バグであり、この検査で防げる。
+#   VERIFIED  … 数値まで出典で裏取り済み（Phase 2以降）。
+#   DISABLED  … 意図的に停止（Phase 0で止めた20モード等）。
+#   UNVERIFIED… 未評価。既定値であり非表示。
+CHECKER_MODE_STATES = ("VERIFIED", "STRUCT_OK", "DISABLED", "UNVERIFIED")
+# 表示してよい状態（STRUCT_OK は目安ラベルが必須になる）
+CHECKER_SHOWABLE = ("VERIFIED", "STRUCT_OK")
 HUB_NONE, HUB_PREVIEW_ONLY, HUB_FULL = "none", "preview_only", "full"
 ALLOW, DROP, UNCLASSIFIED = "ALLOW", "DROP", "UNCLASSIFIED"
 
@@ -203,7 +212,7 @@ def validate_machine(machine: dict) -> list[str]:
 
 CLOSED_GATES = {
     "lifecycle": "CANDIDATE", "public": False, "index": False, "ads": False,
-    "checker": False, "checker_modes": [], "hub": HUB_NONE,
+    "checker": False, "checker_modes": [], "checker_is_estimate": False, "hub": HUB_NONE,
     "affiliate": False, "affiliate_original": False, "profile": None,
 }
 
@@ -226,10 +235,14 @@ def compute_gates(machine: dict) -> dict:
     cm = machine.get("checker_modes")
     modes = [] if (kill or not isinstance(cm, dict)) else sorted(
         k for k, v in cm.items()
-        if _ok_key(k) and k not in RESERVED_CHECKER_KEYS and v == "VERIFIED")
+        if _ok_key(k) and k not in RESERVED_CHECKER_KEYS and v in CHECKER_SHOWABLE)
     checker = bool(public and index and modes)
     if not checker:
         modes = []
+    # 数値が裏取り済みでないmodeが1つでもあれば、チェッカーは「目安」扱い（ラベル必須）
+    checker_is_estimate = bool(
+        checker and isinstance(cm, dict)
+        and any(cm.get(k) == "STRUCT_OK" for k in modes))
 
     affiliate = bool(public and index)
     gates = {
@@ -239,6 +252,7 @@ def compute_gates(machine: dict) -> dict:
         "ads": False,
         "checker": checker,
         "checker_modes": modes,
+        "checker_is_estimate": checker_is_estimate,
         "hub": hub,
         "affiliate": affiliate,
         "affiliate_original": bool(affiliate and isinstance(machine.get("original"), dict)),
@@ -261,6 +275,8 @@ def assert_invariants(g: dict) -> None:
         raise GateError("不変条件違反: Phase 1 で ads が True")
     if g["checker"] and not g["checker_modes"]:
         raise GateError("不変条件違反: checker=True なら表示modeが1つ以上必要")
+    if g.get("checker_is_estimate") and not g["checker"]:
+        raise GateError("不変条件違反: 非表示のcheckerが目安扱いになっている")
     if not g["public"] and g["hub"] != HUB_NONE:
         raise GateError("不変条件違反: 非公開機種を hub に載せない")
     if g["public"] and g["profile"] is None:
@@ -364,6 +380,11 @@ class _Ctx:
         """スキーマ破壊（未知フィールド・不正形式・構造不整合）。publish を失敗させる。"""
         self.errors.append({"path": path, "reason": reason})
 
+    def content_drop(self, path: str, reason: str) -> None:
+        """★方針による除去★（危険な表現を含むので出さない）。データは壊れていないので
+        publish は失敗させず、その塊を出さないだけにする。構造エラーと混同しない。"""
+        self.dropped.append({"atom_id": None, "path": path, "reason": reason})
+
 
 def _only_keys(d: dict, allowed: set) -> bool:
     """原子の中に未知フィールドが無いこと（あれば原子ごと拒否する）。"""
@@ -444,7 +465,7 @@ def _project_mode(conf, ctx: _Ctx, path: str, ctx_label: str) -> dict | None:
                 return None
             r = _project_mode(x, ctx, f"{path}.{field}[{i}]", ctx_label)
             if r is None:
-                ctx.reject(f"{path}.{field}[{i}]", "行が公開基準を満たさない（部分的に出さない）")
+                ctx.content_drop(f"{path}.{field}[{i}]", "行が公開基準を満たさない（部分的に出さない）")
                 return None
             rows.append(r)
         out[field] = rows
@@ -609,9 +630,14 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
         if declared is not None and key not in declared:
             ctx.reject(f"checker.{key}", "modes宣言に無いmodeをVERIFIEDにできない")
             continue
+        before = len(ctx.errors)
         pm = _project_mode(conf, ctx, f"checker.{key}", key)
         if pm is None:
-            ctx.reject(f"checker.{key}", "modeの内容が公開基準を満たさない（部分的に出さない）")
+            # データが壊れている場合は _project_mode が既に reject 済み。
+            # そうでなく「内容が公開基準を満たさない」だけなら方針による除去として扱う。
+            if len(ctx.errors) == before:
+                ctx.content_drop(f"checker.{key}",
+                                 "modeの内容が公開基準を満たさない（部分的に出さない）")
             continue
         out[key] = pm
     # VERIFIEDなのに1つも出せないなら checker を出さない（UIが空configで例外になるのを防ぐ）
@@ -1019,6 +1045,10 @@ def publish_view(machine: dict, detail: dict | None = None,
     ctx = _Ctx(gates["profile"], ledger)
     pm = _project_machine(machine, gates, ctx)
     pd = _project_detail(detail, gates, ctx)
+    # ★方針による除去でcheckerが空になったら、ゲート表示も閉じて自己矛盾を残さない★
+    if gates["checker"] and "checker" not in pm:
+        gates = {**gates, "checker": False, "checker_modes": [], "checker_is_estimate": False}
+        assert_invariants(gates)
 
     # ★スキーマ破壊は内容判定と別チャネルで必ず止める★
     if ctx.errors:
@@ -1037,6 +1067,10 @@ def publish_view(machine: dict, detail: dict | None = None,
     #   文字だけの本文に一律で目安ラベルを付けるのは品質を損ね、
     #   info/seo/original に数値がある場合を見落とすため。
     surfaces = _numeric_surfaces(pm, pd)
+    # 数値未裏取りのチェッカーを出す場合は、必ず目安ラベルの対象にする
+    if gates.get("checker_is_estimate") and "checker" in pm and "checker" not in surfaces:
+        surfaces.append("checker")
+        surfaces.sort()
     if surfaces:
         pm["disclaimer"] = LEGACY_DISCLAIMER
         # どの表示面に併記が必要かをフィールド単位で返す。
@@ -1101,6 +1135,15 @@ def selftest() -> int:
     t("checker: VERIFIEDのmodeだけ",
       compute_gates({**base, "checker_modes": {"normal": "VERIFIED", "suru": "UNVERIFIED"}}
                     )["checker_modes"] == ["normal"])
+    # ★構造の正しさ(STRUCT_OK)と数値の裏取り(VERIFIED)を分ける（運営者決定 2026-07-27）
+    gso = compute_gates({**base, "checker_modes": {"normal": "STRUCT_OK", "suru": "DISABLED"}})
+    t("★STRUCT_OK は表示する（構造は正常＝Phase0の事故は防げている）",
+      gso["checker"] and gso["checker_modes"] == ["normal"])
+    t("★STRUCT_OK を含むなら目安扱いになる", gso["checker_is_estimate"] is True)
+    t("　VERIFIEDだけなら目安扱いにしない",
+      compute_gates({**base, "checker_modes": {"normal": "VERIFIED"}})["checker_is_estimate"] is False)
+    t("　DISABLED/UNVERIFIED は表示しない",
+      not compute_gates({**base, "checker_modes": {"a": "DISABLED", "b": "UNVERIFIED"}})["checker"])
     t("★kill switch型不正でも開かない",
       not compute_gates({**base, "checker_modes": {"normal": "VERIFIED"},
                          "checker_kill_switch": "true"})["checker"])
@@ -1260,14 +1303,16 @@ def selftest() -> int:
            "checker": {"modes": [{"key": "normal"}],
                        "normal": {"good": 580, "excellent": 700,
                                   "note": "期待収支は算出していません"}}}
-    raised = False
-    try:
-        publish_view(inv)
-    except GateError:
-        raised = True
-    t("★注意書きが落ちる場合は数値だけ残さず公開を止める（意味反転しない）", raised)
-    t("　（診断でも数値だけの通過を許さない）",
-      audit_view(inv)["ok"] is False)
+    # ★注意書きが落ちるなら、数値だけ残さず mode ごと出さない（意味反転しない）★
+    #   データは壊れていないので公開自体は止めず、その塊を出さない扱いにする。
+    inv_view = publish_view(inv)
+    t("★注意書きが落ちる場合は数値だけ残さない（modeごと出さない）",
+      "checker" not in inv_view["machine"])
+    t("　ゲート表示も閉じて自己矛盾を残さない",
+      inv_view["gates"]["checker"] is False and inv_view["gates"]["checker_modes"] == [])
+    t("　診断では「方針による除去」として記録される（構造エラーにしない）",
+      audit_view(inv)["errors"] == []
+      and any("公開基準" in (d.get("reason") or "") for d in audit_view(inv)["dropped"]))
 
     # 構造エラーは公開を止める
     for bad_checker, label in (
@@ -1347,6 +1392,11 @@ def selftest() -> int:
     t("★目安ラベルは実際に数値がある時だけ付く",
       "disclaimer" not in publish_view(base, {"lead": "数字のない紹介文です。"})["machine"]
       and publish_view({**base, "strategy": "等価600G〜"})["machine"]["disclaimer"] == LEGACY_DISCLAIMER)
+    t("★目安チェッカーを出すなら必ず目安ラベルの対象になる",
+      "checker" in publish_view(
+          {**base, "checker_modes": {"normal": "STRUCT_OK"},
+           "checker": {"modes": [{"key": "normal"}], "normal": {"good": 580}}}
+      )["machine"]["display_requirements"]["surfaces"])
     t("　どの表示面に必要かを返す",
       "strategy" in publish_view({**base, "strategy": "等価600G〜"}
                                  )["machine"]["display_requirements"]["surfaces"])
