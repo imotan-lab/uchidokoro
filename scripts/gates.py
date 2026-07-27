@@ -519,7 +519,8 @@ _COUNT_AXIS_MODES = ("suru", "through", "cycle")   # 回数・周期で数える
 _AXIS_MAX_COUNT = 30                                # 回数系の閾値がこれを超えたらG数の混入を疑う
 
 
-def _axis_conflict(mode_key: str, conf: dict, unit: str | None) -> str | None:
+def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
+                   declared_flags: bool | None = None) -> str | None:
     """入力軸と判定軸の食い違いを、閾値の大小ではなく**構造**で検出する。
 
     ★実データで確認した判別条件（2026-07-27）★
@@ -535,15 +536,53 @@ def _axis_conflict(mode_key: str, conf: dict, unit: str | None) -> str | None:
       停止マーカーを消しても、構造そのものが不整合なら必ず止まる。
       （Codex 10巡目の指摘：人が付けた印だけを根拠にしてはいけない）
     """
-    if mode_key not in _COUNT_AXIS_MODES:
-        return None
-    if isinstance(conf.get("suru"), list) or isinstance(conf.get("cycle"), list):
-        return None                       # 回数で行を選ぶ二軸構造（正しい形）
+    # 回数軸とみなす条件: mode名 または hasSuru/hasCycle 宣言
+    is_count = (mode_key in _COUNT_AXIS_MODES
+                or conf.get("hasSuru") is True or conf.get("hasCycle") is True
+                or declared_flags is True)
+    rows = conf.get("suru") if isinstance(conf.get("suru"), list) else \
+        (conf.get("cycle") if isinstance(conf.get("cycle"), list) else None)
     direct = [k for k in ("excellent", "good", "caution", "target") if _is_num(conf.get(k))]
-    if direct:
-        return (f"回数系mode({mode_key})が直下に閾値{direct}を持つ"
-                f"（入力単位={unit!r}）＝入力軸と判定軸の食い違い。"
-                f"回数ごとの閾値は suru[]/cycle[] の行として持つこと")
+
+    if not is_count:
+        # G数軸のmodeに回数の入れ子を持たせるのも軸の混在
+        if rows is not None and not direct:
+            return (f"mode({mode_key})が回数の行だけを持ち、G数の閾値を持たない"
+                    f"＝入力軸が判別できない")
+        return None
+
+    # --- ここから回数軸のmode ---
+    if rows is not None and direct:
+        # ★直下閾値と入れ子の併存は、どちらで判定されるか決まらない★
+        return (f"回数系mode({mode_key})が直下閾値{direct}と行の両方を持つ"
+                f"＝判定軸が一意に決まらない")
+    if rows is None:
+        if direct:
+            return (f"回数系mode({mode_key})が直下に閾値{direct}を持つ"
+                    f"（入力単位={unit!r}）＝入力軸と判定軸の食い違い。"
+                    f"回数ごとの閾値は suru[]/cycle[] の行として持つこと")
+        # 閾値も行も無い（noteだけ等）＝判定できないのに表示対象になる
+        return f"回数系mode({mode_key})に判定材料が無い（閾値も行も持たない）"
+
+    # --- 行の契約: count は必須・正の整数・一意・昇順 ---
+    counts = []
+    for i, row in enumerate(rows):
+        if not isinstance(row, dict):
+            return f"回数系mode({mode_key})の行[{i}]が辞書でない"
+        cv = row.get("count")
+        if not _is_num(cv) or isinstance(cv, bool):
+            return f"回数系mode({mode_key})の行[{i}]に count が無い（回数が特定できない）"
+        if float(cv) != int(cv) or int(cv) < 0:
+            return f"回数系mode({mode_key})の行[{i}]の count={cv} が0以上の整数でない"
+        counts.append(int(cv))
+    if len(set(counts)) != len(counts):
+        return f"回数系mode({mode_key})の count が重複している: {counts}"
+    if counts != sorted(counts):
+        return f"回数系mode({mode_key})の count が昇順でない: {counts}"
+    # 入力単位が回数系なら、行の中の閾値は「G数」でなく回数のはず＝二軸が成立しない
+    if _is_str(unit) and unit not in ("G", "g"):
+        return (f"回数系mode({mode_key})の入力単位が{unit!r}＝"
+                f"行ごとのG数閾値と単位が一致しない")
     return None
 
 
@@ -684,7 +723,12 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
             ctx.reject(f"checker.{key}", "modes宣言に無いmodeをVERIFIEDにできない")
             continue
         # ★入力軸と判定軸の整合検査（Phase 0の事故型を機構で防ぐ）★
-        axis = _axis_conflict(key, conf, checker.get("unit"))
+        # modes宣言の中身（hasSuru/hasCycle）から回数軸かどうかを拾う。
+        # declared は key の集合なので、宣言そのものは decl から探す。
+        _decl = next((m for m in (decl if isinstance(decl, list) else [])
+                      if isinstance(m, dict) and m.get("key") == key), {})
+        axis = _axis_conflict(key, conf, checker.get("unit"),
+                              bool(_decl.get("hasSuru") or _decl.get("hasCycle")) or None)
         if axis:
             ctx.reject(f"checker.{key}", axis)
             continue
@@ -1501,6 +1545,35 @@ def selftest() -> int:
                     "checker": {"unit": "G", "modes": [{"key": "suru"}],
                                 "suru": {"suru": [{"count": 1, "good": 600}]}}}
                    )["gates"]["checker"] is True)
+
+    # ★軸契約の完全化（Codex 11巡目の指定反例を全件固定）★
+    def _axis_stops(ck, modes=None):
+        return any("軸" in e["reason"] or "判定材料" in e["reason"] or "count" in e["reason"]
+                   or "回数" in e["reason"]
+                   for e in audit_view({**base, "checker_modes": modes or {"suru": "STRUCT_OK"},
+                                        "checker": ck})["errors"])
+
+    t("★軸契約: 直下閾値＋suru[] の併存 → 停止",
+      _axis_stops({"unit": "G", "modes": [{"key": "suru"}],
+                   "suru": {"good": 4, "suru": [{"count": 1, "good": 600}]}}))
+    t("★軸契約: unit='回' ＋ G数の行 → 停止",
+      _axis_stops({"unit": "回", "modes": [{"key": "suru"}],
+                   "suru": {"suru": [{"count": 1, "good": 600}]}}))
+    t("★軸契約: count 欠落 → 停止",
+      _axis_stops({"unit": "G", "modes": [{"key": "suru"}],
+                   "suru": {"suru": [{"good": 600}]}}))
+    for rows, label in (([{"count": 1, "good": 600}, {"count": 1, "good": 500}], "重複"),
+                        ([{"count": 2, "good": 600}, {"count": 1, "good": 500}], "降順"),
+                        ([{"count": 1.5, "good": 600}], "小数"),
+                        ([{"count": -1, "good": 600}], "負数")):
+        t(f"★軸契約: count {label} → 停止",
+          _axis_stops({"unit": "G", "modes": [{"key": "suru"}], "suru": {"suru": rows}}))
+    t("★軸契約: key='at'でも hasSuru宣言＋直下閾値 → 停止",
+      _axis_stops({"unit": "G", "modes": [{"key": "at", "hasSuru": True}],
+                   "at": {"good": 4}}, {"at": "STRUCT_OK"}))
+    t("★軸契約: noteだけの周期mode → 停止（実データ sengoku_otome5 と同型）",
+      _axis_stops({"unit": "G", "modes": [{"key": "cycle", "hasCycle": True}],
+                   "cycle": {"note": "周期天井は最大6周期"}}, {"cycle": "STRUCT_OK"}))
     t("★分割された絶対禁止を台帳ALLOWで通せない",
       classify_atom(["期待値が", "プラス"],
                     {atom_id("期待値が / プラス", "legacy_safe"): {"verdict": ALLOW}},

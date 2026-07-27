@@ -38,6 +38,11 @@ DATA = os.path.join(BASE, "assets", "data")
 # （tokyo_ghoul は13巡で収束）。余裕を持たせつつ、無限ループは検出できるようにする。
 MAX_ROUNDS = 40
 
+# ★公開機種数の予算（外部固定値）★
+#   gates の自己算出だと「1機種が黙って非公開になった」ことを検出できないため、
+#   ここに人が意図した数を書く。機種を増減したら、意図した変更として必ずここを直す。
+EXPECTED_PUBLIC = 120
+
 
 def _all_allow_ledger(sim: dict, detail: dict, g: dict, slug: str) -> dict:
     """未分類をすべて ALLOW と仮定した台帳（不動点まで反復）。"""
@@ -59,8 +64,9 @@ def run() -> int:
     published = blocked = 0
     problems: list[str] = []
     seen_slugs: set = set()
-    expected_public = sum(1 for m in machines
-                          if gates.compute_gates(bl.provisional(m))["public"])
+    # ★件数予算は gates 自身に計算させない（自己申告では機種が消えても気づけない）★
+    #   外部の固定値と突き合わせる。機種を増減した時は EXPECTED_PUBLIC を意図して直すこと。
+    expected_public = EXPECTED_PUBLIC
 
     for m in machines:
         sim = bl.provisional(m)
@@ -92,11 +98,47 @@ def run() -> int:
     if published != expected_public:
         problems.append(f"公開機種数が想定と違う: {published} != {expected_public}")
 
+    problems.extend(axis_regression())    # 軸契約の回帰も停止条件に含める
+
     print(f"公開できた機種: {published} / 止まった機種: {blocked}（想定 {expected_public}）")
     print(f"独立監査の違反: {len(problems)} 件")
     for p in problems[:30]:
         print("  ✗", p)
     return 1 if problems else 0
+
+
+def axis_regression() -> list[str]:
+    """★実データ全件に対する軸契約の回帰検査★
+
+    Phase 0 で停止した20modeは、停止マーカーを外しても構造だけで止まること。
+    正常な回数系modeは通ること。人が付けた印に安全性を依存させないための検査。
+    """
+    machines = json.load(open(os.path.join(DATA, "machines.json"), encoding="utf-8"))
+    ng: list[str] = []
+    stopped = passed = 0
+    for m in machines:
+        c = m.get("checker") or {}
+        decl = c.get("modes") if isinstance(c.get("modes"), list) else []
+        for k, v in list(c.items()) + list((c.get("modeData") or {}).items()):
+            if not isinstance(v, dict) or k in ("modeData", "byRate", "exchangeRates"):
+                continue
+            d = next((x for x in decl if isinstance(x, dict) and x.get("key") == k), {})
+            flags = bool(d.get("hasSuru") or d.get("hasCycle")) or None
+            # ★停止マーカーをメモリ上で外して検査する（マーカー非依存を確かめる）★
+            probe = {kk: vv for kk, vv in v.items() if kk != "_disabled"}
+            r = gates._axis_conflict(k, probe, c.get("unit"), flags)
+            if "_disabled" in v:
+                if r:
+                    stopped += 1
+                else:
+                    ng.append(f"{m['slug']}.{k}: 停止済みmodeがマーカー無しでは通ってしまう")
+            elif k in ("suru", "through", "cycle") or flags:
+                if r:
+                    ng.append(f"{m['slug']}.{k}: 正常なmodeが止まる（{r[:50]}）")
+                else:
+                    passed += 1
+    print(f"軸契約の回帰: 停止マーカー無しでも止まる {stopped} 件 / 正常modeが通る {passed} 件")
+    return ng
 
 
 def negative_control() -> int:
