@@ -177,8 +177,12 @@ def _atoms(node, path, out):
                     if isinstance(el, str):
                         out.append((f"{path}.{field}[{i}]", f"{head} / {el}"))
                     elif isinstance(el, dict):
-                        # ★見出し＋（表の中の行）まで結合する★
-                        #   labelの無い表でも「section見出し＋行」の複合断定を捕まえる
+                        # ★見出し＋表ラベル＋見出し行＋行 を「全部つなげた原子」も作る★
+                        #   例: section title=「期」/ table label=「待」/ row=["収支が","プラス"]
+                        #   のように細かく割られた断定を、全要素同時連結で捕まえる
+                        sub_label = el.get("label") if isinstance(el.get("label"), str) else None
+                        heads = el.get("headers") if isinstance(el.get("headers"), list) else []
+                        head_txt = [h for h in heads if isinstance(h, str)]
                         for sub in ("rows", "headers", "body"):
                             if not isinstance(el.get(sub), list):
                                 continue
@@ -188,8 +192,9 @@ def _atoms(node, path, out):
                                        else " ".join(str(c[k]) for k in ("badge", "text")
                                                      if isinstance(c.get(k), str))
                                        for c in cells]
+                                parts = [head, sub_label, *(head_txt if sub == "rows" else []), *txt]
                                 out.append((f"{path}.{field}[{i}].{sub}[{j}]",
-                                            " / ".join([head, *txt])))
+                                            " / ".join(p for p in parts if p)))
                     elif isinstance(el, list):
                         cells = [str(x) if not isinstance(x, dict)
                                  else " ".join(str(x[k]) for k in ("badge", "text")
@@ -210,6 +215,75 @@ def _check_url(u: str) -> str | None:
     if re.search(r"[?#]", u) or SECRET_HINT_RE.search(u):
         return "秘密を含みうるURL（クエリ/フラグメント/認証情報）"
     return None
+
+
+# checker の公開契約（gates とは別に、監査側で独自に持つ）
+_CK_TOP = {"unit", "equivOnly", "limit", "modes", "exchangeRates", "defaultRate",
+           "hasSuru", "hasCycle", "suruMax", "ok", "ng"}
+_CK_MODE = {"excellent", "good", "caution", "limit", "suruMax", "target", "count",
+            "note", "cycle", "suru", "byRate"}
+_CK_NUM = {"excellent", "good", "caution", "limit", "suruMax", "target", "count"}
+
+
+def _audit_checker_shape(slug: str, ck, path: str = "checker") -> list[str]:
+    """checker の中身を再帰的に検査する（未知フィールド・数値の型崩れを通さない）。"""
+    out: list[str] = []
+    if ck is None:
+        return out
+    if not isinstance(ck, dict):
+        return [f"{slug}: {path} が辞書でない"]
+    for k, v in ck.items():
+        if k in _CK_TOP:
+            if k in ("limit", "suruMax") and not isinstance(v, (int, float)):
+                out.append(f"{slug}: {path}.{k} の型が不正")
+            if k in ("unit", "defaultRate", "ok", "ng") and not isinstance(v, str):
+                out.append(f"{slug}: {path}.{k} の型が不正")
+            if k in ("hasSuru", "hasCycle", "equivOnly") and not isinstance(v, bool):
+                out.append(f"{slug}: {path}.{k} の型が不正")
+            if k == "modes":
+                if not isinstance(v, list):
+                    out.append(f"{slug}: {path}.modes の型が不正")
+                else:
+                    for i, mm in enumerate(v):
+                        if not (isinstance(mm, dict)
+                                and set(mm.keys()) <= {"key", "label", "hasSuru", "hasCycle"}):
+                            out.append(f"{slug}: {path}.modes[{i}] の形が不正")
+            if k == "exchangeRates":
+                if not isinstance(v, list):
+                    out.append(f"{slug}: {path}.exchangeRates の型が不正")
+                else:
+                    for i, r in enumerate(v):
+                        if not (isinstance(r, dict) and set(r.keys()) <= {"key", "label"}
+                                and isinstance(r.get("key"), str)):
+                            out.append(f"{slug}: {path}.exchangeRates[{i}] の形が不正")
+            continue
+        # mode 設定
+        if not isinstance(v, dict):
+            out.append(f"{slug}: {path}.{k} が辞書でない（未知フィールドの疑い）")
+            continue
+        if set(v.keys()) - _CK_MODE:
+            out.append(f"{slug}: {path}.{k} に未知フィールド")
+        for nk in _CK_NUM & set(v.keys()):
+            if not isinstance(v[nk], (int, float)) or isinstance(v[nk], bool):
+                out.append(f"{slug}: {path}.{k}.{nk} が数値でない")
+        if "note" in v and not isinstance(v["note"], str):
+            out.append(f"{slug}: {path}.{k}.note の型が不正")
+        for seq in ("suru", "cycle"):
+            if seq in v:
+                if not isinstance(v[seq], list):
+                    out.append(f"{slug}: {path}.{k}.{seq} の型が不正")
+                else:
+                    for i, row in enumerate(v[seq]):
+                        if isinstance(row, dict):
+                            out.extend(_audit_checker_shape(slug, {"row": row},
+                                                            f"{path}.{k}.{seq}[{i}]"))
+        if "byRate" in v:
+            if not isinstance(v["byRate"], dict):
+                out.append(f"{slug}: {path}.{k}.byRate の型が不正")
+            else:
+                for rk, rv in v["byRate"].items():
+                    out.extend(_audit_checker_shape(slug, {rk: rv}, f"{path}.{k}.byRate"))
+    return out
 
 
 def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
@@ -244,13 +318,33 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
             problems.append(f"{slug}: authoring専用フィールドの流出 {k}")
         elif k not in ALLOWED_MACHINE_KEYS:
             problems.append(f"{slug}: 許可されていないフィールド {k}")
+    # ★入れ子も allowlist ＋ 型契約で fail-closed にする★
     for i, s in enumerate(pub.get("sources") or []):
         if not isinstance(s, dict):
             problems.append(f"{slug}: sources[{i}] が辞書でない")
             continue
+        if set(s.keys()) - {"url", "title", "confirmed_at"}:
+            problems.append(f"{slug}: sources[{i}] に未知フィールド")
+        for k in ("title", "confirmed_at"):
+            if k in s and not isinstance(s[k], str):
+                problems.append(f"{slug}: sources[{i}].{k} の型が不正")
         why = _check_url(s.get("url", ""))
         if why:
             problems.append(f"{slug}: {why} sources[{i}]")
+    for fld, allowed in (("seo", {"title", "description"}),
+                         ("original", {"title", "kind", "search"}),
+                         ("display_requirements", {"disclaimer", "surfaces"})):
+        v = pub.get(fld)
+        if isinstance(v, dict):
+            if set(v.keys()) - allowed:
+                problems.append(f"{slug}: {fld} に未知フィールド")
+            for k, vv in v.items():
+                if k == "surfaces":
+                    if not (isinstance(vv, list) and all(isinstance(x, str) for x in vv)):
+                        problems.append(f"{slug}: display_requirements.surfaces の型が不正")
+                elif not isinstance(vv, str):
+                    problems.append(f"{slug}: {fld}.{k} の型が不正")
+    problems.extend(_audit_checker_shape(slug, pub.get("checker")))
     # ★checkerを出すなら、目安ラベルの対象にcheckerが入っていること★
     #   （gates側の新しい不変条件を、独立にも担保する）
     dr = pub.get("display_requirements")
@@ -274,7 +368,11 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
             continue
         # ★結合した原子は区切り記号を跨いでも判定する★
         #   （"期待値が / プラス" のように、別セルに割れた断定を取り逃がさない）
-        variants = (shown, re.sub(r"\s*[/／|｜]\s*", " ", shown))
+        # 区切りを空白に置換した形と、完全に除去した形の両方を見る
+        # （gates 側と同じ強度にする。「期／待／収支が／プラス」のような分割を取り逃がさない）
+        variants = (shown,
+                    re.sub(r"\s*[/／|｜]\s*", " ", shown),
+                    re.sub(r"\s*[/／|｜]\s*", "", shown))
         if any(FORBIDDEN_RE.search(v) for v in variants):
             problems.append(f"{slug}: 計算断定の残存 {path}")
         if any(_asserts_missing_setting(v) for v in variants):
@@ -319,9 +417,27 @@ def audit_detail(slug: str, detail: dict, has_disclaimer: bool) -> list[str]:
             problems.append(f"{slug}: sections[{i}].title の型が不正")
         if "type" in s and s["type"] not in ("rumor", "settei"):
             problems.append(f"{slug}: sections[{i}].type が未知の値")
+        if set(s.keys()) - {"title", "type", "body", "tables", "rows"}:
+            problems.append(f"{slug}: sections[{i}] に未知フィールド")
         for f2, t2 in (("body", list), ("tables", list), ("rows", list)):
             if f2 in s and not isinstance(s[f2], t2):
                 problems.append(f"{slug}: sections[{i}].{f2} の型が不正")
+        for ti, tb in enumerate(s.get("tables") or []):
+            if not isinstance(tb, dict):
+                problems.append(f"{slug}: sections[{i}].tables[{ti}] が辞書でない")
+                continue
+            if set(tb.keys()) - {"label", "headers", "rows", "note", "wide"}:
+                problems.append(f"{slug}: sections[{i}].tables[{ti}] に未知フィールド")
+            for f3, t3 in (("label", str), ("headers", list), ("rows", list),
+                           ("note", str), ("wide", bool)):
+                if f3 in tb and not isinstance(tb[f3], t3):
+                    problems.append(f"{slug}: sections[{i}].tables[{ti}].{f3} の型が不正")
+            for ri, row in enumerate(tb.get("rows") or []):
+                for c in (row if isinstance(row, list) else [row]):
+                    if isinstance(c, dict) and set(c.keys()) - {"text", "badge"}:
+                        problems.append(f"{slug}: sections[{i}].tables[{ti}].rows[{ri}] のセルに未知フィールド")
+                    elif not isinstance(c, (str, dict)):
+                        problems.append(f"{slug}: sections[{i}].tables[{ti}].rows[{ri}] のセル型が不正")
     for i, r in enumerate(detail.get("factTable") or []):
         if not (isinstance(r, list) and len(r) == 2 and all(isinstance(x, str) for x in r)):
             problems.append(f"{slug}: factTable[{i}] が2要素の文字列配列でない")
@@ -339,7 +455,11 @@ def audit_detail(slug: str, detail: dict, has_disclaimer: bool) -> list[str]:
             if re.match(r"^_", shown):
                 problems.append(f"{slug}: 内部フィールドの流出 {shown}")
             continue
-        variants = (shown, re.sub(r"\s*[/／|｜]\s*", " ", shown))
+        # 区切りを空白に置換した形と、完全に除去した形の両方を見る
+        # （gates 側と同じ強度にする。「期／待／収支が／プラス」のような分割を取り逃がさない）
+        variants = (shown,
+                    re.sub(r"\s*[/／|｜]\s*", " ", shown),
+                    re.sub(r"\s*[/／|｜]\s*", "", shown))
         if any(FORBIDDEN_RE.search(v) for v in variants):
             problems.append(f"{slug}: 計算断定の残存 {path}")
         if any(_asserts_missing_setting(v) for v in variants):
@@ -464,6 +584,34 @@ def selftest() -> int:
     t("★1文目の断定を、後続文の打ち消しで免罪しない",
       any("設定段階" in p for p in audit_machine(
           {**ok, "info": "設定3は非搭載。設定4がないとの声もありますが公式では6段階です。"})))
+    # --- 入れ子の契約（Codex 9巡目 (a)-2）---
+    t("★sources のtitle型不正・未知フィールドを検出",
+      any("sources[0].title" in p for p in audit_machine(
+          {**ok, "sources": [{"url": "https://a.example/x", "title": {}}]}))
+      and any("未知フィールド" in p for p in audit_machine(
+          {**ok, "sources": [{"url": "https://a.example/x", "memo": "x"}]})))
+    t("★seo/original/display_requirements の未知フィールド・型不正を検出",
+      any("seo" in p for p in audit_machine({**ok, "seo": {"title": "t", "memo": "x"}}))
+      and any("surfaces" in p for p in audit_machine(
+          {**ok, "display_requirements": {"surfaces": "checker"}})))
+    t("★checker内部の数値型崩れ・未知フィールドを検出",
+      any("数値でない" in p for p in audit_machine(
+          {**ok, "checker": {"normal": {"good": "580"}},
+           "display_requirements": {"surfaces": ["checker"]}}))
+      and any("未知フィールド" in p for p in audit_machine(
+          {**ok, "checker": {"normal": {"good": 580, "private": 1}},
+           "display_requirements": {"surfaces": ["checker"]}})))
+    t("★記事の表・セルの未知フィールドを検出",
+      any("未知フィールド" in p for p in audit_detail(
+          "x", {"sections": [{"title": "安全", "type": "settei",
+                              "tables": [{"rows": [["a", "b"]], "memo": "x"}]}]}, True))
+      and any("セルに未知フィールド" in p for p in audit_detail(
+          "x", {"sections": [{"title": "安全", "type": "settei",
+                              "tables": [{"rows": [[{"text": "a", "hidden": 1}]]}]}]}, True)))
+    t("★細かく割られた断定を全要素連結で検出（Codex 9巡目 (a)-3）",
+      any("計算断定" in p for p in audit_detail(
+          "x", {"sections": [{"title": "期", "type": "settei",
+                              "tables": [{"label": "待", "rows": [["収支が", "プラス"]]}]}]}, True)))
     t("★語間の長い直接断定・端の欠番+のみ を検出",
       any("設定段階" in p for p in audit_machine(
           {**ok, "info": "設定3はメーカー資料上の仕様として明確に存在しない。"}))
