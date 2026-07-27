@@ -29,8 +29,20 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _SPEC_LABEL = re.compile(
     r"^(?:機械割|出玉率|純増|AT純増|ART純増|BIG純増|ボーナス純増|BB純増|RB純増|"
     r"ジャングルボーナス純増|純増\(BT\)|コイン持ち|コイン単価|払い出し率|"
-    r"BIG獲得枚数|REG獲得枚数|BB獲得枚数|RB獲得枚数|ボーナス獲得枚数)"
+    r"BIG獲得枚数|REG獲得枚数|BB獲得枚数|RB獲得枚数|ボーナス獲得枚数|"
+    r"ボーナス合算確率|初当たり確率|BIG確率|REG確率|AT初当たり確率|設定段階|設定)"
     r"(?:\([^)]*\))?$")
+
+# 確率（1/179.6）・コイン持ち（約32G/50枚）・設定別の列挙（設1:97.9%〜設6:114.9%）・
+# 複数区分の純増（通常AT約3.2枚/G / 上位AT約8.0枚/G）など、実データの定型を追加で許可する。
+_SPEC_VALUE_EXTRA = re.compile(
+    r"^(?:"
+    r"1\s*/\s*[0-9][0-9.,]*"                                   # 確率
+    r"|(?:約|およそ)?[0-9][0-9.]*\s*G\s*/\s*[0-9]+枚(?:\([^)]*\))?"   # コイン持ち
+    r"|[0-9]段階(?:設定)?(?:\([^)]*\))?"                          # 設定段階
+    r"|(?:設定?[0-9]\s*[:：]?\s*[0-9][0-9.]*[%％]\s*[〜～]?\s*)+(?:\([^)]*\))?"  # 設定別列挙
+    r"|(?:[ぁ-んァ-ヶ一-龥A-Za-z0-9()（）]{1,16}\s*[:：]?\s*(?:約)?[0-9][0-9.]*\s*枚/G\s*)+"  # 区分別純増
+    r")$")
 
 # 値として許す形（数値＋単位。文章や動詞が混ざるものは対象外）
 _SPEC_VALUE = re.compile(
@@ -93,12 +105,13 @@ def propose(item: dict) -> tuple[str | None, str]:
     if _NEVER.search(text):
         return None, "計算値・価値判断の疑いがあるため保留"
     parts = text.split(" / ")
-    if len(parts) != 2:
+    if len(parts) < 2:
         return None, "ラベルと値の2要素でない"
-    label, value = parts[0].strip(), parts[1].strip()
+    # 「純増 / 通常AT約3.2枚/G / 上位AT約8.0枚/G」のように値側が / を含む定型も許す
+    label, value = parts[0].strip(), " / ".join(parts[1:]).strip()
     if not _SPEC_LABEL.match(label):
         return None, "スペックのラベルとして未登録"
-    if not _SPEC_VALUE.match(value):
+    if not (_SPEC_VALUE.match(value) or _SPEC_VALUE_EXTRA.match(value)):
         return None, "値が数値＋単位の形でない"
     return "ALLOW", "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
 
