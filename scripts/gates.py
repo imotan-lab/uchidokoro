@@ -520,9 +520,24 @@ _AXIS_MAX_COUNT = 30                                # 回数系の閾値がこ�
 
 
 def _axis_conflict(mode_key: str, conf: dict) -> str | None:
-    """回数入力のmodeにG数らしい閾値が入っていないかを検査する。"""
+    """回数入力のmodeに、G数らしい閾値が**直接**入っていないかを検査する。
+
+    ★適用範囲を mode 直下に限定する理由（実データで確認・2026-07-27）★
+      入れ子（suru[] / cycle[] / byRate）まで広げると 686件の誤検知になる。
+      例: valvrave2 の suru[0] は {count:1, excellent:800…} ＝「1スルー目なら800G〜」で
+      正しい構造（回数で行を選び、閾値はG数）。閾値の大小から軸は判定できない。
+      Phase 0 の事故は「mode直下の閾値がG数なのに入力は回数」という形だったので、
+      ここだけを見るのが現データで意味のある検査になる。
+
+    ★これは完全な軸検査ではない（自覚）★
+      本来は mode ごとに input_axis / decision_axis を明示宣言して再帰検証すべき。
+      それは台帳 #96「スルー二軸化」の作業であり、Phase 2以降に行う。
+      それまでは Phase 0 の既知事故型だけを機構で止める、という位置づけ。
+    """
     if mode_key not in _COUNT_AXIS_MODES:
         return None
+    if isinstance(conf.get("suru"), list) or isinstance(conf.get("cycle"), list):
+        return None                       # 回数で行を選ぶ二軸構造。直下の閾値は持たない前提
     for k in ("excellent", "good", "caution", "target"):
         v = conf.get(k)
         if _is_num(v) and v > _AXIS_MAX_COUNT:
@@ -575,7 +590,11 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
     if _is_num(checker.get("limit")):
         out["limit"] = checker["limit"]
     for lab in ("ok", "ng"):
-        if _is_str(checker.get(lab)) and ctx.atom([checker[lab]], f"checker.{lab}"):
+        if _is_str(checker.get(lab)):
+            # ★判定ラベルが落ちたら checker ごと閉じる（判定文が消えた表示にしない）★
+            if not ctx.atom([checker[lab]], f"checker.{lab}"):
+                ctx.content_drop("checker", "判定ラベルが公開できないため checker ごと除去")
+                return None
             out[lab] = checker[lab]
     for flag in ("hasSuru", "hasCycle"):
         if isinstance(checker.get(flag), bool):
@@ -882,8 +901,15 @@ def _project_simple_rows(rows, ctx: _Ctx, path: str, section_title: str):
                 break
             texts.append(tx)
             vals.append(val)
-        if ok and vals and ctx.atom([section_title, *texts], f"{path}[{ri}]"):
-            kept.append(vals)
+        if not ok:
+            return None                   # セル不正は既に reject 済み
+        if not vals:
+            continue
+        if not ctx.atom([section_title, *texts], f"{path}[{ri}]"):
+            # ★1行でも落ちたら表相当ごと落とす（示唆の一部だけ消えると誤誘導になる）★
+            ctx.content_drop(f"{path}[{ri}]", "公開できない行があるため表ごと除去")
+            return None
+        kept.append(vals)
     return kept or None
 
 
