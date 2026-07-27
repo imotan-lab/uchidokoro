@@ -1,0 +1,100 @@
+{
+ "slug": "tokyo_ghoul",
+ "name": "L 東京喰種",
+ "checked_on": "2026-07-28",
+ "checked_by": "claude+codex（それぞれ独立に検索し、突き合わせた）",
+ "facts": {
+  "cz_tenjo": {
+   "value": "600G+α",
+   "counting": "液晶右下に表示されるゲーム数。スイカによる加算を含む。データカウンターのハマり数とは別物",
+   "why": "ちょんぼりすた・スロパチクエスト・一撃・なな徹・パチマガが一致。カウンターの説明も複数サイトで一致。",
+   "sources": [
+    {"site": "ちょんぼりすた", "url": "https://chonborista.com/slot/spiky/226073/", "value": "600G+α", "counting": "現在のゲーム数(スイカでの加算込み)は液晶右下で確認可能"},
+    {"site": "スロパチクエスト", "url": "https://www.slopachi-quest.com/article/tokyoghoul-tenjou/", "value": "600G+α", "counting": "液晶右下部分に表示。メニュー画面では確認できない。スイカによるゲーム数加算があるため必ず液晶のゲーム数を確認"},
+    {"site": "一撃", "url": "https://1geki.jp/slot/l_tokyoghoul/3/", "value": "通常時最大600G+α消化"}
+   ]
+  },
+  "at_tenjo": {
+   "value": "1200G+α",
+   "counting": "AT間の実ゲーム数。メニュー画面で確認する（CZ間の液晶カウンターとは別）",
+   "why": "全サイト一致。一撃・なな徹は『実ゲーム数』と明記。ちょんぼりすた・パチマガは『メニュー画面』とだけ記載だが矛盾しない。",
+   "sources": [
+    {"site": "ちょんぼりすた", "url": "https://chonborista.com/slot/spiky/226073/", "value": "1200G+α", "counting": "AT間のハマりゲーム数はメニュー画面で確認可能"},
+    {"site": "スロパチクエスト", "url": "https://www.slopachi-quest.com/article/tokyoghoul-tenjou/", "value": "1200G+α", "counting": "メニュー画面を開くとリール左付近に表示"},
+    {"site": "一撃", "url": "https://1geki.jp/slot/l_tokyoghoul/3/", "value": "1200G+α", "counting": "実ゲーム数はメニュー画面で確認"}
+   ]
+  },
+  "at_tenjo_onkei": {
+   "value": "AT当選",
+   "why": "全サイト一致。",
+   "sources": [
+    {"site": "ちょんぼりすた", "url": "https://chonborista.com/slot/spiky/226073/", "value": "AT"},
+    {"site": "スロパチクエスト", "url": "https://www.slopachi-quest.com/article/tokyoghoul-tenjou/", "value": "AT当選"},
+    {"site": "一撃", "url": "https://1geki.jp/slot/l_tokyoghoul/3/", "value": "ATに当選する"}
+   ]
+  },
+  "reset_tenjo": {
+   "value": "CZ間天井が200G+αに短縮",
+   "why": "全サイト一致。",
+   "sources": [
+    {"site": "ちょんぼりすた", "url": "https://chonborista.com/slot/spiky/226073/", "value": "朝一リセット時は特殊モードに滞在し、CZの最大ゲーム数が200G+αに短縮"},
+    {"site": "スロパチクエスト", "url": "https://www.slopachi-quest.com/article/tokyoghoul-tenjou/", "value": "設定変更時はCZ間天井が最大200G+αに短縮"}
+   ]
+  },
+  "kikaiwari_1": {
+   "value": "97.5%",
+   "why": "ちょんぼりすたで確認。当サイトの既存値と一致。",
+   "sources": [
+    {"site": "ちょんぼりすた", "url": "https://chonborista.com/slot/spiky/226073/", "value": "97.5%"}
+   ]
+  },
+  "at_junzou": {
+   "value": "約4.0枚/G",
+   "why": "ちょんぼりすたで確認。当サイトの既存値と一致。",
+   "sources": [
+    {"site": "ちょんぼりすた", "url": "https://chonborista.com/slot/spiky/226073/", "value": "約4.0枚"}
+   ]
+  }
+ },
+ "conflicts": [
+  {
+   "item": "cz_tenjo_onkei",
+   "label": "CZ間天井に到達したときの恩恵",
+   "site_value": "CZ確定",
+   "status": "結論づかず・掲載見送り",
+   "why": "★どのサイトも『確定』とは書いていない★。さらに『CZ当選』派と『CZ or AT当選』派に割れている。同じちょんぼりすた内でもページによって記述が違う。当サイトの『CZ確定』は根拠より強い表現なので、決着するまで載せない。",
+   "sources": [
+    {"site": "一撃", "url": "https://1geki.jp/slot/l_tokyoghoul/3/", "value": "CZに当選"},
+    {"site": "なな徹（表）", "value": "CZ当選"},
+    {"site": "パチマガスロマガFREE（天井ページ）", "value": "CZ当選"},
+    {"site": "ちょんぼりすた", "url": "https://chonborista.com/slot/spiky/226073/", "value": "最大600G＋αでCZ or ATに当選"},
+    {"site": "スロパチクエスト", "url": "https://www.slopachi-quest.com/article/tokyoghoul-tenjou/", "value": "CZ or AT当選"},
+    {"site": "なな徹（本文）", "value": "基本的にCZ。ただしエピソードボーナス当選の可能性もある"},
+    {"site": "パチマガスロマガFREE（機種解析TOP）", "value": "CZorAT当選のチャンス"}
+   ]
+  },
+  {
+   "item": "cz_suru_tenjo",
+   "label": "CZスルー天井の有無",
+   "status": "結論づかず・掲載しない",
+   "why": "なな徹は『非搭載』と断定、ちょんぼりすたは『存在は現在確認されていません』と留保。結論の強さが違う。当サイトは元々スルー天井を載せていないので、このままにする。",
+   "sources": [
+    {"site": "なな徹", "value": "非搭載"},
+    {"site": "ちょんぼりすた", "value": "存在は現在確認されていません／実践上の最大スルー数は7スルー"}
+   ]
+  }
+ ],
+ "history": [
+  {
+   "date": "2026-07-28",
+   "what": "初回の突き合わせ。Claude と Codex がそれぞれ独立に検索した。",
+   "result": "天井・カウンター・リセット・機械割・純増は裏付けが取れた（既存値と一致・変更なし）。CZ間天井の恩恵は結論づかず、掲載を見送る。",
+   "notes": [
+    "★CZ間の600GとAT間の1200Gは別のカウンター★ CZ間は液晶右下（スイカ加算込み）、AT間はメニュー画面（実ゲーム数）。数字だけ合わせても意味がない。",
+    "同じサイト（ちょんぼりすた）でもページによって恩恵の記述が違った。サイト単位ではなくページ単位で見る必要がある。",
+    "Codex の方が多くのサイトを見つけた（なな徹・パチマガ・ぱちガブッ！）。2人で調べる価値がここでも出た。",
+    "設定示唆（終了画面・枚数表示）は当サイトの記載とぱちガブッ！が一致していた。"
+   ]
+  }
+ ]
+}
