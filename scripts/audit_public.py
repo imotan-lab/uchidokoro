@@ -449,6 +449,8 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
         for k in ("title", "confirmed_at"):
             if k in s and not isinstance(s[k], str):
                 problems.append(f"{slug}: sources[{i}].{k} の型が不正")
+        if isinstance(s.get("confirmed_at"), str) and not _DATE_RE.match(s["confirmed_at"]):
+            problems.append(f"{slug}: sources[{i}].confirmed_at の日付形式が不正")
         why = _check_url(s.get("url", ""))
         if why:
             problems.append(f"{slug}: {why} sources[{i}]")
@@ -528,13 +530,19 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
         d = pub.get("disclaimer")
         if not isinstance(d, str) or d != EXPECTED_DISCLAIMER:
             problems.append(f"{slug}: 数値を公開しているのに目安ラベルが正しくない")
+        if not isinstance(dr, dict) or not isinstance(dr.get("surfaces"), list):
+            problems.append(f"{slug}: 数値を公開しているのに表示要件が無い")
+    elif "disclaimer" in pub and pub["disclaimer"] != EXPECTED_DISCLAIMER:
+        # 数値が無いのに独自文言のラベルが付いているのも契約違反
+        problems.append(f"{slug}: 目安ラベルが固定文言と違う")
     return problems
 
 
 ALLOWED_DETAIL_KEYS = {"lead", "summaryBoxes", "factTable", "sections"}
 
 
-def audit_detail(slug: str, detail: dict, has_disclaimer: bool) -> list[str]:
+def audit_detail(slug: str, detail: dict, has_disclaimer: bool,
+                 surfaces: list | None = None) -> list[str]:
     """公開射影された記事データを検査する（機種データとは契約が違う）。"""
     problems: list[str] = []
     if not isinstance(detail, dict):
@@ -552,8 +560,19 @@ def audit_detail(slug: str, detail: dict, has_disclaimer: bool) -> list[str]:
         if not isinstance(s, dict):
             problems.append(f"{slug}: sections[{i}] が辞書でない")
             continue
-        if "title" in s and not isinstance(s["title"], str):
-            problems.append(f"{slug}: sections[{i}].title の型が不正")
+        if not (isinstance(s.get("title"), str) and s["title"].strip()):
+            problems.append(f"{slug}: sections[{i}].title が無い/空/型不正")
+        for ri, row in enumerate(s.get("rows") or []):
+            cells = row if isinstance(row, list) else [row]
+            if not isinstance(row, (list, dict)):
+                problems.append(f"{slug}: sections[{i}].rows[{ri}] の行形式が不正"); continue
+            for c in (cells if isinstance(row, list) else [row.get("trigger"), row.get("hint")]):
+                if isinstance(c, dict):
+                    if set(c.keys()) - {"text", "badge"} or not all(
+                            isinstance(cv, str) for cv in c.values()):
+                        problems.append(f"{slug}: sections[{i}].rows[{ri}] のセルが不正")
+                elif not isinstance(c, str):
+                    problems.append(f"{slug}: sections[{i}].rows[{ri}] のセル型が不正")
         if "type" in s and s["type"] not in ("rumor", "settei"):
             problems.append(f"{slug}: sections[{i}].type が未知の値")
         if set(s.keys()) - {"title", "type", "body", "tables", "rows"}:
@@ -615,6 +634,14 @@ def audit_detail(slug: str, detail: dict, has_disclaimer: bool) -> list[str]:
             has_number = True
     if has_number and not has_disclaimer:
         problems.append(f"{slug}: 記事に数値があるのに目安ラベルが無い")
+    # ★記事側の数値がある面も表示要件に載っているかを独立に検算する★
+    if surfaces is not None:
+        for k, v in detail.items():
+            if not _NUM.search(as_displayed(json.dumps(v, ensure_ascii=False))):
+                continue
+            if f"detail.{k}" not in surfaces:
+                problems.append(f"{slug}: 記事の数値がある面が表示要件に無い: detail.{k}")
+    # 出典の確認日形式（記事側からは参照しないが、契約として揃える）
     return problems
 
 
@@ -658,8 +685,11 @@ def selftest() -> int:
         res.append((name, bool(cond)))
         print(("✅" if cond else "❌") + " " + name)
 
+    # 数値(600G)があるので、目安ラベルと表示要件の両方が必要（実装が求める正しい形）
     ok = {"slug": "x", "name": "テスト機", "strategy": "等価600G〜",
-          "disclaimer": EXPECTED_DISCLAIMER}
+          "disclaimer": EXPECTED_DISCLAIMER,
+          "display_requirements": {"disclaimer": EXPECTED_DISCLAIMER,
+                                   "surfaces": ["strategy"]}}
     t("正常な公開データは合格", audit_machine(ok) == [])
     t("数値があるのに目安ラベルが無ければ違反",
       any("目安ラベル" in p for p in audit_machine({k: v for k, v in ok.items() if k != "disclaimer"})))
@@ -688,11 +718,16 @@ def selftest() -> int:
         {**ok, "info": "本機は設定3が実質存在しない仕様です。"})))
     t("設定列挙の欠番も検出",
       any("設定段階" in p for p in audit_machine({**ok, "info": "スマスロ（設定1/2/4/5/6）"})))
+    # info にも数値があるので表示要件へ含める（実装が求める正しい形）
+    ok_info = {**ok, "display_requirements": {"disclaimer": EXPECTED_DISCLAIMER,
+                                              "surfaces": ["strategy", "info"]}}
     t("正当な設定判別情報を誤検知しない（実データ hanabi）",
-      audit_machine({**ok, "info": "1枚役成立5回以上のREGで出現率25%。設定1では出現しない。"}) == [])
+      audit_machine({**ok_info,
+                     "info": "1枚役成立5回以上のREGで出現率25%。設定1では出現しない。"}) == [])
     t("噂を否定する文を誤検知しない（実データ neoplanet）",
-      audit_machine({**ok, "info": "一部では「設定3が実質存在しない」との声もありますが、"
-                                   "メーカー公式では6段階設定と表記されています。"}) == [])
+      audit_machine({**ok_info,
+                     "info": "一部では「設定3が実質存在しない」との声もありますが、"
+                             "メーカー公式では6段階設定と表記されています。"}) == [])
     t("秘密を含みうるURLを検出",
       any("URL" in p for p in audit_machine({**ok, "sources": [{"url": "https://a.example/x?token=S"}]})))
     t("★https以外・userinfo付きURLを拒否",

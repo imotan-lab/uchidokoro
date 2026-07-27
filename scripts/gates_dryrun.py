@@ -45,8 +45,10 @@ def provisional_checker_modes(m: dict) -> dict:
     return out
 
 
-# 識別子は置き換えない（置き換えるとmode照合が壊れ、検査自体が誤検知する）
-_IDENTIFIER_KEYS = ("key", "defaultRate", "unit")
+# 識別子・日付・slug は置き換えない
+# （置き換えると照合や形式検査が壊れ、検査自体が誤検知する）
+_IDENTIFIER_KEYS = ("key", "defaultRate", "unit", "slug", "release_date", "confirmed_at",
+                    "lifecycle", "name")
 
 
 def _neutralize(node):
@@ -125,6 +127,35 @@ def schema_coverage(machines: list) -> bool:
         if ctx.errors:                    # 検査中に構造エラーが出たら黙って通さない
             for e in ctx.errors:
                 missing_top.add(f"(構造エラー) {e['reason']}")
+
+    # ★checker以外（機種一般フィールド・記事）も取りこぼしを検査する★
+    #   許可リストから誤って外した時に「取りこぼし0」と表示してしまうのを防ぐ。
+    PUBLIC_MACHINE = {"slug", "name", "manufacturer", "info", "strategy", "strategyByRate",
+                      "aliases", "limit", "tenjo_display", "release_date", "confirmed_at",
+                      "original", "checker", "sources", "seo"}
+    PUBLIC_DETAIL = {"lead", "summaryBoxes", "factTable", "sections"}
+    missing_other: set = set()
+    for m in machines:
+        sim = dict(m)
+        sim["lifecycle"] = "LEGACY_SEARCH"
+        sim["checker_modes"] = {}
+        g = gates.compute_gates(sim)
+        ctx = gates._Ctx("legacy_safe", None)
+        pm = gates._project_machine(_neutralize(sim), g, ctx)
+        for k in m:
+            # null は「その項目が無い」の明示なので、消えて当然（取りこぼしではない）
+            if (k in PUBLIC_MACHINE and m[k] is not None
+                    and k not in pm and k not in ("checker",)):
+                missing_other.add(f"machine.{k}")
+        dp = os.path.join(DATA, "machine-details", f"{m['slug']}.json")
+        if os.path.isfile(dp):
+            det = json.load(open(dp, encoding="utf-8"))
+            pd_ = gates._project_detail(_neutralize(det), g, gates._Ctx("legacy_safe", None))
+            for k in det:
+                if k in PUBLIC_DETAIL and k not in pd_:
+                    missing_other.add(f"detail.{k}")
+    if missing_other:
+        missing_top |= missing_other
 
     print("■ 許可スキーマの取りこぼし検査（実データにあるのに公開射影で消えるキー）")
     print(f"   checker直下: {sorted(missing_top) or 'なし'}")

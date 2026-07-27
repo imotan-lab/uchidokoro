@@ -140,7 +140,8 @@ def run() -> int:
         problems.extend(audit_public.audit_detail(
             m["slug"], view["detail"],
             has_disclaimer=isinstance(view["machine"].get("disclaimer"), str)
-            and view["machine"]["disclaimer"] == audit_public.EXPECTED_DISCLAIMER))
+            and view["machine"]["disclaimer"] == audit_public.EXPECTED_DISCLAIMER,
+            surfaces=(view["machine"].get("display_requirements") or {}).get("surfaces")))
 
     # 件数予算（黙って機種が消える事故を止める）
     if published != expected_public:

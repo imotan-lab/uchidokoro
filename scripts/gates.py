@@ -687,11 +687,19 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
                     ctx.content_drop("checker", "交換率ラベルが公開できないため checker ごと除去")
                     return None
                 e["label"] = r["label"]
+            if any(x["key"] == e["key"] for x in rates):
+                ctx.reject(f"checker.exchangeRates[{i}]", "交換率のkeyが重複している")
+                return None
             rates.append(e)
         if rates:
             out["exchangeRates"] = rates
             dr = checker.get("defaultRate")
-            if _is_str(dr) and any(r["key"] == dr for r in rates):
+            if dr is not None:
+                # ★参照整合性: 既定の交換率は選択肢の中に無ければならない★
+                #   （黙って消すと利用者の初期表示が変わってしまう）
+                if not (_is_str(dr) and any(r["key"] == dr for r in rates)):
+                    ctx.reject("checker.defaultRate", "既定の交換率が選択肢に存在しない")
+                    return None
                 out["defaultRate"] = dr
 
     decl = checker.get("modes")
@@ -718,6 +726,9 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
             for flag in ("hasSuru", "hasCycle"):
                 if isinstance(m.get(flag), bool):
                     e[flag] = m[flag]
+            if any(x["key"] == e["key"] for x in kept):
+                ctx.reject(f"checker.modes[{i}]", "modes宣言に重複したkey")
+                return None
             kept.append(e)
         if kept:
             out["modes"] = kept
@@ -804,7 +815,15 @@ def _project_sections(sections, ctx: _Ctx) -> list | None:
             ctx.reject(f"{p}.type", "セクション種別が未知の値")
             continue
         title = sec.get("title")
-        if not (_is_str(title) and title.strip() and ctx.atom([title], f"{p}.title")):
+        if not (_is_str(title) and title.strip()):
+            # ★見出しの欠落・空文字は構造エラー（黙って落とさない）★
+            ctx.reject(f"{p}.title", "セクション見出しが無い/空")
+            continue
+        # settei 以外に表データが置かれているのは構造の取り違え
+        if sec.get("type") != "settei" and ("tables" in sec or "rows" in sec):
+            ctx.reject(p, "設定示唆以外のセクションに表データがある")
+            continue
+        if not ctx.atom([title], f"{p}.title"):
             continue                                  # 見出しが落ちたらセクションごと落とす
         new: dict = {"title": title}
         if sec.get("type") in ("rumor", "settei"):
@@ -1039,10 +1058,17 @@ def _project_machine(machine: dict, gates: dict, ctx: _Ctx) -> dict:
         ctx.reject("slug", "slugが欠落または不正（公開物を同定できない）")
         return out
     out["slug"] = machine["slug"]
+    # 機種名は公開物の必須項目（欠落・空文字のまま公開しない）
+    if not (_is_str(machine.get("name")) and machine["name"].strip()):
+        ctx.reject("name", "機種名が無い/空")
+        return out
     s("name")
     s("manufacturer")
     for f in ("release_date", "confirmed_at"):
-        if _is_str(machine.get(f)) and _DATE_PAT.match(machine[f]):
+        if f in machine and machine[f] is not None:
+            if not (_is_str(machine[f]) and _DATE_PAT.match(machine[f])):
+                ctx.reject(f, "日付形式が不正（YYYY-MM-DD）")
+                return out
             out[f] = machine[f]
     src = _project_sources(machine.get("sources"), ctx)
     if src:
@@ -1067,37 +1093,41 @@ def _project_machine(machine: dict, gates: dict, ctx: _Ctx) -> dict:
     if _is_num(lim):
         out["limit"] = lim
     elif isinstance(lim, dict):
-        d = {k: v for k, v in lim.items() if _ok_key(k) and _is_num(v)}
-        if d:
-            out["limit"] = d
+        if not all(_ok_key(k) and _is_num(v) for k, v in lim.items()):
+            ctx.reject("limit", "limit辞書に不正なキーまたは非数値がある")
+            return out
+        if lim:
+            out["limit"] = dict(lim)
     sbr = machine.get("strategyByRate")
     if isinstance(sbr, dict):
-        d = {}
-        for k, v in sbr.items():
-            if not _ok_key(k):
-                ctx.reject("strategyByRate", "交換率キーが識別子形式でない")
-                continue
-            if _is_str(v) and ctx.atom([k, v], f"strategyByRate.{k}"):
-                d[k] = v
+        if not all(_ok_key(k) and _is_str(v) for k, v in sbr.items()):
+            ctx.reject("strategyByRate", "交換率キーが識別子でない、または値が文字列でない")
+            return out
+        d = {k: v for k, v in sbr.items() if ctx.atom([k, v], f"strategyByRate.{k}")}
         if d:
             out["strategyByRate"] = d
     seo = machine.get("seo")
     if isinstance(seo, dict):
-        d = {}
-        for k in ("title", "description"):
-            if _is_str(seo.get(k)) and ctx.atom([seo[k]], f"seo.{k}"):
-                d[k] = seo[k]
+        if not _only_keys(seo, {"title", "description"}):
+            ctx.reject("seo", "未知フィールドを含むSEO情報")
+            return out
+        if not _types_ok(ctx, seo, "seo", {"title": str, "description": str}):
+            return out
+        d = {k: seo[k] for k in ("title", "description")
+             if _is_str(seo.get(k)) and ctx.atom([seo[k]], f"seo.{k}")}
         if d:
             out["seo"] = d
     if gates.get("affiliate_original") and isinstance(machine.get("original"), dict):
         o = machine["original"]
-        if _only_keys(o, {"title", "kind", "search"}):
-            d = {k: o[k] for k in ("title", "kind", "search")
-                 if _is_str(o.get(k)) and ctx.atom([o[k]], f"original.{k}")}
-            if d:
-                out["original"] = d
-        else:
+        if not _only_keys(o, {"title", "kind", "search"}):
             ctx.reject("original", "未知フィールドを含む原作情報")
+            return out
+        if not _types_ok(ctx, o, "original", {"title": str, "kind": str, "search": str}):
+            return out
+        d = {k: o[k] for k in ("title", "kind", "search")
+             if _is_str(o.get(k)) and ctx.atom([o[k]], f"original.{k}")}
+        if d:
+            out["original"] = d
     pc = _project_checker(machine.get("checker"), gates.get("checker_modes", []), ctx)
     if pc:
         out["checker"] = pc
@@ -1119,6 +1149,13 @@ def _project_detail(detail, gates: dict, ctx: _Ctx) -> dict:
     if _is_str(lead) and lead.strip() and ctx.atom([lead], "lead"):
         out["lead"] = lead
 
+    # ★記事直下の未知フィールドを黙って捨てない★
+    #   slug/name/updated は同定・更新日の管理用、evTable はJS側が実行時に組み立てる作業用。
+    #   いずれも公開射影には含めないが、authoring 上は正当なので既知として扱う。
+    if not _only_keys(detail, {"lead", "summaryBoxes", "factTable", "sections",
+                               "slug", "name", "updated", "evTable"}):
+        ctx.reject("detail", "記事直下に未知フィールド")
+        return out
     if not _types_ok(ctx, detail, "detail",
                      {"lead": str, "summaryBoxes": list, "factTable": list, "sections": list}):
         return out
@@ -1135,8 +1172,11 @@ def _project_detail(detail, gates: dict, ctx: _Ctx) -> dict:
             if not _types_ok(ctx, b, f"summaryBoxes[{i}]", {"label": str, "value": str}):
                 continue
             lb, vl = b.get("label"), b.get("value")
+            if not (_is_str(lb) and _is_str(vl)):
+                ctx.reject(f"summaryBoxes[{i}]", "label または value が欠落している")
+                continue
             # ★label+value を結合して判定（「期待値」＋「580G〜」を見逃さない）★
-            if _is_str(lb) and _is_str(vl) and ctx.atom([lb, vl], f"summaryBoxes[{i}]"):
+            if ctx.atom([lb, vl], f"summaryBoxes[{i}]"):
                 kept.append({"label": lb, "value": vl})
         if kept:
             out["summaryBoxes"] = kept
