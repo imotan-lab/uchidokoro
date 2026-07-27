@@ -174,9 +174,14 @@ def resolve_ceiling(label: str, value: str):
     """
     if _VALUE_NOT_CEILING.search(value or ""):
         return None                       # 値が狙い目などを語っている
-    units, _ = value_shape(value)
+    units, n_nums = value_shape(value)
     if len(set(units)) != 1:
         return None                       # 単位が無い／複数混在（複合天井を潰さない）
+    # ★同じ単位でも数が複数あれば1つの claim に潰さない★（Codex 指摘5）
+    #   例：「通常1200G、設定変更後800G」「最大1200G（平均620G）」
+    #   別々の枠にすべきものを1値にすると、どちらの数字か決まらない。
+    if n_nums != 1:
+        return None
     unit = units[0]
     if unit == "G":
         return {"unit": "G", "counter_basis": "UNKNOWN", "value_kind": "INTEGER"}
@@ -296,6 +301,15 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
         # ★天井系は値の中身で単位を確定できたときだけ型を起こす★
         if spec is not None and spec["field_key"].startswith("ceiling."):
             shape = resolve_ceiling(label, value)
+            # ★ラベルが具体的な天井（AT間等）なのに単位がGでなければ止める★
+            #   「AT間天井: 500pt」を field_key=ceiling.normal.at のまま
+            #   unit だけ pt に差し替えて通してしまうのを防ぐ。
+            if (shape and spec["field_key"] not in ("ceiling.normal", "ceiling.reset")
+                    and shape["unit"] != spec.get("unit", "G")):
+                unclassified.append({"pointer": pointer, "label": label,
+                                     "reason": "CEILING_UNIT_MISMATCH",
+                                     "value_excerpt": (value or "")[:60]})
+                continue
             if shape is None:
                 unclassified.append({"pointer": pointer, "label": label,
                                      "reason": "AMBIGUOUS_CEILING_VALUE",
@@ -401,6 +415,14 @@ def selftest() -> int:
       _basis_unknown_blocks_verified())
     t("★「通常時」だけでは天井と決めつけない（純増・確率にも使われる語）",
       classify_label("通常時") is None)
+    t("★★同じ単位でも数が複数なら1値に潰さない★★（Codex 指摘5）",
+      resolve_ceiling("AT間天井", "通常1200G、設定変更後800G") is None
+      and resolve_ceiling("AT間天井", "最大1200G（平均620G）") is None)
+    t("　単一の値なら通す", resolve_ceiling("AT間天井", "1200G+α") is not None)
+    t("★★ラベルの天井種別と単位が食い違えば止める（AT間天井:500pt）★★",
+      build_inventory("x", {"slug": "x"},
+                      {"factTable": [["AT間天井", "500pt"]]}
+                      )["unclassified_atoms"][0]["reason"] == "CEILING_UNIT_MISMATCH")
     t("★未知ラベルは推測せず None（勝手に型を作らない）",
       classify_label("謎の項目") is None)
     t("編集判断のラベルは裏取り対象にしない",
