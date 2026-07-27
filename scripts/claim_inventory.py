@@ -266,6 +266,9 @@ def _pairs_from_detail(detail: dict) -> list:
 def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
     """1機種ぶんの在庫を作る。"""
     slots, unclassified = [], []
+    # ★除外したものを黙って捨てない★（Codex 指摘）
+    #   「未分類ゼロ」が網羅の証明になるためには、除外した理由も残っている必要がある。
+    excluded_editorial, excluded_nonclaim, unsupported = [], [], []
     seen_slots = set()
 
     for item in _pairs_from_detail(detail):
@@ -273,11 +276,22 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
         setting = item[3] if len(item) > 3 else None
         table_label = item[4] if len(item) > 4 else None
         if EDITORIAL_LABELS.search(label):
-            continue                       # 編集判断（B区分）は裏取り対象外
+            # 編集判断（B区分）は裏取り対象外。ただし記録は残す
+            excluded_editorial.append({"pointer": pointer, "label": label,
+                                       "reason": "EDITORIAL_JUDGMENT"})
+            continue
         if NONCLAIM_LABELS.match(label.strip()):
-            continue                       # 事実だが数値claimではない
+            excluded_nonclaim.append({"pointer": pointer, "label": label,
+                                      "reason": "NOT_A_NUMERIC_CLAIM"})
+            continue
         if HINT_ROW_LABELS.match(label.strip()):
-            continue                       # 設定示唆の項目名（表ごとの扱いは後の段階）
+            # ★設定示唆はA区分の事実★ 型が未実装なので「未対応の事実」として残す。
+            #   黙って素通りさせると「未分類ゼロ」が嘘になる（Codex 指摘）。
+            unsupported.append({"pointer": pointer, "label": label,
+                                "reason": "UNSUPPORTED_FACT_TABLE",
+                                "kind": "SETTING_HINT_TABLE",
+                                "content_sha256": _sha(f"{label}|{value}")})
+            continue
         spec = classify_label(label)
         # ★天井系は値の中身で単位を確定できたときだけ型を起こす★
         if spec is not None and spec["field_key"].startswith("ceiling."):
@@ -332,12 +346,19 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
         },
         "slots": slots,
         "unclassified_atoms": unclassified,
+        "unsupported_facts": unsupported,
+        "excluded_editorial_atoms": excluded_editorial,
+        "excluded_nonclaim_atoms": excluded_nonclaim,
         "coverage": {
             "slots_total": len(slots),
             "allowlisted_type": sum(1 for s in slots if s["allowlisted_type"]),
             "unclassified_atoms": len(unclassified),
-            # ★未分類が1件でもあれば、その機種はBUILD/PUBLISH不可★
-            "publishable": len(unclassified) == 0,
+            "unsupported_facts": len(unsupported),
+            "excluded_editorial": len(excluded_editorial),
+            "excluded_nonclaim": len(excluded_nonclaim),
+            # ★未分類も「型が未実装の事実」も残っていれば公開不可★
+            #   （素通りさせると「未分類ゼロ」が網羅の証明にならない）
+            "publishable": len(unclassified) == 0 and len(unsupported) == 0,
         },
     }
 

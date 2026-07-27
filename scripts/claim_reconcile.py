@@ -60,6 +60,11 @@ def reconcile(slug: str, machine: dict, detail: dict,
     n_unc = len(inventory.get("unclassified_atoms") or [])
     if n_unc:
         problems.append(f"型に落ちていない事実が {n_unc} 件ある（全部片付くまで公開しない）")
+    # ★型が未実装の事実（設定示唆の表など）も、残っていれば公開しない★
+    #   素通りさせると「未分類ゼロ」が網羅の証明にならない（Codex 指摘）
+    n_uns = len(inventory.get("unsupported_facts") or [])
+    if n_uns:
+        problems.append(f"型が未実装の事実が {n_uns} 件ある（設定示唆の表など）")
 
     inv_slots = {s["slot_id"]: s for s in inventory.get("slots") or []}
     claims = ledger.get("claims") or []
