@@ -2345,6 +2345,30 @@ def selftest() -> int:
                        "normal": {"good": 600, "excellent": 800,
                                   "byRate": {"eq56": {"good": 620, "excellent": 820}}}}}
           )["gates"]["checker"] is True)
+    # ===== Phase 1 閉鎖確認で要求された回帰試験（Codex 2026-07-27）=====
+    _rates2 = [{"key": "eq56", "label": "5.6枚"}, {"key": "rate50", "label": "5.0枚"}]
+    _ck2 = {"unit": "G", "exchangeRates": _rates2, "defaultRate": "eq56",
+            "modes": [{"key": "normal", "label": "通常"}],
+            "normal": {"byRate": {"eq56": {"good": 600, "excellent": 800},
+                                  "rate50": {"good": 650, "excellent": 850}}}}
+    t("★閉鎖-1: 交換率別の狙い目文が無くても、チェッカーから材料が取れるなら通す",
+      _pv({**base, "checker_modes": {"normal": "STRUCT_OK"},
+           "checker": _ck2})["gates"]["checker"] is True)
+    t("　材料(good)が取れない交換率があれば停止",
+      bool(audit_view({**base, "checker_modes": {"normal": "STRUCT_OK"},
+                       "checker": {**_ck2,
+                                   "normal": {"byRate": {
+                                       "eq56": {"good": 600, "excellent": 800},
+                                       "rate50": {"caution": 650,
+                                                  "excellent": 850}}}}})["errors"]))
+    t("★閉鎖-2: 要約の数字がその交換率のチェッカーに無ければ停止",
+      bool(audit_view({**base, "checker_modes": {"normal": "STRUCT_OK"},
+                       "strategyByRate": {"eq56": "580G〜", "rate50": "650G〜"},
+                       "checker": _ck2})["errors"]))
+    t("　要約の数字がチェッカーと一致していれば通す",
+      _pv({**base, "checker_modes": {"normal": "STRUCT_OK"},
+           "strategyByRate": {"eq56": "600G〜", "rate50": "650G〜"},
+           "checker": _ck2})["gates"]["checker"] is True)
     t("★25-5: 別機種の記事が付いていたら停止",
       bool(audit_view(base, {"slug": "別の機種", "lead": "x"})["errors"]))
     t("★23-9: 空白で分断した禁止表現も止める",

@@ -498,6 +498,29 @@ function resolveMachineSlug() {
     evTable.innerHTML = html;
   }
 
+  // 早見表のmodeを、指定されたmodeへ揃える（早見表に無いmodeなら何もしない）
+  function syncEvMode(modeKey) {
+    const radio = document.querySelector(`input[name="evMode"][value="${modeKey}"]`);
+    if (!radio) return;                  // スルー・周期は早見表に出さないので対象外
+    if (!radio.checked) radio.checked = true;
+    if (evModeKey !== modeKey) {
+      evModeKey = modeKey;
+      renderEvTable(evModeKey, getCurrentRateKey());
+    }
+  }
+
+  // 逆向き（早見表を変えたらチェッカーも揃える）
+  function syncCheckerMode(modeKey) {
+    const radio = document.querySelector(`input[name="mode"][value="${modeKey}"]`);
+    if (!radio || radio.checked) return;
+    radio.checked = true;
+    suruCount = 0;
+    cycleCount = 1;
+    gameInput.value = "";
+    applyInputLimit(modeKey);
+    judge();
+  }
+
   function buildEvTable() {
     const evBlock = document.getElementById("evTableBlock");
     const evModeToggle = document.getElementById("evModeToggle");
@@ -524,6 +547,7 @@ function resolveMachineSlug() {
         input.addEventListener("change", () => {
           evModeKey = mode.key;
           renderEvTable(evModeKey, getCurrentRateKey());
+          syncCheckerMode(mode.key);     // ★チェッカー側も同じmodeへ★
         });
         evModeToggle.appendChild(input);
         evModeToggle.appendChild(label);
@@ -737,6 +761,10 @@ function resolveMachineSlug() {
         cycleVal.textContent = 1;
         gameInput.value = "";
         applyInputLimit(mode.key);
+        // ★早見表のmodeも同じものへ揃える★
+        //   別々に持つと「チェッカーはリセット・早見表は通常」という
+        //   食い違った画面になる（同じページで違う判定が並ぶ）。
+        syncEvMode(mode.key);
         judge();
       });
 

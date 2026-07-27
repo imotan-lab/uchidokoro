@@ -30,6 +30,7 @@ audit_site.py（静的解析）では捕まえられないJS実行後の表示�
     R9. body内に '**' 記号が見える形で残っていないか（Markdown未解釈バグの検知）
     R10. セクションtitleが統一形と一致しているか（titleの揺れ検知）
     R11. ヘッダー行型テーブルのth数と各行td数の一致（settei表2セル固定バグの再発検知）
+    R12. チェッカーと早見表のmode選択が双方向で同期するか（食い違った画面の再発検知）
 """
 
 from __future__ import annotations
@@ -188,6 +189,29 @@ def check_one(page, machine: dict) -> list[str]:
     }""")
     for b in bad_tables:
         ngs.append(f"R11: 表の列数不整合: {b}")
+
+    # R12: チェッカーと早見表のmode選択が同期しているか
+    #   （2026-07-27 Codex閉鎖確認 #2: 別々に持っていたため
+    #     「チェッカーはリセット・早見表は通常」という食い違った画面になっていた）
+    modes = page.eval_on_selector_all(
+        'input[name="mode"]', "els=>els.map(e=>e.value)")
+    ev_modes = page.eval_on_selector_all(
+        'input[name="evMode"]', "els=>els.map(e=>e.value)")
+    common = [m for m in modes if m in ev_modes]
+    if len(common) >= 2:
+        try:
+            page.click(f'label[for="mode_{common[1]}"]')
+            page.wait_for_timeout(120)
+            now = page.eval_on_selector('input[name="evMode"]:checked', "e=>e.value")
+            if now != common[1]:
+                ngs.append(f"R12: チェッカーで {common[1]} を選んでも早見表が {now} のまま")
+            page.click(f'label[for="evmode_{common[0]}"]')
+            page.wait_for_timeout(120)
+            now2 = page.eval_on_selector('input[name="mode"]:checked', "e=>e.value")
+            if now2 != common[0]:
+                ngs.append(f"R12: 早見表で {common[0]} を選んでもチェッカーが {now2} のまま")
+        except Exception as e:                       # 操作できない形なら検査自体を失敗にする
+            ngs.append(f"R12: mode同期の検査に失敗: {type(e).__name__}")
 
     return ngs
 

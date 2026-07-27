@@ -497,6 +497,27 @@ def negative_control() -> int:
              {"title": "仕様", "type": "settei",
               "rows": [{"trigger": "天井", "hint": "999G"}]}]})
              if "行形式" in x]),
+        ("[ゲート] 要約とチェッカーの数字が食い違う", "食い違",
+         lambda: _g({**_base, "checker_modes": {"normal": "STRUCT_OK"},
+                     "strategyByRate": {"eq56": "580G〜", "rate50": "650G〜"},
+                     "checker": {"unit": "G",
+                                 "exchangeRates": [{"key": "eq56", "label": "5.6枚"},
+                                                   {"key": "rate50", "label": "5.0枚"}],
+                                 "defaultRate": "eq56",
+                                 "modes": [{"key": "normal", "label": "通常"}],
+                                 "normal": {"byRate": {
+                                     "eq56": {"good": 600, "excellent": 800},
+                                     "rate50": {"good": 650, "excellent": 850}}}}})),
+        ("[ゲート] 交換率別の狙い目の材料が取れない", "取れない",
+         lambda: _g({**_base, "checker_modes": {"normal": "STRUCT_OK"},
+                     "checker": {"unit": "G",
+                                 "exchangeRates": [{"key": "eq56", "label": "5.6枚"},
+                                                   {"key": "rate50", "label": "5.0枚"}],
+                                 "defaultRate": "eq56",
+                                 "modes": [{"key": "normal", "label": "通常"}],
+                                 "normal": {"byRate": {
+                                     "eq56": {"good": 600, "excellent": 800},
+                                     "rate50": {"caution": 650, "excellent": 850}}}}})),
         ("[ゲート] 漢数字も数値面として扱う", "",
          lambda: [] if "strategy" in (gates.publish_view(
              {**_base, "strategy": "天井九百九十九G"})["machine"]
