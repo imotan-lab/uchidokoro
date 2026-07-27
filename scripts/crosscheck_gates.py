@@ -45,10 +45,10 @@ MAX_ROUNDS = 40
 #   これは異常ではなく Phase 2 の作業残量。集合で固定しておき、
 #   黙って増えたら異常、減ったら進捗として表示する。
 EXPECTED_NEEDS_EDIT = {
+    # birdie_wing は表示整合の要修正が先に出るので EXPECTED_DISPLAY_FIX 側にある
     "azurlane",
     "banchou4",
     "bandori",
-    "birdie_wing",
     "bofuri",
     "burning_express",
     "code_geass",
@@ -88,7 +88,22 @@ EXPECTED_NEEDS_EDIT = {
     "zenigata5",
 }
 
-EXPECTED_PUBLIC = 120 - len(EXPECTED_NEEDS_EDIT)
+# ★表示整合の要修正★（要約とチェッカーの数字が食い違う／交換率を変えても
+#   要約が連動しない）。どちらの数字が正しいかは決められないので人の作業。
+EXPECTED_DISPLAY_FIX = {
+    "birdie_wing",
+    "chibaryo2",
+    "goblin",
+    "hokuto_tensei2",
+    "prismnana",
+    "sao2",
+    "shaman_king",
+    "shinuchi_yoshimune",
+    "tenken",
+    "valvrave",
+}
+
+EXPECTED_PUBLIC = 120 - len(EXPECTED_NEEDS_EDIT) - len(EXPECTED_DISPLAY_FIX - EXPECTED_NEEDS_EDIT)
 # ★checker の想定値（2026-07-27 時点）★
 #   200は「宣言」ではなく **実際に公開データへ入った mode** の数。
 #   同日、チェッカーの注意書きから当サイトでは計算できない断定を47件削除した結果、
@@ -96,13 +111,14 @@ EXPECTED_PUBLIC = 120 - len(EXPECTED_NEEDS_EDIT)
 #   ただし kaguya は依然 checker 全モードが止まる（rate45 の excellent=1200 が
 #   天井1100Gを超え、早見表が「1200G〜（天井1100G）」という到達できない行を作るため。
 #   数値の作り直しは Phase 2 の出典検証の仕事なので、いまは止めたままにする）。
-EXPECTED_CHECKER_MACHINES = 71
+EXPECTED_CHECKER_MACHINES = 62
+#   2026-07-27（25巡目）: 表示整合の要修正10機種を止めたため 71機種131mode → 62機種112mode
 #   2026-07-27（24巡目）: 原稿に「公開できない表現」が残る41機種を編集待ちとして
 #     公開対象から外したため 110機種197mode → 71機種131mode。
 #     （編集が進めば EXPECTED_NEEDS_EDIT とともにこの数も戻る）
 #   2026-07-27（22巡目）: 0スルーの行が無い suru mode を止めたため 200 → 197
 #   （sao / bandori / hanma_baki。UIは0スルー入力を1スルーの閾値で判定していた）
-EXPECTED_CHECKER_MODES = 131
+EXPECTED_CHECKER_MODES = 112
 
 # ★公開slugの固定集合★ 件数だけだと「1件消えて1件増える」相殺を見逃すため、
 #   集合そのものを持つ。機種を増減したら意図した変更として更新すること。
@@ -179,6 +195,7 @@ def run() -> int:
     expected_public = EXPECTED_PUBLIC
 
     needs_edit: set = set()
+    needs_display_fix: set = set()
     for m in machines:
         sim = bl.provisional(m)
         g = gates.compute_gates(sim)
@@ -192,7 +209,12 @@ def run() -> int:
             view = gates.publish_view(sim, detail, ledger)
         except gates.GateError as e:
             blocked += 1
-            if "公開できない表現" in str(e):
+            if "strategyByRate" in str(e):
+                # ★表示面どうしの整合が取れていない（要約とチェッカーの食い違い／
+                #   交換率を変えても要約が連動しない）★
+                #   数字のどちらが正しいかは決められないので、直すのは人の作業。
+                needs_display_fix.add(m["slug"])
+            elif "公開できない表現" in str(e):
                 # ★原稿に「公開できない表現」が残っている＝編集待ち★
                 #   これは異常ではなく、Phase 2 でやる作業の残量そのもの。
                 #   ただし黙って増減しないよう、集合として突き合わせる。
@@ -224,6 +246,13 @@ def run() -> int:
             and view["machine"]["disclaimer"] == audit_public.EXPECTED_DISCLAIMER,
             surfaces=(view["machine"].get("display_requirements") or {}).get("surfaces")))
 
+    # ★表示整合の要修正も集合で固定する★
+    for s_ in sorted(needs_display_fix - EXPECTED_DISPLAY_FIX):
+        problems.append(f"表示整合の要修正が増えた: {s_}")
+    _dfixed = sorted(EXPECTED_DISPLAY_FIX - needs_display_fix)
+    if _dfixed:
+        print(f"✅ 表示整合が直った機種: {len(_dfixed)} 件 {_dfixed}")
+
     # ★編集待ちの集合を突き合わせる★（黙って増えたら異常・減ったら進捗）
     for s_ in sorted(needs_edit - EXPECTED_NEEDS_EDIT):
         problems.append(f"編集待ちが増えた（原稿に公開できない表現が入った）: {s_}")
@@ -237,7 +266,8 @@ def run() -> int:
     if published != expected_public:
         problems.append(f"公開機種数が想定と違う: {published} != {expected_public}")
     # ★集合そのものも突き合わせる（1件消えて1件増える相殺を見逃さない）★
-    for s in sorted(EXPECTED_PUBLIC_SLUGS - seen_slugs - EXPECTED_NEEDS_EDIT):
+    for s in sorted(EXPECTED_PUBLIC_SLUGS - seen_slugs
+                    - EXPECTED_NEEDS_EDIT - EXPECTED_DISPLAY_FIX):
         problems.append(f"公開されるはずの機種が公開されていない: {s}")
     for s in sorted(seen_slugs - EXPECTED_PUBLIC_SLUGS):
         problems.append(f"想定外の機種が公開されている: {s}")

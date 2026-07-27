@@ -163,6 +163,10 @@ def schema_coverage(machines: list) -> bool:
         g = gates.compute_gates(sim)
         ctx = gates._Ctx("legacy_safe", None)
         pm = gates._project_machine(_neutralize(sim), g, ctx)
+        if ctx.errors:
+            # ★構造エラーで射影が途中で止まった機種は、取りこぼし検査の対象外★
+            #   （止めたこと自体が正しい挙動で、全フィールドが「消えた」ように見えるだけ）
+            continue
         # ★入れ子まで再帰的に突き合わせる（seo.description・sources[].title 等の欠落も拾う）★
         def _deep(src, dst, where):
             if src is None:
@@ -350,13 +354,27 @@ def main() -> int:
     print(f"   自動DROP（絶対禁止・preview禁止話題等）: {dropped_total} 箇所")
     print("-" * 64)
     from collections import Counter as _C
+    # ★既知の要修正（crosscheck 側で集合として固定しているもの）は別枠にする★
+    #   毎回赤いままだと、新しく増えた異常が埋もれてしまう。
+    try:
+        import crosscheck_gates as _cc
+        _known = set(_cc.EXPECTED_DISPLAY_FIX) | set(_cc.EXPECTED_NEEDS_EDIT)
+    except Exception:
+        _known = set()
+    _new_errors = [e for e in struct_errors if e.get("slug") not in _known]
+    _known_errors = [e for e in struct_errors if e.get("slug") in _known]
+
     print("■ 射影時の構造エラー（配線前に必ず0にする）")
-    if struct_errors:
-        for reason, n in _C(e["reason"] for e in struct_errors).most_common(8):
+    if _new_errors:
+        for reason, n in _C(e["reason"] for e in _new_errors).most_common(8):
             print(f"   {n:>4} 件  {reason}")
-        print(f"   影響機種: {len({e['slug'] for e in struct_errors})}")
+        print(f"   影響機種: {len({e['slug'] for e in _new_errors})}")
     else:
-        print("   なし")
+        print("   なし（新規分）")
+    if _known_errors:
+        print(f"   ※ 既知の要修正 {len({e['slug'] for e in _known_errors})} 機種は別枠"
+              f"（crosscheck の EXPECTED_DISPLAY_FIX / EXPECTED_NEEDS_EDIT）")
+    struct_errors = _new_errors
     print("=" * 64)
     print("※ このスクリプトは一切ファイルを書き換えていません。")
     # ★異常があれば非0終了（CI/preflightに繋げられるように）★

@@ -806,6 +806,76 @@ def _threshold_sanity(conf: dict, where: str) -> str | None:
 _SENTINEL = 99999
 
 
+# 要約の自由文に書かれた「◯◯G〜」を拾う（単位は checker.unit も許す）
+_SUMMARY_NUM = re.compile(r"(\d{2,5})\s*(?:G|g|pt|周期|あべし)")
+
+
+def _effective_thresholds(checker: dict, rate_key: str, base_rate) -> set:
+    """その交換率を選んだときに、実際に判定へ使われる閾値をすべて集める。"""
+    vals: set = set()
+    for k, v in checker.items():
+        if not isinstance(v, dict) or k in ("modeData", "byRate"):
+            continue
+        units = v.get("suru") or v.get("cycle") or [v]
+        for u in units:
+            if not isinstance(u, dict):
+                continue
+            over = (u.get("byRate") or {}).get(rate_key) if rate_key != base_rate else None
+            eff = {**u, **(over or {})}
+            for kk in ("caution", "good", "target", "excellent"):
+                if _is_num(eff.get(kk)):
+                    vals.add(int(eff[kk]))
+    return vals
+
+
+def _summary_conflict(machine: dict) -> str | None:
+    """★要約の狙い目と、チェッカーの判定値が食い違っていないか★（Codex 25巡目 #4）
+
+    同じ画面で「580Gから狙い目」と書きながら、その交換率のチェッカーが590Gで
+    判定していると、580Gと入力した利用者は「目安の手前」と言われる。
+    どちらの数字が外部的に正しいかは決めない（それはPhase 2）。ここで止めるのは
+    **同じ画面状態での食い違い**だけ。
+    """
+    checker = machine.get("checker") if isinstance(machine.get("checker"), dict) else None
+    sbr = machine.get("strategyByRate")
+    if not checker or not isinstance(sbr, dict):
+        return None
+    base = checker.get("baseRateKey")
+    for rk, txt in sbr.items():
+        if not _is_str(txt):
+            continue
+        vals = _effective_thresholds(checker, rk, base)
+        if not vals:
+            continue
+        miss = [int(n) for n in _SUMMARY_NUM.findall(txt) if int(n) not in vals]
+        if miss:
+            return (f"要約の狙い目({rk})に、その交換率のチェッカーが持たない数字がある"
+                    f"（同じ画面で判定と食い違う）: {sorted(set(miss))}")
+    return None
+
+
+def _rate_sync_gap(machine: dict) -> str | None:
+    """★交換率を切り替えたとき、要約が連動しない状態を止める★（Codex 25巡目 #3）
+
+    UIは strategyByRate があるときだけ要約の狙い目を更新する。交換率ごとに
+    チェッカーの値が違うのに要約が無いと、別の交換率を選んでも古い数字が残る。
+    """
+    checker = machine.get("checker") if isinstance(machine.get("checker"), dict) else None
+    if not checker:
+        return None
+    rates = [r.get("key") for r in (checker.get("exchangeRates") or [])
+             if isinstance(r, dict) and isinstance(r.get("key"), str)]
+    if len(rates) < 2 or isinstance(machine.get("strategyByRate"), dict):
+        return None
+    base = checker.get("baseRateKey")
+    # 交換率ごとに判定値が変わるなら、要約も連動しなければならない
+    seen = {tuple(sorted(_effective_thresholds(checker, r, base))) for r in rates}
+    if len(seen) > 1:
+        return ("交換率ごとに判定値が変わるのに、交換率別の狙い目(strategyByRate)が無い"
+                "（交換率を変えても要約が古い数字のまま残る）")
+    return None
+
+
 def _row_coverage_gap(mode_key: str, conf: dict) -> str | None:
     """★入力できる回数がすべて行で覆われているか★（Codex 22巡目 #5）
 
@@ -1688,6 +1758,12 @@ def _project_machine(machine: dict, gates: dict, ctx: _Ctx) -> dict:
     # ★機種フィールドの既知型不正は構造エラーにする（黙って落とさない）★
     if not _types_ok(ctx, machine, "machine", _MACHINE_TYPES):
         return out
+    # ★表示面どうしの整合（Codex 25巡目 #3・#4）★
+    for _bad in (_summary_conflict(machine), _rate_sync_gap(machine)):
+        if _bad:
+            ctx.reject("strategyByRate", _bad)
+            return out
+
     # ★未知フィールドを黙って捨てない（Codex 22巡目 #3）★
     #   例:「strategy_note: 誤記のため公開禁止」のような注記が黙って消え、
     #   strategy だけが表示される事故を防ぐ。authoring 用の既知キーは列挙する。
@@ -2241,6 +2317,7 @@ def selftest() -> int:
                                        "rate50": {"good": 650, "excellent": 850}}}}})["errors"]))
     t("　baseRateKey を明示すれば mode直下を基準値として認める",
       _pv({**base, "checker_modes": {"normal": "STRUCT_OK"},
+           "strategyByRate": {"equal": "600G〜", "eq56": "620G〜"},
            "checker": {"unit": "G", "baseRateKey": "equal",
                        "exchangeRates": [{"key": "equal", "label": "等価"},
                                          {"key": "eq56", "label": "5.6枚"}],
@@ -2830,6 +2907,7 @@ def selftest() -> int:
                                        "rate50": {"excellent": 850}}}}})["errors"]))
     t("　全交換率に判定材料が揃っていれば通す",
       _pv({**base, "checker_modes": {"normal": "STRUCT_OK"},
+                    "strategyByRate": {"eq56": "600G〜", "rate50": "650G〜"},
                     "checker": {"unit": "G",
                                 "exchangeRates": [{"key": "eq56", "label": "5.6枚"},
                                                   {"key": "rate50", "label": "5.0枚"}],
