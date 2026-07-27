@@ -80,6 +80,35 @@ _SPEC_BODY_KAIWARI = re.compile(
     r"(?:\([^)]*\))?$|^機械割(?:\(設定?[0-9]\))?[:：]\s*[0-9]+(?:\.[0-9]+)?[%％]$")
 
 
+# 統一セクション見出し（CLAUDE.md の IDEAL_ORDER）。見出しそのものは事実主張ではない。
+_FIXED_TITLES = {
+    "天井・恩恵", "基本スペック", "期待値の目安", "朝一・リセット情報", "設定示唆まとめ",
+    "狙い目の根拠", "ヤメ時の判断", "立ち回りのコツ", "噂・未確定情報",
+    "設定判別のポイント", "設定狙いのポイント", "ゲーム性", "このページの役割",
+}
+
+# SEOタイトルの定型（機種名＋固定の後置き）。機種名部分は自由だが後置きが定型。
+_SEO_TITLE = re.compile(
+    r"^.{1,40}?\s(?:狙い目・天井・期待値まとめ|狙い目・設定差まとめ|設定判別|狙い目)$")
+
+# 天井まわりのラベル（「◯◯天井」「天井」）。値はG数・pt・周期・+α の事実表記だけ許す。
+_TENJO_LABEL = re.compile(r"^(?:[ぁ-んァ-ヶ一-龥A-Za-z0-9]{0,10}天井|天井)(?:\([^)]*\))?$")
+_TENJO_VALUE = re.compile(
+    r"^(?:[^。]{0,80})$")   # 文末が無い（＝文章でない）ことだけを条件にし、語の中身は _NEVER で弾く
+_TENJO_VALUE_SHAPE = re.compile(
+    r"^[^。]*[0-9][^。]*(?:G|pt|周期|回|枚|%|％)[^。]*$")
+
+
+def _tenjo_ok(label: str, value: str) -> bool:
+    """天井系ラベル＋数値主体の値。動詞や評価語は _NEVER 側で既に除外されている。"""
+    if not _TENJO_LABEL.match(label):
+        return False
+    if not (_TENJO_VALUE.match(value) and _TENJO_VALUE_SHAPE.match(value)):
+        return False
+    # 「〜です」「〜ます」「〜しましょう」等の文章は対象外（表の値ではない）
+    return not re.search(r"(?:です|ます|ましょう|ください|でしょう|と思)", value)
+
+
 def propose(item: dict) -> tuple[str | None, str]:
     """(verdict, 理由) を返す。verdict=None は判断保留。"""
     text = item.get("text", "")
@@ -100,6 +129,18 @@ def propose(item: dict) -> tuple[str | None, str]:
             return "ALLOW", "スペックの事実（項目:数値の定型）"
         return None, "基本スペック欄だが定型でない"
 
+    # 統一セクション見出し（title 単体の原子）
+    if path == "sections[].title":
+        return (("ALLOW", "統一セクション見出し（事実主張を含まない定型ラベル）")
+                if text in _FIXED_TITLES else (None, "統一見出しリストに無い"))
+
+    # SEOタイトルの定型（検索結果に出る見出し。機種名＋固定の後置き）
+    if path == "seo.title":
+        if _NEVER.search(text.replace("期待値まとめ", "").replace("狙い目", "")):
+            return None, "定型外の語を含む"
+        return (("ALLOW", "SEOタイトルの定型（機種名＋固定の後置き）")
+                if _SEO_TITLE.match(text) else (None, "SEOタイトルの定型でない"))
+
     if path not in ("factTable[]", "summaryBoxes[]"):
         return None, "表・要約以外は自動提案しない"
     if _NEVER.search(text):
@@ -109,6 +150,8 @@ def propose(item: dict) -> tuple[str | None, str]:
         return None, "ラベルと値の2要素でない"
     # 「純増 / 通常AT約3.2枚/G / 上位AT約8.0枚/G」のように値側が / を含む定型も許す
     label, value = parts[0].strip(), " / ".join(parts[1:]).strip()
+    if _tenjo_ok(label, value):
+        return "ALLOW", "天井の事実（ラベル＋数値表記）"
     if not _SPEC_LABEL.match(label):
         return None, "スペックのラベルとして未登録"
     if not (_SPEC_VALUE.match(value) or _SPEC_VALUE_EXTRA.match(value)):
