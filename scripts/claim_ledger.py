@@ -70,6 +70,12 @@ class LedgerError(Exception):
     """スキーマ違反。★必ず止める（黙って直さない）★"""
 
 
+def _now_utc():
+    """現在時刻（UTC・naive）。期限切れ判定に使う。"""
+    import datetime as _dt
+    return _dt.datetime.utcnow()
+
+
 def canonical_sha256(obj) -> str:
     """並び順に依存しない指紋。ledger/inventory の突き合わせに使う。"""
     s = json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
@@ -162,20 +168,28 @@ def validate_claim(c: dict, where: str) -> None:
         _req(v, k, f"{where}.value")
     _enum(v["kind"], VALUE_KINDS, f"{where}.value", "kind")
     _enum(v["operator"], OPERATORS, f"{where}.value", "operator")
-    # ★中身が型どおりか確かめる★（kind=INTEGER なのに raw="非搭載" を通さない）
+    # ★★raw と amount は同じ解釈から導く★★（Codex 指摘6）
+    #   以前は別々に検査していたので raw="999%" / amount=100 のような
+    #   食い違いが通っていた（表示と判定が別の数字になる）。
     raw = str(v.get("raw", ""))
     if v["kind"] in ("INTEGER", "DECIMAL", "PERCENT"):
-        if not re.search(r"\d", raw):
+        nums = re.findall(r"\d+(?:\.\d+)?", raw)
+        if not nums:
             raise LedgerError(f"{where}.value.raw: {v['kind']} なのに数字が無い: {raw!r}")
         amt = v.get("amount")
         if not isinstance(amt, (int, float)) or isinstance(amt, bool):
             raise LedgerError(f"{where}.value.amount: 数値が無い（型だけ宣言している）")
+        if abs(float(nums[0]) - float(amt)) > 1e-9:
+            raise LedgerError(
+                f"{where}: raw={raw!r} と amount={amt} が一致しない"
+                f"（表示と判定が別の数字になる）")
         if v["kind"] == "PERCENT" and not (0 < float(amt) < 300):
             raise LedgerError(f"{where}.value.amount: 機械割として異常な値 {amt}")
         if v["kind"] == "INTEGER" and float(amt) != int(amt):
             raise LedgerError(f"{where}.value.amount: INTEGER なのに小数 {amt}")
-    if v["kind"] == "PROBABILITY" and "/" not in raw:
-        raise LedgerError(f"{where}.value.raw: 確率の形（1/x）でない: {raw!r}")
+    if v["kind"] == "PROBABILITY":
+        if not re.match(r"^\s*1\s*/\s*\d+(?:\.\d+)?\s*$", raw):
+            raise LedgerError(f"{where}.value.raw: 確率の形（1/x）でない: {raw!r}")
     # ★判断（JUDGMENT）は VERIFIED にできない★（事実ではないため）
     if c.get("claim_kind") == "JUDGMENT" and c.get("verify_state") == "VERIFIED":
         raise LedgerError(f"{where}: 編集判断(JUDGMENT)を VERIFIED にはできない")
@@ -221,12 +235,20 @@ def validate_claim(c: dict, where: str) -> None:
         if not c.get("expires_at") or not _TS_RE.match(str(c.get("expires_at", ""))):
             # ★TTLが無いと、古い記録を公開から落とせない★
             raise LedgerError(f"{where}.expires_at: VERIFIED なのに期限が無い")
-        # ★期限が検証日より前／長すぎる期限を止める（形式だけ整った記録を通さない）★
-        if c["expires_at"] <= c["verified_at"]:
+        # ★★期限は実日時で判定する★★（Codex 指摘6）
+        #   以前は年の差だけを見ていたので 2026-01-01→2027-12-31（約2年）が通り、
+        #   さらに「今すでに期限切れ」でも VERIFIED のままだった。
+        import datetime as _dt
+        va = _dt.datetime.strptime(c["verified_at"], "%Y-%m-%dT%H:%M:%SZ")
+        ea = _dt.datetime.strptime(c["expires_at"], "%Y-%m-%dT%H:%M:%SZ")
+        if ea <= va:
             raise LedgerError(f"{where}.expires_at: 検証日時より前か同じ")
-        vy, ey = int(c["verified_at"][:4]), int(c["expires_at"][:4])
-        if ey - vy > 1:
-            raise LedgerError(f"{where}.expires_at: 期限が長すぎる（1年以内にする）")
+        if (ea - va).days > 365:
+            raise LedgerError(
+                f"{where}.expires_at: 期限が長すぎる（{(ea - va).days}日・365日以内にする）")
+        if ea <= _now_utc():
+            raise LedgerError(
+                f"{where}.expires_at: すでに期限切れ（STALE にして調べ直すこと）")
 
 
 def validate_ledger(led: dict, path: str = "ledger") -> list:
@@ -458,6 +480,27 @@ def selftest() -> int:
     t("★期限が検証日時より前なら止める",
       raises(lambda: validate_ledger(_mk_ledger([_mk_claim(
           expires_at="2026-07-27T03:20:00Z")]))))
+    t("★★すでに期限切れなら止める（古い記録を検証済みのまま使わない）★★",
+      raises(lambda: validate_ledger(_mk_ledger([_mk_claim(
+          verified_at="2020-01-01T00:00:00Z", expires_at="2020-06-01T00:00:00Z")]))))
+    t("★★raw と amount が食い違えば止める（表示と判定が別の数字になる）★★",
+      raises(lambda: validate_ledger(_mk_ledger([_mk_claim(
+          value={"kind": "INTEGER", "raw": "1200", "amount": 800,
+                 "unit": "G", "operator": "MAX"})]))))
+    t("★機械割 raw='999%' / amount=100 のような食い違いも止める",
+      raises(lambda: validate_ledger(_mk_ledger([_mk_claim(
+          claim_id="x:kikaiwari.setting:001", field_key="kikaiwari.setting",
+          value={"kind": "PERCENT", "raw": "999%", "amount": 100,
+                 "unit": "%", "operator": "EXACT"})]))))
+    t("★確率 raw='/' のような壊れた形も止める",
+      raises(lambda: validate_ledger(_mk_ledger([_mk_claim(
+          claim_id="x:prob.big:001", field_key="prob.big",
+          value={"kind": "PROBABILITY", "raw": "/", "unit": "1/x",
+                 "operator": "EXACT"})]))))
+    t("★期限が約2年（365日超）なら止める",
+      raises(lambda: validate_ledger(_mk_ledger([_mk_claim(
+          verified_at="2026-07-28T00:00:00Z",
+          expires_at="2028-07-01T00:00:00Z")]))))
     t("★期限が長すぎる（1年超）なら止める",
       raises(lambda: validate_ledger(_mk_ledger([_mk_claim(
           expires_at="2028-07-28T03:20:00Z")]))))
