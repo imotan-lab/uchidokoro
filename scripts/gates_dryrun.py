@@ -154,7 +154,10 @@ def schema_coverage(machines: list) -> bool:
     for m in machines:
         sim = dict(m)
         sim["lifecycle"] = "LEGACY_SEARCH"
-        sim["checker_modes"] = {}
+        # ★checker も公開される前提にする（Codex 21巡目 #4 で limit/strategyByRate の
+        #   到達性が「公開された交換率・mode」基準になったため、checker を空にすると
+        #   到達不能扱いで落ち、スキーマの取りこぼしと区別できなくなる）★
+        sim["checker_modes"] = provisional_checker_modes(m)
         g = gates.compute_gates(sim)
         ctx = gates._Ctx("legacy_safe", None)
         pm = gates._project_machine(_neutralize(sim), g, ctx)
@@ -219,12 +222,65 @@ def schema_coverage(machines: list) -> bool:
                     missing_other.add(f"detail.{k}")
                 else:
                     _deep(det[k], pd_[k], f"detail.{k}")
+    # ★射影に依存しないスキーマ網羅検査★（Codex 21巡目 #8）
+    #   上の検査は「射影された mode」しか見ない。内容や数値の理由で落ちた mode にしか
+    #   存在しないキーは未検査のままになる。ここでは authoring データの checker を
+    #   そのまま歩き、gates 側の許可集合に載っていないキーが無いかを直接確かめる。
+    # ★意図的に公開しない（UIが読まない）フィールド★
+    #   交換率配下の suruMax は mode直下の suruMax と同じ値の重複で、
+    #   machine.html は checker[mode].suruMax しか参照しない（実データ onepunchman）。
+    _INTENTIONAL_RATE_DROP = {"suruMax"}
+    unknown_schema: set = set()
+    for m in machines:
+        c = m.get("checker")
+        if not isinstance(c, dict):
+            continue
+        decl_keys = {x.get("key") for x in (c.get("modes") or [])
+                     if isinstance(x, dict) and isinstance(x.get("key"), str)}
+
+        def _walk_mode(conf, where, layer):
+            allowed = gates._MODE_ALLOWED if layer == "mode" else gates._ROW_ALLOWED
+            for k, v in conf.items():
+                if k not in allowed:
+                    unknown_schema.add(f"{where}.{k}")
+                    continue
+                if k in ("suru", "cycle") and isinstance(v, list):
+                    for x in v:
+                        if isinstance(x, dict):
+                            _walk_mode(x, f"{where}.{k}[]", "row")
+                elif k == "byRate" and isinstance(v, dict):
+                    for rv in v.values():
+                        if isinstance(rv, dict):
+                            for rk2 in rv:
+                                if rk2 in _INTENTIONAL_RATE_DROP:
+                                    continue
+                                if rk2 not in gates._RATE_ALLOWED:
+                                    unknown_schema.add(f"{where}.byRate.{rk2}")
+
+        CK_TOP_OK = {"unit", "modes", "limit", "equivOnly", "exchangeRates", "defaultRate",
+                     "hasSuru", "hasCycle", "suruMax", "ok", "ng", "modeData", "_disabled"}
+        for k, v in c.items():
+            if k in CK_TOP_OK:
+                continue
+            if isinstance(v, dict):
+                _walk_mode(v, f"checker.{k}", "mode")
+            elif k not in decl_keys:
+                unknown_schema.add(f"checker.{k}")
+        md = c.get("modeData")
+        if isinstance(md, dict):
+            for k, v in md.items():
+                if isinstance(v, dict):
+                    _walk_mode(v, f"checker.modeData.{k}", "mode")
+
     print("■ 許可スキーマの取りこぼし検査（実データにあるのに公開射影で消えるキー）")
+    print(f"   スキーマ網羅（射影に依存しない）: {sorted(unknown_schema) or 'なし'}")
     print(f"   checker直下: {sorted(missing_top) or 'なし'}")
     print(f"   mode配下   : {sorted(missing_mode) or 'なし'}")
     print(f"   機種・記事 : {sorted(missing_other) or 'なし'}")
     if missing_other:
         missing_top |= missing_other
+    if unknown_schema:
+        missing_top |= {f"(未知スキーマ) {x}" for x in unknown_schema}
     if missing_top or missing_mode:
         print("   ⚠ 上記は配線すると機能が壊れる可能性がある。gates.py の許可スキーマに追加するか、"
               "意図的に落とすなら理由をコメントすること。")

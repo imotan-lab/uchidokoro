@@ -341,14 +341,36 @@ def _to_display(s: str) -> str:
 
 # 記事本文は innerHTML に入るため、許可タグ以外は公開しない（XSSと検査迂回の防止）
 _ALLOWED_TAGS = ("br", "strong", "b", "em", "span")
-_TAG_ANY = re.compile(r"<\s*/?\s*([A-Za-z][A-Za-z0-9]*)([^>]*)>")
+# 許可される形だけを列挙する（属性を書く余地が構文上ない）
+_TAG_OK = re.compile(r"<\s*/?\s*(?:%s)\s*/?\s*>" % "|".join(_ALLOWED_TAGS), re.I)
 _DANGEROUS_ATTR = re.compile(r"(?:on[a-z]+\s*=|javascript:|data:text/html|<\s*script)", re.I)
 
 
 def html_unsafe(text: str) -> str | None:
-    """公開してよいHTMLか。危険なら理由を返す（無害化ではなく拒否＝fail-closed）。"""
+    """公開してよいHTMLか。危険なら理由を返す（無害化ではなく拒否＝fail-closed）。
+
+    ★契約（Codex 21巡目 #5 で厳密化）★
+      「<」が出てきたら、それは _ALLOWED_TAGS の開始/終了タグ**だけ**でなければならない。
+      属性は値の有無にかかわらず一切許可しない（`<span class>` のような値なし属性も不可）。
+      コメント・DOCTYPE・CDATA・処理命令など、タグ以外のHTML構文も通さない。
+      生の「<」も通さない（innerHTML では未知タグの開始として解釈され得るため）。
+    """
     if not _is_str(text):
         return None
+    if _DANGEROUS_ATTR.search(text):
+        return "イベント属性・スクリプト等の危険なHTML"
+    # ★許可タグを取り除いたあとに「<」が残るなら、それは許可されていないHTML構文★
+    rest = _TAG_OK.sub("", text)
+    if "<" in rest:
+        # どこが問題か分かる程度の理由を返す（原文そのものは返さない）
+        m = re.search(r"<\s*/?\s*([A-Za-z][A-Za-z0-9]*)([^<>]*)>", rest)
+        if m:
+            name = m.group(1).lower()
+            if name in _ALLOWED_TAGS:
+                return f"タグ属性は許可しない <{name}>"
+            return f"許可されていないタグ <{name}>"
+        return "タグ以外のHTML構文（コメント・生の「<」等）は許可しない"
+    return None
     if _DANGEROUS_ATTR.search(text):
         return "イベント属性・スクリプト等の危険なHTML"
     for m in _TAG_ANY.finditer(text):
@@ -469,16 +491,32 @@ def _types_ok(ctx: "_Ctx", d: dict, path: str, spec: dict) -> bool:
 
 # --- checker
 _MODE_NUM_KEYS = ("excellent", "good", "caution", "limit", "suruMax", "target", "count")
-_MODE_ALLOWED = set(_MODE_NUM_KEYS) | {"note", "cycle", "suru", "byRate", "_disabled"}
-_RATE_ALLOWED = {"excellent", "good", "caution", "target", "note", "suruMax"}
+# ★層ごとに「UIが実際に読むキー」だけを許可する（Codex 21巡目 #6）★
+#   machine.html が読むのは:
+#     mode直下 … excellent/good/caution/target/note/byRate/suru/cycle
+#                 ＋ checker[mode].limit（入力上限）・checker[mode].suruMax（回数の上限）
+#     行(suru/cycle[]) … count＋閾値＋note＋byRate（行の limit/suruMax や入れ子は読まない）
+#     byRate配下 … 閾値＋note（suruMax は読まない）
+#   共通の許可契約にすると、UIが参照しない値が公開データに残る。
+_MODE_ALLOWED = {"excellent", "good", "caution", "target", "note",
+                 "limit", "suruMax", "cycle", "suru", "byRate", "_disabled"}
+_ROW_ALLOWED = {"count", "excellent", "good", "caution", "target", "note",
+                "byRate", "_disabled"}
+_RATE_ALLOWED = {"excellent", "good", "caution", "target", "note"}
 
 
-def _project_mode(conf, ctx: _Ctx, path: str, ctx_label: str) -> dict | None:
-    """mode設定を既知キーのみで再構築。未知キーがあれば mode ごと拒否（黙って捨てない）。"""
+def _project_mode(conf, ctx: _Ctx, path: str, ctx_label: str,
+                  layer: str = "mode") -> dict | None:
+    """mode設定を既知キーのみで再構築。未知キーがあれば mode ごと拒否（黙って捨てない）。
+
+    layer="mode" は mode直下、layer="row" は suru[]/cycle[] の行。
+    層によってUIが読むキーが違うので、許可集合を分けている。
+    """
     if not isinstance(conf, dict):
         return None
-    if not _only_keys(conf, _MODE_ALLOWED):
-        ctx.reject(path, "未知フィールドを含むため mode ごと拒否")
+    allowed = _MODE_ALLOWED if layer == "mode" else _ROW_ALLOWED
+    if not _only_keys(conf, allowed):
+        ctx.reject(path, "UIが参照しないフィールドを含むため拒否")
         return None
     out: dict = {}
     # ★既知フィールドの型不正は必ず止める★（noteが配列/辞書だと「注意書き無し」と誤認して
@@ -509,6 +547,9 @@ def _project_mode(conf, ctx: _Ctx, path: str, ctx_label: str) -> dict | None:
         seq = conf.get(field)
         if field not in conf:
             continue
+        if layer != "mode":     # 行の中にさらに行は持てない（許可集合でも塞いでいる）
+            ctx.reject(f"{path}.{field}", "行の入れ子は公開しない")
+            return None
         if not isinstance(seq, list) or not seq:
             ctx.reject(f"{path}.{field}", f"{field}の型不正")
             return None
@@ -526,7 +567,7 @@ def _project_mode(conf, ctx: _Ctx, path: str, ctx_label: str) -> dict | None:
                 # 停止マーカーだけ落として数値行を公開する経路を塞ぐ
                 ctx.reject(f"{path}.{field}[{i}]", "停止マーカー(_disabled)付きの行は公開しない")
                 return None
-            r = _project_mode(x, ctx, f"{path}.{field}[{i}]", ctx_label)
+            r = _project_mode(x, ctx, f"{path}.{field}[{i}]", ctx_label, layer="row")
             if r is None:
                 ctx.content_drop(f"{path}.{field}[{i}]", "行が公開基準を満たさない（部分的に出さない）")
                 return None
@@ -552,11 +593,11 @@ def _project_mode(conf, ctx: _Ctx, path: str, ctx_label: str) -> dict | None:
                 return None
             # ★数値の型不正も止める（"600" のような文字列が黙って消えると
             #   他の交換率だけ残り「1つでも落ちたらmodeごと」の約束が破れる）★
-            for nk in ("excellent", "good", "caution", "target", "suruMax"):
+            for nk in ("excellent", "good", "caution", "target"):
                 if nk in rv and not _is_num(rv[nk]):
                     ctx.reject(f"{path}.byRate.{rk}.{nk}", "数値フィールドの型不正")
                     return None
-            r = {k: rv[k] for k in ("excellent", "good", "caution", "target", "suruMax")
+            r = {k: rv[k] for k in ("excellent", "good", "caution", "target")
                  if _is_num(rv.get(k))}
             rnote = rv.get("note") if _is_str(rv.get("note")) else None
             # 交換率別も「数値＋注意書き」で1原子（注意書きだけ消えて数値が残るのを防ぐ）
@@ -596,7 +637,30 @@ def _judgeable(conf: dict) -> bool:
     machine.html の判定は good を主軸にし、無いと目安値が undefined になる箇所がある
     （Codex 20巡目 #9）。よって good を判定材料の必須条件にする。
     """
-    return _is_num(conf.get("good"))
+    # 早見表（renderEvTable）は good と excellent の両方で行を作る。
+    # good だけだと「○ 目安以上」の行が作られず、表が欠ける（Codex 21巡目 #3）。
+    return _is_num(conf.get("good")) and _is_num(conf.get("excellent"))
+
+
+def _judgeable_all_rates(conf: dict, rate_keys) -> bool:
+    """★交換率を選び直しても判定材料が揃っているか★（Codex 21巡目 #2）
+
+    UI は mode直下に byRate を重ねて使う。どれか1つの交換率にだけ good があっても、
+    別の交換率を選んだ瞬間に目安値が確定しなくなる。よって「宣言された全交換率」の
+    実効configが判定可能であることを条件にする。byRate が無い場合は直下だけを見る。
+    """
+    by = conf.get("byRate") if isinstance(conf.get("byRate"), dict) else {}
+    if not by:
+        return _judgeable(conf)
+    # 宣言された交換率（無ければ byRate のキー）すべてを見る
+    keys = list(rate_keys) if rate_keys else list(by.keys())
+    for k in keys:
+        rv = by.get(k)
+        eff = {**conf, **rv} if isinstance(rv, dict) else conf
+        if not _judgeable(eff):
+            return False
+    # byRate 側に宣言外のキーがあっても、それを選べる実装ではないので見ない
+    return True
 
 
 def _threshold_sanity(conf: dict, where: str) -> str | None:
@@ -624,6 +688,31 @@ def _threshold_sanity(conf: dict, where: str) -> str | None:
 _SENTINEL = 99999
 
 
+def _sentinel_protocol(machine: dict, mode_key: str, conf: dict) -> str | None:
+    """★99999（天井なし＝設定狙い専用）の取り決めが崩れていないか★（Codex 21巡目 #7）
+
+    machine.html は `machine.limit が無い && checker.normal.excellent >= 99999` のときだけ
+    「設定狙い専用」表示に切り替える。それ以外の場所にセンチネルが混ざると、
+    到達できない閾値がそのまま判定に使われる。
+    """
+    def _sent(c):
+        return [k for k in ("caution", "good", "excellent")
+                if _is_num(c.get(k)) and c[k] >= _SENTINEL]
+    units = [conf] + [u for u in (conf.get("suru") or conf.get("cycle") or [])
+                      if isinstance(u, dict)]
+    for u in units:
+        cfgs = [u] + [{**u, **rv} for rv in (u.get("byRate") or {}).values()
+                      if isinstance(rv, dict)]
+        for c in cfgs:
+            got = _sent(c)
+            if not got:
+                continue
+            if mode_key != "normal" or machine.get("limit") is not None or len(got) != 3:
+                return (f"mode({mode_key})のセンチネル値(99999)が「天井なし」の取り決めの形に"
+                        f"なっていない（設定狙い専用は normal・limit無し・3値そろい）")
+    return None
+
+
 def _limit_vs_threshold(machine: dict, checker: dict, mode_key: str, conf: dict) -> str | None:
     """UIの入力上限（machine.limit → checker.limit → mode.limit）と閾値の整合。
 
@@ -642,11 +731,11 @@ def _limit_vs_threshold(machine: dict, checker: dict, mode_key: str, conf: dict)
     if lim is None:
         return None
     def _chk(c, where):
-        # ★excellent（◎）が上限を超えるのは正当★
-        #   交換率が悪いほど閾値が上がるため「この交換率では◎に到達しない」という
-        #   意味のある情報になる（実データ banchou4/kaguya/koukaku の4.5枚交換）。
-        #   一方 caution(△)/good(○) が到達不能だと、その交換率で一切判定が出ないので実害。
-        for k in ("caution", "good", "target"):
+        # ★excellent も上限検査の対象に戻す（Codex 21巡目 #1）★
+        #   machine.html の早見表は `excellent G〜（天井 limit G）` という行を生成するため、
+        #   excellent > limit だと「760G〜（天井700G）」という矛盾した行が表示される。
+        #   入力もクランプされ到達できないので、これは誤情報になる。
+        for k in ("caution", "good", "target", "excellent"):
             v = c.get(k)
             if _is_num(v) and v != _SENTINEL and v > lim:
                 return f"{where} の {k}={v} が入力上限 {lim} を超える（判定に到達できない）"
@@ -666,7 +755,8 @@ def _limit_vs_threshold(machine: dict, checker: dict, mode_key: str, conf: dict)
 
 
 def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
-                   declared_flags: dict | None = None) -> str | None:
+                   declared_flags: dict | None = None,
+                   rate_keys=None) -> str | None:
     """入力軸と判定軸の食い違いを、閾値の大小ではなく**構造**で検出する。
 
     ★実データで確認した判別条件（2026-07-27）★
@@ -715,13 +805,13 @@ def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
             return (f"mode({mode_key})が回数の行だけを持ち、G数の閾値を持たない"
                     f"＝入力軸が判別できない")
         # ★判定材料が無いmodeを公開しない（noteだけのタブを出さない）★
-        by = conf.get("byRate") if isinstance(conf.get("byRate"), dict) else {}
-        has_rate = any(_judgeable({**conf, **rv}) for rv in by.values() if isinstance(rv, dict))
-        if not (_judgeable(conf) or has_rate):
-            return f"mode({mode_key})に判定の主軸(good)が無い（全入力域で判定が確定しない）"
+        if not _judgeable_all_rates(conf, rate_keys):
+            return (f"mode({mode_key})に判定の主軸(good/excellent)が無い交換率がある"
+                    f"（その交換率を選ぶと判定が確定しない）")
         bad = _threshold_sanity(conf, mode_key)
         if bad:
             return bad
+        by = conf.get("byRate") if isinstance(conf.get("byRate"), dict) else {}
         if isinstance(by, dict):
             for rk, rv in by.items():
                 if isinstance(rv, dict):
@@ -788,10 +878,9 @@ def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
             return f"回数系mode({mode_key})の行[{i}]の count={cv} が0以上でない"
         counts.append(cv)
         # ★各行にG数の判定材料が最低1つ必要（countだけの行は判定できない）★
-        by = row.get("byRate") if isinstance(row.get("byRate"), dict) else {}
-        has_rate = any(_judgeable({**row, **rv}) for rv in by.values() if isinstance(rv, dict))
-        if not (_judgeable(row) or has_rate):
-            return f"回数系mode({mode_key})の行[{i}]に判定の主軸(good)が無い"
+        if not _judgeable_all_rates(row, rate_keys):
+            return (f"回数系mode({mode_key})の行[{i}]に判定の主軸(good/excellent)が無い交換率がある"
+                    f"（その交換率を選ぶと判定が確定しない）")
     is_cycle = isinstance(conf.get("cycle"), list)
     if counts:
         if is_cycle:
@@ -1009,9 +1098,16 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx,
         # declared は key の集合なので、宣言そのものは decl から探す。
         _decl = next((m for m in (decl if isinstance(decl, list) else [])
                       if isinstance(m, dict) and m.get("key") == key), {})
-        axis = _axis_conflict(key, conf, checker.get("unit"), _decl)
+        # ★宣言された交換率の集合を渡す（どの交換率を選んでも判定できることを条件にする）★
+        _rate_keys = [r.get("key") for r in (checker.get("exchangeRates") or [])
+                      if isinstance(r, dict) and isinstance(r.get("key"), str)]
+        axis = _axis_conflict(key, conf, checker.get("unit"), _decl, _rate_keys)
         if axis:
             ctx.reject(f"checker.{key}", axis)
+            continue
+        sent = _sentinel_protocol(machine_ref or {}, key, conf)
+        if sent:
+            ctx.reject(f"checker.{key}", sent)
             continue
         bad = _limit_vs_threshold(machine_ref or {}, checker, key, conf)
         if bad:
@@ -1060,11 +1156,11 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx,
                 if not isinstance(unit_conf, dict):
                     continue
                 by = unit_conf.get("byRate") if isinstance(unit_conf.get("byRate"), dict) else {}
-                has_base = any(_is_num(unit_conf.get(k))
-                               for k in ("excellent", "good", "caution", "target"))
+                has_base = _is_num(unit_conf.get("good"))
                 def _rate_has_value(rv):
-                    return isinstance(rv, dict) and any(
-                        _is_num(rv.get(k)) for k in ("excellent", "good", "caution", "target"))
+                    # ★交換率を選んだときの実効configに good があること★
+                    #   （good が無いとUIの目安値が未確定になる）
+                    return isinstance(rv, dict) and _is_num({**unit_conf, **rv}.get("good"))
                 for rk in rate_keys:
                     # ★キーが在るだけでなく「判定値がある」ことを要求★
                     if _rate_has_value(by.get(rk)) or has_base:
@@ -1404,6 +1500,14 @@ def _project_machine(machine: dict, gates: dict, ctx: _Ctx) -> dict:
         kept = [x for j, x in enumerate(al) if ctx.atom([x], f"aliases[{j}]")]
         if kept:
             out["aliases"] = kept
+    # ★checker を先に射影し、到達性は「実際に公開される集合」で見る★（Codex 21巡目 #4）
+    #   内容除去で mode や交換率が消えたあとに、それを指す limit/strategyByRate が
+    #   公開データへ残ると、UIから到達できない値が公開されたままになる。
+    pc = _project_checker(machine.get("checker"), gates.get("checker_modes", []), ctx, machine)
+    live_modes = {k for k in gates.get("checker_modes", []) if isinstance(pc, dict) and k in pc}
+    live_rates = {r.get("key") for r in ((pc or {}).get("exchangeRates") or [])
+                  if isinstance(r, dict)}
+
     lim = machine.get("limit")
     if _is_num(lim):
         if not (math.isfinite(lim) and lim >= 0 and float(lim) == int(lim)):
@@ -1415,25 +1519,24 @@ def _project_machine(machine: dict, gates: dict, ctx: _Ctx) -> dict:
                    and math.isfinite(v) for k, v in lim.items()):
             ctx.reject("limit", "limit辞書に不正なキーまたは非数値がある")
             return out
-        ck = machine.get("checker") if isinstance(machine.get("checker"), dict) else {}
-        declared = {m.get("key") for m in (ck.get("modes") or []) if isinstance(m, dict)}
-        if declared and set(lim) - declared:
-            ctx.reject("limit", "宣言に無いmodeのキーがある（参照されない）")
-            return out
-        if lim:
-            out["limit"] = dict(lim)
+        # ★集合が空でも迂回しない（空＝どのキーも到達できない）★
+        #   到達できないキーはデータの型が壊れているわけではないので、記事ごと止めず
+        #   「その値を公開しない」扱いにする（内容除去）。
+        reach = {k: v for k, v in lim.items() if k in live_modes}
+        if len(reach) != len(lim):
+            ctx.content_drop("limit", "公開されるmodeに無いキーは参照されない")
+        if reach:
+            out["limit"] = reach
     sbr = machine.get("strategyByRate")
     if isinstance(sbr, dict):
         if not all(_ok_key(k) and _is_str(v) for k, v in sbr.items()):
             ctx.reject("strategyByRate", "交換率キーが識別子でない、または値が文字列でない")
             return out
-        # ★キー到達性★ UIが選べる交換率に無いキーは参照されない
-        ck = machine.get("checker") if isinstance(machine.get("checker"), dict) else {}
-        sel = {r.get("key") for r in (ck.get("exchangeRates") or []) if isinstance(r, dict)}
-        if sel and set(sbr) - sel:
-            ctx.reject("strategyByRate", "UIで選べない交換率のキーがある（参照されない）")
-            return out
-        d = {k: v for k, v in sbr.items() if ctx.atom([k, v], f"strategyByRate.{k}")}
+        # ★キー到達性★ 公開される交換率に無いキーは参照されない（空集合でも迂回しない）
+        reach = {k: v for k, v in sbr.items() if k in live_rates}
+        if len(reach) != len(sbr):
+            ctx.content_drop("strategyByRate", "公開される交換率に無いキーは参照されない")
+        d = {k: v for k, v in reach.items() if ctx.atom([k, v], f"strategyByRate.{k}")}
         if d:
             out["strategyByRate"] = d
     seo = machine.get("seo")
@@ -1458,7 +1561,6 @@ def _project_machine(machine: dict, gates: dict, ctx: _Ctx) -> dict:
              if _is_str(o.get(k)) and ctx.atom([o[k]], f"original.{k}")}
         if d:
             out["original"] = d
-    pc = _project_checker(machine.get("checker"), gates.get("checker_modes", []), ctx, machine)
     if pc:
         out["checker"] = pc
 
@@ -1652,10 +1754,17 @@ def selftest() -> int:
     import json
 
     def bl_provisional_lifecycle(m):
-        """build_ledger.provisional の lifecycle 決定を検証用に再現（依存を持ち込まない）。"""
-        st = m.get("status")
-        return ("VERIFIED_PREVIEW" if st == "preview"
-                else "LEGACY_SEARCH" if st in (None, "complete") else "CANDIDATE")
+        """★本体（build_ledger.provisional）そのものを呼ぶ★（Codex 21巡目 #9）
+
+        以前は同じロジックをここに書き写していたため、本体が壊れても自己試験だけ
+        合格し得た。ローカル編集ツール側の関数なので import できないときは
+        「検証していない」を明示するために失敗させる。
+        """
+        import os
+        import sys
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import build_ledger
+        return build_ledger.provisional(m).get("lifecycle")
     results = []
 
     def t(name, cond):
@@ -1742,7 +1851,7 @@ def selftest() -> int:
     bad_checker = {**base, "checker_modes": {"normal": "VERIFIED"},
                    "checker": {"unit": "期待収支がプラス", "ok": "狙い目OK",
                                "modes": [{"key": "normal", "label": "期待収支がプラス"}],
-                               "normal": {"good": 600}}}
+                               "normal": {"good": 600, "excellent": 800}}}
     pcj = json.dumps(publish_view(bad_checker)["machine"], ensure_ascii=False)
     t("★checker.unit も分類される（危険なら落ちる）", "期待収支" not in pcj)
     t("★modes[].label も分類される", "期待収支" not in pcj)
@@ -1762,7 +1871,7 @@ def selftest() -> int:
       any(e["path"] == "summaryBoxes[0]" for e in audit_view(base, unk)["errors"]))
     unk2 = {**base, "checker_modes": {"normal": "VERIFIED"},
             "checker": {"modes": [{"key": "normal", "label": "normal"}],
-                        "normal": {"good": 600, "private_note": 123}}}
+                        "normal": {"good": 600, "excellent": 800, "private_note": 123}}}
     raised = False
     try:
         publish_view(unk2)
@@ -1815,8 +1924,9 @@ def selftest() -> int:
             "checker": {"unit": "G", "hasSuru": True, "suruMax": 6,
                         "exchangeRates": [{"key": "eq56", "label": "5.6枚"}],
                         "defaultRate": "eq56", "modes": [{"key": "normal", "label": "通常"}],
-                        "normal": {"good": 700, "target": 570,
-                                   "byRate": {"eq56": {"good": 680, "target": 570}}},
+                        "normal": {"good": 700, "target": 570, "excellent": 900,
+                                   "byRate": {"eq56": {"good": 680, "target": 570,
+                                                       "excellent": 880}}},
                         }}
     rc = publish_view(real)["machine"]["checker"]
     t("実データ形状: exchangeRates/defaultRate/target/hasSuru を落とさない",
@@ -1829,7 +1939,7 @@ def selftest() -> int:
     cyc = {**base, "checker_modes": {"cycle": "VERIFIED"},
            "checker": {"unit": "G",
                        "modes": [{"key": "cycle", "label": "周期", "hasCycle": True}],
-                       "cycle": {"cycle": [{"count": 1, "good": 800}]}}}
+                       "cycle": {"cycle": [{"count": 1, "good": 800, "excellent": 1000}]}}}
     t("実データ形状: 周期(辞書配列)を落とさない",
       publish_view(cyc)["machine"]["checker"]["cycle"]["cycle"][0]["count"] == 1)
 
@@ -1897,7 +2007,7 @@ def selftest() -> int:
         ({"modes": [{"key": "normal", "label": "normal"}], "normal": {"excellent": 600, "private": 1}}, "未知フィールド"),
         ({"modes": [{"key": "normal", "label": "normal"}]}, "configが無い"),
         ({"modes": [{"key": "normal", "label": "normal"}], "normal": {"excellent": 600, "_disabled": "停止"}}, "_disabled付き"),
-        ({"modes": [{"key": "other", "label": "other"}], "normal": {"good": 600}}, "modes宣言に無い"),
+        ({"modes": [{"key": "other", "label": "other"}], "normal": {"good": 600, "excellent": 800}}, "modes宣言に無い"),
     ):
         raised = False
         try:
@@ -1987,7 +2097,7 @@ def selftest() -> int:
     t("　正しい二軸構造（回数ごとのG数）は通す",
       publish_view({**base, "checker_modes": {"suru": "STRUCT_OK"},
                     "checker": {"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
-                                "suru": {"suru": [{"count": 1, "good": 600}]}}}
+                                "suru": {"suru": [{"count": 1, "good": 600, "excellent": 800}]}}}
                    )["gates"]["checker"] is True)
 
     # ★軸契約の完全化（Codex 11巡目の指定反例を全件固定）★
@@ -1998,17 +2108,17 @@ def selftest() -> int:
 
     t("★軸契約: 直下閾値＋suru[] の併存 → 停止",
       _axis_stops({"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
-                   "suru": {"good": 4, "suru": [{"count": 1, "good": 600}]}}))
+                   "suru": {"good": 4, "suru": [{"count": 1, "good": 600, "excellent": 800}]}}))
     t("★軸契約: unit='回' ＋ G数の行 → 停止",
       _axis_stops({"unit": "回", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
-                   "suru": {"suru": [{"count": 1, "good": 600}]}}))
+                   "suru": {"suru": [{"count": 1, "good": 600, "excellent": 800}]}}))
     t("★軸契約: count 欠落 → 停止",
       _axis_stops({"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
                    "suru": {"suru": [{"good": 600}]}}))
-    for rows, label in (([{"count": 1, "good": 600}, {"count": 1, "good": 500}], "重複"),
-                        ([{"count": 2, "good": 600}, {"count": 1, "good": 500}], "降順"),
-                        ([{"count": 1.5, "good": 600}], "小数"),
-                        ([{"count": -1, "good": 600}], "負数")):
+    for rows, label in (([{"count": 1, "good": 600, "excellent": 800}, {"count": 1, "good": 500, "excellent": 700}], "重複"),
+                        ([{"count": 2, "good": 600, "excellent": 800}, {"count": 1, "good": 500, "excellent": 700}], "降順"),
+                        ([{"count": 1.5, "good": 600, "excellent": 800}], "小数"),
+                        ([{"count": -1, "good": 600, "excellent": 800}], "負数")):
         t(f"★軸契約: count {label} → 停止",
           _axis_stops({"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}], "suru": {"suru": rows}}))
     t("★軸契約: key='at'でも hasSuru宣言＋直下閾値 → 停止",
@@ -2016,30 +2126,31 @@ def selftest() -> int:
                    "at": {"good": 4}}, {"at": "STRUCT_OK"}))
     # Codex 12巡目の指定反例
     t("★軸契約: 入力単位の欠落 → 停止",
-      _axis_stops({"modes": [{"key": "suru", "label": "スルー", "hasSuru": True}], "suru": {"suru": [{"count": 1, "good": 600}]}}))
+      _axis_stops({"modes": [{"key": "suru", "label": "スルー", "hasSuru": True}], "suru": {"suru": [{"count": 1, "good": 600, "excellent": 800}]}}))
     t("★軸契約: count が小数表記(1.0) → 停止",
       _axis_stops({"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
-                   "suru": {"suru": [{"count": 1.0, "good": 600}]}}))
+                   "suru": {"suru": [{"count": 1.0, "good": 600, "excellent": 800}]}}))
     t("★軸契約: 行にG数の判定材料が無い（countだけ）→ 停止",
       _axis_stops({"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
                    "suru": {"suru": [{"count": 1}]}}))
     t("★軸契約: 宣言と実体の不一致（hasSuru宣言なのにcycle[]）→ 停止",
       _axis_stops({"unit": "G", "modes": [{"key": "suru", "hasCycle": True}],
-                   "suru": {"suru": [{"count": 1, "good": 600}]}}))
+                   "suru": {"suru": [{"count": 1, "good": 600, "excellent": 800}]}}))
     t("★軸契約: hasSuruとhasCycleの同時宣言 → 停止",
       _axis_stops({"unit": "G", "modes": [{"key": "suru", "hasSuru": True, "hasCycle": True}],
-                   "suru": {"suru": [{"count": 1, "good": 600}]}}))
+                   "suru": {"suru": [{"count": 1, "good": 600, "excellent": 800}]}}))
     t("★軸契約: suru[]とcycle[]の併存 → 停止",
       _axis_stops({"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
-                   "suru": {"suru": [{"count": 1, "good": 600}],
-                            "cycle": [{"count": 1, "good": 500}]}}))
+                   "suru": {"suru": [{"count": 1, "good": 600, "excellent": 800}],
+                            "cycle": [{"count": 1, "good": 500, "excellent": 700}]}}))
     t("　行のbyRateにG数があれば判定材料として認める",
       publish_view({**base, "checker_modes": {"suru": "STRUCT_OK"},
                     "checker": {"unit": "G",
                                 "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
                                 "exchangeRates": [{"key": "eq56", "label": "5.6枚"}],
                                 "suru": {"suru": [{"count": 1,
-                                                   "byRate": {"eq56": {"good": 600}}}]}}}
+                                                   "byRate": {"eq56": {"good": 600,
+                                                                       "excellent": 800}}}]}}}
                    )["gates"]["checker"] is True)
     t("★軸契約: noteだけの周期mode → 停止（実データ sengoku_otome5 と同型）",
       _axis_stops({"unit": "G", "modes": [{"key": "cycle", "hasCycle": True}],
@@ -2051,7 +2162,8 @@ def selftest() -> int:
     t("★目安チェッカーを出すなら必ず目安ラベルの対象になる",
       "checker" in publish_view(
           {**base, "checker_modes": {"normal": "STRUCT_OK"},
-           "checker": {"modes": [{"key": "normal", "label": "normal"}], "normal": {"good": 580}}}
+           "checker": {"modes": [{"key": "normal", "label": "normal"}],
+                       "normal": {"good": 580, "excellent": 700}}}
       )["machine"]["display_requirements"]["surfaces"])
     t("　どの表示面に必要かを返す",
       "strategy" in publish_view({**base, "strategy": "等価600G〜"}
@@ -2080,7 +2192,7 @@ def selftest() -> int:
       _raises(ck({"good": 580, "byRate": {"eq56": {"excellent": 600},
                                           "rate50": {"excellent": "700"}}})))
     t("★複数suru行のうち1行だけ不正でも停止",
-      _raises(ck({"good": 580, "suru": [{"count": 1, "good": 500},
+      _raises(ck({"good": 580, "suru": [{"count": 1, "good": 500, "excellent": 700},
                                         {"count": 2, "good": "400"}]})))
     t("★checker直下の未知フィールド（但し書き）→ 停止",
       _raises(ck({"good": 580}, warning="未確認")))
@@ -2127,7 +2239,7 @@ def selftest() -> int:
     t("★17-6: mode・交換率の表示ラベルが無ければ停止",
       ck17({**base_ck, "modes": [{"key": "normal"}]})          # ラベル欠落（意図的）
       and ck17({**base_ck, "exchangeRates": [{"key": "eq56"}],  # ラベル欠落（意図的）
-                "normal": {"good": 600, "byRate": {"eq56": {"good": 600}}}}))
+                "normal": {"good": 600, "byRate": {"eq56": {"good": 600, "excellent": 800}}}}))
     t("★17-7: 数値配列の周期は未対応として停止",
       ck17({"unit": "G", "modes": [{"key": "cycle", "label": "周期", "hasCycle": True}],
             "cycle": {"cycle": [1, 2, 3]}}, {"cycle": "STRUCT_OK"}))
@@ -2139,13 +2251,14 @@ def selftest() -> int:
       publish_view({**base, "checker_modes": {"a": "STRUCT_OK", "b": "STRUCT_OK"},
                     "checker": {"unit": "G",
                                 "modes": [{"key": "a", "label": "A"}, {"key": "b", "label": "B"}],
-                                "a": {"good": 600},
-                                "b": {"good": 500, "note": "580Gから期待収支がプラス"}}}
+                                "a": {"good": 600, "excellent": 800},
+                                "b": {"good": 500, "excellent": 700, "note": "580Gから期待収支がプラス"}}}
                    )["gates"]["checker_modes"] == ["a"])
 
     # ===== Codex 18巡目の反例（回帰テスト）=====
     b18 = {"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
-           "suru": {"suruMax": 3, "suru": [{"count": 0, "good": 600}, {"count": 1, "good": 500}]}}
+           "suru": {"suruMax": 3, "suru": [{"count": 0, "good": 600, "excellent": 800},
+                                           {"count": 1, "good": 500, "excellent": 700}]}}
     ax18 = lambda ck, modes=None: bool(audit_view(
         {**base, "checker_modes": modes or {"suru": "STRUCT_OK"}, "checker": ck})["errors"])
     t("★18-1: 行の閾値順序が壊れていたら停止",
@@ -2159,21 +2272,21 @@ def selftest() -> int:
       ax18({**b18, "exchangeRates": [{"key": "eq56", "label": "5.6枚"}],
             "suru": {"suru": [{"count": 0, "byRate": {"eq56": {"note": "x"}}}]}}))
     t("　交換率別の値があるのに選択肢が無い → 停止",
-      ax18({**b18, "suru": {"suru": [{"count": 0, "byRate": {"eq56": {"good": 600}}}]}}))
+      ax18({**b18, "suru": {"suru": [{"count": 0, "byRate": {"eq56": {"good": 600, "excellent": 800}}}]}}))
     t("★18-5: modes宣言が無ければ停止",
-      ax18({"unit": "G", "suru": {"suru": [{"count": 0, "good": 600}]}}))
+      ax18({"unit": "G", "suru": {"suru": [{"count": 0, "good": 600, "excellent": 800}]}}))
     t("★18-6: 行があるのに hasSuru/hasCycle 宣言が無ければ停止",
       ax18({"unit": "G", "modes": [{"key": "at", "label": "AT"}],
-            "at": {"suru": [{"count": 0, "good": 600}]}}, {"at": "STRUCT_OK"}))
+            "at": {"suru": [{"count": 0, "good": 600, "excellent": 800}]}}, {"at": "STRUCT_OK"}))
     t("★18-7: 上限を超える回数行・周期の連番崩れは停止",
-      ax18({**b18, "suru": {"suruMax": 1, "suru": [{"count": 0, "good": 600},
-                                                   {"count": 5, "good": 500}]}})
+      ax18({**b18, "suru": {"suruMax": 1, "suru": [{"count": 0, "good": 600, "excellent": 800},
+                                                   {"count": 5, "good": 500, "excellent": 700}]}})
       and ax18({"unit": "G", "modes": [{"key": "cycle", "label": "周期", "hasCycle": True}],
-                "cycle": {"cycle": [{"count": 1, "good": 600}, {"count": 3, "good": 500}]}},
+                "cycle": {"cycle": [{"count": 1, "good": 600, "excellent": 800}, {"count": 3, "good": 500, "excellent": 700}]}},
                {"cycle": "STRUCT_OK"}))
     t("★18-8: 表示ラベルの重複は停止",
       ax18({"unit": "G", "modes": [{"key": "a", "label": "同じ"}, {"key": "b", "label": "同じ"}],
-            "a": {"good": 600}, "b": {"good": 500}}, {"a": "STRUCT_OK", "b": "STRUCT_OK"}))
+            "a": {"good": 600, "excellent": 800}, "b": {"good": 500, "excellent": 700}}, {"a": "STRUCT_OK", "b": "STRUCT_OK"}))
     t("★18-10: 表示すると空になる機種名は停止",
       bool(audit_view({**base, "name": "​​"})["errors"]))
     t("★18-12: modeDataと直下で片方が壊れていたら停止",
@@ -2183,27 +2296,27 @@ def selftest() -> int:
                     "checker": {"unit": "G",
                                 "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
                                 "suru": {"suruMax": 6,
-                                         "suru": [{"count": 1, "good": 600},
-                                                  {"count": 2, "good": 500}]}}}
+                                         "suru": [{"count": 1, "good": 600, "excellent": 800},
+                                                  {"count": 2, "good": 500, "excellent": 700}]}}}
                    )["gates"]["checker"] is True)
 
     # ===== Codex 19巡目の反例（回帰テスト）=====
     b19 = {"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
-           "suru": {"suruMax": 3, "suru": [{"count": 0, "good": 600}]}}
+           "suru": {"suruMax": 3, "suru": [{"count": 0, "good": 600, "excellent": 800}]}}
     ax19 = lambda ck, modes=None: bool(audit_view(
         {**base, "checker_modes": modes or {"suru": "STRUCT_OK"}, "checker": ck})["errors"])
     t("★19-1: mode名がsuruでも宣言フラグが無ければ停止",
       ax19({**b19, "modes": [{"key": "suru", "label": "スルー"}]}))
     t("★19-2: suruMax未指定なら既定上限99を超える行は停止",
-      ax19({**b19, "suru": {"suru": [{"count": 100, "good": 600}]}}))
+      ax19({**b19, "suru": {"suru": [{"count": 100, "good": 600, "excellent": 800}]}}))
     t("★19-3: 回数系modeの直下byRateは停止（UIが使わない）",
       ax19({**b19, "exchangeRates": [{"key": "eq56", "label": "5.6枚"}],
-            "suru": {"suruMax": 3, "byRate": {"eq56": {"good": 600}},
-                     "suru": [{"count": 0, "byRate": {"eq56": {"good": 600}}}]}}))
+            "suru": {"suruMax": 3, "byRate": {"eq56": {"good": 600, "excellent": 800}},
+                     "suru": [{"count": 0, "byRate": {"eq56": {"good": 600, "excellent": 800}}}]}}))
     t("★19-5: 表示すると同じになるラベルは重複として停止",
       ax19({"unit": "G", "modes": [{"key": "a", "label": "通常"},
                                    {"key": "b", "label": "通​常"}],
-            "a": {"good": 600}, "b": {"good": 500}}, {"a": "STRUCT_OK", "b": "STRUCT_OK"}))
+            "a": {"good": 600, "excellent": 800}, "b": {"good": 500, "excellent": 700}}, {"a": "STRUCT_OK", "b": "STRUCT_OK"}))
     t("　表示すると空になるラベルも停止",
       ax19({**b19, "modes": [{"key": "suru", "label": "⁠", "hasSuru": True}]}))
     t("★19-6: U+2060だけの機種名も停止",
@@ -2219,13 +2332,13 @@ def selftest() -> int:
 
     # ===== Codex 20巡目の反例（回帰テスト）=====
     b20 = {"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
-           "suru": {"suruMax": 3, "suru": [{"count": 0, "good": 600}]}}
+           "suru": {"suruMax": 3, "suru": [{"count": 0, "good": 600, "excellent": 800}]}}
     ax20 = lambda ck, extra=None, modes=None: bool(audit_view(
         {**base, **(extra or {}), "checker_modes": modes or {"suru": "STRUCT_OK"},
          "checker": ck})["errors"])
     t("★20-1: 直下が非dictならmodeDataが正常でも停止",
       ax20({**b20, "suru": "壊れた値",
-            "modeData": {"suru": {"suruMax": 3, "suru": [{"count": 0, "good": 600}]}}}))
+            "modeData": {"suru": {"suruMax": 3, "suru": [{"count": 0, "good": 600, "excellent": 800}]}}}))
     t("★20-2: 危険なHTMLは無害化せず停止",
       bool(audit_view({**base, "name": "<img src=x onerror=alert(1)>"})["errors"])
       and bool(audit_view({**base, "strategy": "<span class=a>600G〜</span>"})["errors"]))
@@ -2235,23 +2348,62 @@ def selftest() -> int:
       bool(audit_view({**base, "name": "⁦⁩"})["errors"]))
     t("★20-4: 未知のstatusは公開しない（fail-closed）",
       bl_provisional_lifecycle({"slug": "x", "status": "compelte"}) == "CANDIDATE")
-    t("★20-7: UIで選べない交換率キー・宣言に無いmodeキーは停止",
-      bool(audit_view({**base, "checker": {**b20, "exchangeRates":
-                                           [{"key": "eq56", "label": "5.6枚"}]},
-                       "checker_modes": {"suru": "STRUCT_OK"},
-                       "strategyByRate": {"nope": "600G〜"}})["errors"])
-      and bool(audit_view({**base, "checker": b20, "checker_modes": {"suru": "STRUCT_OK"},
-                           "limit": {"nope": 999}})["errors"]))
+    # ★21-4: 到達性は「実際に公開された集合」で見る。型は壊れていないので記事は止めず、
+    #        その値を公開しない（内容除去）。
+    _v20_7a = publish_view({**base, "checker": {**b20, "exchangeRates":
+                                                [{"key": "eq56", "label": "5.6枚"}]},
+                            "checker_modes": {"suru": "STRUCT_OK"},
+                            "strategyByRate": {"nope": "600G〜", "eq56": "600G〜"}})
+    t("★20-7: UIで選べない交換率キーは公開しない",
+      "nope" not in (_v20_7a["machine"].get("strategyByRate") or {})
+      and _v20_7a["machine"]["strategyByRate"]["eq56"] == "600G〜")
+    _v20_7b = publish_view({**base, "checker": b20, "checker_modes": {"suru": "STRUCT_OK"},
+                            "limit": {"nope": 999, "suru": 900}})
+    t("　公開されるmodeに無いlimitキーも公開しない",
+      "nope" not in (_v20_7b["machine"].get("limit") or {})
+      and _v20_7b["machine"]["limit"]["suru"] == 900)
+    # ★21-4b: checker が丸ごと落ちたら、それを指す limit/strategyByRate も残らない
+    # （閾値が入力上限を超えて mode が内容除去され、checker が空になる形）
+    _v21_4 = publish_view({**base, "checker": {**b20, "exchangeRates":
+                                               [{"key": "eq56", "label": "5.6枚"}]},
+                           "checker_modes": {"suru": "STRUCT_OK"},
+                           "strategyByRate": {"eq56": "600G〜"}, "limit": {"suru": 500}})
+    t("★21-4: checkerが公開されなければ strategyByRate / limit辞書 も公開しない",
+      "checker" not in _v21_4["machine"]
+      and "strategyByRate" not in _v21_4["machine"] and "limit" not in _v21_4["machine"])
     t("★20-8: 入力上限を超える good はそのmodeを出さない（記事は公開する）",
       publish_view({**base, "limit": 700, "checker_modes": {"suru": "STRUCT_OK"},
                     "checker": {**b20, "suru": {"suruMax": 3,
-                                                "suru": [{"count": 0, "good": 760}]}}}
+                                                "suru": [{"count": 0, "good": 760, "excellent": 960}]}}}
                    )["gates"]["checker"] is False)
-    t("　excellent が上限を超えるのは正当（この交換率では◎に到達しない）",
+    t("★21-1: 入力上限を超える excellent もそのmodeを出さない（早見表が到達不能な行を作る）",
       publish_view({**base, "limit": 700, "checker_modes": {"suru": "STRUCT_OK"},
                     "checker": {**b20, "suru": {"suruMax": 3,
                                                 "suru": [{"count": 0, "good": 600,
                                                           "excellent": 760}]}}}
+                   )["gates"]["checker"] is False)
+    t("★21-3: 早見表が描けない（excellent が無い）構造は止める",
+      ax20({**b20, "suru": {"suruMax": 3, "suru": [{"count": 0, "good": 600}]}}))
+    t("★21-2: 交換率ごとの実効configにも good が要る（片方だけ excellent は不可）",
+      bool(audit_view({**base, "checker_modes": {"normal": "STRUCT_OK"},
+                       "checker": {"unit": "G",
+                                   "exchangeRates": [{"key": "eq56", "label": "5.6枚"},
+                                                     {"key": "rate50", "label": "5.0枚"}],
+                                   "defaultRate": "eq56",
+                                   "modes": [{"key": "normal", "label": "通常"}],
+                                   "normal": {"byRate": {
+                                       "eq56": {"good": 600, "excellent": 800},
+                                       "rate50": {"excellent": 850}}}}})["errors"]))
+    t("　全交換率に判定材料が揃っていれば通す",
+      publish_view({**base, "checker_modes": {"normal": "STRUCT_OK"},
+                    "checker": {"unit": "G",
+                                "exchangeRates": [{"key": "eq56", "label": "5.6枚"},
+                                                  {"key": "rate50", "label": "5.0枚"}],
+                                "defaultRate": "eq56",
+                                "modes": [{"key": "normal", "label": "通常"}],
+                                "normal": {"byRate": {
+                                    "eq56": {"good": 600, "excellent": 800},
+                                    "rate50": {"good": 650, "excellent": 850}}}}}
                    )["gates"]["checker"] is True)
     t("★20-9: 判定の主軸(good)が無ければ停止",
       ax20({**b20, "suru": {"suruMax": 3, "suru": [{"count": 0, "excellent": 600}]}}))

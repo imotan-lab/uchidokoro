@@ -93,6 +93,14 @@ _ONE = re.compile(_SET1)
 _NUM = re.compile(r"[0-9０-９]")
 
 
+# ★不可視文字はカテゴリで落とす（列挙だと U+2066 等の取りこぼしが出る・Codex 21巡目 #7）★
+_INVISIBLE_CATS = {"Cf", "Cc", "Co", "Cs", "Zl", "Zp"}
+
+
+def _drop_invisible(s: str) -> str:
+    return "".join(ch for ch in s if unicodedata.category(ch) not in _INVISIBLE_CATS)
+
+
 def as_displayed(s: str) -> str:
     """ブラウザで見える形に寄せる（gates.py とは別実装で同じ狙いを果たす）。"""
     for _ in range(6):
@@ -102,8 +110,30 @@ def as_displayed(s: str) -> str:
         s = t
     s = _TAG.sub("", s)
     s = _MD.sub("", s)
-    s = _ZW.sub("", s)
+    s = _drop_invisible(s)
     return unicodedata.normalize("NFKC", s)
+
+
+# ★公開文字列に許してよいHTMLの独立契約★（gates.py とは別の書き方で同じ結論を出す）
+#   許可タグの開始/終了以外に「<」が出てはならない。属性は値の有無を問わず不可。
+_OK_TAGS = ("br", "strong", "b", "em", "span")
+_OK_TAG_RE = re.compile(r"</?(?:%s)/?>" % "|".join(_OK_TAGS), re.I)
+
+
+def html_violation(s) -> str | None:
+    """公開文字列にHTMLとして危険/未契約な要素が無いか。あれば理由を返す。"""
+    if not isinstance(s, str):
+        return None
+    low = s.lower()
+    for bad in ("<script", "javascript:", "data:text/html", "onerror=", "onload=",
+                "onclick=", "srcdoc="):
+        if bad in low.replace(" ", ""):
+            return "危険なHTML（スクリプト・イベント属性）"
+    # 空白を含む書き方も潰してから許可タグを取り除く
+    rest = _OK_TAG_RE.sub("", re.sub(r"<\s*(/?)\s*([A-Za-z]+)\s*(/?)\s*>", r"<>", s))
+    if "<" in rest or ">" in rest:
+        return "契約外のHTML（許可タグ以外・属性つきタグ・生の不等号）"
+    return None
 
 
 def _enum_gap(text: str) -> bool:
@@ -237,10 +267,16 @@ def _check_url(u: str) -> str | None:
 
 
 # checker の公開契約（gates とは別に、監査側で独自に持つ）
-_CK_TOP = {"unit", "equivOnly", "limit", "modes", "exchangeRates", "defaultRate",
-           "hasSuru", "hasCycle", "suruMax", "ok", "ng"}
+# ★公開データに出てよいキー（authoring 用のフラグは公開しない・Codex 21巡目 #7）★
+#   hasSuru/hasCycle/suruMax/ok/ng は modes宣言や別経路で扱うため、公開物には出ない。
+_CK_TOP = {"unit", "equivOnly", "limit", "modes", "exchangeRates", "defaultRate"}
 _CK_MODE = {"excellent", "good", "caution", "limit", "suruMax", "target", "count",
             "note", "cycle", "suru", "byRate"}
+# 層ごとの契約（mode直下 / 行 / 交換率）
+_CK_MODE_TOP = {"excellent", "good", "caution", "target", "note",
+                "limit", "suruMax", "cycle", "suru", "byRate"}
+_CK_ROW = {"count", "excellent", "good", "caution", "target", "note", "byRate"}
+_CK_RATE = {"excellent", "good", "caution", "target", "note"}
 _CK_NUM = {"excellent", "good", "caution", "limit", "suruMax", "target", "count"}
 
 
@@ -331,7 +367,7 @@ def _audit_checker_shape(slug: str, ck, path: str = "checker") -> list[str]:
 _COUNT_MODES = ("suru", "through", "cycle")
 
 
-def _audit_checker_contract(slug: str, ck) -> list[str]:
+def _audit_checker_contract(slug: str, ck, machine_limit=None) -> list[str]:
     """★17〜18巡目の中核契約を独立に実装★（gates の関数を使わない）
 
     判定材料の有無／閾値の健全性（有限・非負・順序・byRate適用後）／
@@ -341,6 +377,16 @@ def _audit_checker_contract(slug: str, ck) -> list[str]:
         return []
     out: list[str] = []
     import math
+
+    def _machine_limit(mode_key):
+        """機種側の入力上限（数値 or mode別の辞書）。"""
+        if isinstance(machine_limit, (int, float)) and not isinstance(machine_limit, bool):
+            return machine_limit
+        if isinstance(machine_limit, dict):
+            v = machine_limit.get(mode_key)
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                return v
+        return None
 
     def sane(c, where):
         vals = {}
@@ -355,10 +401,16 @@ def _audit_checker_contract(slug: str, ck) -> list[str]:
         if seq != sorted(seq):
             out.append(f"{slug}: {where} の閾値の順序が壊れている")
 
+    def _num(v):
+        return isinstance(v, (int, float)) and not isinstance(v, bool)
+
     def has_value(c):
-        return isinstance(c, dict) and any(
-            isinstance(c.get(k), (int, float)) and not isinstance(c.get(k), bool)
-            for k in ("excellent", "good", "caution", "target"))
+        """★早見表（○以上/◎超過）が描ける条件★（Codex 21巡目 #7）
+
+        good が無いと目安値が確定せず、excellent が無いと表の上側が欠ける。
+        gates 側とは別に、監査側でも「両方あること」を条件にする。
+        """
+        return isinstance(c, dict) and _num(c.get("good")) and _num(c.get("excellent"))
 
     for k in ("limit", "suruMax"):
         v = ck.get(k)
@@ -427,6 +479,59 @@ def _audit_checker_contract(slug: str, ck) -> list[str]:
                     out.append(f"{slug}: checker.{mk}[{i}] は交換率 {rk} で判定値に到達できない")
             if by and not rate_keys:
                 out.append(f"{slug}: checker.{mk}[{i}] に交換率別の値があるのに選択肢が無い")
+
+            # ★入力上限を超える閾値・99999センチネルを独立に検査★（Codex 21巡目 #7）
+            #   上限は mode直下 → checker直下 の順で効く（machine.limit は呼び出し側で渡す）。
+            cap = None
+            for cand in (conf.get("limit"), ck.get("limit"), _machine_limit(mk)):
+                if _num(cand):
+                    cap = cand
+                    break
+            for label, cfg in [("", u)] + [(f".byRate.{rk}", {**u, **rv})
+                                           for rk, rv in by.items()
+                                           if isinstance(rv, dict)]:
+                # ★99999 は「天井なし＝設定狙い専用」を表す取り決め（machine.html が解釈）★
+                #   ただし成立条件は厳密: mode が normal・機種側 limit が無い・
+                #   caution/good/excellent が揃ってセンチネル。半端な混在は事故。
+                sent = [k for k in ("caution", "good", "excellent")
+                        if _num(cfg.get(k)) and cfg[k] >= 99999]
+                if sent:
+                    ok_protocol = (mk == "normal" and _machine_limit(mk) is None
+                                   and len(sent) == 3)
+                    if not ok_protocol:
+                        out.append(f"{slug}: checker.{mk}[{i}]{label} のセンチネル値(99999)が"
+                                   f"「天井なし」の取り決めの形になっていない")
+                    continue
+                for k in ("caution", "good", "target", "excellent"):
+                    v = cfg.get(k)
+                    if not _num(v):
+                        continue
+                    if cap is not None and v > cap:
+                        out.append(f"{slug}: checker.{mk}[{i}]{label}.{k}={v} が"
+                                   f"入力上限({cap})を超えていて到達できない")
+
+        # ★層ごとの許可キー★（UIが読まない値が公開データに残っていないか）
+        for k in conf:
+            if k not in _CK_MODE_TOP:
+                out.append(f"{slug}: checker.{mk}.{k} はUIが参照しないフィールド")
+        for i, r in enumerate(rows or []):
+            if not isinstance(r, dict):
+                continue
+            for k in r:
+                if k not in _CK_ROW:
+                    out.append(f"{slug}: checker.{mk}[{i}].{k} は行が持てないフィールド")
+            for rk, rv in (r.get("byRate") or {}).items():
+                if isinstance(rv, dict):
+                    for k in rv:
+                        if k not in _CK_RATE:
+                            out.append(f"{slug}: checker.{mk}[{i}].byRate.{rk}.{k} は"
+                                       f"交換率が持てないフィールド")
+        for rk, rv in (conf.get("byRate") or {}).items():
+            if isinstance(rv, dict):
+                for k in rv:
+                    if k not in _CK_RATE:
+                        out.append(f"{slug}: checker.{mk}.byRate.{rk}.{k} は"
+                                   f"交換率が持てないフィールド")
     return out
 
 
@@ -551,6 +656,10 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
             problems.append(f"{slug}: 必須フィールド {k} が無い")
         elif not isinstance(v, str):      # truthy だけで通さない（name: true を弾く）
             problems.append(f"{slug}: 必須フィールド {k} の型が不正")
+        elif not as_displayed(v).strip():
+            # ★不可視文字だけの値は「表示すると空」＝実質欠落★（Codex 21巡目 #9）
+            problems.append(f"{slug}: 必須フィールド {k} が表示すると空になる"
+                            f"（不可視文字だけの名前）")
     # 入れ子の型契約（想定と違う形のまま公開しない）
     for k, typ in (("info", str), ("strategy", str), ("aliases", list), ("seo", dict),
                    ("checker", dict), ("sources", list), ("strategyByRate", dict),
@@ -622,7 +731,40 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
     problems.extend(_audit_axis(slug, pub.get("checker")))
     problems.extend(_audit_exchange_ref(slug, pub.get("checker")))
     problems.extend(_audit_modes_config_match(slug, pub.get("checker")))
-    problems.extend(_audit_checker_contract(slug, pub.get("checker")))
+    problems.extend(_audit_checker_contract(slug, pub.get("checker"), pub.get("limit")))
+
+    # ★キー到達性★（gates とは別実装。公開データの中だけで完結して判定する）
+    #   公開された checker が無い／その交換率・mode が無いのに、それを指す値が残っていたら違反。
+    _ck = pub.get("checker") if isinstance(pub.get("checker"), dict) else {}
+    if not isinstance(_ck.get("modes"), list):
+        _ck = {**_ck, "modes": []}
+    if not isinstance(_ck.get("exchangeRates"), list):
+        _ck = {**_ck, "exchangeRates": []}
+    _live_rates = {r.get("key") for r in (_ck.get("exchangeRates") or [])
+                   if isinstance(r, dict) and isinstance(r.get("key"), str)}
+    _live_modes = {m.get("key") for m in (_ck.get("modes") or [])
+                   if isinstance(m, dict) and isinstance(m.get("key"), str)}
+    for kk in (pub.get("strategyByRate") or {}):
+        if kk not in _live_rates:
+            problems.append(f"{slug}: strategyByRate.{kk} は公開された交換率に無い（到達不能）")
+    if isinstance(pub.get("limit"), dict):
+        for kk in pub["limit"]:
+            if kk not in _live_modes:
+                problems.append(f"{slug}: limit.{kk} は公開されたmodeに無い（到達不能）")
+
+    # ★公開文字列のHTML契約★（許可タグ以外・属性つき・生の不等号を通さない）
+    def _scan_html(o, path):
+        if isinstance(o, str):
+            why = html_violation(o)
+            if why:
+                problems.append(f"{slug}: {path} {why}")
+        elif isinstance(o, dict):
+            for k, v in o.items():
+                _scan_html(v, f"{path}.{k}")
+        elif isinstance(o, list):
+            for i, v in enumerate(o):
+                _scan_html(v, f"{path}[{i}]")
+    _scan_html(pub, "machine")
     # ★checkerを出すなら、目安ラベルの対象にcheckerが入っていること★
     #   （gates側の新しい不変条件を、独立にも担保する）
     dr = pub.get("display_requirements")

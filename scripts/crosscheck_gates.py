@@ -51,8 +51,11 @@ EXPECTED_PUBLIC = 120
 #     （交換率が悪いほど閾値が上がる。banchou4/kaguya/koukaku の4.5枚交換が該当）。
 #   ★162は「宣言」ではなく「実際に公開データへ入った mode」の数★
 #   （宣言178との差15は、note除去でconfigが空になったmode＝タブだけ残る状態を排除した結果）
-EXPECTED_CHECKER_MACHINES = 100
-EXPECTED_CHECKER_MODES = 163
+# ★kaguya は checker 全モードが止まる★（Codex 21巡目 #1 の上限検査を excellent へ戻した結果）
+#   rate45 の excellent=1200 が天井1100Gを超え、早見表が「1200G〜（天井1100G）」という
+#   到達できない行を作るため。数値を作り直すのはPhase 2の出典検証の仕事なので、いまは止める。
+EXPECTED_CHECKER_MACHINES = 99
+EXPECTED_CHECKER_MODES = 162
 
 # ★公開slugの固定集合★ 件数だけだと「1件消えて1件増える」相殺を見逃すため、
 #   集合そのものを持つ。機種を増減したら意図した変更として更新すること。
@@ -270,6 +273,65 @@ def negative_control() -> int:
                                        "surfaces": ["checker"]}})),
         ("目安ラベル無しの数値", "目安ラベル",
          lambda: audit_public.audit_machine({"slug": "x", "name": "t", "limit": 999})),
+        # ===== Codex 21巡目で追加した反例 =====
+        ("HTML: 属性つきタグ", "HTML",
+         lambda: audit_public.audit_machine(
+             {"slug": "x", "name": "t", "strategy": '<span class="a">600G〜</span>',
+              "disclaimer": audit_public.EXPECTED_DISCLAIMER})),
+        ("HTML: イベント属性", "HTML",
+         lambda: audit_public.audit_machine(
+             {"slug": "x", "name": "t", "strategy": '<img src=x onerror=alert(1)>',
+              "disclaimer": audit_public.EXPECTED_DISCLAIMER})),
+        ("不可視文字（U+2066 双方向制御）だけの名前", "表示すると空",
+         lambda: audit_public.audit_machine(
+             {"slug": "x", "name": "⁦⁩",
+              "disclaimer": audit_public.EXPECTED_DISCLAIMER})),
+        ("checker: 交換率ごとの good 欠落", "到達できない",
+         lambda: audit_public.audit_machine(
+             {"slug": "x", "name": "t", "disclaimer": audit_public.EXPECTED_DISCLAIMER,
+              "display_requirements": {"disclaimer": audit_public.EXPECTED_DISCLAIMER,
+                                       "surfaces": ["checker"]},
+              "checker": {"unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+                          "exchangeRates": [{"key": "eq56", "label": "5.6枚"},
+                                            {"key": "rate50", "label": "5.0枚"}],
+                          "normal": {"byRate": {"eq56": {"good": 600, "excellent": 800},
+                                                "rate50": {"excellent": 850}}}}})),
+        ("checker: 入力上限を超える閾値", "入力上限",
+         lambda: audit_public.audit_machine(
+             {"slug": "x", "name": "t", "limit": 700,
+              "disclaimer": audit_public.EXPECTED_DISCLAIMER,
+              "display_requirements": {"disclaimer": audit_public.EXPECTED_DISCLAIMER,
+                                       "surfaces": ["checker"]},
+              "checker": {"unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+                          "normal": {"good": 600, "excellent": 760}}})),
+        ("checker: 半端なセンチネル(99999)", "取り決めの形",
+         lambda: audit_public.audit_machine(
+             {"slug": "x", "name": "t",
+              "disclaimer": audit_public.EXPECTED_DISCLAIMER,
+              "display_requirements": {"disclaimer": audit_public.EXPECTED_DISCLAIMER,
+                                       "surfaces": ["checker"]},
+              "checker": {"unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+                          "normal": {"good": 600, "excellent": 99999}}})),
+        ("checkerが無いのに strategyByRate が残る", "到達不能",
+         lambda: audit_public.audit_machine(
+             {"slug": "x", "name": "t", "strategyByRate": {"eq56": "600G〜"},
+              "disclaimer": audit_public.EXPECTED_DISCLAIMER})),
+        ("公開modeに無い limit キー", "到達不能",
+         lambda: audit_public.audit_machine(
+             {"slug": "x", "name": "t", "limit": {"nope": 700},
+              "disclaimer": audit_public.EXPECTED_DISCLAIMER,
+              "display_requirements": {"disclaimer": audit_public.EXPECTED_DISCLAIMER,
+                                       "surfaces": ["checker"]},
+              "checker": {"unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+                          "normal": {"good": 600, "excellent": 700}}})),
+        ("UIが参照しないフィールドが mode に残る", "参照しない",
+         lambda: audit_public.audit_machine(
+             {"slug": "x", "name": "t",
+              "disclaimer": audit_public.EXPECTED_DISCLAIMER,
+              "display_requirements": {"disclaimer": audit_public.EXPECTED_DISCLAIMER,
+                                       "surfaces": ["checker"]},
+              "checker": {"unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+                          "normal": {"good": 600, "excellent": 700, "count": 3}}})),
     ]
     ng = []
     for name, expect, fn in cases:
