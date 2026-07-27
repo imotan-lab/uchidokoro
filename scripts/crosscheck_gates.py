@@ -393,6 +393,20 @@ def negative_control() -> int:
                                           "rows": [["天井", "999G", "未確認"]]}]})),
         ("[ゲート] 視覚順序を反転させる制御文字", "不可視",
          lambda: _g({**_base, "strategy": "‮スラプが値待期‬"})),
+        ("[ゲート] UIが読めない行形式（left/right）", "行形式",
+         lambda: _g(_base, {"sections": [{"title": "仕様", "type": "settei",
+                                          "rows": [{"left": "天井",
+                                                    "right": "999G"}]}]})),
+        ("[ゲート] UIが読めない行形式（title/badge/value）", "行形式",
+         lambda: _g(_base, {"sections": [{"title": "仕様", "type": "settei",
+                                          "rows": [{"title": "天井",
+                                                    "badge": "weak",
+                                                    "value": "999G"}]}]})),
+        ("[ゲート] trigger/hint 形式は通す", "",
+         lambda: [x for x in _g(_base, {"sections": [
+             {"title": "仕様", "type": "settei",
+              "rows": [{"trigger": "天井", "hint": "999G"}]}]})
+             if "行形式" in x]),
         ("[ゲート] 漢数字も数値面として扱う", "",
          lambda: [] if "strategy" in (gates.publish_view(
              {**_base, "strategy": "天井九百九十九G"})["machine"]

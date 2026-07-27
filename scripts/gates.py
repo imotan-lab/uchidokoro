@@ -1479,10 +1479,13 @@ def _project_simple_rows(rows, ctx: _Ctx, path: str, section_title: str):
         if isinstance(row, list):
             cells = row
         elif isinstance(row, dict):
-            # 実データに存在する行形式（既知のものだけ許可・未知の形は構造エラー）
-            for keys in ({"trigger", "hint"}, {"left", "right"}, {"label", "value"},
-                         {"title", "badge", "value"}, {"title", "value"},
-                         {"label", "badge", "value"}):
+            # ★UI・静的ビルダーが実際に読む形だけを許す★（2026-07-27）
+            #   machine.html / build_machine_pages.py はどちらも辞書行から
+            #   row.trigger / row.hint しか読まない。それ以外の形（left/right,
+            #   label/value, title/badge/value）は **表が全行空欄で描画される**。
+            #   実際に super_rio_ace2・takt_opus・shaman_king・tenken・valvrave の
+            #   計28行が本番で空欄表示になっていた（Codex 22巡目 #4 から発覚）。
+            for keys in ({"trigger", "hint"},):
                 # ★完全一致で判定★（部分集合だと {"value": "580G"} のような片側だけの行を
                 #   通してしまい、対になる条件を失った数値が公開される）
                 if set(row.keys()) == keys:
