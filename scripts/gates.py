@@ -412,16 +412,28 @@ def atom_id(text: str, profile: str | None = None) -> str:
     return hashlib.sha256(f"{profile or '-'}|{text}".encode("utf-8")).hexdigest()
 
 
-def classify_atom(parts, ledger: dict | None, profile: str | None = None) -> str:
+def classify_atom(parts, ledger: dict | None, profile: str | None = None,
+                  slug: str | None = None) -> str:
     """表示原子を ALLOW / DROP / UNCLASSIFIED に判定する。
 
     判定順:
       0. preview で禁止話題を含む → DROP
       1. 絶対禁止／設定段階の非存在断定 → DROP（★台帳ALLOWでも解除できない★）
       2. 台帳 DROP → DROP
-      3. 台帳 ALLOW → ALLOW
+      3. 台帳 ALLOW → ALLOW（★slugs 指定があればその機種でだけ有効★）
       4. リスク語を含まない → ALLOW
       5. リスク語ありで未登録 → UNCLASSIFIED
+
+    ★台帳の適用範囲（Codex 23巡目 #13）★
+      atom_id は「表示テキスト」だけから作るので、同じ文言が別の機種にもあると
+      同じキーになる。機種Aで個別に確かめて ALLOW にした事実が、機種Bへ
+      未確認のまま伝播してしまう。これを防ぐため、台帳の項目に
+
+          {"verdict": "ALLOW", "slugs": ["hokuto"]}
+
+      と書けるようにした。slugs があるときは、その機種以外では効かない
+      （＝未分類のまま止まる）。slugs が無い項目は「文言そのものが安全」という
+      パターン全体への承認として扱う（見出し・スペックのラベル等）。
     """
     text = normalize_atom(parts if isinstance(parts, (list, tuple)) else [parts])
     if not text:
@@ -444,8 +456,17 @@ def classify_atom(parts, ledger: dict | None, profile: str | None = None) -> str
         return DROP
     entry = (ledger or {}).get(atom_id(text, profile))
     verdict = entry.get("verdict") if isinstance(entry, dict) else None
-    if verdict in (DROP, ALLOW):
-        return verdict
+    if verdict == DROP:
+        return DROP                      # DROPは範囲を絞らない（安全側）
+    if verdict == ALLOW:
+        scope = entry.get("slugs") if isinstance(entry, dict) else None
+        if scope is None:
+            return ALLOW                 # 文言そのものへの承認
+        if not isinstance(scope, (list, tuple)):
+            return UNCLASSIFIED          # 壊れた台帳は効かせない（fail-closed）
+        if slug is not None and slug in scope:
+            return ALLOW                 # その機種で確かめた事実
+        return UNCLASSIFIED              # 別の機種へは伝播させない
     if not RISK_PAT.search(text):
         return ALLOW
     return UNCLASSIFIED
@@ -456,8 +477,9 @@ def classify_atom(parts, ledger: dict | None, profile: str | None = None) -> str
 class _Ctx:
     """射影中の診断を集める（★原文も動的キーの中身も保持しない★）。"""
 
-    def __init__(self, profile: str, ledger: dict | None):
+    def __init__(self, profile: str, ledger: dict | None, slug: str | None = None):
         self.profile = profile
+        self.slug = slug
         self.ledger = ledger
         self.unclassified: list[dict] = []
         self.dropped: list[dict] = []
@@ -478,7 +500,7 @@ class _Ctx:
             if why:
                 self.reject(path, why)
                 return False
-        v = classify_atom(parts, self.ledger, self.profile)
+        v = classify_atom(parts, self.ledger, self.profile, self.slug)
         if v == ALLOW:
             return True
         text = normalize_atom(parts if isinstance(parts, (list, tuple)) else [parts])
@@ -1910,7 +1932,7 @@ def publish_view(machine: dict, detail: dict | None = None,
     if not gates["public"]:
         return {"gates": gates, "machine": {}, "detail": {}}
 
-    ctx = _Ctx(gates["profile"], ledger)
+    ctx = _Ctx(gates["profile"], ledger, machine.get("slug"))
     pm = _project_machine(machine, gates, ctx)
     pd = _project_detail(detail, gates, ctx)
     # ★方針による除去でcheckerが空になったら、ゲート表示も閉じて自己矛盾を残さない★
@@ -1964,7 +1986,7 @@ def audit_view(machine: dict, detail: dict | None = None,
     if errs or not gates["public"]:
         return {"gates": gates, "errors": errs, "unclassified": [], "dropped": [],
                 "ok": not errs}
-    ctx = _Ctx(gates["profile"], ledger)
+    ctx = _Ctx(gates["profile"], ledger, machine.get("slug"))
     _project_machine(machine, gates, ctx)
     _project_detail(detail, gates, ctx)
     return {"gates": gates, "errors": ctx.errors, "unclassified": ctx.unclassified,
@@ -2094,6 +2116,51 @@ def selftest() -> int:
            "tables": [{"label": "終了画面", "headers": ["画面", "示唆"],
                        "rows": [[{"text": "白", "badge": "strnog"}, "弱"]]}]}]},
                       led_badge)["errors"]))
+    _scoped = {atom_id("狙い目 / 600G〜", "legacy_safe"):
+               {"verdict": ALLOW, "slugs": ["hokuto"]}}
+    t("★23-13: 機種を指定した台帳ALLOWは、その機種でだけ効く",
+      classify_atom(["狙い目", "600G〜"], _scoped, "legacy_safe", "hokuto") == ALLOW
+      and classify_atom(["狙い目", "600G〜"], _scoped, "legacy_safe", "baki") == UNCLASSIFIED)
+    t("　slugs 無しの台帳ALLOWは文言そのものへの承認として全機種に効く",
+      classify_atom(["狙い目", "600G〜"],
+                    {atom_id("狙い目 / 600G〜", "legacy_safe"): {"verdict": ALLOW}},
+                    "legacy_safe", "baki") == ALLOW)
+    t("　slugs が壊れていたら効かせない（fail-closed）",
+      classify_atom(["狙い目", "600G〜"],
+                    {atom_id("狙い目 / 600G〜", "legacy_safe"):
+                     {"verdict": ALLOW, "slugs": "hokuto"}},
+                    "legacy_safe", "hokuto") == UNCLASSIFIED)
+    t("★23-9: 空白で分断した禁止表現も止める",
+      classify_atom(["期 待 値 が", "プ ラ ス"], None, "legacy_safe") == DROP
+      and classify_atom(["設 定 3 は", "非 搭 載"], None, "legacy_safe") == DROP)
+    t("★23-10: アラビア・インド数字も数値として扱う",
+      _has_numeral("٩٩٩G") and not _has_numeral("あいうえお"))
+    t("★23-7: equivOnly と交換率の選択肢は同時に持てない",
+      bool(audit_view({**base, "checker_modes": {"normal": "STRUCT_OK"},
+                       "checker": {"unit": "G", "equivOnly": True,
+                                   "exchangeRates": [{"key": "eq56", "label": "5.6枚"}],
+                                   "defaultRate": "eq56",
+                                   "modes": [{"key": "normal", "label": "通常"}],
+                                   "normal": {"good": 600, "excellent": 800}}})["errors"]))
+    t("★23-2: 設定表セクションの body は停止（画面に描かれない）",
+      bool(audit_view(base, {"sections": [
+          {"title": "設定示唆まとめ", "type": "settei",
+           "body": ["以下の数値は未確認です"],
+           "tables": [{"label": "終了画面", "headers": ["画面", "示唆"],
+                       "rows": [["赤", "設定6"]]}]}]}, led_badge)["errors"]))
+    t("　tables と rows の併存も停止",
+      bool(audit_view(base, {"sections": [
+          {"title": "設定示唆まとめ", "type": "settei",
+           "tables": [{"label": "終了画面", "headers": ["画面", "示唆"],
+                       "rows": [["赤", "設定6"]]}],
+           "rows": [{"trigger": "青", "hint": "弱"}]}]}, led_badge)["errors"]))
+    t("★23-5: スルーのmodeに suruMax が無ければ停止",
+      bool(audit_view({**base, "checker_modes": {"suru": "STRUCT_OK"},
+                       "checker": {"unit": "G",
+                                   "modes": [{"key": "suru", "label": "スルー",
+                                              "hasSuru": True}],
+                                   "suru": {"suru": [{"count": 0, "good": 600,
+                                                      "excellent": 800}]}}})["errors"]))
     t("★23-3: 表の label / headers が無ければ停止",
       bool(audit_view(base, {"sections": [
           {"title": "設定示唆まとめ", "type": "settei",
