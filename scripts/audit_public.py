@@ -43,6 +43,23 @@ FORBIDDEN_CLAIMS = (
 )
 FORBIDDEN_RE = re.compile("|".join(FORBIDDEN_CLAIMS))
 
+# ★否定形は「収益の断定」ではない★（2026-07-27）
+#   「ゲーム数狙いではプラス期待値が出ません」は利用者への注意喚起であり、
+#   これを消すと記事から警告だけが消えて危険になる。gates とは別実装だが同じ結論を出す。
+#   1か所でも否定でない出現があれば断定として扱う（安全側）。
+_NEG_AFTER = re.compile(
+    r"^.{0,14}?(?:出ません|出ない|ありません|無い|ない(?:です)?|入りません|入らない|"
+    r"なりません|ならない|見込めません|見込めない|狙えません|狙えない|"
+    r"期待できません|期待できない|わけではありません|とは限りません)")
+
+
+def asserts_forbidden(text: str) -> bool:
+    """禁止の言い回しが、否定でない形で使われているか。"""
+    for m in FORBIDDEN_RE.finditer(text):
+        if not _NEG_AFTER.match(text[m.end():]):
+            return True
+    return False
+
 _SET1 = r"[1-6１-６一二三四五六]"
 # 設定の存在そのものを否定する形（語間が長い場合は「引用＋否定」かを見る）
 SETTING_ABSENT_RE = re.compile(
@@ -848,7 +865,7 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
         variants = (shown,
                     re.sub(r"\s*[/／|｜]\s*", " ", shown),
                     re.sub(r"\s*[/／|｜]\s*", "", shown))
-        if any(FORBIDDEN_RE.search(v) for v in variants):
+        if any(asserts_forbidden(v) for v in variants):
             problems.append(f"{slug}: 計算断定の残存 {path}")
         if any(_asserts_missing_setting(v) for v in variants):
             problems.append(f"{slug}: 設定段階の非存在断定 {path}")
@@ -967,7 +984,7 @@ def audit_detail(slug: str, detail: dict, has_disclaimer: bool,
         variants = (shown,
                     re.sub(r"\s*[/／|｜]\s*", " ", shown),
                     re.sub(r"\s*[/／|｜]\s*", "", shown))
-        if any(FORBIDDEN_RE.search(v) for v in variants):
+        if any(asserts_forbidden(v) for v in variants):
             problems.append(f"{slug}: 計算断定の残存 {path}")
         if any(_asserts_missing_setting(v) for v in variants):
             problems.append(f"{slug}: 設定段階の非存在断定 {path}")

@@ -412,6 +412,26 @@ def atom_id(text: str, profile: str | None = None) -> str:
     return hashlib.sha256(f"{profile or '-'}|{text}".encode("utf-8")).hexdigest()
 
 
+# ★否定形は「収益の断定」ではない★（2026-07-27）
+#   「ゲーム数狙いではプラス期待値が出ません」は利用者への注意喚起であって、
+#   儲かるという主張ではない。これを消すと記事から警告だけが消えて危険になる。
+#   ただし1か所でも否定でない出現があれば、その文は断定として扱う（安全側）。
+_NEGATION_AFTER = re.compile(
+    r"^.{0,14}?(?:出ません|出ない|ありません|無い|ない(?:です)?|入りません|入らない|"
+    r"なりません|ならない|見込めません|見込めない|狙えません|狙えない|"
+    r"期待できません|期待できない|わけではありません|とは限りません)")
+
+
+def _asserts_profit(text: str) -> bool:
+    """絶対禁止の言い回しが、否定でない形で使われているか。"""
+    found = False
+    for m in ABSOLUTE_DENY_PAT.finditer(text):
+        found = True
+        if not _NEGATION_AFTER.match(text[m.end():]):
+            return True          # 否定が続かない＝断定として使われている
+    return False if found else False
+
+
 def classify_atom(parts, ledger: dict | None, profile: str | None = None,
                   slug: str | None = None) -> str:
     """表示原子を ALLOW / DROP / UNCLASSIFIED に判定する。
@@ -451,7 +471,7 @@ def classify_atom(parts, ledger: dict | None, profile: str | None = None,
                 re.sub(_sep + "+", "", text))
     if profile == "preview_basic" and any(PREVIEW_FORBIDDEN_PAT.search(v) for v in variants):
         return DROP
-    if any(ABSOLUTE_DENY_PAT.search(v) or SETTING_DENY_PAT.search(v)
+    if any(_asserts_profit(v) or SETTING_DENY_PAT.search(v)
            or _implies_missing_setting(v) for v in variants):
         return DROP
     entry = (ledger or {}).get(atom_id(text, profile))
@@ -2130,6 +2150,13 @@ def selftest() -> int:
                     {atom_id("狙い目 / 600G〜", "legacy_safe"):
                      {"verdict": ALLOW, "slugs": "hokuto"}},
                     "legacy_safe", "hokuto") == UNCLASSIFIED)
+    t("★否定形（注意喚起）は断定として消さない",
+      classify_atom(["ゲーム数狙いではプラス期待値が出ません"], None,
+                    "legacy_safe") != DROP)
+    t("　肯定の断定はこれまで通り止める",
+      classify_atom(["400G〜からプラス期待値に入ります"], None, "legacy_safe") == DROP)
+    t("　否定と肯定が混在する文は止める（安全側）",
+      classify_atom(["プラス域には入りませんが、実質プラス域です"], None, "legacy_safe") == DROP)
     t("★23-9: 空白で分断した禁止表現も止める",
       classify_atom(["期 待 値 が", "プ ラ ス"], None, "legacy_safe") == DROP
       and classify_atom(["設 定 3 は", "非 搭 載"], None, "legacy_safe") == DROP)
