@@ -126,10 +126,26 @@ def _validate_source(src: dict, where: str) -> None:
         _enum(ver["checks"][cid].get("verdict"), VERDICTS,
               f"{where}.verification.checks.{cid}", "verdict")
 
-    # ★独立性が不明なら票に数えない★（数だけ揃えて誤情報を通さない）
-    if (ts["independence_state"] == "UNKNOWN"
-            and ver["vote_disposition"] == "COUNTED"):
-        raise LedgerError(f"{where}: 独立性が UNKNOWN なのに票に数えている")
+    # ★★票に数えてよい条件（Codex 指摘3）★★
+    #   これが無いと、FAIL の出典・C5未通過・同一運営のコピー記事でも
+    #   vote_key を別々に付ければ2票になり、VERIFIED を名乗れてしまった。
+    if ver["vote_disposition"] == "COUNTED":
+        if ver["verdict"] != "PASS":
+            raise LedgerError(
+                f"{where}: verdict={ver['verdict']} なのに票に数えている")
+        bad = [cid for cid in CHECK_IDS
+               if ver["checks"][cid].get("verdict") != "PASS"]
+        if bad:
+            raise LedgerError(
+                f"{where}: {bad} が PASS でないのに票に数えている")
+        if ts["independence_state"] != "KNOWN_INDEPENDENT":
+            raise LedgerError(
+                f"{where}: 独立性が {ts['independence_state']} なのに票に数えている")
+        # vote_key は検証器が registry から作る。発行者IDと無関係な値を許さない
+        if ts["vote_key"] != f"publisher:{ts['publisher_id']}":
+            raise LedgerError(
+                f"{where}: vote_key が発行者IDから作られていない"
+                f"（任意の値で票を水増しできてしまう）")
 
 
 def validate_claim(c: dict, where: str) -> None:
@@ -146,6 +162,26 @@ def validate_claim(c: dict, where: str) -> None:
         _req(v, k, f"{where}.value")
     _enum(v["kind"], VALUE_KINDS, f"{where}.value", "kind")
     _enum(v["operator"], OPERATORS, f"{where}.value", "operator")
+    # ★中身が型どおりか確かめる★（kind=INTEGER なのに raw="非搭載" を通さない）
+    raw = str(v.get("raw", ""))
+    if v["kind"] in ("INTEGER", "DECIMAL", "PERCENT"):
+        if not re.search(r"\d", raw):
+            raise LedgerError(f"{where}.value.raw: {v['kind']} なのに数字が無い: {raw!r}")
+        amt = v.get("amount")
+        if not isinstance(amt, (int, float)) or isinstance(amt, bool):
+            raise LedgerError(f"{where}.value.amount: 数値が無い（型だけ宣言している）")
+        if v["kind"] == "PERCENT" and not (0 < float(amt) < 300):
+            raise LedgerError(f"{where}.value.amount: 機械割として異常な値 {amt}")
+        if v["kind"] == "INTEGER" and float(amt) != int(amt):
+            raise LedgerError(f"{where}.value.amount: INTEGER なのに小数 {amt}")
+    if v["kind"] == "PROBABILITY" and "/" not in raw:
+        raise LedgerError(f"{where}.value.raw: 確率の形（1/x）でない: {raw!r}")
+    # ★判断（JUDGMENT）は VERIFIED にできない★（事実ではないため）
+    if c.get("claim_kind") == "JUDGMENT" and c.get("verify_state") == "VERIFIED":
+        raise LedgerError(f"{where}: 編集判断(JUDGMENT)を VERIFIED にはできない")
+    # claim_id の field 部と field_key の食い違いを止める
+    if str(c["claim_id"]).split(":")[1] != c["field_key"]:
+        raise LedgerError(f"{where}.claim_id: field_key と一致しない")
 
     cond = c["conditions"]
     for k in ("mode", "scope", "counter_basis"):
@@ -169,6 +205,13 @@ def validate_claim(c: dict, where: str) -> None:
             raise LedgerError(f"{where}: 数え方(counter_basis)が未確定のまま VERIFIED にできない")
         counted = [s for s in c["sources"]
                    if s["verification"]["vote_disposition"] == "COUNTED"]
+        # ★同一運営・同一転載系列は1票★（vote_key を別にしても数えない）
+        owners = {s["trust_snapshot"]["ownership_group_id"] for s in counted}
+        lineages = {s["trust_snapshot"]["content_lineage_id"] for s in counted}
+        if len(counted) > len(owners):
+            raise LedgerError(f"{where}: 同じ運営元の出典を複数票に数えている")
+        if len(counted) > len(lineages):
+            raise LedgerError(f"{where}: 同じ転載系列の出典を複数票に数えている")
         keys = {s["trust_snapshot"]["vote_key"] for s in counted}
         if len(keys) < 2:
             raise LedgerError(
@@ -178,6 +221,12 @@ def validate_claim(c: dict, where: str) -> None:
         if not c.get("expires_at") or not _TS_RE.match(str(c.get("expires_at", ""))):
             # ★TTLが無いと、古い記録を公開から落とせない★
             raise LedgerError(f"{where}.expires_at: VERIFIED なのに期限が無い")
+        # ★期限が検証日より前／長すぎる期限を止める（形式だけ整った記録を通さない）★
+        if c["expires_at"] <= c["verified_at"]:
+            raise LedgerError(f"{where}.expires_at: 検証日時より前か同じ")
+        vy, ey = int(c["verified_at"][:4]), int(c["expires_at"][:4])
+        if ey - vy > 1:
+            raise LedgerError(f"{where}.expires_at: 期限が長すぎる（1年以内にする）")
 
 
 def validate_ledger(led: dict, path: str = "ledger") -> list:
@@ -217,8 +266,16 @@ def load_allowlist() -> dict:
     return json.load(open(ALLOWLIST, encoding="utf-8"))
 
 
-def auto_adoptable(claim: dict, allow: dict | None = None) -> bool:
-    """この claim を自動で採用してよいか（許可リストに載っている型だけ）。"""
+def allowlisted_type_candidate(claim: dict, allow: dict | None = None) -> bool:
+    """★これは「型として許可リストに載っているか」だけを見る★
+
+    ★自動採用の可否ではない★（Codex 指摘2）。名前を auto_adoptable にしていたため、
+    「これが True なら公開してよい」と誤解する作りになっていた。実際にはこの関数は
+    field/kind/unit/operator/mode/scope しか見ておらず、次を**見ていない**:
+      counter_basis / verify_state / C0〜C5の結果 / claim_kind / setting / TTL /
+      値が本当に数値として解釈できるか
+    自動採用してよいかは `auto_adoptable()` が最終判定する。
+    """
     allow = allow or load_allowlist()
     if allow.get("default_action") != "DENY":
         raise LedgerError("許可リストの default_action は DENY でなければならない")
@@ -234,6 +291,28 @@ def auto_adoptable(claim: dict, allow: dict | None = None) -> bool:
 
 
 # ---------------------------------------------------------------- selftest
+
+def auto_adoptable(claim: dict, allow: dict | None = None) -> bool:
+    """★自動採用してよいかの最終判定★（型の許可リスト＋実際の検証状態）
+
+    型が許可されているだけでは足りない。検証器が VERIFIED を付け、
+    数え方が確定し、期限内で、事実(FACT)であることまで満たして初めて自動採用できる。
+    """
+    if not allowlisted_type_candidate(claim, allow):
+        return False
+    if claim.get("verify_state") != "VERIFIED":
+        return False
+    if claim.get("claim_kind") != "FACT":
+        return False
+    if claim["conditions"].get("counter_basis") == "UNKNOWN":
+        return False
+    # 検証済みの体裁が整っていること（validate_claim と同じ条件を通す）
+    try:
+        validate_claim(claim, "auto_adoptable")
+    except LedgerError:
+        return False
+    return True
+
 
 def _mk_source(quote: str, pub: str, counted: bool = True,
                independence: str = "KNOWN_INDEPENDENT") -> dict:
@@ -331,6 +410,61 @@ def selftest() -> int:
     t("★TTLが無ければVERIFIEDにできない（古い記録を落とせなくなる）",
       raises(lambda: validate_ledger(_mk_ledger([nottl]))))
 
+    # --- ★Codex 指摘3: 票の水増し（これが最も危ない穴だった）★
+    fail = _mk_claim()
+    fail["sources"][0]["verification"]["verdict"] = "FAIL"
+    t("★verdict=FAIL なのに票に数えたら止める",
+      raises(lambda: validate_ledger(_mk_ledger([fail]))))
+    c5 = _mk_claim()
+    c5["sources"][0]["verification"]["checks"]["C5"]["verdict"] = "SKIP"
+    t("★C5が未通過(SKIP)なのに票に数えたら止める",
+      raises(lambda: validate_ledger(_mk_ledger([c5]))))
+    owner = _mk_claim()
+    owner["sources"][1]["trust_snapshot"]["ownership_group_id"] = "own-a"
+    t("★同じ運営元の2件を2票に数えたら止める（vote_keyを別にしても）",
+      raises(lambda: validate_ledger(_mk_ledger([owner]))))
+    lin = _mk_claim()
+    lin["sources"][1]["trust_snapshot"]["content_lineage_id"] = "lin-a"
+    t("★同じ転載系列の2件を2票に数えたら止める",
+      raises(lambda: validate_ledger(_mk_ledger([lin]))))
+    vk = _mk_claim()
+    vk["sources"][1]["trust_snapshot"]["vote_key"] = "publisher:偽装"
+    t("★vote_key が発行者IDから作られていなければ止める",
+      raises(lambda: validate_ledger(_mk_ledger([vk]))))
+    same = _mk_claim()
+    same["sources"][1]["trust_snapshot"]["independence_state"] = "SAME_OWNER"
+    t("★独立性が SAME_OWNER なのに票に数えたら止める",
+      raises(lambda: validate_ledger(_mk_ledger([same]))))
+
+    # --- ★Codex 指摘5: 型だけ宣言して中身が伴わない値★
+    t("★kind=INTEGER なのに raw='非搭載' は止める",
+      raises(lambda: validate_ledger(_mk_ledger([_mk_claim(
+          value={"kind": "INTEGER", "raw": "非搭載", "amount": 0,
+                 "unit": "G", "operator": "MAX"})]))))
+    t("★機械割として異常な値(999%)は止める",
+      raises(lambda: validate_ledger(_mk_ledger([_mk_claim(
+          claim_id="x:kikaiwari.setting:001", field_key="kikaiwari.setting",
+          value={"kind": "PERCENT", "raw": "999%", "amount": 999,
+                 "unit": "%", "operator": "EXACT"})]))))
+    t("★確率なのに 1/x の形でなければ止める",
+      raises(lambda: validate_ledger(_mk_ledger([_mk_claim(
+          claim_id="x:prob.big:001", field_key="prob.big",
+          value={"kind": "PROBABILITY", "raw": "259", "unit": "1/x",
+                 "operator": "EXACT"})]))))
+    t("★編集判断(JUDGMENT)は VERIFIED にできない",
+      raises(lambda: validate_ledger(_mk_ledger([_mk_claim(claim_kind="JUDGMENT")]))))
+    t("★claim_id の field 部と field_key の食い違いを止める",
+      raises(lambda: validate_ledger(_mk_ledger([_mk_claim(field_key="prob.big")]))))
+    t("★期限が検証日時より前なら止める",
+      raises(lambda: validate_ledger(_mk_ledger([_mk_claim(
+          expires_at="2026-07-27T03:20:00Z")]))))
+    t("★期限が長すぎる（1年超）なら止める",
+      raises(lambda: validate_ledger(_mk_ledger([_mk_claim(
+          expires_at="2028-07-28T03:20:00Z")]))))
+    t("★数え方が未確定(UNKNOWN)のまま VERIFIED にできない",
+      raises(lambda: validate_ledger(_mk_ledger([_mk_claim(
+          conditions={**_mk_claim()["conditions"], "counter_basis": "UNKNOWN"})]))))
+
     # --- 型・語彙
     t("★未知の counter_basis は止める（数え方が決まらない）",
       raises(lambda: validate_ledger(_mk_ledger(
@@ -354,18 +488,29 @@ def selftest() -> int:
              "auto_adopt": [{"field_key": "ceiling.normal.at", "value_kind": "INTEGER",
                              "unit": "G", "operators": ["MAX"], "modes": ["NORMAL"],
                              "scopes": ["AT_GAP"]}]}
-    t("許可リストに載っている型は自動採用できる", auto_adoptable(_mk_claim(), allow))
-    t("★載っていない型は自動採用しない（default deny）",
-      not auto_adoptable(_mk_claim(field_key="kikaiwari.setting"), allow))
-    t("★unitが違えば自動採用しない（ptをGとして扱わない）",
-      not auto_adoptable(
+    t("許可リストに載っている型は候補になる",
+      allowlisted_type_candidate(_mk_claim(), allow))
+    t("★載っていない型は候補にならない（default deny）",
+      not allowlisted_type_candidate(_mk_claim(field_key="kikaiwari.setting"), allow))
+    t("★unitが違えば候補にならない（ptをGとして扱わない）",
+      not allowlisted_type_candidate(
           _mk_claim(value={**_mk_claim()["value"], "unit": "pt"}), allow))
-    t("★scopeが違えば自動採用しない（CZ間をAT間として扱わない）",
-      not auto_adoptable(
+    t("★scopeが違えば候補にならない（CZ間をAT間として扱わない）",
+      not allowlisted_type_candidate(
           _mk_claim(conditions={**_mk_claim()["conditions"], "scope": "CZ_GAP"}),
           allow))
     t("★default_action が DENY でない許可リストは受け付けない",
-      raises(lambda: auto_adoptable(_mk_claim(), {"default_action": "ALLOW"})))
+      raises(lambda: allowlisted_type_candidate(_mk_claim(), {"default_action": "ALLOW"})))
+    # ★★型が許可されているだけでは自動採用しない★★
+    t("検証済み・数え方確定・事実 なら自動採用できる", auto_adoptable(_mk_claim(), allow))
+    t("★UNVERIFIED は型が合っていても自動採用しない",
+      not auto_adoptable(_mk_claim(verify_state="UNVERIFIED"), allow))
+    t("★REVIEW も自動採用しない", not auto_adoptable(_mk_claim(verify_state="REVIEW"), allow))
+    t("★数え方が未確定なら自動採用しない",
+      not auto_adoptable(_mk_claim(
+          conditions={**_mk_claim()["conditions"], "counter_basis": "UNKNOWN"}), allow))
+    t("★編集判断(JUDGMENT)は自動採用しない",
+      not auto_adoptable(_mk_claim(claim_kind="JUDGMENT"), allow))
 
     ng = [n for n, ok in results if not ok]
     print(f"\n{len(results) - len(ng)}/{len(results)} 合格")

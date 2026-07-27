@@ -138,6 +138,57 @@ def _sha(obj) -> str:
     return cl.canonical_sha256(obj)
 
 
+# ★★値の中身から単位を確定する（ラベルだけで決めない）★★
+#   Codex 指摘＋実データの反例：
+#     bandori「天井：最大10周期」          → 周期なのにG数天井にしていた
+#     basilisk_tenzen「天井：BC間333G+α＋BC7スルー」→ 2つの天井を1値に潰していた
+#     tekken6「リセット：200Gから狙い目」   → 狙い目なのに天井にしていた
+#     tekken6「リセット：ポイント天井500pt」→ ptなのにGにしていた
+_UNIT_PATTERNS = [
+    (re.compile(r"(\d+)\s*周期"), "CYCLE", "周期"),
+    (re.compile(r"(\d+)\s*pt"), "POINT", "pt"),
+    (re.compile(r"(\d+)\s*スルー|(\d+)\s*回目"), "THROUGH", "回"),
+    (re.compile(r"(\d+)\s*G"), None, "G"),          # basis は別途 C5 で確定
+]
+# 天井の値として認めない語（狙い目・編集判断が値側に入っている）
+_VALUE_NOT_CEILING = re.compile(r"狙い目|から狙|目安|候補|様子見|ヤメ|やめ")
+
+
+def value_shape(value: str):
+    """値の文字列から (単位候補の集合, 数の個数) を返す。
+
+    複数の単位が混ざる／数が複数ある値は、1つの claim に潰してはいけない。
+    """
+    units = []
+    for rx, basis, unit in _UNIT_PATTERNS:
+        if rx.search(value or ""):
+            units.append(unit)
+    nums = re.findall(r"\d+", value or "")
+    return units, len(nums)
+
+
+def resolve_ceiling(label: str, value: str):
+    """天井系ラベルの型を、**値の中身から**確定する。確定できなければ None。
+
+    返り値 None は「型に落ちない＝未分類として止める」を意味する。
+    """
+    if _VALUE_NOT_CEILING.search(value or ""):
+        return None                       # 値が狙い目などを語っている
+    units, _ = value_shape(value)
+    if len(set(units)) != 1:
+        return None                       # 単位が無い／複数混在（複合天井を潰さない）
+    unit = units[0]
+    if unit == "G":
+        return {"unit": "G", "counter_basis": "UNKNOWN", "value_kind": "INTEGER"}
+    if unit == "周期":
+        return {"unit": "周期", "counter_basis": "CYCLE", "value_kind": "INTEGER"}
+    if unit == "pt":
+        return {"unit": "pt", "counter_basis": "POINT", "value_kind": "INTEGER"}
+    if unit == "回":
+        return {"unit": "回", "counter_basis": "THROUGH", "value_kind": "INTEGER"}
+    return None
+
+
 def classify_label(label: str):
     """ラベルを型に落とす。落ちなければ None。"""
     lb = (label or "").strip()
@@ -228,6 +279,15 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
         if HINT_ROW_LABELS.match(label.strip()):
             continue                       # 設定示唆の項目名（表ごとの扱いは後の段階）
         spec = classify_label(label)
+        # ★天井系は値の中身で単位を確定できたときだけ型を起こす★
+        if spec is not None and spec["field_key"].startswith("ceiling."):
+            shape = resolve_ceiling(label, value)
+            if shape is None:
+                unclassified.append({"pointer": pointer, "label": label,
+                                     "reason": "AMBIGUOUS_CEILING_VALUE",
+                                     "value_excerpt": (value or "")[:60]})
+                continue
+            spec = {**spec, **shape}
         if spec is None:
             # ★数値を含むのに型に落ちない＝止める対象★
             if _NUM.search(value):
@@ -253,7 +313,7 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
             "expected_unit": spec["unit"],
             "source_pointer": pointer,
             "current_text": value,
-            "auto_adoptable": cl.auto_adoptable(
+            "allowlisted_type": cl.allowlisted_type_candidate(
                 {"field_key": spec["field_key"],
                  "value": {"kind": spec["value_kind"], "unit": spec["unit"],
                            "operator": "MAX"},
@@ -274,7 +334,7 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
         "unclassified_atoms": unclassified,
         "coverage": {
             "slots_total": len(slots),
-            "auto_adoptable": sum(1 for s in slots if s["auto_adoptable"]),
+            "allowlisted_type": sum(1 for s in slots if s["allowlisted_type"]),
             "unclassified_atoms": len(unclassified),
             # ★未分類が1件でもあれば、その機種はBUILD/PUBLISH不可★
             "publishable": len(unclassified) == 0,
@@ -336,9 +396,9 @@ def selftest() -> int:
     t("編集判断（主な狙い方）は未分類に入れない",
       all(u["label"] != "主な狙い方" for u in inv["unclassified_atoms"]))
     t("★AT間天井は自動採用の対象・CZ間天井は対象外（許可リストどおり）",
-      [s["auto_adoptable"] for s in inv["slots"]
+      [s["allowlisted_type"] for s in inv["slots"]
        if s["field_key"] == "ceiling.normal.at"][0] is True
-      and [s["auto_adoptable"] for s in inv["slots"]
+      and [s["allowlisted_type"] for s in inv["slots"]
            if s["field_key"] == "ceiling.normal.cz"][0] is False)
 
     inv2 = build_inventory("x", {"slug": "x"}, det)
@@ -374,7 +434,7 @@ def main() -> int:
         inv = build_inventory(args.slug, m, d)
         print(json.dumps(inv["coverage"], ensure_ascii=False, indent=1))
         for s in inv["slots"]:
-            mark = "自動可" if s["auto_adoptable"] else "要確認"
+            mark = "型OK" if s["allowlisted_type"] else "型外"
             print(f"  [{mark}] {s['field_key']:<22} {s['current_text'][:40]}")
         for u in inv["unclassified_atoms"]:
             print(f"  [未分類] {u['label']}  ({u['pointer']})")
@@ -398,7 +458,7 @@ def main() -> int:
                 continue
             inv = build_inventory(slug, m, d)
             tot_slots += inv["coverage"]["slots_total"]
-            tot_auto += inv["coverage"]["auto_adoptable"]
+            tot_auto += inv["coverage"]["allowlisted_type"]
             tot_unc += inv["coverage"]["unclassified_atoms"]
             pub_ok += 1 if inv["coverage"]["publishable"] else 0
             for s in inv["slots"]:
@@ -407,7 +467,8 @@ def main() -> int:
         print("=" * 62)
         print(f"公開予定 {n} 機種の在庫")
         print(f"  検証が要る slot 合計 : {tot_slots}")
-        print(f"  うち自動採用できる型 : {tot_auto}")
+        print(f"  うち許可リストに載る型: {tot_auto}  ※型が載っているだけ。"
+              f"自動採用には検証済み(VERIFIED)が別途必要")
         print(f"  未分類（要対応）     : {tot_unc}")
         print(f"  未分類ゼロの機種     : {pub_ok} / {n}")
         print("-" * 62)
