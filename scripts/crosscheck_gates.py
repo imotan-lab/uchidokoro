@@ -46,8 +46,10 @@ EXPECTED_PUBLIC = 120
 #   ゲートは110機種で開くが、10機種28modeは説明文に禁止表現（プラス域等）が残っており
 #   方針どおり内容除去され、結果としてcheckerが空になる（＝100機種178mode）。
 #   Phase 2 の記事再生成で禁止表現が消えれば、この数は110/206へ戻る想定。
+#   ★163は「宣言」ではなく「実際に公開データへ入った mode」の数★
+#   （宣言178との差15は、note除去でconfigが空になったmode＝タブだけ残る状態を排除した結果）
 EXPECTED_CHECKER_MACHINES = 100
-EXPECTED_CHECKER_MODES = 178
+EXPECTED_CHECKER_MODES = 163
 
 # ★公開slugの固定集合★ 件数だけだと「1件消えて1件増える」相殺を見逃すため、
 #   集合そのものを持つ。機種を増減したら意図した変更として更新すること。
@@ -139,9 +141,18 @@ def run() -> int:
             problems.append(f"{m['slug']}: 公開が止まった（{e}）")
             continue
         published += 1
-        if view["gates"]["checker"]:
-            checker_machines += 1
-            checker_modes += len(view["gates"]["checker_modes"])
+        # ★宣言ではなく「実際に公開データへ入った mode」を数える★
+        #   （宣言だけ残って中身が無い状態を「監査済み」と誤認しないため）
+        pub_ck = view["machine"].get("checker")
+        if isinstance(pub_ck, dict):
+            live = [k for k in view["gates"]["checker_modes"] if k in pub_ck]
+            if live:
+                checker_machines += 1
+                checker_modes += len(live)
+            if sorted(live) != sorted(view["gates"]["checker_modes"]):
+                problems.append(f"{m['slug']}: 宣言modeと公開configが一致しない")
+        elif view["gates"]["checker"]:
+            problems.append(f"{m['slug']}: checkerゲートは開いているのに公開データにcheckerが無い")
         # slug重複も停止条件に含める（同じslugが2件あると上書き事故になる）
         problems.extend(audit_public.audit_machine(view["machine"], seen_slugs))
         # LEGACY（記事を出す状態）なのに記事が空なら、記事欠落として止める
@@ -223,29 +234,31 @@ def axis_regression() -> list[str]:
 def negative_control() -> int:
     """危険な文を注入して、監査器が確実に鳴ることを確かめる。"""
     cases = [
-        ("機種データの計算断定",
+        ("機種データの計算断定", "計算断定",
          lambda: audit_public.audit_machine(
              {"slug": "x", "name": "t", "strategy": "580G〜から期待収支がプラスになります",
               "disclaimer": audit_public.EXPECTED_DISCLAIMER})),
-        ("記事の分割断定",
+        ("記事の分割断定", "計算断定",
          lambda: audit_public.audit_detail(
              "x", {"sections": [{"title": "期待値が", "body": ["プラス"]}]}, True)),
-        ("設定の非存在断定",
+        ("設定の非存在断定", "設定段階",
          lambda: audit_public.audit_machine(
              {"slug": "x", "name": "t", "info": "設定3は非搭載",
               "disclaimer": audit_public.EXPECTED_DISCLAIMER})),
-        ("秘密つきURL",
+        ("秘密つきURL", "URL",
          lambda: audit_public.audit_machine(
              {"slug": "x", "name": "t", "sources": [{"url": "https://a.example/x?token=S"}],
               "disclaimer": audit_public.EXPECTED_DISCLAIMER})),
-        ("目安ラベル無しの数値",
+        ("目安ラベル無しの数値", "目安ラベル",
          lambda: audit_public.audit_machine({"slug": "x", "name": "t", "limit": 999})),
     ]
     ng = []
-    for name, fn in cases:
+    for name, expect, fn in cases:
         found = fn()
-        print(("✅" if found else "❌") + f" {name}: {len(found)} 件検出")
-        if not found:
+        # ★「何か検出した」ではなく「注入した違反そのものを検出したか」を見る★
+        hit = [p for p in found if expect in p]
+        print(("✅" if hit else "❌") + f" {name}: {len(hit)} 件検出（全{len(found)}件）")
+        if not hit:
             ng.append(name)
     print(f"\n陰性対照 {len(cases) - len(ng)}/{len(cases)} 合格")
     return 1 if ng else 0

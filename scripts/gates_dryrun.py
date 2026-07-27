@@ -13,36 +13,24 @@ import os
 from collections import Counter
 
 import gates
+import build_ledger as bl
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(BASE, "assets", "data")
 
 
 def provisional_lifecycle(m: dict) -> str:
-    """移行の暫定案（Phase 1）。現状 index されている＝LEGACY_SEARCH（"検証済み"ではない）。"""
-    return "VERIFIED_PREVIEW" if m.get("status") == "preview" else "LEGACY_SEARCH"
+    """暫定 lifecycle（単一情報源＝build_ledger.provisional に委譲）。"""
+    return bl.provisional(m)["lifecycle"]
 
 
 def provisional_checker_modes(m: dict) -> dict:
-    """現行データからの暫定 checker_modes。
+    """暫定 checker_modes（単一情報源＝build_ledger.provisional に委譲）。
 
-    ★運営者決定（2026-07-27）★
-      「構造が正しい(STRUCT_OK)」と「数値が裏取り済み(VERIFIED)」を分ける。
-      Phase 0 の事故は構造バグ（回数入力なのにG数判定）で、該当modeは _disabled 済み。
-      よって _disabled でないmodeは STRUCT_OK とみなし、「当サイトの目安」明示で表示する。
-      数値の裏取り（VERIFIED昇格）は Phase 2 で順次。
+    ★以前ここに独自実装があり、突き合わせ側と状態がズレて
+      checkerが一度も検証されない穴になっていた（Codex 15巡目 #1）。★
     """
-    c = m.get("checker") or {}
-    out = {}
-    for k, v in c.items():
-        if isinstance(v, dict) and k not in ("modeData", "byRate"):
-            out[k] = "DISABLED" if "_disabled" in v else "STRUCT_OK"
-    md = c.get("modeData")
-    if isinstance(md, dict):
-        for k, v in md.items():
-            if isinstance(v, dict):
-                out.setdefault(k, "DISABLED" if "_disabled" in v else "STRUCT_OK")
-    return out
+    return bl.provisional(m)["checker_modes"]
 
 
 # 識別子・日付・slug は置き換えない

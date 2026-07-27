@@ -780,9 +780,19 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
                                  "modeの内容が公開基準を満たさない（部分的に出さない）")
             continue
         out[key] = pm
-    # VERIFIEDなのに1つも出せないなら checker を出さない（UIが空configで例外になるのを防ぐ）
-    if not any(k in out for k in allowed_modes):
-        return None
+    # ★宣言と実体を一致させる★
+    #   内容除去で一部modeのconfigだけ消えると「タブは出るが判定できない」状態になる。
+    #   実際に出せた mode だけを宣言に残し、公開ゲート側にもその集合を返す。
+    live = [k for k in allowed_modes if k in out]
+    if not live:
+        return None                      # 1つも出せないなら checker ごと出さない
+    if isinstance(out.get("modes"), list):
+        kept = [m for m in out["modes"] if m.get("key") in live]
+        if kept:
+            out["modes"] = kept
+        else:
+            out.pop("modes", None)
+    out["_live_modes"] = live            # 呼び出し側が gates を整合させるための内部連絡（後で除去）
     return out or None
 
 
@@ -1268,6 +1278,15 @@ def publish_view(machine: dict, detail: dict | None = None,
     if gates["checker"] and "checker" not in pm:
         gates = {**gates, "checker": False, "checker_modes": [], "checker_is_estimate": False}
         assert_invariants(gates)
+    # ★一部modeだけ消えた場合も、宣言・ゲート・実体を一致させる★
+    #   （「タブは出るが中身が無い」状態を公開しない）
+    elif isinstance(pm.get("checker"), dict) and "_live_modes" in pm["checker"]:
+        live = pm["checker"].pop("_live_modes")
+        if sorted(live) != sorted(gates["checker_modes"]):
+            cm = machine.get("checker_modes") or {}
+            gates = {**gates, "checker_modes": sorted(live),
+                     "checker_is_estimate": any(cm.get(k) == "STRUCT_OK" for k in live)}
+            assert_invariants(gates)
 
     # ★スキーマ破壊は内容判定と別チャネルで必ず止める★
     if ctx.errors:

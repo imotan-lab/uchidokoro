@@ -28,6 +28,7 @@ import json
 import re
 import sys
 import unicodedata
+from datetime import date
 
 # 公開してよい固定文言（gates 側と同じ値だが、意図的にここへ独立に持つ）
 EXPECTED_DISCLAIMER = "当サイトの目安です（メーカー公表値・確定解析ではありません）"
@@ -70,6 +71,18 @@ SECRET_HINT_RE = re.compile(r"token|key=|sig=|signature|auth|session|password", 
 SLUG_RE = re.compile(r"^[a-z0-9_]+$")
 _KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,31}$")   # mode名・交換率キーの形式
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _valid_date(s) -> bool:
+    """字面だけでなく実在する日付か（2026-02-31 のような値を通さない）。"""
+    if not (isinstance(s, str) and _DATE_RE.match(s)):
+        return False
+    try:
+        y, m, d = (int(x) for x in s.split("-"))
+        date(y, m, d)
+        return True
+    except ValueError:
+        return False
 
 _TAG = re.compile(r"<[^>]*>")
 _ZW = re.compile(r"[​-‏⁠﻿­]")
@@ -283,6 +296,9 @@ def _audit_checker_shape(slug: str, ck, path: str = "checker") -> list[str]:
             out.append(f"{slug}: {path}.{k}.note の型が不正")
         for seq in ("suru", "cycle"):
             if seq in v:
+                if seq == "cycle" and isinstance(v[seq], list) and v[seq] and all(
+                        isinstance(x, (int, float)) and not isinstance(x, bool) for x in v[seq]):
+                    continue          # 数値配列の周期（gatesが許す正当な形）
                 if not isinstance(v[seq], list):
                     out.append(f"{slug}: {path}.{k}.{seq} の型が不正")
                 else:
@@ -423,8 +439,8 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
         if k in pub and not isinstance(pub[k], typ):
             problems.append(f"{slug}: フィールド {k} の型が不正")
     for k in ("release_date", "confirmed_at"):
-        if isinstance(pub.get(k), str) and not _DATE_RE.match(pub[k]):
-            problems.append(f"{slug}: {k} の日付形式が不正")
+        if k in pub and not _valid_date(pub[k]):
+            problems.append(f"{slug}: {k} の日付が不正（実在しない日付を含む）")
     lim = pub.get("limit")
     if "limit" in pub:
         if isinstance(lim, dict):
@@ -463,8 +479,8 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
         for k in ("title", "confirmed_at"):
             if k in s and not isinstance(s[k], str):
                 problems.append(f"{slug}: sources[{i}].{k} の型が不正")
-        if isinstance(s.get("confirmed_at"), str) and not _DATE_RE.match(s["confirmed_at"]):
-            problems.append(f"{slug}: sources[{i}].confirmed_at の日付形式が不正")
+        if "confirmed_at" in s and not _valid_date(s["confirmed_at"]):
+            problems.append(f"{slug}: sources[{i}].confirmed_at の日付が不正")
         why = _check_url(s.get("url", ""))
         if why:
             problems.append(f"{slug}: {why} sources[{i}]")
@@ -553,6 +569,8 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
             problems.append(f"{slug}: 数値を公開しているのに目安ラベルが正しくない")
         if not isinstance(dr, dict) or not isinstance(dr.get("surfaces"), list):
             problems.append(f"{slug}: 数値を公開しているのに表示要件が無い")
+        elif dr.get("disclaimer") != EXPECTED_DISCLAIMER:
+            problems.append(f"{slug}: 表示要件に固定文言のdisclaimerが無い")
     elif "disclaimer" in pub and pub["disclaimer"] != EXPECTED_DISCLAIMER:
         # 数値が無いのに独自文言のラベルが付いているのも契約違反
         problems.append(f"{slug}: 目安ラベルが固定文言と違う")
@@ -669,6 +687,11 @@ def audit_detail(slug: str, detail: dict, has_disclaimer: bool,
                 continue
             if f"detail.{k}" not in surfaces:
                 problems.append(f"{slug}: 記事の数値がある面が表示要件に無い: detail.{k}")
+        # ★余分な detail 面の宣言も違反（完全一致）★
+        actual_detail = {f"detail.{k}" for k, v in detail.items()
+                         if _NUM.search(as_displayed(json.dumps(v, ensure_ascii=False)))}
+        for extra in sorted({x for x in surfaces if str(x).startswith("detail.")} - actual_detail):
+            problems.append(f"{slug}: 数値の無い記事面が表示要件にある: {extra}")
     # 出典の確認日形式（記事側からは参照しないが、契約として揃える）
     return problems
 
@@ -691,7 +714,8 @@ def audit_file(path: str, expected_count: int | None = None,
                 problems.extend(audit_detail(
                     m["slug"], json.load(open(dp, encoding="utf-8")),
                     has_disclaimer=isinstance(m.get("disclaimer"), str)
-                    and m["disclaimer"] == EXPECTED_DISCLAIMER))
+                    and m["disclaimer"] == EXPECTED_DISCLAIMER,
+                    surfaces=(m.get("display_requirements") or {}).get("surfaces")))
             else:
                 # ★記事ファイルが無いことを「検査不要」にしない★
                 #   （ファイルを置き忘れれば検査を素通りできてしまう）
@@ -776,7 +800,8 @@ def selftest() -> int:
     def _ax(ck):
         # strategy にも数値があるので表示要件に両方を挙げる（実装が求める正しい形）
         return audit_machine({**ok, "checker": ck,
-                              "display_requirements": {"surfaces": ["checker", "strategy"]}})
+                              "display_requirements": {"disclaimer": EXPECTED_DISCLAIMER,
+                                                       "surfaces": ["checker", "strategy"]}})
     good_ax = {"unit": "G", "modes": [{"key": "suru", "hasSuru": True}],
                "suru": {"suru": [{"count": 0, "good": 600}, {"count": 1, "good": 500}]}}
     t("★軸契約(監査側): 正しい二軸は通す", _ax(good_ax) == [])
@@ -813,8 +838,10 @@ def selftest() -> int:
     t("★独立検査: 数値のある面が表示要件に無い → 違反",
       any("表示要件に無い" in p for p in audit_machine(
           {**ok, "strategy": "600G〜", "display_requirements": {"surfaces": []}})))
+    t("★独立検査: 実在しない日付を弾く",
+      any("日付" in p for p in audit_machine({**ok, "release_date": "2026-02-31"})))
     t("★独立検査: 日付形式・limit・aliases・strategyByRate の不正を検出",
-      any("日付形式" in p for p in audit_machine({**ok, "release_date": "2026/8/1"}))
+      any("日付" in p for p in audit_machine({**ok, "release_date": "2026/8/1"}))
       and any("limit" in p for p in audit_machine({**ok, "limit": True}))
       and any("aliases" in p for p in audit_machine({**ok, "aliases": [1]}))
       and any("strategyByRate" in p for p in audit_machine({**ok, "strategyByRate": {"eq": 1}})))
