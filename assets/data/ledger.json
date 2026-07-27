@@ -1,0 +1,1818 @@
+{
+ "eb4f0612654d4986ff805062a8cf795b4cd5b342a814fb0c68a269fab90ee1f0": {
+  "verdict": "ALLOW",
+  "note": "統一セクション見出し（事実主張を含まない定型ラベル）"
+ },
+ "e770cf4a902a7a7f86f836c599a0a61f0e01fa921073fa5c2834d19ca8e8716e": {
+  "verdict": "ALLOW",
+  "note": "統一セクション見出し（事実主張を含まない定型ラベル）"
+ },
+ "8bc1277374e0729a343d949a9b46b13600685186375d157e67d89d02dd6d1811": {
+  "verdict": "ALLOW",
+  "note": "設定段階の記載（欠番の暗示は gates 側で別途DROP）"
+ },
+ "512e426181b3b75789330b694414b28d55a3003924d24d42f399b95df4e1b1bf": {
+  "verdict": "ALLOW",
+  "note": "仕様の事実（機構の記載）"
+ },
+ "27f0edff97911e013b244ecdf8b03b5c1f926eb0a03fae11bfe29744e0fa509a": {
+  "verdict": "ALLOW",
+  "note": "統一セクション見出し（事実主張を含まない定型ラベル）"
+ },
+ "0053e3b4c06f9d757f813416e36d6504b7fd13b0375b5ec329ab2de81e10af2d": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "1721d70af18f54bcff6dafd570a0e54aaf4643bceaf8a5f71f445dbf45f539ee": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "4b6fddd28711c82b38d7218c29d9f84b7a3d1720366bf21db9fa43cceb34217d": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "626c6a96aebc8d6899f81e3f4dc91fbc987bf22fd6aef7476f82473525b6e26a": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "38d786060721148f90e1cfe9c7310043cbbc61a5f0dc284ac91418fa1c45ac4e": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "046aa2ed36d21b156f4a7b11bba9f5206bba5f42d827022854b3fd714641845e": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "44f67913d72058c66b7d4fa496f461947d6da7f11eb80709908380c3139a8955": {
+  "verdict": "ALLOW",
+  "note": "設定段階の記載（欠番の暗示は gates 側で別途DROP）"
+ },
+ "eb8e6a8105aa09c6f575c736c6977408ff58d868cfb46ef7eb9afdcf59994d0f": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "33df1348d9015d73c5e2fcd094b7eff006f19266e414ed609d63f8a9d5ac5304": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "7d5801e51b50e482fcb17208d86b8b28068af26f312fe1728b08d07b55778ed0": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "53410fb4d62401bc7b887e33a7e4603438ee2cfb790465392a4dab8182141938": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "1c21194091146eb1a26dcf7666713aff0e0a74b1d32a201ceec69d61e7acd8b7": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "ffe299821ce7bd83b71cc882c5f5df7b457d357f838429eadb3aadfd5ce4d5ca": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "becb17259a630fd1ae147e2c339cbdfaf1f5bff0a90c51362613d576ffb30e31": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "2754b1363d11dbb16ee5bfb844a4747e819122a862211367b248f04a591d3c76": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（項目:数値の定型）"
+ },
+ "05ac9da1f58708b2bdedde42595a1da0666498f05f2321f6b0beb50a64d88c28": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "7a7cf5cc4272cdb64f795bd44c7a8e11a404802b0050f456b207a4da9a38bdeb": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "81309eac223397f56970c42e687f482c7a0548ec9614b420f2ec20bf01ce53fe": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "b6383fe12cb6fea8bca16d1ecefed50ab1adde594e5aa8110a86ee48fe5de943": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "9db80bd4eb8a79456b092dce3e77012ef3605b731452968d9a8a47946b8bf5db": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "64e17b83b63a078f00c840d759ff3ff8e8c12bb9ccdf36cf8abb39147209c346": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "cbca7643dc1cdaaf5c2cf0cc97b7e1ed422c7803b67ce9d2a0b31546f933e4e3": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "ae3315483a8eb9763f0396b4a0c5416bac2a65b861d37c028b73f37222f2ed5e": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "5e962c07042599978ba6e2a3e8499e0ec207ee007a52cd71a219e5cbf1fdab6d": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "aa5a8ecfdbc3d0ec409cab744f8a6669adc3528c07e575a2c722bb9222c5f6e8": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "96c0bbd535e0309986e4a83bea701375edc7a46985149284f18244a04218cb7a": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "64283e54da15cd07e33c4663cdae6f88f6713f39d905048f6955dbdeda959057": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（項目:数値の定型）"
+ },
+ "fdaef793961933e8256d9c50372fc28020f209be4b6dd4cf6481dbf182439558": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "99dafdc6f66ad15e97dbf16c00a3f6bf2b44b3f19f82de3cc22f6fca531b8a9c": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "6ae892701e7e1ebf94b681830b713192e9c85064842c14f66d5c3eb65d85346c": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "9cfb87dffda7c83dc34f3e8f67fe09e83d99e3ace3925d79ea7718bfa84ad530": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "41c298e3b7ab1e2dcaa484cddb57ecd2ffa83ed1f5ba2389d69656ff9e2ea1eb": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "41c0630a950e813256aece30c3086c0fab20f8fdd3d409a38a21e4458ec5174c": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "488d7c04a0e81c098c6d2596a9f1a635f96435792f2fdfd005d533d0dd38a186": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "712b81ec578e040cfd9990a1e8f8098509ed8c8ef81dc9620bffac6f51957de1": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "66004d1063e4720be8cdc195dbadf619133bc76b39374ba92e270d37c0ab6bc6": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "fd21652d793a0b49488d97fb1ae7d4d3cbd25b3323a49a7962e5f990daee5204": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "3e2eb83d56f271bfaea5a484f67241a9821475db28b1a7fef2623673544d2f18": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "8a5cc5a8fe32655543fa419d0900913c7751b5a31f523368945be75d0b89c4bc": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "0e6dbda020a9b589328d034e8cece2f238fc84bfc0186084857cfb0f9a5cf5b7": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "4684e3b926b9f319966e94745a31c490c27496b708329db6834b56e44e67fa0b": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "242908b231092ffd51922b6f871c44637f00f34f842496a7c905a83638216641": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "34640906d3089aa34a694e767dd2c5675691c09831d56426af22c22a0f77eae2": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "2dced46211d869b05aaafe84eef393abadf67a0d5d2fed8c3d87df682d75e55d": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "769f0fafd7b292c49143266206adf723cbb7305be1722d67e012c7c00bac8df0": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "6820d84a7a47627a638cc908d879bc1ddbafd9e1d036b8f1e8e35e4ef9f93311": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（項目:数値の定型）"
+ },
+ "6f85702c671ce179d71288e3b15bb76b01143403c6312d044b4b7ff1a79f0ea9": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "d42e5c11be5a0800d512fbfefed4c57731e54c879815ecfbedb74c4a24795b5d": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "d1d9ac3d05c511aee30072325191b0502baf9d1d9b3727471702309e755bb04b": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "7173e9f79346732da3d08ff3a10e75981030f8d4a245296f7d4def6b8db463f3": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "7b04374d3d0ca827dfe3168f4c3848fab78fa6179c14aec4354ad3e4db9d8f3e": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "53a1b96f62ff32947cf625db8411534fb1a84faac00eb4fb2e245e9ecff899f2": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "c8dbfb22fc2a5b8827defa9e0ad82ae367117b599877ec962772b792830d48a5": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "20a4597cc34d6091aee3b3efaeec544f99224d9703722cd177dc09c92222c8be": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "01260b33ffbdd0059eee73f659ba94d18745eec84a63257903c64703b97e6697": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "cbcacfd1f746ba78c8dc03c6b94106f49a578a2e08f2a7ad208a07db2dc9d6da": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "87c79fbfb9488f460413211d3ee8e17c5c15a0b7b4453795face68567443830a": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "690dbf601120dc23f26dae670d16f0cfd759fccbaa5fd2220fa03144558d03bf": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "86a221808209525fea9d21b907fb1cf56c489f7abde161446596b0d19da9a7f4": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "6deab35320899cc9232918efe20c6b937e43c6d179582457aaeca45a77815315": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "478d14a48623ffcda29212e1ad6f4fddcad2ada845d7167b1901c35aa447a189": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "3823ab6d3d76cbe0c9223d42fd284ac59267942119450145478226944c1fbfd0": {
+  "verdict": "ALLOW",
+  "note": "天井の事実（ラベル＋数値表記）"
+ },
+ "9a465ea72047c0cc1ccef5922d7f3b595d136748adf7adb311d0227495207cba": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "755e8abb907110edd85c4a19162a2daea0e2c4dff96997ac92f456f04731a868": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "55986ced375aa82fc36d99241a70e62d16ec990bcdb9862a3947834b17950cef": {
+  "verdict": "ALLOW",
+  "note": "天井の事実（ラベル＋数値表記）"
+ },
+ "51e7d2bcfd44030713b5c0acaa2866ab12b577448199bb686f26649f4f25afff": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "5d3015aacb6d161a7e4933a8f86f27f12d0aa3e244b421b546ec1d442eaa1645": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "d3ae00145076220004ab8e86d7cd7c67498fe2c95acd5345be4c870a955d4beb": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "7d80c022e9079e22987da588e1a33e5155ef0909c71cbc5a3084d62fb02756e8": {
+  "verdict": "ALLOW",
+  "note": "設定段階の記載（欠番の暗示は gates 側で別途DROP）"
+ },
+ "bd07d11e2dbd3c8cc7fe9b5a14251eb5c385bac7de4d0e8448208d37be2e5865": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "d136f57a65e101780427f81c0b7ef327c55789241c7ff7ce97d9e64f4a3c27cc": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "1bb732aa4b8f30a8c481aa242d357e1f244ccf611fc9f40bef7681276fbd2bae": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "c0df17ec89a728e1605b6721b2af7144a420be078643a863da95dfce6554d48e": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "71f966206ad31218bfd35ec9814d7ca9e00e03becde5b439dbffa26cdb642b02": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "d7e44ef3ae27bc9bd78f4f0fb5dc108d3acbf081983f0c0c6e452b41b9ad46a5": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "e2d342a00a4b33059ef8ad37b1d0a4d6f9d1afe1a31fe8b586460673c4fd7d33": {
+  "verdict": "ALLOW",
+  "note": "天井の事実（ラベル＋数値表記）"
+ },
+ "ae4e828d9d46fb91093dcfa1cf5e4336f91718a3899c53bd3f851a89e1af7e28": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "371b0eb69b8e779828ccefb91ded9ea244a811e45681ea58f43c6150c86af468": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "b67bf47026f4c2ab0fc8a84ab7686af52031c0a5d960630af98bd260173c7b48": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "77a3551aa8fd580b6d9d8f3e0a9852d2e74f7469b6a14861709c072fbe9e48e8": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "80bbe037443bebb7ee5db923f6d2b6ff916719c0b8cbc4c49014d5d1810e617e": {
+  "verdict": "ALLOW",
+  "note": "天井の事実（ラベル＋数値表記）"
+ },
+ "9d4f0279c1582f4ea0a9735b5b6c4a771d90fcc882026080ee25e59afe4231e0": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "ccba086340aec71c3eb4ca6c387e7b91d308aeb0f4d3acd6f2af61fec7e6e646": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "7b08b536a379a97c0ea92ce797faf74072f388e29a3e0346cb97cabd0d4e5762": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "be3be8ea1af14a9f200eeba78d1f70a1711f7436b36c4b77c0d8bed8ed7cefd3": {
+  "verdict": "ALLOW",
+  "note": "天井の事実（ラベル＋数値表記）"
+ },
+ "97dfe770fbecd530734be168debfd6c4ec5827997dc0bbd775637599e2ef798f": {
+  "verdict": "ALLOW",
+  "note": "天井の事実（ラベル＋数値表記）"
+ },
+ "d48096d24cdc4d35f41bd9468e065c0d8908d9fb19d1f6c07453c81ecfdca34b": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "b36d1a8456605f75274172aa0ea1eb543be91314fea7bd823028391bb588e26e": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "eaac860b6176932f035814d8690e1eaa2f438e499e5497ef5368319cd0ce6ab1": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "271e1ab816df84f181926660e2b162956a61b6801df19da367f33fb1cdedb70a": {
+  "verdict": "ALLOW",
+  "note": "天井の事実（ラベル＋数値表記）"
+ },
+ "fd182ccb5a9126752528cf2a238796f65034deaae06d101f96e8eef02c2f31b2": {
+  "verdict": "ALLOW",
+  "note": "天井の事実（ラベル＋数値表記）"
+ },
+ "d24c22ab279025075cb54a79ad3918baa722282481fb439fa1042a6ae7fbb8d8": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "76dede343974cfcb27fbfef688a5ed645ad1289da66a027df6115cb3964cccb5": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "fc98e9808360498979ed11b44774d348fdcea305f386190cfc409c122c318380": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "d04ec0c073e18ef9f3826d402de33eccf389c584c04ad3161032e96b11ca8264": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "a1bd8ac63cf78b8fbb58b4330479a42c566cf7917387b5a1ae0c77da3d8b188f": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "e9b5a1555ab04eb3f151e5db564faecd4849d9e31c7b260052662330c48b02b6": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "df1575e32d95703dccd96c363133f5e10fe2dc35fe656c4cb90955c795476381": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "b7e71878f6df451f03bd1d43ac41ec98c44e87ab4a423bc31da68e75f551e181": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "f112ff946d8dcd61533aac9db98471906ca7482aab88cd34ed35d33eb948a250": {
+  "verdict": "ALLOW",
+  "note": "天井の事実（ラベル＋数値表記）"
+ },
+ "e430269714ccb6290e9f77613be5314d62292e33a05ddda171ffd5a086b61277": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "bda21b7c63c67ee28eff286c04cf27e01b649c169d64bfaaa94edfd9f98f973e": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "932648b0cc7bfec6a2f71f98ce1c72e49537addb68cf47b3c60b2244b56c8129": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "3aecf57ea7d48c7538c3edebbbfa6075e5f423d9fe14b07300d25d367bc740bb": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "5d7b9799ce75bdd3d80765eceba320c800578f48dc08cb5e0c81b2da57bcf0e8": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "0f2a9900a54ee7d6efc69f39faa4aa0fe4ee63627d084f6e92299bda4dea0047": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "1725d40227bff41e55698b95c37c3ca1f8bfedb526e345b90f0073ae7e8de96b": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "aed48602a5755773ac982b14612f2f1f4d61e7477df3367ecc43d4136a4b9add": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "54619500369de3838d8eadcb3cdfd4021228b7dac86740621a1107113ace15a9": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "bb4e59805f656b74f0a37605be4cfd789b990caa7f4763bd2f9e5d9b29bd94e3": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "d96351cc6aa4b3da0e141875109529af7121421af8012b00eb027dfa1ec4972f": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "4d55550633166eedf9c04c1c3a29acfff5ff9ce7604f112b5528730a40c2adcb": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（項目:数値の定型）"
+ },
+ "39d1a0499ba22d630a388c86b6e0cb4ab3d32ef9e396d5168c60242a2eb17d3d": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "01e65b12372e3b68d3238e4c43236e7c7a7221b80fa21aa6b5233ae60b16acf2": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "8e55480b3b2b5770b7a42ae0cff0019eafb632e7a05fe3bf55ee4b6859796880": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "9e87475c50c7a1d6648bd15ae78e82ed850885e676fb782c9e9e89f6b885cbe9": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "f08604edb3c660b24053b0fbcd9a79fece0c5bf0337ef2387822bf3e8a1745e7": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "557aeeeadcf4027e4d42c4eaf71b93800eea0e53bfe5ba017ddac2ac830729f3": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "a332738a404771e8fd6be97fa91ecd1fd45f62165a833e3678a05e0782c9bf03": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "0f5e9ecaa9ac85a18f9161b865285ee61774de1318b1b4b69d71bc9fe5dc1bf8": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "d3c38ed1572d813ab921f0048a7e056f8403b453ee9db3b612fbc9777efd74cb": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "e02e0575023eb8b4a7b542a5b8204c4396a03e2d0ac353efa9b17e8034bc6040": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "c2fcf452751b5a925fd86b035ff92918efcf0aa849dd7e675f5a8df73c88c05e": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "8982172c0f233d32ba3fd6424c92824cdd82606bc1c534d8c3e5f30bdca76034": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "b4b6576ab7c32c8bfcdc7cd6b23fd09503ae20f426d4fa6a4ca5086b64a09433": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "bdd7dbab788af861593a9cf40a3c9e46d2544c2b553e0c52991a38acf3bd5ef1": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "daca4a76455cde497ced197098c6b0af1e3cdcc231e4477e1057e4286ef22f98": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "91e6891e6c487d51809cdc35e3ca2f2c1a8793f787090d858bbe957fe27f7e3e": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（項目:数値の定型）"
+ },
+ "205f617bfbf3cc87c0c1cf7762006863831f04e433b1e724fd9b3a4db3850259": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "3304d452e776b0ea59e8e60d3dddaf8c3fffe325ccb317b6c12c99817703fc8e": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "05f8ffe84cdb242ab240ece0e9471cada00837c0d3c1bb9953ac6b209a01236c": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "6eef31e11a9a91893cc980d319351a8d295f9ae17abe2d93db01eebbfb2b296c": {
+  "verdict": "ALLOW",
+  "note": "天井の事実（ラベル＋数値表記）"
+ },
+ "34eef8d0c89687ca87bc05c69a890630cc29ee3f94b730f2f882f8166bee05bd": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "54bfaa08be17b70fd7ec72845d7f81f0be9f81d68a98ea56db1f96ee305bca3e": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "e1b15935043a315d4c81df41acfd52d5bdc25459d8f28b6bb751691532b1c61a": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "37c58e57ea764a5bc7aee561dc21868ec233b18fd3a91166695ac5b9a749867c": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "9f2d715a54135f769d0201d6699e0933c811e7ccf716bc1aad4e0bd79aa47591": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "6f1ace49d8173a5946b9db5e84486df3367774713b9282758dcbea9c65f28e1a": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "9dab1f7937d417d77e2247e994756f1dabc27c8c22f3b89c7ef874b5c5f74310": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "08406ec43e3acada7ff2b98a4561f0081a171dc5720c60569c89ba5895f45636": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "892491d26848b440a8e05c32524176f68456001d61a4e0bd9d3a436673f12a20": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "383832e65ba10bcc02c2521611750efcb79e3b2724215c38512fd81f15546c0a": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "8af4fe66757e0099a9f1118c4bd7bc70d3ad23e6873b267d0a7a41d9fcd8a629": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "528023de4192b7e673746681bb0d66d47ed9acde4e2acc3db4406f8de9f7c045": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "ab50919b1b9d6e854dcef64a101da65f616fb22e2f4b1d68d71f88b85e88c823": {
+  "verdict": "ALLOW",
+  "note": "仕様の事実（機構の記載）"
+ },
+ "7faa65b9292c8479004fbc80b274daaada7c9cb4947c209e6a052b0fff524a42": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "f1ae098c116892ee68d30642d5f9c75eb3f5fd1896d93a70ece43041799ba7e2": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "f4aabbd5a18d402bfa0b456719de5c63f7aec7128eef14c84ef9ced3b544bdf1": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "ecf73c169c9c615649f5c9fb8399f5678bf6d7ff07d94c9b844fd305241d8bd8": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "b8e0ffde8a14a6467f0f32c19a3dd11cd5fe4e85ec7f738fda3f578d1085ff02": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "963725b70a68ac4c0187cd3434126ecf253c04e96037e7c9ac4a462454cb54d9": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "ac3794291def421b9062e3a9b5434ccdaf3f0a49b1020b45d9ab2ab57efda3a9": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "78e7f46ae7367ddc723de8eeb3ebb3330a513a4756be7a10e416938c7b26370d": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "75bc127c6ef19a9e44d5775581dc395399d5b1481d4e5d58ff247ad86414f2b8": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "deab2faa57ec98bc86b9626f76aafa201348624c463609e90afb94219d9f8a8f": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "d249f7931afe37296645b757c1828e9f472d99167bbdf7931bbfd3a5b783a27c": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "e0fa843bd2d03fa2ffabb00678335efc527da316c98b7f405641346a144344cc": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "356ac6c1219af4bbef251503cb789855df1fdf0a8e379d820dd9bae565d94848": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "5e293f5e823ed072b009c97a6389be87ec547888bb59ded9dff86cf9c22b8078": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "84cba3996d209df6b02ad8b11208378f2aeee66e60b94d2df8d86648c92510ab": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "75fc46711c78018e170c3df4ae919dae89f5ac649d319e440e55cee5f6c1b651": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "4e39614879ab76a90785d111a2cb410f2616943ae6669aa208dda4d10414817b": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "049dc918bf202e39b1d4df414cbd86e75569881b60167f8b130cf62124fc6d6e": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "9634320e2de94f1523b149ae14070e9d894b51e2d26568beec26ddfc86bbd762": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "8f2c3cb0db1c241c430876bc0d2044e1def016ce3ff1c4c5f18efd2e05e6733d": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "e15cc10be887be9532b2eb27978db1f1924d269117fa858af04636b8c6286369": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "9b353c33eb392746c8c1bc460af6ab7e00cfa66b9f1919b968222f896ff8ba1a": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "808e6727959b910f938573d3ad67be7980ceb122e5729ce0bf9db7f8c9773ccd": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "430776b16ae1efee2f1610cbed344c3ddb37eecf15e85f0109cec51f6a8ca8b6": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "59b51f2a1ef73915468c3a61291f77b8cb612981dd859b4fc50ef54dc196a509": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "e2b0896220fefaab291e131599cd824807a2906c9ec6f1fd79da7e8f48d63258": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "b7d3041cde71e7faefaea9cc0826cac7cda5dea5a14d09491b8cb7f0564c123f": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "777e23e99d33a42f1299750d9c43d0820e5b6d0fbf35f34df092c712496b4ace": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "be2e4a05db3d556b4dc74d6823f010b2a6735d6130aeb37cd1b01d41793760c1": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "d95b4b80d95cce3f39816f35883b934939aa064e5deb59fb963c5b1f541f22d8": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "bb912f74184e5796207d55801a877009fe5f741ec54ca0cd0fbdd32b9c87ea36": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "db63661fa2707adfc238e2803eb8195828b9695f6b48f85ca5de9eafe0ad9770": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "a989acc33423363d7af78244019a24bfd14dec1fac882c91026ff22530255ca5": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "48b82c56e685964adb97f41c4570532f0adee6a7407bd9835b275acc01cb8a7f": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "c5acea65a02ebda3ae6471c87fcbc2e23755db7cc0a7580165ebce93070b71c2": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "dc109f9e77e698fc1dd85dd9aa61cb282419b53466d697678e102ba94870d11e": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（項目:数値の定型）"
+ },
+ "a2c5106f05254083d0e01c16325ac3469d630a3cf99fa79aade89c2af9f4c1e3": {
+  "verdict": "ALLOW",
+  "note": "統一セクション見出し（事実主張を含まない定型ラベル）"
+ },
+ "eabaef7c2bd1cddf179ff857f597c9cfcdaeab6c297b7e2d1f4be982b779bd79": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "247ed93d51dbdab6807a8e30f91f55f271043b5d7746b49f75923b0811fd66cb": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "f119951f251d8ca4cf6ce746f74365fbd90cefc152c6158e86c9fe60194fd7ff": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "0d455d534c539a12eabd98396df819f0bd217bb384d472f4c2993bae035144ec": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "2c8766e6fa9492721b5f2bf82eb386323a66083180ebd462fbfebe11190f615a": {
+  "verdict": "ALLOW",
+  "note": "設定段階の記載（欠番の暗示は gates 側で別途DROP）"
+ },
+ "841bffb5bf100f28799f2646c5022ef93b8427aa82bec6cab9648fe3d9f687b3": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "f12d076022460d1c66e2ae3f9f30fd59f3de4ea4639f677fc3a1bb63f7590677": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "c48bf8c38bc78b5144ac09ae5bcb38c9f3844097aa0505a4b3cfe89361240067": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "bf4e3d733f32e362d45d976aec11abb7cd94bec87615b51ae42a43bdadbb7520": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "e4a5819fc4e0788a51cda5cb2a57c1b7f12c0a5b641ba9be1e7d0e86d2623edf": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "d570d39b7d410e85960831bb191654f1337e4976d190ec0f7f1ad3c89daf60b2": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "362afed8b8521a2e481068c3df856c6a2d79c061ee6954a5ac42fdf460601d9e": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "41ef04d8794e9145490a2c1487e34fb0bf66057d30406b6bf9ca8bb44e29fee2": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "50fae287e8ff2e3794f22b4bb231c02486bae83b2b89f515f0324e4388d5ee6a": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（項目:数値の定型）"
+ },
+ "378da7bdbc007c8f99f180ec96297a39741539a71e5f6632cbaef1477dd4b5bc": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "9fcd13bfaa02cf721c1b04b5be75b405c556b2c946f5de3b1f43106f6f805384": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "57e61ad68d19ebb826533e00907e5ee41ba8162bc1ffe109d7a0045dfab738c1": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "e73f2396695d5d4fe96bd19fb7c9663839c21867fcdd035c496eb8ec3f6798de": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "3e759a94cb49ece017e77e0e1f6e1d869b1d63fecfe66717482c0ae45cc94220": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "44f890524c2631c86f31b66d2c9651823c183d9f82718c5679186d654134b0af": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "6148794c21fdf4fbf95fc38269ccab5404d4187d9c78be05ff7f723bb7bf26a8": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "bafd9a225a878b089b0483209c3925e78fe0cbe336274eb05e0c2e9ffa425a2a": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "f6cf1c8239abd6fbae0d50153401d218cbb6ca545d5204e2a9e265c7f985dcd0": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（項目:数値の定型）"
+ },
+ "9907a65eb9160d6e013849d422f473d1cf5469c3fbf0f36c047924ced0a59202": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "036929c7982a47aba6ed854656e1d6975ecd16de8b93771aa8c497a072e87d7c": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "e289945bd17993646225176e2ee72173c0d73254ca2f6cf5b0ba0258017f6b46": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "51a2975afd11183973a691626104146c167fcbf30f511625627d1f985115a132": {
+  "verdict": "ALLOW",
+  "note": "天井の事実（ラベル＋数値表記）"
+ },
+ "7d244c0413ec701f5bb9c5970966928d460f4362c7c572f7566057550f46b3c9": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "0000a532faa809c6ab55a94306d803f5ecac106a08aeb5da088dfc7352968ccb": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "dc5e0d4d408dd92ea46d78946197b4665f84289d64be8709745b5b12310e78f5": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "093fc1218e0e2920e93648500670ed13636d71b625261e166c3d06136183c334": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "80631d39b9281f98ba0ed10d54c42e179b26103e6a9b3a9124e4c276722ae108": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "115e211d34b1d2244bc417f88ee7ce1353a5fec57bc05806a181da8c3d8225eb": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "e3bbfaa5bc8246ba0c5a19eff65a642d81319c59f865546d642b04e99e874598": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（項目:数値の定型）"
+ },
+ "3468991d1f05bb15bc391aec75a0c5e193698e15fd007017f9a3563518e7c71a": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "2226240d080a3ad2f13b4d616ef934f1afc1e76c8e47b8e7923e1bf1c220911c": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "1737a206475ccf952831e9dff3ca642e487d4306574e9e9b8e4b1924c2132607": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "de216c3dc6284c7b8bdd4efc3d3dff5565bd822071ceb5183433d0292bbb8af9": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "2362f7142f01d84f9b32a0da763ae52aaf193e8796c154fc5d8247a04ed20355": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "335d03b7582994effbb23a273c9df6eec07f299ee83131653b916d7545c361e3": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "80548bcd440f6b136632bedf5e3f180239db6d5663331fc18e04783b0332931c": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "5f03144a7015a7ac771f1458da8d9bacb47043479228957a0bdbc7acd88f7624": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "2dcd511c56130edad5fd35e15e749369c694b6e29b91310fb76189c78ca645e2": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "8edd5daefeb8cb6b1c2059e187c6eec59e60d3bfe698b732d5e45e4b8e38917c": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "7f70a9a2c5fe0326994ccb8b4a121d2e18f8fa99edf1f45acdb21bbbe7533ef8": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "ce236889d868106aec16cb1a4b8f8222467e5ad9aafb210c5720369c0cd1a923": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "6d830e9869b050c8eff9a9c1db1eac65a0f3e93141c30333a3ae95f4459a358d": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "b944aa40e430c8acba81193ba9d4ab607c92a9cdeeafbeb6ed20d9badbbe4994": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "501cbc9eb2707a081d14d60c34e3feab8df4d91c53b8c78d5e4b6a178edf64e4": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "8a777f28d140df936ed54191e1042d5acb52671c07cda3185489a47732cde166": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "1a909374d616d03fe1504171b70d18fbdf9957682baf5ed28ac53cf10cf0f14c": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "22dd3cee6007dde06cbb4f74ae43ba21738bc25f9eab703041fcc226d626fca4": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "e350b5d7b871e99f8c204520577d72f849f02b9643ef3c6beac2965b9dffc21c": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "89600161ba6b38fcaafd4aed42e7d6641cfbc4339bde147f1d7531006958cd6f": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "bb0d5c740b1be95181b70187914ae9bb30fcdd1476fd0d47f1798e499e41c618": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "9a7c36c1627d5da95901751cf08fc797708b047941433a4ee6ff87c05c2cd14b": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "0c592666d9573610f0da85213760495360c89bda1d17d4f1e6674351d7447cb1": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "78d512ca4a98c5ce2466964d55822a4495476460fde3ff0780cca284b1c28a1a": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "ee35240466b2e279cb6d695bca829d8b427a68b0877df9075bfa1c6d6bb58f9b": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "a35b197fc4b71ffc74528f1a70209fe7f92a0f3d58ef7c97c8d20f67f884f8b8": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "49082d742ff0d43e13b08d0014b250afea949dd68ebb46b23ebf9d5213ca8fb3": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "dfa3d85b6afd5e75e9f4aa0ff392aefa86c1632fe5a25c5e8f787c714c31a03b": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "6c3be2b71617fbbef06999f503a1df988c3cec44d4ab5e7a1880f6b46aa93697": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "cc4e22e2ac05f3700a2efab760904f09e4bada154ffba399b6154e613b3b303c": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "e9eeaa7a9d391a912fa0067733aaea4bea9845a1c57e1fab8a40c4c199330916": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "af31a6a1e6f2f5b8cbcb7dd933ed8b35a91c0124c9a506dfa7e7316ccf4e559e": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "267b27759ba8aaed470bdb8a68df98fb98cadc3d7b35645523141e04598a7477": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "7ed6c31572b323b226924873f62c546c72e4bc80a25f78b2020820a7791af9d6": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "267bc8b919d54fd75219fbddfc8b88e4ef44502aee1941c57202e75d63e0d499": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "539c45a5987e67cab587d76ffa6f5c4fbdac3aa408c3bc8ed128df2844eb6b03": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "e6978074545f78c740f73effb84e7063be416a02c1f2762ce0a5cd75de3f0ccf": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "07fbdd41c7f6fccd6da326cfc029ce3424eeafd13aedf4ee160da8796f38070a": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "0d48b2f408a717e76d575938addb0a563f23f1a869b37c121b206101cb965e9b": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "e07b2b417c0d412a7ea92472e01320ae67e2ce3fe9b44e9651663964a0b8846e": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "c107855f14f7b45fba81dcdafdd00e7ac54f6bb3fd34da06ea27329377c51192": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "2ebc7fe34a5923755973615cc75c0e4efa9d907586813f3cd0e596852d9fa9bd": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "a43f19b9bdaa41232377a95d15463931d06f4b1847b5b3397d4b7079f0a8be9f": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "13b9d3ecf3be516dcea534959d1c40aeb9dad6566ebb242cc46e1e3d3e443827": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "a97dc08c8a3adfdf82788b0b09b2cd738d67b4785ed4b229e88f8d484e515a06": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "7769f359033070d2390b1114890b1c7cc28286966cc26381b0107596ab595285": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "75aa476ad2462bf3902f6df75b34aa5b6d37f3161f12ae70e8be6f9e690a6339": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "602a291d54c94e23a57d472843b6f93358dbcd9eaf262339171fa1cfcc61f3eb": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "aec49a02da284e8d9776e2691547c10a22d527cb0b2295d9c45b9acfafe4023c": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "3f5c69cd5db14c0f19d75ce543f66926a9944c5a6ba10a80a9b13cd95ff51130": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "3699e4197695f9a35913bc1eb813f086205aad5ca1aa875269c8b26ffca67448": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "652923fadba1e1a90ad9ec4fa5b295f1eab739bdf35940748eee7844f5c5a3dc": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "6b6f106dcb92f5d5d7c4ccfc18ed5f9d333828f18f0c49d92ad640540688c534": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "054f17feaee2d64b8da9aede70d9381088bff9e2e81bc1ff4ce409f0578fb64e": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "040d82e9a91f51e3c2e0731b4c3a45848d0b63c5b44d97c5e5c2516c220c9489": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "5a81262a24db4b98b01eb7cffbcd33e3366f20b3179ed5e84b2a68ee302f6149": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "114fa05ceba8d9d7b33026a1097c9ad7ee16f5cffaa896f562e0f70217fcca48": {
+  "verdict": "ALLOW",
+  "note": "天井の事実（ラベル＋数値表記）"
+ },
+ "bef9b519e2bb9b3a8ce6815be90c2ba7fb8398bba6f91c97e975c08b69107f66": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "d8b6b5c7c401890df8e32630e07b0f471a5b30270eb67ff8674fd3c26c060081": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "c6859befed3c34473044c2eaa664d0146c20950e7d5a3d839b9855747241dd43": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "65a47354ea530d9205fa2332352419538464aadef3f2bbcb0ae221128a845f7f": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "688d1c7772adb38ad5776f9180981f8db6e884ca37424d583344ad3dbb376224": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "11f2d11b1225e78b97ec65fcbca60d466290fa392c78f062d10caecf9413c4b6": {
+  "verdict": "ALLOW",
+  "note": "小役確率の列挙（スペックの事実）"
+ },
+ "77bcd7461325d0fdcfef01d7a24db643bb451ae3c2d5ad3b907b9a51cf99a520": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "c965ad9328aa67a4359a1797c1997ae888499f89b943546a5c4a1af3c1b14a09": {
+  "verdict": "ALLOW",
+  "note": "天井の事実（ラベル＋数値表記）"
+ },
+ "b690bd16cee578337b57adc526d18f59d77122492808ca8b7bcc652d6c0767c4": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "50e9e526ed2d902f6500439f624dc9b4a629e413c8b169760fedfe135d01939c": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "baf35b78c0bd8d033acb1673ced792499d2cb68eac444a4f499e0d2bfae91b47": {
+  "verdict": "ALLOW",
+  "note": "小役確率の列挙（スペックの事実）"
+ },
+ "5f2203b217ddaac61eba7a32dfaebc910a0cc441559e07954c918e33887fe7dd": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "0bb7ed300bc4a5161885647afd3cfec5c8627e9f25a9aa3af9d5705204b2a4fc": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "28382de02efe073d0ab7151ff5f5f7f194312e174ccb5bea118ca187837df9bf": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "9c3190a4b980ff65795242479ce029030a6adee763fb37173020e003e8d5a89d": {
+  "verdict": "ALLOW",
+  "note": "天井の事実（ラベル＋数値表記）"
+ },
+ "e8fe995a352e39cbff628ec3430824e6a2162ad7f6a1444b7903982b1f9ed572": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "e2f9e10f3f23617720f64dc56cfc3a62e4a3f2fd7bdbcf3793c98a52d53d3b2c": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "0d424c02e8a7e20a695b4af1194b828e1ff4231c4dfb0aa16a5ca5e077214a11": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "91ac91bf7fe1cbe86e1abf3513e359cc3aa3ba45c5e6c8ac614a1e5243249627": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "6ea1e1a2b43512973674e63608a7ab907750190be5e0da6e18d5167d22bc3825": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "a7e8c5622445da4d0a8de3be6f5aeaa4484360a601c01ae59d77966b53c1c4e9": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "9880f4dec4ff1914ae437f62d4261c14bfd5d71bef867d0152e263f1cde74ea0": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "baa966bc04993b34d91f9828cf0b21aae5d8fd153d9a5f4aa6b2c79e26e69a04": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（項目:数値の定型）"
+ },
+ "02331d35f6ff35a6a2f24e6c6203107e71fe758a894ee08f56befe159b0d17e2": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "0e366a3661ba9ebd79abf3c0225bb23a3f10ecb21fe7742e4870b32265711f06": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "0779025af6059c03a27b53a6845807614686f75ecd671f36aff8368fab00dc22": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "e1d60726c8696885ef9384466c36781c56da446a80f7910c7419157d48def8eb": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（項目:数値の定型）"
+ },
+ "7d0b04dfbd1871c2c51d8fb10c202276afef974fd413604aef557d05af5c2aae": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "f3ca9d0363cb6697d87a25a9d2bc0ccdf47dff25181f2ea285b709bd1eb0748c": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "21b7ee8a70827f7d3e42cdeefdd23cd1d1af8577f732ad383f70b5a786e4a894": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（項目:数値の定型）"
+ },
+ "fb071bef49a3fc98f74822bcf3592be61205eff5c4589c84b04f956bb8867cad": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "762059a8f16a978e5db7c6340cedcc1577f574c9553fc75f9b2ffd2f591775e7": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "9ecf4e0aa1487afcc36ca927af2d9b105de3818d5243310dce88e54dcbc3ff36": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "2269e43df5cd6c8b98d012b28a11a4171eb1ad9063e8efaff5dee5a89b257c81": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（項目:数値の定型）"
+ },
+ "552ca1b9d5f1c0d69e78c2e413e3dae7d0c51bf3fda4f2848eca91ca0d443357": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "eb45fd6abc36edb543d9f4724b7e88e67b6a175a710814fabaed3947d87b6118": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "706b1e39969a7c56a47180fdae024620e6361bd3c085dfe3f854c639c468b475": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "58f4d8496ee669a2bba88ea53255524a3a4a6aaac6ec8f74bbc4b5da81f2d017": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（項目:数値の定型）"
+ },
+ "17e3f85ace85c4adf60abc10182bae0bbf7177c072b95083768860c5d5294916": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "da8693f01d6200486077e0d8ef95e0c47ed42ea2be5ebe5c03f494507b5177f5": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "8b731a6bb2e8c97b0ec86a1d6cfb3fbd82f2c398ee91186c8e5d3147161d2316": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "a6adf4e477e606a9f7afd28c634eb3bf46a0f11f62375d50ac3e18d7343e6fd5": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "128a25f55a81512b6f7467c1742752f4bb29bab52c0e622befca8cf8c21ab214": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "a4e8f8a590ce226a169414611f30dd378aedc2ca65b846c0d74067b5f68dc837": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（項目:数値の定型）"
+ },
+ "a54f23216c7c252f15bb415d0447b0c2d8fbfdf4a1c79a1f2c57e1736e43ff31": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（項目:数値の定型）"
+ },
+ "0e2600d2433436e9776fb990609cb72cfb895b9cef5af4bae2655f1933c0fbfe": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "5d88d242c2d92d80410994c5ec5d025db647e4f9ce5c2190aabce4a4a7195498": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "bcea0a11e064b37e5e35d4319aacf287577644135f950b16446745cbffda169b": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "e13bc61763da7fb63eea6cef0e05a541a0300e6adafec3c5917cc92ee1c4b168": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "261d2ef40a3190df1d805ebf5f621a1484a67cc33bc7f84052ba0263f230c97b": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "7dd229f25efb6e70597e77f2b5fb8a87e52c45edb714eab60759640ce9ac8ee3": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "5afed6adc1649db93da3d1cac7985b0d13d2ccf691f7efcc6e3bedffd2726731": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "ea60482e3f9ba91246a23603a18668a1f1a54a0a1aba5bc6e0107636ff4bb7da": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "24c6f9672aa5641732706d41369e51d34f4b7c04e9dbbd5f889f03a4eaa99314": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "f7b9aacaab99718fa41c33b7e0590859490b4a9710fd5fcb87db64a9d80ba55c": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "0bab49fd14b5f33b6716c8eb9f9c162f15f1f568851d7ace8cb959c36b53a67d": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（項目:数値の定型）"
+ },
+ "e0e5945e7cf03d500db8541ac8a8cb9ba1fdeb0f11014f848d15f0a319b72afe": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "9e6c58db6b06d319bc4ccfc8de2a7c1a778ebfb91f70c0b9f8d12da0451d051c": {
+  "verdict": "ALLOW",
+  "note": "SEOタイトルの定型（機種名＋固定の後置き）"
+ },
+ "ac94c6659f4ff88cc6f279b93b953db5c5edc8eff0e5efc8c23d8a18ee4f53fa": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "0b84646b3d4a8ab8d0b3a635df92c3fa638f41881e255a18b997e0f3deb567da": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "098247bacda5b40b3f59761272dd2ad1994e4c4e56f53b3609f045439087c6de": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "4efa16f8608fb34895b8d5110da0744cdb42044cf23966ccd80c41d3d3dc116f": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "2e05f6ab9d73b2b19d9a1e9ba9d8ad61ce0e4e5561013e5b582975c20ccf81ef": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "a3e62dfa507d550d34167d89fd1b35dffd44fe338190427cbc274f26b8b90dc4": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "6e381db8c702f7acf3fc304157f22fbe66993b4abfad9903012898b46fc96631": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "fbf438e08bde85777c6cf28264c2e9ab094d5b2dfb133f17a7d69922b2f737b8": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "1726cebbdc7622f8a68218b56abc64310f4bce557246b2d604675c833f2b3603": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "62c686e55f51de207fd278dc87c06684b8d7724a1d700678e9d2c9f28adefd97": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "2157767f0d878e0a261f7ee099f6cf1a9b139488589598b58c6e2e1af10537d1": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "3708feafa0995935625fefc3b1477f9c01d7a0e27c403c6f95d61e01fe9167f7": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "313eecf095d2da6638e945c3874d2ccbc14ea779abdb5e01679206beaba5f8b3": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "3269fdd495a7eb3b38497fc25f77e1886989c301ed3c95a6df90325361c23f88": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "95ca5d6f1820ca7e2859857470944f9fa970a678facd0944a80d40e0109933b4": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "095fc3fbe9c1aef8aeb33caa6c76e11bed9e9a4c9b991a247547ad37ae5d297e": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "0137699f8bb4c86ca9252f08e98e8b52a4018bcefc21d347acecf01df4fb0447": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "f535835a281de3132150f0a68c5fe20fa2f2d28626484bdeb65f2ca48d5fd68a": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "03b14bd323bc94a93da8062b76bf1a60f921ec528be055bf0beb13e55c59775f": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "b6cb62a084a36fdfd28ffebaa4b052430d567b039f3497bf97f67f94cccd64b1": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "dff90e0a100512f2def0392c2c1be01be6b9c88a9d6b628f31d52955a7822c21": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "1dd78369cd04796800cedb30516830c0095115fd5cfe53e2710de2457ad3d771": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "fd2baf03a323fe9d73be487c39de99a5423f6f091757938ba64623fedd60a0b5": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "307a1e27d572ba8456c817f65df7e5480cd9510b1bf454cc611652812afe4518": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "26e05297de79ed39d6d7980c8a0435c4e0183055e0a458b28ac46acbcce73d30": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "0caeec7071c7c7d2ef6928588bd43cf8a8d494fca9b263ac1e5b684a29001465": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "d9434c0265ff7c502409bb4e66c8c42a7b6cbf20a6d79391d2a9d510cc955632": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "adf82d894908c88b92cc139a8c9bcca2ffa95a509f8555e26969a54d137414b6": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "05ee48f4c449eb473c65808cd69ef1cedf1d037e55a9e6e00bdf64841557398f": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "a5183a0e7520fb062185fed208be1dbea64ad2c878fadc55b69391a90403291d": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "6423b224faa7996e45d449cbef6ef3c84304d95220652e34f333525c52c22399": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "2db924ae04f9e65fe289663d80eaaadee671241ff0f1f50a32a035f3f9626546": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "a090b92e6cbb7a97ba505bd7e01e306282de02a4868d94cd4ef67baafb6672f1": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "4c1b56496971bf2b8ae03eea60a536c7f934e72a704b23e7fdd73ccd99b4bcdc": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "9e190e32f3ceb8351dcbcda7c88bb3cd03320e1bbb33833c0b4326c7273e5e46": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "7e5bd89d87c70225784733d2dfb288d6aa03db441a3c2c7873812a8ced0f1e94": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "d7884d0ab680061a4fb5c95997172c57ff4450e63f47b64ce2d0c496e2b502a4": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "0378137c5445a3063aad275b26a2b1ee9d1a30008984326ed3616e912874ba5f": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "0b85cb728c6ae2989b85f8180064a8a5a5ae6fd9e4bf554983adc8eddcbec08b": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "583044dfed2b7c67801354e385ed47ecb2b6cc457210c85b508e2403f7159697": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "007b7d5e9560fb95f532b764143b9488af55e902eb8be964f7931146210a40ff": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "47212bd1b22729799875082205488548f8b98a8c28c0452843692df69e1aa7e0": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "936f1c50b5dd840a7a567382628fe79bd87b70e4e0ae62a382859dc19357237b": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "eb136a1445dd2dbfe8ebe607af7bcebd4a6c87719ea7216250a0342797a9e0c0": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "106254787a695a6c4a28ddc0ec94ba2cd250d1564c675139d344dabc15e18988": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "9a6a0aa8577d449f789e1901777026e6d05ee6eb8a60e37e4aea43e334065571": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "2aa3cc6589be882f1f8642da241601b6116bde41a2543e119098c9e6a6825045": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "3762f04bc91b7e0659df17cbe7cc4a3c74d4162bdfbd9ef437387804afb9797d": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "6382b27638d7a0eded76d346a7e7939cdbf0d67aa73be5295a2032abec91de62": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "d219564cee193ffcf139788e19cacc9aa4227d0657dd96c2c90478bfd6d34c8c": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "f466d03473e474f62b4c110ac9e85c31862581467acf45e556eb6ff65c4b82eb": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "6f0d124314c9551636ac1b8470c2b6ac768a60e005e7008ea9234f8fc8edec05": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "189908394bd57e650d66a9bf233f08075de6f904d1389592ec4beb505d05e2ea": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "15c9928d8add44b0a85570825d6b2ba1ac8e9c99547477f4031f28a984c7e2b8": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "3cb0a38700c01b659ee52bfffcd684ae2af7fa845d64c279d7da186bad851d0a": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "d297347817ef88da4ad5cf189353ff1cec2437bb00a497b725510a622b45e67f": {
+  "verdict": "ALLOW",
+  "note": "天井の事実（ラベル＋数値表記）"
+ },
+ "ed711b2f7a705547f82a9a4c63eaf7c9b828d7163022ef816d79cd923406e554": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "4326a1f6e17423b5f24a6f4b315b9d71cb7caf65cfa4c1d2ddf246945c16b52f": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "9c83c9dd3d02d9b49ba01db776804cea30c7994b3fa4e4f1071e5c887fbc8b06": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "3f165b4e967e77a014ced728162abb90910d5d1ec0af0aec24d030b6b9189bcf": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "05130e0c75141e0782fc902e146ebc500a2a937dc000782f3bd79169fac8e7e3": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "0e529d1cf98e3f7d5c6a2c8c987b326e9d6637e0d31ec3810dd762568c16ac07": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "b001729f7284d0ae6833077fb926f5dd7e751b00268741eb11d372513d5d873f": {
+  "verdict": "ALLOW",
+  "note": "天井の事実（ラベル＋数値表記）"
+ },
+ "f048b7d45aaf62266e4e675a00446e3780f9b6774052e73554095dfdf7534549": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "a1fb733967ebcc9ec26daa73d301e8afbc958f3557df7947b55e70bf9cf3046f": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "3c0024090bf0aee278a3416b130835a1bdc60868013a6e267effde07e047df83": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "9a89f4470bb2663e9e40c06edaa3e8efd8ee206f7ac7dc60741e7a4707f77a17": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "f890ea44b0004e7bb5630d4bcf62739b77e8ffc2610ded25f4c0fb4c8b72435b": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "763f8644b67d19ec7492d4a7c37fc63368b287d5b438d901094a4c34e7efcad5": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "a0096695c17f44786fa3849b582ca19a4eaa7e74631fcbe6abca37517015fe43": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "734d14e6b6f4eea15f92257cafc8b6e9e92ee91ceb15758baa406ba044626dc4": {
+  "verdict": "ALLOW",
+  "note": "天井の事実（ラベル＋数値表記）"
+ },
+ "8b3de3aa89f97424c1e8f985348b7e30959f3411315676494f6867f2affa3022": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "baa3216ab07c332253a2d0475f1da846b3809566242b39fd203423e79f59be93": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "7dd11987e39e35f4779713c4e924c96d4f15a8862daf88085e01bcd38a3d1b70": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "903c826484e27e90a892ad6e950975248ee6d2f2619f1e971d37f873eef830c8": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "8e34ce43680060d3f07b40fbe3bee5b5c13a83902874dedfd663df160aea491f": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "bf2ccad1e250ea91fef2c583eac52bd00c197717b19a0caabf071c43b9c811e4": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "2a21c2cfc85a3f3d6983e27a36355137e3306c574e98e6322e2671636c14eff8": {
+  "verdict": "ALLOW",
+  "note": "天井の事実（ラベル＋数値表記）"
+ },
+ "f693a85e80ba3d76e27aea6787cdaafb7b4f2d3d41e9e5a3bf121aaf76749417": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "dc502c2afbf3d041b0834ada5d159f91690d854783299e47bce840d0546b1279": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "cea5a465ff6e5c7c3a7f5c1f13d1a8caed7b93a77d1c7973b8341440e5ceed9d": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "083b4db5055db443201f2406119a73b9238bd312d74107a2e2c3e5c4e4ec2d29": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "624167e71adfa1fae1efa7b4df1bdc608305e436d1762c4866c813bd7d9c4e17": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "9794a9648542502249e0758dc07c99ec671790881e74e66fcea0832c8ce0bc35": {
+  "verdict": "ALLOW",
+  "note": "天井の事実（ラベル＋数値表記）"
+ },
+ "0c246eb4ad8ed71f5ba773dde54bebaee1f4355fac64ebf6b9c281332b1b1e4a": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "e27c837d066567b949791f5625e91293ccb2821141aa80089d934c022ae4fcfb": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "791b9ce2d4e35ded9fd09de1b2b2f7bab3f00aae1f5df14ba49a12ace72e5a3c": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "473aa1fc03f2f13578d87fe5bf73bb27259cc1aa0ae14a336291340574eb9b8b": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "4d5deac0daff6f5f958ed3616d9c2d7e2218358baf25bb73bb1c5b09df4552c3": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "1e4feb0aefd23c94845eea9e6c3cc2ff4081861df89b712c6dd81d51b614b3dc": {
+  "verdict": "ALLOW",
+  "note": "天井の事実（ラベル＋数値表記）"
+ },
+ "7e804530b1d449a38ee19a0d3879a81ebcb3d0c5ed50e4ebbef26c160c604d2a": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（項目:数値の定型）"
+ },
+ "87d9e7d4bf153a5362e734d17e06ee4c948734430a8f94802c188f9546888ca5": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（項目:数値の定型）"
+ },
+ "6355537a2d3a394a58b53bcb40425e6dd68322513b557a8f9a23c9107a466dec": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（項目:数値の定型）"
+ },
+ "bd2ca30105e4c92758574b1a7beb3d68f8e0494b37b9aa5825987498f7fc197a": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（項目:数値の定型）"
+ },
+ "a70c4bd4dc5c29370e782f851233a6ba084b65756b30da3f42c63c3cf469e730": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（項目:数値の定型）"
+ },
+ "48098be5772d42fa542b7fdec9f54eabf141d7b14e641a5b202f6297e971866d": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（項目:数値の定型）"
+ },
+ "1d64f3add57363cd7bc3289490872691457c09d50da05d98f67cdf14abf7dda6": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "9d7fc4e720bf82cfab7cf50d2afcb1e3044309cae5530fbdc1b21d7784bc9e4e": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "dea7e9cc83510ea87553b34abe51c44319da0f2f100876dd021a175a55c75a56": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "824b6e5501f8fe7a320a9827987177be06fd709e1ef666f5bcc23c82c59e4abb": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "6ac317a7857b565178c8e77df43879e3b7c42d715623614a9d8f09878f61b1f1": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（項目:数値の定型）"
+ },
+ "5429ec309bc3c682d9a6c2a6163e7100ae457f9e62e76f8013591ad9b275ec94": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "fe962b232b3fe4ce61986f69c579e9a7ebbbc51f96750f8fd865d0049a2a58db": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "e75a6e911eaad7fff2decdd12eac27d889a5b25c81a0bd7251ec368a9b162a76": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "4f54b6f8c23b586bc69631291d9eea70f8bc70b3d8d6a5361a6d32c9ba4619f3": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "b739b16ab5a0ab5d5a0f5662fa676376f5ec2cea5c58410f41f7d7b36315f480": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "910ab1fbcb01c546baac89b302d68c8bb1f178fae3543c8118353b71ce02cf04": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "a213e353bf7c190ca2fd7fd4adb8e8584dec9b3f5e14099f4c82618f6d2dc13c": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "af75eb384f27a57dac620ff0e2bd6465c4dd15fc4be4beb6c91f2b737190cd77": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "92e4a8652b4ed26c9dbc2d55d99d9fecbb1c64b825548ea228677dd92886e27a": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "d18b825c5d4e73e36e6195e9c30cb107dd7866bef8f8a3fcfad979673eb0c4a8": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "cb4c6d698af116b8958b0d2c56b1360426f51be8262c6bdc123773fe790a2049": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "d11ca941f59784b923f1a72253ad19559ba1295f5cfe96850c4cccc3fe87ca21": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "fe9c15ff3876fd6d0aa2be18044629908e42a2d5c9e9e4a3c3d6c296281c63e6": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "fa2f62874823864f0d33f7213f75e42640ee0c1d795cb2a5db2128509bb0ac2d": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "c6a389bc3e22baca0249c6b9d86935bd6196e53d91968477dad6f62c0ab47ca3": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "d18de9eca9e31de622b36a413855016ca527fc137df50e7739ba393fc836b858": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ },
+ "ad7e6a8dec190438d731bb1495680260702f3278b686f5a53acedf0c18e889f6": {
+  "verdict": "ALLOW",
+  "note": "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+ }
+}
