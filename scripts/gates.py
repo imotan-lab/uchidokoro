@@ -55,8 +55,15 @@ ABSOLUTE_DENY = (
 )
 ABSOLUTE_DENY_PAT = re.compile("|".join(re.escape(t) for t in ABSOLUTE_DENY))
 
-# 設定段階の非存在断定（公式/複数解析の確認なしに書かない・過去に誤記事故あり）
-SETTING_DENY_PAT = re.compile(r"設定[1-6１-６]\s*(?:段階)?\s*(?:は)?\s*(?:なし|無し|ない|無い|非搭載|存在しない|ありません)")
+# 設定段階の非存在断定（公式/複数解析の確認なしに書かない・過去に誤記事故あり）。
+# 実データに「設定3・4は非搭載」「設定3・4がない」「設定3・4が存在しない」等があるため、
+# 数字の列挙（・、,／/～-）と原子の区切り(" / ")を跨ぐ表現も捕まえる。
+_SET_NUM = r"[1-6１-６一二三四五六]"
+SETTING_DENY_PAT = re.compile(
+    r"設定" + _SET_NUM + r"(?:\s*[・、,／/～\-〜]\s*" + _SET_NUM + r")*"
+    r"(?:\s*設定)?\s*(?:段階)?\s*(?:[はがもの]|/|\s)*\s*"
+    r"(?:搭載\s*(?:は|が)?\s*)?(?:なし|無し|ない|無い|非搭載|未搭載|存在しない|ありません|ございません)"
+)
 
 # 【第2層】これを含む原子は台帳で明示分類されていなければ通さない（未分類=fail-closed）。
 RISK_TOKENS = (
@@ -214,10 +221,37 @@ def assert_invariants(g: dict) -> None:
 
 # ---------------------------------------------------------------- 原子の分類
 
+_ZERO_WIDTH = re.compile(r"[​-‏  ﻿­]")
+_TAG = re.compile(r"<[^>]*>")
+_MD = re.compile(r"[*_`~]")
+
+
+def _to_display(s: str) -> str:
+    """生JSON文字列を「ブラウザで実際に見える文字列」に近づける。
+
+    ★なぜ要るか★ 本文は innerHTML で描画されるため、`設定3&#12394;&#12375;` や
+    `設<span>定3</span>なし` は正規表現上は無害でも、画面では禁止表現として表示される。
+    実データには既に <br> が存在する。
+    """
+    import html as _html
+    import unicodedata
+    prev = None
+    # 多重エスケープ（&amp;#12394; 等）を展開しきる
+    for _ in range(5):
+        if s == prev:
+            break
+        prev, s = s, _html.unescape(s)
+    s = _TAG.sub("", s)                       # タグ除去（分断による回避を潰す）
+    s = _MD.sub("", s)                        # Markdown記号による語中分断を潰す
+    s = _ZERO_WIDTH.sub("", s)                # ゼロ幅文字
+    s = unicodedata.normalize("NFKC", s)      # 全角/半角・互換文字の揺れを吸収
+    return re.sub(r"\s+", " ", s).strip()
+
+
 def normalize_atom(parts) -> str:
-    """表示される塊を正規形に。空要素を除き ' / ' で連結し、空白を畳む。"""
-    xs = [re.sub(r"\s+", " ", p).strip() for p in parts if _is_str(p) and p.strip()]
-    return " / ".join(xs)
+    """表示される塊を正規形に。空要素を除き ' / ' で連結する。"""
+    xs = [_to_display(p) for p in parts if _is_str(p)]
+    return " / ".join(x for x in xs if x)
 
 
 def atom_id(text: str, profile: str | None = None) -> str:
@@ -262,6 +296,8 @@ class _Ctx:
         self.ledger = ledger
         self.unclassified: list[dict] = []
         self.dropped: list[dict] = []
+        # ★スキーマ破壊は「内容の判定」と別チャネル。必ずビルドを止める（黙って一部を落とさない）★
+        self.errors: list[dict] = []
 
     def atom(self, parts, path: str) -> bool:
         """表示原子を判定する。落ちた場合は原子ごと出さない。"""
@@ -274,7 +310,8 @@ class _Ctx:
         return False
 
     def reject(self, path: str, reason: str) -> None:
-        self.dropped.append({"atom_id": None, "path": path, "reason": reason})
+        """スキーマ破壊（未知フィールド・不正形式・構造不整合）。publish を失敗させる。"""
+        self.errors.append({"path": path, "reason": reason})
 
 
 def _only_keys(d: dict, allowed: set) -> bool:
@@ -296,13 +333,16 @@ def _project_mode(conf, ctx: _Ctx, path: str, ctx_label: str) -> dict | None:
         ctx.reject(path, "未知フィールドを含むため mode ごと拒否")
         return None
     out: dict = {}
-    for k in _MODE_NUM_KEYS:
-        if _is_num(conf.get(k)):
-            out[k] = conf[k]
-    if _is_str(conf.get("note")):
-        # note は「どのmodeの説明か」と結合して判定する（複合断定の見逃し防止）
-        if ctx.atom([ctx_label, conf["note"]], f"{path}.note"):
-            out["note"] = conf["note"]
+    nums = {k: conf[k] for k in _MODE_NUM_KEYS if _is_num(conf.get(k))}
+    note = conf.get("note") if _is_str(conf.get("note")) else None
+    # ★数値と注意書きは1つの原子★
+    #   別々に判定すると「期待収支は算出していません」という注意書きだけが禁止語で消え、
+    #   数値だけが残る意味反転が起きる（Codex指摘）。落ちたら mode ごと落とす。
+    if not ctx.atom([ctx_label, note, *[f"{k}={v}" for k, v in nums.items()]], path):
+        return None
+    out.update(nums)
+    if note:
+        out["note"] = note
     cyc = conf.get("cycle")
     if isinstance(cyc, list) and cyc:
         if all(_is_num(x) for x in cyc):
@@ -330,9 +370,13 @@ def _project_mode(conf, ctx: _Ctx, path: str, ctx_label: str) -> dict | None:
                 continue
             r = {k: rv[k] for k in ("excellent", "good", "caution", "target", "suruMax")
                  if _is_num(rv.get(k))}
-            if _is_str(rv.get("note")) and ctx.atom([ctx_label, rk, rv["note"]],
-                                                    f"{path}.byRate.{rk}.note"):
-                r["note"] = rv["note"]
+            rnote = rv.get("note") if _is_str(rv.get("note")) else None
+            # 交換率別も「数値＋注意書き」で1原子（注意書きだけ消えて数値が残るのを防ぐ）
+            if not ctx.atom([ctx_label, rk, rnote, *[f"{k}={v}" for k, v in r.items()]],
+                            f"{path}.byRate.{rk}"):
+                continue
+            if rnote:
+                r["note"] = rnote
             if r:
                 rates[rk] = r
         if rates:
@@ -398,14 +442,38 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
             out["modes"] = kept
 
     md = checker.get("modeData") if isinstance(checker.get("modeData"), dict) else {}
+    # ★宣言集合は「元データのmodes」から取る★（射影後のoutから取ると、
+    #   宣言に無いmodeを VERIFIED にした場合に検査自体がすり抜ける）
+    declared = None
+    if isinstance(decl, list):
+        declared = {m.get("key") for m in decl if isinstance(m, dict)}
     for key in allowed_modes:
         if key in RESERVED_CHECKER_KEYS or key in out:
             ctx.reject(f"checker.{key}", "予約キーと衝突するmode名は使えない")
             continue
-        conf = checker.get(key) if isinstance(checker.get(key), dict) else md.get(key)
+        top, alt = checker.get(key), md.get(key)
+        # ★構造不整合はビルドを止める（黙って一部だけ出すと逆判定・実行時例外の元）★
+        if isinstance(top, dict) and isinstance(alt, dict) and top != alt:
+            ctx.reject(f"checker.{key}", "checker直下とmodeDataに食い違う同名configがある")
+            continue
+        conf = top if isinstance(top, dict) else alt
+        if not isinstance(conf, dict):
+            ctx.reject(f"checker.{key}", "VERIFIED指定だがconfigが存在しない")
+            continue
+        if "_disabled" in conf:
+            ctx.reject(f"checker.{key}", "停止マーカー(_disabled)付きのmodeをVERIFIEDにできない")
+            continue
+        if declared is not None and key not in declared:
+            ctx.reject(f"checker.{key}", "modes宣言に無いmodeをVERIFIEDにできない")
+            continue
         pm = _project_mode(conf, ctx, f"checker.{key}", key)
-        if pm:
-            out[key] = pm
+        if pm is None:
+            ctx.reject(f"checker.{key}", "modeの内容が公開基準を満たさない（部分的に出さない）")
+            continue
+        out[key] = pm
+    # VERIFIEDなのに1つも出せないなら checker を出さない（UIが空configで例外になるのを防ぐ）
+    if not any(k in out for k in allowed_modes):
+        return None
     return out or None
 
 
@@ -517,13 +585,19 @@ def _project_settei_table(tbl, ctx: _Ctx, path: str, section_title: str) -> dict
                     break
                 texts.append(tx)
                 vals.append(val)
-            # ★行全体＋見出し行を結合して判定（1セルでも落ちたら行ごと落とす）★
-            if ok and vals and ctx.atom([section_title, *head_txt, *texts], f"{path}.rows[{ri}]"):
+            # ★セクション見出し＋表見出し＋表の見出し行＋行 を結合して判定★
+            #   （表labelが抜けていると「表label=期待値／行=580G〜」の複合断定を見逃す）
+            if ok and vals and ctx.atom([section_title, label if _is_str(label) else None,
+                                         *head_txt, *texts], f"{path}.rows[{ri}]"):
                 kept_rows.append(vals)
     if kept_rows:
         out["rows"] = kept_rows
     note = tbl.get("note")
-    if _is_str(note) and ctx.atom([section_title, note], f"{path}.note"):
+    if _is_str(note):
+        # ★表の注意書きは表全体と1原子★（注意書きだけ消して表を残す意味反転を防ぐ）
+        if not ctx.atom([section_title, label if _is_str(label) else None, note],
+                        f"{path}.note"):
+            return None
         out["note"] = note
     return out if out.get("rows") else None
 
@@ -533,8 +607,20 @@ def _project_simple_rows(rows, ctx: _Ctx, path: str, section_title: str):
     for ri, row in enumerate(rows):
         if isinstance(row, list):
             cells = row
-        elif isinstance(row, dict) and _only_keys(row, {"trigger", "hint"}):
-            cells = [row.get("trigger"), row.get("hint")]
+        elif isinstance(row, dict):
+            # 実データに存在する行形式（既知のものだけ許可・未知の形は構造エラー）
+            for keys in ({"trigger", "hint"}, {"left", "right"}, {"label", "value"},
+                         {"title", "badge", "value"}, {"title", "value"},
+                         {"label", "badge", "value"}):
+                if _only_keys(row, keys):
+                    cells = [row[k] for k in
+                             [x for x in ("trigger", "left", "label", "title") if x in row]
+                             + [x for x in ("badge",) if x in row]
+                             + [x for x in ("hint", "right", "value") if x in row]]
+                    break
+            else:
+                ctx.reject(f"{path}[{ri}]", "未知の行形式")
+                continue
         else:
             ctx.reject(f"{path}[{ri}]", "未知の行形式")
             continue
@@ -642,9 +728,6 @@ def _project_machine(machine: dict, gates: dict, ctx: _Ctx) -> dict:
     if pc:
         out["checker"] = pc
 
-    # ★狙い目数値を出すなら「当サイトの目安」表示を必須要件として明示する★
-    if any(k in out for k in ("strategy", "strategyByRate", "checker", "tenjo_display")):
-        out["disclaimer"] = LEGACY_DISCLAIMER
     return out
 
 
@@ -712,11 +795,27 @@ def publish_view(machine: dict, detail: dict | None = None,
     ctx = _Ctx(gates["profile"], ledger)
     pm = _project_machine(machine, gates, ctx)
     pd = _project_detail(detail, gates, ctx)
+
+    # ★スキーマ破壊は内容判定と別チャネルで必ず止める★
+    if ctx.errors:
+        e = ctx.errors[0]
+        raise GateError(f"{machine.get('slug','?')}: 構造エラー {len(ctx.errors)}件 → 公開不可"
+                        f" 例: path={e['path']} 理由={e['reason']}")
     if ctx.unclassified:
         u = ctx.unclassified[0]
         raise GateError(
             f"{machine.get('slug','?')}: 未分類のリスク表現 {len(ctx.unclassified)}件 → 公開不可"
             f"（分類台帳に ALLOW/DROP を登録すること） 例: path={u['path']} id={u['atom_id']}")
+
+    # ★狙い目・数値を出すなら「当サイトの目安」表示を必須要件として明示する★
+    #   machine側だけでなく detail 側（要約・表・本文）だけに数値がある場合も対象にする。
+    numeric_machine = any(k in pm for k in
+                          ("strategy", "strategyByRate", "checker", "tenjo_display", "limit"))
+    numeric_detail = any(k in pd for k in ("summaryBoxes", "factTable", "sections", "lead"))
+    if numeric_machine or numeric_detail:
+        pm["disclaimer"] = LEGACY_DISCLAIMER
+        # レンダラーがこの表示を落とさないことは、配線時に preflight で検証すること
+        pm["display_requirements"] = {"must_render": ["disclaimer"]}
     return {"gates": gates, "machine": pm, "detail": pd}
 
 
@@ -731,8 +830,8 @@ def audit_view(machine: dict, detail: dict | None = None,
     ctx = _Ctx(gates["profile"], ledger)
     _project_machine(machine, gates, ctx)
     _project_detail(detail, gates, ctx)
-    return {"gates": gates, "errors": [], "unclassified": ctx.unclassified,
-            "dropped": ctx.dropped, "ok": not ctx.unclassified}
+    return {"gates": gates, "errors": ctx.errors, "unclassified": ctx.unclassified,
+            "dropped": ctx.dropped, "ok": not (ctx.unclassified or ctx.errors)}
 
 
 # ---------------------------------------------------------------- selftest
@@ -807,9 +906,10 @@ def selftest() -> int:
     # ===== 但し書きの切り捨て禁止 =====
     ftl = {"factTable": [["設定6機械割", "110%", "未確認・推測値"], ["天井", "999G+α"]]}
     av = audit_view(base, ftl)
-    t("★3列目に但し書きがある行は切り捨てずに拒否",
-      any(d["path"] == "factTable[0]" for d in av["dropped"]))
-    t("2列の安全な行は通る", not any(d["path"] == "factTable[1]" for d in av["dropped"]))
+    t("★3列目に但し書きがある行は切り捨てず構造エラーにする",
+      any(e["path"] == "factTable[0]" for e in av["errors"]) and av["ok"] is False)
+    t("2列の安全な行は構造エラーにならない",
+      not any(e["path"] == "factTable[1]" for e in av["errors"]))
 
     # ===== 走査されない文字列が無いこと =====
     bad_checker = {**base, "checker_modes": {"normal": "VERIFIED"},
@@ -829,18 +929,28 @@ def selftest() -> int:
 
     # ===== 未知フィールドは原子ごと拒否 =====
     unk = {"summaryBoxes": [{"label": "天井", "value": "999G+α", "note": "未確認"}]}
-    t("★未知フィールドを含む箱は原子ごと拒否",
-      any(d["path"] == "summaryBoxes[0]" for d in audit_view(base, unk)["dropped"]))
+    t("★未知フィールド（但し書き）を含む箱は構造エラー",
+      any(e["path"] == "summaryBoxes[0]" for e in audit_view(base, unk)["errors"]))
     unk2 = {**base, "checker_modes": {"normal": "VERIFIED"},
-            "checker": {"normal": {"excellent": 600, "private_note": 123}}}
-    t("★未知フィールドを含むmodeは丸ごと拒否",
-      "checker" not in publish_view(unk2)["machine"])
+            "checker": {"modes": [{"key": "normal"}],
+                        "normal": {"excellent": 600, "private_note": 123}}}
+    raised = False
+    try:
+        publish_view(unk2)
+    except GateError:
+        raised = True
+    t("★未知フィールドを含むmodeは公開を止める", raised)
 
     # ===== 動的キーの安全性 =====
     dyn = {**base, "strategyByRate": {"秘密の文章です": "600G〜"}}
     aj = json.dumps(audit_view(dyn), ensure_ascii=False)
     t("★診断pathに散文キーが入らない", "秘密" not in aj)
-    t("識別子形式でないキーは採用しない", "strategyByRate" not in publish_view(dyn)["machine"])
+    raised = False
+    try:
+        publish_view(dyn)
+    except GateError:
+        raised = True
+    t("識別子形式でないキーは公開を止める", raised)
 
     # ===== preview =====
     prev = {"slug": "x", "lifecycle": "VERIFIED_PREVIEW", "name": "テスト機",
@@ -901,6 +1011,64 @@ def selftest() -> int:
     aj2 = json.dumps(pa["detail"], ensure_ascii=False)
     t("段落: 絶対禁止を含む段落は丸ごと落ちる", "期待収支" not in aj2 and "580" not in aj2)
     t("段落: 同セクションの安全な段落は残る", "天井は999Gです。" in aj2)
+
+    # ===== 第3版で塞いだ経路（Codex 3巡目の指摘）=====
+    t("★HTMLエンティティで回避できない",
+      classify_atom(["設定3&#12394;&#12375;"], None, "legacy_safe") == DROP)
+    t("★タグで語を分断しても回避できない",
+      classify_atom(["設<span>定3</span>なし"], None, "legacy_safe") == DROP)
+    t("★エンティティで断定を隠せない",
+      classify_atom(["期待&#21454;&#25903;がプラス"], None, "legacy_safe") == DROP)
+    t("★ゼロ幅文字で回避できない",
+      classify_atom(["期待​収支がプラス"], None, "legacy_safe") == DROP)
+    t("★実データの複数設定表現を捕まえる（設定3・4は非搭載 等）",
+      all(classify_atom([s], None, "legacy_safe") == DROP for s in
+          ("設定3・4は非搭載", "設定3・4がない", "設定3・4が存在しない", "設定3がない")))
+    t("★原子の区切りを跨いだ『設定3』＋『なし』も捕まえる",
+      classify_atom(["設定3", "なし"], None, "legacy_safe") == DROP)
+
+    # 注意書きだけ消して数値を残す意味反転が起きないこと
+    inv = {**base, "checker_modes": {"normal": "VERIFIED"},
+           "checker": {"modes": [{"key": "normal"}],
+                       "normal": {"good": 580, "excellent": 700,
+                                  "note": "期待収支は算出していません"}}}
+    raised = False
+    try:
+        publish_view(inv)
+    except GateError:
+        raised = True
+    t("★注意書きが落ちる場合は数値だけ残さず公開を止める（意味反転しない）", raised)
+    t("　（診断でも数値だけの通過を許さない）",
+      audit_view(inv)["ok"] is False)
+
+    # 構造エラーは公開を止める
+    for bad_checker, label in (
+        ({"modes": [{"key": "normal"}], "normal": {"excellent": 600, "private": 1}}, "未知フィールド"),
+        ({"modes": [{"key": "normal"}]}, "configが無い"),
+        ({"modes": [{"key": "normal"}], "normal": {"excellent": 600, "_disabled": "停止"}}, "_disabled付き"),
+        ({"modes": [{"key": "other"}], "normal": {"excellent": 600}}, "modes宣言に無い"),
+    ):
+        raised = False
+        try:
+            publish_view({**base, "checker_modes": {"normal": "VERIFIED"}, "checker": bad_checker})
+        except GateError:
+            raised = True
+        t(f"★構造エラーで公開を止める（{label}）", raised)
+    t("audit_view: 構造エラーを ok=False で報告",
+      audit_view({**base, "checker_modes": {"normal": "VERIFIED"},
+                  "checker": {"modes": [{"key": "normal"}]}})["ok"] is False)
+
+    # 表label込みの複合断定
+    tbl_led = {atom_id("設定示唆まとめ / 期待値", "legacy_safe"): {"verdict": ALLOW}}
+    tbl = {"sections": [{"title": "設定示唆まとめ", "type": "settei",
+                         "tables": [{"label": "期待値", "rows": [["580G〜", "◎"]]}]}]}
+    t("★表label＋行の複合断定を見逃さない",
+      any(u["path"].endswith("rows[0]") for u in audit_view(base, tbl, tbl_led)["unclassified"]))
+
+    # 目安ラベルは detail だけに数値がある場合も付く
+    d_only = publish_view(base, {"summaryBoxes": [{"label": "狙い目", "value": "580G〜"}]})
+    t("★detailだけに狙い目がある場合も目安ラベルが付く",
+      d_only["machine"].get("disclaimer") == LEGACY_DISCLAIMER)
 
     # ===== 不変条件 =====
     for bad, label in (({"public": False, "index": True}, "index⇒public"),
