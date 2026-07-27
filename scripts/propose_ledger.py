@@ -54,6 +54,13 @@ _SPEC_KIND = (r"(?:AT|ART|BB|RB|BIG|REG|上位AT|通常AT|ボーナス|ジャン
 _SPEC_BODY_SIMPLE = re.compile(
     r"^" + _SPEC_KIND + r"[:：]\s*(?:最大|約|およそ)?[0-9０-９][0-9０-９.,]*"
     r"\s*(?:枚/G|枚/g|枚|%|％)?(?:\([^)]*\))?$")
+# 設定段階の宣言（6段階 / 6段階(1〜6) 等）。欠番のある列挙は gates が別途DROPする
+_SET_STAGE = re.compile(r"^設定(?:段階)?[:：]\s*[0-9]段階(?:設定)?(?:\(設定?[0-9]\s*[〜～]\s*[0-9]\))?$")
+# 「項目:数値+単位」の定型（コイン持ち・獲得枚数・純増 等）
+_SPEC_KV = re.compile(
+    r"^[ぁ-んァ-ヶ一-龥A-Za-z0-9()（）・]{2,20}[:：]\s*(?:最大|約|およそ)?"
+    r"[0-9][0-9.,]*\s*(?:枚/G|枚|%|％|G|G/50枚|pt|円|段階)"
+    r"(?:\s*\([^)]*\))?$")
 # 機械割の設定別列挙（設1:97.5% / 設6:114.9% など）
 _SPEC_BODY_KAIWARI = re.compile(
     r"^機械割(?:\(設定?[0-9]\))?[:：]\s*"
@@ -73,6 +80,12 @@ def propose(item: dict) -> tuple[str | None, str]:
             return None, "計算値・価値判断の疑いがあるため保留"
         if _SPEC_BODY_SIMPLE.match(body) or _SPEC_BODY_KAIWARI.match(body):
             return "ALLOW", "スペックの事実（断定ではない。出典検証はPhase 2の別軸）"
+        # 設定段階の宣言（6段階など）は事実の記載。★欠番のある列挙は gates が既にDROPする★
+        if _SET_STAGE.match(body):
+            return "ALLOW", "設定段階の記載（欠番の暗示は gates 側で別途DROP）"
+        # コイン持ち・獲得枚数など「項目:数値+単位」の定型
+        if _SPEC_KV.match(body):
+            return "ALLOW", "スペックの事実（項目:数値の定型）"
         return None, "基本スペック欄だが定型でない"
 
     if path not in ("factTable[]", "summaryBoxes[]"):
