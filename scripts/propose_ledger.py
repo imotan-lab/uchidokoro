@@ -109,6 +109,21 @@ def _tenjo_ok(label: str, value: str) -> bool:
     return not re.search(r"(?:です|ます|ましょう|ください|でしょう|と思)", value)
 
 
+# 価値判断・行動示唆の語（仕様の記載でもこれが混ざれば保留に落とす）
+_VALUE_JUDGE = re.compile(
+    r"期待|収支|時給|得する|お得|勝|狙|旨味|リターン|回収|優秀|おすすめ|推奨|"
+    r"有利|不利|効率|投資|損得")
+
+# 小役確率の列挙（「名前:1/○○」を / で連ねた形。評価語を含まない）
+_KOYAKU_LIST = re.compile(
+    r"^[^:：]{1,24}[:：]\s*(?:[ぁ-んァ-ヶ一-龥A-Za-z0-9()（）・]{1,16}\s*[:：]\s*"
+    r"1\s*/\s*[0-9][0-9.,]*\s*(?:/|／)?\s*)+$")
+
+# 仕様の記載（コンプリート機能など）。数値を含む機構の説明で、評価も推奨も含まない。
+_SPEC_MECHANISM = re.compile(
+    r"^(?:コンプリート機能|有利区間|規定[^。]{0,10})[^。]{0,80}$")
+
+
 def propose(item: dict) -> tuple[str | None, str]:
     """(verdict, 理由) を返す。verdict=None は判断保留。"""
     text = item.get("text", "")
@@ -117,6 +132,10 @@ def propose(item: dict) -> tuple[str | None, str]:
     # 「基本スペック」セクションの定型スペック行
     if path == "sections[].body[]" and text.startswith(_SPEC_PREFIX):
         body = text[len(_SPEC_PREFIX):].strip()
+        # ★仕様の記載は先に判定★（「差枚最大マイナスを基点に」等、_NEVER の語を
+        #   含むが計算値でも価値判断でもないものを取りこぼさないため）
+        if _SPEC_MECHANISM.match(body) and not _VALUE_JUDGE.search(body):
+            return "ALLOW", "仕様の事実（機構の記載）"
         if _NEVER.search(body):
             return None, "計算値・価値判断の疑いがあるため保留"
         if _SPEC_BODY_SIMPLE.match(body) or _SPEC_BODY_KAIWARI.match(body):
@@ -127,6 +146,14 @@ def propose(item: dict) -> tuple[str | None, str]:
         # コイン持ち・獲得枚数など「項目:数値+単位」の定型
         if _SPEC_KV.match(body):
             return "ALLOW", "スペックの事実（項目:数値の定型）"
+        # 「天井:AT間1400G(設定変更後1000G)」のような天井の事実
+        if re.search(r"[:：]", body):
+            lab, val = re.split(r"[:：]", body, maxsplit=1)
+            if _tenjo_ok(lab.strip(), val.strip()):
+                return "ALLOW", "天井の事実（ラベル＋数値表記）"
+            # 小役確率の列挙（リプレイ:1/8.2 / スイカ:1/99.9 …）
+            if _KOYAKU_LIST.match(body):
+                return "ALLOW", "小役確率の列挙（スペックの事実）"
         return None, "基本スペック欄だが定型でない"
 
     # 統一セクション見出し（title 単体の原子）
