@@ -35,8 +35,9 @@ def provisional_checker_modes(m: dict) -> dict:
 
 # 識別子・日付・slug は置き換えない
 # （置き換えると照合や形式検査が壊れ、検査自体が誤検知する）
+# label も保持する（無害化で全ラベルが同一文字列になると「重複」検査に誤って引っかかるため）
 _IDENTIFIER_KEYS = ("key", "defaultRate", "unit", "slug", "release_date", "confirmed_at",
-                    "lifecycle", "name", "type")
+                    "lifecycle", "name", "type", "label")
 
 
 def _neutralize(node):
@@ -76,8 +77,13 @@ def schema_coverage(machines: list) -> bool:
             modes |= {k for k, v in md.items() if isinstance(v, dict) and "_disabled" not in v}
         # ★文章の分類による削除と、スキーマの書き忘れを混同しないため、
         #   全ての文字列を無害な文字列に置き換えてから射影する（残るのはスキーマ由来の欠落だけ）。
+        if not modes:
+            continue                      # 表示できるmodeが無い機種は検査対象外
         ctx = gates._Ctx("legacy_safe", None)
-        out = gates._project_checker(_neutralize(c), sorted(modes), ctx) or {}
+        out = gates._project_checker(_neutralize(c), sorted(modes), ctx)
+        if out is None:
+            continue                      # checkerごと出ない（構造上の理由）＝取りこぼしではない
+        out.pop("_live_modes", None)
         for k, v in c.items():
             if k in ("modeData",) or k in modes:
                 continue
@@ -150,17 +156,27 @@ def schema_coverage(machines: list) -> bool:
                 #   ここで見たいのは「スキーマから項目を書き忘れていないか」だけ。
                 if not dst:
                     return
-                src_keys: set = set()
+                # ★要素ごとに「その要素が持つ項目が、対応する出力要素にもあるか」を見る★
+                #   配列全体で和集合を取ると、settei型だけが持つ tables/rows などが
+                #   他の要素にも必要と誤解される（誤検知）。
+                #   対応付けは type や識別子ではなく「同じ形の要素があるか」で緩く見る。
+                dst_keysets = [set(v2.keys()) for v2 in dst if isinstance(v2, dict)]
                 for v2 in src:
-                    if isinstance(v2, dict):
-                        src_keys |= {k3 for k3, v3 in v2.items()
-                                     if v3 is not None and v3 != [] and v3 != {}}
-                dst_keys: set = set()
-                for v2 in dst:
-                    if isinstance(v2, dict):
-                        dst_keys |= set(v2.keys())
-                for k3 in src_keys - dst_keys:
-                    missing_other.add(f"{where}[].{k3}")
+                    if not isinstance(v2, dict):
+                        continue
+                    # 内容除去で丸ごと落ちた要素は「取りこぼし」ではない
+                    if not any(isinstance(d2, dict) and d2.get("title") == v2.get("title")
+                               for d2 in dst) and "title" in v2:
+                        continue
+                    want = {k3 for k3, v3 in v2.items()
+                            if v3 is not None and v3 != [] and v3 != {}}
+                    if not any(want <= ks for ks in dst_keysets):
+                        # どの出力要素もこの項目集合を満たさない＝射影で落ちた項目がある
+                        best = max((len(want & ks) for ks in dst_keysets), default=0)
+                        if best < len(want):
+                            for k3 in want - (max(dst_keysets, key=lambda ks: len(want & ks))
+                                              if dst_keysets else set()):
+                                missing_other.add(f"{where}[].{k3}")
         for k in m:
             if k in ("checker",) or k not in PUBLIC_MACHINE:
                 continue
@@ -181,12 +197,12 @@ def schema_coverage(machines: list) -> bool:
                     missing_other.add(f"detail.{k}")
                 else:
                     _deep(det[k], pd_[k], f"detail.{k}")
-    if missing_other:
-        missing_top |= missing_other
-
     print("■ 許可スキーマの取りこぼし検査（実データにあるのに公開射影で消えるキー）")
     print(f"   checker直下: {sorted(missing_top) or 'なし'}")
     print(f"   mode配下   : {sorted(missing_mode) or 'なし'}")
+    print(f"   機種・記事 : {sorted(missing_other) or 'なし'}")
+    if missing_other:
+        missing_top |= missing_other
     if missing_top or missing_mode:
         print("   ⚠ 上記は配線すると機能が壊れる可能性がある。gates.py の許可スキーマに追加するか、"
               "意図的に落とすなら理由をコメントすること。")

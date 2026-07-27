@@ -249,6 +249,22 @@ def negative_control() -> int:
          lambda: audit_public.audit_machine(
              {"slug": "x", "name": "t", "sources": [{"url": "https://a.example/x?token=S"}],
               "disclaimer": audit_public.EXPECTED_DISCLAIMER})),
+        ("checker: 閾値の順序破壊", "順序",
+         lambda: audit_public.audit_machine(
+             {"slug": "x", "name": "t", "disclaimer": audit_public.EXPECTED_DISCLAIMER,
+              "display_requirements": {"disclaimer": audit_public.EXPECTED_DISCLAIMER,
+                                       "surfaces": ["checker"]},
+              "checker": {"unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+                          "normal": {"caution": 700, "good": 600, "excellent": 500}}})),
+        ("checker: 宣言と実configの不一致", "判定データが無い",
+         lambda: audit_public.audit_machine(
+             {"slug": "x", "name": "t",
+              "checker": {"unit": "G",
+                          "modes": [{"key": "a", "label": "A"}, {"key": "b", "label": "B"}],
+                          "a": {"good": 600}},
+              "disclaimer": audit_public.EXPECTED_DISCLAIMER,
+              "display_requirements": {"disclaimer": audit_public.EXPECTED_DISCLAIMER,
+                                       "surfaces": ["checker"]}})),
         ("目安ラベル無しの数値", "目安ラベル",
          lambda: audit_public.audit_machine({"slug": "x", "name": "t", "limit": 999})),
     ]

@@ -162,7 +162,11 @@ def _valid_date(v) -> bool:
         return True
     except ValueError:
         return False
-_URL_PAT = re.compile(r"^https://[A-Za-z0-9./_\-?=&%#]+$")
+# ホスト名は厳格に（.example / example..com / -example / example- を弾く）。
+# クエリ・フラグメントは「受理してから除去する」のが仕様なので、ここでは許容する。
+_URL_PAT = re.compile(
+    r"^https://(?![.-])[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}(?::\d{1,5})?"
+    r"(?:[/?#][^\s]*)?$")
 
 
 class GateError(Exception):
@@ -451,6 +455,10 @@ def _project_mode(conf, ctx: _Ctx, path: str, ctx_label: str) -> dict | None:
     if "note" in conf and not _is_str(conf["note"]):
         ctx.reject(f"{path}.note", "noteの型不正（注意書きを失って数値だけ残るのを防ぐ）")
         return None
+    bad = _count_sanity(conf, path)
+    if bad:
+        ctx.reject(path, bad)
+        return None
     nums = {k: conf[k] for k in _MODE_NUM_KEYS if _is_num(conf.get(k))}
     note = conf.get("note") if _is_str(conf.get("note")) else None
     # ★数値と注意書きは1つの原子★
@@ -535,6 +543,18 @@ _COUNT_AXIS_MODES = ("suru", "through", "cycle")   # 回数・周期で数える
 _AXIS_MAX_COUNT = 30                                # 回数系の閾値がこれを超えたらG数の混入を疑う
 
 
+def _count_sanity(conf: dict, where: str) -> str | None:
+    """回数・上限の健全性（有限・非負・整数）。UIの入力上限に使われるため実害が出る。"""
+    import math
+    for k in ("limit", "suruMax"):
+        v = conf.get(k)
+        if v is None:
+            continue
+        if not _is_num(v) or not math.isfinite(v) or v < 0 or float(v) != int(v):
+            return f"{where} の {k} が0以上の整数でない"
+    return None
+
+
 def _threshold_sanity(conf: dict, where: str) -> str | None:
     """閾値の健全性（有限・非負・caution<=good<=excellent の順序）を検査する。
 
@@ -588,6 +608,11 @@ def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
         return f"mode({mode_key})は hasSuru 宣言だが cycle[] を持つ（宣言と実体の不一致）"
     if has_cycle_flag and suru_rows is not None:
         return f"mode({mode_key})は hasCycle 宣言だが suru[] を持つ（宣言と実体の不一致）"
+    # ★逆方向も検査（行を持つのに宣言が無い＝UIが回数入力欄を出さない）★
+    if suru_rows is not None and not has_suru_flag and mode_key not in ("suru", "through"):
+        return f"mode({mode_key})は suru[] を持つのに hasSuru 宣言が無い"
+    if cycle_rows is not None and not has_cycle_flag and mode_key != "cycle":
+        return f"mode({mode_key})は cycle[] を持つのに hasCycle 宣言が無い"
     if suru_rows is not None and cycle_rows is not None:
         return f"mode({mode_key})が suru[] と cycle[] の両方を持つ（軸が一意でない）"
 
@@ -616,6 +641,10 @@ def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
                     bad = _threshold_sanity(rv, f"{mode_key}.byRate.{rk}")
                     if bad:
                         return bad
+                    # ★UIは mode直下に byRate を重ねる。重ねた後の順序も検査★
+                    bad = _threshold_sanity({**conf, **rv}, f"{mode_key}.byRate.{rk}(適用後)")
+                    if bad:
+                        return bad
         return None
 
     # --- ここから回数軸のmode ---
@@ -635,6 +664,24 @@ def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
     if not _is_str(unit) or unit not in ("G", "g"):
         return (f"回数系mode({mode_key})の入力単位が{unit!r}＝"
                 f"行ごとのG数閾値と単位が一致しない（回数系modeでは 'G' が必須）")
+
+    # ★行・byRate・マージ後の閾値健全性も検査する★
+    #   UIは mode直下に byRate を重ねて使うので、重ねた後の順序が壊れていないかを見る。
+    for i, row in enumerate(rows if isinstance(rows, list) else []):
+        if not isinstance(row, dict):
+            continue
+        bad = _threshold_sanity(row, f"{mode_key}[{i}]")
+        if bad:
+            return bad
+        for rk, rv in (row.get("byRate") or {}).items():
+            if not isinstance(rv, dict):
+                continue
+            bad = _threshold_sanity(rv, f"{mode_key}[{i}].byRate.{rk}")
+            if bad:
+                return bad
+            bad = _threshold_sanity({**row, **rv}, f"{mode_key}[{i}].byRate.{rk}(適用後)")
+            if bad:
+                return bad
 
     # --- 行の契約: count は必須・0以上の"整数型"・一意・昇順／各行にG数の判定材料が要る ---
     counts = []
@@ -657,6 +704,24 @@ def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
             for rv in by.values())
         if not (has_direct or has_rate):
             return f"回数系mode({mode_key})の行[{i}]にG数の判定材料が無い"
+    is_cycle = isinstance(conf.get("cycle"), list)
+    if counts:
+        if is_cycle:
+            # 周期UIは 1..配列長 を選ばせる。count がその範囲外だと到達できない
+            if sorted(counts) != list(range(1, len(counts) + 1)):
+                return (f"周期mode({mode_key})の count が 1..{len(counts)} の連番でない: {counts}"
+                        f"（UIは配列長で選択肢を作るため到達できない行が出る）")
+        else:
+            # ★スルーUIの実装（machine.html getConfig）を確認済み★
+            #   「要求count以下で最大の行 → 無ければ最浅の行」へフォールバックする設計。
+            #   よって先頭が0でなくても、0スルーは最浅行が使われ判定は成立する
+            #   （実データ sao/bandori/hanma_baki が count=1 始まり）。
+            #   ここで見るべきは「行が昇順で、上限を超える到達不能行が無いこと」だけ。
+            pass
+    cap = conf.get("suruMax")
+    if _is_num(cap) and counts and max(counts) > cap:
+        return (f"回数系mode({mode_key})の行に上限({cap})を超える count={max(counts)} がある"
+                f"＝UIで選べず到達できない")
     if len(set(counts)) != len(counts):
         return f"回数系mode({mode_key})の count が重複している: {counts}"
     if counts != sorted(counts):
@@ -677,6 +742,13 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
     # ★checker直下の未知フィールドを黙って捨てない★
     #   辞書だからといって mode 候補として通さない（"warning": {"text": "未確認"} を防ぐ）。
     #   許されるのは 予約キー / VERIFIED指定された mode名 / modeData配下のmode名 のみ。
+    if "modeData" in checker and not isinstance(checker["modeData"], dict):
+        ctx.reject("checker.modeData", "modeDataが辞書でない")
+        return None
+    for _k, _v in (checker.get("modeData") or {}).items():
+        if not isinstance(_v, dict):
+            ctx.reject(f"checker.modeData.{_k}", "modeDataの値が辞書でない")
+            return None
     md_keys = set(checker.get("modeData").keys()) if isinstance(checker.get("modeData"), dict) else set()
     known = RESERVED_CHECKER_KEYS | set(allowed_modes) | md_keys
     for k, v in checker.items():
@@ -696,6 +768,10 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
         if k in ("limit", "suruMax") and k in checker and isinstance(checker[k], bool):
             ctx.reject(f"checker.{k}", "数値フィールドに真偽値")
             return None
+    bad = _count_sanity(checker, "checker")
+    if bad:
+        ctx.reject("checker", bad)
+        return None
     out: dict = {}
     # ★単位・ラベルが落ちたら checker 全体を閉じる★
     #   （識別子と数値だけ残ると、何の数字か分からないまま公開される）
@@ -746,6 +822,9 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
             if any(x["key"] == e["key"] for x in rates):
                 ctx.reject(f"checker.exchangeRates[{i}]", "交換率のkeyが重複している")
                 return None
+            if any(x.get("label") == e.get("label") for x in rates):
+                ctx.reject(f"checker.exchangeRates[{i}].label", "交換率の表示ラベルが重複している")
+                return None
             rates.append(e)
         if rates:
             out["exchangeRates"] = rates
@@ -759,6 +838,10 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
         out["defaultRate"] = dr
 
     decl = checker.get("modes")
+    if not isinstance(decl, list) or not decl:
+        # ★modes宣言を必須にする（無いと宣言・ラベル検査を丸ごと迂回できる）★
+        ctx.reject("checker.modes", "modes宣言が無い（表示するmodeを明示すること）")
+        return None
     if isinstance(decl, list):
         kept = []
         seen_decl_keys: set = set()
@@ -791,6 +874,9 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
             for flag in ("hasSuru", "hasCycle"):
                 if isinstance(m.get(flag), bool):
                     e[flag] = m[flag]
+            if any(x.get("label") == e.get("label") for x in kept):
+                ctx.reject(f"checker.modes[{i}].label", "modeの表示ラベルが重複している")
+                return None
             kept.append(e)
         if kept:
             out["modes"] = kept
@@ -844,6 +930,21 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
     #   実際に出せた mode だけを宣言に残し、公開ゲート側にもその集合を返す。
     # ★交換率の到達性★ 選択肢のどれを選んでも、そのmodeで閾値に到達できること
     rate_keys = [r["key"] for r in out.get("exchangeRates") or []]
+    if not rate_keys:
+        # 選択肢が無いのに交換率別の判定値だけある＝どれも選べず到達不能
+        for mk in [k for k in allowed_modes if k in out]:
+            def _has_by(c):
+                if isinstance(c, dict) and isinstance(c.get("byRate"), dict) and c["byRate"]:
+                    return True
+                for seq in ("suru", "cycle"):
+                    for r in (c.get(seq) or []) if isinstance(c.get(seq), list) else []:
+                        if isinstance(r, dict) and isinstance(r.get("byRate"), dict) and r["byRate"]:
+                            return True
+                return False
+            if _has_by(out[mk]):
+                ctx.reject(f"checker.{mk}.byRate",
+                           "交換率別の判定値があるのに選択肢(exchangeRates)が無い")
+                return None
     if rate_keys:
         def _units(conf: dict):
             """判定値を持つ単位（mode直下、または回数系の各行）を列挙する。"""
@@ -857,8 +958,12 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
                 by = unit_conf.get("byRate") if isinstance(unit_conf.get("byRate"), dict) else {}
                 has_base = any(_is_num(unit_conf.get(k))
                                for k in ("excellent", "good", "caution", "target"))
+                def _rate_has_value(rv):
+                    return isinstance(rv, dict) and any(
+                        _is_num(rv.get(k)) for k in ("excellent", "good", "caution", "target"))
                 for rk in rate_keys:
-                    if rk in by or has_base:
+                    # ★キーが在るだけでなく「判定値がある」ことを要求★
+                    if _rate_has_value(by.get(rk)) or has_base:
                         continue
                     ctx.reject(f"checker.{mk}[{i}].byRate",
                                f"交換率 {rk} を選ぶと判定値に到達できない（基準値も無い）")
@@ -1161,8 +1266,9 @@ def _project_machine(machine: dict, gates: dict, ctx: _Ctx) -> dict:
         return out
     out["slug"] = machine["slug"]
     # 機種名は公開物の必須項目（欠落・空文字のまま公開しない）
-    if not (_is_str(machine.get("name")) and machine["name"].strip()):
-        ctx.reject("name", "機種名が無い/空")
+    if not (_is_str(machine.get("name")) and normalize_atom([machine["name"]]).strip()):
+        # ★ゼロ幅文字だけの名前など、表示すると空になるものも拒否★
+        ctx.reject("name", "機種名が無い/表示すると空になる")
         return out
     s("name")
     if "name" not in out:
@@ -1594,7 +1700,9 @@ def selftest() -> int:
       and rc["normal"]["byRate"]["eq56"]["target"] == 570)
     # 回数系modeは入力単位(G)が必須になったので明示する
     cyc = {**base, "checker_modes": {"cycle": "VERIFIED"},
-           "checker": {"unit": "G", "cycle": {"cycle": [{"count": 1, "excellent": 800}]}}}
+           "checker": {"unit": "G",
+                       "modes": [{"key": "cycle", "label": "周期", "hasCycle": True}],
+                       "cycle": {"cycle": [{"count": 1, "excellent": 800}]}}}
     t("実データ形状: 周期(辞書配列)を落とさない",
       publish_view(cyc)["machine"]["checker"]["cycle"]["cycle"][0]["count"] == 1)
 
@@ -1800,7 +1908,9 @@ def selftest() -> int:
                             "cycle": [{"count": 1, "good": 500}]}}))
     t("　行のbyRateにG数があれば判定材料として認める",
       publish_view({**base, "checker_modes": {"suru": "STRUCT_OK"},
-                    "checker": {"unit": "G", "modes": [{"key": "suru", "label": "suru"}],
+                    "checker": {"unit": "G",
+                                "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
+                                "exchangeRates": [{"key": "eq56", "label": "5.6枚"}],
                                 "suru": {"suru": [{"count": 1,
                                                    "byRate": {"eq56": {"good": 600}}}]}}}
                    )["gates"]["checker"] is True)
@@ -1905,6 +2015,50 @@ def selftest() -> int:
                                 "a": {"good": 600},
                                 "b": {"good": 500, "note": "580Gから期待収支がプラス"}}}
                    )["gates"]["checker_modes"] == ["a"])
+
+    # ===== Codex 18巡目の反例（回帰テスト）=====
+    b18 = {"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
+           "suru": {"suruMax": 3, "suru": [{"count": 0, "good": 600}, {"count": 1, "good": 500}]}}
+    ax18 = lambda ck, modes=None: bool(audit_view(
+        {**base, "checker_modes": modes or {"suru": "STRUCT_OK"}, "checker": ck})["errors"])
+    t("★18-1: 行の閾値順序が壊れていたら停止",
+      ax18({**b18, "suru": {"suru": [{"count": 0, "caution": 700, "good": 600, "excellent": 500}]}}))
+    t("★18-2: byRate適用後に順序が壊れる場合も停止",
+      ax18({**b18, "exchangeRates": [{"key": "eq56", "label": "5.6枚"}],
+            "suru": {"suru": [{"count": 0, "caution": 300, "good": 600, "excellent": 700,
+                               "byRate": {"eq56": {"excellent": 200}}}]}}))
+    t("★18-3: limit/suruMax が整数でなければ停止", ax18({**b18, "limit": 1.5}))
+    t("★18-4: 交換率キーはあるが判定値が無い → 停止",
+      ax18({**b18, "exchangeRates": [{"key": "eq56", "label": "5.6枚"}],
+            "suru": {"suru": [{"count": 0, "byRate": {"eq56": {"note": "x"}}}]}}))
+    t("　交換率別の値があるのに選択肢が無い → 停止",
+      ax18({**b18, "suru": {"suru": [{"count": 0, "byRate": {"eq56": {"good": 600}}}]}}))
+    t("★18-5: modes宣言が無ければ停止",
+      ax18({"unit": "G", "suru": {"suru": [{"count": 0, "good": 600}]}}))
+    t("★18-6: 行があるのに hasSuru/hasCycle 宣言が無ければ停止",
+      ax18({"unit": "G", "modes": [{"key": "at", "label": "AT"}],
+            "at": {"suru": [{"count": 0, "good": 600}]}}, {"at": "STRUCT_OK"}))
+    t("★18-7: 上限を超える回数行・周期の連番崩れは停止",
+      ax18({**b18, "suru": {"suruMax": 1, "suru": [{"count": 0, "good": 600},
+                                                   {"count": 5, "good": 500}]}})
+      and ax18({"unit": "G", "modes": [{"key": "cycle", "label": "周期", "hasCycle": True}],
+                "cycle": {"cycle": [{"count": 1, "good": 600}, {"count": 3, "good": 500}]}},
+               {"cycle": "STRUCT_OK"}))
+    t("★18-8: 表示ラベルの重複は停止",
+      ax18({"unit": "G", "modes": [{"key": "a", "label": "同じ"}, {"key": "b", "label": "同じ"}],
+            "a": {"good": 600}, "b": {"good": 500}}, {"a": "STRUCT_OK", "b": "STRUCT_OK"}))
+    t("★18-10: 表示すると空になる機種名は停止",
+      bool(audit_view({**base, "name": "​​"})["errors"]))
+    t("★18-12: modeDataと直下で片方が壊れていたら停止",
+      ax18({**b18, "modeData": {"suru": "壊れた値"}}))
+    t("　実データ形状（count=1始まり・UIは最浅へフォールバック）は通す",
+      publish_view({**base, "checker_modes": {"suru": "STRUCT_OK"},
+                    "checker": {"unit": "G",
+                                "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
+                                "suru": {"suruMax": 6,
+                                         "suru": [{"count": 1, "good": 600},
+                                                  {"count": 2, "good": 500}]}}}
+                   )["gates"]["checker"] is True)
 
     # ===== 不変条件 =====
     for bad, label in (({"public": False, "index": True}, "index⇒public"),

@@ -301,7 +301,8 @@ def _audit_checker_shape(slug: str, ck, path: str = "checker") -> list[str]:
             if seq in v:
                 if seq == "cycle" and isinstance(v[seq], list) and v[seq] and all(
                         isinstance(x, (int, float)) and not isinstance(x, bool) for x in v[seq]):
-                    continue          # 数値配列の周期（gatesが許す正当な形）
+                    out.append(f"{slug}: {path}.{k}.cycle が数値配列（未対応の形式）")
+                    continue
                 if not isinstance(v[seq], list):
                     out.append(f"{slug}: {path}.{k}.{seq} の型が不正")
                 else:
@@ -327,6 +328,83 @@ def _audit_checker_shape(slug: str, ck, path: str = "checker") -> list[str]:
 
 
 _COUNT_MODES = ("suru", "through", "cycle")
+
+
+def _audit_checker_contract(slug: str, ck) -> list[str]:
+    """★17〜18巡目の中核契約を独立に実装★（gates の関数を使わない）
+
+    判定材料の有無／閾値の健全性（有限・非負・順序・byRate適用後）／
+    交換率の到達性／ラベルの必須・一意／上限の整数性 を独自に検査する。
+    """
+    if not isinstance(ck, dict):
+        return []
+    out: list[str] = []
+    import math
+
+    def sane(c, where):
+        vals = {}
+        for k in ("caution", "good", "excellent", "target"):
+            v = c.get(k)
+            if v is None:
+                continue
+            if not isinstance(v, (int, float)) or isinstance(v, bool) or not math.isfinite(v) or v < 0:
+                out.append(f"{slug}: {where}.{k} が0以上の有限数でない"); continue
+            vals[k] = v
+        seq = [vals[k] for k in ("caution", "good", "excellent") if k in vals]
+        if seq != sorted(seq):
+            out.append(f"{slug}: {where} の閾値の順序が壊れている")
+
+    def has_value(c):
+        return isinstance(c, dict) and any(
+            isinstance(c.get(k), (int, float)) and not isinstance(c.get(k), bool)
+            for k in ("excellent", "good", "caution", "target"))
+
+    for k in ("limit", "suruMax"):
+        v = ck.get(k)
+        if v is not None and (not isinstance(v, (int, float)) or isinstance(v, bool)
+                              or not math.isfinite(v) or v < 0 or float(v) != int(v)):
+            out.append(f"{slug}: checker.{k} が0以上の整数でない")
+
+    decl = ck.get("modes") if isinstance(ck.get("modes"), list) else []
+    labels = [m.get("label") for m in decl if isinstance(m, dict)]
+    if any(not isinstance(x, str) or not x.strip() for x in labels):
+        out.append(f"{slug}: modeの表示ラベルが無い")
+    if len(labels) != len(set(labels)):
+        out.append(f"{slug}: modeの表示ラベルが重複している")
+    rates = ck.get("exchangeRates") if isinstance(ck.get("exchangeRates"), list) else []
+    rlabels = [r.get("label") for r in rates if isinstance(r, dict)]
+    if any(not isinstance(x, str) or not x.strip() for x in rlabels):
+        out.append(f"{slug}: 交換率の表示ラベルが無い")
+    if len(rlabels) != len(set(rlabels)):
+        out.append(f"{slug}: 交換率の表示ラベルが重複している")
+    rate_keys = [r.get("key") for r in rates if isinstance(r, dict)]
+
+    for mk, conf in ck.items():
+        if mk in _CK_TOP or not isinstance(conf, dict):
+            continue
+        rows = conf.get("suru") if isinstance(conf.get("suru"), list) else (
+            conf.get("cycle") if isinstance(conf.get("cycle"), list) else None)
+        units = rows if rows else [conf]
+        if not rows and not has_value(conf) and not any(
+                has_value(rv) for rv in (conf.get("byRate") or {}).values()):
+            out.append(f"{slug}: checker.{mk} に判定材料が無い")
+        for i, u in enumerate(units):
+            if not isinstance(u, dict):
+                continue
+            sane(u, f"checker.{mk}[{i}]")
+            by = u.get("byRate") if isinstance(u.get("byRate"), dict) else {}
+            for rk, rv in by.items():
+                if isinstance(rv, dict):
+                    sane(rv, f"checker.{mk}[{i}].byRate.{rk}")
+                    sane({**u, **rv}, f"checker.{mk}[{i}].byRate.{rk}(適用後)")
+                if rate_keys and rk not in rate_keys:
+                    out.append(f"{slug}: checker.{mk}[{i}].byRate.{rk} は選択肢に無い交換率")
+            for rk in rate_keys:
+                if not has_value(by.get(rk)) and not has_value(u):
+                    out.append(f"{slug}: checker.{mk}[{i}] は交換率 {rk} で判定値に到達できない")
+            if by and not rate_keys:
+                out.append(f"{slug}: checker.{mk}[{i}] に交換率別の値があるのに選択肢が無い")
+    return out
 
 
 def _audit_modes_config_match(slug: str, ck) -> list[str]:
@@ -519,6 +597,7 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
     problems.extend(_audit_axis(slug, pub.get("checker")))
     problems.extend(_audit_exchange_ref(slug, pub.get("checker")))
     problems.extend(_audit_modes_config_match(slug, pub.get("checker")))
+    problems.extend(_audit_checker_contract(slug, pub.get("checker")))
     # ★checkerを出すなら、目安ラベルの対象にcheckerが入っていること★
     #   （gates側の新しい不変条件を、独立にも担保する）
     dr = pub.get("display_requirements")
@@ -821,7 +900,7 @@ def selftest() -> int:
         return audit_machine({**ok, "checker": ck,
                               "display_requirements": {"disclaimer": EXPECTED_DISCLAIMER,
                                                        "surfaces": ["checker", "strategy"]}})
-    good_ax = {"unit": "G", "modes": [{"key": "suru", "hasSuru": True}],
+    good_ax = {"unit": "G", "modes": [{"key": "suru", "label": "スルー", "hasSuru": True}],
                "suru": {"suru": [{"count": 0, "good": 600}, {"count": 1, "good": 500}]}}
     t("★軸契約(監査側): 正しい二軸は通す", _ax(good_ax) == [])
     for ck, label in (
