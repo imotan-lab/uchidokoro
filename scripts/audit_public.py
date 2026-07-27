@@ -286,6 +286,74 @@ def _audit_checker_shape(slug: str, ck, path: str = "checker") -> list[str]:
     return out
 
 
+_COUNT_MODES = ("suru", "through", "cycle")
+
+
+def _audit_axis(slug: str, ck) -> list[str]:
+    """★軸契約を gates とは独立に検査する★
+
+    gates 側が誤って通した場合に備え、同じ関数を使わずに書く（共通原因故障の回避）。
+    回数系modeは「入力単位がG」「直下閾値を持たない」「回数ごとの行を持つ」
+    「行は count(整数・一意・昇順)＋G数の判定材料を持つ」を満たすこと。
+    """
+    out: list[str] = []
+    if not isinstance(ck, dict):
+        return out
+    unit = ck.get("unit")
+    decl = ck.get("modes") if isinstance(ck.get("modes"), list) else []
+    flags = {m.get("key"): m for m in decl if isinstance(m, dict)}
+    for k, v in ck.items():
+        if k in _CK_TOP or not isinstance(v, dict):
+            continue
+        d = flags.get(k, {})
+        hs, hc = d.get("hasSuru") is True, d.get("hasCycle") is True
+        if not (k in _COUNT_MODES or hs or hc):
+            continue
+        if hs and hc:
+            out.append(f"{slug}: checker.{k} が hasSuru と hasCycle を同時宣言")
+        rows = v.get("suru") if isinstance(v.get("suru"), list) else (
+            v.get("cycle") if isinstance(v.get("cycle"), list) else None)
+        if isinstance(v.get("suru"), list) and isinstance(v.get("cycle"), list):
+            out.append(f"{slug}: checker.{k} が suru[] と cycle[] の両方を持つ")
+        if hs and isinstance(v.get("cycle"), list):
+            out.append(f"{slug}: checker.{k} は hasSuru 宣言だが cycle[] を持つ")
+        if hc and isinstance(v.get("suru"), list):
+            out.append(f"{slug}: checker.{k} は hasCycle 宣言だが suru[] を持つ")
+        direct = [x for x in ("excellent", "good", "caution", "target")
+                  if isinstance(v.get(x), (int, float)) and not isinstance(v.get(x), bool)]
+        if rows is None:
+            out.append(f"{slug}: checker.{k} が回数ごとの行を持たない"
+                       + ("（直下閾値のみ＝軸の食い違い）" if direct else "（判定材料が無い）"))
+            continue
+        if direct:
+            out.append(f"{slug}: checker.{k} が直下閾値と行を併存させている")
+        if unit not in ("G", "g"):
+            out.append(f"{slug}: checker.{k} の入力単位が {unit!r}（回数系modeでは 'G' が必須）")
+        seen, prev = set(), None
+        for i, row in enumerate(rows):
+            if not isinstance(row, dict):
+                out.append(f"{slug}: checker.{k}.rows[{i}] が辞書でない"); continue
+            cv = row.get("count")
+            if type(cv) is not int or isinstance(cv, bool) or cv < 0:
+                out.append(f"{slug}: checker.{k}.rows[{i}] の count が0以上の整数でない"); continue
+            if cv in seen:
+                out.append(f"{slug}: checker.{k}.rows[{i}] の count が重複")
+            if prev is not None and cv < prev:
+                out.append(f"{slug}: checker.{k}.rows[{i}] の count が昇順でない")
+            seen.add(cv); prev = cv
+            ok_direct = any(isinstance(row.get(x), (int, float)) and not isinstance(row.get(x), bool)
+                            for x in ("excellent", "good", "caution", "target"))
+            by = row.get("byRate")
+            ok_rate = isinstance(by, dict) and any(
+                isinstance(rv, dict) and any(
+                    isinstance(rv.get(x), (int, float)) and not isinstance(rv.get(x), bool)
+                    for x in ("excellent", "good", "caution", "target"))
+                for rv in by.values())
+            if not (ok_direct or ok_rate):
+                out.append(f"{slug}: checker.{k}.rows[{i}] にG数の判定材料が無い")
+    return out
+
+
 def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
     """公開射影された1機種分を検査し、違反の一覧を返す。"""
     problems: list[str] = []
@@ -345,6 +413,7 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
                 elif not isinstance(vv, str):
                     problems.append(f"{slug}: {fld}.{k} の型が不正")
     problems.extend(_audit_checker_shape(slug, pub.get("checker")))
+    problems.extend(_audit_axis(slug, pub.get("checker")))
     # ★checkerを出すなら、目安ラベルの対象にcheckerが入っていること★
     #   （gates側の新しい不変条件を、独立にも担保する）
     dr = pub.get("display_requirements")
@@ -561,6 +630,29 @@ def selftest() -> int:
       and any("slug" in p for p in audit_machine({**ok, "slug": "BAD SLUG"}))
       and any("重複" in p for p in audit_machine(ok, {"x"})))
     t("★空の公開データを不合格にする", audit_machine({}) != [])
+
+    # --- 軸契約の独立実装（Codex 12巡目 条件6）---
+    def _ax(ck):
+        return audit_machine({**ok, "checker": ck,
+                              "display_requirements": {"surfaces": ["checker"]}})
+    good_ax = {"unit": "G", "modes": [{"key": "suru", "hasSuru": True}],
+               "suru": {"suru": [{"count": 0, "good": 600}, {"count": 1, "good": 500}]}}
+    t("★軸契約(監査側): 正しい二軸は通す", _ax(good_ax) == [])
+    for ck, label in (
+        ({**good_ax, "suru": {"good": 4}}, "直下閾値のみ"),
+        ({**good_ax, "suru": {**good_ax["suru"], "good": 4}}, "直下閾値と行の併存"),
+        ({**good_ax, "unit": "回"}, "入力単位が回"),
+        ({**good_ax, "unit": None}, "入力単位の欠落"),
+        ({**good_ax, "suru": {"suru": [{"good": 600}]}}, "count欠落"),
+        ({**good_ax, "suru": {"suru": [{"count": 1.0, "good": 600}]}}, "countが小数表記"),
+        ({**good_ax, "suru": {"suru": [{"count": 1}]}}, "行に判定材料が無い"),
+        ({**good_ax, "suru": {"suru": [{"count": 2, "good": 600}, {"count": 1, "good": 500}]}}, "count降順"),
+        ({**good_ax, "modes": [{"key": "suru", "hasCycle": True}]}, "宣言と実体の不一致"),
+        ({**good_ax, "modes": [{"key": "suru", "hasSuru": True, "hasCycle": True}]}, "両方宣言"),
+        ({"unit": "G", "modes": [{"key": "cycle", "hasCycle": True}],
+          "cycle": {"note": "周期天井"}}, "noteだけの周期mode"),
+    ):
+        t(f"★軸契約(監査側): {label} → 違反", _ax(ck) != [])
     t("★必須フィールドが型不正なら違反（name: true）",
       any("型が不正" in p for p in audit_machine({"slug": "x", "name": True})))
 

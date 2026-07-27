@@ -43,6 +43,29 @@ MAX_ROUNDS = 40
 #   ここに人が意図した数を書く。機種を増減したら、意図した変更として必ずここを直す。
 EXPECTED_PUBLIC = 120
 
+# ★軸契約の固定集合（件数ではなく (slug, mode) で持つ）★
+#   件数だけだと「1件止まらなくなり、別の1件が止まる」入れ替わりを検出できない。
+#   データを意図的に変えた時だけ、この集合を意図して更新すること。
+EXPECTED_AXIS_STOPPED = {
+    # Phase 0 で停止した20mode（構造だけで止まることを確認する対象）
+    ("akudama", "suru"), ("azurlane", "suru"), ("basilisk_tenzen", "through"),
+    ("biohazard_re3", "suru"), ("darlifra", "suru"), ("gundam_uc2", "suru"),
+    ("karakuri", "through"), ("madomagi_forte", "through"), ("mhrise", "suru"),
+    ("okidoki_black", "through"), ("okidoki_encore", "through"), ("okidoki_gold", "through"),
+    ("onepunchman", "suru"), ("onimusha3", "cycle"), ("revengers", "through"),
+    ("sengoku_otome4", "suru"), ("shaman_king", "suru"), ("super_blackjack", "suru"),
+    ("super_rio_ace2", "suru"), ("valvrave", "suru"),
+    # 2026-07-27 に軸契約で新たに発見した1件（判定材料が無い周期mode）
+    ("sengoku_otome5", "cycle"),
+}
+EXPECTED_AXIS_PASSED = {
+    ("tokyo_ghoul", "at"), ("valvrave2", "suru"), ("valvrave2", "cycle"),
+    ("monkeyv", "cycle"), ("tekken6", "suru"), ("kaguya", "suru"), ("banchou4", "suru"),
+    ("dumbbell", "suru"), ("baki", "suru"), ("sao", "suru"), ("bandori", "suru"),
+    ("hanma_baki", "suru"), ("gundam_seed", "suru"), ("youjitsu", "suru"),
+    ("kengan_ashura", "suru"), ("goji_eva", "suru"),
+}
+
 
 def _all_allow_ledger(sim: dict, detail: dict, g: dict, slug: str) -> dict:
     """未分類をすべて ALLOW と仮定した台帳（不動点まで反復）。"""
@@ -115,7 +138,8 @@ def axis_regression() -> list[str]:
     """
     machines = json.load(open(os.path.join(DATA, "machines.json"), encoding="utf-8"))
     ng: list[str] = []
-    stopped = passed = 0
+    stopped: set = set()
+    passed: set = set()
     for m in machines:
         c = m.get("checker") or {}
         decl = c.get("modes") if isinstance(c.get("modes"), list) else []
@@ -123,21 +147,24 @@ def axis_regression() -> list[str]:
             if not isinstance(v, dict) or k in ("modeData", "byRate", "exchangeRates"):
                 continue
             d = next((x for x in decl if isinstance(x, dict) and x.get("key") == k), {})
-            flags = bool(d.get("hasSuru") or d.get("hasCycle")) or None
+            is_target = ("_disabled" in v or k in ("suru", "through", "cycle")
+                         or d.get("hasSuru") or d.get("hasCycle"))
+            if not is_target:
+                continue
             # ★停止マーカーをメモリ上で外して検査する（マーカー非依存を確かめる）★
             probe = {kk: vv for kk, vv in v.items() if kk != "_disabled"}
-            r = gates._axis_conflict(k, probe, c.get("unit"), flags)
-            if "_disabled" in v:
-                if r:
-                    stopped += 1
-                else:
-                    ng.append(f"{m['slug']}.{k}: 停止済みmodeがマーカー無しでは通ってしまう")
-            elif k in ("suru", "through", "cycle") or flags:
-                if r:
-                    ng.append(f"{m['slug']}.{k}: 正常なmodeが止まる（{r[:50]}）")
-                else:
-                    passed += 1
-    print(f"軸契約の回帰: 停止マーカー無しでも止まる {stopped} 件 / 正常modeが通る {passed} 件")
+            (stopped if gates._axis_conflict(k, probe, c.get("unit"), d) else passed).add(
+                (m["slug"], k))
+
+    # ★件数ではなく固定集合と突き合わせる（入れ替わりも検出する）★
+    for label, got, want in (("止まるべきmode", stopped, EXPECTED_AXIS_STOPPED),
+                             ("通るべきmode", passed, EXPECTED_AXIS_PASSED)):
+        for x in sorted(want - got):
+            ng.append(f"軸回帰: {label}が{'止まらなくなった' if want is EXPECTED_AXIS_STOPPED else '止まるようになった'}: {x[0]}.{x[1]}")
+        for x in sorted(got - want):
+            ng.append(f"軸回帰: 想定外に{'止まった' if want is EXPECTED_AXIS_STOPPED else '通った'}: {x[0]}.{x[1]}")
+    print(f"軸契約の回帰: 止まる {len(stopped)} 件（想定 {len(EXPECTED_AXIS_STOPPED)}）/ "
+          f"通る {len(passed)} 件（想定 {len(EXPECTED_AXIS_PASSED)}）")
     return ng
 
 

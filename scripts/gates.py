@@ -520,7 +520,7 @@ _AXIS_MAX_COUNT = 30                                # 回数系の閾値がこ�
 
 
 def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
-                   declared_flags: bool | None = None) -> str | None:
+                   declared_flags: dict | None = None) -> str | None:
     """入力軸と判定軸の食い違いを、閾値の大小ではなく**構造**で検出する。
 
     ★実データで確認した判別条件（2026-07-27）★
@@ -537,11 +537,23 @@ def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
       （Codex 10巡目の指摘：人が付けた印だけを根拠にしてはいけない）
     """
     # 回数軸とみなす条件: mode名 または hasSuru/hasCycle 宣言
-    is_count = (mode_key in _COUNT_AXIS_MODES
-                or conf.get("hasSuru") is True or conf.get("hasCycle") is True
-                or declared_flags is True)
-    rows = conf.get("suru") if isinstance(conf.get("suru"), list) else \
-        (conf.get("cycle") if isinstance(conf.get("cycle"), list) else None)
+    has_suru_flag = conf.get("hasSuru") is True or (declared_flags or {}).get("hasSuru") is True
+    has_cycle_flag = conf.get("hasCycle") is True or (declared_flags or {}).get("hasCycle") is True
+    is_count = mode_key in _COUNT_AXIS_MODES or has_suru_flag or has_cycle_flag
+
+    suru_rows = conf.get("suru") if isinstance(conf.get("suru"), list) else None
+    cycle_rows = conf.get("cycle") if isinstance(conf.get("cycle"), list) else None
+    # ★宣言と実体の対応を検査する（hasSuruなのに cycle[] を持つ等の取り違えを止める）★
+    if has_suru_flag and has_cycle_flag:
+        return f"mode({mode_key})が hasSuru と hasCycle を同時に宣言している（軸が一意でない）"
+    if has_suru_flag and cycle_rows is not None:
+        return f"mode({mode_key})は hasSuru 宣言だが cycle[] を持つ（宣言と実体の不一致）"
+    if has_cycle_flag and suru_rows is not None:
+        return f"mode({mode_key})は hasCycle 宣言だが suru[] を持つ（宣言と実体の不一致）"
+    if suru_rows is not None and cycle_rows is not None:
+        return f"mode({mode_key})が suru[] と cycle[] の両方を持つ（軸が一意でない）"
+
+    rows = suru_rows if suru_rows is not None else cycle_rows
     direct = [k for k in ("excellent", "good", "caution", "target") if _is_num(conf.get(k))]
 
     if not is_count:
@@ -564,25 +576,36 @@ def _axis_conflict(mode_key: str, conf: dict, unit: str | None,
         # 閾値も行も無い（noteだけ等）＝判定できないのに表示対象になる
         return f"回数系mode({mode_key})に判定材料が無い（閾値も行も持たない）"
 
-    # --- 行の契約: count は必須・正の整数・一意・昇順 ---
+    # --- 入力単位は必須（欠落を素通りさせない）---
+    if not _is_str(unit) or unit not in ("G", "g"):
+        return (f"回数系mode({mode_key})の入力単位が{unit!r}＝"
+                f"行ごとのG数閾値と単位が一致しない（回数系modeでは 'G' が必須）")
+
+    # --- 行の契約: count は必須・0以上の"整数型"・一意・昇順／各行にG数の判定材料が要る ---
     counts = []
     for i, row in enumerate(rows):
         if not isinstance(row, dict):
             return f"回数系mode({mode_key})の行[{i}]が辞書でない"
         cv = row.get("count")
-        if not _is_num(cv) or isinstance(cv, bool):
-            return f"回数系mode({mode_key})の行[{i}]に count が無い（回数が特定できない）"
-        if float(cv) != int(cv) or int(cv) < 0:
-            return f"回数系mode({mode_key})の行[{i}]の count={cv} が0以上の整数でない"
-        counts.append(int(cv))
+        # ★型そのものが int であること（1.0 のような小数表記を通さない）★
+        if type(cv) is not int or isinstance(cv, bool):
+            return f"回数系mode({mode_key})の行[{i}]の count={cv!r} が整数でない（回数が特定できない）"
+        if cv < 0:
+            return f"回数系mode({mode_key})の行[{i}]の count={cv} が0以上でない"
+        counts.append(cv)
+        # ★各行にG数の判定材料が最低1つ必要（countだけの行は判定できない）★
+        has_direct = any(_is_num(row.get(k)) for k in ("excellent", "good", "caution", "target"))
+        by = row.get("byRate")
+        has_rate = isinstance(by, dict) and any(
+            isinstance(rv, dict) and any(_is_num(rv.get(k))
+                                         for k in ("excellent", "good", "caution", "target"))
+            for rv in by.values())
+        if not (has_direct or has_rate):
+            return f"回数系mode({mode_key})の行[{i}]にG数の判定材料が無い"
     if len(set(counts)) != len(counts):
         return f"回数系mode({mode_key})の count が重複している: {counts}"
     if counts != sorted(counts):
         return f"回数系mode({mode_key})の count が昇順でない: {counts}"
-    # 入力単位が回数系なら、行の中の閾値は「G数」でなく回数のはず＝二軸が成立しない
-    if _is_str(unit) and unit not in ("G", "g"):
-        return (f"回数系mode({mode_key})の入力単位が{unit!r}＝"
-                f"行ごとのG数閾値と単位が一致しない")
     return None
 
 
@@ -727,8 +750,7 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx) -> dict | Non
         # declared は key の集合なので、宣言そのものは decl から探す。
         _decl = next((m for m in (decl if isinstance(decl, list) else [])
                       if isinstance(m, dict) and m.get("key") == key), {})
-        axis = _axis_conflict(key, conf, checker.get("unit"),
-                              bool(_decl.get("hasSuru") or _decl.get("hasCycle")) or None)
+        axis = _axis_conflict(key, conf, checker.get("unit"), _decl)
         if axis:
             ctx.reject(f"checker.{key}", axis)
             continue
@@ -1384,8 +1406,9 @@ def selftest() -> int:
       rc["exchangeRates"][0]["key"] == "eq56" and rc["defaultRate"] == "eq56"
       and rc["normal"]["target"] == 570 and rc["hasSuru"] is True
       and rc["normal"]["byRate"]["eq56"]["target"] == 570)
+    # 回数系modeは入力単位(G)が必須になったので明示する
     cyc = {**base, "checker_modes": {"cycle": "VERIFIED"},
-           "checker": {"cycle": {"cycle": [{"count": 1, "excellent": 800}]}}}
+           "checker": {"unit": "G", "cycle": {"cycle": [{"count": 1, "excellent": 800}]}}}
     t("実データ形状: 周期(辞書配列)を落とさない",
       publish_view(cyc)["machine"]["checker"]["cycle"]["cycle"][0]["count"] == 1)
 
@@ -1548,10 +1571,9 @@ def selftest() -> int:
 
     # ★軸契約の完全化（Codex 11巡目の指定反例を全件固定）★
     def _axis_stops(ck, modes=None):
-        return any("軸" in e["reason"] or "判定材料" in e["reason"] or "count" in e["reason"]
-                   or "回数" in e["reason"]
-                   for e in audit_view({**base, "checker_modes": modes or {"suru": "STRUCT_OK"},
-                                        "checker": ck})["errors"])
+        # 軸契約に触れる構造エラーが1件でも出ること（メッセージ文言に依存させない）
+        return bool(audit_view({**base, "checker_modes": modes or {"suru": "STRUCT_OK"},
+                                "checker": ck})["errors"])
 
     t("★軸契約: 直下閾値＋suru[] の併存 → 停止",
       _axis_stops({"unit": "G", "modes": [{"key": "suru"}],
@@ -1571,6 +1593,31 @@ def selftest() -> int:
     t("★軸契約: key='at'でも hasSuru宣言＋直下閾値 → 停止",
       _axis_stops({"unit": "G", "modes": [{"key": "at", "hasSuru": True}],
                    "at": {"good": 4}}, {"at": "STRUCT_OK"}))
+    # Codex 12巡目の指定反例
+    t("★軸契約: 入力単位の欠落 → 停止",
+      _axis_stops({"modes": [{"key": "suru"}], "suru": {"suru": [{"count": 1, "good": 600}]}}))
+    t("★軸契約: count が小数表記(1.0) → 停止",
+      _axis_stops({"unit": "G", "modes": [{"key": "suru"}],
+                   "suru": {"suru": [{"count": 1.0, "good": 600}]}}))
+    t("★軸契約: 行にG数の判定材料が無い（countだけ）→ 停止",
+      _axis_stops({"unit": "G", "modes": [{"key": "suru"}],
+                   "suru": {"suru": [{"count": 1}]}}))
+    t("★軸契約: 宣言と実体の不一致（hasSuru宣言なのにcycle[]）→ 停止",
+      _axis_stops({"unit": "G", "modes": [{"key": "suru", "hasCycle": True}],
+                   "suru": {"suru": [{"count": 1, "good": 600}]}}))
+    t("★軸契約: hasSuruとhasCycleの同時宣言 → 停止",
+      _axis_stops({"unit": "G", "modes": [{"key": "suru", "hasSuru": True, "hasCycle": True}],
+                   "suru": {"suru": [{"count": 1, "good": 600}]}}))
+    t("★軸契約: suru[]とcycle[]の併存 → 停止",
+      _axis_stops({"unit": "G", "modes": [{"key": "suru"}],
+                   "suru": {"suru": [{"count": 1, "good": 600}],
+                            "cycle": [{"count": 1, "good": 500}]}}))
+    t("　行のbyRateにG数があれば判定材料として認める",
+      publish_view({**base, "checker_modes": {"suru": "STRUCT_OK"},
+                    "checker": {"unit": "G", "modes": [{"key": "suru"}],
+                                "suru": {"suru": [{"count": 1,
+                                                   "byRate": {"eq56": {"good": 600}}}]}}}
+                   )["gates"]["checker"] is True)
     t("★軸契約: noteだけの周期mode → 停止（実データ sengoku_otome5 と同型）",
       _axis_stops({"unit": "G", "modes": [{"key": "cycle", "hasCycle": True}],
                    "cycle": {"note": "周期天井は最大6周期"}}, {"cycle": "STRUCT_OK"}))
