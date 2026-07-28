@@ -269,9 +269,12 @@ def identity_verdict(src: dict, identity: dict | None):
 
 
 # 引用の周りにあってはいけない言い回し（他機種の値を並べている合図）
+# ★語の一覧は「他機種の値を並べている合図」に絞る★（Codex 7巡目 (b)-5）
+#   「シリーズ」「ちなみに」は普通の記事本文にも出るので外し、
+#   代わりに取りこぼしていた 対比／対照／一方／vs を足した。
 _COMPARISON = re.compile(
-    r"比較|旧作|前作|先代|前機種|他機種|参考まで|参考値|シリーズ|歴代|"
-    r"前バージョン|旧台|旧機種|ちなみに|なお、?[^。]{0,10}は")
+    r"比較|対比|対照|旧作|前作|先代|前機種|他機種|参考まで|参考値|歴代|"
+    r"前バージョン|旧台|旧機種|一方、|(?<![A-Za-z])vs(?![A-Za-z])", re.I)
 # 引用の周りで機種名を探す幅（これより離れた機種名は結び付いていないとみなす）
 _BIND_WINDOW = 60
 
@@ -286,12 +289,26 @@ def _context_binding_ok(quote: str, context: str, cores):
     """
     import claim_identity as cid
 
-    ctx = str(context or "")
-    pos = ctx.find(str(quote or ""))
-    if pos < 0:
+    ctx = unicodedata.normalize("NFKC", str(context or ""))
+    q = unicodedata.normalize("NFKC", str(quote or ""))
+    pos = ctx.find(q)
+    if pos < 0 or not q:
         return False, "QUOTE_NOT_IN_CONTEXT"
+
+    # ★★引用を「文の途中」で切らせない★★（Codex 7巡目 (a)-1）
+    #   「設定1の機械割は97.2%ではなく99.9%です」から前半だけを引用すると、
+    #   訂正前の値が正しい値として通ってしまう。
+    #   引用を含む**文まるごと**を取り出し、それに曖昧・否定の検査を掛ける。
+    starts = [0] + [m.end() for m in re.finditer(r"[。\n]", ctx)]
+    ends = [m.end() for m in re.finditer(r"[。\n]", ctx)] + [len(ctx)]
+    s0 = max([s for s in starts if s <= pos], default=0)
+    e0 = min([e for e in ends if e >= pos + len(q)], default=len(ctx))
+    sentence = ctx[s0:e0]
+    if _AMBIGUOUS.search(sentence):
+        return False, "AMBIGUOUS_IN_SENTENCE"
+
     lo = max(0, pos - _BIND_WINDOW)
-    hi = min(len(ctx), pos + len(quote) + _BIND_WINDOW)
+    hi = min(len(ctx), pos + len(q) + _BIND_WINDOW)
     window = ctx[lo:hi]
     if _COMPARISON.search(window):
         return False, "COMPARISON_NEAR_QUOTE"
@@ -317,13 +334,29 @@ def _whole_text_ok(text: str, cores, identity: dict):
     # ★別媒体の表記は日本語だけではない★（Codex 6巡目 (a)-3）
     if cid.is_pachinko_text(raw) or _PACHINKO_EXTRA.search(raw):
         return False, "PACHINKO"
-    # ★他機種は正式名だけでなく別名も見る／2文字の芯も見る★
-    for rc in (identity.get("reject_all_cores") or
-               identity.get("reject_cores") or []):
-        if not rc or len(rc) < 2:
+    # ★★他機種の名前は「位置」で判定する★★（Codex 7巡目 (a)-2）
+    #   以前は「自分の芯を含む名前」を無条件に見逃していたので、
+    #   「真打吉宗」は「吉宗」を含むという理由で素通りし、
+    #   L吉宗の記事に真打吉宗の値を混ぜられた。
+    #   自分の名前が出ている**その場所の中に収まっている**ときだけ見逃す。
+    mine = []
+    for c in cores:
+        if c:
+            mine.extend((mm.start(), mm.end()) for mm in re.finditer(re.escape(c), t))
+    # ★別名は汎用語を含むので、短いものは使わない★（Codex 7巡目 (b)-3）
+    #   「ゴッド」のような別名で正しい文脈（ゴッドモード中の挙動）を落とさないため、
+    #   正式名は2文字以上、別名だけのものは5文字以上を対象にする。
+    names = set(identity.get("reject_name_cores") or [])
+    alls = set(identity.get("reject_all_cores") or identity.get("reject_cores") or [])
+    targets = {rc for rc in names if rc and len(rc) >= 2}
+    targets |= {rc for rc in (alls - names) if rc and len(rc) >= 5}
+    for rc in sorted(targets):
+        if not rc:
             continue
-        if rc in t and not any(rc in c or c in rc for c in cores):
-            return False, f"OTHER_MACHINE:{rc[:12]}"
+        for mm in re.finditer(re.escape(rc), t):
+            inside = any(s <= mm.start() and mm.end() <= e for s, e in mine)
+            if not inside:
+                return False, f"OTHER_MACHINE:{rc[:12]}"
     # ★続編の合図は数字だけではない★（Ⅱ・第二弾・ツー・リターンズ 等）
     for c in cores:
         if not c:
@@ -342,14 +375,16 @@ _PACHINKO_EXTRA = re.compile(
     r"(?<![A-Za-z])[PpＰｐ]機|(?<![A-Za-z])[Ee]機", re.I)
 # 続編・世代違いの合図（芯の直後）。数字は「2つ」等の助数詞を除く
 _SEQUEL_MARK = re.compile(
-    r"[0-9](?![つ人回種択段個倍円枚g])"
+    # 「6号機」「2台」「2025年」「2機種」などは続編ではない
+    r"[0-9](?![つ人回種択段個倍円枚g号台年機日月分秒%])"
     r"|[ⅡⅢⅣⅤⅥⅦⅧⅨⅩ]|ii(?![a-z])|iii|"
     r"第[二三四五2345]弾|ツー|スリー|リターンズ|ネクスト|続編|再臨|新章", re.I)
 
 
 def semantic_artifact(claim: dict, machine_variant_key: str,
                       registry: dict | None = None,
-                      identity: dict | None = None) -> dict:
+                      identity: dict | None = None,
+                      physical_key: str | None = None) -> dict:
     """claim を出典の引用から検証し直した「検証結果の控え」を作る。
 
     ★台帳が書いている C5 の結果は読まない★（Codex 3回目 重大4）
@@ -393,7 +428,12 @@ def semantic_artifact(claim: dict, machine_variant_key: str,
         # 2) 発行者を**URLから**引き直す（台帳の申告は使わない）
         pub = resolve_publisher(src.get("final_url"), registry)
         # 3) 機種の型番までの一致（★同名の別バージョンを混ぜない★）
-        variant_ok = ver.get("machine_variant_key_matched") == machine_variant_key
+        #    ★★台帳が名乗る文字列ではなく、出典が示した型式から計算する★★
+        #      （Codex 7巡目 (a)-3）。証拠に型式が無ければ数えない。
+        import claim_inventory as _ci
+        ev_ident = ((ver.get("identity_evidence") or {}).get("machine_identity"))
+        variant_ok = (physical_key is not None
+                      and _ci.physical_key(ev_ident) == physical_key)
         # 4) 出典が本当にその機種のページか、証拠から判定し直す
         id_ok, id_why = identity_verdict(src, identity)
         # 5) 引用から値を導き直す
@@ -533,14 +573,24 @@ def selftest() -> int:
                            "設定1の機械割は97.2%です（メーカー公表値）。"
                            "設定1の機械割は99.9%。機械割は設定1:99.9%。"}
 
+    IDENT_PHYS = {"manufacturer_id": "test-maker",
+                  "regulatory_model_code": "TEST-001",
+                  "release_date": "2026-01-01"}
+    import claim_inventory as _ci2
+    PHYS = _ci2.physical_key(IDENT_PHYS)
+
     def _src(url, quote, c5_declared="PASS", others="PASS", vk=VK,
-             verdict="PASS", disp="COUNTED", ev=None):
+             verdict="PASS", disp="COUNTED", ev=None, phys="__default__"):
         checks = {c: {"verdict": others} for c in ("C0", "C1", "C2", "C3", "C4")}
         checks["C5"] = {"verdict": c5_declared}
+        base = dict(EV if ev is None else ev)
+        base["machine_identity"] = (IDENT_PHYS if phys == "__default__" else phys)
+        if base["machine_identity"] is None:
+            base.pop("machine_identity")
         return {"final_url": url, "quote": quote,
                 "verification": {"checks": checks, "verdict": verdict,
                                  "vote_disposition": disp,
-                                 "identity_evidence": EV if ev is None else ev,
+                                 "identity_evidence": base,
                                  "machine_variant_key_matched": vk}}
 
     def _c(sources, setting="1", raw="97.2%", amount=97.2):
@@ -551,21 +601,21 @@ def selftest() -> int:
     ok2 = _c([_src("https://chonborista.com/a", Q1),
               _src("https://nana-press.com/b", Q2)])
 
-    a = semantic_artifact(ok2, VK, None, IDENT)
+    a = semantic_artifact(ok2, VK, None, IDENT, PHYS)
     t("独立2出典で同じ値が導ければ VERIFIED", a["verified"] and a["counted_votes"] == 2)
     t("　検証結果の控えに指紋がつく", len(a.get("artifact_sha256", "")) == 64)
 
     t("★★台帳がC5をPASSと書いていても、引用が合わなければ数えない★★",
       not semantic_artifact(
           _c([_src("https://chonborista.com/a", "設定1の機械割は99.9%"),
-              _src("https://nana-press.com/b", Q2)]), VK, None, IDENT)["verified"])
+              _src("https://nana-press.com/b", Q2)]), VK, None, IDENT, PHYS)["verified"])
     t("★1出典しか導けなければ VERIFIED にしない",
       not semantic_artifact(_c([_src("https://chonborista.com/a", Q1)]),
-                            VK, None, IDENT)["verified"])
+                            VK, None, IDENT, PHYS)["verified"])
     t("★レジストリに無いホストは票に数えない",
       not semantic_artifact(
           _c([_src("https://chonborista.com/a", Q1),
-              _src("https://example.com/b", Q2)]), VK, None, IDENT)["verified"])
+              _src("https://example.com/b", Q2)]), VK, None, IDENT, PHYS)["verified"])
     t("★★機種の型番が一致しない出典は数えない（同名の別バージョン混入）★★",
       not semantic_artifact(
           _c([_src("https://chonborista.com/a", Q1),
@@ -578,18 +628,18 @@ def selftest() -> int:
                "verification": {"verdict": "PASS", "vote_disposition": "COUNTED",
                                 "checks": {c: {"verdict": "PASS"}
                                            for c in ("C0", "C1", "C2", "C3", "C4", "C5")}}}
-              ]), VK, None, IDENT)["sources"]][1] == "NOT_COUNTED_VARIANT_MISMATCH")
+              ]), VK, None, IDENT, PHYS)["sources"]][1] == "NOT_COUNTED_VARIANT_MISMATCH")
     # ★★Codex 2回目 (a)-2：台帳が票に数えないとした出典を復活させない★★
     t("★★台帳が FAIL とした出典を、C5が合っても票に復活させない★★",
       not semantic_artifact(
           _c([_src("https://chonborista.com/a", Q1, verdict="FAIL",
                    disp="NOT_COUNTED_UNKNOWN"),
               _src("https://nana-press.com/b", Q2, verdict="FAIL",
-                   disp="NOT_COUNTED_UNKNOWN")]), VK, None, IDENT)["verified"])
+                   disp="NOT_COUNTED_UNKNOWN")]), VK, None, IDENT, PHYS)["verified"])
     t("　票に数えないと書かれた出典も同様",
       not semantic_artifact(
           _c([_src("https://chonborista.com/a", Q1, disp="NOT_COUNTED_SAME_OWNER"),
-              _src("https://nana-press.com/b", Q2)]), VK, None, IDENT)["verified"])
+              _src("https://nana-press.com/b", Q2)]), VK, None, IDENT, PHYS)["verified"])
     # ★★Codex 2回目 (a)-3：別項目の百分率を機械割として導出しない★★
     t("★★別項目の％を機械割として導出しない（勝率97.2%／機械割106.5%）★★",
       check_c5_kikaiwari(_claim("1", "97.2%", 97.2),
@@ -654,20 +704,20 @@ def selftest() -> int:
     t("★★同じ運営元の別ホストは1票（www有無で水増しできない）★★",
       not semantic_artifact(
           _c([_src("https://slopachi-quest.com/a", Q1),
-              _src("https://www.slopachi-quest.com/b", Q2)]), VK, None, IDENT)["verified"])
+              _src("https://www.slopachi-quest.com/b", Q2)]), VK, None, IDENT, PHYS)["verified"])
     # ★★Codex 4巡目 (a)-3：出典の機種同定を証拠から計算し直す★★
     t("★★機種同定の証拠が無い出典は数えない（既定拒否）★★",
       not semantic_artifact(
           _c([_src("https://chonborista.com/a", Q1, ev={}),
               _src("https://nana-press.com/b", Q2, ev={})]),
-          VK, None, IDENT)["verified"])
+          VK, None, IDENT, PHYS)["verified"])
     t("★★別機種のページを持ってきても数えない★★",
       not semantic_artifact(
           _c([_src("https://chonborista.com/a", Q1,
                    ev={"page_title": "スマスロ別機 天井・機械割",
                        "quote_context": Q1 + "スマスロ別機の解析情報です。"}),
               _src("https://nana-press.com/b", Q2)]),
-          VK, None, IDENT)["verified"])
+          VK, None, IDENT, PHYS)["verified"])
     # ★★Codex 5巡目★★
     t("★★引用が同定の文脈に無ければ数えない（比較欄から切り出せない）★★",
       not semantic_artifact(
@@ -676,19 +726,19 @@ def selftest() -> int:
                        "quote_context": "スマスロテスト機の記事。"
                                         "比較欄では旧作の設定1の機械割は88.8%。"}),
               _src("https://nana-press.com/b", Q2)],
-             raw="88.8%", amount=88.8), VK, None, IDENT)["verified"])
+             raw="88.8%", amount=88.8), VK, None, IDENT, PHYS)["verified"])
     t("★★機種名区間の外に置いた媒体表示も見る（｜パチンコ版）★★",
       not semantic_artifact(
           _c([_src("https://chonborista.com/a", Q1,
                    ev={"page_title": "【スマスロテスト機】天井・設定判別｜パチンコ版",
                        "quote_context": EV["quote_context"]}),
-              _src("https://nana-press.com/b", Q2)], ), VK, None, IDENT)["verified"])
+              _src("https://nana-press.com/b", Q2)], ), VK, None, IDENT, PHYS)["verified"])
     t("★★機種名区間の外に置いた続編表示も見る★★",
       not semantic_artifact(
           _c([_src("https://chonborista.com/a", Q1,
                    ev={"page_title": "【スマスロテスト機】天井・設定判別｜スマスロテスト機2",
                        "quote_context": EV["quote_context"]}),
-              _src("https://nana-press.com/b", Q2)], ), VK, None, IDENT)["verified"])
+              _src("https://nana-press.com/b", Q2)], ), VK, None, IDENT, PHYS)["verified"])
     # ★★Codex 6巡目★★
     t("★★比較欄の他機種の値を切り出せない（旧作・吉宗：…）★★",
       not semantic_artifact(
@@ -696,14 +746,14 @@ def selftest() -> int:
                    ev={"page_title": EV["page_title"],
                        "quote_context": "スマスロテスト機との比較。"
                                         "旧作・吉宗：設定1の機械割は97.2%"}),
-              _src("https://nana-press.com/b", Q2)]), VK, None, IDENT)["verified"])
+              _src("https://nana-press.com/b", Q2)]), VK, None, IDENT, PHYS)["verified"])
     t("★★機種名が引用から遠ければ結び付いていないとみなす★★",
       not semantic_artifact(
           _c([_src("https://chonborista.com/a", "設定1の機械割は97.2%",
                    ev={"page_title": EV["page_title"],
                        "quote_context": "スマスロテスト機の解析。" + "あ" * 200
                                         + "設定1の機械割は97.2%"}),
-              _src("https://nana-press.com/b", Q2)]), VK, None, IDENT)["verified"])
+              _src("https://nana-press.com/b", Q2)]), VK, None, IDENT, PHYS)["verified"])
     for bad_title in ("【スマスロテスト機】天井・解析｜PACHINKO版",
                       "【スマスロテスト機】天井・解析｜遊技球版",
                       "【スマスロテスト機】天井・解析｜スマスロテスト機Ⅱ",
@@ -714,17 +764,49 @@ def selftest() -> int:
                        ev={"page_title": bad_title,
                            "quote_context": EV["quote_context"]}),
                   _src("https://nana-press.com/b", Q2)]),
-              VK, None, IDENT)["verified"])
+              VK, None, IDENT, PHYS)["verified"])
     t("★全角で書かれた正しい引用も導ける（設定１の機械割は９７．２％）",
       check_c5_kikaiwari(_claim("1", "97.2%", 97.2),
                          "設定１の機械割は９７．２％")["verdict"] == "PASS")
+    # ★★Codex 7巡目★★
+    t("★★訂正文の途中で引用を切っても通さない（97.2%ではなく99.9%）★★",
+      not semantic_artifact(
+          _c([_src("https://chonborista.com/a", "設定1の機械割は97.2%",
+                   ev={"page_title": EV["page_title"],
+                       "quote_context": "スマスロテスト機の訂正情報。"
+                                        "設定1の機械割は97.2%ではなく99.9%です。"}),
+              _src("https://nana-press.com/b", Q2)]), VK, None, IDENT,
+          PHYS)["verified"])
+    t("★★自機種名を含む別機種名（真打◯◯）を見逃さない★★",
+      _whole_text_ok("真打スマスロテスト機：設定1の機械割は97.2%",
+                     IDENT["machine_cores"],
+                     {"reject_name_cores": ["真打スマスロテスト機"],
+                      "reject_all_cores": ["真打スマスロテスト機"]})[0] is False)
+    t("　自機種名そのものは落とさない",
+      _whole_text_ok("スマスロテスト機：設定1の機械割は97.2%",
+                     IDENT["machine_cores"], IDENT)[0] is True)
+    t("★★型式は出典が示した値から計算する（台帳の申告では通らない）★★",
+      not semantic_artifact(
+          _c([_src("https://chonborista.com/a", Q1, phys=None),
+              _src("https://nana-press.com/b", Q2, phys=None)]),
+          VK, None, IDENT, PHYS)["verified"])
+    t("　型式が違えば数えない",
+      not semantic_artifact(
+          _c([_src("https://chonborista.com/a", Q1,
+                   phys={"manufacturer_id": "other", "regulatory_model_code": "X",
+                         "release_date": "2020-01-01"}),
+              _src("https://nana-press.com/b", Q2)]),
+          VK, None, IDENT, PHYS)["verified"])
+    t("★「6号機」「2台」は続編扱いしない（過剰拒否の回避）",
+      _whole_text_ok("スマスロテスト機 6号機の機械割・設定判別",
+                     IDENT["machine_cores"], IDENT)[0] is True)
     t("★同定の一式が無ければ、その場で止める（NO_IDENTITY_SPEC）",
-      not semantic_artifact(ok2, VK, None, None)["verified"])
+      not semantic_artifact(ok2, VK, None, None, PHYS)["verified"])
     t("★意味の検証器が無い項目は VERIFIED にしない（既定拒否）",
-      semantic_artifact({**ok2, "field_key": "ceiling.normal"}, VK, None, IDENT)["reason"]
+      semantic_artifact({**ok2, "field_key": "ceiling.normal"}, VK, None, IDENT, PHYS)["reason"]
       == "NO_SEMANTIC_CHECKER")
     t("★引用の内容が同じでも、出典が0件なら VERIFIED にしない",
-      not semantic_artifact(_c([]), VK, None, IDENT)["verified"])
+      not semantic_artifact(_c([]), VK, None, IDENT, PHYS)["verified"])
 
     ng = [n for n, ok in results if not ok]
     print("")

@@ -81,7 +81,17 @@ def reconcile(slug: str, machine: dict, detail: dict,
                 f"{(u.get('excerpt') or u.get('label') or '')[:60]}")
 
     inv_slots = {s["slot_id"]: s for s in inventory.get("slots") or []}
-    claims = ledger.get("claims") or []
+    # ★★壊れた台帳でも例外で落とさず、警告として出す★★（Codex 7巡目 (b)-1）
+    #   以前は台帳検証より前に claim を触っていたので、claims が配列でない・
+    #   要素が null といった入力で AttributeError になり、一覧が出なかった。
+    claims = ledger.get("claims")
+    if not isinstance(claims, list):
+        problems.append("台帳の claims が配列でない")
+        claims = []
+    bad_shape = [i for i, c in enumerate(claims) if not isinstance(c, dict)]
+    if bad_shape:
+        problems.append(f"台帳の claims に辞書でない要素がある: {bad_shape}")
+    claims = [c for c in claims if isinstance(c, dict)]
     by_slot: dict = {}
     for c in claims:
         by_slot.setdefault(c.get("slot_id"), []).append(c)
@@ -191,6 +201,9 @@ def reconcile(slug: str, machine: dict, detail: dict,
                 problems.append(f"    {e2}")
     # 台帳が別機種のものでないか
     mref = (ledger.get("machine_ref") or {})
+    if not isinstance(mref, dict):
+        problems.append("台帳の machine_ref が辞書でない")
+        mref = {}
     if mref.get("slug") != slug:
         problems.append(f"台帳の機種が違う: {mref.get('slug')} != {slug}")
     if cl.canonical_sha256(machine) != mref.get("catalog_record_sha256"):
@@ -304,7 +317,9 @@ def _publishable(slug: str, machine: dict, detail: dict,
         c = by_slot.get(s_["slot_id"])
         if not c:
             continue          # claim が無い枠は「調べていない枠」として上で報告済み
-        art = claim_c5.semantic_artifact(c, variant, registry, identity)
+        art = claim_c5.semantic_artifact(
+            c, variant, registry, identity,
+            ci.physical_key(machine.get("identity")))
         if art.get("verified"):
             continue
         # ★★どの枠が、どの出典で、なぜ落ちたかを1件ずつ残す★★（Codex (b)-1）
@@ -440,9 +455,15 @@ def selftest() -> int:
       not ok_b and any("値が違う" in w or "導き直せない" in w for w in why_b))
 
     # ★★同名の別バージョンの出典で埋められない★★
-    ok_v, why_v = _publishable(
-        "x", m, dk, invk,
-        ledger([kclaim(s2, i + 1, variant="x:2019") for i, s2 in enumerate(kslots)]))
+    #   （型式は出典が示した値から計算するので、別型式なら鍵が一致しない）
+    othr = ledger([kclaim(s2, i + 1) for i, s2 in enumerate(kslots)])
+    for c_ in othr["claims"]:
+        for s_ in c_["sources"]:
+            s_["verification"]["identity_evidence"]["machine_identity"] = {
+                "manufacturer_id": "test-maker",
+                "regulatory_model_code": "TEST-999",   # 別型式
+                "release_date": "2019-01-01"}
+    ok_v, why_v = _publishable("x", m, dk, invk, othr)
     t("★★出典が別バージョンの機種なら公開しない★★",
       not ok_v and any("導き直せない" in w for w in why_v))
 

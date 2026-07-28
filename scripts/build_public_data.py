@@ -117,7 +117,10 @@ def build(claim_gate: bool | None = None) -> tuple[list, dict, list]:
             continue
         # ★出典の裏取りゲート（有効時のみ公開を止める）★
         if claim_gate:
-            ok_c, why_c = claim_reconcile.publish_gate(m["slug"])
+            try:
+                ok_c, why_c = claim_reconcile.publish_gate(m["slug"])
+            except Exception as e:     # 壊れた台帳でビルドを落とさない
+                ok_c, why_c = False, [f"検査が例外で失敗: {e}"]
             if not ok_c:
                 # ★理由は全部残す★（Codex 2巡目 (b)-1）
                 blocked.append({"slug": m["slug"],
@@ -137,6 +140,10 @@ def audit(pub_machines: list, pub_details: dict) -> list:
     # ★★一覧と記事ファイルの対応を、通常ビルドでも検査する★★（Codex 6巡目 (a)-6）
     #   静的配信では、一覧に無いファイルでも URL を直接叩けば読める。
     #   逆に記事が無い機種を一覧に載せると、記事ページが空で公開される。
+    # ★★1機種も公開できないのに成果物を書かせない★★（Codex 7巡目 (b)-6）
+    #   空の一覧を「違反0」で書き出すと、サイトが空になったことに気づけない。
+    if not pub_machines:
+        problems.append("公開できる機種が1件も無い（空の公開物は作らない）")
     slugs = {pm.get("slug") for pm in pub_machines}
     for orphan in sorted(set(pub_details) - slugs):
         problems.append(f"公開一覧に無い記事ファイルが残っている: {orphan}.json")
@@ -186,7 +193,10 @@ def selftest() -> int:
       raises('{"schema_version":"claim-gate/v1","enabled":[]}'))
     t("★schema_version が違えばエラー",
       raises('{"schema_version":"x","enabled":false}'))
-    t("正しい設定は読める（現在は無効）", claim_gate_enabled() is False)
+    # ★★「今の設定値」を固定で期待しない★★（Codex 7巡目 (b)-6）
+    #   false を期待すると、正式に有効化した日に必ず失敗する。
+    t("正しい設定は bool として読める",
+      isinstance(claim_gate_enabled(), bool))
 
     ng = [n for n, ok in results if not ok]
     print(f"\n{len(results) - len(ng)}/{len(results)} 合格")
@@ -230,7 +240,10 @@ def main() -> int:
         #   見えてしまうのを防ぐ。
         if gate_on:
             for x in pm:
-                ok_c, why_c = claim_reconcile.publish_gate(x.get("slug"))
+                try:
+                    ok_c, why_c = claim_reconcile.publish_gate(x.get("slug"))
+                except Exception as e:      # 壊れた台帳などで落とさない
+                    ok_c, why_c = False, [f"検査が例外で失敗: {e}"]
                 if not ok_c:
                     problems.extend(
                         f"{x.get('slug')}: 出典の裏取りが済んでいない: {w}"
@@ -238,6 +251,10 @@ def main() -> int:
         print(f"公開物: {len(pm)} 機種 / 記事 {len(pd_)} 件 / 違反 {len(problems)} 件")
         print(f"出典の裏取りゲート: {'★有効★' if gate_on else '☆無効☆'}")
         if not gate_on:
+            # ★★ゲート無効の --verify は「合格」と言わない★★（Codex 7巡目 (a)-5）
+            #   手で置いた公開物を --verify で通してデプロイする経路を塞ぐ。
+            problems.append(
+                "出典の裏取りゲートが無効なので、この検査結果は公開の根拠にできない")
             # ★★--verify でも「有効なら何が止まるか」を出す★★（Codex 4巡目 (b)-4）
             would = [(x.get("slug"), claim_reconcile.publish_gate(x.get("slug")))
                      for x in pm]

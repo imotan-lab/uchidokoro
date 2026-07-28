@@ -133,6 +133,23 @@ NONCLAIM_LABELS = re.compile(
     r"^コンプリート機能$|^有利区間$")
 
 _NUM = re.compile(r"[0-9０-９]")
+# 漢数字（NFKCでもASCIIにならない）
+_KANJI_NUM = re.compile(r"[〇零一二三四五六七八九十百千万億]")
+
+
+def has_numeral(value: str) -> bool:
+    """★数として読める文字が含まれているか★（Codex 7巡目 (a)-4）
+
+    「九十九％」のような漢数字や、NFKCでASCIIにならない各国の数字を
+    見逃すと、型に落ちない事実が未分類にも残らず素通りする。
+    """
+    v = unicodedata.normalize("NFKC", str(value or ""))
+    if _NUM.search(v) or _KANJI_NUM.search(v):
+        return True
+    for ch in v:
+        if unicodedata.category(ch) in ("Nd", "Nl", "No"):
+            return True
+    return False
 
 # ★本文の文章に紛れた「事実らしい数値」★（構造化されていないので型に落とせない）
 #   これを黙って捨てると「未分類ゼロ」が網羅の証明にならない。
@@ -416,6 +433,25 @@ def identity_tuple(machine: dict) -> dict:
             or machine.get("release_date")}
 
 
+def physical_key(ident) -> str | None:
+    """★型式そのものから作る鍵★（Codex 7巡目 (a)-3）
+
+    出典側にも「メーカー・型式・導入日」を書かせ、**この関数で計算した鍵**が
+    機種データ側と一致することを求める。台帳が変な文字列を名乗っても、
+    型式が違えば鍵が一致しない。3項目そろっていなければ None（＝数えない）。
+    """
+    if not isinstance(ident, dict):
+        return None
+    vals = []
+    for k in ("manufacturer_id", "regulatory_model_code", "release_date"):
+        v = ident.get(k)
+        if not isinstance(v, str) or not v.strip():
+            return None
+        vals.append(v.strip())
+    return _sha({"manufacturer_id": vals[0], "regulatory_model_code": vals[1],
+                 "release_date": vals[2]})[:16]
+
+
 def identity_missing(machine: dict) -> list:
     """型式の同定情報が足りない項目を返す（空なら足りている）。
 
@@ -683,7 +719,7 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
             # ★数値を含むのに型に落ちない＝止める対象★
             #   ★字形の違いで見逃さない★（Codex 6巡目 (a)-5）
             #   「天井は⑨⑨⑨⑨Ｇ」のような丸数字も NFKC で拾う。
-            if _NUM.search(unicodedata.normalize("NFKC", str(value or ""))):
+            if has_numeral(value):
                 unclassified.append({"pointer": pointer, "label": label,
                                      "reason": "UNKNOWN_LABEL_WITH_NUMBER"})
             continue
@@ -976,6 +1012,20 @@ def selftest() -> int:
       build_inventory("x", {"slug": "x"}, {"factTable": [
           ["機械割(設定1)", "97.2%"], ["秘密スペック", "天井は⑨⑨⑨⑨Ｇ"]]}
           )["coverage"]["unclassified_atoms"] == 1)
+    t("★★漢数字も数値として扱う（ペイアウト率＝九十九％を見逃さない）★★",
+      has_numeral("九十九％") is True
+      and build_inventory("x", {"slug": "x"}, {"factTable": [
+          ["機械割(設定1)", "97.2%"], ["ペイアウト率", "九十九％"]]}
+          )["coverage"]["unclassified_atoms"] == 1)
+    t("★型式の鍵は3項目そろって初めて作れる",
+      physical_key({"manufacturer_id": "a", "regulatory_model_code": "b",
+                    "release_date": "c"}) is not None
+      and physical_key({"manufacturer_id": "a"}) is None)
+    t("　型式が違えば鍵も違う",
+      physical_key({"manufacturer_id": "a", "regulatory_model_code": "b",
+                    "release_date": "c"})
+      != physical_key({"manufacturer_id": "a", "regulatory_model_code": "z",
+                       "release_date": "c"}))
     t("★★型式が空白だけなら「登録済み」にしない★★",
       identity_missing({"identity": {"manufacturer_id": " ",
                                      "regulatory_model_code": " "}})

@@ -485,7 +485,11 @@ def _mk_source(quote: str, pub: str, counted: bool = True,
             # ★出典が本当にその機種のページかを判定するための証拠★
             "identity_evidence": {
                 "page_title": "スマスロテスト機 天井・機械割・設定判別",
-                "quote_context": "スマスロテスト機の解析情報です。" + quote},
+                "quote_context": "スマスロテスト機の解析情報です。" + quote,
+                # ★出典ページが示した型式（公開ゲートがここから鍵を計算する）★
+                "machine_identity": {"manufacturer_id": "test-maker",
+                                     "regulatory_model_code": "TEST-001",
+                                     "release_date": "2026-01-01"}},
             "checks": {c: {"verdict": "PASS", "code": "OK"} for c in CHECK_IDS},
         },
     }
