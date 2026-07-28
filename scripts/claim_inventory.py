@@ -135,9 +135,12 @@ _NUM = re.compile(r"[0-9０-９]")
 
 # ★本文の文章に紛れた「事実らしい数値」★（構造化されていないので型に落とせない）
 #   これを黙って捨てると「未分類ゼロ」が網羅の証明にならない。
+#   ★★語→数字だけでなく、数字→語の順も見る★★（Codex 2回目 (a)-5）
+#     「9999Gで天井に到達します」は数字が先なので、旧実装では素通りしていた。
+_FACT_WORD = r"(?:天井|機械割|出玉率|純増|確率|獲得枚数|コイン持ち|スルー|周期)"
 _FACT_IN_PROSE = re.compile(
-    r"(?:天井|機械割|出玉率|純増|確率|獲得枚数|コイン持ち|スルー|周期)"
-    r"[^。]{0,20}?[0-9０-９]")
+    _FACT_WORD + r"[^。]{0,20}?[0-9０-９]"
+    r"|[0-9０-９][^。]{0,20}?" + _FACT_WORD)
 
 
 def _sha(obj) -> str:
@@ -219,8 +222,18 @@ def classify_label(label: str):
 
 _ALPHA = re.compile(r"[+＋]\s*[aαａ]", re.I)
 
+# ★「ちょうどN」と言い切れない書き方★（範囲・比較・概算・否定）
+#   これを見逃すと「97.2%未満」を EXACT 97.2% として公開してしまう
+#   （Codex 2回目 (a)-4）。+α は天井の慣用表現なので別扱い。
+_NOT_EXACT = re.compile(
+    r"[〜~～–—]|[0-9]\s*[\-－]\s*[0-9]|"
+    r"未満|以下|以上|超え?|前後|程度|およそ|約|平均|"
+    r"ではなく|不明|未確定|推定|目安")
+# 「最大」「最低」は天井（MAX）では正しい書き方なので、EXACT のときだけ弾く
+_MAX_WORDS = re.compile(r"最大|最低|上限")
 
-def normalize_value(value: str, unit: str):
+
+def normalize_value(value: str, unit: str, operator: str = "EXACT"):
     """記事の値を「数 と 単位 と +α」に正規化する。決まらなければ None。
 
     ★これが無いと、記事を1300Gに変えても1200Gの古い claim で通る★
@@ -231,6 +244,12 @@ def normalize_value(value: str, unit: str):
         return None
     nums = re.findall(r"\d+(?:\.\d+)?", value)
     if len(nums) != 1:
+        return None
+    if _NOT_EXACT.search(value):
+        # 「97.2%未満」「約97.2%」などは1つの値として扱えない
+        return None
+    if operator != "MAX" and _MAX_WORDS.search(value):
+        # 「最大97.2%」を「ちょうど97.2%」として公開しない
         return None
     return {"amount": float(nums[0]), "unit": unit,
             "plus_alpha": bool(_ALPHA.search(value))}
@@ -392,14 +411,25 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
     _walk(detail, "", strings)
     structured = {it[0] for it in _pairs_from_detail(detail)}
     for pointer, text in strings:
-        if pointer in structured or not _FACT_IN_PROSE.search(text or ""):
+        if pointer in structured:
             continue
-        if EDITORIAL_LABELS.search(text or ""):
-            continue                        # 狙い目などの編集判断は対象外
-        unsupported.append({"pointer": pointer,
-                            "reason": "FACT_IN_PROSE_NOT_EXTRACTED",
-                            "excerpt": (text or "")[:70],
-                            "content_sha256": _sha(text)})
+        # ★★文ごとに判定する★★（Codex 2回目 (a)-5）
+        #   段落まるごとで判定していたため、「狙い目は300Gだが、天井は9999Gです」
+        #   のように編集判断の語が1つ入るだけで、同じ段落の事実が消えていた。
+        for si_, sent in enumerate(re.split(r"(?<=[。\n])", str(text or ""))):
+            if not sent.strip():
+                continue
+            # ★事実らしい言い回しそのものに編集判断の語が入っていない箇所を探す★
+            #   文まるごとで判定すると、「狙い目は…だが、天井は9999Gです」の
+            #   後半の事実が消える。
+            hits = [mm.group(0) for mm in _FACT_IN_PROSE.finditer(sent)
+                    if not EDITORIAL_LABELS.search(mm.group(0))]
+            if not hits:
+                continue
+            unsupported.append({"pointer": f"{pointer}#{si_}",
+                                "reason": "FACT_IN_PROSE_NOT_EXTRACTED",
+                                "excerpt": sent.strip()[:70],
+                                "content_sha256": _sha(sent)})
 
     for item in _pairs_from_detail(detail):
         pointer, label, value = item[0], item[1], item[2]
@@ -407,9 +437,18 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
         table_label = item[4] if len(item) > 4 else None
         # ★設定は「表の設定欄」→「ラベル埋め込み」の順で決める★
         _lab = classify_label(label)
+        _lab_setting = _lab.get("setting_from_label") if _lab else None
         setting = normalize_setting(setting_raw) if setting_raw is not None else None
-        if setting is None and _lab:
-            setting = _lab.get("setting_from_label")
+        # ★★2つの設定表示が食い違ったら止める★★（Codex 2回目 (a)-6）
+        #   行が「設定1」・列見出しが「機械割（設定6）」のような記事を
+        #   片方だけ採ると、公開表と検証値が別の設定になる。
+        if setting and _lab_setting and setting != _lab_setting:
+            unclassified.append({"pointer": pointer, "label": label,
+                                 "reason": "SETTING_SIGNAL_CONFLICT",
+                                 "value_excerpt": f"行={setting} / 見出し={_lab_setting}"})
+            continue
+        if setting is None:
+            setting = _lab_setting
         if setting_raw is not None and setting is None:
             # ★どの設定の値か決められない行は枠にしない★
             #   （「設定V」「設定1〜3」など。値だけ拾うと設定を取り違える）
@@ -488,6 +527,7 @@ def _emit_slot(slots, seen_slots, slug, spec, pointer, label, value,
         group = None
         if setting:
             group = f"{slug}:{spec['field_key']}:{table_label or 'by_setting'}"
+        _op = expected_operator(spec["field_key"], spec["value_kind"])
         sid = slot_id(slug, spec, pointer)
         if sid in seen_slots:
             return
@@ -502,8 +542,7 @@ def _emit_slot(slots, seen_slots, slug, spec, pointer, label, value,
             "expected_value_kind": spec["value_kind"],
             "expected_unit": spec["unit"],
             # ★枠が期待する演算子と書き方（台帳の申告と突き合わせる）★
-            "expected_operator": expected_operator(spec["field_key"],
-                                                   spec["value_kind"]),
+            "expected_operator": _op,
             "expected_setting": setting,
             "render_unit_id": render_unit_id(spec["unit"]),
             "source_pointer": pointer,
@@ -511,11 +550,13 @@ def _emit_slot(slots, seen_slots, slug, spec, pointer, label, value,
             # ★記事の表示文そのものの指紋★（記事が書き換わったら気づく）
             "source_text_sha256": _sha(f"{label}|{value}"),
             # ★記事に載っている値そのもの（台帳と突き合わせる）★
-            "current_value": normalize_value(value, spec["unit"]),
+            "current_value": normalize_value(value, spec["unit"], _op),
+            # ★許可リスト照合には枠が期待する演算子を渡す★（Codex (b)-3）
+            #   常に MAX を渡していたため、EXACT の機械割が型外に見えていた。
             "allowlisted_type": cl.allowlisted_type_candidate(
                 {"field_key": spec["field_key"],
                  "value": {"kind": spec["value_kind"], "unit": spec["unit"],
-                           "operator": "MAX"},
+                           "operator": _op},
                  "conditions": {"mode": spec["mode"], "scope": spec["scope"]}}),
             "verify_state": "UNVERIFIED",
         })
@@ -664,6 +705,31 @@ def selftest() -> int:
     t("★設定Vなど数字でない設定は正規化しない（止める）",
       normalize_setting("設定V") is None and normalize_setting("設定1〜3") is None)
     t("　全角数字は正規化する", normalize_setting("設定６") == "6")
+    # -------- Codex 2回目の反例
+    t("★★「97.2%未満」を ちょうど97.2% として扱わない★★",
+      normalize_value("97.2%未満", "%") is None
+      and normalize_value("約97.2%", "%") is None
+      and normalize_value("97.2%〜99.9%", "%") is None)
+    t("　天井の「最大1200G」は MAX なので通す",
+      normalize_value("最大1200G", "G", "MAX")["amount"] == 1200.0
+      and normalize_value("最大97.2%", "%", "EXACT") is None)
+    t("★★数字が先の本文事実も取りこぼさない（9999Gで天井に到達）★★",
+      build_inventory("x", {"slug": "x"},
+                      {"sections": [{"body": ["9999Gで天井に到達します"]}]}
+                      )["coverage"]["unsupported_facts"] == 1)
+    t("★★編集判断の語が同じ段落にあっても、事実の文は拾う★★",
+      build_inventory("x", {"slug": "x"},
+                      {"sections": [{"body": ["狙い目は300Gだが、天井は9999Gです"]}]}
+                      )["coverage"]["unsupported_facts"] == 1)
+    t("★★行の設定と見出しの設定が食い違えば止める★★",
+      build_inventory("x", {"slug": "x"}, {"sections": [{"tables": [
+          {"headers": ["設定", "機械割（設定6）"],
+           "rows": [["設定1", "97.2%"]]}]}]}
+          )["unclassified_atoms"][0]["reason"] == "SETTING_SIGNAL_CONFLICT")
+    t("★機械割の枠が許可リストの型として数えられる（演算子EXACTで照合）",
+      build_inventory("x", {"slug": "x"},
+                      {"factTable": [["機械割(設定6)", "106.5%"]]}
+                      )["slots"][0]["allowlisted_type"] is True)
     t("★機械割の枠は EXACT を期待する（最大N ではない）",
       expected_operator("kikaiwari.setting", "PERCENT") == "EXACT")
     t("★天井の枠は MAX を期待する",
@@ -703,7 +769,12 @@ def main() -> int:
             mark = "型OK" if s["allowlisted_type"] else "型外"
             print(f"  [{mark}] {s['field_key']:<22} {s['current_text'][:40]}")
         for u in inv["unclassified_atoms"]:
-            print(f"  [未分類] {u['label']}  ({u['pointer']})")
+            print(f"  [未分類] {u['label']}  ({u['pointer']}) "
+                  f"{u.get('reason')} {u.get('value_excerpt', '')}")
+        # ★型が未実装の事実も場所と中身を出す★（Codex (b)-2）
+        for u in inv["unsupported_facts"]:
+            print(f"  [未対応] {u.get('pointer')} {u.get('reason')} "
+                  f"{(u.get('excerpt') or u.get('label') or '')[:60]}")
         if args.write:
             os.makedirs(OUT_DIR, exist_ok=True)
             json.dump(inv, open(os.path.join(OUT_DIR, f"{args.slug}.json"), "w",

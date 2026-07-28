@@ -32,6 +32,7 @@ sys.path.insert(0, os.path.join(BASE, "scripts"))
 
 import audit_public  # noqa: E402
 import build_ledger  # noqa: E402
+import claim_reconcile  # noqa: E402
 import gates  # noqa: E402
 
 DATA = os.path.join(BASE, "assets", "data")
@@ -51,8 +52,29 @@ def _load_ledger() -> dict:
     return {}
 
 
-def build() -> tuple[list, dict, list]:
+# ★出典の裏取りゲート（claim）を公開ビルドに効かせるかどうか★
+CLAIM_GATE = os.path.join(DATA, "claim-gate.json")
+
+
+def claim_gate_enabled() -> bool:
+    """出典の裏取りゲートを公開判定に含めるか。既定は無効（Phase 1 移行中）。
+
+    ★無効のあいだ、claim の仕組みは「検査コマンド」であって「停止ゲート」ではない★
+      （Codex 2回目 (a)-1）。この事実が見えないと、実装しただけで守られている
+      と誤解する。build は無効時に必ず警告と影響件数を出す。
+    """
+    if not os.path.isfile(CLAIM_GATE):
+        return False
+    try:
+        return bool(json.load(open(CLAIM_GATE, encoding="utf-8")).get("enabled"))
+    except Exception:
+        return False
+
+
+def build(claim_gate: bool | None = None) -> tuple[list, dict, list]:
     """(公開する機種の配列, slug->公開記事, 止まった理由の一覧) を返す。"""
+    if claim_gate is None:
+        claim_gate = claim_gate_enabled()
     ledger = _load_ledger()
     machines = json.load(open(os.path.join(DATA, "machines.json"), encoding="utf-8"))
     pub_machines: list = []
@@ -72,6 +94,13 @@ def build() -> tuple[list, dict, list]:
         if not view["gates"]["public"] or not view["machine"]:
             blocked.append({"slug": m["slug"], "reason": "公開ゲートが開いていない"})
             continue
+        # ★出典の裏取りゲート（有効時のみ公開を止める）★
+        if claim_gate:
+            ok_c, why_c = claim_reconcile.publish_gate(m["slug"])
+            if not ok_c:
+                blocked.append({"slug": m["slug"],
+                                "reason": f"出典の裏取りが済んでいない: {why_c[0]}"})
+                continue
         pub_machines.append(view["machine"])
         if view["detail"]:
             pub_details[m["slug"]] = view["detail"]
@@ -96,6 +125,10 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true", help="公開物を書き出す")
     ap.add_argument("--verify", action="store_true", help="既存の公開物を検査するだけ")
+    ap.add_argument("--claim-gate", action="store_true",
+                    help="出典の裏取りゲートを今回だけ有効にして影響を見る")
+    ap.add_argument("--no-claim-report", action="store_true",
+                    help="裏取りゲート無効時の影響件数を出さない（速い）")
     args = ap.parse_args()
 
     if args.verify:
@@ -115,10 +148,23 @@ def main() -> int:
             print("  ✗", x)
         return 1 if problems else 0
 
-    pub_machines, pub_details, blocked = build()
+    cg = args.claim_gate or claim_gate_enabled()
+    pub_machines, pub_details, blocked = build(cg)
     print("=" * 66)
     print(f"公開する機種: {len(pub_machines)} / 止まった機種: {len(blocked)}")
     print(f"公開する記事: {len(pub_details)}")
+    print("-" * 66)
+    # ★★繋がっていないことを黙らせない★★（Codex 2回目 (a)-1）
+    if cg:
+        print("出典の裏取りゲート: ★有効★（裏取りできていない機種は公開しません）")
+    else:
+        print("出典の裏取りゲート: ☆無効☆ "
+              "＝ claim の仕組みは検査コマンドであって、まだ公開を止めていません")
+        if not args.no_claim_report:
+            would = [pm["slug"] for pm in pub_machines
+                     if not claim_reconcile.publish_gate(pm["slug"])[0]]
+            print(f"  有効にした場合に止まる機種: {len(would)} / {len(pub_machines)}")
+            print(f"  有効化は {os.path.relpath(CLAIM_GATE, BASE)} の enabled を true に")
     print("-" * 66)
 
     problems = audit(pub_machines, pub_details)

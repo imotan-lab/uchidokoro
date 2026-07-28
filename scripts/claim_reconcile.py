@@ -66,9 +66,14 @@ def reconcile(slug: str, machine: dict, detail: dict,
         problems.append(f"型に落ちていない事実が {n_unc} 件ある（全部片付くまで公開しない）")
     # ★型が未実装の事実（設定示唆の表など）も、残っていれば公開しない★
     #   素通りさせると「未分類ゼロ」が網羅の証明にならない（Codex 指摘）
-    n_uns = len(inventory.get("unsupported_facts") or [])
-    if n_uns:
-        problems.append(f"型が未実装の事実が {n_uns} 件ある（設定示唆の表など）")
+    uns = inventory.get("unsupported_facts") or []
+    if uns:
+        problems.append(f"型が未実装の事実が {len(uns)} 件ある（設定示唆の表など）")
+        # ★件数だけでは直せない。場所と中身を出す★（Codex (b)-2）
+        for u in uns:
+            problems.append(
+                f"    {u.get('pointer')} [{u.get('reason')}] "
+                f"{(u.get('excerpt') or u.get('label') or '')[:60]}")
 
     inv_slots = {s["slot_id"]: s for s in inventory.get("slots") or []}
     claims = ledger.get("claims") or []
@@ -244,13 +249,28 @@ def _publishable(slug: str, machine: dict, detail: dict,
     for s_ in inv_slots:
         c = by_slot.get(s_["slot_id"])
         art = claim_c5.semantic_artifact(c, variant, registry)
-        if not art.get("verified"):
-            bad_semantic.append(
-                f"{s_['field_key']}({art.get('reason') or 'C5_FAILED'})")
+        if art.get("verified"):
+            continue
+        # ★★どの枠が、どの出典で、なぜ落ちたかを1件ずつ残す★★（Codex (b)-1）
+        #   以前は理由を1行にまとめて sorted(set(...)) で畳んでいたため、
+        #   設定1〜6の失敗が1件に見え、直すべき場所が分からなかった。
+        st = s_["conditions"].get("setting")
+        head = (f"{s_['field_key']}"
+                f"{'(設定' + st + ')' if st else ''} "
+                f"[{s_['slot_id']}] {art.get('reason') or 'C5_FAILED'}"
+                f" 票={art.get('counted_votes', 0)}")
+        detail_lines = []
+        for row in art.get("sources") or []:
+            detail_lines.append(
+                f"    出典{row['index']}: {row.get('disposition')}"
+                f" / C5={(row.get('c5') or {}).get('code')}"
+                f" / 発行者={row.get('publisher_id')}"
+                f" / {row.get('final_url')}")
+        bad_semantic.append("\n".join([head] + detail_lines))
     if bad_semantic:
         return False, [
-            f"引用から値を導き直せない枠がある: {sorted(set(bad_semantic))}"
-            f"（台帳の申告ではなく、その場の再計算で判定している）"]
+            "引用から値を導き直せない枠がある"
+            "（台帳の申告ではなく、その場の再計算で判定している）"] + bad_semantic
     return True, []
 
 

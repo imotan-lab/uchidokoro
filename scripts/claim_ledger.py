@@ -724,8 +724,11 @@ def main() -> int:
         return selftest()
     if args.validate:
         led = json.load(open(args.validate, encoding="utf-8"))
-        ids = validate_ledger(led, os.path.basename(args.validate))
-        print(f"✅ 検証OK: {len(ids)} claims")
+        # ★★公開ゲートと同じ条件で検証する★★（Codex (b)-4）
+        #   レジストリを渡さないと、未登録ホストの台帳でも
+        #   単体検証だけ「OK」と表示され、誤解を招いていた。
+        ids = validate_ledger(led, os.path.basename(args.validate), load_registry())
+        print(f"✅ 検証OK: {len(ids)} claims（出典レジストリ照合あり）")
         return 0
     ap.print_help()
     return 0

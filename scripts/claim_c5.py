@@ -36,19 +36,32 @@ _KIKAIWARI_WORD = r"(?:機械割|出玉率)"
 
 # 設定と値をつなぐ言い回し。★任意の文字は挟ませない★
 #   （挟ませると「設定1…（別の話）…106.5%」を組と誤読する）
-_CONNECT = r"(?:\s*の?\s*(?:機械割|出玉率)?\s*[:：はがはが＝=→\-]?\s*)"
+# ★★組の中に「機械割／出玉率」を必須にする★★（Codex (a)-3）
+#   これが任意だと「設定1の勝率は97.2%。設定6の機械割は106.5%」から
+#   勝率97.2%を設定1の機械割として導いてしまう。
+_WORD = r"(?:機械割|出玉率)"
+_CONNECT_LABELED = r"(?:\s*の?\s*" + _WORD + r"\s*[:：はが＝=→]?\s*)"
+_CONNECT_BARE = r"(?:\s*[:：＝=]\s*)"
 
-# 「設定1:97.2% / 設定6:106.5%」「設定1の機械割は97.2%」など
-_PAIR_PATTERNS = [
-    re.compile(_SETTING + _CONNECT + _PCT),
-    # ★括弧を必須にする★ 括弧が無いと「設定1:97.2% 設定2:98.2%」の
-    #   「97.2% 設定2」を組と誤読して、隣の設定の値を拾ってしまう
-    re.compile(_PCT + r"\s*[（(]\s*" + _SETTING + r"\s*[）)]"),
-]
+# 文章形式：組ごとに「機械割」語が入っているものだけ
+_PAIR_LABELED = re.compile(_SETTING + _CONNECT_LABELED + _PCT)
+# 列挙形式：「機械割は 設定1:97.2% / 設定6:106.5%」のように
+#   表頭で1回だけ宣言し、あとは 設定:値 が並ぶ書き方（区切り記号は必須）
+_PAIR_BARE = re.compile(_SETTING + _CONNECT_BARE + _PCT)
+# 値のあとに括弧で設定を書く形（「106.5%（設定6）」）
+_PAIR_PAREN = re.compile(_PCT + r"\s*[（(]\s*" + _SETTING + r"\s*[）)]")
 
-# 値を1つに確定できない書き方（範囲・複数・条件つき）
+# 列挙形式で「組と宣言語と区切り」以外に残ってよい文字
+_ENUM_RESIDUE = re.compile(r"[\s/／、，,・|｜。:：はが＝=]+")
+
+# 値を1つに確定できない書き方（範囲・比較・条件つき・否定）
 _AMBIGUOUS = re.compile(
-    r"[〜~]\s*[0-9]|[0-9]\s*[〜~]|"          # 範囲（97.2%〜106.5%）
+    # 範囲（97.2%〜106.5% / 97.2%-99.9% / 97.2%–99.9%）
+    r"[〜~～\-–—－]\s*[0-9]|[0-9]\s*[〜~～\-–—－]|"
+    # 比較・概算（97.2%未満 / 以上 / 超 / 約97.2% / 前後）
+    r"未満|以下|以上|超え?|前後|程度|およそ|約\s*[0-9]|最大|最低|平均|"
+    # 否定・訂正（97.2%ではなく99.9%）
+    r"ではなく|で(?:は)?ない|誤り|訂正|"
     r"完全攻略|技術介入|フル攻略|"             # 条件つきの別値
     r"実戦値|実測|サンプル")                   # 解析値でない
 
@@ -76,22 +89,36 @@ def derive_kikaiwari(quote: str) -> dict:
         return {}                      # 機械割の話をしていない
     if _AMBIGUOUS.search(q):
         return {}                      # 値を1つに確定できない書き方
-    found: dict = {}
-    for rx in _PAIR_PATTERNS:
-        for m in rx.finditer(q):
-            g = m.groups()
-            if rx is _PAIR_PATTERNS[0]:
-                setting, pct = g[0], g[1]
-            else:
-                pct, setting = g[0], g[1]
+
+    def _collect(pairs):
+        found: dict = {}
+        for setting, pct in pairs:
             try:
                 val = Decimal(pct)
             except InvalidOperation:
-                continue
+                return None
             if setting in found and found[setting] != val:
-                return {}              # 同じ設定に別の値＝曖昧
+                return None            # 同じ設定に別の値＝曖昧
             found[setting] = val
-    return found
+        return found
+
+    # ① 文章形式：組ごとに「機械割」語が入っているもの
+    labeled = [(m.group(1), m.group(2)) for m in _PAIR_LABELED.finditer(q)]
+    paren = [(m.group(2), m.group(1)) for m in _PAIR_PAREN.finditer(q)]
+    if labeled or paren:
+        return _collect(labeled + paren) or {}
+
+    # ② 列挙形式：「機械割は 設1:97.2% / 設6:106.5%」
+    #    ★組・宣言語・区切り以外の文字が残るなら、別の話が混ざっている★
+    bare = [(m.group(1), m.group(2)) for m in _PAIR_BARE.finditer(q)]
+    if not bare:
+        return {}
+    rest = _PAIR_BARE.sub("", q)
+    rest = re.sub(_WORD, "", rest)
+    rest = re.sub(r"^\s*[*＊]*\s*", "", rest)
+    if _ENUM_RESIDUE.sub("", rest):
+        return {}                      # 「勝率」など別項目の語が残っている
+    return _collect(bare) or {}
 
 
 def check_c5_kikaiwari(claim: dict, quote: str) -> dict:
@@ -169,8 +196,15 @@ def semantic_artifact(claim: dict, machine_variant_key: str,
         checks = (ver.get("checks") or {})
 
         # 1) 台帳が自分で FAIL と言っているものは、その時点で数えない
+        #    ★★C5だけでなく、出典全体の判定と票の扱いも見る★★（Codex (a)-2）
+        #      これが無いと、台帳が「票に数えない(FAIL)」とした出典を
+        #      C5の再計算だけで票に復活させられてしまう。
         declared_bad = [cid for cid in CHECK_IDS if cid != "C5"
                         and (checks.get(cid) or {}).get("verdict") != "PASS"]
+        if ver.get("verdict") != "PASS":
+            declared_bad.append("verdict")
+        if ver.get("vote_disposition") != "COUNTED":
+            declared_bad.append("vote_disposition")
         # 2) 発行者を**URLから**引き直す（台帳の申告は使わない）
         pub = resolve_publisher(src.get("final_url"), registry)
         # 3) 機種の型番までの一致（★同名の別バージョンを混ぜない★）
@@ -295,11 +329,13 @@ def selftest() -> int:
     # ------------------------------------------------ 公開ゲートの再計算
     VK = "gogo_juggler3:SS-01"
 
-    def _src(url, quote, c5_declared="PASS", others="PASS", vk=VK):
+    def _src(url, quote, c5_declared="PASS", others="PASS", vk=VK,
+             verdict="PASS", disp="COUNTED"):
         checks = {c: {"verdict": others} for c in ("C0", "C1", "C2", "C3", "C4")}
         checks["C5"] = {"verdict": c5_declared}
         return {"final_url": url, "quote": quote,
-                "verification": {"checks": checks,
+                "verification": {"checks": checks, "verdict": verdict,
+                                 "vote_disposition": disp,
                                  "machine_variant_key_matched": vk}}
 
     def _c(sources, setting="1", raw="97.2%", amount=97.2):
@@ -334,9 +370,42 @@ def selftest() -> int:
       [r["disposition"] for r in semantic_artifact(
           _c([_src("https://chonborista.com/a", Q1),
               {**_src("https://nana-press.com/b", Q2),
-               "verification": {"checks": {c: {"verdict": "PASS"}
+               "verification": {"verdict": "PASS", "vote_disposition": "COUNTED",
+                                "checks": {c: {"verdict": "PASS"}
                                            for c in ("C0", "C1", "C2", "C3", "C4", "C5")}}}
               ]), VK)["sources"]][1] == "NOT_COUNTED_VARIANT_MISMATCH")
+    # ★★Codex 2回目 (a)-2：台帳が票に数えないとした出典を復活させない★★
+    t("★★台帳が FAIL とした出典を、C5が合っても票に復活させない★★",
+      not semantic_artifact(
+          _c([_src("https://chonborista.com/a", Q1, verdict="FAIL",
+                   disp="NOT_COUNTED_UNKNOWN"),
+              _src("https://nana-press.com/b", Q2, verdict="FAIL",
+                   disp="NOT_COUNTED_UNKNOWN")]), VK)["verified"])
+    t("　票に数えないと書かれた出典も同様",
+      not semantic_artifact(
+          _c([_src("https://chonborista.com/a", Q1, disp="NOT_COUNTED_SAME_OWNER"),
+              _src("https://nana-press.com/b", Q2)]), VK)["verified"])
+    # ★★Codex 2回目 (a)-3：別項目の百分率を機械割として導出しない★★
+    t("★★別項目の％を機械割として導出しない（勝率97.2%／機械割106.5%）★★",
+      check_c5_kikaiwari(_claim("1", "97.2%", 97.2),
+                         "設定1の勝率は97.2%。設定6の機械割は106.5%"
+                         )["code"] == "SETTING_NOT_IN_QUOTE")
+    t("　同じ引用でも、機械割と明記された設定6は導ける",
+      check_c5_kikaiwari(_claim("6", "106.5%", 106.5),
+                         "設定1の勝率は97.2%。設定6の機械割は106.5%"
+                         )["verdict"] == "PASS")
+    t("★列挙形式でも、組以外の語が混ざれば導出しない",
+      check_c5_kikaiwari(_claim("1", "97.2%", 97.2),
+                         "機械割 設定1:97.2% 勝率 設定2:98.2%"
+                         )["code"] == "NOT_DERIVABLE_FROM_QUOTE")
+    # ★★Codex 2回目 (a)-4：範囲・比較・否定をEXACTとして通さない★★
+    for bad_q in ("設定1の機械割は97.2%-99.9%", "設定1の機械割は97.2%～99.9%",
+                  "設定1の機械割は97.2%未満", "設定1の機械割は97.2%以上",
+                  "設定1の機械割は97.2%ではなく99.9%", "設定1の機械割は約97.2%"):
+        t(f"★★比較・範囲・否定を EXACT にしない：{bad_q}★★",
+          check_c5_kikaiwari(_claim("1", "97.2%", 97.2), bad_q)["code"]
+          == "NOT_DERIVABLE_FROM_QUOTE")
+
     t("★台帳が C2 を FAIL と書いていればその出典は数えない",
       not semantic_artifact(
           _c([_src("https://chonborista.com/a", Q1),

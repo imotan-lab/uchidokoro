@@ -1,0 +1,8 @@
+{
+ "schema_version": "claim-gate/v1",
+ "enabled": false,
+ "_note": "★出典の裏取りゲートを公開ビルドに効かせるかどうかの唯一のスイッチ★ 2026-07-28 現在は false＝claim の仕組みは検査コマンドであって、公開を止めていない（Codex 2回目 (a)-1 の指摘どおり）。true にすると build_public_data.py が claim_reconcile.publish_gate() を通し、出典の裏取りが済んでいない機種を公開物から外す。★現時点で true にすると全機種が公開物から外れる★（裏取り済みの claim がまだ1件も無いため）。Phase 2 で claim を実収集してから、機種単位で段階的に有効化する。",
+ "_history": [
+  "2026-07-28: 新設。既定 false。build_public_data.py が無効時に「有効にした場合に止まる機種数」を毎回表示する"
+ ]
+}
