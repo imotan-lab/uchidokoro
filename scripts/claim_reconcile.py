@@ -177,11 +177,18 @@ def reconcile(slug: str, machine: dict, detail: dict,
                 f"1つでも欠けたら行ごと出さない")
 
     # --- ⑥ 台帳そのものの検証（★空でも必ず行う★・Codex 指摘1）
+    # ★出典レジストリと必ず照合する（票の水増しを止める）★
+    # ★★1件目で打ち切らず、claim ごとに検証して全部出す★★（Codex 6巡目 (b)-3）
+    _reg = cl.load_registry()
     try:
-        # ★出典レジストリと必ず照合する（票の水増しを止める）★
-        cl.validate_ledger(ledger, f"{slug}.ledger", cl.load_registry())
+        cl.validate_ledger(ledger, f"{slug}.ledger", _reg)
     except cl.LedgerError as e:
         problems.append(f"台帳の検証に失敗: {e}")
+        for i, c in enumerate(ledger.get("claims") or []):
+            try:
+                cl.validate_claim(c, f"{slug}.ledger.claims[{i}]", _reg)
+            except cl.LedgerError as e2:
+                problems.append(f"    {e2}")
     # 台帳が別機種のものでないか
     mref = (ledger.get("machine_ref") or {})
     if mref.get("slug") != slug:
@@ -217,21 +224,32 @@ def publish_gate(slug: str) -> tuple[bool, list]:
     呼び出し側から渡させると、空の記事＋空の在庫＋空の台帳という
     「形式上は正しいが中身が無い」組み合わせで公開可にできてしまう。
     """
+    # ★★止める理由は途中で打ち切らずに集める★★（Codex 6巡目 (b)-2）
+    #   1つ目で return すると、同時にある型式不足・未分類・C5違反が見えず、
+    #   直すたびに次の理由が出てくる「もぐらたたき」になる。
+    hard: list = []
     machine, detail = ci.load_machine(slug)
     if machine is None:
         return False, [f"機種データが無い: {slug}"]
     if not detail:
-        return False, [f"記事データが無い: {slug}（空の記事を公開しない）"]
+        hard.append(f"記事データが無い: {slug}（空の記事を公開しない）")
     lp = os.path.join(DATA, "claim-ledgers", f"{slug}.json")
-    if not os.path.isfile(lp):
-        return False, [f"台帳が無い: {slug}（何も調べていない）"]
-    ledger = json.load(open(lp, encoding="utf-8"))
-    inventory = ci.build_inventory(slug, machine, detail)
+    ledger = (json.load(open(lp, encoding="utf-8")) if os.path.isfile(lp)
+              else None)
+    if ledger is None:
+        hard.append(f"台帳が無い: {slug}（何も調べていない）")
+        ledger = {"schema_version": cl.SCHEMA_VERSION,
+                  "machine_ref": {"slug": slug,
+                                  "machine_variant_key": ci.variant_key(slug, machine),
+                                  "catalog_record_sha256": cl.canonical_sha256(machine),
+                                  "identity_state": "UNVERIFIED"},
+                  "claims": []}
+    inventory = ci.build_inventory(slug, machine, detail or {})
     if not inventory.get("slots"):
-        # ★枠が1つも作れない記事を「全部済み」と誤認しない★
-        return False, [f"検証すべき枠を1つも抽出できない: {slug}"
-                       f"（記事の書き方が想定外か、事実が載っていない）"]
-    return _publishable(slug, machine, detail, inventory, ledger)
+        hard.append(f"検証すべき枠を1つも抽出できない: {slug}"
+                    f"（記事の書き方が想定外か、事実が載っていない）")
+    ok, why = _publishable(slug, machine, detail or {}, inventory, ledger)
+    return (ok and not hard), hard + why
 
 
 def _publishable(slug: str, machine: dict, detail: dict,
@@ -240,9 +258,10 @@ def _publishable(slug: str, machine: dict, detail: dict,
 
     本番の判定は publish_gate() を使うこと（入力を外から渡させない）。
     """
-    problems = reconcile(slug, machine, detail, inventory, ledger)
-    if problems:
-        return False, problems
+    # ★問題があっても検査を続け、理由を全部集める★（Codex 6巡目 (b)-1）
+    #   以前は三者照合で1件でも問題があると意味検証まで到達せず、
+    #   「型式を登録するまでC5の違反が一切見えない」状態だった。
+    problems = list(reconcile(slug, machine, detail, inventory, ledger))
     # ★在庫は必ずその場で作り直したものを使う（渡された在庫を信用しない）★
     inv_slots = ci.build_inventory(slug, machine, detail).get("slots") or []
     by_slot = {c.get("slot_id"): c for c in (ledger.get("claims") or [])}
@@ -250,7 +269,7 @@ def _publishable(slug: str, machine: dict, detail: dict,
     not_verified = [s["field_key"] for s in inv_slots
                     if by_slot.get(s["slot_id"], {}).get("verify_state") != "VERIFIED"]
     if not_verified:
-        return False, [f"検証済みでない枠がある: {sorted(set(not_verified))}"]
+        problems.append(f"検証済みでない枠がある: {sorted(set(not_verified))}")
 
     # ★★許可リストを実際に通す★★（Codex 指摘：関数はあるが呼ばれていなかった）
     #   型が許可リストに載っていて、かつ検証済み・事実・数え方確定・期限内であること。
@@ -260,9 +279,9 @@ def _publishable(slug: str, machine: dict, detail: dict,
         if not c or not cl.auto_adoptable(c):
             not_adoptable.append(s_["field_key"])
     if not_adoptable:
-        return False, [
+        problems.append(
             f"自動採用の条件を満たさない枠がある: {sorted(set(not_adoptable))}"
-            f"（許可リストに無い型／期限切れ／数え方未確定 など）"]
+            f"（許可リストに無い型／期限切れ／数え方未確定 など）")
 
     # --- ★★意味の検証を、公開のたびに計算し直す★★（Codex 3回目 手順5・6）
     #   台帳に書かれた C5 の結果や verify_state は**一切信用しない**。
@@ -279,10 +298,12 @@ def _publishable(slug: str, machine: dict, detail: dict,
             catalog = catalog + [machine]     # 検査用の機種でも同定できるように
         identity = cid.identity_spec(machine, catalog)
     except Exception as e:                       # カタログが読めなければ止める
-        return False, [f"機種カタログを読めないため同定できない: {e}"]
+        return False, problems + [f"機種カタログを読めないため同定できない: {e}"]
     bad_semantic = []
     for s_ in inv_slots:
         c = by_slot.get(s_["slot_id"])
+        if not c:
+            continue          # claim が無い枠は「調べていない枠」として上で報告済み
         art = claim_c5.semantic_artifact(c, variant, registry, identity)
         if art.get("verified"):
             continue
@@ -308,10 +329,10 @@ def _publishable(slug: str, machine: dict, detail: dict,
                 f" / {row.get('final_url')}")
         bad_semantic.append("\n".join([head] + detail_lines))
     if bad_semantic:
-        return False, [
-            "引用から値を導き直せない枠がある"
-            "（台帳の申告ではなく、その場の再計算で判定している）"] + bad_semantic
-    return True, []
+        problems.append("引用から値を導き直せない枠がある"
+                        "（台帳の申告ではなく、その場の再計算で判定している）")
+        problems.extend(bad_semantic)
+    return (not problems), problems
 
 
 # ---------------------------------------------------------------- selftest
@@ -589,6 +610,9 @@ def selftest() -> int:
     ok_t, why_t = publish_gate("tokyo_ghoul")
     t("★★台帳が無い機種は「何も調べていない」として止まる★★",
       not ok_t and any("台帳が無い" in w for w in why_t))
+    # ★★止める理由を1つ目で打ち切らない★★（Codex 6巡目 (b)-2）
+    t("★★台帳が無い機種でも、型式不足や未分類など他の理由も同時に出す★★",
+      len(why_t) > 1 and any("型式情報が足りない" in w for w in why_t))
 
     ng = [n for n, ok_ in results if not ok_]
     print("")

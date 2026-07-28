@@ -668,6 +668,13 @@ def identity_spec(machine: dict, machines: list[dict]) -> dict:
         "reject_name_cores": sorted({normalize_core(m.get("name", "")) for m in machines
                                      if m.get("slug") != machine.get("slug")}
                                     - set(accept_cores_for(machine, machines)) - {""}),
+        # ★他機種の「正式名＋別名」の芯すべて★（2026-07-28・Codex 6巡目 (a)-3）
+        #   全文走査（claim_c5._whole_text_ok）で「他機種の名前が混ざっていないか」を
+        #   見るために使う。タイトル判定には使わない（別名は汎用語を含み誤判定するため）。
+        "reject_all_cores": sorted({c for m in machines
+                                    if m.get("slug") != machine.get("slug")
+                                    for c in machine_cores(m)}
+                                   - set(accept_cores_for(machine, machines)) - {""}),
     }
 
 

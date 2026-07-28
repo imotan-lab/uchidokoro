@@ -417,10 +417,20 @@ def identity_tuple(machine: dict) -> dict:
 
 
 def identity_missing(machine: dict) -> list:
-    """型式の同定情報が足りない項目を返す（空なら足りている）。"""
+    """型式の同定情報が足りない項目を返す（空なら足りている）。
+
+    ★空白だけの値を「登録済み」にしない★（Codex 6巡目 (a)-4）
+      release_date も含めて3項目そろって初めてバージョンを区別できる。
+    """
     ident = machine.get("identity") or {}
-    return [k for k in ("manufacturer_id", "regulatory_model_code")
-            if not ident.get(k)]
+    if not isinstance(ident, dict):
+        return ["identity"]
+    out = []
+    for k in ("manufacturer_id", "regulatory_model_code", "release_date"):
+        v = ident.get(k)
+        if not isinstance(v, str) or not v.strip():
+            out.append(k)
+    return out
 
 
 def variant_key(slug: str, machine: dict) -> str:
@@ -671,7 +681,9 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
             spec = {**spec, **shape}
         if spec is None:
             # ★数値を含むのに型に落ちない＝止める対象★
-            if _NUM.search(value):
+            #   ★字形の違いで見逃さない★（Codex 6巡目 (a)-5）
+            #   「天井は⑨⑨⑨⑨Ｇ」のような丸数字も NFKC で拾う。
+            if _NUM.search(unicodedata.normalize("NFKC", str(value or ""))):
                 unclassified.append({"pointer": pointer, "label": label,
                                      "reason": "UNKNOWN_LABEL_WITH_NUMBER"})
             continue
@@ -960,6 +972,18 @@ def selftest() -> int:
     t("★★同じ単位を2回書いた値を通さない（97.2%％ / 1200GG）★★",
       normalize_value("97.2%％", "%") is None
       and normalize_value("1200GG", "G", "MAX") is None)
+    t("★★丸数字・全角の未知ラベルも未分類として止める（天井は⑨⑨⑨⑨Ｇ）★★",
+      build_inventory("x", {"slug": "x"}, {"factTable": [
+          ["機械割(設定1)", "97.2%"], ["秘密スペック", "天井は⑨⑨⑨⑨Ｇ"]]}
+          )["coverage"]["unclassified_atoms"] == 1)
+    t("★★型式が空白だけなら「登録済み」にしない★★",
+      identity_missing({"identity": {"manufacturer_id": " ",
+                                     "regulatory_model_code": " "}})
+      == ["manufacturer_id", "regulatory_model_code", "release_date"])
+    t("　3項目そろって初めて足りている",
+      identity_missing({"identity": {"manufacturer_id": "a",
+                                     "regulatory_model_code": "b",
+                                     "release_date": "2026-01-01"}}) == [])
     t("★★全角スラッシュの確率も検知する（1／999）★★",
       build_inventory("x", {"slug": "x"}, {"factTable": [
           ["機種名", "テスト機。BIG確率は1／999"],

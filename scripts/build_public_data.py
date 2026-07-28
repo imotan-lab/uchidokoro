@@ -134,6 +134,14 @@ def audit(pub_machines: list, pub_details: dict) -> list:
     """書き出す前後で、gates を使わない独立監査に掛ける。"""
     problems: list = []
     seen: set = set()
+    # ★★一覧と記事ファイルの対応を、通常ビルドでも検査する★★（Codex 6巡目 (a)-6）
+    #   静的配信では、一覧に無いファイルでも URL を直接叩けば読める。
+    #   逆に記事が無い機種を一覧に載せると、記事ページが空で公開される。
+    slugs = {pm.get("slug") for pm in pub_machines}
+    for orphan in sorted(set(pub_details) - slugs):
+        problems.append(f"公開一覧に無い記事ファイルが残っている: {orphan}.json")
+    for missing in sorted(slugs - set(pub_details)):
+        problems.append(f"公開一覧にあるのに記事が無い: {missing}")
     for pm in pub_machines:
         problems.extend(audit_public.audit_machine(pm, seen))
         dr = pm.get("display_requirements") or {}
@@ -216,14 +224,7 @@ def main() -> int:
                 if fn.endswith(".json"):
                     pd_[fn[:-5]] = json.load(
                         open(os.path.join(OUT_DETAILS, fn), encoding="utf-8"))
-        problems = audit(pm, pd_)
-        # ★★公開物に載っていない記事ファイルが残っていないか★★（Codex 5巡目 (a)-6）
-        #   静的配信では、一覧に無いファイルでも URL を直接叩けば読める。
-        slugs = {x.get("slug") for x in pm}
-        for orphan in sorted(set(pd_) - slugs):
-            problems.append(f"公開一覧に無い記事ファイルが残っている: {orphan}.json")
-        for missing in sorted(slugs - set(pd_)):
-            problems.append(f"公開一覧にあるのに記事ファイルが無い: {missing}")
+        problems = audit(pm, pd_)     # 一覧と記事ファイルの対応も audit が見る
         # ★★既存の公開物にも裏取りゲートを掛け直す★★（Codex 2巡目 (a)-5）
         #   無効のまま作った公開物が、有効化後に --verify で「合格」に
         #   見えてしまうのを防ぐ。
@@ -289,6 +290,17 @@ def main() -> int:
         print("（確認のみ。書き出すには --apply）")
         print("=" * 66)
         return 0
+
+    # ★★裏取りゲートが無効のままでは公開物を書き出させない★★（Codex 6巡目 (a)-1）
+    #   無効でも「確認」はできてよいが、**書き出しは止める**。
+    #   これが無いと、警告を無視して --apply するだけで
+    #   裏取りしていない内容が公開物になってしまう。
+    if not cg:
+        print("★出典の裏取りゲートが無効なので書き出しません★")
+        print(f"  {os.path.relpath(CLAIM_GATE, BASE)} の enabled を true にするか、")
+        print("  影響を確認するだけなら --claim-gate を付けて実行してください。")
+        print("=" * 66)
+        return 1
 
     # ★書き出しは一時ディレクトリへ作ってから差し替える（中途半端な状態を作らない）★
     tmp = OUT_DIR + ".tmp"

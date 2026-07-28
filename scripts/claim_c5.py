@@ -25,6 +25,7 @@ import argparse
 import os
 import re
 import sys
+import unicodedata
 from decimal import Decimal, InvalidOperation
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -122,7 +123,10 @@ def derive_kikaiwari_ex(quote: str):
       条件つきの別値（完全攻略時など）や範囲が混ざる文は、
       どの数字がその設定の機械割か決まらないので**何も返さない**。
     """
-    q = str(quote or "")
+    # ★★全角で書かれた正しい引用を落とさない★★（Codex 6巡目 (b)-5）
+    #   「設定１の機械割は９７．２％」は意味上正しいのに、
+    #   正規表現がASCII前提なので導出できなかった。
+    q = unicodedata.normalize("NFKC", str(quote or ""))
     if not re.search(_KIKAIWARI_WORD, q):
         return {}, "NO_KIKAIWARI_WORD"     # 機械割の話をしていない
     if _AMBIGUOUS.search(q):
@@ -237,10 +241,10 @@ def identity_verdict(src: dict, identity: dict | None):
     #   これが無いと「対象機種のページだが、比較欄に載った旧作の値」を
     #   引用として切り出せてしまう。
     quote = str(src.get("quote") or "")
-    if not quote or quote not in str(context):
-        return False, "QUOTE_NOT_IN_CONTEXT"
-
     cores = identity.get("machine_cores") or []
+    ok, why = _context_binding_ok(quote, context, cores)
+    if not ok:
+        return False, why
     ok, why = cid.check_title(title, cores, identity.get("reject_cores") or [],
                               identity.get("reject_name_cores") or [])
     if not ok:
@@ -264,6 +268,39 @@ def identity_verdict(src: dict, identity: dict | None):
     return True, "OK"
 
 
+# 引用の周りにあってはいけない言い回し（他機種の値を並べている合図）
+_COMPARISON = re.compile(
+    r"比較|旧作|前作|先代|前機種|他機種|参考まで|参考値|シリーズ|歴代|"
+    r"前バージョン|旧台|旧機種|ちなみに|なお、?[^。]{0,10}は")
+# 引用の周りで機種名を探す幅（これより離れた機種名は結び付いていないとみなす）
+_BIND_WINDOW = 60
+
+
+def _context_binding_ok(quote: str, context: str, cores):
+    """★引用が「その機種の話」として書かれているかを見る★（Codex 6巡目 (a)-2）
+
+    「quote が context のどこかに含まれる」だけでは、
+    「スマスロテスト機との比較。旧作・吉宗：設定1の機械割は97.2%」のような
+    比較欄から値を切り出せてしまう。引用の**すぐ近く**に機種名があり、
+    かつ近くに比較の言い回しが無いことを求める。
+    """
+    import claim_identity as cid
+
+    ctx = str(context or "")
+    pos = ctx.find(str(quote or ""))
+    if pos < 0:
+        return False, "QUOTE_NOT_IN_CONTEXT"
+    lo = max(0, pos - _BIND_WINDOW)
+    hi = min(len(ctx), pos + len(quote) + _BIND_WINDOW)
+    window = ctx[lo:hi]
+    if _COMPARISON.search(window):
+        return False, "COMPARISON_NEAR_QUOTE"
+    wn = cid.normalize_core(window)
+    if not any(c and c in wn for c in cores):
+        return False, "MACHINE_NAME_NOT_NEAR_QUOTE"
+    return True, "OK"
+
+
 def _whole_text_ok(text: str, cores, identity: dict):
     """文字列**全体**に、別媒体・別機種・続編の手掛かりが無いかを見る。
 
@@ -273,25 +310,41 @@ def _whole_text_ok(text: str, cores, identity: dict):
     """
     import claim_identity as cid
 
-    t = cid.normalize_core(str(text or ""))
+    raw = unicodedata.normalize("NFKC", str(text or ""))
+    t = cid.normalize_core(raw)
     if not t:
         return False, "EMPTY"
-    if cid.is_pachinko_text(str(text or "")):
+    # ★別媒体の表記は日本語だけではない★（Codex 6巡目 (a)-3）
+    if cid.is_pachinko_text(raw) or _PACHINKO_EXTRA.search(raw):
         return False, "PACHINKO"
-    for rc in (identity.get("reject_name_cores") or []):
-        if not rc or len(rc) < 3:
+    # ★他機種は正式名だけでなく別名も見る／2文字の芯も見る★
+    for rc in (identity.get("reject_all_cores") or
+               identity.get("reject_cores") or []):
+        if not rc or len(rc) < 2:
             continue
         if rc in t and not any(rc in c or c in rc for c in cores):
             return False, f"OTHER_MACHINE:{rc[:12]}"
-    # 「芯のすぐ後ろに数字」＝続編・世代違いの可能性（例: 芯+「2」）
+    # ★続編の合図は数字だけではない★（Ⅱ・第二弾・ツー・リターンズ 等）
     for c in cores:
         if not c:
             continue
         for mm in re.finditer(re.escape(c), t):
-            tail = t[mm.end():mm.end() + 1]
-            if tail.isdigit():
-                return False, f"SEQUEL_SUFFIX:{c[:10]}{tail}"
+            tail = t[mm.end():mm.end() + 6]
+            m2 = _SEQUEL_MARK.match(tail)
+            if m2:
+                return False, f"SEQUEL_SUFFIX:{c[:10]}{m2.group(0)}"
     return True, "OK"
+
+
+# 別媒体（パチンコ・遊技球）の表記ゆれ。claim_identity の日本語判定を補う
+_PACHINKO_EXTRA = re.compile(
+    r"pachinko|遊技球|玉あたり|1玉|"
+    r"(?<![A-Za-z])[PpＰｐ]機|(?<![A-Za-z])[Ee]機", re.I)
+# 続編・世代違いの合図（芯の直後）。数字は「2つ」等の助数詞を除く
+_SEQUEL_MARK = re.compile(
+    r"[0-9](?![つ人回種択段個倍円枚g])"
+    r"|[ⅡⅢⅣⅤⅥⅦⅧⅨⅩ]|ii(?![a-z])|iii|"
+    r"第[二三四五2345]弾|ツー|スリー|リターンズ|ネクスト|続編|再臨|新章", re.I)
 
 
 def semantic_artifact(claim: dict, machine_variant_key: str,
@@ -636,6 +689,35 @@ def selftest() -> int:
                    ev={"page_title": "【スマスロテスト機】天井・設定判別｜スマスロテスト機2",
                        "quote_context": EV["quote_context"]}),
               _src("https://nana-press.com/b", Q2)], ), VK, None, IDENT)["verified"])
+    # ★★Codex 6巡目★★
+    t("★★比較欄の他機種の値を切り出せない（旧作・吉宗：…）★★",
+      not semantic_artifact(
+          _c([_src("https://chonborista.com/a", "設定1の機械割は97.2%",
+                   ev={"page_title": EV["page_title"],
+                       "quote_context": "スマスロテスト機との比較。"
+                                        "旧作・吉宗：設定1の機械割は97.2%"}),
+              _src("https://nana-press.com/b", Q2)]), VK, None, IDENT)["verified"])
+    t("★★機種名が引用から遠ければ結び付いていないとみなす★★",
+      not semantic_artifact(
+          _c([_src("https://chonborista.com/a", "設定1の機械割は97.2%",
+                   ev={"page_title": EV["page_title"],
+                       "quote_context": "スマスロテスト機の解析。" + "あ" * 200
+                                        + "設定1の機械割は97.2%"}),
+              _src("https://nana-press.com/b", Q2)]), VK, None, IDENT)["verified"])
+    for bad_title in ("【スマスロテスト機】天井・解析｜PACHINKO版",
+                      "【スマスロテスト機】天井・解析｜遊技球版",
+                      "【スマスロテスト機】天井・解析｜スマスロテスト機Ⅱ",
+                      "【スマスロテスト機】天井・解析｜スマスロテスト機第二弾"):
+        t(f"★★回避表記も落とす：{bad_title[-12:]}★★",
+          not semantic_artifact(
+              _c([_src("https://chonborista.com/a", Q1,
+                       ev={"page_title": bad_title,
+                           "quote_context": EV["quote_context"]}),
+                  _src("https://nana-press.com/b", Q2)]),
+              VK, None, IDENT)["verified"])
+    t("★全角で書かれた正しい引用も導ける（設定１の機械割は９７．２％）",
+      check_c5_kikaiwari(_claim("1", "97.2%", 97.2),
+                         "設定１の機械割は９７．２％")["verdict"] == "PASS")
     t("★同定の一式が無ければ、その場で止める（NO_IDENTITY_SPEC）",
       not semantic_artifact(ok2, VK, None, None)["verified"])
     t("★意味の検証器が無い項目は VERIFIED にしない（既定拒否）",
