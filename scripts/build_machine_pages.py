@@ -209,9 +209,47 @@ def build_jsonld(machine: dict, canonical_url: str, title: str, desc: str) -> st
     return f'<script type="application/ld+json">{payload}</script>'
 
 
+def claim_gate_state():
+    """出典の裏取りゲートが有効か。★設定が読めなければ止める★
+
+    ★★ここが最大の抜け道だった★★（Codex 9巡目 (a)-6）
+      公開物の生成（build_public_data.py）にはゲートを付けたのに、
+      **実際に読者が見るHTMLを作るのはこのスクリプト**で、
+      authoring の machines.json / machine-details を直接読んでいた。
+      つまり誤った数値を書いて本スクリプトを回せば、
+      公開ゲートを一度も通らずに静的HTMLへ入っていた。
+    """
+    import sys as _sys
+    _sys.path.insert(0, str(BASE / "scripts"))
+    import build_public_data as bpd
+    return bpd.claim_gate_enabled()
+
+
 def main():
     machines = json.loads((BASE / "assets" / "data" / "machines.json").read_text(encoding="utf-8"))
     template = (BASE / "machine.html").read_text(encoding="utf-8")
+
+    # ★★裏取りゲートが有効なら、通らない機種のHTMLは作らない★★
+    try:
+        gate_on = claim_gate_state()
+    except Exception as e:
+        print(f"★出典の裏取りゲートの設定が読めません: {e}")
+        return 1
+    blocked_by_claim = set()
+    if gate_on:
+        import claim_reconcile as cr
+        for m in machines:
+            try:
+                ok, _why = cr.publish_gate(m["slug"])
+            except Exception as e:
+                ok, _why = False, [f"検査が例外で失敗: {e}"]
+            if not ok:
+                blocked_by_claim.add(m["slug"])
+        print(f"出典の裏取りゲート: ★有効★ → {len(blocked_by_claim)} 機種のHTMLを作りません")
+    else:
+        print("出典の裏取りゲート: ☆無効☆ "
+              "＝このスクリプトは裏取りを確かめずにHTMLを作ります"
+              "（assets/data/claim-gate.json の enabled で切り替え）")
 
     # <base href="/"> を <head> 直後に挿入
     if "<base " not in template:
@@ -229,6 +267,8 @@ def main():
     prerendered = 0
     for machine in machines:
         slug = machine["slug"]
+        if slug in blocked_by_claim:
+            continue                 # 裏取りが済んでいない機種のHTMLは作らない
         html_out = template
         canonical_url = f"https://uchidokoro.com/machines/{slug}/"
 

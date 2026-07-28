@@ -81,6 +81,8 @@ LABEL_RULES = [
     # ★「通常時」は天井とは限らない★（通常時の純増・通常時の確率などにも使われる）
     #   ラベルだけで天井と決めつけない。未知として止める。
     (r"^通常天井$", "ceiling.normal", "NORMAL", "NONE", "UNKNOWN", "INTEGER", "G"),
+    # ★機種データ側の天井（machines.json の limit）★
+    (r"^limit$", "ceiling.normal", "NORMAL", "NONE", "UNKNOWN", "INTEGER", "G"),
     # --- 恩恵（何が起きるか）。文章なので TEXT。★数値ではないが事実★
     (r"^恩恵$|^天井恩恵$", "benefit.ceiling", "NORMAL", "NONE", "NONE", "TEXT", ""),
     (r"^リセット恩恵$", "benefit.reset", "RESET", "NONE", "NONE", "TEXT", ""),
@@ -634,6 +636,36 @@ def _scan_excluded_value(unsupported: list, pointer: str, label: str,
                             "content_sha256": _sha(f"{label}|{v}")})
 
 
+# ★機種データ（machines.json）側にも公開される数値がある★（Codex 9巡目 (a)-7）
+#   在庫は記事(detail)しか見ていなかったので、`limit` に誤った天井を書いても
+#   枠にも未分類にも入らず、そのまま公開射影へ入っていた。
+_MACHINE_NUMERIC_FIELDS = {
+    "limit": ("ceiling.normal", "NORMAL", "NONE", "UNKNOWN", "INTEGER", "G"),
+}
+# 数値を含み得るが型に落ちない機種データの項目（＝未分類として止める）
+_MACHINE_PROSE_FIELDS = ("tenjo_display", "strategy")
+
+
+def _machine_pairs(machine: dict) -> list:
+    """機種データから「項目：値」の組を取り出す（記事と同じ扱いにする）。"""
+    out = []
+    # `limit` は単位を持たない数値。単位はチェッカーの設定側にあるので添える
+    #   （単位が分からなければ添えない＝値の型が決まらず未分類で止まる）
+    unit = ((machine.get("checker") or {}).get("unit") or "")
+    for k, _spec in _MACHINE_NUMERIC_FIELDS.items():
+        if machine.get(k) is not None:
+            out.append((f"/machine/{k}", k, f"{machine[k]}{unit}"))
+    for k in _MACHINE_PROSE_FIELDS:
+        if machine.get(k):
+            out.append((f"/machine/{k}", k, str(machine[k])))
+    by_rate = machine.get("strategyByRate")
+    if isinstance(by_rate, dict):
+        for rk, rv in by_rate.items():
+            out.append((f"/machine/strategyByRate/{rk}", f"strategyByRate.{rk}",
+                        str(rv)))
+    return out
+
+
 def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
     """1機種ぶんの在庫を作る。"""
     slots, unclassified = [], []
@@ -674,7 +706,8 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
                                 "excerpt": sent.strip()[:70],
                                 "content_sha256": _sha(sent)})
 
-    for item in _pairs_from_detail(detail):
+    # ★記事だけでなく機種データの数値も同じ経路に通す★（Codex 9巡目 (a)-7）
+    for item in _pairs_from_detail(detail) + _machine_pairs(machine):
         pointer, label, value = item[0], item[1], item[2]
         setting_raw = item[3] if len(item) > 3 else None
         table_label = item[4] if len(item) > 4 else None
@@ -1050,6 +1083,18 @@ def selftest() -> int:
       and build_inventory("x", {"slug": "x"}, {"factTable": [
           ["機械割(設定1)", "97.2%"], ["ペイアウト率", "九十九％"]]}
           )["coverage"]["unclassified_atoms"] == 1)
+    # ★★機種データの数値も在庫に入る★★（Codex 9巡目 (a)-7）
+    mi2 = build_inventory("x", {"slug": "x", "limit": 1200,
+                                "checker": {"unit": "G"}}, {})
+    t("★★machines.json の limit（天井）が枠になる★★",
+      any(s["field_key"] == "ceiling.normal" and s["current_value"]["amount"] == 1200
+          for s in mi2["slots"]))
+    t("★★機種データの散文（tenjo_display / strategy）も素通りしない★★",
+      build_inventory("x", {"slug": "x", "limit": 1200,
+                            "checker": {"unit": "G"},
+                            "tenjo_display": "天井1200G+α",
+                            "strategy": "等価600G〜"}, {}
+                      )["coverage"]["unclassified_atoms"] >= 1)
     t("★型式の鍵は3項目そろって初めて作れる",
       physical_key({"manufacturer_id": "a", "regulatory_model_code": "b",
                     "release_date": "c"}) is not None
