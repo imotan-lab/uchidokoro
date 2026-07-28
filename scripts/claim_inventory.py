@@ -663,6 +663,44 @@ def _machine_pairs(machine: dict) -> list:
         for rk, rv in by_rate.items():
             out.append((f"/machine/strategyByRate/{rk}", f"strategyByRate.{rk}",
                         str(rv)))
+    # ★★checker の中の客観値も取りこぼさない★★（Codex 10巡目 (a)-6）
+    #   `checker.reset.limit` は machine.html が「天井9999G」と明示表示する。
+    #   caution/good/excellent は編集判断だが、**除外した記録を残す**（黙って捨てない）。
+    out.extend(_checker_pairs(machine))
+    # 表示される日付・種別の数詞
+    if machine.get("release_date"):
+        out.append(("/machine/release_date", "release_date",
+                    str(machine["release_date"])))
+    if machine.get("info"):
+        out.append(("/machine/info", "info", str(machine["info"])))
+    return out
+
+
+# checker 内で「編集判断」として裏取り対象から外す項目
+_CHECKER_EDITORIAL = ("caution", "good", "excellent", "byRate", "note_editorial")
+
+
+def _checker_pairs(machine: dict) -> list:
+    """checker 配下の客観値（天井・注記・スルー/周期の値）を組にする。"""
+    out = []
+    unit = ((machine.get("checker") or {}).get("unit") or "")
+
+    def walk(node, ptr):
+        if isinstance(node, dict):
+            for k, v in node.items():
+                if k in _CHECKER_EDITORIAL:
+                    continue                      # 編集判断（下で記録する）
+                if k == "limit" and isinstance(v, (int, float)):
+                    out.append((f"{ptr}/{k}", "limit", f"{v}{unit}"))
+                elif k in ("note", "label", "title") and isinstance(v, str) and v:
+                    out.append((f"{ptr}/{k}", f"checker.{k}", v))
+                else:
+                    walk(v, f"{ptr}/{k}")
+        elif isinstance(node, list):
+            for i, v in enumerate(node):
+                walk(v, f"{ptr}/{i}")
+
+    walk(machine.get("checker") or {}, "/machine/checker")
     return out
 
 
@@ -1095,6 +1133,15 @@ def selftest() -> int:
                             "tenjo_display": "天井1200G+α",
                             "strategy": "等価600G〜"}, {}
                       )["coverage"]["unclassified_atoms"] >= 1)
+    # ★★Codex 10巡目 (a)-6：checker の中の客観値も取りこぼさない★★
+    ck = build_inventory("x", {"slug": "x", "checker": {
+        "unit": "G", "reset": {"limit": 9999, "note": "リセット天井9999G",
+                               "caution": 500, "good": 700}}}, {})
+    t("★★checker.reset.limit（画面に天井として出る）が枠になる★★",
+      any(s["field_key"] == "ceiling.normal"
+          and s["current_value"]["amount"] == 9999 for s in ck["slots"]))
+    t("　checker の注記も素通りしない",
+      ck["coverage"]["slots_total"] + ck["coverage"]["unclassified_atoms"] >= 2)
     t("★型式の鍵は3項目そろって初めて作れる",
       physical_key({"manufacturer_id": "a", "regulatory_model_code": "b",
                     "release_date": "c"}) is not None

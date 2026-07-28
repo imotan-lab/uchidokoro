@@ -523,14 +523,27 @@ def _time_order_bad(claim: dict, src: dict, ev_fetch: dict):
             return None
 
     fetched = _p(ev_fetch.get("fetched_at"))
-    checked = _p((src.get("verification") or {}).get("checked_at"))
+    raw_checked = (src.get("verification") or {}).get("checked_at")
+    checked = _p(raw_checked)
     verified = _p(claim.get("verified_at"))
+    expires = _p(claim.get("expires_at"))
     if fetched is None:
         return "NO_FETCH_TIME"
-    if checked is not None and checked < fetched:
+    # ★形式不正を「未指定」と同じ扱いにしない★（Codex 10巡目 (a)-7）
+    if raw_checked is not None and checked is None:
+        return "CHECKED_AT_MALFORMED"
+    if checked is None:
+        return "NO_CHECKED_AT"
+    if checked < fetched:
         return "CHECKED_BEFORE_FETCH"
-    if verified is not None and verified < fetched:
-        return "VERIFIED_BEFORE_FETCH"
+    if verified is None:
+        return None                       # 未検証の claim はここでは判定しない
+    if verified < checked:
+        return "VERIFIED_BEFORE_CHECK"
+    # ★★期限の起点は「取得した時刻」★★（Codex 10巡目 (a)-7）
+    #   6年前の応答でも検証日時を今日にすればTTLが今日から始まっていた。
+    if expires is not None and (expires - fetched).days > 365:
+        return f"TTL_FROM_FETCH_TOO_LONG:{(expires - fetched).days}日"
     return None
 
 
@@ -621,7 +634,11 @@ def semantic_artifact(claim: dict, machine_variant_key: str,
                     "evidence_ref": (ev_ref[:12] + "…") if ev_ref else None,
                     "evidence_url": ev_fetch.get("final_url"),
                     "response_sha": (str(resp_sha)[:12] + "…") if resp_sha else None,
-                    "attestation": att_why})
+                    "attestation": att_why,
+                    # ★調査用には切らない実値も残す★（Codex 10巡目 (b)-4）
+                    "evidence_ref_full": ev_ref,
+                    "response_sha_full": resp_sha,
+                    "attestation_state": (_ev0 or {}).get("attestation_state")})
 
         # 8) ★証拠より前の日時で「検証した」と言わせない★（Codex 9巡目 (a)-5）
         #    後日訂正された古い証拠を、新しい検証日時の claim に貼り直せてしまう。
@@ -845,6 +862,8 @@ def selftest() -> int:
         return {"final_url": url, "quote": quote,
                 "verification": {"checks": checks, "verdict": verdict,
                                  "vote_disposition": disp,
+                                 # 取得(09:00) → 検査(09:05) の順
+                                 "checked_at": "2026-07-28T09:05:00Z",
                                  "evidence_ref": ref}}
 
     def _c(sources, setting="1", raw="97.2%", amount=97.2):
@@ -1145,6 +1164,35 @@ def selftest() -> int:
                  _src("https://nana-press.com/b", Q2)]),
            "verified_at": "2020-01-01T00:00:00Z"},
           VK, None, IDENT, PHYS)["verified"])
+    # ★★Codex 10巡目：時系列の抜け道★★
+    def _timed(fetched, checked, verified, expires=None):
+        s1 = _src("https://chonborista.com/a", Q1)
+        s2 = _src("https://nana-press.com/b", Q2)
+        for s in (s1, s2):
+            ref = s["verification"]["evidence_ref"]
+            ev = _ce.load_evidence(ref)[0]
+            body = {k: v for k, v in ev.items() if k != "evidence_sha256"}
+            body["fetch"] = {**body["fetch"], "fetched_at": fetched}
+            s["verification"]["evidence_ref"] = _ce.write_evidence(body)
+            s["verification"]["checked_at"] = checked
+        c = _c([s1, s2])
+        c["verified_at"] = verified
+        if expires:
+            c["expires_at"] = expires
+        return semantic_artifact(c, VK, None, IDENT, PHYS)["verified"]
+
+    t("★★6年前の応答を今日の検証日時に貼り直せない（期限の起点は取得時刻）★★",
+      not _timed("2020-01-01T00:00:00Z", "2026-07-28T10:00:00Z",
+                 "2026-07-28T10:30:00Z", "2027-07-28T10:30:00Z"))
+    t("★★検査より前の日時で「検証済み」と言えない★★",
+      not _timed("2026-07-28T09:00:00Z", "2026-07-28T10:00:00Z",
+                 "2026-07-28T09:30:00Z"))
+    t("★検査日時が無い／形式が壊れていれば数えない",
+      not _timed("2026-07-28T09:00:00Z", "2026/07/28 10:00",
+                 "2026-07-28T10:30:00Z"))
+    t("　正しい順序なら通る",
+      _timed("2026-07-28T09:00:00Z", "2026-07-28T10:00:00Z",
+             "2026-07-28T10:30:00Z", "2026-10-28T10:30:00Z"))
     t("★同定の一式が無ければ、その場で止める（NO_IDENTITY_SPEC）",
       not semantic_artifact(ok2, VK, None, None, PHYS)["verified"])
     t("★意味の検証器が無い項目は VERIFIED にしない（既定拒否）",

@@ -241,7 +241,10 @@ def publish_gate(slug: str) -> tuple[bool, list]:
     #   1つ目で return すると、同時にある型式不足・未分類・C5違反が見えず、
     #   直すたびに次の理由が出てくる「もぐらたたき」になる。
     hard: list = []
-    machine, detail = ci.load_machine(slug)
+    try:
+        machine, detail = ci.load_machine(slug)
+    except Exception as e:
+        return False, [f"機種データを読めない: {type(e).__name__}: {e}"]
     if machine is None:
         return False, [f"機種データが無い: {slug}"]
     if not detail:
@@ -254,6 +257,10 @@ def publish_gate(slug: str) -> tuple[bool, list]:
         except Exception as e:
             # ★壊れたJSONでも例外にせず、必ずDENYを返す★（Codex 9巡目 (b)-5）
             hard.append(f"台帳が読めない（壊れたJSON）: {type(e).__name__}: {e}")
+    # ★JSONとして読めても型が違えば同じく警告にする★（Codex 10巡目 (b)-3）
+    if ledger is not None and not isinstance(ledger, dict):
+        hard.append(f"台帳が辞書でない（{type(ledger).__name__}）")
+        ledger = None
     if ledger is None:
         hard.append(f"台帳が無い: {slug}（何も調べていない）")
         ledger = {"schema_version": cl.SCHEMA_VERSION,
@@ -284,6 +291,7 @@ def _publishable(slug: str, machine: dict, detail: dict,
     inv_slots = ci.build_inventory(slug, machine, detail).get("slots") or []
     by_slot = {c.get("slot_id"): c for c in (ledger.get("claims") or [])}
 
+    by_slot = {k: v for k, v in by_slot.items() if isinstance(v, dict)}
     not_verified = [s["field_key"] for s in inv_slots
                     if by_slot.get(s["slot_id"], {}).get("verify_state") != "VERIFIED"]
     if not_verified:

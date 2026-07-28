@@ -377,8 +377,41 @@ def build_page(file, prose, data_html):
     return "\n".join(parts)
 
 
-def main():
+def main(allow_ungated: bool = False):
+    # ★★ハブ4ページもゲート外だった★★（Codex 10巡目 (a)-4）
+    #   tenjo_display / strategy / checker閾値 をそのままランキングHTMLへ出すので、
+    #   誤った値を書いて本スクリプトを回せば公開ゲートを通らず公開される。
+    import sys as _sys
+    _sys.path.insert(0, str(BASE / "scripts"))
+    import build_public_data as _bpd
+    try:
+        gate_on = _bpd.claim_gate_enabled()
+    except Exception as e:
+        print(f"★出典の裏取りゲートの設定が読めません: {e}")
+        return 1
     rows = load_rows()
+    if gate_on:
+        import claim_reconcile as _cr
+        blocked = []
+        for r in rows:
+            try:
+                ok, why = _cr.publish_gate(r.get("slug"))
+            except Exception as e:
+                ok, why = False, [f"検査が例外で失敗: {e}"]
+            if not ok:
+                blocked.append((r.get("slug"), why))
+        if blocked:
+            print(f"出典の裏取りゲート: ★有効★ → {len(blocked)} 機種を一覧から外します")
+            for s, why in blocked:
+                print(f"  ✗ {s}: {why[0] if why else ''}")
+            ng = {s for s, _ in blocked}
+            rows = [r for r in rows if r.get("slug") not in ng]
+    elif not allow_ungated:
+        print("★出典の裏取りゲートが無効なのでハブ4ページを作りません★")
+        print("  承知のうえで作るなら --allow-ungated を付けてください。")
+        return 1
+    else:
+        print("☆☆裏取りを確かめずにハブ4ページを作ります（--allow-ungated 指定）☆☆")
     prose_all = json.loads(PROSE.read_text(encoding="utf-8"))
 
     A = dataset_A(rows)
@@ -462,4 +495,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import argparse as _ap
+    _p = _ap.ArgumentParser()
+    _p.add_argument("--allow-ungated", action="store_true",
+                    help="裏取りゲート無効のままハブ4ページを作る（承知のうえで）")
+    _a = _p.parse_args()
+    raise SystemExit(main(_a.allow_ungated) or 0)

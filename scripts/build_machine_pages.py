@@ -225,7 +225,26 @@ def claim_gate_state():
     return bpd.claim_gate_enabled()
 
 
-def main():
+PLACEHOLDER_HTML = """<!doctype html>
+<html lang="ja"><head>
+<base href="/">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>準備中 | うちどころ。</title>
+<link rel="stylesheet" href="assets/css/practical.css">
+</head><body>
+<main class="wrap">
+<h1>準備中です</h1>
+<p>このページの数値は出典の確認が済んでいないため、いまは公開していません。
+確認ができ次第あらためて掲載します。</p>
+<p><a href="index.html">トップページへ戻る</a></p>
+</main>
+</body></html>
+"""
+
+
+def main(allow_ungated: bool = False):
     machines = json.loads((BASE / "assets" / "data" / "machines.json").read_text(encoding="utf-8"))
     template = (BASE / "machine.html").read_text(encoding="utf-8")
 
@@ -235,21 +254,30 @@ def main():
     except Exception as e:
         print(f"★出典の裏取りゲートの設定が読めません: {e}")
         return 1
-    blocked_by_claim = set()
+    blocked_by_claim = {}
     if gate_on:
         import claim_reconcile as cr
         for m in machines:
             try:
-                ok, _why = cr.publish_gate(m["slug"])
+                ok, why = cr.publish_gate(m["slug"])
             except Exception as e:
-                ok, _why = False, [f"検査が例外で失敗: {e}"]
+                ok, why = False, [f"検査が例外で失敗: {e}"]
             if not ok:
-                blocked_by_claim.add(m["slug"])
-        print(f"出典の裏取りゲート: ★有効★ → {len(blocked_by_claim)} 機種のHTMLを作りません")
+                blocked_by_claim[m["slug"]] = why
+        print(f"出典の裏取りゲート: ★有効★ → {len(blocked_by_claim)} 機種は"
+              f"noindexの準備中ページに置き換えます")
+        # ★理由を捨てない★（Codex 10巡目 (b)-1）
+        for slug, why in blocked_by_claim.items():
+            print(f"  ✗ {slug}: {why[0] if why else ''}")
     else:
-        print("出典の裏取りゲート: ☆無効☆ "
-              "＝このスクリプトは裏取りを確かめずにHTMLを作ります"
-              "（assets/data/claim-gate.json の enabled で切り替え）")
+        # ★★ゲート無効のまま既存HTMLを置き換えない★★（Codex 10巡目 (a)-1）
+        #   「警告して書き込む」は条件7（enabled=falseなら既存成果物を置換しない）に反する。
+        if not allow_ungated:
+            print("★出典の裏取りゲートが無効なのでHTMLを作りません★")
+            print("  assets/data/claim-gate.json の enabled を true にするか、")
+            print("  裏取り前の状態を承知のうえで作るなら --allow-ungated を付けてください。")
+            return 1
+        print("☆☆裏取りを確かめずにHTMLを作ります（--allow-ungated 指定）☆☆")
 
     # <base href="/"> を <head> 直後に挿入
     if "<base " not in template:
@@ -268,7 +296,12 @@ def main():
     for machine in machines:
         slug = machine["slug"]
         if slug in blocked_by_claim:
-            continue                 # 裏取りが済んでいない機種のHTMLは作らない
+            # ★★「作らない」だけでは古い誤情報が残り続ける★★（Codex 10巡目 (a)-2）
+            #   既存の index.html を noindex の準備中ページに置き換える。
+            out = BASE / "machines" / slug / "index.html"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(PLACEHOLDER_HTML, encoding="utf-8")
+            continue
         html_out = template
         canonical_url = f"https://uchidokoro.com/machines/{slug}/"
 
@@ -403,4 +436,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # ★終了コードを落とさない★（Codex 10巡目 (b)-2）
+    #   main() が 1 を返しても、プロセスは 0 で終わっていた＝呼び出し側が失敗に気づけない
+    import argparse as _ap
+    _p = _ap.ArgumentParser()
+    _p.add_argument("--allow-ungated", action="store_true",
+                    help="裏取りゲート無効のままHTMLを作る（承知のうえで）")
+    _a = _p.parse_args()
+    raise SystemExit(main(_a.allow_ungated) or 0)
