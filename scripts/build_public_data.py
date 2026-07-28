@@ -224,11 +224,12 @@ def main() -> int:
             for x in pm:
                 ok_c, why_c = claim_reconcile.publish_gate(x.get("slug"))
                 if not ok_c:
-                    problems.append(
-                        f"{x.get('slug')}: 出典の裏取りが済んでいない: {why_c[0]}")
+                    problems.extend(
+                        f"{x.get('slug')}: 出典の裏取りが済んでいない: {w}"
+                        for w in why_c)
         print(f"公開物: {len(pm)} 機種 / 記事 {len(pd_)} 件 / 違反 {len(problems)} 件")
         print(f"出典の裏取りゲート: {'★有効★' if gate_on else '☆無効☆'}")
-        for x in problems[:10]:
+        for x in problems:
             print("  ✗", x)
         return 1 if problems else 0
 
@@ -251,7 +252,7 @@ def main() -> int:
     # ★止まった理由を件数で終わらせない★（Codex 2巡目 (b)-1）
     for b in blocked:
         print(f"  ✗ {b['slug']}: {b['reason']}")
-        for dline in (b.get("details") or [])[:6]:
+        for dline in (b.get("details") or []):
             for ln in str(dline).split("\n"):
                 print(f"      {ln}")
     print("-" * 66)

@@ -217,6 +217,14 @@ def validate_claim(c: dict, where: str, registry: dict | None = None) -> None:
     if v["kind"] == "PROBABILITY":
         if not re.match(r"^\s*1\s*/\s*\d+(?:\.\d+)?\s*$", raw):
             raise LedgerError(f"{where}.value.raw: 確率の形（1/x）でない: {raw!r}")
+    # ★★+α は天井（最大N）でだけ許す★★（Codex 3巡目 (a)-3）
+    #   機械割や確率に +α を付けると、「ちょうどN」の出典で
+    #   「N以上」の記述を裏付けた扱いになってしまう。
+    if v.get("plus_alpha"):
+        if v["operator"] != "MAX" or not str(c["field_key"]).startswith("ceiling."):
+            raise LedgerError(
+                f"{where}.value.plus_alpha: +α は天井（MAX）でだけ使える"
+                f"（field={c['field_key']} / operator={v['operator']}）")
     # ★判断（JUDGMENT）は VERIFIED にできない★（事実ではないため）
     if c.get("claim_kind") == "JUDGMENT" and c.get("verify_state") == "VERIFIED":
         raise LedgerError(f"{where}: 編集判断(JUDGMENT)を VERIFIED にはできない")

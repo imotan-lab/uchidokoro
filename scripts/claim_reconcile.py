@@ -189,8 +189,12 @@ def reconcile(slug: str, machine: dict, detail: dict,
         problems.append("台帳が参照している機種データが今のものと違う")
     # ★★機種の型番が対象機種のものであること★★（Codex 2巡目 (a)-3）
     vk = str(mref.get("machine_variant_key") or "")
-    if vk.split(":")[0] != slug:
-        problems.append(f"台帳の機種型番が対象機種のものでない: {vk}")
+    want_vk = ci.variant_key(slug, machine)
+    if vk != want_vk:
+        # ★台帳が名乗る型番ではなく、機種データから計算した型番と一致すること★
+        problems.append(
+            f"台帳の機種型番が機種データから計算した値と違う"
+            f"（台帳={vk} / 正={want_vk}）")
     if mref.get("identity_state") != "VERIFIED":
         problems.append(
             f"機種の同定が済んでいない: identity_state={mref.get('identity_state')}")
@@ -255,7 +259,8 @@ def _publishable(slug: str, machine: dict, detail: dict,
     # --- ★★意味の検証を、公開のたびに計算し直す★★（Codex 3回目 手順5・6）
     #   台帳に書かれた C5 の結果や verify_state は**一切信用しない**。
     #   出典の引用文からその場で値を導き直し、独立2出典で一致したものだけ通す。
-    variant = (ledger.get("machine_ref") or {}).get("machine_variant_key")
+    # ★型番は台帳の申告ではなく、機種データから計算したものを使う★
+    variant = ci.variant_key(slug, machine)
     registry = cl.load_registry()
     bad_semantic = []
     for s_ in inv_slots:
@@ -325,12 +330,19 @@ def selftest() -> int:
                       "raw": "1200", "amount": 1200, "plus_alpha": True}
         c["conditions"] = {**c["conditions"], **slot["conditions"],
                            "counter_basis": "MENU_GAME"}
+        c["sources"] = [cl._mk_source("AT間天井は最大1200G+αです。", "a", variant=VK),
+                        cl._mk_source("AT間1200G+αで天井に到達します。", "b",
+                                      variant=VK)]
         c.update(over)
         return c
+
+    # ★型番は機種データから計算する（台帳が名乗る値ではない）★
+    VK = ci.variant_key("x", m)
 
     def ledger(claims, machine=None):
         led = cl._mk_ledger(claims)
         led["machine_ref"]["catalog_record_sha256"] = cl.canonical_sha256(machine or m)
+        led["machine_ref"]["machine_variant_key"] = ci.variant_key("x", machine or m)
         return led
 
     # ★★正常系は「C5（意味の検証）が実装済みの型」でしか成立しない★★
@@ -350,7 +362,8 @@ def selftest() -> int:
     KQ = {"1": ("設定1の機械割は97.2%です。", "機械割は設定1:97.2%"),
           "6": ("設定6の機械割は106.5%です。", "機械割は設定6:106.5%")}
 
-    def kclaim(s2, i, state="VERIFIED", quotes=None, variant="x:2026"):
+    def kclaim(s2, i, state="VERIFIED", quotes=None, variant=None):
+        variant = variant or VK
         st = s2["conditions"]["setting"]
         q = quotes or KQ[st]
         c = cl._mk_claim()
@@ -451,10 +464,9 @@ def selftest() -> int:
     # ★★Codex 2巡目 (a)-3：別機種の出典を、別機種と正しく申告したまま使えない★★
     other = ledger([claim()])
     other["machine_ref"] = {**other["machine_ref"],
-                            "machine_variant_key": "other_machine:2020"}
-    t("★★台帳の機種型番が別機種なら止まる★★",
-      any("型番が対象機種のものでない" in w for w in
-          reconcile("x", m, d, inv, other)))
+                            "machine_variant_key": "x:FAKE12345678"}
+    t("★★台帳が名乗る型番では通せない（機種データから計算した値と照合）★★",
+      any("計算した値と違う" in w for w in reconcile("x", m, d, inv, other)))
     unv = ledger([claim()])
     unv["machine_ref"] = {**unv["machine_ref"], "identity_state": "UNVERIFIED"}
     t("★★機種の同定が済んでいなければ止まる★★",
@@ -582,10 +594,10 @@ def main() -> int:
                      "claims": []})
         ok, why = publish_gate(args.slug)
         print(f"公開可否: {'○' if ok else '×'}")
-        for w in why[:12]:
+        # ★全部出す★（Codex 3巡目 (b)-3）
+        #   打ち切ると「一度に全部直す」ことができない。
+        for w in why:
             print("  -", w)
-        if len(why) > 12:
-            print(f"  … 他 {len(why) - 12} 件")
         return 0 if ok else 1
     ap.print_help()
     return 0

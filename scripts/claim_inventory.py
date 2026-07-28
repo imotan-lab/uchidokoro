@@ -233,12 +233,34 @@ _ALPHA = re.compile(r"[+＋]\s*[aαａ]", re.I)
 #   （Codex 2巡目 (a)-2）。から／を下回る／ではありません／推定 のように、
 #   禁止語はいくらでも増やせるので、値の周りに**何も付いていない**ことを求める。
 _VALUE_RESIDUE_OK = re.compile(
-    r"(?:[+＋]\s*[aαａ]|"                              # +α（天井の慣用表現）
-    r"[%％GgＧ枚回pt周期円]|G/50枚|枚/G|1\s*/|"          # 単位
-    r"[\s、。：:（）()【】\[\]\*＊]"                     # 記号
-    r")+", re.I)
+    r"(?:[\s、。：:（）()【】\[\]\*＊/／])+")             # 記号だけ
 # 天井（MAX）でだけ許す語
 _MAX_WORDS_OK = re.compile(r"最大|最低|上限|まで")
+
+# ★★表示されている単位を実際に読み取る★★（Codex 3巡目 (a)-2）
+#   以前は「単位らしき文字」をまとめて許していたため、記事が「97.2円」でも
+#   枠の期待単位 % として通ってしまった。長い単位から順に取り除いて判定する。
+_UNIT_TOKENS = [
+    (re.compile(r"[GgＧ]\s*/\s*50\s*枚"), "G/50枚"),
+    (re.compile(r"枚\s*/\s*[GgＧ]"), "枚/G"),
+    (re.compile(r"[%％]"), "%"),
+    (re.compile(r"pt|ポイント"), "pt"),
+    (re.compile(r"周期"), "周期"),
+    (re.compile(r"枚"), "枚"),
+    (re.compile(r"回"), "回"),
+    (re.compile(r"円"), "円"),
+    (re.compile(r"[GgＧ]"), "G"),
+]
+
+
+def detect_units(value: str):
+    """表示文に実際に書かれている単位を取り出す（残りの文字列も返す）。"""
+    rest, found = str(value or ""), []
+    for rx, u in _UNIT_TOKENS:
+        if rx.search(rest):
+            found.append(u)
+            rest = rx.sub("", rest)
+    return set(found), rest
 
 
 def normalize_value(value: str, unit: str, operator: str = "EXACT"):
@@ -250,18 +272,37 @@ def normalize_value(value: str, unit: str, operator: str = "EXACT"):
     """
     if not isinstance(value, str):
         return None
+    # ★確率（1/x）は形そのものを見る★
+    if unit == "1/x":
+        m = re.fullmatch(r"\s*1\s*/\s*([0-9]+(?:\.[0-9]+)?)\s*", value)
+        return ({"amount": float(m.group(1)), "unit": unit, "plus_alpha": False}
+                if m else None)
     nums = re.findall(r"\d+(?:\.\d+)?", value)
     if len(nums) != 1:
         return None
-    # ★数と単位と記号だけで出来ていること★
-    #   「97.2%を下回る」「約97.2%」「97.2%から99.9%」はここで全部落ちる。
-    rest = re.sub(r"[0-9]+(?:\.[0-9]+)?", "", value)
+    # ★★表示されている単位が、枠の期待単位と同じであること★★
+    units, rest = detect_units(value)
+    if unit:
+        if units != {unit}:
+            return None                 # 「97.2円」を % の枠に入れない
+    elif units:
+        return None                     # 単位なしの枠に単位つきの値
+    # ★+α は天井（MAX）でだけ許す★（Codex 3巡目 (a)-3）
+    #   機械割に「97.2%+α」を認めると、引用が「ちょうど97.2%」でも
+    #   +α つきの記述を裏付けた扱いになってしまう。
+    plus = bool(_ALPHA.search(value))
+    if plus and operator != "MAX":
+        return None
+    if plus:
+        rest = _ALPHA.sub("", rest)
+    # ★残りは数と記号だけ★
+    #   「97.2%を下回る」「約97.2%」「97.2%から99.9%」はここで落ちる。
+    rest = re.sub(r"[0-9]+(?:\.[0-9]+)?", "", rest)
     if operator == "MAX":
         rest = _MAX_WORDS_OK.sub("", rest)
     if _VALUE_RESIDUE_OK.sub("", rest).strip():
         return None
-    return {"amount": float(nums[0]), "unit": unit,
-            "plus_alpha": bool(_ALPHA.search(value))}
+    return {"amount": float(nums[0]), "unit": unit, "plus_alpha": plus}
 
 
 # ★枠が期待する演算子★（Codex 3回目 手順2）
@@ -339,6 +380,17 @@ def split_by_setting(value: str):
     return {s: val.strip() for s, val in pairs}
 
 
+def variant_key(slug: str, machine: dict) -> str:
+    """★機種の型番を、機種データそのものから計算する★（Codex 3巡目 (a)-5）
+
+    台帳が自由に書ける文字列だと、出典側と台帳側に同じ嘘を書くだけで
+    「型番一致」になってしまう（slug:FAKE ↔ slug:FAKE）。
+    機種データの指紋から作れば、台帳が勝手に名乗れない。
+    機種データが変われば型番も変わる＝調べ直しが必要になる、という性質も持つ。
+    """
+    return f"{slug}:{_sha(machine)[:12]}"
+
+
 def slot_id(slug: str, spec: dict, pointer: str) -> str:
     """slot の同定子。★表示文ではなく「型＋条件＋出力先」で決める★"""
     key = (f"{slug}|{spec['field_key']}|mode={spec['mode']};scope={spec['scope']};"
@@ -356,6 +408,48 @@ def _walk(node, pointer: str, out: list):
     elif isinstance(node, list):
         for i, v in enumerate(node):
             _walk(v, f"{pointer}/{i}", out)
+
+
+def consumed_leaves(detail: dict) -> set:
+    """「項目：値」として実際に読み取った**葉**の位置を返す。
+
+    ★★親の位置で除外しない★★（Codex 3巡目 (a)-4）
+      以前は組の位置（/factTable/1）の配下をまとめて除外していたため、
+      「狙い目」欄の値に混ぜた天井の数値が文章検査に届かなかった。
+      実際に消費した葉だけを除外する。
+    """
+    leaves = set()
+    for i, row in enumerate(detail.get("factTable") or []):
+        if isinstance(row, list) and len(row) >= 2:
+            leaves.update({f"/factTable/{i}/0", f"/factTable/{i}/1"})
+    for i, box in enumerate(detail.get("summaryBoxes") or []):
+        if isinstance(box, dict) and "label" in box and "value" in box:
+            leaves.update({f"/summaryBoxes/{i}/label", f"/summaryBoxes/{i}/value"})
+    for si, sec in enumerate(detail.get("sections") or []):
+        for ri, row in enumerate(sec.get("rows") or []):
+            if isinstance(row, dict) and "trigger" in row:
+                base = f"/sections/{si}/rows/{ri}"
+                leaves.update({f"{base}/trigger", f"{base}/hint",
+                               f"{base}/hint/text"})
+        for ti, tbl in enumerate(sec.get("tables") or []):
+            headers = [str(h) for h in (tbl.get("headers") or [])]
+            by_setting = bool(headers) and headers[0].strip() in ("設定", "設定値")
+            for ri, row in enumerate(tbl.get("rows") or []):
+                if not isinstance(row, list) or len(row) < 2:
+                    continue
+                base = f"/sections/{si}/tables/{ti}/rows/{ri}"
+                if by_setting:
+                    leaves.add(f"{base}/0")
+                    for ci in range(1, min(len(row), len(headers))):
+                        leaves.update({f"{base}/{ci}", f"{base}/{ci}/text"})
+                else:
+                    leaves.update({f"{base}/0", f"{base}/1",
+                                   f"{base}/0/text", f"{base}/1/text"})
+        for bi, body in enumerate(sec.get("body") or []):
+            if isinstance(body, str) and re.match(
+                    r"^\*{0,2}([^：:*]{2,20})\*{0,2}\s*[：:]\s*(.+)$", body.strip()):
+                leaves.add(f"/sections/{si}/body/{bi}")
+    return leaves
 
 
 def _pairs_from_detail(detail: dict) -> list:
@@ -418,12 +512,10 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
     #   区別できていない状態。文章中の事実らしい数値は UNSUPPORTED として残す。
     strings: list = []
     _walk(detail, "", strings)
-    structured = {it[0] for it in _pairs_from_detail(detail)}
+    structured = consumed_leaves(detail)
     for pointer, text in strings:
-        # ★「項目：値」として既に拾った箇所は二重に数えない★
-        #   表や factTable の値は、組の pointer（/factTable/0）の下に
-        #   /factTable/0/1 として現れるので、前方一致でも同じ扱いにする。
-        if any(pointer == p or pointer.startswith(p + "/") for p in structured):
+        # ★実際に「項目：値」として読み取った葉だけを除外する★
+        if pointer in structured:
             continue
         # ★★文ごとに判定する★★（Codex 2回目 (a)-5）
         #   段落まるごとで判定していたため、「狙い目は300Gだが、天井は9999Gです」
@@ -473,6 +565,15 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
             # 編集判断（B区分）は裏取り対象外。ただし記録は残す
             excluded_editorial.append({"pointer": pointer, "label": label,
                                        "reason": "EDITORIAL_JUDGMENT"})
+            # ★★編集判断の欄に混ぜた事実を見逃さない★★（Codex 3巡目 (a)-4）
+            #   「狙い目: 300G。天井は9999Gです」のように、ラベルが編集判断でも
+            #   値の中に事実が入っていることがある。
+            if _NUM_WITH_UNIT.search(value or "") and re.search(_FACT_WORD, value or ""):
+                unsupported.append({"pointer": f"{pointer}#editorial_value",
+                                    "reason": "FACT_IN_EDITORIAL_VALUE",
+                                    "label": label,
+                                    "excerpt": (value or "")[:70],
+                                    "content_sha256": _sha(f"{label}|{value}")})
             continue
         if NONCLAIM_LABELS.match(label.strip()):
             excluded_nonclaim.append({"pointer": pointer, "label": label,
@@ -596,11 +697,16 @@ def _finish(slug, machine, detail, slots, unclassified, unsupported,
             "allowlisted_type": sum(1 for s in slots if s["allowlisted_type"]),
             "unclassified_atoms": len(unclassified),
             "unsupported_facts": len(unsupported),
+            # ★記事の値を1つに特定できない枠★（Codex 3巡目 (b)-2）
+            #   これがあると公開できない（reconcile が止める）ので、
+            #   在庫の集計にも出しておく。
+            "unnormalized_slots": sum(1 for s in slots if s["current_value"] is None),
             "excluded_editorial": len(excluded_editorial),
             "excluded_nonclaim": len(excluded_nonclaim),
             # ★未分類も「型が未実装の事実」も残っていれば公開不可★
             #   （素通りさせると「未分類ゼロ」が網羅の証明にならない）
-            "publishable": len(unclassified) == 0 and len(unsupported) == 0,
+            "publishable": (len(unclassified) == 0 and len(unsupported) == 0
+                            and all(s["current_value"] is not None for s in slots)),
         },
     }
 
@@ -755,6 +861,35 @@ def selftest() -> int:
           {"headers": ["設定", "機械割（設定6）"],
            "rows": [["設定1", "97.2%"]]}]}]}
           )["unclassified_atoms"][0]["reason"] == "SETTING_SIGNAL_CONFLICT")
+    # -------- Codex 3巡目の反例
+    t("★★表示単位が枠の期待単位と違えば値にしない（97.2円を%の枠に入れない）★★",
+      normalize_value("97.2円", "%") is None
+      and normalize_value("97.2G", "%") is None
+      and normalize_value("97.2枚", "%") is None)
+    t("★★+α は天井（MAX）でだけ許す（機械割97.2%+αを通さない）★★",
+      normalize_value("97.2%+α", "%", "EXACT") is None
+      and normalize_value("1200G+α", "G", "MAX")["plus_alpha"] is True)
+    t("★確率は 1/x の形そのものを見る",
+      normalize_value("1/259.0", "1/x")["amount"] == 259.0
+      and normalize_value("259.0", "1/x") is None)
+    t("★★編集判断の欄に混ぜた事実を見逃さない★★",
+      build_inventory("x", {"slug": "x"}, {"factTable": [
+          ["機械割(設定1)", "97.2%"],
+          ["狙い目", "300G。天井は9999Gです"]]}
+          )["coverage"]["unsupported_facts"] == 1)
+    t("★★表の3列目以降の数値文も隠さない★★",
+      build_inventory("x", {"slug": "x"}, {"sections": [{"tables": [
+          {"headers": ["項目", "値", "備考"],
+           "rows": [["AT間天井", "1200G", "天井は9999Gという情報もあります"]]}]}]}
+          )["coverage"]["unsupported_facts"] >= 1)
+    t("★★機種の型番は機種データから計算する（台帳が名乗れない）★★",
+      variant_key("x", {"slug": "x", "name": "A"})
+      != variant_key("x", {"slug": "x", "name": "B"})
+      and variant_key("x", {"slug": "x"}).startswith("x:"))
+    t("★値を1つに特定できない枠があれば公開不可になる",
+      build_inventory("x", {"slug": "x"},
+                      {"factTable": [["機械割(設定1)", "97.2%です"]]}
+                      )["coverage"]["publishable"] is False)
     t("★機械割の枠が許可リストの型として数えられる（演算子EXACTで照合）",
       build_inventory("x", {"slug": "x"},
                       {"factTable": [["機械割(設定6)", "106.5%"]]}
@@ -796,6 +931,9 @@ def main() -> int:
         print(json.dumps(inv["coverage"], ensure_ascii=False, indent=1))
         for s in inv["slots"]:
             mark = "型OK" if s["allowlisted_type"] else "型外"
+            # ★値を1つに特定できない枠は、型OKでも公開できない★
+            if s["current_value"] is None:
+                mark = "値NG"
             print(f"  [{mark}] {s['field_key']:<22} {s['current_text'][:40]}")
         for u in inv["unclassified_atoms"]:
             print(f"  [未分類] {u['label']}  ({u['pointer']}) "

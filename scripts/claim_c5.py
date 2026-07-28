@@ -42,8 +42,14 @@ _NUM_RE = re.compile(r"[0-9]{1,3}(?:\.[0-9]+)?")
 #   これが任意だと「設定1の勝率は97.2%。設定6の機械割は106.5%」から
 #   勝率97.2%を設定1の機械割として導いてしまう。
 _WORD = r"(?:機械割|出玉率)"
-_CONNECT_LABELED = r"(?:\s*の?\s*" + _WORD + r"\s*[:：はが＝=→]?\s*)"
-_CONNECT_BARE = r"(?:\s*[:：＝=]\s*)"
+_CONNECT_LABELED = (r"(?:\s*の?\s*" + _WORD
+                    # 「機械割（出玉率）」のような言い換えの併記
+                    + r"\s*(?:[（(]\s*" + _WORD + r"\s*[）)])?"
+                    + r"\s*[:：はが＝=→]?\s*)")
+# 列挙形式の区切り。★空白だけの区切りも許す★（Codex 3巡目 (b)-1）
+#   「機械割：設定1 97.2%／設定6 106.5%」を落としていた。
+#   残余検査があるので、別項目の語が混ざれば結局落ちる。
+_CONNECT_BARE = r"(?:\s*[:：＝=]\s*|\s+)"
 
 # ★★組の書き方は「許可した形」だけ★★（Codex 2巡目 (a)-1）
 #   括弧形（「97.2%（設定1）」）にも項目語を必須にする。項目語なしを許すと
@@ -63,6 +69,7 @@ _PAIR_ANY = re.compile(
 _RESIDUE_OK = re.compile(
     r"(?:機械割|出玉率|"                         # 項目語
     r"です|ます|でした|である|となります|になります|"   # 言い切りの語尾
+    r"メーカー公表値|公表値|公称値|"                   # 出所の但し書き
     r"[はがのとやも、。：:／/・|｜，,＝=\s\*＊【】\[\]（）()]"
     r")+")
 
@@ -90,6 +97,11 @@ def parse_percent(raw: str):
 
 
 def derive_kikaiwari(quote: str) -> dict:
+    """後方互換：値だけを返す（理由が要るときは derive_kikaiwari_ex）。"""
+    return derive_kikaiwari_ex(quote)[0]
+
+
+def derive_kikaiwari_ex(quote: str):
     """引用文から {設定番号: 機械割} を導く。曖昧なら空を返す。
 
     ★導出できないことと、値が無いことを区別する★
@@ -98,9 +110,9 @@ def derive_kikaiwari(quote: str) -> dict:
     """
     q = str(quote or "")
     if not re.search(_KIKAIWARI_WORD, q):
-        return {}                      # 機械割の話をしていない
+        return {}, "NO_KIKAIWARI_WORD"     # 機械割の話をしていない
     if _AMBIGUOUS.search(q):
-        return {}                      # 値を1つに確定できない書き方
+        return {}, "AMBIGUOUS_EXPRESSION"  # 値を1つに確定できない書き方
 
     found: dict = {}
     for m in _PAIR_ANY.finditer(q):
@@ -108,25 +120,25 @@ def derive_kikaiwari(quote: str) -> dict:
         pc = m.group("p1") or m.group("p2") or m.group("p3")
         sm, pm_ = _NUM_RE.search(st), _NUM_RE.search(pc)
         if not sm or not pm_:
-            return {}
+            return {}, "NO_ALLOWED_PAIR"
         setting = sm.group(0)
         try:
             val = Decimal(pm_.group(0))
         except InvalidOperation:
-            return {}
+            return {}, "NO_ALLOWED_PAIR"
         if setting in found and found[setting] != val:
-            return {}                  # 同じ設定に別の値＝曖昧
+            return {}, "DUPLICATE_SETTING_CONFLICT"   # 同じ設定に別の値
         found[setting] = val
     if not found:
-        return {}
+        return {}, "NO_ALLOWED_PAIR"
 
     # ★★残った文字に、意味を変える語が無いことを確かめる★★
     #   「97.2%から99.9%」「97.2%ではありません」「推定では…97.2%」は
     #   組の外に語が残るので、ここで全部落ちる（禁止語を数え上げなくてよい）。
-    rest = _PAIR_ANY.sub("", q)
-    if _RESIDUE_OK.sub("", rest).strip():
-        return {}
-    return found
+    rest = _RESIDUE_OK.sub("", _PAIR_ANY.sub("", q)).strip()
+    if rest:
+        return {}, f"UNALLOWED_RESIDUE:{rest[:20]}"
+    return found, "OK"
 
 
 def check_c5_kikaiwari(claim: dict, quote: str) -> dict:
@@ -152,9 +164,12 @@ def check_c5_kikaiwari(claim: dict, quote: str) -> dict:
     if amt is None or Decimal(str(amt)) != want:
         return {"verdict": "FAIL", "code": "RAW_AMOUNT_MISMATCH"}
 
-    derived = derive_kikaiwari(quote)
+    if val.get("plus_alpha"):
+        # ★機械割に +α は無い★（Codex 3巡目 (a)-3）
+        return {"verdict": "FAIL", "code": "PLUS_ALPHA_NOT_ALLOWED"}
+    derived, why = derive_kikaiwari_ex(quote)
     if not derived:
-        return {"verdict": "FAIL", "code": "NOT_DERIVABLE_FROM_QUOTE"}
+        return {"verdict": "FAIL", "code": why}
     if setting not in derived:
         # ★引用に「その設定の」機械割が無い★（別の設定の値を流用させない）
         return {"verdict": "FAIL", "code": "SETTING_NOT_IN_QUOTE"}
@@ -296,23 +311,23 @@ def selftest() -> int:
       check_c5_kikaiwari(_claim("", "97.2%", 97.2), Q)["code"] == "SETTING_MISSING")
     t("★★範囲値の引用からは導出しない（97.2%〜106.5%）★★",
       check_c5_kikaiwari(_claim("1", "97.2%", 97.2),
-                         "機械割97.2%〜106.5%")["code"] == "NOT_DERIVABLE_FROM_QUOTE")
+                         "機械割97.2%〜106.5%")["verdict"] == "FAIL")
     t("★★完全攻略など条件つきの別値が混ざる引用からは導出しない★★",
       check_c5_kikaiwari(_claim("1", "98.4%", 98.4),
                          "設定1の機械割は98.4%（完全攻略103.0%）"
-                         )["code"] == "NOT_DERIVABLE_FROM_QUOTE")
+                         )["verdict"] == "FAIL")
     t("★実戦値の引用は解析値として使わない",
       check_c5_kikaiwari(_claim("6", "106.5%", 106.5),
                          "設定6の機械割は106.5%（実戦値）"
-                         )["code"] == "NOT_DERIVABLE_FROM_QUOTE")
+                         )["verdict"] == "FAIL")
     t("★機械割の話をしていない引用からは導出しない",
       check_c5_kikaiwari(_claim("1", "97.2%", 97.2),
                          "設定1のボーナス出現率は97.2%です"
-                         )["code"] == "NOT_DERIVABLE_FROM_QUOTE")
+                         )["verdict"] == "FAIL")
     t("★同じ設定に別の値が併記される引用は曖昧として止める",
       check_c5_kikaiwari(_claim("1", "97.2%", 97.2),
                          "機械割 設定1:97.2% ところにより 設定1:99.9%"
-                         )["code"] == "NOT_DERIVABLE_FROM_QUOTE")
+                         )["verdict"] == "FAIL")
     t("★raw と amount が食い違えば止める",
       check_c5_kikaiwari(_claim("1", "97.2%", 106.5), Q)["code"] == "RAW_AMOUNT_MISMATCH")
     t("★単位が % でなければ止める",
@@ -397,20 +412,20 @@ def selftest() -> int:
     t("★★別項目の％を機械割として導出しない（勝率97.2%／機械割106.5%）★★",
       check_c5_kikaiwari(_claim("1", "97.2%", 97.2),
                          "設定1の勝率は97.2%。設定6の機械割は106.5%"
-                         )["code"] == "NOT_DERIVABLE_FROM_QUOTE")
+                         )["verdict"] == "FAIL")
     t("　★別項目が混ざる引用は、正しい設定6の値ごと拒否する（安全側）",
       check_c5_kikaiwari(_claim("6", "106.5%", 106.5),
                          "設定1の勝率は97.2%。設定6の機械割は106.5%"
-                         )["code"] == "NOT_DERIVABLE_FROM_QUOTE")
+                         )["verdict"] == "FAIL")
     t("★列挙形式でも、組以外の語が混ざれば導出しない",
       check_c5_kikaiwari(_claim("1", "97.2%", 97.2),
                          "機械割 設定1:97.2% 勝率 設定2:98.2%"
-                         )["code"] == "NOT_DERIVABLE_FROM_QUOTE")
+                         )["verdict"] == "FAIL")
     # ★★Codex 2回目 (a)-4：範囲・比較・否定をEXACTとして通さない★★
     t("★★括弧形でも項目語を必須にする（勝率97.2%（設定1）を拾わない）★★",
       check_c5_kikaiwari(_claim("1", "97.2%", 97.2),
                          "設定6の機械割は106.5%。勝率97.2%（設定1）"
-                         )["code"] == "NOT_DERIVABLE_FROM_QUOTE")
+                         )["verdict"] == "FAIL")
     t("　項目語つきの括弧形は導ける（機械割は106.5%（設定6））",
       check_c5_kikaiwari(_claim("6", "106.5%", 106.5),
                          "機械割は106.5%（設定6）")["verdict"] == "PASS")
@@ -424,8 +439,26 @@ def selftest() -> int:
                   "推定では設定1の機械割は97.2%",
                   "概算で設定1の機械割は97.2%"):
         t(f"★★比較・範囲・否定を EXACT にしない：{bad_q}★★",
-          check_c5_kikaiwari(_claim("1", "97.2%", 97.2), bad_q)["code"]
-          == "NOT_DERIVABLE_FROM_QUOTE")
+          check_c5_kikaiwari(_claim("1", "97.2%", 97.2), bad_q)["verdict"] == "FAIL")
+
+    # ★★Codex 3巡目 (a)-3・(b)-1★★
+    t("★★機械割に +α を付けた claim は通さない★★",
+      check_c5_kikaiwari({**_claim("1", "97.2%", 97.2),
+                          "value": {**_claim()["value"], "plus_alpha": True}},
+                         Q1)["code"] == "PLUS_ALPHA_NOT_ALLOWED")
+    for ok_q in ("設定1の機械割は97.2%です（メーカー公表値）。",
+                 "設定1の機械割（出玉率）は97.2%です。",
+                 "機械割：設定1 97.2%／設定6 106.5%"):
+        t(f"　安全な書き方は通す：{ok_q}",
+          check_c5_kikaiwari(_claim("1", "97.2%", 97.2), ok_q)["verdict"] == "PASS")
+    t("★落ちた理由が原因ごとに分かれている",
+      check_c5_kikaiwari(_claim("1", "97.2%", 97.2), "設定1のぶどうは1/6.25"
+                         )["code"] == "NO_KIKAIWARI_WORD"
+      and check_c5_kikaiwari(_claim("1", "97.2%", 97.2), "設定1の機械割は約97.2%"
+                             )["code"] == "AMBIGUOUS_EXPRESSION"
+      and check_c5_kikaiwari(_claim("1", "97.2%", 97.2),
+                             "設定1の勝率は97.2%。設定6の機械割は106.5%"
+                             )["code"].startswith("UNALLOWED_RESIDUE"))
 
     t("★台帳が C2 を FAIL と書いていればその出典は数えない",
       not semantic_artifact(
