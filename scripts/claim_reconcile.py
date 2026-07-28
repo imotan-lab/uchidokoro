@@ -247,8 +247,13 @@ def publish_gate(slug: str) -> tuple[bool, list]:
     if not detail:
         hard.append(f"記事データが無い: {slug}（空の記事を公開しない）")
     lp = os.path.join(DATA, "claim-ledgers", f"{slug}.json")
-    ledger = (json.load(open(lp, encoding="utf-8")) if os.path.isfile(lp)
-              else None)
+    ledger = None
+    if os.path.isfile(lp):
+        try:
+            ledger = json.load(open(lp, encoding="utf-8"))
+        except Exception as e:
+            # ★壊れたJSONでも例外にせず、必ずDENYを返す★（Codex 9巡目 (b)-5）
+            hard.append(f"台帳が読めない（壊れたJSON）: {type(e).__name__}: {e}")
     if ledger is None:
         hard.append(f"台帳が無い: {slug}（何も調べていない）")
         ledger = {"schema_version": cl.SCHEMA_VERSION,
@@ -319,7 +324,8 @@ def _publishable(slug: str, machine: dict, detail: dict,
             continue          # claim が無い枠は「調べていない枠」として上で報告済み
         art = claim_c5.semantic_artifact(
             c, variant, registry, identity,
-            ci.physical_key(machine.get("identity")))
+            ci.physical_key(machine.get("identity")),
+            machine.get("identity"))     # ★どの項目が違うかを診断するため★
         if art.get("verified"):
             continue
         # ★★どの枠が、どの出典で、なぜ落ちたかを1件ずつ残す★★（Codex (b)-1）
@@ -341,7 +347,11 @@ def _publishable(slug: str, machine: dict, detail: dict,
                 f" / 機種同定={row.get('identity')}"
                 f" / 発行者={row.get('publisher_id')}"
                 f" / 型番一致={row.get('variant_matched')}"
-                f" / {row.get('final_url')}")
+                f" / 証拠={row.get('evidence_ref')}"
+                f" / 証拠URL={row.get('evidence_url')}"
+                f" / 応答={row.get('response_sha')}"
+                f" / 段階={row.get('attestation')}"
+                f" / 台帳URL={row.get('final_url')}")
         bad_semantic.append("\n".join([head] + detail_lines))
     if bad_semantic:
         problems.append("引用から値を導き直せない枠がある"
@@ -451,6 +461,15 @@ def selftest() -> int:
                                         "機械割は設定1:99.9%")),
            kclaim(kslots[1], 2)]
     ok_b, why_b = _publishable("x", m, dk, invk, ledger(bad))
+    # ★★証拠より前の日時で「検証済み」と言えない★★（Codex 9巡目 (a)-5）
+    old = ledger([kclaim(s2, i + 1) for i, s2 in enumerate(kslots)])
+    for c_ in old["claims"]:
+        c_["verified_at"] = "2026-07-28T03:00:00Z"   # 取得(03:10)より前
+        c_["expires_at"] = "2026-10-26T03:00:00Z"
+    ok_o, why_o = _publishable("x", m, dk, invk, old)
+    t("★★取得より前の日時で「検証済み」と言う claim は公開しない★★",
+      not ok_o and any("TIME_ORDER" in w for w in why_o))
+
     t("★★引用と値が合わなければ、台帳がVERIFIEDでも公開しない★★",
       not ok_b and any("値が違う" in w or "導き直せない" in w for w in why_b))
 

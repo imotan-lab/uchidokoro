@@ -507,6 +507,33 @@ _SEQUEL_MARK = re.compile(
     r"第[二三四五2345]弾|ツー|スリー|リターンズ|ネクスト|続編|再臨|新章", re.I)
 
 
+def _time_order_bad(claim: dict, src: dict, ev_fetch: dict):
+    """時系列の矛盾を返す（問題なければ None）。
+
+    ★取得 → 検査 → 検証済み の順でなければならない★
+      これが無いと、古い証拠を新しい claim に貼り直して
+      「最近確かめた」ように見せられる（Codex 9巡目 (a)-5）。
+    """
+    import datetime as dt
+
+    def _p(s):
+        try:
+            return dt.datetime.strptime(str(s), "%Y-%m-%dT%H:%M:%SZ")
+        except Exception:
+            return None
+
+    fetched = _p(ev_fetch.get("fetched_at"))
+    checked = _p((src.get("verification") or {}).get("checked_at"))
+    verified = _p(claim.get("verified_at"))
+    if fetched is None:
+        return "NO_FETCH_TIME"
+    if checked is not None and checked < fetched:
+        return "CHECKED_BEFORE_FETCH"
+    if verified is not None and verified < fetched:
+        return "VERIFIED_BEFORE_FETCH"
+    return None
+
+
 def semantic_artifact(claim: dict, machine_variant_key: str,
                       registry: dict | None = None,
                       identity: dict | None = None,
@@ -537,6 +564,7 @@ def semantic_artifact(claim: dict, machine_variant_key: str,
         return art
 
     counted, owners, lineages = [], set(), set()
+    used_refs, used_responses = set(), set()   # 同じ証拠を2票にしない
     for i, src in enumerate(claim.get("sources") or []):
         row = {"index": i, "final_url": src.get("final_url")}
         ver = (src.get("verification") or {})
@@ -552,8 +580,14 @@ def semantic_artifact(claim: dict, machine_variant_key: str,
             declared_bad.append("verdict")
         if ver.get("vote_disposition") != "COUNTED":
             declared_bad.append("vote_disposition")
-        # 2) 発行者を**URLから**引き直す（台帳の申告は使わない）
-        pub = resolve_publisher(src.get("final_url"), registry)
+        # 2) 発行者を**証拠に記録された最終URLから**引き直す（Codex 9巡目 (a)-1）
+        #    台帳のURLから引くと、同じ証拠1件を別々のURLに貼るだけで2票になる。
+        _ev0, _ = _identity_evidence_of(src)
+        ev_fetch = (_ev0 or {}).get("fetch") or {}
+        pub = resolve_publisher(ev_fetch.get("final_url"), registry)
+        # 台帳のURLと証拠のURLが食い違っていたら数えない
+        url_ok = (str(src.get("final_url") or "") == str(ev_fetch.get("final_url") or "")
+                  and bool(ev_fetch.get("final_url")))
         # 3) 機種の型番までの一致（★同名の別バージョンを混ぜない★）
         #    ★★台帳が名乗る文字列ではなく、出典が示した型式から計算する★★
         #      （Codex 7巡目 (a)-3）。証拠に型式が無ければ数えない。
@@ -571,15 +605,40 @@ def semantic_artifact(claim: dict, machine_variant_key: str,
         unit = evidence_unit_text(src)
         c5 = (checker(claim, unit) if unit
               else {"verdict": "FAIL", "code": "NO_EVIDENCE_UNIT"})
+        # 6) ★証拠がどこまで確かめられているか★（取得も検算もしていなければ数えない）
+        import claim_evidence as _ce
+        att_ok, att_why = _ce.is_countable(_ev0 or {})
+        # 7) ★同じ証拠を2票にしない★（Codex 9巡目 (a)-1）
+        ev_ref = ((src.get("verification") or {}).get("evidence_ref"))
+        resp_sha = ev_fetch.get("response_sha256")
+        dup = (ev_ref in used_refs) or (resp_sha and resp_sha in used_responses)
+
         row.update({"c5": c5, "declared_bad": declared_bad,
                     "publisher_id": (pub or {}).get("publisher_id"),
                     "variant_matched": variant_ok, "variant_diff": variant_diag,
-                    "identity": id_why, "identity_violations": id_viol})
+                    "identity": id_why, "identity_violations": id_viol,
+                    # ★調査に必要な情報を診断に載せる★（Codex 9巡目 (b)-4）
+                    "evidence_ref": (ev_ref[:12] + "…") if ev_ref else None,
+                    "evidence_url": ev_fetch.get("final_url"),
+                    "response_sha": (str(resp_sha)[:12] + "…") if resp_sha else None,
+                    "attestation": att_why})
+
+        # 8) ★証拠より前の日時で「検証した」と言わせない★（Codex 9巡目 (a)-5）
+        #    後日訂正された古い証拠を、新しい検証日時の claim に貼り直せてしまう。
+        stale = _time_order_bad(claim, src, ev_fetch)
 
         if c5["verdict"] != "PASS":
             row["disposition"] = "NOT_COUNTED_C5"
         elif declared_bad:
             row["disposition"] = "NOT_COUNTED_DECLARED_FAIL"
+        elif stale:
+            row["disposition"] = f"NOT_COUNTED_TIME_ORDER({stale})"
+        elif not att_ok:
+            row["disposition"] = f"NOT_COUNTED_ATTESTATION({att_why})"
+        elif not url_ok:
+            row["disposition"] = "NOT_COUNTED_URL_MISMATCH"
+        elif dup:
+            row["disposition"] = "NOT_COUNTED_SAME_EVIDENCE"
         elif pub is None:
             row["disposition"] = "NOT_COUNTED_UNKNOWN_PUBLISHER"
         elif not variant_ok:
@@ -595,6 +654,9 @@ def semantic_artifact(claim: dict, machine_variant_key: str,
             owners.add(pub["ownership_group_id"])
             lineages.add(pub["content_lineage_id"])
             counted.append(pub["publisher_id"])
+            used_refs.add(ev_ref)
+            if resp_sha:
+                used_responses.add(resp_sha)
         art["sources"].append(row)
 
     art["counted_publishers"] = sorted(counted)
@@ -633,6 +695,22 @@ def _tampered_evidence_blocked(_src, _c, artifact, VK, IDENT, PHYS, Q1, Q2, ce):
     art = artifact(_c([s1, _src("https://nana-press.com/b", Q2)]),
                    VK, None, IDENT, PHYS)
     return not art["verified"]
+
+
+def _unattested_not_counted(ce, _src, _c, artifact, VK, IDENT, PHYS, Q1, Q2):
+    """証拠の段階を1段目（未検算）に落としたら、票にならないこと。"""
+    import json as _json
+    s1 = _src("https://chonborista.com/a", Q1)
+    ref = s1["verification"]["evidence_ref"]
+    ev = _json.load(open(ce.evidence_path(ref), encoding="utf-8"))
+    body = {k: v for k, v in ev.items() if k != "evidence_sha256"}
+    body["attestation_state"] = "UNATTESTED_METADATA"
+    s1["verification"]["evidence_ref"] = ce.write_evidence(body)
+    art = artifact(_c([s1, _src("https://nana-press.com/b", Q2)]),
+                   VK, None, IDENT, PHYS)
+    return (not art["verified"]
+            and any("ATTESTATION" in str(r.get("disposition"))
+                    for r in art["sources"]))
 
 
 def _claim(setting="1", raw="97.2%", amount=97.2, operator="EXACT", unit="%"):
@@ -734,9 +812,10 @@ def selftest() -> int:
         unit = ie.get("evidence_unit") or {}
         body = {
             "schema_version": _ce.SCHEMA_VERSION,
+            # 応答の指紋はページごとに違う（同じにすると同一証拠扱いになる）
             "fetch": {"requested_url": url, "final_url": url,
                       "fetched_at": "2026-07-28T09:00:00Z", "http_status": 200,
-                      "response_sha256": "a" * 64},
+                      "response_sha256": _ce.canonical_sha256(url)},
             "page": {"title": ie.get("page_title") or "（無題）",
                      "body_sha256": "b" * 64},
             "evidence_unit": unit,
@@ -744,6 +823,7 @@ def selftest() -> int:
                 "manufacturer_id": "x", "regulatory_model_code": "x",
                 "release_date": "x"},
             "fetcher_version": "selftest/1",
+            "attestation_state": "CLAIM_VERIFIED",
         }
         try:
             return _ce.write_evidence(body)
@@ -1040,6 +1120,30 @@ def selftest() -> int:
                "verification": {**_src("https://chonborista.com/a", Q1)["verification"],
                                 "identity_evidence": {"page_title": "偽の見出し"}}},
               _src("https://nana-press.com/b", Q2)]),
+          VK, None, IDENT, PHYS)["verified"])
+    # ★★Codex 9巡目★★
+    def _reuse(url2):
+        """1つの証拠を、別の発行者URLの出典に貼り直す。"""
+        s1 = _src("https://chonborista.com/a", Q1)
+        s2 = dict(s1)
+        s2["final_url"] = url2
+        return _c([s1, s2])
+
+    t("★★同じ証拠1件を独立2票にできない★★",
+      not semantic_artifact(_reuse("https://nana-press.com/b"),
+                            VK, None, IDENT, PHYS)["verified"])
+    t("　その理由が「台帳URLと証拠URLの不一致」だと分かる",
+      any("URL_MISMATCH" in str(r.get("disposition")) for r in
+          semantic_artifact(_reuse("https://nana-press.com/b"),
+                            VK, None, IDENT, PHYS)["sources"]))
+    t("★★取得も検算もしていない証拠は票に数えない（段階が足りない）★★",
+      _unattested_not_counted(_ce, _src, _c, semantic_artifact,
+                              VK, IDENT, PHYS, Q1, Q2))
+    t("★★証拠より前の日時で「検証済み」と言えない★★",
+      not semantic_artifact(
+          {**_c([_src("https://chonborista.com/a", Q1),
+                 _src("https://nana-press.com/b", Q2)]),
+           "verified_at": "2020-01-01T00:00:00Z"},
           VK, None, IDENT, PHYS)["verified"])
     t("★同定の一式が無ければ、その場で止める（NO_IDENTITY_SPEC）",
       not semantic_artifact(ok2, VK, None, None, PHYS)["verified"])

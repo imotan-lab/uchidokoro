@@ -50,6 +50,19 @@ _TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 UNIT_TYPES = ("TABLE_ROW", "TABLE_CELL", "LIST_ITEM", "PARAGRAPH",
               "HEADING", "DEFINITION_ITEM")
 
+# ★★証拠がどこまで確かめられているかの段階★★（Codex 9巡目 (a)-3）
+#   「証拠ファイルがある」＝「取ってきた本物」ではない。
+#   今のPhase 1 は**取得を実行していない**ので、書けるのは1段目だけ。
+#   票に数えてよいのは最終段だけにする（＝今は何も数えられない＝正しい状態）。
+ATTESTATION_STATES = (
+    "UNATTESTED_METADATA",   # 形は整っているが、取得も検算もしていない
+    "FETCH_ATTESTED",        # 応答バイトを保存し、response_sha256 を検算済み
+    "EXTRACTION_VERIFIED",   # 保存した応答から証拠単位を再抽出して一致を確認済み
+    "CLAIM_VERIFIED",        # 型式・値まで出所に結び付いた（票に数えてよい）
+)
+# ★票に数えてよい段階★（これ未満は必ず落とす）
+COUNTABLE_STATES = ("CLAIM_VERIFIED",)
+
 
 class EvidenceError(Exception):
     pass
@@ -68,68 +81,89 @@ def content_sha256(ev: dict) -> str:
     return canonical_sha256(body)
 
 
-def validate_evidence(ev: dict, where: str = "evidence") -> None:
-    """証拠の形を検査する。おかしければ EvidenceError。"""
-    if not isinstance(ev, dict):
-        raise EvidenceError(f"{where}: 辞書でない")
-    if ev.get("schema_version") != SCHEMA_VERSION:
-        raise EvidenceError(f"{where}: schema_version が {SCHEMA_VERSION} でない")
+def evidence_violations(ev, where: str = "evidence") -> list:
+    """証拠の形を検査し、**違反を全部**返す（Codex 9巡目 (b)-2）。
 
+    1件目で止めると「status偽装＋DOM位置欠落＋型式欠落」が同時にあっても
+    1つしか見えず、直すたびに次が出てくる。
+    """
+    v: list = []
+    if not isinstance(ev, dict):
+        return [f"{where}: 辞書でない"]
+    if ev.get("schema_version") != SCHEMA_VERSION:
+        v.append(f"{where}: schema_version が {SCHEMA_VERSION} でない")
     for k in ("fetch", "page", "evidence_unit", "machine_identity",
-              "fetcher_version", "evidence_sha256"):
+              "fetcher_version", "attestation_state", "evidence_sha256"):
         if k not in ev:
-            raise EvidenceError(f"{where}.{k}: 必須")
+            v.append(f"{where}.{k}: 必須")
+
+    # --- ★証拠がどこまで確かめられているか★
+    st = ev.get("attestation_state")
+    if st not in ATTESTATION_STATES:
+        v.append(f"{where}.attestation_state: {ATTESTATION_STATES} のいずれか")
+    if not isinstance(ev.get("fetcher_version"), str) \
+            or not str(ev.get("fetcher_version") or "").strip():
+        v.append(f"{where}.fetcher_version: 空にできない")
 
     # --- 取得の記録（★何を・いつ・どんな応答で取ったか★）
-    f = ev["fetch"]
+    f = ev.get("fetch")
     if not isinstance(f, dict):
-        raise EvidenceError(f"{where}.fetch: 辞書でない")
-    for k in ("requested_url", "final_url", "fetched_at",
-              "http_status", "response_sha256"):
-        if k not in f:
-            raise EvidenceError(f"{where}.fetch.{k}: 必須")
-    for k in ("requested_url", "final_url"):
-        if not str(f[k]).startswith("https://"):
-            raise EvidenceError(f"{where}.fetch.{k}: https のURLでない")
-    if not _TS_RE.match(str(f["fetched_at"])):
-        raise EvidenceError(f"{where}.fetch.fetched_at: UTCのISO形式でない")
-    if f["http_status"] != 200:
-        # ★200以外のページを証拠にしない★（404の案内文などを拾わせない）
-        raise EvidenceError(f"{where}.fetch.http_status: 200でない（{f['http_status']}）")
-    if not _SHA_RE.match(str(f["response_sha256"])):
-        raise EvidenceError(f"{where}.fetch.response_sha256: sha256でない")
+        v.append(f"{where}.fetch: 辞書でない")
+    else:
+        for k in ("requested_url", "final_url", "fetched_at",
+                  "http_status", "response_sha256"):
+            if k not in f:
+                v.append(f"{where}.fetch.{k}: 必須")
+        for k in ("requested_url", "final_url"):
+            if not str(f.get(k, "")).startswith("https://"):
+                v.append(f"{where}.fetch.{k}: https のURLでない")
+        if not _TS_RE.match(str(f.get("fetched_at", ""))):
+            v.append(f"{where}.fetch.fetched_at: UTCのISO形式でない")
+        if f.get("http_status") != 200:
+            # ★200以外のページを証拠にしない★（404の案内文などを拾わせない）
+            v.append(f"{where}.fetch.http_status: 200でない（{f.get('http_status')}）")
+        if not _SHA_RE.match(str(f.get("response_sha256", ""))):
+            v.append(f"{where}.fetch.response_sha256: sha256でない")
 
     # --- ページ（見出しと本文の指紋）
-    p = ev["page"]
+    p = ev.get("page")
     if not isinstance(p, dict) or not str(p.get("title") or "").strip():
-        raise EvidenceError(f"{where}.page.title: 空にできない")
-    if not _SHA_RE.match(str(p.get("body_sha256", ""))):
-        raise EvidenceError(f"{where}.page.body_sha256: sha256でない")
+        v.append(f"{where}.page.title: 空にできない")
+    if not isinstance(p, dict) or not _SHA_RE.match(str(p.get("body_sha256", ""))):
+        v.append(f"{where}.page.body_sha256: sha256でない")
 
     # --- 証拠単位（画面上の塊）
-    u = ev["evidence_unit"]
+    u = ev.get("evidence_unit")
     if not isinstance(u, dict):
-        raise EvidenceError(f"{where}.evidence_unit: 辞書でない")
-    if u.get("unit_type") not in UNIT_TYPES:
-        raise EvidenceError(f"{where}.evidence_unit.unit_type: {UNIT_TYPES} のいずれか")
-    for k in ("dom_path", "text"):
-        if not str(u.get(k) or "").strip():
-            raise EvidenceError(f"{where}.evidence_unit.{k}: 空にできない")
+        v.append(f"{where}.evidence_unit: 辞書でない")
+    else:
+        if u.get("unit_type") not in UNIT_TYPES:
+            v.append(f"{where}.evidence_unit.unit_type: {UNIT_TYPES} のいずれか")
+        for k in ("dom_path", "text"):
+            if not str(u.get(k) or "").strip():
+                v.append(f"{where}.evidence_unit.{k}: 空にできない")
 
     # --- 機種の型式（同定の鍵）
-    mi = ev["machine_identity"]
+    mi = ev.get("machine_identity")
     if not isinstance(mi, dict):
-        raise EvidenceError(f"{where}.machine_identity: 辞書でない")
-    for k in ("manufacturer_id", "regulatory_model_code", "release_date"):
-        if not isinstance(mi.get(k), str) or not mi[k].strip():
-            raise EvidenceError(f"{where}.machine_identity.{k}: 空にできない")
+        v.append(f"{where}.machine_identity: 辞書でない")
+    else:
+        for k in ("manufacturer_id", "regulatory_model_code", "release_date"):
+            if not isinstance(mi.get(k), str) or not mi[k].strip():
+                v.append(f"{where}.machine_identity.{k}: 空にできない")
 
     # --- ★指紋が中身と一致すること★（後から中身を書き換えたら落ちる）
-    want = content_sha256(ev)
-    if ev["evidence_sha256"] != want:
-        raise EvidenceError(
-            f"{where}.evidence_sha256: 中身と指紋が一致しない"
-            f"（証拠が後から書き換えられている）")
+    if ev.get("evidence_sha256") != content_sha256(ev):
+        v.append(f"{where}.evidence_sha256: 中身と指紋が一致しない"
+                 f"（証拠が後から書き換えられている）")
+    return v
+
+
+def validate_evidence(ev: dict, where: str = "evidence") -> None:
+    """後方互換：違反が1件でもあれば EvidenceError（全件を本文に載せる）。"""
+    v = evidence_violations(ev, where)
+    if v:
+        raise EvidenceError(" / ".join(v))
 
 
 def evidence_path(sha: str) -> str:
@@ -168,7 +202,24 @@ def as_identity_evidence(ev: dict) -> dict:
     """
     return {"page_title": ev["page"]["title"],
             "evidence_unit": dict(ev["evidence_unit"]),
-            "machine_identity": dict(ev["machine_identity"])}
+            "machine_identity": dict(ev["machine_identity"]),
+            # ★出典の照合・重複排除に使う（台帳のURLは信用しない）★
+            "fetch": dict(ev["fetch"]),
+            "attestation_state": ev.get("attestation_state"),
+            "evidence_sha256": ev.get("evidence_sha256")}
+
+
+def is_countable(ev: dict) -> tuple[bool, str]:
+    """★票に数えてよい段階か★（Codex 9巡目 (a)-3）
+
+    今のPhase 1 は取得も検算もしていないので、正しく作った証拠でも
+    `UNATTESTED_METADATA` にしかならず、**票にはならない**。
+    これは不具合ではなく、「まだ裏取りできていない」を正直に表した状態。
+    """
+    st = (ev or {}).get("attestation_state")
+    if st in COUNTABLE_STATES:
+        return True, "OK"
+    return False, f"NOT_ATTESTED:{st}"
 
 
 def write_evidence(ev: dict, out_dir: str | None = None) -> str:
@@ -202,6 +253,7 @@ def _mk(**over) -> dict:
                              "regulatory_model_code": "TEST-001",
                              "release_date": "2026-01-01"},
         "fetcher_version": "claim_evidence/1",
+        "attestation_state": "UNATTESTED_METADATA",
     }
     ev.update(over)
     ev["evidence_sha256"] = content_sha256(ev)

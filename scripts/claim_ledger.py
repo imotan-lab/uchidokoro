@@ -477,10 +477,12 @@ def _test_evidence_ref(host: str, quote: str, variant: str) -> str:
     ce = _use_test_evidence_dir()
     return ce.write_evidence({
         "schema_version": ce.SCHEMA_VERSION,
+        # 応答の指紋はページごとに違う（同じにすると同一証拠として1票に畳まれる）
         "fetch": {"requested_url": f"https://{host}/x",
                   "final_url": f"https://{host}/x",
-                  "fetched_at": "2026-07-28T09:00:00Z", "http_status": 200,
-                  "response_sha256": "a" * 64},
+                  # 取得 → 検査(03:15) → 検証済み(03:20) の順になるようにする
+                  "fetched_at": "2026-07-28T03:10:00Z", "http_status": 200,
+                  "response_sha256": canonical_sha256(f"https://{host}/x")},
         "page": {"title": "スマスロテスト機 天井・機械割・設定判別",
                  "body_sha256": "b" * 64},
         "evidence_unit": {"unit_type": "TABLE_ROW",
@@ -489,7 +491,8 @@ def _test_evidence_ref(host: str, quote: str, variant: str) -> str:
         "machine_identity": {"manufacturer_id": "test-maker",
                              "regulatory_model_code": "TEST-001",
                              "release_date": "2026-01-01"},
-        "fetcher_version": "selftest/1"})
+        "fetcher_version": "selftest/1",
+        "attestation_state": "CLAIM_VERIFIED"})
 
 
 def _mk_source(quote: str, pub: str, counted: bool = True,
