@@ -32,6 +32,7 @@ import sys
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
 
+import claim_c5  # noqa: E402
 import claim_inventory as ci  # noqa: E402
 import claim_ledger as cl  # noqa: E402
 
@@ -114,6 +115,16 @@ def reconcile(slug: str, machine: dict, detail: dict,
                 problems.append(
                     f"{slot['field_key']}: {key} が枠と違う "
                     f"（枠={slot['conditions'].get(key)} / claim={cond.get(key)}）")
+        # ★★演算子と設定も枠と一致させる★★（Codex 3回目 手順2）
+        #   機械割に MAX（最大N）を書かせない／設定6の値を設定1の枠に入れない。
+        if slot.get("expected_operator") and v.get("operator") != slot["expected_operator"]:
+            problems.append(
+                f"{slot['field_key']}: 演算子が枠と違う "
+                f"（枠={slot['expected_operator']} / claim={v.get('operator')}）")
+        if str(cond.get("setting") or "") != str(slot["conditions"].get("setting") or ""):
+            problems.append(
+                f"{slot['field_key']}: 設定が枠と違う "
+                f"（枠={slot['conditions'].get('setting')} / claim={cond.get('setting')}）")
         if c.get("atomic_group_id") != slot.get("atomic_group_id"):
             problems.append(
                 f"{slot['field_key']}: 束(atomic_group)の指定が枠と違う")
@@ -223,6 +234,23 @@ def _publishable(slug: str, machine: dict, detail: dict,
         return False, [
             f"自動採用の条件を満たさない枠がある: {sorted(set(not_adoptable))}"
             f"（許可リストに無い型／期限切れ／数え方未確定 など）"]
+
+    # --- ★★意味の検証を、公開のたびに計算し直す★★（Codex 3回目 手順5・6）
+    #   台帳に書かれた C5 の結果や verify_state は**一切信用しない**。
+    #   出典の引用文からその場で値を導き直し、独立2出典で一致したものだけ通す。
+    variant = (ledger.get("machine_ref") or {}).get("machine_variant_key")
+    registry = cl.load_registry()
+    bad_semantic = []
+    for s_ in inv_slots:
+        c = by_slot.get(s_["slot_id"])
+        art = claim_c5.semantic_artifact(c, variant, registry)
+        if not art.get("verified"):
+            bad_semantic.append(
+                f"{s_['field_key']}({art.get('reason') or 'C5_FAILED'})")
+    if bad_semantic:
+        return False, [
+            f"引用から値を導き直せない枠がある: {sorted(set(bad_semantic))}"
+            f"（台帳の申告ではなく、その場の再計算で判定している）"]
     return True, []
 
 
@@ -269,8 +297,74 @@ def selftest() -> int:
         led["machine_ref"]["catalog_record_sha256"] = cl.canonical_sha256(machine or m)
         return led
 
-    ok, why = _publishable("x", m, d, inv, ledger([claim()]))
+    # ★★正常系は「C5（意味の検証）が実装済みの型」でしか成立しない★★
+    #   天井は型としては許可リストに載っているが、引用から値を導き直す検証器が
+    #   まだ無いので公開できない。これは仕様どおりの fail-closed。
+    ok_nc, why_nc = _publishable("x", m, d, inv, ledger([claim()]))
+    t("★★意味の検証器が無い型（天井）は検証済みでも公開できない★★",
+      not ok_nc and any("導き直せない" in w for w in why_nc))
+
+    # 機械割（C5実装済み）で正常系を確認する
+    dk = {"sections": [{"title": "基本スペック", "type": "settei",
+                        "tables": [{"label": "機械割",
+                                    "headers": ["設定", "機械割"],
+                                    "rows": [["設定1", "97.2%"],
+                                             ["設定6", "106.5%"]]}]}]}
+    invk = ci.build_inventory("x", m, dk)
+    KQ = {"1": ("設定1の機械割は97.2%です。", "機械割は設定1:97.2%"),
+          "6": ("設定6の機械割は106.5%です。", "機械割は設定6:106.5%")}
+
+    def kclaim(s2, i, state="VERIFIED", quotes=None, variant="x:2026"):
+        st = s2["conditions"]["setting"]
+        q = quotes or KQ[st]
+        c = cl._mk_claim()
+        c["claim_id"] = f"x:kikaiwari.setting:{i:03d}"
+        c["slot_id"] = s2["slot_id"]
+        c["field_key"] = "kikaiwari.setting"
+        c["verify_state"] = state
+        c["atomic_group_id"] = s2["atomic_group_id"]
+        c["value"] = {"kind": "PERCENT", "raw": s2["current_text"],
+                      "amount": s2["current_value"]["amount"], "unit": "%",
+                      "operator": "EXACT"}
+        c["conditions"] = {**c["conditions"], **s2["conditions"],
+                           "counter_basis": "NONE"}
+        c["sources"] = [cl._mk_source(q[0], "a", variant=variant),
+                        cl._mk_source(q[1], "b", variant=variant)]
+        return c
+
+    kslots = sorted(invk["slots"], key=lambda s2: s2["conditions"]["setting"])
+    t("設定つきの機械割の枠が2つできる",
+      len(kslots) == 2 and kslots[0]["conditions"]["setting"] == "1")
+    kled = ledger([kclaim(s2, i + 1) for i, s2 in enumerate(kslots)])
+    ok, why = _publishable("x", m, dk, invk, kled)
     t("枠にぴったり合う検証済みclaimがあれば公開できる", ok or print(why))
+
+    # ★★台帳が VERIFIED と書いていても、引用が合わなければ公開しない★★
+    bad = [kclaim(kslots[0], 1, quotes=("設定1の機械割は99.9%です。",
+                                        "機械割は設定1:99.9%")),
+           kclaim(kslots[1], 2)]
+    ok_b, why_b = _publishable("x", m, dk, invk, ledger(bad))
+    t("★★引用と値が合わなければ、台帳がVERIFIEDでも公開しない★★",
+      not ok_b and any("値が違う" in w or "導き直せない" in w for w in why_b))
+
+    # ★★同名の別バージョンの出典で埋められない★★
+    ok_v, why_v = _publishable(
+        "x", m, dk, invk,
+        ledger([kclaim(s2, i + 1, variant="x:2019") for i, s2 in enumerate(kslots)]))
+    t("★★出典が別バージョンの機種なら公開しない★★",
+      not ok_v and any("導き直せない" in w for w in why_v))
+
+    # ★★演算子・設定の取り違えを止める★★
+    swap = kclaim(kslots[0], 1)
+    swap["conditions"] = {**swap["conditions"], "setting": "6"}
+    t("★★設定が枠と違う claim で埋められない（設定6の値を設定1の欄に）★★",
+      any("設定が枠と違う" in w for w in
+          reconcile("x", m, dk, invk, ledger([swap, kclaim(kslots[1], 2)]))))
+    mx = kclaim(kslots[0], 1)
+    mx["value"] = {**mx["value"], "operator": "MAX"}
+    t("★機械割に「最大N」を書かせない（演算子が枠と違う）",
+      any("演算子が枠と違う" in w for w in
+          reconcile("x", m, dk, invk, ledger([mx, kclaim(kslots[1], 2)]))))
 
     t("★台帳が空なら止まる（何も調べていないのに合格にしない）",
       any("調べていない枠" in w for w in

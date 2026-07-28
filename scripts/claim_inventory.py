@@ -92,11 +92,11 @@ LABEL_RULES = [
     (r"^AT純増$|^純増$", "net_increase.phase", "ANY", "NONE", "COIN",
      "DECIMAL", "枚/G"),
     # ★表の列見出しは短い（BIG / REG / 合算）。設定別表の列としても拾う★
-    (r"^BIG$|^BIG確率$|^BB$|^BB確率$|^BIG確率[（(]設定\d[)）]$|^BB確率[（(]設定\d[)）]$",
+    (r"^BIG$|^BIG確率$|^BB$|^BB確率$|^(?:BIG|BB)確率[（(]設定(\d)[)）]$",
      "prob.big", "ANY", "NONE", "NONE", "PROBABILITY", "1/x"),
-    (r"^REG$|^REG確率$|^RB$|^RB確率$|^REG確率[（(]設定\d[)）]$|^RB確率[（(]設定\d[)）]$",
+    (r"^REG$|^REG確率$|^RB$|^RB確率$|^(?:REG|RB)確率[（(]設定(\d)[)）]$",
      "prob.reg", "ANY", "NONE", "NONE", "PROBABILITY", "1/x"),
-    (r"^初当たり確率$|^初当たり確率[（(]設定\d[)）]$|^AT初当たり確率$",
+    (r"^初当たり確率$|^初当たり確率[（(]設定(\d)[)）]$|^AT初当たり確率$",
      "prob.first_hit", "ANY", "NONE", "NONE", "PROBABILITY", "1/x"),
     (r"^BIG獲得枚数$|^BB獲得枚数$", "payout.big", "ANY", "NONE", "COIN",
      "INTEGER", "枚"),
@@ -106,7 +106,7 @@ LABEL_RULES = [
     (r"^コイン単価$", "coin_unit_price", "ANY", "NONE", "COIN", "DECIMAL", "円"),
     (r"^ぶどう確率$|^ブドウ確率$", "prob.grape", "ANY", "NONE", "NONE",
      "PROBABILITY", "1/x"),
-    (r"^ボーナス合算確率$|^合算$|^合算確率$|^ボーナス合算$|^ボーナス合算[（(]設定\d[)）]$",
+    (r"^ボーナス合算確率$|^合算$|^合算確率$|^ボーナス合算$|^ボーナス合算[（(]設定(\d)[)）]$",
      "prob.bonus_total", "ANY", "NONE", "NONE", "PROBABILITY", "1/x"),
     (r"^コイン持ち$", "coin_persistence", "ANY", "NONE", "COIN", "DECIMAL", "G/50枚"),
 ]
@@ -201,12 +201,19 @@ def resolve_ceiling(label: str, value: str):
 
 
 def classify_label(label: str):
-    """ラベルを型に落とす。落ちなければ None。"""
+    """ラベルを型に落とす。落ちなければ None。
+
+    ★ラベル自体に設定が書いてあれば拾う★（「機械割（設定1）」「BIG確率(設定6)」）
+      表の設定欄からしか取らないと、ラベル埋め込み型の記事が全部止まる。
+    """
     lb = (label or "").strip()
     for rx, fk, mode, scope, cb, vk, unit in _LABEL_RE:
-        if rx.match(lb):
+        m = rx.match(lb)
+        if m:
+            st = next((g for g in (m.groups() or ()) if g), None)
             return {"field_key": fk, "mode": mode, "scope": scope,
-                    "counter_basis": cb, "value_kind": vk, "unit": unit}
+                    "counter_basis": cb, "value_kind": vk, "unit": unit,
+                    "setting_from_label": normalize_setting(st) if st else None}
     return None
 
 
@@ -227,6 +234,81 @@ def normalize_value(value: str, unit: str):
         return None
     return {"amount": float(nums[0]), "unit": unit,
             "plus_alpha": bool(_ALPHA.search(value))}
+
+
+# ★枠が期待する演算子★（Codex 3回目 手順2）
+#   天井は「最大N」（MAX）だが、機械割や確率は「ちょうどN」（EXACT）。
+#   これを枠側に持たせないと、台帳が MAX と書いた機械割が通ってしまう。
+_EXPECTED_OPERATOR = {
+    "PERCENT": "EXACT", "PROBABILITY": "EXACT", "DECIMAL": "EXACT",
+    "TEXT": "EXACT", "BOOLEAN": "EXACT",
+}
+
+
+def expected_operator(field_key: str, value_kind: str) -> str:
+    if str(field_key).startswith("ceiling."):
+        return "MAX"
+    return _EXPECTED_OPERATOR.get(value_kind, "EXACT")
+
+
+# ★表示上の単位の同定子★
+#   「97.2%」と「0.972」は同じ意味でも別の書き方。どちらの書き方で
+#   突き合わせるかを固定しないと、記事と出典で桁がずれても気づけない。
+_RENDER_UNIT = {
+    "%": "PERCENT_100BASE", "1/x": "PROBABILITY_ONE_OVER_X",
+    "G": "GAMES", "pt": "POINTS", "周期": "CYCLES", "回": "TIMES",
+    "枚": "COINS", "枚/G": "COINS_PER_GAME", "G/50枚": "GAMES_PER_50COINS",
+    "円": "YEN", "": "NONE",
+}
+
+
+def render_unit_id(unit: str) -> str:
+    return _RENDER_UNIT.get(unit, "UNKNOWN")
+
+
+# 「設定1」「設1」「1」→ "1"。「設定V」「設定1〜3」などは決められないので None
+_SETTING_RE = re.compile(r"^(?:設定|設)?\s*([1-6])\s*$")
+
+
+def normalize_setting(raw):
+    """設定欄の表記を正規値 "1"〜"6" に直す。決められなければ None。
+
+    ★正規値にしないと突き合わせが効かない★（Codex 3回目 手順1）
+      枠が「設定1」・台帳が "1" だと、同じ設定なのに別物と判定されるか、
+      逆にどちらでも通ってしまう。表記を1つに固定する。
+      「設定V」（ハナハナ系）や「設定1〜3」は決められないので None＝止める。
+    """
+    m = _SETTING_RE.match(str(raw or "").strip().translate(
+        str.maketrans("０１２３４５６", "0123456")))
+    return m.group(1) if m else None
+
+
+# 「設1：97.4%」「設定6:106.5%」のような 設定と値の組
+_SETTING_PAIR = re.compile(
+    r"(?:設定|設)\s*([1-6])\s*[:：]\s*((?:1\s*/\s*)?[0-9]+(?:\.[0-9]+)?\s*[%％]?)")
+# 組と組をつなぐだけの文字（これ以外が残るなら別の情報が混ざっている）
+_SEPARATORS = re.compile(r"[\s/／、，,・|｜～〜\-—－]+")
+
+
+def split_by_setting(value: str):
+    """「設1：97.4% / 設2：98.2% …」を {設定: 値} に分解する。決まらなければ None。
+
+    ★1つのセルに6設定ぶんの事実が入っている書き方への対応★
+      まとめて1つの枠にすると「どの設定の値か」を検証できない。
+      逆に、勝手に切り出すと取りこぼしが起きるので、
+      **文字列が組だけで出来ている**ことを確かめてから分解する。
+    """
+    v = str(value or "")
+    pairs = _SETTING_PAIR.findall(v)
+    if len(pairs) < 2:
+        return None                     # 1組だけなら通常の経路で扱う
+    settings = [s for s, _ in pairs]
+    if len(set(settings)) != len(settings):
+        return None                     # 同じ設定が2回＝どちらか決まらない
+    rest = _SETTING_PAIR.sub("", v)
+    if _SEPARATORS.sub("", rest):
+        return None                     # 組以外の情報が混ざっている
+    return {s: val.strip() for s, val in pairs}
 
 
 def slot_id(slug: str, spec: dict, pointer: str) -> str:
@@ -321,8 +403,20 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
 
     for item in _pairs_from_detail(detail):
         pointer, label, value = item[0], item[1], item[2]
-        setting = item[3] if len(item) > 3 else None
+        setting_raw = item[3] if len(item) > 3 else None
         table_label = item[4] if len(item) > 4 else None
+        # ★設定は「表の設定欄」→「ラベル埋め込み」の順で決める★
+        _lab = classify_label(label)
+        setting = normalize_setting(setting_raw) if setting_raw is not None else None
+        if setting is None and _lab:
+            setting = _lab.get("setting_from_label")
+        if setting_raw is not None and setting is None:
+            # ★どの設定の値か決められない行は枠にしない★
+            #   （「設定V」「設定1〜3」など。値だけ拾うと設定を取り違える）
+            unclassified.append({"pointer": pointer, "label": label,
+                                 "reason": "SETTING_NOT_NORMALIZED",
+                                 "value_excerpt": str(setting_raw)[:30]})
+            continue
         if EDITORIAL_LABELS.search(label):
             # 編集判断（B区分）は裏取り対象外。ただし記録は残す
             excluded_editorial.append({"pointer": pointer, "label": label,
@@ -365,13 +459,38 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
                 unclassified.append({"pointer": pointer, "label": label,
                                      "reason": "UNKNOWN_LABEL_WITH_NUMBER"})
             continue
+        # ★★設定ごとの値なのに設定が分からない枠は起こさない★★
+        #   （Codex 3回目 手順1）「機械割 97.2%〜106.5%」のような
+        #   設定が特定できない書き方を、設定なしの枠として通してしまうと
+        #   どの設定の値かを検証できないまま公開経路に乗る。
+        emit = [(pointer, value, setting)]
+        if spec["field_key"] in cl.SETTING_REQUIRED_FIELDS and not setting:
+            # 「設1：97.4% / 設2：98.2% …」と1セルに詰まっている書き方を分解する
+            split = split_by_setting(value)
+            if not split:
+                unclassified.append({"pointer": pointer, "label": label,
+                                     "reason": "SETTING_REQUIRED_BUT_MISSING",
+                                     "value_excerpt": (value or "")[:60]})
+                continue
+            emit = [(f"{pointer}/setting={s}", split[s], s)
+                    for s in sorted(split)]
+        for pointer, value, setting in emit:
+            _emit_slot(slots, seen_slots, slug, spec, pointer, label, value,
+                       setting, table_label)
+
+    return _finish(slug, machine, detail, slots, unclassified, unsupported,
+                   excluded_editorial, excluded_nonclaim)
+
+
+def _emit_slot(slots, seen_slots, slug, spec, pointer, label, value,
+               setting, table_label):
         # ★設定1〜6は行単位で束ねる（1つ欠けたら行ごと止めるため）★
         group = None
         if setting:
             group = f"{slug}:{spec['field_key']}:{table_label or 'by_setting'}"
         sid = slot_id(slug, spec, pointer)
         if sid in seen_slots:
-            continue
+            return
         seen_slots.add(sid)
         slots.append({
             "slot_id": sid,
@@ -382,8 +501,15 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
             "atomic_group_id": group,
             "expected_value_kind": spec["value_kind"],
             "expected_unit": spec["unit"],
+            # ★枠が期待する演算子と書き方（台帳の申告と突き合わせる）★
+            "expected_operator": expected_operator(spec["field_key"],
+                                                   spec["value_kind"]),
+            "expected_setting": setting,
+            "render_unit_id": render_unit_id(spec["unit"]),
             "source_pointer": pointer,
             "current_text": value,
+            # ★記事の表示文そのものの指紋★（記事が書き換わったら気づく）
+            "source_text_sha256": _sha(f"{label}|{value}"),
             # ★記事に載っている値そのもの（台帳と突き合わせる）★
             "current_value": normalize_value(value, spec["unit"]),
             "allowlisted_type": cl.allowlisted_type_candidate(
@@ -394,6 +520,9 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
             "verify_state": "UNVERIFIED",
         })
 
+
+def _finish(slug, machine, detail, slots, unclassified, unsupported,
+            excluded_editorial, excluded_nonclaim):
     return {
         "schema_version": SCHEMA_VERSION,
         "inventory_id": f"{slug}:inventory:{GENERATOR_VERSION}",
@@ -508,6 +637,42 @@ def selftest() -> int:
     t("★入力が変われば指紋も変わる",
       build_inventory("x", {"slug": "x"}, det3)["input_hashes"]["detail_json_sha256"]
       != inv["input_hashes"]["detail_json_sha256"])
+
+    # -------- 設定ごとの値・期待する演算子（Codex 3回目 手順1・2）
+    kw = build_inventory("x", {"slug": "x"},
+                         {"factTable": [["機械割", "97.2%〜106.5%"]]})
+    t("★★設定が分からない機械割は枠にしない（未分類で止める）★★",
+      kw["coverage"]["slots_total"] == 0
+      and kw["unclassified_atoms"][0]["reason"] == "SETTING_REQUIRED_BUT_MISSING")
+    kw2 = build_inventory("x", {"slug": "x"},
+                          {"factTable": [["機械割(設定6)", "106.5%"]]})
+    t("ラベルに書かれた設定を拾う（機械割(設定6)）",
+      kw2["coverage"]["slots_total"] == 1
+      and kw2["slots"][0]["conditions"]["setting"] == "6")
+    kw3 = build_inventory("x", {"slug": "x"}, {"factTable": [
+        ["機械割", "設1：97.4% / 設2：98.2% / 設3：100.1% / "
+                   "設4：104.1% / 設5：107.3% / 設6：110.2%"]]})
+    t("★1セルに詰まった6設定を、設定ごとの枠に分解する",
+      kw3["coverage"]["slots_total"] == 6
+      and kw3["slots"][5]["current_value"]["amount"] == 110.2)
+    t("　分解した枠は同じ束に入る（1つ欠けたら行ごと止める）",
+      len({s["atomic_group_id"] for s in kw3["slots"]}) == 1)
+    t("★★組以外の情報が混ざっていたら分解しない★★",
+      split_by_setting("設1：97.4% / 設2：98.2%（完全攻略時）") is None)
+    t("★同じ設定が2回出てきたら分解しない",
+      split_by_setting("設1：97.4% / 設1：98.2%") is None)
+    t("★設定Vなど数字でない設定は正規化しない（止める）",
+      normalize_setting("設定V") is None and normalize_setting("設定1〜3") is None)
+    t("　全角数字は正規化する", normalize_setting("設定６") == "6")
+    t("★機械割の枠は EXACT を期待する（最大N ではない）",
+      expected_operator("kikaiwari.setting", "PERCENT") == "EXACT")
+    t("★天井の枠は MAX を期待する",
+      expected_operator("ceiling.normal.at", "INTEGER") == "MAX")
+    t("★％と1/xの書き方を枠が固定する（桁ずれに気づけるように）",
+      render_unit_id("%") == "PERCENT_100BASE"
+      and render_unit_id("1/x") == "PROBABILITY_ONE_OVER_X")
+    t("★枠は記事の表示文の指紋を持つ（記事が書き換わったら気づく）",
+      len(inv["slots"][0]["source_text_sha256"]) == 64)
 
     ng = [n for n, ok in results if not ok]
     print(f"\n{len(results) - len(ng)}/{len(results)} 合格")

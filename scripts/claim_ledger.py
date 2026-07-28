@@ -55,6 +55,14 @@ COUNTER_BASIS = ("LCD_GAME", "MENU_GAME", "REAL_GAME", "DATA_COUNTER", "POINT",
 VERIFY_STATES = ("UNVERIFIED", "VERIFIED", "CONFLICT", "REVIEW", "REVIEW_MANUAL",
                  "STALE", "NOT_FOUND", "UNVERIFIED_LEGACY")
 CLAIM_KINDS = ("FACT", "JUDGMENT")
+# ★設定ごとの事実★ ここに載る項目は conditions.setting が必須
+SETTING_REQUIRED_FIELDS = ("kikaiwari.setting", "koyaku.setting", "bonus.setting")
+# 設定ごとに載ることも、機種共通で載ることもある項目（設定があってもよい）
+SETTING_ALLOWED_FIELDS = SETTING_REQUIRED_FIELDS + (
+    "prob.big", "prob.reg", "prob.grape", "prob.first_hit", "prob.bonus_total",
+    "payout.big", "payout.reg", "base_game", "coin_persistence",
+    "coin_unit_price", "net_increase.phase")
+SETTING_VALUES = ("1", "2", "3", "4", "5", "6")
 INDEPENDENCE = ("KNOWN_INDEPENDENT", "SAME_OWNER", "LINEAGE_COPY", "UNKNOWN")
 VOTE_DISPOSITION = ("COUNTED", "NOT_COUNTED_SAME_OWNER", "NOT_COUNTED_LINEAGE",
                     "NOT_COUNTED_UNKNOWN", "NOT_COUNTED_FAILED")
@@ -222,6 +230,27 @@ def validate_claim(c: dict, where: str, registry: dict | None = None) -> None:
     _enum(cond["scope"], SCOPES, f"{where}.conditions", "scope")
     _enum(cond["counter_basis"], COUNTER_BASIS, f"{where}.conditions", "counter_basis")
 
+    # ★★設定ごとの値は「どの設定か」を必ず持つ★★（Codex 3回目 手順1）
+    #   機械割や小役確率は設定ごとに別の事実。設定が無い claim を許すと
+    #   「設定6の値を設定1の欄に出す」型の取り違えを機械的に止められない。
+    st = cond.get("setting")
+    if c["field_key"] in SETTING_REQUIRED_FIELDS and st is None:
+        raise LedgerError(
+            f"{where}.conditions.setting: {c['field_key']} は設定ごとの値なので"
+            f"設定番号が必要")
+    if st is not None:
+        if c["field_key"] not in SETTING_ALLOWED_FIELDS:
+            raise LedgerError(
+                f"{where}.conditions.setting: {c['field_key']} は設定ごとの値ではない"
+                f"（設定を付けると別項目と取り違える）")
+        if not isinstance(st, str):
+            # 1 と "1" が混ざると突き合わせで別物になる
+            raise LedgerError(f"{where}.conditions.setting: 文字列で書く（\"1\" 等）")
+        if st not in SETTING_VALUES:
+            raise LedgerError(
+                f"{where}.conditions.setting: 設定は {SETTING_VALUES} のいずれか"
+                f"（received={st!r}）")
+
     if not isinstance(c["sources"], list):
         raise LedgerError(f"{where}.sources: 配列でない")
     for i, s in enumerate(c["sources"]):
@@ -387,7 +416,8 @@ _TEST_PUBS = {"a": ("chonborista", "chonborista.com"),
 
 
 def _mk_source(quote: str, pub: str, counted: bool = True,
-               independence: str = "KNOWN_INDEPENDENT") -> dict:
+               independence: str = "KNOWN_INDEPENDENT",
+               variant: str = "x:2026") -> dict:
     pid, host = _TEST_PUBS.get(pub, (pub, f"{pub}.example"))
     return {
         "source_id": f"src-{pid}",
@@ -405,6 +435,8 @@ def _mk_source(quote: str, pub: str, counted: bool = True,
             "verdict": "PASS", "code": "OK", "checked_at": "2026-07-28T03:15:00Z",
             "verifier_version": "consensus_verify/2.0.0",
             "vote_disposition": "COUNTED" if counted else "NOT_COUNTED_UNKNOWN",
+            # ★どの型番の機種で一致を確認したか★（同名の別バージョン混入を防ぐ）
+            "machine_variant_key_matched": variant,
             "checks": {c: {"verdict": "PASS", "code": "OK"} for c in CHECK_IDS},
         },
     }
@@ -645,6 +677,36 @@ def selftest() -> int:
           conditions={**_mk_claim()["conditions"], "counter_basis": "UNKNOWN"}), allow))
     t("★編集判断(JUDGMENT)は自動採用しない",
       not auto_adoptable(_mk_claim(claim_kind="JUDGMENT"), allow))
+
+    # -------- 設定ごとの値は「どの設定か」を必ず持つ（Codex 3回目 手順1）
+    def _kw(**over):
+        c = _mk_claim(
+            claim_id="x:kikaiwari.setting:001",
+            slot_id="x:kikaiwari.setting:setting=1",
+            field_key="kikaiwari.setting",
+            value={"kind": "PERCENT", "raw": "97.2%", "amount": 97.2,
+                   "unit": "%", "operator": "EXACT"},
+            conditions={"mode": "ANY", "scope": "NONE", "counter_basis": "NONE",
+                        "setting": "1", "phase": None, "through_count": None,
+                        "exchange_rate": None},
+            sources=[_mk_source("設定1の機械割は97.2%です。", "a"),
+                     _mk_source("機械割は設定1:97.2%", "b")])
+        c.update(over)
+        return c
+
+    t("設定を持つ機械割 claim は通る", validate_claim(_kw(), "w") is None)
+    t("★★設定が無い機械割 claim は作れない★★",
+      raises(lambda: validate_claim(
+          _kw(conditions={**_kw()["conditions"], "setting": None}), "w")))
+    t("★設定が範囲外なら止める（設定7）",
+      raises(lambda: validate_claim(
+          _kw(conditions={**_kw()["conditions"], "setting": "7"}), "w")))
+    t("★設定を数値で書いたら止める（\"1\" と 1 が混ざると別物になる）",
+      raises(lambda: validate_claim(
+          _kw(conditions={**_kw()["conditions"], "setting": 1}), "w")))
+    t("★設定ごとでない項目に設定を付けたら止める（天井に設定は無い）",
+      raises(lambda: validate_claim(
+          _mk_claim(conditions={**_mk_claim()["conditions"], "setting": "6"}), "w")))
 
     ng = [n for n, ok in results if not ok]
     print(f"\n{len(results) - len(ng)}/{len(results)} 合格")
