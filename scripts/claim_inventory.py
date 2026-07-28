@@ -846,6 +846,19 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
             _emit_slot(slots, seen_slots, slug, spec, pointer, label, value,
                        setting, table_label)
 
+    # ★★ポチポチくんの設定別確率（setting.html 直書き）も在庫に載せる★★
+    #   （Codex 10巡目 (a)-5）。claim系のどこにも到達していなかった。
+    try:
+        import extract_setting_rates as esr
+        rates = esr.load_all().get(slug)
+        if rates:
+            slots.extend(esr.as_slots(slug, rates))
+    except Exception as e:                      # 読めなければ黙って進めない
+        unsupported.append({"pointer": "/setting.html",
+                            "reason": "SETTING_RATES_UNREADABLE",
+                            "excerpt": f"{type(e).__name__}: {e}"[:70],
+                            "content_sha256": _sha(str(e))})
+
     return _finish(slug, machine, detail, slots, unclassified, unsupported,
                    excluded_editorial, excluded_nonclaim)
 
