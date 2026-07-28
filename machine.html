@@ -220,11 +220,16 @@ async function loadJson(path){
 }
 
 function resolveMachineSlug() {
-  const paramsSlug = new URLSearchParams(location.search).get("slug");
-  if (paramsSlug) return paramsSlug;
-
+  // ★★URLのパスを最優先にする★★（2026-07-28・Codex 10巡目 (a)-3）
+  //   以前は ?slug= を先に見ていたため、
+  //   /machines/{公開してよい機種}/?slug={公開できない機種}
+  //   の形で、公開を止めた機種の中身を表示できてしまった。
   const match = location.pathname.match(/\/machines\/([^\/]+)\/?(?:index\.html)?$/);
   if (match) return match[1];
+
+  // 機種ディレクトリの外（machine.html を直接開いた場合）だけ ?slug= を使う
+  const paramsSlug = new URLSearchParams(location.search).get("slug");
+  if (paramsSlug) return paramsSlug;
 
   return null;
 }
