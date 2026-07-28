@@ -56,6 +56,9 @@ VERIFY_STATES = ("UNVERIFIED", "VERIFIED", "CONFLICT", "REVIEW", "REVIEW_MANUAL"
                  "STALE", "NOT_FOUND", "UNVERIFIED_LEGACY")
 CLAIM_KINDS = ("FACT", "JUDGMENT")
 IDENTITY_STATES = ("VERIFIED", "UNVERIFIED", "AMBIGUOUS")
+# 証拠として受け取ってよい単位（claim_c5 と同じ定義）
+EVIDENCE_UNIT_TYPES = ("TABLE_ROW", "TABLE_CELL", "LIST_ITEM", "PARAGRAPH",
+                       "HEADING", "DEFINITION_ITEM")
 # ★設定ごとの事実★ ここに載る項目は conditions.setting が必須
 SETTING_REQUIRED_FIELDS = ("kikaiwari.setting", "koyaku.setting", "bonus.setting")
 # 設定ごとに載ることも、機種共通で載ることもある項目（設定があってもよい）
@@ -139,14 +142,28 @@ def _validate_source(src: dict, where: str, registry: dict | None = None) -> Non
     ie = ver["identity_evidence"]
     if not isinstance(ie, dict):
         raise LedgerError(f"{where}.verification.identity_evidence: 形式が違う")
-    for k in ("page_title", "quote_context"):
-        if not str(ie.get(k) or "").strip():
-            raise LedgerError(
-                f"{where}.verification.identity_evidence.{k}: 空にできない")
-    # ★引用は、同定に使った文脈の中の逐語であること★
-    if str(src["quote"]) not in str(ie["quote_context"]):
+    if not str(ie.get("page_title") or "").strip():
         raise LedgerError(
-            f"{where}: 引用が identity_evidence.quote_context の中に無い"
+            f"{where}.verification.identity_evidence.page_title: 空にできない")
+    # ★★証拠は「表の行・セル・箇条書きの項目」など画面上の塊で受け取る★★
+    #   （Codex 8巡目 (a)-1）。自由文からの切り出しを受け取ると、
+    #   同じ設定に別の値が併記された文から片方だけ取る／訂正を次行に置く、
+    #   といった抜け道が残る。
+    unit = ie.get("evidence_unit")
+    if not isinstance(unit, dict):
+        raise LedgerError(
+            f"{where}.verification.identity_evidence.evidence_unit: 必須"
+            f"（自由文の切り出しは証拠にできない）")
+    if unit.get("unit_type") not in EVIDENCE_UNIT_TYPES:
+        raise LedgerError(
+            f"{where}...evidence_unit.unit_type: {EVIDENCE_UNIT_TYPES} のいずれか")
+    for k in ("dom_path", "text"):
+        if not str(unit.get(k) or "").strip():
+            raise LedgerError(f"{where}...evidence_unit.{k}: 空にできない")
+    # ★引用は証拠単位の中の逐語であること（引用は表示用で、判定には使わない）★
+    if str(src["quote"]) not in str(unit["text"]):
+        raise LedgerError(
+            f"{where}: 引用が evidence_unit.text の中に無い"
             f"（別の場所から切り出した引用は使えない）")
     _enum(ver["verdict"], VERDICTS, f"{where}.verification", "verdict")
     _enum(ver["vote_disposition"], VOTE_DISPOSITION, f"{where}.verification",
@@ -485,7 +502,10 @@ def _mk_source(quote: str, pub: str, counted: bool = True,
             # ★出典が本当にその機種のページかを判定するための証拠★
             "identity_evidence": {
                 "page_title": "スマスロテスト機 天井・機械割・設定判別",
-                "quote_context": "スマスロテスト機の解析情報です。" + quote,
+                "evidence_unit": {
+                    "unit_type": "TABLE_ROW",
+                    "dom_path": "table[1]/tbody/tr[2]",
+                    "text": "スマスロテスト機｜" + quote},
                 # ★出典ページが示した型式（公開ゲートがここから鍵を計算する）★
                 "machine_identity": {"manufacturer_id": "test-maker",
                                      "regulatory_model_code": "TEST-001",

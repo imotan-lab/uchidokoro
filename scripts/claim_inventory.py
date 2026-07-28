@@ -163,6 +163,20 @@ _FACT_WORD = r"(?:天井|機械割|出玉率|純増|確率|獲得枚数|コイ�
 _NUM_WITH_UNIT = re.compile(
     r"[0-9０-９]+(?:\.[0-9０-９]+)?\s*(?:[%％]|[GgＧ]|pt|枚|回|周期|円)"
     r"|1\s*/\s*[0-9０-９]")
+# ★漢数字・各国数字も同じ検出器で拾う★（Codex 8巡目 (a)-4）
+_KANJI_NUM_WITH_UNIT = re.compile(
+    r"[〇零一二三四五六七八九十百千万億]+\s*(?:[%％]|[GgＧ]|pt|枚|回|周期|円)")
+
+
+def numeral_with_unit(text: str) -> bool:
+    """単位のついた数（算用数字・漢数字・各国の数字）が含まれているか。"""
+    t = unicodedata.normalize("NFKC", str(text or ""))
+    if _NUM_WITH_UNIT.search(t) or _KANJI_NUM_WITH_UNIT.search(t):
+        return True
+    # NFKCでASCIIにならない数値文字は 0 に置き換えてから同じ検出器に掛ける
+    t2 = "".join("0" if unicodedata.category(ch) in ("Nd", "Nl", "No") else ch
+                 for ch in t)
+    return bool(_NUM_WITH_UNIT.search(t2))
 
 
 def _sha(obj) -> str:
@@ -452,6 +466,25 @@ def physical_key(ident) -> str | None:
                  "release_date": vals[2]})[:16]
 
 
+def identity_diff(got, want) -> dict:
+    """型式のどの項目が食い違ったかを返す★（Codex 8巡目 (b)-2）
+
+    真偽値だけだと「メーカー不足／型式違い／日付表記違い」を区別できない。
+    """
+    got = got if isinstance(got, dict) else {}
+    want = want if isinstance(want, dict) else {}
+    out = {}
+    for k in ("manufacturer_id", "regulatory_model_code", "release_date"):
+        g, w = got.get(k), want.get(k)
+        if not isinstance(g, str) or not g.strip():
+            out[k] = {"status": "MISSING", "expected": w}
+        elif not isinstance(w, str) or not w.strip():
+            out[k] = {"status": "CATALOG_MISSING", "received": g}
+        elif g.strip() != w.strip():
+            out[k] = {"status": "MISMATCH", "expected": w, "received": g}
+    return out
+
+
 def identity_missing(machine: dict) -> list:
     """型式の同定情報が足りない項目を返す（空なら足りている）。
 
@@ -594,7 +627,7 @@ def _scan_excluded_value(unsupported: list, pointer: str, label: str,
     # ★★字形の違いで検査をすり抜けさせない★★（Codex 5巡目 (a)-4）
     #   「1／999」（全角スラッシュ）が確率として検知されなかった。
     v = unicodedata.normalize("NFKC", str(value or ""))
-    if _NUM_WITH_UNIT.search(v) and re.search(_FACT_WORD, v):
+    if numeral_with_unit(v) and re.search(_FACT_WORD, v):
         unsupported.append({"pointer": f"{pointer}#excluded_value",
                             "reason": reason, "label": label,
                             "excerpt": v[:70],
@@ -629,7 +662,7 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
             if not sent.strip():
                 continue
             # ★単位つきの数字を含む文は、事実を語っているとみなす★
-            if not _NUM_WITH_UNIT.search(sent):
+            if not numeral_with_unit(sent):
                 continue
             # ★編集判断の文でも、項目語が入っていれば事実として拾う★
             #   「狙い目は300G〜」＝編集判断（対象外）
