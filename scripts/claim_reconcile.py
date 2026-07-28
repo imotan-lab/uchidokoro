@@ -156,7 +156,8 @@ def reconcile(slug: str, machine: dict, detail: dict,
 
     # --- ⑥ 台帳そのものの検証（★空でも必ず行う★・Codex 指摘1）
     try:
-        cl.validate_ledger(ledger, f"{slug}.ledger")
+        # ★出典レジストリと必ず照合する（票の水増しを止める）★
+        cl.validate_ledger(ledger, f"{slug}.ledger", cl.load_registry())
     except cl.LedgerError as e:
         problems.append(f"台帳の検証に失敗: {e}")
     # 台帳が別機種のものでないか

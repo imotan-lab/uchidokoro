@@ -94,7 +94,7 @@ def _enum(v, allowed, where: str, key: str):
     return v
 
 
-def _validate_source(src: dict, where: str) -> None:
+def _validate_source(src: dict, where: str, registry: dict | None = None) -> None:
     for k in ("source_id", "requested_url", "final_url", "quote", "quote_sha256",
               "fetched_at", "trust_snapshot", "verification"):
         _req(src, k, where)
@@ -152,9 +152,27 @@ def _validate_source(src: dict, where: str) -> None:
             raise LedgerError(
                 f"{where}: vote_key が発行者IDから作られていない"
                 f"（任意の値で票を水増しできてしまう）")
+        # ★★出典レジストリと照合する★★（Codex 3回目 重大4）
+        #   台帳の申告ではなく、**最終URLのホスト**から発行者を引き直す。
+        #   レジストリに無いホストは票に数えない（default deny）。
+        if registry is not None:
+            pub = resolve_publisher(src["final_url"], registry)
+            if pub is None:
+                raise LedgerError(
+                    f"{where}: 出典レジストリに無いホスト（票に数えない）: "
+                    f"{src['final_url']}")
+            if pub["publisher_id"] != ts["publisher_id"]:
+                raise LedgerError(
+                    f"{where}: 発行者の申告がURLと一致しない"
+                    f"（申告={ts['publisher_id']} / URL={pub['publisher_id']}）")
+            for k in ("ownership_group_id", "content_lineage_id"):
+                if pub.get(k) != ts.get(k):
+                    raise LedgerError(
+                        f"{where}: {k} の申告がレジストリと違う"
+                        f"（申告={ts.get(k)} / 正={pub.get(k)}）")
 
 
-def validate_claim(c: dict, where: str) -> None:
+def validate_claim(c: dict, where: str, registry: dict | None = None) -> None:
     for k in ("claim_id", "slot_id", "claim_kind", "field_key", "value",
               "conditions", "verify_state", "sources"):
         _req(c, k, where)
@@ -207,7 +225,7 @@ def validate_claim(c: dict, where: str) -> None:
     if not isinstance(c["sources"], list):
         raise LedgerError(f"{where}.sources: 配列でない")
     for i, s in enumerate(c["sources"]):
-        _validate_source(s, f"{where}.sources[{i}]")
+        _validate_source(s, f"{where}.sources[{i}]", registry)
 
     # ★VERIFIED を名乗るなら、票に数えた出典が2つ以上必要★
     #   （AIの自己申告では VERIFIED にできない。検証器が付ける状態）
@@ -251,7 +269,8 @@ def validate_claim(c: dict, where: str) -> None:
                 f"{where}.expires_at: すでに期限切れ（STALE にして調べ直すこと）")
 
 
-def validate_ledger(led: dict, path: str = "ledger") -> list:
+def validate_ledger(led: dict, path: str = "ledger",
+                    registry: dict | None = None) -> list:
     """スキーマ検証。違反があれば LedgerError。戻り値は claim_id の一覧。"""
     if led.get("schema_version") != SCHEMA_VERSION:
         raise LedgerError(f"{path}: schema_version が {SCHEMA_VERSION} でない")
@@ -268,7 +287,7 @@ def validate_ledger(led: dict, path: str = "ledger") -> list:
     seen_ids, seen_slots = set(), set()
     for i, c in enumerate(claims):
         w = f"{path}.claims[{i}]"
-        validate_claim(c, w)
+        validate_claim(c, w, registry)
         if c["claim_id"] in seen_ids:
             raise LedgerError(f"{w}: claim_id が重複している {c['claim_id']}")
         seen_ids.add(c["claim_id"])
@@ -279,6 +298,32 @@ def validate_ledger(led: dict, path: str = "ledger") -> list:
         if not str(c["claim_id"]).startswith(mr["slug"] + ":"):
             raise LedgerError(f"{w}: claim_id の機種が machine_ref と違う")
     return sorted(seen_ids)
+
+
+def load_registry() -> dict:
+    """出典レジストリ。★ここに無いホストは票に数えない（default deny）★"""
+    if not os.path.isfile(SOURCE_REGISTRY):
+        return {"publishers": {}}
+    return json.load(open(SOURCE_REGISTRY, encoding="utf-8"))
+
+
+def resolve_publisher(url: str, registry: dict | None = None):
+    """URL のホストから発行者を引く。★台帳の申告ではなくURLから決める★
+
+    台帳の trust_snapshot を権威にすると、発行者IDを自由に書けるので
+    票の水増しが止められない（Codex 3回目 重大4）。
+    """
+    registry = registry if registry is not None else load_registry()
+    m = re.match(r"^https://([^/]+)/?", str(url or ""))
+    if not m:
+        return None
+    host = m.group(1).lower()
+    for pid, pub in (registry.get("publishers") or {}).items():
+        if host in [h.lower() for h in pub.get("canonical_hosts", [])]:
+            if pub.get("status") != "ACTIVE":
+                return None
+            return {"publisher_id": pid, **pub}
+    return None
 
 
 def load_allowlist() -> dict:
@@ -336,19 +381,25 @@ def auto_adoptable(claim: dict, allow: dict | None = None) -> bool:
     return True
 
 
+# テストで使う実在の発行者（レジストリに載っているもの）
+_TEST_PUBS = {"a": ("chonborista", "chonborista.com"),
+              "b": ("1geki", "1geki.jp")}
+
+
 def _mk_source(quote: str, pub: str, counted: bool = True,
                independence: str = "KNOWN_INDEPENDENT") -> dict:
+    pid, host = _TEST_PUBS.get(pub, (pub, f"{pub}.example"))
     return {
-        "source_id": f"src-{pub}",
-        "requested_url": f"https://{pub}.example/x",
-        "final_url": f"https://{pub}.example/x",
+        "source_id": f"src-{pid}",
+        "requested_url": f"https://{host}/x",
+        "final_url": f"https://{host}/x",
         "quote": quote,
         "quote_sha256": canonical_sha256(quote),
         "fetched_at": "2026-07-28T03:10:00Z",
         "trust_snapshot": {
-            "publisher_id": pub, "ownership_group_id": f"own-{pub}",
-            "content_lineage_id": f"lin-{pub}", "independence_state": independence,
-            "vote_key": f"publisher:{pub}", "registry_version": "source-registry/1.0.0",
+            "publisher_id": pid, "ownership_group_id": f"own-{pid}",
+            "content_lineage_id": f"lin-{pid}", "independence_state": independence,
+            "vote_key": f"publisher:{pid}", "registry_version": "source-registry/1.0.0",
         },
         "verification": {
             "verdict": "PASS", "code": "OK", "checked_at": "2026-07-28T03:15:00Z",
@@ -441,14 +492,19 @@ def selftest() -> int:
     c5["sources"][0]["verification"]["checks"]["C5"]["verdict"] = "SKIP"
     t("★C5が未通過(SKIP)なのに票に数えたら止める",
       raises(lambda: validate_ledger(_mk_ledger([c5]))))
+    # ★同一運営・同一転載系列は1票★（レジストリ照合を通さない検証で確かめる）
     owner = _mk_claim()
-    owner["sources"][1]["trust_snapshot"]["ownership_group_id"] = "own-a"
+    for src in owner["sources"]:
+        src["trust_snapshot"]["ownership_group_id"] = "own-same"
     t("★同じ運営元の2件を2票に数えたら止める（vote_keyを別にしても）",
       raises(lambda: validate_ledger(_mk_ledger([owner]))))
     lin = _mk_claim()
-    lin["sources"][1]["trust_snapshot"]["content_lineage_id"] = "lin-a"
+    for src in lin["sources"]:
+        src["trust_snapshot"]["content_lineage_id"] = "lin-same"
     t("★同じ転載系列の2件を2票に数えたら止める",
       raises(lambda: validate_ledger(_mk_ledger([lin]))))
+    t("　レジストリ照合を通す場合は、申告の食い違い自体が先に止まる",
+      raises(lambda: validate_ledger(_mk_ledger([owner]), "t", load_registry())))
     vk = _mk_claim()
     vk["sources"][1]["trust_snapshot"]["vote_key"] = "publisher:偽装"
     t("★vote_key が発行者IDから作られていなければ止める",
@@ -507,6 +563,41 @@ def selftest() -> int:
     t("★数え方が未確定(UNKNOWN)のまま VERIFIED にできない",
       raises(lambda: validate_ledger(_mk_ledger([_mk_claim(
           conditions={**_mk_claim()["conditions"], "counter_basis": "UNKNOWN"})]))))
+
+    # --- ★出典レジストリとの照合（Codex 3回目 重大4）★
+    reg = load_registry()
+    t("実在する発行者はURLから引ける",
+      (resolve_publisher("https://chonborista.com/slot/x/1/", reg) or {})
+      .get("publisher_id") == "chonborista")
+    t("★★レジストリに無いホストは引けない（票に数えない）★★",
+      resolve_publisher("https://nazo-site.example/x", reg) is None)
+    t("★除外したサイト（スロベース）は引けない",
+      resolve_publisher("https://slobase.jp/machines/x", reg) is None)
+
+    def reg_claim(host_b=None, pub_b=None):
+        """既定は実在の2社。host_b/pub_b を渡すと2つ目を差し替える。"""
+        c = _mk_claim()
+        if host_b:
+            src = c["sources"][1]
+            src["requested_url"] = src["final_url"] = f"https://{host_b}/x"
+            src["trust_snapshot"].update(
+                {"publisher_id": pub_b, "ownership_group_id": f"own-{pub_b}",
+                 "content_lineage_id": f"lin-{pub_b}",
+                 "vote_key": f"publisher:{pub_b}"})
+        return c
+
+    t("レジストリに載る2社の出典なら通る",
+      validate_ledger(_mk_ledger([reg_claim()]), "t", reg))
+    t("★★レジストリに無いホストの出典は止める★★",
+      raises(lambda: validate_ledger(
+          _mk_ledger([reg_claim(host_b="nazo.example", pub_b="nazo")]), "t", reg)))
+    t("★★発行者の申告がURLと違えば止める（なりすまし）★★",
+      raises(lambda: validate_ledger(
+          _mk_ledger([reg_claim(host_b="1geki.jp", pub_b="chonborista")]), "t", reg)))
+    fake = reg_claim()
+    fake["sources"][1]["trust_snapshot"]["ownership_group_id"] = "own-nazo"
+    t("★運営元の申告がレジストリと違えば止める",
+      raises(lambda: validate_ledger(_mk_ledger([fake]), "t", reg)))
 
     # --- 型・語彙
     t("★未知の counter_basis は止める（数え方が決まらない）",

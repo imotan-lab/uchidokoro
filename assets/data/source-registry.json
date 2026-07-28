@@ -1,0 +1,82 @@
+{
+ "schema_version": "source-registry/v1",
+ "registry_version": "2026-07-28.1",
+ "_note": "★出典の信頼境界の正本★ 台帳の trust_snapshot を権威にしてはいけない（台帳は参照だけを持つ）。発行者・運営元・転載系列はここから引き、独立性は**出典自身の申告ではなく、出典どうしの関係から集計時に導く**。ここに無いホストは票に数えない（default deny）。",
+ "publishers": {
+  "chonborista": {
+   "name": "ちょんぼりすた",
+   "canonical_hosts": ["chonborista.com"],
+   "ownership_group_id": "own-chonborista",
+   "content_lineage_id": "lin-chonborista",
+   "tier": "MAJOR_ANALYSIS",
+   "status": "ACTIVE"
+  },
+  "slopachi-quest": {
+   "name": "スロパチクエスト",
+   "canonical_hosts": ["slopachi-quest.com", "www.slopachi-quest.com"],
+   "ownership_group_id": "own-slopachi-quest",
+   "content_lineage_id": "lin-slopachi-quest",
+   "tier": "MAJOR_ANALYSIS",
+   "status": "ACTIVE"
+  },
+  "nana-press": {
+   "name": "なな徹（ナナプレス）",
+   "canonical_hosts": ["nana-press.com"],
+   "ownership_group_id": "own-nana-press",
+   "content_lineage_id": "lin-nana-press",
+   "tier": "MAJOR_ANALYSIS",
+   "status": "ACTIVE"
+  },
+  "1geki": {
+   "name": "一撃",
+   "canonical_hosts": ["1geki.jp"],
+   "ownership_group_id": "own-1geki",
+   "content_lineage_id": "lin-1geki",
+   "tier": "MAJOR_ANALYSIS",
+   "status": "ACTIVE"
+  },
+  "dmm-ptown": {
+   "name": "DMM ぱちタウン",
+   "canonical_hosts": ["p-town.dmm.com"],
+   "ownership_group_id": "own-dmm",
+   "content_lineage_id": "lin-dmm-ptown",
+   "tier": "MAJOR_ANALYSIS",
+   "status": "ACTIVE"
+  },
+  "p-world": {
+   "name": "P-WORLD",
+   "canonical_hosts": ["www.p-world.co.jp", "p-world.co.jp"],
+   "ownership_group_id": "own-p-world",
+   "content_lineage_id": "lin-p-world",
+   "tier": "DIRECTORY",
+   "status": "ACTIVE"
+  },
+  "maker-kitadenshi": {
+   "name": "北電子（メーカー公式）",
+   "canonical_hosts": ["www.kitadenshi.co.jp", "kitadenshi.co.jp"],
+   "ownership_group_id": "own-kitadenshi",
+   "content_lineage_id": "lin-kitadenshi",
+   "tier": "OFFICIAL",
+   "status": "ACTIVE"
+  },
+  "maker-universal": {
+   "name": "ユニバーサル（メーカー公式）",
+   "canonical_hosts": ["www.universal-777.com"],
+   "ownership_group_id": "own-universal",
+   "content_lineage_id": "lin-universal",
+   "tier": "OFFICIAL",
+   "status": "ACTIVE"
+  }
+ },
+ "_excluded": {
+  "slobase.jp": "2026-07-28: ゴーゴージャグラー3で BIG・REG・機械割・ぶどうの全項目が他サイトと食い違った。原因未特定のため票に数えない",
+  "slot-lab": "有料サイト。情報の転用不可（CLAUDE.mdの方針）"
+ },
+ "_policy": [
+  "ここに無いホストは票に数えない（default deny）",
+  "同じ ownership_group_id の出典は、ホストが違っても1票",
+  "同じ content_lineage_id（転載系列）の出典も1票",
+  "independence_state は出典自身が申告するものではなく、出典どうしの関係から集計時に導く",
+  "実戦値と解析値は別物として扱う（同じ値でも一致判定しない）"
+ ]
+}
