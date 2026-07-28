@@ -137,10 +137,14 @@ _NUM = re.compile(r"[0-9０-９]")
 #   これを黙って捨てると「未分類ゼロ」が網羅の証明にならない。
 #   ★★語→数字だけでなく、数字→語の順も見る★★（Codex 2回目 (a)-5）
 #     「9999Gで天井に到達します」は数字が先なので、旧実装では素通りしていた。
-_FACT_WORD = r"(?:天井|機械割|出玉率|純増|確率|獲得枚数|コイン持ち|スルー|周期)"
-_FACT_IN_PROSE = re.compile(
-    _FACT_WORD + r"[^。]{0,20}?[0-9０-９]"
-    r"|[0-9０-９][^。]{0,20}?" + _FACT_WORD)
+_FACT_WORD = r"(?:天井|機械割|出玉率|純増|確率|獲得枚数|コイン持ち|スルー|周期|" \
+             r"BIG|REG|BB|RB|ボーナス|初当たり|ベース|設定)"
+# ★★語と数字の距離で判定しない★★（Codex 2巡目 (a)-4）
+#   「機械割については…（30文字）…設定1は99.9%です」のように離すだけで
+#   すり抜けた。**数字に単位が付いていれば、その文は事実を語っている**とみなす。
+_NUM_WITH_UNIT = re.compile(
+    r"[0-9０-９]+(?:\.[0-9０-９]+)?\s*(?:[%％]|[GgＧ]|pt|枚|回|周期|円)"
+    r"|1\s*/\s*[0-9０-９]")
 
 
 def _sha(obj) -> str:
@@ -225,12 +229,16 @@ _ALPHA = re.compile(r"[+＋]\s*[aαａ]", re.I)
 # ★「ちょうどN」と言い切れない書き方★（範囲・比較・概算・否定）
 #   これを見逃すと「97.2%未満」を EXACT 97.2% として公開してしまう
 #   （Codex 2回目 (a)-4）。+α は天井の慣用表現なので別扱い。
-_NOT_EXACT = re.compile(
-    r"[〜~～–—]|[0-9]\s*[\-－]\s*[0-9]|"
-    r"未満|以下|以上|超え?|前後|程度|およそ|約|平均|"
-    r"ではなく|不明|未確定|推定|目安")
-# 「最大」「最低」は天井（MAX）では正しい書き方なので、EXACT のときだけ弾く
-_MAX_WORDS = re.compile(r"最大|最低|上限")
+# ★★「禁止語を並べる」のではなく「残ってよい文字だけ」を決める★★
+#   （Codex 2巡目 (a)-2）。から／を下回る／ではありません／推定 のように、
+#   禁止語はいくらでも増やせるので、値の周りに**何も付いていない**ことを求める。
+_VALUE_RESIDUE_OK = re.compile(
+    r"(?:[+＋]\s*[aαａ]|"                              # +α（天井の慣用表現）
+    r"[%％GgＧ枚回pt周期円]|G/50枚|枚/G|1\s*/|"          # 単位
+    r"[\s、。：:（）()【】\[\]\*＊]"                     # 記号
+    r")+", re.I)
+# 天井（MAX）でだけ許す語
+_MAX_WORDS_OK = re.compile(r"最大|最低|上限|まで")
 
 
 def normalize_value(value: str, unit: str, operator: str = "EXACT"):
@@ -245,11 +253,12 @@ def normalize_value(value: str, unit: str, operator: str = "EXACT"):
     nums = re.findall(r"\d+(?:\.\d+)?", value)
     if len(nums) != 1:
         return None
-    if _NOT_EXACT.search(value):
-        # 「97.2%未満」「約97.2%」などは1つの値として扱えない
-        return None
-    if operator != "MAX" and _MAX_WORDS.search(value):
-        # 「最大97.2%」を「ちょうど97.2%」として公開しない
+    # ★数と単位と記号だけで出来ていること★
+    #   「97.2%を下回る」「約97.2%」「97.2%から99.9%」はここで全部落ちる。
+    rest = re.sub(r"[0-9]+(?:\.[0-9]+)?", "", value)
+    if operator == "MAX":
+        rest = _MAX_WORDS_OK.sub("", rest)
+    if _VALUE_RESIDUE_OK.sub("", rest).strip():
         return None
     return {"amount": float(nums[0]), "unit": unit,
             "plus_alpha": bool(_ALPHA.search(value))}
@@ -411,7 +420,10 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
     _walk(detail, "", strings)
     structured = {it[0] for it in _pairs_from_detail(detail)}
     for pointer, text in strings:
-        if pointer in structured:
+        # ★「項目：値」として既に拾った箇所は二重に数えない★
+        #   表や factTable の値は、組の pointer（/factTable/0）の下に
+        #   /factTable/0/1 として現れるので、前方一致でも同じ扱いにする。
+        if any(pointer == p or pointer.startswith(p + "/") for p in structured):
             continue
         # ★★文ごとに判定する★★（Codex 2回目 (a)-5）
         #   段落まるごとで判定していたため、「狙い目は300Gだが、天井は9999Gです」
@@ -419,12 +431,13 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
         for si_, sent in enumerate(re.split(r"(?<=[。\n])", str(text or ""))):
             if not sent.strip():
                 continue
-            # ★事実らしい言い回しそのものに編集判断の語が入っていない箇所を探す★
-            #   文まるごとで判定すると、「狙い目は…だが、天井は9999Gです」の
-            #   後半の事実が消える。
-            hits = [mm.group(0) for mm in _FACT_IN_PROSE.finditer(sent)
-                    if not EDITORIAL_LABELS.search(mm.group(0))]
-            if not hits:
+            # ★単位つきの数字を含む文は、事実を語っているとみなす★
+            if not _NUM_WITH_UNIT.search(sent):
+                continue
+            # ★編集判断の文でも、項目語が入っていれば事実として拾う★
+            #   「狙い目は300G〜」＝編集判断（対象外）
+            #   「狙い目は300Gだが、天井は9999Gです」＝天井の事実を含む（対象）
+            if EDITORIAL_LABELS.search(sent) and not re.search(_FACT_WORD, sent):
                 continue
             unsupported.append({"pointer": f"{pointer}#{si_}",
                                 "reason": "FACT_IN_PROSE_NOT_EXTRACTED",
@@ -710,9 +723,25 @@ def selftest() -> int:
       normalize_value("97.2%未満", "%") is None
       and normalize_value("約97.2%", "%") is None
       and normalize_value("97.2%〜99.9%", "%") is None)
+    t("★★禁止語リストでは防げない書き方も落とす（を下回る／から）★★",
+      normalize_value("97.2%を下回る", "%") is None
+      and normalize_value("97.2%から99.9%", "%") is None
+      and normalize_value("97.2%ではありません", "%") is None)
+    t("　素直な値は通る（97.2% / 1200G+α）",
+      normalize_value("97.2%", "%")["amount"] == 97.2
+      and normalize_value("1200G+α", "G", "MAX")["plus_alpha"] is True)
     t("　天井の「最大1200G」は MAX なので通す",
       normalize_value("最大1200G", "G", "MAX")["amount"] == 1200.0
       and normalize_value("最大97.2%", "%", "EXACT") is None)
+    t("★★項目語と数字が離れていても取りこぼさない★★（Codex 2巡目 (a)-4）",
+      build_inventory("x", {"slug": "x"}, {"sections": [{"body": [
+          "機械割についてはメーカー資料の算出条件、対象遊技状態、技術条件を"
+          "慎重に確認した結果として、設定1は99.9%です。"]}]}
+          )["coverage"]["unsupported_facts"] == 1)
+    t("★★項目語辞書に無い書き方も取りこぼさない（BIGは設定1で1/999）★★",
+      build_inventory("x", {"slug": "x"},
+                      {"sections": [{"body": ["BIGは設定1で1/999です。"]}]}
+                      )["coverage"]["unsupported_facts"] == 1)
     t("★★数字が先の本文事実も取りこぼさない（9999Gで天井に到達）★★",
       build_inventory("x", {"slug": "x"},
                       {"sections": [{"body": ["9999Gで天井に到達します"]}]}
@@ -786,9 +815,11 @@ def main() -> int:
         rel = json.load(open(os.path.join(BASE, "_design", "release_slugs.json"),
                              encoding="utf-8"))
         tot_slots = tot_auto = tot_unc = 0
+        tot_uns = unc_zero = 0
         pub_ok = 0
         from collections import Counter
         fk = Counter()
+        reasons = Counter()
         for slug in rel["publish"]:
             m, d = load_machine(slug)
             if m is None:
@@ -797,17 +828,30 @@ def main() -> int:
             tot_slots += inv["coverage"]["slots_total"]
             tot_auto += inv["coverage"]["allowlisted_type"]
             tot_unc += inv["coverage"]["unclassified_atoms"]
+            tot_uns += inv["coverage"]["unsupported_facts"]
+            unc_zero += 1 if inv["coverage"]["unclassified_atoms"] == 0 else 0
             pub_ok += 1 if inv["coverage"]["publishable"] else 0
             for s in inv["slots"]:
                 fk[s["field_key"]] += 1
+            for u in inv["unclassified_atoms"]:
+                reasons[u.get("reason", "?")] += 1
+            for u in inv["unsupported_facts"]:
+                reasons[u.get("reason", "?")] += 1
         n = len(rel["publish"])
         print("=" * 62)
         print(f"公開予定 {n} 機種の在庫")
         print(f"  検証が要る slot 合計 : {tot_slots}")
         print(f"  うち許可リストに載る型: {tot_auto}  ※型が載っているだけ。"
               f"自動採用には検証済み(VERIFIED)が別途必要")
-        print(f"  未分類（要対応）     : {tot_unc}")
-        print(f"  未分類ゼロの機種     : {pub_ok} / {n}")
+        # ★「未分類ゼロ」と「本文の未対応もゼロ」を分けて出す★（Codex 2巡目 (b)-4）
+        print(f"  型に落ちない（未分類）: {tot_unc}")
+        print(f"  型が未実装の事実      : {tot_uns}")
+        print(f"  未分類ゼロの機種      : {unc_zero} / {n}")
+        print(f"  未分類も未対応もゼロ  : {pub_ok} / {n}  ※これが公開の前提")
+        print("-" * 62)
+        print("■ 止まっている理由の内訳")
+        for k, v in reasons.most_common():
+            print(f"   {k:<32} {v:>5}")
         print("-" * 62)
         print("■ 型ごとの slot 数")
         for k, v in fk.most_common():

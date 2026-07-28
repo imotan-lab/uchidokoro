@@ -56,19 +56,40 @@ def _load_ledger() -> dict:
 CLAIM_GATE = os.path.join(DATA, "claim-gate.json")
 
 
+CLAIM_GATE_SCHEMA = "claim-gate/v1"
+
+
+class GateConfigError(Exception):
+    pass
+
+
 def claim_gate_enabled() -> bool:
     """出典の裏取りゲートを公開判定に含めるか。既定は無効（Phase 1 移行中）。
 
     ★無効のあいだ、claim の仕組みは「検査コマンド」であって「停止ゲート」ではない★
-      （Codex 2回目 (a)-1）。この事実が見えないと、実装しただけで守られている
+      （Codex 1巡目 (a)-1）。この事実が見えないと、実装しただけで守られている
       と誤解する。build は無効時に必ず警告と影響件数を出す。
+
+    ★★設定ファイルが欠けている・壊れている・型が違うのは「無効」ではなくエラー★★
+      （Codex 2巡目 (a)-5）。例外を握りつぶして False にすると、
+      ファイルを1文字壊すだけでゲートを外せてしまう。
     """
     if not os.path.isfile(CLAIM_GATE):
-        return False
+        raise GateConfigError(f"設定ファイルがありません: {CLAIM_GATE}")
     try:
-        return bool(json.load(open(CLAIM_GATE, encoding="utf-8")).get("enabled"))
-    except Exception:
-        return False
+        cfg = json.load(open(CLAIM_GATE, encoding="utf-8"))
+    except Exception as e:
+        raise GateConfigError(f"設定ファイルが壊れています: {CLAIM_GATE}: {e}")
+    if not isinstance(cfg, dict):
+        raise GateConfigError(f"設定ファイルの形式が違います: {CLAIM_GATE}")
+    if cfg.get("schema_version") != CLAIM_GATE_SCHEMA:
+        raise GateConfigError(
+            f"schema_version が {CLAIM_GATE_SCHEMA} でない: "
+            f"{cfg.get('schema_version')!r}")
+    en = cfg.get("enabled")
+    if not isinstance(en, bool):
+        raise GateConfigError(f"enabled は true / false で書く（received={en!r}）")
+    return en
 
 
 def build(claim_gate: bool | None = None) -> tuple[list, dict, list]:
@@ -98,8 +119,10 @@ def build(claim_gate: bool | None = None) -> tuple[list, dict, list]:
         if claim_gate:
             ok_c, why_c = claim_reconcile.publish_gate(m["slug"])
             if not ok_c:
+                # ★理由は全部残す★（Codex 2巡目 (b)-1）
                 blocked.append({"slug": m["slug"],
-                                "reason": f"出典の裏取りが済んでいない: {why_c[0]}"})
+                                "reason": "出典の裏取りが済んでいない",
+                                "details": why_c})
                 continue
         pub_machines.append(view["machine"])
         if view["detail"]:
@@ -121,15 +144,66 @@ def audit(pub_machines: list, pub_details: dict) -> list:
     return problems
 
 
+def selftest() -> int:
+    """★停止ゲートの設定ファイルが fail-closed か★（Codex 2巡目 (a)-5）"""
+    import tempfile
+    results = []
+
+    def t(name, cond):
+        results.append((name, bool(cond)))
+        print(("✅" if cond else "❌") + " " + name)
+
+    def raises(body: str | None):
+        global CLAIM_GATE
+        keep = CLAIM_GATE
+        try:
+            if body is None:
+                CLAIM_GATE = os.path.join(tempfile.gettempdir(), "__no_such__.json")
+            else:
+                fp = os.path.join(tempfile.gettempdir(), "claim-gate-test.json")
+                open(fp, "w", encoding="utf-8").write(body)
+                CLAIM_GATE = fp
+            try:
+                claim_gate_enabled()
+                return False
+            except GateConfigError:
+                return True
+        finally:
+            CLAIM_GATE = keep
+
+    t("★設定ファイルが無ければエラー（無効扱いにしない）", raises(None))
+    t("★★JSONが壊れていればエラー★★",
+      raises('{"schema_version":"claim-gate/v1","enabled": fals}'))
+    t("★★enabled が true/false でなければエラー★★",
+      raises('{"schema_version":"claim-gate/v1","enabled":[]}'))
+    t("★schema_version が違えばエラー",
+      raises('{"schema_version":"x","enabled":false}'))
+    t("正しい設定は読める（現在は無効）", claim_gate_enabled() is False)
+
+    ng = [n for n, ok in results if not ok]
+    print(f"\n{len(results) - len(ng)}/{len(results)} 合格")
+    if ng:
+        print("失敗:", ng)
+    return 1 if ng else 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--apply", action="store_true", help="公開物を書き出す")
     ap.add_argument("--verify", action="store_true", help="既存の公開物を検査するだけ")
     ap.add_argument("--claim-gate", action="store_true",
                     help="出典の裏取りゲートを今回だけ有効にして影響を見る")
-    ap.add_argument("--no-claim-report", action="store_true",
-                    help="裏取りゲート無効時の影響件数を出さない（速い）")
     args = ap.parse_args()
+    if args.selftest:
+        return selftest()
+
+    try:
+        gate_on = args.claim_gate or claim_gate_enabled()
+    except GateConfigError as e:
+        # ★停止ゲートの設定が読めないときは、ビルド自体を止める★
+        print(f"★出典の裏取りゲートの設定が読めません: {e}")
+        return 1
 
     if args.verify:
         if not os.path.isfile(OUT_MACHINES):
@@ -143,12 +217,22 @@ def main() -> int:
                     pd_[fn[:-5]] = json.load(
                         open(os.path.join(OUT_DETAILS, fn), encoding="utf-8"))
         problems = audit(pm, pd_)
+        # ★★既存の公開物にも裏取りゲートを掛け直す★★（Codex 2巡目 (a)-5）
+        #   無効のまま作った公開物が、有効化後に --verify で「合格」に
+        #   見えてしまうのを防ぐ。
+        if gate_on:
+            for x in pm:
+                ok_c, why_c = claim_reconcile.publish_gate(x.get("slug"))
+                if not ok_c:
+                    problems.append(
+                        f"{x.get('slug')}: 出典の裏取りが済んでいない: {why_c[0]}")
         print(f"公開物: {len(pm)} 機種 / 記事 {len(pd_)} 件 / 違反 {len(problems)} 件")
+        print(f"出典の裏取りゲート: {'★有効★' if gate_on else '☆無効☆'}")
         for x in problems[:10]:
             print("  ✗", x)
         return 1 if problems else 0
 
-    cg = args.claim_gate or claim_gate_enabled()
+    cg = gate_on
     pub_machines, pub_details, blocked = build(cg)
     print("=" * 66)
     print(f"公開する機種: {len(pub_machines)} / 止まった機種: {len(blocked)}")
@@ -160,11 +244,16 @@ def main() -> int:
     else:
         print("出典の裏取りゲート: ☆無効☆ "
               "＝ claim の仕組みは検査コマンドであって、まだ公開を止めていません")
-        if not args.no_claim_report:
-            would = [pm["slug"] for pm in pub_machines
-                     if not claim_reconcile.publish_gate(pm["slug"])[0]]
-            print(f"  有効にした場合に止まる機種: {len(would)} / {len(pub_machines)}")
-            print(f"  有効化は {os.path.relpath(CLAIM_GATE, BASE)} の enabled を true に")
+        would = [pm["slug"] for pm in pub_machines
+                 if not claim_reconcile.publish_gate(pm["slug"])[0]]
+        print(f"  有効にした場合に止まる機種: {len(would)} / {len(pub_machines)}")
+        print(f"  有効化は {os.path.relpath(CLAIM_GATE, BASE)} の enabled を true に")
+    # ★止まった理由を件数で終わらせない★（Codex 2巡目 (b)-1）
+    for b in blocked:
+        print(f"  ✗ {b['slug']}: {b['reason']}")
+        for dline in (b.get("details") or [])[:6]:
+            for ln in str(dline).split("\n"):
+                print(f"      {ln}")
     print("-" * 66)
 
     problems = audit(pub_machines, pub_details)

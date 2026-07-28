@@ -55,6 +55,7 @@ COUNTER_BASIS = ("LCD_GAME", "MENU_GAME", "REAL_GAME", "DATA_COUNTER", "POINT",
 VERIFY_STATES = ("UNVERIFIED", "VERIFIED", "CONFLICT", "REVIEW", "REVIEW_MANUAL",
                  "STALE", "NOT_FOUND", "UNVERIFIED_LEGACY")
 CLAIM_KINDS = ("FACT", "JUDGMENT")
+IDENTITY_STATES = ("VERIFIED", "UNVERIFIED", "AMBIGUOUS")
 # ★設定ごとの事実★ ここに載る項目は conditions.setting が必須
 SETTING_REQUIRED_FIELDS = ("kikaiwari.setting", "koyaku.setting", "bonus.setting")
 # 設定ごとに載ることも、機種共通で載ることもある項目（設定があってもよい）
@@ -308,6 +309,26 @@ def validate_ledger(led: dict, path: str = "ledger",
         _req(mr, k, f"{path}.machine_ref")
     if not _SHA_RE.match(str(mr["catalog_record_sha256"])):
         raise LedgerError(f"{path}.machine_ref.catalog_record_sha256: sha256でない")
+    # ★★機種の型番は、その機種の slug から作る★★（Codex 2巡目 (a)-3）
+    #   自由文字列を許すと「別機種の出典を、別機種だと正しく申告したまま」
+    #   対象機種の claim に使えてしまう（申告どうしが一致するだけで通る）。
+    vk = str(mr["machine_variant_key"])
+    if not re.match(r"^[a-z0-9_]+:[A-Za-z0-9_.\-]+$", vk):
+        raise LedgerError(
+            f"{path}.machine_ref.machine_variant_key: 形式が違う（slug:型番）: {vk}")
+    if vk.split(":")[0] != mr["slug"]:
+        raise LedgerError(
+            f"{path}.machine_ref.machine_variant_key: 機種が slug と違う"
+            f"（{vk} / slug={mr['slug']}）")
+    _enum(mr["identity_state"], IDENTITY_STATES, f"{path}.machine_ref",
+          "identity_state")
+    # 検証済み claim が1件でもあるなら、機種の同定も済んでいなければならない
+    if (mr["identity_state"] != "VERIFIED"
+            and any(c.get("verify_state") == "VERIFIED"
+                    for c in (led.get("claims") or []))):
+        raise LedgerError(
+            f"{path}.machine_ref.identity_state: 機種の同定が済んでいないのに"
+            f"検証済みの claim がある（{mr['identity_state']}）")
 
     claims = _req(led, "claims", path)
     if not isinstance(claims, list):

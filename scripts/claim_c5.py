@@ -31,8 +31,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # 「設定N の 機械割 は X%」という組を、文中から**すべて**拾う
 _SETTING = r"(?:設定|設)\s*([1-6])"
-_PCT = r"([0-9]{1,3}(?:\.[0-9]+)?)\s*[%％]"
+_PCT_RAW = r"[0-9]{1,3}(?:\.[0-9]+)?\s*[%％]"
+_PCT = r"(" + _PCT_RAW + r")"
 _KIKAIWARI_WORD = r"(?:機械割|出玉率)"
+_NUM_RE = re.compile(r"[0-9]{1,3}(?:\.[0-9]+)?")
 
 # 設定と値をつなぐ言い回し。★任意の文字は挟ませない★
 #   （挟ませると「設定1…（別の話）…106.5%」を組と誤読する）
@@ -43,16 +45,26 @@ _WORD = r"(?:機械割|出玉率)"
 _CONNECT_LABELED = r"(?:\s*の?\s*" + _WORD + r"\s*[:：はが＝=→]?\s*)"
 _CONNECT_BARE = r"(?:\s*[:：＝=]\s*)"
 
-# 文章形式：組ごとに「機械割」語が入っているものだけ
-_PAIR_LABELED = re.compile(_SETTING + _CONNECT_LABELED + _PCT)
-# 列挙形式：「機械割は 設定1:97.2% / 設定6:106.5%」のように
-#   表頭で1回だけ宣言し、あとは 設定:値 が並ぶ書き方（区切り記号は必須）
-_PAIR_BARE = re.compile(_SETTING + _CONNECT_BARE + _PCT)
-# 値のあとに括弧で設定を書く形（「106.5%（設定6）」）
-_PAIR_PAREN = re.compile(_PCT + r"\s*[（(]\s*" + _SETTING + r"\s*[）)]")
+# ★★組の書き方は「許可した形」だけ★★（Codex 2巡目 (a)-1）
+#   括弧形（「97.2%（設定1）」）にも項目語を必須にする。項目語なしを許すと
+#   「設定6の機械割は106.5%。勝率97.2%（設定1）」から勝率を拾ってしまう。
+_PAIR_ANY = re.compile(
+    # ① 設定1の機械割は97.2%
+    r"(?P<s1>(?:設定|設)\s*[1-6])" + _CONNECT_LABELED + r"(?P<p1>" + _PCT_RAW + r")"
+    # ② 機械割は97.2%（設定1）
+    r"|" + _WORD + r"\s*[はが:：＝=]?\s*(?P<p2>" + _PCT_RAW + r")"
+    r"\s*[（(]\s*(?P<s2>(?:設定|設)\s*[1-6])\s*[）)]"
+    # ③ 設定1:97.2%（列挙形式。項目語は文中で1回宣言されている前提）
+    r"|(?P<s3>(?:設定|設)\s*[1-6])" + _CONNECT_BARE + r"(?P<p3>" + _PCT_RAW + r")")
 
-# 列挙形式で「組と宣言語と区切り」以外に残ってよい文字
-_ENUM_RESIDUE = re.compile(r"[\s/／、，,・|｜。:：はが＝=]+")
+# ★★組を取り除いた残りに、意味を変える語が残っていないこと★★（Codex 2巡目 (a)-2）
+#   「禁止語を並べる」方式は、から／ではありません／下回る／推定／概算 のように
+#   いくらでも回避できる。**残ってよい語を決め打ちし、それ以外が残ったら拒否**する。
+_RESIDUE_OK = re.compile(
+    r"(?:機械割|出玉率|"                         # 項目語
+    r"です|ます|でした|である|となります|になります|"   # 言い切りの語尾
+    r"[はがのとやも、。：:／/・|｜，,＝=\s\*＊【】\[\]（）()]"
+    r")+")
 
 # 値を1つに確定できない書き方（範囲・比較・条件つき・否定）
 _AMBIGUOUS = re.compile(
@@ -90,35 +102,31 @@ def derive_kikaiwari(quote: str) -> dict:
     if _AMBIGUOUS.search(q):
         return {}                      # 値を1つに確定できない書き方
 
-    def _collect(pairs):
-        found: dict = {}
-        for setting, pct in pairs:
-            try:
-                val = Decimal(pct)
-            except InvalidOperation:
-                return None
-            if setting in found and found[setting] != val:
-                return None            # 同じ設定に別の値＝曖昧
-            found[setting] = val
-        return found
-
-    # ① 文章形式：組ごとに「機械割」語が入っているもの
-    labeled = [(m.group(1), m.group(2)) for m in _PAIR_LABELED.finditer(q)]
-    paren = [(m.group(2), m.group(1)) for m in _PAIR_PAREN.finditer(q)]
-    if labeled or paren:
-        return _collect(labeled + paren) or {}
-
-    # ② 列挙形式：「機械割は 設1:97.2% / 設6:106.5%」
-    #    ★組・宣言語・区切り以外の文字が残るなら、別の話が混ざっている★
-    bare = [(m.group(1), m.group(2)) for m in _PAIR_BARE.finditer(q)]
-    if not bare:
+    found: dict = {}
+    for m in _PAIR_ANY.finditer(q):
+        st = m.group("s1") or m.group("s2") or m.group("s3")
+        pc = m.group("p1") or m.group("p2") or m.group("p3")
+        sm, pm_ = _NUM_RE.search(st), _NUM_RE.search(pc)
+        if not sm or not pm_:
+            return {}
+        setting = sm.group(0)
+        try:
+            val = Decimal(pm_.group(0))
+        except InvalidOperation:
+            return {}
+        if setting in found and found[setting] != val:
+            return {}                  # 同じ設定に別の値＝曖昧
+        found[setting] = val
+    if not found:
         return {}
-    rest = _PAIR_BARE.sub("", q)
-    rest = re.sub(_WORD, "", rest)
-    rest = re.sub(r"^\s*[*＊]*\s*", "", rest)
-    if _ENUM_RESIDUE.sub("", rest):
-        return {}                      # 「勝率」など別項目の語が残っている
-    return _collect(bare) or {}
+
+    # ★★残った文字に、意味を変える語が無いことを確かめる★★
+    #   「97.2%から99.9%」「97.2%ではありません」「推定では…97.2%」は
+    #   組の外に語が残るので、ここで全部落ちる（禁止語を数え上げなくてよい）。
+    rest = _PAIR_ANY.sub("", q)
+    if _RESIDUE_OK.sub("", rest).strip():
+        return {}
+    return found
 
 
 def check_c5_kikaiwari(claim: dict, quote: str) -> dict:
@@ -389,19 +397,32 @@ def selftest() -> int:
     t("★★別項目の％を機械割として導出しない（勝率97.2%／機械割106.5%）★★",
       check_c5_kikaiwari(_claim("1", "97.2%", 97.2),
                          "設定1の勝率は97.2%。設定6の機械割は106.5%"
-                         )["code"] == "SETTING_NOT_IN_QUOTE")
-    t("　同じ引用でも、機械割と明記された設定6は導ける",
+                         )["code"] == "NOT_DERIVABLE_FROM_QUOTE")
+    t("　★別項目が混ざる引用は、正しい設定6の値ごと拒否する（安全側）",
       check_c5_kikaiwari(_claim("6", "106.5%", 106.5),
                          "設定1の勝率は97.2%。設定6の機械割は106.5%"
-                         )["verdict"] == "PASS")
+                         )["code"] == "NOT_DERIVABLE_FROM_QUOTE")
     t("★列挙形式でも、組以外の語が混ざれば導出しない",
       check_c5_kikaiwari(_claim("1", "97.2%", 97.2),
                          "機械割 設定1:97.2% 勝率 設定2:98.2%"
                          )["code"] == "NOT_DERIVABLE_FROM_QUOTE")
     # ★★Codex 2回目 (a)-4：範囲・比較・否定をEXACTとして通さない★★
+    t("★★括弧形でも項目語を必須にする（勝率97.2%（設定1）を拾わない）★★",
+      check_c5_kikaiwari(_claim("1", "97.2%", 97.2),
+                         "設定6の機械割は106.5%。勝率97.2%（設定1）"
+                         )["code"] == "NOT_DERIVABLE_FROM_QUOTE")
+    t("　項目語つきの括弧形は導ける（機械割は106.5%（設定6））",
+      check_c5_kikaiwari(_claim("6", "106.5%", 106.5),
+                         "機械割は106.5%（設定6）")["verdict"] == "PASS")
     for bad_q in ("設定1の機械割は97.2%-99.9%", "設定1の機械割は97.2%～99.9%",
                   "設定1の機械割は97.2%未満", "設定1の機械割は97.2%以上",
-                  "設定1の機械割は97.2%ではなく99.9%", "設定1の機械割は約97.2%"):
+                  "設定1の機械割は97.2%ではなく99.9%", "設定1の機械割は約97.2%",
+                  # ★Codex 2巡目 (a)-2：禁止語リストでは防げなかった書き方
+                  "設定1の機械割は97.2%から99.9%",
+                  "設定1の機械割は97.2%ではありません",
+                  "設定1の機械割は97.2%を下回る",
+                  "推定では設定1の機械割は97.2%",
+                  "概算で設定1の機械割は97.2%"):
         t(f"★★比較・範囲・否定を EXACT にしない：{bad_q}★★",
           check_c5_kikaiwari(_claim("1", "97.2%", 97.2), bad_q)["code"]
           == "NOT_DERIVABLE_FROM_QUOTE")

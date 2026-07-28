@@ -61,9 +61,14 @@ def reconcile(slug: str, machine: dict, detail: dict,
         problems.append("在庫の機種が違う")
 
     # --- ② 未分類が残っていたら公開できない
-    n_unc = len(inventory.get("unclassified_atoms") or [])
-    if n_unc:
-        problems.append(f"型に落ちていない事実が {n_unc} 件ある（全部片付くまで公開しない）")
+    unc = inventory.get("unclassified_atoms") or []
+    if unc:
+        problems.append(f"型に落ちていない事実が {len(unc)} 件ある（全部片付くまで公開しない）")
+        # ★件数だけでは直せない。場所と理由を出す★（Codex 2巡目 (b)-3）
+        for u in unc:
+            problems.append(
+                f"    {u.get('pointer')} [{u.get('reason')}] "
+                f"{u.get('label')} = {(u.get('value_excerpt') or '')[:40]}")
     # ★型が未実装の事実（設定示唆の表など）も、残っていれば公開しない★
     #   素通りさせると「未分類ゼロ」が網羅の証明にならない（Codex 指摘）
     uns = inventory.get("unsupported_facts") or []
@@ -182,6 +187,13 @@ def reconcile(slug: str, machine: dict, detail: dict,
         problems.append(f"台帳の機種が違う: {mref.get('slug')} != {slug}")
     if cl.canonical_sha256(machine) != mref.get("catalog_record_sha256"):
         problems.append("台帳が参照している機種データが今のものと違う")
+    # ★★機種の型番が対象機種のものであること★★（Codex 2巡目 (a)-3）
+    vk = str(mref.get("machine_variant_key") or "")
+    if vk.split(":")[0] != slug:
+        problems.append(f"台帳の機種型番が対象機種のものでない: {vk}")
+    if mref.get("identity_state") != "VERIFIED":
+        problems.append(
+            f"機種の同定が済んでいない: identity_state={mref.get('identity_state')}")
 
     return problems
 
@@ -261,10 +273,14 @@ def _publishable(slug: str, machine: dict, detail: dict,
                 f" 票={art.get('counted_votes', 0)}")
         detail_lines = []
         for row in art.get("sources") or []:
+            # ★どの検査で落ちたかまで出す★（Codex 2巡目 (b)-2）
+            db = row.get("declared_bad") or []
             detail_lines.append(
                 f"    出典{row['index']}: {row.get('disposition')}"
                 f" / C5={(row.get('c5') or {}).get('code')}"
+                f"{' / 台帳側NG=' + ','.join(db) if db else ''}"
                 f" / 発行者={row.get('publisher_id')}"
+                f" / 型番一致={row.get('variant_matched')}"
                 f" / {row.get('final_url')}")
         bad_semantic.append("\n".join([head] + detail_lines))
     if bad_semantic:
@@ -431,6 +447,18 @@ def selftest() -> int:
                         "slug": "y", "machine_variant_key": "y",
                         "catalog_record_sha256": cl.canonical_sha256(m),
                         "identity_state": "VERIFIED"}})))
+
+    # ★★Codex 2巡目 (a)-3：別機種の出典を、別機種と正しく申告したまま使えない★★
+    other = ledger([claim()])
+    other["machine_ref"] = {**other["machine_ref"],
+                            "machine_variant_key": "other_machine:2020"}
+    t("★★台帳の機種型番が別機種なら止まる★★",
+      any("型番が対象機種のものでない" in w for w in
+          reconcile("x", m, d, inv, other)))
+    unv = ledger([claim()])
+    unv["machine_ref"] = {**unv["machine_ref"], "identity_state": "UNVERIFIED"}
+    t("★★機種の同定が済んでいなければ止まる★★",
+      any("同定が済んでいない" in w for w in reconcile("x", m, d, inv, unv)))
 
     t("★台帳が参照する機種データが今のものと違えば止まる",
       any("機種データが今のものと違う" in w for w in
