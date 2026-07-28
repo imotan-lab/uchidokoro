@@ -144,6 +144,7 @@ def reconcile(slug: str, machine: dict, detail: dict,
         if cur is None:
             problems.append(
                 f"{slot['field_key']}: 記事の値を1つに特定できない"
+                f"［{slot.get('value_issue')}］"
                 f"（{str(slot.get('current_text'))[:40]}）")
         else:
             amt = v.get("amount")
@@ -262,10 +263,20 @@ def _publishable(slug: str, machine: dict, detail: dict,
     # ★型番は台帳の申告ではなく、機種データから計算したものを使う★
     variant = ci.variant_key(slug, machine)
     registry = cl.load_registry()
+    # ★出典の機種同定は、機種カタログ全体を見て判定する★
+    #   （続編・シリーズ違い・パチンコ版を弾くために他機種の名前が要る）
+    try:
+        import claim_identity as cid
+        catalog = cid.load_machines()
+        if not any(x.get("slug") == slug for x in catalog):
+            catalog = catalog + [machine]     # 検査用の機種でも同定できるように
+        identity = cid.identity_spec(machine, catalog)
+    except Exception as e:                       # カタログが読めなければ止める
+        return False, [f"機種カタログを読めないため同定できない: {e}"]
     bad_semantic = []
     for s_ in inv_slots:
         c = by_slot.get(s_["slot_id"])
-        art = claim_c5.semantic_artifact(c, variant, registry)
+        art = claim_c5.semantic_artifact(c, variant, registry, identity)
         if art.get("verified"):
             continue
         # ★★どの枠が、どの出典で、なぜ落ちたかを1件ずつ残す★★（Codex (b)-1）
@@ -284,6 +295,7 @@ def _publishable(slug: str, machine: dict, detail: dict,
                 f"    出典{row['index']}: {row.get('disposition')}"
                 f" / C5={(row.get('c5') or {}).get('code')}"
                 f"{' / 台帳側NG=' + ','.join(db) if db else ''}"
+                f" / 機種同定={row.get('identity')}"
                 f" / 発行者={row.get('publisher_id')}"
                 f" / 型番一致={row.get('variant_matched')}"
                 f" / {row.get('final_url')}")
@@ -312,7 +324,7 @@ def selftest() -> int:
         print(("✅" if cond else "❌") + " " + name)
 
     # ★実データと同じ作り方で在庫を作る（在庫は必ずその場で作り直される）★
-    m = {"slug": "x", "name": "テスト機"}
+    m = {"slug": "x", "name": "スマスロテスト機", "info": "スマスロAT"}
     d = {"factTable": [["AT間天井", "1200G+α"]]}
     inv = ci.build_inventory("x", m, d)
     slot = inv["slots"][0]

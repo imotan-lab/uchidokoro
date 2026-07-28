@@ -254,16 +254,28 @@ _UNIT_TOKENS = [
 
 
 def detect_units(value: str):
-    """表示文に実際に書かれている単位を取り出す（残りの文字列も返す）。"""
-    rest, found = str(value or ""), []
+    """表示文に書かれている単位を **出現回数つき** で取り出す。
+
+    ★回数を数えないと「97.2%％」「1200GG」が正常扱いになる★
+      （Codex 4巡目 (a)-4）。集合にしてしまうと重複が消えるため、
+      期待単位がちょうど1回であることを確かめられなくなる。
+    """
+    from collections import Counter
+    rest, found = str(value or ""), Counter()
     for rx, u in _UNIT_TOKENS:
-        if rx.search(rest):
-            found.append(u)
+        hits = rx.findall(rest)
+        if hits:
+            found[u] += len(hits)
             rest = rx.sub("", rest)
-    return set(found), rest
+    return found, rest
 
 
 def normalize_value(value: str, unit: str, operator: str = "EXACT"):
+    """後方互換：値だけを返す（理由が要るときは normalize_value_ex）。"""
+    return normalize_value_ex(value, unit, operator)[0]
+
+
+def normalize_value_ex(value: str, unit: str, operator: str = "EXACT"):
     """記事の値を「数 と 単位 と +α」に正規化する。決まらなければ None。
 
     ★これが無いと、記事を1300Gに変えても1200Gの古い claim で通る★
@@ -271,28 +283,31 @@ def normalize_value(value: str, unit: str, operator: str = "EXACT"):
       突き合わせないと「記事と台帳がずれたまま公開」できてしまう。
     """
     if not isinstance(value, str):
-        return None
+        return None, "NOT_A_STRING"
     # ★確率（1/x）は形そのものを見る★
     if unit == "1/x":
         m = re.fullmatch(r"\s*1\s*/\s*([0-9]+(?:\.[0-9]+)?)\s*", value)
-        return ({"amount": float(m.group(1)), "unit": unit, "plus_alpha": False}
-                if m else None)
+        if not m:
+            return None, "NOT_PROBABILITY_FORM"
+        return {"amount": float(m.group(1)), "unit": unit, "plus_alpha": False}, "OK"
     nums = re.findall(r"\d+(?:\.\d+)?", value)
     if len(nums) != 1:
-        return None
-    # ★★表示されている単位が、枠の期待単位と同じであること★★
+        return None, f"NUMBER_COUNT_{len(nums)}"
+    # ★★表示されている単位が、枠の期待単位とちょうど同じであること★★
     units, rest = detect_units(value)
+    seen = "+".join(f"{u}x{n}" for u, n in sorted(units.items())) or "なし"
     if unit:
-        if units != {unit}:
-            return None                 # 「97.2円」を % の枠に入れない
+        if units.get(unit) != 1 or len(units) != 1:
+            # 「97.2円」を % の枠に入れない／「97.2%％」も通さない
+            return None, f"UNIT_MISMATCH: 期待={unit} 表示={seen}"
     elif units:
-        return None                     # 単位なしの枠に単位つきの値
+        return None, f"UNIT_UNEXPECTED: 期待=なし 表示={seen}"
     # ★+α は天井（MAX）でだけ許す★（Codex 3巡目 (a)-3）
     #   機械割に「97.2%+α」を認めると、引用が「ちょうど97.2%」でも
     #   +α つきの記述を裏付けた扱いになってしまう。
     plus = bool(_ALPHA.search(value))
     if plus and operator != "MAX":
-        return None
+        return None, "PLUS_ALPHA_NOT_ALLOWED"
     if plus:
         rest = _ALPHA.sub("", rest)
     # ★残りは数と記号だけ★
@@ -300,9 +315,10 @@ def normalize_value(value: str, unit: str, operator: str = "EXACT"):
     rest = re.sub(r"[0-9]+(?:\.[0-9]+)?", "", rest)
     if operator == "MAX":
         rest = _MAX_WORDS_OK.sub("", rest)
-    if _VALUE_RESIDUE_OK.sub("", rest).strip():
-        return None
-    return {"amount": float(nums[0]), "unit": unit, "plus_alpha": plus}
+    leftover = _VALUE_RESIDUE_OK.sub("", rest).strip()
+    if leftover:
+        return None, f"UNALLOWED_RESIDUE: {leftover[:20]}"
+    return {"amount": float(nums[0]), "unit": unit, "plus_alpha": plus}, "OK"
 
 
 # ★枠が期待する演算子★（Codex 3回目 手順2）
@@ -380,15 +396,26 @@ def split_by_setting(value: str):
     return {s: val.strip() for s, val in pairs}
 
 
+def identity_tuple(machine: dict) -> dict:
+    """★機種を特定するための「変わらない情報」だけを取り出す★
+
+    型番を機種データ全体の指紋にすると、記事の書き換えのような
+    同定と関係ない変更でも型番が変わってしまう（Codex 4巡目 (a)-3）。
+    同定に使う項目だけを固定する。
+    """
+    return {"slug": machine.get("slug"),
+            "name": machine.get("name"),
+            "info": machine.get("info"),
+            "release_date": machine.get("release_date")}
+
+
 def variant_key(slug: str, machine: dict) -> str:
-    """★機種の型番を、機種データそのものから計算する★（Codex 3巡目 (a)-5）
+    """★機種の型番を、同定情報から計算する★（Codex 3巡目 (a)-5 / 4巡目 (a)-3）
 
     台帳が自由に書ける文字列だと、出典側と台帳側に同じ嘘を書くだけで
     「型番一致」になってしまう（slug:FAKE ↔ slug:FAKE）。
-    機種データの指紋から作れば、台帳が勝手に名乗れない。
-    機種データが変われば型番も変わる＝調べ直しが必要になる、という性質も持つ。
     """
-    return f"{slug}:{_sha(machine)[:12]}"
+    return f"{slug}:{_sha(identity_tuple(machine))[:12]}"
 
 
 def slot_id(slug: str, spec: dict, pointer: str) -> str:
@@ -497,6 +524,21 @@ def _pairs_from_detail(detail: dict) -> list:
     return pairs
 
 
+def _scan_excluded_value(unsupported: list, pointer: str, label: str,
+                         value: str, reason: str) -> None:
+    """★裏取り対象から外す欄でも、値に混ざった事実は必ず記録する★
+
+    ラベルだけで「これは事実ではない」と決めると、値の中に書かれた
+    天井や機械割が、検証も記録もされないまま公開される（Codex 3巡目・4巡目）。
+    """
+    v = value or ""
+    if _NUM_WITH_UNIT.search(v) and re.search(_FACT_WORD, v):
+        unsupported.append({"pointer": f"{pointer}#excluded_value",
+                            "reason": reason, "label": label,
+                            "excerpt": v[:70],
+                            "content_sha256": _sha(f"{label}|{v}")})
+
+
 def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
     """1機種ぶんの在庫を作る。"""
     slots, unclassified = [], []
@@ -568,16 +610,15 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
             # ★★編集判断の欄に混ぜた事実を見逃さない★★（Codex 3巡目 (a)-4）
             #   「狙い目: 300G。天井は9999Gです」のように、ラベルが編集判断でも
             #   値の中に事実が入っていることがある。
-            if _NUM_WITH_UNIT.search(value or "") and re.search(_FACT_WORD, value or ""):
-                unsupported.append({"pointer": f"{pointer}#editorial_value",
-                                    "reason": "FACT_IN_EDITORIAL_VALUE",
-                                    "label": label,
-                                    "excerpt": (value or "")[:70],
-                                    "content_sha256": _sha(f"{label}|{value}")})
+            _scan_excluded_value(unsupported, pointer, label, value,
+                                 "FACT_IN_EDITORIAL_VALUE")
             continue
         if NONCLAIM_LABELS.match(label.strip()):
             excluded_nonclaim.append({"pointer": pointer, "label": label,
                                       "reason": "NOT_A_NUMERIC_CLAIM"})
+            # ★★案内文の欄に混ぜた事実も見逃さない★★（Codex 4巡目 (a)-2）
+            _scan_excluded_value(unsupported, pointer, label, value,
+                                 "FACT_IN_NONCLAIM_VALUE")
             continue
         if HINT_ROW_LABELS.match(label.strip()):
             # ★設定示唆はA区分の事実★ 型が未実装なので「未対応の事実」として残す。
@@ -642,6 +683,7 @@ def _emit_slot(slots, seen_slots, slug, spec, pointer, label, value,
         if setting:
             group = f"{slug}:{spec['field_key']}:{table_label or 'by_setting'}"
         _op = expected_operator(spec["field_key"], spec["value_kind"])
+        _cv, _cvwhy = normalize_value_ex(value, spec["unit"], _op)
         sid = slot_id(slug, spec, pointer)
         if sid in seen_slots:
             return
@@ -664,7 +706,9 @@ def _emit_slot(slots, seen_slots, slug, spec, pointer, label, value,
             # ★記事の表示文そのものの指紋★（記事が書き換わったら気づく）
             "source_text_sha256": _sha(f"{label}|{value}"),
             # ★記事に載っている値そのもの（台帳と突き合わせる）★
-            "current_value": normalize_value(value, spec["unit"], _op),
+            "current_value": _cv,
+            # ★値にできなかった理由を残す★（Codex 4巡目 (b)-1）
+            "value_issue": None if _cv else _cvwhy,
             # ★許可リスト照合には枠が期待する演算子を渡す★（Codex (b)-3）
             #   常に MAX を渡していたため、EXACT の機械割が型外に見えていた。
             "allowlisted_type": cl.allowlisted_type_candidate(
@@ -890,6 +934,22 @@ def selftest() -> int:
       build_inventory("x", {"slug": "x"},
                       {"factTable": [["機械割(設定1)", "97.2%です"]]}
                       )["coverage"]["publishable"] is False)
+    # -------- Codex 4巡目の反例
+    t("★★同じ単位を2回書いた値を通さない（97.2%％ / 1200GG）★★",
+      normalize_value("97.2%％", "%") is None
+      and normalize_value("1200GG", "G", "MAX") is None)
+    t("★★案内文の欄に混ぜた事実も見逃さない（機種名の欄）★★",
+      build_inventory("x", {"slug": "x"}, {"factTable": [
+          ["機種名", "テスト機。設定1の機械割は99.9%"],
+          ["機械割(設定1)", "97.2%"]]}
+          )["coverage"]["unsupported_facts"] == 1)
+    t("★値にできない理由が残る（単位違いが分かる）",
+      "UNIT_MISMATCH" in (normalize_value_ex("97.2円", "%")[1] or ""))
+    t("★機種の型番は同定情報だけから計算する（記事の書き換えで変わらない）",
+      variant_key("x", {"slug": "x", "name": "A", "seo": {"title": "old"}})
+      == variant_key("x", {"slug": "x", "name": "A", "seo": {"title": "new"}})
+      and variant_key("x", {"slug": "x", "name": "A"})
+      != variant_key("x", {"slug": "x", "name": "B"}))
     t("★機械割の枠が許可リストの型として数えられる（演算子EXACTで照合）",
       build_inventory("x", {"slug": "x"},
                       {"factTable": [["機械割(設定6)", "106.5%"]]}
@@ -953,7 +1013,7 @@ def main() -> int:
         rel = json.load(open(os.path.join(BASE, "_design", "release_slugs.json"),
                              encoding="utf-8"))
         tot_slots = tot_auto = tot_unc = 0
-        tot_uns = unc_zero = 0
+        tot_uns = unc_zero = tot_unnorm = 0
         pub_ok = 0
         from collections import Counter
         fk = Counter()
@@ -967,6 +1027,10 @@ def main() -> int:
             tot_auto += inv["coverage"]["allowlisted_type"]
             tot_unc += inv["coverage"]["unclassified_atoms"]
             tot_uns += inv["coverage"]["unsupported_facts"]
+            tot_unnorm += inv["coverage"]["unnormalized_slots"]
+            for s in inv["slots"]:
+                if s["current_value"] is None:
+                    reasons["VALUE_" + str(s.get("value_issue")).split(":")[0]] += 1
             unc_zero += 1 if inv["coverage"]["unclassified_atoms"] == 0 else 0
             pub_ok += 1 if inv["coverage"]["publishable"] else 0
             for s in inv["slots"]:
@@ -984,6 +1048,7 @@ def main() -> int:
         # ★「未分類ゼロ」と「本文の未対応もゼロ」を分けて出す★（Codex 2巡目 (b)-4）
         print(f"  型に落ちない（未分類）: {tot_unc}")
         print(f"  型が未実装の事実      : {tot_uns}")
+        print(f"  値を特定できない枠    : {tot_unnorm}")
         print(f"  未分類ゼロの機種      : {unc_zero} / {n}")
         print(f"  未分類も未対応もゼロ  : {pub_ok} / {n}  ※これが公開の前提")
         print("-" * 62)

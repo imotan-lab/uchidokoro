@@ -59,9 +59,23 @@ _PAIR_ANY = re.compile(
     r"(?P<s1>(?:設定|設)\s*[1-6])" + _CONNECT_LABELED + r"(?P<p1>" + _PCT_RAW + r")"
     # ② 機械割は97.2%（設定1）
     r"|" + _WORD + r"\s*[はが:：＝=]?\s*(?P<p2>" + _PCT_RAW + r")"
-    r"\s*[（(]\s*(?P<s2>(?:設定|設)\s*[1-6])\s*[）)]"
-    # ③ 設定1:97.2%（列挙形式。項目語は文中で1回宣言されている前提）
-    r"|(?P<s3>(?:設定|設)\s*[1-6])" + _CONNECT_BARE + r"(?P<p3>" + _PCT_RAW + r")")
+    r"\s*[（(]\s*(?P<s2>(?:設定|設)\s*[1-6])\s*[）)]")
+
+# ③ 列挙形式：「機械割：設定1 97.2% ／ 設定6 106.5%」
+#   ★★引用**全体**がこの形であるときだけ使う★★（Codex 4巡目 (a)-1）
+#     引用のどこかに「機械割」があればよい、という作りだと
+#     「メーカー公表値は設定1 97.2%。機械割は設定6 106.5%」から
+#     設定1の公表値を機械割として拾ってしまう。
+_PAIR_BARE = re.compile(
+    r"(?P<s3>(?:設定|設)\s*[1-6])" + _CONNECT_BARE + r"(?P<p3>" + _PCT_RAW + r")")
+_ENUM_SEP = r"(?:[\s、，,・/／|｜]+)"
+_ENUM_FULL = re.compile(
+    r"\s*[*＊【\[]*\s*" + _WORD
+    + r"(?:\s*[（(]\s*" + _WORD + r"\s*[）)])?"
+    + r"\s*[*＊】\]]*\s*[:：＝=はが]?\s*"
+    + r"(?:" + _PAIR_BARE.pattern.replace("s3", "x3").replace("p3", "y3") + r")"
+    + r"(?:" + _ENUM_SEP + _PAIR_BARE.pattern.replace("s3", "x4").replace("p3", "y4")
+    + r")*\s*[。]?\s*")
 
 # ★★組を取り除いた残りに、意味を変える語が残っていないこと★★（Codex 2巡目 (a)-2）
 #   「禁止語を並べる」方式は、から／ではありません／下回る／推定／概算 のように
@@ -114,30 +128,46 @@ def derive_kikaiwari_ex(quote: str):
     if _AMBIGUOUS.search(q):
         return {}, "AMBIGUOUS_EXPRESSION"  # 値を1つに確定できない書き方
 
-    found: dict = {}
-    for m in _PAIR_ANY.finditer(q):
-        st = m.group("s1") or m.group("s2") or m.group("s3")
-        pc = m.group("p1") or m.group("p2") or m.group("p3")
-        sm, pm_ = _NUM_RE.search(st), _NUM_RE.search(pc)
-        if not sm or not pm_:
-            return {}, "NO_ALLOWED_PAIR"
-        setting = sm.group(0)
-        try:
-            val = Decimal(pm_.group(0))
-        except InvalidOperation:
-            return {}, "NO_ALLOWED_PAIR"
-        if setting in found and found[setting] != val:
-            return {}, "DUPLICATE_SETTING_CONFLICT"   # 同じ設定に別の値
-        found[setting] = val
-    if not found:
-        return {}, "NO_ALLOWED_PAIR"
+    def _collect(matches, skeys, pkeys):
+        found: dict = {}
+        for m in matches:
+            st = next((m.group(k) for k in skeys if m.group(k)), None)
+            pc = next((m.group(k) for k in pkeys if m.group(k)), None)
+            if not st or not pc:
+                return None, "NO_ALLOWED_PAIR"
+            sm, pm_ = _NUM_RE.search(st), _NUM_RE.search(pc)
+            if not sm or not pm_:
+                return None, "NO_ALLOWED_PAIR"
+            try:
+                val = Decimal(pm_.group(0))
+            except InvalidOperation:
+                return None, "NO_ALLOWED_PAIR"
+            setting = sm.group(0)
+            if setting in found and found[setting] != val:
+                return None, "DUPLICATE_SETTING_CONFLICT"
+            found[setting] = val
+        return found, "OK"
 
-    # ★★残った文字に、意味を変える語が無いことを確かめる★★
-    #   「97.2%から99.9%」「97.2%ではありません」「推定では…97.2%」は
-    #   組の外に語が残るので、ここで全部落ちる（禁止語を数え上げなくてよい）。
-    rest = _RESIDUE_OK.sub("", _PAIR_ANY.sub("", q)).strip()
-    if rest:
-        return {}, f"UNALLOWED_RESIDUE:{rest[:20]}"
+    # ① 文章形式（組ごとに項目語が入っている書き方）
+    ms = list(_PAIR_ANY.finditer(q))
+    if ms:
+        found, why = _collect(ms, ("s1", "s2"), ("p1", "p2"))
+        if not found:
+            return {}, why
+        # ★★残った文字に、意味を変える語が無いことを確かめる★★
+        #   「97.2%から99.9%」「97.2%ではありません」「推定では…97.2%」は
+        #   組の外に語が残るので、ここで全部落ちる（禁止語を数え上げなくてよい）。
+        rest = _RESIDUE_OK.sub("", _PAIR_ANY.sub("", q)).strip()
+        if rest:
+            return {}, f"UNALLOWED_RESIDUE:{rest[:20]}"
+        return found, "OK"
+
+    # ② 列挙形式（★引用**全体**が「項目語＋組の並び」であるときだけ★）
+    if not _ENUM_FULL.fullmatch(q):
+        return {}, "NO_ALLOWED_PAIR"
+    found, why = _collect(list(_PAIR_BARE.finditer(q)), ("s3",), ("p3",))
+    if not found:
+        return {}, why
     return found, "OK"
 
 
@@ -186,8 +216,39 @@ _SEMANTIC_CHECKERS = {
 }
 
 
+def identity_verdict(src: dict, identity: dict | None):
+    """★出典が本当にその機種のページか、証拠から計算し直す★（Codex 4巡目 (a)-3）
+
+    以前は `machine_variant_key_matched` という**台帳が書いた文字列**を
+    比べていただけなので、別バージョンの記事でも同じ値を書けば通った。
+    出典が持ってきた「ページ見出し」と「本文の抜粋」から判定する。
+    証拠が無ければ数えない（既定拒否）。
+    """
+    import claim_identity as cid
+
+    if not identity:
+        return False, "NO_IDENTITY_SPEC"
+    ev = ((src.get("verification") or {}).get("identity_evidence") or {})
+    title, body = ev.get("page_title"), ev.get("body_excerpt")
+    if not title or not body:
+        return False, "NO_IDENTITY_EVIDENCE"
+    cores = identity.get("machine_cores") or []
+    ok, why = cid.check_title(title, cores, identity.get("reject_cores") or [],
+                              identity.get("reject_name_cores") or [])
+    if not ok:
+        return False, f"TITLE_NG:{why[:40]}"
+    ok, why = cid.check_tags(title, identity.get("machine_tags") or [], cores)
+    if not ok:
+        return False, f"TAG_NG:{why[:40]}"
+    ok, why = cid.check_body(body, cores)
+    if not ok:
+        return False, f"BODY_NG:{why[:40]}"
+    return True, "OK"
+
+
 def semantic_artifact(claim: dict, machine_variant_key: str,
-                      registry: dict | None = None) -> dict:
+                      registry: dict | None = None,
+                      identity: dict | None = None) -> dict:
     """claim を出典の引用から検証し直した「検証結果の控え」を作る。
 
     ★台帳が書いている C5 の結果は読まない★（Codex 3回目 重大4）
@@ -232,11 +293,13 @@ def semantic_artifact(claim: dict, machine_variant_key: str,
         pub = resolve_publisher(src.get("final_url"), registry)
         # 3) 機種の型番までの一致（★同名の別バージョンを混ぜない★）
         variant_ok = ver.get("machine_variant_key_matched") == machine_variant_key
-        # 4) 引用から値を導き直す
+        # 4) 出典が本当にその機種のページか、証拠から判定し直す
+        id_ok, id_why = identity_verdict(src, identity)
+        # 5) 引用から値を導き直す
         c5 = checker(claim, src.get("quote"))
         row.update({"c5": c5, "declared_bad": declared_bad,
                     "publisher_id": (pub or {}).get("publisher_id"),
-                    "variant_matched": variant_ok})
+                    "variant_matched": variant_ok, "identity": id_why})
 
         if c5["verdict"] != "PASS":
             row["disposition"] = "NOT_COUNTED_C5"
@@ -246,6 +309,8 @@ def semantic_artifact(claim: dict, machine_variant_key: str,
             row["disposition"] = "NOT_COUNTED_UNKNOWN_PUBLISHER"
         elif not variant_ok:
             row["disposition"] = "NOT_COUNTED_VARIANT_MISMATCH"
+        elif not id_ok:
+            row["disposition"] = f"NOT_COUNTED_IDENTITY({id_why})"
         elif pub["ownership_group_id"] in owners:
             row["disposition"] = "NOT_COUNTED_SAME_OWNER"
         elif pub["content_lineage_id"] in lineages:
@@ -352,13 +417,22 @@ def selftest() -> int:
     # ------------------------------------------------ 公開ゲートの再計算
     VK = "gogo_juggler3:SS-01"
 
+    # ★出典の機種同定に使う一式（実物と同じ作り方）★
+    import claim_identity as _cid
+    _MACHINES = [{"slug": "x", "name": "スマスロテスト機", "info": "スマスロAT"},
+                 {"slug": "y", "name": "スマスロ別機", "info": "スマスロAT"}]
+    IDENT = _cid.identity_spec(_MACHINES[0], _MACHINES)
+    EV = {"page_title": "スマスロテスト機 天井・機械割・設定判別",
+          "body_excerpt": "スマスロテスト機の解析情報です。"}
+
     def _src(url, quote, c5_declared="PASS", others="PASS", vk=VK,
-             verdict="PASS", disp="COUNTED"):
+             verdict="PASS", disp="COUNTED", ev=None):
         checks = {c: {"verdict": others} for c in ("C0", "C1", "C2", "C3", "C4")}
         checks["C5"] = {"verdict": c5_declared}
         return {"final_url": url, "quote": quote,
                 "verification": {"checks": checks, "verdict": verdict,
                                  "vote_disposition": disp,
+                                 "identity_evidence": EV if ev is None else ev,
                                  "machine_variant_key_matched": vk}}
 
     def _c(sources, setting="1", raw="97.2%", amount=97.2):
@@ -369,21 +443,21 @@ def selftest() -> int:
     ok2 = _c([_src("https://chonborista.com/a", Q1),
               _src("https://nana-press.com/b", Q2)])
 
-    a = semantic_artifact(ok2, VK)
+    a = semantic_artifact(ok2, VK, None, IDENT)
     t("独立2出典で同じ値が導ければ VERIFIED", a["verified"] and a["counted_votes"] == 2)
     t("　検証結果の控えに指紋がつく", len(a.get("artifact_sha256", "")) == 64)
 
     t("★★台帳がC5をPASSと書いていても、引用が合わなければ数えない★★",
       not semantic_artifact(
           _c([_src("https://chonborista.com/a", "設定1の機械割は99.9%"),
-              _src("https://nana-press.com/b", Q2)]), VK)["verified"])
+              _src("https://nana-press.com/b", Q2)]), VK, None, IDENT)["verified"])
     t("★1出典しか導けなければ VERIFIED にしない",
       not semantic_artifact(_c([_src("https://chonborista.com/a", Q1)]),
-                            VK)["verified"])
+                            VK, None, IDENT)["verified"])
     t("★レジストリに無いホストは票に数えない",
       not semantic_artifact(
           _c([_src("https://chonborista.com/a", Q1),
-              _src("https://example.com/b", Q2)]), VK)["verified"])
+              _src("https://example.com/b", Q2)]), VK, None, IDENT)["verified"])
     t("★★機種の型番が一致しない出典は数えない（同名の別バージョン混入）★★",
       not semantic_artifact(
           _c([_src("https://chonborista.com/a", Q1),
@@ -396,18 +470,18 @@ def selftest() -> int:
                "verification": {"verdict": "PASS", "vote_disposition": "COUNTED",
                                 "checks": {c: {"verdict": "PASS"}
                                            for c in ("C0", "C1", "C2", "C3", "C4", "C5")}}}
-              ]), VK)["sources"]][1] == "NOT_COUNTED_VARIANT_MISMATCH")
+              ]), VK, None, IDENT)["sources"]][1] == "NOT_COUNTED_VARIANT_MISMATCH")
     # ★★Codex 2回目 (a)-2：台帳が票に数えないとした出典を復活させない★★
     t("★★台帳が FAIL とした出典を、C5が合っても票に復活させない★★",
       not semantic_artifact(
           _c([_src("https://chonborista.com/a", Q1, verdict="FAIL",
                    disp="NOT_COUNTED_UNKNOWN"),
               _src("https://nana-press.com/b", Q2, verdict="FAIL",
-                   disp="NOT_COUNTED_UNKNOWN")]), VK)["verified"])
+                   disp="NOT_COUNTED_UNKNOWN")]), VK, None, IDENT)["verified"])
     t("　票に数えないと書かれた出典も同様",
       not semantic_artifact(
           _c([_src("https://chonborista.com/a", Q1, disp="NOT_COUNTED_SAME_OWNER"),
-              _src("https://nana-press.com/b", Q2)]), VK)["verified"])
+              _src("https://nana-press.com/b", Q2)]), VK, None, IDENT)["verified"])
     # ★★Codex 2回目 (a)-3：別項目の百分率を機械割として導出しない★★
     t("★★別項目の％を機械割として導出しない（勝率97.2%／機械割106.5%）★★",
       check_c5_kikaiwari(_claim("1", "97.2%", 97.2),
@@ -451,6 +525,10 @@ def selftest() -> int:
                  "機械割：設定1 97.2%／設定6 106.5%"):
         t(f"　安全な書き方は通す：{ok_q}",
           check_c5_kikaiwari(_claim("1", "97.2%", 97.2), ok_q)["verdict"] == "PASS")
+    t("★★列挙形式は引用全体がその形のときだけ使う★★（Codex 4巡目 (a)-1）",
+      check_c5_kikaiwari(_claim("1", "97.2%", 97.2),
+                         "メーカー公表値は設定1 97.2%。機械割は設定6 106.5%"
+                         )["verdict"] == "FAIL")
     t("★落ちた理由が原因ごとに分かれている",
       check_c5_kikaiwari(_claim("1", "97.2%", 97.2), "設定1のぶどうは1/6.25"
                          )["code"] == "NO_KIKAIWARI_WORD"
@@ -468,12 +546,27 @@ def selftest() -> int:
     t("★★同じ運営元の別ホストは1票（www有無で水増しできない）★★",
       not semantic_artifact(
           _c([_src("https://slopachi-quest.com/a", Q1),
-              _src("https://www.slopachi-quest.com/b", Q2)]), VK)["verified"])
+              _src("https://www.slopachi-quest.com/b", Q2)]), VK, None, IDENT)["verified"])
+    # ★★Codex 4巡目 (a)-3：出典の機種同定を証拠から計算し直す★★
+    t("★★機種同定の証拠が無い出典は数えない（既定拒否）★★",
+      not semantic_artifact(
+          _c([_src("https://chonborista.com/a", Q1, ev={}),
+              _src("https://nana-press.com/b", Q2, ev={})]),
+          VK, None, IDENT)["verified"])
+    t("★★別機種のページを持ってきても数えない★★",
+      not semantic_artifact(
+          _c([_src("https://chonborista.com/a", Q1,
+                   ev={"page_title": "スマスロ別機 天井・機械割",
+                       "body_excerpt": "スマスロ別機の解析情報です。"}),
+              _src("https://nana-press.com/b", Q2)]),
+          VK, None, IDENT)["verified"])
+    t("★同定の一式が無ければ、その場で止める（NO_IDENTITY_SPEC）",
+      not semantic_artifact(ok2, VK, None, None)["verified"])
     t("★意味の検証器が無い項目は VERIFIED にしない（既定拒否）",
-      semantic_artifact({**ok2, "field_key": "ceiling.normal"}, VK)["reason"]
+      semantic_artifact({**ok2, "field_key": "ceiling.normal"}, VK, None, IDENT)["reason"]
       == "NO_SEMANTIC_CHECKER")
     t("★引用の内容が同じでも、出典が0件なら VERIFIED にしない",
-      not semantic_artifact(_c([]), VK)["verified"])
+      not semantic_artifact(_c([]), VK, None, IDENT)["verified"])
 
     ng = [n for n, ok in results if not ok]
     print("")

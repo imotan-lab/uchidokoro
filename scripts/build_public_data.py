@@ -229,6 +229,14 @@ def main() -> int:
                         for w in why_c)
         print(f"公開物: {len(pm)} 機種 / 記事 {len(pd_)} 件 / 違反 {len(problems)} 件")
         print(f"出典の裏取りゲート: {'★有効★' if gate_on else '☆無効☆'}")
+        if not gate_on:
+            # ★★--verify でも「有効なら何が止まるか」を出す★★（Codex 4巡目 (b)-4）
+            would = [(x.get("slug"), claim_reconcile.publish_gate(x.get("slug")))
+                     for x in pm]
+            ng = [(s, w) for s, (o, w) in would if not o]
+            print(f"  有効にした場合に止まる機種: {len(ng)} / {len(pm)}")
+            for s, w in ng:
+                print(f"    ✗ {s}: {w[0] if w else ''}")
         for x in problems:
             print("  ✗", x)
         return 1 if problems else 0
@@ -245,9 +253,12 @@ def main() -> int:
     else:
         print("出典の裏取りゲート: ☆無効☆ "
               "＝ claim の仕組みは検査コマンドであって、まだ公開を止めていません")
-        would = [pm["slug"] for pm in pub_machines
-                 if not claim_reconcile.publish_gate(pm["slug"])[0]]
-        print(f"  有効にした場合に止まる機種: {len(would)} / {len(pub_machines)}")
+        would = [(x["slug"], claim_reconcile.publish_gate(x["slug"]))
+                 for x in pub_machines]
+        ng = [(s, w) for s, (o, w) in would if not o]
+        print(f"  有効にした場合に止まる機種: {len(ng)} / {len(pub_machines)}")
+        for s, w in ng:               # ★slug と理由も出す★（Codex 4巡目 (b)-4）
+            print(f"    ✗ {s}: {w[0] if w else ''}")
         print(f"  有効化は {os.path.relpath(CLAIM_GATE, BASE)} の enabled を true に")
     # ★止まった理由を件数で終わらせない★（Codex 2巡目 (b)-1）
     for b in blocked:
@@ -259,7 +270,7 @@ def main() -> int:
 
     problems = audit(pub_machines, pub_details)
     print(f"独立監査の違反: {len(problems)} 件")
-    for x in problems[:10]:
+    for x in problems:            # ★全件出す★（Codex 4巡目 (b)-3）
         print("  ✗", x)
     if problems:
         print("★違反があるので公開物は作りません★")

@@ -466,6 +466,10 @@ def _mk_source(quote: str, pub: str, counted: bool = True,
             "vote_disposition": "COUNTED" if counted else "NOT_COUNTED_UNKNOWN",
             # ★どの型番の機種で一致を確認したか★（同名の別バージョン混入を防ぐ）
             "machine_variant_key_matched": variant,
+            # ★出典が本当にその機種のページかを判定するための証拠★
+            "identity_evidence": {
+                "page_title": "スマスロテスト機 天井・機械割・設定判別",
+                "body_excerpt": "スマスロテスト機の解析情報です。"},
             "checks": {c: {"verdict": "PASS", "code": "OK"} for c in CHECK_IDS},
         },
     }
