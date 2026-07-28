@@ -457,12 +457,16 @@ def selftest() -> int:
     # ★★同名の別バージョンの出典で埋められない★★
     #   （型式は出典が示した値から計算するので、別型式なら鍵が一致しない）
     othr = ledger([kclaim(s2, i + 1) for i, s2 in enumerate(kslots)])
+    import claim_evidence as _ce
     for c_ in othr["claims"]:
         for s_ in c_["sources"]:
-            s_["verification"]["identity_evidence"]["machine_identity"] = {
-                "manufacturer_id": "test-maker",
-                "regulatory_model_code": "TEST-999",   # 別型式
-                "release_date": "2019-01-01"}
+            # 証拠を「別型式のもの」に差し替える（台帳は指紋しか持たない）
+            ev0, _w = _ce.load_evidence(s_["verification"]["evidence_ref"])
+            body = {k: v for k, v in ev0.items() if k != "evidence_sha256"}
+            body["machine_identity"] = {"manufacturer_id": "test-maker",
+                                        "regulatory_model_code": "TEST-999",
+                                        "release_date": "2019-01-01"}
+            s_["verification"]["evidence_ref"] = _ce.write_evidence(body)
     ok_v, why_v = _publishable("x", m, dk, invk, othr)
     t("★★出典が別バージョンの機種なら公開しない★★",
       not ok_v and any("導き直せない" in w for w in why_v))

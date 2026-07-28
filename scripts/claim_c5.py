@@ -264,7 +264,9 @@ def identity_violations(src: dict, identity: dict | None):
 
     if not identity:
         return False, ["NO_IDENTITY_SPEC"]
-    ev = ((src.get("verification") or {}).get("identity_evidence") or {})
+    ev, why_ev = _identity_evidence_of(src)
+    if ev is None:
+        return False, [why_ev]          # 証拠を引けない＝数えない
     title = ev.get("page_title")
     unit = evidence_unit_text(src)
     if not title or not unit:
@@ -272,6 +274,11 @@ def identity_violations(src: dict, identity: dict | None):
 
     cores = identity.get("machine_cores") or []
     viol = []
+    # ★引用は証拠単位の中の逐語であること★（台帳が別の場所の文を貼れないように）
+    q = str(src.get("quote") or "")
+    if not q or unicodedata.normalize("NFKC", q) not in unicodedata.normalize(
+            "NFKC", unit):
+        viol.append("QUOTE_NOT_IN_EVIDENCE_UNIT")
     ok, why = _unit_binding_ok(unit, cores)
     if not ok:
         viol.append(why)
@@ -327,6 +334,35 @@ EVIDENCE_UNIT_TYPES = ("TABLE_ROW", "TABLE_CELL", "LIST_ITEM", "PARAGRAPH",
                        "HEADING", "DEFINITION_ITEM")
 
 
+def resolve_evidence(src: dict):
+    """★出典の証拠を、台帳の外から引く★（Codex 8巡目・閉鎖条件③）
+
+    台帳に書かれた見出し・証拠単位・型式は**使わない**。
+    `evidence_ref`（証拠の指紋）で別ディレクトリから引き、
+    中身の指紋が一致したものだけを証拠として認める。
+
+    戻り値 (identity_evidence 相当の辞書, 理由)。
+    """
+    import claim_evidence as ce
+
+    ver = (src.get("verification") or {})
+    ref = ver.get("evidence_ref")
+    if not ref:
+        return None, "NO_EVIDENCE_REF"
+    ev, why = ce.load_evidence(ref)
+    if ev is None:
+        return None, why
+    return ce.as_identity_evidence(ev), "OK"
+
+
+def _identity_evidence_of(src: dict):
+    """検証に使う証拠を1か所で決める（別置きの証拠を正とする）。"""
+    got, why = resolve_evidence(src)
+    if got is not None:
+        return got, why
+    return None, why
+
+
 def evidence_unit_text(src: dict):
     """出典が示した「証拠単位」の本文を返す（無ければ None）。
 
@@ -337,8 +373,8 @@ def evidence_unit_text(src: dict):
       という抜け道が残る。**表の行・セル・箇条書きの項目**のように、
       画面上で1つの塊になっている単位を丸ごと受け取り、丸ごと解析する。
     """
-    ev = ((src.get("verification") or {}).get("identity_evidence") or {})
-    unit = ev.get("evidence_unit")
+    ev, _ = _identity_evidence_of(src)
+    unit = (ev or {}).get("evidence_unit")
     if not isinstance(unit, dict):
         return None
     if unit.get("unit_type") not in EVIDENCE_UNIT_TYPES:
@@ -522,7 +558,8 @@ def semantic_artifact(claim: dict, machine_variant_key: str,
         #    ★★台帳が名乗る文字列ではなく、出典が示した型式から計算する★★
         #      （Codex 7巡目 (a)-3）。証拠に型式が無ければ数えない。
         import claim_inventory as _ci
-        ev_ident = ((ver.get("identity_evidence") or {}).get("machine_identity"))
+        _ev, _ = _identity_evidence_of(src)
+        ev_ident = (_ev or {}).get("machine_identity")
         variant_ok = (physical_key is not None
                       and _ci.physical_key(ev_ident) == physical_key)
         # ★どの項目が食い違ったかを残す★（Codex 8巡目 (b)-2）
@@ -583,6 +620,20 @@ def _artifact_sha(art: dict) -> str:
 
 
 # ---------------------------------------------------------------- selftest
+
+def _tampered_evidence_blocked(_src, _c, artifact, VK, IDENT, PHYS, Q1, Q2, ce):
+    """証拠ファイルを保存後に書き換えたら、その出典が数えられなくなること。"""
+    import json as _json
+    s1 = _src("https://chonborista.com/a", Q1)
+    ref = s1["verification"]["evidence_ref"]
+    path = ce.evidence_path(ref)
+    ev = _json.load(open(path, encoding="utf-8"))
+    ev["evidence_unit"]["text"] = "スマスロテスト機｜機械割は設定1:99.9%"
+    _json.dump(ev, open(path, "w", encoding="utf-8"), ensure_ascii=False)
+    art = artifact(_c([s1, _src("https://nana-press.com/b", Q2)]),
+                   VK, None, IDENT, PHYS)
+    return not art["verified"]
+
 
 def _claim(setting="1", raw="97.2%", amount=97.2, operator="EXACT", unit="%"):
     return {"field_key": "kikaiwari.setting",
@@ -673,19 +724,48 @@ def selftest() -> int:
     import claim_inventory as _ci2
     PHYS = _ci2.physical_key(IDENT_PHYS)
 
+    # ★検査用の証拠置き場（実物と同じ経路で書き、指紋で引く）★
+    import claim_evidence as _ce
+    import tempfile as _tf
+    _ce.EVIDENCE_DIR = _tf.mkdtemp()
+
+    def _put_evidence(url, ie, machine_identity):
+        """台帳ではなく証拠置き場に書き、その指紋を返す。"""
+        unit = ie.get("evidence_unit") or {}
+        body = {
+            "schema_version": _ce.SCHEMA_VERSION,
+            "fetch": {"requested_url": url, "final_url": url,
+                      "fetched_at": "2026-07-28T09:00:00Z", "http_status": 200,
+                      "response_sha256": "a" * 64},
+            "page": {"title": ie.get("page_title") or "（無題）",
+                     "body_sha256": "b" * 64},
+            "evidence_unit": unit,
+            "machine_identity": machine_identity or {
+                "manufacturer_id": "x", "regulatory_model_code": "x",
+                "release_date": "x"},
+            "fetcher_version": "selftest/1",
+        }
+        try:
+            return _ce.write_evidence(body)
+        except _ce.EvidenceError:
+            # 形が不正な証拠は保存できない＝参照先が無い状態を作る
+            return "0" * 64
+
     def _src(url, quote, c5_declared="PASS", others="PASS", vk=VK,
              verdict="PASS", disp="COUNTED", ev=None, phys="__default__"):
         checks = {c: {"verdict": others} for c in ("C0", "C1", "C2", "C3", "C4")}
         checks["C5"] = {"verdict": c5_declared}
-        base = dict(EV if ev is None else ev)
-        base["machine_identity"] = (IDENT_PHYS if phys == "__default__" else phys)
-        if base["machine_identity"] is None:
-            base.pop("machine_identity")
+        # ★証拠は台帳の外に置き、指紋で参照する★
+        # 既定では「機種名｜引用」という表の1行を証拠にする（実物に近い形）
+        base = (dict(ev) if ev is not None
+                else {"page_title": EV["page_title"],
+                      "evidence_unit": _unit("スマスロテスト機｜" + quote)})
+        mi = (IDENT_PHYS if phys == "__default__" else phys)
+        ref = _put_evidence(url, base, mi)
         return {"final_url": url, "quote": quote,
                 "verification": {"checks": checks, "verdict": verdict,
                                  "vote_disposition": disp,
-                                 "identity_evidence": base,
-                                 "machine_variant_key_matched": vk}}
+                                 "evidence_ref": ref}}
 
     def _c(sources, setting="1", raw="97.2%", amount=97.2):
         return {**_claim(setting, raw, amount), "sources": sources}
@@ -926,14 +1006,41 @@ def selftest() -> int:
                       "reject_all_cores": ["真打スマスロテスト機"]})[0] is False)
     t("★同定の違反は全部返す（最初の1件で打ち切らない）",
       len(identity_violations(
-          {"quote": "設定1の機械割は97.2%",
-           "verification": {"identity_evidence": {
-               "page_title": "【スマスロテスト機】解析｜パチンコ版",
-               "evidence_unit": _unit("旧作との比較：設定1の機械割は97.2%",
-                                      "PARAGRAPH")}}}, IDENT)[1]) >= 2)
+          _src("https://chonborista.com/a", "設定1の機械割は97.2%",
+               ev={"page_title": "【スマスロテスト機】解析｜パチンコ版",
+                   "evidence_unit": _unit("旧作との比較：設定1の機械割は97.2%",
+                                          "PARAGRAPH")}), IDENT)[1]) >= 2)
     t("★曖昧で落ちたとき、どの語かが分かる",
       "@" in check_c5_kikaiwari(_claim("1", "97.2%", 97.2),
                                 "設定1の機械割は約97.2%")["code"])
+    # ★★証拠の外部化（Codex 8巡目・閉鎖条件③）★★
+    def _no_ref(url, quote):
+        s = _src(url, quote)
+        s["verification"].pop("evidence_ref")
+        return s
+
+    t("★★証拠の指紋が無い出典は数えない（台帳だけでは通らない）★★",
+      not semantic_artifact(
+          _c([_no_ref("https://chonborista.com/a", Q1),
+              _no_ref("https://nana-press.com/b", Q2)]),
+          VK, None, IDENT, PHYS)["verified"])
+    t("★指し示す証拠が存在しなければ数えない",
+      not semantic_artifact(
+          _c([{**_src("https://chonborista.com/a", Q1),
+               "verification": {**_src("https://chonborista.com/a", Q1)["verification"],
+                                "evidence_ref": "f" * 64}},
+              _src("https://nana-press.com/b", Q2)]),
+          VK, None, IDENT, PHYS)["verified"])
+    t("★★保存後に証拠を書き換えたら数えなくなる★★",
+      _tampered_evidence_blocked(_src, _c, semantic_artifact, VK, IDENT, PHYS,
+                                 Q1, Q2, _ce))
+    t("★台帳が証拠の中身を貼っても、判定には使われない（外の証拠が正）",
+      semantic_artifact(
+          _c([{**_src("https://chonborista.com/a", Q1),
+               "verification": {**_src("https://chonborista.com/a", Q1)["verification"],
+                                "identity_evidence": {"page_title": "偽の見出し"}}},
+              _src("https://nana-press.com/b", Q2)]),
+          VK, None, IDENT, PHYS)["verified"])
     t("★同定の一式が無ければ、その場で止める（NO_IDENTITY_SPEC）",
       not semantic_artifact(ok2, VK, None, None, PHYS)["verified"])
     t("★意味の検証器が無い項目は VERIFIED にしない（既定拒否）",

@@ -134,37 +134,22 @@ def _validate_source(src: dict, where: str, registry: dict | None = None) -> Non
     ver = src["verification"]
     for k in ("verdict", "code", "checked_at", "verifier_version",
               "vote_disposition", "checks",
-              # ★★機種同定の材料はスキーマの必須項目★★（Codex 5巡目 (b)-1）
-              #   ゲートだけで弾いていると、単体検証コマンドが
-              #   「欠落した台帳」を合格と表示してしまう。
-              "machine_variant_key_matched", "identity_evidence"):
+              # ★★証拠は台帳の外に置き、指紋だけを持つ★★（Codex 8巡目・閉鎖条件③）
+              #   台帳に証拠そのものを書かせると、claim を書く側が
+              #   「別ページのURLに、対象機種の見出しと表の行」を書くだけで通る。
+              "evidence_ref"):
         _req(ver, k, f"{where}.verification")
-    ie = ver["identity_evidence"]
-    if not isinstance(ie, dict):
-        raise LedgerError(f"{where}.verification.identity_evidence: 形式が違う")
-    if not str(ie.get("page_title") or "").strip():
+    if not _SHA_RE.match(str(ver["evidence_ref"])):
         raise LedgerError(
-            f"{where}.verification.identity_evidence.page_title: 空にできない")
-    # ★★証拠は「表の行・セル・箇条書きの項目」など画面上の塊で受け取る★★
-    #   （Codex 8巡目 (a)-1）。自由文からの切り出しを受け取ると、
-    #   同じ設定に別の値が併記された文から片方だけ取る／訂正を次行に置く、
-    #   といった抜け道が残る。
-    unit = ie.get("evidence_unit")
-    if not isinstance(unit, dict):
-        raise LedgerError(
-            f"{where}.verification.identity_evidence.evidence_unit: 必須"
-            f"（自由文の切り出しは証拠にできない）")
-    if unit.get("unit_type") not in EVIDENCE_UNIT_TYPES:
-        raise LedgerError(
-            f"{where}...evidence_unit.unit_type: {EVIDENCE_UNIT_TYPES} のいずれか")
-    for k in ("dom_path", "text"):
-        if not str(unit.get(k) or "").strip():
-            raise LedgerError(f"{where}...evidence_unit.{k}: 空にできない")
-    # ★引用は証拠単位の中の逐語であること（引用は表示用で、判定には使わない）★
-    if str(src["quote"]) not in str(unit["text"]):
-        raise LedgerError(
-            f"{where}: 引用が evidence_unit.text の中に無い"
-            f"（別の場所から切り出した引用は使えない）")
+            f"{where}.verification.evidence_ref: 証拠の指紋(sha256)でない")
+    # ★台帳に証拠の中身を書かせない★（書けてしまうと外部保管の意味が無くなる）
+    for banned in ("identity_evidence", "machine_variant_key_matched"):
+        if banned in ver:
+            raise LedgerError(
+                f"{where}.verification.{banned}: 台帳に証拠の中身を書かない"
+                f"（`assets/data/claim-evidence/` に置き evidence_ref で参照する）")
+    # ★引用は証拠単位の中の逐語であること★は、証拠を引ける公開ゲート側で検査する
+    #   （台帳だけでは証拠本文を持たないため、ここでは形式のみを見る）
     _enum(ver["verdict"], VERDICTS, f"{where}.verification", "verdict")
     _enum(ver["vote_disposition"], VOTE_DISPOSITION, f"{where}.verification",
           "vote_disposition")
@@ -477,6 +462,36 @@ _TEST_PUBS = {"a": ("chonborista", "chonborista.com"),
               "b": ("1geki", "1geki.jp")}
 
 
+def _use_test_evidence_dir():
+    """★検査は本番の証拠置き場を汚さない★（一時ディレクトリへ向ける）"""
+    import tempfile
+    import claim_evidence as ce
+    if not getattr(ce, "_TEST_DIR", None):
+        ce._TEST_DIR = tempfile.mkdtemp()
+        ce.EVIDENCE_DIR = ce._TEST_DIR
+    return ce
+
+
+def _test_evidence_ref(host: str, quote: str, variant: str) -> str:
+    """検査用：証拠置き場に1件書いてその指紋を返す（実物と同じ経路）。"""
+    ce = _use_test_evidence_dir()
+    return ce.write_evidence({
+        "schema_version": ce.SCHEMA_VERSION,
+        "fetch": {"requested_url": f"https://{host}/x",
+                  "final_url": f"https://{host}/x",
+                  "fetched_at": "2026-07-28T09:00:00Z", "http_status": 200,
+                  "response_sha256": "a" * 64},
+        "page": {"title": "スマスロテスト機 天井・機械割・設定判別",
+                 "body_sha256": "b" * 64},
+        "evidence_unit": {"unit_type": "TABLE_ROW",
+                          "dom_path": "table[1]/tbody/tr[2]",
+                          "text": "スマスロテスト機｜" + quote},
+        "machine_identity": {"manufacturer_id": "test-maker",
+                             "regulatory_model_code": "TEST-001",
+                             "release_date": "2026-01-01"},
+        "fetcher_version": "selftest/1"})
+
+
 def _mk_source(quote: str, pub: str, counted: bool = True,
                independence: str = "KNOWN_INDEPENDENT",
                variant: str = "x:2026") -> dict:
@@ -497,19 +512,8 @@ def _mk_source(quote: str, pub: str, counted: bool = True,
             "verdict": "PASS", "code": "OK", "checked_at": "2026-07-28T03:15:00Z",
             "verifier_version": "consensus_verify/2.0.0",
             "vote_disposition": "COUNTED" if counted else "NOT_COUNTED_UNKNOWN",
-            # ★どの型番の機種で一致を確認したか★（同名の別バージョン混入を防ぐ）
-            "machine_variant_key_matched": variant,
-            # ★出典が本当にその機種のページかを判定するための証拠★
-            "identity_evidence": {
-                "page_title": "スマスロテスト機 天井・機械割・設定判別",
-                "evidence_unit": {
-                    "unit_type": "TABLE_ROW",
-                    "dom_path": "table[1]/tbody/tr[2]",
-                    "text": "スマスロテスト機｜" + quote},
-                # ★出典ページが示した型式（公開ゲートがここから鍵を計算する）★
-                "machine_identity": {"manufacturer_id": "test-maker",
-                                     "regulatory_model_code": "TEST-001",
-                                     "release_date": "2026-01-01"}},
+            # ★証拠は台帳の外（claim-evidence/）に置き、指紋だけを持つ★
+            "evidence_ref": _test_evidence_ref(host, quote, variant),
             "checks": {c: {"verdict": "PASS", "code": "OK"} for c in CHECK_IDS},
         },
     }
@@ -750,6 +754,26 @@ def selftest() -> int:
           conditions={**_mk_claim()["conditions"], "counter_basis": "UNKNOWN"}), allow))
     t("★編集判断(JUDGMENT)は自動採用しない",
       not auto_adoptable(_mk_claim(claim_kind="JUDGMENT"), allow))
+
+    # -------- ★証拠は台帳の外（Codex 8巡目・閉鎖条件③）★
+    def _with_src(**over):
+        c = _mk_claim()
+        s = dict(c["sources"][0])
+        s["verification"] = {**s["verification"], **over}
+        c["sources"] = [s, c["sources"][1]]
+        return c
+
+    t("★★証拠の指紋（evidence_ref）が無い台帳は通らない★★",
+      raises(lambda: validate_claim(
+          _with_src(evidence_ref=None), "w")))
+    t("★指紋の形でなければ通らない",
+      raises(lambda: validate_claim(_with_src(evidence_ref="not-a-sha"), "w")))
+    t("★★台帳に証拠の中身を書いたら止める（外部保管の意味が無くなる）★★",
+      raises(lambda: validate_claim(
+          _with_src(identity_evidence={"page_title": "偽"}), "w")))
+    t("　旧形式の machine_variant_key_matched も書かせない",
+      raises(lambda: validate_claim(
+          _with_src(machine_variant_key_matched="x:1"), "w")))
 
     # -------- 設定ごとの値は「どの設定か」を必ず持つ（Codex 3回目 手順1）
     def _kw(**over):
