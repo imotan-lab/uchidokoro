@@ -32,14 +32,18 @@ sys.path.insert(0, os.path.join(BASE, "scripts"))
 SETTING_HTML = os.path.join(BASE, "setting.html")
 
 # rates: { 機種: { 項目: { 設定: 値 } } } を素直に読むための正規表現
+#   ★引用符つきのキーも受け付ける★（Codex 12巡目 (a)-2）
+#   `"rates": {` と書き換えるだけで検査を外せる、という抜け道があった
 _MACHINE_BLOCK = re.compile(
-    r"^\s{2}([A-Za-z0-9_]+)\s*:\s*\{", re.M)
-_RATES_BLOCK = re.compile(r"rates\s*:\s*\{")
+    r"^\s{2}[\"']?([A-Za-z0-9_]+)[\"']?\s*:\s*\{", re.M)
+_RATES_BLOCK = re.compile(r"[\"']?rates[\"']?\s*:\s*\{")
 # 1/259.0 / 259 / 0.0039 のいずれか
 _NUM = r"(?:1\s*/\s*)?[0-9]+(?:\.[0-9]+)?"
 _RATE_ENTRY = re.compile(
-    r"([A-Za-z0-9_]+)\s*:\s*\{([^{}]*)\}")
-_SETTING_VAL = re.compile(r"([1-6])\s*:\s*(" + _NUM + r")")
+    r"[\"']?([A-Za-z0-9_]+)[\"']?\s*:\s*\{([^{}]*)\}")
+# 「1 / 9999」のように空白を挟んだ書き方も読む
+_SETTING_VAL = re.compile(
+    r"[\"']?([1-6])[\"']?\s*:\s*((?:1\s*/\s*)?[0-9]+(?:\.[0-9]+)?)")
 
 
 def _find_block(text: str, start: int) -> tuple[str, int]:
@@ -130,6 +134,48 @@ def load_all() -> dict:
     return extract_rates(open(SETTING_HTML, encoding="utf-8").read())
 
 
+def audit_extraction(data: dict | None = None) -> list:
+    """★抽出そのものが信用できるかを検査する★（Codex 12巡目 (b)-4）
+
+    正規表現でJavaScriptを読んでいる以上、「書き方を変えれば読めなくなる」。
+    読めなかったことを**成功として黙らせない**ための検査。
+    """
+    out = []
+    if not os.path.isfile(SETTING_HTML):
+        return ["setting.html が無い"]
+    html = open(SETTING_HTML, encoding="utf-8").read()
+    if "MACHINE_CONFIGS" not in html:
+        return ["MACHINE_CONFIGS が見つからない"]
+    data = data if data is not None else extract_rates(html)
+    if not data:
+        return ["MACHINE_CONFIGS はあるのに1機種も読み取れない"]
+    # 機種ブロックの数と、読み取れた機種の数を突き合わせる
+    blocks = set(_MACHINE_BLOCK.findall(
+        _find_block(html, re.search(r"const MACHINE_CONFIGS\s*=\s*\{", html).end() - 1)[0]))
+    for slug in sorted(blocks - set(data)):
+        if re.search(r"[\"']?rates[\"']?\s*:", html):
+            out.append(f"{slug}: 機種ブロックはあるが確率を読み取れない")
+    for slug, fields in sorted(data.items()):
+        for field, per_setting in sorted(fields.items()):
+            bad = [s for s, v in per_setting.items() if _norm(v) is None]
+            if bad:
+                out.append(f"{slug}.{field}: 値として読めない設定 {bad}")
+    return out
+
+
+def has_machine_block(slug: str) -> bool:
+    """★setting.html にその機種の設定が「ありそう」か★（Codex 12巡目 (a)-2）
+
+    抽出できた・できないに関わらず、機種名のブロックがあるかだけを見る。
+    「ブロックはあるのに1件も読めない」＝書き方を変えて検査を外した疑い。
+    """
+    if not os.path.isfile(SETTING_HTML):
+        return False
+    html = open(SETTING_HTML, encoding="utf-8").read()
+    return bool(re.search(r"^\s{2}[\"']?" + re.escape(slug) + r"[\"']?\s*:\s*\{",
+                          html, re.M))
+
+
 # ---------------------------------------------------------------- selftest
 
 _SAMPLE = """
@@ -161,6 +207,15 @@ def selftest() -> int:
     t("項目ごと・設定ごとに分かれている",
       got["hokuto"]["bb"] == {"1": "1/259.0", "2": "1/255.0", "6": "1/234.9"})
     t("★項目をまたいで混ざらない", got["hokuto"]["cherry"]["6"] == "1/89.0")
+    # ★★書き方を変えて検査を外せないこと★★（Codex 12巡目 (a)-2）
+    quoted = _SAMPLE.replace("rates: {", '"rates": {').replace(
+        "bb: {", '"bb": {')
+    t("★★引用符つきの書き方でも読み取れる★★",
+      extract_rates(quoted).get("hokuto", {}).get("bb", {}).get("1") == "1/259.0")
+    spaced = _SAMPLE.replace("1/259.0", "1 / 259.0")
+    t("★空白を挟んだ 1 / 259.0 も読み取れる",
+      extract_rates(spaced).get("hokuto", {}).get("bb", {}).get("1")
+      == "1/259.0")
 
     slots = as_slots("hokuto", got["hokuto"])
     t("在庫の枠に変換できる（設定ごとに1枠）", len(slots) == 5)
@@ -206,6 +261,13 @@ def main() -> int:
             print(f"  {slug:<24} {n:>3} 枠")
         print(f"\nポチポチくんの確率: {len(data)} 機種 / {total} 枠"
               f"（すべて未検証・意味の検証器なし＝公開ゲートで止まる）")
+        # ★★「構成はあるのに1件も読めない」を成功にしない★★（Codex 12巡目 (b)-4）
+        problems = audit_extraction(data)
+        if problems:
+            print(f"\n★抽出に問題があります（{len(problems)}件）★")
+            for p in problems[:20]:
+                print(f"  ✗ {p}")
+            return 1
         return 0
     ap.print_help()
     return 0

@@ -194,7 +194,9 @@ def reconcile(slug: str, machine: dict, detail: dict,
         cl.validate_ledger(ledger, f"{slug}.ledger", _reg)
     except cl.LedgerError as e:
         problems.append(f"台帳の検証に失敗: {e}")
-        for i, c in enumerate(ledger.get("claims") or []):
+        # ★型検査済みの一覧を使う★（Codex 12巡目 (b)-1）
+        #   元の ledger["claims"] を再走査すると null 要素で例外になっていた
+        for i, c in enumerate(claims):
             try:
                 cl.validate_claim(c, f"{slug}.ledger.claims[{i}]", _reg)
             except cl.LedgerError as e2:

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'uchidokoro-v175';
+const CACHE_NAME = 'uchidokoro-v176';
 
 // ★先読みするのは「中身が機種に依存しない」ファイルだけ★
 //   （2026-07-28・Codex 11巡目 手順7）
@@ -7,7 +7,6 @@ const CACHE_NAME = 'uchidokoro-v175';
 const STATIC_CACHE = [
   '/',
   '/index.html',
-  '/setting.html',
   '/about.html',
   '/contact.html',
   '/privacy.html',
@@ -16,16 +15,11 @@ const STATIC_CACHE = [
   '/guide-pochipochi.html',
   '/guide-yamedoki.html',
   '/guide-reset.html',
-  '/guide-tenjo-ranking.html',
-  '/guide-reset-ranking.html',
-  '/guide-suru-tenjo.html',
-  '/guide-ichiran.html',
   '/404.html',
   '/meta-auto.js',
   '/assets/css/practical.css',
   '/assets/img/logo.png',
-  '/assets/img/ogp.png',
-  '/assets/data/machines.json'
+  '/assets/img/ogp.png'
 ];
 
 // インストール時：静的ファイルをキャッシュ
@@ -55,26 +49,36 @@ self.addEventListener('fetch', event => {
 
   const url = new URL(event.request.url);
 
-  // ★ データJSONは network-first：ネット優先・失敗時のみキャッシュにフォールバック
-  // machines.json / machine-details/*.json は頻繁に更新されるため、
-  // SWキャッシュ→cache-firstだと古いデータが残り続ける問題があった。
-  if (url.pathname.startsWith('/assets/data/')) {
+  // ★★数値を含むもの（機種の情報）は一切キャッシュしない★★
+  //   （2026-07-28・Codex 12巡目 (a)-6）
+  //   network-first でも、通信できない時に古い内容を返してしまう。
+  //   公開を止めた機種・失効した数値が手元に残るくらいなら、
+  //   「いま見られません」と出す方が安全。オフライン閲覧より正確さを優先する。
+  const isClaimDependent =
+    url.pathname.startsWith('/assets/data/')
+    || url.pathname.startsWith('/machines/')
+    || url.pathname === '/setting.html'
+    || url.pathname === '/guide-tenjo-ranking.html'
+    || url.pathname === '/guide-reset-ranking.html'
+    || url.pathname === '/guide-suru-tenjo.html'
+    || url.pathname === '/guide-ichiran.html';
+  if (isClaimDependent) {
     event.respondWith(
-      fetch(event.request).then(response => {
-        if (response && response.status === 200) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-        }
-        return response;
-      }).catch(() => caches.match(event.request))
+      fetch(event.request).catch(() =>
+        new Response(
+          '<!doctype html><meta charset="utf-8">'
+          + '<meta name="robots" content="noindex">'
+          + '<title>いま表示できません | うちどころ。</title>'
+          + '<h1>いま表示できません</h1>'
+          + '<p>通信できないため、最新の情報を確認できませんでした。'
+          + '古い情報をお見せしないよう、この画面を出しています。</p>'
+          + '<p><a href="/">トップページへ</a></p>',
+          { headers: { 'Content-Type': 'text/html; charset=utf-8' }, status: 503 }))
     );
     return;
   }
 
-  // ★★HTML（ページそのもの）は network-first★★
-  //   （2026-07-28・Codex 11巡目 (a)-4）
-  //   cache-first だと、公開を止めた後も「以前見た古いページ」が先に返る。
-  //   誤情報を含む記事がキャッシュに残り続けるので、ページだけは必ずネット優先にする。
+  // ★★その他のHTMLも network-first★★（Codex 11巡目 (a)-4）
   const isPage = event.request.mode === 'navigate'
     || (event.request.headers.get('accept') || '').includes('text/html');
   if (isPage) {

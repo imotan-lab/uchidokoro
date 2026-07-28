@@ -293,6 +293,7 @@ def main(allow_ungated: bool = False):
 
     detail_dir = BASE / "assets" / "data" / "machine-details"
     broken_details: list = []
+    generated_slugs: list = []
     generated = 0
     prerendered = 0
     for machine in machines:
@@ -438,27 +439,33 @@ def main(allow_ungated: bool = False):
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "index.html").write_text(html_out, encoding="utf-8", newline="\n")
         generated += 1
+        generated_slugs.append(slug)
 
     # ★★公開してよい機種の名簿を書き出す★★（Codex 11巡目 (a)-1/(a)-2）
     #   ブラウザ側（machine.html / setting.html / index.html）はこれを見て、
     #   名簿に無い機種は「準備中」と表示する＝汎用URLで中身を見せない。
-    published = [m["slug"] for m in machines if m["slug"] not in blocked_by_claim]
-    manifest = BASE / "assets" / "data" / "published-slugs.json"
-    manifest.write_text(json.dumps(
-        {"schema_version": "published-slugs/v1",
-         "claim_gate_enabled": bool(gate_on),
-         "slugs": sorted(published)}, ensure_ascii=False, indent=1),
-        encoding="utf-8")
-    print(f"公開名簿を書き出し: {len(published)} 機種 → assets/data/published-slugs.json")
-
     print(f"生成完了: {generated} 機種 / machines/{{slug}}/index.html（うち本文プリレンダ {prerendered} 機種）")
     # ★★1機種も作れなければ成功にしない★★（Codex 11巡目 (b)-5）
     if generated == 0:
         print("★1機種も生成できませんでした（全機種が止まっています）★")
         return 1
+    # ★★失敗した回では名簿を更新しない★★（Codex 12巡目 (a)-4）
+    #   以前は「ゲートで止まらなかった集合」から名簿を作り、
+    #   記事の読み込みに失敗した機種も名簿に残したまま非0終了していた。
+    #   ＝古いページ＋その機種を許可する名簿、という食い違いが残る。
     if broken_details:
         print(f"★記事データが読めない機種があります: {broken_details}★")
+        print("　この回は公開名簿を更新しません（古いページと食い違うため）")
         return 1
+
+    # ★名簿は「実際に生成できた機種」から作る★
+    manifest = BASE / "assets" / "data" / "published-slugs.json"
+    manifest.write_text(json.dumps(
+        {"schema_version": "published-slugs/v1",
+         "claim_gate_enabled": bool(gate_on),
+         "slugs": sorted(generated_slugs)}, ensure_ascii=False, indent=1),
+        encoding="utf-8")
+    print(f"公開名簿を書き出し: {len(generated_slugs)} 機種 → assets/data/published-slugs.json")
 
 
 if __name__ == "__main__":

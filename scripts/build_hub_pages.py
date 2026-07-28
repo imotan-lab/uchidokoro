@@ -515,11 +515,29 @@ def main(allow_ungated: bool = False):
         "guide-ichiran.html": (prose_all["ichiran"], {"list": ichiran_list, "note": ichiran_note}),
     }
 
-    for file, (prose, data_html) in pages.items():
-        html = build_page(file, prose, data_html)
+    # ★★検査は「生成後の最終HTML」に対して行う★★（Codex 12巡目 (a)-5）
+    #   入力（hub_prose.json）だけを見ていたので、生成器のコード内に書いた
+    #   「1000G未満」「スルーN回」などの数値は検査を素通りしていた。
+    built = {f: build_page(f, prose, data_html)
+             for f, (prose, data_html) in pages.items()}
+    if gate_on:
+        import claim_inventory as _ci2
+        bad = []
+        for f, html in built.items():
+            text = re.sub(r"<[^>]+>", " ", html)          # タグを外して本文だけ見る
+            for line in text.split():
+                if _ci2.numeral_with_unit(line):
+                    bad.append(f"{f}: {line[:40]}")
+        if bad:
+            print(f"★生成後のHTMLに未検証の数値が {len(bad)} 箇所あります★")
+            for b in bad[:20]:
+                print(f"  ✗ {b}")
+            print("  裏取りが済むまでハブ4ページは書き出しません")
+            return 1
+
+    for file, html in built.items():
         (BASE / file).write_text(html, encoding="utf-8")
-        # 簡易検証：meta description 長さ
-        dlen = len(prose["meta_description"])
+        dlen = len(pages[file][0]["meta_description"])
         warn = "" if 50 <= dlen <= 160 else f"  ⚠ meta desc {dlen}字（50〜160推奨）"
         print(f"  生成: {file}  ({dlen}字 desc){warn}")
 

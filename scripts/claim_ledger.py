@@ -331,9 +331,10 @@ def validate_claim(c: dict, where: str, registry: dict | None = None) -> None:
         if len(keys) < 2:
             raise LedgerError(
                 f"{where}: VERIFIED だが独立した票が {len(keys)} 件しかない（2件必要）")
-        if not c.get("verified_at") or not _TS_RE.match(str(c["verified_at"])):
-            raise LedgerError(f"{where}.verified_at: VERIFIED なのに検証日時が無い")
-        if not c.get("expires_at") or not _TS_RE.match(str(c.get("expires_at", ""))):
+        # ★形式だけでなく実在する日時か★（Codex 12巡目 (b)-2）
+        if not _valid_ts(c.get("verified_at")):
+            raise LedgerError(f"{where}.verified_at: 実在するUTC日時でない")
+        if not _valid_ts(c.get("expires_at")):
             # ★TTLが無いと、古い記録を公開から落とせない★
             raise LedgerError(f"{where}.expires_at: VERIFIED なのに期限が無い")
         # ★★期限は実日時で判定する★★（Codex 指摘6）

@@ -646,7 +646,7 @@ _MACHINE_NUMERIC_FIELDS = {
 _MACHINE_PROSE_FIELDS = ("tenjo_display", "strategy")
 
 
-def _machine_pairs(machine: dict) -> list:
+def _machine_pairs(machine: dict, editorial: list | None = None) -> list:
     """機種データから「項目：値」の組を取り出す（記事と同じ扱いにする）。"""
     out = []
     # `limit` は単位を持たない数値。単位はチェッカーの設定側にあるので添える
@@ -666,7 +666,7 @@ def _machine_pairs(machine: dict) -> list:
     # ★★checker の中の客観値も取りこぼさない★★（Codex 10巡目 (a)-6）
     #   `checker.reset.limit` は machine.html が「天井9999G」と明示表示する。
     #   caution/good/excellent は編集判断だが、**除外した記録を残す**（黙って捨てない）。
-    out.extend(_checker_pairs(machine))
+    out.extend(_checker_pairs(machine, editorial))
     # 表示される日付・種別の数詞
     if machine.get("release_date"):
         out.append(("/machine/release_date", "release_date",
@@ -680,9 +680,14 @@ def _machine_pairs(machine: dict) -> list:
 _CHECKER_EDITORIAL = ("caution", "good", "excellent")
 
 
-def _checker_pairs(machine: dict) -> list:
-    """checker 配下の客観値（天井・注記・スルー/周期の値）を組にする。"""
+def _checker_pairs(machine: dict, editorial: list | None = None) -> list:
+    """checker 配下の客観値（天井・注記・スルー/周期の値）を組にする。
+
+    ★未知の数値末端を黙って捨てない★（Codex 12巡目 (a)-3）
+      `target` のように画面に出る値が、slot にも未分類にも残らず消えていた。
+    """
     out = []
+    editorial = editorial if editorial is not None else []
     unit = ((machine.get("checker") or {}).get("unit") or "")
 
     def walk(node, ptr):
@@ -691,7 +696,12 @@ def _checker_pairs(machine: dict) -> list:
                 # ★★編集判断は「その値だけ」外す。枝ごと切らない★★
                 #   （Codex 11巡目 (a)-7）byRate を丸ごと飛ばしていたので、
                 #   画面に出る byRate 配下の note まで消えていた。
-                if k in ("caution", "good", "excellent"):
+                # ★編集判断でも「捨てた記録」は必ず残す★（Codex 12巡目 (a)-3）
+                if k in ("caution", "good", "excellent", "target"):
+                    if isinstance(v, (int, float)):
+                        editorial.append({"pointer": f"{ptr}/{k}", "label": k,
+                                          "reason": "EDITORIAL_CHECKER_VALUE",
+                                          "value": f"{v}{unit}"})
                     continue
                 if k == "limit" and isinstance(v, (int, float)):
                     out.append((f"{ptr}/{k}", "limit", f"{v}{unit}"))
@@ -701,6 +711,9 @@ def _checker_pairs(machine: dict) -> list:
                     out.append((f"{ptr}/{k}", "through_count", f"{v}回"))
                 elif k in ("note", "label", "title") and isinstance(v, str) and v:
                     out.append((f"{ptr}/{k}", f"checker.{k}", v))
+                elif isinstance(v, (int, float)) and not isinstance(v, bool):
+                    # ★知らない数値も必ず組にする（未分類として止まる）★
+                    out.append((f"{ptr}/{k}", f"checker.unknown.{k}", f"{v}{unit}"))
                 else:
                     walk(v, f"{ptr}/{k}")
         elif isinstance(node, list):
@@ -752,7 +765,7 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
                                 "content_sha256": _sha(sent)})
 
     # ★記事だけでなく機種データの数値も同じ経路に通す★（Codex 9巡目 (a)-7）
-    for item in _pairs_from_detail(detail) + _machine_pairs(machine):
+    for item in _pairs_from_detail(detail) + _machine_pairs(machine, excluded_editorial):
         pointer, label, value = item[0], item[1], item[2]
         setting_raw = item[3] if len(item) > 3 else None
         table_label = item[4] if len(item) > 4 else None
@@ -857,9 +870,18 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
     #   （Codex 10巡目 (a)-5）。claim系のどこにも到達していなかった。
     try:
         import extract_setting_rates as esr
-        rates = esr.load_all().get(slug)
+        all_rates = esr.load_all()
+        rates = all_rates.get(slug)
         if rates:
             slots.extend(esr.as_slots(slug, rates))
+        elif esr.has_machine_block(slug):
+            # ★★HTMLに設定があるのに読み取れない＝抜け道★★（Codex 12巡目 (a)-2）
+            #   正規表現でJavaScriptを読んでいるので、書き方を変えるだけで
+            #   「無いこと」にできてしまう。読めない時は必ず止める。
+            unsupported.append({"pointer": f"/setting.html#{slug}",
+                                "reason": "SETTING_RATES_NOT_EXTRACTED",
+                                "excerpt": "setting.html に設定があるのに読み取れない",
+                                "content_sha256": _sha(slug)})
     except Exception as e:                      # 読めなければ黙って進めない
         unsupported.append({"pointer": "/setting.html",
                             "reason": "SETTING_RATES_UNREADABLE",

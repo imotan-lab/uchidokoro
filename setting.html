@@ -193,8 +193,15 @@ function guardPublished(slug) {
     .then(r => r.ok ? r.json() : null)
     .catch(() => null)
     .then(mf => {
-      if (!mf || !mf.claim_gate_enabled || !Array.isArray(mf.slugs)) return true;
-      if (mf.slugs.includes(slug)) return true;
+      // ★★名簿が読めない・壊れている時は「表示しない」側に倒す★★
+      //   （2026-07-28・Codex 12巡目 (a)-1）
+      //   以前は fail-open だったので、名簿を消す／キー名を変えるだけで通った。
+      //   ただし「ゲート自体が無効」と明示されている時だけは従来どおり全機種。
+      var ok = false;
+      if (mf && mf.claim_gate_enabled === false) ok = true;              // 移行期
+      else if (mf && mf.claim_gate_enabled === true
+               && Array.isArray(mf.slugs) && mf.slugs.includes(slug)) ok = true;
+      if (ok) return true;
       const main = document.querySelector("main") || document.body;
       main.innerHTML = '<div class="wrap"><h1>準備中です</h1>'
         + '<p>この機種の数値は出典の確認が済んでいないため、いまは公開していません。</p>'
