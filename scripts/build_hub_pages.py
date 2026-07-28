@@ -377,6 +377,21 @@ def build_page(file, prose, data_html):
     return "\n".join(parts)
 
 
+def _prose_with_numbers(obj, has_unit_number, path="$") -> list:
+    """固定文のうち「単位つきの数値」を含む箇所の位置を返す。"""
+    out = []
+    if isinstance(obj, str):
+        if has_unit_number(obj):
+            out.append(f"{path}: {obj[:50]}")
+    elif isinstance(obj, dict):
+        for k, v in obj.items():
+            out.extend(_prose_with_numbers(v, has_unit_number, f"{path}.{k}"))
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            out.extend(_prose_with_numbers(v, has_unit_number, f"{path}[{i}]"))
+    return out
+
+
 def main(allow_ungated: bool = False):
     # ★★ハブ4ページもゲート外だった★★（Codex 10巡目 (a)-4）
     #   tenjo_display / strategy / checker閾値 をそのままランキングHTMLへ出すので、
@@ -402,10 +417,15 @@ def main(allow_ungated: bool = False):
                 blocked.append((r.get("slug"), why))
         if blocked:
             print(f"出典の裏取りゲート: ★有効★ → {len(blocked)} 機種を一覧から外します")
-            for s, why in blocked:
-                print(f"  ✗ {s}: {why[0] if why else ''}")
+            for s_, why in blocked:
+                for ln in (why or []):   # ★全理由を出す★（Codex 11巡目 (b)-1）
+                    print(f"  ✗ {s_}: {ln}")
             ng = {s for s, _ in blocked}
             rows = [r for r in rows if r.get("slug") not in ng]
+        # ★★空の一覧を成功として書き出さない★★（Codex 11巡目 (b)-5）
+        if not rows:
+            print("★公開できる機種が1件も無いのでハブ4ページは作りません★")
+            return 1
     elif not allow_ungated:
         print("★出典の裏取りゲートが無効なのでハブ4ページを作りません★")
         print("  承知のうえで作るなら --allow-ungated を付けてください。")
@@ -413,6 +433,18 @@ def main(allow_ungated: bool = False):
     else:
         print("☆☆裏取りを確かめずにハブ4ページを作ります（--allow-ungated 指定）☆☆")
     prose_all = json.loads(PROSE.read_text(encoding="utf-8"))
+    # ★★固定文に埋まった数値もゲートの外だった★★（Codex 11巡目 (a)-3）
+    #   一覧から機種を外しても「うみねこ2は200G」等の記述は本文に残る。
+    #   ゲート有効時は、単位つきの数値を含む固定文を出さない。
+    if gate_on:
+        import claim_inventory as _ci
+        dropped = _prose_with_numbers(prose_all, _ci.numeral_with_unit)
+        if dropped:
+            print(f"★固定文のうち {len(dropped)} 箇所に未検証の数値があります★")
+            for p in dropped[:20]:
+                print(f"  ✗ {p}")
+            print("  裏取りが済むまでハブ4ページは作れません（固定文を直すか裏取りする）")
+            return 1
 
     A = dataset_A(rows)
     C = dataset_C(rows)

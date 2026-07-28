@@ -185,6 +185,25 @@ const slugInfo = resolveMachineSlug();
 const slug = slugInfo.slug;
 const STORAGE_KEY = "uchidokoro_setting_" + slug;
 
+// ★★公開してよい機種の名簿を見る★★（2026-07-28・Codex 11巡目 (a)-2）
+//   名簿に無い機種は ?slug= で指定されても中身を出さない。
+//   名簿が無い／裏取りゲートが無効のうちは、これまでどおり全機種を表示する。
+function guardPublished(slug) {
+  return fetch("assets/data/published-slugs.json")
+    .then(r => r.ok ? r.json() : null)
+    .catch(() => null)
+    .then(mf => {
+      if (!mf || !mf.claim_gate_enabled || !Array.isArray(mf.slugs)) return true;
+      if (mf.slugs.includes(slug)) return true;
+      const main = document.querySelector("main") || document.body;
+      main.innerHTML = '<div class="wrap"><h1>準備中です</h1>'
+        + '<p>この機種の数値は出典の確認が済んでいないため、いまは公開していません。</p>'
+        + '<p><a href="index.html">トップページへ戻る</a></p></div>';
+      return false;
+    });
+}
+
+guardPublished(slug).then(okToShow => { if (!okToShow) return;
 fetch("assets/data/machines.json").then(r=>r.json()).then(machines=>{
   const m = machines.find(x=>x.slug===slug);
   if(!m) return;
@@ -208,6 +227,7 @@ fetch("assets/data/machines.json").then(r=>r.json()).then(machines=>{
   document.title = m.name + " 小役カウンター ポチポチくん | うちどころ。";
   const meta = document.querySelector('meta[name="description"]');
   if(meta) meta.content = m.name + "の小役カウンターツール。BB確率・小役確率をリアルタイムで計算し、設定1〜6の期待度をベイズ推定で表示します。";
+});
 });
 
 // 機種別設定判別データ（追加機種はここに追記）

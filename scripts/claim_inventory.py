@@ -676,8 +676,8 @@ def _machine_pairs(machine: dict) -> list:
     return out
 
 
-# checker 内で「編集判断」として裏取り対象から外す項目
-_CHECKER_EDITORIAL = ("caution", "good", "excellent", "byRate", "note_editorial")
+# checker 内で「編集判断」として裏取り対象から外す**値**（枝ごとは外さない）
+_CHECKER_EDITORIAL = ("caution", "good", "excellent")
 
 
 def _checker_pairs(machine: dict) -> list:
@@ -688,10 +688,17 @@ def _checker_pairs(machine: dict) -> list:
     def walk(node, ptr):
         if isinstance(node, dict):
             for k, v in node.items():
-                if k in _CHECKER_EDITORIAL:
-                    continue                      # 編集判断（下で記録する）
+                # ★★編集判断は「その値だけ」外す。枝ごと切らない★★
+                #   （Codex 11巡目 (a)-7）byRate を丸ごと飛ばしていたので、
+                #   画面に出る byRate 配下の note まで消えていた。
+                if k in ("caution", "good", "excellent"):
+                    continue
                 if k == "limit" and isinstance(v, (int, float)):
                     out.append((f"{ptr}/{k}", "limit", f"{v}{unit}"))
+                elif k == "suruMax" and isinstance(v, (int, float)):
+                    out.append((f"{ptr}/{k}", "suruMax", f"{v}回"))
+                elif k == "count" and isinstance(v, (int, float)):
+                    out.append((f"{ptr}/{k}", "through_count", f"{v}回"))
                 elif k in ("note", "label", "title") and isinstance(v, str) and v:
                     out.append((f"{ptr}/{k}", f"checker.{k}", v))
                 else:

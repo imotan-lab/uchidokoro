@@ -1,4 +1,4 @@
-const CACHE_NAME = 'uchidokoro-v173';
+const CACHE_NAME = 'uchidokoro-v174';
 
 const STATIC_CACHE = [
   '/',
@@ -68,7 +68,26 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // その他リソースは cache-first（オフライン対応）
+  // ★★HTML（ページそのもの）は network-first★★
+  //   （2026-07-28・Codex 11巡目 (a)-4）
+  //   cache-first だと、公開を止めた後も「以前見た古いページ」が先に返る。
+  //   誤情報を含む記事がキャッシュに残り続けるので、ページだけは必ずネット優先にする。
+  const isPage = event.request.mode === 'navigate'
+    || (event.request.headers.get('accept') || '').includes('text/html');
+  if (isPage) {
+    event.respondWith(
+      fetch(event.request).then(response => {
+        if (response && response.status === 200) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        }
+        return response;
+      }).catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // その他リソース（CSS/JS/画像）は cache-first（オフライン対応）
   event.respondWith(
     caches.match(event.request).then(cached => {
       const fetchPromise = fetch(event.request).then(response => {

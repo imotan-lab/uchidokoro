@@ -268,7 +268,8 @@ def main(allow_ungated: bool = False):
               f"noindexの準備中ページに置き換えます")
         # ★理由を捨てない★（Codex 10巡目 (b)-1）
         for slug, why in blocked_by_claim.items():
-            print(f"  ✗ {slug}: {why[0] if why else ''}")
+            for ln in (why or []):      # ★全理由を出す★（Codex 11巡目 (b)-1）
+                print(f"  ✗ {slug}: {ln}")
     else:
         # ★★ゲート無効のまま既存HTMLを置き換えない★★（Codex 10巡目 (a)-1）
         #   「警告して書き込む」は条件7（enabled=falseなら既存成果物を置換しない）に反する。
@@ -291,6 +292,7 @@ def main(allow_ungated: bool = False):
     pochipochi_reasons = extract_pochipochi_reasons(template)
 
     detail_dir = BASE / "assets" / "data" / "machine-details"
+    broken_details: list = []
     generated = 0
     prerendered = 0
     for machine in machines:
@@ -384,8 +386,13 @@ def main(allow_ungated: bool = False):
         if dp.is_file():
             try:
                 detail = json.loads(dp.read_text(encoding="utf-8"))
-            except Exception:
-                detail = {}
+            except Exception as e:
+                # ★★読めない記事を「本文なし」で公開しない★★（Codex 11巡目 (b)-4）
+                #   握り潰すと、中身が欠けたページを正常生成として扱ってしまう。
+                print(f"★記事データが読めません: {slug} ({dp.name}) "
+                      f"{type(e).__name__}: {e}")
+                broken_details.append(slug)
+                continue
             lead = detail.get("lead", "") or ""
             if lead:
                 html_out = html_out.replace(
@@ -432,7 +439,26 @@ def main(allow_ungated: bool = False):
         (out_dir / "index.html").write_text(html_out, encoding="utf-8", newline="\n")
         generated += 1
 
+    # ★★公開してよい機種の名簿を書き出す★★（Codex 11巡目 (a)-1/(a)-2）
+    #   ブラウザ側（machine.html / setting.html / index.html）はこれを見て、
+    #   名簿に無い機種は「準備中」と表示する＝汎用URLで中身を見せない。
+    published = [m["slug"] for m in machines if m["slug"] not in blocked_by_claim]
+    manifest = BASE / "assets" / "data" / "published-slugs.json"
+    manifest.write_text(json.dumps(
+        {"schema_version": "published-slugs/v1",
+         "claim_gate_enabled": bool(gate_on),
+         "slugs": sorted(published)}, ensure_ascii=False, indent=1),
+        encoding="utf-8")
+    print(f"公開名簿を書き出し: {len(published)} 機種 → assets/data/published-slugs.json")
+
     print(f"生成完了: {generated} 機種 / machines/{{slug}}/index.html（うち本文プリレンダ {prerendered} 機種）")
+    # ★★1機種も作れなければ成功にしない★★（Codex 11巡目 (b)-5）
+    if generated == 0:
+        print("★1機種も生成できませんでした（全機種が止まっています）★")
+        return 1
+    if broken_details:
+        print(f"★記事データが読めない機種があります: {broken_details}★")
+        return 1
 
 
 if __name__ == "__main__":

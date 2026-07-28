@@ -68,6 +68,18 @@ class EvidenceError(Exception):
     pass
 
 
+def _valid_ts(s) -> bool:
+    """★形式だけでなく実在する日時か★（共通の日時検査）"""
+    import datetime as _dt
+    if not _TS_RE.match(str(s or "")):
+        return False
+    try:
+        _dt.datetime.strptime(str(s), "%Y-%m-%dT%H:%M:%SZ")
+        return True
+    except ValueError:
+        return False
+
+
 def canonical_sha256(obj) -> str:
     """指紋の計算方法。★台帳側と同じ規則★（キー順を固定して空白を入れない）"""
     return hashlib.sha256(
@@ -117,8 +129,10 @@ def evidence_violations(ev, where: str = "evidence") -> list:
         for k in ("requested_url", "final_url"):
             if not str(f.get(k, "")).startswith("https://"):
                 v.append(f"{where}.fetch.{k}: https のURLでない")
-        if not _TS_RE.match(str(f.get("fetched_at", ""))):
-            v.append(f"{where}.fetch.fetched_at: UTCのISO形式でない")
+        # ★形だけでなく実在する日時か★（Codex 11巡目 (b)-3）
+        #   2026-99-99T25:61:61Z は正規表現を通り、後段で ValueError になっていた
+        if not _valid_ts(f.get("fetched_at")):
+            v.append(f"{where}.fetch.fetched_at: 実在するUTC日時でない")
         if f.get("http_status") != 200:
             # ★200以外のページを証拠にしない★（404の案内文などを拾わせない）
             v.append(f"{where}.fetch.http_status: 200でない（{f.get('http_status')}）")

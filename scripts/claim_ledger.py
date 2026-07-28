@@ -82,6 +82,18 @@ class LedgerError(Exception):
     """スキーマ違反。★必ず止める（黙って直さない）★"""
 
 
+def _valid_ts(s) -> bool:
+    """★形式だけでなく実在する日時か★（claim_evidence と同じ規則）"""
+    import datetime as _dt
+    if not _TS_RE.match(str(s or "")):
+        return False
+    try:
+        _dt.datetime.strptime(str(s), "%Y-%m-%dT%H:%M:%SZ")
+        return True
+    except ValueError:
+        return False
+
+
 def _now_utc():
     """現在時刻（UTC・naive）。期限切れ判定に使う。"""
     import datetime as _dt
@@ -107,6 +119,8 @@ def _enum(v, allowed, where: str, key: str):
 
 
 def _validate_source(src: dict, where: str, registry: dict | None = None) -> None:
+    if not isinstance(src, dict):
+        raise LedgerError(f"{where}: 出典が辞書でない（{type(src).__name__}）")
     for k in ("source_id", "requested_url", "final_url", "quote", "quote_sha256",
               "fetched_at", "trust_snapshot", "verification"):
         _req(src, k, where)
@@ -121,8 +135,12 @@ def _validate_source(src: dict, where: str, registry: dict | None = None) -> Non
     for k in ("requested_url", "final_url"):
         if not str(src[k]).startswith("https://"):
             raise LedgerError(f"{where}.{k}: https のURLでない")
-    if not _TS_RE.match(str(src["fetched_at"])):
-        raise LedgerError(f"{where}.fetched_at: UTCのISO形式でない")
+    # ★形式だけでなく実在する日時か★（Codex 11巡目 (b)-3）
+    if not _valid_ts(src["fetched_at"]):
+        raise LedgerError(f"{where}.fetched_at: 実在するUTC日時でない")
+    _ver = src.get("verification") or {}
+    if "checked_at" in _ver and not _valid_ts(_ver["checked_at"]):
+        raise LedgerError(f"{where}.verification.checked_at: 実在するUTC日時でない")
 
     ts = src["trust_snapshot"]
     for k in ("publisher_id", "ownership_group_id", "content_lineage_id",
@@ -200,6 +218,15 @@ def _validate_source(src: dict, where: str, registry: dict | None = None) -> Non
 
 
 def validate_claim(c: dict, where: str, registry: dict | None = None) -> None:
+    # ★型を先に確かめてから意味の検査へ★（Codex 11巡目 (b)-2）
+    #   claims: [null] のような入力で .get() に到達し、生の例外になっていた
+    if not isinstance(c, dict):
+        raise LedgerError(f"{where}: claim が辞書でない（{type(c).__name__}）")
+    for k in ("value", "conditions"):
+        if k in c and not isinstance(c[k], dict):
+            raise LedgerError(f"{where}.{k}: 辞書でない（{type(c[k]).__name__}）")
+    if "sources" in c and not isinstance(c["sources"], list):
+        raise LedgerError(f"{where}.sources: 配列でない")
     for k in ("claim_id", "slot_id", "claim_kind", "field_key", "value",
               "conditions", "verify_state", "sources"):
         _req(c, k, where)
@@ -757,6 +784,18 @@ def selftest() -> int:
           conditions={**_mk_claim()["conditions"], "counter_basis": "UNKNOWN"}), allow))
     t("★編集判断(JUDGMENT)は自動採用しない",
       not auto_adoptable(_mk_claim(claim_kind="JUDGMENT"), allow))
+
+    # -------- ★壊れた形でも例外でなく違反として止める★（Codex 11巡目 (b)-2/(b)-3）
+    t("★★claim が辞書でなくても例外にならず止まる（claims:[null]）★★",
+      raises(lambda: validate_claim(None, "w")))
+    t("★value / conditions が辞書でなければ止まる",
+      raises(lambda: validate_claim(_mk_claim(value="x"), "w")))
+    t("★出典が辞書でなければ止まる",
+      raises(lambda: validate_claim(_mk_claim(sources=[None, None]), "w")))
+    t("★★実在しない日時（2026-99-99T25:61:61Z）を通さない★★",
+      raises(lambda: validate_claim(_mk_claim(sources=[
+          {**_mk_source("q1", "a"), "fetched_at": "2026-99-99T25:61:61Z"},
+          _mk_source("q2", "b")]), "w")))
 
     # -------- ★証拠は台帳の外（Codex 8巡目・閉鎖条件③）★
     def _with_src(**over):
