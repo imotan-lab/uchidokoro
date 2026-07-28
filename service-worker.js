@@ -1,9 +1,12 @@
-const CACHE_NAME = 'uchidokoro-v174';
+const CACHE_NAME = 'uchidokoro-v175';
 
+// ★先読みするのは「中身が機種に依存しない」ファイルだけ★
+//   （2026-07-28・Codex 11巡目 手順7）
+//   machine.html は汎用の器で、公開を止めた機種の表示にも使われうるので先読みしない。
+//   機種ページ（/machines/{slug}/）は network-first で毎回取り直す。
 const STATIC_CACHE = [
   '/',
   '/index.html',
-  '/machine.html',
   '/setting.html',
   '/about.html',
   '/contact.html',
