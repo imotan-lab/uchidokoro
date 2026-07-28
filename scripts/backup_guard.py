@@ -62,6 +62,10 @@ ALLOW_BASENAMES = {
 }
 # 日付つきタスクログ（例: new_machine_2026-07-16.log）
 ALLOW_LOG_RE = re.compile(r"^[a-z0-9_]+_\d{4}-\d{2}-\d{2}\.log$")
+# 自動タスクの手順書（規約どおりの `{taskId}_SKILL.md`。2026-07-28に一般化）
+#   個別に列挙する方式だと、新しいタスクの手順書が黙ってバックアップされない
+#   （task-watchdog_SKILL.md が実際に拒否されていた）
+ALLOW_TASK_SKILL_RE = re.compile(r"^[a-z0-9][a-z0-9\-_]{1,60}_SKILL\.md$")
 
 # CLAUDE.md の日付つきスナップショット（圧縮など破壊的編集の前に退避する用途・2026-07-24追加）
 # 例: CLAUDE_uchidokoro_2026-07-24.md / CLAUDE_history_uchidokoro_2026-07-24.md
@@ -182,10 +186,29 @@ def content_findings(path: str) -> list[str]:
     return out
 
 
-def is_allowlisted(basename: str) -> bool:
-    return (basename in ALLOW_BASENAMES
+# ── 設計メモ（_design/ 配下）のバックアップ許可（2026-07-28追加）──
+#   `_design/` は .gitignore 対象なので、**Dropboxが唯一の保全先**。
+#   PC故障で Phase の終了条件や設計判断が失われるのを防ぐ。
+#   ★許可するのは「_design/ 配下の .md」だけ★（作業用JSONは巨大かつ再生成可能なので除く）
+#   秘密パターンの検査は従来どおり全部に掛かる。
+DESIGN_DIR_NAME = "_design"
+ALLOW_DESIGN_EXT = {".md"}
+
+
+def is_design_doc(src: str) -> bool:
+    """コピー元が `_design/` 配下の設計メモ（.md）か。"""
+    parent = os.path.basename(os.path.dirname(os.path.abspath(src)))
+    return (parent == DESIGN_DIR_NAME
+            and os.path.splitext(src.lower())[1] in ALLOW_DESIGN_EXT)
+
+
+def is_allowlisted(basename: str, src: str | None = None) -> bool:
+    if (basename in ALLOW_BASENAMES
             or bool(ALLOW_LOG_RE.match(basename))
-            or bool(ALLOW_CLAUDE_SNAPSHOT_RE.match(basename)))
+            or bool(ALLOW_CLAUDE_SNAPSHOT_RE.match(basename))
+            or bool(ALLOW_TASK_SKILL_RE.match(basename))):
+        return True
+    return bool(src) and is_design_doc(src)
 
 
 def cmd_copy(src: str, dst: str, optional: bool) -> int:
@@ -203,7 +226,7 @@ def cmd_copy(src: str, dst: str, optional: bool) -> int:
     # 許可リストは「バックアップ先に存在してよい名前」の一覧なのでdst名で照合する
     # （例: state.json → uchidokoro_state.json にリネームコピーする運用のため。
     #   ただし秘密パターンの名前検査はsrc/dst両方に掛ける＝リネームによるすり替えを防ぐ）
-    if not is_allowlisted(dst_base):
+    if not is_allowlisted(dst_base, src):
         findings.append("allowlist:リスト外")
     for b in {base, dst_base}:
         if os.path.splitext(b.lower())[1] in ARCHIVE_EXTENSIONS:
@@ -286,6 +309,33 @@ def cmd_backup_tree(src_root: str, dst_root: str) -> int:
         print(f"  BLOCKED {rel} RULES={','.join(f)}")
     _log(f"backup-tree: ✅ copied={copied} blocked={blocked} skipped={skipped} → {dst_root}")
     return 0 if blocked == 0 else 1
+
+
+def cmd_backup_design(src_dir: str, dst_dir: str) -> int:
+    """`_design/` の設計メモ（.md）を丸ごとDropboxへ保全する。
+
+    `_design/` は .gitignore 対象なので、Dropboxが唯一の保全先。
+    1件でも拒否されたら非0で終える（黙って一部だけ保全しない）。
+    """
+    if not os.path.isdir(src_dir):
+        print("SRC_MISSING", src_dir)
+        return 2
+    if not _under(dst_dir, DROPBOX_ROOT_ALLOWED):
+        print("DST_OUT_OF_ROOT", dst_dir)
+        return 2
+    ok = ng = 0
+    for name in sorted(os.listdir(src_dir)):
+        src = os.path.join(src_dir, name)
+        if not os.path.isfile(src) or not is_design_doc(src):
+            continue
+        rc = cmd_copy(src, os.path.join(dst_dir, name), False)
+        if rc == 0:
+            ok += 1
+        else:
+            ng += 1
+    print(f"DESIGN_BACKUP ok={ok} ng={ng}")
+    _log(f"backup-design: ok={ok} ng={ng} → {dst_dir}")
+    return 0 if ng == 0 else 1
 
 
 def cmd_scan(root: str) -> int:
@@ -427,6 +477,42 @@ def selftest() -> int:
     t("backup-tree: 許可対象コピー・除外dir無視・秘密混入は拒否",
       copied_ok and excluded_ok and leak_blocked and rc_bt == 1)
 
+    # 12. ★backup-design（_design の設計メモ保全・2026-07-28）★
+    des = os.path.join(d, "_design")
+    os.makedirs(des, exist_ok=True)
+    open(os.path.join(des, "phase1_closure_conditions.md"), "w",
+         encoding="utf-8").write("# 閉鎖条件\n1. 公開値は typed slot へ")
+    open(os.path.join(des, "ledger_todo.json"), "w").write('{"x":1}')   # .md でない
+    open(os.path.join(des, "leak_design.md"), "w", encoding="utf-8").write(
+        "token: ghp_" + "A" * 24)                                       # 秘密混入
+    t("★_design配下の .md は許可される（許可リストに書かなくても）",
+      is_allowlisted("phase1_closure_conditions.md",
+                     os.path.join(des, "phase1_closure_conditions.md")))
+    t("★_design配下でも .json は許可しない（巨大な作業データ）",
+      not is_allowlisted("ledger_todo.json", os.path.join(des, "ledger_todo.json")))
+    t("★タスク手順書は {taskId}_SKILL.md の形なら許可（列挙不要）",
+      is_allowlisted("task-watchdog_SKILL.md")
+      and is_allowlisted("uchidokoro-quality-review_SKILL.md")
+      and not is_allowlisted("secret_SKILL.mdx"))
+    t("★_design 以外の場所の同名 .md は許可しない",
+      not is_allowlisted("phase1_closure_conditions.md",
+                         os.path.join(d, "phase1_closure_conditions.md")))
+    DROPBOX_ROOT_ALLOWED = d
+    try:
+        ddst = os.path.join(d, "dropbox_design")
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc_bd = cmd_backup_design(des, ddst)
+    finally:
+        DROPBOX_ROOT_ALLOWED = orig_root
+    t("backup-design: .mdだけコピー・秘密混入は拒否して非0",
+      os.path.exists(os.path.join(ddst, "phase1_closure_conditions.md"))
+      and not os.path.exists(os.path.join(ddst, "ledger_todo.json"))
+      and not os.path.exists(os.path.join(ddst, "leak_design.md"))
+      and rc_bd == 1)
+    with contextlib.redirect_stdout(io.StringIO()):
+        rc_out2 = cmd_backup_design(des, os.path.join(d, "outside_dropbox2"))
+    t("backup-design: 認可ルート外の宛先を拒否", rc_out2 == 2)
+
     ok = all(c for _, c in results)
     print(f"\nselftest: {sum(1 for _, c in results if c)}/{len(results)} 合格")
     return 0 if ok else 1
@@ -434,7 +520,8 @@ def selftest() -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Dropboxバックアップの秘密情報ガード")
-    parser.add_argument("command", nargs="?", choices=["copy", "scan", "backup-tree"])
+    parser.add_argument("command", nargs="?",
+                        choices=["copy", "scan", "backup-tree", "backup-design"])
     parser.add_argument("src", nargs="?")
     parser.add_argument("dst", nargs="?")
     parser.add_argument("--dir", help="scan: 走査対象ディレクトリ")
@@ -448,6 +535,10 @@ def main() -> int:
         if not args.src or not args.dst:
             parser.error("backup-tree には src(gpt_researchルート) と dst(Dropbox宛先) が必要")
         return cmd_backup_tree(args.src, args.dst)
+    if args.command == "backup-design":
+        if not args.src or not args.dst:
+            parser.error("backup-design には src(_designディレクトリ) と dst が必要")
+        return cmd_backup_design(args.src, args.dst)
     if args.command == "copy":
         if not args.src or not args.dst:
             parser.error("copy には <src> <dst> が必要")
