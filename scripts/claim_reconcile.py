@@ -196,6 +196,13 @@ def reconcile(slug: str, machine: dict, detail: dict,
         problems.append(
             f"台帳の機種型番が機種データから計算した値と違う"
             f"（台帳={vk} / 正={want_vk}）")
+    # ★★型式の同定情報が無ければ、そもそもバージョンを区別できない★★
+    #   （Codex 5巡目 (a)-5）。表示名と種別だけでは同名の別型式を見分けられない。
+    miss = ci.identity_missing(machine)
+    if miss:
+        problems.append(
+            f"機種の型式情報が足りない: {miss}"
+            f"（machines.json の identity に登録すること）")
     if mref.get("identity_state") != "VERIFIED":
         problems.append(
             f"機種の同定が済んでいない: identity_state={mref.get('identity_state')}")
@@ -324,7 +331,10 @@ def selftest() -> int:
         print(("✅" if cond else "❌") + " " + name)
 
     # ★実データと同じ作り方で在庫を作る（在庫は必ずその場で作り直される）★
-    m = {"slug": "x", "name": "スマスロテスト機", "info": "スマスロAT"}
+    m = {"slug": "x", "name": "スマスロテスト機", "info": "スマスロAT",
+         "identity": {"manufacturer_id": "test-maker",
+                      "regulatory_model_code": "TEST-001",
+                      "release_date": "2026-01-01"}}
     d = {"factTable": [["AT間天井", "1200G+α"]]}
     inv = ci.build_inventory("x", m, d)
     slot = inv["slots"][0]
@@ -483,6 +493,11 @@ def selftest() -> int:
     unv["machine_ref"] = {**unv["machine_ref"], "identity_state": "UNVERIFIED"}
     t("★★機種の同定が済んでいなければ止まる★★",
       any("同定が済んでいない" in w for w in reconcile("x", m, d, inv, unv)))
+    # ★★Codex 5巡目 (a)-5：型式が無ければバージョンを区別できない★★
+    t("★★機種の型式情報（メーカー・型式）が無ければ止まる★★",
+      any("型式情報が足りない" in w for w in
+          reconcile("x", {"slug": "x", "name": "スマスロテスト機",
+                          "info": "スマスロAT"}, d, inv, ledger([claim()]))))
 
     t("★台帳が参照する機種データが今のものと違えば止まる",
       any("機種データが今のものと違う" in w for w in

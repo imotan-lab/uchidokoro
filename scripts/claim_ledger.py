@@ -130,8 +130,24 @@ def _validate_source(src: dict, where: str, registry: dict | None = None) -> Non
 
     ver = src["verification"]
     for k in ("verdict", "code", "checked_at", "verifier_version",
-              "vote_disposition", "checks"):
+              "vote_disposition", "checks",
+              # ★★機種同定の材料はスキーマの必須項目★★（Codex 5巡目 (b)-1）
+              #   ゲートだけで弾いていると、単体検証コマンドが
+              #   「欠落した台帳」を合格と表示してしまう。
+              "machine_variant_key_matched", "identity_evidence"):
         _req(ver, k, f"{where}.verification")
+    ie = ver["identity_evidence"]
+    if not isinstance(ie, dict):
+        raise LedgerError(f"{where}.verification.identity_evidence: 形式が違う")
+    for k in ("page_title", "quote_context"):
+        if not str(ie.get(k) or "").strip():
+            raise LedgerError(
+                f"{where}.verification.identity_evidence.{k}: 空にできない")
+    # ★引用は、同定に使った文脈の中の逐語であること★
+    if str(src["quote"]) not in str(ie["quote_context"]):
+        raise LedgerError(
+            f"{where}: 引用が identity_evidence.quote_context の中に無い"
+            f"（別の場所から切り出した引用は使えない）")
     _enum(ver["verdict"], VERDICTS, f"{where}.verification", "verdict")
     _enum(ver["vote_disposition"], VOTE_DISPOSITION, f"{where}.verification",
           "vote_disposition")
@@ -469,7 +485,7 @@ def _mk_source(quote: str, pub: str, counted: bool = True,
             # ★出典が本当にその機種のページかを判定するための証拠★
             "identity_evidence": {
                 "page_title": "スマスロテスト機 天井・機械割・設定判別",
-                "body_excerpt": "スマスロテスト機の解析情報です。"},
+                "quote_context": "スマスロテスト機の解析情報です。" + quote},
             "checks": {c: {"verdict": "PASS", "code": "OK"} for c in CHECK_IDS},
         },
     }

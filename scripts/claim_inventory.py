@@ -28,6 +28,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
@@ -403,10 +404,23 @@ def identity_tuple(machine: dict) -> dict:
     同定と関係ない変更でも型番が変わってしまう（Codex 4巡目 (a)-3）。
     同定に使う項目だけを固定する。
     """
+    ident = machine.get("identity") or {}
     return {"slug": machine.get("slug"),
             "name": machine.get("name"),
             "info": machine.get("info"),
-            "release_date": machine.get("release_date")}
+            # ★★物理的な型式まで含める★★（Codex 5巡目 (a)-5）
+            #   表示名や種別は変わり得るので、同名の別型式を区別できない。
+            "manufacturer_id": ident.get("manufacturer_id"),
+            "regulatory_model_code": ident.get("regulatory_model_code"),
+            "release_date": ident.get("release_date")
+            or machine.get("release_date")}
+
+
+def identity_missing(machine: dict) -> list:
+    """型式の同定情報が足りない項目を返す（空なら足りている）。"""
+    ident = machine.get("identity") or {}
+    return [k for k in ("manufacturer_id", "regulatory_model_code")
+            if not ident.get(k)]
 
 
 def variant_key(slug: str, machine: dict) -> str:
@@ -531,7 +545,9 @@ def _scan_excluded_value(unsupported: list, pointer: str, label: str,
     ラベルだけで「これは事実ではない」と決めると、値の中に書かれた
     天井や機械割が、検証も記録もされないまま公開される（Codex 3巡目・4巡目）。
     """
-    v = value or ""
+    # ★★字形の違いで検査をすり抜けさせない★★（Codex 5巡目 (a)-4）
+    #   「1／999」（全角スラッシュ）が確率として検知されなかった。
+    v = unicodedata.normalize("NFKC", str(value or ""))
     if _NUM_WITH_UNIT.search(v) and re.search(_FACT_WORD, v):
         unsupported.append({"pointer": f"{pointer}#excluded_value",
                             "reason": reason, "label": label,
@@ -562,7 +578,8 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
         # ★★文ごとに判定する★★（Codex 2回目 (a)-5）
         #   段落まるごとで判定していたため、「狙い目は300Gだが、天井は9999Gです」
         #   のように編集判断の語が1つ入るだけで、同じ段落の事実が消えていた。
-        for si_, sent in enumerate(re.split(r"(?<=[。\n])", str(text or ""))):
+        norm = unicodedata.normalize("NFKC", str(text or ""))
+        for si_, sent in enumerate(re.split(r"(?<=[。\n])", norm)):
             if not sent.strip():
                 continue
             # ★単位つきの数字を含む文は、事実を語っているとみなす★
@@ -593,6 +610,9 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
             unclassified.append({"pointer": pointer, "label": label,
                                  "reason": "SETTING_SIGNAL_CONFLICT",
                                  "value_excerpt": f"行={setting} / 見出し={_lab_setting}"})
+            # ★早く止める経路でも、値に混ざった事実は記録する★（Codex 5巡目 (b)-2）
+            _scan_excluded_value(unsupported, pointer, label, value,
+                                 "FACT_IN_UNCLASSIFIED_VALUE")
             continue
         if setting is None:
             setting = _lab_setting
@@ -602,6 +622,8 @@ def build_inventory(slug: str, machine: dict, detail: dict) -> dict:
             unclassified.append({"pointer": pointer, "label": label,
                                  "reason": "SETTING_NOT_NORMALIZED",
                                  "value_excerpt": str(setting_raw)[:30]})
+            _scan_excluded_value(unsupported, pointer, label, value,
+                                 "FACT_IN_UNCLASSIFIED_VALUE")
             continue
         if EDITORIAL_LABELS.search(label):
             # 編集判断（B区分）は裏取り対象外。ただし記録は残す
@@ -938,6 +960,11 @@ def selftest() -> int:
     t("★★同じ単位を2回書いた値を通さない（97.2%％ / 1200GG）★★",
       normalize_value("97.2%％", "%") is None
       and normalize_value("1200GG", "G", "MAX") is None)
+    t("★★全角スラッシュの確率も検知する（1／999）★★",
+      build_inventory("x", {"slug": "x"}, {"factTable": [
+          ["機種名", "テスト機。BIG確率は1／999"],
+          ["機械割(設定1)", "97.2%"]]}
+          )["coverage"]["unsupported_facts"] == 1)
     t("★★案内文の欄に混ぜた事実も見逃さない（機種名の欄）★★",
       build_inventory("x", {"slug": "x"}, {"factTable": [
           ["機種名", "テスト機。設定1の機械割は99.9%"],
@@ -994,7 +1021,8 @@ def main() -> int:
             # ★値を1つに特定できない枠は、型OKでも公開できない★
             if s["current_value"] is None:
                 mark = "値NG"
-            print(f"  [{mark}] {s['field_key']:<22} {s['current_text'][:40]}")
+            issue = f"  ← {s.get('value_issue')}" if s["current_value"] is None else ""
+            print(f"  [{mark}] {s['field_key']:<22} {s['current_text'][:40]}{issue}")
         for u in inv["unclassified_atoms"]:
             print(f"  [未分類] {u['label']}  ({u['pointer']}) "
                   f"{u.get('reason')} {u.get('value_excerpt', '')}")

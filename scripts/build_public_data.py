@@ -217,6 +217,13 @@ def main() -> int:
                     pd_[fn[:-5]] = json.load(
                         open(os.path.join(OUT_DETAILS, fn), encoding="utf-8"))
         problems = audit(pm, pd_)
+        # ★★公開物に載っていない記事ファイルが残っていないか★★（Codex 5巡目 (a)-6）
+        #   静的配信では、一覧に無いファイルでも URL を直接叩けば読める。
+        slugs = {x.get("slug") for x in pm}
+        for orphan in sorted(set(pd_) - slugs):
+            problems.append(f"公開一覧に無い記事ファイルが残っている: {orphan}.json")
+        for missing in sorted(slugs - set(pd_)):
+            problems.append(f"公開一覧にあるのに記事ファイルが無い: {missing}")
         # ★★既存の公開物にも裏取りゲートを掛け直す★★（Codex 2巡目 (a)-5）
         #   無効のまま作った公開物が、有効化後に --verify で「合格」に
         #   見えてしまうのを防ぐ。
@@ -236,7 +243,8 @@ def main() -> int:
             ng = [(s, w) for s, (o, w) in would if not o]
             print(f"  有効にした場合に止まる機種: {len(ng)} / {len(pm)}")
             for s, w in ng:
-                print(f"    ✗ {s}: {w[0] if w else ''}")
+                for ln in w:              # ★理由は全部出す★（Codex 5巡目 (b)-4）
+                    print(f"    ✗ {s}: {ln}")
         for x in problems:
             print("  ✗", x)
         return 1 if problems else 0
@@ -258,7 +266,8 @@ def main() -> int:
         ng = [(s, w) for s, (o, w) in would if not o]
         print(f"  有効にした場合に止まる機種: {len(ng)} / {len(pub_machines)}")
         for s, w in ng:               # ★slug と理由も出す★（Codex 4巡目 (b)-4）
-            print(f"    ✗ {s}: {w[0] if w else ''}")
+            for ln in w:
+                print(f"    ✗ {s}: {ln}")
         print(f"  有効化は {os.path.relpath(CLAIM_GATE, BASE)} の enabled を true に")
     # ★止まった理由を件数で終わらせない★（Codex 2巡目 (b)-1）
     for b in blocked:

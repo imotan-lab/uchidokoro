@@ -229,9 +229,17 @@ def identity_verdict(src: dict, identity: dict | None):
     if not identity:
         return False, "NO_IDENTITY_SPEC"
     ev = ((src.get("verification") or {}).get("identity_evidence") or {})
-    title, body = ev.get("page_title"), ev.get("body_excerpt")
-    if not title or not body:
+    title = ev.get("page_title")
+    context = ev.get("quote_context")
+    if not title or not context:
         return False, "NO_IDENTITY_EVIDENCE"
+    # ★★引用は、同定に使った文脈の中の逐語でなければならない★★（Codex 5巡目 (a)-2）
+    #   これが無いと「対象機種のページだが、比較欄に載った旧作の値」を
+    #   引用として切り出せてしまう。
+    quote = str(src.get("quote") or "")
+    if not quote or quote not in str(context):
+        return False, "QUOTE_NOT_IN_CONTEXT"
+
     cores = identity.get("machine_cores") or []
     ok, why = cid.check_title(title, cores, identity.get("reject_cores") or [],
                               identity.get("reject_name_cores") or [])
@@ -240,9 +248,49 @@ def identity_verdict(src: dict, identity: dict | None):
     ok, why = cid.check_tags(title, identity.get("machine_tags") or [], cores)
     if not ok:
         return False, f"TAG_NG:{why[:40]}"
-    ok, why = cid.check_body(body, cores)
+    # ★★見出しの「機種名区間の外」も見る★★（Codex 5巡目 (a)-3）
+    #   check_tags は機種名区間しか見ないので、
+    #   「【Lバンドリ！】天井・設定判別｜パチンコ版」が通ってしまう。
+    ok, why = _whole_text_ok(title, cores, identity)
+    if not ok:
+        return False, f"TITLE_OUTSIDE_NG:{why}"
+    # ★引用の周りに、別機種・別媒体・続編が混ざっていないこと★
+    ok, why = _whole_text_ok(context, cores, identity)
+    if not ok:
+        return False, f"CONTEXT_NG:{why}"
+    ok, why = cid.check_body(context, cores)
     if not ok:
         return False, f"BODY_NG:{why[:40]}"
+    return True, "OK"
+
+
+def _whole_text_ok(text: str, cores, identity: dict):
+    """文字列**全体**に、別媒体・別機種・続編の手掛かりが無いかを見る。
+
+    claim_identity の検査は「機種名区間」だけを見る作りなので、
+    区間の外に置かれた「｜パチンコ版」「続編2」を拾えない（Codex 5巡目 (a)-3）。
+    ここでは全体を見て、疑わしければ落とす（安全側）。
+    """
+    import claim_identity as cid
+
+    t = cid.normalize_core(str(text or ""))
+    if not t:
+        return False, "EMPTY"
+    if cid.is_pachinko_text(str(text or "")):
+        return False, "PACHINKO"
+    for rc in (identity.get("reject_name_cores") or []):
+        if not rc or len(rc) < 3:
+            continue
+        if rc in t and not any(rc in c or c in rc for c in cores):
+            return False, f"OTHER_MACHINE:{rc[:12]}"
+    # 「芯のすぐ後ろに数字」＝続編・世代違いの可能性（例: 芯+「2」）
+    for c in cores:
+        if not c:
+            continue
+        for mm in re.finditer(re.escape(c), t):
+            tail = t[mm.end():mm.end() + 1]
+            if tail.isdigit():
+                return False, f"SEQUEL_SUFFIX:{c[:10]}{tail}"
     return True, "OK"
 
 
@@ -423,7 +471,14 @@ def selftest() -> int:
                  {"slug": "y", "name": "スマスロ別機", "info": "スマスロAT"}]
     IDENT = _cid.identity_spec(_MACHINES[0], _MACHINES)
     EV = {"page_title": "スマスロテスト機 天井・機械割・設定判別",
-          "body_excerpt": "スマスロテスト機の解析情報です。"}
+          "quote_context": "スマスロテスト機の解析情報です。"
+                           "機械割は設定1:97.2% / 設定6:106.5%。"
+                           "設定1の機械割は97.2%です。設定6の機械割は106.5%です。"
+                           "機械割は106.5%（設定6）。"
+                           "機械割：設定1 97.2%／設定6 106.5%。"
+                           "設定1の機械割（出玉率）は97.2%です。"
+                           "設定1の機械割は97.2%です（メーカー公表値）。"
+                           "設定1の機械割は99.9%。機械割は設定1:99.9%。"}
 
     def _src(url, quote, c5_declared="PASS", others="PASS", vk=VK,
              verdict="PASS", disp="COUNTED", ev=None):
@@ -557,9 +612,30 @@ def selftest() -> int:
       not semantic_artifact(
           _c([_src("https://chonborista.com/a", Q1,
                    ev={"page_title": "スマスロ別機 天井・機械割",
-                       "body_excerpt": "スマスロ別機の解析情報です。"}),
+                       "quote_context": Q1 + "スマスロ別機の解析情報です。"}),
               _src("https://nana-press.com/b", Q2)]),
           VK, None, IDENT)["verified"])
+    # ★★Codex 5巡目★★
+    t("★★引用が同定の文脈に無ければ数えない（比較欄から切り出せない）★★",
+      not semantic_artifact(
+          _c([_src("https://chonborista.com/a", "設定1の機械割は88.8%",
+                   ev={"page_title": EV["page_title"],
+                       "quote_context": "スマスロテスト機の記事。"
+                                        "比較欄では旧作の設定1の機械割は88.8%。"}),
+              _src("https://nana-press.com/b", Q2)],
+             raw="88.8%", amount=88.8), VK, None, IDENT)["verified"])
+    t("★★機種名区間の外に置いた媒体表示も見る（｜パチンコ版）★★",
+      not semantic_artifact(
+          _c([_src("https://chonborista.com/a", Q1,
+                   ev={"page_title": "【スマスロテスト機】天井・設定判別｜パチンコ版",
+                       "quote_context": EV["quote_context"]}),
+              _src("https://nana-press.com/b", Q2)], ), VK, None, IDENT)["verified"])
+    t("★★機種名区間の外に置いた続編表示も見る★★",
+      not semantic_artifact(
+          _c([_src("https://chonborista.com/a", Q1,
+                   ev={"page_title": "【スマスロテスト機】天井・設定判別｜スマスロテスト機2",
+                       "quote_context": EV["quote_context"]}),
+              _src("https://nana-press.com/b", Q2)], ), VK, None, IDENT)["verified"])
     t("★同定の一式が無ければ、その場で止める（NO_IDENTITY_SPEC）",
       not semantic_artifact(ok2, VK, None, None)["verified"])
     t("★意味の検証器が無い項目は VERIFIED にしない（既定拒否）",
