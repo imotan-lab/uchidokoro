@@ -5,7 +5,9 @@
  "publishers": {
   "chonborista": {
    "name": "ちょんぼりすた",
-   "canonical_hosts": ["chonborista.com"],
+   "canonical_hosts": [
+    "chonborista.com"
+   ],
    "ownership_group_id": "own-chonborista",
    "content_lineage_id": "lin-chonborista",
    "tier": "MAJOR_ANALYSIS",
@@ -13,7 +15,10 @@
   },
   "slopachi-quest": {
    "name": "スロパチクエスト",
-   "canonical_hosts": ["slopachi-quest.com", "www.slopachi-quest.com"],
+   "canonical_hosts": [
+    "slopachi-quest.com",
+    "www.slopachi-quest.com"
+   ],
    "ownership_group_id": "own-slopachi-quest",
    "content_lineage_id": "lin-slopachi-quest",
    "tier": "MAJOR_ANALYSIS",
@@ -21,7 +26,9 @@
   },
   "nana-press": {
    "name": "なな徹（ナナプレス）",
-   "canonical_hosts": ["nana-press.com"],
+   "canonical_hosts": [
+    "nana-press.com"
+   ],
    "ownership_group_id": "own-nana-press",
    "content_lineage_id": "lin-nana-press",
    "tier": "MAJOR_ANALYSIS",
@@ -29,7 +36,9 @@
   },
   "1geki": {
    "name": "一撃",
-   "canonical_hosts": ["1geki.jp"],
+   "canonical_hosts": [
+    "1geki.jp"
+   ],
    "ownership_group_id": "own-1geki",
    "content_lineage_id": "lin-1geki",
    "tier": "MAJOR_ANALYSIS",
@@ -37,7 +46,9 @@
   },
   "dmm-ptown": {
    "name": "DMM ぱちタウン",
-   "canonical_hosts": ["p-town.dmm.com"],
+   "canonical_hosts": [
+    "p-town.dmm.com"
+   ],
    "ownership_group_id": "own-dmm",
    "content_lineage_id": "lin-dmm-ptown",
    "tier": "MAJOR_ANALYSIS",
@@ -45,15 +56,22 @@
   },
   "p-world": {
    "name": "P-WORLD",
-   "canonical_hosts": ["www.p-world.co.jp", "p-world.co.jp"],
+   "canonical_hosts": [
+    "www.p-world.co.jp",
+    "p-world.co.jp"
+   ],
    "ownership_group_id": "own-p-world",
-   "content_lineage_id": "lin-p-world",
+   "content_lineage_id": "lin-hazuse",
    "tier": "DIRECTORY",
-   "status": "ACTIVE"
+   "status": "ACTIVE",
+   "_lineage_why": "P-WORLDのページ末尾に解析情報の出所として「HAZUSE調べ」と明記がある（2026-07-31 Codexが実ページで確認）。HAZUSE本体を出典に加えるときに★別票として数えないため★、同じ系列に揃えておく。"
   },
   "maker-kitadenshi": {
    "name": "北電子（メーカー公式）",
-   "canonical_hosts": ["www.kitadenshi.co.jp", "kitadenshi.co.jp"],
+   "canonical_hosts": [
+    "www.kitadenshi.co.jp",
+    "kitadenshi.co.jp"
+   ],
    "ownership_group_id": "own-kitadenshi",
    "content_lineage_id": "lin-kitadenshi",
    "tier": "OFFICIAL",
@@ -61,11 +79,25 @@
   },
   "maker-universal": {
    "name": "ユニバーサル（メーカー公式）",
-   "canonical_hosts": ["www.universal-777.com"],
+   "canonical_hosts": [
+    "www.universal-777.com"
+   ],
    "ownership_group_id": "own-universal",
    "content_lineage_id": "lin-universal",
    "tier": "OFFICIAL",
    "status": "ACTIVE"
+  },
+  "hazuse": {
+   "name": "ハズセ",
+   "canonical_hosts": [
+    "hazuse.com",
+    "www.hazuse.com"
+   ],
+   "ownership_group_id": "own-hazuse",
+   "content_lineage_id": "lin-hazuse",
+   "tier": "MAJOR_ANALYSIS",
+   "status": "ACTIVE",
+   "_note": "★P-WORLDの解析情報の出所★ P-WORLDと同じ系列なので2票に数えない。"
   }
  },
  "_excluded": {
