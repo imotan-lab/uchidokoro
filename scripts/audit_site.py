@@ -995,6 +995,54 @@ def check_30_surface_conflicts(machines: list) -> list[str]:
     return ngs
 
 
+def check_31_codex_report(machines: list) -> list[str]:
+    """スクリプトを変えたのにCodexへ報告していないまま溜まっていないか
+
+    ★なぜ機械に見張らせるか（2026-07-31）★
+      「作ったらCodexへ報告する」を記憶・CLAUDE.md・手順書の3か所に書いたが、
+      **3回とも守れなかった**（作業に没頭すると飛ぶ）。運営者からも
+      「確認怠りすぎ、忘れないように」と指摘された。
+      文章で覚えるのをやめて、**commit前に必ず走らせるこの監査**に載せる。
+
+    ★数え方★
+      `Documents/uchidokoro/last_codex_report.json` に「最後に報告した時点の
+      コミット」を記録する。それ以降に scripts/ を触ったコミットが
+      たまっていたら NG にする。
+
+    ★報告したら記録する★
+      python scripts/codex_reported.py     （このコミットまで報告済み、と記録）
+    """
+    import subprocess
+    STATE = r"C:/Users/imao_/Documents/uchidokoro/last_codex_report.json"
+    LIMIT = 3
+    try:
+        last = load_json(STATE).get("commit") if os.path.isfile(STATE) else None
+    except Exception:
+        last = None
+    if not last:
+        return []          # 記録が無い間は何も言わない（初回の邪魔をしない）
+    try:
+        # ★文字コードを必ず指定する★（2026-07-31）
+        #   指定しないと Windows の既定（cp932）で読もうとし、
+        #   日本語のコミットメッセージで例外になる。
+        #   すると下の except に落ちて **この検査が黙って無効化される**。
+        #   実際に一度そうなっていた（入れたのに効いていなかった）。
+        r = subprocess.run(["git", "log", "--oneline", f"{last}..HEAD", "--",
+                            "scripts/"], cwd=BASE, capture_output=True)
+        if r.returncode != 0:
+            return []      # 記録のコミットが無い等。監査を落とさない
+        text = r.stdout.decode("utf-8", "replace")
+        lines = [x for x in text.splitlines() if x.strip()]
+    except Exception as e:
+        # ★黙って通さない★（検査が動かないこと自体を知らせる）
+        return [f"Codexへの未報告を数えられません（{type(e).__name__}）: {e}"]
+    if len(lines) < LIMIT:
+        return []
+    head = " / ".join(x[:56] for x in lines[:4])
+    return [f"Codexへ未報告のスクリプト変更が {len(lines)} 件たまっています: {head}"
+            f" → 実コードを見せて報告し、`python scripts/codex_reported.py` を実行してください"]
+
+
 CHECKS = [
     ("1_インラインstyle", check_1_inline_style),
     ("2_サブパス残骸", check_2_old_subpath),
@@ -1026,6 +1074,7 @@ CHECKS = [
     ("28_settei表の列数整合", check_28_settei_table_shape),
     ("29_制御文字混入", check_29_control_chars),
     ("30_記事内の自己矛盾", check_30_surface_conflicts),
+    ("31_Codexへの未報告", check_31_codex_report),
 ]
 
 
