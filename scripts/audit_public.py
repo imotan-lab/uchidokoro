@@ -79,10 +79,16 @@ ALLOWED_MACHINE_KEYS = {
     "slug", "name", "manufacturer", "info", "release_date", "confirmed_at", "sources",
     "seo", "strategy", "strategyByRate", "aliases", "limit", "tenjo_display",
     "original", "checker", "disclaimer", "display_requirements",
+    # ★status は公開物に必要★（2026-07-30・Codex 14巡目 (a)-2）
+    #   落としていたため、受け取る側が「先行記事（解析待ち）」を判別できず、
+    #   noindex も警告バナーも付かないページが作られる状態だった。
+    "status",
 }
 REQUIRED_MACHINE_KEYS = {"slug", "name"}
 # authoring 専用（絶対に公開物へ出てはいけない）
-AUTHORING_ONLY = {"lifecycle", "status", "checker_modes", "checker_kill_switch", "_disabled"}
+AUTHORING_ONLY = {"lifecycle", "checker_modes", "checker_kill_switch", "_disabled"}
+# status に許される値（これ以外は公開物として不正）
+ALLOWED_STATUS = {"complete", "preview"}
 
 SECRET_HINT_RE = re.compile(r"token|key=|sig=|signature|auth|session|password", re.I)
 SLUG_RE = re.compile(r"^[a-z0-9_]+$")
@@ -760,6 +766,8 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
             problems.append(f"{slug}: authoring専用フィールドの流出 {k}")
         elif k not in ALLOWED_MACHINE_KEYS:
             problems.append(f"{slug}: 許可されていないフィールド {k}")
+    if "status" in pub and pub["status"] not in ALLOWED_STATUS:
+        problems.append(f"{slug}: status が complete/preview 以外（{pub['status']!r}）")
     # ★入れ子も allowlist ＋ 型契約で fail-closed にする★
     for i, s in enumerate(pub.get("sources") or []):
         if not isinstance(s, dict):

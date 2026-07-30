@@ -9,8 +9,14 @@
 
 使い方:
     python scripts/build_preview_site.py
-    python -m http.server 8000 -d .preview-site      # 確認用サーバ
-    → http://localhost:8000/machines/hokuto/ など
+    python -m http.server 8764 --bind 127.0.0.1 -d .preview-site
+    → http://127.0.0.1:8764/machines/hokuto/ など
+
+★`--bind 127.0.0.1` を必ず付ける★（Codex 13巡目 (a)-3 / 14巡目 (a)-7）
+  付けないと同じLANの他端末から、裏取り前の内容を丸ごと読めてしまう。
+★本番の確認と同じポートを使わない★
+  同じ origin に前の Service Worker が残っていると、写しと本番の表示が混ざる。
+  本番の確認は 8763、写しは 8764 と分けている（.claude/launch.json）。
 """
 
 from __future__ import annotations
@@ -88,8 +94,9 @@ def main() -> int:
 
     print("=" * 66)
     print(f"完了: {len(pages)} ページを {pv.PREVIEW_DIR.name}/ に写しました（公開されません）")
-    print("  確認: python -m http.server 8000 --bind 127.0.0.1 -d .preview-site")
+    print("  確認: python -m http.server 8764 --bind 127.0.0.1 -d .preview-site")
     print("  ★--bind 127.0.0.1 を必ず付ける（付けないと同じLANの他端末から読めます）★")
+    print("  ★本番の確認(8763)とポートを分ける（前のService Workerが混ざるため）★")
     print("=" * 66)
     return 0
 

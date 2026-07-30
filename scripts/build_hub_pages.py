@@ -130,6 +130,53 @@ def _scalar_limit(lim):
     return lim
 
 
+# 「数＋単位」の出現を1つずつ取り出す（全角・漢数字もNFKC後に拾えるよう広めに取る）
+NUMERAL_OCCURRENCE = re.compile(
+    r"[0-9０-９一二三四五六七八九十百千万]+\s*"
+    r"(?:G|ｇ|Ｇ|pt|ｐｔ|回|周期|スルー|枚|円|％|%|倍|分|時間|日|台|機種)")
+
+# ★生成器自身のコードに書いた固定の数値表現★（集計の説明で使う言葉。機種の数値ではない）
+#   ここに無い数値が散文に出たら止める（＝手書きの数値は裏取りが要る）。
+HUB_FIXED_NUMERALS = (
+    "1000G",   # 「G数天井が1000G未満の機種は全N機種です」という集計の定義
+)
+
+
+def hub_content_problems(built: dict, data_html: dict, has_numeral, *deny_pats) -> list:
+    """出来上がったハブ4ページのうち、**データ由来でない部分**を検査する。
+
+    ★機種一覧そのものは検査しない★（Codex 14巡目 (b)-1）
+      一覧は公開データをそのまま並べた部分なので、ここの数値は裏取り済み。
+      以前は一覧も含めて「単位つき数値は全部未検証」と見ていたため、
+      生成器自身が出す「1000G未満」でも必ず止まり、原因も分からなかった。
+      検査すべきは **手書きの散文（hub_prose.json）と生成器のコードに書いた文言**。
+    ★数値の無い断定も止める★（同 (a)-5）
+      「必ず勝てる」のように単位つき数値を含まない文は素通りしていた。
+    """
+    bad = []
+    for f, html in built.items():
+        rest = html
+        # 機種一覧（公開データをそのまま並べた部分）だけを検査から外す
+        part = (data_html.get(f) or {}).get("list")
+        if part:
+            rest = rest.replace(part, " ")
+        text = re.sub(r"<[^>]+>", " ", rest)
+        # ★語のかたまりではなく「数＋単位」の出現ごとに見る★
+        #   日本語は空白で区切れないので、語単位だと文まるごとが1語になり
+        #   許可リストが作れない。出現そのものを取り出して照合する。
+        for occ in set(NUMERAL_OCCURRENCE.findall(text)):
+            if has_numeral(occ) and occ not in HUB_FIXED_NUMERALS:
+                bad.append(f"{f}: 裏取りしていない数値 « {occ} »")
+        # ★数値の無い断定・損得の話も止める★（Codex 14巡目 (a)-5）
+        #   「必ず勝てる」「投資効率は優秀」のように単位つき数値を含まない文は
+        #   数値検査を素通りしていた。散文には台帳が無いので、
+        #   ゲートの禁止語・要判断語に当たったら公開しない（fail-closed）。
+        for pat in deny_pats:
+            for hit in set(pat.findall(text)):
+                bad.append(f"{f}: 公開できない表現 « {hit} »")
+    return sorted(bad)
+
+
 def load_rows(source: "Path | None" = None):
     """一覧のもとになる機種データを読む。
 
@@ -552,17 +599,19 @@ def main(preview: bool = False):
              for f, (prose, data_html) in pages.items()}
     if gate_on:
         import claim_inventory as _ci2
-        bad = []
-        for f, html in built.items():
-            text = re.sub(r"<[^>]+>", " ", html)          # タグを外して本文だけ見る
-            for line in text.split():
-                if _ci2.numeral_with_unit(line):
-                    bad.append(f"{f}: {line[:40]}")
+        import gates as _g
+        # ★数値は「公開データに載っている値」だけ許す★（Codex 14巡目 (b)-1）
+        #   以前は単位つき数値をすべて未検証扱いにしていたため、
+        #   生成器自身が出す「1000G未満」で必ず止まり、
+        #   しかも警告文が原因を正しく表していなかった。
+        bad = hub_content_problems(built, {f: d for f, (_p, d) in pages.items()},
+                                   _ci2.numeral_with_unit,
+                                   _g.ABSOLUTE_DENY_PAT, _g.RISK_PAT)
         if bad:
-            print(f"★生成後のHTMLに未検証の数値が {len(bad)} 箇所あります★")
-            for b in bad[:20]:
+            print(f"★生成後のHTMLに出せない内容が {len(bad)} 箇所あります★")
+            for b in bad:      # ★打ち切らない★（Codex 14巡目 (b)-4）
                 print(f"  ✗ {b}")
-            print("  裏取りが済むまでハブ4ページは書き出しません")
+            print("  裏取り／文言修正が済むまでハブ4ページは書き出しません")
             return 1
 
     for file, html in built.items():
@@ -578,10 +627,60 @@ def main(preview: bool = False):
     print(f"\n完了: 4ページ生成。 A(天井浅い)={len(A)} / C(リセット恩恵)={len(C)} / D(スルー)={len(D)} / ALL={len(ALL)}")
 
 
+def selftest() -> int:
+    """ハブ4ページの内容検査の反例を固定する（Codex 14巡目 (a)-5 / (b)-1）。"""
+    import sys as _s
+    _s.path.insert(0, str(BASE / "scripts"))
+    import claim_inventory as _ci
+    import gates as _g
+    num = _ci.numeral_with_unit
+    deny = (_g.ABSOLUTE_DENY_PAT, _g.RISK_PAT)
+
+    ok = 0
+    cases = []
+
+    def t(name, cond):
+        nonlocal ok
+        cases.append(name)
+        if cond:
+            ok += 1
+        print(("✅" if cond else "❌") + " " + name)
+
+    listing = '<ol><li><a href="/machines/x/">機種x</a> 天井 <strong>777G</strong></li></ol>'
+    page = f"<html><body><p>説明</p>{listing}</body></html>"
+    t("一覧の中の数値は止めない（公開データ由来）",
+      hub_content_problems({"a.html": page}, {"a.html": {"list": listing}}, num, *deny) == [])
+    t("一覧を外さなければ検知する（検査が効いていることの確認）",
+      hub_content_problems({"a.html": page}, {}, num, *deny) != [])
+
+    prose = "<html><body><p>この機種は天井200Gです</p></body></html>"
+    t("散文に手書きした数値は止める",
+      any("200G" in x for x in hub_content_problems({"a.html": prose}, {}, num, *deny)))
+
+    fixed = ('<html><body><p>G数でカウントする天井が1000G未満の機種は全'
+             '<span class="list-count">49</span>機種です</p></body></html>')
+    t("生成器の固定文（1000G未満）では止めない",
+      hub_content_problems({"a.html": fixed}, {}, num, *deny) == [])
+
+    claim = "<html><body><p>この機種は必ず勝てるため最優先です</p></body></html>"
+    t("数値の無い断定も止める",
+      any("公開できない表現" in x for x in hub_content_problems({"a.html": claim}, {}, num, *deny)))
+
+    zenkaku = "<html><body><p>天井は２００Ｇです</p></body></html>"
+    t("全角の数値も見つける",
+      hub_content_problems({"a.html": zenkaku}, {}, num, *deny) != [])
+
+    print(f"\n{ok}/{len(cases)} 合格")
+    return 0 if ok == len(cases) else 1
+
+
 if __name__ == "__main__":
     import argparse as _ap
     _p = _ap.ArgumentParser()
     _p.add_argument("--preview", action="store_true",
                     help="公開されない写し（.preview-site/）にだけ書き出す")
+    _p.add_argument("--selftest", action="store_true")
     _a = _p.parse_args()
+    if _a.selftest:
+        raise SystemExit(selftest())
     raise SystemExit(main(_a.preview) or 0)

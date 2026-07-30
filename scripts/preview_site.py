@@ -83,13 +83,29 @@ HEAD_BLOCK = (
     '<link rel="stylesheet" href="/preview.css">\n'
 )
 
-# 何度通しても増えないように、前回入れた印を先に取り除くための目印
-_HEAD_BLOCK_RE = re.compile(
-    re.escape(f"<!-- {MARKER} -->") + r".*?<link rel=\"stylesheet\" href=\"/preview\.css\">\n?",
-    re.DOTALL)
-_BANNER_RE = re.compile(r'<div class="preview-copy-bar">.*?</div>', re.DOTALL)
+# 写しを開いた時に、前に登録された Service Worker を解除する（Codex 14巡目 (a)-7）
+#   登録文を消しても、同じ origin に残っている古いSWは動き続け、
+#   本番の内容と写しの内容が混ざる。写し側から能動的に解除しにいく。
+UNREGISTER_SW = (
+    "<script>"
+    "if('serviceWorker' in navigator){"
+    "navigator.serviceWorker.getRegistrations()"
+    ".then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});"
+    "if(window.caches&&caches.keys){"
+    "caches.keys().then(function(ks){ks.forEach(function(k){caches.delete(k);});})"
+    ".catch(function(){});}}"
+    "</script>"
+)
+
+# ★何度通しても増えないように、前回入れた印だけを取り除く★（Codex 14巡目 (b)-4）
+#   以前は `<!-- PREVIEW_BUILD -->` から次の preview.css までを
+#   ワイルドカードで消していたので、**元のHTMLを巻き込んで削れた**。
+#   いまは自分が入れた文字列と完全一致した時だけ剥がす。
 _SW_REGISTER_RE = re.compile(
     r"navigator\s*\.\s*serviceWorker\s*\.\s*register\s*\([^)]*\)", re.IGNORECASE)
+
+
+BODY_BLOCK = "\n" + BANNER_HTML + UNREGISTER_SW
 
 
 def strip_html_comments(html: str) -> str:
@@ -104,9 +120,9 @@ def mark(html: str) -> str:
       元のHTMLのコメント欄に文字列を置くだけで、metaもバナーも無いページが
       「印つき」として通ってしまっていた。**毎回いったん剥がして、必ず入れ直す**。
     """
-    # 0) 前回入れた印（あれば）を剥がす
-    html = _HEAD_BLOCK_RE.sub("", html)
-    html = _BANNER_RE.sub("", html)
+    # 0) 前回「自分が入れた文字列」だけを剥がす（元のHTMLは巻き込まない）
+    for block in (HEAD_BLOCK, BODY_BLOCK):
+        html = html.replace(block, "")
 
     # 1) 既存の robots meta を消してから noindex,nofollow を入れ直す
     html = re.sub(r'<meta\s+name="robots"[^>]*>\s*', "", html, flags=re.IGNORECASE)
@@ -115,12 +131,12 @@ def mark(html: str) -> str:
     else:
         html = HEAD_BLOCK + html
 
-    # 2) 本文の先頭にバナー
+    # 2) 本文の先頭にバナー＋前のService Workerの解除
     m = re.search(r"<body[^>]*>", html, flags=re.IGNORECASE)
     if m:
-        html = html[: m.end()] + "\n" + BANNER_HTML + html[m.end():]
+        html = html[: m.end()] + BODY_BLOCK + html[m.end():]
     else:
-        html = BANNER_HTML + html
+        html = BODY_BLOCK + html
 
     # 3) Service Worker を写しでは動かさない
     #    ★引用符の種類を問わず消す★（Codex 13巡目 (b)-1）

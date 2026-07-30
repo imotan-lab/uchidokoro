@@ -108,15 +108,9 @@ TAG = re.compile(r"<[^>]+>")
 # 写しの目印を探す対象（HTMLだけ見ていると .js / .svg / .htm を見落とす）
 MARKER_SCAN_SUFFIXES = {".html", ".htm", ".js", ".json", ".svg", ".css", ".xml", ".txt"}
 
-# 生成器が入れる固定の見出し語（記事データに無くても出てよいもの）
-GENERATED_LITERALS = {
-    "機種名", "天井", "ヤメ時", "-", "—",
-}
-
-SOURCE_IGNORE = shutil.ignore_patterns(
-    ".git", ".github", PREVIEW_DIRNAME, "_site", "_site.next",
-    "__pycache__", "*.pyc", "_design", ".claude",
-)
+IGNORED_DIR_NAMES = {".git", ".github", PREVIEW_DIRNAME, "_site", "_site.next",
+                     "__pycache__", "_design", ".claude"}
+SOURCE_IGNORE = shutil.ignore_patterns(*sorted(IGNORED_DIR_NAMES), "*.pyc")
 
 
 class BuildError(RuntimeError):
@@ -207,7 +201,20 @@ TEXT_SUFFIXES = {".html", ".css", ".js", ".json", ".txt", ".xml", ".svg", ".webm
 TEXT_NAMES = {"CNAME"}
 
 # assets/css・assets/img に置いてよい拡張子（これ以外があればビルドを止める）
-ASSET_SUFFIXES = {".css", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico", ".avif"}
+# ★.svg は入れない★（Codex 14巡目 (a)-4）SVGはスクリプトを書ける＝能動コンテンツ。
+#   いま使っているのは .png だけなので、必要になるまで許可しない。
+ASSET_SUFFIXES = {".css", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".avif"}
+
+# ★中身が名乗りどおりか確かめる★（同）`ledger.json` を `logo.png` にしても通さない。
+IMAGE_MAGIC = {
+    ".png": (b"\x89PNG\r\n\x1a\n",),
+    ".jpg": (b"\xff\xd8\xff",),
+    ".jpeg": (b"\xff\xd8\xff",),
+    ".gif": (b"GIF87a", b"GIF89a"),
+    ".webp": (b"RIFF",),
+    ".ico": (b"\x00\x00\x01\x00", b"\x00\x00\x02\x00"),
+    ".avif": (b"\x00\x00\x00",),
+}
 
 
 def is_text(path: Path) -> bool:
@@ -244,10 +251,18 @@ def copy_asset_dir(source: Path, target: Path) -> None:
     """
     if not source.exists():
         return
+    reject_symlinks(source)
     for src in sorted(p for p in source.rglob("*") if p.is_file()):
         rel = src.relative_to(source).as_posix()
-        if src.suffix.lower() not in ASSET_SUFFIXES:
+        suffix = src.suffix.lower()
+        if suffix not in ASSET_SUFFIXES:
             raise BuildError(f"unexpected file type under {source.name}/: {rel}")
+        magic = IMAGE_MAGIC.get(suffix)
+        if magic and not src.read_bytes()[:8].startswith(magic):
+            raise BuildError(f"{rel}: 中身が {suffix} ではありません（拡張子の偽装）")
+        # ★ハードリンクも拒否★（同じ実体を別名で公開できてしまうため）
+        if src.stat().st_nlink > 1:
+            raise BuildError(f"{rel}: hard link is not allowed in the build input")
         copy_file(src, target / rel)
 
 
@@ -324,6 +339,41 @@ def href_slugs(path: Path) -> set[str]:
     return set(links)
 
 
+def pages_match_data(stage: Path, template_path: Path, slugs: list[str]) -> None:
+    """★出荷するページが「出荷するデータから作り直した物」と1バイトも違わないか★
+
+    （2026-07-30・Codex 14巡目 (a)-1）
+      前の方式（公開データを1本の文字列につないで部分一致を見る）は照合になっていなかった。
+      文字を並べ替える・要素を分ける・検査対象のidを消す・属性に書く、で素通りできた。
+      そこで **出荷するJSONだけを入れてページを作り直し、完全一致を要求する**。
+      これで「ページに出ている物はすべて出荷データから決まる」が保証される
+      （データ自体が正しいかはゲートと独立監査の担当）。
+    """
+    sys.path.insert(0, str(BASE / "scripts"))
+    import build_machine_pages as bmp
+
+    template = bmp.prepare_template(template_path.read_text(encoding="utf-8"))
+    reasons = bmp.extract_pochipochi_reasons(template)
+    machines = {row.get("slug"): row
+                for row in machine_rows(read_json(stage / "assets/data/machines.json"))}
+    diffs: list[str] = []
+    for slug in slugs:
+        page = (stage / "machines" / slug / "index.html").read_text(encoding="utf-8")
+        detail_path = stage / "assets/data/machine-details" / f"{slug}.json"
+        detail = read_json(detail_path) if detail_path.is_file() else None
+        try:
+            expected = bmp.render_page(template, machines[slug], detail, reasons,
+                                       pochipochi_public=False)
+        except Exception as exc:
+            diffs.append(f"{slug}: 作り直せません（{type(exc).__name__}: {exc}）")
+            continue
+        if expected.replace("\r\n", "\n") != page.replace("\r\n", "\n"):
+            diffs.append(f"{slug}: 出荷データから作り直した内容と一致しません")
+    if diffs:
+        # ★診断は打ち切らない★（Codex 14巡目 (b)-4）
+        raise BuildError("pages do not match the shipped data:\n  " + "\n  ".join(diffs))
+
+
 def normalise_text(s: str) -> str:
     """HTMLから取り出した文字列を、記事データと比べられる形に均す。
 
@@ -336,63 +386,6 @@ def normalise_text(s: str) -> str:
     s = TAG.sub(" ", s)
     s = s.replace("**", "")
     return re.sub(r"\s+", "", s)
-
-
-def public_corpus(machine: dict, detail) -> str:
-    """公開データに含まれる文字列を全部つないだもの（照合用の母集団）。"""
-    out: list[str] = []
-
-    def walk(node):
-        if isinstance(node, str):
-            out.append(node)
-        elif isinstance(node, (int, float)):
-            out.append(str(node))
-        elif isinstance(node, dict):
-            for k, v in node.items():
-                out.append(str(k))
-                walk(v)
-        elif isinstance(node, list):
-            for v in node:
-                walk(v)
-
-    walk(machine)
-    walk(detail)
-    return normalise_text(" ".join(out))
-
-
-PRERENDER_SLOTS = (
-    (re.compile(r'<h1 id="machineTitle"[^>]*>(.*?)</h1>', re.DOTALL), "h1"),
-    (re.compile(r'<p id="heroSub"[^>]*>(.*?)</p>', re.DOTALL), "lead"),
-    (re.compile(r'<div id="articleSections">(.*?)</div>\s*(?=<)', re.DOTALL), "sections"),
-    (re.compile(r'<tbody id="infoTableBody">(.*?)</tbody>', re.DOTALL), "factTable"),
-    (re.compile(r'<table id="summaryGrid"[^>]*>(.*?)</table>', re.DOTALL), "summary"),
-)
-CELL = re.compile(r"<(?:p|h3|th|td|span|li)[^>]*>(.*?)</(?:p|h3|th|td|span|li)>", re.DOTALL)
-
-
-def html_within_public(page_html: str, machine: dict, detail) -> list[str]:
-    """★静的HTMLに焼かれた本文が、公開データの範囲に収まっているか★
-
-    （2026-07-30・Codex 13巡目 (a)-1）
-      HTML生成が authoring を直接読んでいたため、射影で消えるはずの記述が
-      静的HTMLだけに残る事故が起き得た。生成側を公開データ入力に直したうえで、
-      **出来上がったHTMLからも再抽出して照合する**（生成器を信用しない）。
-    """
-    corpus = public_corpus(machine, detail)
-    bad: list[str] = []
-    for pattern, label in PRERENDER_SLOTS:
-        m = pattern.search(page_html)
-        if not m:
-            continue
-        inner = m.group(1)
-        chunks = CELL.findall(inner) or [inner]
-        for chunk in chunks:
-            t = normalise_text(chunk)
-            if not t or t in GENERATED_LITERALS:
-                continue
-            if t not in corpus:
-                bad.append(f"{label}: 公開データに無い表示内容 « {t[:40]} »")
-    return bad
 
 
 def audit(stage: Path, expected: set[str]) -> None:
@@ -428,25 +421,29 @@ def audit(stage: Path, expected: set[str]) -> None:
     if sitemap_slugs != expected:
         raise BuildError("sitemap differs from approved slugs")
 
-    # ★静的HTMLの本文が公開データの範囲に収まっているか★（Codex 13巡目 (a)-1）
+    # ページ単位の検査（本文の一致は pages_match_data が完全一致で見る）
     by_slug = {row.get("slug"): row for row in machines}
+    sys.path.insert(0, str(BASE / "scripts"))
+    import build_machine_pages as _bmp
     for slug in sorted(expected):
         page = (stage / "machines" / slug / "index.html").read_text(encoding="utf-8")
-        if not re.search(r'<base\s+href\s*=\s*["\']/["\']', page, re.IGNORECASE):
-            # ★サブディレクトリ配下は <base href="/"> が無いと全リンクが壊れる★（同 (b)-6）
-            raise BuildError(f"machines/{slug}/index.html has no <base href=\"/\">")
-        detail = read_json(stage / "assets/data/machine-details" / f"{slug}.json")
-        problems = html_within_public(page, by_slug.get(slug) or {}, detail)
-        if problems:
-            raise BuildError(f"machines/{slug}/: " + " / ".join(problems[:3]))
-        # ★「目安です」の併記が必要な機種は、実際にHTMLへ出ているか★（同 (b)-4）
-        need = (by_slug.get(slug) or {}).get("display_requirements")
-        if isinstance(need, dict) and isinstance(need.get("disclaimer"), str):
-            if normalise_text(need["disclaimer"]) not in normalise_text(
-                    HTML_COMMENT.sub("", page)):
+        # ★コメントを外してから見る／head内に1つだけ★（Codex 14巡目 (b)-3）
+        head = HTML_COMMENT.sub("", page).split("</head>", 1)[0]
+        bases = re.findall(r'<base\s+href\s*=\s*["\']([^"\']*)["\']', head, re.IGNORECASE)
+        if bases != ["/"]:
+            raise BuildError(
+                f'machines/{slug}/index.html: <base href="/"> が head に1つだけ必要（実際: {bases}）')
+        # ★「目安です」が必要な面すべてに、必要な回数だけ出ているか★（同 (a)-8）
+        machine = by_slug.get(slug) or {}
+        text, _sf = _bmp.disclaimer_of(machine)
+        if text:
+            want = len(_bmp.disclaimer_anchors(machine))
+            got = HTML_COMMENT.sub("", page).count(
+                f'<p class="site-disclaimer">{_bmp.esc(text)}</p>')
+            if got != want:
                 raise BuildError(
-                    f"machines/{slug}/index.html is missing the required note: "
-                    f"{need['disclaimer']}")
+                    f"machines/{slug}/index.html: 「{text}」の併記が {want} 箇所必要ですが "
+                    f"{got} 箇所です")
 
     hub_union: set[str] = set()
     for name in GENERATED_HUBS:
@@ -532,11 +529,17 @@ def write_artifact_manifest(stage: Path) -> None:
 
 
 def build() -> int:
-    gate = read_json(BASE / "assets/data/claim-gate.json")
+    # ★辞書でない設定は診断つきで止める★（Codex 14巡目 (b)-2）
+    gate = read_json_dict(BASE / "assets/data/claim-gate.json")
     if gate.get("enabled") is not True:
         raise BuildError("claim gate is not enabled")
 
     safe_clear(NEXT)
+
+    # ★★入力の時点でリンクを拒否する★★（Codex 14巡目 (a)-4）
+    #   copytree はリンク先を実体としてコピーするので、
+    #   コピーした後に調べても「ただのファイル」になっていて見つけられない。
+    reject_symlinks(BASE, ignore=IGNORED_DIR_NAMES)
 
     with tempfile.TemporaryDirectory(prefix="uchidokoro-source-") as tmp:
         work = Path(tmp) / "repo"
@@ -595,6 +598,8 @@ def build() -> int:
         write_setting_placeholder(NEXT)
         write_sitemap(NEXT, host_origin(work), slugs)
         audit(NEXT, set(slugs))
+        # ★出荷データから作り直して1バイトも違わないことを確かめる★（Codex 14巡目 (a)-1）
+        pages_match_data(NEXT, work / "machine.html", slugs)
         write_artifact_manifest(NEXT)
 
     safe_clear(OUT)
@@ -604,6 +609,8 @@ def build() -> int:
 
 
 # ---------------------------------------------------------------- selftest
+PNG_MAGIC = b"\x89PNG\r\n\x1a\nrest"
+
 PAGE_TPL = ('<html><head><base href="/"></head><body>'
             '<h1 id="machineTitle" class="page-title">{name}</h1>'
             '<p id="heroSub" class="hero-sub">{lead}</p>'
@@ -710,13 +717,24 @@ def selftest() -> int:
     case("公開machinesに非オブジェクトが混ざれば止める", denies(
         lambda r: (r / "assets/data/machines.json").write_text(
             json.dumps([{"slug": "aaa"}, "bbb"]), encoding="utf-8")))
-    # --- Codex 13巡目の反例をここに固定する ---
-    case("(a)-1 公開データに無い文がHTMLに焼かれていたら止める", denies(
-        lambda r: (r / "machines/aaa/index.html").write_text(
-            PAGE_TPL.format(name="機種aaa", lead="この機種はAT機です"), encoding="utf-8")))
-    case("(a)-1 見出しが別機種名にすり替わっていたら止める", denies(
-        lambda r: (r / "machines/aaa/index.html").write_text(
-            PAGE_TPL.format(name="機種zzz", lead="aaaの説明"), encoding="utf-8")))
+    # --- Codex 13・14巡目の反例をここに固定する ---
+    case("(a)-1 出荷データから作り直した内容と一致すれば通る",
+         lambda root: _rebuild_check(root, None), True)
+    case("(a)-1 本文に1文を混ぜたら止める",
+         lambda root: _rebuild_check(
+             root, lambda h: h.replace("</body>", "<p>未公開機の天井は999G</p></body>")), True)
+    case("(a)-1 数字を並べ替えて分割しても止める",
+         lambda root: _rebuild_check(
+             root, lambda h: h.replace(
+                 '<p id="heroSub" class="hero-sub">説明1234G</p>',
+                 '<p id="heroSub" class="hero-sub">説明<span>4</span>'
+                 '<span>3</span><span>2</span><span>1</span>G</p>')), True)
+    case("(a)-1 検査対象のidを変えても止める",
+         lambda root: _rebuild_check(
+             root, lambda h: h.replace('id="machineTitle"', 'id="machineTitleX"')), True)
+    case("(a)-1 属性に文字を仕込んでも止める",
+         lambda root: _rebuild_check(
+             root, lambda h: h.replace("<body", '<body data-x="天井999G"', 1)), True)
     case("(b)-6 base href が無ければ止める", denies(
         lambda r: (r / "machines/aaa/index.html").write_text(
             '<html><head></head><body><h1 id="machineTitle" class="page-title">機種aaa</h1>'
@@ -752,6 +770,10 @@ def selftest() -> int:
          lambda root: _symlink_rejected(root), True)
     case("(a)-2 assets配下の想定外ファイルは止める（画像は通る）",
          lambda root: _asset_suffix_rejected(root), True)
+    case("(a)-4 拡張子の偽装（中身がJSONのpng）を止める",
+         lambda root: _magic_spoof_rejected(root), True)
+    case("(a)-4 SVGは許可しない（能動コンテンツ）",
+         lambda root: _svg_rejected(), True)
 
     case("_site以外を消そうとしたら止める",
          lambda root: _raises(lambda: safe_clear(root / "machines")))
@@ -784,6 +806,40 @@ def selftest() -> int:
     return 0 if ok == len(cases) else 1
 
 
+def _rebuild_check(root: Path, tamper) -> bool:
+    """実物の machine.html を使って「作り直して一致するか」を確かめる。
+
+    tamper=None なら一致して通ること、tamper があれば必ず止まることを期待する。
+    """
+    sys.path.insert(0, str(BASE / "scripts"))
+    import build_machine_pages as bmp
+
+    machine = {"slug": "aaa", "name": "機種aaa"}
+    detail = {"lead": "説明1234G"}
+    (root / "assets/data/machine-details").mkdir(parents=True, exist_ok=True)
+    (root / "assets/data/machines.json").write_text(
+        json.dumps([machine], ensure_ascii=False), encoding="utf-8")
+    (root / "assets/data/machine-details/aaa.json").write_text(
+        json.dumps(detail, ensure_ascii=False), encoding="utf-8")
+
+    template_path = BASE / "machine.html"
+    template = bmp.prepare_template(template_path.read_text(encoding="utf-8"))
+    reasons = bmp.extract_pochipochi_reasons(template)
+    page = bmp.render_page(template, machine, detail, reasons, pochipochi_public=False)
+    if tamper:
+        page = tamper(page)
+    out = root / "machines/aaa/index.html"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(page, encoding="utf-8", newline="\n")
+
+    try:
+        pages_match_data(root, template_path, ["aaa"])
+        stopped = False
+    except BuildError:
+        stopped = True
+    return stopped if tamper else not stopped
+
+
 def _write(path: Path, text: str) -> Path:
     path.write_text(text, encoding="utf-8")
     return path
@@ -805,7 +861,7 @@ def _asset_suffix_rejected(root: Path) -> bool:
     """assets 配下に許可外のファイルがあれば実際に止まること。"""
     src = root / "img"
     src.mkdir(parents=True)
-    (src / "logo.png").write_bytes(b"\x89PNG")
+    (src / "logo.png").write_bytes(PNG_MAGIC)
     (src / "authoring-machines.json").write_text("{}", encoding="utf-8")
     if not _raises(lambda: copy_asset_dir(src, root / "out")):
         return False
@@ -818,16 +874,36 @@ def _symlink_rejected(root: Path) -> bool:
     """許可ディレクトリ内のsymlinkを実際に拒否できること（作れない環境ではスキップ扱い）。"""
     src = root / "img"
     src.mkdir(parents=True)
-    (src / "logo.png").write_bytes(b"\x89PNG")
+    (src / "logo.png").write_bytes(PNG_MAGIC)
     secret = root / "secret.json"
     secret.write_text("{}", encoding="utf-8")
+    # リンク単体で拒否できることを先に確認（作れない環境では省略）
     try:
         (src / "leak.png").symlink_to(secret)
     except (OSError, NotImplementedError):
         print("  （このPCではsymlinkを作れないため実地テストは省略）")
         return True
-    return _raises(lambda: copy_asset_dir(src, root / "out")) and _raises(
-        lambda: reject_symlinks(src))
+    if not _raises(lambda: reject_symlinks(src)):
+        return False
+    if not _raises(lambda: copy_asset_dir(src, root / "out")):
+        return False
+    # リンクを外せば通ることも確かめる（別の理由で止まっていないか）
+    (src / "leak.png").unlink()
+    copy_asset_dir(src, root / "out2")
+    return (root / "out2/logo.png").is_file()
+
+
+def _magic_spoof_rejected(root: Path) -> bool:
+    """拡張子を偽装したファイル（中身がJSONの logo.png）を弾けること。"""
+    src = root / "img"
+    src.mkdir(parents=True)
+    (src / "logo.png").write_text('{"secret": 1}', encoding="utf-8")
+    return _raises(lambda: copy_asset_dir(src, root / "out"))
+
+
+def _svg_rejected() -> bool:
+    """SVGは能動コンテンツを書けるので許可しない。"""
+    return ".svg" not in ASSET_SUFFIXES
 
 
 def _raises(fn) -> bool:

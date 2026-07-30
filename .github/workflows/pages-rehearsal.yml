@@ -7,6 +7,17 @@
 #
 #   deploy は手動起動 かつ リポジトリ変数 PAGES_DEPLOY_ENABLED=true が無い限り動かない。
 #   Actions はタグではなく完全なコミットSHAに固定する（タグは後から差し替えられるため）。
+#
+# ★リポジトリ設定でやらないと効かないこと（コードだけでは塞げない・Codex 14巡目 (a)-6）★
+#   1. 必須チェックは **release-gate** にする。`build` を必須にすると、
+#      条件でskipされた時にGitHubが「成功」と見なしてmergeを止めない。
+#   2. main で「Require review from Code Owners」を有効にする
+#      （CODEOWNERS は置くだけでは merge を止めない）。
+#   3. 管理者・ruleset の bypass を制限する。
+#   4. それでも「所有者自身が意図的に回避する」ことは技術的に防げない
+#      （別アカウントのレビュアーか、制限したGitHub Appが要る）。
+#   5. PRはworkflow自身も書き換えられる。外部フォークは下の if で走らせないが、
+#      **PR由来の緑を信用してmergeしない**という運用が最後の砦。
 
 name: pages-rehearsal
 
@@ -70,6 +81,7 @@ jobs:
           python scripts/gates.py --selftest
           python scripts/audit_public.py --selftest
           python scripts/build_pages_artifact.py --selftest
+          python scripts/build_hub_pages.py --selftest
 
       - name: Repository audits
         shell: bash

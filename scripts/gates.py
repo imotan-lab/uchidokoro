@@ -1826,6 +1826,18 @@ def _project_machine(machine: dict, gates: dict, ctx: _Ctx) -> dict:
         out["sources"] = src
     s("info")
 
+    # ★★公開状態（先行記事かどうか）は必ず射影に出す★★
+    #   （2026-07-30・Codex 14巡目 (a)-2）
+    #   status を落としていたため、公開データを受け取る側からは
+    #   **先行記事（解析待ち）が通常記事と見分けられなかった**。
+    #   その結果、noindex も「⚠先行記事」バナーも付かないページが作られる。
+    st = machine.get("status")
+    if st is not None:
+        if not (_is_str(st) and st in ("complete", "preview")):
+            ctx.reject("status", "status は complete / preview のいずれか")
+            return out
+        out["status"] = st
+
     if profile == "preview_basic":
         return out
 
@@ -2967,6 +2979,22 @@ def selftest() -> int:
                    )["gates"]["checker"] is True)
     t("★20-9: 判定の主軸(good)が無ければ停止",
       ax20({**b20, "suru": {"suruMax": 3, "suru": [{"count": 0, "excellent": 600}]}}))
+
+    # ===== 公開状態（先行記事かどうか）=====（Codex 14巡目 (a)-2）
+    _stbase = {"slug": "x", "lifecycle": LEG, "name": "テスト機", "info": "スマスロAT"}
+    t("★status: preview は公開データに残る",
+      _pv({**_stbase, "status": "preview"})["machine"].get("status") == "preview")
+    t("★status: complete も公開データに残る",
+      _pv({**_stbase, "status": "complete"})["machine"].get("status") == "complete")
+    t("★status: 未指定なら出さない",
+      "status" not in _pv(dict(_stbase))["machine"])
+    def _status_rejected(v):
+        try:
+            return _pv({**_stbase, "status": v})["machine"].get("status") is None
+        except GateError:
+            return True
+    t("★status: 想定外の値は公開しない", _status_rejected("draft"))
+    t("★status: 文字列でなければ公開しない", _status_rejected(1))
 
     # ===== 不変条件 =====
     for bad, label in (({"public": False, "index": True}, "index⇒public"),

@@ -244,6 +244,201 @@ PLACEHOLDER_HTML = """<!doctype html>
 """
 
 
+def prepare_template(template: str) -> str:
+    """テンプレートを機種ページ用に整える（1回だけ行う前処理）。"""
+    if "<base " not in template:
+        template = re.sub(r"(<head[^>]*>)", r'\1\n<base href="/">', template, count=1)
+    # テンプレ由来の robots meta（machine.html自体のnoindex）を除去。
+    # complete機種はnoindex無し(index)、preview機種は下で noindex,follow を再付与する
+    return re.sub(r'<meta name="robots"[^>]*>(<!--.*?-->)?\n?', "", template)
+
+
+def render_page(template: str, machine: dict, detail: dict | None,
+                pochipochi_reasons: dict, pochipochi_public: bool = True) -> str:
+    """1機種ぶんのHTMLを作る。★入力（machine / detail）だけで出力が決まる★
+
+    （2026-07-30・Codex 14巡目 (a)-1）
+      成果物の検査は「この関数に公開データを入れ直した結果と1バイトも違わないか」で行う。
+      そのため、この関数は外部の状態を読まない（引数だけで決まる）必要がある。
+    """
+    slug = machine["slug"]
+    html_out = template
+    canonical_url = f"https://uchidokoro.com/machines/{slug}/"
+
+    # canonical
+    if 'rel="canonical"' in html_out:
+        html_out = re.sub(r'<link\s+rel="canonical"[^>]*>',
+                          f'<link rel="canonical" href="{canonical_url}">', html_out, count=1)
+    else:
+        html_out = html_out.replace("</head>", f'<link rel="canonical" href="{canonical_url}">\n</head>', 1)
+
+    # title / description（meta-auto.js 同等・ポチポチくん対応表記は非対応機種で外す）
+    # ★公開版では「ポチポチくん対応」と名乗らない★（Codex 14巡目 (a)-3）
+    #   成果物の setting.html は準備中ページに差し替えているので、
+    #   対応と書けばSEO文言もリンクも実態と食い違う。
+    if not pochipochi_public:
+        pp_available, pp_reason = False, "準備中"
+    elif machine.get("status") == "preview":
+        pp_available, pp_reason = False, "解析データ判明後に対応"
+    elif slug in pochipochi_reasons:
+        pp_available, pp_reason = False, pochipochi_reasons[slug]
+    else:
+        pp_available, pp_reason = True, ""
+    title, desc = build_title_desc(machine, pp_available)
+    html_out = html_out.replace("<title>機種ページ | うちどころ。</title>",
+                                f"<title>{esc(title)}</title>", 1)
+    html_out = html_out.replace(
+        '<meta name="description" content="機種ごとの狙い目記事ページです。結論と要点をスマホ向けに表示します。">',
+        f'<meta name="description" content="{esc(desc)}">', 1)
+
+    # OGP（SNSシェア用・meta-auto.js も後で更新するが静的にも焼く）
+    html_out = html_out.replace(
+        '<meta property="og:title" content="機種ページ | うちどころ。">',
+        f'<meta property="og:title" content="{esc(title)}">', 1)
+    html_out = html_out.replace(
+        '<meta property="og:description" content="機種ごとの狙い目記事ページです。結論と要点をスマホ向けに表示します。">',
+        f'<meta property="og:description" content="{esc(desc)}">', 1)
+    html_out = html_out.replace(
+        '<meta property="og:url" content="https://uchidokoro.com/machine.html">',
+        f'<meta property="og:url" content="{canonical_url}">', 1)
+
+    # Twitter Card（meta-auto.js はプリレンダ済みで上書きしないため静的に焼く）
+    html_out = html_out.replace(
+        '<meta name="twitter:card" content="summary_large_image">',
+        '<meta name="twitter:card" content="summary_large_image">\n'
+        f'<meta name="twitter:title" content="{esc(title)}">\n'
+        f'<meta name="twitter:description" content="{esc(desc)}">\n'
+        '<meta name="twitter:site" content="@uchidokoro">\n'
+        '<meta name="twitter:image" content="https://uchidokoro.com/assets/img/ogp.png">', 1)
+
+    # ポチポチくん導線：非対応機種は初期HTML段階でリンクを無効化して焼く
+    # （JS実行前・JS無効・クローラーに「対応機能あり」と誤認させない。inline styleは使わずclassで）
+    if not pp_available:
+        for anchor_id, cls in (("settingHeroLink", "btn-settei btn-settei--wide"),
+                               ("settingToolLink", "btn-show-all btn-show-all--center")):
+            html_out = re.sub(
+                r'<a id="' + anchor_id + r'"[^>]*>小役カウンター ポチポチくん →</a>',
+                f'<a id="{anchor_id}" class="{cls} is-disabled" aria-disabled="true" '
+                f'title="{esc(pp_reason)}">小役カウンター ポチポチくん（{esc(pp_reason)}）</a>',
+                html_out, count=1)
+
+    # h1 機種名
+    html_out = html_out.replace(
+        '<h1 id="machineTitle" class="page-title">機種名</h1>',
+        f'<h1 id="machineTitle" class="page-title">{esc(machine["name"])}</h1>', 1)
+
+    # ★「当サイトの目安です」の併記を、必要な表示面すべてに出す★
+    #   （Codex 13巡目 (b)-4 / 14巡目 (a)-8）
+    #   以前は hero の1箇所だけで、`surfaces` を読んでいなかった。
+    html_out = insert_disclaimer(html_out, machine)
+
+    # JSON-LD（Article + BreadcrumbList）を静的に焼き込み
+    html_out = html_out.replace(
+        "</head>", build_jsonld(machine, canonical_url, title, desc) + "\n</head>", 1)
+
+    # 先行記事（preview）は完全記事へ昇格するまで noindex（恒久ポリシー・審査中だけの措置ではない）
+    if machine.get("status") == "preview":
+        html_out = html_out.replace(
+            "</head>", '<meta name="robots" content="noindex,follow">\n</head>', 1)
+    # ★2026-07-24: AdSenseローダーの注入を全機種で停止（Phase 0・止血）★
+    #   承認ゲート（ads = public && index && page_review approved && content_hash一致）の
+    #   実装後、承認済みページだけで再開する。無条件注入に戻さないこと。
+
+    if not isinstance(detail, dict) or not detail:
+        return html_out
+
+    lead = detail.get("lead", "") or ""
+    if lead:
+        html_out = html_out.replace(
+            '<p id="heroSub" class="hero-sub"></p>',
+            f'<p id="heroSub" class="hero-sub">{esc(lead)}</p>', 1)
+    sections = detail.get("sections") or []
+    if sections:
+        sections_html = "".join(render_section(s) for s in sections)
+        html_out = html_out.replace(
+            '<div id="articleSections"></div>',
+            f'<div id="articleSections">{sections_html}</div>', 1)
+    fact = detail.get("factTable") or [["機種名", machine["name"]]]
+    rows_html = "".join(f"<tr><th>{esc(r[0])}</th><td>{esc(r[1])}</td></tr>"
+                        for r in fact if len(r) >= 2)
+    html_out = html_out.replace(
+        '<tbody id="infoTableBody"></tbody>',
+        f'<tbody id="infoTableBody">{rows_html}</tbody>', 1)
+    # summaryBoxes をプリレンダ（machine.html の renderSummaryGrid と同じ2列組み）
+    summary_boxes = detail.get("summaryBoxes") or [
+        {"label": "天井", "value": machine.get("strategy") or "-"},
+        {"label": "ヤメ時", "value": "-"},
+    ]
+    srows = ""
+    for i in range(0, len(summary_boxes), 2):
+        a = summary_boxes[i]
+        cell_a = (f'<span class="s-label">{esc(a.get("label",""))}</span>'
+                  f'<span class="s-value">{esc(a.get("value",""))}</span>')
+        if i + 1 < len(summary_boxes):
+            b = summary_boxes[i + 1]
+            cell_b = (f'<span class="s-label">{esc(b.get("label",""))}</span>'
+                      f'<span class="s-value">{esc(b.get("value",""))}</span>')
+            srows += f"<tr><td>{cell_a}</td><td>{cell_b}</td></tr>"
+        else:
+            srows += f"<tr><td>{cell_a}</td><td></td></tr>"
+    html_out = html_out.replace(
+        '<table id="summaryGrid" class="summary-grid"></table>',
+        f'<table id="summaryGrid" class="summary-grid">{srows}</table>', 1)
+    return html_out
+
+
+# 「目安です」を出す位置（公開データの surfaces → 差し込む目印）
+DISCLAIMER_ANCHORS = {
+    "hero": '<p id="heroSub"',
+    "checker": '<section id="checkerCard"',
+    "detail.sections": '<div id="articleSections">',
+}
+# surfaces の名前 → 実際に置く場所（machine 側の面はすべて hero にまとめる）
+SURFACE_TO_ANCHOR = {
+    "checker": "checker",
+    "detail.sections": "detail.sections",
+}
+
+
+def disclaimer_of(machine: dict) -> tuple[str | None, list]:
+    req = machine.get("display_requirements")
+    text = req.get("disclaimer") if isinstance(req, dict) else None
+    surfaces = req.get("surfaces") if isinstance(req, dict) else None
+    if not isinstance(text, str) or not text.strip():
+        d = machine.get("disclaimer")
+        text = d if isinstance(d, str) and d.strip() else None
+    return text, (surfaces if isinstance(surfaces, list) else [])
+
+
+def disclaimer_anchors(machine: dict) -> list:
+    """この機種で「目安です」を置くべき場所（重複なし・順序固定）。"""
+    text, surfaces = disclaimer_of(machine)
+    if not text:
+        return []
+    spots = ["hero"]      # 機種の要約は必ず hero に付ける
+    for s in surfaces:
+        a = SURFACE_TO_ANCHOR.get(s)
+        if a and a not in spots:
+            spots.append(a)
+    return spots
+
+
+def insert_disclaimer(html_out: str, machine: dict) -> str:
+    text, _ = disclaimer_of(machine)
+    if not text:
+        return html_out
+    block = f'<p class="site-disclaimer">{esc(text)}</p>\n'
+    for spot in disclaimer_anchors(machine):
+        anchor = DISCLAIMER_ANCHORS[spot]
+        if anchor not in html_out:
+            # ★置けない面があったら黙って諦めない★（Codex 14巡目 (a)-8）
+            raise RuntimeError(
+                f"{machine.get('slug','?')}: 「{text}」を {spot} に置けません"
+                f"（テンプレートに {anchor} が無い）")
+        html_out = html_out.replace(anchor, block + anchor, 1)
+    return html_out
+
+
 def main(preview: bool = False):
     """preview=True のときは .preview-site/ にだけ書く（公開されない写し）。
 
@@ -330,16 +525,11 @@ def main(preview: bool = False):
         print("  （.preview-site/ にだけ書き出します。公開されません）")
         return 1
 
-    # <base href="/"> を <head> 直後に挿入
-    if "<base " not in template:
-        template = re.sub(r"(<head[^>]*>)", r'\1\n<base href="/">', template, count=1)
-
-    # テンプレ由来の robots meta（machine.html自体のnoindex）を除去。
-    # complete機種はnoindex無し(index)、preview機種は下で noindex,follow を再付与する
-    template = re.sub(r'<meta name="robots"[^>]*>(<!--.*?-->)?\n?', "", template)
-
+    template = prepare_template(template)
     # ポチポチくん非対応slug→理由（machine.htmlのpochipochiStatusと同期）
     pochipochi_reasons = extract_pochipochi_reasons(template)
+    # ★公開版では setting.html を準備中に差し替えるので「対応」と名乗らない★
+    pochipochi_public = bool(preview)
 
     # 公開時は公開データの記事、写しのときだけ authoring の記事
     detail_dir = detail_dir_override or (BASE / "assets" / "data" / "machine-details")
@@ -351,161 +541,36 @@ def main(preview: bool = False):
         slug = machine["slug"]
         if slug in blocked_by_claim:
             # ★★「作らない」だけでは古い誤情報が残り続ける★★（Codex 10巡目 (a)-2）
-            #   既存の index.html を noindex の準備中ページに置き換える。
             if preview:
-                # 写しでは今この枝に入らないが、入っても印が付くようにしておく
                 _pv.write_html(f"machines/{slug}/index.html", PLACEHOLDER_HTML)
             else:
                 out = out_root / "machines" / slug / "index.html"
                 out.parent.mkdir(parents=True, exist_ok=True)
-                out.write_text(PLACEHOLDER_HTML, encoding="utf-8")
+                out.write_text(PLACEHOLDER_HTML, encoding="utf-8", newline="\n")
             continue
-        html_out = template
-        canonical_url = f"https://uchidokoro.com/machines/{slug}/"
 
-        # canonical
-        if 'rel="canonical"' in html_out:
-            html_out = re.sub(r'<link\s+rel="canonical"[^>]*>',
-                              f'<link rel="canonical" href="{canonical_url}">', html_out, count=1)
-        else:
-            html_out = html_out.replace("</head>", f'<link rel="canonical" href="{canonical_url}">\n</head>', 1)
-
-        # title / description（meta-auto.js 同等・ポチポチくん対応表記は非対応機種で外す）
-        if machine.get("status") == "preview":
-            pp_available, pp_reason = False, "解析データ判明後に対応"
-        elif slug in pochipochi_reasons:
-            pp_available, pp_reason = False, pochipochi_reasons[slug]
-        else:
-            pp_available, pp_reason = True, ""
-        title, desc = build_title_desc(machine, pp_available)
-        html_out = html_out.replace("<title>機種ページ | うちどころ。</title>",
-                                    f"<title>{esc(title)}</title>", 1)
-        html_out = html_out.replace(
-            '<meta name="description" content="機種ごとの狙い目記事ページです。結論と要点をスマホ向けに表示します。">',
-            f'<meta name="description" content="{esc(desc)}">', 1)
-
-        # OGP（SNSシェア用・meta-auto.js も後で更新するが静的にも焼く）
-        html_out = html_out.replace(
-            '<meta property="og:title" content="機種ページ | うちどころ。">',
-            f'<meta property="og:title" content="{esc(title)}">', 1)
-        html_out = html_out.replace(
-            '<meta property="og:description" content="機種ごとの狙い目記事ページです。結論と要点をスマホ向けに表示します。">',
-            f'<meta property="og:description" content="{esc(desc)}">', 1)
-        html_out = html_out.replace(
-            '<meta property="og:url" content="https://uchidokoro.com/machine.html">',
-            f'<meta property="og:url" content="{canonical_url}">', 1)
-
-        # Twitter Card（meta-auto.js はプリレンダ済みで上書きしないため静的に焼く）
-        html_out = html_out.replace(
-            '<meta name="twitter:card" content="summary_large_image">',
-            '<meta name="twitter:card" content="summary_large_image">\n'
-            f'<meta name="twitter:title" content="{esc(title)}">\n'
-            f'<meta name="twitter:description" content="{esc(desc)}">\n'
-            '<meta name="twitter:site" content="@uchidokoro">\n'
-            '<meta name="twitter:image" content="https://uchidokoro.com/assets/img/ogp.png">', 1)
-
-        # ポチポチくん導線：非対応機種は初期HTML段階でリンクを無効化して焼く
-        # （JS実行前・JS無効・クローラーに「対応機能あり」と誤認させない。inline styleは使わずclassで）
-        if not pp_available:
-            for anchor_id, cls in (("settingHeroLink", "btn-settei btn-settei--wide"),
-                                   ("settingToolLink", "btn-show-all btn-show-all--center")):
-                html_out = re.sub(
-                    r'<a id="' + anchor_id + r'"[^>]*>小役カウンター ポチポチくん →</a>',
-                    f'<a id="{anchor_id}" class="{cls} is-disabled" aria-disabled="true" '
-                    f'title="{esc(pp_reason)}">小役カウンター ポチポチくん（{esc(pp_reason)}）</a>',
-                    html_out, count=1)
-
-        # h1 機種名
-        html_out = html_out.replace(
-            '<h1 id="machineTitle" class="page-title">機種名</h1>',
-            f'<h1 id="machineTitle" class="page-title">{esc(machine["name"])}</h1>', 1)
-
-        # ★「当サイトの目安です」の併記を実際に画面へ出す★
-        #   （2026-07-30・Codex 13巡目 (b)-4）
-        #   これまで公開データ側に「併記が必要」と記録されるだけで、
-        #   HTMLには一度も描画されていなかった＝要件が満たされていなかった。
-        req = machine.get("display_requirements")
-        disclaimer = req.get("disclaimer") if isinstance(req, dict) else None
-        if not isinstance(disclaimer, str) or not disclaimer.strip():
-            d = machine.get("disclaimer")
-            disclaimer = d if isinstance(d, str) and d.strip() else None
-        if disclaimer:
-            html_out = html_out.replace(
-                '<p id="heroSub"',
-                f'<p class="site-disclaimer">{esc(disclaimer)}</p>\n<p id="heroSub"', 1)
-
-        # JSON-LD（Article + BreadcrumbList）を静的に焼き込み
-        html_out = html_out.replace(
-            "</head>", build_jsonld(machine, canonical_url, title, desc) + "\n</head>", 1)
-
-        # 先行記事（preview）は完全記事へ昇格するまで noindex（恒久ポリシー・審査中だけの措置ではない）
-        # 昇格時は auto-add が本スクリプトを再実行するため自動で index に戻る
-        if machine.get("status") == "preview":
-            html_out = html_out.replace(
-                "</head>", '<meta name="robots" content="noindex,follow">\n</head>', 1)
-        # ★2026-07-24: AdSenseローダーの注入を全機種で停止（Phase 0・止血）★
-        #   理由: Google Publisher Policy は「人のレビュー/キュレーションが無い自動生成
-        #   コンテンツ」への広告掲載を認めていない。現状は status=complete というだけで
-        #   index・広告・チェッカーが一括で開く fail-open 設計であり、記事の検証状態を
-        #   まったく見ていない。承認ゲート（ads = public && index && page_review approved
-        #   && content_hash一致 …）の実装後、承認済みページだけで再開する。
-        #   ここを戻すときは必ずゲート参照にすること（無条件注入に戻さない）。
-
-        # 本文（lead / sections / factTable）をプリレンダ
+        detail = None
         dp = detail_dir / f"{slug}.json"
         if dp.is_file():
             try:
                 detail = json.loads(dp.read_text(encoding="utf-8"))
             except Exception as e:
                 # ★★読めない記事を「本文なし」で公開しない★★（Codex 11巡目 (b)-4）
-                #   握り潰すと、中身が欠けたページを正常生成として扱ってしまう。
                 print(f"★記事データが読めません: {slug} ({dp.name}) "
                       f"{type(e).__name__}: {e}")
                 broken_details.append(slug)
                 continue
-            lead = detail.get("lead", "") or ""
-            if lead:
-                html_out = html_out.replace(
-                    '<p id="heroSub" class="hero-sub"></p>',
-                    f'<p id="heroSub" class="hero-sub">{esc(lead)}</p>', 1)
-            sections = detail.get("sections") or []
-            if sections:
-                sections_html = "".join(render_section(s) for s in sections)
-                html_out = html_out.replace(
-                    '<div id="articleSections"></div>',
-                    f'<div id="articleSections">{sections_html}</div>', 1)
-            fact = detail.get("factTable") or [["機種名", machine["name"]]]
-            rows_html = "".join(f"<tr><th>{esc(r[0])}</th><td>{esc(r[1])}</td></tr>"
-                                for r in fact if len(r) >= 2)
-            html_out = html_out.replace(
-                '<tbody id="infoTableBody"></tbody>',
-                f'<tbody id="infoTableBody">{rows_html}</tbody>', 1)
-            # summaryBoxes をプリレンダ（JS未実行・データ取得失敗時も要約欄が出るように）
-            # machine.html の renderSummaryGrid と同じ2列組み。strategyByRate上書きは
-            # 実行時JSが再描画するため、静的には既定のsummaryBoxesを焼く。
-            summary_boxes = detail.get("summaryBoxes") or [
-                {"label": "天井", "value": machine.get("strategy") or "-"},
-                {"label": "ヤメ時", "value": "-"},
-            ]
-            srows = ""
-            for i in range(0, len(summary_boxes), 2):
-                a = summary_boxes[i]
-                cell_a = (f'<span class="s-label">{esc(a.get("label",""))}</span>'
-                          f'<span class="s-value">{esc(a.get("value",""))}</span>')
-                if i + 1 < len(summary_boxes):
-                    b = summary_boxes[i + 1]
-                    cell_b = (f'<span class="s-label">{esc(b.get("label",""))}</span>'
-                              f'<span class="s-value">{esc(b.get("value",""))}</span>')
-                    srows += f"<tr><td>{cell_a}</td><td>{cell_b}</td></tr>"
-                else:
-                    srows += f"<tr><td>{cell_a}</td><td></td></tr>"
-            html_out = html_out.replace(
-                '<table id="summaryGrid" class="summary-grid"></table>',
-                f'<table id="summaryGrid" class="summary-grid">{srows}</table>', 1)
             prerendered += 1
 
+        try:
+            html_out = render_page(template, machine, detail,
+                                   pochipochi_reasons, pochipochi_public)
+        except Exception as e:
+            print(f"★ページを作れません: {slug}: {type(e).__name__}: {e}")
+            broken_details.append(slug)
+            continue
+
         if preview:
-            # 写しは必ず noindex・バナー・目印つきで書く（外へ書けない仕組みも通す）
             _pv.write_html(f"machines/{slug}/index.html", html_out)
         else:
             out_dir = out_root / "machines" / slug
