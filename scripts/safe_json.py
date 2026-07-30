@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ci_safe import redact, safe_path  # noqa: E402
+from ci_safe import redact, format_path  # noqa: E402
 
 
 class SafeJsonError(RuntimeError):
@@ -46,12 +46,13 @@ def _no_duplicate_keys(pairs):
     return seen
 
 
-def _control_chars(node, path: str = "$") -> list:
-    """値の中の制御文字（改行・タブ以外）を探す。場所だけ返し、原文は返さない。
+def _control_chars(node, path: tuple = ()) -> list:
+    """値の中の制御文字を探す。★場所は「種別つきの並び」で返す★
 
-    ★再帰ではなくスタックで回す★（Codex 25巡目 (a)-5）
-      深い入れ子でここが RecursionError になると、
-      「診断で止める」はずが traceback になってしまう。
+    （Codex 27巡目 (a)-6）
+      文字列にしてから伏せると、`DRAFT[314159]` のようなキー名を
+      「配列の添字」と誤認して数字がそのまま出てしまう。
+      ("key", 名前) / ("index", 数) の並びで持ち、表示のときに整える。
     """
     out: list = []
     stack = [(node, path)]
@@ -60,7 +61,7 @@ def _control_chars(node, path: str = "$") -> list:
         cur, cpath = stack.pop()
         seen += 1
         if seen > 2_000_000:
-            out.append("（大きすぎて全部は見ていません）")
+            out.append((("note", "大きすぎて全部は見ていません"),))
             break
         if isinstance(cur, str):
             if any(ord(c) < 32 and c not in chr(10) + chr(9) for c in cur):
@@ -69,11 +70,11 @@ def _control_chars(node, path: str = "$") -> list:
             for k, v in cur.items():
                 if isinstance(k, str) and any(
                         ord(c) < 32 and c not in chr(10) + chr(9) for c in k):
-                    out.append(f"{cpath}.<キー名>")
-                stack.append((v, f"{cpath}.{k if isinstance(k, str) else '?'}"))
+                    out.append(cpath + (("key", "<キー名>"),))
+                stack.append((v, cpath + (("key", k if isinstance(k, str) else "?"),)))
         elif isinstance(cur, list):
             for i, v in enumerate(cur):
-                stack.append((v, f"{cpath}[{i}]"))
+                stack.append((v, cpath + (("index", i),)))
     return out
 
 
@@ -116,7 +117,7 @@ def read_json(path, expect=None, allow_missing: bool = False, default=None):
     bad = _control_chars(data)
     if bad:
         raise SafeJsonError(
-            f"{p.name}: 値に制御文字が入っています（{safe_path(bad[0])}）")
+            f"{p.name}: 値に制御文字が入っています（{format_path(bad[0])}）")
     if expect is not None and not isinstance(data, expect):
         want = getattr(expect, "__name__", str(expect))
         raise SafeJsonError(f"{p.name}: {want} であるべきですが {type(data).__name__} でした")

@@ -916,14 +916,29 @@ TAG_URL_ATTR = re.compile(
 CSS_URL = re.compile(r"""url\(\s*["']?((?:https?:)?//[^"')]+)""", re.IGNORECASE)
 # JS から外部を読む書き方（fetch / import / .src = / importScripts / Worker）
 # ★大文字スキームも拾う★（同）
-JS_URL = re.compile(r"""["'`]((?:https?:)?//[^"'`\s]+)["'`]""", re.IGNORECASE)
+#   ★`\` も authority の区切りになる★（Codex 27巡目 (a)-5）
+#   ★`\` も authority の区切りになる★（Codex 27巡目 (a)-5）
+#     `https:\\evil.example\x` はブラウザが外部として読み込む。
+#     ただの相対パス（`/assets/x`）を外部と誤認しないよう、
+#     「スキームつき」か「区切り2つ以上」のときだけ拾う。
+URL_HEAD = r"(?:https?:[/\\]{1,4}|[/\\]{2,4})"
+JS_URL = re.compile(r"""["'`](""" + URL_HEAD + r"""[^"'`\s/\\][^"'`\s]*)["'`]""",
+                    re.IGNORECASE)
 # ★終了タグはタグ名の後にASCII空白を許す★（Codex 25巡目 (a)-3・26巡目 (a)-1）
 #   `</script >` でも実行されるのに、完全一致だと検査から外れていた。
-INLINE_SCRIPT = re.compile(r"<script\b[^>]*>(.*?)</script\s*>",
+#   `</script >` `</script x>` `</script/>` はいずれも閉じる（Codex 27巡目 (a)-4）
+INLINE_SCRIPT = re.compile(r"<script\b[^>]*>(.*?)</script(?=[\s/>])[^>]*>",
                            re.IGNORECASE | re.DOTALL)
-ANY_URL = re.compile(r"""(?:https?:)?//[^\s"'`)>\]]+""", re.IGNORECASE)
+ANY_URL = re.compile(URL_HEAD + r"""[^\s"'`)>\]/\\][^\s"'`)>\]]*""",
+                     re.IGNORECASE)
 # 自分のサイト（★部分一致にしない★：eviluchidokoro.com を自分と誤認しないため）
 OWN_HOSTS = ("uchidokoro.com", "www.uchidokoro.com")
+# 現在すでに使っている外部（名前を出しても未公開情報にならない）
+KNOWN_EXTERNAL_HOSTS = frozenset({
+    "www.googletagmanager.com", "fonts.googleapis.com", "fonts.gstatic.com",
+    "docs.google.com", "hb.afl.rakuten.co.jp", "search.rakuten.co.jp",
+    "www11.a8.net", "www15.a8.net", "www17.a8.net", "px.a8.net",
+})
 # ホスト名の終わり（/ ? # とバックスラッシュ）
 HOST_END = re.compile("[/?#" + chr(92) + chr(92) + "]")
 # JSON-LD の語彙名（ページ読み込み時に取得されない）
@@ -1024,20 +1039,31 @@ def _unescape_all(text: str, rounds: int = 3) -> str:
 def _unescape_js(text: str) -> str:
     r"""JS文字列の \/ を戻す（https:\/\/evil を見落とさないため）。"""
     # ★長さを変えない★（位置がずれないよう空白で詰める）
-    return text.replace(chr(92) + "/", " /")
+    # ★長さを保ちつつURLの連続性も保つ★（Codex 27巡目 (a)-2）
+    #   " /" にしたら `https:\/\/x` が「https: / /x」になって検出できなくなった。
+    #   `\/`(2文字) → `//`(2文字) なら長さも連続性も保てる。
+    return text.replace(chr(92) + "/", "//")
+
+
+LINE_ENDS = (chr(10), chr(13), chr(0x2028), chr(0x2029))
 
 
 def _strip_js_comments(text: str) -> str:
     """JSのコメントを外す（★長さと改行位置は保つ★）。
 
-    ★文字列の中は触らない★（Codex 26巡目 (a)-1）
-      `fetch("//evil.example/x")` の `//` を行コメントと誤認して消していた。
-    ★同じ長さの空白に置き換える★（同 (b)-4）
-      文字を削ると、その後ろの警告の行番号がずれる。
+    ★文字列・テンプレート・正規表現リテラルの中は触らない★
+      （Codex 26巡目 (a)-1 / 27巡目 (a)-3）
+      ・`fetch("//evil/x")` の `//` を行コメントと誤認して消していた
+      ・入れ子のテンプレート（`` `${`//`}` ``）で引用状態が壊れていた
+      ・行コメントの終わりを LF だけで探しており、CR や U+2028 で消しすぎていた
+      ・正規表現リテラル `/[/*]/` の中を コメント開始と誤認していた
+    ★迷ったら消さない★（消しすぎる＝外部依存を見落とす、が最悪）
     """
     out = []
     i, n = 0, len(text)
-    quote = ""
+    quote = ""           # 文字列の引用符
+    tmpl = 0             # テンプレートの入れ子の深さ
+    prev = ""            # 直前の意味のある文字（正規表現かどうかの判断に使う）
     while i < n:
         ch = text[i]
         if quote:
@@ -1046,7 +1072,16 @@ def _strip_js_comments(text: str) -> str:
                 out.append(text[i + 1])
                 i += 2
                 continue
-            if ch == quote:
+            if quote == "`" and ch == "$" and i + 1 < n and text[i + 1] == "{":
+                tmpl += 1
+                out.append("{")
+                i += 2
+                continue
+            if quote == "`" and tmpl and ch == "}":
+                tmpl -= 1
+                i += 1
+                continue
+            if ch == quote and not tmpl:
                 quote = ""
             i += 1
             continue
@@ -1058,17 +1093,23 @@ def _strip_js_comments(text: str) -> str:
         if ch == "/" and i + 1 < n and text[i + 1] == "*":
             end = text.find("*/", i + 2)
             end = n if end < 0 else end + 2
-            # 改行はそのまま残し、他は空白にする（位置を保つ）
-            out.append("".join(c if c == chr(10) else " " for c in text[i:end]))
+            out.append("".join(c if c in LINE_ENDS else " " for c in text[i:end]))
             i = end
+            prev = "*"
             continue
         if ch == "/" and i + 1 < n and text[i + 1] == "/":
-            end = text.find(chr(10), i)
-            end = n if end < 0 else end
+            # ★直前が値なら、これは割り算か正規表現。コメントとみなさない★
+            if prev and (prev.isalnum() or prev in ")]_$"):
+                out.append(ch)
+                i += 1
+                continue
+            end = min([x for x in (text.find(e, i) for e in LINE_ENDS) if x >= 0] or [n])
             out.append(" " * (end - i))
             i = end
             continue
         out.append(ch)
+        if not ch.isspace():
+            prev = ch
         i += 1
     return "".join(out)
 
@@ -1092,6 +1133,8 @@ def external_references(stage: Path) -> list[str]:
         rest = re.sub(r"^(?:https?:)?", "", u.strip(), flags=re.IGNORECASE)
         rest = rest.lstrip("/" + chr(92))
         host = HOST_END.split(rest)[0].lower()
+        if "@" in host:      # user:pass@host を分離（Codex 27巡目 (a)-1）
+            host = host.split("@")[-1]
         # ★部分一致で自サイト扱いにしない★（eviluchidokoro.com 対策・Codex 20巡目 (a)-3）
         if not host or host in OWN_HOSTS:
             return
@@ -1184,7 +1227,11 @@ def external_references(stage: Path) -> list[str]:
         uniq = sorted(set(places))
         shown = " / ".join(uniq[:8])
         more = f" ほか{len(uniq) - 8}箇所" if len(uniq) > 8 else ""
-        out.append(f"{host}（{len(uniq)}箇所）: {shown}{more}")
+        # ★未知のホスト名にも未公開情報が入り得る★（Codex 26巡目 (a)-3 / 27巡目 (a)-1）
+        #   `https://DRAFT_USER:DRAFT_PASS@evil.example/` のような形もある。
+        #   いま実際に使っている外部だけそのまま出し、それ以外は伏せる。
+        label = host if host in KNOWN_EXTERNAL_HOSTS else redact_value(host)
+        out.append(f"{label}（{len(uniq)}箇所）: {shown}{more}")
     return out
 
 
@@ -1870,6 +1917,30 @@ def selftest() -> int:
     ):
         case(f"(a)-1 外部依存: {_name} を見つける",
              (lambda h, k: (lambda root: _ext_found(root, h, k)))(_html, _key), True)
+    for _html, _key, _name in (
+        ('<script>fetch("https:' + chr(92) + '/' + chr(92) + '/x1.example/x")</script>',
+         "x1.example", "JSのエスケープ"),
+        ('<script>fetch("https://x2.example/x")</script x>', "x2.example", "</script x>"),
+        ('<script>fetch("https://x3.example/x")</script/>', "x3.example", "</script/>"),
+        ('<iframe src="http:' + chr(92) + 'x4.example' + chr(92) + 'y"></iframe>',
+         "x4.example", "バックスラッシュ区切り"),
+        ('<script>const t=`${`//`}`;fetch("https://x5.example/x")</script>',
+         "x5.example", "入れ子テンプレート"),
+        ('<script>// c' + chr(13) + 'fetch("https://x6.example/x")</script>',
+         "x6.example", "CR改行"),
+    ):
+        case(f"(a) 外部依存: {_name} を見つける",
+             (lambda h, k: (lambda root: _ext_found(root, h, k)))(_html, _key), True)
+    for _html, _name in (
+        ('<img src="/assets/img/logo.png">', "内部の相対パス"),
+        ('<a href="https://link.example/x">リンク</a>', "ただのリンク"),
+    ):
+        case(f"(a) 外部依存: {_name} は数えない",
+             (lambda h: (lambda root: _ext_none(root, h)))(_html), True)
+    case("(a)-1 未知のホスト名はCIで伏せる",
+         lambda root: _host_redacted(root), True)
+    case("(a)-6 数字だけの偽添字も伏せる",
+         lambda root: _fake_index_number_redacted(), True)
     case("(a)-2 キー名を添字に見せかけても伏せる",
          lambda root: _fake_index_redacted(), True)
     case("(a)-1 重複/boolean属性でJSON-LDを偽装しても数える",
@@ -2153,6 +2224,48 @@ def _jsonld_spoof_detected(root: Path) -> bool:
 def _ext_found(root: Path, html: str, key: str) -> bool:
     (root / "a.html").write_text(html, encoding="utf-8")
     return key in " ".join(external_references(root))
+
+
+def _ext_none(root: Path, html: str) -> bool:
+    (root / "a.html").write_text(html, encoding="utf-8")
+    return external_references(root) == []
+
+
+def _host_redacted(root: Path) -> bool:
+    (root / "a.html").write_text(
+        '<script src="https://DRAFT_USER:DRAFT_PASS@secret.example/x.js"></script>',
+        encoding="utf-8")
+    was = os.environ.get("CI")
+    os.environ["CI"] = "true"
+    try:
+        out = " ".join(external_references(root))
+    finally:
+        if was is None:
+            os.environ.pop("CI", None)
+        else:
+            os.environ["CI"] = was
+    return "DRAFT_USER" not in out and "secret.example" not in out and out != ""
+
+
+def _fake_index_number_redacted() -> bool:
+    sys.path.insert(0, str(BASE / "scripts"))
+    import safe_json as _sj
+    import tempfile as _tf
+    d = Path(_tf.mkdtemp()); f = d / "x.json"
+    f.write_text(json.dumps({"DRAFT[314159]": "a" + chr(8) + "b"}), encoding="utf-8")
+    was = os.environ.get("CI")
+    os.environ["CI"] = "true"
+    try:
+        try:
+            _sj.read_json(f)
+            return False
+        except _sj.SafeJsonError as e:
+            return "314159" not in str(e)
+    finally:
+        if was is None:
+            os.environ.pop("CI", None)
+        else:
+            os.environ["CI"] = was
 
 
 def _fake_index_redacted() -> bool:

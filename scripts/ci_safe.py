@@ -88,3 +88,22 @@ def safe_path(path: str) -> str:
         else:
             out.append(f"<{fingerprint(base)}>{index}")
     return ".".join(out)
+
+
+def format_path(segments) -> str:
+    """("key", 名前) / ("index", 数) の並びを、表示できる形にする。
+
+    ★文字列にしてから判定しない★（Codex 27巡目 (a)-6）
+      `DRAFT[314159]` のようなキー名を「添字」と誤認して数字を出していた。
+    """
+    out = ["$"]
+    for kind, value in segments:
+        if kind == "index":
+            out.append(f"[{value}]")
+        elif kind == "note":
+            out.append(f"（{value}）")
+        elif not in_ci() or value in STRUCTURAL_KEYS:
+            out.append(f".{value}")
+        else:
+            out.append(f".<{fingerprint(value)}>")
+    return "".join(out)
