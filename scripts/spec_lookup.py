@@ -55,6 +55,9 @@ FIELDS = {
     #   波ダッシュの字が違うので、比べる前に形をそろえる。
     "payout_range": {"labels": ("機械割",), "kind": "range", "jp": "機械割の範囲"},
     "model_code":   {"labels": ("型式名",), "kind": "text", "jp": "型式名"},
+    # ★条件（どのモードか）を書かないと載せられない項目★
+    #   収集器はまだ条件を取れないので、集めても採用はされず保留になる。
+    "net_increase": {"labels": ("純増",), "kind": "text", "jp": "純増"},
 }
 
 # 範囲の書き方をそろえる（「97.3% ~ 112.5%」も「97.3% 〜 112.5%」も同じ）
@@ -97,6 +100,52 @@ def single_value(lines: list, labels: tuple, kind: str):
             if _mc._CODE_OK.match(v) and v not in _mc._CODE_NG:
                 return v
     return None
+
+
+# ★出典から値を採るときのルール★（assets/data/collection-rules.json）
+#   Codexとのやり取りで出た指摘のうち、他の機種でも効くものを外部ファイルに置く。
+#   ★手順書（文章）ではなくここで効かせる理由★
+#     文章のルールはAIが読み飛ばせば終わり。コードが読めば必ず効く。
+RULES_PATH = os.path.join(BASE, "assets", "data", "collection-rules.json")
+
+
+def load_rules() -> dict:
+    """採取ルールを読む。★読めなければ止める★（ルール無しで採らない）"""
+    try:
+        return _sj.read_json(RULES_PATH, expect=dict)
+    except Exception as e:
+        raise RuntimeError(f"採取ルールが読めません: {e} → 値を採りません")
+
+
+def phrasing_equal(a: str, b: str, rules: dict | None = None) -> bool:
+    """2つの書き方を『同じ値』と数えてよいか。
+
+    ★書き方が違うものを一致と数えない★
+      「50%以上」と「約50%」は、下限を示す表現と概数で意味の幅が違う。
+      文字が違えば元々一致しないが、**将来ゆるい比較を入れたときの歯止め**として
+      ここに明示しておく（実際に2026-07-31 に指摘された組合せ）。
+    """
+    rules = rules or load_rules()
+    if a == b:
+        return True
+    for ex in (rules.get("phrasing_not_equal") or {}).get("examples") or []:
+        if {a, b} == {ex.get("a"), ex.get("b")}:
+            return False
+    return False
+
+
+def needs_conditions(field_key: str, rules: dict | None = None):
+    """その項目は条件を書かないと載せられないか。要るなら何を書くか返す。"""
+    rules = rules or load_rules()
+    r = (rules.get("conditions_required") or {}).get(field_key)
+    return (r or {}).get("must_state") or []
+
+
+def settings_may_be_non_contiguous(rules: dict | None = None) -> bool:
+    """設定が1〜6の連番だと決めつけてよいか。★決めつけない★"""
+    rules = rules or load_rules()
+    return bool((rules.get("settings_layout") or {}).get("non_contiguous_allowed"))
+
 
 _SETTING_RE = re.compile(r"^設定\s*([1-6])$")
 
@@ -186,7 +235,11 @@ def _lineage(host: str) -> str:
 
 
 def compare(pages: list) -> dict:
-    """★2件が一致したものだけ採る★ 食い違いは『第三の出典が要る』として返す。"""
+    """★2件が一致したものだけ採る★ 食い違いは『第三の出典が要る』として返す。
+
+    ★採取ルールを必ず読む★（読めなければ例外で止まる＝ルール無しで採らない）
+    """
+    rules = load_rules()
     adopted: dict = {}
     need_third: dict = {}
     thin: dict = {}
@@ -203,6 +256,14 @@ def compare(pages: list) -> dict:
             continue
         agreed = [(fp, s) for fp, s in votes.items() if len(s) >= 2]
         if len(agreed) == 1:
+            must = needs_conditions(key, rules)
+            if must:
+                # ★条件を書かないと載せられない項目★（純増・継続率・天井など）
+                #   いまの収集器は条件を取れないので、採用せず保留にする。
+                need_third[key] = {
+                    "why": "条件を書かないと載せられない項目です: " + " / ".join(must),
+                    "value": json.loads(agreed[0][0])}
+                continue
             adopted[key] = {"value": json.loads(agreed[0][0]),
                             "sources": sorted(agreed[0][1])}
         elif len(votes) > 1:
@@ -266,6 +327,34 @@ def selftest() -> int:
     t("★同じ運営元の2ページを2票と数えない★", not r4["adopted"])
     r5 = compare([{**A, "ok": False, "fields": {}}, B])
     t("　機種が違うページの内容は混ぜない", not r5["adopted"])
+
+    # -------- 採取ルール（assets/data/collection-rules.json）が実際に効くか
+    R = load_rules()
+    t("★★ルールが読めなければ値を採らない★★（ルール無しで採らない）",
+      isinstance(R, dict) and R.get("schema_version", "").startswith("collection-rules/"))
+    t("★★『50%以上』と『約50%』を一致と数えない★★"
+      "（下限を示す表現と概数は別物・2026-07-31 Codex指摘）",
+      not phrasing_equal("50%以上", "約50%", R)
+      and not phrasing_equal("82%以上", "約82%", R))
+    t("　同じ書き方どうしは一致とする", phrasing_equal("97.3%", "97.3%", R))
+    t("★★条件が要る項目は、2出典一致でも採用しない★★"
+      "（純増はどのモードか書かないと誤情報・2026-07-31 Codex指摘）",
+      needs_conditions("net_increase", R)
+      and needs_conditions("at_continuation_rate", R)
+      and needs_conditions("ceiling", R))
+    t("　条件の要らない項目は空を返す", needs_conditions("payout_rate", R) == [])
+    t("★設定が1〜6の連番だと決めつけない★"
+      "（L/1/2/4/5/6 のように飛ぶ機種がある）",
+      settings_may_be_non_contiguous(R) is True)
+
+    # ★実際に compare を通したときに効くか★（宣言だけで終わらせない）
+    P = {"url": "https://www.p-world.co.jp/x", "host": "p-world.co.jp", "ok": True,
+         "reason": "OK", "fields": {"net_increase": "約2.8枚"}}
+    Q = {"url": "https://chonborista.com/y", "host": "chonborista.com", "ok": True,
+         "reason": "OK", "fields": {"net_increase": "約2.8枚"}}
+    _r = compare([P, Q])
+    t("★★条件が要る項目は compare でも止まる★★（宣言だけで終わっていない）",
+      "net_increase" not in _r["adopted"] and "net_increase" in _r["need_third"])
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
