@@ -106,6 +106,11 @@ def as_slots(slug: str, rates: dict) -> list:
         for setting, raw in sorted(per_setting.items()):
             slots.append({
                 "slot_id": f"{slug}:setting_rate.{field}:setting={setting}",
+                # ★調べるべき事実そのものの鍵★（Phase 2・2026-07-30）
+                #   ここは出力先が1つしかないので slot_id と同じ形でよいが、
+                #   在庫側が claim_key を必ず要求するので明示して持たせる。
+                #   **付け忘れると集計が落ちる**（fail-closed）。
+                "claim_key": f"{slug}:setting_rate.{field}:setting={setting}",
                 "field_key": f"setting_rate.{field}",
                 "conditions": {"mode": "ANY", "scope": "NONE",
                                "counter_basis": "NONE", "setting": setting},

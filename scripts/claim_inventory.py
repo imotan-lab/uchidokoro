@@ -445,45 +445,92 @@ def identity_tuple(machine: dict) -> dict:
             #   表示名や種別は変わり得るので、同名の別型式を区別できない。
             "manufacturer_id": ident.get("manufacturer_id"),
             "regulatory_model_code": ident.get("regulatory_model_code"),
-            "release_date": ident.get("release_date")
-            or machine.get("release_date")}
+            # ★発売日は「機種データが変わったか」の目印としてだけ残す★
+            #   台の識別（physical_key）には使わない。identity v2・2026-07-30。
+            #   新旧どちらの書き方でも読む（market_release_date / release_date）。
+            "release_date": release_date_of(ident)
+            or release_date_of(machine)}
+
+
+# ★機種を「同じ台」と決めるのに使う項目★（identity v2・2026-07-30）
+#   発売日は入れない。理由は PHYSICAL_KEY_FIELDS のすぐ下に書いた。
+PHYSICAL_KEY_FIELDS = ("manufacturer_id", "regulatory_model_code")
+
+# 発売日は「表示するための事実」であって、台を見分けるための項目ではない。
+#   先行導入・全国導入・再販で値が変わるため、識別子に入れると
+#   **同じ台なのに鍵が一致しない**という取りこぼしが出る。
+#   型式コードは1型式に1つなので、メーカーと合わせれば識別子として足りる。
+RELEASE_DATE_FIELD = "market_release_date"
+
+# 旧名（release_date）も読む。移行期に両方の書き方が混ざるため。
+_RELEASE_DATE_ALIASES = (RELEASE_DATE_FIELD, "release_date")
+
+
+def release_date_of(ident) -> str | None:
+    """発売日を取り出す（新旧どちらの書き方でも読む・空白だけは無効）。"""
+    if not isinstance(ident, dict):
+        return None
+    for k in _RELEASE_DATE_ALIASES:
+        v = ident.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return None
 
 
 def physical_key(ident) -> str | None:
-    """★型式そのものから作る鍵★（Codex 7巡目 (a)-3）
+    """★型式そのものから作る鍵★（Codex 7巡目 (a)-3／identity v2 で2項目に変更）
 
-    出典側にも「メーカー・型式・導入日」を書かせ、**この関数で計算した鍵**が
+    出典側にも「メーカー・型式」を書かせ、**この関数で計算した鍵**が
     機種データ側と一致することを求める。台帳が変な文字列を名乗っても、
-    型式が違えば鍵が一致しない。3項目そろっていなければ None（＝数えない）。
+    型式が違えば鍵が一致しない。2項目そろっていなければ None（＝数えない）。
+
+    ★2026-07-30・発売日を鍵から外した★
+      以前は導入日も必須だったが、導入日は物理的な型式の不変の識別子ではない
+      （先行導入・全国導入・再販で揺れる）。ここに入れると、同じ型式でも
+      出典ごとに日付が違うだけで照合が落ちる。**取りこぼす方向の誤り**なので
+      危険側ではないが、実運用ではほぼ全機種が通らなくなる。
+      発売日は `release_date_of()` で別の事実として扱い、
+      裏取りできなければ表示しない（鍵の一致とは無関係にする）。
     """
     if not isinstance(ident, dict):
         return None
     vals = []
-    for k in ("manufacturer_id", "regulatory_model_code", "release_date"):
+    for k in PHYSICAL_KEY_FIELDS:
         v = ident.get(k)
         if not isinstance(v, str) or not v.strip():
             return None
         vals.append(v.strip())
-    return _sha({"manufacturer_id": vals[0], "regulatory_model_code": vals[1],
-                 "release_date": vals[2]})[:16]
+    return _sha(dict(zip(PHYSICAL_KEY_FIELDS, vals)))[:16]
 
 
 def identity_diff(got, want) -> dict:
     """型式のどの項目が食い違ったかを返す★（Codex 8巡目 (b)-2）
 
     真偽値だけだと「メーカー不足／型式違い／日付表記違い」を区別できない。
+
+    ★発売日の食い違いは `blocking: False` を付けて返す★（identity v2・2026-07-30）
+      発売日は台の識別子ではないので、ここが違っても「別の台」ではない。
+      ただし**黙って捨てない**（表示する値としては裏取りが要るので、差分は報告する）。
     """
     got = got if isinstance(got, dict) else {}
     want = want if isinstance(want, dict) else {}
     out = {}
-    for k in ("manufacturer_id", "regulatory_model_code", "release_date"):
+    for k in PHYSICAL_KEY_FIELDS:
         g, w = got.get(k), want.get(k)
         if not isinstance(g, str) or not g.strip():
-            out[k] = {"status": "MISSING", "expected": w}
+            out[k] = {"status": "MISSING", "expected": w, "blocking": True}
         elif not isinstance(w, str) or not w.strip():
-            out[k] = {"status": "CATALOG_MISSING", "received": g}
+            out[k] = {"status": "CATALOG_MISSING", "received": g, "blocking": True}
         elif g.strip() != w.strip():
-            out[k] = {"status": "MISMATCH", "expected": w, "received": g}
+            out[k] = {"status": "MISMATCH", "expected": w, "received": g,
+                      "blocking": True}
+    g, w = release_date_of(got), release_date_of(want)
+    if g and w and g != w:
+        out[RELEASE_DATE_FIELD] = {"status": "MISMATCH", "expected": w,
+                                   "received": g, "blocking": False}
+    elif g and not w:
+        out[RELEASE_DATE_FIELD] = {"status": "CATALOG_MISSING", "received": g,
+                                   "blocking": False}
     return out
 
 
@@ -491,13 +538,14 @@ def identity_missing(machine: dict) -> list:
     """型式の同定情報が足りない項目を返す（空なら足りている）。
 
     ★空白だけの値を「登録済み」にしない★（Codex 6巡目 (a)-4）
-      release_date も含めて3項目そろって初めてバージョンを区別できる。
+    ★発売日は含めない★（identity v2・2026-07-30）
+      発売日が無くても台は特定できる。無い場合は日付を表示しないだけ。
     """
     ident = machine.get("identity") or {}
     if not isinstance(ident, dict):
         return ["identity"]
     out = []
-    for k in ("manufacturer_id", "regulatory_model_code", "release_date"):
+    for k in PHYSICAL_KEY_FIELDS:
         v = ident.get(k)
         if not isinstance(v, str) or not v.strip():
             out.append(k)
@@ -513,8 +561,29 @@ def variant_key(slug: str, machine: dict) -> str:
     return f"{slug}:{_sha(identity_tuple(machine))[:12]}"
 
 
+def claim_key(slug: str, spec: dict, setting=None) -> str:
+    """★「調べるべき事実」1つ分の鍵★（Phase 2・2026-07-30）
+
+    ★出力先（pointer）を鍵に入れない★
+      同じ機械割が「表」「本文」「ポチポチくん」の3か所に出ていると、
+      これまでは3つ別々の枠として数えていた。裏取りは1回で済むのに
+      3回分の作業に見えるうえ、**3か所のうち1か所だけ裏取り済み**という
+      ありえない状態も作れてしまう。
+
+      事実そのものは「どの機種の・何の値が・どの条件で・どの設定か」で決まる。
+      表示箇所は `surface_binding`（下の slot_id）が持つ。
+    """
+    key = (f"{slug}|{spec['field_key']}|mode={spec['mode']};scope={spec['scope']};"
+           f"basis={spec['counter_basis']};setting={setting if setting else ''}")
+    return f"{slug}:{spec['field_key']}:{_sha(key)[:12]}"
+
+
 def slot_id(slug: str, spec: dict, pointer: str) -> str:
-    """slot の同定子。★表示文ではなく「型＋条件＋出力先」で決める★"""
+    """★表示箇所1つ分の同定子（surface binding）★
+
+    ここには pointer を含める。「記事のどこに出ているか」を指すのが役目で、
+    「何を調べるべきか」は claim_key が持つ。
+    """
     key = (f"{slug}|{spec['field_key']}|mode={spec['mode']};scope={spec['scope']};"
            f"basis={spec['counter_basis']}|{pointer}")
     return f"{slug}:{spec['field_key']}:{_sha(key)[:12]}"
@@ -906,6 +975,8 @@ def _emit_slot(slots, seen_slots, slug, spec, pointer, label, value,
         seen_slots.add(sid)
         slots.append({
             "slot_id": sid,
+            # ★調べるべき事実そのものの鍵（表示箇所が違っても同じになる）★
+            "claim_key": claim_key(slug, spec, setting),
             "field_key": spec["field_key"],
             "conditions": {"mode": spec["mode"], "scope": spec["scope"],
                            "counter_basis": spec["counter_basis"],
@@ -954,6 +1025,10 @@ def _finish(slug, machine, detail, slots, unclassified, unsupported,
         "excluded_nonclaim_atoms": excluded_nonclaim,
         "coverage": {
             "slots_total": len(slots),
+            # ★実際に調べるべき事実の数★（表示箇所の重複を除いた数）
+            #   slots_total は「記事の何か所に出ているか」なので、
+            #   作業量の見積もりにはこちらを使う。
+            "claims_total": len({s["claim_key"] for s in slots}),
             "allowlisted_type": sum(1 for s in slots if s["allowlisted_type"]),
             "unclassified_atoms": len(unclassified),
             "unsupported_facts": len(unsupported),
@@ -1121,6 +1196,48 @@ def selftest() -> int:
           {"headers": ["設定", "機械割（設定6）"],
            "rows": [["設定1", "97.2%"]]}]}]}
           )["unclassified_atoms"][0]["reason"] == "SETTING_SIGNAL_CONFLICT")
+    # -------- identity v2 / claim_key（Phase 2・2026-07-30）
+    t("★発売日が違っても同じ台と分かる（識別子から外した）★",
+      physical_key({"manufacturer_id": "kitadenshi",
+                    "regulatory_model_code": "Sゴーゴー3KA",
+                    "market_release_date": "2023-07-03"})
+      == physical_key({"manufacturer_id": "kitadenshi",
+                       "regulatory_model_code": "Sゴーゴー3KA",
+                       "market_release_date": "2023-08-01"})
+      is not None)
+    t("★型式が違えば別の台（鍵が一致しない）★",
+      physical_key({"manufacturer_id": "a", "regulatory_model_code": "b"})
+      != physical_key({"manufacturer_id": "a", "regulatory_model_code": "z"}))
+    t("★メーカーか型式が欠けたら鍵を作らない（数えない）★",
+      physical_key({"manufacturer_id": "a"}) is None
+      and physical_key({"regulatory_model_code": "b"}) is None
+      and physical_key({"manufacturer_id": " ", "regulatory_model_code": "b"}) is None)
+    t("★発売日は無くても同定情報は足りている扱い★",
+      identity_missing({"identity": {"manufacturer_id": "a",
+                                     "regulatory_model_code": "b"}}) == [])
+    t("★発売日の食い違いは報告するが台の判定は止めない（blocking=False）★",
+      identity_diff({"manufacturer_id": "a", "regulatory_model_code": "b",
+                     "market_release_date": "2023-07-03"},
+                    {"manufacturer_id": "a", "regulatory_model_code": "b",
+                     "market_release_date": "2023-08-01"}
+                    )[RELEASE_DATE_FIELD]["blocking"] is False)
+    t("★発売日は新旧どちらの書き方でも読む★",
+      release_date_of({"release_date": "2023-07-03"}) == "2023-07-03"
+      and release_date_of({"market_release_date": "2023-07-03"}) == "2023-07-03"
+      and release_date_of({"release_date": "   "}) is None)
+    t("★★同じ事実が複数箇所に出ていても、調べるべき事実は1つ★★",
+      (lambda inv: inv["coverage"]["slots_total"] == 2
+       and inv["coverage"]["claims_total"] == 1)(
+          build_inventory("x", {"slug": "x"}, {
+              "factTable": [["機械割(設定1)", "97.2%"]],
+              "sections": [{"body": ["設定1の機械割は97.2%です"]},
+                           {"tables": [{"headers": ["設定", "機械割"],
+                                        "rows": [["設定1", "97.2%"]]}]}]})))
+    t("★設定が違えば別の事実として数える★",
+      (lambda inv: inv["coverage"]["claims_total"] == 2)(
+          build_inventory("x", {"slug": "x"}, {"sections": [{"tables": [
+              {"headers": ["設定", "機械割"],
+               "rows": [["設定1", "97.2%"], ["設定6", "106.5%"]]}]}]})))
     # -------- Codex 3巡目の反例
     t("★★表示単位が枠の期待単位と違えば値にしない（97.2円を%の枠に入れない）★★",
       normalize_value("97.2円", "%") is None
@@ -1196,7 +1313,7 @@ def selftest() -> int:
     t("★★型式が空白だけなら「登録済み」にしない★★",
       identity_missing({"identity": {"manufacturer_id": " ",
                                      "regulatory_model_code": " "}})
-      == ["manufacturer_id", "regulatory_model_code", "release_date"])
+      == ["manufacturer_id", "regulatory_model_code"])
     t("　3項目そろって初めて足りている",
       identity_missing({"identity": {"manufacturer_id": "a",
                                      "regulatory_model_code": "b",
