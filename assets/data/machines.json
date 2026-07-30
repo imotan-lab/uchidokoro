@@ -1452,7 +1452,12 @@
     "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
    }
   },
-  "limit": null
+  "limit": null,
+  "identity": {
+   "manufacturer_id": "kitadenshi",
+   "regulatory_model_code": "Sゴーゴージャグラー3KA",
+   "market_release_date": "2023-07-03"
+  }
  },
  {
   "slug": "neo_aim_juggler",
