@@ -648,12 +648,8 @@ def main(preview: bool = False):
         slug = machine["slug"]
         if slug in blocked_by_claim:
             # ★★「作らない」だけでは古い誤情報が残り続ける★★（Codex 10巡目 (a)-2）
-            if preview:
-                _pv.write_html(f"machines/{slug}/index.html", PLACEHOLDER_HTML)
-            else:
-                out = out_root / "machines" / slug / "index.html"
-                out.parent.mkdir(parents=True, exist_ok=True)
-                out.write_text(PLACEHOLDER_HTML, encoding="utf-8", newline="\n")
+            # ★ここは写し専用★（公開物は build_pages_artifact.py が書く・条件7）
+            _pv.write_html(f"machines/{slug}/index.html", PLACEHOLDER_HTML)
             continue
 
         detail = None
@@ -679,12 +675,8 @@ def main(preview: bool = False):
             broken_details.append(slug)
             continue
 
-        if preview:
-            _pv.write_html(f"machines/{slug}/index.html", html_out)
-        else:
-            out_dir = out_root / "machines" / slug
-            out_dir.mkdir(parents=True, exist_ok=True)
-            (out_dir / "index.html").write_text(html_out, encoding="utf-8", newline="\n")
+        # ★ここは写し専用★（公開物は build_pages_artifact.py が書く・条件7）
+        _pv.write_html(f"machines/{slug}/index.html", html_out)
         generated += 1
         generated_slugs.append(slug)
 
@@ -726,4 +718,18 @@ if __name__ == "__main__":
     _p.add_argument("--preview", action="store_true",
                     help="公開されない写し（.preview-site/）にだけ書き出す")
     _a = _p.parse_args()
-    raise SystemExit(main(_a.preview) or 0)
+    # ★どんな壊れた入力でも traceback にしない★（Codex 閉鎖条件5・27巡目）
+    import sys as _s9
+    _s9.path.insert(0, str(BASE / "scripts"))
+    import safe_json as _sj9
+    try:
+        raise SystemExit(main(_a.preview) or 0)
+    except SystemExit:
+        raise
+    except _sj9.SafeJsonError as _e:
+        print(f"★入力データが読めません: {_e}★")
+        print("  作業を中止しました（直してから再実行してください）")
+        raise SystemExit(1)
+    except Exception as _e:
+        print(f"★想定外の失敗 {type(_e).__name__}: {_e}★")
+        raise SystemExit(1)

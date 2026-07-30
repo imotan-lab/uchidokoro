@@ -1017,7 +1017,8 @@ def _json_urls(node, path: str = "") -> list:
         for k, v in node.items():
             # ★スキームは大文字小文字を区別しない★（Codex 24巡目 (a)-3）
             if isinstance(v, str) and k.lower() in FETCHED_JSON_FIELDS                     and re.match(r"^(?:https?:)?//", v.strip(), re.IGNORECASE):
-                out.append((f".{k}", v.strip()))
+                # ★どこにあるURLか分かるよう、たどってきた道を残す★（Codex 27巡目 (b)）
+                out.append((f"{path}.{k}", v.strip()))
             else:
                 out.extend(_json_urls(v, f"{path}.{k}"))
     elif isinstance(node, list):

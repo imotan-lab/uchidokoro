@@ -979,4 +979,18 @@ if __name__ == "__main__":
     _a = _p.parse_args()
     if _a.selftest:
         raise SystemExit(selftest())
-    raise SystemExit(main(_a.preview) or 0)
+    # ★どんな壊れた入力でも traceback にしない★（Codex 閉鎖条件5・27巡目）
+    import sys as _s9
+    _s9.path.insert(0, str(BASE / "scripts"))
+    import safe_json as _sj9
+    try:
+        raise SystemExit(main(_a.preview) or 0)
+    except SystemExit:
+        raise
+    except _sj9.SafeJsonError as _e:
+        print(f"★入力データが読めません: {_e}★")
+        print("  作業を中止しました（直してから再実行してください）")
+        raise SystemExit(1)
+    except Exception as _e:
+        print(f"★想定外の失敗 {type(_e).__name__}: {_e}★")
+        raise SystemExit(1)
