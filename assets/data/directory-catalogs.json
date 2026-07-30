@@ -39,14 +39,26 @@
    "name": "DMMぱちタウン",
    "surfaces": [
     {
+     "url": "https://p-town.dmm.com/machines",
+     "kind": "機種一覧"
+    },
+    {
+     "url": "https://p-town.dmm.com/machines/slot",
+     "kind": "スロット一覧"
+    },
+    {
      "url": "https://p-town.dmm.com/machines/smart_slot",
      "kind": "新台スマスロ"
+    },
+    {
+     "url": "https://p-town.dmm.com/makers/44",
+     "kind": "メーカー別（ベルコ）"
     }
    ],
    "link_pattern": "/machines/\\d+",
    "min_expected": 10,
    "status": "ACTIVE",
-   "_limit": "この入口は直近20件しか出ないため、少し前の機種は見つからない（2026-07-31確認）。別の入口を足す必要がある。"
+   "_verified": "2026-07-31 Claudeが確認。/machines(31件)・/machines/slot(20件)・/makers/44(20件) のいずれにも Lすーぱぁびん娘(5038) が含まれる。/machines/smart_slot だけだと入らなかった。★1つの入口では足りないことの実例★"
   }
  }
 }
