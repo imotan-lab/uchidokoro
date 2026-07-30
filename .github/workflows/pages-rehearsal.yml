@@ -126,6 +126,11 @@ jobs:
               tail -n 40 as.log
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
+            # ★注釈にも出す★（2026-07-30）
+            #   要約欄は実行ページを開かないと読めない。注釈はAPIからも読めるので、
+            #   ここに出しておくと「手元で再現できない失敗」を外から追える。
+            echo "::error title=crosscheck::$(tail -n 6 cc.log | tr '\n' ' ')"
+            echo "::error title=audit_site::$(tail -n 8 as.log | tr '\n' ' ')"
           fi
           exit "$rc"
 
