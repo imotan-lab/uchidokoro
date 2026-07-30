@@ -227,7 +227,12 @@ def validate_claim(c: dict, where: str, registry: dict | None = None) -> None:
             raise LedgerError(f"{where}.{k}: 辞書でない（{type(c[k]).__name__}）")
     if "sources" in c and not isinstance(c["sources"], list):
         raise LedgerError(f"{where}.sources: 配列でない")
-    for k in ("claim_id", "slot_id", "claim_kind", "field_key", "value",
+    # ★claim は「調べるべき事実」1つ分★（Phase 2・2026-07-30）
+    #   以前は slot_id（記事のどこに出ているか）を必須にしていた。
+    #   同じ機械割が表・本文・ポチポチくんの3か所にあると claim も3つ要り、
+    #   **3か所のうち1か所だけ裏取り済み**というありえない状態が作れた。
+    #   表示箇所との対応は在庫（surface binding）が持つので、台帳は持たない。
+    for k in ("claim_id", "claim_key", "claim_kind", "field_key", "value",
               "conditions", "verify_state", "sources"):
         _req(c, k, where)
     if not _ID_RE.match(str(c["claim_id"])):
@@ -395,10 +400,10 @@ def validate_ledger(led: dict, path: str = "ledger",
         if c["claim_id"] in seen_ids:
             raise LedgerError(f"{w}: claim_id が重複している {c['claim_id']}")
         seen_ids.add(c["claim_id"])
-        # ★同じ枠に2つの値を置かない★（どちらを表示するか決まらない）
-        if c["slot_id"] in seen_slots:
-            raise LedgerError(f"{w}: 同じ slot_id に複数のclaimがある {c['slot_id']}")
-        seen_slots.add(c["slot_id"])
+        # ★同じ事実に2つの値を置かない★（どちらを表示するか決まらない）
+        if c["claim_key"] in seen_slots:
+            raise LedgerError(f"{w}: 同じ claim_key に複数のclaimがある {c['claim_key']}")
+        seen_slots.add(c["claim_key"])
         if not str(c["claim_id"]).startswith(mr["slug"] + ":"):
             raise LedgerError(f"{w}: claim_id の機種が machine_ref と違う")
     return sorted(seen_ids)
@@ -553,7 +558,7 @@ def _mk_source(quote: str, pub: str, counted: bool = True,
 def _mk_claim(**over) -> dict:
     c = {
         "claim_id": "x:ceiling.normal.at:001",
-        "slot_id": "x:ceiling.normal.at:mode=NORMAL;scope=AT_GAP",
+        "claim_key": "x:ceiling.normal.at:mode=NORMAL;scope=AT_GAP",
         "claim_kind": "FACT",
         "field_key": "ceiling.normal.at",
         "value": {"kind": "INTEGER", "raw": "1200", "amount": 1200,
@@ -822,7 +827,7 @@ def selftest() -> int:
     def _kw(**over):
         c = _mk_claim(
             claim_id="x:kikaiwari.setting:001",
-            slot_id="x:kikaiwari.setting:setting=1",
+            claim_key="x:kikaiwari.setting:setting=1",
             field_key="kikaiwari.setting",
             value={"kind": "PERCENT", "raw": "97.2%", "amount": 97.2,
                    "unit": "%", "operator": "EXACT"},
