@@ -162,6 +162,7 @@ APPROVED_INPUTS = frozenset({
     "scripts/claim_identity.py",
     "scripts/claim_evidence.py",
     "scripts/preview_site.py",
+    "scripts/ci_safe.py",
     # ハブの手書き散文
     "scripts/hub_prose.json",
 })
