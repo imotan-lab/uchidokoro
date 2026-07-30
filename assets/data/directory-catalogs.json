@@ -1,0 +1,52 @@
+{
+ "schema_version": "directory-catalogs/v1",
+ "_note": "★名鑑の『機種の入口』★ メーカー公式から取った正式名称で、ここを引いて個別ページURLを見つける。★検索エンジンは使わない★（順位や要約に引きずられ、実在しない名前を拾った事故がある）。1つの名鑑に入口が複数あるので**和集合**で見る（実証：ちょんぼりすたは全機種一覧に無くてもメーカー別一覧にはある）。",
+ "_verified": "2026-07-31 Claudeが実データで確認。ちょんぼりすた: /slot/ には Lすーぱぁびん娘 が無く、/slot/belko-slot/ にはある。P-WORLD: /database/machine.html と導入カレンダーの両方から /machine/database/10496 へ辿れる。",
+ "directories": {
+  "chonborista": {
+   "name": "ちょんぼりすた",
+   "surfaces": [
+    {
+     "url": "https://chonborista.com/slot/",
+     "kind": "全機種一覧"
+    },
+    {
+     "url": "https://chonborista.com/slot/belko-slot/",
+     "kind": "メーカー別（ベルコ）"
+    }
+   ],
+   "link_pattern": "/slot/[a-z\\-]+/\\d+",
+   "min_expected": 20,
+   "status": "ACTIVE"
+  },
+  "p-world": {
+   "name": "P-WORLD",
+   "surfaces": [
+    {
+     "url": "https://www.p-world.co.jp/database/machine.html",
+     "kind": "機種一覧"
+    },
+    {
+     "url": "https://www.p-world.co.jp/database/machine/introduce_calendar.cgi",
+     "kind": "導入カレンダー"
+    }
+   ],
+   "link_pattern": "/machine/database/\\d+",
+   "min_expected": 15,
+   "status": "ACTIVE"
+  },
+  "dmm-ptown": {
+   "name": "DMMぱちタウン",
+   "surfaces": [
+    {
+     "url": "https://p-town.dmm.com/machines/smart_slot",
+     "kind": "新台スマスロ"
+    }
+   ],
+   "link_pattern": "/machines/\\d+",
+   "min_expected": 10,
+   "status": "ACTIVE",
+   "_limit": "この入口は直近20件しか出ないため、少し前の機種は見つからない（2026-07-31確認）。別の入口を足す必要がある。"
+  }
+ }
+}

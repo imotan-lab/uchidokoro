@@ -43,6 +43,14 @@ LOG_PATH = r"C:/Users/imao_/Documents/uchidokoro/logs/backup_guard.log"
 
 # ── 前段copy用: バックアップを許可するファイル名（完全一覧・basename照合）──
 ALLOW_BASENAMES = {
+    # ★プロジェクトのルール（2026-07-31 追加）★
+    #   中身はルール・現在の状態・パスだけで、認証情報を含まない。
+    #   ★ここが失われると「毎回忘れる」ルールごと消える★ので必ず控えを取る。
+    #   保存名は uchidokoro_ を付けて他プロジェクトと混ざらないようにする。
+    "uchidokoro_CLAUDE.md",
+    "uchidokoro_CLAUDE_history.md",
+    # 要確認台帳（人間の判断待ち案件の唯一の恒久記録・台帳 #153）
+    "open_issues.json",
     # 自動タスクの手順書（{taskId}_SKILL.md の形で保存する）
     "uchidokoro-fact-check_SKILL.md",
     "SKILL.md",
