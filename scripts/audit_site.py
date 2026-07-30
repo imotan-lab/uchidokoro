@@ -57,6 +57,8 @@ except Exception:
     pass
 
 BASE = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(BASE / "scripts"))
+from ci_safe import redact as _redact   # noqa: E402  ★CIでは原文を出さない★
 
 # ★ビルドの出力は監査の対象外★（2026-07-30）
 #   .preview-site/ は公開されない写し（全ページ noindex・robots全面Disallow）、
@@ -105,7 +107,7 @@ def check_1_inline_style(machines: list) -> list[str]:
         text = load_text(p)
         matches = re.findall(r'style="[^"]*"', text)
         if matches:
-            ngs.append(f"{p.name}: インラインstyle {len(matches)}箇所: {matches[:3]}")
+            ngs.append(f"{p.name}: インラインstyle {len(matches)}箇所: {_redact(matches[:3])}")
     return ngs
 
 
@@ -135,9 +137,9 @@ def check_3_info_notation(machines: list) -> list[str]:
     for m in machines:
         info = m.get("info", "")
         if "擬似" in info:
-            ngs.append(f"{m['slug']}: infoに『擬似』使用 → 『疑似』に統一すべき (現在: '{info}')")
+            ngs.append(f"{m['slug']}: infoに『擬似』使用 → 『疑似』に統一すべき (現在: {_redact(info)})")
         if "スマスロ ノーマル" in info:
-            ngs.append(f"{m['slug']}: infoに『スマスロ ノーマル』(スペース有) → 『スマスロノーマル』に統一すべき (現在: '{info}')")
+            ngs.append(f"{m['slug']}: infoに『スマスロ ノーマル』(スペース有) → 『スマスロノーマル』に統一すべき (現在: {_redact(info)})")
     return ngs
 
 
@@ -500,7 +502,7 @@ def check_16_writing_style(machines: list) -> list[str]:
                     plain_sentences.append((s.get("title", ""), sent.strip()))
         if plain_sentences:
             for title, sent in plain_sentences[:2]:  # 機種ごとに最大2件
-                ngs.append(f"{slug}: 常体文混在 [{title}] {sent[:50]}...")
+                ngs.append(f"{slug}: 常体文混在 [{title}] {_redact(sent)}")
     return ngs
 
 
@@ -823,6 +825,10 @@ def check_27_hub_counts(machines: list) -> list[str]:
     # ★先行記事も早見表には載る（build_hub_pages と揃える）★（Codex 17巡目 (b)-1）
     #   分類の断定は yome() 側で避ける。sitemap にだけ載せない。
     ALL = rows
+    # ★A/C/D は先行記事を除く★（Codex 18巡目 (b)-3）
+    #   本番のハブは公開射影（preview は数値を落とす）を読むので、
+    #   authoring の数値で分類すると「件数が合わない」という誤警告になる。
+    rows = [r for r in rows if r.get("status") != "preview"]
     A = [r for r in rows
          if r["unit"] == "G" and isinstance(r["limit"], (int, float))
          and not r["has_cycle"] and r["limit"] < 1000

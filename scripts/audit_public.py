@@ -86,6 +86,10 @@ ALLOWED_MACHINE_KEYS = {
 }
 REQUIRED_MACHINE_KEYS = {"slug", "name"}
 # authoring 専用（絶対に公開物へ出てはいけない）
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from ci_safe import redact as _ci_redact   # noqa: E402  ★CIでは原文を出さない★
+
 AUTHORING_ONLY = {"lifecycle", "checker_modes", "checker_kill_switch", "_disabled"}
 # status に許される値（これ以外は公開物として不正）
 ALLOWED_STATUS = {"complete", "preview"}
@@ -763,9 +767,9 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
         seen_slugs.add(slug)
     for k in pub:
         if k in AUTHORING_ONLY:
-            problems.append(f"{slug}: authoring専用フィールドの流出 {k}")
+            problems.append(f"{slug}: authoring専用フィールドの流出 {_ci_redact(k)}")
         elif k not in ALLOWED_MACHINE_KEYS:
-            problems.append(f"{slug}: 許可されていないフィールド {k}")
+            problems.append(f"{slug}: 許可されていないフィールド {_ci_redact(k)}")
     if "status" in pub:
         st = pub["status"]
         # ★型が不正でも「型が不正」と言えるようにする★（Codex 15巡目 (b)-4）
@@ -773,7 +777,7 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
         if not isinstance(st, str):
             problems.append(f"{slug}: status が文字列でない（{type(st).__name__}）")
         elif st not in ALLOWED_STATUS:
-            problems.append(f"{slug}: status が complete/preview 以外（{st!r}）")
+            problems.append(f"{slug}: status が complete/preview 以外 {_ci_redact(st)}")
     # ★入れ子も allowlist ＋ 型契約で fail-closed にする★
     for i, s in enumerate(pub.get("sources") or []):
         if not isinstance(s, dict):
@@ -917,7 +921,7 @@ def audit_detail(slug: str, detail: dict, has_disclaimer: bool,
     _scan_strings(detail, "detail", problems, slug)
     for k in detail:
         if k in AUTHORING_ONLY:
-            problems.append(f"{slug}: authoring専用フィールドの流出 {k}")
+            problems.append(f"{slug}: authoring専用フィールドの流出 {_ci_redact(k)}")
         elif k not in ALLOWED_DETAIL_KEYS:
             problems.append(f"{slug}: 記事に許可されていないフィールド {k}")
     # 入れ子の型契約（想定と違う形のまま公開しない）

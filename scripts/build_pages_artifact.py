@@ -132,9 +132,20 @@ APPROVED_INPUTS = frozenset({
     "assets/css/practical.css",
     "meta-auto.js",
     "service-worker.js",
-    # 全ページに出る画像（画像の中に文字を描けば全機種に表示できる）
+    # 公開設定（そのまま配信される）
+    "CNAME",
+    "ads.txt",
+    "robots.txt",
+    "favicon.ico",
+    "googleafe441235e57f84f.html",
+    # 画像（★中に文字を描けば表示できるので全部★・Codex 18巡目 (a)-2）
     "assets/img/logo.png",
     "assets/img/ogp.png",
+    "assets/img/favicon-16.png",
+    "assets/img/favicon-32.png",
+    "assets/img/apple-touch-icon.png",
+    "assets/img/icon-192.png",
+    "assets/img/icon-512.png",
     # 公開物を作るコード（ここを直せば何でも書ける）
     #   ★判定を構成する側も入れる★（Codex 17巡目 (a)-1）
     "scripts/build_pages_artifact.py",
@@ -149,6 +160,7 @@ APPROVED_INPUTS = frozenset({
     "scripts/claim_inventory.py",
     "scripts/claim_ledger.py",
     "scripts/claim_identity.py",
+    "scripts/claim_evidence.py",
     "scripts/preview_site.py",
     # ハブの手書き散文
     "scripts/hub_prose.json",
@@ -309,6 +321,27 @@ def copy_file(source: Path, target: Path) -> None:
         target.write_bytes(data)
     else:
         shutil.copy2(source, target)
+
+
+def assert_all_verbatim_approved(work: Path) -> None:
+    """★そのまま公開されるファイルは、全部承認済みであること★
+
+    （2026-07-30・Codex 18巡目 (a)-2）
+      「公開する物の一覧」と「承認する物の一覧」を別々に持っていたので、
+      片方に足してもう片方を忘れると、**検査を通らないファイルが公開される**。
+      画像を1枚足すだけで全ページに文字を出せた。ここで機械的に突き合わせる。
+    """
+    verbatim = set(ROOT_FILES) | set(ROOT_ASSETS)
+    for dirname in ("css", "img"):
+        src = work / "assets" / dirname
+        if src.is_dir():
+            verbatim |= {p.relative_to(work).as_posix()
+                         for p in src.rglob("*") if p.is_file()}
+    missing = sorted(verbatim - set(APPROVED_INPUTS))
+    if missing:
+        raise BuildError(
+            "そのまま公開されるのに承認されていないファイルがあります: "
+            f"{missing}（APPROVED_INPUTS に足して --approve を実行すること）")
 
 
 def copy_asset_dir(source: Path, target: Path) -> None:
@@ -547,8 +580,9 @@ def audit(stage: Path, expected: set[str]) -> None:
     if directories != expected:
         raise BuildError("machine page directories differ from approved slugs")
 
-    # ★先行記事（noindex）は sitemap にも一覧にも載せない★（Codex 16巡目 (b)-1）
+    # ★先行記事（noindex）は sitemap に載せない★（Codex 16巡目 (b)-1 / 18巡目 (b)-2）
     #   機種ページには noindex を付けるのに sitemap には載せる、という食い違いがあった。
+    #   早見表には「解析待ち」として載せる（外すと全機種表の件数が合わなくなる）。
     preview = {row.get("slug") for row in machines if row.get("status") == "preview"}
     indexable = expected - preview
 
@@ -662,21 +696,51 @@ CSS_EXTERNAL_ALLOW = (
     "https://fonts.googleapis.com/css2?family=orbitron:wght@700;900&display=swap",
 )
 
+# ★公開（deploy）してはいけない理由として残っているもの★（Codex 18巡目 (a)-4）
+#   予行演習の間は「記録して進む」でよいが、**実際に公開する前に必ず解消する**。
+#   どちらも外部サーバの応答が指紋の外＝中身が変わっても検知できない。
+DEPLOY_BLOCKERS = (
+    "assets/css/practical.css が Google Fonts を外部から読み込んでいる"
+    "（自前配信にするか、フォントをやめる）",
+    "machine.html / ハブが Google Analytics(gtag) の外部JavaScriptを実行している"
+    "（停止するか、信頼境界の外だと明示して受け入れる）",
+)
+
 
 def css_rules(text: str):
-    """CSSを「セレクタ」と「宣言」に分解する（入れ子にも対応した簡易パーサ）。
+    """CSSを「セレクタ」と「宣言」に分解する。
 
-    ★正規表現での切り出しをやめた★（Codex 17巡目 (a)-4）
-      `.x { display:none; & span { … } }` のような入れ子があると、
-      外側の宣言を取り出せずに見逃していた。括弧を数えて自前で分ける。
+    ★文字列・コメント・url() を字句として扱う★（Codex 18巡目 (a)-3）
+      前は「コメントを正規表現で消してから括弧を数える」方式だったので、
+      文字列の中の `/*` や `}` でパーサを壊し、その後ろの `content:` を
+      検査対象から消せてしまった。1文字ずつ状態を持って読む。
     戻り値: (親セレクタを連ねたもの, 宣言文字列) の並び。
     """
-    out = []
+    out: list[tuple[str, str]] = []
     stack: list[str] = []
     buf = ""
-    i = 0
-    while i < len(text):
+    i, n = 0, len(text)
+    while i < n:
         ch = text[i]
+        # コメント
+        if ch == "/" and i + 1 < n and text[i + 1] == "*":
+            end = text.find("*/", i + 2)
+            i = n if end < 0 else end + 2
+            continue
+        # 文字列（中身はそのまま buf に残す＝content の検査に必要）
+        if ch in "\"'":
+            quote = ch
+            j = i + 1
+            while j < n:
+                if text[j] == "\\":
+                    j += 2
+                    continue
+                if text[j] == quote:
+                    break
+                j += 1
+            buf += text[i:min(j + 1, n)]
+            i = j + 1
+            continue
         if ch == "{":
             stack.append(buf.strip())
             buf = ""
@@ -687,7 +751,8 @@ def css_rules(text: str):
             if stack:
                 stack.pop()
         elif ch == ";" and stack:
-            out.append((" ".join(stack), buf.strip()))
+            if buf.strip():
+                out.append((" ".join(stack), buf.strip()))
             buf = ""
         else:
             buf += ch
@@ -697,21 +762,69 @@ def css_rules(text: str):
     return out
 
 
+def css_strip_comments(text: str) -> str:
+    """コメントだけを外す（★文字列の中は触らない★・Codex 18巡目 (a)-3）。"""
+    out = []
+    i, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        if ch == "/" and i + 1 < n and text[i + 1] == "*":
+            end = text.find("*/", i + 2)
+            i = n if end < 0 else end + 2
+            continue
+        if ch in "\"'":
+            quote = ch
+            j = i + 1
+            while j < n:
+                if text[j] == "\\":
+                    j += 2
+                    continue
+                if text[j] == quote:
+                    break
+                j += 1
+            out.append(text[i:min(j + 1, n)])
+            i = j + 1
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def _subject(part: str) -> str:
+    """セレクタの「対象になる部分」（いちばん右のかたまり）を返す。"""
+    # 結合子で分割。( ) の中は分割しない
+    depth, last, cur = 0, "", ""
+    for ch in part:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth = max(0, depth - 1)
+        if depth == 0 and ch in " >+~":
+            if cur.strip():
+                last = cur
+            cur = ""
+        else:
+            cur += ch
+    return (cur if cur.strip() else last).strip()
+
+
 def _targets_disclaimer(selector: str) -> bool:
     """その規則が「併記そのもの」を対象にしているか。
 
-    `:not(.site-disclaimer)` は対象外、`.site-disclaimer::before` は飾りなので対象外。
-    （Codex 17巡目 (a)-4 の誤検知指摘）
+    ★対象になるのは、いちばん右のかたまり★（Codex 18巡目 (a)-3）
+      以前は「セレクタのどこかに `:not(.site-disclaimer)` があれば除外」だったので、
+      `body:not(.site-disclaimer) .site-disclaimer{display:none}` を見逃していた。
+      `.site-disclaimer::before` のような飾りだけは対象外のままにする。
     """
-    sel = selector.replace(" ", "")
-    if "site-disclaimer" not in sel:
+    if "site-disclaimer" not in selector:
         return False
-    for part in re.split(r"[,]", sel):
-        if "site-disclaimer" not in part:
+    for part in selector.split(","):
+        subject = _subject(part)
+        # :not(...) の中身は「対象そのもの」ではないので外す
+        stripped = re.sub(r":not\([^)]*\)", "", subject)
+        if "site-disclaimer" not in stripped:
             continue
-        if re.search(r":not\([^)]*site-disclaimer", part):
-            continue
-        if re.search(r"site-disclaimer[^,]*::(before|after|marker|placeholder)", part):
+        if re.search(r"::(before|after|marker|placeholder|selection)", stripped):
             continue
         return True
     return False
@@ -726,51 +839,57 @@ def css_problems(text: str) -> list[str]:
       ・外部の読み込みは実行時の中身が指紋の外
     """
     problems: list[str] = []
-    body = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    body = css_strip_comments(text)
     # CSSエスケープ（\64 → d、\i → i）を戻す
     body = CSS_ESCAPE.sub(lambda m: chr(int(m.group(1), 16)), body)
     body = re.sub(r"\\(.)", r"\1", body)
 
-    # 外部読み込み（url(...) と @import "..." の両方）
-    externals = [m.group(1).strip("\"' ") for m in re.finditer(r"url\(([^)]*)\)", body)]
-    externals += [m.group(1) for m in re.finditer(r'@import\s+["\']([^"\']+)["\']', body)]
+    # 外部読み込み（url(...) と @import "..." の両方・★大文字小文字を問わない★）
+    externals = [m.group(1).strip("\"' ") for m in re.finditer(r"url\(([^)]*)\)", body, re.I)]
+    externals += [m.group(1) for m in
+                  re.finditer(r'@import\s+["\']([^"\']+)["\']', body, re.I)]
     for url in externals:
-        if not re.match(r"^(?:https?:)?//", url.strip()):
+        u = url.strip()
+        # ★data: URL は中身を検査できない（SVGに文字を描ける）★（Codex 18巡目 (a)-3）
+        if u.lower().startswith("data:"):
+            problems.append(f"CSSで data: URL は使えません « {u[:50]} »")
             continue
-        if url.strip().lower() in CSS_EXTERNAL_ALLOW:
+        if not re.match(r"^(?:https?:)?//", u):
+            continue
+        if u.lower() in CSS_EXTERNAL_ALLOW:
             continue        # ★記録済みの例外（定義のコメント参照）★
-        problems.append(f"承認していない外部URLを読み込んでいます « {url[:70]} »")
+        problems.append(f"承認していない外部URLを読み込んでいます « {u[:70]} »")
 
     rules = css_rules(body)
-    # 変数（--名前）の値を集めておき、var(--名前) は中身に置き換えてから判定する。
-    # ★同じCSSの中で定義された変数なら、実際の値で判断できる★（Codex 17巡目 (a)-4 の誤検知対策）
-    variables = {}
+    # 変数（--名前）に**一度でも**「隠す値」が入るなら、その変数は危険として扱う。
+    # ★最後に見た値で決めない★（Codex 18巡目 (a)-3）
+    #   `.site-disclaimer{--h:none;display:var(--h)}` の後に `:root{--h:block}` と書くと、
+    #   実際は要素側が勝つのに検査は block を採用して素通りしていた。
+    var_values: dict[str, set] = {}
     for _sel, decl in rules:
         m = re.match(r"\s*(--[\w-]+)\s*:\s*(.+)$", decl, re.DOTALL)
         if m:
-            variables[m.group(1)] = m.group(2).strip()
+            var_values.setdefault(m.group(1), set()).add(m.group(2).strip())
 
-    def resolve(value: str) -> str:
-        for _ in range(3):      # 入れ子の var() も数段だけ辿る
-            def sub(m):
-                name = m.group(1).strip()
-                return variables.get(name, m.group(0))
-            new = re.sub(r"var\(\s*(--[\w-]+)\s*(?:,[^)]*)?\)", sub, value)
-            if new == value:
-                break
-            value = new
-        return value
+    def hides(prop_value: str) -> bool:
+        flat = re.sub(r"\s+", "", prop_value).lower()
+        return any(h in flat for h in HIDE_DECLS)
 
     for selector, decl in rules:
-        resolved = resolve(decl)
-        flat = re.sub(r"\s+", "", resolved).lower()
+        flat = re.sub(r"\s+", "", decl).lower()
         if _targets_disclaimer(selector):
-            for hidden in HIDE_DECLS:
-                if hidden in flat:
-                    problems.append(f"併記（.site-disclaimer）を隠しています « {hidden} »")
-            if re.search(r"(display|visibility|opacity|font-size|color|filter):var\(", flat):
-                problems.append(
-                    f"併記の表示指定に、中身の分からない変数を使っています « {decl[:40]} »")
+            if hides(decl):
+                problems.append(f"併記（.site-disclaimer）を隠しています « {decl[:40]} »")
+            for vm in re.finditer(r"var\(\s*(--[\w-]+)", flat):
+                name = vm.group(1)
+                candidates = var_values.get(name)
+                prop = flat.split(":", 1)[0]
+                if candidates is None:
+                    problems.append(
+                        f"併記の表示指定に、中身の分からない変数を使っています « {decl[:40]} »")
+                elif any(hides(f"{prop}:{v}") for v in candidates):
+                    problems.append(
+                        f"併記の表示指定の変数に、隠す値が入り得ます « {name} »")
         # ★CSSから「文章」を生やせないようにする★
         #   箇条書きの記号（"— " など）は文字も数字も含まないので通す。
         if flat.startswith("content:"):
@@ -813,6 +932,8 @@ def write_artifact_manifest(stage: Path, template_hashes: dict | None = None) ->
         "schema_version": 1,
         "source_commit": source_sha,
         "source_dirty": dirty,
+        # ★公開前に解消すべき残件（成果物に記録して見えるようにする）★
+        "deploy_blockers": list(DEPLOY_BLOCKERS),
         # ★成果物に入らないが出来上がりを決めるもの★（Codex 15巡目 (a)-1）
         #   ひな型は artifact に入れないので、成果物だけを見ても再現できない。
         #   何から作ったかを残す。
@@ -831,6 +952,16 @@ def build() -> int:
     if gate.get("enabled") is not True:
         raise BuildError("claim gate is not enabled")
 
+    # ★公開する気になっているのに残件があれば、そこで止める★（Codex 18巡目 (a)-4）
+    #   予行演習（deployしない）の間は警告だけ。公開スイッチが入っていたら失敗させる。
+    if DEPLOY_BLOCKERS:
+        print("★公開前に解消すべき残件があります★")
+        for b in DEPLOY_BLOCKERS:
+            print(f"  ⚠ {b}")
+        if os.environ.get("PAGES_DEPLOY_ENABLED") == "true":
+            raise BuildError(
+                "公開スイッチが入っていますが、外部依存の残件が解消されていません")
+
     safe_clear(NEXT)
 
     # ★★入力の時点でリンクを拒否する★★（Codex 14巡目 (a)-4）
@@ -844,6 +975,7 @@ def build() -> int:
         if (work / PREVIEW_DIRNAME).exists():
             raise BuildError("preview output leaked into the build workspace")
 
+        assert_all_verbatim_approved(work)
         template_hashes = check_template_approved(work)
 
         run(work, "scripts/build_public_data.py", "--apply")
@@ -895,8 +1027,9 @@ def build() -> int:
         write_setting_placeholder(NEXT)
         preview_slugs = {row.get("slug") for row in rows if row.get("status") == "preview"}
         if preview_slugs:
-            print(f"先行記事（noindex）{len(preview_slugs)} 機種は sitemap と一覧に載せません: "
-                  f"{sorted(preview_slugs)}")
+            # ★一覧には載せる。載せないのは sitemap だけ★（Codex 18巡目 (b)-2）
+            print(f"先行記事（noindex）{len(preview_slugs)} 機種は sitemap に載せません"
+                  f"（早見表には「解析待ち」として載ります）: {sorted(preview_slugs)}")
         write_sitemap(NEXT, host_origin(work), set(slugs) - preview_slugs)
         audit(NEXT, set(slugs))
         # ★出荷データから作り直して1バイトも違わないことを確かめる★（Codex 14巡目 (a)-1）
@@ -980,7 +1113,7 @@ def selftest() -> int:
         lambda r: (r / "machines/stray.html").write_text("x", encoding="utf-8")))
     case("sitemapがずれたら止める", denies(
         lambda r: write_sitemap(r, "https://uchidokoro.com", ["aaa"])))
-    case("(b)-1 先行記事はsitemapと一覧から外す（載っていたら止める）",
+    case("(b)-1 先行記事はsitemapから外す（載っていたら止める）",
          lambda root: _preview_excluded(root), True)
     case("ハブに未承認の機種が出たら止める", denies(
         lambda r: (r / "guide-tenjo-ranking.html").write_text(

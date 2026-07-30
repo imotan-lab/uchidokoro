@@ -193,7 +193,8 @@ HUB_FIXED_NUMERALS = (
 )
 
 
-def hub_content_problems(built: dict, data_html: dict, *deny_pats) -> list:
+def hub_content_problems(built: dict, data_html: dict, *deny_pats,
+                         prose_all: dict | None = None) -> list:
     """出来上がったハブ4ページのうち、**データ由来でない部分**を検査する。
 
     ★機種一覧そのものは検査しない★（Codex 14巡目 (b)-1）
@@ -221,7 +222,7 @@ def hub_content_problems(built: dict, data_html: dict, *deny_pats) -> list:
         # ★data: URL は中身を読めない＝検査できない★（Codex 17巡目 (a)-5）
         #   画像に文字を描いて埋め込む等ができるので、そもそも使わせない。
         for hit in _DATA_URL.finditer(rest):
-            bad.append(f"{f}: data: URL は使えません « {hit.group(0)[1:40]} »")
+            bad.append(f"{f}: data: URL は使えません {_redact(hit.group(0)[1:])}")
         text = visible_text(rest)
         # ★語のかたまりではなく「数＋単位」の出現ごとに見る★
         #   日本語は空白で区切れないので、語単位だと文まるごとが1語になり
@@ -230,22 +231,49 @@ def hub_content_problems(built: dict, data_html: dict, *deny_pats) -> list:
             token = occ.group(0)
             if token in HUB_FIXED_NUMERALS:
                 continue
-            bad.append(f"{f}: 裏取りしていない数値 {_redact(token)} … {_around(text, occ.start())}")
+            bad.append(f"{f}: 裏取りしていない数値 {_redact(token)}"
+                       f" 指紋{_fp(token)} … {_around(text, occ.start())}"
+                       f"{_prose_key_of(token, prose_all)}")
         # ★数値の無い断定・損得の話も止める★（Codex 14巡目 (a)-5）
         #   散文には台帳が無いので、ゲートの禁止語・要判断語に当たったら公開しない。
         for label, pat in deny_pats:
             for hit in pat.finditer(text):
-                bad.append(f"{f}: {label} {_redact(hit.group(0))} … {_around(text, hit.start())}")
+                bad.append(f"{f}: {label} {_redact(hit.group(0))}"
+                           f" 指紋{_fp(hit.group(0))} … {_around(text, hit.start())}"
+                           f"{_prose_key_of(hit.group(0), prose_all)}")
     return sorted(bad)
 
 
-def _in_ci() -> bool:
-    return os.environ.get("GITHUB_ACTIONS") == "true" or os.environ.get("CI") == "true"
+sys.path.insert(0, str(BASE / "scripts"))
+from ci_safe import in_ci as _in_ci, redact as _redact, fingerprint as _fp  # noqa: E402
 
 
-def _redact(s: str) -> str:
-    """当たった語そのものもCIでは伏せる（未公開の原文をログに出さない）。"""
-    return "（伏せ字）" if _in_ci() else f"« {s} »"
+def _prose_key_of(hit: str, prose_all: dict | None) -> str:
+    """当たった語が、手書き散文（hub_prose.json）のどのキーに含まれるかを探す。
+
+    ★原文を出さずに「どこを直せばいいか」を伝えるため★（Codex 18巡目 (b)-1）
+      「457文字目」だけでは直せない。JSONのパスを添える。
+    """
+    if not prose_all:
+        return ""
+
+    def walk(node, path):
+        if isinstance(node, str):
+            if hit and hit in node:
+                return path
+        elif isinstance(node, dict):
+            for k, v in node.items():
+                r = walk(v, f"{path}.{k}")
+                if r:
+                    return r
+        elif isinstance(node, list):
+            for i, v in enumerate(node):
+                r = walk(v, f"{path}[{i}]")
+                if r:
+                    return r
+        return ""
+    found = walk(prose_all, "$")
+    return f" / 散文の場所 {found}" if found else " / 散文には無い（生成器のコード側）"
 
 
 def _around(text: str, pos: int, width: int = 24) -> str:
@@ -297,6 +325,10 @@ def load_rows(source: "Path | None" = None):
 
 
 def yome(r) -> str:
+    # ★先行記事は strategy があっても分類を断定しない★（Codex 18巡目・二重防御）
+    #   公開射影が strategy を落とすので通常は来ないが、生成器側でも守る。
+    if r.get("status") == "preview":
+        return "解析待ち（先行記事）"
     s = (r.get("strategy") or "").strip()
     if s:
         return s
@@ -602,10 +634,12 @@ def main(preview: bool = False):
         print(f"先行記事（解析待ち）{len(previews)} 機種は「解析待ち」と表記します: "
               f"{[r['slug'] for r in previews]}")
 
-    A = dataset_A(rows)
-    C = dataset_C(rows)
-    D = dataset_D(rows)
-    ALL = rows  # machines.json 順（稼働率順）
+    # ランキング系は先行記事を除く（未確定の数値で順位を付けない）
+    ranked = [r for r in rows if r.get("status") != "preview"]
+    A = dataset_A(ranked)
+    C = dataset_C(ranked)
+    D = dataset_D(ranked)
+    ALL = rows  # 早見表は全機種（先行記事は「解析待ち」表記）
 
     # 散文内の件数はプレースホルダで持ち、生成時に実数を埋める
     # （手書き数字がデータ更新に追従せずズレる事故の恒久対策・2026-07-12）
@@ -684,7 +718,8 @@ def main(preview: bool = False):
         #   しかも警告文が原因を正しく表していなかった。
         bad = hub_content_problems(built, {f: d for f, (_p, d) in pages.items()},
                                    ("公開できない表現", _g.ABSOLUTE_DENY_PAT),
-                                   ("要人手確認の語（損得・設定の話）", _g.RISK_PAT))
+                                   ("要人手確認の語（損得・設定の話）", _g.RISK_PAT),
+                                   prose_all=prose_all)
         if bad:
             print(f"★生成後のHTMLに出せない内容が {len(bad)} 箇所あります★")
             for b in bad:      # ★打ち切らない★（Codex 14巡目 (b)-4）

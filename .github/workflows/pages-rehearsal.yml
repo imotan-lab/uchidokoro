@@ -97,6 +97,10 @@ jobs:
 
       - name: Build from an empty artifact directory
         shell: bash
+        env:
+          # ★公開スイッチが入っている時は、外部依存の残件があるとビルドを落とす★
+          #   （Codex 18巡目 (a)-4：Google Fonts / gtag は指紋の外）
+          PAGES_DEPLOY_ENABLED: ${{ vars.PAGES_DEPLOY_ENABLED }}
         run: |
           set -euo pipefail
           python scripts/build_pages_artifact.py

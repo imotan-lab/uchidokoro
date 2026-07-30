@@ -35,6 +35,8 @@ from __future__ import annotations
 import hashlib
 import math
 import re
+import sys as _sys
+import os as _os
 import sys
 import unicodedata
 
@@ -59,6 +61,9 @@ ALLOW, DROP, UNCLASSIFIED = "ALLOW", "DROP", "UNCLASSIFIED"
 LEGACY_DISCLAIMER = "当サイトの目安です（メーカー公表値・確定解析ではありません）"
 
 # 【第1層】絶対禁止。台帳ALLOWでも解除できない。
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from ci_safe import redact as _ci_redact   # noqa: E402  ★CIでは原文を出さない★
+
 ABSOLUTE_DENY = (
     "期待収支", "プラス域", "プラス圏", "プラスライン", "プラス期待値", "期待値プラス",
     "期待値がプラス", "プラスに転じ", "期待枚数", "獲得枚数期待", "期待差枚",
@@ -1789,7 +1794,9 @@ def _project_machine(machine: dict, gates: dict, ctx: _Ctx) -> dict:
     # ★1件目で打ち切らず、未知フィールドは全部挙げてから止める★（Codex 17巡目 (b)-2）
     unknown = [k for k in machine if k not in _MACHINE_KNOWN]
     for k in unknown:
-        ctx.reject(f"machine.{k}", "未知フィールド（公開対象か判断できない）")
+        # ★キー名そのものに原稿を入れられる★（Codex 18巡目 (a)-5）
+        #   公開されるCIログに出さないよう、CIでは指紋に置き換える。
+        ctx.reject(f"machine.{_ci_redact(k)}", "未知フィールド（公開対象か判断できない）")
     if unknown:
         return out
     lim = machine.get("limit")
