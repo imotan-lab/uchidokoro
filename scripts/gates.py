@@ -2085,7 +2085,7 @@ def publish_view(machine: dict, detail: dict | None = None,
     """
     errs = validate_machine(machine)
     if errs:
-        raise GateError("スキーマ検証エラー: " + " / ".join(errs[:3]))
+        raise GateError("スキーマ検証エラー: " + " / ".join(errs))   # ★全件（Codex 16巡目 (b)-2）
     gates = compute_gates(machine)
     if not gates["public"]:
         return {"gates": gates, "machine": {}, "detail": {}}
@@ -2108,15 +2108,16 @@ def publish_view(machine: dict, detail: dict | None = None,
             assert_invariants(gates)
 
     # ★スキーマ破壊は内容判定と別チャネルで必ず止める★
+    # ★理由は全件出す★（Codex 16巡目 (b)-2）1件だけだと直すたびに再実行が要る。
     if ctx.errors:
-        e = ctx.errors[0]
+        detail = " / ".join(f"path={e['path']} 理由={e['reason']}" for e in ctx.errors)
         raise GateError(f"{machine.get('slug','?')}: 構造エラー {len(ctx.errors)}件 → 公開不可"
-                        f" 例: path={e['path']} 理由={e['reason']}")
+                        f" [{detail}]")
     if ctx.unclassified:
-        u = ctx.unclassified[0]
+        detail = " / ".join(f"path={u['path']} id={u['atom_id']}" for u in ctx.unclassified)
         raise GateError(
             f"{machine.get('slug','?')}: 未分類のリスク表現 {len(ctx.unclassified)}件 → 公開不可"
-            f"（分類台帳に ALLOW/DROP を登録すること） 例: path={u['path']} id={u['atom_id']}")
+            f"（分類台帳に ALLOW/DROP を登録すること） [{detail}]")
 
     # ★方針による除去（DROP）が残っている原稿は公開しない★（Codex 24巡目 #5）
     #   従来は「その塊を出さない」だけで公開していたが、兄弟の但し書きが消えて
@@ -2124,10 +2125,12 @@ def publish_view(machine: dict, detail: dict | None = None,
     #   ゼロ基準で運用するので、除去が1件でもあれば原稿を直させる（ビルドを止める）。
     #   ※どうしても除去のまま出す必要が生じたら、台帳で ALLOW/DROP を明示すること。
     if ctx.dropped and not allow_drops:
-        d = ctx.dropped[0]
+        detail = " / ".join(
+            f"path={d['path']} 理由={d.get('reason', '公開基準を満たさない表現')}"
+            for d in ctx.dropped)
         raise GateError(
             f"{machine.get('slug','?')}: 公開できない表現 {len(ctx.dropped)}件 → 公開不可"
-            f"（原稿を直すこと） 例: path={d['path']} 理由={d.get('reason', '公開基準を満たさない表現')}")
+            f"（原稿を直すこと） [{detail}]")
 
     # ★狙い目・数値を出すなら「当サイトの目安」表示を必須要件として明示する★
     #   machine側だけでなく detail 側（要約・表・本文）だけに数値がある場合も対象にする。

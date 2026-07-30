@@ -88,7 +88,7 @@ def main() -> int:
 
     if bad:
         print(f"★写しの印が付いていない箇所が {len(bad)} 件あります★")
-        for b in bad[:20]:
+        for b in bad:   # ★打ち切らない★（Codex 16巡目 (b)-4）
             print(f"  ✗ {b}")
         return 1
 

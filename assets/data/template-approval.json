@@ -1,7 +1,20 @@
 {
- "schema_version": "template-approval/v1",
- "note": "公開ページのひな型は、ここに書いた指紋と一致する時だけビルドできる。ひな型を直したら指紋も更新すること（レビュー必須）。",
+ "schema_version": "template-approval/v2",
+ "note": "全機種に一斉に効く入力の指紋。ここと実ファイルが一致する時だけ公開物を作れる。中身を直したらこのファイルも更新すること（レビュー必須）。",
  "templates": {
-  "machine.html": "912591d59586baf3ddab13112c504722dddc08fec09c8ed9e528bcac12c2a7bf"
+  "assets/css/practical.css": "c585643fab74e0c5bcd6891a4546e51370f0220a228a6d58bea1ae1f68c31564",
+  "index.html": "440647d6b6106ae75d34cda61cb97b5711bcb555eab1e1fcf7b524a885706ba6",
+  "machine.html": "912591d59586baf3ddab13112c504722dddc08fec09c8ed9e528bcac12c2a7bf",
+  "meta-auto.js": "934e8de1dd10c528a31ab1a1db3069ecf80627bbb332564636b8248a9e3392a1",
+  "scripts/audit_public.py": "16142c0f3ec2e7209f7595d4c2fb739ded734076eaa216b77020f2e7b8c85c82",
+  "scripts/build_hub_pages.py": "ef59bf5150989a53f8fb94da7ec118391dfdd4b02e9dbbfcedfa2427e8509d41",
+  "scripts/build_machine_pages.py": "837c5bb4773c5d7f6d94ae930602080235efeea4834291b716ff7ffdedfdb1c1",
+  "scripts/build_pages_artifact.py": "3f72ac946d0f31d1c9cdec829109cdfa1cee8a38fb83cd8118d4a77c2635ee47",
+  "scripts/build_public_data.py": "fa07bf4a5d334669f623b4c1a1d80f37c403a3e4b2012cc569c1b1a50d969563",
+  "scripts/claim_reconcile.py": "4817f64bc96c0a8d3c6ddc8aa5c8c204ce9a7c8809e571cf9676b0debe62531b",
+  "scripts/gates.py": "2829b90e67caa9c647806c5ba02e7a5c3bd4d76fe0c0a5e16bfe586f0cba262d",
+  "scripts/hub_prose.json": "1fc567f508184d2a4fa08258e0dc42afdf6356a20a054092404857b0752c0a79",
+  "service-worker.js": "3421c823b656c411fa4d49fa76f1679eeb5c26be5410b2bbe7d44129e7a64734",
+  "setting.html": "de3e1a75b0576531015c362481d08e0cee02241cc5470c7514becaaa5b5fbee6"
  }
 }

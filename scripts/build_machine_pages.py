@@ -286,10 +286,13 @@ def render_page(template: str, machine: dict, detail: dict | None,
     html_out = template
     canonical_url = f"https://uchidokoro.com/machines/{slug}/"
 
-    # canonical
-    if 'rel="canonical"' in html_out:
-        html_out = re.sub(r'<link\s+rel="canonical"[^>]*>',
-                          f'<link rel="canonical" href="{canonical_url}">', html_out, count=1)
+    # canonical（★個数を数えてから置き換える★・Codex 16巡目 (a)-5）
+    canon_pat = re.compile(r'<link\s+rel="canonical"[^>]*>')
+    n_canon = len(canon_pat.findall(html_out))
+    if n_canon > 1:
+        raise TemplateError(f"canonical が {n_canon} 箇所あります（1箇所であるべき）")
+    if n_canon == 1:
+        html_out = canon_pat.sub(f'<link rel="canonical" href="{canonical_url}">', html_out, count=1)
     else:
         html_out = replace_once(html_out, "</head>", f'<link rel="canonical" href="{canonical_url}">\n</head>')
 
@@ -337,8 +340,12 @@ def render_page(template: str, machine: dict, detail: dict | None,
     if not pp_available:
         for anchor_id, cls in (("settingHeroLink", "btn-settei btn-settei--wide"),
                                ("settingToolLink", "btn-show-all btn-show-all--center")):
-            html_out = re.sub(
-                r'<a id="' + anchor_id + r'"[^>]*>小役カウンター ポチポチくん →</a>',
+            pat = re.compile(r'<a id="' + anchor_id + r'"[^>]*>小役カウンター ポチポチくん →</a>')
+            n = len(pat.findall(html_out))
+            if n != 1:      # ★0件を黙って通さない★（Codex 16巡目 (a)-5）
+                raise TemplateError(
+                    f"ポチポチくん導線 {anchor_id} が {n} 箇所です（1箇所であるべき）")
+            html_out = pat.sub(
                 f'<a id="{anchor_id}" class="{cls} is-disabled" aria-disabled="true" '
                 f'title="{esc(pp_reason)}">小役カウンター ポチポチくん（{esc(pp_reason)}）</a>',
                 html_out, count=1)
@@ -364,6 +371,17 @@ def render_page(template: str, machine: dict, detail: dict | None,
     # ★2026-07-24: AdSenseローダーの注入を全機種で停止（Phase 0・止血）★
     #   承認ゲート（ads = public && index && page_review approved && content_hash一致）の
     #   実装後、承認済みページだけで再開する。無条件注入に戻さないこと。
+
+    # ★本文が空でも差し込み先の個数は確かめる★（Codex 16巡目 (a)-5）
+    #   先行記事（記事が空）のときに早期returnしていたので、
+    #   本文まわりの目印が消されていても気づけなかった。
+    for anchor in ('<p id="heroSub" class="hero-sub"></p>',
+                   '<div id="articleSections"></div>',
+                   '<tbody id="infoTableBody"></tbody>',
+                   '<table id="summaryGrid" class="summary-grid"></table>'):
+        n = html_out.count(anchor)
+        if n != 1:
+            raise TemplateError(f"本文の差し込み先が {n} 箇所です（1箇所であるべき）: {anchor}")
 
     if not isinstance(detail, dict) or not detail:
         return html_out
@@ -584,7 +602,9 @@ def main(preview: bool = False):
                       f"{type(e).__name__}: {e}")
                 broken_details.append(slug)
                 continue
-            prerendered += 1
+            # ★空の記事（先行記事）は「本文を焼いた」に数えない★（Codex 16巡目 (b)-4）
+            if isinstance(detail, dict) and detail:
+                prerendered += 1
 
         try:
             html_out = render_page(template, machine, detail,

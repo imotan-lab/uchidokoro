@@ -87,7 +87,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/gates.py
+          # ★引数なしの gates.py は説明を出すだけなので実質何も検査していなかった★
+          #   （Codex 16巡目 (b)-2）実データに対する検査は crosscheck が担当する。
           python scripts/crosscheck_gates.py
           python scripts/audit_site.py
 

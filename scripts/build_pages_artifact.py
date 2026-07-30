@@ -108,8 +108,34 @@ TAG = re.compile(r"<[^>]+>")
 # 写しの目印を探す対象（HTMLだけ見ていると .js / .svg / .htm を見落とす）
 MARKER_SCAN_SUFFIXES = {".html", ".htm", ".js", ".json", ".svg", ".css", ".xml", ".txt"}
 
+APPROVAL_SCHEMA = "template-approval/v2"
+
+# ★全機種に一斉に効く入力★（1箇所直すと全ページに載るもの）
+#   ここは「過不足なく一致」を要求する。承認一覧から外して回避できないようにするため。
+APPROVED_INPUTS = frozenset({
+    # ページのひな型・共通ページ
+    "machine.html",
+    "index.html",
+    "setting.html",
+    # 全ページで読み込まれる見た目と動き
+    "assets/css/practical.css",
+    "meta-auto.js",
+    "service-worker.js",
+    # 公開物を作るコード（ここを直せば何でも書ける）
+    "scripts/build_pages_artifact.py",
+    "scripts/build_machine_pages.py",
+    "scripts/build_hub_pages.py",
+    "scripts/build_public_data.py",
+    "scripts/gates.py",
+    "scripts/audit_public.py",
+    "scripts/claim_reconcile.py",
+    # ハブの手書き散文
+    "scripts/hub_prose.json",
+})
+
 IGNORED_DIR_NAMES = {".git", ".github", PREVIEW_DIRNAME, "_site", "_site.next",
-                     "__pycache__", "_design", ".claude"}
+                     "__pycache__", "_design", ".claude",
+                     "node_modules", ".venv", "venv", ".mypy_cache", ".pytest_cache"}
 SOURCE_IGNORE = shutil.ignore_patterns(*sorted(IGNORED_DIR_NAMES), "*.pyc")
 
 
@@ -166,16 +192,26 @@ def reject_symlinks(root: Path, ignore: set[str] = frozenset()) -> None:
     stack = [root]
     while stack:
         cur = stack.pop()
-        for entry in cur.iterdir():
+        try:
+            entries = list(cur.iterdir())
+        except OSError as exc:      # ★権限エラーも整理した警告にする★（Codex 16巡目 (b)-5）
+            raise BuildError(f"ビルド入力を読めません: {cur}: {exc}") from exc
+        for entry in entries:
             if entry.name in ignore:
                 continue
             rel = entry.relative_to(root).as_posix()
-            if entry.is_symlink() or (os.name == "nt" and entry.is_junction()):
+            try:
+                is_link = entry.is_symlink() or (os.name == "nt" and entry.is_junction())
+                is_dir = entry.is_dir()
+                nlink = 1 if is_dir else entry.stat().st_nlink
+            except OSError as exc:
+                raise BuildError(f"ビルド入力を調べられません: {rel}: {exc}") from exc
+            if is_link:
                 raise BuildError(
                     f"symlink/junction is not allowed in the build input: {rel}")
-            if entry.is_dir():
+            if is_dir:
                 stack.append(entry)
-            elif entry.stat().st_nlink > 1:
+            elif nlink > 1:
                 raise BuildError(f"hard link is not allowed in the build input: {rel}")
 
 
@@ -306,9 +342,10 @@ def write_setting_placeholder(stage: Path) -> None:
     (stage / "setting.html").write_text(SETTING_PLACEHOLDER, encoding="utf-8", newline="\n")
 
 
-def write_sitemap(stage: Path, origin: str, slugs: list[str]) -> None:
+def write_sitemap(stage: Path, origin: str, slugs) -> None:
+    """検索エンジンに知らせるURL一覧（★noindexの機種は入れない★）。"""
     locations = [origin + p for p in SITEMAP_STATIC]
-    locations.extend(f"{origin}/machines/{slug}/" for slug in slugs)
+    locations.extend(f"{origin}/machines/{slug}/" for slug in sorted(slugs))
     body = "\n".join(f"  <url><loc>{u}</loc></url>" for u in locations)
     xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
@@ -347,30 +384,60 @@ def template_sha(path: Path) -> str:
 
 
 def check_template_approved(work: Path) -> dict:
-    """★公開ページのひな型が承認済みのものと一致するか★
+    """★全機種に一斉に効く入力が、承認済みのものと一致するか★
 
-    （2026-07-30・Codex 15巡目 (a)-1）
-      ひな型（machine.html）に固定文を1行足すと、全機種のページに載る。
-      作り直して比べる検査は**同じひな型を使う**ので一致してしまう＝共通原因の故障。
-      そこでひな型そのものを指紋で固定し、直すときは承認ファイルの更新
-      （＝所有者レビューが要る変更）を必須にする。
+    （2026-07-30・Codex 15巡目 (a)-1 / 16巡目 (a)-1・(a)-2）
+      ひな型に固定文を1行足すと全機種のページに載る。作り直して比べる検査は
+      **同じひな型を使う**ので一致してしまう＝共通原因の故障。
+      さらに、ひな型だけ固定しても **CSS・共通JS・Service Worker・生成器のコード**
+      から同じことができる（`body::before{content:"…"}` など）。
+      そこで「全機種に一斉に効く入力」を固定集合として列挙し、
+      **過不足なく一致すること**を要求する（承認一覧から外して回避できないように）。
     """
     approval = read_json_dict(work / "assets/data/template-approval.json")
+    if approval.get("schema_version") != APPROVAL_SCHEMA:
+        raise BuildError(
+            f"template-approval.json の schema_version が想定と違います"
+            f"（想定 {APPROVAL_SCHEMA}／実際 {approval.get('schema_version')!r}）")
     want = approval.get("templates")
-    if not isinstance(want, dict) or not want:
-        raise BuildError("template-approval.json に templates がありません")
+    if not isinstance(want, dict):
+        raise BuildError("template-approval.json に templates（辞書）がありません")
+    names = set(want)
+    if names != set(APPROVED_INPUTS):
+        missing = sorted(set(APPROVED_INPUTS) - names)
+        extra = sorted(names - set(APPROVED_INPUTS))
+        raise BuildError(
+            f"承認一覧が固定集合と一致しません（不足: {missing} / 余分: {extra}）")
     got = {}
-    for name, expected in want.items():
+    for name in sorted(APPROVED_INPUTS):
+        expected = want[name]
+        if ".." in name or name.startswith("/") or ":" in name:
+            raise BuildError(f"承認対象の書き方が不正です: {name}")
         path = work / name
         if not path.is_file():
-            raise BuildError(f"承認対象のひな型がありません: {name}")
+            raise BuildError(f"承認対象のファイルがありません: {name}")
         actual = template_sha(path)
         if not isinstance(expected, str) or actual != expected:
             raise BuildError(
                 f"{name} が承認済みの内容と違います（承認: {expected}／実際: {actual}）。"
-                f"意図した変更なら assets/data/template-approval.json を更新すること")
+                f"意図した変更なら assets/data/template-approval.json を更新すること"
+                f"（python scripts/build_pages_artifact.py --approve）")
         got[name] = actual
     return got
+
+
+def write_approval(base: Path = BASE) -> dict:
+    """承認一覧を今の中身で作り直す（★変更をレビューに載せるための道具★）。"""
+    data = {
+        "schema_version": APPROVAL_SCHEMA,
+        "note": ("全機種に一斉に効く入力の指紋。ここと実ファイルが一致する時だけ公開物を作れる。"
+                 "中身を直したらこのファイルも更新すること（レビュー必須）。"),
+        "templates": {name: template_sha(base / name) for name in sorted(APPROVED_INPUTS)},
+    }
+    path = base / "assets/data/template-approval.json"
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n",
+                    encoding="utf-8", newline="\n")
+    return data["templates"]
 
 
 def pages_match_data(stage: Path, template_path: Path, slugs: list[str]) -> None:
@@ -451,9 +518,16 @@ def audit(stage: Path, expected: set[str]) -> None:
     if directories != expected:
         raise BuildError("machine page directories differ from approved slugs")
 
+    # ★先行記事（noindex）は sitemap にも一覧にも載せない★（Codex 16巡目 (b)-1）
+    #   機種ページには noindex を付けるのに sitemap には載せる、という食い違いがあった。
+    preview = {row.get("slug") for row in machines if row.get("status") == "preview"}
+    indexable = expected - preview
+
     sitemap_slugs = set(machine_links((stage / "sitemap.xml").read_text(encoding="utf-8")))
-    if sitemap_slugs != expected:
-        raise BuildError("sitemap differs from approved slugs")
+    if sitemap_slugs != indexable:
+        raise BuildError(
+            "sitemap が検索登録してよい機種の集合と違います"
+            f"（余分: {sorted(sitemap_slugs - indexable)} / 不足: {sorted(indexable - sitemap_slugs)}）")
 
     # ページ単位の検査（本文の一致は pages_match_data が完全一致で見る）
     by_slug = {row.get("slug"): row for row in machines}
@@ -487,31 +561,27 @@ def audit(stage: Path, expected: set[str]) -> None:
     hub_union: set[str] = set()
     for name in GENERATED_HUBS:
         current = href_slugs(stage / name)
-        if not current <= expected:
-            raise BuildError(f"{name} contains a non-approved slug")
+        if not current <= indexable:
+            raise BuildError(
+                f"{name} に載せてはいけない機種があります: "
+                f"{sorted(current - indexable)}（先行記事や未承認）")
         hub_union |= current
-    if href_slugs(stage / "guide-ichiran.html") != expected:
-        raise BuildError("guide-ichiran differs from approved slugs")
-    if hub_union != expected:
-        raise BuildError("hub union differs from approved slugs")
+    ichiran = href_slugs(stage / "guide-ichiran.html")
+    if ichiran != indexable:
+        raise BuildError(
+            "早見表が「一覧に載せる機種」と違います"
+            f"（余分: {sorted(ichiran - indexable)} / 不足: {sorted(indexable - ichiran)}）")
+    if hub_union != indexable:
+        raise BuildError(
+            f"ハブ全体の機種集合が違います（不足: {sorted(indexable - hub_union)}）")
 
     for rel in FORBIDDEN_PATHS:
         if (stage / rel).exists():
             raise BuildError(f"forbidden authoring path in artifact: {rel}")
 
-    # ★併記を「見えなくする」CSSを許さない★（Codex 15巡目 (a)-3）
-    #   HTMLに所定回数あっても display:none にされたら読者には届かない。
     for css in sorted((stage / "assets/css").rglob("*.css")):
-        text = re.sub(r"/\*.*?\*/", "", css.read_text(encoding="utf-8"), flags=re.DOTALL)
-        for rule in re.findall(r"([^{}]*)\{([^}]*)\}", text):
-            selector, body = rule[0], rule[1].replace(" ", "").lower()
-            if "site-disclaimer" not in selector:
-                continue
-            for hidden in ("display:none", "visibility:hidden", "opacity:0",
-                           "font-size:0", "content-visibility:hidden"):
-                if hidden in body:
-                    raise BuildError(
-                        f"{css.name}: 併記（.site-disclaimer）を隠すCSSがあります « {hidden} »")
+        for problem in css_problems(css.read_text(encoding="utf-8")):
+            raise BuildError(f"{css.name}: {problem}")
 
     # ★HTMLだけでなくJS・SVG・JSONも見る／拡張子の大文字小文字も問わない★（同 (b)-3）
     for path in stage.rglob("*"):
@@ -543,6 +613,66 @@ def git_dirty() -> bool:
     if cp.returncode:
         return True
     return bool(cp.stdout.strip())
+
+
+HIDE_DECLS = ("display:none", "visibility:hidden", "visibility:collapse", "opacity:0",
+              "font-size:0", "content-visibility:hidden", "transform:scale(0)",
+              "clip-path:inset(100%)", "max-height:0", "height:0", "width:0")
+CSS_ESCAPE = re.compile(r"\\([0-9a-fA-F]{1,6})\s?")
+
+# ★記録済みの外部読み込み（Codex 16巡目 (a)-2 の指摘・未解消）★
+#   見出し用の欧文フォントを Google Fonts から読んでいる。外部応答は指紋の外なので、
+#   本来は**自前配信にするか、フォント自体をやめる**のが正しい。
+#   フォントファイルの取得は運営者の判断が要るので、いまは「例外として記録」して
+#   それ以外の外部読み込みを禁止する状態にしてある。
+CSS_EXTERNAL_ALLOW = (
+    "https://fonts.googleapis.com/css2?family=orbitron:wght@700;900&display=swap",
+)
+
+
+def css_problems(text: str) -> list[str]:
+    """CSSに「見せない仕掛け」「外部読み込み」「文字を生やす指定」が無いか。
+
+    （Codex 15巡目 (a)-3 / 16巡目 (a)-2・(a)-3）
+      ・`.site-disclaimer` を隠されたら併記の意味が無い
+      ・`content:"…"` は**CSSから文章を生やせる**＝HTML検査の外で誤情報を出せる
+      ・`@import` は外部サーバの中身を実行時に取り込む＝指紋の外
+      入れ子（@media）や改行・CSSエスケープで逃げられないよう、先に均してから見る。
+    """
+    problems: list[str] = []
+    body = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    # CSSエスケープ（\64 → d）を戻し、空白を潰す
+    body = CSS_ESCAPE.sub(lambda m: chr(int(m.group(1), 16)), body)
+    flat = re.sub(r"\s+", "", body).lower()
+
+    for m in re.finditer(r"url\(([^)]*)\)", flat):
+        url = m.group(1).strip("\"'")
+        if not re.match(r"^(?:https?:)?//", url):
+            continue
+        if url in CSS_EXTERNAL_ALLOW:
+            continue        # ★記録済みの例外（下記コメント参照）★
+        problems.append(f"承認していない外部URLを読み込んでいます « {url[:70]} »")
+    if "@import" in flat and not all(
+            u in flat.replace("'", "").replace('"', "")
+            for u in (x.lower() for x in CSS_EXTERNAL_ALLOW)):
+        problems.append("@import で承認外の外部を読み込んでいます")
+
+    # 規則ごとに見る（@media 等の入れ子は「{…}」を潰してから走査する）
+    for selector, decls in re.findall(r"([^{}]+)\{([^{}]*)\}", flat):
+        sel = selector.split("}")[-1]          # 入れ子の外側を落とす
+        if "site-disclaimer" in sel:
+            for hidden in HIDE_DECLS:
+                if hidden in decls:
+                    problems.append(f"併記（.site-disclaimer）を隠しています « {hidden} »")
+            if re.search(r"(display|visibility|opacity|font-size):var\(", decls):
+                problems.append("併記の表示指定に変数を使っています（隠せてしまう）")
+        # ★CSSから「文章」を生やせないようにする★（Codex 16巡目 (a)-2）
+        #   箇条書きの記号（"— " など）は文字も数字も含まないので通す。
+        for cm in re.finditer(r'content:(?:"([^"]*)"|\'([^\']*)\')', decls):
+            value = cm.group(1) if cm.group(1) is not None else cm.group(2)
+            if re.search(r"[0-9A-Za-z぀-ヿ一-鿿]", value or ""):
+                problems.append(f"CSSから文字を生やしています « {sel[:30]} → {value[:30]} »")
+    return problems
 
 
 def write_artifact_manifest(stage: Path, template_hashes: dict | None = None) -> None:
@@ -655,7 +785,11 @@ def build() -> int:
             encoding="utf-8", newline="\n")
 
         write_setting_placeholder(NEXT)
-        write_sitemap(NEXT, host_origin(work), slugs)
+        preview_slugs = {row.get("slug") for row in rows if row.get("status") == "preview"}
+        if preview_slugs:
+            print(f"先行記事（noindex）{len(preview_slugs)} 機種は sitemap と一覧に載せません: "
+                  f"{sorted(preview_slugs)}")
+        write_sitemap(NEXT, host_origin(work), set(slugs) - preview_slugs)
         audit(NEXT, set(slugs))
         # ★出荷データから作り直して1バイトも違わないことを確かめる★（Codex 14巡目 (a)-1）
         pages_match_data(NEXT, work / "machine.html", slugs)
@@ -738,6 +872,8 @@ def selftest() -> int:
         lambda r: (r / "machines/stray.html").write_text("x", encoding="utf-8")))
     case("sitemapがずれたら止める", denies(
         lambda r: write_sitemap(r, "https://uchidokoro.com", ["aaa"])))
+    case("(b)-1 先行記事はsitemapと一覧から外す（載っていたら止める）",
+         lambda root: _preview_excluded(root), True)
     case("ハブに未承認の機種が出たら止める", denies(
         lambda r: (r / "guide-tenjo-ranking.html").write_text(
             '<a href="/machines/zzz/">x</a>', encoding="utf-8")))
@@ -800,6 +936,25 @@ def selftest() -> int:
          lambda root: _template_change_stopped(root), True)
     case("(a)-1 差し込み先が消えたら黙って通さない",
          lambda root: _missing_anchor_stopped(), True)
+    case("(a)-1 承認一覧から対象を外す／余分を足すと止める",
+         lambda root: _approval_scope_enforced(root), True)
+    case("(a)-2 CSSから文字を生やす指定を止める",
+         lambda root: bool(css_problems('body::before{content:"未公開機は999G"}')), True)
+    case("(a)-2 承認外の外部読み込みを止める",
+         lambda root: bool(css_problems("@import url('https://evil.example/x.css');")), True)
+    case("(a)-3 @media の中で隠しても止める",
+         lambda root: bool(css_problems(
+             "@media(min-width:0){.site-disclaimer{display:none!important}}")), True)
+    case("(a)-3 変数経由で隠しても止める",
+         lambda root: bool(css_problems(
+             ":root{--h:none}.site-disclaimer{display:var(--h)}")), True)
+    case("(a)-3 CSSエスケープで名前を隠しても止める",
+         lambda root: bool(css_problems(r".site-\64 isclaimer{display:none}")), True)
+    case("(a)-3 ふつうの箇条書き記号では止めない",
+         lambda root: not css_problems('.x li::before{content:"— "}'), True)
+    case("(a)-3 いまのCSSは問題なしと判定される",
+         lambda root: not css_problems(
+             (BASE / "assets/css/practical.css").read_text(encoding="utf-8")), True)
     case("(a)-3 併記を隠すCSSがあれば止める", denies(
         lambda r: (r / "assets/css/practical.css").parent.mkdir(parents=True, exist_ok=True)
         or (r / "assets/css/practical.css").write_text(
@@ -909,21 +1064,66 @@ def _rebuild_check(root: Path, tamper) -> bool:
     return stopped if tamper else not stopped
 
 
+def _preview_excluded(root: Path) -> bool:
+    """先行記事は sitemap・一覧から外し、載っていれば止めること。"""
+    _stage_ok(root)
+    # bbb を先行記事にする
+    (root / "assets/data/machines.json").write_text(json.dumps(
+        [{"slug": "aaa", "name": "機種aaa"},
+         {"slug": "bbb", "name": "機種bbb", "status": "preview"}],
+        ensure_ascii=False), encoding="utf-8")
+    links = '<a href="/machines/aaa/">x</a>'
+    for name in GENERATED_HUBS:
+        (root / name).write_text(f"<html><body>{links}</body></html>", encoding="utf-8")
+    write_sitemap(root, "https://uchidokoro.com", ["aaa"])
+    try:
+        audit(root, {"aaa", "bbb"})          # 先行記事を外した状態なら通る
+    except BuildError:
+        return False
+    write_sitemap(root, "https://uchidokoro.com", ["aaa", "bbb"])   # 載せたら止まる
+    return _raises(lambda: audit(root, {"aaa", "bbb"}))
+
+
+def _approval_fixture(root: Path) -> Path:
+    """承認対象を全部そろえた作業コピーを作る。"""
+    work = root / "repo"
+    for name in sorted(APPROVED_INPUTS):
+        dst = work / name
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(BASE / name, dst)
+    (work / "assets/data").mkdir(parents=True, exist_ok=True)
+    write_approval(work)
+    return work
+
+
 def _template_change_stopped(root: Path) -> bool:
     """ひな型に固定文を1行足したら、承認の照合で止まること。"""
-    work = root / "repo"
-    (work / "assets/data").mkdir(parents=True)
-    tpl = work / "machine.html"
-    original = (BASE / "machine.html").read_text(encoding="utf-8")
-    tpl.write_text(original, encoding="utf-8", newline="\n")
-    approval = work / "assets/data/template-approval.json"
-    approval.write_text(json.dumps(
-        {"templates": {"machine.html": template_sha(tpl)}}), encoding="utf-8")
-    if check_template_approved(work) is None:      # まずは一致して通ること
+    work = _approval_fixture(root)
+    if not check_template_approved(work):          # まずは一致して通ること
         return False
-    tpl.write_text(original.replace("</body>", "<p>未公開機の天井は999Gです</p></body>"),
-                   encoding="utf-8", newline="\n")
+    tpl = work / "machine.html"
+    tpl.write_text(tpl.read_text(encoding="utf-8").replace(
+        "</body>", "<p>未公開機の天井は999Gです</p></body>"), encoding="utf-8", newline="\n")
     return _raises(lambda: check_template_approved(work))
+
+
+def _approval_scope_enforced(root: Path) -> bool:
+    """承認一覧から対象を外す／余分を足す／schemaを変えると止まること。"""
+    work = _approval_fixture(root)
+    path = work / "assets/data/template-approval.json"
+    full = json.loads(path.read_text(encoding="utf-8"))
+
+    def with_templates(templates, schema=APPROVAL_SCHEMA):
+        path.write_text(json.dumps({"schema_version": schema, "templates": templates},
+                                   ensure_ascii=False), encoding="utf-8")
+        return _raises(lambda: check_template_approved(work))
+
+    dropped = {k: v for k, v in full["templates"].items() if k != "machine.html"}
+    extra = {**full["templates"], "about.html": "x"}
+    return (with_templates(dropped)
+            and with_templates(extra)
+            and with_templates(full["templates"], schema="template-approval/v1")
+            and with_templates({}))
 
 
 def _missing_anchor_stopped() -> bool:
@@ -1055,6 +1255,12 @@ def _hash_twice(root: Path) -> bool:
 def main() -> int:
     if "--selftest" in sys.argv[1:]:
         return selftest()
+    if "--approve" in sys.argv[1:]:
+        got = write_approval()
+        print("承認一覧を更新しました（差分をレビューに載せること）:")
+        for name, h in sorted(got.items()):
+            print(f"  {name}  {h[:16]}…")
+        return 0
     return build()
 
 

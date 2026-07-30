@@ -818,7 +818,8 @@ def check_27_hub_counts(machines: list) -> list[str]:
             ncau=ncau,
             rcau=(_mode_conf(c, "reset") or {}).get("caution"),
         ))
-    ALL = rows
+    # ★先行記事は一覧に載せない（build_hub_pages と揃える）★（Codex 16巡目 (b)-1）
+    ALL = [r for r in rows if r.get("status") != "preview"]
     A = [r for r in rows
          if r["unit"] == "G" and isinstance(r["limit"], (int, float))
          and not r["has_cycle"] and r["limit"] < 1000

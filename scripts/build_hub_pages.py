@@ -137,16 +137,28 @@ def _scalar_limit(lim):
 # ★「ゲーム」も単位★（Codex 15巡目 (a)-2：「天井は200ゲームです」が素通りしていた）
 NUMERAL_OCCURRENCE = re.compile(
     r"[0-9一二三四五六七八九十百千万]+\s*"
-    r"(?:G|ゲーム|pt|ポイント|回|周期|スルー|枚|円|%|倍|分|時間|日|台|機種|セット|連)")
+    r"(?:G|ゲーム|pt|ポイント|P|回|周期|スルー|枚|円|%|パーセント|割|倍|分|時間|日|台|"
+    r"機種|セット|連|スロット|ベル|レア役|ゲーム数)")
 
 # インライン要素は取り除いて文字をつなぐ（「勝<strong>て</strong>る」を「勝てる」に戻す）
+# ★語を分断できる要素は全部ここに入れる★（Codex 16巡目 (a)-4）
 _INLINE_TAG = re.compile(
-    r"</?(?:strong|b|em|i|span|small|sup|sub|u|mark|a|br|wbr)\b[^>]*>", re.IGNORECASE)
+    r"</?(?:strong|b|em|i|span|small|sup|sub|u|mark|a|br|wbr|ruby|rt|rp|rb|abbr|code|"
+    r"kbd|var|cite|q|data|time|bdi|bdo|ins|del|s|big|tt|font|label|output|dfn|samp|"
+    r"nobr|acronym)\b[^>]*>", re.IGNORECASE)
 _ANY_TAG = re.compile(r"<[^>]+>")
 # 属性に入った文章（meta description・title・alt など）も検査対象にする
-_ATTR_TEXT = re.compile(r'(?:content|title|alt|aria-label)\s*=\s*"([^"]*)"', re.IGNORECASE)
+# ★シングルクォートと、文章が入りうる属性を全部見る★（同 (a)-4）
+_ATTR_TEXT = re.compile(
+    r"(?:content|title|alt|aria-label|aria-description|aria-placeholder|"
+    r"aria-valuetext|aria-roledescription|placeholder|value|label|summary|data-note)"
+    r"""\s*=\s*(?:"([^"]*)"|'([^']*)')""", re.IGNORECASE)
+# 見た目は同じでも検査を回避できる不可視文字（ゼロ幅・方向制御・不可視区切り）
+_INVISIBLE = re.compile(
+    "[​-‏‪-‮⁠-⁤⁪-⁯﻿­᠎]")
 # 「全<span class="list-count">49</span>機種です」の 49 はデータから毎回数える件数
 _COUNT_SPAN = re.compile(r'<span class="list-count">.*?</span>', re.DOTALL)
+_RUBY_ANNOTATION = re.compile(r"<(rt|rp)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)
 
 
 def visible_text(html: str) -> str:
@@ -157,13 +169,19 @@ def visible_text(html: str) -> str:
       インライン要素は詰めてつなぎ、ブロック要素だけ区切る。
       metaの中身はタグごと消えていたので、属性の文章を別に拾う。
     """
-    attrs = " ".join(_ATTR_TEXT.findall(html))
+    attrs = " ".join(a or b for a, b in _ATTR_TEXT.findall(html))
     # 集計の件数（データから毎回計算する数）は検査対象にしない
     body = _COUNT_SPAN.sub("", html)
+    # ふりがな（rt/rp）は本文の間に挟まるので、中身ごと落としてから詰める
+    # （「勝<rt>か</rt>てる」で語を分断できてしまうため・Codex 16巡目 (a)-4）
+    body = _RUBY_ANNOTATION.sub("", body)
     body = _INLINE_TAG.sub("", body)          # インラインは詰める
     body = _ANY_TAG.sub("\n", body)           # ブロックは区切る
     text = html_mod.unescape(body + "\n" + html_mod.unescape(attrs))
-    return unicodedata.normalize("NFKC", text)
+    text = unicodedata.normalize("NFKC", text)
+    # ★不可視文字は取り除いてから判定する★（Codex 16巡目 (a)-4）
+    #   「必ず勝<ゼロ幅>てる」「200<ゼロ幅>G」は画面では同じに見えるのに素通りしていた。
+    return _INVISIBLE.sub("", text)
 
 # ★生成器自身のコードに書いた固定の数値表現★（集計の説明で使う言葉。機種の数値ではない）
 #   ここに無い数値が散文に出たら止める（＝手書きの数値は裏取りが要る）。
@@ -172,7 +190,7 @@ HUB_FIXED_NUMERALS = (
 )
 
 
-def hub_content_problems(built: dict, data_html: dict, has_numeral, *deny_pats) -> list:
+def hub_content_problems(built: dict, data_html: dict, *deny_pats) -> list:
     """出来上がったハブ4ページのうち、**データ由来でない部分**を検査する。
 
     ★機種一覧そのものは検査しない★（Codex 14巡目 (b)-1）
@@ -473,21 +491,6 @@ def build_page(file, prose, data_html):
     return "\n".join(parts)
 
 
-def _prose_with_numbers(obj, has_unit_number, path="$") -> list:
-    """固定文のうち「単位つきの数値」を含む箇所の位置を返す。"""
-    out = []
-    if isinstance(obj, str):
-        if has_unit_number(obj):
-            out.append(f"{path}: {obj[:50]}")
-    elif isinstance(obj, dict):
-        for k, v in obj.items():
-            out.extend(_prose_with_numbers(v, has_unit_number, f"{path}.{k}"))
-    elif isinstance(obj, list):
-        for i, v in enumerate(obj):
-            out.extend(_prose_with_numbers(v, has_unit_number, f"{path}[{i}]"))
-    return out
-
-
 def main(preview: bool = False):
     """preview=True のときは .preview-site/ にだけ書く（公開されない写し）。
 
@@ -556,15 +559,10 @@ def main(preview: bool = False):
     # ★★固定文に埋まった数値もゲートの外だった★★（Codex 11巡目 (a)-3）
     #   一覧から機種を外しても「うみねこ2は200G」等の記述は本文に残る。
     #   ゲート有効時は、単位つきの数値を含む固定文を出さない。
-    if gate_on:
-        import claim_inventory as _ci
-        dropped = _prose_with_numbers(prose_all, _ci.numeral_with_unit)
-        if dropped:
-            print(f"★固定文のうち {len(dropped)} 箇所に未検証の数値があります★")
-            for p in dropped:   # ★打ち切らない★（Codex 15巡目 (b)-3）
-                print(f"  ✗ {p}")
-            print("  裏取りが済むまでハブ4ページは作れません（固定文を直すか裏取りする）")
-            return 1
+    #   ★検査器は1本にした★（Codex 16巡目 (a)-4）
+    #     入力（hub_prose.json）と生成後HTMLで別々の検出器を持っていたため、
+    #     単位の集合がズレて「どちらかだけ通る」状態になっていた。
+    #     いまは生成後HTMLに対する hub_content_problems() 1本で見る（散文も含まれる）。
 
     # ★先行記事（解析待ち）は一覧に載せない★（Codex 15巡目 (b)-1）
     #   preview 機種は strategy が空で、そのままだと
@@ -653,14 +651,12 @@ def main(preview: bool = False):
     built = {f: build_page(f, prose, data_html)
              for f, (prose, data_html) in pages.items()}
     if gate_on:
-        import claim_inventory as _ci2
         import gates as _g
         # ★数値は「公開データに載っている値」だけ許す★（Codex 14巡目 (b)-1）
         #   以前は単位つき数値をすべて未検証扱いにしていたため、
         #   生成器自身が出す「1000G未満」で必ず止まり、
         #   しかも警告文が原因を正しく表していなかった。
         bad = hub_content_problems(built, {f: d for f, (_p, d) in pages.items()},
-                                   _ci2.numeral_with_unit,
                                    ("公開できない表現", _g.ABSOLUTE_DENY_PAT),
                                    ("要人手確認の語（損得・設定の話）", _g.RISK_PAT))
         if bad:
@@ -687,9 +683,7 @@ def selftest() -> int:
     """ハブ4ページの内容検査の反例を固定する（Codex 14巡目 (a)-5 / (b)-1）。"""
     import sys as _s
     _s.path.insert(0, str(BASE / "scripts"))
-    import claim_inventory as _ci
     import gates as _g
-    num = _ci.numeral_with_unit
     deny = (("公開できない表現", _g.ABSOLUTE_DENY_PAT),
             ("要人手確認の語（損得・設定の話）", _g.RISK_PAT))
 
@@ -706,49 +700,62 @@ def selftest() -> int:
     listing = '<ol><li><a href="/machines/x/">機種x</a> 天井 <strong>777G</strong></li></ol>'
     page = f"<html><body><p>説明</p>{listing}</body></html>"
     t("一覧の中の数値は止めない（公開データ由来）",
-      hub_content_problems({"a.html": page}, {"a.html": {"list": listing}}, num, *deny) == [])
+      hub_content_problems({"a.html": page}, {"a.html": {"list": listing}}, *deny) == [])
     t("一覧を外さなければ検知する（検査が効いていることの確認）",
-      hub_content_problems({"a.html": page}, {}, num, *deny) != [])
+      hub_content_problems({"a.html": page}, {}, *deny) != [])
 
     prose = "<html><body><p>この機種は天井200Gです</p></body></html>"
     t("散文に手書きした数値は止める",
-      any("200G" in x for x in hub_content_problems({"a.html": prose}, {}, num, *deny)))
+      any("200G" in x for x in hub_content_problems({"a.html": prose}, {}, *deny)))
 
     fixed = ('<html><body><p>G数でカウントする天井が1000G未満の機種は全'
              '<span class="list-count">49</span>機種です</p></body></html>')
     t("生成器の固定文（1000G未満）では止めない",
-      hub_content_problems({"a.html": fixed}, {}, num, *deny) == [])
+      hub_content_problems({"a.html": fixed}, {}, *deny) == [])
 
     claim = "<html><body><p>この機種は必ず勝てるため最優先です</p></body></html>"
     t("数値の無い断定も止める",
-      hub_content_problems({"a.html": claim}, {}, num, *deny) != [])
+      hub_content_problems({"a.html": claim}, {}, *deny) != [])
 
     zenkaku = "<html><body><p>天井は２００Ｇです</p></body></html>"
     t("全角の数値も見つける",
-      hub_content_problems({"a.html": zenkaku}, {}, num, *deny) != [])
+      hub_content_problems({"a.html": zenkaku}, {}, *deny) != [])
 
     # --- Codex 15巡目 (a)-2 の反例 ---
     split = "<html><body><p>この方法なら勝<strong>て</strong>るため安心です</p></body></html>"
     t("タグで分断した禁止語も見つける",
-      hub_content_problems({"a.html": split}, {}, num, *deny) != [])
+      hub_content_problems({"a.html": split}, {}, *deny) != [])
 
     meta = '<html><head><meta name="description" content="必ず勝てるので安心です"></head><body></body></html>'
     t("meta属性の中の断定も見つける",
-      hub_content_problems({"a.html": meta}, {}, num, *deny) != [])
+      hub_content_problems({"a.html": meta}, {}, *deny) != [])
 
     game = "<html><body><p>天井は200ゲームです</p></body></html>"
     t("「ゲーム」単位の数値も見つける",
-      any("200ゲーム" in x for x in hub_content_problems({"a.html": game}, {}, num, *deny)))
+      any("200ゲーム" in x for x in hub_content_problems({"a.html": game}, {}, *deny)))
 
     twice = f"<html><body>{listing}<p>説明</p>{listing}</body></html>"
     t("一覧が2回出たら止める（片方だけ除去して素通りさせない）",
       any("1箇所であるべき" in x
           for x in hub_content_problems({"a.html": twice}, {"a.html": {"list": listing}},
-                                        num, *deny)))
+                                        *deny)))
 
     ctx = hub_content_problems({"a.html": "<html><body><p>天井は200Gです</p></body></html>"},
-                               {}, num, *deny)
+                               {}, *deny)
     t("どこで引っかかったか前後が出る", ctx and "…" in ctx[0])
+
+    # --- Codex 16巡目 (a)-4 の反例 ---
+    z = "​"
+    t("ゼロ幅文字で分断した禁止語も見つける",
+      hub_content_problems({"a.html": f"<p>必ず勝{z}てる</p>"}, {}, *deny) != [])
+    t("ゼロ幅文字で分断した数値も見つける",
+      hub_content_problems({"a.html": f"<p>天井は200{z}Gです</p>"}, {}, *deny) != [])
+    t("パーセント表記も単位として見る",
+      hub_content_problems({"a.html": "<p>勝率80パーセント</p>"}, {}, *deny) != [])
+    t("ふりがなで分断した禁止語も見つける",
+      hub_content_problems({"a.html": "<p><ruby>勝<rt>か</rt></ruby>てる</p>"}, {}, *deny) != [])
+    t("シングルクォート属性の中も見る",
+      hub_content_problems({"a.html": "<input placeholder='必ず勝てる'>"}, {}, *deny) != [])
 
     print(f"\n{ok}/{len(cases)} 合格")
     return 0 if ok == len(cases) else 1

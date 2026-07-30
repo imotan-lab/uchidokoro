@@ -1029,7 +1029,17 @@ def audit_file(path: str, expected_count: int | None = None,
                details_dir: str | None = None) -> int:
     import os
     data = json.load(open(path, encoding="utf-8"))
-    machines = data if isinstance(data, list) else data.get("machines", [])
+    # ★根っこが配列でも辞書でもない時に例外化させない★（Codex 16巡目 (b)-3）
+    if isinstance(data, list):
+        machines = data
+    elif isinstance(data, dict):
+        machines = data.get("machines", [])
+    else:
+        print(f"✗ 公開データの形が不正です（{type(data).__name__}）")
+        return 2
+    if not isinstance(machines, list):
+        print("✗ 公開データの machines が配列ではありません")
+        return 2
     problems: list[str] = []
     if not machines:
         problems.append("公開データが空（0機種）")
@@ -1044,7 +1054,12 @@ def audit_file(path: str, expected_count: int | None = None,
                     m["slug"], json.load(open(dp, encoding="utf-8")),
                     has_disclaimer=isinstance(m.get("disclaimer"), str)
                     and m["disclaimer"] == EXPECTED_DISCLAIMER,
-                    surfaces=(m.get("display_requirements") or {}).get("surfaces")))
+                    # ★型が違っても例外にしない★（Codex 16巡目 (b)-3）
+                    #   display_requirements がリストだと .get() で落ち、
+                    #   直前に記録した違反まで表示されなかった。
+                    surfaces=(m.get("display_requirements")
+                              if isinstance(m.get("display_requirements"), dict)
+                              else {}).get("surfaces")))
             else:
                 # ★記事ファイルが無いことを「検査不要」にしない★
                 #   （ファイルを置き忘れれば検査を素通りできてしまう）
