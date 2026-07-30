@@ -1584,7 +1584,8 @@ def _cell_text(c, ctx: _Ctx, path: str):
         #   `|| ""` で無視され、強示唆の装飾が黙って消える（強度情報の欠落）。
         if "badge" in c and c["badge"] not in _BADGE_VALUES:
             ctx.reject(f"{path}.badge",
-                       f"未知のbadge値（画面で示唆の強さが表示されない）: {c['badge']!r}")
+                       "未知のbadge値（画面で示唆の強さが表示されない）: "
+                       + _ci_redact(c["badge"]))
             return None, None
         txt = c.get("text")
         if not _is_str(txt):

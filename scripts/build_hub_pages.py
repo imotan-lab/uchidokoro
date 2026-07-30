@@ -245,7 +245,8 @@ def hub_content_problems(built: dict, data_html: dict, *deny_pats,
 
 
 sys.path.insert(0, str(BASE / "scripts"))
-from ci_safe import in_ci as _in_ci, redact as _redact, fingerprint as _fp  # noqa: E402
+from ci_safe import (in_ci as _in_ci, redact as _redact,  # noqa: E402
+                     fingerprint as _fp, safe_path as _safe_path)
 
 
 def _prose_key_of(hit: str, prose_all: dict | None) -> str:
@@ -257,23 +258,30 @@ def _prose_key_of(hit: str, prose_all: dict | None) -> str:
     if not prose_all:
         return ""
 
+    # ★表示文字列と同じ形（NFKC・不可視文字なし）に均してから探す★
+    #   （Codex 19巡目 (b)-1：原文が「２００Ｇ」だと見つけられず誤診していた）
+    target = _INVISIBLE.sub("", unicodedata.normalize("NFKC", hit or ""))
+    found: list = []
+
     def walk(node, path):
         if isinstance(node, str):
-            if hit and hit in node:
-                return path
+            norm = _INVISIBLE.sub("", unicodedata.normalize("NFKC", node))
+            if target and target in norm:
+                found.append(path)
         elif isinstance(node, dict):
             for k, v in node.items():
-                r = walk(v, f"{path}.{k}")
-                if r:
-                    return r
+                walk(v, f"{path}.{k}")
         elif isinstance(node, list):
             for i, v in enumerate(node):
-                r = walk(v, f"{path}[{i}]")
-                if r:
-                    return r
-        return ""
-    found = walk(prose_all, "$")
-    return f" / 散文の場所 {found}" if found else " / 散文には無い（生成器のコード側）"
+                walk(v, f"{path}[{i}]")
+
+    walk(prose_all, "$")
+    if not found:
+        return " / 散文には無い（生成器のコード側）"
+    # ★キー名に原稿を書けるので、CIではパスも伏せる★
+    shown = " ".join(_safe_path(x) for x in found[:3])
+    more = f" ほか{len(found) - 3}件" if len(found) > 3 else ""
+    return f" / 散文の場所 {shown}{more}"
 
 
 def _around(text: str, pos: int, width: int = 24) -> str:

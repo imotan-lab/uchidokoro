@@ -105,9 +105,14 @@ def check_1_inline_style(machines: list) -> list[str]:
         if p.name.startswith("google") and p.name.endswith(".html"):
             continue
         text = load_text(p)
-        matches = re.findall(r'style="[^"]*"', text)
-        if matches:
-            ngs.append(f"{p.name}: インラインstyle {len(matches)}箇所: {_redact(matches[:3])}")
+        # ★どの行かを出す（伏せ字にしても直せるように）★（Codex 19巡目 (b)-3）
+        hits = [(i + 1, m.group(0))
+                for i, line in enumerate(text.splitlines())
+                for m in re.finditer(r'style="[^"]*"', line)]
+        if hits:
+            where_ = ", ".join(f"{ln}行目{_redact(v)}" for ln, v in hits[:5])
+            more = f" ほか{len(hits) - 5}箇所" if len(hits) > 5 else ""
+            ngs.append(f"{p.name}: インラインstyle {len(hits)}箇所: {where_}{more}")
     return ngs
 
 
@@ -403,7 +408,7 @@ def check_13_internal_links(machines: list) -> list[str]:
             if str(target).endswith(("/", "\\")) or target.is_dir():
                 target = Path(str(target).rstrip("/\\")) / "index.html"
             if not target.exists():
-                ngs.append(f"{p.name}: 内部リンク切れ → '{url}'")
+                ngs.append(f"{p.name}: 内部リンク切れ → {_redact(url)}")
     return ngs
 
 
@@ -725,7 +730,7 @@ def check_25_section_body_type(machines: list) -> list[str]:
         for i, s in enumerate(d.get("sections", [])):
             b = s.get("body")
             if isinstance(b, str):
-                ngs.append(f"{m['slug']}: sections[{i}]({s.get('title')}) の body が文字列→配列であるべき（1文字ずつ段落化する不具合）")
+                ngs.append(f"{m['slug']}: sections[{i}]({_redact(s.get('title'))}) の body が文字列→配列であるべき（1文字ずつ段落化する不具合）")
     return ngs
 
 
