@@ -535,17 +535,123 @@ def render_all(source_root: Path) -> tuple[dict, list, list]:
     return pages, blocked, broken
 
 
-def main(preview: bool = False):
+# ★旧形式ページの目印★（この文言が全ページに入っていることを機械的に確かめる）
+#   machine.html のテンプレートに直接書いてある。ここと食い違ったら生成を止める。
+LEGACY_NOTE = ("数値は各種解析情報をもとにまとめた当サイトの整理です。"
+               "出典の照合は順次進めています。")
+
+
+def _build_legacy() -> int:
+    """★いま公開中の旧形式ページを作り直す★（2026-07-30・Codex「これだけはやれ」③）
+
+    ここは `LEGACY_UNVERIFIED` だけを作る経路。裏取り済みとして公開する道には
+    決してならないよう、次の3つで縛る（詳細は main() の docstring）。
+      1. 裏取りゲートが**有効なら実行しない**
+      2. 公開データ（assets/data/public/）を一切読まない
+      3. 全ページに旧形式の目印が入っていることを確かめ、
+         1枚でも欠けたら**1枚も書かずに**終わる
+    """
+    import safe_json as _sj2
+
+    # 1) ゲートが有効なら、旧形式の作り直しは筋違い（正しい経路を使う）
+    try:
+        if claim_gate_state():
+            print("★裏取りゲートが有効なので、旧形式の作り直しはできません★")
+            print("  公開物は build_pages_artifact.py が組み立てます。")
+            return 1
+    except Exception as e:
+        # ★設定が読めないときは書かない★（fail-closed）
+        print(f"★裏取りゲートの設定が読めません: {e} → 何も書きません")
+        return 1
+
+    machines = _sj2.read_rows(BASE / "assets" / "data" / "machines.json")
+    template = prepare_template((BASE / "machine.html").read_text(encoding="utf-8"))
+
+    # 2) authoring の記事だけを読む（公開データは触らない）
+    detail_dir = BASE / "assets" / "data" / "machine-details"
+    pochipochi_reasons = extract_pochipochi_reasons(template)
+
+    pages: dict = {}
+    broken: list = []
+    for machine in machines:
+        slug = machine["slug"]
+        detail = None
+        dp = detail_dir / f"{slug}.json"
+        if dp.is_file():
+            try:
+                detail = _sj2.read_json(dp, expect=dict)
+            except Exception as e:
+                print(f"★記事データが読めません: {slug}: {type(e).__name__}: {e}")
+                broken.append(slug)
+                continue
+        try:
+            pages[f"machines/{slug}/index.html"] = render_page(
+                template, machine, detail, pochipochi_reasons, True)
+        except Exception as e:
+            print(f"★ページを作れません: {slug}: {type(e).__name__}: {e}")
+            broken.append(slug)
+
+    if broken:
+        print(f"★{len(broken)} 機種が作れませんでした → 1枚も書きません: {broken}")
+        return 1
+    if not pages:
+        print("★1機種も作れませんでした★")
+        return 1
+
+    # 3) 旧形式の目印が全ページにあること（無ければ1枚も書かない）
+    missing = [rel for rel, h in pages.items() if LEGACY_NOTE not in h]
+    if missing:
+        print(f"★旧形式の目印が {len(missing)} ページに入っていません → 1枚も書きません")
+        for rel in missing[:5]:
+            print(f"  ✗ {rel}")
+        print("  machine.html の文言と LEGACY_NOTE を一致させてください:")
+        print("  " + LEGACY_NOTE)
+        return 1
+
+    # 目印が「本当に表示される場所」にあることも確かめる（コメント内だけは不可）
+    import preview_site as _pv
+    hidden = [rel for rel, h in pages.items()
+              if LEGACY_NOTE not in _pv.strip_html_comments(h)]
+    if hidden:
+        print(f"★目印がコメント内にしかないページが {len(hidden)} 枚 → 1枚も書きません")
+        return 1
+
+    for rel, h in pages.items():
+        out = BASE / rel
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(h, encoding="utf-8", newline=chr(10))
+    print(f"旧形式ページを作り直しました: {len(pages)} 機種")
+    print("  （全ページに旧形式の目印つき・裏取り済みとしては公開していません）")
+    return 0
+
+
+def main(preview: bool = False, legacy: bool = False):
     """preview=True のときは .preview-site/ にだけ書く（公開されない写し）。
 
     ★2026-07-30・移行手順2で --allow-ungated を廃止した★
       以前は「裏取りゲートが無効でも、承知のうえなら本番のHTMLを上書きしてよい」
       という抜け道があった。フラグ1つで公開物が書けてしまうので廃止し、
       裏取り前の内容は **公開されない写し（.preview-site/）にしか出せない** ようにした。
+
+    ★legacy=True＝旧形式ページの作り直し★（2026-07-30・Codex「これだけはやれ」③）
+      --allow-ungated を廃止した結果、**いま公開中の旧形式ページを直す手段が
+      無くなった**（記事本文はHTMLに焼き込まれていて、JSONを直しても届かない）。
+      東京喰種の矛盾のような、公開中の危険な記述を消せないのは本末転倒。
+
+      ただし --allow-ungated の復活ではない。向きが逆で、抜け道にならない:
+        - `--allow-ungated`：ゲートが**無効でも**公開物を書けた（ゲート回避）
+        - `--legacy`       ：ゲートが**有効になったら使えない**（旧形式専用）
+      さらに
+        - 公開データ（assets/data/public/）は一切読まない
+          ＝裏取り済みとして公開する経路には決してならない
+        - 全ページに旧形式の目印（LEGACY_NOTE）が入っていることを確認し、
+          1枚でも欠けたら**何も書かずに止める**（fail-closed）
     """
     sys.path.insert(0, str(BASE / "scripts"))
     import preview_site as _pv
 
+    if legacy:
+        return _build_legacy()
 
     # ★公開物を書けるのは build_pages_artifact.py だけ★
     #   （2026-07-30・Codex 23巡目 条件7の設計）
@@ -717,13 +823,16 @@ if __name__ == "__main__":
     _p = _ap.ArgumentParser()
     _p.add_argument("--preview", action="store_true",
                     help="公開されない写し（.preview-site/）にだけ書き出す")
+    _p.add_argument("--legacy", action="store_true",
+                    help="いま公開中の旧形式ページを作り直す"
+                         "（裏取りゲートが有効なら実行しない・公開データは読まない）")
     _a = _p.parse_args()
     # ★どんな壊れた入力でも traceback にしない★（Codex 閉鎖条件5・27巡目）
     import sys as _s9
     _s9.path.insert(0, str(BASE / "scripts"))
     import safe_json as _sj9
     try:
-        raise SystemExit(main(_a.preview) or 0)
+        raise SystemExit(main(_a.preview, _a.legacy) or 0)
     except SystemExit:
         raise
     except _sj9.SafeJsonError as _e:

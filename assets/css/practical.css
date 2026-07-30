@@ -229,6 +229,9 @@ button, input, select { font: inherit; }
 /* 数値を出すページに必須の併記（build_machine_pages.py が公開データの指定で挿入する） */
 .site-disclaimer { margin: 0 0 8px 0; color: var(--gold); font-size: 12px; line-height: 1.6; font-weight: 600; }
 
+/* 数値の出どころ（控えめ表示・2026-07-30）。強調しすぎず、読み飛ばされない程度に。 */
+.source-note { margin: 6px 0 10px 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+
 .article-section-wrap { display: grid; }
 .article-block {
   padding: 16px 0;

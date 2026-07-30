@@ -57,6 +57,11 @@
     <p class="eyebrow"><a href="index.html" class="eyebrow-link">‹ 一覧</a>&nbsp;&nbsp;ARTICLE</p>
     <h1 id="machineTitle" class="page-title">スマスロケロット5BT</h1>
     <p id="heroSub" class="hero-sub">スマスロケロット5BTは山佐ネクストのノーマルタイプ（ボーナストリガー搭載）。天井は非搭載で設定狙いが基本の機種です。ボーナス合算は設定1で1/139.7、設定6で1/110.3。機械割98.2%〜111.0%（6段階設定）。スーパーBIGはBT込みで約317枚獲得。2026年7月6日導入。</p>
+    <!-- ★数値の出どころを控えめに明示する★（2026-07-30・運営者判断）
+         各種解析情報をもとにまとめた当サイトの整理であって、
+         1つ1つの数値の出典照合はまだ済んでいない、という状態を短く示す。
+         照合が済んだ機種から、この文言を差し替えていく。 -->
+    <p class="source-note">数値は各種解析情報をもとにまとめた当サイトの整理です。出典の照合は順次進めています。</p>
     <div id="previewBanner" class="preview-banner is-hidden">
       <p class="preview-banner-label">⚠ 先行記事（解析待ち）</p>
       <p class="preview-banner-body">この機種はまだ解析データが出揃っていません。天井・狙い目・設定差は判明次第、随時更新します。</p>
@@ -699,7 +704,9 @@ function resolveMachineSlug() {
       if (resetIndex >= 0 && resetConfig
           && Number.isFinite(resetConfig.good) && Number.isFinite(resetConfig.excellent)) {
         boxes[resetIndex].label = "リセット狙い";
-        boxes[resetIndex].value = `${resetConfig.good}${evUnitOf(checker)}〜（積極${resetConfig.excellent}${evUnitOf(checker)}〜）`;
+        // ★「積極」は行動をすすめる表現なので使わない★（Phase 0 の恒久ルール・2026-07-30）
+        //   判定文だけ直して、この要約の生成コードが残っていた。
+        boxes[resetIndex].value = `${resetConfig.good}${evUnitOf(checker)}〜（大きく超えるのは${resetConfig.excellent}${evUnitOf(checker)}〜）`;
       }
     }
 
@@ -746,9 +753,14 @@ function resolveMachineSlug() {
       checkerResult.querySelector(".result-text").textContent = `◯ 当サイトの目安に到達しています${eqNote}`;
     } else {
       const t = Number.isFinite(config.caution) ? config.caution : (config.target || config.good);
+      // ★同じページで「目安」の値が2つ出ていた★（2026-07-30・Codex指摘）
+      //   ここは caution（手前帯の始まり）を「目安」として表示していたので、
+      //   東京喰種なら △ で「目安は200G〜」・× で「目安は300G〜」と食い違っていた。
+      //   目安＝good に統一し、caution は「手前帯に入った」ことだけを表す。
+      const meyasu = Number.isFinite(config.good) ? config.good : t;
       if (Number.isFinite(t) && g >= t) {
         checkerResult.className = "checker-result result-wait";
-        checkerResult.querySelector(".result-text").textContent = `△ 目安の手前です（目安は${t}${unit}〜）`;
+        checkerResult.querySelector(".result-text").textContent = `△ 目安の手前です（目安は${meyasu}${unit}〜）`;
       } else {
         checkerResult.className = "checker-result result-ng";
         const thr = Number.isFinite(config.good) ? config.good : t;
