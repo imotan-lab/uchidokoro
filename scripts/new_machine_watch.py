@@ -121,6 +121,110 @@ def machine_name(html: str) -> str:
     return t.strip()
 
 
+
+# ★新台と認めるための条件★（2026-07-31・Codexの追加条件）
+#   「未知のURL＝新台」だけでは足りない。次を全部満たしたものだけを候補にする。
+#     1. パチスロのページであること
+#     2. 公式が登場年月を書いていること（こちらで日を補わない）
+#     3. すでに扱っている機種でないこと
+#     4. 前に見たURLの中身が別機種にすり替わっていないこと
+#   1つでも欠けたら候補にせず、理由を残す（黙って落とさない）。
+
+_SLOT_WORDS = ("パチスロ", "スロット", "回胴", "スマスロ", "純増", "AT", "ART")
+_RELEASE_RE = re.compile(r"(20\d\d)年\s*(\d{1,2})月")
+
+
+def _visible_text(html: str) -> str:
+    # ★scriptの中身を本文に混ぜない★
+    #   タグ名は文字列から組み立てる（バックスラッシュを直接書くと
+    #   編集の経路で制御文字に化ける事故が今日5回起きたため）
+    for tag in ("script", "style", "noscript"):
+        html = re.sub("(?is)<" + tag + "[^>]*>.*?</" + tag + "[ \t\r\n]*>", " ", html)
+    t = re.sub("(?s)<[^>]+>", chr(10), html)
+    t = unicodedata.normalize("NFKC", t)
+    return chr(10).join(x.strip() for x in t.splitlines() if x.strip())
+
+
+def release_month(text: str):
+    """公式が書いている登場年月。★日は補わない★（公式が月までなら月まで）"""
+    m = _RELEASE_RE.search(text)
+    if not m:
+        return None
+    return {"value": f"{m.group(1)}-{int(m.group(2)):02d}", "precision": "month",
+            "quote": m.group(0)}
+
+
+def looks_like_slot(text: str) -> bool:
+    return any(w in text for w in _SLOT_WORDS)
+
+
+def known_official_urls() -> set:
+    """すでに扱っている機種の公式URL（重複を防ぐ）。"""
+    try:
+        rows = _sj.read_rows(os.path.join(BASE, "assets", "data", "machines.json"))
+    except Exception:
+        return set()
+    out = set()
+    for m in rows:
+        u = (m.get("identity") or {}).get("official_product_url")
+        if isinstance(u, str) and u:
+            out.add(u.rstrip("/") + "/")
+    return out
+
+
+# 新台とみなす登場年月の幅（今月の1か月前 〜 6か月先）
+#   前: 導入直後に気づいた場合も拾う  後: 事前告知を拾う
+RECENT_BACK_MONTHS = 1
+RECENT_AHEAD_MONTHS = 6
+
+
+def is_recent(ym: str, today=None) -> bool:
+    """登場年月が「新台」と呼べる範囲か。"""
+    from datetime import date
+    t = today or date.today()
+    try:
+        y, m = (int(x) for x in ym.split("-"))
+    except Exception:
+        return False
+    months = (y - t.year) * 12 + (m - t.month)
+    return -RECENT_BACK_MONTHS <= months <= RECENT_AHEAD_MONTHS
+
+
+def classify(url: str, seen_entry: dict | None = None, today=None) -> dict:
+    """新台候補として通してよいか判定する。★通らない理由を必ず残す★"""
+    out = {"url": url, "ok": False, "reasons": [], "official_name": "",
+           "release": None}
+    try:
+        html = _get(url)
+    except WatchError as e:
+        out["reasons"].append(str(e))
+        return out
+    text = _visible_text(html)
+    out["official_name"] = machine_name(html)
+    out["release"] = release_month(text)
+
+    if not out["official_name"]:
+        out["reasons"].append("公式ページから機種名を取れません")
+    if not looks_like_slot(text):
+        out["reasons"].append("パチスロのページに見えません（回胴機の語が無い）")
+    if not out["release"]:
+        out["reasons"].append("公式が登場年月を書いていません（こちらで日付を補わない）")
+    elif not is_recent(out["release"]["value"], today):
+        # ★古い機種のページを新台にしない★（Codexの「新しい登場年月」の条件）
+        #   見たことのあるURLの記録が消えたときに、一覧の全機種が
+        #   新台として押し寄せるのを止める最後の砦でもある。
+        out["reasons"].append(
+            f"登場年月が新台の範囲外です（{out['release']['value']}）")
+    if url.rstrip("/") + "/" in known_official_urls():
+        out["reasons"].append("すでに扱っている機種です")
+    # ★前に見たURLの中身が別機種にすり替わっていないか★
+    if seen_entry and seen_entry.get("name") and out["official_name"]             and seen_entry["name"] != out["official_name"]:
+        out["reasons"].append(
+            f"同じURLの機種名が変わりました（{seen_entry['name']} → {out['official_name']}）")
+    out["ok"] = not out["reasons"]
+    return out
+
+
 def _load_seen() -> dict:
     if not os.path.isfile(SEEN_PATH):
         return {"schema": "seen-machine-urls/v1", "makers": {}}
@@ -253,6 +357,27 @@ def selftest() -> int:
           r4["problem"] and r4["new"] == [])
     finally:
         _get = real_get
+
+    from datetime import date
+    TODAY = date(2026, 7, 31)
+    t("★★古い機種のページを新台にしない★★（記録が消えても全機種が押し寄せない）",
+      not is_recent("2024-12", TODAY) and not is_recent("2023-08", TODAY))
+    t("　導入直後（先月）も拾う", is_recent("2026-06", TODAY))
+    t("　事前告知（半年先まで）は拾う",
+      is_recent("2026-08", TODAY) and is_recent("2027-01", TODAY))
+    t("　それより先は拾わない（噂・別機種の混入を避ける）",
+      not is_recent("2027-03", TODAY))
+    t("　年月として読めない値は通さない",
+      not is_recent("", TODAY) and not is_recent("2026", TODAY)
+      and not is_recent("にせ-99", TODAY))
+    t("★公式が書いた登場年月をそのまま持つ（日を補わない）★",
+      release_month("2026年8月登場")["value"] == "2026-08"
+      and release_month("2026年8月登場")["precision"] == "month")
+    t("　scriptの中身を本文に混ぜない（偽の年月・数値を拾わない）",
+      "パチスロ" not in _visible_text(
+          '<script>var x="パチスロ純増99枚";</script><p>Lテスト機</p>'))
+    t("★パチスロのページでなければ通さない★",
+      not looks_like_slot("これは景品の紹介ページです"))
 
     t("★機種らしくない文字列は取らない★",
       not _SLUGLIKE.match("../etc") and not _SLUGLIKE.match("A B")
