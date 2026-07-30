@@ -769,19 +769,36 @@ def check_29_control_chars(machines: list) -> list[str]:
       見た目では気づけないので機械で検査する（タブ・改行だけ許す）。
     """
     ngs = []
-    targets = (list(BASE.glob("scripts/*.py")) + list(BASE.glob("*.html"))
-               + list(BASE.glob("*.js")) + list(BASE.glob("assets/**/*.css")))
-    for f in targets:
-        if is_build_output(f) or not f.is_file():
+    # ★Gitが追跡している全ファイルを対象にする★（Codex 23巡目 (b)）
+    #   直下のHTMLとCSSだけでは machines/**/*.html・assets/**/*.js・workflow が漏れる。
+    import subprocess
+    try:
+        listed = subprocess.run(["git", "ls-files"], cwd=BASE, text=True,
+                                capture_output=True, check=True).stdout.splitlines()
+    except Exception as e:
+        return [f"追跡ファイルの一覧を取れません（{type(e).__name__}）: {e}"]
+    exts = {".py", ".html", ".htm", ".js", ".css", ".json", ".yml", ".yaml", ".txt", ".xml", ".md"}
+    for rel in listed:
+        rel = rel.strip()
+        if not rel:
+            continue
+        f = BASE / rel
+        if is_build_output(f) or not f.is_file() or f.suffix.lower() not in exts:
             continue
         try:
             text = f.read_text(encoding="utf-8")
-        except Exception:
+        except Exception as e:
+            # ★読めないファイルを黙って飛ばさない★（同）
+            ngs.append(f"{rel}: 読めません（{type(e).__name__}）")
             continue
-        for i, line in enumerate(text.splitlines(), 1):
-            bad = sorted({hex(ord(c)) for c in line if ord(c) < 32 and c != "	"})
-            if bad:
-                ngs.append(f"{f.relative_to(BASE).as_posix()}:{i} に制御文字 {bad}")
+        # ★splitlines は 0x0B/0x0C などを行区切りとして消してしまう★（同）
+        #   文字列全体を1文字ずつ見て、位置は改行の数から出す。
+        line = 1
+        for ch in text:
+            if ch == chr(10):
+                line += 1
+            elif ord(ch) < 32 and ch != chr(9):
+                ngs.append(f"{rel}:{line} に制御文字 {hex(ord(ch))}")
     return ngs
 
 

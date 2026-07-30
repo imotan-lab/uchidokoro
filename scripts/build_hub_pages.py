@@ -584,6 +584,19 @@ def main(preview: bool = False, out_dir: str | None = None):
         out_root = _pv.PREVIEW_DIR
     elif out_dir:
         out_root = Path(out_dir)
+        # ★リポジトリの中は書き先にできない★（Codex 23巡目 (a)-3）
+        #   `--out .` を許すと、artifact監査を通らずに公開物を上書きできてしまう。
+        try:
+            _resolved = out_root.resolve()
+            _base = BASE.resolve()
+            if _resolved == _base or _base in _resolved.parents:
+                print("★リポジトリの中には書き出せません★")
+                print(f"  指定された場所: {_resolved}")
+                print("  公開物は build_pages_artifact.py が一時領域に作ります。")
+                return 1
+        except OSError as e:
+            print(f"★書き出し先を確かめられません: {e}★")
+            return 1
     else:
         print("★公開用のHTMLはここからは作れません★")
         print("  公開物は build_pages_artifact.py が作ります（--out で置き場所を渡します）。")
@@ -756,7 +769,10 @@ def main(preview: bool = False, out_dir: str | None = None):
             _pv.write_html(file, html)   # noindex・バナー・目印つきで写しへ
         else:
             # 改行はLF固定（Windowsで作ってもCIで作っても同じ中身にする）
-            (BASE / file).write_text(html, encoding="utf-8", newline="\n")
+            # ★書き先は out_root★（Codex 23巡目 (a)-2：ここが BASE のままで、
+            #   --out を付けてもリポジトリ直下の4ページを上書きできていた）
+            out_root.mkdir(parents=True, exist_ok=True)
+            (out_root / file).write_text(html, encoding="utf-8", newline="\n")
         dlen = len(pages[file][0]["meta_description"])
         warn = "" if 50 <= dlen <= 160 else f"  ⚠ meta desc {dlen}字（50〜160推奨）"
         print(f"  生成: {file}  ({dlen}字 desc){warn}")

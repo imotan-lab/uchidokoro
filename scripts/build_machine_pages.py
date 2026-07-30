@@ -501,6 +501,19 @@ def main(preview: bool = False, out_dir: str | None = None):
         out_root = _pv.PREVIEW_DIR
     elif out_dir:
         out_root = Path(out_dir)
+        # ★リポジトリの中は書き先にできない★（Codex 23巡目 (a)-3）
+        #   `--out .` を許すと、artifact監査を通らずに公開物を上書きできてしまう。
+        try:
+            _resolved = out_root.resolve()
+            _base = BASE.resolve()
+            if _resolved == _base or _base in _resolved.parents:
+                print("★リポジトリの中には書き出せません★")
+                print(f"  指定された場所: {_resolved}")
+                print("  公開物は build_pages_artifact.py が一時領域に作ります。")
+                return 1
+        except OSError as e:
+            print(f"★書き出し先を確かめられません: {e}★")
+            return 1
     else:
         print("★公開用のHTMLはここからは作れません★")
         print("  公開物は build_pages_artifact.py が作ります（--out で置き場所を渡します）。")

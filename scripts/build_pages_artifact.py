@@ -924,6 +924,38 @@ OWN_HOSTS = ("uchidokoro.com", "www.uchidokoro.com")
 JSONLD_VOCAB_HOSTS = ("schema.org", "www.schema.org")
 
 
+ATTR_PAIR = re.compile(
+    r"""([A-Za-z_:][-\w:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""")
+
+# 端末が取りに行くフィールド（ただの引用リンクは数えない）
+FETCHED_JSON_FIELDS = ("src", "url", "href", "icon", "image", "logo")
+
+
+def _attrs_of(tag_text: str) -> dict:
+    """開始タグの属性を辞書にする（キー名を厳密に見るため）。"""
+    inner = tag_text[tag_text.find(" "):] if " " in tag_text else ""
+    out = {}
+    for m in ATTR_PAIR.finditer(inner):
+        out.setdefault(m.group(1).lower(),
+                       _unescape_all(m.group(2) or m.group(3) or m.group(4) or ""))
+    return out
+
+
+def _json_urls(node, path: str = "") -> list:
+    """JSONの値のうち「端末が取りに行く」URLだけを挙げる。"""
+    out = []
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if isinstance(v, str) and k.lower() in FETCHED_JSON_FIELDS                     and re.match(r"^(?:https?:)?//", v.strip()):
+                out.append((f".{k}", v.strip()))
+            else:
+                out.extend(_json_urls(v, f"{path}.{k}"))
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            out.extend(_json_urls(v, f"{path}[{i}]"))
+    return out
+
+
 def _unescape_all(text: str, rounds: int = 3) -> str:
     """文字実体参照を、変わらなくなるまで戻す。"""
     for _ in range(rounds):
@@ -964,11 +996,15 @@ def external_references(stage: Path) -> list[str]:
         if not path.is_file() or path.suffix.lower() not in (".html", ".css", ".js", ".json"):
             continue
         if path.suffix.lower() == ".json":
-            # ★manifest 等のJSONに書いた外部画像も端末が取りに行く★（Codex 22巡目 (a)-6）
+            # ★JSONは解析してから値を見る★（Codex 23巡目 (a)-4）
+            #   生文字列に正規表現を掛けていたので `https:\/\/evil` を見落としていた。
             rel_j = path.relative_to(stage).as_posix()
-            body_j = path.read_text(encoding="utf-8", errors="replace")
-            for m in ANY_URL.finditer(body_j):
-                note(m.group(0), f"{rel_j} (JSON)")
+            try:
+                data_j = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue          # 壊れたJSONは safe_json 側が止める
+            for where, url in _json_urls(data_j):
+                note(url, f"{rel_j}{where}")
             continue
         rel = path.relative_to(stage).as_posix()
         text = path.read_text(encoding="utf-8", errors="replace")
@@ -1007,16 +1043,19 @@ def external_references(stage: Path) -> list[str]:
                     for u in ANY_URL.finditer(piece):
                         note(u.group(0), f"{rel}:{line_of(tag.start())} <{name}>")
         # HTML に直接書かれたJS
-        for sc in INLINE_SCRIPT.finditer(text):
+        # ★コメントを外したものを走査する★（Codex 23巡目 (b)）
+        #   コメント内の <script> を外部依存に数えていた。
+        #   同じ長さの空白に置換しているので、行番号はずれない。
+        for sc in INLINE_SCRIPT.finditer(scan_text):
             # ★JSON-LD は「読み込む外部リソース」ではない★（Codex 21巡目 (b)-3）
             #   schema.org は語彙の名前として書くだけで、取りに行かない。
             # ★本物の type 属性で判定する★（Codex 22巡目 (a)-4）
             #   `data-kind="application/ld+json"` と書けば、ブラウザは普通のJSとして
             #   実行するのに検査だけ除外できていた。
             head = text[sc.start():sc.start(1)]
-            tm = re.search(r"""\btype\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""",
-                           head, re.IGNORECASE)
-            script_type = ((tm.group(1) or tm.group(2) or tm.group(3)) if tm else "").strip().lower()
+            # ★属性を辞書に分解し、キーが厳密に "type" の時だけ JSON-LD 扱い★
+            #   （Codex 23巡目 (a)-1：`data-type=` の中の `type=` に一致していた）
+            script_type = _attrs_of(head).get("type", "").strip().lower()
             if script_type == "application/ld+json":
                 # remote な @context / @import は別枠で警告する
                 for m in re.finditer(r'"@(?:context|import)"\s*:\s*"((?:https?:)?//[^"]+)"',
@@ -1699,6 +1738,14 @@ def selftest() -> int:
              (lambda c: (lambda root: not css_problems(c)))(_css), True)
     case("(a)-1 HTML内の <style> も検査する",
          lambda root: _style_block_checked(root), True)
+    case("(a)-1 data-type で JSON-LD を偽装しても外部依存に数える",
+         lambda root: _jsonld_spoof_detected(root), True)
+    case("(a)-4 JSONエスケープしたURLも見つける",
+         lambda root: _json_escaped_url_detected(root), True)
+    case("(b) HTMLコメント内のscriptは数えない",
+         lambda root: _html_comment_script_ignored(root), True)
+    case("(a)-2/3 リポジトリ内への --out は拒否される",
+         lambda root: _out_inside_repo_rejected(), True)
     case("(a)-3 実体参照した外部URLも見つける",
          lambda root: _entity_url_detected(root), True)
     case("(b)-3 JSON-LDとコメントのURLは外部依存に数えない",
@@ -1958,6 +2005,41 @@ def _style_block_checked(root: Path) -> bool:
             "</head>", "<style>.site-disclaimer{display:none}</style></head>"),
         encoding="utf-8")
     return _raises(lambda: audit(root, {"aaa", "bbb"}))
+
+
+def _jsonld_spoof_detected(root: Path) -> bool:
+    (root / "a.html").write_text(
+        '<script data-type="application/ld+json">fetch("https://spoof.example/x")</script>',
+        encoding="utf-8")
+    return "spoof.example" in " ".join(external_references(root))
+
+
+def _json_escaped_url_detected(root: Path) -> bool:
+    (root / "manifest.json").write_text(
+        r'{"icons":[{"src":"https:\/\/esc.example\/i.png"}],'
+        r'"sources":[{"note":"https://just-a-link.example"}]}', encoding="utf-8")
+    joined = " ".join(external_references(root))
+    return "esc.example" in joined and "just-a-link" not in joined
+
+
+def _html_comment_script_ignored(root: Path) -> bool:
+    (root / "a.html").write_text(
+        '<!-- <script>fetch("https://cmt.example/x")</script> -->\n'
+        '<script>fetch("https://live.example/x")</script>', encoding="utf-8")
+    joined = " ".join(external_references(root))
+    return "live.example" in joined and "cmt.example" not in joined
+
+
+def _out_inside_repo_rejected() -> bool:
+    """--out にリポジトリ内を渡したら公開物を書かせないこと。"""
+    import subprocess as _sp
+    ok = True
+    for script in ("scripts/build_machine_pages.py", "scripts/build_hub_pages.py"):
+        cp = _sp.run([sys.executable, script, "--out", "."], cwd=BASE,
+                     text=True, capture_output=True,
+                     encoding="utf-8", errors="replace")
+        ok = ok and cp.returncode != 0
+    return ok
 
 
 def _entity_url_detected(root: Path) -> bool:
