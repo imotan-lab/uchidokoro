@@ -1028,7 +1028,12 @@ def audit_detail(slug: str, detail: dict, has_disclaimer: bool,
 def audit_file(path: str, expected_count: int | None = None,
                details_dir: str | None = None) -> int:
     import os
-    data = json.load(open(path, encoding="utf-8"))
+    # ★壊れたJSONでも診断として返す★（Codex 17巡目 (b)-3）
+    try:
+        data = json.load(open(path, encoding="utf-8"))
+    except Exception as e:
+        print(f"✗ 公開データを読めません: {type(e).__name__}: {e}")
+        return 2
     # ★根っこが配列でも辞書でもない時に例外化させない★（Codex 16巡目 (b)-3）
     if isinstance(data, list):
         machines = data
@@ -1050,8 +1055,14 @@ def audit_file(path: str, expected_count: int | None = None,
         if details_dir and isinstance(m, dict) and isinstance(m.get("slug"), str):
             dp = os.path.join(details_dir, f"{m['slug']}.json")
             if os.path.isfile(dp):
+                # ★1件の壊れた記事で、それまでの違反ごと失わない★（Codex 17巡目 (b)-3）
+                try:
+                    detail_obj = json.load(open(dp, encoding="utf-8"))
+                except Exception as e:
+                    problems.append(f"{m['slug']}: 記事データを読めない（{type(e).__name__}: {e}）")
+                    continue
                 problems.extend(audit_detail(
-                    m["slug"], json.load(open(dp, encoding="utf-8")),
+                    m["slug"], detail_obj,
                     has_disclaimer=isinstance(m.get("disclaimer"), str)
                     and m["disclaimer"] == EXPECTED_DISCLAIMER,
                     # ★型が違っても例外にしない★（Codex 16巡目 (b)-3）

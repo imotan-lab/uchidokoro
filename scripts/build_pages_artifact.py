@@ -113,25 +113,54 @@ APPROVAL_SCHEMA = "template-approval/v2"
 # ★全機種に一斉に効く入力★（1箇所直すと全ページに載るもの）
 #   ここは「過不足なく一致」を要求する。承認一覧から外して回避できないようにするため。
 APPROVED_INPUTS = frozenset({
-    # ページのひな型・共通ページ
+    # ページのひな型
     "machine.html",
     "index.html",
-    "setting.html",
+    # 手書きの固定ページ（そのまま公開されるので中身の検査が効かない）
+    #   （Codex 17巡目 (a)-2：ここに嘘を書けば監査を通って公開されていた）
+    "404.html",
+    "about.html",
+    "contact.html",
+    "privacy.html",
+    "guide-haena.html",
+    "guide-pochipochi.html",
+    "guide-rate.html",
+    "guide-reset.html",
+    "guide-yamedoki.html",
+    "manifest.json",
     # 全ページで読み込まれる見た目と動き
     "assets/css/practical.css",
     "meta-auto.js",
     "service-worker.js",
+    # 全ページに出る画像（画像の中に文字を描けば全機種に表示できる）
+    "assets/img/logo.png",
+    "assets/img/ogp.png",
     # 公開物を作るコード（ここを直せば何でも書ける）
+    #   ★判定を構成する側も入れる★（Codex 17巡目 (a)-1）
     "scripts/build_pages_artifact.py",
     "scripts/build_machine_pages.py",
     "scripts/build_hub_pages.py",
     "scripts/build_public_data.py",
+    "scripts/build_ledger.py",
     "scripts/gates.py",
     "scripts/audit_public.py",
     "scripts/claim_reconcile.py",
+    "scripts/claim_c5.py",
+    "scripts/claim_inventory.py",
+    "scripts/claim_ledger.py",
+    "scripts/claim_identity.py",
+    "scripts/preview_site.py",
     # ハブの手書き散文
     "scripts/hub_prose.json",
 })
+
+# ルート直下に置く固定名の資産（★名前パターンでのコピーはやめた★・Codex 17巡目 (a)-2）
+#   `google*.html` のような書き方だと、新しく `google-news.html` を作るだけで
+#   検査を通らない公開URLを増やせてしまう。
+ROOT_ASSETS = (
+    "favicon.ico",
+    "googleafe441235e57f84f.html",   # Search Console 所有権確認（削除禁止）
+)
 
 IGNORED_DIR_NAMES = {".git", ".github", PREVIEW_DIRNAME, "_site", "_site.next",
                      "__pycache__", "_design", ".claude",
@@ -558,22 +587,23 @@ def audit(stage: Path, expected: set[str]) -> None:
                     raise BuildError(
                         f"machines/{slug}/index.html: 併記が {attr} で隠されています")
 
+    # ハブ（早見表を含む）は先行記事も載せる。分類の断定は yome() 側で避ける。
+    # ★sitemap だけ「検索登録してよい機種」に限る★（Codex 17巡目 (b)-1）
     hub_union: set[str] = set()
     for name in GENERATED_HUBS:
         current = href_slugs(stage / name)
-        if not current <= indexable:
+        if not current <= expected:
             raise BuildError(
-                f"{name} に載せてはいけない機種があります: "
-                f"{sorted(current - indexable)}（先行記事や未承認）")
+                f"{name} に承認していない機種があります: {sorted(current - expected)}")
         hub_union |= current
     ichiran = href_slugs(stage / "guide-ichiran.html")
-    if ichiran != indexable:
+    if ichiran != expected:
         raise BuildError(
-            "早見表が「一覧に載せる機種」と違います"
-            f"（余分: {sorted(ichiran - indexable)} / 不足: {sorted(indexable - ichiran)}）")
-    if hub_union != indexable:
+            "早見表が公開機種の集合と違います"
+            f"（余分: {sorted(ichiran - expected)} / 不足: {sorted(expected - ichiran)}）")
+    if hub_union != expected:
         raise BuildError(
-            f"ハブ全体の機種集合が違います（不足: {sorted(indexable - hub_union)}）")
+            f"ハブ全体の機種集合が違います（不足: {sorted(expected - hub_union)}）")
 
     for rel in FORBIDDEN_PATHS:
         if (stage / rel).exists():
@@ -617,7 +647,10 @@ def git_dirty() -> bool:
 
 HIDE_DECLS = ("display:none", "visibility:hidden", "visibility:collapse", "opacity:0",
               "font-size:0", "content-visibility:hidden", "transform:scale(0)",
-              "clip-path:inset(100%)", "max-height:0", "height:0", "width:0")
+              "clip-path:inset(100%)", "max-height:0", "height:0", "width:0",
+              # ★見えなくする手は他にもある★（Codex 17巡目 (a)-4）
+              "color:transparent", "filter:opacity(0)", "-webkit-text-fill-color:transparent",
+              "text-indent:-9999px", "clip:rect(0,0,0,0)", "font-size:0px")
 CSS_ESCAPE = re.compile(r"\\([0-9a-fA-F]{1,6})\s?")
 
 # ★記録済みの外部読み込み（Codex 16巡目 (a)-2 の指摘・未解消）★
@@ -630,48 +663,125 @@ CSS_EXTERNAL_ALLOW = (
 )
 
 
+def css_rules(text: str):
+    """CSSを「セレクタ」と「宣言」に分解する（入れ子にも対応した簡易パーサ）。
+
+    ★正規表現での切り出しをやめた★（Codex 17巡目 (a)-4）
+      `.x { display:none; & span { … } }` のような入れ子があると、
+      外側の宣言を取り出せずに見逃していた。括弧を数えて自前で分ける。
+    戻り値: (親セレクタを連ねたもの, 宣言文字列) の並び。
+    """
+    out = []
+    stack: list[str] = []
+    buf = ""
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch == "{":
+            stack.append(buf.strip())
+            buf = ""
+        elif ch == "}":
+            if buf.strip():
+                out.append((" ".join(stack), buf.strip()))
+            buf = ""
+            if stack:
+                stack.pop()
+        elif ch == ";" and stack:
+            out.append((" ".join(stack), buf.strip()))
+            buf = ""
+        else:
+            buf += ch
+        i += 1
+    if buf.strip() and stack:
+        out.append((" ".join(stack), buf.strip()))
+    return out
+
+
+def _targets_disclaimer(selector: str) -> bool:
+    """その規則が「併記そのもの」を対象にしているか。
+
+    `:not(.site-disclaimer)` は対象外、`.site-disclaimer::before` は飾りなので対象外。
+    （Codex 17巡目 (a)-4 の誤検知指摘）
+    """
+    sel = selector.replace(" ", "")
+    if "site-disclaimer" not in sel:
+        return False
+    for part in re.split(r"[,]", sel):
+        if "site-disclaimer" not in part:
+            continue
+        if re.search(r":not\([^)]*site-disclaimer", part):
+            continue
+        if re.search(r"site-disclaimer[^,]*::(before|after|marker|placeholder)", part):
+            continue
+        return True
+    return False
+
+
 def css_problems(text: str) -> list[str]:
     """CSSに「見せない仕掛け」「外部読み込み」「文字を生やす指定」が無いか。
 
-    （Codex 15巡目 (a)-3 / 16巡目 (a)-2・(a)-3）
+    （Codex 15巡目 (a)-3 / 16巡目 (a)-2・(a)-3 / 17巡目 (a)-4）
       ・`.site-disclaimer` を隠されたら併記の意味が無い
-      ・`content:"…"` は**CSSから文章を生やせる**＝HTML検査の外で誤情報を出せる
-      ・`@import` は外部サーバの中身を実行時に取り込む＝指紋の外
-      入れ子（@media）や改行・CSSエスケープで逃げられないよう、先に均してから見る。
+      ・`content:` は**CSSから文章を生やせる**＝HTML検査の外で誤情報を出せる
+      ・外部の読み込みは実行時の中身が指紋の外
     """
     problems: list[str] = []
     body = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
-    # CSSエスケープ（\64 → d）を戻し、空白を潰す
+    # CSSエスケープ（\64 → d、\i → i）を戻す
     body = CSS_ESCAPE.sub(lambda m: chr(int(m.group(1), 16)), body)
-    flat = re.sub(r"\s+", "", body).lower()
+    body = re.sub(r"\\(.)", r"\1", body)
 
-    for m in re.finditer(r"url\(([^)]*)\)", flat):
-        url = m.group(1).strip("\"'")
-        if not re.match(r"^(?:https?:)?//", url):
+    # 外部読み込み（url(...) と @import "..." の両方）
+    externals = [m.group(1).strip("\"' ") for m in re.finditer(r"url\(([^)]*)\)", body)]
+    externals += [m.group(1) for m in re.finditer(r'@import\s+["\']([^"\']+)["\']', body)]
+    for url in externals:
+        if not re.match(r"^(?:https?:)?//", url.strip()):
             continue
-        if url in CSS_EXTERNAL_ALLOW:
-            continue        # ★記録済みの例外（下記コメント参照）★
+        if url.strip().lower() in CSS_EXTERNAL_ALLOW:
+            continue        # ★記録済みの例外（定義のコメント参照）★
         problems.append(f"承認していない外部URLを読み込んでいます « {url[:70]} »")
-    if "@import" in flat and not all(
-            u in flat.replace("'", "").replace('"', "")
-            for u in (x.lower() for x in CSS_EXTERNAL_ALLOW)):
-        problems.append("@import で承認外の外部を読み込んでいます")
 
-    # 規則ごとに見る（@media 等の入れ子は「{…}」を潰してから走査する）
-    for selector, decls in re.findall(r"([^{}]+)\{([^{}]*)\}", flat):
-        sel = selector.split("}")[-1]          # 入れ子の外側を落とす
-        if "site-disclaimer" in sel:
+    rules = css_rules(body)
+    # 変数（--名前）の値を集めておき、var(--名前) は中身に置き換えてから判定する。
+    # ★同じCSSの中で定義された変数なら、実際の値で判断できる★（Codex 17巡目 (a)-4 の誤検知対策）
+    variables = {}
+    for _sel, decl in rules:
+        m = re.match(r"\s*(--[\w-]+)\s*:\s*(.+)$", decl, re.DOTALL)
+        if m:
+            variables[m.group(1)] = m.group(2).strip()
+
+    def resolve(value: str) -> str:
+        for _ in range(3):      # 入れ子の var() も数段だけ辿る
+            def sub(m):
+                name = m.group(1).strip()
+                return variables.get(name, m.group(0))
+            new = re.sub(r"var\(\s*(--[\w-]+)\s*(?:,[^)]*)?\)", sub, value)
+            if new == value:
+                break
+            value = new
+        return value
+
+    for selector, decl in rules:
+        resolved = resolve(decl)
+        flat = re.sub(r"\s+", "", resolved).lower()
+        if _targets_disclaimer(selector):
             for hidden in HIDE_DECLS:
-                if hidden in decls:
+                if hidden in flat:
                     problems.append(f"併記（.site-disclaimer）を隠しています « {hidden} »")
-            if re.search(r"(display|visibility|opacity|font-size):var\(", decls):
-                problems.append("併記の表示指定に変数を使っています（隠せてしまう）")
-        # ★CSSから「文章」を生やせないようにする★（Codex 16巡目 (a)-2）
+            if re.search(r"(display|visibility|opacity|font-size|color|filter):var\(", flat):
+                problems.append(
+                    f"併記の表示指定に、中身の分からない変数を使っています « {decl[:40]} »")
+        # ★CSSから「文章」を生やせないようにする★
         #   箇条書きの記号（"— " など）は文字も数字も含まないので通す。
-        for cm in re.finditer(r'content:(?:"([^"]*)"|\'([^\']*)\')', decls):
-            value = cm.group(1) if cm.group(1) is not None else cm.group(2)
-            if re.search(r"[0-9A-Za-z぀-ヿ一-鿿]", value or ""):
-                problems.append(f"CSSから文字を生やしています « {sel[:30]} → {value[:30]} »")
+        if flat.startswith("content:"):
+            value = decl.split(":", 1)[1].strip()
+            if re.search(r"\b(var|attr|counter|counters)\s*\(", value):
+                problems.append(f"content に変数・属性を使っています « {selector[:30]} »")
+            for cm in re.finditer(r'"([^"]*)"|\'([^\']*)\'', value):
+                literal = cm.group(1) if cm.group(1) is not None else cm.group(2)
+                if re.search(r"[0-9A-Za-z぀-ヿ一-鿿]", literal or ""):
+                    problems.append(
+                        f"CSSから文字を生やしています « {selector[:30]} → {literal[:30]} »")
     return problems
 
 
@@ -757,10 +867,8 @@ def build() -> int:
         for name in (*ROOT_FILES, *GENERATED_HUBS):
             copy_file(work / name, NEXT / name)
 
-        for pattern in ("favicon.*", "apple-touch-icon*", "google*.html"):
-            for source in sorted(work.glob(pattern)):
-                if source.is_file():
-                    copy_file(source, NEXT / source.name)
+        for name in ROOT_ASSETS:
+            copy_file(work / name, NEXT / name)
 
         # ★ディレクトリ単位で許可しない★（Codex 13巡目 (a)-2）
         #   assets/img を丸ごと入れる方式だと、そこに置かれた
@@ -1065,19 +1173,16 @@ def _rebuild_check(root: Path, tamper) -> bool:
 
 
 def _preview_excluded(root: Path) -> bool:
-    """先行記事は sitemap・一覧から外し、載っていれば止めること。"""
+    """先行記事は sitemap から外す（一覧には載る）。載せたら止まること。"""
     _stage_ok(root)
-    # bbb を先行記事にする
+    # bbb を先行記事にする（ハブには両方載る／sitemap は aaa だけ）
     (root / "assets/data/machines.json").write_text(json.dumps(
         [{"slug": "aaa", "name": "機種aaa"},
          {"slug": "bbb", "name": "機種bbb", "status": "preview"}],
         ensure_ascii=False), encoding="utf-8")
-    links = '<a href="/machines/aaa/">x</a>'
-    for name in GENERATED_HUBS:
-        (root / name).write_text(f"<html><body>{links}</body></html>", encoding="utf-8")
     write_sitemap(root, "https://uchidokoro.com", ["aaa"])
     try:
-        audit(root, {"aaa", "bbb"})          # 先行記事を外した状態なら通る
+        audit(root, {"aaa", "bbb"})          # sitemap から外した状態なら通る
     except BuildError:
         return False
     write_sitemap(root, "https://uchidokoro.com", ["aaa", "bbb"])   # 載せたら止まる

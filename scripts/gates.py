@@ -1786,10 +1786,12 @@ def _project_machine(machine: dict, gates: dict, ctx: _Ctx) -> dict:
     # ★未知フィールドを黙って捨てない（Codex 22巡目 #3）★
     #   例:「strategy_note: 誤記のため公開禁止」のような注記が黙って消え、
     #   strategy だけが表示される事故を防ぐ。authoring 用の既知キーは列挙する。
-    for k in machine:
-        if k not in _MACHINE_KNOWN:
-            ctx.reject(f"machine.{k}", "未知フィールド（公開対象か判断できない）")
-            return out
+    # ★1件目で打ち切らず、未知フィールドは全部挙げてから止める★（Codex 17巡目 (b)-2）
+    unknown = [k for k in machine if k not in _MACHINE_KNOWN]
+    for k in unknown:
+        ctx.reject(f"machine.{k}", "未知フィールド（公開対象か判断できない）")
+    if unknown:
+        return out
     lim = machine.get("limit")
     if "limit" in machine and lim is not None and not (_is_num(lim) or isinstance(lim, dict)):
         ctx.reject("machine.limit", "limitが数値でも辞書でもない")

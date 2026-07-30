@@ -24,6 +24,7 @@ verify（5:05）/ auto-add（0:00）タスクからも呼ばれる想定。
 from __future__ import annotations
 import html as html_mod
 import json
+import os
 import re
 import sys
 import unicodedata
@@ -150,9 +151,10 @@ _ANY_TAG = re.compile(r"<[^>]+>")
 # 属性に入った文章（meta description・title・alt など）も検査対象にする
 # ★シングルクォートと、文章が入りうる属性を全部見る★（同 (a)-4）
 _ATTR_TEXT = re.compile(
-    r"(?:content|title|alt|aria-label|aria-description|aria-placeholder|"
-    r"aria-valuetext|aria-roledescription|placeholder|value|label|summary|data-note)"
-    r"""\s*=\s*(?:"([^"]*)"|'([^']*)')""", re.IGNORECASE)
+    r"(?:content|title|alt|aria-[\w-]+|placeholder|value|label|summary|data-[\w-]+)"
+    r"""\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>"']+))""", re.IGNORECASE)
+# data: URL は中身が読めないので、そもそも使わない（見つけたら止める）
+_DATA_URL = re.compile(r"""["'(]\s*data:[^"')\s]+""", re.IGNORECASE)
 # 見た目は同じでも検査を回避できる不可視文字（ゼロ幅・方向制御・不可視区切り）
 _INVISIBLE = re.compile(
     "[​-‏‪-‮⁠-⁤⁪-⁯﻿­᠎]")
@@ -169,7 +171,8 @@ def visible_text(html: str) -> str:
       インライン要素は詰めてつなぎ、ブロック要素だけ区切る。
       metaの中身はタグごと消えていたので、属性の文章を別に拾う。
     """
-    attrs = " ".join(a or b for a, b in _ATTR_TEXT.findall(html))
+    # ★属性はクォート無しと data-* も全部見る★（Codex 17巡目 (a)-5）
+    attrs = " ".join(a or b or c for a, b, c in _ATTR_TEXT.findall(html))
     # 集計の件数（データから毎回計算する数）は検査対象にしない
     body = _COUNT_SPAN.sub("", html)
     # ふりがな（rt/rp）は本文の間に挟まるので、中身ごと落としてから詰める
@@ -215,6 +218,10 @@ def hub_content_problems(built: dict, data_html: dict, *deny_pats) -> list:
                 bad.append(f"{f}: 機種一覧の描画が {n} 箇所あります（1箇所であるべき）")
                 continue
             rest = rest.replace(part, "\n", 1)
+        # ★data: URL は中身を読めない＝検査できない★（Codex 17巡目 (a)-5）
+        #   画像に文字を描いて埋め込む等ができるので、そもそも使わせない。
+        for hit in _DATA_URL.finditer(rest):
+            bad.append(f"{f}: data: URL は使えません « {hit.group(0)[1:40]} »")
         text = visible_text(rest)
         # ★語のかたまりではなく「数＋単位」の出現ごとに見る★
         #   日本語は空白で区切れないので、語単位だと文まるごとが1語になり
@@ -223,17 +230,33 @@ def hub_content_problems(built: dict, data_html: dict, *deny_pats) -> list:
             token = occ.group(0)
             if token in HUB_FIXED_NUMERALS:
                 continue
-            bad.append(f"{f}: 裏取りしていない数値 « {token} » … {_around(text, occ.start())}")
+            bad.append(f"{f}: 裏取りしていない数値 {_redact(token)} … {_around(text, occ.start())}")
         # ★数値の無い断定・損得の話も止める★（Codex 14巡目 (a)-5）
         #   散文には台帳が無いので、ゲートの禁止語・要判断語に当たったら公開しない。
         for label, pat in deny_pats:
             for hit in pat.finditer(text):
-                bad.append(f"{f}: {label} « {hit.group(0)} » … {_around(text, hit.start())}")
+                bad.append(f"{f}: {label} {_redact(hit.group(0))} … {_around(text, hit.start())}")
     return sorted(bad)
 
 
+def _in_ci() -> bool:
+    return os.environ.get("GITHUB_ACTIONS") == "true" or os.environ.get("CI") == "true"
+
+
+def _redact(s: str) -> str:
+    """当たった語そのものもCIでは伏せる（未公開の原文をログに出さない）。"""
+    return "（伏せ字）" if _in_ci() else f"« {s} »"
+
+
 def _around(text: str, pos: int, width: int = 24) -> str:
-    """どこで引っかかったか分かるように前後を少し出す（Codex 15巡目 (b)-3）。"""
+    """どこで引っかかったか分かるように前後を少し出す（Codex 15巡目 (b)-3）。
+
+    ★CI（GitHub Actions）では原文を出さない★（Codex 17巡目 (a)-6）
+      Actionsのログは公開されるので、未公開の原稿がそこに出てしまう。
+      CIでは位置だけ、手元では前後の文脈を出す。
+    """
+    if _in_ci():
+        return f"（{pos}文字目付近・原文はCIログに出しません）"
     s = text[max(0, pos - width):pos + width].replace("\n", " ").strip()
     return f"«…{s}…»"
 
@@ -275,7 +298,14 @@ def load_rows(source: "Path | None" = None):
 
 def yome(r) -> str:
     s = (r.get("strategy") or "").strip()
-    return s if s else "設定狙い向け（ゲーム数狙い非対応）"
+    if s:
+        return s
+    # ★先行記事（解析待ち）に分類を断定しない★（Codex 15巡目 (b)-1 / 17巡目 (b)-1）
+    #   狙い目が空なだけで「設定狙い向け」と書くと、まだ分からないことを断定してしまう。
+    #   一覧からは外さず（早見表は全機種の表なので）、書き方だけを正しくする。
+    if r.get("status") == "preview":
+        return "解析待ち（先行記事）"
+    return "設定狙い向け（ゲーム数狙い非対応）"
 
 
 def tenjo_disp(r) -> str:
@@ -564,17 +594,13 @@ def main(preview: bool = False):
     #     単位の集合がズレて「どちらかだけ通る」状態になっていた。
     #     いまは生成後HTMLに対する hub_content_problems() 1本で見る（散文も含まれる）。
 
-    # ★先行記事（解析待ち）は一覧に載せない★（Codex 15巡目 (b)-1）
-    #   preview 機種は strategy が空で、そのままだと
-    #   「設定狙い向け（ゲーム数狙い非対応）」という未確定の分類を断定してしまう。
+    # ★先行記事（解析待ち）は一覧に残すが、分類は断定しない★（Codex 17巡目 (b)-1）
+    #   早見表は「全機種の表」なので外すと件数が合わなくなる。
+    #   代わりに yome() が「解析待ち（先行記事）」を返す。sitemap には載せない。
     previews = [r for r in rows if r.get("status") == "preview"]
     if previews:
-        print(f"先行記事（解析待ち）{len(previews)} 機種は一覧から外します: "
+        print(f"先行記事（解析待ち）{len(previews)} 機種は「解析待ち」と表記します: "
               f"{[r['slug'] for r in previews]}")
-    rows = [r for r in rows if r.get("status") != "preview"]
-    if not rows:
-        print("★一覧に載せられる機種が1件もありません★")
-        return 1
 
     A = dataset_A(rows)
     C = dataset_C(rows)
@@ -706,7 +732,8 @@ def selftest() -> int:
 
     prose = "<html><body><p>この機種は天井200Gです</p></body></html>"
     t("散文に手書きした数値は止める",
-      any("200G" in x for x in hub_content_problems({"a.html": prose}, {}, *deny)))
+      any("裏取りしていない数値" in x
+          for x in hub_content_problems({"a.html": prose}, {}, *deny)))
 
     fixed = ('<html><body><p>G数でカウントする天井が1000G未満の機種は全'
              '<span class="list-count">49</span>機種です</p></body></html>')
@@ -732,7 +759,8 @@ def selftest() -> int:
 
     game = "<html><body><p>天井は200ゲームです</p></body></html>"
     t("「ゲーム」単位の数値も見つける",
-      any("200ゲーム" in x for x in hub_content_problems({"a.html": game}, {}, *deny)))
+      any("裏取りしていない数値" in x
+          for x in hub_content_problems({"a.html": game}, {}, *deny)))
 
     twice = f"<html><body>{listing}<p>説明</p>{listing}</body></html>"
     t("一覧が2回出たら止める（片方だけ除去して素通りさせない）",
@@ -742,7 +770,20 @@ def selftest() -> int:
 
     ctx = hub_content_problems({"a.html": "<html><body><p>天井は200Gです</p></body></html>"},
                                {}, *deny)
-    t("どこで引っかかったか前後が出る", ctx and "…" in ctx[0])
+    t("どこで引っかかったか位置が出る", ctx and "…" in ctx[0])
+    # ★CIでは原文をログに出さない★（Codex 17巡目 (a)-6）
+    _was = os.environ.get("CI")
+    os.environ["CI"] = "true"
+    try:
+        ci = hub_content_problems({"a.html": "<html><body><p>天井は200Gです</p></body></html>"},
+                                  {}, *deny)
+        t("CIでは原文を出さない",
+          ci and "200G" not in ci[0] and "伏せ字" in ci[0])
+    finally:
+        if _was is None:
+            os.environ.pop("CI", None)
+        else:
+            os.environ["CI"] = _was
 
     # --- Codex 16巡目 (a)-4 の反例 ---
     z = "​"

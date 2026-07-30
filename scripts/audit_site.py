@@ -813,13 +813,16 @@ def check_27_hub_counts(machines: list) -> list[str]:
         rows.append(dict(
             unit=c.get("unit"),
             limit=_lim,
+            # ★status を入れ忘れていて preview 除外が効いていなかった★（Codex 17巡目 (b)-1）
+            status=m.get("status", "complete"),
             has_suru=bool(c.get("hasSuru") or "suru" in modes or "through" in modes),
             has_cycle=bool(c.get("hasCycle") or "cycle" in modes),
             ncau=ncau,
             rcau=(_mode_conf(c, "reset") or {}).get("caution"),
         ))
-    # ★先行記事は一覧に載せない（build_hub_pages と揃える）★（Codex 16巡目 (b)-1）
-    ALL = [r for r in rows if r.get("status") != "preview"]
+    # ★先行記事も早見表には載る（build_hub_pages と揃える）★（Codex 17巡目 (b)-1）
+    #   分類の断定は yome() 側で避ける。sitemap にだけ載せない。
+    ALL = rows
     A = [r for r in rows
          if r["unit"] == "G" and isinstance(r["limit"], (int, float))
          and not r["has_cycle"] and r["limit"] < 1000

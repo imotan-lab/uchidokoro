@@ -86,11 +86,14 @@ jobs:
       - name: Repository audits
         shell: bash
         run: |
-          set -euo pipefail
-          # ★引数なしの gates.py は説明を出すだけなので実質何も検査していなかった★
-          #   （Codex 16巡目 (b)-2）実データに対する検査は crosscheck が担当する。
-          python scripts/crosscheck_gates.py
-          python scripts/audit_site.py
+          # ★片方が落ちても両方走らせて、まとめて結果を出す★（Codex 17巡目 (b)-2）
+          #   set -e だと先に落ちた時点で残りが実行されず、直すべき点が1回で分からない。
+          set -uo pipefail
+          rc=0
+          # 引数なしの gates.py は説明を出すだけなので実データ検査は crosscheck が担当（16巡目 (b)-2）
+          python scripts/crosscheck_gates.py || rc=1
+          python scripts/audit_site.py || rc=1
+          exit "$rc"
 
       - name: Build from an empty artifact directory
         shell: bash

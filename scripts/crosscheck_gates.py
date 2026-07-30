@@ -281,7 +281,7 @@ def run() -> int:
 
     print(f"公開できた機種: {published} / 止まった機種: {blocked}（想定 {expected_public}）")
     print(f"独立監査の違反: {len(problems)} 件")
-    for p in problems[:30]:
+    for p in problems:   # ★打ち切らない★（Codex 17巡目 (b)-2）
         print("  ✗", p)
     return 1 if problems else 0
 
