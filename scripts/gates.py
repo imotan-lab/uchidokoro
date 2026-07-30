@@ -1764,6 +1764,10 @@ _MACHINE_TYPES = {
     "tenjo_display": str, "release_date": str, "confirmed_at": str,
     "aliases": list, "sources": list, "seo": dict, "original": dict,
     "strategyByRate": dict, "checker": dict,
+    # ★機種の型式（identity v2・2026-07-30）★
+    #   メーカーIDと型式コードで「同じ台」を決める。これが未知フィールド扱いだと、
+    #   machines.json に足した途端に公開射影が全機種を拒否する。
+    "identity": dict,
 }
 # authoring 側に存在してよいキー（公開射影に出さないものも含む）。
 #   lifecycle/checker_modes … Phase 1 の状態軸
@@ -2253,6 +2257,23 @@ def selftest() -> int:
                          "checker_kill_switch": "true"})["checker"])
     t("★予約キーをmode名にできない",
       not compute_gates({**base, "checker_modes": {"unit": "VERIFIED"}})["checker"])
+    # -------- identity v2（2026-07-30・Codex指摘 穴4）
+    #   machines.json に identity を足した途端、未知フィールド扱いで
+    #   **全機種の公開射影が拒否される**状態だった。
+    t("★identity を持つ機種が未知フィールドで拒否されない★",
+      _pv({**base, "identity": {"manufacturer_id": "kitadenshi",
+                                "regulatory_model_code": "SテストKA"}}
+          )["machine"].get("slug") == base["slug"])
+    def _blocked(m):
+        """公開射影が止まること（例外でも空射影でも「止まった」とみなす）。"""
+        try:
+            return _pv(m)["machine"] == {}
+        except GateError:
+            return True
+    t("　identity 以外の未知フィールドは今までどおり拒否する",
+      _blocked({**base, "identity_note": "メモ"}))
+    t("　identity が辞書でなければ拒否する",
+      _blocked({**base, "identity": "kitadenshi"}))
 
     # ===== 複合断定（第3版の主眼）=====
     led_kv = {atom_id("期待値", "legacy_safe"): {"verdict": ALLOW}}

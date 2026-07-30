@@ -162,9 +162,18 @@ def evidence_violations(ev, where: str = "evidence") -> list:
     if not isinstance(mi, dict):
         v.append(f"{where}.machine_identity: 辞書でない")
     else:
-        for k in ("manufacturer_id", "regulatory_model_code", "release_date"):
+        # ★発売日は必須にしない★（identity v2・2026-07-30）
+        #   発売日は物理的な型式の不変の識別子ではない（先行導入・全国導入・
+        #   再販で揺れる）。必須にすると、同じ型式でも出典が日付を書いていない
+        #   だけで証拠が丸ごと無効になる。台の同定は2項目で足りる。
+        #   発売日は「表示するための別の事実」として扱う。
+        for k in ("manufacturer_id", "regulatory_model_code"):
             if not isinstance(mi.get(k), str) or not mi[k].strip():
                 v.append(f"{where}.machine_identity.{k}: 空にできない")
+        # 書いてあるなら空文字は認めない（書いた以上は値であること）
+        for k in ("market_release_date", "release_date"):
+            if k in mi and (not isinstance(mi[k], str) or not mi[k].strip()):
+                v.append(f"{where}.machine_identity.{k}: 書くなら空にできない")
 
     # --- ★指紋が中身と一致すること★（後から中身を書き換えたら落ちる）
     if ev.get("evidence_sha256") != content_sha256(ev):
@@ -281,6 +290,29 @@ def selftest() -> int:
     def t(name, cond):
         results.append((name, bool(cond)))
         print(("✅" if cond else "❌") + " " + name)
+
+    # -------- identity v2（2026-07-30・Codex指摘 穴5）
+    t("★発売日が無くても証拠として成立する（台の同定は2項目）★",
+      validate_evidence(_mk(machine_identity={
+          "manufacturer_id": "test-maker",
+          "regulatory_model_code": "TEST-001"})) is None)
+    def _bad_ident(**mi):
+        """同定情報が不正なら例外で止まること（戻り値ではなく例外で表す）。"""
+        try:
+            validate_evidence(_mk(machine_identity=mi))
+            return False
+        except EvidenceError:
+            return True
+    t("★メーカーか型式が欠けたら証拠にしない★",
+      _bad_ident(manufacturer_id="test-maker")
+      and _bad_ident(regulatory_model_code="TEST-001"))
+    t("★発売日を書くなら空にはできない（書いた以上は値であること）★",
+      _bad_ident(manufacturer_id="test-maker",
+                 regulatory_model_code="TEST-001",
+                 market_release_date="   ")
+      and _bad_ident(manufacturer_id="test-maker",
+                     regulatory_model_code="TEST-001",
+                     release_date=""))
 
     def raises(fn):
         try:

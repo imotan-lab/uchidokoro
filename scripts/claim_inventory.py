@@ -37,8 +37,10 @@ import claim_ledger as cl  # noqa: E402
 
 DATA = os.path.join(BASE, "assets", "data")
 OUT_DIR = os.path.join(DATA, "claim-inventory")
-GENERATOR_VERSION = "claim_inventory/1.0.0"
-SCHEMA_VERSION = "claim-inventory/v1"
+# ★1.1.0 / v2：枠に claim_key を必須化した（出力契約の変更）★
+#   古い在庫ファイルには claim_key が無く、読み手が黙って0件と数えてしまう。
+GENERATOR_VERSION = "claim_inventory/1.1.0"
+SCHEMA_VERSION = "claim-inventory/v2"
 
 # ---------------------------------------------------------------- ラベル辞書
 # ★有限の辞書だけで型に落とす。未知ラベルは推測せず unclassified へ送る★
