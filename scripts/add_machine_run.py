@@ -32,6 +32,7 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
 
 import build_new_article as _ba       # noqa: E402
+import ceiling_lookup as _cl         # noqa: E402
 import directory_index as _di         # noqa: E402
 import model_code_lookup as _mc       # noqa: E402
 import new_machine_watch as _nw       # noqa: E402
@@ -93,6 +94,11 @@ def gather(name: str) -> dict:
     if not mv["adopted"]:
         got["problems"].append("型式名: " + str(mv.get("why", ""))[:160])
     got["material"] = _sl.compare([_sl.read_page(u, name) for u in got["urls"]])
+    # ★天井は一式で採る★（値だけ先に載せない）
+    got["material"]["ceilings"] = _cl.compare(
+        [_cl.read_page(u, name) for u in got["urls"]])
+    for nt in got["material"]["ceilings"]["need_third"]:
+        got["problems"].append(f"{nt['jp']}: {nt['why']}")
     return got
 
 

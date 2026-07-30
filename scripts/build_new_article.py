@@ -126,6 +126,24 @@ def build_detail(slug, name, release, material) -> dict:
         facts.append(["機械割", f"{v['low']}%〜{v['high']}%"])
 
     sections = []
+    # ★天井・恩恵★（一式で採れたものだけ。値だけでは載せない）
+    ceil = (material.get("ceilings") or {}).get("adopted") or []
+    if ceil:
+        body = []
+        for c in ceil:
+            jp = {"GAME": "ゲーム数天井", "CYCLE": "周期天井",
+                  "POINT": "ポイント天井"}.get(c["kind"], "天井")
+            counted = f"（{c['counted']}を数えます）" if c.get("counted") else ""
+            body.append(f"**{jp}**：{c['amount']}{c['unit']}{counted} "
+                        f"／ 恩恵：{c['benefit']}")
+        body.append("出典2件で一致した内容だけを載せています。"
+                    "確認が取れていない天井は掲載していません。")
+        sections.append({"title": "天井・恩恵", "body": body})
+        for c in ceil:
+            jp = {"GAME": "ゲーム数天井", "CYCLE": "周期天井",
+                  "POINT": "ポイント天井"}.get(c["kind"], "天井")
+            facts.append([jp, f"{c['amount']}{c['unit']}"])
+
     spec_body = [f"**機種名**：{name}"]
     if release:
         spec_body.append(f"**登場予定**：{_fmt_release(release)}")
