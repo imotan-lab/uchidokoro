@@ -47,6 +47,8 @@ _SLUG_OK = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
 LEAD_TEMPLATE = ("{name}は{release}に登場予定の機種です。"
                  "現時点で当サイトが出典を確認できた項目だけを掲載しています。"
                  "天井・狙い目などは、確認が取れ次第このページに追記します。")
+LEAD_NO_DATE = ("{name}のページです。登場時期は当サイトでは確認できていません。"
+                "現時点で出典を確認できた項目だけを掲載しています。")
 ROLE_SECTION = {
     "title": "このページの役割",
     "body": ["導入前のため、掲載しているのは**出典で確認が取れた項目だけ**です。",
@@ -57,8 +59,9 @@ ROLE_SECTION = {
 RUMOR_SECTION = {
     "title": "噂・未確定情報",
     "type": "rumor",
-    "body": ["現時点で当サイトが確認した噂はありません。"
-             "**噂・公式未確認**の情報は、確認できるまで掲載しません。"],
+    # ★「噂はありません」と書かない★（Codex指摘5）
+    #   噂を調べていないのに「無い」と書くのは、確認していないことの断定になる。
+    "body": ["**噂・公式未確認**の情報は、当サイトで確認が取れるまで掲載しません。"],
 }
 
 
@@ -97,8 +100,12 @@ def build_machine(slug, name, maker, official_url, release, material) -> dict:
     return {
         "slug": slug,
         "name": name,
-        "seo": {"title": f"{name} 天井・狙い目"},
-        "info": "スマスロAT",
+        # ★未確認のことを固定値で書かない★（Codex指摘5・自分で確認）
+        #   以前は全機種を「スマスロAT」とし、SEOタイトルも「天井・狙い目」と
+        #   していた。AT機でない新台を処理した時点で明確な誤情報になるし、
+        #   天井を1つも載せていないのに「天井」と名乗るのもおかしい。
+        "seo": {"title": f"{name} スペック・基本情報"},
+        "info": "",
         # ★狙い目は当サイトの判断なので、確認が取れるまで空にしない・書かない★
         "strategy": "",
         "aliases": [],
@@ -146,7 +153,9 @@ def build_detail(slug, name, release, material) -> dict:
     return {
         "slug": slug,
         "updated": date.today().isoformat(),
-        "lead": LEAD_TEMPLATE.format(name=name, release=_fmt_release(release) or "近日"),
+        # ★導入月が分からないなら「登場予定です」と書かない★（Codex指摘5）
+        "lead": (LEAD_TEMPLATE.format(name=name, release=_fmt_release(release))
+                 if release else LEAD_NO_DATE.format(name=name)),
         "summaryBoxes": [],
         "factTable": facts,
         "sections": sections,
@@ -161,13 +170,34 @@ def apply(slug, machine, detail) -> list:
     dp = os.path.join(DETAILS, f"{slug}.json")
     if os.path.isfile(dp):
         raise BuildError(f"{dp} がすでにあります（上書きしません）")
+    # ★2つのファイルを「そろって」書く★（Codex指摘6・自分で確認）
+    #   以前は machines.json を先に書き、そのあと記事を書いていた。
+    #   後者で失敗すると**一覧にだけ機種がある**中途半端な状態が残る。
+    #   いったん別名で書き、両方そろってから置き換える。
+    #   片方の置き換えで失敗したら、もう片方を元に戻す。
     rows.append(machine)
-    with open(MACHINES, "w", encoding="utf-8", newline=chr(10)) as f:
-        json.dump(rows, f, ensure_ascii=False, indent=1)
-        f.write(chr(10))
-    with open(dp, "w", encoding="utf-8", newline=chr(10)) as f:
-        json.dump(detail, f, ensure_ascii=False, indent=1)
-        f.write(chr(10))
+    tmp_m, tmp_d = MACHINES + ".new", dp + ".new"
+    backup = None
+    try:
+        for path, data in ((tmp_m, rows), (tmp_d, detail)):
+            with open(path, "w", encoding="utf-8", newline=chr(10)) as f:
+                json.dump(data, f, ensure_ascii=False, indent=1)
+                f.write(chr(10))
+        backup = MACHINES + ".bak"
+        os.replace(MACHINES, backup)
+        try:
+            os.replace(tmp_m, MACHINES)
+            os.replace(tmp_d, dp)
+        except Exception:
+            os.replace(backup, MACHINES)      # ★元に戻す★
+            backup = None
+            raise
+    finally:
+        for t in (tmp_m, tmp_d):
+            if os.path.exists(t):
+                os.remove(t)
+        if backup and os.path.exists(backup):
+            os.remove(backup)
     return [MACHINES, dp]
 
 
