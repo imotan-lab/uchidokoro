@@ -59,6 +59,7 @@ except Exception:
 BASE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE / "scripts"))
 from ci_safe import redact as _redact   # noqa: E402  ★CIでは原文を出さない★
+import safe_json as _sj                 # noqa: E402  ★壊れた入力は診断で止める★
 
 # ★ビルドの出力は監査の対象外★（2026-07-30）
 #   .preview-site/ は公開されない写し（全ページ noindex・robots全面Disallow）、
@@ -88,7 +89,8 @@ def load_text(path: Path) -> str:
 
 
 def load_json(path: Path):
-    return json.loads(path.read_text(encoding="utf-8"))
+    """★壊れた入力は診断で止める★（Codex 閉鎖条件5）"""
+    return _sj.read_json(path)
 
 
 def check_1_inline_style(machines: list) -> list[str]:
@@ -950,7 +952,11 @@ CHECKS = [
 
 
 def main():
-    machines = load_json(BASE / "assets" / "data" / "machines.json")
+    try:
+        machines = load_json(BASE / "assets" / "data" / "machines.json")
+    except _sj.SafeJsonError as e:
+        print(f"★機種データが読めません: {e}★")
+        sys.exit(1)
     out_json = "--json" in sys.argv
     results = {}
     total_ng = 0
