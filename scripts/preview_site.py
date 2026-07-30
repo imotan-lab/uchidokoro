@@ -24,6 +24,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 from pathlib import Path
@@ -59,6 +60,23 @@ class PreviewError(RuntimeError):
     pass
 
 
+def assert_not_linked(path: Path) -> None:
+    """★写しの置き場所（と、その親）がリンクでないこと★
+
+    （2026-07-30・Codex 28巡目 条件7）
+      `.preview-site` を `_site` へのリンクにすると、`--preview` から
+      裏取り前のデータを公開用の置き場へ書き込めてしまう。
+      `resolve()` してから比べる方式では、この付け替えを拒否できない。
+    """
+    cur = path
+    while True:
+        if cur.is_symlink() or (os.name == "nt" and cur.exists() and cur.is_junction()):
+            raise PreviewError(f"写しの置き場所にリンクがあります: {cur}")
+        if cur.parent == cur or cur == BASE:
+            break
+        cur = cur.parent
+
+
 def assert_inside(path: Path, root: Path = PREVIEW_DIR) -> Path:
     """path が root の中であることを確かめる。外なら書かせない（fail-closed）。"""
     rp = Path(path).resolve()
@@ -70,6 +88,7 @@ def assert_inside(path: Path, root: Path = PREVIEW_DIR) -> Path:
 
 def clean() -> None:
     """写しをまっさらにする。★.preview-site 以外は絶対に消さない★"""
+    assert_not_linked(PREVIEW_DIR)
     target = PREVIEW_DIR.resolve()
     if target.name != ".preview-site" or target.parent != BASE.resolve():
         raise PreviewError(f"想定外の場所を消そうとしました: {target}")
@@ -148,6 +167,7 @@ def mark(html: str) -> str:
 
 def write_html(rel_path: str, html: str) -> Path:
     """写しの中へHTMLを1枚書く（必ず mark を通す）。"""
+    assert_not_linked(PREVIEW_DIR)
     out = assert_inside(PREVIEW_DIR / rel_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(mark(html), encoding="utf-8", newline="\n")
@@ -160,6 +180,7 @@ def ensure_scaffold() -> None:
     何度呼んでも壊れない（消さずに上書きする）。まっさらにしたい時は clean() を先に呼ぶ。
     ★ここでコピーするのは authoring のデータ★＝裏取り前の内容。だから写しにしか置かない。
     """
+    assert_not_linked(PREVIEW_DIR)      # ★書く前に必ず確かめる★
     PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
 
     (PREVIEW_DIR / "robots.txt").write_text(ROBOTS_TXT, encoding="utf-8", newline="\n")
