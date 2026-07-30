@@ -481,7 +481,56 @@ def insert_disclaimer(html_out: str, machine: dict) -> str:
     return html_out
 
 
-def main(preview: bool = False, out_dir: str | None = None):
+def render_all(source_root: Path) -> tuple[dict, list, list]:
+    """公開用の機種ページを**描くだけ**（書き込みはしない）。
+
+    ★条件7の設計★（2026-07-30・Codex 23巡目）
+      公開HTMLを書けるのは build_pages_artifact.py だけにするため、
+      ここは `{相対パス: HTML}` を返す純粋な描画関数にする。
+
+    source_root : 公開データ（assets/data/public/）を含む作業ツリー
+    戻り値      : (作ったページ, 準備中に置き換える機種, 作れなかった機種)
+    """
+    sys.path.insert(0, str(BASE / "scripts"))
+    import safe_json as _sj
+
+    pub_dir = source_root / "assets" / "data" / "public"
+    pub_file = pub_dir / "machines.public.json"
+    pub_details = pub_dir / "machine-details"
+    if not pub_file.is_file() or not pub_details.is_dir():
+        raise RuntimeError(f"公開データがありません: {pub_file}")
+
+    machines_all = _sj.read_rows(source_root / "assets" / "data" / "machines.json")
+    pub_rows = _sj.read_rows(pub_file)
+    public_by_slug = {r["slug"]: r for r in pub_rows
+                      if isinstance(r.get("slug"), str) and r["slug"]}
+
+    template = prepare_template((source_root / "machine.html").read_text(encoding="utf-8"))
+    reasons = extract_pochipochi_reasons(template)
+
+    pages: dict = {}
+    blocked: list = []
+    broken: list = []
+    for m in machines_all:
+        slug = m.get("slug")
+        if not isinstance(slug, str) or not slug:
+            broken.append(str(m)[:20])
+            continue
+        if slug not in public_by_slug:
+            blocked.append(slug)
+            pages[f"machines/{slug}/index.html"] = PLACEHOLDER_HTML
+            continue
+        dp = pub_details / f"{slug}.json"
+        detail = _sj.read_json(dp, expect=dict, allow_missing=True, default=None)
+        try:
+            pages[f"machines/{slug}/index.html"] = render_page(
+                template, public_by_slug[slug], detail, reasons, pochipochi_public=False)
+        except Exception as e:
+            broken.append(f"{slug}: {type(e).__name__}: {e}")
+    return pages, blocked, broken
+
+
+def main(preview: bool = False):
     """preview=True のときは .preview-site/ にだけ書く（公開されない写し）。
 
     ★2026-07-30・移行手順2で --allow-ungated を廃止した★
@@ -493,32 +542,16 @@ def main(preview: bool = False, out_dir: str | None = None):
     import preview_site as _pv
 
 
-    # ★公開物はリポジトリ直下に書かない★（2026-07-30・Codex 22巡目 条件7）
-    #   ここが直接 machines/{slug}/index.html を書けると、
-    #   「公開物の書込み経路は artifact 1本」と言えない（ブランチ直配信が生きている間は特に）。
-    #   公開用の書き出しは build_pages_artifact.py が --out で置き場所を渡す時だけ許す。
-    if preview:
-        out_root = _pv.PREVIEW_DIR
-    elif out_dir:
-        out_root = Path(out_dir)
-        # ★リポジトリの中は書き先にできない★（Codex 23巡目 (a)-3）
-        #   `--out .` を許すと、artifact監査を通らずに公開物を上書きできてしまう。
-        try:
-            _resolved = out_root.resolve()
-            _base = BASE.resolve()
-            if _resolved == _base or _base in _resolved.parents:
-                print("★リポジトリの中には書き出せません★")
-                print(f"  指定された場所: {_resolved}")
-                print("  公開物は build_pages_artifact.py が一時領域に作ります。")
-                return 1
-        except OSError as e:
-            print(f"★書き出し先を確かめられません: {e}★")
-            return 1
-    else:
+    # ★公開物を書けるのは build_pages_artifact.py だけ★
+    #   （2026-07-30・Codex 23巡目 条件7の設計）
+    #   ここは「描くだけ」にし、公開用の書き込み口を持たない。
+    #   写し（.preview-site/）への書き出しだけを残す。
+    if not preview:
         print("★公開用のHTMLはここからは作れません★")
-        print("  公開物は build_pages_artifact.py が作ります（--out で置き場所を渡します）。")
+        print("  公開物は build_pages_artifact.py が組み立てます（render_all を呼びます）。")
         print("  裏取り前の内容を見たいだけなら --preview を付けてください。")
         return 1
+    out_root = _pv.PREVIEW_DIR
     # 機種の一覧（＝ページを持ちうるslugの全体）は authoring から取る。
     # 公開が止まった機種にも「準備中」ページを置き換えるために必要。
     machines = json.loads((BASE / "assets" / "data" / "machines.json").read_text(encoding="utf-8"))
@@ -686,7 +719,5 @@ if __name__ == "__main__":
     _p = _ap.ArgumentParser()
     _p.add_argument("--preview", action="store_true",
                     help="公開されない写し（.preview-site/）にだけ書き出す")
-    _p.add_argument("--out", default=None,
-                    help="公開用の書き出し先（build_pages_artifact.py が渡す）")
     _a = _p.parse_args()
-    raise SystemExit(main(_a.preview, _a.out) or 0)
+    raise SystemExit(main(_a.preview) or 0)

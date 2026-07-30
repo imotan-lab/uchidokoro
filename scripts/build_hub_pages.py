@@ -563,113 +563,15 @@ def build_page(file, prose, data_html):
     return "\n".join(parts)
 
 
-def main(preview: bool = False, out_dir: str | None = None):
-    """preview=True のときは .preview-site/ にだけ書く（公開されない写し）。
+def _meta_len_of(file: str, prose_all: dict) -> str:
+    """そのページの meta description（長さの確認用）。"""
+    key = {"guide-tenjo-ranking.html": "tenjo", "guide-reset-ranking.html": "reset",
+           "guide-suru-tenjo.html": "suru", "guide-ichiran.html": "ichiran"}.get(file, "")
+    return (prose_all.get(key) or {}).get("meta_description", "")
 
-    ★2026-07-30・移行手順2で --allow-ungated を廃止した★（理由は build_machine_pages.py 参照）
-    """
-    # ★★ハブ4ページもゲート外だった★★（Codex 10巡目 (a)-4）
-    #   tenjo_display / strategy / checker閾値 をそのままランキングHTMLへ出すので、
-    #   誤った値を書いて本スクリプトを回せば公開ゲートを通らず公開される。
-    import sys as _sys
-    _sys.path.insert(0, str(BASE / "scripts"))
-    import build_public_data as _bpd
-    import preview_site as _pv
 
-    # ★公開物はリポジトリ直下に書かない★（2026-07-30・Codex 22巡目 条件7）
-    #   ここが直接 machines/{slug}/index.html を書けると、
-    #   「公開物の書込み経路は artifact 1本」と言えない（ブランチ直配信が生きている間は特に）。
-    #   公開用の書き出しは build_pages_artifact.py が --out で置き場所を渡す時だけ許す。
-    if preview:
-        out_root = _pv.PREVIEW_DIR
-    elif out_dir:
-        out_root = Path(out_dir)
-        # ★リポジトリの中は書き先にできない★（Codex 23巡目 (a)-3）
-        #   `--out .` を許すと、artifact監査を通らずに公開物を上書きできてしまう。
-        try:
-            _resolved = out_root.resolve()
-            _base = BASE.resolve()
-            if _resolved == _base or _base in _resolved.parents:
-                print("★リポジトリの中には書き出せません★")
-                print(f"  指定された場所: {_resolved}")
-                print("  公開物は build_pages_artifact.py が一時領域に作ります。")
-                return 1
-        except OSError as e:
-            print(f"★書き出し先を確かめられません: {e}★")
-            return 1
-    else:
-        print("★公開用のHTMLはここからは作れません★")
-        print("  公開物は build_pages_artifact.py が作ります（--out で置き場所を渡します）。")
-        print("  裏取り前の内容を見たいだけなら --preview を付けてください。")
-        return 1
-    try:
-        gate_on = _bpd.claim_gate_enabled()
-    except Exception as e:
-        if not preview:
-            print(f"★出典の裏取りゲートの設定が読めません: {e}")
-            return 1
-        print(f"（写し）出典の裏取りゲートの設定が読めません: {e} — 全機種を写します")
-        gate_on = False
-    if preview:
-        # 写しは裏取り前の内容を見るためのもの。止めずに全機種を出す。
-        rows = load_rows()
-        _pv.ensure_scaffold()
-        print(f"☆写しを作ります（公開されません）: {out_root.name}/ ☆")
-        gate_on = False
-    elif gate_on:
-        # ★一覧も公開データから作る★（Codex 13巡目 (a)-1）
-        pub_file = BASE / "assets" / "data" / "public" / "machines.public.json"
-        if not pub_file.is_file():
-            print("★公開データがありません（先に build_public_data.py --apply を実行）★")
-            print(f"  期待した場所: {pub_file}")
-            return 1
-        try:
-            rows = load_rows(pub_file)
-        except Exception as e:
-            print(f"★公開データが読めません: {e}")
-            return 1
-        import claim_reconcile as _cr
-        blocked = []
-        for r in rows:
-            try:
-                ok, why = _cr.publish_gate(r.get("slug"))
-            except Exception as e:
-                ok, why = False, [f"検査が例外で失敗: {e}"]
-            if not ok:
-                blocked.append((r.get("slug"), why))
-        if blocked:
-            print(f"出典の裏取りゲート: ★有効★ → {len(blocked)} 機種を一覧から外します")
-            for s_, why in blocked:
-                for ln in (why or []):   # ★全理由を出す★（Codex 11巡目 (b)-1）
-                    print(f"  ✗ {s_}: {ln}")
-            ng = {s for s, _ in blocked}
-            rows = [r for r in rows if r.get("slug") not in ng]
-        # ★★空の一覧を成功として書き出さない★★（Codex 11巡目 (b)-5）
-        if not rows:
-            print("★公開できる機種が1件も無いのでハブ4ページは作りません★")
-            return 1
-    else:
-        print("★出典の裏取りゲートが無効なので公開用のハブ4ページは作りません★")
-        print("  裏取り前の内容を確かめたいなら --preview を付けてください")
-        print("  （.preview-site/ にだけ書き出します。公開されません）")
-        return 1
-    prose_all = json.loads(PROSE.read_text(encoding="utf-8"))
-    # ★★固定文に埋まった数値もゲートの外だった★★（Codex 11巡目 (a)-3）
-    #   一覧から機種を外しても「うみねこ2は200G」等の記述は本文に残る。
-    #   ゲート有効時は、単位つきの数値を含む固定文を出さない。
-    #   ★検査器は1本にした★（Codex 16巡目 (a)-4）
-    #     入力（hub_prose.json）と生成後HTMLで別々の検出器を持っていたため、
-    #     単位の集合がズレて「どちらかだけ通る」状態になっていた。
-    #     いまは生成後HTMLに対する hub_content_problems() 1本で見る（散文も含まれる）。
-
-    # ★先行記事（解析待ち）は一覧に残すが、分類は断定しない★（Codex 17巡目 (b)-1）
-    #   早見表は「全機種の表」なので外すと件数が合わなくなる。
-    #   代わりに yome() が「解析待ち（先行記事）」を返す。sitemap には載せない。
-    previews = [r for r in rows if r.get("status") == "preview"]
-    if previews:
-        print(f"先行記事（解析待ち）{len(previews)} 機種は「解析待ち」と表記します: "
-              f"{[r['slug'] for r in previews]}")
-
+def _build_pages(rows: list, prose_all: dict) -> tuple:
+    """機種データと散文から、ハブ4ページのHTMLを組み立てる（書き込みはしない）。"""
     # ランキング系は先行記事を除く（未確定の数値で順位を付けない）
     ranked = [r for r in rows if r.get("status") != "preview"]
     A = dataset_A(ranked)
@@ -747,6 +649,127 @@ def main(preview: bool = False, out_dir: str | None = None):
     #   「1000G未満」「スルーN回」などの数値は検査を素通りしていた。
     built = {f: build_page(f, prose, data_html)
              for f, (prose, data_html) in pages.items()}
+    return built, {f: d for f, (_p, d) in pages.items()}
+
+
+def render_all(source_root: "Path") -> dict:
+    """公開用のハブ4ページを**描くだけ**（書き込みはしない）。
+
+    ★条件7の設計★（2026-07-30・Codex 23巡目）
+    """
+    import sys as _s
+    _s.path.insert(0, str(BASE / "scripts"))
+    import gates as _g
+    import safe_json as _sj
+
+    pub = source_root / "assets" / "data" / "public" / "machines.public.json"
+    if not pub.is_file():
+        raise RuntimeError(f"公開データがありません: {pub}")
+    rows = load_rows(pub)
+    prose_all = _sj.read_json(source_root / "scripts" / "hub_prose.json", expect=dict)
+    built, data_html = _build_pages(rows, prose_all)
+    bad = hub_content_problems(built, data_html,
+                               ("公開できない表現", _g.ABSOLUTE_DENY_PAT),
+                               ("要人手確認の語（損得・設定の話）", _g.RISK_PAT),
+                               prose_all=prose_all)
+    if bad:
+        raise RuntimeError("ハブに出せない内容があります:\n  " + "\n  ".join(bad))
+    return built
+
+
+def main(preview: bool = False):
+    """preview=True のときは .preview-site/ にだけ書く（公開されない写し）。
+
+    ★2026-07-30・移行手順2で --allow-ungated を廃止した★（理由は build_machine_pages.py 参照）
+    """
+    # ★★ハブ4ページもゲート外だった★★（Codex 10巡目 (a)-4）
+    #   tenjo_display / strategy / checker閾値 をそのままランキングHTMLへ出すので、
+    #   誤った値を書いて本スクリプトを回せば公開ゲートを通らず公開される。
+    import sys as _sys
+    _sys.path.insert(0, str(BASE / "scripts"))
+    import build_public_data as _bpd
+    import preview_site as _pv
+
+    # ★公開物はリポジトリ直下に書かない★（2026-07-30・Codex 22巡目 条件7）
+    #   ここが直接 machines/{slug}/index.html を書けると、
+    #   「公開物の書込み経路は artifact 1本」と言えない（ブランチ直配信が生きている間は特に）。
+    #   公開用の書き出しは build_pages_artifact.py が --out で置き場所を渡す時だけ許す。
+    # ★公開物を書けるのは build_pages_artifact.py だけ★（Codex 23巡目 条件7）
+    if not preview:
+        print("★公開用のハブ4ページはここからは作れません★")
+        print("  公開物は build_pages_artifact.py が組み立てます。")
+        print("  裏取り前の内容を見たいだけなら --preview を付けてください。")
+        return 1
+    out_root = _pv.PREVIEW_DIR
+    try:
+        gate_on = _bpd.claim_gate_enabled()
+    except Exception as e:
+        if not preview:
+            print(f"★出典の裏取りゲートの設定が読めません: {e}")
+            return 1
+        print(f"（写し）出典の裏取りゲートの設定が読めません: {e} — 全機種を写します")
+        gate_on = False
+    if preview:
+        # 写しは裏取り前の内容を見るためのもの。止めずに全機種を出す。
+        rows = load_rows()
+        _pv.ensure_scaffold()
+        print(f"☆写しを作ります（公開されません）: {out_root.name}/ ☆")
+        gate_on = False
+    elif gate_on:
+        # ★一覧も公開データから作る★（Codex 13巡目 (a)-1）
+        pub_file = BASE / "assets" / "data" / "public" / "machines.public.json"
+        if not pub_file.is_file():
+            print("★公開データがありません（先に build_public_data.py --apply を実行）★")
+            print(f"  期待した場所: {pub_file}")
+            return 1
+        try:
+            rows = load_rows(pub_file)
+        except Exception as e:
+            print(f"★公開データが読めません: {e}")
+            return 1
+        import claim_reconcile as _cr
+        blocked = []
+        for r in rows:
+            try:
+                ok, why = _cr.publish_gate(r.get("slug"))
+            except Exception as e:
+                ok, why = False, [f"検査が例外で失敗: {e}"]
+            if not ok:
+                blocked.append((r.get("slug"), why))
+        if blocked:
+            print(f"出典の裏取りゲート: ★有効★ → {len(blocked)} 機種を一覧から外します")
+            for s_, why in blocked:
+                for ln in (why or []):   # ★全理由を出す★（Codex 11巡目 (b)-1）
+                    print(f"  ✗ {s_}: {ln}")
+            ng = {s for s, _ in blocked}
+            rows = [r for r in rows if r.get("slug") not in ng]
+        # ★★空の一覧を成功として書き出さない★★（Codex 11巡目 (b)-5）
+        if not rows:
+            print("★公開できる機種が1件も無いのでハブ4ページは作りません★")
+            return 1
+    else:
+        print("★出典の裏取りゲートが無効なので公開用のハブ4ページは作りません★")
+        print("  裏取り前の内容を確かめたいなら --preview を付けてください")
+        print("  （.preview-site/ にだけ書き出します。公開されません）")
+        return 1
+    prose_all = json.loads(PROSE.read_text(encoding="utf-8"))
+    # ★★固定文に埋まった数値もゲートの外だった★★（Codex 11巡目 (a)-3）
+    #   一覧から機種を外しても「うみねこ2は200G」等の記述は本文に残る。
+    #   ゲート有効時は、単位つきの数値を含む固定文を出さない。
+    #   ★検査器は1本にした★（Codex 16巡目 (a)-4）
+    #     入力（hub_prose.json）と生成後HTMLで別々の検出器を持っていたため、
+    #     単位の集合がズレて「どちらかだけ通る」状態になっていた。
+    #     いまは生成後HTMLに対する hub_content_problems() 1本で見る（散文も含まれる）。
+
+    # ★先行記事（解析待ち）は一覧に残すが、分類は断定しない★（Codex 17巡目 (b)-1）
+    #   早見表は「全機種の表」なので外すと件数が合わなくなる。
+    #   代わりに yome() が「解析待ち（先行記事）」を返す。sitemap には載せない。
+    previews = [r for r in rows if r.get("status") == "preview"]
+    if previews:
+        print(f"先行記事（解析待ち）{len(previews)} 機種は「解析待ち」と表記します: "
+              f"{[r['slug'] for r in previews]}")
+
+    built, data_html_map = _build_pages(rows, prose_all)
     if gate_on:
         import gates as _g
         # ★数値は「公開データに載っている値」だけ許す★（Codex 14巡目 (b)-1）
@@ -773,11 +796,11 @@ def main(preview: bool = False, out_dir: str | None = None):
             #   --out を付けてもリポジトリ直下の4ページを上書きできていた）
             out_root.mkdir(parents=True, exist_ok=True)
             (out_root / file).write_text(html, encoding="utf-8", newline="\n")
-        dlen = len(pages[file][0]["meta_description"])
+        dlen = len(_meta_len_of(file, prose_all))
         warn = "" if 50 <= dlen <= 160 else f"  ⚠ meta desc {dlen}字（50〜160推奨）"
         print(f"  生成: {file}  ({dlen}字 desc){warn}")
 
-    print(f"\n完了: 4ページ生成。 A(天井浅い)={len(A)} / C(リセット恩恵)={len(C)} / D(スルー)={len(D)} / ALL={len(ALL)}")
+    print(f"\n完了: {len(built)} ページ生成（写し）。")
 
 
 def selftest() -> int:
@@ -886,10 +909,8 @@ if __name__ == "__main__":
     _p = _ap.ArgumentParser()
     _p.add_argument("--preview", action="store_true",
                     help="公開されない写し（.preview-site/）にだけ書き出す")
-    _p.add_argument("--out", default=None,
-                    help="公開用の書き出し先（build_pages_artifact.py が渡す）")
     _p.add_argument("--selftest", action="store_true")
     _a = _p.parse_args()
     if _a.selftest:
         raise SystemExit(selftest())
-    raise SystemExit(main(_a.preview, _a.out) or 0)
+    raise SystemExit(main(_a.preview) or 0)

@@ -1470,9 +1470,17 @@ def build() -> int:
         template_hashes = check_template_approved(work)
 
         run(work, "scripts/build_public_data.py", "--apply")
-        # ★公開用の書き出し先は artifact ビルダーだけが渡す★（Codex 22巡目 条件7）
-        run(work, "scripts/build_machine_pages.py", "--out", str(work))
-        run(work, "scripts/build_hub_pages.py", "--out", str(work))
+        # ★公開HTMLを書くのはこのスクリプトだけ★（Codex 23巡目 条件7の設計）
+        #   ビルダーは「描くだけ」の関数として呼ぶ。ファイルは _site.next にしか作らない。
+        sys.path.insert(0, str(BASE / "scripts"))
+        import build_machine_pages as _bmp
+        import build_hub_pages as _bhp
+        rendered_pages, blocked_slugs, broken_slugs = _bmp.render_all(work)
+        if broken_slugs:
+            raise BuildError(f"機種ページを作れませんでした: {broken_slugs}")
+        if blocked_slugs:
+            print(f"公開データに無い {len(blocked_slugs)} 機種は準備中ページにします")
+        rendered_hubs = _bhp.render_all(work)
 
         public_root = work / "assets/data/public"
         public_machines = public_root / "machines.public.json"
@@ -1488,7 +1496,7 @@ def build() -> int:
 
         NEXT.mkdir(parents=True)
 
-        for name in (*ROOT_FILES, *GENERATED_HUBS):
+        for name in ROOT_FILES:
             copy_file(work / name, NEXT / name)
 
         for name in ROOT_ASSETS:
@@ -1504,9 +1512,16 @@ def build() -> int:
         copy_file(public_machines, NEXT / "assets/data/machines.json")
         copy_tree(public_details, NEXT / "assets/data/machine-details")
 
-        for slug in slugs:
-            copy_file(work / "machines" / slug / "index.html",
-                      NEXT / "machines" / slug / "index.html")
+        # 描いた結果をここで初めてファイルにする（★唯一の書き込み口★）
+        for rel, html in sorted(rendered_pages.items()):
+            slug = rel.split("/")[1]
+            if slug not in set(slugs):
+                continue          # 公開できない機種のページは artifact に入れない
+            target = NEXT / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(html, encoding="utf-8", newline="\n")
+        for name, html in sorted(rendered_hubs.items()):
+            (NEXT / name).write_text(html, encoding="utf-8", newline="\n")
 
         published_path = NEXT / "assets/data/published-slugs.json"
         published_path.parent.mkdir(parents=True, exist_ok=True)
