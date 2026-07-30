@@ -34,3 +34,6 @@ assets/data/claim-evidence/raw/
 # CIの診断用ログ（コミットしない）
 cc.log
 as.log
+
+# Codexへ渡す確認依頼（自動生成・コミットしない）
+_design/spec_review/

@@ -44,10 +44,11 @@ import safe_json as _sj               # noqa: E402
 #   単位が合わない値は捨てる（見出しの近くの別の値を拾う事故を防ぐ）
 FIELDS = {
     # --- 設定ごとの表（P-WORLDは持っているが、DMMは範囲でしか持っていない）
-    "at_prob":      {"labels": ("AT確率", "初当り確率", "初当たり確率"),
+    "at_prob":      {"labels": ("AT確率", "初当り確率", "初当たり確率",
+                                "AT確率・機械割", "AT確率・出玉率"),
                      "unit": "1/x", "kind": "per_setting",
                      "jp": "AT初当たり確率"},
-    "payout_rate":  {"labels": ("出玉率",),
+    "payout_rate":  {"labels": ("出玉率", "AT確率・機械割", "AT確率・出玉率"),
                      "unit": "%", "kind": "per_setting", "jp": "出玉率"},
     # --- 1つの値（★両サイトが同じ形で持っているのはこちら★）
     #   実データで確認: P-WORLD「97.3% ~ 112.5%」／DMM「97.3% 〜 112.5%」
@@ -105,24 +106,40 @@ def _lines(html: str) -> list:
 
 
 def per_setting_values(lines: list, labels: tuple, unit: str) -> dict:
-    """『見出し → 設定N → 値』が並ぶ表を読む。★単位が合う値だけ採る★"""
+    """設定ごとの値が並ぶ表を読む。★単位が合う値だけ採る★
+
+    サイトによって並びが違うので、両方の形に対応する。
+
+      形A（P-WORLD）      形B（ちょんぼりすた）
+        AT確率              AT確率・機械割
+        設定1                設定 / AT / 出玉率
+        1/498.7             設定1
+        設定2                1/498.7   ← AT確率
+        1/477.8             97.3%     ← 出玉率（同じ設定の行に2つ並ぶ）
+
+    ★どちらの形でも「単位が合う値」だけを採る★
+      形Bでは設定1の下に確率と出玉率が並ぶので、
+      単位で選り分けないと取り違える（実際に一度やった）。
+    """
     best: dict = {}
     for i, line in enumerate(lines):
         if line not in labels:
             continue
         got: dict = {}
-        # 見出しの後ろを見る。次の見出しに当たったら終わり。
-        for j in range(i + 1, min(i + 60, len(lines))):
+        for j in range(i + 1, min(i + 80, len(lines))):
             if lines[j] in labels and j > i + 1:
                 break
             m = _SETTING_RE.match(lines[j])
-            if not m or j + 1 >= len(lines):
+            if not m:
                 continue
-            raw = lines[j + 1]
-            # ★期待する単位に合う値だけ★（合わなければ捨てる）
-            if _ci.normalize_value(raw, unit) is None:
-                continue
-            got.setdefault(m.group(1), raw)
+            # ★設定の行の後ろを数行見て、単位が合う最初の値を採る★
+            #   次の「設定N」に当たったらそこで打ち切る。
+            for k in range(j + 1, min(j + 5, len(lines))):
+                if _SETTING_RE.match(lines[k]):
+                    break
+                if _ci.normalize_value(lines[k], unit) is not None:
+                    got.setdefault(m.group(1), lines[k])
+                    break
         if len(got) > len(best):
             best = got
     return best
