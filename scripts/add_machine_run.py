@@ -32,6 +32,7 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
 
 import build_new_article as _ba       # noqa: E402
+import at_spec_lookup as _at        # noqa: E402
 import ceiling_lookup as _cl         # noqa: E402
 import directory_index as _di         # noqa: E402
 import lineage_check as _lc          # noqa: E402
@@ -108,6 +109,12 @@ def gather(name: str) -> dict:
         [_cl.read_page(u, name) for u in got["urls"]])
     for nt in got["material"]["ceilings"]["need_third"]:
         got["problems"].append(f"{nt['jp']}: {nt['why']}")
+    # ★ATの仕様はモードごとに★（純増を混ぜたら誤情報）
+    got["material"]["at_specs"] = _at.compare(
+        [_at.read_page(u, name) for u in got["urls"]])
+    for nt in got["material"]["at_specs"]["need_third"]:
+        jp = "メインAT" if nt["mode"] == "MAIN_AT" else "上位AT"
+        got["problems"].append(f"{jp}の仕様: {nt['why']}")
     return got
 
 

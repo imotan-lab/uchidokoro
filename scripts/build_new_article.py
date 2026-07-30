@@ -144,6 +144,19 @@ def build_detail(slug, name, release, material) -> dict:
                   "POINT": "ポイント天井"}.get(c["kind"], "天井")
             facts.append([jp, f"{c['amount']}{c['unit']}"])
 
+    # ★ATの仕様★（モードごとに分けて書く。混ぜたら誤情報）
+    ats = (material.get("at_specs") or {}).get("adopted") or []
+    if ats:
+        body = []
+        for c in sorted(ats, key=lambda x: x["mode"]):
+            jp = "メインAT" if c["mode"] == "MAIN_AT" else "上位AT"
+            body.append(f"**{jp}**：1セット{c['games']}G ／ 純増約{c['net']}枚")
+        body.append("モードごとに純増が異なります。出典2件で一致した内容だけを載せています。")
+        sections.append({"title": "ゲーム性", "body": body})
+        for c in sorted(ats, key=lambda x: x["mode"]):
+            jp = "メインAT純増" if c["mode"] == "MAIN_AT" else "上位AT純増"
+            facts.append([jp, f"約{c['net']}枚/G"])
+
     spec_body = [f"**機種名**：{name}"]
     if release:
         spec_body.append(f"**登場予定**：{_fmt_release(release)}")
