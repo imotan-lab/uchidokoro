@@ -934,6 +934,17 @@ ANY_URL = re.compile(URL_HEAD + r"""[^\s"'`)>\]/\\][^\s"'`)>\]]*""",
 # 自分のサイト（★部分一致にしない★：eviluchidokoro.com を自分と誤認しないため）
 OWN_HOSTS = ("uchidokoro.com", "www.uchidokoro.com")
 # 現在すでに使っている外部（名前を出しても未公開情報にならない）
+def host_label(host: str) -> str:
+    """診断に出すときのホストの見え方。
+
+    ★自己試験もこの関数を通して比べる★（2026-07-30）
+      試験側がホスト名をそのまま探していたため、CIでは伏せ字になって
+      **CIでだけ失敗**し、pushのたびに失敗メールが飛んでいた。
+      同じ計算を2か所に書くと必ずずれるので、1つにまとめる。
+    """
+    return host if host in KNOWN_EXTERNAL_HOSTS else redact_value(host)
+
+
 KNOWN_EXTERNAL_HOSTS = frozenset({
     "www.googletagmanager.com", "fonts.googleapis.com", "fonts.gstatic.com",
     "docs.google.com", "hb.afl.rakuten.co.jp", "search.rakuten.co.jp",
@@ -1231,7 +1242,7 @@ def external_references(stage: Path) -> list[str]:
         # ★未知のホスト名にも未公開情報が入り得る★（Codex 26巡目 (a)-3 / 27巡目 (a)-1）
         #   `https://DRAFT_USER:DRAFT_PASS@evil.example/` のような形もある。
         #   いま実際に使っている外部だけそのまま出し、それ以外は伏せる。
-        label = host if host in KNOWN_EXTERNAL_HOSTS else redact_value(host)
+        label = host_label(host)
         out.append(f"{label}（{len(uniq)}箇所）: {shown}{more}")
     return out
 
@@ -2219,12 +2230,15 @@ def _jsonld_spoof_detected(root: Path) -> bool:
     (root / "a.html").write_text(
         '<script data-type="application/ld+json">fetch("https://spoof.example/x")</script>',
         encoding="utf-8")
-    return "spoof.example" in " ".join(external_references(root))
+    return host_label("spoof.example") in " ".join(external_references(root))
 
 
 def _ext_found(root: Path, html: str, key: str) -> bool:
     (root / "a.html").write_text(html, encoding="utf-8")
-    return key in " ".join(external_references(root))
+    # ★探すのは「本体が表示する形」★（CIでは伏せ字になる・2026-07-30）
+    #   ここがホスト名の生文字列を探していたため、10件まとめて
+    #   **CIでだけ失敗**し、pushのたびに失敗メールが飛んでいた。
+    return host_label(key) in " ".join(external_references(root))
 
 
 def _ext_none(root: Path, html: str) -> bool:
@@ -2293,13 +2307,19 @@ def _attr_spoof_detected(root: Path) -> bool:
         '<script type="application/ld+json">{"@context":"https://schema.org"}</script>',
         encoding="utf-8")
     j = " ".join(external_references(root))
-    return "dup.example" in j and "nb.example" in j and "schema.org" not in j
+    return (_shown("dup.example") in j and _shown("nb.example") in j
+            and _shown("schema.org") not in j)
+
+
+def _shown(host: str) -> str:
+    """★本体と同じ見え方に変換してから探す★（CIでは伏せ字になるため）"""
+    return host_label(host)
 
 
 def _upper_scheme_detected(root: Path) -> bool:
     (root / "manifest.json").write_text(
         '{"icons":[{"src":"HTTPS://cdn.example/i.png"}]}', encoding="utf-8")
-    return "cdn.example" in " ".join(external_references(root))
+    return _shown("cdn.example") in " ".join(external_references(root))
 
 
 def _json_escaped_url_detected(root: Path) -> bool:
@@ -2307,7 +2327,7 @@ def _json_escaped_url_detected(root: Path) -> bool:
         r'{"icons":[{"src":"https:\/\/esc.example\/i.png"}],'
         r'"sources":[{"note":"https://just-a-link.example"}]}', encoding="utf-8")
     joined = " ".join(external_references(root))
-    return "esc.example" in joined and "just-a-link" not in joined
+    return _shown("esc.example") in joined and _shown("just-a-link.example") not in joined
 
 
 def _html_comment_script_ignored(root: Path) -> bool:
@@ -2315,7 +2335,7 @@ def _html_comment_script_ignored(root: Path) -> bool:
         '<!-- <script>fetch("https://cmt.example/x")</script> -->\n'
         '<script>fetch("https://live.example/x")</script>', encoding="utf-8")
     joined = " ".join(external_references(root))
-    return "live.example" in joined and "cmt.example" not in joined
+    return _shown("live.example") in joined and _shown("cmt.example") not in joined
 
 
 def _out_inside_repo_rejected() -> bool:
@@ -2333,7 +2353,7 @@ def _out_inside_repo_rejected() -> bool:
 def _entity_url_detected(root: Path) -> bool:
     (root / "a.html").write_text(
         '<script src="https:&#47;&#47;evil.example/x.js"></script>', encoding="utf-8")
-    return "evil.example" in " ".join(external_references(root))
+    return _shown("evil.example") in " ".join(external_references(root))
 
 
 def _jsonld_not_counted(root: Path) -> bool:
@@ -2376,8 +2396,8 @@ def _external_refs_detected(root: Path) -> bool:
         '<a href="https://example.org/doc">説明</a>'
         '<iframe src="https://docs.google.com/forms/x"></iframe>', encoding="utf-8")
     hosts = " ".join(external_references(root))
-    return ("evil.example" in hosts and "docs.google.com" in hosts
-            and "example.org" not in hosts)
+    return (_shown("evil.example") in hosts and _shown("docs.google.com") in hosts
+            and _shown("example.org") not in hosts)
 
 
 def _magic_spoof_rejected(root: Path) -> bool:
