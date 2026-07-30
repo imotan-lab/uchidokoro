@@ -339,7 +339,7 @@ def selftest() -> int:
       and ce.load_evidence("x" * 64)[1] == "EVIDENCE_REF_NOT_SHA256"
       and ce.load_evidence("a" * 64)[1] == "EVIDENCE_NOT_FOUND")
     t("★★正規表現が制御文字に化けていない★★（今日3回起きた・単位が0件になる）",
-      all("" not in rx.pattern and "" not in rx.pattern
+      all(chr(8) not in rx.pattern and chr(1) not in rx.pattern
           for _n, rx in _UNIT_PATTERNS))
     t("　表の行を単位として切り出せる",
       [u["text"] for u in extract_units(
