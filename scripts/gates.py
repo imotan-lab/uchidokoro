@@ -353,7 +353,7 @@ def _to_display(s: str) -> str:
 _ALLOWED_TAGS = ("br", "strong", "b", "em", "span")
 # 許可される形だけを列挙する（属性を書く余地が構文上ない）
 _TAG_OK = re.compile(r"<\s*/?\s*(?:%s)\s*/?\s*>" % "|".join(_ALLOWED_TAGS), re.I)
-_DANGEROUS_ATTR = re.compile(r"(?:on[a-z]+\s*=|javascript:|data:text/html|<\s*script)", re.I)
+_DANGEROUS_ATTR = re.compile(r"(?:\bon[a-z]+\s*=|javascript:|data:text/html|<\s*script)", re.I)
 
 
 # ★公開文字列に含めてはいけない文字（除去ではなく拒否）★
@@ -2995,6 +2995,14 @@ def selftest() -> int:
                    )["gates"]["checker"] is True)
     t("★20-9: 判定の主軸(good)が無ければ停止",
       ax20({**b20, "suru": {"suruMax": 3, "suru": [{"count": 0, "excellent": 600}]}}))
+
+    # ===== 危ない属性の検知（2026-07-30に実害のあるバグを発見）=====
+    #   正規表現の `\b` が制御文字（0x08）に化けていて、
+    #   **onclick= などのイベント属性を1つも検知できていなかった**。
+    for _bad in ("onclick=alert(1)", "<div onmouseover=x>", "javascript:x",
+                 "data:text/html,x", "<script>"):
+        t(f"危ない書き方を検知: {_bad[:18]}", bool(_DANGEROUS_ATTR.search(_bad)))
+    t("ふつうの文は検知しない", not _DANGEROUS_ATTR.search("ボタンを押すと表示されます"))
 
     # ===== 公開状態（先行記事かどうか）=====（Codex 14巡目 (a)-2）
     _stbase = {"slug": "x", "lifecycle": LEG, "name": "テスト機", "info": "スマスロAT"}

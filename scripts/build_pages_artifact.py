@@ -904,7 +904,10 @@ CSS_EXTERNAL_ALLOW = (
 # ★ただのリンク（<a href>）は外部依存ではない★（Codex 19巡目 (b)-2 の切り分け）
 EMBEDDING_TAGS = ("script", "link", "iframe", "img", "source", "embed", "object",
                   "video", "audio", "track", "frame")
-HTML_TAG = re.compile(r"<\s*([a-zA-Z][\w-]*)\b([^>]*)>")
+# ★引用符の中の `>` でタグを切らない★（Codex 22巡目 (a)-5）
+#   `<img alt=">" src="…">` の src を見落としていた。
+HTML_TAG = re.compile(
+    r"""<\s*([a-zA-Z][\w-]*)\b((?:[^>"']|"[^"]*"|'[^']*')*)>""")
 # ★引用符なしの値も拾う★（Codex 20巡目 (a)-3）
 TAG_URL_ATTR = re.compile(
     r"""(?:src|href|data|srcset|content)\s*=\s*"""
@@ -916,6 +919,8 @@ INLINE_SCRIPT = re.compile(r"<script\b[^>]*>(.*?)</script>", re.IGNORECASE | re.
 ANY_URL = re.compile(r"""(?:https?:)?//[^\s"'`)>\]]+""", re.IGNORECASE)
 # 自分のサイト（★部分一致にしない★：eviluchidokoro.com を自分と誤認しないため）
 OWN_HOSTS = ("uchidokoro.com", "www.uchidokoro.com")
+# JSON-LD の語彙名（ページ読み込み時に取得されない）
+JSONLD_VOCAB_HOSTS = ("schema.org", "www.schema.org")
 
 
 def _unescape_all(text: str, rounds: int = 3) -> str:
@@ -955,7 +960,14 @@ def external_references(stage: Path) -> list[str]:
         found.setdefault(host, []).append(f"{where} → {redact_value(u)}")
 
     for path in sorted(stage.rglob("*")):
-        if not path.is_file() or path.suffix.lower() not in (".html", ".css", ".js"):
+        if not path.is_file() or path.suffix.lower() not in (".html", ".css", ".js", ".json"):
+            continue
+        if path.suffix.lower() == ".json":
+            # ★manifest 等のJSONに書いた外部画像も端末が取りに行く★（Codex 22巡目 (a)-6）
+            rel_j = path.relative_to(stage).as_posix()
+            body_j = path.read_text(encoding="utf-8", errors="replace")
+            for m in ANY_URL.finditer(body_j):
+                note(m.group(0), f"{rel_j} (JSON)")
             continue
         rel = path.relative_to(stage).as_posix()
         text = path.read_text(encoding="utf-8", errors="replace")
@@ -973,7 +985,8 @@ def external_references(stage: Path) -> list[str]:
                 note(m.group(1), f"{rel}:{line_of(m.start())}")
             continue
 
-        for tag in HTML_TAG.finditer(text):
+        scan_text = HTML_COMMENT.sub(lambda m: " " * len(m.group(0)), text)
+        for tag in HTML_TAG.finditer(scan_text):
             name = tag.group(1).lower()
             attrs = tag.group(2)
             if name == "meta" and "http-equiv" in attrs.lower():
@@ -996,8 +1009,23 @@ def external_references(stage: Path) -> list[str]:
         for sc in INLINE_SCRIPT.finditer(text):
             # ★JSON-LD は「読み込む外部リソース」ではない★（Codex 21巡目 (b)-3）
             #   schema.org は語彙の名前として書くだけで、取りに行かない。
-            head = text[sc.start():sc.start(1)].lower()
-            if "application/ld+json" in head:
+            # ★本物の type 属性で判定する★（Codex 22巡目 (a)-4）
+            #   `data-kind="application/ld+json"` と書けば、ブラウザは普通のJSとして
+            #   実行するのに検査だけ除外できていた。
+            head = text[sc.start():sc.start(1)]
+            tm = re.search(r"""\btype\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""",
+                           head, re.IGNORECASE)
+            script_type = ((tm.group(1) or tm.group(2) or tm.group(3)) if tm else "").strip().lower()
+            if script_type == "application/ld+json":
+                # remote な @context / @import は別枠で警告する
+                for m in re.finditer(r'"@(?:context|import)"\s*:\s*"((?:https?:)?//[^"]+)"',
+                                     sc.group(1)):
+                    url_ld = m.group(1)
+                    # ★語彙のURLはブラウザが取りに行かない★（schema.org は名前として書くだけ）
+                    host_ld = re.sub(r"^(?:https?:)?//", "", url_ld).split("/")[0].lower()
+                    if host_ld in JSONLD_VOCAB_HOSTS:
+                        continue
+                    note(url_ld, f"{rel}:{line_of(sc.start())} JSON-LD @context")
                 continue
             for m in JS_URL.finditer(_strip_js_comments(sc.group(1))):
                 # ★行番号は <script> の開始位置ではなく、当たった位置から出す★
@@ -1261,13 +1289,13 @@ def css_problems(text: str) -> list[str]:
         u = url.strip()
         # ★data: URL は中身を検査できない（SVGに文字を描ける）★（Codex 18巡目 (a)-3）
         if u.lower().startswith("data:"):
-            problems.append(f"CSSで data: URL は使えません « {u[:50]} »")
+            problems.append(f"CSSで data: URL は使えません {redact_value(u)}")
             continue
         if not re.match(r"^(?:https?:)?//", u):
             continue
         if u.lower() in CSS_EXTERNAL_ALLOW:
             continue        # ★記録済みの例外（定義のコメント参照）★
-        problems.append(f"承認していない外部URLを読み込んでいます « {u[:70]} »")
+        problems.append(f"承認していない外部URLを読み込んでいます {redact_value(u)}")
 
     rules = css_rules_nested(body)
     # 変数の候補値（★一度でも危ない値が入るなら危ない★・Codex 18巡目 (a)-3）
@@ -1301,7 +1329,8 @@ def css_problems(text: str) -> list[str]:
                     why = _value_allowed(prop, candidate)
                     if why:
                         problems.append(
-                        f"[{' '.join(chain)[:40]}] 併記の « {prop}: {candidate[:24]} » は不可（{why}）")
+                        f"[{redact_value(' '.join(chain))}] "
+                        f"併記の « {prop}: {candidate[:24]} » は不可（{why}）")
 
         # ★併記を名指ししている規則は、親を対象にしていても隠させない★
         #   （Codex 20巡目 (a)-1：`*:has(> .site-disclaimer){margin-left:-9999px}`）
@@ -1401,8 +1430,9 @@ def build() -> int:
         template_hashes = check_template_approved(work)
 
         run(work, "scripts/build_public_data.py", "--apply")
-        run(work, "scripts/build_machine_pages.py")
-        run(work, "scripts/build_hub_pages.py")
+        # ★公開用の書き出し先は artifact ビルダーだけが渡す★（Codex 22巡目 条件7）
+        run(work, "scripts/build_machine_pages.py", "--out", str(work))
+        run(work, "scripts/build_hub_pages.py", "--out", str(work))
 
         public_root = work / "assets/data/public"
         public_machines = public_root / "machines.public.json"

@@ -758,6 +758,31 @@ def check_26_empty_paragraph(machines: list) -> list[str]:
     return ngs
 
 
+def check_29_control_chars(machines: list) -> list[str]:
+    """スクリプト・HTML・CSS に制御文字が紛れ込んでいないか
+
+    ★2026-07-30に実害のあるバグを発見★
+      `gates.py` の正規表現で `\b` がバックスペース文字(0x08)に化けており、
+      **onclick= などの危ない属性を1つも検知できていなかった**。
+      見た目では気づけないので機械で検査する（タブ・改行だけ許す）。
+    """
+    ngs = []
+    targets = (list(BASE.glob("scripts/*.py")) + list(BASE.glob("*.html"))
+               + list(BASE.glob("*.js")) + list(BASE.glob("assets/**/*.css")))
+    for f in targets:
+        if is_build_output(f) or not f.is_file():
+            continue
+        try:
+            text = f.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        for i, line in enumerate(text.splitlines(), 1):
+            bad = sorted({hex(ord(c)) for c in line if ord(c) < 32 and c != "	"})
+            if bad:
+                ngs.append(f"{f.relative_to(BASE).as_posix()}:{i} に制御文字 {bad}")
+    return ngs
+
+
 def check_27_hub_counts(machines: list) -> list[str]:
     """ハブ/ランキング4ページ内の件数表記が machines.json の実数と一致するか
     （散文の手書き件数がデータ更新に追従せずズレた事故の再発検知・2026-07-12外部レビュー指摘）。
@@ -920,6 +945,7 @@ CHECKS = [
     ("26_空段落", check_26_empty_paragraph),
     ("27_ハブ件数整合", check_27_hub_counts),
     ("28_settei表の列数整合", check_28_settei_table_shape),
+    ("29_制御文字混入", check_29_control_chars),
 ]
 
 

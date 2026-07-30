@@ -481,7 +481,7 @@ def insert_disclaimer(html_out: str, machine: dict) -> str:
     return html_out
 
 
-def main(preview: bool = False):
+def main(preview: bool = False, out_dir: str | None = None):
     """preview=True のときは .preview-site/ にだけ書く（公開されない写し）。
 
     ★2026-07-30・移行手順2で --allow-ungated を廃止した★
@@ -492,7 +492,20 @@ def main(preview: bool = False):
     sys.path.insert(0, str(BASE / "scripts"))
     import preview_site as _pv
 
-    out_root = _pv.PREVIEW_DIR if preview else BASE
+
+    # ★公開物はリポジトリ直下に書かない★（2026-07-30・Codex 22巡目 条件7）
+    #   ここが直接 machines/{slug}/index.html を書けると、
+    #   「公開物の書込み経路は artifact 1本」と言えない（ブランチ直配信が生きている間は特に）。
+    #   公開用の書き出しは build_pages_artifact.py が --out で置き場所を渡す時だけ許す。
+    if preview:
+        out_root = _pv.PREVIEW_DIR
+    elif out_dir:
+        out_root = Path(out_dir)
+    else:
+        print("★公開用のHTMLはここからは作れません★")
+        print("  公開物は build_pages_artifact.py が作ります（--out で置き場所を渡します）。")
+        print("  裏取り前の内容を見たいだけなら --preview を付けてください。")
+        return 1
     # 機種の一覧（＝ページを持ちうるslugの全体）は authoring から取る。
     # 公開が止まった機種にも「準備中」ページを置き換えるために必要。
     machines = json.loads((BASE / "assets" / "data" / "machines.json").read_text(encoding="utf-8"))
@@ -660,5 +673,7 @@ if __name__ == "__main__":
     _p = _ap.ArgumentParser()
     _p.add_argument("--preview", action="store_true",
                     help="公開されない写し（.preview-site/）にだけ書き出す")
+    _p.add_argument("--out", default=None,
+                    help="公開用の書き出し先（build_pages_artifact.py が渡す）")
     _a = _p.parse_args()
-    raise SystemExit(main(_a.preview) or 0)
+    raise SystemExit(main(_a.preview, _a.out) or 0)
