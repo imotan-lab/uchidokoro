@@ -130,8 +130,14 @@ def _scalar_limit(lim):
     return lim
 
 
-def load_rows():
-    machines = json.loads(MACHINES.read_text(encoding="utf-8"))
+def load_rows(source: "Path | None" = None):
+    """一覧のもとになる機種データを読む。
+
+    ★公開時は必ず公開データ（assets/data/public/machines.public.json）から★
+      （2026-07-30・Codex 13巡目 (a)-1）
+      authoring を直接読むと、ランキングやスペック欄に射影で消えるはずの値が出る。
+    """
+    machines = json.loads((source or MACHINES).read_text(encoding="utf-8"))
     rows = []
     for m in machines:
         c = m.get("checker") or {}
@@ -413,13 +419,24 @@ def main(preview: bool = False):
             return 1
         print(f"（写し）出典の裏取りゲートの設定が読めません: {e} — 全機種を写します")
         gate_on = False
-    rows = load_rows()
     if preview:
         # 写しは裏取り前の内容を見るためのもの。止めずに全機種を出す。
+        rows = load_rows()
         _pv.ensure_scaffold()
         print(f"☆写しを作ります（公開されません）: {out_root.name}/ ☆")
         gate_on = False
     elif gate_on:
+        # ★一覧も公開データから作る★（Codex 13巡目 (a)-1）
+        pub_file = BASE / "assets" / "data" / "public" / "machines.public.json"
+        if not pub_file.is_file():
+            print("★公開データがありません（先に build_public_data.py --apply を実行）★")
+            print(f"  期待した場所: {pub_file}")
+            return 1
+        try:
+            rows = load_rows(pub_file)
+        except Exception as e:
+            print(f"★公開データが読めません: {e}")
+            return 1
         import claim_reconcile as _cr
         blocked = []
         for r in rows:
@@ -552,7 +569,8 @@ def main(preview: bool = False):
         if preview:
             _pv.write_html(file, html)   # noindex・バナー・目印つきで写しへ
         else:
-            (BASE / file).write_text(html, encoding="utf-8")
+            # 改行はLF固定（Windowsで作ってもCIで作っても同じ中身にする）
+            (BASE / file).write_text(html, encoding="utf-8", newline="\n")
         dlen = len(pages[file][0]["meta_description"])
         warn = "" if 50 <= dlen <= 160 else f"  ⚠ meta desc {dlen}字（50〜160推奨）"
         print(f"  生成: {file}  ({dlen}字 desc){warn}")

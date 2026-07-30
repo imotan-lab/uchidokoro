@@ -35,7 +35,7 @@
           ? `【先行】${m.name} ${releaseJp}導入｜天井・狙い目予想・解析判明次第更新`
           : `【先行】${m.name} 天井・狙い目予想｜解析判明次第更新`;
       } else {
-        // このtitle生成が効くのはトランポリン（machine.html?slug=・noindex）のみ。
+        // このtitle生成が効くのはトランポリン（machine.html の ?slug= 形式・noindex）のみ。
         // プリレンダ済み正規ページは alreadyBaked で上書きしないため、機種ごとの
         // ポチポチくん対応可否はプリレンダ側(build_machine_pages.py)が正しく焼く。
         // ここでは対応可否を判定できないため、汎用文言で誤称を避ける。
@@ -58,7 +58,7 @@
       // 正しい title/description/OGP/canonical を焼き込み済み。実行時に上書きすると
       // 非対応機種で「ポチポチくん対応」表記が復活する等の不整合が起きるため、
       // ベイク済み（title がテンプレ既定でない）なら上書きしない。
-      // トランポリンの machine.html?slug= 側（title がテンプレ既定）のみ動的生成する。
+      // トランポリンの machine.html の ?slug= 形式（title がテンプレ既定）のみ動的生成する。
       const alreadyBaked = !document.title.includes('機種ページ');
 
       function setMeta(selector, attr, name, content){

@@ -226,6 +226,8 @@ button, input, select { font: inherit; }
   line-height: 1.3;
 }
 .hero-sub { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+/* 数値を出すページに必須の併記（build_machine_pages.py が公開データの指定で挿入する） */
+.site-disclaimer { margin: 0 0 8px 0; color: var(--gold); font-size: 12px; line-height: 1.6; font-weight: 600; }
 
 .article-section-wrap { display: grid; }
 .article-block {

@@ -45,19 +45,40 @@ def main() -> int:
         return rc
 
     # 念のため：写しの中身が本当に「公開されない印」を持っているか確かめる
+    # ★コメントを外してから見る★（Codex 13巡目 (b)-2）
+    #   HTMLコメントに文字列を置いただけで合格させない。
+    # ★.htm / 大文字拡張子も拾う★（同 (b)-3）
     bad = []
-    for f in sorted(pv.PREVIEW_DIR.rglob("*.html")):
-        text = f.read_text(encoding="utf-8")
+    pages = sorted(p for p in pv.PREVIEW_DIR.rglob("*")
+                   if p.is_file() and p.suffix.lower() in (".html", ".htm"))
+    for f in pages:
+        raw = f.read_text(encoding="utf-8")
+        text = pv.strip_html_comments(raw)
         rel = f.relative_to(pv.PREVIEW_DIR).as_posix()
-        if pv.MARKER not in text:
+        if pv.MARKER not in raw:
             bad.append(f"{rel}: 目印 {pv.MARKER} が無い")
         if 'content="noindex,nofollow"' not in text:
-            bad.append(f"{rel}: noindex,nofollow が無い")
+            bad.append(f"{rel}: noindex,nofollow が無い（コメント内は数えない）")
         if pv.BANNER_HTML not in text:
-            bad.append(f"{rel}: 確認用バナーが無い")
+            bad.append(f"{rel}: 確認用バナーが無い（コメント内は数えない）")
+        # ★Service Worker の登録が残っていないか★（同 (b)-1）
+        if pv._SW_REGISTER_RE.search(text):
+            bad.append(f"{rel}: serviceWorker.register が残っている")
+    if not pages:
+        bad.append("写しが1ページも作られていない")
+
     robots = (pv.PREVIEW_DIR / "robots.txt").read_text(encoding="utf-8")
     if "Disallow: /" not in robots:
         bad.append("robots.txt が全面Disallowになっていない")
+
+    # ★写しに内部情報が置かれていないか★（同 (a)-3）
+    #   以前は assets/data を丸ごと写していたので台帳・出典レジストリまで置かれていた。
+    for leaked in ("assets/data/ledger.json", "assets/data/claim-gate.json",
+                   "assets/data/source-registry.json", "assets/data/claim-allowlist.json",
+                   "assets/data/claim-evidence", "assets/data/facts",
+                   "assets/data/public"):
+        if (pv.PREVIEW_DIR / leaked).exists():
+            bad.append(f"写しに内部情報が入っている: {leaked}")
 
     if bad:
         print(f"★写しの印が付いていない箇所が {len(bad)} 件あります★")
@@ -65,10 +86,10 @@ def main() -> int:
             print(f"  ✗ {b}")
         return 1
 
-    count = len(list(pv.PREVIEW_DIR.rglob("*.html")))
     print("=" * 66)
-    print(f"完了: {count} ページを {pv.PREVIEW_DIR.name}/ に写しました（公開されません）")
-    print("  確認: python -m http.server 8000 -d .preview-site")
+    print(f"完了: {len(pages)} ページを {pv.PREVIEW_DIR.name}/ に写しました（公開されません）")
+    print("  確認: python -m http.server 8000 --bind 127.0.0.1 -d .preview-site")
+    print("  ★--bind 127.0.0.1 を必ず付ける（付けないと同じLANの他端末から読めます）★")
     print("=" * 66)
     return 0
 

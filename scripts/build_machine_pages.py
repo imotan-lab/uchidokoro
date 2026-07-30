@@ -256,6 +256,8 @@ def main(preview: bool = False):
     import preview_site as _pv
 
     out_root = _pv.PREVIEW_DIR if preview else BASE
+    # 機種の一覧（＝ページを持ちうるslugの全体）は authoring から取る。
+    # 公開が止まった機種にも「準備中」ページを置き換えるために必要。
     machines = json.loads((BASE / "assets" / "data" / "machines.json").read_text(encoding="utf-8"))
     template = (BASE / "machine.html").read_text(encoding="utf-8")
 
@@ -270,6 +272,7 @@ def main(preview: bool = False):
         print(f"（写し）出典の裏取りゲートの設定が読めません: {e} — 全機種を写します")
         gate_on = False
     blocked_by_claim = {}
+    detail_dir_override = None
     if preview:
         # 写しは「裏取り前の内容を見るため」のものなので、止めずに全機種を出す。
         # 代わりに全ページへ noindex・バナー・目印が入り、robots.txt は全面Disallow。
@@ -284,6 +287,34 @@ def main(preview: bool = False):
                 ok, why = False, [f"検査が例外で失敗: {e}"]
             if not ok:
                 blocked_by_claim[m["slug"]] = why
+        # ★★公開用HTMLは「安全化を通した公開データ」からしか作らない★★
+        #   （2026-07-30・Codex 13巡目 (a)-1）
+        #   以前は authoring の machines.json / machine-details を直接読んでHTMLに焼いていた。
+        #   ゲートで機種を止めても、**通った機種のページの中身は素通り**していた
+        #   （例：射影では消えるはずの説明文が静的HTMLには残る）。
+        #   公開データ（assets/data/public/）が無ければ作らない＝fail-closed。
+        pub_dir = BASE / "assets" / "data" / "public"
+        pub_file = pub_dir / "machines.public.json"
+        pub_details = pub_dir / "machine-details"
+        if not pub_file.is_file() or not pub_details.is_dir():
+            print("★公開データがありません（先に build_public_data.py --apply を実行）★")
+            print(f"  期待した場所: {pub_file}")
+            return 1
+        try:
+            pub_rows = json.loads(pub_file.read_text(encoding="utf-8"))
+        except Exception as e:
+            print(f"★公開データが読めません: {e}")
+            return 1
+        if not isinstance(pub_rows, list) or not all(isinstance(r, dict) for r in pub_rows):
+            print("★公開データの形が想定と違います（機種の配列ではない）★")
+            return 1
+        public_by_slug = {r.get("slug"): r for r in pub_rows if isinstance(r.get("slug"), str)}
+        # 公開データに無い機種も「準備中」に置き換える（古いページを残さない）
+        for m in machines:
+            if m["slug"] not in public_by_slug:
+                blocked_by_claim.setdefault(m["slug"], ["公開データに含まれていない"])
+        machines = [public_by_slug.get(m["slug"], m) for m in machines]
+        detail_dir_override = pub_details
         print(f"出典の裏取りゲート: ★有効★ → {len(blocked_by_claim)} 機種は"
               f"noindexの準備中ページに置き換えます")
         # ★理由を捨てない★（Codex 10巡目 (b)-1）
@@ -310,7 +341,8 @@ def main(preview: bool = False):
     # ポチポチくん非対応slug→理由（machine.htmlのpochipochiStatusと同期）
     pochipochi_reasons = extract_pochipochi_reasons(template)
 
-    detail_dir = BASE / "assets" / "data" / "machine-details"
+    # 公開時は公開データの記事、写しのときだけ authoring の記事
+    detail_dir = detail_dir_override or (BASE / "assets" / "data" / "machine-details")
     broken_details: list = []
     generated_slugs: list = []
     generated = 0
@@ -320,9 +352,13 @@ def main(preview: bool = False):
         if slug in blocked_by_claim:
             # ★★「作らない」だけでは古い誤情報が残り続ける★★（Codex 10巡目 (a)-2）
             #   既存の index.html を noindex の準備中ページに置き換える。
-            out = out_root / "machines" / slug / "index.html"
-            out.parent.mkdir(parents=True, exist_ok=True)
-            out.write_text(PLACEHOLDER_HTML, encoding="utf-8")
+            if preview:
+                # 写しでは今この枝に入らないが、入っても印が付くようにしておく
+                _pv.write_html(f"machines/{slug}/index.html", PLACEHOLDER_HTML)
+            else:
+                out = out_root / "machines" / slug / "index.html"
+                out.parent.mkdir(parents=True, exist_ok=True)
+                out.write_text(PLACEHOLDER_HTML, encoding="utf-8")
             continue
         html_out = template
         canonical_url = f"https://uchidokoro.com/machines/{slug}/"
@@ -383,6 +419,20 @@ def main(preview: bool = False):
         html_out = html_out.replace(
             '<h1 id="machineTitle" class="page-title">機種名</h1>',
             f'<h1 id="machineTitle" class="page-title">{esc(machine["name"])}</h1>', 1)
+
+        # ★「当サイトの目安です」の併記を実際に画面へ出す★
+        #   （2026-07-30・Codex 13巡目 (b)-4）
+        #   これまで公開データ側に「併記が必要」と記録されるだけで、
+        #   HTMLには一度も描画されていなかった＝要件が満たされていなかった。
+        req = machine.get("display_requirements")
+        disclaimer = req.get("disclaimer") if isinstance(req, dict) else None
+        if not isinstance(disclaimer, str) or not disclaimer.strip():
+            d = machine.get("disclaimer")
+            disclaimer = d if isinstance(d, str) and d.strip() else None
+        if disclaimer:
+            html_out = html_out.replace(
+                '<p id="heroSub"',
+                f'<p class="site-disclaimer">{esc(disclaimer)}</p>\n<p id="heroSub"', 1)
 
         # JSON-LD（Article + BreadcrumbList）を静的に焼き込み
         html_out = html_out.replace(

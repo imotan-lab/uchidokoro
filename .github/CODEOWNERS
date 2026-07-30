@@ -1,0 +1,17 @@
+# 検査そのものを書き換えられたら検査の意味が無い（Codex 13巡目 (a)-4）。
+# 下記は「公開してよいか」を決めるコードと設定。変更には所有者の承認を必須にする。
+# ※効かせるにはリポジトリ設定で「Require review from Code Owners」を有効にすること。
+
+/.github/                       @imotan-lab
+/scripts/gates.py               @imotan-lab
+/scripts/audit_public.py        @imotan-lab
+/scripts/crosscheck_gates.py    @imotan-lab
+/scripts/claim_*.py             @imotan-lab
+/scripts/build_public_data.py   @imotan-lab
+/scripts/build_pages_artifact.py @imotan-lab
+/scripts/build_machine_pages.py @imotan-lab
+/scripts/build_hub_pages.py     @imotan-lab
+/scripts/preview_site.py        @imotan-lab
+/assets/data/claim-gate.json        @imotan-lab
+/assets/data/claim-allowlist.json   @imotan-lab
+/assets/data/source-registry.json   @imotan-lab

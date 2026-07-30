@@ -13,8 +13,13 @@
      （build_pages_artifact.py が PREVIEW_BUILD を見つけたら失敗する）
 
 ★使い方★
-  python scripts/build_preview_site.py        # まっさらから作り直す
-  python -m http.server 8000 -d .preview-site # 確認用サーバ（document root を写しにする）
+  python scripts/build_preview_site.py
+  python -m http.server 8000 --bind 127.0.0.1 -d .preview-site
+
+  ★`--bind 127.0.0.1` を必ず付ける★（2026-07-30・Codex 13巡目 (a)-3）
+    Python の http.server は既定で全ネットワーク面に開くので、付けないと
+    **同じLANの他の端末から裏取り前の内容を丸ごと読めてしまう**。
+    noindex も robots も「検索避け」であって鍵ではない。
 """
 
 from __future__ import annotations
@@ -30,14 +35,14 @@ PREVIEW_DIR = BASE / ".preview-site"
 MARKER = "PREVIEW_BUILD"
 
 PREVIEW_CSS = """/* 確認用の写しだけに読み込まれる。本番には存在しない。 */
-.preview-banner{position:sticky;top:0;z-index:9999;display:block;
+.preview-copy-bar{position:sticky;top:0;z-index:9999;display:block;
   padding:8px 12px;background:#7a1f1f;color:#fff;font-size:13px;
   line-height:1.5;text-align:center;letter-spacing:.02em}
-.preview-banner b{color:#ffd76a}
+.preview-copy-bar b{color:#ffd76a}
 """
 
 BANNER_HTML = (
-    '<div class="preview-banner">'
+    '<div class="preview-copy-bar">'
     "<b>確認用の写しです。</b>"
     "ここに出ている数値は出典の確認が済んでいません。公開されていません。"
     "</div>"
@@ -72,22 +77,43 @@ def clean() -> None:
         shutil.rmtree(target)
 
 
+HEAD_BLOCK = (
+    f"<!-- {MARKER} -->\n"
+    '<meta name="robots" content="noindex,nofollow">\n'
+    '<link rel="stylesheet" href="/preview.css">\n'
+)
+
+# 何度通しても増えないように、前回入れた印を先に取り除くための目印
+_HEAD_BLOCK_RE = re.compile(
+    re.escape(f"<!-- {MARKER} -->") + r".*?<link rel=\"stylesheet\" href=\"/preview\.css\">\n?",
+    re.DOTALL)
+_BANNER_RE = re.compile(r'<div class="preview-copy-bar">.*?</div>', re.DOTALL)
+_SW_REGISTER_RE = re.compile(
+    r"navigator\s*\.\s*serviceWorker\s*\.\s*register\s*\([^)]*\)", re.IGNORECASE)
+
+
+def strip_html_comments(html: str) -> str:
+    """HTMLコメントを外す。**印がコメント内にあるだけで合格にしないため**。"""
+    return re.sub(r"<!--.*?-->", "", html, flags=re.DOTALL)
+
+
 def mark(html: str) -> str:
-    """1ページ分のHTMLに noindex・目印・バナー・写し用CSSを入れる（何度通しても同じ結果）。"""
-    if MARKER in html:
-        return html
+    """1ページ分に noindex・目印・バナー・写し用CSSを入れる（何度通しても同じ結果）。
+
+    ★「MARKER が含まれていたら何もしない」方式をやめた★（Codex 13巡目 (b)-2）
+      元のHTMLのコメント欄に文字列を置くだけで、metaもバナーも無いページが
+      「印つき」として通ってしまっていた。**毎回いったん剥がして、必ず入れ直す**。
+    """
+    # 0) 前回入れた印（あれば）を剥がす
+    html = _HEAD_BLOCK_RE.sub("", html)
+    html = _BANNER_RE.sub("", html)
 
     # 1) 既存の robots meta を消してから noindex,nofollow を入れ直す
     html = re.sub(r'<meta\s+name="robots"[^>]*>\s*', "", html, flags=re.IGNORECASE)
-    head_extra = (
-        f"<!-- {MARKER} -->\n"
-        '<meta name="robots" content="noindex,nofollow">\n'
-        '<link rel="stylesheet" href="/preview.css">\n'
-    )
     if "</head>" in html:
-        html = html.replace("</head>", head_extra + "</head>", 1)
+        html = html.replace("</head>", HEAD_BLOCK + "</head>", 1)
     else:
-        html = head_extra + html
+        html = HEAD_BLOCK + html
 
     # 2) 本文の先頭にバナー
     m = re.search(r"<body[^>]*>", html, flags=re.IGNORECASE)
@@ -97,9 +123,10 @@ def mark(html: str) -> str:
         html = BANNER_HTML + html
 
     # 3) Service Worker を写しでは動かさない
-    #    （本番用SWが写しの内容をキャッシュして、後で本番に混ざるのを避ける）
-    html = html.replace('navigator.serviceWorker.register("/service-worker.js")',
-                        'Promise.reject(new Error("preview: service worker disabled"))')
+    #    ★引用符の種類を問わず消す★（Codex 13巡目 (b)-1）
+    #      ダブルクォート決め打ちだったので setting.html（シングルクォート）が素通りしていた。
+    html = _SW_REGISTER_RE.sub(
+        'Promise.reject(new Error("preview: service worker disabled"))', html)
     return html
 
 
@@ -124,11 +151,23 @@ def ensure_scaffold() -> None:
     (PREVIEW_DIR / MARKER).write_text(
         "この中身は確認用の写しです。公開しません。\n", encoding="utf-8", newline="\n")
 
-    for sub in ("css", "img", "data"):
+    for sub in ("css", "img"):
         src = BASE / "assets" / sub
         if src.is_dir():
             dst = assert_inside(PREVIEW_DIR / "assets" / sub)
             shutil.copytree(src, dst, dirs_exist_ok=True)
+
+    # ★assets/data は丸ごと写さない★（2026-07-30・Codex 13巡目 (a)-3）
+    #   丸ごとだと台帳・出典レジストリ・ゲート設定まで写しに置かれ、
+    #   サーバを開いた瞬間に内部情報ごと読めてしまう。表示に要る2つだけにする。
+    data_dst = assert_inside(PREVIEW_DIR / "assets" / "data")
+    data_dst.mkdir(parents=True, exist_ok=True)
+    src_machines = BASE / "assets" / "data" / "machines.json"
+    if src_machines.is_file():
+        shutil.copy2(src_machines, data_dst / "machines.json")
+    src_details = BASE / "assets" / "data" / "machine-details"
+    if src_details.is_dir():
+        shutil.copytree(src_details, data_dst / "machine-details", dirs_exist_ok=True)
 
     for name in SCAFFOLD_ROOT_EXTRA:
         src = BASE / name

@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import hashlib
+import html as html_mod
 import json
 import os
 import re
@@ -31,6 +32,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.parse
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parents[1]
@@ -100,6 +102,16 @@ FORBIDDEN_PATHS = (
 )
 
 MACHINE_HREF = re.compile(r"""(?:https?://[^/"']+)?/machines/([^/"'?#]+)/""")
+HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+TAG = re.compile(r"<[^>]+>")
+
+# 写しの目印を探す対象（HTMLだけ見ていると .js / .svg / .htm を見落とす）
+MARKER_SCAN_SUFFIXES = {".html", ".htm", ".js", ".json", ".svg", ".css", ".xml", ".txt"}
+
+# 生成器が入れる固定の見出し語（記事データに無くても出てよいもの）
+GENERATED_LITERALS = {
+    "機種名", "天井", "ヤメ時", "-", "—",
+}
 
 SOURCE_IGNORE = shutil.ignore_patterns(
     ".git", ".github", PREVIEW_DIRNAME, "_site", "_site.next",
@@ -117,11 +129,56 @@ def run(work: Path, *args: str) -> None:
         raise BuildError(f"command failed ({cp.returncode}): {' '.join(args)}")
 
 
+def _no_duplicate_keys(pairs):
+    """★JSONの同名キー重複を黙って通さない★（Codex 13巡目 (b)-3）
+      Python既定は last-wins なので、`"slugs"` を2回書けば
+      前の値が消える＝監査を欺ける。重複はその場で失敗させる。
+    """
+    seen = {}
+    for k, v in pairs:
+        if k in seen:
+            raise BuildError(f"duplicate JSON key: {k}")
+        seen[k] = v
+    return seen
+
+
 def read_json(path: Path):
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8"),
+                          object_pairs_hook=_no_duplicate_keys)
+    except BuildError:
+        raise
     except Exception as exc:
         raise BuildError(f"cannot read JSON: {path}: {exc}") from exc
+
+
+def read_json_dict(path: Path) -> dict:
+    """辞書であることまで確かめて読む（`.get()` で未処理例外にしない）。"""
+    data = read_json(path)
+    if not isinstance(data, dict):
+        raise BuildError(f"expected a JSON object: {path}")
+    return data
+
+
+def reject_symlinks(root: Path, ignore: set[str] = frozenset()) -> None:
+    """★シンボリックリンク／ジャンクションを全面的に拒否する★（Codex 13巡目 (a)-2）
+
+    許可ディレクトリ（assets/img など）の中に
+    `authoring-machines.json -> ../data/machines.json` のようなリンクを置くと、
+    コピーが実体を追って**禁止データがそのまま公開される**。名前で拒否しても意味がない。
+    """
+    stack = [root]
+    while stack:
+        cur = stack.pop()
+        for entry in cur.iterdir():
+            if entry.name in ignore:
+                continue
+            if entry.is_symlink() or (os.name == "nt" and entry.is_junction()):
+                raise BuildError(
+                    f"symlink/junction is not allowed in the build input: "
+                    f"{entry.relative_to(root).as_posix()}")
+            if entry.is_dir():
+                stack.append(entry)
 
 
 def machine_rows(payload) -> list[dict]:
@@ -145,17 +202,62 @@ def safe_clear(path: Path) -> None:
         shutil.rmtree(path)
 
 
+# 改行を LF に揃えて入れる拡張子（Windowsで作ってもCIで作っても同じ中身にするため）
+TEXT_SUFFIXES = {".html", ".css", ".js", ".json", ".txt", ".xml", ".svg", ".webmanifest"}
+TEXT_NAMES = {"CNAME"}
+
+# assets/css・assets/img に置いてよい拡張子（これ以外があればビルドを止める）
+ASSET_SUFFIXES = {".css", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico", ".avif"}
+
+
+def is_text(path: Path) -> bool:
+    return path.suffix.lower() in TEXT_SUFFIXES or path.name in TEXT_NAMES
+
+
 def copy_file(source: Path, target: Path) -> None:
+    """1ファイルをコピーする。
+
+    ★テキストは改行をLFへ揃える★（Codex 13巡目の観点）
+      このPCは `core.autocrlf=true` なので作業ツリーの改行はCRLF、
+      CIのLinuxではLFになる。そのまま入れると**同じコミットでも成果物の指紋が環境で変わる**。
+      「2回作って同じ」を環境をまたいでも成り立たせるため、入れる時に揃える。
+      画像などは1バイトも触らない。
+    """
+    if source.is_symlink():
+        raise BuildError(f"refusing to copy a symlink: {source}")
     if not source.is_file():
         raise BuildError(f"required file is missing: {source}")
     target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source, target)
+    if is_text(source):
+        data = source.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+        target.write_bytes(data)
+    else:
+        shutil.copy2(source, target)
+
+
+def copy_asset_dir(source: Path, target: Path) -> None:
+    """assets/css・assets/img を、置いてよい拡張子だけコピーする。
+
+    ★ディレクトリ単位で許可しない★（Codex 13巡目 (a)-2）
+      丸ごと許可だと、そこに置かれた authoring-machines.json のようなファイルまで
+      公開されてしまう。「入ってよい形」を列挙し、それ以外は失敗させる。
+    """
+    if not source.exists():
+        return
+    for src in sorted(p for p in source.rglob("*") if p.is_file()):
+        rel = src.relative_to(source).as_posix()
+        if src.suffix.lower() not in ASSET_SUFFIXES:
+            raise BuildError(f"unexpected file type under {source.name}/: {rel}")
+        copy_file(src, target / rel)
 
 
 def copy_tree(source: Path, target: Path) -> None:
     if not source.is_dir():
         raise BuildError(f"required directory is missing: {source}")
-    shutil.copytree(source, target, dirs_exist_ok=True)
+    for src in sorted(p for p in source.rglob("*") if p.is_file()):
+        copy_file(src, target / src.relative_to(source))
+    if not target.exists():
+        raise BuildError(f"required directory is empty: {source}")
 
 
 def host_origin(work: Path) -> str:
@@ -198,15 +300,106 @@ def write_sitemap(stage: Path, origin: str, slugs: list[str]) -> None:
     (stage / "sitemap.xml").write_text(xml, encoding="utf-8", newline="\n")
 
 
+def machine_links(text: str) -> list[str]:
+    """本文から /machines/{slug}/ のリンクを取り出す。
+
+    ★コメントを外してから見る★（Codex 13巡目 (b)-3）
+      コメント内のリンクで「機種が載っている」ことにできてしまっていた。
+    ★%エンコードは復号してから照合★
+      `/%6dachines/zzz/` のような書き方で監査の目を逃れられないようにする。
+    """
+    body = HTML_COMMENT.sub("", text)
+    decoded = urllib.parse.unquote(body)
+    return MACHINE_HREF.findall(decoded)
+
+
 def href_slugs(path: Path) -> set[str]:
     if not path.is_file():
         raise BuildError(f"required page is missing: {path.name}")
-    return set(MACHINE_HREF.findall(path.read_text(encoding="utf-8")))
+    links = machine_links(path.read_text(encoding="utf-8"))
+    # ★同じ機種への重複リンクは黙って消さない★（同 (b)-3）
+    dup = sorted({s for s in links if links.count(s) > 1})
+    if dup:
+        raise BuildError(f"{path.name}: duplicated machine links: {dup}")
+    return set(links)
+
+
+def normalise_text(s: str) -> str:
+    """HTMLから取り出した文字列を、記事データと比べられる形に均す。
+
+    ★エスケープを先に外してからタグを外す★
+      逆順だと `&lt;br&gt;` が「文字としての <br>」として残り、
+      記事データ側の `<br>`（タグとして除去済み）と食い違って
+      **正しいページを誤って弾く**（実データ120機種中114機種で誤検知した）。
+    """
+    s = html_mod.unescape(s)
+    s = TAG.sub(" ", s)
+    s = s.replace("**", "")
+    return re.sub(r"\s+", "", s)
+
+
+def public_corpus(machine: dict, detail) -> str:
+    """公開データに含まれる文字列を全部つないだもの（照合用の母集団）。"""
+    out: list[str] = []
+
+    def walk(node):
+        if isinstance(node, str):
+            out.append(node)
+        elif isinstance(node, (int, float)):
+            out.append(str(node))
+        elif isinstance(node, dict):
+            for k, v in node.items():
+                out.append(str(k))
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(machine)
+    walk(detail)
+    return normalise_text(" ".join(out))
+
+
+PRERENDER_SLOTS = (
+    (re.compile(r'<h1 id="machineTitle"[^>]*>(.*?)</h1>', re.DOTALL), "h1"),
+    (re.compile(r'<p id="heroSub"[^>]*>(.*?)</p>', re.DOTALL), "lead"),
+    (re.compile(r'<div id="articleSections">(.*?)</div>\s*(?=<)', re.DOTALL), "sections"),
+    (re.compile(r'<tbody id="infoTableBody">(.*?)</tbody>', re.DOTALL), "factTable"),
+    (re.compile(r'<table id="summaryGrid"[^>]*>(.*?)</table>', re.DOTALL), "summary"),
+)
+CELL = re.compile(r"<(?:p|h3|th|td|span|li)[^>]*>(.*?)</(?:p|h3|th|td|span|li)>", re.DOTALL)
+
+
+def html_within_public(page_html: str, machine: dict, detail) -> list[str]:
+    """★静的HTMLに焼かれた本文が、公開データの範囲に収まっているか★
+
+    （2026-07-30・Codex 13巡目 (a)-1）
+      HTML生成が authoring を直接読んでいたため、射影で消えるはずの記述が
+      静的HTMLだけに残る事故が起き得た。生成側を公開データ入力に直したうえで、
+      **出来上がったHTMLからも再抽出して照合する**（生成器を信用しない）。
+    """
+    corpus = public_corpus(machine, detail)
+    bad: list[str] = []
+    for pattern, label in PRERENDER_SLOTS:
+        m = pattern.search(page_html)
+        if not m:
+            continue
+        inner = m.group(1)
+        chunks = CELL.findall(inner) or [inner]
+        for chunk in chunks:
+            t = normalise_text(chunk)
+            if not t or t in GENERATED_LITERALS:
+                continue
+            if t not in corpus:
+                bad.append(f"{label}: 公開データに無い表示内容 « {t[:40]} »")
+    return bad
 
 
 def audit(stage: Path, expected: set[str]) -> None:
     """出来上がった物が「同じ機種集合だけ」でできているか確かめる。"""
-    manifest = read_json(stage / "assets/data/published-slugs.json")
+    reject_symlinks(stage)
+
+    manifest = read_json_dict(stage / "assets/data/published-slugs.json")
     if manifest.get("claim_gate_enabled") is not True:
         raise BuildError("artifact manifest is not fail-closed")
     if set(manifest.get("slugs") or []) != expected:
@@ -231,10 +424,29 @@ def audit(stage: Path, expected: set[str]) -> None:
     if directories != expected:
         raise BuildError("machine page directories differ from approved slugs")
 
-    sitemap_slugs = set(MACHINE_HREF.findall(
-        (stage / "sitemap.xml").read_text(encoding="utf-8")))
+    sitemap_slugs = set(machine_links((stage / "sitemap.xml").read_text(encoding="utf-8")))
     if sitemap_slugs != expected:
         raise BuildError("sitemap differs from approved slugs")
+
+    # ★静的HTMLの本文が公開データの範囲に収まっているか★（Codex 13巡目 (a)-1）
+    by_slug = {row.get("slug"): row for row in machines}
+    for slug in sorted(expected):
+        page = (stage / "machines" / slug / "index.html").read_text(encoding="utf-8")
+        if not re.search(r'<base\s+href\s*=\s*["\']/["\']', page, re.IGNORECASE):
+            # ★サブディレクトリ配下は <base href="/"> が無いと全リンクが壊れる★（同 (b)-6）
+            raise BuildError(f"machines/{slug}/index.html has no <base href=\"/\">")
+        detail = read_json(stage / "assets/data/machine-details" / f"{slug}.json")
+        problems = html_within_public(page, by_slug.get(slug) or {}, detail)
+        if problems:
+            raise BuildError(f"machines/{slug}/: " + " / ".join(problems[:3]))
+        # ★「目安です」の併記が必要な機種は、実際にHTMLへ出ているか★（同 (b)-4）
+        need = (by_slug.get(slug) or {}).get("display_requirements")
+        if isinstance(need, dict) and isinstance(need.get("disclaimer"), str):
+            if normalise_text(need["disclaimer"]) not in normalise_text(
+                    HTML_COMMENT.sub("", page)):
+                raise BuildError(
+                    f"machines/{slug}/index.html is missing the required note: "
+                    f"{need['disclaimer']}")
 
     hub_union: set[str] = set()
     for name in GENERATED_HUBS:
@@ -251,15 +463,22 @@ def audit(stage: Path, expected: set[str]) -> None:
         if (stage / rel).exists():
             raise BuildError(f"forbidden authoring path in artifact: {rel}")
 
-    for html in stage.rglob("*.html"):
-        text = html.read_text(encoding="utf-8")
-        rel = html.relative_to(stage).as_posix()
+    # ★HTMLだけでなくJS・SVG・JSONも見る／拡張子の大文字小文字も問わない★（同 (b)-3）
+    for path in stage.rglob("*"):
+        if not path.is_file() or path.suffix.lower() not in MARKER_SCAN_SUFFIXES:
+            continue
+        rel = path.relative_to(stage).as_posix()
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            raise BuildError(f"text file is not valid UTF-8: {rel}")
         if PREVIEW_MARKER in text:
             raise BuildError(f"preview marker found: {rel}")
         if "assets/data/public/" in text:
             raise BuildError(f"internal public path referenced: {rel}")
         # 汎用URL（?slug= で別機種を出す旧経路）を artifact に残さない
-        if "machine.html?slug=" in text:
+        # （コメント内の記述は経路にならないので外してから見る）
+        if "machine.html?slug=" in urllib.parse.unquote(HTML_COMMENT.sub("", text)):
             raise BuildError(f"generic machine URL referenced: {rel}")
 
     for path in stage.rglob("*"):
@@ -267,12 +486,29 @@ def audit(stage: Path, expected: set[str]) -> None:
             raise BuildError(f"preview output inside artifact: {path}")
 
 
+def git_dirty() -> bool:
+    """作業ツリーがコミットと食い違っているか。"""
+    cp = subprocess.run(["git", "status", "--porcelain"], cwd=BASE,
+                        text=True, capture_output=True, check=False)
+    if cp.returncode:
+        return True
+    return bool(cp.stdout.strip())
+
+
 def write_artifact_manifest(stage: Path) -> None:
+    in_ci = bool(os.environ.get("GITHUB_SHA"))
     source_sha = os.environ.get("GITHUB_SHA", "")
     if not source_sha:
         cp = subprocess.run(["git", "rev-parse", "HEAD"], cwd=BASE,
                             text=True, capture_output=True, check=True)
         source_sha = cp.stdout.strip()
+
+    # ★「このコミットから作った」と言えるのは作業ツリーが綺麗な時だけ★
+    #   （Codex 13巡目 (b)-5）中身は手元の変更なのに source_commit は HEAD、
+    #   という食い違いを黙って記録しない。CIでは失敗させ、手元では印を残す。
+    dirty = git_dirty()
+    if dirty and in_ci:
+        raise BuildError("working tree is dirty in CI; artifact would not match the commit")
 
     files: dict[str, str] = {}
     for path in sorted(p for p in stage.rglob("*") if p.is_file()):
@@ -286,6 +522,7 @@ def write_artifact_manifest(stage: Path) -> None:
     payload = {
         "schema_version": 1,
         "source_commit": source_sha,
+        "source_dirty": dirty,
         "content_sha256": hashlib.sha256(canonical).hexdigest(),
         "files": files,
     }
@@ -333,10 +570,12 @@ def build() -> int:
                 if source.is_file():
                     copy_file(source, NEXT / source.name)
 
+        # ★ディレクトリ単位で許可しない★（Codex 13巡目 (a)-2）
+        #   assets/img を丸ごと入れる方式だと、そこに置かれた
+        #   authoring-machines.json のようなファイルまで公開されてしまう。
+        #   置いてよい拡張子を列挙し、それ以外は失敗させる。
         for dirname in ("css", "img"):
-            source = work / "assets" / dirname
-            if source.exists():
-                copy_tree(source, NEXT / "assets" / dirname)
+            copy_asset_dir(work / "assets" / dirname, NEXT / "assets" / dirname)
 
         copy_file(public_machines, NEXT / "assets/data/machines.json")
         copy_tree(public_details, NEXT / "assets/data/machine-details")
@@ -365,6 +604,12 @@ def build() -> int:
 
 
 # ---------------------------------------------------------------- selftest
+PAGE_TPL = ('<html><head><base href="/"></head><body>'
+            '<h1 id="machineTitle" class="page-title">{name}</h1>'
+            '<p id="heroSub" class="hero-sub">{lead}</p>'
+            "</body></html>")
+
+
 def _stage_ok(root: Path, slugs=("aaa", "bbb")) -> Path:
     """audit() を通る最小の成果物を作る（検査の反例を固定するための土台）。"""
     s = set(slugs)
@@ -373,12 +618,14 @@ def _stage_ok(root: Path, slugs=("aaa", "bbb")) -> Path:
         {"schema_version": "published-slugs/v1", "claim_gate_enabled": True,
          "slugs": sorted(s)}), encoding="utf-8")
     (root / "assets/data/machines.json").write_text(json.dumps(
-        [{"slug": x} for x in sorted(s)]), encoding="utf-8")
+        [{"slug": x, "name": f"機種{x}"} for x in sorted(s)]), encoding="utf-8")
     for x in s:
-        (root / f"assets/data/machine-details/{x}.json").write_text("{}", encoding="utf-8")
+        (root / f"assets/data/machine-details/{x}.json").write_text(
+            json.dumps({"lead": f"{x}の説明"}, ensure_ascii=False), encoding="utf-8")
         d = root / "machines" / x
         d.mkdir(parents=True, exist_ok=True)
-        (d / "index.html").write_text("<html><body>ok</body></html>", encoding="utf-8")
+        (d / "index.html").write_text(
+            PAGE_TPL.format(name=f"機種{x}", lead=f"{x}の説明"), encoding="utf-8")
     links = "".join(f'<a href="/machines/{x}/">x</a>' for x in sorted(s))
     for name in GENERATED_HUBS:
         (root / name).write_text(f"<html><body>{links}</body></html>", encoding="utf-8")
@@ -463,6 +710,49 @@ def selftest() -> int:
     case("公開machinesに非オブジェクトが混ざれば止める", denies(
         lambda r: (r / "assets/data/machines.json").write_text(
             json.dumps([{"slug": "aaa"}, "bbb"]), encoding="utf-8")))
+    # --- Codex 13巡目の反例をここに固定する ---
+    case("(a)-1 公開データに無い文がHTMLに焼かれていたら止める", denies(
+        lambda r: (r / "machines/aaa/index.html").write_text(
+            PAGE_TPL.format(name="機種aaa", lead="この機種はAT機です"), encoding="utf-8")))
+    case("(a)-1 見出しが別機種名にすり替わっていたら止める", denies(
+        lambda r: (r / "machines/aaa/index.html").write_text(
+            PAGE_TPL.format(name="機種zzz", lead="aaaの説明"), encoding="utf-8")))
+    case("(b)-6 base href が無ければ止める", denies(
+        lambda r: (r / "machines/aaa/index.html").write_text(
+            '<html><head></head><body><h1 id="machineTitle" class="page-title">機種aaa</h1>'
+            '<p id="heroSub" class="hero-sub">aaaの説明</p></body></html>', encoding="utf-8")))
+    case("(b)-4 必須の併記が画面に無ければ止める", denies(
+        lambda r: (r / "assets/data/machines.json").write_text(json.dumps(
+            [{"slug": "aaa", "name": "機種aaa",
+              "display_requirements": {"disclaimer": "当サイトの目安です"}},
+             {"slug": "bbb", "name": "機種bbb"}], ensure_ascii=False), encoding="utf-8")))
+    case("(b)-3 コメント内のリンクでは機種が載ったことにならない", denies(
+        lambda r: (r / "guide-ichiran.html").write_text(
+            '<a href="/machines/aaa/">x</a><!-- <a href="/machines/bbb/">x</a> -->',
+            encoding="utf-8")))
+    case("(b)-3 %エンコードした未承認リンクも見つける", denies(
+        lambda r: (r / "guide-tenjo-ranking.html").write_text(
+            '<a href="/machines/aaa/">x</a><a href="/machines/bbb/">x</a>'
+            '<a href="/%6Dachines/zzz/">x</a>', encoding="utf-8")))
+    case("(b)-3 同じ機種への重複リンクを見逃さない", denies(
+        lambda r: (r / "guide-ichiran.html").write_text(
+            '<a href="/machines/aaa/">x</a><a href="/machines/aaa/">x</a>'
+            '<a href="/machines/bbb/">x</a>', encoding="utf-8")))
+    case("(b)-3 JSONの同名キー重複を通さない", denies(
+        lambda r: (r / "assets/data/published-slugs.json").write_text(
+            '{"claim_gate_enabled": true, "slugs": ["aaa","bbb"], "slugs": ["aaa","bbb"]}',
+            encoding="utf-8")))
+    case("(b)-3 大文字拡張子・JSの写し目印も見つける", denies(
+        lambda r: (r / "assets/x.JS").parent.mkdir(parents=True, exist_ok=True)
+        or (r / "assets/x.JS").write_text(f"// {PREVIEW_MARKER}", encoding="utf-8")))
+    case("(b)-3 辞書でない claim-gate.json は例外にせず止める",
+         lambda root: _raises(lambda: read_json_dict(_write(root / "g.json", "[]"))))
+    case("(a)-2 成果物にsymlinkがあれば止める", denies(_add_symlink))
+    case("(a)-2 許可ディレクトリ内のsymlinkはコピーしない",
+         lambda root: _symlink_rejected(root), True)
+    case("(a)-2 assets配下の想定外ファイルは止める（画像は通る）",
+         lambda root: _asset_suffix_rejected(root), True)
+
     case("_site以外を消そうとしたら止める",
          lambda root: _raises(lambda: safe_clear(root / "machines")))
     case("読めないCNAMEは止める",
@@ -471,6 +761,10 @@ def selftest() -> int:
          lambda root: _raises(lambda: host_origin(_cname(root, "example.com/x"))))
     case("成果物の指紋は2回とも同じ",
          lambda root: _hash_twice(root), True)
+    case("CRLFで入れてもLFに揃う（指紋が環境で変わらない）",
+         lambda root: _crlf_normalised(root), True)
+    case("画像は1バイトも変えずに入る",
+         lambda root: _binary_untouched(root), True)
 
     ok = 0
     for name, fn, _ in cases:
@@ -490,6 +784,52 @@ def selftest() -> int:
     return 0 if ok == len(cases) else 1
 
 
+def _write(path: Path, text: str) -> Path:
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def _add_symlink(root: Path) -> None:
+    """成果物の中にsymlinkを1つ作る（作れない環境では代わりに禁止パスを置く）。"""
+    target = root / "assets/data/machines.json"
+    link = root / "assets/img/authoring.json"
+    link.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        link.symlink_to(target)
+    except (OSError, NotImplementedError):
+        # 権限が無い環境では symlink を作れないので、同じ検査対象の別条件で代替する
+        (root / "machine.html").write_text("<html></html>", encoding="utf-8")
+
+
+def _asset_suffix_rejected(root: Path) -> bool:
+    """assets 配下に許可外のファイルがあれば実際に止まること。"""
+    src = root / "img"
+    src.mkdir(parents=True)
+    (src / "logo.png").write_bytes(b"\x89PNG")
+    (src / "authoring-machines.json").write_text("{}", encoding="utf-8")
+    if not _raises(lambda: copy_asset_dir(src, root / "out")):
+        return False
+    (src / "authoring-machines.json").unlink()
+    copy_asset_dir(src, root / "out2")
+    return (root / "out2/logo.png").is_file()
+
+
+def _symlink_rejected(root: Path) -> bool:
+    """許可ディレクトリ内のsymlinkを実際に拒否できること（作れない環境ではスキップ扱い）。"""
+    src = root / "img"
+    src.mkdir(parents=True)
+    (src / "logo.png").write_bytes(b"\x89PNG")
+    secret = root / "secret.json"
+    secret.write_text("{}", encoding="utf-8")
+    try:
+        (src / "leak.png").symlink_to(secret)
+    except (OSError, NotImplementedError):
+        print("  （このPCではsymlinkを作れないため実地テストは省略）")
+        return True
+    return _raises(lambda: copy_asset_dir(src, root / "out")) and _raises(
+        lambda: reject_symlinks(src))
+
+
 def _raises(fn) -> bool:
     try:
         fn()
@@ -501,6 +841,27 @@ def _raises(fn) -> bool:
 def _cname(root: Path, text: str) -> Path:
     (root / "CNAME").write_text(text, encoding="utf-8")
     return root
+
+
+def _crlf_normalised(root: Path) -> bool:
+    src = root / "src"
+    src.mkdir()
+    (src / "a.html").write_bytes(b"<p>1</p>\r\n<p>2</p>\r\n")
+    (src / "CNAME").write_bytes(b"uchidokoro.com\r\n")
+    copy_file(src / "a.html", root / "out/a.html")
+    copy_file(src / "CNAME", root / "out/CNAME")
+    return (b"\r" not in (root / "out/a.html").read_bytes()
+            and b"\r" not in (root / "out/CNAME").read_bytes()
+            and host_origin(root / "out") == "https://uchidokoro.com")
+
+
+def _binary_untouched(root: Path) -> bool:
+    src = root / "src"
+    src.mkdir()
+    blob = bytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x0D, 0x0A])
+    (src / "favicon.ico").write_bytes(blob)
+    copy_file(src / "favicon.ico", root / "out/favicon.ico")
+    return (root / "out/favicon.ico").read_bytes() == blob
 
 
 def _hash_twice(root: Path) -> bool:
