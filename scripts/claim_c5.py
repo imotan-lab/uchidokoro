@@ -234,11 +234,161 @@ def check_c5_kikaiwari(claim: dict, quote: str) -> dict:
     return {"verdict": "PASS", "code": "OK"}
 
 
+
+# ------------------------------------------------- 天井（何を数えたか）
+
+# ★「何を数えた値か」を、引用文が**明示している時だけ**取る★
+#   （Phase 2・2026-07-30・Codex「これだけはやれ」⑥）
+#
+#   東京喰種は CZ間600G と AT間1200G があり、前者は液晶右下のG数、
+#   後者はメニュー画面のG数を見る。**数値が正しくても、どちらを数えるかを
+#   取り違えたら実用上は誤情報**になる。だから数値より先にここを固める。
+#
+#   ★推測しない★ 書いていなければ UNKNOWN のままにして不合格にする。
+#   ★禁止語リストにしない★ 許可した言い方に当てはまった時だけ認める。
+_BASIS_WORDS = {
+    "LCD_GAME": (r"液晶(?:画面|右下|左下|下部)?(?:の)?(?:G数|ゲーム数)",
+                 r"画面(?:右下|左下|下)(?:の)?(?:G数|ゲーム数)"),
+    "MENU_GAME": (r"メニュー(?:画面)?(?:内|の)?(?:G数|ゲーム数)",),
+    "REAL_GAME": (r"実(?:際の)?(?:G数|ゲーム数)", r"総(?:G数|ゲーム数)"),
+    "DATA_COUNTER": (r"データ(?:カウンター|ランプ)(?:の)?(?:G数|ゲーム数|回転数)",),
+    "POINT": (r"\d+\s*(?:pt|ポイント)", r"ポイント(?:天井|管理)"),
+    "CYCLE": (r"\d+\s*周期", r"周期(?:天井|管理)"),
+    "THROUGH": (r"\d+\s*スルー", r"スルー(?:天井|回数)"),
+    "COIN": (r"\d+\s*枚(?:天井|消化)", r"差枚(?:数)?"),
+}
+
+# 区間（どこからどこまでを数えるか）。同じく明示された時だけ取る。
+_SCOPE_WORDS = {
+    "CZ_GAP": (r"CZ間",),
+    "AT_GAP": (r"AT間",),
+    "BONUS_GAP": (r"ボーナス間", r"BONUS間"),
+    "ST_GAP": (r"ST間",),
+    "BIG_AFTER": (r"BIG(?:後|終了後)",),
+    "REG_AFTER": (r"REG(?:後|終了後)",),
+}
+
+
+def _stated(quote: str, table: dict) -> set:
+    """引用文が明示している値の集合（書いていなければ空）。"""
+    q = unicodedata.normalize("NFKC", str(quote or ""))
+    out = set()
+    for key, pats in table.items():
+        if any(re.search(p, q) for p in pats):
+            out.add(key)
+    return out
+
+
+def derive_counter_basis(quote: str):
+    """引用文から「何を数えた値か」を1つに決める。決まらなければ理由を返す。
+
+    ★2つ以上の数え方が書いてあったら決めない★
+      「液晶G数とメニュー画面のG数」の両方が出てくる文では、
+      **その数字がどちらの話か**を機械では決められない。
+      推測して片方を選ぶと、取り違えたまま公開される。
+    """
+    found = _stated(quote, _BASIS_WORDS)
+    if not found:
+        return None, "BASIS_NOT_STATED"
+    if len(found) > 1:
+        return None, "BASIS_AMBIGUOUS"
+    return next(iter(found)), "OK"
+
+
+def derive_scope(quote: str):
+    """引用文から「どの区間の話か」を1つに決める。決まらなければ理由を返す。"""
+    found = _stated(quote, _SCOPE_WORDS)
+    if not found:
+        return None, "SCOPE_NOT_STATED"
+    if len(found) > 1:
+        return None, "SCOPE_AMBIGUOUS"
+    return next(iter(found)), "OK"
+
+
+_CEILING_FIELDS = ("ceiling.normal", "ceiling.reset",
+                   "ceiling.normal.cz", "ceiling.normal.at",
+                   "ceiling.normal.big_after", "ceiling.normal.reg_after")
+
+# 天井の値が引用文に出ているか（単位ごとに書き方が違う）
+_AMOUNT_UNITS = {
+    "G": (r"(?<![\d.])%s\s*(?:G|ゲーム)",),
+    "pt": (r"(?<![\d.])%s\s*(?:pt|ポイント)",),
+    "周期": (r"(?<![\d.])%s\s*周期",),
+    "回": (r"(?<![\d.])%s\s*回",),
+    "枚": (r"(?<![\d.])%s\s*枚",),
+}
+
+
+def check_c5_ceiling(claim: dict, quote: str) -> dict:
+    """天井 claim を引用文と突き合わせる。★数え方と区間も必ず一致させる★
+
+    数値の一致だけでは足りない。同じ「600」でも、液晶G数なのかメニュー画面の
+    G数なのかで**別の事実**になる（東京喰種）。だから
+      1. 数え方（counter_basis）が引用文に明示され、claim と一致すること
+      2. 区間（scope）も同様（NONE を名乗る claim には区間の記載を求めない）
+      3. そのうえで数値が引用文に出ていること
+    の全部を満たした時だけ PASS。
+    """
+    cond = claim.get("conditions") or {}
+    val = claim.get("value") or {}
+
+    if claim.get("field_key") not in _CEILING_FIELDS:
+        return {"verdict": "SKIP", "code": "NOT_CEILING"}
+    # 天井は「最大N」。EXACT を名乗る天井 claim は形からして誤り。
+    if val.get("operator") != "MAX":
+        return {"verdict": "FAIL", "code": "OPERATOR_NOT_MAX"}
+    unit = val.get("unit")
+    if unit not in _AMOUNT_UNITS:
+        return {"verdict": "FAIL", "code": "UNIT_NOT_SUPPORTED"}
+    amt = val.get("amount")
+    if not isinstance(amt, (int, float)) or isinstance(amt, bool) or amt <= 0:
+        return {"verdict": "FAIL", "code": "AMOUNT_NOT_POSITIVE"}
+    if cond.get("setting") is not None:
+        # ★天井に設定は無い★（設定差のある天井は別の型で扱う）
+        return {"verdict": "FAIL", "code": "SETTING_NOT_ALLOWED"}
+
+    # --- ① 何を数えた値か
+    want_basis = cond.get("counter_basis")
+    if want_basis in (None, "", "UNKNOWN"):
+        return {"verdict": "FAIL", "code": "BASIS_UNKNOWN_IN_CLAIM"}
+    got_basis, why = derive_counter_basis(quote)
+    if got_basis is None:
+        return {"verdict": "FAIL", "code": why}
+    if got_basis != want_basis:
+        return {"verdict": "FAIL", "code": "BASIS_MISMATCH"}
+
+    # --- ② どの区間か
+    want_scope = cond.get("scope")
+    if want_scope and want_scope != "NONE":
+        got_scope, why = derive_scope(quote)
+        if got_scope is None:
+            return {"verdict": "FAIL", "code": why}
+        if got_scope != want_scope:
+            return {"verdict": "FAIL", "code": "SCOPE_MISMATCH"}
+
+    # --- ③ そのうえで数値が引用文に出ているか
+    q = unicodedata.normalize("NFKC", str(quote or ""))
+    num = f"{amt:g}".replace(".", r"\.")
+    # 桁区切りのある書き方（1,200G）も同じ値として読む
+    grouped = f"{int(amt):,}".replace(",", r"[,，]?") if float(amt).is_integer() else num
+    if not any(re.search(pat % n, q)
+               for pat in _AMOUNT_UNITS[unit] for n in (num, grouped)):
+        return {"verdict": "FAIL", "code": "AMOUNT_NOT_IN_QUOTE"}
+    return {"verdict": "PASS", "code": "OK"}
+
+
 # ------------------------------------------------- 公開ゲートでの再計算
 
 # 意味の検証ができる項目だけを載せる。★ここに無い項目は自動採用しない★
 _SEMANTIC_CHECKERS = {
     "kikaiwari.setting": check_c5_kikaiwari,
+    # ★天井は「何を数えたか」まで一致して初めて同じ事実★（2026-07-30）
+    "ceiling.normal": check_c5_ceiling,
+    "ceiling.reset": check_c5_ceiling,
+    "ceiling.normal.cz": check_c5_ceiling,
+    "ceiling.normal.at": check_c5_ceiling,
+    "ceiling.normal.big_after": check_c5_ceiling,
+    "ceiling.normal.reg_after": check_c5_ceiling,
 }
 
 
@@ -1193,11 +1343,66 @@ def selftest() -> int:
     t("　正しい順序なら通る",
       _timed("2026-07-28T09:00:00Z", "2026-07-28T10:00:00Z",
              "2026-07-28T10:30:00Z", "2026-10-28T10:30:00Z"))
+    # -------- 天井の検証器（Phase 2・2026-07-30・東京喰種の実例）
+    def _ceil(**over):
+        c = {"field_key": "ceiling.normal.cz",
+             "conditions": {"mode": "CZ", "scope": "CZ_GAP",
+                            "counter_basis": "LCD_GAME", "setting": None},
+             "value": {"kind": "INTEGER", "unit": "G", "operator": "MAX",
+                       "amount": 600, "plus_alpha": True, "raw": "600G+α"}}
+        for k, v in over.items():
+            if k in ("conditions", "value"):
+                c[k] = {**c[k], **v}
+            else:
+                c[k] = v
+        return c
+
+    Q_LCD = "CZ間天井は600Gです。液晶右下のG数で確認します。"
+    Q_MENU = "AT間天井は1200Gです。メニュー画面のG数で確認します。"
+    t("★天井は数え方と区間が引用と一致して初めて合格★",
+      check_c5_ceiling(_ceil(), Q_LCD)["verdict"] == "PASS")
+    t("★★数え方を取り違えたら不合格（液晶G数の枠にメニュー画面の話）★★",
+      check_c5_ceiling(_ceil(conditions={"counter_basis": "MENU_GAME"}),
+                       Q_LCD)["code"] == "BASIS_MISMATCH")
+    t("★★区間を取り違えたら不合格（CZ間の枠にAT間の話）★★",
+      check_c5_ceiling(_ceil(conditions={"scope": "AT_GAP", "mode": "AT"},
+                             value={"amount": 1200}),
+                       Q_LCD)["code"] == "SCOPE_MISMATCH")
+    t("★数え方が書いていない引用では合格にしない（推測しない）★",
+      check_c5_ceiling(_ceil(), "CZ間天井は600Gです。")["code"]
+      == "BASIS_NOT_STATED")
+    t("★2つの数え方が混ざった引用でも合格にしない（片方を選ばない）★",
+      check_c5_ceiling(_ceil(), Q_LCD + Q_MENU)["code"] == "BASIS_AMBIGUOUS")
+    t("　claim 側が数え方を UNKNOWN にしていたら合格にしない",
+      check_c5_ceiling(_ceil(conditions={"counter_basis": "UNKNOWN"}),
+                       Q_LCD)["code"] == "BASIS_UNKNOWN_IN_CLAIM")
+    t("　天井なのに「ちょうどN」を名乗る claim は形からして不合格",
+      check_c5_ceiling(_ceil(value={"operator": "EXACT"}), Q_LCD)["code"]
+      == "OPERATOR_NOT_MAX")
+    t("　数え方・区間が合っていても、値が引用に無ければ不合格",
+      check_c5_ceiling(_ceil(value={"amount": 777, "raw": "777G"}), Q_LCD)["code"]
+      == "AMOUNT_NOT_IN_QUOTE")
+    t("　桁区切りの書き方でも同じ値として読む（1,200G）",
+      check_c5_ceiling(
+          _ceil(conditions={"mode": "AT", "scope": "AT_GAP",
+                            "counter_basis": "MENU_GAME"},
+                field_key="ceiling.normal.at",
+                value={"amount": 1200, "raw": "1200G+α"}),
+          "AT間天井は1,200Gです。メニュー画面のG数で確認。"
+      )["verdict"] == "PASS")
+    t("　天井に設定を付けた claim は不合格",
+      check_c5_ceiling(_ceil(conditions={"setting": "6"}), Q_LCD)["code"]
+      == "SETTING_NOT_ALLOWED")
     t("★同定の一式が無ければ、その場で止める（NO_IDENTITY_SPEC）",
       not semantic_artifact(ok2, VK, None, None, PHYS)["verified"])
     t("★意味の検証器が無い項目は VERIFIED にしない（既定拒否）",
-      semantic_artifact({**ok2, "field_key": "ceiling.normal"}, VK, None, IDENT, PHYS)["reason"]
+      # ★ceiling.normal は 2026-07-30 に検証器が付いたので別の項目を使う★
+      #   （検証器のある項目で試すと、この試験が何も確かめなくなる）
+      semantic_artifact({**ok2, "field_key": "benefit.ceiling"}, VK, None, IDENT, PHYS)["reason"]
       == "NO_SEMANTIC_CHECKER")
+    t("　検証器のある項目はここを通り抜ける（上の試験が形骸化していないこと）",
+      semantic_artifact({**ok2, "field_key": "ceiling.normal"}, VK, None, IDENT, PHYS)["reason"]
+      != "NO_SEMANTIC_CHECKER")
     t("★引用の内容が同じでも、出典が0件なら VERIFIED にしない",
       not semantic_artifact(_c([]), VK, None, IDENT, PHYS)["verified"])
 

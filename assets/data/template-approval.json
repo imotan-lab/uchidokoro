@@ -38,7 +38,7 @@
   "scripts/build_pages_artifact.py": "d7394ca53e57b5a432399abafef39c2c87cd6e2eb8a316053811d4a85174b0a4",
   "scripts/build_public_data.py": "08cb5ed0b30e62e38449482fbdac89005476699158679a592531fae662ba34c0",
   "scripts/ci_safe.py": "7868c74045a90bfacaeba9321c1a732c3318ee3b6a49009296d6af1a026f2c10",
-  "scripts/claim_c5.py": "48beea835d20923135cb4dc80972059171dab72493b2205c0ab6d43fc302dec4",
+  "scripts/claim_c5.py": "d5054a7e376fa39e012d0defec19fda0cf3251a8cedbf4c07dcc80aceb7867ba",
   "scripts/claim_evidence.py": "e2d8ab58b5c0170fd396f3d972bb792cfc775b65d965bfd3d2573e9830c4a800",
   "scripts/claim_identity.py": "9519166edf5fc4efb8f25b9e9e6ae80995730da4c1b5d0a35edd80b26027ff3b",
   "scripts/claim_inventory.py": "a1d1120c9949a1e025d67e9e4bde6c241dfb85828e9349e8a15d3f6b3506a99f",
