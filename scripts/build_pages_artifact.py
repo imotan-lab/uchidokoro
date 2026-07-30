@@ -1023,14 +1023,17 @@ def _unescape_all(text: str, rounds: int = 3) -> str:
 
 def _unescape_js(text: str) -> str:
     r"""JS文字列の \/ を戻す（https:\/\/evil を見落とさないため）。"""
-    return text.replace(chr(92) + "/", "/")
+    # ★長さを変えない★（位置がずれないよう空白で詰める）
+    return text.replace(chr(92) + "/", " /")
 
 
 def _strip_js_comments(text: str) -> str:
-    """JSのコメントを外す（コメント中のURLを依存として数えないため）。
+    """JSのコメントを外す（★長さと改行位置は保つ★）。
 
     ★文字列の中は触らない★（Codex 26巡目 (a)-1）
       `fetch("//evil.example/x")` の `//` を行コメントと誤認して消していた。
+    ★同じ長さの空白に置き換える★（同 (b)-4）
+      文字を削ると、その後ろの警告の行番号がずれる。
     """
     out = []
     i, n = 0, len(text)
@@ -1054,15 +1057,21 @@ def _strip_js_comments(text: str) -> str:
             continue
         if ch == "/" and i + 1 < n and text[i + 1] == "*":
             end = text.find("*/", i + 2)
-            i = n if end < 0 else end + 2
+            end = n if end < 0 else end + 2
+            # 改行はそのまま残し、他は空白にする（位置を保つ）
+            out.append("".join(c if c == chr(10) else " " for c in text[i:end]))
+            i = end
             continue
         if ch == "/" and i + 1 < n and text[i + 1] == "/":
             end = text.find(chr(10), i)
-            i = n if end < 0 else end
+            end = n if end < 0 else end
+            out.append(" " * (end - i))
+            i = end
             continue
         out.append(ch)
         i += 1
     return "".join(out)
+
 
 def external_references(stage: Path) -> list[str]:
     """成果物の中から「外部サーバの応答に依存している場所」を全部挙げる。

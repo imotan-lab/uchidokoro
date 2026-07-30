@@ -209,7 +209,9 @@ def _counts_allowed(a: int, c: int, c_top: int, d: int, all_: int) -> dict:
     from collections import Counter
     return {
         "guide-tenjo-ranking.html": Counter({f"{SHALLOW_TENJO_LIMIT}G": 1, f"{a}機種": 1}),
-        "guide-reset-ranking.html": Counter({f"{c}機種": 1, f"{c_top}機種": 1}),
+        # ★同じ数になる場合は2回分として数える★（Codex 26巡目 (b)-1）
+        #   Counter({"30機種":1, "30機種":1}) は1件に潰れてしまう。
+        "guide-reset-ranking.html": Counter([f"{c}機種", f"{c_top}機種"]),
         "guide-suru-tenjo.html": Counter({f"{d}機種": 1}),
         "guide-ichiran.html": Counter({f"{all_}機種": 1}),
     }
@@ -881,6 +883,14 @@ def selftest() -> int:
     t("★同じ集計値を2回使ったら止める（回数まで見る）",
       hub_content_problems({"a.html": twice_same}, {}, *deny,
                            allowed_counts={"a.html": {"49機種": 1}}) != [])
+    t("★同じ件数が2スロットある場合も2回まで許す（Counterで潰れない）",
+      hub_content_problems(
+          {"guide-reset-ranking.html":
+           '<p>全<span class="list-count">30</span>機種のうち'
+           '<span class="list-count">30</span>機種を掲載</p>'},
+          {}, *deny,
+          allowed_counts=_counts_allowed(0, 30, 30, 0, 0)) == [])
+
     t("★別ページの許可は流用できない",
       hub_content_problems({"b.html": fixed}, {}, *deny,
                            allowed_counts={"a.html": {"1000G": 1, "49機種": 1}}) != [])

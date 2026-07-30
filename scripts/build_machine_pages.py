@@ -511,24 +511,27 @@ def render_all(source_root: Path) -> tuple[dict, list, list]:
     pages: dict = {}
     blocked: list = []
     broken: list = []
-    for m in machines_all:
+    # ★行番号は enumerate で数える★（Codex 26巡目 (b)-2）
+    #   len(pages)+len(blocked) は二重計上で、先頭行が「0番目」になっていた。
+    for row_no, m in enumerate(machines_all, start=1):
         slug = m.get("slug")
         if not isinstance(slug, str) or not slug:
-            # ★行の中身は出さない★（Codex 25巡目 (a)-4）
-            #   未公開の見出しをキーに入れられると、そのままCIログへ出てしまう。
-            broken.append(f"{len(pages) + len(blocked)}番目の行: slug の型が不正")
+            # ★行の中身は出さない★（同 (a)-4）未公開の見出しをキーに入れられる。
+            broken.append(f"{row_no}行目: slug の型が不正")
             continue
         if slug not in public_by_slug:
             blocked.append(slug)
             pages[f"machines/{slug}/index.html"] = PLACEHOLDER_HTML
             continue
-        dp = pub_details / f"{slug}.json"
-        detail = _sj.read_json(dp, expect=dict, allow_missing=True, default=None)
+        # ★1件壊れても残りを列挙する★（同 (b)-3）
+        #   読み込みと描画を同じ try に入れ、その機種だけ失敗させる。
         try:
+            detail = _sj.read_json(pub_details / f"{slug}.json",
+                                   expect=dict, allow_missing=True, default=None)
             pages[f"machines/{slug}/index.html"] = render_page(
                 template, public_by_slug[slug], detail, reasons, pochipochi_public=False)
         except Exception as e:
-            broken.append(f"{slug}: {type(e).__name__}: {e}")
+            broken.append(f"{row_no}行目 {slug}: {type(e).__name__}")
     return pages, blocked, broken
 
 
