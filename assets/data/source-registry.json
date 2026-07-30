@@ -98,6 +98,19 @@
    "tier": "MAJOR_ANALYSIS",
    "status": "ACTIVE",
    "_note": "★P-WORLDの解析情報の出所★ P-WORLDと同じ系列なので2票に数えない。"
+  },
+  "yancha-press": {
+   "name": "やんちゃプレス",
+   "canonical_hosts": [
+    "www.yancha-press.com",
+    "yancha-press.com"
+   ],
+   "ownership_group_id": "own-chonborista",
+   "content_lineage_id": "lin-chonborista",
+   "tier": "MAJOR_ANALYSIS",
+   "status": "ACTIVE",
+   "_note": "★ちょんぼりすたと同じ系列★ 2票に数えない。",
+   "_verified": "2026-07-31 Claudeが確認。Lすーぱぁびん娘のページで、20文字以上の本文が17行完全一致（やんちゃプレス側の35%）。例:『通常時は「規定ゲーム数(100G消化ごと)」または「娘ポイント100pt到達(周期到達)」を契機に…』"
   }
  },
  "_excluded": {

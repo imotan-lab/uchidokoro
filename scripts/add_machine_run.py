@@ -34,6 +34,7 @@ sys.path.insert(0, os.path.join(BASE, "scripts"))
 import build_new_article as _ba       # noqa: E402
 import ceiling_lookup as _cl         # noqa: E402
 import directory_index as _di         # noqa: E402
+import lineage_check as _lc          # noqa: E402
 import model_code_lookup as _mc       # noqa: E402
 import new_machine_watch as _nw       # noqa: E402
 import safe_json as _sj               # noqa: E402
@@ -89,6 +90,14 @@ def gather(name: str) -> dict:
         got["problems"].append(
             f"名鑑の個別ページが {len(got['urls'])} 件しか見つかりません（2件以上が要る）")
         return got
+    # ★出典どうしが転載でないか確かめる★（2026-07-31・実際に見つけた）
+    #   やんちゃプレスはちょんぼりすたと本文が17行そのまま同じだった。
+    #   登録簿に無い転載を2票に数えると、独立2出典の意味が無くなる。
+    lin = _lc.check(got["urls"])
+    for sp in lin["suspects"]:
+        got["problems"].append(
+            f"転載の疑い: {sp['a']} と {sp['b']} の本文が {sp['ratio']:.0%} 一致"
+            f"（登録簿に系列が書かれていません）")
     mv = _mc.agree([_mc.lookup(u, name) for u in got["urls"]])
     got["model_code"] = mv.get("model_code")
     if not mv["adopted"]:
@@ -106,7 +115,8 @@ def gather(name: str) -> dict:
 #   以前は problems を文字列で並べるだけで、**中身を見ずに書き込めた**。
 #   機種の同定に関わる問題が1つでもあれば、材料が採れていても書かない。
 BLOCKING = ("AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY", "型式名",
-            "公式ページと名前が一致しません", "2件以上")
+            "公式ページと名前が一致しません", "2件以上",
+            "転載の疑い")   # ★登録簿に無い転載があれば止める★
 
 
 def _blocking(problems: list) -> list:
