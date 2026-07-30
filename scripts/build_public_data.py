@@ -44,12 +44,16 @@ OUT_DETAILS = os.path.join(OUT_DIR, "machine-details")
 #   原文は持たないので公開されても害はない）
 LEDGER = os.path.join(DATA, "ledger.json")
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import safe_json as _sj   # noqa: E402  ★壊れた入力は診断で止める★
+
 
 def _load_ledger() -> dict:
-    """分類台帳。未作成なら空（＝未分類が残る機種は公開されない）。"""
-    if os.path.isfile(LEDGER):
-        return json.load(open(LEDGER, encoding="utf-8"))
-    return {}
+    """分類台帳。未作成なら空（＝未分類が残る機種は公開されない）。
+
+    ★壊れていたら例外ではなく診断で止める★（Codex 閉鎖条件5）
+    """
+    return _sj.read_json(LEDGER, expect=dict, allow_missing=True, default={})
 
 
 # ★出典の裏取りゲート（claim）を公開ビルドに効かせるかどうか★
@@ -77,7 +81,7 @@ def claim_gate_enabled() -> bool:
     if not os.path.isfile(CLAIM_GATE):
         raise GateConfigError(f"設定ファイルがありません: {CLAIM_GATE}")
     try:
-        cfg = json.load(open(CLAIM_GATE, encoding="utf-8"))
+        cfg = _sj.read_json(CLAIM_GATE, expect=dict)
     except Exception as e:
         raise GateConfigError(f"設定ファイルが壊れています: {CLAIM_GATE}: {e}")
     if not isinstance(cfg, dict):
@@ -97,7 +101,7 @@ def build(claim_gate: bool | None = None) -> tuple[list, dict, list]:
     if claim_gate is None:
         claim_gate = claim_gate_enabled()
     ledger = _load_ledger()
-    machines = json.load(open(os.path.join(DATA, "machines.json"), encoding="utf-8"))
+    machines = _sj.read_rows(os.path.join(DATA, "machines.json"))
     pub_machines: list = []
     pub_details: dict = {}
     blocked: list = []
@@ -106,7 +110,7 @@ def build(claim_gate: bool | None = None) -> tuple[list, dict, list]:
         # ★暫定移行の状態は build_ledger.provisional が単一情報源★
         sim = build_ledger.provisional(m)
         dp = os.path.join(DATA, "machine-details", f"{m['slug']}.json")
-        detail = json.load(open(dp, encoding="utf-8")) if os.path.isfile(dp) else {}
+        detail = _sj.read_json(dp, expect=dict, allow_missing=True, default={})
         try:
             view = gates.publish_view(sim, detail, ledger)
         except gates.GateError as e:
@@ -233,7 +237,7 @@ def main() -> int:
         if not os.path.isfile(OUT_MACHINES):
             print("公開物がありません:", OUT_MACHINES)
             return 1
-        pm = json.load(open(OUT_MACHINES, encoding="utf-8"))
+        pm = _sj.read_rows(OUT_MACHINES)
         pd_ = {}
         if os.path.isdir(OUT_DETAILS):
             for fn in os.listdir(OUT_DETAILS):
@@ -354,4 +358,10 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    # ★壊れた入力は traceback ではなく診断で止める★（Codex 閉鎖条件5）
+    try:
+        raise SystemExit(main())
+    except _sj.SafeJsonError as _e:
+        print(f"★入力データが読めません: {_e}★")
+        print("  公開物は作りません（直してから再実行してください）")
+        raise SystemExit(1)

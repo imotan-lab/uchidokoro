@@ -164,6 +164,7 @@ APPROVED_INPUTS = frozenset({
     "scripts/claim_evidence.py",
     "scripts/preview_site.py",
     "scripts/ci_safe.py",
+    "scripts/safe_json.py",
     # ★claim_inventory が実行時にimportする（公開判定に入る）★（Codex 19巡目 (a)-2）
     "scripts/extract_setting_rates.py",
     # ★extract_setting_rates が直接読む（確率の出どころ）★
@@ -2083,4 +2084,7 @@ if __name__ == "__main__":
         raise SystemExit(main())
     except BuildError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+    except Exception as exc:      # ★どんな壊れ方でも診断にする★（閉鎖条件5）
+        print(f"ERROR: 想定外の失敗 {type(exc).__name__}: {exc}", file=sys.stderr)
         raise SystemExit(1)

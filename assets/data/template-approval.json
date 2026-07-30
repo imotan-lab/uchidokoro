@@ -35,8 +35,8 @@
   "scripts/build_hub_pages.py": "e22389611b73056d3ac2eb2296da0bfbca4b84af39e36b8a5f1d46748af11cec",
   "scripts/build_ledger.py": "3d3e7ddbd20723fa2309f60686c7df58d99b8f809d4ad6964fb360a1693af10c",
   "scripts/build_machine_pages.py": "85178ddb30dee6c60a2bf9379521fd411e383e69dbff5d85d512a5f17133c495",
-  "scripts/build_pages_artifact.py": "c4175d4bd44f2d7b8af1e298e2313be4e7ee5d529eeac633d7c19ea54bc4bcd2",
-  "scripts/build_public_data.py": "fa07bf4a5d334669f623b4c1a1d80f37c403a3e4b2012cc569c1b1a50d969563",
+  "scripts/build_pages_artifact.py": "4e92c6cd2edfada39a42f55a880bbbd19533120b067de87dae537639c0c06970",
+  "scripts/build_public_data.py": "f2a11f66170a846cfc829b8e636a2a1a722aee29fbb74343d2280da6ad1c8575",
   "scripts/ci_safe.py": "9047f93e18a3ad612fc3981ff56b6454d0befaf56be8e953da7644f69d934547",
   "scripts/claim_c5.py": "48beea835d20923135cb4dc80972059171dab72493b2205c0ab6d43fc302dec4",
   "scripts/claim_evidence.py": "89e681dde84fe4c8294b6131572e5ee52a52b51f0d60c9c6c15b1ca4f4c8b489",
@@ -48,6 +48,7 @@
   "scripts/gates.py": "e1b5777e847de393e6b69341e5093b2093232dbe83938223c4abe762dbee737f",
   "scripts/hub_prose.json": "1fc567f508184d2a4fa08258e0dc42afdf6356a20a054092404857b0752c0a79",
   "scripts/preview_site.py": "f5317e821f85c442490ee358a2419cf18aa00fb5c7be2361e4e157be28cb335e",
+  "scripts/safe_json.py": "fad054a5ee7ac117440309ccae9857e7346774bb9f5c028c4b3667eefcce6d23",
   "service-worker.js": "3421c823b656c411fa4d49fa76f1679eeb5c26be5410b2bbe7d44129e7a64734",
   "setting.html": "de3e1a75b0576531015c362481d08e0cee02241cc5470c7514becaaa5b5fbee6"
  }
