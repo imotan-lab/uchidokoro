@@ -766,8 +766,14 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
             problems.append(f"{slug}: authoring専用フィールドの流出 {k}")
         elif k not in ALLOWED_MACHINE_KEYS:
             problems.append(f"{slug}: 許可されていないフィールド {k}")
-    if "status" in pub and pub["status"] not in ALLOWED_STATUS:
-        problems.append(f"{slug}: status が complete/preview 以外（{pub['status']!r}）")
+    if "status" in pub:
+        st = pub["status"]
+        # ★型が不正でも「型が不正」と言えるようにする★（Codex 15巡目 (b)-4）
+        #   以前は集合と比較していたので、リスト等の unhashable で TypeError になっていた。
+        if not isinstance(st, str):
+            problems.append(f"{slug}: status が文字列でない（{type(st).__name__}）")
+        elif st not in ALLOWED_STATUS:
+            problems.append(f"{slug}: status が complete/preview 以外（{st!r}）")
     # ★入れ子も allowlist ＋ 型契約で fail-closed にする★
     for i, s in enumerate(pub.get("sources") or []):
         if not isinstance(s, dict):
@@ -1048,7 +1054,7 @@ def audit_file(path: str, expected_count: int | None = None,
     if expected_count is not None and len(machines) != expected_count:
         problems.append(f"機種数が想定と違う: {len(machines)} != {expected_count}")
     print(f"検査 {len(machines)} 機種 / 違反 {len(problems)} 件")
-    for p in problems[:40]:
+    for p in problems:   # ★打ち切らない★（Codex 15巡目 (b)-3）
         print("  ✗", p)
     return 1 if problems else 0
 

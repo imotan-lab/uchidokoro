@@ -155,11 +155,13 @@ def read_json_dict(path: Path) -> dict:
 
 
 def reject_symlinks(root: Path, ignore: set[str] = frozenset()) -> None:
-    """★シンボリックリンク／ジャンクションを全面的に拒否する★（Codex 13巡目 (a)-2）
+    """★リンクの類を全面的に拒否する★（Codex 13巡目 (a)-2 / 15巡目 (a)-4）
 
     許可ディレクトリ（assets/img など）の中に
     `authoring-machines.json -> ../data/machines.json` のようなリンクを置くと、
     コピーが実体を追って**禁止データがそのまま公開される**。名前で拒否しても意味がない。
+    ★ハードリンクも同じ★。しかも一時領域へコピーすると通常ファイルになって
+    後から見分けられないので、**コピーする前の入力**で拒否する。
     """
     stack = [root]
     while stack:
@@ -167,12 +169,14 @@ def reject_symlinks(root: Path, ignore: set[str] = frozenset()) -> None:
         for entry in cur.iterdir():
             if entry.name in ignore:
                 continue
+            rel = entry.relative_to(root).as_posix()
             if entry.is_symlink() or (os.name == "nt" and entry.is_junction()):
                 raise BuildError(
-                    f"symlink/junction is not allowed in the build input: "
-                    f"{entry.relative_to(root).as_posix()}")
+                    f"symlink/junction is not allowed in the build input: {rel}")
             if entry.is_dir():
                 stack.append(entry)
+            elif entry.stat().st_nlink > 1:
+                raise BuildError(f"hard link is not allowed in the build input: {rel}")
 
 
 def machine_rows(payload) -> list[dict]:
@@ -260,9 +264,6 @@ def copy_asset_dir(source: Path, target: Path) -> None:
         magic = IMAGE_MAGIC.get(suffix)
         if magic and not src.read_bytes()[:8].startswith(magic):
             raise BuildError(f"{rel}: 中身が {suffix} ではありません（拡張子の偽装）")
-        # ★ハードリンクも拒否★（同じ実体を別名で公開できてしまうため）
-        if src.stat().st_nlink > 1:
-            raise BuildError(f"{rel}: hard link is not allowed in the build input")
         copy_file(src, target / rel)
 
 
@@ -337,6 +338,39 @@ def href_slugs(path: Path) -> set[str]:
     if dup:
         raise BuildError(f"{path.name}: duplicated machine links: {dup}")
     return set(links)
+
+
+def template_sha(path: Path) -> str:
+    """ひな型の指紋（改行差を吸収してから取る）。"""
+    return hashlib.sha256(
+        path.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")).hexdigest()
+
+
+def check_template_approved(work: Path) -> dict:
+    """★公開ページのひな型が承認済みのものと一致するか★
+
+    （2026-07-30・Codex 15巡目 (a)-1）
+      ひな型（machine.html）に固定文を1行足すと、全機種のページに載る。
+      作り直して比べる検査は**同じひな型を使う**ので一致してしまう＝共通原因の故障。
+      そこでひな型そのものを指紋で固定し、直すときは承認ファイルの更新
+      （＝所有者レビューが要る変更）を必須にする。
+    """
+    approval = read_json_dict(work / "assets/data/template-approval.json")
+    want = approval.get("templates")
+    if not isinstance(want, dict) or not want:
+        raise BuildError("template-approval.json に templates がありません")
+    got = {}
+    for name, expected in want.items():
+        path = work / name
+        if not path.is_file():
+            raise BuildError(f"承認対象のひな型がありません: {name}")
+        actual = template_sha(path)
+        if not isinstance(expected, str) or actual != expected:
+            raise BuildError(
+                f"{name} が承認済みの内容と違います（承認: {expected}／実際: {actual}）。"
+                f"意図した変更なら assets/data/template-approval.json を更新すること")
+        got[name] = actual
+    return got
 
 
 def pages_match_data(stage: Path, template_path: Path, slugs: list[str]) -> None:
@@ -438,12 +472,17 @@ def audit(stage: Path, expected: set[str]) -> None:
         text, _sf = _bmp.disclaimer_of(machine)
         if text:
             want = len(_bmp.disclaimer_anchors(machine))
-            got = HTML_COMMENT.sub("", page).count(
-                f'<p class="site-disclaimer">{_bmp.esc(text)}</p>')
+            visible = HTML_COMMENT.sub("", page)
+            got = visible.count(f'<p class="site-disclaimer">{_bmp.esc(text)}</p>')
             if got != want:
                 raise BuildError(
                     f"machines/{slug}/index.html: 「{text}」の併記が {want} 箇所必要ですが "
                     f"{got} 箇所です")
+            # ★HTML側で隠していないか★（同 (a)-3）
+            for attr in ("hidden", 'aria-hidden="true"', "style="):
+                if re.search(r'<p class="site-disclaimer"[^>]*' + re.escape(attr), visible):
+                    raise BuildError(
+                        f"machines/{slug}/index.html: 併記が {attr} で隠されています")
 
     hub_union: set[str] = set()
     for name in GENERATED_HUBS:
@@ -459,6 +498,20 @@ def audit(stage: Path, expected: set[str]) -> None:
     for rel in FORBIDDEN_PATHS:
         if (stage / rel).exists():
             raise BuildError(f"forbidden authoring path in artifact: {rel}")
+
+    # ★併記を「見えなくする」CSSを許さない★（Codex 15巡目 (a)-3）
+    #   HTMLに所定回数あっても display:none にされたら読者には届かない。
+    for css in sorted((stage / "assets/css").rglob("*.css")):
+        text = re.sub(r"/\*.*?\*/", "", css.read_text(encoding="utf-8"), flags=re.DOTALL)
+        for rule in re.findall(r"([^{}]*)\{([^}]*)\}", text):
+            selector, body = rule[0], rule[1].replace(" ", "").lower()
+            if "site-disclaimer" not in selector:
+                continue
+            for hidden in ("display:none", "visibility:hidden", "opacity:0",
+                           "font-size:0", "content-visibility:hidden"):
+                if hidden in body:
+                    raise BuildError(
+                        f"{css.name}: 併記（.site-disclaimer）を隠すCSSがあります « {hidden} »")
 
     # ★HTMLだけでなくJS・SVG・JSONも見る／拡張子の大文字小文字も問わない★（同 (b)-3）
     for path in stage.rglob("*"):
@@ -492,7 +545,7 @@ def git_dirty() -> bool:
     return bool(cp.stdout.strip())
 
 
-def write_artifact_manifest(stage: Path) -> None:
+def write_artifact_manifest(stage: Path, template_hashes: dict | None = None) -> None:
     in_ci = bool(os.environ.get("GITHUB_SHA"))
     source_sha = os.environ.get("GITHUB_SHA", "")
     if not source_sha:
@@ -520,6 +573,10 @@ def write_artifact_manifest(stage: Path) -> None:
         "schema_version": 1,
         "source_commit": source_sha,
         "source_dirty": dirty,
+        # ★成果物に入らないが出来上がりを決めるもの★（Codex 15巡目 (a)-1）
+        #   ひな型は artifact に入れないので、成果物だけを見ても再現できない。
+        #   何から作ったかを残す。
+        "template_sha256": template_hashes or {},
         "content_sha256": hashlib.sha256(canonical).hexdigest(),
         "files": files,
     }
@@ -546,6 +603,8 @@ def build() -> int:
         shutil.copytree(BASE, work, ignore=SOURCE_IGNORE)
         if (work / PREVIEW_DIRNAME).exists():
             raise BuildError("preview output leaked into the build workspace")
+
+        template_hashes = check_template_approved(work)
 
         run(work, "scripts/build_public_data.py", "--apply")
         run(work, "scripts/build_machine_pages.py")
@@ -600,7 +659,8 @@ def build() -> int:
         audit(NEXT, set(slugs))
         # ★出荷データから作り直して1バイトも違わないことを確かめる★（Codex 14巡目 (a)-1）
         pages_match_data(NEXT, work / "machine.html", slugs)
-        write_artifact_manifest(NEXT)
+        # ★ひな型の指紋も記録する★（成果物だけでは再現できない依存を残す）
+        write_artifact_manifest(NEXT, template_hashes)
 
     safe_clear(OUT)
     NEXT.replace(OUT)
@@ -735,6 +795,15 @@ def selftest() -> int:
     case("(a)-1 属性に文字を仕込んでも止める",
          lambda root: _rebuild_check(
              root, lambda h: h.replace("<body", '<body data-x="天井999G"', 1)), True)
+    # --- Codex 15巡目の反例 ---
+    case("(a)-1 ひな型に固定文を足したら止める（共通原因の故障）",
+         lambda root: _template_change_stopped(root), True)
+    case("(a)-1 差し込み先が消えたら黙って通さない",
+         lambda root: _missing_anchor_stopped(), True)
+    case("(a)-3 併記を隠すCSSがあれば止める", denies(
+        lambda r: (r / "assets/css/practical.css").parent.mkdir(parents=True, exist_ok=True)
+        or (r / "assets/css/practical.css").write_text(
+            ".site-disclaimer{display:none}", encoding="utf-8")))
     case("(b)-6 base href が無ければ止める", denies(
         lambda r: (r / "machines/aaa/index.html").write_text(
             '<html><head></head><body><h1 id="machineTitle" class="page-title">機種aaa</h1>'
@@ -838,6 +907,39 @@ def _rebuild_check(root: Path, tamper) -> bool:
     except BuildError:
         stopped = True
     return stopped if tamper else not stopped
+
+
+def _template_change_stopped(root: Path) -> bool:
+    """ひな型に固定文を1行足したら、承認の照合で止まること。"""
+    work = root / "repo"
+    (work / "assets/data").mkdir(parents=True)
+    tpl = work / "machine.html"
+    original = (BASE / "machine.html").read_text(encoding="utf-8")
+    tpl.write_text(original, encoding="utf-8", newline="\n")
+    approval = work / "assets/data/template-approval.json"
+    approval.write_text(json.dumps(
+        {"templates": {"machine.html": template_sha(tpl)}}), encoding="utf-8")
+    if check_template_approved(work) is None:      # まずは一致して通ること
+        return False
+    tpl.write_text(original.replace("</body>", "<p>未公開機の天井は999Gです</p></body>"),
+                   encoding="utf-8", newline="\n")
+    return _raises(lambda: check_template_approved(work))
+
+
+def _missing_anchor_stopped() -> bool:
+    """差し込み先が消えたひな型で、黙って通さず止まること。"""
+    sys.path.insert(0, str(BASE / "scripts"))
+    import build_machine_pages as bmp
+    broken = bmp.prepare_template(
+        (BASE / "machine.html").read_text(encoding="utf-8")
+    ).replace('<h1 id="machineTitle" class="page-title">機種名</h1>',
+              '<h1 id="machineTitle" class="page-title">天井は999Gです</h1>')
+    try:
+        bmp.render_page(broken, {"slug": "aaa", "name": "機種aaa"}, {"lead": "説明"},
+                        {}, pochipochi_public=False)
+        return False
+    except bmp.TemplateError:
+        return True
 
 
 def _write(path: Path, text: str) -> Path:

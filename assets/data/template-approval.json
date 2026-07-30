@@ -1,0 +1,7 @@
+{
+ "schema_version": "template-approval/v1",
+ "note": "公開ページのひな型は、ここに書いた指紋と一致する時だけビルドできる。ひな型を直したら指紋も更新すること（レビュー必須）。",
+ "templates": {
+  "machine.html": "912591d59586baf3ddab13112c504722dddc08fec09c8ed9e528bcac12c2a7bf"
+ }
+}

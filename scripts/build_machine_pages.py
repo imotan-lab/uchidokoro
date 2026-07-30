@@ -244,6 +244,27 @@ PLACEHOLDER_HTML = """<!doctype html>
 """
 
 
+class TemplateError(RuntimeError):
+    """テンプレートと生成器の食い違い（差し込み先が無い／複数ある）。"""
+
+
+def replace_once(text: str, needle: str, repl: str) -> str:
+    """★差し込み先がちょうど1つあることを確かめてから置き換える★
+
+    （2026-07-30・Codex 15巡目 (a)-1）
+      これまでは `replace(..., 1)` だったので、テンプレートの目印が
+      無くなっていても**黙って何もせず**、テンプレートの固定文がそのまま
+      全機種のページに残った。生成器と検査器が同じテンプレートを読むため、
+      作り直して比べても一致してしまう（共通原因の故障）。
+      差し込み先が0個でも2個以上でも止める。
+    """
+    n = text.count(needle)
+    if n != 1:
+        raise TemplateError(
+            f"テンプレートの差し込み先が {n} 箇所です（1箇所であるべき）: {needle[:60]}")
+    return text.replace(needle, repl, 1)
+
+
 def prepare_template(template: str) -> str:
     """テンプレートを機種ページ用に整える（1回だけ行う前処理）。"""
     if "<base " not in template:
@@ -270,7 +291,7 @@ def render_page(template: str, machine: dict, detail: dict | None,
         html_out = re.sub(r'<link\s+rel="canonical"[^>]*>',
                           f'<link rel="canonical" href="{canonical_url}">', html_out, count=1)
     else:
-        html_out = html_out.replace("</head>", f'<link rel="canonical" href="{canonical_url}">\n</head>', 1)
+        html_out = replace_once(html_out, "</head>", f'<link rel="canonical" href="{canonical_url}">\n</head>')
 
     # title / description（meta-auto.js 同等・ポチポチくん対応表記は非対応機種で外す）
     # ★公開版では「ポチポチくん対応」と名乗らない★（Codex 14巡目 (a)-3）
@@ -285,31 +306,31 @@ def render_page(template: str, machine: dict, detail: dict | None,
     else:
         pp_available, pp_reason = True, ""
     title, desc = build_title_desc(machine, pp_available)
-    html_out = html_out.replace("<title>機種ページ | うちどころ。</title>",
-                                f"<title>{esc(title)}</title>", 1)
-    html_out = html_out.replace(
+    html_out = replace_once(html_out, "<title>機種ページ | うちどころ。</title>",
+                                f"<title>{esc(title)}</title>")
+    html_out = replace_once(html_out, 
         '<meta name="description" content="機種ごとの狙い目記事ページです。結論と要点をスマホ向けに表示します。">',
-        f'<meta name="description" content="{esc(desc)}">', 1)
+        f'<meta name="description" content="{esc(desc)}">')
 
     # OGP（SNSシェア用・meta-auto.js も後で更新するが静的にも焼く）
-    html_out = html_out.replace(
+    html_out = replace_once(html_out, 
         '<meta property="og:title" content="機種ページ | うちどころ。">',
-        f'<meta property="og:title" content="{esc(title)}">', 1)
-    html_out = html_out.replace(
+        f'<meta property="og:title" content="{esc(title)}">')
+    html_out = replace_once(html_out, 
         '<meta property="og:description" content="機種ごとの狙い目記事ページです。結論と要点をスマホ向けに表示します。">',
-        f'<meta property="og:description" content="{esc(desc)}">', 1)
-    html_out = html_out.replace(
+        f'<meta property="og:description" content="{esc(desc)}">')
+    html_out = replace_once(html_out, 
         '<meta property="og:url" content="https://uchidokoro.com/machine.html">',
-        f'<meta property="og:url" content="{canonical_url}">', 1)
+        f'<meta property="og:url" content="{canonical_url}">')
 
     # Twitter Card（meta-auto.js はプリレンダ済みで上書きしないため静的に焼く）
-    html_out = html_out.replace(
+    html_out = replace_once(html_out, 
         '<meta name="twitter:card" content="summary_large_image">',
         '<meta name="twitter:card" content="summary_large_image">\n'
         f'<meta name="twitter:title" content="{esc(title)}">\n'
         f'<meta name="twitter:description" content="{esc(desc)}">\n'
         '<meta name="twitter:site" content="@uchidokoro">\n'
-        '<meta name="twitter:image" content="https://uchidokoro.com/assets/img/ogp.png">', 1)
+        '<meta name="twitter:image" content="https://uchidokoro.com/assets/img/ogp.png">')
 
     # ポチポチくん導線：非対応機種は初期HTML段階でリンクを無効化して焼く
     # （JS実行前・JS無効・クローラーに「対応機能あり」と誤認させない。inline styleは使わずclassで）
@@ -323,9 +344,9 @@ def render_page(template: str, machine: dict, detail: dict | None,
                 html_out, count=1)
 
     # h1 機種名
-    html_out = html_out.replace(
+    html_out = replace_once(html_out, 
         '<h1 id="machineTitle" class="page-title">機種名</h1>',
-        f'<h1 id="machineTitle" class="page-title">{esc(machine["name"])}</h1>', 1)
+        f'<h1 id="machineTitle" class="page-title">{esc(machine["name"])}</h1>')
 
     # ★「当サイトの目安です」の併記を、必要な表示面すべてに出す★
     #   （Codex 13巡目 (b)-4 / 14巡目 (a)-8）
@@ -333,13 +354,13 @@ def render_page(template: str, machine: dict, detail: dict | None,
     html_out = insert_disclaimer(html_out, machine)
 
     # JSON-LD（Article + BreadcrumbList）を静的に焼き込み
-    html_out = html_out.replace(
-        "</head>", build_jsonld(machine, canonical_url, title, desc) + "\n</head>", 1)
+    html_out = replace_once(html_out, 
+        "</head>", build_jsonld(machine, canonical_url, title, desc) + "\n</head>")
 
     # 先行記事（preview）は完全記事へ昇格するまで noindex（恒久ポリシー・審査中だけの措置ではない）
     if machine.get("status") == "preview":
-        html_out = html_out.replace(
-            "</head>", '<meta name="robots" content="noindex,follow">\n</head>', 1)
+        html_out = replace_once(html_out, 
+            "</head>", '<meta name="robots" content="noindex,follow">\n</head>')
     # ★2026-07-24: AdSenseローダーの注入を全機種で停止（Phase 0・止血）★
     #   承認ゲート（ads = public && index && page_review approved && content_hash一致）の
     #   実装後、承認済みページだけで再開する。無条件注入に戻さないこと。
@@ -349,21 +370,21 @@ def render_page(template: str, machine: dict, detail: dict | None,
 
     lead = detail.get("lead", "") or ""
     if lead:
-        html_out = html_out.replace(
+        html_out = replace_once(html_out, 
             '<p id="heroSub" class="hero-sub"></p>',
-            f'<p id="heroSub" class="hero-sub">{esc(lead)}</p>', 1)
+            f'<p id="heroSub" class="hero-sub">{esc(lead)}</p>')
     sections = detail.get("sections") or []
     if sections:
         sections_html = "".join(render_section(s) for s in sections)
-        html_out = html_out.replace(
+        html_out = replace_once(html_out, 
             '<div id="articleSections"></div>',
-            f'<div id="articleSections">{sections_html}</div>', 1)
+            f'<div id="articleSections">{sections_html}</div>')
     fact = detail.get("factTable") or [["機種名", machine["name"]]]
     rows_html = "".join(f"<tr><th>{esc(r[0])}</th><td>{esc(r[1])}</td></tr>"
                         for r in fact if len(r) >= 2)
-    html_out = html_out.replace(
+    html_out = replace_once(html_out, 
         '<tbody id="infoTableBody"></tbody>',
-        f'<tbody id="infoTableBody">{rows_html}</tbody>', 1)
+        f'<tbody id="infoTableBody">{rows_html}</tbody>')
     # summaryBoxes をプリレンダ（machine.html の renderSummaryGrid と同じ2列組み）
     summary_boxes = detail.get("summaryBoxes") or [
         {"label": "天井", "value": machine.get("strategy") or "-"},
@@ -381,16 +402,19 @@ def render_page(template: str, machine: dict, detail: dict | None,
             srows += f"<tr><td>{cell_a}</td><td>{cell_b}</td></tr>"
         else:
             srows += f"<tr><td>{cell_a}</td><td></td></tr>"
-    html_out = html_out.replace(
+    html_out = replace_once(html_out, 
         '<table id="summaryGrid" class="summary-grid"></table>',
-        f'<table id="summaryGrid" class="summary-grid">{srows}</table>', 1)
+        f'<table id="summaryGrid" class="summary-grid">{srows}</table>')
     return html_out
 
 
 # 「目安です」を出す位置（公開データの surfaces → 差し込む目印）
+# ★実際のテンプレートに存在する文字列を使うこと★（Codex 15巡目 (b)-2）
+#   `<section id="checkerCard"` は machine.html に存在せず、
+#   checker 面が必要な最初の機種で必ず止まる状態だった。
 DISCLAIMER_ANCHORS = {
     "hero": '<p id="heroSub"',
-    "checker": '<section id="checkerCard"',
+    "checker": '<div class="checker-card">',
     "detail.sections": '<div id="articleSections">',
 }
 # surfaces の名前 → 実際に置く場所（machine 側の面はすべて hero にまとめる）
@@ -435,7 +459,7 @@ def insert_disclaimer(html_out: str, machine: dict) -> str:
             raise RuntimeError(
                 f"{machine.get('slug','?')}: 「{text}」を {spot} に置けません"
                 f"（テンプレートに {anchor} が無い）")
-        html_out = html_out.replace(anchor, block + anchor, 1)
+        html_out = replace_once(html_out, anchor, block + anchor)
     return html_out
 
 

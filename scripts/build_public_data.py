@@ -130,6 +130,12 @@ def build(claim_gate: bool | None = None) -> tuple[list, dict, list]:
         pub_machines.append(view["machine"])
         if view["detail"]:
             pub_details[m["slug"]] = view["detail"]
+        elif view["machine"].get("status") == "preview":
+            # ★先行記事（解析待ち）は本文が空なのが正しい★（Codex 15巡目 (b)-1）
+            #   射影の仕様で detail は必ず {} になるのに、
+            #   「一覧にあるのに記事が無い」で必ず止まっていた。
+            #   空の記事ファイルを置いて、一覧と記事の対応を保つ。
+            pub_details[m["slug"]] = {}
     return pub_machines, pub_details, blocked
 
 

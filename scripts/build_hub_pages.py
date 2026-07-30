@@ -22,9 +22,11 @@ verify（5:05）/ auto-add（0:00）タスクからも呼ばれる想定。
     - meta description は 50〜160字（項目11）：hub_prose.json 側で担保。
 """
 from __future__ import annotations
+import html as html_mod
 import json
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 try:
@@ -130,10 +132,38 @@ def _scalar_limit(lim):
     return lim
 
 
-# 「数＋単位」の出現を1つずつ取り出す（全角・漢数字もNFKC後に拾えるよう広めに取る）
+# 「数＋単位」の出現を1つずつ取り出す
+# ★NFKC正規化のあとに掛ける★（全角・丸数字などを取りこぼさない）
+# ★「ゲーム」も単位★（Codex 15巡目 (a)-2：「天井は200ゲームです」が素通りしていた）
 NUMERAL_OCCURRENCE = re.compile(
-    r"[0-9０-９一二三四五六七八九十百千万]+\s*"
-    r"(?:G|ｇ|Ｇ|pt|ｐｔ|回|周期|スルー|枚|円|％|%|倍|分|時間|日|台|機種)")
+    r"[0-9一二三四五六七八九十百千万]+\s*"
+    r"(?:G|ゲーム|pt|ポイント|回|周期|スルー|枚|円|%|倍|分|時間|日|台|機種|セット|連)")
+
+# インライン要素は取り除いて文字をつなぐ（「勝<strong>て</strong>る」を「勝てる」に戻す）
+_INLINE_TAG = re.compile(
+    r"</?(?:strong|b|em|i|span|small|sup|sub|u|mark|a|br|wbr)\b[^>]*>", re.IGNORECASE)
+_ANY_TAG = re.compile(r"<[^>]+>")
+# 属性に入った文章（meta description・title・alt など）も検査対象にする
+_ATTR_TEXT = re.compile(r'(?:content|title|alt|aria-label)\s*=\s*"([^"]*)"', re.IGNORECASE)
+# 「全<span class="list-count">49</span>機種です」の 49 はデータから毎回数える件数
+_COUNT_SPAN = re.compile(r'<span class="list-count">.*?</span>', re.DOTALL)
+
+
+def visible_text(html: str) -> str:
+    """表示される文章（＋文章が入る属性）を、比べられる形にして返す。
+
+    ★タグを空白に置き換えるだけでは足りない★（Codex 15巡目 (a)-2）
+      「勝<strong>て</strong>る」が「勝 て る」になって禁止語を回避できた。
+      インライン要素は詰めてつなぎ、ブロック要素だけ区切る。
+      metaの中身はタグごと消えていたので、属性の文章を別に拾う。
+    """
+    attrs = " ".join(_ATTR_TEXT.findall(html))
+    # 集計の件数（データから毎回計算する数）は検査対象にしない
+    body = _COUNT_SPAN.sub("", html)
+    body = _INLINE_TAG.sub("", body)          # インラインは詰める
+    body = _ANY_TAG.sub("\n", body)           # ブロックは区切る
+    text = html_mod.unescape(body + "\n" + html_mod.unescape(attrs))
+    return unicodedata.normalize("NFKC", text)
 
 # ★生成器自身のコードに書いた固定の数値表現★（集計の説明で使う言葉。機種の数値ではない）
 #   ここに無い数値が散文に出たら止める（＝手書きの数値は裏取りが要る）。
@@ -156,25 +186,38 @@ def hub_content_problems(built: dict, data_html: dict, has_numeral, *deny_pats) 
     bad = []
     for f, html in built.items():
         rest = html
-        # 機種一覧（公開データをそのまま並べた部分）だけを検査から外す
+        # 機種一覧（公開データをそのまま並べた部分）だけを検査から外す。
+        # ★ちょうど1回だけ除去する★（Codex 15巡目 (a)-2）
+        #   replace は一致箇所を全部消すので、生成器の回帰で一覧が2回出ると
+        #   両方が検査対象外になってしまう。
         part = (data_html.get(f) or {}).get("list")
         if part:
-            rest = rest.replace(part, " ")
-        text = re.sub(r"<[^>]+>", " ", rest)
+            n = rest.count(part)
+            if n != 1:
+                bad.append(f"{f}: 機種一覧の描画が {n} 箇所あります（1箇所であるべき）")
+                continue
+            rest = rest.replace(part, "\n", 1)
+        text = visible_text(rest)
         # ★語のかたまりではなく「数＋単位」の出現ごとに見る★
         #   日本語は空白で区切れないので、語単位だと文まるごとが1語になり
         #   許可リストが作れない。出現そのものを取り出して照合する。
-        for occ in set(NUMERAL_OCCURRENCE.findall(text)):
-            if has_numeral(occ) and occ not in HUB_FIXED_NUMERALS:
-                bad.append(f"{f}: 裏取りしていない数値 « {occ} »")
+        for occ in NUMERAL_OCCURRENCE.finditer(text):
+            token = occ.group(0)
+            if token in HUB_FIXED_NUMERALS:
+                continue
+            bad.append(f"{f}: 裏取りしていない数値 « {token} » … {_around(text, occ.start())}")
         # ★数値の無い断定・損得の話も止める★（Codex 14巡目 (a)-5）
-        #   「必ず勝てる」「投資効率は優秀」のように単位つき数値を含まない文は
-        #   数値検査を素通りしていた。散文には台帳が無いので、
-        #   ゲートの禁止語・要判断語に当たったら公開しない（fail-closed）。
-        for pat in deny_pats:
-            for hit in set(pat.findall(text)):
-                bad.append(f"{f}: 公開できない表現 « {hit} »")
+        #   散文には台帳が無いので、ゲートの禁止語・要判断語に当たったら公開しない。
+        for label, pat in deny_pats:
+            for hit in pat.finditer(text):
+                bad.append(f"{f}: {label} « {hit.group(0)} » … {_around(text, hit.start())}")
     return sorted(bad)
+
+
+def _around(text: str, pos: int, width: int = 24) -> str:
+    """どこで引っかかったか分かるように前後を少し出す（Codex 15巡目 (b)-3）。"""
+    s = text[max(0, pos - width):pos + width].replace("\n", " ").strip()
+    return f"«…{s}…»"
 
 
 def load_rows(source: "Path | None" = None):
@@ -518,10 +561,22 @@ def main(preview: bool = False):
         dropped = _prose_with_numbers(prose_all, _ci.numeral_with_unit)
         if dropped:
             print(f"★固定文のうち {len(dropped)} 箇所に未検証の数値があります★")
-            for p in dropped[:20]:
+            for p in dropped:   # ★打ち切らない★（Codex 15巡目 (b)-3）
                 print(f"  ✗ {p}")
             print("  裏取りが済むまでハブ4ページは作れません（固定文を直すか裏取りする）")
             return 1
+
+    # ★先行記事（解析待ち）は一覧に載せない★（Codex 15巡目 (b)-1）
+    #   preview 機種は strategy が空で、そのままだと
+    #   「設定狙い向け（ゲーム数狙い非対応）」という未確定の分類を断定してしまう。
+    previews = [r for r in rows if r.get("status") == "preview"]
+    if previews:
+        print(f"先行記事（解析待ち）{len(previews)} 機種は一覧から外します: "
+              f"{[r['slug'] for r in previews]}")
+    rows = [r for r in rows if r.get("status") != "preview"]
+    if not rows:
+        print("★一覧に載せられる機種が1件もありません★")
+        return 1
 
     A = dataset_A(rows)
     C = dataset_C(rows)
@@ -606,7 +661,8 @@ def main(preview: bool = False):
         #   しかも警告文が原因を正しく表していなかった。
         bad = hub_content_problems(built, {f: d for f, (_p, d) in pages.items()},
                                    _ci2.numeral_with_unit,
-                                   _g.ABSOLUTE_DENY_PAT, _g.RISK_PAT)
+                                   ("公開できない表現", _g.ABSOLUTE_DENY_PAT),
+                                   ("要人手確認の語（損得・設定の話）", _g.RISK_PAT))
         if bad:
             print(f"★生成後のHTMLに出せない内容が {len(bad)} 箇所あります★")
             for b in bad:      # ★打ち切らない★（Codex 14巡目 (b)-4）
@@ -634,7 +690,8 @@ def selftest() -> int:
     import claim_inventory as _ci
     import gates as _g
     num = _ci.numeral_with_unit
-    deny = (_g.ABSOLUTE_DENY_PAT, _g.RISK_PAT)
+    deny = (("公開できない表現", _g.ABSOLUTE_DENY_PAT),
+            ("要人手確認の語（損得・設定の話）", _g.RISK_PAT))
 
     ok = 0
     cases = []
@@ -664,11 +721,34 @@ def selftest() -> int:
 
     claim = "<html><body><p>この機種は必ず勝てるため最優先です</p></body></html>"
     t("数値の無い断定も止める",
-      any("公開できない表現" in x for x in hub_content_problems({"a.html": claim}, {}, num, *deny)))
+      hub_content_problems({"a.html": claim}, {}, num, *deny) != [])
 
     zenkaku = "<html><body><p>天井は２００Ｇです</p></body></html>"
     t("全角の数値も見つける",
       hub_content_problems({"a.html": zenkaku}, {}, num, *deny) != [])
+
+    # --- Codex 15巡目 (a)-2 の反例 ---
+    split = "<html><body><p>この方法なら勝<strong>て</strong>るため安心です</p></body></html>"
+    t("タグで分断した禁止語も見つける",
+      hub_content_problems({"a.html": split}, {}, num, *deny) != [])
+
+    meta = '<html><head><meta name="description" content="必ず勝てるので安心です"></head><body></body></html>'
+    t("meta属性の中の断定も見つける",
+      hub_content_problems({"a.html": meta}, {}, num, *deny) != [])
+
+    game = "<html><body><p>天井は200ゲームです</p></body></html>"
+    t("「ゲーム」単位の数値も見つける",
+      any("200ゲーム" in x for x in hub_content_problems({"a.html": game}, {}, num, *deny)))
+
+    twice = f"<html><body>{listing}<p>説明</p>{listing}</body></html>"
+    t("一覧が2回出たら止める（片方だけ除去して素通りさせない）",
+      any("1箇所であるべき" in x
+          for x in hub_content_problems({"a.html": twice}, {"a.html": {"list": listing}},
+                                        num, *deny)))
+
+    ctx = hub_content_problems({"a.html": "<html><body><p>天井は200Gです</p></body></html>"},
+                               {}, num, *deny)
+    t("どこで引っかかったか前後が出る", ctx and "…" in ctx[0])
 
     print(f"\n{ok}/{len(cases)} 合格")
     return 0 if ok == len(cases) else 1
