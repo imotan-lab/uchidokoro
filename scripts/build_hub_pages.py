@@ -198,23 +198,26 @@ SHALLOW_TENJO_LIMIT = 1000
 HUB_FIXED_NUMERALS: tuple = ()
 
 
-def _counts_allowed(a: int, c: int, c_top: int, d: int, all_: int) -> set:
-    """出してよい「集計の数」を★描く前に★決める。
+def _counts_allowed(a: int, c: int, c_top: int, d: int, all_: int) -> dict:
+    """出してよい「集計の数」を★描く前に・ページ別に・出現回数つきで★決める。
 
-    ★生成後HTMLから拾ってはいけない★（Codex 25巡目 (a)-2）
-      拾う方式だと、生成器が件数を間違えても検査器自身がその誤値を許可してしまう
-      （自分で自分を許可する循環）。データから数えた値だけを許す。
+    （Codex 25巡目 (a)-2 / 26巡目）
+      生成後HTMLから拾うと、生成器が件数を間違えても検査器が許してしまう。
+      さらに「49機種」を別の意味の場所で使い回せないよう、
+      ページごとに「何が何回まで出てよいか」を持つ。
     """
-    out = {f"{SHALLOW_TENJO_LIMIT}G"}
-    for n in (a, c, c_top, d, all_):
-        out.add(f"{n}機種")
-        out.add(str(n))
-    return out
+    from collections import Counter
+    return {
+        "guide-tenjo-ranking.html": Counter({f"{SHALLOW_TENJO_LIMIT}G": 1, f"{a}機種": 1}),
+        "guide-reset-ranking.html": Counter({f"{c}機種": 1, f"{c_top}機種": 1}),
+        "guide-suru-tenjo.html": Counter({f"{d}機種": 1}),
+        "guide-ichiran.html": Counter({f"{all_}機種": 1}),
+    }
 
 
 def hub_content_problems(built: dict, data_html: dict, *deny_pats,
                          prose_all: dict | None = None,
-                         allowed_counts: set | None = None) -> list:
+                         allowed_counts: dict | None = None) -> list:
     """出来上がったハブ4ページのうち、**データ由来でない部分**を検査する。
 
     ★機種一覧そのものは検査しない★（Codex 14巡目 (b)-1）
@@ -247,10 +250,14 @@ def hub_content_problems(built: dict, data_html: dict, *deny_pats,
         # ★語のかたまりではなく「数＋単位」の出現ごとに見る★
         #   日本語は空白で区切れないので、語単位だと文まるごとが1語になり
         #   許可リストが作れない。出現そのものを取り出して照合する。
-        allowed = allowed_counts or set()
+        # ★ページ別・出現回数つきで消費する★（Codex 26巡目）
+        budget = dict((allowed_counts or {}).get(f, {}))
         for occ in NUMERAL_OCCURRENCE.finditer(text):
             token = occ.group(0)
-            if token in HUB_FIXED_NUMERALS or token in allowed:
+            if token in HUB_FIXED_NUMERALS:
+                continue
+            if budget.get(token, 0) > 0:
+                budget[token] -= 1
                 continue
             bad.append(f"{f}: 裏取りしていない数値 {_redact(token)}"
                        f" 指紋{_fp(token)} … {_around(text, occ.start())}"
@@ -868,7 +875,16 @@ def selftest() -> int:
              '<span class="list-count">49</span>機種です</p></body></html>')
     t("集計の定義（件数・閾値）は、値を渡した時だけ通す",
       hub_content_problems({"a.html": fixed}, {}, *deny,
-                           allowed_counts={"1000G", "49機種"}) == [])
+                           allowed_counts={"a.html": {"1000G": 1, "49機種": 1}}) == [])
+    twice_same = ('<html><body><p>全<span class="list-count">49</span>機種です。'
+                  'もう一度<span class="list-count">49</span>機種。</p></body></html>')
+    t("★同じ集計値を2回使ったら止める（回数まで見る）",
+      hub_content_problems({"a.html": twice_same}, {}, *deny,
+                           allowed_counts={"a.html": {"49機種": 1}}) != [])
+    t("★別ページの許可は流用できない",
+      hub_content_problems({"b.html": fixed}, {}, *deny,
+                           allowed_counts={"a.html": {"1000G": 1, "49機種": 1}}) != [])
+
     t("★渡していない集計値は止める（クラス名は免除札にしない）",
       hub_content_problems({"a.html": fixed}, {}, *deny) != [])
     t("★例外リストは空である（固定数値の抜け道を持たない）", HUB_FIXED_NUMERALS == ())
