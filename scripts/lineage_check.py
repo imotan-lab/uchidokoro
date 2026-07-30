@@ -44,15 +44,26 @@ def core_lines(text: str) -> list:
             if MIN_LEN < len(x.strip()) < MAX_LEN]
 
 
+# ★一致率だけで決めない★（Codex指摘・実際に再現した）
+#   比較対象が1行しかないと、その1行が一致しただけで100%になる。
+#   一致した行数の下限も置く。
+MIN_SAME_LINES = 3
+MIN_COMPARABLE = 5      # 比べる行がこれ未満なら判定しない
+
+
 def similarity(text_a: str, text_b: str) -> dict:
     a, b = core_lines(text_a), core_lines(text_b)
+    out = {"ratio": 0.0, "same": 0, "a_lines": len(a), "b_lines": len(b),
+           "examples": [], "judgeable": False}
     if not a or not b:
-        return {"ratio": 0.0, "same": 0, "a_lines": len(a), "b_lines": len(b),
-                "examples": []}
+        return out
     same = set(a) & set(b)
-    return {"ratio": len(same) / min(len(a), len(b)),
-            "same": len(same), "a_lines": len(a), "b_lines": len(b),
-            "examples": sorted(same)[:3]}
+    out["same"] = len(same)
+    out["examples"] = sorted(same)[:3]
+    out["ratio"] = len(same) / min(len(a), len(b))
+    # ★判定してよいのは、比べる行が十分にあるときだけ★
+    out["judgeable"] = min(len(a), len(b)) >= MIN_COMPARABLE
+    return out
 
 
 def check(urls: list) -> dict:
@@ -63,7 +74,11 @@ def check(urls: list) -> dict:
             texts[u] = _w._visible_text(_w._get(u))
         except Exception as e:
             errs.append(f"{u}: 取得できません（{e}）")
-    out = {"suspects": [], "checked": [], "problems": errs}
+    # ★低い一致率は「独立である証拠」にはならない★（Codex指摘）
+    #   書き直した転載や、同じプレス資料を各社が要約した場合は検出できない。
+    #   ここで分かるのは「そのまま写した疑いがあるか」だけ。
+    out = {"suspects": [], "checked": [], "problems": errs,
+           "_note": "一致率が低くても独立の証明にはなりません（書き直した転載は検出できません）"}
     for x, y in itertools.combinations(sorted(texts), 2):
         s = similarity(texts[x], texts[y])
         hx = x.split("/")[2].lower().removeprefix("www.")
@@ -73,7 +88,9 @@ def check(urls: list) -> dict:
                "same_lines": s["same"], "already_same_lineage": already,
                "examples": s["examples"]}
         out["checked"].append(rec)
-        if s["ratio"] >= SUSPECT_RATIO and not already:
+        rec["judgeable"] = s["judgeable"]
+        if (s["judgeable"] and s["ratio"] >= SUSPECT_RATIO
+                and s["same"] >= MIN_SAME_LINES and not already):
             # ★登録簿にまだ書かれていない転載の疑い★
             out["suspects"].append(rec)
     return out
@@ -102,6 +119,11 @@ def selftest() -> int:
     t("　短い行は突き合わせに使わない（決まり文句で偶然一致するため）",
       similarity("はい" + nl + "いいえ", "はい" + nl + "いいえ")["ratio"] == 0.0)
     t("　片方が空なら 0", similarity(A, "")["ratio"] == 0.0)
+
+    t("★★比べる行が少なすぎるときは判定しない★★（1行だけで100%になる穴）",
+      similarity(one_line := "これはそこそこ長さのある本文の行がひとつだけです。",
+                 one_line)["judgeable"] is False)
+    t("　行が十分あれば判定する", similarity(A, A)["judgeable"] is True)
 
     real = _w._get
     try:

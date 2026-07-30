@@ -71,17 +71,37 @@ def _norm(s: str) -> str:
 #   「AT」と「AT当選」は同じことを言っている（片方は動詞が省かれているだけ）。
 #   ★「約50%」と「50%以上」のような意味の幅が違うものは揃えない★
 #   （それは spec_lookup の phrasing_not_equal が担当）。
-_BENEFIT_SUFFIX = ("に当選", "当選濃厚", "当選", "確定", "突入")
+# 「当選」は動詞が省かれているだけなので落としてよい。
+#   ★「濃厚」「確定」は落とさない★（確からしさが変わる・Codex指摘、実際に再現した）
+_BENEFIT_PLAIN = ("に当選", "当選", "に突入", "突入")
+# 確からしさ。★これが違えば別の事実として扱う★
+_CERTAINTY = (("濃厚", "LIKELY"), ("確定", "GUARANTEED"))
 
 
-def normalize_benefit(text: str) -> str:
-    """恩恵の言い方をそろえる（「AT」＝「AT当選」）。"""
+def split_benefit(text: str):
+    """恩恵を「何が起きるか」と「どのくらい確かか」に分ける。
+
+    ★『CZ当選濃厚』と『CZ当選』を同じにしない★
+      濃厚は確定ではない。以前は両方 `CZ` にしていたため、
+      **確からしさの違う出典どうしを一致とみなしていた**（実際に再現）。
+    """
     t = _norm(text).strip("。、,. ")
-    for suf in _BENEFIT_SUFFIX:
+    cert = "PLAIN"
+    for word, name in _CERTAINTY:
+        if word in t:
+            cert = name
+            t = t.replace(word, "")
+            break
+    for suf in _BENEFIT_PLAIN:
         if t.endswith(suf) and len(t) > len(suf):
             t = t[: -len(suf)]
             break
-    return t.strip("　 ")
+    return t.strip("　 "), cert
+
+
+def normalize_benefit(text: str) -> str:
+    """後方互換：恩恵の中身だけを返す（確からしさは split_benefit で取る）。"""
+    return split_benefit(text)[0]
 
 
 def normalize_counted(text):
@@ -109,7 +129,8 @@ def from_sentences(text: str) -> list:
             out.append({"kind": kind, "amount": int(m.group("amount")),
                         "unit": KINDS[kind]["unit"],
                         "counted": normalize_counted(counted),
-                        "benefit": normalize_benefit(benefit),
+                        "benefit": split_benefit(benefit)[0],
+                        "certainty": split_benefit(benefit)[1],
                         "raw": m.group(0)[:120]})
     return out
 
@@ -140,7 +161,8 @@ def from_table(lines: list) -> list:
                 continue        # ★恩恵が取れなければ採らない（値だけ載せない）★
             out.append({"kind": kind, "amount": int(m.group(1)),
                         "unit": KINDS[kind]["unit"], "counted": None,
-                        "benefit": normalize_benefit(benefit),
+                        "benefit": split_benefit(benefit)[0],
+                        "certainty": split_benefit(benefit)[1],
                         "raw": f"{line}={lines[i+1]} / 恩恵={benefit}"})
     return out
 
@@ -167,13 +189,23 @@ def read_page(url: str, official_name: str) -> dict:
             continue
         seen.add(key)
         got.append(c)
-    out["ceilings"], out["ok"], out["reason"] = got, True, "OK"
+    out["ceilings"] = got
+    # ★天井の話がありそうなのに1つも採れないなら OK と言わない★（Codex指摘・再現済み）
+    #   採れなかったことを「天井が無い」と読まれると、
+    #   別の出典だけで採用してしまう。
+    looks = any(w in text for w in ("天井", "ゲーム数天井", "周期天井"))
+    if looks and not got:
+        out["ok"], out["reason"] = False, "天井の記述はあるが採れませんでした（要確認）"
+        return out
+    out["ok"] = True
+    out["reason"] = "OK" if got else "天井の記述がありません"
     return out
 
 
 def _key(c: dict) -> str:
     """一致を見るための鍵。★恩恵まで含める★（値だけ合っても採らない）"""
-    return json.dumps({k: c.get(k) for k in ("kind", "amount", "unit", "benefit")},
+    return json.dumps({k: c.get(k) for k in ("kind", "amount", "unit", "benefit",
+                                             "certainty")},
                       ensure_ascii=False, sort_keys=True)
 
 
