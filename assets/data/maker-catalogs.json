@@ -1,0 +1,29 @@
+{
+ "schema_version": "maker-catalogs/v1",
+ "_note": "★新台を見つける唯一の入口★ メーカー公式の『パチスロ機種一覧』ページだけを見る。まとめサイトの機種名は読まない（名前の照合が要らなくなり、機種の取り違えが起きない）。ここに無いメーカーの新台は見つからないが、それは『出さない』側の失敗なので安全。人が保守するのはこのファイルだけで、機種ごとの作業はゼロ。",
+ "_how_to_add": "メーカー公式サイトの『パチスロ機種一覧』ページのURLと、そのページ内で個別機種ページを指すリンクの形（link_prefix）を書く。追加したら scripts/new_machine_watch.py --check <id> で、機種が取れることを確かめる。",
+ "catalogs": {
+  "bellco": {
+   "name": "ベルコ",
+   "list_url": "https://www.s-bellco.co.jp/products/slot/",
+   "link_prefix": "https://www.s-bellco.co.jp/products/slot/",
+   "min_expected": 50,
+   "status": "ACTIVE"
+  },
+  "kitadenshi": {
+   "name": "北電子",
+   "list_url": "https://www.kitadenshi.co.jp/slot/",
+   "link_prefix": "https://www.kitadenshi.co.jp/slot/",
+   "min_expected": 5,
+   "status": "ACTIVE"
+  },
+  "universal": {
+   "name": "ユニバーサル",
+   "list_url": "https://www.universal-777.com/product/slot/",
+   "link_prefix": "https://www.universal-777.com/product/slot/",
+   "min_expected": 3,
+   "status": "NEEDS_SETUP",
+   "_why": "一覧ページの機種リンクがJavaScriptで作られており、HTMLからは取れない（2026-07-31確認）。別の入口（サイトマップ等）を探すまで対象外。★対象外なので新台を取りこぼすが、誤った機種を作るよりは安全★"
+  }
+ }
+}
