@@ -107,8 +107,26 @@ jobs:
           set -uo pipefail
           rc=0
           # 引数なしの gates.py は説明を出すだけなので実データ検査は crosscheck が担当（16巡目 (b)-2）
-          python scripts/crosscheck_gates.py || rc=1
-          python scripts/audit_site.py || rc=1
+          python scripts/crosscheck_gates.py > cc.log 2>&1 || rc=1
+          python scripts/audit_site.py > as.log 2>&1 || rc=1
+          cat cc.log as.log
+          # ★落ちた内容を実行ページに残す★（2026-07-30）
+          #   ログはリポジトリの権限が無いと読めず、失敗メールには
+          #   「exit code 1」しか出ない。手元で再現できない失敗（Linux特有など）を
+          #   追えるように、要約欄へ出しておく。要約欄は実行ページで誰でも読める。
+          if [ "$rc" -ne 0 ]; then
+            {
+              echo "## Repository audits が失敗しました"
+              echo '### crosscheck_gates'
+              echo '```'
+              tail -n 30 cc.log
+              echo '```'
+              echo '### audit_site'
+              echo '```'
+              tail -n 40 as.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
           exit "$rc"
 
       # ★公開物を作る段に入ってよいかを、実ファイルだけで決める★

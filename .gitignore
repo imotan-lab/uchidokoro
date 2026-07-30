@@ -30,3 +30,7 @@ _site.next/
 #   検算に要る生データは手元にだけ残し、証拠ファイル側には
 #   検証に必要な1行分の引用（表の1行など）だけを記録する。
 assets/data/claim-evidence/raw/
+
+# CIの診断用ログ（コミットしない）
+cc.log
+as.log
