@@ -47,6 +47,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
 
+    # ★deploy 側からゲート状態を見られるようにする★
+    #   ゲートが無効なら成果物そのものが存在しないので、deploy は絶対に走らせない。
+    outputs:
+      gate_on: ${{ steps.gate.outputs.on }}
+
     # ★フォークからのPRでは走らせない★（2026-07-30・Codex 13巡目 (a)-4）
     #   pull_request はPR側のコードを実行する。つまりPRで
     #   検査スクリプトやこのworkflow自体を「常に合格」に書き換えれば、
@@ -106,7 +111,32 @@ jobs:
           python scripts/audit_site.py || rc=1
           exit "$rc"
 
+      # ★公開物を作る段に入ってよいかを、実ファイルだけで決める★
+      #   （2026-07-30）ゲートが無効のうちは公開できる機種が0なので、
+      #   ビルドは必ず失敗する。それを「赤いまま」放置すると、
+      #   **本物の失敗に気づけなくなる**（赤が常態＝赤を見なくなる）。
+      #   ここで無効を検出したら、以降の公開系ステップを飛ばして緑で終える。
+      #   ★設定が読めない・bool以外・壊れている場合は落とす（fail-closed）★
+      #     ＝「読めなかったから飛ばす」は絶対にしない。
+      - name: Check the publish gate
+        id: gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          on="$(python -c 'import sys; sys.path.insert(0, "scripts"); from build_public_data import claim_gate_enabled; print("true" if claim_gate_enabled() else "false")')"
+          echo "on=${on}" >> "$GITHUB_OUTPUT"
+          echo "publish gate: ${on}"
+
+      - name: Nothing to publish yet
+        if: steps.gate.outputs.on != 'true'
+        shell: bash
+        run: |
+          echo "::notice title=公開ゲートは無効です::\
+          検査は全て実行しました。公開できる機種がまだ無いので、公開物は作りません。\
+          有効にする前に _design/phase1_open_holes.md の項目を解消してください。"
+
       - name: Build from an empty artifact directory
+        if: steps.gate.outputs.on == 'true'
         shell: bash
         env:
           # ★公開スイッチが入っている時は、外部依存の残件があるとビルドを落とす★
@@ -117,6 +147,7 @@ jobs:
           python scripts/build_pages_artifact.py
 
       - name: Audit the artifact independently
+        if: steps.gate.outputs.on == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -125,6 +156,7 @@ jobs:
             --details-dir _site/assets/data/machine-details
 
       - name: Verify deterministic content hash
+        if: steps.gate.outputs.on == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -137,6 +169,7 @@ jobs:
           test "$first" = "$second"
 
       - name: Upload Pages artifact
+        if: steps.gate.outputs.on == 'true'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
         with:
           path: _site
@@ -162,7 +195,8 @@ jobs:
       github.event_name == 'workflow_dispatch' &&
       inputs.deploy == true &&
       github.ref == 'refs/heads/main' &&
-      vars.PAGES_DEPLOY_ENABLED == 'true'
+      vars.PAGES_DEPLOY_ENABLED == 'true' &&
+      needs.build.outputs.gate_on == 'true'
     runs-on: ubuntu-24.04
 
     permissions:
