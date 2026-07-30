@@ -124,6 +124,8 @@ def build_detail(slug, name, release, material) -> dict:
     if (rng := adopted.get("payout_range")):
         v = rng["value"]
         facts.append(["機械割", f"{v['low']}%〜{v['high']}%"])
+    if (g50 := adopted.get("games_per_50")):
+        facts.append(["50枚あたり", f"約{g50['value']['games']:g}G"])
 
     sections = []
     # ★天井・恩恵★（一式で採れたものだけ。値だけでは載せない）
@@ -165,6 +167,8 @@ def build_detail(slug, name, release, material) -> dict:
     if (rng := adopted.get("payout_range")):
         v = rng["value"]
         spec_body.append(f"**機械割**：{v['low']}%〜{v['high']}%")
+    if (g50 := adopted.get("games_per_50")):
+        spec_body.append(f"**50枚あたりのゲーム数**：約{g50['value']['games']:g}G")
     sections.append({"title": "基本スペック", "body": spec_body})
 
     # 設定別の表（★集まった設定だけ★＝1〜6の連番だと決めつけない）

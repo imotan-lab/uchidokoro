@@ -55,6 +55,10 @@ FIELDS = {
     #   波ダッシュの字が違うので、比べる前に形をそろえる。
     "payout_range": {"labels": ("機械割",), "kind": "range", "jp": "機械割の範囲"},
     "model_code":   {"labels": ("型式名",), "kind": "text", "jp": "型式名"},
+    # 50枚あたりのゲーム数（両サイトにある・実データで確認）
+    #   P-WORLD「50枚あたりのゲーム数 約31G」／ちょんぼりすた「回転数/50枚 → 約31G」
+    "games_per_50": {"labels": ("50枚あたりのゲーム数", "回転数/50枚", "50枚あたり"),
+                     "kind": "games", "jp": "50枚あたりのゲーム数"},
     # ★条件（どのモードか）を書かないと載せられない項目★
     #   収集器はまだ条件を取れないので、集めても採用はされず保留になる。
     "net_increase": {"labels": ("純増",), "kind": "text", "jp": "純増"},
@@ -75,6 +79,20 @@ def normalize_range(raw: str):
     return {"low": lo, "high": hi, "unit": "%"}
 
 
+_GAMES_RE = re.compile(r"約?\s*(\d{1,3}(?:\.\d)?)\s*G")
+
+
+def normalize_games(raw: str):
+    """『約31G』を比べられる形にする。ありえない値は採らない。"""
+    m = _GAMES_RE.search(unicodedata.normalize("NFKC", str(raw or "")))
+    if not m:
+        return None
+    v = float(m.group(1))
+    if not (5 <= v <= 100):
+        return None          # 50枚で5G未満・100G超はありえない
+    return {"games": v, "unit": "G"}
+
+
 def single_value(lines: list, labels: tuple, kind: str):
     """『見出し → 値』の1つ組を読む。見出し行に値が続く形にも対応。"""
     seps = "：:  　"
@@ -84,7 +102,10 @@ def single_value(lines: list, labels: tuple, kind: str):
             continue
         # 見出しの直後は区切りか行末でなければならない（別の語の一部を拾わない）
         rest = line[len(lab):]
-        if rest and rest[0] not in seps:
+        # ★見出しの直後が区切り・空白・行末のいずれか★
+        #   `&nbsp;` をほどくと「50枚あたりのゲーム数 約31G」のように
+        #   空白1つで値が続く形になる（P-WORLDがこの形）。
+        if rest and rest[0] not in seps and not rest[0].isspace():
             continue
         cand = rest.lstrip(seps).strip()
         if not cand and i + 1 < len(lines):
@@ -93,6 +114,10 @@ def single_value(lines: list, labels: tuple, kind: str):
             continue
         if kind == "range":
             v = normalize_range(cand)
+            if v:
+                return v
+        elif kind == "games":
+            v = normalize_games(cand)
             if v:
                 return v
         elif kind == "text":
@@ -307,6 +332,12 @@ def selftest() -> int:
     t("　型式名は許可した形だけ採る（説明文を拾わない）",
       single_value(["型式名", "Lびん娘NY1"], ("型式名",), "text") == "Lびん娘NY1"
       and single_value(["型式名", "記載なし"], ("型式名",), "text") is None)
+
+    t("★50枚あたりのゲーム数を読む（両サイトの書き方の差を吸収）★",
+      normalize_games("約31G") == normalize_games("31G") == {"games": 31.0, "unit": "G"})
+    t("　ありえない値は採らない",
+      normalize_games("約3G") is None and normalize_games("約300G") is None)
+    t("　G数として読めなければ採らない", normalize_games("約2.8枚") is None)
 
     A = {"url": "https://www.p-world.co.jp/x", "host": "p-world.co.jp", "ok": True,
          "reason": "OK", "fields": {"payout_rate": {"1": "97.8%"}}}

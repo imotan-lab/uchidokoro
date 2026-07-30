@@ -141,6 +141,11 @@ def _visible_text(html: str) -> str:
     for tag in ("script", "style", "noscript"):
         html = re.sub("(?is)<" + tag + "[^>]*>.*?</" + tag + "[ \t\r\n]*>", " ", html)
     t = re.sub("(?s)<[^>]+>", chr(10), html)
+    # ★実体参照をほどく★（2026-07-31）
+    #   `&nbsp;` が残ると「50枚あたりのゲーム数&nbsp;約31G」のように
+    #   見出しと値がくっついたまま読めず、値を取りこぼす（実データで確認）。
+    import html as _html
+    t = _html.unescape(t)
     t = unicodedata.normalize("NFKC", t)
     return chr(10).join(x.strip() for x in t.splitlines() if x.strip())
 
