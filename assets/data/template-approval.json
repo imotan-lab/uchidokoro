@@ -41,7 +41,7 @@
   "scripts/claim_c5.py": "48beea835d20923135cb4dc80972059171dab72493b2205c0ab6d43fc302dec4",
   "scripts/claim_evidence.py": "e2d8ab58b5c0170fd396f3d972bb792cfc775b65d965bfd3d2573e9830c4a800",
   "scripts/claim_identity.py": "9519166edf5fc4efb8f25b9e9e6ae80995730da4c1b5d0a35edd80b26027ff3b",
-  "scripts/claim_inventory.py": "fc9cec2fcfb2b450b4fb8c93af3fd0c6c6877b0d12cd1e78f4151e9437831b86",
+  "scripts/claim_inventory.py": "a1d1120c9949a1e025d67e9e4bde6c241dfb85828e9349e8a15d3f6b3506a99f",
   "scripts/claim_ledger.py": "67c2140eee0a9d6d83932a483a24a243a685f87a79737cedaca5236378fe1953",
   "scripts/claim_reconcile.py": "4817f64bc96c0a8d3c6ddc8aa5c8c204ce9a7c8809e571cf9676b0debe62531b",
   "scripts/extract_setting_rates.py": "967989f6804dea9cd10d88ac2cb288ccfd2ea7cb08f03bc9351106f7f334249e",

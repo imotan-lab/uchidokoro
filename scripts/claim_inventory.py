@@ -83,8 +83,15 @@ LABEL_RULES = [
     # ★「通常時」は天井とは限らない★（通常時の純増・通常時の確率などにも使われる）
     #   ラベルだけで天井と決めつけない。未知として止める。
     (r"^通常天井$", "ceiling.normal", "NORMAL", "NONE", "UNKNOWN", "INTEGER", "G"),
-    # ★機種データ側の天井（machines.json の limit）★
-    (r"^limit$", "ceiling.normal", "NORMAL", "NONE", "UNKNOWN", "INTEGER", "G"),
+    # ★`^limit$` を天井として扱わない★（2026-07-30・上の _INPUT_CAP_POINTERS 参照）
+    #   これは入力欄の上限。画面に天井として出るのはモード別の limit だけ。
+    # ★checker の枝ごとの天井★（Phase 2・2026-07-30）
+    #   以前は枝を問わず "limit" だったので、リセット天井666Gと通常天井999Gが
+    #   「同じ事実の食い違い」に見えていた（burning_express で実際に誤検出）。
+    (r"^normal\.limit$", "ceiling.normal", "NORMAL", "NONE", "UNKNOWN", "INTEGER", "G"),
+    (r"^reset\.limit$", "ceiling.reset", "RESET", "NONE", "UNKNOWN", "INTEGER", "G"),
+    (r"^cz\.limit$", "ceiling.normal.cz", "CZ", "CZ_GAP", "UNKNOWN", "INTEGER", "G"),
+    (r"^at\.limit$", "ceiling.normal.at", "AT", "AT_GAP", "UNKNOWN", "INTEGER", "G"),
     # --- 恩恵（何が起きるか）。文章なので TEXT。★数値ではないが事実★
     (r"^恩恵$|^天井恩恵$", "benefit.ceiling", "NORMAL", "NONE", "NONE", "TEXT", ""),
     (r"^リセット恩恵$", "benefit.reset", "RESET", "NONE", "NONE", "TEXT", ""),
@@ -710,9 +717,22 @@ def _scan_excluded_value(unsupported: list, pointer: str, label: str,
 # ★機種データ（machines.json）側にも公開される数値がある★（Codex 9巡目 (a)-7）
 #   在庫は記事(detail)しか見ていなかったので、`limit` に誤った天井を書いても
 #   枠にも未分類にも入らず、そのまま公開射影へ入っていた。
-_MACHINE_NUMERIC_FIELDS = {
-    "limit": ("ceiling.normal", "NORMAL", "NONE", "UNKNOWN", "INTEGER", "G"),
-}
+# ★`limit` は天井ではない★（Phase 2・2026-07-30・実装を確認して訂正）
+#   machine.html の getMachineLimit() は machine.limit / checker.limit を
+#   **入力欄の上限**として使うだけで、画面に「天井」とは出さない。
+#   天井として表示されるのは checker[モード].limit だけ（limitStr の分岐）。
+#   ここを天井として数えていたため、
+#     midoridon_viva: 天井1280G ↔ 入力上限1330G
+#     code_geass    : 天井1000G ↔ 入力上限1050G
+#   のような「+50の入力余裕」が、記事との食い違いに見えていた。
+_MACHINE_NUMERIC_FIELDS = {}
+
+# 入力欄の上限（＝表示されない設定値）。除外した記録は残す。
+_INPUT_CAP_POINTERS = ("/machine/limit", "/machine/checker/limit")
+
+# checker の枝の名前 → 天井の種類（上の辞書のキー）
+_CHECKER_LIMIT_MODE = {"reset": "reset.limit", "normal": "normal.limit",
+                       "cz": "cz.limit", "at": "at.limit"}
 # 数値を含み得るが型に落ちない機種データの項目（＝未分類として止める）
 _MACHINE_PROSE_FIELDS = ("tenjo_display", "strategy")
 
@@ -726,6 +746,13 @@ def _machine_pairs(machine: dict, editorial: list | None = None) -> list:
     for k, _spec in _MACHINE_NUMERIC_FIELDS.items():
         if machine.get(k) is not None:
             out.append((f"/machine/{k}", k, f"{machine[k]}{unit}"))
+    # ★入力欄の上限は「事実」ではないが、黙って捨てない★（2026-07-30）
+    #   画面に天井として出るのはモード別の limit だけ（machine.html の limitStr）。
+    #   ここを事実として数えると、+50 の入力余裕が記事との食い違いに見える。
+    if machine.get("limit") is not None and editorial is not None:
+        editorial.append({"pointer": "/machine/limit", "label": "limit",
+                          "reason": "INPUT_CAP_NOT_A_CLAIM",
+                          "value": f"{machine['limit']}{unit}"})
     for k in _MACHINE_PROSE_FIELDS:
         if machine.get(k):
             out.append((f"/machine/{k}", k, str(machine[k])))
@@ -775,7 +802,16 @@ def _checker_pairs(machine: dict, editorial: list | None = None) -> list:
                                           "value": f"{v}{unit}"})
                     continue
                 if k == "limit" and isinstance(v, (int, float)):
-                    out.append((f"{ptr}/{k}", "limit", f"{v}{unit}"))
+                    # ★画面に「（天井N）」と出るのはモード別の limit だけ★
+                    #   checker 直下の limit は入力欄の上限なので事実にしない。
+                    branch = ptr.rsplit("/", 1)[-1]
+                    label = _CHECKER_LIMIT_MODE.get(branch)
+                    if label is None:
+                        editorial.append({"pointer": f"{ptr}/{k}", "label": "limit",
+                                          "reason": "INPUT_CAP_NOT_A_CLAIM",
+                                          "value": f"{v}{unit}"})
+                        continue
+                    out.append((f"{ptr}/{k}", label, f"{v}{unit}"))
                 elif k == "suruMax" and isinstance(v, (int, float)):
                     out.append((f"{ptr}/{k}", "suruMax", f"{v}回"))
                 elif k == "count" and isinstance(v, (int, float)):
@@ -1021,6 +1057,8 @@ def _finish(slug, machine, detail, slots, unclassified, unsupported,
             "detail_json_sha256": _sha(detail),
         },
         "slots": slots,
+        # ★同じ事実が記事内で食い違っている箇所★（あれば公開しない）
+        "surface_conflicts": surface_conflicts(slots),
         "unclassified_atoms": unclassified,
         "unsupported_facts": unsupported,
         "excluded_editorial_atoms": excluded_editorial,
@@ -1042,10 +1080,64 @@ def _finish(slug, machine, detail, slots, unclassified, unsupported,
             "excluded_nonclaim": len(excluded_nonclaim),
             # ★未分類も「型が未実装の事実」も残っていれば公開不可★
             #   （素通りさせると「未分類ゼロ」が網羅の証明にならない）
+            # ★記事が自分自身と矛盾していたら、出典を見るまでもなく公開不可★
+            "surface_conflicts": len(surface_conflicts(slots)),
             "publishable": (len(unclassified) == 0 and len(unsupported) == 0
+                            and len(surface_conflicts(slots)) == 0
                             and all(s["current_value"] is not None for s in slots)),
         },
     }
+
+
+def surface_conflicts(slots: list) -> list:
+    """★同じ事実が記事内で違う値になっていたら列挙する★（Phase 2・2026-07-30）
+
+    ★なぜ要るか★
+      東京喰種は「CZ間天井の恩恵」が、天井・恩恵セクションでは
+      「CZまたはAT当選」、基本スペックでは「CZ確定」と書かれていた。
+      **どちらかが必ず誤り**なのに、公開まで誰も機械的に気づけなかった
+      （人が読み比べる quality-review が拾うまで残った・台帳 #133）。
+
+      claim_key は表示箇所を含まないので、同じ鍵の枠が複数あるということは
+      「同じ事実が複数箇所に出ている」という意味になる。
+      そこに違う値が入っていれば、出典を見るまでもなく**記事が自己矛盾している**。
+
+    ★値の比べ方★
+      表示文字列ではなく、正規化した値（current_value）で比べる。
+      「1,200G」と「1200G」は同じ事実であって矛盾ではない。
+      値にできていない枠（current_value が None）は比較に使わない
+      ＝別途 unnormalized_slots として公開を止めているので二重に数えない。
+    """
+    by_key: dict = {}
+    for s in slots:
+        cv = s.get("current_value")
+        if cv is None:
+            continue
+        by_key.setdefault(s["claim_key"], []).append(s)
+
+    out = []
+    for key, group in by_key.items():
+        # 正規化した値そのもので突き合わせる（辞書なので安定な形に落とす）
+        seen: dict = {}
+        for s in group:
+            seen.setdefault(_sha(s["current_value"]), []).append(s)
+        if len(seen) < 2:
+            continue
+        out.append({
+            "claim_key": key,
+            "field_key": group[0]["field_key"],
+            "conditions": group[0]["conditions"],
+            # ★どこに何が書いてあるかを全部残す★（片方だけ直して終わらせない）
+            "surfaces": sorted(
+                ({"slot_id": s["slot_id"],
+                  "source_pointer": s["source_pointer"],
+                  "current_text": s["current_text"],
+                  "current_value": s["current_value"]}
+                 for s in group),
+                key=lambda x: x["source_pointer"]),
+            "reason": "SURFACE_CONFLICT",
+        })
+    return sorted(out, key=lambda x: x["claim_key"])
 
 
 def load_machine(slug: str):
@@ -1240,6 +1332,36 @@ def selftest() -> int:
           build_inventory("x", {"slug": "x"}, {"sections": [{"tables": [
               {"headers": ["設定", "機械割"],
                "rows": [["設定1", "97.2%"], ["設定6", "106.5%"]]}]}]})))
+    # -------- SURFACE_CONFLICT（Phase 2・2026-07-30・台帳 #133 の型）
+    _conf = build_inventory("x", {"slug": "x"}, {
+        "factTable": [["機械割(設定1)", "97.2%"]],
+        "sections": [{"tables": [{"headers": ["設定", "機械割"],
+                                  "rows": [["設定1", "98.5%"]]}]}]})
+    t("★★同じ事実が記事内で食い違っていたら止める★★",
+      _conf["coverage"]["surface_conflicts"] == 1
+      and _conf["coverage"]["publishable"] is False)
+    t("　食い違いは「どこに何が」を全部残す（片方だけ直して終わらせない）",
+      len(_conf["surface_conflicts"][0]["surfaces"]) == 2
+      and _conf["surface_conflicts"][0]["reason"] == "SURFACE_CONFLICT")
+    _same = build_inventory("x", {"slug": "x"}, {
+        "factTable": [["機械割(設定1)", "97.2%"]],
+        "sections": [{"tables": [{"headers": ["設定", "機械割"],
+                                  "rows": [["設定1", "97.2%"]]}]}]})
+    t("　同じ値が複数箇所にあるのは矛盾ではない",
+      _same["coverage"]["surface_conflicts"] == 0)
+    t("★書き方の違いだけで矛盾にしない（1,200G と 1200G）★",
+      (lambda inv: inv["coverage"]["surface_conflicts"] == 0)(
+          build_inventory("x", {"slug": "x"}, {
+              "factTable": [["天井", "1,200G"]],
+              "sections": [{"body": ["**天井**：1200G"]}]})))
+    t("　値にできていない枠は矛盾の判定に使わない（別途止まるので二重に数えない）",
+      surface_conflicts([
+          {"claim_key": "k", "field_key": "f", "conditions": {},
+           "slot_id": "a", "source_pointer": "/a",
+           "current_text": "?", "current_value": None},
+          {"claim_key": "k", "field_key": "f", "conditions": {},
+           "slot_id": "b", "source_pointer": "/b",
+           "current_text": "??", "current_value": None}]) == [])
     # -------- Codex 3巡目の反例
     t("★★表示単位が枠の期待単位と違えば値にしない（97.2円を%の枠に入れない）★★",
       normalize_value("97.2円", "%") is None
@@ -1285,9 +1407,20 @@ def selftest() -> int:
     # ★★機種データの数値も在庫に入る★★（Codex 9巡目 (a)-7）
     mi2 = build_inventory("x", {"slug": "x", "limit": 1200,
                                 "checker": {"unit": "G"}}, {})
-    t("★★machines.json の limit（天井）が枠になる★★",
-      any(s["field_key"] == "ceiling.normal" and s["current_value"]["amount"] == 1200
-          for s in mi2["slots"]))
+    t("★★machines.json の limit は入力欄の上限なので事実にしない★★"
+      "（2026-07-30・machine.html の実装を確認して訂正）",
+      not mi2["slots"]
+      and any(e["reason"] == "INPUT_CAP_NOT_A_CLAIM"
+              for e in mi2["excluded_editorial_atoms"]))
+    t("　ただし黙っては捨てない（除外した記録が残る）",
+      any(e["pointer"] == "/machine/limit" for e in mi2["excluded_editorial_atoms"]))
+    t("★画面に「（天井N）」と出るモード別の limit は事実として数える★",
+      (lambda inv: any(s["field_key"] == "ceiling.normal"
+                       and s["current_value"]["amount"] == 1280 for s in inv["slots"])
+       and any(e["reason"] == "INPUT_CAP_NOT_A_CLAIM"
+               for e in inv["excluded_editorial_atoms"]))(
+          build_inventory("x", {"slug": "x", "limit": 1280, "checker": {
+              "unit": "G", "limit": 1330, "normal": {"limit": 1280}}}, {})))
     t("★★機種データの散文（tenjo_display / strategy）も素通りしない★★",
       build_inventory("x", {"slug": "x", "limit": 1200,
                             "checker": {"unit": "G"},
@@ -1299,8 +1432,14 @@ def selftest() -> int:
         "unit": "G", "reset": {"limit": 9999, "note": "リセット天井9999G",
                                "caution": 500, "good": 700}}}, {})
     t("★★checker.reset.limit（画面に天井として出る）が枠になる★★",
-      any(s["field_key"] == "ceiling.normal"
+      any(s["field_key"] == "ceiling.reset"
           and s["current_value"]["amount"] == 9999 for s in ck["slots"]))
+    t("★リセット天井を通常天井と混ぜない★（2026-07-30・burning_expressで誤検出）",
+      (lambda inv: inv["coverage"]["surface_conflicts"] == 0
+       and {s["field_key"] for s in inv["slots"]}
+       >= {"ceiling.normal", "ceiling.reset"})(
+          build_inventory("x", {"slug": "x", "limit": 999, "checker": {
+              "unit": "G", "normal": {"limit": 999}, "reset": {"limit": 666}}}, {})))
     t("　checker の注記も素通りしない",
       ck["coverage"]["slots_total"] + ck["coverage"]["unclassified_atoms"] >= 2)
     t("★型式の鍵は3項目そろって初めて作れる",

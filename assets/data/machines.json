@@ -7932,8 +7932,7 @@
    "normal": {
     "excellent": 850,
     "good": 520,
-    "caution": 320,
-    "limit": 850
+    "caution": 320
    },
    "reset": {
     "excellent": 650,
@@ -7979,14 +7978,12 @@
    "normal": {
     "excellent": 800,
     "good": 610,
-    "caution": 450,
-    "limit": 1050
+    "caution": 450
    },
    "reset": {
     "excellent": 550,
     "good": 350,
-    "caution": 200,
-    "limit": 750
+    "caution": 200
    },
    "limit": 1050
   },
@@ -8223,14 +8220,12 @@
    "normal": {
     "excellent": 1050,
     "good": 750,
-    "caution": 550,
-    "limit": 1330
+    "caution": 550
    },
    "reset": {
     "excellent": 600,
     "good": 250,
-    "caution": 150,
-    "limit": 850
+    "caution": 150
    },
    "limit": 1330
   },
@@ -8264,8 +8259,7 @@
    "normal": {
     "excellent": 800,
     "good": 570,
-    "caution": 400,
-    "limit": 1000
+    "caution": 400
    },
    "reset": {
     "excellent": 350,
@@ -8310,8 +8304,7 @@
    "normal": {
     "excellent": 800,
     "good": 550,
-    "caution": 400,
-    "limit": 1050
+    "caution": 400
    },
    "reset": {
     "excellent": 100,
@@ -8358,8 +8351,7 @@
     "excellent": 350,
     "good": 270,
     "caution": 150,
-    "note": "CZ間400Gで天井。CZ当選。等価270G〜が狙い目。",
-    "limit": 450
+    "note": "CZ間400Gで天井。CZ当選。等価270G〜が狙い目。"
    },
    "suru": {
     "suruMax": 7,
@@ -8457,8 +8449,7 @@
    "normal": {
     "excellent": 1000,
     "good": 700,
-    "caution": 260,
-    "limit": 1350
+    "caution": 260
    },
    "limit": 1350
   },
@@ -8501,8 +8492,7 @@
    "normal": {
     "excellent": 800,
     "good": 640,
-    "caution": 450,
-    "limit": 1050
+    "caution": 450
    },
    "reset": {
     "excellent": 550,

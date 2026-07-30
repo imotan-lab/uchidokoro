@@ -935,6 +935,55 @@ def check_28_settei_table_shape(machines: list) -> list[str]:
     return ngs
 
 
+def check_30_surface_conflicts(machines: list) -> list[str]:
+    """同じ事実が1つの記事の中で違う値になっていないか（自己矛盾）
+
+    ★なぜ要るか（2026-07-30）★
+      東京喰種は「CZ間天井の恩恵」が、天井・恩恵セクションでは
+      「CZまたはAT当選」、基本スペックでは「CZ確定」と書かれていた。
+      **どちらかが必ず誤り**なのに、人が読み比べるまで誰も気づけなかった。
+
+      同じ日に、8機種で「入力欄の上限」がそのまま
+      「（天井N）」として画面に出ていたことも分かった
+      （railgun2 は記事999G+αに対し画面1050G）。
+      どちらも機械で気づける形なので、ここで毎回見る。
+
+    ★+α の表記揺れは通す★
+      「1200G」と「1200G+α」は書き方の違いで、数値そのものは同じ。
+      これで落とすと本題の食い違いが埋もれるので、数値が違う時だけ挙げる。
+    """
+    import sys as _s
+    _s.path.insert(0, str(BASE / "scripts"))
+    import claim_inventory as _ci
+
+    ngs = []
+    for m in machines:
+        slug = m.get("slug")
+        dp = BASE / "assets" / "data" / "machine-details" / f"{slug}.json"
+        if not dp.is_file():
+            continue
+        try:
+            detail = load_json(dp)
+        except Exception:
+            continue        # 読めない記事は別項目の担当
+        try:
+            inv = _ci.build_inventory(slug, m, detail)
+        except Exception as e:
+            ngs.append(f"{slug}: 在庫を作れず矛盾を検査できません（{type(e).__name__}）")
+            continue
+        for c in inv.get("surface_conflicts") or []:
+            amounts = {v.get("amount")
+                       for v in (sf["current_value"] for sf in c["surfaces"])
+                       if isinstance(v, dict)}
+            if len(amounts) < 2:
+                continue        # ＋α などの表記揺れ
+            where = " / ".join(
+                f"{sf['source_pointer']}={_redact(str(sf['current_text']))[:24]}"
+                for sf in c["surfaces"])
+            ngs.append(f"{slug}: {c['field_key']} が記事内で食い違い → {where}")
+    return ngs
+
+
 CHECKS = [
     ("1_インラインstyle", check_1_inline_style),
     ("2_サブパス残骸", check_2_old_subpath),
@@ -965,6 +1014,7 @@ CHECKS = [
     ("27_ハブ件数整合", check_27_hub_counts),
     ("28_settei表の列数整合", check_28_settei_table_shape),
     ("29_制御文字混入", check_29_control_chars),
+    ("30_記事内の自己矛盾", check_30_surface_conflicts),
 ]
 
 
