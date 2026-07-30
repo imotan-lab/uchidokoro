@@ -220,14 +220,18 @@ def main() -> int:
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--apply", action="store_true", help="公開物を書き出す")
     ap.add_argument("--verify", action="store_true", help="既存の公開物を検査するだけ")
-    ap.add_argument("--claim-gate", action="store_true",
-                    help="出典の裏取りゲートを今回だけ有効にして影響を見る")
     args = ap.parse_args()
     if args.selftest:
         return selftest()
 
+    # ★ゲートの状態を知る経路は「実ファイルだけ」★（2026-07-30・Codex Phase 2 相談）
+    #   以前あった `--claim-gate`（今回だけ有効にする）を削除した。
+    #   迂回口ではなかったが、**ゲート状態の情報源が2つある**こと自体が危険で、
+    #   `--allow-ungated` を廃止した理由（迂回できる経路は常用される）と同じ。
+    #   影響を見たいときは assets/data/claim-gate.json の enabled を実際に true にする。
+    #   出力先は公開されない（Pages の Source を切り替えない限り届かない）。
     try:
-        gate_on = args.claim_gate or claim_gate_enabled()
+        gate_on = claim_gate_enabled()
     except GateConfigError as e:
         # ★停止ゲートの設定が読めないときは、ビルド自体を止める★
         print(f"★出典の裏取りゲートの設定が読めません: {e}")
@@ -324,8 +328,8 @@ def main() -> int:
     #   裏取りしていない内容が公開物になってしまう。
     if not cg:
         print("★出典の裏取りゲートが無効なので書き出しません★")
-        print(f"  {os.path.relpath(CLAIM_GATE, BASE)} の enabled を true にするか、")
-        print("  影響を確認するだけなら --claim-gate を付けて実行してください。")
+        print(f"  {os.path.relpath(CLAIM_GATE, BASE)} の enabled を true にしてください。")
+        print("  （今回だけ有効にするフラグは廃止しました。情報源は実ファイルのみです）")
         print("=" * 66)
         return 1
 
