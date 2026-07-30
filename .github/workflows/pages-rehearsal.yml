@@ -98,6 +98,12 @@ jobs:
           python scripts/audit_public.py --selftest
           python scripts/build_pages_artifact.py --selftest
           python scripts/build_hub_pages.py --selftest
+          # ★今日足したものもCIで見る★（手元だけで確かめない）
+          python scripts/numerals.py --selftest
+          python scripts/safe_json.py --selftest
+          python scripts/claim_pipeline.py --selftest
+          python scripts/claim_collect.py --selftest
+          python scripts/task_guard.py --selftest
 
       - name: Repository audits
         shell: bash

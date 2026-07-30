@@ -2037,20 +2037,16 @@ _NUM_IN_TEXT = re.compile(
 
 
 def _has_numeral(text: str) -> bool:
-    """★Unicodeの数値カテゴリ全体で判定する★（Codex 23巡目 #10）
+    """★判定は numerals.py に1本化★（2026-07-30）
 
-    列挙方式だとアラビア・インド数字（٩٩٩）などを取りこぼす。
-    unicodedata の分類（Nd/Nl/No）と数値値の有無で見る。
+    以前はここで unicodedata の数値属性を見ていたが、audit_public は
+    文字を列挙した別方式で見ていた。Python 3.13（Unicode 15.1）で
+    「京」に数値属性が付き、**「東京喰種」を数値ありと判定して**
+    独立監査と食い違い、CIでだけ止まり続けた。
+    同じ意味の判定を2か所に書かない。
     """
-    for ch in text:
-        if unicodedata.category(ch) in ("Nd", "Nl", "No"):
-            return True
-        try:
-            unicodedata.numeric(ch)
-            return True
-        except (TypeError, ValueError):
-            pass
-    return False
+    from numerals import has_numeral as _hn
+    return _hn(text)
 
 
 def _numeric_surfaces(pm: dict, pd: dict) -> list[str]:

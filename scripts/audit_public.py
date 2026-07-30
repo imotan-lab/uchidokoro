@@ -119,10 +119,18 @@ _ENUM = re.compile(r"設定\s*" + _SET1 + r"(?:\s*[・、,／/･]\s*(?:設定\s
 _ONE = re.compile(_SET1)
 # ★数値の表記は算用数字だけではない（Codex 22巡目 #8）★
 #   漢数字・丸数字・上付き/下付き・ローマ数字も数値情報として扱う。
-_NUM = re.compile(
-    r"[0-9０-９]"
-    r"|[一二三四五六七八九十百千万零壱弐参拾]"
-    r"|[①-⓿]|[⁰-₟]|[Ⅰ-ⅿ]")
+# ★数値かどうかの判定は numerals.py に1本化★（2026-07-30）
+#   ここに正規表現で列挙し、gates.py は Unicode の数値属性で見る、という
+#   二重定義だったため、Python 3.13 で「東京」が数値扱いになって食い違った。
+class _NumShim:
+    """既存の呼び出し（_NUM.search）をそのまま使えるようにする薄い包み。"""
+
+    def search(self, text):
+        from numerals import has_numeral as _hn
+        return True if _hn(text) else None
+
+
+_NUM = _NumShim()
 # 同定子・見出しは数値面に数えない（機種名の「絆2」「SAO Ⅱ」は判断に使う数値ではない）
 _NOT_A_SURFACE = ("slug", "name", "seo", "aliases", "release_date", "confirmed_at",
                   "disclaimer", "display_requirements", "sources")
