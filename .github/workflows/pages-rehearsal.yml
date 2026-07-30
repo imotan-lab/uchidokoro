@@ -67,6 +67,15 @@ jobs:
         with:
           python-version: "3.13.5"
 
+      - name: Prepare log key
+        shell: bash
+        run: |
+          # ★このジョブ限りの鍵★（Codex 20巡目 (b)-3）
+          #   公開されるログでは原文を伏せ、代わりにこの鍵で作った指紋を出す。
+          #   ジョブ内の全スクリプトで共有するので「同じ文字列か」は突き合わせられ、
+          #   ジョブが終われば鍵は消えるので後から言い当てられない。
+          echo "UCHIDOKORO_LOG_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+
       - name: Self-tests
         shell: bash
         run: |

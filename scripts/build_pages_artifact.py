@@ -32,6 +32,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import unicodedata
 import urllib.parse
 from pathlib import Path
 
@@ -169,6 +170,12 @@ APPROVED_INPUTS = frozenset({
     "setting.html",
     # ハブの手書き散文
     "scripts/hub_prose.json",
+    # ★公開判断の土台になる設定★（Codex 20巡目 (a)-6）
+    #   ledger はリスク表現を ALLOW にできる。registry は「独立2票」の数え方を、
+    #   allowlist は自動採用してよい型を決める。
+    "assets/data/ledger.json",
+    "assets/data/source-registry.json",
+    "assets/data/claim-allowlist.json",
 })
 
 # ルート直下に置く固定名の資産（★名前パターンでのコピーはやめた★・Codex 17巡目 (a)-2）
@@ -648,9 +655,12 @@ def audit(stage: Path, expected: set[str]) -> None:
         if (stage / rel).exists():
             raise BuildError(f"forbidden authoring path in artifact: {rel}")
 
+    css_issues = []
     for css in sorted((stage / "assets/css").rglob("*.css")):
-        for problem in css_problems(css.read_text(encoding="utf-8")):
-            raise BuildError(f"{css.name}: {problem}")
+        css_issues += [f"{css.name}: {x}"
+                       for x in css_problems(css.read_text(encoding="utf-8"))]
+    if css_issues:      # ★全部出してから止める★（Codex 20巡目 (b)-4）
+        raise BuildError("CSSに問題があります:\n  " + "\n  ".join(css_issues))
 
     # ★HTMLだけでなくJS・SVG・JSONも見る／拡張子の大文字小文字も問わない★（同 (b)-3）
     for path in stage.rglob("*"):
@@ -698,12 +708,12 @@ CONTENT_ONLY_LITERALS = re.compile(
 
 # ★併記（.site-disclaimer）に書いてよい指定★（Codex 19巡目 (a)-1）
 #   「隠す書き方」を数え上げるのをやめ、**見た目を整えるだけの指定**を許可制にした。
+#   ★実際に使っている指定だけに絞る★（Codex 20巡目 (a)-1）
+#     margin/padding/border/background/letter-spacing を許すと、
+#     画面外へ押し出す・背景と同色にする等で読めなくできた。
+#     いま practical.css が使っているのは下の5つだけ。増やすときは値の検査も足すこと。
 DISCLAIMER_ALLOWED_PROPS = frozenset({
-    "margin", "margin-top", "margin-bottom", "margin-left", "margin-right",
-    "padding", "padding-top", "padding-bottom", "padding-left", "padding-right",
-    "color", "font-size", "line-height", "font-weight", "font-family",
-    "letter-spacing", "text-align", "background", "background-color",
-    "border", "border-radius", "border-left", "border-top",
+    "margin", "color", "font-size", "line-height", "font-weight",
 })
 
 
@@ -722,19 +732,72 @@ def _value_candidates(flat_value: str, var_values: dict) -> list:
     return out
 
 
-# 「値そのものが見えなくする」もの（許可した指定でも拒否する）
-_HIDING_COLORS = ("transparent", "rgba(0,0,0,0)", "#00000000", "#0000")
+# ★値も「許可した形」だけ通す★（Codex 20巡目 (a)-1）
+#   禁止する値を数え上げると calc(0px)・rgb(0 0 0/0)・#fff0 のように必ず抜け道が出る。
+_COLOR_OK = re.compile(r"^#[0-9a-f]{6}$|^[a-z]{3,20}$")          # 6桁HEX か 色名
+_LENGTH_OK = re.compile(r"^(\d+(?:\.\d+)?)(px|rem|em|%|pt)?$")   # 負でない長さ
+_NAMED_TRANSPARENT = {"transparent", "inherit", "currentcolor", "initial", "unset", "revert"}
 
 
-def _hiding_value(prop: str, value: str) -> bool:
+def _looks_hiding(prop: str, flat_value: str) -> bool:
+    """「見えなくする指定」に見えるか（親を対象にした規則の判定に使う）。"""
+    v = f"{prop}:{flat_value}"
+    if any(h in v for h in HIDE_DECLS):
+        return True
+    if prop.startswith(("margin", "inset", "left", "right", "top", "bottom",
+                        "text-indent", "translate")) and "-" in flat_value:
+        return True
+    if prop in ("position", "transform", "clip-path", "overflow", "z-index",
+                "opacity", "visibility", "display", "content-visibility",
+                "letter-spacing", "word-spacing", "max-height", "max-width",
+                "height", "width", "filter"):
+        return True
+    return False
+
+
+def _value_allowed(prop: str, value: str) -> str:
+    """併記に書いてよい値か。だめなら理由を返す（よければ空文字）。"""
     v = re.sub(r"\s+", "", str(value)).lower().replace("!important", "")
-    if prop in ("color",):
-        return v in _HIDING_COLORS or bool(re.match(r"^rgba\([^)]*,0(\.0*)?\)$", v))
+    if "(" in v and not v.startswith("var("):
+        return "計算や関数は使えません"      # calc(0px) / rgb(0 0 0/0) など
+    if prop == "color":
+        if v in _NAMED_TRANSPARENT:
+            return "透明・継承は使えません"
+        if not _COLOR_OK.match(v):
+            return "色は6桁の#RRGGBB か色名だけ"
+        return ""
     if prop == "font-size":
-        return bool(re.match(r"^0(px|em|rem|%|pt)?$", v))
+        m = _LENGTH_OK.match(v)
+        if not m:
+            return "文字サイズは数値＋単位だけ"
+        num, unit = float(m.group(1)), (m.group(2) or "px")
+        px = {"px": num, "pt": num * 1.333, "rem": num * 16, "em": num * 16,
+              "%": num * 0.16}.get(unit, num)
+        return "" if px >= 10 else "文字サイズが小さすぎます（10px相当以上）"
     if prop == "line-height":
-        return v in ("0", "0px", "0em")
-    # 許可リストの他の指定は、値だけでは消せない
+        m = _LENGTH_OK.match(v)
+        if not m:
+            return "行間は数値だけ"
+        return "" if float(m.group(1)) >= 1 else "行間が詰まりすぎです"
+    if prop == "font-weight":
+        return "" if re.match(r"^(normal|bold|[1-9]00)$", v) else "太さの指定が不正です"
+    if prop == "margin":
+        if "-" in v:
+            return "負の余白は使えません（画面外へ動かせるため）"
+        return ""
+    return "この指定は許可されていません"
+
+
+def _has_letters_or_digits(text: str) -> bool:
+    """文字か数字が1つでも含まれるか。
+
+    ★NFKCで揃えてからUnicodeの種別で見る★（Codex 20巡目 (a)-2）
+      「ﾃﾝｼﾞｮｳ９９９Ｇ」のように半角カナ・全角英数だと素通りしていた。
+      記号だけ（箇条書きの "— " など）は通す。
+    """
+    for ch in unicodedata.normalize("NFKC", str(text)):
+        if unicodedata.category(ch)[0] in ("L", "N"):
+            return True
     return False
 
 
@@ -759,11 +822,17 @@ CSS_EXTERNAL_ALLOW = (
 EMBEDDING_TAGS = ("script", "link", "iframe", "img", "source", "embed", "object",
                   "video", "audio", "track", "frame")
 HTML_TAG = re.compile(r"<\s*([a-zA-Z][\w-]*)\b([^>]*)>")
+# ★引用符なしの値も拾う★（Codex 20巡目 (a)-3）
 TAG_URL_ATTR = re.compile(
-    r"""(?:src|href|data|srcset)\s*=\s*["']((?:https?:)?//[^"']+)["']""", re.IGNORECASE)
+    r"""(?:src|href|data|srcset|content)\s*=\s*"""
+    r"""(?:"([^"]*)"|'([^']*)'|([^\s>]+))""", re.IGNORECASE)
 CSS_URL = re.compile(r"""url\(\s*["']?((?:https?:)?//[^"')]+)""", re.IGNORECASE)
-# 自分のサイトを指すものは外部ではない
-OWN_HOSTS = ("uchidokoro.com",)
+# JS から外部を読む書き方（fetch / import / .src = / importScripts / Worker）
+JS_URL = re.compile(r"""["'`]((?:https?:)?//[^"'`\s]+)["'`]""")
+INLINE_SCRIPT = re.compile(r"<script\b[^>]*>(.*?)</script>", re.IGNORECASE | re.DOTALL)
+ANY_URL = re.compile(r"""(?:https?:)?//[^\s"'`)>\]]+""", re.IGNORECASE)
+# 自分のサイト（★部分一致にしない★：eviluchidokoro.com を自分と誤認しないため）
+OWN_HOSTS = ("uchidokoro.com", "www.uchidokoro.com")
 
 
 def external_references(stage: Path) -> list[str]:
@@ -775,32 +844,64 @@ def external_references(stage: Path) -> list[str]:
       contact.html には Google フォームの iframe もあった。
       **成果物そのものから数える**ようにして、書き漏れを無くす。
     """
-    found: dict[str, set] = {}
+    found: dict[str, list] = {}
 
-    def note(url: str, rel: str) -> None:
-        host = re.sub(r"^(?:https?:)?//", "", url.strip()).split("/")[0].lower()
-        if host and not any(host.endswith(h) for h in OWN_HOSTS):
-            found.setdefault(host, set()).add(rel)
+    def note(url: str, where: str) -> None:
+        u = html_mod.unescape(url.strip())
+        host = re.sub(r"^(?:https?:)?//", "", u).split("/")[0].split("?")[0].lower()
+        # ★部分一致で自サイト扱いにしない★（eviluchidokoro.com 対策・Codex 20巡目 (a)-3）
+        if not host or host in OWN_HOSTS:
+            return
+        found.setdefault(host, []).append(f"{where} → {u[:80]}")
 
     for path in sorted(stage.rglob("*")):
         if not path.is_file() or path.suffix.lower() not in (".html", ".css", ".js"):
             continue
         rel = path.relative_to(stage).as_posix()
         text = path.read_text(encoding="utf-8", errors="replace")
+        lines = text.splitlines()
+
+        def line_of(pos: int, _t=None) -> int:
+            return text.count("\n", 0, pos) + 1
+
         if path.suffix.lower() == ".css":
             for m in CSS_URL.finditer(text):
-                note(m.group(1), rel)
+                note(m.group(1), f"{rel}:{line_of(m.start())}")
             continue
+        if path.suffix.lower() == ".js":
+            # ★JS は文字列の中のURLを全部見る★（fetch/import/動的 src を静的に追えないため）
+            for m in JS_URL.finditer(text):
+                note(m.group(1), f"{rel}:{line_of(m.start())}")
+            continue
+
         for tag in HTML_TAG.finditer(text):
-            if tag.group(1).lower() not in EMBEDDING_TAGS:
+            name = tag.group(1).lower()
+            attrs = tag.group(2)
+            if name == "meta" and "http-equiv" in attrs.lower():
+                # <meta http-equiv="refresh" content="0;url=...">
+                for m in ANY_URL.finditer(attrs):
+                    note(m.group(0), f"{rel}:{line_of(tag.start())} meta refresh")
                 continue
-            for m in TAG_URL_ATTR.finditer(tag.group(2)):
-                note(m.group(1), rel)
-        # JS の中から直接読み込むもの（外部スクリプトの動的挿入）
-        for m in CSS_URL.finditer(text) if path.suffix.lower() == ".js" else ():
-            note(m.group(1), rel)
-    return [f"{host} を {len(files)} ファイルから読み込んでいる"
-            f"（例: {sorted(files)[0]}）" for host, files in sorted(found.items())]
+            if name not in EMBEDDING_TAGS:
+                continue
+            for m in TAG_URL_ATTR.finditer(attrs):
+                raw = m.group(1) or m.group(2) or m.group(3) or ""
+                # srcset は「URL 記述子, URL 記述子」なので全部見る
+                for piece in raw.split(","):
+                    for u in ANY_URL.finditer(piece):
+                        note(u.group(0), f"{rel}:{line_of(tag.start())} <{name}>")
+        # HTML に直接書かれたJS
+        for sc in INLINE_SCRIPT.finditer(text):
+            for m in JS_URL.finditer(sc.group(1)):
+                note(m.group(1), f"{rel}:{line_of(sc.start())} inline script")
+
+    out = []
+    for host, places in sorted(found.items()):
+        uniq = sorted(set(places))
+        shown = " / ".join(uniq[:8])
+        more = f" ほか{len(uniq) - 8}箇所" if len(uniq) > 8 else ""
+        out.append(f"{host}（{len(uniq)}箇所）: {shown}{more}")
+    return out
 
 
 def css_rules_nested(text: str):
@@ -969,14 +1070,32 @@ def _subject(part: str) -> str:
     return (cur if cur.strip() else last).strip()
 
 
+def _split_top_level(text: str, sep: str = ",") -> list[str]:
+    """括弧の外のカンマだけで分ける（★`:not(a, b)` を壊さない★・Codex 20巡目 (b)-1）。"""
+    out, depth, cur = [], 0, ""
+    for ch in text:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth = max(0, depth - 1)
+        if ch == sep and depth == 0:
+            out.append(cur)
+            cur = ""
+        else:
+            cur += ch
+    out.append(cur)
+    return out
+
+
 def _one_selector_targets(selector: str) -> bool:
     """1本のセレクタが「併記そのもの」を対象にしているか。"""
     if "site-disclaimer" not in selector:
         return False
-    for part in selector.split(","):
+    for part in _split_top_level(selector):
         subject = _subject(part)
-        # :not(...) の中身は「対象そのもの」ではないので外す
-        stripped = re.sub(r":not\([^)]*\)", "", subject)
+        # :not(...) は除外指定、:has(...) は「子孫に持つ親」が対象なので、
+        # どちらも「対象そのもの」ではない（Codex 20巡目 (a)-1・(b)-1）
+        stripped = re.sub(r":(?:not|has)\([^)]*\)", "", subject)
         if "site-disclaimer" not in stripped:
             continue
         if re.search(r"::(before|after|marker|placeholder|selection)", stripped):
@@ -1065,14 +1184,25 @@ def css_problems(text: str) -> list[str]:
                 problems.append(
                     f"併記（.site-disclaimer）に許可していない指定があります « {prop} »")
             else:
-                # 許可した指定でも「見えなくする値」は拒否する
+                # 許可した指定でも、値が「許可した形」でなければ拒否する
                 for candidate in _value_candidates(flat_value, var_values):
                     if candidate is None:
                         problems.append(
                             f"併記の指定に、中身の分からない変数を使っています « {prop} »")
-                    elif _hiding_value(prop, candidate):
-                        problems.append(
-                            f"併記が見えなくなる指定です « {prop}: {candidate[:24]} »")
+                        continue
+                    why = _value_allowed(prop, candidate)
+                    if why:
+                        problems.append(f"併記の « {prop}: {candidate[:24]} » は不可（{why}）")
+
+        # ★併記を名指ししている規則は、親を対象にしていても隠させない★
+        #   （Codex 20巡目 (a)-1：`*:has(> .site-disclaimer){margin-left:-9999px}`）
+        #   `:not()` で除外している場合は、その規則は併記に効かないので対象外。
+        elif any("site-disclaimer" in s for s in chain):
+            mentions_outside_not = any(
+                "site-disclaimer" in re.sub(r":not\([^)]*\)", "", s) for s in chain)
+            if mentions_outside_not and _looks_hiding(prop, flat_value):
+                problems.append(
+                    f"併記を名指しして隠す規則です « {prop}: {flat_value[:24]} »")
 
         # ★CSSから「文章」を生やせないようにする★
         #   許可するのは none / normal / 空 / 記号だけの文字列（箇条書きの "— " など）。
@@ -1085,11 +1215,11 @@ def css_problems(text: str) -> list[str]:
                 else:
                     for cm in CSS_STRING.finditer(value):
                         literal = cm.group(1) if cm.group(1) is not None else cm.group(2)
-                        if re.search(r"[0-9A-Za-z぀-ヿ一-鿿]", literal or ""):
+                        if _has_letters_or_digits(literal or ""):
                             problems.append(
                                 f"CSSから文字を生やしています {redact_value(literal)}")
         # quotes 経由で open-quote から文章を出せる
-        if prop == "quotes" and re.search(r"[0-9A-Za-z぀-ヿ一-鿿]", value):
+        if prop == "quotes" and _has_letters_or_digits(value):
             problems.append(f"quotes に文章を入れています {redact_value(value)}")
     return problems
 
@@ -1658,7 +1788,9 @@ def _fingerprint_is_keyed() -> bool:
     sys.path.insert(0, str(BASE / "scripts"))
     import ci_safe
     plain = hashlib.sha256(b"memo").hexdigest()[:12]
-    return ci_safe.fingerprint("memo") != plain
+    # 同じ実行の中では同じ文字列が同じ指紋になること（突き合わせ用）
+    same = ci_safe.fingerprint("memo") == ci_safe.fingerprint("memo")
+    return ci_safe.fingerprint("memo") != plain and same
 
 
 def _external_refs_detected(root: Path) -> bool:

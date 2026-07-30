@@ -22,7 +22,10 @@ import secrets
 #   総当たりで言い当てられる（＝伏せたことにならない）。
 #   1回の実行の中で「同じ文字列か」を見分けられれば十分なので、
 #   プロセスごとの鍵でHMACを取る。文字数も出さない。
-_RUN_KEY = secrets.token_bytes(32)
+#   ★同じ実行の中では、別のスクリプト同士でも突き合わせたい★（Codex 20巡目 (b)-3）
+#     workflow が最初に作った鍵を環境変数で渡す。無ければプロセスごとの鍵にする。
+_ENV_KEY = os.environ.get("UCHIDOKORO_LOG_KEY", "")
+_RUN_KEY = _ENV_KEY.encode("utf-8") if len(_ENV_KEY) >= 16 else secrets.token_bytes(32)
 
 
 def in_ci() -> bool:

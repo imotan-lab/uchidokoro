@@ -507,7 +507,7 @@ def check_16_writing_style(machines: list) -> list[str]:
                     plain_sentences.append((s.get("title", ""), sent.strip()))
         if plain_sentences:
             for title, sent in plain_sentences[:2]:  # 機種ごとに最大2件
-                ngs.append(f"{slug}: 常体文混在 [{title}] {_redact(sent)}")
+                ngs.append(f"{slug}: 常体文混在 [{_redact(title)}] {_redact(sent)}")
     return ngs
 
 
@@ -754,7 +754,7 @@ def check_26_empty_paragraph(machines: list) -> list[str]:
                 continue  # 型不正は項目25の担当
             for j, t in enumerate(b):
                 if not isinstance(t, str) or not t.strip():
-                    ngs.append(f"{m['slug']}: sections[{i}]({s.get('title')}) body[{j}] が空段落")
+                    ngs.append(f"{m['slug']}: sections[{i}]({_redact(s.get('title'))}) body[{j}] が空段落")
     return ngs
 
 
@@ -885,7 +885,7 @@ def check_28_settei_table_shape(machines: list) -> list[str]:
                     cells = row if isinstance(row, list) else [row]
                     if headers and len(cells) != len(headers):
                         ngs.append(
-                            f"{m['slug']}: sections[{si}].tables[{ti}]({tbl.get('label')}) 行{ri}が"
+                            f"{m['slug']}: sections[{si}].tables[{ti}]({_redact(tbl.get('label'))}) 行{ri}が"
                             f"{len(cells)}セル（見出しは{len(headers)}列）"
                         )
     return ngs

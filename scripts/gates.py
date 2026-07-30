@@ -2124,7 +2124,10 @@ def publish_view(machine: dict, detail: dict | None = None,
         raise GateError(f"{machine.get('slug','?')}: 構造エラー {len(ctx.errors)}件 → 公開不可"
                         f" [{detail}]")
     if ctx.unclassified:
-        detail = " / ".join(f"path={u['path']} id={u['atom_id']}" for u in ctx.unclassified)
+        # ★atom_id は安定した生SHAなので、候補が少ない原稿は総当たりで当てられる★
+        #   （Codex 20巡目 (a)-4）CIでは実行ごとの鍵で伏せる。
+        detail = " / ".join(
+            f"path={u['path']} id={_ci_redact(u['atom_id'])}" for u in ctx.unclassified)
         raise GateError(
             f"{machine.get('slug','?')}: 未分類のリスク表現 {len(ctx.unclassified)}件 → 公開不可"
             f"（分類台帳に ALLOW/DROP を登録すること） [{detail}]")
