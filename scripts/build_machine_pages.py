@@ -244,7 +244,18 @@ PLACEHOLDER_HTML = """<!doctype html>
 """
 
 
-def main(allow_ungated: bool = False):
+def main(preview: bool = False):
+    """preview=True のときは .preview-site/ にだけ書く（公開されない写し）。
+
+    ★2026-07-30・移行手順2で --allow-ungated を廃止した★
+      以前は「裏取りゲートが無効でも、承知のうえなら本番のHTMLを上書きしてよい」
+      という抜け道があった。フラグ1つで公開物が書けてしまうので廃止し、
+      裏取り前の内容は **公開されない写し（.preview-site/）にしか出せない** ようにした。
+    """
+    sys.path.insert(0, str(BASE / "scripts"))
+    import preview_site as _pv
+
+    out_root = _pv.PREVIEW_DIR if preview else BASE
     machines = json.loads((BASE / "assets" / "data" / "machines.json").read_text(encoding="utf-8"))
     template = (BASE / "machine.html").read_text(encoding="utf-8")
 
@@ -252,10 +263,19 @@ def main(allow_ungated: bool = False):
     try:
         gate_on = claim_gate_state()
     except Exception as e:
-        print(f"★出典の裏取りゲートの設定が読めません: {e}")
-        return 1
+        # 写しは公開しないので、設定が読めなくても確認だけはできる
+        if not preview:
+            print(f"★出典の裏取りゲートの設定が読めません: {e}")
+            return 1
+        print(f"（写し）出典の裏取りゲートの設定が読めません: {e} — 全機種を写します")
+        gate_on = False
     blocked_by_claim = {}
-    if gate_on:
+    if preview:
+        # 写しは「裏取り前の内容を見るため」のものなので、止めずに全機種を出す。
+        # 代わりに全ページへ noindex・バナー・目印が入り、robots.txt は全面Disallow。
+        _pv.ensure_scaffold()
+        print(f"☆写しを作ります（公開されません）: {out_root.name}/ ☆")
+    elif gate_on:
         import claim_reconcile as cr
         for m in machines:
             try:
@@ -273,12 +293,11 @@ def main(allow_ungated: bool = False):
     else:
         # ★★ゲート無効のまま既存HTMLを置き換えない★★（Codex 10巡目 (a)-1）
         #   「警告して書き込む」は条件7（enabled=falseなら既存成果物を置換しない）に反する。
-        if not allow_ungated:
-            print("★出典の裏取りゲートが無効なのでHTMLを作りません★")
-            print("  assets/data/claim-gate.json の enabled を true にするか、")
-            print("  裏取り前の状態を承知のうえで作るなら --allow-ungated を付けてください。")
-            return 1
-        print("☆☆裏取りを確かめずにHTMLを作ります（--allow-ungated 指定）☆☆")
+        print("★出典の裏取りゲートが無効なので公開用のHTMLは作りません★")
+        print("  assets/data/claim-gate.json の enabled を true にするか、")
+        print("  裏取り前の内容を確かめたいなら --preview を付けてください")
+        print("  （.preview-site/ にだけ書き出します。公開されません）")
+        return 1
 
     # <base href="/"> を <head> 直後に挿入
     if "<base " not in template:
@@ -301,7 +320,7 @@ def main(allow_ungated: bool = False):
         if slug in blocked_by_claim:
             # ★★「作らない」だけでは古い誤情報が残り続ける★★（Codex 10巡目 (a)-2）
             #   既存の index.html を noindex の準備中ページに置き換える。
-            out = BASE / "machines" / slug / "index.html"
+            out = out_root / "machines" / slug / "index.html"
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_text(PLACEHOLDER_HTML, encoding="utf-8")
             continue
@@ -435,9 +454,13 @@ def main(allow_ungated: bool = False):
                 f'<table id="summaryGrid" class="summary-grid">{srows}</table>', 1)
             prerendered += 1
 
-        out_dir = BASE / "machines" / slug
-        out_dir.mkdir(parents=True, exist_ok=True)
-        (out_dir / "index.html").write_text(html_out, encoding="utf-8", newline="\n")
+        if preview:
+            # 写しは必ず noindex・バナー・目印つきで書く（外へ書けない仕組みも通す）
+            _pv.write_html(f"machines/{slug}/index.html", html_out)
+        else:
+            out_dir = out_root / "machines" / slug
+            out_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / "index.html").write_text(html_out, encoding="utf-8", newline="\n")
         generated += 1
         generated_slugs.append(slug)
 
@@ -459,7 +482,10 @@ def main(allow_ungated: bool = False):
         return 1
 
     # ★名簿は「実際に生成できた機種」から作る★
-    manifest = BASE / "assets" / "data" / "published-slugs.json"
+    manifest = out_root / "assets" / "data" / "published-slugs.json"
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    if preview:
+        _pv.assert_inside(manifest)
     manifest.write_text(json.dumps(
         {"schema_version": "published-slugs/v1",
          "claim_gate_enabled": bool(gate_on),
@@ -473,7 +499,7 @@ if __name__ == "__main__":
     #   main() が 1 を返しても、プロセスは 0 で終わっていた＝呼び出し側が失敗に気づけない
     import argparse as _ap
     _p = _ap.ArgumentParser()
-    _p.add_argument("--allow-ungated", action="store_true",
-                    help="裏取りゲート無効のままHTMLを作る（承知のうえで）")
+    _p.add_argument("--preview", action="store_true",
+                    help="公開されない写し（.preview-site/）にだけ書き出す")
     _a = _p.parse_args()
-    raise SystemExit(main(_a.allow_ungated) or 0)
+    raise SystemExit(main(_a.preview) or 0)

@@ -1,0 +1,140 @@
+# 公開物を「保護された場所」で組み立てるための下ごしらえ（移行手順5）
+#
+# ★いまは公開の切り替えをしない★
+#   Pages の Source は触らない。ここでやるのは
+#   「main の中身から、公開してよい物だけを空のフォルダに組み立て直せるか」の予行演習。
+#   公開できる機種が 0 のうちは build が失敗するのが正しい結果（＝安全側）。
+#
+#   deploy は手動起動 かつ リポジトリ変数 PAGES_DEPLOY_ENABLED=true が無い限り動かない。
+#   Actions はタグではなく完全なコミットSHAに固定する（タグは後から差し替えられるため）。
+
+name: pages-rehearsal
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy the verified artifact
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-rehearsal-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build-verified-artifact
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.13.5"
+
+      - name: Self-tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/claim_evidence.py --selftest
+          python scripts/claim_ledger.py --selftest
+          python scripts/claim_c5.py --selftest
+          python scripts/claim_inventory.py --selftest
+          python scripts/claim_reconcile.py --selftest
+          python scripts/extract_setting_rates.py --selftest
+          python scripts/build_public_data.py --selftest
+          python scripts/gates.py --selftest
+          python scripts/audit_public.py --selftest
+          python scripts/build_pages_artifact.py --selftest
+
+      - name: Repository audits
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/gates.py
+          python scripts/crosscheck_gates.py
+          python scripts/audit_site.py
+
+      - name: Build from an empty artifact directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/build_pages_artifact.py
+
+      - name: Audit the artifact independently
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/audit_public.py \
+            --file _site/assets/data/machines.json \
+            --details-dir _site/assets/data/machine-details
+
+      - name: Verify deterministic content hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          first="$(python -c \
+            'import json; print(json.load(open("_site/artifact-manifest.json", encoding="utf-8"))["content_sha256"])')"
+          rm -rf _site
+          python scripts/build_pages_artifact.py
+          second="$(python -c \
+            'import json; print(json.load(open("_site/artifact-manifest.json", encoding="utf-8"))["content_sha256"])')"
+          test "$first" = "$second"
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
+        with:
+          path: _site
+
+  release-gate:
+    name: release-gate
+    needs:
+      - build
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require successful verified build
+        shell: bash
+        run: |
+          test "${{ needs.build.result }}" = "success"
+
+  deploy:
+    name: deploy-pages
+    needs:
+      - build
+      - release-gate
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.deploy == true &&
+      github.ref == 'refs/heads/main' &&
+      vars.PAGES_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy verified artifact
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e

@@ -16,3 +16,11 @@ __pycache__/
 
 # 設計ドキュメント作業用（Codexに読ませるためリポジトリ内に置くが公開しない）
 _design/
+
+# ★ビルドの出力（コミットしない・公開もしない）★
+#  .preview-site/ = 裏取り前の内容を確かめる写し（noindex・robots全面Disallow）
+#  _site/         = Pagesへ出す成果物（保護CIが空から組み立てる）
+.preview-site/
+_site/
+_site.next/
+.site-build-*/

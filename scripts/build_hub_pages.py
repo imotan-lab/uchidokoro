@@ -392,20 +392,34 @@ def _prose_with_numbers(obj, has_unit_number, path="$") -> list:
     return out
 
 
-def main(allow_ungated: bool = False):
+def main(preview: bool = False):
+    """preview=True のときは .preview-site/ にだけ書く（公開されない写し）。
+
+    ★2026-07-30・移行手順2で --allow-ungated を廃止した★（理由は build_machine_pages.py 参照）
+    """
     # ★★ハブ4ページもゲート外だった★★（Codex 10巡目 (a)-4）
     #   tenjo_display / strategy / checker閾値 をそのままランキングHTMLへ出すので、
     #   誤った値を書いて本スクリプトを回せば公開ゲートを通らず公開される。
     import sys as _sys
     _sys.path.insert(0, str(BASE / "scripts"))
     import build_public_data as _bpd
+    import preview_site as _pv
+    out_root = _pv.PREVIEW_DIR if preview else BASE
     try:
         gate_on = _bpd.claim_gate_enabled()
     except Exception as e:
-        print(f"★出典の裏取りゲートの設定が読めません: {e}")
-        return 1
+        if not preview:
+            print(f"★出典の裏取りゲートの設定が読めません: {e}")
+            return 1
+        print(f"（写し）出典の裏取りゲートの設定が読めません: {e} — 全機種を写します")
+        gate_on = False
     rows = load_rows()
-    if gate_on:
+    if preview:
+        # 写しは裏取り前の内容を見るためのもの。止めずに全機種を出す。
+        _pv.ensure_scaffold()
+        print(f"☆写しを作ります（公開されません）: {out_root.name}/ ☆")
+        gate_on = False
+    elif gate_on:
         import claim_reconcile as _cr
         blocked = []
         for r in rows:
@@ -426,12 +440,11 @@ def main(allow_ungated: bool = False):
         if not rows:
             print("★公開できる機種が1件も無いのでハブ4ページは作りません★")
             return 1
-    elif not allow_ungated:
-        print("★出典の裏取りゲートが無効なのでハブ4ページを作りません★")
-        print("  承知のうえで作るなら --allow-ungated を付けてください。")
-        return 1
     else:
-        print("☆☆裏取りを確かめずにハブ4ページを作ります（--allow-ungated 指定）☆☆")
+        print("★出典の裏取りゲートが無効なので公開用のハブ4ページは作りません★")
+        print("  裏取り前の内容を確かめたいなら --preview を付けてください")
+        print("  （.preview-site/ にだけ書き出します。公開されません）")
+        return 1
     prose_all = json.loads(PROSE.read_text(encoding="utf-8"))
     # ★★固定文に埋まった数値もゲートの外だった★★（Codex 11巡目 (a)-3）
     #   一覧から機種を外しても「うみねこ2は200G」等の記述は本文に残る。
@@ -536,7 +549,10 @@ def main(allow_ungated: bool = False):
             return 1
 
     for file, html in built.items():
-        (BASE / file).write_text(html, encoding="utf-8")
+        if preview:
+            _pv.write_html(file, html)   # noindex・バナー・目印つきで写しへ
+        else:
+            (BASE / file).write_text(html, encoding="utf-8")
         dlen = len(pages[file][0]["meta_description"])
         warn = "" if 50 <= dlen <= 160 else f"  ⚠ meta desc {dlen}字（50〜160推奨）"
         print(f"  生成: {file}  ({dlen}字 desc){warn}")
@@ -547,7 +563,7 @@ def main(allow_ungated: bool = False):
 if __name__ == "__main__":
     import argparse as _ap
     _p = _ap.ArgumentParser()
-    _p.add_argument("--allow-ungated", action="store_true",
-                    help="裏取りゲート無効のままハブ4ページを作る（承知のうえで）")
+    _p.add_argument("--preview", action="store_true",
+                    help="公開されない写し（.preview-site/）にだけ書き出す")
     _a = _p.parse_args()
-    raise SystemExit(main(_a.allow_ungated) or 0)
+    raise SystemExit(main(_a.preview) or 0)

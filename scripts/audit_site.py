@@ -58,6 +58,28 @@ except Exception:
 
 BASE = Path(__file__).resolve().parent.parent
 
+# ★ビルドの出力は監査の対象外★（2026-07-30）
+#   .preview-site/ は公開されない写し（全ページ noindex・robots全面Disallow）、
+#   _site/ は保護CIが空から組み立てる成果物。どちらもGit管理外なので、
+#   ここを本番と同じ物差しで測ると「直す必要のないNG」が出て判断を誤らせる。
+#   ★写し自身の検査は build_preview_site.py が、成果物の検査は
+#     build_pages_artifact.py の audit() が別に行う★
+BUILD_DIRS = {".preview-site", "_site", "_site.next"}
+
+
+def is_build_output(path: Path) -> bool:
+    """ビルド出力（写し・成果物）配下のパスか。"""
+    try:
+        rel = path.resolve().relative_to(BASE.resolve())
+    except ValueError:
+        return False
+    return bool(set(rel.parts) & BUILD_DIRS)
+
+
+def site_html_files() -> list[Path]:
+    """サイト本体のHTML（ビルド出力を除いた全 *.html）。"""
+    return [p for p in BASE.glob("**/*.html") if not is_build_output(p)]
+
 
 def load_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
@@ -540,7 +562,7 @@ def check_18_subdir_base_href(machines: list) -> list[str]:
     例外：<head>タグを持たない単純なリダイレクトスクリプト（checker.html 等の1行JS）。
     """
     ngs = []
-    for f in BASE.glob("**/*.html"):
+    for f in site_html_files():
         # ルート直下は対象外（<base>無しでも相対パスが正しく解決されるため）
         if f.parent == BASE:
             continue
