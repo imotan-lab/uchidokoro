@@ -28,6 +28,7 @@ from __future__ import annotations
 import html
 import json
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -552,6 +553,7 @@ def _build_legacy() -> int:
          1枚でも欠けたら**1枚も書かずに**終わる
     """
     import safe_json as _sj2
+    import preview_site as _pv
 
     # 1) ゲートが有効なら、旧形式の作り直しは筋違い（正しい経路を使う）
     try:
@@ -609,17 +611,49 @@ def _build_legacy() -> int:
         return 1
 
     # 目印が「本当に表示される場所」にあることも確かめる（コメント内だけは不可）
-    import preview_site as _pv
     hidden = [rel for rel, h in pages.items()
               if LEGACY_NOTE not in _pv.strip_html_comments(h)]
     if hidden:
         print(f"★目印がコメント内にしかないページが {len(hidden)} 枚 → 1枚も書きません")
         return 1
 
-    for rel, h in pages.items():
-        out = BASE / rel
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(h, encoding="utf-8", newline=chr(10))
+    # 4) ★すでに公開しているページだけを対象にする★（Codex指摘1・2026-07-30）
+    #   目印があることは「未照合と書いてある」ことしか保証しない。
+    #   新しい slug を machines.json に足せば、この経路で**新規ページも作れた**。
+    #   新台の公開は裏取りを通った経路（build_pages_artifact）の仕事なので、
+    #   ここは「いま公開しているページを直す」ことだけに限る。
+    existing = {rel for rel in pages if (BASE / rel).is_file()}
+    new_pages = sorted(set(pages) - existing)
+    if new_pages:
+        print(f"★まだ公開していないページを {len(new_pages)} 件作ろうとしました → 中止")
+        for rel in new_pages[:5]:
+            print(f"  ✗ {rel}")
+        print("  新しい機種の公開は裏取りを通る経路の仕事です（ここでは作れません）")
+        return 1
+
+    # 5) ★いったん別の場所に書いて、全部そろってから置き換える★
+    #   途中で失敗したときに「半分だけ新しいページ」が残らないようにする。
+    tmp = BASE / "_legacy.next"
+    if tmp.exists():
+        shutil.rmtree(tmp)
+    try:
+        for rel, h in pages.items():
+            out = tmp / rel
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(h, encoding="utf-8", newline=chr(10))
+        # 書いた物をもう一度読み直して、目印が本当に入っているか確かめる
+        for rel in pages:
+            got = (tmp / rel).read_text(encoding="utf-8")
+            if LEGACY_NOTE not in _pv.strip_html_comments(got):
+                print(f"★書き出した物に目印がありません: {rel} → 1枚も置き換えません")
+                return 1
+        for rel in pages:
+            out = BASE / rel
+            out.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(tmp / rel, out)
+    finally:
+        if tmp.exists():
+            shutil.rmtree(tmp)
     print(f"旧形式ページを作り直しました: {len(pages)} 機種")
     print("  （全ページに旧形式の目印つき・裏取り済みとしては公開していません）")
     return 0
@@ -650,6 +684,12 @@ def main(preview: bool = False, legacy: bool = False):
     sys.path.insert(0, str(BASE / "scripts"))
     import preview_site as _pv
 
+    if legacy and preview:
+        # ★--preview --legacy で本番パスへ書けていた★（Codex指摘1・2026-07-30）
+        #   legacy を先に見ていたので、preview を付けても公開パスに書いていた。
+        print("★--preview と --legacy は同時に使えません★")
+        print("  写しを見るなら --preview だけ、公開ページを直すなら --legacy だけ。")
+        return 1
     if legacy:
         return _build_legacy()
 

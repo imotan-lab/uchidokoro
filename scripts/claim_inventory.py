@@ -90,8 +90,14 @@ LABEL_RULES = [
     #   「同じ事実の食い違い」に見えていた（burning_express で実際に誤検出）。
     (r"^normal\.limit$", "ceiling.normal", "NORMAL", "NONE", "UNKNOWN", "INTEGER", "G"),
     (r"^reset\.limit$", "ceiling.reset", "RESET", "NONE", "UNKNOWN", "INTEGER", "G"),
-    (r"^cz\.limit$", "ceiling.normal.cz", "CZ", "CZ_GAP", "UNKNOWN", "INTEGER", "G"),
-    (r"^at\.limit$", "ceiling.normal.at", "AT", "AT_GAP", "UNKNOWN", "INTEGER", "G"),
+    # ★mode は記事側（「CZ間天井」＝NORMAL）と必ず揃える★（Codex指摘3・2026-07-30）
+    #   ここを CZ / AT にしていたので、同じCZ間天井でも claim_key が分かれ、
+    #   **記事999G と 画面1050G の食い違いを検出できなかった**。
+    #   さらに台帳が許す mode は NORMAL/RESET/ANY だけなので、
+    #   CZ/AT を名乗る claim は照合を完了できなかった。
+    #   「どの区間か」は mode ではなく scope が担う。
+    (r"^cz\.limit$", "ceiling.normal.cz", "NORMAL", "CZ_GAP", "UNKNOWN", "INTEGER", "G"),
+    (r"^at\.limit$", "ceiling.normal.at", "NORMAL", "AT_GAP", "UNKNOWN", "INTEGER", "G"),
     # --- 恩恵（何が起きるか）。文章なので TEXT。★数値ではないが事実★
     (r"^恩恵$|^天井恩恵$", "benefit.ceiling", "NORMAL", "NONE", "NONE", "TEXT", ""),
     (r"^リセット恩恵$", "benefit.reset", "RESET", "NONE", "NONE", "TEXT", ""),
@@ -311,6 +317,33 @@ def detect_units(value: str):
             found[u] += len(hits)
             rest = rx.sub("", rest)
     return found, rest
+
+
+def normalize_text_value(value: str):
+    """★文章の事実（恩恵など）を「比べられる形」にする★（Codex指摘2・2026-07-30）
+
+    ★なぜ要るか★
+      自己矛盾の検出を作った動機は東京喰種の恩恵だった。
+        天井・恩恵 = 「CZまたはAT当選」
+        基本スペック = 「CZ確定」
+      ところが恩恵は数値ではないので `current_value` が None になり、
+      **比較対象から外れて検出できていなかった**（作った本人が動機を取り逃した）。
+
+    ★意味の同一判定はしない★
+      「CZ確定」と「CZ当選確定」が同じ意味かどうかは機械では決められない。
+      ここでやるのは**書き方の違いだけを揃える**こと（全角半角・空白・強調）。
+      揃えても違う文字列なら「食い違っている疑いがある」として人に見せる。
+      同義語をまとめて黙って一致させると、本物の矛盾を見逃す。
+    """
+    if not isinstance(value, str):
+        return None
+    t = unicodedata.normalize("NFKC", value)
+    # 強調記号を外す（中身は残す）。★ここは過去に後方参照が制御文字 0x01 に
+    #   化けた箇所★（audit項目29が検知）。chr(92) で書いて再発を防ぐ。
+    t = re.sub(r"\*\*(.+?)\*\*", chr(92) + "1", t)
+    t = re.sub(r"[\s　]+", "", t)            # 空白（全角含む）を詰める
+    t = t.strip("。.、,")
+    return {"kind": "TEXT", "text": t} if t else None
 
 
 def normalize_value(value: str, unit: str, operator: str = "EXACT"):
@@ -1006,7 +1039,12 @@ def _emit_slot(slots, seen_slots, slug, spec, pointer, label, value,
         if setting:
             group = f"{slug}:{spec['field_key']}:{table_label or 'by_setting'}"
         _op = expected_operator(spec["field_key"], spec["value_kind"])
-        _cv, _cvwhy = normalize_value_ex(value, spec["unit"], _op)
+        if spec["value_kind"] == "TEXT":
+            # ★文章の事実も比べられるようにする★（恩恵など・Codex指摘2）
+            _cv = normalize_text_value(value)
+            _cvwhy = None if _cv else "TEXT_EMPTY"
+        else:
+            _cv, _cvwhy = normalize_value_ex(value, spec["unit"], _op)
         sid = slot_id(slug, spec, pointer)
         if sid in seen_slots:
             return
@@ -1362,6 +1400,37 @@ def selftest() -> int:
           {"claim_key": "k", "field_key": "f", "conditions": {},
            "slot_id": "b", "source_pointer": "/b",
            "current_text": "??", "current_value": None}]) == [])
+    # -------- Codex Phase2実装レビューの反例（2026-07-30）
+    t("★★文章の事実の食い違いも検出する（東京喰種の恩恵そのもの）★★",
+      (lambda inv: inv["coverage"]["surface_conflicts"] == 1)(
+          build_inventory("x", {"slug": "x"}, {
+              "factTable": [["恩恵", "CZまたはAT当選"]],
+              "sections": [{"body": ["**恩恵**：CZ確定"]}]})))
+    t("　書き方の違いだけなら矛盾にしない（強調記号・空白・句点）",
+      (lambda inv: inv["coverage"]["surface_conflicts"] == 0)(
+          build_inventory("x", {"slug": "x"}, {
+              "factTable": [["恩恵", "CZ確定"]],
+              "sections": [{"body": ["**恩恵**： CZ確定 。"]}]})))
+    t("★★checkerのCZ間天井と記事のCZ間天井が同じ事実として突き合う★★",
+      (lambda inv: inv["coverage"]["surface_conflicts"] == 1)(
+          build_inventory("x", {"slug": "x", "checker": {
+              "unit": "G", "cz": {"limit": 1050}}},
+              {"factTable": [["CZ間天井", "999G"]]})))
+    t("　同じ値なら矛盾にしない",
+      (lambda inv: inv["coverage"]["surface_conflicts"] == 0)(
+          build_inventory("x", {"slug": "x", "checker": {
+              "unit": "G", "at": {"limit": 1200}}},
+              {"factTable": [["AT間天井", "1200G"]]})))
+    t("★checker由来の天井が台帳の使える mode になっている（CZ/ATを名乗らない）★",
+      all(s_["conditions"]["mode"] in ("NORMAL", "RESET", "ANY")
+          for s_ in build_inventory("x", {"slug": "x", "checker": {
+              "unit": "G", "cz": {"limit": 700}, "at": {"limit": 1200},
+              "reset": {"limit": 300}}}, {})["slots"]))
+    t("★+α の有無は食い違いとして扱う（ちょうどNとN以上は別）★",
+      (lambda inv: inv["coverage"]["surface_conflicts"] == 1)(
+          build_inventory("x", {"slug": "x"}, {
+              "factTable": [["天井", "999G+α"]],
+              "summaryBoxes": [{"label": "天井", "value": "999G"}]})))
     # -------- Codex 3巡目の反例
     t("★★表示単位が枠の期待単位と違えば値にしない（97.2円を%の枠に入れない）★★",
       normalize_value("97.2円", "%") is None

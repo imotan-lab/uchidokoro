@@ -316,9 +316,15 @@ def _publishable(slug: str, machine: dict, detail: dict,
     # ★在庫は必ずその場で作り直したものを使う（渡された在庫を信用しない）★
     inv_slots = ci.build_inventory(slug, machine, detail).get("slots") or []
     # ★事実ごとに引く（表示箇所ごとではない）★
-    by_slot = {c.get("claim_key"): c for c in (ledger.get("claims") or [])}
+    #   ★辞書でない要素を先に落とす★（Codex指摘5・2026-07-30）
+    #     reconcile 側では警告に変えていたが、ここは元の claims をそのまま
+    #     触っていたので `{"claims":[null]}` で AttributeError になり、
+    #     「検査が例外で失敗」という別の顔になっていた。
+    #     公開は外側で止まる（fail-closed）が、理由の一覧が出ない。
+    _raw_claims = ledger.get("claims")
+    _raw_claims = _raw_claims if isinstance(_raw_claims, list) else []
+    by_slot = {c.get("claim_key"): c for c in _raw_claims if isinstance(c, dict)}
 
-    by_slot = {k: v for k, v in by_slot.items() if isinstance(v, dict)}
     not_verified = [s["field_key"] for s in inv_slots
                     if by_slot.get(s["claim_key"], {}).get("verify_state") != "VERIFIED"]
     if not_verified:

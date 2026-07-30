@@ -948,9 +948,20 @@ def check_30_surface_conflicts(machines: list) -> list[str]:
       （railgun2 は記事999G+αに対し画面1050G）。
       どちらも機械で気づける形なので、ここで毎回見る。
 
-    ★+α の表記揺れは通す★
-      「1200G」と「1200G+α」は書き方の違いで、数値そのものは同じ。
-      これで落とすと本題の食い違いが埋もれるので、数値が違う時だけ挙げる。
+    ★+α の有無も食い違いとして挙げる★（2026-07-30・Codex指摘4で訂正）
+      当初は「1200G」と「1200G+α」を書き方の違いとして通していたが、
+      **意味が違う**（ちょうど1200 と 1200以上）。しかも
+      公開判定（claim_reconcile）は正規化した値ぜんぶで比べるので止まる。
+      監査だけ通すと「監査は緑なのに公開は止まる」という食い違いになり、
+      ゲート無効中に頼れる唯一の検査が見逃しになる。判定を揃える。
+
+    ★文章の食い違いはここでは挙げない★（2026-07-30）
+      恩恵などの文章は「ST確定」と「ST『カバネリラッシュ』当選」のように、
+      **同じ意味を別の言い方で書いただけ**の例が大半（実データで24件中の多数）。
+      同義かどうかは機械では判定できない。ここで落とすと、
+      本題である数値の食い違いが言い換えの山に埋もれる。
+      文章の食い違いは公開判定（claim_reconcile）が止める。
+      いま公開中の記事の分は要確認台帳へ載せて、更新タスクが順に処理する。
     """
     import sys as _s
     _s.path.insert(0, str(BASE / "scripts"))
@@ -972,11 +983,11 @@ def check_30_surface_conflicts(machines: list) -> list[str]:
             ngs.append(f"{slug}: 在庫を作れず矛盾を検査できません（{type(e).__name__}）")
             continue
         for c in inv.get("surface_conflicts") or []:
-            amounts = {v.get("amount")
-                       for v in (sf["current_value"] for sf in c["surfaces"])
-                       if isinstance(v, dict)}
-            if len(amounts) < 2:
-                continue        # ＋α などの表記揺れ
+            kinds = {v.get("kind") for v in
+                     (sf["current_value"] for sf in c["surfaces"])
+                     if isinstance(v, dict)}
+            if kinds == {"TEXT"}:
+                continue        # 文章の食い違いは意味判定が要る（上の説明）
             where = " / ".join(
                 f"{sf['source_pointer']}={_redact(str(sf['current_text']))[:24]}"
                 for sf in c["surfaces"])

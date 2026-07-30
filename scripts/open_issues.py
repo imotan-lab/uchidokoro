@@ -44,6 +44,46 @@ except Exception:
 DEFAULT_FILE = Path("C:/Users/imao_/Documents/uchidokoro/open_issues.json")
 
 
+# ★どれだけ危ないか★（2026-07-30・Codex「これだけはやれ」⑧）
+#   C評価が52件たまっていたが、「全部止める」も「全部出し続ける」も雑すぎる。
+#   **公開を止めるべきものだけ**を機械が判別できるように段階を付ける。
+#
+#   CRITICAL … 機械の客観的な事実が誤っている疑い。★公開を止める★
+#               別機種・別型式の混入／天井・恩恵・設定段階・機種タイプの誤り／
+#               CZ間とAT間、実G と 液晶G、G と pt の取り違え。
+#   MATERIAL … 当サイトの目安どうしが食い違っている等。読者は混乱するが、
+#               機械について誤ったことを述べてはいない。公開は続けて順に直す。
+#   QUALITY  … 文体・冗長・読みやすさ。公開に影響しない。
+SEVERITIES = ("CRITICAL", "MATERIAL", "QUALITY")
+
+
+def severity_of(issue: dict) -> str:
+    """案件の危険度。★未設定は MATERIAL 扱いにしない★
+
+    未設定＝まだ人が仕分けていない、という意味なので、
+    公開を止める側（CRITICAL）に倒す（fail-closed）。
+    仕分けが終わっていないものを黙って公開に通さない。
+    """
+    sev = issue.get("severity")
+    return sev if sev in SEVERITIES else "CRITICAL"
+
+
+def blocking_slugs(path=None) -> dict:
+    """★公開を止めるべき機種★ {slug: [理由, ...]}（未解決の CRITICAL だけ）"""
+    data = _load(Path(path) if path else DEFAULT_FILE)
+    out: dict = {}
+    for it in data.get("issues") or []:
+        if it.get("status") != "open":
+            continue
+        if severity_of(it) != "CRITICAL":
+            continue
+        slug = it.get("slug")
+        if not slug or slug in ("site", "env", "_site", "-"):
+            continue        # サイト全体の課題は機種の公開停止にしない
+        out.setdefault(slug, []).append(f"#{it['id']} {it.get('title','')}")
+    return out
+
+
 def _load(path):
     if path.is_file():
         return json.loads(path.read_text(encoding="utf-8"))
@@ -90,6 +130,8 @@ def cmd_add(path, args):
         "detail": args.detail or "",
         "first_seen": _today(),
         "last_seen": _today(),
+        "severity": args.severity,
+        "reason_code": args.reason_code or None,
         "resolution": None,
         "resolved_date": None,
     }
@@ -154,6 +196,28 @@ def cmd_close(path, args):
     return 1
 
 
+def cmd_severity(path, args):
+    data = _load(path)
+    for it in data["issues"]:
+        if it["id"] == args.id:
+            old = it.get("severity") or "(未設定)"
+            it["severity"] = args.level
+            it["reason_code"] = args.reason_code
+            _save(path, data)
+            print(f"#{args.id}: {old} → {args.level} ({args.reason_code})")
+            return 0
+    print(f"案件 #{args.id} が見つかりません")
+    return 1
+
+
+def cmd_blocking(path, args):
+    """公開を止めるべき機種の一覧（ビルドが読む形）。"""
+    b = blocking_slugs(path)
+    print(json.dumps(b, ensure_ascii=False, indent=1))
+    print(f"# 公開を止めるべき機種: {len(b)}", file=sys.stderr)
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--file", default="", help="台帳ファイルパス（既定: Documents/uchidokoro/open_issues.json）")
@@ -165,6 +229,17 @@ def main():
     p.add_argument("--kind", required=True, choices=["external_value", "structural", "quality", "environment", "other"])
     p.add_argument("--title", required=True)
     p.add_argument("--detail", default="")
+    p.add_argument("--severity", choices=SEVERITIES, default="CRITICAL",
+                   help="どれだけ危ないか（既定は CRITICAL＝仕分け前は止める側に倒す）")
+    p.add_argument("--reason-code", dest="reason_code", default="",
+                   help="機械可読な理由コード（例: WRONG_CEILING / MEYASU_MISMATCH）")
+
+    p = sub.add_parser("severity")
+    p.add_argument("--id", type=int, required=True)
+    p.add_argument("--level", required=True, choices=SEVERITIES)
+    p.add_argument("--reason-code", dest="reason_code", required=True)
+
+    p = sub.add_parser("blocking")
 
     p = sub.add_parser("list")
     p.add_argument("--all", action="store_true")
@@ -177,7 +252,8 @@ def main():
 
     args = ap.parse_args()
     path = Path(args.file) if args.file else DEFAULT_FILE
-    fn = {"add": cmd_add, "list": cmd_list, "digest": cmd_digest, "close": cmd_close}[args.cmd]
+    fn = {"add": cmd_add, "list": cmd_list, "digest": cmd_digest, "close": cmd_close,
+          "severity": cmd_severity, "blocking": cmd_blocking}[args.cmd]
     sys.exit(fn(path, args))
 
 

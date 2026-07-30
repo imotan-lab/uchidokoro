@@ -7937,8 +7937,7 @@
    "reset": {
     "excellent": 650,
     "good": 370,
-    "caution": 220,
-    "limit": 650
+    "caution": 220
    },
    "limit": 850
   },
@@ -8841,7 +8840,6 @@
     "excellent": 300,
     "good": 180,
     "caution": 100,
-    "limit": 666,
     "note": "リセット後は最大666G+αに短縮。基準でリセット後100G〜から狙い目。"
    }
   },
