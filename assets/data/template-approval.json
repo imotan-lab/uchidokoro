@@ -32,7 +32,7 @@
   "privacy.html": "5c53483dfaf0f543aa641561a711503153e224216dadba3971fd89bc05e4908d",
   "robots.txt": "94670bb7c4d9b930985eeb08a6d4074283cafbfd3d30c00a74d7dedd46bedd2c",
   "scripts/audit_public.py": "a3999d5f56dec11b94ba37a7e00db67dceb73481a8b95c4d4f320590750dd26d",
-  "scripts/build_hub_pages.py": "e22389611b73056d3ac2eb2296da0bfbca4b84af39e36b8a5f1d46748af11cec",
+  "scripts/build_hub_pages.py": "3992f6549646a16342b6fb63ca964d3420d124a81a88dcd130a7eaac322c3b33",
   "scripts/build_ledger.py": "3d3e7ddbd20723fa2309f60686c7df58d99b8f809d4ad6964fb360a1693af10c",
   "scripts/build_machine_pages.py": "85178ddb30dee6c60a2bf9379521fd411e383e69dbff5d85d512a5f17133c495",
   "scripts/build_pages_artifact.py": "4e92c6cd2edfada39a42f55a880bbbd19533120b067de87dae537639c0c06970",

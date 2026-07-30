@@ -188,9 +188,11 @@ def visible_text(html: str) -> str:
 
 # ★生成器自身のコードに書いた固定の数値表現★（集計の説明で使う言葉。機種の数値ではない）
 #   ここに無い数値が散文に出たら止める（＝手書きの数値は裏取りが要る）。
-HUB_FIXED_NUMERALS = (
-    "1000G",   # 「G数天井が1000G未満の機種は全N機種です」という集計の定義
-)
+# ★集計の定義そのもの（機種の数値ではない）★
+#   ページには <span class="list-count"> で出すので、検査からは自動で外れる。
+#   ここに文字列を並べる「例外リスト」は持たない（Codex 閉鎖条件1）。
+SHALLOW_TENJO_LIMIT = 1000
+HUB_FIXED_NUMERALS: tuple = ()
 
 
 def hub_content_problems(built: dict, data_html: dict, *deny_pats,
@@ -370,7 +372,7 @@ def dataset_A(rows):
     a = [
         r for r in rows
         if r["unit"] == "G" and isinstance(r["limit"], (int, float))
-        and not r["has_cycle"] and r["limit"] < 1000
+        and not r["has_cycle"] and r["limit"] < SHALLOW_TENJO_LIMIT
         and isinstance(r["ncau"], (int, float))
     ]
     a.sort(key=lambda r: (r["limit"], r["ncau"]))
@@ -690,7 +692,8 @@ def main(preview: bool = False, out_dir: str | None = None):
     )
     tenjo_note = (
         "※同じ天井ゲーム数の機種は、狙い目ゲーム数が浅い順に掲載しています。"
-        f"G数でカウントする天井が1000G未満の機種は全<span class=\"list-count\">{len(A)}</span>機種です"
+        f"G数でカウントする天井が<span class=\"list-count\">{SHALLOW_TENJO_LIMIT}</span>G"
+        f"未満の機種は全<span class=\"list-count\">{len(A)}</span>機種です"
         "（周期天井の機種と、G数天井のチェッカーデータが無い機種は集計対象外です）。"
     )
 
@@ -791,10 +794,14 @@ def selftest() -> int:
       any("裏取りしていない数値" in x
           for x in hub_content_problems({"a.html": prose}, {}, *deny)))
 
-    fixed = ('<html><body><p>G数でカウントする天井が1000G未満の機種は全'
+    # ★集計の定義の数値も「データから出す」形にした★（Codex 閉鎖条件1）
+    #   例外リストを持たず、<span class="list-count"> に入れることで検査から外れる。
+    fixed = ('<html><body><p>G数でカウントする天井が'
+             '<span class="list-count">1000</span>G未満の機種は全'
              '<span class="list-count">49</span>機種です</p></body></html>')
-    t("生成器の固定文（1000G未満）では止めない",
+    t("集計の定義（件数・閾値）では止めない",
       hub_content_problems({"a.html": fixed}, {}, *deny) == [])
+    t("★例外リストは空である（固定数値の抜け道を持たない）", HUB_FIXED_NUMERALS == ())
 
     claim = "<html><body><p>この機種は必ず勝てるため最優先です</p></body></html>"
     t("数値の無い断定も止める",
