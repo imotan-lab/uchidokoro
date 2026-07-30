@@ -514,7 +514,9 @@ def render_all(source_root: Path) -> tuple[dict, list, list]:
     for m in machines_all:
         slug = m.get("slug")
         if not isinstance(slug, str) or not slug:
-            broken.append(str(m)[:20])
+            # ★行の中身は出さない★（Codex 25巡目 (a)-4）
+            #   未公開の見出しをキーに入れられると、そのままCIログへ出てしまう。
+            broken.append(f"{len(pages) + len(blocked)}番目の行: slug の型が不正")
             continue
         if slug not in public_by_slug:
             blocked.append(slug)
@@ -554,7 +556,8 @@ def main(preview: bool = False):
     out_root = _pv.PREVIEW_DIR
     # 機種の一覧（＝ページを持ちうるslugの全体）は authoring から取る。
     # 公開が止まった機種にも「準備中」ページを置き換えるために必要。
-    machines = json.loads((BASE / "assets" / "data" / "machines.json").read_text(encoding="utf-8"))
+    import safe_json as _sj2
+    machines = _sj2.read_rows(BASE / "assets" / "data" / "machines.json")
     template = (BASE / "machine.html").read_text(encoding="utf-8")
 
     # ★★裏取りゲートが有効なら、通らない機種のHTMLは作らない★★
@@ -654,7 +657,7 @@ def main(preview: bool = False):
         dp = detail_dir / f"{slug}.json"
         if dp.is_file():
             try:
-                detail = json.loads(dp.read_text(encoding="utf-8"))
+                detail = _sj2.read_json(dp, expect=dict)
             except Exception as e:
                 # ★★読めない記事を「本文なし」で公開しない★★（Codex 11巡目 (b)-4）
                 print(f"★記事データが読めません: {slug} ({dp.name}) "

@@ -211,7 +211,7 @@ def _no_duplicate_keys(pairs):
     seen = {}
     for k, v in pairs:
         if k in seen:
-            raise BuildError(f"duplicate JSON key: {k}")
+            raise BuildError(f"duplicate JSON key: {redact_value(k)}")
         seen[k] = v
     return seen
 
@@ -915,7 +915,8 @@ TAG_URL_ATTR = re.compile(
     r"""(?:"([^"]*)"|'([^']*)'|([^\s>]+))""", re.IGNORECASE)
 CSS_URL = re.compile(r"""url\(\s*["']?((?:https?:)?//[^"')]+)""", re.IGNORECASE)
 # JS から外部を読む書き方（fetch / import / .src = / importScripts / Worker）
-JS_URL = re.compile(r"""["'`]((?:https?:)?//[^"'`\s]+)["'`]""")
+# ★大文字スキームも拾う★（同）
+JS_URL = re.compile(r"""["'`]((?:https?:)?//[^"'`\s]+)["'`]""", re.IGNORECASE)
 INLINE_SCRIPT = re.compile(r"<script\b[^>]*>(.*?)</script>", re.IGNORECASE | re.DOTALL)
 ANY_URL = re.compile(r"""(?:https?:)?//[^\s"'`)>\]]+""", re.IGNORECASE)
 # 自分のサイト（★部分一致にしない★：eviluchidokoro.com を自分と誤認しないため）
@@ -1015,6 +1016,11 @@ def _unescape_all(text: str, rounds: int = 3) -> str:
     return text
 
 
+def _unescape_js(text: str) -> str:
+    r"""JS文字列の \/ を戻す（https:\/\/evil を見落とさないため）。"""
+    return text.replace(chr(92) + "/", "/")
+
+
 def _strip_js_comments(text: str) -> str:
     """JSのコメントを外す（コメント中のURLを依存として数えないため）。"""
     text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
@@ -1034,7 +1040,9 @@ def external_references(stage: Path) -> list[str]:
 
     def note(url: str, where: str) -> None:
         u = html_mod.unescape(url.strip())
-        host = re.sub(r"^(?:https?:)?//", "", u).split("/")[0].split("?")[0].lower()
+        # ★スキームは大文字小文字を区別しない★（Codex 24巡目 (a)-3 / 25巡目 (a)-3）
+        host = re.sub(r"^(?:https?:)?//", "", u, flags=re.IGNORECASE)
+        host = host.split("/")[0].split("?")[0].lower()
         # ★部分一致で自サイト扱いにしない★（eviluchidokoro.com 対策・Codex 20巡目 (a)-3）
         if not host or host in OWN_HOSTS:
             return
@@ -1067,7 +1075,7 @@ def external_references(stage: Path) -> list[str]:
             continue
         if path.suffix.lower() == ".js":
             # ★JS は文字列の中のURLを全部見る★（fetch/import/動的 src を静的に追えないため）
-            for m in JS_URL.finditer(_strip_js_comments(text)):
+            for m in JS_URL.finditer(_unescape_js(_strip_js_comments(text))):
                 note(m.group(1), f"{rel}:{line_of(m.start())}")
             continue
 
@@ -1118,7 +1126,7 @@ def external_references(stage: Path) -> list[str]:
                         continue
                     note(url_ld, f"{rel}:{line_of(sc.start())} JSON-LD @context")
                 continue
-            for m in JS_URL.finditer(_strip_js_comments(sc.group(1))):
+            for m in JS_URL.finditer(_unescape_js(_strip_js_comments(sc.group(1)))):
                 # ★行番号は <script> の開始位置ではなく、当たった位置から出す★
                 note(m.group(1), f"{rel}:{line_of(sc.start(1) + m.start())} inline script")
 

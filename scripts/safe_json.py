@@ -47,19 +47,33 @@ def _no_duplicate_keys(pairs):
 
 
 def _control_chars(node, path: str = "$") -> list:
-    """値の中の制御文字（改行・タブ以外）を探す。場所だけ返し、原文は返さない。"""
-    out = []
-    if isinstance(node, str):
-        if any(ord(c) < 32 and c not in "\n\t" for c in node):
-            out.append(path)
-    elif isinstance(node, dict):
-        for k, v in node.items():
-            if isinstance(k, str) and any(ord(c) < 32 and c not in "\n\t" for c in k):
-                out.append(f"{path}.<キー名>")
-            out.extend(_control_chars(v, f"{path}.{k if k.isascii() else '<key>'}"))
-    elif isinstance(node, list):
-        for i, v in enumerate(node):
-            out.extend(_control_chars(v, f"{path}[{i}]"))
+    """値の中の制御文字（改行・タブ以外）を探す。場所だけ返し、原文は返さない。
+
+    ★再帰ではなくスタックで回す★（Codex 25巡目 (a)-5）
+      深い入れ子でここが RecursionError になると、
+      「診断で止める」はずが traceback になってしまう。
+    """
+    out: list = []
+    stack = [(node, path)]
+    seen = 0
+    while stack:
+        cur, cpath = stack.pop()
+        seen += 1
+        if seen > 2_000_000:
+            out.append("（大きすぎて全部は見ていません）")
+            break
+        if isinstance(cur, str):
+            if any(ord(c) < 32 and c not in chr(10) + chr(9) for c in cur):
+                out.append(cpath)
+        elif isinstance(cur, dict):
+            for k, v in cur.items():
+                if isinstance(k, str) and any(
+                        ord(c) < 32 and c not in chr(10) + chr(9) for c in k):
+                    out.append(f"{cpath}.<キー名>")
+                stack.append((v, f"{cpath}.{k if isinstance(k, str) else '?'}"))
+        elif isinstance(cur, list):
+            for i, v in enumerate(cur):
+                stack.append((v, f"{cpath}[{i}]"))
     return out
 
 

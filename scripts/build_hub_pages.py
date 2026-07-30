@@ -198,20 +198,17 @@ SHALLOW_TENJO_LIMIT = 1000
 HUB_FIXED_NUMERALS: tuple = ()
 
 
-def _allowed_counts(built: dict) -> set:
-    """このビルドで出してよい「集計の数」を明示的に作る。
+def _counts_allowed(a: int, c: int, c_top: int, d: int, all_: int) -> set:
+    """出してよい「集計の数」を★描く前に★決める。
 
-    ★CSSクラスを検査免除の札にしない★（Codex 24巡目 (a)-2）
-      <span class="list-count"> の中身を無条件に外すと、
-      生成器の回帰でそこへ任意の文を入れられても気づけない。
-      許すのは「閾値」と「各ページの件数」だけ。
+    ★生成後HTMLから拾ってはいけない★（Codex 25巡目 (a)-2）
+      拾う方式だと、生成器が件数を間違えても検査器自身がその誤値を許可してしまう
+      （自分で自分を許可する循環）。データから数えた値だけを許す。
     """
     out = {f"{SHALLOW_TENJO_LIMIT}G"}
-    for html in built.values():
-        for m in re.finditer(r'<span class="list-count">(\d+)</span>\s*(機種|G)', html):
-            out.add(f"{m.group(1)}{m.group(2)}")
-        for m in re.finditer(r'<span class="list-count">(\d+)</span>', html):
-            out.add(m.group(1))
+    for n in (a, c, c_top, d, all_):
+        out.add(f"{n}機種")
+        out.add(str(n))
     return out
 
 
@@ -328,7 +325,10 @@ def load_rows(source: "Path | None" = None):
       （2026-07-30・Codex 13巡目 (a)-1）
       authoring を直接読むと、ランキングやスペック欄に射影で消えるはずの値が出る。
     """
-    machines = json.loads((source or MACHINES).read_text(encoding="utf-8"))
+    import sys as _s2
+    _s2.path.insert(0, str(BASE / "scripts"))
+    import safe_json as _sj
+    machines = _sj.read_rows(source or MACHINES)
     rows = []
     for m in machines:
         c = m.get("checker") or {}
@@ -369,7 +369,9 @@ def yome(r) -> str:
     #   一覧からは外さず（早見表は全機種の表なので）、書き方だけを正しくする。
     if r.get("status") == "preview":
         return "解析待ち（先行記事）"
-    return "設定狙い向け（ゲーム数狙い非対応）"
+    # ★分類を断定しない★（Codex 25巡目 (a)-1）
+    #   狙い目が空なだけで「設定狙い向け」と書くのは、公開データで裏取りしていない分類。
+    return "狙い目情報なし"
 
 
 def tenjo_disp(r) -> str:
@@ -671,7 +673,8 @@ def _build_pages(rows: list, prose_all: dict) -> tuple:
     #   「1000G未満」「スルーN回」などの数値は検査を素通りしていた。
     built = {f: build_page(f, prose, data_html)
              for f, (prose, data_html) in pages.items()}
-    return built, {f: d for f, (_p, d) in pages.items()}
+    return (built, {f: d for f, (_p, d) in pages.items()},
+            _counts_allowed(len(A), len(C), len(C_top), len(D), len(ALL)))
 
 
 def render_all(source_root: "Path") -> dict:
@@ -689,12 +692,12 @@ def render_all(source_root: "Path") -> dict:
         raise RuntimeError(f"公開データがありません: {pub}")
     rows = load_rows(pub)
     prose_all = _sj.read_json(source_root / "scripts" / "hub_prose.json", expect=dict)
-    built, data_html = _build_pages(rows, prose_all)
+    built, data_html, allowed = _build_pages(rows, prose_all)
     bad = hub_content_problems(built, data_html,
                                ("公開できない表現", _g.ABSOLUTE_DENY_PAT),
                                ("要人手確認の語（損得・設定の話）", _g.RISK_PAT),
                                prose_all=prose_all,
-                               allowed_counts=_allowed_counts(built))
+                               allowed_counts=allowed)
     if bad:
         raise RuntimeError("ハブに出せない内容があります:\n  " + "\n  ".join(bad))
     return built
@@ -775,7 +778,8 @@ def main(preview: bool = False):
         print("  裏取り前の内容を確かめたいなら --preview を付けてください")
         print("  （.preview-site/ にだけ書き出します。公開されません）")
         return 1
-    prose_all = json.loads(PROSE.read_text(encoding="utf-8"))
+    import safe_json as _sj3
+    prose_all = _sj3.read_json(PROSE, expect=dict)
     # ★★固定文に埋まった数値もゲートの外だった★★（Codex 11巡目 (a)-3）
     #   一覧から機種を外しても「うみねこ2は200G」等の記述は本文に残る。
     #   ゲート有効時は、単位つきの数値を含む固定文を出さない。
@@ -792,7 +796,7 @@ def main(preview: bool = False):
         print(f"先行記事（解析待ち）{len(previews)} 機種は「解析待ち」と表記します: "
               f"{[r['slug'] for r in previews]}")
 
-    built, data_html_map = _build_pages(rows, prose_all)
+    built, data_html_map, allowed = _build_pages(rows, prose_all)
     if gate_on:
         import gates as _g
         # ★数値は「公開データに載っている値」だけ許す★（Codex 14巡目 (b)-1）
@@ -803,7 +807,7 @@ def main(preview: bool = False):
                                    ("公開できない表現", _g.ABSOLUTE_DENY_PAT),
                                    ("要人手確認の語（損得・設定の話）", _g.RISK_PAT),
                                    prose_all=prose_all,
-                                   allowed_counts=_allowed_counts(built))
+                                   allowed_counts=allowed)
         if bad:
             print(f"★生成後のHTMLに出せない内容が {len(bad)} 箇所あります★")
             for b in bad:      # ★打ち切らない★（Codex 14巡目 (b)-4）
