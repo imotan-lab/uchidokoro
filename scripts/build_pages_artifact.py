@@ -917,10 +917,15 @@ CSS_URL = re.compile(r"""url\(\s*["']?((?:https?:)?//[^"')]+)""", re.IGNORECASE)
 # JS から外部を読む書き方（fetch / import / .src = / importScripts / Worker）
 # ★大文字スキームも拾う★（同）
 JS_URL = re.compile(r"""["'`]((?:https?:)?//[^"'`\s]+)["'`]""", re.IGNORECASE)
-INLINE_SCRIPT = re.compile(r"<script\b[^>]*>(.*?)</script>", re.IGNORECASE | re.DOTALL)
+# ★終了タグはタグ名の後にASCII空白を許す★（Codex 25巡目 (a)-3・26巡目 (a)-1）
+#   `</script >` でも実行されるのに、完全一致だと検査から外れていた。
+INLINE_SCRIPT = re.compile(r"<script\b[^>]*>(.*?)</script\s*>",
+                           re.IGNORECASE | re.DOTALL)
 ANY_URL = re.compile(r"""(?:https?:)?//[^\s"'`)>\]]+""", re.IGNORECASE)
 # 自分のサイト（★部分一致にしない★：eviluchidokoro.com を自分と誤認しないため）
 OWN_HOSTS = ("uchidokoro.com", "www.uchidokoro.com")
+# ホスト名の終わり（/ ? # とバックスラッシュ）
+HOST_END = re.compile("[/?#" + chr(92) + chr(92) + "]")
 # JSON-LD の語彙名（ページ読み込み時に取得されない）
 JSONLD_VOCAB_HOSTS = ("schema.org", "www.schema.org")
 
@@ -1022,10 +1027,42 @@ def _unescape_js(text: str) -> str:
 
 
 def _strip_js_comments(text: str) -> str:
-    """JSのコメントを外す（コメント中のURLを依存として数えないため）。"""
-    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
-    return re.sub(r"(?m)(?<![:\w])//[^\n]*$", "", text)
+    """JSのコメントを外す（コメント中のURLを依存として数えないため）。
 
+    ★文字列の中は触らない★（Codex 26巡目 (a)-1）
+      `fetch("//evil.example/x")` の `//` を行コメントと誤認して消していた。
+    """
+    out = []
+    i, n = 0, len(text)
+    quote = ""
+    while i < n:
+        ch = text[i]
+        if quote:
+            out.append(ch)
+            if ch == chr(92) and i + 1 < n:
+                out.append(text[i + 1])
+                i += 2
+                continue
+            if ch == quote:
+                quote = ""
+            i += 1
+            continue
+        if ch in "\"'`":
+            quote = ch
+            out.append(ch)
+            i += 1
+            continue
+        if ch == "/" and i + 1 < n and text[i + 1] == "*":
+            end = text.find("*/", i + 2)
+            i = n if end < 0 else end + 2
+            continue
+        if ch == "/" and i + 1 < n and text[i + 1] == "/":
+            end = text.find(chr(10), i)
+            i = n if end < 0 else end
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
 
 def external_references(stage: Path) -> list[str]:
     """成果物の中から「外部サーバの応答に依存している場所」を全部挙げる。
@@ -1041,8 +1078,11 @@ def external_references(stage: Path) -> list[str]:
     def note(url: str, where: str) -> None:
         u = html_mod.unescape(url.strip())
         # ★スキームは大文字小文字を区別しない★（Codex 24巡目 (a)-3 / 25巡目 (a)-3）
-        host = re.sub(r"^(?:https?:)?//", "", u, flags=re.IGNORECASE)
-        host = host.split("/")[0].split("?")[0].lower()
+        # ★余分な / や \ は読み飛ばして authority を取る★（Codex 26巡目 (a)-1）
+        #   `https:////evil.example/x` を「ホストが空」として無視していた。
+        rest = re.sub(r"^(?:https?:)?", "", u.strip(), flags=re.IGNORECASE)
+        rest = rest.lstrip("/" + chr(92))
+        host = HOST_END.split(rest)[0].lower()
         # ★部分一致で自サイト扱いにしない★（eviluchidokoro.com 対策・Codex 20巡目 (a)-3）
         if not host or host in OWN_HOSTS:
             return
@@ -1814,6 +1854,15 @@ def selftest() -> int:
          lambda root: _style_block_checked(root), True)
     case("(a)-1 data-type で JSON-LD を偽装しても外部依存に数える",
          lambda root: _jsonld_spoof_detected(root), True)
+    for _html, _key, _name in (
+        ('<script>fetch("https://e1.example/x")</script >', "e1.example", "終了タグに空白"),
+        ('<script>fetch("//e2.example/x")</script>', "e2.example", "//で始まるURL"),
+        ('<script src="https:////e3.example/x.js"></script>', "e3.example", "余分なスラッシュ"),
+    ):
+        case(f"(a)-1 外部依存: {_name} を見つける",
+             (lambda h, k: (lambda root: _ext_found(root, h, k)))(_html, _key), True)
+    case("(a)-2 キー名を添字に見せかけても伏せる",
+         lambda root: _fake_index_redacted(), True)
     case("(a)-1 重複/boolean属性でJSON-LDを偽装しても数える",
          lambda root: _attr_spoof_detected(root), True)
     case("(a)-3 大文字スキーム（HTTPS://）も見つける",
@@ -2090,6 +2139,26 @@ def _jsonld_spoof_detected(root: Path) -> bool:
         '<script data-type="application/ld+json">fetch("https://spoof.example/x")</script>',
         encoding="utf-8")
     return "spoof.example" in " ".join(external_references(root))
+
+
+def _ext_found(root: Path, html: str, key: str) -> bool:
+    (root / "a.html").write_text(html, encoding="utf-8")
+    return key in " ".join(external_references(root))
+
+
+def _fake_index_redacted() -> bool:
+    sys.path.insert(0, str(BASE / "scripts"))
+    import ci_safe
+    was = os.environ.get("CI")
+    os.environ["CI"] = "true"
+    try:
+        out = ci_safe.safe_path("$.title[DRAFT_SECRET_X9]")
+    finally:
+        if was is None:
+            os.environ.pop("CI", None)
+        else:
+            os.environ["CI"] = was
+    return "DRAFT_SECRET_X9" not in out
 
 
 def _attr_spoof_detected(root: Path) -> bool:

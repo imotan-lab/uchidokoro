@@ -73,12 +73,18 @@ def safe_path(path: str) -> str:
     """
     if not in_ci():
         return path
+    import re as _re
     out = []
     for part in str(path).split("."):
-        base = part.split("[")[0]
-        suffix = part[len(base):]          # 配列の添字はそのまま残す
+        # ★添字として残すのは [数字] だけ★（Codex 26巡目 (a)-2）
+        #   `title[DRAFT_SECRET_X9]` のようなキー名を「添字」と誤認して素通ししていた。
+        m = _re.fullmatch(r"([^\[\]]*)((?:\[\d+\])*)", part)
+        if not m:
+            out.append(f"<{fingerprint(part)}>")
+            continue
+        base, index = m.group(1), m.group(2)
         if base in STRUCTURAL_KEYS:
-            out.append(part)
+            out.append(base + index)
         else:
-            out.append(f"<{fingerprint(base)}>{suffix}")
+            out.append(f"<{fingerprint(base)}>{index}")
     return ".".join(out)
