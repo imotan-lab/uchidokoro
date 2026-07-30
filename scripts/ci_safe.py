@@ -53,6 +53,17 @@ def redact(text, limit: int = 60) -> str:
     return f"« {s[:limit]} »"
 
 
+# ★出してよい構造キーの一覧★（Codex 21巡目 (a)-5）
+#   「ASCIIなら出す」だと `UNPUBLISHED_X9` のようなキー名がそのままログに出る。
+#   公開してよい既知の骨組みだけを列挙し、それ以外は指紋にする。
+STRUCTURAL_KEYS = frozenset({
+    "$", "tenjo", "reset", "suru", "ichiran",
+    "title", "h1", "lead", "paras", "note", "meta_description",
+    "sections", "body", "items", "list", "blocks", "intro", "outro",
+    "faq", "q", "a", "related", "label", "text",
+})
+
+
 def safe_path(path: str) -> str:
     """JSONのキー名などのパスを、原文を出さない形に整える。
 
@@ -64,8 +75,10 @@ def safe_path(path: str) -> str:
         return path
     out = []
     for part in str(path).split("."):
-        if part.isascii() and len(part) <= 24:
+        base = part.split("[")[0]
+        suffix = part[len(base):]          # 配列の添字はそのまま残す
+        if base in STRUCTURAL_KEYS:
             out.append(part)
         else:
-            out.append(f"<{fingerprint(part)}>")
+            out.append(f"<{fingerprint(base)}>{suffix}")
     return ".".join(out)
