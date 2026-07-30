@@ -542,7 +542,7 @@ LEGACY_NOTE = ("数値は各種解析情報をもとにまとめた当サイト�
                "出典の照合は順次進めています。")
 
 
-def _build_legacy() -> int:
+def _build_legacy(only_slug: str | None = None) -> int:
     """★いま公開中の旧形式ページを作り直す★（2026-07-30・Codex「これだけはやれ」③）
 
     ここは `LEGACY_UNVERIFIED` だけを作る経路。裏取り済みとして公開する道には
@@ -567,6 +567,20 @@ def _build_legacy() -> int:
         return 1
 
     machines = _sj2.read_rows(BASE / "assets" / "data" / "machines.json")
+    # ★1機種だけ直せるようにする★（2026-07-30・Codex指摘6）
+    #   全機種を書き直す作りだったので、
+    #     ①更新タスクの「1日1機種」が実際には全機種だった
+    #     ②新台タスクが machines.json に行を足した翌朝、そのページはまだ無いので
+    #       「未公開ページを作ろうとした」と**全件が中止**していた
+    #   ＝2本に分けたことで互いを止め合う経路になっていた。
+    if only_slug:
+        machines = [m for m in machines if m.get("slug") == only_slug]
+        if not machines:
+            print(f"★machines.json に {only_slug} がありません★")
+            return 1
+        if not (BASE / "machines" / only_slug / "index.html").is_file():
+            print(f"★{only_slug} はまだ公開していません（ここでは作れません）★")
+            return 1
     template = prepare_template((BASE / "machine.html").read_text(encoding="utf-8"))
 
     # 2) authoring の記事だけを読む（公開データは触らない）
@@ -659,7 +673,8 @@ def _build_legacy() -> int:
     return 0
 
 
-def main(preview: bool = False, legacy: bool = False):
+def main(preview: bool = False, legacy: bool = False,
+         legacy_slug: str | None = None):
     """preview=True のときは .preview-site/ にだけ書く（公開されない写し）。
 
     ★2026-07-30・移行手順2で --allow-ungated を廃止した★
@@ -691,7 +706,7 @@ def main(preview: bool = False, legacy: bool = False):
         print("  写しを見るなら --preview だけ、公開ページを直すなら --legacy だけ。")
         return 1
     if legacy:
-        return _build_legacy()
+        return _build_legacy(legacy_slug)
 
     # ★公開物を書けるのは build_pages_artifact.py だけ★
     #   （2026-07-30・Codex 23巡目 条件7の設計）
@@ -863,6 +878,8 @@ if __name__ == "__main__":
     _p = _ap.ArgumentParser()
     _p.add_argument("--preview", action="store_true",
                     help="公開されない写し（.preview-site/）にだけ書き出す")
+    _p.add_argument("--slug", default=None,
+                    help="--legacy と併用。その1機種だけ作り直す（既定は全機種）")
     _p.add_argument("--legacy", action="store_true",
                     help="いま公開中の旧形式ページを作り直す"
                          "（裏取りゲートが有効なら実行しない・公開データは読まない）")
@@ -872,7 +889,7 @@ if __name__ == "__main__":
     _s9.path.insert(0, str(BASE / "scripts"))
     import safe_json as _sj9
     try:
-        raise SystemExit(main(_a.preview, _a.legacy) or 0)
+        raise SystemExit(main(_a.preview, _a.legacy, _a.slug) or 0)
     except SystemExit:
         raise
     except _sj9.SafeJsonError as _e:

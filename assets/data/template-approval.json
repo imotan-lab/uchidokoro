@@ -34,7 +34,7 @@
   "scripts/audit_public.py": "a3999d5f56dec11b94ba37a7e00db67dceb73481a8b95c4d4f320590750dd26d",
   "scripts/build_hub_pages.py": "f7a1355e32a0d9805d10d0fd9d5f1d2bfe1dfb852a8f255e935b51f5488dc7ad",
   "scripts/build_ledger.py": "3d3e7ddbd20723fa2309f60686c7df58d99b8f809d4ad6964fb360a1693af10c",
-  "scripts/build_machine_pages.py": "86b10aec90d77bc4fd0d76c11c8f0595846ed398b5146a21236fc8ec896cc0c3",
+  "scripts/build_machine_pages.py": "cec2f8d843941d776bb22f262c0ef93b78b52ccff575f082afe1b2297acc2ffb",
   "scripts/build_pages_artifact.py": "d7394ca53e57b5a432399abafef39c2c87cd6e2eb8a316053811d4a85174b0a4",
   "scripts/build_public_data.py": "08cb5ed0b30e62e38449482fbdac89005476699158679a592531fae662ba34c0",
   "scripts/ci_safe.py": "7868c74045a90bfacaeba9321c1a732c3318ee3b6a49009296d6af1a026f2c10",

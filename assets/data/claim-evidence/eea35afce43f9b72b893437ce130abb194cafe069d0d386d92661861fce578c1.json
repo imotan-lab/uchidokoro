@@ -1,0 +1,27 @@
+{
+ "schema_version": "claim-evidence/v1",
+ "fetch": {
+  "requested_url": "https://www.p-world.co.jp/machine/database/9848",
+  "final_url": "https://www.p-world.co.jp/machine/database/9848",
+  "fetched_at": "2026-07-30T12:47:58Z",
+  "http_status": 200,
+  "response_sha256": "1ac41fc6d5380541ecae037932a5822b01facc231700a74794048771aadc396f"
+ },
+ "page": {
+  "title": "ゴーゴージャグラー3 パチスロ スロット 機械割 天井 初打ち 打ち方 スペック 掲示板 設置店 | P-WORLD",
+  "body_sha256": "606081cbf4c4be9379b0a01cb1326e15ec802aaff0e9e28b788a3447cd343c58"
+ },
+ "evidence_unit": {
+  "unit_type": "TABLE_ROW",
+  "dom_path": "table_row[87]",
+  "text": "型式名 : Sゴーゴージャグラー3KA"
+ },
+ "machine_identity": {
+  "manufacturer_id": "kitadenshi",
+  "regulatory_model_code": "Sゴーゴージャグラー3KA",
+  "market_release_date": "2023-07-03"
+ },
+ "fetcher_version": "claim_collect/1",
+ "attestation_state": "UNATTESTED_METADATA",
+ "evidence_sha256": "eea35afce43f9b72b893437ce130abb194cafe069d0d386d92661861fce578c1"
+}
