@@ -137,8 +137,8 @@ def _scalar_limit(lim):
 # ★NFKC正規化のあとに掛ける★（全角・丸数字などを取りこぼさない）
 # ★「ゲーム」も単位★（Codex 15巡目 (a)-2：「天井は200ゲームです」が素通りしていた）
 NUMERAL_OCCURRENCE = re.compile(
-    r"[0-9一二三四五六七八九十百千万]+\s*"
-    r"(?:G|ゲーム|pt|ポイント|P|回|周期|スルー|枚|円|%|パーセント|割|倍|分|時間|日|台|"
+    r"[0-9一二三四五六七八九十百千万〇零]+\s*"
+    r"(?:G|g|Ｇ|ゲーム|pt|ポイント|P|回|周期|スルー|枚|円|%|パーセント|割|倍|分|時間|日|台|"
     r"機種|セット|連|スロット|ベル|レア役|ゲーム数)")
 
 # インライン要素は取り除いて文字をつなぐ（「勝<strong>て</strong>る」を「勝てる」に戻す）
@@ -173,8 +173,11 @@ def visible_text(html: str) -> str:
     """
     # ★属性はクォート無しと data-* も全部見る★（Codex 17巡目 (a)-5）
     attrs = " ".join(a or b or c for a, b, c in _ATTR_TEXT.findall(html))
-    # 集計の件数（データから毎回計算する数）は検査対象にしない
-    body = _COUNT_SPAN.sub("", html)
+    # ★集計の件数はここでは消さない★（Codex 24巡目 (a)-2）
+    #   CSSクラスを「検査免除の札」にすると、生成器の回帰で
+    #   <span class="list-count">必ず勝てる</span> のような文も素通りしてしまう。
+    #   代わりに、許される集計値（数）だけを呼び出し側から渡して照合する。
+    body = html
     # ふりがな（rt/rp）は本文の間に挟まるので、中身ごと落としてから詰める
     # （「勝<rt>か</rt>てる」で語を分断できてしまうため・Codex 16巡目 (a)-4）
     body = _RUBY_ANNOTATION.sub("", body)
@@ -195,8 +198,26 @@ SHALLOW_TENJO_LIMIT = 1000
 HUB_FIXED_NUMERALS: tuple = ()
 
 
+def _allowed_counts(built: dict) -> set:
+    """このビルドで出してよい「集計の数」を明示的に作る。
+
+    ★CSSクラスを検査免除の札にしない★（Codex 24巡目 (a)-2）
+      <span class="list-count"> の中身を無条件に外すと、
+      生成器の回帰でそこへ任意の文を入れられても気づけない。
+      許すのは「閾値」と「各ページの件数」だけ。
+    """
+    out = {f"{SHALLOW_TENJO_LIMIT}G"}
+    for html in built.values():
+        for m in re.finditer(r'<span class="list-count">(\d+)</span>\s*(機種|G)', html):
+            out.add(f"{m.group(1)}{m.group(2)}")
+        for m in re.finditer(r'<span class="list-count">(\d+)</span>', html):
+            out.add(m.group(1))
+    return out
+
+
 def hub_content_problems(built: dict, data_html: dict, *deny_pats,
-                         prose_all: dict | None = None) -> list:
+                         prose_all: dict | None = None,
+                         allowed_counts: set | None = None) -> list:
     """出来上がったハブ4ページのうち、**データ由来でない部分**を検査する。
 
     ★機種一覧そのものは検査しない★（Codex 14巡目 (b)-1）
@@ -229,9 +250,10 @@ def hub_content_problems(built: dict, data_html: dict, *deny_pats,
         # ★語のかたまりではなく「数＋単位」の出現ごとに見る★
         #   日本語は空白で区切れないので、語単位だと文まるごとが1語になり
         #   許可リストが作れない。出現そのものを取り出して照合する。
+        allowed = allowed_counts or set()
         for occ in NUMERAL_OCCURRENCE.finditer(text):
             token = occ.group(0)
-            if token in HUB_FIXED_NUMERALS:
+            if token in HUB_FIXED_NUMERALS or token in allowed:
                 continue
             bad.append(f"{f}: 裏取りしていない数値 {_redact(token)}"
                        f" 指紋{_fp(token)} … {_around(text, occ.start())}"
@@ -671,7 +693,8 @@ def render_all(source_root: "Path") -> dict:
     bad = hub_content_problems(built, data_html,
                                ("公開できない表現", _g.ABSOLUTE_DENY_PAT),
                                ("要人手確認の語（損得・設定の話）", _g.RISK_PAT),
-                               prose_all=prose_all)
+                               prose_all=prose_all,
+                               allowed_counts=_allowed_counts(built))
     if bad:
         raise RuntimeError("ハブに出せない内容があります:\n  " + "\n  ".join(bad))
     return built
@@ -779,7 +802,8 @@ def main(preview: bool = False):
         bad = hub_content_problems(built, {f: d for f, (_p, d) in pages.items()},
                                    ("公開できない表現", _g.ABSOLUTE_DENY_PAT),
                                    ("要人手確認の語（損得・設定の話）", _g.RISK_PAT),
-                                   prose_all=prose_all)
+                                   prose_all=prose_all,
+                                   allowed_counts=_allowed_counts(built))
         if bad:
             print(f"★生成後のHTMLに出せない内容が {len(bad)} 箇所あります★")
             for b in bad:      # ★打ち切らない★（Codex 14巡目 (b)-4）
@@ -838,8 +862,11 @@ def selftest() -> int:
     fixed = ('<html><body><p>G数でカウントする天井が'
              '<span class="list-count">1000</span>G未満の機種は全'
              '<span class="list-count">49</span>機種です</p></body></html>')
-    t("集計の定義（件数・閾値）では止めない",
-      hub_content_problems({"a.html": fixed}, {}, *deny) == [])
+    t("集計の定義（件数・閾値）は、値を渡した時だけ通す",
+      hub_content_problems({"a.html": fixed}, {}, *deny,
+                           allowed_counts={"1000G", "49機種"}) == [])
+    t("★渡していない集計値は止める（クラス名は免除札にしない）",
+      hub_content_problems({"a.html": fixed}, {}, *deny) != [])
     t("★例外リストは空である（固定数値の抜け道を持たない）", HUB_FIXED_NUMERALS == ())
 
     claim = "<html><body><p>この機種は必ず勝てるため最優先です</p></body></html>"
@@ -897,6 +924,15 @@ def selftest() -> int:
       hub_content_problems({"a.html": "<p>勝率80パーセント</p>"}, {}, *deny) != [])
     t("ふりがなで分断した禁止語も見つける",
       hub_content_problems({"a.html": "<p><ruby>勝<rt>か</rt></ruby>てる</p>"}, {}, *deny) != [])
+    # --- Codex 24巡目 (a)-2 の反例 ---
+    t("〇G（漢数字のゼロ）も数値として見る",
+      hub_content_problems({"a.html": "<p>天井は〇Gです</p>"}, {}, *deny) != [])
+    t("小文字の g も単位として見る",
+      hub_content_problems({"a.html": "<p>天井は200gです</p>"}, {}, *deny) != [])
+    t("免除札（list-count）に断定を入れても止める",
+      hub_content_problems(
+          {"a.html": '<p><span class="list-count">必ず勝てる</span></p>'}, {}, *deny) != [])
+
     t("シングルクォート属性の中も見る",
       hub_content_problems({"a.html": "<input placeholder='必ず勝てる'>"}, {}, *deny) != [])
 

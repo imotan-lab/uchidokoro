@@ -25,11 +25,15 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ci_safe import redact  # noqa: E402
+from ci_safe import redact, safe_path  # noqa: E402
 
 
 class SafeJsonError(RuntimeError):
     """読めない／形が違うJSON（呼び出し側は必ず「公開しない」に倒す）。"""
+
+
+def _reject_constant(name):
+    raise SafeJsonError(f"JSONで使えない値です: {name}")
 
 
 def _no_duplicate_keys(pairs):
@@ -80,16 +84,25 @@ def read_json(path, expect=None, allow_missing: bool = False, default=None):
     if raw.startswith("﻿"):
         raise SafeJsonError(f"{p.name}: 先頭にBOMがあります（UTF-8で保存し直すこと）")
     try:
-        data = json.loads(raw, object_pairs_hook=_no_duplicate_keys)
+        data = json.loads(raw, object_pairs_hook=_no_duplicate_keys,
+                          # ★NaN / Infinity を受け付けない★（Codex 24巡目）
+                          #   Python既定は通してしまい、数値のつもりが比較できない値になる。
+                          parse_constant=_reject_constant)
     except SafeJsonError:
         raise
     except json.JSONDecodeError as e:
         raise SafeJsonError(f"{p.name}: JSONとして壊れています（{e.lineno}行{e.colno}文字）") from None
+    except RecursionError:
+        # ★入れ子が深すぎる★（同）：例外のままだと traceback になる
+        raise SafeJsonError(f"{p.name}: 入れ子が深すぎます") from None
+    except Exception as e:
+        raise SafeJsonError(f"{p.name}: 読めません（{type(e).__name__}）") from None
     # ★値に制御文字を入れさせない★（2026-07-30に実害のあるバグを踏んだため）
     #   見た目に出ないので、混ざると気づけないまま検査を壊せる。
     bad = _control_chars(data)
     if bad:
-        raise SafeJsonError(f"{p.name}: 値に制御文字が入っています（{bad[0]}）")
+        raise SafeJsonError(
+            f"{p.name}: 値に制御文字が入っています（{safe_path(bad[0])}）")
     if expect is not None and not isinstance(data, expect):
         want = getattr(expect, "__name__", str(expect))
         raise SafeJsonError(f"{p.name}: {want} であるべきですが {type(data).__name__} でした")
@@ -124,6 +137,10 @@ def _broken_inputs():
         "配列の中に文字列": '["x"]',
         "配列の中にnull": "[null]",
         "深い入れ子だけ": "[[[[[]]]]]",
+        "再帰限界を超える入れ子": "[" * 20000 + "]" * 20000,
+        "NaN": '[{"limit": NaN}]',
+        "Infinity": '[{"limit": Infinity}]',
+        "-Infinity": '[{"limit": -Infinity}]',
         "制御文字入り": '[{"slug": "a\\u0008b"}]',
     }
 

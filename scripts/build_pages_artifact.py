@@ -924,21 +924,69 @@ OWN_HOSTS = ("uchidokoro.com", "www.uchidokoro.com")
 JSONLD_VOCAB_HOSTS = ("schema.org", "www.schema.org")
 
 
-ATTR_PAIR = re.compile(
-    r"""([A-Za-z_:][-\w:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""")
+# ★属性は「ASCII空白区切り・boolean属性も記録」で厳密に読む★（Codex 24巡目 (a)-1）
+#   `<script type type="application/ld+json">` はブラウザでは最初の boolean `type`（空）が
+#   採用されて**普通のJSとして実行される**のに、ゆるい解析だと2つ目を拾って
+#   JSON-LD 扱いにできた。NBSP を空白と見なすのも同じ穴になる。
+ASCII_WS = "".join(chr(c) for c in (9, 10, 12, 13, 32))
+ATTR_NAME = re.compile(r"[^\s/>=]+")
 
 # 端末が取りに行くフィールド（ただの引用リンクは数えない）
 FETCHED_JSON_FIELDS = ("src", "url", "href", "icon", "image", "logo")
 
 
-def _attrs_of(tag_text: str) -> dict:
-    """開始タグの属性を辞書にする（キー名を厳密に見るため）。"""
-    inner = tag_text[tag_text.find(" "):] if " " in tag_text else ""
-    out = {}
-    for m in ATTR_PAIR.finditer(inner):
-        out.setdefault(m.group(1).lower(),
-                       _unescape_all(m.group(2) or m.group(3) or m.group(4) or ""))
-    return out
+def parse_attrs(tag_text: str) -> tuple[dict, bool]:
+    """開始タグの属性を厳密に読む。
+
+    戻り値: (属性の辞書, 素直に読めたか)
+      素直に読めなかった（重複属性がある等）ときは False を返し、
+      呼び出し側は **安全側（JSON-LDとみなさない）** に倒す。
+    """
+    i = tag_text.find("<")
+    i = 0 if i < 0 else i + 1
+    while i < len(tag_text) and tag_text[i] not in ASCII_WS and tag_text[i] not in ">/":
+        i += 1                       # タグ名を飛ばす
+    attrs: dict = {}
+    clean = True
+    n = len(tag_text)
+    while i < n:
+        while i < n and tag_text[i] in ASCII_WS:
+            i += 1
+        if i >= n or tag_text[i] in ">/":
+            break
+        m = ATTR_NAME.match(tag_text, i)
+        if not m:
+            clean = False
+            break
+        name = m.group(0).lower()
+        i = m.end()
+        j = i
+        while j < n and tag_text[j] in ASCII_WS:
+            j += 1
+        value = ""
+        if j < n and tag_text[j] == "=":
+            j += 1
+            while j < n and tag_text[j] in ASCII_WS:
+                j += 1
+            if j < n and tag_text[j] in "\"'":
+                q = tag_text[j]
+                k = tag_text.find(q, j + 1)
+                if k < 0:
+                    clean = False
+                    break
+                value, i = tag_text[j + 1:k], k + 1
+            else:
+                k = j
+                while k < n and tag_text[k] not in ASCII_WS and tag_text[k] != ">":
+                    k += 1
+                value, i = tag_text[j:k], k
+        else:
+            i = m.end()              # boolean属性（値なし）
+        if name in attrs:
+            clean = False            # 重複属性は先勝ち。解析が割れるので安全側へ
+        else:
+            attrs[name] = _unescape_all(value)
+    return attrs, clean
 
 
 def _json_urls(node, path: str = "") -> list:
@@ -946,7 +994,8 @@ def _json_urls(node, path: str = "") -> list:
     out = []
     if isinstance(node, dict):
         for k, v in node.items():
-            if isinstance(v, str) and k.lower() in FETCHED_JSON_FIELDS                     and re.match(r"^(?:https?:)?//", v.strip()):
+            # ★スキームは大文字小文字を区別しない★（Codex 24巡目 (a)-3）
+            if isinstance(v, str) and k.lower() in FETCHED_JSON_FIELDS                     and re.match(r"^(?:https?:)?//", v.strip(), re.IGNORECASE):
                 out.append((f".{k}", v.strip()))
             else:
                 out.extend(_json_urls(v, f"{path}.{k}"))
@@ -1055,7 +1104,9 @@ def external_references(stage: Path) -> list[str]:
             head = text[sc.start():sc.start(1)]
             # ★属性を辞書に分解し、キーが厳密に "type" の時だけ JSON-LD 扱い★
             #   （Codex 23巡目 (a)-1：`data-type=` の中の `type=` に一致していた）
-            script_type = _attrs_of(head).get("type", "").strip().lower()
+            _a, _clean = parse_attrs(head)
+            #   素直に読めないタグは JSON-LD 扱いしない（fail-closed）
+            script_type = (_a.get("type", "") if _clean else "").strip().lower()
             if script_type == "application/ld+json":
                 # remote な @context / @import は別枠で警告する
                 for m in re.finditer(r'"@(?:context|import)"\s*:\s*"((?:https?:)?//[^"]+)"',
@@ -1755,6 +1806,10 @@ def selftest() -> int:
          lambda root: _style_block_checked(root), True)
     case("(a)-1 data-type で JSON-LD を偽装しても外部依存に数える",
          lambda root: _jsonld_spoof_detected(root), True)
+    case("(a)-1 重複/boolean属性でJSON-LDを偽装しても数える",
+         lambda root: _attr_spoof_detected(root), True)
+    case("(a)-3 大文字スキーム（HTTPS://）も見つける",
+         lambda root: _upper_scheme_detected(root), True)
     case("(a)-4 JSONエスケープしたURLも見つける",
          lambda root: _json_escaped_url_detected(root), True)
     case("(b) HTMLコメント内のscriptは数えない",
@@ -2027,6 +2082,24 @@ def _jsonld_spoof_detected(root: Path) -> bool:
         '<script data-type="application/ld+json">fetch("https://spoof.example/x")</script>',
         encoding="utf-8")
     return "spoof.example" in " ".join(external_references(root))
+
+
+def _attr_spoof_detected(root: Path) -> bool:
+    nbsp = chr(0x00A0)
+    (root / "a.html").write_text(
+        '<script type type="application/ld+json">fetch("https://dup.example/x")</script>' + chr(10)
+        + f'<script type{nbsp}=application/ld+json>fetch("https://nb.example/x")</script>' + chr(10)
+        +
+        '<script type="application/ld+json">{"@context":"https://schema.org"}</script>',
+        encoding="utf-8")
+    j = " ".join(external_references(root))
+    return "dup.example" in j and "nb.example" in j and "schema.org" not in j
+
+
+def _upper_scheme_detected(root: Path) -> bool:
+    (root / "manifest.json").write_text(
+        '{"icons":[{"src":"HTTPS://cdn.example/i.png"}]}', encoding="utf-8")
+    return "cdn.example" in " ".join(external_references(root))
 
 
 def _json_escaped_url_detected(root: Path) -> bool:
