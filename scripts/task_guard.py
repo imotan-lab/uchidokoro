@@ -97,8 +97,22 @@ def _entry(data: dict, task: str) -> dict:
     return e
 
 
+# ★試したときの架空機種★（本番の「1日1機種」の枠を埋めないため）
+#   2026-07-31: 動作確認で lbinko を claim してしまい、
+#   その日の枠が埋まって本番が別の機種を扱えなくなった。
+TEST_SLUG_MARKS = ("zzz_", "test_", "_test", "確認機", "テスト機")
+
+
+def is_test_slug(slug: str) -> bool:
+    return any(w in str(slug or "") for w in TEST_SLUG_MARKS)
+
+
 def claim(task: str, slug: str, path: str = STATE_PATH) -> dict:
     """今日この機種を担当してよいか。★同じ日の2機種目は拒否★"""
+    if is_test_slug(slug):
+        # ★試したときの架空機種は枠を使わない★（本番の1日1機種を守る）
+        return {"ok": True, "why": f"{slug} は試験用なので枠を使いません",
+                "test": True}
     data = _load(path)
     e = _entry(data, task)
     if e["target_slug"] and e["target_slug"] != slug:
@@ -237,6 +251,11 @@ def selftest() -> int:
       "READY" not in WRITABLE_STAGES)
     t("　段階名は claim_pipeline のものと一致している",
       set(WRITABLE_STAGES) | set(FROZEN_STAGES) | {"READY"} == set(cp.STAGES))
+
+    t("★★試したときの架空機種は1日1機種の枠を使わない★★"
+      "（2026-07-31に実際に枠を埋めて本番を止めかけた）",
+      is_test_slug("zzz_ためし") and is_test_slug("test_x")
+      and is_test_slug("確認機ZZZ") and not is_test_slug("hokuto"))
 
     ng = [n for n, ok in results if not ok]
     print(f"\n{len(results) - len(ng)}/{len(results)} 合格")
