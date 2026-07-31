@@ -47,16 +47,16 @@ def _alias_key(a: str) -> str:
     return unicodedata.normalize("NFKC", a or "").strip().lower()
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--name", required=True, help="新台の正式名称（候補）")
-    ap.add_argument("--aliases", default="", help="候補のaliases（カンマ区切り・任意）")
-    args = ap.parse_args()
+def find_duplicates(name: str, aliases=None) -> list:
+    """★他のスクリプトから呼べる形★（新台追加の実行器が使う）
 
+    2026-07-31: この判定はコマンドからしか使えず、`add_machine_run.py` が
+    呼んでいなかった。そのため既存 `super_binmusume` があるのに
+    別slug（lbinko）で二重登録できる状態だった（実際に確認）。
+    """
     machines = json.loads(MACHINES.read_text(encoding="utf-8"))
-    cand_norm = normalize_machine_name(args.name)
-    cand_aliases = {_alias_key(a) for a in args.aliases.split(",") if a.strip()}
-
+    cand_norm = normalize_machine_name(name)
+    cand_aliases = {_alias_key(a) for a in (aliases or []) if str(a).strip()}
     hits = []
     for m in machines:
         # (1) 正規化名の一致
@@ -66,8 +66,20 @@ def main():
         # (2) 候補名 が既存aliasesに含まれる / 候補aliases が既存名・aliasesに含まれる
         existing_alias_keys = {_alias_key(a) for a in (m.get("aliases") or [])}
         existing_alias_keys.add(_alias_key(m["name"]))
-        if _alias_key(args.name) in existing_alias_keys or (cand_aliases & existing_alias_keys):
+        if _alias_key(name) in existing_alias_keys or (cand_aliases & existing_alias_keys):
             hits.append((m["slug"], m["name"], "別名が重複"))
+    return hits
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--name", required=True, help="新台の正式名称（候補）")
+    ap.add_argument("--aliases", default="", help="候補のaliases（カンマ区切り・任意）")
+    args = ap.parse_args()
+
+    hits = find_duplicates(args.name,
+                           [a for a in args.aliases.split(",") if a.strip()])
+    cand_norm = normalize_machine_name(args.name)
 
     if hits:
         print(f"⚠ 重複の疑い: 候補『{args.name}』は既存機種と同一の可能性があります。")

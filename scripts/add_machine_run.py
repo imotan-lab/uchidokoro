@@ -32,6 +32,7 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
 
 import build_new_article as _ba       # noqa: E402
+import check_duplicate as _cd        # noqa: E402
 import at_spec_lookup as _at        # noqa: E402
 import ceiling_lookup as _cl         # noqa: E402
 import cz_lookup as _cz              # noqa: E402
@@ -162,7 +163,7 @@ BLOCKING = ("AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY", "型式名",
             "公式ページと名前が一致しません",
             # ★公式ページを開けないなら、その機種だと確かめられていない★
             #   slug も公式URLから作るので、開けないURLのまま記事を作らない。
-            "公式ページを取得できません", "2件以上",
+            "公式ページを取得できません", "既に登録されている疑い", "2件以上",
             "転載の疑い")   # ★登録簿に無い転載があれば止める★
 
 
@@ -193,6 +194,12 @@ def run_one(name, official_url, maker, release, apply_it=False) -> dict:
     out = {"name": name, "slug": None, "wrote": [], "problems": [], "blocked": []}
     # ★①まず公式ページと名前が同じ機種を指しているか★
     out["problems"] += verify_official(name, official_url)
+    # ★②その機種が既に登録されていないか★（2026-07-31・実際に二重登録できた）
+    #   手順書には書いてあったが、実行器が呼んでいなかった。
+    for slug, ename, why in _cd.find_duplicates(name):
+        out["problems"].append(
+            f"既に登録されている疑い: slug={slug} name={ename}（{why}）"
+            f"／新しいslugで作らず、更新タスクで直すこと")
     got = gather(name)
     out["problems"] += got["problems"]
     if not got["material"]:
@@ -305,6 +312,12 @@ def selftest() -> int:
               "（機種Aの名前＋機種BのURLで記事ができた穴・実際に再現した）",
               v and "一致しません" in v[0])
             _nw._get = lambda u, timeout=20: "<title>Lすーぱぁびん娘|BELLCO</title>"
+            t("★★既に登録されている機種は作らない★★（実際に二重登録できた・2026-07-31）",
+              _blocking(["既に登録されている疑い: slug=super_binmusume"]))
+            t("　実データでも既存機種を見つけられる",
+              _cd.find_duplicates("Lすーぱぁびん娘"))
+            t("　実在しない名前なら重複としない",
+              not _cd.find_duplicates("そんな機種はありませんXYZ"))
             t("★★公式ページを開けないときは記事を作らない★★（機種を確かめられていない）",
               _blocking(["公式ページを取得できません: 取得できません（URLError）"]))
             _nw._get = lambda u, timeout=20: (
