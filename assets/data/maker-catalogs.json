@@ -27,7 +27,7 @@
    "status": "ACTIVE",
    "fetch": "render",
    "_checked": "2026-07-31 描画後に20件取得。JSエラーは出るがリンクは揃う（健全性として件数を記録）",
-   "list_marker": "パチスロ"
+   "list_marker": "パチスロ|"
   },
   "enterrise": {
    "name": "エンターライズ",
@@ -36,7 +36,7 @@
    "min_expected": 4,
    "status": "ACTIVE",
    "_checked": "2026-07-31 静的HTMLで6件取得・個別ページのタイトルが機種名であることを確認",
-   "list_marker": "エンターライズ"
+   "list_marker": "株式会社 エンターライズ"
   },
   "heiwa": {
    "name": "平和",
@@ -81,7 +81,7 @@
    "min_expected": 25,
    "status": "ACTIVE",
    "_checked": "2026-07-31 静的HTMLで34件取得。★一覧にパチンコ機も混じる★が、個別ページの判定(looks_like_slot)で落ちるので新台としては通らない（理由は毎回報告される）",
-   "list_marker": "パチスロ"
+   "list_marker": "パチスロ |"
   },
   "yamasa_next": {
    "name": "山佐ネクスト",
@@ -152,6 +152,6 @@
  "_notes": {
   "olympia": "オリンピアの機種は平和(heiwa)のページに載るため、heiwaで検出できる（2026-07-31確認）",
   "konami": "KONAMI本体のサイトはアーケード専用。パチスロはKPEが扱う",
-  "list_marker": "★一覧ページである印★ この語が本文に無ければ『別の画面を読んでいる』として止める（Codex優先度2）"
+  "list_marker": "★一覧ページの印★ ページの題(title)が この語で始まること。機種ページの題は機種名から始まるので区別できる（本文照合では区別できなかった・2026-07-31）"
  }
 }

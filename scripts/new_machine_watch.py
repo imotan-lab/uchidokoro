@@ -96,20 +96,39 @@ _YEAR_ONLY = re.compile(r"^(19|20)\d\d$")
 #   （2026-07-31・Codex優先度3）
 #   最終URLが正しくても、アクセス拒否・メンテナンス・年齢確認・soft 404 が
 #   返ることがある。件数の下限だけでは、そこそこリンクがある拒否画面を通す。
-_BAD_PAGE_WORDS = (
+# ★これが出たら、それだけで一覧ではない★
+_BAD_STRONG = (
     "アクセスが拒否", "アクセスできません", "ただいまメンテナンス", "メンテナンス中",
-    "サービスを停止", "ページが見つかりません", "お探しのページは",
-    "not found", "forbidden", "access denied", "service unavailable",
-    "年齢確認", "18歳未満", "あなたは18歳以上ですか",
+    "サービスを停止", "access denied", "forbidden", "service unavailable",
 )
+# ★これだけでは決められない語★（正常なページの注意書きにも出る）
+#   例：パチスロメーカーのサイトには「18歳未満」の注意書きがあって当たり前。
+#   そこで**一覧である証拠が無いとき**だけ、これらを異常の根拠にする。
+_BAD_WEAK = (
+    "ページが見つかりません", "お探しのページは", "not found",
+    "年齢確認", "18歳未満", "あなたは18歳以上ですか", "18歳以上ですか",
+)
+_BAD_PAGE_WORDS = _BAD_STRONG + _BAD_WEAK      # 互換のため残す
 
 
-def bad_page(html: str):
-    """一覧ではない画面（拒否・メンテ・年齢確認・soft 404）なら理由を返す。"""
-    head = unicodedata.normalize("NFKC", _visible_text(html or "")[:1500]).lower()
-    for word in _BAD_PAGE_WORDS:
-        if word.lower() in head:
+def bad_page(html: str, looks_like_list: bool = False):
+    """一覧ではない画面（拒否・メンテ・年齢確認・soft 404）なら理由を返す。
+
+    ★語だけで決めない★（2026-07-31・Codex指摘を再現して二段構えにした）
+      強い語（アクセス拒否・メンテナンス）は単独で止める。
+      弱い語（18歳未満・ページが見つかりません）は、
+      **一覧である証拠（印と機種リンク）が無いとき**だけ根拠にする。
+      でないと、注意書きに「18歳未満」と書いてある正常な一覧まで止まる。
+    """
+    text = unicodedata.normalize("NFKC", _visible_text(html or "")).lower()
+    for word in _BAD_STRONG:
+        if word.lower() in text:
             return f"一覧ではない画面が返っています（『{word}』）"
+    if looks_like_list:
+        return None
+    for word in _BAD_WEAK:
+        if word.lower() in text:
+            return f"一覧ではない画面が返っている可能性があります（『{word}』）"
     return None
 
 
@@ -128,13 +147,18 @@ def redirect_problem(asked: str, final: str):
       なお www の有無だけの転送はよくあるので、それは異常としない。
     """
     if not final:
-        return None
+        # ★どこへ着いたか分からないなら、正常とは言えない★（Codex指摘）
+        return "最終URLを確認できませんでした"
     if _host(final) != _host(asked):
         return f"別のドメインへ転送されました（{final[:90]}）"
     ap = urllib.parse.urlparse(asked).path.rstrip("/")
     fp = urllib.parse.urlparse(final).path.rstrip("/")
     if ap and not fp:
         return f"トップページへ転送されました（{final[:90]}）"
+    if ap != fp:
+        # ★同じサイトの中でも、別のページに飛ばされたら同じ一覧ではない★
+        #   正当な転送がある社は、カタログに allow_redirect_to を書いて許可する。
+        return f"別のページへ転送されました（{final[:90]}）"
     return None
 
 
@@ -333,7 +357,6 @@ def _get_rendered(url: str, link_prefix: str = "") -> tuple:
         from playwright.sync_api import sync_playwright
     except Exception as e:                       # noqa: BLE001
         raise WatchError(f"描画取得を使えません（Playwrightが要ります）: {e}")
-    want_host = urllib.parse.urlparse(url).netloc.lower()
     health = {"status": None, "final_url": None, "js_errors": [], "problem": None,
               "idle_timeout": False, "unstable": False, "counted": None}
     try:
@@ -376,9 +399,9 @@ def _get_rendered(url: str, link_prefix: str = "") -> tuple:
         raise WatchError(f"描画できません: {type(e).__name__}: {e}")
     if health["status"] != 200:
         health["problem"] = f"HTTP {health['status']} が返りました"
-    elif urllib.parse.urlparse(health["final_url"]).netloc.lower() != want_host:
-        # ★別のドメインへ転送されていたら、それは同じ一覧ではない★
-        health["problem"] = f"別のドメインへ転送されました（{health['final_url'][:80]}）"
+    else:
+        # ★静的取得と同じ判定を使う★（www の扱いが食い違っていた・Codex指摘）
+        health["problem"] = redirect_problem(url, health["final_url"])
     return html, health
 
 
@@ -387,8 +410,11 @@ def _get_rendered(url: str, link_prefix: str = "") -> tuple:
 #   件数の下限だけでは、**同じ件数の別の一覧**を掴んだときに素通りする。
 #   実際、既知60件が0件残りの55件に入れ替わっても「新台55件」として通った。
 RETENTION_MIN = 0.8      # 前回の既知URLがこの割合は残っているはず
-MAX_NEW_ABS = 5          # 1社が1回のスキャンでこれ以上増えるのは普通でない
-MAX_NEW_RATIO = 0.2
+# ★1回のスキャンでこれ以上増えたら『新台』と扱わない★
+#   以前は max(5, 全体の2割) にしていたので、97件の社では19件増えても通っていた
+#   （名前は「絶対上限」なのに実際は割合で緩んでいた・Codex指摘を自分で確認）。
+#   超えた日は記録を更新せず理由を残すので、人が見て判断する。
+MAX_NEW_PER_SCAN = 5
 
 
 def is_catalog(conf) -> bool:
@@ -415,11 +441,6 @@ def scan_maker(maker_id: str, conf: dict, seen: dict, record: bool = True) -> di
                 out["problem"] = health["problem"]
                 out["state"] = "FETCH_FAILED"
                 return out
-            why = bad_page(html)
-            if why:
-                out["problem"] = why
-                out["state"] = "FETCH_FAILED"
-                return out
             if health.get("unstable"):
                 # ★まだ増えている途中で読んだ★＝新台だけ落ちている恐れ
                 out["problem"] = ("一覧の件数が落ち着きません（読み込みの途中の可能性）。"
@@ -428,8 +449,7 @@ def scan_maker(maker_id: str, conf: dict, seen: dict, record: bool = True) -> di
                 return out
         else:
             html = _get(conf["list_url"])
-            why = (redirect_problem(conf["list_url"], LAST_FINAL_URL.get("url"))
-                   or bad_page(html))
+            why = redirect_problem(conf["list_url"], LAST_FINAL_URL.get("url"))
             if why:
                 out["problem"] = why
                 out["state"] = "FETCH_FAILED"
@@ -444,9 +464,27 @@ def scan_maker(maker_id: str, conf: dict, seen: dict, record: bool = True) -> di
     # ★そのページである印を確かめる★（2026-07-31・Codex優先度2）
     #   最終URLが正しくても、別の画面が返ることがある。
     #   カタログに `list_marker` を書いておけば、その語が本文に無いとき止まる。
+    # ★一覧である証拠がそろっているか★（印と機種リンクの両方）
+    #   証拠があるなら、弱い語（18歳未満など）は異常の根拠にしない。
+    # ★印は「ページの題が その語で始まること」で見る★（2026-07-31・Codex指摘）
+    #   本文に含まれるかで見ると弱い。実際、ユニバーサル・ニューギン・北電子では
+    #   機種ページの題が一覧の題を**末尾に含む**ため、本文照合では区別できなかった。
+    #   例: 一覧「パチスロ|ユニバーサル…」／機種「アレックス ブライト|パチスロ|…」
+    #   題の先頭で見れば、機種ページは機種名から始まるので区別できる。
     marker = conf.get("list_marker")
-    if marker and marker not in _visible_text(html):
-        out["problem"] = (f"一覧ページの印『{marker}』が見つかりません。"
+    title_n = unicodedata.normalize("NFKC", page_title(html))
+    has_marker = bool(marker) and title_n.startswith(
+        unicodedata.normalize("NFKC", marker))
+    has_links = len(product_urls(html, conf["list_url"], conf["link_prefix"])) > 0
+    why = bad_page(html, looks_like_list=has_marker and has_links)
+    if why:
+        out["problem"] = why
+        out["state"] = "FETCH_FAILED"
+        return out
+
+    if marker and not has_marker:
+        out["problem"] = (f"一覧ページの題が『{marker}』で始まりません"
+                          f"（実際の題: {page_title(html)[:50]!r}）。"
                           f"別の画面を読んでいる可能性があるので『新台なし』とは扱いません")
         out["state"] = "PARSE_SUSPECT"
         return out
@@ -471,17 +509,19 @@ def scan_maker(maker_id: str, conf: dict, seen: dict, record: bool = True) -> di
         out["state"] = "FIRST_TIME"
     else:
         kept = len(known & set(urls))
-        out["retention"] = round(kept / len(known), 3) if known else None
-        if known and out["retention"] < RETENTION_MIN:
+        # ★比べるのは丸める前の値★（丸めると 0.7996 が 0.8 になって通る・Codex指摘）
+        ratio = (kept / len(known)) if known else None
+        out["retention"] = round(ratio, 3) if ratio is not None else None
+        if known and ratio < RETENTION_MIN:
             # ★前に見たURLが大量に消えた＝別の一覧を掴んだ疑い★
             out["problem"] = (
                 f"前回の {len(known)} 件のうち {kept} 件しか残っていません"
-                f"（{out['retention']:.0%}）。別の一覧を読んだ可能性があるので"
+                f"（{ratio:.1%}）。別の一覧を読んだ可能性があるので"
                 f"『新台』とは扱いません")
             out["state"] = "PARSE_SUSPECT"
             return out          # ★記録も更新しない（誤った基準で上書きしない）★
         got = [u for u in urls if u not in known]
-        limit = max(MAX_NEW_ABS, int(len(urls) * MAX_NEW_RATIO))
+        limit = MAX_NEW_PER_SCAN
         if len(got) > limit:
             out["problem"] = (
                 f"一度に {len(got)} 件も増えています（多くても {limit} 件のはず）。"
@@ -555,7 +595,11 @@ def selftest() -> int:
     global _get
     real_get = _get
     try:
-        _get = lambda u, timeout=20: html          # noqa: E731
+        def _fake(u, timeout=20, _h=None):
+            LAST_FINAL_URL["url"] = u          # ★本物と同じく到達先を残す★
+            return _h if _h is not None else html
+
+        _get = _fake
         r = scan_maker("t", conf, seen, record=False)
         t("★★取れた数が少なすぎたら『新台なし』と言わない★★（黙って止まる事故を防ぐ）",
           r["problem"] is not None and r["new"] == [])
@@ -567,26 +611,34 @@ def selftest() -> int:
         t("★★初回は全部を新台にしない（覚えるだけ）★★",
           r3["first_time"] is True and r3["new"] == [])
         # ★一覧ではない画面が返ったとき★（2026-07-31・Codex優先度3）
-        _get = lambda u, timeout=20: (   # noqa: E731
-            "<p>ただいまメンテナンス中です</p>" + html)
-        LAST_FINAL_URL["url"] = LIST
+        _get = lambda u, timeout=20: _fake(u, _h="<p>ただいまメンテナンス中です</p>" + html)
         r_bad = scan_maker("t", {**conf, "min_expected": 2}, seen, record=False)
         t("★★メンテナンス・拒否・年齢確認の画面を一覧として読まない★★"
           "（そこそこリンクがあると件数の下限では通ってしまう）",
           r_bad["problem"] is not None and r_bad["state"] == "FETCH_FAILED")
         # ★一覧ページの印★（2026-07-31・Codex優先度2）
-        _get = lambda u, timeout=20: html          # noqa: E731
+        _get = _fake
+        titled = "<title>パチスロ機種一覧|テスト社</title>" + html
+        _get = lambda u, timeout=20: _fake(u, _h=titled)   # noqa: E731
         r_mk = scan_maker("t", {**conf, "min_expected": 2,
-                                "list_marker": "パチスロ機種一覧"}, seen, record=False)
-        t("★★一覧ページの印が無ければ『新台なし』と扱わない★★",
+                                "list_marker": "スロット機種"}, seen, record=False)
+        t("★★一覧ページの題が印で始まらなければ『新台なし』と扱わない★★",
           r_mk["problem"] is not None and r_mk["state"] == "PARSE_SUSPECT")
-        r_mk2 = scan_maker("t", {**conf, "min_expected": 2, "list_marker": "A"},
-                           seen, record=False)
-        t("　印があれば通る", r_mk2["problem"] is None)
+        r_mk2 = scan_maker("t", {**conf, "min_expected": 2,
+                                 "list_marker": "パチスロ機種一覧"}, seen, record=False)
+        t("　題が印で始まれば通る", r_mk2["problem"] is None)
+        machine_titled = "<title>スマスロ○○|パチスロ機種一覧|テスト社</title>" + html
+        _get = lambda u, timeout=20: _fake(u, _h=machine_titled)   # noqa: E731
+        r_mk3 = scan_maker("t", {**conf, "min_expected": 2,
+                                 "list_marker": "パチスロ機種一覧"}, seen, record=False)
+        t("★★機種ページの題（一覧の題を末尾に含む）を一覧と間違えない★★"
+          "（本文で照合していた時は区別できなかった）",
+          r_mk3["problem"] is not None)
+        _get = _fake
 
         # ★別のドメインへ転送されたとき★（2026-07-31・Codex優先度1）
-        LAST_FINAL_URL["url"] = "https://よそ.example/top/"
-        _get = lambda u, timeout=20: html          # noqa: E731
+        _get = lambda u, timeout=20: (           # noqa: E731
+            LAST_FINAL_URL.__setitem__("url", "https://よそ.example/top/") or html)
         r_red = scan_maker("t", {**conf, "min_expected": 2}, seen, record=False)
         t("★★別のドメインへ転送されたら『新台なし』と扱わない★★"
           "（正しいURLを叩いてもトップや別サイトが返ることがある）",
@@ -594,20 +646,24 @@ def selftest() -> int:
         t("★★一覧を頼んだのにトップページへ飛ばされたら異常とする★★"
           "（山佐ネクストで実際に起きていた）",
           redirect_problem("https://www.x.example/machine/", "https://x.example/"))
+        t("★★最終URLが分からないときは正常と言わない★★（Codex指摘・確認済み）",
+          redirect_problem("https://x.example/machine/", None))
+        t("★★同じサイトの中でも別のページへ飛ばされたら異常★★",
+          redirect_problem("https://x.example/machine/", "https://x.example/products/"))
         t("★www の有無だけの転送は異常としない★",
           not redirect_problem("https://www.x.example/machine/",
                                "https://x.example/machine/"))
         t("　別のドメインへ飛んだら異常",
           redirect_problem("https://x.example/machine/",
                            "https://y.example/machine/"))
-        LAST_FINAL_URL["url"] = LIST
+        _get = _fake
         r_ok = scan_maker("t", {**conf, "min_expected": 2}, seen, record=False)
         t("　同じドメインなら通る", r_ok["problem"] is None)
 
         # ★一覧が丸ごと別物に入れ替わったとき★（自分で再現した）
         many = "".join(f'<a href="/products/slot/new{i}/">x</a>' for i in range(55))
         old_seen = {"makers": {"t": {"urls": [f"{LIST}old{i}/" for i in range(60)]}}}
-        _get = lambda u, timeout=20: many          # noqa: E731
+        _get = lambda u, timeout=20: _fake(u, _h=many)   # noqa: E731
         r5 = scan_maker("t", {**conf, "min_expected": 50}, old_seen, record=False)
         t("★★前に見たURLが大量に消えたら『新台』と扱わない★★"
           "（件数だけ見ていると55件が新台になった）",
@@ -616,14 +672,14 @@ def selftest() -> int:
         # ★一度に増えすぎたとき★
         base = [f"{LIST}a{i}/" for i in range(50)]
         grow = "".join(f'<a href="/products/slot/a{i}/">x</a>' for i in range(50)) +             "".join(f'<a href="/products/slot/z{i}/">x</a>' for i in range(20))
-        _get = lambda u, timeout=20: grow          # noqa: E731
+        _get = lambda u, timeout=20: _fake(u, _h=grow)   # noqa: E731
         r6 = scan_maker("t", {**conf, "min_expected": 50},
                         {"makers": {"t": {"urls": base}}}, record=False)
         t("★一度に増えすぎたときも『新台』と扱わない★",
           r6["problem"] is not None and r6["new"] == [])
         # ★普通に1件増えたときは通る★
         one = "".join(f'<a href="/products/slot/a{i}/">x</a>' for i in range(51))
-        _get = lambda u, timeout=20: one           # noqa: E731
+        _get = lambda u, timeout=20: _fake(u, _h=one)    # noqa: E731
         r7 = scan_maker("t", {**conf, "min_expected": 50},
                         {"makers": {"t": {"urls": base}}}, record=False)
         t("　普通に1件増えたときはちゃんと新台として出る",
@@ -657,6 +713,16 @@ def selftest() -> int:
     t("★パチスロのページでなければ通さない★",
       not looks_like_slot("これは景品の紹介ページです"))
 
+    t("★★『18歳未満』があっても、一覧の印と機種リンクがあれば止めない★★"
+      "（パチスロメーカーのサイトには当たり前に書いてある・Codex指摘）",
+      bad_page("<p>18歳未満の方は入場できません</p>", looks_like_list=True) is None)
+    t("　一覧の証拠が無ければ、その語を根拠に止める",
+      bad_page("<p>18歳未満の方は入場できません</p>", looks_like_list=False))
+    t("★アクセス拒否・メンテナンスは、一覧の証拠があっても止める★",
+      bad_page("<p>ただいまメンテナンス中です</p>", looks_like_list=True))
+    t("★★残存率は丸める前の値で比べる★★（0.7996 が 0.8 になって通っていた）",
+      (7996 / 10000) < RETENTION_MIN)
+    t("★一度に増えてよいのは5件まで（割合で緩めない）★", MAX_NEW_PER_SCAN == 5)
     t("★覚え書きをメーカーとして数えない★",
       is_catalog({"status": "ACTIVE"}) and not is_catalog({"olympia": "平和に載る"}))
     t("★機種らしくない文字列は取らない★",
