@@ -129,9 +129,11 @@ def mark_start(slug: str, machine: dict, backup: dict) -> None:
         "slug": slug, "name": machine.get("name", ""),
         "started_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "pid": os.getpid(),
-        # ★戻し方★ 変える前の中身を控えてある場所
+        # ★戻し方★ 変える前の中身の指紋
         "restore": {os.path.relpath(k, BASE).replace(os.sep, "/"): _sha(v)
                     for k, v in backup.items() if v is not None},
+        # ★作るものの指紋★（消してよいか判断する。人が直していたら消さない）
+        "created": {},
         "_why": "この目印がある間は、公開が途中で終わっています。"
                 "★目印だけ消してはいけません★ "
                 "scripts/publish_new_machine.py --recover で元に戻してください。",
@@ -155,6 +157,16 @@ def mark_start(slug: str, machine: dict, backup: dict) -> None:
         os.replace(tmp, IN_PROGRESS)
         return
     os.remove(tmp)
+
+
+def mark_created(created: dict) -> None:
+    """★作ったものの指紋を目印に足す★（復旧のとき、消してよいか判断する）"""
+    try:
+        got = _sj.read_json(IN_PROGRESS, expect=dict)
+    except Exception:                     # noqa: BLE001
+        return
+    got["created"] = {**(got.get("created") or {}), **created}
+    write_atomic(IN_PROGRESS, json.dumps(got, ensure_ascii=False, indent=1) + chr(10))
 
 
 def mark_done() -> None:
@@ -990,6 +1002,10 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
             raise FileExistsError(page)
         made.append(("file", page, _sha(html)))
         write_atomic(page, html, new_only=True)
+        # ★何を作ったかを目印にも残す★（復旧が「自分の作った物か」を見分ける）
+        mark_created({f"machines/{slug}/index.html": _sha(html),
+                      f"assets/data/machine-details/{slug}.json":
+                          _sha(detail_text)})
     except FileExistsError as e:
         _cleanup()
         raise PublishError(f"同じ名前のファイルが既にあります（触っていません）: {e}")
@@ -1150,54 +1166,90 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
 
 
 def recover(apply_it: bool = False) -> dict:
-    """★途中で終わった公開を、処理前の状態に戻す★（2026-07-31・Codex10回目）
+    """★途中で終わった公開を、処理前の状態に戻す★（2026-07-31・Codex10〜11回目）
 
-    目印だけ消すのは危険（中途半端な状態を正常として公開できる）。
-    目印に控えてある「変える前の指紋」と突き合わせ、
-    **変わっているファイルだけ**を作り直して戻す。
+    ★これは「厳密に元へ戻す」ではなく「今回の追加を打ち消す」処理★
+      早見表は生成物なので、いまのデータから作り直せば整合します。
+      ただし「処理前とバイト単位で同じ」ではありません（生成器が変われば変わる）。
+
+    ★人が直したものは消さない★（Codex11回目）
+      作ったときの指紋と違えば、誰かが手を入れたということなので、
+      消さずに知らせて止まります。
+
+    ★何度走らせても平気★ 既に片付いているものは「済んでいる」と扱います。
     """
     left = unfinished()
-    out = {"slug": left.get("slug"), "problems": [], "restored": [], "todo": []}
+    out = {"slug": left.get("slug"), "problems": [], "restored": [],
+           "todo": [], "kept": []}
     if not left:
         out["problems"].append("途中で終わった公開はありません")
         return out
     slug = left.get("slug") or ""
-    restore = left.get("restore") or {}
-    if not restore:
+    created = left.get("created") or {}
+    if not slug or not _SLUG_OK.match(slug):
         out["problems"].append(
-            "目印に戻し方が入っていません（古い形式か壊れています）。"
-            "手で確かめてください")
+            f"目印から機種名を読めません（{slug!r}）。手で確かめてください")
         return out
-    # ① 新しく作られたもの（機種ページ・記事データ）を消す
-    for rel in (f"machines/{slug}/index.html",
-                f"assets/data/machine-details/{slug}.json"):
+    if not created:
+        # ★目印が壊れていても、作られうる物は決まっている★
+        #   指紋が無いので「自分が作った物か」は判断できない。
+        #   その場合は消さずに、何を確かめるべきかだけ知らせる。
+        out["problems"].append(
+            "目印に『作ったものの指紋』がありません（壊れているか、"
+            "作る前に止まった可能性）。下のファイルを人が確かめてください")
+        for rel in (f"machines/{slug}/index.html",
+                    f"assets/data/machine-details/{slug}.json"):
+            if os.path.isfile(os.path.join(BASE, rel)):
+                out["problems"].append(f"  確かめる: {rel}")
+        rows0 = _sj.read_rows(MACHINES)
+        if any(m.get("slug") == slug for m in rows0):
+            out["problems"].append(f"  確かめる: 一覧に {slug} が入っています")
+        return out
+
+    # ① 作ったものを消す（★自分が作った中身のままの時だけ★）
+    for rel, want in created.items():
         full = os.path.join(BASE, rel)
-        if os.path.isfile(full):
-            out["todo"].append(f"消す: {rel}")
-            if apply_it:
-                os.remove(full)
-                out["restored"].append(rel)
+        if not os.path.isfile(full):
+            continue                      # 既に片付いている（何度走らせても平気）
+        with open(full, encoding="utf-8") as f:
+            now = _sha(f.read())
+        if now != want:
+            out["kept"].append(rel)
+            out["problems"].append(
+                f"★{rel} は作ったときと中身が違います（誰かが直した可能性）。"
+                "消さずに残しました。人が確かめてください★")
+            continue
+        out["todo"].append(f"消す: {rel}")
+        if apply_it:
+            os.remove(full)
+            out["restored"].append(rel)
+    if out["kept"]:
+        return out                        # ★1つでも判断がつかなければ進まない★
     d = os.path.join(BASE, "machines", slug)
-    if slug and os.path.isdir(d) and not os.listdir(d):
+    if os.path.isdir(d) and not os.listdir(d):
         out["todo"].append(f"消す: machines/{slug}/")
         if apply_it:
             os.rmdir(d)
-    # ② 変えたもの（一覧・早見表）を元の中身へ戻す
-    #    ★元の中身そのものは残していないので、いまのデータから作り直して合わせる★
+
+    # ② 一覧から今回の1件だけを外す（★同じslugの行だけ・1件だけ★）
     rows = _sj.read_rows(MACHINES)
-    if any(m.get("slug") == slug for m in rows):
+    hit = [i for i, m in enumerate(rows) if m.get("slug") == slug]
+    if len(hit) > 1:
+        out["problems"].append(
+            f"★一覧に {slug} が {len(hit)} 件あります。手で確かめてください★")
+        return out
+    if hit:
         out["todo"].append(f"一覧から外す: {slug}")
         if apply_it:
-            write_atomic(MACHINES, json.dumps(
-                [m for m in rows if m.get("slug") != slug],
-                ensure_ascii=False, indent=1) + chr(10))
+            del rows[hit[0]]
+            write_atomic(MACHINES, json.dumps(rows, ensure_ascii=False,
+                                              indent=1) + chr(10))
             out["restored"].append("assets/data/machines.json")
+
+    # ③ 早見表を、いまのデータから作り直す
     if apply_it:
         for rel, html in build_hubs().items():
             full = os.path.join(BASE, rel)
-            # ★開いたまま置き換えない★（2026-07-31・Windowsで実際に失敗した）
-            #   `with open(...)` の中で os.replace すると
-            #   WinError 5（アクセスが拒否されました）になる。先に閉じる。
             with open(full, encoding="utf-8") as f:
                 same = (f.read() == html)
             if not same:
@@ -1205,24 +1257,19 @@ def recover(apply_it: bool = False) -> dict:
                 out["restored"].append(rel)
     else:
         out["todo"].append("早見表4ページを作り直す")
+
     if apply_it:
         # ★戻し終わったか確かめてから目印を消す★
-        #   （2026-07-31・順番を間違えていた）
         #   監査の項目33は「目印がある＝途中」を見るので、
         #   消す前に回すと自分の目印を自分で見つけて永久に詰まる。
-        #   目印以外がそろっているかを先に見て、それから消し、最後にもう一度回す。
         ng = [x for x in run_site_audit() if "33_" not in x]
         if ng:
             out["problems"] += ng
             out["problems"].append(
                 "★戻したあとも監査に落ちています。目印は消しません★")
             return out
-        mark_done()
+        mark_done()                       # ★最後の操作★（Codex11回目の助言）
         out["restored"].append("（目印を消しました）")
-        after = run_site_audit()       # ★消したうえでもう一度★
-        if after:
-            out["problems"] += after
-            out["problems"].append("★目印を消したあとも監査に落ちています★")
     return out
 
 
@@ -1237,6 +1284,7 @@ def _raises(fn) -> bool:
 
 
 def selftest() -> int:
+    import inspect
     import tempfile as _tf
     results = []
     nl = chr(10)
@@ -1480,6 +1528,13 @@ def selftest() -> int:
     finally:
         globals()["IN_PROGRESS"] = _real_marker
         __import__("shutil").rmtree(_md, ignore_errors=True)
+    t("★★人が直したページは消さない★★（作ったときの指紋と違えば止まる・Codex11回目）",
+      "created" in inspect.getsource(recover)
+      and "誰かが直した可能性" in inspect.getsource(recover))
+    t("★★一覧から外すのは同じslugが1件のときだけ★★（複数あれば人へ）",
+      "len(hit) > 1" in inspect.getsource(recover))
+    t("　目印が壊れていたら消さずに人へ知らせる",
+      "作ったものの指紋』がありません" in inspect.getsource(recover))
     t("★★公開の前にもサイト監査を通せる★★（後から気づいても世に出ている）",
       run_site_audit() == [])
     t("★★同じ入力なら毎回同じ物ができる★★（2回目に差分が出ない・Codexの助言）",
