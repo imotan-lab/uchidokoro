@@ -133,6 +133,12 @@ def mark_start(slug: str, machine: dict, backup: dict) -> None:
         "restore": {os.path.relpath(k, BASE).replace(os.sep, "/"): _sha(v)
                     for k, v in backup.items() if v is not None},
         # ★作るものの指紋★（消してよいか判断する。人が直していたら消さない）
+        # ★これから作るもの★（作る前に残す）
+        #   2026-07-31・Codex13回目: 作ってから指紋を書く形だと、
+        #   その隙間で落ちたとき「作ったのに目印に無い」残骸ができる。
+        "planned": [f"machines/{slug}/index.html",
+                    f"assets/data/machine-details/{slug}.json",
+                    f"machines.json#{slug}"],
         "created": {},
         "_why": "この目印がある間は、公開が途中で終わっています。"
                 "★目印だけ消してはいけません★ "
@@ -1169,7 +1175,23 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
     return out
 
 
+RECOVER_LOCK = os.path.join(BASE, ".recover.lock")
+
+
 def recover(apply_it: bool = False) -> dict:
+    """★復旧も同時に2つ走らせない★（2026-07-31・Codex13回目）
+
+    目印の存在は「新しい公開」を止めるが、
+    同じ目印を読んで動く復旧処理どうしは止めない。
+    2つが同時に「指紋が一致した」と判断して消しに行ける。
+    """
+    if not apply_it:
+        return _recover(apply_it=False)
+    with _OnlyOne(RECOVER_LOCK):
+        return _recover(apply_it=True)
+
+
+def _recover(apply_it: bool = False) -> dict:
     """★途中で終わった公開を、処理前の状態に戻す★（2026-07-31・Codex10〜11回目）
 
     ★これは「厳密に元へ戻す」ではなく「今回の追加を打ち消す」処理★
@@ -1193,6 +1215,27 @@ def recover(apply_it: bool = False) -> dict:
     if not slug or not _SLUG_OK.match(slug):
         out["problems"].append(
             f"目印から機種名を読めません（{slug!r}）。手で確かめてください")
+        return out
+    planned = left.get("planned") or []
+    if not created and planned:
+        # ★作る前に落ちた場合★（目印に指紋が無い）
+        #   planned に載っているものが実際にあるなら、
+        #   それは「作ったが指紋を書く前に落ちた」もの。中身は分からないので人へ。
+        stuck = [rel for rel in planned
+                 if not rel.startswith("machines.json#")
+                 and os.path.isfile(os.path.join(BASE, rel))]
+        if stuck:
+            out["problems"].append(
+                "★作ったものの指紋が残る前に止まっています。"
+                "中身が正しいか人が確かめてください★")
+            for rel in stuck:
+                out["problems"].append(f"  確かめる: {rel}")
+            return out
+        # 何も作られていないなら、目印を消すだけで元通り
+        out["todo"].append("何も作られていないので、目印を消すだけです")
+        if apply_it:
+            mark_done()
+            out["restored"].append("（目印を消しました）")
         return out
     if not created:
         # ★目印が壊れていても、作られうる物は決まっている★
@@ -1223,24 +1266,36 @@ def recover(apply_it: bool = False) -> dict:
         return out
 
     # ① 作ったものを消す（★自分が作った中身のままの時だけ★）
+    #   ★確かめてから消すまでの隙間をなくす★（2026-07-31・Codex13回目）
+    #     「読む→一致→消す」の間に人が直すと、その編集ごと消える。
+    #     先に別名へ動かしてしまえば、以降の編集は別のファイルに向かうので、
+    #     動かしたものを確かめて消せば取り違えない。
     for rel, want in created.items():
         if rel.startswith("machines.json#"):
             continue                      # 一覧の行は下の②で扱う
         full = os.path.join(BASE, rel)
         if not os.path.isfile(full):
             continue                      # 既に片付いている（何度走らせても平気）
-        with open(full, encoding="utf-8") as f:
+        out["todo"].append(f"消す: {rel}")
+        if not apply_it:
+            continue
+        held = f"{full}.recover.{os.getpid()}"
+        try:
+            os.replace(full, held)        # ★先に確保する（原子的）★
+        except OSError as e:
+            out["problems"].append(f"{rel} を確保できませんでした: {e}")
+            return out
+        with open(held, encoding="utf-8") as f:
             now = _sha(f.read())
         if now != want:
+            os.replace(held, full)        # ★戻す（人の編集を消さない）★
             out["kept"].append(rel)
             out["problems"].append(
                 f"★{rel} は作ったときと中身が違います（誰かが直した可能性）。"
                 "消さずに残しました。人が確かめてください★")
             continue
-        out["todo"].append(f"消す: {rel}")
-        if apply_it:
-            os.remove(full)
-            out["restored"].append(rel)
+        os.remove(held)
+        out["restored"].append(rel)
     if out["kept"]:
         return out                        # ★1つでも判断がつかなければ進まない★
     d = os.path.join(BASE, "machines", slug)
@@ -1558,17 +1613,26 @@ def selftest() -> int:
         globals()["IN_PROGRESS"] = _real_marker
         __import__("shutil").rmtree(_md, ignore_errors=True)
     t("★★人が直したページは消さない★★（作ったときの指紋と違えば止まる・Codex11回目）",
-      "created" in inspect.getsource(recover)
-      and "誰かが直した可能性" in inspect.getsource(recover))
+      "created" in inspect.getsource(_recover)
+      and "誰かが直した可能性" in inspect.getsource(_recover))
+    t("★★復旧も同時に2つ走らせない★★（双方が指紋一致と判断して消しに行ける）",
+      "RECOVER_LOCK" in inspect.getsource(recover))
+    t("★★確かめてから消すまでの隙間をなくす★★"
+      "（読む→一致→消すの間に人が直すと、その編集ごと消える）",
+      "os.replace(full, held)" in inspect.getsource(_recover)
+      and "os.replace(held, full)" in inspect.getsource(_recover))
+    t("★★作る前に『これから作る』を目印へ残す★★"
+      "（作ってから書く形だと、その隙間で落ちた残骸を特定できない）",
+      "planned" in inspect.getsource(mark_start))
     t("★★一覧の行も、足したときと同じ時だけ外す★★"
       "（人が足した別名ごと消していた・実際に再現）",
-      "足したときと中身が違います" in inspect.getsource(recover))
+      "足したときと中身が違います" in inspect.getsource(_recover))
     t("★★目印に書かれたパスをそのまま信用しない★★（書き換えられたら別のファイルを消せる）",
-      "知らないファイルが入っています" in inspect.getsource(recover))
+      "知らないファイルが入っています" in inspect.getsource(_recover))
     t("★★一覧から外すのは同じslugが1件のときだけ★★（複数あれば人へ）",
-      "len(hit) > 1" in inspect.getsource(recover))
+      "len(hit) > 1" in inspect.getsource(_recover))
     t("　目印が壊れていたら消さずに人へ知らせる",
-      "作ったものの指紋』がありません" in inspect.getsource(recover))
+      "作ったものの指紋』がありません" in inspect.getsource(_recover))
     t("★★公開の前にもサイト監査を通せる★★（後から気づいても世に出ている）",
       run_site_audit() == [])
     t("★★同じ入力なら毎回同じ物ができる★★（2回目に差分が出ない・Codexの助言）",

@@ -39,3 +39,4 @@ as.log
 _design/spec_review/
 .publish.lock
 .publish-in-progress.json
+.recover.lock
