@@ -659,12 +659,19 @@ def check_counts(new_n: int, slug: str = "") -> list:
     return ng
 
 
-def run_site_audit() -> list:
+def run_site_audit(ignore_in_progress: bool = False) -> list:
     """サイト全体の監査を回す。★公開の前後の二段構えにするため★
 
     （2026-07-31・Codexの助言）
       公開してから監査するだけだと、見つけたときには既に世に出ている。
       置き換える前にも同じ監査を通し、**駄目なら公開しない**。
+
+    ★ignore_in_progress★（2026-07-31・実際に動かして見つけた）
+      監査の項目33は「公開中の目印があるか」を見る。
+      公開の最終確認は**自分がその目印を持っている最中**に回るので、
+      そのままだと必ず引っかかり、**書けた記事を毎回取り消していた**。
+      目印を正しく持っている側だけが、この項目を外してよい。
+      ★push の関所では絶対に外さない★（そこは残骸を止める場所）。
     """
     r = subprocess.run([sys.executable, os.path.join(BASE, "scripts", "audit_site.py")],
                        cwd=BASE, capture_output=True, text=True,
@@ -675,8 +682,13 @@ def run_site_audit() -> list:
     for line in (r.stdout or "").splitlines():
         line = line.strip()
         # ★Codexへの報告漏れは公開の可否と関係ない★（開発の作法の話）
-        if line.startswith("❌") and "Codexへの未報告" not in line:
-            out.append("サイト監査: " + line[1:].strip())
+        if not line.startswith("❌"):
+            continue
+        if "Codexへの未報告" in line:
+            continue
+        if ignore_in_progress and "33_" in line:
+            continue
+        out.append("サイト監査: " + line[1:].strip())
     return out
 
 
@@ -1158,7 +1170,10 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
 
     # ④ 一覧に足したあとの最終確認
     late2 = check_after(slug, before_pages, rows[:-1])
-    late2 += run_site_audit()          # ★終わったあとにもう一度★
+    # ★終わったあとにもう一度★
+    #   ここは自分が「公開中」の目印を持っている最中なので、項目33だけ外す。
+    #   （外さないと、書けた記事を毎回自分で取り消していた・実機で判明）
+    late2 += run_site_audit(ignore_in_progress=True)
     late2 += check_counts(len(rows), slug)
     with open(page, encoding="utf-8") as f:          # ★最後にもう一度★
         if _sha(f.read()) != _sha(html):
@@ -1392,6 +1407,7 @@ def _raises(fn) -> bool:
 
 
 def selftest() -> int:
+    import inspect
     import inspect
     import tempfile as _tf
     results = []
@@ -1659,6 +1675,30 @@ def selftest() -> int:
       "作ったものの指紋』がありません" in inspect.getsource(_recover))
     t("★★公開の前にもサイト監査を通せる★★（後から気づいても世に出ている）",
       run_site_audit() == [])
+    # ★★実機で見つけた壊れ方★★（2026-07-31・レビューでは出なかった）
+    #   公開の最終確認は、自分が「公開中」の目印を持っている最中に回る。
+    #   項目33（公開が途中で終わっている）を外していなかったので、
+    #   **書けた記事を毎回自分で取り消していた**＝1機種も公開できなかった。
+    t("★★最終確認は、自分が置いた目印を理由に取り消さない★★"
+      "（1機種も公開できなくなっていた・実機で判明）",
+      "ignore_in_progress=True" in inspect.getsource(_publish))
+    # ★監査は別のプロセスで動く★ 本物の目印でないと再現できない。
+    #   （モジュールの中で差し替えても、監査は本物のファイルを見る）
+    if unfinished():
+        t("　いま公開が途中なので、目印の試験は飛ばします", True)
+    else:
+        try:
+            mark_start("zzz_audit33", {"name": "試験"}, {})
+            _strict = run_site_audit()
+            _loose = run_site_audit(ignore_in_progress=True)
+        finally:
+            mark_done()
+        t("★★目印があるとき、外さなければちゃんと引っかかる★★"
+          "（push の関所はここで残骸を止める）",
+          any("33_" in x for x in _strict))
+        t("★★外したときだけ、それを理由に止めない★★"
+          "（公開の最終確認は目印を持っている最中に回る）",
+          not any("33_" in x for x in _loose))
     t("★★同じ入力なら毎回同じ物ができる★★（2回目に差分が出ない・Codexの助言）",
       build_hubs() == build_hubs())
     t("★★一覧と機種データを集合で突き合わせる★★（欠け・余分・重複を見つける）",
