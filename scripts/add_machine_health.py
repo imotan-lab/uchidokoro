@@ -65,8 +65,13 @@ def check_log(day: str) -> list:
         except ValueError:
             pass
     if "前回の公開が途中で終わっています" in text:
-        ng.append(f"{day}: 公開が途中で終わっています"
-                  "（--recover --apply で戻してください）")
+        # ★いま残っているかどうかで判断する★（2026-07-31・自分で気づいた）
+        #   ログは「そのとき出た」記録なので、既に戻してあっても残る。
+        #   ログだけで判定すると、解決済みの話を毎日蒸し返してしまう。
+        import publish_new_machine as _pub
+        if _pub.unfinished():
+            ng.append(f"{day}: 公開が途中で終わっています"
+                      "（--recover --apply で戻してください）")
     return ng
 
 
@@ -143,12 +148,16 @@ def selftest() -> int:
         t("★残存率が下がったら気づく★（一覧の作りが変わった兆候）",
           any("残存率" in x for x in check_log("2026-08-04")))
 
+        # ★ログに記録が残っていても、いま解決済みなら言わない★
         write("2026-08-05",
               "★新台追加タスク 開始★" + nl
               + "★前回の公開が途中で終わっています（x / y）★" + nl
               + "★新台追加タスク 終了★")
-        t("★公開が途中で終わっていたら気づく★",
-          any("--recover" in x for x in check_log("2026-08-05")))
+        import publish_new_machine as _pub2
+        t("★★ログに記録が残っていても、いま解決済みなら蒸し返さない★★"
+          "（毎日同じことを言われると本当の異常が埋もれる）",
+          bool(_pub2.unfinished()) == any("--recover" in x
+                                          for x in check_log("2026-08-05")))
 
         t("　ログが無ければ「動いていない可能性」と言う",
           any("ログがありません" in x for x in check_log("2026-08-09")))
