@@ -64,6 +64,8 @@ def discover() -> dict:
            #   （2026-07-31・Codexの指摘。読めなかった社と混ぜない）
            "watched": [], "not_watched": []}
     for mid, conf in cats.items():
+        if not _nw.is_catalog(conf):
+            continue                      # ★覚え書きはメーカーではない★
         if conf.get("status") != "ACTIVE":
             out["not_watched"].append(f"{mid}（{conf.get('status')}）")
             continue

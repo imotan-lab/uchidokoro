@@ -324,6 +324,11 @@ MAX_NEW_ABS = 5          # 1社が1回のスキャンでこれ以上増えるの
 MAX_NEW_RATIO = 0.2
 
 
+def is_catalog(conf) -> bool:
+    """メーカーの登録かどうか。★覚え書きをメーカーとして数えない★"""
+    return isinstance(conf, dict) and "status" in conf
+
+
 def scan_maker(maker_id: str, conf: dict, seen: dict, record: bool = True) -> dict:
     """1社ぶん見る。★取れた数が少なすぎたら『新台なし』と言わない★
 
@@ -520,6 +525,8 @@ def selftest() -> int:
     t("★パチスロのページでなければ通さない★",
       not looks_like_slot("これは景品の紹介ページです"))
 
+    t("★覚え書きをメーカーとして数えない★",
+      is_catalog({"status": "ACTIVE"}) and not is_catalog({"olympia": "平和に載る"}))
     t("★機種らしくない文字列は取らない★",
       not _SLUGLIKE.match("../etc") and not _SLUGLIKE.match("A B")
       and _SLUGLIKE.match("lbinko"))
