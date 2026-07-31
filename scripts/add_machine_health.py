@@ -32,6 +32,8 @@ LOG_DIR = os.path.join(os.path.expanduser("~"), "Documents", "uchidokoro", "logs
 
 # 待ち行列がこの日数を超えたら知らせる（60日で台帳へ行く前の予告）
 PENDING_WARN_DAYS = 30
+# ★このタスクを動かし始めた日★（それより前は「ログが無い」のが当たり前）
+FIRST_RUN_DATE = "2026-07-31"
 
 
 def log_path(day: str) -> str:
@@ -40,6 +42,8 @@ def log_path(day: str) -> str:
 
 def check_log(day: str) -> list:
     """その日のログを読んで、気になる点を返す。"""
+    if day < FIRST_RUN_DATE:
+        return []          # ★動かし始める前のことは言わない★
     path = log_path(day)
     if not os.path.isfile(path):
         return [f"{day} のログがありません（タスクが動いていない可能性）"]
@@ -161,6 +165,9 @@ def selftest() -> int:
 
         t("　ログが無ければ「動いていない可能性」と言う",
           any("ログがありません" in x for x in check_log("2026-08-09")))
+        t("★★動かし始める前の日については何も言わない★★"
+          "（毎朝『ログがありません』と言われると本当の異常が埋もれる）",
+          check_log("2026-07-01") == [])
     finally:
         LOG_DIR = real
         __import__("shutil").rmtree(d, ignore_errors=True)
