@@ -1743,6 +1743,34 @@ def selftest() -> int:
                 os.replace = _real_replace
             t(f"★★{_nth}回目の置き換え直後に中断されても元のまま★★",
               _ok)
+        # ★復旧が途中で落ちても、もう一度走らせて完走できるか★
+        #   （2026-07-31・Codex12回目「各中断点から再開できるか」）
+        #   「ページだけ消えた」状態を作ってから復旧を走らせる。
+        _s5 = "zzz_resume_test"
+        globals()["check_after"] = lambda *a, **k: ["わざとNG"]
+        try:
+            publish_from_material(_s5, "再開確認機ZZZ", "bellco",
+                                  f"https://m.example/products/slot/{_s5}/",
+                                  "2026-09", {"adopted": {}, "need_third": {},
+                                              "thin": {}}, apply_it=True)
+        except BaseException:                # noqa: BLE001
+            pass
+        finally:
+            globals()["check_after"] = _real["check_after"]
+        _pg5 = os.path.join(BASE, "machines", _s5, "index.html")
+        _made5 = os.path.isfile(_pg5)
+        if _made5:
+            os.remove(_pg5)                  # ★復旧の途中で落ちた状態★
+        _r5 = recover(apply_it=True)
+        _left5 = (os.path.isdir(os.path.join(BASE, "machines", _s5))
+                  or os.path.isfile(os.path.join(
+                      BASE, "assets", "data", "machine-details", f"{_s5}.json"))
+                  or any(m.get("slug") == _s5 for m in _sj.read_rows(MACHINES)))
+        t("★★復旧が途中で落ちても、もう一度走らせれば完走する★★",
+          (not _made5) or (not _left5 and not _r5["problems"]))
+        _sh.rmtree(os.path.join(BASE, "machines", _s5), ignore_errors=True)
+        if os.path.exists(IN_PROGRESS):
+            os.remove(IN_PROGRESS)
         t("　中途半端な一時ファイルを残さない",
           not [x for x in os.listdir(BASE) if ".tmp." in x or ".new." in x])
     finally:
