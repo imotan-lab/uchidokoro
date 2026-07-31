@@ -322,6 +322,14 @@ def check_detail(slug: str, detail: dict) -> list:
                 ng.append("表の headers が文字の配列ではありません")
             if not _rows_ok(tb.get("rows")):
                 ng.append("表の中身が文字の並びではありません")
+            # ★見出しの数と行の列数をそろえる★（2026-07-31・Codex指摘3）
+            #   ずれると、正しい値が別の見出しの下に表示される。
+            elif isinstance(tb.get("headers"), list):
+                w = len(tb["headers"])
+                bad_rows = [i for i, r in enumerate(tb["rows"]) if len(r) != w]
+                if bad_rows:
+                    ng.append(f"表の見出しが {w} 列なのに、"
+                              f"{len(bad_rows)} 行の列数が違います")
     # ★中まで見る★（配列であることだけでは、任意の辞書を入れられる）
     for key in ("factTable", "evTable"):
         val = detail.get(key)
@@ -335,10 +343,17 @@ def check_detail(slug: str, detail: dict) -> list:
             ng.append("summaryBoxes が配列ではありません")
         else:
             for b in boxes:
-                if not (isinstance(b, dict) and set(b) <= {"title", "body", "type"}
-                        and all(_is_text(v) or isinstance(v, list)
-                                for v in b.values())):
+                if not isinstance(b, dict) or set(b) - {"title", "body", "type"}:
                     ng.append(f"summaryBoxes に知らない形があります: {b!r}"[:120])
+                    continue
+                # ★配列なら中身まで見る★（2026-07-31・Codex指摘3を再現）
+                #   「文字か配列か」で止めていたので、配列の中に辞書を入れられた。
+                for k, v in b.items():
+                    if _is_text(v):
+                        continue
+                    if isinstance(v, list) and all(_is_text(x) for x in v):
+                        continue
+                    ng.append(f"summaryBoxes の {k} が文字でも文字の配列でもありません")
     blob = json.dumps(detail, ensure_ascii=False)
     for word in _FORBIDDEN:
         if chr(34) + word + chr(34) in blob:
@@ -388,8 +403,12 @@ def check_machine(slug: str, machine: dict) -> list:
             if ibad:
                 ng.append(f"identity に知らない項目があります: {ibad}")
             for k, v in ident.items():
-                if not (_is_text(v) or isinstance(v, list)):
-                    ng.append(f"identity.{k} が文字でも配列でもありません")
+                if _is_text(v):
+                    continue
+                # ★配列なら中身まで見る★（Codex指摘3を再現）
+                if isinstance(v, list) and all(_is_text(x) for x in v):
+                    continue
+                ng.append(f"identity.{k} が文字でも文字の配列でもありません")
     # ★狙い目は当サイトの判断なので、この経路では書かせない★
     if machine.get("strategy"):
         ng.append("先行記事に狙い目を書くことはできません（strategy は空のはず）")
@@ -687,10 +706,10 @@ def publish_from_material(slug: str, name: str, maker: str, official_url: str,
 
 
 def publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> dict:
-    """新台1件を公開する（★同時に2つは公開しない★）。
+    """★内部専用★ 外からは `publish_from_material` を使うこと。
 
-    ★できれば `publish_from_material` を使うこと★
-      こちらは完成データを受け取るので、境界の検査でしか守れない。
+    こちらは完成データを受け取るので、境界の検査でしか守れない。
+    コマンドからは呼べないようにしてある（2026-07-31・Codex指摘1）。
     """
     if not apply_it:
         return _publish(slug, machine, detail, apply_it=False)
@@ -969,6 +988,13 @@ def selftest() -> int:
             ("identity に知らない項目", {**_m2, "identity": {"任意": "9999"}}),
             ("release_date が変な形", {**_m2, "release_date": "9999年天井"})):
         t(f"★{_why}は止める★", check_machine("zzz_test", _bad))
+    t("★★identity の配列の中に辞書を入れられない★★（Codex指摘・再現した）",
+      check_machine("zzz_test",
+                    {**_m2, "identity": {"_model_code_sources": [{"任意": "にせ"}]}}))
+    t("　まともな identity は通る",
+      check_machine("zzz_test",
+                    {**_m2, "identity": {"manufacturer_id": "bellco",
+                                         "_model_code_sources": ["a", "b"]}}) == [])
     t("　本物の機種データは通る", check_machine("zzz_test", _m2) == [])
 
     # ★受け取った記事データそのものを確かめる★
@@ -991,6 +1017,22 @@ def selftest() -> int:
     t("　節に知らない項目があれば止める",
       check_detail("zzz_test", {"slug": "zzz_test",
                                 "sections": [{"title": "x", "候補": []}]}))
+
+    t("★★summaryBoxes の配列の中に辞書を入れられない★★（Codex指摘・再現した）",
+      check_detail("zzz_test", {"slug": "zzz_test", "sections": [],
+                                "summaryBoxes": [{"title": "題",
+                                                  "body": [{"任意": "天井99999G"}]}]}))
+    t("　まともな summaryBoxes は通る",
+      check_detail("zzz_test", {"slug": "zzz_test", "sections": [],
+                                "summaryBoxes": [{"title": "題",
+                                                  "body": ["ふつうの文"]}]}) == [])
+    t("★★表の見出し数と行の列数がそろわなければ止める★★"
+      "（正しい値が別の見出しの下に出る）",
+      any("列数" in x for x in check_detail(
+          "zzz_test", {"slug": "zzz_test",
+                       "sections": [{"title": "x",
+                                     "tables": [{"headers": ["A", "B", "C"],
+                                                 "rows": [["1", "2"]]}]}]})))
 
     # ★機種データそのものを確かめる★（Codex指摘2）
     _ok_machine = {"slug": "zzz_test", "name": "テスト", "seo": {"title": "x"},
@@ -1133,27 +1175,31 @@ def main() -> int:
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--slug")
     ap.add_argument("--apply", action="store_true")
-    ap.add_argument("--machine", help="machines.json に足す1件（JSONファイル）")
-    ap.add_argument("--detail", help="記事データ（JSONファイル）")
+    ap.add_argument("--material", help="採用済みの材料（JSONファイル）")
+    ap.add_argument("--name", help="メーカー公式の正式名称")
+    ap.add_argument("--maker", help="メーカーID")
+    ap.add_argument("--official-url", dest="official_url", help="公式ページURL")
+    ap.add_argument("--release", default="", help="登場年月 YYYY-MM")
     args = ap.parse_args()
     if args.selftest:
         return selftest()
     if not args.slug:
         ap.print_help()
         return 0
-    # ★実際に公開する経路を持たせる★（2026-07-31・Codex指摘）
-    #   以前はここが「説明を表示して終わり」だったので、
-    #   `--apply` を付けても何も起きなかった。
-    #   **何もしないのに成功したように見える**のが一番こわい。
-    if not (args.machine and args.detail):
-        print("★機種データと記事データのファイルが要ります★")
-        print("  先に add_machine_run.py が作ったものを、")
-        print("  --machine <machine.json> --detail <detail.json> で渡してください。")
+    # ★公開できるのは材料からだけ★（2026-07-31・Codex指摘1）
+    #   以前は完成した機種データ・記事データを受け取って publish() を直接呼べた。
+    #   それだと「数値を含まない誤った文章」や
+    #   「別項目の数値を置いたデータ」をそのまま公開できてしまう。
+    if not (args.material and args.name and args.maker and args.official_url):
+        print("★材料と機種の情報が要ります★")
+        print("  --material <材料JSON> --name <正式名称> "
+              "--maker <メーカーID> --official-url <公式URL> [--release YYYY-MM]")
         print("  （ふだんは add_machine_run.py --apply が中で呼びます）")
         return 1
-    machine = _sj.read_json(args.machine, expect=dict)
-    detail = _sj.read_json(args.detail, expect=dict)
-    res = publish(args.slug, machine, detail, apply_it=args.apply)
+    material = _sj.read_json(args.material, expect=dict)
+    res = publish_from_material(args.slug, args.name, args.maker,
+                                args.official_url, args.release or "",
+                                material, apply_it=args.apply)
     if res["problems"]:
         print("★公開できません★")
         for p in res["problems"]:
