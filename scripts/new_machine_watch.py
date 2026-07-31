@@ -79,6 +79,12 @@ def _get(url: str, timeout: int = 20) -> str:
     return body.decode(charset, "replace")
 
 
+# ★機種ではない「年別アーカイブ」を機種と数えない★（2026-07-31・平和で確認）
+#   一覧の直下に 2009 / 2010 … が機種と同じ形で並ぶ社がある。
+#   年だけの見た目は機種名になりえないので、機械的に外してよい。
+_YEAR_ONLY = re.compile(r"^(19|20)\d\d$")
+
+
 def product_urls(html: str, base_url: str, link_prefix: str) -> list:
     """一覧ページから、個別機種ページのURLを取り出す。
 
@@ -96,6 +102,8 @@ def product_urls(html: str, base_url: str, link_prefix: str) -> list:
             continue                      # 一覧そのもの／さらに下の階層は対象外
         if not _SLUGLIKE.match(rest):
             continue
+        if _YEAR_ONLY.match(rest):
+            continue                      # ★年別アーカイブは機種ではない★
         out.add(link_prefix.rstrip("/") + "/" + rest + "/")
     return sorted(out)
 
@@ -423,6 +431,10 @@ def selftest() -> int:
     t("　一覧ページ自身を機種と数えない", LIST not in got)
     t("　パチンコ側・よそのサイト・下の階層は取らない",
       not any("pachinko" in u or "other.example" in u or "spec" in u for u in got))
+    t("★★年別アーカイブ（2009・2010…）を機種と数えない★★（平和で確認）",
+      product_urls('<a href="/products/slot/2009/">2009年</a>'
+                   '<a href="/products/slot/sns3/">機種</a>', LIST, LIST)
+      == ["https://m.example/products/slot/sns3/"])
     t("　#や?が付いていても同じURLとして1件にする",
       product_urls('<a href="/products/slot/aaa/?x=1">A</a>'
                    '<a href="/products/slot/aaa/#top">A</a>', LIST, LIST)
