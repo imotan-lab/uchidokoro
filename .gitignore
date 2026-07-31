@@ -38,3 +38,4 @@ as.log
 # Codexへ渡す確認依頼（自動生成・コミットしない）
 _design/spec_review/
 .publish.lock
+.publish-in-progress.json

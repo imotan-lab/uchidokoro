@@ -1091,6 +1091,26 @@ def check_32_dangling_machine_page(machines: list) -> list[str]:
     return ng
 
 
+def check_33_publish_in_progress(machines: list) -> list[str]:
+    """★途中で終わった公開が残っていないか★（2026-07-31・Codex9回目）
+
+    電源断で止まると、ページも一覧もそろってしまい、
+    ほかの検査では「中断された処理」と「正常な新台」を区別できない。
+    公開処理は書き始める前に目印を作り、全部終わってから消す。
+    目印が残っていれば、まだ途中。
+    """
+    p = BASE / ".publish-in-progress.json"
+    if not p.is_file():
+        return []
+    try:
+        got = _sj.read_json(str(p), expect=dict)
+        who = f"{got.get('slug')} / {got.get('started_at')}"
+    except Exception:                     # noqa: BLE001
+        who = "（目印が壊れています）"
+    return [f"公開が途中で終わっています（{who}）。中身を確かめて直すか元に戻し、"
+            f".publish-in-progress.json を消してください"]
+
+
 CHECKS = [
     ("1_インラインstyle", check_1_inline_style),
     ("2_サブパス残骸", check_2_old_subpath),
@@ -1124,6 +1144,7 @@ CHECKS = [
     ("30_記事内の自己矛盾", check_30_surface_conflicts),
     ("31_Codexへの未報告", check_31_codex_report),
     ("32_ページ欠けの機種", check_32_dangling_machine_page),
+    ("33_公開が途中で終わっている", check_33_publish_in_progress),
 ]
 
 

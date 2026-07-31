@@ -107,6 +107,43 @@ class _OnlyOne:
         return False
 
 
+# ★作業中の目印★（2026-07-31・Codex9回目・実際に再現した）
+#   全部書き終えた直後に電源が落ちると、
+#   ページも一覧もそろっているため「中断された処理」と
+#   「正常に完成した新台」を区別できなかった。
+#   書き始める前にこの目印を作り、全部終わってから消す。
+#   目印が残っていれば、次の実行も push も止める。
+IN_PROGRESS = os.path.join(BASE, ".publish-in-progress.json")
+
+
+def mark_start(slug: str, machine: dict) -> None:
+    """★書き始める前に目印を残す★（電源が落ちても残る）"""
+    from datetime import datetime
+    write_atomic(IN_PROGRESS, json.dumps({
+        "slug": slug, "name": machine.get("name", ""),
+        "started_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "pid": os.getpid(),
+        "_why": "この目印がある間は、公開が途中で終わっています。"
+                "中身を確かめて直すか、元に戻してからこのファイルを消してください。",
+    }, ensure_ascii=False, indent=1) + chr(10))
+
+
+def mark_done() -> None:
+    """★全部終わってから消す★"""
+    if os.path.exists(IN_PROGRESS):
+        os.remove(IN_PROGRESS)
+
+
+def unfinished() -> dict:
+    """途中で終わった公開が残っていないか。★残っていれば中身を返す★"""
+    if not os.path.exists(IN_PROGRESS):
+        return {}
+    try:
+        return _sj.read_json(IN_PROGRESS, expect=dict)
+    except Exception:                     # noqa: BLE001
+        return {"slug": "(読めません)", "_why": "目印が壊れています"}
+
+
 def write_atomic(path: str, text: str, new_only: bool = False) -> None:
     """★一時ファイルに完成させてから置き換える★（2026-07-31・Codex指摘2/3）
 
@@ -831,6 +868,15 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
     #   壊れた状態から公開すると、後で「どこまでが自分のせいか」分からなくなる。
     #   ★ページを置いた直後は設計上わざと不整合（一覧にまだ足していない）なので、
     #     その途中では監査しない★
+    # ★前回の公開が途中で終わっていないか★（2026-07-31・Codex9回目）
+    #   電源断だと、ページも一覧もそろってしまい、監査では区別できない。
+    left = unfinished()
+    if left:
+        out["problems"].append(
+            f"★前回の公開が途中で終わっています（{left.get('slug')} / "
+            f"{left.get('started_at')}）★ 中身を確かめて直すか元に戻し、"
+            f"{os.path.basename(IN_PROGRESS)} を消してから実行してください")
+        return out
     out["problems"] += run_site_audit()
     # ★一覧・ランキングが、いまのデータと一致しているか★
     #   ずれたまま作り直すと、既存の公開内容まで変えてしまう。
@@ -864,9 +910,11 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
     page = _page_path(slug)
     dp = os.path.join(DETAILS, f"{slug}.json")
     made = []          # ★この処理が実際に作ったものだけ★（既存を消さないため）
+    mark_start(slug, machine)          # ★電源が落ちても残る目印★
     machines_replaced = {}   # 一覧を置き換えたか（戻すため・置き換える前に立てる）
 
     def _cleanup():
+        mark_done()                    # 片付けたら「途中」ではない
         """★自分が作ったものだけ片付ける★（2026-07-31・Codex指摘3を再現して直した）
 
         以前は「置くはずだった場所」を消していたので、
@@ -954,6 +1002,7 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
         _cleanup()
         out["problems"] += late
         out["problems"].append("★確かめで引っかかったので、置いたものを消して元に戻しました★")
+        mark_done()                    # 元に戻ったので「途中」ではない
         return out
 
     # ③ ここで初めて一覧へ足す（★これ以降トップページからリンクされる★）
@@ -1058,11 +1107,13 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
             _cleanup()
             out["wrote"] = []
             late2.append("★一覧から外し、置いたものを消して元に戻しました★")
+            mark_done()                # 元に戻ったので「途中」ではない
         else:
             late2.append("★別の書き込みが入っているため、自動では戻しませんでした★"
                          "（人が確かめてください）")
         out["problems"] += late2
         return out
+    mark_done()                        # ★ここまで来て初めて「終わった」★
     return out
 
 
@@ -1077,6 +1128,7 @@ def _raises(fn) -> bool:
 
 
 def selftest() -> int:
+    import tempfile as _tf
     results = []
     nl = chr(10)
 
@@ -1300,6 +1352,20 @@ def selftest() -> int:
     finally:
         __import__("shutil").rmtree(_d3, ignore_errors=True)
 
+    t("★いまは途中で終わった公開が残っていない★", unfinished() == {})
+    _real_marker = IN_PROGRESS
+    _md = _tf.mkdtemp(prefix="uchi_mark_")
+    try:
+        globals()["IN_PROGRESS"] = os.path.join(_md, "mark.json")
+        t("★★目印を作れば「途中」と分かる★★"
+          "（電源断ではページも一覧もそろってしまい、監査では区別できない）",
+          (mark_start("zzz_mark", {"name": "試験"}) or unfinished().get("slug"))
+          == "zzz_mark")
+        mark_done()
+        t("　消せば「途中」ではなくなる", unfinished() == {})
+    finally:
+        globals()["IN_PROGRESS"] = _real_marker
+        __import__("shutil").rmtree(_md, ignore_errors=True)
     t("★★公開の前にもサイト監査を通せる★★（後から気づいても世に出ている）",
       run_site_audit() == [])
     t("★★同じ入力なら毎回同じ物ができる★★（2回目に差分が出ない・Codexの助言）",
@@ -1396,6 +1462,9 @@ def selftest() -> int:
         _f4 = os.path.join(BASE, _rel4)
         with open(_f4, "rb") as _fh4:
             _bytes4[_f4] = _fh4.read()
+    # ★障害注入は本番の目印を触らない★（試験の残骸で監査が赤くなるため）
+    _real_ip = IN_PROGRESS
+    globals()["IN_PROGRESS"] = os.path.join(_dir4, "in_progress.json")
     _real = {"write_atomic": write_atomic, "build_hubs": build_hubs,
              "check_served": check_served, "run_site_audit": run_site_audit,
              "check_after": check_after, "MACHINES": MACHINES}
@@ -1476,6 +1545,7 @@ def selftest() -> int:
     finally:
         for k, v in _real.items():
             globals()[k] = v
+        globals()["IN_PROGRESS"] = _real_ip
         for _f4, _b4 in _bytes4.items():        # ★元のバイト列に戻す★
             with open(_f4, "rb") as _fh4:
                 if _fh4.read() != _b4:
