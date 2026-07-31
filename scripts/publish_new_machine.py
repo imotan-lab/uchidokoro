@@ -58,10 +58,14 @@ class PublishError(RuntimeError):
 # ★slug に使ってよい形★（2026-07-31・自分で確かめて危険を確認）
 #   `../` を入れると machines/ の外へ書けてしまう
 #   （_page_path("../../evil") → ../evil/index.html）。
-# ★断り書きに必ず入っている語★（無ければ公開しない）
-NOTICE_MUST = ("先行記事", "解析")
-# ★断り書きに書いてはいけない語★（確認済みだと誤解させる）
-NOTICE_NEVER = ("確認済み", "確定", "完全", "裏取り済み")
+# ★断り書きは、決めた文言と丸ごと一致していること★
+#   （2026-07-31・Codex指摘5を再現して変えた）
+#   必須語と禁止語の組み合わせでは、
+#   「先行記事です。解析の結果、全項目が正しいと判明しました。」が通ってしまった。
+#   文言はこちらで作るものなので、**丸ごと突き合わせる**のが確実。
+NOTICE_TEXT = ("⚠ 先行記事（解析待ち）"
+               "この機種はまだ解析データが出揃っていません。"
+               "天井・狙い目・設定差は判明次第、随時更新します。")
 NOTICE = chr(100)+chr(97)+chr(116)+chr(97)+chr(45)+"preview-notice="+chr(34)+STATE+chr(34)
 _SLUG_OK = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
 # 空白の並び（バックスラッシュを直接書かない：制御文字に化ける事故が続いたため）
@@ -202,13 +206,9 @@ def check_page(slug: str, html: str) -> list:
         # ★文面まで確かめる★（2026-07-31・Codex指摘6を再現）
         #   「先行記事」の5文字だけを見ていたので、
         #   「先行記事ですが、全項目を完全確認済みです」も通っていた。
-        text = notices[0]["text"]
-        for word in NOTICE_MUST:
-            if word not in text:
-                ng.append(f"断り書きに『{word}』がありません: {text[:50]!r}")
-        for word in NOTICE_NEVER:
-            if word in text:
-                ng.append(f"断り書きに書いてはいけない語があります（『{word}』）")
+        text = "".join(notices[0]["text"].split())
+        if text != "".join(NOTICE_TEXT.split()):
+            ng.append(f"断り書きの文面が決めたものと違います: {notices[0]['text'][:60]!r}")
     return ng
 
 
@@ -506,17 +506,48 @@ def check_hubs_untouched() -> list:
     return ng
 
 
-def check_counts(new_n: int, slug: str = "") -> list:
-    """★一覧に新台の行があるか★（件数ではなく行の有無で見る）
+# ★サイト全体の掲載数を表す言い回し★（2026-07-31・全体件数の表示をやめた）
+_TOTAL_COUNT_PAT = re.compile(
+    r"(全|全部で|掲載|対象機種数[:：]?[ ]*)(<[^>]+>)?[ ]*[0-9]{2,3}[ ]*(</[^>]+>)?[ ]*機種")
 
-    2026-07-31: 全体の機種数は表示しない方針にしたので、数では確かめられない。
+
+def check_counts(new_n: int, slug: str = "") -> list:
+    """★早見表が機種データと合っているか★（2026-07-31・Codex指摘2/3）
+
+    以前は「一覧に新台の文字列があるか」しか見ていなかったので、
+    既存機種の欠落・余分な行・重複・他3ページの未更新に気づけなかった。
+    **載っている機種の集合**で突き合わせ、
+    4ページとも「いまのデータから作った内容」と丸ごと一致することを確かめる。
     """
     ng = []
-    if slug:
-        path = os.path.join(BASE, "guide-ichiran.html")
+    rows = _sj.read_rows(MACHINES)
+    want = [m.get("slug") for m in rows if m.get("slug")]
+    path = os.path.join(BASE, "guide-ichiran.html")
+    if os.path.isfile(path):
         with open(path, encoding="utf-8") as f:
-            if f"/machines/{slug}/" not in f.read():
-                ng.append(f"一覧ページに {slug} の行がありません")
+            html_i = f.read()
+        got = re.findall(r'href="/machines/([a-z0-9_]+)/"', html_i)
+        missing = sorted(set(want) - set(got))
+        extra = sorted(set(got) - set(want))
+        dup = sorted({x for x in got if got.count(x) > 1})
+        if missing:
+            ng.append(f"一覧に無い機種: {missing[:5]}（全{len(missing)}件）")
+        if extra:
+            ng.append(f"機種データに無い行: {extra[:5]}（全{len(extra)}件）")
+        if dup:
+            ng.append(f"一覧に同じ機種の行が複数: {dup[:5]}")
+    # ★4ページとも、いまのデータから作った内容と丸ごと同じか★
+    ng += check_hubs_untouched()
+    # ★全体件数が書き戻されていないか★（表示しない方針）
+    for rel in ("README.md", "about.html", "guide-ichiran.html"):
+        p2 = os.path.join(BASE, rel)
+        if not os.path.isfile(p2):
+            continue
+        with open(p2, encoding="utf-8") as f:
+            m = _TOTAL_COUNT_PAT.search(f.read())
+        if m:
+            ng.append(f"{rel} にサイト全体の機種数があります（{m.group(0)[:24]!r}）"
+                      "。全体件数は表示しない方針です")
     return ng
 
 
@@ -719,10 +750,11 @@ def publish_from_material(slug: str, name: str, maker: str, official_url: str,
     """
     machine = _ba.build_machine(slug, name, maker, official_url, release, material)
     detail = _ba.build_detail(slug, name, release, material)
-    return publish(slug, machine, detail, apply_it=apply_it)
+    return _publish_prebuilt(slug, machine, detail, apply_it=apply_it)
 
 
-def publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> dict:
+def _publish_prebuilt(slug: str, machine: dict, detail: dict,
+                      apply_it: bool = False) -> dict:
     """★内部専用★ 外からは `publish_from_material` を使うこと。
 
     こちらは完成データを受け取るので、境界の検査でしか守れない。
@@ -732,6 +764,12 @@ def publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> d
         return _publish(slug, machine, detail, apply_it=False)
     with _OnlyOne():
         return _publish(slug, machine, detail, apply_it=True)
+
+
+# ★外から使ってよいのは publish_from_material だけ★（2026-07-31・Codex指摘4）
+#   完成データを受け取る経路は名前を _ で始めて、import * でも出さない。
+__all__ = ["publish_from_material", "check_page", "check_detail", "check_machine",
+           "check_counts", "check_hubs_untouched", "render", "STATE"]
 
 
 def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> dict:
@@ -758,6 +796,13 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
     before_pages = _existing_pages()
     with open(MACHINES, "rb") as f:
         machines_before = f.read()          # ★戻すときの正本★
+    # ★早見表の元の中身を控える★（作り直しに失敗したら戻すため）
+    hub_backup = {}
+    for rel in HUB_FILES:
+        full = os.path.join(BASE, rel)
+        if os.path.isfile(full):
+            with open(full, encoding="utf-8") as f:
+                hub_backup[full] = f.read()
     before_snap = snapshot(changed_paths()
                            + ["sitemap.xml", "index.html", "machine.html",
                               "assets/css/practical.css", "meta-auto.js"])
@@ -861,14 +906,33 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
             except OSError as e:
                 out["problems"].append(f"機種数の表記を直せませんでした（{rel}）: {e}")
         # ★一覧・ランキングを作り直す★（行そのものを持つので数字だけでは足りない）
+        #   ★全部そろってから一気に置き換える★（2026-07-31・Codex指摘1）
+        #     1枚ずつ直接上書きしていたので、途中で失敗すると
+        #     「1枚目だけ新台が載っている」ちぐはぐな状態が残った。
+        #     書きかけのHTMLが配信される恐れもあった。
         try:
-            for rel, html2 in build_hubs().items():
+            new_hubs = build_hubs()                      # ①全部メモリで作る
+            tmps = []
+            for rel, html2 in new_hubs.items():
                 full = os.path.join(BASE, rel)
-                with open(full, "w", encoding="utf-8", newline=chr(10)) as f:
+                tmp2 = full + f".new.{os.getpid()}"
+                with open(tmp2, "w", encoding="utf-8", newline=chr(10)) as f:
                     f.write(html2)
+                tmps.append((tmp2, full, html2))
+            for tmp2, full, html2 in tmps:               # ②一気に置き換える
+                os.replace(tmp2, full)
+                hub_backup[full] = hub_backup.get(full)  # 控えは取得済み
                 out["wrote"].append(full)
         except Exception as e:            # noqa: BLE001
-            out["problems"].append(f"一覧・ランキングを作り直せませんでした: {e}")
+            for tmp2, _f, _h in locals().get("tmps", []):
+                if os.path.exists(tmp2):
+                    os.remove(tmp2)
+            # ★置き換え済みの早見表も元に戻す★
+            for full, text0 in hub_backup.items():
+                if text0 is not None:
+                    with open(full, "w", encoding="utf-8", newline=chr(10)) as f:
+                        f.write(text0)
+            out["problems"].append(f"一覧・ランキングを作り直せませんでした（元に戻しました）: {e}")
     except Exception as e:                # noqa: BLE001
         _cleanup()
         raise PublishError(f"一覧に足せませんでした（作ったものは消しました）: {e}")
@@ -889,6 +953,10 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
         if _sha(now_text) == mine:
             with open(MACHINES, "wb") as f:
                 f.write(machines_before)
+            for full, text0 in hub_backup.items():       # ★早見表も戻す★
+                if text0 is not None:
+                    with open(full, "w", encoding="utf-8", newline=chr(10)) as f:
+                        f.write(text0)
             _cleanup()
             out["wrote"] = []
             late2.append("★一覧から外し、置いたものを消して元に戻しました★")
@@ -939,7 +1007,7 @@ def selftest() -> int:
             '<link rel="canonical" href="https://uchidokoro.com/machines/zzz_test/">'
             "</head><body>"
             '<div class="preview-banner" role="note" ' + NOTICE + ">"
-            "⚠ 先行記事（解析待ち）</div></body></html>")
+            + NOTICE_TEXT + "</div></body></html>")
     t("★作ったページの中身を必ず確かめる★", check_page("zzz_test", good) == [])
     t("★★noindex をコメントに書いただけでは通さない★★（実際に通っていた）",
       check_page("zzz_test",
@@ -980,14 +1048,14 @@ def selftest() -> int:
           "zzz_test",
           good.replace('content="noindex,follow"',
                        'content="index" data-note="noindex"'))))
-    t("★★断り書きの文面が違えば止める★★",
-      any("先行記事" in x for x in check_page(
-          "zzz_test", good.replace("⚠ 先行記事（解析待ち）", "ふつうの記事です"))))
-    t("★★『先行記事ですが確認済みです』のような文面は止める★★"
-      "（5文字だけ見ていたので通っていた・Codex指摘）",
-      any("書いてはいけない" in x for x in check_page(
-          "zzz_test", good.replace("⚠ 先行記事（解析待ち）",
-                                   "先行記事ですが、全項目を完全確認済みです"))))
+    t("★★断り書きの文面が決めたものと違えば止める★★",
+      any("文面" in x for x in check_page(
+          "zzz_test", good.replace(NOTICE_TEXT, "ふつうの記事です"))))
+    t("★★『先行記事です。解析の結果、全項目が正しいと判明しました』も止める★★"
+      "（必須語＋禁止語では通っていた・Codex指摘）",
+      any("文面" in x for x in check_page(
+          "zzz_test", good.replace(
+              NOTICE_TEXT, "先行記事です。解析の結果、全項目が正しいと判明しました。"))))
     t("　暦にない日付は止める",
       any("暦" in x for x in check_machine(
           "zzz_test", {"slug": "zzz_test", "name": "x", "seo": {"title": "x"},
@@ -1105,14 +1173,12 @@ def selftest() -> int:
 
     t("★★全体の機種数はもう扱わない★★（表示しない方針・監査が再導入を見張る）",
       count_updates(120, 121) == {} and COUNT_FILES == ())
-    t("★一覧に載っている機種なら通る★",
-      check_counts(0, next(m["slug"] for m in rows)) == [])
+
     t("★★一覧・ランキングのずれを見つけられる★★"
       "（ずれたまま作り直すと既存の公開内容まで変わる）",
       isinstance(check_hubs_untouched(), list))
-    t("　一覧に無い機種は見つける",
-      any("行がありません" in x for x in
-          check_counts(len(rows), "そんな機種はありません")))
+    t("★★一覧と機種データを集合で突き合わせる★★（欠け・余分・重複を見つける）",
+      check_counts(len(rows)) == [])
 
     # ★同時に2つ公開しない★（Codex指摘4）
     with _OnlyOne(os.path.join(BASE, ".publish.lock.test")) as _one:
