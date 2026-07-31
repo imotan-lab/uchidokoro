@@ -337,6 +337,57 @@ def selftest() -> int:
     t("★★すでにある機種は上書きしない★★",
       raises(lambda: apply("hokuto", {}, {}), "すでに"))
 
+    # ★実際に書き込む経路を確かめる★（2026-07-31）
+    #   これまで「すでにある機種は上書きしない」しか試していなかった。
+    #   本番のファイルは触らず、使い捨ての場所に向けて書かせる。
+    import shutil
+    import tempfile
+    global MACHINES, DETAILS
+    real_m, real_d = MACHINES, DETAILS
+    tmpdir = tempfile.mkdtemp(prefix="uchi_apply_")
+    try:
+        MACHINES = os.path.join(tmpdir, "machines.json")
+        DETAILS = os.path.join(tmpdir, "details")
+        os.makedirs(DETAILS)
+        with open(MACHINES, "w", encoding="utf-8") as f:
+            json.dump([{"slug": "aaa", "name": "既存機"}], f, ensure_ascii=False)
+        mch = {"slug": "zzz", "name": "テスト機", "status": "preview"}
+        det = {"slug": "zzz", "sections": []}
+        wrote = apply("zzz", mch, det)
+        rows = json.loads(open(MACHINES, encoding="utf-8").read())
+        t("★★実際に2つのファイルへ書ける★★（本番では一度も通していなかった）",
+          len(wrote) == 2 and len(rows) == 2 and rows[-1]["slug"] == "zzz"
+          and os.path.isfile(os.path.join(DETAILS, "zzz.json")))
+        t("　既存の機種は消さない", rows[0]["slug"] == "aaa")
+        t("　書いたあとに一時ファイルを残さない",
+          not [x for x in os.listdir(tmpdir) if x.endswith(".new") or x.endswith(".bak")])
+
+        # ★片方の置き換えに失敗したら、もう片方を元に戻す★
+        real_replace = os.replace
+        calls = {"n": 0}
+
+        def _flaky(src, dst):
+            calls["n"] += 1
+            if calls["n"] == 3:          # 3回目＝記事側の置き換え
+                raise OSError("わざと失敗させる")
+            return real_replace(src, dst)
+
+        before = open(MACHINES, encoding="utf-8").read()
+        os.replace = _flaky
+        try:
+            apply("yyy", {"slug": "yyy", "name": "テスト機2"}, {"slug": "yyy"})
+            ok_rollback = False
+        except Exception:                # noqa: BLE001
+            ok_rollback = True
+        finally:
+            os.replace = real_replace
+        t("★★途中で失敗したら一覧を元に戻す★★（一覧にだけ機種が残らない）",
+          ok_rollback and open(MACHINES, encoding="utf-8").read() == before
+          and not os.path.isfile(os.path.join(DETAILS, "yyy.json")))
+    finally:
+        MACHINES, DETAILS = real_m, real_d
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
     if ng:
