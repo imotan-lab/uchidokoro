@@ -46,6 +46,30 @@ import safe_json as _sj               # noqa: E402
 import spec_lookup as _sl             # noqa: E402
 
 
+def _log(msg: str) -> None:
+    """★1行ずつファイルに残す★（プロジェクトの最優先ルール）
+
+    無人で動くので、翌朝ログだけで「何を・いくつ・どこに・成否」を追えること。
+    画面に出すだけでは、スケジュール実行では何も見えない。
+    """
+    from datetime import date
+    line = f"[{_now()}] {msg}"
+    print(line)
+    try:
+        subprocess.run(
+            [sys.executable, r"C:/Users/imao_/.claude/log.py",
+             f"add_machine_{date.today().isoformat()}", msg],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=30)
+    except Exception:                     # noqa: BLE001
+        pass                              # ★ログが書けなくても処理は止めない★
+
+
+def _now() -> str:
+    from datetime import datetime
+    return datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+
+
 def _ledger(slug, kind, severity, code, title, detail) -> None:
     """要確認台帳に残す。★止まった理由を必ず残すため★"""
     subprocess.run(
@@ -72,9 +96,12 @@ def discover() -> dict:
             out["not_watched"].append(f"{mid}（{conf.get('status')}）")
             continue
         r = _nw.scan_maker(mid, conf, seen)
+        _log(f"見張り {mid}: 状態={r['state']} 一覧={r['total']}件 "
+             f"新しいURL={len(r['new'])}件 残存率={r.get('retention')}")
         if r["problem"]:
             out["problems"].append(f"{mid}: {r['problem']}")
             out["not_watched"].append(f"{mid}（{r['state']}）")
+            _log(f"  ✗ {mid}: {r['problem'][:120]}")
             continue
         out["watched"].append(mid)
         if r["first_time"]:
@@ -87,6 +114,8 @@ def discover() -> dict:
             else:
                 out["problems"].append(f"{url}: " + " / ".join(c["reasons"]))
     _nw._save_seen(seen)
+    _log(f"見張り終了: 正常{len(out['watched'])}社 / 見られず{len(out['not_watched'])}社 "
+         f"/ 新台候補{len(out['candidates'])}件 / 確認が要る{len(out['problems'])}件")
     return out
 
 
@@ -99,6 +128,8 @@ def gather(name: str) -> dict:
         if v["state"] != "FOUND":
             got["problems"].append(f"{did}: {v['state']} {v['why']}"[:160])
     got["urls"] = _di.found_urls(fr)
+    _log(f"材料集め開始: {name} / 名鑑{len(got['urls'])}件 "
+         + " ".join(f"{d}={v['state']}" for d, v in fr["results"].items()))
     if len(got["urls"]) < 2:
         got["problems"].append(
             f"名鑑の個別ページが {len(got['urls'])} 件しか見つかりません（2件以上が要る）")
@@ -157,6 +188,15 @@ def gather(name: str) -> dict:
     for nt in got["material"]["at_specs"]["need_third"]:
         jp = "メインAT" if nt["mode"] == "MAIN_AT" else "上位AT"
         got["problems"].append(f"{jp}の仕様: {nt['why']}")
+    mat = got["material"]
+    _log(f"材料集め終了: {name} / 型式={got.get('model_code')} "
+         f"採用={len(mat.get('adopted') or {})}項目 "
+         f"天井={len((mat.get('ceilings') or {}).get('adopted') or [])}件 "
+         f"AT={len((mat.get('at_specs') or {}).get('adopted') or [])}件 "
+         f"CZ={len((mat.get('czs') or {}).get('adopted') or [])}件 "
+         f"／問題{len(got['problems'])}件")
+    for p in got["problems"]:
+        _log(f"  ・{p[:140]}")
     return got
 
 
@@ -237,6 +277,8 @@ def _remember(name, official_url, maker, release, problems) -> None:
 def run_one(name, official_url, maker, release, apply_it=False) -> dict:
     """1機種を最後まで進める。"""
     out = {"name": name, "slug": None, "wrote": [], "problems": [], "blocked": []}
+    _log(f"=== 機種の処理開始: {name} / {maker} / {release} / {official_url} "
+         f"/ 書き込み={'する' if apply_it else 'しない'} ===")
     # ★①まず公式ページと名前が同じ機種を指しているか★
     out["problems"] += verify_official(name, official_url)
     # ★②その機種が既に登録されていないか★（2026-07-31・実際に二重登録できた）
@@ -263,7 +305,10 @@ def run_one(name, official_url, maker, release, apply_it=False) -> dict:
     # ★②同定に関わる問題があれば、材料が採れていても作らない★
     out["blocked"] = _blocking(out["problems"])
     if out["blocked"] or not mat["adopted"]:
+        for b in out["blocked"]:
+            _log(f"  ★止めました: {b[:140]}")
         _remember(name, official_url, maker, release, out["problems"])
+        _log(f"=== 機種の処理終了（作らず）: {name} ===")
         return out
     machine = _ba.build_machine(out["slug"], name, maker, official_url, release, mat)
     detail = _ba.build_detail(out["slug"], name, release, mat)
@@ -278,10 +323,16 @@ def run_one(name, official_url, maker, release, apply_it=False) -> dict:
         if res["problems"]:
             out["blocked"] = res["problems"]
             return out
+        _log(f"公開しました: {out['slug']} / 書いたファイル{len(out['wrote'])}件 "
+             + " ".join(os.path.relpath(w, BASE).replace(os.sep, "/")
+                        for w in out["wrote"]))
         # ★記事にできたら待ち行列から外す★
         pend = _pend.load()
         if _pend.done(pend, official_url):
             _pend.save(pend)
+            _log(f"待ち行列から外しました: {name}")
+    _log(f"=== 機種の処理終了: {name} / 止めた理由{len(out['blocked'])}件 "
+         f"/ 問題{len(out['problems'])}件 ===")
     return out
 
 
@@ -487,6 +538,7 @@ def main() -> int:
                          ensure_ascii=False, indent=1))
         return 0 if res.get("wrote") or not args.apply else 1
 
+    _log("★新台追加タスク 開始★")
     d = discover()
     for x in d["first_time"]:
         print("初回として記録:", x)
@@ -524,6 +576,9 @@ def main() -> int:
         _ledger("site", "structural", "MATERIAL", "WATCH_PROBLEM",
                 "新台の見張りで確認が要る点が出ました",
                 " / ".join(d["problems"])[:1500])
+        _log(f"台帳に登録しました: 確認が要る{len(d['problems'])}件")
+    _log(f"★新台追加タスク 終了★ 新台候補{len(d['candidates'])}件 "
+         f"/ 待っている新台{len(waiting)}件 / 確認が要る{len(d['problems'])}件")
     return 1 if d["problems"] else 0
 
 
