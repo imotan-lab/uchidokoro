@@ -551,6 +551,27 @@ def check_counts(new_n: int, slug: str = "") -> list:
     return ng
 
 
+def run_site_audit() -> list:
+    """サイト全体の監査を回す。★公開の前後の二段構えにするため★
+
+    （2026-07-31・Codexの助言）
+      公開してから監査するだけだと、見つけたときには既に世に出ている。
+      置き換える前にも同じ監査を通し、**駄目なら公開しない**。
+    """
+    r = subprocess.run([sys.executable, os.path.join(BASE, "scripts", "audit_site.py")],
+                       cwd=BASE, capture_output=True, text=True,
+                       encoding="utf-8", errors="replace")
+    if r.returncode == 0:
+        return []
+    out = []
+    for line in (r.stdout or "").splitlines():
+        line = line.strip()
+        # ★Codexへの報告漏れは公開の可否と関係ない★（開発の作法の話）
+        if line.startswith("❌") and "Codexへの未報告" not in line:
+            out.append("サイト監査: " + line[1:].strip())
+    return out
+
+
 def allowed_paths(slug: str) -> set:
     """★この経路が変えてよいファイル★（これ以外が変わっていたら止める）"""
     return {
@@ -860,6 +881,10 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
     #   問題が見つかっても戻せなかった。ここで確かめれば、
     #   駄目なときは置いたファイルを消すだけで完全に元へ戻る。
     late = []
+    # ★置き換える前にサイト監査を通す★（2026-07-31・Codexの助言・二段構え）
+    #   この時点でページと記事データは置いてあるが、一覧にはまだ足していない。
+    #   監査に落ちたら、置いたものを消して完全に元へ戻せる。
+    late += run_site_audit()
     # ★書いたページと記事データが、そのままの中身か★（Codex指摘5）
     for path, want in ((page, _sha(html)), (dp, _sha(detail_text))):
         with open(path, encoding="utf-8") as f:
@@ -1177,6 +1202,10 @@ def selftest() -> int:
     t("★★一覧・ランキングのずれを見つけられる★★"
       "（ずれたまま作り直すと既存の公開内容まで変わる）",
       isinstance(check_hubs_untouched(), list))
+    t("★★公開の前にもサイト監査を通せる★★（後から気づいても世に出ている）",
+      run_site_audit() == [])
+    t("★★同じ入力なら毎回同じ物ができる★★（2回目に差分が出ない・Codexの助言）",
+      build_hubs() == build_hubs())
     t("★★一覧と機種データを集合で突き合わせる★★（欠け・余分・重複を見つける）",
       check_counts(len(rows)) == [])
 
