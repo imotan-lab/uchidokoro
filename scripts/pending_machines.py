@@ -115,13 +115,34 @@ def waited_days(item: dict, today: str = "") -> int:
 
 
 def give_up(data: dict, today: str = "") -> list:
-    """★待ちすぎた分を取り出す★（呼び出し側が必ず台帳に残すこと）"""
+    """★待ちすぎたものを外して返す（黙って消さず台帳へ）★
+
+    ★一度も記事づくりを試していないものは打ち切らない★（Codex21回目）
+      待ち行列の先頭が詰まっていると後ろは一度も試されない。
+      試してもいないものを日数だけで捨てると、機種が黙って消える。
+    """
+    today = today or _today()
     out = []
     for url, it in list(data["items"].items()):
-        if waited_days(it, today) >= GIVE_UP_DAYS:
-            out.append(it)
-            del data["items"][url]
+        if waited_days(it, today) < GIVE_UP_DAYS:
+            continue
+        if int(it.get("runs", 0)) < 1:
+            continue                      # ★まだ一度も試していない★
+        out.append(data["items"].pop(url))
     return out
+
+
+def mark_tried(data: dict, url: str) -> None:
+    """★実際に記事づくりを試したことを残す★（2026-07-31・Codex21回目）
+
+    これが無いと、詰まっている先頭の数件だけを毎晩見続けて、
+    **6件目以降は一度も試されないまま60日で打ち切られる**。
+    """
+    it = data["items"].get(url)
+    if not it:
+        return
+    it["last_try"] = _today()
+    it["runs"] = int(it.get("runs", 0)) + 1
 
 
 def due(data: dict) -> list:
@@ -161,6 +182,7 @@ def selftest() -> int:
     d2 = {"schema": SCHEMA, "items": {}}
     add(d2, "古い機種", "https://m.example/old/", "m", "2026-01")
     d2["items"]["https://m.example/old/"]["first_seen"] = "2026-01-01"
+    mark_tried(d2, "https://m.example/old/")      # ★一度は試している★
     add(d2, "新しい機種", "https://m.example/new/", "m", "2026-09")
     t("★★待ちすぎたものだけ取り出す★★（黙って消さない・台帳に残すため）",
       [x["name"] for x in give_up(d2, "2026-07-31")] == ["古い機種"]
@@ -172,6 +194,16 @@ def selftest() -> int:
     d3["items"]["https://m.example/b/"]["first_seen"] = "2026-07-30"
     add(d3, "さき", "https://m.example/a/", "m", "2026-09")
     d3["items"]["https://m.example/a/"]["first_seen"] = "2026-07-01"
+    d4 = {"schema": SCHEMA, "items": {}}
+    add(d4, "一度も試していない機種", "https://m.example/never/", "m", "2026-01")
+    d4["items"]["https://m.example/never/"]["first_seen"] = "2026-01-01"
+    t("★★一度も記事づくりを試していないものは打ち切らない★★"
+      "（先頭が詰まると後ろは一度も試されない・Codex21回目）",
+      give_up(d4) == [] and "https://m.example/never/" in d4["items"])
+    mark_tried(d4, "https://m.example/never/")
+    t("　一度でも試したものは、待ちすぎたら取り出す",
+      len(give_up(d4)) == 1)
+
     t("★先に見つけたものから試す★", [x["name"] for x in due(d3)] == ["さき", "あと"])
 
     t("★★名前が無くても覚える★★"

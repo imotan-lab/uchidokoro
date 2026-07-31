@@ -273,7 +273,12 @@ RETRYABLE = ("名鑑の個別ページが", "HEALTHY_NO_MATCH", "CATALOG_UNHEALT
              # ★公式がまだ書いていないだけ＝明日には書かれうる★（Codex16回目）
              # ★classify が出す文言そのまま★（似せて書いて一致していなかった）
              "登場年月を書いていません", "登場年月が書かれていません",
-             "公式ページから機種名を取れません", "機種名を取れません")
+             "公式ページから機種名を取れません", "機種名を取れません",
+             # ★型式名は導入前には無いのが普通★（2026-07-31・Codex21回目）
+             #   「まだ載っていない」を「食い違う」と同じ扱いにしていたので、
+             #   明日には載るかもしれない新台を初回で捨てていた。
+             "型式名がまだどの名鑑にも載っていません",
+             "型式名が1つの名鑑にしか載っていません")
 # ★やり直しても意味がない理由★（待たずに台帳へ）
 NOT_RETRYABLE = ("既に登録されている疑い", "公式ページと名前が一致しません",
                  "転載の疑い", "AMBIGUOUS_CANDIDATES",
@@ -281,7 +286,9 @@ NOT_RETRYABLE = ("既に登録されている疑い", "公式ページと名前�
                  "すでに扱っている機種です", "パチスロのページに見えません",
                  "登場年月が新台の範囲外です", "同じURLの機種名が変わりました",
                  "メーカーが名簿にありません", "の場所ではありません",
-                 "登場年月が公式と違います")
+                 "登場年月が公式と違います",
+                 # ★食い違いは人が見るべきもの★（機械では決められない）
+                 "名鑑ごとに型式名が食い違っています")
 
 
 def retry_later(problems: list) -> bool:
@@ -472,14 +479,14 @@ def _head() -> str:
     return (r.stdout or "").strip()
 
 
-def _mark_push_pending(slug: str, sha: str = "") -> None:
+def _mark_push_pending(slug: str, sha: str = "", stage: str = "COMMITTED") -> None:
     """★どのコミットを出そうとしているかまで残す★（Codex20回目）
 
     slug だけだと、やり直すときに「コミットからやり直す」ことになり、
     変更が無いので必ず失敗していた。
     """
     with open(PUSH_PENDING, "w", encoding="utf-8") as f:
-        json.dump({"slug": slug, "sha": sha, "at": _now()}, f,
+        json.dump({"slug": slug, "sha": sha, "stage": stage, "at": _now()}, f,
                   ensure_ascii=False)
 
 
@@ -504,6 +511,15 @@ def retry_push_first() -> list:
         return [f"出せていない公開の目印が壊れています: {e}"]
     slug = got.get("slug") or ""
     sha = got.get("sha") or ""
+    stage = got.get("stage") or ("COMMITTED" if sha else "WRITTEN")
+    if stage == "WRITTEN":
+        # ★書いたがコミットまで行けなかった★ 続きからやる
+        _log(f"★書いたのにコミットまで行けていません: {slug}★ 続きをやります")
+        ng = push_after_publish(slug)
+        if ng:
+            return [f"{slug} をまだ出せません: " + " / ".join(ng)[:300]]
+        _log(f"出せました: {slug}")
+        return []
     now = _head()
     if sha and now != sha:
         # ★あのときのコミットが先端でない★
@@ -525,6 +541,13 @@ def finish_publish(res: dict) -> list:
     push が通って初めて「終わった」。
     通らなかったものを待ち行列から外すと、翌日やり直せなくなる。
     """
+    # ★書けた時点で必ず目印を残す★（2026-07-31・Codex21回目）
+    #   以前はコミットが通ってからだったので、
+    #   「公開ファイルはあるが目印はない」空白があった。
+    #   そこで止まると、翌日は目印が無いので何もせず、
+    #   待ち行列の同じ機種は「既に登録」と判定されて外れ、
+    #   残った変更が後続のpushも塞いでいた。
+    _mark_push_pending(res["slug"], "", "WRITTEN")
     ng = push_after_publish(res["slug"])
     if ng:
         return ng
@@ -551,8 +574,13 @@ def pick_work(pend: dict) -> list:
 
     順に試して、**実際に公開できた1件**で止める。
     """
+    # ★最後に試した日が古い順★（2026-07-31・Codex21回目）
+    #   見つけた日だけで並べると、先頭の数件が詰まっているとき
+    #   **6件目以降は一度も試されないまま60日で打ち切られていた**。
+    #   最後に試した日で回せば、全部が順ぐりに当たる。
     items = _pend.due(pend)
-    return sorted(items, key=lambda x: (x.get("first_seen") or "",
+    return sorted(items, key=lambda x: (x.get("last_try") or "",
+                                        x.get("first_seen") or "",
                                         x.get("url")))[:MAX_TRY_PER_NIGHT]
 
 
@@ -847,6 +875,24 @@ def selftest() -> int:
           "before_write" in inspect.getsource(_pub._publish))
         t("　60日打ち切りも、台帳に残せたときだけ外す",
           "待ち行列に戻しました" in inspect.getsource(main))
+        t("★★型式名が『まだ載っていない』と『食い違う』を分ける★★"
+          "（同じ扱いで、明日には載る新台を初回で捨てていた・Codex21回目）",
+          retry_later(["型式名: 型式名がまだどの名鑑にも載っていません"])
+          and not retry_later(["型式名: 名鑑ごとに型式名が食い違っています: {}"]))
+        t("★★待ち行列は最後に試した日が古い順に回す★★"
+          "（見つけた日だけで並べると6件目以降が一度も試されない・Codex21回目）",
+          [x["url"] for x in pick_work({"items": {
+              "https://x/a": {"name": "a", "url": "https://x/a", "maker": "m",
+                              "release": "2026-09", "first_seen": "2026-07-01",
+                              "last_try": "2026-07-31", "tries": 1},
+              "https://x/b": {"name": "b", "url": "https://x/b", "maker": "m",
+                              "release": "2026-09", "first_seen": "2026-07-20",
+                              "last_try": "2026-07-01", "tries": 1}}})]
+          == ["https://x/b", "https://x/a"])
+        t("★★書けた時点で必ず目印を残す★★"
+          "（コミット前に止まると目印が無く、翌日なにも復旧できなかった・Codex21回目）",
+          '"WRITTEN"' in inspect.getsource(finish_publish)
+          and "WRITTEN" in inspect.getsource(retry_push_first))
 
         # ★★「文言が返る」ではなく「記事を作らない」ところまで見る★★
         #   （2026-07-31・Codex18回目。文言の試験しかしていなかったので、
@@ -1140,8 +1186,14 @@ def main() -> int:
         work = fill_missing(work)
         if not (work["name"] and work["maker"]):
             _log(f"  まだ記事にできません（名前かメーカーが取れない）: {work['url']}")
+            # ★早く抜けるときも試した日を残す★（残さないと毎晩ここで詰まる）
+            _pend.mark_tried(pend, work["url"])
+            _pend.save(pend)
             continue
         _log(f"試す: {work['name']} / {work['maker']} / {work['release']}")
+        # ★試したことを必ず残す★（残さないと同じものばかり選ばれる）
+        _pend.mark_tried(pend, work["url"])
+        _pend.save(pend)
         res = run_one(work["name"], work["url"], work["maker"],
                       work["release"], apply_it,
                       before_write=lambda u=work["url"]: _claim_today(u))

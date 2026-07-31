@@ -134,10 +134,20 @@ def agree(results: list) -> dict:
     for code, hosts in codes.items():
         if len(hosts) >= 2:
             return {"model_code": code, "hosts": sorted(hosts), "adopted": True}
-    return {"model_code": None, "adopted": False,
-            "why": ("独立2つの名鑑で一致しません: "
-                    + json.dumps({k: sorted(v) for k, v in codes.items()},
-                                 ensure_ascii=False))}
+    # ★「まだ載っていない」と「食い違う」を分ける★（2026-07-31・Codex21回目）
+    #   どちらも同じ文言だったので、
+    #   **明日には載るかもしれない新台**まで「やり直しても無駄」と扱い、
+    #   初回で待ち行列から外していた。
+    detail = json.dumps({k: sorted(v) for k, v in codes.items()},
+                        ensure_ascii=False)
+    if len(codes) >= 2:
+        return {"model_code": None, "adopted": False, "state": "CONFLICT",
+                "why": f"名鑑ごとに型式名が食い違っています: {detail}"}
+    if not codes:
+        return {"model_code": None, "adopted": False, "state": "NOT_YET",
+                "why": "型式名がまだどの名鑑にも載っていません"}
+    return {"model_code": None, "adopted": False, "state": "NOT_YET",
+            "why": f"型式名が1つの名鑑にしか載っていません: {detail}"}
 
 
 # ---------------------------------------------------------------- selftest
