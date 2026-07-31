@@ -539,6 +539,22 @@ def main() -> int:
         return 0 if res.get("wrote") or not args.apply else 1
 
     _log("★新台追加タスク 開始★")
+    # ★前回が途中で終わっていないか、いちばん最初に知らせる★
+    #   （2026-07-31・電源断→PC自動起動→翌日の実行、を再現して足した）
+    #   見張りだけなら書き込まないので進んでよいが、
+    #   **気づかないまま作業を続けてpushしてしまう**のが危ない。
+    left = _pub.unfinished()
+    if left:
+        msg = (f"★前回の公開が途中で終わっています（{left.get('slug')} / "
+               f"{left.get('started_at')}）★ "
+               "`python scripts/publish_new_machine.py --recover --apply` で戻すまで、"
+               "**公開もpushもしないでください**")
+        _log(msg)
+        print(msg)
+        _ledger("site", "structural", "MATERIAL", "PUBLISH_UNFINISHED",
+                "前回の公開が途中で終わっています",
+                f"{left.get('slug')} / {left.get('started_at')} / "
+                "--recover --apply で戻してください")
     d = discover()
     for x in d["first_time"]:
         print("初回として記録:", x)
