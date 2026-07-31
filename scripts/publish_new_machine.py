@@ -32,6 +32,7 @@ import argparse
 import functools
 import hashlib
 import json
+import re
 import subprocess
 import os
 import sys
@@ -52,7 +53,30 @@ class PublishError(RuntimeError):
     pass
 
 
+# ★slug に使ってよい形★（2026-07-31・自分で確かめて危険を確認）
+#   `../` を入れると machines/ の外へ書けてしまう
+#   （_page_path("../../evil") → ../evil/index.html）。
+_SLUG_OK = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
+# 空白の並び（バックスラッシュを直接書かない：制御文字に化ける事故が続いたため）
+_WS = "[ " + chr(9) + chr(13) + chr(10) + "]*"
+
+
+def check_slug(slug: str) -> list:
+    """★書く場所を決める前に、slug そのものを確かめる★"""
+    if not isinstance(slug, str) or not _SLUG_OK.match(slug):
+        return [f"slug の形が許せません: {slug!r}"
+                "（小文字英字で始まり、英数字と_のみ・2〜41文字）"]
+    # ★形が合っていても、実際の書き先が machines/ の中か確かめる★（二重の守り）
+    root = os.path.realpath(os.path.join(BASE, "machines"))
+    for path in (os.path.realpath(os.path.join(BASE, "machines", slug, "index.html")),):
+        if os.path.commonpath([root, path]) != root:
+            return [f"書き先が machines/ の外を指しています: {slug!r}"]
+    return []
+
+
 def _page_path(slug: str) -> str:
+    if check_slug(slug):
+        raise PublishError(f"slug が不正です: {slug!r}")
     return os.path.join(BASE, "machines", slug, "index.html")
 
 
@@ -74,7 +98,9 @@ def _existing_pages() -> dict:
 
 def check_before(slug: str, machine: dict, rows: list) -> list:
     """書く前に確かめること。★1つでも引っかかったら書かない★"""
-    ng = []
+    ng = check_slug(slug)
+    if ng:
+        return ng
     if not slug or slug != machine.get("slug"):
         ng.append("slug が機種データと合いません")
     if os.path.isfile(_page_path(slug)):
@@ -90,17 +116,42 @@ def check_before(slug: str, machine: dict, rows: list) -> list:
     return ng
 
 
+def _head(html: str) -> str:
+    """<head> の中だけを取り出す。★コメントは外す★"""
+    m = re.search("(?is)<head[^>]*>(.*?)</head" + _WS + ">", html or "")
+    body = m.group(1) if m else ""
+    return re.sub("(?s)<!--.*?-->", " ", body)
+
+
 def check_page(slug: str, html: str) -> list:
-    """作ったページそのものを確かめる。★テンプレート任せにしない★"""
+    """作ったページそのものを確かめる。★テンプレート任せにしない★
+
+    ★2026-07-31・自分で確かめて直した★
+      以前は本文まるごとの文字列検索だったので、
+      **HTMLコメントに noindex と書いてあるだけで合格**していた。
+      head の中の robots 指定を数えて見る。
+    """
     ng = []
-    if "noindex" not in html:
-        ng.append("noindex が入っていません（先行記事は検索に出しません）")
-    if '<base href="/">' not in html:
-        ng.append('<base href="/"> がありません（ロゴ・ナビが404になります）')
-    if f"https://uchidokoro.com/machines/{slug}/" not in html:
-        ng.append("canonical がこの機種のURLになっていません")
+    head = _head(html)
+    robots = re.findall('(?is)<meta[^>]+name="robots"[^>]*>', head)
+    if len(robots) != 1:
+        ng.append(f"head の robots 指定が {len(robots)} 個です（1個であるべきです）")
+    elif "noindex" not in robots[0].lower():
+        ng.append("robots が noindex になっていません（先行記事は検索に出しません）")
+    bases = re.findall('(?is)<base[^>]+href="/"[^>]*>', head)
+    if len(bases) != 1:
+        ng.append(f'head の <base href="/"> が {len(bases)} 個です'
+                  "（1個でないとロゴ・ナビが404になります）")
+    canon = re.findall('(?is)<link[^>]+rel="canonical"[^>]+href="([^"]+)"', head)
+    want = f"https://uchidokoro.com/machines/{slug}/"
+    if canon != [want]:
+        ng.append(f"canonical が {canon!r} です（{want!r} が1個であるべきです）")
     if "style=" in html:
         ng.append("インラインstyleが入っています")
+    # ★先行記事だと読者に分かる表示があるか★（noindexは非公開化ではない）
+    if "先行記事" not in html:
+        ng.append("先行記事であることの表示がありません"
+                  "（URLを直接開いた読者に伝わりません）")
     return ng
 
 
@@ -214,6 +265,9 @@ def check_after(slug: str, before_pages: dict, rows_before: list) -> list:
     rows = _sj.read_rows(MACHINES)
     if len(rows) != len(rows_before) + 1:
         ng.append(f"machines.json の件数が {len(rows_before)} → {len(rows)} です（+1のはず）")
+    # ★件数だけでは、既存行の書き換えや入れ替わりを見つけられない★
+    elif _sha(json.dumps(rows[:-1], ensure_ascii=False, sort_keys=True)) !=             _sha(json.dumps(rows_before, ensure_ascii=False, sort_keys=True)):
+        ng.append("machines.json の既存の行が書き換わっています（足すだけのはずです）")
     for m in rows:
         if not os.path.isfile(_page_path(m.get("slug", ""))):
             ng.append(f"一覧に出るのにページがありません: {m.get('slug')}")
@@ -341,22 +395,51 @@ def selftest() -> int:
                        {**ok_machine, "publish_state": "LEGACY_UNVERIFIED"}, rows)))
     t("　slugが食い違えば拒否", check_before("aaa", ok_machine, rows))
 
-    good = ('<html><head><base href="/"><meta name="robots" content="noindex,follow">'
+    good = ('<html><head><base href="/">'
+            '<meta name="robots" content="noindex,follow">'
             '<link rel="canonical" href="https://uchidokoro.com/machines/zzz_test/">'
-            "</head><body>x</body></html>")
+            "</head><body>⚠ 先行記事（解析待ち）</body></html>")
     t("★作ったページの中身を必ず確かめる★", check_page("zzz_test", good) == [])
-    t("★★noindex が無ければ公開しない★★（先行記事を検索に出さない）",
-      any("noindex" in x for x in
-          check_page("zzz_test", good.replace("noindex,follow", "index,follow"))))
+    t("★★noindex をコメントに書いただけでは通さない★★（実際に通っていた）",
+      check_page("zzz_test",
+                 good.replace('content="noindex,follow"', 'content="index,follow"')
+                 + "<!-- noindex -->"))
+    t("★★robots が2つあれば止める★★（競合する指定を見逃さない）",
+      any("robots" in x for x in check_page(
+          "zzz_test", good.replace("</head>",
+                                   '<meta name="robots" content="index"></head>'))))
     t("　base href が無ければ公開しない",
-      any("base href" in x for x in check_page("zzz_test",
-                                               good.replace('<base href="/">', ""))))
+      any("base" in x for x in check_page("zzz_test",
+                                          good.replace('<base href="/">', ""))))
     t("　canonical が別機種なら公開しない",
       any("canonical" in x for x in
           check_page("zzz_test", good.replace("zzz_test/", "other/"))))
     t("　インラインstyleがあれば公開しない",
       any("style" in x for x in check_page("zzz_test",
                                            good.replace("<body>", '<body style="x">'))))
+    t("★★先行記事だと読者に分かる表示が無ければ公開しない★★"
+      "（noindexは非公開化ではない）",
+      any("先行記事" in x for x in
+          check_page("zzz_test", good.replace("⚠ 先行記事（解析待ち）", "ふつうの記事"))))
+
+    # ★slug そのものを確かめる★（2026-07-31・machines/ の外へ書けた）
+    t("★★slug に ../ が入っていたら受け付けない★★（machines/ の外へ書けた）",
+      check_slug("../../evil"))
+    t("　変な文字も受け付けない",
+      check_slug("A B") and check_slug("") and check_slug("1abc"))
+    t("　普通のslugは通る", check_slug("lbinko") == [])
+
+    # ★machines.json の既存行が書き換わっていないか★
+    _rows_before = [{"slug": "a", "name": "あ"}, {"slug": "b", "name": "い"}]
+    _now = _rows_before + [{"slug": "c", "name": "う"}]
+    t("　足すだけなら通る",
+      _sha(json.dumps(_now[:-1], ensure_ascii=False, sort_keys=True))
+      == _sha(json.dumps(_rows_before, ensure_ascii=False, sort_keys=True)))
+    _tampered = [{"slug": "a", "name": "書き換え"}, {"slug": "b", "name": "い"},
+                 {"slug": "c", "name": "う"}]
+    t("★★件数が合っていても既存行が書き換わっていたら気づく★★",
+      _sha(json.dumps(_tampered[:-1], ensure_ascii=False, sort_keys=True))
+      != _sha(json.dumps(_rows_before, ensure_ascii=False, sort_keys=True)))
 
     pages = _existing_pages()
     t("★既存ページの指紋を取れる（1枚も変えていないことを確かめるため）★",
@@ -369,17 +452,32 @@ def selftest() -> int:
       allowed_paths("zzz") == {"machines/zzz/index.html",
                                "assets/data/machine-details/zzz.json",
                                "assets/data/machines.json"})
-    t("★★許していないファイルの変更を見つける★★（sitemapやCSSを触っていないか）",
-      check_no_stray_changes("zzz", []) == [] or
-      all("許していない" in x for x in check_no_stray_changes("zzz", [])))
+    _fake_changed = ["assets/css/practical.css", "machines/zzz/index.html",
+                     "assets/data/machines.json"]
+    _real_changed = changed_paths
+    try:
+        globals()["changed_paths"] = lambda: _fake_changed
+        _stray = check_no_stray_changes("zzz", [])
+        t("★★許していないファイルの変更を見つける★★（CSSを触っていたら止める）",
+          len(_stray) == 1 and "practical.css" in _stray[0])
+        t("　許した3つは見逃さない（＝誤検知しない）",
+          not [x for x in _stray if "machines.json" in x or "index.html" in x])
+        globals()["changed_paths"] = lambda: ["assets/css/practical.css"]
+        t("　もともと変更中だったものは責めない",
+          check_no_stray_changes("zzz", ["assets/css/practical.css"]) == [])
+    finally:
+        globals()["changed_paths"] = _real_changed
     with open(SITEMAP, encoding="utf-8") as _f:
         _sm = _f.read()
     t("　sitemapが変わっていなければ通る", check_sitemap_kept(_sm) == [])
     t("★★sitemapが縮んだら止める★★",
       any("減りました" in x for x in check_sitemap_kept(_sm + "<url>x</url>")))
-    _served = check_served(rows[0]["slug"])
-    t("★★実際にHTTPで引いて確かめられる★★（ファイルがあるだけでは足りない）",
-      isinstance(_served, list))
+    t("★★実際にHTTPで引いて200とnoindexを確かめられる★★"
+      "（ファイルがあるだけでは足りない）",
+      check_served(next(m["slug"] for m in rows
+                        if m.get("status") == "preview")) == [])
+    t("　存在しない機種なら引けないと分かる",
+      any("引けません" in x for x in check_served("zzz_nothing_here")))
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
