@@ -237,6 +237,11 @@ def selftest() -> int:
         t("　2件そろえば型式名と材料を集める",
           g2["model_code"] == "C1" and g2["material"] is not None)
 
+        # ★公式ページは本物を想定して差し替える★
+        #   （開けなければ止まる作りなので、通る場合の試験には中身が要る）
+        real_get = _nw._get
+        _nw._get = lambda u, timeout=20: "<title>X</title>"
+
         r = run_one("X", "https://m.example/products/slot/zzz/", "m", "2026-09")
         t("★既定では書き込まない（dry-run）★", r["wrote"] == [])
         t("　組み立てた結果を返す（中身を見てから書ける）",
@@ -285,6 +290,13 @@ def selftest() -> int:
             _nw._get = lambda u, timeout=20: "<title>Lすーぱぁびん娘|BELLCO</title>"
             t("★★公式ページを開けないときは記事を作らない★★（機種を確かめられていない）",
               _blocking(["公式ページを取得できません: 取得できません（URLError）"]))
+            _nw._get = lambda u, timeout=20: (
+                _ for _ in ()).throw(RuntimeError("開けない"))
+            r5 = run_one("X", "https://m.example/products/slot/zzz/", "m", "2026-09")
+            t("　実際に開けない公式URLでは組み立てまで進まない",
+              "preview" not in r5
+              and any("公式ページを取得できません" in x for x in r5["blocked"]))
+            _nw._get = lambda u, timeout=20: "<title>Lすーぱぁびん娘|BELLCO</title>"
             t("　同じ機種なら通る",
               verify_official("Lすーぱぁびん娘",
                               "https://m.example/products/slot/lbinko/") == [])
