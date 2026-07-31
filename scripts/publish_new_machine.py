@@ -62,6 +62,41 @@ _SLUG_OK = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
 _WS = "[ " + chr(9) + chr(13) + chr(10) + "]*"
 
 
+LOCK = os.path.join(BASE, ".publish.lock")
+
+
+class _OnlyOne:
+    """★同時に2つ公開しない★（2026-07-31・Codex指摘4）
+
+    2機種を同時に公開すると、どちらも同じ古い machines.json を読み、
+    後から置き換えた方が先の追加を消してしまう。
+    ロックファイルを「排他作成」で作れた側だけが進む。
+    """
+
+    def __init__(self, path=LOCK):
+        self.path = path
+        self.fd = None
+
+    def __enter__(self):
+        try:
+            self.fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(self.fd, str(os.getpid()).encode())
+        except FileExistsError:
+            raise PublishError(
+                "いま別の公開処理が動いています（同時に2つは公開しません）。"
+                f"止まったままなら {self.path} を消してください")
+        return self
+
+    def __exit__(self, *exc):
+        if self.fd is not None:
+            os.close(self.fd)
+        try:
+            os.remove(self.path)
+        except OSError:
+            pass
+        return False
+
+
 def check_slug(slug: str) -> list:
     """★書く場所を決める前に、slug そのものを確かめる★"""
     if not isinstance(slug, str) or not _SLUG_OK.match(slug):
@@ -458,6 +493,14 @@ def render(slug: str, machine: dict, detail: dict) -> str:
 
 
 def publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> dict:
+    """新台1件を公開する（★同時に2つは公開しない★）。"""
+    if not apply_it:
+        return _publish(slug, machine, detail, apply_it=False)
+    with _OnlyOne():
+        return _publish(slug, machine, detail, apply_it=True)
+
+
+def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> dict:
     """新台1件を公開する。★ページを先に置き、最後に一覧へ足す★"""
     out = {"slug": slug, "problems": [], "wrote": [], "html_bytes": 0}
     rows = _sj.read_rows(MACHINES)
@@ -474,6 +517,8 @@ def publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> d
         return out
 
     before_pages = _existing_pages()
+    with open(MACHINES, "rb") as f:
+        machines_before = f.read()          # ★戻すときの正本★
     before_snap = snapshot(changed_paths()
                            + ["sitemap.xml", "index.html", "machine.html",
                               "assets/css/practical.css", "meta-auto.js"])
@@ -559,12 +604,38 @@ def publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> d
         _cleanup()
         raise PublishError(f"一覧に足せませんでした（作ったものは消しました）: {e}")
 
-    # ④ 一覧に足したあとの最終確認（ここで出たら人が直す＝台帳へ）
-    out["problems"] += check_after(slug, before_pages, rows[:-1])
+    # ④ 一覧に足したあとの最終確認
+    late2 = check_after(slug, before_pages, rows[:-1])
+    if late2:
+        # ★戻せるときだけ戻す★（2026-07-31・Codexの助言）
+        #   いま置いてある中身が「自分が書いたもの」と同じ時にだけ戻す。
+        #   違っていれば誰かが触っているので、上書きせず知らせる。
+        mine = _sha(json.dumps(rows, ensure_ascii=False, indent=1) + chr(10))
+        with open(MACHINES, encoding="utf-8") as f:
+            now_text = f.read()
+        if _sha(now_text) == mine:
+            with open(MACHINES, "wb") as f:
+                f.write(machines_before)
+            _cleanup()
+            out["wrote"] = []
+            late2.append("★一覧から外し、置いたものを消して元に戻しました★")
+        else:
+            late2.append("★別の書き込みが入っているため、自動では戻しませんでした★"
+                         "（人が確かめてください）")
+        out["problems"] += late2
+        return out
     return out
 
 
 # ---------------------------------------------------------------- selftest
+
+def _raises(fn) -> bool:
+    try:
+        fn()
+    except Exception:                        # noqa: BLE001
+        return True
+    return False
+
 
 def selftest() -> int:
     results = []
@@ -693,6 +764,14 @@ def selftest() -> int:
     t("★★hidden=\"\" で隠した先行記事は認めない★★（正規表現では見逃していた）",
       any("先行記事" in x for x in check_page("zzz_test", good.replace(
           "⚠ 先行記事（解析待ち）", '<div hidden="">先行記事</div>ふつうの記事'))))
+
+    # ★同時に2つ公開しない★（Codex指摘4）
+    with _OnlyOne(os.path.join(BASE, ".publish.lock.test")) as _one:
+        t("★★ロックを持っている間は、もう一方が入れない★★",
+          _raises(lambda: _OnlyOne(
+              os.path.join(BASE, ".publish.lock.test")).__enter__()))
+    t("　抜けたらロックは消える",
+      not os.path.exists(os.path.join(BASE, ".publish.lock.test")))
 
     # ★sitemap は1文字も変えない★
     with open(SITEMAP, encoding="utf-8") as _f2:
