@@ -257,6 +257,56 @@ def _save_seen(data: dict) -> None:
             os.remove(tmp)
 
 
+def _get_rendered(url: str) -> tuple:
+    """★ブラウザで描画してから読む★（機種リンクがJavaScriptで作られる社向け）
+
+    ★「ブラウザが起動できた」だけでは成功と見なさない★（Codex指摘・2026-07-31）
+      JavaScriptエラー・通信遮断・Cookie画面・遅延読み込み未完了でも、
+      リンク0件のまま正常終了しうる。そこで健全性を一緒に返し、
+      呼び出し側が「読めなかった」と「読めたが新台なし」を区別できるようにする。
+
+    返すもの: (html, health)
+      health = {"status", "final_url", "js_errors", "problem"}
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception as e:                       # noqa: BLE001
+        raise WatchError(f"描画取得を使えません（Playwrightが要ります）: {e}")
+    want_host = urllib.parse.urlparse(url).netloc.lower()
+    health = {"status": None, "final_url": None, "js_errors": [], "problem": None,
+              "idle_timeout": False}
+    try:
+        with sync_playwright() as pw:
+            br = pw.chromium.launch()
+            try:
+                page = br.new_page()
+                page.on("pageerror", lambda e: health["js_errors"].append(str(e)[:120]))
+                resp = page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                health["status"] = resp.status if resp else None
+                # ★通信が落ち着くまで待つ。落ち着かなくても記録して先へ進む★
+                #   networkidle を必須にすると、広告や計測が鳴り続ける社で
+                #   毎回タイムアウトして「読めない」になる（サミーで実際に発生）。
+                #   代わりに「待ち切れなかった」ことを健全性として残し、
+                #   件数の下限・残存率の検査で取りこぼしを見つける。
+                try:
+                    page.wait_for_load_state("networkidle", timeout=15000)
+                except Exception:               # noqa: BLE001
+                    health["idle_timeout"] = True
+                page.wait_for_timeout(3000)
+                health["final_url"] = page.url
+                html = page.content()
+            finally:
+                br.close()
+    except Exception as e:                       # noqa: BLE001
+        raise WatchError(f"描画できません: {type(e).__name__}: {e}")
+    if health["status"] != 200:
+        health["problem"] = f"HTTP {health['status']} が返りました"
+    elif urllib.parse.urlparse(health["final_url"]).netloc.lower() != want_host:
+        # ★別のドメインへ転送されていたら、それは同じ一覧ではない★
+        health["problem"] = f"別のドメインへ転送されました（{health['final_url'][:80]}）"
+    return html, health
+
+
 # ★一覧が丸ごと別物に差し替わったことを見抜くための条件★
 #   （2026-07-31・Codexと相談し、自分で再現してから追加）
 #   件数の下限だけでは、**同じ件数の別の一覧**を掴んだときに素通りする。
@@ -276,12 +326,23 @@ def scan_maker(maker_id: str, conf: dict, seen: dict, record: bool = True) -> di
     out = {"maker": maker_id, "name": conf.get("name"), "new": [], "problem": None,
            "total": 0, "first_time": maker_id not in seen["makers"], "state": "OK",
            "retention": None}
+    render = str(conf.get("fetch") or "static") == "render"
+    health = {}
     try:
-        html = _get(conf["list_url"])
+        if render:
+            html, health = _get_rendered(conf["list_url"])
+            if health.get("problem"):
+                out["problem"] = health["problem"]
+                out["state"] = "FETCH_FAILED"
+                return out
+        else:
+            html = _get(conf["list_url"])
     except WatchError as e:
         out["problem"] = str(e)
         out["state"] = "FETCH_FAILED"
         return out
+    out["js_errors"] = len(health.get("js_errors") or [])
+    out["idle_timeout"] = bool(health.get("idle_timeout"))
 
     urls = product_urls(html, conf["list_url"], conf["link_prefix"])
     out["total"] = len(urls)
@@ -289,7 +350,9 @@ def scan_maker(maker_id: str, conf: dict, seen: dict, record: bool = True) -> di
     if len(urls) < least:
         # ★ここが黙って0件になる事故を止める唯一の砦★
         out["problem"] = (f"一覧から {len(urls)} 件しか取れません（最低 {least} 件のはず）。"
-                          f"ページの作りが変わった可能性があるので『新台なし』とは扱いません")
+                          f"ページの作りが変わった可能性があるので『新台なし』とは扱いません"
+                          + (f"／描画中にJSエラー {out['js_errors']} 件"
+                             if out.get("js_errors") else ""))
         out["state"] = "PARSE_SUSPECT"
         return out
 

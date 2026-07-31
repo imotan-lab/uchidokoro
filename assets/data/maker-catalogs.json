@@ -21,9 +21,10 @@
    "name": "ユニバーサル",
    "list_url": "https://www.universal-777.com/product/slot/",
    "link_prefix": "https://www.universal-777.com/product/slot/",
-   "min_expected": 3,
-   "status": "NEEDS_SETUP",
-   "_why": "一覧ページの機種リンクがJavaScriptで作られており、HTMLからは取れない（2026-07-31確認）。別の入口（サイトマップ等）を探すまで対象外。★対象外なので新台を取りこぼすが、誤った機種を作るよりは安全★"
+   "min_expected": 15,
+   "status": "ACTIVE",
+   "fetch": "render",
+   "_checked": "2026-07-31 描画後に20件取得。JSエラーは出るがリンクは揃う（健全性として件数を記録）"
   },
   "enterrise": {
    "name": "エンターライズ",
@@ -40,6 +41,31 @@
    "min_expected": 10,
    "status": "NEEDS_SETUP",
    "_why": "一覧の直下に年別アーカイブ（2009・2010…）が機種と同じ形で並び、機種と区別できない（2026-07-31確認）。年を除く仕組みを入れるまで対象外"
+  },
+  "daitogiken": {
+   "name": "大都技研",
+   "list_url": "https://www.daitogiken.com/products/slot/",
+   "link_prefix": "https://www.daitogiken.com/contents/product/slot/",
+   "min_expected": 40,
+   "status": "ACTIVE",
+   "_checked": "2026-07-31 静的HTMLで49件取得・個別ページのタイトルが機種名であることを確認（一覧と機種ページでURLの階層が違う）"
+  },
+  "sankyo": {
+   "name": "SANKYO",
+   "list_url": "https://www.sankyo-fever.co.jp/products/slot/",
+   "link_prefix": "https://www.sankyo-fever.co.jp/products/slot/",
+   "min_expected": 5,
+   "status": "BLOCKED",
+   "_why": "★bot対策(Incapsula)が入っており、機械からは中身を取得できない（2026-07-31確認）。回避はしない（規約・検知回避に当たるため）。対象外として明示する★"
+  },
+  "sammy": {
+   "name": "サミー",
+   "list_url": "https://www.sammy.co.jp/japanese/products/pachislot/",
+   "link_prefix": "https://www.sammy.co.jp/japanese/product/pachislot/",
+   "min_expected": 30,
+   "status": "ACTIVE",
+   "fetch": "render",
+   "_checked": "2026-07-31 描画後に機種リンク取得（一覧は products・機種ページは product と階層が違う）。networkidle は落ち着かないため待ち切れなくても記録して進む"
   }
  }
 }
