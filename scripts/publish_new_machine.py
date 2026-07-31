@@ -864,6 +864,7 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
     page = _page_path(slug)
     dp = os.path.join(DETAILS, f"{slug}.json")
     made = []          # ★この処理が実際に作ったものだけ★（既存を消さないため）
+    machines_replaced = {}   # 一覧を置き換えたか（戻すため・置き換える前に立てる）
 
     def _cleanup():
         """★自分が作ったものだけ片付ける★（2026-07-31・Codex指摘3を再現して直した）
@@ -891,18 +892,24 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
         # ① 記事データとページを置く（★この時点では一覧から辿れない★）
         #    "x" で開く＝既にあれば作らずに例外。存在確認との隙間も無くす。
         detail_text = json.dumps(detail, ensure_ascii=False, indent=1) + chr(10)
+        # ★やる前に登録する★（2026-07-31・Codex指摘を再現して直した）
+        #   以前は「置き換えが済んでから登録」だったので、
+        #   os.replace が成功した直後に Ctrl+C が入ると、
+        #   **できあがったファイルが片付けの対象にならず残った**（実際に再現）。
+        #   write_atomic は一時ファイルを完成させてから置き換えるので、
+        #   最終名に「書きかけ」は現れない。だから先に登録して安全。
         if os.path.exists(dp):
             raise FileExistsError(dp)
+        made.append(("file", dp, _sha(detail_text)))
         write_atomic(dp, detail_text, new_only=True)
-        made.append(("file", dp, _sha(detail_text)))   # ★書けてから登録★
         d = os.path.dirname(page)
         if not os.path.isdir(d):
-            os.makedirs(d)
             made.append(("dir", d, None))
+            os.makedirs(d)
         if os.path.exists(page):
             raise FileExistsError(page)
-        write_atomic(page, html, new_only=True)
         made.append(("file", page, _sha(html)))
+        write_atomic(page, html, new_only=True)
     except FileExistsError as e:
         _cleanup()
         raise PublishError(f"同じ名前のファイルが既にあります（触っていません）: {e}")
@@ -957,6 +964,9 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
             out["problems"].append("書いている間に同じ機種が一覧へ入りました（やり直してください）")
             return out
         rows.append(machine)
+        # ★一覧を置き換える前に「戻し方」を登録する★
+        #   （2026-07-31・Codex指摘を再現：置き換え直後に中断すると戻らなかった）
+        machines_replaced["yes"] = True
         write_atomic(MACHINES, json.dumps(rows, ensure_ascii=False, indent=1) + chr(10))
         out["wrote"] = [dp, page, MACHINES]
         # ★機種数の表記も同時に直す★（ここまで来たら一緒に整える）
@@ -991,21 +1001,36 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
                     os.fsync(f.fileno())
                 tmps.append((tmp2, full))
             for tmp2, full in tmps:                      # ②一気に置き換える
+                swapped.append(full)                     # ★やる前に登録★
                 os.replace(tmp2, full)
-                swapped.append(full)                     # ★実際に置き換えた分だけ★
                 out["wrote"].append(full)
         except BaseException as e:        # noqa: BLE001  ★Ctrl+Cでも戻す★
             for tmp2, _f in tmps:
                 if os.path.exists(tmp2):
                     os.remove(tmp2)
-            for full in swapped:          # ★置き換えたものだけ、一時ファイル経由で戻す★
+            # ★戻す途中で失敗しても、残りを戻し続ける★（Codexの助言）
+            failed = []
+            for full in swapped:
                 text0 = hub_backup.get(full)
-                if text0 is not None:
+                if text0 is None:
+                    continue
+                try:
                     write_atomic(full, text0)
+                except Exception as e2:       # noqa: BLE001
+                    failed.append(f"{os.path.basename(full)}: {e2}")
             out["problems"].append(f"一覧・ランキングを作り直せませんでした（元に戻しました）: {e}")
+            if failed:
+                out["problems"].append(
+                    "★戻せなかったファイルがあります（人が確かめてください）: "
+                    + " / ".join(failed) + "★")
             if isinstance(e, KeyboardInterrupt):
                 raise
     except BaseException as e:            # noqa: BLE001  ★Ctrl+Cでも戻す★
+        if machines_replaced.get("yes"):
+            try:
+                write_atomic(MACHINES, machines_before.decode("utf-8"))
+            except Exception:             # noqa: BLE001
+                out["problems"].append("★一覧を戻せませんでした（人が確かめてください）★")
         _cleanup()
         if isinstance(e, KeyboardInterrupt):
             raise
@@ -1381,7 +1406,9 @@ def selftest() -> int:
             for rel in list(HUB_FILES) + ["assets/data/machines.json"]:
                 full = os.path.join(BASE, rel)
                 with open(full, encoding="utf-8") as f:
-                    out[rel] = _sha(f.read())
+                    # ★改行コードの違いは「戻っていない」と数えない★
+                    #   巻き戻しは書き直すので改行がそろう。中身が同じなら戻っている。
+                    out[rel] = _sha(f.read().replace(chr(13) + chr(10), chr(10)))
             return out
 
         _slug4 = "zzz_fault_test"
@@ -1426,6 +1453,24 @@ def selftest() -> int:
           _try_with("check_after", lambda *a, **k: ["わざとNG"]))
         t("★★Ctrl+C（中断）でも、完全に元のまま★★",
           _try_with("build_hubs", _interrupt))
+        # ★置き換えた直後に中断される狭い窓★（Codex指摘・実際に再現した）
+        _real_replace = os.replace
+        for _nth in (1, 2, 3, 4, 5):
+            _cnt = {"i": 0}
+
+            def _replace_then_stop(src, dst, _n=_nth, _c=_cnt):
+                _real_replace(src, dst)
+                _c["i"] += 1
+                if _c["i"] == _n:
+                    raise KeyboardInterrupt()
+
+            os.replace = _replace_then_stop
+            try:
+                _ok = _try_with("check_served", _real["check_served"])
+            finally:
+                os.replace = _real_replace
+            t(f"★★{_nth}回目の置き換え直後に中断されても元のまま★★",
+              _ok)
         t("　中途半端な一時ファイルを残さない",
           not [x for x in os.listdir(BASE) if ".tmp." in x or ".new." in x])
     finally:
