@@ -41,6 +41,7 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
 
 import build_machine_pages as _bmp      # noqa: E402
+import html_check as _hc                # noqa: E402
 import safe_json as _sj                 # noqa: E402
 
 MACHINES = os.path.join(BASE, "assets", "data", "machines.json")
@@ -116,76 +117,39 @@ def check_before(slug: str, machine: dict, rows: list) -> list:
     return ng
 
 
-def _head(html: str) -> str:
-    """<head> の中だけを取り出す。★コメントは外す★"""
-    m = re.search("(?is)<head[^>]*>(.*?)</head" + _WS + ">", html or "")
-    body = m.group(1) if m else ""
-    return re.sub("(?s)<!--.*?-->", " ", body)
-
-
-def _visible_body(html: str) -> str:
-    """読者に見える本文だけ。★コメント・script・非表示は外す★
-
-    ★2026-07-31・Codex指摘を再現して作った★
-      以前は本文まるごとの文字列検索だったので、
-      `<!-- 先行記事 -->` と書いてあるだけで合格していた。
-    """
-    m = re.search("(?is)<body[^>]*>(.*?)</body" + _WS + ">", html or "")
-    body = m.group(1) if m else (html or "")
-    body = re.sub("(?s)<!--.*?-->", " ", body)
-    for tag in ("script", "style", "template", "noscript"):
-        body = re.sub("(?is)<" + tag + "[^>]*>.*?</" + tag + _WS + ">", " ", body)
-    # 隠されている要素は「表示されている」と見なさない
-    #   hidden 属性 / aria-hidden="true" / display:none / visibility:hidden
-    for pat in ("[ ]hidden[ >]", 'aria-hidden="true"',
-                "display[ ]*:[ ]*none", "visibility[ ]*:[ ]*hidden"):
-        body = re.sub("(?is)<([a-z]+)[^>]*" + pat + "[^>]*>.*?</" + chr(92) + "1"
-                      + _WS + ">", " ", body)
-    return re.sub("(?s)<[^>]+>", " ", body)
-
-
-def _meta_content(tag: str) -> set:
-    """metaタグの content= の中身を、区切りでほどいて返す。"""
-    m = re.search('(?is)content="([^"]*)"', tag or "")
-    if not m:
-        return set()
-    return {x.strip().lower() for x in re.split("[,; ]+", m.group(1)) if x.strip()}
-
-
 def check_page(slug: str, html: str) -> list:
     """作ったページそのものを確かめる。★テンプレート任せにしない★
 
-    ★2026-07-31・Codexの指摘を再現して2回直した★
-      1回目: 本文まるごとの文字列検索だったので、
-             HTMLコメントに noindex と書いてあるだけで合格していた。
-      2回目: head の中は見るようにしたが、タグ全体に "noindex" が
-             含まれるかで見ていたため、
-             `<meta name="robots" content="index" data-note="noindex">`
-             が合格していた（実際に再現）。content の中身で見る。
+    ★2026-07-31・Codexの指摘を再現して3回直した★
+      1回目: 本文まるごとの文字列検索 → コメントの noindex で合格していた
+      2回目: head の中は見るようにしたが、タグ全体に "noindex" があるかで
+             見ていたため `content="index" data-note="noindex"` が合格した
+      3回目: 正規表現をやめた。`<div hidden="">` を見逃し、
+             `<meta name='robots' content='index'>` を数え落としていた。
+             → **HTMLを実際に解析して属性を正規化してから**見る。
     """
     ng = []
-    head = _head(html)
-    robots = re.findall('(?is)<meta[^>]+name="robots"[^>]*>', head)
+    doc = _hc.parse(html)
+    robots = _hc.meta_values(doc, "robots")
     if len(robots) != 1:
-        ng.append(f"head の robots 指定が {len(robots)} 個です（1個であるべきです）")
+        ng.append(f"robots 指定が {len(robots)} 個です（1個であるべきです）")
     else:
-        vals = _meta_content(robots[0])
+        vals = robots[0]
         if "noindex" not in vals:
             ng.append(f"robots が noindex ではありません（{sorted(vals)}）")
         if "index" in vals:
             ng.append("robots に index と noindex が両方あります")
-    bases = re.findall('(?is)<base[^>]+href="/"[^>]*>', head)
-    if len(bases) != 1:
-        ng.append(f'head の <base href="/"> が {len(bases)} 個です'
+    if doc.bases != ["/"]:
+        ng.append(f'<base href="/"> が {doc.bases!r} です'
                   "（1個でないとロゴ・ナビが404になります）")
-    canon = re.findall('(?is)<link[^>]+rel="canonical"[^>]+href="([^"]+)"', head)
+    canon = _hc.link_hrefs(doc, "canonical")
     want = f"https://uchidokoro.com/machines/{slug}/"
     if canon != [want]:
         ng.append(f"canonical が {canon!r} です（{want!r} が1個であるべきです）")
     if "style=" in html:
         ng.append("インラインstyleが入っています")
     # ★先行記事だと読者に分かる表示があるか★（noindexは非公開化ではない）
-    if "先行記事" not in _visible_body(html):
+    if "先行記事" not in " ".join(doc.visible):
         ng.append("先行記事であることが読者に見える形で書かれていません")
     return ng
 
@@ -445,8 +409,9 @@ def check_served(slug: str) -> list:
             if r.status != 200:
                 ng.append(f"公開したページが HTTP {r.status} を返します")
             body = r.read(400000).decode("utf-8", "replace")
-        if "noindex" not in body:
-            ng.append("配信されたHTMLに noindex がありません")
+        vals = _hc.meta_values(_hc.parse(body), "robots")
+        if len(vals) != 1 or "noindex" not in vals[0]:
+            ng.append(f"配信されたHTMLの robots が {vals!r} です（noindex 1個のはず）")
     except Exception as e:                # noqa: BLE001
         ng.append(f"公開したページを引けません: {type(e).__name__}: {e}")
     finally:
@@ -722,11 +687,12 @@ def selftest() -> int:
                        "sections": [{"title": "x", "body": "ひとつの文字列"}]})))
 
     # ★見えない要素の判定★（Codex指摘5）
-    for _hide in ('aria-hidden="true"', "hidden ",
-                  'class="x" style="display:none"'):
-        t(f"　{_hide[:18]} で隠された文字は「見える」と扱わない",
-          "先行記事" not in _visible_body(
-              "<body><div " + _hide + ">先行記事</div>ふつうの本文</body>"))
+    t("★★引用符が違う robots も数える★★（正規表現では見逃していた）",
+      any("2 個" in x for x in check_page("zzz_test", good.replace(
+          "</head>", "<meta name='robots' content='index'></head>"))))
+    t("★★hidden=\"\" で隠した先行記事は認めない★★（正規表現では見逃していた）",
+      any("先行記事" in x for x in check_page("zzz_test", good.replace(
+          "⚠ 先行記事（解析待ち）", '<div hidden="">先行記事</div>ふつうの記事'))))
 
     # ★sitemap は1文字も変えない★
     with open(SITEMAP, encoding="utf-8") as _f2:
