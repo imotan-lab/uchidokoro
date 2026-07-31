@@ -229,8 +229,31 @@ def build_detail(slug, name, release, material) -> dict:
     }
 
 
-def apply(slug, machine, detail) -> list:
+def can_publish_page(slug: str):
+    """★ページを作れる見込みがあるか★（2026-07-31・実際の危険を確認して追加）
+
+    `index.html` は machines.json の全機種に `/machines/{slug}/` へリンクを張る。
+    データだけ書いてページを作らないと、**本番に404リンクができる**。
+
+    いまの作りでは新台のページを作る経路が無い:
+      - 通常経路は「公開用のHTMLはここからは作れません」と拒否
+      - `--legacy` は既存ページの修理専用で、無い slug は拒否
+    そこで**ページを作れないならデータも書かない**（片方だけ残さない）。
+    """
+    page = os.path.join(BASE, "machines", slug, "index.html")
+    if os.path.isfile(page):
+        return None
+    return ("ページを作る経路がありません。データだけ書くと、"
+            "トップページから404になるリンクができます"
+            "（machines/{s}/index.html が要ります）".format(s=slug))
+
+
+def apply(slug, machine, detail, allow_no_page: bool = False) -> list:
     """書き込む。★既にある機種は絶対に上書きしない★"""
+    if not allow_no_page:
+        why = can_publish_page(slug)
+        if why:
+            raise BuildError(why)
     rows = _sj.read_rows(MACHINES)
     if any(m.get("slug") == slug for m in rows):
         raise BuildError(f"{slug} はすでに machines.json にあります（上書きしません）")
@@ -353,7 +376,7 @@ def selftest() -> int:
             json.dump([{"slug": "aaa", "name": "既存機"}], f, ensure_ascii=False)
         mch = {"slug": "zzz", "name": "テスト機", "status": "preview"}
         det = {"slug": "zzz", "sections": []}
-        wrote = apply("zzz", mch, det)
+        wrote = apply("zzz", mch, det, allow_no_page=True)
         rows = json.loads(open(MACHINES, encoding="utf-8").read())
         t("★★実際に2つのファイルへ書ける★★（本番では一度も通していなかった）",
           len(wrote) == 2 and len(rows) == 2 and rows[-1]["slug"] == "zzz"
@@ -375,7 +398,8 @@ def selftest() -> int:
         before = open(MACHINES, encoding="utf-8").read()
         os.replace = _flaky
         try:
-            apply("yyy", {"slug": "yyy", "name": "テスト機2"}, {"slug": "yyy"})
+            apply("yyy", {"slug": "yyy", "name": "テスト機2"}, {"slug": "yyy"},
+                  allow_no_page=True)
             ok_rollback = False
         except Exception:                # noqa: BLE001
             ok_rollback = True
@@ -387,6 +411,11 @@ def selftest() -> int:
     finally:
         MACHINES, DETAILS = real_m, real_d
         shutil.rmtree(tmpdir, ignore_errors=True)
+
+    t("★★ページを作れないならデータも書かない★★"
+      "（一覧に出るのにページが無いと本番が404になる・2026-07-31に確認）",
+      can_publish_page("そんな機種はありません") is not None)
+    t("　ページがある機種なら止めない", can_publish_page("hokuto") is None)
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")

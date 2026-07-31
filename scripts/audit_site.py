@@ -1043,6 +1043,25 @@ def check_31_codex_report(machines: list) -> list[str]:
             f" → 実コードを見せて報告し、`python scripts/codex_reported.py` を実行してください"]
 
 
+def check_32_dangling_machine_page(machines: list) -> list[str]:
+    """★一覧に出るのにページが無い機種★（2026-07-31・新台追加タスクで判明）
+
+    `index.html` は machines.json の全機種に `/machines/{slug}/` へリンクを張る。
+    そのため machines.json に足しただけでページを作らないと、
+    **本番に404リンクができる**。新台追加が `--apply` でデータだけ書ける以上、
+    ここで機械的に止める。
+    """
+    ng = []
+    for m in machines:
+        slug = m.get("slug")
+        if not slug:
+            continue
+        if not (BASE / "machines" / slug / "index.html").is_file():
+            ng.append(f"{slug}: 一覧に載っているのに machines/{slug}/index.html がありません"
+                      f"（トップページから404になります）")
+    return ng
+
+
 CHECKS = [
     ("1_インラインstyle", check_1_inline_style),
     ("2_サブパス残骸", check_2_old_subpath),
@@ -1075,6 +1094,7 @@ CHECKS = [
     ("29_制御文字混入", check_29_control_chars),
     ("30_記事内の自己矛盾", check_30_surface_conflicts),
     ("31_Codexへの未報告", check_31_codex_report),
+    ("32_ページ欠けの機種", check_32_dangling_machine_page),
 ]
 
 
