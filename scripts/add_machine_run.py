@@ -114,6 +114,9 @@ def gather(name: str) -> dict:
     got["material"]["at_specs"] = _at.compare(
         [_at.read_page(u, name) for u in got["urls"]])
     # ★CZは名前ごとに★（どのCZの期待度か分からないと誤情報）
+    for lb in (got["material"].get("setting_labels_unconfirmed") or []):
+        got["problems"].append(
+            f"設定{lb}: 出典に出てくるが値が確認できていません（設定の段数を誤る恐れ）")
     got["material"]["czs"] = _cz.compare([_cz.read_page(u, name) for u in got["urls"]])
     for nt in got["material"]["czs"]["need_third"]:
         got["problems"].append(f"CZ「{nt['name']}」: {nt['why']}")

@@ -173,6 +173,20 @@ def settings_may_be_non_contiguous(rules: dict | None = None) -> bool:
 
 
 _SETTING_RE = re.compile(r"^設定\s*([1-6])$")
+# ★数字でない設定★（設定L・設定V など）。
+#   過去に「設定3なし」と誤記した事故があり、**設定の段数を取り違えると誤情報**になる。
+#   値が採れなくても「そういう設定がある」ことは掴んでおき、黙って落とさない。
+_SETTING_ANY_RE = re.compile("^設定" + chr(92) + "s*([0-9A-Za-z]{1,2})$")
+
+
+def setting_labels(lines: list) -> list:
+    """表に出てくる設定の名前をすべて拾う（値が採れるかは問わない）。"""
+    out = []
+    for line in lines:
+        m = _SETTING_ANY_RE.match(str(line).strip())
+        if m and m.group(1) not in out:
+            out.append(m.group(1))
+    return out
 
 
 def _lines(html: str) -> list:
@@ -240,6 +254,7 @@ def read_page(url: str, official_name: str) -> dict:
             v = single_value(lines, spec["labels"], spec["kind"])
         if v:
             out["fields"][key] = v
+    out["setting_labels"] = setting_labels(lines)
     out["ok"] = True
     out["reason"] = "OK"
     return out
@@ -269,6 +284,14 @@ def compare(pages: list) -> dict:
     need_third: dict = {}
     thin: dict = {}
     usable = [p for p in pages if p["ok"] and p["fields"]]
+    # ★出典に出てくる設定の名前をすべて集める★
+    #   値が採れた設定より多ければ、**段数を取り違えている恐れ**があるので知らせる。
+    #   （過去に「設定3なし」と誤記した事故と同じ型）
+    seen_labels: list = []
+    for p in usable:
+        for lb in (p.get("setting_labels") or []):
+            if lb not in seen_labels:
+                seen_labels.append(lb)
     for key in FIELDS:
         votes: dict = {}
         for p in usable:
@@ -296,7 +319,14 @@ def compare(pages: list) -> dict:
         else:
             thin[key] = {"why": "1つの出典しか取れていません",
                          "sources": sorted(next(iter(votes.values())))}
-    return {"adopted": adopted, "need_third": need_third, "thin": thin}
+    got_labels = set()
+    for key, spec in FIELDS.items():
+        if spec["kind"] == "per_setting" and key in adopted:
+            got_labels |= set(adopted[key]["value"])
+    unconfirmed = [x for x in seen_labels if x not in got_labels]
+    return {"adopted": adopted, "need_third": need_third, "thin": thin,
+            "setting_labels_seen": seen_labels,
+            "setting_labels_unconfirmed": unconfirmed}
 
 
 # ---------------------------------------------------------------- selftest
@@ -374,6 +404,22 @@ def selftest() -> int:
       and needs_conditions("at_continuation_rate", R)
       and needs_conditions("ceiling", R))
     t("　条件の要らない項目は空を返す", needs_conditions("payout_rate", R) == [])
+
+    t("★★数字でない設定（設定L・設定V）も名前として拾う★★",
+      setting_labels(["設定", "設定1", "1/1", "設定L", "調査中"]) == ["1", "L"])
+    t("　設定判別・設定L搭載機などの文は設定名にしない",
+      setting_labels(["設定判別", "設定L搭載機", "設定6以上"]) == [])
+    PW = {"url": "https://www.p-world.co.jp/x", "host": "p-world.co.jp", "ok": True,
+          "reason": "OK", "setting_labels": ["1", "6", "L"],
+          "fields": {"payout_rate": {"1": "97.8%", "6": "112.5%"}}}
+    CB = {**PW, "url": "https://chonborista.com/y", "host": "chonborista.com",
+          "setting_labels": ["1", "6"]}
+    rr = compare([PW, CB])
+    t("★★値が採れなかった設定を黙って落とさない★★（設定Lを見落とすと段数を誤る）",
+      rr["setting_labels_unconfirmed"] == ["L"])
+    t("　値が採れた設定は未確認に入れない",
+      set(rr["setting_labels_seen"]) == {"1", "6", "L"}
+      and "1" not in rr["setting_labels_unconfirmed"])
     t("★設定が1〜6の連番だと決めつけない★"
       "（L/1/2/4/5/6 のように飛ぶ機種がある）",
       settings_may_be_non_contiguous(R) is True)

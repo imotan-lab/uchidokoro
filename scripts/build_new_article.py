@@ -188,8 +188,14 @@ def build_detail(slug, name, release, material) -> dict:
         if not got:
             continue
         rows = [[f"設定{k}", got["value"][k]] for k in sorted(got["value"])]
+        note = "出典で確認が取れた設定のみ掲載しています。"
+        # ★値が採れていない設定があるなら、その名前を出す★
+        #   （黙って省くと「これで全部」と読まれ、段数を誤って伝えることになる）
+        un = material.get("setting_labels_unconfirmed") or []
+        if un:
+            note += "この機種には" + "・".join(f"設定{x}" for x in un) +                     "もありますが、値が確認できていないため掲載していません。"
         tables.append({"label": label, "headers": ["設定", label], "rows": rows,
-                       "note": "出典で確認が取れた設定のみ掲載しています。"})
+                       "note": note})
     if tables:
         sections.append({"title": "設定示唆まとめ", "type": "settei", "tables": tables})
 
