@@ -122,8 +122,21 @@ def changed_paths() -> list:
         raise PublishError(f"git status が失敗しました: {r.stderr[:200]}")
     out = []
     for line in r.stdout.splitlines():
-        if len(line) > 3:
-            out.append(line[3:].strip().strip('"'))
+        if len(line) <= 3:
+            continue
+        path = line[3:].strip().strip('"')
+        if path.endswith("/"):
+            # ★gitは新しいフォルダを「フォルダごと1行」で報告する★
+            #   （2026-07-31・自分の検査が正しい公開を止めて気づいた）
+            #   そのままだと許可リスト（ファイル単位）と突き合わせられないので、
+            #   中のファイルに開いてから比べる。
+            root = os.path.join(BASE, path.rstrip("/"))
+            for dirpath, _dirs, files in os.walk(root):
+                for name in files:
+                    rel = os.path.relpath(os.path.join(dirpath, name), BASE)
+                    out.append(rel.replace(os.sep, "/"))
+        else:
+            out.append(path)
     return out
 
 
@@ -238,21 +251,54 @@ def publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> d
     page = _page_path(slug)
     dp = os.path.join(DETAILS, f"{slug}.json")
     made_dir = False
+
+    def _cleanup():
+        """★置いたものを片付ける★（一覧にはまだ足していないので完全に戻る）"""
+        for q in (dp, page):
+            if os.path.exists(q):
+                os.remove(q)
+        if made_dir and os.path.isdir(os.path.dirname(page)):
+            os.rmdir(os.path.dirname(page))
+
     try:
-        # ① 記事データ（一覧からはまだ辿れない）
+        # ① 記事データとページを置く（★この時点では一覧から辿れない★）
         if os.path.exists(dp):
             raise PublishError(f"{dp} が既にあります")
         with open(dp, "w", encoding="utf-8", newline=chr(10)) as f:
             json.dump(detail, f, ensure_ascii=False, indent=1)
             f.write(chr(10))
-        # ② ページ（★一覧より先★＝404の瞬間を作らない）
         d = os.path.dirname(page)
         if not os.path.isdir(d):
             os.makedirs(d)
             made_dir = True
         with open(page, "w", encoding="utf-8", newline=chr(10)) as f:
             f.write(html)
-        # ③ 最後に一覧へ足す
+    except Exception as e:                # noqa: BLE001
+        _cleanup()
+        raise PublishError(f"公開できませんでした（元に戻しました）: {e}")
+
+    # ② ★一覧に足す前に全部確かめる★（2026-07-31）
+    #   以前は machines.json まで書いてから確かめていたので、
+    #   問題が見つかっても戻せなかった。ここで確かめれば、
+    #   駄目なときは置いたファイルを消すだけで完全に元へ戻る。
+    late = []
+    late += check_served(slug)
+    late += check_no_stray_changes(slug, before_changed)
+    late += check_sitemap_kept(before_sitemap)
+    now_pages = _existing_pages()
+    for s_, h in before_pages.items():
+        if s_ not in now_pages:
+            late.append(f"既存ページが消えました: {s_}")
+        elif now_pages[s_] != h:
+            late.append(f"既存ページが書き換わりました: {s_}")
+    if late:
+        _cleanup()
+        out["problems"] += late
+        out["problems"].append("★確かめで引っかかったので、置いたものを消して元に戻しました★")
+        return out
+
+    # ③ ここで初めて一覧へ足す（★これ以降トップページからリンクされる★）
+    try:
         rows.append(machine)
         tmp = MACHINES + ".new"
         with open(tmp, "w", encoding="utf-8", newline=chr(10)) as f:
@@ -261,18 +307,11 @@ def publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> d
         os.replace(tmp, MACHINES)
         out["wrote"] = [dp, page, MACHINES]
     except Exception as e:                # noqa: BLE001
-        # ★どこで転んでも、置いたものを片付ける★
-        for p in (dp, page):
-            if os.path.exists(p):
-                os.remove(p)
-        if made_dir and os.path.isdir(os.path.dirname(page)):
-            os.rmdir(os.path.dirname(page))
-        raise PublishError(f"公開できませんでした（元に戻しました）: {e}")
+        _cleanup()
+        raise PublishError(f"一覧に足せませんでした（元に戻しました）: {e}")
 
+    # ④ 一覧に足したあとの最終確認（ここで出たら人が直す＝台帳へ）
     out["problems"] += check_after(slug, before_pages, rows[:-1])
-    out["problems"] += check_no_stray_changes(slug, before_changed)
-    out["problems"] += check_sitemap_kept(before_sitemap)
-    out["problems"] += check_served(slug)
     return out
 
 
@@ -323,6 +362,9 @@ def selftest() -> int:
     t("★既存ページの指紋を取れる（1枚も変えていないことを確かめるため）★",
       len(pages) >= 100 and all(len(v) == 64 for v in pages.values()))
 
+    t("★★新しいフォルダは中のファイルに開いてから比べる★★"
+      "（gitはフォルダごと1行で報告するため、正しい公開を止めていた）",
+      not any(x.endswith("/") for x in changed_paths()))
     t("★変えてよいのは3つだけ★",
       allowed_paths("zzz") == {"machines/zzz/index.html",
                                "assets/data/machine-details/zzz.json",
