@@ -671,7 +671,11 @@ def _build_pages(rows: list, prose_all: dict) -> tuple:
         ALL,
         lambda r: f'{esc(r["info"])}｜天井 <strong>{tenjo_disp(r)}</strong>｜狙い目 {esc(yome(r))}',
     )
-    ichiran_note = f"全<span class=\"list-count\">{len(ALL)}</span>機種（稼働率順）。機種名をタップすると各詳細ページへ移動します。"
+    # ★全体の機種数は出さない★（2026-07-31・運営者の判断／Codex同意）
+    #   増減のたびに README・運営者情報・散文の数を合わせる必要があり、
+    #   実際に何度もずれた。読者にとっての価値も薄い。
+    #   条件つきの件数（天井が浅い機種は何件、など）は意味があるので残す。
+    ichiran_note = ("稼働率順に並べています。機種名をタップすると各詳細ページへ移動します。")
 
     pages = {
         "guide-tenjo-ranking.html": (prose_all["tenjo"], {"list": tenjo_list, "note": tenjo_note}),

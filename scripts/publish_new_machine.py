@@ -418,29 +418,18 @@ def check_machine(slug: str, machine: dict) -> list:
 # ★機種数を書いている場所★（2026-07-31・公開後に監査して見つけた）
 #   新台を足すと README・運営者情報の「全120機種」がずれる。
 #   （一覧ページは機種の行そのものを持つので、数字だけ直すと嘘になる。下の作り直しで扱う）
-COUNT_FILES = ("README.md", "about.html")
+# ★全体の機種数は表示しない方針になった（2026-07-31）★
+#   増減のたびに数を合わせる必要があり、実際に何度もずれた。
+#   数字が無いので直す処理も要らない。監査は「書いていないか」を見る。
+COUNT_FILES = ()
 # ★一覧・ランキングの4ページ★（機種の行を実際に持つ生成物）
 HUB_FILES = ("guide-tenjo-ranking.html", "guide-reset-ranking.html",
              "guide-suru-tenjo.html", "guide-ichiran.html")
 
 
 def count_updates(old_n: int, new_n: int) -> dict:
-    """機種数の表記を差し替えた中身を返す（★書き込みはしない★）。
-
-    差し替えるのは「(古い数)機種」だけ。
-    ポチポチくんの36機種などは数が違うので触らない。
-    """
-    out = {}
-    want = f"{old_n}機種"
-    for rel in COUNT_FILES:
-        path = os.path.join(BASE, rel)
-        if not os.path.isfile(path):
-            continue
-        with open(path, encoding="utf-8") as f:
-            text = f.read()
-        if want in text:
-            out[rel] = text.replace(want, f"{new_n}機種")
-    return out
+    """★もう何もしない★（全体の機種数を表示しない方針にしたため）"""
+    return {}
 
 
 def build_hubs() -> dict:
@@ -483,18 +472,11 @@ def check_hubs_untouched() -> list:
 
 
 def check_counts(new_n: int, slug: str = "") -> list:
-    """機種数の表記と、一覧に新台の行があるかを確かめる。"""
+    """★一覧に新台の行があるか★（件数ではなく行の有無で見る）
+
+    2026-07-31: 全体の機種数は表示しない方針にしたので、数では確かめられない。
+    """
     ng = []
-    for rel in COUNT_FILES + HUB_FILES:
-        path = os.path.join(BASE, rel)
-        if not os.path.isfile(path):
-            continue
-        with open(path, encoding="utf-8") as f:
-            text = f.read()
-        for n in re.findall(r"(?<![0-9])([0-9]{2,3})機種", text):
-            # 全機種数として書かれている大きい数だけを見る（36機種などは別の意味）
-            if int(n) >= 50 and int(n) != new_n and rel not in HUB_FILES:
-                ng.append(f"{rel} の機種数が {n} のままです（{new_n} のはず）")
     if slug:
         path = os.path.join(BASE, "guide-ichiran.html")
         with open(path, encoding="utf-8") as f:
@@ -1072,16 +1054,10 @@ def selftest() -> int:
       any("断り書き" in x for x in check_page(
           "zzz_test", good.replace('role="note"', 'role="note" hidden'))))
 
-    _cu = count_updates(120, 121)
-    t("★機種数の表記を差し替えられる★",
-      _cu and all("121機種" in v for v in _cu.values()))
-    t("★★ポチポチくんの36機種は触らない★★（別の意味の数）",
-      "36機種" in _cu.get("README.md", "36機種"))
-    t("　書き込みはしない（中身を返すだけ）",
-      "120機種" in open(os.path.join(BASE, "README.md"),
-                        encoding="utf-8").read())
-    t("★いまの機種数と表記が合っている★", check_counts(len(rows)) == [])
-    t("　ずれていれば見つける", check_counts(len(rows) + 1))
+    t("★★全体の機種数はもう扱わない★★（表示しない方針・監査が再導入を見張る）",
+      count_updates(120, 121) == {} and COUNT_FILES == ())
+    t("★一覧に載っている機種なら通る★",
+      check_counts(0, next(m["slug"] for m in rows)) == [])
     t("★★一覧・ランキングのずれを見つけられる★★"
       "（ずれたまま作り直すと既存の公開内容まで変わる）",
       isinstance(check_hubs_untouched(), list))

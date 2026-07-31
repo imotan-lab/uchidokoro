@@ -253,21 +253,30 @@ def check_7_sitemap_count(machines: list) -> list[str]:
     return ngs
 
 
+# ★当サイト全体の掲載数を表す言い回し★（2026-07-31・全体件数の表示をやめた）
+#   「36機種（ポチポチくん対応）」のような別用途の件数は誤検知しないよう、
+#   「全体を指す語＋数＋機種」の形だけを見る。
+_TOTAL_COUNT_PAT = re.compile(
+    r"(全|全部で|掲載|対象機種数[:：]?\s*)(<[^>]+>)?\s*\d{2,3}\s*(</[^>]+>)?\s*機種")
+
+
 def check_8_readme_count(machines: list) -> list[str]:
-    """README.md の機種数記載と実数の一致"""
+    """★サイト全体の機種数を書いていないか★（2026-07-31 方針転換）
+
+    以前は「READMEの数が実数と合っているか」を見ていた。
+    しかし全体件数は、増減のたびに README・運営者情報・早見表の散文を
+    そろえる必要があり、実際に何度もずれた（読者にとっての価値も薄い）。
+    そこで**全体件数は表示しない**方針にしたので、
+    検査も「合っているか」から「**書いていないか**」に変える。
+
+    条件つきの件数（天井が浅い機種は何件、など）は意味があるので触らない。
+    """
     ngs = []
-    actual = len(machines)
-    text = load_text(BASE / "README.md")
-    nums = [int(n) for n in re.findall(r"(?<![\d])(\d{2,3})機種", text)]
-    if not nums:
-        ngs.append("README.md に『XX機種』記載が見つからない")
-        return ngs
-    # 全機種数として書くべき値（最も多く記載されてる値が実数と一致するはず）
-    inconsistent = [n for n in nums if n != actual and n != 36 and n < 50]
-    # 36 はポチポチくん対応数なので除外、50未満はカテゴリ別件数の可能性で許容
-    big_inconsistent = [n for n in nums if n != actual and n >= 50]
-    if big_inconsistent:
-        ngs.append(f"README.md の機種数記載が実数{actual}と不一致: {sorted(set(big_inconsistent))}")
+    for rel in ("README.md", "about.html", "guide-ichiran.html"):
+        text = load_text(BASE / rel)
+        for m in _TOTAL_COUNT_PAT.finditer(text):
+            ngs.append(f"{rel}: サイト全体の機種数が書かれています"
+                       f"（{m.group(0)[:30]!r}）。全体件数は表示しない方針です")
     return ngs
 
 
@@ -886,11 +895,31 @@ def check_27_hub_counts(machines: list) -> list[str]:
          if isinstance(r["rcau"], (int, float)) and isinstance(r["ncau"], (int, float))
          and r["ncau"] - r["rcau"] > 0]
     D = [r for r in rows if r["has_suru"]]
+    # ★全機種一覧は件数ではなく「載っている機種の集合」で見る★
+    #   （2026-07-31・全体件数の表示をやめたので、数字では確かめられない。
+    #     そもそも件数が合っていても、中身が欠けていれば意味がない）
+    want = {m.get("slug") for m in machines if m.get("slug")}
+    ich = BASE / "guide-ichiran.html"
+    if ich.is_file():
+        html_i = ich.read_text(encoding="utf-8")
+        got = set(re.findall(r'href="/machines/([a-z0-9_]+)/"', html_i))
+        missing = sorted(want - got)
+        extra = sorted(got - want)
+        if missing:
+            ngs.append(f"guide-ichiran.html: 一覧に無い機種 {missing[:5]}"
+                       f"（全{len(missing)}件）→ 早見表を作り直してください")
+        if extra:
+            ngs.append(f"guide-ichiran.html: 機種データに無い行 {extra[:5]}"
+                       f"（全{len(extra)}件）")
+        dup = [x for x in set(got)
+               if html_i.count(f'href="/machines/{x}/"') > 1]
+        if dup:
+            ngs.append(f"guide-ichiran.html: 同じ機種の行が重複 {sorted(dup)[:5]}")
+
     expected = {
         "guide-tenjo-ranking.html": len(A),
         "guide-reset-ranking.html": len(C),
         "guide-suru-tenjo.html": len(D),
-        "guide-ichiran.html": len(ALL),
     }
     for file, exp in expected.items():
         p = BASE / file
