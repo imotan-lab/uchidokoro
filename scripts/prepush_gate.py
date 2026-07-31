@@ -204,16 +204,37 @@ def check_push_scope(slug: str) -> list:
     return ng
 
 
+def _hide(url: str) -> str:
+    """★URLに埋めてある鍵を隠す★（2026-07-31・自分で気づいた）
+
+    このリポジトリの remote URL には利用者名と個人アクセストークンが
+    埋め込まれている。エラー文にそのまま出すと、
+    **ログや画面にトークンが残る**。
+    """
+    return re.sub(r"//[^@/]*@", "//***@", url or "")
+
+
 def remote_ok() -> list:
-    """★push先を確かめる★（読み取り用と書き込み用が別々に設定できる）"""
+    """★push先を確かめる★（読み取り用と書き込み用が別々に設定できる）
+
+    ★URLは1つとは限らない★（2026-07-31・Codex19回目）
+      `remote.<名>.pushurl` は複数書ける。書いてあれば **全部へ** push される。
+      `get-url` は既定で先頭しか返さないので、先頭だけ見ていると
+      確かめていない置き場へも出てしまう。
+    """
     ng = []
     br = _git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
     remote = push_remote(br)
-    for kind, args in (("fetch", ("remote", "get-url", remote)),
-                       ("push", ("remote", "get-url", "--push", remote))):
-        url = (_git(*args).stdout or "").strip()
-        if not _same_repo(url):
-            ng.append(f"push先（{remote} の{kind}用）が想定と違います: {url[:60]!r}")
+    for kind, args in (("fetch", ("remote", "get-url", "--all", remote)),
+                       ("push", ("remote", "get-url", "--push", "--all", remote))):
+        urls = [x for x in (_git(*args).stdout or "").split() if x]
+        if not urls:
+            ng.append(f"push先（{remote} の{kind}用）が分かりません")
+            continue
+        for url in urls:
+            if not _same_repo(url):
+                ng.append(f"push先（{remote} の{kind}用）が想定と違います: "
+                          f"{_hide(url)[:60]!r}")
     return ng
 
 
@@ -299,6 +320,11 @@ def selftest() -> int:
     t("　変わっているファイルを読める（-z なので引用符に強い）",
       isinstance(changed(), list))
 
+    t("★★エラー文に鍵を出さない★★（remote URL にトークンが埋めてある）",
+      "***@" in _hide("https://user:ghp_secret@github.com/a/b.git")
+      and "ghp_secret" not in _hide("https://user:ghp_secret@github.com/a/b.git"))
+    t("★★push先のURLを全部見る★★（pushurl は複数書けて、全部へ出る）",
+      "--all" in inspect.getsource(remote_ok))
     t("★★置き場の名前が似ているだけの別リポジトリを弾く★★"
       "（含まれるかで見ていたので通っていた・Codex16回目）",
       _same_repo("https://github.com/imotan-lab/uchidokoro.git")

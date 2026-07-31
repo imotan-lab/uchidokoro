@@ -71,15 +71,26 @@ def _now() -> str:
     return datetime.now().strftime("%Y/%m/%d %H:%M:%S")
 
 
-def _ledger(slug, kind, severity, code, title, detail) -> None:
-    """要確認台帳に残す。★止まった理由を必ず残すため★"""
-    subprocess.run(
+def _ledger(slug, kind, severity, code, title, detail) -> bool:
+    """要確認台帳に残す。★止まった理由を必ず残すため★
+
+    ★残せたかどうかを返す★（2026-07-31・Codex19回目）
+      以前は成否を見ていなかった。台帳に入らなかったのに待ち行列から外すと、
+      **待ち行列にも台帳にも無い機種**になる。
+      公式URLは既知なので、二度と出てこない＝黙って消える。
+    """
+    r = subprocess.run(
         [sys.executable, os.path.join(BASE, "scripts", "open_issues.py"), "add",
          "--source", "add-machine", "--slug", slug, "--kind", kind,
          "--severity", severity, "--reason-code", code,
          "--title", title, "--detail", detail],
-        capture_output=True, text=True,
+        cwd=BASE, capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
         env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+    if r.returncode != 0:
+        _log(f"  ★台帳に登録できませんでした: {(r.stderr or r.stdout)[:200]}★")
+        return False
+    return True
 
 
 def discover() -> dict:
@@ -264,6 +275,7 @@ BLOCKING = ("AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY", "型式名",
             #   **run_one が記事を作るのを拒む**ところまで確かめていなかった。
             # 名簿を読めない＝メーカーが合っているとは言えない
             "メーカー名簿を読めません", "メーカーが指定されていません",
+            "はまだ見張れていません", "の公式の場所が名簿にありません",
             # 新台でない機種を新台として出さない
             "登場年月が新台の範囲外です")
 
@@ -333,8 +345,17 @@ def _verify_maker(official_url: str, maker: str) -> list:
     conf = cats.get(maker)
     if not conf or not _nw.is_catalog(conf):
         return [f"メーカーが名簿にありません（{maker!r}）"]
+    # ★見張っていない社は通さない★（2026-07-31・Codex19回目）
+    #   名簿に名前だけあって場所（link_prefix）が空の社が実際に5つある。
+    #   空だと照合が働かず、**どんなURLでもその社の公式として通っていた**。
+    if str(conf.get("status") or "") != "ACTIVE":
+        return [f"メーカー {maker} はまだ見張れていません"
+                f"（状態={conf.get('status')}）"]
     pre = str(conf.get("link_prefix") or "")
-    if pre and not official_url.startswith(pre):
+    if not pre:
+        return [f"メーカー {maker} の公式の場所が名簿にありません"
+                "（照合できないので通しません）"]
+    if not official_url.startswith(pre):
         return [f"公式URLが {maker} の場所ではありません"
                 f"（名簿は {pre[:48]}… / 渡されたURLは {official_url[:48]}…）"]
     return []
@@ -403,6 +424,42 @@ def _claim_today(official_url: str) -> bool:
     return True
 
 
+PUSH_PENDING = os.path.join(BASE, ".push-pending.json")
+
+
+def _mark_push_pending(slug: str) -> None:
+    with open(PUSH_PENDING, "w", encoding="utf-8") as f:
+        json.dump({"slug": slug, "at": _now()}, f, ensure_ascii=False)
+
+
+def _clear_push_pending() -> None:
+    try:
+        os.remove(PUSH_PENDING)
+    except FileNotFoundError:
+        pass
+
+
+def retry_push_first() -> list:
+    """★前回コミットしたのに出せていないものを、先に出す★
+
+    これを片付けないまま次の機種へ進むと、
+    未pushのコミットが「許していないファイル」として後続を全部止める。
+    """
+    if not os.path.isfile(PUSH_PENDING):
+        return []
+    try:
+        got = _sj.read_json(PUSH_PENDING, expect=dict)
+    except Exception as e:                # noqa: BLE001
+        return [f"出せていない公開の目印が壊れています: {e}"]
+    slug = got.get("slug") or ""
+    _log(f"★前回コミットしたのに出せていないものがあります: {slug}★ 先に出します")
+    ng = push_after_publish(slug)
+    if ng:
+        return [f"{slug} をまだ出せません: " + " / ".join(ng)[:300]]
+    _log(f"出せました: {slug}")
+    return []
+
+
 def finish_publish(res: dict) -> list:
     """★公開したあとの後始末★（2026-07-31・Codex17回目）
 
@@ -446,9 +503,12 @@ def give_up_now(url: str, name: str, problems: list) -> None:
     行列に残すと、そのぶん後ろが詰まる。
     黙って消すのではなく、要確認台帳に残して人が見られるようにする。
     """
-    _ledger("site", "structural", "MATERIAL", "PENDING_PERMANENT_BLOCK",
-            "新台を記事にできません（やり直しても変わらない理由）",
-            f"{name} / {url} / " + " / ".join(problems)[:1200])
+    if not _ledger("site", "structural", "MATERIAL", "PENDING_PERMANENT_BLOCK",
+                   "新台を記事にできません（やり直しても変わらない理由）",
+                   f"{name} / {url} / " + " / ".join(problems)[:1200]):
+        # ★台帳に残せなかったら行列からも外さない★（消えるより残るほうがまし）
+        _log(f"  台帳に残せなかったので待ち行列に残します: {name or url}")
+        return
     try:
         pend = _pend.load()
         if _pend.done(pend, url):
@@ -500,6 +560,11 @@ def push_after_publish(slug: str) -> list:
     if r.returncode != 0:
         return ["関所で止まりました（コミット対象の選別）: "
                 + (r.stdout or r.stderr or "").strip()[:300]]
+    # ★コミットする前に「これから出す」と残す★（2026-07-31・Codex19回目）
+    #   コミットしたあと push で落ちると、手元にだけ機種がある状態になる。
+    #   翌日は machines.json にあるので「既に登録」と判定され、
+    #   待ち行列から永久に外れ、さらに未pushコミットが後続のpushも塞ぐ。
+    _mark_push_pending(slug)
     msg = (f"feat(machines): 新台 {slug} の先行記事を追加\n\n"
            "出典2件で一致した項目だけを載せています（status: preview・noindex）。\n\n"
            "Co-Authored-By: Claude <自動タスク> <noreply@anthropic.com>\n")
@@ -522,6 +587,8 @@ def push_after_publish(slug: str) -> list:
         ["git", "push", sc["remote"], f"HEAD:refs/heads/{sc['dest']}"],
         cwd=BASE, capture_output=True, text=True,
         encoding="utf-8", errors="replace")
+    if p.returncode == 0:
+        _clear_push_pending()
     if p.returncode != 0:
         return ["pushできませんでした: "
                 + (p.stdout or p.stderr or "").strip()[:300]]
@@ -614,6 +681,7 @@ def run_one(name, official_url, maker, release, apply_it=False,
 # ---------------------------------------------------------------- selftest
 
 def selftest() -> int:
+    import inspect
     results = []
     nl = chr(10)
 
@@ -678,6 +746,22 @@ def selftest() -> int:
               "<body>2026年9月 登場</body>", "2026-08")))
         t("　名簿に無いメーカーは通さない",
           any("名簿にありません" in x for x in _verify_maker("https://x/", "nosuch")))
+        t("★★見張れていない社では、どんなURLでも通さない★★"
+          "（公式の場所が名簿に無い社が5つあり、素通りしていた・Codex19回目）",
+          _blocking(_verify_maker("https://evil.example/x/", "fujishoji")) != [])
+        t("★★台帳に残せなかったら待ち行列から外さない★★"
+          "（待ち行列にも台帳にも無い機種＝黙って消える・Codex19回目）",
+          "台帳に残せなかったので" in inspect.getsource(give_up_now))
+        t("★★コミットしたのに出せていないものを、次の実行で先に出す★★"
+          "（未pushのコミットが後続を全部止める・Codex19回目）",
+          "_mark_push_pending" in inspect.getsource(push_after_publish)
+          and "retry_push_first" in inspect.getsource(main))
+        t("★★公開が途中なら、書き込む日は進まない★★"
+          "（進むと公開できる機種を待ち行列から捨てていた・Codex19回目）",
+          "戻すまで進みません" in inspect.getsource(main))
+        t("★★出せていないなら成功として返さない★★"
+          "（手元に書いただけで成功にしていた・Codex19回目）",
+          "push_ng" in inspect.getsource(main))
 
         # ★★「文言が返る」ではなく「記事を作らない」ところまで見る★★
         #   （2026-07-31・Codex18回目。文言の試験しかしていなかったので、
@@ -863,24 +947,33 @@ def main() -> int:
             print("★ロックを持っていません → 何も書かずに終了します★")
             return 1
         # ★task_guard も必ず通す★（Codex指摘4・通していなかった）
-        if args.name and args.official_url and not _claim_today(args.official_url):
-            print("★今日の担当ではありません → 何も書かずに終了します★")
-            return 1
+        # ★1日1機種の枠は「書く直前」に使う★（2026-07-31・Codex19回目）
+        #   ここで先に使うと、--maker を書き忘れただけでその日の枠が消え、
+        #   正しい別の機種を公開できなくなる。run_one の before_write に任せる。
+        pass
 
     if args.name:
         if not (args.official_url and args.maker):
             print("★--name と一緒に --official-url --maker が必要です★")
             return 1
-        res = run_one(args.name, args.official_url, args.maker, args.release, args.apply)
+        res = run_one(args.name, args.official_url, args.maker, args.release,
+                      args.apply,
+                      before_write=lambda: _claim_today(args.official_url))
         # ★1機種だけ試す経路でも、公開したら最後まで通す★（Codex17回目）
         #   ここだけ push を呼んでいなかったので、手元に変更が残り、
         #   翌日の実行が「許していない変更がある」で止まっていた。
+        push_ng = []
         if res.get("wrote"):
-            for x in finish_publish(res):
+            push_ng = finish_publish(res)
+            for x in push_ng:
                 print("  ✗ " + x[:200])
                 res.setdefault("problems", []).append(x)
         print(json.dumps({k: v for k, v in res.items() if k != "preview"},
                          ensure_ascii=False, indent=1))
+        # ★出せていないなら成功にしない★（2026-07-31・Codex19回目）
+        #   「手元には書いたが読者には届いていない」を成功として返していた。
+        if push_ng:
+            return 1
         return 0 if res.get("wrote") or not args.apply else 1
 
     apply_it = bool(args.apply)
@@ -901,6 +994,18 @@ def main() -> int:
                 "前回の公開が途中で終わっています",
                 f"{left.get('slug')} / {left.get('started_at')} / "
                 "--recover --apply で戻してください")
+        # ★書き込む日はここで終わる★（2026-07-31・Codex19回目）
+        #   そのまま進むと、公開部が途中状態を理由に断り、
+        #   その理由は「やり直す価値なし」に当たるので、
+        #   **公開できるはずの機種が待ち行列から捨てられていた**。
+        if apply_it:
+            _log("★戻すまで進みません（--recover --apply で戻してください）★")
+            return 1
+    for x in retry_push_first():
+        print("  ✗ " + x[:200])
+        _log("  ✗ " + x[:300])
+        if apply_it:
+            return 1                       # ★片付くまで次へ進まない★
     d = discover()
     for x in d["first_time"]:
         print("初回として記録:", x)
