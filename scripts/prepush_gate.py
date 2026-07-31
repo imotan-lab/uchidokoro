@@ -35,7 +35,45 @@ sys.path.insert(0, os.path.join(BASE, "scripts"))
 import publish_new_machine as _pub        # noqa: E402
 
 # 想定しているリモート（ここ以外へは出さない）
-WANT_REMOTE = "github.com/imotan-lab/uchidokoro"
+WANT_HOST = "github.com"
+WANT_PATH = "imotan-lab/uchidokoro"
+
+
+def _same_repo(url: str) -> bool:
+    """★URLが同じ置き場を指しているか★（2026-07-31・Codex16回目）
+
+    以前は「文字列が含まれるか」で見ていた。
+    それだと `github.com/imotan-lab/uchidokoro-evil` のような
+    **別の置き場でも通ってしまう**。ホストと道筋を丸ごと比べる。
+    """
+    u = (url or "").strip()
+    u = re.sub(r"^[A-Za-z][A-Za-z0-9+.-]*://", "", u)   # 方式
+    u = re.sub(r"^[^@/]*@", "", u)                      # 認証情報
+    u = u.split("?", 1)[0].split("#", 1)[0]
+    if ":" in u.split("/", 1)[0]:                       # git@host:owner/repo
+        head, _, rest = u.partition(":")
+        u = head.split(":")[0] + "/" + rest
+    u = u.rstrip("/")
+    if u.lower().endswith(".git"):
+        u = u[:-4]
+    host, _, path = u.partition("/")
+    return (host.split(":")[0].lower() == WANT_HOST
+            and path.strip("/").lower() == WANT_PATH.lower())
+
+
+def push_remote(branch: str) -> str:
+    """★引数なし `git push` が実際に使う先★（gitと同じ順で決める）
+
+    2026-07-31・Codex16回目: `origin` だけを見ていたが、
+    `branch.<名前>.pushRemote` や `remote.pushDefault` があると
+    **確かめた先とは別の場所へ出る**。
+    """
+    for args in ((f"branch.{branch}.pushRemote",), ("remote.pushDefault",),
+                 (f"branch.{branch}.remote",)):
+        v = (_git("config", "--get", *args).stdout or "").strip()
+        if v:
+            return v
+    return "origin"
 
 
 def _git(*args, check: bool = False) -> subprocess.CompletedProcess:
@@ -109,35 +147,53 @@ def same_as_commit() -> list:
 
 
 def push_scope() -> dict:
-    """★これから何がpushされるか★（2026-07-31・Codex15回目）
+    """★これから何がpushされるか★（2026-07-31・Codex15〜16回目）
 
     最新のコミットだけ正しくても、**手前の未pushコミットも一緒に出ます**。
     リモートの先端から今のHEADまで、全部を見る。
+
+    ★見るのは「実際にpushされる先」★
+      追跡先（upstream）と push 先が別々に設定できるので、
+      **push先の先端**からの差分を数える。
     """
     br = _git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
     head = _git("rev-parse", "HEAD").stdout.strip()
+    remote = push_remote(br)
     up = _git("rev-parse", "--abbrev-ref", "@{upstream}")
     upstream = up.stdout.strip() if up.returncode == 0 else ""
+    # ★差分の基準は push 先のブランチ★（追跡先ではない）
+    merge = (_git("config", "--get", f"branch.{br}.merge").stdout or "").strip()
+    dest = merge.rsplit("/", 1)[-1] if merge else br
+    base = f"{remote}/{dest}"
+    if _git("rev-parse", "--verify", "--quiet", base).returncode != 0:
+        base = ""
     commits, files = [], []
-    if upstream:
-        r = _git("rev-list", f"{upstream}..HEAD")
+    if base:
+        r = _git("rev-list", f"{base}..HEAD")
         commits = [x for x in r.stdout.split() if x]
         if commits:
-            r2 = _git("diff", "--name-only", "-z", f"{upstream}..HEAD")
+            r2 = _git("diff", "--name-only", "-z", f"{base}..HEAD")
             files = [x for x in (r2.stdout or "").split(chr(0)) if x]
-    return {"branch": br, "head": head, "upstream": upstream,
-            "commits": commits, "files": files}
+    return {"branch": br, "head": head, "upstream": upstream, "remote": remote,
+            "base": base, "dest": dest, "commits": commits, "files": files}
 
 
 def check_push_scope(slug: str) -> list:
     """push予定の全コミットが、許した範囲だけか。"""
     ng = []
     sc = push_scope()
-    if not sc["upstream"]:
-        ng.append("追跡先（upstream）が設定されていません")
+    if not sc["base"]:
+        ng.append(f"push先の枝（{sc['remote']}/{sc['dest']}）が手元にありません。"
+                  "`git fetch` してから、もう一度実行してください")
         return ng
-    if sc["branch"] != "main":
-        ng.append(f"いまのブランチが main ではありません（{sc['branch']}）")
+    if sc["branch"] != "main" or sc["dest"] != "main":
+        ng.append(f"main 以外へ出そうとしています（{sc['branch']} → "
+                  f"{sc['remote']}/{sc['dest']}）")
+    # ★追跡先と push 先がずれていたら止める★
+    #   「別の追跡先との差分を確かめて、別の場所へ出す」を防ぐ。
+    if sc["upstream"] and sc["upstream"] != f"{sc['remote']}/{sc['dest']}":
+        ng.append(f"追跡先（{sc['upstream']}）と push 先"
+                  f"（{sc['remote']}/{sc['dest']}）が違います")
     if not sc["commits"]:
         return ng                          # 出すものが無い
     allowed = allowed_for(slug)
@@ -151,11 +207,13 @@ def check_push_scope(slug: str) -> list:
 def remote_ok() -> list:
     """★push先を確かめる★（読み取り用と書き込み用が別々に設定できる）"""
     ng = []
-    for kind, args in (("fetch", ("remote", "get-url", "origin")),
-                       ("push", ("remote", "get-url", "--push", "origin"))):
+    br = _git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    remote = push_remote(br)
+    for kind, args in (("fetch", ("remote", "get-url", remote)),
+                       ("push", ("remote", "get-url", "--push", remote))):
         url = (_git(*args).stdout or "").strip()
-        if WANT_REMOTE not in url:
-            ng.append(f"push先（{kind}）が想定と違います: {url[:60]!r}")
+        if not _same_repo(url):
+            ng.append(f"push先（{remote} の{kind}用）が想定と違います: {url[:60]!r}")
     return ng
 
 
@@ -206,7 +264,7 @@ def main() -> int:
     sc = push_scope()
     print(f"② 作業ツリーとコミットが一致・push先も想定どおり")
     print(f"   出すもの: {len(sc['commits'])} コミット / "
-          f"{len(sc['files'])} ファイル → {sc['upstream']}")
+          f"{len(sc['files'])} ファイル → {sc['remote']}/{sc['dest']}")
     print(f"   push元: {sc['head'][:12]}")
     print("★pushしてよい★")
     return 0
@@ -215,6 +273,7 @@ def main() -> int:
 # ---------------------------------------------------------------- selftest
 
 def selftest() -> int:
+    import inspect
     results = []
     nl = chr(10)
 
@@ -239,6 +298,23 @@ def selftest() -> int:
       isinstance(same_as_commit(), list))
     t("　変わっているファイルを読める（-z なので引用符に強い）",
       isinstance(changed(), list))
+
+    t("★★置き場の名前が似ているだけの別リポジトリを弾く★★"
+      "（含まれるかで見ていたので通っていた・Codex16回目）",
+      _same_repo("https://github.com/imotan-lab/uchidokoro.git")
+      and _same_repo("git@github.com:imotan-lab/uchidokoro")
+      and _same_repo("https://tok@github.com/imotan-lab/uchidokoro.git")
+      and not _same_repo("https://github.com/imotan-lab/uchidokoro-evil.git")
+      and not _same_repo("https://evil.com/github.com/imotan-lab/uchidokoro")
+      and not _same_repo("https://github.com/other/uchidokoro"))
+    t("★★push先を git と同じ順で決める★★"
+      "（pushRemote / pushDefault があると別の場所へ出る）",
+      "pushRemote" in inspect.getsource(push_remote)
+      and "remote.pushDefault" in inspect.getsource(push_remote))
+    t("　差分の基準も push 先の枝にする",
+      push_scope().get("base") == "origin/main")
+    t("　追跡先と push 先がずれていたら止める",
+      "追跡先" in inspect.getsource(check_push_scope))
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")

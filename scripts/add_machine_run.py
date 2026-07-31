@@ -113,6 +113,14 @@ def discover() -> dict:
                 out["candidates"].append({"maker": mid, **c})
             else:
                 out["problems"].append(f"{url}: " + " / ".join(c["reasons"]))
+                # ★ここで取りこぼしていた★（2026-07-31・Codex16回目）
+                #   このあと _save_seen で「見たことがあるURL」になるので、
+                #   翌日はもう新台に出てこない。
+                #   一晩だけページが取れなかっただけでも、その機種は永久に消えていた。
+                #   あとで載る見込みがある理由なら、待ち行列に入れて毎日やり直す。
+                _remember(c.get("official_name") or "", url, mid,
+                          (c.get("release") or {}).get("value") or "",
+                          c["reasons"])
     _nw._save_seen(seen)
     _log(f"見張り終了: 正常{len(out['watched'])}社 / 見られず{len(out['not_watched'])}社 "
          f"/ 新台候補{len(out['candidates'])}件 / 確認が要る{len(out['problems'])}件")
@@ -207,10 +215,17 @@ def gather(name: str) -> dict:
 #   ＝**早く見つけた機種ほど取りこぼす**（鮮度を上げる目的と正反対だった）。
 RETRYABLE = ("名鑑の個別ページが", "HEALTHY_NO_MATCH", "CATALOG_UNHEALTHY",
              "取得できません", "を使えませんでした", "1つの出典にしかありません",
-             "採用できた材料がありません")
+             "採用できた材料がありません",
+             # ★公式がまだ書いていないだけ＝明日には書かれうる★（Codex16回目）
+             "登場年月が書かれていません", "公式ページから機種名を取れません")
 # ★やり直しても意味がない理由★（待たずに台帳へ）
 NOT_RETRYABLE = ("既に登録されている疑い", "公式ページと名前が一致しません",
-                 "転載の疑い", "AMBIGUOUS_CANDIDATES")
+                 "転載の疑い", "AMBIGUOUS_CANDIDATES",
+                 # ★何度見ても変わらない／人が見るべきもの★（Codex16回目）
+                 "すでに扱っている機種です", "パチスロのページに見えません",
+                 "登場年月が新台の範囲外です", "同じURLの機種名が変わりました",
+                 "メーカーが名簿にありません", "の場所ではありません",
+                 "登場年月が公式と違います")
 
 
 def retry_later(problems: list) -> bool:
@@ -225,6 +240,10 @@ def retry_later(problems: list) -> bool:
 #   機種の同定に関わる問題が1つでもあれば、材料が採れていても書かない。
 BLOCKING = ("AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY", "型式名",
             "公式ページと名前が一致しません",
+            # ★メーカー・登場年月が公式と食い違うなら書かない★（Codex16回目）
+            #   別会社の機種として出す／打てる時期を誤って出す、どちらも読者への誤情報。
+            "メーカーが名簿にありません", "の場所ではありません",
+            "登場年月が公式と違います", "公式ページに登場年月が書かれていません",
             # ★公式ページを開けないなら、その機種だと確かめられていない★
             #   slug も公式URLから作るので、開けないURLのまま記事を作らない。
             "公式ページを取得できません", "既に登録されている疑い", "2件以上",
@@ -235,21 +254,67 @@ def _blocking(problems: list) -> list:
     return [p for p in problems if any(w in p for w in BLOCKING)]
 
 
-def verify_official(name: str, official_url: str) -> list:
+def verify_official(name: str, official_url: str,
+                    maker: str = "", release: str = "") -> list:
     """★公式ページが本当にその機種か確かめる★（Codex指摘1・実際に再現した穴）
 
     以前は名前とURLを別々に受け取り、照合していなかった。
     そのため「機種Aの名前 ＋ 機種Bの公式URL」で、
     **中身が別機種の記事**を作れてしまった（実際に再現）。
+
+    ★メーカーと登場年月も、渡された値を信じない★（2026-07-31・Codex16回目）
+      この2つは `--maker` `--release` の入力のまま記事とページへ入っていた。
+      メーカー名を間違えれば別会社の機種として、
+      年月を間違えれば「いつ打てるか」を誤って読者に出せる。
+      ・メーカー … 公式URLが、その社の名簿の場所から始まるか
+      ・登場年月 … **公式ページに書いてある年月**と同じか
     """
     try:
         html = _nw._get(official_url)
     except Exception as e:
         return [f"公式ページを取得できません: {e}"]
+    ng = []
     ok, why = _mc.page_is_machine(html, name)
     if not ok:
-        return [f"公式ページと名前が一致しません（{why}）: "
-                f"公式のタイトル={_nw.page_title(html)[:40]!r} / 指定名={name!r}"]
+        ng.append(f"公式ページと名前が一致しません（{why}）: "
+                  f"公式のタイトル={_nw.page_title(html)[:40]!r} / 指定名={name!r}")
+    if maker:
+        ng += _verify_maker(official_url, maker)
+    if release:
+        ng += _verify_release(html, release)
+    return ng
+
+
+def _verify_maker(official_url: str, maker: str) -> list:
+    """★そのURLは本当にそのメーカーの場所か★（名簿の link_prefix で見る）"""
+    try:
+        cats = _sj.read_json(_nw.CATALOGS, expect=dict)["catalogs"]
+    except Exception as e:                # noqa: BLE001
+        return [f"メーカー名簿を読めません: {e}"]
+    conf = cats.get(maker)
+    if not conf or not _nw.is_catalog(conf):
+        return [f"メーカーが名簿にありません（{maker!r}）"]
+    pre = str(conf.get("link_prefix") or "")
+    if pre and not official_url.startswith(pre):
+        return [f"公式URLが {maker} の場所ではありません"
+                f"（名簿は {pre[:48]}… / 渡されたURLは {official_url[:48]}…）"]
+    return []
+
+
+def _verify_release(html: str, release: str) -> list:
+    """★公式ページに書いてある登場年月と同じか★
+
+    ここで見るのは「メーカー自身が自社の機種について書いた年月」なので、
+    独立2出典は求めない（自社の発表が一次情報）。
+    ただし**こちらが入力した値をそのまま信じることはしない**。
+    """
+    got = _nw.release_month(_nw._visible_text(html))
+    if not got:
+        return ["公式ページに登場年月が書かれていません"
+                "（こちらで日付を補わない）"]
+    if str(got.get("value")) != str(release):
+        return [f"登場年月が公式と違います（公式={got.get('value')} / "
+                f"渡された値={release}）"]
     return []
 
 
@@ -274,13 +339,109 @@ def _remember(name, official_url, maker, release, problems) -> None:
         print(f"  ✗ 待ち行列に入れられませんでした: {e}")
 
 
+def _claim_today(official_url: str) -> bool:
+    """★1日1機種の上限をコードに守らせる★（人の判断に任せない）"""
+    slug = _ba.slug_from_url(official_url)
+    g = subprocess.run(
+        [sys.executable, os.path.join(BASE, "scripts", "task_guard.py"),
+         "claim", "--task", "add-machine", "--slug", slug],
+        cwd=BASE, capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+    if g.returncode != 0:
+        print((g.stdout or g.stderr or "").strip()[:200])
+        return False
+    return True
+
+
+def pick_work(pend: dict) -> dict | None:
+    """★今日やる1機種を決める★（2026-07-31・Codex16回目）
+
+    以前は見張った結果を並べて終わりで、**記事を作る所へ一度も進まなかった**。
+    毎晩動かしても待ち行列に溜まるだけだった。
+
+    今日見つけた分も待ち行列に入れてから選ぶので、ここは待ち行列だけを見る。
+    **古いものから**（早く見つけた機種ほど後回しにしない）。
+    """
+    items = _pend.due(pend)
+    if not items:
+        return None
+    it = sorted(items, key=lambda x: (x.get("first_seen") or "", x.get("url")))[0]
+    return {"name": it.get("name") or "", "url": it["url"],
+            "maker": it.get("maker") or "", "release": it.get("release") or ""}
+
+
+def fill_missing(work: dict) -> dict:
+    """★名前や年月が空なら、公式ページをもう一度見る★
+
+    取りこぼし対策で入れたURLは、名前が取れていないことがある。
+    その状態では記事にできないので、毎回もう一度公式を見て埋める。
+    **こちらで作らない。公式に書いていなければ空のまま**。
+    """
+    if work["name"] and work["release"]:
+        return work
+    try:
+        c = _nw.classify(work["url"], None)
+    except Exception as e:                # noqa: BLE001
+        _log(f"  公式ページを見直せませんでした: {e}")
+        return work
+    work["name"] = work["name"] or (c.get("official_name") or "")
+    work["release"] = work["release"] or ((c.get("release") or {}).get("value") or "")
+    return work
+
+
+def push_after_publish(slug: str) -> list:
+    """★公開したら関所を通してpushする★（2026-07-31・Codex16回目）
+
+    手元に置いたままにすると、翌日の実行が「許していない変更がある」で止まる。
+    **確かめる → コミット対象を選ぶ → コミット → もう一度確かめる → push**
+    の順で、1つでも引っかかったら出さない。
+    """
+    gate = os.path.join(BASE, "scripts", "prepush_gate.py")
+
+    def _run(*args):
+        return subprocess.run([sys.executable, gate, "--slug", slug, *args],
+                              cwd=BASE, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace")
+
+    r = _run()
+    if r.returncode != 0:
+        return ["関所で止まりました（公開前の確認）: "
+                + (r.stdout or r.stderr or "").strip()[:300]]
+    r = _run("--commit")
+    if r.returncode != 0:
+        return ["関所で止まりました（コミット対象の選別）: "
+                + (r.stdout or r.stderr or "").strip()[:300]]
+    msg = (f"feat(machines): 新台 {slug} の先行記事を追加\n\n"
+           "出典2件で一致した項目だけを載せています（status: preview・noindex）。\n\n"
+           "Co-Authored-By: Claude <自動タスク> <noreply@anthropic.com>\n")
+    c = subprocess.run(["git", "commit", "-m", msg], cwd=BASE,
+                       capture_output=True, text=True,
+                       encoding="utf-8", errors="replace")
+    if c.returncode != 0:
+        return ["コミットできませんでした: "
+                + (c.stdout or c.stderr or "").strip()[:300]]
+    # ★コミットしたあと、もう一度関所★（確かめた中身がそのまま出るか）
+    r = _run()
+    if r.returncode != 0:
+        return ["関所で止まりました（コミット後の確認・pushしていません）: "
+                + (r.stdout or r.stderr or "").strip()[:300]]
+    p = subprocess.run(["git", "push"], cwd=BASE, capture_output=True,
+                       text=True, encoding="utf-8", errors="replace")
+    if p.returncode != 0:
+        return ["pushできませんでした: "
+                + (p.stdout or p.stderr or "").strip()[:300]]
+    _log(f"pushしました: {slug}")
+    return []
+
+
 def run_one(name, official_url, maker, release, apply_it=False) -> dict:
     """1機種を最後まで進める。"""
     out = {"name": name, "slug": None, "wrote": [], "problems": [], "blocked": []}
     _log(f"=== 機種の処理開始: {name} / {maker} / {release} / {official_url} "
          f"/ 書き込み={'する' if apply_it else 'しない'} ===")
     # ★①まず公式ページと名前が同じ機種を指しているか★
-    out["problems"] += verify_official(name, official_url)
+    out["problems"] += verify_official(name, official_url, maker, release)
     # ★②その機種が既に登録されていないか★（2026-07-31・実際に二重登録できた）
     #   手順書には書いてあったが、実行器が呼んでいなかった。
     # ★名前・公式URL・型式名のどれか1つでも一致したら疑う★（2026-07-31・Codex指摘）
@@ -291,6 +452,17 @@ def run_one(name, official_url, maker, release, apply_it=False) -> dict:
             f"／新しいslugで作らず、更新タスクで直すこと")
     got = gather(name)
     out["problems"] += got["problems"]
+    # ★型式名でも重複を見る★（2026-07-31・Codex16回目）
+    #   最初の重複検査は名前と公式URLしか渡していなかった。
+    #   型式名は材料を集めて初めて分かるので、**分かった時点でもう一度見る**。
+    #   「名前も公式URLも違うが、実は同じ型式」＝同じ機種を二重に作る経路だった。
+    if got.get("model_code"):
+        for slug, ename, why in _cd.find_duplicates(
+                name, model_codes=[got["model_code"]]):
+            out["problems"].append(
+                f"既に登録されている疑い: slug={slug} name={ename}"
+                f"（型式名が同じ: {got['model_code']} / {why}）"
+                f"／新しいslugで作らず、更新タスクで直すこと")
     if not got["material"]:
         out["blocked"] = _blocking(out["problems"])
         _remember(name, official_url, maker, release, out["problems"])
@@ -380,7 +552,29 @@ def selftest() -> int:
         # ★公式ページは本物を想定して差し替える★
         #   （開けなければ止まる作りなので、通る場合の試験には中身が要る）
         real_get = _nw._get
-        _nw._get = lambda u, timeout=20: "<title>X</title>"
+        _nw._get = lambda u, timeout=20: (
+            "<title>X</title><body>2026年9月 登場</body>")
+        # ★メーカー名簿も試験用にする★（本番の名簿を書き換えない）
+        real_cats = _nw.CATALOGS
+        _nw.CATALOGS = os.path.join(_tmpdir, "cats.json")
+        with open(_nw.CATALOGS, "w", encoding="utf-8") as _f:
+            json.dump({"schema": "maker-catalogs/v1", "catalogs": {"m": {
+                "name": "試験", "status": "ACTIVE",
+                "list_url": "https://m.example/products/slot/",
+                "link_prefix": "https://m.example/products/slot/"}}},
+                _f, ensure_ascii=False)
+
+        # -------- Codex16回目の反例（自分で再現してから直した）
+        t("★★別会社のURLで記事を作れない★★"
+          "（--maker は入力のままデータへ入っていた・Codex16回目）",
+          any("場所ではありません" in x for x in _verify_maker(
+              "https://other.example/x/", "m")))
+        t("★★公式と違う登場年月では記事を作れない★★"
+          "（いつ打てるかを誤って読者に出せた・Codex16回目）",
+          any("公式と違います" in x for x in _verify_release(
+              "<body>2026年9月 登場</body>", "2026-08")))
+        t("　名簿に無いメーカーは通さない",
+          any("名簿にありません" in x for x in _verify_maker("https://x/", "nosuch")))
 
         r = run_one("X", "https://m.example/products/slot/zzz/", "m", "2026-09")
         t("★既定では書き込まない（dry-run）★", r["wrote"] == [])
@@ -517,17 +711,9 @@ def main() -> int:
             print("★ロックを持っていません → 何も書かずに終了します★")
             return 1
         # ★task_guard も必ず通す★（Codex指摘4・通していなかった）
-        if args.name and args.official_url:
-            slug = _ba.slug_from_url(args.official_url)
-            g = subprocess.run(
-                [sys.executable, os.path.join(BASE, "scripts", "task_guard.py"),
-                 "claim", "--task", "add-machine", "--slug", slug],
-                capture_output=True, text=True,
-                env={**os.environ, "PYTHONIOENCODING": "utf-8"})
-            if g.returncode != 0:
-                print("★今日の担当ではありません → 何も書かずに終了します★")
-                print((g.stdout or g.stderr or "").strip()[:200])
-                return 1
+        if args.name and args.official_url and not _claim_today(args.official_url):
+            print("★今日の担当ではありません → 何も書かずに終了します★")
+            return 1
 
     if args.name:
         if not (args.official_url and args.maker):
@@ -538,7 +724,8 @@ def main() -> int:
                          ensure_ascii=False, indent=1))
         return 0 if res.get("wrote") or not args.apply else 1
 
-    _log("★新台追加タスク 開始★")
+    apply_it = bool(args.apply)
+    _log("★新台追加タスク 開始★" + ("（書き込みます）" if apply_it else "（下見）"))
     # ★前回が途中で終わっていないか、いちばん最初に知らせる★
     #   （2026-07-31・電源断→PC自動起動→翌日の実行、を再現して足した）
     #   見張りだけなら書き込まないので進んでよいが、
@@ -583,11 +770,39 @@ def main() -> int:
     for p in d["problems"]:
         print("  ✗ " + p[:150])
     waiting = _pend.due(pend)
-    print(f"  記事にできず待っている新台: {len(waiting)} 件"
-          + ("（この中から処理します）" if waiting else ""))
+    print(f"  記事にできず待っている新台: {len(waiting)} 件")
     for it in waiting[:10]:
         print(f"    {it['release']} {it['name'][:34]}"
               f"（{_pend.waited_days(it)}日待ち）{it.get('last_reason', '')[:40]}")
+
+    # ★★ここから実際に1機種を進める★★（2026-07-31・Codex16回目）
+    #   以前はここで終わっていたので、無人で動かしても永久に記事にならなかった。
+    work = pick_work(pend)
+    if work:
+        work = fill_missing(work)
+        if not (work["name"] and work["maker"]):
+            _log(f"  まだ記事にできません（名前かメーカーが取れない）: {work['url']}")
+        else:
+            _log(f"今日の1機種: {work['name']} / {work['maker']} / {work['release']}")
+            if apply_it and not _claim_today(work["url"]):
+                _log("  今日の担当ではありません（1日1機種）")
+            else:
+                res = run_one(work["name"], work["url"], work["maker"],
+                              work["release"], apply_it)
+                for b in res.get("blocked") or []:
+                    print("  ★止めました: " + b[:150])
+                if res.get("wrote"):
+                    ng = push_after_publish(res["slug"])
+                    for x in ng:
+                        print("  ✗ " + x[:200])
+                        _log("  ✗ " + x[:300])
+                    if ng:
+                        _ledger("site", "structural", "MATERIAL", "PUSH_BLOCKED",
+                                "公開はしたがpushできませんでした",
+                                f"{res['slug']} / " + " / ".join(ng)[:1200])
+                    d["problems"] += ng
+                elif apply_it and res.get("blocked"):
+                    _log(f"  作りませんでした（{len(res['blocked'])}件の理由）")
     if d["problems"]:
         _ledger("site", "structural", "MATERIAL", "WATCH_PROBLEM",
                 "新台の見張りで確認が要る点が出ました",
