@@ -396,13 +396,101 @@ def check_machine(slug: str, machine: dict) -> list:
     return ng
 
 
+# ★機種数を書いている場所★（2026-07-31・公開後に監査して見つけた）
+#   新台を足すと README・運営者情報の「全120機種」がずれる。
+#   （一覧ページは機種の行そのものを持つので、数字だけ直すと嘘になる。下の作り直しで扱う）
+COUNT_FILES = ("README.md", "about.html")
+# ★一覧・ランキングの4ページ★（機種の行を実際に持つ生成物）
+HUB_FILES = ("guide-tenjo-ranking.html", "guide-reset-ranking.html",
+             "guide-suru-tenjo.html", "guide-ichiran.html")
+
+
+def count_updates(old_n: int, new_n: int) -> dict:
+    """機種数の表記を差し替えた中身を返す（★書き込みはしない★）。
+
+    差し替えるのは「(古い数)機種」だけ。
+    ポチポチくんの36機種などは数が違うので触らない。
+    """
+    out = {}
+    want = f"{old_n}機種"
+    for rel in COUNT_FILES:
+        path = os.path.join(BASE, rel)
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        if want in text:
+            out[rel] = text.replace(want, f"{new_n}機種")
+    return out
+
+
+def build_hubs() -> dict:
+    """いまの machines.json から一覧・ランキング4ページを描く（書き込まない）。
+
+    ★2026-07-31・公開後に自分で監査して見つけた★
+      新台を足しても一覧ページは120機種のままだった。
+      あのページは**機種の行を実際に持つ生成物**なので、
+      件数の数字だけ直すと「121機種」と言いながら120行しかない嘘になる。
+    """
+    import build_hub_pages as _bhp
+    import safe_json as _sj2
+    rows = _bhp.load_rows()
+    prose = _sj2.read_json(_bhp.PROSE, expect=dict)
+    built, _data_html, _allowed = _bhp._build_pages(rows, prose)
+    return built
+
+
+def check_hubs_untouched() -> list:
+    """★いまの4ページが、いまのデータから作った物と同じか★
+
+    違えば、誰かの未反映の変更が残っているということ。
+    その状態で作り直すと**既存の公開内容まで変えてしまう**ので、この経路は進まない。
+    """
+    try:
+        built = build_hubs()
+    except Exception as e:                # noqa: BLE001
+        return [f"一覧・ランキングを描けません: {type(e).__name__}: {e}"]
+    ng = []
+    for rel, html in built.items():
+        path = os.path.join(BASE, rel)
+        if not os.path.isfile(path):
+            ng.append(f"{rel} がありません")
+            continue
+        with open(path, encoding="utf-8") as f:
+            if f.read() != html:
+                ng.append(f"{rel} が、いまのデータから作った内容と違います"
+                          "（未反映の変更が残っているので、この経路では触りません）")
+    return ng
+
+
+def check_counts(new_n: int, slug: str = "") -> list:
+    """機種数の表記と、一覧に新台の行があるかを確かめる。"""
+    ng = []
+    for rel in COUNT_FILES + HUB_FILES:
+        path = os.path.join(BASE, rel)
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        for n in re.findall(r"(?<![0-9])([0-9]{2,3})機種", text):
+            # 全機種数として書かれている大きい数だけを見る（36機種などは別の意味）
+            if int(n) >= 50 and int(n) != new_n and rel not in HUB_FILES:
+                ng.append(f"{rel} の機種数が {n} のままです（{new_n} のはず）")
+    if slug:
+        path = os.path.join(BASE, "guide-ichiran.html")
+        with open(path, encoding="utf-8") as f:
+            if f"/machines/{slug}/" not in f.read():
+                ng.append(f"一覧ページに {slug} の行がありません")
+    return ng
+
+
 def allowed_paths(slug: str) -> set:
     """★この経路が変えてよいファイル★（これ以外が変わっていたら止める）"""
     return {
         f"machines/{slug}/index.html",
         f"assets/data/machine-details/{slug}.json",
         "assets/data/machines.json",
-    }
+    } | set(COUNT_FILES) | set(HUB_FILES)   # ★件数と一覧の行も整える★
 
 
 def changed_paths() -> list:
@@ -617,6 +705,11 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
     out["problems"] += check_before(slug, machine, rows)
     out["problems"] += check_detail(slug, detail)
     out["problems"] += check_machine(slug, machine)
+    # ★一覧・ランキングが、いまのデータと一致しているか★
+    #   ずれたまま作り直すと、既存の公開内容まで変えてしまう。
+    for x in check_hubs_untouched():
+        out["problems"].append(
+            x + "／先に `python scripts/build_hub_pages.py` 相当の作り直しが要ります")
     if out["problems"]:
         return out
     html = render(slug, machine, detail)
@@ -721,12 +814,32 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
             f.write(chr(10))
         os.replace(tmp, MACHINES)
         out["wrote"] = [dp, page, MACHINES]
+        # ★機種数の表記も同時に直す★（ここまで来たら一緒に整える）
+        #   直せなくても公開は成立しているので、失敗は問題として残すだけにする。
+        for rel, text in count_updates(len(rows) - 1, len(rows)).items():
+            try:
+                full = os.path.join(BASE, rel)
+                with open(full, "w", encoding="utf-8", newline=chr(10)) as f:
+                    f.write(text)
+                out["wrote"].append(full)
+            except OSError as e:
+                out["problems"].append(f"機種数の表記を直せませんでした（{rel}）: {e}")
+        # ★一覧・ランキングを作り直す★（行そのものを持つので数字だけでは足りない）
+        try:
+            for rel, html2 in build_hubs().items():
+                full = os.path.join(BASE, rel)
+                with open(full, "w", encoding="utf-8", newline=chr(10)) as f:
+                    f.write(html2)
+                out["wrote"].append(full)
+        except Exception as e:            # noqa: BLE001
+            out["problems"].append(f"一覧・ランキングを作り直せませんでした: {e}")
     except Exception as e:                # noqa: BLE001
         _cleanup()
         raise PublishError(f"一覧に足せませんでした（作ったものは消しました）: {e}")
 
     # ④ 一覧に足したあとの最終確認
     late2 = check_after(slug, before_pages, rows[:-1])
+    late2 += check_counts(len(rows), slug)
     with open(page, encoding="utf-8") as f:          # ★最後にもう一度★
         if _sha(f.read()) != _sha(html):
             late2.append(f"一覧へ足した後にページの中身が変わっています: {page}")
@@ -917,6 +1030,23 @@ def selftest() -> int:
       any("断り書き" in x for x in check_page(
           "zzz_test", good.replace('role="note"', 'role="note" hidden'))))
 
+    _cu = count_updates(120, 121)
+    t("★機種数の表記を差し替えられる★",
+      _cu and all("121機種" in v for v in _cu.values()))
+    t("★★ポチポチくんの36機種は触らない★★（別の意味の数）",
+      "36機種" in _cu.get("README.md", "36機種"))
+    t("　書き込みはしない（中身を返すだけ）",
+      "120機種" in open(os.path.join(BASE, "README.md"),
+                        encoding="utf-8").read())
+    t("★いまの機種数と表記が合っている★", check_counts(len(rows)) == [])
+    t("　ずれていれば見つける", check_counts(len(rows) + 1))
+    t("★★一覧・ランキングのずれを見つけられる★★"
+      "（ずれたまま作り直すと既存の公開内容まで変わる）",
+      isinstance(check_hubs_untouched(), list))
+    t("　一覧に無い機種は見つける",
+      any("行がありません" in x for x in
+          check_counts(len(rows), "そんな機種はありません")))
+
     # ★同時に2つ公開しない★（Codex指摘4）
     with _OnlyOne(os.path.join(BASE, ".publish.lock.test")) as _one:
         t("★★ロックを持っている間は、もう一方が入れない★★",
@@ -958,10 +1088,11 @@ def selftest() -> int:
     t("★★新しいフォルダは中のファイルに開いてから比べる★★"
       "（gitはフォルダごと1行で報告するため、正しい公開を止めていた）",
       not any(x.endswith("/") for x in changed_paths()))
-    t("★変えてよいのは3つだけ★",
+    t("★変えてよいのは決めたものだけ★",
       allowed_paths("zzz") == {"machines/zzz/index.html",
                                "assets/data/machine-details/zzz.json",
-                               "assets/data/machines.json"})
+                               "assets/data/machines.json"}
+      | set(COUNT_FILES) | set(HUB_FILES))
     _real_changed = changed_paths
     try:
         globals()["changed_paths"] = lambda: ["assets/css/practical.css"]
