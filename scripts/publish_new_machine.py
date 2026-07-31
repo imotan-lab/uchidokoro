@@ -107,6 +107,30 @@ class _OnlyOne:
         return False
 
 
+def write_atomic(path: str, text: str, new_only: bool = False) -> None:
+    """★一時ファイルに完成させてから置き換える★（2026-07-31・Codex指摘2/3）
+
+    最終名へ直接書いていたため、次の2つが起きた。
+      ・書き込みの途中で失敗すると、**書きかけのファイル**が最終名に残る
+        （この処理が作ったのに指紋が違うので、片付けの対象からも外れていた）
+      ・復元も直接書いていたので、失敗すると**元は正常だった早見表が空になる**
+
+    new_only=True は「新しく作る時だけ」。既にあれば作らない。
+    """
+    tmp = f"{path}.tmp.{os.getpid()}"
+    try:
+        with open(tmp, "w", encoding="utf-8", newline=chr(10)) as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())      # ★中身が確実に書けてから置き換える★
+        if new_only and os.path.exists(path):
+            raise FileExistsError(path)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+
+
 def check_slug(slug: str) -> list:
     """★書く場所を決める前に、slug そのものを確かめる★"""
     if not isinstance(slug, str) or not _SLUG_OK.match(slug):
@@ -800,6 +824,11 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
     out["problems"] += check_before(slug, machine, rows)
     out["problems"] += check_detail(slug, detail)
     out["problems"] += check_machine(slug, machine)
+    # ★書き始める前にサイトが健全か確かめる★（2026-07-31・Codexの助言・二段構え）
+    #   壊れた状態から公開すると、後で「どこまでが自分のせいか」分からなくなる。
+    #   ★ページを置いた直後は設計上わざと不整合（一覧にまだ足していない）なので、
+    #     その途中では監査しない★
+    out["problems"] += run_site_audit()
     # ★一覧・ランキングが、いまのデータと一致しているか★
     #   ずれたまま作り直すと、既存の公開内容まで変えてしまう。
     for x in check_hubs_untouched():
@@ -859,21 +888,28 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
         # ① 記事データとページを置く（★この時点では一覧から辿れない★）
         #    "x" で開く＝既にあれば作らずに例外。存在確認との隙間も無くす。
         detail_text = json.dumps(detail, ensure_ascii=False, indent=1) + chr(10)
-        with open(dp, "x", encoding="utf-8", newline=chr(10)) as f:
-            made.append(("file", dp, _sha(detail_text)))
-            f.write(detail_text)
+        if os.path.exists(dp):
+            raise FileExistsError(dp)
+        write_atomic(dp, detail_text, new_only=True)
+        made.append(("file", dp, _sha(detail_text)))   # ★書けてから登録★
         d = os.path.dirname(page)
         if not os.path.isdir(d):
             os.makedirs(d)
             made.append(("dir", d, None))
-        with open(page, "x", encoding="utf-8", newline=chr(10)) as f:
-            made.append(("file", page, _sha(html)))
-            f.write(html)
+        if os.path.exists(page):
+            raise FileExistsError(page)
+        write_atomic(page, html, new_only=True)
+        made.append(("file", page, _sha(html)))
     except FileExistsError as e:
         _cleanup()
         raise PublishError(f"同じ名前のファイルが既にあります（触っていません）: {e}")
-    except Exception as e:                # noqa: BLE001
+    except BaseException as e:            # noqa: BLE001
+        # ★Ctrl+C や強制終了でも巻き戻す★（2026-07-31・Codex指摘1）
+        #   KeyboardInterrupt は Exception ではないので、
+        #   以前は途中の状態を残したまま抜けていた。
         _cleanup()
+        if isinstance(e, KeyboardInterrupt):
+            raise
         raise PublishError(f"公開できませんでした（作ったものは消しました）: {e}")
 
     # ② ★一覧に足す前に全部確かめる★（2026-07-31）
@@ -881,10 +917,6 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
     #   問題が見つかっても戻せなかった。ここで確かめれば、
     #   駄目なときは置いたファイルを消すだけで完全に元へ戻る。
     late = []
-    # ★置き換える前にサイト監査を通す★（2026-07-31・Codexの助言・二段構え）
-    #   この時点でページと記事データは置いてあるが、一覧にはまだ足していない。
-    #   監査に落ちたら、置いたものを消して完全に元へ戻せる。
-    late += run_site_audit()
     # ★書いたページと記事データが、そのままの中身か★（Codex指摘5）
     for path, want in ((page, _sha(html)), (dp, _sha(detail_text))):
         with open(path, encoding="utf-8") as f:
@@ -913,12 +945,7 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
             out["problems"].append("書いている間に同じ機種が一覧へ入りました（やり直してください）")
             return out
         rows.append(machine)
-        # ★一時ファイル名を実行ごとに変える★（同時に走っても踏み合わない）
-        tmp = MACHINES + f".new.{os.getpid()}"
-        with open(tmp, "w", encoding="utf-8", newline=chr(10)) as f:
-            json.dump(rows, f, ensure_ascii=False, indent=1)
-            f.write(chr(10))
-        os.replace(tmp, MACHINES)
+        write_atomic(MACHINES, json.dumps(rows, ensure_ascii=False, indent=1) + chr(10))
         out["wrote"] = [dp, page, MACHINES]
         # ★機種数の表記も同時に直す★（ここまで来たら一緒に整える）
         #   直せなくても公開は成立しているので、失敗は問題として残すだけにする。
@@ -935,35 +962,46 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
         #     1枚ずつ直接上書きしていたので、途中で失敗すると
         #     「1枚目だけ新台が載っている」ちぐはぐな状態が残った。
         #     書きかけのHTMLが配信される恐れもあった。
+        tmps, swapped = [], []
         try:
             new_hubs = build_hubs()                      # ①全部メモリで作る
-            tmps = []
+            # ★4ページそろっているか★（生成器が減らしても気づける・Codex指摘4）
+            if set(new_hubs) != set(HUB_FILES):
+                raise PublishError(
+                    f"早見表が {sorted(new_hubs)} しか作られませんでした"
+                    f"（{sorted(HUB_FILES)} のはず）")
             for rel, html2 in new_hubs.items():
                 full = os.path.join(BASE, rel)
                 tmp2 = full + f".new.{os.getpid()}"
                 with open(tmp2, "w", encoding="utf-8", newline=chr(10)) as f:
                     f.write(html2)
-                tmps.append((tmp2, full, html2))
-            for tmp2, full, html2 in tmps:               # ②一気に置き換える
+                    f.flush()
+                    os.fsync(f.fileno())
+                tmps.append((tmp2, full))
+            for tmp2, full in tmps:                      # ②一気に置き換える
                 os.replace(tmp2, full)
-                hub_backup[full] = hub_backup.get(full)  # 控えは取得済み
+                swapped.append(full)                     # ★実際に置き換えた分だけ★
                 out["wrote"].append(full)
-        except Exception as e:            # noqa: BLE001
-            for tmp2, _f, _h in locals().get("tmps", []):
+        except BaseException as e:        # noqa: BLE001  ★Ctrl+Cでも戻す★
+            for tmp2, _f in tmps:
                 if os.path.exists(tmp2):
                     os.remove(tmp2)
-            # ★置き換え済みの早見表も元に戻す★
-            for full, text0 in hub_backup.items():
+            for full in swapped:          # ★置き換えたものだけ、一時ファイル経由で戻す★
+                text0 = hub_backup.get(full)
                 if text0 is not None:
-                    with open(full, "w", encoding="utf-8", newline=chr(10)) as f:
-                        f.write(text0)
+                    write_atomic(full, text0)
             out["problems"].append(f"一覧・ランキングを作り直せませんでした（元に戻しました）: {e}")
-    except Exception as e:                # noqa: BLE001
+            if isinstance(e, KeyboardInterrupt):
+                raise
+    except BaseException as e:            # noqa: BLE001  ★Ctrl+Cでも戻す★
         _cleanup()
+        if isinstance(e, KeyboardInterrupt):
+            raise
         raise PublishError(f"一覧に足せませんでした（作ったものは消しました）: {e}")
 
     # ④ 一覧に足したあとの最終確認
     late2 = check_after(slug, before_pages, rows[:-1])
+    late2 += run_site_audit()          # ★終わったあとにもう一度★
     late2 += check_counts(len(rows), slug)
     with open(page, encoding="utf-8") as f:          # ★最後にもう一度★
         if _sha(f.read()) != _sha(html):
@@ -976,12 +1014,10 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
         with open(MACHINES, encoding="utf-8") as f:
             now_text = f.read()
         if _sha(now_text) == mine:
-            with open(MACHINES, "wb") as f:
-                f.write(machines_before)
+            write_atomic(MACHINES, machines_before.decode("utf-8"))
             for full, text0 in hub_backup.items():       # ★早見表も戻す★
                 if text0 is not None:
-                    with open(full, "w", encoding="utf-8", newline=chr(10)) as f:
-                        f.write(text0)
+                    write_atomic(full, text0)
             _cleanup()
             out["wrote"] = []
             late2.append("★一覧から外し、置いたものを消して元に戻しました★")
@@ -1202,6 +1238,22 @@ def selftest() -> int:
     t("★★一覧・ランキングのずれを見つけられる★★"
       "（ずれたまま作り直すと既存の公開内容まで変わる）",
       isinstance(check_hubs_untouched(), list))
+    import tempfile as _tf3
+    _d3 = _tf3.mkdtemp(prefix="uchi_atomic_")
+    try:
+        _p3 = os.path.join(_d3, "a.txt")
+        write_atomic(_p3, "ほんぶん")
+        t("★一時ファイルに完成させてから置き換える★",
+          open(_p3, encoding="utf-8").read() == "ほんぶん"
+          and not [x for x in os.listdir(_d3) if ".tmp." in x])
+        t("★★新しく作る時に既にあれば作らない★★",
+          _raises(lambda: write_atomic(_p3, "うわがき", new_only=True))
+          and open(_p3, encoding="utf-8").read() == "ほんぶん")
+        t("　書きかけの一時ファイルを残さない",
+          len(os.listdir(_d3)) == 1)
+    finally:
+        __import__("shutil").rmtree(_d3, ignore_errors=True)
+
     t("★★公開の前にもサイト監査を通せる★★（後から気づいても世に出ている）",
       run_site_audit() == [])
     t("★★同じ入力なら毎回同じ物ができる★★（2回目に差分が出ない・Codexの助言）",
