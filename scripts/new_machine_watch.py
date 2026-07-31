@@ -92,6 +92,27 @@ def _get(url: str, timeout: int = 20) -> str:
 _YEAR_ONLY = re.compile(r"^(19|20)\d\d$")
 
 
+# ★一覧ページではない画面を「一覧」として読まないための語★
+#   （2026-07-31・Codex優先度3）
+#   最終URLが正しくても、アクセス拒否・メンテナンス・年齢確認・soft 404 が
+#   返ることがある。件数の下限だけでは、そこそこリンクがある拒否画面を通す。
+_BAD_PAGE_WORDS = (
+    "アクセスが拒否", "アクセスできません", "ただいまメンテナンス", "メンテナンス中",
+    "サービスを停止", "ページが見つかりません", "お探しのページは",
+    "not found", "forbidden", "access denied", "service unavailable",
+    "年齢確認", "18歳未満", "あなたは18歳以上ですか",
+)
+
+
+def bad_page(html: str):
+    """一覧ではない画面（拒否・メンテ・年齢確認・soft 404）なら理由を返す。"""
+    head = unicodedata.normalize("NFKC", _visible_text(html or "")[:1500]).lower()
+    for word in _BAD_PAGE_WORDS:
+        if word.lower() in head:
+            return f"一覧ではない画面が返っています（『{word}』）"
+    return None
+
+
 def _host(u: str) -> str:
     """比べるためのホスト名。★www の有無は同じサイトとして扱う★"""
     return urllib.parse.urlparse(u or "").netloc.lower().removeprefix("www.")
@@ -394,6 +415,11 @@ def scan_maker(maker_id: str, conf: dict, seen: dict, record: bool = True) -> di
                 out["problem"] = health["problem"]
                 out["state"] = "FETCH_FAILED"
                 return out
+            why = bad_page(html)
+            if why:
+                out["problem"] = why
+                out["state"] = "FETCH_FAILED"
+                return out
             if health.get("unstable"):
                 # ★まだ増えている途中で読んだ★＝新台だけ落ちている恐れ
                 out["problem"] = ("一覧の件数が落ち着きません（読み込みの途中の可能性）。"
@@ -402,7 +428,8 @@ def scan_maker(maker_id: str, conf: dict, seen: dict, record: bool = True) -> di
                 return out
         else:
             html = _get(conf["list_url"])
-            why = redirect_problem(conf["list_url"], LAST_FINAL_URL.get("url"))
+            why = (redirect_problem(conf["list_url"], LAST_FINAL_URL.get("url"))
+                   or bad_page(html))
             if why:
                 out["problem"] = why
                 out["state"] = "FETCH_FAILED"
@@ -413,6 +440,16 @@ def scan_maker(maker_id: str, conf: dict, seen: dict, record: bool = True) -> di
         return out
     out["js_errors"] = len(health.get("js_errors") or [])
     out["idle_timeout"] = bool(health.get("idle_timeout"))
+
+    # ★そのページである印を確かめる★（2026-07-31・Codex優先度2）
+    #   最終URLが正しくても、別の画面が返ることがある。
+    #   カタログに `list_marker` を書いておけば、その語が本文に無いとき止まる。
+    marker = conf.get("list_marker")
+    if marker and marker not in _visible_text(html):
+        out["problem"] = (f"一覧ページの印『{marker}』が見つかりません。"
+                          f"別の画面を読んでいる可能性があるので『新台なし』とは扱いません")
+        out["state"] = "PARSE_SUSPECT"
+        return out
 
     urls = product_urls(html, conf["list_url"], conf["link_prefix"])
     out["total"] = len(urls)
@@ -529,6 +566,24 @@ def selftest() -> int:
         r3 = scan_maker("zzz", conf2, {"makers": {}}, record=False)
         t("★★初回は全部を新台にしない（覚えるだけ）★★",
           r3["first_time"] is True and r3["new"] == [])
+        # ★一覧ではない画面が返ったとき★（2026-07-31・Codex優先度3）
+        _get = lambda u, timeout=20: (   # noqa: E731
+            "<p>ただいまメンテナンス中です</p>" + html)
+        LAST_FINAL_URL["url"] = LIST
+        r_bad = scan_maker("t", {**conf, "min_expected": 2}, seen, record=False)
+        t("★★メンテナンス・拒否・年齢確認の画面を一覧として読まない★★"
+          "（そこそこリンクがあると件数の下限では通ってしまう）",
+          r_bad["problem"] is not None and r_bad["state"] == "FETCH_FAILED")
+        # ★一覧ページの印★（2026-07-31・Codex優先度2）
+        _get = lambda u, timeout=20: html          # noqa: E731
+        r_mk = scan_maker("t", {**conf, "min_expected": 2,
+                                "list_marker": "パチスロ機種一覧"}, seen, record=False)
+        t("★★一覧ページの印が無ければ『新台なし』と扱わない★★",
+          r_mk["problem"] is not None and r_mk["state"] == "PARSE_SUSPECT")
+        r_mk2 = scan_maker("t", {**conf, "min_expected": 2, "list_marker": "A"},
+                           seen, record=False)
+        t("　印があれば通る", r_mk2["problem"] is None)
+
         # ★別のドメインへ転送されたとき★（2026-07-31・Codex優先度1）
         LAST_FINAL_URL["url"] = "https://よそ.example/top/"
         _get = lambda u, timeout=20: html          # noqa: E731
