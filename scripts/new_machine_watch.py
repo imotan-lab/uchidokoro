@@ -276,6 +276,11 @@ def is_recent(ym: str, today=None) -> bool:
         y, m = (int(x) for x in ym.split("-"))
     except Exception:
         return False
+    # ★月が1〜12か確かめる★（2026-07-31・Codexの指摘を確かめる過程で見つけた）
+    #   月を見ていなかったので `2026年13月` が新台として通っていた。
+    #   99月は差が大きすぎて弾かれていたが、13月は範囲に入って通っていた。
+    if not (1 <= m <= 12):
+        return False
     months = (y - t.year) * 12 + (m - t.month)
     return -RECENT_BACK_MONTHS <= months <= RECENT_AHEAD_MONTHS
 
@@ -701,6 +706,9 @@ def selftest() -> int:
       is_recent("2026-08", TODAY) and is_recent("2027-01", TODAY))
     t("　それより先は拾わない（噂・別機種の混入を避ける）",
       not is_recent("2027-03", TODAY))
+    t("★★ありえない月は通さない★★（13月が新台として通っていた・実際に再現）",
+      not is_recent("2026-13", TODAY) and not is_recent("2026-00", TODAY)
+      and not is_recent("2026-99", TODAY))
     t("　年月として読めない値は通さない",
       not is_recent("", TODAY) and not is_recent("2026", TODAY)
       and not is_recent("にせ-99", TODAY))
