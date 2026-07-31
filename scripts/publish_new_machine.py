@@ -123,21 +123,54 @@ def _head(html: str) -> str:
     return re.sub("(?s)<!--.*?-->", " ", body)
 
 
+def _visible_body(html: str) -> str:
+    """読者に見える本文だけ。★コメント・script・非表示は外す★
+
+    ★2026-07-31・Codex指摘を再現して作った★
+      以前は本文まるごとの文字列検索だったので、
+      `<!-- 先行記事 -->` と書いてあるだけで合格していた。
+    """
+    m = re.search("(?is)<body[^>]*>(.*?)</body" + _WS + ">", html or "")
+    body = m.group(1) if m else (html or "")
+    body = re.sub("(?s)<!--.*?-->", " ", body)
+    for tag in ("script", "style", "template", "noscript"):
+        body = re.sub("(?is)<" + tag + "[^>]*>.*?</" + tag + _WS + ">", " ", body)
+    # 隠されている要素は「表示されている」と見なさない
+    body = re.sub("(?is)<([a-z]+)[^>]*[ ]hidden[ >][^>]*>.*?</" + chr(92) + "1"
+                  + _WS + ">", " ", body)
+    return re.sub("(?s)<[^>]+>", " ", body)
+
+
+def _meta_content(tag: str) -> set:
+    """metaタグの content= の中身を、区切りでほどいて返す。"""
+    m = re.search('(?is)content="([^"]*)"', tag or "")
+    if not m:
+        return set()
+    return {x.strip().lower() for x in re.split("[,; ]+", m.group(1)) if x.strip()}
+
+
 def check_page(slug: str, html: str) -> list:
     """作ったページそのものを確かめる。★テンプレート任せにしない★
 
-    ★2026-07-31・自分で確かめて直した★
-      以前は本文まるごとの文字列検索だったので、
-      **HTMLコメントに noindex と書いてあるだけで合格**していた。
-      head の中の robots 指定を数えて見る。
+    ★2026-07-31・Codexの指摘を再現して2回直した★
+      1回目: 本文まるごとの文字列検索だったので、
+             HTMLコメントに noindex と書いてあるだけで合格していた。
+      2回目: head の中は見るようにしたが、タグ全体に "noindex" が
+             含まれるかで見ていたため、
+             `<meta name="robots" content="index" data-note="noindex">`
+             が合格していた（実際に再現）。content の中身で見る。
     """
     ng = []
     head = _head(html)
     robots = re.findall('(?is)<meta[^>]+name="robots"[^>]*>', head)
     if len(robots) != 1:
         ng.append(f"head の robots 指定が {len(robots)} 個です（1個であるべきです）")
-    elif "noindex" not in robots[0].lower():
-        ng.append("robots が noindex になっていません（先行記事は検索に出しません）")
+    else:
+        vals = _meta_content(robots[0])
+        if "noindex" not in vals:
+            ng.append(f"robots が noindex ではありません（{sorted(vals)}）")
+        if "index" in vals:
+            ng.append("robots に index と noindex が両方あります")
     bases = re.findall('(?is)<base[^>]+href="/"[^>]*>', head)
     if len(bases) != 1:
         ng.append(f'head の <base href="/"> が {len(bases)} 個です'
@@ -149,9 +182,8 @@ def check_page(slug: str, html: str) -> list:
     if "style=" in html:
         ng.append("インラインstyleが入っています")
     # ★先行記事だと読者に分かる表示があるか★（noindexは非公開化ではない）
-    if "先行記事" not in html:
-        ng.append("先行記事であることの表示がありません"
-                  "（URLを直接開いた読者に伝わりません）")
+    if "先行記事" not in _visible_body(html):
+        ng.append("先行記事であることが読者に見える形で書かれていません")
     return ng
 
 
@@ -192,6 +224,46 @@ def check_only_allowed_values(slug: str, machine: dict, detail: dict,
     return []
 
 
+# 記事データに入ってよい鍵（★これ以外があれば止める★）
+# ★実際の記事データを見て決めた★（2026-07-31・自分の検査が本物を弾いて気づいた）
+#   新台: slug / lead / sections / factTable / summaryBoxes / updated
+#   既存: それに name / evTable が加わる
+_DETAIL_KEYS = {"slug", "name", "lead", "sections", "factTable",
+                "summaryBoxes", "evTable", "updated"}
+_SECTION_KEYS = {"title", "type", "body", "tables", "rows"}
+# ★記事データへ入ってはいけない鍵★（採用しなかったものの置き場）
+_FORBIDDEN = ("need_third", "unresolved", "candidates", "thin", "disputed")
+
+
+def check_detail(slug: str, detail: dict) -> list:
+    """★受け取った記事データそのものを確かめる★（2026-07-31・Codex指摘）
+
+    `build_detail` が正しくても、この関数は任意の記事データを受け取れる。
+    直接呼び出し・試験用の呼び出し・将来のつなぎ間違いが別の入口になるので、
+    **境界でもう一度確かめる**。
+    """
+    ng = []
+    if not isinstance(detail, dict):
+        return ["記事データが辞書ではありません"]
+    if detail.get("slug") != slug:
+        ng.append(f"記事データの slug が {detail.get('slug')!r} です（{slug!r} のはず）")
+    stray = sorted(set(detail) - _DETAIL_KEYS)
+    if stray:
+        ng.append(f"記事データに知らない項目があります: {stray}")
+    for sec in (detail.get("sections") or []):
+        if not isinstance(sec, dict):
+            ng.append("節が辞書ではありません")
+            continue
+        bad = sorted(set(sec) - _SECTION_KEYS)
+        if bad:
+            ng.append(f"節『{sec.get('title')}』に知らない項目があります: {bad}")
+    blob = json.dumps(detail, ensure_ascii=False)
+    for word in _FORBIDDEN:
+        if chr(34) + word + chr(34) in blob:
+            ng.append(f"採用しなかったものの置き場（{word}）が記事データに残っています")
+    return ng
+
+
 def allowed_paths(slug: str) -> set:
     """★この経路が変えてよいファイル★（これ以外が変わっていたら止める）"""
     return {
@@ -228,27 +300,51 @@ def changed_paths() -> list:
     return out
 
 
-def check_no_stray_changes(slug: str, before: list) -> list:
+def snapshot(paths) -> dict:
+    """指定したファイルの中身の指紋。★名前ではなく中身で見るため★"""
+    out = {}
+    for rel in paths:
+        full = os.path.join(BASE, rel)
+        if os.path.isfile(full):
+            with open(full, "rb") as f:
+                out[rel] = hashlib.sha256(f.read()).hexdigest()
+        else:
+            out[rel] = None
+    return out
+
+
+def check_no_stray_changes(slug: str, before_snap: dict) -> list:
     """★許した3つ以外を書いていないか★（2026-07-31・Codexの条件）
 
-    「既存ページを変えていない」だけでは足りない。
-    sitemap・テンプレート・CSS など、ページ以外を触った場合も見つける。
+    ★Codex指摘を再現して直した★
+      以前は「実行前から変更中だったパス」を名前で除外していたので、
+      **もともとdirtyだったCSSをさらに書き換えても見逃した**。
+      実行前に取った中身の指紋と突き合わせる。
     """
     allowed = allowed_paths(slug)
-    stray = [x for x in changed_paths()
-             if x not in allowed and x not in set(before)]
-    return [f"許していないファイルが変わっています: {x}" for x in stray]
+    ng = []
+    now = snapshot(list(before_snap))
+    for rel, sha in before_snap.items():
+        if rel in allowed:
+            continue
+        if now.get(rel) != sha:
+            ng.append(f"許していないファイルが変わっています: {rel}")
+    for rel in changed_paths():
+        if rel not in allowed and rel not in before_snap:
+            ng.append(f"許していないファイルが増えました: {rel}")
+    return ng
 
 
 def check_sitemap_kept(before_text: str) -> list:
-    """★sitemap が縮んでいないか★（先行記事は足さないが、既存も減らさない）"""
+    """★sitemap が1文字も変わっていないこと★（この経路は触らない決まり）
+
+    件数だけ見ていると、同じ件数のまま別のURLへ差し替わっても通る（Codex指摘）。
+    """
     with open(SITEMAP, encoding="utf-8") as f:
         now = f.read()
-    n0, n1 = before_text.count("<url>"), now.count("<url>")
-    if n1 < n0:
-        return [f"sitemap の件数が減りました（{n0} → {n1}）"]
-    if n1 != n0:
-        return [f"sitemap の件数が変わりました（{n0} → {n1}）。この経路は触りません"]
+    if now != before_text:
+        n0, n1 = before_text.count("<url>"), now.count("<url>")
+        return [f"sitemap が変わりました（{n0} → {n1} 件）。この経路は触りません"]
     return []
 
 
@@ -327,6 +423,7 @@ def publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> d
     out = {"slug": slug, "problems": [], "wrote": [], "html_bytes": 0}
     rows = _sj.read_rows(MACHINES)
     out["problems"] += check_before(slug, machine, rows)
+    out["problems"] += check_detail(slug, detail)
     if out["problems"]:
         return out
     html = render(slug, machine, detail)
@@ -337,7 +434,9 @@ def publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> d
         return out
 
     before_pages = _existing_pages()
-    before_changed = changed_paths()
+    before_snap = snapshot(changed_paths()
+                           + ["sitemap.xml", "index.html", "machine.html",
+                              "assets/css/practical.css", "meta-auto.js"])
     with open(SITEMAP, encoding="utf-8") as f:
         before_sitemap = f.read()
     page = _page_path(slug)
@@ -375,7 +474,7 @@ def publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> d
     #   駄目なときは置いたファイルを消すだけで完全に元へ戻る。
     late = []
     late += check_served(slug)
-    late += check_no_stray_changes(slug, before_changed)
+    late += check_no_stray_changes(slug, before_snap)
     late += check_sitemap_kept(before_sitemap)
     now_pages = _existing_pages()
     for s_, h in before_pages.items():
@@ -463,6 +562,49 @@ def selftest() -> int:
     t("　数値のかたまりを取り出せる（全角もそろえる）",
       _numbers("約97.3%と１２００Ｇ") == {"97.3%", "1200"})
 
+    t("★★robots は content の中身で見る★★"
+      "（data-note=\"noindex\" で合格していた・実際に再現）",
+      any("robots" in x for x in check_page(
+          "zzz_test",
+          good.replace('content="noindex,follow"',
+                       'content="index" data-note="noindex"'))))
+    t("★★先行記事の表示はコメントでは認めない★★（読者に見えないため）",
+      any("先行記事" in x for x in check_page(
+          "zzz_test", good.replace("⚠ 先行記事（解析待ち）",
+                                   "<!-- 先行記事 -->ふつうの記事"))))
+    t("　scriptの中に書いてあるだけでも認めない",
+      any("先行記事" in x for x in check_page(
+          "zzz_test", good.replace("⚠ 先行記事（解析待ち）",
+                                   "<script>var x='先行記事';</script>本文"))))
+
+    # ★受け取った記事データそのものを確かめる★
+    t("★まともな記事データなら通る★",
+      check_detail("zzz_test", {"slug": "zzz_test", "sections": []}) == [])
+    t("★★実際に作られる記事データが通る★★"
+      "（許可リストを狭く書いて本物を弾いた・自分で気づいた）",
+      check_detail("zzz_test", __import__("build_new_article").build_detail(
+          "zzz_test", "テスト", "2026-09",
+          {"adopted": {}, "need_third": {}, "thin": {}})) == [])
+    t("★★別の機種の記事データなら止める★★",
+      check_detail("zzz_test", {"slug": "other", "sections": []}))
+    t("★★採用しなかったものの置き場が残っていたら止める★★",
+      any("need_third" in x for x in
+          check_detail("zzz_test", {"slug": "zzz_test", "sections": [],
+                                    "need_third": {"at_prob": "1/999"}})))
+    t("　知らない項目があれば止める",
+      check_detail("zzz_test", {"slug": "zzz_test", "sections": [],
+                                "こっそり": 1}))
+    t("　節に知らない項目があれば止める",
+      check_detail("zzz_test", {"slug": "zzz_test",
+                                "sections": [{"title": "x", "候補": []}]}))
+
+    # ★sitemap は1文字も変えない★
+    with open(SITEMAP, encoding="utf-8") as _f2:
+        _sm2 = _f2.read()
+    t("★★sitemapは件数が同じでも中身が変われば止める★★"
+      "（同数の別URLに差し替えても通っていた）",
+      check_sitemap_kept(_sm2.replace("/machines/", "/kikai/", 1)))
+
     # ★slug そのものを確かめる★（2026-07-31・machines/ の外へ書けた）
     t("★★slug に ../ が入っていたら受け付けない★★（machines/ の外へ書けた）",
       check_slug("../../evil"))
@@ -493,26 +635,27 @@ def selftest() -> int:
       allowed_paths("zzz") == {"machines/zzz/index.html",
                                "assets/data/machine-details/zzz.json",
                                "assets/data/machines.json"})
-    _fake_changed = ["assets/css/practical.css", "machines/zzz/index.html",
-                     "assets/data/machines.json"]
     _real_changed = changed_paths
     try:
-        globals()["changed_paths"] = lambda: _fake_changed
-        _stray = check_no_stray_changes("zzz", [])
-        t("★★許していないファイルの変更を見つける★★（CSSを触っていたら止める）",
-          len(_stray) == 1 and "practical.css" in _stray[0])
-        t("　許した3つは見逃さない（＝誤検知しない）",
-          not [x for x in _stray if "machines.json" in x or "index.html" in x])
         globals()["changed_paths"] = lambda: ["assets/css/practical.css"]
-        t("　もともと変更中だったものは責めない",
-          check_no_stray_changes("zzz", ["assets/css/practical.css"]) == [])
+        _snap = snapshot(["assets/css/practical.css"])
+        t("　何も変えていなければ通る（＝誤検知しない）",
+          check_no_stray_changes("zzz", _snap) == [])
+        t("★★もともと変更中だったファイルを、さらに書き換えたら気づく★★"
+          "（名前で除外していたので見逃していた）",
+          any("practical.css" in x for x in
+              check_no_stray_changes("zzz", {"assets/css/practical.css": "ちがう指紋"})))
+        globals()["changed_paths"] = lambda: ["assets/img/logo.png"]
+        t("★許していないファイルが増えたら気づく★",
+          any("増えました" in x for x in check_no_stray_changes("zzz", {})))
     finally:
         globals()["changed_paths"] = _real_changed
-    with open(SITEMAP, encoding="utf-8") as _f:
-        _sm = _f.read()
+
+    with open(SITEMAP, encoding="utf-8") as _f3:
+        _sm = _f3.read()
     t("　sitemapが変わっていなければ通る", check_sitemap_kept(_sm) == [])
-    t("★★sitemapが縮んだら止める★★",
-      any("減りました" in x for x in check_sitemap_kept(_sm + "<url>x</url>")))
+    t("★★sitemapが1件でも増減したら止める★★",
+      check_sitemap_kept(_sm + "<url>x</url>"))
     t("★★実際にHTTPで引いて200とnoindexを確かめられる★★"
       "（ファイルがあるだけでは足りない）",
       check_served(next(m["slug"] for m in rows
@@ -532,15 +675,39 @@ def main() -> int:
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--slug")
     ap.add_argument("--apply", action="store_true")
+    ap.add_argument("--machine", help="machines.json に足す1件（JSONファイル）")
+    ap.add_argument("--detail", help="記事データ（JSONファイル）")
     args = ap.parse_args()
     if args.selftest:
         return selftest()
     if not args.slug:
         ap.print_help()
         return 0
-    print("★この経路は新台1機種だけを公開します（既存ページは触りません）★")
-    print(f"  slug: {args.slug} / 書き込み: {'する' if args.apply else 'しない（確認だけ）'}")
-    print("  機種データと記事データは、先に add_machine_run.py が作ったものを渡してください")
+    # ★実際に公開する経路を持たせる★（2026-07-31・Codex指摘）
+    #   以前はここが「説明を表示して終わり」だったので、
+    #   `--apply` を付けても何も起きなかった。
+    #   **何もしないのに成功したように見える**のが一番こわい。
+    if not (args.machine and args.detail):
+        print("★機種データと記事データのファイルが要ります★")
+        print("  先に add_machine_run.py が作ったものを、")
+        print("  --machine <machine.json> --detail <detail.json> で渡してください。")
+        print("  （ふだんは add_machine_run.py --apply が中で呼びます）")
+        return 1
+    machine = _sj.read_json(args.machine, expect=dict)
+    detail = _sj.read_json(args.detail, expect=dict)
+    res = publish(args.slug, machine, detail, apply_it=args.apply)
+    if res["problems"]:
+        print("★公開できません★")
+        for p in res["problems"]:
+            print("  ✗ " + p[:160])
+        return 1
+    if args.apply:
+        print("公開しました:")
+        for w in res["wrote"]:
+            print("   " + os.path.relpath(w, BASE).replace(os.sep, "/"))
+    else:
+        print(f"確認だけ済みました（問題なし・{res['html_bytes']} バイトのページを作れます）")
+        print("  実際に書くには --apply を付けてください")
     return 0
 
 
