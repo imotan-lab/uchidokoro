@@ -136,8 +136,11 @@ def _visible_body(html: str) -> str:
     for tag in ("script", "style", "template", "noscript"):
         body = re.sub("(?is)<" + tag + "[^>]*>.*?</" + tag + _WS + ">", " ", body)
     # 隠されている要素は「表示されている」と見なさない
-    body = re.sub("(?is)<([a-z]+)[^>]*[ ]hidden[ >][^>]*>.*?</" + chr(92) + "1"
-                  + _WS + ">", " ", body)
+    #   hidden 属性 / aria-hidden="true" / display:none / visibility:hidden
+    for pat in ("[ ]hidden[ >]", 'aria-hidden="true"',
+                "display[ ]*:[ ]*none", "visibility[ ]*:[ ]*hidden"):
+        body = re.sub("(?is)<([a-z]+)[^>]*" + pat + "[^>]*>.*?</" + chr(92) + "1"
+                      + _WS + ">", " ", body)
     return re.sub("(?s)<[^>]+>", " ", body)
 
 
@@ -235,12 +238,23 @@ _SECTION_KEYS = {"title", "type", "body", "tables", "rows"}
 _FORBIDDEN = ("need_third", "unresolved", "candidates", "thin", "disputed")
 
 
+_TABLE_KEYS = {"label", "headers", "rows", "note"}
+_SECTION_TYPES = {"settei", "rumor"}
+# 機種データに入ってよい鍵（★新台が作るものだけ★）
+_MACHINE_KEYS = {"slug", "name", "seo", "info", "strategy", "aliases",
+                 "status", "release_date", "identity", "publish_state"}
+
+
+def _is_text(x) -> bool:
+    return isinstance(x, str)
+
+
 def check_detail(slug: str, detail: dict) -> list:
     """★受け取った記事データそのものを確かめる★（2026-07-31・Codex指摘）
 
     `build_detail` が正しくても、この関数は任意の記事データを受け取れる。
     直接呼び出し・試験用の呼び出し・将来のつなぎ間違いが別の入口になるので、
-    **境界でもう一度確かめる**。
+    **境界でもう一度、形と型まで確かめる**。
     """
     ng = []
     if not isinstance(detail, dict):
@@ -250,6 +264,8 @@ def check_detail(slug: str, detail: dict) -> list:
     stray = sorted(set(detail) - _DETAIL_KEYS)
     if stray:
         ng.append(f"記事データに知らない項目があります: {stray}")
+    if not isinstance(detail.get("sections"), list):
+        ng.append("sections が配列ではありません")
     for sec in (detail.get("sections") or []):
         if not isinstance(sec, dict):
             ng.append("節が辞書ではありません")
@@ -257,10 +273,65 @@ def check_detail(slug: str, detail: dict) -> list:
         bad = sorted(set(sec) - _SECTION_KEYS)
         if bad:
             ng.append(f"節『{sec.get('title')}』に知らない項目があります: {bad}")
+        if not _is_text(sec.get("title")):
+            ng.append("節に題がありません")
+        if "type" in sec and sec["type"] not in _SECTION_TYPES:
+            ng.append(f"知らない節の種類です: {sec.get('type')!r}")
+        if "body" in sec and not (isinstance(sec["body"], list)
+                                  and all(_is_text(x) for x in sec["body"])):
+            ng.append(f"節『{sec.get('title')}』の本文が文字の配列ではありません")
+        for tb in (sec.get("tables") or []):
+            if not isinstance(tb, dict):
+                ng.append("表が辞書ではありません")
+                continue
+            tbad = sorted(set(tb) - _TABLE_KEYS)
+            if tbad:
+                ng.append(f"表に知らない項目があります: {tbad}")
+            rows = tb.get("rows")
+            if not (isinstance(rows, list)
+                    and all(isinstance(r, list) and all(_is_text(c) for c in r)
+                            for r in rows)):
+                ng.append("表の中身が文字の並びではありません")
+    for key in ("factTable", "summaryBoxes", "evTable"):
+        val = detail.get(key)
+        if val is None:
+            continue
+        if not isinstance(val, list):
+            ng.append(f"{key} が配列ではありません")
     blob = json.dumps(detail, ensure_ascii=False)
     for word in _FORBIDDEN:
         if chr(34) + word + chr(34) in blob:
             ng.append(f"採用しなかったものの置き場（{word}）が記事データに残っています")
+    return ng
+
+
+def check_machine(slug: str, machine: dict) -> list:
+    """★機種データそのものを確かめる★（2026-07-31・Codex指摘2）
+
+    以前は slug と status と publish_state しか見ていなかった。
+    知らない項目が混ざれば、そこに書いた文字がページへ出る道になる。
+    """
+    ng = []
+    if not isinstance(machine, dict):
+        return ["機種データが辞書ではありません"]
+    stray = sorted(set(machine) - _MACHINE_KEYS)
+    if stray:
+        ng.append(f"機種データに知らない項目があります: {stray}")
+    for key in ("name", "info", "strategy"):
+        if key in machine and not _is_text(machine[key]):
+            ng.append(f"{key} が文字ではありません")
+    if not isinstance(machine.get("aliases", []), list):
+        ng.append("aliases が配列ではありません")
+    seo = machine.get("seo")
+    if seo is not None and not (isinstance(seo, dict)
+                                and set(seo) <= {"title", "description"}):
+        ng.append("seo に知らない項目があります")
+    ident = machine.get("identity")
+    if ident is not None and not isinstance(ident, dict):
+        ng.append("identity が辞書ではありません")
+    # ★狙い目は当サイトの判断なので、この経路では書かせない★
+    if machine.get("strategy"):
+        ng.append("先行記事に狙い目を書くことはできません（strategy は空のはず）")
     return ng
 
 
@@ -396,6 +467,9 @@ def check_after(slug: str, before_pages: dict, rows_before: list) -> list:
     if slug not in now:
         ng.append(f"{slug} のページができていません")
     rows = _sj.read_rows(MACHINES)
+    if not rows or rows[-1].get("slug") != slug:
+        ng.append(f"一覧の最後が {slug} ではありません"
+                  "（同時に別の書き込みがあった可能性があります）")
     if len(rows) != len(rows_before) + 1:
         ng.append(f"machines.json の件数が {len(rows_before)} → {len(rows)} です（+1のはず）")
     # ★件数だけでは、既存行の書き換えや入れ替わりを見つけられない★
@@ -424,6 +498,7 @@ def publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> d
     rows = _sj.read_rows(MACHINES)
     out["problems"] += check_before(slug, machine, rows)
     out["problems"] += check_detail(slug, detail)
+    out["problems"] += check_machine(slug, machine)
     if out["problems"]:
         return out
     html = render(slug, machine, detail)
@@ -441,32 +516,44 @@ def publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> d
         before_sitemap = f.read()
     page = _page_path(slug)
     dp = os.path.join(DETAILS, f"{slug}.json")
-    made_dir = False
+    made = []          # ★この処理が実際に作ったものだけ★（既存を消さないため）
 
     def _cleanup():
-        """★置いたものを片付ける★（一覧にはまだ足していないので完全に戻る）"""
-        for q in (dp, page):
-            if os.path.exists(q):
-                os.remove(q)
-        if made_dir and os.path.isdir(os.path.dirname(page)):
-            os.rmdir(os.path.dirname(page))
+        """★自分が作ったものだけ片付ける★（2026-07-31・Codex指摘3を再現して直した）
+
+        以前は「置くはずだった場所」を消していたので、
+        **たまたま同名で既にあった記事データを消して**しまい、
+        しかも「元に戻しました」と報告していた（実際に再現した）。
+        """
+        for kind, q in reversed(made):
+            try:
+                if kind == "file" and os.path.isfile(q):
+                    os.remove(q)
+                elif kind == "dir" and os.path.isdir(q):
+                    os.rmdir(q)
+            except OSError:
+                pass
 
     try:
         # ① 記事データとページを置く（★この時点では一覧から辿れない★）
-        if os.path.exists(dp):
-            raise PublishError(f"{dp} が既にあります")
-        with open(dp, "w", encoding="utf-8", newline=chr(10)) as f:
+        #    "x" で開く＝既にあれば作らずに例外。存在確認との隙間も無くす。
+        with open(dp, "x", encoding="utf-8", newline=chr(10)) as f:
+            made.append(("file", dp))
             json.dump(detail, f, ensure_ascii=False, indent=1)
             f.write(chr(10))
         d = os.path.dirname(page)
         if not os.path.isdir(d):
             os.makedirs(d)
-            made_dir = True
-        with open(page, "w", encoding="utf-8", newline=chr(10)) as f:
+            made.append(("dir", d))
+        with open(page, "x", encoding="utf-8", newline=chr(10)) as f:
+            made.append(("file", page))
             f.write(html)
+    except FileExistsError as e:
+        _cleanup()
+        raise PublishError(f"同じ名前のファイルが既にあります（触っていません）: {e}")
     except Exception as e:                # noqa: BLE001
         _cleanup()
-        raise PublishError(f"公開できませんでした（元に戻しました）: {e}")
+        raise PublishError(f"公開できませんでした（作ったものは消しました）: {e}")
 
     # ② ★一覧に足す前に全部確かめる★（2026-07-31）
     #   以前は machines.json まで書いてから確かめていたので、
@@ -490,8 +577,14 @@ def publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> d
 
     # ③ ここで初めて一覧へ足す（★これ以降トップページからリンクされる★）
     try:
+        rows = _sj.read_rows(MACHINES)        # ★直前に読み直す★（競合対策）
+        if any(m.get("slug") == slug for m in rows):
+            _cleanup()
+            out["problems"].append("書いている間に同じ機種が一覧へ入りました（やり直してください）")
+            return out
         rows.append(machine)
-        tmp = MACHINES + ".new"
+        # ★一時ファイル名を実行ごとに変える★（同時に走っても踏み合わない）
+        tmp = MACHINES + f".new.{os.getpid()}"
         with open(tmp, "w", encoding="utf-8", newline=chr(10)) as f:
             json.dump(rows, f, ensure_ascii=False, indent=1)
             f.write(chr(10))
@@ -499,7 +592,7 @@ def publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> d
         out["wrote"] = [dp, page, MACHINES]
     except Exception as e:                # noqa: BLE001
         _cleanup()
-        raise PublishError(f"一覧に足せませんでした（元に戻しました）: {e}")
+        raise PublishError(f"一覧に足せませんでした（作ったものは消しました）: {e}")
 
     # ④ 一覧に足したあとの最終確認（ここで出たら人が直す＝台帳へ）
     out["problems"] += check_after(slug, before_pages, rows[:-1])
@@ -597,6 +690,43 @@ def selftest() -> int:
     t("　節に知らない項目があれば止める",
       check_detail("zzz_test", {"slug": "zzz_test",
                                 "sections": [{"title": "x", "候補": []}]}))
+
+    # ★機種データそのものを確かめる★（Codex指摘2）
+    _ok_machine = {"slug": "zzz_test", "name": "テスト", "seo": {"title": "x"},
+                   "info": "", "strategy": "", "aliases": [],
+                   "status": "preview", "release_date": "2026-09",
+                   "publish_state": STATE}
+    t("★まともな機種データなら通る★", check_machine("zzz_test", _ok_machine) == [])
+    t("★★知らない項目が混ざっていたら止める★★（そこに書いた文字がページへ出る）",
+      any("知らない項目" in x for x in
+          check_machine("zzz_test", {**_ok_machine, "こっそり": "9999G天井"})))
+    t("★★先行記事に狙い目は書かせない★★（当サイトの判断は裏取りの外）",
+      any("狙い目" in x for x in
+          check_machine("zzz_test", {**_ok_machine, "strategy": "等価600G〜"})))
+    t("　aliases が配列でなければ止める",
+      check_machine("zzz_test", {**_ok_machine, "aliases": "ほくと"}))
+
+    # ★記事データの中の形まで見る★
+    t("　表の中身が文字の並びでなければ止める",
+      any("文字の並び" in x for x in check_detail(
+          "zzz_test", {"slug": "zzz_test",
+                       "sections": [{"title": "x",
+                                     "tables": [{"rows": "ただの文字列"}]}]})))
+    t("　知らない節の種類なら止める",
+      any("節の種類" in x for x in check_detail(
+          "zzz_test", {"slug": "zzz_test",
+                       "sections": [{"title": "x", "type": "なぞ"}]})))
+    t("　本文が文字の配列でなければ止める",
+      any("本文" in x for x in check_detail(
+          "zzz_test", {"slug": "zzz_test",
+                       "sections": [{"title": "x", "body": "ひとつの文字列"}]})))
+
+    # ★見えない要素の判定★（Codex指摘5）
+    for _hide in ('aria-hidden="true"', "hidden ",
+                  'class="x" style="display:none"'):
+        t(f"　{_hide[:18]} で隠された文字は「見える」と扱わない",
+          "先行記事" not in _visible_body(
+              "<body><div " + _hide + ">先行記事</div>ふつうの本文</body>"))
 
     # ★sitemap は1文字も変えない★
     with open(SITEMAP, encoding="utf-8") as _f2:
