@@ -242,9 +242,15 @@ def compare(pages: list) -> dict:
                         "sources": sorted(e["sources"]),
                         "games_disputed": games is None and len(e["games"]) > 1,
                         "rate_disputed": rate is None and len(e["rate"]) > 1})
+    # ★採用できたCZは「採れなかった語」に出さない★（2026-07-31・実行して気づいた）
+    #   あるページで採れなくても、別のページで採れて採用に至ったものは
+    #   「採れなかった」ではない。そのまま出すと報告が信用できなくなる。
+    got_names = {norm_name(c["name"]) for c in adopted}
+    got_names |= {norm_name(n["name"]) for n in need_third}
     return {"adopted": adopted, "need_third": need_third,
             # ★CZらしいのに採れなかった語★（載せない判断には使わない・報告用）
-            "unresolved": sorted(unresolved)}
+            "unresolved": sorted(x for x in unresolved
+                                 if norm_name(x) not in got_names)}
 
 
 # ---------------------------------------------------------------- selftest
@@ -339,6 +345,9 @@ def selftest() -> int:
     t("★採り切れなかった語は報告に残す（載せない判断には使わない）★",
       compare([{**A, "unresolved": ["ユニゾンチャレンジ"]}, B])["unresolved"]
       == ["ユニゾンチャレンジ"])
+    t("★★採用できたCZを『採れなかった語』に出さない★★（報告が信用できなくなる）",
+      compare([{**A, "unresolved": ["すぱ娘チャレンジ", "ユニゾンチャレンジ"]}, B])
+      ["unresolved"] == ["ユニゾンチャレンジ"])
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")

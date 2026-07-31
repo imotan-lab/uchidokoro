@@ -448,7 +448,8 @@ def main() -> int:
     if args.apply:
         r = subprocess.run(
             [sys.executable, os.path.join(BASE, "scripts", "task_lock.py"),
-             "check", "--ctx", args.ctx], capture_output=True, text=True)
+             "check", "--ctx", args.ctx], capture_output=True, text=True,
+            encoding="utf-8", errors="replace")
         if r.returncode != 0:
             print("★ロックを持っていません → 何も書かずに終了します★")
             return 1
