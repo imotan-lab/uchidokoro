@@ -235,11 +235,6 @@ NOT_RETRYABLE = ("既に登録されている疑い", "公式ページと名前�
                  "すでに扱っている機種です", "パチスロのページに見えません",
                  "登場年月が新台の範囲外です", "同じURLの機種名が変わりました",
                  "メーカーが名簿にありません", "の場所ではありません",
-            # ★名簿を読めないなら「合っている」とは言えない★（Codex17回目）
-            #   読めなかったのに素通りすると、誤ったメーカーのまま公開できた。
-            "メーカー名簿を読めません",
-            # ★新台でない機種を新台として出さない★（Codex17回目）
-            "登場年月が新台の範囲外です",
                  "登場年月が公式と違います")
 
 
@@ -262,7 +257,15 @@ BLOCKING = ("AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY", "型式名",
             # ★公式ページを開けないなら、その機種だと確かめられていない★
             #   slug も公式URLから作るので、開けないURLのまま記事を作らない。
             "公式ページを取得できません", "既に登録されている疑い", "2件以上",
-            "転載の疑い")   # ★登録簿に無い転載があれば止める★
+            "転載の疑い",   # ★登録簿に無い転載があれば止める★
+            # ★★ここに入れ忘れていた★★（2026-07-31・Codex18回目）
+            #   直したつもりで、書き換える場所を1つ手前と間違えていた。
+            #   「文言を返す」ことだけを試験していたので、
+            #   **run_one が記事を作るのを拒む**ところまで確かめていなかった。
+            # 名簿を読めない＝メーカーが合っているとは言えない
+            "メーカー名簿を読めません", "メーカーが指定されていません",
+            # 新台でない機種を新台として出さない
+            "登場年月が新台の範囲外です")
 
 
 def _blocking(problems: list) -> list:
@@ -418,21 +421,41 @@ def finish_publish(res: dict) -> list:
     return []
 
 
-def pick_work(pend: dict) -> dict | None:
-    """★今日やる1機種を決める★（2026-07-31・Codex16回目）
+# ★一晩に見る上限★（全部やると時間もアクセスも際限が無い）
+MAX_TRY_PER_NIGHT = 5
 
-    以前は見張った結果を並べて終わりで、**記事を作る所へ一度も進まなかった**。
-    毎晩動かしても待ち行列に溜まるだけだった。
 
-    今日見つけた分も待ち行列に入れてから選ぶので、ここは待ち行列だけを見る。
-    **古いものから**（早く見つけた機種ほど後回しにしない）。
+def pick_work(pend: dict) -> list:
+    """★今日やる機種を、古い順に並べて返す★（2026-07-31・Codex18回目）
+
+    以前は最古の1件しか返していなかった。
+    その1件が記事にできない状態だと、**翌日も同じ1件が選ばれ**、
+    後ろに記事にできる新台があっても最大60日待たされていた。
+    ＝早く見つけた機種ほど遅れる、という目的と正反対の動きだった。
+
+    順に試して、**実際に公開できた1件**で止める。
     """
     items = _pend.due(pend)
-    if not items:
-        return None
-    it = sorted(items, key=lambda x: (x.get("first_seen") or "", x.get("url")))[0]
-    return {"name": it.get("name") or "", "url": it["url"],
-            "maker": it.get("maker") or "", "release": it.get("release") or ""}
+    return sorted(items, key=lambda x: (x.get("first_seen") or "",
+                                        x.get("url")))[:MAX_TRY_PER_NIGHT]
+
+
+def give_up_now(url: str, name: str, problems: list) -> None:
+    """★何度やっても無理なものは、行列から出して台帳へ★
+
+    行列に残すと、そのぶん後ろが詰まる。
+    黙って消すのではなく、要確認台帳に残して人が見られるようにする。
+    """
+    _ledger("site", "structural", "MATERIAL", "PENDING_PERMANENT_BLOCK",
+            "新台を記事にできません（やり直しても変わらない理由）",
+            f"{name} / {url} / " + " / ".join(problems)[:1200])
+    try:
+        pend = _pend.load()
+        if _pend.done(pend, url):
+            _pend.save(pend)
+            _log(f"待ち行列から出して台帳へ移しました: {name or url}")
+    except Exception as e:                # noqa: BLE001
+        _log(f"  ✗ 待ち行列から出せませんでした: {e}")
 
 
 def fill_missing(work: dict) -> dict:
@@ -468,10 +491,11 @@ def push_after_publish(slug: str) -> list:
                               cwd=BASE, capture_output=True, text=True,
                               encoding="utf-8", errors="replace")
 
-    r = _run()
-    if r.returncode != 0:
-        return ["関所で止まりました（公開前の確認）: "
-                + (r.stdout or r.stderr or "").strip()[:300]]
+    # ★最初から --commit を呼ぶ★（2026-07-31・Codex18回目）
+    #   引数なしの関所は「作業ツリーとコミットが一致しているか」まで見る。
+    #   公開した直後は必ず一致していないので、**新台は1件もpushできなかった**。
+    #   （公開の下見だけして、通しで動かしていなかったので気づけなかった）
+    #   --commit の中でも、目印・許した範囲・サイト監査は同じように通る。
     r = _run("--commit")
     if r.returncode != 0:
         return ["関所で止まりました（コミット対象の選別）: "
@@ -505,7 +529,8 @@ def push_after_publish(slug: str) -> list:
     return []
 
 
-def run_one(name, official_url, maker, release, apply_it=False) -> dict:
+def run_one(name, official_url, maker, release, apply_it=False,
+            before_write=None) -> dict:
     """1機種を最後まで進める。"""
     out = {"name": name, "slug": None, "wrote": [], "problems": [], "blocked": []}
     _log(f"=== 機種の処理開始: {name} / {maker} / {release} / {official_url} "
@@ -559,6 +584,11 @@ def run_one(name, official_url, maker, release, apply_it=False) -> dict:
     detail = _ba.build_detail(out["slug"], name, release, mat)
     out["preview"] = {"machine": machine, "detail": detail}
     if apply_it:
+        # ★書く直前に「今日の担当か」を見る★（2026-07-31・Codex18回目）
+        #   先に使ってしまうと、記事にできない機種でその日の枠を使い切る。
+        if before_write and not before_write():
+            out["problems"].append("今日の担当ではありません（1日1機種）")
+            return out
         # ★公開は専用の経路だけ★（2026-07-31・Codexと相談した案B）
         #   ページを先に置き、最後に一覧へ足す。既存ページは1枚も触らない。
         res = _pub.publish_from_material(
@@ -649,6 +679,32 @@ def selftest() -> int:
         t("　名簿に無いメーカーは通さない",
           any("名簿にありません" in x for x in _verify_maker("https://x/", "nosuch")))
 
+        # ★★「文言が返る」ではなく「記事を作らない」ところまで見る★★
+        #   （2026-07-31・Codex18回目。文言の試験しかしていなかったので、
+        #     止める理由の一覧に入れ忘れていたことに気づけなかった）
+        _nw._get = lambda u, timeout=20: (
+            "<title>X</title><body>2019年4月 登場</body>")
+        _old = run_one("X", "https://m.example/products/slot/zzz/", "m", "")
+        t("★★古い機種は記事そのものを作らない★★（通しで確かめる・Codex18回目）",
+          "preview" not in _old and _old["wrote"] == []
+          and any("範囲外" in x for x in _old["blocked"]))
+        _nw._get = lambda u, timeout=20: (
+            "<title>X</title><body>2026年9月 登場</body>")
+        _bad = run_one("X", "https://m.example/products/slot/zzz/", "nosuch", "2026-09")
+        t("★★名簿に無いメーカーでは記事そのものを作らない★★（通しで確かめる）",
+          "preview" not in _bad and _bad["wrote"] == []
+          and any("名簿" in x for x in _bad["blocked"]))
+        _real_cats2 = _nw.CATALOGS
+        _nw.CATALOGS = os.path.join(_tmpdir, "こわれている.json")
+        with open(_nw.CATALOGS, "w", encoding="utf-8") as _f:
+            _f.write("{ こわれた")
+        _brk = run_one("X", "https://m.example/products/slot/zzz/", "m", "2026-09")
+        _nw.CATALOGS = _real_cats2
+        t("★★名簿を読めないときも記事を作らない★★"
+          "（読めない＝合っているとは言えない・Codex18回目）",
+          "preview" not in _brk and _brk["wrote"] == []
+          and any("名簿" in x for x in _brk["blocked"]))
+
         r = run_one("X", "https://m.example/products/slot/zzz/", "m", "2026-09")
         t("★既定では書き込まない（dry-run）★", r["wrote"] == [])
         t("　組み立てた結果を返す（中身を見てから書ける）",
@@ -738,6 +794,14 @@ def selftest() -> int:
               _remember("通し確認機ZZZ",
                         "https://m.example/products/slot/zzz_x/", "m",
                         "2026-09", ["名鑑の個別ページが 1 件"]) is None)
+            t("★★詰まっている機種が後ろを塞がない★★"
+              "（最古の1件しか見ず、最大60日待たされていた・Codex18回目）",
+              len(pick_work({"items": {
+                  f"https://x/{i}": {
+                      "name": f"n{i}", "url": f"https://x/{i}", "maker": "m",
+                      "release": "2026-09", "first_seen": f"2026-07-0{i+1}",
+                      "last_try": "", "tries": 1} for i in range(3)}})) == 3)
+            t("　一晩に見る数には上限がある", MAX_TRY_PER_NIGHT <= 5)
             t("★★試験が本番の待ち行列を触らない★★（架空機種が入り込んだ）",
               _pend.STORE.startswith(_tmpdir))
             t("　実際に開けない公式URLでは組み立てまで進まない",
@@ -868,34 +932,37 @@ def main() -> int:
         print(f"    {it['release']} {it['name'][:34]}"
               f"（{_pend.waited_days(it)}日待ち）{it.get('last_reason', '')[:40]}")
 
-    # ★★ここから実際に1機種を進める★★（2026-07-31・Codex16回目）
+    # ★★ここから実際に機種を進める★★（2026-07-31・Codex16〜18回目）
     #   以前はここで終わっていたので、無人で動かしても永久に記事にならなかった。
-    work = pick_work(pend)
-    if work:
+    #   さらに1件しか見ていなかったので、その1件が詰まると後ろが全部止まっていた。
+    for work in pick_work(pend):
         work = fill_missing(work)
         if not (work["name"] and work["maker"]):
             _log(f"  まだ記事にできません（名前かメーカーが取れない）: {work['url']}")
-        else:
-            _log(f"今日の1機種: {work['name']} / {work['maker']} / {work['release']}")
-            if apply_it and not _claim_today(work["url"]):
-                _log("  今日の担当ではありません（1日1機種）")
-            else:
-                res = run_one(work["name"], work["url"], work["maker"],
-                              work["release"], apply_it)
-                for b in res.get("blocked") or []:
-                    print("  ★止めました: " + b[:150])
-                if res.get("wrote"):
-                    ng = finish_publish(res)
-                    for x in ng:
-                        print("  ✗ " + x[:200])
-                        _log("  ✗ " + x[:300])
-                    if ng:
-                        _ledger("site", "structural", "MATERIAL", "PUSH_BLOCKED",
-                                "公開はしたがpushできませんでした",
-                                f"{res['slug']} / " + " / ".join(ng)[:1200])
-                    d["problems"] += ng
-                elif apply_it and res.get("blocked"):
-                    _log(f"  作りませんでした（{len(res['blocked'])}件の理由）")
+            continue
+        _log(f"試す: {work['name']} / {work['maker']} / {work['release']}")
+        res = run_one(work["name"], work["url"], work["maker"],
+                      work["release"], apply_it,
+                      before_write=lambda u=work["url"]: _claim_today(u))
+        for b in res.get("blocked") or []:
+            print("  ★止めました: " + b[:150])
+        if res.get("wrote"):
+            ng = finish_publish(res)
+            for x in ng:
+                print("  ✗ " + x[:200])
+                _log("  ✗ " + x[:300])
+            if ng:
+                _ledger("site", "structural", "MATERIAL", "PUSH_BLOCKED",
+                        "公開はしたがpushできませんでした",
+                        f"{res['slug']} / " + " / ".join(ng)[:1200])
+            d["problems"] += ng
+            break                          # ★公開できたら今日はここまで★
+        if any("今日の担当ではありません" in p for p in res.get("problems") or []):
+            _log("  今日の担当ではありません（1日1機種）→ 今日はここまで")
+            break
+        # ★やり直しても変わらない理由なら、行列から出して後ろを通す★
+        if res.get("blocked") and not retry_later(res["problems"]):
+            give_up_now(work["url"], work["name"], res["problems"])
     if d["problems"]:
         _ledger("site", "structural", "MATERIAL", "WATCH_PROBLEM",
                 "新台の見張りで確認が要る点が出ました",
