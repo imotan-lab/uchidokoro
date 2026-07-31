@@ -29,6 +29,7 @@ import unicodedata
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
 
+import html_tables as _ht            # noqa: E402
 import model_code_lookup as _mc       # noqa: E402
 import new_machine_watch as _w        # noqa: E402
 import spec_lookup as _sl             # noqa: E402
@@ -72,38 +73,27 @@ def from_sentences(text: str) -> list:
     return out
 
 
-def from_table(lines: list) -> list:
-    """表から採る。★モード名は見出しをさかのぼって探す★
+def from_tables(html: str) -> list:
+    """表を1区画ずつ読む。★モード名はその表の直前の見出しからだけ取る★
 
-    「継続G数 → 1セット100G」「純増 → 約2.8枚/G」が並ぶが、
-    どのモードの表かは**上の見出し**にしか書かれていない。
-    さかのぼって見つからなければ採らない（モード不明の値は載せない）。
+    ★2026-07-31・CZ側と同じ穴を自分で再現して作り直した★
+      行の列にしてから見出しをさかのぼると、間に別の表が挟まったとき
+      **通常ATの純増を上位ATの値として採って**しまう（実際に再現）。
+      表ごとに切り出せば、値も見出しも同じ区画の中だけで決まる。
     """
     out = []
-    for i, line in enumerate(lines):
-        if line not in _TBL_GAMES or i + 1 >= len(lines):
-            continue
-        mg = re.match(r"^1セット\s*(\d{2,4})\s*G$", _norm(lines[i + 1]))
-        if not mg:
-            continue
-        net = None
-        for j in range(i + 2, min(i + 6, len(lines))):
-            if lines[j] in _TBL_NET and j + 1 < len(lines):
-                mn = re.match(r"^約?\s*(\d+(?:\.\d+)?)\s*枚(?:/G)?$", _norm(lines[j + 1]))
-                if mn:
-                    net = float(mn.group(1))
-                break
-        if net is None:
-            continue          # ★純増が取れなければ採らない★
-        mode = ""
-        for k in range(i - 1, max(i - 12, -1), -1):   # 見出しをさかのぼる
-            mode = mode_of(lines[k])
-            if mode:
-                break
+    for tb in _ht.tables(html):
+        mode = mode_of(tb["title"])
         if not mode:
-            continue          # ★どのモードか分からなければ採らない★
-        out.append({"mode": mode, "games": int(mg.group(1)), "net": net,
-                    "raw": f"{lines[i+1]} / 純増{net}枚"})
+            continue          # ★どのモードの表か分からなければ採らない★
+        mg = re.match(r"^1セット\s*(\d{2,4})\s*G$",
+                      _norm(_ht.value_of(tb["pairs"], _TBL_GAMES)))
+        mn = re.match(r"^約?\s*(\d+(?:\.\d+)?)\s*枚(?:/G)?$",
+                      _norm(_ht.value_of(tb["pairs"], _TBL_NET)))
+        if not (mg and mn):
+            continue
+        out.append({"mode": mode, "games": int(mg.group(1)), "net": float(mn.group(1)),
+                    "raw": f"{tb['title'][:20]} / 1セット{mg.group(1)}G / 純増{mn.group(1)}枚"})
     return out
 
 
@@ -120,9 +110,8 @@ def read_page(url: str, official_name: str) -> dict:
         out["reason"] = why
         return out
     text = _w._visible_text(html)
-    lines = [x.strip() for x in text.splitlines()]
     seen, got = set(), []
-    for c in from_sentences(text) + from_table(lines):
+    for c in from_sentences(text) + from_tables(html):
         key = (c["mode"], c["games"], c["net"])
         if key in seen:
             continue
@@ -184,17 +173,35 @@ def selftest() -> int:
     t("★どのモードか分からない記述は採らない★",
       from_sentences("これは1セット100G継続、純増約2.8枚です。") == [])
 
-    L = ["AT「夢娘ライブ」", "タイプ", "セット数管理", "継続G数", "1セット100G",
-         "純増", "約2.8枚/G"]
-    tb = from_table(L)
+    H = ('<h3>AT「夢娘ライブ」</h3><table>'
+         "<tr><th>タイプ</th><td>セット数管理</td></tr>"
+         "<tr><th>継続G数</th><td>1セット100G</td></tr>"
+         "<tr><th>純増</th><td>約2.8枚/G</td></tr></table>")
+    tb = from_tables(H)
     t("★★表からも同じ形で採れる（見出しからモードを取る）★★",
       tb and tb[0]["mode"] == "MAIN_AT" and tb[0]["net"] == 2.8)
     t("★★見出しにモードが無ければ採らない★★",
-      from_table(["なにかの表", "継続G数", "1セット100G", "純増", "約2.8枚/G"]) == [])
+      from_tables("<h3>なにかの表</h3><table>"
+                  "<tr><th>継続G数</th><td>1セット100G</td></tr>"
+                  "<tr><th>純増</th><td>約2.8枚/G</td></tr></table>") == [])
     t("　純増が取れなければ採らない",
-      from_table(["AT「x」", "継続G数", "1セット100G", "備考", "なし"]) == [])
-    LU = ["上位AT「クライMAXライブ」", "継続G数", "1セット100G", "純増", "約5.0枚/G"]
-    t("　上位ATは上位として採る", from_table(LU)[0]["mode"] == "UPPER_AT")
+      from_tables('<h3>AT「x」</h3><table>'
+                  "<tr><th>継続G数</th><td>1セット100G</td></tr>"
+                  "<tr><th>備考</th><td>なし</td></tr></table>") == [])
+    t("　上位ATは上位として採る",
+      from_tables('<h3>上位AT「クライMAXライブ」</h3><table>'
+                  "<tr><th>継続G数</th><td>1セット100G</td></tr>"
+                  "<tr><th>純増</th><td>約5.0枚/G</td></tr></table>"
+                  )[0]["mode"] == "UPPER_AT")
+    t("★★別の表の値を、上のATの見出しで採らない★★（実際に再現した）",
+      [(c["mode"], c["net"]) for c in from_tables(
+          '<h3>上位AT「クライMAXライブ」</h3><table>'
+          "<tr><th>継続G数</th><td>1セット100G</td></tr>"
+          "<tr><th>純増</th><td>約5.0枚/G</td></tr></table>"
+          "<h3>ボーナス</h3><table>"
+          "<tr><th>継続G数</th><td>1セット100G</td></tr>"
+          "<tr><th>純増</th><td>約2.8枚/G</td></tr></table>")]
+      == [("UPPER_AT", 5.0)])
 
     A = {"url": "https://www.p-world.co.jp/x", "host": "p-world.co.jp", "ok": True,
          "specs": [{"mode": "MAIN_AT", "games": 100, "net": 2.8, "raw": ""}]}

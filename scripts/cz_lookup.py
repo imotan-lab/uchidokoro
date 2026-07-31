@@ -32,6 +32,7 @@ sys.path.insert(0, os.path.join(BASE, "scripts"))
 
 import model_code_lookup as _mc       # noqa: E402
 import new_machine_watch as _w        # noqa: E402
+import html_tables as _ht            # noqa: E402
 import spec_lookup as _sl             # noqa: E402
 
 # CZ名として認める形（★短い固有名だけ★・文を拾わない）
@@ -69,6 +70,12 @@ def clean_name(text: str) -> str:
     return ("上位" + core) if upper and not core.startswith("上位") else core
 
 
+def is_cz_title(text: str) -> bool:
+    """その見出しはCZの見出しか。★CZだと分かる語が要る★"""
+    t = _norm(text)
+    return ("CZ" in t or "チャレンジ" in t or "CHALLENGE" in t or "チャンス" in t)
+
+
 def from_sentences(text: str) -> list:
     out = []
     for m in _SENT.finditer(_norm(text)):
@@ -80,53 +87,57 @@ def from_sentences(text: str) -> list:
     return out
 
 
-def from_table(lines: list) -> list:
-    """表から採る。★CZ名は上の見出しにしかないのでさかのぼる★"""
+def from_tables(html: str) -> list:
+    """表を1区画ずつ読む。★名前はその表の直前の見出しからだけ取る★
+
+    ★2026-07-31・Codex指摘4を自分で再現して作り直した★
+      以前は本文を平らな行にしてから見出しをさかのぼっていたため、
+      間に別の表が挟まると**別のCZの名前で値を採って**いた。
+      表ごとに切り出せば、値も名前も同じ区画の中だけで決まる。
+    """
     out = []
-    for i, line in enumerate(lines):
-        if line not in _TBL_GAMES or i + 1 >= len(lines):
+    for tb in _ht.tables(html):
+        # ★見出しがCZだと分かる時だけ採る★
+        #   これが無いと「ボーナス」「なにかの表」まで CZ名 になってしまう
+        #   （clean_name は短い語なら何でも通すため）。
+        if not is_cz_title(tb["title"]):
             continue
-        games = _norm(lines[i + 1])
-        if not _GAMES_OK.match(games):
-            continue
-        rate = None
-        for j in range(i + 2, min(i + 6, len(lines))):
-            if lines[j] in _TBL_RATE and j + 1 < len(lines):
-                cand = _norm(lines[j + 1])
-                if _RATE_OK.match(cand):
-                    rate = cand
-                break
-        if not rate:
-            continue          # ★期待度が取れなければ採らない★
-        name = ""
-        for k in range(i - 1, max(i - 8, -1), -1):
-            # ★直前のCZの区画を越えて名前を探さない★（2026-07-31・実際に再現した）
-            #   名前の無い表が、上にある別のCZの名前を横取りしていた。
-            #   ＝7G/約50%のCZが「Aチャレンジ」の値として出てしまう。
-            if lines[k] in _TBL_GAMES or lines[k] in _TBL_RATE:
-                break
-            if "CZ" in lines[k] or "チャレンジ" in lines[k]:
-                name = clean_name(lines[k])
-                if name:
-                    break
+        name = clean_name(tb["title"])
         if not name:
-            continue          # ★どのCZか分からなければ採らない★
+            continue          # ★名前がひも付いていない表は使わない★
+        games = _norm(_ht.value_of(tb["pairs"], _TBL_GAMES))
+        rate = _norm(_ht.value_of(tb["pairs"], _TBL_RATE))
+        if not (_GAMES_OK.match(games) and _RATE_OK.match(rate)):
+            continue          # ★継続G数と期待度がそろわなければ採らない★
         out.append({"name": name, "games": games, "rate": rate,
                     "raw": f"{name} / {games} / {rate}"})
     return out
 
 
-# ★「上位」は かぎかっこの外に書かれる★（例: 上位CZ「クライMAXライブCHALLENGE」）
-#   かぎかっこの中だけを見ると「上位」が落ち、採れた名前と突き合わせられない。
-_MENTION = re.compile("(.{0,8})「([^」]{2,24}(?:チャレンジ|CHALLENGE|チャンス))」")
+# ★採り漏れの検知は、採れる形より広く取る★（2026-07-31・Codex指摘2を再現）
+#   かぎかっこ付きしか数えていなかったため、「Bチャレンジは5G or 10G継続…」のような
+#   **採れなかった記述**が採り漏れとして数えられず、「全部採れた」と扱われていた。
+#   なお「上位」はかぎかっこの外に書かれる（例: 上位CZ「クライMAXライブCHALLENGE」）。
+_CZ_WORDS = "(?:チャレンジ|CHALLENGE|チャンス)"
+_MENTION_Q = re.compile("(.{0,8})「([^」]{2,24}" + _CZ_WORDS + ")」")
+_MENTION_BARE = re.compile("([ぁ-んァ-ヶ一-龥A-Za-z0-9ー・]{1,24}" + _CZ_WORDS + ")")
 
 
 def mentioned_names(text: str) -> set:
-    """本文に固有名として出てくるCZらしい名前。★採り漏れの有無を測るため★"""
+    """本文に出てくるCZらしい名前。★採り漏れがあるかを測るためだけに使う★
+
+    ★広めに拾う★ 拾いすぎると「採り切れていない」と判定して**載せない**側に倒れる。
+    取りこぼすと、採れなかったCZに気づかないまま一部だけ載せることになる。
+    """
+    t = _norm(text)
     out = set()
-    for before, raw in _MENTION.findall(_norm(text)):
+    for before, raw in _MENTION_Q.findall(t):
         nm = clean_name(before + "「" + raw + "」")
         if nm:
+            out.add(nm)
+    for raw in _MENTION_BARE.findall(t):
+        nm = clean_name(raw)
+        if nm and not any(nm in x or x in nm for x in out):
             out.add(nm)
     return out
 
@@ -144,18 +155,24 @@ def read_page(url: str, official_name: str) -> dict:
         out["reason"] = why
         return out
     text = _w._visible_text(html)
-    lines = [x.strip() for x in text.splitlines()]
-    seen, got = set(), []
-    for c in from_sentences(text) + from_table(lines):
-        if c["name"] in seen:
-            continue
-        seen.add(c["name"])
-        got.append(c)
+    cands = from_sentences(text) + from_tables(html)
+    # ★同じページの中で同じ名前に別の値が出たら、そのページは使わない★
+    #   （2026-07-31・Codex指摘3を再現）以前は先に見つけた方だけ残し、
+    #   食い違いを黙って捨てていた。捨てた方が正しい可能性がある。
+    by_name: dict = {}
+    for c in cands:
+        by_name.setdefault(c["name"], []).append(c)
+    conflict = sorted(n for n, v in by_name.items()
+                      if len({(x["games"], x["rate"]) for x in v}) > 1)
+    if conflict:
+        out["reason"] = ("同じページの中でCZの値が食い違っています（"
+                         + "・".join(conflict[:3]) + "）")
+        return out
+    got = [v[0] for v in by_name.values()]
     out["czs"] = got
-    # ★一部だけ採れた状態で使わない★（2026-07-31・実際に再現した）
+    # ★一部だけ採れた状態で使わない★（実際に再現した）
     #   P-WORLDには6つのCZ名があるのに3つしか採れず、それでも「OK」を返していた。
-    #   3つだけ載せると読者は「CZは3種類」と読む＝種類数を誤って伝えることになる。
-    missing = sorted(mentioned_names(text) - {c["name"] for c in got})
+    missing = sorted(mentioned_names(text) - set(by_name))
     if missing:
         out["reason"] = "CZを採り切れていません（" + "・".join(missing[:4]) + "）"
         out["czs"] = []
@@ -168,9 +185,11 @@ def read_page(url: str, official_name: str) -> dict:
 def compare(pages: list) -> dict:
     """★CZ名ごとに、継続G数と期待度が一致したものだけ採る★"""
     votes: dict = {}
+    usable = 0
     for p in pages:
         if not p.get("ok"):
             continue
+        usable += 1
         lin = _sl._lineage(p["host"])
         for c in p["czs"]:
             k = json.dumps({x: c[x] for x in ("name", "games", "rate")},
@@ -195,8 +214,15 @@ def compare(pages: list) -> dict:
                 "candidates": [{"games": v["sample"]["games"],
                                 "rate": v["sample"]["rate"],
                                 "sources": sorted(v["sources"])} for v in items]})
+    # ★CZは一式で出す★（2026-07-31・Codex指摘1を再現）
+    #   1つでも食い違いが残ったまま残りを載せると、
+    #   読者は載っているものが全種類だと読む。
+    if need_third:
+        adopted = []
     return {"adopted": sorted(adopted, key=lambda x: x["name"]),
-            "need_third": need_third}
+            "need_third": need_third,
+            # ★使えるページが2つ無いなら「そろっている」とは言わない★
+            "complete": bool(not need_third and usable >= 2)}
 
 
 # ---------------------------------------------------------------- selftest
@@ -224,22 +250,36 @@ def selftest() -> int:
       got[0]["name"] == "すぱ娘チャレンジ" and got[0]["games"] == "4G+α"
       and got[0]["rate"] == "約40%")
 
-    L = ['CZ「すぱ娘チャレンジ」', "タイプ", "ST", "継続G数", "4G+α", "期待度", "約40%"]
-    tb = from_table(L)
+    H = ('<h3><span>CZ「すぱ娘チャレンジ」</span></h3><table><tbody>'
+         '<tr><th>タイプ</th><td>ST</td></tr>'
+         '<tr><th>継続G数</th><td>4G＋α</td></tr>'
+         '<tr><th>期待度</th><td>約40%</td></tr></tbody></table>')
+    tb = from_tables(H)
     t("★★表からも同じ形で採れる★★",
       tb and tb[0]["name"] == "すぱ娘チャレンジ" and tb[0]["rate"] == "約40%")
-    t("★★見出しにCZ名が無ければ採らない★★",
-      from_table(["なにかの表", "継続G数", "4G+α", "期待度", "約40%"]) == [])
+    t("★★表に名前がひも付いていなければ採らない★★",
+      from_tables("<h3>なにかの表</h3><table><tr><th>継続G数</th><td>4G</td></tr>"
+                  "<tr><th>期待度</th><td>約40%</td></tr></table>") == [])
     t("　期待度が取れなければ採らない",
-      from_table(['CZ「x」', "継続G数", "4G+α", "備考", "なし"]) == [])
+      from_tables('<h3>CZ「x娘チャレンジ」</h3><table>'
+                  "<tr><th>継続G数</th><td>4G</td></tr>"
+                  "<tr><th>備考</th><td>なし</td></tr></table>") == [])
 
-    t("★★名前の無い表が、上にある別のCZの名前を横取りしない★★（実際に起きた）",
-      [c["name"] for c in from_table(
-          ['CZ「Aチャレンジ」', "継続G数", "4G", "期待度", "約40%",
-           "タイプ", "ST", "継続G数", "7G", "期待度", "約50%"])] == ["Aチャレンジ"])
+    # ★Codex指摘4：間に別の表の見出しが挟まっても名前を横取りしない★
+    HH = ('<h3>CZ「Aチャレンジ」</h3><table>'
+          "<tr><th>継続G数</th><td>4G</td></tr>"
+          "<tr><th>期待度</th><td>約40%</td></tr></table>"
+          "<h3>ボーナス</h3><table>"
+          "<tr><th>継続G数</th><td>7G</td></tr>"
+          "<tr><th>期待度</th><td>約50%</td></tr></table>")
+    t("★★別の表の値を、上のCZの名前で採らない★★（実際に再現した）",
+      [(c["name"], c["games"]) for c in from_tables(HH)] == [("Aチャレンジ", "4G")])
+
     t("★本文に出てくるCZ名を数えられる★",
-      mentioned_names("上位CZ「クライMAXライブCHALLENGE」と「すぱ娘チャレンジ」があります。")
-      == {"上位クライMAXライブCHALLENGE", "すぱ娘チャレンジ"})
+      "すぱ娘チャレンジ" in mentioned_names("「すぱ娘チャレンジ」があります。"))
+    t("★★かぎかっこが無い記述も採り漏れとして数える★★（Codex指摘2・再現した）",
+      "Bチャレンジ" in mentioned_names(
+          "Aチャレンジは4G継続、期待度は約40%。Bチャレンジは5G or 10G継続、期待度は約50%。"))
 
     A = {"url": "https://www.p-world.co.jp/x", "host": "p-world.co.jp", "ok": True,
          "czs": [{"name": "すぱ娘チャレンジ", "games": "4G+α", "rate": "約40%", "raw": ""}]}
@@ -253,6 +293,21 @@ def selftest() -> int:
     t("　名前が違えば別のCZとして扱う", not compare([A, D])["adopted"])
     t("　同じ運営元の2ページを2票と数えない",
       not compare([A, {**B, "host": "p-world.co.jp"}])["adopted"])
+
+    # ★Codex指摘1：1つでも食い違えばCZは一式で出さない★
+    A2 = {**A, "czs": [A["czs"][0],
+                       {"name": "Bチャレンジ", "games": "7G", "rate": "約50%", "raw": ""}]}
+    B2 = {**B, "czs": [B["czs"][0],
+                       {"name": "Bチャレンジ", "games": "7G", "rate": "約60%", "raw": ""}]}
+    _r = compare([A2, B2])
+    t("★★1つでも食い違えば、一致した分も載せない★★"
+      "（一部だけ載せると全種類だと読まれる・再現した）",
+      _r["adopted"] == [] and _r["complete"] is False
+      and [n["name"] for n in _r["need_third"]] == ["Bチャレンジ"])
+    t("　全部そろえば complete になる", compare([A, B])["complete"] is True)
+    t("★使えるページが無いのに『そろっている』と言わない★",
+      compare([{**A, "ok": False, "czs": []},
+               {**B, "ok": False, "czs": []}])["complete"] is False)
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")

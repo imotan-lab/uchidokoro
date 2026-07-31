@@ -160,8 +160,10 @@ def build_detail(slug, name, release, material) -> dict:
             facts.append([jp, f"約{c['net']}枚/G"])
 
     # ★CZ★（名前ごとに継続G数と期待度をそろえて）
-    czs = (material.get("czs") or {}).get("adopted") or []
-    if czs:
+    cz_res = material.get("czs") or {}
+    czs = cz_res.get("adopted") or []
+    # ★全部そろった時だけ載せる★（一部だけ載せると全種類だと読まれる）
+    if czs and cz_res.get("complete"):
         rows = [[c["name"], f"{c['games']} ／ 期待度 {c['rate']}"] for c in czs]
         sections.append({
             "title": "CZの種類", "type": "settei",
