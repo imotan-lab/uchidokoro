@@ -98,15 +98,65 @@ def same_as_commit() -> list:
             ng.append("コミットしていない変更が残っています"
                       "（監査した中身とpushする中身が違います）")
             break
+    # ★追跡していないファイルも見る★（2026-07-31・Codex15回目）
+    #   git diff は untracked を見ないので、
+    #   手元にだけある物を監査が読んでいると、コミットと違う物を確かめたことになる。
+    r = _git("ls-files", "--others", "--exclude-standard", "-z")
+    others = [x for x in (r.stdout or "").split(chr(0)) if x]
+    if others:
+        ng.append(f"コミットに入らないファイルがあります: {others[:5]}")
+    return ng
+
+
+def push_scope() -> dict:
+    """★これから何がpushされるか★（2026-07-31・Codex15回目）
+
+    最新のコミットだけ正しくても、**手前の未pushコミットも一緒に出ます**。
+    リモートの先端から今のHEADまで、全部を見る。
+    """
+    br = _git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    head = _git("rev-parse", "HEAD").stdout.strip()
+    up = _git("rev-parse", "--abbrev-ref", "@{upstream}")
+    upstream = up.stdout.strip() if up.returncode == 0 else ""
+    commits, files = [], []
+    if upstream:
+        r = _git("rev-list", f"{upstream}..HEAD")
+        commits = [x for x in r.stdout.split() if x]
+        if commits:
+            r2 = _git("diff", "--name-only", "-z", f"{upstream}..HEAD")
+            files = [x for x in (r2.stdout or "").split(chr(0)) if x]
+    return {"branch": br, "head": head, "upstream": upstream,
+            "commits": commits, "files": files}
+
+
+def check_push_scope(slug: str) -> list:
+    """push予定の全コミットが、許した範囲だけか。"""
+    ng = []
+    sc = push_scope()
+    if not sc["upstream"]:
+        ng.append("追跡先（upstream）が設定されていません")
+        return ng
+    if sc["branch"] != "main":
+        ng.append(f"いまのブランチが main ではありません（{sc['branch']}）")
+    if not sc["commits"]:
+        return ng                          # 出すものが無い
+    allowed = allowed_for(slug)
+    stray = [x for x in sc["files"] if x not in allowed]
+    if stray:
+        ng.append(f"pushされる変更に、許していないファイルがあります: {stray[:5]}"
+                  f"（{len(sc['commits'])} コミット分をまとめて出そうとしています）")
     return ng
 
 
 def remote_ok() -> list:
-    r = _git("remote", "get-url", "origin")
-    url = (r.stdout or "").strip()
-    if WANT_REMOTE not in url:
-        return [f"push先が想定と違います: {url[:60]!r}"]
-    return []
+    """★push先を確かめる★（読み取り用と書き込み用が別々に設定できる）"""
+    ng = []
+    for kind, args in (("fetch", ("remote", "get-url", "origin")),
+                       ("push", ("remote", "get-url", "--push", "origin"))):
+        url = (_git(*args).stdout or "").strip()
+        if WANT_REMOTE not in url:
+            ng.append(f"push先（{kind}）が想定と違います: {url[:60]!r}")
+    return ng
 
 
 def main() -> int:
@@ -130,6 +180,11 @@ def main() -> int:
     print("① 目印なし・許した範囲のみ・サイト監査OK")
 
     if args.commit:
+        # ★先に stage されている物が混ざらないようにする★（Codex15回目）
+        if _git("diff", "--quiet", "--cached").returncode != 0:
+            print("★すでに stage されている変更があります★")
+            print("  `git reset` で戻してから、もう一度実行してください")
+            return 1
         add = sorted(x for x in changed() if x in allowed_for(args.slug))
         if not add:
             print("② 変更がありません（コミットしません）")
@@ -142,13 +197,18 @@ def main() -> int:
         print("   （このあと人／タスクが commit → prepush_gate --slug で再確認 → push）")
         return 0
 
-    ng = same_as_commit() + remote_ok()
+    ng = same_as_commit() + remote_ok() + check_push_scope(args.slug)
     if ng:
         print("★push できません★")
         for x in ng:
             print("  ✗ " + x[:160])
         return 1
-    print("② 作業ツリーとコミットが一致・push先も想定どおり → ★pushしてよい★")
+    sc = push_scope()
+    print(f"② 作業ツリーとコミットが一致・push先も想定どおり")
+    print(f"   出すもの: {len(sc['commits'])} コミット / "
+          f"{len(sc['files'])} ファイル → {sc['upstream']}")
+    print(f"   push元: {sc['head'][:12]}")
+    print("★pushしてよい★")
     return 0
 
 
@@ -169,6 +229,11 @@ def selftest() -> int:
       "machines/x/index.html" in allowed_for("x")
       and "machines/y/index.html" not in allowed_for("x"))
     t("★push先が想定どおり★", remote_ok() == [])
+    _sc = push_scope()
+    t("★★これから何がpushされるか分かる★★（手前の未pushコミットも一緒に出る）",
+      isinstance(_sc.get("commits"), list) and _sc.get("branch") == "main")
+    t("　push用URLも読み取り用と別に確かめる",
+      len(remote_ok()) == 0)
     t("★★作業ツリーとコミットが一致しているか見られる★★"
       "（監査した中身とpushする中身が違うと誤情報が出る）",
       isinstance(same_as_commit(), list))
