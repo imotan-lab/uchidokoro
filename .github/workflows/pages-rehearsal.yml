@@ -104,6 +104,17 @@ jobs:
           python scripts/claim_pipeline.py --selftest
           python scripts/claim_collect.py --selftest
           python scripts/task_guard.py --selftest
+          # ★新台追加タスクの部品★（ネットに出ない試験だけ）
+          python scripts/html_tables.py --selftest
+          python scripts/cz_lookup.py --selftest
+          python scripts/at_spec_lookup.py --selftest
+          python scripts/ceiling_lookup.py --selftest
+          python scripts/spec_lookup.py --selftest
+          python scripts/lineage_check.py --selftest
+          python scripts/model_code_lookup.py --selftest
+          python scripts/directory_index.py --selftest
+          python scripts/build_new_article.py --selftest
+          python scripts/new_machine_watch.py --selftest
 
       - name: Repository audits
         shell: bash
