@@ -155,6 +155,43 @@ def check_page(slug: str, html: str) -> list:
     return ng
 
 
+# 数値らしいかたまり（全角も半角にそろえてから見る）
+_NUM = re.compile(r"[0-9][0-9,./]*%?")
+
+
+def _numbers(text: str) -> set:
+    import unicodedata
+    t = unicodedata.normalize("NFKC", text or "")
+    return {x.rstrip(",./") for x in _NUM.findall(t) if x.rstrip(",./")}
+
+
+def check_only_allowed_values(slug: str, machine: dict, detail: dict,
+                              html: str) -> list:
+    """★載せてよい値だけが載っているか★（2026-07-31・Codexの必須条件）
+
+    ひな型だけで描いた結果と見比べ、**この機種のせいで増えた数値**を取り出す。
+    それが機種データ・記事データのどこにも無ければ、
+    どこかで作られた値ということになるので止める。
+
+    本文だけでなく `<head>`（title・説明・JSON-LD）も含めて丸ごと見る。
+    """
+    empty_machine = {"slug": slug, "name": machine.get("name", ""),
+                     "seo": {"title": ""}, "info": "", "strategy": "",
+                     "aliases": [], "status": "preview", "release_date": ""}
+    try:
+        base = render(slug, empty_machine, {"slug": slug, "sections": []})
+    except Exception as e:                # noqa: BLE001
+        return [f"見比べ用のページを描けません: {type(e).__name__}: {e}"]
+    added = _numbers(html) - _numbers(base)
+    allowed = _numbers(json.dumps(machine, ensure_ascii=False)
+                       + json.dumps(detail, ensure_ascii=False))
+    stray = sorted(x for x in added if x not in allowed)
+    if stray:
+        return ["載せる材料に無い数値がページに出ています: "
+                + "・".join(stray[:8])]
+    return []
+
+
 def allowed_paths(slug: str) -> set:
     """★この経路が変えてよいファイル★（これ以外が変わっていたら止める）"""
     return {
@@ -295,6 +332,7 @@ def publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> d
     html = render(slug, machine, detail)
     out["html_bytes"] = len(html)
     out["problems"] += check_page(slug, html)
+    out["problems"] += check_only_allowed_values(slug, machine, detail, html)
     if out["problems"] or not apply_it:
         return out
 
@@ -421,6 +459,9 @@ def selftest() -> int:
       "（noindexは非公開化ではない）",
       any("先行記事" in x for x in
           check_page("zzz_test", good.replace("⚠ 先行記事（解析待ち）", "ふつうの記事"))))
+
+    t("　数値のかたまりを取り出せる（全角もそろえる）",
+      _numbers("約97.3%と１２００Ｇ") == {"97.3%", "1200"})
 
     # ★slug そのものを確かめる★（2026-07-31・machines/ の外へ書けた）
     t("★★slug に ../ が入っていたら受け付けない★★（machines/ の外へ書けた）",
