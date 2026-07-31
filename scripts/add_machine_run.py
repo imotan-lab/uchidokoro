@@ -264,7 +264,8 @@ def run_one(name, official_url, maker, release, apply_it=False) -> dict:
     if apply_it:
         # ★公開は専用の経路だけ★（2026-07-31・Codexと相談した案B）
         #   ページを先に置き、最後に一覧へ足す。既存ページは1枚も触らない。
-        res = _pub.publish(out["slug"], machine, detail, apply_it=True)
+        res = _pub.publish_from_material(
+            out["slug"], name, maker, official_url, release, mat, apply_it=True)
         out["wrote"] = res["wrote"]
         out["problems"] += res["problems"]
         if res["problems"]:

@@ -31,9 +31,17 @@ class _Doc(HTMLParser):
         self.links = []          # [{rel, href}]
         self.bases = []          # [href]
         self.visible = []        # 読者に見える文字
-        self._skip = 0           # 中身を読まない入れ子の深さ
-        self._hidden = []        # 隠された要素のスタック
+        self.notices = []        # 先行記事の断り書き（専用の目印つき）
+        # ★開いている要素を全部積む★（2026-07-31・Codex指摘4を再現して直した）
+        #   以前は「隠された要素」だけを積んでいたので、
+        #   <div hidden><div></div>先行記事</div> のように
+        #   同じタグ名で閉じられると、外側の隠しが外れてしまった。
+        self._stack = []         # [(tag, hidden, skip)]
         self._in_body = False
+
+    # 閉じない要素
+    _VOID = {"meta", "link", "base", "br", "img", "hr", "input", "source",
+             "col", "area", "embed", "track", "wbr", "param"}
 
     @staticmethod
     def _attrs(attrs) -> dict:
@@ -52,38 +60,57 @@ class _Doc(HTMLParser):
         style = a.get("style", "").replace(" ", "").lower()
         return "display:none" in style or "visibility:hidden" in style
 
+    def _hidden_now(self) -> bool:
+        return any(h for _t, h, _s in self._stack)
+
+    def _skip_now(self) -> bool:
+        return any(k for _t, _h, k in self._stack)
+
     def handle_starttag(self, tag, attrs):
         a = self._attrs(attrs)
         if tag == "body":
             self._in_body = True
         if tag == "meta" and a.get("name"):
-            self.metas.append({"name": a["name"].lower(), "content": a.get("content", "")})
+            self.metas.append({"name": a["name"].lower(),
+                               "content": a.get("content", "")})
         if tag == "link" and a.get("rel"):
             self.links.append({"rel": a["rel"].lower(), "href": a.get("href", "")})
         if tag == "base":
             self.bases.append(a.get("href", ""))
-        if tag in _NON_TEXT:
-            self._skip += 1
-        elif self._is_hidden(a):
-            self._hidden.append(tag)
-        # 閉じない要素は入れ子に数えない
-        if tag in ("meta", "link", "base", "br", "img", "hr", "input"):
-            if tag in _NON_TEXT:
-                self._skip -= 1
-            elif self._hidden and self._hidden[-1] == tag:
-                self._hidden.pop()
+        # ★専用の目印がある断り書き★（文面が本文のどこかにあるだけでは認めない）
+        if a.get("data-preview-notice"):
+            self.notices.append({"kind": a["data-preview-notice"],
+                                 "hidden": self._hidden_now() or self._is_hidden(a),
+                                 "text": ""})
+            self._notice_open = len(self._stack)
+        if tag not in self._VOID:
+            self._stack.append((tag, self._is_hidden(a), tag in _NON_TEXT))
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)      # <br/> のような自閉じ
 
     def handle_endtag(self, tag):
-        if tag in _NON_TEXT and self._skip > 0:
-            self._skip -= 1
-        elif self._hidden and self._hidden[-1] == tag:
-            self._hidden.pop()
+        # ★同じタグ名が見つかるところまで戻す★（閉じ忘れがあっても崩れない）
+        for i in range(len(self._stack) - 1, -1, -1):
+            if self._stack[i][0] == tag:
+                del self._stack[i:]
+                opened = getattr(self, "_notice_open", None)
+                if opened is not None and len(self._stack) <= opened:
+                    # ★断り書きはここで終わり★（2026-07-31・自分の確認で気づいた）
+                    #   閉じたことを覚えないと、その後の文章まで断り書きに混ざり、
+                    #   ページ全体を「断り書きの文面」として読んでしまう。
+                    self._notice_open = None
+                return
 
     def handle_data(self, data):
-        if self._in_body and not self._skip and not self._hidden:
-            t = data.strip()
-            if t:
-                self.visible.append(t)
+        t = data.strip()
+        if not t:
+            return
+        opened = getattr(self, "_notice_open", None)
+        if self.notices and opened is not None and len(self._stack) > opened:
+            self.notices[-1]["text"] += t
+        if self._in_body and not self._skip_now() and not self._hidden_now():
+            self.visible.append(t)
 
 
 def parse(source: str) -> _Doc:
@@ -109,6 +136,11 @@ def meta_values(doc: _Doc, name: str) -> list:
 
 def link_hrefs(doc: _Doc, rel: str) -> list:
     return [x["href"] for x in doc.links if x["rel"] == rel.lower()]
+
+
+def preview_notices(doc: _Doc, kind: str) -> list:
+    """★専用の目印を持つ断り書き★（本文のどこかに同じ語があるだけでは認めない）"""
+    return [n for n in doc.notices if n["kind"] == kind and not n["hidden"]]
 
 
 def visible_text(source: str) -> str:
@@ -156,6 +188,33 @@ def selftest() -> int:
     t("　壊れたHTMLでも落ちない", isinstance(visible_text("<body><p>あ"), str))
     t("　実体参照をほどく", "あ&い" not in visible_text("<body>あ&amp;い</body>")
       or "あ&い" in visible_text("<body>あ&amp;い</body>"))
+
+    t("★★入れ子で閉じても外側の隠しが外れない★★（Codex指摘・実際に再現した）",
+      "先行記事" not in visible_text(
+          "<body><div hidden><div></div>先行記事</div>ふつう</body>"))
+    t("　深い入れ子でも隠しが効く",
+      "先行記事" not in visible_text(
+          "<body><div hidden><p><span>先行記事</span></p></div>ふつう</body>"))
+    t("　閉じ忘れがあっても崩れない",
+      "ふつう" in visible_text("<body><div hidden><p>先行記事</div>ふつう</body>"))
+
+    N = ('<body><aside data-preview-notice="PREVIEW_VERIFIED_SUBSET" role="note">'
+         "先行記事：確認できた項目だけを掲載しています</aside>"
+         "<footer>先行記事一覧はこちら</footer></body>")
+    nd = parse(N)
+    t("★★専用の目印を持つ断り書きだけを数える★★"
+      "（フッターに同じ語があるだけでは認めない）",
+      len(preview_notices(nd, "PREVIEW_VERIFIED_SUBSET")) == 1)
+    t("★★断り書きの文面は、その要素の中だけ★★（ページ全体を拾っていた）",
+      preview_notices(nd, "PREVIEW_VERIFIED_SUBSET")[0]["text"]
+      == "先行記事：確認できた項目だけを掲載しています")
+    t("　入れ子があっても中身は全部拾う",
+      preview_notices(parse(
+          '<body><div data-preview-notice="X"><p>先行</p><p>記事</p></div>'
+          "<p>あと</p></body>"), "X")[0]["text"] == "先行記事")
+    t("　隠された断り書きは数えない",
+      not preview_notices(parse(N.replace("<aside ", "<aside hidden ")),
+                          "PREVIEW_VERIFIED_SUBSET"))
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")

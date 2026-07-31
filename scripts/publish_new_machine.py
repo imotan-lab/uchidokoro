@@ -41,6 +41,7 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
 
 import build_machine_pages as _bmp      # noqa: E402
+import build_new_article as _ba         # noqa: E402
 import html_check as _hc                # noqa: E402
 import safe_json as _sj                 # noqa: E402
 
@@ -57,6 +58,7 @@ class PublishError(RuntimeError):
 # ★slug に使ってよい形★（2026-07-31・自分で確かめて危険を確認）
 #   `../` を入れると machines/ の外へ書けてしまう
 #   （_page_path("../../evil") → ../evil/index.html）。
+NOTICE = chr(100)+chr(97)+chr(116)+chr(97)+chr(45)+"preview-notice="+chr(34)+STATE+chr(34)
 _SLUG_OK = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
 # 空白の並び（バックスラッシュを直接書かない：制御文字に化ける事故が続いたため）
 _WS = "[ " + chr(9) + chr(13) + chr(10) + "]*"
@@ -184,8 +186,16 @@ def check_page(slug: str, html: str) -> list:
     if "style=" in html:
         ng.append("インラインstyleが入っています")
     # ★先行記事だと読者に分かる表示があるか★（noindexは非公開化ではない）
-    if "先行記事" not in " ".join(doc.visible):
-        ng.append("先行記事であることが読者に見える形で書かれていません")
+    #   ★本文のどこかに語があるだけでは認めない★（Codex指摘3）
+    #     ひな型のバナーは完成機種のページにも同じ形で入っており、
+    #     JavaScriptで表示を切り替えているだけだった。
+    #     専用の目印を持ち、隠されていない要素をちょうど1個求める。
+    notices = _hc.preview_notices(doc, STATE)
+    if len(notices) != 1:
+        ng.append(f"先行記事の断り書きが {len(notices)} 個です"
+                  "（隠されていないものが1個であるべきです）")
+    elif "先行記事" not in notices[0]["text"]:
+        ng.append(f"断り書きの文面がおかしいです: {notices[0]['text'][:40]!r}")
     return ng
 
 
@@ -484,16 +494,64 @@ def check_after(slug: str, before_pages: dict, rows_before: list) -> list:
     return ng
 
 
+# ひな型のバナー（JavaScriptで表示を切り替えている素の形）
+_BANNER_HIDDEN = '<div id="previewBanner" class="preview-banner is-hidden">'
+# 先行記事として出す形（★JavaScriptが動かなくても見える★＋機械で確かめられる目印）
+_BANNER_SHOWN = ('<div id="previewBanner" class="preview-banner" role="note" '
+                 + NOTICE + '>')
+
+
 def render(slug: str, machine: dict, detail: dict) -> str:
-    """既存ページと同じ描き方で1枚だけ作る。"""
+    """既存ページと同じ描き方で1枚だけ作る。
+
+    ★2026-07-31・Codex指摘3を確かめて分かったこと★
+      先行記事のバナーは、**preview でも完成機種でもHTMLが全く同じ**で、
+      JavaScript が `is-hidden` を外して初めて見える作りだった。
+      つまり **JSが動かなければ、先行記事だという断りが一切出ない**。
+      しかも検査側は「本文のどこかに『先行記事』の語があるか」しか見ていないので、
+      完成機種のページでも合格してしまっていた。
+
+      そこでこの経路で作るページだけ、
+      **最初から見える形**にし、機械で数えられる目印を付ける。
+      （ひな型と描画関数は既存119機種と共通のまま・ここでは差し替えない）
+    """
     with open(os.path.join(BASE, "machine.html"), encoding="utf-8") as f:
         template = _bmp.prepare_template(f.read())
     reasons = _bmp.extract_pochipochi_reasons(template)
-    return _bmp.render_page(template, machine, detail, reasons)
+    html = _bmp.render_page(template, machine, detail, reasons)
+    if machine.get("status") == "preview":
+        if _BANNER_HIDDEN not in html:
+            raise PublishError("ひな型の先行記事バナーが見つかりません"
+                               "（machine.html の作りが変わった可能性があります）")
+        html = html.replace(_BANNER_HIDDEN, _BANNER_SHOWN, 1)
+    return html
+
+
+def publish_from_material(slug: str, name: str, maker: str, official_url: str,
+                          release: str, material: dict,
+                          apply_it: bool = False) -> dict:
+    """★材料から公開まで一気に通す（これが正しい入口）★
+
+    ★2026-07-31・Codex指摘1★
+      以前は完成した `machine` / `detail` を受け取っていたので、
+      **誰かが作った任意のデータをそのまま公開できた**。
+      「出玉率の97.3%」を「CZ期待度97.3%」として渡しても、
+      入力のどこかに同じ数値があるため検査を通ってしまう。
+
+      公開の境界で組み立てれば、載る値は
+      `build_new_article` が**採用済みの材料からしか作らない**ものに限られる。
+    """
+    machine = _ba.build_machine(slug, name, maker, official_url, release, material)
+    detail = _ba.build_detail(slug, name, release, material)
+    return publish(slug, machine, detail, apply_it=apply_it)
 
 
 def publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> dict:
-    """新台1件を公開する（★同時に2つは公開しない★）。"""
+    """新台1件を公開する（★同時に2つは公開しない★）。
+
+    ★できれば `publish_from_material` を使うこと★
+      こちらは完成データを受け取るので、境界の検査でしか守れない。
+    """
     if not apply_it:
         return _publish(slug, machine, detail, apply_it=False)
     with _OnlyOne():
@@ -535,9 +593,15 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
         **たまたま同名で既にあった記事データを消して**しまい、
         しかも「元に戻しました」と報告していた（実際に再現した）。
         """
-        for kind, q in reversed(made):
+        for kind, q, want in reversed(made):
             try:
                 if kind == "file" and os.path.isfile(q):
+                    # ★自分が書いた中身のままの時だけ消す★（Codex指摘5）
+                    with open(q, encoding="utf-8") as fh:
+                        if _sha(fh.read()) != want:
+                            out["problems"].append(
+                                f"作った後に中身が変わっていたので消しませんでした: {q}")
+                            continue
                     os.remove(q)
                 elif kind == "dir" and os.path.isdir(q):
                     os.rmdir(q)
@@ -547,16 +611,16 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
     try:
         # ① 記事データとページを置く（★この時点では一覧から辿れない★）
         #    "x" で開く＝既にあれば作らずに例外。存在確認との隙間も無くす。
+        detail_text = json.dumps(detail, ensure_ascii=False, indent=1) + chr(10)
         with open(dp, "x", encoding="utf-8", newline=chr(10)) as f:
-            made.append(("file", dp))
-            json.dump(detail, f, ensure_ascii=False, indent=1)
-            f.write(chr(10))
+            made.append(("file", dp, _sha(detail_text)))
+            f.write(detail_text)
         d = os.path.dirname(page)
         if not os.path.isdir(d):
             os.makedirs(d)
-            made.append(("dir", d))
+            made.append(("dir", d, None))
         with open(page, "x", encoding="utf-8", newline=chr(10)) as f:
-            made.append(("file", page))
+            made.append(("file", page, _sha(html)))
             f.write(html)
     except FileExistsError as e:
         _cleanup()
@@ -570,6 +634,11 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
     #   問題が見つかっても戻せなかった。ここで確かめれば、
     #   駄目なときは置いたファイルを消すだけで完全に元へ戻る。
     late = []
+    # ★書いたページと記事データが、そのままの中身か★（Codex指摘5）
+    for path, want in ((page, _sha(html)), (dp, _sha(detail_text))):
+        with open(path, encoding="utf-8") as f:
+            if _sha(f.read()) != want:
+                late.append(f"書いたはずの中身と違います: {path}")
     late += check_served(slug)
     late += check_no_stray_changes(slug, before_snap)
     late += check_sitemap_kept(before_sitemap)
@@ -606,6 +675,9 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
 
     # ④ 一覧に足したあとの最終確認
     late2 = check_after(slug, before_pages, rows[:-1])
+    with open(page, encoding="utf-8") as f:          # ★最後にもう一度★
+        if _sha(f.read()) != _sha(html):
+            late2.append(f"一覧へ足した後にページの中身が変わっています: {page}")
     if late2:
         # ★戻せるときだけ戻す★（2026-07-31・Codexの助言）
         #   いま置いてある中身が「自分が書いたもの」と同じ時にだけ戻す。
@@ -664,7 +736,9 @@ def selftest() -> int:
     good = ('<html><head><base href="/">'
             '<meta name="robots" content="noindex,follow">'
             '<link rel="canonical" href="https://uchidokoro.com/machines/zzz_test/">'
-            "</head><body>⚠ 先行記事（解析待ち）</body></html>")
+            "</head><body>"
+            '<div class="preview-banner" role="note" ' + NOTICE + ">"
+            "⚠ 先行記事（解析待ち）</div></body></html>")
     t("★作ったページの中身を必ず確かめる★", check_page("zzz_test", good) == [])
     t("★★noindex をコメントに書いただけでは通さない★★（実際に通っていた）",
       check_page("zzz_test",
@@ -683,10 +757,18 @@ def selftest() -> int:
     t("　インラインstyleがあれば公開しない",
       any("style" in x for x in check_page("zzz_test",
                                            good.replace("<body>", '<body style="x">'))))
-    t("★★先行記事だと読者に分かる表示が無ければ公開しない★★"
-      "（noindexは非公開化ではない）",
-      any("先行記事" in x for x in
-          check_page("zzz_test", good.replace("⚠ 先行記事（解析待ち）", "ふつうの記事"))))
+    t("★★断り書きが無ければ公開しない★★（noindexは非公開化ではない）",
+      any("断り書き" in x for x in check_page(
+          "zzz_test", good.replace(NOTICE, 'data-x="y"'))))
+    t("★★本文に『先行記事』の語があるだけでは認めない★★"
+      "（ひな型のバナーは完成機種のページにも同じ形で入っている）",
+      any("断り書き" in x for x in check_page(
+          "zzz_test", good.replace(NOTICE, 'data-x="y"')
+          + "<p>先行記事一覧はこちら</p>")))
+    t("　断り書きが2個あれば止める",
+      any("2 個" in x for x in check_page(
+          "zzz_test", good.replace("</body>",
+                                   '<div ' + NOTICE + '>先行記事</div></body>'))))
 
     t("　数値のかたまりを取り出せる（全角もそろえる）",
       _numbers("約97.3%と１２００Ｇ") == {"97.3%", "1200"})
@@ -697,14 +779,9 @@ def selftest() -> int:
           "zzz_test",
           good.replace('content="noindex,follow"',
                        'content="index" data-note="noindex"'))))
-    t("★★先行記事の表示はコメントでは認めない★★（読者に見えないため）",
-      any("先行記事" in x for x in check_page(
-          "zzz_test", good.replace("⚠ 先行記事（解析待ち）",
-                                   "<!-- 先行記事 -->ふつうの記事"))))
-    t("　scriptの中に書いてあるだけでも認めない",
-      any("先行記事" in x for x in check_page(
-          "zzz_test", good.replace("⚠ 先行記事（解析待ち）",
-                                   "<script>var x='先行記事';</script>本文"))))
+    t("★★断り書きの文面が違えば止める★★",
+      any("文面" in x for x in check_page(
+          "zzz_test", good.replace("⚠ 先行記事（解析待ち）", "ふつうの記事です"))))
 
     # ★受け取った記事データそのものを確かめる★
     t("★まともな記事データなら通る★",
@@ -761,9 +838,9 @@ def selftest() -> int:
     t("★★引用符が違う robots も数える★★（正規表現では見逃していた）",
       any("2 個" in x for x in check_page("zzz_test", good.replace(
           "</head>", "<meta name='robots' content='index'></head>"))))
-    t("★★hidden=\"\" で隠した先行記事は認めない★★（正規表現では見逃していた）",
-      any("先行記事" in x for x in check_page("zzz_test", good.replace(
-          "⚠ 先行記事（解析待ち）", '<div hidden="">先行記事</div>ふつうの記事'))))
+    t("★★隠された断り書きは認めない★★",
+      any("断り書き" in x for x in check_page(
+          "zzz_test", good.replace('role="note"', 'role="note" hidden'))))
 
     # ★同時に2つ公開しない★（Codex指摘4）
     with _OnlyOne(os.path.join(BASE, ".publish.lock.test")) as _one:
