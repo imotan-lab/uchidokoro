@@ -640,7 +640,10 @@ def _build_pages(rows: list, prose_all: dict) -> tuple:
     )
     tenjo_note = (
         "※同じ天井ゲーム数の機種は、狙い目ゲーム数が浅い順に掲載しています。"
-        f"G数でカウントする天井が<span class=\"list-count\">{SHALLOW_TENJO_LIMIT}</span>G"
+        # ★list-count は「機種数」の印★（2026-07-31）
+        #   ここに付けると監査が 1000 を機種数と読み違える（実際に起きた）。
+        #   ゲーム数はただの数字として出す。
+        f"G数でカウントする天井が{SHALLOW_TENJO_LIMIT}G"
         f"未満の機種は全<span class=\"list-count\">{len(A)}</span>機種です"
         "（周期天井の機種と、G数天井のチェッカーデータが無い機種は集計対象外です）。"
     )
