@@ -607,16 +607,19 @@ def allowed_paths(slug: str) -> set:
 
 def changed_paths() -> list:
     """いまリポジトリで変わっているファイル（gitに聞く）。"""
-    r = subprocess.run(["git", "status", "--porcelain"], cwd=BASE,
+    # ★-z で読む★（2026-07-31・Codexの助言）
+    #   ふつうの porcelain は、空白や日本語を含むパスを引用符で囲み、
+    #   rename を「旧 -> 新」の1行で出す。素朴に切ると読み違える。
+    r = subprocess.run(["git", "status", "--porcelain", "-z"], cwd=BASE,
                        capture_output=True, text=True, encoding="utf-8",
                        errors="replace")
     if r.returncode != 0:
         raise PublishError(f"git status が失敗しました: {r.stderr[:200]}")
     out = []
-    for line in r.stdout.splitlines():
+    for line in r.stdout.split(chr(0)):
         if len(line) <= 3:
             continue
-        path = line[3:].strip().strip('"')
+        path = line[3:].strip()
         if path.endswith("/"):
             # ★gitは新しいフォルダを「フォルダごと1行」で報告する★
             #   （2026-07-31・自分の検査が正しい公開を止めて気づいた）
@@ -837,7 +840,7 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
     if out["problems"]:
         return out
     html = render(slug, machine, detail)
-    out["html_bytes"] = len(html)
+    out["html_bytes"] = len(html.encode("utf-8"))   # ★文字数ではなくバイト数★
     out["problems"] += check_page(slug, html)
     out["problems"] += check_only_allowed_values(slug, machine, detail, html)
     if out["problems"] or not apply_it:
@@ -917,20 +920,29 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
     #   問題が見つかっても戻せなかった。ここで確かめれば、
     #   駄目なときは置いたファイルを消すだけで完全に元へ戻る。
     late = []
-    # ★書いたページと記事データが、そのままの中身か★（Codex指摘5）
-    for path, want in ((page, _sha(html)), (dp, _sha(detail_text))):
-        with open(path, encoding="utf-8") as f:
-            if _sha(f.read()) != want:
-                late.append(f"書いたはずの中身と違います: {path}")
-    late += check_served(slug)
-    late += check_no_stray_changes(slug, before_snap)
-    late += check_sitemap_kept(before_sitemap)
-    now_pages = _existing_pages()
-    for s_, h in before_pages.items():
-        if s_ not in now_pages:
-            late.append(f"既存ページが消えました: {s_}")
-        elif now_pages[s_] != h:
-            late.append(f"既存ページが書き換わりました: {s_}")
+    # ★確かめている最中に例外が出ても片付ける★
+    #   （2026-07-31・Codexが勧めた障害注入テストで見つけた）
+    #   確認の関数が投げると、そのまま外へ抜けてページと記事データが残っていた。
+    try:
+        # ★書いたページと記事データが、そのままの中身か★（Codex指摘5）
+        for path, want in ((page, _sha(html)), (dp, _sha(detail_text))):
+            with open(path, encoding="utf-8") as f:
+                if _sha(f.read()) != want:
+                    late.append(f"書いたはずの中身と違います: {path}")
+        late += check_served(slug)
+        late += check_no_stray_changes(slug, before_snap)
+        late += check_sitemap_kept(before_sitemap)
+        now_pages = _existing_pages()
+        for s_, h in before_pages.items():
+            if s_ not in now_pages:
+                late.append(f"既存ページが消えました: {s_}")
+            elif now_pages[s_] != h:
+                late.append(f"既存ページが書き換わりました: {s_}")
+    except BaseException as e:            # noqa: BLE001
+        _cleanup()
+        if isinstance(e, KeyboardInterrupt):
+            raise
+        raise PublishError(f"確かめの最中に失敗しました（作ったものは消しました）: {e}")
     if late:
         _cleanup()
         out["problems"] += late
@@ -1235,9 +1247,18 @@ def selftest() -> int:
     t("★★全体の機種数はもう扱わない★★（表示しない方針・監査が再導入を見張る）",
       count_updates(120, 121) == {} and COUNT_FILES == ())
 
-    t("★★一覧・ランキングのずれを見つけられる★★"
-      "（ずれたまま作り直すと既存の公開内容まで変わる）",
-      isinstance(check_hubs_untouched(), list))
+    # ★形だけの試験をやめる★（2026-07-31・Codex指摘：常に合格していた）
+    t("★いまは早見表がデータと一致している★", check_hubs_untouched() == [])
+    _real_build = build_hubs
+    try:
+        globals()["build_hubs"] = lambda: {"guide-ichiran.html": "ちがう中身"}
+        t("★★早見表がずれていたら見つける★★",
+          any("違います" in x for x in check_hubs_untouched()))
+        globals()["build_hubs"] = lambda: {"guide-ichiran.html": "x"}
+        t("　4ページそろっていなければ気づける（生成器が減らした場合）",
+          set(build_hubs()) != set(HUB_FILES))
+    finally:
+        globals()["build_hubs"] = _real_build
     import tempfile as _tf3
     _d3 = _tf3.mkdtemp(prefix="uchi_atomic_")
     try:
@@ -1334,6 +1355,75 @@ def selftest() -> int:
                         if m.get("status") == "preview")) == [])
     t("　存在しない機種なら引けないと分かる",
       any("引けません" in x for x in check_served("zzz_nothing_here")))
+
+    # ★★書き込みのどこで失敗しても、中途半端な状態を残さない★★
+    #   （2026-07-31・Codexが最も勧めた「障害注入」）
+    #   各書き込み地点をわざと失敗させ、
+    #   毎回「完全に元のまま」に戻ることを確かめる。
+    import shutil as _sh
+    import tempfile as _tf4
+    _dir4 = _tf4.mkdtemp(prefix="uchi_fault_")
+    _real = {"write_atomic": write_atomic, "build_hubs": build_hubs,
+             "check_served": check_served, "run_site_audit": run_site_audit,
+             "check_after": check_after, "MACHINES": MACHINES}
+    try:
+        def _snapshot():
+            """公開に関わるファイルの指紋（元のままか確かめる用）。"""
+            out = {}
+            for rel in list(HUB_FILES) + ["assets/data/machines.json"]:
+                full = os.path.join(BASE, rel)
+                with open(full, encoding="utf-8") as f:
+                    out[rel] = _sha(f.read())
+            return out
+
+        _slug4 = "zzz_fault_test"
+        _mat4 = {"adopted": {}, "need_third": {}, "thin": {}}
+        _before4 = _snapshot()
+
+        def _try_with(name, breaker):
+            globals()[name] = breaker
+            try:
+                publish_from_material(_slug4, "障害注入確認機", "bellco",
+                                      f"https://m.example/products/slot/{_slug4}/",
+                                      "2026-09", _mat4, apply_it=True)
+            except BaseException:                       # noqa: BLE001
+                pass
+            finally:
+                globals()[name] = _real[name]
+            ok = (_snapshot() == _before4
+                  and not os.path.isdir(os.path.join(BASE, "machines", _slug4))
+                  and not os.path.isfile(os.path.join(
+                      BASE, "assets", "data", "machine-details", f"{_slug4}.json")))
+            # 後片付け（失敗しても残っていたら消す）
+            _sh.rmtree(os.path.join(BASE, "machines", _slug4), ignore_errors=True)
+            dp4 = os.path.join(BASE, "assets", "data", "machine-details",
+                               f"{_slug4}.json")
+            if os.path.isfile(dp4):
+                os.remove(dp4)
+            return ok
+
+        def _boom(*_a, **_k):
+            raise RuntimeError("わざと失敗させました")
+
+        def _interrupt(*_a, **_k):
+            raise KeyboardInterrupt()
+
+        t("★★早見表を作る所で失敗しても、完全に元のまま★★",
+          _try_with("build_hubs", _boom))
+        t("★★配信の確認で失敗しても、完全に元のまま★★",
+          _try_with("check_served", _boom))
+        t("★★最後の監査で失敗しても、完全に元のまま★★",
+          _try_with("run_site_audit", lambda: ["わざとNG"]))
+        t("★★最終確認で失敗しても、完全に元のまま★★",
+          _try_with("check_after", lambda *a, **k: ["わざとNG"]))
+        t("★★Ctrl+C（中断）でも、完全に元のまま★★",
+          _try_with("build_hubs", _interrupt))
+        t("　中途半端な一時ファイルを残さない",
+          not [x for x in os.listdir(BASE) if ".tmp." in x or ".new." in x])
+    finally:
+        for k, v in _real.items():
+            globals()[k] = v
+        _sh.rmtree(_dir4, ignore_errors=True)
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
