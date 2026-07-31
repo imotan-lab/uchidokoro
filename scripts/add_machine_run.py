@@ -213,10 +213,17 @@ def verify_official(name: str, official_url: str) -> list:
     return []
 
 
+# ★試験用の目印★（本番の待ち行列を汚さないため・2026-07-31に実際に混入した）
+TEST_MARKS = ("zzz_", "確認機", "テスト機", "m.example", "x.example")
+
+
 def _remember(name, official_url, maker, release, problems) -> None:
     """★あとで載る見込みがあるなら覚えておく★（翌日やり直すため）"""
     if not retry_later(problems):
         return
+    blob = f"{name} {official_url}"
+    if any(w in blob for w in TEST_MARKS):
+        return          # ★試したときの架空機種は覚えない★
     try:
         pend = _pend.load()
         _pend.add(pend, name, official_url, maker, release,
@@ -407,6 +414,10 @@ def selftest() -> int:
             _nw._get = lambda u, timeout=20: (
                 _ for _ in ()).throw(RuntimeError("開けない"))
             r5 = run_one("X", "https://m.example/products/slot/zzz/", "m", "2026-09")
+            t("★★試したときの架空機種は待ち行列に入れない★★（実際に混入した）",
+              _remember("通し確認機ZZZ",
+                        "https://m.example/products/slot/zzz_x/", "m",
+                        "2026-09", ["名鑑の個別ページが 1 件"]) is None)
             t("★★試験が本番の待ち行列を触らない★★（架空機種が入り込んだ）",
               _pend.STORE.startswith(_tmpdir))
             t("　実際に開けない公式URLでは組み立てまで進まない",
