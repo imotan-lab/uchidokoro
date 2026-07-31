@@ -107,7 +107,12 @@ class _Doc(HTMLParser):
         if not t:
             return
         opened = getattr(self, "_notice_open", None)
-        if self.notices and opened is not None and len(self._stack) > opened:
+        # ★断り書きの文字も、隠された所と script の中は数えない★
+        #   （2026-07-31・Codex指摘5を再現）
+        #   <span hidden>先行記事</span> や <script>先行記事</script> でも
+        #   文面検査を通ってしまい、読者には何も見えない状態になり得た。
+        if (self.notices and opened is not None and len(self._stack) > opened
+                and not self._skip_now() and not self._hidden_now()):
             self.notices[-1]["text"] += t
         if self._in_body and not self._skip_now() and not self._hidden_now():
             self.visible.append(t)
@@ -212,6 +217,14 @@ def selftest() -> int:
       preview_notices(parse(
           '<body><div data-preview-notice="X"><p>先行</p><p>記事</p></div>'
           "<p>あと</p></body>"), "X")[0]["text"] == "先行記事")
+    t("★★断り書きの中で隠された文字は文面に数えない★★（Codex指摘・再現した）",
+      "先行記事" not in (preview_notices(parse(
+          '<body><div data-preview-notice="X"><span hidden>先行記事</span>'
+          "本文</div></body>"), "X")[0]["text"]))
+    t("　scriptの中の文字も数えない",
+      "先行記事" not in (preview_notices(parse(
+          '<body><div data-preview-notice="X"><script>先行記事</script>'
+          "本文</div></body>"), "X")[0]["text"]))
     t("　隠された断り書きは数えない",
       not preview_notices(parse(N.replace("<aside ", "<aside hidden ")),
                           "PREVIEW_VERIFIED_SUBSET"))

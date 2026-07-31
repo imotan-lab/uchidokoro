@@ -58,6 +58,10 @@ class PublishError(RuntimeError):
 # ★slug に使ってよい形★（2026-07-31・自分で確かめて危険を確認）
 #   `../` を入れると machines/ の外へ書けてしまう
 #   （_page_path("../../evil") → ../evil/index.html）。
+# ★断り書きに必ず入っている語★（無ければ公開しない）
+NOTICE_MUST = ("先行記事", "解析")
+# ★断り書きに書いてはいけない語★（確認済みだと誤解させる）
+NOTICE_NEVER = ("確認済み", "確定", "完全", "裏取り済み")
 NOTICE = chr(100)+chr(97)+chr(116)+chr(97)+chr(45)+"preview-notice="+chr(34)+STATE+chr(34)
 _SLUG_OK = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
 # 空白の並び（バックスラッシュを直接書かない：制御文字に化ける事故が続いたため）
@@ -194,8 +198,17 @@ def check_page(slug: str, html: str) -> list:
     if len(notices) != 1:
         ng.append(f"先行記事の断り書きが {len(notices)} 個です"
                   "（隠されていないものが1個であるべきです）")
-    elif "先行記事" not in notices[0]["text"]:
-        ng.append(f"断り書きの文面がおかしいです: {notices[0]['text'][:40]!r}")
+    else:
+        # ★文面まで確かめる★（2026-07-31・Codex指摘6を再現）
+        #   「先行記事」の5文字だけを見ていたので、
+        #   「先行記事ですが、全項目を完全確認済みです」も通っていた。
+        text = notices[0]["text"]
+        for word in NOTICE_MUST:
+            if word not in text:
+                ng.append(f"断り書きに『{word}』がありません: {text[:50]!r}")
+        for word in NOTICE_NEVER:
+            if word in text:
+                ng.append(f"断り書きに書いてはいけない語があります（『{word}』）")
     return ng
 
 
@@ -367,6 +380,28 @@ _IDENTITY_KEYS = {"manufacturer_id", "official_product_url", "announced_name",
 _RELEASE_OK = re.compile(r"^(20[0-9]{2}-[0-9]{2}(-[0-9]{2})?)?$")
 
 
+def release_ok(value: str) -> bool:
+    """★暦として実在する年月（日）か★（2026-07-31・Codex指摘4を再現）
+
+    形だけ見ていたので `2026-99` や `2026-02-30` が通っていた。
+    """
+    v = str(value or "")
+    if v == "":
+        return True
+    if not _RELEASE_OK.match(v):
+        return False
+    from datetime import date
+    try:
+        if len(v) == 7:
+            y, m = int(v[:4]), int(v[5:7])
+            date(y, m, 1)               # 月が1〜12かは date が判断する
+        else:
+            date.fromisoformat(v)       # 日まであるなら暦どおりか
+    except ValueError:
+        return False
+    return True
+
+
 def check_machine(slug: str, machine: dict) -> list:
     """★機種データそのものを確かめる★（2026-07-31・Codex指摘2）
 
@@ -391,9 +426,9 @@ def check_machine(slug: str, machine: dict) -> list:
             ng.append("seo に知らない項目があります")
         elif not all(_is_text(v) for v in seo.values()):
             ng.append("seo の中身が文字ではありません")
-    if not _RELEASE_OK.match(str(machine.get("release_date", "") or "")):
-        ng.append(f"release_date の形がおかしいです: {machine.get('release_date')!r}"
-                  "（YYYY-MM か YYYY-MM-DD か空）")
+    if not release_ok(machine.get("release_date", "")):
+        ng.append(f"release_date が暦として実在しません: "
+                  f"{machine.get('release_date')!r}（YYYY-MM か YYYY-MM-DD か空）")
     ident = machine.get("identity")
     if ident is not None:
         if not isinstance(ident, dict):
@@ -946,8 +981,22 @@ def selftest() -> int:
           good.replace('content="noindex,follow"',
                        'content="index" data-note="noindex"'))))
     t("★★断り書きの文面が違えば止める★★",
-      any("文面" in x for x in check_page(
+      any("先行記事" in x for x in check_page(
           "zzz_test", good.replace("⚠ 先行記事（解析待ち）", "ふつうの記事です"))))
+    t("★★『先行記事ですが確認済みです』のような文面は止める★★"
+      "（5文字だけ見ていたので通っていた・Codex指摘）",
+      any("書いてはいけない" in x for x in check_page(
+          "zzz_test", good.replace("⚠ 先行記事（解析待ち）",
+                                   "先行記事ですが、全項目を完全確認済みです"))))
+    t("　暦にない日付は止める",
+      any("暦" in x for x in check_machine(
+          "zzz_test", {"slug": "zzz_test", "name": "x", "seo": {"title": "x"},
+                       "info": "", "strategy": "", "aliases": [],
+                       "status": "preview", "release_date": "2026-99",
+                       "publish_state": STATE})))
+    t("　2月30日も止める", not release_ok("2026-02-30"))
+    t("　ふつうの年月は通る", release_ok("2026-09") and release_ok("2026-09-15")
+      and release_ok(""))
 
     # ★中まで見る★（2026-07-31・自分で確かめて9箇所が素通りしていた）
     _b = {"slug": "zzz_test", "sections": []}
