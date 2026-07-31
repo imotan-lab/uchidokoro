@@ -203,10 +203,52 @@ def read_page(url: str, official_name: str) -> dict:
 
 
 def _key(c: dict) -> str:
-    """一致を見るための鍵。★恩恵まで含める★（値だけ合っても採らない）"""
-    return json.dumps({k: c.get(k) for k in ("kind", "amount", "unit", "benefit",
-                                             "certainty")},
+    """一致を見るための鍵。★恩恵と「何を数えるか」まで含める★
+
+    ★2026-07-31・実際に再現した値漏れ★
+      以前は `counted`（何を数えるか）を鍵に入れていなかったため、
+      **「通常時1200G」と「AT間1200G」が同じ天井として採用された**。
+      この2つはまったく別物で、AT間天井を通常時天井として出すと
+      読者は打てない台を打つことになる。
+    """
+    return json.dumps({k: (c.get(k) or "") for k in ("kind", "amount", "unit",
+                                                     "counted", "benefit",
+                                                     "certainty")},
                       ensure_ascii=False, sort_keys=True)
+
+
+def _base_key(c: dict) -> str:
+    """「何を数えるか」だけを外した鍵（片方が書いていない場合の突き合わせ用）。"""
+    return json.dumps({k: (c.get(k) or "") for k in ("kind", "amount", "unit",
+                                                     "benefit", "certainty")},
+                      ensure_ascii=False, sort_keys=True)
+
+
+def _merge_unqualified(votes: dict) -> dict:
+    """片方が「何を数えるか」を書いていないだけなら、書いてある方に寄せる。
+
+    ★条件を書いてある方を必ず残す★
+      「通常時1200G」と「1200G（条件の記載なし）」は食い違いではない。
+      ただし**条件なしの側を採用すると条件が消える**ので、
+      条件つきの方にまとめる（消える方向には倒さない）。
+      条件つきが2種類ある（通常時とAT間）ときはまとめない＝食い違いとして残す。
+    """
+    groups: dict = {}
+    for k, v in votes.items():
+        groups.setdefault(_base_key(v["sample"]), []).append((k, v))
+    out: dict = {}
+    for _, items in groups.items():
+        qualified = [(k, v) for k, v in items if v["sample"].get("counted")]
+        plain = [(k, v) for k, v in items if not v["sample"].get("counted")]
+        if len(qualified) == 1 and plain:
+            k, v = qualified[0]
+            for _, pv in plain:
+                v["sources"] |= pv["sources"]
+            out[k] = v
+        else:
+            for k, v in items:
+                out[k] = v
+    return out
 
 
 def compare(pages: list) -> dict:
@@ -219,6 +261,7 @@ def compare(pages: list) -> dict:
         for c in p["ceilings"]:
             votes.setdefault(_key(c), {"sample": c, "sources": set()})
             votes[_key(c)]["sources"].add(lin)
+    votes = _merge_unqualified(votes)
     adopted, need_third = [], []
     # 同じ種類で値が割れていないかも見る（1200Gと1500Gが両方2票、はありえない）
     by_kind: dict = {}
@@ -236,6 +279,7 @@ def compare(pages: list) -> dict:
                 "why": ("出典が食い違っています" if len(agreed) != 1 and len(items) > 1
                         else "1つの出典にしかありません"),
                 "candidates": [{"amount": v["sample"]["amount"],
+                                "counted": v["sample"].get("counted"),
                                 "benefit": v["sample"]["benefit"],
                                 "sources": sorted(v["sources"])} for _, v in items]})
     return {"adopted": adopted, "need_third": need_third}
@@ -302,6 +346,18 @@ def selftest() -> int:
     t("　機種が違うページの内容は混ぜない",
       not compare([{**A, "ok": False}, B])["adopted"])
 
+
+    mk = lambda h, cnt: {"url": "https://" + h + "/x", "host": h, "ok": True,
+                         "ceilings": [{"kind": "GAME", "amount": 1200, "unit": "G",
+                                       "counted": cnt, "benefit": "AT",
+                                       "certainty": "PLAIN", "raw": ""}]}
+    t("★★『通常時1200G』と『AT間1200G』を同じ天井にしない★★（実際に起きた値漏れ）",
+      not compare([mk("p-world.co.jp", "通常時"), mk("chonborista.com", "AT間")])["adopted"])
+    _r = compare([mk("chonborista.com", None), mk("p-world.co.jp", "通常時")])
+    t("★★片方が条件を書いていないだけなら、条件つきの方を残す★★（条件を消さない）",
+      len(_r["adopted"]) == 1 and _r["adopted"][0]["counted"] == "通常時")
+    t("　その場合も2出典ぶんの票として数える",
+      len(_r["adopted"][0]["sources"]) == 2)
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
     if ng:
