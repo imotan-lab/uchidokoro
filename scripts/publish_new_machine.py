@@ -868,7 +868,8 @@ def render(slug: str, machine: dict, detail: dict) -> str:
 
 def publish_from_material(slug: str, name: str, maker: str, official_url: str,
                           release: str, material: dict,
-                          apply_it: bool = False, before_write=None) -> dict:
+                          apply_it: bool = False, before_write=None,
+                          on_written=None) -> dict:
     """★材料から公開まで一気に通す（これが正しい入口）★
 
     ★2026-07-31・Codex指摘1★
@@ -883,11 +884,12 @@ def publish_from_material(slug: str, name: str, maker: str, official_url: str,
     machine = _ba.build_machine(slug, name, maker, official_url, release, material)
     detail = _ba.build_detail(slug, name, release, material)
     return _publish_prebuilt(slug, machine, detail, apply_it=apply_it,
-                             before_write=before_write)
+                             before_write=before_write, on_written=on_written)
 
 
 def _publish_prebuilt(slug: str, machine: dict, detail: dict,
-                      apply_it: bool = False, before_write=None) -> dict:
+                      apply_it: bool = False, before_write=None,
+                      on_written=None) -> dict:
     """★内部専用★ 外からは `publish_from_material` を使うこと。
 
     こちらは完成データを受け取るので、境界の検査でしか守れない。
@@ -897,7 +899,7 @@ def _publish_prebuilt(slug: str, machine: dict, detail: dict,
         return _publish(slug, machine, detail, apply_it=False)
     with _OnlyOne():
         return _publish(slug, machine, detail, apply_it=True,
-                        before_write=before_write)
+                        before_write=before_write, on_written=on_written)
 
 
 # ★外から使ってよいのは publish_from_material だけ★（2026-07-31・Codex指摘4）
@@ -907,7 +909,7 @@ __all__ = ["publish_from_material", "check_page", "check_detail", "check_machine
 
 
 def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
-             before_write=None) -> dict:
+             before_write=None, on_written=None) -> dict:
     """新台1件を公開する。★ページを先に置き、最後に一覧へ足す★"""
     out = {"slug": slug, "problems": [], "wrote": [], "html_bytes": 0}
     rows = _sj.read_rows(MACHINES)
@@ -1182,6 +1184,17 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
                          "（人が確かめてください）")
         out["problems"] += late2
         return out
+    # ★「途中」の目印を消す前に、次の担当へ引き継ぐ★（2026-07-31・Codex22回目）
+    #   ここで消してから呼び出し元が push待ちの目印を作っていたので、
+    #   その間に止まると「公開ファイルはあるが目印はどこにも無い」状態になった。
+    #   翌日は何も復旧できず、機種は『既に登録』と判定されて待ち行列から消え、
+    #   残った変更が後続のpushも塞いでいた。
+    if on_written:
+        try:
+            on_written(slug)
+        except Exception as e:            # noqa: BLE001
+            out["problems"].append(f"引き継ぎに失敗しました（pushしないでください）: {e}")
+            return out
     mark_done()                        # ★ここまで来て初めて「終わった」★
     return out
 

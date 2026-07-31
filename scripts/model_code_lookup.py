@@ -77,17 +77,78 @@ def extract_model_code(html: str):
     return None, "MODEL_CODE_NOT_FOUND"
 
 
+# ★題を区切る記号★（サイト側の飾りを切り離すため）
+#   ★「・」「-」は入れない★＝機種名そのものに使われる
+#   （「すーぱぁびん娘・極」を「すーぱぁびん娘」と「極」に割ると別機種を本人にしてしまう）
+_TITLE_SEPS = "|｜(（)）[［]］【】/／<＞>＜"
+
+
+def title_parts(title: str) -> list:
+    """題を区切って、機種名らしいかたまりに分ける。"""
+    out, buf = [], []
+    for ch in title or "":
+        if ch in _TITLE_SEPS:
+            out.append("".join(buf))
+            buf = []
+        else:
+            buf.append(ch)
+    out.append("".join(buf))
+    return [x.strip() for x in out if x.strip()]
+
+
+# ★機種名のすぐ後ろに来てよい語★（題の飾り）
+#   ここに無い語が名前の直後に来たら、**別の機種**とみなす。
+#   「モンキーターン V」の "V"、「すーぱぁびん娘 SP」の "SP" を止めるため。
+_DECOR = {
+    "新台", "天井", "解析", "スペック", "設定", "判別", "設定判別", "設定差",
+    "設定示唆", "やめどき", "ヤメ時", "やめ時", "狙い目", "初打ち", "打ち方",
+    "機械割", "導入日", "設置店", "掲示板", "有利区間", "期待値", "評価",
+    "感想", "演出", "攻略", "実践", "動画", "画像", "一覧", "情報", "恩恵",
+    "ボーナス", "フリーズ", "ちょんぼりすた", "pworld", "ぱちタウン", "dmm",
+    "パチンコ", "パチスロ解析", "解析情報", "スロット新台",
+}
+_DECOR_CORES = {_ci.normalize_core(w) or w for w in _DECOR}
+
+# ★題を区切る記号★（サイト側の飾りを切り離す）
+#   ★「・」「-」は入れない★＝機種名そのものに使われる
+#   （「すーぱぁびん娘・極」を割ると、別機種を本人にしてしまう）
+_TITLE_SEPS = "|｜(（)）[［]］【】/／<＞>＜、,"
+
+
+def title_parts(title: str) -> list:
+    """題を区切って、機種名らしいかたまりに分ける。"""
+    out, buf = [], []
+    for ch in title or "":
+        if ch in _TITLE_SEPS:
+            out.append("".join(buf))
+            buf = []
+        else:
+            buf.append(ch)
+    out.append("".join(buf))
+    return [x.strip() for x in out if x.strip()]
+
+
 def page_is_machine(html: str, official_name: str):
-    """★その名鑑ページが本当にその機種か★（名前の芯が完全一致すること）
+    """★その名鑑ページが本当にその機種か★
 
-    `claim_identity.normalize_core` で表記ゆれ（スマスロ/L/全角半角など）だけを
-    落とした「芯」を作り、**名鑑のタイトルがその芯から始まる**ことを求める。
-    タイトルには「(スマスロ) パチスロ新台 … | P-WORLD」のような
-    サイト側の飾りが続くので、完全一致ではなく前方一致にする。
+    ★ただの前方一致をやめた★（2026-07-31・Codex22回目。実際に再現した）
+      以前は「題の芯が指定名の芯で**始まる**こと」だけを見て、
+      数字と続編記号しか弾いていなかった。そのため
+        「すーぱぁびん娘新章」「すーぱぁびん娘SP」「すーぱぁびん娘・極」
+      がどれも本人として通り、**別機種の公式URLと指定名を組み合わせて**
+      記事を作れる穴になっていた。
 
-    ★前方一致でも続編は落ちる★
-      「すーぱぁびん娘」の芯で「すーぱぁびん娘2…」は始まるので通ってしまう。
-      そこで**芯の直後が数字や続編を表す文字でないこと**も確かめる。
+    いまは題を「区切り記号」と「空白」で語に分け、
+      ①続いた語をつないだものが、指定名の芯と**丸ごと同じ**
+      ②その次の語が、飾り（新台・天井・解析…）か、区切りか、題の終わり
+    の両方を求める。②が無いと「モンキーターン V」を
+    「モンキーターン」として通してしまう。
+
+    実データで通ることを確かめた形:
+      「L青春ブタ野郎は…(スマスロ 青ブタ) パチスロ新台 … | P-WORLD」
+      「スマスロ 甲鉄城のカバネリ 海門(うなと)決戦 パチスロ新台 …」← 名前に括弧
+      「スマスロ 真打吉宗 スロット 新台 … | ちょんぼりすた …」
+      「スマスロ東京喰種 スロット 新台 … 東京グール | ちょんぼりすた …」← 別名つき
     """
     title = _w.page_title(html)
     if not title:
@@ -95,14 +156,23 @@ def page_is_machine(html: str, official_name: str):
     core = _ci.normalize_core(official_name)
     if not core:
         return False, "OFFICIAL_NAME_HAS_NO_CORE"
-    tcore = _ci.normalize_core(title)
-    if not tcore.startswith(core):
-        return False, "NAME_CORE_MISMATCH"
-    rest = tcore[len(core):]
-    # ★続編・改称を本人と誤認しない★（芯の直後に版を表す文字が続く）
-    if rest[:1] in tuple("01234567892３４５６７８９ivxⅱⅲ") or             rest[:2] in ("ii", "iv", "vi"):
-        return False, "SEQUEL_SUSPECTED"
-    return True, "OK"
+    # ★題そのものも候補に入れる★（機種名の中に括弧が入ることがある）
+    #   「甲鉄城のカバネリ 海門(うなと)決戦」は、区切ると名前が割れてしまう。
+    for seg in [title] + title_parts(title):
+        words = [_ci.normalize_core(w) for w in seg.split()]
+        for i in range(len(words)):
+            joined = ""
+            for j in range(i, len(words)):
+                joined += words[j]
+                if joined != core:
+                    continue
+                # ★次の語を見る★（飾りか、そこで終わりならOK）
+                k = j + 1
+                while k < len(words) and words[k] == "":
+                    k += 1               # 販売区分語などは芯が空になる
+                if k >= len(words) or words[k] in _DECOR_CORES:
+                    return True, "OK"
+    return False, "NAME_CORE_MISMATCH"
 
 
 def lookup(url: str, official_name: str) -> dict:
@@ -131,6 +201,15 @@ def agree(results: list) -> dict:
         if r.get("model_code"):
             host = r["url"].split("/")[2].lower().removeprefix("www.")
             codes.setdefault(r["model_code"], set()).add(host)
+    # ★食い違いを先に見る★（2026-07-31・Codex22回目。実際に再現した）
+    #   以前は「2票そろった型式」を見つけた時点で採用していたので、
+    #   A=2票・B=1票 のときAをそのまま採り、食い違いに気づかなかった。
+    #   型式が食い違う＝別の機種の資料が混じっているので、材料ごと信用できない。
+    if len(codes) >= 2:
+        return {"model_code": None, "adopted": False, "state": "CONFLICT",
+                "why": "名鑑ごとに型式名が食い違っています: "
+                       + json.dumps({k: sorted(v) for k, v in codes.items()},
+                                    ensure_ascii=False)}
     for code, hosts in codes.items():
         if len(hosts) >= 2:
             return {"model_code": code, "hosts": sorted(hosts), "adopted": True}
@@ -197,7 +276,21 @@ def selftest() -> int:
                       "Lすーぱぁびん娘")[0] is True)
     t("★★続編を本人と誤認しない★★（前方一致だけだと通ってしまう）",
       page_is_machine("<title>Lすーぱぁびん娘2 | P-WORLD</title>",
-                      "Lすーぱぁびん娘") == (False, "SEQUEL_SUSPECTED"))
+                      "Lすーぱぁびん娘")[0] is False)
+    # ★★ここから Codex22回目の反例★★（前方一致＋数字だけの検査を通っていた）
+    for _bad in ("Lすーぱぁびん娘新章 | P-WORLD", "Lすーぱぁびん娘SP | P-WORLD",
+                 "Lすーぱぁびん娘・極 | P-WORLD", "Lすーぱぁびん娘 SP | P-WORLD",
+                 "Lすーぱぁびん娘 改 パチスロ新台 | P-WORLD"):
+        t(f"★★別機種を本人にしない: {_bad[:22]}★★",
+          page_is_machine(f"<title>{_bad}</title>", "Lすーぱぁびん娘")[0] is False)
+    t("★★名前の中の括弧を割らない★★（実データ・甲鉄城のカバネリ）",
+      page_is_machine("<title>スマスロ 甲鉄城のカバネリ 海門(うなと)決戦 "
+                      "パチスロ新台 スロット 機械割</title>",
+                      "スマスロ 甲鉄城のカバネリ 海門(うなと)決戦")[0] is True)
+    t("★★別名が題に入っていても通る★★（実データ・東京喰種／東京グール）",
+      page_is_machine("<title>スマスロ東京喰種 スロット 新台 天井 設定判別 解析 "
+                      "東京グール | ちょんぼりすた パチスロ解析</title>",
+                      "L 東京喰種")[0] is True)
     t("★名前の芯が違うページからは採らない★",
       page_is_machine("<title>Lスーパービンゴネオ|P-WORLD</title>",
                       "Lすーぱぁびん娘")[0] is False)

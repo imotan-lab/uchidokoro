@@ -479,15 +479,16 @@ def _head() -> str:
     return (r.stdout or "").strip()
 
 
-def _mark_push_pending(slug: str, sha: str = "", stage: str = "COMMITTED") -> None:
+def _mark_push_pending(slug: str, sha: str = "", stage: str = "COMMITTED",
+                       parent: str = "") -> None:
     """★どのコミットを出そうとしているかまで残す★（Codex20回目）
 
     slug だけだと、やり直すときに「コミットからやり直す」ことになり、
     変更が無いので必ず失敗していた。
     """
     with open(PUSH_PENDING, "w", encoding="utf-8") as f:
-        json.dump({"slug": slug, "sha": sha, "stage": stage, "at": _now()}, f,
-                  ensure_ascii=False)
+        json.dump({"slug": slug, "sha": sha, "stage": stage,
+                   "parent": parent, "at": _now()}, f, ensure_ascii=False)
 
 
 def _clear_push_pending() -> None:
@@ -495,6 +496,24 @@ def _clear_push_pending() -> None:
         os.remove(PUSH_PENDING)
     except FileNotFoundError:
         pass
+
+
+def _committed_on_top(parent: str, slug: str) -> bool:
+    """★あの続きが、もうコミットされているか★
+
+    先端の親が控えた先端と同じで、その説明に機種名が入っていれば、
+    「コミットは通ったが目印を上げる前に止まった」と判断できる。
+    """
+    r = subprocess.run(["git", "log", "-1", "--format=%P%x1f%B"], cwd=BASE,
+                       capture_output=True, text=True,
+                       encoding="utf-8", errors="replace")
+    if r.returncode != 0:
+        return False
+    got = (r.stdout or "").split(chr(31))
+    if len(got) < 2:
+        return False
+    parents = got[0].split()
+    return len(parents) == 1 and parents[0] == parent and slug in got[1]
 
 
 def retry_push_first() -> list:
@@ -513,6 +532,17 @@ def retry_push_first() -> list:
     sha = got.get("sha") or ""
     stage = got.get("stage") or ("COMMITTED" if sha else "WRITTEN")
     if stage == "WRITTEN":
+        # ★もうコミットされていないか先に見る★（2026-07-31・Codex22回目）
+        #   git commit が通った直後に止まると、目印は WRITTEN のままなのに
+        #   変更はコミット済みで、コミットからやり直すと必ず失敗していた。
+        parent = got.get("parent") or ""
+        if parent and _committed_on_top(parent, slug):
+            _log(f"★{slug} はもうコミットされていました★ pushだけやります")
+            ng = push_after_publish(slug, already_committed=True)
+            if ng:
+                return [f"{slug} をまだ出せません: " + " / ".join(ng)[:300]]
+            _log(f"出せました: {slug}")
+            return []
         # ★書いたがコミットまで行けなかった★ 続きからやる
         _log(f"★書いたのにコミットまで行けていません: {slug}★ 続きをやります")
         ng = push_after_publish(slug)
@@ -541,13 +571,8 @@ def finish_publish(res: dict) -> list:
     push が通って初めて「終わった」。
     通らなかったものを待ち行列から外すと、翌日やり直せなくなる。
     """
-    # ★書けた時点で必ず目印を残す★（2026-07-31・Codex21回目）
-    #   以前はコミットが通ってからだったので、
-    #   「公開ファイルはあるが目印はない」空白があった。
-    #   そこで止まると、翌日は目印が無いので何もせず、
-    #   待ち行列の同じ機種は「既に登録」と判定されて外れ、
-    #   残った変更が後続のpushも塞いでいた。
-    _mark_push_pending(res["slug"], "", "WRITTEN")
+    # ★目印は公開部が「途中」を消す前に作ってある★（Codex22回目）
+    #   ここで作ると、公開部から戻る間に止まったときに目印が無くなる。
     ng = push_after_publish(res["slug"])
     if ng:
         return ng
@@ -648,6 +673,11 @@ def push_after_publish(slug: str, already_committed: bool = False) -> list:
     #   それでもコミットしようとして「nothing to commit」で落ち、
     #   **push へ一度もたどり着けなかった**。
     if not already_committed:
+        # ★コミットする前の先端を残す★（2026-07-31・Codex22回目）
+        #   git commit が通った直後に止まると、目印は WRITTEN のままなのに
+        #   変更はもうコミット済みで、次はコミットからやり直して
+        #   「nothing to commit」で永久に止まっていた。
+        _mark_push_pending(slug, "", "WRITTEN", parent=_head())
         r = _run("--commit")
         if r.returncode != 0:
             return ["関所で止まりました（コミット対象の選別）: "
@@ -750,7 +780,10 @@ def run_one(name, official_url, maker, release, apply_it=False,
         #   その日の枠が消えていた。
         res = _pub.publish_from_material(
             out["slug"], name, maker, official_url, release, mat,
-            apply_it=True, before_write=before_write)
+            apply_it=True, before_write=before_write,
+            # ★公開部が「途中」の目印を消す前に引き継ぐ★（Codex22回目）
+            #   あとから作ると、その間に止まったときに目印がどこにも無くなる。
+            on_written=lambda sl: _mark_push_pending(sl, "", "WRITTEN"))
         out["wrote"] = res["wrote"]
         out["problems"] += res["problems"]
         if res["problems"]:
@@ -891,8 +924,16 @@ def selftest() -> int:
           == ["https://x/b", "https://x/a"])
         t("★★書けた時点で必ず目印を残す★★"
           "（コミット前に止まると目印が無く、翌日なにも復旧できなかった・Codex21回目）",
-          '"WRITTEN"' in inspect.getsource(finish_publish)
+          "WRITTEN" in inspect.getsource(run_one)
           and "WRITTEN" in inspect.getsource(retry_push_first))
+        t("★★目印は公開部が『途中』を消す前に作る★★"
+          "（あとから作ると、戻る間に止まったとき目印が無くなる・Codex22回目）",
+          "on_written" in inspect.getsource(run_one)
+          and "on_written" in inspect.getsource(_pub._publish))
+        t("★★コミットが通った直後に止まっても、次で分かる★★"
+          "（WRITTEN のままコミット済みだと、やり直しが永久に失敗した・Codex22回目）",
+          "_committed_on_top" in inspect.getsource(retry_push_first)
+          and "parent=_head()" in inspect.getsource(push_after_publish))
 
         # ★★「文言が返る」ではなく「記事を作らない」ところまで見る★★
         #   （2026-07-31・Codex18回目。文言の試験しかしていなかったので、
