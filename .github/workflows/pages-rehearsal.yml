@@ -119,6 +119,7 @@ jobs:
           python scripts/html_check.py
           python scripts/publish_new_machine.py --selftest
           python scripts/prepush_gate.py --selftest
+          python scripts/add_machine_health.py --selftest
           python scripts/check_duplicate.py --name "存在しない機種テスト用XYZ"
 
       - name: Repository audits
