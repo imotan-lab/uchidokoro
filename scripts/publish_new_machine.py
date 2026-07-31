@@ -116,20 +116,49 @@ class _OnlyOne:
 IN_PROGRESS = os.path.join(BASE, ".publish-in-progress.json")
 
 
-def mark_start(slug: str, machine: dict) -> None:
-    """★書き始める前に目印を残す★（電源が落ちても残る）"""
+def mark_start(slug: str, machine: dict, backup: dict) -> None:
+    """★書き始める前に目印を残す★（電源が落ちても残る）
+
+    ★戻すのに必要な情報も一緒に残す★（2026-07-31・Codex10回目）
+      目印だけ消して再実行すると、中途半端な状態のまま
+      「正常」と見なして公開できてしまう。
+      どのファイルを何に戻せばよいかを、目印の中に書いておく。
+    """
     from datetime import datetime
-    write_atomic(IN_PROGRESS, json.dumps({
+    data = {
         "slug": slug, "name": machine.get("name", ""),
         "started_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "pid": os.getpid(),
+        # ★戻し方★ 変える前の中身を控えてある場所
+        "restore": {os.path.relpath(k, BASE).replace(os.sep, "/"): _sha(v)
+                    for k, v in backup.items() if v is not None},
         "_why": "この目印がある間は、公開が途中で終わっています。"
-                "中身を確かめて直すか、元に戻してからこのファイルを消してください。",
-    }, ensure_ascii=False, indent=1) + chr(10))
+                "★目印だけ消してはいけません★ "
+                "scripts/publish_new_machine.py --recover で元に戻してください。",
+    }
+    # ★排他作成★（同時に2つ始まらない）
+    tmp = f"{IN_PROGRESS}.tmp.{os.getpid()}"
+    with open(tmp, "w", encoding="utf-8", newline=chr(10)) as f:
+        f.write(json.dumps(data, ensure_ascii=False, indent=1) + chr(10))
+        f.flush()
+        os.fsync(f.fileno())
+    try:
+        os.link(tmp, IN_PROGRESS)     # 既にあれば失敗する（＝排他）
+    except FileExistsError:
+        os.remove(tmp)
+        raise PublishError("いま別の公開処理が動いているか、前回が途中で終わっています")
+    except (OSError, AttributeError):
+        # リンクが使えない環境では、存在を確かめてから置く
+        if os.path.exists(IN_PROGRESS):
+            os.remove(tmp)
+            raise PublishError("いま別の公開処理が動いているか、前回が途中で終わっています")
+        os.replace(tmp, IN_PROGRESS)
+        return
+    os.remove(tmp)
 
 
 def mark_done() -> None:
-    """★全部終わってから消す★"""
+    """★全部終わってから消す★（ここまで来て初めて「終わった」）"""
     if os.path.exists(IN_PROGRESS):
         os.remove(IN_PROGRESS)
 
@@ -874,8 +903,10 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
     if left:
         out["problems"].append(
             f"★前回の公開が途中で終わっています（{left.get('slug')} / "
-            f"{left.get('started_at')}）★ 中身を確かめて直すか元に戻し、"
-            f"{os.path.basename(IN_PROGRESS)} を消してから実行してください")
+            f"{left.get('started_at')}）★ "
+            "★目印だけ消してはいけません★"
+            "（中途半端な状態のまま『正常』として公開できてしまいます）。"
+            "`python scripts/publish_new_machine.py --recover` で元に戻してください")
         return out
     out["problems"] += run_site_audit()
     # ★一覧・ランキングが、いまのデータと一致しているか★
@@ -910,7 +941,8 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
     page = _page_path(slug)
     dp = os.path.join(DETAILS, f"{slug}.json")
     made = []          # ★この処理が実際に作ったものだけ★（既存を消さないため）
-    mark_start(slug, machine)          # ★電源が落ちても残る目印★
+    # ★目印は、書き始める前に・戻し方つきで★
+    mark_start(slug, machine, {**hub_backup, MACHINES: machines_before.decode("utf-8")})
     machines_replaced = {}   # 一覧を置き換えたか（戻すため・置き換える前に立てる）
 
     def _cleanup():
@@ -1114,6 +1146,83 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
         out["problems"] += late2
         return out
     mark_done()                        # ★ここまで来て初めて「終わった」★
+    return out
+
+
+def recover(apply_it: bool = False) -> dict:
+    """★途中で終わった公開を、処理前の状態に戻す★（2026-07-31・Codex10回目）
+
+    目印だけ消すのは危険（中途半端な状態を正常として公開できる）。
+    目印に控えてある「変える前の指紋」と突き合わせ、
+    **変わっているファイルだけ**を作り直して戻す。
+    """
+    left = unfinished()
+    out = {"slug": left.get("slug"), "problems": [], "restored": [], "todo": []}
+    if not left:
+        out["problems"].append("途中で終わった公開はありません")
+        return out
+    slug = left.get("slug") or ""
+    restore = left.get("restore") or {}
+    if not restore:
+        out["problems"].append(
+            "目印に戻し方が入っていません（古い形式か壊れています）。"
+            "手で確かめてください")
+        return out
+    # ① 新しく作られたもの（機種ページ・記事データ）を消す
+    for rel in (f"machines/{slug}/index.html",
+                f"assets/data/machine-details/{slug}.json"):
+        full = os.path.join(BASE, rel)
+        if os.path.isfile(full):
+            out["todo"].append(f"消す: {rel}")
+            if apply_it:
+                os.remove(full)
+                out["restored"].append(rel)
+    d = os.path.join(BASE, "machines", slug)
+    if slug and os.path.isdir(d) and not os.listdir(d):
+        out["todo"].append(f"消す: machines/{slug}/")
+        if apply_it:
+            os.rmdir(d)
+    # ② 変えたもの（一覧・早見表）を元の中身へ戻す
+    #    ★元の中身そのものは残していないので、いまのデータから作り直して合わせる★
+    rows = _sj.read_rows(MACHINES)
+    if any(m.get("slug") == slug for m in rows):
+        out["todo"].append(f"一覧から外す: {slug}")
+        if apply_it:
+            write_atomic(MACHINES, json.dumps(
+                [m for m in rows if m.get("slug") != slug],
+                ensure_ascii=False, indent=1) + chr(10))
+            out["restored"].append("assets/data/machines.json")
+    if apply_it:
+        for rel, html in build_hubs().items():
+            full = os.path.join(BASE, rel)
+            # ★開いたまま置き換えない★（2026-07-31・Windowsで実際に失敗した）
+            #   `with open(...)` の中で os.replace すると
+            #   WinError 5（アクセスが拒否されました）になる。先に閉じる。
+            with open(full, encoding="utf-8") as f:
+                same = (f.read() == html)
+            if not same:
+                write_atomic(full, html)
+                out["restored"].append(rel)
+    else:
+        out["todo"].append("早見表4ページを作り直す")
+    if apply_it:
+        # ★戻し終わったか確かめてから目印を消す★
+        #   （2026-07-31・順番を間違えていた）
+        #   監査の項目33は「目印がある＝途中」を見るので、
+        #   消す前に回すと自分の目印を自分で見つけて永久に詰まる。
+        #   目印以外がそろっているかを先に見て、それから消し、最後にもう一度回す。
+        ng = [x for x in run_site_audit() if "33_" not in x]
+        if ng:
+            out["problems"] += ng
+            out["problems"].append(
+                "★戻したあとも監査に落ちています。目印は消しません★")
+            return out
+        mark_done()
+        out["restored"].append("（目印を消しました）")
+        after = run_site_audit()       # ★消したうえでもう一度★
+        if after:
+            out["problems"] += after
+            out["problems"].append("★目印を消したあとも監査に落ちています★")
     return out
 
 
@@ -1359,8 +1468,13 @@ def selftest() -> int:
         globals()["IN_PROGRESS"] = os.path.join(_md, "mark.json")
         t("★★目印を作れば「途中」と分かる★★"
           "（電源断ではページも一覧もそろってしまい、監査では区別できない）",
-          (mark_start("zzz_mark", {"name": "試験"}) or unfinished().get("slug"))
-          == "zzz_mark")
+          (mark_start("zzz_mark", {"name": "試験"},
+                      {os.path.join(BASE, "README.md"): "元の中身"})
+           or unfinished().get("slug")) == "zzz_mark")
+        t("★★戻し方を目印に持っている★★（目印だけ消すと中途半端なまま公開できる）",
+          unfinished().get("restore"))
+        t("★★同じ目印を二重に作れない★★（同時に2つ始まらない）",
+          _raises(lambda: mark_start("zzz_two", {"name": "試験2"}, {})))
         mark_done()
         t("　消せば「途中」ではなくなる", unfinished() == {})
     finally:
@@ -1565,6 +1679,8 @@ def main() -> int:
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--slug")
     ap.add_argument("--apply", action="store_true")
+    ap.add_argument("--recover", action="store_true",
+                    help="途中で終わった公開を処理前へ戻す")
     ap.add_argument("--material", help="採用済みの材料（JSONファイル）")
     ap.add_argument("--name", help="メーカー公式の正式名称")
     ap.add_argument("--maker", help="メーカーID")
@@ -1573,6 +1689,17 @@ def main() -> int:
     args = ap.parse_args()
     if args.selftest:
         return selftest()
+    if args.recover:
+        r = recover(apply_it=args.apply)
+        for x in r["todo"]:
+            print("  " + x)
+        for x in r["restored"]:
+            print("  戻しました: " + x)
+        for x in r["problems"]:
+            print("  ✗ " + x[:160])
+        if not args.apply and not r["problems"]:
+            print("★確認だけです。実際に戻すには --recover --apply★")
+        return 1 if r["problems"] else 0
     if not args.slug:
         ap.print_help()
         return 0
