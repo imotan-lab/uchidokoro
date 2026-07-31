@@ -24,6 +24,22 @@
    "min_expected": 3,
    "status": "NEEDS_SETUP",
    "_why": "一覧ページの機種リンクがJavaScriptで作られており、HTMLからは取れない（2026-07-31確認）。別の入口（サイトマップ等）を探すまで対象外。★対象外なので新台を取りこぼすが、誤った機種を作るよりは安全★"
+  },
+  "enterrise": {
+   "name": "エンターライズ",
+   "list_url": "https://www.enterrise.co.jp/slot.php",
+   "link_prefix": "https://www.enterrise.co.jp/slot/",
+   "min_expected": 4,
+   "status": "ACTIVE",
+   "_checked": "2026-07-31 静的HTMLで6件取得・個別ページのタイトルが機種名であることを確認"
+  },
+  "heiwa": {
+   "name": "平和",
+   "list_url": "https://www.heiwanet.co.jp/products/pachislot/",
+   "link_prefix": "https://www.heiwanet.co.jp/products/pachislot/",
+   "min_expected": 10,
+   "status": "NEEDS_SETUP",
+   "_why": "一覧の直下に年別アーカイブ（2009・2010…）が機種と同じ形で並び、機種と区別できない（2026-07-31確認）。年を除く仕組みを入れるまで対象外"
   }
  }
 }

@@ -257,14 +257,30 @@ def _save_seen(data: dict) -> None:
             os.remove(tmp)
 
 
+# ★一覧が丸ごと別物に差し替わったことを見抜くための条件★
+#   （2026-07-31・Codexと相談し、自分で再現してから追加）
+#   件数の下限だけでは、**同じ件数の別の一覧**を掴んだときに素通りする。
+#   実際、既知60件が0件残りの55件に入れ替わっても「新台55件」として通った。
+RETENTION_MIN = 0.8      # 前回の既知URLがこの割合は残っているはず
+MAX_NEW_ABS = 5          # 1社が1回のスキャンでこれ以上増えるのは普通でない
+MAX_NEW_RATIO = 0.2
+
+
 def scan_maker(maker_id: str, conf: dict, seen: dict, record: bool = True) -> dict:
-    """1社ぶん見る。★取れた数が少なすぎたら『新台なし』と言わない★"""
+    """1社ぶん見る。★取れた数が少なすぎたら『新台なし』と言わない★
+
+    ★状態は3つ以上に分ける★（成功／失敗の2値では足りない）
+      OK / FIRST_TIME / FETCH_FAILED / PARSE_SUSPECT
+      「読めなかった」と「読めたが新台なし」を混ぜないため。
+    """
     out = {"maker": maker_id, "name": conf.get("name"), "new": [], "problem": None,
-           "total": 0, "first_time": maker_id not in seen["makers"]}
+           "total": 0, "first_time": maker_id not in seen["makers"], "state": "OK",
+           "retention": None}
     try:
         html = _get(conf["list_url"])
     except WatchError as e:
         out["problem"] = str(e)
+        out["state"] = "FETCH_FAILED"
         return out
 
     urls = product_urls(html, conf["list_url"], conf["link_prefix"])
@@ -274,6 +290,7 @@ def scan_maker(maker_id: str, conf: dict, seen: dict, record: bool = True) -> di
         # ★ここが黙って0件になる事故を止める唯一の砦★
         out["problem"] = (f"一覧から {len(urls)} 件しか取れません（最低 {least} 件のはず）。"
                           f"ページの作りが変わった可能性があるので『新台なし』とは扱いません")
+        out["state"] = "PARSE_SUSPECT"
         return out
 
     known = set(seen["makers"].get(maker_id, {}).get("urls") or [])
@@ -281,8 +298,27 @@ def scan_maker(maker_id: str, conf: dict, seen: dict, record: bool = True) -> di
         # ★初回は全部を『既知』として覚えるだけ★
         #   いきなり100件を新台として扱わない。
         out["new"] = []
+        out["state"] = "FIRST_TIME"
     else:
-        out["new"] = [u for u in urls if u not in known]
+        kept = len(known & set(urls))
+        out["retention"] = round(kept / len(known), 3) if known else None
+        if known and out["retention"] < RETENTION_MIN:
+            # ★前に見たURLが大量に消えた＝別の一覧を掴んだ疑い★
+            out["problem"] = (
+                f"前回の {len(known)} 件のうち {kept} 件しか残っていません"
+                f"（{out['retention']:.0%}）。別の一覧を読んだ可能性があるので"
+                f"『新台』とは扱いません")
+            out["state"] = "PARSE_SUSPECT"
+            return out          # ★記録も更新しない（誤った基準で上書きしない）★
+        got = [u for u in urls if u not in known]
+        limit = max(MAX_NEW_ABS, int(len(urls) * MAX_NEW_RATIO))
+        if len(got) > limit:
+            out["problem"] = (
+                f"一度に {len(got)} 件も増えています（多くても {limit} 件のはず）。"
+                f"一覧の作りが変わった可能性があるので『新台』とは扱いません")
+            out["state"] = "PARSE_SUSPECT"
+            return out
+        out["new"] = got
     if record:
         seen["makers"][maker_id] = {"urls": urls, "count": len(urls)}
     return out
@@ -356,6 +392,31 @@ def selftest() -> int:
         r3 = scan_maker("zzz", conf2, {"makers": {}}, record=False)
         t("★★初回は全部を新台にしない（覚えるだけ）★★",
           r3["first_time"] is True and r3["new"] == [])
+        # ★一覧が丸ごと別物に入れ替わったとき★（自分で再現した）
+        many = "".join(f'<a href="/products/slot/new{i}/">x</a>' for i in range(55))
+        old_seen = {"makers": {"t": {"urls": [f"{LIST}old{i}/" for i in range(60)]}}}
+        _get = lambda u, timeout=20: many          # noqa: E731
+        r5 = scan_maker("t", {**conf, "min_expected": 50}, old_seen, record=False)
+        t("★★前に見たURLが大量に消えたら『新台』と扱わない★★"
+          "（件数だけ見ていると55件が新台になった）",
+          r5["problem"] is not None and r5["new"] == []
+          and r5["state"] == "PARSE_SUSPECT")
+        # ★一度に増えすぎたとき★
+        base = [f"{LIST}a{i}/" for i in range(50)]
+        grow = "".join(f'<a href="/products/slot/a{i}/">x</a>' for i in range(50)) +             "".join(f'<a href="/products/slot/z{i}/">x</a>' for i in range(20))
+        _get = lambda u, timeout=20: grow          # noqa: E731
+        r6 = scan_maker("t", {**conf, "min_expected": 50},
+                        {"makers": {"t": {"urls": base}}}, record=False)
+        t("★一度に増えすぎたときも『新台』と扱わない★",
+          r6["problem"] is not None and r6["new"] == [])
+        # ★普通に1件増えたときは通る★
+        one = "".join(f'<a href="/products/slot/a{i}/">x</a>' for i in range(51))
+        _get = lambda u, timeout=20: one           # noqa: E731
+        r7 = scan_maker("t", {**conf, "min_expected": 50},
+                        {"makers": {"t": {"urls": base}}}, record=False)
+        t("　普通に1件増えたときはちゃんと新台として出る",
+          r7["problem"] is None and r7["new"] == [f"{LIST}a50/"]
+          and r7["state"] == "OK")
         _get = lambda u, timeout=20: (_ for _ in ()).throw(WatchError("落ちた"))  # noqa: E731
         r4 = scan_maker("t", conf2, seen, record=False)
         t("　取得に失敗したら理由を残して止まる（新台なしにしない）",

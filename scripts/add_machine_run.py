@@ -58,14 +58,20 @@ def discover() -> dict:
     """メーカー公式の一覧から新台候補を出す。"""
     cats = _sj.read_json(_nw.CATALOGS, expect=dict)["catalogs"]
     seen = _nw._load_seen()
-    out = {"candidates": [], "problems": [], "first_time": []}
+    out = {"candidates": [], "problems": [], "first_time": [],
+           # ★「新台なし」と言えるのは、正常に読めたメーカーの話だけ★
+           #   （2026-07-31・Codexの指摘。読めなかった社と混ぜない）
+           "watched": [], "not_watched": []}
     for mid, conf in cats.items():
         if conf.get("status") != "ACTIVE":
+            out["not_watched"].append(f"{mid}（{conf.get('status')}）")
             continue
         r = _nw.scan_maker(mid, conf, seen)
         if r["problem"]:
             out["problems"].append(f"{mid}: {r['problem']}")
+            out["not_watched"].append(f"{mid}（{r['state']}）")
             continue
+        out["watched"].append(mid)
         if r["first_time"]:
             out["first_time"].append(f"{mid}（{r['total']}件を記録）")
             continue
@@ -372,6 +378,12 @@ def main() -> int:
     for x in d["first_time"]:
         print("初回として記録:", x)
     print(f"新台候補: {len(d['candidates'])} 件 / 確認が要る: {len(d['problems'])} 件")
+    # ★「新台なし」とは言わない★ 見られた社に限った話であることを必ず書く
+    print(f"  正常に見られたメーカー: {len(d['watched'])} 社"
+          + (f"（{', '.join(d['watched'])}）" if d["watched"] else ""))
+    if d["not_watched"]:
+        print(f"  ★見られていないメーカー: {', '.join(d['not_watched'])}★"
+              "（この社の新台は検出できていません）")
     for c in d["candidates"]:
         print(f"  ★{c['official_name']}（{c['maker']}／{(c['release'] or {}).get('value')}）")
         print(f"    {c['url']}")
