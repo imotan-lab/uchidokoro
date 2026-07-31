@@ -198,7 +198,9 @@ def run_one(name, official_url, maker, release, apply_it=False) -> dict:
     out["problems"] += verify_official(name, official_url)
     # ★②その機種が既に登録されていないか★（2026-07-31・実際に二重登録できた）
     #   手順書には書いてあったが、実行器が呼んでいなかった。
-    for slug, ename, why in _cd.find_duplicates(name):
+    # ★名前・公式URL・型式名のどれか1つでも一致したら疑う★（2026-07-31・Codex指摘）
+    #   型式名は新台では無いことが多いので、無いこと自体は警告にしない。
+    for slug, ename, why in _cd.find_duplicates(name, official_urls=[official_url]):
         out["problems"].append(
             f"既に登録されている疑い: slug={slug} name={ename}（{why}）"
             f"／新しいslugで作らず、更新タスクで直すこと")
@@ -318,6 +320,32 @@ def selftest() -> int:
               _blocking(["既に登録されている疑い: slug=super_binmusume"]))
             t("　実データでも既存機種を見つけられる",
               _cd.find_duplicates("Lすーぱぁびん娘"))
+            # ★名前が違っても、公式URL・型式名で捕まえる★（Codex指摘・2026-07-31）
+            import json as _json
+            import tempfile as _tmp
+            _real_m = _cd.MACHINES
+            _dir = _tmp.mkdtemp(prefix="uchi_dup_")
+            try:
+                _f = os.path.join(_dir, "machines.json")
+                with open(_f, "w", encoding="utf-8") as _fh:
+                    _json.dump([{"slug": "aaa", "name": "ぜんぜん違う名前",
+                                 "identity": {
+                                     "official_product_url":
+                                         "https://www.example.jp/products/slot/x/",
+                                     "regulatory_model_code": "Lびん娘NY1"}}],
+                               _fh, ensure_ascii=False)
+                _cd.MACHINES = __import__("pathlib").Path(_f)
+                t("★★名前が違っても公式URLが同じなら疑う★★"
+                  "（追跡パラメータ・wwwの有無は無視する）",
+                  _cd.find_duplicates("新しい名前", official_urls=[
+                      "https://example.jp/products/slot/x?utm_source=z"]))
+                t("★名前が違っても型式名が同じなら疑う★",
+                  _cd.find_duplicates("新しい名前", model_codes=["Ｌびん娘 NY1"]))
+                t("　手がかりが無ければ疑わない（型式が無いこと自体は警告にしない）",
+                  not _cd.find_duplicates("新しい名前"))
+            finally:
+                _cd.MACHINES = _real_m
+                __import__("shutil").rmtree(_dir, ignore_errors=True)
             t("　実在しない名前なら重複としない",
               not _cd.find_duplicates("そんな機種はありませんXYZ"))
             t("★★公式ページを開けないときは記事を作らない★★（機種を確かめられていない）",

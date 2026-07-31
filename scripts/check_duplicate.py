@@ -18,6 +18,7 @@ import json
 import re
 import sys
 import unicodedata
+import urllib.parse
 from pathlib import Path
 
 # Windowsのcp932コンソールでも日本語・絵文字を出力できるようstdoutをUTF-8化
@@ -47,7 +48,35 @@ def _alias_key(a: str) -> str:
     return unicodedata.normalize("NFKC", a or "").strip().lower()
 
 
-def find_duplicates(name: str, aliases=None) -> list:
+def norm_official_url(u: str) -> str:
+    """公式URLを比べられる形にそろえる。★機種を分ける情報は消さない★
+
+    ホスト名の大小・www・既定ポート・末尾スラッシュ・追跡パラメータだけを整理する。
+    クエリは機種を分けている場合があるので、追跡用として知られたものだけ落とす。
+    """
+    if not u:
+        return ""
+    pr = urllib.parse.urlsplit(unicodedata.normalize("NFKC", str(u).strip()))
+    host = pr.hostname or ""
+    host = host.lower().removeprefix("www.")
+    if pr.port and pr.port not in (80, 443):
+        host = f"{host}:{pr.port}"
+    keep = [(k, v) for k, v in urllib.parse.parse_qsl(pr.query, keep_blank_values=True)
+            if not (k.lower().startswith("utm_")
+                    or k.lower() in ("fbclid", "gclid", "yclid", "_ga"))]
+    query = urllib.parse.urlencode(sorted(keep))
+    path = (pr.path or "/").rstrip("/") or "/"
+    return f"{host}{path}" + (f"?{query}" if query else "")
+
+
+def norm_model_code(code: str) -> str:
+    """型式名をそろえる。★記号を全部消さない★（別の型式とぶつかるため）"""
+    t = unicodedata.normalize("NFKC", str(code or "")).lower()
+    return re.sub(r"[\s　]+", "", t).replace("‐", "-").replace("−", "-")
+
+
+def find_duplicates(name: str, aliases=None, official_urls=None,
+                    model_codes=None) -> list:
     """★他のスクリプトから呼べる形★（新台追加の実行器が使う）
 
     2026-07-31: この判定はコマンドからしか使えず、`add_machine_run.py` が
@@ -57,8 +86,24 @@ def find_duplicates(name: str, aliases=None) -> list:
     machines = json.loads(MACHINES.read_text(encoding="utf-8"))
     cand_norm = normalize_machine_name(name)
     cand_aliases = {_alias_key(a) for a in (aliases or []) if str(a).strip()}
+    # ★名前以外の手がかりでも見る★（2026-07-31・Codex指摘）
+    #   名前だけだと、表記を変えて別slugで二重登録する経路が残る。
+    #   型式名は新台では無いことが多いので、**無くても警告にはしない**。
+    cand_urls = {norm_official_url(u) for u in (official_urls or []) if u}
+    cand_urls.discard("")
+    cand_codes = {norm_model_code(c) for c in (model_codes or []) if c}
+    cand_codes.discard("")
     hits = []
     for m in machines:
+        ident = m.get("identity") or {}
+        why = []
+        if cand_urls and norm_official_url(ident.get("official_product_url")) in cand_urls:
+            why.append("公式URLが一致")
+        if cand_codes and norm_model_code(ident.get("regulatory_model_code")) in cand_codes:
+            why.append("型式名が一致")
+        if why:
+            hits.append((m["slug"], m["name"], "／".join(why)))
+            continue
         # (1) 正規化名の一致
         if normalize_machine_name(m["name"]) == cand_norm:
             hits.append((m["slug"], m["name"], "名前が正規化一致"))
@@ -75,10 +120,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--name", required=True, help="新台の正式名称（候補）")
     ap.add_argument("--aliases", default="", help="候補のaliases（カンマ区切り・任意）")
+    ap.add_argument("--official-url", default="", help="候補の公式ページURL（任意）")
+    ap.add_argument("--model-code", default="", help="候補の型式名（任意・新台では無いことが多い）")
     args = ap.parse_args()
 
     hits = find_duplicates(args.name,
-                           [a for a in args.aliases.split(",") if a.strip()])
+                           [a for a in args.aliases.split(",") if a.strip()],
+                           official_urls=[args.official_url] if args.official_url else [],
+                           model_codes=[args.model_code] if args.model_code else [])
     cand_norm = normalize_machine_name(args.name)
 
     if hits:
