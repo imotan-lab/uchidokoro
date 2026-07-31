@@ -142,7 +142,10 @@ def gather(name: str) -> dict:
 #   以前は problems を文字列で並べるだけで、**中身を見ずに書き込めた**。
 #   機種の同定に関わる問題が1つでもあれば、材料が採れていても書かない。
 BLOCKING = ("AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY", "型式名",
-            "公式ページと名前が一致しません", "2件以上",
+            "公式ページと名前が一致しません",
+            # ★公式ページを開けないなら、その機種だと確かめられていない★
+            #   slug も公式URLから作るので、開けないURLのまま記事を作らない。
+            "公式ページを取得できません", "2件以上",
             "転載の疑い")   # ★登録簿に無い転載があれば止める★
 
 
@@ -280,6 +283,8 @@ def selftest() -> int:
               "（機種Aの名前＋機種BのURLで記事ができた穴・実際に再現した）",
               v and "一致しません" in v[0])
             _nw._get = lambda u, timeout=20: "<title>Lすーぱぁびん娘|BELLCO</title>"
+            t("★★公式ページを開けないときは記事を作らない★★（機種を確かめられていない）",
+              _blocking(["公式ページを取得できません: 取得できません（URLError）"]))
             t("　同じ機種なら通る",
               verify_official("Lすーぱぁびん娘",
                               "https://m.example/products/slot/lbinko/") == [])
