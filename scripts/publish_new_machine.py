@@ -29,8 +29,10 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import json
+import subprocess
 import os
 import sys
 
@@ -102,6 +104,89 @@ def check_page(slug: str, html: str) -> list:
     return ng
 
 
+def allowed_paths(slug: str) -> set:
+    """★この経路が変えてよいファイル★（これ以外が変わっていたら止める）"""
+    return {
+        f"machines/{slug}/index.html",
+        f"assets/data/machine-details/{slug}.json",
+        "assets/data/machines.json",
+    }
+
+
+def changed_paths() -> list:
+    """いまリポジトリで変わっているファイル（gitに聞く）。"""
+    r = subprocess.run(["git", "status", "--porcelain"], cwd=BASE,
+                       capture_output=True, text=True, encoding="utf-8",
+                       errors="replace")
+    if r.returncode != 0:
+        raise PublishError(f"git status が失敗しました: {r.stderr[:200]}")
+    out = []
+    for line in r.stdout.splitlines():
+        if len(line) > 3:
+            out.append(line[3:].strip().strip('"'))
+    return out
+
+
+def check_no_stray_changes(slug: str, before: list) -> list:
+    """★許した3つ以外を書いていないか★（2026-07-31・Codexの条件）
+
+    「既存ページを変えていない」だけでは足りない。
+    sitemap・テンプレート・CSS など、ページ以外を触った場合も見つける。
+    """
+    allowed = allowed_paths(slug)
+    stray = [x for x in changed_paths()
+             if x not in allowed and x not in set(before)]
+    return [f"許していないファイルが変わっています: {x}" for x in stray]
+
+
+def check_sitemap_kept(before_text: str) -> list:
+    """★sitemap が縮んでいないか★（先行記事は足さないが、既存も減らさない）"""
+    with open(SITEMAP, encoding="utf-8") as f:
+        now = f.read()
+    n0, n1 = before_text.count("<url>"), now.count("<url>")
+    if n1 < n0:
+        return [f"sitemap の件数が減りました（{n0} → {n1}）"]
+    if n1 != n0:
+        return [f"sitemap の件数が変わりました（{n0} → {n1}）。この経路は触りません"]
+    return []
+
+
+def check_served(slug: str) -> list:
+    """★実際にHTTPで返るか確かめる★（ファイルがあるだけでは足りない）
+
+    ローカルの簡易サーバで `/machines/{slug}/` を引き、200 と noindex を見る。
+    ★必ずサーバを止める★
+    """
+    import http.server
+    import socketserver
+    import threading
+    import urllib.request
+
+    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=BASE)
+    try:
+        srv = socketserver.TCPServer(("127.0.0.1", 0), handler)
+    except OSError as e:
+        return [f"確かめ用のサーバを立てられません: {e}"]
+    port = srv.server_address[1]
+    th = threading.Thread(target=srv.serve_forever, daemon=True)
+    th.start()
+    ng = []
+    try:
+        url = f"http://127.0.0.1:{port}/machines/{slug}/"
+        with urllib.request.urlopen(url, timeout=10) as r:
+            if r.status != 200:
+                ng.append(f"公開したページが HTTP {r.status} を返します")
+            body = r.read(400000).decode("utf-8", "replace")
+        if "noindex" not in body:
+            ng.append("配信されたHTMLに noindex がありません")
+    except Exception as e:                # noqa: BLE001
+        ng.append(f"公開したページを引けません: {type(e).__name__}: {e}")
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    return ng
+
+
 def check_after(slug: str, before_pages: dict, rows_before: list) -> list:
     """書いたあとに確かめること。★取り返しがつくうちに気づくため★"""
     ng = []
@@ -147,6 +232,9 @@ def publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> d
         return out
 
     before_pages = _existing_pages()
+    before_changed = changed_paths()
+    with open(SITEMAP, encoding="utf-8") as f:
+        before_sitemap = f.read()
     page = _page_path(slug)
     dp = os.path.join(DETAILS, f"{slug}.json")
     made_dir = False
@@ -182,6 +270,9 @@ def publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> d
         raise PublishError(f"公開できませんでした（元に戻しました）: {e}")
 
     out["problems"] += check_after(slug, before_pages, rows[:-1])
+    out["problems"] += check_no_stray_changes(slug, before_changed)
+    out["problems"] += check_sitemap_kept(before_sitemap)
+    out["problems"] += check_served(slug)
     return out
 
 
@@ -231,6 +322,22 @@ def selftest() -> int:
     pages = _existing_pages()
     t("★既存ページの指紋を取れる（1枚も変えていないことを確かめるため）★",
       len(pages) >= 100 and all(len(v) == 64 for v in pages.values()))
+
+    t("★変えてよいのは3つだけ★",
+      allowed_paths("zzz") == {"machines/zzz/index.html",
+                               "assets/data/machine-details/zzz.json",
+                               "assets/data/machines.json"})
+    t("★★許していないファイルの変更を見つける★★（sitemapやCSSを触っていないか）",
+      check_no_stray_changes("zzz", []) == [] or
+      all("許していない" in x for x in check_no_stray_changes("zzz", [])))
+    with open(SITEMAP, encoding="utf-8") as _f:
+        _sm = _f.read()
+    t("　sitemapが変わっていなければ通る", check_sitemap_kept(_sm) == [])
+    t("★★sitemapが縮んだら止める★★",
+      any("減りました" in x for x in check_sitemap_kept(_sm + "<url>x</url>")))
+    _served = check_served(rows[0]["slug"])
+    t("★★実際にHTTPで引いて確かめられる★★（ファイルがあるだけでは足りない）",
+      isinstance(_served, list))
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
