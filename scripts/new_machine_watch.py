@@ -60,12 +60,19 @@ class WatchError(RuntimeError):
     pass
 
 
+# ★最後にどのURLへ着いたか★（転送でトップや別サイトへ飛ばされた事故を見つける）
+#   _get は文字列しか返さないので、直近の到達先をここに控える。
+LAST_FINAL_URL = {"url": None}
+
+
 def _get(url: str, timeout: int = 20) -> str:
     req = urllib.request.Request(url, headers={"User-Agent": UA})
+    LAST_FINAL_URL["url"] = None
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             if r.status != 200:
                 raise WatchError(f"HTTP {r.status}: {url}")
+            LAST_FINAL_URL["url"] = r.geturl()
             body = r.read(MAX_BYTES + 1)
             charset = r.headers.get_content_charset() or "utf-8"
     except urllib.error.HTTPError as e:
@@ -265,7 +272,7 @@ def _save_seen(data: dict) -> None:
             os.remove(tmp)
 
 
-def _get_rendered(url: str) -> tuple:
+def _get_rendered(url: str, link_prefix: str = "") -> tuple:
     """★ブラウザで描画してから読む★（機種リンクがJavaScriptで作られる社向け）
 
     ★「ブラウザが起動できた」だけでは成功と見なさない★（Codex指摘・2026-07-31）
@@ -282,7 +289,7 @@ def _get_rendered(url: str) -> tuple:
         raise WatchError(f"描画取得を使えません（Playwrightが要ります）: {e}")
     want_host = urllib.parse.urlparse(url).netloc.lower()
     health = {"status": None, "final_url": None, "js_errors": [], "problem": None,
-              "idle_timeout": False}
+              "idle_timeout": False, "unstable": False, "counted": None}
     try:
         with sync_playwright() as pw:
             br = pw.chromium.launch()
@@ -300,7 +307,21 @@ def _get_rendered(url: str) -> tuple:
                     page.wait_for_load_state("networkidle", timeout=15000)
                 except Exception:               # noqa: BLE001
                     health["idle_timeout"] = True
-                page.wait_for_timeout(3000)
+                page.wait_for_timeout(2000)
+                # ★件数が続けて変わらないことを確かめる★（2026-07-31・Codex優先度4）
+                #   遅延読み込みの途中で読むと、件数は正常なのに新台だけ落ちる。
+                #   同じ数が3回続くまで待ち、続かなければ「まだ増えている」と記録する。
+                if link_prefix:
+                    same, last = 0, -1
+                    for _ in range(8):
+                        n = len(product_urls(page.content(), url, link_prefix))
+                        same = same + 1 if n == last else 0
+                        last = n
+                        if same >= 2:
+                            break
+                        page.wait_for_timeout(1500)
+                    health["unstable"] = same < 2
+                    health["counted"] = last
                 health["final_url"] = page.url
                 html = page.content()
             finally:
@@ -343,13 +364,26 @@ def scan_maker(maker_id: str, conf: dict, seen: dict, record: bool = True) -> di
     health = {}
     try:
         if render:
-            html, health = _get_rendered(conf["list_url"])
+            html, health = _get_rendered(conf["list_url"], conf["link_prefix"])
             if health.get("problem"):
                 out["problem"] = health["problem"]
                 out["state"] = "FETCH_FAILED"
                 return out
+            if health.get("unstable"):
+                # ★まだ増えている途中で読んだ★＝新台だけ落ちている恐れ
+                out["problem"] = ("一覧の件数が落ち着きません（読み込みの途中の可能性）。"
+                                  "『新台なし』とは扱いません")
+                out["state"] = "PARSE_SUSPECT"
+                return out
         else:
             html = _get(conf["list_url"])
+            fin = LAST_FINAL_URL.get("url")
+            if fin and (urllib.parse.urlparse(fin).netloc.lower()
+                        != urllib.parse.urlparse(conf["list_url"]).netloc.lower()):
+                # ★別のドメインへ転送されたら、それは同じ一覧ではない★
+                out["problem"] = f"別のドメインへ転送されました（{fin[:90]}）"
+                out["state"] = "FETCH_FAILED"
+                return out
     except WatchError as e:
         out["problem"] = str(e)
         out["state"] = "FETCH_FAILED"
@@ -472,6 +506,17 @@ def selftest() -> int:
         r3 = scan_maker("zzz", conf2, {"makers": {}}, record=False)
         t("★★初回は全部を新台にしない（覚えるだけ）★★",
           r3["first_time"] is True and r3["new"] == [])
+        # ★別のドメインへ転送されたとき★（2026-07-31・Codex優先度1）
+        LAST_FINAL_URL["url"] = "https://よそ.example/top/"
+        _get = lambda u, timeout=20: html          # noqa: E731
+        r_red = scan_maker("t", {**conf, "min_expected": 2}, seen, record=False)
+        t("★★別のドメインへ転送されたら『新台なし』と扱わない★★"
+          "（正しいURLを叩いてもトップや別サイトが返ることがある）",
+          r_red["problem"] is not None and r_red["state"] == "FETCH_FAILED")
+        LAST_FINAL_URL["url"] = LIST
+        r_ok = scan_maker("t", {**conf, "min_expected": 2}, seen, record=False)
+        t("　同じドメインなら通る", r_ok["problem"] is None)
+
         # ★一覧が丸ごと別物に入れ替わったとき★（自分で再現した）
         many = "".join(f'<a href="/products/slot/new{i}/">x</a>' for i in range(55))
         old_seen = {"makers": {"t": {"urls": [f"{LIST}old{i}/" for i in range(60)]}}}
