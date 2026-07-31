@@ -159,17 +159,30 @@ def build_detail(slug, name, release, material) -> dict:
             jp = "メインAT純増" if c["mode"] == "MAIN_AT" else "上位AT純増"
             facts.append([jp, f"約{c['net']}枚/G"])
 
-    # ★CZ★（名前ごとに継続G数と期待度をそろえて）
-    cz_res = material.get("czs") or {}
-    czs = cz_res.get("adopted") or []
-    # ★全部そろった時だけ載せる★（一部だけ載せると全種類だと読まれる）
-    if czs and cz_res.get("complete"):
-        rows = [[c["name"], f"{c['games']} ／ 期待度 {c['rate']}"] for c in czs]
+    # ★CZ★（2026-07-31・Codexと相談した案D）
+    #   ★「全種類」だと読まれない書き方にする★
+    #     どの出典も「これで全部」とは書いていないため、一覧の完全性は判定できない。
+    #     表題を「CZ一覧」にせず、注意書きを**表のすぐ上**に置く（離すと読まれない）。
+    czs = (material.get("czs") or {}).get("adopted") or []
+    if czs:
+        rows = []
+        for c in czs:
+            parts = []
+            if c.get("games"):
+                parts.append(f"継続{c['games']}")
+            elif c.get("games_disputed"):
+                parts.append("継続G数は出典で食い違い")
+            if c.get("rate"):
+                parts.append(f"期待度 {c['rate']}")
+            elif c.get("rate_disputed"):
+                parts.append("期待度は出典で書き方が異なります")
+            rows.append([c["name"], " ／ ".join(parts) if parts else "確認中"])
         sections.append({
-            "title": "CZの種類", "type": "settei",
-            "tables": [{"label": "CZごとの継続G数と期待度",
-                        "headers": ["CZ", "継続G数・期待度"], "rows": rows,
-                        "note": "出典2件で一致したCZのみ掲載しています。"}]})
+            "title": "確認できたCZ", "type": "settei",
+            "tables": [{"label": "出典2件で確認できたCZ",
+                        "headers": ["CZ", "確認できた内容"], "rows": rows,
+                        "note": "現時点で確認できたCZのみを載せています。"
+                                "全種類をまとめたものではありません。"}]})
 
     spec_body = [f"**機種名**：{name}"]
     if release:

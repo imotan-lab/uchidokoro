@@ -132,6 +132,17 @@ def gather(name: str) -> dict:
     got["material"]["czs"] = _read(_cz, "CZ")
     for nt in got["material"]["czs"]["need_third"]:
         got["problems"].append(f"CZ「{nt['name']}」: {nt['why']}")
+    # ★CZらしいのに採れなかった語は必ず報告する★（載せない判断には使わない）
+    #   前兆ステージや文中の普通名詞も混じるため、機械では選り分けられない。
+    un = got["material"]["czs"].get("unresolved") or []
+    if un:
+        got["problems"].append(
+            "CZかもしれないが採れなかった語: " + "・".join(un[:6]))
+    for c in got["material"]["czs"]["adopted"]:
+        if c.get("rate_disputed"):
+            got["problems"].append(f"CZ「{c['name']}」の期待度: 出典で書き方が異なります")
+        if c.get("games_disputed"):
+            got["problems"].append(f"CZ「{c['name']}」の継続G数: 出典が食い違っています")
     for nt in got["material"]["at_specs"]["need_third"]:
         jp = "メインAT" if nt["mode"] == "MAIN_AT" else "上位AT"
         got["problems"].append(f"{jp}の仕様: {nt['why']}")

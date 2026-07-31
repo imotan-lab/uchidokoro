@@ -42,10 +42,13 @@ _GAMES_OK = re.compile(r"^(\d{1,3})\s*G(\+\s*α)?$")
 # 期待度（★書き方をそのまま持つ★＝「約50%」と「50%以上」を混ぜない）
 _RATE_OK = re.compile(r"^(約\s*)?\d{1,3}(\.\d)?\s*%(以上|超)?$")
 
-_SENT = re.compile(
-    r"(?P<name>[ぁ-んァ-ヶ一-龥A-Za-z0-9ー・]{2,20}?)は"
-    r"(?P<games>\d{1,3}\s*G(?:\+\s*α)?)継続[、,]\s*"
-    r"(?:成功)?期待度は(?P<rate>約?\s*\d{1,3}(?:\.\d)?\s*%(?:以上|超)?)")
+_TAIL = (r"(?P<games>[0-9]{1,3}[ ]*G(?:\+[ ]*α)?)継続[、,][ ]*"
+         r"(?:平均)?(?:成功)?期待度は(?P<rate>約?[ ]*[0-9]{1,3}(?:\.[0-9])?[ ]*%(?:以上|超)?)")
+# かぎかっこ無し（例: すぱ娘チャレンジは4G+α継続、成功期待度は約40%）
+_SENT = re.compile("(?P<name>[ぁ-んァ-ヶ一-龥A-Za-z0-9ー・]{2,20}?)は" + _TAIL)
+# ★かぎかっこ付き★（例: 上位CZ「クライMAXライブCHALLENGE」は10G継続、平均成功期待度は50%以上）
+#   2026-07-31: この形を読めておらず、上位CZが片方の出典からしか採れていなかった。
+_SENT_Q = re.compile("(?P<name>(?:[^。]{0,8})「[^」]{2,24}」)は" + _TAIL)
 
 _TBL_GAMES = ("継続G数",)
 _TBL_RATE = ("期待度", "成功期待度")
@@ -70,6 +73,19 @@ def clean_name(text: str) -> str:
     return ("上位" + core) if upper and not core.startswith("上位") else core
 
 
+def norm_name(name: str) -> str:
+    """照合用にそろえる。★英語表記とカタカナ表記の差だけを吸収する★
+
+    ★2026-07-31・Codexと相談し、公式ページで裏を取ってから決めた★
+      P-WORLD「クライMAXライブCHALLENGE」／ちょんぼりすた「クライMAXライブチャレンジ」。
+      メーカー公式（BELLCO）に上位AT「クライMAXライブ」の記載があり、
+      固有部分は公式で確認できた。役割（上位ATへのCZ）も継続G数（10G）も一致。
+      **そろえるのはこの1語だけ**で、残りは完全一致を求める。
+    """
+    t = _norm(name).lower()
+    return t.replace("challenge", "チャレンジ")
+
+
 def is_cz_title(text: str) -> bool:
     """その見出しはCZの見出しか。★CZだと分かる語が要る★"""
     t = _norm(text)
@@ -77,13 +93,16 @@ def is_cz_title(text: str) -> bool:
 
 
 def from_sentences(text: str) -> list:
-    out = []
-    for m in _SENT.finditer(_norm(text)):
-        name = clean_name(m.group("name"))
-        if not name:
-            continue
-        out.append({"name": name, "games": _norm(m.group("games")),
-                    "rate": _norm(m.group("rate")), "raw": m.group(0)[:110]})
+    out, seen = [], set()
+    t = _norm(text)
+    for rx in (_SENT_Q, _SENT):
+        for m in rx.finditer(t):
+            name = clean_name(m.group("name"))
+            if not name or norm_name(name) in seen:
+                continue
+            seen.add(norm_name(name))
+            out.append({"name": name, "games": _norm(m.group("games")),
+                        "rate": _norm(m.group("rate")), "raw": m.group(0)[:110]})
     return out
 
 
@@ -157,72 +176,75 @@ def read_page(url: str, official_name: str) -> dict:
     text = _w._visible_text(html)
     cands = from_sentences(text) + from_tables(html)
     # ★同じページの中で同じ名前に別の値が出たら、そのページは使わない★
-    #   （2026-07-31・Codex指摘3を再現）以前は先に見つけた方だけ残し、
-    #   食い違いを黙って捨てていた。捨てた方が正しい可能性がある。
     by_name: dict = {}
     for c in cands:
-        by_name.setdefault(c["name"], []).append(c)
-    conflict = sorted(n for n, v in by_name.items()
+        by_name.setdefault(norm_name(c["name"]), []).append(c)
+    conflict = sorted(v[0]["name"] for v in by_name.values()
                       if len({(x["games"], x["rate"]) for x in v}) > 1)
     if conflict:
         out["reason"] = ("同じページの中でCZの値が食い違っています（"
                          + "・".join(conflict[:3]) + "）")
         return out
-    got = [v[0] for v in by_name.values()]
-    out["czs"] = got
-    # ★一部だけ採れた状態で使わない★（実際に再現した）
-    #   P-WORLDには6つのCZ名があるのに3つしか採れず、それでも「OK」を返していた。
-    missing = sorted(mentioned_names(text) - set(by_name))
-    if missing:
-        out["reason"] = "CZを採り切れていません（" + "・".join(missing[:4]) + "）"
-        out["czs"] = []
-        return out
+    out["czs"] = [v[0] for v in by_name.values()]
+    # ★採り漏れは「警告」にとどめる★（2026-07-31・Codexと相談して案Dへ）
+    #   語尾だけで拾った語（前兆ステージ・文中の普通名詞）でページごと捨てると、
+    #   **2出典で確認できたCZまで失う**。完全な一覧だと言わないことで安全側を保つ。
+    out["unresolved"] = sorted(
+        mentioned_names(text) - {c["name"] for c in out["czs"]})
     out["ok"] = True
-    out["reason"] = "OK" if got else "CZの記述がありません"
+    out["reason"] = "OK" if out["czs"] else "CZの記述がありません"
     return out
 
 
 def compare(pages: list) -> dict:
-    """★CZ名ごとに、継続G数と期待度が一致したものだけ採る★"""
-    votes: dict = {}
-    usable = 0
+    """★CZごとに、項目ごとに採る★（2026-07-31・Codexと相談した案D）
+
+    以前は「継続G数と期待度が両方一致」しないと丸ごと捨てていた。
+    それだと期待度の書き方が違うだけで、**存在も継続G数も失う**。
+    存在・継続G数・期待度をそれぞれ独立に2出典一致で採る。
+
+    ★総数や「全種類」は決して言わない★
+      どの出典も「これで全部」とは書いていないため、一覧の完全性は判定できない。
+    """
+    per: dict = {}
+    unresolved = set()
     for p in pages:
         if not p.get("ok"):
             continue
-        usable += 1
         lin = _sl._lineage(p["host"])
+        unresolved |= set(p.get("unresolved") or [])
         for c in p["czs"]:
-            k = json.dumps({x: c[x] for x in ("name", "games", "rate")},
-                           ensure_ascii=False, sort_keys=True)
-            votes.setdefault(k, {"sample": c, "sources": set()})
-            votes[k]["sources"].add(lin)
+            nk = norm_name(c["name"])
+            e = per.setdefault(nk, {"names": {}, "sources": set(),
+                                    "games": {}, "rate": {}})
+            e["sources"].add(lin)
+            e["names"].setdefault(c["name"], set()).add(lin)
+            e["games"].setdefault(c["games"], set()).add(lin)
+            e["rate"].setdefault(c["rate"], set()).add(lin)
+
+    def _pick(d):
+        """2出典以上で一致した値だけ返す（割れていたら採らない）。"""
+        ok = [(v, srcs) for v, srcs in d.items() if len(srcs) >= 2]
+        return ok[0] if len(ok) == 1 else (None, set())
+
     adopted, need_third = [], []
-    by_name: dict = {}
-    for v in votes.values():
-        by_name.setdefault(v["sample"]["name"], []).append(v)
-    for nm, items in by_name.items():
-        agreed = [v for v in items if len(v["sources"]) >= 2]
-        if len(agreed) == 1:
-            c = dict(agreed[0]["sample"])
-            c["sources"] = sorted(agreed[0]["sources"])
-            adopted.append(c)
-        else:
-            need_third.append({
-                "name": nm,
-                "why": ("出典が食い違っています" if len(items) > 1
-                        else "1つの出典にしかありません"),
-                "candidates": [{"games": v["sample"]["games"],
-                                "rate": v["sample"]["rate"],
-                                "sources": sorted(v["sources"])} for v in items]})
-    # ★CZは一式で出す★（2026-07-31・Codex指摘1を再現）
-    #   1つでも食い違いが残ったまま残りを載せると、
-    #   読者は載っているものが全種類だと読む。
-    if need_third:
-        adopted = []
-    return {"adopted": sorted(adopted, key=lambda x: x["name"]),
-            "need_third": need_third,
-            # ★使えるページが2つ無いなら「そろっている」とは言わない★
-            "complete": bool(not need_third and usable >= 2)}
+    for nk, e in sorted(per.items()):
+        if len(e["sources"]) < 2:
+            need_third.append({"name": sorted(e["names"])[0],
+                               "why": "1つの出典にしかありません",
+                               "candidates": [{"sources": sorted(e["sources"])}]})
+            continue
+        games, gs = _pick(e["games"])
+        rate, rs = _pick(e["rate"])
+        # 表記が割れたときは、票の多い書き方を出す（同数なら並べ替えて決める）
+        display = sorted(e["names"], key=lambda n: (-len(e["names"][n]), n))[0]
+        adopted.append({"name": display, "games": games, "rate": rate,
+                        "sources": sorted(e["sources"]),
+                        "games_disputed": games is None and len(e["games"]) > 1,
+                        "rate_disputed": rate is None and len(e["rate"]) > 1})
+    return {"adopted": adopted, "need_third": need_third,
+            # ★CZらしいのに採れなかった語★（載せない判断には使わない・報告用）
+            "unresolved": sorted(unresolved)}
 
 
 # ---------------------------------------------------------------- selftest
@@ -281,33 +303,42 @@ def selftest() -> int:
       "Bチャレンジ" in mentioned_names(
           "Aチャレンジは4G継続、期待度は約40%。Bチャレンジは5G or 10G継続、期待度は約50%。"))
 
-    A = {"url": "https://www.p-world.co.jp/x", "host": "p-world.co.jp", "ok": True,
-         "czs": [{"name": "すぱ娘チャレンジ", "games": "4G+α", "rate": "約40%", "raw": ""}]}
-    B = {"url": "https://chonborista.com/y", "host": "chonborista.com", "ok": True,
-         "czs": [{"name": "すぱ娘チャレンジ", "games": "4G+α", "rate": "約40%", "raw": ""}]}
-    t("★2出典一致なら採用★", len(compare([A, B])["adopted"]) == 1)
-    C = {**B, "czs": [{**B["czs"][0], "rate": "50%以上"}]}
-    t("★★『約50%』と『50%以上』を一致にしない★★（意味の幅が違う）",
-      not compare([A, C])["adopted"])
-    D = {**B, "czs": [{**B["czs"][0], "name": "上位クライMAXライブチャレンジ"}]}
-    t("　名前が違えば別のCZとして扱う", not compare([A, D])["adopted"])
-    t("　同じ運営元の2ページを2票と数えない",
-      not compare([A, {**B, "host": "p-world.co.jp"}])["adopted"])
+    mk = lambda h, czs: {"url": "https://" + h + "/x", "host": h, "ok": True,
+                         "czs": czs, "unresolved": []}
+    one = lambda n, g, r: {"name": n, "games": g, "rate": r, "raw": ""}
 
-    # ★Codex指摘1：1つでも食い違えばCZは一式で出さない★
-    A2 = {**A, "czs": [A["czs"][0],
-                       {"name": "Bチャレンジ", "games": "7G", "rate": "約50%", "raw": ""}]}
-    B2 = {**B, "czs": [B["czs"][0],
-                       {"name": "Bチャレンジ", "games": "7G", "rate": "約60%", "raw": ""}]}
-    _r = compare([A2, B2])
-    t("★★1つでも食い違えば、一致した分も載せない★★"
-      "（一部だけ載せると全種類だと読まれる・再現した）",
-      _r["adopted"] == [] and _r["complete"] is False
-      and [n["name"] for n in _r["need_third"]] == ["Bチャレンジ"])
-    t("　全部そろえば complete になる", compare([A, B])["complete"] is True)
-    t("★使えるページが無いのに『そろっている』と言わない★",
-      compare([{**A, "ok": False, "czs": []},
-               {**B, "ok": False, "czs": []}])["complete"] is False)
+    A = mk("p-world.co.jp", [one("すぱ娘チャレンジ", "4G+α", "約40%")])
+    B = mk("chonborista.com", [one("すぱ娘チャレンジ", "4G+α", "約40%")])
+    r = compare([A, B])
+    t("★2出典一致なら採用★",
+      len(r["adopted"]) == 1 and r["adopted"][0]["games"] == "4G+α")
+    t("　同じ運営元の2ページを2票と数えない",
+      not compare([A, mk("p-world.co.jp", B["czs"])])["adopted"])
+
+    # ★Codexと相談した案D：項目ごとに採る★
+    C = mk("chonborista.com", [one("すぱ娘チャレンジ", "4G+α", "50%以上")])
+    r2 = compare([A, C])
+    t("★★『約40%』と『50%以上』が違っても、CZの存在と継続G数は残す★★"
+      "（丸ごと捨てると分かっている事実まで失う）",
+      len(r2["adopted"]) == 1 and r2["adopted"][0]["games"] == "4G+α"
+      and r2["adopted"][0]["rate"] is None
+      and r2["adopted"][0]["rate_disputed"] is True)
+
+    # ★英語表記とカタカナ表記の差だけをそろえる★
+    D1 = mk("p-world.co.jp", [one("上位クライMAXライブCHALLENGE", "10G", "約50%")])
+    D2 = mk("chonborista.com", [one("上位クライMAXライブチャレンジ", "10G", "約50%")])
+    t("★★CHALLENGE と チャレンジ を同じCZとして扱う★★（公式で固有部分を確認済み）",
+      len(compare([D1, D2])["adopted"]) == 1)
+    t("　固有部分が違えば別のCZのまま",
+      not compare([D1, mk("chonborista.com",
+                          [one("上位ゆめ娘チャレンジ", "10G", "約50%")])])["adopted"])
+
+    t("　1つの出典にしか無いCZは採らない",
+      compare([A, mk("chonborista.com", [])])["adopted"] == []
+      and compare([A, mk("chonborista.com", [])])["need_third"])
+    t("★採り切れなかった語は報告に残す（載せない判断には使わない）★",
+      compare([{**A, "unresolved": ["ユニゾンチャレンジ"]}, B])["unresolved"]
+      == ["ユニゾンチャレンジ"])
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
