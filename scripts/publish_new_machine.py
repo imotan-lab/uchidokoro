@@ -1363,6 +1363,14 @@ def selftest() -> int:
     import shutil as _sh
     import tempfile as _tf4
     _dir4 = _tf4.mkdtemp(prefix="uchi_fault_")
+    # ★試験が追跡ファイルの中身（改行コードを含む）を変えないようにする★
+    #   巻き戻しは中身を戻すが、書き直す以上どうしても改行が揃ってしまう。
+    #   元のバイト列を控え、試験の最後にそのまま書き戻す。
+    _bytes4 = {}
+    for _rel4 in list(HUB_FILES) + ["assets/data/machines.json"]:
+        _f4 = os.path.join(BASE, _rel4)
+        with open(_f4, "rb") as _fh4:
+            _bytes4[_f4] = _fh4.read()
     _real = {"write_atomic": write_atomic, "build_hubs": build_hubs,
              "check_served": check_served, "run_site_audit": run_site_audit,
              "check_after": check_after, "MACHINES": MACHINES}
@@ -1423,6 +1431,11 @@ def selftest() -> int:
     finally:
         for k, v in _real.items():
             globals()[k] = v
+        for _f4, _b4 in _bytes4.items():        # ★元のバイト列に戻す★
+            with open(_f4, "rb") as _fh4:
+                if _fh4.read() != _b4:
+                    with open(_f4, "wb") as _fh5:
+                        _fh5.write(_b4)
         _sh.rmtree(_dir4, ignore_errors=True)
 
     ng = [n for n, ok in results if not ok]
