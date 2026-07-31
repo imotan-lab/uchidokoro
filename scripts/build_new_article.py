@@ -159,6 +159,16 @@ def build_detail(slug, name, release, material) -> dict:
             jp = "メインAT純増" if c["mode"] == "MAIN_AT" else "上位AT純増"
             facts.append([jp, f"約{c['net']}枚/G"])
 
+    # ★CZ★（名前ごとに継続G数と期待度をそろえて）
+    czs = (material.get("czs") or {}).get("adopted") or []
+    if czs:
+        rows = [[c["name"], f"{c['games']} ／ 期待度 {c['rate']}"] for c in czs]
+        sections.append({
+            "title": "CZの種類", "type": "settei",
+            "tables": [{"label": "CZごとの継続G数と期待度",
+                        "headers": ["CZ", "継続G数・期待度"], "rows": rows,
+                        "note": "出典2件で一致したCZのみ掲載しています。"}]})
+
     spec_body = [f"**機種名**：{name}"]
     if release:
         spec_body.append(f"**登場予定**：{_fmt_release(release)}")
