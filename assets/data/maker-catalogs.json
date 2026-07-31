@@ -77,11 +77,11 @@
   },
   "yamasa_next": {
    "name": "山佐ネクスト",
-   "list_url": "https://www.yamasa-next.co.jp/machine/",
+   "list_url": "https://yamasa-next.co.jp/",
    "link_prefix": "https://yamasa-next.co.jp/slot/",
    "min_expected": 2,
    "status": "ACTIVE",
-   "_checked": "2026-07-31 静的HTMLで3件取得（一覧はwww付き・機種リンクはwww無しなので接頭辞はwww無しにする）"
+   "_checked": "2026-07-31 トップページに機種が並ぶ（3件）。★/machine/ を頼むとトップへ転送されるため、最初からトップを一覧として読む★"
   },
   "kpe": {
    "name": "KPE",

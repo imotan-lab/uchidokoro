@@ -92,6 +92,31 @@ def _get(url: str, timeout: int = 20) -> str:
 _YEAR_ONLY = re.compile(r"^(19|20)\d\d$")
 
 
+def _host(u: str) -> str:
+    """比べるためのホスト名。★www の有無は同じサイトとして扱う★"""
+    return urllib.parse.urlparse(u or "").netloc.lower().removeprefix("www.")
+
+
+def redirect_problem(asked: str, final: str):
+    """転送された先がおかしくないか。★おかしければ理由を返す★
+
+    ★2026-07-31・Codex優先度1を実装し、実際に設定ミスを見つけた★
+      山佐ネクストは `www.yamasa-next.co.jp/machine/` を叩くと
+      **トップページへ転送**されていた。一覧を読んでいるつもりで
+      別のページを読んでいたことになる。
+      なお www の有無だけの転送はよくあるので、それは異常としない。
+    """
+    if not final:
+        return None
+    if _host(final) != _host(asked):
+        return f"別のドメインへ転送されました（{final[:90]}）"
+    ap = urllib.parse.urlparse(asked).path.rstrip("/")
+    fp = urllib.parse.urlparse(final).path.rstrip("/")
+    if ap and not fp:
+        return f"トップページへ転送されました（{final[:90]}）"
+    return None
+
+
 def product_urls(html: str, base_url: str, link_prefix: str) -> list:
     """一覧ページから、個別機種ページのURLを取り出す。
 
@@ -377,11 +402,9 @@ def scan_maker(maker_id: str, conf: dict, seen: dict, record: bool = True) -> di
                 return out
         else:
             html = _get(conf["list_url"])
-            fin = LAST_FINAL_URL.get("url")
-            if fin and (urllib.parse.urlparse(fin).netloc.lower()
-                        != urllib.parse.urlparse(conf["list_url"]).netloc.lower()):
-                # ★別のドメインへ転送されたら、それは同じ一覧ではない★
-                out["problem"] = f"別のドメインへ転送されました（{fin[:90]}）"
+            why = redirect_problem(conf["list_url"], LAST_FINAL_URL.get("url"))
+            if why:
+                out["problem"] = why
                 out["state"] = "FETCH_FAILED"
                 return out
     except WatchError as e:
@@ -513,6 +536,15 @@ def selftest() -> int:
         t("★★別のドメインへ転送されたら『新台なし』と扱わない★★"
           "（正しいURLを叩いてもトップや別サイトが返ることがある）",
           r_red["problem"] is not None and r_red["state"] == "FETCH_FAILED")
+        t("★★一覧を頼んだのにトップページへ飛ばされたら異常とする★★"
+          "（山佐ネクストで実際に起きていた）",
+          redirect_problem("https://www.x.example/machine/", "https://x.example/"))
+        t("★www の有無だけの転送は異常としない★",
+          not redirect_problem("https://www.x.example/machine/",
+                               "https://x.example/machine/"))
+        t("　別のドメインへ飛んだら異常",
+          redirect_problem("https://x.example/machine/",
+                           "https://y.example/machine/"))
         LAST_FINAL_URL["url"] = LIST
         r_ok = scan_maker("t", {**conf, "min_expected": 2}, seen, record=False)
         t("　同じドメインなら通る", r_ok["problem"] is None)
