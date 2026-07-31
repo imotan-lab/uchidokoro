@@ -1065,6 +1065,10 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
         #   （2026-07-31・Codex指摘を再現：置き換え直後に中断すると戻らなかった）
         machines_replaced["yes"] = True
         write_atomic(MACHINES, json.dumps(rows, ensure_ascii=False, indent=1) + chr(10))
+        # ★足した行の指紋も残す★（2026-07-31・Codex12回目）
+        #   ページと同じで、人が直した行を巻き添えで消さないため。
+        mark_created({f"machines.json#{slug}":
+                      _sha(json.dumps(machine, ensure_ascii=False, sort_keys=True))})
         out["wrote"] = [dp, page, MACHINES]
         # ★機種数の表記も同時に直す★（ここまで来たら一緒に整える）
         #   直せなくても公開は成立しているので、失敗は問題として残すだけにする。
@@ -1206,8 +1210,22 @@ def recover(apply_it: bool = False) -> dict:
             out["problems"].append(f"  確かめる: 一覧に {slug} が入っています")
         return out
 
+    # ★目印に書かれたパスをそのまま信用しない★（2026-07-31・Codex12回目）
+    #   目印が書き換えられていたら、関係ないファイルを消しに行ける。
+    allowed_created = {f"machines/{slug}/index.html",
+                       f"assets/data/machine-details/{slug}.json",
+                       f"machines.json#{slug}"}
+    stray = sorted(set(created) - allowed_created)
+    if stray:
+        out["problems"].append(
+            f"★目印に知らないファイルが入っています: {stray[:3]}。"
+            "触らずに止めました。人が確かめてください★")
+        return out
+
     # ① 作ったものを消す（★自分が作った中身のままの時だけ★）
     for rel, want in created.items():
+        if rel.startswith("machines.json#"):
+            continue                      # 一覧の行は下の②で扱う
         full = os.path.join(BASE, rel)
         if not os.path.isfile(full):
             continue                      # 既に片付いている（何度走らせても平気）
@@ -1239,6 +1257,17 @@ def recover(apply_it: bool = False) -> dict:
             f"★一覧に {slug} が {len(hit)} 件あります。手で確かめてください★")
         return out
     if hit:
+        # ★行の中身が作ったときと同じ時だけ外す★（2026-07-31・Codex12回目）
+        #   同名が1件かどうかだけ見ていたので、
+        #   あとから人が足した別名や狙い目ごと消していた（実際に再現）。
+        want_row = (created or {}).get(f"machines.json#{slug}")
+        now_row = _sha(json.dumps(rows[hit[0]], ensure_ascii=False, sort_keys=True))
+        if want_row and now_row != want_row:
+            out["kept"].append(f"machines.json#{slug}")
+            out["problems"].append(
+                f"★一覧の {slug} の行が、足したときと中身が違います"
+                "（誰かが直した可能性）。外さずに残しました。人が確かめてください★")
+            return out
         out["todo"].append(f"一覧から外す: {slug}")
         if apply_it:
             del rows[hit[0]]
@@ -1531,6 +1560,11 @@ def selftest() -> int:
     t("★★人が直したページは消さない★★（作ったときの指紋と違えば止まる・Codex11回目）",
       "created" in inspect.getsource(recover)
       and "誰かが直した可能性" in inspect.getsource(recover))
+    t("★★一覧の行も、足したときと同じ時だけ外す★★"
+      "（人が足した別名ごと消していた・実際に再現）",
+      "足したときと中身が違います" in inspect.getsource(recover))
+    t("★★目印に書かれたパスをそのまま信用しない★★（書き換えられたら別のファイルを消せる）",
+      "知らないファイルが入っています" in inspect.getsource(recover))
     t("★★一覧から外すのは同じslugが1件のときだけ★★（複数あれば人へ）",
       "len(hit) > 1" in inspect.getsource(recover))
     t("　目印が壊れていたら消さずに人へ知らせる",
