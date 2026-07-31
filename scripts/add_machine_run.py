@@ -40,6 +40,7 @@ import directory_index as _di         # noqa: E402
 import lineage_check as _lc          # noqa: E402
 import model_code_lookup as _mc       # noqa: E402
 import new_machine_watch as _nw       # noqa: E402
+import pending_machines as _pend      # noqa: E402
 import safe_json as _sj               # noqa: E402
 import spec_lookup as _sl             # noqa: E402
 
@@ -158,6 +159,26 @@ def gather(name: str) -> dict:
     return got
 
 
+# ★あとで載る見込みがある理由★（待ち行列に入れて毎日やり直す）
+#   2026-07-31・実データで見つけた穴:
+#   メーカー公式で先に見つけた新台は、名鑑にまだページが無くて止まる。
+#   ところが公式URLは「既知」として記録されるので、翌日はもう新台に出ない。
+#   ＝**早く見つけた機種ほど取りこぼす**（鮮度を上げる目的と正反対だった）。
+RETRYABLE = ("名鑑の個別ページが", "HEALTHY_NO_MATCH", "CATALOG_UNHEALTHY",
+             "取得できません", "を使えませんでした", "1つの出典にしかありません",
+             "採用できた材料がありません")
+# ★やり直しても意味がない理由★（待たずに台帳へ）
+NOT_RETRYABLE = ("既に登録されている疑い", "公式ページと名前が一致しません",
+                 "転載の疑い", "AMBIGUOUS_CANDIDATES")
+
+
+def retry_later(problems: list) -> bool:
+    """あとでやり直す価値があるか。★意味の無い待ちはしない★"""
+    if any(any(w in p for w in NOT_RETRYABLE) for p in problems):
+        return False
+    return any(any(w in p for w in RETRYABLE) for p in problems)
+
+
 # ★書き込みを止める理由★（Codex指摘3・自分で再現を確認）
 #   以前は problems を文字列で並べるだけで、**中身を見ずに書き込めた**。
 #   機種の同定に関わる問題が1つでもあれば、材料が採れていても書かない。
@@ -191,6 +212,20 @@ def verify_official(name: str, official_url: str) -> list:
     return []
 
 
+def _remember(name, official_url, maker, release, problems) -> None:
+    """★あとで載る見込みがあるなら覚えておく★（翌日やり直すため）"""
+    if not retry_later(problems):
+        return
+    try:
+        pend = _pend.load()
+        _pend.add(pend, name, official_url, maker, release,
+                  " / ".join(problems)[:300])
+        _pend.save(pend)
+    except Exception as e:                # noqa: BLE001
+        # ★覚えられなくても本体は止めない。ただし黙らない★
+        print(f"  ✗ 待ち行列に入れられませんでした: {e}")
+
+
 def run_one(name, official_url, maker, release, apply_it=False) -> dict:
     """1機種を最後まで進める。"""
     out = {"name": name, "slug": None, "wrote": [], "problems": [], "blocked": []}
@@ -208,6 +243,7 @@ def run_one(name, official_url, maker, release, apply_it=False) -> dict:
     out["problems"] += got["problems"]
     if not got["material"]:
         out["blocked"] = _blocking(out["problems"])
+        _remember(name, official_url, maker, release, out["problems"])
         return out
     out["slug"] = _ba.slug_from_url(official_url)
     mat = got["material"]
@@ -219,12 +255,17 @@ def run_one(name, official_url, maker, release, apply_it=False) -> dict:
     # ★②同定に関わる問題があれば、材料が採れていても作らない★
     out["blocked"] = _blocking(out["problems"])
     if out["blocked"] or not mat["adopted"]:
+        _remember(name, official_url, maker, release, out["problems"])
         return out
     machine = _ba.build_machine(out["slug"], name, maker, official_url, release, mat)
     detail = _ba.build_detail(out["slug"], name, release, mat)
     out["preview"] = {"machine": machine, "detail": detail}
     if apply_it:
         out["wrote"] = _ba.apply(out["slug"], machine, detail)
+        # ★記事にできたら待ち行列から外す★
+        pend = _pend.load()
+        if _pend.done(pend, official_url):
+            _pend.save(pend)
     return out
 
 
@@ -239,6 +280,10 @@ def selftest() -> int:
         print(("✅" if cond else "❌") + " " + name)
 
     real_find, real_read, real_lookup = _di.find, _sl.read_page, _mc.lookup
+    # ★試験が本番の待ち行列を触らないようにする★（2026-07-31・実際に架空機種が入った）
+    real_store = _pend.STORE
+    _tmpdir = __import__("tempfile").mkdtemp(prefix="uchi_pend_")
+    _pend.STORE = os.path.join(_tmpdir, "pending.json")
     try:
         _di.find = lambda n, c=None: {"results": {
             "a": {"state": "FOUND", "url": "https://a.example/1", "why": "",
@@ -353,6 +398,8 @@ def selftest() -> int:
             _nw._get = lambda u, timeout=20: (
                 _ for _ in ()).throw(RuntimeError("開けない"))
             r5 = run_one("X", "https://m.example/products/slot/zzz/", "m", "2026-09")
+            t("★★試験が本番の待ち行列を触らない★★（架空機種が入り込んだ）",
+              _pend.STORE.startswith(_tmpdir))
             t("　実際に開けない公式URLでは組み立てまで進まない",
               "preview" not in r5
               and any("公式ページを取得できません" in x for x in r5["blocked"]))
@@ -364,6 +411,8 @@ def selftest() -> int:
             _nw._get, _mc.page_is_machine = real_get, real_page
     finally:
         _di.find, _sl.read_page, _mc.lookup = real_find, real_read, real_lookup
+        _pend.STORE = real_store
+        __import__("shutil").rmtree(_tmpdir, ignore_errors=True)
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
@@ -420,6 +469,18 @@ def main() -> int:
     d = discover()
     for x in d["first_time"]:
         print("初回として記録:", x)
+    # ★見つけたが記事にできていない機種を、必ず待ち行列に入れる★
+    pend = _pend.load()
+    for c in d["candidates"]:
+        _pend.add(pend, c.get("official_name") or "", c["url"], c["maker"],
+                  (c.get("release") or {}).get("value") or "", "見つけたばかり")
+    # ★待ちすぎた分は黙って消さず、台帳に残す★
+    for it in _pend.give_up(pend):
+        _ledger("site", "structural", "MATERIAL", "PENDING_GAVE_UP",
+                f"新台を{_pend.GIVE_UP_DAYS}日待っても記事にできませんでした",
+                f"{it['name']} / {it['url']} / 直近の理由: {it.get('last_reason', '')}")
+        print(f"  ★{_pend.GIVE_UP_DAYS}日待っても記事にできませんでした: {it['name']}★")
+    _pend.save(pend)
     print(f"新台候補: {len(d['candidates'])} 件 / 確認が要る: {len(d['problems'])} 件")
     # ★「新台なし」とは言わない★ 見られた社に限った話であることを必ず書く
     print(f"  正常に見られたメーカー: {len(d['watched'])} 社"
@@ -432,6 +493,12 @@ def main() -> int:
         print(f"    {c['url']}")
     for p in d["problems"]:
         print("  ✗ " + p[:150])
+    waiting = _pend.due(pend)
+    print(f"  記事にできず待っている新台: {len(waiting)} 件"
+          + ("（この中から処理します）" if waiting else ""))
+    for it in waiting[:10]:
+        print(f"    {it['release']} {it['name'][:34]}"
+              f"（{_pend.waited_days(it)}日待ち）{it.get('last_reason', '')[:40]}")
     if d["problems"]:
         _ledger("site", "structural", "MATERIAL", "WATCH_PROBLEM",
                 "新台の見張りで確認が要る点が出ました",

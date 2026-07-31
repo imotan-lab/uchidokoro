@@ -115,6 +115,8 @@ jobs:
           python scripts/directory_index.py --selftest
           python scripts/build_new_article.py --selftest
           python scripts/new_machine_watch.py --selftest
+          python scripts/pending_machines.py --selftest
+          python scripts/check_duplicate.py --name "存在しない機種テスト用XYZ"
 
       - name: Repository audits
         shell: bash
