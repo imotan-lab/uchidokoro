@@ -258,12 +258,23 @@ def _is_text(x) -> bool:
     return isinstance(x, str)
 
 
+def _rows_ok(rows) -> bool:
+    """表の中身が「文字の並びの並び」か。"""
+    return (isinstance(rows, list)
+            and all(isinstance(r, list) and all(_is_text(c) for c in r)
+                    for r in rows))
+
+
 def check_detail(slug: str, detail: dict) -> list:
     """★受け取った記事データそのものを確かめる★（2026-07-31・Codex指摘）
 
     `build_detail` が正しくても、この関数は任意の記事データを受け取れる。
     直接呼び出し・試験用の呼び出し・将来のつなぎ間違いが別の入口になるので、
-    **境界でもう一度、形と型まで確かめる**。
+    **境界でもう一度、形と型を最後まで**確かめる。
+
+    ★2026-07-31・自分で確かめて分かったこと★
+      「配列である」までしか見ていない所が9箇所あり、
+      その中に任意の辞書や文字列を入れられた。中まで見る。
     """
     ng = []
     if not isinstance(detail, dict):
@@ -273,6 +284,9 @@ def check_detail(slug: str, detail: dict) -> list:
     stray = sorted(set(detail) - _DETAIL_KEYS)
     if stray:
         ng.append(f"記事データに知らない項目があります: {stray}")
+    for key in ("name", "lead", "updated"):
+        if key in detail and not _is_text(detail[key]):
+            ng.append(f"{key} が文字ではありません")
     if not isinstance(detail.get("sections"), list):
         ng.append("sections が配列ではありません")
     for sec in (detail.get("sections") or []):
@@ -289,6 +303,10 @@ def check_detail(slug: str, detail: dict) -> list:
         if "body" in sec and not (isinstance(sec["body"], list)
                                   and all(_is_text(x) for x in sec["body"])):
             ng.append(f"節『{sec.get('title')}』の本文が文字の配列ではありません")
+        if "rows" in sec and not _rows_ok(sec["rows"]):
+            ng.append(f"節『{sec.get('title')}』の rows が文字の並びではありません")
+        if "tables" in sec and not isinstance(sec["tables"], list):
+            ng.append(f"節『{sec.get('title')}』の tables が配列ではありません")
         for tb in (sec.get("tables") or []):
             if not isinstance(tb, dict):
                 ng.append("表が辞書ではありません")
@@ -296,17 +314,31 @@ def check_detail(slug: str, detail: dict) -> list:
             tbad = sorted(set(tb) - _TABLE_KEYS)
             if tbad:
                 ng.append(f"表に知らない項目があります: {tbad}")
-            rows = tb.get("rows")
-            if not (isinstance(rows, list)
-                    and all(isinstance(r, list) and all(_is_text(c) for c in r)
-                            for r in rows)):
+            for k in ("label", "note"):
+                if k in tb and not _is_text(tb[k]):
+                    ng.append(f"表の {k} が文字ではありません")
+            if "headers" in tb and not (isinstance(tb["headers"], list)
+                                        and all(_is_text(x) for x in tb["headers"])):
+                ng.append("表の headers が文字の配列ではありません")
+            if not _rows_ok(tb.get("rows")):
                 ng.append("表の中身が文字の並びではありません")
-    for key in ("factTable", "summaryBoxes", "evTable"):
+    # ★中まで見る★（配列であることだけでは、任意の辞書を入れられる）
+    for key in ("factTable", "evTable"):
         val = detail.get(key)
         if val is None:
             continue
-        if not isinstance(val, list):
-            ng.append(f"{key} が配列ではありません")
+        if not _rows_ok(val):
+            ng.append(f"{key} が文字の並びではありません")
+    boxes = detail.get("summaryBoxes")
+    if boxes is not None:
+        if not isinstance(boxes, list):
+            ng.append("summaryBoxes が配列ではありません")
+        else:
+            for b in boxes:
+                if not (isinstance(b, dict) and set(b) <= {"title", "body", "type"}
+                        and all(_is_text(v) or isinstance(v, list)
+                                for v in b.values())):
+                    ng.append(f"summaryBoxes に知らない形があります: {b!r}"[:120])
     blob = json.dumps(detail, ensure_ascii=False)
     for word in _FORBIDDEN:
         if chr(34) + word + chr(34) in blob:
@@ -314,11 +346,17 @@ def check_detail(slug: str, detail: dict) -> list:
     return ng
 
 
+_IDENTITY_KEYS = {"manufacturer_id", "official_product_url", "announced_name",
+                  "market_release_date", "identity_tier", "regulatory_model_code",
+                  "_model_code_sources"}
+_RELEASE_OK = re.compile(r"^(20[0-9]{2}-[0-9]{2}(-[0-9]{2})?)?$")
+
+
 def check_machine(slug: str, machine: dict) -> list:
     """★機種データそのものを確かめる★（2026-07-31・Codex指摘2）
 
-    以前は slug と status と publish_state しか見ていなかった。
     知らない項目が混ざれば、そこに書いた文字がページへ出る道になる。
+    ★配列・辞書は中まで見る★（「配列である」だけでは任意の辞書を入れられる）
     """
     ng = []
     if not isinstance(machine, dict):
@@ -326,18 +364,32 @@ def check_machine(slug: str, machine: dict) -> list:
     stray = sorted(set(machine) - _MACHINE_KEYS)
     if stray:
         ng.append(f"機種データに知らない項目があります: {stray}")
-    for key in ("name", "info", "strategy"):
+    for key in ("name", "info", "strategy", "status", "publish_state"):
         if key in machine and not _is_text(machine[key]):
             ng.append(f"{key} が文字ではありません")
-    if not isinstance(machine.get("aliases", []), list):
-        ng.append("aliases が配列ではありません")
+    aliases = machine.get("aliases", [])
+    if not (isinstance(aliases, list) and all(_is_text(x) for x in aliases)):
+        ng.append("aliases が文字の配列ではありません")
     seo = machine.get("seo")
-    if seo is not None and not (isinstance(seo, dict)
-                                and set(seo) <= {"title", "description"}):
-        ng.append("seo に知らない項目があります")
+    if seo is not None:
+        if not isinstance(seo, dict) or set(seo) - {"title", "description"}:
+            ng.append("seo に知らない項目があります")
+        elif not all(_is_text(v) for v in seo.values()):
+            ng.append("seo の中身が文字ではありません")
+    if not _RELEASE_OK.match(str(machine.get("release_date", "") or "")):
+        ng.append(f"release_date の形がおかしいです: {machine.get('release_date')!r}"
+                  "（YYYY-MM か YYYY-MM-DD か空）")
     ident = machine.get("identity")
-    if ident is not None and not isinstance(ident, dict):
-        ng.append("identity が辞書ではありません")
+    if ident is not None:
+        if not isinstance(ident, dict):
+            ng.append("identity が辞書ではありません")
+        else:
+            ibad = sorted(set(ident) - _IDENTITY_KEYS)
+            if ibad:
+                ng.append(f"identity に知らない項目があります: {ibad}")
+            for k, v in ident.items():
+                if not (_is_text(v) or isinstance(v, list)):
+                    ng.append(f"identity.{k} が文字でも配列でもありません")
     # ★狙い目は当サイトの判断なので、この経路では書かせない★
     if machine.get("strategy"):
         ng.append("先行記事に狙い目を書くことはできません（strategy は空のはず）")
@@ -782,6 +834,29 @@ def selftest() -> int:
     t("★★断り書きの文面が違えば止める★★",
       any("文面" in x for x in check_page(
           "zzz_test", good.replace("⚠ 先行記事（解析待ち）", "ふつうの記事です"))))
+
+    # ★中まで見る★（2026-07-31・自分で確かめて9箇所が素通りしていた）
+    _b = {"slug": "zzz_test", "sections": []}
+    for _why, _bad in (
+            ("factTable の中に辞書", {**_b, "factTable": [{"x": "9999G"}]}),
+            ("summaryBoxes に任意の形", {**_b, "summaryBoxes": [{"任意": "天井99999G"}]}),
+            ("表の headers に辞書",
+             {**_b, "sections": [{"title": "x",
+                                  "tables": [{"headers": [{"a": 1}], "rows": []}]}]}),
+            ("節の rows に辞書",
+             {**_b, "sections": [{"title": "x", "rows": [{"a": 1}]}]}),
+            ("lead が辞書", {**_b, "lead": {"a": "b"}})):
+        t(f"★{_why}は止める★", check_detail("zzz_test", _bad))
+    _m2 = {"slug": "zzz_test", "name": "x", "seo": {"title": "x"}, "info": "",
+           "strategy": "", "aliases": [], "status": "preview",
+           "release_date": "2026-09", "publish_state": STATE}
+    for _why, _bad in (
+            ("aliases に辞書", {**_m2, "aliases": [{"a": 1}]}),
+            ("seo.title が辞書", {**_m2, "seo": {"title": {"a": 1}}}),
+            ("identity に知らない項目", {**_m2, "identity": {"任意": "9999"}}),
+            ("release_date が変な形", {**_m2, "release_date": "9999年天井"})):
+        t(f"★{_why}は止める★", check_machine("zzz_test", _bad))
+    t("　本物の機種データは通る", check_machine("zzz_test", _m2) == [])
 
     # ★受け取った記事データそのものを確かめる★
     t("★まともな記事データなら通る★",
