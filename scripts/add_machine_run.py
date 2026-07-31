@@ -41,6 +41,7 @@ import lineage_check as _lc          # noqa: E402
 import model_code_lookup as _mc       # noqa: E402
 import new_machine_watch as _nw       # noqa: E402
 import pending_machines as _pend      # noqa: E402
+import prepush_gate as _pg            # noqa: E402
 import publish_new_machine as _pub    # noqa: E402
 import safe_json as _sj               # noqa: E402
 import spec_lookup as _sl             # noqa: E402
@@ -111,6 +112,12 @@ def discover() -> dict:
             c = _nw.classify(url, None)
             if c["ok"]:
                 out["candidates"].append({"maker": mid, **c})
+                # ★seen を書く前に覚える★（2026-07-31・Codex17回目）
+                #   あとで覚える形だと、その間に落ちたときに
+                #   「既知のURLだが待ち行列にも無い」＝永久に消えた機種になる。
+                _remember_url(c.get("official_name") or "", url, mid,
+                              (c.get("release") or {}).get("value") or "",
+                              "見つけたばかり")
             else:
                 out["problems"].append(f"{url}: " + " / ".join(c["reasons"]))
                 # ★ここで取りこぼしていた★（2026-07-31・Codex16回目）
@@ -118,9 +125,10 @@ def discover() -> dict:
                 #   翌日はもう新台に出てこない。
                 #   一晩だけページが取れなかっただけでも、その機種は永久に消えていた。
                 #   あとで載る見込みがある理由なら、待ち行列に入れて毎日やり直す。
-                _remember(c.get("official_name") or "", url, mid,
-                          (c.get("release") or {}).get("value") or "",
-                          c["reasons"])
+                if retry_later(c["reasons"]):
+                    _remember_url(c.get("official_name") or "", url, mid,
+                                  (c.get("release") or {}).get("value") or "",
+                                  " / ".join(c["reasons"])[:300])
     _nw._save_seen(seen)
     _log(f"見張り終了: 正常{len(out['watched'])}社 / 見られず{len(out['not_watched'])}社 "
          f"/ 新台候補{len(out['candidates'])}件 / 確認が要る{len(out['problems'])}件")
@@ -217,7 +225,9 @@ RETRYABLE = ("名鑑の個別ページが", "HEALTHY_NO_MATCH", "CATALOG_UNHEALT
              "取得できません", "を使えませんでした", "1つの出典にしかありません",
              "採用できた材料がありません",
              # ★公式がまだ書いていないだけ＝明日には書かれうる★（Codex16回目）
-             "登場年月が書かれていません", "公式ページから機種名を取れません")
+             # ★classify が出す文言そのまま★（似せて書いて一致していなかった）
+             "登場年月を書いていません", "登場年月が書かれていません",
+             "公式ページから機種名を取れません", "機種名を取れません")
 # ★やり直しても意味がない理由★（待たずに台帳へ）
 NOT_RETRYABLE = ("既に登録されている疑い", "公式ページと名前が一致しません",
                  "転載の疑い", "AMBIGUOUS_CANDIDATES",
@@ -225,6 +235,11 @@ NOT_RETRYABLE = ("既に登録されている疑い", "公式ページと名前�
                  "すでに扱っている機種です", "パチスロのページに見えません",
                  "登場年月が新台の範囲外です", "同じURLの機種名が変わりました",
                  "メーカーが名簿にありません", "の場所ではありません",
+            # ★名簿を読めないなら「合っている」とは言えない★（Codex17回目）
+            #   読めなかったのに素通りすると、誤ったメーカーのまま公開できた。
+            "メーカー名簿を読めません",
+            # ★新台でない機種を新台として出さない★（Codex17回目）
+            "登場年月が新台の範囲外です",
                  "登場年月が公式と違います")
 
 
@@ -255,7 +270,7 @@ def _blocking(problems: list) -> list:
 
 
 def verify_official(name: str, official_url: str,
-                    maker: str = "", release: str = "") -> list:
+                    maker: str = "", release: str = "") -> dict:
     """★公式ページが本当にその機種か確かめる★（Codex指摘1・実際に再現した穴）
 
     以前は名前とURLを別々に受け取り、照合していなかった。
@@ -266,23 +281,44 @@ def verify_official(name: str, official_url: str,
       この2つは `--maker` `--release` の入力のまま記事とページへ入っていた。
       メーカー名を間違えれば別会社の機種として、
       年月を間違えれば「いつ打てるか」を誤って読者に出せる。
-      ・メーカー … 公式URLが、その社の名簿の場所から始まるか
-      ・登場年月 … **公式ページに書いてある年月**と同じか
+
+    ★登場年月は「公式に書いてあるものを必ず取る」★（Codex17回目）
+      渡された年月と照合するだけだと、**空で渡せば検査ごと飛ばせた**。
+      さらに新台の範囲かも見る。見ないと、未登録の古い機種を
+      「先行記事」として出せてしまう（`--name` の経路に穴があった）。
+
+    返すのは {"problems": [...], "release": 公式に書いてある年月}。
+    **記事に使うのは渡された値ではなく、この公式の値**。
     """
+    out = {"problems": [], "release": ""}
     try:
         html = _nw._get(official_url)
     except Exception as e:
-        return [f"公式ページを取得できません: {e}"]
-    ng = []
+        out["problems"].append(f"公式ページを取得できません: {e}")
+        return out
     ok, why = _mc.page_is_machine(html, name)
     if not ok:
-        ng.append(f"公式ページと名前が一致しません（{why}）: "
-                  f"公式のタイトル={_nw.page_title(html)[:40]!r} / 指定名={name!r}")
+        out["problems"].append(
+            f"公式ページと名前が一致しません（{why}）: "
+            f"公式のタイトル={_nw.page_title(html)[:40]!r} / 指定名={name!r}")
     if maker:
-        ng += _verify_maker(official_url, maker)
-    if release:
-        ng += _verify_release(html, release)
-    return ng
+        out["problems"] += _verify_maker(official_url, maker)
+    else:
+        out["problems"].append("メーカーが指定されていません")
+    got = _nw.release_month(_nw._visible_text(html))
+    if not got:
+        out["problems"].append(
+            "公式ページに登場年月が書かれていません（こちらで日付を補わない）")
+        return out
+    out["release"] = str(got.get("value") or "")
+    if release and str(release) != out["release"]:
+        out["problems"].append(
+            f"登場年月が公式と違います（公式={out['release']} / "
+            f"渡された値={release}）")
+    if not _nw.is_recent(out["release"]):
+        out["problems"].append(
+            f"登場年月が新台の範囲外です（{out['release']}）")
+    return out
 
 
 def _verify_maker(official_url: str, maker: str) -> list:
@@ -302,7 +338,7 @@ def _verify_maker(official_url: str, maker: str) -> list:
 
 
 def _verify_release(html: str, release: str) -> list:
-    """★公式ページに書いてある登場年月と同じか★
+    """★公式ページに書いてある登場年月と同じか★（試験と再利用のために残す）
 
     ここで見るのは「メーカー自身が自社の機種について書いた年月」なので、
     独立2出典は求めない（自社の発表が一次情報）。
@@ -322,21 +358,31 @@ def _verify_release(html: str, release: str) -> list:
 TEST_MARKS = ("zzz_", "確認機", "テスト機", "m.example", "x.example")
 
 
+def _remember_url(name, url, maker, release, reason) -> None:
+    """★URLを待ち行列へ入れる（名前が無くてもよい）★
+
+    覚えられなかったときに黙るのが一番危ない。
+    seen には入るので、覚え損ねた機種は二度と出てこない。
+    """
+    if any(w in f"{name} {url}" for w in TEST_MARKS):
+        return
+    try:
+        pend = _pend.load()
+        _pend.add(pend, name, url, maker, release, reason)
+        _pend.save(pend)
+    except Exception as e:                # noqa: BLE001
+        _log(f"  ★待ち行列に入れられませんでした（機種が消えます）: {url} / {e}★")
+        _ledger("site", "structural", "MATERIAL", "PENDING_WRITE_FAILED",
+                "新台を待ち行列に入れられませんでした",
+                f"{url} / {e}")
+
+
 def _remember(name, official_url, maker, release, problems) -> None:
     """★あとで載る見込みがあるなら覚えておく★（翌日やり直すため）"""
     if not retry_later(problems):
         return
-    blob = f"{name} {official_url}"
-    if any(w in blob for w in TEST_MARKS):
-        return          # ★試したときの架空機種は覚えない★
-    try:
-        pend = _pend.load()
-        _pend.add(pend, name, official_url, maker, release,
+    _remember_url(name, official_url, maker, release,
                   " / ".join(problems)[:300])
-        _pend.save(pend)
-    except Exception as e:                # noqa: BLE001
-        # ★覚えられなくても本体は止めない。ただし黙らない★
-        print(f"  ✗ 待ち行列に入れられませんでした: {e}")
 
 
 def _claim_today(official_url: str) -> bool:
@@ -352,6 +398,24 @@ def _claim_today(official_url: str) -> bool:
         print((g.stdout or g.stderr or "").strip()[:200])
         return False
     return True
+
+
+def finish_publish(res: dict) -> list:
+    """★公開したあとの後始末★（2026-07-31・Codex17回目）
+
+    push が通って初めて「終わった」。
+    通らなかったものを待ち行列から外すと、翌日やり直せなくなる。
+    """
+    ng = push_after_publish(res["slug"])
+    if ng:
+        return ng
+    url = res.get("pending_url")
+    if url:
+        pend = _pend.load()
+        if _pend.done(pend, url):
+            _pend.save(pend)
+            _log(f"待ち行列から外しました: {res.get('name')}")
+    return []
 
 
 def pick_work(pend: dict) -> dict | None:
@@ -426,8 +490,14 @@ def push_after_publish(slug: str) -> list:
     if r.returncode != 0:
         return ["関所で止まりました（コミット後の確認・pushしていません）: "
                 + (r.stdout or r.stderr or "").strip()[:300]]
-    p = subprocess.run(["git", "push"], cwd=BASE, capture_output=True,
-                       text=True, encoding="utf-8", errors="replace")
+    # ★確かめた先へ、確かめた枝だけを出す★（2026-07-31・Codex17回目）
+    #   裸の `git push` は remote.<名>.push の refspec や push.default に
+    #   左右されるので、**確かめた場所と違う所へ出せた**。
+    sc = _pg.push_scope()
+    p = subprocess.run(
+        ["git", "push", sc["remote"], f"HEAD:refs/heads/{sc['dest']}"],
+        cwd=BASE, capture_output=True, text=True,
+        encoding="utf-8", errors="replace")
     if p.returncode != 0:
         return ["pushできませんでした: "
                 + (p.stdout or p.stderr or "").strip()[:300]]
@@ -441,7 +511,10 @@ def run_one(name, official_url, maker, release, apply_it=False) -> dict:
     _log(f"=== 機種の処理開始: {name} / {maker} / {release} / {official_url} "
          f"/ 書き込み={'する' if apply_it else 'しない'} ===")
     # ★①まず公式ページと名前が同じ機種を指しているか★
-    out["problems"] += verify_official(name, official_url, maker, release)
+    vo = verify_official(name, official_url, maker, release)
+    out["problems"] += vo["problems"]
+    # ★記事に載せるのは公式に書いてある年月★（渡された値ではない）
+    release = vo["release"] or release
     # ★②その機種が既に登録されていないか★（2026-07-31・実際に二重登録できた）
     #   手順書には書いてあったが、実行器が呼んでいなかった。
     # ★名前・公式URL・型式名のどれか1つでも一致したら疑う★（2026-07-31・Codex指摘）
@@ -498,11 +571,11 @@ def run_one(name, official_url, maker, release, apply_it=False) -> dict:
         _log(f"公開しました: {out['slug']} / 書いたファイル{len(out['wrote'])}件 "
              + " ".join(os.path.relpath(w, BASE).replace(os.sep, "/")
                         for w in out["wrote"]))
-        # ★記事にできたら待ち行列から外す★
-        pend = _pend.load()
-        if _pend.done(pend, official_url):
-            _pend.save(pend)
-            _log(f"待ち行列から外しました: {name}")
+        # ★待ち行列から外すのは push が通ってから★（2026-07-31・Codex17回目）
+        #   ここで外すと、関所やpushで止まったとき
+        #   「待ち行列にも無い・手元だけ変わっている」状態になり、
+        #   翌日の実行が残骸で止まって、誰も気づかないまま進まなくなる。
+        out["pending_url"] = official_url
     _log(f"=== 機種の処理終了: {name} / 止めた理由{len(out['blocked'])}件 "
          f"/ 問題{len(out['problems'])}件 ===")
     return out
@@ -617,7 +690,9 @@ def selftest() -> int:
         try:
             _nw._get = lambda u, timeout=20: "<title>ぜんぜん別の機種</title>"
             _mc.page_is_machine = real_page
-            v = verify_official("Lすーぱぁびん娘", "https://m.example/products/slot/other/")
+            v = verify_official(
+                "Lすーぱぁびん娘",
+                "https://m.example/products/slot/other/")["problems"]
             t("★★公式ページが別機種なら止める★★"
               "（機種Aの名前＋機種BのURLで記事ができた穴・実際に再現した）",
               v and "一致しません" in v[0])
@@ -668,10 +743,23 @@ def selftest() -> int:
             t("　実際に開けない公式URLでは組み立てまで進まない",
               "preview" not in r5
               and any("公式ページを取得できません" in x for x in r5["blocked"]))
-            _nw._get = lambda u, timeout=20: "<title>Lすーぱぁびん娘|BELLCO</title>"
+            _nw._get = lambda u, timeout=20: (
+                "<title>Lすーぱぁびん娘|BELLCO</title><body>2026年9月 登場</body>")
             t("　同じ機種なら通る",
+              verify_official("Lすーぱぁびん娘", "https://m.example/products/slot/lbinko/",
+                              "m")["problems"] == [])
+            t("★★登場年月を渡さなくても、公式から必ず取って確かめる★★"
+              "（空で渡せば検査ごと飛ばせた・Codex17回目）",
               verify_official("Lすーぱぁびん娘",
-                              "https://m.example/products/slot/lbinko/") == [])
+                              "https://m.example/products/slot/lbinko/",
+                              "m")["release"] == "2026-09")
+            _nw._get = lambda u, timeout=20: (
+                "<title>Lすーぱぁびん娘|BELLCO</title><body>2019年4月 登場</body>")
+            t("★★古い機種を新台として出せない★★"
+              "（--name の経路は新台の範囲を見ていなかった・Codex17回目）",
+              any("範囲外" in x for x in verify_official(
+                  "Lすーぱぁびん娘", "https://m.example/products/slot/lbinko/",
+                  "m")["problems"]))
         finally:
             _nw._get, _mc.page_is_machine = real_get, real_page
     finally:
@@ -720,6 +808,13 @@ def main() -> int:
             print("★--name と一緒に --official-url --maker が必要です★")
             return 1
         res = run_one(args.name, args.official_url, args.maker, args.release, args.apply)
+        # ★1機種だけ試す経路でも、公開したら最後まで通す★（Codex17回目）
+        #   ここだけ push を呼んでいなかったので、手元に変更が残り、
+        #   翌日の実行が「許していない変更がある」で止まっていた。
+        if res.get("wrote"):
+            for x in finish_publish(res):
+                print("  ✗ " + x[:200])
+                res.setdefault("problems", []).append(x)
         print(json.dumps({k: v for k, v in res.items() if k != "preview"},
                          ensure_ascii=False, indent=1))
         return 0 if res.get("wrote") or not args.apply else 1
@@ -746,10 +841,8 @@ def main() -> int:
     for x in d["first_time"]:
         print("初回として記録:", x)
     # ★見つけたが記事にできていない機種を、必ず待ち行列に入れる★
+    # ★候補は discover() の中で、seen を書く前に待ち行列へ入れてある★
     pend = _pend.load()
-    for c in d["candidates"]:
-        _pend.add(pend, c.get("official_name") or "", c["url"], c["maker"],
-                  (c.get("release") or {}).get("value") or "", "見つけたばかり")
     # ★待ちすぎた分は黙って消さず、台帳に残す★
     for it in _pend.give_up(pend):
         _ledger("site", "structural", "MATERIAL", "PENDING_GAVE_UP",
@@ -792,7 +885,7 @@ def main() -> int:
                 for b in res.get("blocked") or []:
                     print("  ★止めました: " + b[:150])
                 if res.get("wrote"):
-                    ng = push_after_publish(res["slug"])
+                    ng = finish_publish(res)
                     for x in ng:
                         print("  ✗ " + x[:200])
                         _log("  ✗ " + x[:300])

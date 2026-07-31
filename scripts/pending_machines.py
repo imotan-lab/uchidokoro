@@ -78,8 +78,12 @@ def save(data: dict) -> None:
 def add(data: dict, name: str, url: str, maker: str, release: str,
         reason: str = "") -> dict:
     """待ち行列に入れる（既にあれば試した回数と理由を更新する）。"""
-    if not (name and url):
-        raise PendingError("機種名と公式URLは必ず要ります")
+    # ★名前が無くても覚える★（2026-07-31・Codex17回目）
+    #   公式ページを読めなかったURLは名前が取れない。
+    #   そこで拒否すると、**そのURLは既知になったまま二度と出てこない**＝機種が消える。
+    #   名前は翌日もう一度公式を見て埋める（記事にできるかは別の所で見る）。
+    if not url:
+        raise PendingError("公式URLは必ず要ります")
     it = data["items"].get(url)
     if it:
         it["tries"] = int(it.get("tries", 0)) + 1
@@ -170,8 +174,11 @@ def selftest() -> int:
     d3["items"]["https://m.example/a/"]["first_seen"] = "2026-07-01"
     t("★先に見つけたものから試す★", [x["name"] for x in due(d3)] == ["さき", "あと"])
 
-    t("　機種名もURLも無ければ受け付けない",
-      _raises(lambda: add({"items": {}}, "", "", "m", "2026-09")))
+    t("★★名前が無くても覚える★★"
+      "（読めなかったURLを拒否すると、既知のまま二度と出てこない・Codex17回目）",
+      add({"items": {}}, "", "https://x/", "m", "2026-09")["url"] == "https://x/")
+    t("　公式URLだけは必ず要る",
+      _raises(lambda: add({"items": {}}, "X", "", "m", "2026-09")))
     t("★★形が違う待ち行列は読まずに止まる★★（黙って空にしない）",
       _raises(lambda: _check_schema({"schema": "べつのもの", "items": {}})))
     t("　中身が壊れていても止まる",
