@@ -47,6 +47,17 @@ import safe_json as _sj               # noqa: E402
 import spec_lookup as _sl             # noqa: E402
 
 
+def _hide(text: str) -> str:
+    """★鍵を伏せる★（2026-07-31・Codex20回目）
+
+    remote URL には利用者名と個人アクセストークンが埋め込んである。
+    git の失敗メッセージにはそのURLが出ることがあり、
+    そのまま画面・ログ・要確認台帳へ入っていた。
+    """
+    import re
+    return re.sub(r"//[^@/\s]*@", "//***@", text or "")
+
+
 def _log(msg: str) -> None:
     """★1行ずつファイルに残す★（プロジェクトの最優先ルール）
 
@@ -93,6 +104,19 @@ def _ledger(slug, kind, severity, code, title, detail) -> bool:
     return True
 
 
+def _forget(seen: dict, maker_id: str, url: str) -> None:
+    """★そのURLを「見たことがある」から外す★（2026-07-31・Codex20回目）
+
+    待ち行列にも台帳にも残せなかったときだけ使う。
+    既知にしてしまうと翌日から新台に出てこないので、機種が黙って消える。
+    """
+    ent = (seen.get("makers") or {}).get(maker_id) or {}
+    urls = ent.get("urls")
+    if isinstance(urls, list) and url in urls:
+        urls.remove(url)
+        ent["count"] = len(urls)
+
+
 def discover() -> dict:
     """メーカー公式の一覧から新台候補を出す。"""
     cats = _sj.read_json(_nw.CATALOGS, expect=dict)["catalogs"]
@@ -121,14 +145,15 @@ def discover() -> dict:
             continue
         for url in r["new"]:
             c = _nw.classify(url, None)
+            kept = True
             if c["ok"]:
                 out["candidates"].append({"maker": mid, **c})
                 # ★seen を書く前に覚える★（2026-07-31・Codex17回目）
                 #   あとで覚える形だと、その間に落ちたときに
                 #   「既知のURLだが待ち行列にも無い」＝永久に消えた機種になる。
-                _remember_url(c.get("official_name") or "", url, mid,
-                              (c.get("release") or {}).get("value") or "",
-                              "見つけたばかり")
+                kept = _remember_url(c.get("official_name") or "", url, mid,
+                                     (c.get("release") or {}).get("value") or "",
+                                     "見つけたばかり")
             else:
                 out["problems"].append(f"{url}: " + " / ".join(c["reasons"]))
                 # ★ここで取りこぼしていた★（2026-07-31・Codex16回目）
@@ -137,9 +162,19 @@ def discover() -> dict:
                 #   一晩だけページが取れなかっただけでも、その機種は永久に消えていた。
                 #   あとで載る見込みがある理由なら、待ち行列に入れて毎日やり直す。
                 if retry_later(c["reasons"]):
-                    _remember_url(c.get("official_name") or "", url, mid,
-                                  (c.get("release") or {}).get("value") or "",
-                                  " / ".join(c["reasons"])[:300])
+                    kept = _remember_url(
+                        c.get("official_name") or "", url, mid,
+                        (c.get("release") or {}).get("value") or "",
+                        " / ".join(c["reasons"])[:300])
+            if not kept:
+                # ★どこにも残せなかったURLは「見た」ことにしない★
+                #   （2026-07-31・Codex20回目）
+                #   待ち行列にも台帳にも残らないまま既知にすると、
+                #   翌日から新台に出てこない＝その機種は黙って消える。
+                #   覚えないでおけば、明日もう一度あたらしいURLとして出てくる。
+                _forget(seen, mid, url)
+                out["problems"].append(
+                    f"{url}: どこにも残せなかったので『見た』ことにしません")
     _nw._save_seen(seen)
     _log(f"見張り終了: 正常{len(out['watched'])}社 / 見られず{len(out['not_watched'])}社 "
          f"/ 新台候補{len(out['candidates'])}件 / 確認が要る{len(out['problems'])}件")
@@ -382,23 +417,26 @@ def _verify_release(html: str, release: str) -> list:
 TEST_MARKS = ("zzz_", "確認機", "テスト機", "m.example", "x.example")
 
 
-def _remember_url(name, url, maker, release, reason) -> None:
+def _remember_url(name, url, maker, release, reason) -> bool:
     """★URLを待ち行列へ入れる（名前が無くてもよい）★
 
     覚えられなかったときに黙るのが一番危ない。
     seen には入るので、覚え損ねた機種は二度と出てこない。
     """
     if any(w in f"{name} {url}" for w in TEST_MARKS):
-        return
+        return True
     try:
         pend = _pend.load()
         _pend.add(pend, name, url, maker, release, reason)
         _pend.save(pend)
+        return True
     except Exception as e:                # noqa: BLE001
-        _log(f"  ★待ち行列に入れられませんでした（機種が消えます）: {url} / {e}★")
-        _ledger("site", "structural", "MATERIAL", "PENDING_WRITE_FAILED",
-                "新台を待ち行列に入れられませんでした",
-                f"{url} / {e}")
+        _log(f"  ★待ち行列に入れられませんでした: {url} / {e}★")
+        # ★台帳にも残せなければ「見た」ことにしない★（2026-07-31・Codex20回目）
+        #   どちらにも残らないまま seen に入れると、その機種は二度と出てこない。
+        return _ledger("site", "structural", "MATERIAL", "PENDING_WRITE_FAILED",
+                       "新台を待ち行列に入れられませんでした",
+                       f"{url} / {e}")
 
 
 def _remember(name, official_url, maker, release, problems) -> None:
@@ -427,9 +465,22 @@ def _claim_today(official_url: str) -> bool:
 PUSH_PENDING = os.path.join(BASE, ".push-pending.json")
 
 
-def _mark_push_pending(slug: str) -> None:
+def _head() -> str:
+    r = subprocess.run(["git", "rev-parse", "HEAD"], cwd=BASE,
+                       capture_output=True, text=True,
+                       encoding="utf-8", errors="replace")
+    return (r.stdout or "").strip()
+
+
+def _mark_push_pending(slug: str, sha: str = "") -> None:
+    """★どのコミットを出そうとしているかまで残す★（Codex20回目）
+
+    slug だけだと、やり直すときに「コミットからやり直す」ことになり、
+    変更が無いので必ず失敗していた。
+    """
     with open(PUSH_PENDING, "w", encoding="utf-8") as f:
-        json.dump({"slug": slug, "at": _now()}, f, ensure_ascii=False)
+        json.dump({"slug": slug, "sha": sha, "at": _now()}, f,
+                  ensure_ascii=False)
 
 
 def _clear_push_pending() -> None:
@@ -452,8 +503,16 @@ def retry_push_first() -> list:
     except Exception as e:                # noqa: BLE001
         return [f"出せていない公開の目印が壊れています: {e}"]
     slug = got.get("slug") or ""
+    sha = got.get("sha") or ""
+    now = _head()
+    if sha and now != sha:
+        # ★あのときのコミットが先端でない★
+        #   あとから別のコミットが乗っている。機械では正否を決められない。
+        return [f"出せていない公開（{slug}）のあとに別のコミットがあります"
+                f"（記録={sha[:12]} / いま={now[:12]}）。人が確かめてください"]
     _log(f"★前回コミットしたのに出せていないものがあります: {slug}★ 先に出します")
-    ng = push_after_publish(slug)
+    # ★コミットはやり直さない★（変更が無いので必ず失敗していた・Codex20回目）
+    ng = push_after_publish(slug, already_committed=True)
     if ng:
         return [f"{slug} をまだ出せません: " + " / ".join(ng)[:300]]
     _log(f"出せました: {slug}")
@@ -537,7 +596,7 @@ def fill_missing(work: dict) -> dict:
     return work
 
 
-def push_after_publish(slug: str) -> list:
+def push_after_publish(slug: str, already_committed: bool = False) -> list:
     """★公開したら関所を通してpushする★（2026-07-31・Codex16回目）
 
     手元に置いたままにすると、翌日の実行が「許していない変更がある」で止まる。
@@ -556,29 +615,34 @@ def push_after_publish(slug: str) -> list:
     #   公開した直後は必ず一致していないので、**新台は1件もpushできなかった**。
     #   （公開の下見だけして、通しで動かしていなかったので気づけなかった）
     #   --commit の中でも、目印・許した範囲・サイト監査は同じように通る。
-    r = _run("--commit")
-    if r.returncode != 0:
-        return ["関所で止まりました（コミット対象の選別）: "
-                + (r.stdout or r.stderr or "").strip()[:300]]
-    # ★コミットする前に「これから出す」と残す★（2026-07-31・Codex19回目）
-    #   コミットしたあと push で落ちると、手元にだけ機種がある状態になる。
-    #   翌日は machines.json にあるので「既に登録」と判定され、
-    #   待ち行列から永久に外れ、さらに未pushコミットが後続のpushも塞ぐ。
-    _mark_push_pending(slug)
-    msg = (f"feat(machines): 新台 {slug} の先行記事を追加\n\n"
-           "出典2件で一致した項目だけを載せています（status: preview・noindex）。\n\n"
-           "Co-Authored-By: Claude <自動タスク> <noreply@anthropic.com>\n")
-    c = subprocess.run(["git", "commit", "-m", msg], cwd=BASE,
-                       capture_output=True, text=True,
-                       encoding="utf-8", errors="replace")
-    if c.returncode != 0:
-        return ["コミットできませんでした: "
-                + (c.stdout or c.stderr or "").strip()[:300]]
+    # ★すでにコミット済みなら、コミットからやり直さない★（Codex20回目）
+    #   出せなかったものをやり直すとき、変更はもう無い。
+    #   それでもコミットしようとして「nothing to commit」で落ち、
+    #   **push へ一度もたどり着けなかった**。
+    if not already_committed:
+        r = _run("--commit")
+        if r.returncode != 0:
+            return ["関所で止まりました（コミット対象の選別）: "
+                    + _hide((r.stdout or r.stderr or "").strip())[:300]]
+        # ★コミットする前に「これから出す」と残す★（2026-07-31・Codex19回目）
+        #   コミットしたあと push で落ちると、手元にだけ機種がある状態になる。
+        #   翌日は machines.json にあるので「既に登録」と判定され、
+        #   待ち行列から永久に外れ、さらに未pushコミットが後続のpushも塞ぐ。
+        msg = (f"feat(machines): 新台 {slug} の先行記事を追加\n\n"
+               "出典2件で一致した項目だけを載せています（status: preview・noindex）。\n\n"
+               "Co-Authored-By: Claude <自動タスク> <noreply@anthropic.com>\n")
+        c = subprocess.run(["git", "commit", "-m", msg], cwd=BASE,
+                           capture_output=True, text=True,
+                           encoding="utf-8", errors="replace")
+        if c.returncode != 0:
+            return ["コミットできませんでした: "
+                    + _hide((c.stdout or c.stderr or "").strip())[:300]]
+        _mark_push_pending(slug, _head())
     # ★コミットしたあと、もう一度関所★（確かめた中身がそのまま出るか）
     r = _run()
     if r.returncode != 0:
         return ["関所で止まりました（コミット後の確認・pushしていません）: "
-                + (r.stdout or r.stderr or "").strip()[:300]]
+                + _hide((r.stdout or r.stderr or "").strip())[:300]]
     # ★確かめた先へ、確かめた枝だけを出す★（2026-07-31・Codex17回目）
     #   裸の `git push` は remote.<名>.push の refspec や push.default に
     #   左右されるので、**確かめた場所と違う所へ出せた**。
@@ -591,7 +655,7 @@ def push_after_publish(slug: str) -> list:
         _clear_push_pending()
     if p.returncode != 0:
         return ["pushできませんでした: "
-                + (p.stdout or p.stderr or "").strip()[:300]]
+                + _hide((p.stdout or p.stderr or "").strip())[:300]]
     _log(f"pushしました: {slug}")
     return []
 
@@ -651,15 +715,14 @@ def run_one(name, official_url, maker, release, apply_it=False,
     detail = _ba.build_detail(out["slug"], name, release, mat)
     out["preview"] = {"machine": machine, "detail": detail}
     if apply_it:
-        # ★書く直前に「今日の担当か」を見る★（2026-07-31・Codex18回目）
-        #   先に使ってしまうと、記事にできない機種でその日の枠を使い切る。
-        if before_write and not before_write():
-            out["problems"].append("今日の担当ではありません（1日1機種）")
-            return out
         # ★公開は専用の経路だけ★（2026-07-31・Codexと相談した案B）
         #   ページを先に置き、最後に一覧へ足す。既存ページは1枚も触らない。
+        # ★枠を使うのは公開部の中、最初の書き込みの直前★（Codex20回目）
+        #   ここで使うと、途中公開・監査・早見表のずれで断られたときにも
+        #   その日の枠が消えていた。
         res = _pub.publish_from_material(
-            out["slug"], name, maker, official_url, release, mat, apply_it=True)
+            out["slug"], name, maker, official_url, release, mat,
+            apply_it=True, before_write=before_write)
         out["wrote"] = res["wrote"]
         out["problems"] += res["problems"]
         if res["problems"]:
@@ -762,6 +825,28 @@ def selftest() -> int:
         t("★★出せていないなら成功として返さない★★"
           "（手元に書いただけで成功にしていた・Codex19回目）",
           "push_ng" in inspect.getsource(main))
+        t("★★やり直しはコミットからやらない★★"
+          "（変更が無いので必ず失敗し、pushへ一度も届かなかった・Codex20回目）",
+          "already_committed=True" in inspect.getsource(retry_push_first))
+        t("★★出せていない公開の片付けを、どの経路より先にやる★★"
+          "（直接指定の経路がその手前にあり、目印を上書きできた・Codex20回目）",
+          inspect.getsource(main).index("retry_push_first")
+          < inspect.getsource(main).index("if args.name:"))
+        t("★★どこにも残せなかったURLは『見た』ことにしない★★"
+          "（待ち行列にも台帳にも無いまま既知になると黙って消える・Codex20回目）",
+          (lambda sn: (_forget(sn, "m", "https://x/1"),
+                       sn["makers"]["m"]["urls"] == ["https://x/2"])[1])(
+              {"makers": {"m": {"urls": ["https://x/1", "https://x/2"],
+                                "count": 2}}}))
+        t("★★gitの失敗メッセージから鍵を伏せる★★"
+          "（push の失敗文にURLごと出て、画面・ログ・台帳へ入っていた）",
+          "ghp_x" not in _hide("fatal: https://u:ghp_x@github.com/a/b.git")
+          and "***@" in _hide("fatal: https://u:ghp_x@github.com/a/b.git"))
+        t("★★1日の枠は公開部の中、最初の書き込み直前に使う★★"
+          "（途中公開や監査で断られたときにも枠が消えていた・Codex20回目）",
+          "before_write" in inspect.getsource(_pub._publish))
+        t("　60日打ち切りも、台帳に残せたときだけ外す",
+          "待ち行列に戻しました" in inspect.getsource(main))
 
         # ★★「文言が返る」ではなく「記事を作らない」ところまで見る★★
         #   （2026-07-31・Codex18回目。文言の試験しかしていなかったので、
@@ -952,6 +1037,15 @@ def main() -> int:
         #   正しい別の機種を公開できなくなる。run_one の before_write に任せる。
         pass
 
+    # ★出せていない公開を、どの経路より先に片付ける★（2026-07-31・Codex20回目）
+    #   直接指定の経路がこの手前にあったので、前の機種を出せないまま
+    #   次の機種を書いてコミットでき、目印まで上書きしていた。
+    for x in retry_push_first():
+        print("  ✗ " + x[:200])
+        _log("  ✗ " + x[:300])
+        if args.apply:
+            return 1                       # ★片付くまで次へ進まない★
+
     if args.name:
         if not (args.official_url and args.maker):
             print("★--name と一緒に --official-url --maker が必要です★")
@@ -1001,11 +1095,6 @@ def main() -> int:
         if apply_it:
             _log("★戻すまで進みません（--recover --apply で戻してください）★")
             return 1
-    for x in retry_push_first():
-        print("  ✗ " + x[:200])
-        _log("  ✗ " + x[:300])
-        if apply_it:
-            return 1                       # ★片付くまで次へ進まない★
     d = discover()
     for x in d["first_time"]:
         print("初回として記録:", x)
@@ -1014,9 +1103,16 @@ def main() -> int:
     pend = _pend.load()
     # ★待ちすぎた分は黙って消さず、台帳に残す★
     for it in _pend.give_up(pend):
-        _ledger("site", "structural", "MATERIAL", "PENDING_GAVE_UP",
-                f"新台を{_pend.GIVE_UP_DAYS}日待っても記事にできませんでした",
-                f"{it['name']} / {it['url']} / 直近の理由: {it.get('last_reason', '')}")
+        if not _ledger("site", "structural", "MATERIAL", "PENDING_GAVE_UP",
+                       f"新台を{_pend.GIVE_UP_DAYS}日待っても記事にできませんでした",
+                       f"{it['name']} / {it['url']} / "
+                       f"直近の理由: {it.get('last_reason', '')}"):
+            # ★台帳に残せなかったら行列へ戻す★（2026-07-31・Codex20回目）
+            #   give_up() は返す前に外してしまうので、そのまま保存すると
+            #   **待ち行列にも台帳にも無い機種**になる。
+            pend["items"][it["url"]] = it
+            _log(f"  台帳に残せなかったので待ち行列に戻しました: {it['name']}")
+            continue
         print(f"  ★{_pend.GIVE_UP_DAYS}日待っても記事にできませんでした: {it['name']}★")
     _pend.save(pend)
     print(f"新台候補: {len(d['candidates'])} 件 / 確認が要る: {len(d['problems'])} 件")

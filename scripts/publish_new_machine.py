@@ -868,7 +868,7 @@ def render(slug: str, machine: dict, detail: dict) -> str:
 
 def publish_from_material(slug: str, name: str, maker: str, official_url: str,
                           release: str, material: dict,
-                          apply_it: bool = False) -> dict:
+                          apply_it: bool = False, before_write=None) -> dict:
     """★材料から公開まで一気に通す（これが正しい入口）★
 
     ★2026-07-31・Codex指摘1★
@@ -882,11 +882,12 @@ def publish_from_material(slug: str, name: str, maker: str, official_url: str,
     """
     machine = _ba.build_machine(slug, name, maker, official_url, release, material)
     detail = _ba.build_detail(slug, name, release, material)
-    return _publish_prebuilt(slug, machine, detail, apply_it=apply_it)
+    return _publish_prebuilt(slug, machine, detail, apply_it=apply_it,
+                             before_write=before_write)
 
 
 def _publish_prebuilt(slug: str, machine: dict, detail: dict,
-                      apply_it: bool = False) -> dict:
+                      apply_it: bool = False, before_write=None) -> dict:
     """★内部専用★ 外からは `publish_from_material` を使うこと。
 
     こちらは完成データを受け取るので、境界の検査でしか守れない。
@@ -895,7 +896,8 @@ def _publish_prebuilt(slug: str, machine: dict, detail: dict,
     if not apply_it:
         return _publish(slug, machine, detail, apply_it=False)
     with _OnlyOne():
-        return _publish(slug, machine, detail, apply_it=True)
+        return _publish(slug, machine, detail, apply_it=True,
+                        before_write=before_write)
 
 
 # ★外から使ってよいのは publish_from_material だけ★（2026-07-31・Codex指摘4）
@@ -904,7 +906,8 @@ __all__ = ["publish_from_material", "check_page", "check_detail", "check_machine
            "check_counts", "check_hubs_untouched", "render", "STATE"]
 
 
-def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> dict:
+def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
+             before_write=None) -> dict:
     """新台1件を公開する。★ページを先に置き、最後に一覧へ足す★"""
     out = {"slug": slug, "problems": [], "wrote": [], "html_bytes": 0}
     rows = _sj.read_rows(MACHINES)
@@ -939,6 +942,14 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False) -> 
     out["problems"] += check_page(slug, html)
     out["problems"] += check_only_allowed_values(slug, machine, detail, html)
     if out["problems"] or not apply_it:
+        return out
+
+    # ★ここが最初の書き込みの直前★（2026-07-31・Codex20回目）
+    #   「1日1機種」の枠は、前の検査を全部通ってから使う。
+    #   手前で使うと、途中公開・監査・早見表のずれで断られたときにも
+    #   その日の枠が消えて、**別の正しい機種を公開できなくなる**。
+    if before_write and not before_write():
+        out["problems"].append("今日の担当ではありません（1日1機種）")
         return out
 
     before_pages = _existing_pages()
