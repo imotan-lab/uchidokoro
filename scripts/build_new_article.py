@@ -193,7 +193,8 @@ def build_detail(slug, name, release, material) -> dict:
         #   （黙って省くと「これで全部」と読まれ、段数を誤って伝えることになる）
         un = material.get("setting_labels_unconfirmed") or []
         if un:
-            note += "この機種には" + "・".join(f"設定{x}" for x in un) +                     "もありますが、値が確認できていないため掲載していません。"
+            note += ("この機種には" + "・".join(f"設定{x}" for x in un)
+                     + "もありますが、値が確認できていないため掲載していません。")
         tables.append({"label": label, "headers": ["設定", label], "rows": rows,
                        "note": note})
     if tables:

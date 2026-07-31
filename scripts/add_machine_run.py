@@ -104,20 +104,32 @@ def gather(name: str) -> dict:
     got["model_code"] = mv.get("model_code")
     if not mv["adopted"]:
         got["problems"].append("型式名: " + str(mv.get("why", ""))[:160])
-    got["material"] = _sl.compare([_sl.read_page(u, name) for u in got["urls"]])
+    def _read(mod, jp):
+        """器ごとに全ページを読み、★使えなかったページの理由を必ず残す★
+
+        （2026-07-31・自分で再現）以前はページ単位の不採用理由を捨てていたので、
+        「本文にCZが6つあるのに3つしか採れなかった」ような取りこぼしが
+        誰にも伝わらないまま、材料だけが減っていた。
+        """
+        pages = [mod.read_page(u, name) for u in got["urls"]]
+        for pg in pages:
+            if not pg.get("ok"):
+                got["problems"].append(
+                    f"{jp}: {pg['host']} を使えませんでした（{pg.get('reason', '')[:90]}）")
+        return mod.compare(pages)
+
+    got["material"] = _read(_sl, "基本スペック")
     # ★天井は一式で採る★（値だけ先に載せない）
-    got["material"]["ceilings"] = _cl.compare(
-        [_cl.read_page(u, name) for u in got["urls"]])
+    got["material"]["ceilings"] = _read(_cl, "天井")
     for nt in got["material"]["ceilings"]["need_third"]:
         got["problems"].append(f"{nt['jp']}: {nt['why']}")
     # ★ATの仕様はモードごとに★（純増を混ぜたら誤情報）
-    got["material"]["at_specs"] = _at.compare(
-        [_at.read_page(u, name) for u in got["urls"]])
-    # ★CZは名前ごとに★（どのCZの期待度か分からないと誤情報）
+    got["material"]["at_specs"] = _read(_at, "ATの仕様")
     for lb in (got["material"].get("setting_labels_unconfirmed") or []):
         got["problems"].append(
             f"設定{lb}: 出典に出てくるが値が確認できていません（設定の段数を誤る恐れ）")
-    got["material"]["czs"] = _cz.compare([_cz.read_page(u, name) for u in got["urls"]])
+    # ★CZは名前ごとに★（どのCZの期待度か分からないと誤情報）
+    got["material"]["czs"] = _read(_cz, "CZ")
     for nt in got["material"]["czs"]["need_third"]:
         got["problems"].append(f"CZ「{nt['name']}」: {nt['why']}")
     for nt in got["material"]["at_specs"]["need_third"]:

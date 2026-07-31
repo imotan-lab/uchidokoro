@@ -100,6 +100,11 @@ def from_table(lines: list) -> list:
             continue          # ★期待度が取れなければ採らない★
         name = ""
         for k in range(i - 1, max(i - 8, -1), -1):
+            # ★直前のCZの区画を越えて名前を探さない★（2026-07-31・実際に再現した）
+            #   名前の無い表が、上にある別のCZの名前を横取りしていた。
+            #   ＝7G/約50%のCZが「Aチャレンジ」の値として出てしまう。
+            if lines[k] in _TBL_GAMES or lines[k] in _TBL_RATE:
+                break
             if "CZ" in lines[k] or "チャレンジ" in lines[k]:
                 name = clean_name(lines[k])
                 if name:
@@ -108,6 +113,21 @@ def from_table(lines: list) -> list:
             continue          # ★どのCZか分からなければ採らない★
         out.append({"name": name, "games": games, "rate": rate,
                     "raw": f"{name} / {games} / {rate}"})
+    return out
+
+
+# ★「上位」は かぎかっこの外に書かれる★（例: 上位CZ「クライMAXライブCHALLENGE」）
+#   かぎかっこの中だけを見ると「上位」が落ち、採れた名前と突き合わせられない。
+_MENTION = re.compile("(.{0,8})「([^」]{2,24}(?:チャレンジ|CHALLENGE|チャンス))」")
+
+
+def mentioned_names(text: str) -> set:
+    """本文に固有名として出てくるCZらしい名前。★採り漏れの有無を測るため★"""
+    out = set()
+    for before, raw in _MENTION.findall(_norm(text)):
+        nm = clean_name(before + "「" + raw + "」")
+        if nm:
+            out.add(nm)
     return out
 
 
@@ -132,9 +152,13 @@ def read_page(url: str, official_name: str) -> dict:
         seen.add(c["name"])
         got.append(c)
     out["czs"] = got
-    looks = "チャレンジ" in text or "CZ" in text
-    if looks and not got:
-        out["ok"], out["reason"] = False, "CZの記述はあるが採れませんでした（要確認）"
+    # ★一部だけ採れた状態で使わない★（2026-07-31・実際に再現した）
+    #   P-WORLDには6つのCZ名があるのに3つしか採れず、それでも「OK」を返していた。
+    #   3つだけ載せると読者は「CZは3種類」と読む＝種類数を誤って伝えることになる。
+    missing = sorted(mentioned_names(text) - {c["name"] for c in got})
+    if missing:
+        out["reason"] = "CZを採り切れていません（" + "・".join(missing[:4]) + "）"
+        out["czs"] = []
         return out
     out["ok"] = True
     out["reason"] = "OK" if got else "CZの記述がありません"
@@ -208,6 +232,14 @@ def selftest() -> int:
       from_table(["なにかの表", "継続G数", "4G+α", "期待度", "約40%"]) == [])
     t("　期待度が取れなければ採らない",
       from_table(['CZ「x」', "継続G数", "4G+α", "備考", "なし"]) == [])
+
+    t("★★名前の無い表が、上にある別のCZの名前を横取りしない★★（実際に起きた）",
+      [c["name"] for c in from_table(
+          ['CZ「Aチャレンジ」', "継続G数", "4G", "期待度", "約40%",
+           "タイプ", "ST", "継続G数", "7G", "期待度", "約50%"])] == ["Aチャレンジ"])
+    t("★本文に出てくるCZ名を数えられる★",
+      mentioned_names("上位CZ「クライMAXライブCHALLENGE」と「すぱ娘チャレンジ」があります。")
+      == {"上位クライMAXライブCHALLENGE", "すぱ娘チャレンジ"})
 
     A = {"url": "https://www.p-world.co.jp/x", "host": "p-world.co.jp", "ok": True,
          "czs": [{"name": "すぱ娘チャレンジ", "games": "4G+α", "rate": "約40%", "raw": ""}]}
