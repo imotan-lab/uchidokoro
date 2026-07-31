@@ -41,6 +41,7 @@ import lineage_check as _lc          # noqa: E402
 import model_code_lookup as _mc       # noqa: E402
 import new_machine_watch as _nw       # noqa: E402
 import pending_machines as _pend      # noqa: E402
+import publish_new_machine as _pub    # noqa: E402
 import safe_json as _sj               # noqa: E402
 import spec_lookup as _sl             # noqa: E402
 
@@ -261,7 +262,14 @@ def run_one(name, official_url, maker, release, apply_it=False) -> dict:
     detail = _ba.build_detail(out["slug"], name, release, mat)
     out["preview"] = {"machine": machine, "detail": detail}
     if apply_it:
-        out["wrote"] = _ba.apply(out["slug"], machine, detail)
+        # ★公開は専用の経路だけ★（2026-07-31・Codexと相談した案B）
+        #   ページを先に置き、最後に一覧へ足す。既存ページは1枚も触らない。
+        res = _pub.publish(out["slug"], machine, detail, apply_it=True)
+        out["wrote"] = res["wrote"]
+        out["problems"] += res["problems"]
+        if res["problems"]:
+            out["blocked"] = res["problems"]
+            return out
         # ★記事にできたら待ち行列から外す★
         pend = _pend.load()
         if _pend.done(pend, official_url):

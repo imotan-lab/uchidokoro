@@ -110,6 +110,10 @@ def build_machine(slug, name, maker, official_url, release, material) -> dict:
         "strategy": "",
         "aliases": [],
         "status": "preview",
+        # ★既存の未裏取りページ（LEGACY_UNVERIFIED）と混ぜない★
+        #   載せた値は出典2件で確認済み。ただし記事は網羅的ではない、という状態。
+        #   （2026-07-31・Codexと相談して別の状態名にした）
+        "publish_state": "PREVIEW_VERIFIED_SUBSET",
         "release_date": release or "",
         "identity": ident,
     }
@@ -412,6 +416,10 @@ def selftest() -> int:
         MACHINES, DETAILS = real_m, real_d
         shutil.rmtree(tmpdir, ignore_errors=True)
 
+    t("★★新台は既存の未裏取りページと別の状態名を持つ★★（意味が違うため）",
+      build_machine("x", "テスト", "m", "https://m.example/products/slot/x/",
+                    "2026-09", {"adopted": {}})["publish_state"]
+      == "PREVIEW_VERIFIED_SUBSET")
     t("★★ページを作れないならデータも書かない★★"
       "（一覧に出るのにページが無いと本番が404になる・2026-07-31に確認）",
       can_publish_page("そんな機種はありません") is not None)
