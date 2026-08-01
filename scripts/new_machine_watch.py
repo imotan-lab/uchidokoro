@@ -267,6 +267,12 @@ def list_release_hints(html: str, base_url: str, link_prefix: str) -> dict:
         p.feed(html)
     except Exception:                     # noqa: BLE001
         return {}
+    # ★ページ全体をカードにしない★（2026-08-02・Codex31回目）
+    #   機種URLが1種類しか無いページでは、親をたどると根まで着いてしまい、
+    #   ページ内の無関係な年月（展示会 2026.9 等）を登場月にできた。
+    #   機種が2種類以上あって初めて「カードの境界」を決められる。
+    if len(set(product_urls(html, base_url, link_prefix))) < 2:
+        return {}
 
     def _walk(node):
         for ch in node["children"]:
@@ -287,7 +293,7 @@ def list_release_hints(html: str, base_url: str, link_prefix: str) -> dict:
         # ★この機種だけを含む、一番外の要素＝カード★
         card = node
         up = node["parent"]
-        while up is not None and len(set(
+        while up is not None and up["tag"] != "#root" and len(set(
                 _node_product_anchors(up, base_url, link_prefix))) == 1:
             card = up
             up = up["parent"]
@@ -945,10 +951,19 @@ def selftest() -> int:
           '<div><a href="https://m.example/products/slot/rikoriko/">'
           '<img src="x.jpg"></a>'
           '<a href="https://m.example/products/slot/rikoriko/">リコリコ</a>'
-          '<p>2026.9</p></div>',
+          '<p>2026.9</p></div>'
+          '<div><a href="https://m.example/products/slot/juoh/">獣王</a></div>',
           "https://m.example/products/slot/",
           "https://m.example/products/slot/")
-      == {"https://m.example/products/slot/rikoriko/": "2026-09"})
+      .get("https://m.example/products/slot/rikoriko/") == "2026-09")
+    # ★★Codex31回目：ページに機種が1種類しか無ければカードの境界を決められない★★
+    t("★★機種URLが1種類だけのページからは年月を採らない★★"
+      "（根まで上がって「展示会 2026.9」を登場月にできた・Codex31回目）",
+      list_release_hints(
+          '<div>展示会 2026.9</div>'
+          '<div><a href="https://m.example/products/slot/newone/">新機種</a></div>',
+          "https://m.example/products/slot/",
+          "https://m.example/products/slot/") == {})
     t("★★一重引用符の href も読む★★"
       "（新しい1件だけ'…'だと永久に検出されなかった・Codex30回目）",
       product_urls("<a href='https://m.example/products/slot/shin_dai/'>新台</a>",

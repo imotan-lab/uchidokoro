@@ -340,6 +340,10 @@ def gather(name: str) -> dict:
     #   やんちゃプレスはちょんぼりすたと本文が17行そのまま同じだった。
     #   登録簿に無い転載を2票に数えると、独立2出典の意味が無くなる。
     lin = _lc.check(got["urls"])
+    # ★照合できなかった＝独立を確かめられていない★（2026-08-02・Codex31回目）
+    #   取得失敗を無視すると「独立か不明な2ページ」を2票にできた。
+    for p_ in lin.get("problems") or []:
+        got["problems"].append(f"転載照合を実施できません: {p_[:120]}")
     for sp in lin["suspects"]:
         got["problems"].append(
             f"転載の疑い: {sp['a']} と {sp['b']} の本文が {sp['ratio']:.0%} 一致"
@@ -478,6 +482,8 @@ BLOCKING = ("AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY", "型式名",
             # ★公式ページを開けないなら、その機種だと確かめられていない★
             #   slug も公式URLから作るので、開けないURLのまま記事を作らない。
             "公式ページを取得できません", "既に登録されている疑い", "2件以上",
+            # ★独立性を確かめられないまま2票にしない★（Codex31回目）
+            "転載照合を実施できません",
             "転載の疑い",   # ★登録簿に無い転載があれば止める★
             # ★★ここに入れ忘れていた★★（2026-07-31・Codex18回目）
             #   直したつもりで、書き換える場所を1つ手前と間違えていた。
@@ -499,7 +505,8 @@ def _blocking(problems: list) -> list:
 
 
 def verify_official(name: str, official_url: str,
-                    maker: str = "", release: str = "") -> dict:
+                    maker: str = "", release: str = "",
+                    release_is_cache: bool = False) -> dict:
     """★公式ページが本当にその機種か確かめる★（Codex指摘1・実際に再現した穴）
 
     以前は名前とURLを別々に受け取り、照合していなかった。
@@ -586,9 +593,17 @@ def verify_official(name: str, official_url: str,
         return out
     out["release"] = str(got.get("value") or "")
     if release and str(release) != out["release"]:
-        out["problems"].append(
-            f"登場年月が公式と違います（公式={out['release']} / "
-            f"渡された値={release}）")
+        if release_is_cache:
+            # ★待ち行列の年月は「控え」＝公式が変えたら現在の公式値で続行★
+            #   （2026-08-02・Codex31回目。以前は食い違いを永久理由として
+            #     台帳送りにし、正しい新年月を取得済みなのに機種を失っていた）
+            _log(f"  公式が登場年月を変えました（控え={release} → "
+                 f"公式={out['release']}）。公式の値で続けます")
+        else:
+            # 手入力（--release）の食い違いは従来どおり止める
+            out["problems"].append(
+                f"登場年月が公式と違います（公式={out['release']} / "
+                f"渡された値={release}）")
     if not _nw.is_recent(out["release"]):
         out["problems"].append(
             f"登場年月が新台の範囲外です（{out['release']}）")
@@ -620,8 +635,21 @@ def _release_from_official_list(maker: str, official_url: str) -> str:
                 else:
                     html = _nw._get(conf["list_url"])
                 if html:
-                    hints = _nw.list_release_hints(
-                        html, conf["list_url"], conf["link_prefix"])
+                    # ★健全な一覧と確かめてから控えを使う★（2026-08-02・Codex31回目）
+                    #   見張りと同じ検査（印・最低件数・拒否画面）を通す。
+                    _marker = conf.get("list_marker")
+                    _tn = unicodedata.normalize("NFKC", _nw.page_title(html))
+                    _pu = _nw.product_urls(html, conf["list_url"],
+                                           conf["link_prefix"])
+                    _least = int(conf.get("min_expected") or 1)
+                    if (len(_pu) >= _least
+                            and (not _marker or _tn.startswith(
+                                unicodedata.normalize("NFKC", _marker)))
+                            and not _nw.bad_page(html, looks_like_list=True)):
+                        hints = _nw.list_release_hints(
+                            html, conf["list_url"], conf["link_prefix"])
+                    else:
+                        _log(f"  一覧が健全に読めないので年月の控えを使いません（{maker}）")
         except Exception as e:            # noqa: BLE001
             _log(f"  一覧の年月の控えを読めませんでした（{maker}）: {e}")
         _LIST_HINT_CACHE[maker] = hints
@@ -1026,13 +1054,15 @@ def push_after_publish(slug: str, already_committed: bool = False) -> list:
 
 
 def run_one(name, official_url, maker, release, apply_it=False,
+            release_is_cache=False,
             before_write=None) -> dict:
     """1機種を最後まで進める。"""
     out = {"name": name, "slug": None, "wrote": [], "problems": [], "blocked": []}
     _log(f"=== 機種の処理開始: {name} / {maker} / {release} / {official_url} "
          f"/ 書き込み={'する' if apply_it else 'しない'} ===")
     # ★①まず公式ページと名前が同じ機種を指しているか★
-    vo = verify_official(name, official_url, maker, release)
+    vo = verify_official(name, official_url, maker, release,
+                         release_is_cache=release_is_cache)
     out["problems"] += vo["problems"]
     # ★記事に載せるのは公式に書いてある年月★（渡された値ではない）
     release = vo["release"] or release
@@ -1059,7 +1089,10 @@ def run_one(name, official_url, maker, release, apply_it=False,
                 f"／新しいslugで作らず、更新タスクで直すこと")
     if not got["material"]:
         out["blocked"] = _blocking(out["problems"])
-        _remember(name, official_url, maker, release, out["problems"])
+        if apply_it:
+            _remember(name, official_url, maker, release, out["problems"])
+        else:
+            _log("（下見）待ち行列には触りません")
         return out
     out["slug"] = _ba.slug_from_url(official_url)
     mat = got["material"]
@@ -1077,7 +1110,10 @@ def run_one(name, official_url, maker, release, apply_it=False,
     if out["blocked"] or not usable_mat:
         for b in out["blocked"]:
             _log(f"  ★止めました: {b[:140]}")
-        _remember(name, official_url, maker, release, out["problems"])
+        if apply_it:
+            _remember(name, official_url, maker, release, out["problems"])
+        else:
+            _log("（下見）待ち行列には触りません")
         _log(f"=== 機種の処理終了（作らず）: {name} ===")
         return out
     machine = _ba.build_machine(out["slug"], name, maker, official_url, release, mat)
@@ -1733,6 +1769,7 @@ def main() -> int:
             _pend.save(pend)
         res = run_one(work["name"], work["url"], work["maker"],
                       work["release"], apply_it,
+                      release_is_cache=True,       # ★待ち行列の年月は控え★
                       before_write=lambda u=work["url"]: _claim_today(u))
         for b in res.get("blocked") or []:
             print("  ★止めました: " + b[:150])

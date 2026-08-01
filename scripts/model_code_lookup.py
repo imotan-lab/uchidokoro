@@ -295,9 +295,20 @@ def _after_ok(after_seg: str, core: str, official_name: str,
     """
     if not after_seg:
         return True
-    okc = set(core) | set(unicodedata.normalize("NFKC", official_name or "").lower())
-    for w in after_seg.split():
-        c = _ci.normalize_core(w)
+    words = after_seg.split()
+    cores = [_ci.normalize_core(w) for w in words]
+    # ★略称を許すのは「(規格 略称)」の形だけ★（2026-08-02・Codex31回目）
+    #   文字の集合で見ると、名前に偶然SとPが入る機種では派生印SPまで通った。
+    #   ①同じ括弧に規格・販売区分の語（芯が空）があること
+    #   ②語が名前の芯の**順番どおりの部分列**であること（青ブタ⊂青春ブタ野郎…）
+    #   の両方を求める。
+    has_platform = any(c == "" for c in cores)
+
+    def _subseq(small: str, big: str) -> bool:
+        it = iter(big)
+        return all(ch in it for ch in small)
+
+    for c in cores:
         if c == "" or c in _DECOR_CORES or c in _maker_name_cores():
             continue
         # ★メーカー語は正規化後の完全一致だけ★（2026-08-02・Codex28回目）
@@ -306,8 +317,8 @@ def _after_ok(after_seg: str, core: str, official_name: str,
         c2 = c.replace("株式会社", "")
         if extra and (c in extra or c2 in extra):
             continue                      # 期待するメーカーの社名・銘柄
-        if set(c) <= okc:
-            continue                      # 本人の名前の文字だけ＝略称・読み
+        if has_platform and len(c) >= 2 and _subseq(c, core):
+            continue                      # (規格 略称) の形の略称
         return False
     return True
 
