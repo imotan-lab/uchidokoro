@@ -290,9 +290,16 @@ def shape_warnings(html: str, base_url: str, link_prefix: str) -> list:
         if not rest or _YEAR_ONLY.match(rest):
             continue
         first = rest.split("/")[0]
-        if first in got_slugs:
-            continue                      # 既知の機種の下層ページ
-        if (link_prefix.rstrip("/") + "/" + first + "/") in got:
+        if first in got_slugs or (link_prefix.rstrip("/") + "/" + first + "/") in got:
+            # ★既知機種の下でも、資料ファイル以外は知らせる★（2026-08-02・Codex38回目）
+            #   /old/spec.html は機種ページの資料だが、/old/new_variant/ のような
+            #   下層ディレクトリは新機種かもしれない。黙って捨てない。
+            tail = rest[len(first):].strip("/")
+            if not tail:
+                continue
+            if "/" not in tail and "." in tail:
+                continue                  # 機種ページ配下の資料ファイル
+            odd.add(rest)
             continue
         odd.add(rest)
     return sorted(odd)
@@ -644,6 +651,15 @@ def classify(url: str, seen_entry: dict | None = None, today=None,
     _why_bad = bad_page(html, looks_like_list=True)
     if _why_bad:
         out["reasons"].append(f"公式ページが読める状態ではありません（{_why_bad}）")
+        return out
+    # ★題そのものがエラー文なら、その題を機種名にしない★（2026-08-02・Codex38回目）
+    #   弱い語（ページが見つかりません・年齢確認）は本文では普通に出るが、
+    #   **題**に出るのはエラー画面だけ。誤った名前が待ち行列に固定されるのを防ぐ。
+    _t_low = unicodedata.normalize("NFKC", page_title(html)).lower()
+    if any(w.lower() in _t_low for w in _BAD_PAGE_WORDS):
+        out["reasons"].append(
+            f"公式ページが読める状態ではありません（題がエラー文です: "
+            f"{page_title(html)[:40]!r}）")
         return out
     text = _visible_text(html)
     # ★転送された先も検査する★（2026-08-02・Codex34回目）
@@ -1332,6 +1348,25 @@ def selftest() -> int:
           "https://m.example/products/slot/")
       == {"https://m.example/products/slot/cross_b/": "2026-09",
           "https://m.example/products/slot/konan_s/": "2026-10"})
+    # ★★Codex38回目★★
+    _real_get38 = globals()["_get"]
+    globals()["_get"] = lambda u, timeout=20: (
+        "<title>ページが見つかりません</title>"
+        "<nav>パチスロ製品情報</nav><p>お探しのページはありません</p>")
+    try:
+        _c38 = classify("https://m.example/products/slot/x2/", None,
+                        list_release="2026-09")
+    finally:
+        globals()["_get"] = _real_get38
+    t("★★エラー画面の題を機種名にしない★★"
+      "（誤った名前が待ち行列に固定され永久理由で機種を失った・Codex38回目）",
+      not _c38["ok"]
+      and any("読める状態ではありません" in r for r in _c38["reasons"]))
+    t("★★既知機種の下層ディレクトリ（新機種かもしれない）は知らせる★★（Codex38回目）",
+      shape_warnings('<a href="https://m.example/products/slot/ok_one/">y</a>'
+                     '<a href="https://m.example/products/slot/ok_one/new_kishu/">n</a>',
+                     "https://m.example/products/slot/",
+                     "https://m.example/products/slot/") == ["ok_one/new_kishu"])
     t("　カードの構造が無いページでは採らない（安全側）",
       list_release_hints(
           '<a href="https://m.example/products/slot/alpha/">A</a> 導入 2026.9 '

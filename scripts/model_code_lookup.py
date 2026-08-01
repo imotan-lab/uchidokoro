@@ -356,6 +356,11 @@ def _after_ok(after_seg: str, core: str, official_name: str,
         c2 = c.replace("株式会社", "")
         if extra and (c in extra or c2 in extra):
             continue                      # 期待するメーカーの社名・銘柄
+        # ★明確な派生印は、略称より先に拒む★（2026-08-02・Codex38回目）
+        #   名前の芯に偶然 s,p が順に並ぶ機種だと、「(スマスロ SP)」の
+        #   SP が部分列として略称扱いになっていた。
+        if c in _DERIV_MARKS or (c.isdigit() and len(c) <= 2):
+            return False
         if has_platform and len(c) >= 2 and _subseq(c, core):
             continue                      # (規格 略称) の形の略称
         return False
@@ -634,6 +639,10 @@ def selftest() -> int:
       agree([{"url": "https://www.p-world.co.jp/x", "model_code": "LTEST-A"},
              {"url": "https://p-town.dmm.com/y", "model_code": "LTEST−A"}])
       ["adopted"] is True)
+    t("★★「(スマスロ SP)」の派生印を略称として許さない★★"
+      "（名前の芯に偶然s,pが並ぶ機種で素通りした・Codex38回目）",
+      page_is_machine("<title>L SP TEST（スマスロ SP） | P-WORLD</title>",
+                      "L SP TEST", strict_all_tail=True)[0] is False)
     t("　直後の括弧が本人の略称なら通る（実データ・青ブタ）",
       page_is_machine(
           "<title>L青春ブタ野郎はバニーガール先輩の夢を見ない"

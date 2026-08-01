@@ -993,21 +993,28 @@ def give_up_now(pend: dict, url: str, name: str, problems: list) -> None:
 
 
 def fill_missing(work: dict) -> dict:
-    """★名前や年月が空なら、公式ページをもう一度見る★
+    """★毎回、公式ページを見直して名前と年月を最新にする★
 
-    取りこぼし対策で入れたURLは、名前が取れていないことがある。
-    その状態では記事にできないので、毎回もう一度公式を見て埋める。
-    **こちらで作らない。公式に書いていなければ空のまま**。
+    ★空を埋めるだけにしない★（2026-08-02・Codex38回目）
+      一時的なエラー画面の題（「ページが見つかりません」等）が名前として
+      待ち行列に固定されると、復旧後も `or` のせいで直らず、
+      「公式ページと名前が一致しません」（永久理由）で機種を失っていた。
+      **読めた時は必ず公式の現在値で置き換える**（読めなければ従来値のまま）。
+      こちらで作らないのは従来どおり（公式に無ければ空のまま）。
     """
-    if work["name"] and work["release"]:
-        return work
     try:
         c = _nw.classify(work["url"], None)
     except Exception as e:                # noqa: BLE001
         _log(f"  公式ページを見直せませんでした: {e}")
         return work
-    work["name"] = work["name"] or (c.get("official_name") or "")
-    work["release"] = work["release"] or ((c.get("release") or {}).get("value") or "")
+    if c.get("official_name"):
+        if work["name"] and work["name"] != c["official_name"]:
+            _log(f"  名前を公式の現在値に直します: "
+                 f"{work['name'][:30]} → {c['official_name'][:30]}")
+        work["name"] = c["official_name"]
+    rel = (c.get("release") or {}).get("value") or ""
+    if rel:
+        work["release"] = rel
     return work
 
 
@@ -1608,6 +1615,10 @@ def selftest() -> int:
             t("★★公開前の照合でもメンテ画面を永久理由にしない★★（Codex37回目）",
               any("読める状態ではありません" in x for x in v5["problems"])
               and not any("一致しません" in x for x in v5["problems"]))
+            t("★★読み直せた時は待ち行列の名前を公式の現在値へ置き換える★★"
+              "（エラー題の名前がorのせいで直らなかった・Codex38回目）",
+              "名前を公式の現在値に直します" in inspect.getsource(fill_missing)
+              and " or (c.get" not in inspect.getsource(fill_missing))
             t("★★初回に読めなかった将来の新台を沈めない★★（Codex37回目）",
               "初回に読めなかった" in inspect.getsource(discover)
               and "初回に残せなかったので" in inspect.getsource(discover))
