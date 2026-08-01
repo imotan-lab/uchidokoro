@@ -188,7 +188,8 @@ def _gen_mark(s: str) -> str:
 
 
 def page_is_machine(html: str, official_name: str,
-                    extra_tail_ok: set | None = None):
+                    extra_tail_ok: set | None = None,
+                    strict_all_tail: bool = False):
     """★その名鑑ページが本当にその機種か★
 
     ★ただの前方一致をやめた★（2026-07-31・Codex22回目。実際に再現した）
@@ -228,13 +229,14 @@ def page_is_machine(html: str, official_name: str,
     #   「Lすーぱぁびん娘（SP）」のように、派生機の印が括弧で
     #   区切られると誰も見ていなかった（25回目の「前」と逆向きの穴）。
     _segs = title_parts(title)
-    cands = [(title, [], "")]
+    cands = [(title, [], [])]
     _seen = []
     for _ix, s in enumerate(_segs):
         # ★後ろは「直後の1断片」ではなく残り全部★（2026-08-02・Codex28回目）
-        #   「…|BELLCO|SP」は、直後のBELLCOを許した時点で
-        #   SPを一度も見ずに通っていた。
-        cands.append((s, list(_seen), " ".join(_segs[_ix + 1:])))
+        # ★ただし断片の区切りを保つ★（2026-08-02・Codex32回目）
+        #   平らにつなぐと、別の断片の「パチスロ」が
+        #   「(SP)」の括弧の規格語として数えられてしまった。
+        cands.append((s, list(_seen), _segs[_ix + 1:]))
         _seen.extend(_ci.normalize_core(w) for w in s.split())
     for seg, before, after in cands:
         raw = seg.split()
@@ -272,12 +274,25 @@ def page_is_machine(html: str, official_name: str,
                         continue          # 印が違う＝別機種。他の候補を探す
                     # ★直後の断片も確かめる★（2026-08-02・Codex26回目）
                     #   許すのは①規格・販売区分（芯が空）②飾り③メーカー名
-                    #   ④本人の略称＝**本人の名前の文字だけでできている語**
-                    #   （「青ブタ」は通る・「SP」「新章」「極」は本人の文字に無いので弾く）
+                    #   ④本人の略称＝「(規格 略称)」の形だけ
                     # ★公式の照合では extra_tail_ok（社名・銘柄）を許す★
                     #   （2026-08-02・Codex27回目。検査を丸ごと外すと
                     #     派生機の公式URL「…（SP）|BELLCO」が通ってしまった）
-                    if not _after_ok(after, core, official_name, extra_tail_ok):
+                    if not all(_after_ok(a, core, official_name, extra_tail_ok)
+                               for a in after):
+                        gen_conflict = True
+                        continue
+                    # ★同じ断片の残りの語も全部見る★（2026-08-02・Codex32回目）
+                    #   「名前 新台 SP」は最初の飾り（新台）で検査を
+                    #   打ち切っていたので、後ろの派生印SPを見ていなかった。
+                    # ★strict_all_tail の経路だけ★＝型式の名鑑照合と公式照合。
+                    #   材料の解析サイトの題は別名を後ろに書くのが通例
+                    #   （「…解析 東京グール | ちょんぼりすた」）で、
+                    #   そこまで縛ると実在の出典を失う。型式と公式の同定が
+                    #   厳格なら、材料側の混入は2票一致＋規格印で抑えられる。
+                    if strict_all_tail and not _after_ok(
+                            " ".join(raw[j + 1:]), core,
+                            official_name, extra_tail_ok):
                         gen_conflict = True
                         continue
                     return True, "OK"
@@ -288,10 +303,13 @@ def page_is_machine(html: str, official_name: str,
 
 def _after_ok(after_seg: str, core: str, official_name: str,
               extra: set | None = None) -> bool:
-    """名前の直後の断片（括弧の中身など）が、本人のページとして自然か。
+    """名前の後ろの断片（括弧の中身など）が、本人のページとして自然か。
+
+    ★1つの断片＝1つの括弧★（2026-08-02・Codex32回目）
+      複数の断片をつないで渡さないこと。つなぐと、別の断片の規格語が
+      「(SP)」の括弧の規格語として数えられてしまう。
 
     extra: 呼び出し元が追加で許す語（メーカー公式の照合では社名・銘柄）。
-      その語を**含む**尾部も許す（「株式会社サミー」等）。
     """
     if not after_seg:
         return True
@@ -299,7 +317,7 @@ def _after_ok(after_seg: str, core: str, official_name: str,
     cores = [_ci.normalize_core(w) for w in words]
     # ★略称を許すのは「(規格 略称)」の形だけ★（2026-08-02・Codex31回目）
     #   文字の集合で見ると、名前に偶然SとPが入る機種では派生印SPまで通った。
-    #   ①同じ括弧に規格・販売区分の語（芯が空）があること
+    #   ①**同じ断片（括弧）**に規格・販売区分の語（芯が空）があること
     #   ②語が名前の芯の**順番どおりの部分列**であること（青ブタ⊂青春ブタ野郎…）
     #   の両方を求める。
     has_platform = any(c == "" for c in cores)
@@ -358,7 +376,7 @@ def lookup(url: str, official_name: str) -> dict:
     except Exception as e:
         out["reason"] = f"取得できません: {e}"
         return out
-    ok, why = page_is_machine(html, official_name)
+    ok, why = page_is_machine(html, official_name, strict_all_tail=True)
     if not ok:
         out["reason"] = why
         return out
@@ -377,7 +395,11 @@ def agree(results: list) -> dict:
       表示に使う値は最初に見つかった書き方のまま残す。
     """
     def _key(c: str) -> str:
-        return re.sub(r"[\s　]+", "", unicodedata.normalize("NFKC", c))
+        t = unicodedata.normalize("NFKC", c)
+        t = re.sub(r"[\s　]+", "", t)
+        # ★ダッシュの種類の違いを食い違いにしない★（2026-08-02・Codex32回目）
+        #   抽出は - − – — 等を許すのに、比較で別物にすると恒久CONFLICTになる。
+        return re.sub("[‐‑–—−]", "-", t)
 
     codes = {}          # 比較鍵 -> hosts集合
     shown = {}          # 比較鍵 -> 最初に見つかった表示値
@@ -570,6 +592,21 @@ def selftest() -> int:
       _after_ok("SPBELLCO", "x", "x", {"bellco"}) is False
       and _after_ok("BELLCO", "x", "x", {"bellco"}) is True
       and _after_ok("株式会社BELLCO", "x", "x", {"bellco"}) is True)
+    # ★★Codex32回目★★
+    t("★★別の断片の規格語を「(SP)」の括弧の規格語に数えない★★（Codex32回目）",
+      page_is_machine("<title>L SP TEST（SP） パチスロ 新台 | P-WORLD</title>",
+                      "L SP TEST")[0] is False)
+    t("★★飾り語の後ろの派生印も見る（型式・公式の照合）★★（Codex32回目）",
+      page_is_machine("<title>Lすーぱぁびん娘 新台 SP | P-WORLD</title>",
+                      "Lすーぱぁびん娘", strict_all_tail=True)[0] is False)
+    t("　材料の照合（別名が題の後ろに入る解析サイト）は従来どおり",
+      page_is_machine("<title>スマスロ東京喰種 スロット 新台 天井 設定判別 解析 "
+                      "東京グール | ちょんぼりすた パチスロ解析</title>",
+                      "L 東京喰種")[0] is True)
+    t("★★型式名のダッシュ表記差を食い違いにしない★★（Codex32回目）",
+      agree([{"url": "https://www.p-world.co.jp/x", "model_code": "LTEST-A"},
+             {"url": "https://p-town.dmm.com/y", "model_code": "LTEST−A"}])
+      ["adopted"] is True)
     t("　直後の括弧が本人の略称なら通る（実データ・青ブタ）",
       page_is_machine(
           "<title>L青春ブタ野郎はバニーガール先輩の夢を見ない"

@@ -569,7 +569,8 @@ def verify_official(name: str, official_url: str,
             "パチスロのページに見えません（題・見出しに回胴機の証拠が無い）")
     ok, why = _mc.page_is_machine(
         html, name,
-        extra_tail_ok=_mc.maker_brand_cores(maker) if maker else None)
+        extra_tail_ok=_mc.maker_brand_cores(maker) if maker else None,
+        strict_all_tail=True)
     if not ok:
         out["problems"].append(
             f"公式ページと名前が一致しません（{why}）: "

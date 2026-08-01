@@ -162,6 +162,40 @@ def redirect_problem(asked: str, final: str):
     return None
 
 
+_BENIGN_QUERY = {"page", "p", "sort", "order", "lang", "hl", "s", "q",
+                 "cat", "category", "tag", "filter", "offset", "limit",
+                 "utm_source", "utm_medium", "utm_campaign"}
+
+
+def query_style_machine_links(html: str, base_url: str, link_prefix: str) -> list:
+    """★クエリで機種を指すリンク（未対応の形）を見つける★（2026-08-02・Codex32回目）
+
+    「/products/slot/?machine=newone」の形は、クエリを落とすと一覧自身になり
+    黙って捨てられていた。既存カードが残っていれば件数も残存率も正常なので、
+    その新台だけが永久に見逃される。
+    対応はしない（機種URLの形はメーカーごとに違いすぎる）が、
+    **見つけたら異常として知らせ、人が名簿を直す**。
+    """
+    hits = []
+    for m0 in re.finditer(r"href\s*=\s*(\"([^\"]*)\"|'([^']*)')", html):
+        href = (m0.group(2) if m0.group(2) is not None else m0.group(3)) or ""
+        absu = urllib.parse.urljoin(base_url, href.strip())
+        base = absu.split("#")[0].split("?")[0]
+        q = urllib.parse.urlparse(absu).query
+        if not q or not base.startswith(link_prefix):
+            continue
+        if base[len(link_prefix):].strip("/"):
+            continue                      # 個別ページへのクエリは対象外
+        for k, vals in urllib.parse.parse_qs(q).items():
+            if k.lower() in _BENIGN_QUERY:
+                continue
+            for v in vals:
+                if len(v) >= 3 and _SLUGLIKE.match(v.lower()):
+                    hits.append(absu)
+                    break
+    return sorted(set(hits))
+
+
 def product_urls(html: str, base_url: str, link_prefix: str) -> list:
     """一覧ページから、個別機種ページのURLを取り出す。
 
@@ -218,6 +252,13 @@ class _CardParser(_HTMLParser):
             self._cur = n["parent"]
 
     def handle_data(self, data):
+        # ★scriptの中身を本文に混ぜない★（2026-08-02・Codex32回目）
+        #   カード内の <script> のJSON日付を登場年月として採れてしまった。
+        n = self._cur
+        while n is not None:
+            if n["tag"] in ("script", "style", "noscript", "template"):
+                return
+            n = n["parent"]
         if data.strip():
             self._cur["text"].append(data)
 
@@ -689,6 +730,15 @@ def scan_maker(maker_id: str, conf: dict, seen: dict, record: bool = True) -> di
         out["state"] = "PARSE_SUSPECT"
         return out
 
+    # ★クエリで機種を指す未対応の形が混ざっていないか★（2026-08-02・Codex32回目）
+    #   混ざっていても件数・残存率は正常に見えるため、黙って見逃す前に知らせる。
+    _qs = query_style_machine_links(html, conf["list_url"], conf["link_prefix"])
+    if _qs:
+        out["problem"] = (f"一覧に未対応の形（クエリ式）の機種リンクがあります"
+                          f"（{len(_qs)}件・例: {_qs[0][:80]}）。"
+                          "名簿の直しが要ります。『新台なし』とは扱いません")
+        out["state"] = "PARSE_SUSPECT"
+        return out
     urls = product_urls(html, conf["list_url"], conf["link_prefix"])
     out["total"] = len(urls)
     # ★一覧のカードに書かれた年月も控える★（2026-08-02・Codex27回目）
@@ -1005,6 +1055,27 @@ def selftest() -> int:
       "（平らな窓だと前の機種が盗っていた・Codex29回目）",
       _h2.get("https://m.example/products/slot/bravo/") == "2026-10"
       and "https://m.example/products/slot/alpha/" not in _h2)
+    # ★★Codex32回目★★
+    t("★★カード内のscriptの日付を登場年月にしない★★（Codex32回目）",
+      list_release_hints(
+          '<div><a href="https://m.example/products/slot/newone/">新機種</a>'
+          '<script>window.__D__={"updatedAt":"2026.09.01"}</script></div>'
+          '<div><a href="https://m.example/products/slot/other/">別機種</a></div>',
+          "https://m.example/products/slot/",
+          "https://m.example/products/slot/") == {})
+    t("★★クエリで機種を指す未対応の形を見つけて知らせる★★"
+      "（黙って見逃すと件数も残存率も正常のまま新台だけ落ちる・Codex32回目）",
+      query_style_machine_links(
+          '<a href="https://m.example/products/slot/?machine=newone">新機種</a>',
+          "https://m.example/products/slot/",
+          "https://m.example/products/slot/")
+      == ["https://m.example/products/slot/?machine=newone"])
+    t("　ページ送りなどの無害なクエリでは騒がない",
+      query_style_machine_links(
+          '<a href="https://m.example/products/slot/?page=2">次へ</a>'
+          '<a href="https://m.example/products/slot/?sort=new">並び替え</a>',
+          "https://m.example/products/slot/",
+          "https://m.example/products/slot/") == [])
     t("　カードの構造が無いページでは採らない（安全側）",
       list_release_hints(
           '<a href="https://m.example/products/slot/alpha/">A</a> 導入 2026.9 '
