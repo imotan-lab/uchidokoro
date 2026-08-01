@@ -110,7 +110,8 @@ _DECOR = {
     "機械割", "導入日", "設置店", "掲示板", "有利区間", "期待値", "評価",
     "感想", "演出", "攻略", "実践", "動画", "画像", "一覧", "情報", "恩恵",
     "ボーナス", "フリーズ", "ちょんぼりすた", "pworld", "ぱちタウン", "dmm",
-    "パチスロ解析", "解析情報", "スロット新台", "機種情報", "新台情報",
+    "dmmぱちタウン", "パチスロ解析", "解析情報", "スロット新台",
+    "機種情報", "新台情報",
 }
 _DECOR_CORES = {_ci.normalize_core(w) or w for w in _DECOR}
 
@@ -131,6 +132,25 @@ def title_parts(title: str) -> list:
             buf.append(ch)
     out.append("".join(buf))
     return [x.strip() for x in out if x.strip()]
+
+
+# ★メーカー名（名鑑の題の括弧に入る）★（2026-08-02・Codex26回目）
+#   名簿から読む。読めなければ空＝厳しい側（メーカー括弧つきの題を通さない）。
+_MAKER_CORES = None
+
+
+def _maker_name_cores() -> set:
+    global _MAKER_CORES
+    if _MAKER_CORES is None:
+        try:
+            got = json.load(open(_w.CATALOGS, encoding="utf-8"))
+            _MAKER_CORES = {
+                _ci.normalize_core(str(c.get("name") or ""))
+                for c in (got.get("catalogs") or {}).values()
+                if isinstance(c, dict)} - {""}
+        except Exception:                 # noqa: BLE001
+            _MAKER_CORES = set()
+    return _MAKER_CORES
 
 
 # ★規格の印（L/S）を読む語★（2026-08-01・Codex23回目を再現して直した）
@@ -167,7 +187,8 @@ def _gen_mark(s: str) -> str:
     return ""
 
 
-def page_is_machine(html: str, official_name: str):
+def page_is_machine(html: str, official_name: str,
+                    strict_tail: bool = True):
     """★その名鑑ページが本当にその機種か★
 
     ★ただの前方一致をやめた★（2026-07-31・Codex22回目。実際に再現した）
@@ -203,12 +224,17 @@ def page_is_machine(html: str, official_name: str):
     #   （2026-08-02・Codex25回目を再現して直した）
     #   断片ごとに独立して見ていたので、「別機種 | L北斗の拳」の後ろの断片が
     #   まっさらな前置として通っていた。前置の検査は元の題の全部に対して行う。
-    cands = [(title, [])]
+    # ★直後の断片も持ち歩く★（2026-08-02・Codex26回目を再現して直した）
+    #   「Lすーぱぁびん娘（SP）」のように、派生機の印が括弧で
+    #   区切られると誰も見ていなかった（25回目の「前」と逆向きの穴）。
+    _segs = title_parts(title)
+    cands = [(title, [], "")]
     _seen = []
-    for s in title_parts(title):
-        cands.append((s, list(_seen)))
+    for _ix, s in enumerate(_segs):
+        cands.append((s, list(_seen),
+                      _segs[_ix + 1] if _ix + 1 < len(_segs) else ""))
         _seen.extend(_ci.normalize_core(w) for w in s.split())
-    for seg, before in cands:
+    for seg, before, after in cands:
         raw = seg.split()
         words = [_ci.normalize_core(w) for w in raw]
         for i in range(len(words)):
@@ -242,10 +268,36 @@ def page_is_machine(html: str, official_name: str):
                     if want_gen and got_gen and got_gen != want_gen:
                         gen_conflict = True
                         continue          # 印が違う＝別機種。他の候補を探す
+                    # ★直後の断片も確かめる★（2026-08-02・Codex26回目）
+                    #   許すのは①規格・販売区分（芯が空）②飾り③メーカー名
+                    #   ④本人の略称＝**本人の名前の文字だけでできている語**
+                    #   （「青ブタ」は通る・「SP」「新章」「極」は本人の文字に無いので弾く）
+                    # ★strict_tail=False はメーカー公式の照合用★
+                    #   公式サイトの題は「機種名|BELLCO」のように社名の飾りが付く。
+                    #   派生機の取り違えは名鑑の2票（型式）で起きる問題なので、
+                    #   厳格な尾部検査は名鑑側だけに掛ける。
+                    if strict_tail and not _after_ok(after, core, official_name):
+                        gen_conflict = True
+                        continue
                     return True, "OK"
     if gen_conflict:
         return False, "GEN_MARK_CONFLICT"
     return False, "NAME_CORE_MISMATCH"
+
+
+def _after_ok(after_seg: str, core: str, official_name: str) -> bool:
+    """名前の直後の断片（括弧の中身など）が、本人のページとして自然か。"""
+    if not after_seg:
+        return True
+    okc = set(core) | set(unicodedata.normalize("NFKC", official_name or "").lower())
+    for w in after_seg.split():
+        c = _ci.normalize_core(w)
+        if c == "" or c in _DECOR_CORES or c in _maker_name_cores():
+            continue
+        if set(c) <= okc:
+            continue                      # 本人の名前の文字だけ＝略称・読み
+        return False
+    return True
 
 
 def lookup(url: str, official_name: str) -> dict:
@@ -448,6 +500,23 @@ def selftest() -> int:
                       "L北斗の拳")[0] is True)
     t("★全角の型式名も従来どおり取れる★（本文抽出でNFKC済み・Codex25回目の指摘は非該当）",
       extract_model_code("<p>型式名：Ｌびん娘ＮＹ１</p>") == ("Lびん娘NY1", "OK"))
+    # ★★Codex26回目（自分で再現してから直した）★★
+    t("★★名前の直後の括弧の派生印を弾く: （SP）★★（Codex26回目）",
+      page_is_machine("<title>Lすーぱぁびん娘（SP） | P-WORLD</title>",
+                      "Lすーぱぁびん娘")[0] is False)
+    t("　【新章】・／極 も弾く",
+      page_is_machine("<title>Lすーぱぁびん娘【新章】</title>",
+                      "Lすーぱぁびん娘")[0] is False
+      and page_is_machine("<title>Lすーぱぁびん娘／極</title>",
+                          "Lすーぱぁびん娘")[0] is False)
+    t("　直後の括弧がメーカー名なら通る（実データ形）",
+      page_is_machine("<title>L北斗の拳(サミー) パチスロ 機種情報 | P-WORLD</title>",
+                      "L北斗の拳")[0] is True)
+    t("　直後の括弧が本人の略称なら通る（実データ・青ブタ）",
+      page_is_machine(
+          "<title>L青春ブタ野郎はバニーガール先輩の夢を見ない"
+          "(スマスロ 青ブタ) パチスロ新台 | P-WORLD</title>",
+          "L青春ブタ野郎はバニーガール先輩の夢を見ない")[0] is True)
     t("　タイトルが無ければ採らない",
       page_is_machine("<p>本文だけ</p>", "Lすーぱぁびん娘")[0] is False)
 

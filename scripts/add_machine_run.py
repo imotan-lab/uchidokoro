@@ -174,6 +174,16 @@ def discover() -> dict:
                         c.get("official_name") or "", url, mid,
                         (c.get("release") or {}).get("value") or "",
                         " / ".join(c["reasons"])[:300])
+                else:
+                    # ★やり直しても変わらない理由は、その場で1件ずつ台帳へ★
+                    #   （2026-08-02・Codex26回目）まとめ登録は失敗を無視し
+                    #   1500字で切るので、誤判定されたURLが台帳にも残らないまま
+                    #   既知になり、**翌日から二度と出てこなかった**。
+                    #   台帳に残せた時だけ既知にする（残せなければ明日また出てくる）。
+                    kept = _ledger(
+                        "site", "structural", "MATERIAL", "URL_PERMANENT_REJECT",
+                        "新URLを記事化の対象から外しました（やり直しても変わらない理由）",
+                        f"{url} / " + " / ".join(c["reasons"])[:900])
             if not kept:
                 # ★どこにも残せなかったURLは「見た」ことにしない★
                 #   （2026-07-31・Codex20回目）
@@ -371,18 +381,33 @@ def verify_official(name: str, official_url: str,
     **記事に使うのは渡された値ではなく、この公式の値**。
     """
     out = {"problems": [], "release": ""}
+    # ★転送された先も検査する★（2026-08-02・Codex26回目）
+    #   渡されたURLだけ見ていたので、メーカーAのURLが別の場所へ転送されると、
+    #   転送先の中身をメーカーAの公式として通せた。
+    #   メーカー照合は「実際に読んだ場所（最終URL）」に対して行う。
+    #   ★先にこちらでリセットする★（試験の偽取得は到達先を書かないため、
+    #     前の呼び出しの残り値を拾わないように）
+    _fin = getattr(_nw, "LAST_FINAL_URL", None)
+    if isinstance(_fin, dict):
+        _fin["url"] = None
     try:
         html = _nw._get(official_url)
     except Exception as e:
         out["problems"].append(f"公式ページを取得できません: {e}")
         return out
-    ok, why = _mc.page_is_machine(html, name)
+    final_url = str(((_fin or {}).get("url") if isinstance(_fin, dict) else None)
+                    or official_url)
+    if final_url != official_url:
+        # 同じメーカーの中の転送（https化・スラッシュ補正）は普通に起きるので
+        # それ自体は問題にしない。★範囲の外なら下の照合が止める★
+        _log(f"  公式ページが転送されました: {official_url[:60]} → {final_url[:60]}")
+    ok, why = _mc.page_is_machine(html, name, strict_tail=False)
     if not ok:
         out["problems"].append(
             f"公式ページと名前が一致しません（{why}）: "
             f"公式のタイトル={_nw.page_title(html)[:40]!r} / 指定名={name!r}")
     if maker:
-        out["problems"] += _verify_maker(official_url, maker)
+        out["problems"] += _verify_maker(final_url, maker)
     else:
         out["problems"].append("メーカーが指定されていません")
     got = _nw.release_month(_nw._visible_text(html))
@@ -1033,6 +1058,13 @@ def selftest() -> int:
           "下見では触りません" in inspect.getsource(main)
           and inspect.getsource(main).index("if args.apply:")
           < inspect.getsource(main).index("retry_push_first()"))
+        t("★★やり直しても変わらないURLは、台帳に残せた時だけ既知にする★★"
+          "（まとめ登録は失敗無視＋1500字切りで、機種が黙って消えた・Codex26回目）",
+          "URL_PERMANENT_REJECT" in inspect.getsource(discover))
+        t("★★メーカー照合は転送先（最終URL）に対して行う★★"
+          "（別の場所へ転送されても元のURLで照合していた・Codex26回目）",
+          "LAST_FINAL_URL" in inspect.getsource(verify_official)
+          and "_verify_maker(final_url" in inspect.getsource(verify_official))
         t("★★採用した型式名の規格印も照合する★★"
           "（旧機種のページが2名鑑でそろうと旧型式で新台を書けた・Codex24回目）",
           "規格印が確認できません" in inspect.getsource(gather)

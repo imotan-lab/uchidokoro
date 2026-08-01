@@ -235,13 +235,45 @@ def _visible_text(html: str) -> str:
     return chr(10).join(x.strip() for x in t.splitlines() if x.strip())
 
 
+# ★導入の年月だと分かる言葉★（同じ行にあるものだけ信じる）
+_RELEASE_CONTEXT = ("導入", "登場", "発売", "稼働", "リリース", "デビュー",
+                    "ホール", "設置", "納品")
+# ★導入とは別の話だと分かる言葉★（この行の年月は採らない）
+_RELEASE_NOISE = ("更新", "お知らせ", "ニュース", "news", "News", "公開",
+                  "Copyright", "copyright", "(C)", "©", "採用", "募集")
+
+
 def release_month(text: str):
-    """公式が書いている登場年月。★日は補わない★（公式が月までなら月まで）"""
-    m = _RELEASE_RE.search(text)
-    if not m:
-        return None
-    return {"value": f"{m.group(1)}-{int(m.group(2)):02d}", "precision": "month",
-            "quote": m.group(0)}
+    """公式が書いている登場年月。★日は補わない★（公式が月までなら月まで）
+
+    ★ページで最初に見つかった年月を無条件に使わない★
+      （2026-08-02・Codex26回目）「お知らせ更新：2026年7月」が
+      「導入予定：2026年9月」より先にあると、7月を登場年月として
+      記事に載せていた。
+      ①導入・登場などの言葉と同じ行にある年月だけを信じる
+      ②それが無ければ、ページに年月が1つだけ＆雑音の行でない時だけ使う
+      ③複数あってどれが導入か決められなければ「書かれていない」扱い
+        （＝待ち行列で待つ。こちらで選ばない）
+    """
+    ctx_vals, all_vals = [], []
+    for line in text.splitlines():
+        for m in _RELEASE_RE.finditer(line):
+            got = {"value": f"{m.group(1)}-{int(m.group(2)):02d}",
+                   "precision": "month", "quote": m.group(0)}
+            all_vals.append((got, line))
+            if any(w in line for w in _RELEASE_CONTEXT) \
+                    and not any(w in line for w in _RELEASE_NOISE):
+                ctx_vals.append(got)
+    if ctx_vals:
+        vals = {g["value"] for g in ctx_vals}
+        if len(vals) > 1:
+            return None                   # 導入らしい年月どうしが食い違う→選ばない
+        return ctx_vals[0]
+    if len(all_vals) == 1:
+        got, line = all_vals[0]
+        if not any(w in line for w in _RELEASE_NOISE):
+            return got
+    return None
 
 
 def looks_like_slot(text: str) -> bool:
@@ -715,6 +747,20 @@ def selftest() -> int:
     t("★公式が書いた登場年月をそのまま持つ（日を補わない）★",
       release_month("2026年8月登場")["value"] == "2026-08"
       and release_month("2026年8月登場")["precision"] == "month")
+    # ★★Codex26回目（ページ最初の年月を無条件に使っていた）★★
+    _nl = chr(10)
+    t("★★お知らせの年月より、導入の行の年月を採る★★（Codex26回目）",
+      release_month("お知らせ更新：2026年7月" + _nl + "導入予定：2026年9月")["value"]
+      == "2026-09")
+    t("　導入らしい行どうしで食い違えば選ばない",
+      release_month("導入予定：2026年9月" + _nl + "2026年8月登場") is None)
+    t("　導入の行が無く、年月が複数あれば選ばない",
+      release_month("2026年7月の話" + _nl + "2026年9月の話") is None)
+    t("　導入の行が無くても、年月が1つだけで雑音の行でなければ使う",
+      release_month("Lテスト機 2026年9月")["value"] == "2026-09")
+    t("　雑音の行（更新・お知らせ・©）の年月は使わない",
+      release_month("最終更新 2026年7月") is None
+      and release_month("Copyright 2026年1月") is None)
     t("　scriptの中身を本文に混ぜない（偽の年月・数値を拾わない）",
       "パチスロ" not in _visible_text(
           '<script>var x="パチスロ純増99枚";</script><p>Lテスト機</p>'))
