@@ -249,6 +249,12 @@ def product_urls(html: str, base_url: str, link_prefix: str) -> list:
         if not absu.startswith(link_prefix):
             continue
         rest = absu[len(link_prefix):].strip("/")
+        # ★「slug/index.shtml」形も機種として拾う★（2026-08-02・Codex36回目）
+        #   ニューギンの一覧に実在し（cross_b/index.shtml 等4件）、
+        #   「さらに下の階層」として黙って捨てていた＝実際に取りこぼしていた。
+        m_idx = re.match(r"^([^/]+)/index[.]s?html?$", rest)
+        if m_idx:
+            rest = m_idx.group(1)
         if not rest or "/" in rest:
             continue                      # 一覧そのもの／さらに下の階層は対象外
         if not _SLUGLIKE.match(rest):
@@ -257,6 +263,39 @@ def product_urls(html: str, base_url: str, link_prefix: str) -> list:
             continue                      # ★年別アーカイブは機種ではない★
         out.add(link_prefix.rstrip("/") + "/" + rest + "/")
     return sorted(out)
+
+
+def shape_warnings(html: str, base_url: str, link_prefix: str) -> list:
+    """★公式範囲内なのに、対応している形に合わないリンク★（2026-08-02・Codex36回目）
+
+    黙って捨てると、その形の新台だけ件数も残存率も正常なまま永久に見逃す。
+    社全体は止めず（既存の検出は生きている）、知らせて人が名簿を直す。
+    www・ホストの大文字小文字は同じ場所として扱う。
+    """
+    def _hp(u):
+        q = urllib.parse.urlparse(u)
+        return q.netloc.lower().removeprefix("www."), q.path
+
+    ph, pp = _hp(link_prefix)
+    got = set(product_urls(html, base_url, link_prefix))
+    got_slugs = {u.rstrip("/").split("/")[-1] for u in got}
+    odd = set()
+    for href in (_visible_anchor_hrefs(html) or []):
+        absu = urllib.parse.urljoin(base_url, href.strip())
+        absu = absu.split("#")[0].split("?")[0]
+        h, pt = _hp(absu)
+        if h != ph or not pt.startswith(pp):
+            continue
+        rest = pt[len(pp):].strip("/")
+        if not rest or _YEAR_ONLY.match(rest):
+            continue
+        first = rest.split("/")[0]
+        if first in got_slugs:
+            continue                      # 既知の機種の下層ページ
+        if (link_prefix.rstrip("/") + "/" + first + "/") in got:
+            continue
+        odd.add(rest)
+    return sorted(odd)
 
 
 from html.parser import HTMLParser as _HTMLParser  # noqa: E402
@@ -508,11 +547,13 @@ def release_month(text: str, assume_release_context: bool = False):
             # ★文脈は同じ行か、直前の行（見出しの次の行に値がある形）★
             #   雑音の検査は「文脈を読んだ行」と「値の行」だけに掛ける
             #   （前の行が雑音でも、同じ行に導入の文脈があれば有効）
-            _noisy_line = any(w in line for w in _RELEASE_NOISE)
+            # ★大文字小文字を区別しない★（NEWSがnewsを素通りした・Codex36回目）
+            _line_l, _prev_l = line.lower(), prev.lower()
+            _noisy_line = any(w.lower() in _line_l for w in _RELEASE_NOISE)
             _ctx_same = any(w in line for w in _RELEASE_CONTEXT) \
                 and not _noisy_line
             _ctx_prev = any(w in prev for w in _RELEASE_CONTEXT) \
-                and not any(w in prev for w in _RELEASE_NOISE) \
+                and not any(w.lower() in _prev_l for w in _RELEASE_NOISE) \
                 and not _noisy_line
             if _ctx_same or _ctx_prev:
                 ctx_vals.append(got)
@@ -529,7 +570,7 @@ def release_month(text: str, assume_release_context: bool = False):
     #   カードはその機種の紹介そのものなので、載っている年月＝登場月とみなす。
     if assume_release_context and len(all_vals) == 1:
         got, line = all_vals[0]
-        if not any(w in line for w in _RELEASE_NOISE):
+        if not any(w.lower() in line.lower() for w in _RELEASE_NOISE):
             return got
     return None
 
@@ -590,6 +631,14 @@ def classify(url: str, seen_entry: dict | None = None, today=None,
         html = _get(url)
     except WatchError as e:
         out["reasons"].append(str(e))
+        return out
+    # ★読める状態のページか先に見る★（2026-08-02・Codex36回目）
+    #   HTTP 200のメンテナンス・拒否画面を「回胴機の語が無い」と誤判定すると、
+    #   やり直しても変わらない理由として機種を永久に外していた。
+    #   （弱い語=18歳未満などは機種ページに普通に書いてあるので、強い語だけ見る）
+    _why_bad = bad_page(html, looks_like_list=True)
+    if _why_bad:
+        out["reasons"].append(f"公式ページが読める状態ではありません（{_why_bad}）")
         return out
     text = _visible_text(html)
     # ★転送された先も検査する★（2026-08-02・Codex34回目）
@@ -819,6 +868,12 @@ def scan_maker(maker_id: str, conf: dict, seen: dict, record: bool = True) -> di
         return out
     urls = product_urls(html, conf["list_url"], conf["link_prefix"])
     out["total"] = len(urls)
+    # ★対応していない形のリンクは、社を止めずに知らせる★（2026-08-02・Codex36回目）
+    try:
+        out["shape_warnings"] = shape_warnings(html, conf["list_url"],
+                                               conf["link_prefix"])
+    except Exception:                     # noqa: BLE001
+        out["shape_warnings"] = []
     # ★一覧のカードに書かれた年月も控える★（2026-08-02・Codex27回目）
     #   個別ページに年月が無いメーカー（サミー等）の公式の控えになる。
     try:
@@ -840,7 +895,12 @@ def scan_maker(maker_id: str, conf: dict, seen: dict, record: bool = True) -> di
     if out["first_time"]:
         # ★初回は全部を『既知』として覚えるだけ★
         #   いきなり100件を新台として扱わない。
+        # ★ただし一覧は返す★（2026-08-02・Codex36回目）
+        #   監視を始めた時点で既に載っていた「これから出る新台」まで
+        #   既知に沈めると、その機種は永久に記事にならない。
+        #   呼び出し元が登場年月を確かめ、新台の範囲のものだけ拾う。
         out["new"] = []
+        out["initial_urls"] = list(urls)
         out["state"] = "FIRST_TIME"
     else:
         kept = len(known & set(urls))
@@ -1230,6 +1290,32 @@ def selftest() -> int:
           '<a href="https://m.example/products/slot/detail/?machine=新台">a</a>',
           "https://m.example/products/slot/",
           "https://m.example/products/slot/") != [])
+    # ★★Codex36回目★★
+    t("★★NEWS（大文字）も雑音として弾く★★（Codex36回目）",
+      release_month("NEWS 2026.9", assume_release_context=True) is None)
+    t("★★「slug/index.shtml」形の機種を拾う★★（ニューギンで実際に取りこぼしていた）",
+      product_urls('<a href="https://m.example/products/slot/cross_b/index.shtml">x</a>',
+                   "https://m.example/products/slot/",
+                   "https://m.example/products/slot/")
+      == ["https://m.example/products/slot/cross_b/"])
+    t("★★対応していない形のリンクを知らせる★★（黙って捨てない・Codex36回目）",
+      shape_warnings('<a href="https://m.example/products/slot/NewMachine/">x</a>'
+                     '<a href="https://m.example/products/slot/ok_one/">y</a>',
+                     "https://m.example/products/slot/",
+                     "https://m.example/products/slot/") == ["NewMachine"])
+    t("　既知の機種の下層ページでは騒がない",
+      shape_warnings('<a href="https://m.example/products/slot/ok_one/">y</a>'
+                     '<a href="https://m.example/products/slot/ok_one/spec.html">s</a>',
+                     "https://m.example/products/slot/",
+                     "https://m.example/products/slot/") == [])
+    t("★★HTTP200のメンテ画面を「回胴機でない」と誤判定しない★★（Codex36回目）",
+      (lambda c: any("読める状態ではありません" in r for r in c["reasons"])
+       and not any("パチスロのページに見えません" in r for r in c["reasons"]))(
+          (lambda: (globals().__setitem__("_get_bak", globals()["_get"]),
+                    globals().__setitem__("_get", lambda u, timeout=20:
+                        "<title>Access Denied</title><p>ただいまメンテナンス中です</p>"),
+                    classify("https://m.example/products/slot/x1/", None),
+                    globals().__setitem__("_get", globals()["_get_bak"]))[2])()))
     t("　カードの構造が無いページでは採らない（安全側）",
       list_release_hints(
           '<a href="https://m.example/products/slot/alpha/">A</a> 導入 2026.9 '
@@ -1303,12 +1389,15 @@ def main() -> int:
         return 1 if r["problem"] else 0
 
     if args.scan:
+        # ★単体の --scan は記録しない（見るだけ）★（2026-08-02・Codex36回目）
+        #   記録すると、見つけた新台が待ち行列に入らないまま既知になり、
+        #   夜のタスクからは二度と「新しいURL」に見えなくなる。
         seen = _load_seen()
         problems, found = [], []
         for mid, conf in cats.items():
             if conf.get("status") != "ACTIVE":
                 continue
-            r = scan_maker(mid, conf, seen)
+            r = scan_maker(mid, conf, seen, record=False)
             if r["problem"]:
                 problems.append(f"{mid}: {r['problem']}")
                 continue
@@ -1318,7 +1407,7 @@ def main() -> int:
             for u in r["new"]:
                 found.append({"maker": mid, **describe(u)})
             print(f"{mid}: 一覧 {r['total']} 件 / 新台 {len(r['new'])} 件")
-        _save_seen(seen)
+        # ★保存しない★（記録の更新は夜のタスクだけ・Codex36回目）
         if found:
             print(chr(10) + "★新台候補★")
             print(json.dumps(found, ensure_ascii=False, indent=1))

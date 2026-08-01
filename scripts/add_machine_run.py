@@ -244,8 +244,26 @@ def discover(persist: bool = True) -> dict:
             _log(f"  ✗ {mid}: {r['problem'][:120]}")
             continue
         out["watched"].append(mid)
+        # ★対応していない形のリンクが混ざっていたら台帳へ★（Codex36回目・社は止めない）
+        for w_ in (r.get("shape_warnings") or [])[:5]:
+            out["problems"].append(
+                f"{mid}: 対応していない形の機種リンクがあります: {w_}"
+                "（名簿の直しが要ります）")
         if r["first_time"]:
             out["first_time"].append(f"{mid}（{r['total']}件を記録）")
+            # ★初回でも「これから出る新台」は拾う★（2026-08-02・Codex36回目）
+            #   監視開始時に既に載っていた新台を既知に沈めない。
+            #   登場年月が新台の範囲のものだけ、通常の分類を通して待ち行列へ。
+            for url in (r.get("initial_urls") or []):
+                c = _nw.classify(url, None,
+                                 list_release=(r.get("hints") or {}).get(url))
+                if c["ok"]:
+                    out["candidates"].append({"maker": mid, **c})
+                    if persist:
+                        _remember_url(c.get("official_name") or "", url, mid,
+                                      (c.get("release") or {}).get("value") or "",
+                                      "初回の一覧から（新台の範囲内）")
+                # 範囲外・読めない等は初回の古い機種として扱う（台帳には残さない）
             continue
         for url in r["new"]:
             # ★公式一覧のカードの年月を控えとして渡す★（2026-08-02・Codex27回目）
@@ -1538,24 +1556,24 @@ def selftest() -> int:
               and "if persist:" in inspect.getsource(discover)
               and "d = discover(persist=apply_it)" in inspect.getsource(main))
             _src_pp = inspect.getsource(push_after_publish)
-        t("★★pushするSHAは関所に入る前に固定し、後で増えたら出さない★★"
-          "（関所の後のHEAD取り直しで未検査コミットを出せた・Codex35回目）",
-          _src_pp.index("checked_sha = _head()")
-          < _src_pp.index("コミットしたあと、もう一度関所")
-          and "関所の後にコミットが増えています" in _src_pp)
-        # ★www差のある名簿でも正しい場所として通す★（Codex35回目）
-        _cats35 = _sj.read_json(_nw.CATALOGS, expect=dict)
-        _cats35["catalogs"]["w"] = {
-            "name": "ダブル", "status": "ACTIVE",
-            "list_url": "https://www.w.example/products/slot/",
-            "link_prefix": "https://www.w.example/products/slot/"}
-        with open(_nw.CATALOGS, "w", encoding="utf-8") as _f35:
-            json.dump(_cats35, _f35, ensure_ascii=False)
-        t("★★www・https差だけなら「メーカーの場所」として通す★★"
-          "（転送許可と食い違い、正しい新台を永久拒否できた・Codex35回目）",
-          _verify_maker("https://w.example/products/slot/shin1/", "w") == []
-          and _verify_maker("https://yoso.example/products/slot/x/", "w") != [])
-        t("★★発見した時点で基準の題を控える★★"
+            t("★★pushするSHAは関所に入る前に固定し、後で増えたら出さない★★"
+              "（関所の後のHEAD取り直しで未検査コミットを出せた・Codex35回目）",
+              _src_pp.index("checked_sha = _head()")
+              < _src_pp.index("コミットしたあと、もう一度関所")
+              and "関所の後にコミットが増えています" in _src_pp)
+            # ★www差のある名簿でも正しい場所として通す★（Codex35回目）
+            _cats35 = _sj.read_json(_nw.CATALOGS, expect=dict)
+            _cats35["catalogs"]["w"] = {
+                "name": "ダブル", "status": "ACTIVE",
+                "list_url": "https://www.w.example/products/slot/",
+                "link_prefix": "https://www.w.example/products/slot/"}
+            with open(_nw.CATALOGS, "w", encoding="utf-8") as _f35:
+                json.dump(_cats35, _f35, ensure_ascii=False)
+            t("★★www・https差だけなら「メーカーの場所」として通す★★"
+              "（転送許可と食い違い、正しい新台を永久拒否できた・Codex35回目）",
+              _verify_maker("https://w.example/products/slot/shin1/", "w") == []
+              and _verify_maker("https://yoso.example/products/slot/x/", "w") != [])
+            t("★★発見した時点で基準の題を控える★★"
               "（最初の再確認までの使い回しを見逃した・Codex30回目）",
               "known_titles" in inspect.getsource(discover)
               and "page_title" in inspect.getsource(discover))
