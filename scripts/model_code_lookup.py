@@ -110,7 +110,7 @@ _DECOR = {
     "機械割", "導入日", "設置店", "掲示板", "有利区間", "期待値", "評価",
     "感想", "演出", "攻略", "実践", "動画", "画像", "一覧", "情報", "恩恵",
     "ボーナス", "フリーズ", "ちょんぼりすた", "pworld", "ぱちタウン", "dmm",
-    "パチスロ解析", "解析情報", "スロット新台",
+    "パチスロ解析", "解析情報", "スロット新台", "機種情報", "新台情報",
 }
 _DECOR_CORES = {_ci.normalize_core(w) or w for w in _DECOR}
 
@@ -199,7 +199,16 @@ def page_is_machine(html: str, official_name: str):
     gen_conflict = False
     # ★題そのものも候補に入れる★（機種名の中に括弧が入ることがある）
     #   「甲鉄城のカバネリ 海門(うなと)決戦」は、区切ると名前が割れてしまう。
-    for seg in [title] + title_parts(title):
+    # ★断片にしても「元の題でその前に何があったか」を持ち歩く★
+    #   （2026-08-02・Codex25回目を再現して直した）
+    #   断片ごとに独立して見ていたので、「別機種 | L北斗の拳」の後ろの断片が
+    #   まっさらな前置として通っていた。前置の検査は元の題の全部に対して行う。
+    cands = [(title, [])]
+    _seen = []
+    for s in title_parts(title):
+        cands.append((s, list(_seen)))
+        _seen.extend(_ci.normalize_core(w) for w in s.split())
+    for seg, before in cands:
         raw = seg.split()
         words = [_ci.normalize_core(w) for w in raw]
         for i in range(len(words)):
@@ -213,13 +222,13 @@ def page_is_machine(html: str, official_name: str):
                 while k < len(words) and words[k] == "":
                     k += 1               # 販売区分語などは芯が空になる
                 if k >= len(words) or words[k] in _DECOR_CORES:
-                    # ★名前より前の語も全部見る★（2026-08-02・Codex24回目を再現して直した）
-                    #   後ろの語しか見ていなかったので、
-                    #   「P 北斗の拳」「パチンコ 北斗の拳」「L別機種の話 L北斗の拳」の
+                    # ★名前より前の語も全部見る★（2026-08-02・Codex24〜25回目）
+                    #   「P 北斗の拳」「パチンコ 北斗の拳」「別機種 | L北斗の拳」の
                     #   ように**前に別の意味の語がある題**が通っていた。
                     #   前に許すのは、芯が空になる語（規格・販売区分）と飾りだけ。
-                    if any(words[w] != "" and words[w] not in _DECOR_CORES
-                           for w in range(i)):
+                    #   ★前は断片の中だけでなく、元の題のそこまで全部★
+                    if any(w != "" and w not in _DECOR_CORES
+                           for w in before + words[:i]):
                         continue          # 名前の前に知らない語＝別の話かもしれない
                     # ★規格の印（L/S）が食い違ったら別機種★（2026-08-01・Codex23回目）
                     #   芯の比較は印を落とすので、S版のページがL版の本人になれた。
@@ -421,6 +430,24 @@ def selftest() -> int:
              {"url": "https://p-town.dmm.com/y", "model_code": "Lびん娘 NY1"}])
       == {"model_code": "Lびん娘NY1", "hosts": ["p-town.dmm.com", "p-world.co.jp"],
           "adopted": True})
+    # ★★Codex25回目（自分で再現してから直した）★★
+    t("★★区切りの後ろの断片でも、元の題の前置を見る★★（Codex25回目）",
+      page_is_machine("<title>別機種 | L北斗の拳 新台</title>",
+                      "L北斗の拳")[0] is False)
+    t("　【】区切りでも同じ",
+      page_is_machine("<title>別機種【L北斗の拳 新台】</title>",
+                      "L北斗の拳")[0] is False)
+    t("　／区切りでも同じ",
+      page_is_machine("<title>別機種の話/L北斗の拳</title>",
+                      "L北斗の拳")[0] is False)
+    t("　前が飾りの断片は通る（【新台】L北斗の拳 | P-WORLD）",
+      page_is_machine("<title>【新台】L北斗の拳 | P-WORLD</title>",
+                      "L北斗の拳")[0] is True)
+    t("　実データ形（名前が先頭・後ろにサイト名）は通る",
+      page_is_machine("<title>L北斗の拳(サミー) パチスロ 機種情報 | P-WORLD</title>",
+                      "L北斗の拳")[0] is True)
+    t("★全角の型式名も従来どおり取れる★（本文抽出でNFKC済み・Codex25回目の指摘は非該当）",
+      extract_model_code("<p>型式名：Ｌびん娘ＮＹ１</p>") == ("Lびん娘NY1", "OK"))
     t("　タイトルが無ければ採らない",
       page_is_machine("<p>本文だけ</p>", "Lすーぱぁびん娘")[0] is False)
 

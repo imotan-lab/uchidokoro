@@ -771,8 +771,21 @@ def push_after_publish(slug: str, already_committed: bool = False) -> list:
                        encoding="utf-8", errors="replace")
         return [f"push先の先端（{remote_sha[:12]}）が手元の基準（{base_sha[:12]}）と"
                 "違います。fetchしたので、次の実行で確かめ直します（pushしていません）"]
+    # ★基準が今のHEADの祖先であることも確かめる★（早送り以外は出さない）
+    anc = subprocess.run(["git", "merge-base", "--is-ancestor", base_sha, "HEAD"],
+                         cwd=BASE, capture_output=True, text=True,
+                         encoding="utf-8", errors="replace")
+    if anc.returncode != 0:
+        return [f"手元の枝が基準（{base_sha[:12]}）の続きではありません"
+                "（早送りで出せない形。人が確かめてください）"]
+    # ★確かめた先端のまま、という条件つきでpushする★（2026-08-02・Codex25回目）
+    #   ls-remote と push は別操作なので、その隙間に別PCがリモートを
+    #   巻き戻すと、確かめていない範囲ごと再公開できた。
+    #   「リモートが base_sha のままなら置き換える」を push 自体に持たせる。
     p = subprocess.run(
-        ["git", "push", sc["remote"], f"HEAD:refs/heads/{sc['dest']}"],
+        ["git", "push",
+         f"--force-with-lease=refs/heads/{sc['dest']}:{base_sha}",
+         sc["remote"], f"HEAD:refs/heads/{sc['dest']}"],
         cwd=BASE, capture_output=True, text=True,
         encoding="utf-8", errors="replace")
     if p.returncode == 0:
@@ -1011,6 +1024,15 @@ def selftest() -> int:
         t("★★push前に実リモートの先端と基準を突き合わせる★★"
           "（基準が古いと確かめていない範囲ごと出せた・Codex24回目）",
           "ls-remote" in inspect.getsource(push_after_publish))
+        t("★★pushは「先端がそのままなら」の条件つき★★"
+          "（ls-remoteとpushの隙間に巻き戻されると検査外まで出た・Codex25回目）",
+          "--force-with-lease=refs/heads/" in inspect.getsource(push_after_publish)
+          and "is-ancestor" in inspect.getsource(push_after_publish))
+        t("★★下見は目印の片付け（コミット・push）をしない★★"
+          "（見るだけの実行がロック無しで公開していた・Codex25回目）",
+          "下見では触りません" in inspect.getsource(main)
+          and inspect.getsource(main).index("if args.apply:")
+          < inspect.getsource(main).index("retry_push_first()"))
         t("★★採用した型式名の規格印も照合する★★"
           "（旧機種のページが2名鑑でそろうと旧型式で新台を書けた・Codex24回目）",
           "規格印が確認できません" in inspect.getsource(gather)
@@ -1240,11 +1262,18 @@ def main() -> int:
     # ★出せていない公開を、どの経路より先に片付ける★（2026-07-31・Codex20回目）
     #   直接指定の経路がこの手前にあったので、前の機種を出せないまま
     #   次の機種を書いてコミットでき、目印まで上書きしていた。
-    for x in retry_push_first():
-        print("  ✗ " + x[:200])
-        _log("  ✗ " + x[:300])
-        if args.apply:
+    # ★片付け（コミット・push）は --apply の時だけ★（2026-08-02・Codex25回目）
+    #   以前は下見でもここを通っていたので、目印が残っていると
+    #   **見るだけの実行がロックも持たずに公開（push）していた**。
+    #   下見では目印の存在を知らせるだけにする。
+    if args.apply:
+        for x in retry_push_first():
+            print("  ✗ " + x[:200])
+            _log("  ✗ " + x[:300])
             return 1                       # ★片付くまで次へ進まない★
+    elif os.path.isfile(PUSH_PENDING):
+        print("★出せていない公開の目印があります（下見では触りません）。"
+              "--apply の実行が先に片付けます★")
 
     if args.name:
         if not (args.official_url and args.maker):
