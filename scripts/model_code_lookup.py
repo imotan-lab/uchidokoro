@@ -231,8 +231,10 @@ def page_is_machine(html: str, official_name: str,
     cands = [(title, [], "")]
     _seen = []
     for _ix, s in enumerate(_segs):
-        cands.append((s, list(_seen),
-                      _segs[_ix + 1] if _ix + 1 < len(_segs) else ""))
+        # ★後ろは「直後の1断片」ではなく残り全部★（2026-08-02・Codex28回目）
+        #   「…|BELLCO|SP」は、直後のBELLCOを許した時点で
+        #   SPを一度も見ずに通っていた。
+        cands.append((s, list(_seen), " ".join(_segs[_ix + 1:])))
         _seen.extend(_ci.normalize_core(w) for w in s.split())
     for seg, before, after in cands:
         raw = seg.split()
@@ -298,7 +300,11 @@ def _after_ok(after_seg: str, core: str, official_name: str,
         c = _ci.normalize_core(w)
         if c == "" or c in _DECOR_CORES or c in _maker_name_cores():
             continue
-        if extra and any(e and e in c for e in extra):
+        # ★メーカー語は正規化後の完全一致だけ★（2026-08-02・Codex28回目）
+        #   部分一致だと「SPBELLCO」のような合成語まで許してしまう。
+        #   「株式会社サミー」は株式会社を外してから比べる。
+        c2 = c.replace("株式会社", "")
+        if extra and (c in extra or c2 in extra):
             continue                      # 期待するメーカーの社名・銘柄
         if set(c) <= okc:
             continue                      # 本人の名前の文字だけ＝略称・読み
@@ -544,6 +550,15 @@ def selftest() -> int:
     t("　直後の括弧がメーカー名なら通る（実データ形）",
       page_is_machine("<title>L北斗の拳(サミー) パチスロ 機種情報 | P-WORLD</title>",
                       "L北斗の拳")[0] is True)
+    # ★★Codex28回目★★
+    t("★★許可した社名の後ろの派生印も見る★★（…|BELLCO|SP が通っていた・Codex28回目）",
+      page_is_machine("<title>Lすーぱぁびん娘|EXAMPLE|SP</title>",
+                      "Lすーぱぁびん娘",
+                      extra_tail_ok={"example"})[0] is False)
+    t("★★メーカー語は完全一致だけ★★（部分一致だとSPBELLCOまで許した・Codex28回目）",
+      _after_ok("SPBELLCO", "x", "x", {"bellco"}) is False
+      and _after_ok("BELLCO", "x", "x", {"bellco"}) is True
+      and _after_ok("株式会社BELLCO", "x", "x", {"bellco"}) is True)
     t("　直後の括弧が本人の略称なら通る（実データ・青ブタ）",
       page_is_machine(
           "<title>L青春ブタ野郎はバニーガール先輩の夢を見ない"

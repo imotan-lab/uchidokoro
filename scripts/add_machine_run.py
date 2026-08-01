@@ -125,6 +125,47 @@ def _forget(seen: dict, maker_id: str, url: str) -> None:
         ent["count"] = len(urls)
 
 
+RECHECK_PER_MAKER = 3
+
+
+def recheck_known(mid: str, r: dict, seen: dict, out: dict) -> None:
+    """★既知URLの中身のすり替え検知★（2026-08-02・Codex28回目）
+
+    見張りは「新しいURL」しか見ないので、メーカーが既存URLを
+    別機種に使い回すと黙って見逃していた。
+    毎晩、確認が最も古い既知URLを少数だけ読み直し、
+    覚えている機種名と違えば台帳に残す（人が見る）。
+    """
+    ent = (seen.get("makers") or {}).get(mid) or {}
+    known = [u for u in (ent.get("urls") or []) if u not in set(r.get("new") or [])]
+    if not known:
+        return
+    names = seen.setdefault("names", {})
+    checked = seen.setdefault("name_checked", {})
+    known.sort(key=lambda u: (checked.get(u, ""), u))
+    from datetime import date as _date
+    for url in known[:RECHECK_PER_MAKER]:
+        try:
+            html = _nw._get(url)
+            now_name = _nw.machine_name(html)
+        except Exception as e:            # noqa: BLE001
+            _log(f"  再確認できませんでした（次のローテで再試行）: {url} / {e}")
+            continue
+        old_name = names.get(url) or ""
+        if old_name and now_name and old_name != now_name:
+            if _ledger("site", "structural", "MATERIAL",
+                       "KNOWN_URL_CONTENT_CHANGED",
+                       "既知の公式URLの機種名が変わりました（使い回しの疑い）",
+                       f"{url} / {old_name} → {now_name}"):
+                names[url] = now_name     # ★台帳に残せた時だけ更新★
+                out["problems"].append(
+                    f"{url}: 機種名が変わりました（{old_name} → {now_name}）")
+            continue
+        if now_name and not old_name:
+            names[url] = now_name         # 初回は覚えるだけ
+        checked[url] = _date.today().isoformat()
+
+
 def discover() -> dict:
     """メーカー公式の一覧から新台候補を出す。"""
     cats = _sj.read_json(_nw.CATALOGS, expect=dict)["catalogs"]
@@ -196,6 +237,13 @@ def discover() -> dict:
                 _forget(seen, mid, url)
                 out["problems"].append(
                     f"{url}: どこにも残せなかったので『見た』ことにしません")
+            elif c.get("official_name"):
+                # ★URLごとの機種名を覚える★（2026-08-02・Codex28回目）
+                #   既知URLの中身が別機種にすり替わったことに気づくため。
+                seen.setdefault("names", {})[url] = c["official_name"]
+        # ★既知URLの中身がすり替わっていないか、毎晩少しずつ見る★
+        #   （2026-08-02・Codex28回目。全件毎晩は重いのでローテーション）
+        recheck_known(mid, r, seen, out)
     _nw._save_seen(seen)
     _log(f"見張り終了: 正常{len(out['watched'])}社 / 見られず{len(out['not_watched'])}社 "
          f"/ 新台候補{len(out['candidates'])}件 / 確認が要る{len(out['problems'])}件")
@@ -208,22 +256,15 @@ def gather(name: str) -> dict:
            "problems": []}
     fr = _di.find(name)
     got["urls"] = _di.found_urls(fr)
-    for did, v in fr["results"].items():
-        if v["state"] == "FOUND":
-            continue
-        msg = f"{did}: {v['state']} {v['why']}"[:160]
-        # ★使わない名鑑の曖昧さで、成立している2票を捨てない★（2026-08-02・Codex27回目）
-        #   2名鑑がきちんと見つかっているのに、3件目のAMBIGUOUSを全体の問題に
-        #   足していたので、やり直しても変わらない理由として**即・台帳送り**になっていた。
-        #   2票そろっているなら、その名鑑を使わないという記録だけ残す。
-        #   2票に満たないときは従来どおり問題として残す（曖昧の解消は人の仕事）。
-        if len(got["urls"]) >= 2:
-            _log(f"  （使わない名鑑）{msg}")
-        else:
-            got["problems"].append(msg)
+    # ★使わない名鑑の問題は「票が成立した」と分かってから抑制する★
+    #   （2026-08-02・Codex27〜28回目。URLが2件あるだけでは2票ではない＝
+    #     型式の独立2票が成立して初めて、3件目の曖昧さを記録だけにしてよい）
+    unused_msgs = [f"{did}: {v['state']} {v['why']}"[:160]
+                   for did, v in fr["results"].items() if v["state"] != "FOUND"]
     _log(f"材料集め開始: {name} / 名鑑{len(got['urls'])}件 "
          + " ".join(f"{d}={v['state']}" for d, v in fr["results"].items()))
     if len(got["urls"]) < 2:
+        got["problems"] += unused_msgs    # ★なぜ足りないかも残す★
         got["problems"].append(
             f"名鑑の個別ページが {len(got['urls'])} 件しか見つかりません（2件以上が要る）")
         return got
@@ -239,6 +280,12 @@ def gather(name: str) -> dict:
     got["model_code"] = mv.get("model_code")
     if not mv["adopted"]:
         got["problems"].append("型式名: " + str(mv.get("why", ""))[:160])
+    # ★型式の2票が成立した時だけ、使わなかった名鑑の問題を記録に落とす★
+    if mv.get("adopted"):
+        for m_ in unused_msgs:
+            _log(f"  （使わない名鑑）{m_}")
+    else:
+        got["problems"] += unused_msgs
     # ★採用した型式名の規格印も照合する★（2026-08-02・Codex24回目の助言で実装）
     #   規格の印が無い題（同名の旧機種のページ）が2名鑑でそろうと、
     #   旧機種の型式・スペックで新台の記事を作れてしまう。
@@ -365,7 +412,11 @@ BLOCKING = ("AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY", "型式名",
             "メーカー名簿を読めません", "メーカーが指定されていません",
             "はまだ見張れていません", "の公式の場所が名簿にありません",
             # 新台でない機種を新台として出さない
-            "登場年月が新台の範囲外です")
+            "登場年月が新台の範囲外です",
+            # ★パチンコ機を新台記事にしない★（2026-08-02・Codex28回目）
+            #   --name 経路と、取得失敗→待ち行列→fill_missing の経路は
+            #   classify() を通らないので、公開前の照合でも必ず見る。
+            "パチスロのページに見えません")
 
 
 def _blocking(problems: list) -> list:
@@ -418,6 +469,12 @@ def verify_official(name: str, official_url: str,
     #   検査を丸ごと外していたら「Lすーぱぁびん娘（SP）|BELLCO」のような
     #   派生機の公式URLを本機として通せた。社名の飾り（|BELLCO / |Sammy）は
     #   名簿から作った許可で通し、派生の印（SP等）は従来どおり弾く。
+    # ★回胴機のページであることも公開前に必ず見る★（2026-08-02・Codex28回目）
+    #   見張りの classify は通らない経路（--name・fill_missing）がある。
+    #   実際、ニューギンのパチスロ一覧にはパチンコ機のリンクも混じる。
+    _text = _nw._visible_text(html)
+    if not _nw.looks_like_slot(_text):
+        out["problems"].append("パチスロのページに見えません（回胴機の語が無い）")
     ok, why = _mc.page_is_machine(
         html, name,
         extra_tail_ok=_mc.maker_brand_cores(maker) if maker else None)
@@ -429,7 +486,7 @@ def verify_official(name: str, official_url: str,
         out["problems"] += _verify_maker(final_url, maker)
     else:
         out["problems"].append("メーカーが指定されていません")
-    got = _nw.release_month(_nw._visible_text(html))
+    got = _nw.release_month(_text)
     if not got and maker:
         # ★個別ページに年月が無ければ、公式一覧のカードから取り直す★
         #   （2026-08-02・Codex27回目。サミーは一覧に「2026.9」・個別には無し）
@@ -1018,7 +1075,7 @@ def selftest() -> int:
         #   （開けなければ止まる作りなので、通る場合の試験には中身が要る）
         real_get = _nw._get
         _nw._get = lambda u, timeout=20: (
-            "<title>X</title><body>2026年9月 登場</body>")
+            "<title>X</title><body>パチスロ 2026年9月 登場</body>")
         # ★メーカー名簿も試験用にする★（本番の名簿を書き換えない）
         real_cats = _nw.CATALOGS
         _nw.CATALOGS = os.path.join(_tmpdir, "cats.json")
@@ -1037,7 +1094,7 @@ def selftest() -> int:
         t("★★公式と違う登場年月では記事を作れない★★"
           "（いつ打てるかを誤って読者に出せた・Codex16回目）",
           any("公式と違います" in x for x in _verify_release(
-              "<body>2026年9月 登場</body>", "2026-08")))
+              "<body>パチスロ 2026年9月 登場</body>", "2026-08")))
         t("　名簿に無いメーカーは通さない",
           any("名簿にありません" in x for x in _verify_maker("https://x/", "nosuch")))
         t("★★見張れていない社では、どんなURLでも通さない★★"
@@ -1172,7 +1229,7 @@ def selftest() -> int:
           "preview" not in _old and _old["wrote"] == []
           and any("範囲外" in x for x in _old["blocked"]))
         _nw._get = lambda u, timeout=20: (
-            "<title>X</title><body>2026年9月 登場</body>")
+            "<title>X</title><body>パチスロ 2026年9月 登場</body>")
         _bad = run_one("X", "https://m.example/products/slot/zzz/", "nosuch", "2026-09")
         t("★★名簿に無いメーカーでは記事そのものを作らない★★（通しで確かめる）",
           "preview" not in _bad and _bad["wrote"] == []
@@ -1224,6 +1281,15 @@ def selftest() -> int:
         t("★★使わない3件目の名鑑が曖昧でも、成立した2票を捨てない★★"
           "（永久理由扱いで即・台帳送りになっていた・Codex27回目）",
           not any("AMBIGUOUS" in x for x in r4.get("problems") or []))
+        # ★票が成立しなかった時は、3件目の曖昧さも残す★（Codex28回目）
+        _real_lookup28 = _mc.lookup
+        _mc.lookup = lambda u, n: {"url": u, "model_code": None,
+                                   "reason": "MODEL_CODE_NOT_FOUND"}
+        r4c = run_one("X", "https://m.example/products/slot/zzz/", "m", "2026-09")
+        _mc.lookup = _real_lookup28
+        t("★★票が成立しなければ、使わなかった名鑑の曖昧さも問題として残す★★"
+          "（URL2件=2票ではない・Codex28回目）",
+          any("AMBIGUOUS" in x for x in r4c.get("problems") or []))
         _di.find = lambda n, c=None: {"results": {
             "a": {"state": "FOUND", "url": "https://a.example/1", "why": "",
                   "candidates": [], "surfaces": "1/1", "index_size": 9, "problems": []},
@@ -1244,10 +1310,10 @@ def selftest() -> int:
                 "https://m.example/products/slot/other/")["problems"]
             t("★★公式ページが別機種なら止める★★"
               "（機種Aの名前＋機種BのURLで記事ができた穴・実際に再現した）",
-              v and "一致しません" in v[0])
+              any("一致しません" in x for x in v))
             _nw._get = lambda u, timeout=20: (
                 "<title>Lすーぱぁびん娘（SP） | EXAMPLE</title>"
-                "<body>2026年9月 登場</body>")
+                "<body>パチスロ 2026年9月 登場</body>")
             v2 = verify_official(
                 "Lすーぱぁびん娘",
                 "https://m.example/products/slot/lbinko/", "m")["problems"]
@@ -1256,7 +1322,7 @@ def selftest() -> int:
               any("一致しません" in x for x in v2))
             # ★個別ページに年月が無くても、公式一覧の控えで通る★（Codex27回目）
             _nw._get = lambda u, timeout=20: (
-                "<title>Lすーぱぁびん娘|EXAMPLE</title><body>本文に年月なし</body>")
+                "<title>Lすーぱぁびん娘|EXAMPLE</title><body>パチスロの本文に年月なし</body>")
             _LIST_HINT_CACHE.clear()
             _LIST_HINT_CACHE["m"] = {
                 "https://m.example/products/slot/lbinko/": "2026-09"}
@@ -1267,6 +1333,38 @@ def selftest() -> int:
               "（サミーは一覧に「2026.9」・個別には無し・Codex27回目）",
               v3["release"] == "2026-09"
               and not any("書かれていません" in x for x in v3["problems"]))
+            # ★パチンコ機のページは公開前の照合で止まる★（Codex28回目）
+            _nw._get = lambda u, timeout=20: (
+                "<title>Lすーぱぁびん娘|EXAMPLE</title>"
+                "<body>ぱちんこ新台のご案内 2026年9月 登場</body>")
+            v4 = verify_official("Lすーぱぁびん娘",
+                                 "https://m.example/products/slot/lbinko/", "m")
+            t("★★パチンコ機を公開前の照合で止める★★"
+              "（--name とfill_missing の経路はclassifyを通らない・Codex28回目）",
+              any("パチスロのページに見えません" in x for x in v4["problems"])
+              and _blocking(["パチスロのページに見えません（回胴機の語が無い）"]))
+            # ★既知URLの中身のすり替えを見つける★（Codex28回目）
+            _seen28 = {"schema": "seen-machine-urls/v1", "makers": {"m": {
+                "urls": ["https://m.example/products/slot/aaa/"], "count": 1}},
+                "names": {"https://m.example/products/slot/aaa/": "前の機種"}}
+            _out28 = {"problems": []}
+            _nw._get = lambda u, timeout=20: "<title>新しい別機種|EXAMPLE</title>"
+            _real_lg28 = globals()["_ledger"]
+            globals()["_ledger"] = lambda *a, **k: True
+            try:
+                recheck_known("m", {"new": []}, _seen28, _out28)
+            finally:
+                globals()["_ledger"] = _real_lg28
+            t("★★既知URLの機種名が変わったら台帳に残して知らせる★★"
+              "（使い回しは差分0件で黙って見逃していた・Codex28回目）",
+              any("変わりました" in x for x in _out28["problems"])
+              and _seen28["names"]["https://m.example/products/slot/aaa/"]
+              == "新しい別機種")
+            t("★★下見は待ち行列・台帳を変えない★★"
+              "（60日打ち切り・試行記録・台帳送りが下見でも進んでいた・Codex28回目）",
+              "60日超えの待ち" in inspect.getsource(main)
+              and "if apply_it:" in inspect.getsource(main)
+              and "（下見）やり直しても変わらない理由です" in inspect.getsource(main))
             _nw._get = lambda u, timeout=20: "<title>Lすーぱぁびん娘|EXAMPLE</title>"
             t("★★既に登録されている機種は作らない★★（実際に二重登録できた・2026-07-31）",
               _blocking(["既に登録されている疑い: slug=super_binmusume"]))
@@ -1323,7 +1421,7 @@ def selftest() -> int:
               "preview" not in r5
               and any("公式ページを取得できません" in x for x in r5["blocked"]))
             _nw._get = lambda u, timeout=20: (
-                "<title>Lすーぱぁびん娘|EXAMPLE</title><body>2026年9月 登場</body>")
+                "<title>Lすーぱぁびん娘|EXAMPLE</title><body>パチスロ 2026年9月 登場</body>")
             t("　同じ機種なら通る",
               verify_official("Lすーぱぁびん娘", "https://m.example/products/slot/lbinko/",
                               "m")["problems"] == [])
@@ -1333,7 +1431,7 @@ def selftest() -> int:
                               "https://m.example/products/slot/lbinko/",
                               "m")["release"] == "2026-09")
             _nw._get = lambda u, timeout=20: (
-                "<title>Lすーぱぁびん娘|EXAMPLE</title><body>2019年4月 登場</body>")
+                "<title>Lすーぱぁびん娘|EXAMPLE</title><body>パチスロ 2019年4月 登場</body>")
             t("★★古い機種を新台として出せない★★"
               "（--name の経路は新台の範囲を見ていなかった・Codex17回目）",
               any("範囲外" in x for x in verify_official(
@@ -1455,8 +1553,17 @@ def main() -> int:
     # ★見つけたが記事にできていない機種を、必ず待ち行列に入れる★
     # ★候補は discover() の中で、seen を書く前に待ち行列へ入れてある★
     pend = _pend.load()
+    # ★下見は待ち行列・台帳を変えない★（2026-08-02・Codex28回目）
+    #   見るだけの実行が60日打ち切り・台帳送り・試行記録を進めてしまうと、
+    #   将来公開できる機種が自動経路から外れる。
+    if not apply_it:
+        would = [it for it in pend["items"].values()
+                 if _pend.waited_days(it) >= _pend.GIVE_UP_DAYS
+                 and int(it.get("runs", 0)) >= 1]
+        if would:
+            print(f"（下見）60日超えの待ち {len(would)} 件は --apply の実行が処理します")
     # ★待ちすぎた分は黙って消さず、台帳に残す★
-    for it in _pend.give_up(pend):
+    for it in (_pend.give_up(pend) if apply_it else []):
         if not _ledger("site", "structural", "MATERIAL", "PENDING_GAVE_UP",
                        f"新台を{_pend.GIVE_UP_DAYS}日待っても記事にできませんでした",
                        f"{it['name']} / {it['url']} / "
@@ -1495,13 +1602,16 @@ def main() -> int:
         if not (work["name"] and work["maker"]):
             _log(f"  まだ記事にできません（名前かメーカーが取れない）: {work['url']}")
             # ★早く抜けるときも試した日を残す★（残さないと毎晩ここで詰まる）
-            _pend.mark_tried(pend, work["url"])
-            _pend.save(pend)
+            if apply_it:
+                _pend.mark_tried(pend, work["url"])
+                _pend.save(pend)
             continue
         _log(f"試す: {work['name']} / {work['maker']} / {work['release']}")
         # ★試したことを必ず残す★（残さないと同じものばかり選ばれる）
-        _pend.mark_tried(pend, work["url"])
-        _pend.save(pend)
+        # ★下見では残さない★（試行記録・巡回順を進めない・Codex28回目）
+        if apply_it:
+            _pend.mark_tried(pend, work["url"])
+            _pend.save(pend)
         res = run_one(work["name"], work["url"], work["maker"],
                       work["release"], apply_it,
                       before_write=lambda u=work["url"]: _claim_today(u))
@@ -1523,7 +1633,11 @@ def main() -> int:
             break
         # ★やり直しても変わらない理由なら、行列から出して後ろを通す★
         if res.get("blocked") and not retry_later(res["problems"]):
-            give_up_now(pend, work["url"], work["name"], res["problems"])
+            if apply_it:
+                give_up_now(pend, work["url"], work["name"], res["problems"])
+            else:
+                print("（下見）やり直しても変わらない理由です"
+                      "（--apply の実行が台帳へ移します）: " + work["name"])
     if d["problems"]:
         _ledger("site", "structural", "MATERIAL", "WATCH_PROBLEM",
                 "新台の見張りで確認が要る点が出ました",
