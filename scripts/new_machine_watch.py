@@ -185,6 +185,61 @@ def product_urls(html: str, base_url: str, link_prefix: str) -> list:
     return sorted(out)
 
 
+from html.parser import HTMLParser as _HTMLParser  # noqa: E402
+
+
+class _CardParser(_HTMLParser):
+    """一覧HTMLを要素の木にする最小のパーサ（カード単位の対応づけ用）。"""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.root = {"tag": "#root", "attrs": {}, "children": [],
+                     "parent": None, "text": []}
+        self._cur = self.root
+
+    def handle_starttag(self, tag, attrs):
+        node = {"tag": tag, "attrs": dict(attrs), "children": [],
+                "parent": self._cur, "text": []}
+        self._cur["children"].append(node)
+        if tag not in ("br", "img", "meta", "link", "input", "hr", "source"):
+            self._cur = node
+
+    def handle_endtag(self, tag):
+        n = self._cur
+        while n is not None and n["tag"] != tag:
+            n = n["parent"]
+        if n is not None and n["parent"] is not None:
+            self._cur = n["parent"]
+
+    def handle_data(self, data):
+        if data.strip():
+            self._cur["text"].append(data)
+
+
+def _node_text(node) -> str:
+    out = list(node["text"])
+    for ch in node["children"]:
+        out.append(_node_text(ch))
+    return " ".join(x for x in out if x)
+
+
+def _node_product_anchors(node, base_url, link_prefix) -> list:
+    out = []
+    if node["tag"] == "a":
+        href = str(node["attrs"].get("href") or "").strip()
+        if href:
+            absu = urllib.parse.urljoin(base_url, href)
+            absu = absu.split("#")[0].split("?")[0]
+            if absu.startswith(link_prefix):
+                rest = absu[len(link_prefix):].strip("/")
+                if rest and "/" not in rest and _SLUGLIKE.match(rest) \
+                        and not _YEAR_ONLY.match(rest):
+                    out.append(link_prefix.rstrip("/") + "/" + rest + "/")
+    for ch in node["children"]:
+        out += _node_product_anchors(ch, base_url, link_prefix)
+    return out
+
+
 def list_release_hints(html: str, base_url: str, link_prefix: str) -> dict:
     """一覧ページのカードから「機種URL → 一覧に書かれた登場年月」を取る。
 
@@ -192,30 +247,44 @@ def list_release_hints(html: str, base_url: str, link_prefix: str) -> dict:
       サミーは一覧に「スマスロ リコリス・リコイル 2026.9」と書くが、
       個別ページの本文には登場年月が無い。個別だけ見ていると
       **正しい月が公式にあるのに記事化できない**。
-      一覧もメーカー公式なので、カード単位（そのリンクから次のリンクまで）で
-      年月を探し、個別に無いときの公式の控えとして使う。
-      ★カードの範囲に年月が2つ以上あれば採らない★（release_month と同じ流儀）。
+
+    ★カードはDOMの要素で区切る★（2026-08-02・Codex29回目）
+      「リンクから次のリンクまで」の平らな窓だと、次のカードの中で
+      リンクより**前**に書かれた年月を、前の機種に付けてしまった。
+      機種リンクから親をたどり、**機種リンクを1つだけ含む一番外の要素**を
+      そのカードとみなして、その中の文字だけから年月を探す。
+      年月が2つ以上あれば採らない（release_month と同じ流儀）。
+      カードの構造が無いページでは何も採らない（安全側）。
     """
-    anchors = []                          # (位置, 正規化した機種URL or None)
-    for m in re.finditer(r'href="([^"]+)"', html):
-        absu = urllib.parse.urljoin(base_url, m.group(1).strip())
-        absu = absu.split("#")[0].split("?")[0]
-        norm = None
-        if absu.startswith(link_prefix):
-            rest = absu[len(link_prefix):].strip("/")
-            if rest and "/" not in rest and _SLUGLIKE.match(rest) \
-                    and not _YEAR_ONLY.match(rest):
-                norm = link_prefix.rstrip("/") + "/" + rest + "/"
-        anchors.append((m.start(), norm))
+    p = _CardParser()
+    try:
+        p.feed(html)
+    except Exception:                     # noqa: BLE001
+        return {}
+
+    def _walk(node):
+        for ch in node["children"]:
+            yield ch
+            yield from _walk(ch)
+
     out = {}
-    for i, (pos, norm) in enumerate(anchors):
-        if not norm:
+    for node in _walk(p.root):
+        if node["tag"] != "a":
             continue
-        end = anchors[i + 1][0] if i + 1 < len(anchors) else min(
-            len(html), pos + 4000)
-        got = release_month(_visible_text(html[pos:end]))
-        if got and norm not in out:
-            out[norm] = got["value"]
+        urls = _node_product_anchors(node, base_url, link_prefix)
+        if len(urls) != 1:
+            continue
+        url = urls[0]
+        # ★このリンクだけを含む、一番外の要素＝カード★
+        card = node
+        up = node["parent"]
+        while up is not None and len(
+                _node_product_anchors(up, base_url, link_prefix)) == 1:
+            card = up
+            up = up["parent"]
+        got = release_month(unicodedata.normalize("NFKC", _node_text(card)))
+        if got and url not in out:
+            out[url] = got["value"]
     return out
 
 
@@ -841,6 +910,22 @@ def selftest() -> int:
       and _hints.get("https://m.example/products/slot/juoh/") == "2026-10")
     t("　カードに年月が2つあれば採らない（選ばない）",
       "https://m.example/products/slot/nazo/" not in _hints)
+    # ★★Codex29回目：隣のカードの年月を盗らない★★
+    _atk = ('<a href="https://m.example/products/slot/alpha/">A</a>'
+            '<div><span>導入 2026.10</span>'
+            '<a href="https://m.example/products/slot/bravo/">B</a></div>')
+    _h2 = list_release_hints(_atk, "https://m.example/products/slot/",
+                             "https://m.example/products/slot/")
+    t("★★リンクより前にある年月は、そのカードの機種に付く★★"
+      "（平らな窓だと前の機種が盗っていた・Codex29回目）",
+      _h2.get("https://m.example/products/slot/bravo/") == "2026-10"
+      and "https://m.example/products/slot/alpha/" not in _h2)
+    t("　カードの構造が無いページでは採らない（安全側）",
+      list_release_hints(
+          '<a href="https://m.example/products/slot/alpha/">A</a> 導入 2026.9 '
+          '<a href="https://m.example/products/slot/bravo/">B</a>',
+          "https://m.example/products/slot/",
+          "https://m.example/products/slot/") == {})
     # ★個別ページに年月が無くても、一覧の控えがあれば通る★
     _real_get_cls = globals()["_get"]
     globals()["_get"] = lambda u, timeout=20: (
