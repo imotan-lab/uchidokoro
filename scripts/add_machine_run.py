@@ -257,13 +257,28 @@ def discover(persist: bool = True) -> dict:
             for url in (r.get("initial_urls") or []):
                 c = _nw.classify(url, None,
                                  list_release=(r.get("hints") or {}).get(url))
+                kept0 = True
                 if c["ok"]:
                     out["candidates"].append({"maker": mid, **c})
                     if persist:
-                        _remember_url(c.get("official_name") or "", url, mid,
-                                      (c.get("release") or {}).get("value") or "",
-                                      "初回の一覧から（新台の範囲内）")
-                # 範囲外・読めない等は初回の古い機種として扱う（台帳には残さない）
+                        kept0 = _remember_url(
+                            c.get("official_name") or "", url, mid,
+                            (c.get("release") or {}).get("value") or "",
+                            "初回の一覧から（新台の範囲内）")
+                elif retry_later(c["reasons"]):
+                    # ★初回の晩だけ読めなかった将来の新台を沈めない★（Codex37回目）
+                    #   取得失敗・メンテ・年月未掲載は明日には変わりうる。
+                    if persist:
+                        kept0 = _remember_url(
+                            c.get("official_name") or "", url, mid,
+                            (c.get("release") or {}).get("value") or "",
+                            "初回に読めなかった: " + " / ".join(c["reasons"])[:200])
+                # 範囲外など「やり直しても変わらない」は初回の古い機種＝台帳に残さない
+                if persist and not kept0:
+                    # ★どこにも残せなかったURLは「見た」ことにしない★（Codex37回目）
+                    _forget(seen, mid, url)
+                    out["problems"].append(
+                        f"{url}: 初回に残せなかったので『見た』ことにしません")
             continue
         for url in r["new"]:
             # ★公式一覧のカードの年月を控えとして渡す★（2026-08-02・Codex27回目）
@@ -470,7 +485,10 @@ RETRYABLE = ("名鑑の個別ページが", "HEALTHY_NO_MATCH", "CATALOG_UNHEALT
              # ★旧機種のページしか無い間は保留＝新台のページが載れば解ける★
              "型式名の規格印が確認できません",
              # ★一時的な転送は戻れば解ける★（Codex34回目）
-             "へ転送されました")
+             "へ転送されました",
+             # ★メンテ・拒否画面は待てば解ける★（Codex36〜37回目。36回目で
+             #   足すと言って足し忘れ、永久理由のままだった）
+             "読める状態ではありません")
 # ★やり直しても意味がない理由★（待たずに台帳へ）
 NOT_RETRYABLE = ("既に登録されている疑い", "公式ページと名前が一致しません",
                  "転載の疑い", "AMBIGUOUS_CANDIDATES",
@@ -580,6 +598,13 @@ def verify_official(name: str, official_url: str,
     #   検査を丸ごと外していたら「Lすーぱぁびん娘（SP）|BELLCO」のような
     #   派生機の公式URLを本機として通せた。社名の飾り（|BELLCO / |Sammy）は
     #   名簿から作った許可で通し、派生の印（SP等）は従来どおり弾く。
+    # ★読める状態のページか先に見る★（2026-08-02・Codex37回目）
+    #   待ち行列の再処理中にHTTP200のメンテ画面が出ると、
+    #   「名前が一致しません」（永久理由）として正しい新台を打ち切れた。
+    _why_bad = _nw.bad_page(html, looks_like_list=True)
+    if _why_bad:
+        out["problems"].append(f"公式ページが読める状態ではありません（{_why_bad}）")
+        return out
     # ★回胴機の判定は「ページ全体」ではなく機種固有の領域で★
     #   （2026-08-02・Codex28〜29回目。共通ナビの「パチスロ」の一語で
     #     パチンコ機のページが通ってしまう）
@@ -1573,6 +1598,19 @@ def selftest() -> int:
               "（転送許可と食い違い、正しい新台を永久拒否できた・Codex35回目）",
               _verify_maker("https://w.example/products/slot/shin1/", "w") == []
               and _verify_maker("https://yoso.example/products/slot/x/", "w") != [])
+            t("★★メンテ画面の理由はやり直す価値がある★★"
+              "（36回目で足すと言って足し忘れていた・Codex37回目）",
+              retry_later(["公式ページが読める状態ではありません（『メンテナンス中』）"]))
+            _nw._get = lambda u, timeout=20: (
+                "<title>Access Denied</title><p>ただいまメンテナンス中です</p>")
+            v5 = verify_official("Lすーぱぁびん娘",
+                                 "https://m.example/products/slot/lbinko/", "m")
+            t("★★公開前の照合でもメンテ画面を永久理由にしない★★（Codex37回目）",
+              any("読める状態ではありません" in x for x in v5["problems"])
+              and not any("一致しません" in x for x in v5["problems"]))
+            t("★★初回に読めなかった将来の新台を沈めない★★（Codex37回目）",
+              "初回に読めなかった" in inspect.getsource(discover)
+              and "初回に残せなかったので" in inspect.getsource(discover))
             t("★★発見した時点で基準の題を控える★★"
               "（最初の再確認までの使い回しを見逃した・Codex30回目）",
               "known_titles" in inspect.getsource(discover)

@@ -356,6 +356,11 @@ def _node_product_anchors(node, base_url, link_prefix) -> list:
             absu = absu.split("#")[0].split("?")[0]
             if absu.startswith(link_prefix):
                 rest = absu[len(link_prefix):].strip("/")
+                # ★「slug/index.shtml」形もここで正規化★（2026-08-02・Codex37回目）
+                #   product_urls だけ直すと、この形のカードの年月が必ず失われた。
+                m_idx = re.match(r"^([^/]+)/index[.]s?html?$", rest)
+                if m_idx:
+                    rest = m_idx.group(1)
                 if rest and "/" not in rest and _SLUGLIKE.match(rest) \
                         and not _YEAR_ONLY.match(rest):
                     out.append(link_prefix.rstrip("/") + "/" + rest + "/")
@@ -1316,6 +1321,17 @@ def selftest() -> int:
                         "<title>Access Denied</title><p>ただいまメンテナンス中です</p>"),
                     classify("https://m.example/products/slot/x1/", None),
                     globals().__setitem__("_get", globals()["_get_bak"]))[2])()))
+    # ★★Codex37回目★★
+    t("★★index.shtml形のカードからも年月を取れる★★（Codex37回目）",
+      list_release_hints(
+          '<div><a href="https://m.example/products/slot/cross_b/index.shtml">x</a>'
+          '<p>導入 2026.9</p></div>'
+          '<div><a href="https://m.example/products/slot/konan_s/index.shtml">y</a>'
+          '<p>導入 2026.10</p></div>',
+          "https://m.example/products/slot/",
+          "https://m.example/products/slot/")
+      == {"https://m.example/products/slot/cross_b/": "2026-09",
+          "https://m.example/products/slot/konan_s/": "2026-10"})
     t("　カードの構造が無いページでは採らない（安全側）",
       list_release_hints(
           '<a href="https://m.example/products/slot/alpha/">A</a> 導入 2026.9 '
