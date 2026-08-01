@@ -675,20 +675,30 @@ def run_site_audit(ignore_in_progress: bool = False) -> list:
     """
     r = subprocess.run([sys.executable, os.path.join(BASE, "scripts", "audit_site.py")],
                        cwd=BASE, capture_output=True, text=True,
-                       encoding="utf-8", errors="replace")
+                       encoding="utf-8", errors="replace",
+                       env={**os.environ, "PYTHONIOENCODING": "utf-8"})
     if r.returncode == 0:
         return []
     out = []
+    raw_ng = 0                            # ★除外前の❌の数★
     for line in (r.stdout or "").splitlines():
         line = line.strip()
-        # ★Codexへの報告漏れは公開の可否と関係ない★（開発の作法の話）
         if not line.startswith("❌"):
             continue
+        raw_ng += 1
+        # ★Codexへの報告漏れは公開の可否と関係ない★（開発の作法の話）
         if "Codexへの未報告" in line:
             continue
         if ignore_in_progress and "33_" in line:
             continue
         out.append("サイト監査: " + line[1:].strip())
+    # ★監査そのものが壊れて終わった場合を「合格」にしない★（2026-08-01・Codex23回目）
+    #   起動失敗・構文エラー・強制終了は❌の行を1つも出さずに非0で終わる。
+    #   以前はその場合に空リスト＝合格として、公開・pushを通していた。
+    #   ❌が1つでもあれば通常の監査書式なので、除外の結果が空でも正常に扱う。
+    if raw_ng == 0:
+        out.append("サイト監査が異常終了しました（監査できていません）: "
+                   + ((r.stderr or r.stdout or "").strip()[:200] or "出力なし"))
     return out
 
 
@@ -1699,6 +1709,44 @@ def selftest() -> int:
         t("★★外したときだけ、それを理由に止めない★★"
           "（公開の最終確認は目印を持っている最中に回る）",
           not any("33_" in x for x in _loose))
+    # ★監査そのものが壊れたら「合格」にしない★（2026-08-01・Codex23回目を再現して直した）
+    #   起動失敗・構文エラーは❌を出さずに非0で終わり、以前は空リスト＝合格だった。
+    _real_run = subprocess.run
+
+    def _crash_run(cmd, **k):
+        if any("audit_site.py" in str(c) for c in cmd):
+            class _R:
+                returncode = 1
+                stdout = "Traceback: ImportError"
+                stderr = "boom"
+            return _R()
+        return _real_run(cmd, **k)
+
+    subprocess.run = _crash_run
+    try:
+        _crashed = run_site_audit()
+    finally:
+        subprocess.run = _real_run
+    t("★★監査が異常終了したら合格にしない★★"
+      "（構文エラー等は❌を出さず非0で終わり、素通りしていた・Codex23回目）",
+      any("異常終了" in x for x in _crashed))
+
+    def _only31_run(cmd, **k):
+        if any("audit_site.py" in str(c) for c in cmd):
+            class _R:
+                returncode = 1
+                stdout = "❌ 31_Codexへの未報告: 1件"
+                stderr = ""
+            return _R()
+        return _real_run(cmd, **k)
+
+    subprocess.run = _only31_run
+    try:
+        _only31 = run_site_audit()
+    finally:
+        subprocess.run = _real_run
+    t("　除外対象（Codex未報告）だけの非0は、いままでどおり通す",
+      _only31 == [])
     t("★★同じ入力なら毎回同じ物ができる★★（2回目に差分が出ない・Codexの助言）",
       build_hubs() == build_hubs())
     t("★★一覧と機種データを集合で突き合わせる★★（欠け・余分・重複を見つける）",

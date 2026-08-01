@@ -493,10 +493,16 @@ def _mark_push_pending(slug: str, sha: str = "", stage: str = "COMMITTED",
 
     slug だけだと、やり直すときに「コミットからやり直す」ことになり、
     変更が無いので必ず失敗していた。
+
+    ★必ず原子的に書く★（2026-08-01・Codex23回目）
+      直接 "w" で開くと先に中身が消える。書いている途中で止まると
+      壊れた目印が残り、翌日から**全部の公開が「目印が壊れています」で
+      恒久停止**していた（人が直すまで出せない）。
+      完成させてから置き換えれば、いつ止まっても目印は前か後の完全な形。
     """
-    with open(PUSH_PENDING, "w", encoding="utf-8") as f:
-        json.dump({"slug": slug, "sha": sha, "stage": stage,
-                   "parent": parent, "at": _now()}, f, ensure_ascii=False)
+    _pub.write_atomic(PUSH_PENDING, json.dumps(
+        {"slug": slug, "sha": sha, "stage": stage,
+         "parent": parent, "at": _now()}, ensure_ascii=False))
 
 
 def _clear_push_pending() -> None:
@@ -573,11 +579,15 @@ def retry_push_first() -> list:
     return []
 
 
-def finish_publish(res: dict) -> list:
+def finish_publish(res: dict, pend: dict = None) -> list:
     """★公開したあとの後始末★（2026-07-31・Codex17回目）
 
     push が通って初めて「終わった」。
     通らなかったものを待ち行列から外すと、翌日やり直せなくなる。
+
+    ★行列は呼び出し元のものを使う★（2026-08-01・give_up_now と同じ穴の予防）
+      ここで読み直して外すと、呼び出し元が持つ古い行列に残ったままになり、
+      あとから保存された瞬間に外したはずの機種が蘇る。
     """
     # ★目印は公開部が「途中」を消す前に作ってある★（Codex22回目）
     #   ここで作ると、公開部から戻る間に止まったときに目印が無くなる。
@@ -586,7 +596,8 @@ def finish_publish(res: dict) -> list:
         return ng
     url = res.get("pending_url")
     if url:
-        pend = _pend.load()
+        if pend is None:
+            pend = _pend.load()
         if _pend.done(pend, url):
             _pend.save(pend)
             _log(f"待ち行列から外しました: {res.get('name')}")
@@ -617,11 +628,18 @@ def pick_work(pend: dict) -> list:
                                         x.get("url")))[:MAX_TRY_PER_NIGHT]
 
 
-def give_up_now(url: str, name: str, problems: list) -> None:
+def give_up_now(pend: dict, url: str, name: str, problems: list) -> None:
     """★何度やっても無理なものは、行列から出して台帳へ★
 
     行列に残すと、そのぶん後ろが詰まる。
     黙って消すのではなく、要確認台帳に残して人が見られるようにする。
+
+    ★呼び出し元が持っている行列（pend）から外す★（2026-08-01・複数夜の通しで見つけた）
+      以前はここでファイルを読み直して外していたので、
+      ループが手元に持つ古い行列には残ったままだった。
+      次の機種の「試した」を保存した瞬間に**古い行列ごと上書きされ、
+      台帳へ移したはずの機種が毎晩蘇っていた**（台帳にも毎晩同じ件が積まれる）。
+      行列の保存は「1回の実行につき1つの行列オブジェクト」に一本化する。
     """
     if not _ledger("site", "structural", "MATERIAL", "PENDING_PERMANENT_BLOCK",
                    "新台を記事にできません（やり直しても変わらない理由）",
@@ -630,7 +648,6 @@ def give_up_now(url: str, name: str, problems: list) -> None:
         _log(f"  台帳に残せなかったので待ち行列に残します: {name or url}")
         return
     try:
-        pend = _pend.load()
         if _pend.done(pend, url):
             _pend.save(pend)
             _log(f"待ち行列から出して台帳へ移しました: {name or url}")
@@ -946,6 +963,36 @@ def selftest() -> int:
         t("★★関所の呼び出しに文字コード指定がある★★"
           "（無いと関所が理由を印字した瞬間に落ち、本当の理由が失われた・2026-08-01実機）",
           "PYTHONIOENCODING" in inspect.getsource(push_after_publish))
+        t("★★push目印は原子的に書く★★"
+          "（途中で止まると壊れた目印が残り、全公開が恒久停止した・Codex23回目）",
+          "write_atomic" in inspect.getsource(_mark_push_pending)
+          and 'open(PUSH_PENDING, "w"' not in inspect.getsource(_mark_push_pending))
+        # ★台帳へ移した機種が、次の保存で行列に蘇らない★
+        #   （2026-08-01・複数夜の通しで見つけた。give_up_now が別読みして
+        #     外していたので、ループ側の古い行列の保存が削除を打ち消していた）
+        _real_store = _pend.STORE
+        _real_lg = globals()["_ledger"]
+        _pend.STORE = os.path.join(_tmpdir, "pend_resurrect.json")
+        globals()["_ledger"] = lambda *a, **k: True
+        try:
+            _pd = {"schema": _pend.SCHEMA, "items": {}}
+            _pend.add(_pd, "残る機種", "https://m.example/stay/", "m", "2026-09")
+            _pend.add(_pd, "台帳行き", "https://m.example/dead/", "m", "2026-09")
+            _pend.save(_pd)
+            give_up_now(_pd, "https://m.example/dead/", "台帳行き", ["x"])
+            _pend.mark_tried(_pd, "https://m.example/stay/")   # ループの次の周
+            _pend.save(_pd)
+            _after = _pend.load()["items"]
+            t("★★台帳へ移した機種が次の保存で蘇らない★★"
+              "（毎晩蘇って行列に居座り、台帳にも同じ件が積まれ続けた・2026-08-01実機）",
+              "https://m.example/dead/" not in _after
+              and "https://m.example/stay/" in _after)
+            t("　行列の保存は呼び出し元の1オブジェクトに一本化",
+              "pend" in inspect.signature(give_up_now).parameters
+              and "pend" in inspect.signature(finish_publish).parameters)
+        finally:
+            _pend.STORE = _real_store
+            globals()["_ledger"] = _real_lg
         t("★★コミットが通った直後に止まっても、次で分かる★★"
           "（WRITTEN のままコミット済みだと、やり直しが永久に失敗した・Codex22回目）",
           "_committed_on_top" in inspect.getsource(retry_push_first)
@@ -1257,7 +1304,7 @@ def main() -> int:
         for b in res.get("blocked") or []:
             print("  ★止めました: " + b[:150])
         if res.get("wrote"):
-            ng = finish_publish(res)
+            ng = finish_publish(res, pend)
             for x in ng:
                 print("  ✗ " + x[:200])
                 _log("  ✗ " + x[:300])
@@ -1272,7 +1319,7 @@ def main() -> int:
             break
         # ★やり直しても変わらない理由なら、行列から出して後ろを通す★
         if res.get("blocked") and not retry_later(res["problems"]):
-            give_up_now(work["url"], work["name"], res["problems"])
+            give_up_now(pend, work["url"], work["name"], res["problems"])
     if d["problems"]:
         _ledger("site", "structural", "MATERIAL", "WATCH_PROBLEM",
                 "新台の見張りで確認が要る点が出ました",

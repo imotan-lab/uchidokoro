@@ -77,35 +77,19 @@ def extract_model_code(html: str):
     return None, "MODEL_CODE_NOT_FOUND"
 
 
-# ★題を区切る記号★（サイト側の飾りを切り離すため）
-#   ★「・」「-」は入れない★＝機種名そのものに使われる
-#   （「すーぱぁびん娘・極」を「すーぱぁびん娘」と「極」に割ると別機種を本人にしてしまう）
-_TITLE_SEPS = "|｜(（)）[［]］【】/／<＞>＜"
-
-
-def title_parts(title: str) -> list:
-    """題を区切って、機種名らしいかたまりに分ける。"""
-    out, buf = [], []
-    for ch in title or "":
-        if ch in _TITLE_SEPS:
-            out.append("".join(buf))
-            buf = []
-        else:
-            buf.append(ch)
-    out.append("".join(buf))
-    return [x.strip() for x in out if x.strip()]
-
-
 # ★機種名のすぐ後ろに来てよい語★（題の飾り）
 #   ここに無い語が名前の直後に来たら、**別の機種**とみなす。
 #   「モンキーターン V」の "V"、「すーぱぁびん娘 SP」の "SP" を止めるため。
+#   ★「パチンコ」を入れない★（2026-08-01・Codex23回目を再現して直した）
+#     飾りではなく**別の種目の印**。入れていたせいで
+#     「北斗の拳 パチンコ 新台」のようなパチンコ版のページを本人にできた。
 _DECOR = {
     "新台", "天井", "解析", "スペック", "設定", "判別", "設定判別", "設定差",
     "設定示唆", "やめどき", "ヤメ時", "やめ時", "狙い目", "初打ち", "打ち方",
     "機械割", "導入日", "設置店", "掲示板", "有利区間", "期待値", "評価",
     "感想", "演出", "攻略", "実践", "動画", "画像", "一覧", "情報", "恩恵",
     "ボーナス", "フリーズ", "ちょんぼりすた", "pworld", "ぱちタウン", "dmm",
-    "パチンコ", "パチスロ解析", "解析情報", "スロット新台",
+    "パチスロ解析", "解析情報", "スロット新台",
 }
 _DECOR_CORES = {_ci.normalize_core(w) or w for w in _DECOR}
 
@@ -126,6 +110,40 @@ def title_parts(title: str) -> list:
             buf.append(ch)
     out.append("".join(buf))
     return [x.strip() for x in out if x.strip()]
+
+
+# ★規格の印（L/S）を読む語★（2026-08-01・Codex23回目を再現して直した）
+#   スマスロ系の言い換えはLと同じ規格。パチスロ/スロットはどちらとも言えない。
+_GEN_L_WORDS = ("スマートパチスロ", "スマートスロット", "スマスロ", "メダルレス")
+_GEN_NEUTRAL_WORDS = ("パチスロ", "ぱちすろ", "スロット")
+_GEN_PREFIX_RE = re.compile(r"^[ls](?![a-z])")
+
+
+def _gen_mark(s: str) -> str:
+    """名前の頭に付く規格の印を返す（'L'／'S'／''＝書かれていない）。
+
+    ★なぜ要るか（2026-08-01・Codex23回目。自分で再現した）★
+      芯の比較は表記ゆれを吸収するためにL/Sを落とす。そのせいで
+      「S北斗の拳」のページを「L北斗の拳」の本人にできた。
+      L版とS版は規格も中身も別の機種なので、印どうしが食い違ったら弾く。
+      印が書かれていない題は従来どおり通す（芯とその後ろの検査は別にある）。
+    """
+    t = unicodedata.normalize("NFKC", s or "").lower().lstrip(" 　")
+    while t:
+        hit = False
+        for w in _GEN_L_WORDS:
+            if t.startswith(unicodedata.normalize("NFKC", w).lower()):
+                return "L"
+        for w in _GEN_NEUTRAL_WORDS:
+            wl = unicodedata.normalize("NFKC", w).lower()
+            if t.startswith(wl):
+                t = t[len(wl):].lstrip(" 　")
+                hit = True
+                break
+        if not hit:
+            m = _GEN_PREFIX_RE.match(t)
+            return m.group(0).upper() if m else ""
+    return ""
 
 
 def page_is_machine(html: str, official_name: str):
@@ -156,10 +174,13 @@ def page_is_machine(html: str, official_name: str):
     core = _ci.normalize_core(official_name)
     if not core:
         return False, "OFFICIAL_NAME_HAS_NO_CORE"
+    want_gen = _gen_mark(official_name)
+    gen_conflict = False
     # ★題そのものも候補に入れる★（機種名の中に括弧が入ることがある）
     #   「甲鉄城のカバネリ 海門(うなと)決戦」は、区切ると名前が割れてしまう。
     for seg in [title] + title_parts(title):
-        words = [_ci.normalize_core(w) for w in seg.split()]
+        raw = seg.split()
+        words = [_ci.normalize_core(w) for w in raw]
         for i in range(len(words)):
             joined = ""
             for j in range(i, len(words)):
@@ -171,7 +192,21 @@ def page_is_machine(html: str, official_name: str):
                 while k < len(words) and words[k] == "":
                     k += 1               # 販売区分語などは芯が空になる
                 if k >= len(words) or words[k] in _DECOR_CORES:
+                    # ★規格の印（L/S）が食い違ったら別機種★（2026-08-01・Codex23回目）
+                    #   芯の比較は印を落とすので、S版のページがL版の本人になれた。
+                    #   印は、名前に融合した頭（「S北斗の拳」）と、
+                    #   直前に独立して置かれた語（「L 東京喰種」「スマスロ 甲鉄城…」）
+                    #   の両方から読む。
+                    pre = i
+                    while pre > 0 and words[pre - 1] == "":
+                        pre -= 1          # 芯が空＝規格・販売区分の語
+                    got_gen = _gen_mark(" ".join(raw[pre:i + 1]))
+                    if want_gen and got_gen and got_gen != want_gen:
+                        gen_conflict = True
+                        continue          # 印が違う＝別機種。他の候補を探す
                     return True, "OK"
+    if gen_conflict:
+        return False, "GEN_MARK_CONFLICT"
     return False, "NAME_CORE_MISMATCH"
 
 
@@ -294,6 +329,28 @@ def selftest() -> int:
     t("★名前の芯が違うページからは採らない★",
       page_is_machine("<title>Lスーパービンゴネオ|P-WORLD</title>",
                       "Lすーぱぁびん娘")[0] is False)
+    # ★★Codex23回目（自分で再現してから直した）★★
+    t("★★S版のページをL版の本人にしない★★（規格が違えば別機種・Codex23回目）",
+      page_is_machine("<title>S北斗の拳 新台 | P-WORLD</title>",
+                      "L北斗の拳") == (False, "GEN_MARK_CONFLICT"))
+    t("　逆（L版のページをS版の本人に）も弾く",
+      page_is_machine("<title>L北斗の拳 新台 | P-WORLD</title>",
+                      "S北斗の拳")[0] is False)
+    t("　独立した語の印（L 東京喰種）でも読める",
+      page_is_machine("<title>S 東京喰種 新台 | P-WORLD</title>",
+                      "L 東京喰種")[0] is False)
+    t("　スマスロ表記はLと同じ規格として通す（実データの形）",
+      page_is_machine("<title>スマスロ東京喰種 スロット 新台 天井 解析 | x</title>",
+                      "L 東京喰種")[0] is True)
+    t("　印が書かれていない題は従来どおり通る",
+      page_is_machine("<title>北斗の拳 新台 | P-WORLD</title>",
+                      "L北斗の拳")[0] is True)
+    t("★★「パチンコ」を飾り扱いしない★★（パチンコ版のページを本人にできた・Codex23回目）",
+      page_is_machine("<title>北斗の拳 パチンコ 新台 | P-WORLD</title>",
+                      "北斗の拳")[0] is False)
+    t("　英字の機種名をL/Sの印と取り違えない（lucky等）",
+      _gen_mark("lucky trigger") == "" and _gen_mark("L北斗の拳") == "L"
+      and _gen_mark("スマスロ北斗の拳") == "L" and _gen_mark("パチスロ北斗の拳") == "")
     t("　タイトルが無ければ採らない",
       page_is_machine("<p>本文だけ</p>", "Lすーぱぁびん娘")[0] is False)
 
