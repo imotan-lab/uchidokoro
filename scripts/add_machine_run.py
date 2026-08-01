@@ -273,6 +273,18 @@ def discover(persist: bool = True) -> dict:
                             c.get("official_name") or "", url, mid,
                             (c.get("release") or {}).get("value") or "",
                             "初回に読めなかった: " + " / ".join(c["reasons"])[:200])
+                elif ((r.get("hints") or {}).get(url) or "") \
+                        and _nw.is_recent((r.get("hints") or {}).get(url)):
+                    # ★一覧カードの年月が新台の範囲なら、分類失敗の種類を問わず残す★
+                    #   （2026-08-02・Codex39回目。先行公開直後の薄い個別ページが
+                    #     「パチスロのページに見えません」＝永久理由になり、
+                    #     初回記録で既知に沈んでいた）
+                    if persist:
+                        kept0 = _remember_url(
+                            c.get("official_name") or "", url, mid,
+                            (r.get("hints") or {}).get(url) or "",
+                            "初回・個別ページが未完成の疑い: "
+                            + " / ".join(c["reasons"])[:200])
                 # 範囲外など「やり直しても変わらない」は初回の古い機種＝台帳に残さない
                 if persist and not kept0:
                     # ★どこにも残せなかったURLは「見た」ことにしない★（Codex37回目）
@@ -403,6 +415,15 @@ def gather(name: str) -> dict:
             f"型式名の規格印が確認できません（機種は{_want_gen}版なのに、"
             f"型式名「{got['model_code']}」に{_want_gen}の印がありません。"
             "同名の旧機種のページを見ている可能性）")
+        got["model_code"] = None
+    elif got["model_code"] and not _want_gen:
+        # ★公式名から規格（L/S）を読めない機種は照合できない★（2026-08-02・Codex39回目）
+        #   照合を飛ばすと、同名の旧機種の型式・材料で新台記事を作れる。
+        #   機械では区別を確定できないので、人が確認する（台帳へ）。
+        got["problems"].append(
+            f"型式名: 機種の規格（L/S）が公式名「{name[:30]}」から読めず、"
+            f"型式名「{got['model_code']}」が同名の旧機種のものでないと"
+            "確認できません（人が確認してください）")
         got["model_code"] = None
     def _read(mod, jp):
         """器ごとに全ページを読み、★使えなかったページの理由を必ず残す★
@@ -604,6 +625,14 @@ def verify_official(name: str, official_url: str,
     _why_bad = _nw.bad_page(html, looks_like_list=True)
     if _why_bad:
         out["problems"].append(f"公式ページが読める状態ではありません（{_why_bad}）")
+        return out
+    # ★題がエラー文の soft 404 も待つ★（2026-08-02・Codex39回目。
+    #   classify と同じ判定。無いと「名前が一致しません」＝永久理由になった）
+    _t_low = unicodedata.normalize("NFKC", _nw.page_title(html)).lower()
+    if any(w.lower() in _t_low for w in _nw._BAD_PAGE_WORDS):
+        out["problems"].append(
+            f"公式ページが読める状態ではありません（題がエラー文です: "
+            f"{_nw.page_title(html)[:40]!r}）")
         return out
     # ★回胴機の判定は「ページ全体」ではなく機種固有の領域で★
     #   （2026-08-02・Codex28〜29回目。共通ナビの「パチスロ」の一語で
@@ -1259,7 +1288,7 @@ def selftest() -> int:
             "b": {"state": "HEALTHY_NO_MATCH", "url": None, "why": "載っていません",
                   "candidates": [], "surfaces": "1/1", "index_size": 9, "problems": []},
         }}
-        g = gather("X")
+        g = gather("L試験機")
         t("★見つからない名鑑があっても、理由を残して進む★",
           len(g["urls"]) == 1 and any("HEALTHY_NO_MATCH" in p for p in g["problems"]))
         t("★★名鑑が1件だけなら材料を集めに行かない★★（2件以上が要る）",
@@ -1270,19 +1299,19 @@ def selftest() -> int:
             k: {"state": "FOUND", "url": f"https://{k}.example/1", "why": "",
                 "candidates": [], "surfaces": "1/1", "index_size": 9, "problems": []}
             for k in ("a", "b")}}
-        _mc.lookup = lambda u, n: {"url": u, "model_code": "C1", "reason": "OK"}
+        _mc.lookup = lambda u, n: {"url": u, "model_code": "L1", "reason": "OK"}
         _sl.read_page = lambda u, n: {
             "url": u, "host": u.split("/")[2], "ok": True, "reason": "OK",
             "fields": {"payout_rate": {"1": "97.3%"}}}
-        g2 = gather("X")
+        g2 = gather("L試験機")
         t("　2件そろえば型式名と材料を集める",
-          g2["model_code"] == "C1" and g2["material"] is not None)
+          g2["model_code"] == "L1" and g2["material"] is not None)
 
         # ★公式ページは本物を想定して差し替える★
         #   （開けなければ止まる作りなので、通る場合の試験には中身が要る）
         real_get = _nw._get
         _nw._get = lambda u, timeout=20: (
-            "<title>パチスロX</title><body>2026年9月 登場</body>")
+            "<title>L試験機</title><body>2026年9月 登場</body>")
         # ★メーカー名簿も試験用にする★（本番の名簿を書き換えない）
         real_cats = _nw.CATALOGS
         _nw.CATALOGS = os.path.join(_tmpdir, "cats.json")
@@ -1431,13 +1460,13 @@ def selftest() -> int:
         #     止める理由の一覧に入れ忘れていたことに気づけなかった）
         _nw._get = lambda u, timeout=20: (
             "<title>X</title><body>2019年4月 登場</body>")
-        _old = run_one("X", "https://m.example/products/slot/zzz/", "m", "")
+        _old = run_one("L試験機", "https://m.example/products/slot/zzz/", "m", "")
         t("★★古い機種は記事そのものを作らない★★（通しで確かめる・Codex18回目）",
           "preview" not in _old and _old["wrote"] == []
           and any("範囲外" in x for x in _old["blocked"]))
         _nw._get = lambda u, timeout=20: (
-            "<title>パチスロX</title><body>2026年9月 登場</body>")
-        _bad = run_one("X", "https://m.example/products/slot/zzz/", "nosuch", "2026-09")
+            "<title>L試験機</title><body>2026年9月 登場</body>")
+        _bad = run_one("L試験機", "https://m.example/products/slot/zzz/", "nosuch", "2026-09")
         t("★★名簿に無いメーカーでは記事そのものを作らない★★（通しで確かめる）",
           "preview" not in _bad and _bad["wrote"] == []
           and any("名簿" in x for x in _bad["blocked"]))
@@ -1445,14 +1474,14 @@ def selftest() -> int:
         _nw.CATALOGS = os.path.join(_tmpdir, "こわれている.json")
         with open(_nw.CATALOGS, "w", encoding="utf-8") as _f:
             _f.write("{ こわれた")
-        _brk = run_one("X", "https://m.example/products/slot/zzz/", "m", "2026-09")
+        _brk = run_one("L試験機", "https://m.example/products/slot/zzz/", "m", "2026-09")
         _nw.CATALOGS = _real_cats2
         t("★★名簿を読めないときも記事を作らない★★"
           "（読めない＝合っているとは言えない・Codex18回目）",
           "preview" not in _brk and _brk["wrote"] == []
           and any("名簿" in x for x in _brk["blocked"]))
 
-        r = run_one("X", "https://m.example/products/slot/zzz/", "m", "2026-09")
+        r = run_one("L試験機", "https://m.example/products/slot/zzz/", "m", "2026-09")
         t("★既定では書き込まない（dry-run）★", r["wrote"] == [])
         t("　組み立てた結果を返す（中身を見てから書ける）",
           r["preview"]["machine"]["status"] == "preview")
@@ -1460,7 +1489,7 @@ def selftest() -> int:
 
         _sl.read_page = lambda u, n: {"url": u, "host": u.split("/")[2], "ok": True,
                                       "reason": "OK", "fields": {}}
-        r2 = run_one("X", "https://m.example/products/slot/zzz/", "m", "2026-09")
+        r2 = run_one("L試験機", "https://m.example/products/slot/zzz/", "m", "2026-09")
         t("★★材料がゼロなら記事を作らない★★",
           "preview" not in r2 and any("採用できた材料" in p for p in r2["problems"]))
 
@@ -1470,12 +1499,12 @@ def selftest() -> int:
             "fields": {"payout_rate": {"1": "97.3%"}}}
         _mc.lookup = lambda u, n: {"url": u, "model_code": None,
                                    "reason": "MODEL_CODE_NOT_FOUND"}
-        r3 = run_one("X", "https://m.example/products/slot/zzz/", "m", "2026-09")
+        r3 = run_one("L試験機", "https://m.example/products/slot/zzz/", "m", "2026-09")
         t("★★型式名が確定していなければ記事を作らない★★"
           "（材料が採れていても作れてしまう穴があった）",
           "preview" not in r3 and any("型式名" in x for x in r3["blocked"]))
 
-        _mc.lookup = lambda u, n: {"url": u, "model_code": "C1", "reason": "OK"}
+        _mc.lookup = lambda u, n: {"url": u, "model_code": "L1", "reason": "OK"}
         _di.find = lambda n, c=None: {"results": {
             "a": {"state": "FOUND", "url": "https://a.example/1", "why": "",
                   "candidates": [], "surfaces": "1/1", "index_size": 9, "problems": []},
@@ -1484,7 +1513,7 @@ def selftest() -> int:
             "c": {"state": "AMBIGUOUS_CANDIDATES", "url": None, "why": "候補が3件",
                   "candidates": [1, 2, 3], "surfaces": "1/1", "index_size": 9,
                   "problems": []}}}
-        r4 = run_one("X", "https://m.example/products/slot/zzz/", "m", "2026-09")
+        r4 = run_one("L試験機", "https://m.example/products/slot/zzz/", "m", "2026-09")
         t("★★使わない3件目の名鑑が曖昧でも、成立した2票を捨てない★★"
           "（永久理由扱いで即・台帳送りになっていた・Codex27回目）",
           not any("AMBIGUOUS" in x for x in r4.get("problems") or []))
@@ -1492,7 +1521,7 @@ def selftest() -> int:
         _real_lookup28 = _mc.lookup
         _mc.lookup = lambda u, n: {"url": u, "model_code": None,
                                    "reason": "MODEL_CODE_NOT_FOUND"}
-        r4c = run_one("X", "https://m.example/products/slot/zzz/", "m", "2026-09")
+        r4c = run_one("L試験機", "https://m.example/products/slot/zzz/", "m", "2026-09")
         _mc.lookup = _real_lookup28
         t("★★票が成立しなければ、使わなかった名鑑の曖昧さも問題として残す★★"
           "（URL2件=2票ではない・Codex28回目）",
@@ -1503,7 +1532,7 @@ def selftest() -> int:
             "c": {"state": "AMBIGUOUS_CANDIDATES", "url": None, "why": "候補が3件",
                   "candidates": [1, 2, 3], "surfaces": "1/1", "index_size": 9,
                   "problems": []}}}
-        r4b = run_one("X", "https://m.example/products/slot/zzz/", "m", "2026-09")
+        r4b = run_one("L試験機", "https://m.example/products/slot/zzz/", "m", "2026-09")
         t("　2票に満たないときの曖昧は、従来どおり問題として残す（人が解く）",
           "preview" not in r4b
           and any("AMBIGUOUS" in x for x in r4b["blocked"]))
@@ -1619,6 +1648,14 @@ def selftest() -> int:
               "（エラー題の名前がorのせいで直らなかった・Codex38回目）",
               "名前を公式の現在値に直します" in inspect.getsource(fill_missing)
               and " or (c.get" not in inspect.getsource(fill_missing))
+            t("★★規格を読めない公式名では型式を採用しない★★"
+              "（照合を飛ばすと同名旧機種の型式・材料で新台を書けた・Codex39回目）",
+              "規格（L/S）が公式名" in inspect.getsource(gather))
+            t("★★公開前の照合でも soft 404（題がエラー文）を待つ★★（Codex39回目）",
+              "題がエラー文です" in inspect.getsource(verify_official))
+            t("★★初回・カード年月が新台範囲なら分類失敗でも残す★★"
+              "（薄い先行ページが永久理由で既知に沈んだ・Codex39回目）",
+              "初回・個別ページが未完成の疑い" in inspect.getsource(discover))
             t("★★初回に読めなかった将来の新台を沈めない★★（Codex37回目）",
               "初回に読めなかった" in inspect.getsource(discover)
               and "初回に残せなかったので" in inspect.getsource(discover))
@@ -1668,7 +1705,7 @@ def selftest() -> int:
               _blocking(["公式ページを取得できません: 取得できません（URLError）"]))
             _nw._get = lambda u, timeout=20: (
                 _ for _ in ()).throw(RuntimeError("開けない"))
-            r5 = run_one("X", "https://m.example/products/slot/zzz/", "m", "2026-09")
+            r5 = run_one("L試験機", "https://m.example/products/slot/zzz/", "m", "2026-09")
             t("★★試したときの架空機種は待ち行列に入れない★★（実際に混入した）",
               _remember("通し確認機ZZZ",
                         "https://m.example/products/slot/zzz_x/", "m",

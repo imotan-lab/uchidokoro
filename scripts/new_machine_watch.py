@@ -281,24 +281,34 @@ def shape_warnings(html: str, base_url: str, link_prefix: str) -> list:
     got_slugs = {u.rstrip("/").split("/")[-1] for u in got}
     odd = set()
     for href in (_visible_anchor_hrefs(html) or []):
-        absu = urllib.parse.urljoin(base_url, href.strip())
-        absu = absu.split("#")[0].split("?")[0]
+        absu_full = urllib.parse.urljoin(base_url, href.strip())
+        frag = urllib.parse.urlparse(absu_full).fragment
+        absu = absu_full.split("#")[0].split("?")[0]
         h, pt = _hp(absu)
         if h != ph or not pt.startswith(pp):
+            continue
+        # ★ハッシュ経路（#/machine/…）も知らせる★（2026-08-02・Codex39回目）
+        #   #以降を先に捨てる読み方では一覧自身に潰れ、黙って見逃していた。
+        #   ページ内ジャンプ（#top等）と区別するため「/」を含むものだけ。
+        if frag and "/" in frag:
+            odd.add("#" + frag)
             continue
         rest = pt[len(pp):].strip("/")
         if not rest or _YEAR_ONLY.match(rest):
             continue
         first = rest.split("/")[0]
         if first in got_slugs or (link_prefix.rstrip("/") + "/" + first + "/") in got:
-            # ★既知機種の下でも、資料ファイル以外は知らせる★（2026-08-02・Codex38回目）
-            #   /old/spec.html は機種ページの資料だが、/old/new_variant/ のような
-            #   下層ディレクトリは新機種かもしれない。黙って捨てない。
+            # ★既知機種の下でも、よくある資料ファイル以外は知らせる★
+            #   （2026-08-02・Codex38〜39回目。/old/new_variant.html のような
+            #     「拡張子つきの別機種」も黙って捨てない）
             tail = rest[len(first):].strip("/")
             if not tail:
                 continue
-            if "/" not in tail and "." in tail:
-                continue                  # 機種ページ配下の資料ファイル
+            base_name = tail.split("/")[-1].rsplit(".", 1)[0].lower()
+            if "/" not in tail and "." in tail and base_name in (
+                    "index", "spec", "movie", "gallery", "special",
+                    "about", "point", "detail", "top", "main"):
+                continue                  # 機種ページ配下のよくある資料
             odd.add(rest)
             continue
         odd.add(rest)
@@ -526,7 +536,10 @@ def _visible_text(html: str) -> str:
 
 
 # ★導入の年月だと分かる言葉★（同じ行にあるものだけ信じる）
-_RELEASE_CONTEXT = ("導入", "登場", "発売", "稼働", "リリース", "デビュー",
+# ★「発売」を入れない★（2026-08-02・Codex39回目）
+#   「サウンドトラック発売 2026年9月」のような関連商品の発売月を
+#   台の登場月として採ってしまう。台は「導入・登場・稼働」で書かれる。
+_RELEASE_CONTEXT = ("導入", "登場", "稼働", "リリース", "デビュー",
                     "ホール", "設置", "納品")
 # ★導入とは別の話だと分かる言葉★（この行の年月は採らない）
 _RELEASE_NOISE = ("更新", "お知らせ", "ニュース", "news", "News", "公開",
@@ -1367,6 +1380,26 @@ def selftest() -> int:
                      '<a href="https://m.example/products/slot/ok_one/new_kishu/">n</a>',
                      "https://m.example/products/slot/",
                      "https://m.example/products/slot/") == ["ok_one/new_kishu"])
+    # ★★Codex39回目★★
+    t("★★関連商品の「発売」を導入の文脈にしない★★（Codex39回目）",
+      release_month("オリジナルサウンドトラック発売 2026年9月") is None
+      and release_month("2026年9月導入予定")["value"] == "2026-09")
+    t("★★ハッシュ経路（#/machine/…）のリンクを知らせる★★（Codex39回目）",
+      shape_warnings('<a href="https://m.example/products/slot/#/machine/newone">n</a>'
+                     '<a href="https://m.example/products/slot/ok_one/">y</a>',
+                     "https://m.example/products/slot/",
+                     "https://m.example/products/slot/") == ["#/machine/newone"])
+    t("　ページ内ジャンプ（#top）では騒がない",
+      shape_warnings('<a href="https://m.example/products/slot/#top">t</a>'
+                     '<a href="https://m.example/products/slot/ok_one/">y</a>',
+                     "https://m.example/products/slot/",
+                     "https://m.example/products/slot/") == [])
+    t("★★既知機種の下の拡張子つき別機種（new_variant.html）も知らせる★★（Codex39回目）",
+      shape_warnings('<a href="https://m.example/products/slot/ok_one/">y</a>'
+                     '<a href="https://m.example/products/slot/ok_one/new_variant.html">n</a>',
+                     "https://m.example/products/slot/",
+                     "https://m.example/products/slot/")
+      == ["ok_one/new_variant.html"])
     t("　カードの構造が無いページでは採らない（安全側）",
       list_release_hints(
           '<a href="https://m.example/products/slot/alpha/">A</a> 導入 2026.9 '
