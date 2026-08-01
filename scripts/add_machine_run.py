@@ -152,7 +152,10 @@ def discover() -> dict:
             out["first_time"].append(f"{mid}（{r['total']}件を記録）")
             continue
         for url in r["new"]:
-            c = _nw.classify(url, None)
+            # ★公式一覧のカードの年月を控えとして渡す★（2026-08-02・Codex27回目）
+            #   個別ページに年月が無いメーカー（サミー等）でも記事化できるように。
+            c = _nw.classify(url, None,
+                             list_release=(r.get("hints") or {}).get(url))
             kept = True
             if c["ok"]:
                 out["candidates"].append({"maker": mid, **c})
@@ -204,10 +207,20 @@ def gather(name: str) -> dict:
     got = {"name": name, "urls": [], "model_code": None, "material": None,
            "problems": []}
     fr = _di.find(name)
-    for did, v in fr["results"].items():
-        if v["state"] != "FOUND":
-            got["problems"].append(f"{did}: {v['state']} {v['why']}"[:160])
     got["urls"] = _di.found_urls(fr)
+    for did, v in fr["results"].items():
+        if v["state"] == "FOUND":
+            continue
+        msg = f"{did}: {v['state']} {v['why']}"[:160]
+        # ★使わない名鑑の曖昧さで、成立している2票を捨てない★（2026-08-02・Codex27回目）
+        #   2名鑑がきちんと見つかっているのに、3件目のAMBIGUOUSを全体の問題に
+        #   足していたので、やり直しても変わらない理由として**即・台帳送り**になっていた。
+        #   2票そろっているなら、その名鑑を使わないという記録だけ残す。
+        #   2票に満たないときは従来どおり問題として残す（曖昧の解消は人の仕事）。
+        if len(got["urls"]) >= 2:
+            _log(f"  （使わない名鑑）{msg}")
+        else:
+            got["problems"].append(msg)
     _log(f"材料集め開始: {name} / 名鑑{len(got['urls'])}件 "
          + " ".join(f"{d}={v['state']}" for d, v in fr["results"].items()))
     if len(got["urls"]) < 2:
@@ -401,7 +414,13 @@ def verify_official(name: str, official_url: str,
         # 同じメーカーの中の転送（https化・スラッシュ補正）は普通に起きるので
         # それ自体は問題にしない。★範囲の外なら下の照合が止める★
         _log(f"  公式ページが転送されました: {official_url[:60]} → {final_url[:60]}")
-    ok, why = _mc.page_is_machine(html, name, strict_tail=False)
+    # ★尾部にはそのメーカーの社名・銘柄だけを追加で許す★（2026-08-02・Codex27回目）
+    #   検査を丸ごと外していたら「Lすーぱぁびん娘（SP）|BELLCO」のような
+    #   派生機の公式URLを本機として通せた。社名の飾り（|BELLCO / |Sammy）は
+    #   名簿から作った許可で通し、派生の印（SP等）は従来どおり弾く。
+    ok, why = _mc.page_is_machine(
+        html, name,
+        extra_tail_ok=_mc.maker_brand_cores(maker) if maker else None)
     if not ok:
         out["problems"].append(
             f"公式ページと名前が一致しません（{why}）: "
@@ -411,6 +430,14 @@ def verify_official(name: str, official_url: str,
     else:
         out["problems"].append("メーカーが指定されていません")
     got = _nw.release_month(_nw._visible_text(html))
+    if not got and maker:
+        # ★個別ページに年月が無ければ、公式一覧のカードから取り直す★
+        #   （2026-08-02・Codex27回目。サミーは一覧に「2026.9」・個別には無し）
+        #   渡された値は使わない＝いま公式の一覧を読み直して確かめる。
+        lv = _release_from_official_list(maker, official_url)
+        if lv:
+            got = {"value": lv, "precision": "month",
+                   "quote": "メーカー公式一覧のカードに記載"}
     if not got:
         out["problems"].append(
             "公式ページに登場年月が書かれていません（こちらで日付を補わない）")
@@ -424,6 +451,40 @@ def verify_official(name: str, official_url: str,
         out["problems"].append(
             f"登場年月が新台の範囲外です（{out['release']}）")
     return out
+
+
+# ★一覧の読み直しは一晩に1社1回★（描画つきの一覧もあるため）
+_LIST_HINT_CACHE: dict = {}
+
+
+def _release_from_official_list(maker: str, official_url: str) -> str:
+    """★メーカー公式の一覧のカードに書かれた登場年月★（個別に無いときの控え）
+
+    渡された値・待ち行列の記録は使わず、いま公式一覧を読み直して取る。
+    取れなければ空文字（＝「書かれていません」として待つ・fail-closed）。
+    """
+    if maker not in _LIST_HINT_CACHE:
+        hints = {}
+        try:
+            cats = _sj.read_json(_nw.CATALOGS, expect=dict)["catalogs"]
+            conf = cats.get(maker)
+            if conf and _nw.is_catalog(conf) \
+                    and str(conf.get("status") or "") == "ACTIVE":
+                if str(conf.get("fetch") or "static") == "render":
+                    html, health = _nw._get_rendered(conf["list_url"],
+                                                     conf["link_prefix"])
+                    if health.get("problem"):
+                        html = ""
+                else:
+                    html = _nw._get(conf["list_url"])
+                if html:
+                    hints = _nw.list_release_hints(
+                        html, conf["list_url"], conf["link_prefix"])
+        except Exception as e:            # noqa: BLE001
+            _log(f"  一覧の年月の控えを読めませんでした（{maker}）: {e}")
+        _LIST_HINT_CACHE[maker] = hints
+    return str(_LIST_HINT_CACHE[maker].get(
+        official_url.rstrip("/") + "/", "") or "")
 
 
 def _verify_maker(official_url: str, maker: str) -> list:
@@ -1160,9 +1221,19 @@ def selftest() -> int:
                   "candidates": [1, 2, 3], "surfaces": "1/1", "index_size": 9,
                   "problems": []}}}
         r4 = run_one("X", "https://m.example/products/slot/zzz/", "m", "2026-09")
-        t("★★1つでも候補を絞れない名鑑があれば記事を作らない★★",
-          "preview" not in r4
-          and any("AMBIGUOUS" in x for x in r4["blocked"]))
+        t("★★使わない3件目の名鑑が曖昧でも、成立した2票を捨てない★★"
+          "（永久理由扱いで即・台帳送りになっていた・Codex27回目）",
+          not any("AMBIGUOUS" in x for x in r4.get("problems") or []))
+        _di.find = lambda n, c=None: {"results": {
+            "a": {"state": "FOUND", "url": "https://a.example/1", "why": "",
+                  "candidates": [], "surfaces": "1/1", "index_size": 9, "problems": []},
+            "c": {"state": "AMBIGUOUS_CANDIDATES", "url": None, "why": "候補が3件",
+                  "candidates": [1, 2, 3], "surfaces": "1/1", "index_size": 9,
+                  "problems": []}}}
+        r4b = run_one("X", "https://m.example/products/slot/zzz/", "m", "2026-09")
+        t("　2票に満たないときの曖昧は、従来どおり問題として残す（人が解く）",
+          "preview" not in r4b
+          and any("AMBIGUOUS" in x for x in r4b["blocked"]))
 
         real_get, real_page = _nw._get, _mc.page_is_machine
         try:
@@ -1174,7 +1245,29 @@ def selftest() -> int:
             t("★★公式ページが別機種なら止める★★"
               "（機種Aの名前＋機種BのURLで記事ができた穴・実際に再現した）",
               v and "一致しません" in v[0])
-            _nw._get = lambda u, timeout=20: "<title>Lすーぱぁびん娘|BELLCO</title>"
+            _nw._get = lambda u, timeout=20: (
+                "<title>Lすーぱぁびん娘（SP） | EXAMPLE</title>"
+                "<body>2026年9月 登場</body>")
+            v2 = verify_official(
+                "Lすーぱぁびん娘",
+                "https://m.example/products/slot/lbinko/", "m")["problems"]
+            t("★★派生機の公式URL（…（SP）|社名）を本機として通さない★★"
+              "（公式だけ尾部検査を外していて通っていた・Codex27回目）",
+              any("一致しません" in x for x in v2))
+            # ★個別ページに年月が無くても、公式一覧の控えで通る★（Codex27回目）
+            _nw._get = lambda u, timeout=20: (
+                "<title>Lすーぱぁびん娘|EXAMPLE</title><body>本文に年月なし</body>")
+            _LIST_HINT_CACHE.clear()
+            _LIST_HINT_CACHE["m"] = {
+                "https://m.example/products/slot/lbinko/": "2026-09"}
+            v3 = verify_official("Lすーぱぁびん娘",
+                                 "https://m.example/products/slot/lbinko/", "m")
+            _LIST_HINT_CACHE.clear()
+            t("★★個別に年月が無くても、公式一覧のカードの年月で通せる★★"
+              "（サミーは一覧に「2026.9」・個別には無し・Codex27回目）",
+              v3["release"] == "2026-09"
+              and not any("書かれていません" in x for x in v3["problems"]))
+            _nw._get = lambda u, timeout=20: "<title>Lすーぱぁびん娘|EXAMPLE</title>"
             t("★★既に登録されている機種は作らない★★（実際に二重登録できた・2026-07-31）",
               _blocking(["既に登録されている疑い: slug=super_binmusume"]))
             t("　実データでも既存機種を見つけられる",
@@ -1230,7 +1323,7 @@ def selftest() -> int:
               "preview" not in r5
               and any("公式ページを取得できません" in x for x in r5["blocked"]))
             _nw._get = lambda u, timeout=20: (
-                "<title>Lすーぱぁびん娘|BELLCO</title><body>2026年9月 登場</body>")
+                "<title>Lすーぱぁびん娘|EXAMPLE</title><body>2026年9月 登場</body>")
             t("　同じ機種なら通る",
               verify_official("Lすーぱぁびん娘", "https://m.example/products/slot/lbinko/",
                               "m")["problems"] == [])
@@ -1240,7 +1333,7 @@ def selftest() -> int:
                               "https://m.example/products/slot/lbinko/",
                               "m")["release"] == "2026-09")
             _nw._get = lambda u, timeout=20: (
-                "<title>Lすーぱぁびん娘|BELLCO</title><body>2019年4月 登場</body>")
+                "<title>Lすーぱぁびん娘|EXAMPLE</title><body>2019年4月 登場</body>")
             t("★★古い機種を新台として出せない★★"
               "（--name の経路は新台の範囲を見ていなかった・Codex17回目）",
               any("範囲外" in x for x in verify_official(

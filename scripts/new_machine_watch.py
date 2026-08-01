@@ -185,6 +185,40 @@ def product_urls(html: str, base_url: str, link_prefix: str) -> list:
     return sorted(out)
 
 
+def list_release_hints(html: str, base_url: str, link_prefix: str) -> dict:
+    """一覧ページのカードから「機種URL → 一覧に書かれた登場年月」を取る。
+
+    ★なぜ要るか（2026-08-02・Codex27回目。サミーの実ページで裏取り済み）★
+      サミーは一覧に「スマスロ リコリス・リコイル 2026.9」と書くが、
+      個別ページの本文には登場年月が無い。個別だけ見ていると
+      **正しい月が公式にあるのに記事化できない**。
+      一覧もメーカー公式なので、カード単位（そのリンクから次のリンクまで）で
+      年月を探し、個別に無いときの公式の控えとして使う。
+      ★カードの範囲に年月が2つ以上あれば採らない★（release_month と同じ流儀）。
+    """
+    anchors = []                          # (位置, 正規化した機種URL or None)
+    for m in re.finditer(r'href="([^"]+)"', html):
+        absu = urllib.parse.urljoin(base_url, m.group(1).strip())
+        absu = absu.split("#")[0].split("?")[0]
+        norm = None
+        if absu.startswith(link_prefix):
+            rest = absu[len(link_prefix):].strip("/")
+            if rest and "/" not in rest and _SLUGLIKE.match(rest) \
+                    and not _YEAR_ONLY.match(rest):
+                norm = link_prefix.rstrip("/") + "/" + rest + "/"
+        anchors.append((m.start(), norm))
+    out = {}
+    for i, (pos, norm) in enumerate(anchors):
+        if not norm:
+            continue
+        end = anchors[i + 1][0] if i + 1 < len(anchors) else min(
+            len(html), pos + 4000)
+        got = release_month(_visible_text(html[pos:end]))
+        if got and norm not in out:
+            out[norm] = got["value"]
+    return out
+
+
 def page_title(html: str) -> str:
     m = re.search(r"(?is)<title[^>]*>(.*?)</title\s*>", html)
     if not m:
@@ -216,7 +250,10 @@ def machine_name(html: str) -> str:
 #   1つでも欠けたら候補にせず、理由を残す（黙って落とさない）。
 
 _SLOT_WORDS = ("パチスロ", "スロット", "回胴", "スマスロ", "純増", "AT", "ART")
-_RELEASE_RE = re.compile(r"(20\d\d)年\s*(\d{1,2})月")
+# ★「2026年9月」だけでなく「2026.9」「2026/9」も公式が使う★
+#   （2026-08-02・Codex27回目。サミーの一覧は「2026.9」形式で、
+#     個別ページには年月が無い＝この形を読めないと記事化できない機種が出る）
+_RELEASE_RE = re.compile(r"(?<![0-9])(20\d\d)(?:年|[.．/／])\s*(\d{1,2})(?:月|(?![0-9]))")
 
 
 def _visible_text(html: str) -> str:
@@ -258,6 +295,8 @@ def release_month(text: str):
     ctx_vals, all_vals = [], []
     for line in text.splitlines():
         for m in _RELEASE_RE.finditer(line):
+            if not 1 <= int(m.group(2)) <= 12:
+                continue                  # 「2026.13」等は年月ではない
             got = {"value": f"{m.group(1)}-{int(m.group(2)):02d}",
                    "precision": "month", "quote": m.group(0)}
             all_vals.append((got, line))
@@ -317,8 +356,14 @@ def is_recent(ym: str, today=None) -> bool:
     return -RECENT_BACK_MONTHS <= months <= RECENT_AHEAD_MONTHS
 
 
-def classify(url: str, seen_entry: dict | None = None, today=None) -> dict:
-    """新台候補として通してよいか判定する。★通らない理由を必ず残す★"""
+def classify(url: str, seen_entry: dict | None = None, today=None,
+             list_release: str | None = None) -> dict:
+    """新台候補として通してよいか判定する。★通らない理由を必ず残す★
+
+    list_release: 同じメーカーの**公式一覧のカード**に書かれていた年月。
+      個別ページに年月が無いメーカー（サミー等）の公式の控え。
+      ★メーカー公式の一覧から取った値だけを渡すこと★（Codex27回目）
+    """
     out = {"url": url, "ok": False, "reasons": [], "official_name": "",
            "release": None}
     try:
@@ -329,6 +374,11 @@ def classify(url: str, seen_entry: dict | None = None, today=None) -> dict:
     text = _visible_text(html)
     out["official_name"] = machine_name(html)
     out["release"] = release_month(text)
+    if not out["release"] and list_release:
+        # ★個別ページに無ければ、公式一覧のカードの年月を使う★
+        out["release"] = {"value": str(list_release), "precision": "month",
+                          "quote": "メーカー公式一覧のカードに記載",
+                          "source": "maker_list"}
 
     if not out["official_name"]:
         out["reasons"].append("公式ページから機種名を取れません")
@@ -528,6 +578,13 @@ def scan_maker(maker_id: str, conf: dict, seen: dict, record: bool = True) -> di
 
     urls = product_urls(html, conf["list_url"], conf["link_prefix"])
     out["total"] = len(urls)
+    # ★一覧のカードに書かれた年月も控える★（2026-08-02・Codex27回目）
+    #   個別ページに年月が無いメーカー（サミー等）の公式の控えになる。
+    try:
+        out["hints"] = list_release_hints(html, conf["list_url"],
+                                          conf["link_prefix"])
+    except Exception:                     # noqa: BLE001
+        out["hints"] = {}                 # 控えが取れなくても見張りは続ける
     least = int(conf.get("min_expected") or 1)
     if len(urls) < least:
         # ★ここが黙って0件になる事故を止める唯一の砦★
@@ -761,6 +818,46 @@ def selftest() -> int:
     t("　雑音の行（更新・お知らせ・©）の年月は使わない",
       release_month("最終更新 2026年7月") is None
       and release_month("Copyright 2026年1月") is None)
+    # ★★Codex27回目：サミーの一覧は「2026.9」形式・個別ページに年月なし★★
+    t("★★「2026.9」形式も読める★★（サミーの一覧の実形式・Codex27回目）",
+      release_month("導入 2026.9")["value"] == "2026-09"
+      and release_month("導入 2026/10")["value"] == "2026-10")
+    t("　「2026.13」は年月として読まない",
+      release_month("導入 2026.13") is None)
+    t("　小数・連番を年月と取り違えない",
+      release_month("導入 12026.9") is None
+      and release_month("導入 2026.91") is None)
+    _list_html = (
+        '<div><a href="https://m.example/products/slot/rikoriko/">リコリコ</a>'
+        '<p>2026.9</p></div>'
+        '<div><a href="https://m.example/products/slot/juoh/">獣王</a>'
+        '<p>2026.10</p></div>'
+        '<div><a href="https://m.example/products/slot/nazo/">なぞ</a>'
+        '<p>2026.9 と 2026.11</p></div>')
+    _hints = list_release_hints(_list_html, "https://m.example/products/slot/",
+                                "https://m.example/products/slot/")
+    t("★★一覧のカードから「URL→登場年月」を取れる★★（Codex27回目）",
+      _hints.get("https://m.example/products/slot/rikoriko/") == "2026-09"
+      and _hints.get("https://m.example/products/slot/juoh/") == "2026-10")
+    t("　カードに年月が2つあれば採らない（選ばない）",
+      "https://m.example/products/slot/nazo/" not in _hints)
+    # ★個別ページに年月が無くても、一覧の控えがあれば通る★
+    _real_get_cls = globals()["_get"]
+    globals()["_get"] = lambda u, timeout=20: (
+        "<title>スマスロ リコリコ|Sammy</title><body>パチスロ 純増 AT機</body>")
+    try:
+        _c1 = classify("https://m.example/products/slot/rikoriko2/", None,
+                       today=__import__("datetime").date(2026, 8, 2),
+                       list_release="2026-09")
+        _c2 = classify("https://m.example/products/slot/rikoriko2/", None,
+                       today=__import__("datetime").date(2026, 8, 2))
+    finally:
+        globals()["_get"] = _real_get_cls
+    t("★★個別に年月が無くても、公式一覧の控えで通せる★★（Codex27回目）",
+      (_c1.get("release") or {}).get("value") == "2026-09"
+      and not any("登場年月" in r for r in _c1["reasons"]))
+    t("　控えが無ければ従来どおり「書いていません」で止まる",
+      any("登場年月" in r for r in _c2["reasons"]))
     t("　scriptの中身を本文に混ぜない（偽の年月・数値を拾わない）",
       "パチスロ" not in _visible_text(
           '<script>var x="パチスロ純増99枚";</script><p>Lテスト機</p>'))

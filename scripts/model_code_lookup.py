@@ -188,7 +188,7 @@ def _gen_mark(s: str) -> str:
 
 
 def page_is_machine(html: str, official_name: str,
-                    strict_tail: bool = True):
+                    extra_tail_ok: set | None = None):
     """★その名鑑ページが本当にその機種か★
 
     ★ただの前方一致をやめた★（2026-07-31・Codex22回目。実際に再現した）
@@ -272,11 +272,10 @@ def page_is_machine(html: str, official_name: str,
                     #   許すのは①規格・販売区分（芯が空）②飾り③メーカー名
                     #   ④本人の略称＝**本人の名前の文字だけでできている語**
                     #   （「青ブタ」は通る・「SP」「新章」「極」は本人の文字に無いので弾く）
-                    # ★strict_tail=False はメーカー公式の照合用★
-                    #   公式サイトの題は「機種名|BELLCO」のように社名の飾りが付く。
-                    #   派生機の取り違えは名鑑の2票（型式）で起きる問題なので、
-                    #   厳格な尾部検査は名鑑側だけに掛ける。
-                    if strict_tail and not _after_ok(after, core, official_name):
+                    # ★公式の照合では extra_tail_ok（社名・銘柄）を許す★
+                    #   （2026-08-02・Codex27回目。検査を丸ごと外すと
+                    #     派生機の公式URL「…（SP）|BELLCO」が通ってしまった）
+                    if not _after_ok(after, core, official_name, extra_tail_ok):
                         gen_conflict = True
                         continue
                     return True, "OK"
@@ -285,8 +284,13 @@ def page_is_machine(html: str, official_name: str,
     return False, "NAME_CORE_MISMATCH"
 
 
-def _after_ok(after_seg: str, core: str, official_name: str) -> bool:
-    """名前の直後の断片（括弧の中身など）が、本人のページとして自然か。"""
+def _after_ok(after_seg: str, core: str, official_name: str,
+              extra: set | None = None) -> bool:
+    """名前の直後の断片（括弧の中身など）が、本人のページとして自然か。
+
+    extra: 呼び出し元が追加で許す語（メーカー公式の照合では社名・銘柄）。
+      その語を**含む**尾部も許す（「株式会社サミー」等）。
+    """
     if not after_seg:
         return True
     okc = set(core) | set(unicodedata.normalize("NFKC", official_name or "").lower())
@@ -294,10 +298,38 @@ def _after_ok(after_seg: str, core: str, official_name: str) -> bool:
         c = _ci.normalize_core(w)
         if c == "" or c in _DECOR_CORES or c in _maker_name_cores():
             continue
+        if extra and any(e and e in c for e in extra):
+            continue                      # 期待するメーカーの社名・銘柄
         if set(c) <= okc:
             continue                      # 本人の名前の文字だけ＝略称・読み
         return False
     return True
+
+
+def maker_brand_cores(maker_id: str) -> set:
+    """★そのメーカーの社名・銘柄として許す芯★（公式ページの題の尾部用）
+
+    名簿の日本語名・メーカーID・公式の場所（link_prefix）のホスト名の
+    部品から作る。読めなければ空＝厳しい側。
+    """
+    out = set()
+    try:
+        got = json.load(open(_w.CATALOGS, encoding="utf-8"))
+        conf = (got.get("catalogs") or {}).get(maker_id) or {}
+    except Exception:                     # noqa: BLE001
+        return out
+    for tok in (str(conf.get("name") or ""), str(maker_id or "")):
+        c = _ci.normalize_core(tok)
+        if c:
+            out.add(c)
+    host = re.sub(r"^[a-z]+://", "", str(conf.get("link_prefix") or ""))
+    host = host.split("/", 1)[0]
+    for part in re.split(r"[.\-]", host):
+        if len(part) >= 3 and part not in ("www", "com", "net"):
+            c = _ci.normalize_core(part)
+            if len(c) >= 3:
+                out.add(c)
+    return out
 
 
 def lookup(url: str, official_name: str) -> dict:
