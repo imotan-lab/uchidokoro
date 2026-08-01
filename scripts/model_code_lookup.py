@@ -53,6 +53,12 @@ class LookupError_(RuntimeError):
     pass
 
 
+# ★型式名の候補として拒む語★（2026-08-02・Codex24回目を再現して直した）
+#   「型式名：」の次の行が別の見出しだと、その見出しを型式名として採っていた。
+_LABEL_LIKE = ("メーカー名", "機種名", "型式名", "型式", "メーカー", "導入開始",
+               "導入日", "登場日", "検定日", "タイプ", "仕様", "備考")
+
+
 def extract_model_code(html: str):
     """名鑑ページの本文から型式名を1つ取り出す。決まらなければ None と理由。"""
     lines = _w._visible_text(html).splitlines()
@@ -61,8 +67,13 @@ def extract_model_code(html: str):
         for lab in _LABELS:
             if not s.startswith(lab):
                 continue
+            # ★見出しの直後は区切りか行末に限る★（2026-08-02・Codex24回目）
+            #   「型式名について」の「について」を値として採っていた。
+            after = s[len(lab):]
+            if after and after[0] not in "：: 　\t":
+                continue          # 「型式名○○」は見出しではない
             # 「型式名：Lびん娘NY1」の形
-            rest = s[len(lab):].lstrip("：: 　").strip()
+            rest = after.lstrip("：: 　").strip()
             cand = rest
             if not cand and i + 1 < len(lines):
                 # 「型式名 :」の次の行に値がある形（P-WORLD）
@@ -71,9 +82,19 @@ def extract_model_code(html: str):
                 continue
             if cand in _CODE_NG:
                 return None, "MODEL_CODE_NOT_STATED"
+            # ★別の見出しを値にしない★（次の行が「メーカー名」等だった・Codex24回目）
+            if cand in _LABEL_LIKE:
+                continue
+            norm = unicodedata.normalize("NFKC", cand)
+            # ★英数字を1文字も含まない語は採らない★（2026-08-02・Codex24回目）
+            #   このタスクが扱う新台（L/S世代）の型式名は必ず英数字を含む
+            #   （Lびん娘NY1 等）。日本語だけの語は見出し・説明の可能性が高い。
+            #   本物を取りこぼしても「まだ載っていない」扱い＝安全側に落ちる。
+            if not re.search(r"[0-9A-Za-z]", norm):
+                continue
             if not _CODE_OK.match(cand):
                 continue          # 説明文などを拾ってしまった。次の候補へ
-            return unicodedata.normalize("NFKC", cand), "OK"
+            return norm, "OK"
     return None, "MODEL_CODE_NOT_FOUND"
 
 
@@ -192,6 +213,14 @@ def page_is_machine(html: str, official_name: str):
                 while k < len(words) and words[k] == "":
                     k += 1               # 販売区分語などは芯が空になる
                 if k >= len(words) or words[k] in _DECOR_CORES:
+                    # ★名前より前の語も全部見る★（2026-08-02・Codex24回目を再現して直した）
+                    #   後ろの語しか見ていなかったので、
+                    #   「P 北斗の拳」「パチンコ 北斗の拳」「L別機種の話 L北斗の拳」の
+                    #   ように**前に別の意味の語がある題**が通っていた。
+                    #   前に許すのは、芯が空になる語（規格・販売区分）と飾りだけ。
+                    if any(words[w] != "" and words[w] not in _DECOR_CORES
+                           for w in range(i)):
+                        continue          # 名前の前に知らない語＝別の話かもしれない
                     # ★規格の印（L/S）が食い違ったら別機種★（2026-08-01・Codex23回目）
                     #   芯の比較は印を落とすので、S版のページがL版の本人になれた。
                     #   印は、名前に融合した頭（「S北斗の拳」）と、
@@ -230,12 +259,24 @@ def lookup(url: str, official_name: str) -> dict:
 
 
 def agree(results: list) -> dict:
-    """★独立2つ以上の名鑑で型式名が一致して初めて採用する★"""
-    codes = {}
+    """★独立2つ以上の名鑑で型式名が一致して初めて採用する★
+
+    ★比較は空白を無視した鍵で行う★（2026-08-02・Codex24回目を再現して直した）
+      「Lびん娘NY1」と「Lびん娘 NY1」（空白差）を別の型式として CONFLICT にし、
+      やり直しても直らない理由なので**機種ごと自動経路から外していた**。
+      表示に使う値は最初に見つかった書き方のまま残す。
+    """
+    def _key(c: str) -> str:
+        return re.sub(r"[\s　]+", "", unicodedata.normalize("NFKC", c))
+
+    codes = {}          # 比較鍵 -> hosts集合
+    shown = {}          # 比較鍵 -> 最初に見つかった表示値
     for r in results:
         if r.get("model_code"):
             host = r["url"].split("/")[2].lower().removeprefix("www.")
-            codes.setdefault(r["model_code"], set()).add(host)
+            k = _key(r["model_code"])
+            codes.setdefault(k, set()).add(host)
+            shown.setdefault(k, r["model_code"])
     # ★食い違いを先に見る★（2026-07-31・Codex22回目。実際に再現した）
     #   以前は「2票そろった型式」を見つけた時点で採用していたので、
     #   A=2票・B=1票 のときAをそのまま採り、食い違いに気づかなかった。
@@ -247,7 +288,8 @@ def agree(results: list) -> dict:
                                     ensure_ascii=False)}
     for code, hosts in codes.items():
         if len(hosts) >= 2:
-            return {"model_code": code, "hosts": sorted(hosts), "adopted": True}
+            return {"model_code": shown[code], "hosts": sorted(hosts),
+                    "adopted": True}
     # ★「まだ載っていない」と「食い違う」を分ける★（2026-07-31・Codex21回目）
     #   どちらも同じ文言だったので、
     #   **明日には載るかもしれない新台**まで「やり直しても無駄」と扱い、
@@ -351,6 +393,34 @@ def selftest() -> int:
     t("　英字の機種名をL/Sの印と取り違えない（lucky等）",
       _gen_mark("lucky trigger") == "" and _gen_mark("L北斗の拳") == "L"
       and _gen_mark("スマスロ北斗の拳") == "L" and _gen_mark("パチスロ北斗の拳") == "")
+    # ★★Codex24回目（自分で再現してから直した）★★
+    t("★★空白つきの別種目の印を弾く: 「P 北斗の拳」★★（Codex24回目）",
+      page_is_machine("<title>P 北斗の拳 新台 | P-WORLD</title>",
+                      "L北斗の拳")[0] is False)
+    t("　前置の「パチンコ」も弾く",
+      page_is_machine("<title>パチンコ 北斗の拳 新台 | P-WORLD</title>",
+                      "L北斗の拳")[0] is False)
+    t("★★対象名が副次的に現れる題を弾く★★（前に知らない語がある・Codex24回目）",
+      page_is_machine("<title>L別機種の話 L北斗の拳 新台 | x</title>",
+                      "L北斗の拳")[0] is False)
+    t("　名前の前が飾りと規格語だけなら通る",
+      page_is_machine("<title>新台 スマスロ 北斗の拳 天井 | x</title>",
+                      "L北斗の拳")[0] is True)
+    t("★★「型式名について」の「について」を値にしない★★（Codex24回目）",
+      extract_model_code("<p>型式名についての説明</p><p>Lびん娘NY1</p>")
+      == (None, "MODEL_CODE_NOT_FOUND"))
+    t("★★次の行の別見出し（メーカー名）を型式名にしない★★（Codex24回目）",
+      extract_model_code("<p>型式名：</p><p>メーカー名</p>")
+      == (None, "MODEL_CODE_NOT_FOUND"))
+    t("　英数字を含まない語は型式名として採らない（安全側＝まだ載っていない扱い）",
+      extract_model_code("<p>型式名：ぱちすろほくと</p>")
+      == (None, "MODEL_CODE_NOT_FOUND"))
+    t("★★型式名の空白差を食い違いにしない★★"
+      "（CONFLICTだと機種ごと自動経路から外れていた・Codex24回目）",
+      agree([{"url": "https://www.p-world.co.jp/x", "model_code": "Lびん娘NY1"},
+             {"url": "https://p-town.dmm.com/y", "model_code": "Lびん娘 NY1"}])
+      == {"model_code": "Lびん娘NY1", "hosts": ["p-town.dmm.com", "p-world.co.jp"],
+          "adopted": True})
     t("　タイトルが無ければ採らない",
       page_is_machine("<p>本文だけ</p>", "Lすーぱぁびん娘")[0] is False)
 

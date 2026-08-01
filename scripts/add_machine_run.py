@@ -216,6 +216,19 @@ def gather(name: str) -> dict:
     got["model_code"] = mv.get("model_code")
     if not mv["adopted"]:
         got["problems"].append("型式名: " + str(mv.get("why", ""))[:160])
+    # ★採用した型式名の規格印も照合する★（2026-08-02・Codex24回目の助言で実装）
+    #   規格の印が無い題（同名の旧機種のページ）が2名鑑でそろうと、
+    #   旧機種の型式・スペックで新台の記事を作れてしまう。
+    #   L/S世代の型式名は頭に同じ印を持つので、照合できるまで採用しない。
+    #   新台の正しいページが名鑑に載れば自然に解ける＝待てば直る（打ち切りは60日）。
+    _want_gen = _mc._gen_mark(name)
+    if got["model_code"] and _want_gen \
+            and _mc._gen_mark(got["model_code"]) != _want_gen:
+        got["problems"].append(
+            f"型式名の規格印が確認できません（機種は{_want_gen}版なのに、"
+            f"型式名「{got['model_code']}」に{_want_gen}の印がありません。"
+            "同名の旧機種のページを見ている可能性）")
+        got["model_code"] = None
     def _read(mod, jp):
         """器ごとに全ページを読み、★使えなかったページの理由を必ず残す★
 
@@ -286,7 +299,9 @@ RETRYABLE = ("名鑑の個別ページが", "HEALTHY_NO_MATCH", "CATALOG_UNHEALT
              #   「まだ載っていない」を「食い違う」と同じ扱いにしていたので、
              #   明日には載るかもしれない新台を初回で捨てていた。
              "型式名がまだどの名鑑にも載っていません",
-             "型式名が1つの名鑑にしか載っていません")
+             "型式名が1つの名鑑にしか載っていません",
+             # ★旧機種のページしか無い間は保留＝新台のページが載れば解ける★
+             "型式名の規格印が確認できません")
 # ★やり直しても意味がない理由★（待たずに台帳へ）
 NOT_RETRYABLE = ("既に登録されている疑い", "公式ページと名前が一致しません",
                  "転載の疑い", "AMBIGUOUS_CANDIDATES",
@@ -735,6 +750,27 @@ def push_after_publish(slug: str, already_committed: bool = False) -> list:
     #   裸の `git push` は remote.<名>.push の refspec や push.default に
     #   左右されるので、**確かめた場所と違う所へ出せた**。
     sc = _pg.push_scope()
+    # ★差分の基準（手元の origin/main）が、実際のリモートの先端と同じか★
+    #   （2026-08-02・Codex24回目）手元の基準が実リモートより進んでいると、
+    #   関所は「基準〜HEAD」しか見ないのに、pushは**確かめていない範囲ごと**出せる。
+    #   食い違っていたら fetch して止める（次の実行が新しい基準で確かめ直す）。
+    lr = subprocess.run(
+        ["git", "ls-remote", sc["remote"], f"refs/heads/{sc['dest']}"],
+        cwd=BASE, capture_output=True, text=True,
+        encoding="utf-8", errors="replace")
+    remote_sha = (lr.stdout or "").split()[0] if (lr.stdout or "").split() else ""
+    base_sha = subprocess.run(
+        ["git", "rev-parse", sc["base"]], cwd=BASE, capture_output=True,
+        text=True, encoding="utf-8", errors="replace").stdout.strip()
+    if lr.returncode != 0 or not remote_sha:
+        return ["push先の先端を確かめられませんでした（pushしていません）: "
+                + _hide((lr.stderr or "").strip())[:200]]
+    if remote_sha != base_sha:
+        subprocess.run(["git", "fetch", sc["remote"]], cwd=BASE,
+                       capture_output=True, text=True,
+                       encoding="utf-8", errors="replace")
+        return [f"push先の先端（{remote_sha[:12]}）が手元の基準（{base_sha[:12]}）と"
+                "違います。fetchしたので、次の実行で確かめ直します（pushしていません）"]
     p = subprocess.run(
         ["git", "push", sc["remote"], f"HEAD:refs/heads/{sc['dest']}"],
         cwd=BASE, capture_output=True, text=True,
@@ -848,6 +884,11 @@ def selftest() -> int:
     real_store = _pend.STORE
     _tmpdir = __import__("tempfile").mkdtemp(prefix="uchi_pend_")
     _pend.STORE = os.path.join(_tmpdir, "pending.json")
+    # ★試験は本番の日次ログにも書かない★（2026-08-01・実際に混入した）
+    #   混入すると完了マーカーが末尾から離れ、番兵（task-watchdog）が
+    #   「起動したが完走していない」と誤検知しうる。画面出力だけにする。
+    real_log = globals()["_log"]
+    globals()["_log"] = lambda m: print(f"[selftest-log] {m}")
     try:
         _di.find = lambda n, c=None: {"results": {
             "a": {"state": "FOUND", "url": "https://a.example/1", "why": "",
@@ -967,6 +1008,14 @@ def selftest() -> int:
           "（途中で止まると壊れた目印が残り、全公開が恒久停止した・Codex23回目）",
           "write_atomic" in inspect.getsource(_mark_push_pending)
           and 'open(PUSH_PENDING, "w"' not in inspect.getsource(_mark_push_pending))
+        t("★★push前に実リモートの先端と基準を突き合わせる★★"
+          "（基準が古いと確かめていない範囲ごと出せた・Codex24回目）",
+          "ls-remote" in inspect.getsource(push_after_publish))
+        t("★★採用した型式名の規格印も照合する★★"
+          "（旧機種のページが2名鑑でそろうと旧型式で新台を書けた・Codex24回目）",
+          "規格印が確認できません" in inspect.getsource(gather)
+          and retry_later(["型式名の規格印が確認できません（機種はL版なのに…）"])
+          and "型式名の規格印が確認できません" not in str(NOT_RETRYABLE))
         # ★台帳へ移した機種が、次の保存で行列に蘇らない★
         #   （2026-08-01・複数夜の通しで見つけた。give_up_now が別読みして
         #     外していたので、ループ側の古い行列の保存が削除を打ち消していた）
@@ -1148,6 +1197,7 @@ def selftest() -> int:
     finally:
         _di.find, _sl.read_page, _mc.lookup = real_find, real_read, real_lookup
         _pend.STORE = real_store
+        globals()["_log"] = real_log
         __import__("shutil").rmtree(_tmpdir, ignore_errors=True)
 
     ng = [n for n, ok in results if not ok]

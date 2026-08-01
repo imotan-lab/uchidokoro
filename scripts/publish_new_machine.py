@@ -673,32 +673,39 @@ def run_site_audit(ignore_in_progress: bool = False) -> list:
       目印を正しく持っている側だけが、この項目を外してよい。
       ★push の関所では絶対に外さない★（そこは残骸を止める場所）。
     """
-    r = subprocess.run([sys.executable, os.path.join(BASE, "scripts", "audit_site.py")],
+    r = subprocess.run([sys.executable, os.path.join(BASE, "scripts", "audit_site.py"),
+                        "--json"],
                        cwd=BASE, capture_output=True, text=True,
                        encoding="utf-8", errors="replace",
                        env={**os.environ, "PYTHONIOENCODING": "utf-8"})
-    if r.returncode == 0:
-        return []
+    # ★監査そのものが壊れて終わった場合を「合格」にしない★（2026-08-01〜02・Codex23〜24回目）
+    #   1回目の直しは「❌の行が無い非0は異常」だったが、
+    #   ❌を1行出した**あとに**落ちると素通りする穴が残っていた（Codex24回目）。
+    #   JSONで受ければ「完全に出力し終えたか」を機械で判定できる：
+    #   途中で落ちた出力はJSONとして読めないか、項目が欠ける。
+    try:
+        got = json.loads(r.stdout or "")
+        if not isinstance(got, dict) or not got:
+            raise ValueError("形が違います")
+        # ★項目1〜33がそろっているか★（欠け＝監査が途中で終わっている）
+        nums = {k.split("_", 1)[0] for k in got}
+        missing = {str(i) for i in range(1, 34)} - nums
+        if missing:
+            raise ValueError(f"項目が欠けています: {sorted(missing, key=int)[:5]}")
+    except (ValueError, json.JSONDecodeError) as e:
+        return ["サイト監査が異常終了しました（監査できていません）: "
+                + str(e)[:100] + " / "
+                + ((r.stderr or r.stdout or "").strip()[:150] or "出力なし")]
     out = []
-    raw_ng = 0                            # ★除外前の❌の数★
-    for line in (r.stdout or "").splitlines():
-        line = line.strip()
-        if not line.startswith("❌"):
+    for key, items in got.items():
+        if not items:
             continue
-        raw_ng += 1
         # ★Codexへの報告漏れは公開の可否と関係ない★（開発の作法の話）
-        if "Codexへの未報告" in line:
+        if key.startswith("31_"):
             continue
-        if ignore_in_progress and "33_" in line:
+        if ignore_in_progress and key.startswith("33_"):
             continue
-        out.append("サイト監査: " + line[1:].strip())
-    # ★監査そのものが壊れて終わった場合を「合格」にしない★（2026-08-01・Codex23回目）
-    #   起動失敗・構文エラー・強制終了は❌の行を1つも出さずに非0で終わる。
-    #   以前はその場合に空リスト＝合格として、公開・pushを通していた。
-    #   ❌が1つでもあれば通常の監査書式なので、除外の結果が空でも正常に扱う。
-    if raw_ng == 0:
-        out.append("サイト監査が異常終了しました（監査できていません）: "
-                   + ((r.stderr or r.stdout or "").strip()[:200] or "出力なし"))
+        out.append(f"サイト監査: {key}: {len(items)}件 " + str(items[0])[:120])
     return out
 
 
@@ -1722,31 +1729,39 @@ def selftest() -> int:
             return _R()
         return _real_run(cmd, **k)
 
-    subprocess.run = _crash_run
-    try:
-        _crashed = run_site_audit()
-    finally:
-        subprocess.run = _real_run
+    def _fake_audit(stdout_text):
+        def _fk(cmd, **k):
+            if any("audit_site.py" in str(c) for c in cmd):
+                class _R:
+                    returncode = 1
+                    stdout = stdout_text
+                    stderr = "boom"
+                return _R()
+            return _real_run(cmd, **k)
+        subprocess.run = _fk
+        try:
+            return run_site_audit()
+        finally:
+            subprocess.run = _real_run
+
+    _full = {f"{i}_試験": [] for i in range(1, 34)}
     t("★★監査が異常終了したら合格にしない★★"
-      "（構文エラー等は❌を出さず非0で終わり、素通りしていた・Codex23回目）",
-      any("異常終了" in x for x in _crashed))
-
-    def _only31_run(cmd, **k):
-        if any("audit_site.py" in str(c) for c in cmd):
-            class _R:
-                returncode = 1
-                stdout = "❌ 31_Codexへの未報告: 1件"
-                stderr = ""
-            return _R()
-        return _real_run(cmd, **k)
-
-    subprocess.run = _only31_run
-    try:
-        _only31 = run_site_audit()
-    finally:
-        subprocess.run = _real_run
+      "（構文エラー等はJSONを出さずに終わり、素通りしていた・Codex23回目）",
+      any("異常終了" in x for x in _fake_audit("Traceback: ImportError")))
+    _cut = json.dumps({**_full, "31_Codexへの未報告": ["x"]},
+                      ensure_ascii=False)[:80]
+    t("★★途中まで出力して落ちた監査も合格にしない★★"
+      "（❌を1行出した後に落ちると素通りしていた・Codex24回目）",
+      any("異常終了" in x for x in _fake_audit(_cut)))
+    _lack = {k: v for k, v in _full.items() if not k.startswith("32_")}
+    t("　項目が欠けたJSONも合格にしない（途中終了の別の形）",
+      any("異常終了" in x for x in _fake_audit(json.dumps(_lack, ensure_ascii=False))))
     t("　除外対象（Codex未報告）だけの非0は、いままでどおり通す",
-      _only31 == [])
+      _fake_audit(json.dumps({**_full, "31_Codexへの未報告": ["x"]},
+                             ensure_ascii=False)) == [])
+    t("　普通のNGはちゃんと出る",
+      any("22_" in x for x in _fake_audit(
+          json.dumps({**_full, "22_機種重複検知": ["だぶり"]}, ensure_ascii=False))))
     t("★★同じ入力なら毎回同じ物ができる★★（2回目に差分が出ない・Codexの助言）",
       build_hubs() == build_hubs())
     t("★★一覧と機種データを集合で突き合わせる★★（欠け・余分・重複を見つける）",
