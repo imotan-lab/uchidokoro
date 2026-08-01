@@ -162,6 +162,12 @@ def redirect_problem(asked: str, final: str):
     return None
 
 
+# ★hrefは大文字・引用符なしでも読む★（2026-08-02・Codex33回目）
+#   <A HREF="..."> と <a href=...> はHTMLとして正しいのに読み飛ばし、
+#   その形の新台だけ、件数も残存率も正常なまま永久に見逃せた。
+_HREF_RE = re.compile(
+    r"href\s*=\s*(?:\"([^\"]*)\"|'([^']*)'|([^\s>\"']+))", re.IGNORECASE)
+
 _BENIGN_QUERY = {"page", "p", "sort", "order", "lang", "hl", "s", "q",
                  "cat", "category", "tag", "filter", "offset", "limit",
                  "utm_source", "utm_medium", "utm_campaign"}
@@ -177,8 +183,8 @@ def query_style_machine_links(html: str, base_url: str, link_prefix: str) -> lis
     **見つけたら異常として知らせ、人が名簿を直す**。
     """
     hits = []
-    for m0 in re.finditer(r"href\s*=\s*(\"([^\"]*)\"|'([^']*)')", html):
-        href = (m0.group(2) if m0.group(2) is not None else m0.group(3)) or ""
+    for m0 in _HREF_RE.finditer(html):
+        href = next((g for g in m0.groups() if g is not None), "") or ""
         absu = urllib.parse.urljoin(base_url, href.strip())
         base = absu.split("#")[0].split("?")[0]
         q = urllib.parse.urlparse(absu).query
@@ -206,8 +212,8 @@ def product_urls(html: str, base_url: str, link_prefix: str) -> list:
     # ★一重引用符の href も読む★（2026-08-02・Codex30回目）
     #   新しい1件だけ href='...' だと、既存の件数・残存率は正常なので
     #   異常にもならず、その新台だけが永久に検出されなかった。
-    for m0 in re.finditer(r"href\s*=\s*(\"([^\"]*)\"|'([^']*)')", html):
-        href = m0.group(2) if m0.group(2) is not None else m0.group(3)
+    for m0 in _HREF_RE.finditer(html):
+        href = next((g for g in m0.groups() if g is not None), "")
         if not href:
             continue
         absu = urllib.parse.urljoin(base_url, href.strip())
@@ -331,13 +337,30 @@ def list_release_hints(html: str, base_url: str, link_prefix: str) -> dict:
         if len(set(urls)) != 1:
             continue
         url = urls[0]
-        # ★この機種だけを含む、一番外の要素＝カード★
-        card = node
-        up = node["parent"]
-        while up is not None and up["tag"] != "#root" and len(set(
-                _node_product_anchors(up, base_url, link_prefix))) == 1:
-            card = up
-            up = up["parent"]
+        # ★カード＝「繰り返しの1枚」★（2026-08-02・Codex33回目）
+        #   「その機種だけを含む一番外の要素」だと、たまたま機種を1つしか
+        #   含まない大きな区画（見出しや告知ごと）までカードにできた。
+        #   一覧のカードは**同じ親の下に並ぶ繰り返し**なので、
+        #   「親の子に『ちょうど1機種の部分木』が2機種ぶん以上並ぶ」階層を
+        #   見つけ、その1枚をカードとする。見つからなければ採らない（安全側）。
+        card = None
+        a, up = node, node["parent"]
+        while up is not None:
+            sib_urls = set()
+            qualified = 0
+            for ch in up["children"]:
+                u2 = set(_node_product_anchors(ch, base_url, link_prefix))
+                if len(u2) == 1:
+                    qualified += 1
+                    sib_urls |= u2
+            if qualified >= 2 and len(sib_urls) >= 2 \
+                    and len(set(_node_product_anchors(a, base_url,
+                                                      link_prefix))) == 1:
+                card = a
+                break
+            a, up = up, up["parent"]
+        if card is None:
+            continue
         # ★カードはその機種の紹介そのもの＝導入の文脈があるとみなす★
         got = release_month(unicodedata.normalize("NFKC", _node_text(card)),
                             assume_release_context=True)
@@ -395,7 +418,8 @@ def _visible_text(html: str) -> str:
     # ★scriptの中身を本文に混ぜない★
     #   タグ名は文字列から組み立てる（バックスラッシュを直接書くと
     #   編集の経路で制御文字に化ける事故が今日5回起きたため）
-    for tag in ("script", "style", "noscript"):
+    # ★template（画面に出ない雛形）も本文に混ぜない★（2026-08-02・Codex33回目）
+    for tag in ("script", "style", "noscript", "template"):
         html = re.sub("(?is)<" + tag + "[^>]*>.*?</" + tag + "[ \t\r\n]*>", " ", html)
     t = re.sub("(?s)<[^>]+>", chr(10), html)
     # ★実体参照をほどく★（2026-07-31）
@@ -413,7 +437,8 @@ _RELEASE_CONTEXT = ("導入", "登場", "発売", "稼働", "リリース", "デ
 # ★導入とは別の話だと分かる言葉★（この行の年月は採らない）
 _RELEASE_NOISE = ("更新", "お知らせ", "ニュース", "news", "News", "公開",
                   "Copyright", "copyright", "(C)", "©", "採用", "募集",
-                  "キャンペーン", "応募", "抽選", "終了")
+                  "キャンペーン", "応募", "抽選", "終了",
+                  "展示", "イベント", "発表", "出展", "フェア")
 
 
 def release_month(text: str, assume_release_context: bool = False):
@@ -1076,6 +1101,29 @@ def selftest() -> int:
           '<a href="https://m.example/products/slot/?sort=new">並び替え</a>',
           "https://m.example/products/slot/",
           "https://m.example/products/slot/") == [])
+    # ★★Codex33回目★★
+    t("★★templateの中の日付を本文として読まない★★（Codex33回目）",
+      release_month(_visible_text(
+          "<template><p>導入 2026年10月</p></template><body>本文</body>")) is None)
+    t("★★カードの外の年月（同じ区画の告知）を機種に付けない★★（Codex33回目）",
+      list_release_hints(
+          '<section><p>展示会 2026.9</p>'
+          '<div><a href="https://m.example/products/slot/newone/">新機種</a></div>'
+          '</section>'
+          '<section><a href="https://m.example/products/slot/other/">別機種</a>'
+          '</section>',
+          "https://m.example/products/slot/",
+          "https://m.example/products/slot/") == {})
+    t("★★大文字HREF・引用符なしhrefのリンクも読む★★"
+      "（読み飛ばすとその新台だけ永久に見逃す・Codex33回目）",
+      product_urls('<A HREF="https://m.example/products/slot/newone/">新台</A>',
+                   "https://m.example/products/slot/",
+                   "https://m.example/products/slot/")
+      == ["https://m.example/products/slot/newone/"]
+      and product_urls('<a href=https://m.example/products/slot/newtwo/>新台</a>',
+                       "https://m.example/products/slot/",
+                       "https://m.example/products/slot/")
+      == ["https://m.example/products/slot/newtwo/"])
     t("　カードの構造が無いページでは採らない（安全側）",
       list_release_hints(
           '<a href="https://m.example/products/slot/alpha/">A</a> 導入 2026.9 '

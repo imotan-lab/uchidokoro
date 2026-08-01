@@ -153,6 +153,20 @@ def _maker_name_cores() -> set:
     return _MAKER_CORES
 
 
+# ★明確な派生の印★（2026-08-02・Codex33回目）
+#   材料の照合は別名を許す必要があり全語検査はできないが、
+#   これらの印が名前の後ろに出たページを本人として扱うのは危険すぎる。
+#   （許可制の本線＝strict_all_tail は型式・公式の照合に掛けてある。
+#     これは材料経路のための拒否リスト＝防御の厚み。網羅はできない）
+_DERIV_MARKS = {"sp", "ex", "dx", "v", "z", "zero", "改", "極", "新章",
+                "新装版", "廻", "頂"}
+
+
+def _has_deriv_mark(cores: list) -> bool:
+    return any(c in _DERIV_MARKS or (c.isdigit() and len(c) <= 2)
+               for c in cores)
+
+
 # ★規格の印（L/S）を読む語★（2026-08-01・Codex23回目を再現して直した）
 #   スマスロ系の言い換えはLと同じ規格。パチスロ/スロットはどちらとも言えない。
 _GEN_L_WORDS = ("スマートパチスロ", "スマートスロット", "スマスロ", "メダルレス")
@@ -288,11 +302,18 @@ def page_is_machine(html: str, official_name: str,
                     # ★strict_all_tail の経路だけ★＝型式の名鑑照合と公式照合。
                     #   材料の解析サイトの題は別名を後ろに書くのが通例
                     #   （「…解析 東京グール | ちょんぼりすた」）で、
-                    #   そこまで縛ると実在の出典を失う。型式と公式の同定が
-                    #   厳格なら、材料側の混入は2票一致＋規格印で抑えられる。
+                    #   そこまで縛ると実在の出典を失う。
                     if strict_all_tail and not _after_ok(
                             " ".join(raw[j + 1:]), core,
                             official_name, extra_tail_ok):
+                        gen_conflict = True
+                        continue
+                    # ★材料の照合でも、明確な派生の印だけは拒む★
+                    #   （2026-08-02・Codex33回目。独立2つの解析サイトが
+                    #     「名前 新台 SP」でSP版の値を載せていると、
+                    #     2票一致も規格印も通ってしまうため）
+                    if not strict_all_tail and _has_deriv_mark(
+                            [_ci.normalize_core(w) for w in raw[j + 1:]]):
                         gen_conflict = True
                         continue
                     return True, "OK"
@@ -599,6 +620,12 @@ def selftest() -> int:
     t("★★飾り語の後ろの派生印も見る（型式・公式の照合）★★（Codex32回目）",
       page_is_machine("<title>Lすーぱぁびん娘 新台 SP | P-WORLD</title>",
                       "Lすーぱぁびん娘", strict_all_tail=True)[0] is False)
+    t("★★材料の照合でも明確な派生印（SP等）は拒む★★"
+      "（独立2サイトがSP版の値で一致すると混入できた・Codex33回目）",
+      page_is_machine("<title>Lすーぱぁびん娘 新台 SP | 解析サイトA</title>",
+                      "Lすーぱぁびん娘")[0] is False
+      and page_is_machine("<title>Lすーぱぁびん娘 新台 2 | 解析サイトA</title>",
+                          "Lすーぱぁびん娘")[0] is False)
     t("　材料の照合（別名が題の後ろに入る解析サイト）は従来どおり",
       page_is_machine("<title>スマスロ東京喰種 スロット 新台 天井 設定判別 解析 "
                       "東京グール | ちょんぼりすた パチスロ解析</title>",
