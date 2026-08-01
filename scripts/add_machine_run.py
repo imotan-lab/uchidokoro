@@ -31,6 +31,14 @@ import sys
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
 
+# ★出力の文字コードを固定する★（2026-08-01・実際にpushまで通して見つけた）
+#   Windowsでパイプ越しに動かすと出力がcp932になり、
+#   「✗」を1つ印字しただけで**タスク全体が途中で即死**していた。
+#   無人実行の入口なので、ここで固定する（失敗理由が化けて消えるのも防ぐ）。
+for _s in (sys.stdout, sys.stderr):
+    if _s is not None and hasattr(_s, "reconfigure"):
+        _s.reconfigure(encoding="utf-8", errors="replace")
+
 import build_new_article as _ba       # noqa: E402
 import check_duplicate as _cd        # noqa: E402
 import at_spec_lookup as _at        # noqa: E402
@@ -659,9 +667,14 @@ def push_after_publish(slug: str, already_committed: bool = False) -> list:
     gate = os.path.join(BASE, "scripts", "prepush_gate.py")
 
     def _run(*args):
+        # ★PYTHONIOENCODING が必須★（2026-08-01・実際にpushまで通して見つけた）
+        #   これが無いと、関所が「✗」を含む理由を印字しようとした瞬間に
+        #   文字コードの失敗で落ち、**止まった本当の理由が化けて失われていた**。
+        #   （同じ対策がこのファイルの他の subprocess には入っていた）
         return subprocess.run([sys.executable, gate, "--slug", slug, *args],
                               cwd=BASE, capture_output=True, text=True,
-                              encoding="utf-8", errors="replace")
+                              encoding="utf-8", errors="replace",
+                              env={**os.environ, "PYTHONIOENCODING": "utf-8"})
 
     # ★最初から --commit を呼ぶ★（2026-07-31・Codex18回目）
     #   引数なしの関所は「作業ツリーとコミットが一致しているか」まで見る。
@@ -930,6 +943,9 @@ def selftest() -> int:
           "（あとから作ると、戻る間に止まったとき目印が無くなる・Codex22回目）",
           "on_written" in inspect.getsource(run_one)
           and "on_written" in inspect.getsource(_pub._publish))
+        t("★★関所の呼び出しに文字コード指定がある★★"
+          "（無いと関所が理由を印字した瞬間に落ち、本当の理由が失われた・2026-08-01実機）",
+          "PYTHONIOENCODING" in inspect.getsource(push_after_publish))
         t("★★コミットが通った直後に止まっても、次で分かる★★"
           "（WRITTEN のままコミット済みだと、やり直しが永久に失敗した・Codex22回目）",
           "_committed_on_top" in inspect.getsource(retry_push_first)

@@ -32,6 +32,13 @@ import sys
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
 
+# ★出力の文字コードを固定する★（2026-08-01・実際にpushまで通して見つけた）
+#   Windowsでパイプ越しに動かすと出力がcp932になり、
+#   止まった理由（✗つきの行）を印字した瞬間に落ちて理由が失われていた。
+for _s in (sys.stdout, sys.stderr):
+    if _s is not None and hasattr(_s, "reconfigure"):
+        _s.reconfigure(encoding="utf-8", errors="replace")
+
 import publish_new_machine as _pub        # noqa: E402
 
 # 想定しているリモート（ここ以外へは出さない）
@@ -83,8 +90,16 @@ def _git(*args, check: bool = False) -> subprocess.CompletedProcess:
 
 
 def changed() -> list:
-    """変わっているファイル（-z で読む。引用符・renameに強い）。"""
-    r = _git("status", "--porcelain", "-z")
+    """変わっているファイル（-z で読む。引用符・renameに強い）。
+
+    ★-uall が必須★（2026-08-01・実際にpushまで通して見つけた）
+      git は新しいフォルダを「フォルダごと1行」（machines/xxx/）で報告する。
+      許可リストはファイル単位なので突き合わせられず、
+      **新台（必ず新フォルダを作る）のpushを全部拒否していた**。
+      公開側（publish_new_machine の changed_paths）は同じ穴を先に直してあったのに、
+      この関所だけ直っていなかった。-uall なら git が中のファイルを1つずつ返す。
+    """
+    r = _git("status", "--porcelain", "-z", "-uall")
     if r.returncode != 0:
         raise RuntimeError(f"git status が失敗しました: {r.stderr[:200]}")
     out = []
@@ -319,6 +334,24 @@ def selftest() -> int:
       isinstance(same_as_commit(), list))
     t("　変わっているファイルを読める（-z なので引用符に強い）",
       isinstance(changed(), list))
+    # ★新しいフォルダを「フォルダごと1行」ではなくファイル単位で見る★
+    #   （2026-08-01・実際にpushまで通して見つけた。
+    #     新台は必ず新フォルダを作るので、これが無いと全部の新台pushを拒否する）
+    _d = os.path.join(BASE, "machines", "zzz_gate_selftest")
+    try:
+        os.makedirs(_d, exist_ok=True)
+        for _n in ("a.html", "b.html"):
+            with open(os.path.join(_d, _n), "w", encoding="utf-8") as _f:
+                _f.write("<!-- selftest -->")
+        _got = changed()
+        t("★★新フォルダの中身がファイル単位で見える★★"
+          "（フォルダごと1行だと許可リストと突き合わせられない）",
+          "machines/zzz_gate_selftest/a.html" in _got
+          and "machines/zzz_gate_selftest/b.html" in _got
+          and "machines/zzz_gate_selftest/" not in _got)
+    finally:
+        import shutil as _sh
+        _sh.rmtree(_d, ignore_errors=True)
 
     t("★★エラー文に鍵を出さない★★（remote URL にトークンが埋めてある）",
       "***@" in _hide("https://user:ghp_secret@github.com/a/b.git")
