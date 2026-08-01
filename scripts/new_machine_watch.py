@@ -190,8 +190,10 @@ def query_style_machine_links(html: str, base_url: str, link_prefix: str) -> lis
         q = urllib.parse.urlparse(absu).query
         if not q or not base.startswith(link_prefix):
             continue
-        if base[len(link_prefix):].strip("/"):
-            continue                      # 個別ページへのクエリは対象外
+        # ★個別パス＋クエリで機種を分ける形も対象★（2026-08-02・Codex34回目）
+        #   /detail/?machine=new はクエリを落とすと /detail/ に潰れ、
+        #   既知なら件数・残存率とも正常なまま新台だけ永久に見逃した。
+        #   （一覧直下だけに限らず、範囲内の全リンクを見る）
         for k, vals in urllib.parse.parse_qs(q).items():
             if k.lower() in _BENIGN_QUERY:
                 continue
@@ -277,6 +279,10 @@ def _node_text(node) -> str:
 
 
 def _node_product_anchors(node, base_url, link_prefix) -> list:
+    # ★画面に出ない部分はリンクとしても数えない★（2026-08-02・Codex34回目）
+    #   template内のリンクが「繰り返しの1枚」を偽装できた。
+    if node["tag"] in ("script", "style", "noscript", "template"):
+        return []
     out = []
     if node["tag"] == "a":
         href = str(node["attrs"].get("href") or "").strip()
@@ -327,6 +333,7 @@ def list_release_hints(html: str, base_url: str, link_prefix: str) -> dict:
             yield from _walk(ch)
 
     out = {}
+    cand = {}
     for node in _walk(p.root):
         if node["tag"] != "a":
             continue
@@ -349,6 +356,11 @@ def list_release_hints(html: str, base_url: str, link_prefix: str) -> dict:
             sib_urls = set()
             qualified = 0
             for ch in up["children"]:
+                # ★繰り返しは「同じ形の兄弟」だけ数える★（2026-08-02・Codex34回目）
+                #   タグとclassが同じ部分木が2機種ぶん以上並んで、初めてカード。
+                if ch["tag"] != a["tag"] \
+                        or ch["attrs"].get("class") != a["attrs"].get("class"):
+                    continue
                 u2 = set(_node_product_anchors(ch, base_url, link_prefix))
                 if len(u2) == 1:
                     qualified += 1
@@ -364,8 +376,13 @@ def list_release_hints(html: str, base_url: str, link_prefix: str) -> dict:
         # ★カードはその機種の紹介そのもの＝導入の文脈があるとみなす★
         got = release_month(unicodedata.normalize("NFKC", _node_text(card)),
                             assume_release_context=True)
-        if got and url not in out:
-            out[url] = got["value"]
+        if got:
+            # ★同じ機種に別の月が出たら採らない★（2026-08-02・Codex34回目）
+            #   注目機種欄と一覧で月が食い違うことがある。選ばない。
+            cand.setdefault(url, set()).add(got["value"])
+    for url, vals in cand.items():
+        if len(vals) == 1:
+            out[url] = vals.pop()
     return out
 
 
@@ -542,12 +559,22 @@ def classify(url: str, seen_entry: dict | None = None, today=None,
     """
     out = {"url": url, "ok": False, "reasons": [], "official_name": "",
            "release": None}
+    LAST_FINAL_URL["url"] = None      # ★前の呼び出しの残り値を拾わない★
     try:
         html = _get(url)
     except WatchError as e:
         out["reasons"].append(str(e))
         return out
     text = _visible_text(html)
+    # ★転送された先も検査する★（2026-08-02・Codex34回目）
+    #   同一メーカー内でも、別のページへの転送は「その機種のページ」ではない。
+    #   （試験の偽取得は到達先を書かないので、値がある時だけ見る）
+    _fin = LAST_FINAL_URL.get("url")
+    if _fin:
+        _why_rd = redirect_problem(url, _fin)
+        if _why_rd:
+            out["reasons"].append(f"公式ページが{_why_rd}")
+            return out
     out["official_name"] = machine_name(html)
     # ★題の全文も返す★（2026-08-02・Codex30回目）
     #   発見した時点で「基準の題」を控えるため（すり替え検知の空白を無くす）。
@@ -1071,7 +1098,7 @@ def selftest() -> int:
     t("　カードに年月が2つあれば採らない（選ばない）",
       "https://m.example/products/slot/nazo/" not in _hints)
     # ★★Codex29回目：隣のカードの年月を盗らない★★
-    _atk = ('<a href="https://m.example/products/slot/alpha/">A</a>'
+    _atk = ('<div><a href="https://m.example/products/slot/alpha/">A</a></div>'
             '<div><span>導入 2026.10</span>'
             '<a href="https://m.example/products/slot/bravo/">B</a></div>')
     _h2 = list_release_hints(_atk, "https://m.example/products/slot/",
@@ -1124,6 +1151,34 @@ def selftest() -> int:
                        "https://m.example/products/slot/",
                        "https://m.example/products/slot/")
       == ["https://m.example/products/slot/newtwo/"])
+    # ★★Codex34回目★★
+    t("★★同じ機種に別の月が出たら採らない★★（注目欄と一覧の食い違い・Codex34回目）",
+      list_release_hints(
+          '<div class="pick"><a href="https://m.example/products/slot/aaa1/">A</a>'
+          '<p>2026.9</p></div>'
+          '<div class="pick"><a href="https://m.example/products/slot/bbb1/">B</a></div>'
+          '<li class="all"><a href="https://m.example/products/slot/aaa1/">A</a>'
+          '<p>2026.10</p></li>'
+          '<li class="all"><a href="https://m.example/products/slot/bbb1/">B</a></li>',
+          "https://m.example/products/slot/",
+          "https://m.example/products/slot/").get(
+              "https://m.example/products/slot/aaa1/") is None)
+    t("★★template内のリンクで「繰り返し」を偽装できない★★（Codex34回目）",
+      list_release_hints(
+          '<template><div><a href="https://m.example/products/slot/ghost/">幽霊'
+          '</a></div></template>'
+          '<div><span>導入 2026.10</span>'
+          '<a href="https://m.example/products/slot/real1/">実在</a></div>'
+          '<p><a href="https://m.example/products/slot/real2/">実在2</a></p>',
+          "https://m.example/products/slot/",
+          "https://m.example/products/slot/") == {})
+    t("★★個別パス＋クエリの機種リンクも検知する★★（/detail/?machine=新台・Codex34回目）",
+      query_style_machine_links(
+          '<a href="https://m.example/products/slot/detail/?machine=newone">新台</a>',
+          "https://m.example/products/slot/",
+          "https://m.example/products/slot/") != [])
+    t("★★発見時にも転送先を検査する★★（同一メーカー内の別ページ転送・Codex34回目）",
+      "redirect_problem" in __import__("inspect").getsource(classify))
     t("　カードの構造が無いページでは採らない（安全側）",
       list_release_hints(
           '<a href="https://m.example/products/slot/alpha/">A</a> 導入 2026.9 '

@@ -450,7 +450,9 @@ RETRYABLE = ("名鑑の個別ページが", "HEALTHY_NO_MATCH", "CATALOG_UNHEALT
              "型式名がまだどの名鑑にも載っていません",
              "型式名が1つの名鑑にしか載っていません",
              # ★旧機種のページしか無い間は保留＝新台のページが載れば解ける★
-             "型式名の規格印が確認できません")
+             "型式名の規格印が確認できません",
+             # ★一時的な転送は戻れば解ける★（Codex34回目）
+             "へ転送されました")
 # ★やり直しても意味がない理由★（待たずに台帳へ）
 NOT_RETRYABLE = ("既に登録されている疑い", "公式ページと名前が一致しません",
                  "転載の疑い", "AMBIGUOUS_CANDIDATES",
@@ -484,6 +486,8 @@ BLOCKING = ("AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY", "型式名",
             "公式ページを取得できません", "既に登録されている疑い", "2件以上",
             # ★独立性を確かめられないまま2票にしない★（Codex31回目）
             "転載照合を実施できません",
+            # ★別のページへ転送された中身で記事を作らない★（Codex34回目）
+            "へ転送されました", "トップページへ転送されました",
             "転載の疑い",   # ★登録簿に無い転載があれば止める★
             # ★★ここに入れ忘れていた★★（2026-07-31・Codex18回目）
             #   直したつもりで、書き換える場所を1つ手前と間違えていた。
@@ -544,9 +548,16 @@ def verify_official(name: str, official_url: str,
     final_url = str(((_fin or {}).get("url") if isinstance(_fin, dict) else None)
                     or official_url)
     if final_url != official_url:
-        # 同じメーカーの中の転送（https化・スラッシュ補正）は普通に起きるので
-        # それ自体は問題にしない。★範囲の外なら下の照合が止める★
-        _log(f"  公式ページが転送されました: {official_url[:60]} → {final_url[:60]}")
+        # ★同一メーカー内でも「別のページ」への転送は通さない★
+        #   （2026-08-02・Codex34回目。機種Aが同社の機種Bへ一時転送されると、
+        #     slugと公式URLはAのまま、中身はBの記事を作れた）
+        #   https化・www・末尾スラッシュの違いだけは許す（redirect_problemの判定）。
+        _why_rd = _nw.redirect_problem(official_url, final_url)
+        if _why_rd:
+            out["problems"].append(f"公式ページが{_why_rd}")
+            return out
+        _log(f"  公式ページが転送されました（同一ページ扱い）: "
+             f"{official_url[:60]} → {final_url[:60]}")
     # ★尾部にはそのメーカーの社名・銘柄だけを追加で許す★（2026-08-02・Codex27回目）
     #   検査を丸ごと外していたら「Lすーぱぁびん娘（SP）|BELLCO」のような
     #   派生機の公式URLを本機として通せた。社名の飾り（|BELLCO / |Sammy）は
@@ -1039,10 +1050,13 @@ def push_after_publish(slug: str, already_committed: bool = False) -> list:
     #   ls-remote と push は別操作なので、その隙間に別PCがリモートを
     #   巻き戻すと、確かめていない範囲ごと再公開できた。
     #   「リモートが base_sha のままなら置き換える」を push 自体に持たせる。
+    # ★pushするのは「関所を通したそのコミット」だけ★（2026-08-02・Codex34回目）
+    #   HEADを出すと、関所の後に増えたコミットまで未検査のまま公開できる。
+    checked_sha = _head()
     p = subprocess.run(
         ["git", "push",
          f"--force-with-lease=refs/heads/{sc['dest']}:{base_sha}",
-         sc["remote"], f"HEAD:refs/heads/{sc['dest']}"],
+         sc["remote"], f"{checked_sha}:refs/heads/{sc['dest']}"],
         cwd=BASE, capture_output=True, text=True,
         encoding="utf-8", errors="replace")
     if p.returncode == 0:
