@@ -688,7 +688,18 @@ def _verify_maker(official_url: str, maker: str) -> list:
     if not pre:
         return [f"メーカー {maker} の公式の場所が名簿にありません"
                 "（照合できないので通しません）"]
-    if not official_url.startswith(pre):
+    # ★www・httpsの違いは同じ場所として扱う★（2026-08-02・Codex35回目）
+    #   redirect_problem はwww差を許すのに、ここが生の前方一致だったので、
+    #   名簿がwww付き・転送先がwww無しの正しい新台を永久拒否できた。
+    import urllib.parse as _up
+
+    def _hp(u: str):
+        q = _up.urlparse(u)
+        return (q.netloc.lower().removeprefix("www."), q.path)
+
+    ph, pp = _hp(pre)
+    oh, op = _hp(official_url)
+    if oh != ph or not op.startswith(pp):
         return [f"公式URLが {maker} の場所ではありません"
                 f"（名簿は {pre[:48]}… / 渡されたURLは {official_url[:48]}…）"]
     return []
@@ -1009,6 +1020,10 @@ def push_after_publish(slug: str, already_committed: bool = False) -> list:
             return ["コミットできませんでした: "
                     + _hide((c.stdout or c.stderr or "").strip())[:300]]
         _mark_push_pending(slug, _head())
+    # ★関所に入る前に「検査対象のコミット」を固定する★（2026-08-02・Codex35回目）
+    #   関所の後で _head() を取り直すと、その隙間に増えた
+    #   未検査のコミットを「検査済み」としてpushできた（34回目の直し漏れ）。
+    checked_sha = _head()
     # ★コミットしたあと、もう一度関所★（確かめた中身がそのまま出るか）
     r = _run()
     if r.returncode != 0:
@@ -1050,9 +1065,11 @@ def push_after_publish(slug: str, already_committed: bool = False) -> list:
     #   ls-remote と push は別操作なので、その隙間に別PCがリモートを
     #   巻き戻すと、確かめていない範囲ごと再公開できた。
     #   「リモートが base_sha のままなら置き換える」を push 自体に持たせる。
-    # ★pushするのは「関所を通したそのコミット」だけ★（2026-08-02・Codex34回目）
-    #   HEADを出すと、関所の後に増えたコミットまで未検査のまま公開できる。
-    checked_sha = _head()
+    # ★pushするのは「関所を通したそのコミット」だけ★（2026-08-02・Codex34〜35回目）
+    #   関所の間・後にコミットが増えていたら出さない。
+    if _head() != checked_sha:
+        return [f"関所の後にコミットが増えています（検査済み={checked_sha[:12]} / "
+                f"いま={_head()[:12]}）。pushしていません（人が確かめてください）"]
     p = subprocess.run(
         ["git", "push",
          f"--force-with-lease=refs/heads/{sc['dest']}:{base_sha}",
@@ -1520,7 +1537,25 @@ def selftest() -> int:
               "persist" in inspect.signature(discover).parameters
               and "if persist:" in inspect.getsource(discover)
               and "d = discover(persist=apply_it)" in inspect.getsource(main))
-            t("★★発見した時点で基準の題を控える★★"
+            _src_pp = inspect.getsource(push_after_publish)
+        t("★★pushするSHAは関所に入る前に固定し、後で増えたら出さない★★"
+          "（関所の後のHEAD取り直しで未検査コミットを出せた・Codex35回目）",
+          _src_pp.index("checked_sha = _head()")
+          < _src_pp.index("コミットしたあと、もう一度関所")
+          and "関所の後にコミットが増えています" in _src_pp)
+        # ★www差のある名簿でも正しい場所として通す★（Codex35回目）
+        _cats35 = _sj.read_json(_nw.CATALOGS, expect=dict)
+        _cats35["catalogs"]["w"] = {
+            "name": "ダブル", "status": "ACTIVE",
+            "list_url": "https://www.w.example/products/slot/",
+            "link_prefix": "https://www.w.example/products/slot/"}
+        with open(_nw.CATALOGS, "w", encoding="utf-8") as _f35:
+            json.dump(_cats35, _f35, ensure_ascii=False)
+        t("★★www・https差だけなら「メーカーの場所」として通す★★"
+          "（転送許可と食い違い、正しい新台を永久拒否できた・Codex35回目）",
+          _verify_maker("https://w.example/products/slot/shin1/", "w") == []
+          and _verify_maker("https://yoso.example/products/slot/x/", "w") != [])
+        t("★★発見した時点で基準の題を控える★★"
               "（最初の再確認までの使い回しを見逃した・Codex30回目）",
               "known_titles" in inspect.getsource(discover)
               and "page_title" in inspect.getsource(discover))

@@ -159,16 +159,45 @@ def redirect_problem(asked: str, final: str):
         # ★同じサイトの中でも、別のページに飛ばされたら同じ一覧ではない★
         #   正当な転送がある社は、カタログに allow_redirect_to を書いて許可する。
         return f"別のページへ転送されました（{final[:90]}）"
+    # ★クエリの違いも「別のページ」★（2026-08-02・Codex35回目）
+    #   /slot/a/ → /slot/a/?machine=b の転送を同一ページと見なすと、
+    #   転送先Bの中身をAの公式として読めてしまう。
+    if urllib.parse.urlparse(asked).query != urllib.parse.urlparse(final).query:
+        return f"クエリの違うページへ転送されました（{final[:90]}）"
     return None
 
 
-# ★hrefは大文字・引用符なしでも読む★（2026-08-02・Codex33回目）
-#   <A HREF="..."> と <a href=...> はHTMLとして正しいのに読み飛ばし、
-#   その形の新台だけ、件数も残存率も正常なまま永久に見逃せた。
-_HREF_RE = re.compile(
-    r"href\s*=\s*(?:\"([^\"]*)\"|'([^']*)'|([^\s>\"']+))", re.IGNORECASE)
+def _visible_anchor_hrefs(html: str):
+    """★画面に出る<a>のhrefだけを返す★（2026-08-02・Codex33〜35回目）
 
-_BENIGN_QUERY = {"page", "p", "sort", "order", "lang", "hl", "s", "q",
+    正規表現の href 探しは、script/template の中のリンクや
+    data-href まで拾っていた。非表示の既知URLだけで最低件数・残存率を
+    満たせると、画面の一覧が壊れても正常に見えてしまう。
+    解析できなければ None（呼び出し元は0件として異常側に倒す）。
+    """
+    p = _CardParser()
+    try:
+        p.feed(html)
+    except Exception:                     # noqa: BLE001
+        return None
+
+    out = []
+
+    def _walk(n, hidden):
+        h = hidden or n["tag"] in ("script", "style", "noscript", "template")
+        if n["tag"] == "a" and not h:
+            href = str(n["attrs"].get("href") or "").strip()
+            if href:
+                out.append(href)
+        for c in n["children"]:
+            _walk(c, h)
+
+    _walk(p.root, False)
+    return out
+
+
+# ★1文字キー（p/s/q）は無害と決めつけない★（2026-08-02・Codex35回目）
+_BENIGN_QUERY = {"page", "sort", "order", "lang", "hl",
                  "cat", "category", "tag", "filter", "offset", "limit",
                  "utm_source", "utm_medium", "utm_campaign"}
 
@@ -183,8 +212,7 @@ def query_style_machine_links(html: str, base_url: str, link_prefix: str) -> lis
     **見つけたら異常として知らせ、人が名簿を直す**。
     """
     hits = []
-    for m0 in _HREF_RE.finditer(html):
-        href = next((g for g in m0.groups() if g is not None), "") or ""
+    for href in (_visible_anchor_hrefs(html) or []):
         absu = urllib.parse.urljoin(base_url, href.strip())
         base = absu.split("#")[0].split("?")[0]
         q = urllib.parse.urlparse(absu).query
@@ -197,10 +225,11 @@ def query_style_machine_links(html: str, base_url: str, link_prefix: str) -> lis
         for k, vals in urllib.parse.parse_qs(q).items():
             if k.lower() in _BENIGN_QUERY:
                 continue
-            for v in vals:
-                if len(v) >= 3 and _SLUGLIKE.match(v.lower()):
-                    hits.append(absu)
-                    break
+            # ★値の形は問わない★（2026-08-02・Codex35回目）
+            #   「?id=42」「?machine=新台」は形の検査で素通りしていた。
+            if any(v.strip() for v in vals):
+                hits.append(absu)
+                break
     return sorted(set(hits))
 
 
@@ -211,13 +240,10 @@ def product_urls(html: str, base_url: str, link_prefix: str) -> list:
       `/products/slot/` のような「末尾が接頭辞と同じ」ものは機種ではない。
     """
     out = set()
-    # ★一重引用符の href も読む★（2026-08-02・Codex30回目）
-    #   新しい1件だけ href='...' だと、既存の件数・残存率は正常なので
-    #   異常にもならず、その新台だけが永久に検出されなかった。
-    for m0 in _HREF_RE.finditer(html):
-        href = next((g for g in m0.groups() if g is not None), "")
-        if not href:
-            continue
+    # ★画面に出るリンクだけを、実際のHTML解析で読む★（2026-08-02・Codex30〜35回目）
+    #   引用符の種類・大文字・属性の境界・非表示領域を正規表現で追いかけるのを
+    #   やめてパーサで読む（読めなければ0件＝最低件数の警報側に倒れる）。
+    for href in (_visible_anchor_hrefs(html) or []):
         absu = urllib.parse.urljoin(base_url, href.strip())
         absu = absu.split("#")[0].split("?")[0]
         if not absu.startswith(link_prefix):
@@ -1179,6 +1205,31 @@ def selftest() -> int:
           "https://m.example/products/slot/") != [])
     t("★★発見時にも転送先を検査する★★（同一メーカー内の別ページ転送・Codex34回目）",
       "redirect_problem" in __import__("inspect").getsource(classify))
+    # ★★Codex35回目★★
+    t("★★クエリだけ違うページへの転送も「別のページ」★★（Codex35回目）",
+      redirect_problem("https://m.example/products/slot/aaa1/",
+                       "https://m.example/products/slot/aaa1/?machine=bbb1")
+      is not None)
+    t("★★scriptやtemplateの中のリンクを機種数に数えない★★（Codex35回目）",
+      product_urls('<template><a href="https://m.example/products/slot/kakushi1/">x'
+                   '</a></template>'
+                   '<a href="https://m.example/products/slot/mieru1/">y</a>',
+                   "https://m.example/products/slot/",
+                   "https://m.example/products/slot/")
+      == ["https://m.example/products/slot/mieru1/"])
+    t("　data-href を href として拾わない",
+      product_urls('<a data-href="https://m.example/products/slot/nise1/">x</a>',
+                   "https://m.example/products/slot/",
+                   "https://m.example/products/slot/") == [])
+    t("★★「?id=42」「?machine=日本語」も検知する★★（形の検査で素通りした・Codex35回目）",
+      query_style_machine_links(
+          '<a href="https://m.example/products/slot/?id=42">a</a>',
+          "https://m.example/products/slot/",
+          "https://m.example/products/slot/") != []
+      and query_style_machine_links(
+          '<a href="https://m.example/products/slot/detail/?machine=新台">a</a>',
+          "https://m.example/products/slot/",
+          "https://m.example/products/slot/") != [])
     t("　カードの構造が無いページでは採らない（安全側）",
       list_release_hints(
           '<a href="https://m.example/products/slot/alpha/">A</a> 導入 2026.9 '
