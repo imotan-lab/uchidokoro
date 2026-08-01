@@ -130,6 +130,47 @@ def _forget(seen: dict, maker_id: str, url: str) -> None:
 RECHECK_PER_MAKER = 3
 
 
+def baseline_titles() -> int:
+    """★既知URL全部の題を一度だけ控える★（2026-08-02・Codex29回目）
+
+    ローテ（1社3件/晩）だけだと基準がそろうまで1か月以上かかり、
+    その間に使い回されたURLは「新しい題」を基準として覚えてしまう。
+    導入時に一度だけ全URLを読み、基準の題をそろえる。
+    """
+    import random
+    import time
+    seen = _nw._load_seen()
+    titles = seen.setdefault("known_titles", {})
+    checked = seen.setdefault("name_checked", {})
+    todo = [u for m in (seen.get("makers") or {}).values()
+            for u in (m.get("urls") or []) if u not in titles]
+    print(f"題が未記録の既知URL: {len(todo)} 件")
+    ok = ng = 0
+    from datetime import date as _date
+    for i, url in enumerate(todo, 1):
+        try:
+            html = _nw._get(url)
+            t = unicodedata.normalize("NFKC", _nw.page_title(html)).strip()
+            if t:
+                titles[url] = t
+                checked[url] = _date.today().isoformat()
+                ok += 1
+            else:
+                ng += 1
+                _log(f"  題が空でした: {url}")
+        except Exception as e:            # noqa: BLE001
+            ng += 1
+            _log(f"  基準の題を取れませんでした（ローテが拾い直します）: {url} / {e}")
+        if i % 20 == 0:
+            _nw._save_seen(seen)          # ★途中で落ちても控えは残す★
+            print(f"  {i}/{len(todo)} …")
+        time.sleep(0.8 + random.random() * 0.8)
+    _nw._save_seen(seen)
+    _log(f"基準の題の一括取得: 成功{ok}件 / 失敗{ng}件 / 対象{len(todo)}件")
+    print(f"完了: 成功{ok} / 失敗{ng}")
+    return 0
+
+
 def recheck_known(mid: str, r: dict, seen: dict, out: dict) -> None:
     """★既知URLの中身のすり替え検知★（2026-08-02・Codex28回目）
 
@@ -1502,12 +1543,17 @@ def main() -> int:
     ap.add_argument("--apply", action="store_true", help="実際に書き込む")
     ap.add_argument("--ctx", help="task_lock の CTX パス（--apply に必須）")
     ap.add_argument("--name", help="1機種だけ試す：正式名称")
+    ap.add_argument("--baseline-titles", action="store_true",
+                    help="既知URL全部の題を一度だけ控える（すり替え検知の基準）")
     ap.add_argument("--official-url", dest="official_url")
     ap.add_argument("--maker")
     ap.add_argument("--release", default="")
     args = ap.parse_args()
     if args.selftest:
         return selftest()
+
+    if args.baseline_titles:
+        return baseline_titles()
 
     if args.apply and not args.ctx:
         print("★--apply には --ctx（ロックのCTXパス）が必要です★")
