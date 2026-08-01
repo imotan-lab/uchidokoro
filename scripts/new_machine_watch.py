@@ -169,7 +169,13 @@ def product_urls(html: str, base_url: str, link_prefix: str) -> list:
       `/products/slot/` のような「末尾が接頭辞と同じ」ものは機種ではない。
     """
     out = set()
-    for href in re.findall(r'href="([^"]+)"', html):
+    # ★一重引用符の href も読む★（2026-08-02・Codex30回目）
+    #   新しい1件だけ href='...' だと、既存の件数・残存率は正常なので
+    #   異常にもならず、その新台だけが永久に検出されなかった。
+    for m0 in re.finditer(r"href\s*=\s*(\"([^\"]*)\"|'([^']*)')", html):
+        href = m0.group(2) if m0.group(2) is not None else m0.group(3)
+        if not href:
+            continue
         absu = urllib.parse.urljoin(base_url, href.strip())
         absu = absu.split("#")[0].split("?")[0]
         if not absu.startswith(link_prefix):
@@ -272,17 +278,22 @@ def list_release_hints(html: str, base_url: str, link_prefix: str) -> dict:
         if node["tag"] != "a":
             continue
         urls = _node_product_anchors(node, base_url, link_prefix)
-        if len(urls) != 1:
+        # ★数えるのはリンクの本数ではなく、指す機種の数★（2026-08-02・Codex30回目）
+        #   画像と題で同じ機種へ2回リンクする普通のカードで、
+        #   本数で数えると親へ上がれず、年月の控えが取れなかった。
+        if len(set(urls)) != 1:
             continue
         url = urls[0]
-        # ★このリンクだけを含む、一番外の要素＝カード★
+        # ★この機種だけを含む、一番外の要素＝カード★
         card = node
         up = node["parent"]
-        while up is not None and len(
-                _node_product_anchors(up, base_url, link_prefix)) == 1:
+        while up is not None and len(set(
+                _node_product_anchors(up, base_url, link_prefix))) == 1:
             card = up
             up = up["parent"]
-        got = release_month(unicodedata.normalize("NFKC", _node_text(card)))
+        # ★カードはその機種の紹介そのもの＝導入の文脈があるとみなす★
+        got = release_month(unicodedata.normalize("NFKC", _node_text(card)),
+                            assume_release_context=True)
         if got and url not in out:
             out[url] = got["value"]
     return out
@@ -302,10 +313,18 @@ def machine_name(html: str) -> str:
     """公式ページのタイトルから機種名だけを取る（サイト名などを落とす）。"""
     t = page_title(html)
     # 「機種名|機種情報|メーカー名...」の形が多い。最初の区切りまでを名前とする。
-    for sep in ("|", "｜", "-", "‐", "―", "–"):
+    # ★ハイフン類は前後に空白がある時だけ区切りにする★（2026-08-02・Codex30回目）
+    #   「A-SLOT+」のように正式名称の中のハイフンで切ると名前が「A」になり、
+    #   照合不一致（NOT_RETRYABLE）で正しい新台を初回で台帳送りにしていた。
+    for sep in ("|", "｜"):
         if sep in t:
             t = t.split(sep)[0]
             break
+    else:
+        for sep in (" - ", " ‐ ", " ― ", " – ", "　-　", "　―　"):
+            if sep in t:
+                t = t.split(sep)[0]
+                break
     return t.strip()
 
 
@@ -346,10 +365,11 @@ _RELEASE_CONTEXT = ("導入", "登場", "発売", "稼働", "リリース", "デ
                     "ホール", "設置", "納品")
 # ★導入とは別の話だと分かる言葉★（この行の年月は採らない）
 _RELEASE_NOISE = ("更新", "お知らせ", "ニュース", "news", "News", "公開",
-                  "Copyright", "copyright", "(C)", "©", "採用", "募集")
+                  "Copyright", "copyright", "(C)", "©", "採用", "募集",
+                  "キャンペーン", "応募", "抽選", "終了")
 
 
-def release_month(text: str):
+def release_month(text: str, assume_release_context: bool = False):
     """公式が書いている登場年月。★日は補わない★（公式が月までなら月まで）
 
     ★ページで最初に見つかった年月を無条件に使わない★
@@ -362,6 +382,7 @@ def release_month(text: str):
         （＝待ち行列で待つ。こちらで選ばない）
     """
     ctx_vals, all_vals = [], []
+    prev = ""
     for line in text.splitlines():
         for m in _RELEASE_RE.finditer(line):
             if not 1 <= int(m.group(2)) <= 12:
@@ -369,15 +390,29 @@ def release_month(text: str):
             got = {"value": f"{m.group(1)}-{int(m.group(2)):02d}",
                    "precision": "month", "quote": m.group(0)}
             all_vals.append((got, line))
-            if any(w in line for w in _RELEASE_CONTEXT) \
-                    and not any(w in line for w in _RELEASE_NOISE):
+            # ★文脈は同じ行か、直前の行（見出しの次の行に値がある形）★
+            #   雑音の検査は「文脈を読んだ行」と「値の行」だけに掛ける
+            #   （前の行が雑音でも、同じ行に導入の文脈があれば有効）
+            _noisy_line = any(w in line for w in _RELEASE_NOISE)
+            _ctx_same = any(w in line for w in _RELEASE_CONTEXT) \
+                and not _noisy_line
+            _ctx_prev = any(w in prev for w in _RELEASE_CONTEXT) \
+                and not any(w in prev for w in _RELEASE_NOISE) \
+                and not _noisy_line
+            if _ctx_same or _ctx_prev:
                 ctx_vals.append(got)
+        if line.strip():
+            prev = line
     if ctx_vals:
         vals = {g["value"] for g in ctx_vals}
         if len(vals) > 1:
             return None                   # 導入らしい年月どうしが食い違う→選ばない
         return ctx_vals[0]
-    if len(all_vals) == 1:
+    # ★導入の文脈が無い年月は採らない★（2026-08-02・Codex30回目）
+    #   「キャンペーン期間 2026.9」のような唯一の年月を登場月にしていた。
+    #   例外は assume_release_context=True（メーカー公式一覧のカード）だけ。
+    #   カードはその機種の紹介そのものなので、載っている年月＝登場月とみなす。
+    if assume_release_context and len(all_vals) == 1:
         got, line = all_vals[0]
         if not any(w in line for w in _RELEASE_NOISE):
             return got
@@ -442,6 +477,9 @@ def classify(url: str, seen_entry: dict | None = None, today=None,
         return out
     text = _visible_text(html)
     out["official_name"] = machine_name(html)
+    # ★題の全文も返す★（2026-08-02・Codex30回目）
+    #   発見した時点で「基準の題」を控えるため（すり替え検知の空白を無くす）。
+    out["page_title"] = unicodedata.normalize("NFKC", page_title(html)).strip()
     out["release"] = release_month(text)
     if not out["release"] and list_release:
         # ★個別ページに無ければ、公式一覧のカードの年月を使う★
@@ -882,11 +920,43 @@ def selftest() -> int:
       release_month("導入予定：2026年9月" + _nl + "2026年8月登場") is None)
     t("　導入の行が無く、年月が複数あれば選ばない",
       release_month("2026年7月の話" + _nl + "2026年9月の話") is None)
-    t("　導入の行が無くても、年月が1つだけで雑音の行でなければ使う",
-      release_month("Lテスト機 2026年9月")["value"] == "2026-09")
+    t("　導入の文脈が無い単独の年月は、個別ページでは採らない（Codex30回目で厳格化）",
+      release_month("Lテスト機 2026年9月") is None)
     t("　雑音の行（更新・お知らせ・©）の年月は使わない",
       release_month("最終更新 2026年7月") is None
       and release_month("Copyright 2026年1月") is None)
+    # ★★Codex30回目★★
+    t("★★導入の文脈が無い唯一の年月は採らない★★"
+      "（「キャンペーン期間 2026.9」を登場月にできた・Codex30回目）",
+      release_month("キャンペーン期間 2026.9") is None
+      and release_month("Lテスト機のページ 2026.9") is None)
+    t("　一覧のカード（文脈ありとみなす）だけは唯一の年月を使える",
+      release_month("Lテスト機 2026.9", assume_release_context=True)["value"]
+      == "2026-09")
+    t("　見出しの次の行の年月も文脈として読む（表の形）",
+      release_month("導入予定日" + chr(10) + "2026年9月")["value"] == "2026-09")
+    t("★★名前の中のハイフンで題を切らない★★"
+      "（A-SLOT+が「A」になり正しい新台を台帳送りにした・Codex30回目）",
+      machine_name("<title>A-SLOT+</title>") == "A-SLOT+"
+      and machine_name("<title>Lテスト機 - メーカー公式</title>") == "Lテスト機"
+      and machine_name("<title>Lテスト機|公式</title>") == "Lテスト機")
+    t("★★同じ機種へ画像と題で2回リンクするカードからも年月を取れる★★（Codex30回目）",
+      list_release_hints(
+          '<div><a href="https://m.example/products/slot/rikoriko/">'
+          '<img src="x.jpg"></a>'
+          '<a href="https://m.example/products/slot/rikoriko/">リコリコ</a>'
+          '<p>2026.9</p></div>',
+          "https://m.example/products/slot/",
+          "https://m.example/products/slot/")
+      == {"https://m.example/products/slot/rikoriko/": "2026-09"})
+    t("★★一重引用符の href も読む★★"
+      "（新しい1件だけ'…'だと永久に検出されなかった・Codex30回目）",
+      product_urls("<a href='https://m.example/products/slot/shin_dai/'>新台</a>",
+                   "https://m.example/products/slot/",
+                   "https://m.example/products/slot/")
+      == ["https://m.example/products/slot/shin_dai/"])
+    t("　classify は題の全文も返す（発見時に基準の題を控えるため）",
+      "page_title" in __import__("inspect").getsource(classify))
     # ★★Codex27回目：サミーの一覧は「2026.9」形式・個別ページに年月なし★★
     t("★★「2026.9」形式も読める★★（サミーの一覧の実形式・Codex27回目）",
       release_month("導入 2026.9")["value"] == "2026-09"

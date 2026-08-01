@@ -215,8 +215,14 @@ def recheck_known(mid: str, r: dict, seen: dict, out: dict) -> None:
             titles[url] = now_t           # 初回は覚えるだけ
 
 
-def discover() -> dict:
-    """メーカー公式の一覧から新台候補を出す。"""
+def discover(persist: bool = True) -> dict:
+    """メーカー公式の一覧から新台候補を出す。
+
+    ★persist=False（下見）は何も書かない★（2026-08-02・Codex30回目）
+      下見はロックを持たないので、本番実行と重なると
+      古い状態の保存が新しい記録を消す競合が起きえた。
+      下見では待ち行列・台帳・seen・再確認のどれにも書かない。
+    """
     cats = _sj.read_json(_nw.CATALOGS, expect=dict)["catalogs"]
     seen = _nw._load_seen()
     out = {"candidates": [], "problems": [], "first_time": [],
@@ -252,9 +258,10 @@ def discover() -> dict:
                 # ★seen を書く前に覚える★（2026-07-31・Codex17回目）
                 #   あとで覚える形だと、その間に落ちたときに
                 #   「既知のURLだが待ち行列にも無い」＝永久に消えた機種になる。
-                kept = _remember_url(c.get("official_name") or "", url, mid,
-                                     (c.get("release") or {}).get("value") or "",
-                                     "見つけたばかり")
+                kept = (_remember_url(c.get("official_name") or "", url, mid,
+                                      (c.get("release") or {}).get("value") or "",
+                                      "見つけたばかり")
+                        if persist else True)
             else:
                 out["problems"].append(f"{url}: " + " / ".join(c["reasons"]))
                 # ★ここで取りこぼしていた★（2026-07-31・Codex16回目）
@@ -263,20 +270,21 @@ def discover() -> dict:
                 #   一晩だけページが取れなかっただけでも、その機種は永久に消えていた。
                 #   あとで載る見込みがある理由なら、待ち行列に入れて毎日やり直す。
                 if retry_later(c["reasons"]):
-                    kept = _remember_url(
+                    kept = (_remember_url(
                         c.get("official_name") or "", url, mid,
                         (c.get("release") or {}).get("value") or "",
-                        " / ".join(c["reasons"])[:300])
+                        " / ".join(c["reasons"])[:300]) if persist else True)
                 else:
                     # ★やり直しても変わらない理由は、その場で1件ずつ台帳へ★
                     #   （2026-08-02・Codex26回目）まとめ登録は失敗を無視し
                     #   1500字で切るので、誤判定されたURLが台帳にも残らないまま
                     #   既知になり、**翌日から二度と出てこなかった**。
                     #   台帳に残せた時だけ既知にする（残せなければ明日また出てくる）。
-                    kept = _ledger(
+                    kept = (_ledger(
                         "site", "structural", "MATERIAL", "URL_PERMANENT_REJECT",
                         "新URLを記事化の対象から外しました（やり直しても変わらない理由）",
                         f"{url} / " + " / ".join(c["reasons"])[:900])
+                        if persist else True)
             if not kept:
                 # ★どこにも残せなかったURLは「見た」ことにしない★
                 #   （2026-07-31・Codex20回目）
@@ -290,10 +298,21 @@ def discover() -> dict:
                 # ★URLごとの機種名を覚える★（2026-08-02・Codex28回目）
                 #   既知URLの中身が別機種にすり替わったことに気づくため。
                 seen.setdefault("names", {})[url] = c["official_name"]
+            # ★発見した時点で「基準の題」も控える★（2026-08-02・Codex30回目）
+            #   最初の再確認までにURLが使い回されると、
+            #   新しい機種の題を基準として覚えてしまう空白があった。
+            if kept and c.get("page_title"):
+                from datetime import date as _date30
+                seen.setdefault("known_titles", {})[url] = c["page_title"]
+                seen.setdefault("name_checked", {})[url] =                     _date30.today().isoformat()
         # ★既知URLの中身がすり替わっていないか、毎晩少しずつ見る★
         #   （2026-08-02・Codex28回目。全件毎晩は重いのでローテーション）
-        recheck_known(mid, r, seen, out)
-    _nw._save_seen(seen)
+        if persist:
+            recheck_known(mid, r, seen, out)
+    if persist:
+        _nw._save_seen(seen)
+    else:
+        _log("（下見）seen・待ち行列・台帳には何も書きません")
     _log(f"見張り終了: 正常{len(out['watched'])}社 / 見られず{len(out['not_watched'])}社 "
          f"/ 新台候補{len(out['candidates'])}件 / 確認が要る{len(out['problems'])}件")
     return out
@@ -1445,6 +1464,15 @@ def selftest() -> int:
             t("　読めなかったURLも巡回の末尾へ送る（同じ3件で詰まらない）",
               "checked[url] = _date.today().isoformat()   # ★試したら必ず末尾へ★"
               in inspect.getsource(recheck_known))
+            t("★★下見は seen・待ち行列・台帳のどれにも書かない★★"
+              "（ロック無しの下見の保存が本番実行の記録を消せた・Codex30回目）",
+              "persist" in inspect.signature(discover).parameters
+              and "if persist:" in inspect.getsource(discover)
+              and "d = discover(persist=apply_it)" in inspect.getsource(main))
+            t("★★発見した時点で基準の題を控える★★"
+              "（最初の再確認までの使い回しを見逃した・Codex30回目）",
+              "known_titles" in inspect.getsource(discover)
+              and "page_title" in inspect.getsource(discover))
             t("★★下見は待ち行列・台帳を変えない★★"
               "（60日打ち切り・試行記録・台帳送りが下見でも進んでいた・Codex28回目）",
               "60日超えの待ち" in inspect.getsource(main)
@@ -1637,7 +1665,7 @@ def main() -> int:
         if apply_it:
             _log("★戻すまで進みません（--recover --apply で戻してください）★")
             return 1
-    d = discover()
+    d = discover(persist=apply_it)
     for x in d["first_time"]:
         print("初回として記録:", x)
     # ★見つけたが記事にできていない機種を、必ず待ち行列に入れる★
@@ -1665,7 +1693,8 @@ def main() -> int:
             _log(f"  台帳に残せなかったので待ち行列に戻しました: {it['name']}")
             continue
         print(f"  ★{_pend.GIVE_UP_DAYS}日待っても記事にできませんでした: {it['name']}★")
-    _pend.save(pend)
+    if apply_it:
+        _pend.save(pend)                  # ★下見は古い姿を書き戻さない★（Codex30回目）
     print(f"新台候補: {len(d['candidates'])} 件 / 確認が要る: {len(d['problems'])} 件")
     # ★「新台なし」とは言わない★ 見られた社に限った話であることを必ず書く
     print(f"  正常に見られたメーカー: {len(d['watched'])} 社"
