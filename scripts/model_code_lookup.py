@@ -111,7 +111,7 @@ _DECOR = {
     "感想", "演出", "攻略", "実践", "動画", "画像", "一覧", "情報", "恩恵",
     "ボーナス", "フリーズ", "ちょんぼりすた", "pworld", "ぱちタウン", "dmm",
     "dmmぱちタウン", "パチスロ解析", "解析情報", "スロット新台",
-    "機種情報", "新台情報",
+    "機種情報", "新台情報", "ゾーン",
 }
 _DECOR_CORES = {_ci.normalize_core(w) or w for w in _DECOR}
 
@@ -322,6 +322,45 @@ def page_is_machine(html: str, official_name: str,
     return False, "NAME_CORE_MISMATCH"
 
 
+_SEP_LOW = "・、,/／　 -‐―–—"
+_COMPOUND_TOKENS = None
+
+
+def _compound_tokens() -> list:
+    """飾り語・販売区分語（小文字NFKC・長い順）。連結語の分解に使う。"""
+    global _COMPOUND_TOKENS
+    if _COMPOUND_TOKENS is None:
+        toks = set()
+        for w in list(_DECOR) + ["スマートパチスロ", "スマートスロット",
+                                 "スマスロ", "メダルレス", "パチスロ",
+                                 "ぱちスロ", "スロット"]:
+            toks.add(unicodedata.normalize("NFKC", w).lower())
+        _COMPOUND_TOKENS = sorted(toks, key=len, reverse=True)
+    return _COMPOUND_TOKENS
+
+
+def _decor_compound(word: str) -> bool:
+    """★飾り語・販売区分語だけの連結語か★（2026-08-02・とんスキ実データ）
+
+    DMMの実在の題「(新台スマスロ)パチスロ|設定判別・天井・ゾーン・解析…」の
+    「新台スマスロ」「設定判別・天井・…」を、語単位の照合では読めなかった。
+    許可済みの語だけで最後まで分解できる時に限り通す（残りが出たら不合格）。
+    """
+    t = unicodedata.normalize("NFKC", word or "").lower()
+    i = 0
+    while i < len(t):
+        if t[i] in _SEP_LOW:
+            i += 1
+            continue
+        for tok in _compound_tokens():
+            if t.startswith(tok, i):
+                i += len(tok)
+                break
+        else:
+            return False
+    return True
+
+
 def _after_ok(after_seg: str, core: str, official_name: str,
               extra: set | None = None) -> bool:
     """名前の後ろの断片（括弧の中身など）が、本人のページとして自然か。
@@ -342,12 +381,13 @@ def _after_ok(after_seg: str, core: str, official_name: str,
     #   ②語が名前の芯の**順番どおりの部分列**であること（青ブタ⊂青春ブタ野郎…）
     #   の両方を求める。
     has_platform = any(c == "" for c in cores)
+    want_gen = _gen_mark(official_name)
 
     def _subseq(small: str, big: str) -> bool:
         it = iter(big)
         return all(ch in it for ch in small)
 
-    for c in cores:
+    for w, c in zip(words, cores):
         if c == "" or c in _DECOR_CORES or c in _maker_name_cores():
             continue
         # ★メーカー語は正規化後の完全一致だけ★（2026-08-02・Codex28回目）
@@ -363,6 +403,15 @@ def _after_ok(after_seg: str, core: str, official_name: str,
             return False
         if has_platform and len(c) >= 2 and _subseq(c, core):
             continue                      # (規格 略称) の形の略称
+        # ★機種と同じ規格印つきの略称★（2026-08-02・とんスキ実データ）
+        #   P-WORLDの実在の題「(Lとんスキ)」。L自体が規格の注記なので、
+        #   印が機種と同じで、残りが名前の順番どおりの部分列なら通す。
+        if want_gen and _gen_mark(w) == want_gen \
+                and len(c) >= 2 and _subseq(c, core):
+            continue
+        # ★飾り語・販売区分語だけの連結語★（新台スマスロ・設定判別・天井・…）
+        if _decor_compound(w):
+            continue
         return False
     return True
 
@@ -643,6 +692,25 @@ def selftest() -> int:
       "（名前の芯に偶然s,pが並ぶ機種で素通りした・Codex38回目）",
       page_is_machine("<title>L SP TEST（スマスロ SP） | P-WORLD</title>",
                       "L SP TEST", strict_all_tail=True)[0] is False)
+    # ★★とんスキ実データ（2026-08-02・更新タスク初回が実際に弾いた）★★
+    t("★★実在の題「(Lとんスキ)」＝規格印つき略称を通す★★（P-WORLD実データ）",
+      page_is_machine("<title>スマスロ とんでもスキルで異世界放浪メシ(Lとんスキ) "
+                      "パチスロ新台 スロット 機械割 天井 初打ち 打ち方 スペック "
+                      "掲示板 設置店 | P-WORLD</title>",
+                      "スマスロ とんでもスキルで異世界放浪メシ",
+                      strict_all_tail=True)[0] is True)
+    t("★★実在の題「(新台スマスロ)…設定判別・天井・…」＝飾りの連結語を通す★★"
+      "（DMM実データ）",
+      page_is_machine("<title>スマスロ とんでもスキルで異世界放浪メシ(新台スマスロ)"
+                      "パチスロ|設定判別・天井・ゾーン・解析・打ち方・ヤメ時</title>",
+                      "スマスロ とんでもスキルで異世界放浪メシ",
+                      strict_all_tail=True)[0] is True)
+    t("　規格印つきでも派生印（L改）は弾く",
+      page_is_machine("<title>Lすーぱぁびん娘（L改） | P-WORLD</title>",
+                      "Lすーぱぁびん娘", strict_all_tail=True)[0] is False)
+    t("　飾りの連結を装った派生印（SP新台）は弾く",
+      _decor_compound("SP新台") is False and _decor_compound("新台スマスロ") is True
+      and _decor_compound("設定判別・天井・ゾーン・解析・打ち方・ヤメ時") is True)
     t("　直後の括弧が本人の略称なら通る（実データ・青ブタ）",
       page_is_machine(
           "<title>L青春ブタ野郎はバニーガール先輩の夢を見ない"
