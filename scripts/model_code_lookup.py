@@ -452,7 +452,12 @@ def maker_brand_cores(maker_id: str) -> set:
         conf = (got.get("catalogs") or {}).get(maker_id) or {}
     except Exception:                     # noqa: BLE001
         return out
-    for tok in (str(conf.get("name") or ""), str(maker_id or "")):
+    toks = [str(conf.get("name") or ""), str(maker_id or "")]
+    # ★名鑑での別名（パオン・ディーピー等）も、その社の銘柄として許す★
+    #   （2026-08-02・Codex47回目。メーカー欄にしか効いておらず、
+    #     題の括弧（パオン・ディーピー）で正しい票を失っていた）
+    toks += [str(x) for x in (conf.get("directory_names") or [])]
+    for tok in toks:
         c = _ci.normalize_core(tok)
         if c:
             out.add(c)
@@ -521,10 +526,18 @@ def lookup(url: str, official_name: str, expected_maker: str = "") -> dict:
     except Exception as e:
         out["reason"] = f"取得できません: {e}"
         return out
-    ok, why = page_is_machine(html, official_name, strict_all_tail=True)
+    ok, why = page_is_machine(
+        html, official_name, strict_all_tail=True,
+        extra_tail_ok=maker_brand_cores(expected_maker) if expected_maker
+        else None)
     if not ok:
         out["reason"] = why
         return out
+    # ★同定に通ったページの導入年月を控えとして返す★（2026-08-02・Codex47回目）
+    #   公式が年月を画像でしか出さない機種のため。使ってよいのは
+    #   「型式が一致した同じ2名鑑」の月が一致した時だけ（呼び出し元が判定）。
+    _rm = _w.release_month(_w._visible_text(html))
+    out["release_hint"] = str((_rm or {}).get("value") or "")
     # ★名鑑のメーカー欄が「名簿にある別の社」を指していたら採らない★
     #   （2026-08-02・Codex40回目。同名機の別メーカー票を防ぐ）
     #   ★表記ゆれ・別名（KPE↔コナミアミューズメント等）は拒否しない★
@@ -842,6 +855,18 @@ def selftest() -> int:
       "universal" in _maker_core_owners("ミズホ")
       and "kpe" in _maker_core_owners("コナミアミューズメント")
       and _maker_core_owners("そんな社は無い") == set())
+    # ★★Codex47回目★★
+    t("★★期待メーカーの名鑑別名（パオン・ディーピー）が題の括弧でも通る★★"
+      "（メーカー欄にしか効いておらず正しい票を失った・Codex47回目）",
+      page_is_machine("<title>スロット ワールドダイスター(パオン・ディーピー) "
+                      "パチスロ新台 | P-WORLD</title>",
+                      "スロット ワールドダイスター", strict_all_tail=True,
+                      extra_tail_ok=maker_brand_cores("daitogiken"))[0] is True)
+    t("　別の社の照合では通らない（別名は期待メーカーの分だけ渡す）",
+      page_is_machine("<title>スロット ワールドダイスター(パオン・ディーピー) "
+                      "パチスロ新台 | P-WORLD</title>",
+                      "スロット ワールドダイスター", strict_all_tail=True,
+                      extra_tail_ok=maker_brand_cores("sammy"))[0] is False)
     t("　直後の括弧が本人の略称なら通る（実データ・青ブタ）",
       page_is_machine(
           "<title>L青春ブタ野郎はバニーガール先輩の夢を見ない"

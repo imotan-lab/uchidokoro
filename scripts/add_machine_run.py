@@ -413,6 +413,20 @@ def gather(name: str, maker: str = "") -> dict:
             f"（登録簿に系列が書かれていません）")
     mv = _mc.agree(looks)
     got["model_code"] = mv.get("model_code")
+    # ★名鑑2票一致の登場年月★（2026-08-02・Codex47回目に条件つきで承認）
+    #   使ってよいのは「型式が一致した、同定検査を全部通った同じ2名鑑」の
+    #   月が一致した時だけ。公式が年月を画像でしか出さない社（山佐）のため。
+    if mv.get("adopted"):
+        _hosts = set(mv.get("hosts") or [])
+        _months = {r.get("release_hint") for r in looks
+                   if r.get("release_hint")
+                   and r["url"].split("/")[2].lower().removeprefix("www.")
+                   in _hosts}
+        if len(_months) == 1 and len([
+                r for r in looks if r.get("release_hint")
+                and r["url"].split("/")[2].lower().removeprefix("www.")
+                in _hosts]) >= 2:
+            got["directory_release"] = _months.pop()
     if not mv["adopted"]:
         got["problems"].append("型式名: " + str(mv.get("why", ""))[:160])
     # ★型式の2票が成立した時だけ、使わなかった名鑑の問題を記録に落とす★
@@ -534,7 +548,9 @@ RETRYABLE = ("名鑑の個別ページが", "HEALTHY_NO_MATCH", "CATALOG_UNHEALT
              "へ転送されました",
              # ★メンテ・拒否画面は待てば解ける★（Codex36〜37回目。36回目で
              #   足すと言って足し忘れ、永久理由のままだった）
-             "読める状態ではありません")
+             "読める状態ではありません",
+             # ★更新の途中の食い違いも待てば解ける★（Codex47回目）
+             "一覧で食い違っています")
 # ★やり直しても意味がない理由★（待たずに台帳へ）
 NOT_RETRYABLE = ("既に登録されている疑い", "公式ページと名前が一致しません",
                  "転載の疑い", "AMBIGUOUS_CANDIDATES",
@@ -574,6 +590,8 @@ BLOCKING = ("AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY", "型式名",
             #   RETRYABLEに足した時、公開を止める側に入れ忘れていた。
             #   メンテ画面でも名鑑2票がそろえば公開へ進めた）
             "読める状態ではありません",
+            # ★個別と一覧の食い違いのまま書かない★（Codex47回目）
+            "一覧で食い違っています",
             "転載の疑い",   # ★登録簿に無い転載があれば止める★
             # ★★ここに入れ忘れていた★★（2026-07-31・Codex18回目）
             #   直したつもりで、書き換える場所を1つ手前と間違えていた。
@@ -717,14 +735,20 @@ def verify_official(name: str, official_url: str,
     else:
         out["problems"].append("メーカーが指定されていません")
     got = _nw.release_month(_text)
-    if not got and maker:
-        # ★個別ページに年月が無ければ、公式一覧のカードから取り直す★
-        #   （2026-08-02・Codex27回目。サミーは一覧に「2026.9」・個別には無し）
-        #   渡された値は使わない＝いま公式の一覧を読み直して確かめる。
+    if maker:
         lv = _release_from_official_list(maker, official_url)
-        if lv:
+        if not got and lv:
+            # ★個別ページに年月が無ければ、公式一覧のカードから取り直す★
+            #   （2026-08-02・Codex27回目。サミーは一覧に「2026.9」・個別には無し）
             got = {"value": lv, "precision": "month",
                    "quote": "メーカー公式一覧のカードに記載"}
+        elif got and lv and lv != got["value"]:
+            # ★個別と一覧の食い違いは公開しない★（2026-08-02・Codex47回目）
+            #   更新の途中かもしれない＝待てば解ける。
+            out["problems"].append(
+                f"登場年月が公式の個別ページと一覧で食い違っています"
+                f"（個別={got['value']} / 一覧={lv}）")
+            return out
     if not got:
         # ★人間確認済みの控え（release_overrides）★（2026-08-02・Codex46回目）
         #   山佐は導入年月を画像でしか載せない＝機械では読めない実在形。
@@ -1287,6 +1311,19 @@ def run_one(name, official_url, maker, release, apply_it=False,
             f"／新しいslugで作らず、更新タスクで直すこと")
     got = gather(name, maker)
     out["problems"] += got["problems"]
+    # ★公式が年月を出さない機種は、名鑑2票一致の月で先行記事にする★
+    #   （2026-08-02・Codex47回目に条件つきで承認。山佐は導入年月が画像のみ）
+    #   条件＝型式が一致した同じ2名鑑の月が一致（gatherが判定済み）。
+    #   公式に年月がある時はそちらが正（この控えは使わない）。
+    if got.get("directory_release") and not release \
+            and any("登場年月が書かれていません" in p for p in out["problems"]):
+        release = got["directory_release"]
+        out["problems"] = [p for p in out["problems"]
+                           if "登場年月が書かれていません" not in p]
+        if not _nw.is_recent(release):
+            out["problems"].append(f"登場年月が新台の範囲外です（{release}）")
+        else:
+            _log(f"  登場年月は名鑑2票一致の月を使用（先行記事）: {release}")
     # ★型式名でも重複を見る★（2026-07-31・Codex16回目）
     #   最初の重複検査は名前と公式URLしか渡していなかった。
     #   型式名は材料を集めて初めて分かるので、**分かった時点でもう一度見る**。
@@ -1823,6 +1860,10 @@ def selftest() -> int:
               "（山佐は導入年月が画像のみ・Codex46回目）",
               "_release_override" in inspect.getsource(verify_official)
               and "read_json(RELEASE_OVERRIDES" in inspect.getsource(_release_override))
+            t("★★名鑑2票一致の月は「公式が無言の時だけ」使う★★（Codex47回目）",
+              "directory_release" in inspect.getsource(gather)
+              and "名鑑2票一致の月を使用" in inspect.getsource(run_one)
+              and "not release" in inspect.getsource(run_one))
             t("★★初回に読めなかった将来の新台を沈めない★★（Codex37回目）",
               "初回に読めなかった" in inspect.getsource(discover)
               and "初回に残せなかったので" in inspect.getsource(discover))

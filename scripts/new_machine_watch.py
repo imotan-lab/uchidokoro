@@ -763,6 +763,15 @@ def classify(url: str, seen_entry: dict | None = None, today=None,
         out["release"] = {"value": str(list_release), "precision": "month",
                           "quote": "メーカー公式一覧のカードに記載",
                           "source": "maker_list"}
+    elif out["release"] and list_release             and str(list_release) != out["release"]["value"]:
+        # ★個別と一覧で月が食い違ったら選ばない★（2026-08-02・Codex47回目）
+        #   更新の途中かもしれない＝待てば解けるので待ち行列で待つ。
+        out["reasons"].append(
+            f"登場年月が公式の個別ページと一覧で食い違っています"
+            f"（個別={out['release']['value']} / 一覧={list_release}）")
+        out["release"] = None
+        out["ok"] = False
+        return out
 
     if not out["official_name"]:
         out["reasons"].append("公式ページから機種名を取れません")
@@ -1538,6 +1547,19 @@ def selftest() -> int:
       "（完成後も再分類されず既知に沈んだ・Codex46回目）",
       not any("パチスロのページに見えません" in r for r in _c46["reasons"])
       and any("登場年月" in r for r in _c46["reasons"]))
+    # ★★Codex47回目★★
+    _real_get47 = globals()["_get"]
+    globals()["_get"] = lambda u, timeout=20: (
+        "<title>L試験機</title><body>パチスロ 導入予定 2026年9月</body>")
+    try:
+        _c47 = classify("https://m.example/products/slot/x3/", None,
+                        today=__import__("datetime").date(2026, 8, 2),
+                        list_release="2026-10")
+    finally:
+        globals()["_get"] = _real_get47
+    t("★★個別ページと一覧の月が食い違ったら選ばない★★（Codex47回目）",
+      not _c47["ok"]
+      and any("食い違っています" in r for r in _c47["reasons"]))
     t("　カードの構造が無いページでは採らない（安全側）",
       list_release_hints(
           '<a href="https://m.example/products/slot/alpha/">A</a> 導入 2026.9 '
