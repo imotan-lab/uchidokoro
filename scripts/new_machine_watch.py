@@ -198,8 +198,11 @@ def _visible_anchor_hrefs(html: str):
 
 
 # ★1文字キー（p/s/q）は無害と決めつけない★（2026-08-02・Codex35回目）
+# ★cat/category/tag/filter も無害と決めつけない★（2026-08-02・Codex51回目）
+#   分類キーは「?cat=機種名」の形で機種を指せるため、値つきなら知らせる。
+#   実物9社の一覧で誤報0件を確認してから外した。
 _BENIGN_QUERY = {"page", "sort", "order", "lang", "hl",
-                 "cat", "category", "tag", "filter", "offset", "limit",
+                 "offset", "limit",
                  "utm_source", "utm_medium", "utm_campaign"}
 # ★ページ送り系のキーは「数字のときだけ」無害★（2026-08-02・Codex50回目）
 #   ?page=new_machine のような機種指定を黙って捨てない。
@@ -217,12 +220,19 @@ def query_style_machine_links(html: str, base_url: str, link_prefix: str) -> lis
     対応はしない（機種URLの形はメーカーごとに違いすぎる）が、
     **見つけたら異常として知らせ、人が名簿を直す**。
     """
+    # ★一覧ページ側（list_url）のクエリ形も検査する★（2026-08-02・Codex51回目）
+    #   現行9社中5社は list_url と link_prefix の場所が異なるため、
+    #   一覧自身への「?machine=新台」を link_prefix だけでは検知できなかった。
+    _list_base = base_url.split("#")[0].split("?")[0]
+    if not _list_base.endswith("/"):
+        _list_base = _list_base.rsplit("/", 1)[0] + "/"
+    _scan_prefixes = (link_prefix, _list_base)
     hits = []
     for href in (_visible_anchor_hrefs(html) or []):
         absu = urllib.parse.urljoin(base_url, href.strip())
         base = absu.split("#")[0].split("?")[0]
         q = urllib.parse.urlparse(absu).query
-        if not q or not base.startswith(link_prefix):
+        if not q or not any(base.startswith(p) for p in _scan_prefixes):
             continue
         # ★個別パス＋クエリで機種を分ける形も対象★（2026-08-02・Codex34回目）
         #   /detail/?machine=new はクエリを落とすと /detail/ に潰れ、
@@ -1417,6 +1427,20 @@ def selftest() -> int:
           '<a href="https://m.example/products/slot/?sort=new">並び替え</a>',
           "https://m.example/products/slot/",
           "https://m.example/products/slot/") == [])
+    # ★★Codex51回目★★
+    t("★★分類キー（?cat=機種名）を無害と決めつけない★★（Codex51回目）",
+      query_style_machine_links(
+          '<a href="https://m.example/products/slot/?cat=new_machine">新機種</a>',
+          "https://m.example/products/slot/",
+          "https://m.example/products/slot/")
+      == ["https://m.example/products/slot/?cat=new_machine"])
+    t("★★一覧（list_url）側のクエリ形も検査する★★"
+      "（一覧と機種置き場が別の5社で検知できなかった・Codex51回目）",
+      query_style_machine_links(
+          '<a href="?machine=new_machine">L新機種</a>',
+          "https://m.example/machine/slot/",
+          "https://m.example/pub/machine/")
+      == ["https://m.example/machine/slot/?machine=new_machine"])
     # ★★Codex33回目★★
     t("★★templateの中の日付を本文として読まない★★（Codex33回目）",
       release_month(_visible_text(

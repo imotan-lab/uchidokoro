@@ -50,9 +50,21 @@ CATALOGS = os.path.join(BASE, "assets", "data", "directory-catalogs.json")
 # 一覧のリンク文字が「2026年5月22日 Lすーぱぁびん娘 スロット 新台 天井 …」の形なので、
 # 先頭の日付と、後ろに続く記事タイトルの飾りを落として機種名だけにする。
 _DATE_HEAD = re.compile(r"^\s*20\d\d年\s*\d{1,2}月\s*\d{1,2}日\s*")
-_TITLE_TAIL = ("スロット", "新台", "天井", "設定判別", "やめどき", "ヤメ時", "解析",
-               "まとめ", "攻略", "打ち方", "ゾーン", "スペック", "期待値", "情報",
-               "パチスロ", "設置店", "掲示板", "初打ち", "機械割")
+_TITLE_TAIL = ("設定判別", "解析まとめ", "終了画面", "徹底解説", "打ち方", "狙い目",
+               "やめどき", "ヤメ時", "ゾーン", "スペック", "期待値", "情報",
+               "設置店", "掲示板", "初打ち", "機械割", "スロット", "パチスロ",
+               "スマスロ", "新台", "天井", "解析", "まとめ", "攻略", "示唆",
+               "評価", "考察")
+# 飾り語どうしをつなぐ記号・助詞（これだけが残るなら「飾りだけの塊」とみなす）
+_TAIL_JOINERS = set("・、/｜|()（） 　をとのー:：!！?？")
+
+
+def _decor_only(token: str) -> bool:
+    """その塊（空白なし）が記事タイトルの飾りだけでできているか。"""
+    t = token
+    for w in sorted(_TITLE_TAIL, key=len, reverse=True):
+        t = t.replace(w, " ")
+    return bool(token) and all(ch in _TAIL_JOINERS or ch == " " for ch in t)
 
 STATES = ("FOUND", "HEALTHY_NO_MATCH", "AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY")
 
@@ -63,12 +75,33 @@ def anchor_core(text: str) -> str:
     ★記事タイトルの飾りを落とす★
       落とさないと芯が「すーぱぁびん娘新台天井設定判別…」まで伸びて、
       正式名称の芯と一致しなくなる（実データで確認）。
+
+    ★飾りは「右端から・語境界を保って」剥がす★（2026-08-02・Codex51回目）
+      最初に現れた飾り語で切ると、機種名の中の「パチスロ」「スロット」で
+      名前ごと消える。実在の「Lパチスロうる星やつら」は芯が空になり、
+      「Lパチスロ からくりサーカス2」はちょんぼりすたの実一覧で
+      既に取りこぼしていた（両方とも実ページで確認）。
     """
     t = _DATE_HEAD.sub("", " ".join(str(text or "").split()))
-    for word in _TITLE_TAIL:
-        i = t.find(word)
-        if i > 0:
-            t = t[:i]
+    # ｜は語の区切りとして扱う（「機種名｜天井・設定判別…」の形が実在）
+    toks = [x for x in re.split(r"[ ｜|]+", t) if x]
+    # 右端から「飾りだけの塊」を落とす。機種名に届いたら止まる
+    while toks and _decor_only(toks[-1]):
+        toks.pop()
+    t = " ".join(toks)
+    # ベタ付きの飾り（…びん娘新台天井）は、末尾に飾り語が2語以上
+    # 連続する時だけ剥がす。1語では剥がさない（「アニマルスロット」等、
+    # 機種名の一部かもしれないため）
+    stripped, n = t, 0
+    while True:
+        hit = next((w for w in sorted(_TITLE_TAIL, key=len, reverse=True)
+                    if stripped.endswith(w) and len(stripped) > len(w)), None)
+        if not hit:
+            break
+        stripped = stripped[:-len(hit)].rstrip("".join(_TAIL_JOINERS))
+        n += 1
+    if n >= 2 and stripped:
+        t = stripped
     return _ci.normalize_core(t)
 
 
@@ -180,6 +213,19 @@ def selftest() -> int:
       anchor_core("Lすーぱぁびん娘(スマスロ) パチスロ新台")
       == _ci.normalize_core("Lすーぱぁびん娘"))
     t("　飾りしか無ければ空を返す", anchor_core("スロット 新台 天井") == "")
+    t("★★機種名の中の「パチスロ」で名前ごと消えない★★（実在・Codex51回目）",
+      anchor_core("Lパチスロうる星やつら") == _ci.normalize_core("Lパチスロうる星やつら")
+      and anchor_core("2026年7月20日 Lパチスロ からくりサーカス2｜天井 スペック 設定判別 解析 評価")
+      == _ci.normalize_core("Lパチスロ からくりサーカス2"))
+    t("　機種名の中の「スロット」でも切らない（Lアニマルスロット ドッチ）",
+      anchor_core("Lアニマルスロット ドッチ 新台 天井 設定判別")
+      == _ci.normalize_core("Lアニマルスロット ドッチ"))
+    t("　｜区切りの飾り列も落とす",
+      anchor_core("Lタクトオーパス デスティニー｜天井・設定判別・終了画面・ヤメ時を徹底解説")
+      == _ci.normalize_core("Lタクトオーパス デスティニー"))
+    t("　ベタ付きの飾りは2語以上の時だけ剥がす",
+      anchor_core("Lすーぱぁびん娘新台天井設定判別") == _ci.normalize_core("Lすーぱぁびん娘")
+      and anchor_core("Lアニマルスロット") == _ci.normalize_core("Lアニマルスロット"))
 
     HTML = ('<a href="/slot/belko-slot/260918/">2026年5月22日 Lすーぱぁびん娘 スロット 新台</a>'
             '<a href="/slot/belko-slot/111111/">Lスーパービンゴネオ スロット 解析</a>'

@@ -386,18 +386,27 @@ def gather(name: str, maker: str = "") -> dict:
     # ★メーカー違いと判明した名鑑は、材料・転載照合からも外す★
     #   （2026-08-02・Codex41回目。型式の票からしか外していなかったので、
     #     同名の別メーカー機のページが材料の2票に復活できた）
+    # ★メーカー欄を名簿で解決できない名鑑も、票・材料とも不採用★
+    #   （2026-08-02・Codex51回目。同名別会社機を異なる2名鑑が載せると
+    #     誤った型式・スペックを2票一致として公開できてしまう。
+    #     実在の別名は directory_names に足せば通る＝待ち行列側の失敗にとどまる）
     _bad_maker = {r["url"] for r in looks
                   if str(r.get("reason") or "").startswith(
-                      "DIRECTORY_MAKER_MISMATCH")}
+                      ("DIRECTORY_MAKER_MISMATCH", "DIRECTORY_MAKER_UNRESOLVED"))}
     if _bad_maker:
-        for u in sorted(_bad_maker):
-            _log(f"  （別メーカーの名鑑・材料からも除外）{u}")
+        _bad_msgs = []
+        for r in looks:
+            if r["url"] in _bad_maker:
+                _log(f"  （メーカー欄の照合により票・材料からも除外）"
+                     f"{r['url']} → {r['reason']}")
+                _bad_msgs.append(str(r["reason"]))
         got["urls"] = [u for u in got["urls"] if u not in _bad_maker]
         if len(got["urls"]) < 2:
             got["problems"] += unused_msgs
+            got["problems"] += _bad_msgs      # ★なぜ除外したかを行列・台帳に残す★
             got["problems"].append(
                 f"名鑑の個別ページが {len(got['urls'])} 件しか見つかりません"
-                "（2件以上が要る・別メーカーの名鑑を除いた結果）")
+                "（2件以上が要る・メーカー欄の照合で除いた結果）")
             return got
     # ★出典どうしが転載でないか確かめる★（2026-07-31・実際に見つけた）
     #   やんちゃプレスはちょんぼりすたと本文が17行そのまま同じだった。
@@ -550,7 +559,9 @@ RETRYABLE = ("名鑑の個別ページが", "HEALTHY_NO_MATCH", "CATALOG_UNHEALT
              #   足すと言って足し忘れ、永久理由のままだった）
              "読める状態ではありません",
              # ★更新の途中の食い違いも待てば解ける★（Codex47回目）
-             "一覧で食い違っています")
+             "一覧で食い違っています",
+             # ★名簿に別名を足せば解ける★（Codex51回目）
+             "名鑑のメーカー欄を名簿で解決できません")
 # ★やり直しても意味がない理由★（待たずに台帳へ）
 NOT_RETRYABLE = ("既に登録されている疑い", "公式ページと名前が一致しません",
                  "転載の疑い", "AMBIGUOUS_CANDIDATES",
@@ -1810,6 +1821,11 @@ def selftest() -> int:
             t("★★メーカー違いの名鑑は材料・転載照合からも外す★★"
               "（型式の票からしか外れず材料に復活できた・Codex41回目）",
               "材料からも除外" in inspect.getsource(gather))
+            t("★★メーカー欄を解決できない名鑑も票・材料から外し、"
+              "やり直す価値ありとして待つ★★（Codex51回目）",
+              "DIRECTORY_MAKER_UNRESOLVED" in inspect.getsource(gather)
+              and retry_later(["DIRECTORY_MAKER_UNRESOLVED（名鑑のメーカー欄を"
+                               "名簿で解決できません: 別会社）"]))
             t("★★機種名の芯が変わったURLは公開へ進めない★★"
               "（使い回し検知が公開を止めていなかった・Codex41回目）",
               "_name_conflict" in inspect.getsource(fill_missing)

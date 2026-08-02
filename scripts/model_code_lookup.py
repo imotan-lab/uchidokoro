@@ -585,12 +585,16 @@ def lookup(url: str, official_name: str, expected_maker: str = "") -> dict:
                                  f"別の社を指しています: {mk[:30]}）")
                 return out
             if not owners:
-                # ★解決できない表記は記録して育てる★（2026-08-02・Codex44回目）
-                #   いきなり除外にすると、名簿に無い実在の別名
-                #   （子会社ブランド等）で正しい新台を失う。
-                #   ログに残し、実在の別名を directory_names へ足していく。
-                print(f"  （名鑑のメーカー欄を名簿で解決できません: {mk[:40]} "
-                      f"/ 期待={expected_maker} / {url[:60]}）")
+                # ★解決できない表記の票は採用しない★（2026-08-02・Codex51回目）
+                #   44回目は「ログだけ残して育てる」段階案だったが、
+                #   同名別会社機を異なる2名鑑が載せると誤った型式を
+                #   2票一致として公開できてしまう（誤情報側の穴）。
+                #   実在の別名（レオスター等）は directory_names に足せば通る
+                #   ＝不採用は「名簿を直せば直る」待ち行列側の失敗にとどまる。
+                out["reason"] = (f"DIRECTORY_MAKER_UNRESOLVED（名鑑のメーカー欄を"
+                                 f"名簿で解決できません: {mk[:30]}。実在の別名なら"
+                                 f" directory_names へ追加）")
+                return out
     code, why = extract_model_code(html)
     out["model_code"] = code
     out["reason"] = why
@@ -866,7 +870,7 @@ def selftest() -> int:
                        expected_maker="heiwa"),
                 setattr(_w, "_get", _w._get_bak40))[2])()
       ["reason"].startswith("DIRECTORY_MAKER_MISMATCH"))
-    t("　名簿に無い表記（コナミアミューズメント等）は判定不能として通す"
+    t("　名簿の別名（コナミアミューズメント→KPE）は解決されて通る"
       "（KPEのとんスキ実データを弾かないため）",
       (lambda: (setattr(_w, "_get_bak41", _w._get),
                 setattr(_w, "_get", lambda u, timeout=20:
@@ -875,6 +879,19 @@ def selftest() -> int:
                 lookup("https://www.p-world.co.jp/x", "L試験機",
                        expected_maker="kpe"),
                 setattr(_w, "_get", _w._get_bak41))[2])()["model_code"] == "L試験1")
+    # ★★Codex51回目★★
+    t("★★名簿で解決できないメーカー欄の票は採用しない★★（Codex51回目・"
+      "同名別会社機の2名鑑一致で誤った型式を公開できた）",
+      (lambda: (setattr(_w, "_get_bak51", _w._get),
+                setattr(_w, "_get", lambda u, timeout=20:
+                    "<title>L試験機 パチスロ新台 | P-WORLD</title>"
+                    "<p>メーカー名：名簿にない別会社</p><p>型式名：L別物1</p>"),
+                lookup("https://www.p-world.co.jp/x", "L試験機",
+                       expected_maker="heiwa"),
+                setattr(_w, "_get", _w._get_bak51))[2])()
+      ["reason"].startswith("DIRECTORY_MAKER_UNRESOLVED"))
+    t("　レオスター（エンターライズの名鑑表記・P-WORLD実データ）は解決される",
+      "enterrise" in _maker_core_owners("レオスター"))
     # ★★Codex43回目（北電子・実データ）★★
     t("★★実在の題「マイジャグラーVI|パチスロ製品情報|株式会社北電子」を通す★★"
       "（北電子の新台を出せない経路だった・Codex43回目）",

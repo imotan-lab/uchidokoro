@@ -46,7 +46,10 @@
    "min_expected": 4,
    "status": "ACTIVE",
    "_checked": "2026-07-31 静的HTMLで6件取得・個別ページのタイトルが機種名であることを確認",
-   "list_marker": "株式会社 エンターライズ"
+   "list_marker": "株式会社 エンターライズ",
+   "directory_names": [
+    "レオスター"
+   ]
   },
   "heiwa": {
    "name": "平和",
