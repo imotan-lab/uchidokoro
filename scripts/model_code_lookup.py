@@ -471,6 +471,34 @@ def maker_brand_cores(maker_id: str) -> set:
     return out
 
 
+_INTRO_LABELS = ("導入開始日", "導入開始", "導入予定日", "導入日")
+
+
+def release_near_identity(text: str) -> str:
+    """★型式名の近くにある導入開始日★（対象機の基本情報ブロックの値）
+
+    （2026-08-02・Codex48回目。DMMの実ページで確認＝本体の導入開始日は
+      型式名の数行後・「シリーズ機種」の日付は1000行以上離れている）
+    見つからなければ空文字（呼び出し元がページ全体の単独月へ退避）。
+    """
+    lines = text.splitlines()
+    ti = next((i for i, l in enumerate(lines)
+               if l.strip().startswith("型式名")), None)
+    if ti is None:
+        return ""
+    for i in range(ti, min(ti + 25, len(lines))):
+        s2 = lines[i].strip()
+        for lab in _INTRO_LABELS:
+            if not s2.startswith(lab):
+                continue
+            rest = s2[len(lab):].lstrip("：: 　").strip()
+            cand = rest or (lines[i + 1].strip() if i + 1 < len(lines) else "")
+            m = _w._RELEASE_RE.search(cand)
+            if m and 1 <= int(m.group(2)) <= 12:
+                return f"{m.group(1)}-{int(m.group(2)):02d}"
+    return ""
+
+
 def extract_maker_name(html: str) -> str:
     """名鑑ページの「メーカー名」欄の値（無ければ空）。"""
     lines = _w._visible_text(html).splitlines()
@@ -536,8 +564,13 @@ def lookup(url: str, official_name: str, expected_maker: str = "") -> dict:
     # ★同定に通ったページの導入年月を控えとして返す★（2026-08-02・Codex47回目）
     #   公式が年月を画像でしか出さない機種のため。使ってよいのは
     #   「型式が一致した同じ2名鑑」の月が一致した時だけ（呼び出し元が判定）。
-    _rm = _w.release_month(_w._visible_text(html))
-    out["release_hint"] = str((_rm or {}).get("value") or "")
+    # ★対象機の基本情報ブロックの導入開始日だけを読む★（2026-08-02・Codex48回目）
+    #   DMMは同じページに「シリーズ機種」の導入開始日も並ぶ（実ページで確認）。
+    #   ページ全体で読むと複数月＝Noneになり、山佐系の控えが消えていた。
+    out["release_hint"] = release_near_identity(_w._visible_text(html))
+    if not out["release_hint"]:
+        _rm = _w.release_month(_w._visible_text(html))
+        out["release_hint"] = str((_rm or {}).get("value") or "")
     # ★名鑑のメーカー欄が「名簿にある別の社」を指していたら採らない★
     #   （2026-08-02・Codex40回目。同名機の別メーカー票を防ぐ）
     #   ★表記ゆれ・別名（KPE↔コナミアミューズメント等）は拒否しない★
@@ -867,6 +900,18 @@ def selftest() -> int:
                       "パチスロ新台 | P-WORLD</title>",
                       "スロット ワールドダイスター", strict_all_tail=True,
                       extra_tail_ok=maker_brand_cores("sammy"))[0] is False)
+    # ★★Codex48回目（DMM実在形）★★
+    _nl48 = chr(10)
+    t("★★シリーズ機種の月が並んでも、対象機の導入開始日だけを読む★★"
+      "（DMM実在形・名鑑2票の月控えが消えていた・Codex48回目）",
+      release_near_identity(_nl48.join(
+          ["メーカー名", "テスト社", "型式名", "L試験1", "タイプ", "AT",
+           "導入開始日", "2026年10月05日(月)予定"]
+          + ["x"] * 30
+          + ["シリーズ機種", "導入開始日: 2025年06月02日(月)", "旧機種A",
+             "導入開始日: 2024年05月07日(火)", "旧機種B"])) == "2026-10")
+    t("　型式名が無いページでは空（ページ全体の単独月へ退避）",
+      release_near_identity("導入開始日" + _nl48 + "2026年10月05日") == "")
     t("　直後の括弧が本人の略称なら通る（実データ・青ブタ）",
       page_is_machine(
           "<title>L青春ブタ野郎はバニーガール先輩の夢を見ない"
