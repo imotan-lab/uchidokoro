@@ -68,16 +68,19 @@ def similarity(text_a: str, text_b: str) -> dict:
 
 def check(urls: list) -> dict:
     """URLどうしを総当たりで比べ、転載の疑いを返す。"""
-    texts, errs = {}, []
+    texts, errs, failed = {}, [], []
     for u in urls:
         try:
             texts[u] = _w._visible_text(_w._get(u))
         except Exception as e:
             errs.append(f"{u}: 取得できません（{e}）")
+            failed.append(u)
     # ★低い一致率は「独立である証拠」にはならない★（Codex指摘）
     #   書き直した転載や、同じプレス資料を各社が要約した場合は検出できない。
     #   ここで分かるのは「そのまま写した疑いがあるか」だけ。
-    out = {"suspects": [], "checked": [], "problems": errs,
+    # ★取れなかったURLは failed で明示して返す★（2026-08-02・Codex53回目）
+    #   呼び出し元が「そのページだけを票・材料から外す」判断をできるように。
+    out = {"suspects": [], "checked": [], "problems": errs, "failed": failed,
            "_note": "一致率が低くても独立の証明にはなりません（書き直した転載は検出できません）"}
     for x, y in itertools.combinations(sorted(texts), 2):
         s = similarity(texts[x], texts[y])
@@ -140,6 +143,20 @@ def selftest() -> int:
         r2 = check(list(pages))
         t("　取得できなければ理由を残す（黙って0件にしない）",
           len(r2["problems"]) == 3)
+        t("★★取れなかったURLを failed で明示する★★"
+          "（呼び出し元がそのページだけを票から外せるように・Codex53回目）",
+          sorted(r2["failed"]) == sorted(pages))
+
+        def _get_partial(u, timeout=20):
+            if u == "https://c.example/1":
+                raise RuntimeError("3件目だけ落ちた")
+            return pages[u]
+        _w._get = _get_partial
+        r3 = check(list(pages))
+        t("　一部だけ落ちた時は、取れた2件どうしの照合は続ける",
+          r3["failed"] == ["https://c.example/1"]
+          and any({x["a"], x["b"]} == {"a.example", "b.example"}
+                  for x in r3["checked"]))
     finally:
         _w._get = real
 

@@ -732,6 +732,11 @@ _RELEASE_NOISE = ("更新", "お知らせ", "ニュース", "news", "News", "公
                   "展示", "イベント", "発表", "出展", "フェア",
                   # ★関連商品の発売・配信の月を台の登場月にしない★（Codex48〜49回目）
                   "リリース", "サウンドトラック", "サントラ", "配信")
+# ★カード（文脈なしで採る側）だけに掛ける商品販売の語★（2026-08-02・Codex53回目）
+#   「グッズ発売 2026.9」の月を導入月にしない。全体の雑音に入れないのは、
+#   「発売」を導入の意味で書くメーカー表記まで文脈つきの行で失わないため
+#   （文脈つきの行は導入・登場などの語を別に要求している）。
+_RELEASE_CARD_NOISE = ("発売", "予約", "受注", "グッズ", "商品", "販売")
 
 
 def release_month(text: str, assume_release_context: bool = False):
@@ -781,7 +786,8 @@ def release_month(text: str, assume_release_context: bool = False):
     #   カードはその機種の紹介そのものなので、載っている年月＝登場月とみなす。
     if assume_release_context and len(all_vals) == 1:
         got, line = all_vals[0]
-        if not any(w.lower() in line.lower() for w in _RELEASE_NOISE):
+        if not any(w.lower() in line.lower()
+                   for w in _RELEASE_NOISE + _RELEASE_CARD_NOISE):
             return got
     return None
 
@@ -1370,6 +1376,10 @@ def selftest() -> int:
     t("　一覧のカード（文脈ありとみなす）だけは唯一の年月を使える",
       release_month("Lテスト機 2026.9", assume_release_context=True)["value"]
       == "2026-09")
+    t("★★グッズ発売・予約の月をカードの導入月にしない★★（Codex53回目）",
+      release_month("グッズ発売 2026.9", assume_release_context=True) is None
+      and release_month("予約商品 2026.9", assume_release_context=True) is None
+      and release_month("導入予定 2026.9")["value"] == "2026-09")
     t("　見出しの次の行の年月も文脈として読む（表の形）",
       release_month("導入予定日" + chr(10) + "2026年9月")["value"] == "2026-09")
     t("★★名前の中のハイフンで題を切らない★★"

@@ -412,10 +412,27 @@ def gather(name: str, maker: str = "") -> dict:
     #   やんちゃプレスはちょんぼりすたと本文が17行そのまま同じだった。
     #   登録簿に無い転載を2票に数えると、独立2出典の意味が無くなる。
     lin = _lc.check(got["urls"])
-    # ★照合できなかった＝独立を確かめられていない★（2026-08-02・Codex31回目）
-    #   取得失敗を無視すると「独立か不明な2ページ」を2票にできた。
+    # ★照合できなかったページは、そのページだけを票・材料から外す★
+    #   （2026-08-02・Codex53回目。31回目は全体をBLOCKINGにしていたため、
+    #     3件目の名鑑が一時的に落ちただけで、独立を確かめ終えた正常な
+    #     2票まで公開不能になった。独立か不明なページを票に入れない、
+    #     という31回目の目的は「外す」ことでそのまま守られる）
+    _lin_failed = set(lin.get("failed") or [])
+    if _lin_failed:
+        for u in sorted(_lin_failed):
+            _log(f"  （転載照合で取得できず・票と材料から除外）{u}")
+        got["urls"] = [u for u in got["urls"] if u not in _lin_failed]
+        looks = [r for r in looks if r["url"] not in _lin_failed]
+        if len(got["urls"]) < 2:
+            got["problems"] += unused_msgs
+            got["problems"].append(
+                f"名鑑の個別ページが {len(got['urls'])} 件しか見つかりません"
+                "（2件以上が要る・転載照合で取得できないページを除いた結果）")
+            return got
+    # 取得失敗以外の照合不能（想定外）は従来どおり全体を止める
     for p_ in lin.get("problems") or []:
-        got["problems"].append(f"転載照合を実施できません: {p_[:120]}")
+        if not any(p_.startswith(u) for u in _lin_failed):
+            got["problems"].append(f"転載照合を実施できません: {p_[:120]}")
     for sp in lin["suspects"]:
         got["problems"].append(
             f"転載の疑い: {sp['a']} と {sp['b']} の本文が {sp['ratio']:.0%} 一致"
@@ -1430,6 +1447,13 @@ def selftest() -> int:
         print(("✅" if cond else "❌") + " " + name)
 
     real_find, real_read, real_lookup = _di.find, _sl.read_page, _mc.lookup
+    # ★転載照合は試験では常に成功扱い★（2026-08-02・Codex53回目の変更で
+    #   取得失敗が「そのページを票から外す」ようになり、架空URLの試験が
+    #   全部外されてしまうため。lineage_check 自体の挙動は同スクリプトの
+    #   自己テストで確かめている）
+    real_lc = _lc.check
+    _lc.check = lambda urls: {"suspects": [], "checked": [],
+                              "problems": [], "failed": []}
     # ★試験が本番の待ち行列を触らないようにする★（2026-07-31・実際に架空機種が入った）
     real_store = _pend.STORE
     _tmpdir = __import__("tempfile").mkdtemp(prefix="uchi_pend_")
@@ -1826,6 +1850,11 @@ def selftest() -> int:
               "DIRECTORY_MAKER_UNRESOLVED" in inspect.getsource(gather)
               and retry_later(["DIRECTORY_MAKER_UNRESOLVED（名鑑のメーカー欄を"
                                "名簿で解決できません: 別会社）"]))
+            t("★★3件目の名鑑が落ちても、正常な2票を巻き込まない★★"
+              "（取得失敗の名鑑だけを票・材料から外す・Codex53回目）",
+              "転載照合で取得できず・票と材料から除外"
+              in inspect.getsource(gather)
+              and "failed" in inspect.getsource(gather))
             t("★★機種名の芯が変わったURLは公開へ進めない★★"
               "（使い回し検知が公開を止めていなかった・Codex41回目）",
               "_name_conflict" in inspect.getsource(fill_missing)
@@ -1839,12 +1868,19 @@ def selftest() -> int:
             _nw._get = lambda u, timeout=20: (
                 "<title>大都技研「スロット ワールドダイスター」製品サイトはこちら!"
                 "</title><body>スロット 2026年8月導入</body>")
+            # ★社名入りの題は「その社の照合」で通す★（2026-08-02・Codex53回目
+            #   で他社名の題を拒むようにしたため、期待メーカーを大都に合わせる。
+            #   本番でもこの題は大都の機種の照合でしか現れない）
             v7 = verify_official("スロット ワールドダイスター",
-                                 "https://m.example/products/slot/wds/", "m")
+                                 "https://d.example/slot/wds/", "daito_test")
             t("★★かぎ括弧の実在題（山佐・大都）を公開前照合が通す★★"
               "（大都の8月導入機を出せない経路だった・Codex42回目）",
               not any("一致しません" in x for x in v6["problems"])
               and not any("一致しません" in x for x in v7["problems"]))
+            t("★★他社名入りの題は、別メーカーの照合では通さない★★（Codex53回目）",
+              any("一致しません" in x for x in verify_official(
+                  "スロット ワールドダイスター",
+                  "https://m.example/products/slot/wds/", "m")["problems"]))
             _nw._get = lambda u, timeout=20: (
                 "<title>「スマスロパリピ孔明SP」公式サイト</title>"
                 "<body>パチスロ 2026年8月導入</body>")
@@ -1879,7 +1915,7 @@ def selftest() -> int:
                 "<title>大都技研「スロット ワールドダイスター」製品サイトはこちら!"
                 "</title><body>スロット 2026年8月導入</body>")
             v10 = verify_official("スロット ワールドダイスター",
-                                  "https://m.example/products/slot/wds/", "m")
+                                  "https://d.example/slot/wds/", "daito_test")
             t("　実在形（社名＋定型句）は引き続き通る",
               not any("一致しません" in x for x in v10["problems"]))
             t("★★人間確認済みの控え（release_overrides）だけ最後に使う★★"
@@ -1986,6 +2022,7 @@ def selftest() -> int:
             _nw._get, _mc.page_is_machine = real_get, real_page
     finally:
         _di.find, _sl.read_page, _mc.lookup = real_find, real_read, real_lookup
+        _lc.check = real_lc
         _pend.STORE = real_store
         globals()["_log"] = real_log
         __import__("shutil").rmtree(_tmpdir, ignore_errors=True)

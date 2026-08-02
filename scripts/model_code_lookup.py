@@ -400,11 +400,19 @@ def _after_ok(after_seg: str, core: str, official_name: str,
         #   部分一致だと「SPBELLCO」のような合成語まで許してしまう。
         #   「株式会社サミー」「株式会社北電子」は株式会社を外してから比べる。
         c2 = c.replace("株式会社", "")
-        if c == "" or c in _DECOR_CORES \
-                or c in _maker_name_cores() or c2 in _maker_name_cores():
+        if c == "" or c in _DECOR_CORES:
             return "ok"
-        if extra and (c in extra or c2 in extra):
-            return "ok"                   # 期待するメーカーの社名・銘柄
+        if extra is not None:
+            if c in extra or c2 in extra:
+                return "ok"               # 期待するメーカーの社名・銘柄
+            # ★期待メーカーの照合中は、他社の社名を許さない★
+            #   （2026-08-02・Codex53回目。「L試験機(サミー)」が平和の照合を
+            #     通り、メーカー欄が無いページでは後段の照合も無いため、
+            #     別メーカーの同名機を2名鑑一致で採用できた）
+            if c in _maker_name_cores() or c2 in _maker_name_cores():
+                return "ng"
+        elif c in _maker_name_cores() or c2 in _maker_name_cores():
+            return "ok"
         # ★明確な派生印は、略称より先に拒む★（2026-08-02・Codex38回目）
         #   名前の芯に偶然 s,p が順に並ぶ機種だと、「(スマスロ SP)」の
         #   SP が部分列として略称扱いになっていた。
@@ -440,9 +448,10 @@ def _after_ok(after_seg: str, core: str, official_name: str,
     #   「あおぶた」は漢字の読みなので部分列では確かめられない。
     #   ①同じ括弧に部分列で確かめられた略称があり
     #   ②語がかな（ひらがな・カタカナ・ー）だけでできていて
-    #   ③その略称の「かな部分」を順番どおり全部含む
+    #   ③その略称の「かな部分」で終わる（＝末尾一致。含む、では緩い）
     #   の3つがそろった語だけを読み仮名とみなす。②③により
-    #   「(青ブタ ほくと)」「(青ブタ スペシャル)」は入り込めない。
+    #   「(青ブタ ほくと)」「(青ブタ スペシャル)」に加え、版違いを示しうる
+    #   「あおぶたかい」も入り込めない（2026-08-02・Codex53回目で締めた）。
     #   略称のかな部分が空（漢字だけの略称）の時は誰も通さない（安全側）。
     _KANA = re.compile(r"^[ぁ-ゖァ-ヺーゝゞヽヾ]+$")
 
@@ -464,7 +473,7 @@ def _after_ok(after_seg: str, core: str, official_name: str,
             continue
         if not (_KANA.match(w) and len(c) >= 2):
             return False
-        if not any(_subseq(k, _kana_of(c)) for k in _abbrev_kana):
+        if not any(_kana_of(c).endswith(k) for k in _abbrev_kana):
             return False
     return True
 
@@ -945,6 +954,23 @@ def selftest() -> int:
                           _AOBUTA, strict_all_tail=True)[0] is False
       and page_is_machine(f"<title>{_AOBUTA}(スマスロ あおぶた) | P</title>",
                           _AOBUTA, strict_all_tail=True)[0] is False)
+    # ★★Codex53回目★★
+    t("★★版違いを示しうる読み（あおぶたかい）は通さない★★"
+      "（末尾一致に締めた・Codex53回目）",
+      page_is_machine(f"<title>{_AOBUTA}(スマスロ 青ブタ あおぶたかい) "
+                      "パチスロ新台 スロット | P-WORLD</title>",
+                      _AOBUTA, strict_all_tail=True)[0] is False
+      and page_is_machine(f"<title>{_AOBUTA}(スマスロ 青ブタ あおぶた) "
+                          "パチスロ新台 スロット | P-WORLD</title>",
+                          _AOBUTA, strict_all_tail=True)[0] is True)
+    t("★★期待メーカーの照合中は他社の社名を題末尾に許さない★★"
+      "（メーカー欄の無いページで別メーカーの同名機を採用できた・Codex53回目）",
+      page_is_machine("<title>L試験機(サミー) パチスロ新台 | P-WORLD</title>",
+                      "L試験機", strict_all_tail=True,
+                      extra_tail_ok=maker_brand_cores("heiwa"))[0] is False
+      and page_is_machine("<title>L試験機(平和) パチスロ新台 | P-WORLD</title>",
+                          "L試験機", strict_all_tail=True,
+                          extra_tail_ok=maker_brand_cores("heiwa"))[0] is True)
     # ★★Codex43回目（北電子・実データ）★★
     t("★★実在の題「マイジャグラーVI|パチスロ製品情報|株式会社北電子」を通す★★"
       "（北電子の新台を出せない経路だった・Codex43回目）",
