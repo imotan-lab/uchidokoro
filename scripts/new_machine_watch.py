@@ -766,7 +766,16 @@ def classify(url: str, seen_entry: dict | None = None, today=None,
 
     if not out["official_name"]:
         out["reasons"].append("公式ページから機種名を取れません")
-    if not looks_like_slot(text):
+    # ★名前の規格印（L/S・スマスロ）も回胴機の証拠に数える★（2026-08-02・Codex46回目）
+    #   予告だけの薄いページ（題「L新機種」＋COMING SOON）を
+    #   「パチスロのページに見えません」＝永久理由にして、完成後も
+    #   再分類されないまま既知に沈めていた。
+    _nm = unicodedata.normalize("NFKC", out["official_name"] or "").lower()
+    _nm = _nm.lstrip(" 　")
+    _name_ev = bool(re.match(
+        r"^(?:スマスロ|スマートパチスロ|スマートスロット|メダルレス)", _nm)
+        or re.match(r"^[ls](?![a-z])", _nm))
+    if not looks_like_slot(text) and not _name_ev:
         out["reasons"].append("パチスロのページに見えません（回胴機の語が無い）")
     if not out["release"]:
         out["reasons"].append("公式が登場年月を書いていません（こちらで日付を補わない）")
@@ -1517,6 +1526,18 @@ def selftest() -> int:
     t("　見出しの次の行に値がある形は従来どおり読める（型式抽出の形を壊さない）",
       _visible_text("<p>型式名  :</p><p>Lびん娘NY1</p>").splitlines()
       == ["型式名  :", "Lびん娘NY1"])
+    # ★★Codex46回目★★
+    _real_get46 = globals()["_get"]
+    globals()["_get"] = lambda u, timeout=20: (
+        "<title>L新機種</title><p>COMING SOON</p>")
+    try:
+        _c46 = classify("https://m.example/products/slot/soon1/", None)
+    finally:
+        globals()["_get"] = _real_get46
+    t("★★予告だけの薄いページ（題L○○＋COMING SOON）を永久理由にしない★★"
+      "（完成後も再分類されず既知に沈んだ・Codex46回目）",
+      not any("パチスロのページに見えません" in r for r in _c46["reasons"])
+      and any("登場年月" in r for r in _c46["reasons"]))
     t("　カードの構造が無いページでは採らない（安全側）",
       list_release_hints(
           '<a href="https://m.example/products/slot/alpha/">A</a> 導入 2026.9 '

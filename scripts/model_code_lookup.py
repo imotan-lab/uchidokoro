@@ -112,6 +112,7 @@ _DECOR = {
     "ボーナス", "フリーズ", "ちょんぼりすた", "pworld", "ぱちタウン", "dmm",
     "dmmぱちタウン", "パチスロ解析", "解析情報", "スロット新台",
     "機種情報", "新台情報", "ゾーン", "製品情報",
+    "公式サイト", "製品サイト", "特設サイト", "機種サイト", "はこちら",
 }
 _DECOR_CORES = {_ci.normalize_core(w) or w for w in _DECOR}
 
@@ -322,7 +323,7 @@ def page_is_machine(html: str, official_name: str,
     return False, "NAME_CORE_MISMATCH"
 
 
-_SEP_LOW = "・、,/／　 -‐―–—"
+_SEP_LOW = "・、,/／　 -‐―–—!！。"
 _COMPOUND_TOKENS = None
 
 

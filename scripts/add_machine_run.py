@@ -694,7 +694,17 @@ def verify_official(name: str, official_url: str,
         _mn_core = _mc._ci.normalize_core(_mn)
         _nm_core = _mc._ci.normalize_core(name)
         _g1, _g2 = _mc._gen_mark(_mn), _mc._gen_mark(name)
-        if "「" in _nw.page_title(html) and _mn_core and _mn_core == _nm_core \
+        # ★かぎ括弧の外も検査する★（2026-08-02・Codex46回目）
+        #   「「機種名」SP公式サイト」のように、括弧の外の派生印を見ないと
+        #   別版の公式ページを通せた。外に許すのは社名・飾り・定型句
+        #   （公式サイト・製品サイトはこちら等）だけ。
+        _ttl = _nw.page_title(html)
+        _pre = _ttl.split("「", 1)[0]
+        _suf = _ttl.split("」", 1)[1] if "」" in _ttl else ""
+        _extra46 = _mc.maker_brand_cores(maker) if maker else None
+        _outside_ok = (_mc._after_ok(_pre, _nm_core, name, _extra46)
+                       and _mc._after_ok(_suf, _nm_core, name, _extra46))
+        if "「" in _ttl and _outside_ok and _mn_core and _mn_core == _nm_core \
                 and not (_g1 and _g2 and _g1 != _g2):
             ok = True
             _log(f"  公式題はかぎ括弧形。抜き出した機種名の完全一致で照合: {_mn[:30]}")
@@ -716,6 +726,16 @@ def verify_official(name: str, official_url: str,
             got = {"value": lv, "precision": "month",
                    "quote": "メーカー公式一覧のカードに記載"}
     if not got:
+        # ★人間確認済みの控え（release_overrides）★（2026-08-02・Codex46回目）
+        #   山佐は導入年月を画像でしか載せない＝機械では読めない実在形。
+        #   運営者が公式の画像を目視確認して書いた値だけを最後の控えに使う。
+        #   無人タスクはこのファイルに書かない（読むだけ）。
+        ov = _release_override(official_url)
+        if ov:
+            got = {"value": ov["value"], "precision": "month",
+                   "quote": f"運営者確認: {ov.get('source', '')[:60]}"}
+            _log(f"  登場年月は運営者確認の控えを使用: {ov['value']}")
+    if not got:
         out["problems"].append(
             "公式ページに登場年月が書かれていません（こちらで日付を補わない）")
         return out
@@ -736,6 +756,21 @@ def verify_official(name: str, official_url: str,
         out["problems"].append(
             f"登場年月が新台の範囲外です（{out['release']}）")
     return out
+
+
+RELEASE_OVERRIDES = r"C:/Users/imao_/Documents/uchidokoro/release_overrides.json"
+
+
+def _release_override(url: str):
+    """人間確認済みの登場年月（公式が画像でしか載せない機種用）。無ければNone。"""
+    try:
+        d = _sj.read_json(RELEASE_OVERRIDES, expect=dict)
+    except Exception:                     # noqa: BLE001
+        return None
+    it = (d.get("items") or {}).get(url.rstrip("/") + "/")         or (d.get("items") or {}).get(url)
+    if isinstance(it, dict) and re.match(r"^20\d\d-\d\d$", str(it.get("value") or "")):
+        return it
+    return None
 
 
 # ★一覧の読み直しは一晩に1社1回★（描画つきの一覧もあるため）
@@ -1381,10 +1416,14 @@ def selftest() -> int:
         real_cats = _nw.CATALOGS
         _nw.CATALOGS = os.path.join(_tmpdir, "cats.json")
         with open(_nw.CATALOGS, "w", encoding="utf-8") as _f:
-            json.dump({"schema": "maker-catalogs/v1", "catalogs": {"m": {
-                "name": "試験", "status": "ACTIVE",
-                "list_url": "https://m.example/products/slot/",
-                "link_prefix": "https://m.example/products/slot/"}}},
+            json.dump({"schema": "maker-catalogs/v1", "catalogs": {
+                "m": {"name": "試験", "status": "ACTIVE",
+                      "list_url": "https://m.example/products/slot/",
+                      "link_prefix": "https://m.example/products/slot/"},
+                # ★実在題の試験用（かぎ括弧の外の社名検査で使う）★
+                "daito_test": {"name": "大都技研", "status": "ACTIVE",
+                               "list_url": "https://d.example/slot/",
+                               "link_prefix": "https://d.example/slot/"}}},
                 _f, ensure_ascii=False)
 
         # -------- Codex16回目の反例（自分で再現してから直した）
@@ -1765,6 +1804,25 @@ def selftest() -> int:
               "（RETRYABLEに足した時BLOCKINGへ入れ忘れた・Codex45回目）",
               "preview" not in r45
               and any("読める状態ではありません" in x for x in r45["blocked"]))
+            # ★かぎ括弧の外の派生印★（Codex46回目）
+            _nw._get = lambda u, timeout=20: (
+                "<title>「スマスロ試験機」SP公式サイト</title>"
+                "<h1>スマスロ試験機 SP</h1><body>パチスロ 2026年9月導入</body>")
+            v9 = verify_official("スマスロ試験機",
+                                 "https://m.example/products/slot/shiken/", "m")
+            t("★★かぎ括弧の外の派生印（SP）を通さない★★（Codex46回目）",
+              any("一致しません" in x for x in v9["problems"]))
+            _nw._get = lambda u, timeout=20: (
+                "<title>大都技研「スロット ワールドダイスター」製品サイトはこちら!"
+                "</title><body>スロット 2026年8月導入</body>")
+            v10 = verify_official("スロット ワールドダイスター",
+                                  "https://m.example/products/slot/wds/", "m")
+            t("　実在形（社名＋定型句）は引き続き通る",
+              not any("一致しません" in x for x in v10["problems"]))
+            t("★★人間確認済みの控え（release_overrides）だけ最後に使う★★"
+              "（山佐は導入年月が画像のみ・Codex46回目）",
+              "_release_override" in inspect.getsource(verify_official)
+              and "read_json(RELEASE_OVERRIDES" in inspect.getsource(_release_override))
             t("★★初回に読めなかった将来の新台を沈めない★★（Codex37回目）",
               "初回に読めなかった" in inspect.getsource(discover)
               and "初回に残せなかったので" in inspect.getsource(discover))
