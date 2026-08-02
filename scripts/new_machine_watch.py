@@ -184,7 +184,8 @@ def _visible_anchor_hrefs(html: str):
     out = []
 
     def _walk(n, hidden):
-        h = hidden or n["tag"] in ("script", "style", "noscript", "template")
+        h = (hidden or n["tag"] in ("script", "style", "noscript", "template")
+             or _CardParser.attr_hidden(n))
         if n["tag"] == "a" and not h:
             href = str(n["attrs"].get("href") or "").strip()
             if href:
@@ -334,6 +335,21 @@ class _CardParser(_HTMLParser):
         if tag not in ("br", "img", "meta", "link", "input", "hr", "source"):
             self._cur = node
 
+    @staticmethod
+    def attr_hidden(node) -> bool:
+        """★属性で分かる非表示★（2026-08-02・Codex41回目）
+
+        hidden属性・aria-hidden="true"・style="display:none/visibility:hidden"。
+        外部CSSやclassによる非表示は静的には分からない（描画が要る）ので対象外。
+        """
+        a = node["attrs"]
+        if "hidden" in a:
+            return True
+        if str(a.get("aria-hidden") or "").strip().lower() == "true":
+            return True
+        st = str(a.get("style") or "").lower().replace(" ", "")
+        return "display:none" in st or "visibility:hidden" in st
+
     def handle_endtag(self, tag):
         n = self._cur
         while n is not None and n["tag"] != tag:
@@ -354,6 +370,9 @@ class _CardParser(_HTMLParser):
 
 
 def _node_text(node) -> str:
+    # ★属性で分かる非表示の中の文字は読まない★（2026-08-02・Codex41回目）
+    if _CardParser.attr_hidden(node):
+        return ""
     out = list(node["text"])
     for ch in node["children"]:
         out.append(_node_text(ch))
@@ -361,9 +380,9 @@ def _node_text(node) -> str:
 
 
 def _node_product_anchors(node, base_url, link_prefix) -> list:
-    # ★画面に出ない部分はリンクとしても数えない★（2026-08-02・Codex34回目）
-    #   template内のリンクが「繰り返しの1枚」を偽装できた。
-    if node["tag"] in ("script", "style", "noscript", "template"):
+    # ★画面に出ない部分はリンクとしても数えない★（2026-08-02・Codex34〜41回目）
+    #   template内・hidden属性等のリンクが「繰り返しの1枚」や件数を偽装できた。
+    if node["tag"] in ("script", "style", "noscript", "template")             or _CardParser.attr_hidden(node):
         return []
     out = []
     if node["tag"] == "a":
@@ -480,6 +499,11 @@ def page_title(html: str) -> str:
     if not m:
         return ""
     t = re.sub(r"(?s)<[^>]+>", "", m.group(1))
+    # ★実体参照をほどく★（2026-08-02・Codex41回目）
+    #   「L A&amp;B」のまま名鑑を引くと、復号済みの「L A&B」と芯が合わず
+    #   正しい新台の2票を確保できない。記事名に &amp; が残る恐れもあった。
+    import html as _html
+    t = _html.unescape(t)
     return unicodedata.normalize("NFKC", t).strip()
 
 
@@ -1412,6 +1436,26 @@ def selftest() -> int:
       == "スマスロパリピ孔明"
       and machine_name("<title>大都技研「スロット ワールドダイスター」"
                        "製品サイトはこちら!</title>") == "スロット ワールドダイスター")
+    # ★★Codex41回目★★
+    t("★★titleの実体参照をほどく★★（&amp;のままだと芯が合わず2票を確保できない）",
+      page_title("<title>L A&amp;B｜メーカー</title>") == "L A&B|メーカー"
+      and machine_name("<title>L A&amp;B｜メーカー</title>") == "L A&B")
+    t("★★hidden属性・display:noneのリンクを数えない★★（Codex41回目）",
+      product_urls('<div hidden><a href="https://m.example/products/slot/old1/">o'
+                   '</a></div>'
+                   '<div style="display:none">'
+                   '<a href="https://m.example/products/slot/old2/">o</a></div>'
+                   '<a href="https://m.example/products/slot/mieru1/">y</a>',
+                   "https://m.example/products/slot/",
+                   "https://m.example/products/slot/")
+      == ["https://m.example/products/slot/mieru1/"])
+    t("　hidden内の年月もカードから読まない",
+      list_release_hints(
+          '<div><a href="https://m.example/products/slot/aaa2/">A</a>'
+          '<span hidden>導入 2026.9</span></div>'
+          '<div><a href="https://m.example/products/slot/bbb2/">B</a></div>',
+          "https://m.example/products/slot/",
+          "https://m.example/products/slot/") == {})
     t("　カードの構造が無いページでは採らない（安全側）",
       list_release_hints(
           '<a href="https://m.example/products/slot/alpha/">A</a> 導入 2026.9 '

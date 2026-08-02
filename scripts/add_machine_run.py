@@ -381,6 +381,24 @@ def gather(name: str, maker: str = "") -> dict:
         got["problems"].append(
             f"名鑑の個別ページが {len(got['urls'])} 件しか見つかりません（2件以上が要る）")
         return got
+    # ★名鑑にも期待するメーカーを渡す★（2026-08-02・Codex40回目）
+    looks = [_mc.lookup(u, name, expected_maker=maker) for u in got["urls"]]
+    # ★メーカー違いと判明した名鑑は、材料・転載照合からも外す★
+    #   （2026-08-02・Codex41回目。型式の票からしか外していなかったので、
+    #     同名の別メーカー機のページが材料の2票に復活できた）
+    _bad_maker = {r["url"] for r in looks
+                  if str(r.get("reason") or "").startswith(
+                      "DIRECTORY_MAKER_MISMATCH")}
+    if _bad_maker:
+        for u in sorted(_bad_maker):
+            _log(f"  （別メーカーの名鑑・材料からも除外）{u}")
+        got["urls"] = [u for u in got["urls"] if u not in _bad_maker]
+        if len(got["urls"]) < 2:
+            got["problems"] += unused_msgs
+            got["problems"].append(
+                f"名鑑の個別ページが {len(got['urls'])} 件しか見つかりません"
+                "（2件以上が要る・別メーカーの名鑑を除いた結果）")
+            return got
     # ★出典どうしが転載でないか確かめる★（2026-07-31・実際に見つけた）
     #   やんちゃプレスはちょんぼりすたと本文が17行そのまま同じだった。
     #   登録簿に無い転載を2票に数えると、独立2出典の意味が無くなる。
@@ -393,9 +411,7 @@ def gather(name: str, maker: str = "") -> dict:
         got["problems"].append(
             f"転載の疑い: {sp['a']} と {sp['b']} の本文が {sp['ratio']:.0%} 一致"
             f"（登録簿に系列が書かれていません）")
-    # ★名鑑にも期待するメーカーを渡す★（2026-08-02・Codex40回目）
-    mv = _mc.agree([_mc.lookup(u, name, expected_maker=maker)
-                    for u in got["urls"]])
+    mv = _mc.agree(looks)
     got["model_code"] = mv.get("model_code")
     if not mv["adopted"]:
         got["problems"].append("型式名: " + str(mv.get("why", ""))[:160])
@@ -1040,6 +1056,17 @@ def fill_missing(work: dict) -> dict:
         return work
     if c.get("official_name"):
         if work["name"] and work["name"] != c["official_name"]:
+            # ★芯まで変わっていたら「直す」ではなく使い回しの疑い★
+            #   （2026-08-02・Codex41回目。無条件の置き換えだと、
+            #     URLが別機種に使い回されたとき新しい名前へ追随して
+            #     別機種として公開し、元の機種が黙って消える）
+            _old_core = _mc._ci.normalize_core(work["name"])
+            _new_core = _mc._ci.normalize_core(c["official_name"])
+            if _old_core and _new_core and _old_core != _new_core:
+                work["_name_conflict"] = c["official_name"]
+                _log(f"  ★機種名の芯が変わっています（使い回しの疑い）: "
+                     f"{work['name'][:30]} → {c['official_name'][:30]}★")
+                return work
             _log(f"  名前を公式の現在値に直します: "
                  f"{work['name'][:30]} → {c['official_name'][:30]}")
         work["name"] = c["official_name"]
@@ -1658,6 +1685,13 @@ def selftest() -> int:
             t("★★初回・カード年月が新台範囲なら分類失敗でも残す★★"
               "（薄い先行ページが永久理由で既知に沈んだ・Codex39回目）",
               "初回・個別ページが未完成の疑い" in inspect.getsource(discover))
+            t("★★メーカー違いの名鑑は材料・転載照合からも外す★★"
+              "（型式の票からしか外れず材料に復活できた・Codex41回目）",
+              "材料からも除外" in inspect.getsource(gather))
+            t("★★機種名の芯が変わったURLは公開へ進めない★★"
+              "（使い回し検知が公開を止めていなかった・Codex41回目）",
+              "_name_conflict" in inspect.getsource(fill_missing)
+              and "_name_conflict" in inspect.getsource(main))
             t("★★初回に読めなかった将来の新台を沈めない★★（Codex37回目）",
               "初回に読めなかった" in inspect.getsource(discover)
               and "初回に残せなかったので" in inspect.getsource(discover))
@@ -1910,6 +1944,17 @@ def main() -> int:
     #   さらに1件しか見ていなかったので、その1件が詰まると後ろが全部止まっていた。
     for work in pick_work(pend):
         work = fill_missing(work)
+        # ★使い回しの疑いは公開処理へ進めない★（2026-08-02・Codex41回目）
+        #   検知（recheck）と公開の停止がつながっていなかった。
+        if work.get("_name_conflict"):
+            msg = (f"同じURLの機種名が変わりました（{work['name'][:30]} → "
+                   f"{work['_name_conflict'][:30]}）")
+            print("  ★止めました: " + msg)
+            if apply_it:
+                give_up_now(pend, work["url"], work["name"], [msg])
+            else:
+                print("（下見）--apply の実行が台帳へ移します")
+            continue
         if not (work["name"] and work["maker"]):
             _log(f"  まだ記事にできません（名前かメーカーが取れない）: {work['url']}")
             # ★早く抜けるときも試した日を残す★（残さないと毎晩ここで詰まる）
