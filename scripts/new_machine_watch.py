@@ -197,6 +197,37 @@ def _visible_anchor_hrefs(html: str):
     return out
 
 
+def _visible_h1s(html: str) -> list:
+    """★画面に出る<h1>の文字を返す★（2026-08-02・Codex54回目）
+
+    名鑑のSEO用の題は括弧に略称・読み仮名を詰めるが（P-WORLD実データ）、
+    機種見出し（h1）は正式名そのもの。同定はh1を先に見る。
+    非表示のh1は数えない（隠したh1で本人を装う細工を防ぐ）。
+    解析できなければ空＝従来どおり題だけで判定する。
+    """
+    p = _CardParser()
+    try:
+        p.feed(html or "")
+    except Exception:                     # noqa: BLE001
+        return []
+
+    out = []
+
+    def _walk(n, hidden):
+        h = (hidden or n["tag"] in ("script", "style", "noscript", "template")
+             or _CardParser.attr_hidden(n))
+        if n["tag"] == "h1" and not h:
+            txt = " ".join(_node_text(n).split())
+            if txt:
+                import html as _html
+                out.append(_html.unescape(txt))
+        for c in n["children"]:
+            _walk(c, h)
+
+    _walk(p.root, False)
+    return out
+
+
 def _visible_anchor_pairs(html: str):
     """★画面に出る<a>の (href, リンク文字) を返す★（2026-08-02・Codex52回目）
 

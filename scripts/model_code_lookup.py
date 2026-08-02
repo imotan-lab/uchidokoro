@@ -206,6 +206,23 @@ def _gen_mark(s: str) -> str:
     return ""
 
 
+_MODEL_GEN_RE = re.compile(r"^([ls])b?(?![a-z])")
+
+
+def model_gen_mark(code: str) -> str:
+    """★型式名の規格印（L/S）★（2026-08-02・Codex54回目）
+
+    題名用の _gen_mark を型式名に流用すると、実在のBT型式
+    「LB/タコスロBD」（スマスロ タコスロ・ユニバーサルブロス・
+    P-WORLDニュースで確認）の L の直後が英字のため印なし扱いになり、
+    2名鑑一致でも型式が捨てられた。LB/SB はL系/S系のBT型式として読む。
+    それ以外の英字連なり（LBX… 等）は従来どおり印なし＝人の確認へ。
+    """
+    t = unicodedata.normalize("NFKC", str(code or "")).strip().lower()
+    m = _MODEL_GEN_RE.match(t)
+    return m.group(1).upper() if m else ""
+
+
 def page_is_machine(html: str, official_name: str,
                     extra_tail_ok: set | None = None,
                     strict_all_tail: bool = False):
@@ -247,16 +264,25 @@ def page_is_machine(html: str, official_name: str,
     # ★直後の断片も持ち歩く★（2026-08-02・Codex26回目を再現して直した）
     #   「Lすーぱぁびん娘（SP）」のように、派生機の印が括弧で
     #   区切られると誰も見ていなかった（25回目の「前」と逆向きの穴）。
-    _segs = title_parts(title)
-    cands = [(title, [], [])]
-    _seen = []
-    for _ix, s in enumerate(_segs):
-        # ★後ろは「直後の1断片」ではなく残り全部★（2026-08-02・Codex28回目）
-        # ★ただし断片の区切りを保つ★（2026-08-02・Codex32回目）
-        #   平らにつなぐと、別の断片の「パチスロ」が
-        #   「(SP)」の括弧の規格語として数えられてしまった。
-        cands.append((s, list(_seen), _segs[_ix + 1:]))
-        _seen.extend(_ci.normalize_core(w) for w in s.split())
+    # ★機種見出し（h1）を先に見る★（2026-08-02・Codex54回目）
+    #   P-WORLDのSEO用の題は括弧に略称・読み仮名を詰める
+    #   （「…6(Lスト6 SF6)」「…参る!(やじきた参 やじきた3)」＝実在）。
+    #   部分列で確かめられない略称のたびに実在の票を失っていた。
+    #   h1は正式名そのもの（実ページ3件で確認）。h1にも題と**同じ**
+    #   厳格検査を通す（DMMのh1はSEO文言込みなので、緩めない）。
+    #   前後の検査は各ソースの中で閉じる（題の飾りをh1に持ち込まない）。
+    cands = []
+    for _src in _w._visible_h1s(html) + [title]:
+        _segs = title_parts(_src)
+        cands.append((_src, [], []))
+        _seen = []
+        for _ix, s in enumerate(_segs):
+            # ★後ろは「直後の1断片」ではなく残り全部★（2026-08-02・Codex28回目）
+            # ★ただし断片の区切りを保つ★（2026-08-02・Codex32回目）
+            #   平らにつなぐと、別の断片の「パチスロ」が
+            #   「(SP)」の括弧の規格語として数えられてしまった。
+            cands.append((s, list(_seen), _segs[_ix + 1:]))
+            _seen.extend(_ci.normalize_core(w) for w in s.split())
     for seg, before, after in cands:
         raw = seg.split()
         words = [_ci.normalize_core(w) for w in raw]
@@ -440,42 +466,13 @@ def _after_ok(after_seg: str, core: str, official_name: str,
             return "ok"
         return "ng"
 
-    statuses = [_word_status(w, c) for w, c in zip(words, cores)]
-    if all(s != "ng" for s in statuses):
-        return True
-    # ★略称の読み仮名だけは、条件つきで通す★（2026-08-02・実データ）
-    #   P-WORLDの実在の題「L青春ブタ野郎は…(スマスロ 青ブタ あおぶた)」。
-    #   「あおぶた」は漢字の読みなので部分列では確かめられない。
-    #   ①同じ括弧に部分列で確かめられた略称があり
-    #   ②語がかな（ひらがな・カタカナ・ー）だけでできていて
-    #   ③その略称の「かな部分」で終わる（＝末尾一致。含む、では緩い）
-    #   の3つがそろった語だけを読み仮名とみなす。②③により
-    #   「(青ブタ ほくと)」「(青ブタ スペシャル)」に加え、版違いを示しうる
-    #   「あおぶたかい」も入り込めない（2026-08-02・Codex53回目で締めた）。
-    #   略称のかな部分が空（漢字だけの略称）の時は誰も通さない（安全側）。
-    _KANA = re.compile(r"^[ぁ-ゖァ-ヺーゝゞヽヾ]+$")
-
-    def _kana_of(s: str) -> str:
-        # カタカナはひらがなへ寄せて、かな以外の文字を落とす
-        out = []
-        for ch in s:
-            o = ord(ch)
-            if 0x30A1 <= o <= 0x30F6:
-                ch = chr(o - 0x60)
-            if _KANA.match(ch):
-                out.append(ch)
-        return "".join(out)
-
-    _abbrev_kana = [_kana_of(c) for c, s in zip(cores, statuses)
-                    if s == "abbrev" and _kana_of(c)]
-    for w, c, s in zip(words, cores, statuses):
-        if s != "ng":
-            continue
-        if not (_KANA.match(w) and len(c) >= 2):
-            return False
-        if not any(_kana_of(c).endswith(k) for k in _abbrev_kana):
-            return False
-    return True
+    # ★読み仮名を略称から推定しない★（2026-08-02・Codex54回目で撤去）
+    #   52回目に「(スマスロ 青ブタ あおぶた)」の読み仮名を条件つきで
+    #   通したが、「くろぶた」「にせぶた」も条件を満たすと反証された。
+    #   文字列から読みの正しさは確定できない。実在形はh1（機種見出し＝
+    #   正式名そのもの）の同定で通るので、題の読み別名は根拠にしない。
+    return all(_word_status(w, c) != "ng"
+               for w, c in zip(words, cores))
 
 
 # ★世代表記の同値化★（VI↔6。共通部品 claim_identity.canon_num_tail へ委譲）
@@ -942,11 +939,41 @@ def selftest() -> int:
       "（無いと51回目の不採用化で現行の青ブタを公開できない・Codex52回目）",
       "heiwa" in _maker_core_owners("オリンピア"))
     _AOBUTA = "L青春ブタ野郎はバニーガール先輩の夢を見ない"
-    t("★★実在の題「…(スマスロ 青ブタ あおぶた)」＝略称の読み仮名を通す★★"
-      "（P-WORLD実データ・現行の青ブタが弾かれていた）",
+    t("★★実在形（P-WORLDの読み仮名つき題＋h1が正式名）を通す★★"
+      "（青ブタ実データ・題だけでは読み仮名を確かめられない→h1で同定・Codex54回目）",
+      page_is_machine(f"<title>{_AOBUTA}(スマスロ 青ブタ あおぶた) "
+                      "パチスロ新台 スロット | P-WORLD</title>"
+                      f"<h1>{_AOBUTA}</h1>",
+                      _AOBUTA, strict_all_tail=True)[0] is True)
+    t("　h1が無ければ読み仮名つきの題だけでは通さない（読みは推定しない）",
       page_is_machine(f"<title>{_AOBUTA}(スマスロ 青ブタ あおぶた) "
                       "パチスロ新台 スロット | P-WORLD</title>",
-                      _AOBUTA, strict_all_tail=True)[0] is True)
+                      _AOBUTA, strict_all_tail=True)[0] is False)
+    t("★★SEO題の略称（Lスト6 SF6・やじきた3）でもh1で通す★★"
+      "（P-WORLD実在2ページ・実在の票を失っていた・Codex54回目）",
+      page_is_machine("<title>スマスロ ストリートファイター6(Lスト6 SF6) "
+                      "パチスロ新台 スロット | P-WORLD</title>"
+                      "<h1>スマスロ ストリートファイター6</h1>",
+                      "スマスロ ストリートファイター6",
+                      strict_all_tail=True)[0] is True
+      and page_is_machine("<title>スマスロ やじきた道中記参る!(やじきた参 "
+                          "やじきた3) パチスロ新台 | P-WORLD</title>"
+                          "<h1>スマスロ やじきた道中記参る!</h1>",
+                          "スマスロ やじきた道中記参る!",
+                          strict_all_tail=True)[0] is True)
+    t("　h1が別機種・派生機なら通さない（隠しh1も数えない）",
+      page_is_machine("<title>Lすーぱぁびん娘（SP） | P-WORLD</title>"
+                      "<h1>Lすーぱぁびん娘SP</h1>",
+                      "Lすーぱぁびん娘", strict_all_tail=True)[0] is False
+      and page_is_machine("<title>Lすーぱぁびん娘（SP） | P-WORLD</title>"
+                          "<h1 hidden>Lすーぱぁびん娘</h1>",
+                          "Lすーぱぁびん娘", strict_all_tail=True)[0] is False)
+    t("★★型式名の規格印は専用判定★★（LB/タコスロBD＝実在のBT型式・Codex54回目）",
+      model_gen_mark("LB/タコスロBD") == "L"
+      and model_gen_mark("SマイジャグラーVI KK") == "S"
+      and model_gen_mark("L青春ブタ野郎L1") == "L"
+      and model_gen_mark("LBX試験") == ""
+      and model_gen_mark("") == "")
     t("　読み仮名を装った別機種・派生印・読みだけの括弧は通さない",
       page_is_machine(f"<title>{_AOBUTA}(スマスロ 青ブタ ほくと) | P</title>",
                       _AOBUTA, strict_all_tail=True)[0] is False
@@ -954,15 +981,15 @@ def selftest() -> int:
                           _AOBUTA, strict_all_tail=True)[0] is False
       and page_is_machine(f"<title>{_AOBUTA}(スマスロ あおぶた) | P</title>",
                           _AOBUTA, strict_all_tail=True)[0] is False)
-    # ★★Codex53回目★★
-    t("★★版違いを示しうる読み（あおぶたかい）は通さない★★"
-      "（末尾一致に締めた・Codex53回目）",
+    # ★★Codex53〜54回目★★
+    t("★★読みを装う語（あおぶたかい・くろぶた）は題からは通らない★★"
+      "（読みの推定を撤去・Codex54回目）",
       page_is_machine(f"<title>{_AOBUTA}(スマスロ 青ブタ あおぶたかい) "
                       "パチスロ新台 スロット | P-WORLD</title>",
                       _AOBUTA, strict_all_tail=True)[0] is False
-      and page_is_machine(f"<title>{_AOBUTA}(スマスロ 青ブタ あおぶた) "
+      and page_is_machine(f"<title>{_AOBUTA}(スマスロ 青ブタ くろぶた) "
                           "パチスロ新台 スロット | P-WORLD</title>",
-                          _AOBUTA, strict_all_tail=True)[0] is True)
+                          _AOBUTA, strict_all_tail=True)[0] is False)
     t("★★期待メーカーの照合中は他社の社名を題末尾に許さない★★"
       "（メーカー欄の無いページで別メーカーの同名機を採用できた・Codex53回目）",
       page_is_machine("<title>L試験機(サミー) パチスロ新台 | P-WORLD</title>",

@@ -466,9 +466,11 @@ def gather(name: str, maker: str = "") -> dict:
     #   旧機種の型式・スペックで新台の記事を作れてしまう。
     #   L/S世代の型式名は頭に同じ印を持つので、照合できるまで採用しない。
     #   新台の正しいページが名鑑に載れば自然に解ける＝待てば直る（打ち切りは60日）。
+    # ★型式名の印は専用の判定で読む★（2026-08-02・Codex54回目。
+    #   題名用の _gen_mark だと実在のBT型式「LB/タコスロBD」が印なしになる）
     _want_gen = _mc._gen_mark(name)
     if got["model_code"] and _want_gen \
-            and _mc._gen_mark(got["model_code"]) != _want_gen:
+            and _mc.model_gen_mark(got["model_code"]) != _want_gen:
         got["problems"].append(
             f"型式名の規格印が確認できません（機種は{_want_gen}版なのに、"
             f"型式名「{got['model_code']}」に{_want_gen}の印がありません。"
@@ -480,7 +482,7 @@ def gather(name: str, maker: str = "") -> dict:
         #   「SマイジャグラーVI KK」＝一律の人送りだと実在の新台を出せない）
         #   型式名そのものに規格の印（L/S）があれば、独立2票の印を信じて通す。
         #   印の無い型式名だけ人の確認へ（規格を機械で確定できないため）。
-        _code_gen = _mc._gen_mark(got["model_code"])
+        _code_gen = _mc.model_gen_mark(got["model_code"])
         if _code_gen in ("L", "S"):
             _log(f"  公式名に規格印なし。型式名の印（{_code_gen}）で照合: "
                  f"{got['model_code']}")
@@ -1488,6 +1490,17 @@ def selftest() -> int:
         g2 = gather("L試験機")
         t("　2件そろえば型式名と材料を集める",
           g2["model_code"] == "L1" and g2["material"] is not None)
+        _mc.lookup = lambda u, n, **k: {"url": u, "model_code": "LB/タコスロBD",
+                                        "reason": "OK"}
+        t("★★BT型式（LB/…）を規格印ありとして採用する★★"
+          "（実在の「スマスロ タコスロ」の型式・Codex54回目）",
+          gather("スマスロ タコスロ")["model_code"] == "LB/タコスロBD")
+        _mc.lookup = lambda u, n, **k: {"url": u, "model_code": "SタコスロBD",
+                                        "reason": "OK"}
+        t("　S型式との取り違えは引き続き拒否",
+          gather("スマスロ タコスロ")["model_code"] is None)
+        _mc.lookup = lambda u, n, **k: {"url": u, "model_code": "L1",
+                                        "reason": "OK"}
 
         # ★公式ページは本物を想定して差し替える★
         #   （開けなければ止まる作りなので、通る場合の試験には中身が要る）
