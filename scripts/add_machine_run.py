@@ -673,6 +673,21 @@ def verify_official(name: str, official_url: str,
         extra_tail_ok=_mc.maker_brand_cores(maker) if maker else None,
         strict_all_tail=True)
     if not ok:
+        # ★かぎ括弧の公式題は、抜き出した機種名の完全一致で照合する★
+        #   （2026-08-02・Codex42回目。実在＝山佐「「スマスロパリピ孔明」公式サイト」
+        #     ・大都「大都技研「スロット ワールドダイスター」製品サイトはこちら!」。
+        #     題の語検査では通らず、大都の8月導入機を出せない経路だった）
+        #   条件は厳しいまま＝①「…」から抜いた名前の芯が指定名と完全一致
+        #   ②規格の印（L/S）が食い違わない。派生機（…SP等）は芯が違うので通らない。
+        _mn = _nw.machine_name(html)
+        _mn_core = _mc._ci.normalize_core(_mn)
+        _nm_core = _mc._ci.normalize_core(name)
+        _g1, _g2 = _mc._gen_mark(_mn), _mc._gen_mark(name)
+        if "「" in _nw.page_title(html) and _mn_core and _mn_core == _nm_core \
+                and not (_g1 and _g2 and _g1 != _g2):
+            ok = True
+            _log(f"  公式題はかぎ括弧形。抜き出した機種名の完全一致で照合: {_mn[:30]}")
+    if not ok:
         out["problems"].append(
             f"公式ページと名前が一致しません（{why}）: "
             f"公式のタイトル={_nw.page_title(html)[:40]!r} / 指定名={name!r}")
@@ -1062,6 +1077,16 @@ def fill_missing(work: dict) -> dict:
             #     別機種として公開し、元の機種が黙って消える）
             _old_core = _mc._ci.normalize_core(work["name"])
             _new_core = _mc._ci.normalize_core(c["official_name"])
+            # ★規格の印（L/S）が入れ替わったら、芯が同じでも別機種★
+            #   （2026-08-02・Codex42回目。芯はL/Sを落とすので、
+            #     L北斗の拳→S北斗の拳の使い回しに追随して公開できた）
+            _og = _mc._gen_mark(work["name"])
+            _ng = _mc._gen_mark(c["official_name"])
+            if _og and _ng and _og != _ng:
+                work["_name_conflict"] = c["official_name"]
+                _log(f"  ★規格の印が変わっています（使い回しの疑い）: "
+                     f"{work['name'][:30]} → {c['official_name'][:30]}★")
+                return work
             if _old_core and _new_core and _old_core != _new_core:
                 work["_name_conflict"] = c["official_name"]
                 _log(f"  ★機種名の芯が変わっています（使い回しの疑い）: "
@@ -1692,6 +1717,30 @@ def selftest() -> int:
               "（使い回し検知が公開を止めていなかった・Codex41回目）",
               "_name_conflict" in inspect.getsource(fill_missing)
               and "_name_conflict" in inspect.getsource(main))
+            # ★かぎ括弧の実在題（山佐・大都）を公開前照合が通す★（Codex42回目）
+            _nw._get = lambda u, timeout=20: (
+                "<title>「スマスロパリピ孔明」公式サイト</title>"
+                "<body>パチスロ 2026年8月導入</body>")
+            v6 = verify_official("スマスロパリピ孔明",
+                                 "https://m.example/products/slot/prskkm/", "m")
+            _nw._get = lambda u, timeout=20: (
+                "<title>大都技研「スロット ワールドダイスター」製品サイトはこちら!"
+                "</title><body>スロット 2026年8月導入</body>")
+            v7 = verify_official("スロット ワールドダイスター",
+                                 "https://m.example/products/slot/wds/", "m")
+            t("★★かぎ括弧の実在題（山佐・大都）を公開前照合が通す★★"
+              "（大都の8月導入機を出せない経路だった・Codex42回目）",
+              not any("一致しません" in x for x in v6["problems"])
+              and not any("一致しません" in x for x in v7["problems"]))
+            _nw._get = lambda u, timeout=20: (
+                "<title>「スマスロパリピ孔明SP」公式サイト</title>"
+                "<body>パチスロ 2026年8月導入</body>")
+            v8 = verify_official("スマスロパリピ孔明",
+                                 "https://m.example/products/slot/prskkm/", "m")
+            t("　かぎ括弧でも派生機（…SP）は通さない",
+              any("一致しません" in x for x in v8["problems"]))
+            t("★★L/Sが入れ替わる使い回しに追随しない★★（芯はL/Sを落とす・Codex42回目）",
+              "規格の印が変わっています" in inspect.getsource(fill_missing))
             t("★★初回に読めなかった将来の新台を沈めない★★（Codex37回目）",
               "初回に読めなかった" in inspect.getsource(discover)
               and "初回に残せなかったので" in inspect.getsource(discover))

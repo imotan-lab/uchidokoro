@@ -433,10 +433,17 @@ def list_release_hints(html: str, base_url: str, link_prefix: str) -> dict:
     if len(set(product_urls(html, base_url, link_prefix))) < 2:
         return {}
 
-    def _walk(node):
+    def _walk(node, hidden=False):
+        # ★非表示の祖先の下は丸ごと見ない★（2026-08-02・Codex42回目）
+        #   <section hidden> の中の同形カード群で「繰り返し」を偽装し、
+        #   古い年月を控えにできた。
         for ch in node["children"]:
-            yield ch
-            yield from _walk(ch)
+            h = (hidden or ch["tag"] in ("script", "style", "noscript",
+                                         "template")
+                 or _CardParser.attr_hidden(ch))
+            if not h:
+                yield ch
+                yield from _walk(ch, h)
 
     out = {}
     cand = {}
@@ -1454,6 +1461,18 @@ def selftest() -> int:
           '<div><a href="https://m.example/products/slot/aaa2/">A</a>'
           '<span hidden>導入 2026.9</span></div>'
           '<div><a href="https://m.example/products/slot/bbb2/">B</a></div>',
+          "https://m.example/products/slot/",
+          "https://m.example/products/slot/") == {})
+    # ★★Codex42回目★★
+    t("★★hiddenの祖先の下のカード群から年月を採らない★★（Codex42回目）",
+      list_release_hints(
+          '<a href="https://m.example/products/slot/aaa3/">A</a>'
+          '<a href="https://m.example/products/slot/bbb3/">B</a>'
+          '<section hidden>'
+          '<div><a href="https://m.example/products/slot/aaa3/">A</a>'
+          '<p>導入 2025.9</p></div>'
+          '<div><a href="https://m.example/products/slot/bbb3/">B</a>'
+          '<p>導入 2025.10</p></div></section>',
           "https://m.example/products/slot/",
           "https://m.example/products/slot/") == {})
     t("　カードの構造が無いページでは採らない（安全側）",
