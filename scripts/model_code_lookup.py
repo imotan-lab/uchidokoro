@@ -111,7 +111,7 @@ _DECOR = {
     "感想", "演出", "攻略", "実践", "動画", "画像", "一覧", "情報", "恩恵",
     "ボーナス", "フリーズ", "ちょんぼりすた", "pworld", "ぱちタウン", "dmm",
     "dmmぱちタウン", "パチスロ解析", "解析情報", "スロット新台",
-    "機種情報", "新台情報", "ゾーン",
+    "機種情報", "新台情報", "ゾーン", "製品情報",
 }
 _DECOR_CORES = {_ci.normalize_core(w) or w for w in _DECOR}
 
@@ -388,12 +388,13 @@ def _after_ok(after_seg: str, core: str, official_name: str,
         return all(ch in it for ch in small)
 
     for w, c in zip(words, cores):
-        if c == "" or c in _DECOR_CORES or c in _maker_name_cores():
-            continue
         # ★メーカー語は正規化後の完全一致だけ★（2026-08-02・Codex28回目）
         #   部分一致だと「SPBELLCO」のような合成語まで許してしまう。
-        #   「株式会社サミー」は株式会社を外してから比べる。
+        #   「株式会社サミー」「株式会社北電子」は株式会社を外してから比べる。
         c2 = c.replace("株式会社", "")
+        if c == "" or c in _DECOR_CORES \
+                or c in _maker_name_cores() or c2 in _maker_name_cores():
+            continue
         if extra and (c in extra or c2 in extra):
             continue                      # 期待するメーカーの社名・銘柄
         # ★明確な派生印は、略称より先に拒む★（2026-08-02・Codex38回目）
@@ -817,6 +818,12 @@ def selftest() -> int:
                 lookup("https://www.p-world.co.jp/x", "L試験機",
                        expected_maker="kpe"),
                 setattr(_w, "_get", _w._get_bak41))[2])()["model_code"] == "L試験1")
+    # ★★Codex43回目（北電子・実データ）★★
+    t("★★実在の題「マイジャグラーVI|パチスロ製品情報|株式会社北電子」を通す★★"
+      "（北電子の新台を出せない経路だった・Codex43回目）",
+      page_is_machine("<title>マイジャグラーVI｜パチスロ製品情報｜株式会社北電子"
+                      "</title>", "マイジャグラーVI",
+                      strict_all_tail=True)[0] is True)
     t("　直後の括弧が本人の略称なら通る（実データ・青ブタ）",
       page_is_machine(
           "<title>L青春ブタ野郎はバニーガール先輩の夢を見ない"

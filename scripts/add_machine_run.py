@@ -435,14 +435,21 @@ def gather(name: str, maker: str = "") -> dict:
             "同名の旧機種のページを見ている可能性）")
         got["model_code"] = None
     elif got["model_code"] and not _want_gen:
-        # ★公式名から規格（L/S）を読めない機種は照合できない★（2026-08-02・Codex39回目）
-        #   照合を飛ばすと、同名の旧機種の型式・材料で新台記事を作れる。
-        #   機械では区別を確定できないので、人が確認する（台帳へ）。
-        got["problems"].append(
-            f"型式名: 機種の規格（L/S）が公式名「{name[:30]}」から読めず、"
-            f"型式名「{got['model_code']}」が同名の旧機種のものでないと"
-            "確認できません（人が確認してください）")
-        got["model_code"] = None
+        # ★公式名にL/Sが無い社は現に在る★（2026-08-02・Codex43回目。
+        #   北電子の公式名は「マイジャグラーVI」でP-WORLDの型式は
+        #   「SマイジャグラーVI KK」＝一律の人送りだと実在の新台を出せない）
+        #   型式名そのものに規格の印（L/S）があれば、独立2票の印を信じて通す。
+        #   印の無い型式名だけ人の確認へ（規格を機械で確定できないため）。
+        _code_gen = _mc._gen_mark(got["model_code"])
+        if _code_gen in ("L", "S"):
+            _log(f"  公式名に規格印なし。型式名の印（{_code_gen}）で照合: "
+                 f"{got['model_code']}")
+        else:
+            got["problems"].append(
+                f"型式名: 機種の規格（L/S）が公式名「{name[:30]}」からも"
+                f"型式名「{got['model_code']}」からも読めません"
+                "（人が確認してください）")
+            got["model_code"] = None
     def _read(mod, jp):
         """器ごとに全ページを読み、★使えなかったページの理由を必ず残す★
 
@@ -1741,6 +1748,10 @@ def selftest() -> int:
               any("一致しません" in x for x in v8["problems"]))
             t("★★L/Sが入れ替わる使い回しに追随しない★★（芯はL/Sを落とす・Codex42回目）",
               "規格の印が変わっています" in inspect.getsource(fill_missing))
+            t("★★公式名にL/Sが無くても、型式名の印があれば通す★★"
+              "（北電子マイジャグラーVIを一律人送りにしていた・Codex43回目）",
+              "型式名の印" in inspect.getsource(gather)
+              and "からも読めません" in inspect.getsource(gather))
             t("★★初回に読めなかった将来の新台を沈めない★★（Codex37回目）",
               "初回に読めなかった" in inspect.getsource(discover)
               and "初回に残せなかったので" in inspect.getsource(discover))

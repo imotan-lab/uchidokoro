@@ -366,7 +366,12 @@ class _CardParser(_HTMLParser):
                 return
             n = n["parent"]
         if data.strip():
-            self._cur["text"].append(data)
+            # ★文書の順番を保って文字を持つ★（2026-08-02・Codex43回目）
+            #   「見出しの次の行に値」の形を保ったまま、非表示を除いた
+            #   本文を作れるように、文字も子として順番どおりに置く。
+            self._cur["children"].append(
+                {"tag": "#text", "attrs": {}, "children": [],
+                 "parent": self._cur, "text": [data]})
 
 
 def _node_text(node) -> str:
@@ -555,20 +560,47 @@ _SLOT_WORDS = ("パチスロ", "スロット", "回胴", "スマスロ", "純増
 _RELEASE_RE = re.compile(r"(?<![0-9])(20\d\d)(?:年|[.．/／])\s*(\d{1,2})(?:月|(?![0-9]))")
 
 
-def _visible_text(html: str) -> str:
-    # ★scriptの中身を本文に混ぜない★
-    #   タグ名は文字列から組み立てる（バックスラッシュを直接書くと
-    #   編集の経路で制御文字に化ける事故が今日5回起きたため）
-    # ★template（画面に出ない雛形）も本文に混ぜない★（2026-08-02・Codex33回目）
+def _visible_text_regex(html: str) -> str:
+    """旧実装（タグ落としだけ）。★解析できないHTMLの控えとしてだけ使う★"""
     for tag in ("script", "style", "noscript", "template"):
         html = re.sub("(?is)<" + tag + "[^>]*>.*?</" + tag + "[ \t\r\n]*>", " ", html)
     t = re.sub("(?s)<[^>]+>", chr(10), html)
-    # ★実体参照をほどく★（2026-07-31）
-    #   `&nbsp;` が残ると「50枚あたりのゲーム数&nbsp;約31G」のように
-    #   見出しと値がくっついたまま読めず、値を取りこぼす（実データで確認）。
     import html as _html
     t = _html.unescape(t)
     t = unicodedata.normalize("NFKC", t)
+    return chr(10).join(x.strip() for x in t.splitlines() if x.strip())
+
+
+def _visible_text(html: str) -> str:
+    """★画面に出る文字だけの本文★（2026-08-02・Codex43回目）
+
+    hidden・aria-hidden・display:none とその祖先の下、および
+    script/style/noscript/template の中は読まない。
+    <div hidden>導入 2026年10月</div> を登場年月として採る経路と、
+    非表示の古い型式名を拾う経路を塞ぐ。
+    文書の順番と「タグ境界＝行」の形は従来どおり（見出しの次の行に値、を保つ）。
+    解析に失敗したときだけ旧実装（非表示は読まれる）へ退避する。
+    """
+    p = _CardParser()
+    try:
+        p.feed(html or "")
+    except Exception:                     # noqa: BLE001
+        return _visible_text_regex(html)
+
+    out = []
+
+    def _walk(n, hidden):
+        h = (hidden or n["tag"] in ("script", "style", "noscript", "template")
+             or _CardParser.attr_hidden(n))
+        if h:
+            return
+        for x in n["text"]:
+            out.append(x)
+        for c in n["children"]:
+            _walk(c, h)
+
+    _walk(p.root, False)
+    t = unicodedata.normalize("NFKC", chr(10).join(out))
     return chr(10).join(x.strip() for x in t.splitlines() if x.strip())
 
 
@@ -1475,6 +1507,16 @@ def selftest() -> int:
           '<p>導入 2025.10</p></div></section>',
           "https://m.example/products/slot/",
           "https://m.example/products/slot/") == {})
+    # ★★Codex43回目★★
+    t("★★hiddenの中の年月を本文として読まない★★（Codex43回目）",
+      release_month(_visible_text(
+          "<h1>L試験機 パチスロ</h1><div hidden>導入 2026年10月</div>"
+          "<p>導入時期は未定</p>")) is None
+      and "導入 2026年10月" not in _visible_text(
+          "<div hidden>導入 2026年10月</div><p>見える本文</p>"))
+    t("　見出しの次の行に値がある形は従来どおり読める（型式抽出の形を壊さない）",
+      _visible_text("<p>型式名  :</p><p>Lびん娘NY1</p>").splitlines()
+      == ["型式名  :", "Lびん娘NY1"])
     t("　カードの構造が無いページでは採らない（安全側）",
       list_release_hints(
           '<a href="https://m.example/products/slot/alpha/">A</a> 導入 2026.9 '
