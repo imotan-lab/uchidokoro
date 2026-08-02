@@ -1251,6 +1251,31 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
     return out
 
 
+def _find_stale_held(full: str, want: str):
+    """★前回の復旧が残した退避物（*.recover.<旧PID>）を探す★（Codex62回目）
+
+    返すもの: (指紋が一致した退避物のパス or None, 指紋が合わない退避物のリスト)
+    一致しない退避物は「人が確かめる」対象（触らない）。
+    """
+    import glob as _glob
+    hit, bad = None, []
+    for o in sorted(_glob.glob(full + ".recover.*")):
+        if not os.path.isfile(o):
+            continue
+        try:
+            with open(o, encoding="utf-8") as f:
+                if _sha(f.read()) == want:
+                    if hit is None:
+                        hit = o
+                    else:
+                        bad.append(o)     # 一致が2つ＝想定外。人へ
+                    continue
+        except OSError:
+            pass
+        bad.append(o)
+    return hit, bad
+
+
 RECOVER_LOCK = os.path.join(BASE, ".recover.lock")
 
 
@@ -1384,8 +1409,34 @@ def _recover(apply_it: bool = False) -> dict:
         if rel.startswith("machines.json#"):
             continue                      # 一覧の行は上と②で扱う
         full = os.path.join(BASE, rel)
+        # ★前回の復旧が残した退避物（旧PID名）を再接続する★
+        #   （2026-08-03・Codex62回目。巻き戻しの復元に失敗すると
+        #     *.recover.<旧PID> のまま残り、元パスが無いため以後の復旧が
+        #     何度走っても見つけられず、新台公開が恒久停止した。
+        #     指紋が一致した退避物だけを自分の held_map に引き取る）
+        _old_hit, _old_bad = _find_stale_held(full, want)
+        if _old_bad:
+            out["problems"].append(
+                f"★{rel} の退避物が残っていますが、作った時の指紋と合いません: "
+                f"{_old_bad[0]}。触らずに止めました。人が確かめてください★")
+            grab_fail = True
+            break
         if not os.path.isfile(full):
+            if _old_hit:
+                out["todo"].append(f"消す: {rel}（前回の退避物を引き取り）")
+                if apply_it:
+                    held_map.append((rel, full, _old_hit, want))
             continue                      # 既に片付いている（何度走らせても平気）
+        if _old_hit:
+            # 元パスも退避物もある＝退避物は自分の複製（指紋一致）なので消してよい
+            out["todo"].append(f"消す: {_old_hit}（自分の複製）")
+            if apply_it:
+                try:
+                    os.remove(_old_hit)
+                except OSError as e:      # noqa: BLE001
+                    out["problems"].append(f"複製を消せませんでした: {e}")
+                    grab_fail = True
+                    break
         out["todo"].append(f"消す: {rel}")
         if not apply_it:
             continue
@@ -1404,14 +1455,22 @@ def _recover(apply_it: bool = False) -> dict:
                 with open(held, encoding="utf-8") as f:
                     if _sha(f.read()) != want:
                         bad.append(rel)
-    def _undo_held():
-        """退避したファイルを全部原位置へ戻す（何も消さなかったことにする）。"""
+    def _undo_held() -> bool:
+        """退避したファイルを全部原位置へ戻す（何も消さなかったことにする）。
+
+        ★成否を返す★（2026-08-03・Codex62回目）。戻せなかった退避物は
+        旧PID名のまま残るが、次の復旧が指紋一致で引き取る（上の再接続）。
+        """
+        ok_all = True
         for rel_, full_, held_, _w2 in held_map:
             try:
                 os.replace(held_, full_)
             except OSError as e:          # noqa: BLE001
+                ok_all = False
                 out["problems"].append(
-                    f"★{rel_} を戻せませんでした（{held_} に退避したまま）: {e}★")
+                    f"★{rel_} を戻せませんでした（{held_} に退避したまま・"
+                    f"次の --recover --apply が引き取ります）: {e}★")
+        return ok_all
 
     if apply_it:
         if grab_fail or bad:
@@ -1895,6 +1954,28 @@ def selftest() -> int:
     t("★★公開と復旧は同じロックで排他★★"
       "（mark_startとファイル作成の隙間に復旧が目印を消せた・Codex61回目）",
       "with _OnlyOne():" in inspect.getsource(recover))
+    # ★★Codex62回目：旧PIDの退避物の再接続★★
+    _fs_dir = __import__("tempfile").mkdtemp(prefix="uchi_stale_")
+    try:
+        _fp = os.path.join(_fs_dir, "index.html")
+        _want62 = _sha("中身A")
+        with open(_fp + ".recover.100", "w", encoding="utf-8") as f:
+            f.write("中身A")
+        _hit, _bad = _find_stale_held(_fp, _want62)
+        t("★★前回の退避物（旧PID名）を指紋一致で見つける★★"
+          "（見失うと復旧が恒久に完走できなかった・Codex62回目）",
+          _hit == _fp + ".recover.100" and _bad == [])
+        with open(_fp + ".recover.200", "w", encoding="utf-8") as f:
+            f.write("別の中身")
+        _hit2, _bad2 = _find_stale_held(_fp, _want62)
+        t("　指紋が合わない退避物は「人が確かめる」側に分ける",
+          _hit2 == _fp + ".recover.100"
+          and _bad2 == [_fp + ".recover.200"])
+        t("　復旧の入口が退避物を引き取る配線",
+          "_find_stale_held(full, want)" in inspect.getsource(_recover)
+          and "前回の退避物を引き取り" in inspect.getsource(_recover))
+    finally:
+        __import__("shutil").rmtree(_fs_dir, ignore_errors=True)
     t("★★退避物が残っている間は目印を消さない＋巻き戻しは退避物から★★"
       "（Codex61回目）",
       "退避物が残っているため目印は消しません" in inspect.getsource(_recover)
