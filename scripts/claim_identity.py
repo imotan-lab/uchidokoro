@@ -61,10 +61,19 @@ _ROMAN_MAP = {"i": "1", "ii": "2", "iii": "3", "iv": "4", "v": "5",
 
 
 def canon_num_tail(core: str) -> str:
-    """芯の語尾のローマ数字を数字へ（ii→2）。NFKC小文字済みの芯に使う。"""
+    """芯の語尾のローマ数字を数字へ（ii→2）。NFKC小文字済みの芯に使う。
+
+    ★直前がASCII英字なら変換しない★（2026-08-02・Codex52回目）
+      英単語の末尾（MIX・FELIX・MATRIX）までローマ数字に読むと、
+      別機種「L MI10」と「L MIX」が同じ鍵になり、取り違えて
+      別機種の数値を公開できてしまう。かな・漢字・数字の後ろに
+      続く語尾（…ジャグラーVI・…オンラインII・RX7II）だけを直す。
+    """
     m = _ROMAN_TAIL_RE.match(core or "")
     if m and m.group(1):
-        return m.group(1) + _ROMAN_MAP[m.group(2)]
+        prev = m.group(1)[-1]
+        if not (prev.isascii() and prev.isalpha()):
+            return m.group(1) + _ROMAN_MAP[m.group(2)]
     return core
 
 
@@ -712,6 +721,16 @@ def selftest() -> int:
         else:
             fail += 1
             print(f"  NG {label}: got={got!r} want={want!r}")
+
+    # --- 語尾のローマ数字（Codex50・52回目） ---
+    eq(canon_num_tail("そーどあーとおんらいんii"), "そーどあーとおんらいん2",
+       "roman:かなの後ろは直す（SAO2実データ）")
+    eq(canon_num_tail("まいじゃぐらーvi"), "まいじゃぐらー6", "roman:VI↔6")
+    eq(canon_num_tail("rx7ii"), "rx72", "roman:数字の後ろも直す")
+    eq(canon_num_tail("mix"), "mix", "roman:英単語の末尾は直さない（MIX≠MI10）")
+    eq(canon_num_tail("mi10"), "mi10", "roman:MI10はそのまま")
+    eq(canon_num_tail("felix"), "felix", "roman:FELIXを化けさせない")
+    eq(canon_num_tail("matrix"), "matrix", "roman:MATRIXを化けさせない")
 
     # --- 芯の正規化 ---
     eq(normalize_core("Lバンドリ！"), "バンドリ", "core:Lバンドリ！")

@@ -394,29 +394,30 @@ def _after_ok(after_seg: str, core: str, official_name: str,
         it = iter(big)
         return all(ch in it for ch in small)
 
-    for w, c in zip(words, cores):
+    def _word_status(w: str, c: str) -> str:
+        """'ok'＝通す / 'abbrev'＝本人の略称として通す / 'ng'＝通せない。"""
         # ★メーカー語は正規化後の完全一致だけ★（2026-08-02・Codex28回目）
         #   部分一致だと「SPBELLCO」のような合成語まで許してしまう。
         #   「株式会社サミー」「株式会社北電子」は株式会社を外してから比べる。
         c2 = c.replace("株式会社", "")
         if c == "" or c in _DECOR_CORES \
                 or c in _maker_name_cores() or c2 in _maker_name_cores():
-            continue
+            return "ok"
         if extra and (c in extra or c2 in extra):
-            continue                      # 期待するメーカーの社名・銘柄
+            return "ok"                   # 期待するメーカーの社名・銘柄
         # ★明確な派生印は、略称より先に拒む★（2026-08-02・Codex38回目）
         #   名前の芯に偶然 s,p が順に並ぶ機種だと、「(スマスロ SP)」の
         #   SP が部分列として略称扱いになっていた。
         if c in _DERIV_MARKS or (c.isdigit() and len(c) <= 2):
-            return False
+            return "ng"
         if has_platform and len(c) >= 2 and _subseq(c, core):
-            continue                      # (規格 略称) の形の略称
+            return "abbrev"               # (規格 略称) の形の略称
         # ★機種と同じ規格印つきの略称★（2026-08-02・とんスキ実データ）
         #   P-WORLDの実在の題「(Lとんスキ)」。L自体が規格の注記なので、
         #   印が機種と同じで、残りが名前の順番どおりの部分列なら通す。
         if want_gen and _gen_mark(w) == want_gen \
                 and len(c) >= 2 and _subseq(c, core):
-            continue
+            return "abbrev"
         # ★正式名から導ける別名★（2026-08-02・Codex40回目。P-WORLD実データ）
         #   「マイジャグラーVI(マイジャグラー6 マイジャグ6)」のように、
         #   規格語もL/S印も無い別名括弧が現に在る。
@@ -425,11 +426,46 @@ def _after_ok(after_seg: str, core: str, official_name: str,
         #   （派生印の拒否が先に効くので SP・改 等はここへ来ない）。
         if len(c) >= 2 and c[:1] == core[:1] \
                 and _subseq(_canon_gen_num(c), _canon_gen_num(core)):
-            continue
+            return "abbrev"
         # ★飾り語・販売区分語だけの連結語★（新台スマスロ・設定判別・天井・…）
         if _decor_compound(w):
+            return "ok"
+        return "ng"
+
+    statuses = [_word_status(w, c) for w, c in zip(words, cores)]
+    if all(s != "ng" for s in statuses):
+        return True
+    # ★略称の読み仮名だけは、条件つきで通す★（2026-08-02・実データ）
+    #   P-WORLDの実在の題「L青春ブタ野郎は…(スマスロ 青ブタ あおぶた)」。
+    #   「あおぶた」は漢字の読みなので部分列では確かめられない。
+    #   ①同じ括弧に部分列で確かめられた略称があり
+    #   ②語がかな（ひらがな・カタカナ・ー）だけでできていて
+    #   ③その略称の「かな部分」を順番どおり全部含む
+    #   の3つがそろった語だけを読み仮名とみなす。②③により
+    #   「(青ブタ ほくと)」「(青ブタ スペシャル)」は入り込めない。
+    #   略称のかな部分が空（漢字だけの略称）の時は誰も通さない（安全側）。
+    _KANA = re.compile(r"^[ぁ-ゖァ-ヺーゝゞヽヾ]+$")
+
+    def _kana_of(s: str) -> str:
+        # カタカナはひらがなへ寄せて、かな以外の文字を落とす
+        out = []
+        for ch in s:
+            o = ord(ch)
+            if 0x30A1 <= o <= 0x30F6:
+                ch = chr(o - 0x60)
+            if _KANA.match(ch):
+                out.append(ch)
+        return "".join(out)
+
+    _abbrev_kana = [_kana_of(c) for c, s in zip(cores, statuses)
+                    if s == "abbrev" and _kana_of(c)]
+    for w, c, s in zip(words, cores, statuses):
+        if s != "ng":
             continue
-        return False
+        if not (_KANA.match(w) and len(c) >= 2):
+            return False
+        if not any(_subseq(k, _kana_of(c)) for k in _abbrev_kana):
+            return False
     return True
 
 
@@ -892,6 +928,23 @@ def selftest() -> int:
       ["reason"].startswith("DIRECTORY_MAKER_UNRESOLVED"))
     t("　レオスター（エンターライズの名鑑表記・P-WORLD実データ）は解決される",
       "enterrise" in _maker_core_owners("レオスター"))
+    # ★★Codex52回目★★
+    t("★★オリンピア（平和の名鑑表記・P-WORLD実データ）は解決される★★"
+      "（無いと51回目の不採用化で現行の青ブタを公開できない・Codex52回目）",
+      "heiwa" in _maker_core_owners("オリンピア"))
+    _AOBUTA = "L青春ブタ野郎はバニーガール先輩の夢を見ない"
+    t("★★実在の題「…(スマスロ 青ブタ あおぶた)」＝略称の読み仮名を通す★★"
+      "（P-WORLD実データ・現行の青ブタが弾かれていた）",
+      page_is_machine(f"<title>{_AOBUTA}(スマスロ 青ブタ あおぶた) "
+                      "パチスロ新台 スロット | P-WORLD</title>",
+                      _AOBUTA, strict_all_tail=True)[0] is True)
+    t("　読み仮名を装った別機種・派生印・読みだけの括弧は通さない",
+      page_is_machine(f"<title>{_AOBUTA}(スマスロ 青ブタ ほくと) | P</title>",
+                      _AOBUTA, strict_all_tail=True)[0] is False
+      and page_is_machine(f"<title>{_AOBUTA}(スマスロ 青ブタ スペシャル) | P</title>",
+                          _AOBUTA, strict_all_tail=True)[0] is False
+      and page_is_machine(f"<title>{_AOBUTA}(スマスロ あおぶた) | P</title>",
+                          _AOBUTA, strict_all_tail=True)[0] is False)
     # ★★Codex43回目（北電子・実データ）★★
     t("★★実在の題「マイジャグラーVI|パチスロ製品情報|株式会社北電子」を通す★★"
       "（北電子の新台を出せない経路だった・Codex43回目）",

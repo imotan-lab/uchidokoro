@@ -197,6 +197,36 @@ def _visible_anchor_hrefs(html: str):
     return out
 
 
+def _visible_anchor_pairs(html: str):
+    """★画面に出る<a>の (href, リンク文字) を返す★（2026-08-02・Codex52回目）
+
+    名鑑の索引（directory_index.build_index）が href=\"...\" の正規表現で
+    読んでいたため、単一引用符のリンクだけを黙って見落とせた。
+    こちらと同じHTML解析で読む。解析できなければ None
+    （呼び出し元は0件＝最低件数の警報側に倒す）。
+    """
+    p = _CardParser()
+    try:
+        p.feed(html)
+    except Exception:                     # noqa: BLE001
+        return None
+
+    out = []
+
+    def _walk(n, hidden):
+        h = (hidden or n["tag"] in ("script", "style", "noscript", "template")
+             or _CardParser.attr_hidden(n))
+        if n["tag"] == "a" and not h:
+            href = str(n["attrs"].get("href") or "").strip()
+            if href:
+                out.append((href, _node_text(n)))
+        for c in n["children"]:
+            _walk(c, h)
+
+    _walk(p.root, False)
+    return out
+
+
 # ★1文字キー（p/s/q）は無害と決めつけない★（2026-08-02・Codex35回目）
 # ★cat/category/tag/filter も無害と決めつけない★（2026-08-02・Codex51回目）
 #   分類キーは「?cat=機種名」の形で機種を指せるため、値つきなら知らせる。

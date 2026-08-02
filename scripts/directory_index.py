@@ -106,14 +106,19 @@ def anchor_core(text: str) -> str:
 
 
 def build_index(html: str, base_url: str, link_pattern: str) -> dict:
-    """1つの入口から {機種名の芯: [(URL, 元の文字), ...]} を作る。"""
+    """1つの入口から {機種名の芯: [(URL, 元の文字), ...]} を作る。
+
+    ★リンクはHTML解析で読む★（2026-08-02・Codex52回目）
+      href=\"...\" の正規表現だと単一引用符のリンクだけを黙って見落とし、
+      既存リンクが十分あるページでは面が健全に見えたまま
+      新台だけが HEALTHY_NO_MATCH で欠落する。
+      解析できなければ0件＝最低件数の警報側に倒れる。
+    """
     idx: dict = {}
     rx = re.compile(link_pattern)
-    for m in re.finditer(r'<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>', html, re.S | re.I):
-        href = m.group(1).strip()
+    for href, text in (_w._visible_anchor_pairs(html) or []):
         if not rx.search(href):
             continue
-        text = re.sub(r"<[^>]+>", " ", m.group(2))
         core = anchor_core(text)
         if not core:
             continue
@@ -241,6 +246,18 @@ def selftest() -> int:
       len(idx.get(key, [])) == 1)
     t("　別機種は別の項目になる",
       _ci.normalize_core("Lスーパービンゴネオ") in idx)
+    idx_q = build_index(
+        "<a href=\"/slot/belko-slot/1/\">L既存機 スロット 新台</a>"
+        "<a href='/slot/belko-slot/2/'>L新台機 スロット 新台</a>",
+        "https://d.example/slot/", r"/slot/[a-z\-]+/\d+")
+    t("★★単一引用符のリンクも見落とさない★★"
+      "（新台だけ欠落しても面が健全に見えた・Codex52回目）",
+      _ci.normalize_core("L新台機") in idx_q
+      and _ci.normalize_core("L既存機") in idx_q)
+    t("　非表示のリンクは索引に入れない",
+      _ci.normalize_core("L隠し機") not in build_index(
+          '<div hidden><a href="/slot/belko-slot/3/">L隠し機 スロット</a></div>',
+          "https://d.example/slot/", r"/slot/[a-z\-]+/\d+"))
 
     CONF = {"name": "t", "link_pattern": r"/slot/[a-z\-]+/\d+", "min_expected": 2,
             "status": "ACTIVE",

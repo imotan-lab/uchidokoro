@@ -58,7 +58,10 @@
    "min_expected": 4,
    "status": "ACTIVE",
    "_checked": "2026-07-31 年別アーカイブを除外する仕組みを入れて5件取得・タイトルが機種名であることを確認",
-   "list_marker": "パチスロ機種一覧"
+   "list_marker": "パチスロ機種一覧",
+   "directory_names": [
+    "オリンピア"
+   ]
   },
   "daitogiken": {
    "name": "大都技研",
