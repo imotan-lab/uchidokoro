@@ -497,7 +497,12 @@ def _maker_core_owners(core_text: str) -> set:
         for mid, conf in (got.get("catalogs") or {}).items():
             if not isinstance(conf, dict) or "list_url" not in conf:
                 continue
-            for tok in (str(conf.get("name") or ""), str(mid)):
+            # ★名鑑での別名（directory_names）も見る★（2026-08-02・Codex44回目）
+            #   KPE↔コナミアミューズメント、ユニバーサル↔ミズホ/メーシー/アクロス等。
+            #   別名が解決できるほど「別の社」の検知が広がる（誤拒否は増えない）。
+            toks = [str(conf.get("name") or ""), str(mid)]
+            toks += [str(x) for x in (conf.get("directory_names") or [])]
+            for tok in toks:
                 c = _ci.normalize_core(tok)
                 if c and c in core_text:
                     owners.add(mid)
@@ -534,6 +539,13 @@ def lookup(url: str, official_name: str, expected_maker: str = "") -> dict:
                 out["reason"] = (f"DIRECTORY_MAKER_MISMATCH（名鑑のメーカー欄が"
                                  f"別の社を指しています: {mk[:30]}）")
                 return out
+            if not owners:
+                # ★解決できない表記は記録して育てる★（2026-08-02・Codex44回目）
+                #   いきなり除外にすると、名簿に無い実在の別名
+                #   （子会社ブランド等）で正しい新台を失う。
+                #   ログに残し、実在の別名を directory_names へ足していく。
+                print(f"  （名鑑のメーカー欄を名簿で解決できません: {mk[:40]} "
+                      f"/ 期待={expected_maker} / {url[:60]}）")
     code, why = extract_model_code(html)
     out["model_code"] = code
     out["reason"] = why
@@ -824,6 +836,11 @@ def selftest() -> int:
       page_is_machine("<title>マイジャグラーVI｜パチスロ製品情報｜株式会社北電子"
                       "</title>", "マイジャグラーVI",
                       strict_all_tail=True)[0] is True)
+    # ★★Codex44回目★★
+    t("★★名鑑の別名（directory_names）で別の社を検知できる★★（Codex44回目）",
+      "universal" in _maker_core_owners("ミズホ")
+      and "kpe" in _maker_core_owners("コナミアミューズメント")
+      and _maker_core_owners("そんな社は無い") == set())
     t("　直後の括弧が本人の略称なら通る（実データ・青ブタ）",
       page_is_machine(
           "<title>L青春ブタ野郎はバニーガール先輩の夢を見ない"

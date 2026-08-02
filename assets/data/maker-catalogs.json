@@ -17,7 +17,10 @@
    "link_prefix": "https://www.kitadenshi.co.jp/slot/",
    "min_expected": 5,
    "status": "ACTIVE",
-   "list_marker": "パチスロ製品情報"
+   "list_marker": "パチスロ製品情報",
+   "directory_names": [
+    "北電子"
+   ]
   },
   "universal": {
    "name": "ユニバーサル",
@@ -27,7 +30,14 @@
    "status": "ACTIVE",
    "fetch": "render",
    "_checked": "2026-07-31 描画後に20件取得。JSエラーは出るがリンクは揃う（健全性として件数を記録）",
-   "list_marker": "パチスロ|"
+   "list_marker": "パチスロ|",
+   "directory_names": [
+    "ユニバーサルエンターテインメント",
+    "ミズホ",
+    "メーシー",
+    "アクロス",
+    "ユニバーサルブロス"
+   ]
   },
   "enterrise": {
    "name": "エンターライズ",
@@ -54,7 +64,11 @@
    "min_expected": 40,
    "status": "ACTIVE",
    "_checked": "2026-07-31 静的HTMLで49件取得・個別ページのタイトルが機種名であることを確認（一覧と機種ページでURLの階層が違う）",
-   "list_marker": "スロット機種"
+   "list_marker": "スロット機種",
+   "directory_names": [
+    "大都技研",
+    "大都"
+   ]
   },
   "sankyo": {
    "name": "SANKYO",
@@ -90,7 +104,11 @@
    "min_expected": 2,
    "status": "ACTIVE",
    "_checked": "2026-07-31 トップページに機種が並ぶ（3件）。★/machine/ を頼むとトップへ転送されるため、最初からトップを一覧として読む★",
-   "list_marker": "山佐ネクスト"
+   "list_marker": "山佐ネクスト",
+   "directory_names": [
+    "山佐",
+    "山佐ネクスト"
+   ]
   },
   "kpe": {
    "name": "KPE",
@@ -98,7 +116,11 @@
    "link_prefix": "https://www.kpe.co.jp/products/",
    "min_expected": 3,
    "status": "NEEDS_SETUP",
-   "_why": "描画しても機種ごとの個別ページが存在しない（製品情報が画像・PDFのみと思われる。2026-07-31確認）"
+   "_why": "描画しても機種ごとの個別ページが存在しない（製品情報が画像・PDFのみと思われる。2026-07-31確認）",
+   "directory_names": [
+    "コナミアミューズメント",
+    "KPE"
+   ]
   },
   "daxel": {
    "name": "ダクセル",
@@ -146,7 +168,11 @@
    "link_prefix": null,
    "min_expected": 1,
    "status": "NEEDS_SETUP",
-   "_why": "公式サイトの機種一覧URLを特定できていない（社名から推測したドメインでは接続できず。2026-07-31）。★推測URLを登録しない★＝別会社のページを機種一覧として読む事故を避けるため"
+   "_why": "公式サイトの機種一覧URLを特定できていない（社名から推測したドメインでは接続できず。2026-07-31）。★推測URLを登録しない★＝別会社のページを機種一覧として読む事故を避けるため",
+   "directory_names": [
+    "NET",
+    "ネット"
+   ]
   }
  },
  "_notes": {
