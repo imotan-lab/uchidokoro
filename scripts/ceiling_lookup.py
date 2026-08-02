@@ -390,6 +390,17 @@ def selftest() -> int:
                  "<tr><th>恩恵</th><td>AT当選</td></tr></table>"
                  )[0]["counted"] == "AT間"
       and from_table(LH)[0]["counted"] is None)
+    t("★★非表示の天井表を採らない★★（Codex63回目）",
+      from_table("<h3>AT天井</h3><table>"
+                 "<tr><th>天井G数</th><td>1200G</td></tr>"
+                 "<tr><th>恩恵</th><td>AT当選</td></tr></table>"
+                 "<div hidden><h3>旧天井</h3><table>"
+                 "<tr><th>天井G数</th><td>1500G</td></tr>"
+                 "<tr><th>恩恵</th><td>AT当選</td></tr></table></div>"
+                 )[0]["amount"] == 1200
+      and len(from_table("<div hidden><table>"
+                         "<tr><th>天井G数</th><td>1500G</td></tr>"
+                         "<tr><th>恩恵</th><td>AT当選</td></tr></table></div>")) == 0)
     t("★★別区画の恩恵を天井に結合しない★★（Codex59回目・合成HTML）",
       from_table("<h3>AT天井</h3><table>"
                  "<tr><th>天井G数</th><td>1200G</td></tr></table>"

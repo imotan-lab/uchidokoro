@@ -402,6 +402,14 @@ def selftest() -> int:
       per_setting_from_tables(
           "<table><tr><th>設定</th><th>AT</th></tr>"
           "<tr><td>備考</td><td>なし</td></tr></table>", ("AT",), "1/x")[0] == {})
+    t("★★非表示の設定表を採らない★★（Codex63回目）",
+      per_setting_from_tables(
+          '<div hidden>' + HP + "</div>", ("AT初当り確率",), "1/x")[0] == {}
+      and per_setting_from_tables(
+          HP + '<div style="display:none">'
+          + HP.replace("1/498.7", "1/999.9") + "</div>",
+          ("AT初当り確率",), "1/x")
+      == ({"1": "1/498.7", "2": "1/477.8"}, False))
     t("★★同じページの重複表の食い違いを見逃さない★★（Codex60回目）",
       per_setting_from_tables(
           HP + HP.replace("1/498.7", "1/999.9"),

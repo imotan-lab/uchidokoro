@@ -329,6 +329,10 @@ def selftest() -> int:
       from_tables('<h3>CZ「x娘チャレンジ」</h3><table>'
                   "<tr><th>継続G数</th><td>4G</td></tr>"
                   "<tr><th>備考</th><td>なし</td></tr></table>") == [])
+    t("★★非表示のCZ表を採らない★★（Codex63回目）",
+      from_tables('<div hidden><h3>CZ「旧チャレンジ」</h3><table>'
+                  "<tr><th>継続G数</th><td>9G</td></tr>"
+                  "<tr><th>期待度</th><td>約99%</td></tr></table></div>") == [])
     t("★★「チャンス」だけの見出し・文をCZとして採らない★★"
       "（AT中の報酬ゾーンをCZにできた・Codex61回目）",
       from_tables('<h3>AT中の報酬「ドリームチャンス」</h3><table>'

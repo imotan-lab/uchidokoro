@@ -210,6 +210,16 @@ def selftest() -> int:
           "<tr><th>純増</th><td>約2.8枚/G</td></tr></table>")]
       == [("UPPER_AT", 5.0)])
 
+    _VIS = ('<h3>AT「本物」</h3><table><tr><th>継続G数</th><td>1セット100G</td></tr>'
+            "<tr><th>純増</th><td>約2.8枚/G</td></tr></table>")
+    _HID = ('<div hidden><h3>上位AT「旧仕様」</h3><table>'
+            "<tr><th>継続G数</th><td>1セット100G</td></tr>"
+            "<tr><th>純増</th><td>約9.9枚/G</td></tr></table></div>")
+    t("★★非表示の表の値を採らない★★（読者に見えない旧値が票になれた・Codex63回目）",
+      [(c["mode"], c["net"]) for c in from_tables(_VIS + _HID)]
+      == [("MAIN_AT", 2.8)]
+      and from_tables(_HID) == [])
+
     A = {"url": "https://www.p-world.co.jp/x", "host": "p-world.co.jp", "ok": True,
          "specs": [{"mode": "MAIN_AT", "games": 100, "net": 2.8, "raw": ""}]}
     B = {"url": "https://chonborista.com/y", "host": "chonborista.com", "ok": True,

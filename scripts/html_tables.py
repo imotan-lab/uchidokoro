@@ -34,51 +34,149 @@ def _text(fragment: str) -> str:
     return unicodedata.normalize("NFKC", " ".join(t.split()))
 
 
+from html.parser import HTMLParser as _HTMLParser
+
+# 読まない区画。script等は実行用、aside等は本文でない脇の区画
+_SKIP_TAGS = ("script", "style", "noscript", "template",
+              "aside", "nav", "footer", "header")
+_VOID = ("br", "img", "hr", "input", "meta", "link", "wbr", "source")
+
+
+class _TableParser(_HTMLParser):
+    """★画面に出る表だけをHTML解析で読む★（2026-08-03・Codex63回目）
+
+    生HTMLの正規表現走査は、HTMLコメント・<template>・hidden祖先の中の
+    「読者には見えない旧値の表」まで採れた（4収集器すべてに波及）。
+    パーサならコメントはそもそも本文にならず、hidden・脇区画は
+    スタックの印で除外できる。解析に失敗したら空＝採らない側に倒す。
+    """
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.out = []                    # 完成した表
+        self.stack = []                  # (tag, skip, hidden)
+        self.table_depth = 0
+        self.cur = None                  # 取り込み中の表
+        self.cell = None                 # 取り込み中のセルの文字
+        self.in_caption = False
+        self.cap_buf = []
+        self.head_tag = None             # 取り込み中の見出し(h1-h6)
+        self.head_buf = []
+        self.last_heading = ""          # 前の表からここまでの最後の見出し
+
+    @staticmethod
+    def _is_hidden(attrs) -> bool:
+        d = dict(attrs)
+        if "hidden" in d:
+            return True
+        if str(d.get("aria-hidden", "")).lower() == "true":
+            return True
+        style = str(d.get("style", "")).lower().replace(" ", "")
+        return "display:none" in style or "visibility:hidden" in style
+
+    def _suppressed(self) -> bool:
+        return any(s or h for _t, s, h in self.stack)
+
+    def handle_starttag(self, tag, attrs):
+        if tag in _VOID:
+            return
+        skip = tag in _SKIP_TAGS
+        hidden = self._is_hidden(attrs)
+        self.stack.append((tag, skip, hidden))
+        if self._suppressed():
+            return
+        if tag == "table":
+            self.table_depth += 1
+            if self.table_depth == 1:
+                self.cur = {"title": self.last_heading, "pairs": [],
+                            "cells": [], "rows": [], "has_span": False,
+                            "_cap": None}
+            return
+        if self.cur is not None:
+            if tag == "tr":
+                self.cur["rows"].append([])
+            elif tag in ("th", "td"):
+                self.cell = []
+                d = dict(attrs)
+                for k in ("rowspan", "colspan"):
+                    v = str(d.get(k, "") or "").strip()
+                    if v and v != "1":
+                        self.cur["has_span"] = True
+            elif tag == "caption":
+                self.in_caption = True
+                self.cap_buf = []
+        elif tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
+            self.head_tag = tag
+            self.head_buf = []
+
+    def handle_endtag(self, tag):
+        if tag in _VOID:
+            return
+        # スタックを閉じタグまで巻き戻す（閉じ忘れHTMLに耐える）
+        for i in range(len(self.stack) - 1, -1, -1):
+            if self.stack[i][0] == tag:
+                del self.stack[i:]
+                break
+        if tag == "table" and self.table_depth > 0:
+            self.table_depth -= 1
+            if self.table_depth == 0 and self.cur is not None:
+                cur = self.cur
+                if cur["_cap"]:
+                    cur["title"] = cur["_cap"]
+                del cur["_cap"]
+                self.out.append(cur)
+                self.cur = None
+                self.last_heading = ""   # 見出しは「前の表との間」だけ有効
+            return
+        if self.cur is not None:
+            if tag in ("th", "td") and self.cell is not None:
+                text = unicodedata.normalize(
+                    "NFKC", " ".join("".join(self.cell).split()))
+                if self.cur["rows"]:
+                    self.cur["rows"][-1].append(text)
+                self.cur["cells"].append(text)
+                self.cell = None
+            elif tag == "tr" and self.cur["rows"]:
+                got = self.cur["rows"][-1]
+                if len(got) >= 2:
+                    self.cur["pairs"].append((got[0], got[1]))
+            elif tag == "caption":
+                self.cur["_cap"] = unicodedata.normalize(
+                    "NFKC", " ".join("".join(self.cap_buf).split()))
+                self.in_caption = False
+        elif tag == self.head_tag:
+            self.last_heading = unicodedata.normalize(
+                "NFKC", " ".join("".join(self.head_buf).split()))
+            self.head_tag = None
+
+    def handle_data(self, data):
+        if self._suppressed():
+            return
+        if self.cell is not None:
+            self.cell.append(" " + data + " ")
+        elif self.in_caption:
+            self.cap_buf.append(data)
+        elif self.head_tag:
+            self.head_buf.append(data)
+
+
 def tables(html: str) -> list:
     """表を1つずつ、直前の見出しと一緒に返す。
 
-    返すもの: [{"title": 直前の見出し, "pairs": [(左, 右), ...], "cells": [...]}]
+    返すもの: [{"title": 直前の見出し, "pairs": [(左, 右), ...],
+                "cells": [...], "rows": [...], "has_span": bool}]
+
+    ★画面に出るものだけ★（2026-08-03・Codex63回目）
+      HTMLコメント・template/script/style・hidden/aria-hidden/display:none
+      の祖先・脇区画（aside/nav/footer/header）の中の表は返さない。
+      見出しも同じ条件で「前の表とこの表の間」のものだけを題にする。
     """
-    out = []
-    prev_end = 0
-    for m in re.finditer("(?is)<table[^>]*>(.*?)</table" + _S + ">", html or ""):
-        body = m.group(1)
-        pairs, cells, rows = [], [], []
-        # ★rowspan/colspan のある表は「ずれあり」と印を付ける★
-        #   （2026-08-03・Codex60回目。物理セルしか持たないので、
-        #     多段見出しの表は列見出しと値が必ずずれる。展開はせず、
-        #     読む側がこの印の表を不採用にする）
-        has_span = bool(re.search(
-            r"(?is)<t[hd][^>]*\b(?:row|col)span\s*=\s*[\"']?\s*(?!1[\"'\s>])",
-            body))
-        for row in re.finditer("(?is)<tr[^>]*>(.*?)</tr" + _S + ">", body):
-            got = [_text(c) for c in re.findall(
-                "(?is)<t[hd][^>]*>(.*?)</t[hd]" + _S + ">", row.group(1))]
-            cells.extend(got)
-            # ★全列を rows に残す★（2026-08-03・Codex59回目）
-            #   pairs は(左,右)の2列しか持たず、P-WORLDの「CZ/AT確率」のような
-            #   3列の表（設定|CZ合成|AT初当り確率）の3列目が読めなかった。
-            rows.append(got)
-            if len(got) >= 2:
-                pairs.append((got[0], got[1]))
-        # ★見出しは「前の表とこの表の間」にあるものだけ★
-        #   （2026-08-03・Codex60回目。文書全体で最後の見出しを使うと、
-        #     見出しを持たない次の表が前の表の見出しを引き継いでしまい、
-        #     ボーナス表を上位AT表として読めた）
-        between = html[prev_end:m.start()]
-        # ★脇の区画（aside/nav/footer/header）の見出しは表の題にしない★
-        #   （2026-08-03・Codex61回目。asideの「上位ATへの移行条件」が
-        #     直後の無題の表の題になり、通常ATの値を上位AT仕様にできた）
-        between = re.sub(
-            r"(?is)<(aside|nav|footer|header)\b[^>]*>.*?</\1" + _S + ">",
-            " ", between)
-        heads = re.findall("(?is)<h[1-6][^>]*>(.*?)</h[1-6]" + _S + ">", between)
-        caps = re.findall("(?is)<caption[^>]*>(.*?)</caption" + _S + ">", body)
-        title = _text(caps[-1]) if caps else (_text(heads[-1]) if heads else "")
-        prev_end = m.end()
-        out.append({"title": title, "pairs": pairs, "cells": cells,
-                    "rows": rows, "has_span": has_span})
-    return out
+    p = _TableParser()
+    try:
+        p.feed(str(html or ""))
+    except Exception:                     # noqa: BLE001
+        return []                         # 解析できなければ採らない側に倒す
+    return p.out
 
 
 def value_of(pairs: list, labels) -> str:
@@ -127,6 +225,25 @@ def selftest() -> int:
     t("★caption があれば見出しより優先する★",
       tables('<h3>ちがう見出し</h3><table><caption>本当の名前</caption>'
              '<tr><th>a</th><td>b</td></tr></table>')[0]["title"] == "本当の名前")
+    _HID = ('<h3>AT「本物」</h3><table><tr><th>継続G数</th><td>1セット100G</td></tr>'
+            "<tr><th>純増</th><td>約2.8枚/G</td></tr></table>"
+            '<div hidden><h3>上位AT「旧仕様」</h3><table>'
+            "<tr><th>継続G数</th><td>1セット100G</td></tr>"
+            "<tr><th>純増</th><td>約9.9枚/G</td></tr></table></div>")
+    t("★★hidden祖先の中の表を返さない★★"
+      "（読者に見えない旧値が2票になれた・Codex63回目）",
+      len(tables(_HID)) == 1 and tables(_HID)[0]["title"] == "AT「本物」")
+    t("　HTMLコメントの中の表を返さない",
+      tables("<!-- <h3>廃止</h3><table><tr><th>a</th><td>b</td></tr></table> -->"
+             "<p>本文</p>") == [])
+    t("　template・display:none・aria-hiddenの中の表も返さない",
+      tables("<template><table><tr><th>a</th><td>b</td></tr></table></template>"
+             '<div style="display:none"><table><tr><th>c</th><td>d</td></tr>'
+             "</table></div>"
+             '<div aria-hidden="true"><table><tr><th>e</th><td>f</td></tr>'
+             "</table></div>") == [])
+    t("　asideの中の表も返さない",
+      tables("<aside><table><tr><th>a</th><td>b</td></tr></table></aside>") == [])
     t("　実体参照をほどく",
       tables("<h3>x</h3><table><tr><th>a</th><td>1&nbsp;G</td></tr></table>"
              )[0]["pairs"] == [("a", "1 G")])
