@@ -570,6 +570,10 @@ BLOCKING = ("AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY", "型式名",
             "転載照合を実施できません",
             # ★別のページへ転送された中身で記事を作らない★（Codex34回目）
             "へ転送されました", "トップページへ転送されました",
+            # ★公式を確認できていない状態で書かない★（2026-08-02・Codex45回目。
+            #   RETRYABLEに足した時、公開を止める側に入れ忘れていた。
+            #   メンテ画面でも名鑑2票がそろえば公開へ進めた）
+            "読める状態ではありません",
             "転載の疑い",   # ★登録簿に無い転載があれば止める★
             # ★★ここに入れ忘れていた★★（2026-07-31・Codex18回目）
             #   直したつもりで、書き換える場所を1つ手前と間違えていた。
@@ -1752,6 +1756,15 @@ def selftest() -> int:
               "（北電子マイジャグラーVIを一律人送りにしていた・Codex43回目）",
               "型式名の印" in inspect.getsource(gather)
               and "からも読めません" in inspect.getsource(gather))
+            # ★メンテ画面のまま公開へ進めない通し試験★（Codex45回目）
+            _nw._get = lambda u, timeout=20: (
+                "<title>Access Denied</title><p>ただいまメンテナンス中です</p>")
+            r45 = run_one("L試験機", "https://m.example/products/slot/zzz/",
+                          "m", "2026-09")
+            t("★★公式がメンテ画面なら、材料がそろっても書かない★★"
+              "（RETRYABLEに足した時BLOCKINGへ入れ忘れた・Codex45回目）",
+              "preview" not in r45
+              and any("読める状態ではありません" in x for x in r45["blocked"]))
             t("★★初回に読めなかった将来の新台を沈めない★★（Codex37回目）",
               "初回に読めなかった" in inspect.getsource(discover)
               and "初回に残せなかったので" in inspect.getsource(discover))
