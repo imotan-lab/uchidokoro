@@ -51,10 +51,11 @@ class _TableParser(_HTMLParser):
     スタックの印で除外できる。解析に失敗したら空＝採らない側に倒す。
     """
 
-    def __init__(self):
+    def __init__(self, hidden_classes: frozenset = frozenset()):
         super().__init__(convert_charrefs=True)
         self.out = []                    # 完成した表
-        self.stack = []                  # (tag, skip, hidden)
+        self.stack = []                  # (tag, skip, hidden, depthを増やしたか)
+        self.hidden_classes = hidden_classes
         self.table_depth = 0
         self.cur = None                  # 取り込み中の表
         self.cell = None                 # 取り込み中のセルの文字
@@ -64,33 +65,52 @@ class _TableParser(_HTMLParser):
         self.head_buf = []
         self.last_heading = ""          # 前の表からここまでの最後の見出し
 
-    @staticmethod
-    def _is_hidden(attrs) -> bool:
+    def _is_hidden(self, attrs) -> bool:
         d = dict(attrs)
         if "hidden" in d:
             return True
         if str(d.get("aria-hidden", "")).lower() == "true":
             return True
         style = str(d.get("style", "")).lower().replace(" ", "")
-        return "display:none" in style or "visibility:hidden" in style
+        if "display:none" in style or "visibility:hidden" in style:
+            return True
+        # ★同じ文書の<style>で display:none にされたクラス★（Codex64回目）
+        #   .old-spec { display:none } ＋ class="old-spec" の形。
+        #   外部CSSまでは判定できない（描画なしの限界）。
+        if self.hidden_classes:
+            cls = set(str(d.get("class", "") or "").split())
+            if cls & self.hidden_classes:
+                return True
+        return False
 
     def _suppressed(self) -> bool:
-        return any(s or h for _t, s, h in self.stack)
+        return any(s or h for _t, s, h, _c in self.stack)
 
     def handle_starttag(self, tag, attrs):
         if tag in _VOID:
             return
         skip = tag in _SKIP_TAGS
         hidden = self._is_hidden(attrs)
-        self.stack.append((tag, skip, hidden))
-        if self._suppressed():
+        suppressed_before = self._suppressed()
+        counted = False
+        if tag == "table" and not (suppressed_before or skip or hidden):
+            # ★depthを増やしたことをスタックに残す★（2026-08-03・Codex64回目。
+            #   非表示の入れ子表の閉じタグで外の表が途中終了していた）
+            counted = True
+        self.stack.append((tag, skip, hidden, counted))
+        if suppressed_before or skip or hidden:
             return
         if tag == "table":
             self.table_depth += 1
             if self.table_depth == 1:
                 self.cur = {"title": self.last_heading, "pairs": [],
                             "cells": [], "rows": [], "has_span": False,
-                            "_cap": None}
+                            "_cap": None, "_nested": False}
+            else:
+                # ★入れ子の表は丸ごと不採用★（2026-08-03・Codex64回目。
+                #   内側の値が外側の見出しの値として混ざった）
+                if self.cur is not None:
+                    self.cur["_nested"] = True
             return
         if self.cur is not None:
             if tag == "tr":
@@ -113,18 +133,25 @@ class _TableParser(_HTMLParser):
         if tag in _VOID:
             return
         # スタックを閉じタグまで巻き戻す（閉じ忘れHTMLに耐える）
+        counted_closed = False
         for i in range(len(self.stack) - 1, -1, -1):
             if self.stack[i][0] == tag:
+                counted_closed = any(c for _t, _s, _h, c in self.stack[i:])
                 del self.stack[i:]
                 break
-        if tag == "table" and self.table_depth > 0:
+        if tag == "table":
+            # ★depthを増やした開始タグに対応する閉じだけで減らす★（Codex64回目）
+            if not counted_closed:
+                return
             self.table_depth -= 1
             if self.table_depth == 0 and self.cur is not None:
                 cur = self.cur
                 if cur["_cap"]:
                     cur["title"] = cur["_cap"]
+                nested = cur.pop("_nested")
                 del cur["_cap"]
-                self.out.append(cur)
+                if not nested:            # 入れ子を含む表は返さない
+                    self.out.append(cur)
                 self.cur = None
                 self.last_heading = ""   # 見出しは「前の表との間」だけ有効
             return
@@ -171,12 +198,45 @@ def tables(html: str) -> list:
       の祖先・脇区画（aside/nav/footer/header）の中の表は返さない。
       見出しも同じ条件で「前の表とこの表の間」のものだけを題にする。
     """
-    p = _TableParser()
+    p = _TableParser(_css_hidden_classes(str(html or "")))
     try:
         p.feed(str(html or ""))
     except Exception:                     # noqa: BLE001
         return []                         # 解析できなければ採らない側に倒す
     return p.out
+
+
+_STYLE_RE = re.compile("(?is)<style[^>]*>(.*?)</style" + _S + ">")
+_HIDE_BODY_RE = re.compile(
+    r"(?i)display\s*:\s*none|visibility\s*:\s*hidden")
+_AT_BLOCK_RE = re.compile(
+    r"(?is)@[^{};]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}")
+
+
+def _css_hidden_classes(html: str) -> frozenset:
+    """★同じ文書の<style>で非表示にされるクラス名★（2026-08-03・Codex64回目）
+
+    .old-spec { display:none } のような同一文書内の定義だけを読む。
+    外部CSS・JSによる切替は描画なしでは判定できない（そこは
+    「両名鑑を偽造できる立場が要る」信頼境界の外として扱う）。
+
+    ★セレクタが「単独クラスちょうど」の規則だけを数える★
+      `.entry-content iframe{display:none}` のような複合セレクタで
+      先頭のクラスを数えると、ちょんぼりすたの本文包み（entry-content）
+      ごと非表示扱いになり、実在の全表を失った（実際に起きた）。
+      @media の中も数えない（画面幅による切替＝常時非表示ではない）。
+    """
+    out = set()
+    for m in _STYLE_RE.finditer(html or ""):
+        css = _AT_BLOCK_RE.sub(" ", m.group(1))
+        for rule in re.finditer(r"([^{}]+)\{([^{}]*)\}", css):
+            if not _HIDE_BODY_RE.search(rule.group(2)):
+                continue
+            for part in rule.group(1).split(","):
+                mm = re.match(r"^\.([A-Za-z0-9_-]+)$", part.strip())
+                if mm:
+                    out.add(mm.group(1))
+    return frozenset(out)
 
 
 def value_of(pairs: list, labels) -> str:
@@ -244,6 +304,30 @@ def selftest() -> int:
              "</table></div>") == [])
     t("　asideの中の表も返さない",
       tables("<aside><table><tr><th>a</th><td>b</td></tr></table></aside>") == [])
+    t("★★同じ文書の<style>によるクラス非表示の表を返さない★★（Codex64回目）",
+      tables("<style>.old-spec { display:none }</style>"
+             '<div class="old-spec"><h3>上位AT「旧仕様」</h3><table>'
+             "<tr><th>純増</th><td>約9.9枚/G</td></tr></table></div>"
+             "<h3>AT「本物」</h3><table>"
+             "<tr><th>純増</th><td>約2.8枚/G</td></tr></table>")[0]["title"]
+      == "AT「本物」"
+      and len(tables("<style>.x{display:none}</style>"
+                     '<table class="x"><tr><th>a</th><td>b</td></tr></table>')) == 0)
+    t("★★入れ子の表は丸ごと不採用★★"
+      "（内側の値が外側の見出しの値として混ざった・Codex64回目）",
+      tables('<h3>CZ「Aチャレンジ」</h3><table><tr><td>'
+             "<h3>ボーナス</h3><table>"
+             "<tr><th>継続G数</th><td>7G</td></tr>"
+             "<tr><th>期待度</th><td>約50%</td></tr></table>"
+             "</td></tr></table>") == [])
+    t("★★非表示の入れ子表の閉じで外の表を途中終了しない★★（Codex64回目）",
+      value_of(tables("<h3>AT「本物」</h3><table>"
+                      "<tr><th>継続G数</th><td>1セット100G</td></tr>"
+                      "<tr><td><div hidden>"
+                      "<table><tr><td>旧データ</td></tr></table>"
+                      "</div></td></tr>"
+                      "<tr><th>純増</th><td>約2.8枚/G</td></tr></table>"
+                      )[0]["pairs"], ("純増",)) == "約2.8枚/G")
     t("　実体参照をほどく",
       tables("<h3>x</h3><table><tr><th>a</th><td>1&nbsp;G</td></tr></table>"
              )[0]["pairs"] == [("a", "1 G")])
