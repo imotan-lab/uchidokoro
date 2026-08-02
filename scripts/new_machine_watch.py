@@ -616,7 +616,9 @@ _RELEASE_CONTEXT = ("導入", "登場", "稼働", "デビュー",
 _RELEASE_NOISE = ("更新", "お知らせ", "ニュース", "news", "News", "公開",
                   "Copyright", "copyright", "(C)", "©", "採用", "募集",
                   "キャンペーン", "応募", "抽選", "終了",
-                  "展示", "イベント", "発表", "出展", "フェア")
+                  "展示", "イベント", "発表", "出展", "フェア",
+                  # ★関連商品の発売・配信の月を台の登場月にしない★（Codex48〜49回目）
+                  "リリース", "サウンドトラック", "サントラ", "配信")
 
 
 def release_month(text: str, assume_release_context: bool = False):
@@ -1566,6 +1568,12 @@ def selftest() -> int:
     t("★★関連商品の「リリース」を台の登場文脈にしない★★（Codex48回目）",
       release_month("サウンドトラック リリース 2026年9月") is None
       and release_month("2026年9月導入予定")["value"] == "2026-09")
+    # ★★Codex49回目★★
+    t("★★カード扱い（単独月）でも関連商品のリリース月は採らない★★（Codex49回目）",
+      release_month("サウンドトラック リリース 2026年9月",
+                    assume_release_context=True) is None
+      and release_month("Lテスト機 2026.9",
+                        assume_release_context=True)["value"] == "2026-09")
     t("　カードの構造が無いページでは採らない（安全側）",
       list_release_hints(
           '<a href="https://m.example/products/slot/alpha/">A</a> 導入 2026.9 '
