@@ -307,7 +307,10 @@ def compare(pages: list) -> dict:
         if not votes:
             continue
         agreed = [(fp, s) for fp, s in votes.items() if len(s) >= 2]
-        if len(agreed) == 1:
+        # ★反対票が1票でもあれば採らない★（2026-08-02・Codex56回目。
+        #   「97.8% 2票＋99.9% 1票」を97.8%で採用し、不一致を報告にも
+        #   残していなかった。値が割れている間は保留＝人・翌日へ）
+        if len(agreed) == 1 and len(votes) == 1:
             must = needs_conditions(key, rules)
             if must:
                 # ★条件を書かないと載せられない項目★（純増・継続率・天井など）
@@ -387,6 +390,12 @@ def selftest() -> int:
       "payout_rate" in r2["need_third"] and not r2["adopted"])
     r3 = compare([A])
     t("　1件だけなら採らない", not r3["adopted"] and "payout_rate" in r3["thin"])
+    D = {"url": "https://chonborista.com/w", "host": "chonborista.com", "ok": True,
+         "reason": "OK", "fields": {"payout_rate": {"1": "99.9%"}}}
+    r23 = compare([A, B, D])
+    t("★★2票一致でも反対票が1票あれば採らない★★"
+      "（97.8%×2＋99.9%×1を採用し不一致を報告にも残さなかった・Codex56回目）",
+      not r23["adopted"] and "payout_rate" in r23["need_third"])
     B2 = {**B, "url": "https://p-world.co.jp/y", "host": "p-world.co.jp"}
     r4 = compare([A, B2])
     t("★同じ運営元の2ページを2票と数えない★", not r4["adopted"])

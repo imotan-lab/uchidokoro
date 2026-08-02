@@ -390,14 +390,19 @@ def gather(name: str, maker: str = "") -> dict:
     #   （2026-08-02・Codex51回目。同名別会社機を異なる2名鑑が載せると
     #     誤った型式・スペックを2票一致として公開できてしまう。
     #     実在の別名は directory_names に足せば通る＝待ち行列側の失敗にとどまる）
+    # ★同定に落ちたページも材料から外す★（2026-08-02・Codex56回目。
+    #   他社名の題（GEN_MARK_CONFLICT）等で型式照合に落ちたページが、
+    #   理由の文字列が DIRECTORY_MAKER_* でないため材料収集に復活していた。
+    #   本人と確かめられていないページは票にも材料にもしない）
     _bad_maker = {r["url"] for r in looks
                   if str(r.get("reason") or "").startswith(
-                      ("DIRECTORY_MAKER_MISMATCH", "DIRECTORY_MAKER_UNRESOLVED"))}
+                      ("DIRECTORY_MAKER_MISMATCH", "DIRECTORY_MAKER_UNRESOLVED"))
+                  or not r.get("identity_ok")}
     if _bad_maker:
         _bad_msgs = []
         for r in looks:
             if r["url"] in _bad_maker:
-                _log(f"  （メーカー欄の照合により票・材料からも除外）"
+                _log(f"  （同定・メーカー欄の照合により票・材料からも除外）"
                      f"{r['url']} → {r['reason']}")
                 _bad_msgs.append(str(r["reason"]))
         got["urls"] = [u for u in got["urls"] if u not in _bad_maker]
@@ -1482,23 +1487,23 @@ def selftest() -> int:
             k: {"state": "FOUND", "url": f"https://{k}.example/1", "why": "",
                 "candidates": [], "surfaces": "1/1", "index_size": 9, "problems": []}
             for k in ("a", "b")}}
-        _mc.lookup = lambda u, n, **k: {"url": u, "model_code": "L1", "reason": "OK"}
+        _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": "L1", "reason": "OK"}
         _sl.read_page = lambda u, n: {
             "url": u, "host": u.split("/")[2], "ok": True, "reason": "OK",
             "fields": {"payout_rate": {"1": "97.3%"}}}
         g2 = gather("L試験機")
         t("　2件そろえば型式名と材料を集める",
           g2["model_code"] == "L1" and g2["material"] is not None)
-        _mc.lookup = lambda u, n, **k: {"url": u, "model_code": "LB/タコスロBD",
+        _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": "LB/タコスロBD",
                                         "reason": "OK"}
         t("★★BT型式（LB/…）を規格印ありとして採用する★★"
           "（実在の「スマスロ タコスロ」の型式・Codex54回目）",
           gather("スマスロ タコスロ")["model_code"] == "LB/タコスロBD")
-        _mc.lookup = lambda u, n, **k: {"url": u, "model_code": "SタコスロBD",
+        _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": "SタコスロBD",
                                         "reason": "OK"}
         t("　S型式との取り違えは引き続き拒否",
           gather("スマスロ タコスロ")["model_code"] is None)
-        _mc.lookup = lambda u, n, **k: {"url": u, "model_code": "L1",
+        _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": "L1",
                                         "reason": "OK"}
 
         # ★公式ページは本物を想定して差し替える★
@@ -1695,14 +1700,14 @@ def selftest() -> int:
         _sl.read_page = lambda u, n: {
             "url": u, "host": u.split("/")[2], "ok": True, "reason": "OK",
             "fields": {"payout_rate": {"1": "97.3%"}}}
-        _mc.lookup = lambda u, n, **k: {"url": u, "model_code": None,
+        _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": None,
                                    "reason": "MODEL_CODE_NOT_FOUND"}
         r3 = run_one("L試験機", "https://m.example/products/slot/zzz/", "m", "2026-09")
         t("★★型式名が確定していなければ記事を作らない★★"
           "（材料が採れていても作れてしまう穴があった）",
           "preview" not in r3 and any("型式名" in x for x in r3["blocked"]))
 
-        _mc.lookup = lambda u, n, **k: {"url": u, "model_code": "L1", "reason": "OK"}
+        _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": "L1", "reason": "OK"}
         _di.find = lambda n, c=None: {"results": {
             "a": {"state": "FOUND", "url": "https://a.example/1", "why": "",
                   "candidates": [], "surfaces": "1/1", "index_size": 9, "problems": []},
@@ -1717,7 +1722,7 @@ def selftest() -> int:
           not any("AMBIGUOUS" in x for x in r4.get("problems") or []))
         # ★票が成立しなかった時は、3件目の曖昧さも残す★（Codex28回目）
         _real_lookup28 = _mc.lookup
-        _mc.lookup = lambda u, n, **k: {"url": u, "model_code": None,
+        _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": None,
                                    "reason": "MODEL_CODE_NOT_FOUND"}
         r4c = run_one("L試験機", "https://m.example/products/slot/zzz/", "m", "2026-09")
         _mc.lookup = _real_lookup28
@@ -1867,6 +1872,9 @@ def selftest() -> int:
               "転載照合で取得できず・票と材料から除外"
               in inspect.getsource(gather)
               and "failed" in inspect.getsource(gather))
+            t("★★同定に落ちたページ（identity_ok=偽）は材料からも外す★★"
+              "（他社名の題のページが材料の票に復活できた・Codex56回目）",
+              "identity_ok" in inspect.getsource(gather))
             t("★★機種名の芯が変わったURLは公開へ進めない★★"
               "（使い回し検知が公開を止めていなかった・Codex41回目）",
               "_name_conflict" in inspect.getsource(fill_missing)

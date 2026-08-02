@@ -142,7 +142,8 @@ def compare(pages: list) -> dict:
         by_mode.setdefault(v["sample"]["mode"], []).append(v)
     for mode, items in by_mode.items():
         agreed = [v for v in items if len(v["sources"]) >= 2]
-        if len(agreed) == 1:
+        # ★反対票が1票でもあれば採らない★（2026-08-02・Codex56回目）
+        if len(agreed) == 1 and len(items) == 1:
             c = dict(agreed[0]["sample"])
             c["sources"] = sorted(agreed[0]["sources"])
             adopted.append(c)
@@ -219,6 +220,10 @@ def selftest() -> int:
       not compare([A, D])["adopted"] and len(compare([A, D])["need_third"]) == 2)
     t("　同じ運営元の2ページを2票と数えない",
       not compare([A, {**B, "host": "p-world.co.jp"}])["adopted"])
+    E = {"url": "https://p-town.dmm.com/z", "host": "p-town.dmm.com", "ok": True,
+         "specs": [{"mode": "MAIN_AT", "games": 100, "net": 3.0, "raw": ""}]}
+    t("★★2票一致でも反対票が1票あれば採らない★★（Codex56回目）",
+      not compare([A, B, E])["adopted"])
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")

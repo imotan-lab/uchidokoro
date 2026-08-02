@@ -227,9 +227,14 @@ def compare(pages: list) -> dict:
             e["rate"].setdefault(c["rate"], set()).add(lin)
 
     def _pick(d):
-        """2出典以上で一致した値だけ返す（割れていたら採らない）。"""
-        ok = [(v, srcs) for v, srcs in d.items() if len(srcs) >= 2]
-        return ok[0] if len(ok) == 1 else (None, set())
+        """2出典以上で一致した値だけ返す（割れていたら採らない）。
+
+        ★反対票が1票でもあれば採らない★（2026-08-02・Codex56回目）
+          値を書いていない出典（None）は反対票には数えない。
+        """
+        real = {v: srcs for v, srcs in d.items() if v is not None}
+        ok = [(v, srcs) for v, srcs in real.items() if len(srcs) >= 2]
+        return ok[0] if len(ok) == 1 and len(real) == 1 else (None, set())
 
     adopted, need_third = [], []
     for nk, e in sorted(per.items()):
@@ -333,6 +338,12 @@ def selftest() -> int:
       len(r2["adopted"]) == 1 and r2["adopted"][0]["games"] == "4G+α"
       and r2["adopted"][0]["rate"] is None
       and r2["adopted"][0]["rate_disputed"] is True)
+
+    # ★反対票が1票でもあれば、その項目は採らない★（Codex56回目）
+    E3 = mk("p-town.dmm.com", [one("すぱ娘チャレンジ", "5G+α", "約40%")])
+    r56 = compare([A, B, E3])
+    t("★★2票一致でも反対票が1票あれば、その項目は保留★★（Codex56回目）",
+      (not r56["adopted"]) or r56["adopted"][0].get("games") is None)
 
     # ★英語表記とカタカナ表記の差だけをそろえる★
     D1 = mk("p-world.co.jp", [one("上位クライMAXライブCHALLENGE", "10G", "約50%")])

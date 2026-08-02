@@ -1292,6 +1292,7 @@ def _recover(apply_it: bool = False) -> dict:
         if apply_it:
             mark_done()
             out["restored"].append("（目印を消しました）")
+            _clear_stale_push_marker(slug, out)
         return out
     if not created:
         # ★目印が壊れていても、作られうる物は決まっている★
@@ -1410,7 +1411,40 @@ def _recover(apply_it: bool = False) -> dict:
             return out
         mark_done()                       # ★最後の操作★（Codex11回目の助言）
         out["restored"].append("（目印を消しました）")
+        _clear_stale_push_marker(slug, out)
+    else:
+        out["todo"].append("同じ機種のコミット前push待ちの目印があれば消す")
     return out
+
+
+def _clear_stale_push_marker(slug: str, out: dict) -> None:
+    """★戻した公開のpush待ちの目印も片付ける★（2026-08-02・Codex56回目）
+
+    公開部は「途中」の目印を消す**前**にpush待ちの目印を作る（引き継ぎの
+    隙間を無くすため・Codex22回目）。その間に止まると両方が残り、
+    復旧で「途中」を戻しても push待ちだけが残った。翌晩からは
+    変更なしのツリーをコミットしようとして毎晩失敗し、自動経路が
+    恒久停止する（Codex56回目の指摘・コードで確認）。
+    ★消すのは「同じ機種・コミット前（WRITTEN・sha無し）」の目印だけ★。
+    コミット済み（sha入り）や別機種の目印は push側の仕事なので触らない。
+    """
+    p = os.path.join(BASE, ".push-pending.json")
+    if not os.path.isfile(p):
+        return
+    try:
+        got = _sj.read_json(p, expect=dict)
+    except Exception:                     # noqa: BLE001
+        out["problems"].append(
+            "★push待ちの目印が壊れています。人が確かめてください★")
+        return
+    stage = got.get("stage") or ("COMMITTED" if got.get("sha") else "WRITTEN")
+    if got.get("slug") == slug and stage == "WRITTEN" and not got.get("sha"):
+        os.remove(p)
+        out["restored"].append("（push待ちの目印も消しました＝コミット前だったため）")
+    elif got.get("slug") == slug:
+        out["problems"].append(
+            f"★{slug} のpush待ちの目印がコミット済みの形で残っています。"
+            "push側の再開処理に任せます（消していません）★")
 
 
 # ---------------------------------------------------------------- selftest
@@ -1690,6 +1724,35 @@ def selftest() -> int:
       "len(hit) > 1" in inspect.getsource(_recover))
     t("　目印が壊れていたら消さずに人へ知らせる",
       "作ったものの指紋』がありません" in inspect.getsource(_recover))
+    # ★★Codex56回目：復旧はpush待ちの目印も片付ける★★
+    _pp = os.path.join(BASE, ".push-pending.json")
+    if os.path.isfile(_pp):
+        # 本物のpush待ちがある時は触らない（試験は挙動の代わりに配線だけ見る）
+        t("★★復旧がコミット前のpush待ちの目印も消す★★（配線のみ確認・Codex56回目）",
+          "_clear_stale_push_marker" in inspect.getsource(_recover))
+    else:
+        try:
+            import json as _js56
+            write_atomic(_pp, _js56.dumps(
+                {"slug": "zzz_test56", "stage": "WRITTEN", "sha": ""}))
+            _o1 = {"problems": [], "restored": [], "todo": []}
+            _clear_stale_push_marker("zzz_test56", _o1)
+            _gone = not os.path.isfile(_pp)
+            write_atomic(_pp, _js56.dumps(
+                {"slug": "zzz_test56", "stage": "COMMITTED", "sha": "abc123"}))
+            _o2 = {"problems": [], "restored": [], "todo": []}
+            _clear_stale_push_marker("zzz_test56", _o2)
+            _kept = os.path.isfile(_pp)
+            t("★★復旧がコミット前（WRITTEN）のpush待ちの目印を消す★★"
+              "（残ると毎晩の空コミット失敗で自動経路が恒久停止・Codex56回目）",
+              _gone and _o1["restored"])
+            t("　コミット済み（sha入り）の目印は消さない（push側の再開に任せる）",
+              _kept and _o2["problems"])
+        finally:
+            try:
+                os.remove(_pp)
+            except OSError:
+                pass
     t("★★公開の前にもサイト監査を通せる★★（後から気づいても世に出ている）",
       run_site_audit() == [])
     # ★★実機で見つけた壊れ方★★（2026-07-31・レビューでは出なかった）

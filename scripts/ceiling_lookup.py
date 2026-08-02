@@ -188,7 +188,10 @@ def read_page(url: str, official_name: str) -> dict:
     lines = [x.strip() for x in text.splitlines()]
     seen, got = set(), []
     for c in from_sentences(text) + from_table(lines):
-        key = (c["kind"], c["amount"])
+        # ★「何を数えるか」までページ内の重複判定に含める★（Codex56回目。
+        #   (kind, amount)だけだと、同じG数の「通常時」と「AT間」の
+        #   片方がページ内で消え、正しい2出典一致が成立しなくなる）
+        key = (c["kind"], c["amount"], c.get("counted"))
         if key in seen:
             continue
         seen.add(key)
@@ -268,12 +271,25 @@ def compare(pages: list) -> dict:
     votes = _merge_unqualified(votes)
     adopted, need_third = [], []
     # 同じ種類で値が割れていないかも見る（1200Gと1500Gが両方2票、はありえない）
+    # ★束ねる単位は (kind, counted)★（2026-08-02・Codex56回目。
+    #   kindだけだと「通常時」「AT間」の2つのG数天井が両方2出典一致でも
+    #   互いに食い違い扱いになり、正しい情報を全部落としていた）
     by_kind: dict = {}
     for k, v in votes.items():
-        by_kind.setdefault(v["sample"]["kind"], []).append((k, v))
-    for kind, items in by_kind.items():
+        by_kind.setdefault(
+            (v["sample"]["kind"], v["sample"].get("counted")),
+            []).append((k, v))
+    # ★「条件なし」と「条件つき」が同じ種類に併存したら、その種類は全部保留★
+    #   （2026-08-02・Codex56回目の反対票規則の一部。寄せ先が一意なら
+    #     _merge_unqualified が済ませている＝ここに残る条件なしは
+    #     どの天井の票か決められない。反対票かもしれない声を無視しない）
+    _has_counted = {k for (k, c) in by_kind if c is not None}
+    _has_plain = {k for (k, c) in by_kind if c is None}
+    _ambiguous = _has_counted & _has_plain
+    for (kind, _cnt), items in by_kind.items():
         agreed = [(k, v) for k, v in items if len(v["sources"]) >= 2]
-        if len(agreed) == 1:
+        # ★反対票が1票でもあれば採らない★（2026-08-02・Codex56回目）
+        if len(agreed) == 1 and len(items) == 1 and kind not in _ambiguous:
             c = dict(agreed[0][1]["sample"])
             c["sources"] = sorted(agreed[0][1]["sources"])
             adopted.append(c)
@@ -362,6 +378,45 @@ def selftest() -> int:
       len(_r["adopted"]) == 1 and _r["adopted"][0]["counted"] == "通常時")
     t("　その場合も2出典ぶんの票として数える",
       len(_r["adopted"][0]["sources"]) == 2)
+
+    # ★★Codex56回目★★
+    mk3 = lambda h: {"url": "https://" + h + "/x", "host": h, "ok": True,
+                     "ceilings": [
+                         {"kind": "GAME", "amount": 800, "unit": "G",
+                          "counted": "通常時", "benefit": "AT",
+                          "certainty": "PLAIN", "raw": ""},
+                         {"kind": "GAME", "amount": 1200, "unit": "G",
+                          "counted": "AT間", "benefit": "AT",
+                          "certainty": "PLAIN", "raw": ""}]}
+    r56 = compare([mk3("p-world.co.jp"), mk3("chonborista.com")])
+    t("★★数える対象が違う2つのG数天井は、両方2出典一致なら両方採る★★"
+      "（kindだけで束ねると互いを食い違い扱いにして全部落とした・Codex56回目）",
+      len(r56["adopted"]) == 2
+      and {c["counted"] for c in r56["adopted"]} == {"通常時", "AT間"})
+    F = {**B, "url": "https://p-town.dmm.com/z", "host": "p-town.dmm.com",
+         "ceilings": [{"kind": "GAME", "amount": 1500, "unit": "G",
+                       "counted": None, "benefit": "AT", "raw": ""}]}
+    t("★★2票一致でも反対票が1票あれば採らない★★（Codex56回目）",
+      not compare([A, B, F])["adopted"])
+    _g = globals()
+    _real_fs, _real_ft = from_sentences, from_table
+    _real_get, _real_pim = _w._get, _mc.page_is_machine
+    try:
+        _g["from_sentences"] = lambda text: [
+            {"kind": "GAME", "amount": 1200, "unit": "G", "counted": "通常時",
+             "benefit": "AT", "certainty": "PLAIN", "raw": ""},
+            {"kind": "GAME", "amount": 1200, "unit": "G", "counted": "AT間",
+             "benefit": "AT", "certainty": "PLAIN", "raw": ""}]
+        _g["from_table"] = lambda lines: []
+        _w._get = lambda u, timeout=20: "<title>x</title><body>天井</body>"
+        _mc.page_is_machine = lambda *a, **k: (True, "OK")
+        _p56 = read_page("https://x.example/1", "L試験機")
+        t("★★同じG数で数える対象が違う天井を、ページ内で両方残す★★"
+          "（(kind, amount)の重複判定で片方が消えていた・Codex56回目）",
+          len(_p56["ceilings"]) == 2)
+    finally:
+        _g["from_sentences"], _g["from_table"] = _real_fs, _real_ft
+        _w._get, _mc.page_is_machine = _real_get, _real_pim
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
     if ng:

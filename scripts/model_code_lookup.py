@@ -596,8 +596,12 @@ def _maker_core_owners(core_text: str) -> set:
 
 def lookup(url: str, official_name: str, expected_maker: str = "") -> dict:
     """1つの名鑑ページから型式名を引く。★機種が違えば採らない★"""
+    # ★identity_ok＝このページが本人だと確かめられたか★（2026-08-02・Codex56回目）
+    #   型式照合で不合格（他社名の題等）になったページが、理由の文字列が
+    #   DIRECTORY_MAKER_* でないため材料収集に復活していた。
+    #   呼び出し元は identity_ok が偽のページを材料からも外す。
     out = {"url": url, "official_name": official_name,
-           "model_code": None, "reason": ""}
+           "model_code": None, "reason": "", "identity_ok": False}
     try:
         html = _w._get(url)
     except Exception as e:
@@ -610,6 +614,7 @@ def lookup(url: str, official_name: str, expected_maker: str = "") -> dict:
     if not ok:
         out["reason"] = why
         return out
+    out["identity_ok"] = True
     # ★同定に通ったページの導入年月を控えとして返す★（2026-08-02・Codex47回目）
     #   公式が年月を画像でしか出さない機種のため。使ってよいのは
     #   「型式が一致した同じ2名鑑」の月が一致した時だけ（呼び出し元が判定）。
@@ -986,6 +991,24 @@ def selftest() -> int:
       and page_is_machine("<title>Lすーぱぁびん娘（SP） | P-WORLD</title>"
                           "<h1 hidden>Lすーぱぁびん娘</h1>",
                           "Lすーぱぁびん娘", strict_all_tail=True)[0] is False)
+    t("★★同定に落ちたページは identity_ok=偽で返す★★"
+      "（材料収集への復活を呼び出し元が止めるため・Codex56回目）",
+      (lambda: (setattr(_w, "_get_bak56", _w._get),
+                setattr(_w, "_get", lambda u, timeout=20:
+                    "<title>L対象機(サミー) パチスロ新台 | P-WORLD</title>"
+                    "<p>型式名：L別物1</p>"),
+                lookup("https://www.p-world.co.jp/x", "L対象機",
+                       expected_maker="heiwa"),
+                setattr(_w, "_get", _w._get_bak56))[2])()
+      .get("identity_ok") is False
+      and (lambda: (setattr(_w, "_get_bak57", _w._get),
+                    setattr(_w, "_get", lambda u, timeout=20:
+                        "<title>L対象機 パチスロ新台 | P-WORLD</title>"
+                        "<p>まだ型式は載っていません</p>"),
+                    lookup("https://www.p-world.co.jp/x", "L対象機",
+                           expected_maker="heiwa"),
+                    setattr(_w, "_get", _w._get_bak57))[2])()
+      .get("identity_ok") is True)
     t("★★型式名の規格印は専用判定★★（LB/タコスロBD＝実在のBT型式・Codex54回目）",
       model_gen_mark("LB/タコスロBD") == "L"
       and model_gen_mark("SマイジャグラーVI KK") == "S"
