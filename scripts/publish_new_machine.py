@@ -1263,8 +1263,14 @@ def recover(apply_it: bool = False) -> dict:
     """
     if not apply_it:
         return _recover(apply_it=False)
-    with _OnlyOne(RECOVER_LOCK):
-        return _recover(apply_it=True)
+    # ★公開と復旧は同じロックでも排他する★（2026-08-03・Codex61回目）
+    #   公開が mark_start() の直後（ファイル作成前）の隙間に復旧が走ると、
+    #   「created が空＝何も作られていない」と判断して目印を消し、
+    #   進行中の公開が目印なしになる。公開のロックを先に取れば、
+    #   公開中の復旧・復旧中の公開はどちらも待たされて成立しない。
+    with _OnlyOne():
+        with _OnlyOne(RECOVER_LOCK):
+            return _recover(apply_it=True)
 
 
 def _recover(apply_it: bool = False) -> dict:
@@ -1458,9 +1464,14 @@ def _recover(apply_it: bool = False) -> dict:
             out["restored"].append("assets/data/machines.json")
 
     def _undo_all():
-        """一覧の行と退避物を元へ戻し、早見表も元データで作り直す。"""
-        write_atomic(MACHINES, machines_text_before)
+        """一覧の行と退避物を元へ戻し、早見表も元データで作り直す。
+
+        ★退避物を最初に戻す★（2026-08-03・Codex61回目）
+          一覧の書き戻しが先だと、そこで失敗した時に退避物が
+          退避名のまま残り、次の復旧が見つけられなかった。
+        """
         _undo_held()
+        write_atomic(MACHINES, machines_text_before)
         try:
             for rel_, html_ in build_hubs().items():
                 full_ = os.path.join(BASE, rel_)
@@ -1528,6 +1539,21 @@ def _recover(apply_it: bool = False) -> dict:
         d = os.path.join(BASE, "machines", slug)
         if os.path.isdir(d) and not os.listdir(d):
             os.rmdir(d)
+        # ★退避物が1つでも残っている間は目印を消さない★（2026-08-03・
+        #   Codex61回目。目印が消えると次の復旧が退避物を見つけられず、
+        #   未追跡ファイルが後続のpushを止め続ける）
+        import glob as _glob
+        _strays = []
+        for rel in allowed_created:
+            if rel.startswith("machines.json#"):
+                continue
+            _strays += [x for x in _glob.glob(
+                os.path.join(BASE, rel) + ".recover.*") if os.path.isfile(x)]
+        if _strays:
+            out["problems"].append(
+                "★退避物が残っているため目印は消しません: "
+                + " / ".join(sorted(set(_strays))[:3])[:200] + "★")
+            return out
         mark_done()                       # ★最後の操作★（Codex11回目の助言）
         out["restored"].append("（目印を消しました）")
         _clear_stale_push_marker(slug, out)
@@ -1866,6 +1892,14 @@ def selftest() -> int:
     t("★★消せなかった退避物は元パスへ戻す★★"
       "（退避名のままだと次のrecoverが見つけられず回収不能・Codex60回目）",
       "元パスへ戻しました" in inspect.getsource(_recover))
+    t("★★公開と復旧は同じロックで排他★★"
+      "（mark_startとファイル作成の隙間に復旧が目印を消せた・Codex61回目）",
+      "with _OnlyOne():" in inspect.getsource(recover))
+    t("★★退避物が残っている間は目印を消さない＋巻き戻しは退避物から★★"
+      "（Codex61回目）",
+      "退避物が残っているため目印は消しません" in inspect.getsource(_recover)
+      and inspect.getsource(_recover).index("_undo_held()")
+      < inspect.getsource(_recover).index("write_atomic(MACHINES, machines_text_before)"))
     t("★★外部の材料JSONからは公開（--apply）できない★★"
       "（出典の再検証を通らない値を記事化できた・Codex58回目）",
       "外部の材料JSONからの公開" in inspect.getsource(main)

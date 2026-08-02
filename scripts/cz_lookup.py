@@ -87,9 +87,16 @@ def norm_name(name: str) -> str:
 
 
 def is_cz_title(text: str) -> bool:
-    """その見出しはCZの見出しか。★CZだと分かる語が要る★"""
+    """その見出しはCZの見出しか。★CZだと分かる語が要る★
+
+    ★「チャンス」だけでは採らない★（2026-08-03・Codex61回目）
+      「AT中の報酬ドリームチャンス」のような非CZの区画まで
+      CZとして採用できた。明示のCZ表記か、チャレンジ系の語に限る。
+      チャンス系の実在CZは mentioned_names（採り漏れ警告）には
+      残るので、黙って消えることはない。
+    """
     t = _norm(text)
-    return ("CZ" in t or "チャレンジ" in t or "CHALLENGE" in t or "チャンス" in t)
+    return ("CZ" in t or "チャレンジ" in t or "CHALLENGE" in t)
 
 
 def from_sentences(text: str) -> list:
@@ -97,6 +104,14 @@ def from_sentences(text: str) -> list:
     t = _norm(text)
     for rx in (_SENT_Q, _SENT):
         for m in rx.finditer(t):
+            # ★文でも、CZだと分かる語が名前の部分に要る★（2026-08-03・
+            #   Codex61回目の表側と同族。「ドリームチャンスは10G継続…」の
+            #   ような非CZの文をCZとして採らない。clean_name が CZ を
+            #   落とす前の生の文字列で見る（CZ「ドキドキゾーン」等のため）
+            _raw_nm = m.group("name")
+            if not ("CZ" in _raw_nm.upper() or "チャレンジ" in _raw_nm
+                    or "CHALLENGE" in _raw_nm.upper()):
+                continue
             name = clean_name(m.group("name"))
             # ★重複判定は (名前, G数, 期待度) の事実全体で★（2026-08-03・
             #   Codex58回目。名前だけだと、同じ名前で別の値の2件目＝
@@ -314,6 +329,13 @@ def selftest() -> int:
       from_tables('<h3>CZ「x娘チャレンジ」</h3><table>'
                   "<tr><th>継続G数</th><td>4G</td></tr>"
                   "<tr><th>備考</th><td>なし</td></tr></table>") == [])
+    t("★★「チャンス」だけの見出し・文をCZとして採らない★★"
+      "（AT中の報酬ゾーンをCZにできた・Codex61回目）",
+      from_tables('<h3>AT中の報酬「ドリームチャンス」</h3><table>'
+                  "<tr><th>継続G数</th><td>10G</td></tr>"
+                  "<tr><th>期待度</th><td>50%</td></tr></table>") == []
+      and from_sentences("ドリームチャンスは10G継続、期待度は50%。") == []
+      and len(from_sentences("すぱ娘チャレンジは4G+α継続、成功期待度は約40%。")) == 1)
     t("★★同じ名前で別の値の文を先着順で消さない★★"
       "（2件目が矛盾検査に届かず最初の値を採用できた・Codex58回目）",
       len(from_sentences("すぱ娘チャレンジは4G+α継続、成功期待度は約40%。"

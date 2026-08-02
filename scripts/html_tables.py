@@ -66,6 +66,12 @@ def tables(html: str) -> list:
         #     見出しを持たない次の表が前の表の見出しを引き継いでしまい、
         #     ボーナス表を上位AT表として読めた）
         between = html[prev_end:m.start()]
+        # ★脇の区画（aside/nav/footer/header）の見出しは表の題にしない★
+        #   （2026-08-03・Codex61回目。asideの「上位ATへの移行条件」が
+        #     直後の無題の表の題になり、通常ATの値を上位AT仕様にできた）
+        between = re.sub(
+            r"(?is)<(aside|nav|footer|header)\b[^>]*>.*?</\1" + _S + ">",
+            " ", between)
         heads = re.findall("(?is)<h[1-6][^>]*>(.*?)</h[1-6]" + _S + ">", between)
         caps = re.findall("(?is)<caption[^>]*>(.*?)</caption" + _S + ">", body)
         title = _text(caps[-1]) if caps else (_text(heads[-1]) if heads else "")
@@ -110,6 +116,10 @@ def selftest() -> int:
     t("　全角の＋αも半角にそろえる",
       value_of(tb[0]["pairs"], ("継続G数",)) == "4G+α")
     t("　無い見出しは空を返す", value_of(tb[0]["pairs"], ("純増",)) == "")
+    t("★★asideの見出しを表の題にしない★★（Codex61回目）",
+      tables('<h3>AT「通常AT」</h3><table><tr><th>a</th><td>b</td></tr></table>'
+             '<aside><h3>上位ATへの移行条件</h3></aside>'
+             '<table><tr><th>c</th><td>d</td></tr></table>')[1]["title"] == "")
     t("　表が無ければ空", tables("<p>表はありません</p>") == [])
     t("　タグの中の文字は本文にしない",
       tables('<h3>見出し</h3><table><tr><th>a<span>b</span></th>'

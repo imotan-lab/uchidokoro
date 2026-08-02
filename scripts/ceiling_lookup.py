@@ -195,8 +195,16 @@ def from_table(html: str) -> list:
             benefit = _norm(_ht.value_of(tb["pairs"], _BENEFIT_LABELS))
             if not (benefit and _BENEFIT_OK.match(benefit)):
                 continue        # ★恩恵が取れなければ採らない（値だけ載せない）★
+            # ★表題に「何を数えるか」があれば捨てない★（2026-08-03・
+            #   Codex61回目。常に counted=None だと「AT間天井」の表が
+            #   条件なし票になり、別出典の「通常時」へ寄せられて
+            #   条件の違う天井を一致にできた。
+            #   「AT天井」のATは恩恵の意味なので、〜間・通常時だけ読む）
+            _cm = re.search(r"(通常時|AT間|ボーナス間|CZ間|有利区間)",
+                            _norm(tb["title"]))
             out.append({"kind": kind, "amount": int(m.group(1)),
-                        "unit": KINDS[kind]["unit"], "counted": None,
+                        "unit": KINDS[kind]["unit"],
+                        "counted": _cm.group(1) if _cm else None,
                         "benefit": split_benefit(benefit)[0],
                         "certainty": split_benefit(benefit)[1],
                         "raw": f"{tb['title'][:20]}: {val} / 恩恵={benefit}"})
@@ -375,6 +383,13 @@ def selftest() -> int:
     tb = from_table(LH)
     t("★★表からも同じ形で採れる★★（実在形＝1つの表に値と恩恵）",
       tb and tb[0]["amount"] == 1200 and tb[0]["benefit"] == "AT")
+    t("★★表題の「AT間」を捨てない★★"
+      "（条件なし票として通常時へ寄せられた・Codex61回目）",
+      from_table("<h3>AT間天井</h3><table>"
+                 "<tr><th>天井G数</th><td>1200G</td></tr>"
+                 "<tr><th>恩恵</th><td>AT当選</td></tr></table>"
+                 )[0]["counted"] == "AT間"
+      and from_table(LH)[0]["counted"] is None)
     t("★★別区画の恩恵を天井に結合しない★★（Codex59回目・合成HTML）",
       from_table("<h3>AT天井</h3><table>"
                  "<tr><th>天井G数</th><td>1200G</td></tr></table>"
