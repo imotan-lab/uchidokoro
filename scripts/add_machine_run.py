@@ -1394,7 +1394,13 @@ def run_one(name, official_url, maker, release, apply_it=False,
     # ★型式名だけでは「材料あり」と数えない★（2026-08-02・Codex29回目の副作用対策）
     #   型式名は identity の正本として adopted に入れるが、
     #   それしか無い記事（スペックも天井も無い）を作ってはいけない。
+    # ★天井・AT・CZの採用分も材料に数える★（2026-08-03・Codex57回目。
+    #   基本スペック直下しか見ておらず、天井などが2媒体一致していても
+    #   「材料なし」で記事を永久に作れなかった）
     usable_mat = {k: v for k, v in mat["adopted"].items() if k != "model_code"}
+    for _mod_key in ("ceilings", "at_specs", "czs"):
+        for _i, _c in enumerate((mat.get(_mod_key) or {}).get("adopted") or []):
+            usable_mat[f"{_mod_key}#{_i}"] = _c
     if not usable_mat:
         out["problems"].append("採用できた材料がありません（記事を作りません）")
     # ★②同定に関わる問題があれば、材料が採れていても作らない★
@@ -1875,6 +1881,10 @@ def selftest() -> int:
             t("★★同定に落ちたページ（identity_ok=偽）は材料からも外す★★"
               "（他社名の題のページが材料の票に復活できた・Codex56回目）",
               "identity_ok" in inspect.getsource(gather))
+            t("★★天井・AT・CZだけ採れた機種も「材料あり」と数える★★"
+              "（基本スペック直下しか見ず記事を永久に作れなかった・Codex57回目）",
+              'for _mod_key in ("ceilings", "at_specs", "czs")'
+              in inspect.getsource(run_one))
             t("★★機種名の芯が変わったURLは公開へ進めない★★"
               "（使い回し検知が公開を止めていなかった・Codex41回目）",
               "_name_conflict" in inspect.getsource(fill_missing)

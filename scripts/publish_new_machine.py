@@ -1006,13 +1006,17 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
     machines_replaced = {}   # 一覧を置き換えたか（戻すため・置き換える前に立てる）
 
     def _cleanup():
-        mark_done()                    # 片付けたら「途中」ではない
         """★自分が作ったものだけ片付ける★（2026-07-31・Codex指摘3を再現して直した）
 
         以前は「置くはずだった場所」を消していたので、
         **たまたま同名で既にあった記事データを消して**しまい、
         しかも「元に戻しました」と報告していた（実際に再現した）。
+
+        ★片付け切れた時だけ「途中」の目印を消す★（2026-08-03・Codex57回目）
+          先に目印を消すと、消せなかった残骸があるのに復旧の手がかりだけ
+          失われる。残った時は目印を保持し、残ったパスを問題として残す。
         """
+        left = []
         for kind, q, want in reversed(made):
             try:
                 if kind == "file" and os.path.isfile(q):
@@ -1021,12 +1025,20 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
                         if _sha(fh.read()) != want:
                             out["problems"].append(
                                 f"作った後に中身が変わっていたので消しませんでした: {q}")
+                            left.append(q)
                             continue
                     os.remove(q)
                 elif kind == "dir" and os.path.isdir(q):
                     os.rmdir(q)
-            except OSError:
-                pass
+            except OSError as e:
+                out["problems"].append(f"片付けに失敗しました: {q}（{e}）")
+                left.append(q)
+        if left:
+            out["problems"].append(
+                "★片付け切れていないため『途中』の目印は残します"
+                "（--recover で確かめてください）★")
+        else:
+            mark_done()                # 片付け切れて初めて「途中」ではない
 
     try:
         # ① 記事データとページを置く（★この時点では一覧から辿れない★）
@@ -1321,6 +1333,29 @@ def _recover(apply_it: bool = False) -> dict:
             f"★目印に知らないファイルが入っています: {stray[:3]}。"
             "触らずに止めました。人が確かめてください★")
         return out
+
+    # ★消す前に、一覧の行も先に確かめる★（2026-08-03・Codex57回目）
+    #   ページ・詳細を消した後に一覧の行の食い違いで止まると、
+    #   「記事は消えたのに一覧に行だけ残る」中途半端な状態を自分で作る。
+    #   全部を確かめてから、初めて消し始める（全か無か）。
+    rows_pre = _sj.read_rows(MACHINES)
+    hit_pre = [i for i, m in enumerate(rows_pre) if m.get("slug") == slug]
+    if len(hit_pre) > 1:
+        out["problems"].append(
+            f"★一覧に {slug} が {len(hit_pre)} 件あります。何も消さずに"
+            "止めました。手で確かめてください★")
+        return out
+    if hit_pre:
+        want_row_pre = (created or {}).get(f"machines.json#{slug}")
+        now_row_pre = _sha(json.dumps(rows_pre[hit_pre[0]],
+                                      ensure_ascii=False, sort_keys=True))
+        if want_row_pre and now_row_pre != want_row_pre:
+            out["kept"].append(f"machines.json#{slug}")
+            out["problems"].append(
+                f"★一覧の {slug} の行が、足したときと中身が違います"
+                "（誰かが直した可能性）。ページ・詳細も含め何も消さずに"
+                "止めました。人が確かめてください★")
+            return out
 
     # ① 作ったものを消す（★自分が作った中身のままの時だけ★）
     #   ★確かめてから消すまでの隙間をなくす★（2026-07-31・Codex13回目）
@@ -1724,6 +1759,14 @@ def selftest() -> int:
       "len(hit) > 1" in inspect.getsource(_recover))
     t("　目印が壊れていたら消さずに人へ知らせる",
       "作ったものの指紋』がありません" in inspect.getsource(_recover))
+    t("★★消す前に一覧の行も先に確かめる（全か無か）★★"
+      "（ページを消した後に行の食い違いで止まると中途半端が残る・Codex57回目）",
+      "rows_pre" in inspect.getsource(_recover)
+      and "何も消さずに" in inspect.getsource(_recover))
+    t("★★失敗時の片付けは、片付け切れた時だけ目印を消す★★"
+      "（残骸があるのに復旧の手がかりだけ失われた・Codex57回目）",
+      "片付け切れて初めて" in inspect.getsource(_publish)
+      and "片付け切れていないため" in inspect.getsource(_publish))
     # ★★Codex56回目：復旧はpush待ちの目印も片付ける★★
     _pp = os.path.join(BASE, ".push-pending.json")
     if os.path.isfile(_pp):

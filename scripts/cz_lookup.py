@@ -126,6 +126,11 @@ def from_tables(html: str) -> list:
             continue          # ★名前がひも付いていない表は使わない★
         games = _norm(_ht.value_of(tb["pairs"], _TBL_GAMES))
         rate = _norm(_ht.value_of(tb["pairs"], _TBL_RATE))
+        # ★表の値の頭の「平均」だけそろえる★（2026-08-03・Codex57回目）
+        #   ちょんぼりすたの実在表は「平均50%以上」、P-WORLDの文は
+        #   「平均成功期待度は50%以上」→ 値は「50%以上」。頭の平均を
+        #   落とさないと上位CZが1票扱いになり実在の機種で採れなかった。
+        rate = re.sub(r"^平均\s*", "", rate)
         if not (_GAMES_OK.match(games) and _RATE_OK.match(rate)):
             continue          # ★継続G数と期待度がそろわなければ採らない★
         out.append({"name": name, "games": games, "rate": rate,
@@ -301,6 +306,12 @@ def selftest() -> int:
       from_tables('<h3>CZ「x娘チャレンジ」</h3><table>'
                   "<tr><th>継続G数</th><td>4G</td></tr>"
                   "<tr><th>備考</th><td>なし</td></tr></table>") == [])
+    t("★★表の「平均50%以上」を「50%以上」として採る★★"
+      "（ちょんぼりすた実在表・上位CZが1票扱いになり実機種で採れなかった・Codex57回目）",
+      from_tables('<h3>上位CZ「クライMAXライブCHALLENGE」</h3><table>'
+                  "<tr><th>継続G数</th><td>10G</td></tr>"
+                  "<tr><th>期待度</th><td>平均50%以上</td></tr></table>"
+                  )[0]["rate"] == "50%以上")
 
     # ★Codex指摘4：間に別の表の見出しが挟まっても名前を横取りしない★
     HH = ('<h3>CZ「Aチャレンジ」</h3><table>'

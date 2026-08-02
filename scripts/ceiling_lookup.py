@@ -188,10 +188,13 @@ def read_page(url: str, official_name: str) -> dict:
     lines = [x.strip() for x in text.splitlines()]
     seen, got = set(), []
     for c in from_sentences(text) + from_table(lines):
-        # ★「何を数えるか」までページ内の重複判定に含める★（Codex56回目。
+        # ★重複判定は事実の全部で★（Codex56〜57回目。
         #   (kind, amount)だけだと、同じG数の「通常時」と「AT間」の
-        #   片方がページ内で消え、正しい2出典一致が成立しなくなる）
-        key = (c["kind"], c["amount"], c.get("counted"))
+        #   片方がページ内で消え、正しい2出典一致が成立しなかった。
+        #   恩恵・確度を外すと、同じページ内の「1200G/AT」と「1200G/CZ」の
+        #   後者＝反対情報が先着順で消え、比較の反対票規則が働かなかった）
+        key = (c["kind"], c["amount"], c.get("counted"),
+               c.get("benefit"), c.get("certainty"))
         if key in seen:
             continue
         seen.add(key)
@@ -414,6 +417,24 @@ def selftest() -> int:
         t("★★同じG数で数える対象が違う天井を、ページ内で両方残す★★"
           "（(kind, amount)の重複判定で片方が消えていた・Codex56回目）",
           len(_p56["ceilings"]) == 2)
+        # ★同じ(kind,amount,counted)で恩恵だけ違う併記＝ページ内の反対情報★
+        _g["from_sentences"] = lambda text: [
+            {"kind": "GAME", "amount": 1200, "unit": "G", "counted": "通常時",
+             "benefit": "AT", "certainty": "PLAIN", "raw": ""},
+            {"kind": "GAME", "amount": 1200, "unit": "G", "counted": "通常時",
+             "benefit": "CZ", "certainty": "PLAIN", "raw": ""}]
+        _p57 = read_page("https://x.example/1", "L試験機")
+        t("★★恩恵違いの併記を先着順で消さない★★"
+          "（片方が消えると反対票規則が働かず誤採用できた・Codex57回目）",
+          len(_p57["ceilings"]) == 2)
+        _pB = {"url": "https://chonborista.com/y", "host": "chonborista.com",
+               "ok": True,
+               "ceilings": [{"kind": "GAME", "amount": 1200, "unit": "G",
+                             "counted": "通常時", "benefit": "AT",
+                             "certainty": "PLAIN", "raw": ""}]}
+        _p57["ok"] = True
+        t("　その併記ページ＋AT側1票では採用しない（反対票として効く）",
+          not compare([_p57, _pB])["adopted"])
     finally:
         _g["from_sentences"], _g["from_table"] = _real_fs, _real_ft
         _w._get, _mc.page_is_machine = _real_get, _real_pim
