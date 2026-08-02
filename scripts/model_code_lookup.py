@@ -264,7 +264,9 @@ def page_is_machine(html: str, official_name: str,
             joined = ""
             for j in range(i, len(words)):
                 joined += words[j]
-                if joined != core:
+                # ★世代表記の同値化を主名称にも★（2026-08-02・Codex50回目）
+                #   公式「…2」↔名鑑「…II」（SAO2の実在形）が一致しなかった。
+                if joined != core and                         _ci.canon_num_tail(joined) != _ci.canon_num_tail(core):
                     continue
                 # ★次の語を見る★（飾りか、そこで終わりならOK）
                 k = j + 1
@@ -431,17 +433,9 @@ def _after_ok(after_seg: str, core: str, official_name: str,
     return True
 
 
-# ★世代表記の同値化★（VI↔6 など。語尾のローマ数字を数字に直して比べる）
-_ROMAN_TAIL = re.compile(r"^(.*?)(viii|vii|vi|iv|ix|iii|ii|x|v|i)$")
-_ROMAN_MAP = {"i": "1", "ii": "2", "iii": "3", "iv": "4", "v": "5",
-              "vi": "6", "vii": "7", "viii": "8", "ix": "9", "x": "10"}
-
-
+# ★世代表記の同値化★（VI↔6。共通部品 claim_identity.canon_num_tail へ委譲）
 def _canon_gen_num(t: str) -> str:
-    m = _ROMAN_TAIL.match(t or "")
-    if m and m.group(1):
-        return m.group(1) + _ROMAN_MAP[m.group(2)]
-    return t
+    return _ci.canon_num_tail(t)
 
 
 def maker_brand_cores(maker_id: str) -> set:
@@ -926,6 +920,13 @@ def selftest() -> int:
     t("　「パチンコ」単独の印は引き続き弾く（23回目の穴を再び開けない）",
       page_is_machine("<title>北斗の拳 パチンコ 新台 | P-WORLD</title>",
                       "北斗の拳")[0] is False)
+    # ★★Codex50回目（SAO2実在形）★★
+    t("★★公式「…2」と名鑑「…II」を同じ機種として照合できる★★"
+      "（SAO2の実在形・独立2名鑑を確保できなかった・Codex50回目）",
+      page_is_machine("<title>スロット ソード・アート・オンラインII "
+                      "パチスロ新台 | P-WORLD</title>",
+                      "スロット ソード・アート・オンライン2",
+                      strict_all_tail=True)[0] is True)
     t("　直後の括弧が本人の略称なら通る（実データ・青ブタ）",
       page_is_machine(
           "<title>L青春ブタ野郎はバニーガール先輩の夢を見ない"

@@ -131,7 +131,13 @@ def find(official_name: str, catalogs: dict | None = None) -> dict:
         if conf.get("status") != "ACTIVE":
             continue
         r = scan_directory(dir_id, conf)
-        hits = r["index"].get(core) or []
+        hits = list(r["index"].get(core) or [])
+        if not hits:
+            # ★世代表記の同値化★（2026-08-02・Codex50回目。公式「…2」↔名鑑「…II」）
+            ck = _ci.canon_num_tail(core)
+            for k, v in r["index"].items():
+                if k != core and _ci.canon_num_tail(k) == ck:
+                    hits += v
         if r["surfaces_ok"] == 0:
             state, why = "CATALOG_UNHEALTHY", " / ".join(r["problems"])
         elif len(hits) == 1:

@@ -52,6 +52,21 @@ _PLATFORM_RE = re.compile(
 
 MIN_ALIAS_CORE = 3   # 同定に使ってよい別名の芯の最短長（汎用語よけ）
 
+# ★世代表記の同値化★（2026-08-02・Codex50回目）
+#   公式は「…2」・名鑑は「…II/Ⅱ」と書く実例（ソード・アート・オンライン2）。
+#   語尾のローマ数字を数字へ直した鍵でも照合できるようにする。
+_ROMAN_TAIL_RE = re.compile(r"^(.*?)(viii|vii|vi|iv|ix|iii|ii|x|v|i)$")
+_ROMAN_MAP = {"i": "1", "ii": "2", "iii": "3", "iv": "4", "v": "5",
+              "vi": "6", "vii": "7", "viii": "8", "ix": "9", "x": "10"}
+
+
+def canon_num_tail(core: str) -> str:
+    """芯の語尾のローマ数字を数字へ（ii→2）。NFKC小文字済みの芯に使う。"""
+    m = _ROMAN_TAIL_RE.match(core or "")
+    if m and m.group(1):
+        return m.group(1) + _ROMAN_MAP[m.group(2)]
+    return core
+
 
 def normalize_core(s: str) -> str:
     """表記ゆれを落とした「芯」を返す。判定は全てこの芯の完全一致で行う。"""

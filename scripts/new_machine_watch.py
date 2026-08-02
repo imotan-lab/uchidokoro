@@ -201,6 +201,11 @@ def _visible_anchor_hrefs(html: str):
 _BENIGN_QUERY = {"page", "sort", "order", "lang", "hl",
                  "cat", "category", "tag", "filter", "offset", "limit",
                  "utm_source", "utm_medium", "utm_campaign"}
+# ★ページ送り系のキーは「数字のときだけ」無害★（2026-08-02・Codex50回目）
+#   ?page=new_machine のような機種指定を黙って捨てない。
+#   sort=new / lang=ja など文字の値が普通のキーまで疑うと誤報だらけになるので、
+#   数字要求はページ送り系（page/offset/limit）に限る。
+_BENIGN_NUMERIC_ONLY = {"page", "offset", "limit"}
 
 
 def query_style_machine_links(html: str, base_url: str, link_prefix: str) -> list:
@@ -224,8 +229,13 @@ def query_style_machine_links(html: str, base_url: str, link_prefix: str) -> lis
         #   既知なら件数・残存率とも正常なまま新台だけ永久に見逃した。
         #   （一覧直下だけに限らず、範囲内の全リンクを見る）
         for k, vals in urllib.parse.parse_qs(q).items():
-            if k.lower() in _BENIGN_QUERY:
-                continue
+            kl = k.lower()
+            if kl in _BENIGN_QUERY:
+                # ★ページ送り系は値が数字のときだけ無害★（2026-08-02・Codex50回目）
+                if kl not in _BENIGN_NUMERIC_ONLY \
+                        or all(v.strip().isdigit() or not v.strip()
+                               for v in vals):
+                    continue              # ?page=2 / ?sort=new 等は無害
             # ★値の形は問わない★（2026-08-02・Codex35回目）
             #   「?id=42」「?machine=新台」は形の検査で素通りしていた。
             if any(v.strip() for v in vals):
@@ -264,6 +274,65 @@ def product_urls(html: str, base_url: str, link_prefix: str) -> list:
             continue                      # ★年別アーカイブは機種ではない★
         out.add(link_prefix.rstrip("/") + "/" + rest + "/")
     return sorted(out)
+
+
+def filter_slot_urls(html: str, base_url: str, link_prefix: str,
+                     urls: list) -> tuple:
+    """★カードが「パチンコ」と明記する機種URLを外す★（2026-08-02・Codex50回目）
+
+    ニューギンのパチスロ一覧には、同じ場所（/pub/machine/…）の
+    パチンコ機リンクも同居する（実ページで確認）。混ざったままだと
+    「一度に6件以上増えた」の安全弁がパチンコの増加だけで発火し、
+    パチスロの監視が恒久停止しうる。
+    カードの文字に「パチンコ/ぱちんこ」があり回胴機の語が無いURLだけを外す。
+    カードを判定できないURLは残す（安全側＝従来どおり）。
+    """
+    p2 = _CardParser()
+    try:
+        p2.feed(html or "")
+    except Exception:                     # noqa: BLE001
+        return list(urls), []
+
+    def _walk2(node, hidden=False):
+        for ch in node["children"]:
+            h = (hidden or ch["tag"] in ("script", "style", "noscript",
+                                         "template")
+                 or _CardParser.attr_hidden(ch))
+            if not h:
+                yield ch
+                yield from _walk2(ch, h)
+
+    slot_w = ("パチスロ", "スロット", "スマスロ", "回胴")
+    pachi_only = set()
+    for node in _walk2(p2.root):
+        if node["tag"] != "a":
+            continue
+        u2 = set(_node_product_anchors(node, base_url, link_prefix))
+        if len(u2) != 1:
+            continue
+        url = next(iter(u2))
+        if url not in urls:
+            continue
+        # ★そのリンク「だけ」を含む、いちばん近い種目語つきの範囲で判定する★
+        #   先祖の文字を混ぜて広げると、平たいHTMLでは隣のカードの
+        #   「パチスロ」「パチンコ」まで拾って誤判定する（自己テストで再現）。
+        #   別の機種URLも含む先祖に達したら、そこで判定を打ち切って残す（安全側）。
+        a = node
+        for _ in range(4):
+            if a is None:
+                break
+            if len(set(_node_product_anchors(a, base_url, link_prefix))) > 1:
+                break                     # カードの外＝種目を特定できない
+            txt = unicodedata.normalize("NFKC", _node_text(a) or "")
+            has_p = ("パチンコ" in txt or "ぱちんこ" in txt)
+            has_s = any(w in txt for w in slot_w)
+            if has_p or has_s:
+                if has_p and not has_s:
+                    pachi_only.add(url)
+                break                     # 種目語が出た最初の範囲で決める
+            a = a["parent"]
+    kept = [u for u in urls if u not in pachi_only]
+    return kept, sorted(pachi_only)
 
 
 def shape_warnings(html: str, base_url: str, link_prefix: str) -> list:
@@ -590,7 +659,11 @@ def _visible_text(html: str) -> str:
     out = []
 
     def _walk(n, hidden):
-        h = (hidden or n["tag"] in ("script", "style", "noscript", "template")
+        # ★脇の領域（aside/nav/footer/header）も本文にしない★
+        #   （2026-08-02・Codex50回目。関連機種の導入月を対象機の月として
+        #     採れるため。仕様・年月・型式は本文領域に書かれる）
+        h = (hidden or n["tag"] in ("script", "style", "noscript", "template",
+                                    "aside", "nav", "footer", "header")
              or _CardParser.attr_hidden(n))
         if h:
             return
@@ -992,6 +1065,11 @@ def scan_maker(maker_id: str, conf: dict, seen: dict, record: bool = True) -> di
         out["state"] = "PARSE_SUSPECT"
         return out
     urls = product_urls(html, conf["list_url"], conf["link_prefix"])
+    # ★パチンコと明記されたカードのURLを外す★（2026-08-02・Codex50回目）
+    urls, _pachi = filter_slot_urls(html, conf["list_url"],
+                                    conf["link_prefix"], urls)
+    if _pachi:
+        out["excluded_pachinko"] = len(_pachi)
     out["total"] = len(urls)
     # ★対応していない形のリンクは、社を止めずに知らせる★（2026-08-02・Codex36回目）
     try:
@@ -1574,6 +1652,32 @@ def selftest() -> int:
                     assume_release_context=True) is None
       and release_month("Lテスト機 2026.9",
                         assume_release_context=True)["value"] == "2026-09")
+    # ★★Codex50回目★★
+    t("★★パチンコと明記されたカードのURLを機種から外す★★"
+      "（ニューギン実在形＝パチンコの増加で監視が恒久停止しえた・Codex50回目）",
+      filter_slot_urls(
+          '<li><a href="https://m.example/pub/m/slotone/">機種A</a>'
+          '<span>パチスロ</span></li>'
+          '<li><a href="https://m.example/pub/m/pachione/">機種P</a>'
+          '<span>パチンコ</span></li>',
+          "https://m.example/pub/m/", "https://m.example/pub/m/",
+          ["https://m.example/pub/m/slotone/",
+           "https://m.example/pub/m/pachione/"])
+      == (["https://m.example/pub/m/slotone/"],
+          ["https://m.example/pub/m/pachione/"]))
+    t("★★脇の領域（aside）の導入月を本文にしない★★（Codex50回目）",
+      release_month(_visible_text(
+          "<h1>L新機種</h1><p>COMING SOON</p>"
+          "<aside>旧機種A 2026年9月導入</aside>")) is None)
+    t("★★?page=の値が数字でなければ検知する★★（Codex50回目）",
+      query_style_machine_links(
+          '<a href="https://m.example/products/slot/?page=new_machine">n</a>',
+          "https://m.example/products/slot/",
+          "https://m.example/products/slot/") != []
+      and query_style_machine_links(
+          '<a href="https://m.example/products/slot/?page=2">2</a>',
+          "https://m.example/products/slot/",
+          "https://m.example/products/slot/") == [])
     t("　カードの構造が無いページでは採らない（安全側）",
       list_release_hints(
           '<a href="https://m.example/products/slot/alpha/">A</a> 導入 2026.9 '

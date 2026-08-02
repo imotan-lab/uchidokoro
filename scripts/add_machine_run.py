@@ -690,10 +690,20 @@ def verify_official(name: str, official_url: str,
         re.sub(r"<[^>]+>", " ", h)
         for h in re.findall(r"(?is)<h1[^>]*>(.*?)</h1>", html))
     _head_txt = unicodedata.normalize("NFKC", _head_txt)
+    # ★企業の定型句は種目の証拠から除く★（2026-08-02・Codex50回目）
+    #   「…|パチンコ・パチスロメーカー」の定型句がパチスロの証拠になり、
+    #   ぱちんこページの拒否も打ち消していた。
+    _head_txt = _head_txt.replace("パチンコ・パチスロメーカー", "")
     _slot_w = ("パチスロ", "スロット", "スマスロ", "回胴", "ぱちスロ")
     _slot_ev = (any(w in _head_txt for w in _slot_w)
                 or _mc._gen_mark(name) in ("L", "S"))
     _pachi_ev = any(w in _head_txt for w in ("ぱちんこ", "パチンコ", "スマパチ"))         and not any(w in _head_txt for w in _slot_w)
+    # ★H1に「ぱちんこ」があれば無条件で拒む★（定型句や規格印では覆せない）
+    _h1_txt = unicodedata.normalize("NFKC", " ".join(
+        re.sub(r"<[^>]+>", " ", h)
+        for h in re.findall(r"(?is)<h1[^>]*>(.*?)</h1>", html)))
+    if "ぱちんこ" in _h1_txt:
+        _pachi_ev = True
     if _pachi_ev or not _slot_ev:
         out["problems"].append(
             "パチスロのページに見えません（題・見出しに回胴機の証拠が無い）")
@@ -1864,6 +1874,14 @@ def selftest() -> int:
               "directory_release" in inspect.getsource(gather)
               and "名鑑2票一致の月を使用" in inspect.getsource(run_one)
               and "not release" in inspect.getsource(run_one))
+            # ★定型句を種目の証拠にしない★（Codex50回目）
+            _nw._get = lambda u, timeout=20: (
+                "<title>北斗の拳|パチンコ・パチスロメーカー</title>"
+                "<h1>ぱちんこ 北斗の拳</h1><body>2026年9月導入</body>")
+            v11 = verify_official("北斗の拳",
+                                  "https://m.example/products/slot/hokuto/", "m")
+            t("★★企業定型句の「パチスロ」でぱちんこページを通さない★★（Codex50回目）",
+              any("パチスロのページに見えません" in x for x in v11["problems"]))
             t("★★初回に読めなかった将来の新台を沈めない★★（Codex37回目）",
               "初回に読めなかった" in inspect.getsource(discover)
               and "初回に残せなかったので" in inspect.getsource(discover))
