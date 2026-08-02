@@ -409,11 +409,33 @@ def _after_ok(after_seg: str, core: str, official_name: str,
         if want_gen and _gen_mark(w) == want_gen \
                 and len(c) >= 2 and _subseq(c, core):
             continue
+        # ★正式名から導ける別名★（2026-08-02・Codex40回目。P-WORLD実データ）
+        #   「マイジャグラーVI(マイジャグラー6 マイジャグ6)」のように、
+        #   規格語もL/S印も無い別名括弧が現に在る。
+        #   頭の文字が同じ・順番どおりの部分列・世代表記（VI↔6）は同値、
+        #   の3条件がそろった語だけを別名として通す
+        #   （派生印の拒否が先に効くので SP・改 等はここへ来ない）。
+        if len(c) >= 2 and c[:1] == core[:1] \
+                and _subseq(_canon_gen_num(c), _canon_gen_num(core)):
+            continue
         # ★飾り語・販売区分語だけの連結語★（新台スマスロ・設定判別・天井・…）
         if _decor_compound(w):
             continue
         return False
     return True
+
+
+# ★世代表記の同値化★（VI↔6 など。語尾のローマ数字を数字に直して比べる）
+_ROMAN_TAIL = re.compile(r"^(.*?)(viii|vii|vi|iv|ix|iii|ii|x|v|i)$")
+_ROMAN_MAP = {"i": "1", "ii": "2", "iii": "3", "iv": "4", "v": "5",
+              "vi": "6", "vii": "7", "viii": "8", "ix": "9", "x": "10"}
+
+
+def _canon_gen_num(t: str) -> str:
+    m = _ROMAN_TAIL.match(t or "")
+    if m and m.group(1):
+        return m.group(1) + _ROMAN_MAP[m.group(2)]
+    return t
 
 
 def maker_brand_cores(maker_id: str) -> set:
@@ -442,7 +464,48 @@ def maker_brand_cores(maker_id: str) -> set:
     return out
 
 
-def lookup(url: str, official_name: str) -> dict:
+def extract_maker_name(html: str) -> str:
+    """名鑑ページの「メーカー名」欄の値（無ければ空）。"""
+    lines = _w._visible_text(html).splitlines()
+    for i, line in enumerate(lines):
+        s = line.strip()
+        for lab in ("メーカー名", "メーカー"):
+            if not s.startswith(lab):
+                continue
+            after = s[len(lab):]
+            if after and after[0] not in "：: 　\t":
+                continue
+            v = after.lstrip("：: 　").strip()
+            if not v and i + 1 < len(lines):
+                v = lines[i + 1].strip()
+            if v and v not in _LABEL_LIKE:
+                return v
+    return ""
+
+
+def _maker_core_owners(core_text: str) -> set:
+    """その文字列が名簿のどの社を指すか（名前・IDの芯の**包含**で見る）。
+
+    ★包含にする理由★ 名鑑は「コナミアミューズメント(メーカー公式サイト)」の
+    ように飾りを足す。逆に名簿に無い表記（コナミ…はKPEの名鑑表記）は
+    どの社も指さない＝判定不能として扱う。
+    """
+    owners = set()
+    try:
+        got = json.load(open(_w.CATALOGS, encoding="utf-8"))
+        for mid, conf in (got.get("catalogs") or {}).items():
+            if not isinstance(conf, dict) or "list_url" not in conf:
+                continue
+            for tok in (str(conf.get("name") or ""), str(mid)):
+                c = _ci.normalize_core(tok)
+                if c and c in core_text:
+                    owners.add(mid)
+    except Exception:                     # noqa: BLE001
+        return set()
+    return owners
+
+
+def lookup(url: str, official_name: str, expected_maker: str = "") -> dict:
     """1つの名鑑ページから型式名を引く。★機種が違えば採らない★"""
     out = {"url": url, "official_name": official_name,
            "model_code": None, "reason": ""}
@@ -455,6 +518,21 @@ def lookup(url: str, official_name: str) -> dict:
     if not ok:
         out["reason"] = why
         return out
+    # ★名鑑のメーカー欄が「名簿にある別の社」を指していたら採らない★
+    #   （2026-08-02・Codex40回目。同名機の別メーカー票を防ぐ）
+    #   ★表記ゆれ・別名（KPE↔コナミアミューズメント等）は拒否しない★
+    #     ＝欄の値が名簿のどの社か判定できた時だけ、期待する社と比べる。
+    #     素直な一致要求だと実在のとんスキ（メーカー欄=コナミアミューズメント・
+    #     名簿=KPE）をまた弾いてしまう（実ページで確認済み）。
+    if expected_maker:
+        mk = extract_maker_name(html)
+        if mk:
+            owners = _maker_core_owners(
+                _ci.normalize_core(mk).replace("株式会社", ""))
+            if owners and expected_maker not in owners:
+                out["reason"] = (f"DIRECTORY_MAKER_MISMATCH（名鑑のメーカー欄が"
+                                 f"別の社を指しています: {mk[:30]}）")
+                return out
     code, why = extract_model_code(html)
     out["model_code"] = code
     out["reason"] = why
@@ -711,6 +789,34 @@ def selftest() -> int:
     t("　飾りの連結を装った派生印（SP新台）は弾く",
       _decor_compound("SP新台") is False and _decor_compound("新台スマスロ") is True
       and _decor_compound("設定判別・天井・ゾーン・解析・打ち方・ヤメ時") is True)
+    # ★★Codex40回目★★
+    t("★★実在の題「マイジャグラーVI(マイジャグラー6 マイジャグ6)」を通す★★"
+      "（規格語なしの別名括弧・P-WORLD実データ・Codex40回目）",
+      page_is_machine("<title>マイジャグラーVI(マイジャグラー6 マイジャグ6) "
+                      "パチスロ新台 スロット 機械割 天井 | P-WORLD</title>",
+                      "マイジャグラーVI", strict_all_tail=True)[0] is True)
+    t("　世代表記の同値化はVI↔6の形だけ（SPや新章は従来どおり弾く）",
+      _canon_gen_num("まいじゃぐらーvi") == "まいじゃぐらー6"
+      and page_is_machine("<title>Lすーぱぁびん娘（SP） | P-WORLD</title>",
+                          "Lすーぱぁびん娘", strict_all_tail=True)[0] is False)
+    t("★★名鑑のメーカー欄が名簿の別の社なら採らない★★（Codex40回目）",
+      (lambda: (setattr(_w, "_get_bak40", _w._get),
+                setattr(_w, "_get", lambda u, timeout=20:
+                    "<title>L試験機 パチスロ新台 | P-WORLD</title>"
+                    "<p>メーカー名：サミー</p><p>型式名：L試験1</p>"),
+                lookup("https://www.p-world.co.jp/x", "L試験機",
+                       expected_maker="heiwa"),
+                setattr(_w, "_get", _w._get_bak40))[2])()
+      ["reason"].startswith("DIRECTORY_MAKER_MISMATCH"))
+    t("　名簿に無い表記（コナミアミューズメント等）は判定不能として通す"
+      "（KPEのとんスキ実データを弾かないため）",
+      (lambda: (setattr(_w, "_get_bak41", _w._get),
+                setattr(_w, "_get", lambda u, timeout=20:
+                    "<title>L試験機 パチスロ新台 | P-WORLD</title>"
+                    "<p>メーカー名：コナミアミューズメント</p><p>型式名：L試験1</p>"),
+                lookup("https://www.p-world.co.jp/x", "L試験機",
+                       expected_maker="kpe"),
+                setattr(_w, "_get", _w._get_bak41))[2])()["model_code"] == "L試験1")
     t("　直後の括弧が本人の略称なら通る（実データ・青ブタ）",
       page_is_machine(
           "<title>L青春ブタ野郎はバニーガール先輩の夢を見ない"

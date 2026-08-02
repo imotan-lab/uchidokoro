@@ -486,6 +486,12 @@ def page_title(html: str) -> str:
 def machine_name(html: str) -> str:
     """公式ページのタイトルから機種名だけを取る（サイト名などを落とす）。"""
     t = page_title(html)
+    # ★かぎ括弧の中を最優先★（2026-08-02・Codex40回目。実ページで確認）
+    #   山佐「スマスロパリピ孔明」公式サイト／大都技研「スロット ワールドダイスター」
+    #   製品サイトはこちら! のように、題全体では名前にならない社が現に2社ある。
+    m_kagi = re.search(r"「([^」]+)」", t)
+    if m_kagi and m_kagi.group(1).strip():
+        return m_kagi.group(1).strip()
     # 「機種名|機種情報|メーカー名...」の形が多い。最初の区切りまでを名前とする。
     # ★ハイフン類は前後に空白がある時だけ区切りにする★（2026-08-02・Codex30回目）
     #   「A-SLOT+」のように正式名称の中のハイフンで切ると名前が「A」になり、
@@ -1400,6 +1406,12 @@ def selftest() -> int:
                      "https://m.example/products/slot/",
                      "https://m.example/products/slot/")
       == ["ok_one/new_variant.html"])
+    # ★★Codex40回目（実ページ由来）★★
+    t("★★かぎ括弧の題から機種名を取れる★★（山佐・大都の実形式・Codex40回目）",
+      machine_name("<title>「スマスロパリピ孔明」公式サイト</title>")
+      == "スマスロパリピ孔明"
+      and machine_name("<title>大都技研「スロット ワールドダイスター」"
+                       "製品サイトはこちら!</title>") == "スロット ワールドダイスター")
     t("　カードの構造が無いページでは採らない（安全側）",
       list_release_hints(
           '<a href="https://m.example/products/slot/alpha/">A</a> 導入 2026.9 '

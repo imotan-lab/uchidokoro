@@ -363,7 +363,7 @@ def discover(persist: bool = True) -> dict:
     return out
 
 
-def gather(name: str) -> dict:
+def gather(name: str, maker: str = "") -> dict:
     """1機種ぶんの材料を集める。★止まった理由も返す★"""
     got = {"name": name, "urls": [], "model_code": None, "material": None,
            "problems": []}
@@ -393,7 +393,9 @@ def gather(name: str) -> dict:
         got["problems"].append(
             f"転載の疑い: {sp['a']} と {sp['b']} の本文が {sp['ratio']:.0%} 一致"
             f"（登録簿に系列が書かれていません）")
-    mv = _mc.agree([_mc.lookup(u, name) for u in got["urls"]])
+    # ★名鑑にも期待するメーカーを渡す★（2026-08-02・Codex40回目）
+    mv = _mc.agree([_mc.lookup(u, name, expected_maker=maker)
+                    for u in got["urls"]])
     got["model_code"] = mv.get("model_code")
     if not mv["adopted"]:
         got["problems"].append("型式名: " + str(mv.get("why", ""))[:160])
@@ -1185,7 +1187,7 @@ def run_one(name, official_url, maker, release, apply_it=False,
         out["problems"].append(
             f"既に登録されている疑い: slug={slug} name={ename}（{why}）"
             f"／新しいslugで作らず、更新タスクで直すこと")
-    got = gather(name)
+    got = gather(name, maker)
     out["problems"] += got["problems"]
     # ★型式名でも重複を見る★（2026-07-31・Codex16回目）
     #   最初の重複検査は名前と公式URLしか渡していなかった。
@@ -1299,7 +1301,7 @@ def selftest() -> int:
             k: {"state": "FOUND", "url": f"https://{k}.example/1", "why": "",
                 "candidates": [], "surfaces": "1/1", "index_size": 9, "problems": []}
             for k in ("a", "b")}}
-        _mc.lookup = lambda u, n: {"url": u, "model_code": "L1", "reason": "OK"}
+        _mc.lookup = lambda u, n, **k: {"url": u, "model_code": "L1", "reason": "OK"}
         _sl.read_page = lambda u, n: {
             "url": u, "host": u.split("/")[2], "ok": True, "reason": "OK",
             "fields": {"payout_rate": {"1": "97.3%"}}}
@@ -1497,14 +1499,14 @@ def selftest() -> int:
         _sl.read_page = lambda u, n: {
             "url": u, "host": u.split("/")[2], "ok": True, "reason": "OK",
             "fields": {"payout_rate": {"1": "97.3%"}}}
-        _mc.lookup = lambda u, n: {"url": u, "model_code": None,
+        _mc.lookup = lambda u, n, **k: {"url": u, "model_code": None,
                                    "reason": "MODEL_CODE_NOT_FOUND"}
         r3 = run_one("L試験機", "https://m.example/products/slot/zzz/", "m", "2026-09")
         t("★★型式名が確定していなければ記事を作らない★★"
           "（材料が採れていても作れてしまう穴があった）",
           "preview" not in r3 and any("型式名" in x for x in r3["blocked"]))
 
-        _mc.lookup = lambda u, n: {"url": u, "model_code": "L1", "reason": "OK"}
+        _mc.lookup = lambda u, n, **k: {"url": u, "model_code": "L1", "reason": "OK"}
         _di.find = lambda n, c=None: {"results": {
             "a": {"state": "FOUND", "url": "https://a.example/1", "why": "",
                   "candidates": [], "surfaces": "1/1", "index_size": 9, "problems": []},
@@ -1519,7 +1521,7 @@ def selftest() -> int:
           not any("AMBIGUOUS" in x for x in r4.get("problems") or []))
         # ★票が成立しなかった時は、3件目の曖昧さも残す★（Codex28回目）
         _real_lookup28 = _mc.lookup
-        _mc.lookup = lambda u, n: {"url": u, "model_code": None,
+        _mc.lookup = lambda u, n, **k: {"url": u, "model_code": None,
                                    "reason": "MODEL_CODE_NOT_FOUND"}
         r4c = run_one("L試験機", "https://m.example/products/slot/zzz/", "m", "2026-09")
         _mc.lookup = _real_lookup28
