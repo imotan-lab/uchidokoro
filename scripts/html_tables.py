@@ -40,9 +40,17 @@ def tables(html: str) -> list:
     返すもの: [{"title": 直前の見出し, "pairs": [(左, 右), ...], "cells": [...]}]
     """
     out = []
+    prev_end = 0
     for m in re.finditer("(?is)<table[^>]*>(.*?)</table" + _S + ">", html or ""):
         body = m.group(1)
         pairs, cells, rows = [], [], []
+        # ★rowspan/colspan のある表は「ずれあり」と印を付ける★
+        #   （2026-08-03・Codex60回目。物理セルしか持たないので、
+        #     多段見出しの表は列見出しと値が必ずずれる。展開はせず、
+        #     読む側がこの印の表を不採用にする）
+        has_span = bool(re.search(
+            r"(?is)<t[hd][^>]*\b(?:row|col)span\s*=\s*[\"']?\s*(?!1[\"'\s>])",
+            body))
         for row in re.finditer("(?is)<tr[^>]*>(.*?)</tr" + _S + ">", body):
             got = [_text(c) for c in re.findall(
                 "(?is)<t[hd][^>]*>(.*?)</t[hd]" + _S + ">", row.group(1))]
@@ -53,13 +61,17 @@ def tables(html: str) -> list:
             rows.append(got)
             if len(got) >= 2:
                 pairs.append((got[0], got[1]))
-        # ★この表の直前にある見出しだけを名前の候補にする★
-        before = html[:m.start()]
-        heads = re.findall("(?is)<h[1-6][^>]*>(.*?)</h[1-6]" + _S + ">", before)
+        # ★見出しは「前の表とこの表の間」にあるものだけ★
+        #   （2026-08-03・Codex60回目。文書全体で最後の見出しを使うと、
+        #     見出しを持たない次の表が前の表の見出しを引き継いでしまい、
+        #     ボーナス表を上位AT表として読めた）
+        between = html[prev_end:m.start()]
+        heads = re.findall("(?is)<h[1-6][^>]*>(.*?)</h[1-6]" + _S + ">", between)
         caps = re.findall("(?is)<caption[^>]*>(.*?)</caption" + _S + ">", body)
         title = _text(caps[-1]) if caps else (_text(heads[-1]) if heads else "")
+        prev_end = m.end()
         out.append({"title": title, "pairs": pairs, "cells": cells,
-                    "rows": rows})
+                    "rows": rows, "has_span": has_span})
     return out
 
 

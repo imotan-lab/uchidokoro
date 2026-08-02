@@ -122,6 +122,8 @@ def from_tables(html: str) -> list:
     """
     out = []
     for tb in _ht.tables(html):
+        if tb.get("has_span"):
+            continue          # ★多段見出し（rowspan/colspan）は列がずれる＝不採用★
         # ★見出しがCZだと分かる時だけ採る★
         #   これが無いと「ボーナス」「なにかの表」まで CZ名 になってしまう
         #   （clean_name は短い語なら何でも通すため）。

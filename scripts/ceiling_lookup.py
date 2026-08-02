@@ -185,6 +185,8 @@ def from_table(html: str) -> list:
     """
     out = []
     for tb in _ht.tables(html):
+        if tb.get("has_span"):
+            continue          # ★多段見出し（rowspan/colspan）は列がずれる＝不採用★
         for kind, labels in _TABLE_LABELS.items():
             val = _norm(_ht.value_of(tb["pairs"], labels))
             m = re.match(r"^(\d{1,5})\s*" + KINDS[kind]["unit"] + r"$", val)

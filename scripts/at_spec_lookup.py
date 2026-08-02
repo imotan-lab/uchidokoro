@@ -83,6 +83,8 @@ def from_tables(html: str) -> list:
     """
     out = []
     for tb in _ht.tables(html):
+        if tb.get("has_span"):
+            continue          # ★多段見出し（rowspan/colspan）は列がずれる＝不採用★
         mode = mode_of(tb["title"])
         if not mode:
             continue          # ★どのモードの表か分からなければ採らない★

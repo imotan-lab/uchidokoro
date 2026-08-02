@@ -1037,8 +1037,9 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
             out["problems"].append(
                 "★片付け切れていないため『途中』の目印は残します"
                 "（--recover で確かめてください）★")
-        else:
-            mark_done()                # 片付け切れて初めて「途中」ではない
+            return False
+        mark_done()                    # 片付け切れて初めて「途中」ではない
+        return True
 
     try:
         # ① 記事データとページを置く（★この時点では一覧から辿れない★）
@@ -1107,10 +1108,15 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
             raise
         raise PublishError(f"確かめの最中に失敗しました（作ったものは消しました）: {e}")
     if late:
-        _cleanup()
-        out["problems"] += late
-        out["problems"].append("★確かめで引っかかったので、置いたものを消して元に戻しました★")
-        mark_done()                    # 元に戻ったので「途中」ではない
+        # ★目印は _cleanup が「片付け切れた時だけ」消す★（2026-08-03・
+        #   Codex60回目。ここで無条件に mark_done すると、ページ削除だけ
+        #   失敗した時に残骸があるのに復旧の目印が消えた）
+        if _cleanup():
+            out["problems"] += late
+            out["problems"].append(
+                "★確かめで引っかかったので、置いたものを消して元に戻しました★")
+        else:
+            out["problems"] += late
         return out
 
     # ③ ここで初めて一覧へ足す（★これ以降トップページからリンクされる★）
@@ -1219,10 +1225,12 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
             for full, text0 in hub_backup.items():       # ★早見表も戻す★
                 if text0 is not None:
                     write_atomic(full, text0)
-            _cleanup()
-            out["wrote"] = []
-            late2.append("★一覧から外し、置いたものを消して元に戻しました★")
-            mark_done()                # 元に戻ったので「途中」ではない
+            # ★目印は _cleanup が「片付け切れた時だけ」消す★（Codex60回目）
+            if _cleanup():
+                out["wrote"] = []
+                late2.append("★一覧から外し、置いたものを消して元に戻しました★")
+            else:
+                out["wrote"] = []
         else:
             late2.append("★別の書き込みが入っているため、自動では戻しませんでした★"
                          "（人が確かめてください）")
@@ -1499,11 +1507,22 @@ def _recover(apply_it: bool = False) -> dict:
         for rel, full, held, _w_ in held_map:
             try:
                 os.remove(held)
-            except OSError as e:          # noqa: BLE001
-                _del_fail.append(f"{held}（{e}）")
+            except OSError:               # noqa: BLE001
+                # ★消せなかった退避物は元パスへ戻す★（2026-08-03・Codex60回目）
+                #   退避名（*.recover.<pid>）のまま残すと、目印に場所が
+                #   書かれていないため、次の --recover では見つからず
+                #   （元パスが無い＝held_mapが空）、目印だけ消えて
+                #   未追跡ファイルが後続のpushを全部止めた。
+                #   元パスへ戻せば、次の --recover が普通にやり直せる。
+                try:
+                    os.replace(held, full)
+                    _del_fail.append(f"{rel}（元パスへ戻しました）")
+                except OSError as e2:     # noqa: BLE001
+                    _del_fail.append(f"{held}（戻せず退避名のまま: {e2}）")
         if _del_fail:
             out["problems"].append(
-                "★退避物を消せませんでした（復旧自体は完了・目印は残します）: "
+                "★退避物を消せませんでした（目印は残します・もう一度 "
+                "--recover --apply でやり直せます）: "
                 + " / ".join(_del_fail)[:200] + "★")
             return out
         d = os.path.join(BASE, "machines", slug)
@@ -1840,6 +1859,13 @@ def selftest() -> int:
       "_undo_all" in inspect.getsource(_recover)
       and "初めて退避物を消す" in inspect.getsource(_recover)
       and "machines_text_before" in inspect.getsource(_recover))
+    t("★★片付けに失敗したら目印を消さない（呼び出し側も）★★"
+      "（_cleanup後の無条件mark_doneで残骸があるのに目印が消えた・Codex60回目）",
+      "if _cleanup():" in inspect.getsource(_publish)
+      and "return False" in inspect.getsource(_publish))
+    t("★★消せなかった退避物は元パスへ戻す★★"
+      "（退避名のままだと次のrecoverが見つけられず回収不能・Codex60回目）",
+      "元パスへ戻しました" in inspect.getsource(_recover))
     t("★★外部の材料JSONからは公開（--apply）できない★★"
       "（出典の再検証を通らない値を記事化できた・Codex58回目）",
       "外部の材料JSONからの公開" in inspect.getsource(main)

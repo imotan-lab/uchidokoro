@@ -212,8 +212,10 @@ def per_setting_from_tables(html: str, columns: tuple, unit: str) -> dict:
       P-WORLD       設定|CZ合成|AT初当り確率
       ちょんぼりすた 設定|AT|出玉率
     """
-    best: dict = {}
+    cands: list = []
     for tb in _ht.tables(html):
+        if tb.get("has_span"):
+            continue    # ★多段見出し（rowspan/colspan）は列がずれる＝不採用★
         rows = tb.get("rows") or []
         if len(rows) < 2 or not rows[0]:
             continue
@@ -233,9 +235,20 @@ def per_setting_from_tables(html: str, columns: tuple, unit: str) -> dict:
                 v = " ".join(str(r[ci]).split())
                 if _ci.normalize_value(v, unit) is not None:
                     got.setdefault(m.group(1), v)
-            if len(got) > len(best):
-                best = got
-    return best
+            if got:
+                cands.append(got)
+    # ★同じページの別の表が同じ設定に別の値を出していたら食い違い★
+    #   （2026-08-03・Codex60回目。最大の表だけ残すと、更新途中などで
+    #     片方だけ値が変わったページ内の反対情報が compare() に届かない）
+    merged: dict = {}
+    conflict = False
+    for got in cands:
+        for k, v in got.items():
+            if k in merged and merged[k] != v:
+                conflict = True
+            merged.setdefault(k, v)
+    best = max(cands, key=len, default={})
+    return best, conflict
 
 
 def read_page(url: str, official_name: str) -> dict:
@@ -258,7 +271,14 @@ def read_page(url: str, official_name: str) -> dict:
     lines = _lines(html)
     for key, spec in FIELDS.items():
         if spec["kind"] == "per_setting":
-            v = per_setting_from_tables(html, spec["columns"], spec["unit"])
+            v, conflict = per_setting_from_tables(html, spec["columns"],
+                                                  spec["unit"])
+            if conflict:
+                # ★ページ内の反対情報を握りつぶさない★（Codex60回目）
+                out["fields"] = {}
+                out["reason"] = (f"同じページの中で{spec['jp']}の"
+                                 "設定値が食い違っています（要確認）")
+                return out
         else:
             v = single_value(lines, spec["labels"], spec["kind"])
         if v:
@@ -359,35 +379,46 @@ def selftest() -> int:
           "<tr><td>設定L</td><td>調査中</td><td>調査中</td></tr></table>")
     t("★★同じ表の同単位2列（CZ合成|AT初当り確率）を列見出しで区別する★★"
       "（行の走査ではCZ合成をAT確率として採れた・P-WORLD実在形・Codex59回目）",
-      per_setting_from_tables(HP, ("AT初当り確率",), "1/x")
+      per_setting_from_tables(HP, ("AT初当り確率",), "1/x")[0]
       == {"1": "1/498.7", "2": "1/477.8"}
-      and per_setting_from_tables(HP, ("CZ合成",), "1/x")
+      and per_setting_from_tables(HP, ("CZ合成",), "1/x")[0]
       == {"1": "1/395.7", "2": "1/394.8"})
     HC = ("<h3>AT確率・機械割</h3><table>"
           "<tr><th>設定</th><th>AT</th><th>出玉率</th></tr>"
           "<tr><td>設定1</td><td>1/498.7</td><td>97.8%</td></tr>"
           "<tr><td>設定2</td><td>1/477.8</td><td>98.5%</td></tr></table>")
     t("★項目ごとに正しい列を読む★（ちょんぼりすた実在形）",
-      per_setting_from_tables(HC, ("AT",), "1/x")
+      per_setting_from_tables(HC, ("AT",), "1/x")[0]
       == {"1": "1/498.7", "2": "1/477.8"}
-      and per_setting_from_tables(HC, ("出玉率",), "%")
+      and per_setting_from_tables(HC, ("出玉率",), "%")[0]
       == {"1": "97.8%", "2": "98.5%"})
     t("★★単位が合わない値は採らない★★"
       "（出玉率の欄に確率を拾った実際の事故）",
       per_setting_from_tables(
           "<table><tr><th>設定</th><th>出玉率</th></tr>"
           "<tr><td>設定1</td><td>1/498.7</td></tr></table>",
-          ("出玉率",), "%") == {})
+          ("出玉率",), "%")[0] == {})
     t("　設定の行が無ければ何も採らない",
       per_setting_from_tables(
           "<table><tr><th>設定</th><th>AT</th></tr>"
-          "<tr><td>備考</td><td>なし</td></tr></table>", ("AT",), "1/x") == {})
+          "<tr><td>備考</td><td>なし</td></tr></table>", ("AT",), "1/x")[0] == {})
+    t("★★同じページの重複表の食い違いを見逃さない★★（Codex60回目）",
+      per_setting_from_tables(
+          HP + HP.replace("1/498.7", "1/999.9"),
+          ("AT初当り確率",), "1/x")[1] is True
+      and per_setting_from_tables(HP + HP, ("AT初当り確率",), "1/x")[1] is False)
+    t("★★多段見出し（rowspan/colspan）の表は不採用★★（列がずれる・Codex60回目）",
+      per_setting_from_tables(
+          '<table><tr><th rowspan="2">設定</th><th colspan="2">AT</th></tr>'
+          "<tr><th>CZ合成</th><th>AT初当り</th></tr>"
+          "<tr><td>設定1</td><td>1/395.7</td><td>1/498.7</td></tr></table>",
+          ("AT",), "1/x")[0] == {})
     t("★★見出しの後の別の表（CZ確率）まで走査しない★★（Codex59回目）",
       per_setting_from_tables(
           "<h3>AT確率</h3><p>調査中</p><h3>CZ確率</h3>"
           "<table><tr><th>設定</th><th>CZ確率</th></tr>"
           "<tr><td>設定1</td><td>1/395.7</td></tr></table>",
-          ("AT初当り確率", "AT確率", "AT"), "1/x") == {})
+          ("AT初当り確率", "AT確率", "AT"), "1/x")[0] == {})
 
     t("★★波ダッシュの字が違っても同じ範囲として扱う★★（実データの差）",
       normalize_range("97.3% ~ 112.5%") == normalize_range("97.3% 〜 112.5%")
