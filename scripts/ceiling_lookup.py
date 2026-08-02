@@ -37,6 +37,7 @@ import unicodedata
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
 
+import html_tables as _ht             # noqa: E402
 import model_code_lookup as _mc       # noqa: E402
 import new_machine_watch as _w        # noqa: E402
 import spec_lookup as _sl             # noqa: E402
@@ -78,14 +79,33 @@ _BENEFIT_PLAIN = ("に当選", "当選", "に突入", "突入")
 _CERTAINTY = (("濃厚", "LIKELY"), ("確定", "GUARANTEED"))
 
 
+# ★英語表記とカタカナ表記の差だけをそろえる★（2026-08-03・Codex59回目）
+#   P-WORLD「夢娘 ドリムス CHANCE」↔ちょんぼりすた「夢娘チャンス」の
+#   英語部分。CZ名の同値化（cz_lookup）と同じ考え方で、意味の同じ
+#   固定語だけを対応させる。
+_ENG_KANA = (("CHANCE", "チャンス"), ("CHALLENGE", "チャレンジ"),
+             ("BONUS", "ボーナス"), ("TIME", "タイム"))
+
+
 def split_benefit(text: str):
     """恩恵を「何が起きるか」と「どのくらい確かか」に分ける。
 
     ★『CZ当選濃厚』と『CZ当選』を同じにしない★
       濃厚は確定ではない。以前は両方 `CZ` にしていたため、
       **確からしさの違う出典どうしを一致とみなしていた**（実際に再現）。
+
+    ★かっこ・空白・英語表記の差はそろえる★（2026-08-03・Codex59回目）
+      P-WORLDは「AT+「 夢娘 ドリムス CHANCE」」のようにかっこと空白と
+      ふりがなを挟む。かっこ・空白・英語↔カタカナは機械的にそろえる
+      （ふりがな部分＝ドリムスは機械では判定できないので、
+      benefit_aliases（機種名つきの検証済み対応表）が担当する）。
     """
     t = _norm(text).strip("。、,. ")
+    for q in "「」『』“”\"'":
+        t = t.replace(q, "")
+    t = t.replace(" ", "").replace("　", "")
+    for eng, kana in _ENG_KANA:
+        t = re.sub(eng, kana, t, flags=re.I)
     cert = "PLAIN"
     for word, name in _CERTAINTY:
         if word in t:
@@ -97,6 +117,25 @@ def split_benefit(text: str):
             t = t[: -len(suf)]
             break
     return t.strip("　 "), cert
+
+
+def _benefit_alias(benefit: str, official_name: str) -> str:
+    """★検証済みの恩恵名の対応表★（2026-08-03・Codex59回目）
+
+    実ページで「同じ天井の恩恵」と確認できた組だけを
+    collection-rules.json の benefit_aliases に機種名つきで登録し、
+    片方の書き方（a）へ寄せる。登録が無ければそのまま返す。
+    """
+    try:
+        rules = _sl.load_rules()
+    except Exception:                     # noqa: BLE001
+        return benefit
+    for p in (rules.get("benefit_aliases") or {}).get("pairs") or []:
+        if official_name not in (p.get("machines") or []):
+            continue
+        if benefit in (p.get("a"), p.get("b")):
+            return p.get("a")
+    return benefit
 
 
 def normalize_benefit(text: str) -> str:
@@ -135,35 +174,30 @@ def from_sentences(text: str) -> list:
     return out
 
 
-def from_table(lines: list) -> list:
-    """表から天井を採る（ちょんぼりすたの形）。
+def from_table(html: str) -> list:
+    """表から天井を採る（ちょんぼりすたの形・★表1区画ずつ★）。
 
-    ★恩恵は「天井の見出しの近く」にあるものだけを使う★
-      ページのどこかにある「恩恵」を拾うと、別項目の恩恵が混ざる。
+    ★値と恩恵は同じ表の中だけで結びつける★（2026-08-03・Codex59回目）
+      平らな行読み＋「後ろ6行の恩恵」は、隣の区画（フリーズ等）の
+      恩恵を天井の値に結合できた（合成HTMLで成立）。
+      実在形は1つの表に「天井G数|1200G」「恩恵|AT+夢娘チャンス」が
+      並ぶ（ちょんぼりすた実ページで確認）ので、表単位で閉じて読む。
     """
     out = []
-    for i, line in enumerate(lines):
+    for tb in _ht.tables(html):
         for kind, labels in _TABLE_LABELS.items():
-            if line not in labels or i + 1 >= len(lines):
-                continue
-            m = re.match(r"^(\d{1,5})\s*" + KINDS[kind]["unit"] + r"$",
-                         _norm(lines[i + 1]))
+            val = _norm(_ht.value_of(tb["pairs"], labels))
+            m = re.match(r"^(\d{1,5})\s*" + KINDS[kind]["unit"] + r"$", val)
             if not m:
                 continue
-            benefit = None
-            for j in range(i + 2, min(i + 8, len(lines))):
-                if lines[j] in _BENEFIT_LABELS and j + 1 < len(lines):
-                    cand = _norm(lines[j + 1])
-                    if _BENEFIT_OK.match(cand):
-                        benefit = cand
-                    break
-            if not benefit:
+            benefit = _norm(_ht.value_of(tb["pairs"], _BENEFIT_LABELS))
+            if not (benefit and _BENEFIT_OK.match(benefit)):
                 continue        # ★恩恵が取れなければ採らない（値だけ載せない）★
             out.append({"kind": kind, "amount": int(m.group(1)),
                         "unit": KINDS[kind]["unit"], "counted": None,
                         "benefit": split_benefit(benefit)[0],
                         "certainty": split_benefit(benefit)[1],
-                        "raw": f"{line}={lines[i+1]} / 恩恵={benefit}"})
+                        "raw": f"{tb['title'][:20]}: {val} / 恩恵={benefit}"})
     return out
 
 
@@ -187,7 +221,9 @@ def read_page(url: str, official_name: str) -> dict:
     text = _w._visible_text(html)
     lines = [x.strip() for x in text.splitlines()]
     seen, got = set(), []
-    for c in from_sentences(text) + from_table(lines):
+    for c in from_sentences(text) + from_table(html):
+        # ★検証済みの恩恵名の対応表で書き方をそろえる★（Codex59回目）
+        c["benefit"] = _benefit_alias(c["benefit"], official_name)
         # ★重複判定は事実の全部で★（Codex56〜57回目。
         #   (kind, amount)だけだと、同じG数の「通常時」と「AT間」の
         #   片方がページ内で消え、正しい2出典一致が成立しなかった。
@@ -331,10 +367,17 @@ def selftest() -> int:
       from_sentences("通常時を最大1200G消化するとゲーム数天井に到達し、"
                      "状況によっては上位ATに直行する場合もあるとされているものに当選") == [])
 
-    L = ["天井詳細", "天井G数", "1200G", "恩恵", "AT当選", "解析"]
-    tb = from_table(L)
-    t("★★表からも同じ形で採れる★★",
+    LH = ("<h3>AT天井</h3><table>"
+          "<tr><th>天井G数</th><td>1200G</td></tr>"
+          "<tr><th>恩恵</th><td>AT当選</td></tr></table>")
+    tb = from_table(LH)
+    t("★★表からも同じ形で採れる★★（実在形＝1つの表に値と恩恵）",
       tb and tb[0]["amount"] == 1200 and tb[0]["benefit"] == "AT")
+    t("★★別区画の恩恵を天井に結合しない★★（Codex59回目・合成HTML）",
+      from_table("<h3>AT天井</h3><table>"
+                 "<tr><th>天井G数</th><td>1200G</td></tr></table>"
+                 "<h3>フリーズ</h3><table>"
+                 "<tr><th>恩恵</th><td>上位AT</td></tr></table>") == [])
     t("★★『AT』と『AT当選』を同じ恩恵として扱う★★（実データの差）",
       normalize_benefit("AT当選") == normalize_benefit("AT") == "AT"
       and normalize_benefit("CZ当選濃厚") == "CZ")
@@ -343,9 +386,11 @@ def selftest() -> int:
     t("　見出しの飾りを落として数える対象にする",
       normalize_counted("▼ゲーム数天井 通常時") == "通常時")
     t("★★恩恵が無ければ採らない（値だけ載せない）★★",
-      from_table(["天井G数", "1200G", "解析", "通常時の抽選"]) == [])
+      from_table("<table><tr><th>天井G数</th><td>1200G</td></tr>"
+                 "<tr><th>解説</th><td>通常時の抽選</td></tr></table>") == [])
     t("　単位が合わなければ採らない",
-      from_table(["天井G数", "1200pt", "恩恵", "AT当選"]) == [])
+      from_table("<table><tr><th>天井G数</th><td>1200pt</td></tr>"
+                 "<tr><th>恩恵</th><td>AT当選</td></tr></table>") == [])
 
     A = {"url": "https://www.p-world.co.jp/x", "host": "p-world.co.jp", "ok": True,
          "ceilings": [{"kind": "GAME", "amount": 1200, "unit": "G",

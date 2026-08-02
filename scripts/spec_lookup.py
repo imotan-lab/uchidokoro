@@ -36,6 +36,7 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
 
 import claim_inventory as _ci         # noqa: E402
+import html_tables as _ht             # noqa: E402
 import model_code_lookup as _mc       # noqa: E402
 import new_machine_watch as _w        # noqa: E402
 import safe_json as _sj               # noqa: E402
@@ -44,11 +45,15 @@ import safe_json as _sj               # noqa: E402
 #   単位が合わない値は捨てる（見出しの近くの別の値を拾う事故を防ぐ）
 FIELDS = {
     # --- 設定ごとの表（P-WORLDは持っているが、DMMは範囲でしか持っていない）
-    "at_prob":      {"labels": ("AT確率", "初当り確率", "初当たり確率",
-                                "AT確率・機械割", "AT確率・出玉率"),
+    # ★per_setting は表の「列見出し」で対応づけて読む★（2026-08-03・Codex59回目）
+    #   columns がその列見出しの許可リスト。行の走査（旧 per_setting_values）は
+    #   同じ表の同単位2列（P-WORLD「設定|CZ合成|AT初当り確率」＝実在）を
+    #   区別できず、CZ合成をAT確率として採れたので廃止。
+    "at_prob":      {"columns": ("AT初当り確率", "AT初当たり確率", "AT確率",
+                                 "AT"),
                      "unit": "1/x", "kind": "per_setting",
                      "jp": "AT初当たり確率"},
-    "payout_rate":  {"labels": ("出玉率", "AT確率・機械割", "AT確率・出玉率"),
+    "payout_rate":  {"columns": ("出玉率", "機械割"),
                      "unit": "%", "kind": "per_setting", "jp": "出玉率"},
     # --- 1つの値（★両サイトが同じ形で持っているのはこちら★）
     #   実データで確認: P-WORLD「97.3% ~ 112.5%」／DMM「97.3% 〜 112.5%」
@@ -193,43 +198,43 @@ def _lines(html: str) -> list:
     return [x.strip() for x in _w._visible_text(html).splitlines()]
 
 
-def per_setting_values(lines: list, labels: tuple, unit: str) -> dict:
-    """設定ごとの値が並ぶ表を読む。★単位が合う値だけ採る★
+def per_setting_from_tables(html: str, columns: tuple, unit: str) -> dict:
+    """設定ごとの値を、表の「列見出し」で対応づけて読む。
 
-    サイトによって並びが違うので、両方の形に対応する。
+    ★行の走査をやめた理由★（2026-08-03・Codex59回目）
+      P-WORLDの実在表「設定|CZ合成|AT初当り確率」は同単位の2列が並ぶ。
+      「設定行の後で最初に単位が合う値」を採る旧方式では、
+      CZ合成の確率をAT初当り確率として採れた（列を区別できない）。
+      また見出しから80行の走査は、間に挟まる別の表（CZ確率）まで
+      読めた。表単位＋列見出しの対応なら、どちらも起きない。
 
-      形A（P-WORLD）      形B（ちょんぼりすた）
-        AT確率              AT確率・機械割
-        設定1                設定 / AT / 出玉率
-        1/498.7             設定1
-        設定2                1/498.7   ← AT確率
-        1/477.8             97.3%     ← 出玉率（同じ設定の行に2つ並ぶ）
-
-    ★どちらの形でも「単位が合う値」だけを採る★
-      形Bでは設定1の下に確率と出玉率が並ぶので、
-      単位で選り分けないと取り違える（実際に一度やった）。
+    実在の形（2026-08-03・実ページで確認）:
+      P-WORLD       設定|CZ合成|AT初当り確率
+      ちょんぼりすた 設定|AT|出玉率
     """
     best: dict = {}
-    for i, line in enumerate(lines):
-        if line not in labels:
+    for tb in _ht.tables(html):
+        rows = tb.get("rows") or []
+        if len(rows) < 2 or not rows[0]:
             continue
-        got: dict = {}
-        for j in range(i + 1, min(i + 80, len(lines))):
-            if lines[j] in labels and j > i + 1:
-                break
-            m = _SETTING_RE.match(lines[j])
-            if not m:
+        header = [" ".join(str(c).split()) for c in rows[0]]
+        if header[0] != "設定":
+            continue                      # 設定ごとの表ではない
+        for ci in range(1, len(header)):
+            if header[ci] not in columns:
                 continue
-            # ★設定の行の後ろを数行見て、単位が合う最初の値を採る★
-            #   次の「設定N」に当たったらそこで打ち切る。
-            for k in range(j + 1, min(j + 5, len(lines))):
-                if _SETTING_RE.match(lines[k]):
-                    break
-                if _ci.normalize_value(lines[k], unit) is not None:
-                    got.setdefault(m.group(1), lines[k])
-                    break
-        if len(got) > len(best):
-            best = got
+            got: dict = {}
+            for r in rows[1:]:
+                if not r or len(r) <= ci:
+                    continue
+                m = _SETTING_RE.match(" ".join(str(r[0]).split()))
+                if not m:
+                    continue
+                v = " ".join(str(r[ci]).split())
+                if _ci.normalize_value(v, unit) is not None:
+                    got.setdefault(m.group(1), v)
+            if len(got) > len(best):
+                best = got
     return best
 
 
@@ -253,7 +258,7 @@ def read_page(url: str, official_name: str) -> dict:
     lines = _lines(html)
     for key, spec in FIELDS.items():
         if spec["kind"] == "per_setting":
-            v = per_setting_values(lines, spec["labels"], spec["unit"])
+            v = per_setting_from_tables(html, spec["columns"], spec["unit"])
         else:
             v = single_value(lines, spec["labels"], spec["kind"])
         if v:
@@ -346,16 +351,43 @@ def selftest() -> int:
         results.append((name, bool(cond)))
         print(("✅" if cond else "❌") + " " + name)
 
-    L = ["AT確率", "設定1", "1/498.7", "設定2", "1/477.8",
-         "出玉率", "設定1", "97.8%", "設定2", "98.5%"]
-    t("★項目ごとに正しい表を読む★",
-      per_setting_values(L, ("AT確率",), "1/x") == {"1": "1/498.7", "2": "1/477.8"}
-      and per_setting_values(L, ("出玉率",), "%") == {"1": "97.8%", "2": "98.5%"})
+    # ★実在の2形（P-WORLD 3列・ちょんぼりすた 3列）を列見出しで読む★
+    HP = ("<h3>CZ/AT確率</h3><table>"
+          "<tr><th>設定</th><th>CZ合成</th><th>AT初当り確率</th></tr>"
+          "<tr><td>設定1</td><td>1/395.7</td><td>1/498.7</td></tr>"
+          "<tr><td>設定2</td><td>1/394.8</td><td>1/477.8</td></tr>"
+          "<tr><td>設定L</td><td>調査中</td><td>調査中</td></tr></table>")
+    t("★★同じ表の同単位2列（CZ合成|AT初当り確率）を列見出しで区別する★★"
+      "（行の走査ではCZ合成をAT確率として採れた・P-WORLD実在形・Codex59回目）",
+      per_setting_from_tables(HP, ("AT初当り確率",), "1/x")
+      == {"1": "1/498.7", "2": "1/477.8"}
+      and per_setting_from_tables(HP, ("CZ合成",), "1/x")
+      == {"1": "1/395.7", "2": "1/394.8"})
+    HC = ("<h3>AT確率・機械割</h3><table>"
+          "<tr><th>設定</th><th>AT</th><th>出玉率</th></tr>"
+          "<tr><td>設定1</td><td>1/498.7</td><td>97.8%</td></tr>"
+          "<tr><td>設定2</td><td>1/477.8</td><td>98.5%</td></tr></table>")
+    t("★項目ごとに正しい列を読む★（ちょんぼりすた実在形）",
+      per_setting_from_tables(HC, ("AT",), "1/x")
+      == {"1": "1/498.7", "2": "1/477.8"}
+      and per_setting_from_tables(HC, ("出玉率",), "%")
+      == {"1": "97.8%", "2": "98.5%"})
     t("★★単位が合わない値は採らない★★"
       "（出玉率の欄に確率を拾った実際の事故）",
-      per_setting_values(["出玉率", "設定1", "1/498.7"], ("出玉率",), "%") == {})
+      per_setting_from_tables(
+          "<table><tr><th>設定</th><th>出玉率</th></tr>"
+          "<tr><td>設定1</td><td>1/498.7</td></tr></table>",
+          ("出玉率",), "%") == {})
     t("　設定の行が無ければ何も採らない",
-      per_setting_values(["AT確率", "備考", "なし"], ("AT確率",), "1/x") == {})
+      per_setting_from_tables(
+          "<table><tr><th>設定</th><th>AT</th></tr>"
+          "<tr><td>備考</td><td>なし</td></tr></table>", ("AT",), "1/x") == {})
+    t("★★見出しの後の別の表（CZ確率）まで走査しない★★（Codex59回目）",
+      per_setting_from_tables(
+          "<h3>AT確率</h3><p>調査中</p><h3>CZ確率</h3>"
+          "<table><tr><th>設定</th><th>CZ確率</th></tr>"
+          "<tr><td>設定1</td><td>1/395.7</td></tr></table>",
+          ("AT初当り確率", "AT確率", "AT"), "1/x") == {})
 
     t("★★波ダッシュの字が違っても同じ範囲として扱う★★（実データの差）",
       normalize_range("97.3% ~ 112.5%") == normalize_range("97.3% 〜 112.5%")

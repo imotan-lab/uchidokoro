@@ -42,11 +42,15 @@ def tables(html: str) -> list:
     out = []
     for m in re.finditer("(?is)<table[^>]*>(.*?)</table" + _S + ">", html or ""):
         body = m.group(1)
-        pairs, cells = [], []
+        pairs, cells, rows = [], [], []
         for row in re.finditer("(?is)<tr[^>]*>(.*?)</tr" + _S + ">", body):
             got = [_text(c) for c in re.findall(
                 "(?is)<t[hd][^>]*>(.*?)</t[hd]" + _S + ">", row.group(1))]
             cells.extend(got)
+            # ★全列を rows に残す★（2026-08-03・Codex59回目）
+            #   pairs は(左,右)の2列しか持たず、P-WORLDの「CZ/AT確率」のような
+            #   3列の表（設定|CZ合成|AT初当り確率）の3列目が読めなかった。
+            rows.append(got)
             if len(got) >= 2:
                 pairs.append((got[0], got[1]))
         # ★この表の直前にある見出しだけを名前の候補にする★
@@ -54,7 +58,8 @@ def tables(html: str) -> list:
         heads = re.findall("(?is)<h[1-6][^>]*>(.*?)</h[1-6]" + _S + ">", before)
         caps = re.findall("(?is)<caption[^>]*>(.*?)</caption" + _S + ">", body)
         title = _text(caps[-1]) if caps else (_text(heads[-1]) if heads else "")
-        out.append({"title": title, "pairs": pairs, "cells": cells})
+        out.append({"title": title, "pairs": pairs, "cells": cells,
+                    "rows": rows})
     return out
 
 

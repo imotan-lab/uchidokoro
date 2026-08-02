@@ -1390,36 +1390,43 @@ def _recover(apply_it: bool = False) -> dict:
                 with open(held, encoding="utf-8") as f:
                     if _sha(f.read()) != want:
                         bad.append(rel)
+    def _undo_held():
+        """退避したファイルを全部原位置へ戻す（何も消さなかったことにする）。"""
+        for rel_, full_, held_, _w2 in held_map:
+            try:
+                os.replace(held_, full_)
+            except OSError as e:          # noqa: BLE001
+                out["problems"].append(
+                    f"★{rel_} を戻せませんでした（{held_} に退避したまま）: {e}★")
+
+    if apply_it:
         if grab_fail or bad:
-            for rel, full, held, _w_ in held_map:
-                try:
-                    os.replace(held, full)    # ★全部戻す（何も消さない）★
-                except OSError as e:          # noqa: BLE001
-                    out["problems"].append(
-                        f"★{rel} を戻せませんでした（{held} に退避したまま）: {e}★")
+            _undo_held()
             for rel in bad:
                 out["kept"].append(rel)
                 out["problems"].append(
                     f"★{rel} は作ったときと中身が違います（誰かが直した可能性）。"
                     "何も消さずに止めました。人が確かめてください★")
             return out
+        # ★退避物はまだ消さない★（2026-08-03・Codex59回目）
+        #   一覧の行・早見表・監査まで成功した最後に消す。
+        #   途中の失敗では _undo_held() で全部戻せるようにしておく
+        #   （消してしまうと、目印に本文が無いので自動では戻せない）。
         for rel, full, held, _w_ in held_map:
-            os.remove(held)
             out["restored"].append(rel)
     if out["kept"]:
         return out                        # ★1つでも判断がつかなければ進まない★
-    d = os.path.join(BASE, "machines", slug)
-    if os.path.isdir(d) and not os.listdir(d):
-        out["todo"].append(f"消す: machines/{slug}/")
-        if apply_it:
-            os.rmdir(d)
 
     # ② 一覧から今回の1件だけを外す（★同じslugの行だけ・1件だけ★）
     rows = _sj.read_rows(MACHINES)
+    with open(MACHINES, encoding="utf-8") as f:
+        machines_text_before = f.read()   # ★失敗したら戻すための正本★
     hit = [i for i, m in enumerate(rows) if m.get("slug") == slug]
     if len(hit) > 1:
+        _undo_held()
         out["problems"].append(
-            f"★一覧に {slug} が {len(hit)} 件あります。手で確かめてください★")
+            f"★一覧に {slug} が {len(hit)} 件あります。何も消さずに戻しました。"
+            "手で確かめてください★")
         return out
     if hit:
         # ★行の中身が作ったときと同じ時だけ外す★（2026-07-31・Codex12回目）
@@ -1428,10 +1435,12 @@ def _recover(apply_it: bool = False) -> dict:
         want_row = (created or {}).get(f"machines.json#{slug}")
         now_row = _sha(json.dumps(rows[hit[0]], ensure_ascii=False, sort_keys=True))
         if want_row and now_row != want_row:
+            _undo_held()
             out["kept"].append(f"machines.json#{slug}")
             out["problems"].append(
                 f"★一覧の {slug} の行が、足したときと中身が違います"
-                "（誰かが直した可能性）。外さずに残しました。人が確かめてください★")
+                "（誰かが直した可能性）。何も消さずに戻しました。"
+                "人が確かめてください★")
             return out
         out["todo"].append(f"一覧から外す: {slug}")
         if apply_it:
@@ -1440,15 +1449,34 @@ def _recover(apply_it: bool = False) -> dict:
                                               indent=1) + chr(10))
             out["restored"].append("assets/data/machines.json")
 
+    def _undo_all():
+        """一覧の行と退避物を元へ戻し、早見表も元データで作り直す。"""
+        write_atomic(MACHINES, machines_text_before)
+        _undo_held()
+        try:
+            for rel_, html_ in build_hubs().items():
+                full_ = os.path.join(BASE, rel_)
+                with open(full_, encoding="utf-8") as f_:
+                    if f_.read() != html_:
+                        write_atomic(full_, html_)
+        except Exception as e:            # noqa: BLE001
+            out["problems"].append(f"★早見表を元に戻せませんでした: {e}★")
+
     # ③ 早見表を、いまのデータから作り直す
     if apply_it:
-        for rel, html in build_hubs().items():
-            full = os.path.join(BASE, rel)
-            with open(full, encoding="utf-8") as f:
-                same = (f.read() == html)
-            if not same:
-                write_atomic(full, html)
-                out["restored"].append(rel)
+        try:
+            for rel, html in build_hubs().items():
+                full = os.path.join(BASE, rel)
+                with open(full, encoding="utf-8") as f:
+                    same = (f.read() == html)
+                if not same:
+                    write_atomic(full, html)
+                    out["restored"].append(rel)
+        except Exception as e:            # noqa: BLE001
+            _undo_all()
+            out["problems"].append(
+                f"★早見表の作り直しに失敗したため、全部元に戻しました: {e}★")
+            return out
     else:
         out["todo"].append("早見表4ページを作り直す")
 
@@ -1458,14 +1486,36 @@ def _recover(apply_it: bool = False) -> dict:
         #   消す前に回すと自分の目印を自分で見つけて永久に詰まる。
         ng = [x for x in run_site_audit() if "33_" not in x]
         if ng:
+            _undo_all()
             out["problems"] += ng
             out["problems"].append(
-                "★戻したあとも監査に落ちています。目印は消しません★")
+                "★戻したあとの監査に落ちたため、全部元に戻しました。"
+                "目印は消しません★")
             return out
+        # ★一覧・早見表・監査まで成功して、初めて退避物を消す★
+        #   （2026-08-03・Codex59回目。先に消すと、後段の失敗で
+        #     「先に消したファイルだけ自動復元できない」中途半端が残った）
+        _del_fail = []
+        for rel, full, held, _w_ in held_map:
+            try:
+                os.remove(held)
+            except OSError as e:          # noqa: BLE001
+                _del_fail.append(f"{held}（{e}）")
+        if _del_fail:
+            out["problems"].append(
+                "★退避物を消せませんでした（復旧自体は完了・目印は残します）: "
+                + " / ".join(_del_fail)[:200] + "★")
+            return out
+        d = os.path.join(BASE, "machines", slug)
+        if os.path.isdir(d) and not os.listdir(d):
+            os.rmdir(d)
         mark_done()                       # ★最後の操作★（Codex11回目の助言）
         out["restored"].append("（目印を消しました）")
         _clear_stale_push_marker(slug, out)
     else:
+        d = os.path.join(BASE, "machines", slug)
+        if os.path.isdir(d):
+            out["todo"].append(f"消す: machines/{slug}/（空になった時）")
         out["todo"].append("同じ機種のコミット前push待ちの目印があれば消す")
     return out
 
@@ -1764,7 +1814,7 @@ def selftest() -> int:
     t("★★確かめてから消すまでの隙間をなくす★★"
       "（読む→一致→消すの間に人が直すと、その編集ごと消える）",
       "os.replace(full, held)" in inspect.getsource(_recover)
-      and "os.replace(held, full)" in inspect.getsource(_recover))
+      and "os.replace(held_, full_)" in inspect.getsource(_recover))
     t("★★作る前に『これから作る』を目印へ残す★★"
       "（作ってから書く形だと、その隙間で落ちた残骸を特定できない）",
       "planned" in inspect.getsource(mark_start))
@@ -1784,7 +1834,12 @@ def selftest() -> int:
     t("★★ファイルの削除も全部を確保・検証してから（全か無か）★★"
       "（2件目の指紋違いで1件目だけ消え404を自作できた・Codex58回目）",
       "held_map" in inspect.getsource(_recover)
-      and "全部戻す" in inspect.getsource(_recover))
+      and "_undo_held" in inspect.getsource(_recover))
+    t("★★退避物を消すのは一覧・早見表・監査の成功後だけ★★"
+      "（先に消すと後段の失敗で自動復元できない・Codex59回目）",
+      "_undo_all" in inspect.getsource(_recover)
+      and "初めて退避物を消す" in inspect.getsource(_recover)
+      and "machines_text_before" in inspect.getsource(_recover))
     t("★★外部の材料JSONからは公開（--apply）できない★★"
       "（出典の再検証を通らない値を記事化できた・Codex58回目）",
       "外部の材料JSONからの公開" in inspect.getsource(main)
