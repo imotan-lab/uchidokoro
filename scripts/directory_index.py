@@ -54,17 +54,62 @@ _TITLE_TAIL = ("設定判別", "解析まとめ", "終了画面", "徹底解説"
                "やめどき", "ヤメ時", "ゾーン", "スペック", "期待値", "情報",
                "設置店", "掲示板", "初打ち", "機械割", "スロット", "パチスロ",
                "スマスロ", "新台", "天井", "解析", "まとめ", "攻略", "示唆",
-               "評価", "考察")
+               "評価", "考察",
+               # DMMのカードの飾り（2026-08-03・実データ）
+               "導入開始日", "導入予定日", "導入日", "掲載準備中", "準備中",
+               "掲載", "予定")
 # 飾り語どうしをつなぐ記号・助詞（これだけが残るなら「飾りだけの塊」とみなす）
 _TAIL_JOINERS = set("・、/｜|()（） 　をとのー:：!！?？")
+# 日付・曜日の文字（DMMのカードの「導入開始日:2026年09月07日（月）予定」用）
+_DATE_CHARS = set("0123456789年月日火水木金土")
+
+_MAKER_WORDS = None
+
+
+def _maker_word_cores() -> set:
+    """★名簿にあるメーカーの言い方すべての芯★（2026-08-03・DMM実データ）
+
+    DMMのカードは機種名の後ろにメーカー名（オリンピア等）を書く。
+    名簿の name / id / directory_names を飾りとして落とせるようにする。
+    """
+    global _MAKER_WORDS
+    if _MAKER_WORDS is None:
+        out = set()
+        try:
+            got = _sj.read_json(os.path.join(BASE, "assets", "data",
+                                             "maker-catalogs.json"),
+                                expect=dict)
+            for mid, c in (got.get("catalogs") or {}).items():
+                if not isinstance(c, dict):
+                    continue
+                for w in [c.get("name") or "", mid] + list(
+                        c.get("directory_names") or []):
+                    core = _ci.normalize_core(str(w))
+                    if core:
+                        out.add(core)
+        except Exception:                 # noqa: BLE001
+            pass
+        _MAKER_WORDS = out
+    return _MAKER_WORDS
 
 
 def _decor_only(token: str) -> bool:
-    """その塊（空白なし）が記事タイトルの飾りだけでできているか。"""
+    """その塊（空白なし）が記事タイトルの飾りだけでできているか。
+
+    ★DMMのカードの形も飾りと数える★（2026-08-03・実データで確認）
+      「オリンピア」（名簿のメーカー名）・「機械割:」・「掲載準備中」・
+      「導入開始日:2026年09月07日（月）予定」。これらが落ちないと
+      芯が伸びて、実在の新台（青ブタ）がDMMで照合不能だった。
+    """
+    if not token:
+        return False
+    if _ci.normalize_core(token) in _maker_word_cores():
+        return True                       # メーカー名の塊
     t = token
     for w in sorted(_TITLE_TAIL, key=len, reverse=True):
         t = t.replace(w, " ")
-    return bool(token) and all(ch in _TAIL_JOINERS or ch == " " for ch in t)
+    return all(ch in _TAIL_JOINERS or ch == " " or ch in _DATE_CHARS
+               for ch in t)
 
 STATES = ("FOUND", "HEALTHY_NO_MATCH", "AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY")
 
@@ -231,6 +276,15 @@ def selftest() -> int:
     t("　ベタ付きの飾りは2語以上の時だけ剥がす",
       anchor_core("Lすーぱぁびん娘新台天井設定判別") == _ci.normalize_core("Lすーぱぁびん娘")
       and anchor_core("Lアニマルスロット") == _ci.normalize_core("Lアニマルスロット"))
+    t("★★DMMのカードの形（メーカー名・機械割・導入開始日つき）を読める★★"
+      "（実在の青ブタがDMMで照合不能＝名鑑1票のまま12回止まっていた・2026-08-03実データ）",
+      anchor_core("L青春ブタ野郎はバニーガール先輩の夢を見ない オリンピア "
+                  "機械割: 掲載準備中 導入開始日:2026年09月07日（月）予定")
+      == _ci.normalize_core("L青春ブタ野郎はバニーガール先輩の夢を見ない"))
+    t("　メーカー名だけ・日付だけの塊は飾り扱い（機種名は消えない）",
+      anchor_core("オリンピア 機械割: 導入開始日:2026年09月07日") == ""
+      and anchor_core("Lアニマルスロット ドッチ オリンピア")
+      == _ci.normalize_core("Lアニマルスロット ドッチ"))
 
     HTML = ('<a href="/slot/belko-slot/260918/">2026年5月22日 Lすーぱぁびん娘 スロット 新台</a>'
             '<a href="/slot/belko-slot/111111/">Lスーパービンゴネオ スロット 解析</a>'

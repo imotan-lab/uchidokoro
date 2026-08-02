@@ -249,7 +249,14 @@ def read_page(url: str, official_name: str) -> dict:
     # ★天井の話がありそうなのに1つも採れないなら OK と言わない★（Codex指摘・再現済み）
     #   採れなかったことを「天井が無い」と読まれると、
     #   別の出典だけで採用してしまう。
-    looks = any(w in text for w in ("天井", "ゲーム数天井", "周期天井"))
+    # ★SEO用の題の行は数えない★（2026-08-03・青ブタ実データ）
+    #   P-WORLDの未導入ページは本文がまだ無く、題の「…天井 初打ち…」だけで
+    #   「記述はあるが採れない（要確認）」の誤警報になっていた。
+    _title_line = _w.page_title(html).strip()
+    _body = [ln for ln in text.splitlines()
+             if ln.strip() and ln.strip() != _title_line]
+    looks = any(w in ln for ln in _body
+                for w in ("天井", "ゲーム数天井", "周期天井"))
     if looks and not got:
         out["ok"], out["reason"] = False, "天井の記述はあるが採れませんでした（要確認）"
         return out
