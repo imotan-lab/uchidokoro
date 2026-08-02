@@ -176,7 +176,11 @@ def read_page(url: str, official_name: str) -> dict:
     except Exception as e:
         out["reason"] = f"取得できません: {e}"
         return out
-    ok, why = _mc.page_is_machine(html, official_name)
+    # ★材料の照合も厳格側で★（2026-08-02・Codex55回目。緩い側だと
+    #   「機種名 新台 BLACK」のような未知の版名が装飾語の後ろで通り、
+    #   別バージョンの値を2媒体一致で採用できた）
+    ok, why = _mc.page_is_machine(html, official_name,
+                                  strict_all_tail=True)
     if not ok:
         out["reason"] = why
         return out

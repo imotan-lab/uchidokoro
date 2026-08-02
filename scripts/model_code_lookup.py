@@ -271,8 +271,17 @@ def page_is_machine(html: str, official_name: str,
     #   h1は正式名そのもの（実ページ3件で確認）。h1にも題と**同じ**
     #   厳格検査を通す（DMMのh1はSEO文言込みなので、緩めない）。
     #   前後の検査は各ソースの中で閉じる（題の飾りをh1に持ち込まない）。
+    # ★h1を使うのは「可視のh1が1本だけ」の時に限る★（2026-08-02・Codex55回目）
+    #   複数のh1があると、別機種の題のページでも節のh1の1本が一致すれば
+    #   本人にできた。実在の名鑑（P-WORLD・DMM）はh1が1本（実ページで確認）。
+    #   2本以上ならh1は根拠にせず、題だけで判定する（安全側）。
+    #   CSSクラスで隠したh1は静的には見抜けないが、この規則により
+    #   「h1を足す」細工はh1経路を無効にする方向にしか働かない。
+    _h1s = _w._visible_h1s(html)
+    if len(_h1s) != 1:
+        _h1s = []
     cands = []
-    for _src in _w._visible_h1s(html) + [title]:
+    for _src in _h1s + [title]:
         _segs = title_parts(_src)
         cands.append((_src, [], []))
         _seen = []
@@ -961,6 +970,15 @@ def selftest() -> int:
                           "<h1>スマスロ やじきた道中記参る!</h1>",
                           "スマスロ やじきた道中記参る!",
                           strict_all_tail=True)[0] is True)
+    t("★★h1が2本以上なら、h1は同定の根拠にしない★★"
+      "（節のh1の1本一致で別機種ページを本人にできた・Codex55回目）",
+      page_is_machine("<title>L別機種</title><h1>L別機種</h1>"
+                      "<section><h1>L対象機</h1></section>",
+                      "L対象機", strict_all_tail=True)[0] is False)
+    t("★★材料の緩い照合でも未知の版名（BLACK）は通さない★★"
+      "（材料4モジュールをstrictへ・Codex55回目）",
+      page_is_machine("<title>L対象機 新台 BLACK | 解析サイトA</title>",
+                      "L対象機", strict_all_tail=True)[0] is False)
     t("　h1が別機種・派生機なら通さない（隠しh1も数えない）",
       page_is_machine("<title>Lすーぱぁびん娘（SP） | P-WORLD</title>"
                       "<h1>Lすーぱぁびん娘SP</h1>",
