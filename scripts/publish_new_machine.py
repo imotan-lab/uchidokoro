@@ -1362,9 +1362,13 @@ def _recover(apply_it: bool = False) -> dict:
     #     「読む→一致→消す」の間に人が直すと、その編集ごと消える。
     #     先に別名へ動かしてしまえば、以降の編集は別のファイルに向かうので、
     #     動かしたものを確かめて消せば取り違えない。
+    # ★全部を確保・検証してから、初めて消す（全か無か）★（2026-08-03・
+    #   Codex58回目。1件ずつ検証・削除すると、2件目の指紋違いで止まった時
+    #   1件目だけが消えており、404や欠損記事を自分で作っていた）
+    held_map, grab_fail = [], False
     for rel, want in created.items():
         if rel.startswith("machines.json#"):
-            continue                      # 一覧の行は下の②で扱う
+            continue                      # 一覧の行は上と②で扱う
         full = os.path.join(BASE, rel)
         if not os.path.isfile(full):
             continue                      # 既に片付いている（何度走らせても平気）
@@ -1376,18 +1380,32 @@ def _recover(apply_it: bool = False) -> dict:
             os.replace(full, held)        # ★先に確保する（原子的）★
         except OSError as e:
             out["problems"].append(f"{rel} を確保できませんでした: {e}")
+            grab_fail = True
+            break
+        held_map.append((rel, full, held, want))
+    if apply_it:
+        bad = []
+        if not grab_fail:
+            for rel, full, held, want in held_map:
+                with open(held, encoding="utf-8") as f:
+                    if _sha(f.read()) != want:
+                        bad.append(rel)
+        if grab_fail or bad:
+            for rel, full, held, _w_ in held_map:
+                try:
+                    os.replace(held, full)    # ★全部戻す（何も消さない）★
+                except OSError as e:          # noqa: BLE001
+                    out["problems"].append(
+                        f"★{rel} を戻せませんでした（{held} に退避したまま）: {e}★")
+            for rel in bad:
+                out["kept"].append(rel)
+                out["problems"].append(
+                    f"★{rel} は作ったときと中身が違います（誰かが直した可能性）。"
+                    "何も消さずに止めました。人が確かめてください★")
             return out
-        with open(held, encoding="utf-8") as f:
-            now = _sha(f.read())
-        if now != want:
-            os.replace(held, full)        # ★戻す（人の編集を消さない）★
-            out["kept"].append(rel)
-            out["problems"].append(
-                f"★{rel} は作ったときと中身が違います（誰かが直した可能性）。"
-                "消さずに残しました。人が確かめてください★")
-            continue
-        os.remove(held)
-        out["restored"].append(rel)
+        for rel, full, held, _w_ in held_map:
+            os.remove(held)
+            out["restored"].append(rel)
     if out["kept"]:
         return out                        # ★1つでも判断がつかなければ進まない★
     d = os.path.join(BASE, "machines", slug)
@@ -1763,6 +1781,14 @@ def selftest() -> int:
       "（ページを消した後に行の食い違いで止まると中途半端が残る・Codex57回目）",
       "rows_pre" in inspect.getsource(_recover)
       and "何も消さずに" in inspect.getsource(_recover))
+    t("★★ファイルの削除も全部を確保・検証してから（全か無か）★★"
+      "（2件目の指紋違いで1件目だけ消え404を自作できた・Codex58回目）",
+      "held_map" in inspect.getsource(_recover)
+      and "全部戻す" in inspect.getsource(_recover))
+    t("★★外部の材料JSONからは公開（--apply）できない★★"
+      "（出典の再検証を通らない値を記事化できた・Codex58回目）",
+      "外部の材料JSONからの公開" in inspect.getsource(main)
+      and "apply_it=False" in inspect.getsource(main))
     t("★★失敗時の片付けは、片付け切れた時だけ目印を消す★★"
       "（残骸があるのに復旧の手がかりだけ失われた・Codex57回目）",
       "片付け切れて初めて" in inspect.getsource(_publish)
@@ -2127,10 +2153,21 @@ def main() -> int:
               "--maker <メーカーID> --official-url <公式URL> [--release YYYY-MM]")
         print("  （ふだんは add_machine_run.py --apply が中で呼びます）")
         return 1
+    # ★外部の材料JSONからは公開（--apply）できない★（2026-08-03・Codex58回目）
+    #   ファイルの中身は「2出典で確認済み」の再検証を通らないので、
+    #   誤ったJSONや手打ちの値をそのまま「出典2件で一致」として
+    #   記事化できてしまう。下見（--applyなし）だけ許し、
+    #   公開は材料収集から検証込みで行う add_machine_run.py --apply 経由に限る。
+    if args.apply:
+        print("★外部の材料JSONからの公開（--apply）はできません★")
+        print("  出典の再検証を通らない値を記事化できてしまうため、"
+              "このコマンドは下見（--applyなし）専用です。")
+        print("  公開は python scripts/add_machine_run.py --apply を使ってください。")
+        return 1
     material = _sj.read_json(args.material, expect=dict)
     res = publish_from_material(args.slug, args.name, args.maker,
                                 args.official_url, args.release or "",
-                                material, apply_it=args.apply)
+                                material, apply_it=False)
     if res["problems"]:
         print("★公開できません★")
         for p in res["problems"]:

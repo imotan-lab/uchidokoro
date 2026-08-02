@@ -98,9 +98,15 @@ def from_sentences(text: str) -> list:
     for rx in (_SENT_Q, _SENT):
         for m in rx.finditer(t):
             name = clean_name(m.group("name"))
-            if not name or norm_name(name) in seen:
+            # ★重複判定は (名前, G数, 期待度) の事実全体で★（2026-08-03・
+            #   Codex58回目。名前だけだと、同じ名前で別の値の2件目＝
+            #   ページ内の矛盾が先着順で消え、read_page の食い違い検査に
+            #   届かないまま最初の値が採用できた）
+            key = (norm_name(name), _norm(m.group("games")),
+                   _norm(m.group("rate")))
+            if not name or key in seen:
                 continue
-            seen.add(norm_name(name))
+            seen.add(key)
             out.append({"name": name, "games": _norm(m.group("games")),
                         "rate": _norm(m.group("rate")), "raw": m.group(0)[:110]})
     return out
@@ -306,6 +312,10 @@ def selftest() -> int:
       from_tables('<h3>CZ「x娘チャレンジ」</h3><table>'
                   "<tr><th>継続G数</th><td>4G</td></tr>"
                   "<tr><th>備考</th><td>なし</td></tr></table>") == [])
+    t("★★同じ名前で別の値の文を先着順で消さない★★"
+      "（2件目が矛盾検査に届かず最初の値を採用できた・Codex58回目）",
+      len(from_sentences("すぱ娘チャレンジは4G+α継続、成功期待度は約40%。"
+                         "すぱ娘チャレンジは10G継続、成功期待度は約60%。")) == 2)
     t("★★表の「平均50%以上」を「50%以上」として採る★★"
       "（ちょんぼりすた実在表・上位CZが1票扱いになり実機種で採れなかった・Codex57回目）",
       from_tables('<h3>上位CZ「クライMAXライブCHALLENGE」</h3><table>'
