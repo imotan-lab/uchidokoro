@@ -70,6 +70,13 @@ ALLOW_BASENAMES = {
 }
 # 日付つきタスクログ（例: new_machine_2026-07-16.log）
 ALLOW_LOG_RE = re.compile(r"^[a-z0-9_]+_\d{4}-\d{2}-\d{2}\.log$")
+# ★出典の裏取り証拠（claims）★（2026-08-03・台帳#202）
+#   命名は {slug}_{yyyymmdd}_{種別}.json（例: milliongod_kiseki_20260803_maker.json）。
+#   verify_claims の全関門通過を記録した唯一の裏取り証拠で、失うと再検証が要る。
+#   認証情報系（x_storage_*.json / gmail_config.json）は8桁日付の区切りが無いため
+#   この形には一致しない（selftestで凍結）。
+ALLOW_CLAIMS_RE = re.compile(
+    r"^[a-z0-9_]+_(?:\d{8}_[a-z0-9_]+|\d{4}-\d{2}-\d{2})\.json$")
 # 自動タスクの手順書（規約どおりの `{taskId}_SKILL.md`。2026-07-28に一般化）
 #   個別に列挙する方式だと、新しいタスクの手順書が黙ってバックアップされない
 #   （task-watchdog_SKILL.md が実際に拒否されていた）
@@ -214,7 +221,8 @@ def is_allowlisted(basename: str, src: str | None = None) -> bool:
     if (basename in ALLOW_BASENAMES
             or bool(ALLOW_LOG_RE.match(basename))
             or bool(ALLOW_CLAUDE_SNAPSHOT_RE.match(basename))
-            or bool(ALLOW_TASK_SKILL_RE.match(basename))):
+            or bool(ALLOW_TASK_SKILL_RE.match(basename))
+            or bool(ALLOW_CLAIMS_RE.match(basename))):
         return True
     return bool(src) and is_design_doc(src)
 
@@ -502,6 +510,14 @@ def selftest() -> int:
       is_allowlisted("task-watchdog_SKILL.md")
       and is_allowlisted("uchidokoro-quality-review_SKILL.md")
       and not is_allowlisted("secret_SKILL.mdx"))
+    t("★claims証拠（{slug}_{8桁日付}_{種別}.json）は許可（台帳#202）",
+      is_allowlisted("milliongod_kiseki_20260803_maker.json")
+      and is_allowlisted("hokuto_20260101_ceiling.json")
+      and is_allowlisted("issue27_yorumungando_2026-07-17.json"))
+    t("　★認証情報系はclaimsの形に一致しない（8桁日付の区切りが無い）★",
+      not is_allowlisted("x_storage_uchidokoro.json")
+      and not is_allowlisted("gmail_config.json")
+      and not is_allowlisted("state.json"))
     t("★_design 以外の場所の同名 .md は許可しない",
       not is_allowlisted("phase1_closure_conditions.md",
                          os.path.join(d, "phase1_closure_conditions.md")))
