@@ -254,9 +254,33 @@ def discover(persist: bool = True) -> dict:
             # ★初回でも「これから出る新台」は拾う★（2026-08-02・Codex36回目）
             #   監視開始時に既に載っていた新台を既知に沈めない。
             #   登場年月が新台の範囲のものだけ、通常の分類を通して待ち行列へ。
+            # ★初回に読めないURLが異常に多い時は待ち行列に入れない★（2026-08-03・台帳#210）
+            #   「一晩だけ読めなかった新台」と「メーカー側の障害（SSL全滅等）」を件数で区別する。
+            #   藤商事116件・オーイズミ29件の既存ラインナップが行列に入り、
+            #   本物の新台が最悪29晩後回しになる実害が出た。
+            #   境目は MAX_NEW_PER_SCAN（一晩に増えてよい新台の上限と同じ物差し）。
+            #   抑えたURLは基準として覚えたままにする（忘れると翌日145件が
+            #   「新しいURL」になり PARSE_SUSPECT で社ごと止まる）。
+            first_classified = []
             for url in (r.get("initial_urls") or []):
-                c = _nw.classify(url, None,
-                                 list_release=(r.get("hints") or {}).get(url))
+                first_classified.append(
+                    (url, _nw.classify(
+                        url, None,
+                        list_release=(r.get("hints") or {}).get(url))))
+            n_unreadable = sum(
+                1 for _u, c in first_classified
+                if (not c["ok"]) and retry_later(c["reasons"]))
+            too_many = n_unreadable > _nw.MAX_NEW_PER_SCAN
+            if too_many:
+                ex = next(" / ".join(c["reasons"])[:160]
+                          for _u, c in first_classified
+                          if (not c["ok"]) and retry_later(c["reasons"]))
+                out["problems"].append(
+                    f"{mid}: 初回一覧の {n_unreadable} 件が読めません"
+                    f"（多くても {_nw.MAX_NEW_PER_SCAN} 件のはず）＝"
+                    f"メーカー側の障害の疑い。待ち行列には入れず基準として"
+                    f"覚えるだけにします（例: {ex}）")
+            for url, c in first_classified:
                 kept0 = True
                 if c["ok"]:
                     out["candidates"].append({"maker": mid, **c})
@@ -268,7 +292,8 @@ def discover(persist: bool = True) -> dict:
                 elif retry_later(c["reasons"]):
                     # ★初回の晩だけ読めなかった将来の新台を沈めない★（Codex37回目）
                     #   取得失敗・メンテ・年月未掲載は明日には変わりうる。
-                    if persist:
+                    #   ただし件数が異常な時はメーカー側の障害＝行列に入れない（#210）。
+                    if persist and not too_many:
                         kept0 = _remember_url(
                             c.get("official_name") or "", url, mid,
                             (c.get("release") or {}).get("value") or "",
@@ -1976,6 +2001,11 @@ def selftest() -> int:
             t("★★初回に読めなかった将来の新台を沈めない★★（Codex37回目）",
               "初回に読めなかった" in inspect.getsource(discover)
               and "初回に残せなかったので" in inspect.getsource(discover))
+            t("★★初回に読めないURLが多すぎる時は行列に入れない★★"
+              "（メーカー側の障害と件数で区別・基準としては覚えたまま・台帳#210）",
+              "メーカー側の障害の疑い" in inspect.getsource(discover)
+              and "not too_many" in inspect.getsource(discover)
+              and "MAX_NEW_PER_SCAN" in inspect.getsource(discover))
             t("★★発見した時点で基準の題を控える★★"
               "（最初の再確認までの使い回しを見逃した・Codex30回目）",
               "known_titles" in inspect.getsource(discover)
