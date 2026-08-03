@@ -49,7 +49,6 @@ EXPECTED_NEEDS_EDIT = {
     "birdie_wing",
     "banchou4",
     "bandori",
-    "bofuri",
     "burning_express",
     "code_geass",
     "dark_haibi",
@@ -104,7 +103,7 @@ EXPECTED_PUBLIC = 120 - len(EXPECTED_NEEDS_EDIT) - len(EXPECTED_DISPLAY_FIX - EX
 #   ただし kaguya は依然 checker 全モードが止まる（rate45 の excellent=1200 が
 #   天井1100Gを超え、早見表が「1200G〜（天井1100G）」という到達できない行を作るため。
 #   数値の作り直しは Phase 2 の出典検証の仕事なので、いまは止めたままにする）。
-EXPECTED_CHECKER_MACHINES = 71
+EXPECTED_CHECKER_MACHINES = 72
 #   2026-07-27（25巡目）: 表示整合の要修正を止めたため 71機種131mode → 67機種123mode
 #     （当初10機種→UIが交換率別の狙い目をチェッカーから組み立てるようにして5機種解消）
 #   2026-07-27（24巡目）: 原稿に「公開できない表現」が残る41機種を編集待ちとして
@@ -112,7 +111,7 @@ EXPECTED_CHECKER_MACHINES = 71
 #     （編集が進めば EXPECTED_NEEDS_EDIT とともにこの数も戻る）
 #   2026-07-27（22巡目）: 0スルーの行が無い suru mode を止めたため 200 → 197
 #   （sao / bandori / hanma_baki。UIは0スルー入力を1スルーの閾値で判定していた）
-EXPECTED_CHECKER_MODES = 131
+EXPECTED_CHECKER_MODES = 133
 
 # ★公開slugの固定集合★ 件数だけだと「1件消えて1件増える」相殺を見逃すため、
 #   集合そのものを持つ。機種を増減したら意図した変更として更新すること。
