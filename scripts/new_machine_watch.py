@@ -374,6 +374,12 @@ def filter_slot_urls(html: str, base_url: str, link_prefix: str,
                 yield from _walk2(ch, h)
 
     slot_w = ("パチスロ", "スロット", "スマスロ", "回胴")
+    # ★ぱちんこの規格印（e/P/CR）で始まる名前はパチンコ機★（2026-08-03・藤商事実データ）
+    #   藤商事の全機種一覧はカードに「パチンコ」と書かず、
+    #   「ｅ魔女と野獣」「P〜」「CR 暴れん坊将軍」のように名前の頭の印だけで
+    #   種目が分かる。回胴機の印（L/S・パチスロ・スマスロ）と対になる決まりで、
+    #   L/S機がe/P/CRで始まることはない。
+    _pachi_mark = re.compile(r"^(?:CR(?![0-9A-Za-z])|[eEpP](?![0-9A-Za-z]))")
     pachi_only = set()
     for node in _walk2(p2.root):
         if node["tag"] != "a":
@@ -383,6 +389,12 @@ def filter_slot_urls(html: str, base_url: str, link_prefix: str,
             continue
         url = next(iter(u2))
         if url not in urls:
+            continue
+        _own = unicodedata.normalize("NFKC", " ".join(
+            _node_text(node).split()))
+        if _own and _pachi_mark.match(_own) \
+                and not any(w in _own for w in slot_w):
+            pachi_only.add(url)
             continue
         # ★そのリンク「だけ」を含む、いちばん近い種目語つきの範囲で判定する★
         #   先祖の文字を混ぜて広げると、平たいHTMLでは隣のカードの
@@ -1760,6 +1772,32 @@ def selftest() -> int:
            "https://m.example/pub/m/pachione/"])
       == (["https://m.example/pub/m/slotone/"],
           ["https://m.example/pub/m/pachione/"]))
+    t("★★ぱちんこの規格印（e/P/CR）で始まる名前を機種から外す★★"
+      "（藤商事実在形＝カードに「パチンコ」と書かず印だけで種目が分かる・2026-08-03）",
+      filter_slot_urls(
+          '<li><a href="https://m.example/products/eisekai/">ｅ異世界でチート能力</a></li>'
+          '<li><a href="https://m.example/products/pfairy/">P FAIRY TAIL</a></li>'
+          '<li><a href="https://m.example/products/crabare/">CR 暴れん坊将軍</a></li>'
+          '<li><a href="https://m.example/products/ltoaru/">スマスロ とある魔術の禁書目録2</a></li>'
+          '<li><a href="https://m.example/products/psword/">パチスロ 戦国†恋姫</a></li>',
+          "https://m.example/products/all/", "https://m.example/products/",
+          ["https://m.example/products/eisekai/",
+           "https://m.example/products/pfairy/",
+           "https://m.example/products/crabare/",
+           "https://m.example/products/ltoaru/",
+           "https://m.example/products/psword/"])
+      == (["https://m.example/products/ltoaru/",
+           "https://m.example/products/psword/"],
+          ["https://m.example/products/crabare/",
+           "https://m.example/products/eisekai/",
+           "https://m.example/products/pfairy/"]))
+    t("　CRUSH等のCR始まり英単語・L/S機は外さない",
+      filter_slot_urls(
+          '<li><a href="https://m.example/products/crush/">CRUSH FEVER</a></li>'
+          '<li><a href="https://m.example/products/lshin/">L真ウルトラマン</a></li>',
+          "https://m.example/products/all/", "https://m.example/products/",
+          ["https://m.example/products/crush/",
+           "https://m.example/products/lshin/"])[1] == [])
     t("★★脇の領域（aside）の導入月を本文にしない★★（Codex50回目）",
       release_month(_visible_text(
           "<h1>L新機種</h1><p>COMING SOON</p>"
