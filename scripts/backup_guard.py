@@ -601,14 +601,19 @@ def selftest() -> int:
     t("★_design配下でも .json は許可しない（巨大な作業データ）",
       not is_allowlisted("ledger_todo.json", os.path.join(des, "ledger_todo.json")))
     t("★タスク手順書は {taskId}_SKILL.md の形なら許可（列挙不要）",
-      is_allowlisted("CLAUDE_uchidokoro_precompress_2026-08-04b.md")
-      and is_allowlisted("CLAUDE_history_uchidokoro_2026-08-04.md")
-      and not is_allowlisted("CLAUDE_uchidokoro_backup.md")
-      and not is_allowlisted("CLAUDE_uchidokoro_2026-08-04.txt"))
-    t("バックアップ名: タスクのSKILLは許可・別名は不許可",
       is_allowlisted("task-watchdog_SKILL.md")
       and is_allowlisted("uchidokoro-quality-review_SKILL.md")
       and not is_allowlisted("secret_SKILL.mdx"))
+    # ★CLAUDE.mdの控えの名前★（2026-08-04〜。圧縮前の控えが取れなかったので追加）
+    t("バックアップ名: CLAUDEの控えは日付形式だけ許す",
+      is_allowlisted("CLAUDE_uchidokoro_precompress_2026-08-04b.md")
+      and is_allowlisted("CLAUDE_history_uchidokoro_2026-08-04.md")
+      and is_allowlisted("CLAUDE_history_uchidokoro_precompress_2026-08-04b.md")
+      and not is_allowlisted("CLAUDE_uchidokoro_backup.md")
+      and not is_allowlisted("CLAUDE_uchidokoro_2026-08-04.txt")
+      and not is_allowlisted("CLAUDE_uchidokoro_2026-8-4.md")
+      and not is_allowlisted("CLAUDE_uchidokoro_precompress_2026-08-04bb.md")
+      and not is_allowlisted("evil_CLAUDE_uchidokoro_2026-08-04.md"))
     _cl = lambda n: os.path.join(CLAIMS_DIR, n)      # noqa: E731
     t("★claims証拠（{slug}_{8桁日付}_{種別}.json）は許可（台帳#202）",
       is_allowlisted("milliongod_kiseki_20260803_maker.json",

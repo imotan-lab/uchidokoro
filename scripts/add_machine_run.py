@@ -823,8 +823,10 @@ def _machine_class(slug: str) -> str:
         for m in ms:
             if m.get("slug") == slug:
                 return _pdz.machine_class(m)
-    except Exception:                     # noqa: BLE001
-        pass
+    except Exception as e:                # noqa: BLE001
+        # ★止めないが、原因は残す★（2026-08-05・Codex99回目。
+        #   握りつぶすと「区分不明」になった理由が誰にも分からなかった）
+        _log(f"  コミット文の区分を読めません（{type(e).__name__}: {e}）")
     return "区分不明"
 
 
@@ -2817,6 +2819,29 @@ def selftest() -> int:
               _bad is None
               and not [f for f in os.listdir(globals()["EVIDENCE_DIR"])
                        if ".tmp" in f])
+            # ★コミット文に書く区分★（2026-08-05・Codex99回目）
+            t("　コミット文の区分: 実データから決まった区分を返す",
+              _machine_class(sorted(
+                  m["slug"] for m in _sj.read_json(
+                      os.path.join(BASE, "assets/data/machines.json"),
+                      expect=(dict, list)))[0]) in (
+                  "LEGACY_COMPLETE", "LEGACY_PREVIEW",
+                  "AUTO_INDEXABLE", "AUTO_PENDING"))
+            _real_ms = os.path.join(BASE, "assets/data/machines.json")
+            _ms_bak = _io.open(_real_ms, "rb").read()
+            try:
+                _io.open(_real_ms, "w", encoding="utf-8").write(json.dumps(
+                    [{"slug": "t1", "publication_policy": "page-decision/v1",
+                      "page_decision": {"schema_version": "page-decision/v1",
+                                        "indexable": False}}],
+                    ensure_ascii=False))
+                t("　コミット文の区分: 知らないslugは区分不明",
+                  _machine_class("nothing") == "区分不明")
+                _io.open(_real_ms, "w", encoding="utf-8").write("{壊れた")
+                t("★★コミット文の区分: 壊れていても止めず区分不明にする★★",
+                  _machine_class("t1") == "区分不明")
+            finally:
+                _io.open(_real_ms, "wb").write(_ms_bak)
             LIST_SNAPSHOT.pop("z", None)
             _nw.CATALOGS = real_cats
             globals()["EVIDENCE_DIR"] = real_evdir
