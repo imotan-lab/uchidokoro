@@ -69,6 +69,8 @@ def is_setting_only(machine: dict) -> bool:
 
 sys.path.insert(0, str(BASE / "scripts"))
 from build_new_article import PENDING_TEXT   # noqa: E402  ★未確認の文言（正本）★
+import html_check as _hc                     # noqa: E402
+import page_decision as _pd                  # noqa: E402
 
 
 def _load_detail(slug: str) -> dict:
@@ -78,6 +80,50 @@ def _load_detail(slug: str) -> dict:
         return json.loads(p_.read_text(encoding="utf-8"))
     except Exception:                     # noqa: BLE001
         return {}
+
+
+def _sig_of(html: str) -> list:
+    """描き直したHTMLのタグの並び（属性は見ない）。"""
+    import re as _re
+    return _re.findall(r"<([a-z0-9]+)", html)
+
+
+def judge_boxes(boxes: list, detail: dict) -> list[str]:
+    """最終DOMの箱が、記事データの契約どおりか（★ブラウザ無しで試験できる★）。
+
+    ★箱が0件でも合格にしない★（2026-08-04・Codex80回目の指摘1。
+      JSが箱を作らない不具合になっても素通りしていた）
+    ★通常の箱も中身と作りを照合する★（同指摘2。表を段落に潰す・本文を消す）
+    """
+    import build_machine_pages as _bmp
+    secs = [x for x in (detail.get("sections") or []) if isinstance(x, dict)]
+    if not secs:
+        return []                        # 記事データに節が無いページは対象外
+    want = [x.get("title") for x in secs]
+    got = [b.get("title") for b in boxes]
+    if got != want:
+        return [f"R13: 最終DOMの箱がデータと違います（{got} / {want} のはず）"]
+    ngs = []
+    for sec, b in zip(secs, boxes):
+        title = sec.get("title")
+        if not b.get("shown"):
+            ngs.append(f"R13: 箱が読者に見えていません: {title}")
+        if b.get("tag") != "div" or not b.get("has_cls"):
+            ngs.append(f"R13: 箱の作りが違います: {title} <{b.get('tag')}>")
+        if (b.get("heading") or "").strip() != title:
+            ngs.append(f"R13: 箱の見出しが違います: {title}")
+        rendered = _bmp.render_section(sec)
+        if b.get("sig") != _sig_of(rendered):
+            ngs.append(f"R13: 箱の中の作りが違います（表や段落が壊れています）: {title}")
+        want_text = "".join(_hc.visible_text("<body>" + rendered + "</body>").split())
+        if (b.get("text") or "") != want_text:
+            ngs.append(f"R13: 箱の中身がデータと違います: {title}")
+        body = [x for x in (sec.get("body") or []) if isinstance(x, str)]
+        if body == [PENDING_TEXT] and b.get("pending") != title:
+            ngs.append(f"R13: 未確認の箱に目印がありません: {title}")
+        if body != [PENDING_TEXT] and b.get("pending"):
+            ngs.append(f"R13: 中身がある箱に未確認の目印が付いています: {title}")
+    return ngs
 
 
 def check_one(page, machine: dict) -> list[str]:
@@ -206,47 +252,48 @@ def check_one(page, machine: dict) -> list[str]:
         ngs.append(f"R11: 表の列数不整合: {b}")
 
     # R13: 記事の箱が、読者の見る最終DOMでも契約どおりか
-    #   （2026-08-04・Codex79回目の指摘4。ページはJSで箱を作り直すので、
-    #     静的HTMLの契約が最終DOMまで保たれているかは別に確かめる必要がある）
-    #   ★computed style で本当に見えているかを見る★
+    #   （2026-08-04・Codex79〜80回目。ページはJSで箱を作り直すので、
+    #     静的HTMLの契約が最終DOMまで保たれているかを別に確かめる）
+    #   ★判定は judge_boxes()（純関数）に置く★＝ブラウザ無しで試験できる
     boxes = page.evaluate(r"""() => {
         const out = [];
         document.querySelectorAll('#articleSections [data-section]').forEach(el => {
             const st = getComputedStyle(el);
+            const r = el.getBoundingClientRect();
+            const head = el.querySelector(':scope > h3.article-title');
+            // ★この箱の作り（タグの並び）★＝表を段落に潰す等の改変を見つける
+            const sig = [el.tagName.toLowerCase()].concat(
+                Array.from(el.querySelectorAll('*')).map(x => x.tagName.toLowerCase()));
             out.push({
                 title: el.getAttribute('data-section'),
                 pending: el.getAttribute('data-pending-section'),
                 tag: el.tagName.toLowerCase(),
-                cls: el.className,
+                // ★クラスは「語」で見る★（article-item-broken を通さない）
+                has_cls: el.classList.contains('article-item'),
+                // ★見えないやり方は display だけではない★
                 shown: !(st.display === 'none' || st.visibility === 'hidden'
-                         || el.offsetParent === null),
-                heading: (el.querySelector('h3') || {}).textContent || '',
+                         || el.offsetParent === null
+                         || parseFloat(st.opacity || '1') < 0.05
+                         || (st.clipPath && st.clipPath !== 'none')
+                         || (st.clip && st.clip !== 'auto')
+                         || r.width < 1 || r.height < 1),
+                heading: head ? (head.textContent || '') : null,
+                sig: sig,
                 text: (el.textContent || '').replace(/\s+/g, ''),
             });
         });
         return out;
     }""")
-    if boxes:                       # 箱を持つのは新台経路のページだけ
-        want = [s.get("title") for s in (detail.get("sections") or [])]
-        got = [b["title"] for b in boxes]
-        if got != want:
-            ngs.append(f"R13: 最終DOMの箱がデータと違います（{got} / {want} のはず）")
-        for b in boxes:
-            if not b["shown"]:
-                ngs.append(f"R13: 箱が読者に見えていません: {b['title']}")
-            if b["tag"] != "div" or "article-item" not in (b["cls"] or ""):
-                ngs.append(f"R13: 箱の作りが違います: {b['title']} <{b['tag']}>")
-            if b["heading"].strip() != b["title"]:
-                ngs.append(f"R13: 箱の見出しが違います: {b['title']}")
-        for sec in (detail.get("sections") or []):
-            body = [x for x in (sec.get("body") or []) if isinstance(x, str)]
-            if body != [PENDING_TEXT]:
-                continue
-            hit = [b for b in boxes if b["title"] == sec.get("title")]
-            if not hit or hit[0]["pending"] != sec.get("title"):
-                ngs.append(f"R13: 未確認の箱に目印がありません: {sec.get('title')}")
-            elif hit[0]["text"] != (sec.get("title", "") + PENDING_TEXT).replace(" ", ""):
-                ngs.append(f"R13: 未確認の箱の中身が違います: {sec.get('title')}")
+    # ★契約は新台経路（page-decision/v1）だけ★（既存120機種は従来の作り）
+    try:
+        _is_auto = _pd.machine_class(machine) in ("AUTO_INDEXABLE",
+                                                  "AUTO_PENDING")
+    except Exception as e:                # noqa: BLE001
+        ngs.append(f"R13: 機種の区分を判定できません: {e}")
+        _is_auto = False
+    if _is_auto:
+        ngs += judge_boxes(boxes, detail)
+
 
     # R12: チェッカーと早見表のmode選択が同期しているか
     #   （2026-07-27 Codex閉鎖確認 #2: 別々に持っていたため
@@ -305,14 +352,90 @@ def check_one(page, machine: dict) -> list[str]:
     return ngs
 
 
+def selftest() -> int:
+    """★R13の判定を、ブラウザ無しで確かめる★（2026-08-04・Codex80回目の指摘5）
+
+    ブラウザから取る値（boxes）を手で組み立てて、判定関数だけを試す。
+    """
+    import build_machine_pages as _bmp
+    import build_new_article as _ba
+    ok_all, ran = True, [0]
+
+    def t(name, cond):
+        nonlocal ok_all
+        ran[0] += 1
+        ok_all = ok_all and bool(cond)
+        print(("✅" if cond else "❌") + " " + name)
+
+    mat = {"adopted": {"model_code": {"value": "L1"},
+                       "payout_range": {"value": {"low": 97, "high": 110}},
+                       "payout_rate": {"value": {"1": "97%", "6": "110%"}}},
+           "at_specs": {"adopted": [{"mode": "MAIN_AT", "games": 30,
+                                     "net": 2.8}]}}
+    det = _ba.build_detail("zzz", "試験機", "2026-09", mat)
+
+    def box_of(sec):
+        rendered = _bmp.render_section(sec)
+        body = [x for x in (sec.get("body") or []) if isinstance(x, str)]
+        return {"title": sec["title"],
+                "pending": sec["title"] if body == [PENDING_TEXT] else None,
+                "tag": "div", "has_cls": True, "shown": True,
+                "heading": sec["title"], "sig": _sig_of(rendered),
+                "text": "".join(_hc.visible_text(
+                    "<body>" + rendered + "</body>").split())}
+    good = [box_of(x) for x in det["sections"]]
+    t("★正しい最終DOMなら通る★", judge_boxes(good, det) == [])
+    t("★★箱が1つも無ければ止める★★"
+      "（JSが作らない不具合が素通りしていた・Codex80回目の指摘1）",
+      any("箱がデータと違います" in x for x in judge_boxes([], det)))
+    t("　順番が違えば止める",
+      any("箱がデータと違います" in x for x in
+          judge_boxes(list(reversed(good)), det)))
+    t("★★opacity等で見えなくしていたら止める★★",
+      any("見えていません" in x for x in
+          judge_boxes([{**good[0], "shown": False}] + good[1:], det)))
+    t("★★クラスが article-item-broken のような別物なら止める★★"
+      "（部分一致で通っていた・Codex80回目の指摘4）",
+      any("箱の作りが違います" in x for x in
+          judge_boxes([{**good[0], "has_cls": False}] + good[1:], det)))
+    t("　見出しが直下の h3.article-title でなければ止める",
+      any("見出しが違います" in x for x in
+          judge_boxes([{**good[0], "heading": None}] + good[1:], det)))
+    t("★★表を段落に潰したら止める★★（作りの並びで見る・指摘2）",
+      any("表や段落が壊れています" in x for x in judge_boxes(
+          [{**b, "sig": [x.replace("table", "p").replace("tr", "p")
+                         .replace("th", "p").replace("td", "p")
+                         for x in b["sig"]]} if b["title"] == "設定示唆まとめ"
+           else b for b in good], det)))
+    t("★★本文を消したら止める★★",
+      any("中身がデータと違います" in x for x in judge_boxes(
+          [{**b, "text": b["title"]} if b["title"] == "ゲーム性" else b
+           for b in good], det)))
+    t("　未確認の箱の目印が無ければ止める",
+      any("目印がありません" in x for x in judge_boxes(
+          [{**b, "pending": None} if b["pending"] else b for b in good], det)))
+    t("　中身がある箱に未確認の目印が付いていたら止める",
+      any("未確認の目印が付いています" in x for x in judge_boxes(
+          [{**b, "pending": b["title"]} if not b["pending"] else b
+           for b in good], det)))
+    t("　記事データに節が無いページは対象外（既存120機種を巻き込まない）",
+      judge_boxes([], {"sections": []}) == [])
+    print(f"{ran[0]}/{ran[0]} 合格" if ok_all else "不合格あり")
+    return 0 if ok_all else 1
+
+
 def main():
     global SITE_URL
     parser = argparse.ArgumentParser()
+    parser.add_argument("--selftest", action="store_true",
+                        help="R13の判定をブラウザ無しで試す")
     parser.add_argument("--slug", help="特定の1機種だけチェック")
     parser.add_argument("--limit", type=int, help="先頭N機種だけチェック")
     parser.add_argument("--json", action="store_true", help="JSON形式で結果を出力")
     parser.add_argument("--base-url", help="検査対象のベースURL（省略時は本番。ローカル検査は http://localhost:8000 等）")
     args = parser.parse_args()
+    if args.selftest:
+        return selftest()
 
     if args.base_url:
         SITE_URL = args.base_url.rstrip("/")
@@ -366,4 +489,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main() or 0)

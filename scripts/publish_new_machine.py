@@ -359,7 +359,8 @@ def check_pending_boxes(html: str, detail: dict) -> list:
     got_titles = [sec.get("title") for sec in secs]
     if got_titles != want_titles:
         return [f"記事の箱がそろっていません（{got_titles} / {want_titles} のはず）"]
-    if re.search(r"<[ 	]*style[ 	>/]", html, re.I):
+    if re.search("<[" + ' \t\n\r\x0c' + "]*style[" + ' \t\n\r\x0c' + ">/]",
+                 html, re.I):
         ng.append("ページに <style> があります（箱ごと隠せるので許しません）")
     # ★描き直した結果と、そのまま突き合わせる★
     want_html = "".join(_bmp.render_section(sec) for sec in secs)
