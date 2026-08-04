@@ -100,19 +100,41 @@ def _sig_of(html: str) -> list:
 
 # ★最終DOMから箱の情報を取り出すJS★（統合試験からも同じものを使う）
 BOX_JS = r"""() => {
-        // ★祖先までさかのぼって「本当に見えているか」を見る★
-        //   （2026-08-04・Codex81回目の指摘2。箱だけ見ていたので、
-        //     #articleSections 側を透明にされると気づけなかった）
+        // ★隠し方は display だけではない★（2026-08-04・Codex81〜82回目）
+        //   自分・祖先・**子孫**のどれで隠されても「見えていない」と扱う。
+        //   clip-path は「何も切り取らない指定」を隠しと数えない（誤検知防止）。
+        const noopClip = (v) => !v || v === 'none'
+            || /^inset\(\s*0(px|%)?(\s+0(px|%)?){0,3}\s*\)$/.test(v);
+        const hiddenSelf = (n) => {
+            const st = getComputedStyle(n);
+            return st.display === 'none' || st.visibility === 'hidden'
+                || parseFloat(st.opacity || '1') < 0.05
+                || !noopClip(st.clipPath)
+                || (st.clip && st.clip !== 'auto');
+        };
         const visible = (el) => {
             for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
-                const st = getComputedStyle(n);
-                if (st.display === 'none' || st.visibility === 'hidden') return false;
-                if (parseFloat(st.opacity || '1') < 0.05) return false;
-                if (st.clipPath && st.clipPath !== 'none') return false;
-                if (st.clip && st.clip !== 'auto') return false;
+                if (hiddenSelf(n)) return false;
             }
             const r = el.getBoundingClientRect();
             return el.offsetParent !== null && r.width >= 1 && r.height >= 1;
+        };
+        // ★見える文字は自分でたどって集める★
+        //   innerText は opacity:0 / clip-path の文字を残すので、
+        //   子を透明にするだけで検査を通せた（Codex82回目の指摘1）。
+        const shownText = (node) => {
+            let out = '';
+            node.childNodes.forEach(c => {
+                if (c.nodeType === 3) { out += c.nodeValue; return; }
+                if (c.nodeType !== 1) return;
+                if (['script', 'style', 'template'].includes(
+                        c.tagName.toLowerCase())) return;
+                if (c.hasAttribute('hidden')
+                    || c.getAttribute('aria-hidden') === 'true') return;
+                if (hiddenSelf(c)) return;
+                out += shownText(c);
+            });
+            return out;
         };
         const out = [];
         document.querySelectorAll('#articleSections [data-section]').forEach(el => {
@@ -127,8 +149,7 @@ BOX_JS = r"""() => {
                 shown: visible(el),
                 heading: head ? (head.textContent || '') : null,
                 sig: sig,
-                // ★innerText で読む★＝隠された子（hidden 等）の文字は入らない
-                text: (el.innerText || '').replace(/\s+/g, ''),
+                text: shownText(el).replace(/\s+/g, ''),
             });
         });
         return out;
@@ -147,10 +168,11 @@ def judge_boxes(boxes: list, detail) -> list[str]:
     want = list(_ba.SECTION_ORDER) + [_ba.RUMOR_SECTION["title"]]
     if not isinstance(detail, dict):
         return ["R13: 記事データを読めません（新台経路のページなのに中身が無い）"]
+    # ★箱だけの骨組み（本文が空）も止める★（Codex82回目の指摘2）
+    bad = _ba.article_contract_problems(detail)
+    if bad:
+        return ["R13: " + x for x in bad]
     secs = [x for x in (detail.get("sections") or []) if isinstance(x, dict)]
-    if [x.get("title") for x in secs] != want:
-        return [f"R13: 記事データの箱が契約と違います"
-                f"（{[x.get('title') for x in secs]} / {want} のはず）"]
     got = [b.get("title") for b in boxes]
     if got != want:
         return [f"R13: 最終DOMの箱がデータと違います（{got} / {want} のはず）"]
@@ -432,6 +454,34 @@ def selftest_dom() -> int:
             clp = pg.evaluate(BOX_JS)
             t("　祖先を clip-path で切り抜いても止める",
               any("見えていません" in x for x in judge_boxes(clp, det)))
+            # ★子だけを透明にする★（2026-08-04・Codex82回目の指摘1）
+            pg.set_content(page_of(body_extra=(
+                "<style>#articleSections [data-section] > *"
+                "{opacity:0}</style>")))
+            ch1 = pg.evaluate(BOX_JS)
+            t("★★子を opacity:0 で消したら止める★★（innerTextでは残っていた）",
+              any("中身がデータと違います" in x for x in judge_boxes(ch1, det)))
+            pg.set_content(page_of(body_extra=(
+                "<style>#articleSections [data-section] > *"
+                "{clip-path:inset(100%)}</style>")))
+            ch2 = pg.evaluate(BOX_JS)
+            t("★★子を clip-path で切り抜いても止める★★",
+              any("中身がデータと違います" in x for x in judge_boxes(ch2, det)))
+            # ★何も切り取らない clip-path で誤検知しない★（Codex82回目・厚み）
+            pg.set_content(page_of(wrap_style=' style="clip-path:inset(0)"'))
+            ok2 = pg.evaluate(BOX_JS)
+            t("　clip-path:inset(0)（何も隠さない指定）では止めない",
+              judge_boxes(ok2, det) == [])
+            # ★骨組みだけの記事データは止める★（Codex82回目の指摘2）
+            import build_new_article as _ba2
+            skel = {"slug": "zzz",
+                    "sections": [{"title": x, "body": []}
+                                 for x in _ba2.SECTION_ORDER]
+                    + [{"title": _ba2.RUMOR_SECTION["title"], "body": []}]}
+            pg.set_content(page_of())
+            t("★★タイトルだけ残して本文が空の記事データは止める★★",
+              any("中身がありません" in x for x in
+                  judge_boxes(pg.evaluate(BOX_JS), skel)))
         finally:
             b.close()
     print(f"{ran[0]}/{ran[0]} 合格" if ok_all else "不合格あり")
@@ -506,7 +556,14 @@ def selftest() -> int:
            for b in good], det)))
     t("★★新台なのに記事データが空なら不合格★★"
       "（対象外にしていた＝fail-open・Codex81回目の指摘3）",
-      any("契約と違います" in x for x in judge_boxes([], {"sections": []})))
+      any("契約と違います" in x for x in
+          judge_boxes([], {"slug": "zzz", "sections": []})))
+    t("★★タイトルだけで本文が空の骨組みも不合格★★（Codex82回目の指摘2）",
+      any("中身がありません" in x for x in judge_boxes([], {
+          "slug": "zzz",
+          "sections": [{"title": x, "body": []}
+                       for x in _ba.SECTION_ORDER]
+          + [{"title": _ba.RUMOR_SECTION["title"], "body": []}]})))
     t("★★記事データを読めない（None）場合も不合格★★",
       any("読めません" in x for x in judge_boxes([], None)))
     t("　ブラウザが足す tbody は作りの違いに数えない",

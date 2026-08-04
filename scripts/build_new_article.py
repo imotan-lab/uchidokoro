@@ -89,6 +89,47 @@ RUMOR_SECTION = {
 }
 
 
+# 表で中身を出す箱（本文が空でも表があればよい）
+TABLE_SECTIONS = ("確認できたCZ", "設定示唆まとめ")
+
+
+def article_contract_problems(detail) -> list:
+    """★記事データが「箱だけの骨組み」になっていないか★
+
+    （2026-08-04・Codex82回目の指摘2。タイトルだけ残して本文を空にすると、
+      描き直した期待値も同じく空になるので、突き合わせでは気づけなかった）
+    ★中身が無い箱は「未確認」と書いてあること★を要求する。
+    """
+    want = list(SECTION_ORDER) + [RUMOR_SECTION["title"]]
+    if not isinstance(detail, dict):
+        return ["記事データが辞書ではありません"]
+    if not isinstance(detail.get("slug"), str) or not detail["slug"]:
+        return ["記事データに slug がありません"]
+    secs = detail.get("sections")
+    if not isinstance(secs, list) or not all(isinstance(x, dict) for x in secs):
+        return ["記事データの sections が節の配列ではありません"]
+    if [x.get("title") for x in secs] != want:
+        return [f"記事の箱が契約と違います"
+                f"（{[x.get('title') for x in secs]} / {want} のはず）"]
+    ng = []
+    for sec in secs:
+        title = sec.get("title")
+        body = [x for x in (sec.get("body") or []) if isinstance(x, str) and x.strip()]
+        tables = sec.get("tables") or []
+        if title == RUMOR_SECTION["title"]:
+            if sec.get("type") != "rumor" or body != RUMOR_SECTION["body"]:
+                ng.append("噂の箱が決めた形と違います")
+            continue
+        if not body and not tables:
+            ng.append(f"箱の中身がありません（未確認と書くこと）: {title}")
+            continue
+        if not tables and body != [PENDING_TEXT] and PENDING_TEXT in body:
+            ng.append(f"未確認の文が中身に混ざっています: {title}")
+        if title in TABLE_SECTIONS and not tables and body != [PENDING_TEXT]:
+            ng.append(f"表の箱なのに表も未確認表示もありません: {title}")
+    return ng
+
+
 class BuildError(RuntimeError):
     pass
 

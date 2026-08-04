@@ -355,10 +355,11 @@ def check_pending_boxes(html: str, detail: dict) -> list:
     """
     ng = []
     want_titles = list(_ba.SECTION_ORDER) + [_ba.RUMOR_SECTION["title"]]
+    # ★箱だけの骨組み（本文が空）も止める★（2026-08-04・Codex82回目の指摘2）
+    bad = _ba.article_contract_problems(detail)
+    if bad:
+        return bad
     secs = detail.get("sections") or []
-    got_titles = [sec.get("title") for sec in secs]
-    if got_titles != want_titles:
-        return [f"記事の箱がそろっていません（{got_titles} / {want_titles} のはず）"]
     if re.search("<[" + ' \t\n\r\x0c' + "]*style[" + ' \t\n\r\x0c' + ">/]",
                  html, re.I):
         ng.append("ページに <style> があります（箱ごと隠せるので許しません）")
@@ -2076,6 +2077,12 @@ def selftest() -> int:
                 + '<div id="articleSections">' + _inner + "</div>"
                 + '<div class="article-block">next</div></body></html>')
     t("★★箱がそろっていれば通る★★", check_pending_boxes(_html_ok, _det_ok) == [])
+    t("★★タイトルだけで本文が空の骨組みは公開しない★★（Codex82回目の指摘2）",
+      any("中身がありません" in x for x in check_pending_boxes(
+          _html_ok, {"slug": "zzz_test",
+                     "sections": [{"title": x, "body": []}
+                                  for x in _ba.SECTION_ORDER]
+                     + [{"title": _ba.RUMOR_SECTION["title"], "body": []}]})))
     t("★★箱のクラスを外したら止める★★（構造ごと突き合わせる・Codex79回目）",
       any("ページのものと一致しません" in x for x in check_pending_boxes(
           _html_ok.replace('class="article-item" ', ""), _det_ok)))
@@ -2108,7 +2115,7 @@ def selftest() -> int:
                                'data-section="天井・恩恵"'),
               _det_ok)))
     t("　記事データ側の箱が欠けていたら止める（契約と突き合わせる）",
-      any("記事の箱がそろっていません" in x for x in check_pending_boxes(
+      any("契約と違います" in x for x in check_pending_boxes(
           _html_ok, {**_det_ok,
                      "sections": [x for x in _det_ok["sections"]
                                   if x["title"] != "天井・恩恵"]})))
