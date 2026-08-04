@@ -830,31 +830,58 @@ EVIDENCE_DIR = os.path.join(
 
 
 def _save_evidence(html: str, ev: dict) -> str:
-    """同定の根拠にした一覧HTMLを、指紋の名前で保管する。
+    """同定の根拠にした一覧HTMLを、指紋の名前で確かに保管する。
 
     ★なぜ要るか（2026-08-04・Codex93回目の指摘8）★
       記事に残していたのは指紋（sha256）だけで、**元のHTMLはどこにも無かった**。
       あとから「本当にこのカードだったのか」を誰も確かめられない
       ＝証跡として成立していない。指紋を名前にして保管し、
       記事には **その場所とカード番号** を残す。
-      同じ内容なら同じ名前になるので、上書きも重複も起きない。
+
+    ★保管できなければ空を返す＝その機種は公開しない★
+      （2026-08-04・Codex94回目の指摘4。私は「指紋が残るから続けてよい」と
+        考えたが、一覧が更新されれば同じHTMLは二度と手に入らず、
+        指紋だけでは何も確かめられない＝証跡なしで公開したのと同じ。
+        その晩は公開せず待ち行列に残し、翌日やり直す）
+
+    ★書き途中の壊れたファイルを「保管済み」と思い込まない★
+      いったん別名で書き、**中身から指紋を計算し直して一致した時だけ**置く。
+      既にある場合も中身を読んで指紋を確かめる。
     """
-    ref = f"{ev.get('list_html_sha256','')} #card{ev.get('card_index')}"
+    digest = str(ev.get("list_html_sha256") or "").split(":")[-1]
+    if not digest:
+        _log("  同定の根拠の指紋がありません")
+        return ""
+    fp = os.path.join(EVIDENCE_DIR, f"{digest}.html")
+    ok_ref = f"identity_evidence/{digest}.html #card{ev.get('card_index')}"
     try:
         os.makedirs(EVIDENCE_DIR, exist_ok=True)
-        digest = str(ev.get("list_html_sha256") or "").split(":")[-1]
-        if not digest:
-            return ref
-        fp = os.path.join(EVIDENCE_DIR, f"{digest}.html")
-        if not os.path.exists(fp):
-            with io.open(fp, "w", encoding="utf-8") as f:
-                f.write(html)
+        if os.path.exists(fp):
+            got = io.open(fp, encoding="utf-8").read()
+            if _sha_text(got) == digest:
+                ev["saved_path"] = fp
+                return ok_ref
+            _log("  保管済みの根拠が壊れています（書き直します）")
+        tmp = fp + f".tmp{os.getpid()}"
+        with io.open(tmp, "w", encoding="utf-8") as f:
+            f.write(html)
+            f.flush()
+            os.fsync(f.fileno())
+        if _sha_text(io.open(tmp, encoding="utf-8").read()) != digest:
+            os.remove(tmp)
+            _log("  根拠を書いた結果が元と一致しません（保管しません）")
+            return ""
+        os.replace(tmp, fp)
         ev["saved_path"] = fp
-        return f"identity_evidence/{digest}.html #card{ev.get('card_index')}"
+        return ok_ref
     except Exception as e:                # noqa: BLE001
-        # ★保管に失敗しても公開は止めない★（指紋は残るので後から突き合わせ可能）
-        _log(f"  同定の根拠の保管に失敗しました（{e}）")
-        return ref
+        _log(f"  同定の根拠を保管できません（{e}）")
+        return ""
+
+
+def _sha_text(t: str) -> str:
+    import hashlib
+    return hashlib.sha256((t or "").encode("utf-8")).hexdigest()
 
 
 def _evidence_ref(vo: dict) -> str:
@@ -866,12 +893,15 @@ def _evidence_ref(vo: dict) -> str:
                or (ev.get("list_html_sha256", "") + f" #card{ev.get('card_index')}"))
 
 
-def _card_identity(name: str, official_url: str, maker: str, reasons: list):
+def _card_identity(name: str, official_url: str, maker: str, exc):
     """公式の個別ページが読めない時だけ、同じ公式の一覧カードで同定する。
 
     条件を1つでも欠いたら None（＝従来どおり「取得できません」で止まる）。
+    exc: 個別ページの取得で出た例外そのもの（★型で証明書の失敗か判定する★）
     """
-    if not _lci.failure_allowed(reasons):
+    _log("  一覧カードでの同定を試みます（取得失敗の中身: "
+         + " / ".join(_lci.exc_reasons(exc))[:160] + "）")
+    if not _lci.tls_failure(exc):
         return None                       # 許した失敗（証明書・TLS）以外は代替しない
     try:
         cats = _sj.read_json(_nw.CATALOGS, expect=dict)["catalogs"]
@@ -912,7 +942,12 @@ def _card_identity(name: str, official_url: str, maker: str, reasons: list):
     if _ci.normalize_core(got["name"]) != _ci.normalize_core(name):
         _log(f"  一覧カードの機種名と一致しません（{got['name']!r} / {name!r}）")
         return None
-    got["evidence"]["evidence_ref"] = _save_evidence(html, got["evidence"])
+    # ★根拠を確かに保管できた時だけ同定を成立させる★（Codex94回目の指摘4）
+    ref = _save_evidence(html, got["evidence"])
+    if not ref:
+        _log("  一覧カードでの同定: 根拠を保管できないので使いません（明日やり直します）")
+        return None
+    got["evidence"]["evidence_ref"] = ref
     return got
 
 
@@ -958,8 +993,9 @@ def verify_official(name: str, official_url: str,
         # ★失敗の中身まで見る★（2026-08-04。_get の文言は
         #   「取得できません（URLError）」までしか書かないので、
         #   例外の連鎖をたどらないと証明書エラーだと分からなかった）
-        _why = _lci.exc_reasons(e)
-        card = _card_identity(name, official_url, maker, _why)
+        # ★判定は例外の型で行う★（文言では代替に逃がさない・Codex94回目の指摘2）
+        card = (_card_identity(name, official_url, maker, e)
+                if _lci.tls_failure(e) else None)
         if card is not None:
             out["release"] = card["release"]
             # ★カードの公式名を正として後段へ渡す★（2026-08-04・Codex93回目の指摘2）
@@ -2675,14 +2711,15 @@ def selftest() -> int:
             _nw._get = _fail_tls
             t("★★L版のカードでS版を通さない★★（Codex93回目・自分で再現した）",
               _card_identity("S北斗の拳", "https://z.example/m/hokuto/", "z",
-                             _lci.exc_reasons(_tls)) is None)
+                             _tls) is None)
             t("　同じ規格なら一覧カードで同定できる",
               (_card_identity("L北斗の拳", "https://z.example/m/hokuto/", "z",
-                              _lci.exc_reasons(_tls)) or {}).get("release") == "2026-09")
-            t("★★証明書の失敗は例外の連鎖と型で見分ける★★（文言だけでは分からない）",
-              _lci.failure_allowed(_lci.exc_reasons(_tls))
-              and not _lci.failure_allowed(_lci.exc_reasons(
-                  _ue.URLError("timed out"))))
+                              _tls) or {}).get("release") == "2026-09")
+            t("★★証明書の失敗は例外の型で見分ける★★（文言だけでは通さない）",
+              _lci.tls_failure(_tls)
+              and not _lci.tls_failure(_ue.URLError("timed out"))
+              and not _lci.tls_failure(Exception(
+                  "取得できません: [SSL: CERTIFICATE_VERIFY_FAILED]")))
             _vo = verify_official("L北斗の拳", "https://z.example/m/hokuto/", "z")
             t("★★カードの公式名を後段へ渡す★★（Codex93回目の指摘2）",
               _vo.get("identity_name") == "L北斗の拳"
@@ -2699,12 +2736,35 @@ def selftest() -> int:
                 '<a href="/m/betsu/">こちらも</a></li>')
             t("★★相対で書かれた別機種のリンクも数える★★（Codex93回目の指摘5）",
               _card_identity("L北斗の拳", "https://z.example/m/hokuto/", "z",
-                             _lci.exc_reasons(_tls)) is None)
+                             _tls) is None)
             # 取得失敗が証明書以外なら代替しない
             LIST_SNAPSHOT["z"] = _list_html(_card("hokuto", "L北斗の拳"))
             t("　証明書以外の失敗では一覧カードに逃がさない",
               _card_identity("L北斗の拳", "https://z.example/m/hokuto/", "z",
-                             _lci.exc_reasons(_ue.URLError("timed out"))) is None)
+                             _ue.URLError("timed out")) is None)
+            # ★根拠を保管できないなら公開しない★（Codex94回目の指摘4）
+            _blocked = os.path.join(_tmpdir, "ev_blocked")
+            _io.open(_blocked, "w").write("これはフォルダではありません")
+            globals()["EVIDENCE_DIR"] = _blocked
+            t("★★同定の根拠を保管できない晩は公開しない★★（指紋だけでは確かめられない）",
+              _card_identity("L北斗の拳", "https://z.example/m/hokuto/", "z",
+                             _tls) is None)
+            globals()["EVIDENCE_DIR"] = os.path.join(_tmpdir, "ev")
+            # ★書き途中で壊れた保管を「済み」と思い込まない★
+            _card_identity("L北斗の拳", "https://z.example/m/hokuto/", "z", _tls)
+            _files = [f for f in os.listdir(globals()["EVIDENCE_DIR"])
+                      if f.endswith(".html")]
+            _io.open(os.path.join(globals()["EVIDENCE_DIR"], _files[0]),
+                     "w", encoding="utf-8").write("壊れた中身")
+            _got2 = _card_identity("L北斗の拳", "https://z.example/m/hokuto/",
+                                   "z", _tls)
+            t("★★壊れた保管は書き直してから使う★★",
+              _got2 is not None
+              and _io.open((_got2["evidence"]["saved_path"]),
+                           encoding="utf-8").read() == LIST_SNAPSHOT["z"])
+            t("　書き途中のファイルを残さない",
+              not [f for f in os.listdir(globals()["EVIDENCE_DIR"])
+                   if ".tmp" in f])
             LIST_SNAPSHOT.pop("z", None)
             _nw.CATALOGS = real_cats
             globals()["EVIDENCE_DIR"] = real_evdir

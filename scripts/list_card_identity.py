@@ -140,6 +140,12 @@ class _Cards(HTMLParser):
         t = data.strip()
         if not t or not self._stack:
             return
+        # ★非表示の中の文字は、親にも足さない★（2026-08-04・Codex94回目の指摘1）
+        #   以前は「その要素自身が非表示か」だけを見ていたので、
+        #   <p class="category"><span hidden>パチスロ</span>製品</p> のように
+        #   **読者に見えない肯定語**で種目の判定を通せた（自分で再現した）。
+        if self._stack[-1]["hidden"]:
+            return
         # ★開いている要素すべてに文字を足す★（要素の中身＝子孫の文字も含む）
         for node in self._stack:
             if node["card"] is not None and not node["hidden"]:
@@ -226,10 +232,12 @@ def identify(html: str, spec: dict, url: str, today=None,
         return out
     name = _norm(name_els[0]["text"])
     # 種目（年月のクラスが付いた要素は除く）
-    year_els = [e for e in _by_class(card, spec["year_class"]) if e["text"]]
+    # ★空の要素も数えてから、中身があることを別に見る★（Codex94回目の指摘5）
+    #   先に空を捨てて数えていたので、「値のある1個＋空1個」を1個として通していた。
+    year_els = _by_class(card, spec["year_class"])
     type_els = [e for e in _by_class(card, spec["type_class"])
-                if e["text"] and spec["year_class"] not in e["classes"]]
-    if len(type_els) != 1:
+                if spec["year_class"] not in e["classes"]]
+    if len(type_els) != 1 or not type_els[0]["text"]:
         out["problems"].append(f"カードの種目の要素が {len(type_els)} 個です（1個であるべきです）")
         return out
     kind = _norm(type_els[0]["text"])
@@ -245,13 +253,17 @@ def identify(html: str, spec: dict, url: str, today=None,
         out["problems"].append(f"機種名がぱちんこの規格印で始まっています（{name!r}）")
         return out
     # 登場年月（★要素がちょうど1つ★）
-    if len(year_els) != 1:
+    if len(year_els) != 1 or not year_els[0]["text"]:
         out["problems"].append(f"カードの登場年月の要素が {len(year_els)} 個です（1個であるべきです）")
         return out
-    m = YEAR_MONTH.search(_norm(year_els[0]["text"]))
-    if not m:
-        out["problems"].append(f"カードの登場年月を読めません（{year_els[0]['text']!r}）")
+    # ★1つの欄に年月が2つ書かれていたら採らない★（Codex94回目の指摘3・再現した）
+    #   「2026.08 / 2027.01」でも要素は1個なので、以前は先頭を採用していた。
+    hits = list(YEAR_MONTH.finditer(_norm(year_els[0]["text"])))
+    if len(hits) != 1:
+        out["problems"].append(
+            f"カードの登場年月が {len(hits)} 個あります（{year_els[0]['text']!r}）")
         return out
+    m = hits[0]
     # ★他のカードにも同じ作りがあること★（たまたま似た要素を拾っていないか）
     same_shape = sum(1 for c in siblings
                      if len(_by_class(c, spec["name_class"])) == 1
@@ -275,8 +287,32 @@ def identify(html: str, spec: dict, url: str, today=None,
     return out
 
 
+def tls_failure(e, depth: int = 0) -> bool:
+    """★例外の型だけで「証明書・TLSの失敗か」を決める★
+
+    ★2026-08-04・Codex94回目の指摘2（自分で再現した）★
+      以前は失敗の文言に「SSLError」等が入っているかを見ていたので、
+      **SSLと無関係の失敗でも、文言さえ含めば**一覧カードへ逃がせた。
+      判定は文字を一切見ず、例外の型と `reason` の連鎖だけで行う。
+    """
+    import ssl
+    if e is None or depth > 8:
+        return False
+    if isinstance(e, ssl.SSLError):       # 証明書の期限切れ・握手拒否はここに入る
+        return True
+    for attr in ("reason", "__cause__", "__context__"):
+        nxt = getattr(e, attr, None)
+        if isinstance(nxt, BaseException) and tls_failure(nxt, depth + 1):
+            return True
+    return False
+
+
 def failure_allowed(reasons) -> bool:
-    """代替を許す取得失敗か（許可した種類だけ）。"""
+    """（説明用）失敗の文言に、許可した種類の語が出てくるか。
+
+    ★これは判定に使わない★（判定は `tls_failure()` ＝例外の型で決める）。
+    ログや台帳に「なぜ代替したのか」を書くための説明にだけ使う。
+    """
     joined = " ".join(str(x) for x in (reasons or []))
     return any(w in joined for w in ALLOWED_FAILURES)
 
@@ -291,15 +327,10 @@ def exc_reasons(e, depth: int = 0) -> list:
       そこで ①例外の型 ②`reason` ③`__cause__`/`__context__` を
       再帰でたどり、**型が証明書・TLSのときだけ確かな印を足す**。
     """
-    import ssl
     out = []
     if e is None or depth > 8:
         return out
     out.append(str(e))
-    if isinstance(e, ssl.SSLCertVerificationError):
-        out.append("CERTIFICATE_VERIFY_FAILED")   # ★型で確かめた印★
-    elif isinstance(e, ssl.SSLError):
-        out.append("SSLError")
     for attr in ("reason", "__cause__", "__context__"):
         nxt = getattr(e, attr, None)
         if isinstance(nxt, BaseException):
@@ -407,11 +438,15 @@ def selftest() -> int:
     t("★★『くわしく見る』を機種名にしない★★（リンク文字は名前ではない）",
       r["name"] != "くわしく見る")
     # 許可した取得失敗だけを代替の対象にする
-    t("★★代替を許すのは証明書・TLSの失敗だけ★★",
-      failure_allowed(["公式ページを取得できません: 取得できません（URLError）: "
-                       "<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] ...>"])
-      and not failure_allowed(["公式ページを取得できません: 取得できません（HTTP 404）"])
-      and not failure_allowed(["パチスロのページに見えません（回胴機の語が無い）"]))
+    import ssl as _ssl2, urllib.error as _ue2
+    t("★★代替を許すのは証明書・TLSの失敗だけ（例外の型で見る）★★",
+      tls_failure(_ue2.URLError(_ssl2.SSLCertVerificationError("expired")))
+      and not tls_failure(_ue2.URLError("timed out"))
+      and not tls_failure(Exception("取得できません（HTTP 404）")))
+    t("★★文言に SSL の語があっても、型が違えば代替しない★★（Codex94回目・再現した）",
+      not tls_failure(Exception(
+          "取得できません（URLError）: <urlopen error [SSL: "
+          "CERTIFICATE_VERIFY_FAILED] ...>")))
     t("　カードの作りの指定が足りなければ止まる",
       _raises(lambda: parse_cards(page, {"card_tag": "li"})))
     # ★相対で書かれたリンク★（2026-08-04・Codex93回目の指摘5）
@@ -435,14 +470,45 @@ def selftest() -> int:
           today=_D(2026, 8, 4))["problems"]))
     # ★型で見分ける（文言そのままでは通さない）★
     import ssl as _ssl, urllib.error as _ue
-    t("★★証明書の失敗は例外の型からも印を立てる★★",
-      failure_allowed(exc_reasons(
-          _ue.URLError(_ssl.SSLCertVerificationError("expired"))))
-      and not failure_allowed(exc_reasons(_ue.URLError("timed out"))))
+    t("★★証明書の失敗は例外の連鎖をたどって見つける★★",
+      tls_failure(_wrap(_ue.URLError(_ssl.SSLCertVerificationError("x"))))
+      and not tls_failure(_wrap(_ue.URLError("timed out"))))
     t("　例外の連鎖が輪になっていても止まらない",
-      len(exc_reasons(_loop_exc())) < 40)
+      len(exc_reasons(_loop_exc())) < 40 and not tls_failure(_loop_exc()))
+    # ★非表示の子の文字を、表示中の親に足さない★（Codex94回目の指摘1・再現した）
+    hidkid = REAL_CARD.replace(
+        '<p class="category">パチスロ</p>',
+        '<p class="category"><span hidden>パチスロ</span>製品</p>')
+    t("★★読者に見えない肯定語で種目の判定を通せない★★",
+      not identify(_page(hidkid, _other("a"), _other("b")), SPEC, U,
+                   today=_D(2026, 8, 4))["ok"])
+    # ★1つの欄に年月が2つ★（Codex94回目の指摘3・再現した）
+    y2in1 = REAL_CARD.replace("2026.08</p>", "2026.08 / 2027.01</p>")
+    t("★★1つの欄に年月が2つ書かれていたら採らない★★",
+      any("登場年月が 2 個" in x for x in identify(
+          _page(y2in1, _other("a"), _other("b")), SPEC, U,
+          today=_D(2026, 8, 4))["problems"]))
+    # ★空の要素と併存していたら「1個」と数えない★（同・指摘5）
+    empt = REAL_CARD.replace(
+        '<p class="category __year">2026.08</p>',
+        '<p class="category __year"></p><p class="category __year">2026.08</p>')
+    t("★★値のある要素と空の要素が併存したら使わない★★",
+      any("登場年月の要素が 2 個" in x for x in identify(
+          _page(empt, _other("a"), _other("b")), SPEC, U,
+          today=_D(2026, 8, 4))["problems"]))
     print(f"{ran[0]}/{ran[0]} 合格" if ok_all else "不合格あり")
     return 0 if ok_all else 1
+
+
+def _wrap(e):
+    """例外を1段包む（連鎖をたどれるか見るため）。"""
+    try:
+        raise e
+    except BaseException:
+        try:
+            raise RuntimeError("取得できません（URLError）")
+        except RuntimeError as outer:
+            return outer
 
 
 def _loop_exc():
