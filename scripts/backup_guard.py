@@ -217,12 +217,31 @@ def is_design_doc(src: str) -> bool:
             and os.path.splitext(src.lower())[1] in ALLOW_DESIGN_EXT)
 
 
+# ★claims の証拠は「置き場」も込みで許す★（2026-08-04・Codex83回目の指摘6）
+#   名前の形だけで許していたので、別の場所にある同じ形のファイル
+#   （anything_20260803_export.json など）も通ってしまった。
+CLAIMS_DIR = os.path.join(os.path.expanduser("~"), "Documents", "uchidokoro",
+                          "claims")
+
+
+def _in_claims_dir(src: str | None) -> bool:
+    if not src:
+        return False
+    try:
+        d = os.path.normcase(os.path.abspath(os.path.dirname(src)))
+        return d == os.path.normcase(os.path.abspath(CLAIMS_DIR))
+    except Exception:                     # noqa: BLE001
+        return False
+
+
 def is_allowlisted(basename: str, src: str | None = None) -> bool:
     if (basename in ALLOW_BASENAMES
             or bool(ALLOW_LOG_RE.match(basename))
             or bool(ALLOW_CLAUDE_SNAPSHOT_RE.match(basename))
-            or bool(ALLOW_TASK_SKILL_RE.match(basename))
-            or bool(ALLOW_CLAIMS_RE.match(basename))):
+            or bool(ALLOW_TASK_SKILL_RE.match(basename))):
+        return True
+    # claims は「名前の形」と「claims置き場にあること」の両方が要る
+    if ALLOW_CLAIMS_RE.match(basename) and _in_claims_dir(src):
         return True
     return bool(src) and is_design_doc(src)
 
@@ -510,10 +529,20 @@ def selftest() -> int:
       is_allowlisted("task-watchdog_SKILL.md")
       and is_allowlisted("uchidokoro-quality-review_SKILL.md")
       and not is_allowlisted("secret_SKILL.mdx"))
+    _cl = lambda n: os.path.join(CLAIMS_DIR, n)      # noqa: E731
     t("★claims証拠（{slug}_{8桁日付}_{種別}.json）は許可（台帳#202）",
-      is_allowlisted("milliongod_kiseki_20260803_maker.json")
-      and is_allowlisted("hokuto_20260101_ceiling.json")
-      and is_allowlisted("issue27_yorumungando_2026-07-17.json"))
+      is_allowlisted("milliongod_kiseki_20260803_maker.json",
+                     _cl("milliongod_kiseki_20260803_maker.json"))
+      and is_allowlisted("hokuto_20260101_ceiling.json",
+                        _cl("hokuto_20260101_ceiling.json"))
+      and is_allowlisted("issue27_yorumungando_2026-07-17.json",
+                        _cl("issue27_yorumungando_2026-07-17.json")))
+    t("★★claimsの形でも、置き場が違えば許さない★★"
+      "（名前だけで通っていた・2026-08-04 Codex83回目の指摘6）",
+      not is_allowlisted("anything_20260803_export.json",
+                         os.path.join(os.path.expanduser("~"), "Desktop",
+                                      "anything_20260803_export.json"))
+      and not is_allowlisted("milliongod_kiseki_20260803_maker.json"))
     t("　★認証情報系はclaimsの形に一致しない（8桁日付の区切りが無い）★",
       not is_allowlisted("x_storage_uchidokoro.json")
       and not is_allowlisted("gmail_config.json")

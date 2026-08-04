@@ -343,12 +343,18 @@ def product_urls(html: str, base_url: str, link_prefix: str) -> list:
             continue
         if _YEAR_ONLY.match(rest):
             continue                      # ★年別アーカイブは機種ではない★
-        out.add(link_prefix.rstrip("/") + "/" + rest + "/")
+        got = link_prefix.rstrip("/") + "/" + rest + "/"
+        # ★一覧ページ自身は機種ではない★（2026-08-04・Codex83回目）
+        #   藤商事は一覧が /products/all/ で接頭辞が /products/ のため、
+        #   一覧そのものが機種URLとして登録され、毎晩取りに行っていた。
+        if got.rstrip("/") == base_url.split("#")[0].split("?")[0].rstrip("/"):
+            continue
+        out.add(got)
     return sorted(out)
 
 
 def filter_slot_urls(html: str, base_url: str, link_prefix: str,
-                     urls: list) -> tuple:
+                     urls: list, use_marks: bool = False) -> tuple:
     """★カードが「パチンコ」と明記する機種URLを外す★（2026-08-02・Codex50回目）
 
     ニューギンのパチスロ一覧には、同じ場所（/pub/machine/…）の
@@ -392,7 +398,10 @@ def filter_slot_urls(html: str, base_url: str, link_prefix: str,
             continue
         _own = unicodedata.normalize("NFKC", " ".join(
             _node_text(node).split()))
-        if _own and _pachi_mark.match(_own) \
+        # ★規格印での除外は、そのメーカーで必要な時だけ★
+        #   （2026-08-04・Codex83回目の指摘7。全社に効かせていたので、
+        #     将来 P/e で始まる回胴機が出たら黙って永久に外れる）
+        if use_marks and _own and _pachi_mark.match(_own) \
                 and not any(w in _own for w in slot_w):
             pachi_only.add(url)
             continue
@@ -1156,7 +1165,8 @@ def scan_maker(maker_id: str, conf: dict, seen: dict, record: bool = True) -> di
     urls = product_urls(html, conf["list_url"], conf["link_prefix"])
     # ★パチンコと明記されたカードのURLを外す★（2026-08-02・Codex50回目）
     urls, _pachi = filter_slot_urls(html, conf["list_url"],
-                                    conf["link_prefix"], urls)
+                                    conf["link_prefix"], urls,
+                                    use_marks=bool(conf.get("pachinko_marks")))
     if _pachi:
         out["excluded_pachinko"] = len(_pachi)
     out["total"] = len(urls)
@@ -1255,6 +1265,13 @@ def selftest() -> int:
       got == ["https://m.example/products/slot/aaa/",
               "https://m.example/products/slot/bbb/"])
     t("　一覧ページ自身を機種と数えない", LIST not in got)
+    t("★★接頭辞の下に一覧がある形でも、一覧自身を機種にしない★★"
+      "（藤商事 /products/all/ が機種として登録されていた・Codex83回目）",
+      product_urls('<a href="/products/all/">一覧</a>'
+                   '<a href="/products/7up/">機種</a>',
+                   "https://m.example/products/all/",
+                   "https://m.example/products/")
+      == ["https://m.example/products/7up/"])
     t("　パチンコ側・よそのサイト・下の階層は取らない",
       not any("pachinko" in u or "other.example" in u or "spec" in u for u in got))
     t("★★年別アーカイブ（2009・2010…）を機種と数えない★★（平和で確認）",
@@ -1785,12 +1802,19 @@ def selftest() -> int:
            "https://m.example/products/pfairy/",
            "https://m.example/products/crabare/",
            "https://m.example/products/ltoaru/",
-           "https://m.example/products/psword/"])
+           "https://m.example/products/psword/"], use_marks=True)
       == (["https://m.example/products/ltoaru/",
            "https://m.example/products/psword/"],
           ["https://m.example/products/crabare/",
            "https://m.example/products/eisekai/",
            "https://m.example/products/pfairy/"]))
+    t("★★規格印での除外は、指定したメーカーだけで効く★★"
+      "（全社に効かせると将来 P/e で始まる回胴機が黙って消える・Codex83回目）",
+      filter_slot_urls(
+          '<li><a href="https://m.example/products/eisekai/">ｅ異世界でチート能力</a></li>',
+          "https://m.example/products/all/", "https://m.example/products/",
+          ["https://m.example/products/eisekai/"])
+      == (["https://m.example/products/eisekai/"], []))
     t("　CRUSH等のCR始まり英単語・L/S機は外さない",
       filter_slot_urls(
           '<li><a href="https://m.example/products/crush/">CRUSH FEVER</a></li>'
