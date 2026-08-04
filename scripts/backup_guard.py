@@ -184,15 +184,21 @@ def _json_key_findings(obj, path="$") -> list[str]:
 def content_findings(path: str) -> list[str]:
     """中身ベースの検知（JSONキー・Cookie構造・値パターン）。ルール名のみ返す。"""
     out = []
+    # ★確かめられなかったものは通さない★（2026-08-04・Codex86回目）
+    #   以前は「大きすぎる」「読めない」を空の結果で返していたので、
+    #   20MB超のファイルに app_password を入れれば素通りできた。
+    #   検査できない＝安全とは言えない、で統一する（fail-closed）。
+    #   ※実運用の対象は最大2MB程度なので、拒否しても支障はない。
     try:
         size = os.path.getsize(path)
-        if size > 20 * 1024 * 1024:  # 20MB超のテキスト走査はスキップ（名前検査は済み）
-            return out
+        if size > 20 * 1024 * 1024:
+            return ["content:大きすぎて中身を確かめられません"
+                    f"（{size // (1024 * 1024)}MB）"]
         with open(path, "rb") as f:
             raw = f.read()
         text = raw.decode("utf-8", errors="ignore")
-    except Exception:
-        return out
+    except Exception as e:                # noqa: BLE001
+        return [f"content:読めないので確かめられません（{type(e).__name__}）"]
     if path.lower().endswith(".json"):
         # ★壊れたJSONは「秘密が無い」と見なさない★（2026-08-04・Codex85回目）
         #   以前は解析に失敗すると黙って素通りしていたので、末尾カンマ等で
@@ -560,6 +566,18 @@ def selftest() -> int:
       any("壊れていて" in x for x in content_findings(_ng9)))
     t("★★壊れたJSONに秘密の鍵が入っていても通さない★★",
       bool(content_findings(_sec9)))
+    # ★確かめられなかったものは通さない★（2026-08-04・Codex86回目）
+    _big9 = os.path.join(_d9, "big.json")
+    with open(_big9, "wb") as _fb9:
+        _fb9.write(b'{"app_password":"abcd efgh ijkl mnop","pad":"'
+                   + b"x" * (21 * 1024 * 1024) + b'"}')
+    t("★★大きすぎて読めないファイルは通さない★★"
+      "（20MB超は検査を飛ばして素通りしていた＝ガードのfail-open）",
+      any("大きすぎて" in x for x in content_findings(_big9)))
+    os.remove(_big9)
+    t("★★読み取りに失敗したファイルも通さない★★",
+      any("読めないので" in x
+          for x in content_findings(os.path.join(_d9, "no_such_file.json"))))
     __import__("shutil").rmtree(_d9, ignore_errors=True)
     t("★台帳を越えた修正の記録（manual_overrides.json）は許可★"
       "（2026-08-04・Codex84回目。標準経路で保全されていなかった）",
