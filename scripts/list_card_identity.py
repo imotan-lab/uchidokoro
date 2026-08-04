@@ -288,8 +288,11 @@ def identify(html: str, spec: dict, url: str, today=None,
 
 
 # ★代替を許す TLS の理由（これ以外の SSLError は一時的な失敗として扱う）★
+#   ★CERTIFICATE_VERIFY_FAILED はここに入れない★（2026-08-04・Codex96回目）
+#     証明書の検証失敗は上の `SSLCertVerificationError` の型で受ける。
+#     理由の名前でも許すと、型が違う普通の SSLError まで通り、
+#     「型で決める」という説明と実装が食い違う。
 ALLOWED_SSL_REASONS = (
-    "CERTIFICATE_VERIFY_FAILED",          # 証明書が期限切れ・信頼できない
     "SSLV3_ALERT_HANDSHAKE_FAILURE",      # 握手そのものを拒否された（藤商事）
     "TLSV1_ALERT_PROTOCOL_VERSION",       # こちらのTLS版を受け付けない
     "UNSUPPORTED_PROTOCOL",
@@ -472,8 +475,12 @@ def selftest() -> int:
     _hs.reason = "SSLV3_ALERT_HANDSHAKE_FAILURE"
     _unk = _ssl2.SSLError("なにか")
     _unk.reason = "SOMETHING_ELSE"
+    _cvf = _ssl2.SSLError("証明書")
+    _cvf.reason = "CERTIFICATE_VERIFY_FAILED"
     t("　握手拒否は許し、知らない理由のSSLErrorは許さない",
       tls_failure(_ue2.URLError(_hs)) and not tls_failure(_ue2.URLError(_unk)))
+    t("★★証明書の失敗は型で受ける（理由の名前だけのSSLErrorは許さない）★★"
+      "（Codex96回目）", not tls_failure(_ue2.URLError(_cvf)))
     t("★★文言に SSL の語があっても、型が違えば代替しない★★（Codex94回目・再現した）",
       not tls_failure(Exception(
           "取得できません（URLError）: <urlopen error [SSL: "
