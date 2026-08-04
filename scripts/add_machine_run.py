@@ -665,6 +665,14 @@ def retry_later(problems: list) -> bool:
 _OUTAGE_PREFIXES = ("公式ページが読める状態ではありません",
                     "取得できません（", "HTTP ", "ページが大きすぎます")
 
+# ★復旧夜に個別ページを読みに行く上限（メーカーごと・一晩）★（Codex67回目）
+#   行列投入の上限（moved）だけだと、部分復旧＝残りが障害中の夜に
+#   143件へ全部取得しに行ってしまう（障害中サイトへの負荷と最大143×timeoutの
+#   実行時間）。読みに行く件数そのものにも別のカウンタで上限を置く。
+#   20件＝一晩の見張りが各社の一覧を読む規模と同程度で、144件の隔離でも
+#   約1週間で排出できる折り合いの値。
+RECLASSIFY_FETCH_PER_NIGHT = 20
+
 
 def _is_outage(reasons: list) -> bool:
     return any(str(x).startswith(_OUTAGE_PREFIXES) for x in reasons)
@@ -714,14 +722,23 @@ def probe_quarantine(persist: bool) -> dict:
         out["recovered"].append(mid)
         _log(f"隔離の復旧確認 {mid}: 読めました。分類し直します")
         moved = 0
+        fetched = 0
         for u, rec in sorted(_quar.urls_of(qd, mid).items()):
             if moved >= _nw.MAX_NEW_PER_SCAN:
-                _log(f"隔離の分類し直し {mid}: 今晩の上限"
+                _log(f"隔離の分類し直し {mid}: 今晩の行列投入上限"
                      f"（{_nw.MAX_NEW_PER_SCAN}件）に達したので続きは明晩")
                 break
+            if u != url and fetched >= RECLASSIFY_FETCH_PER_NIGHT:
+                # ★部分復旧の夜に残り全件へ取得しに行かない★（Codex67回目）
+                _log(f"隔離の分類し直し {mid}: 今晩の取得上限"
+                     f"（{RECLASSIFY_FETCH_PER_NIGHT}件）に達したので続きは明晩")
+                break
             hint = rec.get("hint") or ""
-            cu = c if u == url else _nw.classify(
-                u, None, list_release=(hint or None))
+            if u == url:
+                cu = c
+            else:
+                fetched += 1
+                cu = _nw.classify(u, None, list_release=(hint or None))
             if (not cu["ok"]) and _is_outage(cu["reasons"]):
                 continue    # ★このURLはまだ読めない＝隔離に残す★
             if cu["ok"] or (hint and _nw.is_recent(hint)):
@@ -2301,6 +2318,33 @@ def selftest() -> int:
                   r68["requeued"] == 1 and Q2[0] in p66b["items"]
                   and all(u not in p66b["items"] for u in Q2[1:7])
                   and len(_quar.urls_of(q66c, "qm")) == 6)
+                # --- 部分復旧の夜: 残りの障害URLへ全件取得しに行かない ---
+                #     （Codex67回目の反例＝moved上限は障害URLでは増えないため、
+                #       取得件数そのものの上限が要る）
+                _cap_before = globals()["RECLASSIFY_FETCH_PER_NIGHT"]
+                globals()["RECLASSIFY_FETCH_PER_NIGHT"] = 3
+                Q4 = [f"https://q4.maker.test/slot/m{i}/" for i in range(8)]
+
+                def _uo_partial4(req, timeout=20):
+                    u = getattr(req, "full_url", str(req))
+                    _uo_calls.append(u)
+                    if u == Q4[0]:
+                        return _FR66(u, _OK_HTML)
+                    raise _ue66.URLError("SSLV3_ALERT_HANDSHAKE_FAILURE")
+                _ur66.urlopen = _uo_partial4
+                q66f = _quar.load()
+                _quar.add(q66f, "qm4",
+                          {u: ("2026-09" if u == Q4[0] else "") for u in Q4},
+                          "試験")
+                _quar.save(q66f)
+                _uo_calls.clear()
+                r68b = probe_quarantine(persist=True)
+                q66g = _quar.load()
+                t("★★部分復旧の夜は取得件数にも上限（残り全件へ当たりに行かない）★★"
+                  "（Codex67回目・復旧確認1回＋上限3回で打ち切り）",
+                  len(_uo_calls) == 1 + 3 and r68b["requeued"] == 1
+                  and len(_quar.urls_of(q66g, "qm4")) == 7)
+                globals()["RECLASSIFY_FETCH_PER_NIGHT"] = _cap_before
                 # --- 古いヒント＋ページに年月なし: 行列に入れず隔離から外す ---
                 _OLD_HTML = ("<title>旧機X</title><h1>旧機X</h1>"
                              "<p>パチスロの製品情報</p>")
