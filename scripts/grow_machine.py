@@ -107,6 +107,29 @@ def claims_grew(old_decision: dict, new_decision: dict) -> list:
     return []
 
 
+ANY = "\uE000"          # ★この欄は何が来てもよい（まだ確定していない）★
+
+
+def _match(old_u, new_units) -> bool:
+    """未確定の欄を除いて、同じ単位が新しい側にあるか。"""
+    for n in new_units:
+        if len(n) != len(old_u):
+            continue
+        ok = True
+        for a, b in zip(old_u, new_units and n):
+            if isinstance(a, tuple) and isinstance(b, tuple):
+                if len(a) != len(b) or any(
+                        x != ANY and x != y for x, y in zip(a, b)):
+                    ok = False
+                    break
+            elif a != ANY and a != b:
+                ok = False
+                break
+        if ok:
+            return True
+    return False
+
+
 def _units(detail: dict) -> list:
     """読者に出ている中身を、比べられる単位に分ける。
 
@@ -125,7 +148,17 @@ def _units(detail: dict) -> list:
         return out
 
     def _pending(t: str) -> bool:
-        return (t == _ba.PENDING_TEXT) or (_ba.PENDING_ITEM in t)
+        """まだ確定していない書き方か（★あとで埋まってよい欄★）。
+
+        ★決まり文句は1種類ではない★（2026-08-05・Codex104回目）
+          CZの値が採れないときは「確認中」、値が採れていない設定があるときは
+          注記に「値が確認できていないため掲載していません」と出る。
+          これらを「確定した内容」として数えると、
+          **後から埋まった正しい更新を「消えた」と誤判定**してしまう。
+        """
+        return (t == _ba.PENDING_TEXT) or (_ba.PENDING_ITEM in t) \
+            or (t.strip() == "確認中") or ("確認できていない" in t) \
+            or ("出典で食い違い" in t) or ("書き方が異なります" in t)
 
     for s in detail.get("sections") or []:
         title = str(s.get("title"))
@@ -137,9 +170,11 @@ def _units(detail: dict) -> list:
             label = str((tb or {}).get("label") or "")
             headers = tuple(str(x) for x in ((tb or {}).get("headers") or []))
             for row in ((tb or {}).get("rows") or []):
-                cells = tuple(str(x) for x in (row or []))
-                if any(_pending(c) for c in cells):
-                    continue
+                # ★未確定の欄だけを「何が来てもよい」にする★
+                #   （2026-08-05・Codex104回目の指摘3。行ごと捨てていたので、
+                #     同じ行の**確定済みの欄**まで比べられなくなっていた）
+                cells = tuple(ANY if _pending(str(x)) else str(x)
+                              for x in (row or []))
                 out.append(("table", title, label, headers, cells))
             note = str((tb or {}).get("note") or "").strip()
             if note and not _pending(note):
@@ -168,12 +203,17 @@ def text_kept(old_detail: dict, new_detail: dict) -> list:
     （足すのは自由・消す/変えるのは不可＝本当の意味での単調追加）。
     """
     old, new = _units(old_detail), _units(new_detail)
-    from collections import Counter
-    left = Counter(old) - Counter(new)          # ★数も含めて包含されているか★
-    if not left:
+    rest = list(new)
+    gone = []
+    for u in old:
+        hit = next((n for n in rest if _match(u, [n])), None)
+        if hit is None:
+            gone.append(" ".join(str(x) for x in u).replace(ANY, "（未確定）")[:60])
+        else:
+            rest.remove(hit)               # ★同じ物を二重に使わない（数も見る）★
+    if not gone:
         return []
-    gone = [" ".join(str(x) for x in u)[:60] for u in list(left.elements())[:3]]
-    return [f"前に載っていた内容が消える/変わる更新です: {' / '.join(gone)}"]
+    return [f"前に載っていた内容が消える/変わる更新です: {' / '.join(gone[:3])}"]
 
 
 def ledger_once(slug: str, title: str, detail: str,
@@ -388,6 +428,15 @@ def apply_one(got: dict) -> dict:
     if not got.get("fingerprint"):
         out["problems"].append("計画時の指紋がありません（書きません）")
         return out
+    # ★先に一度そろえて見る★（本番の判定は鍵の中でもう一度やる。
+    #   ここで落とすのは「明らかに古い計画」を早く断るため）
+    stale = [p for p, want in got["fingerprint"].items()
+             if not os.path.isfile(p) or _file_sha(p) != want]
+    if stale:
+        out["problems"].append(
+            "計画したときから中身が変わっています: "
+            + ", ".join(os.path.relpath(x, BASE) for x in stale[:3]))
+        return out
     indexable = got["now"] == "AUTO_INDEXABLE"
     html = _pub.render(slug, machine, detail)
     # ★書く前の検査（新規公開と同じものを使う）★
@@ -554,6 +603,72 @@ def selftest() -> int:
     t("★★同じ表の行が減ったら止める★★",
       text_kept(OLD, _mod(lambda d: d["sections"][1]["tables"][0]
                           .__setitem__("rows", []))))
+    # ── ★本物の build_detail で、暫定表現が埋まる更新を通す★（Codex104回目）
+    def _mat(**kw):
+        m = {"adopted": {"model_code": {"value": "L機/1", "sources": ["a", "b"]}},
+             "need_third": {}, "thin": {},
+             "ceilings": {"adopted": [], "need_third": []},
+             "at_specs": {"adopted": [], "need_third": []},
+             "czs": {"adopted": [], "need_third": []},
+             "setting_labels_seen": [], "setting_labels_unconfirmed": []}
+        m.update(kw)
+        return m
+
+    cz_thin = _mat(czs={"adopted": [{"name": "喰霊チャンス",
+                                     "sources": ["a", "b"]}], "need_third": []})
+    cz_full = _mat(czs={"adopted": [{"name": "喰霊チャンス", "games": 10,
+                                     "sources": ["a", "b"]}], "need_third": []})
+    d_thin = _ba.build_detail("x", "L機", "2026-08", cz_thin)
+    d_full = _ba.build_detail("x", "L機", "2026-08", cz_full)
+    t("★★CZの「確認中」が中身に変わる更新を通す★★（Codex104回目・拒否していた）",
+      not text_kept(d_thin, d_full))
+    t("　逆に、確認できていた内容が「確認中」へ戻る更新は止める",
+      bool(text_kept(d_full, d_thin)))
+    set_thin = _mat(adopted={"model_code": {"value": "L機/1", "sources": ["a", "b"]},
+                             "at_prob": {"value": {"1": "1/300"},
+                                         "sources": ["a", "b"]}},
+                    setting_labels_unconfirmed=[2])
+    set_full = _mat(adopted={"model_code": {"value": "L機/1", "sources": ["a", "b"]},
+                             "at_prob": {"value": {"1": "1/300", "2": "1/290"},
+                                         "sources": ["a", "b"]}})
+    t("★★未確認だった設定の値が載る更新を通す★★（注記が変わっても止めない）",
+      not text_kept(_ba.build_detail("x", "L機", "2026-08", set_thin),
+                    _ba.build_detail("x", "L機", "2026-08", set_full)))
+    t("★★同じ設定の値が書き換わる更新は止める★★",
+      bool(text_kept(
+          _ba.build_detail("x", "L機", "2026-08", set_full),
+          _ba.build_detail("x", "L機", "2026-08", _mat(
+              adopted={"model_code": {"value": "L機/1", "sources": ["a", "b"]},
+                       "at_prob": {"value": {"1": "1/999", "2": "1/290"},
+                                   "sources": ["a", "b"]}})))))
+    # ── ★指紋は一覧を読む前に取っているか★（順番そのものを見る）
+    order = []
+    real_sha, real_rows = _file_sha, _read_rows
+    try:
+        globals()["_file_sha"] = lambda p: (order.append("sha"), real_sha(p))[1]
+        globals()["_read_rows"] = lambda: (order.append("rows"), real_rows())[1]
+        plan_one("garei_zero_re",
+                 gather=lambda *a, **k: {"material": None, "problems": []},
+                 verify=lambda *a, **k: {"problems": [], "release": ""})
+    finally:
+        globals()["_file_sha"], globals()["_read_rows"] = real_sha, real_rows
+    t("★★指紋を取り終えてから一覧を読んでいる★★（順番が戻ったら落ちる）",
+      "rows" in order and "sha" in order
+      and order.index("rows") > max(i for i, x in enumerate(order) if x == "sha"))
+    # ── ★計画後に中身が変われば、1文字も書かずに止まる★
+    wrote = []
+    real_write = _pub.write_atomic
+    try:
+        _pub.write_atomic = lambda *a, **k: wrote.append(a[0])
+        bad = apply_one({"slug": "garei_zero_re", "machine": {"slug": "x"},
+                         "detail": {}, "was": "AUTO_PENDING",
+                         "now": "AUTO_PENDING",
+                         "fingerprint": {MACHINES: "ちがう指紋"}})
+    finally:
+        _pub.write_atomic = real_write
+    t("★★計画したときから変わっていたら、1つも書かない★★",
+      not wrote and any("変わっています" in p or "計画" in p
+                        for p in bad["problems"]))
     # 指紋は「計画で読む前」に取る
     got = plan_one("garei_zero_re", gather=lambda *a, **k: {"material": None,
                                                             "problems": []},
