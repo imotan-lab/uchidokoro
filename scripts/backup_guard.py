@@ -51,6 +51,9 @@ ALLOW_BASENAMES = {
     "uchidokoro_CLAUDE_history.md",
     # 要確認台帳（人間の判断待ち案件の唯一の恒久記録・台帳 #153）
     "open_issues.json",
+    # ★台帳を越えた修正の記録★（2026-08-04・Codex84回目）
+    #   運営者の承認で例外的に直した記録。失うと「なぜ直したか」が消える。
+    "manual_overrides.json",
     # 自動タスクの手順書（{taskId}_SKILL.md の形で保存する）
     "uchidokoro-fact-check_SKILL.md",
     "SKILL.md",
@@ -537,6 +540,9 @@ def selftest() -> int:
                         _cl("hokuto_20260101_ceiling.json"))
       and is_allowlisted("issue27_yorumungando_2026-07-17.json",
                         _cl("issue27_yorumungando_2026-07-17.json")))
+    t("★台帳を越えた修正の記録（manual_overrides.json）は許可★"
+      "（2026-08-04・Codex84回目。標準経路で保全されていなかった）",
+      is_allowlisted("manual_overrides.json"))
     t("★★claimsの形でも、置き場が違えば許さない★★"
       "（名前だけで通っていた・2026-08-04 Codex83回目の指摘6）",
       not is_allowlisted("anything_20260803_export.json",
