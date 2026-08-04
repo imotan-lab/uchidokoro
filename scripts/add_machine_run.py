@@ -723,7 +723,13 @@ def probe_quarantine(persist: bool) -> dict:
         _log(f"隔離の復旧確認 {mid}: 読めました。分類し直します")
         moved = 0
         fetched = 0
-        for u, rec in sorted(_quar.urls_of(qd, mid).items()):
+        # ★復旧を確認できたURLを必ず最初に処理する★（Codex68回目・実害/中）
+        #   辞書順のまま取得上限で打ち切ると、確認済みURLが後ろの並びの時に
+        #   処理されず隔離に残り、次に選ばれるまで最大144晩かかり得た。
+        _qm_urls = _quar.urls_of(qd, mid)
+        ordered = ([(url, _qm_urls.get(url) or {})]
+                   + [kv for kv in sorted(_qm_urls.items()) if kv[0] != url])
+        for u, rec in ordered:
             if moved >= _nw.MAX_NEW_PER_SCAN:
                 _log(f"隔離の分類し直し {mid}: 今晩の行列投入上限"
                      f"（{_nw.MAX_NEW_PER_SCAN}件）に達したので続きは明晩")
@@ -2344,6 +2350,33 @@ def selftest() -> int:
                   "（Codex67回目・復旧確認1回＋上限3回で打ち切り）",
                   len(_uo_calls) == 1 + 3 and r68b["requeued"] == 1
                   and len(_quar.urls_of(q66g, "qm4")) == 7)
+                # --- 復旧URLが辞書順の末尾でも、取得上限より先に処理される ---
+                #     （Codex68回目の反例＝先頭復旧の試験では検出できない）
+                Q5 = [f"https://q5.maker.test/slot/m{i}/" for i in range(8)]
+
+                def _uo_partial5(req, timeout=20):
+                    u = getattr(req, "full_url", str(req))
+                    _uo_calls.append(u)
+                    if u == Q5[7]:
+                        return _FR66(u, _OK_HTML)
+                    raise _ue66.URLError("SSLV3_ALERT_HANDSHAKE_FAILURE")
+                _ur66.urlopen = _uo_partial5
+                q66h = _quar.load()
+                _quar.add(q66h, "qm5",
+                          {u: ("2026-09" if u == Q5[7] else "") for u in Q5},
+                          "試験")
+                # 復旧確認がm7を選ぶよう、m0〜m6は確認済みの古い日付にしておく
+                for _i in range(7):
+                    q66h["makers"]["qm5"]["urls"][Q5[_i]]["last_probe"] = \
+                        "2026-08-01"
+                _quar.save(q66h)
+                _uo_calls.clear()
+                r68c = probe_quarantine(persist=True)
+                p66d = _pend.load()
+                t("★★復旧URLが並びの末尾でも取得上限より先に処理される★★"
+                  "（Codex68回目＝確認済みの復旧URLを隔離に取り残さない）",
+                  r68c["requeued"] >= 1 and Q5[7] in p66d["items"]
+                  and len(_uo_calls) == 1 + 3)
                 globals()["RECLASSIFY_FETCH_PER_NIGHT"] = _cap_before
                 # --- 古いヒント＋ページに年月なし: 行列に入れず隔離から外す ---
                 _OLD_HTML = ("<title>旧機X</title><h1>旧機X</h1>"
