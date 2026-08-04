@@ -194,10 +194,14 @@ def content_findings(path: str) -> list[str]:
     except Exception:
         return out
     if path.lower().endswith(".json"):
+        # ★壊れたJSONは「秘密が無い」と見なさない★（2026-08-04・Codex85回目）
+        #   以前は解析に失敗すると黙って素通りしていたので、末尾カンマ等で
+        #   壊れたファイルに app_password が入っていても鍵の検査が動かず、
+        #   そのままコピーされ得た（いま動いているガードのfail-open）。
         try:
             out.extend(_json_key_findings(json.loads(text)))
-        except Exception:
-            pass
+        except Exception as e:            # noqa: BLE001
+            out.append(f"json:壊れていて中身を確かめられません（{type(e).__name__}）")
     for rule, pat in DENY_VALUE_PATTERNS:
         if pat.search(text):
             out.append(f"value:{rule}")
@@ -540,6 +544,23 @@ def selftest() -> int:
                         _cl("hokuto_20260101_ceiling.json"))
       and is_allowlisted("issue27_yorumungando_2026-07-17.json",
                         _cl("issue27_yorumungando_2026-07-17.json")))
+    # ★壊れたJSONは「秘密が無い」と見なさない★（2026-08-04・Codex85回目）
+    import tempfile as _tf9
+    _d9 = _tf9.mkdtemp(prefix="uchi_bg_")
+    _ok9 = os.path.join(_d9, "manual_overrides.json")
+    _ng9 = os.path.join(_d9, "manual_overrides_broken.json")
+    _sec9 = os.path.join(_d9, "secret_broken.json")
+    open(_ok9, "w", encoding="utf-8").write('{"schema":"x","items":[]}')
+    open(_ng9, "w", encoding="utf-8").write('{"a":1,}')
+    open(_sec9, "w", encoding="utf-8").write(
+        '{"app_password":"abcd efgh ijkl mnop",}')
+    t("　正しいJSONはそのまま通る", content_findings(_ok9) == [])
+    t("★★壊れたJSONは中身を確かめられないので通さない★★"
+      "（例外を握り潰して素通りしていた＝いま動いているガードの穴）",
+      any("壊れていて" in x for x in content_findings(_ng9)))
+    t("★★壊れたJSONに秘密の鍵が入っていても通さない★★",
+      bool(content_findings(_sec9)))
+    __import__("shutil").rmtree(_d9, ignore_errors=True)
     t("★台帳を越えた修正の記録（manual_overrides.json）は許可★"
       "（2026-08-04・Codex84回目。標準経路で保全されていなかった）",
       is_allowlisted("manual_overrides.json"))
