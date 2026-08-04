@@ -117,14 +117,21 @@ DENY_JSON_KEYS = {
 DENY_JSON_KEYS_EXACT = {"secret", "token", "cookie", "session"}
 
 # 本文から「鍵の名前らしい書き方」を拾う（"app_password": / app_password= など）
-# 本文から「鍵に値を入れている書き方」を拾う（"app_password": "…" / api_key='…'）
-#   ★型注釈（token: str）や説明文を拾わないよう、**引用符つきで一定の長さの値**
-#     が入っている場合だけに絞る★（2026-08-04・Codex89回目の対応中に、
-#     設計メモのコード片で誤検知して22件が拒否されたため）
-_KEYLIKE_RE = re.compile(
-    "[\"']?(?P<key>[A-Za-z_][A-Za-z0-9_-]{2,40})[\"']?"
+# 本文から「鍵に値を入れている書き方」を拾う（2026-08-04・Codex89〜90回目）
+#   ★形式（カッコ始まり）で判断すると [00:00:00] のタスクログが通らなくなり、
+#     鍵の名前だけで判断すると設計メモのコード片（token: str）で誤検知する。
+#     そこで「鍵に**それらしい値**を入れている書き方」に絞る。
+#   ①引用符つき: 同じ引用符で閉じるまでを値とする（中のアポストロフィや
+#     エスケープで検査から逃げられないように）
+#   ②引用符なし: 記号と英数字だけの塊（日本語の説明文や `token: str` は当たらない）
+_KEYLIKE_QUOTED = re.compile(
+    r"[\"']?(?P<key>[A-Za-z_][A-Za-z0-9_-]{2,40})[\"']?"
     r"\s*[:=]\s*"
-    "[\"'](?P<val>[^\"']{8,})[\"']")
+    r"(?P<q>[\"'])(?P<val>(?:\\.|(?!(?P=q)).){8,}?)(?P=q)")
+_KEYLIKE_BARE = re.compile(
+    r"(?<![A-Za-z0-9_])(?P<key>[A-Za-z_][A-Za-z0-9_-]{2,40})"
+    r"\s*[:=]\s*"
+    r"(?P<val>[A-Za-z0-9_+/=.\-]{8,})(?![A-Za-z0-9_+/=.\-]*[(\[])")
 
 # ── 秘密パターン: 値（テキスト全文への正規表現・具体プレフィックスのみ）──
 DENY_VALUE_PATTERNS = [
@@ -253,10 +260,11 @@ def content_findings(path: str) -> list[str]:
     #     一方で「[00:00:00] のログはJSONではない」ので、
     #     カッコ始まりを一律に拒否すると本物のログが通らなくなる＝
     #     形式ではなく**鍵の名前**で見る）
-    for _m in _KEYLIKE_RE.finditer(text):
-        _k = _norm_key(_m.group("key"))
-        if _k in DENY_JSON_KEYS or _k in DENY_JSON_KEYS_EXACT:
-            out.append(f"text_key:{_m.group('key')}")
+    for _re9 in (_KEYLIKE_QUOTED, _KEYLIKE_BARE):
+        for _m in _re9.finditer(text):
+            _k = _norm_key(_m.group("key"))
+            if _k in DENY_JSON_KEYS or _k in DENY_JSON_KEYS_EXACT:
+                out.append(f"text_key:{_m.group('key')}")
     for rule, pat in DENY_VALUE_PATTERNS:
         if pat.search(text):
             out.append(f"value:{rule}")
@@ -661,6 +669,22 @@ def selftest() -> int:
     _plain9 = _mk9("plain_note.md", "# 設計メモ" + chr(10) + "ふつうの文章")
     t("★★.md に JSON を書いても鍵の検査から逃げられない★★",
       any("app_password" in x for x in content_findings(_json_md9)))
+    # ★引用符の種類・エスケープ・引用符なしでも逃げられない★（Codex90回目）
+    t("★値の中にアポストロフィがあっても検知する★",
+      any("app_password" in x for x in content_findings(
+          _mk9("apos.md", '{"app_password":"ab' + chr(39) + 'cdefghij",}'))))
+    t("★エスケープした引用符が入っていても検知する★",
+      any("app_password" in x for x in content_findings(
+          _mk9("esc.md",
+               '{"app_password":"ab' + chr(92) + chr(34) + 'cdefghij"}'))))
+    t("★引用符なしの代入でも検知する★",
+      any("app_password" in x for x in content_findings(
+          _mk9("bare.md", "app_password = abcdefghijkl"))))
+    t("　コード片（secret = os.environ.get(...)）は誤検知しない",
+      content_findings(_mk9("code2.md",
+                            'secret = os.environ.get("X")')) == [])
+    t("　日本語の説明文は誤検知しない",
+      content_findings(_mk9("ja.md", "token: 認証に使う値のことです。")) == [])
     t("★★壊れたJSONを .md に書いても通さない★★"
       "（鍵の名前を本文から探す＝形式に頼らない・Codex89回目）",
       any("app_password" in x for x in content_findings(_broken_md9)))
