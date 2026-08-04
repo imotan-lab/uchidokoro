@@ -1134,10 +1134,19 @@ def check_34_indexing_policy_applied(machines: list) -> list[str]:
     そのままなので、「スイッチを入れたつもりで何も起きていない」状態になる。
     判定書に焼かれた policy_mode といまの設定を突き合わせて検知する。
     """
-    stale = _pd.stale_decisions(machines)
-    if not stale:
+    # ★判定書だけでなく、実際のページのnoindexとsitemapまで突き合わせる★
+    #   （2026-08-04・Codex74回目の指摘1。部分的に反映されたまま落ちた状態を
+    #     「反映済み」と誤認しないため）
+    try:
+        import apply_indexing_policy as _ap
+        got = _ap.plan()
+    except Exception as e:                # noqa: BLE001
+        return [f"検索方針の反映状況を確かめられません: {e}"]
+    if not got["changes"]:
         return []
-    return [f"緊急overrideの切り替えが未反映の機種 {len(stale)}件: {stale[:5]}"
+    detail = ", ".join(f"{c['slug']}（{'/'.join(c['why'])}）"
+                       for c in got["changes"][:5])
+    return [f"検索方針が成果物へ反映されていない機種 {len(got['changes'])}件: {detail}"
             "（python scripts/apply_indexing_policy.py --apply で反映）"]
 
 

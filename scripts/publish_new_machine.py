@@ -594,6 +594,17 @@ def check_machine(slug: str, machine: dict) -> list:
     # ★本人性を公開の境界でも確かめ直す★（2026-08-04・Codex73回目の指摘5。
     #   上流の add_machine_run では確認しているが、この関数を通る経路は
     #   メーカーもURLも受け取れるので、最後の境界でも見る）
+    # ★identity そのものの欠落で検証を素通りできないようにする★
+    #   （Codex74回目の指摘4。「辞書なら見る」だけだと、identityを消せば
+    #     どの検査も通らずに公開できた＝fail-open）
+    if _pdz.is_auto(machine):
+        if not isinstance(ident, dict):
+            ng.append("新台経路には identity が要ります（本人性を確かめられません）")
+        else:
+            for k in ("manufacturer_id", "official_product_url",
+                      "announced_name"):
+                if not (ident.get(k) or "").strip():
+                    ng.append(f"identity.{k} がありません（本人性を確かめられません）")
     if isinstance(ident, dict):
         url = ident.get("official_product_url") or ""
         if url and not url.startswith("https://"):
@@ -2111,6 +2122,12 @@ def selftest() -> int:
                    "publication_policy": _pdz.SCHEMA,
                    "page_decision": _pd_ok,
                    "release_date": "2026-09",
+                   "identity": {
+                       "manufacturer_id": "bellco",
+                       "identity_tier": "CATALOG_BOUND",
+                       "official_product_url":
+                           "https://www.s-bellco.co.jp/products/slot/zzz_test/",
+                       "announced_name": "テスト"},
                    "publish_state": STATE}
     t("★まともな機種データなら通る★", check_machine("zzz_test", _ok_machine) == [])
     t("★★知らない項目が混ざっていたら止める★★（そこに書いた文字がページへ出る）",
@@ -2128,6 +2145,15 @@ def selftest() -> int:
               "announced_name": "テスト"}
     t("★まともな identity なら通る★",
       check_machine("zzz_test", {**_ok_machine, "identity": _id_ok}) == [])
+    t("★★identity ごと消して検証を素通りできない★★（Codex74回目の指摘4）",
+      any("identity" in x for x in check_machine(
+          "zzz_test", {k: v for k, v in _ok_machine.items()
+                       if k != "identity"})))
+    t("★★identity の必須項目が欠けていれば止める★★",
+      any("official_product_url" in x for x in check_machine(
+          "zzz_test", {**_ok_machine,
+                       "identity": {"manufacturer_id": "bellco",
+                                    "announced_name": "テスト"}})))
     t("★★名簿に無いメーカーは止める★★",
       any("メーカーが名簿" in x for x in check_machine(
           "zzz_test", {**_ok_machine,

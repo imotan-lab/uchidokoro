@@ -86,12 +86,28 @@ def _norm_name(s: str) -> str:
     return "".join(s.split())
 
 
+# ★claim IDに使ってよい値★（2026-08-04・Codex74回目の指摘3。
+#   接頭辞だけ見ていたので `at:`（モード空）や `ceiling:None:` が
+#   「固有ゲーム性1件」として数えられ、中身の無い機種が index できた）
+AT_MODES = ("MAIN_AT", "UPPER_AT")
+CEILING_KINDS = ("GAME", "CYCLE", "POINT")
+_CZ_NAME_OK = re.compile(r"^[^\s]{1,60}$")
+
+
+def _bad_value(v) -> bool:
+    """空・None・文字列の 'None'/'none' を値として認めない。"""
+    s = "" if v is None else str(v).strip()
+    return (not s) or s.lower() in ("none", "null", "nan", "-")
+
+
 def claims_from_material(material: dict) -> list:
     """材料から一意claim IDの一覧を作る（契約 §4）。
 
     ★機種名・メーカー・登場時期は数えない★（本人性に使う情報であって
     「中身の濃さ」ではない。Codex70回目）。
     ★setで重複排除★＝同じclaimを何度足しても点数は変わらない。
+    ★欠けた値からclaimを作らない★（Codex74回目。作れば「中身がある」と
+      数えてしまう。材料が壊れているなら止める＝fail-closed）
     """
     got = set()
     adopted = (material or {}).get("adopted") or {}
@@ -99,22 +115,46 @@ def claims_from_material(material: dict) -> list:
         if adopted.get(key):
             got.add(key)
     for c in ((material or {}).get("ceilings") or {}).get("adopted") or []:
-        got.add(f"ceiling:{c.get('kind')}:{c.get('counted') or ''}")
+        kind = (c or {}).get("kind")
+        if kind not in CEILING_KINDS:
+            raise DecisionError(f"天井の種類が不明です: {kind!r}")
+        if _bad_value(c.get("amount")):
+            raise DecisionError(f"天井の値がありません: {c!r}")
+        counted = "" if _bad_value(c.get("counted")) else str(c["counted"]).strip()
+        got.add(f"ceiling:{kind}:{counted}")
     for c in ((material or {}).get("at_specs") or {}).get("adopted") or []:
-        got.add(f"at:{c.get('mode')}")
+        mode = (c or {}).get("mode")
+        if mode not in AT_MODES:
+            raise DecisionError(f"ATのモードが不明です: {mode!r}")
+        if _bad_value(c.get("games")) or _bad_value(c.get("net")):
+            raise DecisionError(f"ATの値がありません: {c!r}")
+        got.add(f"at:{mode}")
     for c in ((material or {}).get("czs") or {}).get("adopted") or []:
-        got.add(f"cz:{_norm_name(c.get('name'))}")
+        nm = _norm_name((c or {}).get("name"))
+        if _bad_value(nm):
+            raise DecisionError(f"CZの名前がありません: {c!r}")
+        got.add(f"cz:{nm}")
     return sorted(got)
 
 
 def _category(claim: str) -> str:
+    """claim ID の**形まで**確かめてカテゴリを返す（不正は例外）。"""
     if claim in _SPEC_CLAIMS:
         return "spec"
     if claim.startswith("ceiling:"):
+        parts = claim.split(":")
+        if len(parts) != 3 or parts[1] not in CEILING_KINDS \
+                or (parts[2] and _bad_value(parts[2])):
+            raise DecisionError(f"天井のclaim IDが不正です: {claim!r}")
         return "ceiling"
     if claim.startswith("at:"):
+        if claim[3:] not in AT_MODES:
+            raise DecisionError(f"ATのclaim IDが不正です: {claim!r}")
         return "gameflow"
     if claim.startswith("cz:"):
+        nm = claim[3:]
+        if _bad_value(nm) or not _CZ_NAME_OK.match(nm):
+            raise DecisionError(f"CZのclaim IDが不正です: {claim!r}")
         return "cz"
     raise DecisionError(f"不明なclaim IDです: {claim!r}")
 
@@ -214,9 +254,12 @@ def validate_decision(pd: dict) -> None:
     if not isinstance(pd["claims"], list) \
             or not all(isinstance(c, str) and c for c in pd["claims"]):
         raise DecisionError("判定書の claims が文字列の配列ではありません")
-    if not isinstance(pd["decided_at"], str) \
-            or not re.match(r"^\d{4}-\d{2}-\d{2}$", pd["decided_at"]):
-        raise DecisionError(f"判定書の decided_at が日付ではありません: "
+    if not isinstance(pd["decided_at"], str):
+        raise DecisionError("判定書の decided_at が文字ではありません")
+    try:
+        date.fromisoformat(pd["decided_at"])   # ★実在する日か★（Codex74回目）
+    except ValueError:
+        raise DecisionError(f"判定書の decided_at が実在する日付ではありません: "
                             f"{pd['decided_at']!r}")
     for c in pd["claims"]:
         _category(c)                       # 不明なclaim IDはここで例外
@@ -404,6 +447,35 @@ def selftest() -> int:
     t("　余分な項目があれば止まる",
       _raises(lambda: validate_decision({**d, "extra": 1})))
     t("　正しい判定書は通る", validate_decision(d) is None)
+    # ★中身の無いclaim IDで index できない★（Codex74回目の指摘3）
+    t("★★空のATモード（at:）は固有ゲーム性として数えない★★",
+      _raises(lambda: decide_from_claims(
+          ["at:", "model_code", "payout_range"], "normal", "2026-08-04")))
+    t("★★天井の種類が不明（ceiling:None:）は通さない★★",
+      _raises(lambda: decide_from_claims(
+          ["ceiling:None:", "model_code", "payout_range"], "normal",
+          "2026-08-04")))
+    t("★★名前の無いCZ（cz:）は通さない★★",
+      _raises(lambda: decide_from_claims(
+          ["cz:", "model_code", "payout_range"], "normal", "2026-08-04")))
+    t("★★材料側でも欠けた値からclaimを作らない★★",
+      _raises(lambda: claims_from_material(
+          {"at_specs": {"adopted": [{"mode": None, "games": 30, "net": 2.8}]}}))
+      and _raises(lambda: claims_from_material(
+          {"at_specs": {"adopted": [{"mode": "MAIN_AT", "games": None,
+                                     "net": None}]}}))
+      and _raises(lambda: claims_from_material(
+          {"czs": {"adopted": [{"name": ""}]}}))
+      and _raises(lambda: claims_from_material(
+          {"ceilings": {"adopted": [{"kind": None, "amount": 800}]}})))
+    t("　正しい材料からは今までどおりclaimが出る",
+      claims_from_material(
+          {"ceilings": {"adopted": [{"kind": "GAME", "amount": 800,
+                                     "counted": "通常時"}]},
+           "czs": {"adopted": [{"name": "喰霊チャンス"}]}})
+      == ["ceiling:GAME:通常時", "cz:喰霊チャンス"])
+    t("★実在しない日付（2026-99-99）の判定書は通さない★",
+      _raises(lambda: validate_decision({**d, "decided_at": "2026-99-99"})))
     # ★公開済みの機種にも緊急overrideが効く★（Codex73回目の指摘1）
     t("★★override中は、公開時にindexableで焼かれた機種もnoindex側になる★★",
       machine_class(m_auto, FORCE) == "AUTO_PENDING"

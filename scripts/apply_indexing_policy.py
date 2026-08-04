@@ -45,10 +45,26 @@ class PolicyApplyError(RuntimeError):
     pass
 
 
+def _page_has_noindex(path: str) -> bool:
+    with open(path, encoding="utf-8") as f:
+        vals = _pub._hc.meta_values(_pub._hc.parse(f.read()), "robots")
+    return any("noindex" in v for v in vals)
+
+
 def plan(policy: dict | None = None) -> dict:
-    """いまのpolicyで、何をそろえる必要があるかを返す（書き込まない）。"""
+    """いまのpolicyに対して、そろっていない成果物を挙げる（書き込まない）。
+
+    ★判定書だけでなく、実際のHTMLとsitemapの状態まで見る★
+      （2026-08-04・Codex74回目の指摘1。判定書だけを見ていたので、
+        判定書を書いた直後に落ちると「差分なし」と判断し、
+        古いHTML・sitemapを直せないまま収束できなかった）
+      3つのどれか1つでもずれていれば「そろえる対象」にする＝
+      途中で落ちても、もう一度走らせれば必ず追いつく。
+    """
     policy = policy if policy is not None else _pd.load_policy()
     rows = _sj.read_rows(MACHINES)
+    with open(SITEMAP, encoding="utf-8") as f:
+        sm = f.read()
     out = {"mode": policy["mode"], "changes": [], "unchanged": []}
     for m in rows:
         if not _pd.is_auto(m):
@@ -58,13 +74,23 @@ def plan(policy: dict | None = None) -> dict:
         _pd.validate_decision(pd_old)          # 壊れていればここで止まる
         pd_new = _pd.decide_from_claims(pd_old["claims"], policy["mode"],
                                         pd_old["decided_at"])
-        if pd_new == pd_old:
+        page = os.path.join(BASE, "machines", slug, "index.html")
+        why = []
+        if pd_new != pd_old:
+            why.append("判定書")
+        if not os.path.isfile(page):
+            why.append("ページがありません")
+        elif _page_has_noindex(page) == pd_new["indexable"]:
+            why.append("ページのnoindex")
+        if (_pub.sitemap_line(slug) in sm) != pd_new["indexable"]:
+            why.append("sitemap")
+        if not why:
             out["unchanged"].append(slug)
             continue
         out["changes"].append({
             "slug": slug,
             "from": pd_old["indexable"], "to": pd_new["indexable"],
-            "decision": pd_new,
+            "why": why, "decision": pd_new,
         })
     return out
 
@@ -91,15 +117,30 @@ def apply(policy: dict | None = None, apply_it: bool = False) -> dict:
         with open(p, encoding="utf-8") as f:
             pages_before[p] = f.read()
 
-    def _rollback():
-        try:
-            _pub.write_atomic(MACHINES, machines_before.decode("utf-8"))
-            _pub.write_atomic(SITEMAP, sitemap_before)
-            for p_, t_ in pages_before.items():
-                _pub.write_atomic(p_, t_)
-        except Exception as e:            # noqa: BLE001
+    def _rollback() -> list:
+        """★1つずつ独立に戻し、戻せたかを1件ずつ確かめる★
+
+        （2026-08-04・Codex74回目の指摘2。全体を1つのtryで囲っていたので、
+        最初の machines.json の復元に失敗すると sitemap もページも
+        戻さないまま抜けていた）
+        戻せなかったものの一覧を返す（空なら完全に戻った）。
+        """
+        failed = []
+        targets = [(MACHINES, machines_before.decode("utf-8")),
+                   (SITEMAP, sitemap_before)] + list(pages_before.items())
+        for path_, text_ in targets:
+            try:
+                _pub.write_atomic(path_, text_)
+                with open(path_, encoding="utf-8") as f:
+                    if f.read() != text_:
+                        failed.append(os.path.relpath(path_, BASE))
+            except Exception as e:        # noqa: BLE001
+                failed.append(f"{os.path.relpath(path_, BASE)}: {e}")
+        if failed:
             got["problems"].append(
-                f"★元に戻せませんでした（人が確かめてください）: {e}★")
+                "★元に戻せなかったファイルがあります（人が確かめてください）: "
+                + " / ".join(str(x)[:80] for x in failed[:5]) + "★")
+        return failed
 
     try:
         rows = _sj.read_rows(MACHINES)
@@ -138,18 +179,32 @@ def apply(policy: dict | None = None, apply_it: bool = False) -> dict:
             _pub.write_atomic(SITEMAP, sm)
             got["wrote"].append(SITEMAP)
     except BaseException as e:            # noqa: BLE001
-        _rollback()
-        got["problems"].append(f"反映できませんでした（元に戻しました）: {e}")
+        failed = _rollback()
+        got["problems"].append(
+            f"反映できませんでした（{'元に戻しました' if not failed else '戻し切れていません'}）: {e}")
+        got["wrote"] = [] if not failed else got["wrote"]
         if isinstance(e, KeyboardInterrupt):
             raise
         return got
 
-    ng = _pub.run_site_audit()
+    # ★監査そのものが例外で落ちる場合も、変更を残して終わらない★
+    #   （2026-08-04・Codex74回目の指摘2）
+    try:
+        ng = _pub.run_site_audit()
+    except BaseException as e:            # noqa: BLE001
+        ng = [f"監査を実行できませんでした: {e}"]
+        if isinstance(e, KeyboardInterrupt):
+            _rollback()
+            raise
     if ng:
-        _rollback()
+        failed = _rollback()
         got["problems"] += ng
-        got["problems"].append("★監査に落ちたので全部元に戻しました★")
-        got["wrote"] = []
+        if failed:
+            got["problems"].append(
+                "★監査に落ちたので戻そうとしましたが、戻し切れていません★")
+        else:
+            got["problems"].append("★監査に落ちたので全部元に戻しました★")
+            got["wrote"] = []
     return got
 
 
@@ -167,12 +222,55 @@ def selftest() -> int:
 
     NORMAL = {"schema_version": _pd.POLICY_SCHEMA, "mode": "normal",
               "reason": ""}
+    claims = ["at:MAIN_AT", "model_code", "payout_range"]
     FORCE = {"schema_version": _pd.POLICY_SCHEMA,
              "mode": "force_noindex_new_auto", "reason": "試験"}
     t("★いまの本番データに新台経路の機種が無ければ、変えるものも無い★",
       plan(NORMAL)["changes"] == [])
+    # ★成果物ベースの収束（Codex74回目の指摘1）★
+    #   判定書だけ書き換わって落ちた状態＝ページとsitemapが古い、を作って
+    #   plan() が「まだそろっていない」と言えることを確かめる。
+    import tempfile as _tf, shutil as _sh, json as _js
+    _real = (MACHINES, SITEMAP, BASE)
+    _d = _tf.mkdtemp(prefix="uchi_pol_")
+    try:
+        g = globals()
+        g["MACHINES"] = os.path.join(_d, "machines.json")
+        g["SITEMAP"] = os.path.join(_d, "sitemap.xml")
+        g["BASE"] = _d
+        os.makedirs(os.path.join(_d, "machines", "zzz_pol"))
+        # 判定書は「override反映済み（noindex側）」、ページは古い（noindexが無い）、
+        # sitemapにも載ったまま＝落ちた直後の状態
+        _pd_f = _pd.decide_from_claims(claims, "force_noindex_new_auto",
+                                       "2026-08-04")
+        with open(g["MACHINES"], "w", encoding="utf-8") as f:
+            _js.dump([{"slug": "zzz_pol", "name": "試験",
+                       "publication_policy": _pd.SCHEMA,
+                       "page_decision": _pd_f}], f, ensure_ascii=False)
+        with open(os.path.join(_d, "machines", "zzz_pol", "index.html"),
+                  "w", encoding="utf-8") as f:
+            f.write("<html><head><title>x</title></head><body></body></html>")
+        with open(g["SITEMAP"], "w", encoding="utf-8") as f:
+            f.write("<urlset>" + chr(10)
+                    + _pub.sitemap_line("zzz_pol") + chr(10) + "</urlset>" + chr(10))
+        got2 = plan(FORCE)
+        t("★★判定書だけ反映されて落ちた状態を、もう一度走らせれば直せる★★"
+          "（ページのnoindexとsitemapのずれを見つける・Codex74回目）",
+          len(got2["changes"]) == 1
+          and set(got2["changes"][0]["why"]) == {"ページのnoindex", "sitemap"})
+        # 全部そろっていれば「変えるものは無い」
+        with open(os.path.join(_d, "machines", "zzz_pol", "index.html"),
+                  "w", encoding="utf-8") as f:
+            f.write('<html><head><meta name="robots" content="noindex,follow">'
+                    "</head><body></body></html>")
+        with open(g["SITEMAP"], "w", encoding="utf-8") as f:
+            f.write("<urlset>" + chr(10) + "</urlset>" + chr(10))
+        t("　そろっていれば変えるものは無い（何度走らせても同じ）",
+          plan(FORCE)["changes"] == [])
+    finally:
+        globals()["MACHINES"], globals()["SITEMAP"], globals()["BASE"] = _real
+        _sh.rmtree(_d, ignore_errors=True)
     # 合成データで、切り替えが判定書に効くことを見る
-    claims = ["at:MAIN_AT", "model_code", "payout_range"]
     d_n = _pd.decide_from_claims(claims, "normal", "2026-08-04")
     d_f = _pd.decide_from_claims(claims, "force_noindex_new_auto", "2026-08-04")
     t("★★同じclaimsでも、override中は indexable が false になる★★",
