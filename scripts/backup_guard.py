@@ -116,6 +116,16 @@ DENY_JSON_KEYS = {
 # 単独では一般的すぎる語（secret/token/cookie/session）はキー名の完全一致のみ
 DENY_JSON_KEYS_EXACT = {"secret", "token", "cookie", "session"}
 
+# 本文から「鍵の名前らしい書き方」を拾う（"app_password": / app_password= など）
+# 本文から「鍵に値を入れている書き方」を拾う（"app_password": "…" / api_key='…'）
+#   ★型注釈（token: str）や説明文を拾わないよう、**引用符つきで一定の長さの値**
+#     が入っている場合だけに絞る★（2026-08-04・Codex89回目の対応中に、
+#     設計メモのコード片で誤検知して22件が拒否されたため）
+_KEYLIKE_RE = re.compile(
+    "[\"']?(?P<key>[A-Za-z_][A-Za-z0-9_-]{2,40})[\"']?"
+    r"\s*[:=]\s*"
+    "[\"'](?P<val>[^\"']{8,})[\"']")
+
 # ── 秘密パターン: 値（テキスト全文への正規表現・具体プレフィックスのみ）──
 DENY_VALUE_PATTERNS = [
     ("github_token", re.compile(r"ghp_[A-Za-z0-9]{20,}")),
@@ -228,15 +238,25 @@ def content_findings(path: str) -> list[str]:
         if raw.startswith(magic):
             return [f"content:圧縮ファイルの中身です（{name}）"]
     _txt = text.strip()
-    if _txt[:1] in ("{", "["):
-        try:
-            out.extend(_json_key_findings(json.loads(_txt)))
-        except Exception as e:            # noqa: BLE001
-            if path.lower().endswith(".json"):
-                out.append(f"json:壊れていて中身を確かめられません（{type(e).__name__}）")
-    elif path.lower().endswith(".json"):
-        # ★壊れたJSONは「秘密が無い」と見なさない★（2026-08-04・Codex85回目）
+    _parsed = None
+    try:
+        _parsed = json.loads(_txt) if _txt[:1] in ("{", "[") else None
+    except Exception:                     # noqa: BLE001
+        _parsed = "BROKEN"
+    if _parsed not in (None, "BROKEN"):
+        out.extend(_json_key_findings(_parsed))
+    if path.lower().endswith(".json") and _parsed in (None, "BROKEN"):
+        # ★.json は必ず読めること★（読めない＝中身を確かめられない）
         out.append("json:壊れていて中身を確かめられません（JSONとして読めません）")
+    # ★秘密の鍵の名前は、JSONとして読めなくても本文から探す★
+    #   （2026-08-04・Codex89回目。壊れたJSONを .md に書いて隠せた。
+    #     一方で「[00:00:00] のログはJSONではない」ので、
+    #     カッコ始まりを一律に拒否すると本物のログが通らなくなる＝
+    #     形式ではなく**鍵の名前**で見る）
+    for _m in _KEYLIKE_RE.finditer(text):
+        _k = _norm_key(_m.group("key"))
+        if _k in DENY_JSON_KEYS or _k in DENY_JSON_KEYS_EXACT:
+            out.append(f"text_key:{_m.group('key')}")
     for rule, pat in DENY_VALUE_PATTERNS:
         if pat.search(text):
             out.append(f"value:{rule}")
@@ -617,35 +637,64 @@ def selftest() -> int:
     t("★★UTF-16で保存すれば素通り、を防ぐ★★"
       "（errors=ignore で文字の間にNULが入り正規表現に当たらなかった）",
       any("UTF-8として読めない" in x for x in content_findings(_u16)))
-    # ★中身がJSONなら拡張子に関係なく確かめる★（2026-08-04・Codex88回目）
-    _md9 = os.path.join(_d9, "note.md")
-    open(_md9, "w", encoding="utf-8").write(
-        '{"app_password":"abcd efgh ijkl mnop"}')
-    t("★★.md に JSON を書いても鍵の検査から逃げられない★★"
-      "（拡張子でしか見ていなかった＝ガードのfail-open）",
-      any("app_password" in x for x in content_findings(_md9)))
-    _zip9 = os.path.join(_d9, "fake.md")
-    open(_zip9, "wb").write(b"PK" + bytes([3, 4]) + b"rest")
+    # ★中身がJSONなら拡張子に関係なく確かめる★（2026-08-04・Codex88〜89回目）
+    #   ★試験は「許可される場所・別々の名前」で行う★
+    #     （前回は一時ディレクトリ直下に置いたため名前の許可で落ちており、
+    #       さらに2本が同じパスを上書きしていて意図した経路を試せていなかった）
+    _dd9 = os.path.join(_d9, "_design")
+    os.makedirs(_dd9, exist_ok=True)
+
+    def _mk9(name, text, binary=False):
+        q = os.path.join(_dd9, name)
+        if binary:
+            open(q, "wb").write(text)
+        else:
+            open(q, "w", encoding="utf-8").write(text)
+        return q
+
+    _json_md9 = _mk9("fake_json.md", '{"app_password":"abcd efgh ijkl mnop"}')
+    _broken_md9 = _mk9("broken_json.md", '{"app_password":"abcd efgh ijkl mnop",}')
+    _u16_9 = _mk9("utf16_note.md", "これはUTF-16で保存した文章です".encode("utf-16"),
+                  binary=True)
+    _zip9 = _mk9("fake_zip.md", b"PK" + bytes([3, 4]) + b"rest", binary=True)
+    _nul9 = _mk9("nul_note.md", b"abc" + bytes([0]) + b"def", binary=True)
+    _plain9 = _mk9("plain_note.md", "# 設計メモ" + chr(10) + "ふつうの文章")
+    t("★★.md に JSON を書いても鍵の検査から逃げられない★★",
+      any("app_password" in x for x in content_findings(_json_md9)))
+    t("★★壊れたJSONを .md に書いても通さない★★"
+      "（鍵の名前を本文から探す＝形式に頼らない・Codex89回目）",
+      any("app_password" in x for x in content_findings(_broken_md9)))
+    t("★★設計メモのコード片（token: str）を誤って拒否しない★★"
+      "（鍵の名前だけで見ると22件が拒否された・2026-08-04の実測）",
+      content_findings(_mk9("code_note.md",
+                            "def f(token: str) -> None:" + chr(10)
+                            + "    pass")) == [])
+    t("★★カッコで始まるタスクログを誤って拒否しない★★"
+      "（形式で判断すると [00:00:00] のログが通らなくなる）",
+      content_findings(_mk9("dummy_2026-07-16.log",
+                            "[00:00:00] STEP 0" + chr(10)
+                            + "[00:00:01] 見張り bellco: 状態=OK")) == [])
     t("★★テキストの皮をかぶった圧縮ファイルも通さない★★",
       any("圧縮ファイル" in x for x in content_findings(_zip9)))
-    _nul9 = os.path.join(_d9, "nul.md")
-    open(_nul9, "wb").write(b"abc" + bytes([0]) + b"def")
     t("　NULが入っているファイルはテキストとして扱わない",
       any("NUL" in x for x in content_findings(_nul9)))
-    _plain9 = os.path.join(_d9, "plain.md")
-    open(_plain9, "w", encoding="utf-8").write("# 設計メモ" + chr(10) + "ふつうの文章")
-    t("　ふつうの設計メモはこれまでどおり通る",
-      content_findings(_plain9) == [])
-    # ★最後のコピー拒否まで確かめる★（Codex88回目・防御の厚み）
+    t("　ふつうの設計メモはこれまでどおり通る", content_findings(_plain9) == [])
+    t("　UTF-16のファイルは中身を確かめられないので通さない",
+      any("UTF-8として読めない" in x for x in content_findings(_u16_9)))
+    # ★最後のコピー拒否まで、別々のファイルで確かめる★（Codex89回目）
     _out9 = os.path.join(_d9, "out")
     os.makedirs(_out9, exist_ok=True)
-    for _nm9, _why9 in ((_md9, ".mdに書いたJSON"),
-                        (_arr9, "配列51件目の秘密"),
-                        (_u16, "UTF-16のファイル")):
-        _dst9 = os.path.join(_out9, os.path.basename(_nm9))
-        _rc9 = cmd_copy(_nm9, _dst9, False)
+    for _src9, _why9 in ((_json_md9, ".mdに書いたJSON"),
+                         (_broken_md9, ".mdに書いた壊れたJSON"),
+                         (_u16_9, "UTF-16のファイル"),
+                         (_arr9, "配列51件目の秘密")):
+        _dst9 = os.path.join(_out9, os.path.basename(_src9))
+        _rc9 = cmd_copy(_src9, _dst9, False)
         t(f"★★{_why9} は実際にコピーされない★★",
           _rc9 != 0 and not os.path.exists(_dst9))
+    t("　ふつうの設計メモは実際にコピーできる（拒否しすぎていない）",
+      cmd_copy(_plain9, os.path.join(_out9, "plain_note.md"), False) == 0
+      and os.path.exists(os.path.join(_out9, "plain_note.md")))
     t("★★読み取りに失敗したファイルも通さない★★",
       any("読めないので" in x
           for x in content_findings(os.path.join(_d9, "no_such_file.json"))))
