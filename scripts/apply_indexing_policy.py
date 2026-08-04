@@ -231,7 +231,7 @@ def selftest() -> int:
     #   判定書だけ書き換わって落ちた状態＝ページとsitemapが古い、を作って
     #   plan() が「まだそろっていない」と言えることを確かめる。
     import tempfile as _tf, shutil as _sh, json as _js
-    _real = (MACHINES, SITEMAP, BASE)
+    _real = (MACHINES, SITEMAP, BASE, DETAILS)
     _d = _tf.mkdtemp(prefix="uchi_pol_")
     try:
         g = globals()
@@ -267,8 +267,53 @@ def selftest() -> int:
             f.write("<urlset>" + chr(10) + "</urlset>" + chr(10))
         t("　そろっていれば変えるものは無い（何度走らせても同じ）",
           plan(FORCE)["changes"] == [])
+        # ★★障害を実際に起こして確かめる★★（2026-08-04・Codex75回目の助言）
+        #   「実装は塞がっているが、退行を防ぐ試験が無い」と言われた3経路。
+        _det = os.path.join(_d, "assets", "data", "machine-details")
+        os.makedirs(_det)
+        with open(os.path.join(_det, "zzz_pol.json"), "w",
+                  encoding="utf-8") as f:
+            _js.dump({"slug": "zzz_pol", "sections": []}, f)
+        g["DETAILS"] = _det
+        # 反映が必要な状態に戻す（ページのnoindexを外す）
+        _page = os.path.join(_d, "machines", "zzz_pol", "index.html")
+        with open(_page, "w", encoding="utf-8") as f:
+            f.write("<html><head><title>x</title></head><body></body></html>")
+        _real_render, _real_audit, _real_write = (
+            _pub.render, _pub.run_site_audit, _pub.write_atomic)
+        try:
+            # ① 書込み中の例外 → 全部元に戻り、書いたことにしない
+            _pub.render = lambda *a2, **k2: (_ for _ in ()).throw(
+                RuntimeError("描画に失敗"))
+            r1 = apply(FORCE, apply_it=True)
+            with open(_page, encoding="utf-8") as f:
+                _page_now = f.read()
+            t("★★描画で落ちても、書いたものは全部元に戻る★★",
+              r1["wrote"] == [] and "描画に失敗" in " ".join(r1["problems"])
+              and "noindex" not in _page_now)
+            # ② 監査が例外で落ちる → 変更を残さない
+            _pub.render = _real_render
+            _pub.run_site_audit = lambda **k2: (_ for _ in ()).throw(
+                RuntimeError("監査が異常終了"))
+            r2 = apply(FORCE, apply_it=True)
+            t("★★監査そのものが落ちても、変更を残して終わらない★★",
+              r2["wrote"] == []
+              and any("監査を実行できません" in x for x in r2["problems"]))
+            # ③ 戻すのに失敗 → 「全部戻しました」と言わない
+            _pub.run_site_audit = lambda **k2: ["わざとNG"]
+            _pub.write_atomic = lambda p3, t3, **k3: (
+                _real_write(p3, t3, **k3) if "machines.json" not in p3
+                else (_ for _ in ()).throw(OSError("戻せない")))
+            r3 = apply(FORCE, apply_it=True)
+            t("★★戻し切れないときに『全部元に戻しました』と言わない★★",
+              any("戻し切れていません" in x for x in r3["problems"])
+              and not any("全部元に戻しました" in x for x in r3["problems"]))
+        finally:
+            _pub.render, _pub.run_site_audit, _pub.write_atomic = (
+                _real_render, _real_audit, _real_write)
     finally:
-        globals()["MACHINES"], globals()["SITEMAP"], globals()["BASE"] = _real
+        (globals()["MACHINES"], globals()["SITEMAP"], globals()["BASE"],
+         globals()["DETAILS"]) = _real
         _sh.rmtree(_d, ignore_errors=True)
     # 合成データで、切り替えが判定書に効くことを見る
     d_n = _pd.decide_from_claims(claims, "normal", "2026-08-04")
