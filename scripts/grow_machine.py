@@ -110,24 +110,33 @@ def claims_grew(old_decision: dict, new_decision: dict) -> list:
 ANY = "\uE000"          # ★この欄は何が来てもよい（まだ確定していない）★
 
 
+def _cell(text: str, pending) -> tuple:
+    """1つの欄を、確定した部分と未確定の部分に分ける。
+
+    ★2026-08-05・Codex105回目★
+      CZの欄は「継続10 ／ 期待度は出典で書き方が異なります」のように
+      **1つの欄に確定と未確定が同居する**。欄ごと「何が来てもよい」に
+      していたので、確定していた「継続10」の書き換えを見逃していた。
+      区切りで分け、未確定の部分だけを自由にする。
+    """
+    parts = [p.strip() for p in str(text).split("／")]
+    return tuple(ANY if pending(p) else p for p in parts)
+
+
+def _same(a, b) -> bool:
+    """未確定の印（ANY）は何にでも一致する、という比べ方。"""
+    if a == ANY:
+        return True
+    if isinstance(a, tuple) and isinstance(b, tuple):
+        return len(a) == len(b) and all(_same(x, y) for x, y in zip(a, b))
+    return a == b
+
+
 def _match(old_u, new_units) -> bool:
     """未確定の欄を除いて、同じ単位が新しい側にあるか。"""
-    for n in new_units:
-        if len(n) != len(old_u):
-            continue
-        ok = True
-        for a, b in zip(old_u, new_units and n):
-            if isinstance(a, tuple) and isinstance(b, tuple):
-                if len(a) != len(b) or any(
-                        x != ANY and x != y for x, y in zip(a, b)):
-                    ok = False
-                    break
-            elif a != ANY and a != b:
-                ok = False
-                break
-        if ok:
-            return True
-    return False
+    return any(len(n) == len(old_u)
+               and all(_same(x, y) for x, y in zip(old_u, n))
+               for n in new_units)
 
 
 def _units(detail: dict) -> list:
@@ -173,8 +182,7 @@ def _units(detail: dict) -> list:
                 # ★未確定の欄だけを「何が来てもよい」にする★
                 #   （2026-08-05・Codex104回目の指摘3。行ごと捨てていたので、
                 #     同じ行の**確定済みの欄**まで比べられなくなっていた）
-                cells = tuple(ANY if _pending(str(x)) else str(x)
-                              for x in (row or []))
+                cells = tuple(_cell(x, _pending) for x in (row or []))
                 out.append(("table", title, label, headers, cells))
             note = str((tb or {}).get("note") or "").strip()
             if note and not _pending(note):
@@ -624,6 +632,21 @@ def selftest() -> int:
       not text_kept(d_thin, d_full))
     t("　逆に、確認できていた内容が「確認中」へ戻る更新は止める",
       bool(text_kept(d_full, d_thin)))
+    # ★1つの欄に確定と未確定が同居する場合★（Codex105回目・再現した）
+    cz_mix = _mat(czs={"adopted": [{"name": "CZ-A", "games": 10,
+                                    "rate_disputed": True,
+                                    "sources": ["a", "b"]}], "need_third": []})
+    cz_changed = _mat(czs={"adopted": [{"name": "CZ-A", "games": 20,
+                                        "rate": "50%",
+                                        "sources": ["a", "b"]}], "need_third": []})
+    cz_kept = _mat(czs={"adopted": [{"name": "CZ-A", "games": 10,
+                                     "rate": "50%",
+                                     "sources": ["a", "b"]}], "need_third": []})
+    d_mix = _ba.build_detail("x", "L機", "2026-08", cz_mix)
+    t("★★同じ欄の中でも、確定していた部分の書き換えは止める★★（継続10→20）",
+      bool(text_kept(d_mix, _ba.build_detail("x", "L機", "2026-08", cz_changed))))
+    t("★★同じ欄の未確定の部分だけが埋まる更新は通す★★（継続10のまま期待度が確定）",
+      not text_kept(d_mix, _ba.build_detail("x", "L機", "2026-08", cz_kept)))
     set_thin = _mat(adopted={"model_code": {"value": "L機/1", "sources": ["a", "b"]},
                              "at_prob": {"value": {"1": "1/300"},
                                          "sources": ["a", "b"]}},
