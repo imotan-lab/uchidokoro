@@ -110,6 +110,9 @@ def claims_grew(old_decision: dict, new_decision: dict) -> list:
 ANY = "\uE000"          # ★この欄は何が来てもよい（まだ確定していない）★
 
 
+CELL = ""        # ★これは「欄」だという印★（表の構造と混ぜない）
+
+
 def _cell(text: str, pending) -> tuple:
     """1つの欄を、確定した部分と未確定の部分に分ける。
 
@@ -120,13 +123,28 @@ def _cell(text: str, pending) -> tuple:
       区切りで分け、未確定の部分だけを自由にする。
     """
     parts = [p.strip() for p in str(text).split("／")]
-    return tuple(ANY if pending(p) else p for p in parts)
+    return (CELL,) + tuple(ANY if pending(p) else p for p in parts)
 
 
 def _same(a, b) -> bool:
-    """未確定の印（ANY）は何にでも一致する、という比べ方。"""
+    """未確定の印（ANY）は何にでも一致する、という比べ方。
+
+    ★欄の中は「増えてよい」★（2026-08-05・Codex106回目）
+      1つの欄には複数の事実が並ぶ（継続・期待度）。後から
+      **もう1つ確定して増える**のが正しい更新なので、欄の中だけは
+      「前にあった確定分が残っていること」を見る（増えるのは自由）。
+      表の行や列の数は従来どおり厳密に比べる（緩めると構造が守れない）。
+    """
     if a == ANY:
         return True
+    a_cell = isinstance(a, tuple) and a and a[0] == CELL
+    b_cell = isinstance(b, tuple) and b and b[0] == CELL
+    if a_cell or b_cell:
+        if not (a_cell and b_cell):
+            return False
+        from collections import Counter
+        want = Counter(x for x in a[1:] if x != ANY)
+        return not (want - Counter(b[1:]))
     if isinstance(a, tuple) and isinstance(b, tuple):
         return len(a) == len(b) and all(_same(x, y) for x, y in zip(a, b))
     return a == b
@@ -647,6 +665,30 @@ def selftest() -> int:
       bool(text_kept(d_mix, _ba.build_detail("x", "L機", "2026-08", cz_changed))))
     t("★★同じ欄の未確定の部分だけが埋まる更新は通す★★（継続10のまま期待度が確定）",
       not text_kept(d_mix, _ba.build_detail("x", "L機", "2026-08", cz_kept)))
+    def _cz(**kw):
+        return _mat(czs={"adopted": [dict({"name": "CZ-A",
+                                           "sources": ["a", "b"]}, **kw)],
+                         "need_third": []})
+
+    def _d(m):
+        return _ba.build_detail("x", "L機", "2026-08", m)
+
+    none_ = _cz()                                   # 確認中
+    g10 = _cz(games=10)                             # 継続10
+    r50 = _cz(rate="50%")                           # 期待度 50%
+    both = _cz(games=10, rate="50%")                # 継続10 ／ 期待度 50%
+    mix = _cz(games=10, rate_disputed=True)         # 継続10 ／ 未確定
+    changed = _cz(games=20, rate="50%")             # 継続20 ／ 期待度 50%
+    t("★★確認中 → 継続10 ／ 期待度50% は通る★★（Codex106回目・拒否していた）",
+      not text_kept(_d(none_), _d(both)))
+    t("★★継続10 → 継続10 ／ 期待度50% は通る★★（同じ欄に増えるのは正しい更新）",
+      not text_kept(_d(g10), _d(both)))
+    t("★★期待度50% → 継続10 ／ 期待度50% は通る★★",
+      not text_kept(_d(r50), _d(both)))
+    t("★★継続10 ／ 未確定 → 継続20 ／ 期待度50% は止める★★",
+      bool(text_kept(_d(mix), _d(changed))))
+    t("　欄の中身が減る更新は止める（継続10 ／ 期待度50% → 継続10）",
+      bool(text_kept(_d(both), _d(g10))))
     set_thin = _mat(adopted={"model_code": {"value": "L機/1", "sources": ["a", "b"]},
                              "at_prob": {"value": {"1": "1/300"},
                                          "sources": ["a", "b"]}},
