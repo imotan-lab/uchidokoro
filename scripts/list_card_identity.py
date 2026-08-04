@@ -38,7 +38,9 @@ SLOT_WORDS = ("パチスロ", "スロット", "スマスロ", "回胴")
 PACHI_WORDS = ("パチンコ", "ぱちんこ", "スマパチ")
 # ぱちんこの規格印（名前の先頭）
 PACHI_MARK = re.compile(r"^(?:CR(?![0-9A-Za-z])|[eEpP](?![0-9A-Za-z]))")
-YEAR_MONTH = re.compile(r"(20\d\d)[./年](\d{1,2})")
+# ★月は1〜12・前後に数字を続けない★（2026-08-04・Codex97回目。
+#   「2026.081」を 2026.08 として採用していた）
+YEAR_MONTH = re.compile(r"(?<!\d)(20\d\d)[./年](0?[1-9]|1[0-2])(?!\d)")
 
 # ★代替を許す取得失敗の種類★（Codex92回目：FETCH_FAILEDなら何でも可、にしない）
 #   いま実際に起きている2つだけを許す。他は必要になった実例が出てから足す。
@@ -79,7 +81,9 @@ class _Cards(HTMLParser):
     def _hidden(a: dict) -> bool:
         if "hidden" in a or a.get("aria-hidden", "").lower() == "true":
             return True
-        st = (a.get("style") or "").replace(" ", "").lower()
+        # ★空白は種類を問わず落とす★（2026-08-04・Codex97回目。半角スペースしか
+        #   落としていなかったので、style="display:	none" が素通りした）
+        st = re.sub(r"\s+", "", (a.get("style") or "")).lower()
         return "display:none" in st or "visibility:hidden" in st
 
     def handle_starttag(self, tag, attrs):
@@ -522,6 +526,20 @@ def selftest() -> int:
                    today=_D(2026, 8, 4))["ok"])
     # ★1つの欄に年月が2つ★（Codex94回目の指摘3・再現した）
     y2in1 = REAL_CARD.replace("2026.08</p>", "2026.08 / 2027.01</p>")
+    t("★★タブ入りの style でも非表示と見なす★★（Codex97回目・再現した）",
+      not identify(_page(REAL_CARD.replace(
+          '<p class="category">パチスロ</p>',
+          '<p class="category"><span style="display:	none">パチスロ</span>製品</p>'),
+          _other("a"), _other("b")), SPEC, U, today=_D(2026, 8, 4))["ok"])
+    t("★★年月に余計な数字が続くものは採らない★★（2026.081・同）",
+      not identify(_page(REAL_CARD.replace("2026.08</p>", "2026.081</p>"),
+                         _other("a"), _other("b")), SPEC, U,
+                   today=_D(2026, 8, 4))["ok"])
+    t("　13月のような月は年月として読まない",
+      any("読めません" in x or "0 個" in x for x in identify(
+          _page(REAL_CARD.replace("2026.08</p>", "2026.13</p>"),
+                _other("a"), _other("b")), SPEC, U,
+          today=_D(2026, 8, 4))["problems"]))
     t("★★1つの欄に年月が2つ書かれていたら採らない★★",
       any("登場年月が 2 個" in x for x in identify(
           _page(y2in1, _other("a"), _other("b")), SPEC, U,
