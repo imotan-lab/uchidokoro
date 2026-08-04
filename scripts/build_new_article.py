@@ -49,34 +49,31 @@ _SLUG_OK = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
 #   （2026-08-04・Codex70〜72回目。導入日を過ぎた瞬間に記事が古くなり、
 #     8/3導入の7機種で実際に「導入予定」のまま公開が続いた。
 #     いつ読んでも真になる文言だけを使う）
+# ★確認した日付を読者向けに出さない★（2026-08-04・運営者判断）
+#   日付は情報を新しくせず「古さの申告」にしかならない。時間が経つと
+#   放置サイトに見え、更新のたびに日付だけ動けば別の不誠実になる。
+#   鮮度は表示ではなく**再確認の仕組み**（台帳#220）で担保する。
+#   ★代わりに「時間に言及しない書き方」にする★＝いつ読んでも真になる文。
+#   （Codexの指摘は「読者の現在に依存する表現が時間で嘘になる」ことなので、
+#     相対表現も日付も使わなければ、その懸念自体が消える）
 LEAD_TEMPLATE = ("{name}の機種情報ページです。登場時期は{release}"
                  "（公式発表を確認済み）。"
-                 "{checked}に当サイトが出典を確認できた項目だけを掲載しています。"
-                 "天井・狙い目などは、確認が取れ次第このページに追記します。")
+                 "出典で確認が取れた項目だけを掲載しており、"
+                 "天井・狙い目などは確認が取れ次第このページに追記します。")
 LEAD_NO_DATE = ("{name}のページです。登場時期は当サイトでは確認できていません。"
-                "{checked}に出典を確認できた項目だけを掲載しています。")
+                "出典で確認が取れた項目だけを掲載しています。")
 # ★生成物に混ぜてはいけない語★（検査でも使う）
 STALE_WORDS = ("導入予定", "登場予定", "導入前")
 
 
-def role_section(checked_on: str) -> dict:
-    """このページの役割（★いつ確認したかを絶対日付で示す★）
-
-    2026-08-04・Codex74回目の指摘5。「現時点で」だけだと、読者が読む
-    「現在」がいつなのか分からない。**確認した日そのもの**を書く。
-    """
-    jp = checked_on
-    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", str(checked_on or ""))
-    if m:
-        jp = f"{m.group(1)}年{int(m.group(2))}月{int(m.group(3))}日"
-    return {
-        "title": "このページの役割",
-        "body": [f"このページは、**{jp}に出典で確認が取れた項目だけ**を"
-                 "掲載しています。",
-                 "確認が取れていない項目は、埋めずに空けてあります。"
-                 "推測や他機種からの流用は行いません。",
-                 "解析が出そろい次第、天井・狙い目・設定示唆などを追記します。"],
-    }
+ROLE_SECTION = {
+    "title": "このページの役割",
+    # ★同じ断りをページ内で繰り返さない★（バナーで既に言っている）
+    #   ここは「載っていない項目をどう扱うか」だけを書く。
+    "body": ["確認が取れていない項目は、埋めずに空けてあります。"
+             "推測や他機種からの流用は行いません。",
+             "解析が出そろい次第、天井・狙い目・設定示唆などを追記します。"],
+}
 
 
 RUMOR_SECTION = {
@@ -253,18 +250,15 @@ def build_detail(slug, name, release, material) -> dict:
     if tables:
         sections.append({"title": "設定示唆まとめ", "type": "settei", "tables": tables})
 
-    sections.append(role_section(date.today().isoformat()))
+    sections.append(ROLE_SECTION)
     sections.append(RUMOR_SECTION)
     return {
         "slug": slug,
         "updated": date.today().isoformat(),
         # ★導入月が分からないなら「登場予定です」と書かない★（Codex指摘5）
         "lead": (LEAD_TEMPLATE.format(name=name,
-                                      release=_fmt_release(release),
-                                      checked=_fmt_day(date.today().isoformat()))
-                 if release
-                 else LEAD_NO_DATE.format(
-                     name=name, checked=_fmt_day(date.today().isoformat()))),
+                                      release=_fmt_release(release))
+                 if release else LEAD_NO_DATE.format(name=name)),
         "summaryBoxes": [],
         "factTable": facts,
         "sections": sections,
@@ -410,13 +404,15 @@ def selftest() -> int:
       any(s.get("type") == "rumor" for s in d["sections"]))
     t("　本文に数値を作文しない（lead に数字が入らない）",
       not re.search(r"\d+\.\d+|\d+G|\d+枚", d["lead"]))
-    t("★★確認した日を絶対日付で示す★★"
-      "（『現時点で』だけでは、読者の『現在』がいつか分からない・Codex74回目）",
-      __import__("re").search(r"\d{4}年\d{1,2}月\d{1,2}日に当サイトが出典を確認",
-                              d["lead"])
-      and any("に出典で確認が取れた項目だけ" in x
-              for sec in d["sections"] if sec.get("title") == "このページの役割"
-              for x in sec["body"]))
+    t("★★確認した日付を読者向けに出さない★★"
+      "（古さの申告にしかならず、放置サイトに見える・2026-08-04運営者判断）",
+      not __import__("re").search(r"\d{4}年\d{1,2}月\d{1,2}日", txt))
+    t("★★読者の『現在』に依存する表現も使わない★★"
+      "（時間に言及しなければ、いつ読んでも真になる・Codex74回目の懸念に対応）",
+      "現時点" not in txt and "現在" not in txt)
+    t("　同じ断りをページ内で繰り返さない（バナーで言っている）",
+      sum(1 for sec in d["sections"] for x in sec.get("body", [])
+          if "確認が取れた項目だけを掲載" in x) == 0)
     t("★★時間で嘘になる語（導入予定・登場予定・導入前）を書かない★★"
       "（Codex70回目＝8/3導入7機種で「導入予定」のまま公開が続いた実害の再発防止）",
       not any(w in txt for w in STALE_WORDS))
