@@ -281,7 +281,8 @@ def check_before(slug: str, machine: dict, rows: list) -> list:
     return ng
 
 
-def check_page(slug: str, html: str, expect_noindex: bool = True) -> list:
+def check_page(slug: str, html: str, expect_noindex: bool = True,
+               pending_boxes: int | None = None) -> list:
     """作ったページそのものを確かめる。★テンプレート任せにしない★
 
     ★2026-07-31・Codexの指摘を再現して3回直した★
@@ -329,17 +330,16 @@ def check_page(slug: str, html: str, expect_noindex: bool = True) -> list:
     #     ひな型のバナーは完成機種のページにも同じ形で入っており、
     #     JavaScriptで表示を切り替えているだけだった。
     #     専用の目印を持ち、隠されていない要素をちょうど1個求める。
-    notices = _hc.preview_notices(doc, STATE)
-    if len(notices) != 1:
-        ng.append(f"先行記事の断り書きが {len(notices)} 個です"
-                  "（隠されていないものが1個であるべきです）")
-    else:
-        # ★文面まで確かめる★（2026-07-31・Codex指摘6を再現）
-        #   「先行記事」の5文字だけを見ていたので、
-        #   「先行記事ですが、全項目を完全確認済みです」も通っていた。
-        text = "".join(notices[0]["text"].split())
-        if text != "".join(NOTICE_TEXT.split()):
-            ng.append(f"断り書きの文面が決めたものと違います: {notices[0]['text'][:60]!r}")
+    # ★未確認の項目には「未確認」と書いた箱があること★
+    #   （2026-08-04・運営者判断でページ全体の断り書きをやめた代わりの検査。
+    #     ページ冒頭の1行より、項目ごとの表示のほうが読者に正確で、
+    #     機械でも「箱の数」で確かめられる）
+    #   ★隠れていない本文として出ていること★（JSが動かなくても見える）
+    shown = _hc.visible_text(html)
+    if pending_boxes is not None:
+        got = shown.count(_ba.PENDING_TEXT)
+        if got != pending_boxes:
+            ng.append(f"未確認の箱が {got} 個です（{pending_boxes} 個であるべきです）")
     return ng
 
 
@@ -1023,8 +1023,10 @@ def render(slug: str, machine: dict, detail: dict) -> str:
         template = _bmp.prepare_template(f.read())
     reasons = _bmp.extract_pochipochi_reasons(template)
     html = _bmp.render_page(template, machine, detail, reasons)
-    # ★通知divは AUTO_INDEXABLE にも付く★（indexableと独立・2026-08-04・Codex72回目）
-    if machine.get("status") == "preview" or _pdz.is_auto(machine):
+    # ★新台経路はページ全体の断り書きを出さない★（2026-08-04・運営者判断）
+    #   未確認の項目は、その項目の場所に「未確認」と書いてある（build_new_article）。
+    #   旧preview（既存7機種）はバナーを出す従来の作りのまま。
+    if machine.get("status") == "preview":
         if _BANNER_HIDDEN not in html:
             raise PublishError("ひな型の断り書きバナーが見つかりません"
                                "（machine.html の作りが変わった可能性があります）")
@@ -1112,7 +1114,10 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
         return out
     html = render(slug, machine, detail)
     out["html_bytes"] = len(html.encode("utf-8"))   # ★文字数ではなくバイト数★
-    out["problems"] += check_page(slug, html, expect_noindex=not indexable)
+    want_pending = sum(1 for sec in (detail.get("sections") or [])
+                       if _ba.PENDING_TEXT in " ".join(sec.get("body") or []))
+    out["problems"] += check_page(slug, html, expect_noindex=not indexable,
+                                  pending_boxes=want_pending)
     out["problems"] += check_only_allowed_values(slug, machine, detail, html)
     if out["problems"] or not apply_it:
         return out
@@ -2009,18 +2014,23 @@ def selftest() -> int:
     t("　インラインstyleがあれば公開しない",
       any("style" in x for x in check_page("zzz_test",
                                            good.replace("<body>", '<body style="x">'))))
-    t("★★断り書きが無ければ公開しない★★（noindexは非公開化ではない）",
-      any("断り書き" in x for x in check_page(
-          "zzz_test", good.replace(NOTICE, 'data-x="y"'))))
-    t("★★本文に『先行記事』の語があるだけでは認めない★★"
-      "（ひな型のバナーは完成機種のページにも同じ形で入っている）",
-      any("断り書き" in x for x in check_page(
-          "zzz_test", good.replace(NOTICE, 'data-x="y"')
-          + "<p>先行記事一覧はこちら</p>")))
-    t("　断り書きが2個あれば止める",
-      any("2 個" in x for x in check_page(
-          "zzz_test", good.replace("</body>",
-                                   '<div ' + NOTICE + '>先行記事</div></body>'))))
+    # ★未確認の項目には「未確認」と書いた箱があること★（2026-08-04・運営者判断）
+    #   ページ冒頭の断り書きをやめた代わりに、項目ごとの表示を機械で数える。
+    _pend_html = good.replace(
+        "</body>", f"<p>{_ba.PENDING_TEXT}</p><p>{_ba.PENDING_TEXT}</p></body>")
+    t("★★未確認の箱がそろっていれば通る★★",
+      check_page("zzz_test", _pend_html, pending_boxes=2) == [])
+    t("★★未確認の箱が足りなければ公開しない★★"
+      "（読者に『分かっていない』と伝わらないまま公開される）",
+      any("未確認の箱" in x for x in check_page(
+          "zzz_test", good, pending_boxes=2)))
+    t("★★隠された（見えない）未確認の箱は数えない★★"
+      "（JSが動かない読者に伝わらない）",
+      any("未確認の箱" in x for x in check_page(
+          "zzz_test",
+          good.replace("</body>",
+                       f'<p hidden>{_ba.PENDING_TEXT}</p></body>'),
+          pending_boxes=1)))
 
     t("　数値のかたまりを取り出せる（全角もそろえる）",
       _numbers("約97.3%と１２００Ｇ") == {"97.3%", "1200"})
@@ -2031,14 +2041,13 @@ def selftest() -> int:
           "zzz_test",
           good.replace('content="noindex,follow"',
                        'content="index" data-note="noindex"'))))
-    t("★★断り書きの文面が決めたものと違えば止める★★",
-      any("文面" in x for x in check_page(
-          "zzz_test", good.replace(NOTICE_TEXT, "ふつうの記事です"))))
-    t("★★『先行記事です。解析の結果、全項目が正しいと判明しました』も止める★★"
-      "（必須語＋禁止語では通っていた・Codex指摘）",
-      any("文面" in x for x in check_page(
-          "zzz_test", good.replace(
-              NOTICE_TEXT, "先行記事です。解析の結果、全項目が正しいと判明しました。"))))
+    t("★★未確認の文面を勝手に変えたら数に入らない★★"
+      "（『未確認ですが問題ありません』のような打ち消しを混ぜられない）",
+      any("未確認の箱" in x for x in check_page(
+          "zzz_test",
+          good.replace("</body>",
+                       "<p>未確認ですが、当サイトの調べでは問題ありません。</p></body>"),
+          pending_boxes=1)))
     t("　暦にない日付は止める",
       any("暦" in x for x in check_machine(
           "zzz_test", {"slug": "zzz_test", "name": "x", "seo": {"title": "x"},
@@ -2192,9 +2201,10 @@ def selftest() -> int:
     t("★★引用符が違う robots も数える★★（正規表現では見逃していた）",
       any("2 個" in x for x in check_page("zzz_test", good.replace(
           "</head>", "<meta name='robots' content='index'></head>"))))
-    t("★★隠された断り書きは認めない★★",
-      any("断り書き" in x for x in check_page(
-          "zzz_test", good.replace('role="note"', 'role="note" hidden'))))
+    t("★★旧preview（既存7機種）の断り書きは従来どおり検査する★★"
+      "（隠された断り書きを認めない・DOM契約は残す）",
+      len(_hc.preview_notices(_hc.parse(
+          good.replace('role="note"', 'role="note" hidden')), STATE)) == 0)
 
     t("★★全体の機種数はもう扱わない★★（表示しない方針・監査が再導入を見張る）",
       count_updates(120, 121) == {} and COUNT_FILES == ())

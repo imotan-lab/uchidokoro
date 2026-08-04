@@ -56,24 +56,26 @@ _SLUG_OK = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
 #   ★代わりに「時間に言及しない書き方」にする★＝いつ読んでも真になる文。
 #   （Codexの指摘は「読者の現在に依存する表現が時間で嘘になる」ことなので、
 #     相対表現も日付も使わなければ、その懸念自体が消える）
-LEAD_TEMPLATE = ("{name}の機種情報ページです。登場時期は{release}"
-                 "（公式発表を確認済み）。"
-                 "出典で確認が取れた項目だけを掲載しており、"
-                 "天井・狙い目などは確認が取れ次第このページに追記します。")
-LEAD_NO_DATE = ("{name}のページです。登場時期は当サイトでは確認できていません。"
-                "出典で確認が取れた項目だけを掲載しています。")
+# ★ページ全体への断り書きは書かない★（2026-08-04・運営者判断）
+#   「出典で確認が取れた項目のみ掲載」を毎ページ繰り返しても読者の役に立たない。
+#   代わりに**未確認の項目の場所に「未確認」と書く**（下の PENDING_TEXT）。
+LEAD_TEMPLATE = "{name}の機種情報ページです。登場時期は{release}（公式発表を確認済み）。"
+LEAD_NO_DATE = "{name}のページです。登場時期は当サイトでは確認できていません。"
 # ★生成物に混ぜてはいけない語★（検査でも使う）
 STALE_WORDS = ("導入予定", "登場予定", "導入前")
 
 
-ROLE_SECTION = {
-    "title": "このページの役割",
-    # ★同じ断りをページ内で繰り返さない★（バナーで既に言っている）
-    #   ここは「載っていない項目をどう扱うか」だけを書く。
-    "body": ["確認が取れていない項目は、埋めずに空けてあります。"
-             "推測や他機種からの流用は行いません。",
-             "解析が出そろい次第、天井・狙い目・設定示唆などを追記します。"],
-}
+# ★未確認の項目は「箱」を先に作り、そこに未確認と書く★（2026-08-04・運営者判断）
+#   ページ全体への断り書きを繰り返すのではなく、**その項目の場所**に書く。
+#   読者は何が分かっていて何が分かっていないかを一目で把握でき、
+#   確認が取れたらこの1文を中身に差し替えるだけで済む。
+PENDING_TEXT = "未確認です。確認でき次第、この欄に掲載します。"
+
+# 記事に必ず用意する「箱」（確認できたものから中身が入る）
+#   ★並びは CLAUDE.md の IDEAL_ORDER に合わせる★
+SECTION_ORDER = ("天井・恩恵", "基本スペック", "当サイトの狙い目",
+                 "朝一・リセット情報", "ゲーム性", "確認できたCZ",
+                 "設定示唆まとめ")
 
 
 RUMOR_SECTION = {
@@ -162,7 +164,7 @@ def build_detail(slug, name, release, material) -> dict:
     if (g50 := adopted.get("games_per_50")):
         facts.append(["50枚あたり", f"約{g50['value']['games']:g}G"])
 
-    sections = []
+    boxes = {}          # title -> section（確認できたものだけ中身が入る）
     # ★天井・恩恵★（一式で採れたものだけ。値だけでは載せない）
     ceil = (material.get("ceilings") or {}).get("adopted") or []
     if ceil:
@@ -175,7 +177,7 @@ def build_detail(slug, name, release, material) -> dict:
                         f"／ 恩恵：{c['benefit']}")
         body.append("出典2件で一致した内容だけを載せています。"
                     "確認が取れていない天井は掲載していません。")
-        sections.append({"title": "天井・恩恵", "body": body})
+        boxes["天井・恩恵"] = {"title": "天井・恩恵", "body": body}
         for c in ceil:
             jp = {"GAME": "ゲーム数天井", "CYCLE": "周期天井",
                   "POINT": "ポイント天井"}.get(c["kind"], "天井")
@@ -189,7 +191,7 @@ def build_detail(slug, name, release, material) -> dict:
             jp = "メインAT" if c["mode"] == "MAIN_AT" else "上位AT"
             body.append(f"**{jp}**：1セット{c['games']}G ／ 純増約{c['net']}枚")
         body.append("モードごとに純増が異なります。出典2件で一致した内容だけを載せています。")
-        sections.append({"title": "ゲーム性", "body": body})
+        boxes["ゲーム性"] = {"title": "ゲーム性", "body": body}
         for c in sorted(ats, key=lambda x: x["mode"]):
             jp = "メインAT純増" if c["mode"] == "MAIN_AT" else "上位AT純増"
             facts.append([jp, f"約{c['net']}枚/G"])
@@ -212,12 +214,12 @@ def build_detail(slug, name, release, material) -> dict:
             elif c.get("rate_disputed"):
                 parts.append("期待度は出典で書き方が異なります")
             rows.append([c["name"], " ／ ".join(parts) if parts else "確認中"])
-        sections.append({
+        boxes["確認できたCZ"] = {
             "title": "確認できたCZ", "type": "settei",
             "tables": [{"label": "出典2件で確認できたCZ",
                         "headers": ["CZ", "確認できた内容"], "rows": rows,
-                        "note": "現時点で確認できたCZのみを載せています。"
-                                "全種類をまとめたものではありません。"}]})
+                        "note": "確認が取れたCZのみを載せています。"
+                                "全種類をまとめたものではありません。"}]}
 
     spec_body = [f"**機種名**：{name}"]
     if release:
@@ -229,7 +231,7 @@ def build_detail(slug, name, release, material) -> dict:
         spec_body.append(f"**機械割**：{v['low']}%〜{v['high']}%")
     if (g50 := adopted.get("games_per_50")):
         spec_body.append(f"**50枚あたりのゲーム数**：約{g50['value']['games']:g}G")
-    sections.append({"title": "基本スペック", "body": spec_body})
+    boxes["基本スペック"] = {"title": "基本スペック", "body": spec_body}
 
     # 設定別の表（★集まった設定だけ★＝1〜6の連番だと決めつけない）
     tables = []
@@ -248,9 +250,14 @@ def build_detail(slug, name, release, material) -> dict:
         tables.append({"label": label, "headers": ["設定", label], "rows": rows,
                        "note": note})
     if tables:
-        sections.append({"title": "設定示唆まとめ", "type": "settei", "tables": tables})
+        boxes["設定示唆まとめ"] = {"title": "設定示唆まとめ", "type": "settei",
+                                  "tables": tables}
 
-    sections.append(ROLE_SECTION)
+    # ★箱を必ず全部並べる★（確認できていない項目は「未確認」と書いておく）
+    sections = []
+    for title in SECTION_ORDER:
+        sections.append(boxes.get(title)
+                        or {"title": title, "body": [PENDING_TEXT]})
     sections.append(RUMOR_SECTION)
     return {
         "slug": slug,
@@ -393,13 +400,19 @@ def selftest() -> int:
     t("★★集まっていない項目の値を作文しない★★"
       "（天井N G・純増N枚・狙い目N Gのような断定が無い）",
       not re.search(r"(天井|狙い目|純増)[^」』\"]{0,12}?\d", txt))
-    t("　説明文として語が出るのは可（『解析が出そろい次第、天井…を追記します』）",
-      "追記します" in txt)
+    t("★★確認できていない項目には『未確認』の箱が用意される★★"
+      "（2026-08-04・運営者判断。ページ冒頭の断り書きの代わり）",
+      all(any(sec["title"] == title for sec in d["sections"])
+          for title in SECTION_ORDER)
+      and any(PENDING_TEXT in " ".join(sec.get("body") or [])
+              for sec in d["sections"]))
     t("★確認できた値だけが表に入る★",
       ["型式名", "Lびん娘NY1"] in d["factTable"]
       and ["機械割", "97.3%〜112.5%"] in d["factTable"])
     t("★★設定が1〜6の連番だと決めつけない★★（集まった設定だけ出す）",
-      [r[0] for r in d["sections"][1]["tables"][0]["rows"]] == ["設定1", "設定6"])
+      [r[0] for r in next(sec for sec in d["sections"]
+                          if sec["title"] == "設定示唆まとめ")
+       ["tables"][0]["rows"]] == ["設定1", "設定6"])
     t("　噂セクションが必ず入る（新規追加の必須項目）",
       any(s.get("type") == "rumor" for s in d["sections"]))
     t("　本文に数値を作文しない（lead に数字が入らない）",

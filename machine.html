@@ -282,13 +282,18 @@ function resolveMachineSlug() {
     }
   }
 
-  // 解析待ちモード：preview または 新台経路(page-decision/v1) はバナーを表示し
-  // 狙い目チェッカー系を隠す（時間経過で嘘になる語は使わない）
-  if (machine.status === "preview" || machine.publication_policy === "page-decision/v1") {
-    const banner = document.getElementById("previewBanner");
-    if (banner) banner.classList.remove("is-hidden");
-    const dateEl = document.getElementById("previewReleaseDate");
-    if (dateEl && machine.release_date) dateEl.textContent = `登場時期: ${machine.release_date}（公式確認）`;
+  // ★新台経路(page-decision/v1)はページ全体の断り書きを出さない★
+  //   （2026-08-04・運営者判断。未確認の項目は、その項目の場所に「未確認」と
+  //     書いてあるので、ページ冒頭で繰り返す必要がない）
+  //   旧preview（既存7機種）は従来どおりバナーを出す。
+  const _isAuto = machine.publication_policy === "page-decision/v1";
+  if (machine.status === "preview" || _isAuto) {
+    if (!_isAuto) {
+      const banner = document.getElementById("previewBanner");
+      if (banner) banner.classList.remove("is-hidden");
+      const dateEl = document.getElementById("previewReleaseDate");
+      if (dateEl && machine.release_date) dateEl.textContent = `登場時期: ${machine.release_date}`;
+    }
     // 解析データが必要なブロックを非表示
     const evBlock = document.getElementById("evTableBlock");
     if (evBlock) evBlock.classList.add("is-hidden");
