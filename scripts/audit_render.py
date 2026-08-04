@@ -73,33 +73,84 @@ import html_check as _hc                     # noqa: E402
 import page_decision as _pd                  # noqa: E402
 
 
-def _load_detail(slug: str) -> dict:
-    """記事データ（契約の正本）。無ければ空。"""
+def _load_detail(slug: str):
+    """記事データ。★無い・壊れている場合は None（合格にしない）★
+
+    （2026-08-04・Codex81回目の指摘3。空dictに変換していたので、
+      読み込み失敗が「節が無いページ」として素通りしていた）
+    """
     p_ = BASE / "assets" / "data" / "machine-details" / f"{slug}.json"
     try:
-        return json.loads(p_.read_text(encoding="utf-8"))
+        got = json.loads(p_.read_text(encoding="utf-8"))
     except Exception:                     # noqa: BLE001
-        return {}
+        return None
+    return got if isinstance(got, dict) else None
 
 
 def _sig_of(html: str) -> list:
-    """描き直したHTMLのタグの並び（属性は見ない）。"""
+    """描き直したHTMLのタグの並び（属性は見ない）。
+
+    ★tbody は数えない★（2026-08-04・Codex81回目の指摘1。
+      ブラウザは table の中に tbody を自動で足すので、
+      文字列から数えた並びとは必ずズレる）
+    """
     import re as _re
-    return _re.findall(r"<([a-z0-9]+)", html)
+    return [t for t in _re.findall(r"<([a-z0-9]+)", html) if t != "tbody"]
 
 
-def judge_boxes(boxes: list, detail: dict) -> list[str]:
-    """最終DOMの箱が、記事データの契約どおりか（★ブラウザ無しで試験できる★）。
+# ★最終DOMから箱の情報を取り出すJS★（統合試験からも同じものを使う）
+BOX_JS = r"""() => {
+        // ★祖先までさかのぼって「本当に見えているか」を見る★
+        //   （2026-08-04・Codex81回目の指摘2。箱だけ見ていたので、
+        //     #articleSections 側を透明にされると気づけなかった）
+        const visible = (el) => {
+            for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
+                const st = getComputedStyle(n);
+                if (st.display === 'none' || st.visibility === 'hidden') return false;
+                if (parseFloat(st.opacity || '1') < 0.05) return false;
+                if (st.clipPath && st.clipPath !== 'none') return false;
+                if (st.clip && st.clip !== 'auto') return false;
+            }
+            const r = el.getBoundingClientRect();
+            return el.offsetParent !== null && r.width >= 1 && r.height >= 1;
+        };
+        const out = [];
+        document.querySelectorAll('#articleSections [data-section]').forEach(el => {
+            const head = el.querySelector(':scope > h3.article-title');
+            const sig = [el.tagName.toLowerCase()].concat(
+                Array.from(el.querySelectorAll('*')).map(x => x.tagName.toLowerCase()));
+            out.push({
+                title: el.getAttribute('data-section'),
+                pending: el.getAttribute('data-pending-section'),
+                tag: el.tagName.toLowerCase(),
+                has_cls: el.classList.contains('article-item'),
+                shown: visible(el),
+                heading: head ? (head.textContent || '') : null,
+                sig: sig,
+                // ★innerText で読む★＝隠された子（hidden 等）の文字は入らない
+                text: (el.innerText || '').replace(/\s+/g, ''),
+            });
+        });
+        return out;
+    }"""
 
-    ★箱が0件でも合格にしない★（2026-08-04・Codex80回目の指摘1。
-      JSが箱を作らない不具合になっても素通りしていた）
-    ★通常の箱も中身と作りを照合する★（同指摘2。表を段落に潰す・本文を消す）
+
+def judge_boxes(boxes: list, detail) -> list[str]:
+    """最終DOMの箱が契約どおりか（★ブラウザ無しで試験できる★）。
+
+    ★この関数に来るのは新台経路の機種だけ★（呼ぶ側で絞る）。
+    したがって**記事データが無い・空・契約と違う**のは、
+    対象外ではなく**不合格**として扱う（Codex81回目の指摘3）。
     """
     import build_machine_pages as _bmp
+    import build_new_article as _ba
+    want = list(_ba.SECTION_ORDER) + [_ba.RUMOR_SECTION["title"]]
+    if not isinstance(detail, dict):
+        return ["R13: 記事データを読めません（新台経路のページなのに中身が無い）"]
     secs = [x for x in (detail.get("sections") or []) if isinstance(x, dict)]
-    if not secs:
-        return []                        # 記事データに節が無いページは対象外
-    want = [x.get("title") for x in secs]
+    if [x.get("title") for x in secs] != want:
+        return [f"R13: 記事データの箱が契約と違います"
+                f"（{[x.get('title') for x in secs]} / {want} のはず）"]
     got = [b.get("title") for b in boxes]
     if got != want:
         return [f"R13: 最終DOMの箱がデータと違います（{got} / {want} のはず）"]
@@ -113,7 +164,7 @@ def judge_boxes(boxes: list, detail: dict) -> list[str]:
         if (b.get("heading") or "").strip() != title:
             ngs.append(f"R13: 箱の見出しが違います: {title}")
         rendered = _bmp.render_section(sec)
-        if b.get("sig") != _sig_of(rendered):
+        if [x for x in (b.get("sig") or []) if x != "tbody"] != _sig_of(rendered):
             ngs.append(f"R13: 箱の中の作りが違います（表や段落が壊れています）: {title}")
         want_text = "".join(_hc.visible_text("<body>" + rendered + "</body>").split())
         if (b.get("text") or "") != want_text:
@@ -255,35 +306,7 @@ def check_one(page, machine: dict) -> list[str]:
     #   （2026-08-04・Codex79〜80回目。ページはJSで箱を作り直すので、
     #     静的HTMLの契約が最終DOMまで保たれているかを別に確かめる）
     #   ★判定は judge_boxes()（純関数）に置く★＝ブラウザ無しで試験できる
-    boxes = page.evaluate(r"""() => {
-        const out = [];
-        document.querySelectorAll('#articleSections [data-section]').forEach(el => {
-            const st = getComputedStyle(el);
-            const r = el.getBoundingClientRect();
-            const head = el.querySelector(':scope > h3.article-title');
-            // ★この箱の作り（タグの並び）★＝表を段落に潰す等の改変を見つける
-            const sig = [el.tagName.toLowerCase()].concat(
-                Array.from(el.querySelectorAll('*')).map(x => x.tagName.toLowerCase()));
-            out.push({
-                title: el.getAttribute('data-section'),
-                pending: el.getAttribute('data-pending-section'),
-                tag: el.tagName.toLowerCase(),
-                // ★クラスは「語」で見る★（article-item-broken を通さない）
-                has_cls: el.classList.contains('article-item'),
-                // ★見えないやり方は display だけではない★
-                shown: !(st.display === 'none' || st.visibility === 'hidden'
-                         || el.offsetParent === null
-                         || parseFloat(st.opacity || '1') < 0.05
-                         || (st.clipPath && st.clipPath !== 'none')
-                         || (st.clip && st.clip !== 'auto')
-                         || r.width < 1 || r.height < 1),
-                heading: head ? (head.textContent || '') : null,
-                sig: sig,
-                text: (el.textContent || '').replace(/\s+/g, ''),
-            });
-        });
-        return out;
-    }""")
+    boxes = page.evaluate(BOX_JS)
     # ★契約は新台経路（page-decision/v1）だけ★（既存120機種は従来の作り）
     try:
         _is_auto = _pd.machine_class(machine) in ("AUTO_INDEXABLE",
@@ -352,6 +375,69 @@ def check_one(page, machine: dict) -> list[str]:
     return ngs
 
 
+def selftest_dom() -> int:
+    """★実ブラウザでの統合試験★（2026-08-04・Codex81回目の指摘5）
+
+    手で組み立てた値ではなく、**本物のブラウザにHTMLを読ませて**
+    抽出JSの結果を確かめる。tbodyの自動挿入・子の非表示・祖先の非表示。
+    """
+    import build_machine_pages as _bmp
+    import build_new_article as _ba
+    from playwright.sync_api import sync_playwright
+    ok_all, ran = True, [0]
+
+    def t(name, cond):
+        nonlocal ok_all
+        ran[0] += 1
+        ok_all = ok_all and bool(cond)
+        print(("✅" if cond else "❌") + " " + name)
+
+    mat = {"adopted": {"model_code": {"value": "L1"},
+                       "payout_range": {"value": {"low": 97, "high": 110}},
+                       "payout_rate": {"value": {"1": "97%", "6": "110%"}}},
+           "at_specs": {"adopted": [{"mode": "MAIN_AT", "games": 30,
+                                     "net": 2.8}]}}
+    det = _ba.build_detail("zzz", "試験機", "2026-09", mat)
+    inner = "".join(_bmp.render_section(x) for x in det["sections"])
+
+    def page_of(body_extra="", wrap_style=""):
+        return ("<html><head><meta charset='utf-8'></head><body>"
+                f'<div id="articleSections"{wrap_style}>{inner}</div>'
+                + body_extra + "</body></html>")
+
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(headless=True)
+        pg = b.new_page()
+        try:
+            pg.set_content(page_of())
+            good = pg.evaluate(BOX_JS)
+            t("★★本物のブラウザで、正しいページなら通る★★"
+              "（表の tbody 自動挿入で誤検知しない・Codex81回目の指摘1）",
+              judge_boxes(good, det) == [])
+            t("　ブラウザは実際に tbody を足している（誤検知の元）",
+              any("tbody" in (x.get("sig") or []) for x in good))
+            # 子（本文）だけ隠す
+            pg.set_content(page_of().replace('<p class="article-body">',
+                                             '<p class="article-body" hidden>'))
+            hid = pg.evaluate(BOX_JS)
+            t("★★本文だけ隠したら止める★★（Codex81回目の指摘2）",
+              any("中身がデータと違います" in x for x in judge_boxes(hid, det)))
+            # 祖先を透明にする
+            pg.set_content(page_of(wrap_style=' style="opacity:0"'))
+            anc = pg.evaluate(BOX_JS)
+            t("★★祖先を透明にしたら止める★★（箱だけ見ていると気づけない）",
+              any("見えていません" in x for x in judge_boxes(anc, det)))
+            # 祖先を切り抜く
+            pg.set_content(page_of(wrap_style=' style="clip-path:inset(100%)"'))
+            clp = pg.evaluate(BOX_JS)
+            t("　祖先を clip-path で切り抜いても止める",
+              any("見えていません" in x for x in judge_boxes(clp, det)))
+        finally:
+            b.close()
+    print(f"{ran[0]}/{ran[0]} 合格" if ok_all else "不合格あり")
+    return 0 if ok_all else 1
+
+
 def selftest() -> int:
     """★R13の判定を、ブラウザ無しで確かめる★（2026-08-04・Codex80回目の指摘5）
 
@@ -418,8 +504,14 @@ def selftest() -> int:
       any("未確認の目印が付いています" in x for x in judge_boxes(
           [{**b, "pending": b["title"]} if not b["pending"] else b
            for b in good], det)))
-    t("　記事データに節が無いページは対象外（既存120機種を巻き込まない）",
-      judge_boxes([], {"sections": []}) == [])
+    t("★★新台なのに記事データが空なら不合格★★"
+      "（対象外にしていた＝fail-open・Codex81回目の指摘3）",
+      any("契約と違います" in x for x in judge_boxes([], {"sections": []})))
+    t("★★記事データを読めない（None）場合も不合格★★",
+      any("読めません" in x for x in judge_boxes([], None)))
+    t("　ブラウザが足す tbody は作りの違いに数えない",
+      judge_boxes([{**b, "sig": (b["sig"][:1] + ["tbody"] + b["sig"][1:])}
+                   for b in good], det) == [])
     print(f"{ran[0]}/{ran[0]} 合格" if ok_all else "不合格あり")
     return 0 if ok_all else 1
 
@@ -429,6 +521,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--selftest", action="store_true",
                         help="R13の判定をブラウザ無しで試す")
+    parser.add_argument("--selftest-dom", action="store_true",
+                        help="R13の抽出を実ブラウザで試す")
     parser.add_argument("--slug", help="特定の1機種だけチェック")
     parser.add_argument("--limit", type=int, help="先頭N機種だけチェック")
     parser.add_argument("--json", action="store_true", help="JSON形式で結果を出力")
@@ -436,6 +530,8 @@ def main():
     args = parser.parse_args()
     if args.selftest:
         return selftest()
+    if args.selftest_dom:
+        return selftest_dom()
 
     if args.base_url:
         SITE_URL = args.base_url.rstrip("/")
