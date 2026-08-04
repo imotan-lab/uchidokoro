@@ -51,61 +51,102 @@ class CardError(RuntimeError):
 
 
 class _Cards(HTMLParser):
-    """指定したタグ・クラスの要素を「カード」として集める。"""
+    """要素の木として読み、指定タグ・クラスの要素を「カード」として集める。
+
+    ★数えるのは要素であって文字の断片ではない★（2026-08-04・Codex93回目の指摘3）
+      文字の数え方だと、空の<div class="name"></div>が並んでいても1個に見え、
+      逆に1つの要素の文字が子要素で割れると複数個に見えた。
+    ★隠れている要素・templateの中は読まない★（同・指摘4）
+    ★兄弟かどうかを見るため、親を覚える★（同・指摘4）
+    """
+
+    _VOID = {"img", "br", "hr", "input", "meta", "link", "source", "area",
+             "col", "embed", "track", "wbr", "param", "base"}
+    _SKIP = {"script", "style", "template", "noscript"}
 
     def __init__(self, card_tag: str, card_class: str):
         super().__init__(convert_charrefs=True)
         self._tag, self._cls = card_tag.lower(), card_class
-        self._stack: list = []
-        self._open: int | None = None
+        self._stack: list = []            # 開いている要素
+        self._seq = 0
         self.cards: list = []
 
     @staticmethod
     def _attrs(attrs) -> dict:
         return {(k or "").lower(): (v or "") for k, v in attrs}
 
-    _VOID = {"img", "br", "hr", "input", "meta", "link", "source", "area"}
+    @staticmethod
+    def _hidden(a: dict) -> bool:
+        if "hidden" in a or a.get("aria-hidden", "").lower() == "true":
+            return True
+        st = (a.get("style") or "").replace(" ", "").lower()
+        return "display:none" in st or "visibility:hidden" in st
 
     def handle_starttag(self, tag, attrs):
+        tag = tag.lower()
         a = self._attrs(attrs)
-        classes = set((a.get("class") or "").split())
-        if self._open is None and tag.lower() == self._tag and self._cls in classes:
-            self.cards.append({"urls": [], "by_class": {}, "text": "",
-                               "index": len(self.cards)})
-            self._open = len(self._stack)
-        if self._open is not None and self.cards:
-            c = self.cards[-1]
-            if tag.lower() == "a" and a.get("href"):
-                c["urls"].append(a["href"].strip())
-            if classes:
-                # クラスごとの本文を集める（あとで名前・種目・年月を取り出す）
-                self._cur_classes = classes
-                c.setdefault("_open_classes", []).append(
-                    (len(self._stack), frozenset(classes)))
-        if tag.lower() not in self._VOID:
-            self._stack.append(tag.lower())
+        self._seq += 1
+        node = {"id": self._seq, "tag": tag,
+                "classes": frozenset((a.get("class") or "").split()),
+                "href": a.get("href", "").strip() if tag == "a" else "",
+                "hidden": self._hidden(a) or tag in self._SKIP
+                or any(x["hidden"] for x in self._stack),
+                "parent": self._stack[-1]["id"] if self._stack else None,
+                "text": "", "card": None}
+        # このノードがカードなら登録（★入れ子のカードは作らない★）
+        in_card = next((x["card"] for x in reversed(self._stack)
+                        if x["card"] is not None), None)
+        if in_card is None and tag == self._tag and self._cls in node["classes"]                 and not node["hidden"]:
+            card = {"index": len(self.cards), "parent": node["parent"],
+                    "elements": [], "urls": [], "text": ""}
+            self.cards.append(card)
+            node["card"] = card
+        else:
+            node["card"] = in_card
+        if node["card"] is not None and not node["hidden"]:
+            if tag == "a" and node["href"]:
+                node["card"]["urls"].append(node["href"])
+        if tag not in self._VOID:
+            self._stack.append(node)
+        else:
+            self._close(node)
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+
+    def _close(self, node):
+        card = node.get("card")
+        if card is not None and not node["hidden"]:
+            card["elements"].append({"classes": node["classes"],
+                                     "tag": node["tag"],
+                                     "text": " ".join(node["text"].split())})
 
     def handle_endtag(self, tag):
+        tag = tag.lower()
         for i in range(len(self._stack) - 1, -1, -1):
-            if self._stack[i] == tag.lower():
+            if self._stack[i]["tag"] == tag:
+                for node in self._stack[i:]:
+                    self._close(node)
                 del self._stack[i:]
-                break
-        if self._open is not None and len(self._stack) <= self._open:
-            self._open = None
-        if self.cards and self.cards[-1].get("_open_classes"):
-            self.cards[-1]["_open_classes"] = [
-                x for x in self.cards[-1]["_open_classes"]
-                if x[0] < len(self._stack)]
+                return
+
+    def close(self):
+        super().close()
+        for node in self._stack:
+            self._close(node)
+        self._stack = []
 
     def handle_data(self, data):
         t = data.strip()
-        if not t or self._open is None or not self.cards:
+        if not t or not self._stack:
             return
-        c = self.cards[-1]
-        c["text"] += t + " "
-        for _depth, classes in (c.get("_open_classes") or []):
-            for cl in classes:
-                c["by_class"].setdefault(cl, []).append(t)
+        # ★開いている要素すべてに文字を足す★（要素の中身＝子孫の文字も含む）
+        for node in self._stack:
+            if node["card"] is not None and not node["hidden"]:
+                node["text"] += t + " "
+        card = self._stack[-1]["card"]
+        if card is not None and not self._stack[-1]["hidden"]:
+            card["text"] += t + " "
 
 
 def _norm(s: str) -> str:
@@ -126,50 +167,72 @@ def parse_cards(html: str, spec: dict) -> list:
     return p.cards
 
 
-def identify(html: str, spec: dict, url: str, today=None) -> dict:
+def _by_class(card: dict, cls: str) -> list:
+    """そのクラスを持つ**要素**を返す（文字の断片ではない）。"""
+    return [e for e in card["elements"] if cls in e["classes"]]
+
+
+def identify(html: str, spec: dict, url: str, today=None,
+             list_url: str = "", link_prefix: str = "") -> dict:
     """1つのURLについて、一覧カードから名前・種目・登場年月を取り出す。
 
     ★条件を1つでも満たさなければ ok=False★（Codex92回目の12条件）
+    list_url / link_prefix: 相対URLを絶対にして、機種URLだけを数えるために使う
+      （2026-08-04・Codex93回目の指摘5。相対表記の別機種を見落としていた）
     """
+    import urllib.parse
     import new_machine_watch as _nw
     out = {"ok": False, "problems": [], "name": "", "release": "",
            "card_index": None, "card_text": "", "evidence": {}}
     cards = parse_cards(html, spec)
-    if len(cards) < 3:
-        out["problems"].append(
-            f"カードが {len(cards)} 個しかありません（同じ形の繰り返しとして"
-            "確かめられないので使いません）")
-        return out
-    want = url.rstrip("/") + "/"
-    hit = []
+    base = list_url or url
+    pref = link_prefix or ""
+
+    def machine_urls(card) -> set:
+        got = set()
+        for h in card["urls"]:
+            absu = urllib.parse.urljoin(base, h).split("#")[0].split("?")[0]
+            absu = absu.rstrip("/") + "/"
+            if pref and not absu.startswith(pref):
+                continue                  # 一覧・よそのサイトは機種URLとして数えない
+            if pref and absu.rstrip("/") == pref.rstrip("/"):
+                continue
+            got.add(absu)
+        return got
+
+    want = urllib.parse.urljoin(base, url).split("#")[0].split("?")[0].rstrip("/") + "/"
     for c in cards:
-        urls = {u.split("#")[0].split("?")[0].rstrip("/") + "/" for u in c["urls"]}
-        urls = {u for u in urls if u.startswith("http")}
-        c["_urls"] = urls
-        if want in urls:
-            hit.append(c)
+        c["_urls"] = machine_urls(c)
+    hit = [c for c in cards if want in c["_urls"]]
     if len(hit) != 1:
         out["problems"].append(f"この機種のカードが {len(hit)} 個です（1個であるべきです）")
         return out
     card = hit[0]
+    # ★同じ親のカードが3つ以上あること★（同じ形の繰り返しだと確かめる・条件2）
+    siblings = [c for c in cards if c["parent"] == card["parent"]]
+    if len(siblings) < 3:
+        out["problems"].append(
+            f"同じ並びのカードが {len(siblings)} 個しかありません"
+            "（繰り返しの一覧だと確かめられないので使いません）")
+        return out
     if len(card["_urls"]) != 1:
         out["problems"].append(
             f"1つのカードに機種のURLが {len(card['_urls'])} 個あります（1個であるべきです）")
         return out
-    # 名前
-    names = [_norm(x) for x in card["by_class"].get(spec["name_class"], []) if _norm(x)]
-    if len(names) != 1:
-        out["problems"].append(f"カードの機種名が {len(names)} 個です（1個であるべきです）")
+    # 名前（★要素がちょうど1つ★）
+    name_els = _by_class(card, spec["name_class"])
+    if len(name_els) != 1 or not name_els[0]["text"]:
+        out["problems"].append(f"カードの機種名の要素が {len(name_els)} 個です（1個であるべきです）")
         return out
-    name = names[0]
-    # 種目（年月のクラスが付いている要素は除く）
-    types = [_norm(x) for x in card["by_class"].get(spec["type_class"], []) if _norm(x)]
-    years_raw = [_norm(x) for x in card["by_class"].get(spec["year_class"], []) if _norm(x)]
-    types = [t for t in types if t not in years_raw]
-    if len(types) != 1:
-        out["problems"].append(f"カードの種目が {len(types)} 個です（1個であるべきです）")
+    name = _norm(name_els[0]["text"])
+    # 種目（年月のクラスが付いた要素は除く）
+    year_els = [e for e in _by_class(card, spec["year_class"]) if e["text"]]
+    type_els = [e for e in _by_class(card, spec["type_class"])
+                if e["text"] and spec["year_class"] not in e["classes"]]
+    if len(type_els) != 1:
+        out["problems"].append(f"カードの種目の要素が {len(type_els)} 個です（1個であるべきです）")
         return out
-    kind = types[0]
+    kind = _norm(type_els[0]["text"])
     if not any(w in kind for w in SLOT_WORDS):
         out["problems"].append(f"カードの種目が回胴機ではありません（{kind!r}）")
         return out
@@ -181,13 +244,21 @@ def identify(html: str, spec: dict, url: str, today=None) -> dict:
     if PACHI_MARK.match(name):
         out["problems"].append(f"機種名がぱちんこの規格印で始まっています（{name!r}）")
         return out
-    # 登場年月
-    if len(years_raw) != 1:
-        out["problems"].append(f"カードの登場年月が {len(years_raw)} 個です（1個であるべきです）")
+    # 登場年月（★要素がちょうど1つ★）
+    if len(year_els) != 1:
+        out["problems"].append(f"カードの登場年月の要素が {len(year_els)} 個です（1個であるべきです）")
         return out
-    m = YEAR_MONTH.search(years_raw[0])
+    m = YEAR_MONTH.search(_norm(year_els[0]["text"]))
     if not m:
-        out["problems"].append(f"カードの登場年月を読めません（{years_raw[0]!r}）")
+        out["problems"].append(f"カードの登場年月を読めません（{year_els[0]['text']!r}）")
+        return out
+    # ★他のカードにも同じ作りがあること★（たまたま似た要素を拾っていないか）
+    same_shape = sum(1 for c in siblings
+                     if len(_by_class(c, spec["name_class"])) == 1
+                     and len(_by_class(c, spec["year_class"])) == 1)
+    if same_shape < 3:
+        out["problems"].append(
+            f"同じ作りのカードが {same_shape} 個しかありません（作りが揺れています）")
         return out
     release = f"{m.group(1)}-{int(m.group(2)):02d}"
     if not _nw.is_recent(release, today):
@@ -208,6 +279,34 @@ def failure_allowed(reasons) -> bool:
     """代替を許す取得失敗か（許可した種類だけ）。"""
     joined = " ".join(str(x) for x in (reasons or []))
     return any(w in joined for w in ALLOWED_FAILURES)
+
+
+def exc_reasons(e, depth: int = 0) -> list:
+    """例外の連鎖をたどって、失敗の中身を全部集める。
+
+    ★なぜ要るか（2026-08-04・Codex93回目の指摘6）★
+      取得側の文言は「取得できません（URLError）」までしか書かないので、
+      1段だけ見ても証明書エラーだと分からない。逆に、
+      **文字列だけで判断すると別の失敗を証明書エラーに見せかけられる**。
+      そこで ①例外の型 ②`reason` ③`__cause__`/`__context__` を
+      再帰でたどり、**型が証明書・TLSのときだけ確かな印を足す**。
+    """
+    import ssl
+    out = []
+    if e is None or depth > 8:
+        return out
+    out.append(str(e))
+    if isinstance(e, ssl.SSLCertVerificationError):
+        out.append("CERTIFICATE_VERIFY_FAILED")   # ★型で確かめた印★
+    elif isinstance(e, ssl.SSLError):
+        out.append("SSLError")
+    for attr in ("reason", "__cause__", "__context__"):
+        nxt = getattr(e, attr, None)
+        if isinstance(nxt, BaseException):
+            out += exc_reasons(nxt, depth + 1)
+        elif nxt is not None and attr == "reason":
+            out.append(str(nxt))
+    return out
 
 
 # ---------------------------------------------------------------- selftest
@@ -276,7 +375,7 @@ def selftest() -> int:
     dup = REAL_CARD.replace('<div class="name">Lパチスロ 喰霊-零-Re</div>',
                             '<div class="name">A</div><div class="name">B</div>')
     t("★★名前が2つあるカードは使わない★★",
-      any("機種名が 2 個" in x for x in identify(
+      any("機種名の要素が 2 個" in x for x in identify(
           _page(dup, _other("a"), _other("b")), SPEC, U, today=_D(2026, 8, 4))["problems"]))
     # 種目がパチンコ
     pachi = REAL_CARD.replace('<p class="category">パチスロ</p>',
@@ -294,7 +393,7 @@ def selftest() -> int:
                            '<p class="category __year">2026.08</p>'
                            '<p class="category __year">2027.01</p>')
     t("★★登場年月が2つあるカードは使わない★★",
-      any("登場年月が 2 個" in x for x in identify(
+      any("登場年月の要素が 2 個" in x for x in identify(
           _page(y2, _other("a"), _other("b")), SPEC, U, today=_D(2026, 8, 4))["problems"]))
     old = REAL_CARD.replace("2026.08", "2011.11")
     t("★★古い年月のカードは新台にしない★★",
@@ -315,8 +414,42 @@ def selftest() -> int:
       and not failure_allowed(["パチスロのページに見えません（回胴機の語が無い）"]))
     t("　カードの作りの指定が足りなければ止まる",
       _raises(lambda: parse_cards(page, {"card_tag": "li"})))
+    # ★相対で書かれたリンク★（2026-08-04・Codex93回目の指摘5）
+    PRE = "https://www.oizumi.co.jp/machine/"
+    rel = REAL_CARD.replace(
+        '</div></li>', '<a href="/machine/betsu/">こちらも</a></div></li>')
+    t("★★同じカードの相対リンクも機種URLとして数える★★",
+      any("機種のURLが 2 個" in x for x in identify(
+          _page(rel, _other("a"), _other("b")), SPEC, U,
+          today=_D(2026, 8, 4), list_url=PRE, link_prefix=PRE)["problems"]))
+    t("　よそのサイトへのリンクは機種URLとして数えない",
+      identify(_page(REAL_CARD.replace(
+          '</div></li>', '<a href="https://twitter.com/x">SNS</a></div></li>'),
+          _other("a"), _other("b")), SPEC, U, today=_D(2026, 8, 4),
+          list_url=PRE, link_prefix=PRE)["ok"])
+    # ★非表示のカードは無かったことにする★（読者に出ていないものを根拠にしない）
+    hid = '<li class="slotItem" hidden>' + REAL_CARD[len('<li class="slotItem">'):]
+    t("★★非表示のカードは同定に使わない★★",
+      any("カードが 0 個" in x for x in identify(
+          _page(hid, _other("a"), _other("b")), SPEC, U,
+          today=_D(2026, 8, 4))["problems"]))
+    # ★型で見分ける（文言そのままでは通さない）★
+    import ssl as _ssl, urllib.error as _ue
+    t("★★証明書の失敗は例外の型からも印を立てる★★",
+      failure_allowed(exc_reasons(
+          _ue.URLError(_ssl.SSLCertVerificationError("expired"))))
+      and not failure_allowed(exc_reasons(_ue.URLError("timed out"))))
+    t("　例外の連鎖が輪になっていても止まらない",
+      len(exc_reasons(_loop_exc())) < 40)
     print(f"{ran[0]}/{ran[0]} 合格" if ok_all else "不合格あり")
     return 0 if ok_all else 1
+
+
+def _loop_exc():
+    """自分自身を指す例外の連鎖（深さの上限が効くか見るため）。"""
+    a, b = ValueError("a"), ValueError("b")
+    a.__context__, b.__context__ = b, a
+    return a
 
 
 def _raises(fn) -> bool:

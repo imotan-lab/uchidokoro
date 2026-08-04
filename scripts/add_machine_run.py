@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import re
@@ -249,7 +250,10 @@ def discover(persist: bool = True) -> dict:
             continue
         out["watched"].append(mid)
         # ★state=OK の一覧だけを控える★（あとで一覧カード同定に使う唯一の証跡）
-        if r.get("list_html"):
+        #   ★状態そのものを見る★（2026-08-04・Codex93回目の指摘7。
+        #     problem が空でも PARSE_SUSPECT 等はあり得るので、
+        #     「問題が無い」ではなく「OKと判定された」を条件にする）
+        if r.get("state") == "OK" and r.get("list_html"):
             LIST_SNAPSHOT[mid] = r["list_html"]
         # ★対応していない形のリンクが混ざっていたら台帳へ★（Codex36回目・社は止めない）
         for w_ in (r.get("shape_warnings") or [])[:5]:
@@ -820,6 +824,48 @@ def _blocking(problems: list) -> list:
 LIST_SNAPSHOT: dict = {}
 
 
+# ★同定に使った一覧HTMLの保管場所★（リポジトリの外・上書きしない）
+EVIDENCE_DIR = os.path.join(
+    os.path.expanduser("~"), "Documents", "uchidokoro", "identity_evidence")
+
+
+def _save_evidence(html: str, ev: dict) -> str:
+    """同定の根拠にした一覧HTMLを、指紋の名前で保管する。
+
+    ★なぜ要るか（2026-08-04・Codex93回目の指摘8）★
+      記事に残していたのは指紋（sha256）だけで、**元のHTMLはどこにも無かった**。
+      あとから「本当にこのカードだったのか」を誰も確かめられない
+      ＝証跡として成立していない。指紋を名前にして保管し、
+      記事には **その場所とカード番号** を残す。
+      同じ内容なら同じ名前になるので、上書きも重複も起きない。
+    """
+    ref = f"{ev.get('list_html_sha256','')} #card{ev.get('card_index')}"
+    try:
+        os.makedirs(EVIDENCE_DIR, exist_ok=True)
+        digest = str(ev.get("list_html_sha256") or "").split(":")[-1]
+        if not digest:
+            return ref
+        fp = os.path.join(EVIDENCE_DIR, f"{digest}.html")
+        if not os.path.exists(fp):
+            with io.open(fp, "w", encoding="utf-8") as f:
+                f.write(html)
+        ev["saved_path"] = fp
+        return f"identity_evidence/{digest}.html #card{ev.get('card_index')}"
+    except Exception as e:                # noqa: BLE001
+        # ★保管に失敗しても公開は止めない★（指紋は残るので後から突き合わせ可能）
+        _log(f"  同定の根拠の保管に失敗しました（{e}）")
+        return ref
+
+
+def _evidence_ref(vo: dict) -> str:
+    """記事に残す証跡の指し先（一覧カード同定でない時は空）。"""
+    ev = vo.get("identity_evidence") or {}
+    if not ev:
+        return ""
+    return str(ev.get("evidence_ref")
+               or (ev.get("list_html_sha256", "") + f" #card{ev.get('card_index')}"))
+
+
 def _card_identity(name: str, official_url: str, maker: str, reasons: list):
     """公式の個別ページが読めない時だけ、同じ公式の一覧カードで同定する。
 
@@ -840,18 +886,33 @@ def _card_identity(name: str, official_url: str, maker: str, reasons: list):
         _log("  一覧カードでの同定: その晩に正常に読めた一覧がありません")
         return None
     try:
-        got = _lci.identify(html, conf["list_card"], official_url)
+        # ★相対で書かれたリンクも数える★（2026-08-04・Codex93回目の指摘5）
+        #   絶対URLだけ数えていたので、同じカードに相対表記の別機種が
+        #   入っていても「URLは1つ」と見なして通せた。
+        got = _lci.identify(html, conf["list_card"], official_url,
+                            list_url=str(conf.get("list_url") or ""),
+                            link_prefix=str(conf.get("link_prefix") or ""))
     except _lci.CardError as e:
         _log(f"  一覧カードでの同定: {e}")
         return None
     if not got["ok"]:
         _log("  一覧カードでの同定: " + " / ".join(got["problems"])[:160])
         return None
+    # ★L版とS版を取り違えない★（2026-08-04・Codex93回目の指摘1。自分で再現した）
+    #   芯の比較は表記ゆれを吸収するために規格の印を落とすので、
+    #   「S北斗の拳」のカードで「L北斗の拳」を通せた。
+    #   両方に印があって食い違うときは必ず弾く（既存の名鑑照合と同じ規則）。
+    m_card, m_want = _mc._gen_mark(got["name"]), _mc._gen_mark(name)
+    if m_card and m_want and m_card != m_want:
+        _log(f"  一覧カードの規格が違います（{m_card}版 / {m_want}版・"
+             f"{got['name']!r} / {name!r}）")
+        return None
     # ★名前は一覧カードのものを正として、こちらの名前と芯で照合する★
     #   （表記ゆれは吸収するが、別機種は通さない＝既存の正規化を使う）
     if _ci.normalize_core(got["name"]) != _ci.normalize_core(name):
         _log(f"  一覧カードの機種名と一致しません（{got['name']!r} / {name!r}）")
         return None
+    got["evidence"]["evidence_ref"] = _save_evidence(html, got["evidence"])
     return got
 
 
@@ -897,11 +958,14 @@ def verify_official(name: str, official_url: str,
         # ★失敗の中身まで見る★（2026-08-04。_get の文言は
         #   「取得できません（URLError）」までしか書かないので、
         #   例外の連鎖をたどらないと証明書エラーだと分からなかった）
-        _ctx = getattr(e, "__context__", None)
-        _why = [str(e), str(_ctx or ""), str(getattr(_ctx, "reason", "") or "")]
+        _why = _lci.exc_reasons(e)
         card = _card_identity(name, official_url, maker, _why)
         if card is not None:
             out["release"] = card["release"]
+            # ★カードの公式名を正として後段へ渡す★（2026-08-04・Codex93回目の指摘2）
+            #   表記ゆれを許した以上、記事名・名鑑検索・公開データが
+            #   こちらの持っていた表記のままだと「公式で確かめた名前」ではなくなる。
+            out["identity_name"] = card["name"]
             out["identity_binding"] = "MAKER_LIST_CARD"
             out["identity_evidence"] = card["evidence"]
             _log(f"  公式の個別ページを取得できないため、同じ公式の一覧カードで"
@@ -1570,6 +1634,11 @@ def run_one(name, official_url, maker, release, apply_it=False,
     out["problems"] += vo["problems"]
     # ★記事に載せるのは公式に書いてある年月★（渡された値ではない）
     release = vo["release"] or release
+    # ★名前も公式（一覧カード）に書いてあるものを正とする★（Codex93回目の指摘2）
+    if vo.get("identity_name") and vo["identity_name"] != name:
+        _log(f"  機種名を公式の表記に合わせます: {name!r} → {vo['identity_name']!r}")
+        name = vo["identity_name"]
+        out["name"] = name
     # ★②その機種が既に登録されていないか★（2026-07-31・実際に二重登録できた）
     #   手順書には書いてあったが、実行器が呼んでいなかった。
     # ★名前・公式URL・型式名のどれか1つでも一致したら疑う★（2026-07-31・Codex指摘）
@@ -1641,7 +1710,11 @@ def run_one(name, official_url, maker, release, apply_it=False,
         return out
     machine = _ba.build_machine(out["slug"], name, maker, official_url, release, mat)
     detail = _ba.build_detail(out["slug"], name, release, mat)
-    out["preview"] = {"machine": machine, "detail": detail}
+    out["preview"] = {"machine": machine, "detail": detail,
+                      # ★下見と本番で出るものを揃える★（Codex93回目の指摘9）
+                      "identity_binding": vo.get("identity_binding")
+                      or "OFFICIAL_PRODUCT_PAGE",
+                      "identity_evidence_ref": _evidence_ref(vo)}
     if apply_it:
         # ★公開は専用の経路だけ★（2026-07-31・Codexと相談した案B）
         #   ページを先に置き、最後に一覧へ足す。既存ページは1枚も触らない。
@@ -1654,10 +1727,7 @@ def run_one(name, official_url, maker, release, apply_it=False,
             # ★どの公式ページで本人性を確かめたかを残す★（台帳#209）
             identity_binding=vo.get("identity_binding")
             or "OFFICIAL_PRODUCT_PAGE",
-            identity_evidence_ref=((vo.get("identity_evidence") or {})
-                                   .get("list_html_sha256", "")
-                                   + (f" #card{(vo.get('identity_evidence') or {}).get('card_index')}"
-                                      if vo.get("identity_evidence") else "")),
+            identity_evidence_ref=_evidence_ref(vo),
             # ★公開部が「途中」の目印を消す前に引き継ぐ★（Codex22回目）
             #   あとから作ると、その間に止まったときに目印がどこにも無くなる。
             on_written=lambda sl: _mark_push_pending(sl, "", "WRITTEN"))
@@ -2563,6 +2633,81 @@ def selftest() -> int:
               any("範囲外" in x for x in verify_official(
                   "Lすーぱぁびん娘", "https://m.example/products/slot/lbinko/",
                   "m")["problems"]))
+            # ---- 一覧カードでの同定（2026-08-04・Codex93回目の直し）
+            import io as _io
+            import ssl as _ssl
+            import urllib.error as _ue
+            real_cats = _nw.CATALOGS
+            _cat = os.path.join(_tmpdir, "cat.json")
+            _cardspec = {"card_tag": "li", "card_class": "slotItem",
+                         "name_class": "name", "type_class": "category",
+                         "year_class": "__year"}
+            with _io.open(_cat, "w", encoding="utf-8") as f:
+                json.dump({"catalogs": {"z": {
+                    "name": "Z", "status": "ACTIVE",
+                    "list_url": "https://z.example/list/",
+                    "link_prefix": "https://z.example/m/",
+                    "allow_list_card_identity": True,
+                    "list_card": _cardspec}}}, f, ensure_ascii=False)
+            _nw.CATALOGS = _cat
+            real_evdir = globals()["EVIDENCE_DIR"]     # ★本物の保管場所を汚さない★
+            globals()["EVIDENCE_DIR"] = os.path.join(_tmpdir, "ev")
+
+            def _card(slug, name, year="2026.09", href=None):
+                return (f'<li class="slotItem"><div class="name">{name}</div>'
+                        f'<p class="category">パチスロ</p>'
+                        f'<p class="category __year">{year}</p>'
+                        f'<a href="{href or ("https://z.example/m/" + slug + "/")}">'
+                        "くわしく見る</a></li>")
+
+            def _list_html(first):
+                return ("<html><body><ul>" + first + _card("aa", "Lほかの機種")
+                        + _card("bb", "Lべつの機種") + "</ul></body></html>")
+
+            _tls = _ue.URLError(_ssl.SSLCertVerificationError("expired"))
+            _fail = lambda u, timeout=20: (_ for _ in ()).throw(
+                Exception("取得できません（URLError）: " + u))
+
+            def _fail_tls(u, timeout=20):
+                raise Exception("取得できません（URLError）: " + u) from _tls
+
+            LIST_SNAPSHOT["z"] = _list_html(_card("hokuto", "L北斗の拳"))
+            _nw._get = _fail_tls
+            t("★★L版のカードでS版を通さない★★（Codex93回目・自分で再現した）",
+              _card_identity("S北斗の拳", "https://z.example/m/hokuto/", "z",
+                             _lci.exc_reasons(_tls)) is None)
+            t("　同じ規格なら一覧カードで同定できる",
+              (_card_identity("L北斗の拳", "https://z.example/m/hokuto/", "z",
+                              _lci.exc_reasons(_tls)) or {}).get("release") == "2026-09")
+            t("★★証明書の失敗は例外の連鎖と型で見分ける★★（文言だけでは分からない）",
+              _lci.failure_allowed(_lci.exc_reasons(_tls))
+              and not _lci.failure_allowed(_lci.exc_reasons(
+                  _ue.URLError("timed out"))))
+            _vo = verify_official("L北斗の拳", "https://z.example/m/hokuto/", "z")
+            t("★★カードの公式名を後段へ渡す★★（Codex93回目の指摘2）",
+              _vo.get("identity_name") == "L北斗の拳"
+              and _vo.get("identity_binding") == "MAKER_LIST_CARD")
+            t("★★同定の根拠にした一覧HTMLを保管する★★（あとから確かめられる）",
+              os.path.exists((_vo.get("identity_evidence") or {}).get("saved_path", ""))
+              and "identity_evidence/" in _evidence_ref(_vo))
+            # 相対で書かれた別機種のリンクが同じカードにあれば数える
+            LIST_SNAPSHOT["z"] = _list_html(
+                '<li class="slotItem"><div class="name">L北斗の拳</div>'
+                '<p class="category">パチスロ</p>'
+                '<p class="category __year">2026.09</p>'
+                '<a href="https://z.example/m/hokuto/">くわしく見る</a>'
+                '<a href="/m/betsu/">こちらも</a></li>')
+            t("★★相対で書かれた別機種のリンクも数える★★（Codex93回目の指摘5）",
+              _card_identity("L北斗の拳", "https://z.example/m/hokuto/", "z",
+                             _lci.exc_reasons(_tls)) is None)
+            # 取得失敗が証明書以外なら代替しない
+            LIST_SNAPSHOT["z"] = _list_html(_card("hokuto", "L北斗の拳"))
+            t("　証明書以外の失敗では一覧カードに逃がさない",
+              _card_identity("L北斗の拳", "https://z.example/m/hokuto/", "z",
+                             _lci.exc_reasons(_ue.URLError("timed out"))) is None)
+            LIST_SNAPSHOT.pop("z", None)
+            _nw.CATALOGS = real_cats
+            globals()["EVIDENCE_DIR"] = real_evdir
         finally:
             _nw._get, _mc.page_is_machine = real_get, real_page
     finally:
