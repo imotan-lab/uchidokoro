@@ -32,12 +32,14 @@ class _Doc(HTMLParser):
         self.bases = []          # [href]
         self.visible = []        # 読者に見える文字
         self.notices = []        # 先行記事の断り書き（専用の目印つき）
+        self.blocks = []         # ★未確認の箱★（data-pending-section つき）
         # ★開いている要素を全部積む★（2026-07-31・Codex指摘4を再現して直した）
         #   以前は「隠された要素」だけを積んでいたので、
         #   <div hidden><div></div>先行記事</div> のように
         #   同じタグ名で閉じられると、外側の隠しが外れてしまった。
         self._stack = []         # [(tag, hidden, skip)]
         self._in_body = False
+        self._hidden_classes = set()
 
     # 閉じない要素
     _VOID = {"meta", "link", "base", "br", "img", "hr", "input", "source",
@@ -50,15 +52,23 @@ class _Doc(HTMLParser):
             out[(k or "").strip().lower()] = (v or "").strip()
         return out
 
-    @staticmethod
-    def _is_hidden(a: dict) -> bool:
-        """★隠されているか★（属性でもCSSでも）"""
+    def _is_hidden(self, a: dict) -> bool:
+        """★隠されているか★（属性でもCSSでも・クラスでも）
+
+        ★クラスによる非表示も見る★（2026-08-04・Codex77回目の指摘4）
+          `.is-hidden { display:none }` のようなクラスは画面では消えるのに
+          「見えている」と判定していた。隠すクラスの名前は呼び出し側が渡す
+          （CSSファイルから機械的に取り出す＝手で並べない）。
+        """
         if "hidden" in a:                     # hidden / hidden="" / hidden="hidden"
             return True
         if a.get("aria-hidden", "").lower() == "true":
             return True
         style = a.get("style", "").replace(" ", "").lower()
-        return "display:none" in style or "visibility:hidden" in style
+        if "display:none" in style or "visibility:hidden" in style:
+            return True
+        cls = set((a.get("class") or "").split())
+        return bool(cls & self._hidden_classes)
 
     def _hidden_now(self) -> bool:
         return any(h for _t, h, _s in self._stack)
@@ -83,6 +93,12 @@ class _Doc(HTMLParser):
                                  "hidden": self._hidden_now() or self._is_hidden(a),
                                  "text": ""})
             self._notice_open = len(self._stack)
+        # ★未確認の箱★（2026-08-04・Codex77回目。どの項目が未確認かを構造で示す）
+        if a.get("data-pending-section") is not None:
+            self.blocks.append({"pending_title": a["data-pending-section"],
+                                "hidden": self._hidden_now() or self._is_hidden(a),
+                                "text": ""})
+            self._block_open = len(self._stack)
         if tag not in self._VOID:
             self._stack.append((tag, self._is_hidden(a), tag in _NON_TEXT))
 
@@ -94,6 +110,9 @@ class _Doc(HTMLParser):
         for i in range(len(self._stack) - 1, -1, -1):
             if self._stack[i][0] == tag:
                 del self._stack[i:]
+                b_open = getattr(self, "_block_open", None)
+                if b_open is not None and len(self._stack) <= b_open:
+                    self._block_open = None
                 opened = getattr(self, "_notice_open", None)
                 if opened is not None and len(self._stack) <= opened:
                     # ★断り書きはここで終わり★（2026-07-31・自分の確認で気づいた）
@@ -114,12 +133,40 @@ class _Doc(HTMLParser):
         if (self.notices and opened is not None and len(self._stack) > opened
                 and not self._skip_now() and not self._hidden_now()):
             self.notices[-1]["text"] += t
+        b_open = getattr(self, "_block_open", None)
+        if (self.blocks and b_open is not None and len(self._stack) > b_open
+                and not self._skip_now() and not self._hidden_now()):
+            self.blocks[-1]["text"] += t
         if self._in_body and not self._skip_now() and not self._hidden_now():
             self.visible.append(t)
 
 
-def parse(source: str) -> _Doc:
+def hidden_classes_from_css(css: str) -> set:
+    """CSSから「そのクラスが付いていたら消える」クラス名を取り出す。
+
+    ★手で並べない★（2026-08-04・Codex77回目の指摘4）。
+    `.is-hidden { display: none !important; }` のような**クラス1つだけ**の
+    規則に限る（`.a .b{...}` のような組み合わせは、その条件を判定できないので数えない）。
+    """
+    import re as _re
+    got = set()
+    body = _re.sub(r"/\*.*?\*/", " ", css or "", flags=_re.S)
+    # @media 内は条件つきなので外す（画面幅で変わるものを常に隠れると見なさない）
+    body = _re.sub(r"@media[^{]*\{(?:[^{}]|\{[^{}]*\})*\}", " ", body)
+    for sel, decl in _re.findall(r"([^{}]+)\{([^{}]*)\}", body):
+        d = decl.replace(" ", "").lower()
+        if "display:none" not in d and "visibility:hidden" not in d:
+            continue
+        for one in sel.split(","):
+            m = _re.match(r"^\s*\.([A-Za-z0-9_-]+)\s*$", one)
+            if m:
+                got.add(m.group(1))
+    return got
+
+
+def parse(source: str, hidden_classes: set | None = None) -> _Doc:
     doc = _Doc()
+    doc._hidden_classes = set(hidden_classes or ())
     try:
         doc.feed(source or "")
         doc.close()
@@ -148,9 +195,9 @@ def preview_notices(doc: _Doc, kind: str) -> list:
     return [n for n in doc.notices if n["kind"] == kind and not n["hidden"]]
 
 
-def visible_text(source: str) -> str:
+def visible_text(source: str, hidden_classes: set | None = None) -> str:
     """読者に見える文字だけ。★隠された要素とscriptは入らない★"""
-    return " ".join(parse(source).visible)
+    return " ".join(parse(source, hidden_classes).visible)
 
 
 # ---------------------------------------------------------------- selftest

@@ -126,6 +126,21 @@ def build_title_desc(machine: dict, pochipochi_available: bool = True) -> tuple[
     return title, desc
 
 
+# ★未確認の箱に付ける目印★（2026-08-04・Codex77回目の指摘1）
+#   ページ全体で文字列を数える形だと、別の場所に同じ文言を置くだけで
+#   数がそろってしまう。**どの項目が未確認か**を構造で示す。
+PENDING_ATTR = "data-pending-section"
+
+
+def pending_attr(section: dict) -> str:
+    """本文が「未確認」1文だけの箱に付ける属性（それ以外は空文字）。"""
+    from build_new_article import PENDING_TEXT as _pt
+    body = section.get("body") or []
+    if isinstance(body, list) and [x.strip() for x in body if isinstance(x, str)] == [_pt]:
+        return f' {PENDING_ATTR}="{esc(section.get("title", ""))}"'
+    return ""
+
+
 def render_section(section: dict) -> str:
     """1セクションを machine.html の JS と同じ構造の静的HTMLに。"""
     title = section.get("title", "")
@@ -186,7 +201,8 @@ def render_section(section: dict) -> str:
 
     # default
     paras = "".join(f'<p class="article-body">{md(t)}</p>' for t in body)
-    return f'<div class="article-item"><h3 class="article-title">{esc(title)}</h3>{paras}</div>'
+    return (f'<div class="article-item"{pending_attr(section)}>'
+            f'<h3 class="article-title">{esc(title)}</h3>{paras}</div>')
 
 
 def build_jsonld(machine: dict, canonical_url: str, title: str, desc: str) -> str:

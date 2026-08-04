@@ -70,6 +70,8 @@ STALE_WORDS = ("導入予定", "登場予定", "導入前")
 #   読者は何が分かっていて何が分かっていないかを一目で把握でき、
 #   確認が取れたらこの1文を中身に差し替えるだけで済む。
 PENDING_TEXT = "未確認です。確認でき次第、この欄に掲載します。"
+# 箱の中の1項目だけが未確認のとき（例: 機械割）に、その欄へ入れる文言
+PENDING_ITEM = "未確認（確認でき次第掲載します）"
 
 # 記事に必ず用意する「箱」（確認できたものから中身が入る）
 #   ★並びは CLAUDE.md の IDEAL_ORDER に合わせる★
@@ -221,16 +223,26 @@ def build_detail(slug, name, release, material) -> dict:
                         "note": "確認が取れたCZのみを載せています。"
                                 "全種類をまとめたものではありません。"}]}
 
+    # ★どの機種にも必ずある項目は、未確認でも欄ごと出す★
+    #   （2026-08-04・Codex77回目の指摘2。一部だけ埋まった箱では、
+    #     載っていない項目が「未確認なのか・非該当なのか・単に省いたのか」を
+    #     読者が区別できなかった）
+    #   ★存在するかどうか分からない項目（上位AT・CZ等）はここに並べない★
+    #     （並べると「あるのに未確認」と読めてしまう）
     spec_body = [f"**機種名**：{name}"]
-    if release:
-        spec_body.append(f"**登場時期**：{_fmt_release(release)}（公式確認）")
-    if (code := adopted.get("model_code")):
-        spec_body.append(f"**型式名**：{code['value']}")
-    if (rng := adopted.get("payout_range")):
-        v = rng["value"]
-        spec_body.append(f"**機械割**：{v['low']}%〜{v['high']}%")
-    if (g50 := adopted.get("games_per_50")):
-        spec_body.append(f"**50枚あたりのゲーム数**：約{g50['value']['games']:g}G")
+    spec_body.append(f"**登場時期**：{_fmt_release(release)}（公式確認）"
+                     if release else f"**登場時期**：{PENDING_ITEM}")
+    code = adopted.get("model_code")
+    spec_body.append(f"**型式名**：{code['value']}" if code
+                     else f"**型式名**：{PENDING_ITEM}")
+    rng = adopted.get("payout_range")
+    spec_body.append(
+        f"**機械割**：{rng['value']['low']}%〜{rng['value']['high']}%" if rng
+        else f"**機械割**：{PENDING_ITEM}")
+    g50 = adopted.get("games_per_50")
+    spec_body.append(
+        f"**50枚あたりのゲーム数**：約{g50['value']['games']:g}G" if g50
+        else f"**50枚あたりのゲーム数**：{PENDING_ITEM}")
     boxes["基本スペック"] = {"title": "基本スペック", "body": spec_body}
 
     # 設定別の表（★集まった設定だけ★＝1〜6の連番だと決めつけない）

@@ -282,7 +282,7 @@ def check_before(slug: str, machine: dict, rows: list) -> list:
 
 
 def check_page(slug: str, html: str, expect_noindex: bool = True,
-               pending_boxes: int | None = None) -> list:
+               detail: dict | None = None) -> list:
     """作ったページそのものを確かめる。★テンプレート任せにしない★
 
     ★2026-07-31・Codexの指摘を再現して3回直した★
@@ -330,16 +330,59 @@ def check_page(slug: str, html: str, expect_noindex: bool = True,
     #     ひな型のバナーは完成機種のページにも同じ形で入っており、
     #     JavaScriptで表示を切り替えているだけだった。
     #     専用の目印を持ち、隠されていない要素をちょうど1個求める。
-    # ★未確認の項目には「未確認」と書いた箱があること★
-    #   （2026-08-04・運営者判断でページ全体の断り書きをやめた代わりの検査。
-    #     ページ冒頭の1行より、項目ごとの表示のほうが読者に正確で、
-    #     機械でも「箱の数」で確かめられる）
-    #   ★隠れていない本文として出ていること★（JSが動かなくても見える）
-    shown = _hc.visible_text(html)
-    if pending_boxes is not None:
-        got = shown.count(_ba.PENDING_TEXT)
-        if got != pending_boxes:
-            ng.append(f"未確認の箱が {got} 個です（{pending_boxes} 個であるべきです）")
+    # ★箱ごとに、目印・見出し・本文を結びつけて確かめる★
+    #   （2026-08-04・Codex77回目の指摘1/3。以前はページ全体で文言の**個数**を
+    #     数えていたので、別の場所に同じ文言を置けば数がそろい、
+    #     期待値も検査対象と同じ detail から出していたので自己参照だった）
+    #   ★契約（作るべき箱の一覧）は build_new_article の定数＝独立した正本★
+    if detail is not None:
+        ng += check_pending_boxes(html, detail)
+    return ng
+
+
+def check_pending_boxes(html: str, detail: dict) -> list:
+    """必ず作る箱がそろい、未確認の箱が読者に見える形で示されているか。
+
+    ★CSSクラスによる非表示も見る★（Codex77回目の指摘4。
+      `.is-hidden{display:none}` を付ければ画面から消せた）
+    """
+    ng = []
+    try:
+        with open(os.path.join(BASE, "assets", "css", "practical.css"),
+                  encoding="utf-8") as f:
+            hidden_cls = _hc.hidden_classes_from_css(f.read())
+    except OSError as e:                  # noqa: BLE001
+        return [f"CSSを読めないので表示を確かめられません: {e}"]
+    doc = _hc.parse(html, hidden_cls)
+    want_titles = list(_ba.SECTION_ORDER) + [_ba.RUMOR_SECTION["title"]]
+    # ① 記事データ側の契約（順番・重複・過不足）
+    got_titles = [sec.get("title") for sec in (detail.get("sections") or [])]
+    if got_titles != want_titles:
+        ng.append(f"記事の箱がそろっていません（{got_titles} / {want_titles} のはず）")
+        return ng
+    # ② ページ側：見出しがちょうど1個ずつ見えていること
+    shown = " ".join(doc.visible)
+    for title in want_titles:
+        if shown.count(title) < 1:
+            ng.append(f"見出しが読者に見えません: {title}")
+    # ③ 未確認の箱：目印・見出し・本文が結びついていること
+    for sec in (detail.get("sections") or []):
+        title = sec.get("title")
+        body = [x for x in (sec.get("body") or []) if isinstance(x, str)]
+        want_pending = (body == [_ba.PENDING_TEXT])
+        marks = [b for b in doc.blocks
+                 if b.get("pending_title") == title and not b["hidden"]]
+        if want_pending:
+            if len(marks) != 1:
+                ng.append(f"未確認の目印が {len(marks)} 個です（{title}）")
+                continue
+            text = "".join(marks[0]["text"].split())
+            want = "".join((title + _ba.PENDING_TEXT).split())
+            if text != want:
+                ng.append(f"未確認の箱の中身が決めたものと違います（{title}）: "
+                          f"{marks[0]['text'][:60]!r}")
+        elif marks:
+            ng.append(f"中身がある箱に未確認の目印が付いています（{title}）")
     return ng
 
 
@@ -1114,10 +1157,8 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
         return out
     html = render(slug, machine, detail)
     out["html_bytes"] = len(html.encode("utf-8"))   # ★文字数ではなくバイト数★
-    want_pending = sum(1 for sec in (detail.get("sections") or [])
-                       if _ba.PENDING_TEXT in " ".join(sec.get("body") or []))
     out["problems"] += check_page(slug, html, expect_noindex=not indexable,
-                                  pending_boxes=want_pending)
+                                  detail=detail)
     out["problems"] += check_only_allowed_values(slug, machine, detail, html)
     if out["problems"] or not apply_it:
         return out
@@ -2014,23 +2055,47 @@ def selftest() -> int:
     t("　インラインstyleがあれば公開しない",
       any("style" in x for x in check_page("zzz_test",
                                            good.replace("<body>", '<body style="x">'))))
-    # ★未確認の項目には「未確認」と書いた箱があること★（2026-08-04・運営者判断）
-    #   ページ冒頭の断り書きをやめた代わりに、項目ごとの表示を機械で数える。
-    _pend_html = good.replace(
-        "</body>", f"<p>{_ba.PENDING_TEXT}</p><p>{_ba.PENDING_TEXT}</p></body>")
-    t("★★未確認の箱がそろっていれば通る★★",
-      check_page("zzz_test", _pend_html, pending_boxes=2) == [])
-    t("★★未確認の箱が足りなければ公開しない★★"
-      "（読者に『分かっていない』と伝わらないまま公開される）",
-      any("未確認の箱" in x for x in check_page(
-          "zzz_test", good, pending_boxes=2)))
-    t("★★隠された（見えない）未確認の箱は数えない★★"
-      "（JSが動かない読者に伝わらない）",
-      any("未確認の箱" in x for x in check_page(
-          "zzz_test",
-          good.replace("</body>",
-                       f'<p hidden>{_ba.PENDING_TEXT}</p></body>'),
-          pending_boxes=1)))
+    # ★★未確認は「箱」で示す★★（2026-08-04・運営者判断＋Codex77回目）
+    #   ページ全体の文字列を数えるのではなく、目印・見出し・本文を結びつけて見る。
+    _mat_ok = {"adopted": {"model_code": {"value": "L1"},
+                           "payout_range": {"value": {"low": 97, "high": 110}}},
+               "at_specs": {"adopted": [{"mode": "MAIN_AT", "games": 30,
+                                         "net": 2.8}]}}
+    _det_ok = _ba.build_detail("zzz_test", "試験機", "2026-09", _mat_ok)
+    _html_ok = ("<html><head></head><body>"
+                + "".join(_bmp.render_section(x) for x in _det_ok["sections"])
+                + "</body></html>")
+    t("★★箱がそろっていれば通る★★", check_pending_boxes(_html_ok, _det_ok) == [])
+    t("★★必ず作る箱が欠けていたら止める★★"
+      "（期待値を検査対象から作らない＝契約は build_new_article の定数・Codex77回目）",
+      any("箱がそろっていません" in x for x in check_pending_boxes(
+          _html_ok, {**_det_ok,
+                     "sections": [x for x in _det_ok["sections"]
+                                  if x["title"] != "天井・恩恵"]})))
+    t("★★同じ文言を別の場所に置いても数合わせにならない★★"
+      "（目印と見出しが結びついていること）",
+      any("未確認の目印" in x for x in check_pending_boxes(
+          _html_ok.replace('<div class="article-item" data-pending-section="天井・恩恵">',
+                           '<div class="article-item">')
+          + f"<p>{_ba.PENDING_TEXT}</p>", _det_ok)))
+    t("★★★CSSクラスで隠した箱は認めない★★★"
+      "（.is-hidden{display:none} で画面から消せた・Codex77回目の指摘4）",
+      any("未確認の目印" in x for x in check_pending_boxes(
+          _html_ok.replace('class="article-item" data-pending-section="天井・恩恵"',
+                           'class="article-item is-hidden" data-pending-section="天井・恩恵"'),
+          _det_ok)))
+    t("★★完全な文言の後ろで打ち消す文を足しても止まる★★",
+      any("中身が決めたもの" in x for x in check_pending_boxes(
+          _html_ok.replace(
+              _ba.PENDING_TEXT,
+              _ba.PENDING_TEXT + "という表示は誤りで、確認済みです。", 1),
+          _det_ok)))
+    t("　中身がある箱に未確認の目印が付いていたら止める",
+      any("中身がある箱" in x for x in check_pending_boxes(
+          _html_ok.replace('<div class="article-item"><h3 class="article-title">基本スペック',
+                           '<div class="article-item" data-pending-section="基本スペック">'
+                           '<h3 class="article-title">基本スペック'),
+          _det_ok)))
 
     t("　数値のかたまりを取り出せる（全角もそろえる）",
       _numbers("約97.3%と１２００Ｇ") == {"97.3%", "1200"})
@@ -2041,13 +2106,6 @@ def selftest() -> int:
           "zzz_test",
           good.replace('content="noindex,follow"',
                        'content="index" data-note="noindex"'))))
-    t("★★未確認の文面を勝手に変えたら数に入らない★★"
-      "（『未確認ですが問題ありません』のような打ち消しを混ぜられない）",
-      any("未確認の箱" in x for x in check_page(
-          "zzz_test",
-          good.replace("</body>",
-                       "<p>未確認ですが、当サイトの調べでは問題ありません。</p></body>"),
-          pending_boxes=1)))
     t("　暦にない日付は止める",
       any("暦" in x for x in check_machine(
           "zzz_test", {"slug": "zzz_test", "name": "x", "seo": {"title": "x"},
