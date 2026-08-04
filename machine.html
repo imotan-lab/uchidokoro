@@ -862,7 +862,8 @@ function resolveMachineSlug() {
   (detail?.sections || []).forEach(section => {
     const div = document.createElement("div");
     div.className = "article-item";
-    // ★未確認の箱には目印を付ける★（プリレンダ側と同じ形・2026-08-04）
+    // ★全部の箱に目印を付ける★（プリレンダ側と同じ形・2026-08-04）
+    div.setAttribute("data-section", section.title || "");
     if (Array.isArray(section.body)
         && section.body.length === 1
         && String(section.body[0]).trim() === PENDING_TEXT) {

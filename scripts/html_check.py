@@ -68,7 +68,7 @@ class _Doc(HTMLParser):
         if "display:none" in style or "visibility:hidden" in style:
             return True
         cls = set((a.get("class") or "").split())
-        return bool(cls & self._hidden_classes)
+        return any(want <= cls for want in self._hidden_classes if want)
 
     def _hidden_now(self) -> bool:
         return any(h for _t, h, _s in self._stack)
@@ -93,11 +93,14 @@ class _Doc(HTMLParser):
                                  "hidden": self._hidden_now() or self._is_hidden(a),
                                  "text": ""})
             self._notice_open = len(self._stack)
-        # ★未確認の箱★（2026-08-04・Codex77回目。どの項目が未確認かを構造で示す）
-        if a.get("data-pending-section") is not None:
-            self.blocks.append({"pending_title": a["data-pending-section"],
-                                "hidden": self._hidden_now() or self._is_hidden(a),
-                                "text": ""})
+        # ★記事の箱★（2026-08-04・Codex77〜78回目。ページ側の欠落・重複・
+        #   順番・中身を確かめるため、**全部の箱**に目印を付けて集める）
+        if a.get("data-section") is not None:
+            self.blocks.append({
+                "title": a["data-section"],
+                "pending_title": a.get("data-pending-section"),
+                "hidden": self._hidden_now() or self._is_hidden(a),
+                "text": ""})
             self._block_open = len(self._stack)
         if tag not in self._VOID:
             self._stack.append((tag, self._is_hidden(a), tag in _NON_TEXT))
@@ -142,25 +145,31 @@ class _Doc(HTMLParser):
 
 
 def hidden_classes_from_css(css: str) -> set:
-    """CSSから「そのクラスが付いていたら消える」クラス名を取り出す。
+    """CSSから「その組み合わせが付いていたら消える」クラス集合を取り出す。
 
-    ★手で並べない★（2026-08-04・Codex77回目の指摘4）。
-    `.is-hidden { display: none !important; }` のような**クラス1つだけ**の
-    規則に限る（`.a .b{...}` のような組み合わせは、その条件を判定できないので数えない）。
+    ★手で並べない★（2026-08-04・Codex77〜78回目）。返すのは frozenset の集合で、
+    要素が**その全部**を持っていたら隠れていると見なす。
+      `.is-hidden{display:none}`            → {frozenset({"is-hidden"})}
+      `.article-item.pending{display:none}` → {frozenset({"article-item","pending"})}
+    ★@media の中も数える★（画面幅で消えるものは「常に見える」とは言えない。
+      読者の一部に見えないなら、未確認の表示としては不十分）。
+    クラス以外（要素・id・子孫）が混ざる規則は、条件を判定できないので数えない。
     """
     import re as _re
     got = set()
     body = _re.sub(r"/\*.*?\*/", " ", css or "", flags=_re.S)
-    # @media 内は条件つきなので外す（画面幅で変わるものを常に隠れると見なさない）
-    body = _re.sub(r"@media[^{]*\{(?:[^{}]|\{[^{}]*\})*\}", " ", body)
+    body = body.replace("@media", chr(10) + "@media")   # 入れ子をほどきやすくする
     for sel, decl in _re.findall(r"([^{}]+)\{([^{}]*)\}", body):
-        d = decl.replace(" ", "").lower()
+        d = _re.sub(r"\s+", "", decl).lower()
         if "display:none" not in d and "visibility:hidden" not in d:
             continue
         for one in sel.split(","):
-            m = _re.match(r"^\s*\.([A-Za-z0-9_-]+)\s*$", one)
-            if m:
-                got.add(m.group(1))
+            o = one.strip()
+            if o.startswith("@"):
+                continue
+            if not _re.match(r"^(?:\.[A-Za-z0-9_-]+)+$", o):
+                continue                        # 複合・子孫・要素混じりは判定不能
+            got.add(frozenset(_re.findall(r"\.([A-Za-z0-9_-]+)", o)))
     return got
 
 

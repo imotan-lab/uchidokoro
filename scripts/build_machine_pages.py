@@ -132,13 +132,20 @@ def build_title_desc(machine: dict, pochipochi_available: bool = True) -> tuple[
 PENDING_ATTR = "data-pending-section"
 
 
-def pending_attr(section: dict) -> str:
-    """本文が「未確認」1文だけの箱に付ける属性（それ以外は空文字）。"""
+def section_attrs(section: dict) -> str:
+    """★全部の箱に目印を付ける★（2026-08-04・Codex78回目の指摘1）
+
+    ページ側の**欠落・重複・順番・中身**を確かめられるようにするため、
+    未確認の箱だけでなく全セクションに `data-section` を付ける。
+    """
     from build_new_article import PENDING_TEXT as _pt
+    title = section.get("title", "")
+    out = f' data-section="{esc(title)}"'
     body = section.get("body") or []
-    if isinstance(body, list) and [x.strip() for x in body if isinstance(x, str)] == [_pt]:
-        return f' {PENDING_ATTR}="{esc(section.get("title", ""))}"'
-    return ""
+    if isinstance(body, list) and [x.strip() for x in body
+                                   if isinstance(x, str)] == [_pt]:
+        out += f' {PENDING_ATTR}="{esc(title)}"'
+    return out
 
 
 def render_section(section: dict) -> str:
@@ -154,7 +161,7 @@ def render_section(section: dict) -> str:
         paras = "".join(f'<p class="rumor-body">{md(t)}</p>' for t in body)
         inner = (f'<h3 class="article-title">{esc(title)}</h3>'
                  f'<div class="rumor-box"><p class="rumor-label">⚠ 噂・未確定情報</p>{paras}</div>')
-        return f'<div class="article-item">{inner}</div>'
+        return f'<div class="article-item"{section_attrs(section)}>{inner}</div>'
 
     if stype == "settei":
         tables = section.get("tables")
@@ -197,11 +204,11 @@ def render_section(section: dict) -> str:
                     badge = esc(c1)
                 h += f"<tr><td>{esc(c0)}</td><td>{badge}</td></tr>"
             h += "</table>"
-        return f'<div class="article-item">{h}</div>'
+        return f'<div class="article-item"{section_attrs(section)}>{h}</div>'
 
     # default
     paras = "".join(f'<p class="article-body">{md(t)}</p>' for t in body)
-    return (f'<div class="article-item"{pending_attr(section)}>'
+    return (f'<div class="article-item"{section_attrs(section)}>'
             f'<h3 class="article-title">{esc(title)}</h3>{paras}</div>')
 
 
