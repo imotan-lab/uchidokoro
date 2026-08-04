@@ -2374,9 +2374,11 @@ def selftest() -> int:
                 r68c = probe_quarantine(persist=True)
                 p66d = _pend.load()
                 t("★★復旧URLが並びの末尾でも取得上限より先に処理される★★"
-                  "（Codex68回目＝確認済みの復旧URLを隔離に取り残さない）",
+                  "（Codex68回目＝確認済みの復旧URLを隔離に取り残さない・"
+                  "呼び出し順と隔離からの除去まで確認＝Codex69回目）",
                   r68c["requeued"] >= 1 and Q5[7] in p66d["items"]
-                  and len(_uo_calls) == 1 + 3)
+                  and _uo_calls == [Q5[7], Q5[0], Q5[1], Q5[2]]
+                  and Q5[7] not in _quar.urls_of(_quar.load(), "qm5"))
                 globals()["RECLASSIFY_FETCH_PER_NIGHT"] = _cap_before
                 # --- 古いヒント＋ページに年月なし: 行列に入れず隔離から外す ---
                 _OLD_HTML = ("<title>旧機X</title><h1>旧機X</h1>"
