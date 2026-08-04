@@ -118,8 +118,15 @@ _WARN = re.compile(
     r"厳禁|危険|やめ(?:て|ましょう)|控え)")
 
 
-def judge(item: dict, detail: dict) -> dict:
-    """その原子を自動で消してよいか決める（★迷ったら人送り★）。"""
+def judge(item: dict, detail: dict, ledger: dict | None = None,
+          profile: str | None = None) -> dict:
+    """その原子を自動で消してよいか決める（★迷ったら人送り★）。
+
+    ★集めた時と同じ条件で判定する★（2026-08-05・Codex101回目の実バグ）
+      以前は段落内の文を `classify_atom(s, {}, None)` で見ていた。
+      台帳も profile も slug も渡していないので、**集めた時と別の判定**になり、
+      「危ない文はこれだけ」という数え方が信用できなかった。
+    """
     out = {**item, "auto": False, "why": ""}
     m = AUTO_PATH.match(item["path"])
     if not m:
@@ -138,7 +145,7 @@ def judge(item: dict, detail: dict) -> dict:
         out["why"] = WHY_LAST
         return out
     para = str(body[bi])
-    if drop_kind(gates.normalize_atom([para])) == "setting":
+    if drop_kind(gates.normalize_atom([para])) == "setting":  # noqa: E501
         out["why"] = WHY_SETTING          # ★消さずに言い換える★
         return out
     if _WARN.search(para):
@@ -148,7 +155,8 @@ def judge(item: dict, detail: dict) -> dict:
     #   （消すと読者が知るべき事実まで一緒に消える）
     sentences = [s for s in re.split(r"(?<=。)", para) if s.strip()]
     risky = [s for s in sentences
-             if gates.classify_atom([s], {}, None) == gates.DROP]
+             if gates.classify_atom([s], ledger or {}, profile,
+                                    slug=item.get("slug")) == gates.DROP]
     if len(sentences) > 1 and len(risky) < len(sentences):
         out["why"] = WHY_MIX
         return out
@@ -164,8 +172,9 @@ def plan(slug: str | None = None) -> list:
             continue
         p = _detail_path(m["slug"])
         detail = _sj.read_json(p, expect=dict) if os.path.isfile(p) else {}
+        g = gates.compute_gates(_bl.provisional(m))
         for it in collect(m, detail, ledger):
-            rows.append(judge(it, detail))
+            rows.append(judge(it, detail, ledger, g.get("profile")))
     return rows
 
 
@@ -303,8 +312,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="危ない表現を原子ごと消す")
     ap.add_argument("--slug")
     ap.add_argument("--apply", action="store_true")
-    ap.add_argument("--limit", type=int, default=10,
-                    help="1機種で消してよい原子の数（既定10）")
+    ap.add_argument("--limit", type=int, default=1,
+                    help="1機種で消してよい原子の数（★既定1＝canary★）")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:

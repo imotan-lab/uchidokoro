@@ -1150,6 +1150,44 @@ def check_34_indexing_policy_applied(machines: list) -> list[str]:
             "（python scripts/apply_indexing_policy.py --apply で反映）"]
 
 
+def check_35_risky_atoms(machines: list) -> list[str]:
+    """★公開記事に残る「危ない表現」が増えていないか★（2026-08-05）
+
+    Phase 0 で落とすと決めた表現（利益・行動の断定／設定段階の非存在断定）が
+    既存記事に残っている。全部直すには人の手が要るので、
+    **いま残っている数を基準として持ち、増えたら止める**。
+    ＝直すのは人、増やさないのは機械。
+
+    ★なぜ「0件」にしないのか★（2026-08-05・Codex101回目）
+      段落単位で安全に消せるものが実データで0件だった（危ない文が
+      他の事実と同居している／設定段階は消すと情報が減る）。
+      0件を条件にすると、直せないまま監査が毎日赤くなり誰も見なくなる。
+      基準値を置いて「減る方向にしか動かせない」ようにする。
+    """
+    base_p = BASE / "assets" / "data" / "risky-baseline.json"
+    try:
+        import risky_atoms as _ra
+        rows = _ra.plan()
+    except Exception as e:                # noqa: BLE001
+        return [f"危ない表現を数えられません: {e}"]
+    now = len(rows)
+    try:
+        base = load_json(base_p)
+        limit = int(base["max_atoms"])
+    except Exception as e:                # noqa: BLE001
+        return [f"危ない表現の基準値を読めません（{base_p.name}）: {e}"]
+    if now > limit:
+        slugs = sorted({r["slug"] for r in rows})[:6]
+        return [f"危ない表現が増えています: {now}箇所（基準 {limit}箇所）"
+                f" 例: {', '.join(slugs)}"
+                "（python scripts/risky_atoms.py で場所を確認）"]
+    if now < limit:
+        return [f"危ない表現が {limit} → {now} 箇所に減りました。"
+                "assets/data/risky-baseline.json の max_atoms を下げてください"
+                "（減った分を基準に戻さないため）"]
+    return []
+
+
 CHECKS = [
     ("1_インラインstyle", check_1_inline_style),
     ("2_サブパス残骸", check_2_old_subpath),
@@ -1185,6 +1223,7 @@ CHECKS = [
     ("32_ページ欠けの機種", check_32_dangling_machine_page),
     ("33_公開が途中で終わっている", check_33_publish_in_progress),
     ("34_検索方針の反映漏れ", check_34_indexing_policy_applied),
+    ("35_危ない表現の残り", check_35_risky_atoms),
 ]
 
 
