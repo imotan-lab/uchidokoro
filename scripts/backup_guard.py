@@ -103,6 +103,9 @@ DENY_NAME_SEGMENT = {"auth", "oauth", "token", "session", "storage", "env"}
 DENY_EXTENSIONS = {".pem", ".key", ".pfx", ".p12", ".jks"}
 ARCHIVE_EXTENSIONS = {".zip", ".7z", ".rar", ".tar", ".gz", ".tgz"}
 
+# JSONの配列を確かめる上限（超えたら「確かめられない」として拒否する）
+JSON_SCAN_LIMIT = 5000
+
 # ── 秘密パターン: JSONキー（大小文字・-/_ 無視・再帰）──
 DENY_JSON_KEYS = {
     "app_password", "password", "passwd", "client_secret", "private_key",
@@ -176,7 +179,14 @@ def _json_key_findings(obj, path="$") -> list[str]:
         if len(dictitems) >= 3 and all({"name", "value", "domain"} <= {_norm_key(k) for k in x.keys()} for x in dictitems[:3]):
             out.append(f"cookie_structure:{path}")
             return out  # 配列の中まで潜らない（値を触らない）
-        for i, x in enumerate(obj[:50]):
+        # ★配列の途中で検査をやめない★（2026-08-04・Codex87回目）
+        #   先頭50件だけ見ていたので、51件目に app_password を置けば
+        #   20MB未満の正しいJSONでも素通りできた。
+        #   数が多すぎる時は「確かめられない」として拒否する（fail-closed）。
+        if len(obj) > JSON_SCAN_LIMIT:
+            out.append(f"json:要素が多すぎて確かめられません（{len(obj)}件）")
+            return out
+        for i, x in enumerate(obj):
             out.extend(_json_key_findings(x, f"{path}[{i}]"))
     return out
 
@@ -196,7 +206,13 @@ def content_findings(path: str) -> list[str]:
                     f"（{size // (1024 * 1024)}MB）"]
         with open(path, "rb") as f:
             raw = f.read()
-        text = raw.decode("utf-8", errors="ignore")
+        # ★読めない文字コードのまま素通りさせない★（2026-08-04・Codex87回目）
+        #   errors="ignore" だと、UTF-16 で保存した .md/.py/.log は
+        #   文字の間にNULが入って正規表現に当たらず、秘密が通っていた。
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            return ["content:UTF-8として読めないので中身を確かめられません"]
     except Exception as e:                # noqa: BLE001
         return [f"content:読めないので確かめられません（{type(e).__name__}）"]
     if path.lower().endswith(".json"):
@@ -575,6 +591,19 @@ def selftest() -> int:
       "（20MB超は検査を飛ばして素通りしていた＝ガードのfail-open）",
       any("大きすぎて" in x for x in content_findings(_big9)))
     os.remove(_big9)
+    # ★配列の途中で検査をやめない／読めない文字コードを通さない★（Codex87回目）
+    import json as _js9
+    _arr9 = os.path.join(_d9, "manual_overrides.json")
+    open(_arr9, "w", encoding="utf-8").write(_js9.dumps(
+        [{} for _ in range(50)] + [{"app_password": "abcd efgh ijkl mnop"}]))
+    t("★★JSON配列の51件目に秘密があっても見つける★★"
+      "（先頭50件しか見ていなかった＝ガードのfail-open）",
+      any("app_password" in x for x in content_findings(_arr9)))
+    _u16 = os.path.join(_d9, "note.md")
+    open(_u16, "wb").write("ghp_abcdefghij0123456789".encode("utf-16"))
+    t("★★UTF-16で保存すれば素通り、を防ぐ★★"
+      "（errors=ignore で文字の間にNULが入り正規表現に当たらなかった）",
+      any("UTF-8として読めない" in x for x in content_findings(_u16)))
     t("★★読み取りに失敗したファイルも通さない★★",
       any("読めないので" in x
           for x in content_findings(os.path.join(_d9, "no_such_file.json"))))
