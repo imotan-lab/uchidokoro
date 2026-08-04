@@ -814,6 +814,20 @@ BLOCKING = ("AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY", "型式名",
             "パチスロのページに見えません")
 
 
+def _machine_class(slug: str) -> str:
+    """コミット文に書くための区分（読めなければ「区分不明」）。"""
+    try:
+        ms = _sj.read_json(os.path.join(BASE, "assets/data/machines.json"),
+                           expect=(dict, list))
+        ms = ms["machines"] if isinstance(ms, dict) else ms
+        for m in ms:
+            if m.get("slug") == slug:
+                return _pdz.machine_class(m)
+    except Exception:                     # noqa: BLE001
+        pass
+    return "区分不明"
+
+
 def _blocking(problems: list) -> list:
     return [p for p in problems if any(w in p for w in BLOCKING)]
 
@@ -1598,8 +1612,12 @@ def push_after_publish(slug: str, already_committed: bool = False) -> list:
         #   コミットしたあと push で落ちると、手元にだけ機種がある状態になる。
         #   翌日は machines.json にあるので「既に登録」と判定され、
         #   待ち行列から永久に外れ、さらに未pushコミットが後続のpushも塞ぐ。
-        msg = (f"feat(machines): 新台 {slug} の先行記事を追加\n\n"
-               "出典2件で一致した項目だけを載せています（status: preview・noindex）。\n\n"
+        # ★コミット文にも本当の区分を書く★（2026-08-05。
+        #   「先行記事・status: preview」は新台経路では**もう使っていない**表現で、
+        #   実際の成果物（判定書つき・statusなし）と食い違っていた）
+        msg = (f"feat(machines): 新台 {slug} を追加（{_machine_class(slug)}）\n\n"
+               "出典2件で一致した項目だけを載せています。"
+               "検索に載せるかは判定書（PageDecision v1）が決めます。\n\n"
                "Co-Authored-By: Claude <自動タスク> <noreply@anthropic.com>\n")
         c = subprocess.run(["git", "commit", "-m", msg], cwd=BASE,
                            capture_output=True, text=True,
