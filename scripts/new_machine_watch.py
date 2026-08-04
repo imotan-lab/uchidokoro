@@ -65,7 +65,48 @@ class WatchError(RuntimeError):
 LAST_FINAL_URL = {"url": None}
 
 
+# ★1回の実行の中では、同じURLを1度しか取りに行かない★（2026-08-05）
+#   ★なぜ要るか★
+#     1機種を調べるのに、型式・転載・基本仕様・天井・AT・CZの6つの担当が
+#     **それぞれ同じ個別ページを取り直して**いた。一覧も機種ごとに読み直していて、
+#     実測で1機種あたり約27回、5機種なら135回になる。
+#     相手のサイトに無用な負担をかけるうえ、遅い。
+#     同じ実行の中で使い回せば、典型的には1日28回程度まで減る。
+#   ★持ち越さない★＝処理が終われば消える（日をまたいで古い内容を使わない）。
+_CACHE: dict = {}
+_CACHE_MAX = 400
+_LAST_AT: dict = {}
+MIN_INTERVAL = float(os.environ.get("UCHI_FETCH_INTERVAL", "2.0"))
+FETCH_COUNT = {"n": 0, "cached": 0}   # ★何回取りに行ったか★
+
+
+def cache_clear() -> None:
+    _CACHE.clear()
+    _LAST_AT.clear()
+    FETCH_COUNT.update({"n": 0, "cached": 0})
+
+
+def _wait_turn(url: str) -> None:
+    """同じ相手には続けて叩かない（間隔をあける）。"""
+    import time
+    import urllib.parse
+    host = urllib.parse.urlsplit(url).netloc.lower()
+    last = _LAST_AT.get(host)
+    if last is not None:
+        rest = MIN_INTERVAL - (time.monotonic() - last)
+        if rest > 0:
+            time.sleep(rest)
+    _LAST_AT[host] = time.monotonic()
+
+
 def _get(url: str, timeout: int = 20) -> str:
+    hit = _CACHE.get(url)
+    if hit is not None:
+        FETCH_COUNT["cached"] += 1
+        LAST_FINAL_URL["url"] = hit[1]   # 転送の検査が働くように控えも戻す
+        return hit[0]
+    _wait_turn(url)
+    FETCH_COUNT["n"] += 1
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     LAST_FINAL_URL["url"] = None
     try:
@@ -83,7 +124,11 @@ def _get(url: str, timeout: int = 20) -> str:
         raise WatchError(f"取得できません（{type(e).__name__}）: {url}")
     if len(body) > MAX_BYTES:
         raise WatchError(f"ページが大きすぎます: {url}")
-    return body.decode(charset, "replace")
+    text = body.decode(charset, "replace")
+    if len(_CACHE) >= _CACHE_MAX:
+        _CACHE.pop(next(iter(_CACHE)), None)
+    _CACHE[url] = (text, LAST_FINAL_URL["url"])
+    return text
 
 
 # ★機種ではない「年別アーカイブ」を機種と数えない★（2026-07-31・平和で確認）
@@ -1256,6 +1301,39 @@ def selftest() -> int:
     def t(name, cond):
         results.append((name, bool(cond)))
         print(("✅" if cond else "❌") + " " + name)
+
+    # ── ★同じページを取り直さない★（2026-08-05・取得回数の削減）
+    import urllib.request as _ur
+    _real_open, _hits = _ur.urlopen, {"n": 0}
+
+    class _Res:
+        status = 200
+        headers = type("H", (), {"get_content_charset": lambda self: "utf-8"})()
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def geturl(self): return "https://x.example/a"
+        def read(self, n=None): return b"<html>ok</html>"
+
+    try:
+        _ur.urlopen = lambda *a, **k: (_hits.__setitem__("n", _hits["n"] + 1),
+                                        _Res())[1]
+        _iv, MIN = MIN_INTERVAL, 0.0
+        globals()["MIN_INTERVAL"] = 0.0
+        cache_clear()
+        globals()["_get"]("https://x.example/a")
+        globals()["_get"]("https://x.example/a")
+        globals()["_get"]("https://x.example/b")
+        t("★★同じページは1度しか取りに行かない★★（相手への負担を減らす）",
+          _hits["n"] == 2 and FETCH_COUNT["n"] == 2 and FETCH_COUNT["cached"] == 1)
+        t("　使い回しても到達先の控えは戻る（転送の検査が働く）",
+          LAST_FINAL_URL["url"] == "https://x.example/a")
+        cache_clear()
+        globals()["_get"]("https://x.example/a")
+        t("　控えを消せば取り直す", _hits["n"] == 3)
+    finally:
+        _ur.urlopen = _real_open
+        globals()["MIN_INTERVAL"] = _iv
+        cache_clear()
 
     LIST = "https://m.example/products/slot/"
     html = ('<a href="/products/slot/aaa/">A</a>'
