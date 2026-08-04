@@ -285,6 +285,26 @@ def selftest() -> int:
       not preview_notices(parse(N.replace("<aside ", "<aside hidden ")),
                           "PREVIEW_VERIFIED_SUBSET"))
 
+    # ★CSSからの「隠すクラス」抽出★（2026-08-04・Codex77〜79回目）
+    _css = (".is-hidden{display:none}" + chr(10)
+            + ".article-item.pending{display:" + chr(9) + "none}" + chr(10)
+            + "@media (min-width:0px){.only-media{display:none}}" + chr(10)
+            + ".a .b{display:none}")
+    _cls = hidden_classes_from_css(_css)
+    t("★単独クラスの display:none を取り出せる★",
+      frozenset({"is-hidden"}) in _cls)
+    t("★★複合クラス（.a.b）＋宣言中のタブも取り出せる★★（Codex79回目の指摘3）",
+      frozenset({"article-item", "pending"}) in _cls)
+    t("★★@media の中の規則も『隠れる』と数える★★"
+      "（一部の読者に見えないなら未確認の表示として不十分）",
+      frozenset({"only-media"}) in _cls)
+    t("　子孫セレクタ（.a .b）は条件を判定できないので数えない",
+      not any(c == frozenset({"a", "b"}) for c in _cls))
+    _h = ('<body><div class="article-item pending">かくれ</div>'
+          '<div class="only-media">めでぃあ</div><p>みえる</p></body>')
+    t("★★複合クラス・@media で隠れた要素は見えない文字に数えない★★",
+      visible_text(_h, _cls).strip() == "みえる")
+
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
     if ng:

@@ -67,9 +67,23 @@ def is_setting_only(machine: dict) -> bool:
     )
 
 
+sys.path.insert(0, str(BASE / "scripts"))
+from build_new_article import PENDING_TEXT   # noqa: E402  ★未確認の文言（正本）★
+
+
+def _load_detail(slug: str) -> dict:
+    """記事データ（契約の正本）。無ければ空。"""
+    p_ = BASE / "assets" / "data" / "machine-details" / f"{slug}.json"
+    try:
+        return json.loads(p_.read_text(encoding="utf-8"))
+    except Exception:                     # noqa: BLE001
+        return {}
+
+
 def check_one(page, machine: dict) -> list[str]:
     """1機種のレンダリング検査。NGメッセージのリストを返す。"""
     slug = machine["slug"]
+    detail = _load_detail(slug)
     url = f"{SITE_URL}/machines/{slug}/"
     ngs: list[str] = []
     console_errors: list[str] = []
@@ -190,6 +204,49 @@ def check_one(page, machine: dict) -> list[str]:
     }""")
     for b in bad_tables:
         ngs.append(f"R11: 表の列数不整合: {b}")
+
+    # R13: 記事の箱が、読者の見る最終DOMでも契約どおりか
+    #   （2026-08-04・Codex79回目の指摘4。ページはJSで箱を作り直すので、
+    #     静的HTMLの契約が最終DOMまで保たれているかは別に確かめる必要がある）
+    #   ★computed style で本当に見えているかを見る★
+    boxes = page.evaluate(r"""() => {
+        const out = [];
+        document.querySelectorAll('#articleSections [data-section]').forEach(el => {
+            const st = getComputedStyle(el);
+            out.push({
+                title: el.getAttribute('data-section'),
+                pending: el.getAttribute('data-pending-section'),
+                tag: el.tagName.toLowerCase(),
+                cls: el.className,
+                shown: !(st.display === 'none' || st.visibility === 'hidden'
+                         || el.offsetParent === null),
+                heading: (el.querySelector('h3') || {}).textContent || '',
+                text: (el.textContent || '').replace(/\s+/g, ''),
+            });
+        });
+        return out;
+    }""")
+    if boxes:                       # 箱を持つのは新台経路のページだけ
+        want = [s.get("title") for s in (detail.get("sections") or [])]
+        got = [b["title"] for b in boxes]
+        if got != want:
+            ngs.append(f"R13: 最終DOMの箱がデータと違います（{got} / {want} のはず）")
+        for b in boxes:
+            if not b["shown"]:
+                ngs.append(f"R13: 箱が読者に見えていません: {b['title']}")
+            if b["tag"] != "div" or "article-item" not in (b["cls"] or ""):
+                ngs.append(f"R13: 箱の作りが違います: {b['title']} <{b['tag']}>")
+            if b["heading"].strip() != b["title"]:
+                ngs.append(f"R13: 箱の見出しが違います: {b['title']}")
+        for sec in (detail.get("sections") or []):
+            body = [x for x in (sec.get("body") or []) if isinstance(x, str)]
+            if body != [PENDING_TEXT]:
+                continue
+            hit = [b for b in boxes if b["title"] == sec.get("title")]
+            if not hit or hit[0]["pending"] != sec.get("title"):
+                ngs.append(f"R13: 未確認の箱に目印がありません: {sec.get('title')}")
+            elif hit[0]["text"] != (sec.get("title", "") + PENDING_TEXT).replace(" ", ""):
+                ngs.append(f"R13: 未確認の箱の中身が違います: {sec.get('title')}")
 
     # R12: チェッカーと早見表のmode選択が同期しているか
     #   （2026-07-27 Codex閉鎖確認 #2: 別々に持っていたため

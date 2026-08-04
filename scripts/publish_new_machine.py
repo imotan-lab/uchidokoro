@@ -341,54 +341,53 @@ def check_page(slug: str, html: str, expect_noindex: bool = True,
 
 
 def check_pending_boxes(html: str, detail: dict) -> list:
-    """記事の箱が、契約どおりページに出ているか（欠落・重複・順番・中身）。
+    """記事の箱が、契約どおりページに出ているか（構造ごと・順番・中身）。
 
-    ★ページ側を構造で確かめる★（2026-08-04・Codex78回目の指摘1/3）
-      以前は見出しの文字がページのどこかに1回でもあれば通ったので、
-      箱を丸ごと消して別の場所に見出しの文字を置くだけで合格できた。
-      いまは **data-section の並び**が契約と完全一致することを求め、
-      各箱の見える文字を**その節を描き直した結果**と突き合わせる。
+    ★平坦化した文字の比較をやめる★（2026-08-04・Codex79回目の指摘1）
+      以前は「目印のある要素の見える文字」を突き合わせていたので、
+      箱のクラスを外す・見出しを span に変える・表を段落に潰す、といった
+      **構造の破壊が素通り**した。いまは記事データから描き直した
+      セクション群のHTMLと、ページの該当部分を**そのまま**突き合わせる。
 
-    ★CSSクラスによる非表示も見る★（Codex77〜78回目の指摘4）
+    ★ページ内 <style> を許さない★（Codex79回目の指摘2）
+      `<style>.article-item{display:none}</style>` を1つ足すだけで
+      全部の箱を消せた。ひな型に <style> は無いので、あれば止める。
     """
     ng = []
+    want_titles = list(_ba.SECTION_ORDER) + [_ba.RUMOR_SECTION["title"]]
+    secs = detail.get("sections") or []
+    got_titles = [sec.get("title") for sec in secs]
+    if got_titles != want_titles:
+        return [f"記事の箱がそろっていません（{got_titles} / {want_titles} のはず）"]
+    if re.search(r"<[ 	]*style[ 	>/]", html, re.I):
+        ng.append("ページに <style> があります（箱ごと隠せるので許しません）")
+    # ★描き直した結果と、そのまま突き合わせる★
+    want_html = "".join(_bmp.render_section(sec) for sec in secs)
+    want_block = f'<div id="articleSections">{want_html}</div>'
+    if want_block not in html:
+        # どこがどう違うかを短く示す（原文は出さない）
+        got = re.search(r'<div id="articleSections">.*?(?=<div class="article-block">)',
+                        html, re.S)
+        got_titles2 = re.findall(r'data-section="([^"]*)"', got.group(0) if got else "")
+        ng.append("記事の箱がページのものと一致しません"
+                  f"（ページ側の並び: {got_titles2} / {want_titles} のはず）")
+        return ng
+    # ★念のため、目印つき要素が余分に無いか★（別の場所に置いた偽物）
+    all_marks = re.findall(r'data-section="([^"]*)"', html)
+    if all_marks != want_titles:
+        ng.append(f"記事の箱の目印が余分にあります（{all_marks}）")
+    # ★CSSクラスで隠されていないか★（practical.css から機械的に取り出す）
     try:
         with open(os.path.join(BASE, "assets", "css", "practical.css"),
                   encoding="utf-8") as f:
             hidden_cls = _hc.hidden_classes_from_css(f.read())
     except OSError as e:                  # noqa: BLE001
-        return [f"CSSを読めないので表示を確かめられません: {e}"]
-    want_titles = list(_ba.SECTION_ORDER) + [_ba.RUMOR_SECTION["title"]]
-    # ① 記事データ側の契約（順番・重複・過不足）
-    secs = detail.get("sections") or []
-    got_titles = [sec.get("title") for sec in secs]
-    if got_titles != want_titles:
-        return [f"記事の箱がそろっていません（{got_titles} / {want_titles} のはず）"]
-    # ② ページ側の箱の並び（欠落・重複・順番）
+        return ng + [f"CSSを読めないので表示を確かめられません: {e}"]
     doc = _hc.parse(html, hidden_cls)
-    blocks = [b for b in doc.blocks if not b["hidden"]]
-    page_titles = [b["title"] for b in blocks]
-    if page_titles != want_titles:
-        return [f"ページの箱がそろっていません（見えている順: {page_titles} / "
-                f"{want_titles} のはず）"]
-    # ③ 各箱の中身が、その節を描き直した結果と一致すること
-    #    ★期待値は検査対象のHTMLからではなく、記事データから作り直す★
-    for sec, blk in zip(secs, blocks):
-        title = sec.get("title")
-        # ★<body>で包んでから読む★（visible_text は body の中だけを見る）
-        want_text = "".join(
-            _hc.visible_text("<body>" + _bmp.render_section(sec) + "</body>",
-                             hidden_cls).split())
-        got_text = "".join(blk["text"].split())
-        if got_text != want_text:
-            ng.append(f"箱の中身がデータと違います（{title}）: "
-                      f"{blk['text'][:60]!r}")
-        body = [x for x in (sec.get("body") or []) if isinstance(x, str)]
-        want_pending = (body == [_ba.PENDING_TEXT])
-        if want_pending and blk.get("pending_title") != title:
-            ng.append(f"未確認の箱に目印がありません（{title}）")
-        if (not want_pending) and blk.get("pending_title"):
-            ng.append(f"中身がある箱に未確認の目印が付いています（{title}）")
+    shown = [b["title"] for b in doc.blocks if not b["hidden"]]
+    if shown != want_titles:
+        ng.append(f"読者に見えている箱がそろっていません（{shown} / "
+                  f"{want_titles} のはず）")
     return ng
 
 
@@ -2061,55 +2060,52 @@ def selftest() -> int:
     t("　インラインstyleがあれば公開しない",
       any("style" in x for x in check_page("zzz_test",
                                            good.replace("<body>", '<body style="x">'))))
-    # ★★記事の箱をページ側で構造ごと確かめる★★（2026-08-04・Codex77〜78回目）
-    #   ページ全体の文字数合わせでは、箱を消して別の場所に文字を置けば通った。
+    # ★★記事の箱をページ側で構造ごと確かめる★★（2026-08-04・Codex77〜79回目）
+    #   平坦化した文字の比較では、クラス・見出し・表を壊しても通っていた。
+    #   記事データから描き直したHTMLと、そのまま突き合わせる。
     _mat_ok = {"adopted": {"model_code": {"value": "L1"},
-                           "payout_range": {"value": {"low": 97, "high": 110}}},
+                           "payout_range": {"value": {"low": 97, "high": 110}},
+                           "payout_rate": {"value": {"1": "97%", "6": "110%"}}},
                "at_specs": {"adopted": [{"mode": "MAIN_AT", "games": 30,
-                                         "net": 2.8}]}}
+                                         "net": 2.8}]},
+               "czs": {"adopted": [{"name": "試験チャンス", "games": "20G"}]}}
     _det_ok = _ba.build_detail("zzz_test", "試験機", "2026-09", _mat_ok)
+    _inner = "".join(_bmp.render_section(x) for x in _det_ok["sections"])
     _html_ok = ("<html><head></head><body>"
-                + "".join(_bmp.render_section(x) for x in _det_ok["sections"])
-                + "</body></html>")
+                + '<div id="articleSections">' + _inner + "</div>"
+                + '<div class="article-block">next</div></body></html>')
     t("★★箱がそろっていれば通る★★", check_pending_boxes(_html_ok, _det_ok) == [])
-    t("★★ページから箱を消して見出しの文字だけ置いても通らない★★"
-      "（Codex78回目の指摘1）",
-      any("ページの箱がそろっていません" in x for x in check_pending_boxes(
-          re.sub(r'<div class="article-item" data-section="基本スペック".*?</div>',
-                 "<p>基本スペック</p>", _html_ok, count=1, flags=re.S), _det_ok)))
-    t("★★箱が重複していたら止める★★",
-      any("ページの箱がそろっていません" in x for x in check_pending_boxes(
+    t("★★箱のクラスを外したら止める★★（構造ごと突き合わせる・Codex79回目）",
+      any("ページのものと一致しません" in x for x in check_pending_boxes(
+          _html_ok.replace('class="article-item" ', ""), _det_ok)))
+    t("★★見出しを別のタグに変えたら止める★★",
+      any("ページのものと一致しません" in x for x in check_pending_boxes(
+          _html_ok.replace('<h3 class="article-title">', "<span>")
+          .replace("</h3>", "</span>"), _det_ok)))
+    t("★★表を段落に潰したら止める★★",
+      any("ページのものと一致しません" in x for x in check_pending_boxes(
+          _html_ok.replace("<table", "<p").replace("</table>", "</p>"),
+          _det_ok)))
+    t("★★★ページ内の <style> で箱ごと隠せない★★★（Codex79回目の指摘2）",
+      any("<style>" in x for x in check_pending_boxes(
+          _html_ok.replace("<body>",
+                           "<body><style>.article-item{display:none}</style>"),
+          _det_ok))
+      and any("<style>" in x for x in check_pending_boxes(
+          _html_ok.replace("<body>", "<body><STYLE >x{display:none}</STYLE>"),
+          _det_ok)))
+    t("★★別の場所に偽の箱を置いたら止める★★",
+      any("目印が余分" in x for x in check_pending_boxes(
           _html_ok.replace("</body>",
-                           _bmp.render_section(_det_ok["sections"][0])
-                           + "</body>"), _det_ok)))
-    t("★★箱の順番が違えば止める★★",
-      any("ページの箱がそろっていません" in x for x in check_pending_boxes(
-          "<html><body>"
-          + "".join(_bmp.render_section(x)
-                    for x in list(reversed(_det_ok["sections"])))
-          + "</body></html>", _det_ok)))
-    t("★★中身のある箱を見出しだけにしたら止める★★",
-      any("箱の中身がデータと違います" in x for x in check_pending_boxes(
-          re.sub(r'(<div class="article-item" data-section="ゲーム性">'
-                 r'<h3[^<]*</h3>).*?</div>',
-                 lambda _m: _m.group(1) + "</div>", _html_ok,
-                 flags=re.S),
+                           '<p data-section="ゲーム性">にせもの</p></body>'),
           _det_ok)))
-    t("★★未確認の行（機械割など）を消したら止める★★（Codex78回目の指摘2）",
-      any("箱の中身がデータと違います" in x for x in check_pending_boxes(
-          _html_ok.replace(_ba.PENDING_ITEM, "", 1), _det_ok)))
-    t("★★★CSSクラスで隠した箱は見えていないと判定する★★★"
-      "（.is-hidden / 複合クラス / @media 内も・Codex77〜78回目）",
-      any("ページの箱がそろっていません" in x for x in check_pending_boxes(
-          _html_ok.replace('class="article-item" data-section="天井・恩恵"',
-                           'class="article-item is-hidden" data-section="天井・恩恵"'),
-          _det_ok)))
-    t("★★完全な文言の後ろで打ち消す文を足しても止まる★★",
-      any("箱の中身がデータと違います" in x for x in check_pending_boxes(
-          _html_ok.replace(
-              _ba.PENDING_TEXT,
-              _ba.PENDING_TEXT + "という表示は誤りで、確認済みです。", 1),
-          _det_ok)))
+    t("★★CSSクラスで隠した箱は見えていないと判定する★★",
+      any("見えている箱" in x or "ページのものと一致しません" in x
+          for x in check_pending_boxes(
+              _html_ok.replace('class="article-item" data-section="天井・恩恵"',
+                               'class="article-item is-hidden" '
+                               'data-section="天井・恩恵"'),
+              _det_ok)))
     t("　記事データ側の箱が欠けていたら止める（契約と突き合わせる）",
       any("記事の箱がそろっていません" in x for x in check_pending_boxes(
           _html_ok, {**_det_ok,
