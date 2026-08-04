@@ -53,6 +53,7 @@ import new_machine_watch as _nw       # noqa: E402
 import pending_machines as _pend      # noqa: E402
 import prepush_gate as _pg            # noqa: E402
 import publish_new_machine as _pub    # noqa: E402
+import quarantine_machines as _quar   # noqa: E402
 import safe_json as _sj               # noqa: E402
 import spec_lookup as _sl             # noqa: E402
 
@@ -254,35 +255,50 @@ def discover(persist: bool = True) -> dict:
             # ★初回でも「これから出る新台」は拾う★（2026-08-02・Codex36回目）
             #   監視開始時に既に載っていた新台を既知に沈めない。
             #   登場年月が新台の範囲のものだけ、通常の分類を通して待ち行列へ。
-            # ★初回に読めないURLが異常に多い時は待ち行列に入れない★（2026-08-03・台帳#210）
-            #   「一晩だけ読めなかった新台」と「メーカー側の障害（SSL全滅等）」を件数で区別する。
-            #   藤商事116件・オーイズミ29件の既存ラインナップが行列に入り、
-            #   本物の新台が最悪29晩後回しになる実害が出た。
-            #   境目は MAX_NEW_PER_SCAN（一晩に増えてよい新台の上限と同じ物差し）。
-            #   抑えたURLは基準として覚えたままにする（忘れると翌日145件が
-            #   「新しいURL」になり PARSE_SUSPECT で社ごと止まる）。
-            first_classified = []
+            # ★初回に読めないURLが多すぎる時は、通常行列でなく隔離へ★
+            #   （2026-08-03・台帳#210 → 2026-08-04・Codex65回目で設計を是正）
+            #   藤商事116件・オーイズミ29件の既存ラインナップが「読めない＝
+            #   明日やり直す」の救済で行列へ無差別流入し、本物の新台が最悪29晩
+            #   後回しになった。かといって捨てるとseenに残ったまま二度と分類
+            #   されず、一覧に既載だった未導入新台（実例: L喰霊-零-Re）が沈む。
+            #   → 第三の置き場＝隔離（quarantine_machines）。復旧を毎晩1件だけ
+            #   確かめ、直ったら分類し直して新台の範囲だけ行列へ移す。
+            #   境目の MAX_NEW_PER_SCAN は「障害の証明」ではなく
+            #   「通常行列へ一晩に入れてよい上限」として使う（Codexの指摘2）。
+            #   数えるのは読めない失敗（_OUTAGE）だけ＝年月未掲載など
+            #   ページ自体は読めた理由は従来どおり通常行列で待つ。
+            hints0 = r.get("hints") or {}
+            first_classified = []         # (url, c)  c=None は打ち切り後の未分類
+            outage = 0
             for url in (r.get("initial_urls") or []):
-                first_classified.append(
-                    (url, _nw.classify(
-                        url, None,
-                        list_release=(r.get("hints") or {}).get(url))))
-            n_unreadable = sum(
-                1 for _u, c in first_classified
-                if (not c["ok"]) and retry_later(c["reasons"]))
-            too_many = n_unreadable > _nw.MAX_NEW_PER_SCAN
-            if too_many:
-                ex = next(" / ".join(c["reasons"])[:160]
-                          for _u, c in first_classified
-                          if (not c["ok"]) and retry_later(c["reasons"]))
-                out["problems"].append(
-                    f"{mid}: 初回一覧の {n_unreadable} 件が読めません"
-                    f"（多くても {_nw.MAX_NEW_PER_SCAN} 件のはず）＝"
-                    f"メーカー側の障害の疑い。待ち行列には入れず基準として"
-                    f"覚えるだけにします（例: {ex}）")
+                if outage > _nw.MAX_NEW_PER_SCAN:
+                    # ★障害と分かってからも全URLへ当たりに行かない★（Codexの指摘4）
+                    #   未分類のまま隔離し、復旧後に分類し直す。
+                    first_classified.append((url, None))
+                    continue
+                c = _nw.classify(url, None, list_release=hints0.get(url))
+                first_classified.append((url, c))
+                if (not c["ok"]) and _is_outage(c["reasons"]):
+                    outage += 1
+            too_many = outage > _nw.MAX_NEW_PER_SCAN
+            quarantined = {}
             for url, c in first_classified:
                 kept0 = True
-                if c["ok"]:
+                hint = hints0.get(url) or ""
+                if c is None or (too_many and (not c["ok"])
+                                 and _is_outage(c["reasons"])):
+                    # ★障害の巻き添えは隔離へ★（seenには残す＝翌日の
+                    #   「一度に145件増」PARSE_SUSPECT誤爆を防ぐ）
+                    #   ただし一覧カードの年月が新台の範囲なら、障害中でも
+                    #   通常行列で毎日やり直す（未導入新台を復旧待ちに巻き込まない）
+                    if hint and _nw.is_recent(hint):
+                        if persist:
+                            kept0 = _remember_url(
+                                "", url, mid, hint,
+                                "初回・メーカー側の障害中だが一覧カードの年月が新台範囲")
+                    else:
+                        quarantined[url] = hint
+                elif c["ok"]:
                     out["candidates"].append({"maker": mid, **c})
                     if persist:
                         kept0 = _remember_url(
@@ -292,22 +308,19 @@ def discover(persist: bool = True) -> dict:
                 elif retry_later(c["reasons"]):
                     # ★初回の晩だけ読めなかった将来の新台を沈めない★（Codex37回目）
                     #   取得失敗・メンテ・年月未掲載は明日には変わりうる。
-                    #   ただし件数が異常な時はメーカー側の障害＝行列に入れない（#210）。
-                    if persist and not too_many:
+                    if persist:
                         kept0 = _remember_url(
                             c.get("official_name") or "", url, mid,
                             (c.get("release") or {}).get("value") or "",
                             "初回に読めなかった: " + " / ".join(c["reasons"])[:200])
-                elif ((r.get("hints") or {}).get(url) or "") \
-                        and _nw.is_recent((r.get("hints") or {}).get(url)):
+                elif hint and _nw.is_recent(hint):
                     # ★一覧カードの年月が新台の範囲なら、分類失敗の種類を問わず残す★
                     #   （2026-08-02・Codex39回目。先行公開直後の薄い個別ページが
                     #     「パチスロのページに見えません」＝永久理由になり、
                     #     初回記録で既知に沈んでいた）
                     if persist:
                         kept0 = _remember_url(
-                            c.get("official_name") or "", url, mid,
-                            (r.get("hints") or {}).get(url) or "",
+                            c.get("official_name") or "", url, mid, hint,
                             "初回・個別ページが未完成の疑い: "
                             + " / ".join(c["reasons"])[:200])
                 # 範囲外など「やり直しても変わらない」は初回の古い機種＝台帳に残さない
@@ -316,6 +329,18 @@ def discover(persist: bool = True) -> dict:
                     _forget(seen, mid, url)
                     out["problems"].append(
                         f"{url}: 初回に残せなかったので『見た』ことにしません")
+            if quarantined:
+                out["problems"].append(
+                    f"{mid}: 初回一覧で読めない個別ページが、通常の待ち行列へ"
+                    f"一晩に入れてよい上限（{_nw.MAX_NEW_PER_SCAN}件）を超えたため、"
+                    f"{len(quarantined)}件を別枠（隔離）に保留しました。"
+                    "毎晩1件ずつ復旧を確かめ、直ったら分類し直して"
+                    "新台の範囲だけ行列へ入れます")
+                if persist:
+                    qd = _quar.load()
+                    _quar.add(qd, mid, quarantined,
+                              f"初回一覧の読めない個別ページ {outage} 件超")
+                    _quar.save(qd)
             continue
         for url in r["new"]:
             # ★公式一覧のカードの年月を控えとして渡す★（2026-08-02・Codex27回目）
@@ -628,6 +653,72 @@ def retry_later(problems: list) -> bool:
     if any(any(w in p for w in NOT_RETRYABLE) for p in problems):
         return False
     return any(any(w in p for w in RETRYABLE) for p in problems)
+
+
+# ★「ページが読めない」失敗だけを障害として数える★（2026-08-04・Codex65回目）
+#   年月未掲載などページ自体は読めた理由と混ぜない（隔離の判定を歪めないため）。
+_OUTAGE_PREFIX = "公式ページが読める状態ではありません"
+
+
+def _is_outage(reasons: list) -> bool:
+    return any(str(x).startswith(_OUTAGE_PREFIX) for x in reasons)
+
+
+def probe_quarantine(persist: bool) -> dict:
+    """★隔離したメーカーの復旧確認（毎晩1URLだけ）と、復旧後の分類し直し★
+
+    （2026-08-04・Codex65回目の設計）
+    - まだ読めない: 確かめた記録だけ残して待つ（障害中サイトへ負荷をかけない）
+    - 読めた=復旧: そのメーカーの隔離分を全部分類し直し、
+      新台の範囲・やり直す価値のあるものだけ通常の行列へ移す。
+      古い機種と分かった分は隔離から外すだけ（seenに残っているので再流入しない）。
+    - 行列に入れられなかった分は隔離に残す（黙って消さない）。
+    """
+    out = {"probed": [], "recovered": [], "requeued": 0, "problems": []}
+    try:
+        qd = _quar.load()
+    except Exception as e:                # noqa: BLE001
+        out["problems"].append(f"隔離簿が読めません: {e}")
+        return out
+    if not _quar.makers(qd):
+        return out
+    if not persist:
+        _log(f"（下見）隔離中 {len(_quar.makers(qd))} 社の復旧確認は"
+             "--apply の実行が行います")
+        return out
+    for mid in _quar.makers(qd):
+        url = _quar.pick_probe(qd, mid)
+        if not url:
+            continue
+        c = _nw.classify(url, None)
+        out["probed"].append(f"{mid}: {url}")
+        if (not c["ok"]) and _is_outage(c["reasons"]):
+            _quar.mark_probe(qd, mid, url)
+            _log(f"隔離の復旧確認 {mid}: まだ読めません（{url}）")
+            continue
+        # ★読めた＝復旧。隔離分を全部分類し直す★
+        out["recovered"].append(mid)
+        _log(f"隔離の復旧確認 {mid}: 読めました。分類し直します")
+        for u, rec in sorted(_quar.urls_of(qd, mid).items()):
+            cu = c if u == url else _nw.classify(
+                u, None, list_release=(rec.get("hint") or None))
+            hint = rec.get("hint") or ""
+            worth = (cu["ok"] or retry_later(cu["reasons"])
+                     or (hint and _nw.is_recent(hint)))
+            if worth:
+                if _remember_url(cu.get("official_name") or "", u, mid,
+                                 (cu.get("release") or {}).get("value")
+                                 or hint or "",
+                                 "隔離からの復旧分類"):
+                    out["requeued"] += 1
+                    _quar.remove_url(qd, mid, u)
+                # 行列に入れられなかった分は隔離に残す（明日また試す）
+            else:
+                # 範囲外など「やり直しても変わらない」＝初回の古い機種。
+                # seenに残っているので、外すだけで再流入しない。
+                _quar.remove_url(qd, mid, u)
+    _quar.save(qd)
+    return out
 
 
 # ★書き込みを止める理由★（Codex指摘3・自分で再現を確認）
@@ -2001,11 +2092,105 @@ def selftest() -> int:
             t("★★初回に読めなかった将来の新台を沈めない★★（Codex37回目）",
               "初回に読めなかった" in inspect.getsource(discover)
               and "初回に残せなかったので" in inspect.getsource(discover))
-            t("★★初回に読めないURLが多すぎる時は行列に入れない★★"
-              "（メーカー側の障害と件数で区別・基準としては覚えたまま・台帳#210）",
-              "メーカー側の障害の疑い" in inspect.getsource(discover)
-              and "not too_many" in inspect.getsource(discover)
-              and "MAX_NEW_PER_SCAN" in inspect.getsource(discover))
+            # ★★#210＋Codex65回目: 初回の障害URLは隔離へ・復旧後に分類し直す★★
+            #   （文字列の有無ではなく、偽の一覧とURLで挙動そのものを確かめる）
+            _real_qstore = _quar.STORE
+            _quar.STORE = os.path.join(_tmpdir, "quarantine.json")
+            _real_rj = _sj.read_json
+            _real_ls = _nw._load_seen
+            _real_ss = _nw._save_seen
+            _real_sm = _nw.scan_maker
+            _real_cl = _nw.classify
+            try:
+                Q_URLS = [f"https://q.maker.test/slot/m{i}/" for i in range(8)]
+                _fake_cat = {"catalogs": {"qm": {
+                    "status": "ACTIVE", "name": "試験メーカー",
+                    "list_url": "https://q.maker.test/slot/",
+                    "link_prefix": "https://q.maker.test/slot/"}}}
+
+                def _fake_rj(path, expect=None, **kw):
+                    if str(path) == str(_nw.CATALOGS):
+                        return _fake_cat
+                    return _real_rj(path, expect=expect, **kw)
+                _sj.read_json = _fake_rj
+                _nw._load_seen = lambda: {"schema": "seen-machine-urls/v1",
+                                          "makers": {}}
+                _nw._save_seen = lambda s: None
+                _q_calls = []
+
+                def _cl_outage(url, seen_entry=None, list_release=None):
+                    _q_calls.append(url)
+                    return {"ok": False, "official_name": "", "release": None,
+                            "reasons": ["公式ページが読める状態ではありません"
+                                        "（取得できません（URLError SSL））"]}
+                _nw.classify = _cl_outage
+                _nw.scan_maker = lambda mid, conf, seen, record=True: {
+                    "maker": mid, "state": "FIRST_TIME", "first_time": True,
+                    "problem": None, "total": len(Q_URLS), "new": [],
+                    "initial_urls": list(Q_URLS),
+                    "hints": {Q_URLS[7]: "2026-09"},
+                    "retention": None, "shape_warnings": []}
+                _pend.save({"schema": _pend.SCHEMA, "items": {}})
+                d65 = discover(persist=True)
+                p65 = _pend.load()
+                q65 = _quar.load()
+                t("★★初回の障害URL群は通常行列に入れない★★"
+                  "（8件全滅→行列は一覧年月ありの1件だけ・台帳#210）",
+                  list(p65["items"]) == [Q_URLS[7]])
+                t("★★一覧カードの年月が新台範囲なら障害中でも行列で待つ★★"
+                  "（喰霊が沈んだ形の再発防止）",
+                  Q_URLS[7] in p65["items"]
+                  and Q_URLS[7] not in _quar.urls_of(q65, "qm"))
+                t("★★巻き添え分は隔離簿に残る（捨てない・行列にも入れない）★★",
+                  len(_quar.urls_of(q65, "qm")) == 7)
+                t("★★障害と分かったら残りのURLへ当たりに行かない★★"
+                  "（上限+1=6回で打ち切り・全116アクセスを繰り返さない）",
+                  len(_q_calls) == _nw.MAX_NEW_PER_SCAN + 1)
+                t("　隔離したことは「確認が要る」に報告される",
+                  any("隔離" in x for x in d65["problems"]))
+                # --- まだ読めない晩: 1URLだけ確かめて待つ ---
+                _q_calls.clear()
+                r65 = probe_quarantine(persist=True)
+                q65b = _quar.load()
+                t("★★復旧確認は一晩にメーカーへ1URLだけ★★",
+                  len(_q_calls) == 1 and r65["probed"]
+                  and not r65["recovered"]
+                  and len(_quar.urls_of(q65b, "qm")) == 7)
+                # --- 復旧した晩: 分類し直して新台だけ行列へ ---
+
+                def _cl_fixed(url, seen_entry=None, list_release=None):
+                    _q_calls.append(url)
+                    if url == Q_URLS[0]:
+                        return {"ok": True, "official_name": "L試験新台Q",
+                                "release": {"value": "2026-09"}, "reasons": []}
+                    return {"ok": False, "official_name": "", "release": None,
+                            "reasons": ["登場年月が新台の範囲外です（2011-11）"]}
+                _nw.classify = _cl_fixed
+                r66 = probe_quarantine(persist=True)
+                p66 = _pend.load()
+                q66 = _quar.load()
+                t("★★復旧したら隔離分を分類し直し、新台の範囲だけ行列へ★★"
+                  "（喰霊の恒久救済経路）",
+                  r66["recovered"] == ["qm"] and r66["requeued"] == 1
+                  and Q_URLS[0] in p66["items"])
+                t("★★古い機種と分かった分は隔離から外れ、行列にも入らない★★",
+                  _quar.makers(q66) == []
+                  and all(u not in p66["items"] for u in Q_URLS[1:7]))
+                # --- 下見は隔離を確かめにも行かない ---
+                _quar.save(_quar.add(_quar.load(), "qm",
+                                     {Q_URLS[1]: ""}, "試験"))
+                _q_calls.clear()
+                r67 = probe_quarantine(persist=False)
+                t("★★下見は復旧確認に行かない（隔離簿も書かない）★★",
+                  not _q_calls and not r67["probed"]
+                  and len(_quar.urls_of(_quar.load(), "qm")) == 1)
+            finally:
+                _quar.STORE = _real_qstore
+                _sj.read_json = _real_rj
+                _nw._load_seen = _real_ls
+                _nw._save_seen = _real_ss
+                _nw.scan_maker = _real_sm
+                _nw.classify = _real_cl
             t("★★発見した時点で基準の題を控える★★"
               "（最初の再確認までの使い回しを見逃した・Codex30回目）",
               "known_titles" in inspect.getsource(discover)
@@ -2206,6 +2391,16 @@ def main() -> int:
     d = discover(persist=apply_it)
     for x in d["first_time"]:
         print("初回として記録:", x)
+    # ★隔離したメーカーの復旧確認（毎晩1URL）★（2026-08-04・Codex65回目）
+    q = probe_quarantine(persist=apply_it)
+    for x in q["probed"]:
+        _log(f"隔離の復旧確認: {x}")
+    for mzz in q["recovered"]:
+        _log(f"★隔離が復旧: {mzz} / 行列へ移した数は下記★")
+    if q["requeued"]:
+        _log(f"隔離から行列へ: {q['requeued']} 件")
+    for x in q["problems"]:
+        d["problems"].append(x)
     # ★見つけたが記事にできていない機種を、必ず待ち行列に入れる★
     # ★候補は discover() の中で、seen を書く前に待ち行列へ入れてある★
     pend = _pend.load()
