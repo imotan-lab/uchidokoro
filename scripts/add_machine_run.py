@@ -830,8 +830,17 @@ def _machine_class(slug: str) -> str:
     return "区分不明"
 
 
-def _blocking(problems: list) -> list:
+def blocking_problems(problems: list) -> list:
+    """★書いてはいけない理由だけを取り出す★（新台追加も更新も同じ判定を使う）
+
+    2026-08-05・Codex102回目: 更新側がこれを見ておらず、
+    転載の疑いなど「材料は返るが公開してはいけない」場合を素通りしていた。
+    """
     return [p for p in problems if any(w in p for w in BLOCKING)]
+
+
+def _blocking(problems: list) -> list:
+    return blocking_problems(problems)
 
 
 # ★その晩に「正常に読めた」一覧のスナップショット★（メーカーID → HTML）
