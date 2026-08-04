@@ -107,14 +107,55 @@ def claims_grew(old_decision: dict, new_decision: dict) -> list:
     return []
 
 
-def _paragraphs(detail: dict) -> list:
-    """記事の中身（未確認の箱の決まり文句は数えない）。"""
+def _units(detail: dict) -> list:
+    """読者に出ている中身を、比べられる単位に分ける。
+
+    ★段落だけでは足りない★（2026-08-05・Codex103回目の指摘2）
+      CZの継続G数や設定別の数値は `tables` にあるので、
+      段落だけ比べると「表の値だけ書き換える」改ざんが素通りした。
+      factTable（型式名・機械割）も同じ。
+
+    ★「未確認」の行は数えない★（同・指摘3）
+      箱ごとの決まり文句（PENDING_TEXT）だけでなく、
+      項目ごとの「未確認（確認でき次第掲載します）」（PENDING_ITEM）も除く。
+      ここを数えると、**未確認を埋める正しい更新まで拒否**してしまう。
+    """
     out = []
-    for s in (detail or {}).get("sections") or []:
+    if not isinstance(detail, dict):
+        return out
+
+    def _pending(t: str) -> bool:
+        return (t == _ba.PENDING_TEXT) or (_ba.PENDING_ITEM in t)
+
+    for s in detail.get("sections") or []:
+        title = str(s.get("title"))
         for b in (s.get("body") or []):
             t = str(b).strip()
-            if t and t != _ba.PENDING_TEXT:
-                out.append((str(s.get("title")), t))
+            if t and not _pending(t):
+                out.append(("body", title, t))
+        for tb in (s.get("tables") or []):
+            label = str((tb or {}).get("label") or "")
+            headers = tuple(str(x) for x in ((tb or {}).get("headers") or []))
+            for row in ((tb or {}).get("rows") or []):
+                cells = tuple(str(x) for x in (row or []))
+                if any(_pending(c) for c in cells):
+                    continue
+                out.append(("table", title, label, headers, cells))
+            note = str((tb or {}).get("note") or "").strip()
+            if note and not _pending(note):
+                out.append(("note", title, label, note))
+    for row in (detail.get("factTable") or []):
+        cells = tuple(str(x) for x in (row or []))
+        if not any(_pending(c) for c in cells):
+            out.append(("fact",) + cells)
+    for box in (detail.get("summaryBoxes") or []):
+        lab = str((box or {}).get("label") or "")
+        val = str((box or {}).get("value") or "")
+        if val and not _pending(val):
+            out.append(("box", lab, val))
+    lead = str(detail.get("lead") or "").strip()
+    if lead and not _pending(lead):
+        out.append(("lead", lead))
     return out
 
 
@@ -126,10 +167,13 @@ def text_kept(old_detail: dict, new_detail: dict) -> list:
     そこで**確認済みとして既に出ている文**を1つでも失う更新は拒否する
     （足すのは自由・消す/変えるのは不可＝本当の意味での単調追加）。
     """
-    old, new = _paragraphs(old_detail), set(_paragraphs(new_detail))
-    gone = [f"{t}: {b[:40]}" for t, b in old if (t, b) not in new]
-    return [f"前に載っていた内容が消える/変わる更新です: {' / '.join(gone[:3])}"] \
-        if gone else []
+    old, new = _units(old_detail), _units(new_detail)
+    from collections import Counter
+    left = Counter(old) - Counter(new)          # ★数も含めて包含されているか★
+    if not left:
+        return []
+    gone = [" ".join(str(x) for x in u)[:60] for u in list(left.elements())[:3]]
+    return [f"前に載っていた内容が消える/変わる更新です: {' / '.join(gone)}"]
 
 
 def ledger_once(slug: str, title: str, detail: str,
@@ -192,9 +236,18 @@ def _detail_path(slug: str) -> str:
 
 
 def plan_one(slug: str, gather=None, verify=None) -> dict:
-    """育てられるか調べて、新しい機種データ・記事を作る（★書き込まない★）。"""
+    """育てられるか調べて、新しい機種データ・記事を作る（★書き込まない★）。
+
+    ★指紋は「読む前」に取る★（2026-08-05・Codex103回目の指摘1）
+      以前は計画が終わってから指紋を取っていたので、
+      **計画中に別の処理が書き換えると、その新しい姿を指紋にしてしまい**、
+      古い計画で相手の追加を消せた。読む前に取れば必ず食い違って止まる。
+    """
     out = {"slug": slug, "problems": [], "machine": None, "detail": None,
-           "was": None, "now": None}
+           "was": None, "now": None,
+           "fingerprint": {p: _file_sha(p) for p in
+                           (_detail_path(slug), _pub._page_path(slug),
+                            MACHINES, SITEMAP) if os.path.isfile(p)}}
     rows = _read_rows()
     cur = next((m for m in rows if m.get("slug") == slug), None)
     if cur is None:
@@ -316,7 +369,7 @@ def _file_sha(path: str) -> str:
         return hashlib.sha256(f.read()).hexdigest()
 
 
-def apply_one(got: dict, before_fp: dict | None = None) -> dict:
+def apply_one(got: dict) -> dict:
     """育てた結果を書き込む（★全部そろうか、何も残さないか★）。
 
     ★書く直前にもう一度確かめる★（2026-08-05・Codex102回目の指摘4）
@@ -331,6 +384,10 @@ def apply_one(got: dict, before_fp: dict | None = None) -> dict:
     machine, detail = got["machine"], got["detail"]
     out = {"slug": slug, "problems": [], "wrote": [], "was": got["was"],
            "now": got["now"]}
+    # ★指紋が無い計画では何もしない★（先に断る＝無駄な描画もしない）
+    if not got.get("fingerprint"):
+        out["problems"].append("計画時の指紋がありません（書きません）")
+        return out
     indexable = got["now"] == "AUTO_INDEXABLE"
     html = _pub.render(slug, machine, detail)
     # ★書く前の検査（新規公開と同じものを使う）★
@@ -350,12 +407,12 @@ def apply_one(got: dict, before_fp: dict | None = None) -> dict:
 
     with _pub._OnlyOne():                  # ★同時に2つ走らせない★
         # ── 書く直前の再確認
-        if before_fp:
-            for p, want in before_fp.items():
-                if not os.path.isfile(p) or _file_sha(p) != want:
-                    out["problems"].append(
-                        f"計画したときから中身が変わっています: "
-                        f"{os.path.relpath(p, BASE)}")
+        before_fp = got["fingerprint"]
+        for p, want in before_fp.items():
+            if not os.path.isfile(p) or _file_sha(p) != want:
+                out["problems"].append(
+                    f"計画したときから中身が変わっています: "
+                    f"{os.path.relpath(p, BASE)}")
         again = plan_one(slug, gather=lambda *a, **k: {"material": None,
                                                        "problems": []},
                          verify=lambda *a, **k: {"problems": [], "release": ""})
@@ -452,6 +509,62 @@ def selftest() -> int:
       claims_grew({"claims": ["a"]}, {"claims": ["a"]}))
     t("　増えていれば通る", not claims_grew({"claims": ["a"]},
                                             {"claims": ["a", "b"]}))
+    # ── 前に載っていた内容が消える/変わる更新を止める（Codex102/103回目）
+    OLD = {"lead": "この機種の紹介です。",
+           "factTable": [["型式名", "L機/1"], ["機械割", "97.0%〜110.0%"]],
+           "summaryBoxes": [{"label": "天井", "value": "800G"}],
+           "sections": [
+               {"title": "基本スペック", "body": [
+                   "**型式名**：L機/1",
+                   f"**50枚あたりのゲーム数**：{_ba.PENDING_ITEM}"]},
+               {"title": "確認できたCZ", "tables": [
+                   {"label": "出典2件で確認できたCZ",
+                    "headers": ["CZ", "継続", "契機"],
+                    "rows": [["喰霊チャンス", "10G", "レア役"]]}]},
+               {"title": "天井・恩恵", "body": [_ba.PENDING_TEXT]}]}
+
+    def _mod(f):
+        import copy
+        d = copy.deepcopy(OLD)
+        f(d)
+        return d
+
+    t("　同じ内容なら通る", not text_kept(OLD, _mod(lambda d: None)))
+    t("　中身を足すのは通る",
+      not text_kept(OLD, _mod(lambda d: d["sections"][0]["body"].append("**純増**：2.8枚"))))
+    t("★★段落の値を書き換えたら止める★★",
+      text_kept(OLD, _mod(lambda d: d["sections"][0]["body"].__setitem__(
+          0, "**型式名**：L機/2"))))
+    t("★★表の値だけ書き換えても止める★★（Codex103回目・段落だけ見ていた）",
+      text_kept(OLD, _mod(lambda d: d["sections"][1]["tables"][0]["rows"]
+                          .__setitem__(0, ["喰霊チャンス", "20G", "レア役"]))))
+    t("★★factTableの値を書き換えても止める★★",
+      text_kept(OLD, _mod(lambda d: d["factTable"].__setitem__(
+          1, ["機械割", "99.0%〜115.0%"]))))
+    t("★★まとめ箱・リード文の書き換えも止める★★",
+      text_kept(OLD, _mod(lambda d: d["summaryBoxes"][0].__setitem__(
+          "value", "999G")))
+      and text_kept(OLD, _mod(lambda d: d.__setitem__("lead", "別の紹介文。"))))
+    t("★★項目ごとの「未確認」を埋める更新は通す★★（Codex103回目・正しい更新を拒んでいた）",
+      not text_kept(OLD, _mod(lambda d: d["sections"][0]["body"].__setitem__(
+          1, "**50枚あたりのゲーム数**：約32G"))))
+    t("　箱の「未確認です」を中身に差し替えるのも通る",
+      not text_kept(OLD, _mod(lambda d: d["sections"][2]["body"].__setitem__(
+          0, "通常時800Gで天井に到達します。"))))
+    t("★★同じ表の行が減ったら止める★★",
+      text_kept(OLD, _mod(lambda d: d["sections"][1]["tables"][0]
+                          .__setitem__("rows", []))))
+    # 指紋は「計画で読む前」に取る
+    got = plan_one("garei_zero_re", gather=lambda *a, **k: {"material": None,
+                                                            "problems": []},
+                   verify=lambda *a, **k: {"problems": [], "release": ""})
+    t("★★計画結果に、読む前の指紋が入っている★★（同時更新を古い計画で消さない）",
+      isinstance(got.get("fingerprint"), dict) and got["fingerprint"])
+    t("★★指紋が無い計画では書かない★★",
+      any("指紋がありません" in p for p in
+          apply_one({"slug": "x", "machine": {}, "detail": {},
+                     "was": "AUTO_PENDING", "now": "AUTO_PENDING",
+                     "fingerprint": {}})["problems"]))
     t("★★型式が変わったら育てない★★",
       any("型式" in x for x in identity_same(
           {"regulatory_model_code": "A/1"}, {"regulatory_model_code": "B/2"})))
@@ -507,10 +620,7 @@ def main() -> int:
     if not a.apply:
         print("（下見です。書き込むには --apply）")
         return 0
-    fp = {p: _file_sha(p) for p in
-          (_detail_path(a.slug), _pub._page_path(a.slug), MACHINES, SITEMAP)
-          if os.path.isfile(p)}
-    r = apply_one(got, before_fp=fp)
+    r = apply_one(got)
     for p in r["problems"]:
         print("  -", p)
     if r["wrote"]:
