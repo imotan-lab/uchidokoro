@@ -1126,6 +1126,21 @@ def check_33_publish_in_progress(machines: list) -> list[str]:
             f".publish-in-progress.json を消してください"]
 
 
+def check_34_indexing_policy_applied(machines: list) -> list[str]:
+    """★緊急overrideの切り替えが、成果物へ反映されているか★
+
+    （2026-08-04・Codex73回目の指摘1）
+    indexing-policy.json を切り替えても、公開済みの静的HTMLとsitemapは
+    そのままなので、「スイッチを入れたつもりで何も起きていない」状態になる。
+    判定書に焼かれた policy_mode といまの設定を突き合わせて検知する。
+    """
+    stale = _pd.stale_decisions(machines)
+    if not stale:
+        return []
+    return [f"緊急overrideの切り替えが未反映の機種 {len(stale)}件: {stale[:5]}"
+            "（python scripts/apply_indexing_policy.py --apply で反映）"]
+
+
 CHECKS = [
     ("1_インラインstyle", check_1_inline_style),
     ("2_サブパス残骸", check_2_old_subpath),
@@ -1160,6 +1175,7 @@ CHECKS = [
     ("31_Codexへの未報告", check_31_codex_report),
     ("32_ページ欠けの機種", check_32_dangling_machine_page),
     ("33_公開が途中で終わっている", check_33_publish_in_progress),
+    ("34_検索方針の反映漏れ", check_34_indexing_policy_applied),
 ]
 
 

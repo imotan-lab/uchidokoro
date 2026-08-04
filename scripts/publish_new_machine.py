@@ -43,6 +43,7 @@ sys.path.insert(0, os.path.join(BASE, "scripts"))
 import build_machine_pages as _bmp      # noqa: E402
 import build_new_article as _ba         # noqa: E402
 import page_decision as _pdz            # noqa: E402  ★区分の唯一の判定箇所★
+import new_machine_watch as _nwz       # noqa: E402  ★メーカー名簿★
 import html_check as _hc                # noqa: E402
 import safe_json as _sj                 # noqa: E402
 
@@ -366,10 +367,10 @@ def check_only_allowed_values(slug: str, machine: dict, detail: dict,
                      "seo": {"title": ""}, "info": "", "strategy": "",
                      "aliases": [], "release_date": ""}
     if _pdz.is_auto(machine):
-        # バナー有無を実物とそろえる（新契約の最小の判定書つき）
+        # バナー有無を実物とそろえる（判定書はそのまま使う＝素の描画でも
+        # 区分が同じになる。中身の数字は allowed から除外済み）
         empty_machine["publication_policy"] = _pdz.SCHEMA
-        empty_machine["page_decision"] = {
-            "schema_version": _pdz.SCHEMA, "indexable": False}
+        empty_machine["page_decision"] = machine["page_decision"]
     else:
         empty_machine["status"] = "preview"
     try:
@@ -589,7 +590,29 @@ def check_machine(slug: str, machine: dict) -> list:
                 ng.append(f"identity.{k} が文字でも文字の配列でもありません")
     # ★狙い目は当サイトの判断なので、この経路では書かせない★
     if machine.get("strategy"):
-        ng.append("先行記事に狙い目を書くことはできません（strategy は空のはず）")
+        ng.append("この経路で狙い目は書けません（strategy は空のはず）")
+    # ★本人性を公開の境界でも確かめ直す★（2026-08-04・Codex73回目の指摘5。
+    #   上流の add_machine_run では確認しているが、この関数を通る経路は
+    #   メーカーもURLも受け取れるので、最後の境界でも見る）
+    if isinstance(ident, dict):
+        url = ident.get("official_product_url") or ""
+        if url and not url.startswith("https://"):
+            ng.append(f"公式URLが https ではありません: {url[:60]}")
+        if url and _ba.slug_from_url(url) != slug:
+            ng.append(f"slug が公式URLの末尾と合いません（{slug} / {url[:60]}）")
+        mid = ident.get("manufacturer_id") or ""
+        if mid:
+            try:
+                cats = _sj.read_json(_nwz.CATALOGS, expect=dict)["catalogs"]
+            except Exception as e:        # noqa: BLE001
+                ng.append(f"メーカー名簿を読めません: {e}")
+            else:
+                if mid not in cats or not _nwz.is_catalog(cats[mid]):
+                    ng.append(f"メーカーが名簿にありません: {mid}")
+        ann = ident.get("announced_name")
+        if ann and ann != machine.get("name"):
+            ng.append(f"公式の発表名と機種名が違います（{ann!r} / "
+                      f"{machine.get('name')!r}）")
     return ng
 
 
@@ -722,9 +745,13 @@ def run_site_audit(ignore_in_progress: bool = False) -> list:
         got = json.loads(r.stdout or "")
         if not isinstance(got, dict) or not got:
             raise ValueError("形が違います")
-        # ★項目1〜33がそろっているか★（欠け＝監査が途中で終わっている）
+        # ★監査の全項目がそろっているか★（欠け＝監査が途中で終わっている）
+        #   ★項目数は audit_site.CHECKS から取る★（2026-08-04・Codex72回目。
+        #     1〜33の固定だと、項目を足したときに検査が追随しない）
         nums = {k.split("_", 1)[0] for k in got}
-        missing = {str(i) for i in range(1, 34)} - nums
+        import audit_site as _as_mod
+        want_nums = {k.split("_", 1)[0] for k, _f in _as_mod.CHECKS}
+        missing = want_nums - nums
         if missing:
             raise ValueError(f"項目が欠けています: {sorted(missing, key=int)[:5]}")
     except (ValueError, json.JSONDecodeError) as e:
@@ -1112,6 +1139,7 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
     mark_start(slug, machine, backup_for_mark)
     machines_replaced = {}   # 一覧を置き換えたか（戻すため・置き換える前に立てる）
     sitemap_replaced = {}    # sitemap を置き換えたか（同上）
+    restore_failed = []      # ★戻せなかったもの（あれば目印を消さない）★
 
     def _cleanup():
         """★自分が作ったものだけ片付ける★（2026-07-31・Codex指摘3を再現して直した）
@@ -1145,6 +1173,15 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
             out["problems"].append(
                 "★片付け切れていないため『途中』の目印は残します"
                 "（--recover で確かめてください）★")
+            return False
+        # ★戻せなかったものが1つでもあれば目印を消さない★
+        #   （2026-08-04・Codex73回目の指摘2。sitemapや一覧の復元に失敗しても
+        #     「作ったファイルさえ消せば終わり」として目印を消していたので、
+        #     自動では戻せない中途半端な状態が残った）
+        if restore_failed:
+            out["problems"].append(
+                "★戻せなかったファイルがあるため『途中』の目印は残します"
+                f"（{restore_failed[0]}／--recover で確かめてください）★")
             return False
         mark_done()                    # 片付け切れて初めて「途中」ではない
         return True
@@ -1249,9 +1286,12 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
         # ★index対象は sitemap にも1行足す★（2026-08-04・Codex72回目。
         #   1行形式・</urlset> 直前・復旧は同じ1行の完全一致除去）
         if indexable:
+            # ★書く前に目印へ登録する★（2026-08-04・Codex73回目の指摘2。
+            #   書いた直後に落ちると、復旧側は created に無いので外せなかった。
+            #   足す行は決まった1行なので、書く前に指紋を出せる）
+            mark_created({f"sitemap.xml#{slug}": _sha(sitemap_line(slug))})
             sitemap_replaced["yes"] = True
             write_atomic(SITEMAP, add_to_sitemap(before_sitemap, slug))
-            mark_created({f"sitemap.xml#{slug}": _sha(sitemap_line(slug))})
             out["wrote"].append(SITEMAP)
         # ★機種数の表記も同時に直す★（ここまで来たら一緒に整える）
         #   直せなくても公開は成立しているので、失敗は問題として残すだけにする。
@@ -1314,11 +1354,13 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
             try:
                 write_atomic(MACHINES, machines_before.decode("utf-8"))
             except Exception:             # noqa: BLE001
+                restore_failed.append("machines.json")
                 out["problems"].append("★一覧を戻せませんでした（人が確かめてください）★")
         if sitemap_replaced.get("yes"):
             try:
                 write_atomic(SITEMAP, before_sitemap)
             except Exception:             # noqa: BLE001
+                restore_failed.append("sitemap.xml")
                 out["problems"].append("★sitemapを戻せませんでした（人が確かめてください）★")
         _cleanup()
         if isinstance(e, KeyboardInterrupt):
@@ -1354,6 +1396,7 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
                 if _sha(sm_now2) == _sha(add_to_sitemap(before_sitemap, slug)):
                     write_atomic(SITEMAP, before_sitemap)
                 else:
+                    restore_failed.append("sitemap.xml")
                     late2.append("★sitemapに別の変更が入っているため自動では"
                                  "戻しませんでした（人が確かめてください）★")
             for full, text0 in hub_backup.items():       # ★早見表も戻す★
@@ -1663,6 +1706,15 @@ def _recover(apply_it: bool = False) -> dict:
         sitemap_text_before = f.read()    # ★失敗したら戻すための正本★
     sm_replaced = {}
     smap_key = f"sitemap.xml#{slug}"
+    if smap_key not in (created or {}) and sitemap_line(slug) in sitemap_text_before:
+        # ★目印に無いのに sitemap に行がある＝説明のつかない状態★
+        #   （黙って残すと noindex と矛盾したまま公開が続く）
+        _undo_held()
+        out["kept"].append("sitemap.xml")
+        out["problems"].append(
+            "★sitemap に この機種の行がありますが、目印に記録がありません。"
+            "何も消さずに戻しました。人が確かめてください★")
+        return out
     if smap_key in (created or {}):
         line = sitemap_line(slug)
         if _sha(line) != created[smap_key]:
@@ -1837,7 +1889,9 @@ def selftest() -> int:
         print(("✅" if cond else "❌") + " " + name)
 
     rows = _sj.read_rows(MACHINES)
-    _pd_ok = {"schema_version": _pdz.SCHEMA, "indexable": False}
+    _pd_ok = _pdz.decide_from_claims(["model_code"], "normal", "2026-08-04")
+    _pd_index = _pdz.decide_from_claims(
+        ["model_code", "payout_range", "at:MAIN_AT"], "normal", "2026-08-04")
     ok_machine = {"slug": "zzz_test", "name": "テスト機",
                   "publication_policy": _pdz.SCHEMA, "page_decision": _pd_ok,
                   "publish_state": STATE}
@@ -2055,8 +2109,7 @@ def selftest() -> int:
     _ok_machine = {"slug": "zzz_test", "name": "テスト", "seo": {"title": "x"},
                    "info": "", "strategy": "", "aliases": [],
                    "publication_policy": _pdz.SCHEMA,
-                   "page_decision": {"schema_version": _pdz.SCHEMA,
-                                     "indexable": False},
+                   "page_decision": _pd_ok,
                    "release_date": "2026-09",
                    "publish_state": STATE}
     t("★まともな機種データなら通る★", check_machine("zzz_test", _ok_machine) == [])
@@ -2068,6 +2121,31 @@ def selftest() -> int:
           check_machine("zzz_test", {**_ok_machine, "strategy": "等価600G〜"})))
     t("　aliases が配列でなければ止める",
       check_machine("zzz_test", {**_ok_machine, "aliases": "ほくと"}))
+    # ★本人性を公開の境界でも確かめる★（Codex73回目の指摘5）
+    _id_ok = {"manufacturer_id": "bellco", "identity_tier": "CATALOG_BOUND",
+              "official_product_url":
+                  "https://www.s-bellco.co.jp/products/slot/zzz_test/",
+              "announced_name": "テスト"}
+    t("★まともな identity なら通る★",
+      check_machine("zzz_test", {**_ok_machine, "identity": _id_ok}) == [])
+    t("★★名簿に無いメーカーは止める★★",
+      any("メーカーが名簿" in x for x in check_machine(
+          "zzz_test", {**_ok_machine,
+                       "identity": {**_id_ok, "manufacturer_id": "zzzz"}})))
+    t("★★公式URLが https でなければ止める★★",
+      any("https" in x for x in check_machine(
+          "zzz_test", {**_ok_machine,
+                       "identity": {**_id_ok, "official_product_url":
+                                    "http://www.s-bellco.co.jp/products/slot/zzz_test/"}})))
+    t("★★slugが公式URLの末尾と違えば止める★★",
+      any("slug" in x for x in check_machine(
+          "zzz_test", {**_ok_machine,
+                       "identity": {**_id_ok, "official_product_url":
+                                    "https://www.s-bellco.co.jp/products/slot/other/"}})))
+    t("★★公式の発表名と機種名が違えば止める★★",
+      any("発表名" in x for x in check_machine(
+          "zzz_test", {**_ok_machine,
+                       "identity": {**_id_ok, "announced_name": "別の機種"}})))
 
     # ★記事データの中の形まで見る★
     t("　表の中身が文字の並びでなければ止める",
@@ -2304,7 +2382,8 @@ def selftest() -> int:
         finally:
             subprocess.run = _real_run
 
-    _full = {f"{i}_試験": [] for i in range(1, 34)}
+    import audit_site as _as_mod2
+    _full = {f"{k.split('_', 1)[0]}_試験": [] for k, _f in _as_mod2.CHECKS}
     t("★★監査が異常終了したら合格にしない★★"
       "（構文エラー等はJSONを出さずに終わり、素通りしていた・Codex23回目）",
       any("異常終了" in x for x in _fake_audit("Traceback: ImportError")))

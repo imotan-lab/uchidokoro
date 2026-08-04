@@ -42,6 +42,8 @@ from send_notify import send_mail  # noqa: E402
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 MACHINES_PATH = PROJECT_DIR / "assets" / "data" / "machines.json"
+import page_decision as _pd_x  # noqa: E402  ★区分の唯一の判定箇所★
+
 PREV_PATH = PROJECT_DIR / "scripts" / "machines_prev.json"
 RESULT_PATH = PROJECT_DIR / "scripts" / "x_post_result.json"
 LOG_DIR = Path("C:/Users/imao_/Documents/uchidokoro/logs")
@@ -177,7 +179,9 @@ def build_post_text(entry: dict, release_date: str | None) -> str:
     is_preview = status == "preview"
     # ★新台経路（page-decision/v1）の第3の文面★（2026-08-04・Codex72回目。
     #   「先行記事」「導入予定」の語を使わない・狙い目/天井を名乗らない）
-    is_auto = entry.get("publication_policy") == "page-decision/v1"
+    # ★区分は page_decision.machine_class が唯一の判定箇所★（Codex73回目の指摘6）
+    #   壊れた判定書を「AUTOだから」と成功扱いにしない（例外で止める）
+    is_auto = _pd_x.machine_class(entry) in ("AUTO_INDEXABLE", "AUTO_PENDING")
 
     def build(nm: str) -> str:
         if is_auto:

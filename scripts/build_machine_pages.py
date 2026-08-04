@@ -589,7 +589,10 @@ def _build_legacy(only_slug: str | None = None) -> int:
     # ★新台経路（page-decision/v1）の機種を旧statusロジックで再生成しない★
     #   （2026-08-04・Codex72回目。ここで除外しないと、翌朝の一括再生成が
     #     AUTO_PENDING の noindex を剥がし、AUTO_INDEXABLE に旧タイトルを焼く）
-    auto_slugs = [m["slug"] for m in machines if _pd.is_auto(m)]
+    # ★区分は machine_class で判定する★（壊れた判定書は例外で止まる＝
+    #   「AUTOだから除外」で成功扱いにしない・Codex73回目の指摘6）
+    auto_slugs = [m["slug"] for m in machines
+                  if _pd.machine_class(m) in ("AUTO_INDEXABLE", "AUTO_PENDING")]
     if only_slug and only_slug in auto_slugs:
         print(f"★{only_slug} は新台経路（page-decision/v1）の機種です。"
               "この経路（--legacy）では作り直せません★")
@@ -598,7 +601,7 @@ def _build_legacy(only_slug: str | None = None) -> int:
         print(f"新台経路の機種 {len(auto_slugs)} 件はこの経路では触りません: "
               + ", ".join(auto_slugs[:5])
               + (" ほか" if len(auto_slugs) > 5 else ""))
-        machines = [m for m in machines if not _pd.is_auto(m)]
+        machines = [m for m in machines if m["slug"] not in set(auto_slugs)]
     # ★1機種だけ直せるようにする★（2026-07-30・Codex指摘6）
     #   全機種を書き直す作りだったので、
     #     ①更新タスクの「1日1機種」が実際には全機種だった

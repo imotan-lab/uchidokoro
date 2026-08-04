@@ -28,6 +28,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sys
 import unicodedata
 from datetime import date
@@ -138,17 +139,21 @@ def topics_from_claims(claims: list) -> tuple:
 
 # ---------------------------------------------------------------- decide
 
-def decide(material: dict, policy: dict | None = None,
-           decided_at: str = "") -> dict:
-    """材料から判定書を作る（純関数・材料以外の外部状態は policy だけ）。
+REASON_CODES = ("CLAIMS_LT_3", "CATEGORIES_LT_2", "NO_UNIQUE_GAMEPLAY",
+                "POLICY_FORCE_NOINDEX")
+_DECISION_KEYS = {"schema_version", "indexable", "confirmed_topics",
+                  "pending_topics", "reason_codes", "claims", "policy_mode",
+                  "decided_at", "input_digest"}
+
+
+def decide_from_claims(claims: list, mode: str, decided_at: str = "") -> dict:
+    """claim一覧と policy mode から判定書を組み立てる（唯一の計算箇所）。
 
     ★並べ替え・重複追加で結果が変わらない★（claimsを正規化してから判定）。
     """
-    policy = policy if policy is not None else load_policy()
-    mode = policy.get("mode")
     if mode not in POLICY_MODES:
         raise DecisionError(f"policy mode が不明です: {mode!r}")
-    claims = claims_from_material(material)
+    claims = sorted(set(claims))
     confirmed, pending = topics_from_claims(claims)
     cats = sorted({_category(c) for c in claims})
     reasons = []
@@ -180,34 +185,109 @@ def decide(material: dict, policy: dict | None = None,
     }
 
 
+def decide(material: dict, policy: dict | None = None,
+           decided_at: str = "") -> dict:
+    """材料から判定書を作る（純関数・材料以外の外部状態は policy だけ）。"""
+    policy = policy if policy is not None else load_policy()
+    return decide_from_claims(claims_from_material(material),
+                              policy.get("mode"), decided_at)
+
+
+def validate_decision(pd: dict) -> None:
+    """★保存された判定書を、claims から計算し直して丸ごと突き合わせる★
+
+    （2026-08-04・Codex73回目の指摘3。以前は「辞書・schema一致・indexableがbool」
+    しか見ておらず、**claims も理由も無い判定書で index できた**。
+    台帳を信用せず毎回計算し直す、という当サイトの原則にも反していた）
+    合わないものは例外＝fail-closed（黙って安全側に倒さない）。
+    """
+    if not isinstance(pd, dict):
+        raise DecisionError("判定書が辞書ではありません")
+    missing = sorted(_DECISION_KEYS - set(pd))
+    extra = sorted(set(pd) - _DECISION_KEYS)
+    if missing or extra:
+        raise DecisionError(f"判定書の項目が違います（欠け={missing} 余分={extra}）")
+    if pd["schema_version"] != SCHEMA:
+        raise DecisionError(f"判定書の schema が違います: {pd['schema_version']!r}")
+    if not isinstance(pd["indexable"], bool):
+        raise DecisionError("判定書の indexable が真偽値ではありません")
+    if not isinstance(pd["claims"], list) \
+            or not all(isinstance(c, str) and c for c in pd["claims"]):
+        raise DecisionError("判定書の claims が文字列の配列ではありません")
+    if not isinstance(pd["decided_at"], str) \
+            or not re.match(r"^\d{4}-\d{2}-\d{2}$", pd["decided_at"]):
+        raise DecisionError(f"判定書の decided_at が日付ではありません: "
+                            f"{pd['decided_at']!r}")
+    for c in pd["claims"]:
+        _category(c)                       # 不明なclaim IDはここで例外
+    want = decide_from_claims(pd["claims"], pd["policy_mode"], pd["decided_at"])
+    for k in sorted(_DECISION_KEYS):
+        if pd[k] != want[k]:
+            raise DecisionError(
+                f"判定書の {k} が claims から計算し直した値と違います "
+                f"（保存={pd[k]!r} / 計算={want[k]!r}）")
+
+
 # ---------------------------------------------------------------- class
 
-def machine_class(machine: dict) -> str:
-    """machines.json の1件を4区分に分ける唯一の判定箇所（契約 §1）。"""
-    policy = machine.get("publication_policy")
+def machine_class(machine: dict, policy: dict | None = None) -> str:
+    """machines.json の1件を4区分に分ける唯一の判定箇所（契約 §1）。
+
+    ★いまの緊急overrideを毎回かける★（2026-08-04・Codex73回目の指摘1。
+    以前は公開時に焼いた indexable をそのまま信じていたので、
+    **公開済みの機種にスイッチが効かなかった**）。
+    """
+    policy = policy if policy is not None else load_policy()
+    pol_mode = policy.get("mode")
+    if pol_mode not in POLICY_MODES:
+        raise DecisionError(f"policy mode が不明です: {pol_mode!r}")
+    pub = machine.get("publication_policy")
     status = machine.get("status")
-    if policy is None:
+    if pub is None:
         if status in (None, "complete"):
             return "LEGACY_COMPLETE"
         if status == "preview":
             return "LEGACY_PREVIEW"
         raise DecisionError(
             f"不明な status です: {status!r} (slug={machine.get('slug')})")
-    if policy != SCHEMA:
+    if pub != SCHEMA:
         raise DecisionError(
-            f"不明な publication_policy です: {policy!r} "
+            f"不明な publication_policy です: {pub!r} "
             f"(slug={machine.get('slug')})")
     if status is not None:
         raise DecisionError(
             f"publication_policy と status は同居できません "
             f"(slug={machine.get('slug')})")
-    pd = machine.get("page_decision")
-    if not isinstance(pd, dict) or pd.get("schema_version") != SCHEMA \
-            or not isinstance(pd.get("indexable"), bool):
-        raise DecisionError(
-            f"page_decision が欠落または壊れています "
-            f"(slug={machine.get('slug')})")
-    return "AUTO_INDEXABLE" if pd["indexable"] else "AUTO_PENDING"
+    try:
+        validate_decision(machine.get("page_decision"))
+    except DecisionError as e:
+        raise DecisionError(f"{machine.get('slug')}: {e}")
+    pd = machine["page_decision"]
+    # ★保存値ではなく「いまのpolicyで計算し直した結果」を使う★
+    now = decide_from_claims(pd["claims"], pol_mode, pd["decided_at"])
+    return "AUTO_INDEXABLE" if now["indexable"] else "AUTO_PENDING"
+
+
+def stale_decisions(machines: list, policy: dict | None = None) -> list:
+    """保存された判定書と、いまのpolicyでの判定が食い違う機種を返す。
+
+    緊急overrideを切り替えた直後は、ページ・sitemap が古い判定のまま。
+    ★監査がこれを検知し、`apply_indexing_policy.py` で成果物をそろえる★
+    """
+    policy = policy if policy is not None else load_policy()
+    out = []
+    for m in machines:
+        if not is_auto(m):
+            continue
+        pd = m.get("page_decision") or {}
+        try:
+            validate_decision(pd)
+        except DecisionError:
+            out.append(m.get("slug"))
+            continue
+        if pd["policy_mode"] != policy["mode"]:
+            out.append(m.get("slug"))
+    return out
 
 
 def is_auto(machine: dict) -> bool:
@@ -225,6 +305,13 @@ def selftest() -> int:
         ran[0] += 1
         ok_all = ok_all and bool(cond)
         print(("✅" if cond else "❌") + " " + name)
+
+    def _raises(fn):
+        try:
+            fn()
+            return False
+        except DecisionError:
+            return True
 
     NORMAL = {"schema_version": POLICY_SCHEMA, "mode": "normal", "reason": ""}
     FORCE = {"schema_version": POLICY_SCHEMA,
@@ -299,6 +386,31 @@ def selftest() -> int:
             t(label, False)
         except DecisionError:
             t(label, True)
+    # ★判定書の丸ごと検証★（Codex73回目の指摘3）
+    t("★★claims だけの判定書は通さない（項目の欠けを検知）★★",
+      _raises(lambda: validate_decision(
+          {"schema_version": SCHEMA, "indexable": True})))
+    t("★★中身の無い判定書で index できない★★"
+      "（claims無しの indexable=true が通っていた）",
+      _raises(lambda: machine_class(
+          {"slug": "z", "publication_policy": SCHEMA,
+           "page_decision": {"schema_version": SCHEMA, "indexable": True}})))
+    t("★★indexable を手で書き換えたら止まる（claimsから計算し直す）★★",
+      _raises(lambda: validate_decision({**d, "indexable": False})))
+    t("★★理由コードを消したら止まる★★",
+      _raises(lambda: validate_decision({**d2, "reason_codes": []})))
+    t("★★claims を足して digest を直さなければ止まる★★",
+      _raises(lambda: validate_decision({**d, "claims": d["claims"] + ["cz:x"]})))
+    t("　余分な項目があれば止まる",
+      _raises(lambda: validate_decision({**d, "extra": 1})))
+    t("　正しい判定書は通る", validate_decision(d) is None)
+    # ★公開済みの機種にも緊急overrideが効く★（Codex73回目の指摘1）
+    t("★★override中は、公開時にindexableで焼かれた機種もnoindex側になる★★",
+      machine_class(m_auto, FORCE) == "AUTO_PENDING"
+      and machine_class(m_auto, NORMAL) == "AUTO_INDEXABLE")
+    t("★★policyを切り替えたら、成果物が古い機種を一覧できる★★",
+      stale_decisions([m_auto, {"slug": "x"}], FORCE) == ["a"]
+      and stale_decisions([m_auto], NORMAL) == [])
     # 実ファイルのpolicyが読める（形式検査）
     try:
         p = load_policy()
