@@ -73,7 +73,8 @@ def save(data: dict) -> None:
 def add(data: dict, maker: str, urls: dict, reason: str) -> dict:
     """URL群を隔離する。urls は {url: 一覧カードの年月ヒント(無ければ空文字)}。"""
     m = data["makers"].setdefault(
-        maker, {"since": _today(), "reason": str(reason)[:300], "urls": {}})
+        maker, {"since": _today(), "reason": str(reason)[:300],
+                "probe_date": "", "urls": {}})
     for url, hint in urls.items():
         if url in m["urls"]:
             continue                    # ★既にある記録（日付・回数）を上書きしない★
@@ -91,25 +92,33 @@ def urls_of(data: dict, maker: str) -> dict:
 
 
 def pick_probe(data: dict, maker: str, today: str = "") -> str:
-    """今晩確かめる1URLを選ぶ（最後に確かめた日が最も古いもの・当日分は選ばない）。"""
+    """今晩確かめる1URLを選ぶ（最後に確かめた日が最も古いもの）。
+
+    ★一晩にメーカー1URLだけ★（2026-08-04・Codex66回目の指摘4）
+      URL単位でなく**メーカー単位**の確認日で判定する。
+      同じ晩にタスクを2回実行しても、2URL目を確かめに行かない。
+    """
     today = today or _today()
     m = data["makers"].get(maker)
     if not m or not m["urls"]:
         return ""
+    if m.get("probe_date") == today:
+        return ""                       # ★今晩はもう確かめた★
     order = sorted(m["urls"].items(),
                    key=lambda kv: (kv[1].get("last_probe") or "", kv[0]))
-    url, rec = order[0]
-    if rec.get("last_probe") == today:
-        return ""                       # ★一晩に1回だけ★
-    return url
+    return order[0][0]
 
 
 def mark_probe(data: dict, maker: str, url: str, today: str = "") -> dict:
-    """確かめた記録を残す（まだ読めなかった時）。"""
-    rec = data["makers"].get(maker, {}).get("urls", {}).get(url)
-    if rec is not None:
-        rec["last_probe"] = today or _today()
-        rec["probes"] = int(rec.get("probes") or 0) + 1
+    """確かめた記録を残す（結果を問わず、確かめたら必ず呼ぶ）。"""
+    today = today or _today()
+    m = data["makers"].get(maker)
+    if m is not None:
+        m["probe_date"] = today
+        rec = m.get("urls", {}).get(url)
+        if rec is not None:
+            rec["last_probe"] = today
+            rec["probes"] = int(rec.get("probes") or 0) + 1
     return data
 
 
@@ -154,12 +163,11 @@ def selftest() -> int:
         u = pick_probe(d2, "m1", "2026-08-05")
         t("★確かめる1URLを選べる★", u in ("https://x/1", "https://x/2"))
         mark_probe(d2, "m1", u, "2026-08-05")
-        u2 = pick_probe(d2, "m1", "2026-08-05")
-        t("★同じ晩は別のURLを選ぶ（確かめ済みを選び直さない）★", u2 and u2 != u)
-        mark_probe(d2, "m1", u2, "2026-08-05")
-        t("★全URLが当日確認済みなら選ばない＝一晩の上限★",
+        t("★★同じ晩に再実行しても2URL目を確かめない（メーカー単位の上限）★★"
+          "（Codex66回目の指摘4）",
           pick_probe(d2, "m1", "2026-08-05") == "")
-        t("　翌日はまた選べる", pick_probe(d2, "m1", "2026-08-06") != "")
+        u2 = pick_probe(d2, "m1", "2026-08-06")
+        t("　翌日は確かめていない方のURLを選ぶ", u2 and u2 != u)
         remove_url(d2, "m1", "https://x/1")
         remove_url(d2, "m1", "https://x/2")
         t("★全部外れたらメーカーごと畳む★", makers(d2) == [])

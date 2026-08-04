@@ -655,13 +655,19 @@ def retry_later(problems: list) -> bool:
     return any(any(w in p for w in RETRYABLE) for p in problems)
 
 
-# ★「ページが読めない」失敗だけを障害として数える★（2026-08-04・Codex65回目）
+# ★「ページが読めない」失敗だけを障害として数える★（2026-08-04・Codex65〜66回目）
 #   年月未掲載などページ自体は読めた理由と混ぜない（隔離の判定を歪めないため）。
-_OUTAGE_PREFIX = "公式ページが読める状態ではありません"
+#   ★classify が実際に返す形に合わせる★（Codex66回目の指摘1。
+#     SSL・通信失敗は _get の WatchError がそのまま理由になる＝
+#     「取得できません（URLError）: url」「取得できません（HTTP 503）: url」
+#     「HTTP 404: url」「ページが大きすぎます: url」。
+#     「公式ページが読める状態ではありません」は HTTP 200 の障害画面の形）
+_OUTAGE_PREFIXES = ("公式ページが読める状態ではありません",
+                    "取得できません（", "HTTP ", "ページが大きすぎます")
 
 
 def _is_outage(reasons: list) -> bool:
-    return any(str(x).startswith(_OUTAGE_PREFIX) for x in reasons)
+    return any(str(x).startswith(_OUTAGE_PREFIXES) for x in reasons)
 
 
 def probe_quarantine(persist: bool) -> dict:
@@ -690,33 +696,49 @@ def probe_quarantine(persist: bool) -> dict:
         url = _quar.pick_probe(qd, mid)
         if not url:
             continue
-        c = _nw.classify(url, None)
+        # ★選んだURLにも保存済みヒントを渡す★（Codex66回目の指摘3。
+        #   渡さないと「ページに年月なし＋古いヒント」が範囲外と
+        #   分類されず、古いヒントを年月にして行列へ入っていた）
+        hint0 = (_quar.urls_of(qd, mid).get(url) or {}).get("hint") or ""
+        c = _nw.classify(url, None, list_release=(hint0 or None))
         out["probed"].append(f"{mid}: {url}")
+        _quar.mark_probe(qd, mid, url)    # ★結果を問わず「今晩確かめた」を記録★
         if (not c["ok"]) and _is_outage(c["reasons"]):
-            _quar.mark_probe(qd, mid, url)
             _log(f"隔離の復旧確認 {mid}: まだ読めません（{url}）")
             continue
-        # ★読めた＝復旧。隔離分を全部分類し直す★
+        # ★読めた＝復旧の兆し。隔離分を分類し直す★
+        #   ★1URLの復旧をメーカー全体の復旧と混同しない★（Codex66回目の指摘2。
+        #     残りが引き続き取得不能なら隔離に残す＝取得不能のまま行列へ戻さない）
+        #   ★通常行列へ移すのは一晩に MAX_NEW_PER_SCAN 件まで★（行列投入の上限。
+        #     残りは明晩の復旧確認から続きを流す）
         out["recovered"].append(mid)
         _log(f"隔離の復旧確認 {mid}: 読めました。分類し直します")
+        moved = 0
         for u, rec in sorted(_quar.urls_of(qd, mid).items()):
-            cu = c if u == url else _nw.classify(
-                u, None, list_release=(rec.get("hint") or None))
+            if moved >= _nw.MAX_NEW_PER_SCAN:
+                _log(f"隔離の分類し直し {mid}: 今晩の上限"
+                     f"（{_nw.MAX_NEW_PER_SCAN}件）に達したので続きは明晩")
+                break
             hint = rec.get("hint") or ""
-            worth = (cu["ok"] or retry_later(cu["reasons"])
-                     or (hint and _nw.is_recent(hint)))
-            if worth:
+            cu = c if u == url else _nw.classify(
+                u, None, list_release=(hint or None))
+            if (not cu["ok"]) and _is_outage(cu["reasons"]):
+                continue    # ★このURLはまだ読めない＝隔離に残す★
+            if cu["ok"] or (hint and _nw.is_recent(hint)):
                 if _remember_url(cu.get("official_name") or "", u, mid,
                                  (cu.get("release") or {}).get("value")
                                  or hint or "",
                                  "隔離からの復旧分類"):
                     out["requeued"] += 1
+                    moved += 1
                     _quar.remove_url(qd, mid, u)
                 # 行列に入れられなかった分は隔離に残す（明日また試す）
-            else:
+            elif not retry_later(cu["reasons"]):
                 # 範囲外など「やり直しても変わらない」＝初回の古い機種。
                 # seenに残っているので、外すだけで再流入しない。
                 _quar.remove_url(qd, mid, u)
+            # 読めたが年月不明などは隔離で待つ（通常行列を汚さない・
+            # 公式が年月を書けば ok になって次の晩に移る）
     _quar.save(qd)
     return out
 
@@ -1631,6 +1653,7 @@ def selftest() -> int:
         # ★公式ページは本物を想定して差し替える★
         #   （開けなければ止まる作りなので、通る場合の試験には中身が要る）
         real_get = _nw._get
+        _true_get = _nw._get   # ★真の原本（real_getは後段で偽物に上書きされる）★
         _nw._get = lambda u, timeout=20: (
             "<title>L試験機</title><body>2026年9月 登場</body>")
         # ★メーカー名簿も試験用にする★（本番の名簿を書き換えない）
@@ -2157,6 +2180,10 @@ def selftest() -> int:
                   and not r65["recovered"]
                   and len(_quar.urls_of(q65b, "qm")) == 7)
                 # --- 復旧した晩: 分類し直して新台だけ行列へ ---
+                # （翌晩に進めたことにする＝メーカー単位の確認日を消す）
+                _q65r = _quar.load()
+                _q65r["makers"]["qm"]["probe_date"] = ""
+                _quar.save(_q65r)
 
                 def _cl_fixed(url, seen_entry=None, list_release=None):
                     _q_calls.append(url)
@@ -2191,6 +2218,119 @@ def selftest() -> int:
                 _nw._save_seen = _real_ss
                 _nw.scan_maker = _real_sm
                 _nw.classify = _real_cl
+            # ★★Codex66回目: 実際の取得失敗（WatchError形式）で確かめる★★
+            #   分類器はモックせず本物を使い、通信層（urlopen）だけを偽る。
+            #   前の試験の偽分類器はHTTP200障害画面の形しか出しておらず、
+            #   実際のSSL失敗（「取得できません（URLError）: url」）では
+            #   隔離判定に入らない穴を見逃していた。
+            import urllib.request as _ur66
+            import urllib.error as _ue66
+            import email.message as _em66
+            _real_uo = _ur66.urlopen
+
+            class _FR66:
+                def __init__(self, url, body):
+                    self._u, self._b = url, body.encode("utf-8")
+                    self.status = 200
+                    self.headers = _em66.Message()
+
+                def geturl(self):
+                    return self._u
+
+                def read(self, n=-1):
+                    return self._b
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *a):
+                    return False
+
+            _quar.STORE = os.path.join(_tmpdir, "quarantine2.json")
+            _sj.read_json = _fake_rj
+            _nw._load_seen = lambda: {"schema": "seen-machine-urls/v1",
+                                      "makers": {}}
+            _nw._save_seen = lambda s: None
+            Q2 = [f"https://q2.maker.test/slot/m{i}/" for i in range(8)]
+            _nw.scan_maker = lambda mid, conf, seen, record=True: {
+                "maker": mid, "state": "FIRST_TIME", "first_time": True,
+                "problem": None, "total": len(Q2), "new": [],
+                "initial_urls": list(Q2), "hints": {Q2[7]: "2026-09"},
+                "retention": None, "shape_warnings": []}
+            _uo_calls = []
+
+            def _uo_ssl(req, timeout=20):
+                _uo_calls.append(getattr(req, "full_url", str(req)))
+                raise _ue66.URLError("SSLV3_ALERT_HANDSHAKE_FAILURE")
+            # ★前段の試験が偽物にした _get を本物へ戻す★
+            #   （通信層 urlopen を偽る意味が無くなるため）
+            _get_before66 = _nw._get
+            _nw._get = _true_get
+            try:
+                # --- 実SSL全滅: 隔離に入り、行列はヒント1件だけ ---
+                _ur66.urlopen = _uo_ssl
+                _pend.save({"schema": _pend.SCHEMA, "items": {}})
+                d66 = discover(persist=True)
+                p66a = _pend.load()
+                q66a = _quar.load()
+                t("★★実際のSSL失敗（取得できません（URLError））でも隔離に入る★★"
+                  "（Codex66回目の指摘1・#210の再発防止の本丸）",
+                  list(p66a["items"]) == [Q2[7]]
+                  and len(_quar.urls_of(q66a, "qm")) == 7)
+                t("★★実SSL失敗でも上限+1回で残りへのアクセスを打ち切る★★",
+                  len(_uo_calls) == _nw.MAX_NEW_PER_SCAN + 1)
+                # --- 1URLだけ復旧・残りはSSL失敗のまま ---
+                _OK_HTML = ("<title>L試験新台Q2</title><h1>L試験新台Q2</h1>"
+                            "<p>パチスロ 2026年9月導入予定</p>")
+
+                def _uo_partial(req, timeout=20):
+                    u = getattr(req, "full_url", str(req))
+                    _uo_calls.append(u)
+                    if u == Q2[0]:
+                        return _FR66(u, _OK_HTML)
+                    raise _ue66.URLError("SSLV3_ALERT_HANDSHAKE_FAILURE")
+                _ur66.urlopen = _uo_partial
+                q66b = _quar.load()
+                q66b["makers"]["qm"]["urls"][Q2[0]]["hint"] = "2026-09"
+                _quar.save(q66b)
+                r68 = probe_quarantine(persist=True)
+                p66b = _pend.load()
+                q66c = _quar.load()
+                t("★★1URLの復旧で、まだ読めない残りを行列へ戻さない★★"
+                  "（Codex66回目の指摘2・読めた1件だけ行列へ）",
+                  r68["requeued"] == 1 and Q2[0] in p66b["items"]
+                  and all(u not in p66b["items"] for u in Q2[1:7])
+                  and len(_quar.urls_of(q66c, "qm")) == 6)
+                # --- 古いヒント＋ページに年月なし: 行列に入れず隔離から外す ---
+                _OLD_HTML = ("<title>旧機X</title><h1>旧機X</h1>"
+                             "<p>パチスロの製品情報</p>")
+                _u3 = "https://q3.maker.test/slot/old1/"
+
+                def _uo_old(req, timeout=20):
+                    return _FR66(getattr(req, "full_url", str(req)), _OLD_HTML)
+                _ur66.urlopen = _uo_old
+                q66d = _quar.load()
+                _quar.add(q66d, "qm3", {_u3: "2011-11"}, "試験")
+                _quar.save(q66d)
+                r69 = probe_quarantine(persist=True)
+                p66c = _pend.load()
+                q66e = _quar.load()
+                t("★★復旧確認のURLにも保存済みヒントを渡す★★"
+                  "（Codex66回目の指摘3＝古いヒント＋年月なしページは"
+                  "範囲外として行列に入れず隔離から外す）",
+                  _u3 not in p66c["items"]
+                  and _quar.urls_of(q66e, "qm3") == {})
+                t("★★同じ晩に確かめ済みのメーカーは再確認しない★★"
+                  "（qm はこの晩すでに確認済み＝qm3 だけが確かめられる）",
+                  all(not x.startswith("qm:") for x in r69["probed"]))
+            finally:
+                _ur66.urlopen = _real_uo
+                _nw._get = _get_before66
+                _quar.STORE = _real_qstore
+                _sj.read_json = _real_rj
+                _nw._load_seen = _real_ls
+                _nw._save_seen = _real_ss
+                _nw.scan_maker = _real_sm
             t("★★発見した時点で基準の題を控える★★"
               "（最初の再確認までの使い回しを見逃した・Codex30回目）",
               "known_titles" in inspect.getsource(discover)
