@@ -46,6 +46,9 @@ MAX_ROUNDS = 40
 #   これは異常ではなく Phase 2 の作業残量。集合で固定しておき、
 #   黙って増えたら異常、減ったら進捗として表示する。
 EXPECTED_NEEDS_EDIT = {
+    # ★2026-08-04: 記事の誤りを直した結果、台帳のALLOWが外れた（文言が変われば
+    #   承認も外れる設計）。台帳の再登録は更新用タスクで行う（台帳 #223）★
+    "happy_juggler_v3",
     "azurlane",
     "birdie_wing",
     "banchou4",
@@ -108,7 +111,8 @@ EXPECTED_PUBLIC = EXPECTED_LEGACY_TOTAL - len(EXPECTED_NEEDS_EDIT) - len(EXPECTE
 #   ただし kaguya は依然 checker 全モードが止まる（rate45 の excellent=1200 が
 #   天井1100Gを超え、早見表が「1200G〜（天井1100G）」という到達できない行を作るため。
 #   数値の作り直しは Phase 2 の出典検証の仕事なので、いまは止めたままにする）。
-EXPECTED_CHECKER_MACHINES = 72
+#   2026-08-04: happy_juggler_v3 の記事を直して台帳のALLOWが外れたため 72 → 71
+EXPECTED_CHECKER_MACHINES = 71
 #   2026-07-27（25巡目）: 表示整合の要修正を止めたため 71機種131mode → 67機種123mode
 #     （当初10機種→UIが交換率別の狙い目をチェッカーから組み立てるようにして5機種解消）
 #   2026-07-27（24巡目）: 原稿に「公開できない表現」が残る41機種を編集待ちとして
@@ -116,7 +120,8 @@ EXPECTED_CHECKER_MACHINES = 72
 #     （編集が進めば EXPECTED_NEEDS_EDIT とともにこの数も戻る）
 #   2026-07-27（22巡目）: 0スルーの行が無い suru mode を止めたため 200 → 197
 #   （sao / bandori / hanma_baki。UIは0スルー入力を1スルーの閾値で判定していた）
-EXPECTED_CHECKER_MODES = 133
+#   2026-08-04: 同上で 133 → 132
+EXPECTED_CHECKER_MODES = 132
 
 # ★公開slugの固定集合★ 件数だけだと「1件消えて1件増える」相殺を見逃すため、
 #   集合そのものを持つ。機種を増減したら意図した変更として更新すること。
@@ -127,7 +132,7 @@ EXPECTED_PUBLIC_SLUGS = {
     "darlifra", "discup_ur", "dmc5_st", "dragon_hanahana_senko", "dumbbell", "enen", "enen2",
     "eva_yakusoku", "fujiko_bt", "funky_juggler2", "galfy", "gineiden_dnt", "goblin",
     "godeater", "godzilla", "gogo_juggler3", "goji_eva", "gundam_seed", "gundam_uc2", "hanabi",
-    "hanma_baki", "happy_juggler_v3", "hihou", "hokuto", "hokuto_tensei2", "isekai_quattro_bt",
+    "hanma_baki", "hihou", "hokuto", "hokuto_tensei2", "isekai_quattro_bt",
     "iza_bancho", "jashinchan", "kabaneri", "kaguya", "karakuri", "karakuri2", "kengan_ashura",
     "kerot5bt", "king_hanahana", "kizumonogatari", "koukaku", "kurea_bt", "kyokousuiri",
     "lupin_daikokaisha", "madomagi_forte", "magireco", "mhrise", "midoridon_viva",
