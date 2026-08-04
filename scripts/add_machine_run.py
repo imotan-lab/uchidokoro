@@ -847,6 +847,13 @@ def _save_evidence(html: str, ev: dict) -> str:
     ★書き途中の壊れたファイルを「保管済み」と思い込まない★
       いったん別名で書き、**中身から指紋を計算し直して一致した時だけ**置く。
       既にある場合も中身を読んで指紋を確かめる。
+
+    ★必ずバイト列のまま扱う★（2026-08-04・Codex95回目の指摘2。実物で確かめた）
+      文字として書くとWindowsでは改行が 
+ に変換され、
+      **ファイル名の指紋と、そのファイルの実バイトの指紋が食い違っていた**。
+      あとから普通に sha256 を取った人が「別物だ」と判断してしまうので、
+      書くのも読むのもバイナリにして、実バイトで照合する。
     """
     digest = str(ev.get("list_html_sha256") or "").split(":")[-1]
     if not digest:
@@ -854,34 +861,43 @@ def _save_evidence(html: str, ev: dict) -> str:
         return ""
     fp = os.path.join(EVIDENCE_DIR, f"{digest}.html")
     ok_ref = f"identity_evidence/{digest}.html #card{ev.get('card_index')}"
+    raw = (html or "").encode("utf-8")
+    tmp = ""
     try:
         os.makedirs(EVIDENCE_DIR, exist_ok=True)
         if os.path.exists(fp):
-            got = io.open(fp, encoding="utf-8").read()
-            if _sha_text(got) == digest:
+            if _sha_bytes(io.open(fp, "rb").read()) == digest:
                 ev["saved_path"] = fp
                 return ok_ref
             _log("  保管済みの根拠が壊れています（書き直します）")
         tmp = fp + f".tmp{os.getpid()}"
-        with io.open(tmp, "w", encoding="utf-8") as f:
-            f.write(html)
+        with io.open(tmp, "wb") as f:
+            f.write(raw)
             f.flush()
             os.fsync(f.fileno())
-        if _sha_text(io.open(tmp, encoding="utf-8").read()) != digest:
-            os.remove(tmp)
+        if _sha_bytes(io.open(tmp, "rb").read()) != digest:
             _log("  根拠を書いた結果が元と一致しません（保管しません）")
             return ""
         os.replace(tmp, fp)
+        tmp = ""
         ev["saved_path"] = fp
         return ok_ref
     except Exception as e:                # noqa: BLE001
         _log(f"  同定の根拠を保管できません（{e}）")
         return ""
+    finally:
+        # ★書き途中のファイルを残さない★（Codex95回目の指摘3。
+        #   fsync や os.replace で失敗した場合も片付ける）
+        if tmp and os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
 
 
-def _sha_text(t: str) -> str:
+def _sha_bytes(b: bytes) -> str:
     import hashlib
-    return hashlib.sha256((t or "").encode("utf-8")).hexdigest()
+    return hashlib.sha256(b or b"").hexdigest()
 
 
 def _evidence_ref(vo: dict) -> str:
@@ -2761,10 +2777,28 @@ def selftest() -> int:
             t("★★壊れた保管は書き直してから使う★★",
               _got2 is not None
               and _io.open((_got2["evidence"]["saved_path"]),
-                           encoding="utf-8").read() == LIST_SNAPSHOT["z"])
+                           "rb").read().decode("utf-8") == LIST_SNAPSHOT["z"])
+            t("★★保管したファイルの実バイトの指紋が、名前の指紋と一致する★★"
+              "（Codex95回目・改行変換で食い違っていた）",
+              _sha_bytes(_io.open(_got2["evidence"]["saved_path"], "rb").read())
+              == os.path.basename(_got2["evidence"]["saved_path"])[:-5])
             t("　書き途中のファイルを残さない",
               not [f for f in os.listdir(globals()["EVIDENCE_DIR"])
                    if ".tmp" in f])
+            # ★置き換えで失敗しても残骸を残さない★（同・指摘3）
+            for _f in os.listdir(globals()["EVIDENCE_DIR"]):
+                os.remove(os.path.join(globals()["EVIDENCE_DIR"], _f))
+            _real_replace = os.replace
+            try:
+                os.replace = lambda a, b: (_ for _ in ()).throw(OSError("失敗"))
+                _bad = _card_identity("L北斗の拳", "https://z.example/m/hokuto/",
+                                      "z", _tls)
+            finally:
+                os.replace = _real_replace
+            t("★★置き換えに失敗した晩は公開せず、残骸も残さない★★",
+              _bad is None
+              and not [f for f in os.listdir(globals()["EVIDENCE_DIR"])
+                       if ".tmp" in f])
             LIST_SNAPSHOT.pop("z", None)
             _nw.CATALOGS = real_cats
             globals()["EVIDENCE_DIR"] = real_evdir

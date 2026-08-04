@@ -287,6 +287,15 @@ def identify(html: str, spec: dict, url: str, today=None,
     return out
 
 
+# ★代替を許す TLS の理由（これ以外の SSLError は一時的な失敗として扱う）★
+ALLOWED_SSL_REASONS = (
+    "CERTIFICATE_VERIFY_FAILED",          # 証明書が期限切れ・信頼できない
+    "SSLV3_ALERT_HANDSHAKE_FAILURE",      # 握手そのものを拒否された（藤商事）
+    "TLSV1_ALERT_PROTOCOL_VERSION",       # こちらのTLS版を受け付けない
+    "UNSUPPORTED_PROTOCOL",
+)
+
+
 def tls_failure(e, depth: int = 0) -> bool:
     """★例外の型だけで「証明書・TLSの失敗か」を決める★
 
@@ -298,8 +307,20 @@ def tls_failure(e, depth: int = 0) -> bool:
     import ssl
     if e is None or depth > 8:
         return False
-    if isinstance(e, ssl.SSLError):       # 証明書の期限切れ・握手拒否はここに入る
+    # ★証明書の検証失敗★（オーイズミ＝期限切れ）
+    if isinstance(e, ssl.SSLCertVerificationError):
         return True
+    # ★握手そのものを拒否された場合★（藤商事）だけ、理由の名前で許す
+    #   ★2026-08-04・Codex95回目の指摘1★
+    #     `ssl.SSLError` を丸ごと許すと、通信が途中で切れただけ
+    #     （SSLEOFError 等＝そのうち直る一時的な失敗）でも
+    #     一覧カードへ逃がしてしまい、「実例の2種類だけ」になっていなかった。
+    #   reason は OpenSSL が付ける決まった名前で、相手が自由に書ける文ではない。
+    if isinstance(e, ssl.SSLError) and not isinstance(
+            e, (ssl.SSLEOFError, ssl.SSLZeroReturnError, ssl.SSLWantReadError,
+                ssl.SSLWantWriteError, ssl.SSLSyscallError)):
+        if str(getattr(e, "reason", "") or "") in ALLOWED_SSL_REASONS:
+            return True
     for attr in ("reason", "__cause__", "__context__"):
         nxt = getattr(e, attr, None)
         if isinstance(nxt, BaseException) and tls_failure(nxt, depth + 1):
@@ -443,6 +464,16 @@ def selftest() -> int:
       tls_failure(_ue2.URLError(_ssl2.SSLCertVerificationError("expired")))
       and not tls_failure(_ue2.URLError("timed out"))
       and not tls_failure(Exception("取得できません（HTTP 404）")))
+    # ★通信が途中で切れただけの失敗は代替しない★（Codex95回目の指摘1）
+    t("★★一時的なSSLの失敗（EOF等）では一覧カードへ逃がさない★★",
+      not tls_failure(_ue2.URLError(_ssl2.SSLEOFError("eof")))
+      and not tls_failure(_ue2.URLError(_ssl2.SSLZeroReturnError("zero"))))
+    _hs = _ssl2.SSLError("SSLV3_ALERT_HANDSHAKE_FAILURE")
+    _hs.reason = "SSLV3_ALERT_HANDSHAKE_FAILURE"
+    _unk = _ssl2.SSLError("なにか")
+    _unk.reason = "SOMETHING_ELSE"
+    t("　握手拒否は許し、知らない理由のSSLErrorは許さない",
+      tls_failure(_ue2.URLError(_hs)) and not tls_failure(_ue2.URLError(_unk)))
     t("★★文言に SSL の語があっても、型が違えば代替しない★★（Codex94回目・再現した）",
       not tls_failure(Exception(
           "取得できません（URLError）: <urlopen error [SSL: "
