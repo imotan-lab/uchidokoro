@@ -88,8 +88,13 @@ ALLOW_TASK_SKILL_RE = re.compile(r"^[a-z0-9][a-z0-9\-_]{1,60}_SKILL\.md$")
 # CLAUDE.md の日付つきスナップショット（圧縮など破壊的編集の前に退避する用途・2026-07-24追加）
 # 例: CLAUDE_uchidokoro_2026-07-24.md / CLAUDE_history_uchidokoro_2026-07-24.md
 # 通常のバックアップ名（CLAUDE_uchidokoro.md）を上書きせずに世代を残すために許可する。
+# ★圧縮前の控えも同じ枠で許す★（2026-08-04。実際の運用では
+#   CLAUDE_uchidokoro_precompress_2026-07-23.md のような名前を使ってきたが、
+#   この形が許可の形から漏れていて、圧縮前のバックアップが取れなかった。
+#   同じ日に2回取る場合の末尾1文字（…-04b.md）も許す）
 ALLOW_CLAUDE_SNAPSHOT_RE = re.compile(
-    r"^CLAUDE(_history)?_uchidokoro_\d{4}-\d{2}-\d{2}\.md$")
+    r"^CLAUDE(_history)?_uchidokoro(_precompress)?_"
+    r"\d{4}-\d{2}-\d{2}[a-z]?\.md$")
 
 # ── 秘密パターン: ファイル名（正規化後の部分一致）──
 DENY_NAME_SUBSTR = [
@@ -596,6 +601,11 @@ def selftest() -> int:
     t("★_design配下でも .json は許可しない（巨大な作業データ）",
       not is_allowlisted("ledger_todo.json", os.path.join(des, "ledger_todo.json")))
     t("★タスク手順書は {taskId}_SKILL.md の形なら許可（列挙不要）",
+      is_allowlisted("CLAUDE_uchidokoro_precompress_2026-08-04b.md")
+      and is_allowlisted("CLAUDE_history_uchidokoro_2026-08-04.md")
+      and not is_allowlisted("CLAUDE_uchidokoro_backup.md")
+      and not is_allowlisted("CLAUDE_uchidokoro_2026-08-04.txt"))
+    t("バックアップ名: タスクのSKILLは許可・別名は不許可",
       is_allowlisted("task-watchdog_SKILL.md")
       and is_allowlisted("uchidokoro-quality-review_SKILL.md")
       and not is_allowlisted("secret_SKILL.mdx"))
