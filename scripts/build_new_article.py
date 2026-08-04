@@ -34,6 +34,7 @@ from datetime import date
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
 
+import page_decision as _pd           # noqa: E402
 import safe_json as _sj               # noqa: E402
 import spec_lookup as _sl             # noqa: E402
 
@@ -43,19 +44,26 @@ DETAILS = os.path.join(BASE, "assets", "data", "machine-details")
 # slug に使ってよい形（★推測で作らない・URLの末尾から取る★）
 _SLUG_OK = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
 
-# 先行記事の固定文。★ここに数値を書かない★
-LEAD_TEMPLATE = ("{name}は{release}に登場予定の機種です。"
+# 固定文。★ここに数値を書かない★
+# ★時間で嘘になる語（導入予定・登場予定・導入前）を書かない★
+#   （2026-08-04・Codex70〜72回目。導入日を過ぎた瞬間に記事が古くなり、
+#     8/3導入の7機種で実際に「導入予定」のまま公開が続いた。
+#     いつ読んでも真になる文言だけを使う）
+LEAD_TEMPLATE = ("{name}の機種情報ページです。登場時期は{release}"
+                 "（公式発表を確認済み）。"
                  "現時点で当サイトが出典を確認できた項目だけを掲載しています。"
                  "天井・狙い目などは、確認が取れ次第このページに追記します。")
 LEAD_NO_DATE = ("{name}のページです。登場時期は当サイトでは確認できていません。"
                 "現時点で出典を確認できた項目だけを掲載しています。")
 ROLE_SECTION = {
     "title": "このページの役割",
-    "body": ["導入前のため、掲載しているのは**出典で確認が取れた項目だけ**です。",
+    "body": ["このページは、**出典で確認が取れた項目だけ**を掲載しています。",
              "確認が取れていない項目は、埋めずに空けてあります。"
              "推測や他機種からの流用は行いません。",
              "解析が出そろい次第、天井・狙い目・設定示唆などを追記します。"],
 }
+# ★生成物に混ぜてはいけない語★（検査でも使う）
+STALE_WORDS = ("導入予定", "登場予定", "導入前")
 RUMOR_SECTION = {
     "title": "噂・未確定情報",
     "type": "rumor",
@@ -97,6 +105,10 @@ def build_machine(slug, name, maker, official_url, release, material) -> dict:
         ident["regulatory_model_code"] = code["value"]
         ident["identity_tier"] = "CATALOG_CODE_MATCHED"
         ident["_model_code_sources"] = code["sources"]
+    # ★判定書（PageDecision）を機種行に焼き込む★（2026-08-04・Codex71〜72回目）
+    #   「先行/完成」の宣言をやめ、検索に載せるかは判定書が決める。
+    #   status は書かない（旧契約との同居は machine_class が拒否する）。
+    decision = _pd.decide(material)
     return {
         "slug": slug,
         "name": name,
@@ -109,10 +121,11 @@ def build_machine(slug, name, maker, official_url, release, material) -> dict:
         # ★狙い目は当サイトの判断なので、確認が取れるまで空にしない・書かない★
         "strategy": "",
         "aliases": [],
-        "status": "preview",
+        "publication_policy": _pd.SCHEMA,
+        "page_decision": decision,
         # ★既存の未裏取りページ（LEGACY_UNVERIFIED）と混ぜない★
         #   載せた値は出典2件で確認済み。ただし記事は網羅的ではない、という状態。
-        #   （2026-07-31・Codexと相談して別の状態名にした）
+        #   （内部の検証状態＝読者向けラベルではない）
         "publish_state": "PREVIEW_VERIFIED_SUBSET",
         "release_date": release or "",
         "identity": ident,
@@ -190,7 +203,7 @@ def build_detail(slug, name, release, material) -> dict:
 
     spec_body = [f"**機種名**：{name}"]
     if release:
-        spec_body.append(f"**登場予定**：{_fmt_release(release)}")
+        spec_body.append(f"**登場時期**：{_fmt_release(release)}（公式確認）")
     if (code := adopted.get("model_code")):
         spec_body.append(f"**型式名**：{code['value']}")
     if (rng := adopted.get("payout_range")):
@@ -327,7 +340,22 @@ def selftest() -> int:
     }}
     m = build_machine("lbinko", "Lすーぱぁびん娘", "bellco",
                       "https://www.s-bellco.co.jp/products/slot/lbinko/", "2026-08", MAT)
-    t("★★導入前は必ず preview（noindex）で作る★★", m["status"] == "preview")
+    t("★★新台は判定書つき（statusを書かない・旧契約と同居しない）★★"
+      "（2026-08-04・Codex71〜72回目）",
+      "status" not in m and m["publication_policy"] == _pd.SCHEMA
+      and _pd.machine_class(m) in ("AUTO_INDEXABLE", "AUTO_PENDING"))
+    t("★★固有ゲーム性が無い材料は indexable にならない★★"
+      "（spec系claimだけでは検索に載せない）",
+      _pd.machine_class(m) == "AUTO_PENDING"
+      and "NO_UNIQUE_GAMEPLAY" in m["page_decision"]["reason_codes"])
+    MAT_FULL = dict(MAT)
+    MAT_FULL["at_specs"] = {"adopted": [
+        {"mode": "MAIN_AT", "games": 30, "net": 2.8, "sources": ["a", "b"]}]}
+    m_full = build_machine("lbinko", "Lすーぱぁびん娘", "bellco",
+                           "https://www.s-bellco.co.jp/products/slot/lbinko/",
+                           "2026-08", MAT_FULL)
+    t("★★claim3件・2カテゴリ・固有ゲーム性あり → AUTO_INDEXABLE★★",
+      _pd.machine_class(m_full) == "AUTO_INDEXABLE")
     t("★狙い目は空のまま（当サイトの判断なので推測で埋めない）★", m["strategy"] == "")
     t("　型式が取れていれば identity に入り、段階が上がる",
       m["identity"]["regulatory_model_code"] == "Lびん娘NY1"
@@ -357,6 +385,9 @@ def selftest() -> int:
       any(s.get("type") == "rumor" for s in d["sections"]))
     t("　本文に数値を作文しない（lead に数字が入らない）",
       not re.search(r"\d+\.\d+|\d+G|\d+枚", d["lead"]))
+    t("★★時間で嘘になる語（導入予定・登場予定・導入前）を書かない★★"
+      "（Codex70回目＝8/3導入7機種で「導入予定」のまま公開が続いた実害の再発防止）",
+      not any(w in txt for w in STALE_WORDS))
     d2 = build_detail("x", "X", "2026-09", {"adopted": {}})
     t("　材料がゼロでも壊れない（表が空になるだけ）",
       d2["factTable"] == [] and len(d2["sections"]) >= 2)

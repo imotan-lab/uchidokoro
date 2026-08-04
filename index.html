@@ -267,15 +267,16 @@ function formatReleaseDate(dateStr){
       upcoming.forEach(machine => {
         const row = document.createElement("article");
         row.className = "list-row";
-        const isPreview = machine.status === "preview";
+        const isPreview = machine.status === "preview"
+          || machine.publication_policy === "page-decision/v1";
         const relLabel = formatReleaseDate(machine.release_date);
         const statusBadge = isPreview
-          ? '<span class="badge badge--preview">⚠ 先行記事</span>'
+          ? '<span class="badge badge--preview">⚠ 解析待ち</span>'
           : '<span class="badge badge--new">🆕 新台</span>';
         row.innerHTML = `
           <a class="list-row-main" href="${["", "machines", machine.slug, ""].join("/")}">
             <span class="machine-name">${machine.name} ${statusBadge}</span>
-            <span class="machine-strategy machine-strategy--upcoming">導入予定: ${relLabel}</span>
+            <span class="machine-strategy machine-strategy--upcoming">登場時期: ${relLabel}</span>
           </a>
         `;
         listEl.appendChild(row);
@@ -307,13 +308,14 @@ function formatReleaseDate(dateStr){
       filtered.forEach((machine, i) => {
         const row = document.createElement("article");
         row.className = "list-row";
-        const isPreview = machine.status === "preview";
+        const isPreview = machine.status === "preview"
+          || machine.publication_policy === "page-decision/v1";
         const isNew = isNewMachine(machine);
         const nameBadge = isPreview
-          ? ' <span class="badge badge--preview">⚠ 先行記事</span>'
+          ? ' <span class="badge badge--preview">⚠ 解析待ち</span>'
           : (isNew ? ' <span class="badge badge--new">🆕 新台</span>' : '');
         const stretegyCell = isPreview
-          ? '<span class="machine-strategy machine-strategy--preview">⚠ 先行記事（解析待ち）</span>'
+          ? '<span class="machine-strategy machine-strategy--preview">⚠ 解析待ち（判明次第更新）</span>'
           : `<span class="machine-strategy">${machine.strategy || ''}</span>`;
         row.innerHTML = `
           <a class="list-row-main" href="${["", "machines", machine.slug, ""].join("/")}">

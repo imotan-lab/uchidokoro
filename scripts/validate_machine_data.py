@@ -92,7 +92,9 @@ def check_machine(machine, detail):
     ngs = []
     slug = machine.get("slug", "?")
     if machine.get("status") == "preview":
-        return ngs  # 先行記事は解析待ちなので数値検査の対象外
+        return ngs  # 解析待ち（preview）は数値検査の対象外
+    # 新台経路（page-decision/v1）は存在するフィールドだけ検査を続行
+    # （checker等が無ければ各検査が自然にスキップされる・fail-openを明文化）
     setting_only = _is_setting_only(machine)
     checker = machine.get("checker") or {}
 

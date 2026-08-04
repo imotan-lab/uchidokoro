@@ -42,6 +42,7 @@ sys.path.insert(0, os.path.join(BASE, "scripts"))
 
 import build_machine_pages as _bmp      # noqa: E402
 import build_new_article as _ba         # noqa: E402
+import page_decision as _pdz            # noqa: E402  ★区分の唯一の判定箇所★
 import html_check as _hc                # noqa: E402
 import safe_json as _sj                 # noqa: E402
 
@@ -63,9 +64,9 @@ class PublishError(RuntimeError):
 #   必須語と禁止語の組み合わせでは、
 #   「先行記事です。解析の結果、全項目が正しいと判明しました。」が通ってしまった。
 #   文言はこちらで作るものなので、**丸ごと突き合わせる**のが確実。
-NOTICE_TEXT = ("⚠ 先行記事（解析待ち）"
-               "この機種はまだ解析データが出揃っていません。"
-               "天井・狙い目・設定差は判明次第、随時更新します。")
+# ★時間で嘘になる語（先行・導入前）を使わない★（2026-08-04・Codex70〜72回目）
+NOTICE_TEXT = ("⚠ このページは出典で確認が取れた項目のみ掲載しています。"
+               "未掲載の項目は確認でき次第更新します。")
 NOTICE = chr(100)+chr(97)+chr(116)+chr(97)+chr(45)+"preview-notice="+chr(34)+STATE+chr(34)
 _SLUG_OK = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
 # 空白の並び（バックスラッシュを直接書かない：制御文字に化ける事故が続いたため）
@@ -136,9 +137,14 @@ def mark_start(slug: str, machine: dict, backup: dict) -> None:
         # ★これから作るもの★（作る前に残す）
         #   2026-07-31・Codex13回目: 作ってから指紋を書く形だと、
         #   その隙間で落ちたとき「作ったのに目印に無い」残骸ができる。
-        "planned": [f"machines/{slug}/index.html",
-                    f"assets/data/machine-details/{slug}.json",
-                    f"machines.json#{slug}"],
+        "planned": ([f"machines/{slug}/index.html",
+                     f"assets/data/machine-details/{slug}.json",
+                     f"machines.json#{slug}"]
+                    # ★index対象は sitemap にも1行足す★（2026-08-04・Codex72回目）
+                    + ([f"sitemap.xml#{slug}"]
+                       if _pdz.is_auto(machine)
+                       and _pdz.machine_class(machine) == "AUTO_INDEXABLE"
+                       else [])),
         "created": {},
         "_why": "この目印がある間は、公開が途中で終わっています。"
                 "★目印だけ消してはいけません★ "
@@ -261,16 +267,20 @@ def check_before(slug: str, machine: dict, rows: list) -> list:
         ng.append(f"{slug} のページは既にあります（この経路は新規作成だけです）")
     if any(m.get("slug") == slug for m in rows):
         ng.append(f"{slug} は既に machines.json にあります（上書きしません）")
-    if machine.get("status") != "preview":
-        ng.append(f"status が preview ではありません（{machine.get('status')!r}）"
-                  "。この経路は先行記事だけを公開します")
+    try:
+        cls = _pdz.machine_class(machine)
+        if cls not in ("AUTO_INDEXABLE", "AUTO_PENDING"):
+            ng.append(f"新台経路の区分ではありません（{cls}）"
+                      "。この経路は判定書つきの新台だけを公開します")
+    except _pdz.DecisionError as e:
+        ng.append(f"判定書が壊れています: {e}")
     if machine.get("publish_state") != STATE:
         ng.append(f"publish_state が {STATE} ではありません"
                   f"（{machine.get('publish_state')!r}）")
     return ng
 
 
-def check_page(slug: str, html: str) -> list:
+def check_page(slug: str, html: str, expect_noindex: bool = True) -> list:
     """作ったページそのものを確かめる。★テンプレート任せにしない★
 
     ★2026-07-31・Codexの指摘を再現して3回直した★
@@ -284,14 +294,21 @@ def check_page(slug: str, html: str) -> list:
     ng = []
     doc = _hc.parse(html)
     robots = _hc.meta_values(doc, "robots")
-    if len(robots) != 1:
-        ng.append(f"robots 指定が {len(robots)} 個です（1個であるべきです）")
+    if expect_noindex:
+        if len(robots) != 1:
+            ng.append(f"robots 指定が {len(robots)} 個です（1個であるべきです）")
+        else:
+            vals = robots[0]
+            if "noindex" not in vals:
+                ng.append(f"robots が noindex ではありません（{sorted(vals)}）")
+            if "index" in vals:
+                ng.append("robots に index と noindex が両方あります")
     else:
-        vals = robots[0]
-        if "noindex" not in vals:
-            ng.append(f"robots が noindex ではありません（{sorted(vals)}）")
-        if "index" in vals:
-            ng.append("robots に index と noindex が両方あります")
+        # ★index対象（AUTO_INDEXABLE）: robots meta が1個も無いこと★
+        #   逆に付いていたら止める（逆方向もfail-closed・Codex72回目）
+        if len(robots) != 0:
+            ng.append(f"index対象なのに robots 指定が {len(robots)} 個あります"
+                      f"（{[sorted(v) for v in robots]!r}）")
     if doc.bases != ["/"]:
         ng.append(f'<base href="/"> が {doc.bases!r} です'
                   "（1個でないとロゴ・ナビが404になります）")
@@ -301,6 +318,11 @@ def check_page(slug: str, html: str) -> list:
         ng.append(f"canonical が {canon!r} です（{want!r} が1個であるべきです）")
     if "style=" in html:
         ng.append("インラインstyleが入っています")
+    # ★時間で嘘になる語の禁止★（2026-08-04・Codex70〜72回目の鮮度ゲート。
+    #   導入日を過ぎた瞬間に記事が古くなる語は、日付を問わず最初から書かない）
+    for w in _ba.STALE_WORDS:
+        if w in html:
+            ng.append(f"時間で嘘になる語がページに入っています: {w}")
     # ★先行記事だと読者に分かる表示があるか★（noindexは非公開化ではない）
     #   ★本文のどこかに語があるだけでは認めない★（Codex指摘3）
     #     ひな型のバナーは完成機種のページにも同じ形で入っており、
@@ -342,13 +364,24 @@ def check_only_allowed_values(slug: str, machine: dict, detail: dict,
     """
     empty_machine = {"slug": slug, "name": machine.get("name", ""),
                      "seo": {"title": ""}, "info": "", "strategy": "",
-                     "aliases": [], "status": "preview", "release_date": ""}
+                     "aliases": [], "release_date": ""}
+    if _pdz.is_auto(machine):
+        # バナー有無を実物とそろえる（新契約の最小の判定書つき）
+        empty_machine["publication_policy"] = _pdz.SCHEMA
+        empty_machine["page_decision"] = {
+            "schema_version": _pdz.SCHEMA, "indexable": False}
+    else:
+        empty_machine["status"] = "preview"
     try:
         base = render(slug, empty_machine, {"slug": slug, "sections": []})
     except Exception as e:                # noqa: BLE001
         return [f"見比べ用のページを描けません: {type(e).__name__}: {e}"]
     added = _numbers(html) - _numbers(base)
-    allowed = _numbers(json.dumps(machine, ensure_ascii=False)
+    # ★判定書（decided_at・digest）の数字を「載せてよい数値」に混ぜない★
+    #   （2026-08-04・Codex72回目の分析。掲載値の由来ではないため）
+    m_for_allowed = {k: v for k, v in machine.items()
+                     if k not in ("page_decision", "publication_policy")}
+    allowed = _numbers(json.dumps(m_for_allowed, ensure_ascii=False)
                        + json.dumps(detail, ensure_ascii=False))
     stray = sorted(x for x in added if x not in allowed)
     if stray:
@@ -372,7 +405,9 @@ _TABLE_KEYS = {"label", "headers", "rows", "note"}
 _SECTION_TYPES = {"settei", "rumor"}
 # 機種データに入ってよい鍵（★新台が作るものだけ★）
 _MACHINE_KEYS = {"slug", "name", "seo", "info", "strategy", "aliases",
-                 "status", "release_date", "identity", "publish_state"}
+                 "status", "release_date", "identity", "publish_state",
+                 # ★新台経路の判定書★（2026-08-04・Codex71〜72回目）
+                 "publication_policy", "page_decision"}
 
 
 def _is_text(x) -> bool:
@@ -709,13 +744,20 @@ def run_site_audit(ignore_in_progress: bool = False) -> list:
     return out
 
 
-def allowed_paths(slug: str) -> set:
-    """★この経路が変えてよいファイル★（これ以外が変わっていたら止める）"""
-    return {
+def allowed_paths(slug: str, with_sitemap: bool = False) -> set:
+    """★この経路が変えてよいファイル★（これ以外が変わっていたら止める）
+
+    with_sitemap は AUTO_INDEXABLE の公開だけ True（無条件に許すと、
+    AUTO_PENDING で誤って sitemap を書いた事故を検知できない・Codex72回目）。
+    """
+    got = {
         f"machines/{slug}/index.html",
         f"assets/data/machine-details/{slug}.json",
         "assets/data/machines.json",
     } | set(COUNT_FILES) | set(HUB_FILES)   # ★件数と一覧の行も整える★
+    if with_sitemap:
+        got.add("sitemap.xml")
+    return got
 
 
 def changed_paths() -> list:
@@ -761,7 +803,8 @@ def snapshot(paths) -> dict:
     return out
 
 
-def check_no_stray_changes(slug: str, before_snap: dict) -> list:
+def check_no_stray_changes(slug: str, before_snap: dict,
+                           with_sitemap: bool = False) -> list:
     """★許した3つ以外を書いていないか★（2026-07-31・Codexの条件）
 
     ★Codex指摘を再現して直した★
@@ -769,8 +812,8 @@ def check_no_stray_changes(slug: str, before_snap: dict) -> list:
       **もともとdirtyだったCSSをさらに書き換えても見逃した**。
       実行前に取った中身の指紋と突き合わせる。
     """
-    allowed = allowed_paths(slug)
     ng = []
+    allowed = allowed_paths(slug, with_sitemap=with_sitemap)
     now = snapshot(list(before_snap))
     for rel, sha in before_snap.items():
         if rel in allowed:
@@ -796,7 +839,52 @@ def check_sitemap_kept(before_text: str) -> list:
     return []
 
 
-def check_served(slug: str) -> list:
+SITE_ORIGIN = "https://uchidokoro.com"
+
+
+def _sitemap_locs(text: str) -> list:
+    import re as _re
+    return _re.findall(r"<loc>([^<]+)</loc>", text)
+
+
+def sitemap_line(slug: str) -> str:
+    """追加する1行（1行形式・生成器 write_sitemap と同じ側に合わせる）。"""
+    return f"  <url><loc>{SITE_ORIGIN}/machines/{slug}/</loc></url>"
+
+
+def add_to_sitemap(before_text: str, slug: str) -> str:
+    """★1行形式で </urlset> の直前に1件だけ足す★（復旧は同じ1行の完全一致除去）"""
+    line = sitemap_line(slug)
+    if line in before_text:
+        raise PublishError(f"sitemap に {slug} の行が既にあります")
+    marker = "</urlset>"
+    if before_text.count(marker) != 1:
+        raise PublishError("sitemap の形が想定と違います（</urlset> が1個でない）")
+    return before_text.replace(marker, line + chr(10) + marker)
+
+
+def remove_from_sitemap(text: str, slug: str) -> str:
+    """add_to_sitemap が足した1行だけを外す（無ければそのまま返す）。"""
+    line = sitemap_line(slug)
+    return text.replace(line + chr(10), "", 1)
+
+
+def check_sitemap_added(before_text: str, slug: str) -> list:
+    """★期待した1件だけ増えたこと★（バイト一致でなく<loc>集合で見る・Codex72回目）"""
+    with open(SITEMAP, encoding="utf-8") as f:
+        now = f.read()
+    b, n = _sitemap_locs(before_text), _sitemap_locs(now)
+    want = f"{SITE_ORIGIN}/machines/{slug}/"
+    ng = []
+    if n.count(want) != 1:
+        ng.append(f"sitemap に {slug} のURLが {n.count(want)} 件あります（1件のはず）")
+    import collections as _c
+    if _c.Counter([x for x in n if x != want]) != _c.Counter(b):
+        ng.append("sitemap で追加した1件以外のURLが増減・変更されています")
+    return ng
+
+
+def check_served(slug: str, expect_noindex: bool = True) -> list:
     """★実際にHTTPで返るか確かめる★（ファイルがあるだけでは足りない）
 
     ローカルの簡易サーバで `/machines/{slug}/` を引き、200 と noindex を見る。
@@ -823,8 +911,12 @@ def check_served(slug: str) -> list:
                 ng.append(f"公開したページが HTTP {r.status} を返します")
             body = r.read(400000).decode("utf-8", "replace")
         vals = _hc.meta_values(_hc.parse(body), "robots")
-        if len(vals) != 1 or "noindex" not in vals[0]:
-            ng.append(f"配信されたHTMLの robots が {vals!r} です（noindex 1個のはず）")
+        if expect_noindex:
+            if len(vals) != 1 or "noindex" not in vals[0]:
+                ng.append(f"配信されたHTMLの robots が {vals!r} です（noindex 1個のはず）")
+        else:
+            if len(vals) != 0:
+                ng.append(f"index対象なのに配信HTMLに robots が {vals!r} あります")
     except Exception as e:                # noqa: BLE001
         ng.append(f"公開したページを引けません: {type(e).__name__}: {e}")
     finally:
@@ -833,7 +925,8 @@ def check_served(slug: str) -> list:
     return ng
 
 
-def check_after(slug: str, before_pages: dict, rows_before: list) -> list:
+def check_after(slug: str, before_pages: dict, rows_before: list,
+                expect_in_sitemap: bool = False) -> list:
     """書いたあとに確かめること。★取り返しがつくうちに気づくため★"""
     ng = []
     now = _existing_pages()
@@ -857,8 +950,13 @@ def check_after(slug: str, before_pages: dict, rows_before: list) -> list:
         if not os.path.isfile(_page_path(m.get("slug", ""))):
             ng.append(f"一覧に出るのにページがありません: {m.get('slug')}")
     with open(SITEMAP, encoding="utf-8") as f:
-        if f"/machines/{slug}/" in f.read():
-            ng.append("sitemap に先行記事が載っています（載せない決まりです）")
+        sm_now = f.read()
+    if expect_in_sitemap:
+        if f"<loc>{SITE_ORIGIN}/machines/{slug}/</loc>" not in sm_now:
+            ng.append("index対象なのに sitemap に載っていません")
+    else:
+        if f"/machines/{slug}/" in sm_now:
+            ng.append("sitemap に noindex対象の機種が載っています（載せない決まりです）")
     return ng
 
 
@@ -887,9 +985,10 @@ def render(slug: str, machine: dict, detail: dict) -> str:
         template = _bmp.prepare_template(f.read())
     reasons = _bmp.extract_pochipochi_reasons(template)
     html = _bmp.render_page(template, machine, detail, reasons)
-    if machine.get("status") == "preview":
+    # ★通知divは AUTO_INDEXABLE にも付く★（indexableと独立・2026-08-04・Codex72回目）
+    if machine.get("status") == "preview" or _pdz.is_auto(machine):
         if _BANNER_HIDDEN not in html:
-            raise PublishError("ひな型の先行記事バナーが見つかりません"
+            raise PublishError("ひな型の断り書きバナーが見つかりません"
                                "（machine.html の作りが変わった可能性があります）")
         html = html.replace(_BANNER_HIDDEN, _BANNER_SHOWN, 1)
     return html
@@ -943,6 +1042,11 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
     out = {"slug": slug, "problems": [], "wrote": [], "html_bytes": 0}
     rows = _sj.read_rows(MACHINES)
     out["problems"] += check_before(slug, machine, rows)
+    # ★区分（index対象かどうか）はここで一度だけ決めて全検査に配る★
+    try:
+        indexable = _pdz.machine_class(machine) == "AUTO_INDEXABLE"
+    except _pdz.DecisionError:
+        indexable = False      # check_before が既に問題として積んでいる
     out["problems"] += check_detail(slug, detail)
     out["problems"] += check_machine(slug, machine)
     # ★書き始める前にサイトが健全か確かめる★（2026-07-31・Codexの助言・二段構え）
@@ -970,7 +1074,7 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
         return out
     html = render(slug, machine, detail)
     out["html_bytes"] = len(html.encode("utf-8"))   # ★文字数ではなくバイト数★
-    out["problems"] += check_page(slug, html)
+    out["problems"] += check_page(slug, html, expect_noindex=not indexable)
     out["problems"] += check_only_allowed_values(slug, machine, detail, html)
     if out["problems"] or not apply_it:
         return out
@@ -1002,8 +1106,12 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
     dp = os.path.join(DETAILS, f"{slug}.json")
     made = []          # ★この処理が実際に作ったものだけ★（既存を消さないため）
     # ★目印は、書き始める前に・戻し方つきで★
-    mark_start(slug, machine, {**hub_backup, MACHINES: machines_before.decode("utf-8")})
+    backup_for_mark = {**hub_backup, MACHINES: machines_before.decode("utf-8")}
+    if indexable:
+        backup_for_mark[SITEMAP] = before_sitemap
+    mark_start(slug, machine, backup_for_mark)
     machines_replaced = {}   # 一覧を置き換えたか（戻すため・置き換える前に立てる）
+    sitemap_replaced = {}    # sitemap を置き換えたか（同上）
 
     def _cleanup():
         """★自分が作ったものだけ片付ける★（2026-07-31・Codex指摘3を再現して直した）
@@ -1093,8 +1201,10 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
             with open(path, encoding="utf-8") as f:
                 if _sha(f.read()) != want:
                     late.append(f"書いたはずの中身と違います: {path}")
-        late += check_served(slug)
-        late += check_no_stray_changes(slug, before_snap)
+        late += check_served(slug, expect_noindex=not indexable)
+        late += check_no_stray_changes(slug, before_snap,
+                                       with_sitemap=indexable)
+        # ★この時点では sitemap はまだ書いていない＝不変のはず★
         late += check_sitemap_kept(before_sitemap)
         now_pages = _existing_pages()
         for s_, h in before_pages.items():
@@ -1136,6 +1246,13 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
         mark_created({f"machines.json#{slug}":
                       _sha(json.dumps(machine, ensure_ascii=False, sort_keys=True))})
         out["wrote"] = [dp, page, MACHINES]
+        # ★index対象は sitemap にも1行足す★（2026-08-04・Codex72回目。
+        #   1行形式・</urlset> 直前・復旧は同じ1行の完全一致除去）
+        if indexable:
+            sitemap_replaced["yes"] = True
+            write_atomic(SITEMAP, add_to_sitemap(before_sitemap, slug))
+            mark_created({f"sitemap.xml#{slug}": _sha(sitemap_line(slug))})
+            out["wrote"].append(SITEMAP)
         # ★機種数の表記も同時に直す★（ここまで来たら一緒に整える）
         #   直せなくても公開は成立しているので、失敗は問題として残すだけにする。
         for rel, text in count_updates(len(rows) - 1, len(rows)).items():
@@ -1198,13 +1315,21 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
                 write_atomic(MACHINES, machines_before.decode("utf-8"))
             except Exception:             # noqa: BLE001
                 out["problems"].append("★一覧を戻せませんでした（人が確かめてください）★")
+        if sitemap_replaced.get("yes"):
+            try:
+                write_atomic(SITEMAP, before_sitemap)
+            except Exception:             # noqa: BLE001
+                out["problems"].append("★sitemapを戻せませんでした（人が確かめてください）★")
         _cleanup()
         if isinstance(e, KeyboardInterrupt):
             raise
         raise PublishError(f"一覧に足せませんでした（作ったものは消しました）: {e}")
 
     # ④ 一覧に足したあとの最終確認
-    late2 = check_after(slug, before_pages, rows[:-1])
+    late2 = check_after(slug, before_pages, rows[:-1],
+                        expect_in_sitemap=indexable)
+    late2 += (check_sitemap_added(before_sitemap, slug) if indexable
+              else check_sitemap_kept(before_sitemap))
     # ★終わったあとにもう一度★
     #   ここは自分が「公開中」の目印を持っている最中なので、項目33だけ外す。
     #   （外さないと、書けた記事を毎回自分で取り消していた・実機で判明）
@@ -1222,6 +1347,15 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
             now_text = f.read()
         if _sha(now_text) == mine:
             write_atomic(MACHINES, machines_before.decode("utf-8"))
+            if sitemap_replaced.get("yes"):
+                # ★自分が書いた1行のままの時だけ戻す★（他人の変更を消さない）
+                with open(SITEMAP, encoding="utf-8") as f:
+                    sm_now2 = f.read()
+                if _sha(sm_now2) == _sha(add_to_sitemap(before_sitemap, slug)):
+                    write_atomic(SITEMAP, before_sitemap)
+                else:
+                    late2.append("★sitemapに別の変更が入っているため自動では"
+                                 "戻しませんでした（人が確かめてください）★")
             for full, text0 in hub_backup.items():       # ★早見表も戻す★
                 if text0 is not None:
                     write_atomic(full, text0)
@@ -1365,7 +1499,9 @@ def _recover(apply_it: bool = False) -> dict:
     #   目印が書き換えられていたら、関係ないファイルを消しに行ける。
     allowed_created = {f"machines/{slug}/index.html",
                        f"assets/data/machine-details/{slug}.json",
-                       f"machines.json#{slug}"}
+                       f"machines.json#{slug}",
+                       # ★index対象の公開は sitemap の1行も作る★（Codex72回目）
+                       f"sitemap.xml#{slug}"}
     stray = sorted(set(created) - allowed_created)
     if stray:
         out["problems"].append(
@@ -1406,8 +1542,8 @@ def _recover(apply_it: bool = False) -> dict:
     #   1件目だけが消えており、404や欠損記事を自分で作っていた）
     held_map, grab_fail = [], False
     for rel, want in created.items():
-        if rel.startswith("machines.json#"):
-            continue                      # 一覧の行は上と②で扱う
+        if rel.startswith(("machines.json#", "sitemap.xml#")):
+            continue                      # 一覧の行は上と②・sitemapの行は②bで扱う
         full = os.path.join(BASE, rel)
         # ★前回の復旧が残した退避物（旧PID名）を再接続する★
         #   （2026-08-03・Codex62回目。巻き戻しの復元に失敗すると
@@ -1522,8 +1658,31 @@ def _recover(apply_it: bool = False) -> dict:
                                               indent=1) + chr(10))
             out["restored"].append("assets/data/machines.json")
 
+    # ②b sitemap から今回の1行だけを外す（★足した行そのもの・1行だけ★）
+    with open(SITEMAP, encoding="utf-8") as f:
+        sitemap_text_before = f.read()    # ★失敗したら戻すための正本★
+    sm_replaced = {}
+    smap_key = f"sitemap.xml#{slug}"
+    if smap_key in (created or {}):
+        line = sitemap_line(slug)
+        if _sha(line) != created[smap_key]:
+            _undo_held()
+            out["kept"].append(smap_key)
+            out["problems"].append(
+                "★sitemap の行の指紋が、足したときの記録と合いません。"
+                "何も消さずに戻しました。人が確かめてください★")
+            return out
+        if line in sitemap_text_before:
+            out["todo"].append(f"sitemap から外す: {slug}")
+            if apply_it:
+                sm_replaced["yes"] = True
+                write_atomic(SITEMAP,
+                             remove_from_sitemap(sitemap_text_before, slug))
+                out["restored"].append("sitemap.xml")
+        # 無ければ既に片付いている（何度走らせても平気）
+
     def _undo_all():
-        """一覧の行と退避物を元へ戻し、早見表も元データで作り直す。
+        """一覧の行・sitemap・退避物を元へ戻し、早見表も元データで作り直す。
 
         ★退避物を最初に戻す★（2026-08-03・Codex61回目）
           一覧の書き戻しが先だと、そこで失敗した時に退避物が
@@ -1531,6 +1690,8 @@ def _recover(apply_it: bool = False) -> dict:
         """
         _undo_held()
         write_atomic(MACHINES, machines_text_before)
+        if sm_replaced.get("yes"):
+            write_atomic(SITEMAP, sitemap_text_before)
         try:
             for rel_, html_ in build_hubs().items():
                 full_ = os.path.join(BASE, rel_)
@@ -1676,15 +1837,31 @@ def selftest() -> int:
         print(("✅" if cond else "❌") + " " + name)
 
     rows = _sj.read_rows(MACHINES)
-    ok_machine = {"slug": "zzz_test", "name": "テスト機", "status": "preview",
+    _pd_ok = {"schema_version": _pdz.SCHEMA, "indexable": False}
+    ok_machine = {"slug": "zzz_test", "name": "テスト機",
+                  "publication_policy": _pdz.SCHEMA, "page_decision": _pd_ok,
                   "publish_state": STATE}
     t("★新しい機種なら前提を通る★", check_before("zzz_test", ok_machine, rows) == [])
     t("★★既にある機種は拒否する★★（上書きしない）",
       check_before(rows[0]["slug"],
                    {**ok_machine, "slug": rows[0]["slug"]}, rows))
-    t("★★先行記事以外は公開しない★★",
-      any("preview" in x for x in
-          check_before("zzz_test", {**ok_machine, "status": "complete"}, rows)))
+    t("★★判定書と旧statusの同居は公開しない★★（fail-closed・Codex71回目）",
+      any("判定書" in x or "区分" in x for x in
+          check_before("zzz_test", {**ok_machine, "status": "preview"}, rows)))
+    t("★★未知のpolicyは公開しない★★",
+      any("判定書" in x or "区分" in x for x in
+          check_before("zzz_test",
+                       {**ok_machine, "publication_policy": "other/v9"}, rows)))
+    t("★★判定書の欠落は公開しない★★",
+      any("判定書" in x or "区分" in x for x in
+          check_before("zzz_test",
+                       {k: v for k, v in ok_machine.items()
+                        if k != "page_decision"}, rows)))
+    t("★★旧status契約（LEGACY_PREVIEW）はこの経路で公開しない★★",
+      any("区分" in x for x in
+          check_before("zzz_test", {"slug": "zzz_test", "name": "テスト機",
+                                    "status": "preview",
+                                    "publish_state": STATE}, rows)))
     t("★★状態名が違えば公開しない★★（既存の未裏取りページと混ぜない）",
       any("publish_state" in x for x in
           check_before("zzz_test",
@@ -1698,6 +1875,58 @@ def selftest() -> int:
             '<div class="preview-banner" role="note" ' + NOTICE + ">"
             + NOTICE_TEXT + "</div></body></html>")
     t("★作ったページの中身を必ず確かめる★", check_page("zzz_test", good) == [])
+    # ★index対象（AUTO_INDEXABLE）: robots meta が無いことを要求★（Codex72回目）
+    good_indexable = good.replace(
+        '<meta name="robots" content="noindex,follow">', "")
+    t("★★index対象は robots 無しで通る★★",
+      check_page("zzz_test", good_indexable, expect_noindex=False) == [])
+    t("★★index対象に noindex が付いていたら止める★★（逆方向もfail-closed）",
+      any("robots" in x for x in
+          check_page("zzz_test", good, expect_noindex=False)))
+    t("★★時間で嘘になる語（導入予定等）が入っていたら止める★★"
+      "（鮮度ゲート・Codex70回目）",
+      any("時間で嘘になる語" in x for x in
+          check_page("zzz_test",
+                     good.replace("</body>", "<p>2026年9月導入予定</p></body>"))))
+    # ★sitemap の追加・除去（1行形式・1件だけ）★
+    _sm0 = ('<?xml version="1.0" encoding="UTF-8"?>' + chr(10)
+            + '<urlset>' + chr(10)
+            + '  <url><loc>https://uchidokoro.com/machines/aaa/</loc></url>'
+            + chr(10) + '</urlset>' + chr(10))
+    _sm1 = add_to_sitemap(_sm0, "zzz_new")
+    t("★★sitemapへ1行だけ足せる（</urlset>直前・1行形式）★★",
+      _sitemap_locs(_sm1) == ["https://uchidokoro.com/machines/aaa/",
+                              "https://uchidokoro.com/machines/zzz_new/"])
+    def _pub_raises(fn):
+        try:
+            fn()
+            return False
+        except PublishError:
+            return True
+    t("　同じ行の二重追加は止める",
+      _pub_raises(lambda: add_to_sitemap(_sm1, "zzz_new")))
+    t("★★除去は自分が足した1行の完全一致だけ★★（元に戻る）",
+      remove_from_sitemap(_sm1, "zzz_new") == _sm0)
+    _real_smp = globals().get("SITEMAP")
+    try:
+        import tempfile as _tf65
+        _smd = _tf65.mkdtemp(prefix="uchi_sm_")
+        globals()["SITEMAP"] = os.path.join(_smd, "sitemap.xml")
+        with open(SITEMAP, "w", encoding="utf-8") as _f65:
+            _f65.write(_sm1)
+        t("★★check_sitemap_added: 正しい1件追加は通る★★",
+          check_sitemap_added(_sm0, "zzz_new") == [])
+        with open(SITEMAP, "w", encoding="utf-8") as _f65:
+            _f65.write(add_to_sitemap(_sm1, "zzz_two"))
+        t("　2件増えていたら止める",
+          check_sitemap_added(_sm0, "zzz_new"))
+        with open(SITEMAP, "w", encoding="utf-8") as _f65:
+            _f65.write(_sm1.replace("machines/aaa", "machines/bbb"))
+        t("　1件追加＋別URLの書き換えは止める",
+          check_sitemap_added(_sm0, "zzz_new"))
+    finally:
+        globals()["SITEMAP"] = _real_smp
+        __import__("shutil").rmtree(_smd, ignore_errors=True)
     t("★★noindex をコメントに書いただけでは通さない★★（実際に通っていた）",
       check_page("zzz_test",
                  good.replace('content="noindex,follow"', 'content="index,follow"')
@@ -1825,7 +2054,10 @@ def selftest() -> int:
     # ★機種データそのものを確かめる★（Codex指摘2）
     _ok_machine = {"slug": "zzz_test", "name": "テスト", "seo": {"title": "x"},
                    "info": "", "strategy": "", "aliases": [],
-                   "status": "preview", "release_date": "2026-09",
+                   "publication_policy": _pdz.SCHEMA,
+                   "page_decision": {"schema_version": _pdz.SCHEMA,
+                                     "indexable": False},
+                   "release_date": "2026-09",
                    "publish_state": STATE}
     t("★まともな機種データなら通る★", check_machine("zzz_test", _ok_machine) == [])
     t("★★知らない項目が混ざっていたら止める★★（そこに書いた文字がページへ出る）",

@@ -31,6 +31,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gates                     # noqa: E402
 import audit_public              # noqa: E402
 import build_ledger as bl        # noqa: E402
+import page_decision as _pd      # noqa: E402
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(BASE, "assets", "data")
@@ -95,7 +96,11 @@ EXPECTED_NEEDS_EDIT = {
 #   同じ構造化データ（checker）から描く形に統一した（数字は選んでいない）。
 EXPECTED_DISPLAY_FIX: set = set()
 
-EXPECTED_PUBLIC = 120 - len(EXPECTED_NEEDS_EDIT) - len(EXPECTED_DISPLAY_FIX - EXPECTED_NEEDS_EDIT)
+# ★120 は「旧経路（status契約）だけの総件数」★（2026-08-04・Codex72回目）
+#   新台経路（page-decision/v1）の機種は run() 冒頭で除外するため、
+#   AUTO機種を何台足してもこの数は増やさない。
+EXPECTED_LEGACY_TOTAL = 120
+EXPECTED_PUBLIC = EXPECTED_LEGACY_TOTAL - len(EXPECTED_NEEDS_EDIT) - len(EXPECTED_DISPLAY_FIX - EXPECTED_NEEDS_EDIT)
 # ★checker の想定値（2026-07-27 時点）★
 #   200は「宣言」ではなく **実際に公開データへ入った mode** の数。
 #   同日、チェッカーの注意書きから当サイトでは計算できない断定を47件削除した結果、
@@ -190,6 +195,11 @@ def run() -> int:
     needs_edit: set = set()
     needs_display_fix: set = set()
     for m in machines:
+        # ★新台経路（page-decision/v1）は gates 経路に載せない★（Codex72回目）
+        #   build_public_data と同じ「明示的に除外」。壊れた判定書はここで止まる。
+        if _pd.is_auto(m):
+            _pd.machine_class(m)
+            continue
         sim = bl.provisional(m)
         g = gates.compute_gates(sim)
         if not g["public"]:

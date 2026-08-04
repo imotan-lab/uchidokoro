@@ -120,6 +120,8 @@ def allowed_for(slug: str) -> set:
         "guide-suru-tenjo.html", "guide-ichiran.html",
         # キャッシュ版を上げるので
         "service-worker.js",
+        # ★AUTO_INDEXABLE の公開では sitemap にも1件足す★（2026-08-04・Codex72回目）
+        "sitemap.xml",
     }
 
 

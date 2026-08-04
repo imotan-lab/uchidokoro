@@ -34,6 +34,7 @@ import audit_public  # noqa: E402
 import build_ledger  # noqa: E402
 import claim_reconcile  # noqa: E402
 import gates  # noqa: E402
+import page_decision  # noqa: E402
 
 DATA = os.path.join(BASE, "assets", "data")
 OUT_DIR = os.path.join(DATA, "public")
@@ -107,6 +108,13 @@ def build(claim_gate: bool | None = None) -> tuple[list, dict, list]:
     blocked: list = []
 
     for m in machines:
+        # ★新台経路（page-decision/v1）は Phase1 の公開物に入れない★
+        #   （2026-08-04・Codex72回目。黙って解釈させず、理由つきで明示的に除外）
+        if page_decision.is_auto(m):
+            cls = page_decision.machine_class(m)   # 壊れた判定書はここで止まる
+            blocked.append({"slug": m["slug"],
+                            "reason": f"新台経路（{cls}）は Phase1 の公開物に入れない"})
+            continue
         # ★暫定移行の状態は build_ledger.provisional が単一情報源★
         sim = build_ledger.provisional(m)
         dp = os.path.join(DATA, "machine-details", f"{m['slug']}.json")

@@ -51,6 +51,7 @@ import lineage_check as _lc          # noqa: E402
 import model_code_lookup as _mc       # noqa: E402
 import new_machine_watch as _nw       # noqa: E402
 import pending_machines as _pend      # noqa: E402
+import page_decision as _pdz          # noqa: E402
 import prepush_gate as _pg            # noqa: E402
 import publish_new_machine as _pub    # noqa: E402
 import quarantine_machines as _quar   # noqa: E402
@@ -1855,7 +1856,8 @@ def selftest() -> int:
         r = run_one("L試験機", "https://m.example/products/slot/zzz/", "m", "2026-09")
         t("★既定では書き込まない（dry-run）★", r["wrote"] == [])
         t("　組み立てた結果を返す（中身を見てから書ける）",
-          r["preview"]["machine"]["status"] == "preview")
+          r["preview"]["machine"]["publication_policy"] == _pdz.SCHEMA
+          and "status" not in r["preview"]["machine"])
         t("　slugは公式URLから作る", r["slug"] == "zzz")
 
         _sl.read_page = lambda u, n: {"url": u, "host": u.split("/")[2], "ok": True,

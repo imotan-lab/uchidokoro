@@ -32,6 +32,9 @@ import shutil
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import page_decision as _pd  # noqa: E402  ★区分の唯一の判定箇所★
+
 BASE = Path(__file__).resolve().parent.parent
 
 # settei バッジのクラス対応（machine.html の badgeClass と一致させる）
@@ -87,16 +90,27 @@ def build_title_desc(machine: dict, pochipochi_available: bool = True) -> tuple[
     name = machine.get("name", "")
     strategy = machine.get("strategy", "") or ""
     info = machine.get("info", "") or ""
-    is_preview = machine.get("status") == "preview"
+    cls = _pd.machine_class(machine)
+    is_preview = cls == "LEGACY_PREVIEW"
     release_jp = jp_date(machine.get("release_date", ""))
 
+    if cls in ("AUTO_INDEXABLE", "AUTO_PENDING"):
+        # ★新台経路: 実在する内容だけを名乗る★（2026-08-04・Codex70〜72回目）
+        #   天井・狙い目は載っていないので名乗らない。
+        #   時間で嘘になる語（導入予定・導入前・先行）も使わない。
+        title = (machine.get("seo") or {}).get("title") \
+            or f"{name} スペック・基本情報"
+        desc = (f"{name}のスペック・基本情報。出典で確認が取れた項目のみ"
+                "掲載しています。未掲載の項目は確認でき次第更新します。"
+                + (f"登場時期は{release_jp}（公式確認）。" if release_jp else ""))
+        return title, desc
     if is_preview:
-        if release_jp:
-            title = f"【先行】{name} {release_jp}導入｜天井・狙い目予想・解析判明次第更新"
-            desc = f"{release_jp}導入予定の{name}の機種概要を先行公開。天井・狙い目・設定差などの解析データが判明次第、随時更新します。導入前から最新情報をチェック。"
-        else:
-            title = f"【先行】{name} 天井・狙い目予想｜解析判明次第更新"
-            desc = f"{name}の機種概要を先行公開。天井・狙い目・設定差などの解析データが判明次第、随時更新します。導入前から最新情報をチェック。"
+        # ★時間で嘘になる語（導入予定・導入前）と「天井・狙い目」の名乗りをやめた★
+        #   （2026-08-04・Codex70回目。8/3導入後も「導入予定」のmeta説明が残っていた）
+        title = f"{name} スペック・基本情報｜解析判明次第更新"
+        desc = (f"{name}のスペック・基本情報。出典で確認が取れた項目のみ掲載し、"
+                "解析データが判明次第、随時更新します。"
+                + (f"登場時期は{release_jp}（公式確認）。" if release_jp else ""))
     elif pochipochi_available:
         title = f"{name} 天井・狙い目・やめどき｜小役カウンター ポチポチくん対応"
         if strategy:
@@ -303,7 +317,8 @@ def render_page(template: str, machine: dict, detail: dict | None,
     #   対応と書けばSEO文言もリンクも実態と食い違う。
     if not pochipochi_public:
         pp_available, pp_reason = False, "準備中"
-    elif machine.get("status") == "preview":
+    elif _pd.machine_class(machine) != "LEGACY_COMPLETE":
+        # preview と新台経路(AUTO_*)は設定判別データが無い＝対応と名乗らない
         pp_available, pp_reason = False, "解析データ判明後に対応"
     elif slug in pochipochi_reasons:
         pp_available, pp_reason = False, pochipochi_reasons[slug]
@@ -365,9 +380,13 @@ def render_page(template: str, machine: dict, detail: dict | None,
     html_out = replace_once(html_out, 
         "</head>", build_jsonld(machine, canonical_url, title, desc) + "\n</head>")
 
-    # 先行記事（preview）は完全記事へ昇格するまで noindex（恒久ポリシー・審査中だけの措置ではない）
-    if machine.get("status") == "preview":
-        html_out = replace_once(html_out, 
+    # noindex の付与は区分で決める（2026-08-04・Codex71〜72回目）:
+    #   LEGACY_PREVIEW / AUTO_PENDING = noindex,follow ／
+    #   LEGACY_COMPLETE / AUTO_INDEXABLE = 付けない。
+    #   ★緊急overrideはここで読まない★（render_page は「引数だけで出力が決まる」
+    #     契約。override は判定書を作る側＝page_decision.decide が適用済み）
+    if _pd.machine_class(machine) in ("LEGACY_PREVIEW", "AUTO_PENDING"):
+        html_out = replace_once(html_out,
             "</head>", '<meta name="robots" content="noindex,follow">\n</head>')
     # ★2026-07-24: AdSenseローダーの注入を全機種で停止（Phase 0・止血）★
     #   承認ゲート（ads = public && index && page_review approved && content_hash一致）の
@@ -567,6 +586,19 @@ def _build_legacy(only_slug: str | None = None) -> int:
         return 1
 
     machines = _sj2.read_rows(BASE / "assets" / "data" / "machines.json")
+    # ★新台経路（page-decision/v1）の機種を旧statusロジックで再生成しない★
+    #   （2026-08-04・Codex72回目。ここで除外しないと、翌朝の一括再生成が
+    #     AUTO_PENDING の noindex を剥がし、AUTO_INDEXABLE に旧タイトルを焼く）
+    auto_slugs = [m["slug"] for m in machines if _pd.is_auto(m)]
+    if only_slug and only_slug in auto_slugs:
+        print(f"★{only_slug} は新台経路（page-decision/v1）の機種です。"
+              "この経路（--legacy）では作り直せません★")
+        return 1
+    if auto_slugs:
+        print(f"新台経路の機種 {len(auto_slugs)} 件はこの経路では触りません: "
+              + ", ".join(auto_slugs[:5])
+              + (" ほか" if len(auto_slugs) > 5 else ""))
+        machines = [m for m in machines if not _pd.is_auto(m)]
     # ★1機種だけ直せるようにする★（2026-07-30・Codex指摘6）
     #   全機種を書き直す作りだったので、
     #     ①更新タスクの「1日1機種」が実際には全機種だった

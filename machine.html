@@ -58,8 +58,8 @@
          照合が済んだ機種から、この文言を差し替えていく。 -->
     <p class="source-note">数値は各種解析情報をもとにまとめた当サイトの整理です。出典の照合は順次進めています。</p>
     <div id="previewBanner" class="preview-banner is-hidden">
-      <p class="preview-banner-label">⚠ 先行記事（解析待ち）</p>
-      <p class="preview-banner-body">この機種はまだ解析データが出揃っていません。天井・狙い目・設定差は判明次第、随時更新します。</p>
+      <p class="preview-banner-label">⚠ このページは出典で確認が取れた項目のみ掲載しています。</p>
+      <p class="preview-banner-body">未掲載の項目は確認でき次第更新します。</p>
       <p id="previewReleaseDate" class="preview-banner-date"></p>
     </div>
     <div class="hero-actions">
@@ -282,12 +282,13 @@ function resolveMachineSlug() {
     }
   }
 
-  // 先行記事モード：status === "preview" の場合、バナーを表示し狙い目チェッカー系を隠す
-  if (machine.status === "preview") {
+  // 解析待ちモード：preview または 新台経路(page-decision/v1) はバナーを表示し
+  // 狙い目チェッカー系を隠す（時間経過で嘘になる語は使わない）
+  if (machine.status === "preview" || machine.publication_policy === "page-decision/v1") {
     const banner = document.getElementById("previewBanner");
     if (banner) banner.classList.remove("is-hidden");
     const dateEl = document.getElementById("previewReleaseDate");
-    if (dateEl && machine.release_date) dateEl.textContent = `導入予定日: ${machine.release_date}`;
+    if (dateEl && machine.release_date) dateEl.textContent = `登場時期: ${machine.release_date}（公式確認）`;
     // 解析データが必要なブロックを非表示
     const evBlock = document.getElementById("evTableBlock");
     if (evBlock) evBlock.classList.add("is-hidden");
@@ -302,8 +303,8 @@ function resolveMachineSlug() {
   }
   // ポチポチくん対応状況（ポチポチくんに飛んでも機能しない機種は無効化して理由を表示）
   const pochipochiStatus = (function() {
-    // 先行記事（解析待ち）
-    if (machine.status === "preview") return { available: false, reason: "解析データ判明後に対応" };
+    // 解析待ち（preview / 新台経路）
+    if (machine.status === "preview" || machine.publication_policy === "page-decision/v1") return { available: false, reason: "解析データ判明後に対応" };
     // 小役による設定差が元々ない機種（ジャグラー系・ノーマル系・一部AT）
     const noSettingDiff = ['enen2','karakuri','kaguya','valvrave2','sf5','chibaryo2','tekken6','tokyo_ghoul','koukaku','biohazard','tensura','dumbbell','mhrise','sengoku_otome4','sao','bandori','hanma_baki','yorumungando','tolove_darkness','zenigata5','enen','madomagi_forte','burning_express','akudama','neoplanet','lupin_daikokaisha','zettai_shougeki4','babel','milliongod_kiseki','animal_dotch'];
     if (noSettingDiff.includes(slug)) return { available: false, reason: "小役による設定差なし" };

@@ -30,6 +30,9 @@ import sys
 import unicodedata
 from pathlib import Path
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import page_decision as _pd  # noqa: E402  ★区分の唯一の判定箇所★
+
 try:
     sys.stdout.reconfigure(encoding="utf-8")
 except Exception:
@@ -353,6 +356,9 @@ def load_rows(source: "Path | None" = None):
                 limit=_scalar_limit(m.get("limit")),
                 tenjo_display=m.get("tenjo_display"),
                 status=m.get("status", "complete"),
+                # ★新台経路(AUTO_*)の区分★（2026-08-04・Codex72回目。
+                #   status欠落を complete に化けさせない）
+                mclass=_pd.machine_class(m),
                 unit=c.get("unit"),
                 # スルー天井はモードキー'suru'に加え'through'表記の機種がある
                 # （バジ天膳/からくり/まどマギフォルテ/沖ドキDUOアンコールが漏れていた・2026-07-13修正）
@@ -368,16 +374,16 @@ def load_rows(source: "Path | None" = None):
 def yome(r) -> str:
     # ★先行記事は strategy があっても分類を断定しない★（Codex 18巡目・二重防御）
     #   公開射影が strategy を落とすので通常は来ないが、生成器側でも守る。
-    if r.get("status") == "preview":
-        return "解析待ち（先行記事）"
+    if r.get("status") == "preview"             or r.get("mclass", "LEGACY_COMPLETE") != "LEGACY_COMPLETE":
+        return "解析待ち"
     s = (r.get("strategy") or "").strip()
     if s:
         return s
     # ★先行記事（解析待ち）に分類を断定しない★（Codex 15巡目 (b)-1 / 17巡目 (b)-1）
     #   狙い目が空なだけで「設定狙い向け」と書くと、まだ分からないことを断定してしまう。
     #   一覧からは外さず（早見表は全機種の表なので）、書き方だけを正しくする。
-    if r.get("status") == "preview":
-        return "解析待ち（先行記事）"
+    if r.get("status") == "preview"             or r.get("mclass", "LEGACY_COMPLETE") != "LEGACY_COMPLETE":
+        return "解析待ち"
     # ★分類を断定しない★（Codex 25巡目 (a)-1）
     #   狙い目が空なだけで「設定狙い向け」と書くのは、公開データで裏取りしていない分類。
     return "狙い目情報なし"
@@ -606,7 +612,9 @@ def _meta_len_of(file: str, prose_all: dict) -> str:
 def _build_pages(rows: list, prose_all: dict) -> tuple:
     """機種データと散文から、ハブ4ページのHTMLを組み立てる（書き込みはしない）。"""
     # ランキング系は先行記事を除く（未確定の数値で順位を付けない）
-    ranked = [r for r in rows if r.get("status") != "preview"]
+    # ★新台経路(AUTO_*)も明示除外★（checker無しの自然除外に頼らない・Codex72回目）
+    ranked = [r for r in rows if r.get("status") != "preview"
+              and r.get("mclass", "LEGACY_COMPLETE") == "LEGACY_COMPLETE"]
     A = dataset_A(ranked)
     C = dataset_C(ranked)
     D = dataset_D(ranked)

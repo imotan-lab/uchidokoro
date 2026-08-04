@@ -1,0 +1,6 @@
+{
+ "schema_version": "indexing-policy/v1",
+ "mode": "normal",
+ "reason": "",
+ "_why": "新台経路（page-decision/v1）の緊急override。force_noindex_new_auto にするとAUTO機種全部をnoindex・sitemap除去。欠落・破損・未知modeはビルド停止（自動で倒さない）。既存のstatus契約の機種には効かない。"
+}

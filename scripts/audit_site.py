@@ -60,6 +60,7 @@ BASE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE / "scripts"))
 from ci_safe import redact as _redact   # noqa: E402  ★CIでは原文を出さない★
 import safe_json as _sj                 # noqa: E402  ★壊れた入力は診断で止める★
+import page_decision as _pd            # noqa: E402  ★区分の唯一の判定箇所★
 
 # ★ビルドの出力は監査の対象外★（2026-07-30）
 #   .preview-site/ は公開されない写し（全ページ noindex・robots全面Disallow）、
@@ -225,15 +226,21 @@ def check_7_sitemap_count(machines: list) -> list[str]:
     sm = load_text(BASE / "sitemap.xml")
     sitemap_machine_slugs_list = re.findall(r"/machines/([^/]+)/", sm)
     sitemap_machine_slugs = set(sitemap_machine_slugs_list)
-    complete_slugs = set(m["slug"] for m in machines if m.get("status") != "preview")
-    preview_slugs = set(m["slug"] for m in machines if m.get("status") == "preview")
+    # ★区分は page_decision.machine_class が唯一の判定箇所★（2026-08-04・Codex71〜72回目）
+    #   index対象 = LEGACY_COMPLETE ∪ AUTO_INDEXABLE ／ noindex対象 = LEGACY_PREVIEW ∪ AUTO_PENDING
+    complete_slugs = set(m["slug"] for m in machines
+                         if _pd.machine_class(m) in ("LEGACY_COMPLETE",
+                                                     "AUTO_INDEXABLE"))
+    preview_slugs = set(m["slug"] for m in machines
+                        if _pd.machine_class(m) in ("LEGACY_PREVIEW",
+                                                    "AUTO_PENDING"))
     machine_slugs = complete_slugs | preview_slugs
     missing_in_sitemap = sorted(complete_slugs - sitemap_machine_slugs)
     extra_in_sitemap = sorted(sitemap_machine_slugs - machine_slugs)
-    # preview機種はnoindex恒久ポリシー（2026-07-09）＝sitemap掲載はnoindexと信号矛盾になるため禁止
+    # noindex対象のsitemap掲載はnoindexと信号矛盾になるため禁止
     preview_in_sitemap = sorted(preview_slugs & sitemap_machine_slugs)
     if preview_in_sitemap:
-        ngs.append(f"sitemap.xml にpreview機種が掲載（noindexと矛盾・昇格時にauto-addが追加する運用）: {preview_in_sitemap[:5]}")
+        ngs.append(f"sitemap.xml にnoindex対象（preview/AUTO_PENDING）の機種が掲載（noindexと信号矛盾）: {preview_in_sitemap[:5]}")
     if missing_in_sitemap:
         ngs.append(f"sitemap.xml に未登録のcomplete機種 {len(missing_in_sitemap)}件: {missing_in_sitemap[:5]}")
     if extra_in_sitemap:
@@ -307,7 +314,8 @@ def check_9_article_length(machines: list) -> list[str]:
     ngs = []
     detail_dir = BASE / "assets" / "data" / "machine-details"
     for m in machines:
-        if m.get("status") == "preview":
+        if _pd.machine_class(m) != "LEGACY_COMPLETE":
+            # ★preview と新台経路(AUTO_*)は対象外★（網羅性を保証しない設計・Codex72回目）
             continue
         slug = m["slug"]
         p = detail_dir / f"{slug}.json"
@@ -494,7 +502,8 @@ def check_16_writing_style(machines: list) -> list[str]:
         return bool(_re.search(r"(?:だ|である|した|する|った|ない|だが|だろう|だろ|なる|させる|られる|られた)$", last))
 
     for m in machines:
-        if m.get("status") == "preview":
+        if _pd.machine_class(m) != "LEGACY_COMPLETE":
+            # ★preview と新台経路(AUTO_*)は対象外★（網羅性を保証しない設計・Codex72回目）
             continue
         slug = m["slug"]
         p = detail_dir / f"{slug}.json"
@@ -654,7 +663,8 @@ def check_21_prerender(machines: list) -> list[str]:
         if '>機種名</h1>' in text:
             ngs.append(f"machines/{slug}/index.html: h1 が『機種名』プレースホルダのまま（要プリレンダ）")
         # articleSections が空（先行記事除く・本文があるはず）
-        if '<div id="articleSections"></div>' in text and m.get("status") != "preview":
+        if ('<div id="articleSections"></div>' in text
+                and _pd.machine_class(m) == "LEGACY_COMPLETE"):
             ngs.append(f"machines/{slug}/index.html: 本文(articleSections)が空シェルのまま（要プリレンダ）")
     return ngs
 
@@ -718,11 +728,12 @@ def check_24_robots_noindex(machines: list) -> list[str]:
             continue  # 実在チェックは check_6 の担当
         text = load_text(page)
         has_noindex = bool(re.search(r"<meta[^>]*name=[\"']robots[\"'][^>]*content=[\"'][^\"']*noindex", text, re.I))
-        is_preview = m.get("status") == "preview"
-        if is_preview and not has_noindex:
-            ngs.append(f"{slug}: preview なのに noindex が無い（build_machine_pages.py 再実行で付与される）")
-        if (not is_preview) and has_noindex:
-            ngs.append(f"{slug}: complete なのに noindex が残留（検索から消える事故。build_machine_pages.py 再実行で解除される）")
+        # ★区分は machine_class（preview/AUTO_PENDING=noindex・complete/AUTO_INDEXABLE=index）★
+        want_noindex = _pd.machine_class(m) in ("LEGACY_PREVIEW", "AUTO_PENDING")
+        if want_noindex and not has_noindex:
+            ngs.append(f"{slug}: noindex対象（{_pd.machine_class(m)}）なのに noindex が無い")
+        if (not want_noindex) and has_noindex:
+            ngs.append(f"{slug}: index対象（{_pd.machine_class(m)}）なのに noindex が残留（検索から消える事故）")
     return ngs
 
 
@@ -875,6 +886,8 @@ def check_27_hub_counts(machines: list) -> list[str]:
             limit=_lim,
             # ★status を入れ忘れていて preview 除外が効いていなかった★（Codex 17巡目 (b)-1）
             status=m.get("status", "complete"),
+            # ★新台経路(AUTO_*)はランキング母集団から明示除外★（2026-08-04・Codex72回目）
+            mclass=_pd.machine_class(m),
             has_suru=bool(c.get("hasSuru") or "suru" in modes or "through" in modes),
             has_cycle=bool(c.get("hasCycle") or "cycle" in modes),
             ncau=ncau,
@@ -886,7 +899,9 @@ def check_27_hub_counts(machines: list) -> list[str]:
     # ★A/C/D は先行記事を除く★（Codex 18巡目 (b)-3）
     #   本番のハブは公開射影（preview は数値を落とす）を読むので、
     #   authoring の数値で分類すると「件数が合わない」という誤警告になる。
-    rows = [r for r in rows if r.get("status") != "preview"]
+    rows = [r for r in rows
+            if r.get("status") != "preview"
+            and r.get("mclass") == "LEGACY_COMPLETE"]
     A = [r for r in rows
          if r["unit"] == "G" and isinstance(r["limit"], (int, float))
          and not r["has_cycle"] and r["limit"] < 1000

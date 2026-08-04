@@ -26,6 +26,7 @@ import re
 from collections import Counter, defaultdict
 
 import gates
+import page_decision as _pd
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(BASE, "assets", "data")
@@ -39,6 +40,14 @@ def provisional(m: dict) -> dict:
     暫定状態はここ1箇所で決め、dryrun からもこれを使う。
     """
     sim = dict(m)
+    # ★新台経路（page-decision/v1）は status より先に判定する★（2026-08-04・Codex71〜72回目）
+    #   statusを持たないため、下の分岐だと LEGACY_SEARCH（公開・index）へ倒れていた。
+    #   v1 では gates の公開経路に載せない＝既存の非公開値 CANDIDATE に倒す
+    #   （lifecycle に新しい値を作らない。未知値は validate_machine が拒否するため）。
+    if _pd.is_auto(m):
+        _pd.machine_class(m)               # ★壊れた判定書はここで止まる（fail-closed）★
+        sim["lifecycle"] = "CANDIDATE"
+        return sim
     # ★旧statusは許容値を明示列挙し、未知値は公開しない（fail-closed）★
     #   タイプミスや未知値が LEGACY_SEARCH（公開）へ落ちるのを防ぐ（Codex 20巡目 #4）。
     status = m.get("status")

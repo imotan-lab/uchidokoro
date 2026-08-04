@@ -175,14 +175,22 @@ def build_post_text(entry: dict, release_date: str | None) -> str:
     url = f"{MACHINE_URL_BASE}{slug}/"
     hashtags = build_hashtags(entry)
     is_preview = status == "preview"
+    # ★新台経路（page-decision/v1）の第3の文面★（2026-08-04・Codex72回目。
+    #   「先行記事」「導入予定」の語を使わない・狙い目/天井を名乗らない）
+    is_auto = entry.get("publication_policy") == "page-decision/v1"
 
     def build(nm: str) -> str:
-        if is_preview:
-            # 先行記事モード：解析前の早期告知
-            lines = ["【新台情報・先行記事】", nm]
+        if is_auto:
+            lines = ["【新台情報】", nm]
             if release_date:
-                lines.append(f"導入予定: {release_date}")
-            lines += ["", "機種概要を先行公開（解析データは判明次第更新）", url, "", hashtags]
+                lines.append(f"登場時期: {release_date}（公式確認）")
+            lines += ["", "確認が取れた項目のみ掲載（判明次第更新）", url, "", hashtags]
+        elif is_preview:
+            # 解析待ちの早期告知
+            lines = ["【新台情報】", nm]
+            if release_date:
+                lines.append(f"登場時期: {release_date}")
+            lines += ["", "機種概要を公開（解析データは判明次第更新）", url, "", hashtags]
         else:
             # 完全記事モード：通常の新台追加告知
             lines = ["【新台追加】", nm]
@@ -256,8 +264,11 @@ def main():
         current = load_json(MACHINES_PATH, [])
         _log(f"machines.json 読み込み成功: {len(current)}件")
         preview_count = sum(1 for e in current if e.get("status") == "preview")
-        complete_count = len(current) - preview_count
-        _log(f"内訳: 完全記事{complete_count}件 / 先行記事{preview_count}件")
+        auto_count = sum(1 for e in current
+                         if e.get("publication_policy") == "page-decision/v1")
+        complete_count = len(current) - preview_count - auto_count
+        _log(f"内訳: 完全記事{complete_count}件 / 解析待ち{preview_count}件 / "
+             f"新台経路{auto_count}件")
     except Exception as e:
         _log_exception("machines.json 読み込み失敗", e)
         return 1
