@@ -215,15 +215,28 @@ def content_findings(path: str) -> list[str]:
             return ["content:UTF-8として読めないので中身を確かめられません"]
     except Exception as e:                # noqa: BLE001
         return [f"content:読めないので確かめられません（{type(e).__name__}）"]
-    if path.lower().endswith(".json"):
-        # ★壊れたJSONは「秘密が無い」と見なさない★（2026-08-04・Codex85回目）
-        #   以前は解析に失敗すると黙って素通りしていたので、末尾カンマ等で
-        #   壊れたファイルに app_password が入っていても鍵の検査が動かず、
-        #   そのままコピーされ得た（いま動いているガードのfail-open）。
+    # ★中身がJSONなら、拡張子に関係なく鍵を確かめる★（2026-08-04・Codex88回目）
+    #   .json の時しか見ていなかったので、許可対象の .md に
+    #   {"app_password": "..."} と書けば素通りできた。
+    #   ★NUL・圧縮ファイルの先頭印もここで拒否する★（テキストの皮をかぶった別物）
+    if bytes([0]) in raw:
+        return ["content:テキストではありません（NULが入っています）"]
+    for magic, name in ((b"PK" + bytes([3, 4]), "zip"),
+                        (bytes([0x1f, 0x8b]), "gzip"),
+                        (b"7z" + bytes([0xbc, 0xaf, 0x27, 0x1c]), "7z"),
+                        (b"Rar!", "rar")):
+        if raw.startswith(magic):
+            return [f"content:圧縮ファイルの中身です（{name}）"]
+    _txt = text.strip()
+    if _txt[:1] in ("{", "["):
         try:
-            out.extend(_json_key_findings(json.loads(text)))
+            out.extend(_json_key_findings(json.loads(_txt)))
         except Exception as e:            # noqa: BLE001
-            out.append(f"json:壊れていて中身を確かめられません（{type(e).__name__}）")
+            if path.lower().endswith(".json"):
+                out.append(f"json:壊れていて中身を確かめられません（{type(e).__name__}）")
+    elif path.lower().endswith(".json"):
+        # ★壊れたJSONは「秘密が無い」と見なさない★（2026-08-04・Codex85回目）
+        out.append("json:壊れていて中身を確かめられません（JSONとして読めません）")
     for rule, pat in DENY_VALUE_PATTERNS:
         if pat.search(text):
             out.append(f"value:{rule}")
@@ -600,10 +613,39 @@ def selftest() -> int:
       "（先頭50件しか見ていなかった＝ガードのfail-open）",
       any("app_password" in x for x in content_findings(_arr9)))
     _u16 = os.path.join(_d9, "note.md")
-    open(_u16, "wb").write("ghp_abcdefghij0123456789".encode("utf-16"))
+    open(_u16, "wb").write("これはUTF-16で保存した文章です".encode("utf-16"))
     t("★★UTF-16で保存すれば素通り、を防ぐ★★"
       "（errors=ignore で文字の間にNULが入り正規表現に当たらなかった）",
       any("UTF-8として読めない" in x for x in content_findings(_u16)))
+    # ★中身がJSONなら拡張子に関係なく確かめる★（2026-08-04・Codex88回目）
+    _md9 = os.path.join(_d9, "note.md")
+    open(_md9, "w", encoding="utf-8").write(
+        '{"app_password":"abcd efgh ijkl mnop"}')
+    t("★★.md に JSON を書いても鍵の検査から逃げられない★★"
+      "（拡張子でしか見ていなかった＝ガードのfail-open）",
+      any("app_password" in x for x in content_findings(_md9)))
+    _zip9 = os.path.join(_d9, "fake.md")
+    open(_zip9, "wb").write(b"PK" + bytes([3, 4]) + b"rest")
+    t("★★テキストの皮をかぶった圧縮ファイルも通さない★★",
+      any("圧縮ファイル" in x for x in content_findings(_zip9)))
+    _nul9 = os.path.join(_d9, "nul.md")
+    open(_nul9, "wb").write(b"abc" + bytes([0]) + b"def")
+    t("　NULが入っているファイルはテキストとして扱わない",
+      any("NUL" in x for x in content_findings(_nul9)))
+    _plain9 = os.path.join(_d9, "plain.md")
+    open(_plain9, "w", encoding="utf-8").write("# 設計メモ" + chr(10) + "ふつうの文章")
+    t("　ふつうの設計メモはこれまでどおり通る",
+      content_findings(_plain9) == [])
+    # ★最後のコピー拒否まで確かめる★（Codex88回目・防御の厚み）
+    _out9 = os.path.join(_d9, "out")
+    os.makedirs(_out9, exist_ok=True)
+    for _nm9, _why9 in ((_md9, ".mdに書いたJSON"),
+                        (_arr9, "配列51件目の秘密"),
+                        (_u16, "UTF-16のファイル")):
+        _dst9 = os.path.join(_out9, os.path.basename(_nm9))
+        _rc9 = cmd_copy(_nm9, _dst9, False)
+        t(f"★★{_why9} は実際にコピーされない★★",
+          _rc9 != 0 and not os.path.exists(_dst9))
     t("★★読み取りに失敗したファイルも通さない★★",
       any("読めないので" in x
           for x in content_findings(os.path.join(_d9, "no_such_file.json"))))
