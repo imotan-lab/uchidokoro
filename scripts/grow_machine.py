@@ -102,9 +102,37 @@ def claims_grew(old_decision: dict, new_decision: dict) -> list:
     lost = [c for c in old if c not in new]
     if lost:
         return [f"確認済みだった事実が消えます: {', '.join(sorted(lost)[:5])}"]
-    if len(new) <= len(old):
-        return ["材料が増えていません（育てるものがありません）"]
     return []
+
+
+def confirmed_count(detail: dict) -> int:
+    """確定して載っている中身の数（未確定の印は数えない）。"""
+    def _n(x) -> int:
+        # ★入れ子を最後までたどる★（表→行→欄→部分）
+        if isinstance(x, tuple):
+            body = x[1:] if (x and x[0] == CELL) else x
+            return sum(_n(y) for y in body)
+        return 0 if x == ANY else 1
+
+    return sum(_n(u) for u in _units(detail))
+
+
+def nothing_new(old_dec: dict, new_dec: dict,
+                old_detail: dict, new_detail: dict) -> list:
+    """育てるものがあるか（★事実の数だけで見ない★）。
+
+    ★2026-08-05・Codex107回目の指摘★
+      claim ID は「CZ-Aがある」までしか表さないので、
+      **そのCZの継続G数や期待度が新たに確定しても増えない**。
+      claim の数だけを条件にしていたため、
+      いちばんやりたい「未確認の欄を埋める更新」が永久に通らなかった。
+      載っている確定内容が増えていれば、育てる価値がある。
+    """
+    grew_claims = len(list((new_dec or {}).get("claims") or [])) >         len(list((old_dec or {}).get("claims") or []))
+    grew_text = confirmed_count(new_detail) > confirmed_count(old_detail)
+    if grew_claims or grew_text:
+        return []
+    return ["育てるものがありません（確定した中身が増えていません）"]
 
 
 ANY = "\uE000"          # ★この欄は何が来てもよい（まだ確定していない）★
@@ -398,6 +426,9 @@ def plan_one(slug: str, gather=None, verify=None) -> dict:
     old_detail = _sj.read_json(dp, expect=dict) if os.path.isfile(dp) else {}
     lost = text_kept(old_detail, detail)
     out["problems"] += lost
+    out["problems"] += nothing_new(cur.get("page_decision"),
+                                   machine.get("page_decision"),
+                                   old_detail, detail)
     # ★「前に載っていた内容が再現できない」は人へ回す★（黙って止め続けない）
     if lost or any("消えます" in p for p in out["problems"]):
         ledger_once(
@@ -580,8 +611,6 @@ def selftest() -> int:
       claims_grew({"claims": ["a", "b"]}, {"claims": ["a"]})
       and "消えます" in claims_grew({"claims": ["a", "b"]},
                                     {"claims": ["a"]})[0])
-    t("　材料が増えていなければ何もしない",
-      claims_grew({"claims": ["a"]}, {"claims": ["a"]}))
     t("　増えていれば通る", not claims_grew({"claims": ["a"]},
                                             {"claims": ["a", "b"]}))
     # ── 前に載っていた内容が消える/変わる更新を止める（Codex102/103回目）
@@ -650,6 +679,35 @@ def selftest() -> int:
       not text_kept(d_thin, d_full))
     t("　逆に、確認できていた内容が「確認中」へ戻る更新は止める",
       bool(text_kept(d_full, d_thin)))
+    # ★claimが増えなくても、欄の中身が確定すれば育てる★（Codex107回目・再現した）
+    def _m2(**kw):
+        base = {"adopted": {"model_code": {"value": "L/1", "sources": ["a", "b"]},
+                            "payout_range": {"value": {"low": 97.0, "high": 110.0},
+                                             "sources": ["a", "b"]}},
+                "need_third": {}, "thin": {},
+                "ceilings": {"adopted": [], "need_third": []},
+                "at_specs": {"adopted": [{"mode": "MAIN_AT", "games": 30,
+                                          "net": 2.8, "sources": ["a", "b"]}],
+                             "need_third": []},
+                "czs": {"adopted": [], "need_third": []},
+                "setting_labels_seen": [], "setting_labels_unconfirmed": []}
+        base.update(kw)
+        return base
+
+    _thin = _m2(czs={"adopted": [{"name": "CZ-A", "sources": ["a", "b"]}],
+                     "need_third": []})
+    _rich = _m2(czs={"adopted": [{"name": "CZ-A", "games": 10, "rate": "50%",
+                                  "sources": ["a", "b"]}], "need_third": []})
+    _mt, _mr = (_ba.build_machine("x", "L機", "m", "https://e/x/", "2026-08", z)
+                for z in (_thin, _rich))
+    _dt, _dr = (_ba.build_detail("x", "L機", "2026-08", z)
+                for z in (_thin, _rich))
+    t("★★claimが増えなくても、欄の中身が確定すれば育てる★★（Codex107回目）",
+      _mt["page_decision"]["claims"] == _mr["page_decision"]["claims"]
+      and not nothing_new(_mt["page_decision"], _mr["page_decision"], _dt, _dr))
+    t("　中身が何も増えていなければ育てない",
+      bool(nothing_new(_mt["page_decision"], _mt["page_decision"], _dt, _dt)))
+    t("　確定した中身が減る方向は（別の検査で）止まる", bool(text_kept(_dr, _dt)))
     # ★1つの欄に確定と未確定が同居する場合★（Codex105回目・再現した）
     cz_mix = _mat(czs={"adopted": [{"name": "CZ-A", "games": 10,
                                     "rate_disputed": True,
