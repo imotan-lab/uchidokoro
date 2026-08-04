@@ -1651,6 +1651,13 @@ def run_one(name, official_url, maker, release, apply_it=False,
         res = _pub.publish_from_material(
             out["slug"], name, maker, official_url, release, mat,
             apply_it=True, before_write=before_write,
+            # ★どの公式ページで本人性を確かめたかを残す★（台帳#209）
+            identity_binding=vo.get("identity_binding")
+            or "OFFICIAL_PRODUCT_PAGE",
+            identity_evidence_ref=((vo.get("identity_evidence") or {})
+                                   .get("list_html_sha256", "")
+                                   + (f" #card{(vo.get('identity_evidence') or {}).get('card_index')}"
+                                      if vo.get("identity_evidence") else "")),
             # ★公開部が「途中」の目印を消す前に引き継ぐ★（Codex22回目）
             #   あとから作ると、その間に止まったときに目印がどこにも無くなる。
             on_written=lambda sl: _mark_push_pending(sl, "", "WRITTEN"))

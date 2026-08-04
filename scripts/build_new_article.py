@@ -157,10 +157,26 @@ def _fmt_release(ym: str) -> str:
     return f"{m.group(1)}年{int(m.group(2))}月" if m else str(ym or "")
 
 
-def build_machine(slug, name, maker, official_url, release, material) -> dict:
-    """machines.json に足す1件を作る。★確認できた項目だけ★"""
+# 本人性の結び付け方（どの公式ページで確かめたか）
+IDENTITY_BINDINGS = ("OFFICIAL_PRODUCT_PAGE", "MAKER_LIST_CARD")
+
+
+def build_machine(slug, name, maker, official_url, release, material,
+                  identity_binding: str = "", identity_evidence_ref: str = "") -> dict:
+    """machines.json に足す1件を作る。★確認できた項目だけ★
+
+    identity_binding: 個別ページで確かめたのか、同じ公式の一覧カードで
+      確かめたのか（2026-08-04・台帳#209）。★どちらも公式だが粒度が違う★ので
+      機械可読に残す。
+    """
     ident = {"manufacturer_id": maker, "official_product_url": official_url,
              "announced_name": name, "identity_tier": "CATALOG_BOUND"}
+    if identity_binding:
+        if identity_binding not in IDENTITY_BINDINGS:
+            raise BuildError(f"知らない本人性の結び付け方です: {identity_binding!r}")
+        ident["identity_binding"] = identity_binding
+        if identity_evidence_ref:
+            ident["identity_evidence_ref"] = str(identity_evidence_ref)[:120]
     if release:
         ident["market_release_date"] = release
     code = (material.get("adopted") or {}).get("model_code")
@@ -435,6 +451,20 @@ def selftest() -> int:
                            "2026-08", MAT_FULL)
     t("★★claim3件・2カテゴリ・固有ゲーム性あり → AUTO_INDEXABLE★★",
       _pd.machine_class(m_full) == "AUTO_INDEXABLE")
+    # ★どの公式ページで本人性を確かめたかを残す★（2026-08-04・台帳#209）
+    m_card = build_machine("lbinko", "Lすーぱぁびん娘", "bellco",
+                           "https://www.s-bellco.co.jp/products/slot/lbinko/",
+                           "2026-08", MAT, identity_binding="MAKER_LIST_CARD",
+                           identity_evidence_ref="sha256:abc #card0")
+    t("★★一覧カードで同定したことを機械可読に残す★★",
+      m_card["identity"]["identity_binding"] == "MAKER_LIST_CARD"
+      and m_card["identity"]["identity_evidence_ref"] == "sha256:abc #card0")
+    t("　結び付け方を書かなければ identity に入らない（既存の形のまま）",
+      "identity_binding" not in m["identity"])
+    t("★★知らない結び付け方は止める★★",
+      raises(lambda: build_machine("x", "X", "y",
+                                   "https://a.example/products/slot/x/", "2026-09",
+                                   {"adopted": {}}, identity_binding="でたらめ")))
     t("★狙い目は空のまま（当サイトの判断なので推測で埋めない）★", m["strategy"] == "")
     t("　型式が取れていれば identity に入り、段階が上がる",
       m["identity"]["regulatory_model_code"] == "Lびん娘NY1"

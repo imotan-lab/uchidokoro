@@ -570,7 +570,9 @@ def check_detail(slug: str, detail: dict) -> list:
 
 _IDENTITY_KEYS = {"manufacturer_id", "official_product_url", "announced_name",
                   "market_release_date", "identity_tier", "regulatory_model_code",
-                  "_model_code_sources"}
+                  "_model_code_sources",
+                  # ★どの公式ページで本人性を確かめたか★（2026-08-04・台帳#209）
+                  "identity_binding", "identity_evidence_ref"}
 _RELEASE_OK = re.compile(r"^(20[0-9]{2}-[0-9]{2}(-[0-9]{2})?)?$")
 
 
@@ -1087,7 +1089,8 @@ def render(slug: str, machine: dict, detail: dict) -> str:
 def publish_from_material(slug: str, name: str, maker: str, official_url: str,
                           release: str, material: dict,
                           apply_it: bool = False, before_write=None,
-                          on_written=None) -> dict:
+                          on_written=None, identity_binding: str = "",
+                          identity_evidence_ref: str = "") -> dict:
     """★材料から公開まで一気に通す（これが正しい入口）★
 
     ★2026-07-31・Codex指摘1★
@@ -1099,7 +1102,9 @@ def publish_from_material(slug: str, name: str, maker: str, official_url: str,
       公開の境界で組み立てれば、載る値は
       `build_new_article` が**採用済みの材料からしか作らない**ものに限られる。
     """
-    machine = _ba.build_machine(slug, name, maker, official_url, release, material)
+    machine = _ba.build_machine(slug, name, maker, official_url, release, material,
+                                identity_binding=identity_binding,
+                                identity_evidence_ref=identity_evidence_ref)
     detail = _ba.build_detail(slug, name, release, material)
     return _publish_prebuilt(slug, machine, detail, apply_it=apply_it,
                              before_write=before_write, on_written=on_written)
