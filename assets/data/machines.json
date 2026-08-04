@@ -11283,5 +11283,59 @@
   ],
   "checker": null,
   "limit": null
+ },
+ {
+  "slug": "garei_zero_re",
+  "name": "Lパチスロ 喰霊-零-Re",
+  "seo": {
+   "title": "Lパチスロ 喰霊-零-Re スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v1",
+  "page_decision": {
+   "schema_version": "page-decision/v1",
+   "indexable": false,
+   "confirmed_topics": [
+    "spec"
+   ],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "setting",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3",
+    "CATEGORIES_LT_2",
+    "NO_UNIQUE_GAMEPLAY"
+   ],
+   "claims": [
+    "model_code",
+    "payout_range"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-08-04",
+   "input_digest": "sha256:5da370da9cc7fef9614e23168f29a7294a460d9a9d535c1e9418a0efb1c76f99"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-08",
+  "identity": {
+   "manufacturer_id": "oizumi",
+   "official_product_url": "https://www.oizumi.co.jp/machine/garei-zero-re/",
+   "announced_name": "Lパチスロ 喰霊-零-Re",
+   "identity_tier": "CATALOG_CODE_MATCHED",
+   "identity_binding": "MAKER_LIST_CARD",
+   "identity_evidence_ref": "identity_evidence/13674f64333e5765e7fd009beb11fe73c52ed2f5c2b4498532d06218adf767fb.html #card0",
+   "market_release_date": "2026-08",
+   "regulatory_model_code": "Lパチスロ喰霊零Re/L3",
+   "_model_code_sources": [
+    "p-town.dmm.com",
+    "p-world.co.jp"
+   ]
+  }
  }
 ]
