@@ -166,7 +166,16 @@
    "status": "ACTIVE",
    "fetch": "render",
    "_checked": "2026-08-03 描画で30機種URL取得（静的はTLS握手拒否）。スロ専業。一覧はoizumi.co.jp・機種はwww.oizumi.co.jp/machine/配下。旧作の入れ子（dc500/dc711）は下の階層として対象外",
-   "list_marker": "機種一覧"
+   "list_marker": "機種一覧",
+   "allow_list_card_identity": true,
+   "list_card": {
+    "card_tag": "li",
+    "card_class": "slotItem",
+    "name_class": "name",
+    "type_class": "category",
+    "year_class": "__year"
+   },
+   "_why_list_card": "公式の証明書が期限切れで個別ページを取得できない（台帳#209）。一覧は読めており、カードに機種名・種目・登場年月が揃っているため、同定の根拠を一覧カードに置く（2026-08-04・Codex92回目で条件つき承認）"
   },
   "pioneer": {
    "name": "パイオニア",

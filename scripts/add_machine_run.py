@@ -52,6 +52,8 @@ import model_code_lookup as _mc       # noqa: E402
 import new_machine_watch as _nw       # noqa: E402
 import pending_machines as _pend      # noqa: E402
 import page_decision as _pdz          # noqa: E402
+import list_card_identity as _lci     # noqa: E402  ★一覧カードでの同定★
+import claim_identity as _ci          # noqa: E402  ★機種名の芯の照合★
 import prepush_gate as _pg            # noqa: E402
 import publish_new_machine as _pub    # noqa: E402
 import quarantine_machines as _quar   # noqa: E402
@@ -246,6 +248,9 @@ def discover(persist: bool = True) -> dict:
             _log(f"  ✗ {mid}: {r['problem'][:120]}")
             continue
         out["watched"].append(mid)
+        # ★state=OK の一覧だけを控える★（あとで一覧カード同定に使う唯一の証跡）
+        if r.get("list_html"):
+            LIST_SNAPSHOT[mid] = r["list_html"]
         # ★対応していない形のリンクが混ざっていたら台帳へ★（Codex36回目・社は止めない）
         for w_ in (r.get("shape_warnings") or [])[:5]:
             out["problems"].append(
@@ -809,6 +814,47 @@ def _blocking(problems: list) -> list:
     return [p for p in problems if any(w in p for w in BLOCKING)]
 
 
+# ★その晩に「正常に読めた」一覧のスナップショット★（メーカーID → HTML）
+#   ★同じ証跡を使う★（2026-08-04・Codex92回目。公開前に取り直すと、
+#     夜の見張りが確かめた残存率・急増・描画の安定とは別物になる）
+LIST_SNAPSHOT: dict = {}
+
+
+def _card_identity(name: str, official_url: str, maker: str, reasons: list):
+    """公式の個別ページが読めない時だけ、同じ公式の一覧カードで同定する。
+
+    条件を1つでも欠いたら None（＝従来どおり「取得できません」で止まる）。
+    """
+    if not _lci.failure_allowed(reasons):
+        return None                       # 許した失敗（証明書・TLS）以外は代替しない
+    try:
+        cats = _sj.read_json(_nw.CATALOGS, expect=dict)["catalogs"]
+        conf = cats.get(maker) or {}
+    except Exception as e:                # noqa: BLE001
+        _log(f"  一覧カードでの同定: メーカー名簿を読めません（{e}）")
+        return None
+    if not conf.get("allow_list_card_identity") or not conf.get("list_card"):
+        return None                       # ★メーカーごとの明示許可制★
+    html = LIST_SNAPSHOT.get(maker)
+    if not html:
+        _log("  一覧カードでの同定: その晩に正常に読めた一覧がありません")
+        return None
+    try:
+        got = _lci.identify(html, conf["list_card"], official_url)
+    except _lci.CardError as e:
+        _log(f"  一覧カードでの同定: {e}")
+        return None
+    if not got["ok"]:
+        _log("  一覧カードでの同定: " + " / ".join(got["problems"])[:160])
+        return None
+    # ★名前は一覧カードのものを正として、こちらの名前と芯で照合する★
+    #   （表記ゆれは吸収するが、別機種は通さない＝既存の正規化を使う）
+    if _ci.normalize_core(got["name"]) != _ci.normalize_core(name):
+        _log(f"  一覧カードの機種名と一致しません（{got['name']!r} / {name!r}）")
+        return None
+    return got
+
+
 def verify_official(name: str, official_url: str,
                     maker: str = "", release: str = "",
                     release_is_cache: bool = False) -> dict:
@@ -844,6 +890,23 @@ def verify_official(name: str, official_url: str,
     try:
         html = _nw._get(official_url)
     except Exception as e:
+        # ★取得できない時、同じ公式の一覧カードで確かめ直す★
+        #   （2026-08-04・台帳#209、Codex92回目で条件つき承認）
+        #   ★「取得できません」という理由を消すのではなく、
+        #     名前・種目・登場年月を**一覧から取り直して同じだけ確かめる**★
+        # ★失敗の中身まで見る★（2026-08-04。_get の文言は
+        #   「取得できません（URLError）」までしか書かないので、
+        #   例外の連鎖をたどらないと証明書エラーだと分からなかった）
+        _ctx = getattr(e, "__context__", None)
+        _why = [str(e), str(_ctx or ""), str(getattr(_ctx, "reason", "") or "")]
+        card = _card_identity(name, official_url, maker, _why)
+        if card is not None:
+            out["release"] = card["release"]
+            out["identity_binding"] = "MAKER_LIST_CARD"
+            out["identity_evidence"] = card["evidence"]
+            _log(f"  公式の個別ページを取得できないため、同じ公式の一覧カードで"
+                 f"同定しました: {card['name']} / {card['release']}")
+            return out
         out["problems"].append(f"公式ページを取得できません: {e}")
         return out
     final_url = str(((_fin or {}).get("url") if isinstance(_fin, dict) else None)

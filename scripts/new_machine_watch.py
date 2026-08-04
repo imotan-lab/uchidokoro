@@ -1162,6 +1162,10 @@ def scan_maker(maker_id: str, conf: dict, seen: dict, record: bool = True) -> di
                           "名簿の直しが要ります。『新台なし』とは扱いません")
         out["state"] = "PARSE_SUSPECT"
         return out
+    # ★読んだ一覧そのものを渡す★（2026-08-04・Codex92回目。
+    #   公開前に取り直すと、この見張りが確かめた残存率・急増・描画の安定とは
+    #   別のスナップショットになる）
+    out["list_html"] = html
     urls = product_urls(html, conf["list_url"], conf["link_prefix"])
     # ★パチンコと明記されたカードのURLを外す★（2026-08-02・Codex50回目）
     urls, _pachi = filter_slot_urls(html, conf["list_url"],
