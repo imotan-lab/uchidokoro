@@ -285,6 +285,35 @@ def plan_digest(plan: dict) -> str:
     ).hexdigest()
 
 
+# ★試験用の差し替え口★（2026-08-06・Codex115回目のP0-1）
+#   以前は `verify` / `guard` を引数で差し替えられたので、
+#   偽の関所と偽の台帳を渡せば**任意の値を書けた**。
+#   本番の関数からは引数を消し、差し替えは
+#   **環境変数 UCHI_AEF_TEST_HOOKS=1 のときだけ**登録できるようにする。
+_HOOKS = {"verify": None, "guard": None}
+
+
+def _install_test_hooks(verify=None, guard=None) -> None:
+    """★試験専用★ 本番では環境変数が無いので必ず失敗する。"""
+    if os.environ.get("UCHI_AEF_TEST_HOOKS") != "1":
+        raise Abort("試験用の差し替えは、この環境では使えません")
+    _HOOKS["verify"], _HOOKS["guard"] = verify, guard
+
+
+def _verifier():
+    if _HOOKS["verify"] and os.environ.get("UCHI_AEF_TEST_HOOKS") == "1":
+        return _HOOKS["verify"]
+    import verify_claims as _vc
+    return lambda d: _vc.run_data(d, 2)
+
+
+def _guard():
+    if _HOOKS["guard"] and os.environ.get("UCHI_AEF_TEST_HOOKS") == "1":
+        return _HOOKS["guard"]
+    import task_guard as _tg
+    return _tg
+
+
 class _Ticket:
     """★書き込みの許可証★（2026-08-05・Codex111回目のP0-1）
 
@@ -451,15 +480,15 @@ def _domain(url) -> str:
 # 本体
 # ─────────────────────────────────────────────
 
-def apply_contract(contract_path: str, token: str = "", apply_mode: bool = False,
-                   base: Path | None = None, verify=None,
-                   guard=None) -> dict:
+def apply_contract(contract_path: str, token: str = "",
+                   apply_mode: bool = False) -> dict:
     """★書き込みの唯一の入口★
 
     2026-08-06・Codex114回目: 書く直前の確認は `_commit_plan()` が
     **自分で契約を読み直して**行う。ここは下見と、予約の取り扱いだけ。
     `base` は受け取らない（契約の `base_path` が唯一の書き込み先）。
     """
+    verify, guard = _verifier(), _guard()
     c = load_contract(contract_path)
     proof = check_contract(c, verify=verify)
     base = Path(c["base_path"])
@@ -475,6 +504,25 @@ def apply_contract(contract_path: str, token: str = "", apply_mode: bool = False
         return out
     import hashlib as _h
     attempt = _h.sha256(f"{token}|{csha}".encode("utf-8")).hexdigest()[:16]
+    # ★先に予約を見る★（2026-08-06・Codex115回目のP0-2）
+    #   以前は先にジャーナルから元へ戻していたので、
+    #   「書き終わって記録もしたが、ジャーナルを消す前に落ちた」場合に
+    #   **ファイルを旧値へ戻したうえで『適用済み』と報告**していた。
+    try:
+        _r0 = guard.reservation(token)
+    except Exception:                     # noqa: BLE001
+        _r0 = {}
+    if _r0.get("state") == "APPLIED_LOCAL" and _r0.get("attempt_id") == attempt:
+        done_plan = plan_fix(base, c["slug"], c["field"], float(c["old"]),
+                             float(c["new"]), expect=None)
+        if done_plan.get("reason") and "想定した旧値" in str(done_plan["reason"]):
+            _journal_done(base, attempt, "APPLIED_LOCAL")   # もう新値になっている
+            out.update({"applied": True, "outcome": "APPLIED_LOCAL"})
+            return out
+        out["outcome"] = "UNKNOWN"
+        out["reason"] = ("記録は『適用済み』ですが、ファイルは旧値のままです。"
+                         "人が確かめてください")
+        return out
     left = unfinished_fix(base)
     if left:
         if left.get("attempt_id") != attempt:
@@ -491,8 +539,6 @@ def apply_contract(contract_path: str, token: str = "", apply_mode: bool = False
             out["outcome"] = "ROLLBACK_FAILED"
             out["reason"] = " / ".join(back["problems"])[:300]
             return out
-    if guard is None:
-        import task_guard as guard
     try:
         guard.begin_apply(token, slug=c["slug"], kind="fix",
                           contract_sha256=csha, attempt_id=attempt)
@@ -509,9 +555,14 @@ def apply_contract(contract_path: str, token: str = "", apply_mode: bool = False
         out["reason"] = f"予約を使えません: {e}"
         return out
     try:
-        got = _commit_plan(contract_path, token, verify=verify, guard=guard)
+        got = _commit_plan(contract_path, token)
     except Abort as e:
-        got = {"applied": False, "outcome": "NOT_APPLIED", "reason": str(e)}
+        # ★巻き戻しに失敗した結末を握りつぶさない★（Codex115回目のP0-3）
+        #   以前はここで NOT_APPLIED に潰していたので、
+        #   予約は「安全に戻した」に進み、ジャーナルまで消えていた。
+        got = {"applied": False, "reason": str(e),
+               "outcome": getattr(e, "outcome", "NOT_APPLIED"),
+               "unrestored": getattr(e, "unrestored", [])}
     out.update({k: v for k, v in got.items() if k not in ("contract", "_apply")})
     guard.advance(token, {"APPLIED_LOCAL": "APPLIED_LOCAL",
                           "ROLLED_BACK_VERIFIED": "ROLLED_BACK_VERIFIED",
@@ -580,6 +631,19 @@ def _journal_begin(base: Path, c: dict, csha: str, token: str,
         f.flush()
         os.fsync(f.fileno())               # ★電源が落ちても残るように★
     os.replace(tmp, p)
+    _sync_dir(p.parent)
+
+
+def _sync_dir(d) -> None:
+    """置き換えたことをフォルダにも残す（電源断への備え）。"""
+    try:
+        fd = os.open(str(d), os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    except (OSError, AttributeError):
+        pass
 
 
 def _journal_done(base: Path, attempt: str, outcome) -> None:
@@ -598,6 +662,7 @@ def _journal_done(base: Path, attempt: str, outcome) -> None:
     #   ジャーナルが残り、**以後の書き換えが全部ブロックされた**（試験で発覚）。
     if outcome in ("APPLIED_LOCAL", "ROLLED_BACK_VERIFIED", "NOT_APPLIED"):
         p.unlink()
+        _sync_dir(p.parent)
         return
     rec.update({"stage": "STUCK", "outcome": outcome})
     # ★やりかけの記録こそ確実に残す★（置き換えで書き、fsyncする）
@@ -620,8 +685,7 @@ def unfinished_fix(base: Path | None = None) -> dict:
         return {"stage": "UNKNOWN", "_why": f"記録が読めません: {e}"}
 
 
-def _commit_plan(contract_path: str, token: str, verify=None,
-                 guard=None) -> dict:
+def _commit_plan(contract_path: str, token: str) -> dict:
     """★書き込みはここだけ★（2026-08-06・Codex114回目の指摘1）
 
     ★受け取るのは「契約ファイルの場所」と「予約」だけ★
@@ -632,14 +696,13 @@ def _commit_plan(contract_path: str, token: str, verify=None,
       「試験用の関所と台帳」だけで、書く中身には一切触れない。
     """
     import hashlib
+    verify, guard = _verifier(), _guard()
     c = load_contract(contract_path)
     csha = _sha256_file(contract_path)
     check_contract(c, verify=verify)       # ★証拠は必ずここで確かめ直す★
     base = Path(c["base_path"])
     attempt = hashlib.sha256(
         f"{token}|{csha}".encode("utf-8")).hexdigest()[:16]
-    if guard is None:
-        import task_guard as guard
     plan = plan_fix(base, c["slug"], c["field"], float(c["old"]),
                     float(c["new"]), expect=c)
     res = plan
@@ -693,9 +756,12 @@ def _commit_plan(contract_path: str, token: str, verify=None,
             res["outcome"] = ("ROLLBACK_FAILED" if bad
                               else "ROLLED_BACK_VERIFIED")
             res["unrestored"] = bad
-            raise Abort("書き込みを取り消しました: " + str(e)
-                        + ("／★戻せませんでした: " + " / ".join(bad) + "★"
-                           if bad else ""))
+            ab = Abort("書き込みを取り消しました: " + str(e)
+                       + ("／★戻せませんでした: " + " / ".join(bad) + "★"
+                          if bad else ""))
+            ab.outcome = res["outcome"]   # ★結末を持たせて外へ伝える★
+            ab.unrestored = bad
+            raise ab
         res["applied"] = True
         res["outcome"] = "APPLIED_LOCAL"
     return res
@@ -740,13 +806,21 @@ class _DataLock:
             old = time.time() - os.path.getmtime(self.path) > 600
         except OSError:
             pass
-        if old or not self._alive(pid):
-            try:
-                os.remove(self.path)
-                return True
-            except OSError:
-                return False
-        return False
+        if not (old or not self._alive(pid)):
+            return False
+        # ★名前を変えられた1人だけが奪う★（2026-08-06・Codex115回目のP1-5）
+        #   「読んで、消して、作る」だと2つの処理が同じ鍵を消し合い、
+        #   後から来た方が**相手の新しい鍵**を消してしまえた。
+        mine = f"{self.path}.taking.{os.getpid()}"
+        try:
+            os.rename(self.path, mine)     # 成功するのは1人だけ
+        except OSError:
+            return False
+        try:
+            os.remove(mine)
+        except OSError:
+            pass
+        return True
 
     def __enter__(self):
         import time
@@ -914,8 +988,13 @@ def _t_apply(base, slug, field, old, new, apply_mode=False, expect=None):
 
     tok = _tg.reserve("t", slug, "fix", path=sp, budget_path=bp,
                       contract_sha256=sha(cp))["token"]
-    _r = apply_contract(cp, token=tok, apply_mode=True,
-                        verify=lambda e: 0, guard=_G)
+    os.environ["UCHI_AEF_TEST_HOOKS"] = "1"
+    _install_test_hooks(verify=lambda e: 0, guard=_G)
+    try:
+        _r = apply_contract(cp, token=tok, apply_mode=True)
+    finally:
+        _HOOKS["verify"] = _HOOKS["guard"] = None
+        os.environ.pop("UCHI_AEF_TEST_HOOKS", None)
     if os.environ.get("AEF_DEBUG") and not _r.get("applied"):
         print("   [debug]", slug, field, old, "->", new, "|", _r.get("reason"))
     return _r
@@ -1201,6 +1280,10 @@ def selftest() -> int:
 
     # ★許可証を自作しても、計画が契約と違えば書けない★（Codex113回目の指摘1）
     _p9 = plan_fix(Path(_b2), "x", "ceiling.normal.game", 800, 700)
+    # ★本番では差し替え口が使えない★（2026-08-06・Codex115回目のP0-1）
+    t("★★試験用の差し替えは、環境変数が無ければ使えない★★",
+      _raises_abort(lambda: _install_test_hooks(verify=lambda e: 0)))
+    _sig2 = list(_insp.signature(apply_contract).parameters)         if "_insp" in dir() else []
     # ★最終地点は契約ファイルしか受け取らない★（2026-08-06・Codex114回目）
     #   計画も許可証も外から渡せないので、「正しい指紋を自分で計算して
     #   自作の許可証で書く」という経路そのものが無くなった。
@@ -1209,6 +1292,11 @@ def selftest() -> int:
     t("★★書き込みの最終地点は、計画も許可証も受け取らない★★",
       _sig[:2] == ["contract_path", "token"]
       and not any(x in _sig for x in ("plan", "ticket", "base")))
+    t("★★本番の入口に差し替え口が無い★★（偽の関所・偽の台帳を渡せない）",
+      not any(x in _insp.signature(apply_contract).parameters
+              for x in ("verify", "guard", "base"))
+      and not any(x in _insp.signature(_commit_plan).parameters
+                  for x in ("verify", "guard", "plan", "ticket")))
     t("　契約に書き込み先（base_path）が無ければ読まない",
       _raises_contract(lambda: load_contract(_write("nb.json", dict(
           base_c, base_path="/存在しない場所")))))
@@ -1274,8 +1362,7 @@ def main() -> int:
         return selftest()
     if a.contract:
         try:
-            r = apply_contract(a.contract, token=a.token, apply_mode=a.apply,
-                               base=Path(a.base) if a.base else None)
+            r = apply_contract(a.contract, token=a.token, apply_mode=a.apply)
         except Exception as e:            # noqa: BLE001
             print(json.dumps({"applied": False,
                               "reason": f"契約を通せません: {e}"},

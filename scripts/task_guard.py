@@ -159,13 +159,19 @@ class _Exclusive:
             old = time.time() - os.path.getmtime(self.lock) > 600
         except OSError:
             pass
-        if old or not self._alive(pid):
-            try:
-                os.remove(self.lock)
-                return True
-            except OSError:
-                return False
-        return False
+        if not (old or not self._alive(pid)):
+            return False
+        # ★名前を変えられた1人だけが奪う★（2026-08-06・Codex115回目のP1-5）
+        mine = f"{self.lock}.taking.{os.getpid()}"
+        try:
+            os.rename(self.lock, mine)
+        except OSError:
+            return False
+        try:
+            os.remove(mine)
+        except OSError:
+            pass
+        return True
 
     def __enter__(self):
         import time
@@ -299,6 +305,13 @@ def reserve(task: str, slug: str, kind: str, path: str = STATE_PATH,
             raise GuardError(
                 f"{'既存記事の修正' if kind == 'fix' else '育てる処理'}は"
                 f"今日の上限です（{b['writes_' + kind]}件）")
+        # ★書き換えの枠でも「今日の担当」を守る★（Codex115回目のP1-6）
+        #   claim() を呼ばずに reserve() だけ使えば、何機種でも直せた。
+        cur = d.get("target_slug")
+        if cur and cur != slug:
+            raise GuardError(
+                f"今日はすでに {cur} を担当しています（1日{MACHINES_PER_DAY}機種）")
+        d["target_slug"] = slug
         token = f"{_today()}-{kind}-{slug}-{d['writes']['total'] + 1}"
         d["writes"]["total"] += 1
         d["writes"][kind] += 1
@@ -589,6 +602,11 @@ def _budget_tests(t, tmpdir) -> None:
                  "deadline_hhmm": "23:59"}, f)
 
     def res(kind, slug, close=True):
+        # ★1日1機種の縛りとは別に、予算の増減だけを見たい★
+        #   （担当は日ごとに1つなので、担当を書き換えてから取る）
+        _d0 = _load(sp)
+        _day(_d0)["target_slug"] = None
+        _save(sp, _d0)
         r = reserve("t", slug, kind, path=sp, budget_path=bp,
                     contract_sha256="sha256:" + "a" * 64)
         if close and r.get("token"):
@@ -619,6 +637,13 @@ def _budget_tests(t, tmpdir) -> None:
               contract_sha256="sha256:" + "a" * 64)["test"])
     # 止めたら、タスク名を変えても通らない
     halt("監査に引っかかったため", path=sp)
+    sp6 = os.path.join(tmpdir, "state_claim.json")
+    reserve("t", "きめた機種", "fix", path=sp6, budget_path=bp,
+            contract_sha256="sha256:" + "a" * 64)
+    t("★★claim を呼ばなくても、1日1機種は守られる★★（Codex115回目のP1-6）",
+      _raises(lambda: reserve("t", "ちがう機種", "fix", path=sp6, budget_path=bp,
+                              contract_sha256="sha256:" + "a" * 64),
+              "担当しています"))
     t("★★止めた日は、別のタスク名でも書けない★★",
       _raises(lambda: reserve("別のタスク", "g", "fix", path=sp,
                               budget_path=bp, contract_sha256="sha256:" + "a" * 64),
