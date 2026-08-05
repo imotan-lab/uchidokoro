@@ -289,6 +289,13 @@ def reserve(task: str, slug: str, kind: str, path: str = STATE_PATH,
         d = _day(data)
         if d.get("halted"):
             raise GuardError(f"今日は止めています（{d['halted']}）")
+        # ★書き換えの枠でも「今日の担当」を守る★（Codex115回目のP1-6）
+        #   claim() を呼ばずに reserve() だけ使えば、何機種でも直せた。
+        cur = d.get("target_slug")
+        if cur and cur != slug:
+            raise GuardError(
+                f"今日はすでに {cur} を担当しています（1日{MACHINES_PER_DAY}機種）")
+        d["target_slug"] = slug
         # ★締切を過ぎたら新しい書き換えに着手しない★（途中で朝を迎えないため）
         if datetime.now().strftime("%H:%M") >= b["deadline_hhmm"]:
             raise GuardError(
@@ -305,13 +312,6 @@ def reserve(task: str, slug: str, kind: str, path: str = STATE_PATH,
             raise GuardError(
                 f"{'既存記事の修正' if kind == 'fix' else '育てる処理'}は"
                 f"今日の上限です（{b['writes_' + kind]}件）")
-        # ★書き換えの枠でも「今日の担当」を守る★（Codex115回目のP1-6）
-        #   claim() を呼ばずに reserve() だけ使えば、何機種でも直せた。
-        cur = d.get("target_slug")
-        if cur and cur != slug:
-            raise GuardError(
-                f"今日はすでに {cur} を担当しています（1日{MACHINES_PER_DAY}機種）")
-        d["target_slug"] = slug
         token = f"{_today()}-{kind}-{slug}-{d['writes']['total'] + 1}"
         d["writes"]["total"] += 1
         d["writes"][kind] += 1
@@ -684,7 +684,7 @@ def _budget_tests(t, tmpdir) -> None:
                    contract_sha256="sha256:" + "a" * 64)["token"]
     begin_apply(tok3, "p", "fix", "sha256:" + "a" * 64, "t-p", path=sp3)
     t("★★やりかけの書き換えがあるうちは次を始めない★★",
-      _raises(lambda: reserve("t", "q", "fix", path=sp3, budget_path=bp,
+      _raises(lambda: reserve("t", "p", "fix", path=sp3, budget_path=bp,
                               contract_sha256="sha256:" + "a" * 64),
               "やりかけ"))
     t("★★決められた順にしか進めない★★（予約直後にpush済みとは書けない）",
