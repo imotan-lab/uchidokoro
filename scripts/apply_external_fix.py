@@ -236,7 +236,17 @@ def _atomic_write(path: Path, text: str) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
             f.write(text)
+            f.flush()
+            os.fsync(f.fileno())          # ★電源が落ちても中身が残るように★
         os.replace(tmp, path)
+        try:                              # ★置き換えたことも残す（親フォルダ）★
+            dfd = os.open(str(d), os.O_RDONLY)
+            try:
+                os.fsync(dfd)
+            finally:
+                os.close(dfd)
+        except (OSError, AttributeError):
+            pass                          # 対応していない環境では諦める
     except Exception:
         if os.path.exists(tmp):
             os.unlink(tmp)
@@ -249,6 +259,30 @@ def _atomic_write(path: Path, text: str) -> None:
 
 CONTRACT_SCHEMA = "fix-contract/v3"
 REPOSITORY_ID = "uchidokoro"
+
+
+def plan_digest(plan: dict) -> str:
+    """★どこを何に書き換えるかまで含めた計画の指紋★
+
+    2026-08-05・Codex113回目の指摘1: 許可証は誰でも作れるので、
+    「型を見るだけ」では**別の計画を渡して書かせる**ことができた。
+    契約にこの指紋を書いておき、書く直前に計画から作り直して突き合わせる。
+    これで「同じ件数だが別の場所を書いた」も止まる。
+    """
+    import hashlib
+    ap = plan.get("_apply") or {}
+    body = {
+        "slug": plan.get("slug"), "field": plan.get("field"),
+        # ★数は数として比べる★（900 と 900.0 で指紋が変わらないように）
+        "old": float(plan.get("old")), "new": float(plan.get("new")),
+        "struct_path": plan.get("struct_path"),
+        "edits": [{"path": e["path"], "count": int(e["count"]),
+                   "before": e["before"], "after": e["after"]}
+                  for e in (ap.get("edits") or [])],
+    }
+    return "sha256:" + hashlib.sha256(
+        json.dumps(body, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
 
 
 class _Ticket:
@@ -322,6 +356,8 @@ def load_contract(path) -> dict:
     # ★本文を何箇所直すのかを必ず書く★（2026-08-05・Codex111回目のP0-2）
     #   任意項目だったので、書かなければ検査ごと素通りできた。
     #   0 も許さない（構造化値だけ直して本文に旧値が残る形を作らせない）。
+    if not re.match(r"^sha256:[0-9a-f]{64}$", str(data.get("plan_sha256") or "")):
+        raise ContractError("契約に計画の指紋（plan_sha256）が要ります")
     n = data.get("prose_edit_count")
     if not isinstance(n, int) or isinstance(n, bool) or n < 1:
         raise ContractError(
@@ -422,8 +458,16 @@ def apply_contract(contract_path: str, token: str = "", apply_mode: bool = False
     """
     c = load_contract(contract_path)
     proof = check_contract(c, verify=verify)
+    _csha0 = _sha256_file(contract_path)
+    _tok0 = token
+    import hashlib as _h0
+    _attempt0 = _h0.sha256(f"{_tok0}|{_csha0}".encode("utf-8")).hexdigest()[:16]
     left = unfinished_fix(base or c.get("base") or BASE_DEFAULT)
-    if left and apply_mode:
+    # ★同じ回（同じ予約・同じ契約）なら続きから★（Codex113回目の指摘2）
+    #   以前はジャーナルがあるだけで必ず止まり、決定論のattempt_idが
+    #   まったく使われていなかった＝**落ちたら二度と再開できない**。
+    if left and apply_mode and not (
+            left.get("attempt_id") == _attempt0 and left.get("stage") == "APPLYING"):
         return {"applied": False, "outcome": "UNKNOWN",
                 "reason": f"前回の書き換えが決着していません（{left.get('attempt_id')} / "
                           f"{left.get('stage')}）。人が確かめてください"}
@@ -554,9 +598,21 @@ def _commit_plan(base: Path, plan: dict, ticket: _Ticket, guard) -> dict:
     ap = plan.get("_apply") or {}
     if not plan.get("ready") or not ap:
         raise Abort("書ける計画ではありません")
+    c = ticket.contract
+    # ★計画そのものが契約と一致すること★（許可証を自作しても通らない）
+    got_plan = plan_digest(plan)
+    if got_plan != str(c.get("plan_sha256") or ""):
+        raise Abort("計画が契約と違います（書き換える場所か中身が変わっています）")
+    for k in ("slug", "field"):
+        if str(plan.get(k)) != str(c.get(k)):
+            raise Abort(f"計画の {k} が契約と違います")
+    if float(plan.get("old")) != float(c["old"]) or \
+            float(plan.get("new")) != float(c["new"]):
+        raise Abort("計画の新旧の値が契約と違います")
     with _DataLock(base):                  # ★確認から置き換えまでを他に割り込ませない★
-        r = guard.reservation(ticket.token)
-        if r.get("state") != "APPLYING" or r.get("attempt_id") != ticket.attempt_id:
+        # ★予約の確認と書き込みを同じ鍵の中で★（Codex113回目の指摘4）
+        r = guard.hold_apply(ticket.token, ticket.attempt_id, ticket.sha256)
+        if r.get("state") != "APPLYING":
             raise Abort(f"予約の状態が変わりました（{r.get('state')}）")
         import hashlib
         c = ticket.contract
@@ -701,6 +757,14 @@ def plan_fix(base: Path, slug: str, field: str, old, new,
     return res
 
 
+def _raises_abort(fn) -> bool:
+    try:
+        fn()
+        return False
+    except Abort:
+        return True
+
+
 def _raises_contract(fn) -> bool:
     try:
         fn()
@@ -736,13 +800,15 @@ def _t_apply(base, slug, field, old, new, apply_mode=False, expect=None):
         json.dump(ev, f, ensure_ascii=False)
     plan = plan_fix(Path(base), slug, field, old, new)
     hits = sum(int(e["count"]) for e in plan.get("prose_edits") or []) or 1
+    pdig = plan_digest(plan)
     c = {"schema_version": CONTRACT_SCHEMA, "slug": slug, "field": field,
          "old": old, "new": new, "unit": FIELD_EVIDENCE.get(field, {}).get("unit", "G"),
          "evidence_file": evp, "evidence_sha256": sha(evp),
          "repository_id": REPOSITORY_ID,
          "machines_before_sha256": sha(mp) if mp.exists() else "",
          "detail_before_sha256": sha(dp) if dp.exists() else "",
-         "prose_edit_count": (expect or {}).get("prose_edit_count", hits)}
+         "prose_edit_count": (expect or {}).get("prose_edit_count", hits),
+         "plan_sha256": pdig}
     c.update({k: v for k, v in (expect or {}).items()
               if k in ("prose_edit_count", "machines_before_sha256",
                        "detail_before_sha256")})
@@ -759,6 +825,8 @@ def _t_apply(base, slug, field, old, new, apply_mode=False, expect=None):
         reservation = staticmethod(lambda t: _tg.reservation(t, path=sp))
         advance = staticmethod(lambda t, st, **k: _tg.advance(t, st, path=sp, **k))
         begin_apply = staticmethod(lambda t, **k: _tg.begin_apply(t, path=sp, **k))
+        hold_apply = staticmethod(
+            lambda t, a, c: _tg.hold_apply(t, a, c, path=sp))
 
     tok = _tg.reserve("t", slug, "fix", path=sp, budget_path=bp,
                       contract_sha256=sha(cp))["token"]
@@ -949,7 +1017,8 @@ def selftest() -> int:
               "repository_id": "uchidokoro",
               "machines_before_sha256": "sha256:" + "0" * 64,
               "detail_before_sha256": "sha256:" + "0" * 64,
-              "prose_edit_count": 1}
+              "prose_edit_count": 1,
+              "plan_sha256": "sha256:" + "0" * 64}
 
     def _try(c, verify=ok_verify):
         try:
@@ -1044,6 +1113,19 @@ def selftest() -> int:
           Path(_b2), "x", "ceiling.normal.game", 800, 700, True,
           expect=dict(_exp, machines_before_sha256="sha256:" + "0" * 64)
       )["reason"] or ""))
+
+    # ★許可証を自作しても、計画が契約と違えば書けない★（Codex113回目の指摘1）
+    _p9 = plan_fix(Path(_b2), "x", "ceiling.normal.game", 800, 700)
+    t("★★別の計画を渡しても書けない★★（許可証は誰でも作れるので計画を照合する）",
+      _raises_abort(lambda: _commit_plan(
+          Path(_b2), _p9,
+          _Ticket({"slug": "x", "field": "ceiling.normal.game", "old": 800,
+                   "new": 700, "plan_sha256": "sha256:" + "0" * 64},
+                  "sha256:" + "a" * 64, "tok", "att"), None)))
+    t("　計画の指紋は数の書き方（900 と 900.0）で変わらない",
+      plan_digest(plan_fix(Path(_b2), "x", "ceiling.normal.game", 800, 700))
+      == plan_digest(plan_fix(Path(_b2), "x", "ceiling.normal.game",
+                              800.0, 700.0)))
 
     # ── ★書き込みの巻き戻し★（片方だけ書かれた状態を残さない）
     import shutil as _sh

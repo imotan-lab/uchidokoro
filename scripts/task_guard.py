@@ -190,8 +190,9 @@ NEXT_OK = {
     "RESERVED": ("DEFERRED", "UNKNOWN"),
     "APPLYING": ("APPLIED_LOCAL", "ROLLED_BACK_VERIFIED", "ROLLBACK_FAILED",
                  "UNKNOWN"),
-    "APPLIED_LOCAL": ("VALIDATED", "ROLLED_BACK_VERIFIED", "ROLLBACK_FAILED",
-                      "UNKNOWN"),
+    # ★書き終わったものを「巻き戻した」と記録できないようにする★
+    #   （実ファイルは適用済みなのに予約だけ巻き戻し、という食い違いを防ぐ）
+    "APPLIED_LOCAL": ("VALIDATED", "ROLLBACK_FAILED", "UNKNOWN"),
     "VALIDATED": ("COMMITTED", "ROLLED_BACK_VERIFIED", "ROLLBACK_FAILED",
                   "UNKNOWN"),
     "COMMITTED": ("PUSH_CONFIRMED", "UNKNOWN"),
@@ -350,6 +351,40 @@ def begin_apply(token: str, slug: str, kind: str, contract_sha256: str,
         return hit
 
 
+def hold_apply(token: str, attempt_id: str, contract_sha256: str,
+               path: str = STATE_PATH) -> dict:
+    """★書く直前に、その回の持ち主であることを鍵の中で確かめる★
+
+    2026-08-05・Codex113回目の指摘3・4:
+      同じ attempt_id なら複数のプロセスが両方 begin_apply を通れたので、
+      片方が書いた後にもう片方が「巻き戻した」と記録し、
+      **実ファイルは適用済みなのに予約は巻き戻し済み**という食い違いが作れた。
+      ここでは持ち主（owner）を1つに決め、違う持ち主は断る。
+      すでに書き終わっている（APPLIED_LOCAL）なら、その結果をそのまま返す。
+    """
+    import os as _os
+    owner = f"{_os.getpid()}"
+    with _Exclusive(path):
+        data = _load(path)
+        _day(data)
+        hit = next((r for r in data.get("reservations") or []
+                    if r["token"] == token), None)
+        if hit is None:
+            raise GuardError(f"その予約がありません: {token}")
+        if str(hit.get("contract_sha256") or "") != str(contract_sha256):
+            raise GuardError("予約したときの契約と違います")
+        if hit.get("state") == "APPLIED_LOCAL":
+            return hit                    # すでに書き終わっている（やり直し不要）
+        if hit.get("state") != "APPLYING" or hit.get("attempt_id") != attempt_id:
+            raise GuardError(f"その予約は使えません（いま {hit.get('state')}）")
+        cur = str(hit.get("owner") or "")
+        if cur and cur != owner:
+            raise GuardError(f"別の処理が書いています（owner={cur}）")
+        hit["owner"] = owner
+        _save(path, data)
+        return hit
+
+
 def reservation(token: str, path: str = STATE_PATH) -> dict:
     """予約の中身を読む（書き換え器が照合するため）。"""
     hit = next((r for r in (_load(path).get("reservations") or [])
@@ -457,8 +492,22 @@ def before_commit(task: str, slug: str, path: str = STATE_PATH) -> dict:
         e = _entry(data, task)
         if e["target_slug"] != slug:
             raise GuardError(f"今日の担当は {e['target_slug']} です（{slug} ではありません）")
+        # ★書き換えを始めた記録が無ければコミットさせない★
+        #   （2026-08-05・Codex113回目の指摘5。before-write を通らずに
+        #     コミットへ来た場合、悪化していないかを比べる基準が無い）
+        if not e.get("mutation_started") or not e.get("stage_before"):
+            raise GuardError(
+                f"{slug} は書き換えを始めた記録がありません"
+                "（before-write を通っていない＝コミットさせません）")
         a = cp.assess(slug)
+        # ★知らない段階なら止める★（fail-closed）
+        if a["stage"] not in set(WRITABLE_STAGES) | set(FROZEN_STAGES) | {"READY"}:
+            raise GuardError(f"直したあとの段階が想定外です: {a['stage']}")
         before = e.get("stage_before")
+        # ★止めるべき段階になっていたら、理由を問わずコミットさせない★
+        if a["stage"] in FROZEN_STAGES and before not in FROZEN_STAGES:
+            raise GuardError(
+                f"直した結果、触ってはいけない段階になりました（{before} → {a['stage']}）")
         if a["stage"] in ("HOLD", "NO_MACHINE"):
             raise GuardError(
                 f"直したあとの判定ができません: {a['stage']} → コミットしないでください")
