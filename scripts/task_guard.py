@@ -234,6 +234,11 @@ def reserve(task: str, slug: str, kind: str, path: str = STATE_PATH,
     """
     if kind not in ("fix", "grow"):
         raise GuardError(f"知らない種類です: {kind!r}")
+    # ★どの契約のための枠かを、取るときに決める★（Codex111回目のP0-3）
+    #   空のままだと、同じ機種の別の契約に枠を流用できた。
+    if kind == "fix" and not re.match(r"^sha256:[0-9a-f]{64}$",
+                                      str(contract_sha256 or "")):
+        raise GuardError("既存記事の修正は、契約の指紋（sha256:…）が要ります")
     if is_test_slug(slug):
         return {"ok": True, "test": True, "token": "",
                 "why": f"{slug} は試験用なので枠を使いません"}
@@ -302,6 +307,46 @@ def advance(token: str, state: str, path: str = STATE_PATH, **extra) -> dict:
         return hit
 
 
+def begin_apply(token: str, slug: str, kind: str, contract_sha256: str,
+                attempt_id: str, path: str = STATE_PATH) -> dict:
+    """★予約の確認と消費を1つのまとまりで行う★（2026-08-05・Codex111回目のP0-4）
+
+    以前は「RESERVED か確かめる」と「APPLYING へ進める」が別々だったので、
+    2つのプロセスが同時に RESERVED を読み、**両方が書き始められた**。
+    ここでは鍵の中で確かめて消費するので、後から来た方は必ず断られる。
+
+    ★同じ回のやり直しだけは通す★（attempt_id が同じなら冪等）。
+    """
+    if not str(contract_sha256 or "").strip():
+        raise GuardError("契約の指紋がありません（予約を使えません）")
+    with _Exclusive(path):
+        data = _load(path)
+        _day(data)
+        hit = next((r for r in data.get("reservations") or []
+                    if r["token"] == token), None)
+        if hit is None:
+            raise GuardError(f"その予約がありません: {token}")
+        want = str(hit.get("contract_sha256") or "")
+        if not want:
+            raise GuardError("予約に契約の指紋がありません（作り直してください）")
+        if want != contract_sha256:
+            raise GuardError("予約したときの契約と違います")
+        if hit.get("slug") != slug or hit.get("kind") != kind:
+            raise GuardError(
+                f"予約と食い違います（予約 {hit.get('slug')}/{hit.get('kind')}）")
+        if hit.get("state") == "APPLYING":
+            if hit.get("attempt_id") == attempt_id:
+                return hit                # 同じ回のやり直し
+            raise GuardError("その予約はいま別の処理が使っています")
+        if hit.get("state") != "RESERVED":
+            raise GuardError(f"その予約は使えません（いま {hit.get('state')}）")
+        hit["state"] = "APPLYING"
+        hit["attempt_id"] = attempt_id
+        hit["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        _save(path, data)
+        return hit
+
+
 def reservation(token: str, path: str = STATE_PATH) -> dict:
     """予約の中身を読む（書き換え器が照合するため）。"""
     hit = next((r for r in (_load(path).get("reservations") or [])
@@ -363,7 +408,8 @@ def claim(task: str, slug: str, path: str = STATE_PATH) -> dict:
 
 def codex_round(task: str, path: str = STATE_PATH) -> int:
     """Codexへ1往復ぶん使う。★上限を超えたら拒否（必ず終わるため）★"""
-    data = _load(path)
+    with _Exclusive(path):
+         data = _load(path)
     e = _entry(data, task)
     if e["codex_rounds"] >= CODEX_ROUND_LIMIT:
         raise GuardError(
@@ -376,7 +422,8 @@ def codex_round(task: str, path: str = STATE_PATH) -> int:
 
 def before_write(task: str, slug: str, path: str = STATE_PATH) -> dict:
     """記事を書き換える前の確認。★触ってよい段階か毎回聞き直す★"""
-    data = _load(path)
+    with _Exclusive(path):
+         data = _load(path)
     e = _entry(data, task)
     if e["target_slug"] != slug:
         raise GuardError(f"今日の担当は {e['target_slug']} です（{slug} ではありません）")
@@ -404,7 +451,8 @@ def before_commit(task: str, slug: str, path: str = STATE_PATH) -> dict:
       →本来は BLOCKED_BY_LEDGER なのに、再判定せずページを作って公開へ進む
     という経路が通ってしまう。
     """
-    data = _load(path)
+    with _Exclusive(path):
+         data = _load(path)
     e = _entry(data, task)
     if e["target_slug"] != slug:
         raise GuardError(f"今日の担当は {e['target_slug']} です（{slug} ではありません）")
@@ -424,7 +472,8 @@ def before_commit(task: str, slug: str, path: str = STATE_PATH) -> dict:
 
 
 def done(task: str, slug: str, stage: str, path: str = STATE_PATH) -> dict:
-    data = _load(path)
+    with _Exclusive(path):
+         data = _load(path)
     e = _entry(data, task)
     e["final_stage"] = stage
     e["finished_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -445,7 +494,8 @@ def _budget_tests(t, tmpdir) -> None:
                  "deadline_hhmm": "23:59"}, f)
 
     def res(kind, slug, close=True):
-        r = reserve("t", slug, kind, path=sp, budget_path=bp)
+        r = reserve("t", slug, kind, path=sp, budget_path=bp,
+                    contract_sha256="sha256:" + "a" * 64)
         if close and r.get("token"):
             # ★1件ずつ片付けてから次へ★（やりかけを2つ持たない）
             advance(r["token"], "APPLYING", path=sp)
@@ -470,12 +520,31 @@ def _budget_tests(t, tmpdir) -> None:
       _raises(lambda: inspected("t", "c", path=sp, budget_path=bp), "上限"))
     # 試験用の機種は枠を使わない
     t("　試験用の機種は枠を使わない",
-      reserve("t", "zzz_test", "fix", path=sp, budget_path=bp)["test"])
+      reserve("t", "zzz_test", "fix", path=sp, budget_path=bp,
+              contract_sha256="sha256:" + "a" * 64)["test"])
     # 止めたら、タスク名を変えても通らない
     halt("監査に引っかかったため", path=sp)
     t("★★止めた日は、別のタスク名でも書けない★★",
       _raises(lambda: reserve("別のタスク", "g", "fix", path=sp,
-                              budget_path=bp), "止めています"))
+                              budget_path=bp, contract_sha256="sha256:" + "a" * 64),
+              "止めています"))
+    # ★予約の確認と消費が1つのまとまりになっているか★（Codex111回目のP0-4）
+    sp4 = os.path.join(tmpdir, "state_begin.json")
+    tk = reserve("t", "m", "fix", path=sp4, budget_path=bp,
+                 contract_sha256="sha256:" + "a" * 64)["token"]
+    begin_apply(tk, "m", "fix", "sha256:" + "a" * 64, "attempt-1", path=sp4)
+    t("★★同じ予約を別の処理が同時に使えない★★",
+      _raises(lambda: begin_apply(tk, "m", "fix", "sha256:" + "a" * 64, "attempt-2",
+                                  path=sp4), "別の処理"))
+    t("　同じ回のやり直しは通る",
+      begin_apply(tk, "m", "fix", "sha256:" + "a" * 64, "attempt-1",
+                  path=sp4)["state"] == "APPLYING")
+    t("★★契約が違えば同じ予約を使えない★★",
+      _raises(lambda: begin_apply(tk, "m", "fix", "sha256:" + "b" * 64,
+                                  "attempt-3", path=sp4), "契約と違います"))
+    t("★★機種が違えば同じ予約を使えない★★",
+      _raises(lambda: begin_apply(tk, "ちがう機種", "fix", "sha256:" + "a" * 64, "attempt-4",
+                                  path=sp4), "食い違います"))
     # ★締切を過ぎたら新しい書き換えに着手しない★
     bp2 = os.path.join(tmpdir, "budget_late.json")
     sp2 = os.path.join(tmpdir, "state_late.json")
@@ -484,14 +553,19 @@ def _budget_tests(t, tmpdir) -> None:
                  "writes_fix": 2, "writes_grow": 1, "inspections": 2,
                  "deadline_hhmm": "00:00"}, f)
     t("★★締切を過ぎたら新しい書き換えに着手しない★★",
+      _raises(lambda: reserve("t", "z", "fix", path=sp2, budget_path=bp2,
+                              contract_sha256="sha256:" + "a" * 64), "締切"))
+    t("★★契約の指紋なしでは修正の枠を取れない★★（別の契約に流用させない）",
       _raises(lambda: reserve("t", "z", "fix", path=sp2, budget_path=bp2),
-              "締切"))
+              "指紋"))
     # ★やりかけがあるうちは次を始めない★
     sp3 = os.path.join(tmpdir, "state_open.json")
-    tok3 = reserve("t", "p", "fix", path=sp3, budget_path=bp)["token"]
+    tok3 = reserve("t", "p", "fix", path=sp3, budget_path=bp,
+                   contract_sha256="sha256:" + "a" * 64)["token"]
     advance(tok3, "APPLYING", path=sp3)
     t("★★やりかけの書き換えがあるうちは次を始めない★★",
-      _raises(lambda: reserve("t", "q", "fix", path=sp3, budget_path=bp),
+      _raises(lambda: reserve("t", "q", "fix", path=sp3, budget_path=bp,
+                              contract_sha256="sha256:" + "a" * 64),
               "やりかけ"))
     t("★★決められた順にしか進めない★★（予約直後にpush済みとは書けない）",
       _raises(lambda: advance(tok3, "PUSH_CONFIRMED", path=sp3), "進めません"))

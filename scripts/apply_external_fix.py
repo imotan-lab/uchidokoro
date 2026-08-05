@@ -247,7 +247,26 @@ def _atomic_write(path: Path, text: str) -> None:
 # 契約（★これが唯一の入口★）
 # ─────────────────────────────────────────────
 
-CONTRACT_SCHEMA = "fix-contract/v2"
+CONTRACT_SCHEMA = "fix-contract/v3"
+REPOSITORY_ID = "uchidokoro"
+
+
+class _Ticket:
+    """★書き込みの許可証★（2026-08-05・Codex111回目のP0-1）
+
+    「関数名の先頭に _ を付けた」だけでは呼び出しを禁止できない。
+    最終の書き込み関数は**この許可証**を要求し、許可証は
+    `apply_contract()` が契約・証拠・予約を全部確かめた後にしか作らない。
+    """
+
+    __slots__ = ("contract", "sha256", "token", "attempt_id")
+
+    def __init__(self, contract: dict, sha256: str, token: str,
+                 attempt_id: str):
+        self.contract = contract
+        self.sha256 = sha256
+        self.token = token
+        self.attempt_id = attempt_id
 
 # ★項目ごとに「証拠のどの見出しか」「単位は何か」を固定する★
 #   （2026-08-05・Codex110回目の指摘3。以前は証拠の見出しを契約に自由記述
@@ -300,6 +319,16 @@ def load_contract(path) -> dict:
     miss = [k for k in need if not str(data.get(k) or "").strip()]
     if miss:
         raise ContractError(f"契約に足りない項目があります: {', '.join(miss)}")
+    # ★本文を何箇所直すのかを必ず書く★（2026-08-05・Codex111回目のP0-2）
+    #   任意項目だったので、書かなければ検査ごと素通りできた。
+    #   0 も許さない（構造化値だけ直して本文に旧値が残る形を作らせない）。
+    n = data.get("prose_edit_count")
+    if not isinstance(n, int) or isinstance(n, bool) or n < 1:
+        raise ContractError(
+            f"契約の prose_edit_count は1以上の整数が要ります: {n!r}")
+    if str(data.get("repository_id")) != REPOSITORY_ID:
+        raise ContractError(
+            f"別のリポジトリ向けの契約です: {data.get('repository_id')!r}")
     return data
 
 
@@ -335,7 +364,11 @@ def check_contract(c: dict, verify=None, min_domains: int = 2) -> dict:
         raise ContractError("証拠が関所を通りません（出典の実在・逐語一致が取れない）")
     # ★証拠の見出しは、項目ごとに決めた名前だけを受け付ける★
     rows = [r for r in (ev.get("claims") or [])
-            if str(r.get("field") or "") in spec["evidence"]]
+            if str(r.get("field") or "") in spec["evidence"]
+            # ★証拠の側にも単位を書かせる★（2026-08-05・Codex111回目のP1-6）
+            #   見出しが「天井」だけだと、G天井の証拠でポイント天井の契約を
+            #   通せた。証拠行の unit が契約と一致するものだけを数える。
+            and str(r.get("unit") or "") == str(c["unit"])]
     if not rows:
         raise ContractError(
             f"証拠に「{' / '.join(spec['evidence'])}」の記載がありません")
@@ -389,52 +422,119 @@ def apply_contract(contract_path: str, token: str = "", apply_mode: bool = False
     """
     c = load_contract(contract_path)
     proof = check_contract(c, verify=verify)
+    left = unfinished_fix(base or c.get("base") or BASE_DEFAULT)
+    if left and apply_mode:
+        return {"applied": False, "outcome": "UNKNOWN",
+                "reason": f"前回の書き換えが決着していません（{left.get('attempt_id')} / "
+                          f"{left.get('stage')}）。人が確かめてください"}
     base = Path(base or c.get("base") or BASE_DEFAULT)
     out = {"slug": c["slug"], "field": c["field"], "old": c["old"],
            "new": c["new"], "applied": False, "reason": None,
            "contract": {"sha256": _sha256_file(contract_path),
                         "domains": proof["domains"]}}
+    csha = out["contract"]["sha256"]
+    attempt = ""
     if apply_mode:
         # ★予約が無ければ書かない★（上限をすり抜けさせない）
         if guard is None:
             import task_guard as guard
+        import uuid
+        attempt = uuid.uuid4().hex
         try:
-            r = guard.reservation(token)
+            # ★確認と消費を1つのまとまりで行う★（Codex111回目のP0-4）
+            #   以前は「読んで確かめる」と「APPLYINGへ進める」が別々で、
+            #   2つのプロセスが同じ予約で同時に書き始められた。
+            guard.begin_apply(token, slug=c["slug"], kind="fix",
+                              contract_sha256=csha, attempt_id=attempt)
         except Exception as e:            # noqa: BLE001
-            out["reason"] = f"予約がありません: {e}"
+            out["reason"] = f"予約を使えません: {e}"
             return out
-        if r.get("state") != "RESERVED":
-            out["reason"] = f"その予約は使えません（いま {r.get('state')}）"
-            return out
-        if r.get("slug") != c["slug"] or r.get("kind") != "fix":
-            out["reason"] = (f"予約と契約が食い違います"
-                             f"（予約 {r.get('slug')}/{r.get('kind')}）")
-            return out
-        want = str(r.get("contract_sha256") or "")
-        if want and want != out["contract"]["sha256"]:
-            out["reason"] = "予約したときの契約と違います"
-            return out
-        guard.advance(token, "APPLYING")
-    got = _apply_plan(base, c, apply_mode)
+        _journal_begin(base, c, csha, token, attempt)
+    got = _write_verified(base, _Ticket(c, csha, token, attempt), apply_mode)
     out.update({k: v for k, v in got.items() if k not in ("contract",)})
     if apply_mode:
-        guard.advance(token,
-                      "APPLIED_LOCAL" if got["applied"]
-                      else "ROLLED_BACK_VERIFIED")
+        # ★結末をそのまま記録する★（戻せなかったことを隠さない）
+        guard.advance(token, {"APPLIED_LOCAL": "APPLIED_LOCAL",
+                              "ROLLED_BACK_VERIFIED": "ROLLED_BACK_VERIFIED",
+                              "ROLLBACK_FAILED": "ROLLBACK_FAILED",
+                              "NOT_APPLIED": "ROLLED_BACK_VERIFIED",
+                              }.get(got.get("outcome"), "UNKNOWN"))
+        _journal_done(base, attempt, got.get("outcome"))
     return out
 
 
-def _apply_plan(base: Path, c: dict, apply_mode: bool) -> dict:
-    """★内部専用★ 契約を通ったものだけを書く。外から直接呼ばないこと。"""
-    return _run_unverified(base, c["slug"], c["field"], float(c["old"]),
-                           float(c["new"]), apply_mode,
-                           expect=c)
+# ─────────────────────────────────────────────
+# ジャーナル（★電源が落ちても、何をどこまでやったか分かるように★）
+#   2026-08-05・Codex111回目: 2回の置き換えの間で落ちると、
+#   予約には APPLYING が残るのに、元の中身をどこからも復元できなかった。
+# ─────────────────────────────────────────────
+
+def _journal_path(base: Path) -> Path:
+    return Path(base) / ".fix-journal.json"
 
 
-def _run_unverified(base: Path, slug: str, field: str, old, new,
+def _journal_begin(base: Path, c: dict, csha: str, token: str,
+                   attempt: str) -> None:
+    import datetime as _dt
+    rec = {"attempt_id": attempt, "token": token, "contract_sha256": csha,
+           "slug": c["slug"], "field": c["field"],
+           "old": c["old"], "new": c["new"],
+           "machines_before_sha256": c["machines_before_sha256"],
+           "detail_before_sha256": c["detail_before_sha256"],
+           "stage": "APPLYING", "outcome": None,
+           "at": _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+    p = _journal_path(base)
+    fd, tmp = tempfile.mkstemp(dir=str(p.parent), suffix=".tmp")
+    with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(rec, f, ensure_ascii=False, indent=1)
+        f.flush()
+        os.fsync(f.fileno())               # ★電源が落ちても残るように★
+    os.replace(tmp, p)
+
+
+def _journal_done(base: Path, attempt: str, outcome) -> None:
+    p = _journal_path(base)
+    if not p.exists():
+        return
+    try:
+        rec = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:                     # noqa: BLE001
+        return
+    if rec.get("attempt_id") != attempt:
+        return
+    if outcome in ("APPLIED_LOCAL", "ROLLED_BACK_VERIFIED"):
+        p.unlink()                        # ★決着した回の記録は残さない★
+        return
+    rec.update({"stage": "STUCK", "outcome": outcome})
+    p.write_text(json.dumps(rec, ensure_ascii=False, indent=1),
+                 encoding="utf-8")
+
+
+def unfinished_fix(base: Path | None = None) -> dict:
+    """やりかけの書き換えが残っていないか（★次を始める前に見る★）。"""
+    p = _journal_path(Path(base or BASE_DEFAULT))
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception as e:                # noqa: BLE001
+        return {"stage": "UNKNOWN", "_why": f"記録が読めません: {e}"}
+
+
+def _write_verified(base: Path, ticket: _Ticket, apply_mode: bool) -> dict:
+    """★書き込みの最終地点★（許可証が無ければ動かない）。"""
+    if not isinstance(ticket, _Ticket):
+        raise Abort("許可証がありません（契約を通っていない書き込みです）")
+    c = ticket.contract
+    return _plan_and_write(base, c["slug"], c["field"], float(c["old"]),
+                           float(c["new"]), apply_mode, expect=c)
+
+
+def _plan_and_write(base: Path, slug: str, field: str, old, new,
                     apply_mode: bool, expect: dict | None = None) -> dict:
     res = {"slug": slug, "field": field, "old": old, "new": new,
-           "applied": False, "struct_path": None, "prose_edits": [], "reason": None}
+           "applied": False, "struct_path": None, "prose_edits": [],
+           "reason": None, "outcome": "NOT_APPLIED", "unrestored": []}
     mpath = base / "assets" / "data" / "machines.json"
     dpath = base / "assets" / "data" / "machine-details" / f"{slug}.json"
     try:
@@ -473,10 +573,14 @@ def _run_unverified(base: Path, slug: str, field: str, old, new,
         # ★直す場所の数まで契約に書いておく★（指摘4）
         #   0件でも「適用した」と言えてしまい、本文に旧値が残る形があった。
         if expect is not None and expect.get("prose_edit_count") is not None:
-            if len(edits) != int(expect["prose_edit_count"]):
+            # ★数えるのは「置き換える回数」★（2026-08-05・Codex111回目のP0-2）
+            #   以前は「直す段落の数」で数えていたので、同じ段落の2か所を
+            #   置き換えても1件だった。
+            hits = sum(int(e["count"]) for e in edits)
+            if hits != int(expect["prose_edit_count"]):
                 raise Abort(
                     f"直す箇所の数が契約と違います"
-                    f"（契約 {expect['prose_edit_count']}／実際 {len(edits)}）")
+                    f"（契約 {expect['prose_edit_count']}／実際 {hits}）")
         if apply_mode:
             container[key] = int(new) if float(new).is_integer() else new
             for e in edits:
@@ -499,10 +603,16 @@ def _run_unverified(base: Path, slug: str, field: str, old, new,
                         _atomic_write(p, b.decode("utf-8"))
                     except Exception as e2:  # noqa: BLE001
                         bad.append(f"{p.name}（{e2}）")
+                # ★戻せなかったことを「安全に戻した」と記録しない★
+                #   （2026-08-05・Codex111回目のP0-5。最悪の状態が
+                #     いちばん安全な記録になっていた）
+                res["outcome"] = "ROLLBACK_FAILED" if bad else "ROLLED_BACK_VERIFIED"
+                res["unrestored"] = bad
                 raise Abort("書き込みを取り消しました: " + str(e)
                             + ("／★戻せませんでした: " + " / ".join(bad) + "★"
                                if bad else ""))
             res["applied"] = True
+            res["outcome"] = "APPLIED_LOCAL"
     except Abort as e:
         res["reason"] = str(e)
     return res
@@ -553,7 +663,7 @@ def selftest() -> int:
 
         # 1. 正常系: 構造化値も本文も直る
         setup(base_machine, dict(base_detail))
-        r = _run_unverified(tmp, "t", "ceiling.normal.game", 900, 1000, apply_mode=True)
+        r = _plan_and_write(tmp, "t", "ceiling.normal.game", 900, 1000, apply_mode=True)
         eq(r["applied"], True, "正常系:適用された")
         m = json.loads((tmp / "assets" / "data" / "machines.json").read_text(encoding="utf-8"))
         d = json.loads((tmp / "assets" / "data" / "machine-details" / "t.json").read_text(encoding="utf-8"))
@@ -566,7 +676,7 @@ def selftest() -> int:
 
         # 2. 旧値が現状と違う → 何も書かない
         setup(base_machine, dict(base_detail))
-        r = _run_unverified(tmp, "t", "ceiling.normal.game", 777, 1000, apply_mode=True)
+        r = _plan_and_write(tmp, "t", "ceiling.normal.game", 777, 1000, apply_mode=True)
         eq(r["applied"], False, "楽観ロック:適用しない")
         eq("状況が変わった" in (r["reason"] or ""), True, "楽観ロック:理由")
         m = json.loads((tmp / "assets" / "data" / "machines.json").read_text(encoding="utf-8"))
@@ -576,7 +686,7 @@ def selftest() -> int:
         d2 = json.loads(json.dumps(base_detail))
         d2["sections"][1]["body"].append("設定6のBIG確率は1/900です。")
         setup(base_machine, d2)
-        r = _run_unverified(tmp, "t", "ceiling.normal.game", 900, 1000, apply_mode=True)
+        r = _plan_and_write(tmp, "t", "ceiling.normal.game", 900, 1000, apply_mode=True)
         eq(r["applied"], True, "確率の分母:別物として無視し適用")
         d = json.loads((tmp / "assets" / "data" / "machine-details" / "t.json").read_text(encoding="utf-8"))
         eq(d["sections"][1]["body"][-1], "設定6のBIG確率は1/900です。", "確率の分母:書き換えない")
@@ -586,7 +696,7 @@ def selftest() -> int:
         d2b = json.loads(json.dumps(base_detail))
         d2b["sections"][1]["body"].append("900到達で優遇されます。")
         setup(base_machine, d2b)
-        r = _run_unverified(tmp, "t", "ceiling.normal.game", 900, 1000, apply_mode=True)
+        r = _plan_and_write(tmp, "t", "ceiling.normal.game", 900, 1000, apply_mode=True)
         eq(r["applied"], True, "単位省略+到達:適用する")
         d = json.loads((tmp / "assets" / "data" / "machine-details" / "t.json").read_text(encoding="utf-8"))
         eq(d["sections"][1]["body"][-1], "1000到達で優遇されます。", "単位省略+到達:直る")
@@ -595,7 +705,7 @@ def selftest() -> int:
         d2c = json.loads(json.dumps(base_detail))
         d2c["sections"][1]["body"].append("900Gからは打ち切りです。")
         setup(base_machine, d2c)
-        r = _run_unverified(tmp, "t", "ceiling.normal.game", 900, 1000, apply_mode=True)
+        r = _plan_and_write(tmp, "t", "ceiling.normal.game", 900, 1000, apply_mode=True)
         eq(r["applied"], True, "ラベル無し単位付き:直す")
         d = json.loads((tmp / "assets" / "data" / "machine-details" / "t.json").read_text(encoding="utf-8"))
         eq(d["sections"][1]["body"][-1], "1000Gからは打ち切りです。", "ラベル無し単位付き:内容")
@@ -604,7 +714,7 @@ def selftest() -> int:
         d2d = json.loads(json.dumps(base_detail))
         d2d["sections"][1]["body"].append("900が一つの目安になります。")
         setup(base_machine, d2d)
-        r = _run_unverified(tmp, "t", "ceiling.normal.game", 900, 1000, apply_mode=True)
+        r = _plan_and_write(tmp, "t", "ceiling.normal.game", 900, 1000, apply_mode=True)
         eq(r["applied"], False, "判定不能な裸の同値:適用しない")
         d = json.loads((tmp / "assets" / "data" / "machine-details" / "t.json").read_text(encoding="utf-8"))
         eq(d["lead"], "天井は900Gです。", "判定不能:全体が不変（部分適用しない）")
@@ -613,7 +723,7 @@ def selftest() -> int:
         d2e = {"slug": "t", "lead": "天井は最大10周期です。",
                "sections": [{"title": "x", "body": ["設定6の確率は10%です。"]}]}
         setup(base_machine, d2e)
-        r = _run_unverified(tmp, "t", "ceiling.normal.cycle", 10, 8, apply_mode=True)
+        r = _plan_and_write(tmp, "t", "ceiling.normal.cycle", 10, 8, apply_mode=True)
         eq(r["applied"], True, "小さい数字:裸の同値は無視して適用")
         d = json.loads((tmp / "assets" / "data" / "machine-details" / "t.json").read_text(encoding="utf-8"))
         eq(d["sections"][0]["body"][0], "設定6の確率は10%です。", "小さい数字:別文脈は不変")
@@ -622,7 +732,7 @@ def selftest() -> int:
         d3 = json.loads(json.dumps(base_detail))
         d3["sections"][0]["body"][0] = "天井は900Gで、900到達で確定です。"
         setup(base_machine, d3)
-        r = _run_unverified(tmp, "t", "ceiling.normal.game", 900, 1000, apply_mode=True)
+        r = _plan_and_write(tmp, "t", "ceiling.normal.game", 900, 1000, apply_mode=True)
         eq(r["applied"], True, "同一文の複数出現:適用")
         d = json.loads((tmp / "assets" / "data" / "machine-details" / "t.json").read_text(encoding="utf-8"))
         eq(d["sections"][0]["body"][0], "天井は1000Gで、1000到達で確定です。", "同一文の複数出現:内容")
@@ -630,7 +740,7 @@ def selftest() -> int:
         # 5. 周期・スルーの項目
         d4 = {"slug": "t", "lead": "天井は最大10周期です。", "sections": []}
         setup(base_machine, d4)
-        r = _run_unverified(tmp, "t", "ceiling.normal.cycle", 10, 8, apply_mode=True)
+        r = _plan_and_write(tmp, "t", "ceiling.normal.cycle", 10, 8, apply_mode=True)
         eq(r["applied"], True, "周期:適用")
         d = json.loads((tmp / "assets" / "data" / "machine-details" / "t.json").read_text(encoding="utf-8"))
         eq(d["lead"], "天井は最大8周期です。", "周期:本文が直る")
@@ -639,7 +749,7 @@ def selftest() -> int:
 
         # 6. dry-run は何も書かない
         setup(base_machine, dict(base_detail))
-        r = _run_unverified(tmp, "t", "ceiling.normal.game", 900, 1000, apply_mode=False)
+        r = _plan_and_write(tmp, "t", "ceiling.normal.game", 900, 1000, apply_mode=False)
         eq(r["applied"], False, "dry-run:書かない")
         eq(len(r["prose_edits"]), 2, "dry-run:計画は出る（lead＋本文）")
         eq(json.loads((tmp / "assets" / "data" / "machines.json").read_text(encoding="utf-8"))[0]["limit"],
@@ -649,21 +759,21 @@ def selftest() -> int:
         d5 = {"slug": "t", "lead": "天井は1,200Gです。", "sections": []}
         m5 = json.loads(json.dumps(base_machine)); m5["limit"] = 1200
         setup(m5, d5)
-        r = _run_unverified(tmp, "t", "ceiling.normal.game", 1200, 1268, apply_mode=True)
+        r = _plan_and_write(tmp, "t", "ceiling.normal.game", 1200, 1268, apply_mode=True)
         eq(r["applied"], True, "桁区切り:適用")
         eq(json.loads((tmp / "assets" / "data" / "machine-details" / "t.json").read_text(encoding="utf-8"))["lead"],
            "天井は1,268Gです。", "桁区切り:表記を保つ")
 
         # 8. 未対応項目・同値・不明slug
         setup(base_machine, dict(base_detail))
-        eq(_run_unverified(tmp, "t", "payout.setting6", 97, 98, True)["applied"], False, "未対応項目は適用しない")
-        eq(_run_unverified(tmp, "t", "ceiling.normal.game", 900, 900, True)["applied"], False, "同値は適用しない")
-        eq(_run_unverified(tmp, "zzz", "ceiling.normal.game", 900, 1000, True)["applied"], False, "不明slugは適用しない")
+        eq(_plan_and_write(tmp, "t", "payout.setting6", 97, 98, True)["applied"], False, "未対応項目は適用しない")
+        eq(_plan_and_write(tmp, "t", "ceiling.normal.game", 900, 900, True)["applied"], False, "同値は適用しない")
+        eq(_plan_and_write(tmp, "zzz", "ceiling.normal.game", 900, 1000, True)["applied"], False, "不明slugは適用しない")
 
         # 9. 構造化値が無い機種（構造ごと変わる修正）は自動化しない
         m9 = {"slug": "t", "name": "Lテスト", "checker": {"unit": "G"}}
         setup(m9, {"slug": "t", "lead": "天井は900Gです。", "sections": []})
-        r = _run_unverified(tmp, "t", "ceiling.normal.game", 900, 1000, apply_mode=True)
+        r = _plan_and_write(tmp, "t", "ceiling.normal.game", 900, 1000, apply_mode=True)
         eq(r["applied"], False, "構造化値なし:適用しない")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -680,9 +790,9 @@ def selftest() -> int:
 
     EV = {"slug": "x", "identity": {"must_contain": ["L機"]},
           "claims": [
-              {"field": "天井", "value": "800", "critical": True,
+              {"field": "天井", "value": "800", "unit": "G", "critical": True,
                "url": "https://a.example/1", "quote": "800G"},
-              {"field": "天井", "value": "800", "critical": True,
+              {"field": "天井", "value": "800", "unit": "G", "critical": True,
                "url": "https://b.example/1", "quote": "800G"}]}
     ev_p = _write("ev.json", EV)
     ok_verify = lambda d: 0            # noqa: E731  関所は通ったことにする
@@ -691,7 +801,9 @@ def selftest() -> int:
               "unit": "G", "evidence_file": ev_p,
               "evidence_sha256": _sha256_file(ev_p),
               "repository_id": "uchidokoro",
-              "machines_before_sha256": "", "detail_before_sha256": ""}
+              "machines_before_sha256": "sha256:" + "0" * 64,
+              "detail_before_sha256": "sha256:" + "0" * 64,
+              "prose_edit_count": 1}
 
     def _try(c, verify=ok_verify):
         try:
@@ -719,6 +831,14 @@ def selftest() -> int:
     t("★★証拠の中で値が食い違っていたら書けない★★",
       "食い違っています" in _try(dict(
           base_c, evidence_file=p2, evidence_sha256=_sha256_file(p2))))
+    t("★★単位の書いていない証拠は使わない★★（見出しだけでは項目を決めない）",
+      "記載がありません" in _try(dict(
+          base_c, evidence_file=_write("ev5.json", {
+              **EV, "claims": [{"field": "天井", "value": "800",
+                                "url": "https://a.example/1"},
+                               {"field": "天井", "value": "800",
+                                "url": "https://b.example/1"}]}),
+          evidence_sha256=_sha256_file(os.path.join(_d, "ev5.json")))))
     t("★★項目と単位が食い違う契約は通さない★★（G天井にpt値を書けない）",
       "単位が項目と合いません" in _try(dict(base_c, unit="pt")))
     t("★★扱えない項目は通さない★★",
@@ -726,16 +846,16 @@ def selftest() -> int:
     t("　出典URLの無い証拠行は通さない",
       "出典URLの無い行" in _try(dict(
           base_c, evidence_file=_write("ev3.json", {
-              **EV, "claims": [EV["claims"][0], {"field": "天井",
+              **EV, "claims": [EV["claims"][0], {"field": "天井", "unit": "G",
                                                  "value": "800", "url": ""}]}),
           evidence_sha256=_sha256_file(os.path.join(_d, "ev3.json")))))
     t("★★www違い・ポート違いは同じサイトとして数える★★",
       "ドメインしかありません" in _try(dict(
           base_c, evidence_file=_write("ev4.json", {
               **EV, "claims": [
-                  {"field": "天井", "value": "800",
+                  {"field": "天井", "value": "800", "unit": "G",
                    "url": "https://a.example/1"},
-                  {"field": "天井", "value": "800",
+                  {"field": "天井", "value": "800", "unit": "G",
                    "url": "https://www.a.example:443/2"}]}),
           evidence_sha256=_sha256_file(os.path.join(_d, "ev4.json")))))
     t("★★知らない形の契約は読まない★★",
@@ -762,7 +882,7 @@ def selftest() -> int:
     _exp = {"slug": "x", "field": "ceiling.normal.game", "old": 900, "new": 800,
             "machines_before_sha256": _sha(_m2),
             "detail_before_sha256": _sha(_d2), "prose_edit_count": 1}
-    _rr = _run_unverified(Path(_b2), "x", "ceiling.normal.game", 900, 800,
+    _rr = _plan_and_write(Path(_b2), "x", "ceiling.normal.game", 900, 800,
                           True, expect=_exp)
     _mm = json.load(open(_m2, encoding="utf-8"))[0]
     t("★★書いた値が正しい場所に入る★★（別のキーへ書く事故を実際に作った）",
@@ -771,10 +891,10 @@ def selftest() -> int:
     t("　本文の数値も一緒に変わる",
       "800G" in json.load(open(_d2, encoding="utf-8"))["sections"][0]["body"][0])
     t("★★直す箇所の数が契約と違えば書かない★★",
-      not _run_unverified(Path(_b2), "x", "ceiling.normal.game", 800, 700, True,
+      not _plan_and_write(Path(_b2), "x", "ceiling.normal.game", 800, 700, True,
                           expect=dict(_exp, prose_edit_count=5))["applied"])
     t("★★対象ファイルが契約時から変わっていたら書かない★★",
-      "変わっています" in (_run_unverified(
+      "変わっています" in (_plan_and_write(
           Path(_b2), "x", "ceiling.normal.game", 800, 700, True,
           expect=dict(_exp, machines_before_sha256="sha256:" + "0" * 64)
       )["reason"] or ""))
@@ -807,7 +927,7 @@ def selftest() -> int:
 
     try:
         globals()["_atomic_write"] = _fail_second
-        _r = _run_unverified(Path(_b), "x", "ceiling.normal.game", 900, 800, True)
+        _r = _plan_and_write(Path(_b), "x", "ceiling.normal.game", 900, 800, True)
     finally:
         globals()["_atomic_write"] = _real_w
     t("★★片方だけ書けた状態を残さない★★（2つ目で失敗させて確認）",
@@ -856,7 +976,7 @@ def main() -> int:
                                     "（証拠と結び付いていない値は書きません）"},
                          ensure_ascii=False))
         return 1
-    r = _run_unverified(Path(a.base), a.slug, a.field, float(a.old), float(a.new), a.apply)
+    r = _plan_and_write(Path(a.base), a.slug, a.field, float(a.old), float(a.new), a.apply)
     print(json.dumps(r, ensure_ascii=False))
     return 0 if (r["applied"] or (not a.apply and not r["reason"])) else 1
 
