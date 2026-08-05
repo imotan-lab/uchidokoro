@@ -167,7 +167,10 @@ class _Exclusive:
             old = time.time() - os.path.getmtime(self.lock) > 600
         except OSError:
             pass
-        if not (old or not self._alive(pid)):
+        # ★生きている持ち主からは、時間が経っても奪わない★（Codex117回目のP1）
+        if pid and self._alive(pid):
+            return False
+        if not pid and not old:
             return False
         # ★名前を変えられた1人だけが奪う★（2026-08-06・Codex115回目のP1-5）
         mine = f"{self.lock}.taking.{os.getpid()}"

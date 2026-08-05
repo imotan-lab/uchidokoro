@@ -584,13 +584,27 @@ def _recover(base: Path, left: dict, attempt: str, token: str,
         if not cur or cur.get("attempt_id") != attempt:
             return out                    # 誰かが片付けた
         after = cur.get("after") or {}
-        if after:
+        want_paths = {str(Path(base) / "assets" / "data" / "machines.json"),
+                      str(Path(base) / "assets" / "data" / "machine-details"
+                          / f"{cur.get('slug')}.json")}
+        if after and set(after) == want_paths:   # ★2つそろっている時だけ★
             ok = all(
                 os.path.isfile(p)
                 and "sha256:" + hashlib.sha256(
                     Path(p).read_bytes()).hexdigest() == want
                 for p, want in after.items())
             if ok:
+                # ★先に台帳を確定してから、証拠を消す★
+                #   （2026-08-06・Codex117回目のP0。順番が逆だと
+                #     「現物は適用済み・台帳は巻き戻し済み」を作れた）
+                try:
+                    guard.advance(token, "APPLIED_LOCAL")
+                except Exception as e:    # noqa: BLE001
+                    if str(guard.reservation(token).get("state")) \
+                            != "APPLIED_LOCAL":
+                        out["problems"].append(f"台帳を確定できません: {e}")
+                        out["outcome"] = "UNKNOWN"
+                        return out
                 _journal_done(base, attempt, "APPLIED_LOCAL")
                 out.update({"done": True,
                             "result": {"applied": True,
@@ -600,6 +614,14 @@ def _recover(base: Path, left: dict, attempt: str, token: str,
         if back["problems"]:
             out["problems"] += back["problems"]
             out["outcome"] = "ROLLBACK_FAILED"
+            # ★戻せなかったことを台帳とジャーナルの両方に残す★
+            #   （2026-08-06・Codex117回目のP1。早期に返していたので、
+            #     いちばん危ない状態が記録されずに消えていた）
+            try:
+                guard.advance(token, "ROLLBACK_FAILED")
+            except Exception:             # noqa: BLE001
+                pass
+            _journal_done(base, attempt, "ROLLBACK_FAILED")
     return out
 
 
@@ -706,16 +728,21 @@ def _journal_done(base: Path, attempt: str, outcome) -> None:
 
 
 def _journal_after(base: Path, attempt: str, after: dict) -> None:
-    """書き終えた姿（各ファイルの指紋）を控える。"""
+    """書き終えた姿（各ファイルの指紋）を控える。
+
+    ★残せなければ失敗にする★（2026-08-06・Codex117回目のP1）
+      黙って諦めると、次の再開で「本当に書けたのか」を確かめられないのに
+      成功として進んでしまう。
+    """
     p = _journal_path(base)
     if not p.exists():
-        return
+        raise Abort("書き終えた姿を控えられません（記録がありません）")
     try:
         rec = json.loads(p.read_text(encoding="utf-8"))
-    except Exception:                     # noqa: BLE001
-        return
+    except Exception as e:                # noqa: BLE001
+        raise Abort(f"書き終えた姿を控えられません（記録が読めません: {e}）")
     if rec.get("attempt_id") != attempt:
-        return
+        raise Abort("書き終えた姿を控えられません（別の回の記録です）")
     rec["after"] = after
     fd, tmp = tempfile.mkstemp(dir=str(p.parent), suffix=".tmp")
     with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
@@ -867,7 +894,12 @@ class _DataLock:
             old = time.time() - os.path.getmtime(self.path) > 600
         except OSError:
             pass
-        if not (old or not self._alive(pid)):
+        # ★生きている持ち主からは、時間が経っても奪わない★
+        #   （2026-08-06・Codex117回目のP1。10分を超える処理があると、
+        #     動いている相手の鍵を横取りできた）
+        if pid and self._alive(pid):
+            return False
+        if not pid and not old:
             return False
         # ★名前を変えられた1人だけが奪う★（2026-08-06・Codex115回目のP1-5）
         #   「読んで、消して、作る」だと2つの処理が同じ鍵を消し合い、
