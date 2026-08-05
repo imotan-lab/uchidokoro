@@ -508,49 +508,41 @@ def apply_contract(contract_path: str, token: str = "",
     #   以前は先にジャーナルから元へ戻していたので、
     #   「書き終わって記録もしたが、ジャーナルを消す前に落ちた」場合に
     #   **ファイルを旧値へ戻したうえで『適用済み』と報告**していた。
-    try:
-        _r0 = guard.reservation(token)
-    except Exception:                     # noqa: BLE001
-        _r0 = {}
-    if _r0.get("state") == "APPLIED_LOCAL" and _r0.get("attempt_id") == attempt:
-        done_plan = plan_fix(base, c["slug"], c["field"], float(c["old"]),
-                             float(c["new"]), expect=None)
-        if done_plan.get("reason") and "想定した旧値" in str(done_plan["reason"]):
-            _journal_done(base, attempt, "APPLIED_LOCAL")   # もう新値になっている
-            out.update({"applied": True, "outcome": "APPLIED_LOCAL"})
-            return out
+    left = unfinished_fix(base)
+    if left and left.get("attempt_id") != attempt:
         out["outcome"] = "UNKNOWN"
-        out["reason"] = ("記録は『適用済み』ですが、ファイルは旧値のままです。"
+        out["reason"] = (f"前回の書き換えが決着していません"
+                         f"（{left.get('attempt_id')} / {left.get('stage')}）。"
                          "人が確かめてください")
         return out
-    left = unfinished_fix(base)
     if left:
-        if left.get("attempt_id") != attempt:
-            out["outcome"] = "UNKNOWN"
-            out["reason"] = (f"前回の書き換えが決着していません"
-                             f"（{left.get('attempt_id')} / {left.get('stage')}）。"
-                             "人が確かめてください")
+        # ★復旧そのものを鍵と持ち主の中で行う★（2026-08-06・Codex116回目のP0-1）
+        #   以前は鍵を取る前に戻していたので、**同じ回の先発がまだ生きている**間に
+        #   後発が割り込んで、片方だけ旧値に戻すことができた。
+        rec = _recover(base, left, attempt, token, guard)
+        if rec.get("done"):
+            out.update(rec["result"])
             return out
-        # ★同じ回なら、まず元へ戻してからやり直す★（2026-08-06・Codex114回目の指摘2）
-        #   電源が落ちて片方だけ書けている場合があるので、
-        #   控えてある**元の中身そのもの**へ戻してから作り直す。
-        back = _rollback_journal(base, left)
-        if back["problems"]:
-            out["outcome"] = "ROLLBACK_FAILED"
-            out["reason"] = " / ".join(back["problems"])[:300]
+        if rec.get("problems"):
+            out["outcome"] = rec.get("outcome", "UNKNOWN")
+            out["reason"] = " / ".join(rec["problems"])[:300]
             return out
     try:
         guard.begin_apply(token, slug=c["slug"], kind="fix",
                           contract_sha256=csha, attempt_id=attempt)
     except Exception as e:                # noqa: BLE001
-        # ★すでに書き終わっている回なら、成功として扱う★
+        # ★「記録が適用済み」だけで成功と言わない★（2026-08-06・自分の試験で発覚）
+        #   中身を確かめる経路（_recover）を通っていない場合、
+        #   ファイルが旧値でも成功と返していた。Codex115回目のP0-2と同じ型が
+        #   別の道に残っていた。
         try:
             r = guard.reservation(token)
         except Exception:                 # noqa: BLE001
             r = {}
         if r.get("state") == "APPLIED_LOCAL" and r.get("attempt_id") == attempt:
-            out.update({"applied": True, "outcome": "APPLIED_LOCAL",
-                        "reason": None})
+            out["outcome"] = "UNKNOWN"
+            out["reason"] = ("記録は『適用済み』ですが、書き終えた姿の控えで"
+                             "確かめられませんでした。人が確かめてください")
             return out
         out["reason"] = f"予約を使えません: {e}"
         return out
@@ -570,6 +562,44 @@ def apply_contract(contract_path: str, token: str = "",
                           "NOT_APPLIED": "ROLLED_BACK_VERIFIED",
                           }.get(out.get("outcome"), "UNKNOWN"))
     _journal_done(base, attempt, out.get("outcome"))
+    return out
+
+
+def _recover(base: Path, left: dict, attempt: str, token: str,
+             guard) -> dict:
+    """やりかけを片付ける（★鍵と持ち主を取ってから★）。
+
+    ①書き終えた姿が控えてあり、いまの中身と一致 → そのまま成功
+    ②一致しない・控えが無い → 元へ戻してやり直す
+    """
+    import hashlib
+    out = {"done": False, "problems": []}
+    with _DataLock(base):
+        try:
+            guard.hold_apply(token, attempt, left.get("contract_sha256") or "")
+        except Exception as e:            # noqa: BLE001
+            out["problems"].append(f"前の処理がまだ使っています: {e}")
+            return out
+        cur = unfinished_fix(base)        # ★鍵の中で読み直す★
+        if not cur or cur.get("attempt_id") != attempt:
+            return out                    # 誰かが片付けた
+        after = cur.get("after") or {}
+        if after:
+            ok = all(
+                os.path.isfile(p)
+                and "sha256:" + hashlib.sha256(
+                    Path(p).read_bytes()).hexdigest() == want
+                for p, want in after.items())
+            if ok:
+                _journal_done(base, attempt, "APPLIED_LOCAL")
+                out.update({"done": True,
+                            "result": {"applied": True,
+                                       "outcome": "APPLIED_LOCAL"}})
+                return out
+        back = _rollback_journal(base, cur)
+        if back["problems"]:
+            out["problems"] += back["problems"]
+            out["outcome"] = "ROLLBACK_FAILED"
     return out
 
 
@@ -672,6 +702,28 @@ def _journal_done(base: Path, attempt: str, outcome) -> None:
         f.flush()
         os.fsync(f.fileno())
     os.replace(tmp, p)
+    _sync_dir(p.parent)
+
+
+def _journal_after(base: Path, attempt: str, after: dict) -> None:
+    """書き終えた姿（各ファイルの指紋）を控える。"""
+    p = _journal_path(base)
+    if not p.exists():
+        return
+    try:
+        rec = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:                     # noqa: BLE001
+        return
+    if rec.get("attempt_id") != attempt:
+        return
+    rec["after"] = after
+    fd, tmp = tempfile.mkstemp(dir=str(p.parent), suffix=".tmp")
+    with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(rec, f, ensure_ascii=False, indent=1)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, p)
+    _sync_dir(p.parent)
 
 
 def unfinished_fix(base: Path | None = None) -> dict:
@@ -762,6 +814,15 @@ def _commit_plan(contract_path: str, token: str) -> dict:
             ab.outcome = res["outcome"]   # ★結末を持たせて外へ伝える★
             ab.unrestored = bad
             raise ab
+        # ★書き終えた姿を控える★（2026-08-06・Codex116回目のP0-2）
+        #   これが無いと、再開したとき「本当に最後まで書けたのか」を
+        #   中身で確かめられず、旧値のままでも成功と誤認できた。
+        import hashlib as _hh
+        _journal_after(base, attempt, {
+            str(ap["mpath"]): "sha256:" + _hh.sha256(
+                ap["mpath"].read_bytes()).hexdigest(),
+            str(ap["dpath"]): "sha256:" + _hh.sha256(
+                ap["dpath"].read_bytes()).hexdigest()})
         res["applied"] = True
         res["outcome"] = "APPLIED_LOCAL"
     return res

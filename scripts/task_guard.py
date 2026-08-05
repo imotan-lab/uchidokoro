@@ -82,6 +82,14 @@ def _save(path: str, data: dict) -> None:
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, path)
+        try:                              # ★置き換えたことをフォルダにも残す★
+            dfd = os.open(os.path.dirname(path), os.O_RDONLY)
+            try:
+                os.fsync(dfd)
+            finally:
+                os.close(dfd)
+        except (OSError, AttributeError):
+            pass
     finally:
         if os.path.exists(tmp):
             os.remove(tmp)
