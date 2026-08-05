@@ -556,11 +556,20 @@ def apply_contract(contract_path: str, token: str = "",
                "outcome": getattr(e, "outcome", "NOT_APPLIED"),
                "unrestored": getattr(e, "unrestored", [])}
     out.update({k: v for k, v in got.items() if k not in ("contract", "_apply")})
-    guard.advance(token, {"APPLIED_LOCAL": "APPLIED_LOCAL",
-                          "ROLLED_BACK_VERIFIED": "ROLLED_BACK_VERIFIED",
-                          "ROLLBACK_FAILED": "ROLLBACK_FAILED",
-                          "NOT_APPLIED": "ROLLED_BACK_VERIFIED",
-                          }.get(out.get("outcome"), "UNKNOWN"))
+    # ★書いた後の記帳に失敗しても「未適用」とは言わない★
+    #   （2026-08-06・Codex119回目。現物は新値なのに applied:false と
+    #     報告していた＝現物・台帳・返答の三者が食い違う）
+    try:
+        guard.advance(token, {"APPLIED_LOCAL": "APPLIED_LOCAL",
+                              "ROLLED_BACK_VERIFIED": "ROLLED_BACK_VERIFIED",
+                              "ROLLBACK_FAILED": "ROLLBACK_FAILED",
+                              "NOT_APPLIED": "ROLLED_BACK_VERIFIED",
+                              }.get(out.get("outcome"), "UNKNOWN"))
+    except Exception as e:                # noqa: BLE001
+        out["outcome"] = "UNKNOWN"
+        out["reason"] = (f"書き込みは終わりましたが、台帳に記録できませんでした"
+                         f"（{e}）。人が確かめてください")
+        return out                        # ★ジャーナルは残す（復旧の手がかり）★
     _journal_done(base, attempt, out.get("outcome"))
     return out
 
@@ -600,8 +609,11 @@ def _recover(base: Path, left: dict, attempt: str, token: str,
                 try:
                     guard.advance(token, "APPLIED_LOCAL")
                 except Exception as e:    # noqa: BLE001
-                    if str(guard.reservation(token).get("state")) \
-                            != "APPLIED_LOCAL":
+                    try:
+                        _st = str(guard.reservation(token).get("state"))
+                    except Exception as e2:   # noqa: BLE001
+                        _st = f"（確かめられません: {e2}）"
+                    if _st != "APPLIED_LOCAL":
                         out["problems"].append(f"台帳を確定できません: {e}")
                         out["outcome"] = "UNKNOWN"
                         return out
@@ -1091,6 +1103,10 @@ def _t_apply(base, slug, field, old, new, apply_mode=False, expect=None):
     finally:
         _HOOKS["verify"] = _HOOKS["guard"] = None
         os.environ.pop("UCHI_AEF_TEST_HOOKS", None)
+    try:
+        _r["reservation_state"] = _tg.reservation(tok, path=sp).get("state")
+    except Exception:                     # noqa: BLE001
+        _r["reservation_state"] = None
     if os.environ.get("AEF_DEBUG") and not _r.get("applied"):
         print("   [debug]", slug, field, old, "->", new, "|", _r.get("reason"))
     return _r
