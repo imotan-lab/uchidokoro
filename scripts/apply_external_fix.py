@@ -619,8 +619,10 @@ def _recover(base: Path, left: dict, attempt: str, token: str,
             #     いちばん危ない状態が記録されずに消えていた）
             try:
                 guard.advance(token, "ROLLBACK_FAILED")
-            except Exception:             # noqa: BLE001
-                pass
+            except Exception as e:        # noqa: BLE001
+                # ★台帳に残せなかったことも伝える★（Codex118回目のP1）
+                out["problems"].append(f"台帳に記録できません: {e}")
+                out["outcome"] = "UNKNOWN"
             _journal_done(base, attempt, "ROLLBACK_FAILED")
     return out
 
@@ -821,6 +823,16 @@ def _commit_plan(contract_path: str, token: str) -> dict:
         try:
             _atomic_write(ap["mpath"], _dump(ap["machines"], ap["mraw"]))
             _atomic_write(ap["dpath"], _dump(ap["detail"], ap["draw"]))
+            # ★書き終えた姿の控えも、ここ（巻き戻しの内側）で残す★
+            #   （2026-08-06・Codex118回目のP0。外に置いていたので、
+            #     控えに失敗すると**両方書いた後なのに「書く前に中止」扱い**になり、
+            #     現物は新値のまま予約だけ「安全に戻した」と記録されていた）
+            import hashlib as _hh
+            _journal_after(base, attempt, {
+                str(ap["mpath"]): "sha256:" + _hh.sha256(
+                    ap["mpath"].read_bytes()).hexdigest(),
+                str(ap["dpath"]): "sha256:" + _hh.sha256(
+                    ap["dpath"].read_bytes()).hexdigest()})
         except BaseException as e:          # noqa: BLE001
             bad = []
             for p, b in keep.items():
@@ -841,15 +853,6 @@ def _commit_plan(contract_path: str, token: str) -> dict:
             ab.outcome = res["outcome"]   # ★結末を持たせて外へ伝える★
             ab.unrestored = bad
             raise ab
-        # ★書き終えた姿を控える★（2026-08-06・Codex116回目のP0-2）
-        #   これが無いと、再開したとき「本当に最後まで書けたのか」を
-        #   中身で確かめられず、旧値のままでも成功と誤認できた。
-        import hashlib as _hh
-        _journal_after(base, attempt, {
-            str(ap["mpath"]): "sha256:" + _hh.sha256(
-                ap["mpath"].read_bytes()).hexdigest(),
-            str(ap["dpath"]): "sha256:" + _hh.sha256(
-                ap["dpath"].read_bytes()).hexdigest()})
         res["applied"] = True
         res["outcome"] = "APPLIED_LOCAL"
     return res
@@ -1397,6 +1400,35 @@ def selftest() -> int:
       plan_digest(plan_fix(Path(_b2), "x", "ceiling.normal.game", 800, 700))
       == plan_digest(plan_fix(Path(_b2), "x", "ceiling.normal.game",
                               800.0, 700.0)))
+
+    # ★両方書いた後で控えの記録に失敗しても、現物・予約・記録がそろう★
+    #   （2026-08-06・Codex118回目のP0。以前は「書く前に中止」と同じ扱いになり、
+    #     現物は新値のまま予約だけ「安全に戻した」と記録されていた）
+    _b3 = os.path.join(_d, "base3")
+    os.makedirs(os.path.join(_b3, "assets", "data", "machine-details"))
+    with open(os.path.join(_b3, "assets", "data", "machines.json"),
+              "w", encoding="utf-8") as f:
+        json.dump([{"slug": "x", "name": "L機", "limit": 900,
+                    "checker": {"unit": "G"}}], f, ensure_ascii=False, indent=1)
+    with open(os.path.join(_b3, "assets", "data", "machine-details", "x.json"),
+              "w", encoding="utf-8") as f:
+        json.dump({"slug": "x", "sections": [
+            {"title": "天井・恩恵",
+             "body": ["天井は**900G**で、到達時はATが確定します。"]}]},
+            f, ensure_ascii=False, indent=1)
+    _real_after = globals()["_journal_after"]
+    try:
+        globals()["_journal_after"] = lambda *a, **k: (_ for _ in ()).throw(
+            Abort("控えを残せません"))
+        _rf = _t_apply(_b3, "x", "ceiling.normal.game", 900, 800,
+                       apply_mode=True)
+    finally:
+        globals()["_journal_after"] = _real_after
+    _mm3 = json.load(open(os.path.join(_b3, "assets", "data", "machines.json"),
+                          encoding="utf-8"))[0]
+    t("★★控えを残せなければ、書いた分を戻して記録もそろえる★★",
+      _rf.get("outcome") == "ROLLED_BACK_VERIFIED" and _mm3["limit"] == 900
+      and not unfinished_fix(Path(_b3)))
 
     # ── ★書き込みの巻き戻し★（片方だけ書かれた状態を残さない）
     import shutil as _sh
