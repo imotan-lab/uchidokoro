@@ -184,7 +184,10 @@ STATES = ("RESERVED", "APPLYING", "APPLIED_LOCAL", "VALIDATED", "COMMITTED",
           "PUSH_CONFIRMED", "DEFERRED", "ROLLED_BACK_VERIFIED",
           "ROLLBACK_FAILED", "UNKNOWN")
 NEXT_OK = {
-    "RESERVED": ("APPLYING", "DEFERRED", "UNKNOWN"),
+    # ★APPLYING へは begin_apply() からしか進めない★（Codex112回目の指摘4）
+    #   一般の advance() に許すと、slug・種類・契約の指紋・attempt の照合を
+    #   すべて飛ばして予約を消費できた。
+    "RESERVED": ("DEFERRED", "UNKNOWN"),
     "APPLYING": ("APPLIED_LOCAL", "ROLLED_BACK_VERIFIED", "ROLLBACK_FAILED",
                  "UNKNOWN"),
     "APPLIED_LOCAL": ("VALIDATED", "ROLLED_BACK_VERIFIED", "ROLLBACK_FAILED",
@@ -391,57 +394,55 @@ def day_status(path: str = STATE_PATH) -> dict:
 
 def claim(task: str, slug: str, path: str = STATE_PATH) -> dict:
     """今日この機種を担当してよいか。★同じ日の2機種目は拒否★"""
-    if is_test_slug(slug):
-        # ★試したときの架空機種は枠を使わない★（本番の1日1機種を守る）
-        return {"ok": True, "why": f"{slug} は試験用なので枠を使いません",
-                "test": True}
-    data = _load(path)
-    e = _entry(data, task)
-    if e["target_slug"] and e["target_slug"] != slug:
-        raise GuardError(
-            f"今日はすでに {e['target_slug']} を担当しています（1日{MACHINES_PER_DAY}機種）。"
-            f"{slug} は明日以降に回してください")
-    e["target_slug"] = slug
-    _save(path, data)
-    return e
-
+    with _Exclusive(path):
+        if is_test_slug(slug):
+            # ★試したときの架空機種は枠を使わない★（本番の1日1機種を守る）
+            return {"ok": True, "why": f"{slug} は試験用なので枠を使いません",
+                    "test": True}
+        data = _load(path)
+        e = _entry(data, task)
+        if e["target_slug"] and e["target_slug"] != slug:
+            raise GuardError(
+                f"今日はすでに {e['target_slug']} を担当しています（1日{MACHINES_PER_DAY}機種）。"
+                f"{slug} は明日以降に回してください")
+        e["target_slug"] = slug
+        _save(path, data)
+        return e
 
 def codex_round(task: str, path: str = STATE_PATH) -> int:
     """Codexへ1往復ぶん使う。★上限を超えたら拒否（必ず終わるため）★"""
     with _Exclusive(path):
-         data = _load(path)
-    e = _entry(data, task)
-    if e["codex_rounds"] >= CODEX_ROUND_LIMIT:
-        raise GuardError(
-            f"Codexとの相談が上限（{CODEX_ROUND_LIMIT}往復）に達しました。"
-            f"結論づかず扱いで台帳に登録して終わってください")
-    e["codex_rounds"] += 1
-    _save(path, data)
-    return e["codex_rounds"]
-
+        data = _load(path)
+        e = _entry(data, task)
+        if e["codex_rounds"] >= CODEX_ROUND_LIMIT:
+            raise GuardError(
+                f"Codexとの相談が上限（{CODEX_ROUND_LIMIT}往復）に達しました。"
+                f"結論づかず扱いで台帳に登録して終わってください")
+        e["codex_rounds"] += 1
+        _save(path, data)
+        return e["codex_rounds"]
 
 def before_write(task: str, slug: str, path: str = STATE_PATH) -> dict:
     """記事を書き換える前の確認。★触ってよい段階か毎回聞き直す★"""
     with _Exclusive(path):
-         data = _load(path)
-    e = _entry(data, task)
-    if e["target_slug"] != slug:
-        raise GuardError(f"今日の担当は {e['target_slug']} です（{slug} ではありません）")
-    a = cp.assess(slug)
-    if a["stage"] in FROZEN_STAGES:
-        raise GuardError(
-            f"{slug} は触ってはいけない段階です: {a['stage']} / "
-            + " / ".join(a["reasons"][:2]))
-    if a["stage"] == "READY":
-        raise GuardError(
-            f"{slug} はすでに公開してよい状態です。更新タスクが書き換える理由がありません")
-    if a["stage"] not in WRITABLE_STAGES:
-        raise GuardError(f"{slug} は想定外の段階です: {a['stage']}")
-    e["mutation_started"] = True
-    e["stage_before"] = a["stage"]
-    _save(path, data)
-    return a
-
+        data = _load(path)
+        e = _entry(data, task)
+        if e["target_slug"] != slug:
+            raise GuardError(f"今日の担当は {e['target_slug']} です（{slug} ではありません）")
+        a = cp.assess(slug)
+        if a["stage"] in FROZEN_STAGES:
+            raise GuardError(
+                f"{slug} は触ってはいけない段階です: {a['stage']} / "
+                + " / ".join(a["reasons"][:2]))
+        if a["stage"] == "READY":
+            raise GuardError(
+                f"{slug} はすでに公開してよい状態です。更新タスクが書き換える理由がありません")
+        if a["stage"] not in WRITABLE_STAGES:
+            raise GuardError(f"{slug} は想定外の段階です: {a['stage']}")
+        e["mutation_started"] = True
+        e["stage_before"] = a["stage"]
+        _save(path, data)
+        return a
 
 def before_commit(task: str, slug: str, path: str = STATE_PATH) -> dict:
     """コミットの前の確認。★直したあと必ず判定し直す★（Codex指摘1）
@@ -452,34 +453,33 @@ def before_commit(task: str, slug: str, path: str = STATE_PATH) -> dict:
     という経路が通ってしまう。
     """
     with _Exclusive(path):
-         data = _load(path)
-    e = _entry(data, task)
-    if e["target_slug"] != slug:
-        raise GuardError(f"今日の担当は {e['target_slug']} です（{slug} ではありません）")
-    a = cp.assess(slug)
-    before = e.get("stage_before")
-    if a["stage"] in ("HOLD", "NO_MACHINE"):
-        raise GuardError(
-            f"直したあとの判定ができません: {a['stage']} → コミットしないでください")
-    # ★悪化していないこと★（更新タスクは「今より悪くしない」が最優先）
-    if before and before != "BLOCKED_BY_LEDGER" and a["stage"] == "BLOCKED_BY_LEDGER":
-        raise GuardError(
-            f"直した結果、公開を止めるべき状態になりました（{before} → {a['stage']}）。"
-            f"コミットせず、変更を戻すか台帳で扱ってください")
-    e["final_stage"] = a["stage"]
-    _save(path, data)
-    return a
-
+        data = _load(path)
+        e = _entry(data, task)
+        if e["target_slug"] != slug:
+            raise GuardError(f"今日の担当は {e['target_slug']} です（{slug} ではありません）")
+        a = cp.assess(slug)
+        before = e.get("stage_before")
+        if a["stage"] in ("HOLD", "NO_MACHINE"):
+            raise GuardError(
+                f"直したあとの判定ができません: {a['stage']} → コミットしないでください")
+        # ★悪化していないこと★（更新タスクは「今より悪くしない」が最優先）
+        if before and before != "BLOCKED_BY_LEDGER" and a["stage"] == "BLOCKED_BY_LEDGER":
+            raise GuardError(
+                f"直した結果、公開を止めるべき状態になりました（{before} → {a['stage']}）。"
+                f"コミットせず、変更を戻すか台帳で扱ってください")
+        e["final_stage"] = a["stage"]
+        _save(path, data)
+        return a
 
 def done(task: str, slug: str, stage: str, path: str = STATE_PATH) -> dict:
-    with _Exclusive(path):
-         data = _load(path)
-    e = _entry(data, task)
-    e["final_stage"] = stage
-    e["finished_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    _save(path, data)
-    return e
 
+    with _Exclusive(path):
+        data = _load(path)
+        e = _entry(data, task)
+        e["final_stage"] = stage
+        e["finished_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        _save(path, data)
+        return e
 
 # ---------------------------------------------------------------- selftest
 
@@ -498,7 +498,7 @@ def _budget_tests(t, tmpdir) -> None:
                     contract_sha256="sha256:" + "a" * 64)
         if close and r.get("token"):
             # ★1件ずつ片付けてから次へ★（やりかけを2つ持たない）
-            advance(r["token"], "APPLYING", path=sp)
+            begin_apply(r["token"], slug, kind, "sha256:" + "a" * 64, "t-" + slug, path=sp)
             advance(r["token"], "ROLLED_BACK_VERIFIED", path=sp)
         return r
 
@@ -562,15 +562,20 @@ def _budget_tests(t, tmpdir) -> None:
     sp3 = os.path.join(tmpdir, "state_open.json")
     tok3 = reserve("t", "p", "fix", path=sp3, budget_path=bp,
                    contract_sha256="sha256:" + "a" * 64)["token"]
-    advance(tok3, "APPLYING", path=sp3)
+    begin_apply(tok3, "p", "fix", "sha256:" + "a" * 64, "t-p", path=sp3)
     t("★★やりかけの書き換えがあるうちは次を始めない★★",
       _raises(lambda: reserve("t", "q", "fix", path=sp3, budget_path=bp,
                               contract_sha256="sha256:" + "a" * 64),
               "やりかけ"))
     t("★★決められた順にしか進めない★★（予約直後にpush済みとは書けない）",
       _raises(lambda: advance(tok3, "PUSH_CONFIRMED", path=sp3), "進めません"))
+    t("★★普通の前進では予約を消費できない★★（照合を飛ばす経路を塞いだ）",
+      _raises(lambda: advance(
+          reserve("t", "r", "fix", path=os.path.join(tmpdir, "s5.json"),
+                  budget_path=bp, contract_sha256="sha256:" + "a" * 64)["token"],
+          "APPLYING", path=os.path.join(tmpdir, "s5.json")), "進めません"))
     t("　同じ段階への再実行は何も起きない（冪等）",
-      advance(tok3, "APPLYING", path=sp3)["state"] == "APPLYING")
+      begin_apply(tok3, "p", "fix", "sha256:" + "a" * 64, "t-p", path=sp3)["state"] == "APPLYING")
     t("★★日をまたいでも予約の履歴は消えない★★（再開できる）",
       len(_load(sp3).get("reservations") or []) == 1)
     # 予算そのものが壊れていたら止まる
@@ -691,6 +696,8 @@ def main() -> int:
     p.add_argument("--task", required=True)
     p.add_argument("--slug", required=True)
     p.add_argument("--kind", required=True, choices=["fix", "grow"])
+    p.add_argument("--contract-sha", default="",
+                   help="修正の枠には必須（契約JSONの sha256:…）")
     p = sub.add_parser("advance")          # 予約を次の段階へ（★枠は戻らない★）
     p.add_argument("--token", required=True)
     p.add_argument("--state", required=True, choices=list(STATES))
@@ -711,8 +718,9 @@ def main() -> int:
     if args.cmd == "claim":
         print(json.dumps(claim(args.task, args.slug), ensure_ascii=False, indent=1))
     elif args.cmd == "reserve":
-        print(json.dumps(reserve(args.task, args.slug, args.kind),
-                         ensure_ascii=False))
+        print(json.dumps(
+            reserve(args.task, args.slug, args.kind,
+                    contract_sha256=args.contract_sha), ensure_ascii=False))
     elif args.cmd == "advance":
         print(json.dumps(advance(args.token, args.state), ensure_ascii=False))
     elif args.cmd == "inspected":
