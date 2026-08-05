@@ -358,6 +358,13 @@ def load_contract(path) -> dict:
     #   0 も許さない（構造化値だけ直して本文に旧値が残る形を作らせない）。
     if not re.match(r"^sha256:[0-9a-f]{64}$", str(data.get("plan_sha256") or "")):
         raise ContractError("契約に計画の指紋（plan_sha256）が要ります")
+    # ★どのリポジトリのどこへ書くかも契約に書く★（2026-08-06・Codex114回目の指摘4）
+    #   base を外から渡せたので、同じ中身の別の作業フォルダへ適用できた。
+    bp = str(data.get("base_path") or "")
+    if not bp or not os.path.isdir(bp):
+        raise ContractError(f"契約の base_path が実在しません: {bp!r}")
+    if not os.path.isfile(os.path.join(bp, "assets", "data", "machines.json")):
+        raise ContractError(f"契約の base_path が機種データの場所ではありません: {bp!r}")
     n = data.get("prose_edit_count")
     if not isinstance(n, int) or isinstance(n, bool) or n < 1:
         raise ContractError(
@@ -447,74 +454,94 @@ def _domain(url) -> str:
 def apply_contract(contract_path: str, token: str = "", apply_mode: bool = False,
                    base: Path | None = None, verify=None,
                    guard=None) -> dict:
-    """★書き込みの唯一の入口★（2026-08-05・Codex110回目の指摘1・2）
+    """★書き込みの唯一の入口★
 
-    以前は `run()` が公開関数で、Pythonから直接呼べば契約の検査を丸ごと
-    飛ばせた（自分で再現した＝でたらめな値111を書けた）。
-    さらに書き換え器が**予約を要求していなかった**ので、契約を複数用意して
-    繰り返せば1日の上限を超えて書けた。
-
-    いまは ①契約 ②証拠 ③予約 の3つが揃って初めて書ける。
+    2026-08-06・Codex114回目: 書く直前の確認は `_commit_plan()` が
+    **自分で契約を読み直して**行う。ここは下見と、予約の取り扱いだけ。
+    `base` は受け取らない（契約の `base_path` が唯一の書き込み先）。
     """
     c = load_contract(contract_path)
     proof = check_contract(c, verify=verify)
-    _csha0 = _sha256_file(contract_path)
-    _tok0 = token
-    import hashlib as _h0
-    _attempt0 = _h0.sha256(f"{_tok0}|{_csha0}".encode("utf-8")).hexdigest()[:16]
-    left = unfinished_fix(base or c.get("base") or BASE_DEFAULT)
-    # ★同じ回（同じ予約・同じ契約）なら続きから★（Codex113回目の指摘2）
-    #   以前はジャーナルがあるだけで必ず止まり、決定論のattempt_idが
-    #   まったく使われていなかった＝**落ちたら二度と再開できない**。
-    if left and apply_mode and not (
-            left.get("attempt_id") == _attempt0 and left.get("stage") == "APPLYING"):
-        return {"applied": False, "outcome": "UNKNOWN",
-                "reason": f"前回の書き換えが決着していません（{left.get('attempt_id')} / "
-                          f"{left.get('stage')}）。人が確かめてください"}
-    base = Path(base or c.get("base") or BASE_DEFAULT)
+    base = Path(c["base_path"])
+    csha = _sha256_file(contract_path)
     out = {"slug": c["slug"], "field": c["field"], "old": c["old"],
            "new": c["new"], "applied": False, "reason": None,
-           "contract": {"sha256": _sha256_file(contract_path),
-                        "domains": proof["domains"]}}
-    csha = out["contract"]["sha256"]
-    attempt = ""
-    if apply_mode:
-        # ★予約が無ければ書かない★（上限をすり抜けさせない）
-        if guard is None:
-            import task_guard as guard
-        # ★同じ契約・同じ予約なら同じ回として扱う★（Codex112回目の指摘5）
-        #   毎回ばらばらのIDだと、落ちたあとの再実行が「別の回」として
-        #   拒否され、二度と再開できなかった。
-        import hashlib as _h
-        attempt = _h.sha256(f"{token}|{csha}".encode("utf-8")).hexdigest()[:16]
-        try:
-            # ★確認と消費を1つのまとまりで行う★（Codex111回目のP0-4）
-            #   以前は「読んで確かめる」と「APPLYINGへ進める」が別々で、
-            #   2つのプロセスが同じ予約で同時に書き始められた。
-            guard.begin_apply(token, slug=c["slug"], kind="fix",
-                              contract_sha256=csha, attempt_id=attempt)
-        except Exception as e:            # noqa: BLE001
-            out["reason"] = f"予約を使えません: {e}"
+           "outcome": "NOT_APPLIED",
+           "contract": {"sha256": csha, "domains": proof["domains"]}}
+    if not apply_mode:
+        plan = plan_fix(base, c["slug"], c["field"], float(c["old"]),
+                        float(c["new"]), expect=c)
+        out.update({k: v for k, v in plan.items() if k != "_apply"})
+        return out
+    import hashlib as _h
+    attempt = _h.sha256(f"{token}|{csha}".encode("utf-8")).hexdigest()[:16]
+    left = unfinished_fix(base)
+    if left:
+        if left.get("attempt_id") != attempt:
+            out["outcome"] = "UNKNOWN"
+            out["reason"] = (f"前回の書き換えが決着していません"
+                             f"（{left.get('attempt_id')} / {left.get('stage')}）。"
+                             "人が確かめてください")
             return out
-        _journal_begin(base, c, csha, token, attempt)
-    plan = plan_fix(base, c["slug"], c["field"], float(c["old"]),
-                    float(c["new"]), expect=c)
-    if apply_mode and plan.get("ready"):
+        # ★同じ回なら、まず元へ戻してからやり直す★（2026-08-06・Codex114回目の指摘2）
+        #   電源が落ちて片方だけ書けている場合があるので、
+        #   控えてある**元の中身そのもの**へ戻してから作り直す。
+        back = _rollback_journal(base, left)
+        if back["problems"]:
+            out["outcome"] = "ROLLBACK_FAILED"
+            out["reason"] = " / ".join(back["problems"])[:300]
+            return out
+    if guard is None:
+        import task_guard as guard
+    try:
+        guard.begin_apply(token, slug=c["slug"], kind="fix",
+                          contract_sha256=csha, attempt_id=attempt)
+    except Exception as e:                # noqa: BLE001
+        # ★すでに書き終わっている回なら、成功として扱う★
         try:
-            plan = _commit_plan(base, plan,
-                                _Ticket(c, csha, token, attempt), guard)
-        except Abort as e:
-            plan["reason"] = str(e)
-    got = {k: v for k, v in plan.items() if k != "_apply"}
-    out.update({k: v for k, v in got.items() if k not in ("contract",)})
-    if apply_mode:
-        # ★結末をそのまま記録する★（戻せなかったことを隠さない）
-        guard.advance(token, {"APPLIED_LOCAL": "APPLIED_LOCAL",
-                              "ROLLED_BACK_VERIFIED": "ROLLED_BACK_VERIFIED",
-                              "ROLLBACK_FAILED": "ROLLBACK_FAILED",
-                              "NOT_APPLIED": "ROLLED_BACK_VERIFIED",
-                              }.get(got.get("outcome"), "UNKNOWN"))
-        _journal_done(base, attempt, got.get("outcome"))
+            r = guard.reservation(token)
+        except Exception:                 # noqa: BLE001
+            r = {}
+        if r.get("state") == "APPLIED_LOCAL" and r.get("attempt_id") == attempt:
+            out.update({"applied": True, "outcome": "APPLIED_LOCAL",
+                        "reason": None})
+            return out
+        out["reason"] = f"予約を使えません: {e}"
+        return out
+    try:
+        got = _commit_plan(contract_path, token, verify=verify, guard=guard)
+    except Abort as e:
+        got = {"applied": False, "outcome": "NOT_APPLIED", "reason": str(e)}
+    out.update({k: v for k, v in got.items() if k not in ("contract", "_apply")})
+    guard.advance(token, {"APPLIED_LOCAL": "APPLIED_LOCAL",
+                          "ROLLED_BACK_VERIFIED": "ROLLED_BACK_VERIFIED",
+                          "ROLLBACK_FAILED": "ROLLBACK_FAILED",
+                          "NOT_APPLIED": "ROLLED_BACK_VERIFIED",
+                          }.get(out.get("outcome"), "UNKNOWN"))
+    _journal_done(base, attempt, out.get("outcome"))
+    return out
+
+
+def _rollback_journal(base: Path, rec: dict) -> dict:
+    """控えてある元の中身へ戻す（★戻せたことをバイト単位で確かめる★）。"""
+    import hashlib
+    out = {"problems": []}
+    before = rec.get("before") or {}
+    if not before:
+        out["problems"].append(
+            "元の中身が控えられていません（古い記録）。人が確かめてください")
+        return out
+    for p, text in before.items():
+        try:
+            _atomic_write(Path(p), text)
+            got = "sha256:" + hashlib.sha256(
+                Path(p).read_bytes()).hexdigest()
+            want = "sha256:" + hashlib.sha256(
+                text.encode("utf-8")).hexdigest()
+            if got != want:
+                out["problems"].append(f"{Path(p).name} を戻せませんでした")
+        except Exception as e:            # noqa: BLE001
+            out["problems"].append(f"{Path(p).name} を戻せません（{e}）")
     return out
 
 
@@ -529,13 +556,21 @@ def _journal_path(base: Path) -> Path:
 
 
 def _journal_begin(base: Path, c: dict, csha: str, token: str,
-                   attempt: str) -> None:
+                   attempt: str, keep: dict | None = None) -> None:
+    """★書く前に、元の中身そのものを控える★（2026-08-06・Codex114回目の指摘2）
+
+    以前は指紋しか残していなかったので、1つ目を書いた直後に電源が落ちると
+    **元へ戻す材料がどこにも無かった**。しかも再開時は
+    「もう新しい値になっている＝直すものが無い」と読めてしまい、
+    片方だけ直った状態を「安全に巻き戻した」と記録していた。
+    """
     import datetime as _dt
     rec = {"attempt_id": attempt, "token": token, "contract_sha256": csha,
            "slug": c["slug"], "field": c["field"],
            "old": c["old"], "new": c["new"],
            "machines_before_sha256": c["machines_before_sha256"],
            "detail_before_sha256": c["detail_before_sha256"],
+           "before": {str(k): v for k, v in (keep or {}).items()},
            "stage": "APPLYING", "outcome": None,
            "at": _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
     p = _journal_path(base)
@@ -585,30 +620,36 @@ def unfinished_fix(base: Path | None = None) -> dict:
         return {"stage": "UNKNOWN", "_why": f"記録が読めません: {e}"}
 
 
-def _commit_plan(base: Path, plan: dict, ticket: _Ticket, guard) -> dict:
-    """★書き込みはここだけ★（2026-08-05・Codex112回目の指摘1・6）
+def _commit_plan(contract_path: str, token: str, verify=None,
+                 guard=None) -> dict:
+    """★書き込みはここだけ★（2026-08-06・Codex114回目の指摘1）
 
-    ①許可証があること ②予約がいま `APPLYING` で、同じ回（attempt_id）であること
-    ③対象ファイルが計画時のままであること、を**書く直前にもう一度**確かめる。
-    さらに対象フォルダの鍵を取って、確認と置き換えの間に割り込ませない。
+    ★受け取るのは「契約ファイルの場所」と「予約」だけ★
+      以前は計画と許可証を引数で受け取っていたので、呼び出し側が
+      正しい指紋を自分で計算した許可証を作れば、**契約も証拠も通らずに**
+      書けた。ここでは**この関数自身が**契約を読み、証拠を確かめ、
+      計画を作り直し、予約を照合する。外から差し替えられるのは
+      「試験用の関所と台帳」だけで、書く中身には一切触れない。
     """
+    import hashlib
+    c = load_contract(contract_path)
+    csha = _sha256_file(contract_path)
+    check_contract(c, verify=verify)       # ★証拠は必ずここで確かめ直す★
+    base = Path(c["base_path"])
+    attempt = hashlib.sha256(
+        f"{token}|{csha}".encode("utf-8")).hexdigest()[:16]
+    if guard is None:
+        import task_guard as guard
+    plan = plan_fix(base, c["slug"], c["field"], float(c["old"]),
+                    float(c["new"]), expect=c)
     res = plan
-    if not isinstance(ticket, _Ticket):
-        raise Abort("許可証がありません（契約を通っていない書き込みです）")
     ap = plan.get("_apply") or {}
     if not plan.get("ready") or not ap:
-        raise Abort("書ける計画ではありません")
-    c = ticket.contract
-    # ★計画そのものが契約と一致すること★（許可証を自作しても通らない）
-    got_plan = plan_digest(plan)
-    if got_plan != str(c.get("plan_sha256") or ""):
+        return res
+    # ★計画そのものが契約と一致すること★
+    if plan_digest(plan) != str(c.get("plan_sha256") or ""):
         raise Abort("計画が契約と違います（書き換える場所か中身が変わっています）")
-    for k in ("slug", "field"):
-        if str(plan.get(k)) != str(c.get(k)):
-            raise Abort(f"計画の {k} が契約と違います")
-    if float(plan.get("old")) != float(c["old"]) or \
-            float(plan.get("new")) != float(c["new"]):
-        raise Abort("計画の新旧の値が契約と違います")
+    ticket = _Ticket(c, csha, token, attempt)
     with _DataLock(base):                  # ★確認から置き換えまでを他に割り込ませない★
         # ★予約の確認と書き込みを同じ鍵の中で★（Codex113回目の指摘4）
         r = guard.hold_apply(ticket.token, ticket.attempt_id, ticket.sha256)
@@ -632,6 +673,9 @@ def _commit_plan(base: Path, plan: dict, ticket: _Ticket, guard) -> dict:
             raise Abort(f"{ap['slug']}.json が再整形で変化する（手整形）→安全に書けない")
         keep = {ap["mpath"]: ap["mpath"].read_bytes(),
                 ap["dpath"]: ap["dpath"].read_bytes()}
+        # ★書く前に、元の中身そのものをディスクへ控える★（WAL）
+        _journal_begin(base, c, csha, token, attempt,
+                       keep={str(k): v.decode("utf-8") for k, v in keep.items()})
         try:
             _atomic_write(ap["mpath"], _dump(ap["machines"], ap["mraw"]))
             _atomic_write(ap["dpath"], _dump(ap["detail"], ap["draw"]))
@@ -640,6 +684,9 @@ def _commit_plan(base: Path, plan: dict, ticket: _Ticket, guard) -> dict:
             for p, b in keep.items():
                 try:
                     _atomic_write(p, b.decode("utf-8"))
+                    # ★戻せたことをバイトで確かめる★（Codex114回目の指摘2）
+                    if p.read_bytes() != b:
+                        bad.append(f"{p.name}（戻した中身が一致しません）")
                 except Exception as e2:      # noqa: BLE001
                     bad.append(f"{p.name}（{e2}）")
             # ★戻せなかったことを「安全に戻した」と記録しない★
@@ -655,11 +702,51 @@ def _commit_plan(base: Path, plan: dict, ticket: _Ticket, guard) -> dict:
 
 
 class _DataLock:
-    """対象データを触る間の鍵（同じ場所を2つの処理が書かないように）。"""
+    """対象データを触る間の鍵（同じ場所を2つの処理が書かないように）。
+
+    ★持ち主がいなくなった鍵は奪う★（2026-08-06・電源断の試験で分かった）
+      強制終了すると鍵のファイルだけが残り、**再開できない時間**ができる。
+      鍵に持ち主のプロセス番号を書いておき、そのプロセスが居なければ奪う。
+    """
 
     def __init__(self, base):
         self.path = str(Path(base) / ".fix-data.lock")
         self.fd = None
+
+    @staticmethod
+    def _alive(pid: int) -> bool:
+        """そのプロセスがまだ動いているか（居なければ鍵を奪ってよい）。"""
+        if pid <= 0:
+            return False
+        try:
+            import subprocess
+            r = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+                               capture_output=True, text=True, timeout=10,
+                               encoding="utf-8", errors="replace")
+            return str(pid) in (r.stdout or "")
+        except Exception:                 # noqa: BLE001
+            return True                   # 分からないときは奪わない（安全側）
+
+    def _take_over(self) -> bool:
+        """残っている鍵を奪ってよいか調べ、よければ消す。"""
+        try:
+            with open(self.path, encoding="utf-8") as f:
+                pid = int((f.read().strip() or "0").split()[0])
+        except Exception:                 # noqa: BLE001
+            pid = 0
+        import time
+        old = False
+        try:
+            old = time.time() - os.path.getmtime(self.path) > 600
+        except OSError:
+            pass
+        if old or not self._alive(pid):
+            try:
+                os.remove(self.path)
+                return True
+            except OSError:
+                return False
+        return False
 
     def __enter__(self):
         import time
@@ -667,14 +754,11 @@ class _DataLock:
             try:
                 self.fd = os.open(self.path,
                                   os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.write(self.fd, str(os.getpid()).encode("ascii"))
                 return self
             except FileExistsError:
-                try:
-                    if time.time() - os.path.getmtime(self.path) > 600:
-                        os.remove(self.path)
-                        continue
-                except OSError:
-                    pass
+                if self._take_over():
+                    continue
                 time.sleep(0.1)
         raise Abort("ほかの処理がデータを書いています（30秒待っても空きません）")
 
@@ -808,7 +892,7 @@ def _t_apply(base, slug, field, old, new, apply_mode=False, expect=None):
          "machines_before_sha256": sha(mp) if mp.exists() else "",
          "detail_before_sha256": sha(dp) if dp.exists() else "",
          "prose_edit_count": (expect or {}).get("prose_edit_count", hits),
-         "plan_sha256": pdig}
+         "plan_sha256": pdig, "base_path": str(Path(base).resolve())}
     c.update({k: v for k, v in (expect or {}).items()
               if k in ("prose_edit_count", "machines_before_sha256",
                        "detail_before_sha256")})
@@ -830,7 +914,7 @@ def _t_apply(base, slug, field, old, new, apply_mode=False, expect=None):
 
     tok = _tg.reserve("t", slug, "fix", path=sp, budget_path=bp,
                       contract_sha256=sha(cp))["token"]
-    _r = apply_contract(cp, token=tok, apply_mode=True, base=Path(base),
+    _r = apply_contract(cp, token=tok, apply_mode=True,
                         verify=lambda e: 0, guard=_G)
     if os.environ.get("AEF_DEBUG") and not _r.get("applied"):
         print("   [debug]", slug, field, old, "->", new, "|", _r.get("reason"))
@@ -1018,7 +1102,8 @@ def selftest() -> int:
               "machines_before_sha256": "sha256:" + "0" * 64,
               "detail_before_sha256": "sha256:" + "0" * 64,
               "prose_edit_count": 1,
-              "plan_sha256": "sha256:" + "0" * 64}
+              "plan_sha256": "sha256:" + "0" * 64,
+              "base_path": str(BASE_DEFAULT)}
 
     def _try(c, verify=ok_verify):
         try:
@@ -1116,12 +1201,17 @@ def selftest() -> int:
 
     # ★許可証を自作しても、計画が契約と違えば書けない★（Codex113回目の指摘1）
     _p9 = plan_fix(Path(_b2), "x", "ceiling.normal.game", 800, 700)
-    t("★★別の計画を渡しても書けない★★（許可証は誰でも作れるので計画を照合する）",
-      _raises_abort(lambda: _commit_plan(
-          Path(_b2), _p9,
-          _Ticket({"slug": "x", "field": "ceiling.normal.game", "old": 800,
-                   "new": 700, "plan_sha256": "sha256:" + "0" * 64},
-                  "sha256:" + "a" * 64, "tok", "att"), None)))
+    # ★最終地点は契約ファイルしか受け取らない★（2026-08-06・Codex114回目）
+    #   計画も許可証も外から渡せないので、「正しい指紋を自分で計算して
+    #   自作の許可証で書く」という経路そのものが無くなった。
+    import inspect as _insp
+    _sig = list(_insp.signature(_commit_plan).parameters)
+    t("★★書き込みの最終地点は、計画も許可証も受け取らない★★",
+      _sig[:2] == ["contract_path", "token"]
+      and not any(x in _sig for x in ("plan", "ticket", "base")))
+    t("　契約に書き込み先（base_path）が無ければ読まない",
+      _raises_contract(lambda: load_contract(_write("nb.json", dict(
+          base_c, base_path="/存在しない場所")))))
     t("　計画の指紋は数の書き方（900 と 900.0）で変わらない",
       plan_digest(plan_fix(Path(_b2), "x", "ceiling.normal.game", 800, 700))
       == plan_digest(plan_fix(Path(_b2), "x", "ceiling.normal.game",

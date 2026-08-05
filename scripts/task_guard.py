@@ -132,21 +132,52 @@ class _Exclusive:
         self.lock = path + ".lock"
         self.fd = None
 
+    @staticmethod
+    def _alive(pid: int) -> bool:
+        """そのプロセスがまだ動いているか（居なければ鍵を奪ってよい）。"""
+        if pid <= 0:
+            return False
+        try:
+            import subprocess
+            r = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+                               capture_output=True, text=True, timeout=10,
+                               encoding="utf-8", errors="replace")
+            return str(pid) in (r.stdout or "")
+        except Exception:                 # noqa: BLE001
+            return True                   # 分からないときは奪わない（安全側）
+
+    def _take_over(self) -> bool:
+        """残っている鍵を奪ってよいか調べ、よければ消す。"""
+        try:
+            with open(self.lock, encoding="utf-8") as f:
+                pid = int((f.read().strip() or "0").split()[0])
+        except Exception:                 # noqa: BLE001
+            pid = 0
+        import time
+        old = False
+        try:
+            old = time.time() - os.path.getmtime(self.lock) > 600
+        except OSError:
+            pass
+        if old or not self._alive(pid):
+            try:
+                os.remove(self.lock)
+                return True
+            except OSError:
+                return False
+        return False
+
     def __enter__(self):
         import time
         for _ in range(300):              # 最大30秒待つ
             try:
                 self.fd = os.open(self.lock,
                                   os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.write(self.fd, str(os.getpid()).encode("ascii"))
                 return self
             except FileExistsError:
-                # ★古い鍵は奪う★（落ちたプロセスの鍵で永久に止まらないように）
-                try:
-                    if time.time() - os.path.getmtime(self.lock) > 600:
-                        os.remove(self.lock)
-                        continue
-                except OSError:
-                    pass
+                if self._take_over():     # ★持ち主が居なければ奪う★
+                    continue
                 time.sleep(0.1)
         raise GuardError("ほかの処理が枠を使っています（30秒待っても空きません）")
 
@@ -222,7 +253,7 @@ def _day(data: dict) -> dict:
     if d.get("date") != _today():
         d.clear()
         d.update({"date": _today(), "writes": {"total": 0, "fix": 0, "grow": 0},
-                  "inspections": 0, "halted": None})
+                  "inspections": 0, "halted": None, "target_slug": None})
     data.setdefault("reservations", [])   # ★履歴は消さない★
     return d
 
@@ -379,7 +410,12 @@ def hold_apply(token: str, attempt_id: str, contract_sha256: str,
             raise GuardError(f"その予約は使えません（いま {hit.get('state')}）")
         cur = str(hit.get("owner") or "")
         if cur and cur != owner:
-            raise GuardError(f"別の処理が書いています（owner={cur}）")
+            # ★持ち主が居なくなっていたら引き継ぐ★（2026-08-06・電源断の試験で発覚）
+            #   落ちたプロセスの番号が残るだけで、二度と再開できなかった。
+            if _Exclusive._alive(int(cur) if cur.isdigit() else 0):
+                raise GuardError(f"別の処理が書いています（owner={cur}）")
+            _log_takeover = f"（前の持ち主 {cur} は居ないので引き継ぎます）"
+            hit["owner_taken_over_from"] = cur
         hit["owner"] = owner
         _save(path, data)
         return hit
@@ -436,6 +472,16 @@ def claim(task: str, slug: str, path: str = STATE_PATH) -> dict:
                     "test": True}
         data = _load(path)
         e = _entry(data, task)
+        # ★担当は日単位で1つ★（2026-08-06・Codex114回目の指摘5）
+        #   以前はタスクごとに数えていたので、**タスク名を変えれば**
+        #   同じ日に何機種でも担当できた。
+        d = _day(data)
+        cur = d.get("target_slug")
+        if cur and cur != slug:
+            raise GuardError(
+                f"今日はすでに {cur} を担当しています（1日{MACHINES_PER_DAY}機種）。"
+                f"{slug} は明日以降に回してください")
+        d["target_slug"] = slug
         if e["target_slug"] and e["target_slug"] != slug:
             raise GuardError(
                 f"今日はすでに {e['target_slug']} を担当しています（1日{MACHINES_PER_DAY}機種）。"
@@ -667,8 +713,8 @@ def selftest() -> int:
           claim("t", "hokuto", fp)["target_slug"] == "hokuto")
         t("★★同じ日の2機種目は拒否する★★（1日1機種が実際に効く）",
           raises(lambda: claim("t", "enen", fp), "1日"))
-        t("　別のタスクは別に数える",
-          claim("t2", "enen", fp)["target_slug"] == "enen")
+        t("★★タスク名を変えても1日1機種は迂回できない★★（Codex114回目の指摘5）",
+          raises(lambda: claim("t2", "enen", fp), "1日"))
 
         for i in (1, 2, 3):
             codex_round("t", fp)
@@ -679,6 +725,7 @@ def selftest() -> int:
 
         t("★担当していない機種は書き換えられない★",
           raises(lambda: before_write("t", "enen", fp), "今日の担当"))
+        claim("t2", "hokuto", fp)      # 別タスクでも担当は同じ機種だけ
         # ★段階を作って確かめる★（2026-08-05・Codex110回目の指摘11。
         #   以前は `or True` が付いていて、何が起きても合格していた）
         _real_assess = cp.assess
@@ -686,13 +733,13 @@ def selftest() -> int:
             cp.assess = lambda slug: {"stage": FROZEN_STAGES[0],
                                       "reasons": ["試験"]}
             t("★★止めるべき機種は触らせない★★",
-              raises(lambda: before_write("t2", "enen", fp), "触ってはいけない"))
+              raises(lambda: before_write("t2", "hokuto", fp), "触ってはいけない"))
             cp.assess = lambda slug: {"stage": "READY", "reasons": []}
             t("★すでに公開してよい機種は書き換えない★",
-              raises(lambda: before_write("t2", "enen", fp), "理由がありません"))
+              raises(lambda: before_write("t2", "hokuto", fp), "理由がありません"))
             cp.assess = lambda slug: {"stage": "でたらめ", "reasons": []}
             t("★知らない段階なら書かない★",
-              raises(lambda: before_write("t2", "enen", fp), "想定外"))
+              raises(lambda: before_write("t2", "hokuto", fp), "想定外"))
         finally:
             cp.assess = _real_assess
 
