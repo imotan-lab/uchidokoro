@@ -57,6 +57,11 @@ FIELD_SPEC = {
     "ceiling.normal.through": {"struct": "suruMax", "labels": ("天井", "スルー"),
                                "units": ("スルー",), "small": True},
 }
+# ★同じ数値でも「別の話」だと分かる語★（これがあれば取り違えを避けて中止する）
+#   通常天井とリセット後天井が同じ数値、という記事は珍しくない。
+_OTHER_TOPIC_WORDS = ("リセット", "設定変更", "朝一", "有利区間", "引き戻し",
+                      "スルー", "周期", "CZ間", "AT間", "ボーナス間", "ST間")
+
 # 単位が省かれていても同じ値を指すと読める後続語（ここも置換する）
 _FOLLOW_WORDS = ("到達", "以降", "以上", "まで", "消化", "ハマり", "回転", "超え")
 
@@ -132,6 +137,15 @@ def _fmt_like(sample: str, new) -> str:
     return f"{int(s):,}" if ("," in sample and s.isdigit()) else s
 
 
+def _section_titles(detail: dict) -> dict:
+    """節の番号 → 題（本文がどの話題の中にあるかを見るため）。"""
+    out = {}
+    for i, sec in enumerate(detail.get("sections") or []):
+        if isinstance(sec, dict):
+            out[i] = str(sec.get("title") or "")
+    return out
+
+
 def _iter_texts(detail: dict):
     """(取り出し関数, 差し替え関数, 文字列) を列挙する。lead・sections本文・箱・表を対象。"""
     def walk(container, key, path):
@@ -181,6 +195,7 @@ def plan_prose_edits(detail: dict, field: str, old, new) -> list[dict]:
     units, small = spec["units"], spec["small"]
     olds = _num_variants(old)
     followers = "|".join(map(re.escape, list(units) + list(_FOLLOW_WORDS)))
+    titles = _section_titles(detail)
     edits = []
     for container, key, text, path in _iter_texts(detail):
         if not any(o in text for o in olds):
@@ -200,6 +215,21 @@ def plan_prose_edits(detail: dict, field: str, old, new) -> list[dict]:
                                 f"（…{new_text[max(0, mm.start() - 14):mm.end() + 14]}…）"
                                 f"→記事内で数字が食い違う恐れがあるので修正しない")
         if hits:
+            # ★その数値が「この項目の値」だと分かる書き方か★
+            #   （2026-08-06・Codex120回目。labels を定義しておきながら
+            #     一度も使っておらず、**同じ数値なら何の話でも書き換えて**いた。
+            #     実際に「リセット後は900G」「周期は900Gごと」まで直していた）
+            m_sec = re.match(r"^sections\[(\d+)\]", path)
+            ctx = text + " " + (titles.get(int(m_sec.group(1)), "")
+                                if m_sec else "")
+            if not any(lab in ctx for lab in spec["labels"]):
+                raise Abort(f"{path}: この数値が{spec['labels'][0]}の値だと"
+                            f"読み取れません（…{text[:30]}…）→修正しない")
+            other = [w for w in _OTHER_TOPIC_WORDS
+                     if w in ctx and not any(w in lab for lab in spec["labels"])]
+            if other:
+                raise Abort(f"{path}: 別の話題（{other[0]}）と同じ数値なので"
+                            f"取り違える恐れがあります（…{text[:30]}…）→修正しない")
             edits.append({"path": path, "before": text, "after": new_text,
                           "container": container, "key": key, "count": hits})
     return edits
@@ -713,6 +743,20 @@ def _sync_dir(d) -> None:
 
 
 def _journal_done(base: Path, attempt: str, outcome) -> None:
+    """★ここで例外を外へ出さない★（2026-08-06・Codex120回目）
+
+    後片付けの失敗が呼び出し元まで飛ぶと、**書き終わっているのに
+    「未適用」と報告**してしまう。片付けに失敗しても、
+    残るのは「やりかけの記録」なので次回が気づける（安全側）。
+    """
+    try:
+        _journal_done_inner(base, attempt, outcome)
+    except Exception as e:                # noqa: BLE001
+        print(json.dumps({"warn": f"記録の後片付けに失敗しました: {e}"},
+                         ensure_ascii=False))
+
+
+def _journal_done_inner(base: Path, attempt: str, outcome) -> None:
     p = _journal_path(base)
     if not p.exists():
         return
@@ -1039,7 +1083,8 @@ def _raises_contract(fn) -> bool:
         return True
 
 
-def _t_apply(base, slug, field, old, new, apply_mode=False, expect=None):
+def _t_apply(base, slug, field, old, new, apply_mode=False, expect=None,
+             break_advance=False):
     """★試験用★ 契約と予約を本物どおり通してから書く（迂回経路を作らない）。
 
     2026-08-05・Codex112回目: 自己試験が書き込み関数を直接叩いていたため、
@@ -1089,7 +1134,13 @@ def _t_apply(base, slug, field, old, new, apply_mode=False, expect=None):
 
     class _G:
         reservation = staticmethod(lambda t: _tg.reservation(t, path=sp))
-        advance = staticmethod(lambda t, st, **k: _tg.advance(t, st, path=sp, **k))
+
+        @staticmethod
+        def advance(t, st, **k):
+            # ★「書けたのに台帳へ記録できない」状況を作るため★
+            if break_advance and st == "APPLIED_LOCAL":
+                raise RuntimeError("台帳が書けません")
+            return _tg.advance(t, st, path=sp, **k)
         begin_apply = staticmethod(lambda t, **k: _tg.begin_apply(t, path=sp, **k))
         hold_apply = staticmethod(
             lambda t, a, c: _tg.hold_apply(t, a, c, path=sp))
@@ -1180,21 +1231,34 @@ def selftest() -> int:
 
         # 3b. 単位が略されていても意味が分かる書き方（900到達）は一緒に直す
         d2b = json.loads(json.dumps(base_detail))
-        d2b["sections"][1]["body"].append("900到達で優遇されます。")
+        d2b["sections"][0]["body"].append("900到達で優遇されます。")
         setup(base_machine, d2b)
         r = _t_apply(tmp, "t", "ceiling.normal.game", 900, 1000, apply_mode=True)
         eq(r["applied"], True, "単位省略+到達:適用する")
         d = json.loads((tmp / "assets" / "data" / "machine-details" / "t.json").read_text(encoding="utf-8"))
-        eq(d["sections"][1]["body"][-1], "1000到達で優遇されます。", "単位省略+到達:直る")
+        eq(d["sections"][0]["body"][-1], "1000到達で優遇されます。", "単位省略+到達:直る")
 
-        # 3c. ラベルの無い文でも単位付きなら直す（記事内で数字が食い違わないように）
+        # 3c. ★ラベルの無い文は直さない★（2026-08-06・Codex120回目で契約を変更）
+        #   以前は「単位が付いていれば何の話でも直す」だったので、
+        #   リセット後の天井や周期まで書き換えていた（自分で再現した）。
         d2c = json.loads(json.dumps(base_detail))
         d2c["sections"][1]["body"].append("900Gからは打ち切りです。")
         setup(base_machine, d2c)
         r = _t_apply(tmp, "t", "ceiling.normal.game", 900, 1000, apply_mode=True)
-        eq(r["applied"], True, "ラベル無し単位付き:直す")
+        eq(r["applied"], False, "ラベル無しの文があれば直さない")
         d = json.loads((tmp / "assets" / "data" / "machine-details" / "t.json").read_text(encoding="utf-8"))
-        eq(d["sections"][1]["body"][-1], "1000Gからは打ち切りです。", "ラベル無し単位付き:内容")
+        eq(d["sections"][1]["body"][-1], "900Gからは打ち切りです。",
+           "ラベル無し:本文は変わらない")
+        # ★別の話題（リセット・周期）と同じ数値なら中止する★
+        d2d = {"slug": "t", "lead": "天井は900Gです。",
+               "sections": [{"title": "天井・恩恵", "body": ["天井は900Gです。"]},
+                            {"title": "朝一・リセット情報",
+                             "body": ["リセット後は900Gで前兆が始まります。"]}]}
+        setup(base_machine, d2d)
+        r = _t_apply(tmp, "t", "ceiling.normal.game", 900, 1000, apply_mode=True)
+        eq(r["applied"], False, "別の話題と同じ数値なら直さない")
+        eq(json.loads((tmp / "assets" / "data" / "machines.json").read_text(
+            encoding="utf-8"))[0]["limit"], 900, "別の話題:構造化値も変えない")
 
         # 3d. 3桁以上で意味の判定がつかない裸の同値が残る → 中止（部分適用しない）
         d2d = json.loads(json.dumps(base_detail))
@@ -1445,6 +1509,33 @@ def selftest() -> int:
     t("★★控えを残せなければ、書いた分を戻して記録もそろえる★★",
       _rf.get("outcome") == "ROLLED_BACK_VERIFIED" and _mm3["limit"] == 900
       and not unfinished_fix(Path(_b3)))
+
+    # ★書き終えた後に台帳へ記録できない場合★（2026-08-06・Codex119/120回目）
+    _b4 = os.path.join(_d, "base4")
+    os.makedirs(os.path.join(_b4, "assets", "data", "machine-details"))
+    with open(os.path.join(_b4, "assets", "data", "machines.json"),
+              "w", encoding="utf-8") as f:
+        json.dump([{"slug": "x", "name": "L機", "limit": 900,
+                    "checker": {"unit": "G"}}], f, ensure_ascii=False, indent=1)
+    with open(os.path.join(_b4, "assets", "data", "machine-details", "x.json"),
+              "w", encoding="utf-8") as f:
+        json.dump({"slug": "x", "sections": [
+            {"title": "天井・恩恵",
+             "body": ["天井は**900G**で、到達時はATが確定します。"]}]},
+            f, ensure_ascii=False, indent=1)
+    _rk = _t_apply(_b4, "x", "ceiling.normal.game", 900, 800, apply_mode=True,
+                   break_advance=True)
+    _mm4 = json.load(open(os.path.join(_b4, "assets", "data", "machines.json"),
+                          encoding="utf-8"))[0]
+    _dd4 = json.load(open(os.path.join(_b4, "assets", "data",
+                                       "machine-details", "x.json"),
+                          encoding="utf-8"))
+    t("★★書けたのに台帳へ記録できない時は、事実をそのまま返す★★"
+      "（現物・本文・返答・記録の4つを確かめる）",
+      _rk.get("outcome") == "UNKNOWN" and _rk.get("applied") is True
+      and _mm4["limit"] == 800
+      and "800G" in _dd4["sections"][0]["body"][0]
+      and (unfinished_fix(Path(_b4)) or {}).get("stage") == "APPLYING")
 
     # ── ★書き込みの巻き戻し★（片方だけ書かれた状態を残さない）
     import shutil as _sh
