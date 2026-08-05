@@ -1,0 +1,11 @@
+{
+  "schema_version": "task-budget/v1",
+  "_why": "1日の上限。★機種数ではなく「書き換えた数」で数える★（点検は安く、書き換えは高い）。段階的に上げる（Codex109回目の助言）。",
+  "_stage": "初期（2026-08-05〜）",
+  "writes_total": 3,
+  "writes_fix": 2,
+  "writes_grow": 1,
+  "inspections": 15,
+  "_next_stage": "7日連続で完走し、既存記事の修正が10件以上できたら writes_total=4 / writes_fix=3 へ。さらに7日＋15件で 5 / 4。1件でも巻き戻し・監査違反・push不一致が出たら1段下げて凍結",
+  "_deadline_hhmm": "07:20（これ以降は新しい書き換えに着手しない）"
+}

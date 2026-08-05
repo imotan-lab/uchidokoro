@@ -107,6 +107,127 @@ def is_test_slug(slug: str) -> bool:
     return any(w in str(slug or "") for w in TEST_SLUG_MARKS)
 
 
+# ─────────────────────────────────────────────
+# ★1日の予算（機種数ではなく「書き換えた数」で数える）★
+#   2026-08-05・運営者決定＋Codex109回目
+#   点検（読むだけ）は安いので多く回せる。書き換えは1件ずつ確かめる分だけ高い。
+#   だから上限は**書き換えの数**に置く。段階的に上げる（初期は控えめ）。
+# ─────────────────────────────────────────────
+
+BUDGET_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "assets", "data", "task-budget.json")
+
+
+def budget(path: str = BUDGET_PATH) -> dict:
+    """1日の上限（★読めなければ止める＝fail-closed★）。"""
+    d = _sj.read_json(path, expect=dict)
+    if d.get("schema_version") != "task-budget/v1":
+        raise GuardError(f"知らない予算の形です: {d.get('schema_version')!r}")
+    for k in ("writes_total", "writes_fix", "writes_grow", "inspections"):
+        v = d.get(k)
+        if not isinstance(v, int) or v < 0:
+            raise GuardError(f"予算の {k} が数ではありません: {v!r}")
+    if d["writes_fix"] + d["writes_grow"] < d["writes_total"]:
+        raise GuardError("内訳の合計が総枠に届きません（設定の誤り）")
+    return d
+
+
+def _day(data: dict) -> dict:
+    """その日ぶんの共通の記録（★タスク名をまたいで1つ★）。
+
+    ★タスク名を変えても迂回できないようにする★（Codex109回目）
+      以前はタスクごとに別の枠だったので、名前を変えれば上限をすり抜けられた。
+    """
+    d = data.setdefault("day", {})
+    if d.get("date") != _today():
+        d.clear()
+        d.update({"date": _today(), "writes": {"total": 0, "fix": 0, "grow": 0},
+                  "inspections": 0, "halted": None, "reserved": []})
+    return d
+
+
+def reserve(task: str, slug: str, kind: str, path: str = STATE_PATH,
+            budget_path: str = BUDGET_PATH) -> dict:
+    """書き換えを1件ぶん予約する（★書き始める前に必ず通す★）。
+
+    ★予約した時点で枠を使う★（Codex109回目）
+      書き終わってから数えると、途中で落ちて再起動するたびに
+      同じ枠で何度でもやり直せてしまう。失敗しても枠は戻さない。
+    """
+    if kind not in ("fix", "grow"):
+        raise GuardError(f"知らない種類です: {kind!r}")
+    if is_test_slug(slug):
+        return {"ok": True, "test": True, "token": "",
+                "why": f"{slug} は試験用なので枠を使いません"}
+    b = budget(budget_path)
+    data = _load(path)
+    d = _day(data)
+    if d.get("halted"):
+        raise GuardError(f"今日は止めています（{d['halted']}）")
+    if d["writes"]["total"] >= b["writes_total"]:
+        raise GuardError(f"今日の書き換えは上限です（{b['writes_total']}件）")
+    if d["writes"][kind] >= b[f"writes_{kind}"]:
+        raise GuardError(
+            f"{'既存記事の修正' if kind == 'fix' else '育てる処理'}は"
+            f"今日の上限です（{b['writes_' + kind]}件）")
+    token = f"{_today()}-{kind}-{slug}-{d['writes']['total'] + 1}"
+    d["writes"]["total"] += 1
+    d["writes"][kind] += 1
+    d["reserved"].append({"token": token, "task": task, "slug": slug,
+                          "kind": kind, "state": "RESERVED",
+                          "at": datetime.now().strftime("%H:%M:%S")})
+    _save(path, data)
+    return {"ok": True, "token": token, "used": dict(d["writes"]),
+            "limit": {k: b[k] for k in ("writes_total", "writes_fix",
+                                        "writes_grow")}}
+
+
+def finish(token: str, state: str, path: str = STATE_PATH) -> dict:
+    """予約の結末を記録する（★枠は戻さない★）。"""
+    if state not in ("APPLIED", "ROLLED_BACK", "DEFERRED", "PUSH_CONFIRMED"):
+        raise GuardError(f"知らない結末です: {state!r}")
+    data = _load(path)
+    d = _day(data)
+    hit = next((r for r in d["reserved"] if r["token"] == token), None)
+    if hit is None:
+        raise GuardError(f"その予約がありません: {token}")
+    hit["state"] = state
+    _save(path, data)
+    return hit
+
+
+def inspected(task: str, slug: str, path: str = STATE_PATH,
+              budget_path: str = BUDGET_PATH) -> dict:
+    """点検を1件ぶん数える（★読むだけでも上限はある＝実行時間の歯止め★）。"""
+    if is_test_slug(slug):
+        return {"ok": True, "test": True}
+    b = budget(budget_path)
+    data = _load(path)
+    d = _day(data)
+    if d.get("halted"):
+        raise GuardError(f"今日は止めています（{d['halted']}）")
+    if d["inspections"] >= b["inspections"]:
+        raise GuardError(f"今日の点検は上限です（{b['inspections']}件）")
+    d["inspections"] += 1
+    _save(path, data)
+    return {"ok": True, "inspections": d["inspections"],
+            "limit": b["inspections"]}
+
+
+def halt(reason: str, path: str = STATE_PATH) -> dict:
+    """その日をまるごと止める（★タスク名を変えても迂回できない★）。"""
+    data = _load(path)
+    d = _day(data)
+    d["halted"] = str(reason)[:300]
+    _save(path, data)
+    return d
+
+
+def day_status(path: str = STATE_PATH) -> dict:
+    return _day(_load(path))
+
+
 def claim(task: str, slug: str, path: str = STATE_PATH) -> dict:
     """今日この機種を担当してよいか。★同じ日の2機種目は拒否★"""
     if is_test_slug(slug):
@@ -197,6 +318,59 @@ def done(task: str, slug: str, stage: str, path: str = STATE_PATH) -> dict:
 
 # ---------------------------------------------------------------- selftest
 
+def _budget_tests(t, tmpdir) -> None:
+    """1日の予算（書き換えた数で数える）の試験。"""
+    import json as _j
+    bp = os.path.join(tmpdir, "budget.json")
+    sp = os.path.join(tmpdir, "state.json")
+    with open(bp, "w", encoding="utf-8") as f:
+        _j.dump({"schema_version": "task-budget/v1", "writes_total": 3,
+                 "writes_fix": 2, "writes_grow": 1, "inspections": 2}, f)
+
+    def res(kind, slug):
+        return reserve("t", slug, kind, path=sp, budget_path=bp)
+
+    t("　1件目の書き換えは取れる", res("fix", "a")["token"])
+    t("　2件目も取れる", res("fix", "b")["token"])
+    t("★★既存記事の修正は内訳の上限で止まる★★",
+      _raises(lambda: res("fix", "c"), "上限"))
+    t("　育てる枠はまだ残っている", res("grow", "d")["token"])
+    t("★★総枠を超えたら種類を問わず止まる★★",
+      _raises(lambda: res("grow", "e"), "上限"))
+    # ★失敗しても枠は戻らない★
+    tok = day_status(path=sp)["reserved"][0]["token"]
+    finish(tok, "ROLLED_BACK", path=sp)
+    t("★★巻き戻しても枠は戻らない★★（再起動で無限に試せてしまうため）",
+      _raises(lambda: res("fix", "f"), "上限")
+      and day_status(path=sp)["writes"]["total"] == 3)
+    # 点検の上限
+    t("　点検も数える", inspected("t", "a", path=sp, budget_path=bp)["ok"])
+    inspected("t", "b", path=sp, budget_path=bp)
+    t("★★点検にも上限がある★★（実行時間の歯止め）",
+      _raises(lambda: inspected("t", "c", path=sp, budget_path=bp), "上限"))
+    # 試験用の機種は枠を使わない
+    t("　試験用の機種は枠を使わない",
+      reserve("t", "zzz_test", "fix", path=sp, budget_path=bp)["test"])
+    # 止めたら、タスク名を変えても通らない
+    halt("監査に引っかかったため", path=sp)
+    t("★★止めた日は、別のタスク名でも書けない★★",
+      _raises(lambda: reserve("別のタスク", "g", "fix", path=sp,
+                              budget_path=bp), "止めています"))
+    # 予算そのものが壊れていたら止まる
+    with open(bp, "w", encoding="utf-8") as f:
+        f.write("{壊れた")
+    t("★★予算が読めない日は動かさない★★",
+      _raises(lambda: budget(bp), ""))
+
+
+def _raises(fn, word: str = "") -> bool:
+    try:
+        fn()
+        return False
+    except Exception as e:                # noqa: BLE001
+        return (word in str(e)) if word else True
+
+
 def selftest() -> int:
     import shutil
     results = []
@@ -257,6 +431,14 @@ def selftest() -> int:
       is_test_slug("zzz_ためし") and is_test_slug("test_x")
       and is_test_slug("確認機ZZZ") and not is_test_slug("hokuto"))
 
+    import tempfile as _tf
+    import shutil as _sh
+    _d = _tf.mkdtemp(prefix="guard_")
+    try:
+        _budget_tests(t, _d)
+    finally:
+        _sh.rmtree(_d, ignore_errors=True)
+
     ng = [n for n, ok in results if not ok]
     print(f"\n{len(results) - len(ng)}/{len(results)} 合格")
     if ng:
@@ -274,6 +456,21 @@ def main() -> int:
         p.add_argument("--slug", required=True)
         if name == "done":
             p.add_argument("--stage", required=True)
+    p = sub.add_parser("reserve")          # ★書き換えの枠を取る★
+    p.add_argument("--task", required=True)
+    p.add_argument("--slug", required=True)
+    p.add_argument("--kind", required=True, choices=["fix", "grow"])
+    p = sub.add_parser("finish")           # 予約の結末（★枠は戻らない★）
+    p.add_argument("--token", required=True)
+    p.add_argument("--state", required=True,
+                   choices=["APPLIED", "ROLLED_BACK", "DEFERRED",
+                            "PUSH_CONFIRMED"])
+    p = sub.add_parser("inspected")        # 点検を1件数える
+    p.add_argument("--task", required=True)
+    p.add_argument("--slug", required=True)
+    p = sub.add_parser("halt")             # その日をまるごと止める
+    p.add_argument("--reason", required=True)
+    sub.add_parser("day")                  # 今日の使用状況
     p = sub.add_parser("codex")
     p.add_argument("--task", required=True)
     p = sub.add_parser("status")
@@ -284,6 +481,17 @@ def main() -> int:
         return selftest()
     if args.cmd == "claim":
         print(json.dumps(claim(args.task, args.slug), ensure_ascii=False, indent=1))
+    elif args.cmd == "reserve":
+        print(json.dumps(reserve(args.task, args.slug, args.kind),
+                         ensure_ascii=False))
+    elif args.cmd == "finish":
+        print(json.dumps(finish(args.token, args.state), ensure_ascii=False))
+    elif args.cmd == "inspected":
+        print(json.dumps(inspected(args.task, args.slug), ensure_ascii=False))
+    elif args.cmd == "halt":
+        print(json.dumps(halt(args.reason), ensure_ascii=False))
+    elif args.cmd == "day":
+        print(json.dumps(day_status(), ensure_ascii=False, indent=1))
     elif args.cmd == "codex":
         print(f"Codex相談 {codex_round(args.task)}/{CODEX_ROUND_LIMIT} 回目")
     elif args.cmd == "before-write":
