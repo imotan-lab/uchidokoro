@@ -309,6 +309,13 @@ def selftest() -> int:
 
 
 def main() -> int:
+    # ★日本語Windowsの画面でも落ちないようにする★（2026-08-05・台帳#227）
+    #   記事の本文には「—」など cp932 に無い字が混ざる。そのまま出すと
+    #   無人タスクの点検が**途中で黙って落ちる**（実際に起きた）。
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:                     # noqa: BLE001
+        pass
     ap = argparse.ArgumentParser(description="危ない表現を原子ごと消す")
     ap.add_argument("--slug")
     ap.add_argument("--apply", action="store_true")
