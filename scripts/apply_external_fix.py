@@ -244,6 +244,100 @@ def _atomic_write(path: Path, text: str) -> None:
 
 
 # ─────────────────────────────────────────────
+# 契約（★これが唯一の入口★）
+# ─────────────────────────────────────────────
+
+CONTRACT_SCHEMA = "fix-contract/v1"
+
+
+class ContractError(Exception):
+    pass
+
+
+def _sha256_file(path) -> str:
+    import hashlib
+    with open(path, "rb") as f:
+        return "sha256:" + hashlib.sha256(f.read()).hexdigest()
+
+
+def _norm_value(v) -> str:
+    """比べるための形（数は数として、それ以外は空白を詰めた文字列）。"""
+    import unicodedata
+    t = unicodedata.normalize("NFKC", str(v)).strip()
+    try:
+        f = float(t.replace(",", "").rstrip("G枚%"))
+        return f"{f:g}"
+    except ValueError:
+        return " ".join(t.split())
+
+
+def load_contract(path) -> dict:
+    """契約を読み、形を確かめる。
+
+    ★なぜ契約が要るか（2026-08-05・Codex109回目）★
+      これまでは `--new` に任意の値を渡せた。証拠ファイルで値Aを合格させてから、
+      書き込み器に値Bを渡すことが**構造上できた**。
+      「2出典が一致した値だけを書く」は手順書のルールでしかなく、
+      コードが強制していなかった。いまは**契約に書いた値**しか書けない。
+    """
+    import safe_json as _sj
+    data = _sj.read_json(str(path), expect=dict)
+    if data.get("schema_version") != CONTRACT_SCHEMA:
+        raise ContractError(f"知らない契約の形です: {data.get('schema_version')!r}")
+    need = ("slug", "field", "old", "new", "evidence_file",
+            "evidence_sha256", "evidence_field")
+    miss = [k for k in need if not str(data.get(k) or "").strip()]
+    if miss:
+        raise ContractError(f"契約に足りない項目があります: {', '.join(miss)}")
+    return data
+
+
+def check_contract(c: dict, verify=None, min_domains: int = 2) -> dict:
+    """契約と証拠が本当に結び付いているかを確かめる（★ここを通らないと書かない★）。
+
+    ①証拠ファイルが契約の指紋と一致する（すり替え防止）
+    ②その証拠が verify_claims の関所を通る（出典が実在し、逐語で一致する）
+    ③証拠の中の**その項目**が、独立2ドメイン以上で、**すべて同じ値**
+    ④その値が**契約の new と一致する**（＝合格させた値しか書けない）
+    """
+    import safe_json as _sj
+    ev_path = c["evidence_file"]
+    if not os.path.isfile(ev_path):
+        raise ContractError(f"証拠ファイルがありません: {ev_path}")
+    got = _sha256_file(ev_path)
+    if got != c["evidence_sha256"]:
+        raise ContractError(f"証拠ファイルが契約と違います（指紋 {got[:19]}…）")
+    ev = _sj.read_json(ev_path, expect=dict)
+    if str(ev.get("slug") or "") != str(c["slug"]):
+        raise ContractError(f"証拠の機種が違います（{ev.get('slug')!r}）")
+    if verify is None:
+        import verify_claims as _vc
+        verify = lambda d: _vc.run_data(d, min_domains)   # noqa: E731
+    if verify(ev) != 0:
+        raise ContractError("証拠が関所を通りません（出典の実在・逐語一致が取れない）")
+    rows = [r for r in (ev.get("claims") or [])
+            if str(r.get("field") or "") == str(c["evidence_field"])]
+    if not rows:
+        raise ContractError(f"証拠に「{c['evidence_field']}」の記載がありません")
+    doms = {(_domain(r.get("url")) or "") for r in rows}
+    if len(doms) < min_domains:
+        raise ContractError(
+            f"「{c['evidence_field']}」の出典が {len(doms)} ドメインしかありません")
+    vals = {_norm_value(r.get("value")) for r in rows}
+    if len(vals) != 1:
+        raise ContractError(f"証拠の中で値が食い違っています: {sorted(vals)}")
+    if vals.pop() != _norm_value(c["new"]):
+        raise ContractError(
+            f"契約の新値が、証拠で合格した値と違います（契約 {c['new']!r}）")
+    return {"domains": sorted(doms), "value": c["new"]}
+
+
+def _domain(url) -> str:
+    import urllib.parse
+    return urllib.parse.urlsplit(str(url or "")).netloc.lower()
+
+
+# ─────────────────────────────────────────────
 # 本体
 # ─────────────────────────────────────────────
 
@@ -281,17 +375,44 @@ def run(base: Path, slug: str, field: str, old, new, apply_mode: bool) -> dict:
                 raise Abort("machines.json が再整形で変化する（手整形）→安全に書けない")
             if not _roundtrip_safe(detail, draw):
                 raise Abort(f"{slug}.json が再整形で変化する（手整形）→安全に書けない")
-            _atomic_write(mpath, _dump(machines, mraw))
-            _atomic_write(dpath, _dump(detail, draw))
+            # ★全か無か★（2026-08-05・Codex109回目の指摘2）
+            #   以前は machines.json を書いた後で記事の書き込みが失敗すると、
+            #   **数値だけ直って本文は旧値のまま**の状態が残った（戻す処理が無かった）。
+            keep = {mpath: mpath.read_bytes(), dpath: dpath.read_bytes()}
+            try:
+                _atomic_write(mpath, _dump(machines, mraw))
+                _atomic_write(dpath, _dump(detail, draw))
+            except BaseException as e:      # noqa: BLE001
+                bad = []
+                for p, b in keep.items():
+                    try:
+                        _atomic_write(p, b.decode("utf-8"))
+                    except Exception as e2:  # noqa: BLE001
+                        bad.append(f"{p.name}（{e2}）")
+                raise Abort("書き込みを取り消しました: " + str(e)
+                            + ("／★戻せませんでした: " + " / ".join(bad) + "★"
+                               if bad else ""))
             res["applied"] = True
     except Abort as e:
         res["reason"] = str(e)
     return res
 
 
+def _raises_contract(fn) -> bool:
+    try:
+        fn()
+        return False
+    except (ContractError, Exception):
+        return True
+
+
 def selftest() -> int:
     import shutil
     ok = fail = 0
+
+    def t(label, cond):
+        """真偽で書く試験（既存の eq に合わせる）。"""
+        eq(bool(cond), True, label)
 
     def eq(got, want, label):
         nonlocal ok, fail
@@ -437,12 +558,105 @@ def selftest() -> int:
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
+    # ── ★契約入口★（2026-08-05・Codex109回目）
+    import tempfile as _tf
+    _d = _tf.mkdtemp()
+
+    def _write(name, obj):
+        p = os.path.join(_d, name)
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(obj, f, ensure_ascii=False)
+        return p
+
+    EV = {"slug": "x", "identity": {"must_contain": ["L機"]},
+          "claims": [
+              {"field": "天井", "value": "800", "critical": True,
+               "url": "https://a.example/1", "quote": "800G"},
+              {"field": "天井", "value": "800", "critical": True,
+               "url": "https://b.example/1", "quote": "800G"}]}
+    ev_p = _write("ev.json", EV)
+    ok_verify = lambda d: 0            # noqa: E731  関所は通ったことにする
+    base_c = {"schema_version": CONTRACT_SCHEMA, "slug": "x",
+              "field": "ceiling.normal.games", "old": 900, "new": 800,
+              "evidence_file": ev_p, "evidence_sha256": _sha256_file(ev_p),
+              "evidence_field": "天井"}
+
+    def _try(c, verify=ok_verify):
+        try:
+            check_contract(c, verify=verify)
+            return ""
+        except Exception as e:          # noqa: BLE001
+            return str(e)
+
+    t("　証拠と契約が合っていれば通る", _try(dict(base_c)) == "")
+    t("★★証拠で合格した値と違う値は書けない★★（値のすり替え）",
+      "証拠で合格した値と違います" in _try(dict(base_c, new=750)))
+    t("★★証拠ファイルを差し替えたら通さない★★",
+      "証拠ファイルが契約と違います" in
+      _try(dict(base_c, evidence_sha256="sha256:" + "0" * 64)))
+    t("★★関所を通らない証拠では書けない★★",
+      "関所を通りません" in _try(dict(base_c), verify=lambda d: 1))
+    EV1 = {**EV, "claims": EV["claims"][:1]}
+    p1 = _write("ev1.json", EV1)
+    t("★★1ドメインしか無い証拠では書けない★★",
+      "ドメインしかありません" in _try(dict(
+          base_c, evidence_file=p1, evidence_sha256=_sha256_file(p1))))
+    EV2 = {**EV, "claims": [EV["claims"][0],
+                            dict(EV["claims"][1], value="999")]}
+    p2 = _write("ev2.json", EV2)
+    t("★★証拠の中で値が食い違っていたら書けない★★",
+      "食い違っています" in _try(dict(
+          base_c, evidence_file=p2, evidence_sha256=_sha256_file(p2))))
+    t("　証拠に無い項目は書けない",
+      "の記載がありません" in _try(dict(base_c, evidence_field="機械割")))
+    t("★★知らない形の契約は読まない★★",
+      _raises_contract(lambda: load_contract(
+          _write("bad.json", {"schema_version": "でたらめ"}))))
+
+    # ── ★書き込みの巻き戻し★（片方だけ書かれた状態を残さない）
+    import shutil as _sh
+    _b = os.path.join(_d, "base")
+    os.makedirs(os.path.join(_b, "assets", "data", "machine-details"))
+    _mp = os.path.join(_b, "assets", "data", "machines.json")
+    _dp = os.path.join(_b, "assets", "data", "machine-details", "x.json")
+    with open(_mp, "w", encoding="utf-8") as f:
+        json.dump([{"slug": "x", "name": "L機", "limit": 900,
+                    "checker": {"unit": "G"}}], f,
+                  ensure_ascii=False, indent=1)
+    with open(_dp, "w", encoding="utf-8") as f:
+        json.dump({"slug": "x", "sections": [
+            {"title": "天井・恩恵",
+             "body": ["天井は**900G**で、到達時はATが確定します。"]}]},
+            f, ensure_ascii=False, indent=1)
+    _before = (open(_mp, encoding="utf-8").read(),
+               open(_dp, encoding="utf-8").read())
+    _real_w = globals()["_atomic_write"]
+    _calls = {"n": 0}
+
+    def _fail_second(path, text):
+        _calls["n"] += 1
+        if _calls["n"] == 2:
+            raise OSError("2つ目の書き込みでわざと失敗")
+        return _real_w(path, text)
+
+    try:
+        globals()["_atomic_write"] = _fail_second
+        _r = run(Path(_b), "x", "ceiling.normal.game", 900, 800, True)
+    finally:
+        globals()["_atomic_write"] = _real_w
+    t("★★片方だけ書けた状態を残さない★★（2つ目で失敗させて確認）",
+      not _r["applied"] and "取り消しました" in (_r["reason"] or "")
+      and (open(_mp, encoding="utf-8").read(),
+           open(_dp, encoding="utf-8").read()) == _before)
+    _sh.rmtree(_d, ignore_errors=True)
+
     print(f"apply_external_fix selftest: {ok}/{ok + fail}")
     return 0 if fail == 0 else 1
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="裏取り済み外部数値の書き戻し（決定論）")
+    ap.add_argument("--contract", help="★書き込みの唯一の入口★ 契約JSONのパス")
     ap.add_argument("--slug")
     ap.add_argument("--field")
     ap.add_argument("--old")
@@ -453,9 +667,34 @@ def main() -> int:
     a = ap.parse_args()
     if a.selftest:
         return selftest()
+    if a.contract:
+        # ★契約から読む★（値を人が手で渡さない）
+        try:
+            c = load_contract(a.contract)
+            proof = check_contract(c)
+        except (ContractError, Exception) as e:   # noqa: BLE001
+            print(json.dumps({"applied": False,
+                              "reason": f"契約を通せません: {e}"},
+                             ensure_ascii=False))
+            return 1
+        r = run(Path(a.base), c["slug"], c["field"],
+                float(c["old"]), float(c["new"]), a.apply)
+        r["contract"] = {"evidence_file": c["evidence_file"],
+                         "evidence_sha256": c["evidence_sha256"],
+                         "domains": proof["domains"]}
+        print(json.dumps(r, ensure_ascii=False))
+        return 0 if (r["applied"] or (not a.apply and not r["reason"])) else 1
     if not (a.slug and a.field and a.old is not None and a.new is not None):
-        ap.error("--slug --field --old --new が必要")
+        ap.error("--contract、または --slug --field --old --new が必要")
         return 2
+    # ★契約なしで書き込むことは許さない★（2026-08-05・Codex109回目）
+    #   下見（値の当たりを見る）だけは従来どおり使える。
+    if a.apply:
+        print(json.dumps({"applied": False,
+                          "reason": "★--apply には --contract が必要です★"
+                                    "（証拠と結び付いていない値は書きません）"},
+                         ensure_ascii=False))
+        return 1
     r = run(Path(a.base), a.slug, a.field, float(a.old), float(a.new), a.apply)
     print(json.dumps(r, ensure_ascii=False))
     return 0 if (r["applied"] or (not a.apply and not r["reason"])) else 1
