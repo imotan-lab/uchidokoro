@@ -7,5 +7,6 @@
   "writes_grow": 1,
   "inspections": 15,
   "_next_stage": "7日連続で完走し、既存記事の修正が10件以上できたら writes_total=4 / writes_fix=3 へ。さらに7日＋15件で 5 / 4。1件でも巻き戻し・監査違反・push不一致が出たら1段下げて凍結",
-  "_deadline_hhmm": "07:20（これ以降は新しい書き換えに着手しない）"
+  "deadline_hhmm": "07:20",
+  "_deadline_why": "これ以降は新しい書き換えに着手しない（途中で朝を迎えないため）。★コードが読む設定★"
 }

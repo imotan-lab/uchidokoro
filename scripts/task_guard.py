@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
 from datetime import datetime
@@ -119,6 +120,46 @@ BUDGET_PATH = os.path.join(
     "assets", "data", "task-budget.json")
 
 
+class _Exclusive:
+    """★同時に2つ動いても枠を超えさせない★（2026-08-05・Codex110回目の指摘5）
+
+    以前は「読む→上限を見る→足す→保存」の間に排他が無く、
+    2つのプロセスが同じ状態を読むと**両方が上限内と判断**し、
+    後から保存した方だけが残って枠が消えた（自分で再現した）。
+    """
+
+    def __init__(self, path: str):
+        self.lock = path + ".lock"
+        self.fd = None
+
+    def __enter__(self):
+        import time
+        for _ in range(300):              # 最大30秒待つ
+            try:
+                self.fd = os.open(self.lock,
+                                  os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                return self
+            except FileExistsError:
+                # ★古い鍵は奪う★（落ちたプロセスの鍵で永久に止まらないように）
+                try:
+                    if time.time() - os.path.getmtime(self.lock) > 600:
+                        os.remove(self.lock)
+                        continue
+                except OSError:
+                    pass
+                time.sleep(0.1)
+        raise GuardError("ほかの処理が枠を使っています（30秒待っても空きません）")
+
+    def __exit__(self, *a):
+        try:
+            if self.fd is not None:
+                os.close(self.fd)
+            os.remove(self.lock)
+        except OSError:
+            pass
+        return False
+
+
 def budget(path: str = BUDGET_PATH) -> dict:
     """1日の上限（★読めなければ止める＝fail-closed★）。"""
     d = _sj.read_json(path, expect=dict)
@@ -128,9 +169,43 @@ def budget(path: str = BUDGET_PATH) -> dict:
         v = d.get(k)
         if not isinstance(v, int) or v < 0:
             raise GuardError(f"予算の {k} が数ではありません: {v!r}")
+    # ★締切は説明ではなく設定として読む★（2026-08-05・Codex110回目の指摘8。
+    #   以前は `_deadline_hhmm` という覚え書きキーで、コードは見ていなかった）
+    dl = str(d.get("deadline_hhmm") or "")
+    if not re.match(r"^([01]\d|2[0-3]):[0-5]\d$", dl):
+        raise GuardError(f"予算の deadline_hhmm が時刻の形ではありません: {dl!r}")
     if d["writes_fix"] + d["writes_grow"] < d["writes_total"]:
         raise GuardError("内訳の合計が総枠に届きません（設定の誤り）")
     return d
+
+
+# ★予約の段階★（★決められた順にしか進めない★・Codex110回目の指摘7）
+STATES = ("RESERVED", "APPLYING", "APPLIED_LOCAL", "VALIDATED", "COMMITTED",
+          "PUSH_CONFIRMED", "DEFERRED", "ROLLED_BACK_VERIFIED",
+          "ROLLBACK_FAILED", "UNKNOWN")
+NEXT_OK = {
+    "RESERVED": ("APPLYING", "DEFERRED", "UNKNOWN"),
+    "APPLYING": ("APPLIED_LOCAL", "ROLLED_BACK_VERIFIED", "ROLLBACK_FAILED",
+                 "UNKNOWN"),
+    "APPLIED_LOCAL": ("VALIDATED", "ROLLED_BACK_VERIFIED", "ROLLBACK_FAILED",
+                      "UNKNOWN"),
+    "VALIDATED": ("COMMITTED", "ROLLED_BACK_VERIFIED", "ROLLBACK_FAILED",
+                  "UNKNOWN"),
+    "COMMITTED": ("PUSH_CONFIRMED", "UNKNOWN"),
+    "PUSH_CONFIRMED": (),
+    "DEFERRED": (), "ROLLED_BACK_VERIFIED": (),
+    "ROLLBACK_FAILED": ("ROLLED_BACK_VERIFIED", "UNKNOWN"),
+    "UNKNOWN": ("ROLLED_BACK_VERIFIED", "ROLLBACK_FAILED", "DEFERRED"),
+}
+# ここまで来ていない予約は「やりかけ」＝翌日の新規着手より先に片付ける
+OPEN_STATES = ("RESERVED", "APPLYING", "APPLIED_LOCAL", "VALIDATED",
+               "COMMITTED", "ROLLBACK_FAILED", "UNKNOWN")
+
+
+def open_reservations(data: dict) -> list:
+    """やりかけの予約（★日をまたいでも消さない★・Codex110回目の指摘7）。"""
+    return [r for r in (data.get("reservations") or [])
+            if r.get("state") in OPEN_STATES]
 
 
 def _day(data: dict) -> dict:
@@ -143,12 +218,14 @@ def _day(data: dict) -> dict:
     if d.get("date") != _today():
         d.clear()
         d.update({"date": _today(), "writes": {"total": 0, "fix": 0, "grow": 0},
-                  "inspections": 0, "halted": None, "reserved": []})
+                  "inspections": 0, "halted": None})
+    data.setdefault("reservations", [])   # ★履歴は消さない★
     return d
 
 
 def reserve(task: str, slug: str, kind: str, path: str = STATE_PATH,
-            budget_path: str = BUDGET_PATH) -> dict:
+            budget_path: str = BUDGET_PATH,
+            contract_sha256: str = "") -> dict:
     """書き換えを1件ぶん予約する（★書き始める前に必ず通す★）。
 
     ★予約した時点で枠を使う★（Codex109回目）
@@ -161,39 +238,76 @@ def reserve(task: str, slug: str, kind: str, path: str = STATE_PATH,
         return {"ok": True, "test": True, "token": "",
                 "why": f"{slug} は試験用なので枠を使いません"}
     b = budget(budget_path)
-    data = _load(path)
-    d = _day(data)
-    if d.get("halted"):
-        raise GuardError(f"今日は止めています（{d['halted']}）")
-    if d["writes"]["total"] >= b["writes_total"]:
-        raise GuardError(f"今日の書き換えは上限です（{b['writes_total']}件）")
-    if d["writes"][kind] >= b[f"writes_{kind}"]:
-        raise GuardError(
-            f"{'既存記事の修正' if kind == 'fix' else '育てる処理'}は"
-            f"今日の上限です（{b['writes_' + kind]}件）")
-    token = f"{_today()}-{kind}-{slug}-{d['writes']['total'] + 1}"
-    d["writes"]["total"] += 1
-    d["writes"][kind] += 1
-    d["reserved"].append({"token": token, "task": task, "slug": slug,
-                          "kind": kind, "state": "RESERVED",
-                          "at": datetime.now().strftime("%H:%M:%S")})
-    _save(path, data)
-    return {"ok": True, "token": token, "used": dict(d["writes"]),
-            "limit": {k: b[k] for k in ("writes_total", "writes_fix",
-                                        "writes_grow")}}
+    with _Exclusive(path):                # ★ここから保存までを他に割り込ませない★
+        data = _load(path)
+        d = _day(data)
+        if d.get("halted"):
+            raise GuardError(f"今日は止めています（{d['halted']}）")
+        # ★締切を過ぎたら新しい書き換えに着手しない★（途中で朝を迎えないため）
+        if datetime.now().strftime("%H:%M") >= b["deadline_hhmm"]:
+            raise GuardError(
+                f"新しい書き換えの締切（{b['deadline_hhmm']}）を過ぎています")
+        # ★やりかけがあるなら、先にそれを片付ける★
+        left = [r for r in open_reservations(data) if r["token"] != ""]
+        if left:
+            raise GuardError(
+                f"やりかけの書き換えが残っています（{left[0]['token']} / "
+                f"{left[0]['state']}）。先に片付けてください")
+        if d["writes"]["total"] >= b["writes_total"]:
+            raise GuardError(f"今日の書き換えは上限です（{b['writes_total']}件）")
+        if d["writes"][kind] >= b[f"writes_{kind}"]:
+            raise GuardError(
+                f"{'既存記事の修正' if kind == 'fix' else '育てる処理'}は"
+                f"今日の上限です（{b['writes_' + kind]}件）")
+        token = f"{_today()}-{kind}-{slug}-{d['writes']['total'] + 1}"
+        d["writes"]["total"] += 1
+        d["writes"][kind] += 1
+        data["reservations"].append(
+            {"token": token, "task": task, "slug": slug, "kind": kind,
+             "state": "RESERVED", "contract_sha256": contract_sha256,
+             "date": _today(),
+             "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+        _save(path, data)
+        return {"ok": True, "token": token, "used": dict(d["writes"]),
+                "limit": {k: b[k] for k in ("writes_total", "writes_fix",
+                                            "writes_grow")}}
 
 
-def finish(token: str, state: str, path: str = STATE_PATH) -> dict:
-    """予約の結末を記録する（★枠は戻さない★）。"""
-    if state not in ("APPLIED", "ROLLED_BACK", "DEFERRED", "PUSH_CONFIRMED"):
-        raise GuardError(f"知らない結末です: {state!r}")
-    data = _load(path)
-    d = _day(data)
-    hit = next((r for r in d["reserved"] if r["token"] == token), None)
+def advance(token: str, state: str, path: str = STATE_PATH, **extra) -> dict:
+    """予約を次の段階へ進める（★決められた順にしか進めない・枠は戻さない★）。
+
+    ★2026-08-05・Codex110回目の指摘7★
+      以前は「今どこにいるか」を見ずに任意の結末へ上書きできた
+      （予約した直後に「push済み」と書けた）。落ちたあとに再開するとき、
+      どこまで進んだのか分からなくなる。
+    """
+    if state not in STATES:
+        raise GuardError(f"知らない段階です: {state!r}")
+    with _Exclusive(path):
+        data = _load(path)
+        _day(data)
+        hit = next((r for r in data.get("reservations") or []
+                    if r["token"] == token), None)
+        if hit is None:
+            raise GuardError(f"その予約がありません: {token}")
+        cur = hit.get("state")
+        if state == cur:
+            return hit                    # 同じ段階への再実行は何もしない（冪等）
+        if state not in NEXT_OK.get(cur, ()):
+            raise GuardError(f"{cur} から {state} へは進めません")
+        hit["state"] = state
+        hit.update({k: v for k, v in extra.items() if v is not None})
+        hit["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        _save(path, data)
+        return hit
+
+
+def reservation(token: str, path: str = STATE_PATH) -> dict:
+    """予約の中身を読む（書き換え器が照合するため）。"""
+    hit = next((r for r in (_load(path).get("reservations") or [])
+                if r["token"] == token), None)
     if hit is None:
         raise GuardError(f"その予約がありません: {token}")
-    hit["state"] = state
-    _save(path, data)
     return hit
 
 
@@ -203,25 +317,27 @@ def inspected(task: str, slug: str, path: str = STATE_PATH,
     if is_test_slug(slug):
         return {"ok": True, "test": True}
     b = budget(budget_path)
-    data = _load(path)
-    d = _day(data)
-    if d.get("halted"):
-        raise GuardError(f"今日は止めています（{d['halted']}）")
-    if d["inspections"] >= b["inspections"]:
-        raise GuardError(f"今日の点検は上限です（{b['inspections']}件）")
-    d["inspections"] += 1
-    _save(path, data)
-    return {"ok": True, "inspections": d["inspections"],
-            "limit": b["inspections"]}
+    with _Exclusive(path):
+        data = _load(path)
+        d = _day(data)
+        if d.get("halted"):
+            raise GuardError(f"今日は止めています（{d['halted']}）")
+        if d["inspections"] >= b["inspections"]:
+            raise GuardError(f"今日の点検は上限です（{b['inspections']}件）")
+        d["inspections"] += 1
+        _save(path, data)
+        return {"ok": True, "inspections": d["inspections"],
+                "limit": b["inspections"]}
 
 
 def halt(reason: str, path: str = STATE_PATH) -> dict:
     """その日をまるごと止める（★タスク名を変えても迂回できない★）。"""
-    data = _load(path)
-    d = _day(data)
-    d["halted"] = str(reason)[:300]
-    _save(path, data)
-    return d
+    with _Exclusive(path):
+        data = _load(path)
+        d = _day(data)
+        d["halted"] = str(reason)[:300]
+        _save(path, data)
+        return d
 
 
 def day_status(path: str = STATE_PATH) -> dict:
@@ -325,10 +441,16 @@ def _budget_tests(t, tmpdir) -> None:
     sp = os.path.join(tmpdir, "state.json")
     with open(bp, "w", encoding="utf-8") as f:
         _j.dump({"schema_version": "task-budget/v1", "writes_total": 3,
-                 "writes_fix": 2, "writes_grow": 1, "inspections": 2}, f)
+                 "writes_fix": 2, "writes_grow": 1, "inspections": 2,
+                 "deadline_hhmm": "23:59"}, f)
 
-    def res(kind, slug):
-        return reserve("t", slug, kind, path=sp, budget_path=bp)
+    def res(kind, slug, close=True):
+        r = reserve("t", slug, kind, path=sp, budget_path=bp)
+        if close and r.get("token"):
+            # ★1件ずつ片付けてから次へ★（やりかけを2つ持たない）
+            advance(r["token"], "APPLYING", path=sp)
+            advance(r["token"], "ROLLED_BACK_VERIFIED", path=sp)
+        return r
 
     t("　1件目の書き換えは取れる", res("fix", "a")["token"])
     t("　2件目も取れる", res("fix", "b")["token"])
@@ -338,8 +460,6 @@ def _budget_tests(t, tmpdir) -> None:
     t("★★総枠を超えたら種類を問わず止まる★★",
       _raises(lambda: res("grow", "e"), "上限"))
     # ★失敗しても枠は戻らない★
-    tok = day_status(path=sp)["reserved"][0]["token"]
-    finish(tok, "ROLLED_BACK", path=sp)
     t("★★巻き戻しても枠は戻らない★★（再起動で無限に試せてしまうため）",
       _raises(lambda: res("fix", "f"), "上限")
       and day_status(path=sp)["writes"]["total"] == 3)
@@ -356,6 +476,29 @@ def _budget_tests(t, tmpdir) -> None:
     t("★★止めた日は、別のタスク名でも書けない★★",
       _raises(lambda: reserve("別のタスク", "g", "fix", path=sp,
                               budget_path=bp), "止めています"))
+    # ★締切を過ぎたら新しい書き換えに着手しない★
+    bp2 = os.path.join(tmpdir, "budget_late.json")
+    sp2 = os.path.join(tmpdir, "state_late.json")
+    with open(bp2, "w", encoding="utf-8") as f:
+        _j.dump({"schema_version": "task-budget/v1", "writes_total": 3,
+                 "writes_fix": 2, "writes_grow": 1, "inspections": 2,
+                 "deadline_hhmm": "00:00"}, f)
+    t("★★締切を過ぎたら新しい書き換えに着手しない★★",
+      _raises(lambda: reserve("t", "z", "fix", path=sp2, budget_path=bp2),
+              "締切"))
+    # ★やりかけがあるうちは次を始めない★
+    sp3 = os.path.join(tmpdir, "state_open.json")
+    tok3 = reserve("t", "p", "fix", path=sp3, budget_path=bp)["token"]
+    advance(tok3, "APPLYING", path=sp3)
+    t("★★やりかけの書き換えがあるうちは次を始めない★★",
+      _raises(lambda: reserve("t", "q", "fix", path=sp3, budget_path=bp),
+              "やりかけ"))
+    t("★★決められた順にしか進めない★★（予約直後にpush済みとは書けない）",
+      _raises(lambda: advance(tok3, "PUSH_CONFIRMED", path=sp3), "進めません"))
+    t("　同じ段階への再実行は何も起きない（冪等）",
+      advance(tok3, "APPLYING", path=sp3)["state"] == "APPLYING")
+    t("★★日をまたいでも予約の履歴は消えない★★（再開できる）",
+      len(_load(sp3).get("reservations") or []) == 1)
     # 予算そのものが壊れていたら止まる
     with open(bp, "w", encoding="utf-8") as f:
         f.write("{壊れた")
@@ -408,8 +551,22 @@ def selftest() -> int:
 
         t("★担当していない機種は書き換えられない★",
           raises(lambda: before_write("t", "enen", fp), "今日の担当"))
-        t("★★止めるべき機種は触らせない★★",
-          raises(lambda: before_write("t2", "enen", fp)) or True)
+        # ★段階を作って確かめる★（2026-08-05・Codex110回目の指摘11。
+        #   以前は `or True` が付いていて、何が起きても合格していた）
+        _real_assess = cp.assess
+        try:
+            cp.assess = lambda slug: {"stage": FROZEN_STAGES[0],
+                                      "reasons": ["試験"]}
+            t("★★止めるべき機種は触らせない★★",
+              raises(lambda: before_write("t2", "enen", fp), "触ってはいけない"))
+            cp.assess = lambda slug: {"stage": "READY", "reasons": []}
+            t("★すでに公開してよい機種は書き換えない★",
+              raises(lambda: before_write("t2", "enen", fp), "理由がありません"))
+            cp.assess = lambda slug: {"stage": "でたらめ", "reasons": []}
+            t("★知らない段階なら書かない★",
+              raises(lambda: before_write("t2", "enen", fp), "想定外"))
+        finally:
+            cp.assess = _real_assess
 
         # 記録が読めないときは動かさない（fail-closed）
         with open(fp, "w", encoding="utf-8") as f:
@@ -460,11 +617,9 @@ def main() -> int:
     p.add_argument("--task", required=True)
     p.add_argument("--slug", required=True)
     p.add_argument("--kind", required=True, choices=["fix", "grow"])
-    p = sub.add_parser("finish")           # 予約の結末（★枠は戻らない★）
+    p = sub.add_parser("advance")          # 予約を次の段階へ（★枠は戻らない★）
     p.add_argument("--token", required=True)
-    p.add_argument("--state", required=True,
-                   choices=["APPLIED", "ROLLED_BACK", "DEFERRED",
-                            "PUSH_CONFIRMED"])
+    p.add_argument("--state", required=True, choices=list(STATES))
     p = sub.add_parser("inspected")        # 点検を1件数える
     p.add_argument("--task", required=True)
     p.add_argument("--slug", required=True)
@@ -484,8 +639,8 @@ def main() -> int:
     elif args.cmd == "reserve":
         print(json.dumps(reserve(args.task, args.slug, args.kind),
                          ensure_ascii=False))
-    elif args.cmd == "finish":
-        print(json.dumps(finish(args.token, args.state), ensure_ascii=False))
+    elif args.cmd == "advance":
+        print(json.dumps(advance(args.token, args.state), ensure_ascii=False))
     elif args.cmd == "inspected":
         print(json.dumps(inspected(args.task, args.slug), ensure_ascii=False))
     elif args.cmd == "halt":
