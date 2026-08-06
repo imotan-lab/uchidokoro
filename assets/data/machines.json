@@ -11271,13 +11271,12 @@
  {
   "slug": "super_binmusume",
   "name": "Lすーぱぁびん娘",
-  "status": "preview",
   "release_date": "2026-08-03",
   "seo": {
    "title": "Lすーぱぁびん娘 狙い目・天井・解析まとめ"
   },
   "info": "スマスロAT",
-  "strategy": "解析待ち",
+  "strategy": "天井1200G（通常時）／10周期（娘ポイント）※狙い目は算定中",
   "aliases": [
    "すーぱぁびん娘",
    "びん娘",
@@ -11286,7 +11285,6 @@
    "すーぱーびんむすめ",
    "びんむすめ"
   ],
-  "checker": null,
   "limit": null
  },
  {
