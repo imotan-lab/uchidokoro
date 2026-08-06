@@ -23,11 +23,20 @@
     python scripts/grow_legacy.py                 # 対象を見る
     python scripts/grow_legacy.py --slug xxx      # 1機種だけ（下見）
     python scripts/grow_legacy.py --slug xxx --apply
+    python scripts/grow_legacy.py --next --apply  # ★無人運転★（1日1機種・最古優先）
     python scripts/grow_legacy.py --selftest
+
+★無人運転（--next）の約束★（2026-08-06）
+  ・1回に1機種だけ。**いちばん長く見ていない機種**から順に見る
+  ・止まった（Halt）ら**台帳へ1件だけ上げて、その日は終わり**（例外で落ちない）
+  ・止まっても「見た日」は進める＝同じ機種で毎日詰まらない
+  ・台帳に「止めるべき」案件がある機種は触らない
+  ・★1日1機種の枠（task_guard）は使わない★（育てるのは別レーン）
 """
 from __future__ import annotations
 
 import argparse
+import datetime
 import hashlib
 import json
 import math
@@ -88,6 +97,17 @@ _SEP = re.compile(r"[・／/、,]")
 _LABELED = re.compile(r"^\*\*(?P<label>[^*]+)\*\*\s*[：:]\s*(?P<value>.+)$")
 
 
+# ★状態は専用ファイル★（2026-08-06・Codex132回目）
+#   state.json を共有すると、読めなかった時に **他タスクの履歴まで消して**
+#   上書きしうる。この道具の記録だけを別ファイルに持つ。
+STATE = "C:/Users/imao_/Documents/uchidokoro/legacy_grow_state.json"
+# ★一時的な不調（時間が解決する）とそうでないものを分ける★
+_TRANSIENT = ("材料を集められません", "台帳を読めません",
+              "書く直前にファイルが変わっていました",
+              "ほかの処理が同じ記事を書いています", "鍵が取れません")
+_TRANSIENT_LIMIT = 3                      # 続けてこの回数で人に知らせる
+
+
 class Halt(Exception):
     """決められないので書かずに止める。"""
 
@@ -97,11 +117,132 @@ def _sha(path: str) -> str:
         return hashlib.sha256(f.read()).hexdigest()
 
 
+def _read_state() -> dict:
+    """記録を読む。★無ければ空・壊れていれば止める★（空として上書きしない）"""
+    if not os.path.exists(STATE):
+        return {}
+    try:
+        return _sj.read_json(STATE, expect=dict)
+    except Exception as e:                # noqa: BLE001
+        raise Halt(f"記録ファイルが読めません（上書きしません）: {e}")
+
+
+def _save_state(st: dict) -> None:
+    """記録を書く（★失敗は握り潰さない★）。"""
+    tmp = STATE + f".tmp.{os.getpid()}"
+    try:
+        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(st, f, ensure_ascii=False, indent=1)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, STATE)
+    finally:
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+
+def _mark_checked(slug: str, today: str, outcome: str) -> int:
+    """「見た日」と結果を記録し、続けて失敗した回数を返す。
+
+    outcome: "wrote"（書けた）／"none"（足すものなし）／
+             "halt"（人の判断が要る）／"transient"（時間が解決するかも）
+    ★失敗したら例外★＝呼び出し側で失敗として扱う（Codex132回目）。
+    """
+    st = _read_state()
+    st.setdefault("checked", {})[slug] = today
+    st["last_run"] = today
+    cnt = st.setdefault("counts", {}).setdefault(slug, {})
+    cnt[outcome] = int(cnt.get(outcome, 0)) + 1
+    fails = st.setdefault("transient_streak", {})
+    fails[slug] = (int(fails.get(slug, 0)) + 1) if outcome == "transient" else 0
+    _save_state(st)
+    return int(fails[slug])
+
+
+def is_transient(problems: list) -> bool:
+    """時間が解決するかもしれない不調か（★人の判断が要るものと分ける★）。"""
+    text = " / ".join(str(x) for x in problems)
+    return any(w in text for w in _TRANSIENT)
+
+
+def _to_ledger(slug: str, problems: list, transient: bool) -> None:
+    """★黙って同じ所で止まり続けない★（無人運転のときだけ呼ぶ）。
+
+    ★無人タスクは close しない★＝人が判断する。
+    同じ (slug + kind + title) なら重複登録されず last_seen だけ伸びる。
+
+    ★危険度は必ず決まった語で渡す★（2026-08-06・自分で確認して見つけた）
+      `open_issues.severity_of()` は**知らない語を CRITICAL に倒す**（fail-closed）。
+      当初 "normal" を渡していたが、これは有効な語ではないので CRITICAL になり、
+      **一時的な取得失敗だけでその機種が公開停止扱い**になるところだった。
+      人の判断が要る＝MATERIAL ／ 時間が解決するかも＝QUALITY。
+    ★失敗したら例外★＝呼び出し側で失敗として扱う（Codex132回目）。
+    """
+    import argparse as _ap
+    import open_issues as _oi
+    if transient:
+        title = (f"{slug}: 旧方式の先行記事の材料を"
+                 f"{_TRANSIENT_LIMIT}回続けて集められません")
+        kind, sev, code = "external_value", "QUALITY", "GROW_LEGACY_TRANSIENT"
+    else:
+        title = f"{slug}: 旧方式の先行記事を育てられません（人の判断が要ります）"
+        kind, sev, code = "structural", "MATERIAL", "GROW_LEGACY_HALT"
+    _oi.cmd_add(_oi.DEFAULT_FILE, _ap.Namespace(
+        source="update-machine", slug=slug, kind=kind, title=title,
+        detail="grow_legacy.py --next が止まりました: "
+               + " / ".join(str(x) for x in problems),
+        severity=sev, reason_code=code))
+
+
+def _blocked(slug: str) -> list:
+    """台帳に「止めるべき」案件があるか（★読めない時は進めない★）。"""
+    try:
+        import open_issues as _oi
+        why = _oi.blocking_slugs().get(slug)
+    except Exception as e:                # noqa: BLE001
+        return [f"台帳を読めません: {e}"]
+    return [f"台帳に止めるべき案件があります: {' / '.join(why)}"] if why else []
+
+
+RUN_WEEKDAY = 0                           # 0=月曜（1周したあとは週1回だけ）
+
+
+def pick_next(today: str):
+    """今日見る機種を1つ返す。見ない日は (None, 理由) を返す。
+
+    ★動かす頻度★（2026-08-06・Codex132回目の助言）
+      ・まだ一度も見ていない機種があるうちは**毎日1機種**（最初の1周）
+      ・全機種を一度見たあとは**週1回（月曜）だけ**
+        ＝7機種・普段は増えない・検索にも出ない、に対して毎日は割に合わない
+    """
+    st = _read_state()
+    if st.get("last_run") == today:
+        return None, "今日はもう見ました"
+    rows = targets()
+    if not rows:
+        # ★対象0件は「正常」ではないかもしれない★（判定が全部こけても0件になる）
+        return None, "★対象が1機種もありません（区分の判定を確かめてください）★"
+    checked = st.get("checked") or {}
+    first_round = any(m["slug"] not in checked for m in rows)
+    if not first_round:
+        try:
+            wd = datetime.date.fromisoformat(today).weekday()
+        except ValueError:
+            return None, f"日付の形が違います: {today}"
+        if wd != RUN_WEEKDAY:
+            return None, "今日は動かす日ではありません（1周したので週1回）"
+    rows.sort(key=lambda m: (str(checked.get(m["slug"], "")), m["slug"]))
+    return rows[0]["slug"], ""
+
+
 def targets(slug: str | None = None) -> list:
     ms = _sj.read_json(os.path.join(BASE, "assets", "data", "machines.json"),
                        expect=(dict, list))
     ms = ms["machines"] if isinstance(ms, dict) else ms
-    out = []
+    out, broken = [], 0
     for m in ms:
         if slug and m.get("slug") != slug:
             continue
@@ -109,7 +250,10 @@ def targets(slug: str | None = None) -> list:
             if _pd.machine_class(m) == "LEGACY_PREVIEW":
                 out.append(m)
         except Exception:                 # noqa: BLE001
+            broken += 1                   # ★黙って捨てない★（Codex132回目）
             continue
+    if broken:
+        print(f"  ★区分を判定できない機種が {broken} 件あります★")
     return out
 
 
@@ -1027,6 +1171,56 @@ def selftest() -> int:                    # noqa: C901
     t("★★別の種類の天井の恩恵は「分かっている」に数えない★★（止めすぎ防止）",
       pl28["detail"]["sections"][1]["body"] == ["・天井ゲーム数と恩恵"])
 
+    # --- ★無人運転（--next）★
+    import tempfile
+    keep_state, keep_targets = globals()["STATE"], globals()["targets"]
+    tmpd = tempfile.mkdtemp()
+    try:
+        globals()["STATE"] = os.path.join(tmpd, "st.json")
+        globals()["targets"] = lambda slug=None: [{"slug": "a"}, {"slug": "b"},
+                                                  {"slug": "c"}]
+        with open(globals()["STATE"], "w", encoding="utf-8") as f:
+            json.dump({"checked": {"a": "2026-08-05", "b": "2026-08-01"},
+                       "last_run": "2026-08-05"}, f)
+        t("★★いちばん長く見ていない機種を選ぶ★★（見たことが無い機種が最優先）",
+          pick_next("2026-08-06")[0] == "c")
+        t("　まだ全機種を見ていないうちは毎日動く（曜日を問わない）",
+          pick_next("2026-08-08")[0] == "c")      # 2026-08-08は土曜
+        streak = _mark_checked("c", "2026-08-06", "none")
+        st = json.load(open(globals()["STATE"], encoding="utf-8"))
+        t("　見た日と結果を記録する",
+          st["checked"]["c"] == "2026-08-06"
+          and st["counts"]["c"]["none"] == 1 and streak == 0)
+        t("★★同じ日に2回は動かない★★", pick_next("2026-08-06")[0] is None)
+        t("★★1周したら週1回（月曜）だけ★★",
+          pick_next("2026-08-08")[0] is None          # 土曜
+          and pick_next("2026-08-10")[0] == "b")      # 月曜
+        t("★★一時的な不調は続いた回数を数える★★",
+          _mark_checked("b", "2026-08-10", "transient") == 1
+          and _mark_checked("b", "2026-08-17", "transient") == 2
+          and _mark_checked("b", "2026-08-24", "none") == 0)
+        with open(globals()["STATE"], "w", encoding="utf-8") as f:
+            f.write("{壊れた")
+        broke = False
+        try:
+            pick_next("2026-09-01")
+        except Halt as e:
+            broke = "上書きしません" in str(e)
+        t("★★記録が壊れていたら、空として書き戻さない★★（他の記録を消さない）",
+          broke)
+        os.remove(globals()["STATE"])
+        t("　記録がまだ無ければ、いちばん先頭から始める",
+          pick_next("2026-09-01")[0] == "a")
+        globals()["targets"] = lambda slug=None: []
+        got, why = pick_next("2026-09-01")
+        t("★★対象0件は『正常』にしない★★（区分の判定がこけた時に気づく）",
+          got is None and "★" in why)
+    finally:
+        globals()["STATE"], globals()["targets"] = keep_state, keep_targets
+    t("★★一時的な不調と、人の判断が要るものを分ける★★",
+      is_transient(["材料を集められません: ..."])
+      and not is_transient(["★止めました★ 知らない話が混じっています: ..."]))
+
     # --- ★別機種の記事には書かない★（Codex125 #9）
     halted10 = False
     try:
@@ -1039,18 +1233,100 @@ def selftest() -> int:                    # noqa: C901
     return 0 if ok else 1
 
 
+def dirty_files() -> list:
+    """まだコミットしていない変更（★人の作業の上に書かない★）。
+
+    2026-08-06・Codex132回目 #3。新台のレーンが同じ日に書いた直後だと、
+    1回の実行で2機種ぶんの公開内容が変わり、切り分けが難しくなる。
+    対話セッションの書きかけの上に重ねるのも避けたい。
+    """
+    import subprocess
+    try:
+        out = subprocess.run(["git", "status", "--porcelain"], cwd=BASE,
+                             capture_output=True, text=True, timeout=60)
+    except Exception as e:                # noqa: BLE001
+        raise Halt(f"作業中の変更を確かめられません: {e}")
+    if out.returncode != 0:
+        raise Halt(f"作業中の変更を確かめられません（git が {out.returncode}）")
+    return [x for x in out.stdout.splitlines()
+            if x.strip() and not x.startswith("??")]
+
+
+def run_next(a) -> int:
+    """★無人運転★（1回1機種・詰まったら台帳・失敗は隠さない）"""
+    if a.slug:
+        print("★--next と --slug は同時に使えません★")
+        return 1
+    if not a.apply:
+        # ★下見のまま日を消費させない★（Codex132回目 #4）
+        print("★--next には --apply が要ります★（下見は --slug で行います）")
+        return 1
+    today = a.today or datetime.date.today().isoformat()
+    try:
+        dirty = dirty_files()
+        if dirty:
+            print("作業中の変更があるので今日は動きません（先にコミットしてください）")
+            for x in dirty[:5]:
+                print("  ", x)
+            return 0                      # ★異常ではない★
+        slug, why = pick_next(today)
+    except Halt as e:
+        print(f"★止めました★ {e}")
+        return 1                          # ★記録が読めない等は失敗として扱う★
+    if not slug:
+        print(why)
+        return 1 if "★" in why else 0
+    print(f"今日見る機種: {slug}")
+    stop = _blocked(slug)
+    r = {"problems": stop} if stop else run(slug, True)
+    problems = r.get("problems") or []
+    transient = bool(problems) and is_transient(problems)
+    outcome = ("transient" if transient else "halt") if problems else \
+              ("wrote" if r.get("wrote") else "none")
+    try:
+        streak = _mark_checked(slug, today, outcome)   # ★止まっても日は進める★
+    except Exception as e:                # noqa: BLE001
+        print(f"★見た日を記録できません: {type(e).__name__}: {e}★")
+        return 1                          # ★成功扱いにしない★
+    for x in problems:
+        print("  -", x)
+    if problems:
+        # 一時的な不調は、続いた時だけ人に知らせる（毎回積まない）
+        if not transient or streak >= _TRANSIENT_LIMIT:
+            try:
+                _to_ledger(slug, problems, transient)
+            except Exception as e:        # noqa: BLE001
+                print(f"★台帳に登録できません: {type(e).__name__}: {e}★")
+                return 1                  # ★成功扱いにしない★
+        else:
+            print(f"  （一時的な不調 {streak}/{_TRANSIENT_LIMIT} 回目・様子を見ます）")
+        return 0
+    for x in (r.get("added") or []) + (r.get("boxes") or []):
+        print("  ＋", str(x)[:74])
+    for x in (r.get("removed") or []):
+        print("  －", str(x)[:70])
+    print("書きました" if r.get("wrote") else "足すものがありません")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="旧方式の先行記事に材料を足す")
     ap.add_argument("--slug")
     ap.add_argument("--apply", action="store_true")
+    ap.add_argument("--next", action="store_true",
+                    help="無人運転: いちばん長く見ていない1機種を見る")
+    ap.add_argument("--today", help="無人運転で使う日付（既定は今日）")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
-    if not a.slug:
+    slug = a.slug
+    if a.next:
+        return run_next(a)
+    if not slug:
         print("対象:", " ".join(m["slug"] for m in targets()))
         return 0
-    r = run(a.slug, a.apply)
+    r = run(slug, a.apply)
     for p in r.get("problems") or []:
         print("  -", p)
     for x in r.get("added") or []:
