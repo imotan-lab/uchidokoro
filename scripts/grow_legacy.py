@@ -43,7 +43,6 @@ import math
 import os
 import re
 import sys
-import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -216,8 +215,11 @@ def _blocked(slug: str) -> list:
 
 RUN_WEEKDAY = 0                           # 0=月曜（1周したあとは週1回だけ）
 # 終了コード（★手順書と合わせる★・2026-08-06・Codex133回目）
-EXIT_OK = 0        # 書いた／足すものなし／今日は動かない日
-EXIT_ATTENTION = 3 # 人の判断が要る・一時的な不調（★台帳に載せた★）
+# ★「書けた」だけを見分けられるようにする★（2026-08-06・Codex135回目 #2）
+#   0 に全部まとめると、手順書が「書けた日だけ検証・コミットへ」を判断できない。
+EXIT_OK = 0        # 何も変えていない（足すものなし／動かない日／作業中で飛ばした）
+EXIT_WROTE = 10    # ★書いた★（この時だけ検証・コミット・push へ進む）
+EXIT_ATTENTION = 3 # このレーンだけ終わり（人の判断が要る・一時的な不調）
 EXIT_FATAL = 1     # 予期しない失敗（記録が読めない・保存できない等）
 
 
@@ -751,67 +753,48 @@ def check(before: dict, after: dict, edits=(), added_lines=(), boxes=(),
 
 # ------------------------------------------------------------------ 実行
 
-def _alive(pid: int) -> bool:
-    """そのプロセスがまだ動いているか（★分からない時は奪わない★）。"""
-    if pid <= 0:
-        return False
-    try:
-        import subprocess
-        r = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"],
-                           capture_output=True, text=True, timeout=10,
-                           encoding="utf-8", errors="replace")
-        return str(pid) in (r.stdout or "")
-    except Exception:                     # noqa: BLE001
-        return True
+def _lock(path: str):
+    """★同時に触らないための鍵★（2026-08-06・Codex135回目で作り替え）
 
-
-def _lock(path: str) -> str:
-    """★同時に触らないための鍵★（2026-08-06・Codex126回目 #4／134回目で強化）
-
-    ★動いている持ち主からは、時間が経っても奪わない★
-      以前は5分で置き去りとみなしていたが、材料集めはネットワーク待ちで
-      5分を超えうる。動いている相手の鍵を横取りすると、2つが同じ機種を
-      選んでしまう。生きているかを見てから決める。
-    ★自分が作った鍵だけを消す★（合言葉を書いておき、外す時に照合する）
+    ★OSに任せる★＝ファイルの中身で持ち主を判断するのをやめた。
+      自前で「置き去りかどうか」を判断する方式は、どう作っても
+      「読んでから消すまでの間に別の処理が鍵を作る」競合が残る
+      （Aが古い鍵を消して自分の鍵を作った直後に、Bが『古い鍵』のつもりで
+        Aの鍵を消してしまう）。
+      OSのファイルロックなら、**プロセスが終わった時点で必ず外れる**ので、
+      置き去りも、奪い合いも、合言葉の照合も要らない。
+    使い方: lk = _lock(path) … _unlock(lk)
     """
-    lock = path + ".lock"
-    token = f"{os.getpid()} {uuid.uuid4().hex}"
-    for _ in range(2):
-        try:
-            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            os.write(fd, token.encode())
-            os.close(fd)
-            return lock
-        except FileExistsError:
-            try:
-                with open(lock, encoding="utf-8") as f:
-                    pid = int((f.read().strip() or "0").split()[0])
-            except Exception:             # noqa: BLE001
-                pid = 0
-            if pid and _alive(pid):       # ★動いている持ち主からは奪わない★
-                raise Halt("ほかの処理が動いています（鍵が取れません）")
-            try:                          # 持ち主が居ないなら置き去り
-                os.remove(lock)
-                continue
-            except OSError:
-                raise Halt("鍵が取れません")
-    raise Halt("鍵が取れません")
+    fh = open(path + ".lock", "a+b")
+    try:
+        if os.name == "nt":
+            import msvcrt
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        fh.close()
+        raise Halt("ほかの処理が動いています（鍵が取れません）")
+    return fh
 
 
-def _unlock(lock: str) -> None:
-    """★自分が作った鍵だけを消す★（人の鍵を消さない）。"""
-    if not lock:
+def _unlock(fh) -> None:
+    """鍵を外す（★閉じれば OS が必ず外す★ので取りこぼしが無い）。"""
+    if not fh:
         return
     try:
-        with open(lock, encoding="utf-8") as f:
-            got = f.read().strip()
-    except Exception:                     # noqa: BLE001
-        return
-    if got.split()[0:1] != [str(os.getpid())]:
-        print("  ★鍵の持ち主が入れ替わっています（消しません）★")
-        return
+        if os.name == "nt":
+            import msvcrt
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+    except OSError:
+        pass
     try:
-        os.remove(lock)
+        fh.close()
     except OSError:
         pass
 
@@ -1283,41 +1266,53 @@ def selftest() -> int:                    # noqa: C901
           got is None and "★" in why)
     finally:
         globals()["STATE"], globals()["targets"] = keep_state, keep_targets
-    # --- ★鍵★（2026-08-06・Codex134回目）
+    # --- ★鍵★（2026-08-06・Codex135回目でOSに任せる方式へ）
     lkd = tempfile.mkdtemp()
     lk_target = os.path.join(lkd, "x.json")
-    lk = _lock(lk_target)
-    t("　鍵が取れる（合言葉を書く）",
-      os.path.exists(lk) and str(os.getpid()) in
-      open(lk, encoding="utf-8").read())
+    fh = _lock(lk_target)
+    t("　鍵が取れる", fh is not None)
     took = False
     try:
-        _lock(lk_target)                  # 自分＝生きている持ち主
+        _lock(lk_target)                  # 同じプロセスからでも二重には取れない
     except Halt as e:
-        took = "ほかの処理が動いています" in str(e)
-    t("★★動いている持ち主からは、時間が経っても奪わない★★"
-      "（材料集めは5分を超えうる）", took)
-    old = os.stat(lk).st_mtime - 99999
-    os.utime(lk, (old, old))              # うんと古くしても奪わせない
+        took = "鍵が取れません" in str(e)
+    t("★★鍵を持っている間は、ほかは取れない★★（時間が経っても同じ）", took)
+    old = os.stat(lk_target + ".lock").st_mtime - 99999
+    os.utime(lk_target + ".lock", (old, old))
     took2 = False
     try:
         _lock(lk_target)
     except Halt:
         took2 = True
-    t("★★古くなっても、持ち主が動いていれば奪わない★★", took2)
-    with open(lk, "w", encoding="utf-8") as f:
-        f.write("999999999 よその合言葉")  # 居ないPID＝置き去り
-    lk2 = _lock(lk_target)
-    t("　持ち主が居なくなった鍵は引き取れる", os.path.exists(lk2))
-    with open(lk2, "w", encoding="utf-8") as f:
-        f.write("999999999 よその合言葉")
-    _unlock(lk2)
-    t("★★自分の鍵でなければ消さない★★（人の鍵を巻き添えにしない）",
-      os.path.exists(lk2))
-    with open(lk2, "w", encoding="utf-8") as f:
-        f.write(f"{os.getpid()} mine")
-    _unlock(lk2)
-    t("　自分の鍵は外せる", not os.path.exists(lk2))
+    t("★★どれだけ古くても、持っている間は奪えない★★（置き去り判定を持たない）",
+      took2)
+    _unlock(fh)
+    fh2 = _lock(lk_target)
+    t("　外したあとは取れる", fh2 is not None)
+    _unlock(fh2)
+    t("★★鍵のファイルは消さない★★（消す/作るの間の競合をそもそも作らない）",
+      os.path.exists(lk_target + ".lock"))
+    import subprocess as _sp
+    here = os.path.dirname(os.path.abspath(__file__))
+    prog = chr(10).join([
+        f"import sys; sys.path.insert(0, r'{here}')",
+        "import grow_legacy as g",
+        "try:",
+        f"    g._lock(r'{lk_target}')",
+        "    print('取れた')",
+        "except g.Halt:",
+        "    print('取れない')",
+    ])
+    fh3 = _lock(lk_target)
+    out = _sp.run([sys.executable, "-c", prog], capture_output=True, text=True,
+                  timeout=120, encoding="utf-8", errors="replace")
+    t("★★別のプロセスからも取れない★★（本当に排他できているか確かめる）",
+      "取れない" in (out.stdout or ""))
+    _unlock(fh3)
+    out2 = _sp.run([sys.executable, "-c", prog], capture_output=True, text=True,
+                   timeout=120, encoding="utf-8", errors="replace")
+    t("★★持ち主のプロセスが終われば、OSが必ず外す★★（置き去りにならない）",
+      "取れた" in (out2.stdout or ""))
 
     # --- ★無人運転を最後まで通す★（2026-08-06・Codex133回目の指摘）
     keep = {k: globals()[k] for k in ("STATE", "targets", "dirty_files",
@@ -1339,35 +1334,44 @@ def selftest() -> int:                    # noqa: C901
             (slug, tr))
         globals()["run"] = lambda slug, ap: {"problems": [], "wrote": True,
                                              "added": ["**型式名**：X"]}
-        t("★★書けたら 0 で終わる★★", run_next(_A()) == EXIT_OK)
+        t("★★書けた時だけ別の終了コード（10）にする★★"
+          "（手順書が『書けた日だけ検証・コミット』を判断できるように）",
+          run_next(_A()) == EXIT_WROTE)
         globals()["run"] = lambda slug, ap: {
             "problems": ["★止めました★ 知らない話が混じっています"]}
+        globals()["run"] = lambda slug, ap: {"problems": [], "wrote": False,
+                                             "added": []}
         _A.today = "2026-08-10"      # 月曜（1周後は週1）
+        t("　足すものが無い日は 0（検証・コミットへ進まない）",
+          run_next(_A()) == EXIT_OK)
+        globals()["run"] = lambda slug, ap: {
+            "problems": ["★止めました★ 知らない話が混じっています"]}
+        _A.today = "2026-08-17"      # 月曜
         rc = run_next(_A())
         t("★★人の判断が要る時は 3 で終わり、台帳へ載せる★★",
           rc == EXIT_ATTENTION and calls["ledger"] == [("a", False)])
         globals()["run"] = lambda slug, ap: {
             "problems": ["材料を集められません: ..."]}
-        _A.today = "2026-08-17"      # 月曜
+        _A.today = "2026-08-24"      # 月曜
         rc2 = run_next(_A())
         t("★★一時的な不調も 3 で終わる（最初は台帳に積まない）★★",
           rc2 == EXIT_ATTENTION and len(calls["ledger"]) == 1)
         globals()["dirty_files"] = lambda: [" M scripts/x.py"]
-        _A.today = "2026-08-18"      # 火曜でも「作業中」判定が先
+        _A.today = "2026-08-25"      # 火曜でも「作業中」判定が先
         t("★★作業中の変更があれば何もせず 0★★", run_next(_A()) == EXIT_OK)
         globals()["dirty_files"] = lambda: []
         def _boom(slug, pr, tr):
             raise RuntimeError("台帳が書けない")
         globals()["_to_ledger"] = _boom
         globals()["run"] = lambda slug, ap: {"problems": ["★止めました★ だめ"]}
-        _A.today = "2026-08-24"      # 月曜
+        _A.today = "2026-08-31"      # 月曜
         rc3 = run_next(_A())
         st3 = json.load(open(globals()["STATE"], encoding="utf-8"))
         t("★★台帳に載せられなければ 1 で終わり、その日を消費しない★★"
           "（やり直せる）",
-          rc3 == EXIT_FATAL and st3.get("last_run") != "2026-08-24")
+          rc3 == EXIT_FATAL and st3.get("last_run") != "2026-08-31")
         globals()["_blocked"] = lambda slug: ["台帳を読めません: こわれています"]
-        _A.today = "2026-08-24"      # 月曜（上は日を消費していない）
+        _A.today = "2026-08-31"      # 月曜（上は日を消費していない）
         t("★★台帳が読めないのは、その機種の問題ではない（すぐ 1）★★",
           run_next(_A()) == EXIT_FATAL)
         _A.apply = False
@@ -1419,7 +1423,8 @@ def run_next(a) -> int:
     """★無人運転★（1回1機種・詰まったら台帳・失敗は隠さない）
 
     終了コード（★手順書と揃える★）
-      0 = 書いた／足すものなし／今日は動かない日／作業中で飛ばした
+      0 = 何も変えていない（足すものなし／動かない日／作業中で飛ばした）
+     10 = ★書いた★（この時だけ検証・コミット・push へ進む）
       3 = このレーンだけ終わり（本編は続けてよい）
           ・人の判断が要る → **台帳に登録済み**
           ・一時的な不調   → 続いた回数が上限に届くまでは**登録しない**
@@ -1444,10 +1449,12 @@ def run_next(a) -> int:
             print("作業中の変更があるので今日は動きません（先にコミットしてください）")
             for x in dirty[:5]:
                 print("  ", x)
+            print("結果: skipped")
             return EXIT_OK                # ★異常ではない★
         slug, why = pick_next(today)
         if not slug:
             print(why)
+            print("結果: fatal" if "★" in why else "結果: skipped")
             return EXIT_FATAL if "★" in why else EXIT_OK
         print(f"今日見る機種: {slug}")
         # ★台帳が読めないのは、その機種の問題ではない★（すぐ失敗にする）
@@ -1472,19 +1479,24 @@ def run_next(a) -> int:
             else:
                 print(f"  （一時的な不調 {streak}/{_TRANSIENT_LIMIT} 回目・様子を見ます）")
             _mark_checked(slug, today, outcome)   # ★止まっても日は進める★
+            print(f"結果: {outcome}")
             return EXIT_ATTENTION
         _mark_checked(slug, today, outcome)
         for x in (r.get("added") or []) + (r.get("boxes") or []):
             print("  ＋", str(x)[:74])
         for x in (r.get("removed") or []):
             print("  －", str(x)[:70])
-        print("書きました" if r.get("wrote") else "足すものがありません")
-        return EXIT_OK
+        wrote = bool(r.get("wrote"))
+        print("書きました" if wrote else "足すものがありません")
+        print("結果: wrote" if wrote else "結果: noop")
+        return EXIT_WROTE if wrote else EXIT_OK
     except Halt as e:
         print(f"★止めました★ {e}")
+        print("結果: fatal")
         return EXIT_FATAL
     except Exception as e:                # noqa: BLE001
         print(f"★思わぬ失敗★ {type(e).__name__}: {e}")
+        print("結果: fatal")
         return EXIT_FATAL
     finally:
         _unlock(lock)                     # ★自分の鍵だけ外す★
