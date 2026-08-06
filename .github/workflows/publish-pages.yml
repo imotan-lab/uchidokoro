@@ -1,0 +1,95 @@
+# うちどころ。のサイトを配信する（★リポジトリの中身をそのまま出す＝いまと同じ★）
+#
+# ★なぜ作ったか（2026-08-06）★
+#   GitHub の旧方式（legacy）ビルドが10分を超えるようになり、配信側が待ちきれず
+#   毎回キャンセル → 失敗メールが届き続けていた（7回連続）。最後に成功したビルドは
+#   12分かかっていた。このサイトは Jekyll を使っていないので旧方式でビルドする
+#   意味がない。ここでは**チェックアウトした中身をそのまま**配信する。
+#
+# ★裏取り用の pages-rehearsal.yml とは役割が違う★
+#   あちらは「裏取り済みの機種だけを出す」仕組みで、公開0機種のいまは
+#   **サイトがほぼ空になる**ため手動でしか動かない。
+#   こちらは**いまと同じ中身**を出す（配信方法を変えるだけで、中身は変えない）。
+#   ★両方が本番へ配信できてしまうので、下の2つで必ず1本だけにする★
+#     ①同じ concurrency group（pages-production）で直列化
+#     ②リポジトリ変数 PAGES_DEPLOY_MODE で排他（mirror / verified）
+#
+# ★公開範囲は旧方式と同じ★（2026-08-06に実測して確認）
+#   /scripts/*.py・/assets/data/*.json・/README.md は現在も200。
+#   /.github/ は404（upload-pages-artifact が .git と .github を常に除外する）。
+#   ＝この切替で**新しく公開されるものは無い**。
+#
+# ★独自ドメインの正本は Pages の設定（API の cname）★（Codex141回目の指摘）
+#   Actions 方式では成果物の CNAME は見られない。リポジトリの CNAME は
+#   旧方式へ戻す時のために保全するだけ。切替の前後で API の cname を必ず確認する。
+name: publish-pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # ★main 以外は配信しない★（手動起動で別ブランチを本番へ出さない）
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      vars.PAGES_DEPLOY_MODE == 'mirror'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+
+      - name: 出してよい中身か確かめる（★空・欠けを配信しない★）
+        shell: bash
+        run: |
+          set -euo pipefail
+          # ★中身のある index.html があるか★（0バイトでも通っていた）
+          test -s index.html || { echo "★index.html が無いか空です★"; exit 1; }
+          # ★独自ドメインの控え★（旧方式へ戻す時に要る。完全一致で見る）
+          test "$(tr -d '[:space:]' < CNAME)" = "uchidokoro.com" \
+            || { echo "★CNAME の中身が違います★"; exit 1; }
+          # ★実在する機種ページを数える★（空フォルダを数えない）
+          n="$(find machines -mindepth 2 -maxdepth 2 -type f -name index.html | wc -l)"
+          echo "機種ページ: ${n}件"
+          [ "$n" -ge 100 ] || { echo "★機種ページが少なすぎます（${n}件）★"; exit 1; }
+          # ★サイト全体の監査を通す★（機種データ・sitemap・内部リンク等）
+          python scripts/audit_site.py
+          # ★シンボリックリンクを配信しない★
+          l="$(find . -path ./.git -prune -o -type l -print | wc -l)"
+          [ "$l" -eq 0 ] || { echo "★シンボリックリンクが ${l} 件あります★"; exit 1; }
+
+      - name: Setup Pages
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
+        with:
+          path: .
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    # ★書き込みの権限はこのジョブだけ★
+    permissions:
+      pages: write
+      id-token: write
+    # ★裏取り用の配信と同じ組にして、同時に配信しない★（Codex141回目）
+    concurrency:
+      group: pages-production
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e

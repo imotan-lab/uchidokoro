@@ -237,10 +237,15 @@ jobs:
     needs:
       - build
       - release-gate
+    # ★配信できるのは1本だけ★（2026-08-06・Codex141回目）
+    #   publish-pages.yml（いまと同じ中身を出す方）と同時に有効にできないよう、
+    #   リポジトリ変数 PAGES_DEPLOY_MODE で排他する。
+    #   mirror = publish-pages が配信 ／ verified = こちらが配信
     if: >-
       github.event_name == 'workflow_dispatch' &&
       inputs.deploy == true &&
       github.ref == 'refs/heads/main' &&
+      vars.PAGES_DEPLOY_MODE == 'verified' &&
       vars.PAGES_DEPLOY_ENABLED == 'true' &&
       needs.build.outputs.gate_on == 'true'
     runs-on: ubuntu-24.04
@@ -249,6 +254,11 @@ jobs:
       contents: read
       pages: write
       id-token: write
+
+    # ★同じ組にして、2本が同時に配信しないようにする★
+    concurrency:
+      group: pages-production
+      cancel-in-progress: false
 
     environment:
       name: github-pages
