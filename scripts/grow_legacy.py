@@ -248,9 +248,17 @@ def pick_next(today: str):
     if st.get("last_run") == today:
         return None, "今日はもう見ました"
     rows = targets(strict=True)           # ★判定できない機種があれば止める★
+    # ★対象0件は「もう全部仕上がった」場合もある★（2026-08-07）
+    #   2026-08-06に旧preview7機種を全部完成記事へ上げた結果、対象が0になり
+    #   毎朝「失敗」を報告する状態になっていた。
+    #   ★危ないのは「名簿そのものが壊れて0件」★なので、そこだけ見る。
+    all_rows = _sj.read_json(os.path.join(BASE, "assets", "data", "machines.json"),
+                             expect=(dict, list))
+    all_rows = all_rows["machines"] if isinstance(all_rows, dict) else all_rows
+    if len(all_rows) < 100:
+        return None, f"★機種の名簿が壊れています（{len(all_rows)}件）★"
     if not rows:
-        # ★対象0件は「正常」ではないかもしれない★（判定が全部こけても0件になる）
-        return None, "★対象が1機種もありません（区分の判定を確かめてください）★"
+        return None, "育てる対象はありません（旧方式の先行記事は残っていません）"
     checked = st.get("checked") or {}
     first_round = any(m["slug"] not in checked for m in rows)
     if not first_round:
@@ -1266,8 +1274,9 @@ def selftest() -> int:                    # noqa: C901
           pick_next("2026-09-01")[0] == "a")
         globals()["targets"] = lambda slug=None, strict=False: []
         got, why = pick_next("2026-09-01")
-        t("★★対象0件は『正常』にしない★★（区分の判定がこけた時に気づく）",
-          got is None and "★" in why)
+        t("★★対象0件は正常（全部仕上がった場合がある）★★"
+          "（2026-08-07。7機種を完成記事へ上げたら毎朝失敗を報告していた）",
+          got is None and "★" not in why and "残っていません" in why)
     finally:
         globals()["STATE"], globals()["targets"] = keep_state, keep_targets
     # --- ★鍵★（2026-08-06・Codex135回目でOSに任せる方式へ）
