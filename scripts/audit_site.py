@@ -310,7 +310,14 @@ def _section_text(section: dict) -> str:
 
 
 def check_9_article_length(machines: list) -> list[str]:
-    """machine-details の本文文字数（先行記事除き1500字以上）"""
+    """本文が短い記事を知らせる（★止めない＝お知らせだけ★）
+
+    ★「1500字以上」ルールは2026-07-24に廃止した★（字数のための加筆をしない）。
+    ところが監査だけ残っていて、**廃止したはずのルールが公開を止めていた**
+    （2026-08-06、裏取りできた事実だけで書いた6機種が引っかかった）。
+    決めたことをコードに反映する。短いこと自体は知りたいので、
+    NGではなく「お知らせ」として出す。
+    """
     ngs = []
     detail_dir = BASE / "assets" / "data" / "machine-details"
     for m in machines:
@@ -327,7 +334,7 @@ def check_9_article_length(machines: list) -> list[str]:
         # lead もカウント
         total += len(d.get("lead", "") or "")
         if total < 1500:
-            ngs.append(f"{slug}: 本文{total}字 (1500字未満)")
+            ngs.append(f"{slug}: 本文{total}字（短め・★止めません★）")
     return ngs
 
 
@@ -1227,6 +1234,12 @@ CHECKS = [
 ]
 
 
+# ★お知らせだけの項目★（見たいが、公開は止めない）
+#   9_記事文字数: 「1500字以上」ルールは2026-07-24に廃止済み。
+#   ★決めたことをコードに反映する★（廃止したルールで公開を止めない）。
+INFO_ONLY = {"9_記事文字数"}
+
+
 def main():
     try:
         machines = load_json(BASE / "assets" / "data" / "machines.json")
@@ -1242,14 +1255,16 @@ def main():
         except Exception as e:
             ngs = [f"チェック実行エラー: {e}"]
         results[name] = ngs
-        total_ng += len(ngs)
+        if name not in INFO_ONLY:         # ★お知らせだけの項目は数えない★
+            total_ng += len(ngs)
 
     if out_json:
         print(json.dumps(results, ensure_ascii=False, indent=2))
     else:
         print(f"=== サイト構造整合性チェック（NG合計: {total_ng}件）===")
         for name, ngs in results.items():
-            mark = "✅" if not ngs else "❌"
+            mark = ("ℹ️" if name in INFO_ONLY and ngs
+                    else ("✅" if not ngs else "❌"))
             print(f"\n{mark} {name}: {len(ngs)}件")
             for ng in ngs:
                 print(f"   - {ng}")

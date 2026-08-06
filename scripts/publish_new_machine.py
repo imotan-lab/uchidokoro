@@ -828,6 +828,12 @@ def run_site_audit(ignore_in_progress: bool = False) -> list:
         # ★Codexへの報告漏れは公開の可否と関係ない★（開発の作法の話）
         if key.startswith("31_"):
             continue
+        # ★お知らせだけの項目は公開を止めない★（2026-08-06）
+        #   監査側で決めた「お知らせ」を、こちらでも同じに扱う
+        #   （廃止したはずの1500字ルールが公開を止めていた）
+        import audit_site as _as_info
+        if key in getattr(_as_info, "INFO_ONLY", set()):
+            continue
         if ignore_in_progress and key.startswith("33_"):
             continue
         out.append(f"サイト監査: {key}: {len(items)}件 " + str(items[0])[:120])
@@ -2595,10 +2601,18 @@ def selftest() -> int:
     t("　sitemapが変わっていなければ通る", check_sitemap_kept(_sm) == [])
     t("★★sitemapが1件でも増減したら止める★★",
       check_sitemap_kept(_sm + "<url>x</url>"))
-    t("★★実際にHTTPで引いて200とnoindexを確かめられる★★"
-      "（ファイルがあるだけでは足りない）",
-      check_served(next(m["slug"] for m in rows
-                        if m.get("status") == "preview")) == [])
+    # ★対象が1機種も無い日がある★（2026-08-06。旧preview7機種を全部
+    #   完成記事へ上げた日に、この試験が StopIteration で落ちた）
+    import page_decision as _pd2
+    _np = next((m["slug"] for m in rows
+                if _pd2.machine_class(m) in ("LEGACY_PREVIEW", "AUTO_PENDING")),
+               None)
+    if _np:
+        t("★★実際にHTTPで引いて200とnoindexを確かめられる★★"
+          "（ファイルがあるだけでは足りない）", check_served(_np) == [])
+    else:
+        t("　検索に載せない機種が1つも無いので、この確認は行わない"
+          "（★対象が無いこと自体は正常★）", True)
     t("　存在しない機種なら引けないと分かる",
       any("引けません" in x for x in check_served("zzz_nothing_here")))
 
