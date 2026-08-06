@@ -225,6 +225,23 @@ def _decode_utf16(raw: bytes):
     return None
 
 
+def _is_archive(name: str, data: bytes) -> bool:
+    """圧縮ファイルか（★名前・先頭の印・中身の3つで見る★）。"""
+    import io as _io
+    import zipfile as _zf
+    if name.lower().endswith((".zip", ".gz", ".7z", ".rar", ".tgz", ".jar",
+                              ".whl", ".xz", ".bz2")):
+        return True
+    for mg in (b"PK" + bytes([3, 4]), bytes([0x1f, 0x8b]),
+               b"7z" + bytes([0xbc, 0xaf, 0x27, 0x1c]), b"Rar!"):
+        if data.startswith(mg):
+            return True
+    try:                                  # 前置きデータ付きでも見つける
+        return _zf.is_zipfile(_io.BytesIO(data))
+    except Exception:                     # noqa: BLE001
+        return False
+
+
 def _looks_binary(name: str) -> bool:
     return name.lower().endswith(
         (".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".pdf",
@@ -247,23 +264,28 @@ def _zip_findings(path: str, raw: bytes, depth: int = 0):
     out = []
     try:
         with zipfile.ZipFile(path) as z:
-            names = [n for n in z.namelist() if not n.endswith("/")]
-            if len(names) > 500:
-                return [f"content:ZIPの中身が多すぎます（{len(names)}件）"]
+            # ★名前ではなく実体で回す★（2026-08-06・Codex122回目の指摘1）
+            #   ZIPには同じ名前の中身を複数入れられる。名前で読むと
+            #   **同名の1件しか読めず、残りを検査しないまま通していた**。
+            infos = [zi for zi in z.infolist() if not zi.filename.endswith("/")]
+            if len(infos) > 500:
+                return [f"content:ZIPの中身が多すぎます（{len(infos)}件）"]
             total = 0
-            for nm in names:
-                total += z.getinfo(nm).file_size
+            for zi in infos:
+                nm = zi.filename
+                total += zi.file_size
                 if total > 20 * 1024 * 1024:
                     return ["content:ZIPの中身が大きすぎて確かめられません"]
-                data = z.read(nm)
+                data = z.read(zi)
                 # ★中の圧縮ファイルは確かめられない★（見た目で飛ばさない）
                 #   拡張子で「binaryだから無視」にすると、
                 #   **ZIPの中にZIPを置けば中身を隠せた**（自分の試験で発覚）。
-                for _mg in (b"PK" + bytes([3, 4]), bytes([0x1f, 0x8b]),
-                            b"7z" + bytes([0xbc, 0xaf, 0x27, 0x1c]), b"Rar!"):
-                    if data.startswith(_mg):
-                        return ["content:ZIPの中にZIPがあるので確かめられません"
-                                f"（{nm}）"]
+                #   ★先頭の印だけで見ない★（2026-08-06・Codex122回目の指摘2）
+                #     ZIPは前に別のデータを付けても成立する。
+                #     先頭一致だけだと「前置き＋ZIP」が素通りしていた。
+                if _is_archive(nm, data):
+                    return ["content:ZIPの中にZIPがあるので確かめられません"
+                            f"（{nm}）"]
                 txt = None
                 try:
                     txt = data.decode("utf-8")
@@ -766,6 +788,21 @@ def selftest() -> int:
     _z9c = os.path.join(_d9, "bundle3.zip")
     with _zf9.ZipFile(_z9c, "w") as _z:
         _z.writestr("inner.zip", open(_z9, "rb").read())
+    # ★同じ名前の中身が2つあっても、全部見る★（Codex122回目の指摘1）
+    _z9d = os.path.join(_d9, "dup.zip")
+    with _zf9.ZipFile(_z9d, "w") as _z:
+        _z.writestr("conf.json", '{"app_password": "abcd efgh ijkl mnop"}')
+        _z.writestr("conf.json", '{"note": "ふつうの中身"}')
+    t("★★ZIP内に同名の中身が2つあっても両方見る★★"
+      "（名前で読むと1件しか読めず、秘密を見逃していた）",
+      any("app_password" in x for x in content_findings(_z9d)))
+    # ★前に別のデータを付けたZIPも見逃さない★（同・指摘2）
+    _z9e = os.path.join(_d9, "prefixed.zip")
+    _inner = open(_z9, "rb").read()
+    with _zf9.ZipFile(_z9e, "w") as _z:
+        _z.writestr("inner.bin", b"MZ" + b"x" * 64 + _inner)
+    t("★★前置きデータ付きのZIPも確かめられないので通さない★★",
+      any("ZIPの中にZIP" in x for x in content_findings(_z9e)))
     t("★★ZIPの中のZIPは確かめられないので通さない★★",
       any("ZIPの中にZIP" in x for x in content_findings(_z9c)))
     # ★中身がJSONなら拡張子に関係なく確かめる★（2026-08-04・Codex88〜89回目）
