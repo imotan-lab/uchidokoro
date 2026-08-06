@@ -78,6 +78,11 @@ _SENT_THROUGH_NTH = re.compile(
     r"(?P<counted>[^。、]{0,16}?)の?(?P<nth>\d{1,2})\s*回目"
     r"(?![^。]{0,6}?スルー)"
     r"(?:は天井|[^。]{0,14}?(?:必ず|確定|濃厚))")
+#   「Nスルー後（に）M回目」形＝そのままNスルー
+#     例:「関所チャレンジ6スルー後、7回目の関所チャレンジで勝率が100%となる。」
+_SENT_THROUGH_AFTER = re.compile(
+    r"(?P<counted>[^。、]{0,20}?)(?P<amount>\d{1,2})\s*スルー後[^。]{0,12}?"
+    r"(?P<nth>\d{1,2})\s*回目")
 # ★打ち消しが混じる文は採らない★
 _NEGATED = re.compile(r"非当選|しなかった|とは限らない|ではない|外れ")
 
@@ -202,18 +207,23 @@ def cut_user_area(text: str) -> str:
     return text if last < 0 else text[:last]
 
 
-def through_counted(raw: str):
-    # ★決まらなければ None を返し、呼び出し側で捨てる★
-    #   （2026-08-06・Codex123回目。None どうし・None と CZ が
-    #     まとめられて「2票」に見える経路があった）
-    """スルー天井の「何を数えるか」を整える。
+# ★CZらしい名前★（「〇〇チャレンジ」「〇〇チャンス」など）
+_CZ_NAME = re.compile(
+    r"([一-龥ぁ-んァ-ヶA-Za-z0-9]{2,12}(?:チャレンジ|チャンス|バトル|ゾーン|RUSH))")
 
-    ★2026-08-06・自分の試験で気づいた★
-      文からそのまま切り出すと「CZスルー回数天井 CZ」「到達時は次回(最大」
-      のような屑が入り、**同じ天井が別物に見えて2票にならなかった**。
-      数えている対象は実質「CZの回数」なので、そこだけを残す。
+
+def through_counted(raw: str):
+    """スルー天井の「何を数えるか」を返す（★決まらなければ None★）。
+
+    ★書いてある名前をそのまま残す★（2026-08-06・Codex123回目）
+      「CZ」と「関所チャレンジ」を勝手に同じ物にすると、別のCZと
+      取り違える。名前は残しておき、**同じ物だと確かめられた時だけ**
+      呼び出し側（compare）で寄せる。
     """
     t = _norm(raw)
+    m = _CZ_NAME.search(t)
+    if m:
+        return m.group(1)
     if "CZ" in t or "ＣＺ" in t:
         return "CZ"
     if "ボーナス" in t:
@@ -248,6 +258,19 @@ def from_sentences(text: str) -> list:
                     "counted": through_counted(m.group(0)),
                     "benefit": "", "certainty": "",
                     "raw": m.group(0)[:120]})
+    for m in _SENT_THROUGH_AFTER.finditer(t):
+        amount, nth = int(m.group("amount")), int(m.group("nth"))
+        # ★数え方が食い違う文は採らない★（Nスルー後は N+1 回目のはず）
+        if nth != amount + 1 or amount < 1 or amount > 20:
+            continue
+        if _NEGATED.search(m.group(0)):
+            continue
+        counted = through_counted(m.group(0))
+        if counted is None:
+            continue
+        out.append({"kind": "THROUGH", "amount": amount,
+                    "unit": KINDS["THROUGH"]["unit"], "counted": counted,
+                    "benefit": "", "certainty": "", "raw": m.group(0)[:120]})
     for m in _SENT_THROUGH_NTH.finditer(t):
         nth = int(m.group("nth"))
         if nth < 2 or nth > 20:
@@ -304,7 +327,7 @@ def from_table(html: str) -> list:
 def read_page(url: str, official_name: str) -> dict:
     """1ページから天井の一式を採る。★機種が違えば何も採らない★"""
     out = {"url": url, "host": url.split("/")[2].lower().removeprefix("www."),
-           "ok": False, "reason": "", "ceilings": []}
+           "ok": False, "reason": "", "ceilings": [], "cz_names": set()}
     try:
         html = _w._get(url)
     except Exception as e:
@@ -336,6 +359,8 @@ def read_page(url: str, official_name: str) -> dict:
         seen.add(key)
         got.append(c)
     out["ceilings"] = got
+    # ★このページが「CZ＝〇〇」と書いている名前を控える★（突き合わせに使う）
+    out["cz_names"] = cz_names_in_page(_w._visible_text(html))
     # ★天井の話がありそうなのに1つも採れないなら OK と言わない★（Codex指摘・再現済み）
     #   採れなかったことを「天井が無い」と読まれると、
     #   別の出典だけで採用してしまう。
@@ -411,14 +436,71 @@ def _merge_unqualified(votes: dict) -> dict:
     return out
 
 
-def compare(pages: list) -> dict:
+# ★「CZ」と名前が並んで書かれている形★（これ自体が「同じ物だ」という証拠）
+_CZ_IS_NAMED = re.compile(
+    r"CZ[「『（(\s]{0,2}(?P<a>[一-龥ぁ-んァ-ヶA-Za-z0-9]{2,12}"
+    r"(?:チャレンジ|チャンス|バトル))"
+    r"|(?P<b>[一-龥ぁ-んァ-ヶA-Za-z0-9]{2,12}(?:チャレンジ|チャンス|バトル))"
+    r"[」』）)\s]{0,2}(?:は|が)?\s*CZ")
+
+
+def cz_names_in_page(text: str) -> set:
+    """そのページが「CZ＝〇〇」と書いている名前を集める。
+
+    ★推測しない★（2026-08-06）
+      「関所チャレンジ」がCZかどうかは、**ページ自身がそう書いている**
+      ことだけを根拠にする。書いていないページの名前は数えない。
+    """
+    out = set()
+    for m in _CZ_IS_NAMED.finditer(_norm(cut_user_area(text))):
+        got = m.group("a") or m.group("b")
+        if got:
+            out.add(_norm(got))
+    return out
+
+
+def verified_cz_names(pages: list) -> list:
+    """★独立2出典が同じ名前をCZだと書いている時だけ採る★"""
+    from collections import Counter
+    cnt = Counter()
+    for p in pages:
+        if not p.get("ok"):
+            continue
+        lin = _sl._lineage(p["host"])
+        for nm in (p.get("cz_names") or set()):
+            cnt[(nm, lin)] += 1
+    by_name: dict = {}
+    for (nm, lin) in cnt:
+        by_name.setdefault(nm, set()).add(lin)
+    return sorted(nm for nm, lins in by_name.items() if len(lins) >= 2)
+
+
+def apply_cz_aliases(items: list, cz_names) -> list:
+    """★確かめたCZ名を「CZ」に寄せる★（2026-08-06）
+
+    出典によって「CZ」と書く所と「関所チャレンジ」と書く所がある。
+    **その機種のCZ名が独立2出典で確かめられている時だけ**同じ物として扱う。
+    確かめられていない名前は寄せない（別のCZかもしれないため）。
+    """
+    names = {_norm(str(n)) for n in (cz_names or []) if str(n).strip()}
+    out = []
+    for it in items:
+        c = it.get("counted")
+        if it.get("kind") == "THROUGH" and c and _norm(str(c)) in names:
+            it = {**it, "counted": "CZ", "counted_as_written": c}
+        out.append(it)
+    return out
+
+
+def compare(pages: list, cz_names=None) -> dict:
     """★値・種類・恩恵がすべて一致したものだけ採る★"""
     votes: dict = {}
     for p in pages:
         if not p.get("ok"):
             continue
         lin = _sl._lineage(p["host"])
-        for c in p["ceilings"]:
+        # ★確かめたCZ名だけを「CZ」に寄せてから数える★（2026-08-06）
+        for c in apply_cz_aliases(p["ceilings"], cz_names):
             votes.setdefault(_key(c), {"sample": c, "sources": set()})
             votes[_key(c)]["sources"].add(lin)
     votes = _merge_unqualified(votes)
@@ -643,6 +725,29 @@ def selftest() -> int:
        if g["kind"] == "THROUGH"] == [6])
     t("　1回目・21回目のような数え方は採らない",
       not [g for g in from_sentences("1回目で当選") if g["kind"] == "THROUGH"])
+
+    # ★CZ名で突き合わせる★（2026-08-06・運営者の指摘から）
+    t("★★『CZ＝〇〇』と書いてある名前だけを拾う★★",
+      cz_names_in_page("CZ「関所チャレンジ」に突入") == {"関所チャレンジ"}
+      and cz_names_in_page("あっぱれチャンスへ移行") == set())
+    t("★★独立2出典が同じ名前をCZだと書いた時だけ採る★★",
+      verified_cz_names([
+          {"ok": True, "host": "a.example", "cz_names": {"関所チャレンジ"}},
+          {"ok": True, "host": "b.example", "cz_names": {"関所チャレンジ"}}])
+      == ["関所チャレンジ"]
+      and verified_cz_names([
+          {"ok": True, "host": "a.example", "cz_names": {"関所チャレンジ"}}]) == [])
+    t("★★確かめていない名前は寄せない★★（別のCZと取り違えない）",
+      apply_cz_aliases([{"kind": "THROUGH", "counted": "真剣チャレンジ"}],
+                       ["関所チャレンジ"])[0]["counted"] == "真剣チャレンジ")
+    t("　確かめた名前は CZ に寄せる（元の書き方も残す）",
+      apply_cz_aliases([{"kind": "THROUGH", "counted": "関所チャレンジ"}],
+                       ["関所チャレンジ"])[0]["counted"] == "CZ")
+    t("★★『Nスルー後M回目』は数が合う時だけ採る★★",
+      [g["amount"] for g in from_sentences("関所チャレンジ6スルー後、7回目の関所チャレンジで勝率が100%となる。")
+       if g["kind"] == "THROUGH"] == [6]
+      and not [g for g in from_sentences("関所チャレンジ6スルー後、9回目の関所チャレンジ")
+               if g["kind"] == "THROUGH"])
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")

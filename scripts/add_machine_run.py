@@ -580,7 +580,16 @@ def gather(name: str, maker: str = "") -> dict:
             "value": got["model_code"],
             "sources": list(mv.get("hosts") or [])}
     # ★天井は一式で採る★（値だけ先に載せない）
-    got["material"]["ceilings"] = _read(_cl, "天井")
+    # ★天井はCZ名の突き合わせつきで採る★（2026-08-06）
+    #   出典によって「CZ」と書く所と「関所チャレンジ」と書く所がある。
+    #   ★独立2出典が『CZ＝その名前』と書いている時だけ★同じ物として扱う。
+    _cl_pages = [_cl.read_page(u, name) for u in got["urls"]]
+    for _pg in _cl_pages:
+        if not _pg.get("ok"):
+            got["problems"].append(
+                f"天井: {_pg['host']} を使えませんでした（{_pg.get('reason','')[:90]}）")
+    got["material"]["ceilings"] = _cl.compare(
+        _cl_pages, cz_names=_cl.verified_cz_names(_cl_pages))
     for nt in got["material"]["ceilings"]["need_third"]:
         got["problems"].append(f"{nt['jp']}: {nt['why']}")
     # ★ATの仕様はモードごとに★（純増を混ぜたら誤情報）
