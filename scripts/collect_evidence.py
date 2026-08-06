@@ -72,7 +72,13 @@ TOPICS = {
              "pat": r"[^。\n]{0,55}(?:ヤメ|やめ時|やめどき|即ヤメ)[^。\n]{0,85}",
              "need": r""},
 }
-PER_SOURCE = 12                           # 1出典・1話題あたりの上限
+PER_SOURCE = 12                           # 1出典・1話題あたりの件数の上限
+QUOTE_MAX = 400                           # 1件の抜粋の長さの上限（★切ったら言う★）
+
+
+def _now() -> str:
+    import datetime
+    return datetime.datetime.now().astimezone().isoformat(timespec="seconds")
 
 
 def machine(slug: str) -> dict:
@@ -94,20 +100,39 @@ def quotes(text: str, topic: str, limit: int = PER_SOURCE) -> dict:
     """
     conf = TOPICS[topic]
     need = re.compile(conf["need"]) if conf["need"] else None
-    seen, out, total = set(), [], 0
+    seen, out, total, cut = set(), [], 0, 0
+    ends = "".join(("。", chr(10)))
     for m in re.compile(conf["pat"]).finditer(text):
-        g = " ".join(m.group(0).split())
+        raw = m.group(0)
+        g = " ".join(raw.split())
         if len(g) < 12 or (need and not need.search(g)):
             continue
-        key = g[:34]                      # 同じ書き出しは1回だけ
-        if key in seen:
+        # ★重複は「全文が同じ」ときだけ★（2026-08-07・台帳#249）
+        #   先頭34字で判定していたので、**書き出しが同じで中身が違う行**
+        #   （表の行など）が黙って捨てられ、件数にも出なかった。
+        if g in seen:
             continue
-        seen.add(key)
+        seen.add(g)
         total += 1
         if len(out) < limit:
-            out.append(g[:200])
+            # ★文の途中で切れたら必ず言う★（2026-08-07・台帳#249）
+            #   切っているのは200字の上限ではなく**キーワードの前後の窓**。
+            #   sf6で「バトルパート:15G+」の「+α」が窓の外に出て切れ、
+            #   ★ClaudeもCodexも「原文に無い」と判断して気づけなかった★。
+            tail_cut = m.end() < len(text) and text[m.end()] not in ends
+            head_cut = m.start() > 0 and text[m.start() - 1] not in ends
+            if len(g) > QUOTE_MAX:
+                g, tail_cut = g[:QUOTE_MAX], True
+            if head_cut:
+                g = "★前が切れています★…" + g
+            if tail_cut:
+                g = g + "…★ここで切れています★"
+            if head_cut or tail_cut:
+                cut += 1
+            out.append(g)
     return {"quotes": out, "matched_total": total,
-            "truncated": total > len(out)}
+            "truncated": total > len(out),
+            "context_truncated": cut}
 
 
 def collect(slug: str, topics: list, fetch=None) -> dict:
@@ -141,12 +166,17 @@ def collect(slug: str, topics: list, fetch=None) -> dict:
         rec = {"url": r["url"],
                # ★同じ原文を2人が読んだことを後から確かめられるように★
                "text_sha256": hashlib.sha256(r["text"].encode("utf-8")).hexdigest(),
-               "text_len": len(r["text"])}
+               "text_len": len(r["text"]),
+               # ★いつの原文か★（同じURLでも中身は日々変わる・台帳#250）
+               "fetched_at": _now()}
         for t in topics:
             rec[t] = quotes(r["text"], t)
         out["sources"][dir_id] = rec
-    out["usable_sources"] = sum(1 for v in out["sources"].values() if v.get("url")
-                                and not v.get("error"))
+    # ★本文が空なら「使える出典」に数えない★（台帳#250）
+    #   出典の数で公開の可否を決めるので、ここが緩いと土台が崩れる
+    out["usable_sources"] = sum(
+        1 for v in out["sources"].values()
+        if v.get("url") and not v.get("error") and (v.get("text_len") or 0) > 0)
     return out
 
 
@@ -180,6 +210,10 @@ def as_request(got: dict) -> str:
             if g.get("truncated"):
                 mark = (f"　★抜粋を打ち切りました（全{g.get('matched_total')}件中"
                         f"{len(qs)}件）＝ここは自動で採用しないでください★")
+            if g.get("context_truncated"):
+                mark += (f"　★{g['context_truncated']}件は途中で切れています"
+                         f"（「…★ここで切りました★」の行）＝その先は"
+                         f"「原文に無い」ではなく「見えていない」と扱ってください★")
             L.append(f"- ＜{TOPICS[t]['jp']}＞ {len(qs)}件{mark}")
             for q in qs:
                 L.append(f"  - 「{q}」")
@@ -231,6 +265,26 @@ def selftest() -> int:
       _g["truncated"] and _g["matched_total"] == 20 and len(_g["quotes"]) == 5)
     t("　打ち切っていなければ truncated は立たない",
       quotes(T, "ceiling")["truncated"] is False)
+
+    # --- ★黙って切り落とさない★（2026-08-07・台帳#249）
+    _long = "あ" * 80 + "天井は1000Gでボーナス当選" + "い" * 120 + "。"
+    _lg = quotes(_long, "ceiling")
+    t("★★文の途中で切れたら必ず言う★★"
+      "（sf6で「15G+」の+αが窓の外に出て切れ、両AIが『原文に無い』と誤判定した）",
+      _lg["context_truncated"] == 1
+      and "★ここで切れています★" in _lg["quotes"][0]
+      and "★前が切れています★" in _lg["quotes"][0])
+    t("　文まるごと入っていれば切れたと言わない",
+      quotes("天井は1000Gでボーナスに当選する。", "ceiling")["context_truncated"] == 0)
+    _same = ("モードAの天井は500Gでボーナスに当選する。"
+             "モードAの天井は600Gでボーナスに当選する。")
+    _sg = quotes(_same, "ceiling")
+    t("★★書き出しが同じでも中身が違えば両方残す★★"
+      "（先頭34字で捨てていたので、表の行が黙って消えていた）",
+      _sg["matched_total"] == 2 and len(_sg["quotes"]) == 2)
+    t("　まったく同じ文は1回だけ",
+      quotes("天井は1000Gでボーナス当選。天井は1000Gでボーナス当選。",
+             "ceiling")["matched_total"] == 1)
 
     def _fake(name):
         return {"chonborista": {"url": "https://a.example/1", "text": T},

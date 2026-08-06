@@ -656,6 +656,8 @@ def _merge_unqualified(votes: dict) -> dict:
             k, v = qualified[0]
             for _, pv in plain:
                 v["sources"] |= pv["sources"]
+                # ★寄せる時も+αを落とさない★（台帳#248）
+                v["plus_alpha"] = v.get("plus_alpha") or pv.get("plus_alpha")
             out[k] = v
         elif len(qualified) == 2 and not plain:
             # ★片方だけが数え方の但し書きを書いている★（2026-08-06・実データ）
@@ -759,8 +761,16 @@ def compare(pages: list, cz_names=None) -> dict:
         # ★確かめたCZ名だけを「CZ」に寄せてから数える★（2026-08-06）
         for c in apply_cz_aliases(p["ceilings"], cz_names,
                                   page_names=p.get("cz_names")):
-            votes.setdefault(_key(c), {"sample": c, "sources": set()})
-            votes[_key(c)]["sources"].add(lin)
+            k = _key(c)
+            votes.setdefault(k, {"sample": c, "sources": set(),
+                                 "plus_alpha": False})
+            votes[k]["sources"].add(lin)
+            # ★+αは票を作る段でまとめる★（2026-08-07・台帳#248）
+            #   同じ票にまとまるのに sample は**最初に来た1件だけ**なので、
+            #   「999G」が先に来ると、あとから来た「999G+α」の+αが消えていた。
+            #   ＝出典の並び順しだいで、読者が前兆ぶんを見込まずに打ち始める。
+            if c.get("plus_alpha"):
+                votes[k]["plus_alpha"] = True
     # ★恩恵が分からない天井は採らない★（2026-08-06。条件つき天井
     #   「設定変更後は650G+αに短縮」は恩恵が書かれていないことが多く、
     #   そのままだと**到達して何が起きるか分からない天井**を載せてしまう）
@@ -795,9 +805,8 @@ def compare(pages: list, cz_names=None) -> dict:
             c = dict(agreed[0][1]["sample"])
             c["sources"] = sorted(agreed[0][1]["sources"])
             # ★表示は深い側（+α付き）にそろえる★（早く打ち始める事故を防ぐ）
-            c["plus_alpha"] = any(v["sample"].get("plus_alpha")
-                                  for _k, v in items
-                                  if v["sample"].get("amount") == c.get("amount"))
+            #   ★票そのものが持つ集約値を使う★（並び順に左右されない）
+            c["plus_alpha"] = bool(agreed[0][1].get("plus_alpha"))
             c["others"] = [{"amount": v["sample"]["amount"],
                             "benefit": v["sample"].get("benefit"),
                             "counted": v["sample"].get("counted"),
@@ -1086,6 +1095,18 @@ def selftest() -> int:
                      "ceilings": [p999n]}])["adopted"]
     t("★★表示は深い側（+α付き）にそろえる★★（早く打ち始める事故を防ぐ）",
       len(_mix) == 1 and _mix[0]["plus_alpha"] is True)
+    # ★出典の並び順で+αが消えないか★（2026-08-07・台帳#248。
+    #   票のまとめ先が「最初に来た1件」だったので、+α無しが先に来ると消えていた）
+    _rev = compare([{"ok": True, "host": "chonborista.com", "ceilings": [p999n]},
+                    {"ok": True, "host": "www.p-world.co.jp",
+                     "ceilings": [p999]}])["adopted"]
+    t("★★+α無しが先に来ても+αは消えない★★（並び順に左右されない）",
+      len(_rev) == 1 and _rev[0]["plus_alpha"] is True)
+    _both = compare([{"ok": True, "host": "chonborista.com", "ceilings": [p999n]},
+                     {"ok": True, "host": "www.p-world.co.jp",
+                      "ceilings": [p999n]}])["adopted"]
+    t("　どちらも+α無しなら、+αを足さない（無い物を書かない）",
+      len(_both) == 1 and _both[0]["plus_alpha"] is False)
     mode799 = _atom("GAME", 799, "G", role="TABLE", phase="通常時", mode="特殊",
                     benefit="ボーナス")
     max799 = _atom("GAME", 799, "G", role="EXPLICIT_CEILING", phase="通常時",

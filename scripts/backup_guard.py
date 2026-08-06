@@ -58,6 +58,9 @@ ALLOW_BASENAMES = {
     "uchidokoro-fact-check_SKILL.md",
     "SKILL.md",
     "send_notify.py",
+    # ★Codexの呼び出し口★（2026-08-07。リポジトリ外にあり、ここが壊れると
+    #   2AIの突き合わせが丸ごと止まる。利用制限の検知もここに入っている）
+    "codex_review.sh",
     "refresh_x_cookies.py",
     "x_poster.py",
     "post_to_x.py",
