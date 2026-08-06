@@ -219,33 +219,48 @@ _CLAUSE_MARK = ("ほか", "他の", "他は", "その他", "ものの", "一方"
                 "ですが", "ますが", "以外")
 
 
-# 文の「余り」を消すための言葉（助詞・語尾・記号）
+# 文の終わり方（これだけを語尾として許す）
 _TAIL_WORDS = ("しています", "しており", "されています", "されておらず",
                "ています", "ており", "ました", "でした", "です", "ます",
-               "である", "ある", "ない", "の時点", "について", "に関して",
-               "現在", "本機", "当サイト", "この", "その", "情報", "データ")
-_FILLER = re.compile(r"[はがのをにでもとやへかねよ、。・\s「」『』（）()【】\-—…]+")
-
-
+               "である", "ない")
+# 助詞・記号（つなぎ）
+_JOIN = r"[はがのをにでもとやへかねよ、。・\s「」『』（）()【】\-—…]"
 # 「解析待ちの項目」の見出しに付く言葉（項目名の一部）
-_ITEM_DESC = ("有無", "回数", "内容", "詳細", "条件", "の値")
+#   ★広い言葉は入れない★（2026-08-06・Codex130回目 #1。「内容」「詳細」
+#     「条件」「情報」「本機」のような語を許すと、別の未判明事項まで消せる）
+_ITEM_DESC = ("有無", "回数")
+
+
+def _sentence_form(keys: set):
+    """★消してよい文の形★（既知項目＋つなぎ＋未判明の決まり文句＋語尾）
+
+    2026-08-06・Codex130回目 #1。言葉を1つずつ取り除いて「余りが空か」を
+    見る方式（袋詰め）は、語の並び順を見ないため
+    「スルー天井と本機の情報は未判明です」も空になってしまった。
+    文の形そのものを頭からお尻まで照合する。
+    """
+    known = "|".join(re.escape(w) for k in sorted(keys)
+                     for w in _SENT_WORDS.get(k, ()))
+    if not known:
+        return None
+    unknown = "|".join(re.escape(w) for w in _UNKNOWN_MARK)
+    tail = "|".join(re.escape(w) for w in _TAIL_WORDS)
+    return re.compile(
+        rf"^{_JOIN}*(?:(?:{known}){_JOIN}*)+(?:{unknown})(?:{tail})*{_JOIN}*$")
 
 
 def _only_known(text: str, keys: set, extra=()) -> bool:
-    """★知っている言葉だけで出来ているか★（2026-08-06・Codex129回目 #2）
-
-    「消してはいけない言葉」を数え上げる方式（黒名簿）は、載っていない話題
-    （例:「スルー天井とボーナス仕様は未判明です」）が素通りする。
-    そこで逆にして、**分かった項目＋未判明の決まり文句＋助詞**だけで
-    出来ている時にしか消さない。余りが残ればそれは別の話なので止める。
-    """
-    t = text
-    for k in keys:
-        for w in _SENT_WORDS.get(k, ()):
+    """その文（または項目）が、知っている言葉だけで出来ているか。"""
+    if extra:                             # 箇条書き＝項目名なので形が違う
+        t = text
+        for k in keys:
+            for w in _SENT_WORDS.get(k, ()):
+                t = t.replace(w, "")
+        for w in tuple(extra):
             t = t.replace(w, "")
-    for w in _UNKNOWN_MARK + _TAIL_WORDS + tuple(extra):
-        t = t.replace(w, "")
-    return not _FILLER.sub("", t).strip()
+        return not re.sub(_JOIN, "", t).strip()
+    form = _sentence_form(keys)
+    return bool(form and form.match(text.strip()))
 
 
 def guard_drop(text: str, keys: set, topics=(), extra=()) -> None:
@@ -270,6 +285,17 @@ def guard_drop(text: str, keys: set, topics=(), extra=()) -> None:
         raise Halt(f"知らない話が混じっています: {text[:40]}")
 
 
+def _other_ceiling(text: str, keys: set) -> bool:
+    """まだ分かっていない種類の天井の話が入っているか。
+
+    ★2026-08-06★「恩恵」が分かっているのは**その天井**についてであって、
+    別の種類の天井の恩恵ではない。「・天井ゲーム数と恩恵」（G数天井は未判明）を
+    「恩恵は分かっている」と混同しないための見分け。
+    """
+    mine = {w for k in keys for w in _SENT_WORDS.get(k, ())}
+    return any(w in text for w in _CEILING_WORDS if w not in mine)
+
+
 def _removable(sent: str, keys: set) -> bool:
     """その文が『いま分かった事実』を「まだ分からない」と言っているか。"""
     if not any(w in sent for w in _UNKNOWN_MARK):
@@ -290,7 +316,8 @@ def _enum_rest(text: str, keys: set, topics=()):
     keep = []
     for x in _SEP.split(raw):
         if any(w in x for k in keys for w in _SENT_WORDS.get(k, ())):
-            guard_drop(x, keys, topics)   # ★抜く前に確かめる★
+            # 列挙も項目名なので、箇条書きと同じ形で見る
+            guard_drop(x, keys, topics, _ITEM_DESC)
             continue                      # 分かった項目なので抜く
         if _vague_ceiling(x, keys):
             # ★どの天井を指すのか決まらない項目は、勝手に扱わない★
@@ -316,6 +343,17 @@ def resolve_contradictions(after: dict, keys: set, topics=(),
         listing = ("解析待ち" in title) or ("未確認" in title)
         for b in sec["body"]:
             t = str(b)
+            # ★分かっている項目を「まだ」と書いていないか★（構文より先に見る）
+            #   2026-08-06・Codex130回目 #2。以前は通常文だけ見ていたので、
+            #   箇条書き「・恩恵の有無」や列挙「**恩恵**：解析判明次第…」が
+            #   判明済みの恩恵と同じページに並んで残った。
+            implicit = ((listing and t.strip().startswith("・"))
+                        or bool(_ENUM.match(t.strip())))
+            if (implicit or any(u in t for u in _UNKNOWN_MARK))                     and not _other_ceiling(t, keys):
+                for kt in known_topics:
+                    if any(w in t for w in _TOPIC_WORDS.get(kt, ())):
+                        raise Halt("分かっている項目を『まだ』と書いています: "
+                                   + t[:40])
             if listing and t.strip().startswith("・"):
                 hit = any(w in t for k in keys
                           for w in _PENDING_WORDS.get(k, ()))
@@ -334,17 +372,6 @@ def resolve_contradictions(after: dict, keys: set, topics=(),
                     edits.append((i, t, rest or None))
                 continue
             sents = [s for s in re.split(r"(?<=。)", t) if s.strip()]
-            # ★分かっている項目を「未判明」と書いている文があれば止める★
-            #   （2026-08-06・Codex129回目 #1。「恩恵は未判明です」が
-            #     恩恵つきの天井と同じページに並ぶのを防ぐ。消すのではなく
-            #     人に判断してもらう）
-            for s2 in sents:
-                if not any(w in s2 for w in _UNKNOWN_MARK):
-                    continue
-                for kt in known_topics:
-                    if any(w in s2 for w in _TOPIC_WORDS.get(kt, ())):
-                        raise Halt("分かっている項目を『未判明』と書いています: "
-                                   + s2[:40])
             drop = [s for s in sents if _removable(s, keys)]
             for s2 in sents:
                 if s2 in drop or not any(w in s2 for w in _UNKNOWN_MARK):
@@ -961,6 +988,44 @@ def selftest() -> int:                    # noqa: C901
       _only_known("スルー天井は判明していません。", {"天井THROUGH"})
       and not _only_known("スルー天井とボーナス仕様は未判明です。",
                           {"天井THROUGH"}))
+
+    # --- ★Codex130回目に挙げられた迂回例★
+    d25 = D([{"title": "天井・恩恵", "body": [PENDING]},
+             {"title": "ゲーム性",
+              "body": ["スルー天井と本機の情報は未判明です。"]}])
+    h25 = False
+    try:
+        plan(MACH, MAT_FULL, d25)
+    except Halt as e:
+        h25 = "知らない話" in str(e)
+    t("★★語を袋詰めで消さない★★（『本機の情報』まで消せた迂回・#1）", h25)
+    t("　消してよい形だけを通す",
+      _only_known("スルー天井は判明していません。", {"天井THROUGH"})
+      and not _only_known("スルー天井と本機の情報は未判明です。",
+                          {"天井THROUGH"})
+      and not _only_known("スルー天井のデータは未判明です。", {"天井THROUGH"}))
+    d26 = D([{"title": "天井・恩恵", "body": [PENDING]},
+             {"title": "解析待ちの項目", "body": ["・恩恵の有無"]}])
+    h26 = False
+    try:
+        plan(MACH, MAT_FULL, d26)         # 恩恵は分かっている
+    except Halt as e:
+        h26 = "『まだ』と書いています" in str(e)
+    t("★★箇条書きでも『分かっている項目の解析待ち』を止める★★（#2）", h26)
+    d27 = D([{"title": "天井・恩恵", "body": [PENDING]},
+             {"title": "基本スペック",
+              "body": ["**恩恵**：解析判明次第追記します。"]}])
+    h27 = False
+    try:
+        plan(MACH, MAT_FULL, d27)
+    except Halt as e:
+        h27 = "『まだ』と書いています" in str(e)
+    t("★★列挙でも『分かっている項目の解析待ち』を止める★★（#2）", h27)
+    d28 = D([{"title": "天井・恩恵", "body": [PENDING]},
+             {"title": "解析待ちの項目", "body": ["・天井ゲーム数と恩恵"]}])
+    pl28 = plan(MACH, MAT_FULL, d28)      # G数天井は未判明なので触らない
+    t("★★別の種類の天井の恩恵は「分かっている」に数えない★★（止めすぎ防止）",
+      pl28["detail"]["sections"][1]["body"] == ["・天井ゲーム数と恩恵"])
 
     # --- ★別機種の記事には書かない★（Codex125 #9）
     halted10 = False
