@@ -11300,17 +11300,17 @@
     "reset"
    ],
    "reason_codes": [
-    "CLAIMS_LT_3",
     "CATEGORIES_LT_2",
     "NO_UNIQUE_GAMEPLAY"
    ],
    "claims": [
+    "games_per_50",
     "model_code",
     "payout_range"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-08-04",
-   "input_digest": "sha256:5da370da9cc7fef9614e23168f29a7294a460d9a9d535c1e9418a0efb1c76f99"
+   "decided_at": "2026-08-07",
+   "input_digest": "sha256:a69e6d5f3b462a7b1933aade6d4711d7a18aad02576620a7049d27c61f311d13"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-08",

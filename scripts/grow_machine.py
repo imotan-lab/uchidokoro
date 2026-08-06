@@ -553,8 +553,10 @@ def apply_one(got: dict) -> dict:
             _pub.write_atomic(dp, json.dumps(detail, ensure_ascii=False,
                                              indent=1) + "\n")
             _pub.write_atomic(page, html)
+            # ★indent=1★ 他の書き手（publish_new_machine 等）と必ずそろえる。
+            #   2にすると中身が同じでも全行が書き換わり、実際の差分が埋もれる
             _pub.write_atomic(MACHINES,
-                              json.dumps(rows, ensure_ascii=False, indent=2) + "\n")
+                              json.dumps(rows, ensure_ascii=False, indent=1) + "\n")
             sm = keep[SITEMAP].decode("utf-8")
             sm2 = _pub.add_to_sitemap(sm, slug) if indexable \
                 else _pub.remove_from_sitemap(sm, slug)
