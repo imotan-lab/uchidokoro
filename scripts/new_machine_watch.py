@@ -303,6 +303,49 @@ def _visible_anchor_pairs(html: str):
     return out
 
 
+def visible_anchor_titles(html: str, title_class: str):
+    """★リンクの中の「題」だけを取り出す★（2026-08-06・台帳#189）
+
+    名鑑によっては、1つのリンクの中に機種名・メーカー・機械割・紹介文が
+    まとめて入っている（DMMぱちタウン）。全部つなげて芯を作ると
+    「やじきた道中記参るユニバーサルブロス機械割9771145…」のようになり、
+    **正しい機種でも一致しない**（＝索引に載っていない扱い）。
+    題の入っている場所を名簿で指定して、そこだけを読む。
+    """
+    p = _CardParser()
+    try:
+        p.feed(html)
+    except Exception:                     # noqa: BLE001
+        return None
+    out = []
+
+    def _title_of(node):
+        cls = str(node["attrs"].get("class") or "").split()
+        if title_class in cls:
+            t = _node_text(node).strip()
+            if t:
+                return t
+        for c in node["children"]:
+            got = _title_of(c)
+            if got:
+                return got
+        return None
+
+    def _walk(n, hidden):
+        h = (hidden or n["tag"] in ("script", "style", "noscript", "template")
+             or _CardParser.attr_hidden(n))
+        if n["tag"] == "a" and not h:
+            href = str(n["attrs"].get("href") or "").strip()
+            title = _title_of(n)
+            if href and title:
+                out.append((href, title))
+        for c in n["children"]:
+            _walk(c, h)
+
+    _walk(p.root, False)
+    return out
+
+
 # ★1文字キー（p/s/q）は無害と決めつけない★（2026-08-02・Codex35回目）
 # ★cat/category/tag/filter も無害と決めつけない★（2026-08-02・Codex51回目）
 #   分類キーは「?cat=機種名」の形で機種を指せるため、値つきなら知らせる。

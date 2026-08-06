@@ -150,7 +150,8 @@ def anchor_core(text: str) -> str:
     return _ci.normalize_core(t)
 
 
-def build_index(html: str, base_url: str, link_pattern: str) -> dict:
+def build_index(html: str, base_url: str, link_pattern: str,
+                title_class: str = "") -> dict:
     """1つの入口から {機種名の芯: [(URL, 元の文字), ...]} を作る。
 
     ★リンクはHTML解析で読む★（2026-08-02・Codex52回目）
@@ -161,7 +162,10 @@ def build_index(html: str, base_url: str, link_pattern: str) -> dict:
     """
     idx: dict = {}
     rx = re.compile(link_pattern)
-    for href, text in (_w._visible_anchor_pairs(html) or []):
+    # ★題の場所が決まっている名鑑は、そこだけを読む★（2026-08-06・台帳#189）
+    pairs = (_w.visible_anchor_titles(html, title_class) if title_class
+             else _w._visible_anchor_pairs(html))
+    for href, text in (pairs or []):
         if not rx.search(href):
             continue
         core = anchor_core(text)
@@ -186,7 +190,8 @@ def scan_directory(dir_id: str, conf: dict) -> dict:
         except Exception as e:
             out["problems"].append(f"{sf['url']}: 取得できません（{e}）")
             continue
-        idx = build_index(html, sf["url"], conf["link_pattern"])
+        idx = build_index(html, sf["url"], conf["link_pattern"],
+                          title_class=str(conf.get("title_class") or ""))
         if len(idx) < least:
             # ★ここが黙って0件になる事故を止める砦★
             out["problems"].append(
