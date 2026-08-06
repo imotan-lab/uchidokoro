@@ -211,6 +211,30 @@ def _residual_ceiling(text: str, keys: set) -> bool:
     return "天井" in t
 
 
+# ★2つ目の話が続く印★（前半だけ分かっても、後半まで消してはいけない）
+_CLAUSE_MARK = ("ほか", "他の", "他は", "その他", "ものの", "一方",
+                "ですが", "ますが", "以外")
+
+
+def guard_drop(text: str, keys: set, topics=()) -> None:
+    """★これを消してよいか★を1か所で決める（消してはいけなければ Halt）。
+
+    2026-08-06・Codex128回目 #3〜#5。列挙・箇条書き・文でそれぞれ別の判定を
+    していたため、片方だけ迂回できた。判断はここに集める。
+    """
+    for w in tuple(_OTHER_TOPICS) + tuple(topics):
+        if w in text:
+            raise Halt(f"まだ分からない別の話が混じっています（{w}）: {text[:40]}")
+    if _residual_ceiling(text, keys):
+        raise Halt(f"分かった天井と分からない天井が同じところにあります: {text[:40]}")
+    for w in _CLAUSE_MARK:
+        if w in text:
+            raise Halt(f"2つ目の話が続いています（{w}）: {text[:40]}")
+    # ★天井の材料に欠けがあるなら、天井の未判明文は触らない★
+    if topics and any(w in text for w in _CEILING_WORDS):
+        raise Halt(f"天井の材料に欠けがあります: {text[:40]}")
+
+
 def _removable(sent: str, keys: set) -> bool:
     """その文が『いま分かった事実』を「まだ分からない」と言っているか。"""
     if not any(w in sent for w in _UNKNOWN_MARK):
@@ -218,7 +242,7 @@ def _removable(sent: str, keys: set) -> bool:
     return any(w in sent for k in keys for w in _SENT_WORDS.get(k, ()))
 
 
-def _enum_rest(text: str, keys: set):
+def _enum_rest(text: str, keys: set, topics=()):
     """「A・B：解析判明次第追記します」から、分かった項目を抜く。
 
     戻り値は (残した文 or "") ／ 形が違えば None。
@@ -231,6 +255,7 @@ def _enum_rest(text: str, keys: set):
     keep = []
     for x in _SEP.split(raw):
         if any(w in x for k in keys for w in _SENT_WORDS.get(k, ())):
+            guard_drop(x, keys, topics)   # ★抜く前に確かめる★
             continue                      # 分かった項目なので抜く
         if _vague_ceiling(x, keys):
             # ★どの天井を指すのか決まらない項目は、勝手に扱わない★
@@ -258,18 +283,15 @@ def resolve_contradictions(after: dict, keys: set, topics=()) -> list:
             if listing and t.strip().startswith("・"):
                 hit = any(w in t for k in keys
                           for w in _PENDING_WORDS.get(k, ()))
-                if hit and _residual_ceiling(t, keys):
-                    raise Halt(f"分かった天井と分からない天井が同じ項目にあります: "
-                               f"{t[:28]}")
-                if hit and any(w in t for w in topics):
-                    raise Halt(f"まだ分からない話が同じ項目にあります: {t[:28]}")
+                if hit:
+                    guard_drop(t, keys, topics)   # ★消す前に確かめる★
                 if not hit and _vague_ceiling(t, keys)                         and not any(w in t for w in _OTHER_TOPICS):
                     # ★「・リセット時の天井短縮」のような別の話は、そのまま残す★
                     raise Halt(f"どの天井を指すのか決まらない項目があります: {t[:28]}")
                 if hit:
                     edits.append((i, t, None))
                 continue
-            rest = _enum_rest(t, keys)
+            rest = _enum_rest(t, keys, topics)
             if rest is not None:
                 if rest.strip() != t.strip():
                     edits.append((i, t, rest or None))
@@ -286,11 +308,7 @@ def resolve_contradictions(after: dict, keys: set, topics=()) -> list:
                 continue
             # ★別の「まだ分からない話」が混じる文は自分で決めない★
             for s in drop:
-                if any(w in s for w in tuple(_OTHER_TOPICS) + tuple(topics)):
-                    raise Halt(f"落としてよいか決められない文があります: {s[:48]}")
-                if _residual_ceiling(s, keys):
-                    raise Halt("分かった天井と分からない天井が同じ文にあります: "
-                               + s[:44])
+                guard_drop(s, keys, topics)
             new = "".join(s for s in sents if s not in drop).strip()
             edits.append((i, t, new or None))
     return edits
@@ -643,13 +661,18 @@ def selftest() -> int:                    # noqa: C901
     try:
         plan(MACH, MAT, d4)
     except Halt as e:
-        halted4 = "決められない" in str(e)
+        halted4 = "別の話" in str(e)
     t("★★落としてよいか決められない文があれば止める★★（狙い目の話が混じる）",
       halted4)
+    # ★材料に欠けがない天井★（恩恵・数える対象がそろっている）
+    MAT_FULL = {"adopted": MAT["adopted"],
+                "ceilings": {"adopted": [
+                    {"kind": "THROUGH", "amount": 6, "unit": "スルー",
+                     "counted": "CZ", "benefit": "AT当選"}]}}
     d5 = D([{"title": "天井・恩恵", "body": [PENDING]},
             {"title": "ゲーム性",
              "body": ["スルー天井は判明していません。", "残す文。"]}])
-    pl5 = plan(MACH, MAT, d5)
+    pl5 = plan(MACH, MAT_FULL, d5)
     t("　混ざり物が無ければ、その文だけ落とす",
       pl5["detail"]["sections"][1]["body"] == ["残す文。"]
       and check(pl5["before"], pl5["detail"], pl5["edits"],
@@ -736,7 +759,7 @@ def selftest() -> int:                    # noqa: C901
             {"title": "解析待ちの項目",
              "body": ["・天井ゲーム数と恩恵", "・スルー天井の有無と回数",
                       "・リセット時の天井短縮"]}])
-    pl7 = plan(MACH, MAT, d7)
+    pl7 = plan(MACH, MAT_FULL, d7)
     t("★★分かった項目だけ『解析待ちの項目』から消す★★（似た言葉を巻き込まない）",
       pl7["detail"]["sections"][1]["body"]
       == ["・天井ゲーム数と恩恵", "・リセット時の天井短縮"])
@@ -795,7 +818,7 @@ def selftest() -> int:                    # noqa: C901
     try:
         plan(MACH, MAT, d15)              # 材料の benefit は空
     except Halt as e:
-        halted15 = "決められない" in str(e)
+        halted15 = "別の話" in str(e)
     t("★★回数だけ分かった天井の『恩恵は未判明』は消さない★★（#2の迂回例）",
       halted15)
     d16 = D([{"title": "天井・恩恵", "body": [PENDING]},
@@ -803,9 +826,9 @@ def selftest() -> int:                    # noqa: C901
               "body": ["スルー天井は判明しましたが、ほかの天井は未判明です。"]}])
     halted16 = False
     try:
-        plan(MACH, MAT, d16)
+        plan(MACH, MAT_FULL, d16)
     except Halt as e:
-        halted16 = "分からない天井が同じ文" in str(e)
+        halted16 = "分からない天井が同じ" in str(e)
     t("★★分かった天井と分からない天井が同じ文にあれば止める★★（#2の迂回例）",
       halted16)
     d17 = D([{"title": "天井・恩恵", "body": [PENDING]},
@@ -817,6 +840,53 @@ def selftest() -> int:                    # noqa: C901
         halted17 = "どの天井" in str(e)
     t("★★『・天井の有無と回数』のような曖昧な項目でも止める★★（#2の迂回例）",
       halted17)
+
+    # --- ★Codex128回目に挙げられた迂回例★
+    d18 = D([{"title": "天井・恩恵", "body": [PENDING]},
+             {"title": "基本スペック",
+              "body": ["**スルー天井とほかの天井**：解析判明次第追記します。"]}])
+    h18 = False
+    try:
+        plan(MACH, MAT_FULL, d18)
+    except Halt as e:
+        h18 = "2つ目の話" in str(e) or "分からない天井" in str(e)
+    t("★★列挙の項目に2つ目の話が続いていれば止める★★（#3の迂回例）", h18)
+    d19 = D([{"title": "天井・恩恵", "body": [PENDING]},
+             {"title": "基本スペック",
+              "body": ["**スルー天井の恩恵**：解析判明次第追記します。"]}])
+    h19 = False
+    try:
+        plan(MACH, MAT, d19)              # 材料の恩恵は空
+    except Halt as e:
+        h19 = "別の話" in str(e) or "欠け" in str(e)
+    t("★★恩恵が未判明なら、列挙の『恩恵』も消さない★★（#3の迂回例）", h19)
+    d20 = D([{"title": "天井・恩恵", "body": [PENDING]},
+             {"title": "解析待ちの項目",
+              "body": ["・スルー天井の有無とリセット時の短縮"]}])
+    h20 = False
+    try:
+        plan(MACH, MAT_FULL, d20)
+    except Halt as e:
+        h20 = "別の話" in str(e)
+    t("★★箇条書きに別の話が同居していれば止める★★（#4の迂回例）", h20)
+    d21 = D([{"title": "天井・恩恵", "body": [PENDING]},
+             {"title": "ゲーム性",
+              "body": ["スルー天井は判明しましたが、ほかは未判明です。"]}])
+    h21 = False
+    try:
+        plan(MACH, MAT_FULL, d21)
+    except Halt as e:
+        h21 = "2つ目の話" in str(e)
+    t("★★『ほかは未判明』のような言い方でも止める★★（#5の迂回例）", h21)
+    d22 = D([{"title": "天井・恩恵", "body": [PENDING]},
+             {"title": "ゲーム性",
+              "body": ["スルー天井到達時の特典は未判明です。"]}])
+    h22 = False
+    try:
+        plan(MACH, MAT, d22)              # 材料の恩恵が空
+    except Halt as e:
+        h22 = "欠け" in str(e)
+    t("★★材料に欠けがある天井の未判明文は触らない★★（#5の言い換え迂回）", h22)
 
     # --- ★別機種の記事には書かない★（Codex125 #9）
     halted10 = False

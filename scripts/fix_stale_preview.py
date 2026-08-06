@@ -98,9 +98,12 @@ def _sub_checked(pat, rep: str, text: str) -> str:
         out.append(text[last:m.start()])
         out.append(rep)
         last = m.end()
-        joint = "".join(out)[-1:] + text[last:last + 2]
-        if _BROKEN.search(joint):
-            raise Broken(f"言い換えでつなぎ目が壊れます: …{joint}…")
+        # ★右側は切らずに渡す★（2026-08-06・Codex128回目 #2。
+        #   2文字だけだと「。はじめに」の「じめ」を見切れず、正しい文を
+        #   壊れと誤判定した）
+        joint = "".join(out)[-1:] + text[last:]
+        if _BROKEN.match(joint):
+            raise Broken(f"言い換えでつなぎ目が壊れます: …{joint[:14]}…")
     out.append(text[last:])
     return "".join(out)
 
@@ -190,7 +193,9 @@ def targets(slug: str | None = None) -> list:
 
 
 def run(slug: str, apply_it: bool) -> dict:
+    import grow_legacy as _gl              # ★書き込み方法をそろえる★
     p = os.path.join(DETAILS, f"{slug}.json")
+    sha_before = _gl._sha(p)               # ★読む前に指紋を取る★
     before = _sj.read_json(p, expect=dict)
     after, changes = fix_detail(json.loads(json.dumps(before)))
     res = {"slug": slug, "changes": changes, "wrote": False}
@@ -286,6 +291,28 @@ def selftest() -> int:
     except Broken:
         broke2 = True
     t("★★元から壊れていても、増えたぶんは見逃さない★★", broke2)
+
+    # ★実際に書くところまで通す★（2026-08-06・Codex128回目 #1。
+    #   書き込み部分を試験していなかったので、変数の書き忘れに気づけなかった）
+    import tempfile
+    tmp = tempfile.mkdtemp()
+    keep = globals()["DETAILS"]
+    try:
+        globals()["DETAILS"] = tmp
+        art = {"slug": "t1", "name": "試験機",
+               "sections": [{"title": "天井・恩恵",
+                             "body": ["天井は2026年7月時点で未解析です。"]}]}
+        fp = os.path.join(tmp, "t1.json")
+        with open(fp, "w", encoding="utf-8") as f:
+            json.dump(art, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+        r = run("t1", True)
+        got = json.load(open(fp, encoding="utf-8"))
+        t("★★書くところまで実際に通る★★（--apply が動かない事故を止める）",
+          r.get("wrote") and not r.get("problems")
+          and got["sections"][0]["body"] == [PENDING])
+    finally:
+        globals()["DETAILS"] = keep
     print(f"\n{ran[0]}/{ran[0]} 合格" if ok else "\n不合格あり")
     return 0 if ok else 1
 
