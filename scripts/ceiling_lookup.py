@@ -62,9 +62,13 @@ KINDS = {
 _SENT_EXPLICIT_A = re.compile(
     r"天井は(?P<phase>通常時)\s*(?P<amount>\d{2,5})\s*G(?P<plus>\s*\+\s*α)?"
     r"で[、,]?\s*到達(?:時|後)は[、,]?\s*(?P<benefit>[^。]{1,26}?)に当選")
+#   ★数え方の但し書き（液晶G数など）は括弧で挟まる★（2026-08-06・実データ）
+#     「通常時を最大1000G+α消化(液晶G数)で天井到達。」の形。
+#     ★但し書きは「数える対象」として残す★（捨てると別の数え方と混ざる）
 _SENT_EXPLICIT_B = re.compile(
     r"(?P<phase>通常時)を?最大\s*(?P<amount>\d{2,5})\s*G(?P<plus>\s*\+\s*α)?"
-    r"\s*消化で天井到達。\s*到達(?:後|時)は(?P<benefit>[^。]{1,26}?)に当選")
+    r"\s*消化(?:\s*[(（](?P<note>[^)）]{1,14})[)）])?で天井到達。"
+    r"\s*到達(?:後|時)は(?P<benefit>[^。]{1,26}?)に当選")
 # ★条件つきの天井（設定変更後・上位ST後など）★
 #   ★通常時の天井と混ぜない★＝別の主張として持つ。恩恵は書いていないことが
 #   多いので、そのままでは採用されない（＝勝手に「ボーナス」と決めない）。
@@ -126,7 +130,9 @@ def _sentence_at(text: str, pos: int) -> str:
 _TABLE_LABELS = {"GAME": ("天井G数", "天井ゲーム数"), "CYCLE": ("天井周期", "周期天井")}
 # ★「天井条件／天井恩恵」の形★（2026-08-06。DMMぱちタウンの実ページ）
 #   値は「通常時999G+α消化」のように**場面と数がひと続き**で書かれる。
-_COND_LABELS = ("天井条件", "天井到達条件")
+_COND_LABELS = ("天井条件", "天井到達条件", "天井突入条件")
+# 値の後ろに付く「※設定変更後は…に短縮」の但し書き（★短縮の話だけ切り離す★）
+_COND_NOTE = re.compile(r"[※*]\s*[^※*]{0,60}?短縮[^※*]{0,20}$")
 _COND_VALUE = re.compile(
     r"^(?P<phase>通常時|AT間|ボーナス間|CZ間|有利区間)?\s*"
     r"(?P<amount>\d{2,5})\s*G(?P<plus>\s*\+\s*α)?\s*消化?$")
@@ -292,9 +298,10 @@ def explicit_ceilings(text: str) -> list:
                 continue
             if _NEGATED.search(_sentence_at(t, m.start())):
                 continue
+            note = (m.groupdict().get("note") or "").strip()
             out.append(_atom("GAME", int(m.group("amount")), "G",
                              role="EXPLICIT_CEILING", phase=m.group("phase"),
-                             counted=m.group("phase"),
+                             counted=m.group("phase"), count_note=note,
                              plus_alpha=bool(m.group("plus")),
                              benefit=split_benefit(benefit)[0],
                              certainty=split_benefit(benefit)[1],
@@ -436,7 +443,11 @@ def from_condition_table(html: str) -> list:
         if tb.get("has_span"):
             continue                      # 列がずれる表は読まない
         raw = _norm(_ht.value_of(tb["pairs"], _COND_LABELS))
-        m = _COND_VALUE.match(raw)
+        # ★切り離してよいのは「短縮の但し書き」だけ★（2026-08-06）
+        #   何でも切ると「※有利区間リセット時のみ」のような**意味を変える
+        #   但し書き**まで捨ててしまう。短縮の話は条件つき天井として別に扱う。
+        cut = _COND_NOTE.sub("", raw).strip()
+        m = _COND_VALUE.match(cut)
         if not m:
             continue
         benefit = _norm(_ht.value_of(tb["pairs"], _BENEFIT_LABELS))
@@ -449,7 +460,7 @@ def from_condition_table(html: str) -> list:
                          plus_alpha=bool(m.group("plus")),
                          benefit=split_benefit(benefit)[0],
                          certainty=split_benefit(benefit)[1],
-                         raw=f"天井条件={raw} / 恩恵={benefit}"))
+                         raw=f"天井条件={raw[:60]} / 恩恵={benefit}"))
     return out
 
 
@@ -523,7 +534,12 @@ def _atom(kind, amount, unit, **kw) -> dict:
            "role": kw.get("role") or "TABLE", "phase": kw.get("phase"),
            "mode": kw.get("mode"), "after_event": kw.get("after_event"),
            "plus_alpha": bool(kw.get("plus_alpha")),
-           "counted": kw.get("counted"), "benefit": kw.get("benefit") or "",
+           "counted": kw.get("counted"),
+           # 数え方の但し書き（液晶G数など）。★「通常時」と混ぜない★＝
+           #   混ぜると、書いていない出典と書いた出典が別票になって届かない。
+           #   ただし鍵には入れる（液晶G数と内部G数は別物）。
+           "count_note": kw.get("count_note") or "",
+           "benefit": kw.get("benefit") or "",
            "certainty": kw.get("certainty") or "", "raw": kw.get("raw") or ""}
     return got
 
@@ -543,8 +559,9 @@ def _key(c: dict) -> str:
     #     同じ数字でも賛成票にしてはいけない。
     return json.dumps({k: (c.get(k) if c.get(k) not in (None, False) else "")
                        for k in ("kind", "amount", "unit", "counted",
-                                 "benefit", "certainty", "role", "phase",
-                                 "mode", "after_event", "plus_alpha")},
+                                 "count_note", "benefit", "certainty", "role",
+                                 "phase", "mode", "after_event",
+                                 "plus_alpha")},
                       ensure_ascii=False, sort_keys=True)
 
 
@@ -574,8 +591,10 @@ def _merge_unqualified(votes: dict) -> dict:
         groups.setdefault(_base_key(v["sample"]), []).append((k, v))
     out: dict = {}
     for _, items in groups.items():
-        qualified = [(k, v) for k, v in items if v["sample"].get("counted")]
-        plain = [(k, v) for k, v in items if not v["sample"].get("counted")]
+        def _detail(x):               # 条件・但し書きのどちらかが書いてある
+            return bool(x.get("counted") or x.get("count_note"))
+        qualified = [(k, v) for k, v in items if _detail(v["sample"])]
+        plain = [(k, v) for k, v in items if not _detail(v["sample"])]
         # ★スルー天井はまとめない★（2026-08-06・Codex123回目）
         #   スルーは「何をスルーしたか」が本体（CZ / REG / ボーナス）。
         #   条件なしの票を寄せると、**別の対象どうしが2票に見える**。
@@ -588,6 +607,22 @@ def _merge_unqualified(votes: dict) -> dict:
             for _, pv in plain:
                 v["sources"] |= pv["sources"]
             out[k] = v
+        elif len(qualified) == 2 and not plain:
+            # ★片方だけが数え方の但し書きを書いている★（2026-08-06・実データ）
+            #   「通常時1000G」と「通常時1000G（液晶G数）」は同じ主張。
+            #   ★但し書きが両方にあって中身が違う場合は寄せない★
+            #   （液晶G数と内部G数は数え方が違う＝別の天井）
+            a, b = qualified[0][1]["sample"], qualified[1][1]["sample"]
+            na, nb = a.get("count_note") or "", b.get("count_note") or ""
+            same_rest = (a.get("counted") == b.get("counted")) and bool(na) != bool(nb)
+            if same_rest:
+                k, v = (qualified[0] if na else qualified[1])   # 詳しい方に寄せる
+                other = (qualified[1] if na else qualified[0])[1]
+                v["sources"] |= other["sources"]
+                out[k] = v
+            else:
+                for k, v in items:
+                    out[k] = v
         else:
             for k, v in items:
                 out[k] = v
@@ -1020,6 +1055,37 @@ def selftest() -> int:
                            "<td>モードにより異なる</td></tr>"
                            "<tr><th>天井恩恵</th><td>ボーナス</td></tr>"
                            "</table>") == [])
+
+    def _pg(host, cs):
+        return {"ok": True, "host": host, "ceilings": cs}
+    _plain = _atom("GAME", 1000, "G", role="EXPLICIT_CEILING", phase="通常時",
+                   counted="通常時", benefit="AT")
+    _noted = _atom("GAME", 1000, "G", role="EXPLICIT_CEILING", phase="通常時",
+                   counted="通常時", count_note="液晶G数", benefit="AT")
+    _other = _atom("GAME", 1000, "G", role="EXPLICIT_CEILING", phase="通常時",
+                   counted="通常時", count_note="内部G数", benefit="AT")
+    got = compare([_pg("chonborista.com", [_plain]),
+                   _pg("www.p-world.co.jp", [_noted])])["adopted"]
+    t("★★片方だけが数え方の但し書きを書いていても、同じ天井として数える★★"
+      "（実データで1票ずつに割れて届かなかった）",
+      len(got) == 1 and got[0]["count_note"] == "液晶G数")
+    t("★★但し書きが両方にあって中身が違えば寄せない★★（液晶G数と内部G数は別物）",
+      compare([_pg("chonborista.com", [_noted]),
+               _pg("www.p-world.co.jp", [_other])])["adopted"] == [])
+    t("　括弧の但し書きつきの文も読める",
+      explicit_ceilings("通常時を最大1000G+α消化(液晶G数)で天井到達。"
+                        "到達後はATに当選する。")[0]["count_note"] == "液晶G数")
+    t("★★『天井突入条件』の表と、※の短縮の但し書きも読める★★",
+      from_condition_table(
+          "<table><tr><th>天井突入条件</th>"
+          "<td>通常時999G+α消化 ※設定変更と上位AT後は600G+αに短縮</td></tr>"
+          "<tr><th>天井恩恵</th><td>ボーナスに当選</td></tr></table>"
+      )[0]["amount"] == 999)
+    t("★★意味を変える但し書きは切り離さない★★（短縮の話だけ切る）",
+      from_condition_table(
+          "<table><tr><th>天井突入条件</th>"
+          "<td>通常時999G+α消化 ※有利区間リセット時のみ</td></tr>"
+          "<tr><th>天井恩恵</th><td>ボーナスに当選</td></tr></table>") == [])
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
