@@ -319,26 +319,32 @@ def visible_anchor_titles(html: str, title_class: str):
         return None
     out = []
 
-    def _title_of(node):
-        cls = str(node["attrs"].get("class") or "").split()
-        if title_class in cls:
+    def _titles_of(node, hidden=False):
+        """★表示中の題を全部集める★（2026-08-06・Codex123回目）
+
+        以前は「最初に見つけた1つ」を返していたので、
+        隠してある古い題があると**そちらを機種名にできた**。
+        いま見えている題がちょうど1つの時だけ使う。
+        """
+        h = (hidden or node["tag"] in ("script", "style", "noscript", "template")
+             or _CardParser.attr_hidden(node))
+        got = []
+        if not h and title_class in str(node["attrs"].get("class") or "").split():
             t = _node_text(node).strip()
             if t:
-                return t
+                got.append(t)
         for c in node["children"]:
-            got = _title_of(c)
-            if got:
-                return got
-        return None
+            got += _titles_of(c, h)
+        return got
 
     def _walk(n, hidden):
         h = (hidden or n["tag"] in ("script", "style", "noscript", "template")
              or _CardParser.attr_hidden(n))
         if n["tag"] == "a" and not h:
             href = str(n["attrs"].get("href") or "").strip()
-            title = _title_of(n)
-            if href and title:
-                out.append((href, title))
+            titles = _titles_of(n)
+            if href and len(titles) == 1:   # ★0個・複数は使わない★
+                out.append((href, titles[0]))
         for c in n["children"]:
             _walk(c, h)
 

@@ -165,6 +165,18 @@ def build_index(html: str, base_url: str, link_pattern: str,
     # ★題の場所が決まっている名鑑は、そこだけを読む★（2026-08-06・台帳#189）
     pairs = (_w.visible_anchor_titles(html, title_class) if title_class
              else _w._visible_anchor_pairs(html))
+    # ★題を取れなかったリンクを黙って捨てない★（2026-08-06・Codex123回目）
+    #   新しいカードだけ作りが変わって題を取れなくても、既存カードが
+    #   最低件数を満たせば「面は正常」に見え、**新台だけ消える**（#189の再発）。
+    if title_class:
+        all_links = [(h, t) for h, t in (_w._visible_anchor_pairs(html) or [])
+                     if rx.search(h)]
+        got = {h for h, _ in (pairs or []) if rx.search(h)}
+        missing = [h for h, _ in all_links if h not in got]
+        if missing:
+            idx["_PROBLEM_"] = [(
+                "", f"題を読めない機種リンクが {len(missing)} 件あります"
+                    f"（例: {missing[0]}）。名鑑の作りが変わった可能性があります")]
     for href, text in (pairs or []):
         if not rx.search(href):
             continue
@@ -192,6 +204,10 @@ def scan_directory(dir_id: str, conf: dict) -> dict:
             continue
         idx = build_index(html, sf["url"], conf["link_pattern"],
                           title_class=str(conf.get("title_class") or ""))
+        # ★題を読めないカードがあれば、その面は使わない★（#189の再発防止）
+        if "_PROBLEM_" in idx:
+            out["problems"].append(f"{sf['url']}: {idx['_PROBLEM_'][0][1]}")
+            continue
         if len(idx) < least:
             # ★ここが黙って0件になる事故を止める砦★
             out["problems"].append(

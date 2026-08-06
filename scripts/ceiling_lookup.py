@@ -65,10 +65,21 @@ _SENT_CYCLE = re.compile(
 _SENT_THROUGH = re.compile(
     r"(?P<counted>[^。、]{0,16}?)で(?P<miss>[^。、]{0,10}?非当選)が?最大\s*"
     r"(?P<amount>\d{1,2})\s*回続くと[^。]{0,12}?天井")
-#   「N回目（で）確定／当選」形は (N-1) スルーとして採る
+#   「N回目で必ず当たる」形は (N-1) スルーとして採る
+#   ★2026-08-06・Codex123回目★
+#     以前は「当選」だけで一致していたので、
+#       ・CZ7回目でもAT非当選（＝逆の意味）
+#       ・7回目のCZでATに当選した（＝ある人の実績）
+#       ・CZ7回目のスルーで天井（＝7スルー。N-1ではない）
+#     まで6スルーとして採っていた（自分で再現した）。
+#     いまは「必ず／濃厚／確定」の保証表現があり、
+#     打ち消し（非当選・しなかった）と「N回目のスルー」を含まない形だけ。
 _SENT_THROUGH_NTH = re.compile(
-    r"(?P<counted>[^。、]{0,16}?)の?(?P<nth>\d{1,2})\s*回目[^。]{0,12}?"
-    r"(?:天井|確定|当選(?:濃厚)?)")
+    r"(?P<counted>[^。、]{0,16}?)の?(?P<nth>\d{1,2})\s*回目"
+    r"(?![^。]{0,6}?スルー)"
+    r"(?:は天井|[^。]{0,14}?(?:必ず|確定|濃厚))")
+# ★打ち消しが混じる文は採らない★
+_NEGATED = re.compile(r"非当選|しなかった|とは限らない|ではない|外れ")
 
 # 表から採る形（見出しと値が交互に並ぶ）
 _TABLE_LABELS = {"GAME": ("天井G数", "天井ゲーム数"), "CYCLE": ("天井周期", "周期天井")}
@@ -180,15 +191,21 @@ def cut_user_area(text: str) -> str:
     """掲示板より前だけを返す（＝サイト側が書いた部分だけ）。"""
     # ★同じ語がページ上部の目次にも出る★（2026-08-06・実データで確認）
     #   いちばん最初で切ると本文ごと落ちる。**最後に出てきた場所**で切る。
-    pos = len(text)
+    # ★語ごとの「最後」を集めて最小を取るのは誤り★（Codex123回目）
+    #   目次に「掲示板 / 口コミ」が並ぶと、口コミの最後＝目次の位置になり、
+    #   そこで切って**本文ごと落ちる**。
+    #   いちばん後ろに現れた見出しを1つだけ選ぶ。
+    last = -1
     for w in _USER_AREA:
-        hits = list(re.finditer(rf"(?m)^\s*{re.escape(w)}\s*$", text))
-        if hits:
-            pos = min(pos, hits[-1].start())
-    return text[:pos]
+        for m in re.finditer(rf"(?m)^\s*{re.escape(w)}\s*$", text):
+            last = max(last, m.start())
+    return text if last < 0 else text[:last]
 
 
 def through_counted(raw: str):
+    # ★決まらなければ None を返し、呼び出し側で捨てる★
+    #   （2026-08-06・Codex123回目。None どうし・None と CZ が
+    #     まとめられて「2票」に見える経路があった）
     """スルー天井の「何を数えるか」を整える。
 
     ★2026-08-06・自分の試験で気づいた★
@@ -224,6 +241,8 @@ def from_sentences(text: str) -> list:
     #   ★「N回目で確定」は (N-1) スルー★（数え方を取り違えない）
     t = _norm(text)
     for m in _SENT_THROUGH.finditer(t):
+        if through_counted(m.group(0)) is None:
+            continue                      # 何を数えるか決まらない票は使わない
         out.append({"kind": "THROUGH", "amount": int(m.group("amount")),
                     "unit": KINDS["THROUGH"]["unit"],
                     "counted": through_counted(m.group(0)),
@@ -232,6 +251,10 @@ def from_sentences(text: str) -> list:
     for m in _SENT_THROUGH_NTH.finditer(t):
         nth = int(m.group("nth"))
         if nth < 2 or nth > 20:
+            continue
+        if _NEGATED.search(m.group(0)):
+            continue                      # 逆の意味の文を採らない
+        if through_counted(m.group(0)) is None:
             continue
         out.append({"kind": "THROUGH", "amount": nth - 1,
                     "unit": KINDS["THROUGH"]["unit"],
@@ -370,6 +393,13 @@ def _merge_unqualified(votes: dict) -> dict:
     for _, items in groups.items():
         qualified = [(k, v) for k, v in items if v["sample"].get("counted")]
         plain = [(k, v) for k, v in items if not v["sample"].get("counted")]
+        # ★スルー天井はまとめない★（2026-08-06・Codex123回目）
+        #   スルーは「何をスルーしたか」が本体（CZ / REG / ボーナス）。
+        #   条件なしの票を寄せると、**別の対象どうしが2票に見える**。
+        if any(v["sample"].get("kind") == "THROUGH" for _, v in items):
+            for k, v in items:
+                out[k] = v
+            continue
         if len(qualified) == 1 and plain:
             k, v = qualified[0]
             for _, pv in plain:
@@ -598,9 +628,19 @@ def selftest() -> int:
       not [g for g in from_sentences(
           "本文です。" + chr(10) + "掲示板" + chr(10)
           + "7回目のCZでAT当選だと思います") if g["kind"] == "THROUGH"])
-    t("　目次に「掲示板」があっても本文は読む（最後の見出しで切る）",
+    t("★★目次と本当の掲示板が両方あっても、本文は落とさない★★"
+      "（語ごとの最後を集めて最小を取ると本文ごと落ちた・Codex123回目）",
       [g["amount"] for g in from_sentences(
-          "天井 設定推測 掲示板" + chr(10) + TH) if g["kind"] == "THROUGH"] == [6, 6])
+          "掲示板" + chr(10) + "口コミ" + chr(10) + TH + chr(10)
+          + "掲示板" + chr(10) + "7回目だと思う")
+       if g["kind"] == "THROUGH"] == [6])
+    t("★★逆の意味・実績・N回目スルーは採らない★★（Codex123回目・再現した）",
+      not from_sentences("CZ7回目でもAT非当選")
+      and not from_sentences("7回目のCZでATに当選した")
+      and not from_sentences("CZ7回目のスルーで天井"))
+    t("　保証の言い方があるものは採る",
+      [g["amount"] for g in from_sentences("CZ7回目は天井なので必ずAT当選")
+       if g["kind"] == "THROUGH"] == [6])
     t("　1回目・21回目のような数え方は採らない",
       not [g for g in from_sentences("1回目で当選") if g["kind"] == "THROUGH"])
 
