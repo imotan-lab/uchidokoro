@@ -30,9 +30,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -56,9 +58,17 @@ _PENDING_WORDS = {"型式名": ("型式名",),
                   "天井POINT": ("ポイント天井",),
                   "天井THROUGH": ("スルー天井",)}
 # 項目キー → 打ち消し文を探す時の言葉
+#   ★天井は種類ごとに厳密に分ける★（2026-08-06・Codex126回目 #1）
+#     以前はどの天井にも「天井」を入れていたので、スルー天井が分かっただけで
+#     「天井ゲーム数」の未判明表示まで消えた（やじきたで実際に起きた）。
 _SENT_WORDS = {"機械割": ("機械割", "出玉率"), "型式名": ("型式名",),
-               "天井GAME": ("天井",), "天井CYCLE": ("天井", "周期"),
-               "天井POINT": ("天井",), "天井THROUGH": ("天井", "スルー")}
+               "天井GAME": ("天井ゲーム数", "ゲーム数天井", "G数天井"),
+               "天井CYCLE": ("周期天井", "天井周期"),
+               "天井POINT": ("ポイント天井", "天井ポイント"),
+               "天井THROUGH": ("スルー天井", "天井スルー", "スルー回数")}
+# 天井を指す言葉の全体（★これが1つも無いのに「天井」だけある＝どの天井か決まらない★）
+_CEILING_WORDS = tuple(w for k, ws in _SENT_WORDS.items()
+                       if k.startswith("天井") for w in ws)
 
 # ★「まだ分かりません」を表す言い方★
 _UNKNOWN_MARK = ("判明していない", "判明していません", "判明しておらず",
@@ -103,7 +113,10 @@ def targets(slug: str | None = None) -> list:
 # --------------------------------------------------------------- 材料 → 行
 
 def _num(x):
-    return x if isinstance(x, (int, float)) and not isinstance(x, bool) else None
+    """数値だけを通す（★NaN・無限大は数値として扱わない★・Codex126回目 #7）。"""
+    if isinstance(x, bool) or not isinstance(x, (int, float)):
+        return None
+    return x if math.isfinite(x) else None
 
 
 def ceiling_items(material: dict) -> list:
@@ -142,6 +155,25 @@ def spec_items(material: dict) -> list:
     return out
 
 
+def _dedupe(cand: list) -> list:
+    """★同じ項目が2つ以上あれば止める★（2026-08-06・Codex126回目 #2）
+
+    同じ種類の天井が「6スルー」「8スルー」の2件来ると、本文には両方載り、
+    早見表には片方だけが載る。どちらが正しいかは機械には決められない。
+    """
+    seen, out = {}, []
+    for item in cand:
+        key, label, value = item[0], item[1], item[2]
+        if key in seen:
+            if seen[key] != value:
+                raise Halt(f"同じ項目に違う値が2つあります: {label}"
+                           f"（「{seen[key]}」と「{value}」）")
+            continue                      # まったく同じなら1件にまとめる
+        seen[key] = value
+        out.append(item)
+    return out
+
+
 def _value_of(line: str, label: str):
     """本文の1行が同じ見出しなら、その値を返す（違う見出しなら None）。"""
     m = _LABELED.match(str(line).strip())
@@ -151,6 +183,17 @@ def _value_of(line: str, label: str):
 
 
 # ------------------------------------------------------- 食い違いを落とす
+
+def _vague_ceiling(text: str, keys: set) -> bool:
+    """「天井」とだけ書かれていて、どの天井を指すか決まらないか。
+
+    ★天井が1種類でも分かっている時だけ問題になる★（Codex126回目 #1）。
+    種類が書いてあれば決められるので、ここでは False。
+    """
+    if not any(k.startswith("天井") for k in keys):
+        return False
+    return "天井" in text and not any(w in text for w in _CEILING_WORDS)
+
 
 def _removable(sent: str, keys: set) -> bool:
     """その文が『いま分かった事実』を「まだ分からない」と言っているか。"""
@@ -169,8 +212,14 @@ def _enum_rest(text: str, keys: set):
         return None
     raw = m.group("items")
     sep = (_SEP.search(raw).group(0) if _SEP.search(raw) else "・")
-    keep = [x for x in _SEP.split(raw)
-            if not any(w in x for k in keys for w in _SENT_WORDS.get(k, ()))]
+    keep = []
+    for x in _SEP.split(raw):
+        if any(w in x for k in keys for w in _SENT_WORDS.get(k, ())):
+            continue                      # 分かった項目なので抜く
+        if _vague_ceiling(x, keys):
+            # ★どの天井を指すのか決まらない項目は、勝手に扱わない★
+            raise Halt(f"どの天井を指すのか決まらない項目があります: {x[:24]}")
+        keep.append(x)
     return f"**{sep.join(keep)}**：解析判明次第追記します。" if keep else ""
 
 
@@ -201,6 +250,12 @@ def resolve_contradictions(after: dict, keys: set) -> list:
                 continue
             sents = [s for s in re.split(r"(?<=。)", t) if s.strip()]
             drop = [s for s in sents if _removable(s, keys)]
+            for s2 in sents:
+                if s2 in drop or not any(w in s2 for w in _UNKNOWN_MARK):
+                    continue
+                if _vague_ceiling(s2, keys):
+                    raise Halt("どの天井を指すのか決まらない文があります: "
+                               + s2[:44])
             if not drop:
                 continue
             # ★別の「まだ分からない話」が混じる文は自分で決めない★
@@ -242,7 +297,17 @@ _BOX_PENDING = ("解析待ち", "未確認", "調査中", "-", "－", "")
 _BOX_ORDER = ("天井GAME", "天井CYCLE", "天井POINT", "天井THROUGH")
 
 
-def _fix_summary(after: dict, ceilings: list, present: set) -> list:
+def _apply_boxes(detail: dict, boxes: list) -> dict:
+    """早見表の計画を当てる（★計画にある欄だけ★）。"""
+    for i, before, after_v in boxes:
+        box = (detail.get("summaryBoxes") or [])[i]
+        if str(box.get("value") or "").strip() != str(before):
+            raise Halt("早見表が計画と違います（先に誰かが書き換えた可能性）")
+        box["value"] = after_v
+    return detail
+
+
+def _plan_summary(detail: dict, ceilings: list, present: set) -> list:
     """★早見表の「天井：解析待ち」を、記事に載せた天井にそろえる★
 
     2026-08-06・Codex125回目 #1。本文に「1200G」と書きながら、同じページの
@@ -258,7 +323,7 @@ def _fix_summary(after: dict, ceilings: list, present: set) -> list:
     if len(got) > 1:
         value += " ほか"
     out = []
-    for i, box in enumerate(after.get("summaryBoxes") or []):
+    for i, box in enumerate(detail.get("summaryBoxes") or []):
         if str(box.get("label") or "").strip() != "天井":
             continue
         before = str(box.get("value") or "").strip()
@@ -267,7 +332,6 @@ def _fix_summary(after: dict, ceilings: list, present: set) -> list:
         if before not in _BOX_PENDING:
             # ★すでに別の天井が書いてある＝どちらが正しいか決められない★
             raise Halt(f"早見表にすでに別の天井が書かれています（{before}）")
-        box["value"] = value
         out.append((i, before, value))
     return out
 
@@ -281,8 +345,10 @@ def plan(machine: dict, material: dict, detail: dict) -> dict:
         raise Halt("記事の中身が名簿と合いません（slug・機種名の不一致）")
     after = json.loads(json.dumps(detail))
     secs = after.get("sections") or []
-    idx = {str(s.get("title")): i for i, s in enumerate(secs)}
-    cand = ceiling_items(material) + spec_items(material)
+    idx = {}
+    for i, sec in enumerate(secs):        # ★同名の節があれば決めない★（#6）
+        idx.setdefault(str(sec.get("title")), []).append(i)
+    cand = _dedupe(ceiling_items(material) + spec_items(material))
 
     present, adds, added_lines = set(), {}, []
     for key, label, value, want in cand:
@@ -305,81 +371,126 @@ def plan(machine: dict, material: dict, detail: dict) -> dict:
             #   載っていない事実で打ち消し文を消すと、値がどこにも無いまま
             #   「まだ分かりません」だけが消える（2026-08-06・Codex125回目 #6）
             continue
+        if len(idx[want]) != 1:
+            raise Halt(f"同じ名前の節が{len(idx[want])}つあり、どこへ書くか決められません"
+                       f"（{want}）")
         present.add(key)
         line = f"**{label}**：{value}{SOURCED}"
-        adds.setdefault(idx[want], []).append(line)
+        adds.setdefault(idx[want][0], []).append(line)
         added_lines.append(f"{want}: {line}")
 
     # ★食い違いを落としてよいのは「記事に載っている事実」だけ★
     edits = resolve_contradictions(after, present)
     after = _apply_edits(after, edits, adds)
-    boxes = _fix_summary(after, ceiling_items(material), present)
+    boxes = _plan_summary(after, _dedupe(ceiling_items(material)), present)
+    after = _apply_boxes(after, boxes)
     return {"slug": machine["slug"], "detail": after, "before": detail,
             "added": added_lines, "edits": edits, "boxes": boxes,
-            "added_lines": [x.split(": ", 1)[1] for x in added_lines]}
+            "adds": adds, "added_lines": [x.split(": ", 1)[1]
+                                          for x in added_lines]}
 
 
-def check(before: dict, after: dict, edits=(), added_lines=(), boxes=()) -> list:
-    """★決めたとおりにだけ変わっているか★（節の番号で照合する）。"""
+def check(before: dict, after: dict, edits=(), added_lines=(), boxes=(),
+          adds=None) -> list:
+    """★計画どおりに組み立て直して、完全に一致するか確かめる★
+
+    2026-08-06・Codex126回目 #5。以前は「知らない文が増えていないか」しか
+    見ていなかったので、**計画したのに実行されていない**（早見表を直し忘れた・
+    足すはずの行が無い・別の節に入った）を通してしまった。
+    ここでは before に計画を当て直し、**一字一句同じ**であることを求める。
+    """
     ng = []
-    # --- 早見表 ---
-    b_box = before.get("summaryBoxes") or []
-    a_box = after.get("summaryBoxes") or []
-    if len(b_box) != len(a_box):
-        ng.append("早見表の欄の数が変わります")
-    else:
-        allow_box = {i: (b, a) for i, b, a in (boxes or [])}
-        for i, (bb, ab) in enumerate(zip(b_box, a_box)):
-            if str(bb.get("label")) != str(ab.get("label")):
-                ng.append(f"早見表{i}番目の見出しが変わります")
-                continue
-            bv, av = str(bb.get("value") or ""), str(ab.get("value") or "")
-            if bv == av:
-                continue
-            want = allow_box.get(i)
-            if not want or want[1] != av:
-                ng.append(f"早見表『{bb.get('label')}』が決めていない値に変わります")
-    # --- 本文 ---
+    # --- 計画そのものの妥当性 ---
     b_secs = before.get("sections") or []
-    a_secs = after.get("sections") or []
-    if len(b_secs) != len(a_secs):
-        return ["節の数が変わります"]
-    allow = {(i, b): a for i, b, a in (edits or [])}
-    adds = {str(x) for x in (added_lines or [])}
-    for i, (bs, as_) in enumerate(zip(b_secs, a_secs)):
-        if str(bs.get("title")) != str(as_.get("title")):
-            ng.append(f"{i}番目の節の名前が変わります")
-            continue
-        expect = []
-        for b in (bs.get("body") or []):
-            key = (i, str(b))
-            if key in allow:
-                if allow[key]:
-                    expect.append(str(allow[key]))
-                continue
-            if str(b).strip() == PENDING:
-                continue                  # 断りは外れてもよい
-            expect.append(str(b))
-        got = [str(x) for x in (as_.get("body") or [])]
-        miss = [x for x in expect if x not in got]
-        if miss:
-            ng.append(f"{bs.get('title')}: 前からあった文が消えます（{miss[0][:32]}…）")
-        extra = [x for x in got
-                 if x not in expect and x not in adds and x.strip() != PENDING]
-        if extra:
-            ng.append(f"{bs.get('title')}: 決めていない文が増えます（{extra[0][:32]}…）")
-    return ng
+    for i, orig, _new in (edits or []):
+        if i >= len(b_secs) or str(orig) not in [str(x) for x in
+                                                 (b_secs[i].get("body") or [])]:
+            ng.append(f"消す予定の文が{i}番目の節にありません（{str(orig)[:28]}…）")
+    for line in (added_lines or []):
+        if not _LABELED.match(str(line)) or SOURCED not in str(line):
+            ng.append(f"足す行の形が決まりと違います（{str(line)[:32]}…）")
+    if ng:
+        return ng
+    # --- 組み立て直して完全一致 ---
+    try:
+        expect = _apply_edits(json.loads(json.dumps(before)),
+                              list(edits or []), dict(adds or {}))
+        expect = _apply_boxes(expect, list(boxes or []))
+    except Exception as e:                # noqa: BLE001
+        return [f"計画を組み立て直せません: {e}"]
+    if expect == after:
+        return []
+    e_secs, a_secs = expect.get("sections") or [], after.get("sections") or []
+    if len(e_secs) != len(a_secs):
+        return ["節の数が計画と違います"]
+    for i, (es, as_) in enumerate(zip(e_secs, a_secs)):
+        if str(es.get("title")) != str(as_.get("title")):
+            ng.append(f"{i}番目の節の名前が計画と違います")
+        eb = [str(x) for x in (es.get("body") or [])]
+        ab = [str(x) for x in (as_.get("body") or [])]
+        if eb != ab:
+            miss = [x for x in eb if x not in ab]
+            extra = [x for x in ab if x not in eb]
+            if miss:
+                ng.append(f"{es.get('title')}: 計画にある文がありません"
+                          f"（{miss[0][:30]}…）")
+            if extra:
+                ng.append(f"{es.get('title')}: 計画にない文があります"
+                          f"（{extra[0][:30]}…）")
+            if not miss and not extra:
+                ng.append(f"{es.get('title')}: 文の並び・個数が計画と違います")
+    eb_box = expect.get("summaryBoxes") or []
+    ab_box = after.get("summaryBoxes") or []
+    if eb_box != ab_box:
+        ng.append("早見表が計画と違います")
+    return ng or ["計画と中身が違います（本文・早見表以外）"]
 
 
 # ------------------------------------------------------------------ 実行
 
+def _lock(path: str) -> str:
+    """★1つの記事を同時に書かないための鍵★（2026-08-06・Codex126回目 #4）"""
+    lock = path + ".lock"
+    for _ in range(2):
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, str(os.getpid()).encode())
+            os.close(fd)
+            return lock
+        except FileExistsError:
+            try:                          # 5分より古い鍵は置き去りとみなす
+                if time.time() - os.path.getmtime(lock) > 300:
+                    os.remove(lock)
+                    continue
+            except OSError:
+                pass
+            raise Halt("ほかの処理が同じ記事を書いています（鍵が取れません）")
+    raise Halt("鍵が取れません")
+
+
 def _write(path: str, detail: dict, sha_before: str) -> None:
-    """★書く直前にもう一度確かめて、置き換えで書く★。"""
-    if _sha(path) != sha_before:
-        raise Halt("書く直前にファイルが変わっていました（同時に触られた可能性）")
-    sys.path.insert(0, os.path.join(BASE, "scripts"))
-    from publish_new_machine import write_atomic
-    write_atomic(path, json.dumps(detail, ensure_ascii=False, indent=1) + "\n")
+    """★鍵の中で「もう一度確かめて→置き換える」★（間に何も挟まない）
+
+    2026-08-06・Codex126回目 #4。以前は確かめたあとに import を挟んでいたので、
+    その隙に誰かが書いた内容を上書きできた。
+    """
+    text = json.dumps(detail, ensure_ascii=False, indent=1) + "\n"
+    lock = _lock(path)
+    tmp = f"{path}.tmp.{os.getpid()}"
+    try:
+        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())          # ★中身が確実に書けてから★
+        if _sha(path) != sha_before:      # ★置き換える直前に確かめる★
+            raise Halt("書く直前にファイルが変わっていました（同時に触られた可能性）")
+        os.replace(tmp, path)
+    finally:
+        for x in (tmp, lock):
+            try:
+                os.remove(x)
+            except OSError:
+                pass
 
 
 def run(slug: str, apply_it: bool, gather=None) -> dict:
@@ -403,7 +514,7 @@ def run(slug: str, apply_it: bool, gather=None) -> dict:
     except Halt as e:
         return {"slug": slug, "problems": [f"★止めました★ {e}"]}
     ng = check(pl["before"], pl["detail"], pl["edits"], pl["added_lines"],
-               pl["boxes"])
+               pl["boxes"], pl["adds"])
     if ng:
         return {"slug": slug, "problems": ng}
     res = {"slug": slug, "added": pl["added"],
@@ -460,7 +571,8 @@ def selftest() -> int:                    # noqa: C901
            {"title": "基本スペック", "body": ["**メーカー**：A社"]}])
     pl = plan(MACH, MAT, d)
     t("　足すだけなら通る",
-      check(pl["before"], pl["detail"], pl["edits"], pl["added_lines"]) == []
+      check(pl["before"], pl["detail"], pl["edits"], pl["added_lines"],
+            pl["boxes"], pl["adds"]) == []
       and pl["detail"]["sections"][0]["body"]
       == ["**スルー天井**：6スルー（CZ）" + SOURCED])
 
@@ -482,7 +594,7 @@ def selftest() -> int:                    # noqa: C901
     # --- ★別の話が混じる文は自分で決めない★（Codex125 #4）
     d4 = D([{"title": "天井・恩恵", "body": [PENDING]},
             {"title": "狙い目の根拠",
-             "body": ["天井は判明していませんので狙い目を出せません。"]}])
+             "body": ["スルー天井は判明していませんので狙い目を出せません。"]}])
     halted4 = False
     try:
         plan(MACH, MAT, d4)
@@ -491,12 +603,73 @@ def selftest() -> int:                    # noqa: C901
     t("★★落としてよいか決められない文があれば止める★★（狙い目の話が混じる）",
       halted4)
     d5 = D([{"title": "天井・恩恵", "body": [PENDING]},
-            {"title": "ゲーム性", "body": ["天井は判明していません。", "残す文。"]}])
+            {"title": "ゲーム性",
+             "body": ["スルー天井は判明していません。", "残す文。"]}])
     pl5 = plan(MACH, MAT, d5)
     t("　混ざり物が無ければ、その文だけ落とす",
       pl5["detail"]["sections"][1]["body"] == ["残す文。"]
       and check(pl5["before"], pl5["detail"], pl5["edits"],
-                pl5["added_lines"]) == [])
+                pl5["added_lines"], pl5["boxes"], pl5["adds"]) == [])
+
+    d5b = D([{"title": "天井・恩恵", "body": [PENDING]},
+             {"title": "ゲーム性", "body": ["天井は判明していません。"]}])
+    halted5b = False
+    try:
+        plan(MACH, MAT, d5b)
+    except Halt as e:
+        halted5b = "どの天井" in str(e)
+    t("★★どの天井を指すのか決まらない文は、消さずに止める★★"
+      "（スルー天井だけ分かった時にG数天井の未判明を消さない）", halted5b)
+    t("　種類が書いてあれば取り違えない",
+      _enum_rest("**天井ゲーム数・スルー天井**：解析判明次第追記します。",
+                 {"天井THROUGH"})
+      == "**天井ゲーム数**：解析判明次第追記します。")
+
+    # --- ★同じ項目に違う値が2つ★（Codex126 #2）
+    dup = {"ceilings": {"adopted": [
+        {"kind": "THROUGH", "amount": 6, "unit": "スルー", "counted": "CZ"},
+        {"kind": "THROUGH", "amount": 8, "unit": "スルー", "counted": "CZ"}]}}
+    halted_dup = False
+    try:
+        _dedupe(ceiling_items(dup))
+    except Halt as e:
+        halted_dup = "違う値が2つ" in str(e)
+    t("★★同じ項目に違う値が2つ来たら止める★★", halted_dup)
+    same = {"ceilings": {"adopted": [
+        {"kind": "GAME", "amount": 1200, "unit": "G", "counted": "通常時"},
+        {"kind": "GAME", "amount": 1200, "unit": "G", "counted": "通常時"}]}}
+    t("　まったく同じなら1件にまとめる", len(_dedupe(ceiling_items(same))) == 1)
+    t("★★NaN・無限大は数値として扱わない★★",
+      ceiling_items({"ceilings": {"adopted": [
+          {"kind": "GAME", "amount": float("nan"), "unit": "G"},
+          {"kind": "GAME", "amount": float("inf"), "unit": "G"}]}}) == [])
+
+    # --- ★同じ名前の節が2つあれば、どこへ書くか決めない★（Codex126 #6）
+    d_two = D([{"title": "基本スペック", "body": ["A"]},
+               {"title": "基本スペック", "body": ["B"]}])
+    halted_two = False
+    try:
+        plan(MACH, {"adopted": MAT["adopted"]}, d_two)
+    except Halt as e:
+        halted_two = "どこへ書くか決められません" in str(e)
+    t("★★同じ名前の節が2つあれば書かずに止める★★", halted_two)
+
+    # --- ★計画したのに実行されていなければ止める★（Codex126 #5）
+    d_np = D([{"title": "天井・恩恵", "body": [PENDING]},
+              {"title": "基本スペック", "body": ["**メーカー**：A社"]}])
+    pl_np = plan(MACH, MAT, d_np)
+    t("★★計画どおりに組み立て直して一致する★★",
+      check(pl_np["before"], pl_np["detail"], pl_np["edits"],
+            pl_np["added_lines"], pl_np["boxes"], pl_np["adds"]) == [])
+    t("★★計画したのに何も変えていなければ止める★★",
+      check(pl_np["before"], pl_np["before"], pl_np["edits"],
+            pl_np["added_lines"], pl_np["boxes"], pl_np["adds"]) != [])
+    moved = json.loads(json.dumps(pl_np["detail"]))
+    line = moved["sections"][0]["body"].pop(0)
+    moved["sections"][1]["body"].insert(0, line)
+    t("★★足す行を別の節に置いたら止める★★",
+      check(pl_np["before"], moved, pl_np["edits"], pl_np["added_lines"],
+            pl_np["boxes"], pl_np["adds"]) != [])
 
     # --- ★「解析判明次第」の並び★（Codex125 #5）
     t("★★区切りが「／」でも、分かった項目だけ抜く★★",
@@ -529,11 +702,11 @@ def selftest() -> int:                    # noqa: C901
     a8 = json.loads(json.dumps(b8))
     a8["sections"][0]["body"] = []
     t("★★同じ名前の節が2つあっても、消えたら気づく★★",
-      any("消えます" in x for x in check(b8, a8)))
+      any("計画にある文がありません" in x for x in check(b8, a8)))
     a9 = json.loads(json.dumps(b8))
     a9["sections"][0]["body"].append("勝手に足した文。")
     t("★★決めていない文が増えたら止める★★",
-      any("増えます" in x for x in check(b8, a9)))
+      any("計画にない文があります" in x for x in check(b8, a9)))
 
     # --- ★早見表と本文の食い違い★（Codex125 #1）
     d11 = {"slug": "x", "name": "機種X",
@@ -545,7 +718,7 @@ def selftest() -> int:                    # noqa: C901
       pl11["detail"]["summaryBoxes"][0]["value"] == "6スルー（CZ）"
       and pl11["detail"]["summaryBoxes"][1]["value"] == "解析待ち"
       and check(pl11["before"], pl11["detail"], pl11["edits"],
-                pl11["added_lines"], pl11["boxes"]) == [])
+                pl11["added_lines"], pl11["boxes"], pl11["adds"]) == [])
     d12 = json.loads(json.dumps(d11))
     d12["summaryBoxes"][0]["value"] = "1200G"
     halted12 = False
@@ -558,7 +731,8 @@ def selftest() -> int:                    # noqa: C901
     a13["summaryBoxes"][1]["value"] = "600G〜"
     t("★★決めていない欄が変わったら止める★★",
       any("早見表" in x for x in check(pl11["before"], a13, pl11["edits"],
-                                       pl11["added_lines"], pl11["boxes"])))
+                                       pl11["added_lines"], pl11["boxes"],
+                                       pl11["adds"])))
 
     # --- ★別機種の記事には書かない★（Codex125 #9）
     halted10 = False

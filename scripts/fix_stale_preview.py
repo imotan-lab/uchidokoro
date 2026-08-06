@@ -26,6 +26,7 @@ import json
 import os
 import re
 import sys
+from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -63,14 +64,21 @@ INLINE = (
     (re.compile(r"【20\d\d年\d+月時点・公式未確認】"), "【公式未確認】"),
     # ★助詞まで含めて消す★（2026-08-06。「現時点では」の「現時点で」だけを
     #   消して「は具体的な…」という壊れた文を7機種に公開してしまった）
-    (re.compile(r"20\d\d年\d+月時点で(?:は、?|も、?|、|(?=[^はも]))"), ""),
-    (re.compile(r"現時点で(?:は、?|も、?|、|(?=[^はも]))"), ""),
+    # ★ただし、次がひらがなの時は触らない★（2026-08-06・Codex126回目 #3。
+    #   「現時点ではっきりしていません」「現時点でもっと…」の「は」「も」は
+    #   助詞ではなく語の一部で、消すと「っきり」「っと」になる）
+    (re.compile(r"20\d\d年\d+月時点で(?:は|も)?、?(?![ぁ-ん])"), ""),
+    (re.compile(r"現時点で(?:は|も)?、?(?![ぁ-ん])"), ""),
     (re.compile(r"導入済みですが、"), ""),
 )
 
 
 # ★言い換えたあとに出てはいけない並び★（消しすぎで文が壊れた印）
-_BROKEN = re.compile(r"[、。](?:は|が|を|に|も|で)[^。]")
+#   ★語の先頭は助詞ではない★（2026-08-06・Codex126回目 #8。
+#     「。はじめに」「。もっとも」を壊れと誤判定していた）
+_BROKEN = re.compile(
+    r"[、。](?:は(?!じめ|っきり|たして|なは)|が(?!っかり|くじつ)"
+    r"|を|に(?!わか)|も(?!し|う|っと|ちろん|はや|の)|で(?!き|も|は))[^。]")
 
 
 class Broken(Exception):
@@ -96,8 +104,12 @@ def fix_text(t: str) -> str:
         if sent.strip():
             out.append(sent.strip())
     got = re.sub(r"[ 　]{2,}", " ", "".join(out).strip())
-    # ★元に無かった壊れ方が出たら書かない★（2026-08-06の事故の再発防止）
-    if _BROKEN.search(got) and not _BROKEN.search(t):
+    # ★元より壊れ方が増えたら書かない★（2026-08-06の事故の再発防止）
+    #   ★「有無」ではなく「新しく出たか」で見る★（Codex126回目 #8。元に
+    #     1か所でもあると、言い換えで新しく壊れても素通りしていた。
+    #     数だけの比較でも、別の場所へ移っただけの時に見逃す）
+    new = Counter(_BROKEN.findall(got)) - Counter(_BROKEN.findall(t))
+    if new:
         raise Broken(f"言い換えで文が壊れます: {got[:60]}")
     return got
 
@@ -234,10 +246,23 @@ def selftest() -> int:
     broke = False
     try:
         fix_text("XX現時点でZZ。")     # 消すと「XXZZ」になるだけ＝壊れない
-        fix_text("ため、現時点ではは具体的な目安。")
+        fix_text("確認します。導入済みですが、を見ます。")
     except Broken:
         broke = True
     t("★★壊れた並びが出たら書かずに止める★★", broke)
+    t("★★次がひらがなの「は」「も」は助詞ではない★★（Codex126回目 #3）",
+      fix_text("現時点ではっきりしていません。") == "現時点ではっきりしていません。"
+      and fix_text("現時点でもっと詳しい情報を確認します。")
+      == "現時点でもっと詳しい情報を確認します。")
+    t("　語の先頭を壊れと誤判定しない",
+      fix_text("注記です。（2026年7月時点）はじめに確認します。")
+      == "注記です。はじめに確認します。")
+    broke2 = False
+    try:                                  # 元から壊れていても、増えたら止める
+        fix_text("あ、を確認。導入済みですが、に注意します。")
+    except Broken:
+        broke2 = True
+    t("★★元から壊れていても、増えたぶんは見逃さない★★", broke2)
     print(f"\n{ran[0]}/{ran[0]} 合格" if ok else "\n不合格あり")
     return 0 if ok else 1
 
