@@ -264,4 +264,10 @@
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
+  <url><loc>https://uchidokoro.com/machines/tonsuki/</loc></url>
+  <url><loc>https://uchidokoro.com/machines/toaru_index2/</loc></url>
+  <url><loc>https://uchidokoro.com/machines/yajikita_mairu/</loc></url>
+  <url><loc>https://uchidokoro.com/machines/sf6/</loc></url>
+  <url><loc>https://uchidokoro.com/machines/world_dai_star/</loc></url>
+  <url><loc>https://uchidokoro.com/machines/jashinchan/</loc></url>
 </urlset>
