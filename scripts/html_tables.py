@@ -64,6 +64,11 @@ class _TableParser(_HTMLParser):
         self.head_tag = None             # 取り込み中の見出し(h1-h6)
         self.head_buf = []
         self.last_heading = ""          # 前の表からここまでの最後の見出し
+        # ★見出しの階層をそのまま持つ★（2026-08-06・Codex138回目）
+        #   <h2>通常時</h2><h3>内部モードごとの特徴</h3><table> のとき、
+        #   直前の見出し1つ（＝h3）だけでは**親の「通常時」が失われる**。
+        #   AT中の表を通常時と取り違えると、実際より浅い天井を載せてしまう。
+        self.head_levels = {}           # {1..6: 見出し文字列}
 
     def _is_hidden(self, attrs) -> bool:
         d = dict(attrs)
@@ -105,6 +110,9 @@ class _TableParser(_HTMLParser):
             if self.table_depth == 1:
                 self.cur = {"title": self.last_heading, "pairs": [],
                             "cells": [], "rows": [], "has_span": False,
+                            "headings": [self.head_levels[k] for k in
+                                         sorted(self.head_levels)],
+                            "caption": "",
                             "_cap": None, "_nested": False}
             else:
                 # ★入れ子の表は丸ごと不採用★（2026-08-03・Codex64回目。
@@ -147,7 +155,9 @@ class _TableParser(_HTMLParser):
             if self.table_depth == 0 and self.cur is not None:
                 cur = self.cur
                 if cur["_cap"]:
+                    # ★caption は題を上書きするが、見出しは消さない★
                     cur["title"] = cur["_cap"]
+                    cur["caption"] = cur["_cap"]
                 nested = cur.pop("_nested")
                 del cur["_cap"]
                 if not nested:            # 入れ子を含む表は返さない
@@ -172,8 +182,16 @@ class _TableParser(_HTMLParser):
                     "NFKC", " ".join("".join(self.cap_buf).split()))
                 self.in_caption = False
         elif tag == self.head_tag:
-            self.last_heading = unicodedata.normalize(
+            got = unicodedata.normalize(
                 "NFKC", " ".join("".join(self.head_buf).split()))
+            self.last_heading = got
+            try:                          # h1〜h6 の階層を更新する
+                lv = int(str(self.head_tag)[1])
+            except (ValueError, IndexError):
+                lv = 6
+            self.head_levels[lv] = got
+            for k in [k for k in self.head_levels if k > lv]:
+                del self.head_levels[k]   # 深い見出しは新しい親で無効になる
             self.head_tag = None
 
     def handle_data(self, data):
@@ -190,7 +208,8 @@ class _TableParser(_HTMLParser):
 def tables(html: str) -> list:
     """表を1つずつ、直前の見出しと一緒に返す。
 
-    返すもの: [{"title": 直前の見出し, "pairs": [(左, 右), ...],
+    返すもの: [{"title": 直前の見出し, "headings": [親からの見出し],
+                "caption": 表の題, "pairs": [(左, 右), ...],
                 "cells": [...], "rows": [...], "has_span": bool}]
 
     ★画面に出るものだけ★（2026-08-03・Codex63回目）
@@ -282,6 +301,22 @@ def selftest() -> int:
     t("　タグの中の文字は本文にしない",
       tables('<h3>見出し</h3><table><tr><th>a<span>b</span></th>'
              '<td>c</td></tr></table>')[0]["pairs"] == [("a b", "c")])
+    HH = ("<h2>通常時</h2><h3>内部モードごとの特徴</h3>"
+          "<table><tr><th>通常A</th><td>天井:749G+α</td></tr></table>"
+          "<h2>AT中</h2><h3>内部モードごとの特徴</h3>"
+          "<table><tr><th>通常A</th><td>天井:649G+α</td></tr></table>")
+    hh = tables(HH)
+    t("★★親の見出しを失わない★★（通常時の表とAT中の表を取り違えない）",
+      hh[0]["headings"] == ["通常時", "内部モードごとの特徴"]
+      and hh[1]["headings"] == ["AT中", "内部モードごとの特徴"])
+    hc = tables("<h2>通常時</h2><table><caption>モード別天井</caption>"
+                "<tr><th>a</th><td>b</td></tr></table>")[0]
+    t("★★caption は題を上書きするが、見出しは消さない★★",
+      hc["caption"] == "モード別天井" and hc["headings"] == ["通常時"])
+    t("　深い見出しは新しい親で無効になる",
+      tables("<h2>A</h2><h3>B</h3><h2>C</h2>"
+             "<table><tr><th>x</th><td>y</td></tr></table>"
+             )[0]["headings"] == ["C"])
     t("★caption があれば見出しより優先する★",
       tables('<h3>ちがう見出し</h3><table><caption>本当の名前</caption>'
              '<tr><th>a</th><td>b</td></tr></table>')[0]["title"] == "本当の名前")

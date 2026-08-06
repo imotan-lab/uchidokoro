@@ -53,6 +53,27 @@ KINDS = {
     "THROUGH": {"jp": "スルー天井", "unit": "スルー"},
 }
 
+# ★出典自身が「通常時の天井」と書いている文★（2026-08-06・Codex138回目）
+#   実データで確認した2つの形。**表からの最大値算出はしない**
+#   （「表がモードを網羅している」ことを機械では証明できず、
+#     取りこぼした行にもっと深い天井があると**浅い天井を載せてしまう**）。
+#   例1「…の天井は通常時1000G+αで、到達時はST「…」に当選」
+#   例2「通常時を最大999G+α消化で天井到達。到達後はボーナスに当選する」
+_SENT_EXPLICIT_A = re.compile(
+    r"天井は(?P<phase>通常時)\s*(?P<amount>\d{2,5})\s*G(?P<plus>\s*\+\s*α)?"
+    r"で[、,]?\s*到達(?:時|後)は[、,]?\s*(?P<benefit>[^。]{1,26}?)に当選")
+_SENT_EXPLICIT_B = re.compile(
+    r"(?P<phase>通常時)を?最大\s*(?P<amount>\d{2,5})\s*G(?P<plus>\s*\+\s*α)?"
+    r"\s*消化で天井到達。\s*到達(?:後|時)は(?P<benefit>[^。]{1,26}?)に当選")
+# ★条件つきの天井（設定変更後・上位ST後など）★
+#   ★通常時の天井と混ぜない★＝別の主張として持つ。恩恵は書いていないことが
+#   多いので、そのままでは採用されない（＝勝手に「ボーナス」と決めない）。
+_SENT_AFTER = re.compile(
+    r"(?P<events>(?:設定変更|上位ST|上位AT|有利区間リセット)[^。]{0,12}?)"
+    r"は[^。]{0,16}?(?P<amount>\d{2,5})\s*G(?P<plus>\s*\+\s*α)?"
+    r"[^。]{0,8}?に短縮")
+_AFTER_EVENTS = ("設定変更", "上位ST", "上位AT", "有利区間リセット")
+
 # 文章から採る形（★許可した言い回しだけ★・禁止語を並べる方式は必ず抜ける）
 _SENT_GAME = re.compile(
     r"(?P<counted>[^。、]{0,14}?)を?最大\s*(?P<amount>\d{2,5})\s*G\s*消化すると"
@@ -103,10 +124,19 @@ def _sentence_at(text: str, pos: int) -> str:
 
 # 表から採る形（見出しと値が交互に並ぶ）
 _TABLE_LABELS = {"GAME": ("天井G数", "天井ゲーム数"), "CYCLE": ("天井周期", "周期天井")}
+# ★「天井条件／天井恩恵」の形★（2026-08-06。DMMぱちタウンの実ページ）
+#   値は「通常時999G+α消化」のように**場面と数がひと続き**で書かれる。
+_COND_LABELS = ("天井条件", "天井到達条件")
+_COND_VALUE = re.compile(
+    r"^(?P<phase>通常時|AT間|ボーナス間|CZ間|有利区間)?\s*"
+    r"(?P<amount>\d{2,5})\s*G(?P<plus>\s*\+\s*α)?\s*消化?$")
 _BENEFIT_LABELS = ("恩恵", "天井恩恵")
 
 # 恩恵として認める形（★文にせず短い語だけ★）
-_BENEFIT_OK = re.compile(r"^[ぁ-んァ-ヶ一-龥A-Za-z0-9「」・＋+/ 　]{2,24}$")
+#   ★長音符「ー」が抜けていた★（2026-08-06に自分の試験で発覚）
+#     いちばん多い恩恵「ボーナス」が丸ごと弾かれ、**天井が採れない原因**に
+#     なっていた（ァ-ヶ に U+30FC は入らない）。「々」「〜」も足す。
+_BENEFIT_OK = re.compile(r"^[ぁ-んァ-ヶーｰ々〜～一-龥A-Za-z0-9「」・＋+/ 　]{2,24}$")
 
 
 def _norm(s: str) -> str:
@@ -246,22 +276,75 @@ def through_counted(raw: str):
     return None
 
 
+def explicit_ceilings(text: str) -> list:
+    """★出典自身が「通常時の天井」と書いた文だけ★を採る（Codex138回目）。
+
+    表からモード別の値を集めて最大を計算する、はやらない。
+    「その表がモードを網羅している」ことを機械では確かめられず、
+    読み落とした行にもっと深い天井があると**浅い天井を載せてしまう**。
+    """
+    t = _norm(cut_user_area(text))
+    out = []
+    for rx in (_SENT_EXPLICIT_A, _SENT_EXPLICIT_B):
+        for m in rx.finditer(t):
+            benefit = m.group("benefit").strip()
+            if not _BENEFIT_OK.match(benefit):
+                continue
+            if _NEGATED.search(_sentence_at(t, m.start())):
+                continue
+            out.append(_atom("GAME", int(m.group("amount")), "G",
+                             role="EXPLICIT_CEILING", phase=m.group("phase"),
+                             counted=m.group("phase"),
+                             plus_alpha=bool(m.group("plus")),
+                             benefit=split_benefit(benefit)[0],
+                             certainty=split_benefit(benefit)[1],
+                             raw=m.group(0)[:120]))
+    return out
+
+
+def conditional_ceilings(text: str) -> list:
+    """★条件つきの天井★（設定変更後・上位ST後など）を、別の主張として採る。
+
+    ★通常時の天井と混ぜない★（2026-08-06・Codex138回目）
+      「設定変更後」と「上位ST後」は同じ600Gでも**別の条件**。
+      恩恵は書かれていないことが多いので、勝手に「ボーナス」と決めない
+      （＝恩恵が取れないものは、この先の採用に進まない）。
+    """
+    t = _norm(cut_user_area(text))
+    out = []
+    for m in _SENT_AFTER.finditer(t):
+        if _NEGATED.search(_sentence_at(t, m.start())):
+            continue
+        evs = [e for e in _AFTER_EVENTS if e in m.group("events")]
+        for ev in evs:                    # ★条件ごとに別の1件にする★
+            out.append(_atom("GAME", int(m.group("amount")), "G",
+                             role="CONDITIONAL", phase="通常時",
+                             after_event=ev, counted="通常時",
+                             plus_alpha=bool(m.group("plus")),
+                             raw=m.group(0)[:120]))
+    return out
+
+
 def from_sentences(text: str) -> list:
     """文章から天井を採る（P-WORLD の形）。★掲示板は読まない★"""
     text = cut_user_area(text)
-    out = []
+    out = explicit_ceilings(text) + conditional_ceilings(text)
     for rx, kind in ((_SENT_GAME, "GAME"), (_SENT_CYCLE, "CYCLE")):
         for m in rx.finditer(_norm(text)):
             benefit = m.group("benefit").strip()
             counted = m.group("counted").strip() or None
             if not _BENEFIT_OK.match(benefit):
                 continue
-            out.append({"kind": kind, "amount": int(m.group("amount")),
-                        "unit": KINDS[kind]["unit"],
-                        "counted": normalize_counted(counted),
-                        "benefit": split_benefit(benefit)[0],
-                        "certainty": split_benefit(benefit)[1],
-                        "raw": m.group(0)[:120]})
+            # ★役割を必ず入れる★（2026-08-06。役割を鍵に入れた結果、
+            #   同じ「通常時1200G」でも表から採った票と文から採った票が
+            #   別物になり、**採れていた天井が採れなくなった**）
+            out.append(_atom(kind, int(m.group("amount")),
+                             KINDS[kind]["unit"], role="EXPLICIT_CEILING",
+                             phase=normalize_counted(counted),
+                             counted=normalize_counted(counted),
+                             benefit=split_benefit(benefit)[0],
+                             certainty=split_benefit(benefit)[1],
+                             raw=m.group(0)[:120]))
     # ★スルー天井★（恩恵は同じ文に無いことが多いので、別に集める）
     #   ★「N回目で確定」は (N-1) スルー★（数え方を取り違えない）
     t = _norm(text)
@@ -332,12 +415,41 @@ def from_table(html: str) -> list:
             #   「AT天井」のATは恩恵の意味なので、〜間・通常時だけ読む）
             _cm = re.search(r"(通常時|AT間|ボーナス間|CZ間|有利区間)",
                             _norm(tb["title"]))
-            out.append({"kind": kind, "amount": int(m.group(1)),
-                        "unit": KINDS[kind]["unit"],
-                        "counted": _cm.group(1) if _cm else None,
-                        "benefit": split_benefit(benefit)[0],
-                        "certainty": split_benefit(benefit)[1],
-                        "raw": f"{tb['title'][:20]}: {val} / 恩恵={benefit}"})
+            out.append(_atom(kind, int(m.group(1)), KINDS[kind]["unit"],
+                             role="EXPLICIT_CEILING",
+                             phase=_cm.group(1) if _cm else None,
+                             counted=_cm.group(1) if _cm else None,
+                             benefit=split_benefit(benefit)[0],
+                             certainty=split_benefit(benefit)[1],
+                             raw=f"{tb['title'][:20]}: {val} / 恩恵={benefit}"))
+    return out
+
+
+def from_condition_table(html: str) -> list:
+    """「天井条件／天井恩恵」の表から採る（★DMMぱちタウンの形★）。
+
+    2026-08-06。3出典が同じ天井を書いているのに、**書き方が違うだけで
+    1票しか集まらない**状態だった。値と恩恵は**同じ表の中だけ**で結ぶ。
+    """
+    out = []
+    for tb in _ht.tables(html):
+        if tb.get("has_span"):
+            continue                      # 列がずれる表は読まない
+        raw = _norm(_ht.value_of(tb["pairs"], _COND_LABELS))
+        m = _COND_VALUE.match(raw)
+        if not m:
+            continue
+        benefit = _norm(_ht.value_of(tb["pairs"], _BENEFIT_LABELS))
+        benefit = re.sub(r"に当選$", "", benefit).strip()
+        if not (benefit and _BENEFIT_OK.match(benefit)):
+            continue                      # ★恩恵が取れなければ採らない★
+        out.append(_atom("GAME", int(m.group("amount")), "G",
+                         role="EXPLICIT_CEILING", phase=m.group("phase"),
+                         counted=m.group("phase"),
+                         plus_alpha=bool(m.group("plus")),
+                         benefit=split_benefit(benefit)[0],
+                         certainty=split_benefit(benefit)[1],
+                         raw=f"天井条件={raw} / 恩恵={benefit}"))
     return out
 
 
@@ -361,7 +473,8 @@ def read_page(url: str, official_name: str) -> dict:
     text = _w._visible_text(html)
     lines = [x.strip() for x in text.splitlines()]
     seen, got = set(), []
-    for c in from_sentences(text) + from_table(html):
+    for c in (from_sentences(text) + from_table(html)
+              + from_condition_table(html)):
         # ★検証済みの恩恵名の対応表で書き方をそろえる★（Codex59回目）
         c["benefit"] = _benefit_alias(c["benefit"], official_name)
         # ★重複判定は事実の全部で★（Codex56〜57回目。
@@ -397,6 +510,24 @@ def read_page(url: str, official_name: str) -> dict:
     return out
 
 
+def _atom(kind, amount, unit, **kw) -> dict:
+    """天井1件の形（★条件まで含めて別物として扱う★・Codex138回目）。
+
+    role       EXPLICIT_CEILING（出典が「通常時の天井」と書いた）
+               / TABLE（表から）／ CONDITIONAL（設定変更後などの条件つき）
+    phase      通常時 / AT中 …（どの場面の話か）
+    after_event 設定変更 / 上位ST … （何のあとの話か・無ければ None）
+    plus_alpha 「+α」が付くか（★999Gちょうどと999G+αは別物★）
+    """
+    got = {"kind": kind, "amount": amount, "unit": unit,
+           "role": kw.get("role") or "TABLE", "phase": kw.get("phase"),
+           "mode": kw.get("mode"), "after_event": kw.get("after_event"),
+           "plus_alpha": bool(kw.get("plus_alpha")),
+           "counted": kw.get("counted"), "benefit": kw.get("benefit") or "",
+           "certainty": kw.get("certainty") or "", "raw": kw.get("raw") or ""}
+    return got
+
+
 def _key(c: dict) -> str:
     """一致を見るための鍵。★恩恵と「何を数えるか」まで含める★
 
@@ -406,16 +537,26 @@ def _key(c: dict) -> str:
       この2つはまったく別物で、AT間天井を通常時天井として出すと
       読者は打てない台を打つことになる。
     """
-    return json.dumps({k: (c.get(k) or "") for k in ("kind", "amount", "unit",
-                                                     "counted", "benefit",
-                                                     "certainty")},
+    #   ★2026-08-06・Codex138回目★
+    #     役割・場面・モード・条件・+α まで鍵に入れる。
+    #     「特殊モードの799G」と「通常時全体の最大799G」は**別の主張**であり、
+    #     同じ数字でも賛成票にしてはいけない。
+    return json.dumps({k: (c.get(k) if c.get(k) not in (None, False) else "")
+                       for k in ("kind", "amount", "unit", "counted",
+                                 "benefit", "certainty", "role", "phase",
+                                 "mode", "after_event", "plus_alpha")},
                       ensure_ascii=False, sort_keys=True)
 
 
 def _base_key(c: dict) -> str:
     """「何を数えるか」だけを外した鍵（片方が書いていない場合の突き合わせ用）。"""
-    return json.dumps({k: (c.get(k) or "") for k in ("kind", "amount", "unit",
-                                                     "benefit", "certainty")},
+    #   ★「場面」も外す★（2026-08-06。phase は counted と同じことを指すので、
+    #     ここに入れると「条件なしの票を条件つきへ寄せる」働きが死ぬ。
+    #     実データで、すーぱぁびん娘の1200G天井が採れなくなって気づいた）
+    return json.dumps({k: (c.get(k) if c.get(k) not in (None, False) else "")
+                       for k in ("kind", "amount", "unit", "benefit",
+                                 "certainty", "role", "mode",
+                                 "after_event", "plus_alpha")},
                       ensure_ascii=False, sort_keys=True)
 
 
@@ -535,6 +676,11 @@ def compare(pages: list, cz_names=None) -> dict:
                                   page_names=p.get("cz_names")):
             votes.setdefault(_key(c), {"sample": c, "sources": set()})
             votes[_key(c)]["sources"].add(lin)
+    # ★恩恵が分からない天井は採らない★（2026-08-06。条件つき天井
+    #   「設定変更後は650G+αに短縮」は恩恵が書かれていないことが多く、
+    #   そのままだと**到達して何が起きるか分からない天井**を載せてしまう）
+    votes = {k: v for k, v in votes.items()
+             if v["sample"]["kind"] == "THROUGH" or v["sample"].get("benefit")}
     votes = _merge_unqualified(votes)
     adopted, need_third = [], []
     # 同じ種類で値が割れていないかも見る（1200Gと1500Gが両方2票、はありえない）
@@ -802,6 +948,78 @@ def selftest() -> int:
       "（打ち消し扱いにして正しい出典を1つ失っていた・自分の試験で発覚）",
       [g["amount"] for g in from_sentences("CZでAT非当選が最大6回続くと天井到達。")
        if g["kind"] == "THROUGH"] == [6])
+
+    # --- ★出典が「通常時の天井」と書いた文だけ採る★（2026-08-06・Codex138回目）
+    EX1 = ("「Lワールドダイスター」のボーナス天井は通常時999G+αで、"
+           "到達時はボーナスに当選。設定変更後や上位ST後は600G+αに短縮される。")
+    g1 = explicit_ceilings(EX1)
+    t("★★『天井は通常時999G+αで、到達時は…に当選』を読める★★",
+      len(g1) == 1 and g1[0]["amount"] == 999 and g1[0]["plus_alpha"]
+      and g1[0]["role"] == "EXPLICIT_CEILING" and g1[0]["phase"] == "通常時"
+      and g1[0]["benefit"] == "ボーナス")
+    EX2 = "通常時を最大999G+α消化で天井到達。到達後はボーナスに当選する。"
+    g2 = explicit_ceilings(EX2)
+    t("　『通常時を最大999G+α消化で天井到達。到達後は…に当選』も読める",
+      len(g2) == 1 and g2[0]["amount"] == 999 and g2[0]["plus_alpha"])
+    c1 = conditional_ceilings(EX1)
+    t("★★条件つきは条件ごとに別の1件にする★★（設定変更後と上位ST後を混ぜない）",
+      len(c1) == 2 and {x["after_event"] for x in c1} == {"設定変更", "上位ST"}
+      and all(x["role"] == "CONDITIONAL" and x["amount"] == 600 for x in c1))
+    t("★★条件つきの恩恵を勝手に決めない★★（書いていなければ空のまま）",
+      all(not x["benefit"] for x in c1))
+    t("★★条件つきを通常時の天井と同じ票にしない★★",
+      _key(g1[0]) != _key(c1[0]) and _base_key(g1[0]) != _base_key(c1[0]))
+    p999 = _atom("GAME", 999, "G", role="EXPLICIT_CEILING", phase="通常時",
+                 benefit="ボーナス", plus_alpha=True)
+    p999n = _atom("GAME", 999, "G", role="EXPLICIT_CEILING", phase="通常時",
+                  benefit="ボーナス", plus_alpha=False)
+    t("★★999Gちょうどと999G+αを同じ票にしない★★（早く打ち始める事故）",
+      _key(p999) != _key(p999n))
+    mode799 = _atom("GAME", 799, "G", role="TABLE", phase="通常時", mode="特殊",
+                    benefit="ボーナス")
+    max799 = _atom("GAME", 799, "G", role="EXPLICIT_CEILING", phase="通常時",
+                   benefit="ボーナス")
+    t("★★『特殊モードの799G』と『通常時の天井799G』を同じ票にしない★★",
+      _key(mode799) != _key(max799) and _base_key(mode799) != _base_key(max799))
+    t("　打ち消しの文からは採らない",
+      explicit_ceilings("天井は通常時999G+αではない。") == []
+      and conditional_ceilings("設定変更後は600G+αに短縮されるわけではない。") == [])
+
+    t("★★恩恵が分からない天井は採らない★★（到達して何が起きるか不明のまま載せない）",
+      compare([{"ok": True, "host": "a.example", "ceilings": [
+          _atom("GAME", 650, "G", role="CONDITIONAL", after_event="設定変更")]},
+          {"ok": True, "host": "b.example", "ceilings": [
+              _atom("GAME", 650, "G", role="CONDITIONAL",
+                    after_event="設定変更")]}])["adopted"] == [])
+    t("★★同じ事実なら、表から採っても文から採っても同じ票になる★★"
+      "（役割を鍵に入れた時に採れなくなった事故の再発防止）",
+      _key(_atom("GAME", 1200, "G", role="EXPLICIT_CEILING", phase="通常時",
+                 counted="通常時", benefit="AT"))
+      == _key(_atom("GAME", 1200, "G", role="EXPLICIT_CEILING", phase="通常時",
+                    counted="通常時", benefit="AT")))
+
+    _u = _atom("GAME", 1200, "G", role="EXPLICIT_CEILING", benefit="AT")
+    _q = _atom("GAME", 1200, "G", role="EXPLICIT_CEILING", phase="通常時",
+               counted="通常時", benefit="AT")
+    t("★★片方が「通常時」と書いていないだけなら、同じ天井として寄せられる★★"
+      "（実データで1200G天井を落とした事故の再発防止）",
+      _base_key(_u) == _base_key(_q) and _key(_u) != _key(_q))
+
+    CT = ("<h3>天井</h3><table>"
+          "<tr><th>天井条件</th><td>通常時999G+α消化</td></tr>"
+          "<tr><th>天井恩恵</th><td>ボーナスに当選</td></tr></table>")
+    ct = from_condition_table(CT)
+    t("★★『天井条件／天井恩恵』の形も読める★★（DMMぱちタウンの書き方）",
+      len(ct) == 1 and ct[0]["amount"] == 999 and ct[0]["plus_alpha"]
+      and ct[0]["counted"] == "通常時" and ct[0]["benefit"] == "ボーナス")
+    t("　恩恵が取れない表からは採らない",
+      from_condition_table("<table><tr><th>天井条件</th>"
+                           "<td>通常時999G+α消化</td></tr></table>") == [])
+    t("★★『天井条件』の値が数だけでない時は採らない★★",
+      from_condition_table("<table><tr><th>天井条件</th>"
+                           "<td>モードにより異なる</td></tr>"
+                           "<tr><th>天井恩恵</th><td>ボーナス</td></tr>"
+                           "</table>") == [])
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
