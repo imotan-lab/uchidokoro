@@ -219,6 +219,10 @@ RUN_WEEKDAY = 0                           # 0=月曜（1周したあとは週1�
 #   0 に全部まとめると、手順書が「書けた日だけ検証・コミットへ」を判断できない。
 EXIT_OK = 0        # 何も変えていない（足すものなし／動かない日／作業中で飛ばした）
 EXIT_WROTE = 10    # ★書いた★（この時だけ検証・コミット・push へ進む）
+EXIT_WROTE_UNRECORDED = 11  # ★書いたが、見た日を記録できなかった★
+#   （2026-08-06・Codex136回目。書いた後に記録で失敗して 1 を返すと、
+#     書き換えたまま検証もコミットもされず、翌日は「作業中の変更あり」で
+#     飛ばされて誰も気づかない。書いた事実のほうを優先して伝える）
 EXIT_ATTENTION = 3 # このレーンだけ終わり（人の判断が要る・一時的な不調）
 EXIT_FATAL = 1     # 予期しない失敗（記録が読めない・保存できない等）
 
@@ -1374,6 +1378,28 @@ def selftest() -> int:                    # noqa: C901
         _A.today = "2026-08-31"      # 月曜（上は日を消費していない）
         t("★★台帳が読めないのは、その機種の問題ではない（すぐ 1）★★",
           run_next(_A()) == EXIT_FATAL)
+        globals()["_blocked"] = lambda slug: []      # 台帳は読める状態に戻す
+        globals()["_to_ledger"] = lambda slug, pr, tr: None
+        globals()["run"] = lambda slug, ap: {"problems": [], "wrote": True,
+                                             "added": ["**型式名**：X"]}
+        keep_mark = globals()["_mark_checked"]
+
+        def _mark_boom(slug, today, outcome):
+            raise RuntimeError("記録できない")
+        globals()["_mark_checked"] = _mark_boom
+        _A.today = "2026-09-07"          # 月曜
+        rc4 = run_next(_A())
+        globals()["_mark_checked"] = keep_mark
+        t("★★書いた後に記録できなくても『失敗』にしない★★"
+          "（記事は変わっているので検証・コミットへ進ませる）",
+          rc4 == EXIT_WROTE_UNRECORDED)
+        globals()["run"] = lambda slug, ap: {"problems": ["★止めました★ だめ"]}
+        globals()["_mark_checked"] = _mark_boom
+        _A.today = "2026-09-14"          # 月曜
+        rc5 = run_next(_A())
+        globals()["_mark_checked"] = keep_mark
+        t("　書いていない時の記録失敗は、これまでどおり 1",
+          rc5 == EXIT_FATAL)
         _A.apply = False
         t("★★--apply が無ければ何もしない★★", run_next(_A()) == EXIT_FATAL)
         _A.apply, _A.slug = True, "x"
@@ -1425,6 +1451,7 @@ def run_next(a) -> int:
     終了コード（★手順書と揃える★）
       0 = 何も変えていない（足すものなし／動かない日／作業中で飛ばした）
      10 = ★書いた★（この時だけ検証・コミット・push へ進む）
+     11 = 書いたが、見た日を記録できなかった（★10と同じく検証・コミットへ★）
       3 = このレーンだけ終わり（本編は続けてよい）
           ・人の判断が要る → **台帳に登録済み**
           ・一時的な不調   → 続いた回数が上限に届くまでは**登録しない**
@@ -1481,12 +1508,24 @@ def run_next(a) -> int:
             _mark_checked(slug, today, outcome)   # ★止まっても日は進める★
             print(f"結果: {outcome}")
             return EXIT_ATTENTION
-        _mark_checked(slug, today, outcome)
+        wrote = bool(r.get("wrote"))
+        try:
+            _mark_checked(slug, today, outcome)
+        except Exception as e:            # noqa: BLE001
+            if not wrote:
+                raise
+            # ★書いた後の記録失敗で「失敗」にしない★（Codex136回目）
+            #   記事は変わっているので、検証とコミットまでは進めてもらう。
+            print(f"★見た日を記録できませんでした: {type(e).__name__}: {e}★")
+            for x in (r.get("added") or []) + (r.get("boxes") or []):
+                print("  ＋", str(x)[:74])
+            print("書きました（記録だけ失敗）")
+            print("結果: wrote_unrecorded")
+            return EXIT_WROTE_UNRECORDED
         for x in (r.get("added") or []) + (r.get("boxes") or []):
             print("  ＋", str(x)[:74])
         for x in (r.get("removed") or []):
             print("  －", str(x)[:70])
-        wrote = bool(r.get("wrote"))
         print("書きました" if wrote else "足すものがありません")
         print("結果: wrote" if wrote else "結果: noop")
         return EXIT_WROTE if wrote else EXIT_OK
