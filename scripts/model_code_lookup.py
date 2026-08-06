@@ -45,6 +45,19 @@ _LABELS = ("型式名", "型式")
 # 型式名として認める形。★これ以外は採らない★（許可した形だけ通す）
 #   英数字・記号・かな・漢字が混じる短い1行。文や説明を拾わない。
 _CODE_OK = re.compile(r"^[0-9A-Za-zぁ-んァ-ヶ一-龥ー･・／/＋+\-−–—．.　 ]{2,40}$")
+# ★型式名だけの許可文字★（2026-08-06・台帳#238）
+#   ★共用しない理由★: _CODE_OK は spec_lookup の「文字の値」（純増など）でも
+#   使っている。型式名のために文字を足すと、関係のない収集まで一緒にゆるむ。
+#   実データで確かめた追加文字だけを、ここに1つずつ足していく。
+#     「!」… Lやじきた道中記参る!BG（P-WORLD 10489 / DMMぱちタウン 5027 の2社一致）
+#   ※「:」「~」「☆」も実在するとCodexは言うが**当方未確認**なので足さない。
+#     足すときは公的な検定一覧などで1件ずつ確かめること。
+#   ★短すぎる形は採らない★（「L!」のような1文字＋記号を型式名にしない）
+_MODEL_CODE_OK = re.compile(
+    r"^(?=.*[0-9A-Za-z])(?=.*[0-9A-Za-zぁ-んァ-ヶ一-龥]{2})"
+    r"[0-9A-Za-zぁ-んァ-ヶ一-龥ー･・／/＋+\-−–—．.!　 ]{4,40}$")
+# ★型式名に混じっていたら採らない語★（見出しや注記を型式名にしない）
+_MODEL_CODE_NG_WORDS = ("予定", "導入", "発売", "登場", "新台", "解析", "初打ち")
 # 明らかに型式名ではない語（見出しの取り違え防止）
 _CODE_NG = ("記載なし", "不明", "未定", "調査中")
 
@@ -92,7 +105,9 @@ def extract_model_code(html: str):
             #   本物を取りこぼしても「まだ載っていない」扱い＝安全側に落ちる。
             if not re.search(r"[0-9A-Za-z]", norm):
                 continue
-            if not _CODE_OK.match(cand):
+            if any(w in cand for w in _MODEL_CODE_NG_WORDS):
+                continue                  # ★注記が混じった行は型式名ではない★
+            if not _MODEL_CODE_OK.match(cand):
                 continue          # 説明文などを拾ってしまった。次の候補へ
             return norm, "OK"
     return None, "MODEL_CODE_NOT_FOUND"
@@ -1107,6 +1122,22 @@ def selftest() -> int:
           "L青春ブタ野郎はバニーガール先輩の夢を見ない")[0] is True)
     t("　タイトルが無ければ採らない",
       page_is_machine("<p>本文だけ</p>", "Lすーぱぁびん娘")[0] is False)
+
+    # ★型式名の許可文字は専用に分ける★（2026-08-06・台帳#238）
+    def _mc_ok(x):
+        return bool(_MODEL_CODE_OK.match(x)) and not any(
+            w in x for w in _MODEL_CODE_NG_WORDS)
+
+    t("★★「!」を含む型式名を採れる★★（2名鑑一致でも採れず登録できなかった）",
+      _mc_ok("Lやじきた道中記参る!BG"))
+    t("　これまで採れていた型式名は引き続き採れる",
+      _mc_ok("LとんでもスキルKM") and _mc_ok("Lパチスロ喰霊零Re/L3"))
+    t("★★注記が混じった行は型式名にしない★★（「… 予定」など）",
+      not _mc_ok("8月3日導入予定!") and not _mc_ok("新台 Lなんとか"))
+    t("★★1文字＋記号のような形は採らない★★（「L!」）",
+      not _mc_ok("L!") and not _mc_ok("!!"))
+    t("★★純増などの共用ルールは広げていない★★（型式名専用に切り分けた）",
+      not _CODE_OK.match("Lやじきた道中記参る!BG"))
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")

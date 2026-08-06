@@ -213,6 +213,78 @@ def _json_key_findings(obj, path="$") -> list[str]:
     return out
 
 
+def _decode_utf16(raw: bytes):
+    """BOM付きUTF-16なら文字列にする（そうでなければ None）。"""
+    for bom, enc in ((bytes([0xff, 0xfe]), "utf-16-le"),
+                     (bytes([0xfe, 0xff]), "utf-16-be")):
+        if raw.startswith(bom):
+            try:
+                return raw[2:].decode(enc)
+            except UnicodeDecodeError:
+                return None
+    return None
+
+
+def _looks_binary(name: str) -> bool:
+    return name.lower().endswith(
+        (".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".pdf",
+         ".zip", ".gz", ".7z", ".woff", ".woff2", ".ttf", ".mp4"))
+
+
+def _zip_findings(path: str, raw: bytes, depth: int = 0):
+    """ZIPなら中の文字ファイルを1件ずつ同じ検査に掛ける（ZIPでなければ None）。
+
+    ★中を見ないまま拒否し続けない★（2026-08-06）
+      拒否のままだと、Dropboxに置いた控えの中身を誰も確かめられず、
+      毎朝の警告だけが積み上がる。
+    """
+    import tempfile
+    import zipfile
+    if not raw.startswith(b"PK" + bytes([3, 4])):
+        return None
+    if depth > 0:
+        return ["content:ZIPの中にZIPがあるので確かめられません"]
+    out = []
+    try:
+        with zipfile.ZipFile(path) as z:
+            names = [n for n in z.namelist() if not n.endswith("/")]
+            if len(names) > 500:
+                return [f"content:ZIPの中身が多すぎます（{len(names)}件）"]
+            total = 0
+            for nm in names:
+                total += z.getinfo(nm).file_size
+                if total > 20 * 1024 * 1024:
+                    return ["content:ZIPの中身が大きすぎて確かめられません"]
+                data = z.read(nm)
+                # ★中の圧縮ファイルは確かめられない★（見た目で飛ばさない）
+                #   拡張子で「binaryだから無視」にすると、
+                #   **ZIPの中にZIPを置けば中身を隠せた**（自分の試験で発覚）。
+                for _mg in (b"PK" + bytes([3, 4]), bytes([0x1f, 0x8b]),
+                            b"7z" + bytes([0xbc, 0xaf, 0x27, 0x1c]), b"Rar!"):
+                    if data.startswith(_mg):
+                        return ["content:ZIPの中にZIPがあるので確かめられません"
+                                f"（{nm}）"]
+                txt = None
+                try:
+                    txt = data.decode("utf-8")
+                except UnicodeDecodeError:
+                    txt = _decode_utf16(data)
+                if txt is None:
+                    if _looks_binary(nm):
+                        continue
+                    return [f"content:ZIP内 {nm} を読めないので確かめられません"]
+                fd, tp = tempfile.mkstemp(suffix="_" + os.path.basename(nm))
+                try:
+                    with os.fdopen(fd, "w", encoding="utf-8") as f:
+                        f.write(txt)
+                    out += [f"{nm} → {x}" for x in content_findings(tp)]
+                finally:
+                    os.remove(tp)
+    except zipfile.BadZipFile:
+        return ["content:壊れたZIPなので確かめられません"]
+    return out
+
+
 def content_findings(path: str) -> list[str]:
     """中身ベースの検知（JSONキー・Cookie構造・値パターン）。ルール名のみ返す。"""
     out = []
@@ -234,19 +306,32 @@ def content_findings(path: str) -> list[str]:
         try:
             text = raw.decode("utf-8")
         except UnicodeDecodeError:
-            return ["content:UTF-8として読めないので中身を確かめられません"]
+            # ★読める形なら、実際に読んで確かめる★（2026-08-06）
+            #   Windowsのタスク定義は UTF-16、レビューの控えは ZIP。
+            #   「読めないから拒否」だと毎朝の警告が積み上がるだけで、
+            #   中身は一度も確かめられない。読めるようにするほうが安全。
+            text = _decode_utf16(raw)
+            _from_utf16 = text is not None
+            if text is None:
+                zf = _zip_findings(path, raw)
+                if zf is not None:
+                    return zf
+                return ["content:UTF-8として読めないので中身を確かめられません"]
     except Exception as e:                # noqa: BLE001
         return [f"content:読めないので確かめられません（{type(e).__name__}）"]
     # ★中身がJSONなら、拡張子に関係なく鍵を確かめる★（2026-08-04・Codex88回目）
     #   .json の時しか見ていなかったので、許可対象の .md に
     #   {"app_password": "..."} と書けば素通りできた。
     #   ★NUL・圧縮ファイルの先頭印もここで拒否する★（テキストの皮をかぶった別物）
-    if bytes([0]) in raw:
+    # ★UTF-16で読めたものはNULがあって当たり前★（2026-08-06）
+    #   文字の間にNULが入るので、生バイトで見ると必ず引っかかっていた。
+    if bytes([0]) in raw and not locals().get("_from_utf16"):
         return ["content:テキストではありません（NULが入っています）"]
-    for magic, name in ((b"PK" + bytes([3, 4]), "zip"),
+    for magic, name in (() if locals().get("_from_utf16") else
+                        ((b"PK" + bytes([3, 4]), "zip"),
                         (bytes([0x1f, 0x8b]), "gzip"),
                         (b"7z" + bytes([0xbc, 0xaf, 0x27, 0x1c]), "7z"),
-                        (b"Rar!", "rar")):
+                        (b"Rar!", "rar"))):
         if raw.startswith(magic):
             return [f"content:圧縮ファイルの中身です（{name}）"]
     _txt = text.strip()
@@ -655,11 +740,34 @@ def selftest() -> int:
     t("★★JSON配列の51件目に秘密があっても見つける★★"
       "（先頭50件しか見ていなかった＝ガードのfail-open）",
       any("app_password" in x for x in content_findings(_arr9)))
+    # ★UTF-16は読んで確かめる★（2026-08-06・毎朝の警告を潰すために変更）
+    #   以前は「読めないから拒否」だったが、Windowsのタスク定義など
+    #   正当なUTF-16があり、拒否のままでは中身を一度も確かめられなかった。
     _u16 = os.path.join(_d9, "note.md")
     open(_u16, "wb").write("これはUTF-16で保存した文章です".encode("utf-16"))
-    t("★★UTF-16で保存すれば素通り、を防ぐ★★"
-      "（errors=ignore で文字の間にNULが入り正規表現に当たらなかった）",
-      any("UTF-8として読めない" in x for x in content_findings(_u16)))
+    t("　UTF-16の普通の文章は通す（中身を読めるので）",
+      not content_findings(_u16))
+    _u16b = os.path.join(_d9, "note2.md")
+    open(_u16b, "wb").write(
+        '{"app_password": "abcd efgh ijkl mnop"}'.encode("utf-16"))
+    t("★★UTF-16で保存しても秘密は見つける★★",
+      any("app_password" in x for x in content_findings(_u16b)))
+    # ★ZIPも中を読んで確かめる★
+    import zipfile as _zf9
+    _z9 = os.path.join(_d9, "bundle.zip")
+    with _zf9.ZipFile(_z9, "w") as _z:
+        _z.writestr("logs/ok.txt", "普通のログです")
+    t("　中身が普通のZIPは通す", not content_findings(_z9))
+    _z9b = os.path.join(_d9, "bundle2.zip")
+    with _zf9.ZipFile(_z9b, "w") as _z:
+        _z.writestr("conf/gmail.json", '{"app_password": "abcd efgh ijkl mnop"}')
+    t("★★ZIPの中の秘密も見つける★★",
+      any("app_password" in x for x in content_findings(_z9b)))
+    _z9c = os.path.join(_d9, "bundle3.zip")
+    with _zf9.ZipFile(_z9c, "w") as _z:
+        _z.writestr("inner.zip", open(_z9, "rb").read())
+    t("★★ZIPの中のZIPは確かめられないので通さない★★",
+      any("ZIPの中にZIP" in x for x in content_findings(_z9c)))
     # ★中身がJSONなら拡張子に関係なく確かめる★（2026-08-04・Codex88〜89回目）
     #   ★試験は「許可される場所・別々の名前」で行う★
     #     （前回は一時ディレクトリ直下に置いたため名前の許可で落ちており、
@@ -677,7 +785,8 @@ def selftest() -> int:
 
     _json_md9 = _mk9("fake_json.md", '{"app_password":"abcd efgh ijkl mnop"}')
     _broken_md9 = _mk9("broken_json.md", '{"app_password":"abcd efgh ijkl mnop",}')
-    _u16_9 = _mk9("utf16_note.md", "これはUTF-16で保存した文章です".encode("utf-16"),
+    _u16_9 = _mk9("utf16_note.md",
+                  '{"app_password": "abcd efgh ijkl mnop"}'.encode("utf-16"),
                   binary=True)
     _zip9 = _mk9("fake_zip.md", b"PK" + bytes([3, 4]) + b"rest", binary=True)
     _nul9 = _mk9("nul_note.md", b"abc" + bytes([0]) + b"def", binary=True)
@@ -718,14 +827,14 @@ def selftest() -> int:
     t("　NULが入っているファイルはテキストとして扱わない",
       any("NUL" in x for x in content_findings(_nul9)))
     t("　ふつうの設計メモはこれまでどおり通る", content_findings(_plain9) == [])
-    t("　UTF-16のファイルは中身を確かめられないので通さない",
-      any("UTF-8として読めない" in x for x in content_findings(_u16_9)))
+    t("★★UTF-16に隠した秘密も見つける★★（読めるようになったので中身で判断）",
+      any("app_password" in x for x in content_findings(_u16_9)))
     # ★最後のコピー拒否まで、別々のファイルで確かめる★（Codex89回目）
     _out9 = os.path.join(_d9, "out")
     os.makedirs(_out9, exist_ok=True)
     for _src9, _why9 in ((_json_md9, ".mdに書いたJSON"),
                          (_broken_md9, ".mdに書いた壊れたJSON"),
-                         (_u16_9, "UTF-16のファイル"),
+                         (_u16_9, "UTF-16に隠した秘密"),
                          (_arr9, "配列51件目の秘密")):
         _dst9 = os.path.join(_out9, os.path.basename(_src9))
         _rc9 = cmd_copy(_src9, _dst9, False)
