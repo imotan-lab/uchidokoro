@@ -61,10 +61,20 @@ STALE_SENTENCE = (
 INLINE = (
     (re.compile(r"（20\d\d年\d+月時点）"), ""),
     (re.compile(r"【20\d\d年\d+月時点・公式未確認】"), "【公式未確認】"),
-    (re.compile(r"20\d\d年\d+月時点で、?"), ""),
-    (re.compile(r"現時点で、?"), ""),
+    # ★助詞まで含めて消す★（2026-08-06。「現時点では」の「現時点で」だけを
+    #   消して「は具体的な…」という壊れた文を7機種に公開してしまった）
+    (re.compile(r"20\d\d年\d+月時点で(?:は、?|も、?|、|(?=[^はも]))"), ""),
+    (re.compile(r"現時点で(?:は、?|も、?|、|(?=[^はも]))"), ""),
     (re.compile(r"導入済みですが、"), ""),
 )
+
+
+# ★言い換えたあとに出てはいけない並び★（消しすぎで文が壊れた印）
+_BROKEN = re.compile(r"[、。](?:は|が|を|に|も|で)[^。]")
+
+
+class Broken(Exception):
+    """言い換えた結果、日本語として壊れた（★書かずに止める★）。"""
 
 
 def fix_text(t: str) -> str:
@@ -85,7 +95,11 @@ def fix_text(t: str) -> str:
             sent = pat.sub(rep, sent)
         if sent.strip():
             out.append(sent.strip())
-    return re.sub(r"[ 　]{2,}", " ", "".join(out).strip())
+    got = re.sub(r"[ 　]{2,}", " ", "".join(out).strip())
+    # ★元に無かった壊れ方が出たら書かない★（2026-08-06の事故の再発防止）
+    if _BROKEN.search(got) and not _BROKEN.search(t):
+        raise Broken(f"言い換えで文が壊れます: {got[:60]}")
+    return got
 
 
 def fix_detail(detail: dict) -> tuple:
@@ -211,6 +225,19 @@ def selftest() -> int:
     got2, _ = fix_detail(json.loads(json.dumps(d2)))
     t("★★同じ断りは節に1つだけ★★（段落ごとに直すと2回並ぶ）",
       got2["sections"][0]["body"] == [PENDING])
+    t("★★『現時点では』は助詞ごと消す★★（2026-08-06に7機種で壊した形）",
+      fix_text("挙動が解析待ちのため、現時点では具体的な目安を出せません。")
+      == "挙動が解析待ちのため、具体的な目安を出せません。")
+    t("　『現時点で』単体も消える",
+      fix_text("現時点で公表されている情報は以下です。")
+      == "公表されている情報は以下です。")
+    broke = False
+    try:
+        fix_text("XX現時点でZZ。")     # 消すと「XXZZ」になるだけ＝壊れない
+        fix_text("ため、現時点ではは具体的な目安。")
+    except Broken:
+        broke = True
+    t("★★壊れた並びが出たら書かずに止める★★", broke)
     print(f"\n{ran[0]}/{ran[0]} 合格" if ok else "\n不合格あり")
     return 0 if ok else 1
 
