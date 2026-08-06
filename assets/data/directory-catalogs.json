@@ -206,7 +206,9 @@
       "link_pattern": "/slot/[a-z\\-]+/\\d+",
       "min_expected": 20,
       "status": "ACTIVE",
-      "_why_surfaces": "メーカー別の入口を全部登録する（2026-08-06）。2つしか登録しておらず、ユニバーサル等の新台が『一覧に載っていない』扱いになっていた"
+      "_why_surfaces": "メーカー別の入口を全部登録する（2026-08-06）。2つしか登録しておらず、ユニバーサル等の新台が『一覧に載っていない』扱いになっていた",
+      "surface_pattern": "^https://chonborista\\.com/slot/[a-z0-9\\-]+/$",
+      "_why_surface_pattern": "入口の登録漏れを毎回機械が数えるため（2026-08-06・scripts/directory_coverage.py）"
     },
     "p-world": {
       "name": "P-WORLD",
@@ -222,7 +224,9 @@
       ],
       "link_pattern": "/machine/database/\\d+",
       "min_expected": 15,
-      "status": "ACTIVE"
+      "status": "ACTIVE",
+      "surface_pattern": "^https://www\\.p-world\\.co\\.jp/database/machine[a-z0-9_/\\.\\-]*$",
+      "_why_surface_pattern": "入口の登録漏れを毎回機械が数えるため（2026-08-06・scripts/directory_coverage.py）"
     },
     "dmm-ptown": {
       "name": "DMMぱちタウン",
@@ -242,6 +246,90 @@
         {
           "url": "https://p-town.dmm.com/makers/44",
           "kind": "メーカー別（ベルコ）"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/alert/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/art/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/at/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/bonus/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/bonus_trigger_flg/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/change/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/digital/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/feather/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/informations/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/kainyu/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/limit/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/lucky_trigger_flg/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/middle_type/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/new_calendar/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/pachinko/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/pinball_ceiling/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/rt/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/search/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/smart_pinball/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/timing/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/with_setting/",
+          "kind": "タイプ別"
         }
       ],
       "link_pattern": "/machines/\\d+",
@@ -249,7 +337,9 @@
       "status": "ACTIVE",
       "_verified": "2026-07-31 Claudeが確認。/machines(31件)・/machines/slot(20件)・/makers/44(20件) のいずれにも Lすーぱぁびん娘(5038) が含まれる。/machines/smart_slot だけだと入らなかった。★1つの入口では足りないことの実例★",
       "title_class": "title",
-      "_why_title_class": "1つのリンクに機種名・メーカー・機械割・紹介文が同居しており、全部つなげると芯が一致しない（台帳#189）。題は <p class=\"title\"> にある（2026-08-06に実データで確認）"
+      "_why_title_class": "1つのリンクに機種名・メーカー・機械割・紹介文が同居しており、全部つなげると芯が一致しない（台帳#189）。題は <p class=\"title\"> にある（2026-08-06に実データで確認）",
+      "surface_pattern": "^https://p-town\\.dmm\\.com/machines/[a-z_]+/$",
+      "_why_surface_pattern": "入口の登録漏れを毎回機械が数えるため（2026-08-06・scripts/directory_coverage.py）"
     }
   }
 }
