@@ -69,6 +69,11 @@ _SENT_EXPLICIT_B = re.compile(
     r"(?P<phase>通常時)を?最大\s*(?P<amount>\d{2,5})\s*G(?P<plus>\s*\+\s*α)?"
     r"\s*消化(?:\s*[(（](?P<note>[^)）]{1,14})[)）])?で天井到達。"
     r"\s*到達(?:後|時)は(?P<benefit>[^。]{1,26}?)に当選")
+#   例3「通常時を最大1000G+α消化でボーナスに当選」（天井到達の語が無い形）
+_SENT_EXPLICIT_C = re.compile(
+    r"(?P<phase>通常時|AT間|CZ間|ボーナス間)を?最大\s*(?P<amount>\d{2,5})\s*G"
+    r"(?P<plus>\s*\+\s*α)?\s*消化(?:\s*[(（](?P<note>[^)）]{1,14})[)）])?"
+    r"で(?P<benefit>[^。、]{1,26}?)に当選")
 # ★条件つきの天井（設定変更後・上位ST後など）★
 #   ★通常時の天井と混ぜない★＝別の主張として持つ。恩恵は書いていないことが
 #   多いので、そのままでは採用されない（＝勝手に「ボーナス」と決めない）。
@@ -134,8 +139,9 @@ _COND_LABELS = ("天井条件", "天井到達条件", "天井突入条件")
 # 値の後ろに付く「※設定変更後は…に短縮」の但し書き（★短縮の話だけ切り離す★）
 _COND_NOTE = re.compile(r"[※*]\s*[^※*]{0,60}?短縮[^※*]{0,20}$")
 _COND_VALUE = re.compile(
-    r"^(?P<phase>通常時|AT間|ボーナス間|CZ間|有利区間)?\s*"
-    r"(?P<amount>\d{2,5})\s*G(?P<plus>\s*\+\s*α)?\s*消化?$")
+    r"^(?:最大)?\s*(?P<phase>通常時|AT間|ボーナス間|CZ間|有利区間)?を?\s*"
+    r"(?:最大)?\s*(?P<amount>\d{2,5})\s*G(?P<plus>\s*\+\s*α)?"
+    r"(?:\s*[(（][^)）]{1,14}[)）])?\s*(?:消化)?$")
 _BENEFIT_LABELS = ("恩恵", "天井恩恵")
 
 # 恩恵として認める形（★文にせず短い語だけ★）
@@ -291,7 +297,7 @@ def explicit_ceilings(text: str) -> list:
     """
     t = _norm(cut_user_area(text))
     out = []
-    for rx in (_SENT_EXPLICIT_A, _SENT_EXPLICIT_B):
+    for rx in (_SENT_EXPLICIT_A, _SENT_EXPLICIT_B, _SENT_EXPLICIT_C):
         for m in rx.finditer(t):
             benefit = m.group("benefit").strip()
             if not _BENEFIT_OK.match(benefit):
@@ -464,6 +470,48 @@ def from_condition_table(html: str) -> list:
     return out
 
 
+# 表ではなく、文章の流れの中に「ラベル 値」で並ぶ形（DMMぱちタウン）
+#   例「天井突入条件 通常時1000G+α消化 ※設定変更時は650G+αに短縮 天井恩恵 ボーナスに当選」
+_STOP = "".join(("。", chr(10)))
+_TEXT_PAIR = re.compile(
+    r"(?:天井突入条件|天井条件|天井到達条件)\s*"
+    r"(?P<value>[^" + _STOP + r"]{3,70}?)\s*"
+    r"(?:天井恩恵|恩恵)\s*"
+    r"(?P<benefit>[^" + _STOP + r"]{2,30}?)"
+    r"(?=\s*(?:リセット|ヤメ|打ち方|$|[" + _STOP + r"]))")
+
+
+def from_text_pairs(text: str) -> list:
+    """★表になっていない「天井突入条件 … 天井恩恵 …」も読む★（2026-08-06）
+
+    DMMぱちタウンは表タグを使わずに並べているので、表として読む道具では
+    拾えなかった。**同じ並びの中だけ**で値と恩恵を結ぶ（間に別の話が入る
+    書き方は読まない）。
+    """
+    t = _norm(cut_user_area(text))
+    out = []
+    for m in _TEXT_PAIR.finditer(t):
+        raw = m.group("value").strip()
+        cut = _COND_NOTE.sub("", raw).strip()
+        # 「1.…  2.…」のような箇条書きは、取り違えるので読まない
+        if re.search(r"[0-9１-９]\s*[.．]", cut):
+            continue
+        mm = _COND_VALUE.match(cut)
+        if not mm:
+            continue
+        ben = re.sub(r"に当選$|に突入$", "", m.group("benefit").strip())
+        if not (ben and _BENEFIT_OK.match(ben)):
+            continue
+        out.append(_atom("GAME", int(mm.group("amount")), "G",
+                         role="EXPLICIT_CEILING", phase=mm.group("phase"),
+                         counted=mm.group("phase"),
+                         plus_alpha=bool(mm.group("plus")),
+                         benefit=split_benefit(ben)[0],
+                         certainty=split_benefit(ben)[1],
+                         raw=f"{raw[:50]} / 恩恵={ben}"))
+    return out
+
+
 def read_page(url: str, official_name: str) -> dict:
     """1ページから天井の一式を採る。★機種が違えば何も採らない★"""
     out = {"url": url, "host": url.split("/")[2].lower().removeprefix("www."),
@@ -485,7 +533,7 @@ def read_page(url: str, official_name: str) -> dict:
     lines = [x.strip() for x in text.splitlines()]
     seen, got = set(), []
     for c in (from_sentences(text) + from_table(html)
-              + from_condition_table(html)):
+              + from_condition_table(html) + from_text_pairs(text)):
         # ★検証済みの恩恵名の対応表で書き方をそろえる★（Codex59回目）
         c["benefit"] = _benefit_alias(c["benefit"], official_name)
         # ★重複判定は事実の全部で★（Codex56〜57回目。
@@ -558,10 +606,13 @@ def _key(c: dict) -> str:
     #     「特殊モードの799G」と「通常時全体の最大799G」は**別の主張**であり、
     #     同じ数字でも賛成票にしてはいけない。
     return json.dumps({k: (c.get(k) if c.get(k) not in (None, False) else "")
+                       #   ★+α は一致の判定に使わない★（2026-08-06・運営者決定）
+                       #     「799G」と「799G+α」は同じ天井を指し、出典ごとの
+                       #     書き方の違いにすぎない。表示は深い側（+α付き）に
+                       #     そろえるので、読者が早く打ち始める事故にはならない。
                        for k in ("kind", "amount", "unit", "counted",
                                  "count_note", "benefit", "certainty", "role",
-                                 "phase", "mode", "after_event",
-                                 "plus_alpha")},
+                                 "phase", "mode", "after_event")},
                       ensure_ascii=False, sort_keys=True)
 
 
@@ -572,8 +623,7 @@ def _base_key(c: dict) -> str:
     #     実データで、すーぱぁびん娘の1200G天井が採れなくなって気づいた）
     return json.dumps({k: (c.get(k) if c.get(k) not in (None, False) else "")
                        for k in ("kind", "amount", "unit", "benefit",
-                                 "certainty", "role", "mode",
-                                 "after_event", "plus_alpha")},
+                                 "certainty", "role", "mode", "after_event")},
                       ensure_ascii=False, sort_keys=True)
 
 
@@ -736,10 +786,23 @@ def compare(pages: list, cz_names=None) -> dict:
     _ambiguous = _has_counted & _has_plain
     for (kind, _cnt), items in by_kind.items():
         agreed = [(k, v) for k, v in items if len(v["sources"]) >= 2]
-        # ★反対票が1票でもあれば採らない★（2026-08-02・Codex56回目）
-        if len(agreed) == 1 and len(items) == 1 and kind not in _ambiguous:
+        # ★大手2サイトが合致したら採用する★（2026-08-06・運営者決定）
+        #   これまでは「3つ目の出典が違う書き方をしていたら全部保留」だった。
+        #   実際には、同じ天井を別の言い方で書いているだけのことが多く、
+        #   **載っているのに載せられない**状態が続いていた（鮮度が命なのに）。
+        #   ★本物の食い違い（2つ以上の候補がそれぞれ2出典を取った）は保留★
+        if len(agreed) == 1 and kind not in _ambiguous:
             c = dict(agreed[0][1]["sample"])
             c["sources"] = sorted(agreed[0][1]["sources"])
+            # ★表示は深い側（+α付き）にそろえる★（早く打ち始める事故を防ぐ）
+            c["plus_alpha"] = any(v["sample"].get("plus_alpha")
+                                  for _k, v in items
+                                  if v["sample"].get("amount") == c.get("amount"))
+            c["others"] = [{"amount": v["sample"]["amount"],
+                            "benefit": v["sample"].get("benefit"),
+                            "counted": v["sample"].get("counted"),
+                            "sources": sorted(v["sources"])}
+                           for k2, v in items if k2 != agreed[0][0]]
             adopted.append(c)
         else:
             need_third.append({
@@ -905,8 +968,15 @@ def selftest() -> int:
                              "counted": "通常時", "benefit": "AT",
                              "certainty": "PLAIN", "raw": ""}]}
         _p57["ok"] = True
-        t("　その併記ページ＋AT側1票では採用しない（反対票として効く）",
-          not compare([_p57, _pB])["adopted"])
+        # ★2026-08-06・運営者決定で方針が変わった★
+        #   以前は「3つ目が違うことを書いていたら全部保留」だった。
+        #   いまは「2出典が合致したら採用」。★引き換えに手放したもの★＝
+        #   1つの出典が2通りの恩恵を併記している時、もう片方と一致した方を
+        #   採る（併記のもう一方は others に残して追えるようにする）。
+        _got57 = compare([_p57, _pB])["adopted"]
+        t("★★2出典が合致した側を採る★★（併記のもう一方は記録に残す）",
+          len(_got57) == 1 and _got57[0]["benefit"] == "AT"
+          and any(o["benefit"] == "CZ" for o in _got57[0].get("others") or []))
     finally:
         _g["from_sentences"], _g["from_table"] = _real_fs, _real_ft
         _w._get, _mc.page_is_machine = _real_get, _real_pim
@@ -1008,8 +1078,14 @@ def selftest() -> int:
                  benefit="ボーナス", plus_alpha=True)
     p999n = _atom("GAME", 999, "G", role="EXPLICIT_CEILING", phase="通常時",
                   benefit="ボーナス", plus_alpha=False)
-    t("★★999Gちょうどと999G+αを同じ票にしない★★（早く打ち始める事故）",
-      _key(p999) != _key(p999n))
+    t("★★『999G』と『999G+α』は同じ票として数える★★"
+      "（2026-08-06・運営者決定。出典ごとの書き方の違いにすぎない）",
+      _key(p999) == _key(p999n))
+    _mix = compare([{"ok": True, "host": "chonborista.com", "ceilings": [p999]},
+                    {"ok": True, "host": "www.p-world.co.jp",
+                     "ceilings": [p999n]}])["adopted"]
+    t("★★表示は深い側（+α付き）にそろえる★★（早く打ち始める事故を防ぐ）",
+      len(_mix) == 1 and _mix[0]["plus_alpha"] is True)
     mode799 = _atom("GAME", 799, "G", role="TABLE", phase="通常時", mode="特殊",
                     benefit="ボーナス")
     max799 = _atom("GAME", 799, "G", role="EXPLICIT_CEILING", phase="通常時",
@@ -1086,6 +1162,22 @@ def selftest() -> int:
           "<table><tr><th>天井突入条件</th>"
           "<td>通常時999G+α消化 ※有利区間リセット時のみ</td></tr>"
           "<tr><th>天井恩恵</th><td>ボーナスに当選</td></tr></table>") == [])
+
+    t("★★『通常時を最大N消化で…に当選』も読める★★（天井到達の語が無い形）",
+      explicit_ceilings("通常時を最大1000G+α消化でボーナスに当選")[0]["amount"]
+      == 1000)
+    _tp = from_text_pairs("天井突入条件 通常時1000G+α消化 "
+                          "※設定変更時は650G+αに短縮 天井恩恵 ボーナスに当選 リセット仕様")
+    t("★★表になっていない『天井突入条件 … 天井恩恵 …』も読める★★"
+      "（DMMぱちタウンは表タグを使っていない）",
+      len(_tp) == 1 and _tp[0]["amount"] == 1000 and _tp[0]["plus_alpha"]
+      and _tp[0]["benefit"] == "ボーナス")
+    t("★★箇条書きで2つ並ぶ形は読まない★★（どれとどれが対か決められない）",
+      from_text_pairs("天井突入条件 1.FB間最大1000G消化 2.FBスルー最大3回 "
+                      "天井恩恵 1.FB当選 2.初回勝利濃厚") == [])
+    t("　「最大」が付く値も読める",
+      _COND_VALUE.match("最大1000G+α") is not None
+      and _COND_VALUE.match("通常時999G+α消化") is not None)
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
