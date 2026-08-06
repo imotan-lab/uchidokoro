@@ -84,7 +84,22 @@ _SENT_THROUGH_AFTER = re.compile(
     r"(?P<counted>[^。、]{0,20}?)(?P<amount>\d{1,2})\s*スルー後[^。]{0,12}?"
     r"(?P<nth>\d{1,2})\s*回目")
 # ★打ち消しが混じる文は採らない★
-_NEGATED = re.compile(r"非当選|しなかった|とは限らない|ではない|外れ")
+#   ★一致した部分だけでなく、その文の最後まで見る★（Codex124回目。
+#     「CZ7回目は天井ではない」は一致が『天井』で終わるため素通りしていた）
+#   ★「非当選」は打ち消しではない★（2026-08-06・自分の試験で気づいた）
+#     「CZでAT非当選が最大6回続くと天井」は**正しい天井の説明**。
+#     これを打ち消し扱いにしたら、正しい文まで捨てて出典が1つに減った。
+_NEGATED = re.compile(r"しなかった|とは限らない|ではない|ではありません|"
+                      r"天井では|外れ(?!値)")
+# 「N回目で当たる」形にだけ効く打ち消し（当選の否定）
+_NEGATED_NTH = re.compile(r"非当選|しなかった|とは限らない|ではない|ではありません")
+
+
+def _sentence_at(text: str, pos: int) -> str:
+    """その位置を含む1文を返す（否定語を文の最後まで見るため）。"""
+    start = text.rfind("。", 0, pos) + 1
+    end = text.find("。", pos)
+    return text[start:(len(text) if end < 0 else end + 1)]
 
 # 表から採る形（見出しと値が交互に並ぶ）
 _TABLE_LABELS = {"GAME": ("天井G数", "天井ゲーム数"), "CYCLE": ("天井周期", "周期天井")}
@@ -251,6 +266,8 @@ def from_sentences(text: str) -> list:
     #   ★「N回目で確定」は (N-1) スルー★（数え方を取り違えない）
     t = _norm(text)
     for m in _SENT_THROUGH.finditer(t):
+        if _NEGATED.search(_sentence_at(t, m.start())):
+            continue
         if through_counted(m.group(0)) is None:
             continue                      # 何を数えるか決まらない票は使わない
         out.append({"kind": "THROUGH", "amount": int(m.group("amount")),
@@ -263,7 +280,7 @@ def from_sentences(text: str) -> list:
         # ★数え方が食い違う文は採らない★（Nスルー後は N+1 回目のはず）
         if nth != amount + 1 or amount < 1 or amount > 20:
             continue
-        if _NEGATED.search(m.group(0)):
+        if _NEGATED.search(_sentence_at(t, m.start())):
             continue
         counted = through_counted(m.group(0))
         if counted is None:
@@ -275,8 +292,8 @@ def from_sentences(text: str) -> list:
         nth = int(m.group("nth"))
         if nth < 2 or nth > 20:
             continue
-        if _NEGATED.search(m.group(0)):
-            continue                      # 逆の意味の文を採らない
+        if _NEGATED_NTH.search(_sentence_at(t, m.start())):
+            continue
         if through_counted(m.group(0)) is None:
             continue
         out.append({"kind": "THROUGH", "amount": nth - 1,
@@ -437,11 +454,16 @@ def _merge_unqualified(votes: dict) -> dict:
 
 
 # ★「CZ」と名前が並んで書かれている形★（これ自体が「同じ物だ」という証拠）
+#   ★括弧を必須にする／述語まで見る★（2026-08-06・Codex124回目）
+#     以前は `CZ中は小役チャンスアップ` から「中は小役チャンス」を名前として拾い、
+#     `非CZ「関所チャレンジ」` や `CZ「関所チャレンジ」ではない` も通していた。
 _CZ_IS_NAMED = re.compile(
-    r"CZ[「『（(\s]{0,2}(?P<a>[一-龥ぁ-んァ-ヶA-Za-z0-9]{2,12}"
-    r"(?:チャレンジ|チャンス|バトル))"
+    r"CZ[「『（(](?P<a>[一-龥ぁ-んァ-ヶA-Za-z0-9]{2,12}"
+    r"(?:チャレンジ|チャンス|バトル))[」』）)]"
     r"|(?P<b>[一-龥ぁ-んァ-ヶA-Za-z0-9]{2,12}(?:チャレンジ|チャンス|バトル))"
-    r"[」』）)\s]{0,2}(?:は|が)?\s*CZ")
+    r"\s*(?:は|が)\s*CZ(?:です|。|、|$)")
+# ★この語が同じ文にあれば、CZ名として採らない★
+_NOT_CZ = ("非CZ", "ではない", "ではありません", "候補", "示唆", "かもしれ", "とは限")
 
 
 def cz_names_in_page(text: str) -> set:
@@ -452,10 +474,13 @@ def cz_names_in_page(text: str) -> set:
       ことだけを根拠にする。書いていないページの名前は数えない。
     """
     out = set()
-    for m in _CZ_IS_NAMED.finditer(_norm(cut_user_area(text))):
-        got = m.group("a") or m.group("b")
-        if got:
-            out.add(_norm(got))
+    for sent in re.split(r"(?<=。)|\n", _norm(cut_user_area(text))):
+        if any(w in sent for w in _NOT_CZ):
+            continue                      # 打ち消し・推測の文からは採らない
+        for m in _CZ_IS_NAMED.finditer(sent):
+            got = m.group("a") or m.group("b")
+            if got:
+                out.add(_norm(got))
     return out
 
 
@@ -475,14 +500,20 @@ def verified_cz_names(pages: list) -> list:
     return sorted(nm for nm, lins in by_name.items() if len(lins) >= 2)
 
 
-def apply_cz_aliases(items: list, cz_names) -> list:
+def apply_cz_aliases(items: list, cz_names, page_names=None) -> list:
     """★確かめたCZ名を「CZ」に寄せる★（2026-08-06）
 
-    出典によって「CZ」と書く所と「関所チャレンジ」と書く所がある。
-    **その機種のCZ名が独立2出典で確かめられている時だけ**同じ物として扱う。
-    確かめられていない名前は寄せない（別のCZかもしれないため）。
+    ★寄せてよいのは「CZが1種類しか出てこない」時だけ★（Codex124回目）
+      「〇〇はCZである」は**分類**の証拠でしかなく、天井文の「CZ」が
+      その名前を指す証拠にはならない。CZが2種類ある機種では
+        出典A: 関所チャレンジ6スルー ／ 出典B: 真剣チャレンジ6スルー
+      が「CZの2票」に化ける。名前が1つに定まらない時は寄せない。
     """
     names = {_norm(str(n)) for n in (cz_names or []) if str(n).strip()}
+    if len(names) != 1:
+        return list(items)                # 1種類に定まらないなら寄せない
+    if page_names is not None and len({_norm(str(x)) for x in page_names}) > 1:
+        return list(items)                # そのページに複数のCZ名がある
     out = []
     for it in items:
         c = it.get("counted")
@@ -500,7 +531,8 @@ def compare(pages: list, cz_names=None) -> dict:
             continue
         lin = _sl._lineage(p["host"])
         # ★確かめたCZ名だけを「CZ」に寄せてから数える★（2026-08-06）
-        for c in apply_cz_aliases(p["ceilings"], cz_names):
+        for c in apply_cz_aliases(p["ceilings"], cz_names,
+                                  page_names=p.get("cz_names")):
             votes.setdefault(_key(c), {"sample": c, "sources": set()})
             votes[_key(c)]["sources"].add(lin)
     votes = _merge_unqualified(votes)
@@ -748,6 +780,28 @@ def selftest() -> int:
        if g["kind"] == "THROUGH"] == [6]
       and not [g for g in from_sentences("関所チャレンジ6スルー後、9回目の関所チャレンジ")
                if g["kind"] == "THROUGH"])
+
+    # ★Codex124回目の指摘★
+    t("★★CZが2種類あるページからは寄せない★★（別のCZを2票にしない）",
+      apply_cz_aliases([{"kind": "THROUGH", "counted": "関所チャレンジ"}],
+                       ["関所チャレンジ", "真剣チャレンジ"])[0]["counted"]
+      == "関所チャレンジ"
+      and apply_cz_aliases([{"kind": "THROUGH", "counted": "関所チャレンジ"}],
+                           ["関所チャレンジ"],
+                           page_names={"関所チャレンジ", "真剣チャレンジ"}
+                           )[0]["counted"] == "関所チャレンジ")
+    t("★★CZ名の誤認を防ぐ★★（括弧必須・打ち消し・接尾辞）",
+      cz_names_in_page("CZ中は小役チャンスアップ") == set()
+      and cz_names_in_page("非CZ「関所チャレンジ」") == set()
+      and cz_names_in_page("CZ「関所チャレンジ」ではない。") == set()
+      and cz_names_in_page("CZ「関所チャレンジ」に突入。") == {"関所チャレンジ"})
+    t("★★打ち消しは文の最後まで見る★★（『天井ではない』が素通りしていた）",
+      not [g for g in from_sentences("CZ7回目は天井ではない。")
+           if g["kind"] == "THROUGH"])
+    t("★★『非当選が続くと天井』は打ち消しではない★★"
+      "（打ち消し扱いにして正しい出典を1つ失っていた・自分の試験で発覚）",
+      [g["amount"] for g in from_sentences("CZでAT非当選が最大6回続くと天井到達。")
+       if g["kind"] == "THROUGH"] == [6])
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")

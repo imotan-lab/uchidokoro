@@ -207,7 +207,7 @@
       "min_expected": 20,
       "status": "ACTIVE",
       "_why_surfaces": "メーカー別の入口を全部登録する（2026-08-06）。2つしか登録しておらず、ユニバーサル等の新台が『一覧に載っていない』扱いになっていた",
-      "surface_pattern": "^https://chonborista\\.com/slot/[a-z0-9\\-]+/$",
+      "surface_pattern": "^https://chonborista\\.com/slot/(?![0-9]+/)[a-z0-9\\-]+/$",
       "_why_surface_pattern": "入口の登録漏れを毎回機械が数えるため（2026-08-06・scripts/directory_coverage.py）"
     },
     "p-world": {
@@ -338,7 +338,7 @@
       "_verified": "2026-07-31 Claudeが確認。/machines(31件)・/machines/slot(20件)・/makers/44(20件) のいずれにも Lすーぱぁびん娘(5038) が含まれる。/machines/smart_slot だけだと入らなかった。★1つの入口では足りないことの実例★",
       "title_class": "title",
       "_why_title_class": "1つのリンクに機種名・メーカー・機械割・紹介文が同居しており、全部つなげると芯が一致しない（台帳#189）。題は <p class=\"title\"> にある（2026-08-06に実データで確認）",
-      "surface_pattern": "^https://p-town\\.dmm\\.com/machines/[a-z_]+/$",
+      "surface_pattern": "^https://p-town\\.dmm\\.com/(?:machines/[a-z_]+|makers/\\d+)/?$",
       "_why_surface_pattern": "入口の登録漏れを毎回機械が数えるため（2026-08-06・scripts/directory_coverage.py）"
     }
   }

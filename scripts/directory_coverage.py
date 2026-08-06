@@ -63,7 +63,11 @@ def check(dir_id: str, conf: dict) -> dict:
         u = str(s.get("url") or "")
         have.add(u if u.endswith("/") else u + "/")
     seen = set()
-    for s in (conf.get("surfaces") or [])[:2]:   # 先頭の入口だけ読む（負担を抑える）
+    # ★並び順に頼らない★（2026-08-06・Codex124回目。先頭2つだけ見ると
+    #   そこに載っていない入口を永久に見落とす）
+    roots = conf.get("coverage_roots") or [s["url"] for s in
+                                           (conf.get("surfaces") or [])[:6]]
+    for s in [{"url": u} for u in roots]:
         try:
             html = _w._get(s["url"])
         except Exception as e:            # noqa: BLE001
@@ -71,6 +75,10 @@ def check(dir_id: str, conf: dict) -> dict:
             continue
         seen |= surface_candidates(html, s["url"], pat)
     out["found"] = len(seen)
+    # ★1件も見つからないのは異常★（Bot対策画面・空ページを「正常」にしない）
+    if not seen:
+        out["problems"].append(
+            "入口を1つも見つけられません（取得できているか確かめてください）")
     out["missing"] = sorted(seen - have)
     return out
 
