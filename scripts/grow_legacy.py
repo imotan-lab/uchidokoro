@@ -43,7 +43,7 @@ import math
 import os
 import re
 import sys
-import time
+import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -751,24 +751,69 @@ def check(before: dict, after: dict, edits=(), added_lines=(), boxes=(),
 
 # ------------------------------------------------------------------ 実行
 
+def _alive(pid: int) -> bool:
+    """そのプロセスがまだ動いているか（★分からない時は奪わない★）。"""
+    if pid <= 0:
+        return False
+    try:
+        import subprocess
+        r = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+                           capture_output=True, text=True, timeout=10,
+                           encoding="utf-8", errors="replace")
+        return str(pid) in (r.stdout or "")
+    except Exception:                     # noqa: BLE001
+        return True
+
+
 def _lock(path: str) -> str:
-    """★1つの記事を同時に書かないための鍵★（2026-08-06・Codex126回目 #4）"""
+    """★同時に触らないための鍵★（2026-08-06・Codex126回目 #4／134回目で強化）
+
+    ★動いている持ち主からは、時間が経っても奪わない★
+      以前は5分で置き去りとみなしていたが、材料集めはネットワーク待ちで
+      5分を超えうる。動いている相手の鍵を横取りすると、2つが同じ機種を
+      選んでしまう。生きているかを見てから決める。
+    ★自分が作った鍵だけを消す★（合言葉を書いておき、外す時に照合する）
+    """
     lock = path + ".lock"
+    token = f"{os.getpid()} {uuid.uuid4().hex}"
     for _ in range(2):
         try:
             fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            os.write(fd, str(os.getpid()).encode())
+            os.write(fd, token.encode())
             os.close(fd)
             return lock
         except FileExistsError:
-            try:                          # 5分より古い鍵は置き去りとみなす
-                if time.time() - os.path.getmtime(lock) > 300:
-                    os.remove(lock)
-                    continue
+            try:
+                with open(lock, encoding="utf-8") as f:
+                    pid = int((f.read().strip() or "0").split()[0])
+            except Exception:             # noqa: BLE001
+                pid = 0
+            if pid and _alive(pid):       # ★動いている持ち主からは奪わない★
+                raise Halt("ほかの処理が動いています（鍵が取れません）")
+            try:                          # 持ち主が居ないなら置き去り
+                os.remove(lock)
+                continue
             except OSError:
-                pass
-            raise Halt("ほかの処理が同じ記事を書いています（鍵が取れません）")
+                raise Halt("鍵が取れません")
     raise Halt("鍵が取れません")
+
+
+def _unlock(lock: str) -> None:
+    """★自分が作った鍵だけを消す★（人の鍵を消さない）。"""
+    if not lock:
+        return
+    try:
+        with open(lock, encoding="utf-8") as f:
+            got = f.read().strip()
+    except Exception:                     # noqa: BLE001
+        return
+    if got.split()[0:1] != [str(os.getpid())]:
+        print("  ★鍵の持ち主が入れ替わっています（消しません）★")
+        return
+    try:
+        os.remove(lock)
+    except OSError:
+        pass
 
 
 def _write(path: str, detail: dict, sha_before: str) -> None:
@@ -789,11 +834,11 @@ def _write(path: str, detail: dict, sha_before: str) -> None:
             raise Halt("書く直前にファイルが変わっていました（同時に触られた可能性）")
         os.replace(tmp, path)
     finally:
-        for x in (tmp, lock):
-            try:
-                os.remove(x)
-            except OSError:
-                pass
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        _unlock(lock)                     # ★自分の鍵だけ外す★
 
 
 def run(slug: str, apply_it: bool, gather=None) -> dict:
@@ -1238,6 +1283,42 @@ def selftest() -> int:                    # noqa: C901
           got is None and "★" in why)
     finally:
         globals()["STATE"], globals()["targets"] = keep_state, keep_targets
+    # --- ★鍵★（2026-08-06・Codex134回目）
+    lkd = tempfile.mkdtemp()
+    lk_target = os.path.join(lkd, "x.json")
+    lk = _lock(lk_target)
+    t("　鍵が取れる（合言葉を書く）",
+      os.path.exists(lk) and str(os.getpid()) in
+      open(lk, encoding="utf-8").read())
+    took = False
+    try:
+        _lock(lk_target)                  # 自分＝生きている持ち主
+    except Halt as e:
+        took = "ほかの処理が動いています" in str(e)
+    t("★★動いている持ち主からは、時間が経っても奪わない★★"
+      "（材料集めは5分を超えうる）", took)
+    old = os.stat(lk).st_mtime - 99999
+    os.utime(lk, (old, old))              # うんと古くしても奪わせない
+    took2 = False
+    try:
+        _lock(lk_target)
+    except Halt:
+        took2 = True
+    t("★★古くなっても、持ち主が動いていれば奪わない★★", took2)
+    with open(lk, "w", encoding="utf-8") as f:
+        f.write("999999999 よその合言葉")  # 居ないPID＝置き去り
+    lk2 = _lock(lk_target)
+    t("　持ち主が居なくなった鍵は引き取れる", os.path.exists(lk2))
+    with open(lk2, "w", encoding="utf-8") as f:
+        f.write("999999999 よその合言葉")
+    _unlock(lk2)
+    t("★★自分の鍵でなければ消さない★★（人の鍵を巻き添えにしない）",
+      os.path.exists(lk2))
+    with open(lk2, "w", encoding="utf-8") as f:
+        f.write(f"{os.getpid()} mine")
+    _unlock(lk2)
+    t("　自分の鍵は外せる", not os.path.exists(lk2))
+
     # --- ★無人運転を最後まで通す★（2026-08-06・Codex133回目の指摘）
     keep = {k: globals()[k] for k in ("STATE", "targets", "dirty_files",
                                       "run", "_to_ledger", "_blocked")}
@@ -1339,7 +1420,9 @@ def run_next(a) -> int:
 
     終了コード（★手順書と揃える★）
       0 = 書いた／足すものなし／今日は動かない日／作業中で飛ばした
-      3 = 人の判断が要る・一時的な不調（**台帳に載せた**・このレーンだけ終わり）
+      3 = このレーンだけ終わり（本編は続けてよい）
+          ・人の判断が要る → **台帳に登録済み**
+          ・一時的な不調   → 続いた回数が上限に届くまでは**登録しない**
       1 = 予期しない失敗（記録が読めない・保存できない・台帳が読めない）
     """
     if a.slug:
@@ -1404,11 +1487,7 @@ def run_next(a) -> int:
         print(f"★思わぬ失敗★ {type(e).__name__}: {e}")
         return EXIT_FATAL
     finally:
-        if lock:
-            try:
-                os.remove(lock)
-            except OSError:
-                pass
+        _unlock(lock)                     # ★自分の鍵だけ外す★
 
 
 def main() -> int:
