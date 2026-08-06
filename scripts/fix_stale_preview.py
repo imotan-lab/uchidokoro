@@ -1,0 +1,248 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""fix_stale_preview.py — 古い先行記事から「時間で嘘になる文」を落とす。
+
+★何のための道具か（2026-08-06）★
+  導入前に作った先行記事が、導入後もそのまま公開され続けていた。
+  7機種すべてが 2026-08-03 に導入済みなのに、本文は
+  「2026年7月時点で解析データが公開されていません」「導入日に向けて
+  各解析サイトで順次データが公開される予定です」のままだった。
+  ★読者から見ると、出ている機種を『まだ出ていない』と書いている状態★。
+
+★やること／やらないこと★
+  やる   : 時間で嘘になる書き方を、時間が経っても嘘にならない書き方へ直す
+  やらない: 新しい事実（天井・狙い目など）を書く。**値は1つも足さない**
+
+使い方:
+    python scripts/fix_stale_preview.py            # 下見（全機種の差分）
+    python scripts/fix_stale_preview.py --slug x   # 1機種だけ
+    python scripts/fix_stale_preview.py --apply    # 実際に直す
+    python scripts/fix_stale_preview.py --selftest
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import safe_json as _sj                  # noqa: E402
+
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DETAILS = os.path.join(BASE, "assets", "data", "machine-details")
+
+PENDING = "当サイトでは未確認です。確認でき次第、この欄に掲載します。"
+
+# ★丸ごと落とす文★（時間が経つと嘘になる・予想を述べているだけ）
+DROP_SENTENCE = (
+    "導入日に近づくにつれて",
+    "導入日に向けて",
+    "順次情報が公開される",
+    "順次データが公開される",
+    "解析判明後に掲載します",
+    "判明次第随時更新します",
+    "判明次第このページを更新します",
+)
+
+# ★文ごと「未確認です」に置き換える★（部分置換だと文が繋がって壊れる）
+#   例:「天井ゲーム数・恩恵は2026年7月時点で解析データが公開されていません。」
+#      → 尻尾だけ置き換えると「…恩恵当サイトでは未確認です」になる。
+STALE_SENTENCE = (
+    "解析データが公開されていません",
+    "解析データが揃っていません",
+    "未解析です",
+    "解析が出ておらず",
+)
+
+# ★文の中だけを言い換える★（文そのものは残す）
+INLINE = (
+    (re.compile(r"（20\d\d年\d+月時点）"), ""),
+    (re.compile(r"【20\d\d年\d+月時点・公式未確認】"), "【公式未確認】"),
+    (re.compile(r"20\d\d年\d+月時点で、?"), ""),
+    (re.compile(r"現時点で、?"), ""),
+    (re.compile(r"導入済みですが、"), ""),
+)
+
+
+def fix_text(t: str) -> str:
+    """1つの文字列を直す（★値は足さない・消すか言い換えるだけ★）。"""
+    out = []
+    seen_pending = False
+    for sent in re.split(r"(?<=。)", t):
+        if not sent.strip():
+            continue
+        if any(w in sent for w in DROP_SENTENCE):
+            continue                      # 時間が経つと嘘になる文は落とす
+        if any(w in sent for w in STALE_SENTENCE):
+            if not seen_pending:          # ★同じ断りを何度も並べない★
+                out.append(PENDING)
+                seen_pending = True
+            continue
+        for pat, rep in INLINE:
+            sent = pat.sub(rep, sent)
+        if sent.strip():
+            out.append(sent.strip())
+    return re.sub(r"[ 　]{2,}", " ", "".join(out).strip())
+
+
+def fix_detail(detail: dict) -> tuple:
+    """記事全体を直す。(直した記事, 変えた場所の一覧) を返す。"""
+    changes = []
+
+    def walk(node, path):
+        if isinstance(node, dict):
+            return {k: walk(v, f"{path}.{k}") for k, v in node.items()}
+        if isinstance(node, list):
+            return [walk(v, f"{path}[{i}]") for i, v in enumerate(node)]
+        if isinstance(node, str):
+            got = fix_text(node)
+            if got != node:
+                changes.append({"path": path, "before": node, "after": got})
+            return got
+        return node
+
+    out = walk(detail, "")
+    for sec in out.get("sections") or []:
+        if not isinstance(sec.get("body"), list):
+            continue
+        # ★空になった段落は消す★（消した結果の空文字を残さない）
+        body = [b for b in sec["body"] if str(b).strip()]
+        # ★同じ断りは節に1つだけ★（2026-08-06。段落ごとに直したので、
+        #   1つの節に「未確認です」が2回並ぶことがあった）
+        seen = False
+        kept = []
+        for b in body:
+            if str(b).strip() == PENDING:
+                if seen:
+                    continue
+                seen = True
+            kept.append(b)
+        if kept != sec["body"]:
+            changes.append({"path": f"sections[{sec.get('title')}].body",
+                            "before": " / ".join(map(str, sec["body"]))[:60],
+                            "after": " / ".join(map(str, kept))[:60]})
+        sec["body"] = kept
+    return out, changes
+
+
+def targets(slug: str | None = None) -> list:
+    """直す対象（旧方式の先行記事）。"""
+    import page_decision as _pd
+    ms = _sj.read_json(os.path.join(BASE, "assets", "data", "machines.json"),
+                       expect=(dict, list))
+    ms = ms["machines"] if isinstance(ms, dict) else ms
+    out = []
+    for m in ms:
+        if slug and m.get("slug") != slug:
+            continue
+        try:
+            if _pd.machine_class(m) == "LEGACY_PREVIEW":
+                out.append(m["slug"])
+        except Exception:                 # noqa: BLE001
+            continue
+    return out
+
+
+def run(slug: str, apply_it: bool) -> dict:
+    p = os.path.join(DETAILS, f"{slug}.json")
+    before = _sj.read_json(p, expect=dict)
+    after, changes = fix_detail(json.loads(json.dumps(before)))
+    res = {"slug": slug, "changes": changes, "wrote": False}
+    if not changes:
+        return res
+    # ★空の節を作らない★
+    for sec in after.get("sections") or []:
+        if isinstance(sec.get("body"), list) and not sec["body"] \
+                and not sec.get("tables"):
+            res["problems"] = [f"本文が空になる節があります: {sec.get('title')!r}"]
+            return res
+    if apply_it:
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(after, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+        res["wrote"] = True
+    return res
+
+
+# ------------------------------------------------------------------ selftest
+
+def selftest() -> int:
+    ok, ran = True, [0]
+
+    def t(name, cond):
+        nonlocal ok
+        ran[0] += 1
+        print(("✅ " if cond else "❌ ") + name)
+        ok = ok and bool(cond)
+
+    t("★★『いつ時点で未解析』は文ごと差し替える★★（尻尾だけ直すと文が壊れる）",
+      fix_text("天井ゲーム数・恩恵は2026年7月時点で解析データが公開されていません。")
+      == PENDING)
+    t("　カッコ書きの時点も消える",
+      fix_text("公表されているスペックは以下の通りです（2026年7月時点）。")
+      == "公表されているスペックは以下の通りです。")
+    t("★★導入日を待つ書き方は落とす★★（もう導入されている）",
+      "順次情報" not in fix_text(
+          "天井は未確認です。導入日（2026年8月3日）に近づくにつれて"
+          "各解析サイトで順次情報が公開される見込みです。"))
+    t("　噂の見出しは『公式未確認』だけ残る",
+      fix_text("【2026年7月時点・公式未確認】") == "【公式未確認】")
+    t("★★事実はそのまま残す★★（メーカー・導入日・ゲーム性）",
+      fix_text("**メーカー**：ユニバーサルエンターテインメント")
+      == "**メーカー**：ユニバーサルエンターテインメント"
+      and fix_text("2026年8月3日にホール導入されました。")
+      == "2026年8月3日にホール導入されました。")
+    t("★★数値を足さない★★（消すか言い換えるだけ）",
+      not re.search(r"\d+G", fix_text("天井は2026年7月時点で未解析です。")))
+    t("　同じ断りを何度も並べない",
+      fix_text("天井は未解析です。狙い目も解析データが揃っていません。") == PENDING)
+    d = {"sections": [{"title": "天井・恩恵", "body": [
+        "天井は2026年7月時点で解析データが公開されていません。",
+        "判明次第随時更新します。"]}]}
+    got, ch = fix_detail(json.loads(json.dumps(d)))
+    t("　落とした結果、空の段落は残さない",
+      got["sections"][0]["body"] == [PENDING] and len(ch) >= 2)
+    d2 = {"sections": [{"title": "天井・恩恵", "body": [
+        "天井は2026年7月時点で解析データが公開されていません。",
+        "狙い目も現時点で解析データが揃っていません。"]}]}
+    got2, _ = fix_detail(json.loads(json.dumps(d2)))
+    t("★★同じ断りは節に1つだけ★★（段落ごとに直すと2回並ぶ）",
+      got2["sections"][0]["body"] == [PENDING])
+    print(f"\n{ran[0]}/{ran[0]} 合格" if ok else "\n不合格あり")
+    return 0 if ok else 1
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="古い先行記事の言い回しを直す")
+    ap.add_argument("--slug")
+    ap.add_argument("--apply", action="store_true")
+    ap.add_argument("--selftest", action="store_true")
+    a = ap.parse_args()
+    if a.selftest:
+        return selftest()
+    total = 0
+    for s in targets(a.slug):
+        r = run(s, a.apply)
+        total += len(r["changes"])
+        if r.get("problems"):
+            print(f"★{s}: " + " / ".join(r["problems"]))
+            continue
+        print(f"{s}: {len(r['changes'])}箇所" + ("（書きました）" if r["wrote"] else ""))
+        for c in r["changes"][:3]:
+            print(f"    - {c['before'][:46]}")
+            print(f"      → {c['after'][:46] or '（削除）'}")
+    print(f"\n合計 {total}箇所" + ("" if a.apply else "（下見です。--apply で直します）"))
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except SystemExit:
+        raise
+    except _sj.SafeJsonError as e:
+        print(f"★入力データが読めません: {e}★")
+        raise SystemExit(1)
