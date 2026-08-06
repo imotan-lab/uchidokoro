@@ -47,6 +47,10 @@ KINDS = {
     "GAME": {"jp": "ゲーム数天井", "unit": "G"},
     "CYCLE": {"jp": "周期天井", "unit": "周期"},
     "POINT": {"jp": "ポイント天井", "unit": "pt"},
+    # ★スルー天井★（2026-08-06。両名鑑が書いているのに拾えていなかった）
+    #   ★数え方の取り違えに注意★＝「N回目で確定」は (N-1) スルー。
+    #   採るのは**スルー回数**（うちどころの checker.suruMax と同じ数え方）。
+    "THROUGH": {"jp": "スルー天井", "unit": "スルー"},
 }
 
 # 文章から採る形（★許可した言い回しだけ★・禁止語を並べる方式は必ず抜ける）
@@ -56,6 +60,16 @@ _SENT_GAME = re.compile(
 _SENT_CYCLE = re.compile(
     r"(?P<counted>[^。、]{0,20}?)が?最大\s*(?P<amount>\d{1,3})\s*周期に到達すると"
     r"[^。]{0,16}?天井となり[、,]?\s*(?P<benefit>[^。]{1,24}?)に当選")
+# ★スルー天井の言い回し★（許可した形だけ・実データから起こした）
+#   P-WORLD:「CZでAT非当選が最大6回続くと天井到達。到達時は次回(最大7回目)のCZでATに当選する。」
+_SENT_THROUGH = re.compile(
+    r"(?P<counted>[^。、]{0,16}?)で(?P<miss>[^。、]{0,10}?非当選)が?最大\s*"
+    r"(?P<amount>\d{1,2})\s*回続くと[^。]{0,12}?天井")
+#   「N回目（で）確定／当選」形は (N-1) スルーとして採る
+_SENT_THROUGH_NTH = re.compile(
+    r"(?P<counted>[^。、]{0,16}?)の?(?P<nth>\d{1,2})\s*回目[^。]{0,12}?"
+    r"(?:天井|確定|当選(?:濃厚)?)")
+
 # 表から採る形（見出しと値が交互に並ぶ）
 _TABLE_LABELS = {"GAME": ("天井G数", "天井ゲーム数"), "CYCLE": ("天井周期", "周期天井")}
 _BENEFIT_LABELS = ("恩恵", "天井恩恵")
@@ -156,8 +170,43 @@ def normalize_counted(text):
     return t.strip() or None
 
 
+# ★読者の書き込みは事実として採らない★（2026-08-06・自分の試験で気づいた）
+#   P-WORLDの機種ページは下の方に掲示板があり、そこにも天井の話が出る。
+#   書き込みは推測や間違いを含むので、ここから先は読まない。
+_USER_AREA = ("掲示板", "口コミ", "みんなの感想", "コメント一覧")
+
+
+def cut_user_area(text: str) -> str:
+    """掲示板より前だけを返す（＝サイト側が書いた部分だけ）。"""
+    # ★同じ語がページ上部の目次にも出る★（2026-08-06・実データで確認）
+    #   いちばん最初で切ると本文ごと落ちる。**最後に出てきた場所**で切る。
+    pos = len(text)
+    for w in _USER_AREA:
+        hits = list(re.finditer(rf"(?m)^\s*{re.escape(w)}\s*$", text))
+        if hits:
+            pos = min(pos, hits[-1].start())
+    return text[:pos]
+
+
+def through_counted(raw: str):
+    """スルー天井の「何を数えるか」を整える。
+
+    ★2026-08-06・自分の試験で気づいた★
+      文からそのまま切り出すと「CZスルー回数天井 CZ」「到達時は次回(最大」
+      のような屑が入り、**同じ天井が別物に見えて2票にならなかった**。
+      数えている対象は実質「CZの回数」なので、そこだけを残す。
+    """
+    t = _norm(raw)
+    if "CZ" in t or "ＣＺ" in t:
+        return "CZ"
+    if "ボーナス" in t:
+        return "ボーナス"
+    return None
+
+
 def from_sentences(text: str) -> list:
-    """文章から天井を採る（P-WORLD の形）。"""
+    """文章から天井を採る（P-WORLD の形）。★掲示板は読まない★"""
+    text = cut_user_area(text)
     out = []
     for rx, kind in ((_SENT_GAME, "GAME"), (_SENT_CYCLE, "CYCLE")):
         for m in rx.finditer(_norm(text)):
@@ -171,6 +220,24 @@ def from_sentences(text: str) -> list:
                         "benefit": split_benefit(benefit)[0],
                         "certainty": split_benefit(benefit)[1],
                         "raw": m.group(0)[:120]})
+    # ★スルー天井★（恩恵は同じ文に無いことが多いので、別に集める）
+    #   ★「N回目で確定」は (N-1) スルー★（数え方を取り違えない）
+    t = _norm(text)
+    for m in _SENT_THROUGH.finditer(t):
+        out.append({"kind": "THROUGH", "amount": int(m.group("amount")),
+                    "unit": KINDS["THROUGH"]["unit"],
+                    "counted": through_counted(m.group(0)),
+                    "benefit": "", "certainty": "",
+                    "raw": m.group(0)[:120]})
+    for m in _SENT_THROUGH_NTH.finditer(t):
+        nth = int(m.group("nth"))
+        if nth < 2 or nth > 20:
+            continue
+        out.append({"kind": "THROUGH", "amount": nth - 1,
+                    "unit": KINDS["THROUGH"]["unit"],
+                    "counted": through_counted(m.group(0)),
+                    "benefit": "", "certainty": "",
+                    "raw": m.group(0)[:120]})
     return out
 
 
@@ -518,6 +585,25 @@ def selftest() -> int:
     finally:
         _g["from_sentences"], _g["from_table"] = _real_fs, _real_ft
         _w._get, _mc.page_is_machine = _real_get, _real_pim
+    # ★スルー天井★（2026-08-06。両名鑑が書いているのに拾えていなかった）
+    TH = ("▼CZスルー回数天井 CZでAT非当選が最大6回続くと天井到達。"
+          "到達時は次回(最大7回目)のCZでATに当選する。")
+    got = [g for g in from_sentences(TH) if g["kind"] == "THROUGH"]
+    t("★★スルー天井を採れる★★（CZ6回スルー）",
+      got and all(g["amount"] == 6 for g in got))
+    t("★★「N回目で確定」は (N-1) スルーとして採る★★（数え方の取り違え防止）",
+      [g["amount"] for g in from_sentences("7回目のCZでAT当選確定")
+       if g["kind"] == "THROUGH"] == [6])
+    t("★★掲示板の書き込みは読まない★★（推測や誤りが混じる）",
+      not [g for g in from_sentences(
+          "本文です。" + chr(10) + "掲示板" + chr(10)
+          + "7回目のCZでAT当選だと思います") if g["kind"] == "THROUGH"])
+    t("　目次に「掲示板」があっても本文は読む（最後の見出しで切る）",
+      [g["amount"] for g in from_sentences(
+          "天井 設定推測 掲示板" + chr(10) + TH) if g["kind"] == "THROUGH"] == [6, 6])
+    t("　1回目・21回目のような数え方は採らない",
+      not [g for g in from_sentences("1回目で当選") if g["kind"] == "THROUGH"])
+
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
     if ng:
