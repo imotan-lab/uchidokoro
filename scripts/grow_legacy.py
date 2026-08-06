@@ -195,6 +195,22 @@ def _vague_ceiling(text: str, keys: set) -> bool:
     return "天井" in text and not any(w in text for w in _CEILING_WORDS)
 
 
+def _residual_ceiling(text: str, keys: set) -> bool:
+    """分かった天井の言葉を取り除いても、まだ「天井」の話が残るか。
+
+    ★2026-08-06・Codex127回目 #2★
+      「ゲーム数天井は判明しましたが、ほかの天井は未判明です。」のように、
+      分かった天井と分からない天井が同じ文にあると、消してはいけない。
+    """
+    if not any(k.startswith("天井") for k in keys):
+        return False
+    t = text
+    for k in keys:
+        for w in _SENT_WORDS.get(k, ()):
+            t = t.replace(w, "")
+    return "天井" in t
+
+
 def _removable(sent: str, keys: set) -> bool:
     """その文が『いま分かった事実』を「まだ分からない」と言っているか。"""
     if not any(w in sent for w in _UNKNOWN_MARK):
@@ -223,7 +239,7 @@ def _enum_rest(text: str, keys: set):
     return f"**{sep.join(keep)}**：解析判明次第追記します。" if keep else ""
 
 
-def resolve_contradictions(after: dict, keys: set) -> list:
+def resolve_contradictions(after: dict, keys: set, topics=()) -> list:
     """食い違う文を落とす計画を作る（★after を直接は書き換えない★）。
 
     戻り値は [(節の番号, 元の文, 直した文 or None)]。
@@ -240,7 +256,17 @@ def resolve_contradictions(after: dict, keys: set) -> list:
         for b in sec["body"]:
             t = str(b)
             if listing and t.strip().startswith("・"):
-                if any(w in t for k in keys for w in _PENDING_WORDS.get(k, ())):
+                hit = any(w in t for k in keys
+                          for w in _PENDING_WORDS.get(k, ()))
+                if hit and _residual_ceiling(t, keys):
+                    raise Halt(f"分かった天井と分からない天井が同じ項目にあります: "
+                               f"{t[:28]}")
+                if hit and any(w in t for w in topics):
+                    raise Halt(f"まだ分からない話が同じ項目にあります: {t[:28]}")
+                if not hit and _vague_ceiling(t, keys)                         and not any(w in t for w in _OTHER_TOPICS):
+                    # ★「・リセット時の天井短縮」のような別の話は、そのまま残す★
+                    raise Halt(f"どの天井を指すのか決まらない項目があります: {t[:28]}")
+                if hit:
                     edits.append((i, t, None))
                 continue
             rest = _enum_rest(t, keys)
@@ -260,16 +286,25 @@ def resolve_contradictions(after: dict, keys: set) -> list:
                 continue
             # ★別の「まだ分からない話」が混じる文は自分で決めない★
             for s in drop:
-                if any(w in s for w in _OTHER_TOPICS):
+                if any(w in s for w in tuple(_OTHER_TOPICS) + tuple(topics)):
                     raise Halt(f"落としてよいか決められない文があります: {s[:48]}")
+                if _residual_ceiling(s, keys):
+                    raise Halt("分かった天井と分からない天井が同じ文にあります: "
+                               + s[:44])
             new = "".join(s for s in sents if s not in drop).strip()
             edits.append((i, t, new or None))
     return edits
 
 
-def _apply_edits(after: dict, edits: list, adds: dict) -> dict:
-    """計画どおりに本文を組み立てる。"""
+def _apply_edits(after: dict, edits: list, adds: dict, facts=()) -> dict:
+    """計画どおりに本文を組み立てる。
+
+    ★未確認の断りは「その節に事実があるか」で外す★（Codex127回目 #1）
+      以前は「今回足したか」で判断していたので、前回すでに書いてある節では
+      事実と「未確認です」が並んだままになった。
+    """
     drop = {(i, b): a for i, b, a in edits}
+    has_fact = set(adds or {}) | set(facts or ())
     for i, sec in enumerate(after.get("sections") or []):
         if not isinstance(sec.get("body"), list):
             continue
@@ -280,7 +315,7 @@ def _apply_edits(after: dict, edits: list, adds: dict) -> dict:
                 if drop[key]:
                     body.append(drop[key])
                 continue
-            if str(b).strip() == PENDING and adds.get(i):
+            if str(b).strip() == PENDING and i in has_fact:
                 continue                  # ★中身が入ったら断りは外す★
             body.append(b)
         sec["body"] = adds.get(i, []) + body
@@ -350,7 +385,7 @@ def plan(machine: dict, material: dict, detail: dict) -> dict:
         idx.setdefault(str(sec.get("title")), []).append(i)
     cand = _dedupe(ceiling_items(material) + spec_items(material))
 
-    present, adds, added_lines = set(), {}, []
+    present, adds, added_lines, facts = set(), {}, [], set()
     for key, label, value, want in cand:
         same = False
         for i, s in enumerate(secs):      # ★全部の節を見る★（同じ見出しの重複防止）
@@ -360,6 +395,7 @@ def plan(machine: dict, material: dict, detail: dict) -> dict:
                     continue
                 if got == value:
                     same = True
+                    facts.add(i)          # ★この節にはもう事実がある★
                 else:
                     raise Halt(f"すでに違う値が書かれています: {label} "
                                f"（記事「{got}」／材料「{value}」）")
@@ -379,19 +415,26 @@ def plan(machine: dict, material: dict, detail: dict) -> dict:
         adds.setdefault(idx[want][0], []).append(line)
         added_lines.append(f"{want}: {line}")
 
+    # ★恩恵が分かっていない天井があるなら「恩恵」の話は守る★（Codex127回目 #2）
+    topics = set()
+    for c in ((material.get("ceilings") or {}).get("adopted") or []):
+        if not str(c.get("benefit") or "").strip():
+            topics.add("恩恵")
+        if not str(c.get("counted") or "").strip():
+            topics.add("何回")
     # ★食い違いを落としてよいのは「記事に載っている事実」だけ★
-    edits = resolve_contradictions(after, present)
-    after = _apply_edits(after, edits, adds)
+    edits = resolve_contradictions(after, present, topics)
+    after = _apply_edits(after, edits, adds, facts)
     boxes = _plan_summary(after, _dedupe(ceiling_items(material)), present)
     after = _apply_boxes(after, boxes)
     return {"slug": machine["slug"], "detail": after, "before": detail,
             "added": added_lines, "edits": edits, "boxes": boxes,
-            "adds": adds, "added_lines": [x.split(": ", 1)[1]
-                                          for x in added_lines]}
+            "adds": adds, "facts": sorted(facts),
+            "added_lines": [x.split(": ", 1)[1] for x in added_lines]}
 
 
 def check(before: dict, after: dict, edits=(), added_lines=(), boxes=(),
-          adds=None) -> list:
+          adds=None, facts=()) -> list:
     """★計画どおりに組み立て直して、完全に一致するか確かめる★
 
     2026-08-06・Codex126回目 #5。以前は「知らない文が増えていないか」しか
@@ -414,7 +457,8 @@ def check(before: dict, after: dict, edits=(), added_lines=(), boxes=(),
     # --- 組み立て直して完全一致 ---
     try:
         expect = _apply_edits(json.loads(json.dumps(before)),
-                              list(edits or []), dict(adds or {}))
+                              list(edits or []), dict(adds or {}),
+                              tuple(facts or ()))
         expect = _apply_boxes(expect, list(boxes or []))
     except Exception as e:                # noqa: BLE001
         return [f"計画を組み立て直せません: {e}"]
@@ -514,7 +558,7 @@ def run(slug: str, apply_it: bool, gather=None) -> dict:
     except Halt as e:
         return {"slug": slug, "problems": [f"★止めました★ {e}"]}
     ng = check(pl["before"], pl["detail"], pl["edits"], pl["added_lines"],
-               pl["boxes"], pl["adds"])
+               pl["boxes"], pl["adds"], pl["facts"])
     if ng:
         return {"slug": slug, "problems": ng}
     res = {"slug": slug, "added": pl["added"],
@@ -733,6 +777,46 @@ def selftest() -> int:                    # noqa: C901
       any("早見表" in x for x in check(pl11["before"], a13, pl11["edits"],
                                        pl11["added_lines"], pl11["boxes"],
                                        pl11["adds"])))
+
+    # --- ★Codex127回目に挙げられた迂回例★
+    d14 = D([{"title": "天井・恩恵",
+              "body": ["**スルー天井**：6スルー（CZ）" + SOURCED, PENDING]}])
+    pl14 = plan(MACH, MAT, d14)
+    t("★★すでに事実が書いてある節でも、未確認の断りは外す★★（#1の迂回例）",
+      pl14["detail"]["sections"][0]["body"]
+      == ["**スルー天井**：6スルー（CZ）" + SOURCED]
+      and check(pl14["before"], pl14["detail"], pl14["edits"],
+                pl14["added_lines"], pl14["boxes"], pl14["adds"],
+                pl14["facts"]) == [])
+    d15 = D([{"title": "天井・恩恵", "body": [PENDING]},
+             {"title": "ゲーム性",
+              "body": ["スルー天井の恩恵は判明していません。"]}])
+    halted15 = False
+    try:
+        plan(MACH, MAT, d15)              # 材料の benefit は空
+    except Halt as e:
+        halted15 = "決められない" in str(e)
+    t("★★回数だけ分かった天井の『恩恵は未判明』は消さない★★（#2の迂回例）",
+      halted15)
+    d16 = D([{"title": "天井・恩恵", "body": [PENDING]},
+             {"title": "ゲーム性",
+              "body": ["スルー天井は判明しましたが、ほかの天井は未判明です。"]}])
+    halted16 = False
+    try:
+        plan(MACH, MAT, d16)
+    except Halt as e:
+        halted16 = "分からない天井が同じ文" in str(e)
+    t("★★分かった天井と分からない天井が同じ文にあれば止める★★（#2の迂回例）",
+      halted16)
+    d17 = D([{"title": "天井・恩恵", "body": [PENDING]},
+             {"title": "解析待ちの項目", "body": ["・天井の有無と回数"]}])
+    halted17 = False
+    try:
+        plan(MACH, MAT, d17)
+    except Halt as e:
+        halted17 = "どの天井" in str(e)
+    t("★★『・天井の有無と回数』のような曖昧な項目でも止める★★（#2の迂回例）",
+      halted17)
 
     # --- ★別機種の記事には書かない★（Codex125 #9）
     halted10 = False

@@ -85,6 +85,26 @@ class Broken(Exception):
     """言い換えた結果、日本語として壊れた（★書かずに止める★）。"""
 
 
+def _sub_checked(pat, rep: str, text: str) -> str:
+    """言い換えながら、★つなぎ目が壊れていないかその場で見る★
+
+    2026-08-06・Codex127回目 #3。文字列全体の「壊れ方の数」を比べる方式では、
+    同じ壊れ方が別の場所へ移っただけの時に見逃した（元から「、を見」があると、
+    新しく「、を見」ができても数が変わらない）。
+    消した場所そのもののつなぎ目を見れば、位置ごとに確実に分かる。
+    """
+    out, last = [], 0
+    for m in pat.finditer(text):
+        out.append(text[last:m.start()])
+        out.append(rep)
+        last = m.end()
+        joint = "".join(out)[-1:] + text[last:last + 2]
+        if _BROKEN.search(joint):
+            raise Broken(f"言い換えでつなぎ目が壊れます: …{joint}…")
+    out.append(text[last:])
+    return "".join(out)
+
+
 def fix_text(t: str) -> str:
     """1つの文字列を直す（★値は足さない・消すか言い換えるだけ★）。"""
     out = []
@@ -100,14 +120,11 @@ def fix_text(t: str) -> str:
                 seen_pending = True
             continue
         for pat, rep in INLINE:
-            sent = pat.sub(rep, sent)
+            sent = _sub_checked(pat, rep, sent)
         if sent.strip():
             out.append(sent.strip())
     got = re.sub(r"[ 　]{2,}", " ", "".join(out).strip())
-    # ★元より壊れ方が増えたら書かない★（2026-08-06の事故の再発防止）
-    #   ★「有無」ではなく「新しく出たか」で見る★（Codex126回目 #8。元に
-    #     1か所でもあると、言い換えで新しく壊れても素通りしていた。
-    #     数だけの比較でも、別の場所へ移っただけの時に見逃す）
+    # ★文どうしのつなぎ目も見る★（文を丸ごと落とした結果の並び）
     new = Counter(_BROKEN.findall(got)) - Counter(_BROKEN.findall(t))
     if new:
         raise Broken(f"言い換えで文が壊れます: {got[:60]}")
@@ -186,9 +203,13 @@ def run(slug: str, apply_it: bool) -> dict:
             res["problems"] = [f"本文が空になる節があります: {sec.get('title')!r}"]
             return res
     if apply_it:
-        with open(p, "w", encoding="utf-8") as f:
-            json.dump(after, f, ensure_ascii=False, indent=1)
-            f.write("\n")
+        # ★鍵の中で「もう一度確かめる→置き換える」★（2026-08-06・Codex127回目）
+        #   同じ7機種を触る grow_legacy と書き込み方法をそろえる。
+        try:
+            _gl._write(p, after, sha_before)
+        except _gl.Halt as e:
+            res["problems"] = [f"★止めました★ {e}"]
+            return res
         res["wrote"] = True
     return res
 
@@ -260,6 +281,8 @@ def selftest() -> int:
     broke2 = False
     try:                                  # 元から壊れていても、増えたら止める
         fix_text("あ、を確認。導入済みですが、に注意します。")
+        # ★同じ壊れ方が別の場所へ移るだけの迂回（Codex127回目 #3）★
+        fix_text("確認します、導入済みですが、を見ます。")
     except Broken:
         broke2 = True
     t("★★元から壊れていても、増えたぶんは見逃さない★★", broke2)
