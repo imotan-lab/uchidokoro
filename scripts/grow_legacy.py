@@ -102,8 +102,10 @@ _LABELED = re.compile(r"^\*\*(?P<label>[^*]+)\*\*\s*[：:]\s*(?P<value>.+)$")
 #   上書きしうる。この道具の記録だけを別ファイルに持つ。
 STATE = "C:/Users/imao_/Documents/uchidokoro/legacy_grow_state.json"
 # ★一時的な不調（時間が解決する）とそうでないものを分ける★
-_TRANSIENT = ("材料を集められません", "台帳を読めません",
-              "書く直前にファイルが変わっていました",
+#   ★台帳を読めないのは入れない★（2026-08-06・Codex133回目 #2）
+#     台帳全体の障害なのに機種ごとに数えると、週1運転では3回目まで
+#     14週かかる＝その間ずっと「成功」に見えてしまう。すぐ知らせる。
+_TRANSIENT = ("材料を集められません", "書く直前にファイルが変わっていました",
               "ほかの処理が同じ記事を書いています", "鍵が取れません")
 _TRANSIENT_LIMIT = 3                      # 続けてこの回数で人に知らせる
 
@@ -142,6 +144,11 @@ def _save_state(st: dict) -> None:
                 os.remove(tmp)
             except OSError:
                 pass
+
+
+def _peek_streak(slug: str) -> int:
+    """続けて失敗した回数を見る（★記録する前に判断したい★）。"""
+    return int((_read_state().get("transient_streak") or {}).get(slug, 0))
 
 
 def _mark_checked(slug: str, today: str, outcome: str) -> int:
@@ -208,6 +215,18 @@ def _blocked(slug: str) -> list:
 
 
 RUN_WEEKDAY = 0                           # 0=月曜（1周したあとは週1回だけ）
+# 終了コード（★手順書と合わせる★・2026-08-06・Codex133回目）
+EXIT_OK = 0        # 書いた／足すものなし／今日は動かない日
+EXIT_ATTENTION = 3 # 人の判断が要る・一時的な不調（★台帳に載せた★）
+EXIT_FATAL = 1     # 予期しない失敗（記録が読めない・保存できない等）
+
+
+def _valid_date(text: str) -> str:
+    """日付の形を確かめる（★おかしな文字列を記録に残さない★・#6）。"""
+    try:
+        return datetime.date.fromisoformat(str(text)).isoformat()
+    except (TypeError, ValueError):
+        raise Halt(f"日付の形が違います: {text!r}")
 
 
 def pick_next(today: str):
@@ -218,27 +237,25 @@ def pick_next(today: str):
       ・全機種を一度見たあとは**週1回（月曜）だけ**
         ＝7機種・普段は増えない・検索にも出ない、に対して毎日は割に合わない
     """
+    today = _valid_date(today)            # ★巡回の途中でも必ず確かめる★
     st = _read_state()
     if st.get("last_run") == today:
         return None, "今日はもう見ました"
-    rows = targets()
+    rows = targets(strict=True)           # ★判定できない機種があれば止める★
     if not rows:
         # ★対象0件は「正常」ではないかもしれない★（判定が全部こけても0件になる）
         return None, "★対象が1機種もありません（区分の判定を確かめてください）★"
     checked = st.get("checked") or {}
     first_round = any(m["slug"] not in checked for m in rows)
     if not first_round:
-        try:
-            wd = datetime.date.fromisoformat(today).weekday()
-        except ValueError:
-            return None, f"日付の形が違います: {today}"
+        wd = datetime.date.fromisoformat(today).weekday()
         if wd != RUN_WEEKDAY:
             return None, "今日は動かす日ではありません（1周したので週1回）"
     rows.sort(key=lambda m: (str(checked.get(m["slug"], "")), m["slug"]))
     return rows[0]["slug"], ""
 
 
-def targets(slug: str | None = None) -> list:
+def targets(slug: str | None = None, strict: bool = False) -> list:
     ms = _sj.read_json(os.path.join(BASE, "assets", "data", "machines.json"),
                        expect=(dict, list))
     ms = ms["machines"] if isinstance(ms, dict) else ms
@@ -253,6 +270,10 @@ def targets(slug: str | None = None) -> list:
             broken += 1                   # ★黙って捨てない★（Codex132回目）
             continue
     if broken:
+        # ★一部だけ判定できないのがいちばん危ない★（2026-08-06・Codex133回目 #1）
+        #   その機種だけ対象から永久に外れ、残りで「1周した」と誤って判断する。
+        if strict:
+            raise Halt(f"区分を判定できない機種が {broken} 件あります")
         print(f"  ★区分を判定できない機種が {broken} 件あります★")
     return out
 
@@ -1177,8 +1198,8 @@ def selftest() -> int:                    # noqa: C901
     tmpd = tempfile.mkdtemp()
     try:
         globals()["STATE"] = os.path.join(tmpd, "st.json")
-        globals()["targets"] = lambda slug=None: [{"slug": "a"}, {"slug": "b"},
-                                                  {"slug": "c"}]
+        globals()["targets"] = lambda slug=None, strict=False: [
+            {"slug": "a"}, {"slug": "b"}, {"slug": "c"}]
         with open(globals()["STATE"], "w", encoding="utf-8") as f:
             json.dump({"checked": {"a": "2026-08-05", "b": "2026-08-01"},
                        "last_run": "2026-08-05"}, f)
@@ -1211,12 +1232,72 @@ def selftest() -> int:                    # noqa: C901
         os.remove(globals()["STATE"])
         t("　記録がまだ無ければ、いちばん先頭から始める",
           pick_next("2026-09-01")[0] == "a")
-        globals()["targets"] = lambda slug=None: []
+        globals()["targets"] = lambda slug=None, strict=False: []
         got, why = pick_next("2026-09-01")
         t("★★対象0件は『正常』にしない★★（区分の判定がこけた時に気づく）",
           got is None and "★" in why)
     finally:
         globals()["STATE"], globals()["targets"] = keep_state, keep_targets
+    # --- ★無人運転を最後まで通す★（2026-08-06・Codex133回目の指摘）
+    keep = {k: globals()[k] for k in ("STATE", "targets", "dirty_files",
+                                      "run", "_to_ledger", "_blocked")}
+    tmpd2 = tempfile.mkdtemp()
+    calls = {"ledger": [], "marked": []}
+
+    class _A:                             # 引数の代わり
+        slug = None
+        apply = True
+        today = "2026-08-06"
+
+    try:
+        globals()["STATE"] = os.path.join(tmpd2, "st.json")
+        globals()["targets"] = lambda slug=None, strict=False: [{"slug": "a"}]
+        globals()["dirty_files"] = lambda: []
+        globals()["_blocked"] = lambda slug: []
+        globals()["_to_ledger"] = lambda slug, pr, tr: calls["ledger"].append(
+            (slug, tr))
+        globals()["run"] = lambda slug, ap: {"problems": [], "wrote": True,
+                                             "added": ["**型式名**：X"]}
+        t("★★書けたら 0 で終わる★★", run_next(_A()) == EXIT_OK)
+        globals()["run"] = lambda slug, ap: {
+            "problems": ["★止めました★ 知らない話が混じっています"]}
+        _A.today = "2026-08-10"      # 月曜（1周後は週1）
+        rc = run_next(_A())
+        t("★★人の判断が要る時は 3 で終わり、台帳へ載せる★★",
+          rc == EXIT_ATTENTION and calls["ledger"] == [("a", False)])
+        globals()["run"] = lambda slug, ap: {
+            "problems": ["材料を集められません: ..."]}
+        _A.today = "2026-08-17"      # 月曜
+        rc2 = run_next(_A())
+        t("★★一時的な不調も 3 で終わる（最初は台帳に積まない）★★",
+          rc2 == EXIT_ATTENTION and len(calls["ledger"]) == 1)
+        globals()["dirty_files"] = lambda: [" M scripts/x.py"]
+        _A.today = "2026-08-18"      # 火曜でも「作業中」判定が先
+        t("★★作業中の変更があれば何もせず 0★★", run_next(_A()) == EXIT_OK)
+        globals()["dirty_files"] = lambda: []
+        def _boom(slug, pr, tr):
+            raise RuntimeError("台帳が書けない")
+        globals()["_to_ledger"] = _boom
+        globals()["run"] = lambda slug, ap: {"problems": ["★止めました★ だめ"]}
+        _A.today = "2026-08-24"      # 月曜
+        rc3 = run_next(_A())
+        st3 = json.load(open(globals()["STATE"], encoding="utf-8"))
+        t("★★台帳に載せられなければ 1 で終わり、その日を消費しない★★"
+          "（やり直せる）",
+          rc3 == EXIT_FATAL and st3.get("last_run") != "2026-08-24")
+        globals()["_blocked"] = lambda slug: ["台帳を読めません: こわれています"]
+        _A.today = "2026-08-24"      # 月曜（上は日を消費していない）
+        t("★★台帳が読めないのは、その機種の問題ではない（すぐ 1）★★",
+          run_next(_A()) == EXIT_FATAL)
+        _A.apply = False
+        t("★★--apply が無ければ何もしない★★", run_next(_A()) == EXIT_FATAL)
+        _A.apply, _A.slug = True, "x"
+        t("　--slug とは併用できない", run_next(_A()) == EXIT_FATAL)
+        _A.slug, _A.today = None, "8月6日"
+        t("★★日付の形がおかしければ動かない★★", run_next(_A()) == EXIT_FATAL)
+    finally:
+        for k, v in keep.items():
+            globals()[k] = v
     t("★★一時的な不調と、人の判断が要るものを分ける★★",
       is_transient(["材料を集められません: ..."])
       and not is_transient(["★止めました★ 知らない話が混じっています: ..."]))
@@ -1248,65 +1329,86 @@ def dirty_files() -> list:
         raise Halt(f"作業中の変更を確かめられません: {e}")
     if out.returncode != 0:
         raise Halt(f"作業中の変更を確かめられません（git が {out.returncode}）")
-    return [x for x in out.stdout.splitlines()
-            if x.strip() and not x.startswith("??")]
+    # ★新しく作られたファイルも「作業中」に数える★（2026-08-06・Codex133回目 #4）
+    #   ずっと置いておく生成物は .gitignore で管理する（個別に除外しない）
+    return [x for x in out.stdout.splitlines() if x.strip()]
 
 
 def run_next(a) -> int:
-    """★無人運転★（1回1機種・詰まったら台帳・失敗は隠さない）"""
+    """★無人運転★（1回1機種・詰まったら台帳・失敗は隠さない）
+
+    終了コード（★手順書と揃える★）
+      0 = 書いた／足すものなし／今日は動かない日／作業中で飛ばした
+      3 = 人の判断が要る・一時的な不調（**台帳に載せた**・このレーンだけ終わり）
+      1 = 予期しない失敗（記録が読めない・保存できない・台帳が読めない）
+    """
     if a.slug:
         print("★--next と --slug は同時に使えません★")
-        return 1
+        return EXIT_FATAL
     if not a.apply:
         # ★下見のまま日を消費させない★（Codex132回目 #4）
         print("★--next には --apply が要ります★（下見は --slug で行います）")
-        return 1
-    today = a.today or datetime.date.today().isoformat()
+        return EXIT_FATAL
+    lock = None
     try:
+        today = _valid_date(a.today or datetime.date.today().isoformat())
+        # ★選ぶところから記録するところまでを1つの鍵で守る★
+        #   （2026-08-06・Codex133回目 #5。2つ動くと同じ機種を選び、
+        #     回数や連続失敗の記録がどちらが残るか分からなくなる）
+        lock = _lock(STATE)
         dirty = dirty_files()
         if dirty:
             print("作業中の変更があるので今日は動きません（先にコミットしてください）")
             for x in dirty[:5]:
                 print("  ", x)
-            return 0                      # ★異常ではない★
+            return EXIT_OK                # ★異常ではない★
         slug, why = pick_next(today)
+        if not slug:
+            print(why)
+            return EXIT_FATAL if "★" in why else EXIT_OK
+        print(f"今日見る機種: {slug}")
+        # ★台帳が読めないのは、その機種の問題ではない★（すぐ失敗にする）
+        stop = _blocked(slug)
+        if any("台帳を読めません" in str(x) for x in stop):
+            print("★" + " / ".join(str(x) for x in stop) + "★")
+            return EXIT_FATAL
+        r = {"problems": stop} if stop else run(slug, True)
+        problems = r.get("problems") or []
+        transient = bool(problems) and is_transient(problems)
+        outcome = ("transient" if transient else "halt") if problems else \
+                  ("wrote" if r.get("wrote") else "none")
+        for x in problems:
+            print("  -", x)
+        if problems:
+            # ★台帳を先に、記録を後に★（2026-08-06・Codex133回目 #3）
+            #   逆にすると、台帳登録に失敗した時「今日はもう見た」だけが残り、
+            #   同じ日にやり直しても何もせず終わる。
+            streak = _peek_streak(slug) + (1 if transient else 0)
+            if not transient or streak >= _TRANSIENT_LIMIT:
+                _to_ledger(slug, problems, transient)
+            else:
+                print(f"  （一時的な不調 {streak}/{_TRANSIENT_LIMIT} 回目・様子を見ます）")
+            _mark_checked(slug, today, outcome)   # ★止まっても日は進める★
+            return EXIT_ATTENTION
+        _mark_checked(slug, today, outcome)
+        for x in (r.get("added") or []) + (r.get("boxes") or []):
+            print("  ＋", str(x)[:74])
+        for x in (r.get("removed") or []):
+            print("  －", str(x)[:70])
+        print("書きました" if r.get("wrote") else "足すものがありません")
+        return EXIT_OK
     except Halt as e:
         print(f"★止めました★ {e}")
-        return 1                          # ★記録が読めない等は失敗として扱う★
-    if not slug:
-        print(why)
-        return 1 if "★" in why else 0
-    print(f"今日見る機種: {slug}")
-    stop = _blocked(slug)
-    r = {"problems": stop} if stop else run(slug, True)
-    problems = r.get("problems") or []
-    transient = bool(problems) and is_transient(problems)
-    outcome = ("transient" if transient else "halt") if problems else \
-              ("wrote" if r.get("wrote") else "none")
-    try:
-        streak = _mark_checked(slug, today, outcome)   # ★止まっても日は進める★
+        return EXIT_FATAL
     except Exception as e:                # noqa: BLE001
-        print(f"★見た日を記録できません: {type(e).__name__}: {e}★")
-        return 1                          # ★成功扱いにしない★
-    for x in problems:
-        print("  -", x)
-    if problems:
-        # 一時的な不調は、続いた時だけ人に知らせる（毎回積まない）
-        if not transient or streak >= _TRANSIENT_LIMIT:
+        print(f"★思わぬ失敗★ {type(e).__name__}: {e}")
+        return EXIT_FATAL
+    finally:
+        if lock:
             try:
-                _to_ledger(slug, problems, transient)
-            except Exception as e:        # noqa: BLE001
-                print(f"★台帳に登録できません: {type(e).__name__}: {e}★")
-                return 1                  # ★成功扱いにしない★
-        else:
-            print(f"  （一時的な不調 {streak}/{_TRANSIENT_LIMIT} 回目・様子を見ます）")
-        return 0
-    for x in (r.get("added") or []) + (r.get("boxes") or []):
-        print("  ＋", str(x)[:74])
-    for x in (r.get("removed") or []):
-        print("  －", str(x)[:70])
-    print("書きました" if r.get("wrote") else "足すものがありません")
-    return 0
+                os.remove(lock)
+            except OSError:
+                pass
 
 
 def main() -> int:
