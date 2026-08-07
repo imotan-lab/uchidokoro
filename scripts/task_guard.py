@@ -522,6 +522,21 @@ def claim(task: str, slug: str, path: str = STATE_PATH) -> dict:
             e["target_slug"] = slug
             _save(path, data)
             return e
+        # ★書けない機種を担当にして枠を捨てない★（2026-08-08・台帳#272）
+        #   台帳に未解決のCRITICAL案件がある機種は before_write が拒否する。
+        #   ところが claim は段階を見ていなかったので、担当に確保した時点で
+        #   その日の枠が消え、拒否されても戻らなかった。
+        #   ＝毎日 blocking の機種を選んでは空振りする、という動きになっていた
+        #   （2026-08-08に実際に発生。galfy で1機種も直せずに終了）。
+        #   ★ここで拒否すれば枠は減らない★＝呼び出し側は次の候補へ進める。
+        try:
+            stage = cp.assess(slug).get("stage")
+        except Exception:                 # noqa: BLE001
+            stage = None                  # 判定できないときは従来どおり通す
+        if stage in FROZEN_STAGES:
+            raise GuardError(
+                f"{slug} はいま触れません（{stage}）。"
+                "枠は使っていないので、次の候補を選んでください")
         e = _entry(data, task)
         # ★担当は日単位で1つ★（2026-08-06・Codex114回目の指摘5）
         #   以前はタスクごとに数えていたので、**タスク名を変えれば**
@@ -771,6 +786,20 @@ def selftest() -> int:
     tmpdir = tempfile.mkdtemp()
     fp = os.path.join(tmpdir, "guard.json")
     try:
+        # ★触れない機種を選んでも枠を減らさない★（2026-08-08・台帳#272）
+        #   以前は claim が段階を見ておらず、blocking の機種を担当に確保した
+        #   時点でその日の枠が消え、before_write に拒否されても戻らなかった。
+        fp0 = os.path.join(tmpdir, "guard0.json")
+        _keep_assess = cp.assess
+        cp.assess = lambda s, *a, **k: {"stage": "BLOCKED_BY_LEDGER"}
+        try:
+            blocked = raises(lambda: claim("t", "galfy", fp0), "触れません")
+        finally:
+            cp.assess = _keep_assess
+        t("★★台帳で止まっている機種は担当にできない★★（台帳#272）", blocked)
+        t("　断られた日でも枠は残る（次の候補を選べる）",
+          claim("t", "hokuto", fp0)["target_slug"] == "hokuto")
+
         t("★1機種目は担当できる★", claim("t", "hokuto", fp)["target_slug"] == "hokuto")
         t("　同じ機種なら何度呼んでもよい（再開できる）",
           claim("t", "hokuto", fp)["target_slug"] == "hokuto")
