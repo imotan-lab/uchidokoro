@@ -99,6 +99,32 @@ def _wait_turn(url: str) -> None:
     _LAST_AT[host] = time.monotonic()
 
 
+# ★ページの中に書いてある文字コードも見る★（2026-08-07・台帳#264）
+#   HTTPの見出しに文字コードが無いページは、これまで一律 UTF-8 として読んでいた。
+#   P-WORLD の50音索引は EUC-JP なので、機種名が丸ごと文字化けし、
+#   「載っていない」と同じ扱いになっていた（実データで確認）。
+#   ★見出しに書いてあるときは、そちらを優先する★（中の記述が古いことがある）
+_META_CHARSET = re.compile(
+    rb"""<meta[^>]+charset\s*=\s*["']?\s*([0-9A-Za-z_\-]+)""", re.I)
+
+
+def _decode(body: bytes, charset: str, hdr_charset: str | None) -> str:
+    """本文を文字に直す。見出しに文字コードが無ければ中の記述を使う。"""
+    if not hdr_charset:
+        m = _META_CHARSET.search(body[:4096])
+        if m:
+            try:
+                name = m.group(1).decode("ascii", "ignore")
+                b"".decode(name)          # 実在する名前か確かめる
+                charset = name
+            except (LookupError, UnicodeDecodeError):
+                pass
+    try:
+        return body.decode(charset, "replace")
+    except LookupError:
+        return body.decode("utf-8", "replace")
+
+
 def _get(url: str, timeout: int = 20) -> str:
     hit = _CACHE.get(url)
     if hit is not None:
@@ -115,7 +141,8 @@ def _get(url: str, timeout: int = 20) -> str:
                 raise WatchError(f"HTTP {r.status}: {url}")
             LAST_FINAL_URL["url"] = r.geturl()
             body = r.read(MAX_BYTES + 1)
-            charset = r.headers.get_content_charset() or "utf-8"
+            hdr_charset = r.headers.get_content_charset()
+            charset = hdr_charset or "utf-8"
     except urllib.error.HTTPError as e:
         raise WatchError(f"取得できません（HTTP {e.code}）: {url}")
     except WatchError:
@@ -124,7 +151,7 @@ def _get(url: str, timeout: int = 20) -> str:
         raise WatchError(f"取得できません（{type(e).__name__}）: {url}")
     if len(body) > MAX_BYTES:
         raise WatchError(f"ページが大きすぎます: {url}")
-    text = body.decode(charset, "replace")
+    text = _decode(body, charset, hdr_charset)
     if len(_CACHE) >= _CACHE_MAX:
         _CACHE.pop(next(iter(_CACHE)), None)
     _CACHE[url] = (text, LAST_FINAL_URL["url"])

@@ -220,13 +220,35 @@
         {
           "url": "https://www.p-world.co.jp/database/machine/introduce_calendar.cgi",
           "kind": "導入カレンダー"
+        },
+        {
+          "url": "https://www.p-world.co.jp/_machine/t_machine.cgi?mode=slot_type&key=NORMAL&start=0",
+          "kind": "ノーマルタイプ一覧"
+        },
+        {
+          "url": "https://www.p-world.co.jp/_machine/t_machine.cgi?mode=slot_type&key=AT&start=0",
+          "kind": "ATタイプ一覧"
+        },
+        {
+          "url": "https://www.p-world.co.jp/_machine/t_machine.cgi?mode=slot_type&key=RT&start=0",
+          "kind": "RTタイプ一覧"
+        },
+        {
+          "url": "https://www.p-world.co.jp/_machine/t_machine.cgi?mode=slot_type&key=aRT&start=0",
+          "kind": "ARTタイプ一覧"
+        },
+        {
+          "url": "https://www.p-world.co.jp/_machine/t_machine.cgi?mode=slot_type&key=over_6.5number&start=0",
+          "kind": "6.5号機以降一覧"
         }
       ],
       "link_pattern": "/machine/database/\\d+",
       "min_expected": 15,
       "status": "ACTIVE",
-      "surface_pattern": "^https://www\\.p-world\\.co\\.jp/database/machine[a-z0-9_/\\.\\-]*$",
-      "_why_surface_pattern": "入口の登録漏れを毎回機械が数えるため（2026-08-06・scripts/directory_coverage.py）"
+      "surface_pattern": "^https://www\\.p-world\\.co\\.jp/(database/machine[a-z0-9_/\\.\\-]*|_machine/t_machine\\.cgi\\?mode=slot_type&key=[A-Za-z0-9_\\.]+&start=0)$",
+      "_why_surface_pattern": "入口の登録漏れを毎回機械が数えるため（2026-08-06・scripts/directory_coverage.py）",
+      "follow_next_page": true,
+      "_why_follow_next_page": "一覧が50件ずつしか出ないため（2026-08-07・台帳#264）。1ページ目だけでは古い機種が索引に入らず、2つ目の出典が取れない機種が全体の8割あった。"
     },
     "dmm-ptown": {
       "name": "DMMぱちタウン",

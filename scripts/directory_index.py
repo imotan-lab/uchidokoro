@@ -55,6 +55,12 @@ _TITLE_TAIL = ("設定判別", "解析まとめ", "終了画面", "徹底解説"
                "設置店", "掲示板", "初打ち", "機械割", "スロット", "パチスロ",
                "スマスロ", "新台", "天井", "解析", "まとめ", "攻略", "示唆",
                "評価", "考察",
+               # ★実データで足りなかった飾り語★（2026-08-07・台帳#264）
+               #   末尾から剥がすので、**最後に来る語**が無いと1つも剥がせない。
+               #   例「ゴーゴージャグラー3新台設定判別機械割6号機」は
+               #   「6号機」が無いために丸ごと芯になっていた。
+               "6号機", "5号機", "設定差", "最速", "解説", "レビュー",
+               "動画", "導入", "実践", "実戦", "打法", "全解析", "設定",
                # DMMのカードの飾り（2026-08-03・実データ）
                "導入開始日", "導入予定日", "導入日", "掲載準備中", "準備中",
                "掲載", "予定")
@@ -114,8 +120,12 @@ def _decor_only(token: str) -> bool:
 STATES = ("FOUND", "HEALTHY_NO_MATCH", "AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY")
 
 
-def anchor_core(text: str) -> str:
+def anchor_core(text: str, aggressive: bool = False) -> str:
     """一覧のリンク文字から「機種名の芯」を作る。
+
+    ★aggressive★＝飾りを1つしか剥がせなくても剥がした形を返す。
+      索引には「剥がさない芯」と「剥がした芯」を**両方**入れるので、
+      剥がし過ぎても取りこぼしにはならない（別名が1つ増えるだけ）。
 
     ★記事タイトルの飾りを落とす★
       落とさないと芯が「すーぱぁびん娘新台天井設定判別…」まで伸びて、
@@ -145,7 +155,8 @@ def anchor_core(text: str) -> str:
             break
         stripped = stripped[:-len(hit)].rstrip("".join(_TAIL_JOINERS))
         n += 1
-    if n >= 2 and stripped:
+    # ★aggressive=True なら1つ剥がせただけでも使う★（別の索引キーとして足す用）
+    if stripped and (n >= 2 or (aggressive and n >= 1)):
         t = stripped
     return _ci.normalize_core(t)
 
@@ -184,10 +195,46 @@ def build_index(html: str, base_url: str, link_pattern: str,
         if not core:
             continue
         url = urllib.parse.urljoin(base_url, href).split("#")[0].split("?")[0]
-        idx.setdefault(core, [])
-        if url not in [u for u, _ in idx[core]]:
-            idx[core].append((url, " ".join(text.split())[:60]))
+        # ★飾りを剥がした芯も一緒に索引へ入れる★（2026-08-07・台帳#264）
+        #   剥がせた数が1つだけの時は今まで使っていなかったので、
+        #   「マギアレコード最速解析まとめ」のような題が引けなかった。
+        #   ★元の芯は必ず残す★＝剥がし過ぎても取りこぼしにならない。
+        for c in dict.fromkeys([core, anchor_core(text, aggressive=True)]):
+            if not c:
+                continue
+            idx.setdefault(c, [])
+            if url not in [u for u, _ in idx[c]]:
+                idx[c].append((url, " ".join(text.split())[:60]))
     return idx
+
+
+# ★ページ送りの「次へ」を追いかける★（2026-08-07・台帳#264）
+#   一覧が50件ずつしか出ない名鑑があり、1ページ目だけ見ていたため
+#   古い機種が丸ごと索引に入っていなかった。
+#   ★上限を必ず置く★＝作りが変わって輪になっても止まる。
+NEXT_PAGE_MAX = 40
+_NEXT_WORDS = ("次へ", "次の", "次ページ", "次 ", ">>", "»")
+
+
+def _next_page_url(html: str, base_url: str) -> str:
+    """一覧の「次へ」のリンク先を返す（無ければ空）。"""
+    for href, text in _w._visible_anchor_pairs(html):
+        t = " ".join(str(text or "").split())
+        if t and any(t.startswith(w) or t == w.strip() for w in _NEXT_WORDS):
+            return urllib.parse.urljoin(base_url, href)
+    return ""
+
+
+def _surface_pages(url: str, follow_next: bool):
+    """1つの入口が指すページを順に返す（★同じURLは二度読まない★）。"""
+    seen, cur = set(), url
+    for _ in range(NEXT_PAGE_MAX if follow_next else 1):
+        if not cur or cur in seen:
+            return
+        seen.add(cur)
+        html = _w._get(cur)
+        yield cur, html
+        cur = _next_page_url(html, cur) if follow_next else ""
 
 
 def scan_directory(dir_id: str, conf: dict) -> dict:
@@ -195,10 +242,16 @@ def scan_directory(dir_id: str, conf: dict) -> dict:
     out = {"directory": dir_id, "name": conf.get("name"), "index": {},
            "surfaces_ok": 0, "surfaces_total": 0, "problems": []}
     least = int(conf.get("min_expected") or 1)
+    follow = bool(conf.get("follow_next_page"))
     for sf in conf.get("surfaces") or []:
         out["surfaces_total"] += 1
         try:
-            html = _w._get(sf["url"])
+            html, extra = "", []
+            for page_url, page_html in _surface_pages(sf["url"], follow):
+                if not html:
+                    html = page_html
+                else:
+                    extra.append((page_url, page_html))
         except Exception as e:
             out["problems"].append(f"{sf['url']}: 取得できません（{e}）")
             continue
@@ -214,12 +267,79 @@ def scan_directory(dir_id: str, conf: dict) -> dict:
                 f"{sf['url']}: {len(idx)} 件しか取れません（最低 {least} 件のはず）")
             continue
         out["surfaces_ok"] += 1
+        # ★2ページ目以降も同じ入口として足す★（1ページ目の健全さは上で見た）
+        for page_url, page_html in extra:
+            more = build_index(page_html, page_url, conf["link_pattern"],
+                               title_class=str(conf.get("title_class") or ""))
+            if "_PROBLEM_" in more:
+                out["problems"].append(
+                    f"{page_url}: {more['_PROBLEM_'][0][1]}")
+                continue
+            for core, items in more.items():
+                idx.setdefault(core, [])
+                for it in items:
+                    if it[0] not in [u for u, _ in idx[core]]:
+                        idx[core].append(it)
         for core, items in idx.items():          # ★入口どうしは和集合★
             cur = out["index"].setdefault(core, [])
             for it in items:
                 if it[0] not in [u for u, _ in cur]:
                     cur.append(it)
     return out
+
+
+# ★「機種名＋宣伝文句」の見出しを引き当てる★（2026-08-07・台帳#264）
+#   ちょんぼりすたの一覧は「マイジャグラーVスペック設定判別ぶどう」のように
+#   機種名の**後ろ**に宣伝文句が連なる。飾りを末尾から剥がす作りでは
+#   語を1つ足すたびに別の形が現れて追いつかない（実データで確認）。
+#   ★探す機種名が分かっているときは、前から当てたほうが確実★
+#     ①見出しが機種名でちょうど始まる ②残りが飾りの語だけでできている
+#   この2つが揃ったときだけ同じ機種とみなす。
+#   ★「マイジャグラーV」で「マイジャグラーVI」を引かない★
+#     残りが "i" になり、飾りの語ではないので外れる。
+#   ★「ストリートファイターV」で「ストリートファイターV挑戦者の道」も引かない★
+_DECOR_WORDS = _TITLE_TAIL + (
+    "確率", "ボーナス", "データ", "パターン", "プレミアム", "コメント",
+    "みんなの", "評価", "解析", "設定差", "設定判別", "設定", "打ち方",
+    "ぶどう", "ベル", "小役", "負け", "勝ち", "実戦", "実践", "期待値",
+    "フリーズ", "恩恵", "モード", "示唆", "早見表", "画面", "終了",
+    "打法", "立ち回り", "スペック", "天井", "狙い目", "やめ時", "やめどき",
+    "解説", "まとめ", "一覧", "動画", "感想", "results", "の",
+)
+_MAX_DECOR_STEPS = 24
+
+
+def remainder_is_decor(rest: str) -> bool:
+    """機種名の後ろに残った文字が「飾りの語だけ」でできているか。"""
+    s = str(rest or "")
+    for _ in range(_MAX_DECOR_STEPS):
+        if not s:
+            return True
+        hit = next((w for w in sorted(_DECOR_WORDS, key=len, reverse=True)
+                    if s.startswith(_ci.normalize_core(w))
+                    and _ci.normalize_core(w)), None)
+        if not hit:
+            return False
+        s = s[len(_ci.normalize_core(hit)):]
+    return False
+
+
+def lookup_hits(index: dict, core: str) -> list:
+    """索引から、この機種名にあたる項目を集める。"""
+    hits = list(index.get(core) or [])
+    if hits:
+        return hits
+    # ★世代表記の同値化★（公式「…2」↔名鑑「…II」）
+    ck = _ci.canon_num_tail(core)
+    for k, v in index.items():
+        if k != core and _ci.canon_num_tail(k) == ck:
+            hits += v
+    if hits or not core:
+        return hits
+    for k, v in index.items():           # ★機種名＋飾り の見出し★
+        if k != core and k.startswith(core) and remainder_is_decor(k[len(core):]):
+            hits += v
+    return hits
 
 
 def find(official_name: str, catalogs: dict | None = None) -> dict:
@@ -235,13 +355,7 @@ def find(official_name: str, catalogs: dict | None = None) -> dict:
         if conf.get("status") != "ACTIVE":
             continue
         r = scan_directory(dir_id, conf)
-        hits = list(r["index"].get(core) or [])
-        if not hits:
-            # ★世代表記の同値化★（2026-08-02・Codex50回目。公式「…2」↔名鑑「…II」）
-            ck = _ci.canon_num_tail(core)
-            for k, v in r["index"].items():
-                if k != core and _ci.canon_num_tail(k) == ck:
-                    hits += v
+        hits = lookup_hits(r["index"], core)
         if r["surfaces_ok"] == 0:
             state, why = "CATALOG_UNHEALTHY", " / ".join(r["problems"])
         elif len(hits) == 1:
@@ -276,6 +390,35 @@ def selftest() -> int:
     def t(name, cond):
         results.append((name, bool(cond)))
         print(("✅" if cond else "❌") + " " + name)
+
+    # ★宣伝文句がくっついたままの芯を索引に入れていた★（2026-08-07・台帳#264）
+    #   末尾から剥がす作りなので、**最後の語**が飾り一覧に無いと1つも剥がせない。
+    #   実データで多数の機種が引けなくなっていた。
+    t("★★末尾の宣伝文句を剥がして機種名にする★★（台帳#264の実データ）",
+      anchor_core("ゴーゴージャグラー3新台設定判別機械割6号機")
+      == _ci.normalize_core("ゴーゴージャグラー3")
+      and anchor_core("ネオアイムジャグラーex新台スペック打ち方設定差")
+      == _ci.normalize_core("ネオアイムジャグラーEX")
+      and anchor_core("マギアレコード最速解析まとめ")
+      == _ci.normalize_core("マギアレコード"))
+    t("　機種名の一部は剥がさない（別機種と混ざらない）",
+      anchor_core("北斗の拳転生の章2") == _ci.normalize_core("北斗の拳転生の章2")
+      and anchor_core("北斗の拳転生の章2", aggressive=True)
+      != _ci.normalize_core("北斗の拳"))
+
+    _pre = {_ci.normalize_core(k): [("u%d" % i, k)] for i, k in enumerate(
+        ["マイジャグラーVスペック設定判別ぶどう", "マイジャグラーVI",
+         "ストリートファイターV挑戦者の道", "北斗の拳転生の章2"])}
+
+    def _hit(name):
+        return [x[1] for x in lookup_hits(_pre, _ci.normalize_core(name))]
+
+    t("★★機種名＋宣伝文句の見出しを引き当てる★★（台帳#264）",
+      _hit("マイジャグラーV") == ["マイジャグラーVスペック設定判別ぶどう"])
+    t("★★世代違いを引き当てない★★（V で VI を拾わない）",
+      _hit("マイジャグラーVI") == ["マイジャグラーVI"])
+    t("★★続編・副題は飾りではない★★（V で『V挑戦者の道』を拾わない）",
+      _hit("ストリートファイターV") == [] and _hit("北斗の拳") == [])
 
     t("★★一覧の記事タイトルから機種名だけを取り出す★★（実データの形）",
       anchor_core("2026年5月22日 Lすーぱぁびん娘 スロット 新台 天井 設定判別 やめどき 解析まとめ")
