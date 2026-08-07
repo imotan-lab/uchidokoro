@@ -366,6 +366,58 @@
       "_why_surface_pattern": "入口の登録漏れを毎回機械が数えるため（2026-08-06・scripts/directory_coverage.py）",
       "max_pages": 6,
       "_why_max_pages": "一覧が数ページに分かれており、1頁目だけでは古い機種が索引に入らないため（2026-08-07・台帳#264）。上限は毎晩の取得回数とのつり合いで決める"
+    },
+    "nana-press": {
+      "name": "なな徹",
+      "surfaces": [
+        {
+          "url": "https://nana-press.com/kaiseki/index/machine/s/a/",
+          "kind": "機種名で探す（a行）"
+        },
+        {
+          "url": "https://nana-press.com/kaiseki/index/machine/s/ka/",
+          "kind": "機種名で探す（ka行）"
+        },
+        {
+          "url": "https://nana-press.com/kaiseki/index/machine/s/sa/",
+          "kind": "機種名で探す（sa行）"
+        },
+        {
+          "url": "https://nana-press.com/kaiseki/index/machine/s/ta/",
+          "kind": "機種名で探す（ta行）"
+        },
+        {
+          "url": "https://nana-press.com/kaiseki/index/machine/s/na/",
+          "kind": "機種名で探す（na行）"
+        },
+        {
+          "url": "https://nana-press.com/kaiseki/index/machine/s/ha/",
+          "kind": "機種名で探す（ha行）"
+        },
+        {
+          "url": "https://nana-press.com/kaiseki/index/machine/s/ma/",
+          "kind": "機種名で探す（ma行）"
+        },
+        {
+          "url": "https://nana-press.com/kaiseki/index/machine/s/ya/",
+          "kind": "機種名で探す（ya行）"
+        },
+        {
+          "url": "https://nana-press.com/kaiseki/index/machine/s/ra/",
+          "kind": "機種名で探す（ra行）"
+        },
+        {
+          "url": "https://nana-press.com/kaiseki/index/machine/s/wa/",
+          "kind": "機種名で探す（wa行）"
+        }
+      ],
+      "link_pattern": "/kaiseki/machine/\\d+",
+      "min_expected": 50,
+      "max_pages": 1,
+      "status": "ACTIVE",
+      "surface_pattern": "^https://nana-press\\.com/kaiseki/index/machine/s/[a-z]+/$",
+      "_why": "★スロット専用の索引★（2026-08-08）パチンコが混ざらず、題に導入日が入っていて未来の機種も載る。P-WORLDしか型式を持っていない新台が3件連続で止まったため追加",
+      "_why_max_pages": "1つの行のページに全機種が載る（ページ送りが無い）"
     }
   }
 }
