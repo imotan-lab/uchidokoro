@@ -8,6 +8,9 @@
 
 ★守らせること★
   1. 1日に処理する機種は1つだけ（同じ日の2機種目を拒否する）
+     ★ただし新台の追加（add-machine）だけは数えない★（2026-08-07・運営者決定。
+       新台は導入日が決まっていて待てないため。件数の上限は置かず、
+       時刻で区切る＝add_machine_run.NEW_MACHINE_DEADLINE_HHMM）
   2. Codexとの相談は決めた回数まで（4往復目を拒否する）
   3. 記事を書き換える前と、コミットする前に「公開してよいか」を必ず確かめ直す
      （更新タスクが直したあと再判定せずに公開へ進む経路を塞ぐ）
@@ -43,6 +46,13 @@ import safe_json as _sj               # noqa: E402
 STATE_PATH = r"C:/Users/imao_/Documents/uchidokoro/task_guard.json"
 CODEX_ROUND_LIMIT = 3
 MACHINES_PER_DAY = 1
+# ★1日の機種数を数えないタスク★（2026-08-07・運営者決定）
+#   新台は導入日が決まっていて待てない。分かり次第そのまま記事にする。
+UNLIMITED_MACHINE_TASKS = frozenset({"add-machine"})
+# ★新台の件数には上限を置かない★（2026-08-07・運営者決定）
+#   新台は導入日が決まっていて待てない。待ち行列にあるものは全部やる。
+#   件数ではなく**時刻**で区切る（add_machine_run.NEW_MACHINE_DEADLINE_HHMM）
+#   ＝5:05の更新タスクをロック待ちにしないため。
 
 # 書き換えてよい段階（＝「今より良くする」余地がある段階）
 #   READY は既に公開してよいので、更新タスクが触る理由が無い。
@@ -488,13 +498,30 @@ def day_status(path: str = STATE_PATH) -> dict:
 
 
 def claim(task: str, slug: str, path: str = STATE_PATH) -> dict:
-    """今日この機種を担当してよいか。★同じ日の2機種目は拒否★"""
+    """今日この機種を担当してよいか。★同じ日の2機種目は拒否★
+
+    ★新台の追加だけは1日の機種数を数えない★（2026-08-07・運営者決定）
+      新台は導入日が決まっていて待てない。分かり次第そのまま記事にする。
+      いま未処理の新台は14機種で、導入日は9月〜11月に分かれている。
+      **1日1機種にしておく理由が無い**（材料が揃わなければどのみち書けない）。
+      ★ただし暴走止めは残す★＝同じ晩に何十件も書き続けるのは、
+      うまくいっている状態ではなく不具合の形。上限に当たったら止めて知らせる。
+    """
     with _Exclusive(path):
         if is_test_slug(slug):
             # ★試したときの架空機種は枠を使わない★（本番の1日1機種を守る）
             return {"ok": True, "why": f"{slug} は試験用なので枠を使いません",
                     "test": True}
         data = _load(path)
+        if task in UNLIMITED_MACHINE_TASKS:
+            d = _day(data)
+            done = d.setdefault("unlimited_slugs", [])
+            if slug not in done:
+                done.append(slug)          # ★記録するだけ・拒否しない★
+            e = _entry(data, task)
+            e["target_slug"] = slug
+            _save(path, data)
+            return e
         e = _entry(data, task)
         # ★担当は日単位で1つ★（2026-08-06・Codex114回目の指摘5）
         #   以前はタスクごとに数えていたので、**タスク名を変えれば**
@@ -751,6 +778,22 @@ def selftest() -> int:
           raises(lambda: claim("t", "enen", fp), "1日"))
         t("★★タスク名を変えても1日1機種は迂回できない★★（Codex114回目の指摘5）",
           raises(lambda: claim("t2", "enen", fp), "1日"))
+
+        # ★新台の追加だけは機種数を数えない★（2026-08-07・運営者決定）
+        #   新台は導入日が決まっていて待てないため。
+        fp2 = os.path.join(tmpdir, "guard2.json")
+        many = [claim("add-machine", "n%d" % i, fp2)["target_slug"]
+                for i in range(5)]
+        t("★★新台の追加は同じ晩に何機種でも担当できる★★",
+          many == ["n%d" % i for i in range(5)])
+        t("　新台を何件やっても他のタスクの1日1機種は残る",
+          claim("t3", "hokuto", fp2)["target_slug"] == "hokuto"
+          and raises(lambda: claim("t3", "enen", fp2), "1日"))
+        for i in range(5, 40):
+            claim("add-machine", "n%d" % i, fp2)
+        t("★★新台には件数の上限を置かない★★（2026-08-07・運営者決定）",
+          claim("add-machine", "zzz", fp2)["target_slug"] == "zzz"
+          and len(_load(fp2)["day"]["unlimited_slugs"]) == 41)
 
         for i in (1, 2, 3):
             codex_round("t", fp)

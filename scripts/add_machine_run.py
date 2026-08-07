@@ -883,7 +883,7 @@ def _save_evidence(html: str, ev: dict) -> str:
       既にある場合も中身を読んで指紋を確かめる。
 
     ★必ずバイト列のまま扱う★（2026-08-04・Codex95回目の指摘2。実物で確かめた）
-      文字として書くとWindowsでは改行が 
+      文字として書くとWindowsでは改行が 
  に変換され、
       **ファイル名の指紋と、そのファイルの実バイトの指紋が食い違っていた**。
       あとから普通に sha256 を取った人が「別物だ」と判断してしまうので、
@@ -1492,8 +1492,26 @@ def finish_publish(res: dict, pend: dict = None) -> list:
     return []
 
 
-# ★一晩に見る上限★（全部やると時間もアクセスも際限が無い）
-MAX_TRY_PER_NIGHT = 5
+# ★件数の上限は置かない★（2026-08-07・運営者決定）
+#   新台は導入日が決まっていて待てない。待ち行列にあるものは全部やる。
+#   ★代わりに時刻で区切る★
+#     このタスクは23:30に始まり、5:05に更新タスクが動く。件数無制限のまま
+#     朝までかかると、更新タスクがロック待ちで当日動けなくなる（60分待って
+#     SKIPPED_LOCKED）。そこで**この時刻を過ぎたら新しい機種に着手しない**。
+#     いま処理中の機種は最後まで通す（途中で放り出さない）。
+#     書き換え系のタスクにも同じ仕組みがある（task-budget の deadline_hhmm）。
+NEW_MACHINE_DEADLINE_HHMM = "04:30"
+
+
+def past_deadline(now=None) -> bool:
+    """新しい機種に着手してよい時刻を過ぎたか。"""
+    import datetime as _dt
+    t = (now or _dt.datetime.now()).strftime("%H:%M")
+    # ★止めるのは朝の時間帯だけ★
+    #   23:30に始まり日付をまたいで作業するので、04:30〜08:00 に入っていたら
+    #   新しい機種には着手しない（5:05の更新タスクをロック待ちにしないため）。
+    #   昼間に手で流すときは締切を効かせない。
+    return NEW_MACHINE_DEADLINE_HHMM <= t < "08:00"
 
 
 def pick_work(pend: dict) -> list:
@@ -1513,7 +1531,7 @@ def pick_work(pend: dict) -> list:
     items = _pend.due(pend)
     return sorted(items, key=lambda x: (x.get("last_try") or "",
                                         x.get("first_seen") or "",
-                                        x.get("url")))[:MAX_TRY_PER_NIGHT]
+                                        x.get("url")))
 
 
 def give_up_now(pend: dict, url: str, name: str, problems: list) -> None:
@@ -2700,7 +2718,18 @@ def selftest() -> int:
                       "name": f"n{i}", "url": f"https://x/{i}", "maker": "m",
                       "release": "2026-09", "first_seen": f"2026-07-0{i+1}",
                       "last_try": "", "tries": 1} for i in range(3)}})) == 3)
-            t("　一晩に見る数には上限がある", MAX_TRY_PER_NIGHT <= 5)
+            t("★★一晩に見る件数に上限を置かない★★（2026-08-07・運営者決定）",
+              len(pick_work({"items": {
+                  f"https://x/{i}": {
+                      "name": f"n{i}", "url": f"https://x/{i}", "maker": "m",
+                      "release": "2026-09", "first_seen": "2026-07-01",
+                      "last_try": "", "tries": 1} for i in range(30)}})) == 30)
+            t("　代わりに時刻で区切る（更新タスクとぶつからないため）",
+              past_deadline(__import__("datetime").datetime(2026, 8, 8, 5, 30))
+              and not past_deadline(
+                  __import__("datetime").datetime(2026, 8, 8, 2, 0))
+              and not past_deadline(
+                  __import__("datetime").datetime(2026, 8, 8, 14, 0)))
             t("★★試験が本番の待ち行列を触らない★★（架空機種が入り込んだ）",
               _pend.STORE.startswith(_tmpdir))
             t("　実際に開けない公式URLでは組み立てまで進まない",
@@ -3041,6 +3070,14 @@ def main() -> int:
     #   以前はここで終わっていたので、無人で動かしても永久に記事にならなかった。
     #   さらに1件しか見ていなかったので、その1件が詰まると後ろが全部止まっていた。
     for work in pick_work(pend):
+        # ★件数ではなく時刻で区切る★（2026-08-07・運営者決定）
+        #   5:05の更新タスクをロック待ちにしないため。
+        #   いま処理中の機種は最後まで通す（ここは着手の前）。
+        if past_deadline():
+            _log(f"  {NEW_MACHINE_DEADLINE_HHMM} を過ぎたので"
+                 "新しい機種には着手しません（残りは明晩）")
+            print(f"  ★{NEW_MACHINE_DEADLINE_HHMM} を過ぎました→残りは明晩★")
+            break
         work = fill_missing(work)
         # ★使い回しの疑いは公開処理へ進めない★（2026-08-02・Codex41回目）
         #   検知（recheck）と公開の停止がつながっていなかった。
@@ -3082,9 +3119,18 @@ def main() -> int:
                         "公開はしたがpushできませんでした",
                         f"{res['slug']} / " + " / ".join(ng)[:1200])
             d["problems"] += ng
-            break                          # ★公開できたら今日はここまで★
+            if ng:
+                # ★pushできなかった夜は続けない★（手元に未pushを残したまま
+                #   次の機種を作ると、翌晩に2機種ぶんまとめてpushしようとして
+                #   関所で止まる。2026-08-04に実害・台帳#225）
+                _log("  pushできなかったので今夜はここまで")
+                break
+            # ★公開できても続ける★（2026-08-07・運営者決定）
+            #   新台は導入日が決まっていて待てない。分かり次第そのまま作る。
+            _log(f"  公開しました → 次の機種へ（{res['slug']}）")
+            continue
         if any("今日の担当ではありません" in p for p in res.get("problems") or []):
-            _log("  今日の担当ではありません（1日1機種）→ 今日はここまで")
+            _log("  今日の担当ではありません → 今日はここまで")
             break
         # ★やり直しても変わらない理由なら、行列から出して後ろを通す★
         if res.get("blocked") and not retry_later(res["problems"]):
