@@ -208,7 +208,9 @@
       "status": "ACTIVE",
       "_why_surfaces": "メーカー別の入口を全部登録する（2026-08-06）。2つしか登録しておらず、ユニバーサル等の新台が『一覧に載っていない』扱いになっていた",
       "surface_pattern": "^https://chonborista\\.com/slot/(?![0-9]+/)[a-z0-9\\-]+/$",
-      "_why_surface_pattern": "入口の登録漏れを毎回機械が数えるため（2026-08-06・scripts/directory_coverage.py）"
+      "_why_surface_pattern": "入口の登録漏れを毎回機械が数えるため（2026-08-06・scripts/directory_coverage.py）",
+      "max_pages": 1,
+      "_why_max_pages": "番号のページ送りは実際には404を返す飾りだった（2026-08-07に実機確認）。深いページはたどれないので1頁のみ。古い機種は machine_sources.py の控えで補う"
     },
     "p-world": {
       "name": "P-WORLD",
@@ -247,8 +249,8 @@
       "status": "ACTIVE",
       "surface_pattern": "^https://www\\.p-world\\.co\\.jp/(database/machine[a-z0-9_/\\.\\-]*|_machine/t_machine\\.cgi\\?mode=slot_type&key=[A-Za-z0-9_\\.]+&start=0)$",
       "_why_surface_pattern": "入口の登録漏れを毎回機械が数えるため（2026-08-06・scripts/directory_coverage.py）",
-      "follow_next_page": true,
-      "_why_follow_next_page": "一覧が50件ずつしか出ないため（2026-08-07・台帳#264）。1ページ目だけでは古い機種が索引に入らず、2つ目の出典が取れない機種が全体の8割あった。"
+      "max_pages": 40,
+      "_why_max_pages": "一覧が数ページに分かれており、1頁目だけでは古い機種が索引に入らないため（2026-08-07・台帳#264）。上限は毎晩の取得回数とのつり合いで決める"
     },
     "dmm-ptown": {
       "name": "DMMぱちタウン",
@@ -361,7 +363,9 @@
       "title_class": "title",
       "_why_title_class": "1つのリンクに機種名・メーカー・機械割・紹介文が同居しており、全部つなげると芯が一致しない（台帳#189）。題は <p class=\"title\"> にある（2026-08-06に実データで確認）",
       "surface_pattern": "^https://p-town\\.dmm\\.com/(?:machines/[a-z_]+|makers/\\d+)/?$",
-      "_why_surface_pattern": "入口の登録漏れを毎回機械が数えるため（2026-08-06・scripts/directory_coverage.py）"
+      "_why_surface_pattern": "入口の登録漏れを毎回機械が数えるため（2026-08-06・scripts/directory_coverage.py）",
+      "max_pages": 6,
+      "_why_max_pages": "一覧が数ページに分かれており、1頁目だけでは古い機種が索引に入らないため（2026-08-07・台帳#264）。上限は毎晩の取得回数とのつり合いで決める"
     }
   }
 }

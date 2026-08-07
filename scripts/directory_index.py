@@ -216,25 +216,55 @@ NEXT_PAGE_MAX = 40
 _NEXT_WORDS = ("次へ", "次の", "次ページ", "次 ", ">>", "»")
 
 
-def _next_page_url(html: str, base_url: str) -> str:
-    """一覧の「次へ」のリンク先を返す（無ければ空）。"""
+def _same_listing(cand: str, base: str) -> bool:
+    """そのリンクが「同じ一覧の別ページ」か。★別の一覧へ渡り歩かない★"""
+    a, b = urllib.parse.urlsplit(cand), urllib.parse.urlsplit(base)
+    if a.hostname != b.hostname:
+        return False
+    root = b.path.rstrip("/")
+    return a.path.rstrip("/") == root or a.path.startswith(root + "/")
+
+
+def more_pages(html: str, base_url: str) -> list:
+    """一覧の「別のページ」へのリンクを集める。
+
+    ★「次へ」だけを追わない★（2026-08-07・実データ）
+      DMMの送りは「次へ」が**最終ページ**（75頁目）を指していて、
+      そこだけ読むと2〜74頁が丸ごと抜ける。数字のページ送り
+      （1 2 3 … ）をたどれば、この取り違えが起きない。
+    """
+    out = []
     for href, text in _w._visible_anchor_pairs(html):
         t = " ".join(str(text or "").split())
-        if t and any(t.startswith(w) or t == w.strip() for w in _NEXT_WORDS):
-            return urllib.parse.urljoin(base_url, href)
-    return ""
+        if not t:
+            continue
+        num = t.isdigit() and len(t) <= 4
+        nxt = any(t.startswith(w) or t == w.strip() for w in _NEXT_WORDS)
+        if not (num or nxt):
+            continue
+        u = urllib.parse.urljoin(base_url, href).split("#")[0]
+        if u not in out and _same_listing(u, base_url):
+            out.append(u)
+    return out
 
 
-def _surface_pages(url: str, follow_next: bool):
-    """1つの入口が指すページを順に返す（★同じURLは二度読まない★）。"""
-    seen, cur = set(), url
-    for _ in range(NEXT_PAGE_MAX if follow_next else 1):
-        if not cur or cur in seen:
-            return
+def _surface_pages(url: str, max_pages: int, first_html: str = ""):
+    """1つの入口の**2ページ目以降**を順に返す（★同じURLは二度読まない★）。
+
+    1ページ目は呼び出し側が持っている前提。ここで落ちても
+    1ページ目を捨てないようにするための切り分け。
+    """
+    seen, queue = {url}, list(more_pages(first_html, url))
+    while queue and len(seen) < max(1, max_pages):
+        cur = queue.pop(0)
+        if cur in seen:
+            continue
         seen.add(cur)
         html = _w._get(cur)
         yield cur, html
-        cur = _next_page_url(html, cur) if follow_next else ""
+        for u in more_pages(html, url):
+            if u not in seen and u not in queue:
+                queue.append(u)
 
 
 def scan_directory(dir_id: str, conf: dict) -> dict:
@@ -242,19 +272,32 @@ def scan_directory(dir_id: str, conf: dict) -> dict:
     out = {"directory": dir_id, "name": conf.get("name"), "index": {},
            "surfaces_ok": 0, "surfaces_total": 0, "problems": []}
     least = int(conf.get("min_expected") or 1)
-    follow = bool(conf.get("follow_next_page"))
+    # ★何ページまで追うか★（名鑑ごと。0/未設定なら1ページだけ＝従来どおり）
+    pages = int(conf.get("max_pages") or (NEXT_PAGE_MAX
+                                          if conf.get("follow_next_page")
+                                          else 1))
     for sf in conf.get("surfaces") or []:
         out["surfaces_total"] += 1
         try:
-            html, extra = "", []
-            for page_url, page_html in _surface_pages(sf["url"], follow):
-                if not html:
-                    html = page_html
-                else:
-                    extra.append((page_url, page_html))
+            html = _w._get(sf["url"])
         except Exception as e:
             out["problems"].append(f"{sf['url']}: 取得できません（{e}）")
             continue
+        # ★2ページ目以降が読めなくても1ページ目を捨てない★（2026-08-07）
+        #   ちょんぼりすたの番号送りは実際には404を返す飾りだった。
+        #   ここで例外を通していたため、入口ごと落ちて索引が565→224に減った。
+        extra = []
+        if pages > 1:
+            gen = _surface_pages(sf["url"], pages, first_html=html)
+            while True:
+                try:
+                    got = next(gen)
+                except StopIteration:
+                    break
+                except Exception as e:      # noqa: BLE001
+                    out["problems"].append(f"{sf['url']}: 2頁目以降（{e}）")
+                    break
+                extra.append(got)
         idx = build_index(html, sf["url"], conf["link_pattern"],
                           title_class=str(conf.get("title_class") or ""))
         # ★題を読めないカードがあれば、その面は使わない★（#189の再発防止）
@@ -305,6 +348,7 @@ _DECOR_WORDS = _TITLE_TAIL + (
     "フリーズ", "恩恵", "モード", "示唆", "早見表", "画面", "終了",
     "打法", "立ち回り", "スペック", "天井", "狙い目", "やめ時", "やめどき",
     "解説", "まとめ", "一覧", "動画", "感想", "results", "の",
+    "出玉率", "出玉", "差枚", "判別", "推測", "抽選", "確定", "期待",
 )
 _MAX_DECOR_STEPS = 24
 
@@ -412,6 +456,28 @@ def selftest() -> int:
 
     def _hit(name):
         return [x[1] for x in lookup_hits(_pre, _ci.normalize_core(name))]
+
+    # ★2ページ目が404でも1ページ目を捨てない★（2026-08-07・実データで発生）
+    #   ちょんぼりすたの番号送りは404を返す飾りで、これを通していたため
+    #   入口ごと落ちて索引が565→224件に減った。
+    _pages_conf = {"surfaces": [{"url": "https://ex.test/list/"}],
+                   "link_pattern": r"/m/\d+", "max_pages": 6,
+                   "min_expected": 1}
+    _keep_get = _w._get
+
+    def _fake_get(u, timeout=20):
+        if u == "https://ex.test/list/":
+            return ('<a href="/m/1">Lためし機</a>'
+                    '<a href="/list/page/2/">2</a>')
+        raise RuntimeError("HTTP 404")
+
+    _w._get = _fake_get
+    try:
+        _r = scan_directory("ex", _pages_conf)
+    finally:
+        _w._get = _keep_get
+    t("★★2ページ目が読めなくても1ページ目は使う★★（実データで565→224に減った）",
+      _r["surfaces_ok"] == 1 and len(_r["index"]) == 1 and _r["problems"])
 
     t("★★機種名＋宣伝文句の見出しを引き当てる★★（台帳#264）",
       _hit("マイジャグラーV") == ["マイジャグラーVスペック設定判別ぶどう"])
