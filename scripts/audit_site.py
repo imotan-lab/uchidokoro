@@ -1157,6 +1157,48 @@ def check_34_indexing_policy_applied(machines: list) -> list[str]:
             "（python scripts/apply_indexing_policy.py --apply で反映）"]
 
 
+def check_36_duplicate_facts(machines: list) -> list[str]:
+    """★同じ節に同じ事実が2行あるか★（2026-08-07・台帳#262）
+
+    「設定変更後：天井が650G+αに短縮」と「設定変更時：天井が650G+αに短縮」の
+    ように、**同じ事実を指す見出しの言い換え**で同じ行が二重に入っていた。
+    実データで4機種に出ていて、読者にそのまま見えていた。
+
+    ★書き手ごとに直すのではなく、全機種を機械で見る★
+      重複を作るのは grow_legacy だけとは限らない（手で足すこともある）。
+      入口を1つずつ塞ぐより、出来上がったものを毎回数えるほうが確実。
+    """
+    try:
+        import grow_legacy as _gl
+    except Exception as e:                # noqa: BLE001
+        return [f"重複の検査ができません: {e}"]
+    ngs = []
+    for m in machines:
+        slug = m.get("slug")
+        p = BASE / "assets" / "data" / "machine-details" / f"{slug}.json"
+        if not p.exists():
+            continue
+        try:
+            det = load_json(p)
+        except Exception as e:            # noqa: BLE001
+            ngs.append(f"{slug}: 記事データが読めません（{e}）")
+            continue
+        for sec in det.get("sections") or []:
+            seen = {}
+            for b in sec.get("body") or []:
+                mt = _gl._LABELED.match(str(b).strip())
+                if not mt:
+                    continue
+                key = _gl._canon_label(mt.group("label"))
+                if key in seen:
+                    ngs.append(
+                        f"{slug} /「{sec.get('title')}」に同じ見出しの行が2つ: "
+                        f"{seen[key][:40]} ／ {str(b)[:40]}")
+                else:
+                    seen[key] = str(b)
+    return ngs
+
+
 def check_35_risky_atoms(machines: list) -> list[str]:
     """★公開記事に残る「危ない表現」が増えていないか★（2026-08-05）
 
@@ -1231,6 +1273,7 @@ CHECKS = [
     ("33_公開が途中で終わっている", check_33_publish_in_progress),
     ("34_検索方針の反映漏れ", check_34_indexing_policy_applied),
     ("35_危ない表現の残り", check_35_risky_atoms),
+    ("36_同じ事実の重複行", check_36_duplicate_facts),
 ]
 
 

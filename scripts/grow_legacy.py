@@ -356,10 +356,33 @@ def _dedupe(cand: list) -> list:
     return out
 
 
+# ★同じ事実を指す見出しの言い換え★（2026-08-07・台帳#262の実データ）
+#   「設定変更後」と「設定変更時」が同じ意味なのに別の見出しとして扱われたため、
+#   同じ事実が2行に増えていた（4機種で発生・読者に見えていた）。
+#   ★突き合わせる時だけ同じものとみなす★＝書く文言は変えない。
+#   ★言い換えを1つにまとめると、値が違うときに Halt できるようになる★
+#   （いままでは見出しが違うので「別の事実」として黙って足していた）
+_LABEL_SAME = {
+    "設定変更時": "設定変更後",
+    "リセット時": "設定変更後",
+    "リセット後": "設定変更後",
+    "朝一リセット": "設定変更後",
+    "電源OFF/ON": "電源OFF→ON",
+    "電源OFF・ON": "電源OFF→ON",
+    "電源断": "電源OFF→ON",
+}
+
+
+def _canon_label(label: str) -> str:
+    """見出しの言い換えを1つに寄せる（★突き合わせ専用★）。"""
+    s = str(label or "").strip().strip("*＊ 　")
+    return _LABEL_SAME.get(s, s)
+
+
 def _value_of(line: str, label: str):
     """本文の1行が同じ見出しなら、その値を返す（違う見出しなら None）。"""
     m = _LABELED.match(str(line).strip())
-    if not m or m.group("label").strip() != label:
+    if not m or _canon_label(m.group("label")) != _canon_label(label):
         return None
     return m.group("value").replace(SOURCED, "").strip().rstrip("。")
 
@@ -987,6 +1010,16 @@ def selftest() -> int:                    # noqa: C901
         {"kind": "GAME", "amount": 1200, "unit": "G", "counted": "通常時"},
         {"kind": "GAME", "amount": 1200, "unit": "G", "counted": "通常時"}]}}
     t("　まったく同じなら1件にまとめる", len(_dedupe(ceiling_items(same))) == 1)
+
+    # ★言い換えの見出しを同じ事実として扱う★（2026-08-07・台帳#262）
+    #   「設定変更時」と「設定変更後」を別物として数えていたため、
+    #   同じ事実が2行に増えて読者に見えていた（4機種で発生）。
+    t("★★見出しの言い換えを同じ事実とみなす★★（設定変更時＝設定変更後・台帳#262）",
+      _value_of("**設定変更時**：天井が650G+αに短縮", "設定変更後") == "天井が650G+αに短縮"
+      and _value_of("**リセット時**：天井が650G+αに短縮", "設定変更後") is not None)
+    t("　言い換えでない見出しまで混ぜない",
+      _value_of("**電源OFF→ON**：引き継ぎ", "設定変更後") is None
+      and _value_of("**通常B**：650G+α", "設定変更後") is None)
     t("★★NaN・無限大は数値として扱わない★★",
       ceiling_items({"ceilings": {"adopted": [
           {"kind": "GAME", "amount": float("nan"), "unit": "G"},
