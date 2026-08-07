@@ -54,6 +54,10 @@ ALLOW_BASENAMES = {
     # ★台帳を越えた修正の記録★（2026-08-04・Codex84回目）
     #   運営者の承認で例外的に直した記録。失うと「なぜ直したか」が消える。
     "manual_overrides.json",
+    # ★機種ごとの出典URLの控え★（2026-08-07・台帳#265）
+    #   AIが探して機械が確かめた結果。失うと同じ調べ直しをやり直すことになる。
+    #   中身は公開サイトのURLと判断理由だけで、認証情報を含まない。
+    "uchidokoro_machine_sources.json",
     # 自動タスクの手順書（{taskId}_SKILL.md の形で保存する）
     "uchidokoro-fact-check_SKILL.md",
     "SKILL.md",
