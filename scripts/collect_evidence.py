@@ -144,19 +144,37 @@ def collect(slug: str, topics: list, fetch=None) -> dict:
         import directory_index as _di
         import new_machine_watch as _nw
 
+        import machine_sources as _ms
+
+        def _read(where, url, got):
+            try:
+                got[where] = {"url": url, "text": _cl.cut_user_area(
+                    _cl._norm(_nw._visible_text(_nw._get(url))))}
+            except Exception as e:        # noqa: BLE001
+                got[where] = {"url": url, "error": str(e)[:80]}
+
         def fetch(name):
             got = {}
             for dir_id, r in (_di.find(name).get("results") or {}).items():
                 if r.get("state") != "FOUND":
                     got[dir_id] = {"state": r.get("state")}
                     continue
-                try:
-                    text = _cl.cut_user_area(
-                        _cl._norm(_nw._visible_text(_nw._get(r["url"]))))
-                except Exception as e:    # noqa: BLE001
-                    got[dir_id] = {"url": r["url"], "error": str(e)[:80]}
+                _read(dir_id, r["url"], got)
+            # ★人が一度確かめた出典も足す★（2026-08-07・台帳#265）
+            #   名鑑は機種名で引くので、表記が違う機種を引き当てられない。
+            #   「スマスロ防振り」↔「痛いのは嫌なので防御力に極振り…」のような
+            #   意味の判断はAIがして、確かめた結果をここから読む。
+            #   ★控えが無くても止まらない★＝いままで通り名鑑だけで動く。
+            try:
+                saved = _ms.urls_for(slug)
+            except Exception as e:        # noqa: BLE001
+                got["_saved_"] = {"error": "控えを読めません: " + str(e)[:60]}
+                saved = []
+            for rec in saved:
+                url = rec.get("url")
+                if not url or any(v.get("url") == url for v in got.values()):
                     continue
-                got[dir_id] = {"url": r["url"], "text": text}
+                _read("控え:" + str(rec.get("publisher") or "?"), url, got)
             return got
     for dir_id, r in (fetch(m.get("name")) or {}).items():
         if not r.get("text"):
