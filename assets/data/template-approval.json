@@ -49,7 +49,7 @@
   "scripts/hub_prose.json": "e72916960e547c4a88351ba0886a643dc0248e290a204af0269b7d2f91388380",
   "scripts/preview_site.py": "8ef4c5eef6c1749df51c1c8c3edfebd2a4af427b8e0ae52287e724776dc7849a",
   "scripts/safe_json.py": "43f61703cbe7e1ea93ee2602fe9be45662957c8929aef62d649b6fc0493e0006",
-  "service-worker.js": "72c8218d1fc8df57517b9970959942f2189688535db401ebbe2a8e77d7afb1f2",
+  "service-worker.js": "917c293d070214f988127f63cf9978e72f1995fec6b0c199cdb7a5d3765d9a49",
   "setting.html": "0dbb05bc5ab19183d49a0ab836205fb5fb1d85866059739fbf333c879d3de7b2"
  }
 }
