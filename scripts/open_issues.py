@@ -59,6 +59,14 @@ LOCK_PATH = Path("C:/Users/imao_/Documents/uchidokoro/task.lock")
 LOCK_STALE_MIN = 30           # task_lock.py と同じ（これを超えたら残骸とみなす）
 MAX_TEXT_BYTES = 64 * 1024
 
+# ★文章ファイルはここから下だけ★（2026-08-09・依頼127 A-2 P1）
+#   どこのファイルでも読めると、うっかり認証情報のファイルを指したときに
+#   台帳やメールへその中身が写る。置き場を決めておけば起こらない。
+TEXT_ROOTS = (
+    Path("C:/Users/imao_/Documents/uchidokoro/ops"),
+    Path("C:/Users/imao_/Desktop/個人用/うちどころ/_design"),
+)
+
 
 def _running_task() -> str:
     """無人タスクが動いている最中ならタスク名を返す（動いていなければ空）。"""
@@ -85,14 +93,25 @@ def _read_text_arg(inline: str, path: str, label: str,
         p = Path(path)
         if p.is_symlink() or not p.is_file():
             raise SystemExit(f"★{label}: 通常のファイルではありません: {path}★")
-        raw = p.read_bytes()
-        if len(raw) > MAX_TEXT_BYTES:
+        real = p.resolve()
+        if not any(str(real).lower().startswith(str(r.resolve()).lower())
+                   for r in TEXT_ROOTS):
             raise SystemExit(
-                f"★{label}: 大きすぎます（{len(raw)}バイト・上限{MAX_TEXT_BYTES}）★")
+                f"★{label}: この置き場のファイルは使えません: {real}★ "
+                + "／".join(str(r) for r in TEXT_ROOTS) + " の下に置いてください"
+                "（うっかり認証情報のファイルを指しても台帳に写らないため）")
+        size = real.stat().st_size          # ★読む前に大きさを見る★
+        if size > MAX_TEXT_BYTES:
+            raise SystemExit(
+                f"★{label}: 大きすぎます（{size}バイト・上限{MAX_TEXT_BYTES}）★")
+        raw = real.read_bytes()
         try:
             text = raw.decode("utf-8")       # ★strict＝壊れた文字は受け取らない★
         except UnicodeDecodeError as e:
             raise SystemExit(f"★{label}: UTF-8として読めません（{e}）★")
+        # ★Windowsの改行（CRLF）で書かれたファイルも受け取る★
+        #   以前はCRを制御文字として弾いていた。メモ帳等で書くと必ずCRLFになる。
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
     else:
         text = inline or ""
         # ★シェルを通らない呼び出しだけは直接指定を許す★（2026-08-09）
