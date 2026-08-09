@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -42,10 +43,47 @@ def _changed_paths() -> list:
     return []
 
 
+def _warn_unreported() -> None:
+    """Codexへ未報告のスクリプト変更があれば、pushの直前に知らせる。
+
+    ★止めない★（当日中にpushする鉄則があるため）。目に入れるのが目的。
+    """
+    state = r"C:/Users/imao_/Documents/uchidokoro/last_codex_report.json"
+    try:
+        with open(state, encoding="utf-8") as fh:
+            last = json.load(fh).get("commit")
+    except Exception:                      # noqa: BLE001
+        return
+    if not last:
+        return
+    r = subprocess.run(["git", "log", "--oneline", f"{last}..HEAD", "--", "scripts/"],
+                       cwd=BASE, capture_output=True)
+    if r.returncode != 0:
+        return
+    lines = [x for x in r.stdout.decode("utf-8", "replace").splitlines() if x.strip()]
+    if not lines:
+        return
+    print()
+    print("★★Codexへ未報告のスクリプト変更が %d 件あります★★" % len(lines))
+    for ln in lines[:5]:
+        print("   " + ln[:100])
+    print("   → 実コードを見せて報告し、"
+          "python scripts/codex_reported.py --receipt <領収書> を実行してください")
+    print("   （鉄則1b: 作ったら報告する。報告は運営者に言われる前にやる）")
+    print()
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="push前の検査")
     ap.add_argument("--always", action="store_true")
     a = ap.parse_args()
+
+    # ★Codexへの未報告をpushの直前に必ず目に入れる★（2026-08-09）
+    #   「作ったら報告する」は鉄則1bにもメモリにも書いてあるのに、
+    #   この日また言われるまで動けなかった。覚え直すのではなく、
+    #   **忘れようのない場所（pushの瞬間）に出す**。
+    #   ★止めはしない★＝当日中のpushは別の鉄則（未pushで残すと夜の公開が止まる）。
+    _warn_unreported()
 
     changed = _changed_paths()
     hit = [p for p in changed if any(p.startswith(w) or p == w for w in WATCH)]

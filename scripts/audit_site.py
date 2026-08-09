@@ -1068,7 +1068,12 @@ def check_31_codex_report(machines: list) -> list[str]:
     """
     import subprocess
     STATE = r"C:/Users/imao_/Documents/uchidokoro/last_codex_report.json"
-    LIMIT = 3
+    # ★1件でも知らせる★（2026-08-09。3件まで黙っていた）
+    #   「3件たまってから」だと、2件までは何も出ないので気づけない。
+    #   実際この日、コードを直しては報告せずに進み、運営者から
+    #   「言われなくてもやって。記憶しているはず」と指摘された。
+    #   覚え直すのではなく、**最初の1件から見えるようにする**。
+    LIMIT = 1
     try:
         last = load_json(STATE).get("commit") if os.path.isfile(STATE) else None
     except Exception:
