@@ -133,7 +133,9 @@ def compare(pages: list) -> dict:
     for p in pages:
         if not p.get("ok"):
             continue
-        lin = _sl._lineage(p["host"])
+        lin = _sl.vote_lineage(p["host"])
+        if not lin:      # ★登録されていないサイトは票に数えない★
+            continue
         for c in p["specs"]:
             k = json.dumps({x: c[x] for x in ("mode", "games", "net")}, sort_keys=True)
             votes.setdefault(k, {"sample": c, "sources": set()})

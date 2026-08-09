@@ -531,8 +531,14 @@ def claim(task: str, slug: str, path: str = STATE_PATH) -> dict:
         #   ★ここで拒否すれば枠は減らない★＝呼び出し側は次の候補へ進める。
         try:
             stage = cp.assess(slug).get("stage")
-        except Exception:                 # noqa: BLE001
-            stage = None                  # 判定できないときは従来どおり通す
+        except Exception as e:            # noqa: BLE001
+            # ★判定できないときも枠を使わせない★（2026-08-09・依頼127）
+            #   以前は「従来どおり通す」だったので、assess が例外になる機種を
+            #   選ぶと**その日の枠を消費して空振り**した（#272で直したはずの
+            #   動きが、例外の経路にだけ残っていた）。
+            raise GuardError(
+                f"{slug} はいま触れるか判定できません（{type(e).__name__}: {e}）。"
+                "枠は使っていないので、次の候補を選んでください")
         if stage in FROZEN_STAGES:
             raise GuardError(
                 f"{slug} はいま触れません（{stage}）。"

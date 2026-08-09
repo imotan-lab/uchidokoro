@@ -303,6 +303,26 @@ def _lineage(host: str) -> str:
     return host          # 未登録は他と束ねない（＝1票として扱う）
 
 
+def vote_lineage(host: str) -> str:
+    """★票を数えるときの系列★ 登録されていないサイトは空を返す。
+
+    ★なぜ分けたか（2026-08-09・依頼127）★
+      `_lineage()` は未登録のホストをそのまま返すので、**知らないサイトが
+      1票として数えられて**いた。source-registry の方針は
+      「ここに無いホストは票に数えない（default deny）」なので逆だった。
+      いまは名鑑（すべて登録済み）からしか来ないので実害は出ていないが、
+      出所が増えた瞬間に「知らないサイト2つが一致したから採用」が成立する。
+
+      `_lineage()` 自体は転載検知（lineage_check）が使っているので触らず、
+      **票を数える側だけ**をこちらに寄せる。
+    """
+    import source_lineage as _sl2
+    try:
+        return _sl2.vote_key_of_url("https://" + str(host or "").lstrip("/"))
+    except Exception:                      # noqa: BLE001
+        return ""
+
+
 def compare(pages: list) -> dict:
     """★2件が一致したものだけ採る★ 食い違いは『第三の出典が要る』として返す。
 
@@ -328,7 +348,10 @@ def compare(pages: list) -> dict:
             if not v:
                 continue
             fp = json.dumps(v, ensure_ascii=False, sort_keys=True)
-            votes.setdefault(fp, set()).add(_lineage(p["host"]))
+            lin = vote_lineage(p["host"])
+            if not lin:      # ★登録されていないサイトは票に数えない★
+                continue
+            votes.setdefault(fp, set()).add(lin)
         if not votes:
             continue
         agreed = [(fp, s) for fp, s in votes.items() if len(s) >= 2]

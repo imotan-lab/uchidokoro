@@ -719,7 +719,9 @@ def verified_cz_names(pages: list) -> list:
     for p in pages:
         if not p.get("ok"):
             continue
-        lin = _sl._lineage(p["host"])
+        lin = _sl.vote_lineage(p["host"])
+        if not lin:      # ★登録されていないサイトは票に数えない★
+            continue
         for nm in (p.get("cz_names") or set()):
             cnt[(nm, lin)] += 1
     by_name: dict = {}
@@ -757,7 +759,9 @@ def compare(pages: list, cz_names=None) -> dict:
     for p in pages:
         if not p.get("ok"):
             continue
-        lin = _sl._lineage(p["host"])
+        lin = _sl.vote_lineage(p["host"])
+        if not lin:      # ★登録されていないサイトは票に数えない★
+            continue
         # ★確かめたCZ名だけを「CZ」に寄せてから数える★（2026-08-06）
         for c in apply_cz_aliases(p["ceilings"], cz_names,
                                   page_names=p.get("cz_names")):
@@ -957,7 +961,7 @@ def selftest() -> int:
         _g["from_table"] = lambda lines: []
         _w._get = lambda u, timeout=20: "<title>x</title><body>天井</body>"
         _mc.page_is_machine = lambda *a, **k: (True, "OK")
-        _p56 = read_page("https://x.example/1", "L試験機")
+        _p56 = read_page("https://nana-press.com/1", "L試験機")
         t("★★同じG数で数える対象が違う天井を、ページ内で両方残す★★"
           "（(kind, amount)の重複判定で片方が消えていた・Codex56回目）",
           len(_p56["ceilings"]) == 2)
@@ -967,7 +971,7 @@ def selftest() -> int:
              "benefit": "AT", "certainty": "PLAIN", "raw": ""},
             {"kind": "GAME", "amount": 1200, "unit": "G", "counted": "通常時",
              "benefit": "CZ", "certainty": "PLAIN", "raw": ""}]
-        _p57 = read_page("https://x.example/1", "L試験機")
+        _p57 = read_page("https://nana-press.com/1", "L試験機")
         t("★★恩恵違いの併記を先着順で消さない★★"
           "（片方が消えると反対票規則が働かず誤採用できた・Codex57回目）",
           len(_p57["ceilings"]) == 2)
@@ -1024,11 +1028,11 @@ def selftest() -> int:
       and cz_names_in_page("あっぱれチャンスへ移行") == set())
     t("★★独立2出典が同じ名前をCZだと書いた時だけ採る★★",
       verified_cz_names([
-          {"ok": True, "host": "a.example", "cz_names": {"関所チャレンジ"}},
-          {"ok": True, "host": "b.example", "cz_names": {"関所チャレンジ"}}])
+          {"ok": True, "host": "chonborista.com", "cz_names": {"関所チャレンジ"}},
+          {"ok": True, "host": "nana-press.com", "cz_names": {"関所チャレンジ"}}])
       == ["関所チャレンジ"]
       and verified_cz_names([
-          {"ok": True, "host": "a.example", "cz_names": {"関所チャレンジ"}}]) == [])
+          {"ok": True, "host": "chonborista.com", "cz_names": {"関所チャレンジ"}}]) == [])
     t("★★確かめていない名前は寄せない★★（別のCZと取り違えない）",
       apply_cz_aliases([{"kind": "THROUGH", "counted": "真剣チャレンジ"}],
                        ["関所チャレンジ"])[0]["counted"] == "真剣チャレンジ")
@@ -1117,10 +1121,22 @@ def selftest() -> int:
       explicit_ceilings("天井は通常時999G+αではない。") == []
       and conditional_ceilings("設定変更後は600G+αに短縮されるわけではない。") == [])
 
+    # ★登録されていない発行者は票に数えない★（2026-08-09・依頼127・台帳#291）
+    #   source-registry の方針は default deny。以前は未登録ホストが
+    #   そのまま1票になっており、知らないサイト2つの一致で採用できた。
+    _unk = [{"ok": True, "host": "shiranai-a.example", "ceilings": [
+                _atom("GAME", 999, "G", role="EXPLICIT_CEILING",
+                      phase="通常時", counted="通常時", benefit="AT")]},
+            {"ok": True, "host": "shiranai-b.example", "ceilings": [
+                _atom("GAME", 999, "G", role="EXPLICIT_CEILING",
+                      phase="通常時", counted="通常時", benefit="AT")]}]
+    t("★★登録されていないサイト2つが一致しても採らない★★（default deny）",
+      compare(_unk)["adopted"] == [])
+
     t("★★恩恵が分からない天井は採らない★★（到達して何が起きるか不明のまま載せない）",
-      compare([{"ok": True, "host": "a.example", "ceilings": [
+      compare([{"ok": True, "host": "chonborista.com", "ceilings": [
           _atom("GAME", 650, "G", role="CONDITIONAL", after_event="設定変更")]},
-          {"ok": True, "host": "b.example", "ceilings": [
+          {"ok": True, "host": "nana-press.com", "ceilings": [
               _atom("GAME", 650, "G", role="CONDITIONAL",
                     after_event="設定変更")]}])["adopted"] == [])
     t("★★同じ事実なら、表から採っても文から採っても同じ票になる★★"

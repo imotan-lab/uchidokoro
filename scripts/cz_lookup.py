@@ -243,7 +243,9 @@ def compare(pages: list) -> dict:
     for p in pages:
         if not p.get("ok"):
             continue
-        lin = _sl._lineage(p["host"])
+        lin = _sl.vote_lineage(p["host"])
+        if not lin:      # ★登録されていないサイトは票に数えない★
+            continue
         unresolved |= set(p.get("unresolved") or [])
         for c in p["czs"]:
             nk = norm_name(c["name"])
