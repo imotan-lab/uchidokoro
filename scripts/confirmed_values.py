@@ -54,6 +54,27 @@ SCHEMA = "confirmed-values/v1"
 REQUIRED_JUDGES = ("claude", "codex")
 MIN_QUOTE = 6            # 逐語の引用がこれより短いものは根拠にしない
 
+# ★どの項目を、材料のどこへ入れるか★（2026-08-09・依頼130 P0-1）
+#   最初の版は全部を material["adopted"] に入れていたが、
+#   記事が天井を読むのは material["ceilings"]["adopted"] で、
+#   しかも add_machine_run が spec_lookup.FIELDS を引くため
+#   **記録した瞬間に KeyError で落ちた**（実機で確認）。
+#   置き場を明示し、知らない項目は受け取らない。
+FIELD_TARGETS = {
+    "ceiling": "ceilings",      # 天井（1件ずつ）
+    "at": "at_specs",           # ATの仕様
+    "cz": "czs",                # CZ
+}
+# 基本スペック側（spec_lookup.FIELDS の鍵）はそのまま adopted へ入る
+
+
+def allowed_fields() -> dict:
+    """受け取ってよい項目 → 入れ先。"""
+    import spec_lookup as _sp
+    out = {k: "adopted" for k in _sp.FIELDS}
+    out.update(FIELD_TARGETS)
+    return out
+
 
 class ConfirmedError(Exception):
     """確定値に関する異常（★迷ったら記録しない★）。"""
@@ -83,14 +104,26 @@ def _save(data: dict) -> None:
 
 
 def parse_source(spec: str) -> dict:
-    """`発行者|URL|逐語の引用` を組に分ける。"""
-    parts = [x.strip() for x in str(spec or "").split("|", 2)]
-    if len(parts) != 3 or not all(parts):
+    """`URL|逐語の引用` を組に分ける。
+
+    ★発行者は名乗らせない★（2026-08-09・依頼130 P0-2）
+      以前は `発行者|URL|引用` と自己申告させていたので、
+      登録済みの発行者名を**別ホストのURLに付けて**通せた。
+      発行者はURLのホストから機械が引く。
+    """
+    parts = [x.strip() for x in str(spec or "").split("|", 1)]
+    if len(parts) != 2 or not all(parts):
         raise ConfirmedError(
-            "出典は 発行者|URL|逐語の引用 の形で書きます: " + str(spec)[:60])
-    pub, url, quote = parts
+            "出典は URL|逐語の引用 の形で書きます: " + str(spec)[:60])
+    url, quote = parts
     if len(quote) < MIN_QUOTE:
         raise ConfirmedError(f"引用が短すぎます（{MIN_QUOTE}文字以上）: {quote}")
+    import urllib.parse
+    host = urllib.parse.urlsplit(url).hostname or ""
+    try:
+        pub = _sl.publisher_of_host(host)
+    except _sl.LineageError as e:
+        raise ConfirmedError(str(e))
     return {"publisher": pub, "url": url, "quote": quote}
 
 
@@ -111,11 +144,49 @@ def check_sources(sources: list) -> list:
     return sorted(keys)
 
 
+def verify_source(src: dict, name: str, fetch=None) -> dict:
+    """★出典のページを実際に取ってきて確かめる★（2026-08-09・依頼130 P0-2）
+
+    以前は URL も引用も**言うだけ**で通った。そのため
+    「機種Aについての本物の引用」を機種Bとして記録できた。
+    ①そのページが本当にその機種のページか ②引用が本当にそこにあるか
+    の2つを機械が確かめる。
+    """
+    if fetch is None:
+        import new_machine_watch as _w
+
+        def fetch(u):
+            return _w._get(u)
+    import model_code_lookup as _mc
+    import new_machine_watch as _w
+    try:
+        html = fetch(src["url"])
+    except Exception as e:                 # noqa: BLE001
+        raise ConfirmedError(f"出典を取得できません（{src['url']}）: {str(e)[:80]}")
+    ok, why = _mc.page_is_machine(html, name)
+    if not ok:
+        raise ConfirmedError(
+            f"そのページは「{name}」のページだと確かめられません（{why}）: {src['url']}")
+    text = " ".join(_w._visible_text(html).split())
+    quote = " ".join(str(src["quote"]).split())
+    if quote not in text:
+        raise ConfirmedError(
+            f"引用がそのページに見当たりません（{src['url']}）: {quote[:40]}")
+    src["verified_at"] = datetime.date.today().isoformat()
+    return src
+
+
 def record(slug: str, field: str, value, sources: list, by: list,
-           why: str) -> dict:
+           why: str, name: str = "", fetch=None) -> dict:
     """★2AIが一致した値だけを残す★（fail-closed）"""
     if not slug or not field:
         raise ConfirmedError("--slug と --field が要ります")
+    if field not in allowed_fields():
+        raise ConfirmedError(
+            "受け取れない項目です: %s（使えるのは %s）"
+            % (field, "/".join(sorted(allowed_fields()))))
+    if not str(name or "").strip():
+        raise ConfirmedError("--name（正式名称）が要ります（機種の取り違えを防ぐため）")
     who = sorted({x.strip() for x in (by or []) if x.strip()})
     for need in REQUIRED_JUDGES:
         if need not in who:
@@ -125,12 +196,21 @@ def record(slug: str, field: str, value, sources: list, by: list,
     if len(str(why or "").strip()) < 8:
         raise ConfirmedError("--why（どう突き合わせたか）は8文字以上で書きます")
     lineages = check_sources(sources)
-    # ★値が引用に現れることを機械が確かめる★（値を発明させない）
-    text = " ".join(s["quote"] for s in sources)
-    for token in _tokens(value):
-        if token not in text:
-            raise ConfirmedError(
-                f"値『{token}』が出典の引用に現れません（引用にある値だけ記録できます）")
+    # ★出典ごとに、その値を支えていることを確かめる★（2026-08-09・依頼130 P1-1）
+    #   以前は全出典の引用をつなげてから探していたので、
+    #   **1つの出典にしか無い値でも「2出典一致」として通った**。
+    toks = _tokens(value)
+    if not toks:
+        raise ConfirmedError("確かめられる値がありません（数値や文字列が要ります）")
+    for s in sources:
+        q = " ".join(str(s["quote"]).split())
+        for token in toks:
+            if token not in q:
+                raise ConfirmedError(
+                    f"値『{token}』が {s['publisher']} の引用にありません"
+                    "（★出典ごとに同じ値を支えている必要があります★）")
+    # ★引用が本当にそのページにあるか・そのページがその機種かを確かめる★
+    sources = [verify_source(dict(s), name, fetch) for s in sources]
     data = load()
     rec = {
         "value": value,
@@ -186,15 +266,20 @@ def merge_into(material: dict, slug: str) -> list:
 
     ★機械が採れたものを上書きしない★（機械が採れているなら、それは
       すでに独立2出典で一致したもの。人の記録で塗り替えない）
+    ★入れ先を間違えない★（2026-08-09・依頼130 P0-1）
+      天井・AT・CZは基本スペックとは別の場所に入る。全部を adopted に
+      入れていたので、記事に届かないうえ KeyError で落ちていた。
     """
     added = []
     if not isinstance(material, dict):
         return added
-    adopted = material.setdefault("adopted", {})
+    targets = allowed_fields()
     for field, rec in for_slug(slug).items():
-        if field in adopted:
-            continue
-        adopted[field] = {
+        where = targets.get(field)
+        if not where:
+            # ★知らない項目は黙って捨てない★
+            raise ConfirmedError(f"知らない項目です: {field}")
+        stamped = {
             "value": rec["value"],
             "sources": [s["url"] for s in rec.get("sources") or []],
             # ★どこから来た値かを残す★（あとで追える）
@@ -202,6 +287,24 @@ def merge_into(material: dict, slug: str) -> list:
             "_agreed_by": rec.get("agreed_by"),
             "_decided_at": rec.get("decided_at"),
         }
+        if where == "adopted":
+            adopted = material.setdefault("adopted", {})
+            if field in adopted:
+                continue
+            adopted[field] = stamped
+        else:
+            box = material.setdefault(where, {})
+            rows = box.setdefault("adopted", [])
+            # ★同じ中身が既にあるなら足さない★（機械が採れていれば上書きしない）
+            if any(json.dumps(r, ensure_ascii=False, sort_keys=True)
+                   == json.dumps(rec["value"], ensure_ascii=False, sort_keys=True)
+                   for r in rows):
+                continue
+            row = dict(rec["value"]) if isinstance(rec["value"], dict) else {
+                "value": rec["value"]}
+            row["_from"] = "confirmed_values"
+            row["sources"] = stamped["sources"]
+            rows.append(row)
         added.append(field)
     return added
 
@@ -215,7 +318,7 @@ def selftest() -> int:
 
     def t(name, cond):
         results.append((name, bool(cond)))
-        print(("✅" if cond else "❌") + " " + name)
+        print(("OK " if cond else "NG ") + name)
 
     def stops(name, fn):
         try:
@@ -224,58 +327,97 @@ def selftest() -> int:
         except ConfirmedError:
             t(name, True)
 
+    NAME = "L試験機"
+    Q1 = "天井は1000G+α"
+    Q2 = "通常時1000G+αで天井"
+
+    def fake_fetch(url):
+        q = Q1 if "chonborista" in url else Q2
+        return ("<title>" + NAME + " スロット 新台 天井 | 解析</title>"
+                "<body><h1>" + NAME + "</h1><p>" + q + "。" + ("説明。" * 30)
+                + "</p></body>")
+
+    def rec(**kw):
+        base = dict(slug="x", field="ceiling",
+                    value={"kind": "GAME", "amount": "1000", "unit": "G"},
+                    sources=None, by=["claude", "codex"],
+                    why="同じ原文を読んで一致しました", name=NAME,
+                    fetch=fake_fetch)
+        base.update(kw)
+        if base["sources"] is None:
+            base["sources"] = [parse_source("https://chonborista.com/1|" + Q1),
+                               parse_source("https://nana-press.com/1|" + Q2)]
+        return record(**base)
+
     global STORE
     keep = STORE
     STORE = os.path.join(tempfile.mkdtemp(), "confirmed_values.json")
     try:
-        S = [parse_source("chonborista|https://chonborista.com/1|天井は1000G+α"),
-             parse_source("nana-press|https://nana-press.com/1|通常時1000G+αで天井")]
+        t("★★発行者は名乗らせずURLから引く★★（別ホストに名前を付けて通せた）",
+          parse_source("https://chonborista.com/1|" + Q1)["publisher"]
+          == "chonborista")
+        stops("　登録されていないサイトは使えない",
+              lambda: parse_source("https://a.example/1|" + Q1))
 
-        stops("★★2人そろわないと記録できない★★（片方だけの読みは採らない）",
-              lambda: record("x", "ceiling", "1000", S, ["claude"], "突き合わせました"))
-        stops("　どう突き合わせたかを書かないと記録できない",
-              lambda: record("x", "ceiling", "1000", S, ["claude", "codex"], "短い"))
+        stops("★★2人そろわないと記録できない★★", lambda: rec(by=["claude"]))
+        stops("　どう突き合わせたかを書かないと記録できない", lambda: rec(why="短い"))
         stops("★★出典が1つでは記録できない★★",
-              lambda: record("x", "ceiling", "1000", S[:1], ["claude", "codex"],
-                             "突き合わせました"))
-        same = [parse_source("chonborista|https://chonborista.com/1|天井は1000G+α"),
-                parse_source("yancha-press|https://yancha-press.com/1|天井は1000G+α")]
-        stops("★★同じ転載系列の2つは1票★★（ちょんぼりすたとやんちゃプレス）",
-              lambda: record("x", "ceiling", "1000", same, ["claude", "codex"],
-                             "突き合わせました"))
+              lambda: rec(sources=[parse_source("https://chonborista.com/1|" + Q1)]))
+        stops("★★同じ転載系列の2つは1票★★",
+              lambda: rec(sources=[parse_source("https://chonborista.com/1|" + Q1),
+                                   parse_source("https://yancha-press.com/1|" + Q1)]))
         stops("★★引用に無い値は記録できない★★（値を発明させない）",
-              lambda: record("x", "ceiling", "1234", S, ["claude", "codex"],
-                             "突き合わせました"))
-        stops("　登録されていない発行者は使えない",
-              lambda: record("x", "ceiling", "1000",
-                             [parse_source("shiranai|https://a.example/1|天井は1000G+α"),
-                              S[1]], ["claude", "codex"], "突き合わせました"))
+              lambda: rec(value={"kind": "GAME", "amount": "1234", "unit": "G"}))
+        stops("★★出典ごとに同じ値を支えていないと記録できない★★"
+              "（つなげて探していたので1出典だけでも通った）",
+              lambda: rec(sources=[parse_source("https://chonborista.com/1|" + Q1),
+                                   parse_source("https://nana-press.com/1|天井なし")]))
+        stops("★★受け取れない項目は断る★★（入れ先が決まっていないもの）",
+              lambda: rec(field="なにか"))
+        stops("　正式名称が要る（機種の取り違えを防ぐため）", lambda: rec(name=""))
 
-        r = record("x", "ceiling", {"amount": "1000", "unit": "G"}, S,
-                   ["claude", "codex"], "同じ原文を読んで一致しました")
-        t("　2人が一致し、独立2系列の引用があれば記録できる",
+        def other_machine(url):
+            return ("<title>別の機種 スロット 新台 | 解析</title>"
+                    "<body><h1>別の機種</h1><p>" + Q1 + "。" + ("説明。" * 30)
+                    + "</p></body>")
+        stops("★★別機種のページの引用は記録できない★★"
+              "（本物の引用でも、その機種のページでなければ採らない）",
+              lambda: rec(fetch=other_machine))
+
+        def no_quote(url):
+            return ("<title>" + NAME + " スロット 新台 | 解析</title>"
+                    "<body><h1>" + NAME + "</h1><p>" + ("説明。" * 40)
+                    + "</p></body>")
+        stops("★★引用がそのページに無ければ記録できない★★（言うだけでは通らない）",
+              lambda: rec(fetch=no_quote))
+
+        r = rec()
+        t("　2人が一致し、独立2系列の引用が実在すれば記録できる",
           r["state"] == "RECORDED" and len(r["lineages"]) == 2)
-        t("　機械が毎回読む側から取り出せる",
-          for_slug("x")["ceiling"]["value"]["amount"] == "1000")
 
-        mat = {"adopted": {}}
+        mat = {}
         added = merge_into(mat, "x")
-        t("★★材料に足される（ここが無かったので永久に空だった）★★",
+        t("★★天井は ceilings の中へ入る★★（依頼130 P0-1。adopted に入れて落ちていた）",
           added == ["ceiling"]
-          and mat["adopted"]["ceiling"]["value"]["amount"] == "1000"
-          and mat["adopted"]["ceiling"]["_from"] == "confirmed_values")
+          and mat["ceilings"]["adopted"][0]["amount"] == "1000"
+          and mat["ceilings"]["adopted"][0]["_from"] == "confirmed_values"
+          and "ceiling" not in (mat.get("adopted") or {}))
 
-        mat2 = {"adopted": {"ceiling": {"value": "機械が採った"}}}
+        import spec_lookup as _sp
+        t("　基本スペック側の項目は spec_lookup が知っている鍵だけ",
+          all(k in _sp.FIELDS for k, v in allowed_fields().items()
+              if v == "adopted"))
+
+        mat2 = {"ceilings": {"adopted": [{"kind": "GAME", "amount": "1000",
+                                          "unit": "G"}]}}
         merge_into(mat2, "x")
-        t("★★機械が採れている項目は上書きしない★★",
-          mat2["adopted"]["ceiling"]["value"] == "機械が採った")
+        t("★★機械が採れている天井は増やさない★★",
+          len(mat2["ceilings"]["adopted"]) == 1)
 
-        t("　間違いは取り消せる", forget("x", "ceiling")["state"] == "FORGOTTEN"
-          and for_slug("x") == {})
+        t("　間違いは取り消せる", forget("x", "ceiling")["state"] == "FORGOTTEN")
         t("　無いものを取り消しても壊れない",
           forget("x", "ceiling")["state"] == "NOT_FOUND")
-        stops("　出典の書き方が違えば受け取らない",
-              lambda: parse_source("URLだけ"))
+        stops("　出典の書き方が違えば受け取らない", lambda: parse_source("URLだけ"))
     finally:
         STORE = keep
 
@@ -291,12 +433,14 @@ def main() -> int:
     ap.add_argument("--forget", action="store_true")
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--slug", default="")
+    ap.add_argument("--name", default="",
+                    help="正式名称（機種の取り違えを防ぐため必須）")
     ap.add_argument("--field", default="")
     ap.add_argument("--value", default="", help="値（文字列）")
     ap.add_argument("--value-file", dest="value_file", default="",
                     help="値を書いたJSONファイル（構造のある値はこちら）")
     ap.add_argument("--source", action="append", default=[],
-                    help="発行者|URL|逐語の引用（2つ以上）")
+                    help="URL|逐語の引用（2つ以上・発行者はURLから引く）")
     ap.add_argument("--by", default="", help="判断した人（claude,codex）")
     ap.add_argument("--why", default="")
     ap.add_argument("--selftest", action="store_true")
@@ -315,7 +459,8 @@ def main() -> int:
                 return 2
             r = record(a.slug, a.field, value,
                        [parse_source(s) for s in a.source],
-                       [x for x in a.by.split(",") if x.strip()], a.why)
+                       [x for x in a.by.split(",") if x.strip()], a.why,
+                       name=a.name)
             print(json.dumps(r, ensure_ascii=False))
             return 0
         if a.forget:
