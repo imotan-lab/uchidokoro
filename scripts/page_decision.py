@@ -112,9 +112,17 @@ def claims_from_material(material: dict) -> list:
     got = set()
     adopted = (material or {}).get("adopted") or {}
     for key in _SPEC_CLAIMS:
-        if adopted.get(key):
+        v = adopted.get(key)
+        # ★2AIが確定した値は「検索に載せてよい濃さ」に数えない★
+        #   （2026-08-09・依頼130 P1-3）
+        #   記事に載せる材料としては使うが、claim の裏取り（verify_claims）を
+        #   まだ通っていない。数えると、機械が確かめていない値で
+        #   検索に載る判定が出てしまう。★載せるのは裏取り後★
+        if v and not (isinstance(v, dict) and v.get("_from") == "confirmed_values"):
             got.add(key)
     for c in ((material or {}).get("ceilings") or {}).get("adopted") or []:
+        if isinstance(c, dict) and c.get("_from") == "confirmed_values":
+            continue
         kind = (c or {}).get("kind")
         if kind not in CEILING_KINDS:
             raise DecisionError(f"天井の種類が不明です: {kind!r}")
@@ -123,6 +131,8 @@ def claims_from_material(material: dict) -> list:
         counted = "" if _bad_value(c.get("counted")) else str(c["counted"]).strip()
         got.add(f"ceiling:{kind}:{counted}")
     for c in ((material or {}).get("at_specs") or {}).get("adopted") or []:
+        if isinstance(c, dict) and c.get("_from") == "confirmed_values":
+            continue    # ★裏取り前の値は濃さに数えない★（依頼130 P1-3）
         mode = (c or {}).get("mode")
         if mode not in AT_MODES:
             raise DecisionError(f"ATのモードが不明です: {mode!r}")
@@ -130,6 +140,8 @@ def claims_from_material(material: dict) -> list:
             raise DecisionError(f"ATの値がありません: {c!r}")
         got.add(f"at:{mode}")
     for c in ((material or {}).get("czs") or {}).get("adopted") or []:
+        if isinstance(c, dict) and c.get("_from") == "confirmed_values":
+            continue    # ★裏取り前の値は濃さに数えない★（依頼130 P1-3）
         nm = _norm_name((c or {}).get("name"))
         if _bad_value(nm):
             raise DecisionError(f"CZの名前がありません: {c!r}")

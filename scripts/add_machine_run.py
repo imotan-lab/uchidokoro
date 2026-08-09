@@ -509,6 +509,13 @@ def gather(name: str, maker: str = "") -> dict:
             f"（登録簿に系列が書かれていません）")
     mv = _mc.agree(looks)
     got["model_code"] = mv.get("model_code")
+    # ★採用値と観測値を分ける★（2026-08-09・依頼130 P1-2）
+    #   型式を載せているのは P-WORLD だけなので、独立2出典はそろわない。
+    #   記事には出さない（＝採用しない）が、**取り違えを防ぐ検査には使う**。
+    got["observed_model_code"] = (mv.get("model_code")
+                                  or mv.get("observed_model_code"))
+    got["observed_model_hosts"] = (mv.get("hosts")
+                                   or mv.get("observed_hosts") or [])
     # ★名鑑2票一致の登場年月★（2026-08-02・Codex47回目に条件つきで承認）
     #   使ってよいのは「型式が一致した、同定検査を全部通った同じ2名鑑」の
     #   月が一致した時だけ。公式が年月を画像でしか出さない社（山佐）のため。
@@ -539,29 +546,33 @@ def gather(name: str, maker: str = "") -> dict:
     # ★型式名の印は専用の判定で読む★（2026-08-02・Codex54回目。
     #   題名用の _gen_mark だと実在のBT型式「LB/タコスロBD」が印なしになる）
     _want_gen = _mc._gen_mark(name)
-    if got["model_code"] and _want_gen \
-            and _mc.model_gen_mark(got["model_code"]) != _want_gen:
+    # ★検査は観測値で行う★（2026-08-09・依頼130 P1-2）
+    #   採用値（独立2出典）だけを見ていたので、型式が1つしか無い新台では
+    #   規格印の矛盾も重複も検査できていなかった＝取り違えを防ぐ入力が消えていた。
+    _obs = got.get("observed_model_code")
+    if _obs and _want_gen and _mc.model_gen_mark(_obs) != _want_gen:
         got["problems"].append(
             f"型式名の規格印が確認できません（機種は{_want_gen}版なのに、"
-            f"型式名「{got['model_code']}」に{_want_gen}の印がありません。"
+            f"型式名「{_obs}」に{_want_gen}の印がありません。"
             "同名の旧機種のページを見ている可能性）")
         got["model_code"] = None
-    elif got["model_code"] and not _want_gen:
+        got["observed_model_code"] = None
+    elif _obs and not _want_gen:
         # ★公式名にL/Sが無い社は現に在る★（2026-08-02・Codex43回目。
         #   北電子の公式名は「マイジャグラーVI」でP-WORLDの型式は
         #   「SマイジャグラーVI KK」＝一律の人送りだと実在の新台を出せない）
         #   型式名そのものに規格の印（L/S）があれば、独立2票の印を信じて通す。
         #   印の無い型式名だけ人の確認へ（規格を機械で確定できないため）。
-        _code_gen = _mc.model_gen_mark(got["model_code"])
+        _code_gen = _mc.model_gen_mark(_obs)
         if _code_gen in ("L", "S"):
-            _log(f"  公式名に規格印なし。型式名の印（{_code_gen}）で照合: "
-                 f"{got['model_code']}")
+            _log(f"  公式名に規格印なし。型式名の印（{_code_gen}）で照合: {_obs}")
         else:
             got["problems"].append(
                 f"型式名: 機種の規格（L/S）が公式名「{name[:30]}」からも"
-                f"型式名「{got['model_code']}」からも読めません"
+                f"型式名「{_obs}」からも読めません"
                 "（人が確認してください）")
             got["model_code"] = None
+            got["observed_model_code"] = None
     def _read(mod, jp):
         """器ごとに全ページを読み、★使えなかったページの理由を必ず残す★
 
@@ -584,6 +595,15 @@ def gather(name: str, maker: str = "") -> dict:
         got["material"]["adopted"]["model_code"] = {
             "value": got["model_code"],
             "sources": list(mv.get("hosts") or [])}
+    elif got.get("observed_model_code"):
+        # ★1出典しか無い型式は「観測値」として残す★（2026-08-09・依頼130 P1-2）
+        #   記事には出さない（採用しない）が、あとから
+        #   「どの型式のページを見て作ったか」を追えるようにする。
+        got["material"]["observed_model_code"] = {
+            "value": got["observed_model_code"],
+            "sources": list(got.get("observed_model_hosts") or []),
+            "_note": "1出典のみ。記事には出さず同定にだけ使う",
+        }
     # ★天井は一式で採る★（値だけ先に載せない）
     # ★天井はCZ名の突き合わせつきで採る★（2026-08-06）
     #   出典によって「CZ」と書く所と「関所チャレンジ」と書く所がある。
@@ -1790,12 +1810,14 @@ def run_one(name, official_url, maker, release, apply_it=False,
     #   最初の重複検査は名前と公式URLしか渡していなかった。
     #   型式名は材料を集めて初めて分かるので、**分かった時点でもう一度見る**。
     #   「名前も公式URLも違うが、実は同じ型式」＝同じ機種を二重に作る経路だった。
-    if got.get("model_code"):
+    # ★観測値で見る★（2026-08-09・依頼130 P1-2。1出典しか無い型式でも
+    #   「同じ型式の機種がすでにある」なら二重に作ってはいけない）
+    if got.get("observed_model_code"):
         for slug, ename, why in _cd.find_duplicates(
-                name, model_codes=[got["model_code"]]):
+                name, model_codes=[got["observed_model_code"]]):
             out["problems"].append(
                 f"既に登録されている疑い: slug={slug} name={ename}"
-                f"（型式名が同じ: {got['model_code']} / {why}）"
+                f"（型式名が同じ: {got['observed_model_code']} / {why}）"
                 f"／新しいslugで作らず、更新タスクで直すこと")
     if not got["material"]:
         out["blocked"] = _blocking(out["problems"])

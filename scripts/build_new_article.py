@@ -184,6 +184,13 @@ def build_machine(slug, name, maker, official_url, release, material,
         ident["regulatory_model_code"] = code["value"]
         ident["identity_tier"] = "CATALOG_CODE_MATCHED"
         ident["_model_code_sources"] = code["sources"]
+    elif (obs := material.get("observed_model_code")):
+        # ★1出典しか無い型式も同定の手がかりとして残す★（2026-08-09・依頼130 P1-2）
+        #   型式を載せているのは P-WORLD だけなので、これを捨てると
+        #   「どの型式のページを見て作ったか」が後から分からなくなる。
+        #   ★採用値ではないので regulatory_model_code には入れない★
+        ident["observed_model_code"] = obs["value"]
+        ident["_observed_model_code_sources"] = obs.get("sources") or []
     # ★判定書（PageDecision）を機種行に焼き込む★（2026-08-04・Codex71〜72回目）
     #   「先行/完成」の宣言をやめ、検索に載せるかは判定書が決める。
     #   status は書かない（旧契約との同居は machine_class が拒否する）。

@@ -727,7 +727,16 @@ def agree(results: list) -> dict:
     if not codes:
         return {"model_code": None, "adopted": False, "state": "NOT_YET",
                 "why": "型式名がまだどの名鑑にも載っていません"}
+    # ★1つしか無い型式も「観測した値」として返す★（2026-08-09・依頼130 P1-2）
+    #   採用（記事に出す・独立2出典）はしないが、**捨てると同定に使えない**。
+    #   実測: 型式を載せているのは P-WORLD だけなので、捨てると
+    #   ①L/Sの規格印の矛盾を型式から見つけられない
+    #   ②型式が同じ既存機種との重複を見つけられない
+    #   という、取り違えを防ぐ検査の入力が丸ごと消えていた。
+    only = next(iter(codes)) if len(codes) == 1 else None
     return {"model_code": None, "adopted": False, "state": "NOT_YET",
+            "observed_model_code": shown.get(only) if only else None,
+            "observed_hosts": sorted(codes[only]) if only else [],
             "why": f"型式名が1つの名鑑にしか載っていません: {detail}"}
 
 
