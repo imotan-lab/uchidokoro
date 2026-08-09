@@ -1078,6 +1078,8 @@ def add_issue(slug: str, kind: str, title: str, detail: str) -> None:
                             "--source", "codex-audit", "--slug", slug,
                             "--kind", kind, "--title", title, "--detail", detail],
                            capture_output=True, text=True, timeout=60,
+                           # ★引数配列＝シェルを通らないので直接指定してよい★
+                           env={**os.environ, "UCHIDOKORO_ARGV_CALL": "1"},
                            creationflags=_NO_WINDOW)
         if r.returncode != 0:
             ISSUE_FAILURES.append(f"{slug}:{title[:40]}")

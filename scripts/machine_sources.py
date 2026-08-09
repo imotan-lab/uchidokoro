@@ -56,6 +56,7 @@ import claim_identity as _ci          # noqa: E402
 import model_code_lookup as _mc       # noqa: E402
 import new_machine_watch as _w        # noqa: E402
 import safe_json as _sj               # noqa: E402
+import source_lineage as _sl          # noqa: E402
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REGISTRY = os.path.join(BASE, "assets", "data", "source-registry.json")
@@ -151,7 +152,8 @@ def check(slug: str, url: str, html: str | None = None,
     """
     m = machine(slug)
     name = str(m.get("name") or "")
-    out = {"slug": slug, "name": name, "url": url, "ok": False,
+    out = {"slug": slug, "name": name, "url": url, "final_url": url,
+           "ok": False,
            "problems": [], "publisher": None, "lineage": None,
            "title": "", "headings": [], "model_code": None,
            "name_core": _ci.normalize_core(name),
@@ -173,6 +175,7 @@ def check(slug: str, url: str, html: str | None = None,
             out["problems"].append(f"取得できません（{e}）")
             return out
         final = _w.LAST_FINAL_URL.get("url") or url
+        out["final_url"] = final
         bad = _w.redirect_problem(url, final)
         if bad:
             out["problems"].append(f"転送されました（{bad}）")
@@ -203,10 +206,22 @@ def check(slug: str, url: str, html: str | None = None,
         return out
 
     data = load()
+    # ★票が増えるかどうかは、保存してある系列名ではなく今のレジストリで数える★
+    #   （2026-08-09・依頼125）保存値を信じると、レジストリで統合された後も
+    #   古い名前のまま「別系列＝もう1票」に見えてしまう。
+    try:
+        my_key = _sl.vote_key(pid)
+    except _sl.LineageError:
+        my_key = None
     for rec in urls_for(slug, data):
         if rec.get("url") == url:
             out["already_recorded"] = True
-        elif rec.get("lineage") == lin:
+            continue
+        try:
+            same = my_key is not None and _sl.vote_key(rec.get("publisher")) == my_key
+        except _sl.LineageError:
+            same = False
+        if same:
             out["same_lineage_already"].append(rec.get("url"))
     out["ok"] = True
     return out
@@ -214,15 +229,33 @@ def check(slug: str, url: str, html: str | None = None,
 
 # ---------------------------------------------------------------- 記録
 
+# ★判断してよいのはこの3者だけ★（2026-08-09・依頼125）
+#   誰の判断かを後から追えないと、間違いを見つけたときに取り消す範囲を決められない。
+JUDGES = ("claude", "codex", "運営者")
+MIN_WHY = 8          # 「x」の一文字で通っていたので、文になる長さを求める
+
+
 def record(slug: str, url: str, why: str, by: list,
            override_identity: str = "", checked: dict | None = None) -> dict:
     """★検査を通ったものだけを控えに残す★（fail-closed）"""
-    if not str(why or "").strip():
-        raise SourceError("--why（なぜ同じ機種と判断したか）は必ず書きます")
+    if len(str(why or "").strip()) < MIN_WHY:
+        raise SourceError(
+            "--why（なぜ同じ機種と判断したか）は%d文字以上で書きます" % MIN_WHY)
     who = [x for x in (by or []) if x]
     if not who:
         raise SourceError("--by（誰が判断したか）は必ず書きます")
+    bad = [x for x in who if x not in JUDGES]
+    if bad:
+        raise SourceError("判断者に使えない名前です（%s のみ）: %s"
+                          % ("/".join(JUDGES), ",".join(bad)))
     got = checked if checked is not None else check(slug, url)
+    # ★検査したものと記録するものが同じか確かめる★（2026-08-09・依頼125）
+    #   ここが無いと、別の機種・別のURLを検査した結果を持ってきて
+    #   「機械が取ってきた」という唯一の守る線を越えられる。
+    if got.get("slug") != slug or got.get("url") != url:
+        raise SourceError(
+            "検査したものと記録するものが違います（検査=%s/%s 記録=%s/%s）"
+            % (got.get("slug"), got.get("url"), slug, url))
     if not got["ok"]:
         raise SourceError("機械の検査を通りません: " + " / ".join(got["problems"]))
     if got["already_recorded"]:
@@ -246,6 +279,16 @@ def record(slug: str, url: str, why: str, by: list,
         # ★どの中身を見て決めたか★（後から同じものを見たか確かめられる）
         "text_sha256": got["text_sha256"],
         "identity_verdict": got["identity_verdict"],
+        # ★このページが「その機種のページ」だと言える手がかり★
+        #   （2026-08-09・依頼125）本文は日々変わるが、これが変わったときは
+        #   別の機種のページに差し替わった疑いがある＝人がもう一度見る。
+        "identity_marks": {
+            "final_url": got.get("final_url") or url,
+            "title": got["title"][:120],
+            "headings": list(got.get("headings") or [])[:3],
+            "model_code": (str(got["model_code"]) if got.get("model_code")
+                           else None),
+        },
     }
     if override_identity:
         rec["override_identity"] = str(override_identity).strip()[:300]
@@ -272,34 +315,62 @@ def forget(slug: str, url: str) -> dict:
 # ---------------------------------------------------------------- 手当てが要る機種
 
 def missing(limit: int = 0) -> list:
-    """2つの系列に届かない機種を並べる（★AIに探させる対象★）。"""
+    """2つの系列に届かない機種を並べる（★AIに探させる対象★）。
+
+    ★票の単位は source_lineage が唯一の正本★（2026-08-09・依頼125）
+      以前は名鑑側だけ `dir:<名鑑ID>` という仮の名前で数えていたため、
+      **同じ発行者の名鑑と控えが2票に化けていた**（実データで再現済み）。
+      名鑑も控えも「発行者ID → 票のかたまり」で数え直す。
+      引けないものは票にしない（★仮の名前を作らない★）。
+    """
     import directory_index as _di
 
     cats = _sj.read_json(_di.CATALOGS, expect=dict)["directories"]
-    scans = {k: _di.scan_directory(k, c) for k, c in cats.items()
-             if c.get("status") == "ACTIVE"}
+    active = {k: c for k, c in cats.items() if c.get("status") == "ACTIVE"}
+    # ★名鑑の発行者は起動時に必ず引けること★（引けなければ設定の誤り＝止める）
+    dir_key = {}
+    for dir_id, c in active.items():
+        pid = c.get("publisher_id")
+        if not pid:
+            raise SourceError(
+                "名鑑に publisher_id がありません: " + dir_id
+                + "（票の単位を決められないので数えません）")
+        dir_key[dir_id] = _sl.vote_key(pid)
+
+    scans = {k: _di.scan_directory(k, c) for k, c in active.items()}
     ms = _sj.read_json(MACHINES, expect=(dict, list))
     ms = ms["machines"] if isinstance(ms, dict) else ms
     data = load()
     rows = []
     for m in ms:
         core = _ci.normalize_core(m.get("name") or "")
-        lins, seen = [], set()
+        have, seen, unknown = [], set(), []
         for dir_id, r in scans.items():
-            if not _di.lookup_hits(r["index"], core):
+            # ★候補が2件以上ある名鑑は票にしない★（2026-08-09・実データで判明）
+            #   実際に原文を読む側（directory_index.find）は候補が1件のときしか
+            #   URLを返さない。ここだけ「1件でも当たれば手当て済み」と数えると、
+            #   **読めない機種を「もう出典がある」と誤って外して**しまう。
+            #   実例: Lハナビ → 「スマスロ ハナビ」と旧「ハナビ」の2件、
+            #        Lパチスロ炎炎ノ消防隊 → L版と旧パチスロ版の2件。
+            if len(_di.lookup_hits(r["index"], core)) != 1:
                 continue
-            lin = (cats[dir_id].get("content_lineage_id")
-                   or "dir:" + dir_id)
-            if lin not in seen:
-                seen.add(lin)
-                lins.append(dir_id)
+            if dir_key[dir_id] not in seen:
+                seen.add(dir_key[dir_id])
+                have.append(dir_id)
         for rec in urls_for(m["slug"], data):
-            if rec.get("lineage") not in seen:
-                seen.add(rec.get("lineage"))
-                lins.append(rec.get("publisher"))
+            # ★保存済みの系列名は使わない★＝今のレジストリから引き直す
+            try:
+                key = _sl.vote_key(rec.get("publisher"))
+            except _sl.LineageError:
+                unknown.append(rec.get("publisher"))
+                continue
+            if key not in seen:
+                seen.add(key)
+                have.append(rec.get("publisher"))
         if len(seen) < 2:
             rows.append({"slug": m["slug"], "name": m.get("name"),
-                         "have": lins})
+                         "have": have, "votes": len(seen),
+                         "unknown": unknown})
     return rows[:limit] if limit else rows
 
 
@@ -381,7 +452,7 @@ def selftest() -> int:
         t("★★なぜ同じ機種かを書かずには記録できない★★", ok)
 
         try:
-            record(slug, got["url"], why="題が一致", by=[], checked=got)
+            record(slug, got["url"], why="題が機種名と一致します", by=[], checked=got)
             ok = False
         except SourceError:
             ok = True
@@ -389,7 +460,8 @@ def selftest() -> int:
 
         bad = dict(got, ok=False, problems=["取得できません"])
         try:
-            record(slug, got["url"], why="x", by=["claude"], checked=bad)
+            record(slug, got["url"], why="題が機種名と一致します", by=["claude"],
+                   checked=bad)
             ok = False
         except SourceError:
             ok = True
@@ -398,19 +470,21 @@ def selftest() -> int:
 
         ng = dict(got, identity_verdict=False, identity_why="TITLE_MISMATCH")
         try:
-            record(slug, got["url"], why="x", by=["claude"], checked=ng)
+            record(slug, got["url"], why="題が機種名と一致します", by=["claude"],
+                   checked=ng)
             ok = False
         except SourceError:
             ok = True
         t("★★題が合わないときは理由を明示しないと記録できない★★", ok)
 
-        r = record(slug, got["url"], why="x", by=["claude"],
+        r = record(slug, got["url"], why="略称なので題は合いませんが型式が一致します",
+                   by=["claude"],
                    override_identity="略称だが型式が一致", checked=ng)
         t("　理由を書けば記録できる", r["state"] == "RECORDED")
         t("　控えから読み出せる（機械が毎日使う側）",
           [x["url"] for x in urls_for(slug)] == [got["url"]])
         t("　同じURLは二重に入らない",
-          record(slug, got["url"], why="x", by=["claude"],
+          record(slug, got["url"], why="題が機種名と一致します", by=["claude"],
                  checked=dict(got, already_recorded=True))["state"] == "ALREADY")
         t("　控えの形が読み出せる", load()["schema_version"] == SCHEMA)
 
@@ -424,6 +498,58 @@ def selftest() -> int:
           and urls_for(slug) == [])
         t("　無いものを外そうとしても壊れない",
           forget(slug, got["url"])["state"] == "NOT_FOUND")
+
+        # ★2026-08-09・依頼125で見つかった数え間違いを固定する★
+        #   名鑑と控えに同じ発行者が出たとき、以前は2票と数えていた。
+        import directory_index as _di
+        real_scan = _di.scan_directory
+        core = _ci.normalize_core(name)
+
+        def fake_scan(dir_id, conf, _core=core):
+            idx = ({_core: [("https://chonborista.com/slot/a/1", "題")]}
+                   if dir_id == "chonborista" else {})
+            return {"index": idx, "surfaces_ok": 1, "surfaces_total": 1,
+                    "problems": []}
+
+        def ambiguous_scan(dir_id, conf, _core=core):
+            """★候補が2件ある名鑑★（Lハナビ ↔ スマスロハナビ/旧ハナビ）"""
+            idx = ({_core: [("https://chonborista.com/slot/a/1", "新しい方"),
+                            ("https://chonborista.com/slot/a/2", "古い方")]}
+                   if dir_id == "chonborista" else {})
+            return {"index": idx, "surfaces_ok": 1, "surfaces_total": 1,
+                    "problems": []}
+        _di.scan_directory = fake_scan
+        try:
+            _save({"schema_version": SCHEMA, "machines": {slug: [
+                {"url": "https://chonborista.com/slot/a/9",
+                 "publisher": "chonborista", "lineage": "lin-chonborista"}]}})
+            still = [r for r in missing() if r["slug"] == slug]
+            t("★★名鑑と控えが同じ発行者なら1票★★（1社を2票と数えない）",
+              still and still[0]["votes"] == 1)
+
+            _save({"schema_version": SCHEMA, "machines": {slug: [
+                {"url": "https://nana-press.com/kaiseki/machine/1",
+                 "publisher": "nana-press", "lineage": "lin-nana-press"}]}})
+            t("　別の発行者なら2票になって一覧から外れる",
+              not [r for r in missing() if r["slug"] == slug])
+
+            _save({"schema_version": SCHEMA, "machines": {slug: [
+                {"url": "https://example.com/x", "publisher": "shiranai-site",
+                 "lineage": "lin-shiranai"}]}})
+            left = [r for r in missing() if r["slug"] == slug]
+            t("★★登録されていない発行者は票にしない★★（仮の名前を作らない）",
+              left and left[0]["votes"] == 1
+              and left[0]["unknown"] == ["shiranai-site"])
+
+            _di.scan_directory = ambiguous_scan
+            _save({"schema_version": SCHEMA, "machines": {slug: [
+                {"url": "https://nana-press.com/kaiseki/machine/1",
+                 "publisher": "nana-press", "lineage": "lin-nana-press"}]}})
+            amb = [r for r in missing() if r["slug"] == slug]
+            t("★★候補が割れている名鑑は票にしない★★（原文を読む側は1件のときしか使わない）",
+              amb and amb[0]["votes"] == 1 and amb[0]["have"] == ["nana-press"])
+        finally:
+            _di.scan_directory = real_scan
     finally:
         STORE = keep
 

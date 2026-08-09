@@ -5,6 +5,8 @@
   "directories": {
     "chonborista": {
       "name": "ちょんぼりすた",
+      "publisher_id": "chonborista",
+      "_why_publisher_id": "★票の単位はここから引く★（2026-08-09・依頼125）名鑑IDから仮の系列名を作ると、同じ発行者の控えと二重に数えられる。source-registry.json の発行者IDを明示する",
       "surfaces": [
         {
           "url": "https://chonborista.com/slot/",
@@ -214,6 +216,8 @@
     },
     "p-world": {
       "name": "P-WORLD",
+      "publisher_id": "p-world",
+      "_why_publisher_id": "★票の単位はここから引く★（2026-08-09・依頼125）名鑑IDから仮の系列名を作ると、同じ発行者の控えと二重に数えられる。source-registry.json の発行者IDを明示する",
       "surfaces": [
         {
           "url": "https://www.p-world.co.jp/database/machine.html",
@@ -254,6 +258,8 @@
     },
     "dmm-ptown": {
       "name": "DMMぱちタウン",
+      "publisher_id": "dmm-ptown",
+      "_why_publisher_id": "★票の単位はここから引く★（2026-08-09・依頼125）名鑑IDから仮の系列名を作ると、同じ発行者の控えと二重に数えられる。source-registry.json の発行者IDを明示する",
       "surfaces": [
         {
           "url": "https://p-town.dmm.com/machines",
@@ -369,6 +375,8 @@
     },
     "nana-press": {
       "name": "なな徹",
+      "publisher_id": "nana-press",
+      "_why_publisher_id": "★票の単位はここから引く★（2026-08-09・依頼125）名鑑IDから仮の系列名を作ると、同じ発行者の控えと二重に数えられる。source-registry.json の発行者IDを明示する",
       "surfaces": [
         {
           "url": "https://nana-press.com/kaiseki/index/machine/s/a/",

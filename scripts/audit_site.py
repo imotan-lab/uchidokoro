@@ -1060,8 +1060,11 @@ def check_31_codex_report(machines: list) -> list[str]:
       コミット」を記録する。それ以降に scripts/ を触ったコミットが
       たまっていたら NG にする。
 
-    ★報告したら記録する★
-      python scripts/codex_reported.py     （このコミットまで報告済み、と記録）
+    ★報告したら記録する★（2026-08-09に領収書方式へ変更・依頼126）
+      python scripts/codex_reported.py --receipt <領収書のパス>
+      領収書は codex_review.sh がCodexを実際に呼んで成功したときにだけ発行する。
+      以前は「引数なしで実行すれば印が付く」形だったため、台帳に書いた文章の
+      バッククォートをシェルが実行して**報告していないのに印が付いた**。
     """
     import subprocess
     STATE = r"C:/Users/imao_/Documents/uchidokoro/last_codex_report.json"
@@ -1091,7 +1094,9 @@ def check_31_codex_report(machines: list) -> list[str]:
         return []
     head = " / ".join(x[:56] for x in lines[:4])
     return [f"Codexへ未報告のスクリプト変更が {len(lines)} 件たまっています: {head}"
-            f" → 実コードを見せて報告し、`python scripts/codex_reported.py` を実行してください"]
+            f" → 実コードを見せて報告し、"
+            f"python scripts/codex_reported.py --receipt <領収書> を実行してください"
+            f"（領収書の一覧は python scripts/codex_receipt.py list）"]
 
 
 def check_32_dangling_machine_page(machines: list) -> list[str]:

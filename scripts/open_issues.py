@@ -43,6 +43,77 @@ except Exception:
 
 DEFAULT_FILE = Path("C:/Users/imao_/Documents/uchidokoro/open_issues.json")
 
+# ---------------------------------------------------------------- 自由文の受け取り
+# ★なぜファイル渡しにするか（2026-08-09）★
+#   2026-08-08、無人タスクが台帳に
+#     「`python scripts/codex_reported.py` を実行する必要がある」
+#   と**書こうとしただけ**で、その部分が本当に実行された。
+#   バッククォートは文章としては飾りでも、シェルには
+#   「ここを実行して結果を差し込め」という命令だから。
+#   手順書は「ツールの出力をそのまま転記」「外部サイトの機種名を渡す」形なので、
+#   同じことがいつでも起き得る。
+#   ★文章はファイルに書き、コマンドにはパスだけを渡す★＝中身は読まれるだけで
+#   実行されない。無人タスクが動いている間は、直接指定を受け付けない。
+
+LOCK_PATH = Path("C:/Users/imao_/Documents/uchidokoro/task.lock")
+LOCK_STALE_MIN = 30           # task_lock.py と同じ（これを超えたら残骸とみなす）
+MAX_TEXT_BYTES = 64 * 1024
+
+
+def _running_task() -> str:
+    """無人タスクが動いている最中ならタスク名を返す（動いていなければ空）。"""
+    try:
+        d = json.loads(LOCK_PATH.read_text(encoding="utf-8"))
+    except Exception:                        # noqa: BLE001
+        return ""
+    ts = d.get("heartbeat") or d.get("started_at")
+    try:
+        t = datetime.datetime.fromisoformat(str(ts).replace("Z", ""))
+    except Exception:                        # noqa: BLE001
+        return ""
+    if (datetime.datetime.now() - t).total_seconds() / 60.0 > LOCK_STALE_MIN:
+        return ""                            # 残骸のロックは「動いていない」扱い
+    return str(d.get("task") or "")
+
+
+def _read_text_arg(inline: str, path: str, label: str,
+                   allow_newline: bool = True) -> str:
+    """自由文を受け取る。★直接指定とファイル指定は同時に使えない★"""
+    if inline and path:
+        raise SystemExit(f"★{label} は直接指定とファイル指定を同時に使えません★")
+    if path:
+        p = Path(path)
+        if p.is_symlink() or not p.is_file():
+            raise SystemExit(f"★{label}: 通常のファイルではありません: {path}★")
+        raw = p.read_bytes()
+        if len(raw) > MAX_TEXT_BYTES:
+            raise SystemExit(
+                f"★{label}: 大きすぎます（{len(raw)}バイト・上限{MAX_TEXT_BYTES}）★")
+        try:
+            text = raw.decode("utf-8")       # ★strict＝壊れた文字は受け取らない★
+        except UnicodeDecodeError as e:
+            raise SystemExit(f"★{label}: UTF-8として読めません（{e}）★")
+    else:
+        text = inline or ""
+        # ★シェルを通らない呼び出しだけは直接指定を許す★（2026-08-09）
+        #   add_machine_run.py などは subprocess の引数配列で呼ぶので、
+        #   文章の中の記号が実行されることはない（危ないのはシェル文字列だけ）。
+        #   この印は「うっかり古い書き方に戻らないため」のものであって、
+        #   安全の境界ではない（境界は PreToolUse の shell_guard.py）。
+        if text and os.environ.get("UCHIDOKORO_ARGV_CALL") != "1" \
+                and _running_task():
+            raise SystemExit(
+                f"★{label} は無人タスクの実行中は直接指定できません"
+                f"（{_running_task()} が実行中）★ "
+                f"文章をファイルに書いて --{label}-file でパスを渡してください"
+                "（コマンドに文章を書くと、中の記号がシェルに実行されます）")
+    bad = [c for c in text if c in "\x00" or (ord(c) < 32 and c not in "\n\t")]
+    if bad:
+        raise SystemExit(f"★{label}: 使えない制御文字が入っています★")
+    if not allow_newline and ("\n" in text or "\r" in text):
+        raise SystemExit(f"★{label}: 改行は入れられません★")
+    return text.strip()
+
 
 # ★どれだけ危ないか★（2026-07-30・Codex「これだけはやれ」⑧）
 #   C評価が52件たまっていたが、「全部止める」も「全部出し続ける」も雑すぎる。
@@ -110,6 +181,11 @@ def _days_open(issue):
 
 
 def cmd_add(path, args):
+    args.title = _read_text_arg(args.title, args.title_file, "title",
+                                allow_newline=False)
+    args.detail = _read_text_arg(args.detail, args.detail_file, "detail")
+    if not args.title:
+        raise SystemExit("★--title または --title-file が要ります★")
     data = _load(path)
     for it in data["issues"]:
         if it["status"] == "open" and it["slug"] == args.slug and \
@@ -180,6 +256,9 @@ def cmd_digest(path, args):
 
 
 def cmd_close(path, args):
+    args.reason = _read_text_arg(args.reason, args.reason_file, "reason")
+    if not args.reason:
+        raise SystemExit("★--reason または --reason-file が要ります★")
     data = _load(path)
     for it in data["issues"]:
         if it["id"] == args.id:
@@ -227,8 +306,13 @@ def main():
     p.add_argument("--source", required=True, help="発見元タスク（verify/new-machine/auto-add/quality-review/manual）")
     p.add_argument("--slug", required=True, help="対象機種slug（機種以外は site/env 等）")
     p.add_argument("--kind", required=True, choices=["external_value", "structural", "quality", "environment", "other"])
-    p.add_argument("--title", required=True)
+    # ★自由文はファイル渡しを使う★（無人タスクでは直接指定を拒否・2026-08-09）
+    p.add_argument("--title", default="")
+    p.add_argument("--title-file", dest="title_file", default="",
+                   help="一行要約を書いたファイル（無人タスクはこちら）")
     p.add_argument("--detail", default="")
+    p.add_argument("--detail-file", dest="detail_file", default="",
+                   help="判断材料を書いたファイル（無人タスクはこちら）")
     p.add_argument("--severity", choices=SEVERITIES, default="CRITICAL",
                    help="どれだけ危ないか（既定は CRITICAL＝仕分け前は止める側に倒す）")
     p.add_argument("--reason-code", dest="reason_code", default="",
@@ -248,7 +332,9 @@ def main():
 
     p = sub.add_parser("close")
     p.add_argument("--id", type=int, required=True)
-    p.add_argument("--reason", required=True)
+    p.add_argument("--reason", default="")
+    p.add_argument("--reason-file", dest="reason_file", default="",
+                   help="クローズ理由を書いたファイル（無人タスクはこちら）")
 
     args = ap.parse_args()
     path = Path(args.file) if args.file else DEFAULT_FILE

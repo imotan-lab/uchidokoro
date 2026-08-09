@@ -112,7 +112,11 @@ def _ledger(slug, kind, severity, code, title, detail) -> bool:
          "--title", title, "--detail", detail],
         cwd=BASE, capture_output=True, text=True,
         encoding="utf-8", errors="replace",
-        env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+        # ★引数配列で渡している＝シェルを通らない★（2026-08-09）
+        #   台帳は無人タスクの実行中、シェル経由の直接指定を断るようにしたが、
+        #   ここは文章が実行される経路ではないので通してよい。
+        env={**os.environ, "PYTHONIOENCODING": "utf-8",
+             "UCHIDOKORO_ARGV_CALL": "1"})
     if r.returncode != 0:
         _log(f"  ★台帳に登録できませんでした: {(r.stderr or r.stdout)[:200]}★")
         return False

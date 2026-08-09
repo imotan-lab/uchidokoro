@@ -37,6 +37,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import safe_json as _sj                  # noqa: E402
+import source_lineage as _sl             # noqa: E402
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -146,20 +147,24 @@ def collect(slug: str, topics: list, fetch=None) -> dict:
 
         import machine_sources as _ms
 
-        def _read(where, url, got):
+        def _read(where, url, got, publisher=None):
             try:
-                got[where] = {"url": url, "text": _cl.cut_user_area(
-                    _cl._norm(_nw._visible_text(_nw._get(url))))}
+                got[where] = {"url": url, "publisher": publisher,
+                              "text": _cl.cut_user_area(
+                                  _cl._norm(_nw._visible_text(_nw._get(url))))}
             except Exception as e:        # noqa: BLE001
-                got[where] = {"url": url, "error": str(e)[:80]}
+                got[where] = {"url": url, "publisher": publisher,
+                              "error": str(e)[:80]}
 
         def fetch(name):
             got = {}
+            cats = _sj.read_json(_di.CATALOGS, expect=dict)["directories"]
             for dir_id, r in (_di.find(name).get("results") or {}).items():
                 if r.get("state") != "FOUND":
                     got[dir_id] = {"state": r.get("state")}
                     continue
-                _read(dir_id, r["url"], got)
+                _read(dir_id, r["url"], got,
+                      (cats.get(dir_id) or {}).get("publisher_id"))
             # ★人が一度確かめた出典も足す★（2026-08-07・台帳#265）
             #   名鑑は機種名で引くので、表記が違う機種を引き当てられない。
             #   「スマスロ防振り」↔「痛いのは嫌なので防御力に極振り…」のような
@@ -174,14 +179,15 @@ def collect(slug: str, topics: list, fetch=None) -> dict:
                 url = rec.get("url")
                 if not url or any(v.get("url") == url for v in got.values()):
                     continue
-                _read("控え:" + str(rec.get("publisher") or "?"), url, got)
+                _read("控え:" + str(rec.get("publisher") or "?"), url, got,
+                      rec.get("publisher"))
             return got
     for dir_id, r in (fetch(m.get("name")) or {}).items():
         if not r.get("text"):
             out["sources"][dir_id] = {k: v for k, v in r.items() if k != "text"}
             continue
         import hashlib
-        rec = {"url": r["url"],
+        rec = {"url": r["url"], "publisher": r.get("publisher"),
                # ★同じ原文を2人が読んだことを後から確かめられるように★
                "text_sha256": hashlib.sha256(r["text"].encode("utf-8")).hexdigest(),
                "text_len": len(r["text"]),
@@ -192,9 +198,23 @@ def collect(slug: str, topics: list, fetch=None) -> dict:
         out["sources"][dir_id] = rec
     # ★本文が空なら「使える出典」に数えない★（台帳#250）
     #   出典の数で公開の可否を決めるので、ここが緩いと土台が崩れる
-    out["usable_sources"] = sum(
-        1 for v in out["sources"].values()
-        if v.get("url") and not v.get("error") and (v.get("text_len") or 0) > 0)
+    usable = [v for v in out["sources"].values()
+              if v.get("url") and not v.get("error")
+              and (v.get("text_len") or 0) > 0]
+    out["usable_sources"] = len(usable)
+    # ★「2つ揃った」を決めるのはページ数ではなく発行者の数★（2026-08-09・依頼125）
+    #   名鑑と控えに同じ発行者が出ると、URLが違うだけで2件に見えていた。
+    #   例: なな徹1社しか無い機種が「使える出典2件」と表示され、
+    #       2AIの突き合わせが「大手2つが一致」と誤って判断できてしまう。
+    keys, unknown = set(), []
+    for v in usable:
+        try:
+            keys.add(_sl.vote_key(v.get("publisher")))
+        except Exception:                 # noqa: BLE001
+            # ★引けないものは票にしない★（仮の名前を作らない）
+            unknown.append(v.get("url"))
+    out["usable_lineages"] = len(keys)
+    out["lineage_unknown"] = unknown
     return out
 
 
@@ -360,7 +380,14 @@ def main() -> int:
             parts.append(f"{TOPICS[t]['jp']}{len(g.get('quotes') or [])}件"
                          + ("★打ち切り★" if g.get("truncated") else ""))
         print(f"  {dir_id}: " + " / ".join(parts))
-    print(f"使える出典: {got.get('usable_sources')} 件")
+    # ★「2つ揃ったか」を決めるのは発行者の数★（ページ数ではない・依頼125）
+    print(f"使える出典: {got.get('usable_sources')} 件"
+          f" ／ ★独立した発行者: {got.get('usable_lineages')} 社★"
+          + ("（★1社しかありません＝2つ一致は作れません★）"
+             if (got.get('usable_lineages') or 0) < 2 else ""))
+    if got.get("lineage_unknown"):
+        print("  ※発行者を引けないので票に数えなかったもの: "
+              + ", ".join(str(u) for u in got["lineage_unknown"]))
     print(f"合計 {n} 件の原文を集めました")
     if a.json:
         with open(a.json, "w", encoding="utf-8") as f:
