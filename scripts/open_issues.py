@@ -94,8 +94,18 @@ def _read_text_arg(inline: str, path: str, label: str,
         if p.is_symlink() or not p.is_file():
             raise SystemExit(f"★{label}: 通常のファイルではありません: {path}★")
         real = p.resolve()
-        if not any(str(real).lower().startswith(str(r.resolve()).lower())
-                   for r in TEXT_ROOTS):
+
+        def _inside(child: Path, root: Path) -> bool:
+            # ★フォルダの区切りで見る★（2026-08-09・依頼127→128で修正）
+            #   文字の前方一致で見ていたため、隣の `ops-secret` まで
+            #   許可されていた（実際に読めることを確認した）。
+            try:
+                child.relative_to(root)
+                return True
+            except ValueError:
+                return False
+
+        if not any(_inside(real, r.resolve()) for r in TEXT_ROOTS):
             raise SystemExit(
                 f"★{label}: この置き場のファイルは使えません: {real}★ "
                 + "／".join(str(r) for r in TEXT_ROOTS) + " の下に置いてください"
@@ -197,6 +207,110 @@ def _days_open(issue):
         return (datetime.date.today() - first).days
     except Exception:
         return -1
+
+
+def selftest() -> int:
+    """★自由文の受け取りかたの回帰テスト★（2026-08-09・依頼126〜128）
+
+    ここを緩めると「文章を書いただけでコマンドが実行される」経路が戻る。
+    """
+    import tempfile
+
+    results = []
+
+    def t(name, cond):
+        results.append((name, bool(cond)))
+        print(("✅" if cond else "❌") + " " + name)
+
+    def stops(name, fn):
+        try:
+            fn()
+            t(name, False)
+        except SystemExit:
+            t(name, True)
+
+    global LOCK_PATH
+    keep = LOCK_PATH
+    tmp = Path(tempfile.mkdtemp())
+    ops = TEXT_ROOTS[0]
+    ops.mkdir(parents=True, exist_ok=True)
+    try:
+        LOCK_PATH = tmp / "task.lock"
+        LOCK_PATH.write_text(json.dumps(
+            {"task": "uchidokoro-add-machine",
+             "heartbeat": datetime.datetime.now().isoformat()}), encoding="utf-8")
+        t("　無人タスクが動いていると分かる", _running_task())
+        stops("★★無人タスク実行中はシェルからの直接指定を断る★★",
+              lambda: _read_text_arg("直接書いた文章", "", "detail"))
+
+        os.environ["UCHIDOKORO_ARGV_CALL"] = "1"
+        t("　実行器（引数配列）からの直接指定は通す",
+          _read_text_arg("実行器からの文章", "", "detail") == "実行器からの文章")
+        del os.environ["UCHIDOKORO_ARGV_CALL"]
+
+        mark = chr(96) + "記号" + chr(96) + " と " + chr(36) + "(canary)"
+        good = ops / "_selftest_detail.txt"
+        good.write_text(mark, encoding="utf-8", newline="\n")
+        t("★★ファイル渡しは無人でも通り、記号はそのまま残る★★",
+          _read_text_arg("", str(good), "detail") == mark)
+
+        crlf = ops / "_selftest_crlf.txt"
+        crlf.write_bytes("1行目\r\n2行目".encode("utf-8"))
+        t("　Windowsの改行（CRLF）でも受け取れる",
+          _read_text_arg("", str(crlf), "detail") == "1行目\n2行目")
+
+        # ★隣のフォルダを許さない★（依頼128で実際に読めてしまった）
+        sib = Path(str(ops) + "-secret")
+        sib.mkdir(parents=True, exist_ok=True)
+        himitsu = sib / "_selftest.txt"
+        himitsu.write_text("許可していない置き場", encoding="utf-8")
+        stops("★★許可した置き場の『隣』は読まない（ops-secret 等）★★",
+              lambda: _read_text_arg("", str(himitsu), "detail"))
+
+        outside = tmp / "outside.txt"
+        outside.write_text("よその文章", encoding="utf-8")
+        stops("　決めた置き場の外は読まない",
+              lambda: _read_text_arg("", str(outside), "detail"))
+        stops("　直接指定とファイル指定の同時使用を断る",
+              lambda: _read_text_arg("a", str(good), "detail"))
+
+        bad = ops / "_selftest_bad.bin"
+        bad.write_bytes(b"\xff\xfe not utf8")
+        stops("　UTF-8として読めないファイルを断る",
+              lambda: _read_text_arg("", str(bad), "detail"))
+
+        nl = ops / "_selftest_nl.txt"
+        nl.write_text("1行目\n2行目", encoding="utf-8", newline="\n")
+        stops("　題に改行は入れられない",
+              lambda: _read_text_arg("", str(nl), "title", allow_newline=False))
+
+        big = ops / "_selftest_big.txt"
+        big.write_text("あ" * 40000, encoding="utf-8", newline="\n")
+        stops("　大きすぎるファイルを断る",
+              lambda: _read_text_arg("", str(big), "detail"))
+
+        LOCK_PATH.write_text(json.dumps(
+            {"task": "x", "heartbeat":
+             (datetime.datetime.now() - datetime.timedelta(hours=2)).isoformat()}),
+            encoding="utf-8")
+        t("　残骸のロックは実行中とみなさない", _running_task() == "")
+
+        for f in (good, crlf, bad, nl, big, himitsu):
+            try:
+                f.unlink()
+            except Exception:              # noqa: BLE001
+                pass
+        try:
+            sib.rmdir()
+        except Exception:                  # noqa: BLE001
+            pass
+    finally:
+        LOCK_PATH = keep
+
+    ng = sum(1 for _, o in results if not o)
+    print()
+    print("%d/%d 合格" % (len(results) - ng, len(results)))
+    return 1 if ng else 0
 
 
 def cmd_add(path, args):
@@ -319,6 +433,10 @@ def cmd_blocking(path, args):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--file", default="", help="台帳ファイルパス（既定: Documents/uchidokoro/open_issues.json）")
+    ap.add_argument("--selftest", action="store_true",
+                    help="自由文の受け取りかたの回帰テスト")
+    if "--selftest" in sys.argv:
+        return selftest()
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("add")
