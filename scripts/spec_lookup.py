@@ -319,8 +319,12 @@ def vote_lineage(host: str) -> str:
     import source_lineage as _sl2
     try:
         return _sl2.vote_key_of_url("https://" + str(host or "").lstrip("/"))
-    except Exception:                      # noqa: BLE001
+    except _sl2.LineageError:
+        # ★登録されていないサイトだけを「票にしない」★
         return ""
+    # ★登録簿そのものが読めない等は握りつぶさない★（2026-08-09・依頼129）
+    #   全部を「未登録」に倒すと、材料が一斉に0になっても
+    #   「材料不足」に見えて原因が分からなくなる。例外はそのまま上げる。
 
 
 def compare(pages: list) -> dict:

@@ -114,8 +114,25 @@ def run(slugs: list, expects: list, pochipochi_public: bool,
         print()
         print("下見です。書き込むには --apply を付けてください（%d枚）" % len(planned))
         return 0
-    for path, out in planned:
-        path.write_text(out, encoding="utf-8", newline="\n")
+    # ★途中で失敗しても半端に残さない★（2026-08-09・依頼129）
+    #   順に書いていくと、5枚目で失敗したとき4枚だけ変わった状態になる。
+    #   いったん全部を下書きへ書き、そろってから置き換える。
+    tmps = []
+    try:
+        for path, out in planned:
+            tmp = path.with_suffix(path.suffix + ".tmp")
+            tmp.write_text(out, encoding="utf-8", newline="\n")
+            tmps.append((tmp, path))
+    except Exception as e:                 # noqa: BLE001
+        for tmp, _ in tmps:
+            try:
+                tmp.unlink()
+            except Exception:              # noqa: BLE001
+                pass
+        print("★下書きの作成で失敗したので、1枚も書き換えていません: %s★" % e)
+        return 1
+    for tmp, path in tmps:
+        os.replace(tmp, path)
         print("書き換えました: %s" % path.relative_to(BASE))
     print()
     print("%d枚を書き換えました。★service-worker のキャッシュ版数を上げること★"

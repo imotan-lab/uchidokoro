@@ -24,6 +24,8 @@ SUB = chr(36) + "("          # コマンド置換の始まり
 DQ = chr(34)
 NL = chr(10)
 Q = chr(39)
+SH = "bash"
+EV = "eval"
 
 # (説明, コマンド, 止めるべきか)
 CASES = [
@@ -72,6 +74,17 @@ CASES = [
     ("★二段目: eval★", "eval " + chr(36) + "p", True),
     ("★二段目: source★", "source ./external.sh", True),
 
+    # ---- 依頼129で見つかった二段目のすり抜け ----
+    ("★すり抜け: 先頭に空白の " + EV + "★", " " + EV + " " + DQ + "$p" + DQ, True),
+    ("★すり抜け: command " + EV + "★", "command " + EV + " " + DQ + "$p" + DQ, True),
+    ("★すり抜け: /bin/" + SH + " -c★", "/bin/" + SH + " -c " + DQ + "$p" + DQ, True),
+    ("★すり抜け: " + SH + " -lc★", SH + " -lc " + DQ + "$p" + DQ, True),
+    ("★すり抜け: " + SH + " --noprofile -c★",
+     SH + " --noprofile -c " + DQ + "$p" + DQ, True),
+    ("★すり抜け: dash -c★", "dash -c " + DQ + "$p" + DQ, True),
+    ("★すり抜け: here-string★", SH + " <<< " + DQ + "$p" + DQ, True),
+    ("★すり抜け: シェルへ流し込む★", SH + " < external.txt", True),
+
     # ---- 通ってよいもの（誤って止めない）----
     ("　普通のコマンドは通る", "python scripts/audit_site.py", False),
     ("　二重引用符の日本語も通る",
@@ -89,6 +102,8 @@ CASES = [
      "bash scripts/codex_with_lock.sh ctx.json a b", False),
     ("　ファイル名に source を含んでも通る",
      "python scripts/x.py --file source_registry.json", False),
+    ("　文章の中の source は通る（誤検知を減らした）",
+     'git commit -m ' + DQ + 'docs: x; source を確認' + DQ, False),
 ]
 
 # (説明, 入力そのもの) ＝ どれも止めるべき
@@ -105,6 +120,12 @@ BROKEN_INPUT = [
 def ask(payload: str):
     p = subprocess.run([sys.executable, GUARD], input=payload, text=True,
                        capture_output=True, encoding="utf-8")
+    # ★見張り自身が落ちていたら合格にしない★（2026-08-09・依頼129）
+    #   終了コードを見ていなかったので、出力が無いまま落ちても
+    #   「通してよいもの」は合格に見えていた。
+    if p.returncode != 0:
+        return None, "見張りが異常終了しました（終了コード %d）%s" % (
+            p.returncode, (p.stderr or "")[:120])
     try:
         out = json.loads(p.stdout or "{}")
     except Exception:                      # noqa: BLE001
