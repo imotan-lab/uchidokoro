@@ -571,6 +571,12 @@ def check_detail(slug: str, detail: dict) -> list:
 _IDENTITY_KEYS = {"manufacturer_id", "official_product_url", "announced_name",
                   "market_release_date", "identity_tier", "regulatory_model_code",
                   "_model_code_sources",
+                  # ★1出典しか無い型式の観測値★（2026-08-09・依頼130 P1-2）
+                  #   型式を載せているのは P-WORLD だけなので、独立2出典は
+                  #   そろわない。記事には出さないが、同定の手がかりとして残す。
+                  #   ★ここに足さないと、その機種は公開の関所で必ず止まる★
+                  #   （依頼131 P0-2で実際に指摘された）
+                  "observed_model_code", "_observed_model_code_sources",
                   # ★どの公式ページで本人性を確かめたか★（2026-08-04・台帳#209）
                   "identity_binding", "identity_evidence_ref"}
 _RELEASE_OK = re.compile(r"^(20[0-9]{2}-[0-9]{2}(-[0-9]{2})?)?$")

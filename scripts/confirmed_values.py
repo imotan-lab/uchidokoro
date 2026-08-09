@@ -76,6 +76,42 @@ def allowed_fields() -> dict:
     return out
 
 
+# ★項目ごとに「値の形」を決める★（2026-08-09・依頼131 P0-3）
+#   項目名しか見ていなかったので、benefit の無い天井を記録でき、
+#   そのあと記事生成が c["benefit"] で落ち続ける状態になっていた。
+#   ★引用と照合する表示値★も項目ごとに決める（内部の記号は照合しない）。
+VALUE_SHAPES = {
+    "ceiling": {"required": ("kind", "amount", "unit", "benefit"),
+                "enums": {"kind": ("GAME", "CYCLE", "POINT")},
+                "quoted": ("amount", "unit")},
+    "at": {"required": ("mode", "games", "net"),
+           "enums": {"mode": ("MAIN_AT", "UPPER_AT")},
+           "quoted": ("games", "net")},
+    "cz": {"required": ("name",), "enums": {}, "quoted": ("name",)},
+}
+
+
+def check_shape(field: str, value) -> list:
+    """値の形を確かめ、★引用と照合すべき表示値★を返す。"""
+    shape = VALUE_SHAPES.get(field)
+    if not shape:
+        # 基本スペック側は spec_lookup が形を持っているので、空でないことだけ見る
+        toks = _tokens(value)
+        if not toks:
+            raise ConfirmedError(f"{field}: 確かめられる値がありません")
+        return toks
+    if not isinstance(value, dict):
+        raise ConfirmedError(f"{field}: 値は組（辞書）で書きます")
+    for k in shape["required"]:
+        if k not in value or str(value[k] or "").strip() == "":
+            raise ConfirmedError(f"{field}: 「{k}」が要ります（記事がこれを読みます）")
+    for k, ok in shape["enums"].items():
+        if value.get(k) not in ok:
+            raise ConfirmedError(
+                f"{field}: 「{k}」は {'/'.join(ok)} のどれかです（いま {value.get(k)!r}）")
+    return [str(value[k]).strip() for k in shape["quoted"]]
+
+
 class ConfirmedError(Exception):
     """確定値に関する異常（★迷ったら記録しない★）。"""
 
@@ -176,17 +212,62 @@ def verify_source(src: dict, name: str, fetch=None) -> dict:
     return src
 
 
+def bind_machine(official_url: str) -> tuple:
+    """公式URLから slug と正式名称を**正本から**引く。
+
+    ★なぜ名前を名乗らせないか（2026-08-09・依頼131 P0-1）★
+      `--slug` と `--name` を別々に受け取っていたので、
+      **機種Aの本物のURL・引用を、機種Bのslugで記録できた**。
+      三層の検査（発行者・ページの本人性・引用の実在）を全部通ってしまう。
+      slugも名前も公式URLから導き、人に決めさせない。
+    """
+    import build_new_article as _ba
+    slug = _ba.slug_from_url(official_url)
+    if not slug:
+        raise ConfirmedError(f"公式URLから機種の名前を作れません: {official_url}")
+    # ①待ち行列（まだ登録されていない新台）
+    try:
+        pend = _sj.read_json(
+            r"C:/Users/imao_/Documents/uchidokoro/add_machine_pending.json",
+            expect=dict)
+        for u, it in (pend.get("items") or {}).items():
+            if u.rstrip("/") == str(official_url).rstrip("/"):
+                return slug, str(it.get("name") or "")
+    except Exception:                      # noqa: BLE001
+        pass
+    # ②すでに登録されている機種
+    try:
+        ms = _sj.read_json(os.path.join(BASE, "assets", "data", "machines.json"),
+                           expect=(dict, list))
+        ms = ms["machines"] if isinstance(ms, dict) else ms
+        for m in ms:
+            if m.get("slug") == slug:
+                return slug, str(m.get("name") or "")
+    except Exception:                      # noqa: BLE001
+        pass
+    raise ConfirmedError(
+        f"その公式URLの機種が見つかりません（待ち行列にも一覧にも無い）: {official_url}")
+
+
 def record(slug: str, field: str, value, sources: list, by: list,
-           why: str, name: str = "", fetch=None) -> dict:
+           why: str, name: str = "", fetch=None,
+           official_url: str = "") -> dict:
     """★2AIが一致した値だけを残す★（fail-closed）"""
-    if not slug or not field:
-        raise ConfirmedError("--slug と --field が要ります")
+    if not field:
+        raise ConfirmedError("--field が要ります")
     if field not in allowed_fields():
         raise ConfirmedError(
             "受け取れない項目です: %s（使えるのは %s）"
             % (field, "/".join(sorted(allowed_fields()))))
+    if official_url:
+        # ★slugと名前は正本から引く★（人に名乗らせない）
+        slug, name = bind_machine(official_url)
+    if not slug:
+        raise ConfirmedError("--official-url（推奨）か --slug が要ります")
     if not str(name or "").strip():
-        raise ConfirmedError("--name（正式名称）が要ります（機種の取り違えを防ぐため）")
+        raise ConfirmedError(
+            "正式名称を決められません。--official-url を使ってください"
+            "（slugと名前を正本から引きます＝機種の取り違えを防ぐため）")
     who = sorted({x.strip() for x in (by or []) if x.strip()})
     for need in REQUIRED_JUDGES:
         if need not in who:
@@ -199,9 +280,9 @@ def record(slug: str, field: str, value, sources: list, by: list,
     # ★出典ごとに、その値を支えていることを確かめる★（2026-08-09・依頼130 P1-1）
     #   以前は全出典の引用をつなげてから探していたので、
     #   **1つの出典にしか無い値でも「2出典一致」として通った**。
-    toks = _tokens(value)
-    if not toks:
-        raise ConfirmedError("確かめられる値がありません（数値や文字列が要ります）")
+    # ★値の形を確かめ、引用と照合する表示値を決める★（依頼131 P0-3・P1）
+    #   単位や恩恵まで照合しないと、引用が「1000pt」でも値を「1000G」にできた。
+    toks = check_shape(field, value)
     for s in sources:
         q = " ".join(str(s["quote"]).split())
         for token in toks:
@@ -296,9 +377,12 @@ def merge_into(material: dict, slug: str) -> list:
             box = material.setdefault(where, {})
             rows = box.setdefault("adopted", [])
             # ★同じ中身が既にあるなら足さない★（機械が採れていれば上書きしない）
-            if any(json.dumps(r, ensure_ascii=False, sort_keys=True)
-                   == json.dumps(rec["value"], ensure_ascii=False, sort_keys=True)
-                   for r in rows):
+            def _core(d):
+                # 出所や出典URLは比べない（機械が採った行と形が違うだけで
+                # 「別物」と見なして重複して増えていた・依頼131 P1）
+                return {k: v for k, v in (d or {}).items()
+                        if not k.startswith("_") and k != "sources"}
+            if any(_core(r) == _core(rec["value"]) for r in rows):
                 continue
             row = dict(rec["value"]) if isinstance(rec["value"], dict) else {
                 "value": rec["value"]}
@@ -339,7 +423,8 @@ def selftest() -> int:
 
     def rec(**kw):
         base = dict(slug="x", field="ceiling",
-                    value={"kind": "GAME", "amount": "1000", "unit": "G"},
+                    value={"kind": "GAME", "amount": "1000", "unit": "G",
+                           "benefit": "AT"},
                     sources=None, by=["claude", "codex"],
                     why="同じ原文を読んで一致しました", name=NAME,
                     fetch=fake_fetch)
@@ -409,11 +494,18 @@ def selftest() -> int:
               if v == "adopted"))
 
         mat2 = {"ceilings": {"adopted": [{"kind": "GAME", "amount": "1000",
-                                          "unit": "G"}]}}
+                                          "unit": "G", "benefit": "AT",
+                                          "sources": ["x"]}]}}
         merge_into(mat2, "x")
         t("★★機械が採れている天井は増やさない★★",
           len(mat2["ceilings"]["adopted"]) == 1)
 
+        stops("★★記事が読む項目（恩恵など）が無い値は記録できない★★"
+              "（依頼131 P0-3。記録できてしまい、あとで記事生成が落ちていた）",
+              lambda: rec(value={"kind": "GAME", "amount": "1000", "unit": "G"}))
+        stops("　天井の種類が決まった語でないと記録できない",
+              lambda: rec(value={"kind": "ナニカ", "amount": "1000",
+                                 "unit": "G", "benefit": "AT"}))
         t("　間違いは取り消せる", forget("x", "ceiling")["state"] == "FORGOTTEN")
         t("　無いものを取り消しても壊れない",
           forget("x", "ceiling")["state"] == "NOT_FOUND")
@@ -433,8 +525,10 @@ def main() -> int:
     ap.add_argument("--forget", action="store_true")
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--slug", default="")
+    ap.add_argument("--official-url", dest="official_url", default="",
+                    help="★推奨★ 公式URL（slugと正式名称を正本から引く）")
     ap.add_argument("--name", default="",
-                    help="正式名称（機種の取り違えを防ぐため必須）")
+                    help="正式名称（--official-url が使えないときだけ）")
     ap.add_argument("--field", default="")
     ap.add_argument("--value", default="", help="値（文字列）")
     ap.add_argument("--value-file", dest="value_file", default="",
@@ -460,7 +554,7 @@ def main() -> int:
             r = record(a.slug, a.field, value,
                        [parse_source(s) for s in a.source],
                        [x for x in a.by.split(",") if x.strip()], a.why,
-                       name=a.name)
+                       name=a.name, official_url=a.official_url)
             print(json.dumps(r, ensure_ascii=False))
             return 0
         if a.forget:
