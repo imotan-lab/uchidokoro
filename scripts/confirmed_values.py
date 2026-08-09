@@ -84,16 +84,30 @@ VALUE_SHAPES = {
     "ceiling": {"required": ("kind", "amount", "unit", "benefit"),
                 "enums": {"kind": ("GAME", "CYCLE", "POINT")},
                 "quoted": ("amount", "unit")},
-    "at": {"required": ("mode", "games", "net"),
+    # ★どれか1つでも確認できていればよい★（2026-08-09）
+    #   継続率しか公表されていない機種が実在する（パリピ孔明）。
+    #   3つとも必須にすると、確かに2出典で一致した継続率まで記録できない。
+    "at": {"required": ("mode",), "any_of": ("games", "net", "loop_rate"),
            "enums": {"mode": ("MAIN_AT", "UPPER_AT")},
-           "quoted": ("games", "net")},
+           "quoted": ("games", "net", "loop_rate")},
     "cz": {"required": ("name",), "enums": {}, "quoted": ("name",)},
 }
 
 
+def base_field(field: str) -> str:
+    """「at#パーティータイム」→「at」。
+
+    ★なぜ要るか（2026-08-09）★
+      1機種にATもCZも複数ある（メインST・上位ST・究極ST…）。
+      項目名を1つしか持てないと、2出典で一致した2つ目以降を捨てることになる。
+      見出しを付けて複数を持てるようにし、入れ先は「#」の前で決める。
+    """
+    return str(field or "").split("#", 1)[0]
+
+
 def check_shape(field: str, value) -> list:
     """値の形を確かめ、★引用と照合すべき表示値★を返す。"""
-    shape = VALUE_SHAPES.get(field)
+    shape = VALUE_SHAPES.get(base_field(field))
     if not shape:
         # 基本スペック側は spec_lookup が形を持っているので、空でないことだけ見る
         toks = _tokens(value)
@@ -109,7 +123,13 @@ def check_shape(field: str, value) -> list:
         if value.get(k) not in ok:
             raise ConfirmedError(
                 f"{field}: 「{k}」は {'/'.join(ok)} のどれかです（いま {value.get(k)!r}）")
-    return [str(value[k]).strip() for k in shape["quoted"]]
+    any_of = shape.get("any_of") or ()
+    if any_of and not any(str(value.get(k) or "").strip() for k in any_of):
+        raise ConfirmedError(
+            f"{field}: {'/'.join(any_of)} のどれか1つは要ります（中身の無い項目は作らない）")
+    # ★引用と照合するのは、実際に書いた項目だけ★
+    return [str(value[k]).strip() for k in shape["quoted"]
+            if str(value.get(k) or "").strip()]
 
 
 class ConfirmedError(Exception):
@@ -255,7 +275,7 @@ def record(slug: str, field: str, value, sources: list, by: list,
     """★2AIが一致した値だけを残す★（fail-closed）"""
     if not field:
         raise ConfirmedError("--field が要ります")
-    if field not in allowed_fields():
+    if base_field(field) not in allowed_fields():
         raise ConfirmedError(
             "受け取れない項目です: %s（使えるのは %s）"
             % (field, "/".join(sorted(allowed_fields()))))
@@ -356,7 +376,7 @@ def merge_into(material: dict, slug: str) -> list:
         return added
     targets = allowed_fields()
     for field, rec in for_slug(slug).items():
-        where = targets.get(field)
+        where = targets.get(base_field(field))
         if not where:
             # ★知らない項目は黙って捨てない★
             raise ConfirmedError(f"知らない項目です: {field}")

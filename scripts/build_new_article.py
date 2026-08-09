@@ -256,12 +256,29 @@ def build_detail(slug, name, release, material) -> dict:
     ats = (material.get("at_specs") or {}).get("adopted") or []
     if ats:
         body = []
+        # ★確認できた項目だけを並べる★（2026-08-09）
+        #   以前は「1セットG数」と「純増」が必ずある前提だった。
+        #   ところが機種によっては**継続率しか公表されていない**
+        #   （実例: スマスロパリピ孔明は継続率73%/81%/91%のみで、
+        #   1セットG数も純増も独立2出典では取れない）。
+        #   欠けた項目を空欄で書くと嘘になるので、あるものだけ書く。
         for c in sorted(ats, key=lambda x: x["mode"]):
             jp = "メインAT" if c["mode"] == "MAIN_AT" else "上位AT"
-            body.append(f"**{jp}**：1セット{c['games']}G ／ 純増約{c['net']}枚")
-        body.append("モードごとに純増が異なります。出典2件で一致した内容だけを載せています。")
+            parts = []
+            if c.get("games"):
+                parts.append(f"1セット{c['games']}G")
+            if c.get("net"):
+                parts.append(f"純増約{c['net']}枚")
+            if c.get("loop_rate"):
+                parts.append(f"継続率{c['loop_rate']}")
+            if c.get("label"):
+                jp = f"{jp}「{c['label']}」"
+            body.append(f"**{jp}**：" + " ／ ".join(parts))
+        body.append("出典2件で一致した内容だけを載せています。")
         boxes["ゲーム性"] = {"title": "ゲーム性", "body": body}
         for c in sorted(ats, key=lambda x: x["mode"]):
+            if not c.get("net"):
+                continue
             jp = "メインAT純増" if c["mode"] == "MAIN_AT" else "上位AT純増"
             facts.append([jp, f"約{c['net']}枚/G"])
 

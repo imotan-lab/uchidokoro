@@ -136,7 +136,11 @@ def claims_from_material(material: dict) -> list:
         mode = (c or {}).get("mode")
         if mode not in AT_MODES:
             raise DecisionError(f"ATのモードが不明です: {mode!r}")
-        if _bad_value(c.get("games")) or _bad_value(c.get("net")):
+        # ★どれか1つでも中身があればclaimにする★（2026-08-09）
+        #   以前は「1セットG数」と「純増」の両方を必須にしていたが、
+        #   継続率しか公表されていない機種が実在する（パリピ孔明）。
+        #   両方必須だと、確かに分かっている継続率まで捨てることになる。
+        if all(_bad_value(c.get(k)) for k in ("games", "net", "loop_rate")):
             raise DecisionError(f"ATの値がありません: {c!r}")
         got.add(f"at:{mode}")
     for c in ((material or {}).get("czs") or {}).get("adopted") or []:
