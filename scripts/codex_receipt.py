@@ -76,9 +76,16 @@ def scripts_tree(commit: str = "HEAD") -> str:
     return _git("rev-parse", f"{commit}:scripts")
 
 
+_SAFE_RUN_ID = __import__("re").compile(r"^[A-Za-z0-9._-]{1,64}$")
+
+
 def issue(prompt: str, response: str, exit_code: int,
           run_id: str = "", reviewed_commit: str = "") -> str:
     """★Codexを実際に呼んだ直後にだけ発行する★"""
+    # ★run_id をファイル名に使うので形を厳しく見る★（2026-08-09・依頼127 P0-4）
+    #   区切り文字を入れられると、領収書置き場の外へ書けてしまう。
+    if run_id and not _SAFE_RUN_ID.match(run_id):
+        raise ReceiptError(f"run_id に使えない文字が入っています: {run_id!r}")
     for p in (prompt, response):
         if not os.path.isfile(p):
             raise ReceiptError(f"ファイルがありません: {p}")
@@ -100,6 +107,12 @@ def issue(prompt: str, response: str, exit_code: int,
         "response_path": os.path.abspath(response),
         "response_sha256": sha256_of(response),
         "exit_code": int(exit_code),
+        # ★見せたものが「そのコミットの中身」とは限らない★（依頼127・A-3 P1）
+        #   レビュー中に未コミットの変更を見せていることが多い。
+        #   コミット番号だけでは何を見せたか表せないので、手元の状態も残す。
+        "worktree_dirty": bool(_git("status", "--porcelain")),
+        "worktree_diff_sha256": hashlib.sha256(
+            _git("diff", "HEAD").encode("utf-8")).hexdigest(),
         "consumed": False,
         "consumed_at": None,
     }
@@ -132,13 +145,18 @@ def validate(rec: dict, path: str) -> dict:
         raise ReceiptError(
             f"この領収書は既に使われています（{rec.get('consumed_at')}）。"
             "同じレビューで二度は印を付けられません")
-    resp = rec.get("response_path") or ""
-    if not os.path.isfile(resp):
-        raise ReceiptError(f"回答ファイルが見当たりません: {resp}")
-    now = sha256_of(resp)
-    if now != rec.get("response_sha256"):
-        raise ReceiptError(
-            "回答ファイルが領収書の指紋と一致しません（差し替えられています）")
+    # ★依頼文と回答の両方を見る★（2026-08-09・依頼127 A-3 P1）
+    #   以前は回答だけ見ていた。依頼文が差し替わっていれば、
+    #   「何をレビューしてもらったか」が変わっている。
+    for label, key_path, key_sha in (
+            ("回答", "response_path", "response_sha256"),
+            ("依頼文", "prompt_path", "prompt_sha256")):
+        p = rec.get(key_path) or ""
+        if not os.path.isfile(p):
+            raise ReceiptError(f"{label}ファイルが見当たりません: {p}")
+        if sha256_of(p) != rec.get(key_sha):
+            raise ReceiptError(
+                f"{label}ファイルが領収書の指紋と一致しません（差し替えられています）")
     commit = rec.get("reviewed_commit") or ""
     if not commit or not _git("cat-file", "-t", commit) == "commit":
         raise ReceiptError(f"レビュー対象のコミットが見つかりません: {commit}")
@@ -227,6 +245,40 @@ def selftest() -> int:
         except ReceiptError:
             ok = True
         t("　領収書が無ければ止まる", ok)
+
+        # ★2026-08-09・依頼127で見つかった穴を固定する★
+        pf2 = os.path.join(tmp, "req2.md")
+        rf2 = os.path.join(tmp, "res2.md")
+        open(pf2, "w", encoding="utf-8").write("依頼です2")
+        open(rf2, "w", encoding="utf-8").write("回答です2 tokens used")
+        p4 = issue(pf2, rf2, 0)
+        ok = True
+        try:
+            validate(load(p4), p4)     # ★発行した直後にそのまま使えること★
+        except ReceiptError as e:
+            ok = False
+            print("   ", e)
+        t("★★発行した直後の領収書がそのまま使える★★"
+          "（回答ファイルへ追記して自分の指紋を壊さない）", ok)
+
+        open(pf2, "a", encoding="utf-8").write("依頼文をあとから書き換えた")
+        ok = False
+        try:
+            validate(load(p4), p4)
+        except ReceiptError:
+            ok = True
+        t("★★依頼文が差し替わっていたら印を付けない★★", ok)
+
+        for bad_id in ("../../nukedasu", "a/b", "a" + chr(92) + "b"):
+            ok = False
+            try:
+                issue(pf2, rf2, 0, run_id=bad_id)
+            except ReceiptError:
+                ok = True
+            t("★★領収書の名前に区切り文字を入れられない★★（%s）" % bad_id, ok)
+
+        t("　手元に未コミットの変更があるかを残している",
+          "worktree_dirty" in load(p4))
     finally:
         RECEIPT_DIR = keep
 
