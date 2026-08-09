@@ -215,8 +215,11 @@ def build_detail(slug, name, release, material) -> dict:
     """記事データを作る。★集まった材料だけを表に入れる★"""
     adopted = material.get("adopted") or {}
     facts = []
-    if (code := adopted.get("model_code")):
-        facts.append(["型式名", code["value"]])
+    # ★型式名は記事に書かない★（2026-08-09・運営者決定）
+    #   型式は「別機種と取り違えないため」の同定に使うもので、読者が使う情報ではない。
+    #   載せているのが P-WORLD だけ（実測）なので、記事に出すと
+    #   「出典2件で一致した値だけ」という約束も守れない。
+    #   同定に使う値は identity.regulatory_model_code に残す（読者には出ない）。
     if (rng := adopted.get("payout_range")):
         v = rng["value"]
         facts.append(["機械割", f"{v['low']}%〜{v['high']}%"])
@@ -289,9 +292,7 @@ def build_detail(slug, name, release, material) -> dict:
     spec_body = [f"**機種名**：{name}"]
     spec_body.append(f"**登場時期**：{_fmt_release(release)}（公式確認）"
                      if release else f"**登場時期**：{PENDING_ITEM}")
-    code = adopted.get("model_code")
-    spec_body.append(f"**型式名**：{code['value']}" if code
-                     else f"**型式名**：{PENDING_ITEM}")
+    # ★型式名は書かない★（2026-08-09・運営者決定。同定専用にした）
     rng = adopted.get("payout_range")
     spec_body.append(
         f"**機械割**：{rng['value']['low']}%〜{rng['value']['high']}%" if rng
@@ -490,8 +491,11 @@ def selftest() -> int:
       and any(PENDING_TEXT in " ".join(sec.get("body") or [])
               for sec in d["sections"]))
     t("★確認できた値だけが表に入る★",
-      ["型式名", "Lびん娘NY1"] in d["factTable"]
-      and ["機械割", "97.3%〜112.5%"] in d["factTable"])
+      ["機械割", "97.3%〜112.5%"] in d["factTable"])
+    t("★★型式名は記事に出さない★★（2026-08-09・運営者決定。同定にだけ使う）",
+      not any(r[0] == "型式名" for r in d["factTable"])
+      and not any("型式名" in " ".join(sec.get("body") or [])
+                  for sec in d["sections"]))
     t("★★設定が1〜6の連番だと決めつけない★★（集まった設定だけ出す）",
       [r[0] for r in next(sec for sec in d["sections"]
                           if sec["title"] == "設定示唆まとめ")

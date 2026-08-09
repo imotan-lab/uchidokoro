@@ -49,6 +49,7 @@ import ceiling_lookup as _cl         # noqa: E402
 import cz_lookup as _cz              # noqa: E402
 import directory_index as _di         # noqa: E402
 import lineage_check as _lc          # noqa: E402
+import confirmed_values as _cv        # noqa: E402
 import model_code_lookup as _mc       # noqa: E402
 import new_machine_watch as _nw       # noqa: E402
 import pending_machines as _pend      # noqa: E402
@@ -792,7 +793,18 @@ def probe_quarantine(persist: bool) -> dict:
 # ★書き込みを止める理由★（Codex指摘3・自分で再現を確認）
 #   以前は problems を文字列で並べるだけで、**中身を見ずに書き込めた**。
 #   機種の同定に関わる問題が1つでもあれば、材料が採れていても書かない。
-BLOCKING = ("AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY", "型式名",
+BLOCKING = ("AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY",
+            # ★型式名は「別機種と取り違えない」ためだけに使う★（2026-08-09・運営者決定）
+            #   実測: 型式名を載せているのは P-WORLD だけだった。
+            #   DMMは描画して読んでも載せておらず、なな徹・ちょんぼりすた・
+            #   メーカー公式にも無い。つまり「独立2出典が要る」という条件は
+            #   **新台では原理的に満たせない**（4夜連続で1件も公開できなかった原因）。
+            #   運営者の判断＝型式は記事に書かない。同定にだけ使う。
+            #   よって「まだ載っていない／1つにしか載っていない」では止めない。
+            #   ★取り違えを防ぐ検査は残す★＝下の3つは今までどおり止める。
+            "名鑑ごとに型式名が食い違っています",   # 別機種の資料が混じっている
+            "型式名の規格印が確認できません",       # 同名の旧機種のページの疑い
+            "型式名: 機種の規格（L/S）が",          # 規格を機械で確定できない
             "公式ページと名前が一致しません",
             # ★メーカー・登場年月が公式と食い違うなら書かない★（Codex16回目）
             #   別会社の機種として出す／打てる時期を誤って出す、どちらも読者への誤情報。
@@ -1794,6 +1806,19 @@ def run_one(name, official_url, maker, release, apply_it=False,
         return out
     out["slug"] = _ba.slug_from_url(official_url)
     mat = got["material"]
+    # ★2AIで突き合わせて確定した値を材料に足す★（2026-08-09・台帳#273）
+    #   機械の抽出は「載っているのに読めない」が普通に起きる（実測: パリピ孔明は
+    #   名鑑4件すべてに天井の記述があるのに4件とも採れなかった）。
+    #   手順書には2AI突き合わせ（STEP 3-B）があるのに、**確定した値を
+    #   受け取る場所が無かった**ので、読めない機種は永久に空のままだった。
+    #   ★機械が採れている項目は上書きしない★／記録できるのは対話セッションだけ。
+    try:
+        _added = _cv.merge_into(mat, out["slug"])
+        if _added:
+            _log("  2AIで確定した値を材料に足しました: " + " / ".join(_added))
+    except Exception as e:                # noqa: BLE001
+        # ★読めないことを黙って「無い」にしない★
+        out["problems"].append(f"2AIの確定値を読めません: {type(e).__name__}: {e}")
     out["adopted"] = sorted(_sl.FIELDS[k]["jp"] for k in mat["adopted"])
     out["held"] = sorted(_sl.FIELDS[k]["jp"] for k in mat["need_third"])
     out["thin"] = sorted(_sl.FIELDS[k]["jp"] for k in mat["thin"])
@@ -1891,7 +1916,7 @@ def selftest() -> int:
     globals()["_log"] = lambda m: print(f"[selftest-log] {m}")
     try:
         _di.find = lambda n, c=None: {"results": {
-            "a": {"state": "FOUND", "url": "https://a.example/1", "why": "",
+            "a": {"state": "FOUND", "url": "https://chonborista.com/1", "why": "",
                   "candidates": [], "surfaces": "1/1", "index_size": 9, "problems": []},
             "b": {"state": "HEALTHY_NO_MATCH", "url": None, "why": "載っていません",
                   "candidates": [], "surfaces": "1/1", "index_size": 9, "problems": []},
@@ -1903,10 +1928,12 @@ def selftest() -> int:
           g["material"] is None
           and any("2件以上" in p for p in g["problems"]))
 
+        # ★架空ホストは票に数えられない★（2026-08-09・登録されていない発行者は
+        #   default deny にしたため、実在の発行者で試す）
         _di.find = lambda n, c=None: {"results": {
-            k: {"state": "FOUND", "url": f"https://{k}.example/1", "why": "",
+            k: {"state": "FOUND", "url": f"https://{h}/1", "why": "",
                 "candidates": [], "surfaces": "1/1", "index_size": 9, "problems": []}
-            for k in ("a", "b")}}
+            for k, h in (("a", "chonborista.com"), ("b", "nana-press.com"))}}
         _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": "L1", "reason": "OK"}
         _sl.read_page = lambda u, n: {
             "url": u, "host": u.split("/")[2], "ok": True, "reason": "OK",
@@ -2125,15 +2152,31 @@ def selftest() -> int:
         _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": None,
                                    "reason": "MODEL_CODE_NOT_FOUND"}
         r3 = run_one("L試験機", "https://m.example/products/slot/zzz/", "m", "2026-09")
-        t("★★型式名が確定していなければ記事を作らない★★"
-          "（材料が採れていても作れてしまう穴があった）",
-          "preview" not in r3 and any("型式名" in x for x in r3["blocked"]))
+        # ★2026-08-09・運営者決定で契約が変わった★
+        #   以前は「型式名が確定しなければ記事を作らない」だった。
+        #   ところが型式名を載せているのは P-WORLD だけ（実測）で、
+        #   DMMは描画して読んでも載せていない＝独立2出典は原理的にそろわず、
+        #   4夜連続で1件も公開できなかった。
+        #   型式は記事に書かず同定にだけ使う方針へ変更。よって
+        #   「まだ載っていない」では止めない（同定は名鑑2件＋公式名一致で担保）。
+        t("★★型式名が無くても、同定が取れていれば記事を作る★★"
+          "（載せているのがP-WORLDだけなので、待っても永久にそろわない）",
+          "preview" in r3 and not any("型式名" in x for x in r3["blocked"]))
+
+        # ★取り違えを防ぐ検査は残す★＝型式が名鑑ごとに食い違うなら作らない
+        _mc.lookup = lambda u, n, **k: {
+            "url": u, "identity_ok": True, "reason": "OK",
+            "model_code": "L1" if "chonborista.com" in u else "L9"}
+        r3b = run_one("L試験機", "https://m.example/products/slot/zzz/", "m", "2026-09")
+        t("★★型式名が名鑑ごとに食い違うときは作らない★★（別機種の資料が混じっている）",
+          "preview" not in r3b
+          and any("食い違" in x for x in r3b["blocked"]))
 
         _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": "L1", "reason": "OK"}
         _di.find = lambda n, c=None: {"results": {
-            "a": {"state": "FOUND", "url": "https://a.example/1", "why": "",
+            "a": {"state": "FOUND", "url": "https://chonborista.com/1", "why": "",
                   "candidates": [], "surfaces": "1/1", "index_size": 9, "problems": []},
-            "b": {"state": "FOUND", "url": "https://b.example/1", "why": "",
+            "b": {"state": "FOUND", "url": "https://nana-press.com/1", "why": "",
                   "candidates": [], "surfaces": "1/1", "index_size": 9, "problems": []},
             "c": {"state": "AMBIGUOUS_CANDIDATES", "url": None, "why": "候補が3件",
                   "candidates": [1, 2, 3], "surfaces": "1/1", "index_size": 9,
@@ -2152,7 +2195,7 @@ def selftest() -> int:
           "（URL2件=2票ではない・Codex28回目）",
           any("AMBIGUOUS" in x for x in r4c.get("problems") or []))
         _di.find = lambda n, c=None: {"results": {
-            "a": {"state": "FOUND", "url": "https://a.example/1", "why": "",
+            "a": {"state": "FOUND", "url": "https://chonborista.com/1", "why": "",
                   "candidates": [], "surfaces": "1/1", "index_size": 9, "problems": []},
             "c": {"state": "AMBIGUOUS_CANDIDATES", "url": None, "why": "候補が3件",
                   "candidates": [1, 2, 3], "surfaces": "1/1", "index_size": 9,

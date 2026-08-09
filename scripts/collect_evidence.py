@@ -136,9 +136,15 @@ def quotes(text: str, topic: str, limit: int = PER_SOURCE) -> dict:
             "context_truncated": cut}
 
 
-def collect(slug: str, topics: list, fetch=None) -> dict:
-    """1機種ぶん集める。★取れなかった出典も理由つきで残す★"""
-    m = machine(slug)
+def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
+    """1機種ぶん集める。★取れなかった出典も理由つきで残す★
+
+    ★name を渡せる理由（2026-08-09・台帳#273）★
+      新台は machines.json にまだ無いので、slug では引けない。
+      そのため手順書の2AI工程（新台=STEP 3-B）が**実行できなかった**
+      （「そんな機種はありません」で止まる）。正式名称を直接渡せるようにする。
+    """
+    m = {"slug": slug, "name": name} if name else machine(slug)
     out = {"slug": slug, "name": m.get("name"), "topics": topics, "sources": {}}
     if fetch is None:
         import ceiling_lookup as _cl
@@ -350,6 +356,8 @@ def selftest() -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description="出典の原文を集める（判断はしない）")
     ap.add_argument("--slug")
+    ap.add_argument("--name", default="",
+                    help="正式名称（machines.jsonにまだ無い新台のとき）")
     ap.add_argument("--topic", action="append",
                     help=f"既定は全部。選べるもの: {', '.join(TOPICS)}")
     ap.add_argument("--out", help="依頼文の書き出し先（.md）")
@@ -366,7 +374,7 @@ def main() -> int:
         if t not in TOPICS:
             print(f"★知らない話題です: {t}★（選べるもの: {', '.join(TOPICS)}）")
             return 1
-    got = collect(a.slug, topics)
+    got = collect(a.slug, topics, name=a.name)
     n = sum(len((v.get(t) or {}).get("quotes") or [])
             for v in got["sources"].values() for t in topics)
     for dir_id, r in got["sources"].items():
