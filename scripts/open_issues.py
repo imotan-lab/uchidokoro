@@ -295,6 +295,33 @@ def selftest() -> int:
             encoding="utf-8")
         t("　残骸のロックは実行中とみなさない", _running_task() == "")
 
+        # ★コードから台帳へ登録する道が生きているか★（2026-08-10・台帳#300）
+        #   2026-08-09に --title-file を足したとき、コード側は Namespace を
+        #   手で組んでいたので **2か所とも黙って壊れた**（安全網が黙って死んだ）。
+        #   CLIに引数を足しても、この道が壊れないことをここで固定する。
+        store = tmp / "issues.json"
+        n = add_issue(store, source="grow-machine", slug="s1",
+                      kind="external_value", title="値が再現できません",
+                      detail="出典が消えました", severity="MATERIAL",
+                      reason_code="GROW_VALUE_LOST")
+        got = json.loads(store.read_text(encoding="utf-8"))
+        t("★★コードから台帳へ登録できる★★"
+          "（黙って止まり続けないための安全網そのもの）",
+          n == 0 and len(got["issues"]) == 1
+          and got["issues"][0]["title"] == "値が再現できません")
+        add_issue(store, source="grow-machine", slug="s1",
+                  kind="external_value", title="値が再現できません",
+                  detail="出典が消えました", severity="MATERIAL")
+        got = json.loads(store.read_text(encoding="utf-8"))
+        t("　同じ題は重ねて登録しない（last_seen だけ動く）",
+          len(json.loads(store.read_text(encoding="utf-8"))["issues"]) == 1)
+        t("　実際に使っている2本が、この道を通っている",
+          all("add_issue" in (Path(__file__).parent / f).read_text(
+              encoding="utf-8")
+              and "cmd_add" not in (Path(__file__).parent / f).read_text(
+                  encoding="utf-8")
+              for f in ("grow_machine.py", "grow_legacy.py")))
+
         for f in (good, crlf, bad, nl, big, himitsu):
             try:
                 f.unlink()
@@ -313,42 +340,64 @@ def selftest() -> int:
     return 1 if ng else 0
 
 
-def cmd_add(path, args):
-    args.title = _read_text_arg(args.title, args.title_file, "title",
-                                allow_newline=False)
-    args.detail = _read_text_arg(args.detail, args.detail_file, "detail")
-    if not args.title:
-        raise SystemExit("★--title または --title-file が要ります★")
+def add_issue(path, *, source, slug, kind, title, severity, detail="",
+              reason_code=None):
+    """★コードから台帳へ登録する入口★（CLIの引数の形に左右されない）
+
+    ★なぜ分けたか★（2026-08-10・台帳#300）
+      以前はコードからも `cmd_add(Namespace(...))` を組み立てて呼んでいた。
+      そのため**CLIに引数を1つ足すたびにコード側が黙って壊れる**。
+      実際 2026-08-09 に `--title-file` を足したところ、
+      grow_machine と grow_legacy の台帳登録が2か所とも落ちていた
+      ＝「黙って止まり続けないための安全網」自体が、黙って死んでいた。
+      CLIの都合（ファイル渡し・既定値）は cmd_add に閉じ込める。
+    """
+    title = str(title or "").strip()
+    if not title:
+        raise ValueError("title が空です")
     data = _load(path)
     for it in data["issues"]:
-        if it["status"] == "open" and it["slug"] == args.slug and \
-           it["kind"] == args.kind and it["title"] == args.title:
+        if it["status"] == "open" and it["slug"] == slug and \
+           it["kind"] == kind and it["title"] == title:
             it["last_seen"] = _today()
-            if args.detail and args.detail not in (it.get("detail") or ""):
-                it["detail"] = (it.get("detail") or "") + f"\n[{_today()}追記] {args.detail}"
+            if detail and detail not in (it.get("detail") or ""):
+                it["detail"] = (it.get("detail") or "") + f"\n[{_today()}追記] {detail}"
             _save(path, data)
             print(f"既存案件 #{it['id']} の last_seen を更新（重複登録なし・経過{_days_open(it)}日）")
             return 0
     issue = {
         "id": data["next_id"],
         "status": "open",
-        "source": args.source,
-        "slug": args.slug,
-        "kind": args.kind,
-        "title": args.title,
-        "detail": args.detail or "",
+        "source": source,
+        "slug": slug,
+        "kind": kind,
+        "title": title,
+        "detail": detail or "",
         "first_seen": _today(),
         "last_seen": _today(),
-        "severity": args.severity,
-        "reason_code": args.reason_code or None,
+        "severity": severity,
+        "reason_code": reason_code or None,
         "resolution": None,
         "resolved_date": None,
     }
     data["issues"].append(issue)
     data["next_id"] += 1
     _save(path, data)
-    print(f"新規案件 #{issue['id']} を登録: [{args.kind}] {args.slug}: {args.title}")
+    print(f"新規案件 #{issue['id']} を登録: [{kind}] {slug}: {title}")
     return 0
+
+
+def cmd_add(path, args):
+    """CLIから台帳へ登録する（ファイル渡しなどCLI固有の都合はここに閉じる）。"""
+    title = _read_text_arg(args.title, getattr(args, "title_file", ""),
+                           "title", allow_newline=False)
+    detail = _read_text_arg(args.detail, getattr(args, "detail_file", ""),
+                            "detail")
+    if not title:
+        raise SystemExit("★--title または --title-file が要ります★")
+    return add_issue(path, source=args.source, slug=args.slug, kind=args.kind,
+                     title=title, detail=detail, severity=args.severity,
+                     reason_code=args.reason_code)
 
 
 def cmd_list(path, args):

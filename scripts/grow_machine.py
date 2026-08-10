@@ -279,12 +279,14 @@ def ledger_once(slug: str, title: str, detail: str,
     台帳へ1件だけ上げる（同じ題なら重複せず last_seen が更新される）。
     ★無人タスクは close しない★＝人が判断する。
     """
-    import argparse as _ap
     try:
-        _oi.cmd_add(_oi.DEFAULT_FILE, _ap.Namespace(
-            source="grow-machine", slug=slug, kind="external_value",
-            title=title, detail=detail, severity=severity,
-            reason_code="GROW_VALUE_LOST"))
+        # ★CLIの引数の形に依存しない入口を使う★（2026-08-10・台帳#300）
+        #   Namespace を手で組んでいたので、CLIに引数が増えるたびに
+        #   ここが黙って壊れていた（安全網が黙って死んでいた）。
+        _oi.add_issue(_oi.DEFAULT_FILE,
+                      source="grow-machine", slug=slug, kind="external_value",
+                      title=title, detail=detail, severity=severity,
+                      reason_code="GROW_VALUE_LOST")
     except Exception as e:                # noqa: BLE001
         _log(f"  台帳に登録できませんでした: {type(e).__name__}: {e}")
 

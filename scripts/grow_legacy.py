@@ -187,7 +187,6 @@ def _to_ledger(slug: str, problems: list, transient: bool) -> None:
       人の判断が要る＝MATERIAL ／ 時間が解決するかも＝QUALITY。
     ★失敗したら例外★＝呼び出し側で失敗として扱う（Codex132回目）。
     """
-    import argparse as _ap
     import open_issues as _oi
     if transient:
         title = (f"{slug}: 旧方式の先行記事の材料を"
@@ -196,11 +195,12 @@ def _to_ledger(slug: str, problems: list, transient: bool) -> None:
     else:
         title = f"{slug}: 旧方式の先行記事を育てられません（人の判断が要ります）"
         kind, sev, code = "structural", "MATERIAL", "GROW_LEGACY_HALT"
-    _oi.cmd_add(_oi.DEFAULT_FILE, _ap.Namespace(
-        source="update-machine", slug=slug, kind=kind, title=title,
-        detail="grow_legacy.py --next が止まりました: "
-               + " / ".join(str(x) for x in problems),
-        severity=sev, reason_code=code))
+    # ★CLIの引数の形に依存しない入口を使う★（2026-08-10・台帳#300）
+    _oi.add_issue(_oi.DEFAULT_FILE,
+                  source="update-machine", slug=slug, kind=kind, title=title,
+                  detail="grow_legacy.py --next が止まりました: "
+                         + " / ".join(str(x) for x in problems),
+                  severity=sev, reason_code=code)
 
 
 def _blocked(slug: str) -> list:
