@@ -45,6 +45,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import datetime
+import errno
 import hashlib
 import json
 import os
@@ -134,6 +135,13 @@ def _save(data: dict) -> None:
 
 _LOCK_WAIT = 15.0        # 鍵が空くのを待つ最大の秒数
 
+# ★「いま他の実行が使っている」を表す番号だけ待つ★（2026-08-10・依頼139のP3）
+#   どんな異常でも「使用中」と扱うと、壊れた記述子や使えない置き場のときに
+#   15秒待たされたうえ、間違った案内が出る。原因の違う異常はすぐ知らせる。
+_BUSY = {getattr(errno, n) for n in
+         ("EACCES", "EAGAIN", "EWOULDBLOCK", "EDEADLOCK", "EDEADLK")
+         if hasattr(errno, n)}
+
 
 def _hold(fh, on: bool) -> None:
     """★OSに鍵を持たせる★（プロセスが死んだらOSが必ず外す）"""
@@ -175,7 +183,10 @@ def _lock():
             try:
                 _hold(fh, True)
                 break
-            except OSError:
+            except OSError as e:
+                if e.errno not in _BUSY:
+                    # ★「使用中」とは別の異常★（待っても直らないので即やめる）
+                    raise SourceError("控えの鍵を扱えません（%s）" % e)
                 if time.time() - started > _LOCK_WAIT:
                     raise SourceError(
                         "控えが他の実行に使われています"
@@ -1162,6 +1173,22 @@ def selftest() -> int:
           "＝先頭1本だけ見ていたので、あとが差し替わっても通っていた",
           R(two, two_body)["state"] == CHECK_OK
           and R(two, body)["state"] == CHECK_CHANGED)
+
+        # ★鍵の異常は「使用中」と分ける★（依頼139のP3）
+        def _broken(fh, on):
+            raise OSError(errno.EBADF, "壊れた記述子")
+        _keep_hold = globals()["_hold"]
+        try:
+            globals()["_hold"] = _broken
+            t0 = time.time()
+            try:
+                _update(lambda d: {"state": "x"})
+                okl = False
+            except SourceError as e:
+                okl = "扱えません" in str(e) and time.time() - t0 < 5
+        finally:
+            globals()["_hold"] = _keep_hold
+        t("　鍵の異常は「他の実行が使用中」と分けて、待たずに知らせる", okl)
 
         # ★URLの表記ゆれ（依頼136のP0-1）★
         t("★★末尾の / や www の違いで、同じページを別物と数えない★★"
