@@ -345,18 +345,43 @@ def selftest() -> int:
             _oi_mod.DEFAULT_FILE = real
             import grow_legacy as _gl
             import grow_machine as _gm
-            _gm.ledger_once("s9", "s9: 値が再現できません", "詳細", "MATERIAL")
+            _gm.ledger_once("s9", "s9: 値が再現できません", "詳細です",
+                            "MATERIAL")
             _gl._to_ledger("s8", ["材料が集まりません"], transient=True)
-            rows = json.loads(real.read_text(encoding="utf-8"))["issues"]
+            _gl._to_ledger("s7", ["形が違います"], transient=False)
+            rows = {r["slug"]: r for r in
+                    json.loads(real.read_text(encoding="utf-8"))["issues"]}
+            limit = _gl._TRANSIENT_LIMIT
         finally:
             _oi_mod.DEFAULT_FILE = keep_default
         t("★★実際に使っている2本を呼んで、本当に台帳へ載ることを確かめる★★"
           "（文字列を探すだけでは、今回の事故そのものを見逃す）",
-          len(rows) == 2
-          and {r["source"] for r in rows} == {"grow-machine", "update-machine"}
-          and {r["slug"] for r in rows} == {"s9", "s8"})
+          len(rows) == 3 and set(rows) == {"s9", "s8", "s7"})
+        # ★載ったかだけでなく、中身が正しいかまで見る★（依頼142の指摘1）
+        #   分類や危険度を取り違えたまま登録されると、人の見る順番が狂う。
+        t("　値が再現できない側は、分類・危険度・理由コード・詳細まで正しい",
+          rows.get("s9", {}).get("source") == "grow-machine"
+          and rows["s9"]["kind"] == "external_value"
+          and rows["s9"]["severity"] == "MATERIAL"
+          and rows["s9"]["reason_code"] == "GROW_VALUE_LOST"
+          and rows["s9"]["title"] == "s9: 値が再現できません"
+          and rows["s9"]["detail"] == "詳細です")
+        t("　材料が集まらない側（何度も続いた）も、題と分類が正しい",
+          rows.get("s8", {}).get("source") == "update-machine"
+          and rows["s8"]["kind"] == "external_value"
+          and rows["s8"]["severity"] == "QUALITY"
+          and rows["s8"]["reason_code"] == "GROW_LEGACY_TRANSIENT"
+          and rows["s8"]["title"] == (
+              "s8: 旧方式の先行記事の材料を%d回続けて集められません" % limit)
+          and "材料が集まりません" in rows["s8"]["detail"])
+        t("★★人の判断が要る側は、危険度も分類も別になる★★"
+          "（同じ関数の2つの分岐を取り違えると、緊急のものが埋もれる）",
+          rows.get("s7", {}).get("kind") == "structural"
+          and rows["s7"]["severity"] == "MATERIAL"
+          and rows["s7"]["reason_code"] == "GROW_LEGACY_HALT"
+          and "人の判断が要ります" in rows["s7"]["title"])
 
-        for f in (good, crlf, bad, nl, big, himitsu):
+        for f in (good, crlf, bad, nl, big, himitsu, store, real):
             try:
                 f.unlink()
             except Exception:              # noqa: BLE001
