@@ -146,6 +146,8 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
     """
     m = {"slug": slug, "name": name} if name else machine(slug)
     out = {"slug": slug, "name": m.get("name"), "topics": topics, "sources": {}}
+    # ★台帳へ届かなかった隔離★（届かないまま静かに出典を失わせない）
+    unreported = []
     if fetch is None:
         import ceiling_lookup as _cl
         import directory_index as _di
@@ -166,12 +168,6 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
         def fetch(name):
             got = {}
             cats = _sj.read_json(_di.CATALOGS, expect=dict)["directories"]
-            for dir_id, r in (_di.find(name).get("results") or {}).items():
-                if r.get("state") != "FOUND":
-                    got[dir_id] = {"state": r.get("state")}
-                    continue
-                _read(dir_id, r["url"], got,
-                      (cats.get(dir_id) or {}).get("publisher_id"))
             # ★人が一度確かめた出典も足す★（2026-08-07・台帳#265）
             #   名鑑は機種名で引くので、表記が違う機種を引き当てられない。
             #   「スマスロ防振り」↔「痛いのは嫌なので防御力に極振り…」のような
@@ -182,6 +178,21 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
             except Exception as e:        # noqa: BLE001
                 got["_saved_"] = {"error": "控えを読めません: " + str(e)[:60]}
                 saved = []
+            # ★控えにあるURLは、名鑑側では読まない★（2026-08-10・依頼135のP0-2）
+            #   名鑑は一覧のリンク文字だけで見つけたと決めて中身を見ない。
+            #   同じURLが先に名鑑として読まれると、控えの同定を通らないまま
+            #   本文が入る（ちょんぼりすたは名鑑であり控えの発行者でもある）。
+            saved_urls = {r.get("url") for r in saved if r.get("url")}
+            for dir_id, r in (_di.find(name).get("results") or {}).items():
+                if r.get("state") != "FOUND":
+                    got[dir_id] = {"state": r.get("state")}
+                    continue
+                if r["url"] in saved_urls:
+                    got[dir_id] = {"state": "SAME_AS_SAVED",
+                                   "why": "控えと同じURLなので控え側で確かめます"}
+                    continue
+                _read(dir_id, r["url"], got,
+                      (cats.get(dir_id) or {}).get("publisher_id"))
             for rec in saved:
                 url = rec.get("url")
                 if not url or any(v.get("url") == url for v in got.values()):
@@ -204,9 +215,20 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
                                   "error": "確かめられません: " + str(e)[:60]}
                     continue
                 if ck["state"] != _ms.CHECK_OK:
-                    _ms.report_changed(slug, rec, ck)
+                    note = ""
+                    if ck["state"] == _ms.CHECK_CHANGED:
+                        # ★先に隔離を残してから台帳へ送る★（依頼135・回答5）
+                        #   ここで控えに残さないと、読む側は毎回止めるのに
+                        #   手当ての一覧はずっと「出典あり」と数え続ける。
+                        _ms.remember_changed(slug, url, ck, reported=False)
+                        sent = _ms.report_changed(slug, rec, ck)
+                        _ms.remember_changed(slug, url, ck, reported=sent)
+                        if not sent:
+                            note = "／★台帳へ届いていません★"
+                            unreported.append(url)
                     got[where] = {"url": url, "publisher": pub,
-                                  "error": "%s: %s" % (ck["state"], ck["why"])}
+                                  "error": "%s: %s%s"
+                                           % (ck["state"], ck["why"], note)}
                     continue
                 _read(where, url, got, pub, html=ck.get("html"))
             return got
@@ -243,6 +265,7 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
             unknown.append(v.get("url"))
     out["usable_lineages"] = len(keys)
     out["lineage_unknown"] = unknown
+    out["unreported_quarantine"] = unreported
     return out
 
 
@@ -377,13 +400,16 @@ def selftest() -> int:
     import directory_index as _di
     import machine_sources as _ms
     import new_machine_watch as _nw
-    keep2 = (_di.find, _ms.urls_for, _ms.recheck, _ms.report_changed, _nw._get)
-    reported = []
+    keep2 = (_di.find, _ms.urls_for, _ms.recheck, _ms.report_changed, _nw._get,
+             _ms.remember_changed)
+    reported, held = [], []
 
     def _never(url, timeout=20):
         raise AssertionError("★同定を通さずに取りに行きました★")
 
     try:
+        _ms.remember_changed = lambda slug, url, got, reported=False: held.append(
+            (url, reported))
         _di.find = lambda name, catalogs=None: {"results": {}}
         _ms.urls_for = lambda slug, data=None: [
             {"url": "https://a.example/ok", "publisher": "p1"},
@@ -406,9 +432,29 @@ def selftest() -> int:
         t("　隔離中の控えは取りに行きもしない", "隔離中" in s["控え:p3"]["error"])
         t("★★変わったことは台帳へ届ける★★（黙って出典を1つ失わない）",
           reported == ["https://a.example/ng"])
+        t("★★台帳へ送る前に、先に隔離を控えへ残す★★（依頼135・回答5）"
+          "＝送信に失敗しても「使わない」は消えない",
+          held and held[0] == ("https://a.example/ng", False))
+
+        # ★名鑑が同じURLを先に読んで同定を飛ばす経路★（依頼135のP0-2）
+        same = "https://a.example/ok"
+        _di.find = lambda name, catalogs=None: {"results": {
+            "chonborista": {"state": "FOUND", "url": same}}}
+        _ms.urls_for = lambda slug, data=None: [
+            {"url": same, "publisher": "chonborista"}]
+        seen = []
+        _ms.recheck = lambda slug, rec, html=None, pubs=None: (
+            seen.append(rec["url"]) or {"state": _ms.CHECK_CHANGED,
+                                        "why": "題が変わりました", "html": None})
+        s = collect("t3", ["ceiling"], name="試験機")["sources"]
+        t("★★控えにあるURLは、名鑑側でも同定を飛ばさない★★"
+          "（ちょんぼりすたは名鑑であり控えの発行者でもある）",
+          seen == [same] and s["chonborista"]["state"] == "SAME_AS_SAVED"
+          and s["控え:chonborista"].get("error")
+          and "text_len" not in s["控え:chonborista"])
     finally:
         (_di.find, _ms.urls_for, _ms.recheck, _ms.report_changed,
-         _nw._get) = keep2
+         _nw._get, _ms.remember_changed) = keep2
 
     print(f"\n{ran[0]}/{ran[0]} 合格" if ok else "\n不合格あり")
     return 0 if ok else 1
@@ -466,6 +512,17 @@ def main() -> int:
         with open(a.out, "w", encoding="utf-8", newline="\n") as f:
             f.write(as_request(got))
         print("依頼文:", a.out)
+    if got.get("unreported_quarantine"):
+        # ★止める側に倒す★（2026-08-10・依頼135の回答5）
+        #   「別機種に化けた疑い」を見つけたのに台帳へ届いていない。
+        #   控えには隔離として残っているので出典が復活することはないが、
+        #   人が気づかないまま出典が1つ減った状態が続く。
+        print("★別のページに変わった疑いを台帳へ登録できませんでした★: "
+              + ", ".join(got["unreported_quarantine"]), file=sys.stderr)
+        print("  控えには隔離として残しています。"
+              "python scripts/machine_sources.py --recheck --apply "
+              "で送り直してください", file=sys.stderr)
+        return 3
     return 0
 
 

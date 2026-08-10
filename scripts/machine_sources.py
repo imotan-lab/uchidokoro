@@ -47,6 +47,7 @@ import datetime
 import hashlib
 import json
 import os
+import re
 import sys
 import unicodedata
 import urllib.parse
@@ -267,9 +268,8 @@ JUDGES = ("claude", "codex", "運営者")
 MIN_WHY = 8          # 「x」の一文字で通っていたので、文になる長さを求める
 
 
-def record(slug: str, url: str, why: str, by: list,
-           override_identity: str = "", checked: dict | None = None) -> dict:
-    """★検査を通ったものだけを控えに残す★（fail-closed）"""
+def _judgement(why: str, by: list) -> list:
+    """★誰がなぜ判断したかを必ず書かせる★（記録も承認も同じ条件で通す）"""
     if len(str(why or "").strip()) < MIN_WHY:
         raise SourceError(
             "--why（なぜ同じ機種と判断したか）は%d文字以上で書きます" % MIN_WHY)
@@ -280,6 +280,13 @@ def record(slug: str, url: str, why: str, by: list,
     if bad:
         raise SourceError("判断者に使えない名前です（%s のみ）: %s"
                           % ("/".join(JUDGES), ",".join(bad)))
+    return who
+
+
+def record(slug: str, url: str, why: str, by: list,
+           override_identity: str = "", checked: dict | None = None) -> dict:
+    """★検査を通ったものだけを控えに残す★（fail-closed）"""
+    who = _judgement(why, by)
     got = checked if checked is not None else check(slug, url)
     # ★検査したものと記録するものが同じか確かめる★（2026-08-09・依頼125）
     #   ここが無いと、別の機種・別のURLを検査した結果を持ってきて
@@ -374,32 +381,64 @@ def _marks_of(got: dict) -> dict:
     }
 
 
+def _headings_same(marks: dict, now: dict):
+    """記録した見出しが、今もこのページに出ているか。
+
+    返すもの: True=出ている / False=消えた / None=記録が無くて比べられない
+    """
+    old = [_title_key(h) for h in (marks.get("headings") or []) if str(h).strip()]
+    if not old:
+        return None
+    new = {_title_key(h) for h in (now.get("headings") or [])}
+    if not new:
+        return False          # 見出しが1つも読めない＝別のページになった疑い
+    return old[0] in new
+
+
 def _same_page(rec: dict, now: dict):
-    """保存した手がかりと今のページを比べる。★迷ったら使わない★"""
+    """保存した手がかりと今のページを比べる。★迷ったら使わない★
+
+    ★手がかり1つでは足りない★（2026-08-10・依頼135のP0-1を再現して直した）
+      題の指紋が合えばそれだけで通していたので、
+        ①題を残したまま中身を別機種へ差し替える形
+        ②保存時にあった型式が**読めなくなった**形（同定の根拠を失っている）
+      が素通りしていた。いまは**保存してある手がかりが全部そろうこと**を求める。
+
+    ★見抜けないもの（正直に書いておく）★
+      題も見出しも同じまま本文だけ別機種になった場合は、ここでは分からない。
+      それは意味の判断なので、2AIの突き合わせ側の仕事。
+    """
     marks = rec.get("identity_marks") or {}
+    if not marks.get("title_fp"):
+        # ★手がかりが無い控えは使わない★（fail-closed）
+        #   2026-08-10に全件取り直したので、ここへ来るのは手で書き足した控えだけ。
+        #   ★120字で切った題との前方一致はやめた★（依頼135・回答2）
+        #     121字目以降だけが違う別機種を通しうるうえ、もう不要になった。
+        return (CHECK_CHANGED,
+                "確かめる手がかりがありません（--accept-current で承認が要ります）")
+
     old_code = str(marks.get("model_code") or "").strip()
     new_code = str(now.get("model_code") or "").strip()
-    # ★型式が食い違ったら、題が同じでも別の機種★
-    #   （題を使い回して中身だけ差し替える形は、題では見抜けない）
     if old_code and new_code and _title_key(old_code) != _title_key(new_code):
+        # ★題を使い回して中身だけ差し替える形は、題では見抜けない★
         return CHECK_CHANGED, "型式が変わりました（%s → %s）" % (old_code, new_code)
-    if marks.get("title_fp"):
-        if marks["title_fp"] == now.get("title_fp"):
-            return CHECK_OK, ""
-        if old_code and new_code:
-            return CHECK_OK, "題は変わりましたが型式が一致します"
-        return CHECK_CHANGED, "題が変わりました（控え: %s）" % (
-            str(marks.get("title") or "")[:60])
-    # ★手がかりを保存する前に入れた控え★（2026-08-07の35件）
-    #   題だけが残っている。120字で切ってあるので**前方一致**で比べる。
-    #   ここを通れるのは一度だけ＝`--recheck --apply` で手がかりを保存し直す。
-    saved = str(rec.get("title") or "")
-    if not saved:
-        return CHECK_CHANGED, "確かめる手がかりがありません（取り直しが要ります）"
-    a, b = _title_key(saved), _title_key(now.get("title"))
-    if a == b or (len(saved) >= 120 and a and b.startswith(a)):
-        return CHECK_OK, "旧い控え（保存時の題だけで確かめました）"
-    return CHECK_CHANGED, "題が変わりました（控え: %s）" % saved[:60]
+    if old_code and not new_code:
+        # ★あった手がかりが消えたのも「変わった」★（同定の根拠を失っている）
+        return CHECK_CHANGED, "型式が読めなくなりました（控え: %s）" % old_code
+
+    title_same = marks["title_fp"] == now.get("title_fp")
+    heads = _headings_same(marks, now)
+    if title_same:
+        if heads is False:
+            return (CHECK_CHANGED,
+                    "題は同じですが見出しが変わりました（控え: %s）"
+                    % str((marks.get("headings") or ["（なし）"])[0])[:60])
+        return CHECK_OK, ""
+    if old_code and new_code:
+        # 型式が一致している＝機種は同じで、題の飾りが変わっただけ
+        return CHECK_OK, "題は変わりましたが型式が一致します"
+    return CHECK_CHANGED, "題が変わりました（控え: %s）" % (
+        str(marks.get("title") or "")[:60])
 
 
 def recheck(slug: str, rec: dict, html: str | None = None,
@@ -426,7 +465,15 @@ def recheck(slug: str, rec: dict, html: str | None = None,
         try:
             html = _w._get(url)
         except Exception as e:              # noqa: BLE001
-            out["why"] = "取得できません（%s）" % str(e)[:80]
+            msg = str(e)
+            # ★無くなったページは「一時的に読めない」ではない★（依頼135・P2）
+            #   404/410 を取得失敗と同じ扱いにすると、廃止された出典が
+            #   いつまでも人の確認対象にならないまま控えに残る。
+            if re.search(r"HTTP\s*(404|410)", msg):
+                out["state"] = CHECK_CHANGED
+                out["why"] = "ページが無くなりました（%s）" % msg[:80]
+            else:
+                out["why"] = "取得できません（%s）" % msg[:80]
             return out
         final = _w.LAST_FINAL_URL.get("url") or ""
         out["final_url"] = final or url
@@ -498,14 +545,15 @@ def issue_args(slug: str, rec: dict, got: dict) -> list:
             "--title", title, "--detail", detail]
 
 
-def report_changed(slug: str, rec: dict, got: dict) -> None:
-    """隔離を人に届ける。★黙って落とさない★（失敗しても呼び出し元は止めない）
+def report_changed(slug: str, rec: dict, got: dict) -> bool:
+    """隔離を人に届ける。★届いたかどうかを返す★（例外は投げない）
 
     ここが無いと、無人タスクは出典を1つ静かに失うだけで、
     誰も「別機種に化けたページ」に気づけない。
+    ★届かなかったことは呼び出し元が控えに残す★（依頼135・P1-5）
     """
     if got.get("state") != CHECK_CHANGED:
-        return
+        return True
     try:
         import subprocess
         r = subprocess.run(
@@ -514,15 +562,77 @@ def report_changed(slug: str, rec: dict, got: dict) -> None:
             # ★シェルを通らない引数配列なので直接指定でよい★（台帳#295）
             env=dict(os.environ, UCHIDOKORO_ARGV_CALL="1"),
             capture_output=True, timeout=60, check=False)
-        if r.returncode != 0:
-            # ★届かなかったことは必ず残す★（握りつぶすと隔離が誰にも見えない）
-            print("★台帳へ登録できませんでした（%s / %s）★: %s"
-                  % (slug, rec.get("url"),
-                     (r.stderr or b"").decode("utf-8", "replace")[:200]),
-                  file=sys.stderr)
+        if r.returncode == 0:
+            return True
+        why = (r.stderr or b"").decode("utf-8", "replace")[:200]
     except Exception as e:                  # noqa: BLE001
-        print("★台帳へ登録できませんでした（%s / %s）★: %s"
-              % (slug, rec.get("url"), str(e)[:200]), file=sys.stderr)
+        why = str(e)[:200]
+    print("★台帳へ登録できませんでした（%s / %s）★: %s"
+          % (slug, rec.get("url"), why), file=sys.stderr)
+    return False
+
+
+def remember_changed(slug: str, url: str, got: dict,
+                     reported: bool = False) -> dict:
+    """★「変わった」ことだけを控えに残す（手がかりは絶対に触らない）★
+
+    ★なぜ無人タスクからでも書いてよいか★（2026-08-10・依頼135のP1-3）
+      書くのは「使わない」という**制限**だけで、判断（手がかり）は書かない。
+      これが無いと、読む側は毎回止めるのに `missing()` はずっと1票と数え続け、
+      その機種が手当ての一覧から外れたまま誰も探しに行かない。
+    """
+    if got.get("state") != CHECK_CHANGED:
+        return {"state": "SKIP"}
+    data = load()
+    for rec in (data.get("machines") or {}).get(slug) or []:
+        if rec.get("url") != url:
+            continue
+        rec["last_check"] = {
+            "at": datetime.date.today().isoformat(),
+            "state": CHECK_CHANGED,
+            "why": str(got.get("why") or "")[:200],
+            # ★台帳へ届いたか★（届いていないものは --recheck が拾い直す）
+            "reported": bool(reported),
+        }
+        _save(data)
+        return {"state": "QUARANTINED", "reported": bool(reported)}
+    return {"state": "NOT_FOUND"}
+
+
+def accept_current(slug: str, url: str, why: str, by: list) -> dict:
+    """★人が「まだ同じ機種のページだ」と承認して手がかりを取り直す★
+
+    ★なぜ要るか（2026-08-10・依頼135のP1-4）★
+      題が正当に変わっただけの出典は、`--recheck --apply` では永久に戻らない
+      （手がかりを書けるのは「同じページだ」と言えたときだけなので堂々巡り）。
+      型式の無いページ（なな徹・ちょんぼりすた・一撃＝控えの大半）が該当する。
+      戻す道が無いと、正しい出典を失ったまま機種の更新が止まる。
+    """
+    _judgement(why, by)
+    data = load()
+    for rec in (data.get("machines") or {}).get(slug) or []:
+        if rec.get("url") != url:
+            continue
+        got = recheck(slug, rec)
+        if not got.get("marks_now"):
+            # ★読めないページは承認できない★（見ずに判を押させない）
+            raise SourceError("いま読めないページは承認できません: " + got["why"])
+        before = dict(rec.get("identity_marks") or {})
+        rec["identity_marks"] = got["marks_now"]
+        rec["last_check"] = {"at": datetime.date.today().isoformat(),
+                             "state": CHECK_OK, "why": "人が承認しました"}
+        rec.setdefault("accepted", []).append({
+            "at": datetime.date.today().isoformat(),
+            "by": list(by), "why": str(why).strip()[:300],
+            "was_title": str(before.get("title") or "")[:120],
+            "now_title": str(got["marks_now"].get("title") or "")[:120],
+            "was_model_code": before.get("model_code"),
+            "now_model_code": got["marks_now"].get("model_code"),
+        })
+        _save(data)
+        return {"state": "ACCEPTED", "url": url,
+                "was": before.get("title"), "now": got["marks_now"].get("title")}
+    return {"state": "NOT_FOUND"}
 
 
 def remember_check(slug: str, url: str, got: dict) -> dict:
@@ -536,11 +646,15 @@ def remember_check(slug: str, url: str, got: dict) -> dict:
     for rec in (data.get("machines") or {}).get(slug) or []:
         if rec.get("url") != url:
             continue
-        rec["last_check"] = {
+        last = {
             "at": datetime.date.today().isoformat(),
             "state": got.get("state"),
             "why": str(got.get("why") or "")[:200],
         }
+        if got.get("state") == CHECK_CHANGED:
+            # ★台帳へ届いたかも一緒に残す★（届いていなければ次回また送る）
+            last["reported"] = bool(got.get("reported"))
+        rec["last_check"] = last
         if got.get("state") == CHECK_OK and got.get("marks_now"):
             rec["identity_marks"] = got["marks_now"]
             if got.get("text_sha256"):
@@ -558,10 +672,21 @@ def recheck_all(slug: str = "", apply: bool = False) -> list:
         if slug and s != slug:
             continue
         for rec in recs:
-            got = recheck(s, rec)
+            try:
+                got = recheck(s, rec)
+            except Exception as e:          # noqa: BLE001
+                # ★1件つまずいても残りを見る★（途中で落ちると、
+                #   その先の控えが確かめられないまま「無事」に見える）
+                got = {"state": CHECK_UNUSABLE,
+                       "why": "確かめられません: " + str(e)[:80],
+                       "marks_now": None}
             if apply:
+                if got.get("state") == CHECK_CHANGED:
+                    # ★先に隔離を残してから台帳へ送る★（依頼135・回答5）
+                    #   送信に失敗しても「使わない」は消えない。
+                    remember_changed(s, rec.get("url"), got, reported=False)
+                    got["reported"] = report_changed(s, rec, got)
                 remember_check(s, rec.get("url"), got)
-                report_changed(s, rec, got)
             rows.append({"slug": s, "url": rec.get("url"),
                          "publisher": rec.get("publisher"),
                          "state": got["state"], "why": got["why"],
@@ -808,20 +933,31 @@ def selftest() -> int:
                     )["model_code"] is None
           and _model_code_of(code_body) == "LテストAB1")
 
-        # ★手がかりを保存する前に入れた控え（2026-08-07の35件）★
-        old = dict(base, title=title_now[:120])
-        t("　旧い控えは、保存時の題だけで確かめる（取り直すまでの橋渡し）",
-          R(old, body)["state"] == CHECK_OK)
-        t("　旧い控えでも、題が変わっていれば使わない",
-          R(old, other)["state"] == CHECK_CHANGED)
-        t("★★手がかりが何も無い控えは使わない★★（fail-closed）",
-          R(dict(base), body)["state"] == CHECK_CHANGED)
-        long_title = ("<title>" + "あ" * 200 + "</title><body><h1>x</h1><p>"
-                      + ("天井は999Gです。" * 40) + "</p></body>")
-        t("　120字で切って保存した長い題は、前方一致で確かめる"
-          "（P-WORLDの題は200字近い）",
-          R(dict(base, title=_w.page_title(long_title)[:120]),
-            long_title)["state"] == CHECK_OK)
+        # ★依頼135のP0-1：手がかり1つでは通さない★
+        t("★★保存時にあった型式が読めなくなったら止める★★"
+          "（同定の根拠を失っているのに、題だけで通していた）",
+          R(m_code, body)["state"] == CHECK_CHANGED
+          and "型式が読めなくなりました" in R(m_code, body)["why"])
+        head_marked = dict(base, identity_marks={
+            "title_fp": _title_fp(title_now), "title": title_now[:120],
+            "headings": [name], "model_code": None})
+        swap = ("<title>" + title_now + "</title><body><h1>ぜんぜん別の機種</h1>"
+                "<p>" + ("天井は777Gです。" * 40) + "</p></body>")
+        t("★★題を残したまま中身を差し替えた形を、見出しで捕まえる★★"
+          "（型式の無い出典が控えの大半なので、題だけでは薄い）",
+          R(head_marked, swap)["state"] == CHECK_CHANGED
+          and "見出しが変わりました" in R(head_marked, swap)["why"])
+        t("　題も見出しも同じなら通る（正しく通る側も確かめる）",
+          R(head_marked, body)["state"] == CHECK_OK)
+        t("　見出しを記録していない控えは題だけで判断する（記録が無いものは求めない）",
+          R(marked, body)["state"] == CHECK_OK)
+
+        # ★手がかりが無い控え（旧形式）は、もう通さない★（依頼135・回答2）
+        t("★★手がかりが無い控えは使わない★★（fail-closed）"
+          "＝120字の前方一致はやめた（121字目以降だけ違う別機種を通しうる）",
+          R(dict(base, title=title_now[:120]), body)["state"] == CHECK_CHANGED)
+        t("　戻し方を必ず案内する（黙って行き止まりにしない）",
+          "--accept-current" in R(dict(base), body)["why"])
 
         t("★★発行者が変わったら使わない★★",
           R(dict(marked, publisher="nana-press"),
@@ -852,16 +988,58 @@ def selftest() -> int:
               led, expect=dict)["issues"][0]["title"])
 
         t("　確認の結果は控えに書き戻せる（手がかりの取り直し）",
-          (_save({"schema_version": SCHEMA, "machines": {slug: [dict(old)]}}),
-           remember_check(slug, base["url"], R(old, body))["state"] == "SAVED"
-           and urls_for(slug)[0]["identity_marks"]["title_fp"]
-           == _title_fp(title_now))[1])
+          (_save({"schema_version": SCHEMA,
+                  "machines": {slug: [dict(marked)]}}),
+           remember_check(slug, base["url"], R(marked, body))["state"] == "SAVED"
+           and urls_for(slug)[0]["text_sha256_last"])[1])
         t("★★変わっていたら手がかりを上書きしない★★"
           "（差し替わった別機種のページを正として覚え直さない）",
-          (_save({"schema_version": SCHEMA, "machines": {slug: [dict(old)]}}),
-           remember_check(slug, base["url"], R(old, other)),
-           "identity_marks" not in urls_for(slug)[0]
+          (_save({"schema_version": SCHEMA,
+                  "machines": {slug: [dict(marked)]}}),
+           remember_check(slug, base["url"], R(marked, other)),
+           urls_for(slug)[0]["identity_marks"]["title_fp"]
+           == _title_fp(title_now)
            and urls_for(slug)[0]["last_check"]["state"] == CHECK_CHANGED)[2])
+
+        # ★依頼135のP1-3：隔離そのものを控えに残す★
+        _save({"schema_version": SCHEMA, "machines": {slug: [dict(marked)]}})
+        rq = remember_changed(slug, base["url"], R(marked, other),
+                              reported=False)
+        left = urls_for(slug)[0]
+        t("★★『変わった』だけを控えに残せる（手がかりは触らない）★★"
+          "＝これが無いと、読む側は毎回止めるのに手当ての一覧は出典ありと数え続ける",
+          rq["state"] == "QUARANTINED" and quarantined(left)
+          and left["identity_marks"]["title_fp"] == _title_fp(title_now)
+          and left["last_check"]["reported"] is False)
+        t("　変わっていないものを隔離として書き込まない",
+          remember_changed(slug, base["url"], R(marked, body))["state"] == "SKIP")
+
+        # ★依頼135のP1-4：人が承認して戻せる★
+        _save({"schema_version": SCHEMA, "machines": {slug: [dict(marked)]}})
+        try:
+            accept_current(slug, base["url"], why="短い", by=["運営者"])
+            okx = False
+        except SourceError:
+            okx = True
+        t("　承認にも「誰がなぜ」を書かせる（記録と同じ条件）", okx)
+        _keep_recheck = globals()["recheck"]
+        try:
+            # ★承認は「いまのページ」を取りに行くので、そこだけ差し替える★
+            globals()["recheck"] = (
+                lambda s, r, html=None, pubs=None, _f=_keep_recheck:
+                _f(s, r, html=other, pubs=pubs))
+            acc = accept_current(slug, base["url"],
+                                 why="題が変わっただけで同じ機種のページです",
+                                 by=["運営者"])
+            got_rec = urls_for(slug)[0]
+            t("★★題が正当に変わったものを、人が承認して戻せる★★"
+              "（型式の無い出典は --recheck --apply では永久に戻らない）",
+              acc["state"] == "ACCEPTED" and not quarantined(got_rec)
+              and got_rec["identity_marks"]["title_fp"]
+              == _title_fp(_w.page_title(other))
+              and got_rec["accepted"][0]["by"] == ["運営者"])
+        finally:
+            globals()["recheck"] = _keep_recheck
 
         # ★2026-08-09・依頼125で見つかった数え間違いを固定する★
         #   名鑑と控えに同じ発行者が出たとき、以前は2票と数えていた。
@@ -949,6 +1127,10 @@ def main() -> int:
                     help="控えのページが同じままか確かめる（既定は見るだけ）")
     ap.add_argument("--apply", action="store_true",
                     help="--recheck の結果を控えに保存する（★人の操作専用★）")
+    ap.add_argument("--accept-current", dest="accept_current",
+                    action="store_true",
+                    help="いまのページを「まだ同じ機種」と人が承認して手がかりを"
+                         "取り直す（--slug --url --why --by が要ります）")
     ap.add_argument("--slug")
     ap.add_argument("--url")
     ap.add_argument("--why", default="")
@@ -980,6 +1162,14 @@ def main() -> int:
         if a.forget:
             print(json.dumps(forget(a.slug, a.url), ensure_ascii=False))
             return 0
+        if a.accept_current:
+            if not (a.slug and a.url):
+                print("--slug と --url が要ります")
+                return 2
+            r = accept_current(a.slug, a.url, a.why,
+                               [x.strip() for x in a.by.split(",") if x.strip()])
+            print(json.dumps(r, ensure_ascii=False))
+            return 0 if r["state"] == "ACCEPTED" else 1
         if a.recheck:
             rows = recheck_all(a.slug or "", apply=a.apply)
             mark = {CHECK_OK: "○", CHECK_CHANGED: "★変わっています★",
@@ -997,9 +1187,15 @@ def main() -> int:
                      n[CHECK_UNUSABLE]))
             if a.apply:
                 print("★保存しました★（同じページのものだけ手がかりを取り直し）")
+                print("　まだ同じ機種だと人が判断したものは、"
+                      "--accept-current --slug X --url Y --why … --by 運営者")
             else:
                 print("※見るだけです。保存するには --apply を付けます")
-            return 1 if n[CHECK_CHANGED] else 0
+            # ★読めないだけでも成功にしない★（依頼135・P2）
+            #   廃止された出典が誰の目にも触れず残るのを防ぐ。
+            if n[CHECK_CHANGED]:
+                return 1
+            return 2 if n[CHECK_UNUSABLE] else 0
         if a.missing:
             rows = missing()
             print("★2つの系列に届かない機種: %d件★" % len(rows))
