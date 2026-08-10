@@ -231,13 +231,20 @@ def selftest() -> int:
 
     global LOCK_PATH
     keep = LOCK_PATH
-    tmp = Path(tempfile.mkdtemp())
     ops = TEXT_ROOTS[0]
-    ops.mkdir(parents=True, exist_ok=True)
+    # ★自分が作ったものだけ片づける★（元からあった置き場は消さない）
+    ops_existed = ops.exists()
     # ★後片付けは finally で必ず通すので、先に名前を用意しておく★
     #   （途中で落ちた回に、まだ作っていない名前を触って別の失敗にしない）
+    tmp = None
     good = crlf = bad = nl = big = himitsu = sib = None
+    stuck = []                 # ★消せなかったもの（黙って残さない）★
     try:
+        # ★一時フォルダを作るのも try の中★（2026-08-11・依頼145）
+        #   外で作ると、この直後の mkdir が失敗したときに finally へ入らず、
+        #   フォルダが残ったままになる。
+        tmp = Path(tempfile.mkdtemp())
+        ops.mkdir(parents=True, exist_ok=True)
         LOCK_PATH = tmp / "task.lock"
         LOCK_PATH.write_text(json.dumps(
             {"task": "uchidokoro-add-machine",
@@ -398,19 +405,33 @@ def selftest() -> int:
                 continue
             try:
                 f.unlink()
-            except Exception:              # noqa: BLE001
+            except FileNotFoundError:
                 pass
-        try:
-            if sib is not None:
-                sib.rmdir()
-        except Exception:                  # noqa: BLE001
-            pass
-        # ★一時フォルダは丸ごと消す★（2026-08-11・依頼144）
-        #   task.lock / outside.txt / issues.json / real.json とフォルダ自身が
-        #   残っていた。個々に並べると**足し忘れたものが黙って残る**ので、
-        #   この中に作ったものは丸ごと回収する。
-        import shutil
-        shutil.rmtree(tmp, ignore_errors=True)
+            except Exception as e:         # noqa: BLE001
+                stuck.append("%s（%s）" % (f.name, type(e).__name__))
+        for d in (sib, tmp):
+            # ★一時フォルダは丸ごと消す★（2026-08-11・依頼144）
+            #   個々に並べると**足し忘れたものが黙って残る**ので、
+            #   この中に作ったものはまとめて回収する。
+            if d is None:
+                continue
+            try:
+                import shutil
+                shutil.rmtree(d)
+            except FileNotFoundError:
+                pass
+            except Exception as e:         # noqa: BLE001
+                stuck.append("%s（%s）" % (d.name, type(e).__name__))
+        if not ops_existed:
+            # 自分が作った置き場だけ、空なら戻す（元からあれば触らない）
+            try:
+                ops.rmdir()
+            except OSError:
+                pass
+        # ★消せなかったことを黙って通さない★（2026-08-11・依頼145）
+        #   握りつぶしていたので、権限や掴まれで残っても合格に見えていた。
+        t("　後片付けが実際にできた（残ったもの: %s）"
+          % ("なし" if not stuck else "、".join(stuck)), not stuck)
 
     ng = sum(1 for _, o in results if not o)
     print()
