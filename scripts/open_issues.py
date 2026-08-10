@@ -233,7 +233,10 @@ def selftest() -> int:
     keep = LOCK_PATH
     ops = TEXT_ROOTS[0]
     # ★自分が作ったものだけ片づける★（元からあった置き場は消さない）
-    ops_existed = ops.exists()
+    #   ★「前に見たら無かった」ではなく「自分が作れた」で決める★（依頼146）
+    #     見てから作るまでの間に別の実行が作ることがあるので、
+    #     exists() の結果を所有の根拠にしない。
+    ops_created = False
     # ★後片付けは finally で必ず通すので、先に名前を用意しておく★
     #   （途中で落ちた回に、まだ作っていない名前を触って別の失敗にしない）
     tmp = None
@@ -244,7 +247,11 @@ def selftest() -> int:
         #   外で作ると、この直後の mkdir が失敗したときに finally へ入らず、
         #   フォルダが残ったままになる。
         tmp = Path(tempfile.mkdtemp())
-        ops.mkdir(parents=True, exist_ok=True)
+        try:
+            ops.mkdir(parents=True)        # ★作れたときだけ自分のもの★
+            ops_created = True
+        except FileExistsError:
+            pass
         LOCK_PATH = tmp / "task.lock"
         LOCK_PATH.write_text(json.dumps(
             {"task": "uchidokoro-add-machine",
@@ -426,12 +433,15 @@ def selftest() -> int:
                 pass
             except Exception as e:         # noqa: BLE001
                 stuck.append("%s（%s）" % (d.name, type(e).__name__))
-        if not ops_existed:
-            # 自分が作った置き場だけ、空なら戻す（元からあれば触らない）
+        if ops_created:
+            # 自分が作った置き場だけ戻す（元からあれば触らない）
             try:
                 ops.rmdir()
-            except OSError:
+            except FileNotFoundError:
                 pass
+            except OSError as e:
+                # ★ここの失敗も黙って通さない★（依頼146）
+                stuck.append("%s（%s）" % (ops.name, type(e).__name__))
         # ★消せなかったことを黙って通さない★（2026-08-11・依頼145）
         #   握りつぶしていたので、権限や掴まれで残っても合格に見えていた。
         t("　後片付けが実際にできた（残ったもの: %s）"
