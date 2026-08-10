@@ -270,8 +270,12 @@ def selftest() -> int:
           _read_text_arg("", str(crlf), "detail") == "1行目\n2行目")
 
         # ★隣のフォルダを許さない★（依頼128で実際に読めてしまった）
-        sib = Path(str(ops) + "-secret")
-        sib.mkdir(parents=True, exist_ok=True)
+        #   ★名前は固定にしない★（2026-08-11・依頼146）
+        #     固定名 `ops-secret` を丸ごと消す形にしてしまい、
+        #     **人が置いた同名フォルダがあれば中身ごと消える**ところだった。
+        #     頭が `ops-` で始まる使い捨ての名前にすれば、
+        #     「隣を読まない」の検査はそのままで、自分の作ったものだけ消せる。
+        sib = Path(tempfile.mkdtemp(prefix=ops.name + "-", dir=ops.parent))
         himitsu = sib / "_selftest.txt"
         himitsu.write_text("許可していない置き場", encoding="utf-8")
         stops("★★許可した置き場の『隣』は読まない（ops-secret 等）★★",
