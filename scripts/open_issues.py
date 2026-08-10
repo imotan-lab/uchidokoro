@@ -309,18 +309,52 @@ def selftest() -> int:
           "（黙って止まり続けないための安全網そのもの）",
           n == 0 and len(got["issues"]) == 1
           and got["issues"][0]["title"] == "値が再現できません")
+
+        # ★重ならないだけでなく、最終確認日と追記まで見る★（依頼141の指摘2）
+        old = json.loads(store.read_text(encoding="utf-8"))
+        old["issues"][0]["last_seen"] = "2020-01-01"
+        store.write_text(json.dumps(old, ensure_ascii=False), encoding="utf-8")
         add_issue(store, source="grow-machine", slug="s1",
                   kind="external_value", title="値が再現できません",
-                  detail="出典が消えました", severity="MATERIAL")
-        got = json.loads(store.read_text(encoding="utf-8"))
-        t("　同じ題は重ねて登録しない（last_seen だけ動く）",
-          len(json.loads(store.read_text(encoding="utf-8"))["issues"]) == 1)
-        t("　実際に使っている2本が、この道を通っている",
-          all("add_issue" in (Path(__file__).parent / f).read_text(
-              encoding="utf-8")
-              and "cmd_add" not in (Path(__file__).parent / f).read_text(
-                  encoding="utf-8")
-              for f in ("grow_machine.py", "grow_legacy.py")))
+                  detail="別の出典も消えました", severity="MATERIAL")
+        one = json.loads(store.read_text(encoding="utf-8"))["issues"]
+        t("　同じ題は重ねず、最終確認日が動いて詳細が追記される",
+          len(one) == 1 and one[0]["last_seen"] == _today()
+          and "別の出典も消えました" in one[0]["detail"]
+          and "追記]" in one[0]["detail"])
+        add_issue(store, source="grow-machine", slug="s1",
+                  kind="external_value", title="値が再現できません",
+                  detail="別の出典も消えました", severity="MATERIAL")
+        two = json.loads(store.read_text(encoding="utf-8"))["issues"]
+        t("　同じ詳細は二度追記しない",
+          two[0]["detail"].count("別の出典も消えました") == 1)
+
+        # ★★実際に使っている2本を、本当に呼んで確かめる★★（依頼141の指摘1）
+        #   文字列があるかを見るだけでは、綴り違い・呼ばれない分岐・
+        #   引数の組み立て崩れを通してしまう＝今回の事故そのものを防げない。
+        #   grow_machine は例外を握ってログだけにするので、
+        #   「落ちないこと」ではなく**台帳に載ったこと**を見る。
+        real = tmp / "real.json"
+        # ★呼ぶ側が読んでいる実体を差し替える★
+        #   このファイルを直接動かすと自分は `__main__` になり、
+        #   grow_machine が読む `open_issues` は**別の実体**になる。
+        #   自分の globals を書き換えても届かないので、名前で取り直す。
+        import open_issues as _oi_mod
+        keep_default = _oi_mod.DEFAULT_FILE
+        try:
+            _oi_mod.DEFAULT_FILE = real
+            import grow_legacy as _gl
+            import grow_machine as _gm
+            _gm.ledger_once("s9", "s9: 値が再現できません", "詳細", "MATERIAL")
+            _gl._to_ledger("s8", ["材料が集まりません"], transient=True)
+            rows = json.loads(real.read_text(encoding="utf-8"))["issues"]
+        finally:
+            _oi_mod.DEFAULT_FILE = keep_default
+        t("★★実際に使っている2本を呼んで、本当に台帳へ載ることを確かめる★★"
+          "（文字列を探すだけでは、今回の事故そのものを見逃す）",
+          len(rows) == 2
+          and {r["source"] for r in rows} == {"grow-machine", "update-machine"}
+          and {r["slug"] for r in rows} == {"s9", "s8"})
 
         for f in (good, crlf, bad, nl, big, himitsu):
             try:
@@ -389,10 +423,13 @@ def add_issue(path, *, source, slug, kind, title, severity, detail="",
 
 def cmd_add(path, args):
     """CLIから台帳へ登録する（ファイル渡しなどCLI固有の都合はここに閉じる）。"""
-    title = _read_text_arg(args.title, getattr(args, "title_file", ""),
-                           "title", allow_newline=False)
-    detail = _read_text_arg(args.detail, getattr(args, "detail_file", ""),
-                            "detail")
+    # ★引数が足りなければ早く大きく失敗させる★（2026-08-10・依頼141）
+    #   getattr で既定値を補うと、CLI専用と決めた境界を破った呼び出しを
+    #   部分的に延命し、**今回と同じ壊れ方をまた隠す**（次に必須項目が
+    #   増えたときに同じ事故が起きる）。コードからは add_issue() を使う。
+    title = _read_text_arg(args.title, args.title_file, "title",
+                           allow_newline=False)
+    detail = _read_text_arg(args.detail, args.detail_file, "detail")
     if not title:
         raise SystemExit("★--title または --title-file が要ります★")
     return add_issue(path, source=args.source, slug=args.slug, kind=args.kind,
