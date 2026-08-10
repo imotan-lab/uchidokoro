@@ -153,11 +153,12 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
 
         import machine_sources as _ms
 
-        def _read(where, url, got, publisher=None):
+        def _read(where, url, got, publisher=None, html=None):
             try:
+                page = _nw._get(url) if html is None else html
                 got[where] = {"url": url, "publisher": publisher,
                               "text": _cl.cut_user_area(
-                                  _cl._norm(_nw._visible_text(_nw._get(url))))}
+                                  _cl._norm(_nw._visible_text(page)))}
             except Exception as e:        # noqa: BLE001
                 got[where] = {"url": url, "publisher": publisher,
                               "error": str(e)[:80]}
@@ -185,8 +186,29 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
                 url = rec.get("url")
                 if not url or any(v.get("url") == url for v in got.values()):
                     continue
-                _read("控え:" + str(rec.get("publisher") or "?"), url, got,
-                      rec.get("publisher"))
+                where = "控え:" + str(rec.get("publisher") or "?")
+                pub = rec.get("publisher")
+                # ★読む直前に「本当にこの機種のページか」を確かめる★
+                #   （2026-08-10・台帳#292）ここが無いと、登録したページが
+                #   後日べつの機種へ差し替わっても気づかないまま原文として渡り、
+                #   **別機種の天井値**がこの機種の記事の材料になる。
+                if _ms.quarantined(rec):
+                    got[where] = {"url": url, "publisher": pub,
+                                  "error": "隔離中（別のページに変わった疑い）"}
+                    continue
+                try:
+                    ck = _ms.recheck(slug, rec)
+                except Exception as e:    # noqa: BLE001
+                    # ★確かめられないものは使わない★（fail-closed）
+                    got[where] = {"url": url, "publisher": pub,
+                                  "error": "確かめられません: " + str(e)[:60]}
+                    continue
+                if ck["state"] != _ms.CHECK_OK:
+                    _ms.report_changed(slug, rec, ck)
+                    got[where] = {"url": url, "publisher": pub,
+                                  "error": "%s: %s" % (ck["state"], ck["why"])}
+                    continue
+                _read(where, url, got, pub, html=ck.get("html"))
             return got
     for dir_id, r in (fetch(m.get("name")) or {}).items():
         if not r.get("text"):
@@ -349,6 +371,45 @@ def selftest() -> int:
         t("　原文に無い数字を補うなと明記している", "補わないでください" in req)
     finally:
         globals()["machine"] = keep
+
+    # --- ★控えを読む前に同定していることを、つないだ形で確かめる★（台帳#292）
+    #   ★関数を足しただけでは効かない★＝実際に呼ばれる道に入っているかを見る。
+    import directory_index as _di
+    import machine_sources as _ms
+    import new_machine_watch as _nw
+    keep2 = (_di.find, _ms.urls_for, _ms.recheck, _ms.report_changed, _nw._get)
+    reported = []
+
+    def _never(url, timeout=20):
+        raise AssertionError("★同定を通さずに取りに行きました★")
+
+    try:
+        _di.find = lambda name, catalogs=None: {"results": {}}
+        _ms.urls_for = lambda slug, data=None: [
+            {"url": "https://a.example/ok", "publisher": "p1"},
+            {"url": "https://a.example/ng", "publisher": "p2"},
+            {"url": "https://a.example/q", "publisher": "p3",
+             "last_check": {"state": _ms.CHECK_CHANGED}}]
+        _ms.recheck = lambda slug, rec, html=None, pubs=None: (
+            {"state": _ms.CHECK_OK, "why": "", "html": "<body>" + T + "</body>"}
+            if str(rec["url"]).endswith("/ok")
+            else {"state": _ms.CHECK_CHANGED, "why": "題が変わりました",
+                  "html": None})
+        _ms.report_changed = lambda slug, rec, got: reported.append(rec["url"])
+        _nw._get = _never
+        s = collect("t2", ["ceiling"], name="試験機")["sources"]
+        t("★★同定を通った控えだけ原文を渡す★★",
+          s["控え:p1"].get("text_len") and not s["控え:p1"].get("error"))
+        t("★★題が変わった控えは原文を渡さない★★"
+          "（別機種の値がこの機種の材料に混じる経路をふさぐ）",
+          s["控え:p2"].get("error") and "text_len" not in s["控え:p2"])
+        t("　隔離中の控えは取りに行きもしない", "隔離中" in s["控え:p3"]["error"])
+        t("★★変わったことは台帳へ届ける★★（黙って出典を1つ失わない）",
+          reported == ["https://a.example/ng"])
+    finally:
+        (_di.find, _ms.urls_for, _ms.recheck, _ms.report_changed,
+         _nw._get) = keep2
+
     print(f"\n{ran[0]}/{ran[0]} 合格" if ok else "\n不合格あり")
     return 0 if ok else 1
 
