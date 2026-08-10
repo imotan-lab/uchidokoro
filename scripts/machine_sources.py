@@ -43,12 +43,14 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime
 import hashlib
 import json
 import os
 import re
 import sys
+import time
 import unicodedata
 import urllib.parse
 
@@ -113,11 +115,74 @@ def load() -> dict:
 
 def _save(data: dict) -> None:
     os.makedirs(os.path.dirname(STORE), exist_ok=True)
-    tmp = STORE + ".tmp"
-    with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
-        json.dump(data, fh, ensure_ascii=False, indent=1)
-        fh.write("\n")
-    os.replace(tmp, STORE)
+    # ★一時ファイルの名前を実行ごとに変える★（2026-08-10・依頼137のP1-1）
+    #   同じ名前を使っていたので、2つの実行が同時に書くと
+    #   **片方が書いた一時ファイルを、もう片方が控えとして公開する**形だった。
+    tmp = "%s.tmp.%d" % (STORE, os.getpid())
+    try:
+        with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=1)
+            fh.write("\n")
+        os.replace(tmp, STORE)
+    finally:
+        if os.path.exists(tmp):
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+
+_LOCK_WAIT = 15.0        # 鍵が空くのを待つ最大の秒数
+_LOCK_STALE = 120.0      # これより古い鍵は、異常終了の残骸として奪う
+
+
+@contextlib.contextmanager
+def _lock():
+    """★控えを書くあいだの鍵★（2026-08-10・依頼137のP1-1）
+
+    読み直して比べるだけでは、**比べてから置き換えるまでのごく短い隙**に
+    別の実行が書いた分を消せる。消えるのが隔離や削除だと影響が大きい
+    （誤同定を理由に外した出典が復活しうる）ので、鍵で囲む。
+    ★ネットへ取りに行くのは鍵の外★（鍵を長く握らない）。
+    """
+    path = STORE + ".lock"
+    os.makedirs(os.path.dirname(STORE), exist_ok=True)
+    started, fd = time.time(), None
+    while True:
+        try:
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            break
+        except FileExistsError:
+            try:
+                age = time.time() - os.path.getmtime(path)
+            except OSError:
+                age = 0.0
+            if age > _LOCK_STALE:
+                try:                        # ★残骸で永久に止まらない★
+                    os.unlink(path)
+                except OSError:
+                    pass
+                continue
+            if time.time() - started > _LOCK_WAIT:
+                raise SourceError(
+                    "控えが他の実行に使われています（あとでやり直してください）")
+            time.sleep(0.15)
+    try:
+        os.write(fd, str(os.getpid()).encode("ascii"))
+        os.close(fd)
+        fd = None
+        yield
+    finally:
+        if fd is not None:
+            os.close(fd)
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+# ★「書かずに結果だけ返す」印★（条件が合わなかったときに使う）
+NO_WRITE = "_nowrite"
 
 
 def _now() -> str:
@@ -143,15 +208,19 @@ def _update(change, tries: int = 6):
     そこで、書く直前にファイルが読んだときのままかを確かめ、
     変わっていたら読み直してやり直す。
     """
-    for _ in range(tries):
-        base = _raw()
-        data = load()
-        out = change(data)
-        if out is None:
-            return None                     # 変えるものが無かった
-        if _raw() == base:
-            _save(data)
-            return out
+    with _lock():
+        for _ in range(tries):
+            base = _raw()
+            data = load()
+            out = change(data)
+            if out is None:
+                return None                 # 変えるものが無かった＝1文字も書かない
+            if out.get(NO_WRITE):
+                return out                  # 条件が合わない＝書かずに知らせる
+            # ★鍵があるので普通はここで一致する★（鍵を無視する実行への備え）
+            if _raw() == base:
+                _save(data)
+                return out
     raise SourceError("控えが同時に書き換えられています（やり直してください）")
 
 
@@ -194,6 +263,8 @@ def url_key(u: str) -> str:
     末尾の `/` や `www.` の有無が違うだけで「別のURL」と見なすと、
     名鑑側が先にそのページを読んでしまい、控えの同定を素通りする。
     ★問い合わせ文字列（?以降）は残す★＝別のページを指すことがある。
+    ★そろえるのは「省略できる既定のポート（80/443）」だけ★（依頼137のP2）
+      `:8443` のような明示のポートは**別の窓口**なので、同じにしない。
     """
     p = urllib.parse.urlsplit(str(u or "").strip())
     host = (p.hostname or "").lower().removeprefix("www.")
@@ -373,6 +444,8 @@ def record(slug: str, url: str, why: str, by: list,
         "lineage": got["lineage"],
         "title": got["title"][:120],
         "decided_at": datetime.date.today().isoformat(),
+        # ★時刻まで残す★（同じ日の複数回・書き込み順を後から追えるように）
+        "recorded_at": _now(),
         "decided_by": who,
         "why": str(why).strip()[:300],
         # ★どの中身を見て決めたか★（後から同じものを見たか確かめられる）
@@ -396,16 +469,25 @@ def record(slug: str, url: str, why: str, by: list,
     return _update(_change)
 
 
-def forget(slug: str, url: str) -> dict:
+def forget(slug: str, url: str, why: str = "", by: list | None = None) -> dict:
     """判断が間違っていたときに控えから外す（★人の操作専用★）。"""
     def _change(data):
         rows = urls_for(slug, data)
         left = [r for r in rows if r.get("url") != url]
         if len(left) == len(rows):
             return None                     # 見つからない＝1文字も書かない
+        gone = [r for r in rows if r.get("url") == url]
         data["machines"][slug] = left
         if not left:
             data["machines"].pop(slug, None)
+        # ★外したことも残す★（2026-08-10・依頼137のP2）
+        #   消した記録は復元できないので、いつ誰がなぜ外したかだけは残す。
+        log = data.setdefault("removed", [])
+        log.append({"slug": slug, "url": url, "at": _now(),
+                    "by": list(by or []), "why": str(why or "").strip()[:300],
+                    "title": str((gone[0] if gone else {}).get("title")
+                                 or "")[:120]})
+        del log[:-200]                      # 増えすぎないように直近だけ残す
         return {"state": "FORGOTTEN", "sources_now": len(left)}
     got = _update(_change)
     return got if got is not None else {"state": "NOT_FOUND"}
@@ -673,15 +755,23 @@ def remember_changed(slug: str, url: str, got: dict,
     return _update_one(slug, url, _change)
 
 
-def release_quarantine(slug: str, url: str) -> dict:
+def release_quarantine(slug: str, url: str, marks: dict | None = None) -> dict:
     """★ページが元どおりに戻ったら隔離を解く★（2026-08-10・依頼136）
 
     解くのは「保存してある手がかりに**完全に戻った**」ときだけ。
     手がかりは人が承認したものなので、そこへ戻ったなら同じページに戻っている。
     ★これが無いと、一時的な不具合で止まった出典が永久に戻らない★
       （題が1文字変わっただけでも止まるので、放っておくと出典が減り続ける）
+
+    ★確かめてから解くまでに人が動かしていたら解かない★（依頼137のP1-2）
+      `marks` に「確かめたときの手がかり」を渡すこと。控えが書き換わっていたら
+      `MARKS_CHANGED` を返す（呼び出し元は本文を使ってはいけない）。
     """
     def _change(rec):
+        if marks is not None and (rec.get("identity_marks") or {}) != marks:
+            return {"state": "MARKS_CHANGED", NO_WRITE: True}
+        if not quarantined(rec):
+            return {"state": "ALREADY_OK", NO_WRITE: True}
         rec["last_check"] = {"at": _now(), "state": CHECK_OK,
                              "why": "保存してある手がかりに戻ったので解除しました",
                              "by": "collect_evidence"}
@@ -1052,6 +1142,10 @@ def selftest() -> int:
           url_key("https://www.a.example/x/") == url_key("https://a.example/x")
           and url_key("https://a.example/x?q=1")
           != url_key("https://a.example/x?q=2"))
+        t("　省略できる既定のポートだけをそろえる（:8443 は別の窓口）",
+          url_key("https://a.example:443/x") == url_key("https://a.example/x")
+          and url_key("https://a.example:8443/x")
+          != url_key("https://a.example/x"))
 
         # ★手がかりが無い控え（旧形式）は、もう通さない★（依頼135・回答2）
         t("★★手がかりが無い控えは使わない★★（fail-closed）"
@@ -1115,8 +1209,21 @@ def selftest() -> int:
         t("　変わっていないものを隔離として書き込まない",
           remember_changed(slug, base["url"], R(marked, body))["state"] == "SKIP")
         t("　元どおりに戻ったら隔離を解ける（自動解除）",
-          release_quarantine(slug, base["url"])["state"] == "RELEASED"
+          release_quarantine(slug, base["url"],
+                             marked["identity_marks"])["state"] == "RELEASED"
           and not quarantined(urls_for(slug)[0]))
+        _save({"schema_version": SCHEMA, "machines": {slug: [
+            dict(marked, last_check={"state": CHECK_CHANGED})]}})
+        t("★★確かめてから解くまでに人が控えを変えていたら解かない★★"
+          "（依頼137のP1-2）＝古い控えに合格した本文を使わせない",
+          release_quarantine(slug, base["url"], {"title_fp": "ちがう"}
+                             )["state"] == "MARKS_CHANGED"
+          and quarantined(urls_for(slug)[0]))
+        t("　外したことも控えに残る（いつ誰がなぜ）",
+          forget(slug, base["url"], "別機種のページでした",
+                 ["運営者"])["state"] == "FORGOTTEN"
+          and load()["removed"][-1]["by"] == ["運営者"]
+          and load()["removed"][-1]["at"])
 
         # ★同時に書いても、先の書き込みを消さない★（依頼136のP1-3）
         _save({"schema_version": SCHEMA, "machines": {slug: [
@@ -1290,7 +1397,10 @@ def main() -> int:
             print(json.dumps(r, ensure_ascii=False))
             return 0
         if a.forget:
-            print(json.dumps(forget(a.slug, a.url), ensure_ascii=False))
+            print(json.dumps(
+                forget(a.slug, a.url, a.why,
+                       [x.strip() for x in a.by.split(",") if x.strip()]),
+                ensure_ascii=False))
             return 0
         if a.accept_current:
             if not (a.slug and a.url):

@@ -244,7 +244,16 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
                     continue
                 if held:
                     # ★保存してある手がかりに戻ったので隔離を解く★
-                    _ms.release_quarantine(slug, url)
+                    #   ★解けなかったら本文を使わない★（依頼137のP1-2）
+                    #     確かめてからここまでの間に人が --forget や承認をして
+                    #     いた場合、こちらは古い控えに対して合格している。
+                    rel = _ms.release_quarantine(slug, url,
+                                                 rec.get("identity_marks"))
+                    if rel.get("state") not in ("RELEASED", "ALREADY_OK"):
+                        got[where] = {"url": url, "publisher": pub,
+                                      "error": "隔離を解けませんでした（%s）"
+                                               % rel.get("state")}
+                        continue
                 _read(where, url, got, pub, html=ck.get("html"))
             return got
     for dir_id, r in (fetch(m.get("name")) or {}).items():
@@ -425,7 +434,8 @@ def selftest() -> int:
     try:
         _ms.remember_changed = lambda slug, url, got, reported=False: held.append(
             (url, reported))
-        _ms.release_quarantine = lambda slug, url: freed.append(url)
+        _ms.release_quarantine = lambda slug, url, marks=None: (
+            freed.append(url) or {"state": "RELEASED"})
         _di.find = lambda name, catalogs=None: {"results": {}}
         _ms.urls_for = lambda slug, data=None: [
             {"url": "https://a.example/ok", "publisher": "p1"},
@@ -462,6 +472,13 @@ def selftest() -> int:
           "text_len" not in s["控え:p4"]
           and "登録済み" in s["控え:p4"]["error"]
           and "https://a.example/ng2" not in reported)
+        _ms.release_quarantine = lambda slug, url, marks=None: {
+            "state": "MARKS_CHANGED"}
+        s2 = collect("t2b", ["ceiling"], name="試験機")["sources"]
+        t("★★隔離を解けなかったら本文を使わない★★（依頼137のP1-2）"
+          "＝確かめてから解くまでに人が控えを変えていた場合",
+          "text_len" not in s2["控え:p3"]
+          and "解けませんでした" in s2["控え:p3"]["error"])
 
         # ★名鑑が同じURLを先に読んで同定を飛ばす経路★（依頼135のP0-2）
         #   ★末尾の「/」が違うだけの形も同じページとして扱う★（依頼136のP0-1）
