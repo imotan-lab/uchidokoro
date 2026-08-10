@@ -120,6 +120,53 @@ def _save(data: dict) -> None:
     os.replace(tmp, STORE)
 
 
+def _now() -> str:
+    """★いつ書いたか（時刻まで）★＝同じ日の複数回を見分けるため（依頼136）"""
+    return datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _raw() -> bytes | None:
+    try:
+        with open(STORE, "rb") as fh:
+            return fh.read()
+    except FileNotFoundError:
+        return None
+
+
+def _update(change, tries: int = 6):
+    """★読んだときから変わっていなければ書く★（2026-08-10・依頼136のP1-3）
+
+    控えは丸ごと読んで丸ごと書き戻す。`os.replace` は壊れた途中のファイルは
+    防ぐが、**2つの実行が同じ古い中身を読んで順に書く**と、あとの1つが
+    先の書き込みを消す。隔離（＝使わないという印）が消えると、
+    次の実行では未隔離として本文が使われてしまう。
+    そこで、書く直前にファイルが読んだときのままかを確かめ、
+    変わっていたら読み直してやり直す。
+    """
+    for _ in range(tries):
+        base = _raw()
+        data = load()
+        out = change(data)
+        if out is None:
+            return None                     # 変えるものが無かった
+        if _raw() == base:
+            _save(data)
+            return out
+    raise SourceError("控えが同時に書き換えられています（やり直してください）")
+
+
+def _update_one(slug: str, url: str, change):
+    """控えの1件だけを、読み直してから書き換える。"""
+    def _do(data):
+        for rec in (data.get("machines") or {}).get(slug) or []:
+            if rec.get("url") == url:
+                # ★change は必ず結果を返すこと★（None は「書かない」の合図）
+                return change(rec)
+        return None                          # 見つからない＝1文字も書かない
+    got = _update(_do)
+    return got if got is not None else {"state": "NOT_FOUND"}
+
+
 def urls_for(slug: str, data: dict | None = None) -> list:
     """控えに入っている、この機種の出典（機械が毎日読む側）。"""
     d = data if data is not None else load()
@@ -139,6 +186,20 @@ def machine(slug: str) -> dict:
 
 def _text_of(html: str) -> str:
     return " ".join(_w._visible_text(html).split())
+
+
+def url_key(u: str) -> str:
+    """URLを比べるための形。★同じページを別物と数えない★（依頼136のP0-1）
+
+    末尾の `/` や `www.` の有無が違うだけで「別のURL」と見なすと、
+    名鑑側が先にそのページを読んでしまい、控えの同定を素通りする。
+    ★問い合わせ文字列（?以降）は残す★＝別のページを指すことがある。
+    """
+    p = urllib.parse.urlsplit(str(u or "").strip())
+    host = (p.hostname or "").lower().removeprefix("www.")
+    port = ":%d" % p.port if p.port and p.port not in (80, 443) else ""
+    path = p.path.rstrip("/") or "/"
+    return "%s%s%s?%s" % (host, port, path, p.query)
 
 
 def _title_key(title: str) -> str:
@@ -306,7 +367,6 @@ def record(slug: str, url: str, why: str, by: list,
             "題が機種名と一致しません（" + got["identity_why"] + "）。"
             "同じ機種だと判断したなら --override-identity に理由を書きます")
 
-    data = load()
     rec = {
         "url": url,
         "publisher": got["publisher"],
@@ -325,24 +385,30 @@ def record(slug: str, url: str, why: str, by: list,
     }
     if override_identity:
         rec["override_identity"] = str(override_identity).strip()[:300]
-    data["machines"].setdefault(slug, []).append(rec)
-    _save(data)
-    return {"state": "RECORDED", "url": url, "lineage": got["lineage"],
-            "sources_now": len(data["machines"][slug])}
+
+    def _change(data):
+        rows = data.setdefault("machines", {}).setdefault(slug, [])
+        if any(r.get("url") == url for r in rows):
+            return {"state": "ALREADY", "url": url}   # 読み直したら先に入っていた
+        rows.append(rec)
+        return {"state": "RECORDED", "url": url, "lineage": got["lineage"],
+                "sources_now": len(rows)}
+    return _update(_change)
 
 
 def forget(slug: str, url: str) -> dict:
     """判断が間違っていたときに控えから外す（★人の操作専用★）。"""
-    data = load()
-    rows = urls_for(slug, data)
-    left = [r for r in rows if r.get("url") != url]
-    if len(left) == len(rows):
-        return {"state": "NOT_FOUND"}
-    data["machines"][slug] = left
-    if not left:
-        data["machines"].pop(slug, None)
-    _save(data)
-    return {"state": "FORGOTTEN", "sources_now": len(left)}
+    def _change(data):
+        rows = urls_for(slug, data)
+        left = [r for r in rows if r.get("url") != url]
+        if len(left) == len(rows):
+            return None                     # 見つからない＝1文字も書かない
+        data["machines"][slug] = left
+        if not left:
+            data["machines"].pop(slug, None)
+        return {"state": "FORGOTTEN", "sources_now": len(left)}
+    got = _update(_change)
+    return got if got is not None else {"state": "NOT_FOUND"}
 
 
 # ------------------------------------------------------- ★使う瞬間の同定★
@@ -392,7 +458,10 @@ def _headings_same(marks: dict, now: dict):
     new = {_title_key(h) for h in (now.get("headings") or [])}
     if not new:
         return False          # 見出しが1つも読めない＝別のページになった疑い
-    return old[0] in new
+    # ★保存した見出しは全部そろっていること★（2026-08-10・依頼136のP0-2）
+    #   先頭1本だけを見ていたので、「最初の見出しは同じで、あとが別機種に
+    #   差し替わった」形が通っていた。「全部そろう」と書いた説明と実装がずれていた。
+    return all(h in new for h in old)
 
 
 def _same_page(rec: dict, now: dict):
@@ -534,10 +603,16 @@ def issue_args(slug: str, rec: dict, got: dict) -> list:
         "いまの型式: " + str((got.get("marks_now") or {})
                              .get("model_code") or "（なし）"),
         "★この出典は使っていません（隔離中）★",
-        "対応: 人が中身を見て、まだ同じ機種なら",
-        "  python scripts/machine_sources.py --recheck --slug " + slug
-        + " --apply",
-        "  で手がかりを取り直す。別機種になっていたら --forget で外す。",
+        "対応: 人がページを開いて中身を見てから、どちらかを選ぶ。",
+        "  ①まだ同じ機種のページだった（題や見出しが変わっただけ）",
+        "    python scripts/machine_sources.py --accept-current --slug "
+        + slug + " --url <URL> --why <理由> --by 運営者",
+        "    ★--recheck --apply では戻りません★（手がかりを書けるのは"
+        "「同じページだ」と言えたときだけなので堂々巡りになります）",
+        "  ②別の機種のページになっていた",
+        "    python scripts/machine_sources.py --forget --slug " + slug
+        + " --url <URL>",
+        "  ※ページが元どおりに戻った場合は、次の収集で自動的に解除されます。",
     ])
     return ["add", "--source", "machine-sources", "--slug", slug,
             "--kind", "external_value", "--severity", "CRITICAL",
@@ -583,20 +658,35 @@ def remember_changed(slug: str, url: str, got: dict,
     """
     if got.get("state") != CHECK_CHANGED:
         return {"state": "SKIP"}
-    data = load()
-    for rec in (data.get("machines") or {}).get(slug) or []:
-        if rec.get("url") != url:
-            continue
+
+    def _change(rec):
         rec["last_check"] = {
-            "at": datetime.date.today().isoformat(),
+            "at": _now(),
             "state": CHECK_CHANGED,
             "why": str(got.get("why") or "")[:200],
-            # ★台帳へ届いたか★（届いていないものは --recheck が拾い直す）
+            # ★台帳へ届いたか★（届いていないものは次の収集で送り直す）
             "reported": bool(reported),
+            # ★誰がいつ書いたか★（依頼136・回答2）
+            "by": "collect_evidence",
         }
-        _save(data)
         return {"state": "QUARANTINED", "reported": bool(reported)}
-    return {"state": "NOT_FOUND"}
+    return _update_one(slug, url, _change)
+
+
+def release_quarantine(slug: str, url: str) -> dict:
+    """★ページが元どおりに戻ったら隔離を解く★（2026-08-10・依頼136）
+
+    解くのは「保存してある手がかりに**完全に戻った**」ときだけ。
+    手がかりは人が承認したものなので、そこへ戻ったなら同じページに戻っている。
+    ★これが無いと、一時的な不具合で止まった出典が永久に戻らない★
+      （題が1文字変わっただけでも止まるので、放っておくと出典が減り続ける）
+    """
+    def _change(rec):
+        rec["last_check"] = {"at": _now(), "state": CHECK_OK,
+                             "why": "保存してある手がかりに戻ったので解除しました",
+                             "by": "collect_evidence"}
+        return {"state": "RELEASED"}
+    return _update_one(slug, url, _change)
 
 
 def accept_current(slug: str, url: str, why: str, by: list) -> dict:
@@ -609,30 +699,33 @@ def accept_current(slug: str, url: str, why: str, by: list) -> dict:
       戻す道が無いと、正しい出典を失ったまま機種の更新が止まる。
     """
     _judgement(why, by)
-    data = load()
-    for rec in (data.get("machines") or {}).get(slug) or []:
-        if rec.get("url") != url:
-            continue
-        got = recheck(slug, rec)
-        if not got.get("marks_now"):
-            # ★読めないページは承認できない★（見ずに判を押させない）
-            raise SourceError("いま読めないページは承認できません: " + got["why"])
+    here = [r for r in urls_for(slug) if r.get("url") == url]
+    if not here:
+        return {"state": "NOT_FOUND"}
+    # ★取りに行くのは書き換えの外で1回だけ★（やり直しのたびに叩かない）
+    got = recheck(slug, here[0])
+    if not got.get("marks_now"):
+        # ★読めないページは承認できない★（見ずに判を押させない）
+        raise SourceError("いま読めないページは承認できません: " + got["why"])
+
+    def _change(rec):
         before = dict(rec.get("identity_marks") or {})
         rec["identity_marks"] = got["marks_now"]
-        rec["last_check"] = {"at": datetime.date.today().isoformat(),
-                             "state": CHECK_OK, "why": "人が承認しました"}
+        rec["last_check"] = {"at": _now(), "state": CHECK_OK,
+                             "why": "人が承認しました",
+                             "by": ",".join(by)}
         rec.setdefault("accepted", []).append({
-            "at": datetime.date.today().isoformat(),
+            "at": _now(),
             "by": list(by), "why": str(why).strip()[:300],
             "was_title": str(before.get("title") or "")[:120],
             "now_title": str(got["marks_now"].get("title") or "")[:120],
             "was_model_code": before.get("model_code"),
             "now_model_code": got["marks_now"].get("model_code"),
         })
-        _save(data)
         return {"state": "ACCEPTED", "url": url,
-                "was": before.get("title"), "now": got["marks_now"].get("title")}
-    return {"state": "NOT_FOUND"}
+                "was": before.get("title"),
+                "now": got["marks_now"].get("title")}
+    return _update_one(slug, url, _change)
 
 
 def remember_check(slug: str, url: str, got: dict) -> dict:
@@ -642,15 +735,9 @@ def remember_check(slug: str, url: str, got: dict) -> dict:
       変わっていたのに今のページで上書きすると、
       **差し替わった別機種のページを正として覚え直す**ことになる。
     """
-    data = load()
-    for rec in (data.get("machines") or {}).get(slug) or []:
-        if rec.get("url") != url:
-            continue
-        last = {
-            "at": datetime.date.today().isoformat(),
-            "state": got.get("state"),
-            "why": str(got.get("why") or "")[:200],
-        }
+    def _change(rec):
+        last = {"at": _now(), "state": got.get("state"),
+                "why": str(got.get("why") or "")[:200], "by": "recheck"}
         if got.get("state") == CHECK_CHANGED:
             # ★台帳へ届いたかも一緒に残す★（届いていなければ次回また送る）
             last["reported"] = bool(got.get("reported"))
@@ -659,9 +746,8 @@ def remember_check(slug: str, url: str, got: dict) -> dict:
             rec["identity_marks"] = got["marks_now"]
             if got.get("text_sha256"):
                 rec["text_sha256_last"] = got["text_sha256"]
-        _save(data)
         return {"state": "SAVED", "marks": got.get("state") == CHECK_OK}
-    return {"state": "NOT_FOUND"}
+    return _update_one(slug, url, _change)
 
 
 def recheck_all(slug: str = "", apply: bool = False) -> list:
@@ -951,6 +1037,21 @@ def selftest() -> int:
           R(head_marked, body)["state"] == CHECK_OK)
         t("　見出しを記録していない控えは題だけで判断する（記録が無いものは求めない）",
           R(marked, body)["state"] == CHECK_OK)
+        two = dict(base, identity_marks={
+            "title_fp": _title_fp(title_now), "title": title_now[:120],
+            "headings": [name, "解析データ"], "model_code": None})
+        two_body = body.replace("</h1>", "</h1><h1>解析データ</h1>")
+        t("★★保存した見出しは全部そろっていること★★（依頼136のP0-2）"
+          "＝先頭1本だけ見ていたので、あとが差し替わっても通っていた",
+          R(two, two_body)["state"] == CHECK_OK
+          and R(two, body)["state"] == CHECK_CHANGED)
+
+        # ★URLの表記ゆれ（依頼136のP0-1）★
+        t("★★末尾の / や www の違いで、同じページを別物と数えない★★"
+          "＝別物と見なすと名鑑側が先に読んで同定を素通りする",
+          url_key("https://www.a.example/x/") == url_key("https://a.example/x")
+          and url_key("https://a.example/x?q=1")
+          != url_key("https://a.example/x?q=2"))
 
         # ★手がかりが無い控え（旧形式）は、もう通さない★（依頼135・回答2）
         t("★★手がかりが無い控えは使わない★★（fail-closed）"
@@ -1013,6 +1114,35 @@ def selftest() -> int:
           and left["last_check"]["reported"] is False)
         t("　変わっていないものを隔離として書き込まない",
           remember_changed(slug, base["url"], R(marked, body))["state"] == "SKIP")
+        t("　元どおりに戻ったら隔離を解ける（自動解除）",
+          release_quarantine(slug, base["url"])["state"] == "RELEASED"
+          and not quarantined(urls_for(slug)[0]))
+
+        # ★同時に書いても、先の書き込みを消さない★（依頼136のP1-3）
+        _save({"schema_version": SCHEMA, "machines": {slug: [
+            dict(marked), dict(marked, url="https://chonborista.com/slot/a/2")]}})
+
+        def _sneak(rec):
+            """★書く直前に、別の実行が控えを書き換えた状況を作る★"""
+            d2 = load()
+            d2["machines"][slug][1]["last_check"] = {"state": CHECK_CHANGED}
+            _save(d2)
+            rec["last_check"] = {"state": CHECK_CHANGED, "why": "こちらの書き込み"}
+            return {"state": "DONE"}
+        calls = [0]
+        _orig_sneak = _sneak
+
+        def _once(rec):
+            calls[0] += 1
+            if calls[0] == 1:
+                return _orig_sneak(rec)      # 1回目だけ横入りされる
+            rec["last_check"] = {"state": CHECK_CHANGED, "why": "こちらの書き込み"}
+            return {"state": "DONE"}
+        _update_one(slug, base["url"], _once)
+        after = urls_for(slug)
+        t("★★同時に書いても、先の書き込みを消さない★★（読み直してやり直す）"
+          "＝隔離が消えると、次の実行では未隔離として本文が使われてしまう",
+          calls[0] == 2 and quarantined(after[0]) and quarantined(after[1]))
 
         # ★依頼135のP1-4：人が承認して戻せる★
         _save({"schema_version": SCHEMA, "machines": {slug: [dict(marked)]}})

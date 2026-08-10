@@ -182,31 +182,37 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
             #   名鑑は一覧のリンク文字だけで見つけたと決めて中身を見ない。
             #   同じURLが先に名鑑として読まれると、控えの同定を通らないまま
             #   本文が入る（ちょんぼりすたは名鑑であり控えの発行者でもある）。
-            saved_urls = {r.get("url") for r in saved if r.get("url")}
+            #   ★末尾の「/」の有無などで別物と見なさない★（依頼136のP0-1）
+            #     表記が違うだけで名鑑側が先に読むと、同定を素通りしてしまう。
+            saved_urls = {_ms.url_key(r.get("url"))
+                          for r in saved if r.get("url")}
             for dir_id, r in (_di.find(name).get("results") or {}).items():
                 if r.get("state") != "FOUND":
                     got[dir_id] = {"state": r.get("state")}
                     continue
-                if r["url"] in saved_urls:
+                if _ms.url_key(r["url"]) in saved_urls:
                     got[dir_id] = {"state": "SAME_AS_SAVED",
-                                   "why": "控えと同じURLなので控え側で確かめます"}
+                                   "why": "控えと同じページなので控え側で確かめます"}
                     continue
                 _read(dir_id, r["url"], got,
                       (cats.get(dir_id) or {}).get("publisher_id"))
+            seen_urls = {_ms.url_key(v["url"]) for v in got.values()
+                         if v.get("url")}
             for rec in saved:
                 url = rec.get("url")
-                if not url or any(v.get("url") == url for v in got.values()):
+                if not url or _ms.url_key(url) in seen_urls:
                     continue
+                seen_urls.add(_ms.url_key(url))
                 where = "控え:" + str(rec.get("publisher") or "?")
                 pub = rec.get("publisher")
+                held = _ms.quarantined(rec)
                 # ★読む直前に「本当にこの機種のページか」を確かめる★
                 #   （2026-08-10・台帳#292）ここが無いと、登録したページが
                 #   後日べつの機種へ差し替わっても気づかないまま原文として渡り、
                 #   **別機種の天井値**がこの機種の記事の材料になる。
-                if _ms.quarantined(rec):
-                    got[where] = {"url": url, "publisher": pub,
-                                  "error": "隔離中（別のページに変わった疑い）"}
-                    continue
+                #   ★隔離中でも確かめだけはする★（2026-08-10・依頼136）
+                #     題が1文字変わっただけでも止まるので、確かめないと
+                #     一時的な不具合で止まった出典が永久に戻らない。
                 try:
                     ck = _ms.recheck(slug, rec)
                 except Exception as e:    # noqa: BLE001
@@ -220,16 +226,25 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
                         # ★先に隔離を残してから台帳へ送る★（依頼135・回答5）
                         #   ここで控えに残さないと、読む側は毎回止めるのに
                         #   手当ての一覧はずっと「出典あり」と数え続ける。
-                        _ms.remember_changed(slug, url, ck, reported=False)
-                        sent = _ms.report_changed(slug, rec, ck)
-                        _ms.remember_changed(slug, url, ck, reported=sent)
-                        if not sent:
-                            note = "／★台帳へ届いていません★"
-                            unreported.append(url)
+                        was_sent = bool((rec.get("last_check") or {})
+                                        .get("reported"))
+                        if not held or not was_sent:
+                            # ★毎日は送らない★（初回と、前回届かなかったときだけ）
+                            _ms.remember_changed(slug, url, ck, reported=False)
+                            sent = _ms.report_changed(slug, rec, ck)
+                            _ms.remember_changed(slug, url, ck, reported=sent)
+                            if not sent:
+                                note = "／★台帳へ届いていません★"
+                                unreported.append(url)
+                        else:
+                            note = "／隔離中（台帳に登録済み）"
                     got[where] = {"url": url, "publisher": pub,
                                   "error": "%s: %s%s"
                                            % (ck["state"], ck["why"], note)}
                     continue
+                if held:
+                    # ★保存してある手がかりに戻ったので隔離を解く★
+                    _ms.release_quarantine(slug, url)
                 _read(where, url, got, pub, html=ck.get("html"))
             return got
     for dir_id, r in (fetch(m.get("name")) or {}).items():
@@ -401,8 +416,8 @@ def selftest() -> int:
     import machine_sources as _ms
     import new_machine_watch as _nw
     keep2 = (_di.find, _ms.urls_for, _ms.recheck, _ms.report_changed, _nw._get,
-             _ms.remember_changed)
-    reported, held = [], []
+             _ms.remember_changed, _ms.release_quarantine)
+    reported, held, freed = [], [], []
 
     def _never(url, timeout=20):
         raise AssertionError("★同定を通さずに取りに行きました★")
@@ -410,15 +425,20 @@ def selftest() -> int:
     try:
         _ms.remember_changed = lambda slug, url, got, reported=False: held.append(
             (url, reported))
+        _ms.release_quarantine = lambda slug, url: freed.append(url)
         _di.find = lambda name, catalogs=None: {"results": {}}
         _ms.urls_for = lambda slug, data=None: [
             {"url": "https://a.example/ok", "publisher": "p1"},
             {"url": "https://a.example/ng", "publisher": "p2"},
-            {"url": "https://a.example/q", "publisher": "p3",
-             "last_check": {"state": _ms.CHECK_CHANGED}}]
+            # ★隔離中だが、ページは元どおりに戻っている★
+            {"url": "https://a.example/ok2", "publisher": "p3",
+             "last_check": {"state": _ms.CHECK_CHANGED, "reported": True}},
+            # ★隔離中で、まだ直っていない（台帳には登録済み）★
+            {"url": "https://a.example/ng2", "publisher": "p4",
+             "last_check": {"state": _ms.CHECK_CHANGED, "reported": True}}]
         _ms.recheck = lambda slug, rec, html=None, pubs=None: (
             {"state": _ms.CHECK_OK, "why": "", "html": "<body>" + T + "</body>"}
-            if str(rec["url"]).endswith("/ok")
+            if "/ok" in str(rec["url"])
             else {"state": _ms.CHECK_CHANGED, "why": "題が変わりました",
                   "html": None})
         _ms.report_changed = lambda slug, rec, got: reported.append(rec["url"])
@@ -429,32 +449,41 @@ def selftest() -> int:
         t("★★題が変わった控えは原文を渡さない★★"
           "（別機種の値がこの機種の材料に混じる経路をふさぐ）",
           s["控え:p2"].get("error") and "text_len" not in s["控え:p2"])
-        t("　隔離中の控えは取りに行きもしない", "隔離中" in s["控え:p3"]["error"])
         t("★★変わったことは台帳へ届ける★★（黙って出典を1つ失わない）",
           reported == ["https://a.example/ng"])
         t("★★台帳へ送る前に、先に隔離を控えへ残す★★（依頼135・回答5）"
           "＝送信に失敗しても「使わない」は消えない",
           held and held[0] == ("https://a.example/ng", False))
+        t("★★隔離中でも確かめ直し、元どおりなら解除して使う★★（依頼136）"
+          "＝確かめないと、一時的な不具合で止まった出典が永久に戻らない",
+          freed == ["https://a.example/ok2"]
+          and s["控え:p3"].get("text_len"))
+        t("　まだ直っていない隔離は使わず、台帳へも送り直さない（毎日は送らない）",
+          "text_len" not in s["控え:p4"]
+          and "登録済み" in s["控え:p4"]["error"]
+          and "https://a.example/ng2" not in reported)
 
         # ★名鑑が同じURLを先に読んで同定を飛ばす経路★（依頼135のP0-2）
-        same = "https://a.example/ok"
+        #   ★末尾の「/」が違うだけの形も同じページとして扱う★（依頼136のP0-1）
         _di.find = lambda name, catalogs=None: {"results": {
-            "chonborista": {"state": "FOUND", "url": same}}}
+            "chonborista": {"state": "FOUND", "url": "https://a.example/x"}}}
         _ms.urls_for = lambda slug, data=None: [
-            {"url": same, "publisher": "chonborista"}]
+            {"url": "https://www.a.example/x/", "publisher": "chonborista"}]
         seen = []
         _ms.recheck = lambda slug, rec, html=None, pubs=None: (
             seen.append(rec["url"]) or {"state": _ms.CHECK_CHANGED,
                                         "why": "題が変わりました", "html": None})
         s = collect("t3", ["ceiling"], name="試験機")["sources"]
-        t("★★控えにあるURLは、名鑑側でも同定を飛ばさない★★"
-          "（ちょんぼりすたは名鑑であり控えの発行者でもある）",
-          seen == [same] and s["chonborista"]["state"] == "SAME_AS_SAVED"
+        t("★★控えにあるページは、名鑑側でも同定を飛ばさない★★"
+          "（ちょんぼりすたは名鑑であり控えの発行者でもある。"
+          "末尾の / や www の違いでも素通りさせない）",
+          seen == ["https://www.a.example/x/"]
+          and s["chonborista"]["state"] == "SAME_AS_SAVED"
           and s["控え:chonborista"].get("error")
           and "text_len" not in s["控え:chonborista"])
     finally:
         (_di.find, _ms.urls_for, _ms.recheck, _ms.report_changed,
-         _nw._get, _ms.remember_changed) = keep2
+         _nw._get, _ms.remember_changed, _ms.release_quarantine) = keep2
 
     print(f"\n{ran[0]}/{ran[0]} 合格" if ok else "\n不合格あり")
     return 0 if ok else 1
