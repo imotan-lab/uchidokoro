@@ -105,15 +105,55 @@ def base_field(field: str) -> str:
     return str(field or "").split("#", 1)[0]
 
 
+# ★項目ごとの「値の見た目」★（2026-08-10・依頼132 P0-2）
+#   以前は「空でない文字列」しか見ていなかったので、次が通った:
+#     loop_rate に「4.2枚/G」→ 記事に「継続率4.2枚/G」と出る
+#     net に「73%」        → 記事に「純増約73%枚」と出る
+#   単位は記事側だけが付けるので、値の側で単位の種類を必ず確かめる。
+import re as _re                          # noqa: E402
+
+VALUE_PATTERNS = {
+    "games": (_re.compile(r"^\d{1,4}(\+α)?$"), "ゲーム数（例: 30 / 30+α）"),
+    "net": (_re.compile(r"^約?\d{1,2}(\.\d)?枚?$"), "純増の枚数（例: 2.8 / 約2.8枚）"),
+    "loop_rate": (_re.compile(r"^約?\d{1,3}(\.\d)?%$"), "継続率（例: 約73%）"),
+}
+
+
+def check_spec_shape(field: str, value) -> list:
+    """基本スペック側の形を spec_lookup の決まりで確かめる。
+
+    ★以前は「形を持っている」とコメントに書いただけで、実際には
+      呼んでいなかった★（2026-08-10・依頼132 P0-3）。
+      文字列で記録できてしまい、記事側は辞書として読むので落ち続けた。
+    """
+    import spec_lookup as _sp
+    spec = _sp.FIELDS.get(field) or {}
+    kind = spec.get("kind")
+    if kind == "range":
+        if not (isinstance(value, dict)
+                and all(k in value for k in ("low", "high", "unit"))):
+            raise ConfirmedError(
+                f"{field}: low / high / unit を持つ組で書きます（記事がこれを読みます）")
+        return [str(value["low"]), str(value["high"])]
+    if kind == "games":
+        if not (isinstance(value, dict) and "games" in value):
+            raise ConfirmedError(f"{field}: games を持つ組で書きます")
+        return [str(value["games"])]
+    if kind == "per_setting":
+        if not isinstance(value, dict) or not value:
+            raise ConfirmedError(f"{field}: 設定ごとの組で書きます（例: 1 → 値）")
+        return [str(v) for v in value.values()]
+    toks = _tokens(value)
+    if not toks:
+        raise ConfirmedError(f"{field}: 確かめられる値がありません")
+    return toks
+
+
 def check_shape(field: str, value) -> list:
     """値の形を確かめ、★引用と照合すべき表示値★を返す。"""
     shape = VALUE_SHAPES.get(base_field(field))
     if not shape:
-        # 基本スペック側は spec_lookup が形を持っているので、空でないことだけ見る
-        toks = _tokens(value)
-        if not toks:
-            raise ConfirmedError(f"{field}: 確かめられる値がありません")
-        return toks
+        return check_spec_shape(base_field(field), value)
     if not isinstance(value, dict):
         raise ConfirmedError(f"{field}: 値は組（辞書）で書きます")
     for k in shape["required"]:
@@ -127,6 +167,13 @@ def check_shape(field: str, value) -> list:
     if any_of and not any(str(value.get(k) or "").strip() for k in any_of):
         raise ConfirmedError(
             f"{field}: {'/'.join(any_of)} のどれか1つは要ります（中身の無い項目は作らない）")
+    # ★単位の種類を確かめる★（依頼132 P0-2）
+    #   継続率の欄に枚数、純増の欄に％、が書けてしまうと
+    #   記事側が単位を付けた瞬間に嘘になる。
+    for k, (pat, jp) in VALUE_PATTERNS.items():
+        v = str(value.get(k) or "").strip()
+        if v and not pat.match(v):
+            raise ConfirmedError(f"{field}: 「{k}」は{jp}の形で書きます（いま {v!r}）")
     # ★引用と照合するのは、実際に書いた項目だけ★
     return [str(value[k]).strip() for k in shape["quoted"]
             if str(value.get(k) or "").strip()]
@@ -279,11 +326,15 @@ def record(slug: str, field: str, value, sources: list, by: list,
         raise ConfirmedError(
             "受け取れない項目です: %s（使えるのは %s）"
             % (field, "/".join(sorted(allowed_fields()))))
-    if official_url:
-        # ★slugと名前は正本から引く★（人に名乗らせない）
-        slug, name = bind_machine(official_url)
-    if not slug:
-        raise ConfirmedError("--official-url（推奨）か --slug が要ります")
+    # ★公式URLを必ず要る★（2026-08-10・依頼132 P0-1）
+    #   slug と name を別々に受け取れると、機種Aの本物の根拠を
+    #   機種Bとして保存できた（三層の検査を全部通したうえで）。
+    #   公式URLからしか slug と名前を決めない。
+    if not official_url:
+        raise ConfirmedError(
+            "--official-url が要ります（slugと正式名称を正本から引くため。"
+            "人が名乗った機種名は信用しません）")
+    slug, name = bind_machine(official_url)
     if not str(name or "").strip():
         raise ConfirmedError(
             "正式名称を決められません。--official-url を使ってください"
@@ -441,8 +492,12 @@ def selftest() -> int:
                 "<body><h1>" + NAME + "</h1><p>" + q + "。" + ("説明。" * 30)
                 + "</p></body>")
 
+    real_bind = globals()["bind_machine"]
+    globals()["bind_machine"] = lambda u: ("x", NAME)
+
     def rec(**kw):
-        base = dict(slug="x", field="ceiling",
+        base = dict(official_url="https://m.example/products/slot/x/",
+                    slug="x", field="ceiling",
                     value={"kind": "GAME", "amount": "1000", "unit": "G",
                            "benefit": "AT"},
                     sources=None, by=["claude", "codex"],
@@ -479,7 +534,13 @@ def selftest() -> int:
                                    parse_source("https://nana-press.com/1|天井なし")]))
         stops("★★受け取れない項目は断る★★（入れ先が決まっていないもの）",
               lambda: rec(field="なにか"))
-        stops("　正式名称が要る（機種の取り違えを防ぐため）", lambda: rec(name=""))
+        stops("★★公式URLが無ければ記録できない★★（機種の取り違えを断つ）",
+              lambda: rec(official_url=""))
+        stops("★★継続率の欄に枚数は書けない★★（記事が単位を付けるので嘘になる）",
+              lambda: rec(field="at#x",
+                          value={"mode": "MAIN_AT", "loop_rate": "4.2枚/G"}))
+        stops("★★純増の欄に％は書けない★★",
+              lambda: rec(field="at#y", value={"mode": "MAIN_AT", "net": "73%"}))
 
         def other_machine(url):
             return ("<title>別の機種 スロット 新台 | 解析</title>"
@@ -532,6 +593,7 @@ def selftest() -> int:
         stops("　出典の書き方が違えば受け取らない", lambda: parse_source("URLだけ"))
     finally:
         STORE = keep
+        globals()["bind_machine"] = real_bind
 
     ng = sum(1 for _, o in results if not o)
     print()

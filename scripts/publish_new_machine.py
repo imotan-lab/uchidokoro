@@ -2764,6 +2764,35 @@ def selftest() -> int:
                         _fh5.write(_b4)
         _sh.rmtree(_dir4, ignore_errors=True)
 
+    # ★項目23（説明書の大きさ）だけが赤なら公開は止めない★
+    #   （2026-08-10・依頼133 P1。8行の変更に回帰テストが無かった）
+    _real_run = __import__("subprocess").run
+
+    def _fake_audit(only):
+        import json as _j
+        import subprocess as _sp
+
+        def _run(cmd, **kw):
+            if any("audit_site.py" in str(c) for c in cmd):
+                body = {k: ([] if k != only else ["わざと赤にした"])
+                        for k, _f in _as_mod.CHECKS}
+                return _sp.CompletedProcess(cmd, 0, _j.dumps(body), "")
+            return _real_run(cmd, **kw)
+        return _run
+
+    import audit_site as _as_mod
+    import subprocess as _sp_mod
+    try:
+        _sp_mod.run = _fake_audit("23_CLAUDE_md肥大検知")
+        t("★★項目23だけが赤でも公開は止めない★★（記事の正しさと無関係）",
+          run_site_audit() == [])
+        _sp_mod.run = _fake_audit("24_noindex整合")
+        t("★★記事に関わる項目が赤なら止める★★（23を外したせいで素通りしない）",
+          any("24_" in x for x in run_site_audit()))
+    finally:
+        _sp_mod.run = _real_run
+
+
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
     if ng:
