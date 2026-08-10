@@ -965,6 +965,25 @@ def release_month(text: str, assume_release_context: bool = False):
     return None
 
 
+# ★運営者が確認した登場年月の控え★（2026-08-10）
+#   公式が画像や「発売」表記でしか書かない機種のための逃げ道。
+#   ここは**読むだけ**（無人タスクは書かない）。正本は add_machine_run と同じファイル。
+RELEASE_OVERRIDES = r"C:/Users/imao_/Documents/uchidokoro/release_overrides.json"
+
+
+def release_override(url: str):
+    """人が確認した登場年月。無ければ None。"""
+    try:
+        d = _sj.read_json(RELEASE_OVERRIDES, expect=dict)
+    except Exception:                      # noqa: BLE001
+        return None
+    items = d.get("items") or {}
+    it = items.get(str(url).rstrip("/") + "/") or items.get(url)
+    if isinstance(it, dict) and re.match(r"^20\d\d-\d\d$", str(it.get("value") or "")):
+        return it
+    return None
+
+
 def looks_like_slot(text: str) -> bool:
     return any(w in text for w in _SLOT_WORDS)
 
@@ -1082,6 +1101,18 @@ def classify(url: str, seen_entry: dict | None = None, today=None,
         or re.match(r"^[ls](?![a-z])", _nm))
     if not looks_like_slot(text) and not _name_ev:
         out["reasons"].append("パチスロのページに見えません（回胴機の語が無い）")
+    if not out["release"]:
+        # ★人が確認した控えを、ここでも読む★（2026-08-10）
+        #   release_overrides は「公式が機械では読めない形で書いている」機種の
+        #   ための、運営者確認済みの控え。ところが読んでいたのは
+        #   add_machine_run の後段だけで、**見張りの段階で先に捨てていた**ので、
+        #   控えを書いても永久に届かなかった（実例: スマスロ ラグナドール。
+        #   公式に「発売 2026年11月」と書いてあるが、「発売」は
+        #   サウンドトラックの発売月を誤採用した事故のため除外語）。
+        ov = release_override(url)
+        if ov:
+            out["release"] = {"value": ov["value"], "precision": "month",
+                              "quote": "運営者確認: " + str(ov.get("source", ""))[:60]}
     if not out["release"]:
         out["reasons"].append("公式が登場年月を書いていません（こちらで日付を補わない）")
     elif not is_recent(out["release"]["value"], today):
