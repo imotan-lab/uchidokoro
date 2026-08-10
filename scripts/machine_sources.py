@@ -133,52 +133,61 @@ def _save(data: dict) -> None:
 
 
 _LOCK_WAIT = 15.0        # 鍵が空くのを待つ最大の秒数
-_LOCK_STALE = 120.0      # これより古い鍵は、異常終了の残骸として奪う
+
+
+def _hold(fh, on: bool) -> None:
+    """★OSに鍵を持たせる★（プロセスが死んだらOSが必ず外す）"""
+    fh.seek(0)
+    try:
+        import msvcrt                        # Windows
+        msvcrt.locking(fh.fileno(),
+                       msvcrt.LK_NBLCK if on else msvcrt.LK_UNLCK, 1)
+        return
+    except ImportError:
+        pass
+    import fcntl                             # それ以外
+    fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB if on else fcntl.LOCK_UN)
 
 
 @contextlib.contextmanager
 def _lock():
-    """★控えを書くあいだの鍵★（2026-08-10・依頼137のP1-1）
+    """★控えを書くあいだの鍵★（2026-08-10・依頼137のP1-1 → 依頼138で作り直し）
 
     読み直して比べるだけでは、**比べてから置き換えるまでのごく短い隙**に
     別の実行が書いた分を消せる。消えるのが隔離や削除だと影響が大きい
     （誤同定を理由に外した出典が復活しうる）ので、鍵で囲む。
     ★ネットへ取りに行くのは鍵の外★（鍵を長く握らない）。
+
+    ★「古い鍵を消して奪う」方式はやめた★（2026-08-10・依頼138のP1）
+      持ち主が生きているか確かめずに消していたうえ、**持ち主のほうも
+      自分の鍵か確かめずに消して**いた。そのため
+        ①Aが止まって120秒を超える ②BがAの鍵を消して取る
+        ③Aが再開してBの鍵を消す ④CがBの書き込み中に取る
+      という二重取得が成立した。
+      いまはOSに持たせる（プロセスが死ねばOSが外す）ので、時間で奪う必要が無い。
+      ★鍵のファイルは消さない★＝消すと別の実行が握っている鍵を壊す。
     """
     path = STORE + ".lock"
     os.makedirs(os.path.dirname(STORE), exist_ok=True)
-    started, fd = time.time(), None
-    while True:
-        try:
-            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            break
-        except FileExistsError:
+    started = time.time()
+    with open(path, "a+b") as fh:
+        while True:
             try:
-                age = time.time() - os.path.getmtime(path)
+                _hold(fh, True)
+                break
             except OSError:
-                age = 0.0
-            if age > _LOCK_STALE:
-                try:                        # ★残骸で永久に止まらない★
-                    os.unlink(path)
-                except OSError:
-                    pass
-                continue
-            if time.time() - started > _LOCK_WAIT:
-                raise SourceError(
-                    "控えが他の実行に使われています（あとでやり直してください）")
-            time.sleep(0.15)
-    try:
-        os.write(fd, str(os.getpid()).encode("ascii"))
-        os.close(fd)
-        fd = None
-        yield
-    finally:
-        if fd is not None:
-            os.close(fd)
+                if time.time() - started > _LOCK_WAIT:
+                    raise SourceError(
+                        "控えが他の実行に使われています"
+                        "（あとでやり直してください）")
+                time.sleep(0.15)
         try:
-            os.unlink(path)
-        except OSError:
-            pass
+            yield
+        finally:
+            try:
+                _hold(fh, False)
+            except OSError:
+                pass                        # 閉じればOSが外す
 
 
 # ★「書かずに結果だけ返す」印★（条件が合わなかったときに使う）
@@ -263,12 +272,14 @@ def url_key(u: str) -> str:
     末尾の `/` や `www.` の有無が違うだけで「別のURL」と見なすと、
     名鑑側が先にそのページを読んでしまい、控えの同定を素通りする。
     ★問い合わせ文字列（?以降）は残す★＝別のページを指すことがある。
-    ★そろえるのは「省略できる既定のポート（80/443）」だけ★（依頼137のP2）
-      `:8443` のような明示のポートは**別の窓口**なので、同じにしない。
+    ★そろえるのは「その方式で省略できるポート」だけ★（依頼138のP2）
+      80を省略できるのは http、443を省略できるのは https のときだけ。
+      `https://…:80/` や `:8443` は**別の窓口**なので、同じにしない。
     """
     p = urllib.parse.urlsplit(str(u or "").strip())
     host = (p.hostname or "").lower().removeprefix("www.")
-    port = ":%d" % p.port if p.port and p.port not in (80, 443) else ""
+    default = {"http": 80, "https": 443}.get((p.scheme or "https").lower())
+    port = ":%d" % p.port if p.port and p.port != default else ""
     path = p.path.rstrip("/") or "/"
     return "%s%s%s?%s" % (host, port, path, p.query)
 
@@ -469,8 +480,14 @@ def record(slug: str, url: str, why: str, by: list,
     return _update(_change)
 
 
-def forget(slug: str, url: str, why: str = "", by: list | None = None) -> dict:
-    """判断が間違っていたときに控えから外す（★人の操作専用★）。"""
+def forget(slug: str, url: str, why: str, by: list) -> dict:
+    """判断が間違っていたときに控えから外す（★人の操作専用★）。
+
+    ★「誰がなぜ」を書かないと外せない★（2026-08-10・依頼138のP2）
+      外した記録は復元できない。残せるのは帰属だけなので、そこは必ず書かせる。
+    """
+    _judgement(why, by)
+
     def _change(data):
         rows = urls_for(slug, data)
         left = [r for r in rows if r.get("url") != url]
@@ -484,7 +501,7 @@ def forget(slug: str, url: str, why: str = "", by: list | None = None) -> dict:
         #   消した記録は復元できないので、いつ誰がなぜ外したかだけは残す。
         log = data.setdefault("removed", [])
         log.append({"slug": slug, "url": url, "at": _now(),
-                    "by": list(by or []), "why": str(why or "").strip()[:300],
+                    "by": list(by), "why": str(why).strip()[:300],
                     "title": str((gone[0] if gone else {}).get("title")
                                  or "")[:120]})
         del log[:-200]                      # 増えすぎないように直近だけ残す
@@ -693,7 +710,7 @@ def issue_args(slug: str, rec: dict, got: dict) -> list:
         "「同じページだ」と言えたときだけなので堂々巡りになります）",
         "  ②別の機種のページになっていた",
         "    python scripts/machine_sources.py --forget --slug " + slug
-        + " --url <URL>",
+        + " --url <URL> --why <理由> --by 運営者",
         "  ※ページが元どおりに戻った場合は、次の収集で自動的に解除されます。",
     ])
     return ["add", "--source", "machine-sources", "--slug", slug,
@@ -755,7 +772,7 @@ def remember_changed(slug: str, url: str, got: dict,
     return _update_one(slug, url, _change)
 
 
-def release_quarantine(slug: str, url: str, marks: dict | None = None) -> dict:
+def release_quarantine(slug: str, url: str, marks: dict) -> dict:
     """★ページが元どおりに戻ったら隔離を解く★（2026-08-10・依頼136）
 
     解くのは「保存してある手がかりに**完全に戻った**」ときだけ。
@@ -764,11 +781,12 @@ def release_quarantine(slug: str, url: str, marks: dict | None = None) -> dict:
       （題が1文字変わっただけでも止まるので、放っておくと出典が減り続ける）
 
     ★確かめてから解くまでに人が動かしていたら解かない★（依頼137のP1-2）
-      `marks` に「確かめたときの手がかり」を渡すこと。控えが書き換わっていたら
-      `MARKS_CHANGED` を返す（呼び出し元は本文を使ってはいけない）。
+      `marks` に「確かめたときの手がかり」を**必ず**渡すこと（依頼138のP3）。
+      控えが書き換わっていたら `MARKS_CHANGED` を返す
+      （呼び出し元は本文を使ってはいけない）。
     """
     def _change(rec):
-        if marks is not None and (rec.get("identity_marks") or {}) != marks:
+        if (rec.get("identity_marks") or {}) != (marks or {}):
             return {"state": "MARKS_CHANGED", NO_WRITE: True}
         if not quarantined(rec):
             return {"state": "ALREADY_OK", NO_WRITE: True}
@@ -1060,11 +1078,20 @@ def selftest() -> int:
         t("★★同じ系列がすでにあるときは知らせる★★（票は増えない）",
           got2["same_lineage_already"] == [got["url"]])
 
+        try:
+            forget(slug, got["url"], why="", by=["運営者"])
+            okf = False
+        except SourceError:
+            okf = True
+        t("★★外すときも「誰がなぜ」を書かせる★★（依頼138のP2）"
+          "＝外した記録は復元できないので、残せる帰属だけは必ず残す", okf)
         t("　間違いは控えから外せる",
-          forget(slug, got["url"])["state"] == "FORGOTTEN"
+          forget(slug, got["url"], "別機種のページでした",
+                 ["運営者"])["state"] == "FORGOTTEN"
           and urls_for(slug) == [])
         t("　無いものを外そうとしても壊れない",
-          forget(slug, got["url"])["state"] == "NOT_FOUND")
+          forget(slug, got["url"], "もう無いはずです",
+                 ["運営者"])["state"] == "NOT_FOUND")
 
         # ------------------------------------------- ★使う瞬間の同定★（#292）
         title_now = _w.page_title(body)
@@ -1142,8 +1169,12 @@ def selftest() -> int:
           url_key("https://www.a.example/x/") == url_key("https://a.example/x")
           and url_key("https://a.example/x?q=1")
           != url_key("https://a.example/x?q=2"))
-        t("　省略できる既定のポートだけをそろえる（:8443 は別の窓口）",
+        t("　その方式で省略できるポートだけをそろえる（依頼138のP2）"
+          "＝80を省けるのはhttp・443を省けるのはhttpsのときだけ",
           url_key("https://a.example:443/x") == url_key("https://a.example/x")
+          and url_key("http://a.example:80/x") == url_key("http://a.example/x")
+          and url_key("https://a.example:80/x") != url_key("https://a.example/x")
+          and url_key("http://a.example:443/x") != url_key("http://a.example/x")
           and url_key("https://a.example:8443/x")
           != url_key("https://a.example/x"))
 
