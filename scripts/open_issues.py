@@ -234,6 +234,9 @@ def selftest() -> int:
     tmp = Path(tempfile.mkdtemp())
     ops = TEXT_ROOTS[0]
     ops.mkdir(parents=True, exist_ok=True)
+    # ★後片付けは finally で必ず通すので、先に名前を用意しておく★
+    #   （途中で落ちた回に、まだ作っていない名前を触って別の失敗にしない）
+    good = crlf = bad = nl = big = himitsu = store = real = sib = None
     try:
         LOCK_PATH = tmp / "task.lock"
         LOCK_PATH.write_text(json.dumps(
@@ -349,14 +352,17 @@ def selftest() -> int:
                             "MATERIAL")
             _gl._to_ledger("s8", ["材料が集まりません"], transient=True)
             _gl._to_ledger("s7", ["形が違います"], transient=False)
-            rows = {r["slug"]: r for r in
-                    json.loads(real.read_text(encoding="utf-8"))["issues"]}
+            # ★先に「行の数」で見る★（依頼143の指摘2）
+            #   いきなり slug をキーにすると、同じ機種の行が二重に増えても
+            #   上書きされて気づけない（重複が台帳に溜まる回帰を見逃す）。
+            raw = json.loads(real.read_text(encoding="utf-8"))["issues"]
+            rows = {r["slug"]: r for r in raw}
             limit = _gl._TRANSIENT_LIMIT
         finally:
             _oi_mod.DEFAULT_FILE = keep_default
         t("★★実際に使っている2本を呼んで、本当に台帳へ載ることを確かめる★★"
           "（文字列を探すだけでは、今回の事故そのものを見逃す）",
-          len(rows) == 3 and set(rows) == {"s9", "s8", "s7"})
+          len(raw) == 3 and set(rows) == {"s9", "s8", "s7"})
         # ★載ったかだけでなく、中身が正しいかまで見る★（依頼142の指摘1）
         #   分類や危険度を取り違えたまま登録されると、人の見る順番が狂う。
         t("　値が再現できない側は、分類・危険度・理由コード・詳細まで正しい",
@@ -379,19 +385,20 @@ def selftest() -> int:
           rows.get("s7", {}).get("kind") == "structural"
           and rows["s7"]["severity"] == "MATERIAL"
           and rows["s7"]["reason_code"] == "GROW_LEGACY_HALT"
-          and "人の判断が要ります" in rows["s7"]["title"])
-
-        for f in (good, crlf, bad, nl, big, himitsu, store, real):
-            try:
-                f.unlink()
-            except Exception:              # noqa: BLE001
-                pass
-        try:
-            sib.rmdir()
-        except Exception:                  # noqa: BLE001
-            pass
+          and "人の判断が要ります" in rows["s7"]["title"]
+          and rows["s7"]["detail"]
+          == "grow_legacy.py --next が止まりました: 形が違います")
     finally:
         LOCK_PATH = keep
+        # ★後片付けは必ず通る場所へ★（依頼143の指摘3）
+        #   途中で落ちた回ほど一時ファイルが残るので、finally に置く。
+        for f in (good, crlf, bad, nl, big, himitsu, store, real, sib):
+            if f is None:
+                continue
+            try:
+                f.unlink() if f is not sib else f.rmdir()
+            except Exception:              # noqa: BLE001
+                pass
 
     ng = sum(1 for _, o in results if not o)
     print()
