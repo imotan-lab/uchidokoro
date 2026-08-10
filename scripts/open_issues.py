@@ -236,7 +236,7 @@ def selftest() -> int:
     ops.mkdir(parents=True, exist_ok=True)
     # ★後片付けは finally で必ず通すので、先に名前を用意しておく★
     #   （途中で落ちた回に、まだ作っていない名前を触って別の失敗にしない）
-    good = crlf = bad = nl = big = himitsu = store = real = sib = None
+    good = crlf = bad = nl = big = himitsu = sib = None
     try:
         LOCK_PATH = tmp / "task.lock"
         LOCK_PATH.write_text(json.dumps(
@@ -392,13 +392,25 @@ def selftest() -> int:
         LOCK_PATH = keep
         # ★後片付けは必ず通る場所へ★（依頼143の指摘3）
         #   途中で落ちた回ほど一時ファイルが残るので、finally に置く。
-        for f in (good, crlf, bad, nl, big, himitsu, store, real, sib):
+        # ★決めた置き場（ops）と、その隣に作ったものを消す★
+        for f in (good, crlf, bad, nl, big, himitsu):
             if f is None:
                 continue
             try:
-                f.unlink() if f is not sib else f.rmdir()
+                f.unlink()
             except Exception:              # noqa: BLE001
                 pass
+        try:
+            if sib is not None:
+                sib.rmdir()
+        except Exception:                  # noqa: BLE001
+            pass
+        # ★一時フォルダは丸ごと消す★（2026-08-11・依頼144）
+        #   task.lock / outside.txt / issues.json / real.json とフォルダ自身が
+        #   残っていた。個々に並べると**足し忘れたものが黙って残る**ので、
+        #   この中に作ったものは丸ごと回収する。
+        import shutil
+        shutil.rmtree(tmp, ignore_errors=True)
 
     ng = sum(1 for _, o in results if not o)
     print()
