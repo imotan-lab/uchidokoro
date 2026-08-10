@@ -90,7 +90,10 @@ VALUE_SHAPES = {
     "at": {"required": ("mode",), "any_of": ("games", "net", "loop_rate"),
            "enums": {"mode": ("MAIN_AT", "UPPER_AT")},
            "quoted": ("games", "net", "loop_rate")},
-    "cz": {"required": ("name",), "enums": {}, "quoted": ("name",)},
+    # ★CZは名前だけでなく、書いた項目は全部引用と照合する★（依頼134）
+    #   記事は継続G数と期待度も出すので、書くなら根拠が要る。
+    "cz": {"required": ("name",), "enums": {},
+           "quoted": ("name", "games", "rate")},
 }
 
 
@@ -112,11 +115,35 @@ def base_field(field: str) -> str:
 #   単位は記事側だけが付けるので、値の側で単位の種類を必ず確かめる。
 import re as _re                          # noqa: E402
 
+# ★値には単位を書かせない★（2026-08-10・依頼134 P0-1）
+#   記事側が「約」「枚」「G」を付けるので、値にも付いていると
+#   「純増約約2.8枚枚」のような文が出る（実際に通る形だった）。
+#   ★項目ごとに分ける★（依頼134 P1）＝ATの継続G数は「30」、
+#   CZの継続G数は「4G+α」が正しい形で、同じ鍵名でも意味が違う。
 VALUE_PATTERNS = {
-    "games": (_re.compile(r"^\d{1,4}(\+α)?$"), "ゲーム数（例: 30 / 30+α）"),
-    "net": (_re.compile(r"^約?\d{1,2}(\.\d)?枚?$"), "純増の枚数（例: 2.8 / 約2.8枚）"),
-    "loop_rate": (_re.compile(r"^約?\d{1,3}(\.\d)?%$"), "継続率（例: 約73%）"),
+    "at": {
+        "games": (_re.compile(r"^\d{1,4}(\+α)?$"),
+                  "ゲーム数（単位は書かない。例: 30 / 30+α）"),
+        "net": (_re.compile(r"^\d{1,2}(\.\d)?$"),
+                "純増の数だけ（単位も『約』も書かない。例: 2.8）"),
+        "loop_rate": (_re.compile(r"^約?\d{1,3}(\.\d)?%$"),
+                      "継続率（％を付ける。例: 約73%）"),
+    },
+    "cz": {
+        "games": (_re.compile(r"^\d{1,4}\s*[GＧ](\+α)?$"),
+                  "CZの継続G数（例: 4G+α）"),
+        "rate": (_re.compile(r"^約?\d{1,3}(\.\d)?%$"), "期待度（例: 約85%）"),
+    },
+    "ceiling": {
+        "amount": (_re.compile(r"^\d{1,5}$"), "数だけ（単位は unit に書く）"),
+        "unit": (_re.compile(r"^[GＧ]|pt|周期|スルー|まいる$"), "単位"),
+    },
 }
+
+
+def _ci_mod():
+    import claim_inventory as _ci
+    return _ci
 
 
 def check_spec_shape(field: str, value) -> list:
@@ -130,18 +157,36 @@ def check_spec_shape(field: str, value) -> list:
     spec = _sp.FIELDS.get(field) or {}
     kind = spec.get("kind")
     if kind == "range":
+        # ★抽出器と同じ検査を通す★（2026-08-10・依頼134 P0-2）
+        #   以前は鍵があるかしか見ておらず、low/high が空でも通った。
+        #   空文字はどの引用にも含まれる扱いになるので照合もすり抜けた。
         if not (isinstance(value, dict)
                 and all(k in value for k in ("low", "high", "unit"))):
             raise ConfirmedError(
                 f"{field}: low / high / unit を持つ組で書きます（記事がこれを読みます）")
+        norm = _sp.normalize_range("%s%% 〜 %s%%" % (value["low"], value["high"]))
+        if not norm:
+            raise ConfirmedError(
+                f"{field}: 範囲として読めません（低い方→高い方・50〜200%%の間）: {value}")
         return [str(value["low"]), str(value["high"])]
     if kind == "games":
         if not (isinstance(value, dict) and "games" in value):
             raise ConfirmedError(f"{field}: games を持つ組で書きます")
+        if not _sp.normalize_games("%sG" % value["games"]):
+            raise ConfirmedError(
+                f"{field}: G数として読めません（5〜100の数）: {value}")
         return [str(value["games"])]
     if kind == "per_setting":
         if not isinstance(value, dict) or not value:
             raise ConfirmedError(f"{field}: 設定ごとの組で書きます（例: 1 → 値）")
+        unit = spec.get("unit") or ""
+        for k, v in value.items():
+            if not _re.match(r"^[1-6]$", str(k)):
+                raise ConfirmedError(
+                    f"{field}: 設定は1〜6で書きます（いま {k!r}）")
+            if _ci_mod().normalize_value(str(v), unit) is None:
+                raise ConfirmedError(
+                    f"{field}: 設定{k}の値が単位（{unit}）に合いません: {v!r}")
         return [str(v) for v in value.values()]
     toks = _tokens(value)
     if not toks:
@@ -167,10 +212,8 @@ def check_shape(field: str, value) -> list:
     if any_of and not any(str(value.get(k) or "").strip() for k in any_of):
         raise ConfirmedError(
             f"{field}: {'/'.join(any_of)} のどれか1つは要ります（中身の無い項目は作らない）")
-    # ★単位の種類を確かめる★（依頼132 P0-2）
-    #   継続率の欄に枚数、純増の欄に％、が書けてしまうと
-    #   記事側が単位を付けた瞬間に嘘になる。
-    for k, (pat, jp) in VALUE_PATTERNS.items():
+    # ★単位の種類を確かめる★（依頼132 P0-2／依頼134で項目ごとに分けた）
+    for k, (pat, jp) in (VALUE_PATTERNS.get(base_field(field)) or {}).items():
         v = str(value.get(k) or "").strip()
         if v and not pat.match(v):
             raise ConfirmedError(f"{field}: 「{k}」は{jp}の形で書きます（いま {v!r}）")
@@ -303,13 +346,27 @@ def bind_machine(official_url: str) -> tuple:
     except Exception:                      # noqa: BLE001
         pass
     # ②すでに登録されている機種
+    #   ★公式URLの完全一致で引く★（2026-08-10・依頼134 P0-3）
+    #     URLの末尾だけでslugを作るので、待ち行列の機種のURL末尾が
+    #     既存機種のslugと同じだと、別機種の欄へ保存できてしまった。
     try:
         ms = _sj.read_json(os.path.join(BASE, "assets", "data", "machines.json"),
                            expect=(dict, list))
         ms = ms["machines"] if isinstance(ms, dict) else ms
         for m in ms:
+            ident = m.get("identity") or {}
+            if str(ident.get("official_product_url") or "").rstrip("/") \
+                    == str(official_url).rstrip("/"):
+                return m.get("slug"), str(m.get("name") or "")
+        for m in ms:
             if m.get("slug") == slug:
-                return slug, str(m.get("name") or "")
+                # ★URLは違うのにslugだけ同じ＝取り違えの疑い★
+                raise ConfirmedError(
+                    "この公式URLから作ったslug（%s）は、別の機種がすでに使っています。"
+                    "取り違えを防ぐため記録しません: 既存=%s"
+                    % (slug, m.get("name")))
+    except ConfirmedError:
+        raise
     except Exception:                      # noqa: BLE001
         pass
     raise ConfirmedError(
@@ -587,6 +644,26 @@ def selftest() -> int:
         stops("　天井の種類が決まった語でないと記録できない",
               lambda: rec(value={"kind": "ナニカ", "amount": "1000",
                                  "unit": "G", "benefit": "AT"}))
+        # ★依頼134で見つかった穴を固定する★
+        stops("★★純増に単位を書かせない★★（記事が付けるので『約約2.8枚枚』になる）",
+              lambda: rec(field="at#z",
+                          value={"mode": "MAIN_AT", "net": "約2.8枚"}))
+        t("　純増は数だけなら通る",
+          check_shape("at#z", {"mode": "MAIN_AT", "net": "2.8"}) == ["2.8"])
+        stops("★★機械割が空でも通っていた★★（引用照合もすり抜けた）",
+              lambda: check_shape("payout_range",
+                                  {"low": "", "high": "", "unit": "%"}))
+        stops("　範囲として読めない機械割は受け取らない",
+              lambda: check_shape("payout_range",
+                                  {"low": "112.5", "high": "97.3", "unit": "%"}))
+        stops("★★設定は1〜6以外を受け取らない★★（『設定memo』が表に出せた）",
+              lambda: check_shape("payout_rate", {"memo": "97.8%"}))
+        t("★CZの継続G数はGを付けた形★（ATの『30』とは別の決まり）",
+          check_shape("cz#a", {"name": "石兵八陣", "games": "4G+α"})
+          == ["石兵八陣", "4G+α"])
+        stops("　ATの継続G数に単位は書かない",
+              lambda: check_shape("at#w", {"mode": "MAIN_AT", "games": "30G"}))
+
         t("　間違いは取り消せる", forget("x", "ceiling")["state"] == "FORGOTTEN")
         t("　無いものを取り消しても壊れない",
           forget("x", "ceiling")["state"] == "NOT_FOUND")
