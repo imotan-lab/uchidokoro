@@ -208,12 +208,19 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
                 ident_ok, ident_why = _ms.directory_page_ok(
                     m.get("name") or "", page)
                 if not ident_ok:
-                    # ★捨てない＝人と2AIが見て判断できるように残す★
+                    # ★捨てない＝2AIが判断できるように材料ごと残す★
+                    #   （2026-08-11・運営者の指摘「機械で取れないものは2AIで取る」）
+                    #   機械は「題では分からない」と言うだけ。同じ機種かどうかは
+                    #   ClaudeとCodexが本文を読んで決め、控えへ登録すれば以後使える。
+                    body = _cl.cut_user_area(_cl._norm(_nw._visible_text(page)))
                     got[dir_id] = {"url": r["url"], "publisher": pub,
                                    "state": "IDENTITY_UNVERIFIED",
-                                   "error": "この機種のページか確かめられません"
-                                            f"（{ident_why}）",
-                                   "page_title": (_nw.page_title(page) or "")[:90]}
+                                   "error": "題ではこの機種のページか分かりません"
+                                            f"（{ident_why}）"
+                                            "／2AIが本文を読んで判断してください",
+                                   "page_title": (_nw.page_title(page) or "")[:90],
+                                   # ★判断に要る材料（本文の頭）を付ける★
+                                   "excerpt": body[:600]}
                     continue
                 _read(dir_id, r["url"], got, pub, html=page)
             seen_urls = {_ms.url_key(v["url"]) for v in got.values()
@@ -330,6 +337,18 @@ def as_request(got: dict) -> str:
     for dir_id, r in got["sources"].items():
         if not r.get("url"):
             L.append(f"### {dir_id}: 見つかりません（{r.get('state')}）")
+            continue
+        if r.get("state") == "IDENTITY_UNVERIFIED":
+            # ★2AIに判断してもらう★（機械は題では決められなかった）
+            L.append(f"### {dir_id}: ★この機種のページか判断してください★")
+            L.append(f"{r['url']}")
+            L.append(f"- 題: 「{r.get('page_title')}」")
+            L.append(f"- 機械の言い分: {r.get('error')}")
+            L.append(f"- 本文の頭: 「{(r.get('excerpt') or '')[:400]}」")
+            L.append("- **同じ機種なら**、根拠にした逐語を挙げてください"
+                     "（控えへ登録すると、次からは機械が確かめます）")
+            L.append("- **別の機種なら**、そう書いてください（使いません）")
+            L.append("")
             continue
         if r.get("error"):
             L.append(f"### {dir_id}: 取得できません（{r['error']}）")

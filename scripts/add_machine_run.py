@@ -1395,10 +1395,26 @@ _LOCK_LOST: list = []
 
 def _claim_today(official_url: str) -> bool:
     """★1日1機種の上限をコードに守らせる★（人の判断に任せない）"""
+    # ★★書く直前に、実際にロックを持っているか自分で確かめる★★
+    #   （2026-08-11・依頼152の指摘②）
+    #   印（_LOCK_LOST）を見るだけでは足りない。プロセスが長く止まって
+    #   ロックを奪われた後にメインが先に動き出すと、見張りの糸が
+    #   気づく前に枠を取れてしまう。ここで同期して確かめる。
     if _LOCK_LOST:
         print("★ロックの生存信号を打てなくなりました → 何も書きません★: "
               + str(_LOCK_LOST[0])[:120])
         return False
+    ctx = os.environ.get("UCHIDOKORO_LOCK_CTX")
+    if ctx:
+        c = subprocess.run(
+            [sys.executable, os.path.join(BASE, "scripts", "task_lock.py"),
+             "check", "--ctx", ctx], capture_output=True, text=True,
+            encoding="utf-8", errors="replace")
+        if c.returncode != 0:
+            print("★いまロックを持っていません → 何も書きません★: "
+                  + (c.stderr or c.stdout or "").strip()[:150])
+            _LOCK_LOST.append("check が非0")
+            return False
     slug = _ba.slug_from_url(official_url)
     g = subprocess.run(
         [sys.executable, os.path.join(BASE, "scripts", "task_guard.py"),
@@ -3046,6 +3062,7 @@ def main() -> int:
 
         def _heartbeat():
             while not _hb_stop.wait(300):        # 5分ごと
+              try:                               # noqa: E111
                 h = subprocess.run(
                     [sys.executable,
                      os.path.join(BASE, "scripts", "task_lock.py"),
@@ -3055,7 +3072,12 @@ def main() -> int:
                 if h.returncode != 0:
                     _LOCK_LOST.append((h.stderr or h.stdout or "")[:200])
                     return                      # 失ったら打ち続けない
+              except Exception as e:             # noqa: BLE001,E111
+                # ★糸だけ黙って死なせない★（印が立たないと書けてしまう）
+                _LOCK_LOST.append(f"生存信号を打てません: {type(e).__name__}: {e}")
+                return
 
+        os.environ["UCHIDOKORO_LOCK_CTX"] = args.ctx
         threading.Thread(target=_heartbeat, daemon=True).start()
         # ★task_guard も必ず通す★（Codex指摘4・通していなかった）
         # ★1日1機種の枠は「書く直前」に使う★（2026-07-31・Codex19回目）
@@ -3078,6 +3100,18 @@ def main() -> int:
     elif os.path.isfile(PUSH_PENDING):
         print("★出せていない公開の目印があります（下見では触りません）。"
               "--apply の実行が先に片付けます★")
+
+    # ★★締切は全部の入口に掛ける★★（2026-08-11・依頼152の指摘③）
+    #   以前は待ち行列のループの中だけで見ていたので、
+    #   **--name の直接指定は締切を一度も通らなかった**（時間帯の外でも1機種作れた）。
+    #   また通常の経路も、締切の外に起動すると見張りまで済ませてから止まっていた。
+    #   ★未完了の公開の片付けだけは、ここより手前で済ませる★（復旧は時間帯に関係ない）
+    if past_deadline(scheduled=args.scheduled):
+        _log(f"  {NEW_MACHINE_START_HHMM}〜{NEW_MACHINE_DEADLINE_HHMM} の外なので"
+             "新しい機種には着手しません（片付けだけ済ませました）")
+        print(f"  ★{NEW_MACHINE_START_HHMM}〜{NEW_MACHINE_DEADLINE_HHMM} の外です"
+              "→新しい機種には着手しません★")
+        return 0
 
     if args.name:
         if not (args.official_url and args.maker):
