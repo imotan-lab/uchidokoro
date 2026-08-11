@@ -28,6 +28,7 @@ import json
 import os
 import re
 import subprocess
+import threading
 import sys
 import unicodedata
 
@@ -1386,8 +1387,18 @@ def _remember(name, official_url, maker, release, problems) -> None:
                   " / ".join(problems)[:300])
 
 
+# ★ロックを失ったまま書かない★（2026-08-11・台帳#269）
+#   生存信号を打てなくなった＝他のタスクに奪われた可能性がある。
+#   書く直前（1日1機種の枠を使う所）で止める（fail-closed）。
+_LOCK_LOST: list = []
+
+
 def _claim_today(official_url: str) -> bool:
     """★1日1機種の上限をコードに守らせる★（人の判断に任せない）"""
+    if _LOCK_LOST:
+        print("★ロックの生存信号を打てなくなりました → 何も書きません★: "
+              + str(_LOCK_LOST[0])[:120])
+        return False
     slug = _ba.slug_from_url(official_url)
     g = subprocess.run(
         [sys.executable, os.path.join(BASE, "scripts", "task_guard.py"),
@@ -3006,6 +3017,26 @@ def main() -> int:
         if r.returncode != 0:
             print("★ロックを持っていません → 何も書かずに終了します★")
             return 1
+        # ★★処理中もロックの生存信号を打ち続ける★★（2026-08-11・台帳#269）
+        #   起動時に1回 check するだけだったので、見張り（11社・実測10分超）や
+        #   1機種の処理が長引くと**30分でロックを奪われ**、5:05の更新タスクと
+        #   同時に同じファイルを触りうる状態だった。
+        #   ★打てなくなったら書かない★＝失敗を覚えておき、書く直前に見る。
+        _hb_stop = threading.Event()
+
+        def _heartbeat():
+            while not _hb_stop.wait(300):        # 5分ごと
+                h = subprocess.run(
+                    [sys.executable,
+                     os.path.join(BASE, "scripts", "task_lock.py"),
+                     "heartbeat", "--ctx", args.ctx],
+                    capture_output=True, text=True,
+                    encoding="utf-8", errors="replace")
+                if h.returncode != 0:
+                    _LOCK_LOST.append((h.stderr or h.stdout or "")[:200])
+                    return                      # 失ったら打ち続けない
+
+        threading.Thread(target=_heartbeat, daemon=True).start()
         # ★task_guard も必ず通す★（Codex指摘4・通していなかった）
         # ★1日1機種の枠は「書く直前」に使う★（2026-07-31・Codex19回目）
         #   ここで先に使うと、--maker を書き忘れただけでその日の枠が消え、
