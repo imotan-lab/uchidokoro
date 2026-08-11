@@ -491,7 +491,13 @@ def cmd_copy(src: str, dst: str, optional: bool) -> int:
 DROPBOX_ROOT_ALLOWED = r"C:/Users/imao_/今電 Dropbox/今電　今尾笙夢"
 TREE_INCLUDE_DIRS = {"gold_eval", "results", "input_snapshot"}
 TREE_INCLUDE_GLOBS = ["gold_set_v*.json", "codex_schema_*.json",
-                      "gold_freeze_log*.txt", "shadow_state.json"]
+                      "gold_freeze_log*.txt", "shadow_state.json",
+                      # ★2AIの判断記録★（2026-08-11・台帳#317）
+                      #   ClaudeとCodexが同じ原文を読んで何を採り、何を保留に
+                      #   したかの唯一の記録。失うと同じ突き合わせをやり直す
+                      #   ことになり、Codexの回数も消費する。
+                      #   中身は公開サイトのURLと逐語引用だけで秘密を含まない。
+                      "*_20??-??-??.md"]
 TREE_EXCLUDE_DIRS = {"claims_check", "workdir", ".codex", ".claude", "notify_body.txt"}
 TREE_EXCLUDE_EXT = {".tmp"}
 

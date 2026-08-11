@@ -39,6 +39,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import build_new_article as _ba          # noqa: E402
+import confirmed_values as _cv           # noqa: E402
 import open_issues as _oi                # noqa: E402
 import page_decision as _pdz             # noqa: E402
 import publish_new_machine as _pub       # noqa: E402
@@ -413,6 +414,20 @@ def plan_one(slug: str, gather=None, verify=None) -> dict:
         out["problems"].append("材料を集められません: "
                                + " / ".join(got.get("problems") or [])[:200])
         return out
+    # ★2AIで確定した値も材料に足す★（2026-08-11・台帳#316）
+    #   足す場所が add_machine_run の中の1か所にしか無かったので、
+    #   **確定値を載せた機種はここで「前に載っていた内容が再現できない」**
+    #   と判定され、育てる処理が毎日止まっていた（パリピ孔明・ガレイゼロ）。
+    #   ＝「読む側を1か所しか繋いでいなかった」型の穴。
+    #   ★読めないことを黙って「無い」にしない★（例外は理由として残す）
+    try:
+        _added = _cv.merge_into(mat, slug)
+        if _added:
+            _log("  2AIで確定した値を材料に足しました: " + " / ".join(_added))
+    except Exception as e:                    # noqa: BLE001
+        out["problems"].append(
+            f"2AIの確定値を読めません: {type(e).__name__}: {e}")
+        return out
     release = vo.get("release") or (cur.get("release_date") or "")
     machine = _ba.build_machine(
         slug, vo.get("identity_name") or name, maker, url, release, mat,
@@ -782,6 +797,24 @@ def selftest() -> int:
     t("★★指紋を取り終えてから一覧を読んでいる★★（順番が戻ったら落ちる）",
       "rows" in order and "sha" in order
       and order.index("rows") > max(i for i, x in enumerate(order) if x == "sha"))
+    # ── ★2AIで確定した値を、育てる処理も必ず読む★（2026-08-11・台帳#316）
+    #    足す場所が新台側の1か所にしか無く、確定値を載せた機種は
+    #    「前に載っていた内容が再現できない」と判定されて毎日止まっていた。
+    #    ★呼んだかどうかを見る★（文字列を探すだけでは綴り違いも通る）
+    seen = []
+    real_merge = _cv.merge_into
+    try:
+        _cv.merge_into = lambda mat, slug: (seen.append((slug, id(mat))), [])[1]
+        plan_one("garei_zero_re",
+                 gather=lambda *a, **k: {"material": {"adopted": {}},
+                                         "problems": []},
+                 verify=lambda *a, **k: {"problems": [], "release": ""})
+    finally:
+        _cv.merge_into = real_merge
+    t("★★育てる処理も2AIの確定値を読む★★"
+      "（読まないと、確定値を載せた機種は毎日『再現できません』で止まる）",
+      seen and seen[0][0] == "garei_zero_re")
+
     # ── ★計画後に中身が変われば、1文字も書かずに止まる★
     wrote = []
     real_write = _pub.write_atomic
