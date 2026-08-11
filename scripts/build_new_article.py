@@ -267,7 +267,15 @@ def build_detail(slug, name, release, material) -> dict:
             counted = f"（{c['counted']}を数えます）" if c.get("counted") else ""
             body.append(f"**{jp}**：{c['amount']}{c['unit']}{counted} "
                         f"／ 恩恵：{c['benefit']}")
-        body.append("確認が取れていない天井は掲載していません。")
+        # ★断り書きは「1つしか確認できていないとき」だけ★
+        #   （2026-08-12・運営者決定）
+        #   天井は1機種に1つとは限らない（通常時／AT間／スルー）。
+        #   1つしか載っていないと、読者は「この台の天井はこれだけ」と受け取り、
+        #   **書いていないことが無いことに見える**。
+        #   全部そろっている機種では不要な文なので出さない。
+        if len(ceil) < 2:
+            body.append("ほかにも天井がある場合、確認が取れていないものは"
+                        "掲載していません。")
         boxes["天井・恩恵"] = {"title": "天井・恩恵", "body": body}
         for c in ceil:
             jp = {"GAME": "ゲーム数天井", "CYCLE": "周期天井",
