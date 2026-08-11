@@ -213,6 +213,7 @@ def _units(detail: dict) -> list:
           **後から埋まった正しい更新を「消えた」と誤判定**してしまう。
         """
         return (t == _ba.PENDING_TEXT) or (_ba.PENDING_ITEM in t) \
+            or (t == getattr(_ba, "PENDING_TEXT_OLD", "\0")) \
             or (t.strip() == "確認中") or ("確認できていない" in t) \
             or ("出典で食い違い" in t) or ("書き方が異なります" in t)
 
