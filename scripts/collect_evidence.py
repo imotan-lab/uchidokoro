@@ -194,8 +194,28 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
                     got[dir_id] = {"state": "SAME_AS_SAVED",
                                    "why": "控えと同じページなので控え側で確かめます"}
                     continue
-                _read(dir_id, r["url"], got,
-                      (cats.get(dir_id) or {}).get("publisher_id"))
+                # ★名鑑で見つけたページも、中身を見て同定する★
+                #   （2026-08-11・台帳#309）名鑑は一覧のリンク文字だけで
+                #   機種を決めていた。リンク文字が古い機種名のまま中身が
+                #   別機種に差し替わると、そのまま材料になっていた。
+                pub = (cats.get(dir_id) or {}).get("publisher_id")
+                try:
+                    page = _nw._get(r["url"])
+                except Exception as e:    # noqa: BLE001
+                    got[dir_id] = {"url": r["url"], "publisher": pub,
+                                   "error": str(e)[:80]}
+                    continue
+                ident_ok, ident_why = _ms.directory_page_ok(
+                    m.get("name") or "", page)
+                if not ident_ok:
+                    # ★捨てない＝人と2AIが見て判断できるように残す★
+                    got[dir_id] = {"url": r["url"], "publisher": pub,
+                                   "state": "IDENTITY_UNVERIFIED",
+                                   "error": "この機種のページか確かめられません"
+                                            f"（{ident_why}）",
+                                   "page_title": (_nw.page_title(page) or "")[:90]}
+                    continue
+                _read(dir_id, r["url"], got, pub, html=page)
             seen_urls = {_ms.url_key(v["url"]) for v in got.values()
                          if v.get("url")}
             for rec in saved:
