@@ -275,7 +275,14 @@ def _ceiling_note_may_go(old_detail: dict, new_detail: dict) -> bool:
         return []
 
     was, now = lines(old_detail), lines(new_detail)
-    return len(now) > len(was) and all(x in now for x in was)
+    if len(now) > len(was) and all(x in now for x in was):
+        return True
+    # ★「一覧は同じまま、これで全部だと確認できた」も正しい更新★
+    #   （2026-08-12・依頼162のP1。行数が増えたときしか許さないと、
+    #     網羅性だけ確かめた更新が永久に公開できない）
+    #   ★真偽値の真だけ★＝文字列の "true" では許さない。
+    return (new_detail.get("ceilings_complete") is True
+            and now == was)
 
 
 def text_kept(old_detail: dict, new_detail: dict) -> list:
@@ -955,6 +962,13 @@ def selftest() -> int:
       bool(text_kept(_was, _sneak)))
     t("★★天井が実際に増えたときは断り書きが消えてよい★★",
       not text_kept(_was, _grown))
+    # ★一覧は同じまま「これで全部」と確認できた更新も通す★（依頼162のP1）
+    _same = _ceil_box(["**天井**：800G"])
+    _same_ok = dict(_same, ceilings_complete=True)
+    _same_str = dict(_same, ceilings_complete="true")
+    t("★★一覧が同じでも「これで全部」なら断り書きを消せる★★",
+      not text_kept(_was, _same_ok))
+    t("　文字列の \"true\" では消せない", bool(text_kept(_was, _same_str)))
     #   ★対照実験★＝昔の姿（断り書きを最初から数えない）では素通りする
     t("　（対照）断り書きを数えないと、消すだけの更新が通る",
       not text_kept(_ceil_box(["**天井**：800G"]), _sneak))
