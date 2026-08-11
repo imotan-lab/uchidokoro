@@ -157,6 +157,9 @@ RESERVED_CHECKER_KEYS = frozenset({
     #   defaultRate は「最初に選ぶ交換率」であって、直下の値がその交換率だという
     #   証明にはならない。暗黙の継承と入力漏れを区別するために別フィールドにする。
     "baseRateKey",
+    # ★天井と50枚あたりG数（2026-08-12）★ 刻みの表が読む。
+    #   limit（入力欄の上限）は丸めてあることが多いので、天井は別に持つ。
+    "ceiling", "coinRate",
 })
 
 _SLUG_PAT = re.compile(r"^[a-z0-9_]+$")
@@ -574,7 +577,8 @@ def _types_ok(ctx: "_Ctx", d: dict, path: str, spec: dict) -> bool:
 
 
 # --- checker
-_MODE_NUM_KEYS = ("excellent", "good", "caution", "limit", "suruMax", "target", "count")
+_MODE_NUM_KEYS = ("excellent", "good", "caution", "limit", "suruMax", "target",
+                  "count", "ceiling")
 # ★層ごとに「UIが実際に読むキー」だけを許可する（Codex 21巡目 #6）★
 #   machine.html が読むのは:
 #     mode直下 … excellent/good/caution/target/note/byRate/suru/cycle
@@ -583,7 +587,8 @@ _MODE_NUM_KEYS = ("excellent", "good", "caution", "limit", "suruMax", "target", 
 #     byRate配下 … 閾値＋note（suruMax は読まない）
 #   共通の許可契約にすると、UIが参照しない値が公開データに残る。
 _MODE_ALLOWED = {"excellent", "good", "caution", "target", "note",
-                 "limit", "suruMax", "cycle", "suru", "byRate", "_disabled"}
+                 "limit", "suruMax", "cycle", "suru", "byRate", "_disabled",
+                 "ceiling"}
 _ROW_ALLOWED = {"count", "excellent", "good", "caution", "target", "note",
                 "byRate", "_disabled"}
 _RATE_ALLOWED = {"excellent", "good", "caution", "target", "note"}
@@ -615,6 +620,10 @@ def _project_mode(conf, ctx: _Ctx, path: str, ctx_label: str,
     bad = _count_sanity(conf, path)
     if bad:
         ctx.reject(path, bad)
+        return None
+    # ★天井は正の数だけ★（2026-08-12。0以下だと「天井まで残り」がマイナスになる）
+    if "ceiling" in conf and (not _is_num(conf["ceiling"]) or conf["ceiling"] <= 0):
+        ctx.reject(f"{path}.ceiling", "天井が正の数でない")
         return None
     nums = {k: conf[k] for k in _MODE_NUM_KEYS if _is_num(conf.get(k))}
     note = conf.get("note") if _is_str(conf.get("note")) else None
@@ -1204,11 +1213,13 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx,
     for k, typ in (("unit", str), ("equivOnly", bool), ("exchangeRates", list),
                    ("defaultRate", str), ("baseRateKey", str), ("ok", str), ("ng", str),
                    ("limit", (int, float)), ("hasSuru", bool), ("hasCycle", bool),
-                   ("suruMax", (int, float)), ("modeData", dict)):
+                   ("suruMax", (int, float)), ("modeData", dict),
+                   ("ceiling", (int, float)), ("coinRate", (int, float))):
         if k in checker and not isinstance(checker[k], typ):
             ctx.reject(f"checker.{k}", "既知フィールドの型不正")
             return None
-        if k in ("limit", "suruMax") and k in checker and isinstance(checker[k], bool):
+        if k in ("limit", "suruMax", "ceiling", "coinRate") and k in checker \
+                and isinstance(checker[k], bool):
             ctx.reject(f"checker.{k}", "数値フィールドに真偽値")
             return None
     bad = _count_sanity(checker, "checker")
@@ -1227,6 +1238,15 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx,
         out["equivOnly"] = checker["equivOnly"]
     if _is_num(checker.get("limit")):
         out["limit"] = checker["limit"]
+    # ★天井・50枚あたりG数（2026-08-12）★
+    #   表は「天井 − 現在G」を出すので、0以下だと残りゲーム数がマイナスになる。
+    #   丸めた入力上限を天井として使わないよう、値は別フィールドで持つ。
+    for _k in ("ceiling", "coinRate"):
+        if _k in checker:
+            if not _is_num(checker[_k]) or checker[_k] <= 0:
+                ctx.reject(f"checker.{_k}", "天井・コイン持ちが正の数でない")
+                return None
+            out[_k] = checker[_k]
     # ★UIが参照しないフィールドは公開しない（公開契約と消費契約を一致させる）★
     #   判定文は固定文言・カウンター表示は modes[] のフラグ・上限は mode直下の suruMax を使う。
     for lab in ("ok", "ng"):
@@ -3049,6 +3069,28 @@ def selftest() -> int:
         t(f"不変条件: {label} 違反を検出", ok)
 
     ng = [n for n, c in results if not c]
+    # ★天井（ceiling）と50枚あたりG数（coinRate）★（2026-08-12）
+    #   刻みの表が「天井 − 現在G」を出すので、0以下や真偽値が混ざると
+    #   「天井まで残り -200G」のような表示になる。関所で止める。
+    def _ck_ceil(**over):
+        base = {"unit": "G", "modes": [{"key": "normal", "label": "通常"}],
+                "normal": {"good": 500, "caution": 400, "excellent": 700}}
+        base.update(over)
+        return _project_checker(base, ["normal"], _Ctx("strict", None, "zzz"), None)
+
+    _good = _ck_ceil(coinRate=30.7,
+                     normal={"good": 500, "caution": 400, "excellent": 700,
+                             "ceiling": 1499})
+    t("★★天井とコイン持ちは公開データに残る★★（刻みの表が読む）",
+      bool(_good) and _good.get("coinRate") == 30.7
+      and (_good.get("normal") or {}).get("ceiling") == 1499)
+    t("　コイン持ちが0なら止まる", not _ck_ceil(coinRate=0))
+    t("　コイン持ちが真偽値なら止まる", not _ck_ceil(coinRate=True))
+    t("　天井が0なら止まる",
+      not _ck_ceil(normal={"good": 500, "caution": 400, "ceiling": 0}))
+    t("　天井が文字なら止まる",
+      not _ck_ceil(normal={"good": 500, "caution": 400, "ceiling": "1499"}))
+
     print(f"\n{len(results) - len(ng)}/{len(results)} 合格")
     if ng:
         print("失敗:", ng)

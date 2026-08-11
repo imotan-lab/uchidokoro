@@ -516,10 +516,62 @@ function resolveMachineSlug() {
     if (Number.isFinite(excellent)) {
       rows.push({ range: `${excellent}${evUnit} 〜${limitStr}`, label: "◎ 目安を大きく超過" + eqSuffix, cls: "ev-row-great" });
     }
+    // ★天井が分かっている機種は、刻みの表にする★（2026-08-12）
+    //   「あと何G回すのか」「直行なら最大いくら使うのか」は、
+    //   天井と50枚あたりG数の2つだけで**確実に**言える。
+    //   ★期待値ではない★（途中で当たればここまで使わない）ので、
+    //   プラス・マイナスの金額は出さない。
+    const stepHtml = renderStepTable(modeKey, config, evUnit);
+    if (stepHtml) { evTable.innerHTML = stepHtml; return; }
     let html = `<thead><tr><th>${evUnit === "G" ? "G数帯" : evUnit + "の範囲"}</th><th>判定</th></tr></thead><tbody>`;
     rows.forEach(r => { html += `<tr class="${r.cls}"><td>${r.range}</td><td>${r.label}</td></tr>`; });
     html += `</tbody>`;
     evTable.innerHTML = html;
+  }
+
+  // そのモードの天井（★入力欄の上限とは別物★）。分かっている時だけ数値を返す。
+  function getModeCeiling(modeKey) {
+    const md = checker[modeKey];
+    if (md && Number.isFinite(md.ceiling)) return md.ceiling;
+    if (Number.isFinite(checker.ceiling)) return checker.ceiling;
+    return null;
+  }
+
+  // 判定（× / △ / ○ / ◎）を1行ぶん決める
+  function judgeAt(g, config) {
+    const { caution, good, excellent } = config;
+    if (Number.isFinite(excellent) && g >= excellent) return ["◎ 大きく超過", "ev-row-great"];
+    if (Number.isFinite(good) && g >= good) return ["○ 目安以上", "ev-row-ok"];
+    if (Number.isFinite(caution) && g >= caution) return ["△ 手前", "ev-row-wait"];
+    return ["× 未達", "ev-row-ng"];
+  }
+
+  function renderStepTable(modeKey, config, evUnit) {
+    if (evUnit !== "G") return "";                 // pt・周期は刻みにしない
+    const ceiling = getModeCeiling(modeKey);
+    if (!Number.isFinite(ceiling) || ceiling < 100) return "";
+    const coinRate = Number.isFinite(checker.coinRate) ? checker.coinRate : null;
+    const step = ceiling <= 1000 ? 50 : 100;
+    const rows = [];
+    for (let g = 0; g < ceiling; g += step) {
+      const rest = ceiling - g;
+      const [label, cls] = judgeAt(g, config);
+      let cost = "—";
+      if (coinRate) {
+        // 直行なら、残りG数ぶんのメダルを使う（50枚＝1,000円で換算）
+        const mai = Math.round(rest / coinRate * 50);
+        cost = `約${mai.toLocaleString()}枚<span class="ev-yen">（約${(Math.round(mai * 20 / 100) * 100).toLocaleString()}円）</span>`;
+      }
+      rows.push({ g, rest, cost, label, cls });
+    }
+    const costHead = coinRate ? "<th>直行なら投入</th>" : "";
+    let html = `<thead><tr><th>打ち出しG数</th><th>天井まで</th>${costHead}<th>当サイト判定</th></tr></thead><tbody>`;
+    rows.forEach(r => {
+      const costCell = coinRate ? `<td>${r.cost}</td>` : "";
+      html += `<tr class="${r.cls}"><td>${r.g}G〜</td><td>${r.rest}G</td>${costCell}<td>${r.label}</td></tr>`;
+    });
+    html += "</tbody>";
+    return html;
   }
 
   // 早見表のmodeを、指定されたmodeへ揃える（早見表に無いmodeなら何もしない）
@@ -590,7 +642,16 @@ function resolveMachineSlug() {
     }
     if (evTableNote) {
       const hasVar = getModes(checker).some(m => m.hasSuru || m.hasCycle);
-      evTableNote.textContent = hasVar ? "スルー・周期は変動要素があるためチェッカーで確認してください。" : "";
+      const notes = [];
+      // ★誤解を招かないための断り★（2026-08-12）
+      //   「直行なら投入」は**天井まで一度も当たらなかった場合**の枚数。
+      //   実際は途中で当たるので、ここまで使うことはほとんど無い。
+      //   ★期待値（勝てる金額）ではない★ことを必ず書く。
+      if (Number.isFinite(checker.coinRate)) {
+        notes.push(`「直行なら投入」は、天井まで一度も当たらなかった場合に使うメダルです（50枚あたり${checker.coinRate}Gで計算・1,000円で50枚貸し）。途中で当たればここまで使いません。勝ち負けの金額（期待値）ではありません。`);
+      }
+      if (hasVar) notes.push("スルー・周期は変動要素があるためチェッカーで確認してください。");
+      evTableNote.textContent = notes.join(" ");
     }
     renderEvTable(evModeKey, getCurrentRateKey());
   }
