@@ -156,9 +156,20 @@ def _fmt_day(ymd: str) -> str:
             if m else str(ymd or ""))
 
 
-def _fmt_release(ym: str) -> str:
-    m = re.match(r"^(\d{4})-(\d{2})$", str(ym or ""))
-    return f"{m.group(1)}年{int(m.group(2))}月" if m else str(ym or "")
+def _fmt_release(ymd: str) -> str:
+    """登場時期の書き方（2026-08-12・運営者決定）。
+
+      日まで分かる   → 2026年10月5日 導入
+      月までしか無い → 2026年10月頃（曖昧なままでよい）
+
+    ★「導入予定」とは書かない★＝導入後に嘘になる語なので検査で止まる。
+    """
+    t = str(ymd or "")
+    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", t)
+    if m:
+        return f"{m.group(1)}年{int(m.group(2))}月{int(m.group(3))}日 導入"
+    m = re.match(r"^(\d{4})-(\d{2})$", t)
+    return f"{m.group(1)}年{int(m.group(2))}月頃" if m else t
 
 
 # 本人性の結び付け方（どの公式ページで確かめたか）
@@ -286,6 +297,26 @@ def build_detail(slug, name, release, material) -> dict:
             jp = "メインAT純増" if c["mode"] == "MAIN_AT" else "上位AT純増"
             facts.append([jp, f"約{c['net']}枚/G"])
 
+    # ★朝一・リセット★（2026-08-12・運営者決定）
+    #   原文を集める側には前から話題があったのに、書く処理が無かったため
+    #   **情報が揃っても永久に空のまま**だった。
+    #   ★2AIが確定した値だけを書く★（機械が本文から読み取ることはしない）
+    resets = (material.get("resets") or {}).get("adopted") or []
+    if resets:
+        body = []
+        for c in resets:
+            kind = c.get("kind")
+            if kind == "CEILING_SHORTENED" and c.get("games"):
+                body.append(f"**設定変更後の天井**：{c['games']}G")
+            elif kind == "MORNING_STATE" and c.get("state"):
+                body.append(f"**朝一の状態**：{c['state']}")
+            elif kind == "ADVANTAGE_RESET" and c.get("state"):
+                body.append(f"**有利区間**：{c['state']}")
+        if body:
+            body.append("出典2件で一致した内容だけを載せています。")
+            boxes["朝一・リセット情報"] = {"title": "朝一・リセット情報",
+                                          "body": body}
+
     # ★CZ★（2026-07-31・Codexと相談した案D）
     #   ★「全種類」だと読まれない書き方にする★
     #     どの出典も「これで全部」とは書いていないため、一覧の完全性は判定できない。
@@ -318,7 +349,7 @@ def build_detail(slug, name, release, material) -> dict:
     #   ★存在するかどうか分からない項目（上位AT・CZ等）はここに並べない★
     #     （並べると「あるのに未確認」と読めてしまう）
     spec_body = [f"**機種名**：{name}"]
-    spec_body.append(f"**登場時期**：{_fmt_release(release)}（公式確認）"
+    spec_body.append(f"**登場時期**：{_fmt_release(release)}"
                      if release else f"**登場時期**：{PENDING_ITEM}")
     # ★型式名は書かない★（2026-08-09・運営者決定。同定専用にした）
     rng = adopted.get("payout_range")

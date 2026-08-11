@@ -65,6 +65,10 @@ FIELD_TARGETS = {
     "ceiling": "ceilings",      # 天井（1件ずつ）
     "at": "at_specs",           # ATの仕様
     "cz": "czs",                # CZ
+    # ★朝一・リセット★（2026-08-12・運営者決定で箱を埋めることにした）
+    #   原文を集める側には前から話題があったのに、値を受け取る器が無く、
+    #   **情報が揃っても永久に空のまま**だった。
+    "reset": "resets",
 }
 # 基本スペック側（spec_lookup.FIELDS の鍵）はそのまま adopted へ入る
 
@@ -91,6 +95,14 @@ VALUE_SHAPES = {
     "at": {"required": ("mode",), "any_of": ("games", "net", "loop_rate"),
            "enums": {"mode": ("MAIN_AT", "UPPER_AT")},
            "quoted": ("games", "net", "loop_rate")},
+    # ★朝一・リセット★（2026-08-12）
+    #   種類だけは必ず要る。中身はどれか1つでもあればよい
+    #   （天井が短くなる機種／朝一の状態だけ分かる機種、どちらもある）。
+    "reset": {"required": ("kind",),
+              "any_of": ("games", "state"),
+              "enums": {"kind": ("CEILING_SHORTENED", "MORNING_STATE",
+                                 "ADVANTAGE_RESET")},
+              "quoted": ("games", "state")},
     # ★CZは名前だけでなく、書いた項目は全部引用と照合する★（依頼134）
     #   記事は継続G数と期待度も出すので、書くなら根拠が要る。
     "cz": {"required": ("name",), "enums": {},
@@ -138,6 +150,13 @@ VALUE_PATTERNS = {
     "ceiling": {
         "amount": (_re.compile(r"^\d{1,5}$"), "数だけ（単位は unit に書く）"),
         "unit": (_re.compile(r"^[GＧ]|pt|周期|スルー|まいる$"), "単位"),
+    },
+    # ★朝一・リセット★（2026-08-12）
+    "reset": {
+        "games": (_re.compile(r"^\d{1,4}(\+α)?$"),
+                  "短縮後のゲーム数（単位は書かない。例: 600 / 600+α）"),
+        "state": (_re.compile(r"^.{2,30}$"),
+                  "朝一の状態（例: 高確からスタート）"),
     },
 }
 
