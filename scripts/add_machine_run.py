@@ -2023,6 +2023,11 @@ def selftest() -> int:
     real_store = _pend.STORE
     _tmpdir = __import__("tempfile").mkdtemp(prefix="uchi_pend_")
     _pend.STORE = os.path.join(_tmpdir, "pending.json")
+    # ★試験は本番の未pushの目印にも書かない★（2026-08-11・実際に汚した）
+    #   push_after_publish は本物の目印を書くので、試験の slug が残ると
+    #   **次の --apply が未完了公開として処理し、後続を止める**。
+    real_mark = globals()["PUSH_PENDING"]
+    globals()["PUSH_PENDING"] = os.path.join(_tmpdir, ".push-pending.json")
     # ★試験は本番の日次ログにも書かない★（2026-08-01・実際に混入した）
     #   混入すると完了マーカーが末尾から離れ、番兵（task-watchdog）が
     #   「起動したが完走していない」と誤検知しうる。画面出力だけにする。
@@ -2927,8 +2932,10 @@ def selftest() -> int:
                 _keep_lsm = globals()["lock_still_mine"]
                 _keep_run = globals()["subprocess"].run
                 try:
-                    for stop_at, jp, ban in ((2, "コミットの直前", ("commit", "push")),
-                                             (3, "pushの直前", ("push",))):
+                    # (何回目の確認で落とすか, 名前, 呼ばれてはいけない, 呼ばれるべき)
+                    for stop_at, jp, ban, must in (
+                            (2, "コミットの直前", ("commit", "push"), ()),
+                            (3, "pushの直前", ("push",), ("commit",))):
                         seen, gits = [0], []
 
                         def _lsm(where, _n=stop_at, _s=seen):
@@ -2945,23 +2952,38 @@ def selftest() -> int:
                         globals()["subprocess"].run = _run
                         out = push_after_publish("dummy_slug")
                         t(f"★★{jp}で失ったら、そこから先へ進まない★★",
-                          bool(out) and not any(g in gits for g in ban))
+                          bool(out) and not any(g in gits for g in ban)
+                          and all(g in gits for g in must))
                 finally:
                     globals()["lock_still_mine"] = _keep_lsm
                     globals()["subprocess"].run = _keep_run
 
-                # ★再開経路も入口の拒否が効くか★（3分岐とも push_after_publish 経由）
+                # ★再開経路の3分岐とも、出す経路を必ず通る★（依頼156のP2）
+                #   以前は「何か返ってくれば合格」だったので、
+                #   push_after_publish を呼ばずに別の理由で失敗しても通った。
                 _keep_pap = globals()["push_after_publish"]
                 try:
-                    called = []
-                    globals()["push_after_publish"] = (
-                        lambda slug, already_committed=False:
-                        called.append(slug) or ["入口で止めました"])
-                    _mark = PUSH_PENDING
-                    t("　未完了公開の再開も、出す経路を必ず通る",
-                      not os.path.isfile(_mark) or bool(retry_push_first()))
+                    for stage, committed in (("WRITTEN", False),
+                                             ("COMMITTED", True)):
+                        called = []
+                        globals()["push_after_publish"] = (
+                            lambda slug, already_committed=False, _c=called:
+                            _c.append((slug, already_committed))
+                            or ["入口で止めました"])
+                        io.open(PUSH_PENDING, "w", encoding="utf-8").write(
+                            json.dumps({"slug": "t_resume", "sha": "",
+                                        "stage": stage, "parent": "",
+                                        "at": "2026/08/11 00:00:00"}))
+                        out = retry_push_first()
+                        t(f"　未完了公開（{stage}）の再開も、出す経路を必ず通る",
+                          bool(out) and len(called) == 1
+                          and called[0][0] == "t_resume")
                 finally:
                     globals()["push_after_publish"] = _keep_pap
+                    try:
+                        os.remove(PUSH_PENDING)
+                    except OSError:
+                        pass
             finally:
                 _LOCK_LOST.clear()
                 _LOCK_LOST.extend(_keep_lost)
@@ -2969,6 +2991,11 @@ def selftest() -> int:
                     os.environ.pop("UCHIDOKORO_LOCK_CTX", None)
                 else:
                     os.environ["UCHIDOKORO_LOCK_CTX"] = _keep_ctx
+            # ★試験が本番のどこにも書かないことを、まとめて確かめる★
+            #   （2026-08-11・実際に2つ汚した＝台帳と未pushの目印）
+            t("★★試験が本番の未pushの目印を触らない★★"
+              "（dummy_slug が残り、次の実行が未完了公開として処理しかけた）",
+              PUSH_PENDING.startswith(_tmpdir))
             t("★★試験が本番の待ち行列を触らない★★（架空機種が入り込んだ）",
               _pend.STORE.startswith(_tmpdir))
             t("　実際に開けない公式URLでは組み立てまで進まない",
@@ -3137,6 +3164,7 @@ def selftest() -> int:
         _di.find, _sl.read_page, _mc.lookup = real_find, real_read, real_lookup
         _lc.check = real_lc
         _pend.STORE = real_store
+        globals()["PUSH_PENDING"] = real_mark
         globals()["_log"] = real_log
         __import__("shutil").rmtree(_tmpdir, ignore_errors=True)
 
