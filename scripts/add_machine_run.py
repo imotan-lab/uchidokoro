@@ -860,11 +860,17 @@ BLOCKING = ("AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY",
             "パチスロのページに見えません")
 
 
+# ★どの一覧を読むか★（自己テストが本番を書き換えないように差し替えられる）
+#   （2026-08-11・依頼157のP1）以前は自己テストが本番の machines.json を
+#   偽データや壊れたJSONで**直接上書き**していた。通常終了なら戻すが、
+#   強制終了や電源断で偽データが残る。実行中に別処理が読めば壊れた状態も見える。
+MACHINES_PATH = os.path.join(BASE, "assets/data/machines.json")
+
+
 def _machine_class(slug: str) -> str:
     """コミット文に書くための区分（読めなければ「区分不明」）。"""
     try:
-        ms = _sj.read_json(os.path.join(BASE, "assets/data/machines.json"),
-                           expect=(dict, list))
+        ms = _sj.read_json(MACHINES_PATH, expect=(dict, list))
         ms = ms["machines"] if isinstance(ms, dict) else ms
         for m in ms:
             if m.get("slug") == slug:
@@ -2028,6 +2034,13 @@ def selftest() -> int:
     #   **次の --apply が未完了公開として処理し、後続を止める**。
     real_mark = globals()["PUSH_PENDING"]
     globals()["PUSH_PENDING"] = os.path.join(_tmpdir, ".push-pending.json")
+    # ★試験は本番の台帳にも書かない★（2026-08-11・依頼157のP1）
+    #   局所で偽物に差し替えていたが、分類の回帰や待ち行列の保存失敗など
+    #   別の経路から本物の _ledger が呼ばれうる。全体で差し替える。
+    real_ledger = globals()["_ledger"]
+    _ledger_calls: list = []
+    globals()["_ledger"] = (
+        lambda *a, **k: _ledger_calls.append((a, k)) or None)
     # ★試験は本番の日次ログにも書かない★（2026-08-01・実際に混入した）
     #   混入すると完了マーカーが末尾から離れ、番兵（task-watchdog）が
     #   「起動したが完走していない」と誤検知しうる。画面出力だけにする。
@@ -2963,8 +2976,13 @@ def selftest() -> int:
                 #   push_after_publish を呼ばずに別の理由で失敗しても通った。
                 _keep_pap = globals()["push_after_publish"]
                 try:
-                    for stage, committed in (("WRITTEN", False),
-                                             ("COMMITTED", True)):
+                    # ★3分岐とも、呼ばれ方（slugと already_committed）まで見る★
+                    #   （依頼157のP2）以前は slug しか見ておらず、
+                    #   誤った already_committed で呼んでも通った。
+                    for stage, committed, on_top in (
+                            ("WRITTEN", False, False),
+                            ("WRITTEN", True, True),
+                            ("COMMITTED", True, False)):
                         called = []
                         globals()["push_after_publish"] = (
                             lambda slug, already_committed=False, _c=called:
@@ -2972,12 +2990,19 @@ def selftest() -> int:
                             or ["入口で止めました"])
                         io.open(PUSH_PENDING, "w", encoding="utf-8").write(
                             json.dumps({"slug": "t_resume", "sha": "",
-                                        "stage": stage, "parent": "",
+                                        "stage": stage,
+                                        "parent": "oyacommit" if on_top else "",
                                         "at": "2026/08/11 00:00:00"}))
-                        out = retry_push_first()
-                        t(f"　未完了公開（{stage}）の再開も、出す経路を必ず通る",
-                          bool(out) and len(called) == 1
-                          and called[0][0] == "t_resume")
+                        _keep_top = globals()["_committed_on_top"]
+                        try:
+                            globals()["_committed_on_top"] = (
+                                lambda parent, slug, _v=on_top: _v)
+                            out = retry_push_first()
+                        finally:
+                            globals()["_committed_on_top"] = _keep_top
+                        t(f"　未完了公開（{stage}/コミット済み={committed}）の再開も、"
+                          "出す経路を必ず通る",
+                          bool(out) and called == [("t_resume", committed)])
                 finally:
                     globals()["push_after_publish"] = _keep_pap
                     try:
@@ -3140,8 +3165,10 @@ def selftest() -> int:
                       expect=(dict, list)))[0]) in (
                   "LEGACY_COMPLETE", "LEGACY_PREVIEW",
                   "AUTO_INDEXABLE", "AUTO_PENDING"))
-            _real_ms = os.path.join(BASE, "assets/data/machines.json")
-            _ms_bak = _io.open(_real_ms, "rb").read()
+            # ★本番の一覧は読むだけ★（書き換えない・依頼157のP1）
+            _real_ms = os.path.join(_tmpdir, "machines_for_test.json")
+            _keep_mp = globals()["MACHINES_PATH"]
+            globals()["MACHINES_PATH"] = _real_ms
             try:
                 _io.open(_real_ms, "w", encoding="utf-8").write(json.dumps(
                     [{"slug": "t1", "publication_policy": "page-decision/v1",
@@ -3154,7 +3181,7 @@ def selftest() -> int:
                 t("★★コミット文の区分: 壊れていても止めず区分不明にする★★",
                   _machine_class("t1") == "区分不明")
             finally:
-                _io.open(_real_ms, "wb").write(_ms_bak)
+                globals()["MACHINES_PATH"] = _keep_mp
             LIST_SNAPSHOT.pop("z", None)
             _nw.CATALOGS = real_cats
             globals()["EVIDENCE_DIR"] = real_evdir
@@ -3165,6 +3192,7 @@ def selftest() -> int:
         _lc.check = real_lc
         _pend.STORE = real_store
         globals()["PUSH_PENDING"] = real_mark
+        globals()["_ledger"] = real_ledger
         globals()["_log"] = real_log
         __import__("shutil").rmtree(_tmpdir, ignore_errors=True)
 
