@@ -1715,7 +1715,16 @@ def push_after_publish(slug: str, already_committed: bool = False) -> list:
     手元に置いたままにすると、翌日の実行が「許していない変更がある」で止まる。
     **確かめる → コミット対象を選ぶ → コミット → もう一度確かめる → push**
     の順で、1つでも引っかかったら出さない。
+
+    ★★出す手前でロックを確かめる★★（2026-08-11・依頼154の②）
+      以前は「枠を取るとき」と「公開の仕上げ」でしか見ていなかったので、
+      **未完了公開の再開経路（retry_push_first）が素通り**していた。
+      さらに、確かめた直後に長く止まると、所有権が移ったあとに
+      コミットやpushができた。入口・commit直前・push直前の3か所で見る。
     """
+    ng = lock_still_mine("公開のpush（入口）")
+    if ng:
+        return ng
     gate = os.path.join(BASE, "scripts", "prepush_gate.py")
 
     def _run(*args):
@@ -1758,6 +1767,9 @@ def push_after_publish(slug: str, already_committed: bool = False) -> list:
                "出典2件で一致した項目だけを載せています。"
                "検索に載せるかは判定書（PageDecision v1）が決めます。\n\n"
                "Co-Authored-By: Claude <自動タスク> <noreply@anthropic.com>\n")
+        ng = lock_still_mine("コミットの直前")
+        if ng:
+            return ng
         c = subprocess.run(["git", "commit", "-m", msg], cwd=BASE,
                            capture_output=True, text=True,
                            encoding="utf-8", errors="replace")
@@ -1815,6 +1827,9 @@ def push_after_publish(slug: str, already_committed: bool = False) -> list:
     if _head() != checked_sha:
         return [f"関所の後にコミットが増えています（検査済み={checked_sha[:12]} / "
                 f"いま={_head()[:12]}）。pushしていません（人が確かめてください）"]
+    ng = lock_still_mine("pushの直前")
+    if ng:
+        return ng
     p = subprocess.run(
         ["git", "push",
          f"--force-with-lease=refs/heads/{sc['dest']}:{base_sha}",
@@ -2869,6 +2884,36 @@ def selftest() -> int:
               _late(8, 30) and _late(14, 0) and _late(22, 59))
             t("　手で流すときは締切を効かせない（人が見ている）",
               not _late(14, 0, sch=False) and not _late(5, 30, sch=False))
+            # ★★ロックを失ったら、出す手前で全部止まる★★（依頼154の②）
+            #   ここが無いと、30分以上止まってロックが別の実行へ移ったあと
+            #   復帰した旧い実行が、そのままコミット・pushできてしまう。
+            #   ★再開経路（retry_push_first）も push_after_publish を通る★
+            _keep_lost = list(_LOCK_LOST)
+            _keep_ctx = os.environ.get("UCHIDOKORO_LOCK_CTX")
+            try:
+                _LOCK_LOST.clear()
+                os.environ.pop("UCHIDOKORO_LOCK_CTX", None)
+                t("　ロックを持っていれば関所は通る（手動＝CTX無し）",
+                  lock_still_mine("試験") == [])
+                _LOCK_LOST.append("生存信号を打てません")
+                t("★★生存信号を失ったら出さない★★",
+                  bool(lock_still_mine("試験")))
+                _LOCK_LOST.clear()
+                os.environ["UCHIDOKORO_LOCK_CTX"] = os.path.join(
+                    _tmpdir, "no_such_ctx.json")
+                t("★★CTXはあるが今は持っていない場合も出さない★★",
+                  bool(lock_still_mine("試験")))
+                _LOCK_LOST.append("失った")
+                t("★★失った状態では push_after_publish が入口で止まる★★"
+                  "（未完了公開の再開経路もここを通る）",
+                  bool(push_after_publish("dummy_slug")))
+            finally:
+                _LOCK_LOST.clear()
+                _LOCK_LOST.extend(_keep_lost)
+                if _keep_ctx is None:
+                    os.environ.pop("UCHIDOKORO_LOCK_CTX", None)
+                else:
+                    os.environ["UCHIDOKORO_LOCK_CTX"] = _keep_ctx
             t("★★試験が本番の待ち行列を触らない★★（架空機種が入り込んだ）",
               _pend.STORE.startswith(_tmpdir))
             t("　実際に開けない公式URLでは組み立てまで進まない",
