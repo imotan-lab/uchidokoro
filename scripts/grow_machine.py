@@ -342,9 +342,14 @@ def plan_one(slug: str, gather=None, verify=None) -> dict:
     """
     out = {"slug": slug, "problems": [], "machine": None, "detail": None,
            "was": None, "now": None,
-           "fingerprint": {p: _file_sha(p) for p in
-                           (_detail_path(slug), _pub._page_path(slug),
-                            MACHINES, SITEMAP) if os.path.isfile(p)}}
+           # ★読む入力は全部指紋に入れる★（2026-08-11・依頼148の指摘2）
+           #   2AIの確定値を読むようにしたのに、そこだけ監視の外だった。
+           #   計画のあと・書き込みの前に確定値を取り消しても、
+           #   古い計画のまま公開できてしまう。
+           #   ★無い状態も指紋に入れる★（後から現れた場合も食い違わせる）
+           "fingerprint": {p: (_file_sha(p) if os.path.isfile(p) else "")
+                           for p in (_detail_path(slug), _pub._page_path(slug),
+                                     MACHINES, SITEMAP, _cv.STORE)}}
     rows = _read_rows()
     cur = next((m for m in rows if m.get("slug") == slug), None)
     if cur is None:
@@ -504,8 +509,9 @@ def apply_one(got: dict) -> dict:
         return out
     # ★先に一度そろえて見る★（本番の判定は鍵の中でもう一度やる。
     #   ここで落とすのは「明らかに古い計画」を早く断るため）
+    # ★「無い」も指紋のうち★（後から現れた／消えたのどちらも食い違わせる）
     stale = [p for p, want in got["fingerprint"].items()
-             if not os.path.isfile(p) or _file_sha(p) != want]
+             if (_file_sha(p) if os.path.isfile(p) else "") != want]
     if stale:
         out["problems"].append(
             "計画したときから中身が変わっています: "
@@ -532,7 +538,7 @@ def apply_one(got: dict) -> dict:
         # ── 書く直前の再確認
         before_fp = got["fingerprint"]
         for p, want in before_fp.items():
-            if not os.path.isfile(p) or _file_sha(p) != want:
+            if (_file_sha(p) if os.path.isfile(p) else "") != want:
                 out["problems"].append(
                     f"計画したときから中身が変わっています: "
                     f"{os.path.relpath(p, BASE)}")
@@ -802,18 +808,31 @@ def selftest() -> int:
     #    「前に載っていた内容が再現できない」と判定されて毎日止まっていた。
     #    ★呼んだかどうかを見る★（文字列を探すだけでは綴り違いも通る）
     seen = []
+    the_mat = {"adopted": {}}
     real_merge = _cv.merge_into
     try:
-        _cv.merge_into = lambda mat, slug: (seen.append((slug, id(mat))), [])[1]
+        # ★どの材料に足したかまで見る★（依頼148の指摘4）
+        #   slugだけ見ていると、空の辞書へ誤って繋いでも合格してしまう。
+        def _spy(mat, slug):
+            # ★「集めた材料そのもの」に足しているか★（別の辞書ではないこと）
+            seen.append((slug, mat is the_mat))
+            return []
+        _cv.merge_into = _spy
         plan_one("garei_zero_re",
-                 gather=lambda *a, **k: {"material": {"adopted": {}},
-                                         "problems": []},
+                 gather=lambda *a, **k: {"material": the_mat, "problems": []},
                  verify=lambda *a, **k: {"problems": [], "release": ""})
     finally:
         _cv.merge_into = real_merge
     t("★★育てる処理も2AIの確定値を読む★★"
       "（読まないと、確定値を載せた機種は毎日『再現できません』で止まる）",
-      seen and seen[0][0] == "garei_zero_re")
+      seen and seen[0] == ("garei_zero_re", True))
+    t("　2AIの確定値も計画の指紋に入っている"
+      "（計画のあとに取り消されたら食い違って止まる）",
+      _cv.STORE in (plan_one(
+          "garei_zero_re",
+          gather=lambda *a, **k: {"material": None, "problems": []},
+          verify=lambda *a, **k: {"problems": [], "release": ""}
+      ).get("fingerprint") or {}))
 
     # ── ★計画後に中身が変われば、1文字も書かずに止まる★
     wrote = []

@@ -304,12 +304,17 @@ def verify_source(src: dict, name: str, fetch=None) -> dict:
 
         def fetch(u):
             return _w._get(u)
+    import hashlib
+
     import model_code_lookup as _mc
     import new_machine_watch as _w
     try:
         html = fetch(src["url"])
     except Exception as e:                 # noqa: BLE001
         raise ConfirmedError(f"出典を取得できません（{src['url']}）: {str(e)[:80]}")
+
+    def text_of(h):
+        return " ".join(_w._visible_text(h).split())
     ok, why = _mc.page_is_machine(html, name)
     if not ok:
         # ★機械が弾いたら、それはAIの出番の合図★（2026-08-11・運営者の指摘）
@@ -322,14 +327,32 @@ def verify_source(src: dict, name: str, fetch=None) -> dict:
         #   ただし**言うだけでは通さない**＝本文は必ず機械が取ってきたもので、
         #   判断者と理由を必ず残す（あとで取り消す範囲を決められるように）。
         why_same = str(src.get("identity_why") or "").strip()
-        if not why_same:
+        proof = " ".join(str(src.get("identity_proof") or "").split())
+        if not why_same or not proof:
             raise ConfirmedError(
                 f"そのページは「{name}」のページだと確かめられません（{why}）: "
                 f"{src['url']}／同じ機種だと2AIが判断したなら "
-                "--source-identity に『URL|理由』を付けます")
+                "--source-identity に『URL|根拠の逐語引用|理由』を付けます")
+        if len(why_same) < MIN_WHY:
+            # ★受け取る側でも確かめる★（2026-08-11・依頼148の指摘3）
+            #   CLIでしか見ていなかったので、別の呼び出し口を足すと素通りする。
+            raise ConfirmedError(
+                f"なぜ同じ機種かの理由は{MIN_WHY}文字以上で書きます: {why_same}")
+        # ★理由だけでは通さない★（2026-08-11・依頼148の指摘1）
+        #   「もっともらしい理由」は誰でも書ける。**そのページに実在する文**を
+        #   根拠として出させ、機械が確かめる。これで、別機種のページを
+        #   通すには「対象機種の正式名称がそのページに載っている」ことが要る。
+        if proof not in text_of(html):
+            raise ConfirmedError(
+                f"同定の根拠がそのページに見当たりません（{src['url']}）: "
+                f"{proof[:40]}")
         src["identity_override"] = {
             "why": why_same[:300],
+            "proof": proof[:300],
             "machine_said": why,
+            # ★どの本文を読んで判断したか★（あとで同じものを見たか確かめられる）
+            "text_sha256": hashlib.sha256(
+                text_of(html).encode("utf-8")).hexdigest(),
             "at": datetime.date.today().isoformat(),
         }
     text = " ".join(_w._visible_text(html).split())
@@ -647,16 +670,26 @@ def selftest() -> int:
                     + ("説明。" * 30) + "</p></body>")
         stops("★★題が機種名と合わないページは、理由なしでは通らない★★",
               lambda: rec(fetch=nickname))
+        src_lie = [parse_source("https://chonborista.com/1|" + Q1),
+                   dict(parse_source("https://nana-press.com/1|" + Q2),
+                        identity_why="題は通称だが本文に正式名称とメーカーがある",
+                        identity_proof="このページには無い文です")]
+        stops("★★同定の根拠も、そのページに実在しなければ通らない★★"
+              "（もっともらしい理由は誰でも書ける・依頼148の指摘1）",
+              lambda: rec(fetch=nickname, sources=src_lie))
         src_ok = [parse_source("https://chonborista.com/1|" + Q1),
                   dict(parse_source("https://nana-press.com/1|" + Q2),
-                       identity_why="題は通称だが本文に正式名称とメーカーがある")]
+                       identity_why="題は通称だが本文に正式名称とメーカーがある",
+                       identity_proof="機種名:" + NAME)]
         r = rec(fetch=nickname, sources=src_ok)
         t("★★2AIが本文を読んで判断すれば、題が通称でも通せる★★"
           "（機械は取ってくるだけ／判断と理由は残す）",
           r["state"] == "RECORDED" and len(r["lineages"]) == 2)
         got = for_slug("x")["ceiling"]["sources"]
-        t("　誰がなぜ通したかが残る（あとで取り消す範囲を決められる）",
-          any((s.get("identity_override") or {}).get("why") for s in got))
+        ov = [s.get("identity_override") for s in got if s.get("identity_override")]
+        t("　誰がなぜ通したか・何を読んで判断したかが残る",
+          ov and ov[0]["why"] and ov[0]["proof"]
+          and len(ov[0]["text_sha256"]) == 64)
         forget("x", "ceiling")
 
         r = rec()
@@ -741,8 +774,9 @@ def main() -> int:
                     help="URL|逐語の引用（2つ以上・発行者はURLから引く）")
     ap.add_argument("--source-identity", dest="source_identity",
                     action="append", default=[],
-                    help="URL|なぜ同じ機種と判断したか"
-                         "（題が通称のサイト等。2AIが本文を読んで判断したとき）")
+                    help="URL|根拠の逐語引用|なぜ同じ機種と判断したか"
+                         "（題が通称のサイト等。2AIが本文を読んで判断したとき。"
+                         "根拠はそのページに実在する文＝機械が確かめる）")
     ap.add_argument("--by", default="", help="判断した人（claude,codex）")
     ap.add_argument("--why", default="")
     ap.add_argument("--selftest", action="store_true")
@@ -762,17 +796,20 @@ def main() -> int:
             # ★題が合わないページを2AIの判断で通す理由★（URLごとに結び付ける）
             why_by_url = {}
             for spec in a.source_identity:
-                u, _, w = str(spec).partition("|")
-                if not (u.strip() and len(w.strip()) >= MIN_WHY):
-                    print("--source-identity は『URL|理由（%d文字以上）』の形です"
-                          % MIN_WHY)
+                parts = [x.strip() for x in str(spec).split("|", 2)]
+                if len(parts) != 3 or not parts[0] or len(parts[1]) < MIN_QUOTE \
+                        or len(parts[2]) < MIN_WHY:
+                    print("--source-identity は"
+                          "『URL|根拠の逐語引用（%d文字以上）|理由（%d文字以上）』"
+                          "の形です" % (MIN_QUOTE, MIN_WHY))
                     return 2
-                why_by_url[u.strip()] = w.strip()
+                why_by_url[parts[0]] = (parts[1], parts[2])
             srcs = []
             for s in a.source:
                 one = parse_source(s)
                 if one["url"] in why_by_url:
-                    one["identity_why"] = why_by_url.pop(one["url"])
+                    proof, w = why_by_url.pop(one["url"])
+                    one["identity_proof"], one["identity_why"] = proof, w
                 srcs.append(one)
             if why_by_url:
                 # ★どの出典にも結び付かない理由は黙って捨てない★
