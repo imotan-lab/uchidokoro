@@ -459,7 +459,9 @@ _SECTION_TYPES = {"settei", "rumor"}
 _MACHINE_KEYS = {"slug", "name", "seo", "info", "strategy", "aliases",
                  "status", "release_date", "identity", "publish_state",
                  # ★新台経路の判定書★（2026-08-04・Codex71〜72回目）
-                 "publication_policy", "page_decision"}
+                 "publication_policy", "page_decision",
+                 # ★早見表の材料（2026-08-12）★天井・50枚あたりG数
+                 "checker"}
 
 
 def _is_text(x) -> bool:

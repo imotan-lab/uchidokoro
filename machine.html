@@ -295,8 +295,16 @@ function resolveMachineSlug() {
       if (dateEl && machine.release_date) dateEl.textContent = `登場時期: ${machine.release_date}`;
     }
     // 解析データが必要なブロックを非表示
+    // ★天井が確認できた新台では早見表を出す★（2026-08-12）
+    //   以前は新台経路なら無条件に隠していた（載せる材料が無かったため）。
+    //   天井と50枚あたりG数が確認できた機種は「あと何G回すか・直行なら
+    //   いくら使うか」を出せるので、隠したままにしない。
+    const _ck = machine.checker || {};
+    const _hasCeiling = Number.isFinite(_ck.ceiling)
+      || Object.keys(_ck).some(k => _ck[k] && typeof _ck[k] === "object"
+        && Number.isFinite(_ck[k].ceiling));
     const evBlock = document.getElementById("evTableBlock");
-    if (evBlock) evBlock.classList.add("is-hidden");
+    if (evBlock && !_hasCeiling) evBlock.classList.add("is-hidden");
     const checkerBlockLabel = document.querySelectorAll(".article-block");
     checkerBlockLabel.forEach(block => {
       const label = block.querySelector(".block-label");
@@ -518,6 +526,15 @@ function resolveMachineSlug() {
     //   プラス・マイナスの金額は出さない。
     const stepHtml = renderStepTable(modeKey, config, evUnit);
     if (stepHtml) { evTable.innerHTML = stepHtml; return; }
+    // ★中身の無い表を出さない★（2026-08-12）
+    //   新台は狙い目ラインがまだ無いので、帯の表は行が1つも作れない。
+    //   見出しだけの空の表が出ると「情報が抜けている」ように見える。
+    if (!rows.length) {
+      const blk = document.getElementById("evTableBlock");
+      if (blk) blk.classList.add("is-hidden");
+      evTable.innerHTML = "";
+      return;
+    }
     let html = `<thead><tr><th>${evUnit === "G" ? "G数帯" : evUnit + "の範囲"}</th><th>判定</th></tr></thead><tbody>`;
     rows.forEach(r => { html += `<tr class="${r.cls}"><td>${r.range}</td><td>${r.label}</td></tr>`; });
     html += `</tbody>`;
@@ -574,11 +591,16 @@ function resolveMachineSlug() {
     if (!Number.isFinite(ceiling) || ceiling < 100) return "";
     const coinRate = Number.isFinite(checker.coinRate) ? checker.coinRate : null;
     const hasEv = evFromTarget(0, ceiling, config) !== null;
+    // ★狙い目ラインがまだ無い機種では判定の列を出さない★（2026-08-12）
+    //   新台は当サイトの狙い目が未確認なので、全行を「× 未達」と書くと
+    //   **狙う価値が無い台**だと誤って伝わる。
+    const hasJudge = ["caution", "good", "excellent"]
+      .some(k => Number.isFinite(config[k]));
     const step = ceiling <= 1000 ? 50 : 100;
     const rows = [];
     for (let g = 0; g < ceiling; g += step) {
       const rest = ceiling - g;
-      const [label, cls] = judgeAt(g, config);
+      const [label, cls] = hasJudge ? judgeAt(g, config) : ["", ""];
       let cost = "—";
       if (coinRate) {
         // 直行なら、残りG数ぶんのメダルを使う（50枚＝1,000円で換算）
@@ -590,11 +612,13 @@ function resolveMachineSlug() {
     }
     const costHead = coinRate ? "<th>直行なら投入</th>" : "";
     const evHead = hasEv ? "<th>狙い目比</th>" : "";
-    let html = `<thead><tr><th>打ち出しG数</th><th>天井まで</th>${costHead}${evHead}<th>当サイト判定</th></tr></thead><tbody>`;
+    const judgeHead = hasJudge ? "<th>当サイト判定</th>" : "";
+    let html = `<thead><tr><th>打ち出しG数</th><th>天井まで</th>${costHead}${evHead}${judgeHead}</tr></thead><tbody>`;
     rows.forEach(r => {
       const costCell = coinRate ? `<td>${r.cost}</td>` : "";
       const evCell = hasEv ? `<td class="ev-delta">${r.ev}</td>` : "";
-      html += `<tr class="${r.cls}"><td>${r.g}G〜</td><td>${r.rest}G</td>${costCell}${evCell}<td>${r.label}</td></tr>`;
+      const judgeCell = hasJudge ? `<td>${r.label}</td>` : "";
+      html += `<tr class="${r.cls}"><td>${r.g}G〜</td><td>${r.rest}G</td>${costCell}${evCell}${judgeCell}</tr>`;
     });
     html += "</tbody>";
     return html;
@@ -605,6 +629,14 @@ function resolveMachineSlug() {
     const evBlock = document.getElementById("evTableBlock");
     const radio = document.querySelector(`input[name="evMode"][value="${modeKey}"]`);
     if (!radio) {
+      // ★modeが1つだけの機種は、そもそも切り替えボタンを作っていない★
+      //   （2026-08-12。ボタンが無い＝食い違いようがないので隠さない。
+      //     以前はここで隠していたため、modeが1つの機種では早見表が
+      //     いつまでも出なかった）
+      if (evBlock && evHasTable && evModeKey === modeKey) {
+        evBlock.classList.remove("is-hidden");
+        return;
+      }
       // ★早見表に無いmode（スルー・周期）を選んでいる間は、早見表ごと隠す★
       //   出したままだと「チェッカーはスルー・早見表は通常」という
       //   食い違った画面になる（前のmodeの表が残る）。

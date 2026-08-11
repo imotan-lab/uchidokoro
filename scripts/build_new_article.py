@@ -276,7 +276,40 @@ def build_machine(slug, name, maker, official_url, release, material,
         "publish_state": "PREVIEW_VERIFIED_SUBSET",
         "release_date": release or "",
         "identity": ident,
+        # ★早見表の材料（2026-08-12）★ 入るものが無ければ鍵ごと出ない
+        **({"checker": ck} if (ck := build_checker(material)) else {}),
     }
+
+
+def build_checker(material) -> dict | None:
+    """早見表の材料（天井・50枚あたりG数）だけの checker を作る。
+
+    ★入れられるものが1つも無ければ作らない★（空の器を置かない）
+    ★天井は「G数の天井がちょうど1つ」のときだけ★
+      通常時／AT間／スルーのように複数あるとき、どれを通常時の天井として
+      扱うかは**意味の判断**なので機械は決めない（2AI・人が後で入れる）。
+    """
+    adopted = material.get("adopted") or {}
+    out: dict = {}
+    if (g50 := adopted.get("games_per_50")):
+        games = (g50.get("value") or {}).get("games")
+        if isinstance(games, (int, float)) and not isinstance(games, bool) \
+                and 5 < games < 100:
+            out["coinRate"] = games
+    ceilings = [c for c in ((material.get("ceilings") or {}).get("adopted") or [])
+                if (c or {}).get("kind") == "GAME"]
+    mode = {}
+    if len(ceilings) == 1:
+        # 「1000」「1000+α」どちらも 1000 として読む（+αは前兆ぶんで幅がある）
+        m = re.match(r"^(\d{2,5})", str(ceilings[0].get("amount") or "").strip())
+        if m and 0 < int(m.group(1)) <= 20000:
+            mode["ceiling"] = int(m.group(1))
+    if not out and not mode:
+        return None
+    out["unit"] = "G"
+    out["modes"] = [{"key": "normal", "label": "通常"}]
+    out["normal"] = mode
+    return out
 
 
 def build_detail(slug, name, release, material) -> dict:

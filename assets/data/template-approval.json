@@ -26,7 +26,7 @@
   "guide-reset.html": "79fcc06cbce7c1326f56d1b2582c77cb5ad53773a79bdad6b91c233a6866603c",
   "guide-yamedoki.html": "c942817c9ef5faac33a6bf7d09bfd2ed692ce8c5391f36101cff4620186af8b1",
   "index.html": "98a49ed4ee215dbee3f3de9304cd14a6f60547a2c7e013b86f881b71208b5056",
-  "machine.html": "cb6fd1ea19c701057b499753b2db5fbcdebdbef56c7c9bd840c27df0ee58d8f9",
+  "machine.html": "62d84655da84f36c043e7718aa54e9842b41c46672036e43b0309349e98cb6fe",
   "manifest.json": "23be5d18069cfeb2c331b135f8976478e36543b3213006b991ed91e53a9bb90e",
   "meta-auto.js": "bbdd01f25211761643292d3b3305f64262f024b2cb59ea3d3d9f9b9216a27a89",
   "privacy.html": "5c53483dfaf0f543aa641561a711503153e224216dadba3971fd89bc05e4908d",
@@ -49,7 +49,7 @@
   "scripts/hub_prose.json": "e72916960e547c4a88351ba0886a643dc0248e290a204af0269b7d2f91388380",
   "scripts/preview_site.py": "8ef4c5eef6c1749df51c1c8c3edfebd2a4af427b8e0ae52287e724776dc7849a",
   "scripts/safe_json.py": "43f61703cbe7e1ea93ee2602fe9be45662957c8929aef62d649b6fc0493e0006",
-  "service-worker.js": "aa19b6a6eb43a203a3238ac093e60a9269ab51e13a3969146a5891be1ee2c5b5",
+  "service-worker.js": "aab553921f16469cac6feeb93cacb3838d654a0bd4eb68e5d0a7f9f76ca871e7",
   "setting.html": "0dbb05bc5ab19183d49a0ab836205fb5fb1d85866059739fbf333c879d3de7b2"
  }
 }
