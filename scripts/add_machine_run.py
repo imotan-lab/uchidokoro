@@ -1550,15 +1550,27 @@ def finish_publish(res: dict, pend: dict = None) -> list:
 NEW_MACHINE_DEADLINE_HHMM = "04:30"
 
 
-def past_deadline(now=None) -> bool:
-    """新しい機種に着手してよい時刻を過ぎたか。"""
+# ★無人実行が新しい機種に着手してよい時間帯★（2026-08-11・台帳#293）
+#   このタスクは23:30に始まり、04:30で新規着手を止める。
+NEW_MACHINE_START_HHMM = "23:00"
+
+
+def past_deadline(now=None, scheduled: bool = False) -> bool:
+    """新しい機種に着手してよい時刻を過ぎたか。
+
+    ★手動か無人かを区別する★（2026-08-11・台帳#293）
+      以前は時刻だけを見て「04:30〜08:00 なら止める」としていた。
+      そのため**08:00より後に遅れて起動した無人実行**は、締切を過ぎているのに
+      件数の上限も無いまま処理を続けられた（上限を撤廃したのは
+      「時刻で区切るから」という前提だったので、前提が崩れていた）。
+      無人実行は**決まった時間帯（23:00〜04:30）の外なら常に止める**。
+      手動（対話セッション）は昼間に流すので締切を効かせない。
+    """
     import datetime as _dt
     t = (now or _dt.datetime.now()).strftime("%H:%M")
-    # ★止めるのは朝の時間帯だけ★
-    #   23:30に始まり日付をまたいで作業するので、04:30〜08:00 に入っていたら
-    #   新しい機種には着手しない（5:05の更新タスクをロック待ちにしないため）。
-    #   昼間に手で流すときは締切を効かせない。
-    return NEW_MACHINE_DEADLINE_HHMM <= t < "08:00"
+    if not scheduled:
+        return False                      # 手動は締切なし（人が見ている）
+    return not (NEW_MACHINE_START_HHMM <= t or t < NEW_MACHINE_DEADLINE_HHMM)
 
 
 def pick_work(pend: dict) -> list:
@@ -2804,12 +2816,17 @@ def selftest() -> int:
                       "name": f"n{i}", "url": f"https://x/{i}", "maker": "m",
                       "release": "2026-09", "first_seen": "2026-07-01",
                       "last_try": "", "tries": 1} for i in range(30)}})) == 30)
+            _dtm = __import__("datetime").datetime
+
+            def _late(h, m, sch=True):
+                return past_deadline(_dtm(2026, 8, 8, h, m), scheduled=sch)
             t("　代わりに時刻で区切る（更新タスクとぶつからないため）",
-              past_deadline(__import__("datetime").datetime(2026, 8, 8, 5, 30))
-              and not past_deadline(
-                  __import__("datetime").datetime(2026, 8, 8, 2, 0))
-              and not past_deadline(
-                  __import__("datetime").datetime(2026, 8, 8, 14, 0)))
+              _late(5, 30) and not _late(2, 0) and not _late(23, 45))
+            t("★★遅れて起動した無人実行も止める★★（2026-08-11・台帳#293）"
+              "＝以前は08:00より後だと締切が効かず、件数無制限で走れた",
+              _late(8, 30) and _late(14, 0) and _late(22, 59))
+            t("　手で流すときは締切を効かせない（人が見ている）",
+              not _late(14, 0, sch=False) and not _late(5, 30, sch=False))
             t("★★試験が本番の待ち行列を触らない★★（架空機種が入り込んだ）",
               _pend.STORE.startswith(_tmpdir))
             t("　実際に開けない公式URLでは組み立てまで進まない",
@@ -2993,6 +3010,9 @@ def main() -> int:
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--apply", action="store_true", help="実際に書き込む")
     ap.add_argument("--ctx", help="task_lock の CTX パス（--apply に必須）")
+    ap.add_argument("--scheduled", action="store_true",
+                    help="無人タスクからの実行（決まった時間帯の外では"
+                         "新しい機種に着手しない）")
     ap.add_argument("--name", help="1機種だけ試す：正式名称")
     ap.add_argument("--baseline-titles", action="store_true",
                     help="既知URL全部の題を一度だけ控える（すり替え検知の基準）")
@@ -3173,7 +3193,7 @@ def main() -> int:
         # ★件数ではなく時刻で区切る★（2026-08-07・運営者決定）
         #   5:05の更新タスクをロック待ちにしないため。
         #   いま処理中の機種は最後まで通す（ここは着手の前）。
-        if past_deadline():
+        if past_deadline(scheduled=args.scheduled):
             _log(f"  {NEW_MACHINE_DEADLINE_HHMM} を過ぎたので"
                  "新しい機種には着手しません（残りは明晩）")
             print(f"  ★{NEW_MACHINE_DEADLINE_HHMM} を過ぎました→残りは明晩★")
