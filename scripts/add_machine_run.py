@@ -1481,6 +1481,12 @@ def _committed_on_top(parent: str, slug: str) -> bool:
     return len(parents) == 1 and parents[0] == parent and slug in got[1]
 
 
+# ★出す作業の時間制限★（2026-08-11・依頼155の①）
+#   ロックの期限は30分。始まってしまった git commit / git push は
+#   途中でロックを失っても止まらないので、期限より十分短く切る。
+LOCK_SAFE_TIMEOUT = 600
+
+
 def lock_still_mine(where: str) -> list:
     """★書く・出す直前に、いまもロックを持っているか確かめる★
 
@@ -1494,12 +1500,17 @@ def lock_still_mine(where: str) -> list:
     ctx = os.environ.get("UCHIDOKORO_LOCK_CTX")
     if not ctx:
         return []                              # 手動実行（ロック無し）は対象外
+    # ★★確認だけでなく、その場で延長する★★（2026-08-11・依頼155の①）
+    #   check は「持ち主が自分か」を見るだけで**期限を延ばさない**。
+    #   そのため「期限切れ寸前に確認が通り、直後に別の実行が奪う」窓が残る。
+    #   heartbeat は所有者の確認と延長を一度に行うので、通った時点から
+    #   30分の猶予が付き、この窓が閉じる。
     c = subprocess.run(
         [sys.executable, os.path.join(BASE, "scripts", "task_lock.py"),
-         "check", "--ctx", ctx], capture_output=True, text=True,
+         "heartbeat", "--ctx", ctx], capture_output=True, text=True,
         encoding="utf-8", errors="replace")
     if c.returncode != 0:
-        _LOCK_LOST.append(f"{where} で check が非0")
+        _LOCK_LOST.append(f"{where} で heartbeat が非0")
         return [f"{where}: いまロックを持っていません"]
     return []
 
@@ -1771,6 +1782,7 @@ def push_after_publish(slug: str, already_committed: bool = False) -> list:
         if ng:
             return ng
         c = subprocess.run(["git", "commit", "-m", msg], cwd=BASE,
+                           timeout=LOCK_SAFE_TIMEOUT,
                            capture_output=True, text=True,
                            encoding="utf-8", errors="replace")
         if c.returncode != 0:
@@ -1834,7 +1846,7 @@ def push_after_publish(slug: str, already_committed: bool = False) -> list:
         ["git", "push",
          f"--force-with-lease=refs/heads/{sc['dest']}:{base_sha}",
          sc["remote"], f"{checked_sha}:refs/heads/{sc['dest']}"],
-        cwd=BASE, capture_output=True, text=True,
+        cwd=BASE, timeout=LOCK_SAFE_TIMEOUT, capture_output=True, text=True,
         encoding="utf-8", errors="replace")
     if p.returncode == 0:
         _clear_push_pending()
@@ -2907,6 +2919,49 @@ def selftest() -> int:
                 t("★★失った状態では push_after_publish が入口で止まる★★"
                   "（未完了公開の再開経路もここを通る）",
                   bool(push_after_publish("dummy_slug")))
+
+                # ★★3か所の配置を、順序つきで固定する★★（依頼155の②）
+                #   入口だけを見ていると、commit直前・push直前の検査が
+                #   消えても気づけない。「何回目の確認で落とすか」を変えて、
+                #   git が呼ばれないことまで確かめる。
+                _keep_lsm = globals()["lock_still_mine"]
+                _keep_run = globals()["subprocess"].run
+                try:
+                    for stop_at, jp, ban in ((2, "コミットの直前", ("commit", "push")),
+                                             (3, "pushの直前", ("push",))):
+                        seen, gits = [0], []
+
+                        def _lsm(where, _n=stop_at, _s=seen):
+                            _s[0] += 1
+                            return [] if _s[0] < _n else [f"{where}: 止めます"]
+
+                        def _run(cmd, *a, **k):
+                            if cmd and cmd[0] == "git":
+                                gits.append(cmd[1] if len(cmd) > 1 else "")
+                            class R:
+                                returncode, stdout, stderr = 0, "", ""
+                            return R()
+                        globals()["lock_still_mine"] = _lsm
+                        globals()["subprocess"].run = _run
+                        out = push_after_publish("dummy_slug")
+                        t(f"★★{jp}で失ったら、そこから先へ進まない★★",
+                          bool(out) and not any(g in gits for g in ban))
+                finally:
+                    globals()["lock_still_mine"] = _keep_lsm
+                    globals()["subprocess"].run = _keep_run
+
+                # ★再開経路も入口の拒否が効くか★（3分岐とも push_after_publish 経由）
+                _keep_pap = globals()["push_after_publish"]
+                try:
+                    called = []
+                    globals()["push_after_publish"] = (
+                        lambda slug, already_committed=False:
+                        called.append(slug) or ["入口で止めました"])
+                    _mark = PUSH_PENDING
+                    t("　未完了公開の再開も、出す経路を必ず通る",
+                      not os.path.isfile(_mark) or bool(retry_push_first()))
+                finally:
+                    globals()["push_after_publish"] = _keep_pap
             finally:
                 _LOCK_LOST.clear()
                 _LOCK_LOST.extend(_keep_lost)
