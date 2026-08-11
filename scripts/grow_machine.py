@@ -626,6 +626,17 @@ def apply_one(got: dict) -> dict:
 def selftest() -> int:
     ok, ran = True, [0]
 
+    # ★★自己テストは本番の台帳に書かない★★（2026-08-11・台帳#310/#311/#320）
+    #   ここは plan_one を偽の材料で呼ぶので、必ず「前に載っていた内容が消える」
+    #   判定になり、そのたび ledger_once が**本番の台帳へ登録**していた
+    #   （実際にごみが3件入った: s9 / s8 / garei_zero_re）。
+    #   ★呼ぶ側が読んでいる実体を差し替える★＝このファイルを直接動かすと
+    #   自分は __main__ になるため、名前で取り直す。
+    import tempfile
+    import open_issues as _oi_mod
+    _keep_ledger, _tmp_dir = _oi_mod.DEFAULT_FILE, tempfile.mkdtemp()
+    _oi_mod.DEFAULT_FILE = _oi_mod.Path(_tmp_dir) / "issues.json"
+
     def t(name, cond):
         nonlocal ok
         ran[0] += 1
@@ -886,6 +897,14 @@ def selftest() -> int:
           any("台帳を読めません" in x for x in blocked_by_ledger("zz")))
     finally:
         _oi.blocking_slugs = real_blocking
+    # ★本番の台帳ではなく、使い捨ての台帳へ書いたことを確かめる★
+    t("★★自己テストは本番の台帳に書かない★★（実際にごみが3件入ったので固定する）",
+      _oi_mod.DEFAULT_FILE != _keep_ledger and not _keep_ledger.samefile(
+          _oi_mod.DEFAULT_FILE.parent) if _oi_mod.DEFAULT_FILE.exists()
+      else _oi_mod.DEFAULT_FILE != _keep_ledger)
+    _oi_mod.DEFAULT_FILE = _keep_ledger
+    import shutil
+    shutil.rmtree(_tmp_dir, ignore_errors=True)
     print(f"\n{ran[0]}/{ran[0]} 合格" if ok else "\n不合格あり")
     return 0 if ok else 1
 

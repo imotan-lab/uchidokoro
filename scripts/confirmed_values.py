@@ -342,7 +342,13 @@ def verify_source(src: dict, name: str, fetch=None) -> dict:
         #   ＝「正式名称が載っている必要がある」という説明が実装と合っていなかった。
         import claim_identity as _cid
         core = _cid.normalize_core(name)
-        if core and core not in _cid.normalize_core(proof):
+        if not core:
+            # ★芯が取れないなら通さない★（2026-08-11・依頼151のP2）
+            #   `if core and …` にしていたので、正本の名前が「L」「スマスロ」等
+            #   飾りだけだと**検査ごと素通り**した（fail-open）。
+            raise ConfirmedError(
+                f"正式名称から機種の芯を取れません（{name!r}）＝同定を確かめられません")
+        if core not in _cid.normalize_core(proof):
             raise ConfirmedError(
                 f"同定の根拠に機種名が含まれていません（{src['url']}）: "
                 f"{proof[:40]}／「{name}」だと分かる文を根拠にします")
@@ -713,6 +719,15 @@ def selftest() -> int:
         t("★★2AIが本文を読んで判断すれば、題が通称でも通せる★★"
           "（機械は取ってくるだけ／判断と理由は残す）",
           r["state"] == "RECORDED" and len(r["lineages"]) == 2)
+        # ★正本の名前が飾りだけだと、検査ごと素通りしていた★（依頼151のP2）
+        #   名前は公式URLから引くので、引き当てる側を差し替えて確かめる。
+        _keep_bind = globals()["bind_machine"]
+        try:
+            globals()["bind_machine"] = lambda u: ("x", "スマスロ")
+            stops("★★正式名称から芯を取れないときも通らない★★（依頼151のP2）",
+                  lambda: rec(fetch=nickname, sources=src_ok, name="スマスロ"))
+        finally:
+            globals()["bind_machine"] = _keep_bind
         got = for_slug("x")["ceiling"]["sources"]
         ov = [s.get("identity_override") for s in got if s.get("identity_override")]
         t("　誰がなぜ通したか・何を読んで判断したかが残る",
