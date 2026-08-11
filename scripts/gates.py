@@ -159,7 +159,7 @@ RESERVED_CHECKER_KEYS = frozenset({
     "baseRateKey",
     # ★天井と50枚あたりG数（2026-08-12）★ 刻みの表が読む。
     #   limit（入力欄の上限）は丸めてあることが多いので、天井は別に持つ。
-    "ceiling", "coinRate",
+    "ceiling", "coinRate", "hitRate",
 })
 
 _SLUG_PAT = re.compile(r"^[a-z0-9_]+$")
@@ -1214,11 +1214,12 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx,
                    ("defaultRate", str), ("baseRateKey", str), ("ok", str), ("ng", str),
                    ("limit", (int, float)), ("hasSuru", bool), ("hasCycle", bool),
                    ("suruMax", (int, float)), ("modeData", dict),
-                   ("ceiling", (int, float)), ("coinRate", (int, float))):
+                   ("ceiling", (int, float)), ("coinRate", (int, float)),
+                   ("hitRate", (int, float))):
         if k in checker and not isinstance(checker[k], typ):
             ctx.reject(f"checker.{k}", "既知フィールドの型不正")
             return None
-        if k in ("limit", "suruMax", "ceiling", "coinRate") and k in checker \
+        if k in ("limit", "suruMax", "ceiling", "coinRate", "hitRate") and k in checker \
                 and isinstance(checker[k], bool):
             ctx.reject(f"checker.{k}", "数値フィールドに真偽値")
             return None
@@ -1241,7 +1242,7 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx,
     # ★天井・50枚あたりG数（2026-08-12）★
     #   表は「天井 − 現在G」を出すので、0以下だと残りゲーム数がマイナスになる。
     #   丸めた入力上限を天井として使わないよう、値は別フィールドで持つ。
-    for _k in ("ceiling", "coinRate"):
+    for _k in ("ceiling", "coinRate", "hitRate"):
         if _k in checker:
             if not _is_num(checker[_k]) or checker[_k] <= 0:
                 ctx.reject(f"checker.{_k}", "天井・コイン持ちが正の数でない")

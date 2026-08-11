@@ -352,7 +352,7 @@ def _check_url(u: str) -> str | None:
 #   （83機種中17機種が記事の天井とズレていた・795G→800G など）、
 #   「あと何G回すか」に使うと嘘になる。
 _CK_TOP = {"unit", "equivOnly", "limit", "modes", "exchangeRates", "defaultRate",
-           "ceiling", "coinRate"}
+           "ceiling", "coinRate", "hitRate"}
 _CK_MODE = {"excellent", "good", "caution", "limit", "suruMax", "target", "count",
             "note", "cycle", "suru", "byRate", "ceiling"}
 # 層ごとの契約（mode直下 / 行 / 交換率）
@@ -361,7 +361,7 @@ _CK_MODE_TOP = {"excellent", "good", "caution", "target", "note",
 _CK_ROW = {"count", "excellent", "good", "caution", "target", "note", "byRate"}
 _CK_RATE = {"excellent", "good", "caution", "target", "note"}
 _CK_NUM = {"excellent", "good", "caution", "limit", "suruMax", "target", "count",
-           "ceiling", "coinRate"}
+           "ceiling", "coinRate", "hitRate"}
 
 
 def _ceiling_problems(slug: str, path: str, v) -> list[str]:
@@ -387,14 +387,14 @@ def _audit_checker_shape(slug: str, ck, path: str = "checker") -> list[str]:
     for k, v in ck.items():
         if k in _CK_TOP:
             # ★真偽値は数値として扱わない（limit: true を通さない）★
-            if k in ("limit", "suruMax", "ceiling", "coinRate") and (
+            if k in ("limit", "suruMax", "ceiling", "coinRate", "hitRate") and (
                     not isinstance(v, (int, float)) or isinstance(v, bool)):
                 out.append(f"{slug}: {path}.{k} の型が不正")
             if k in ("unit", "defaultRate", "ok", "ng") and not isinstance(v, str):
                 out.append(f"{slug}: {path}.{k} の型が不正")
             if k in ("hasSuru", "hasCycle", "equivOnly") and not isinstance(v, bool):
                 out.append(f"{slug}: {path}.{k} の型が不正")
-            if k in ("ceiling", "coinRate"):
+            if k in ("ceiling", "coinRate", "hitRate"):
                 out += _ceiling_problems(slug, f"{path}.{k}", v)
             if k == "modes":
                 if not isinstance(v, list):

@@ -601,6 +601,7 @@ button, input, select { font: inherit; }
 /* 刻みの表（打ち出しG数・天井まで・直行なら投入・判定）は行数が多いので詰める */
 .ev-table tbody td:nth-child(2) { color: var(--muted); white-space: nowrap; }
 .ev-table td .ev-yen { color: var(--muted); font-size: 11px; display: block; }
+.ev-table td.ev-delta { white-space: nowrap; font-weight: 700; }
 
 .is-landscape .site-header { position: static; }
 .is-landscape .setting-input-grid { grid-template-columns: 1fr 1fr 1fr; gap: 6px 16px; }

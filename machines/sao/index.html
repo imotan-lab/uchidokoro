@@ -547,11 +547,39 @@ function resolveMachineSlug() {
     return ["× 未達", "ev-row-ng"];
   }
 
+  // 天井まで打つあいだに、平均で何ゲーム回すか。
+  //   毎ゲーム 1/hitRate で当たり、当たらなければ天井で必ず当たる、という数え方。
+  function expectedGames(rest, hitRate) {
+    const p = 1 / hitRate;
+    return (1 - Math.pow(1 - p, rest)) / p;
+  }
+
+  // ★当サイトの狙い目ラインを ±0円 とした増減★（2026-08-12）
+  //   絶対額の期待値は、途中当選の分布が公表されていないため出せない。
+  //   出せるのは「深く座るぶん、投資がどれだけ減るか」＝ここは確実に計算できる。
+  //   ±0の位置は**すでに公開している当サイトの狙い目**なので、
+  //   ★うちの狙い目より浅い位置がプラスになることは構造上あり得ない★。
+  function evFromTarget(g, ceiling, config) {
+    const { coinRate, hitRate } = checker;
+    const base = config.good;
+    if (!Number.isFinite(coinRate) || !Number.isFinite(hitRate)) return null;
+    if (!Number.isFinite(base) || base >= ceiling) return null;
+    const coins = rest => expectedGames(rest, hitRate) / coinRate * 50;
+    return (coins(ceiling - base) - coins(ceiling - g)) * 20;
+  }
+
+  function yen(v) {
+    const r = Math.round(v / 100) * 100;
+    if (r === 0) return "±0円";
+    return (r > 0 ? "+" : "−") + Math.abs(r).toLocaleString() + "円";
+  }
+
   function renderStepTable(modeKey, config, evUnit) {
     if (evUnit !== "G") return "";                 // pt・周期は刻みにしない
     const ceiling = getModeCeiling(modeKey);
     if (!Number.isFinite(ceiling) || ceiling < 100) return "";
     const coinRate = Number.isFinite(checker.coinRate) ? checker.coinRate : null;
+    const hasEv = evFromTarget(0, ceiling, config) !== null;
     const step = ceiling <= 1000 ? 50 : 100;
     const rows = [];
     for (let g = 0; g < ceiling; g += step) {
@@ -563,13 +591,16 @@ function resolveMachineSlug() {
         const mai = Math.round(rest / coinRate * 50);
         cost = `約${mai.toLocaleString()}枚<span class="ev-yen">（約${(Math.round(mai * 20 / 100) * 100).toLocaleString()}円）</span>`;
       }
-      rows.push({ g, rest, cost, label, cls });
+      const ev = hasEv ? yen(evFromTarget(g, ceiling, config)) : "";
+      rows.push({ g, rest, cost, ev, label, cls });
     }
     const costHead = coinRate ? "<th>直行なら投入</th>" : "";
-    let html = `<thead><tr><th>打ち出しG数</th><th>天井まで</th>${costHead}<th>当サイト判定</th></tr></thead><tbody>`;
+    const evHead = hasEv ? "<th>狙い目比</th>" : "";
+    let html = `<thead><tr><th>打ち出しG数</th><th>天井まで</th>${costHead}${evHead}<th>当サイト判定</th></tr></thead><tbody>`;
     rows.forEach(r => {
       const costCell = coinRate ? `<td>${r.cost}</td>` : "";
-      html += `<tr class="${r.cls}"><td>${r.g}G〜</td><td>${r.rest}G</td>${costCell}<td>${r.label}</td></tr>`;
+      const evCell = hasEv ? `<td class="ev-delta">${r.ev}</td>` : "";
+      html += `<tr class="${r.cls}"><td>${r.g}G〜</td><td>${r.rest}G</td>${costCell}${evCell}<td>${r.label}</td></tr>`;
     });
     html += "</tbody>";
     return html;
@@ -650,6 +681,11 @@ function resolveMachineSlug() {
       //   ★期待値（勝てる金額）ではない★ことを必ず書く。
       if (Number.isFinite(checker.coinRate)) {
         notes.push(`「直行なら投入」は、天井まで一度も当たらなかった場合に使うメダルです（50枚あたり${checker.coinRate}Gで計算・1,000円で50枚貸し）。途中で当たればここまで使いません。勝ち負けの金額（期待値）ではありません。`);
+      }
+      // ★狙い目比の断り★ 絶対額の期待値ではないことを必ず書く
+      if (Number.isFinite(checker.coinRate) && Number.isFinite(checker.hitRate)) {
+        notes.push("「狙い目比」は、当サイトの狙い目ラインを±0円としたときの増減です（深いぶん投資が減る分を、初当たり1/"
+          + checker.hitRate + "で計算）。他サイトが出している金額そのものの期待値とは別のものです。");
       }
       if (hasVar) notes.push("スルー・周期は変動要素があるためチェッカーで確認してください。");
       evTableNote.textContent = notes.join(" ");
