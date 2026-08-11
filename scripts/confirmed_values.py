@@ -333,6 +333,19 @@ def verify_source(src: dict, name: str, fetch=None) -> dict:
                 f"そのページは「{name}」のページだと確かめられません（{why}）: "
                 f"{src['url']}／同じ機種だと2AIが判断したなら "
                 "--source-identity に『URL|根拠の逐語引用|理由』を付けます")
+        if len(proof) < MIN_QUOTE:
+            raise ConfirmedError(
+                f"同定の根拠は{MIN_QUOTE}文字以上で書きます: {proof}")
+        # ★根拠は「この機種だ」と示すものでなければ意味がない★
+        #   （2026-08-11・依頼150の指摘1）実在するだけの文を根拠にできたので、
+        #   **別機種のページでも、そこにある文を写せば通っていた**。
+        #   ＝「正式名称が載っている必要がある」という説明が実装と合っていなかった。
+        import claim_identity as _cid
+        core = _cid.normalize_core(name)
+        if core and core not in _cid.normalize_core(proof):
+            raise ConfirmedError(
+                f"同定の根拠に機種名が含まれていません（{src['url']}）: "
+                f"{proof[:40]}／「{name}」だと分かる文を根拠にします")
         if len(why_same) < MIN_WHY:
             # ★受け取る側でも確かめる★（2026-08-11・依頼148の指摘3）
             #   CLIでしか見ていなかったので、別の呼び出し口を足すと素通りする。
@@ -677,6 +690,21 @@ def selftest() -> int:
         stops("★★同定の根拠も、そのページに実在しなければ通らない★★"
               "（もっともらしい理由は誰でも書ける・依頼148の指摘1）",
               lambda: rec(fetch=nickname, sources=src_lie))
+        # ★実在するだけでは足りない＝その機種だと分かる文でなければ意味がない★
+        #   （依頼150の指摘1。別機種のページにある文を写せば通っていた）
+        src_other = [parse_source("https://chonborista.com/1|" + Q1),
+                     dict(parse_source("https://nana-press.com/1|" + Q2),
+                          identity_why="題は通称だが同じ機種だと判断した",
+                          identity_proof=Q2)]   # 実在するが機種名を含まない
+        stops("★★根拠に機種名が入っていなければ通らない★★"
+              "（別機種のページにある文を写しても越えられない）",
+              lambda: rec(fetch=nickname, sources=src_other))
+        src_short = [parse_source("https://chonborista.com/1|" + Q1),
+                     dict(parse_source("https://nana-press.com/1|" + Q2),
+                          identity_why="題は通称だが同じ機種だと判断した",
+                          identity_proof="機種")]
+        stops("　根拠が短すぎても通らない（受け取る関数側でも見る）",
+              lambda: rec(fetch=nickname, sources=src_short))
         src_ok = [parse_source("https://chonborista.com/1|" + Q1),
                   dict(parse_source("https://nana-press.com/1|" + Q2),
                        identity_why="題は通称だが本文に正式名称とメーカーがある",
