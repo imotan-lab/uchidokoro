@@ -11376,5 +11376,57 @@
     "p-world.co.jp"
    ]
   }
+ },
+ {
+  "slug": "ssb1",
+  "name": "L青春ブタ野郎はバニーガール先輩の夢を見ない",
+  "seo": {
+   "title": "L青春ブタ野郎はバニーガール先輩の夢を見ない スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v1",
+  "page_decision": {
+   "schema_version": "page-decision/v1",
+   "indexable": false,
+   "confirmed_topics": [
+    "spec"
+   ],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "setting",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3",
+    "CATEGORIES_LT_2",
+    "NO_UNIQUE_GAMEPLAY"
+   ],
+   "claims": [
+    "model_code"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-08-11",
+   "input_digest": "sha256:0fcf939da4ba90aed483c6b49d327279a439ef1250cf90076f456d8bbd65741d"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-09",
+  "identity": {
+   "manufacturer_id": "heiwa",
+   "official_product_url": "https://www.heiwanet.co.jp/products/pachislot/ssb1/",
+   "announced_name": "L青春ブタ野郎はバニーガール先輩の夢を見ない",
+   "identity_tier": "CATALOG_CODE_MATCHED",
+   "identity_binding": "OFFICIAL_PRODUCT_PAGE",
+   "market_release_date": "2026-09",
+   "regulatory_model_code": "L青春ブタ野郎L1",
+   "_model_code_sources": [
+    "p-town.dmm.com",
+    "p-world.co.jp"
+   ]
+  }
  }
 ]
