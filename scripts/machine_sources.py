@@ -459,6 +459,16 @@ def record(slug: str, url: str, why: str, by: list,
         raise SourceError(
             "題が機種名と一致しません（" + got["identity_why"] + "）。"
             "同じ機種だと判断したなら --override-identity に理由を書きます")
+    if not got["identity_verdict"]:
+        # ★★題で分からないものは、2AIがそろって一致したときだけ登録する★★
+        #   （2026-08-11・運営者のルール「2AIの一致でいいじゃん」・依頼153の①）
+        #   片方だけの判断で通せると、**最初の誤登録は誰も検出できない**
+        #   （以後の確認は「登録時と同じページか」しか見ないため）。
+        if not ({"claude", "codex"} <= set(who)):
+            raise SourceError(
+                "題で分からない出典は、claude と codex の両方が一致したときだけ"
+                "登録できます（--by claude,codex）。いまの判断者: "
+                + ",".join(who))
 
     rec = {
         "url": url,
@@ -1103,10 +1113,18 @@ def selftest() -> int:
             ok = True
         t("★★題が合わないときは理由を明示しないと記録できない★★", ok)
 
+        try:
+            record(slug, got["url"], why="略称なので題は合いませんが型式が一致します",
+                   by=["claude"], override_identity="略称だが型式が一致", checked=ng)
+            _one = False
+        except SourceError:
+            _one = True
+        t("★★題で分からない出典は、2AIがそろわないと登録できない★★"
+          "（片方の誤判定だと、最初の誤登録を誰も検出できない）", _one)
         r = record(slug, got["url"], why="略称なので題は合いませんが型式が一致します",
-                   by=["claude"],
+                   by=["claude", "codex"],
                    override_identity="略称だが型式が一致", checked=ng)
-        t("　理由を書けば記録できる", r["state"] == "RECORDED")
+        t("　2AIがそろって理由を書けば記録できる", r["state"] == "RECORDED")
         t("　控えから読み出せる（機械が毎日使う側）",
           [x["url"] for x in urls_for(slug)] == [got["url"]])
         t("　同じURLは二重に入らない",

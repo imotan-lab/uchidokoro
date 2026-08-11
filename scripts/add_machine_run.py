@@ -1481,6 +1481,29 @@ def _committed_on_top(parent: str, slug: str) -> bool:
     return len(parents) == 1 and parents[0] == parent and slug in got[1]
 
 
+def lock_still_mine(where: str) -> list:
+    """★書く・出す直前に、いまもロックを持っているか確かめる★
+
+    （2026-08-11・依頼153の②）以前は1日1機種の枠を取るときに1回見るだけで、
+    そのあとの公開・コミット・pushは確かめていなかった。
+    30分以上止まってロックが別の実行へ移ったあと復帰すると、
+    **旧い実行がそのまま出し続けられる**。
+    """
+    if _LOCK_LOST:
+        return [f"{where}: ロックを失っています（{str(_LOCK_LOST[0])[:100]}）"]
+    ctx = os.environ.get("UCHIDOKORO_LOCK_CTX")
+    if not ctx:
+        return []                              # 手動実行（ロック無し）は対象外
+    c = subprocess.run(
+        [sys.executable, os.path.join(BASE, "scripts", "task_lock.py"),
+         "check", "--ctx", ctx], capture_output=True, text=True,
+        encoding="utf-8", errors="replace")
+    if c.returncode != 0:
+        _LOCK_LOST.append(f"{where} で check が非0")
+        return [f"{where}: いまロックを持っていません"]
+    return []
+
+
 def retry_push_first() -> list:
     """★前回コミットしたのに出せていないものを、先に出す★
 
@@ -1540,6 +1563,9 @@ def finish_publish(res: dict, pend: dict = None) -> list:
       ここで読み直して外すと、呼び出し元が持つ古い行列に残ったままになり、
       あとから保存された瞬間に外したはずの機種が蘇る。
     """
+    ng = lock_still_mine("公開の仕上げ（コミット・push）")
+    if ng:
+        return ng                      # ★出さない★
     # ★目印は公開部が「途中」を消す前に作ってある★（Codex22回目）
     #   ここで作ると、公開部から戻る間に止まったときに目印が無くなる。
     ng = push_after_publish(res["slug"])
@@ -3101,7 +3127,9 @@ def main() -> int:
         print("★出せていない公開の目印があります（下見では触りません）。"
               "--apply の実行が先に片付けます★")
 
-    # ★★締切は全部の入口に掛ける★★（2026-08-11・依頼152の指摘③）
+    # ★★締切は**無人の**全部の入口に掛ける★★（2026-08-11・依頼152の指摘③）
+    #   ★手で流すときは締切を効かせない★＝人が見ているので時間帯で縛らない
+    #     （依頼153の指摘③。要件は「無人の全入口」であって「全入口」ではない）
     #   以前は待ち行列のループの中だけで見ていたので、
     #   **--name の直接指定は締切を一度も通らなかった**（時間帯の外でも1機種作れた）。
     #   また通常の経路も、締切の外に起動すると見張りまで済ませてから止まっていた。
