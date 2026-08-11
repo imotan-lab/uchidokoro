@@ -212,6 +212,11 @@ def _units(detail: dict) -> list:
           これらを「確定した内容」として数えると、
           **後から埋まった正しい更新を「消えた」と誤判定**してしまう。
         """
+        # ★もう出さないことにした決まり文句★（2026-08-12・運営者決定）
+        #   既に公開した記事には入っているので、消えても「内容が減った」と
+        #   判定しない（読者に情報を与える文ではない）。
+        if t == "出典2件で一致した内容だけを載せています。":
+            return True
         return (t == _ba.PENDING_TEXT) or (_ba.PENDING_ITEM in t) \
             or (t == getattr(_ba, "PENDING_TEXT_OLD", "\0")) \
             or (t.strip() == "確認中") or ("確認できていない" in t) \

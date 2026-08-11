@@ -104,7 +104,14 @@ def article_contract_problems(detail) -> list:
       描き直した期待値も同じく空になるので、突き合わせでは気づけなかった）
     ★中身が無い箱は「未確認」と書いてあること★を要求する。
     """
-    want = list(SECTION_ORDER) + [RUMOR_SECTION["title"]]
+    # ★噂の箱は中身があるときだけ★（2026-08-12・運営者決定）
+    #   噂や小ネタは**無い機種のほうが多い**。空の箱を必ず置くと、
+    #   読者には「何かあるのに載せていない」に見える。
+    want = list(SECTION_ORDER)
+    titles = [x.get("title") for x in (detail.get("sections") or [])
+              if isinstance(x, dict)]
+    if titles and titles[-1] == RUMOR_SECTION["title"]:
+        want = want + [RUMOR_SECTION["title"]]
     if not isinstance(detail, dict):
         return ["記事データが辞書ではありません"]
     if not isinstance(detail.get("slug"), str) or not detail["slug"]:
@@ -121,8 +128,9 @@ def article_contract_problems(detail) -> list:
         body = [x for x in (sec.get("body") or []) if isinstance(x, str) and x.strip()]
         tables = sec.get("tables") or []
         if title == RUMOR_SECTION["title"]:
-            if sec.get("type") != "rumor" or body != RUMOR_SECTION["body"]:
-                ng.append("噂の箱が決めた形と違います")
+            # ★出すなら中身が要る★（決まり文句だけの箱は作らない）
+            if sec.get("type") != "rumor" or not body:
+                ng.append("噂の箱に中身がありません（無いなら箱ごと出さない）")
             continue
         if not body and not tables:
             ng.append(f"箱の中身がありません（未確認と書くこと）: {title}")
@@ -259,8 +267,7 @@ def build_detail(slug, name, release, material) -> dict:
             counted = f"（{c['counted']}を数えます）" if c.get("counted") else ""
             body.append(f"**{jp}**：{c['amount']}{c['unit']}{counted} "
                         f"／ 恩恵：{c['benefit']}")
-        body.append("出典2件で一致した内容だけを載せています。"
-                    "確認が取れていない天井は掲載していません。")
+        body.append("確認が取れていない天井は掲載していません。")
         boxes["天井・恩恵"] = {"title": "天井・恩恵", "body": body}
         for c in ceil:
             jp = {"GAME": "ゲーム数天井", "CYCLE": "周期天井",
@@ -289,7 +296,6 @@ def build_detail(slug, name, release, material) -> dict:
             if c.get("label"):
                 jp = f"{jp}「{c['label']}」"
             body.append(f"**{jp}**：" + " ／ ".join(parts))
-        body.append("出典2件で一致した内容だけを載せています。")
         boxes["ゲーム性"] = {"title": "ゲーム性", "body": body}
         for c in sorted(ats, key=lambda x: x["mode"]):
             if not c.get("net"):
@@ -313,7 +319,6 @@ def build_detail(slug, name, release, material) -> dict:
             elif kind == "ADVANTAGE_RESET" and c.get("state"):
                 body.append(f"**有利区間**：{c['state']}")
         if body:
-            body.append("出典2件で一致した内容だけを載せています。")
             boxes["朝一・リセット情報"] = {"title": "朝一・リセット情報",
                                           "body": body}
 
@@ -387,7 +392,8 @@ def build_detail(slug, name, release, material) -> dict:
     for title in SECTION_ORDER:
         sections.append(boxes.get(title)
                         or {"title": title, "body": [PENDING_TEXT]})
-    sections.append(RUMOR_SECTION)
+    # ★噂の箱は中身ができてから★（2026-08-12・運営者決定）
+    #   新台の時点では噂も小ネタも無いので、箱ごと出さない。
     return {
         "slug": slug,
         "updated": date.today().isoformat(),
@@ -559,8 +565,9 @@ def selftest() -> int:
       [r[0] for r in next(sec for sec in d["sections"]
                           if sec["title"] == "設定示唆まとめ")
        ["tables"][0]["rows"]] == ["設定1", "設定6"])
-    t("　噂セクションが必ず入る（新規追加の必須項目）",
-      any(s.get("type") == "rumor" for s in d["sections"]))
+    t("★★噂の箱は中身ができてから出す★★（2026-08-12・運営者決定）"
+      "＝噂や小ネタが無い機種のほうが多く、空の箱は「あるのに載せていない」と読める",
+      not any(s.get("type") == "rumor" for s in d["sections"]))
     t("　本文に数値を作文しない（lead に数字が入らない）",
       not re.search(r"\d+\.\d+|\d+G|\d+枚", d["lead"]))
     t("★★確認した日付を読者向けに出さない★★"
