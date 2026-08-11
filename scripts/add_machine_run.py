@@ -2040,7 +2040,7 @@ def selftest() -> int:
     real_ledger = globals()["_ledger"]
     _ledger_calls: list = []
     globals()["_ledger"] = (
-        lambda *a, **k: _ledger_calls.append((a, k)) or None)
+        lambda *a, **k: _ledger_calls.append((a, k)) or True)
     # ★試験は本番の日次ログにも書かない★（2026-08-01・実際に混入した）
     #   混入すると完了マーカーが末尾から離れ、番兵（task-watchdog）が
     #   「起動したが完走していない」と誤検知しうる。画面出力だけにする。
@@ -2979,30 +2979,45 @@ def selftest() -> int:
                     # ★3分岐とも、呼ばれ方（slugと already_committed）まで見る★
                     #   （依頼157のP2）以前は slug しか見ておらず、
                     #   誤った already_committed で呼んでも通った。
-                    for stage, committed, on_top in (
-                            ("WRITTEN", False, False),
-                            ("WRITTEN", True, True),
-                            ("COMMITTED", True, False)):
+                    #   ★COMMITTED は実データと同じく sha を持つ★（依頼158のP2）
+                    #     再開側は sha と現在のHEADの一致を見てから進むので、
+                    #     空のままだとその判定を素通りしていた。
+                    for stage, committed, on_top, sha in (
+                            ("WRITTEN", False, False, ""),
+                            ("WRITTEN", True, True, ""),
+                            ("COMMITTED", True, False, "headcommit"),
+                            # ★記録したコミットが先端でない＝人が確かめる★
+                            #   （出さずに止まるので called は空のまま）
+                            ("COMMITTED", None, False, "furuisha")):
                         called = []
                         globals()["push_after_publish"] = (
                             lambda slug, already_committed=False, _c=called:
                             _c.append((slug, already_committed))
                             or ["入口で止めました"])
                         io.open(PUSH_PENDING, "w", encoding="utf-8").write(
-                            json.dumps({"slug": "t_resume", "sha": "",
+                            json.dumps({"slug": "t_resume", "sha": sha,
                                         "stage": stage,
                                         "parent": "oyacommit" if on_top else "",
                                         "at": "2026/08/11 00:00:00"}))
                         _keep_top = globals()["_committed_on_top"]
+                        _keep_head = globals()["_head"]
                         try:
                             globals()["_committed_on_top"] = (
                                 lambda parent, slug, _v=on_top: _v)
+                            globals()["_head"] = (lambda _v=sha: "headcommit" if _v != "furuisha" else "atarasii")
                             out = retry_push_first()
                         finally:
                             globals()["_committed_on_top"] = _keep_top
-                        t(f"　未完了公開（{stage}/コミット済み={committed}）の再開も、"
-                          "出す経路を必ず通る",
-                          bool(out) and called == [("t_resume", committed)])
+                            globals()["_head"] = _keep_head
+                        if committed is None:
+                            t("★★記録したコミットが先端でなければ、出さずに止まる★★"
+                              "（あとから別のコミットが乗っている＝人が確かめる）",
+                              bool(out) and called == []
+                              and any("別のコミット" in x for x in out))
+                        else:
+                            t(f"　未完了公開（{stage}/コミット済み={committed}）の再開も、"
+                              "出す経路を必ず通る",
+                              bool(out) and called == [("t_resume", committed)])
                 finally:
                     globals()["push_after_publish"] = _keep_pap
                     try:
