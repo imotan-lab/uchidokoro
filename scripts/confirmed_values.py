@@ -53,6 +53,7 @@ SCHEMA = "confirmed-values/v1"
 # ★2人そろって初めて記録できる★（片方だけの読みは採らない）
 REQUIRED_JUDGES = ("claude", "codex")
 MIN_QUOTE = 6            # 逐語の引用がこれより短いものは根拠にしない
+MIN_WHY = 8              # 「なぜ同じ機種か」は文になる長さを求める（控えと同じ）
 
 # ★どの項目を、材料のどこへ入れるか★（2026-08-09・依頼130 P0-1）
 #   最初の版は全部を material["adopted"] に入れていたが、
@@ -311,8 +312,26 @@ def verify_source(src: dict, name: str, fetch=None) -> dict:
         raise ConfirmedError(f"出典を取得できません（{src['url']}）: {str(e)[:80]}")
     ok, why = _mc.page_is_machine(html, name)
     if not ok:
-        raise ConfirmedError(
-            f"そのページは「{name}」のページだと確かめられません（{why}）: {src['url']}")
+        # ★機械が弾いたら、それはAIの出番の合図★（2026-08-11・運営者の指摘）
+        #   大手には記事の題に**通称しか入れない**ところがある。
+        #     なな徹の題「【青ブタ(スマスロ)】解析情報まとめ…」
+        #     正式名称  「L青春ブタ野郎はバニーガール先輩の夢を見ない」
+        #   ここで場合分け（通称の辞書・発行者ごとの例外）を足し始めると、
+        #   「この場合、この場合…」が延々に増える。それはAIを使う意味がない。
+        #   ★機械は取ってきて記録するところまで／同じ機種かの判断は2AI★
+        #   ただし**言うだけでは通さない**＝本文は必ず機械が取ってきたもので、
+        #   判断者と理由を必ず残す（あとで取り消す範囲を決められるように）。
+        why_same = str(src.get("identity_why") or "").strip()
+        if not why_same:
+            raise ConfirmedError(
+                f"そのページは「{name}」のページだと確かめられません（{why}）: "
+                f"{src['url']}／同じ機種だと2AIが判断したなら "
+                "--source-identity に『URL|理由』を付けます")
+        src["identity_override"] = {
+            "why": why_same[:300],
+            "machine_said": why,
+            "at": datetime.date.today().isoformat(),
+        }
     text = " ".join(_w._visible_text(html).split())
     quote = " ".join(str(src["quote"]).split())
     if quote not in text:
@@ -614,6 +633,32 @@ def selftest() -> int:
         stops("★★引用がそのページに無ければ記録できない★★（言うだけでは通らない）",
               lambda: rec(fetch=no_quote))
 
+        # ★題が通称のページを、2AIの判断で通す★（2026-08-11・運営者の指摘）
+        #   機械が弾いたら場合分けを足すのではなく、2AIが本文を読んで決める。
+        #   ★ただし理由を書かなければ通らない★（言うだけでは通さない）
+        def nickname(url):
+            """題は通称だけ・本文には正式名称がある（なな徹の実際の形）"""
+            if "nana-press" not in url:
+                return fake_fetch(url)
+            # ★題には通称しか入っていない★（機種名の芯が1文字も出てこない）
+            return ("<title>【ためし丸(スマスロ)】解析情報まとめ</title>"
+                    "<body><h1>【ためし丸(スマスロ)】解析情報まとめ</h1>"
+                    "<p>機種名:" + NAME + " メーカー オリンピア " + Q2 + "。"
+                    + ("説明。" * 30) + "</p></body>")
+        stops("★★題が機種名と合わないページは、理由なしでは通らない★★",
+              lambda: rec(fetch=nickname))
+        src_ok = [parse_source("https://chonborista.com/1|" + Q1),
+                  dict(parse_source("https://nana-press.com/1|" + Q2),
+                       identity_why="題は通称だが本文に正式名称とメーカーがある")]
+        r = rec(fetch=nickname, sources=src_ok)
+        t("★★2AIが本文を読んで判断すれば、題が通称でも通せる★★"
+          "（機械は取ってくるだけ／判断と理由は残す）",
+          r["state"] == "RECORDED" and len(r["lineages"]) == 2)
+        got = for_slug("x")["ceiling"]["sources"]
+        t("　誰がなぜ通したかが残る（あとで取り消す範囲を決められる）",
+          any((s.get("identity_override") or {}).get("why") for s in got))
+        forget("x", "ceiling")
+
         r = rec()
         t("　2人が一致し、独立2系列の引用が実在すれば記録できる",
           r["state"] == "RECORDED" and len(r["lineages"]) == 2)
@@ -694,6 +739,10 @@ def main() -> int:
                     help="値を書いたJSONファイル（構造のある値はこちら）")
     ap.add_argument("--source", action="append", default=[],
                     help="URL|逐語の引用（2つ以上・発行者はURLから引く）")
+    ap.add_argument("--source-identity", dest="source_identity",
+                    action="append", default=[],
+                    help="URL|なぜ同じ機種と判断したか"
+                         "（題が通称のサイト等。2AIが本文を読んで判断したとき）")
     ap.add_argument("--by", default="", help="判断した人（claude,codex）")
     ap.add_argument("--why", default="")
     ap.add_argument("--selftest", action="store_true")
@@ -710,8 +759,27 @@ def main() -> int:
             else:
                 print("--value か --value-file が要ります")
                 return 2
-            r = record(a.slug, a.field, value,
-                       [parse_source(s) for s in a.source],
+            # ★題が合わないページを2AIの判断で通す理由★（URLごとに結び付ける）
+            why_by_url = {}
+            for spec in a.source_identity:
+                u, _, w = str(spec).partition("|")
+                if not (u.strip() and len(w.strip()) >= MIN_WHY):
+                    print("--source-identity は『URL|理由（%d文字以上）』の形です"
+                          % MIN_WHY)
+                    return 2
+                why_by_url[u.strip()] = w.strip()
+            srcs = []
+            for s in a.source:
+                one = parse_source(s)
+                if one["url"] in why_by_url:
+                    one["identity_why"] = why_by_url.pop(one["url"])
+                srcs.append(one)
+            if why_by_url:
+                # ★どの出典にも結び付かない理由は黙って捨てない★
+                print("--source-identity のURLが --source にありません: "
+                      + ", ".join(why_by_url))
+                return 2
+            r = record(a.slug, a.field, value, srcs,
                        [x for x in a.by.split(",") if x.strip()], a.why,
                        name=a.name, official_url=a.official_url)
             print(json.dumps(r, ensure_ascii=False))
