@@ -217,11 +217,6 @@ def _units(detail: dict) -> list:
         #   判定しない（読者に情報を与える文ではない）。
         if t == "出典2件で一致した内容だけを載せています。":
             return True
-        # ★天井の断り書きも決まり文句★（2026-08-12・依頼160のP1-3）
-        #   天井が1件→2件に増えると、この文は正しく消える。
-        #   比較の対象にすると「内容が消えた」と判定され、正しい成長が止まる。
-        if t == getattr(_ba, "CEILING_PARTIAL_NOTE", "\0"):
-            return True
         return (t == _ba.PENDING_TEXT) or (_ba.PENDING_ITEM in t) \
             or (t == getattr(_ba, "PENDING_TEXT_OLD", "\0")) \
             or (t.strip() == "確認中") or ("確認できていない" in t) \
@@ -260,6 +255,29 @@ def _units(detail: dict) -> list:
     return out
 
 
+def _ceiling_note_may_go(old_detail: dict, new_detail: dict) -> bool:
+    """★天井の断り書きが消えてよい更新か★（2026-08-12・依頼161）
+
+    断り書きは「ほかにも天井があるかもしれない」という**読者への断り**。
+    これが消えるのは、天井が全部そろったときだけであるべき。
+    ★消えたこと自体を見逃すのではなく、「天井の箱が実際に増えた」
+      ことを条件にする★（無条件に外すと、材料が増えていないのに
+      断り書きだけ消える更新を誰も止められない）。
+    """
+    note = _ba.CEILING_PARTIAL_NOTE
+
+    def lines(d):
+        for sec in (d.get("sections") or []):
+            if not isinstance(sec, dict) or sec.get("title") != "天井・恩恵":
+                continue
+            return [str(x).strip() for x in (sec.get("body") or [])
+                    if str(x).strip() and str(x).strip() != note]
+        return []
+
+    was, now = lines(old_detail), lines(new_detail)
+    return len(now) > len(was) and all(x in now for x in was)
+
+
 def text_kept(old_detail: dict, new_detail: dict) -> list:
     """★前に載っていた文が、そのまま残っているか★（値の書き換えを止める）
 
@@ -269,6 +287,12 @@ def text_kept(old_detail: dict, new_detail: dict) -> list:
     （足すのは自由・消す/変えるのは不可＝本当の意味での単調追加）。
     """
     old, new = _units(old_detail), _units(new_detail)
+    # ★天井の断り書きは「天井が実際に増えたとき」だけ消えてよい★
+    #   （2026-08-12・依頼161。無条件に比較から外すと、
+    #     網羅性が未確認のまま断り書きだけ消える更新を止められない）
+    if _ceiling_note_may_go(old_detail, new_detail):
+        note = _ba.CEILING_PARTIAL_NOTE
+        old = [u for u in old if not (u[0] == "body" and u[-1] == note)]
     rest = list(new)
     gone = []
     for u in old:
@@ -648,6 +672,10 @@ def selftest() -> int:
     _keep_ledger, _tmp_dir = _oi_mod.DEFAULT_FILE, tempfile.mkdtemp()
     _oi_mod.DEFAULT_FILE = _oi_mod.Path(_tmp_dir) / "issues.json"
 
+    def _ceil_box(lines):
+        return {"slug": "zzz",
+                "sections": [{"title": "天井・恩恵", "body": lines}]}
+
     def t(name, cond):
         nonlocal ok
         ran[0] += 1
@@ -916,6 +944,21 @@ def selftest() -> int:
     _oi_mod.DEFAULT_FILE = _keep_ledger
     import shutil
     shutil.rmtree(_tmp_dir, ignore_errors=True)
+    # ★断り書きだけ消す更新は止める★（2026-08-12・依頼161）
+    #   無条件に比較の対象外にすると、材料が増えていないのに
+    #   「ほかにも天井があるかも」の断りだけ消える更新を誰も止められない。
+    _note = _ba.CEILING_PARTIAL_NOTE
+    _was = _ceil_box(["**天井**：800G", _note])
+    _sneak = _ceil_box(["**天井**：800G"])                     # 増えていない
+    _grown = _ceil_box(["**天井**：800G", "**AT間天井**：1200G"])  # 増えた
+    t("★★断り書きだけ消す更新は止める★★（網羅性は未確認のまま）",
+      bool(text_kept(_was, _sneak)))
+    t("★★天井が実際に増えたときは断り書きが消えてよい★★",
+      not text_kept(_was, _grown))
+    #   ★対照実験★＝昔の姿（断り書きを最初から数えない）では素通りする
+    t("　（対照）断り書きを数えないと、消すだけの更新が通る",
+      not text_kept(_ceil_box(["**天井**：800G"]), _sneak))
+
     print(f"\n{ran[0]}/{ran[0]} 合格" if ok else "\n不合格あり")
     return 0 if ok else 1
 

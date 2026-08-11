@@ -167,9 +167,15 @@ def article_contract_problems(detail) -> list:
         if not body and not tables:
             ng.append(f"箱の中身がありません（未確認と書くこと）: {title}")
             continue
-        if not tables and body != [PENDING_TEXT] and PENDING_TEXT in body:
+        # ★新旧どちらの文言も「未確認」★（2026-08-12・依頼161）
+        #   ここだけ新しい文言を直接見ていたので、古い文言の記事
+        #   （ssb1・prskkm の「確認できたCZ」「設定示唆まとめ」）が
+        #   **公開の関所と最終監査で拒否**されていた（実データで再現）。
+        pending_only = is_pending_body(body)
+        if not tables and not pending_only and any(x in PENDING_TEXTS
+                                                   for x in body):
             ng.append(f"未確認の文が中身に混ざっています: {title}")
-        if title in TABLE_SECTIONS and not tables and body != [PENDING_TEXT]:
+        if title in TABLE_SECTIONS and not tables and not pending_only:
             ng.append(f"表の箱なのに表も未確認表示もありません: {title}")
     return ng
 
@@ -309,7 +315,11 @@ def build_detail(slug, name, release, material) -> dict:
         #   通常時・AT間・スルーの3種類ある機種で2件だけ確認できたとき、
         #   件数で判断すると断り書きが消えて「これで全部」に見える。
         #   ★全部そろったと言えるのは、2AIがそう明示したときだけ★
-        if not (material.get("ceilings") or {}).get("complete"):
+        # ★真偽値の真だけを「全部そろった」と見る★（2026-08-12・依頼161）
+        #   truthy で見ると、外から来た "false" という**文字列**でも
+        #   断り書きが消える（網羅性が未確認なのに全部に見える）。
+        #   ★いまこの旗を立てる処理は無い＝2AIが対話で入れたときだけ★
+        if (material.get("ceilings") or {}).get("complete") is not True:
             body.append(CEILING_PARTIAL_NOTE)
         boxes["天井・恩恵"] = {"title": "天井・恩恵", "body": body}
         for c in ceil:
@@ -522,6 +532,13 @@ def selftest() -> int:
         results.append((name, bool(cond)))
         print(("✅" if cond else "❌") + " " + name)
 
+    def _old_wording_article():
+        """表の箱に古い文言だけが入っている記事（ssb1・prskkm と同じ形）。"""
+        return {"slug": "zzz", "sections": [
+            {"title": ti,
+             "body": [PENDING_TEXT_OLD if ti in TABLE_SECTIONS else "本文です。"]}
+            for ti in SECTION_ORDER]}
+
     def raises(fn, word=""):
         try:
             fn()
@@ -693,6 +710,33 @@ def selftest() -> int:
       can_publish_page("そんな機種はありません") is not None)
     t("　ページがある機種なら止めない", can_publish_page("hokuto") is None)
 
+    # ★古い文言の記事も公開の関所を通る★（2026-08-12・依頼161）
+    #   ここだけ新しい文言を直接比べていたので、公開済みの ssb1・prskkm が
+    #   **公開の関所と最終監査で拒否**されていた（実データで再現した）。
+    t("★★古い文言の記事も契約に合格する★★（公開済み記事が止まらない）",
+      not article_contract_problems(_old_wording_article()))
+    #   ★対照実験★＝新しい文言だけを見る昔の判定では落ちること
+    t("　（対照）昔の判定では落ちる",
+      any(x["title"] in TABLE_SECTIONS and x["body"] != [PENDING_TEXT]
+          for x in _old_wording_article()["sections"]))
+    # ★天井の断り書きは「本物の真」でしか消えない★（2026-08-12・依頼161）
+    #   truthy で見ると、外から来た "false" という**文字列**でも消える。
+    _mat_false = {"adopted": {}, "need_third": {}, "thin": {},
+                  "ceilings": {"adopted": [{"kind": "GAMES", "amount": "800",
+                                            "unit": "G", "benefit": "AT当選"}],
+                               "complete": "false"}}
+    _d_false = build_detail("zzz", "試験機", "2026-09", _mat_false)
+    _mat_true = json.loads(json.dumps(_mat_false))
+    _mat_true["ceilings"]["complete"] = True
+    _d_true = build_detail("zzz", "試験機", "2026-09", _mat_true)
+
+    def _ceil_body(d):
+        return next(x["body"] for x in d["sections"] if x["title"] == "天井・恩恵")
+
+    t("★★天井の網羅性は真偽値の真だけ★★"
+      "（文字列の \"false\" で断り書きが消えない）",
+      CEILING_PARTIAL_NOTE in _ceil_body(_d_false)
+      and CEILING_PARTIAL_NOTE not in _ceil_body(_d_true))
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
     if ng:

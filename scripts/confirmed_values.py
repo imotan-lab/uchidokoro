@@ -249,6 +249,17 @@ def check_shape(field: str, value) -> list:
             raise ConfirmedError(
                 f"{field}: {value.get('kind')} には "
                 f"{'/'.join(need)} が要ります（記事がこれを読みます）")
+        # ★その種類では読まない鍵を受け取らない★（2026-08-12・依頼161）
+        #   記事は種類だけで書き分けるので、種類に関係ない鍵を入れると
+        #   **2出典で確かめた中身が黙って消える**（記事に1行も出ない）。
+        used = set(shape.get("required") or ()) | set(need)
+        others = {k for keys in by_kind.values() for k in keys}
+        extra = sorted(k for k in others - used
+                       if str(value.get(k) or "").strip())
+        if extra:
+            raise ConfirmedError(
+                f"{field}: {value.get('kind')} では "
+                f"{'/'.join(extra)} は使いません（記事に出ないので受け取りません）")
     # ★単位の種類を確かめる★（依頼132 P0-2／依頼134で項目ごとに分けた）
     for k, (pat, jp) in (VALUE_PATTERNS.get(base_field(field)) or {}).items():
         v = str(value.get(k) or "").strip()
@@ -828,6 +839,27 @@ def selftest() -> int:
     finally:
         STORE = keep
         globals()["bind_machine"] = real_bind
+
+    # ★種類ごとに、要る鍵と使わない鍵を決める★（2026-08-12・依頼160/161）
+    #   欠けていれば記事に1行も出ず、余分なら2出典で確かめた中身が黙って消える。
+    stops("★★種類に要る鍵が欠けたら受け取らない★★（記事に1行も出ない）",
+          lambda: check_shape("reset", {"kind": "CEILING_SHORTENED",
+                                        "state": "高確スタート"}))
+    stops("★★その種類で使わない鍵は受け取らない★★（黙って消えるのを防ぐ）",
+          lambda: check_shape("reset", {"kind": "CEILING_SHORTENED",
+                                        "games": "600",
+                                        "state": "高確スタート"}))
+    def _passes(field, value):
+        """止まらずに通ること（返り値は逐語照合が要る欄の一覧）。"""
+        try:
+            check_shape(field, value)
+            return True
+        except ConfirmedError:
+            return False
+
+    t("　種類に合った形は通る",
+      _passes("reset", {"kind": "CEILING_SHORTENED", "games": "600"})
+      and _passes("reset", {"kind": "MORNING_STATE", "state": "高確スタート"}))
 
     ng = sum(1 for _, o in results if not o)
     print()
