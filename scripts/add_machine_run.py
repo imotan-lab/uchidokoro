@@ -1863,6 +1863,31 @@ def push_after_publish(slug: str, already_committed: bool = False) -> list:
     return []
 
 
+# ★記事を作れるだけの材料があるか★（2026-08-12・依頼160のP1-6で関数にした）
+#   ここは run_one の中に埋まっていて、試験は**本文に文字列があるか**しか
+#   見られなかった。項目を1つ増やしても試験は通り、実際に数えているかは
+#   確かめられない。★数える場所を関数にして、試験は実際に呼ぶ★
+MODULE_FIELDS = ("ceilings", "at_specs", "czs", "resets")
+
+
+def usable_material(mat: dict) -> dict:
+    """材料のうち、記事の中身になるものだけを返す。
+
+    ★型式名だけでは「材料あり」と数えない★（2026-08-02・Codex29回目）
+      型式名は identity の正本として adopted に入るが、
+      それしか無い記事（スペックも天井も無い）を作ってはいけない。
+    ★天井・AT・CZ・リセットの採用分も数える★（Codex57回目／依頼160のP1-6）
+      基本スペック直下しか見ておらず、天井などが2媒体一致していても
+      「材料なし」で記事を永久に作れなかった。
+    """
+    out = {k: v for k, v in (mat.get("adopted") or {}).items()
+           if k != "model_code"}
+    for key in MODULE_FIELDS:
+        for i, c in enumerate((mat.get(key) or {}).get("adopted") or []):
+            out[f"{key}#{i}"] = c
+    return out
+
+
 def run_one(name, official_url, maker, release, apply_it=False,
             release_is_cache=False,
             before_write=None) -> dict:
@@ -1948,10 +1973,7 @@ def run_one(name, official_url, maker, release, apply_it=False,
     # ★天井・AT・CZの採用分も材料に数える★（2026-08-03・Codex57回目。
     #   基本スペック直下しか見ておらず、天井などが2媒体一致していても
     #   「材料なし」で記事を永久に作れなかった）
-    usable_mat = {k: v for k, v in mat["adopted"].items() if k != "model_code"}
-    for _mod_key in ("ceilings", "at_specs", "czs"):
-        for _i, _c in enumerate((mat.get(_mod_key) or {}).get("adopted") or []):
-            usable_mat[f"{_mod_key}#{_i}"] = _c
+    usable_mat = usable_material(mat)
     if not usable_mat:
         out["problems"].append("採用できた材料がありません（記事を作りません）")
     # ★②同定に関わる問題があれば、材料が採れていても作らない★
@@ -2472,10 +2494,21 @@ def selftest() -> int:
             t("★★同定に落ちたページ（identity_ok=偽）は材料からも外す★★"
               "（他社名の題のページが材料の票に復活できた・Codex56回目）",
               "identity_ok" in inspect.getsource(gather))
-            t("★★天井・AT・CZだけ採れた機種も「材料あり」と数える★★"
-              "（基本スペック直下しか見ず記事を永久に作れなかった・Codex57回目）",
-              'for _mod_key in ("ceilings", "at_specs", "czs")'
-              in inspect.getsource(run_one))
+            # ★実際に呼んで数える★（2026-08-12・依頼160のP1-6）
+            #   以前は本文に文字列があるかしか見ていなかったので、
+            #   数える対象を増やし忘れても試験は通った。
+            _only_model = {"adopted": {"model_code": "L試験機"}}
+            _mods = {}
+            for _k in ("ceilings", "at_specs", "czs", "resets"):
+                _mods[_k] = usable_material(
+                    {"adopted": {"model_code": "L試験機"},
+                     _k: {"adopted": [{"x": 1}]}})
+            t("★★天井・AT・CZ・リセットだけ採れた機種も「材料あり」と数える★★"
+              "（基本スペック直下しか見ず記事を永久に作れなかった・Codex57回目"
+              "／リセットは依頼160のP1-6）",
+              not usable_material(_only_model)
+              and all(len(v) == 1 for v in _mods.values())
+              and set(_mods["resets"]) == {"resets#0"})
             t("★★機種名の芯が変わったURLは公開へ進めない★★"
               "（使い回し検知が公開を止めていなかった・Codex41回目）",
               "_name_conflict" in inspect.getsource(fill_missing)

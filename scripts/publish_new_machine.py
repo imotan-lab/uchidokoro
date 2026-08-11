@@ -354,7 +354,8 @@ def check_pending_boxes(html: str, detail: dict) -> list:
       全部の箱を消せた。ひな型に <style> は無いので、あれば止める。
     """
     ng = []
-    want_titles = list(_ba.SECTION_ORDER) + [_ba.RUMOR_SECTION["title"]]
+    # ★並びは build_new_article に聞く★（2026-08-12・依頼160のP0-5）
+    want_titles = _ba.expected_titles(detail)
     # ★箱だけの骨組み（本文が空）も止める★（2026-08-04・Codex82回目の指摘2）
     bad = _ba.article_contract_problems(detail)
     if bad:

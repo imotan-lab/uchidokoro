@@ -59,7 +59,7 @@ _SLUG_OK = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
 # ★ページ全体への断り書きは書かない★（2026-08-04・運営者判断）
 #   「出典で確認が取れた項目のみ掲載」を毎ページ繰り返しても読者の役に立たない。
 #   代わりに**未確認の項目の場所に「未確認」と書く**（下の PENDING_TEXT）。
-LEAD_TEMPLATE = "{name}の機種情報ページです。登場時期は{release}（公式発表を確認済み）。"
+LEAD_TEMPLATE = "{name}の機種情報ページです。登場時期は{release}。"
 LEAD_NO_DATE = "{name}のページです。登場時期は当サイトでは確認できていません。"
 # ★生成物に混ぜてはいけない語★（検査でも使う）
 STALE_WORDS = ("導入予定", "登場予定", "導入前")
@@ -74,8 +74,25 @@ STALE_WORDS = ("導入予定", "登場予定", "導入前")
 PENDING_TEXT = "未確認（確認でき次第掲載します）"
 # ★以前の文言★（既に公開した記事に入っている。未確認として扱い続ける）
 PENDING_TEXT_OLD = "未確認です。確認でき次第、この欄に掲載します。"
+# ★天井が全部そろったと言えないときの断り書き★（比較の対象外にする）
+CEILING_PARTIAL_NOTE = ("ほかにも天井がある場合、確認が取れていないものは"
+                        "掲載していません。")
 # 箱の中の1項目だけが未確認のとき（例: 機械割）に、その欄へ入れる文言
 PENDING_ITEM = "未確認（確認でき次第掲載します）"
+# ★未確認と見なす文言★（新旧どちらも。ここが唯一の一覧）
+PENDING_TEXTS = (PENDING_TEXT, PENDING_TEXT_OLD)
+
+
+def is_pending_body(body) -> bool:
+    """★この箱は「中身が無い（未確認）」か★（2026-08-12・依頼160のP2-7）
+
+    プリレンダ・ブラウザ・最終DOM検査の3か所が別々に文言を持っていて、
+    文言を変えたときに**片方だけ**が直り、目印が食い違って公開が止まった。
+    """
+    if not isinstance(body, list):
+        return False
+    got = [x.strip() for x in body if isinstance(x, str) and x.strip()]
+    return len(got) == 1 and got[0] in PENDING_TEXTS
 
 # 記事に必ず用意する「箱」（確認できたものから中身が入る）
 #   ★並びは CLAUDE.md の IDEAL_ORDER に合わせる★
@@ -97,6 +114,25 @@ RUMOR_SECTION = {
 TABLE_SECTIONS = ("確認できたCZ", "設定示唆まとめ")
 
 
+def expected_titles(detail) -> list:
+    """★この記事に出るはずの箱の並び★（噂の箱は中身があるときだけ）
+
+    （2026-08-12・依頼160のP0-5）
+    公開の関所・最終DOM検査・記事データの検査の**3か所**が
+    それぞれ並びを組み立てていたので、噂の箱を任意にしたときに
+    記事データ側だけが直り、**公開できない**状態になった。
+    ★数え方を変えるなら、数える場所は1つにする★
+    """
+    want = list(SECTION_ORDER)
+    if not isinstance(detail, dict):
+        return want
+    titles = [x.get("title") for x in (detail.get("sections") or [])
+              if isinstance(x, dict)]
+    if titles and titles[-1] == RUMOR_SECTION["title"]:
+        want = want + [RUMOR_SECTION["title"]]
+    return want
+
+
 def article_contract_problems(detail) -> list:
     """★記事データが「箱だけの骨組み」になっていないか★
 
@@ -104,16 +140,12 @@ def article_contract_problems(detail) -> list:
       描き直した期待値も同じく空になるので、突き合わせでは気づけなかった）
     ★中身が無い箱は「未確認」と書いてあること★を要求する。
     """
+    if not isinstance(detail, dict):
+        return ["記事データが辞書ではありません"]
     # ★噂の箱は中身があるときだけ★（2026-08-12・運営者決定）
     #   噂や小ネタは**無い機種のほうが多い**。空の箱を必ず置くと、
     #   読者には「何かあるのに載せていない」に見える。
-    want = list(SECTION_ORDER)
-    titles = [x.get("title") for x in (detail.get("sections") or [])
-              if isinstance(x, dict)]
-    if titles and titles[-1] == RUMOR_SECTION["title"]:
-        want = want + [RUMOR_SECTION["title"]]
-    if not isinstance(detail, dict):
-        return ["記事データが辞書ではありません"]
+    want = expected_titles(detail)
     if not isinstance(detail.get("slug"), str) or not detail["slug"]:
         return ["記事データに slug がありません"]
     secs = detail.get("sections")
@@ -273,9 +305,12 @@ def build_detail(slug, name, release, material) -> dict:
         #   1つしか載っていないと、読者は「この台の天井はこれだけ」と受け取り、
         #   **書いていないことが無いことに見える**。
         #   全部そろっている機種では不要な文なので出さない。
-        if len(ceil) < 2:
-            body.append("ほかにも天井がある場合、確認が取れていないものは"
-                        "掲載していません。")
+        # ★件数から「全部そろった」と決めない★（2026-08-12・依頼160のP0-2）
+        #   通常時・AT間・スルーの3種類ある機種で2件だけ確認できたとき、
+        #   件数で判断すると断り書きが消えて「これで全部」に見える。
+        #   ★全部そろったと言えるのは、2AIがそう明示したときだけ★
+        if not (material.get("ceilings") or {}).get("complete"):
+            body.append(CEILING_PARTIAL_NOTE)
         boxes["天井・恩恵"] = {"title": "天井・恩恵", "body": body}
         for c in ceil:
             jp = {"GAME": "ゲーム数天井", "CYCLE": "周期天井",
@@ -320,11 +355,11 @@ def build_detail(slug, name, release, material) -> dict:
         body = []
         for c in resets:
             kind = c.get("kind")
-            if kind == "CEILING_SHORTENED" and c.get("games"):
+            if kind == "CEILING_SHORTENED":
                 body.append(f"**設定変更後の天井**：{c['games']}G")
-            elif kind == "MORNING_STATE" and c.get("state"):
+            elif kind == "MORNING_STATE":
                 body.append(f"**朝一の状態**：{c['state']}")
-            elif kind == "ADVANTAGE_RESET" and c.get("state"):
+            elif kind == "ADVANTAGE_RESET":
                 body.append(f"**有利区間**：{c['state']}")
         if body:
             boxes["朝一・リセット情報"] = {"title": "朝一・リセット情報",

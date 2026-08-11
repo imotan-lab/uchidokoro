@@ -138,12 +138,11 @@ def section_attrs(section: dict) -> str:
     ページ側の**欠落・重複・順番・中身**を確かめられるようにするため、
     未確認の箱だけでなく全セクションに `data-section` を付ける。
     """
-    from build_new_article import PENDING_TEXT as _pt
+    from build_new_article import is_pending_body as _pending
     title = section.get("title", "")
     out = f' data-section="{esc(title)}"'
-    body = section.get("body") or []
-    if isinstance(body, list) and [x.strip() for x in body
-                                   if isinstance(x, str)] == [_pt]:
+    # ★見分けるのは build_new_article の1か所★（2026-08-12・依頼160のP2-7）
+    if _pending(section.get("body")):
         out += f' {PENDING_ATTR}="{esc(title)}"'
     return out
 

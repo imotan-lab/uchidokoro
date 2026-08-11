@@ -165,7 +165,8 @@ def judge_boxes(boxes: list, detail) -> list[str]:
     """
     import build_machine_pages as _bmp
     import build_new_article as _ba
-    want = list(_ba.SECTION_ORDER) + [_ba.RUMOR_SECTION["title"]]
+    # ★並びは build_new_article に聞く★（2026-08-12・依頼160のP0-5）
+    want = _ba.expected_titles(detail)
     if not isinstance(detail, dict):
         return ["R13: 記事データを読めません（新台経路のページなのに中身が無い）"]
     # ★箱だけの骨組み（本文が空）も止める★（Codex82回目の指摘2）
@@ -191,10 +192,10 @@ def judge_boxes(boxes: list, detail) -> list[str]:
         want_text = "".join(_hc.visible_text("<body>" + rendered + "</body>").split())
         if (b.get("text") or "") != want_text:
             ngs.append(f"R13: 箱の中身がデータと違います: {title}")
-        body = [x for x in (sec.get("body") or []) if isinstance(x, str)]
-        if body == [PENDING_TEXT] and b.get("pending") != title:
+        # ★新旧どちらの文言でも未確認★（2026-08-12・依頼160のP2-7）
+        if _ba.is_pending_body(sec.get("body")) and b.get("pending") != title:
             ngs.append(f"R13: 未確認の箱に目印がありません: {title}")
-        if body != [PENDING_TEXT] and b.get("pending"):
+        if not _ba.is_pending_body(sec.get("body")) and b.get("pending"):
             ngs.append(f"R13: 中身がある箱に未確認の目印が付いています: {title}")
     return ngs
 
@@ -512,9 +513,9 @@ def selftest() -> int:
 
     def box_of(sec):
         rendered = _bmp.render_section(sec)
-        body = [x for x in (sec.get("body") or []) if isinstance(x, str)]
         return {"title": sec["title"],
-                "pending": sec["title"] if body == [PENDING_TEXT] else None,
+                "pending": (sec["title"]
+                            if _ba.is_pending_body(sec.get("body")) else None),
                 "tag": "div", "has_cls": True, "shown": True,
                 "heading": sec["title"], "sig": _sig_of(rendered),
                 "text": "".join(_hc.visible_text(

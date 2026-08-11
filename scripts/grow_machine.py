@@ -217,6 +217,11 @@ def _units(detail: dict) -> list:
         #   判定しない（読者に情報を与える文ではない）。
         if t == "出典2件で一致した内容だけを載せています。":
             return True
+        # ★天井の断り書きも決まり文句★（2026-08-12・依頼160のP1-3）
+        #   天井が1件→2件に増えると、この文は正しく消える。
+        #   比較の対象にすると「内容が消えた」と判定され、正しい成長が止まる。
+        if t == getattr(_ba, "CEILING_PARTIAL_NOTE", "\0"):
+            return True
         return (t == _ba.PENDING_TEXT) or (_ba.PENDING_ITEM in t) \
             or (t == getattr(_ba, "PENDING_TEXT_OLD", "\0")) \
             or (t.strip() == "確認中") or ("確認できていない" in t) \

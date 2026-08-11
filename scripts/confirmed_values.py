@@ -98,8 +98,14 @@ VALUE_SHAPES = {
     # ★朝一・リセット★（2026-08-12）
     #   種類だけは必ず要る。中身はどれか1つでもあればよい
     #   （天井が短くなる機種／朝一の状態だけ分かる機種、どちらもある）。
+    # ★種類ごとに、要る中身を決める★（2026-08-12・依頼160のP1-4）
+    #   以前は「どれか1つあればよい」だったので、
+    #   {kind: CEILING_SHORTENED, state: "高確スタート"} が検査を通り、
+    #   記事側は games しか読まないので**1行も出ない**（確定値が消える）。
     "reset": {"required": ("kind",),
-              "any_of": ("games", "state"),
+              "required_by_kind": {"CEILING_SHORTENED": ("games",),
+                                   "MORNING_STATE": ("state",),
+                                   "ADVANTAGE_RESET": ("state",)},
               "enums": {"kind": ("CEILING_SHORTENED", "MORNING_STATE",
                                  "ADVANTAGE_RESET")},
               "quoted": ("games", "state")},
@@ -232,6 +238,17 @@ def check_shape(field: str, value) -> list:
     if any_of and not any(str(value.get(k) or "").strip() for k in any_of):
         raise ConfirmedError(
             f"{field}: {'/'.join(any_of)} のどれか1つは要ります（中身の無い項目は作らない）")
+    # ★種類ごとに要る中身を確かめる★（2026-08-12・依頼160のP1-4）
+    #   記事は種類ごとに読む鍵が決まっているので、種類と中身が食い違うと
+    #   検査は通るのに**記事には1行も出ない**（確定値が黙って消える）。
+    by_kind = shape.get("required_by_kind") or {}
+    need = by_kind.get(value.get("kind"))
+    if need:
+        miss = [k for k in need if not str(value.get(k) or "").strip()]
+        if miss:
+            raise ConfirmedError(
+                f"{field}: {value.get('kind')} には "
+                f"{'/'.join(need)} が要ります（記事がこれを読みます）")
     # ★単位の種類を確かめる★（依頼132 P0-2／依頼134で項目ごとに分けた）
     for k, (pat, jp) in (VALUE_PATTERNS.get(base_field(field)) or {}).items():
         v = str(value.get(k) or "").strip()
