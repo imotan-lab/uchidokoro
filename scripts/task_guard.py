@@ -514,6 +514,21 @@ def claim(task: str, slug: str, path: str = STATE_PATH) -> dict:
                     "test": True}
         data = _load(path)
         if task in UNLIMITED_MACHINE_TASKS:
+            # ★★名乗りだけで無制限にしない★★（2026-08-11・台帳#294）
+            #   以前は「タスク名が add-machine なら無制限」だったので、
+            #   **別のタスクがこの名前を名乗れば1日1機種の枠を迂回できた**。
+            #   無制限を許してよいのは「まだ一覧に無い機種」＝これから作る新台だけ。
+            #   すでに一覧にある機種を触るなら、それは更新であって新台ではない。
+            try:
+                stage = cp.assess(slug).get("stage")
+            except Exception as e:            # noqa: BLE001
+                raise GuardError(
+                    f"{slug} が新台かどうか判定できません"
+                    f"（{type(e).__name__}: {e}）。枠は使っていません")
+            if stage != "NO_MACHINE":
+                raise GuardError(
+                    f"{slug} はすでに一覧にあります（{stage}）。"
+                    "新台の無制限枠は使えません（更新タスクの担当です）")
             d = _day(data)
             done = d.setdefault("unlimited_slugs", [])
             if slug not in done:
@@ -762,6 +777,34 @@ def _budget_tests(t, tmpdir) -> None:
         f.write("{壊れた")
     t("★★予算が読めない日は動かさない★★",
       _raises(lambda: budget(bp), ""))
+
+    # ★★無制限の枠は「まだ一覧に無い機種」だけ★★（2026-08-11・台帳#294）
+    #   以前はタスク名の自己申告だけで無制限になったので、
+    #   別のタスクがこの名前を名乗れば1日1機種の枠を迂回できた。
+    _keep_assess = cp.assess
+    try:
+        cp.assess = lambda slug: {"stage": "NO_MACHINE"}
+        _p = os.path.join(tempfile.mkdtemp(), "guard.json")
+        got = claim("add-machine", "aarakuma1", path=_p)
+        t("★★新台（まだ一覧に無い機種）は無制限で通る★★",
+          isinstance(got, dict))
+        cp.assess = lambda slug: {"stage": "READY"}
+        try:
+            claim("add-machine", "aarakuma2", path=_p)
+            _ng = False
+        except GuardError as e:
+            _ng = "すでに一覧にあります" in str(e)
+        t("★★すでに一覧にある機種では無制限を使えない★★"
+          "（名乗りだけで1日1機種の枠を迂回できた）", _ng)
+        cp.assess = lambda slug: (_ for _ in ()).throw(RuntimeError("読めません"))
+        try:
+            claim("add-machine", "aarakuma3", path=_p)
+            _ng2 = False
+        except GuardError:
+            _ng2 = True
+        t("　新台かどうか判定できないときも通さない（枠は使わない）", _ng2)
+    finally:
+        cp.assess = _keep_assess
 
 
 def _raises(fn, word: str = "") -> bool:
