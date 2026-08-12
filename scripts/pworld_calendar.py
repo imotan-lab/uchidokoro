@@ -89,7 +89,8 @@ class _Reader(HTMLParser):
             self._field, self._buf = "count", []
             return
         if tag == "li" and "machineList-item" in cls:
-            self._item = {"type": "", "name": "", "maker": "", "machine_id": ""}
+            self._item = {"type": "", "name": "", "maker": "",
+                          "machine_id": "", "ids": set(), "title_id": ""}
             self._day["items"].append(self._item)
             return
         if self._item is None:
@@ -100,10 +101,15 @@ class _Reader(HTMLParser):
             if tag == "p" and key in cls:
                 self._field, self._buf = name, []
                 return
-        if tag == "a" and not self._item["machine_id"]:
+        if tag == "a":
             m = re.match(r"^/machine/database/(\d+)/?$", a.get("href", ""))
             if m:
-                self._item["machine_id"] = m.group(1)
+                # ★行の中の機種リンクを全部覚える★（依頼165のP1）
+                #   サムネイルがA・題がBのような壊れ方だと、
+                #   AのIDにBの名前が付く（同名機なら名前の照合も抜ける）。
+                self._item["ids"].add(m.group(1))
+                if self._field == "name":
+                    self._item["title_id"] = m.group(1)
 
     def handle_data(self, data):
         if self._field:
@@ -150,23 +156,49 @@ def parse(html: str) -> list:
         said = day.get("said") or {}
         got_all = len(day["items"])
         got_slot = [x for x in day["items"] if x["type"] == SLOT_TYPE]
-        if "all" in said and said["all"] != got_all:
+        got_pachi = [x for x in day["items"] if x["type"] and x["type"] != SLOT_TYPE]
+        # ★件数の申告は必ず在ること★（2026-08-12・依頼165のP0）
+        #   読めないときに比べずに通すと、行の読み取りが同時に壊れたとき
+        #   **0件を「新台なし」として通してしまう**（狙いと逆）。
+        missing = [k for k in ("all", "pachi", "slot") if k not in said]
+        if missing:
+            raise CalendarError(
+                f"{day['date']}: 件数の申告が読めません（{'/'.join(missing)}）"
+                "＝ページの作りが変わった可能性があります")
+        if said["all"] != said["pachi"] + said["slot"]:
+            raise CalendarError(
+                f"{day['date']}: 申告の内訳が合いません"
+                f"（全{said['all']} ≠ パチンコ{said['pachi']}＋パチスロ{said['slot']}）")
+        if said["all"] != got_all:
             raise CalendarError(
                 f"{day['date']}: ページは全{said['all']}機種と書いていますが "
                 f"{got_all}機種しか読めませんでした（取りこぼし）")
-        if "slot" in said and said["slot"] != len(got_slot):
+        if said["slot"] != len(got_slot):
             raise CalendarError(
                 f"{day['date']}: ページはパチスロ{said['slot']}機種と書いていますが "
                 f"{len(got_slot)}機種しか読めませんでした（取りこぼし）")
+        if said["pachi"] != len(got_pachi):
+            raise CalendarError(
+                f"{day['date']}: ページはパチンコ{said['pachi']}機種と書いていますが "
+                f"{len(got_pachi)}機種しか読めませんでした（取りこぼし）")
         for it in got_slot:
-            if not it["machine_id"] or not it["name"]:
+            if not it["title_id"] or not it["name"]:
                 raise CalendarError(
-                    f"{day['date']}: 機種IDか機種名が読めない行があります: {it}")
-            out.append({"machine_id": it["machine_id"],
+                    f"{day['date']}: 機種IDか機種名が読めない行があります: "
+                    f"{it.get('name') or '(名前なし)'}")
+            # ★行の中の機種リンクが全部同じIDか★（依頼165のP1）
+            if len(it["ids"]) > 1:
+                raise CalendarError(
+                    f"{day['date']}: 1つの行に複数の機種IDがあります"
+                    f"（{'/'.join(sorted(it['ids']))}）＝別機種が混ざっています")
+            if not it["maker"]:
+                raise CalendarError(
+                    f"{day['date']}: メーカーが読めない行があります: {it['name']}")
+            out.append({"machine_id": it["title_id"],
                         "name": it["name"],
                         "maker": it["maker"],
                         "release_date": day["date"],
-                        "url": MACHINE_URL % it["machine_id"]})
+                        "url": MACHINE_URL % it["title_id"]})
     return out
 
 
@@ -275,18 +307,40 @@ def selftest() -> int:
       raises(lambda: parse(_FIX.replace(
           '<p class="machineList-item-type">パチスロ</p>',
           '<p class="machineList-item-type">パチンコ</p>')), "パチスロ1機種"))
-    t("★★申告より全体が少なければ止まる★★",
-      raises(lambda: parse(_FIX.replace("全3機種", "全4機種")), "全4機種"))
+    #   ★行が読めなくなった場合★（申告はそのまま・実物が減る）
+    _one_less = _FIX.replace("""    <li class="machineList-item">
+      <p class="machineList-item-type">パチンコ</p>
+      <p class="machineList-item-thumb"><a href="/machine/database/2"><img alt="P2"></a></p>
+      <p class="machineList-item-maker"><a href="/x">メカB</a></p>
+      <p class="machineList-item-title"><a href="/machine/database/2">P その2</a></p>
+    </li>""", "")
+    t("★★申告より実物が少なければ止まる★★（読み取りが壊れたら気づく）",
+      raises(lambda: parse(_one_less), "全3機種と書いています"))
     t("★★日付の区切りが無ければ止まる★★（ページの作りが変わった）",
       raises(lambda: parse("<html><body>なにもない</body></html>"), "日付の区切り"))
     t("　機種IDが読めない行があれば止まる",
       raises(lambda: parse(_FIX.replace("/machine/database/10530", "/x/10530")),
              "機種IDか機種名"))
 
-    # ★申告が無いページでも落ちない（読めたぶんを返す）★
+    # ★申告が読めなければ止める★（2026-08-12・依頼165のP0で反転）
+    #   以前は「読めたぶんを返す」を正常としていたが、
+    #   行の読み取りが同時に壊れると0件を「新台なし」として通してしまう。
     no_count = _FIX.replace(
         '<p class="machineList-header-count">全3機種 パチンコ2機種 / パチスロ1機種</p>', "")
-    t("　件数の申告が無くても読めたぶんは返す", len(parse(no_count)) == 1)
+    t("★★件数の申告が読めなければ止まる★★（0件を新台なしと取り違えない）",
+      raises(lambda: parse(no_count), "件数の申告が読めません"))
+    t("★★申告の内訳が合わなければ止まる★★",
+      raises(lambda: parse(_FIX.replace("パチンコ2機種", "パチンコ1機種")), "内訳が合いません"))
+    t("★★1つの行に複数の機種IDがあれば止まる★★（サムネイルと題が別機種）",
+      raises(lambda: parse(_FIX.replace(
+          '<p class="machineList-item-thumb"><a href="/machine/database/10530">'
+          '<img alt="S"></a></p>',
+          '<p class="machineList-item-thumb"><a href="/machine/database/99999">'
+          '<img alt="S"></a></p>')), "複数の機種ID"))
+    t("　メーカーが読めない行があれば止まる",
+      raises(lambda: parse(_FIX.replace(
+          '<p class="machineList-item-maker"><a href="/x">オーイズミ</a></p>', "")),
+          "メーカーが読めない"))
 
     # ★記事があるかの突き合わせ★（★候補を出すだけ・同定はしない★）
     t("　名前が一致する機種は候補から外れる",

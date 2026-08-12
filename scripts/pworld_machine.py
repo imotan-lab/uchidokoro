@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import os
 import re
@@ -32,8 +33,25 @@ MACHINE_URL = "https://www.p-world.co.jp/machine/database/%s"
 SLOT_TAG = "パチスロ"
 
 # ページが名乗る項目（★この一覧に無いものは読まない★）
-_LABELS = {"メーカー": "maker", "タイプ": "type", "機械割": "payout",
+#   ★機械割は入れない★（2026-08-12・依頼165のP1）
+#   「呼び出し元が使っていないから安全」ではなく、**読み口ごと持たない**。
+#   記事に載る値は2AIが原文を読んで決める（confirmed_values へ記録）。
+_LABELS = {"メーカー": "maker", "タイプ": "type",
            "検定番号": "shinsa", "型式名": "model_code", "導入開始": "release_text"}
+
+# ★隠れている要素は読まない★（2026-08-12・依頼165のP0）
+#   非表示の「パチスロ」を1つ置くだけで、パチンコのページを通せてしまう。
+_HIDDEN_STYLE = ("display:none", "display: none", "visibility:hidden",
+                 "visibility: hidden")
+
+
+def _is_hidden(a: dict) -> bool:
+    if "hidden" in a:
+        return True
+    if str(a.get("aria-hidden", "")).lower() == "true":
+        return True
+    st = str(a.get("style", "")).replace(" ", "").lower()
+    return any(x.replace(" ", "") in st for x in _HIDDEN_STYLE)
 
 
 class MachineError(RuntimeError):
@@ -55,6 +73,9 @@ class _Reader(HTMLParser):
         self._depth = 0
         self._buf: list = []
         self._row: list = []
+        self._hide = 0            # 隠れている塊の深さ
+        self.tag_blocks = 0       # 種目ラベルの塊がいくつ見つかったか
+        self.info_blocks = 0      # 機種情報の塊がいくつ見つかったか
 
     @staticmethod
     def _cls(a: dict) -> set:
@@ -63,11 +84,20 @@ class _Reader(HTMLParser):
     def handle_starttag(self, tag, attrs):
         a = {k: (v or "") for k, v in attrs}
         cls = self._cls(a)
+        # ★隠れている塊はまるごと読まない★（依頼165のP0）
+        if self._hide:
+            self._hide += 1
+            return
+        if _is_hidden(a):
+            self._hide = 1
+            return
         if self._in is None:
             if tag == "p" and "kisyuTag" in cls:
                 self._in, self._depth = "tag", 1
+                self.tag_blocks += 1
             elif tag == "div" and "kisyuInfo" in cls:
                 self._in, self._depth = "info", 1
+                self.info_blocks += 1
             elif tag == "h1":
                 self._in, self._depth, self._buf = "h1", 1, []
             return
@@ -79,12 +109,17 @@ class _Reader(HTMLParser):
             self._row = []
 
     def handle_data(self, data):
+        if self._hide:
+            return
         if self._in:
             self._buf.append(data)
             if self._in == "info":
                 self._row.append(data)
 
     def handle_endtag(self, tag):
+        if self._hide:
+            self._hide -= 1
+            return
         if self._in is None:
             return
         if self._in == "tag" and tag == "span":
@@ -122,6 +157,11 @@ def _read_date(text: str) -> str:
     """「2026年10月05日」→ "2026-10-05"。日が無ければ月まで。"""
     m = re.search(r"(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日", text or "")
     if m:
+        # ★暦として実在するか確かめる★（依頼165のP1。2026年2月31日を通さない）
+        try:
+            datetime.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            return ""
         return "%s-%02d-%02d" % (m.group(1), int(m.group(2)), int(m.group(3)))
     m = re.search(r"(\d{4})\s*年\s*(\d{1,2})\s*月", text or "")
     return "%s-%02d" % (m.group(1), int(m.group(2))) if m else ""
@@ -137,16 +177,50 @@ def parse(html: str) -> dict:
         raise MachineError("種目のラベル（パチスロ／パチンコ）が読めません")
     if not r.rows:
         raise MachineError("機種情報の表が読めません")
+    # ★塊が2つ以上あれば止める★（依頼165のP0）
+    #   別機種の表が混ざっていると、先に見つけた方を勝手に採ってしまう。
+    if r.tag_blocks > 1 or r.info_blocks > 1:
+        raise MachineError(
+            f"同じ塊が複数あります（種目{r.tag_blocks}個・機種情報{r.info_blocks}個）"
+            "＝別機種の情報が混ざっている可能性")
+    if len(r.h1) > 1:
+        raise MachineError(f"見出し(h1)が{len(r.h1)}個あります＝どれが機種名か決まりません")
     out = {"name": r.h1[0], "tags": r.tags, "is_slot": SLOT_TAG in r.tags}
     for row in r.rows:
         key, val = _split_row(row)
-        if key and val and key not in out:
-            out[key] = val
+        if not (key and val):
+            continue
+        # ★同じ見出しで違う値なら止める★（先に来た方を勝手に採らない）
+        if key in out and out[key] != val:
+            raise MachineError(f"「{key}」が2つあり、中身が違います: {out[key]!r} / {val!r}")
+        out[key] = val
     out["release"] = _read_date(out.get("release_text", ""))
     return out
 
 
-def verify(machine_id: str, name: str, html: str | None = None) -> dict:
+_ID_RE = re.compile(r"^\d{1,7}$")
+
+
+def _same_machine_url(url: str, machine_id: str) -> bool:
+    """★同じ機種IDのページか★（依頼165のP0）
+
+    取得後の最終URLを見ないと、機種AのURLが機種Bへ転送されたとき
+    **Bの中身をAの機種IDとして**返してしまう。名前が同じなら照合も抜ける。
+    """
+    from urllib.parse import urlsplit
+    u = urlsplit(url or "")
+    if u.scheme not in ("http", "https"):
+        return False
+    if u.hostname not in ("www.p-world.co.jp", "p-world.co.jp"):
+        return False
+    if u.query or u.fragment:
+        return False
+    return u.path.rstrip("/") == "/machine/database/" + str(machine_id)
+
+
+def verify(machine_id: str, name: str, html: str | None = None,
+           expect_maker: str = "", expect_release: str = "",
+           final_url: str | None = None) -> dict:
     """★カレンダーの機種名と、機種ページが同じ機種か★
 
     返すのは {"problems": [...], ...読み取った身元}。
@@ -156,12 +230,22 @@ def verify(machine_id: str, name: str, html: str | None = None) -> dict:
     import new_machine_watch as _nw
     out = {"machine_id": str(machine_id), "url": MACHINE_URL % machine_id,
            "problems": []}
+    if not _ID_RE.match(str(machine_id)):
+        out["problems"].append(f"機種IDが数字ではありません: {machine_id!r}")
+        return out
     if html is None:
         try:
             html = _nw._get(out["url"])
         except Exception as e:              # noqa: BLE001
             out["problems"].append(f"機種ページを取得できません: {e}")
             return out
+        # ★最終URLは _get が控えている★（既存の verify_official と同じ見方）
+        final_url = (_nw.LAST_FINAL_URL or {}).get("url") or final_url
+    # ★転送先が同じ機種IDか★（依頼165のP0）
+    if final_url and not _same_machine_url(final_url, machine_id):
+        out["problems"].append(
+            f"別のページへ転送されました（{final_url[:80]}）")
+        return out
     why = _nw.bad_page(html)
     if why:
         out["problems"].append(f"機種ページが読める状態ではありません（{why}）")
@@ -178,13 +262,25 @@ def verify(machine_id: str, name: str, html: str | None = None) -> dict:
             f"パチスロのページではありません（ラベル: {'/'.join(got['tags'])}）")
     # ★同じ機種か★ 判定は名鑑ページ用の既存の仕組みに任せる
     #   （続編・派生・シリーズ違いを通さない・自前で緩めない）
-    ok, why2 = _mc.page_is_machine(html, name)
+    # ★同定は既存の全経路と同じ厳しさで★（依頼165のP0）
+    #   既定は材料ページ向けの緩い方。公式の同定は strict_all_tail=True。
+    ok, why2 = _mc.page_is_machine(html, name, strict_all_tail=True)
     if not ok:
         out["problems"].append(f"機種名が一致しません（{why2}）")
     # ★導入日★ 読めないまま「いつ出るか」を空で進めない
     if not got.get("release"):
         out["problems"].append("導入開始の日付が読めません")
+    # ★カレンダーの言い分と食い違えば止める★（依頼165のP1）
+    if expect_maker and got.get("maker") and expect_maker != got["maker"]:
+        out["problems"].append(
+            f"メーカーが食い違います（カレンダー: {expect_maker} / "
+            f"機種ページ: {got['maker']}）")
+    if expect_release and got.get("release") and expect_release != got["release"]:
+        out["problems"].append(
+            f"導入日が食い違います（カレンダー: {expect_release} / "
+            f"機種ページ: {got['release']}）")
     return out
+
 
 
 # ---------------------------------------------------------------- selftest
