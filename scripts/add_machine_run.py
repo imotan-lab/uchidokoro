@@ -1907,11 +1907,28 @@ def _fill_missing_pworld(work: dict) -> dict:
     ★使い回しの判定は残す★＝芯や規格の印が変わっていたら止める。
     """
     import pworld_machine as _pm
+    mid = _pw_machine_url(work.get("url", ""))
     try:
-        got = _pm.parse(_nw._get(work["url"]))
+        html = _nw._get(work["url"])
+        final = (getattr(_nw, "LAST_FINAL_URL", None) or {}).get("url")
     except Exception as e:                # noqa: BLE001
         _log(f"  機種ページを見直せませんでした: {e}")
         return work
+    # ★確かめてから比べる★（2026-08-13・依頼169のP1）
+    #   ページが読めただけでは「同じ機種のページ」とは言えない。
+    #   転送・パチンコ・障害ページのどれでも、形が整っていれば読めてしまう。
+    #   確かめる前に名前の食い違いを「使い回し」と決めつけると、
+    #   **正しい新台をその晩に永久に取りこぼす**。
+    #   ここでは今の名前で同定し、通らなければ**何もしない**
+    #   （待ち行列はそのまま残し、翌晩やり直す）。
+    chk = _pm.verify(mid, work.get("name") or "", html=html, final_url=final)
+    _why = [x for x in (chk.get("problems") or [])
+            if "機種名が一致しません" not in x]
+    if _why:
+        # ★名前以外の理由（転送・種目・障害）なら、判定材料にしない★
+        _log(f"  機種ページを確かめられないので名前は直しません: {_why[0][:90]}")
+        return work
+    got = chk
     new_name = str(got.get("name") or "")
     if new_name:
         if work.get("name") and work["name"] != new_name:
@@ -2928,6 +2945,42 @@ def selftest() -> int:
             t("★★それでも使い回しの疑いは止める★★（別機種の名前なら印を付ける）",
               _w2.get("_name_conflict") == "マイジャグラーVI")
             t("　導入年月も機種ページから直す", _w["release"] == "2026-10")
+            # ★確かめる前に「使い回し」と決めつけない★（2026-08-13・依頼169のP1）
+            #   ページが読めただけでは同じ機種のページとは言えない。
+            #   転送・パチンコ・欠けたページでも形が整えば読めてしまい、
+            #   名前が違えば**正しい新台をその晩に永久に取りこぼす**。
+            def _fm(html, final, nm="スマスロ 獣王"):
+                _k, _kf = _nw._get, dict(getattr(_nw, "LAST_FINAL_URL", {}) or {})
+                _nw._get = lambda *a, **k: html
+                if hasattr(_nw, "LAST_FINAL_URL"):
+                    _nw.LAST_FINAL_URL["url"] = final
+                try:
+                    return fill_missing({
+                        "name": nm, "maker": "kitadenshi", "release": "2026-10",
+                        "url": "https://www.p-world.co.jp/machine/database/10513"})
+                finally:
+                    _nw._get = _k
+                    if hasattr(_nw, "LAST_FINAL_URL"):
+                        _nw.LAST_FINAL_URL.clear()
+                        _nw.LAST_FINAL_URL.update(_kf)
+
+            _self = "https://www.p-world.co.jp/machine/database/10513"
+            _pachi = _pmm._FIX.replace(
+                '<span class="kisyuTag-slot">パチスロ</span>',
+                '<span class="kisyuTag-slot">パチンコ</span>')
+            _broken = _pmm._FIX.replace(
+                '<tr><td>メーカー　：<a href="/x">北電子</a></td></tr>', "")
+            _r1 = _fm(_pmm._FIX,
+                      "https://www.p-world.co.jp/machine/database/99999")
+            _r2 = _fm(_pachi, _self)
+            _r3 = _fm(_broken, _self)
+            t("★★確かめられないページで「使い回し」と決めつけない★★"
+              "（転送・パチンコ・欠け）",
+              all(x["name"] == "スマスロ 獣王" and not x.get("_name_conflict")
+                  for x in (_r1, _r2, _r3)))
+            t("★★正常なページで芯が違えば、今までどおり止める★★",
+              _fm(_pmm._FIX, _self, "スマスロ北斗の拳").get("_name_conflict")
+              == "マイジャグラーVI")
             t("　一覧カードの証跡は今までどおり",
               "#card2" in _evidence_ref({"identity_evidence": {
                   "list_html_sha256": "abc", "card_index": 2}}))

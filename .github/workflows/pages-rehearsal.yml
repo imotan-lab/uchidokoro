@@ -127,7 +127,7 @@ jobs:
           python scripts/pworld_discover.py --selftest
           python scripts/grow_machine.py --selftest
           # ★ここに足せないもの★（2026-08-12・実際にCIが落ちた）
-          #   add_machine_run / open_issues / task_guard / confirmed_values は
+          #   add_machine_run / open_issues / confirmed_values は
           #   C:/Users/imao_/Documents/... のようなWindows専用の置き場を
           #   前提にしており、Linux の CI では動かない。
           #   ★動くようにしてから足す★（台帳 #336）。それまでは手元で流す。
