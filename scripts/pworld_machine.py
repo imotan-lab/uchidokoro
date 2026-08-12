@@ -270,6 +270,11 @@ def verify(machine_id: str, name: str, html: str | None = None,
     # ★導入日★ 読めないまま「いつ出るか」を空で進めない
     if not got.get("release"):
         out["problems"].append("導入開始の日付が読めません")
+    # ★メーカーが読めなければ止める★（2026-08-12・依頼167のP0）
+    #   「値がある時だけ比べる」と書くと、**値が無い時は確認せずに通る**。
+    #   確かめられなかったことを、確かめたことにしない。
+    if not got.get("maker"):
+        out["problems"].append("メーカーが読めません")
     # ★カレンダーの言い分と食い違えば止める★（依頼165のP1）
     if expect_maker and got.get("maker") and expect_maker != got["maker"]:
         out["problems"].append(
@@ -352,6 +357,16 @@ def selftest() -> int:
                 html=_FIX.replace("2026年10月05日", "近日"))
     t("★★導入日が読めなければ進めない★★",
       any("導入開始の日付が読めません" in p for p in v4["problems"]))
+    # ★読めなかったことを、確かめたことにしない★（2026-08-12・依頼167のP0）
+    #   「値がある時だけ比べる」と書くと、値が無い時は確認せずに通る。
+    _no_maker = _FIX.replace(
+        '<tr><td>メーカー　：<a href="/x">北電子</a></td></tr>', "")
+    v5 = verify("10513", "マイジャグラーVI", html=_no_maker)
+    t("★★メーカーが読めなければ進めない★★（無いのに確認済みにしない）",
+      any("メーカーが読めません" in p for p in v5["problems"]))
+    #   ★対照実験★＝直す前は「メーカーを渡さなければ何も言わない」形だった
+    t("　（対照）中身が読めていれば問題は出ない",
+      not verify("10513", "マイジャグラーVI", html=_FIX)["problems"])
 
     ng = [n for n, ok in results if not ok]
     print(f"\n{len(results) - len(ng)}/{len(results)} 合格")

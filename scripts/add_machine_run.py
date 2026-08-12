@@ -1194,7 +1194,7 @@ def _pw_machine_url(url: str) -> str:
 
 
 def _verify_pworld(name: str, official_url: str, maker: str,
-                   release: str) -> dict:
+                   release: str, expect_maker: str = "") -> dict:
     """★P-WORLDの機種ページで身元を確かめる★（2026-08-12）
 
     返す形は verify_official と同じ（呼ぶ側を変えないため）。
@@ -1230,9 +1230,15 @@ def _verify_pworld(name: str, official_url: str, maker: str,
         return out
     # ★メーカーは名簿の名前のどれかと一致すること★
     page_maker = str(got.get("maker") or "")
-    if allow and page_maker and _pd._norm(page_maker) not in {
-            _pd._norm(x) for x in allow}:
-        return _ng(f"メーカーが食い違います（名簿: {'／'.join(allow)} / "
+    if allow and not page_maker:
+        # ★読めなかったことを、確かめたことにしない★（依頼167のP0）
+        return _ng("機種ページのメーカーを読めませんでした")
+    # ★最初に確かめた表示名があれば、そちらと完全一致させる★（依頼167のP1）
+    #   内部IDだけを渡すと、同じIDにぶら下がる別名（ミズホ／メーシー／
+    #   アクロス…）のどれでも通ってしまい、公開前の再確認が緩くなる。
+    want = [expect_maker] if expect_maker else allow
+    if want and _pd._norm(page_maker) not in {_pd._norm(x) for x in want}:
+        return _ng(f"メーカーが食い違います（期待: {'／'.join(want)} / "
                    f"機種ページ: {page_maker}）")
     out["release"] = got.get("release") or ""
     out["identity_name"] = got.get("name") or name
@@ -2834,6 +2840,22 @@ def selftest() -> int:
                   "model_code": "S1", "shinsa": "5S1", "checked_at": "2026-08-12"}})
               and "card" not in _evidence_ref({"identity_evidence": {
                   "kind": "PWORLD_MACHINE_PAGE", "pworld_machine_id": "10513"}}))
+            # ★メーカーが読めないページは同定成功にしない★（依頼167のP0）
+            _pm_mod = __import__("pworld_machine")
+            _no_maker = _pm_mod._FIX.replace(
+                '<tr><td>メーカー　：<a href="/x">北電子</a></td></tr>', "")
+            _keep_verify = _pm_mod.verify
+            _pm_mod.verify = lambda *a, **k: _pm_mod.parse(_no_maker) | {
+                "problems": ["メーカーが読めません"]}
+            try:
+                _r = _verify_pworld(
+                    "マイジャグラーVI",
+                    "https://www.p-world.co.jp/machine/database/10513",
+                    "kitadenshi", "2026-10")
+            finally:
+                _pm_mod.verify = _keep_verify
+            t("★★メーカーを読めないページは公開まで止める★★（印が付く）",
+              bool(_blocking(_r["problems"])))
             t("　一覧カードの証跡は今までどおり",
               "#card2" in _evidence_ref({"identity_evidence": {
                   "list_html_sha256": "abc", "card_index": 2}}))
