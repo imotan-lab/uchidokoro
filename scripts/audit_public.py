@@ -372,8 +372,9 @@ def _ceiling_problems(slug: str, path: str, v) -> list[str]:
     out = []
     if not isinstance(v, (int, float)) or isinstance(v, bool):
         return [f"{slug}: {path} が数値でない"]
-    if v <= 0:
-        out.append(f"{slug}: {path} が0以下")
+    # ★hitRateは確率の分母★＝1未満だと 1/hitRate が1を超える（依頼163）
+    if v <= (1 if path.endswith("hitRate") else 0):
+        out.append(f"{slug}: {path} が小さすぎます")
     return out
 
 

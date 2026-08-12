@@ -1244,8 +1244,11 @@ def _project_checker(checker, allowed_modes: list[str], ctx: _Ctx,
     #   丸めた入力上限を天井として使わないよう、値は別フィールドで持つ。
     for _k in ("ceiling", "coinRate", "hitRate"):
         if _k in checker:
-            if not _is_num(checker[_k]) or checker[_k] <= 0:
-                ctx.reject(f"checker.{_k}", "天井・コイン持ちが正の数でない")
+            _min = 1 if _k == "hitRate" else 0
+            if not _is_num(checker[_k]) or checker[_k] <= _min:
+                # ★hitRateは確率の分母★＝1未満だと 1/hitRate が1を超え、
+                #   期待ゲーム数の計算が壊れる（2026-08-12・依頼163）
+                ctx.reject(f"checker.{_k}", "天井・コイン持ち・初当たりが正の数でない")
                 return None
             out[_k] = checker[_k]
     # ★UIが参照しないフィールドは公開しない（公開契約と消費契約を一致させる）★
@@ -3091,6 +3094,11 @@ def selftest() -> int:
       not _ck_ceil(normal={"good": 500, "caution": 400, "ceiling": 0}))
     t("　天井が文字なら止まる",
       not _ck_ceil(normal={"good": 500, "caution": 400, "ceiling": "1499"}))
+    # ★初当たり確率は「分母」★（2026-08-12・依頼163）
+    #   1未満だと 1/hitRate が1を超え、期待ゲーム数の計算が壊れる。
+    t("★★初当たり確率は1以上でないと止まる★★（確率が1を超える形を通さない）",
+      bool(_ck_ceil(hitRate=400)) and not _ck_ceil(hitRate=0.5)
+      and not _ck_ceil(hitRate=1) and not _ck_ceil(hitRate=0))
 
     print(f"\n{len(results) - len(ng)}/{len(results)} 合格")
     if ng:

@@ -1888,23 +1888,21 @@ def usable_material(mat: dict) -> dict:
     return out
 
 
-def _ask_ledger(slug: str, name: str, question: str) -> None:
+def _ask_ledger(slug: str, name: str, question: str) -> bool:
     """★2AIで決まらなかったことを台帳へ★（2026-08-12・運営者決定）
 
     「人が直す項目をなくす」ので、機械が決められないことは 2AI へ回す。
     それでも答えが出ないまま公開まで来たときだけ、ここで知らせる。
     ★メールを送るのは台帳のまとめ（翌朝）★＝公開処理はメールで止めない。
     """
-    ok = _ledger(
+    return _ledger(
         slug, "quality", "QUALITY", "ASK_2AI",
         f"{name}: 2AIで決まらなかった項目があります",
         f"{question}\n\n"
         "★機械では決められない意味の判断です★\n"
         "2AIで原文を読んで決め、confirmed_values へ記録してください。"
         "記録されれば次の実行から自動で反映されます。")
-    # ★知らせられなくても公開は止めない★（ログには必ず残る）
-    if not ok:
-        _log(f"  ★2AIへの質問を台帳に載せられませんでした★: {question[:80]}")
+
 
 
 def run_one(name, official_url, maker, release, apply_it=False,
@@ -2013,6 +2011,15 @@ def run_one(name, official_url, maker, release, apply_it=False,
             _log("（下見）待ち行列には触りません")
         _log(f"=== 機種の処理終了（作らず）: {name} ===")
         return out
+    # ★2AIの答えが出ないまま公開まで来たらメールで知らせる★
+    #   （2026-08-12・運営者決定「困ったら2AI、それでも無理ならメール」）
+    #   ★公開より先に載せる★（2026-08-12・依頼163の2）＝公開の途中で落ちても
+    #   質問が残る。台帳は同じ題を重ねないので、毎晩鳴ることはない。
+    if apply_it:
+        for q in out.get("ask_2ai") or []:
+            if not _ask_ledger(out["slug"], name, q):
+                # ★載せられなくても公開は止めない★が、黙って消さない
+                out["problems"].append(f"2AIへの質問を台帳に載せられません: {q[:80]}")
     machine = _ba.build_machine(out["slug"], name, maker, official_url, release, mat)
     detail = _ba.build_detail(out["slug"], name, release, mat)
     out["preview"] = {"machine": machine, "detail": detail,
@@ -2049,12 +2056,6 @@ def run_one(name, official_url, maker, release, apply_it=False,
         #   「待ち行列にも無い・手元だけ変わっている」状態になり、
         #   翌日の実行が残骸で止まって、誰も気づかないまま進まなくなる。
         out["pending_url"] = official_url
-        # ★2AIの答えが出ないまま公開まで来たらメールで知らせる★
-        #   （2026-08-12・運営者決定「困ったら2AI、それでも無理ならメール」）
-        #   台帳に載せると翌朝のまとめメールで届く。
-        #   ★同じ題は重複しない★ので毎晩は鳴らない。
-        for q in out.get("ask_2ai") or []:
-            _ask_ledger(out["slug"], name, q)
     _log(f"=== 機種の処理終了: {name} / 止めた理由{len(out['blocked'])}件 "
          f"/ 問題{len(out['problems'])}件 ===")
     return out
@@ -2555,6 +2556,14 @@ def selftest() -> int:
             t("★★2AIで決まらなかった質問は台帳へ載せる★★（翌朝のメールで届く）",
               _ok_call)
             t("★★台帳に載せられなくても公開を止めない★★", _no_raise)
+            # ★公開より先に載せる★（2026-08-12・依頼163の2）
+            #   公開の途中で落ちると、質問がどこにも残らなくなる。
+            _src = inspect.getsource(run_one)
+            t("★★2AIへの質問は公開より先に台帳へ載せる★★",
+              _src.index("_ask_ledger(out[\"slug\"], name, q)")
+              < _src.index("machine = _ba.build_machine("))
+            t("　台帳に載せられなかったら問題として残す（黙って消さない）",
+              "2AIへの質問を台帳に載せられません" in _src)
             t("　質問は run_one が持ち回る（黙って捨てない）",
               'out["ask_2ai"] = _ba.checker_questions(mat)'
               in inspect.getsource(run_one))

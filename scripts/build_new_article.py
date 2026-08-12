@@ -291,7 +291,18 @@ def checker_questions(material) -> list:
     adopted = material.get("adopted") or {}
     ceilings = [c for c in ((material.get("ceilings") or {}).get("adopted") or [])
                 if (c or {}).get("kind") == "GAME"]
-    if len(ceilings) < 2 or adopted.get("checker_ceiling"):
+    if len(ceilings) < 2:
+        return []
+    # ★答えがあっても、いまの候補に無ければ聞き直す★（2026-08-12・依頼163の1）
+    #   出典が更新されて候補が変わったり、打ち間違いで候補に無い値を
+    #   記録したりすると、**採用もされず質問も消える**（永久に空のまま）。
+    picked = str(((adopted.get("checker_ceiling") or {}).get("value")
+                  or {}).get("games") or "").strip()
+    if picked and picked in {re.match(r"^(\d{2,5})", str(c.get("amount") or "")
+                                      .strip()).group(1)
+                             for c in ceilings
+                             if re.match(r"^(\d{2,5})",
+                                         str(c.get("amount") or "").strip())}:
         return []
     amounts = " / ".join(f"{c.get('amount')}{c.get('unit')}"
                          f"（{c.get('benefit')}）" for c in ceilings)
@@ -832,6 +843,13 @@ def selftest() -> int:
       and not checker_questions(_mat_ceil("800", "1200", picked="1200")))
     t("★★出典に無い値を答えても採らない★★（2AIでも値は発明できない）",
       build_checker(_mat_ceil("800", "1200", picked="999")) is None)
+    # ★答えがあっても、いまの候補に無ければ聞き直す★（2026-08-12・依頼163の1）
+    #   出典が更新されて候補が変わると、採用もされず質問も消え、
+    #   その欄が永久に空のままになる（誰も気づけない）。
+    t("★★候補に無い答えなら質問し続ける★★（採用も質問も消えるのを防ぐ）",
+      len(checker_questions(_mat_ceil("800", "1200", picked="999"))) == 1)
+    t("　候補に有る答えなら質問は消える",
+      not checker_questions(_mat_ceil("800", "1200", picked="1200")))
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")

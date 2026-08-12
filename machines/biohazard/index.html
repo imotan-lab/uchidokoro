@@ -678,7 +678,6 @@ function resolveMachineSlug() {
     }
     const modes = getModes(checker).filter(m => !m.hasSuru && !m.hasCycle);
     if (!modes.length) { evBlock.style.display = "none"; return; }
-    evHasTable = true;
     evModeKey = modes[0].key;
     if (modes.length > 1) {
       modes.forEach((mode, i) => {
@@ -722,6 +721,11 @@ function resolveMachineSlug() {
       evTableNote.textContent = notes.join(" ");
     }
     renderEvTable(evModeKey, getCurrentRateKey());
+    // ★行が1つも描けなければ早見表は無いものとして扱う★（2026-08-12・依頼163の5）
+    //   以前は「modeがある」だけで有りと見なしていたので、
+    //   空の表を隠したあとに syncEvMode が無条件で出し直していた。
+    evHasTable = document.querySelectorAll("#evTable tbody tr").length > 0;
+    if (!evHasTable) evBlock.classList.add("is-hidden");
   }
 
   function getModes(c) {
