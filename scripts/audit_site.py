@@ -1263,6 +1263,57 @@ def check_35_risky_atoms(machines: list) -> list[str]:
     return []
 
 
+def check_37_skill_vs_code(machines: list) -> list[str]:
+    """★手順書が、いま無いものを指していないか★（2026-08-13新設）
+
+    ★なぜ要るか★（実際に起きたこと）
+      2026-08-12に新台の探し方をP-WORLD一本へ切り替えたのに、
+      手順書（SKILL.md）は「メーカー公式9社を見張る」のままだった。
+      手順書はリポジトリの外（Claudeの自動タスクが読む場所）にあるので、
+      コードを直しても一緒にレビューされず、**AIが古い前提で判断する**。
+
+    ★手順書そのものはリポジトリに入れない★（2026-08-13・検討して却下）
+      中にWindowsのユーザー名が186回、認証情報の置き場所が書かれている。
+      このリポジトリは公開なので、入れると構成が読まれる。
+      代わりに「食い違いだけ」をここで見る。
+
+    見るもの（機械で確かめられることだけ）:
+      ①手順書が叩けと書いているスクリプトが実在するか
+      ②止めたタスクを「実行する」と書いていないか
+    """
+    import re
+    base = "C:/Users/imao_/.claude/scheduled-tasks"
+    if not os.path.isdir(base):
+        return []                      # 別PCなど。手順書が無いだけで止めない
+    ng = []
+    # ★止めたタスク★＝CLAUDE.mdの決定（再開せず add-machine/update-machine が後継）
+    stopped = ("uchidokoro-new-machine", "uchidokoro-auto-add",
+               "uchidokoro-verify", "uchidokoro-fact-check")
+    live = ("uchidokoro-add-machine", "uchidokoro-update-machine",
+            "uchidokoro-quality-review", "task-watchdog")
+    for task in live:
+        f = os.path.join(base, task, "SKILL.md")
+        if not os.path.isfile(f):
+            continue
+        try:
+            with open(f, encoding="utf-8") as _fh:
+                text = _fh.read()
+        except Exception as e:                    # noqa: BLE001
+            ng.append(f"{task}: 手順書を読めません（{e}）")
+            continue
+        for m in re.finditer(r"python\s+(scripts/[A-Za-z0-9_]+\.py)", text):
+            rel = m.group(1)
+            if not os.path.isfile(os.path.join(BASE, rel)):
+                ng.append(f"{task}: 手順書が無いスクリプトを指しています → {rel}")
+        for line in text.splitlines():
+            if line.lstrip().startswith("#"):
+                continue
+            for st in stopped:
+                if st in line and "を実行" in line:
+                    ng.append(f"{task}: 止めたタスク {st} を実行するよう書いています")
+    return sorted(set(ng))
+
+
 CHECKS = [
     ("1_インラインstyle", check_1_inline_style),
     ("2_サブパス残骸", check_2_old_subpath),
@@ -1300,6 +1351,7 @@ CHECKS = [
     ("34_検索方針の反映漏れ", check_34_indexing_policy_applied),
     ("35_危ない表現の残り", check_35_risky_atoms),
     ("36_同じ事実の重複行", check_36_duplicate_facts),
+    ("37_手順書と実装の食い違い", check_37_skill_vs_code),
 ]
 
 
