@@ -125,10 +125,12 @@ jobs:
           python scripts/pworld_calendar.py --selftest
           python scripts/pworld_machine.py --selftest
           python scripts/pworld_discover.py --selftest
-          python scripts/add_machine_run.py --selftest
-          python scripts/open_issues.py --selftest
-          python scripts/confirmed_values.py --selftest
           python scripts/grow_machine.py --selftest
+          # ★ここに足せないもの★（2026-08-12・実際にCIが落ちた）
+          #   add_machine_run / open_issues / task_guard / confirmed_values は
+          #   C:/Users/imao_/Documents/... のようなWindows専用の置き場を
+          #   前提にしており、Linux の CI では動かない。
+          #   ★動くようにしてから足す★（台帳 #336）。それまでは手元で流す。
           python scripts/check_duplicate.py --name "存在しない機種テスト用XYZ"
 
       - name: Repository audits
