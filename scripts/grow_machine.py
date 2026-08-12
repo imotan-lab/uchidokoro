@@ -944,10 +944,23 @@ def selftest() -> int:
     finally:
         _oi.blocking_slugs = real_blocking
     # ★本番の台帳ではなく、使い捨ての台帳へ書いたことを確かめる★
+    # ★その環境に本番の置き場が無くても落ちないこと★（2026-08-13）
+    #   CIはLinuxなので C:/Users/... は存在しない。
+    #   samefile() は存在しないパスに例外を投げるため、
+    #   **自己テストがそこで落ちてCIが赤になっていた**。
+    def _not_the_real_ledger() -> bool:
+        if _oi_mod.DEFAULT_FILE == _keep_ledger:
+            return False
+        try:
+            # 実在する時だけ「同じ場所ではない」ことも確かめる
+            if _keep_ledger.exists() and _oi_mod.DEFAULT_FILE.exists():
+                return not _keep_ledger.samefile(_oi_mod.DEFAULT_FILE)
+        except OSError:
+            pass                       # 触れない置き場なら、違う場所とみなす
+        return True
+
     t("★★自己テストは本番の台帳に書かない★★（実際にごみが3件入ったので固定する）",
-      _oi_mod.DEFAULT_FILE != _keep_ledger and not _keep_ledger.samefile(
-          _oi_mod.DEFAULT_FILE.parent) if _oi_mod.DEFAULT_FILE.exists()
-      else _oi_mod.DEFAULT_FILE != _keep_ledger)
+      _not_the_real_ledger())
     _oi_mod.DEFAULT_FILE = _keep_ledger
     import shutil
     shutil.rmtree(_tmp_dir, ignore_errors=True)
