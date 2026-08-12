@@ -525,8 +525,45 @@ def open_questions(path) -> list:
     data = _load(path)
     return sorted(
         (i for i in data["issues"]
-         if i.get("status") == "open" and i.get("reason_code") == "ASK_2AI"),
+         if i.get("status") == "open" and i.get("reason_code") == "ASK_2AI"
+         # ★上限に達したものは自動では拾わない★＝人へ渡したものを毎晩やり直さない
+         and int(i.get("attempts") or 0) < ASK_MAX_ATTEMPTS),
         key=lambda i: (str(i.get("first_seen") or ""), i.get("id") or 0))
+
+
+# ★何回やり直したら人に知らせるか★（2026-08-12・運営者決定）
+ASK_MAX_ATTEMPTS = 3
+
+
+def cmd_attempt(path, args):
+    """★1回やり直したことを記録する★（決まらなかったときだけ呼ぶ）
+
+    3回目で「人に知らせる番」と表示する。
+    ★数えるのは道具の側★＝手順書に回数を書くと、いつか合わなくなる。
+    """
+    data = _load(path)
+    hit = next((i for i in data["issues"] if i.get("id") == args.id), None)
+    if hit is None:
+        print(f"★#{args.id} は台帳にありません★")
+        return 1
+    if hit.get("status") != "open":
+        print(f"#{args.id} はすでに解決済みです（やり直しは要りません）")
+        return 0
+    hit["attempts"] = int(hit.get("attempts") or 0) + 1
+    hit["last_seen"] = _today()
+    if args.note:
+        notes = hit.setdefault("attempt_notes", [])
+        notes.append(f"{_today()}: {args.note}")
+        del notes[:-ASK_MAX_ATTEMPTS]      # 直近ぶんだけ残す
+    _save(path, data)
+    n = hit["attempts"]
+    print(f"#{args.id} やり直し {n} 回目 / 上限 {ASK_MAX_ATTEMPTS}")
+    if n >= ASK_MAX_ATTEMPTS:
+        # ★ここではメールを送らない★（送るのはタスク側。台帳は台帳の仕事だけ）
+        print("★NOTIFY_HUMAN★ 3回やって決まりませんでした。人に知らせてください")
+        return 0
+    print("まだ自分でやり直します（次回のタスクが同じ質問を拾います）")
+    return 0
 
 
 def cmd_questions(path, args):
@@ -539,7 +576,9 @@ def cmd_questions(path, args):
         print(f"#{it['id']} [{it['slug']}] {it['title']}")
         for line in str(it.get("detail") or "").splitlines():
             print(f"      {line}")
-        print(f"      （初出 {it.get('first_seen')}・経過{_days_open(it)}日）")
+        print(f"      （初出 {it.get('first_seen')}・経過{_days_open(it)}日"
+              f"・やり直し{int(it.get('attempts') or 0)}回"
+              f"／上限{ASK_MAX_ATTEMPTS}回）")
     return 0
 
 
@@ -661,6 +700,11 @@ def main():
     p = sub.add_parser("questions", help="まだ答えが出ていない2AIへの質問")
     p.add_argument("--limit", type=int, default=1)
 
+    # ★やり直した回数を数える★（3回目で人に知らせる）
+    p = sub.add_parser("attempt", help="決まらなかった質問のやり直し回数を+1する")
+    p.add_argument("--id", type=int, required=True)
+    p.add_argument("--note", default="", help="何を試したか（短く）")
+
     sub.add_parser("digest")
 
     p = sub.add_parser("close")
@@ -673,7 +717,7 @@ def main():
     path = Path(args.file) if args.file else DEFAULT_FILE
     fn = {"add": cmd_add, "list": cmd_list, "digest": cmd_digest, "close": cmd_close,
           "severity": cmd_severity, "blocking": cmd_blocking,
-          "questions": cmd_questions}[args.cmd]
+          "questions": cmd_questions, "attempt": cmd_attempt}[args.cmd]
     sys.exit(fn(path, args))
 
 
