@@ -11485,5 +11485,70 @@
     "p-world.co.jp"
    ]
   }
+ },
+ {
+  "slug": "pw_10503",
+  "name": "スマスロ リコリス・リコイル",
+  "seo": {
+   "title": "スマスロ リコリス・リコイル スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v1",
+  "page_decision": {
+   "schema_version": "page-decision/v1",
+   "indexable": false,
+   "confirmed_topics": [
+    "spec"
+   ],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "setting",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CATEGORIES_LT_2",
+    "NO_UNIQUE_GAMEPLAY"
+   ],
+   "claims": [
+    "games_per_50",
+    "model_code",
+    "payout_range"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-08-13",
+   "input_digest": "sha256:a69e6d5f3b462a7b1933aade6d4711d7a18aad02576620a7049d27c61f311d13"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-09-07",
+  "identity": {
+   "manufacturer_id": "sammy",
+   "official_product_url": "https://www.p-world.co.jp/machine/database/10503",
+   "announced_name": "スマスロ リコリス・リコイル",
+   "identity_tier": "CATALOG_CODE_MATCHED",
+   "identity_binding": "PWORLD_MACHINE_PAGE",
+   "identity_evidence_ref": "pworld:10503 型式=L スマスロ リコリス・リコイル KX 検定=6S0400 確認日=2026-08-13",
+   "market_release_date": "2026-09-07",
+   "regulatory_model_code": "L スマスロ リコリス・リコイル KX",
+   "_model_code_sources": [
+    "p-town.dmm.com",
+    "p-world.co.jp"
+   ]
+  },
+  "checker": {
+   "coinRate": 31.8,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {}
+  }
  }
 ]
