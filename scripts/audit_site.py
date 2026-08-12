@@ -279,7 +279,11 @@ def check_8_readme_count(machines: list) -> list[str]:
     条件つきの件数（天井が浅い機種は何件、など）は意味があるので触らない。
     """
     ngs = []
-    for rel in ("README.md", "about.html", "guide-ichiran.html"):
+    # ★説明書も見る★（2026-08-12・運営者から再度の指摘）
+    #   公開ページは守れていたのに、CLAUDE.md 自身が
+    #   「機種数は書かない」と書きながら「全120機種」と書いていた。
+    #   ルールを書いた場所こそ、静かに戻りやすい。
+    for rel in ("README.md", "about.html", "guide-ichiran.html", "CLAUDE.md"):
         text = load_text(BASE / rel)
         for m in _TOTAL_COUNT_PAT.finditer(text):
             ngs.append(f"{rel}: サイト全体の機種数が書かれています"
