@@ -1187,6 +1187,12 @@ _PW_MACHINE_RE = re.compile(
     r"^https?://(?:www\.)?p-world\.co\.jp/machine/database/(\d{1,7})/?$")
 
 
+def _pw_slug_hint(url: str) -> str:
+    """台帳のslug欄に入れる目印（機種IDが分かればそれ、無ければ site）。"""
+    mid = _pw_machine_url(url)
+    return ("pw_" + mid) if mid else "site"
+
+
 def _pw_machine_url(url: str) -> str:
     """P-WORLDの機種ページなら機種IDを返す（違えば空）。"""
     m = _PW_MACHINE_RE.match(str(url or "").strip())
@@ -3036,6 +3042,33 @@ def selftest() -> int:
               not _cache["problems"])
             t("★★新台の範囲外なら止める★★（古い機種を新台にしない）",
               bool(_blocking(_oldm["problems"])))
+            # ★手で渡すときの入口を、実際に main() で確かめる★
+            #   （2026-08-13・依頼171のP3）引数の判定や受け渡しが将来外れても
+            #   気づけるように、通し（main）で見る。
+            def _main_rc(argv):
+                _keep_argv, _keep_run = sys.argv, globals()["run_one"]
+                _called = {}
+                globals()["run_one"] = lambda *a, **k: (
+                    _called.update(k), {"wrote": [], "problems": [],
+                                        "blocked": [], "slug": None})[1]
+                sys.argv = ["add_machine_run.py"] + argv
+                try:
+                    return main(), _called
+                except SystemExit as e:          # noqa: PERF203
+                    return (e.code or 0), _called
+                finally:
+                    sys.argv, globals()["run_one"] = _keep_argv, _keep_run
+
+            _pwu = "https://www.p-world.co.jp/machine/database/10513"
+            _rc1, _c1 = _main_rc(["--name", "試験機", "--official-url", _pwu,
+                                  "--maker", "kitadenshi", "--release", "2026-10"])
+            t("★★P-WORLDのURLを手で渡すとき、名乗りが無ければ止まる★★",
+              _rc1 == 1 and not _c1)
+            _rc2, _c2 = _main_rc(["--name", "試験機", "--official-url",
+                                  _pwu + "?utm=1", "--maker", "kitadenshi",
+                                  "--release", "2026-10", "--expect-maker", "北電子"])
+            t("★★URLの形が違えば、直し方を示して止まる★★",
+              _rc2 == 1 and not _c2)
             t("　一覧カードの証跡は今までどおり",
               "#card2" in _evidence_ref({"identity_evidence": {
                   "list_html_sha256": "abc", "card_index": 2}}))
@@ -3892,6 +3925,16 @@ def main() -> int:
             print("★--name と一緒に --official-url --maker が必要です★")
             return 1
         # ★P-WORLDのURLなら表示名を必ず名乗ってもらう★（依頼170のP2）
+        # ★P-WORLDのURLは形が違っても気づく★（依頼171のP3）
+        #   クエリや#付きだと見分けられず、案内が出ないまま後段で止まっていた。
+        from urllib.parse import urlsplit as _usp
+        _u = _usp(str(args.official_url or ""))
+        _is_pw_host = (_u.hostname or "") in ("www.p-world.co.jp", "p-world.co.jp")
+        if _is_pw_host and not _pw_machine_url(args.official_url):
+            print("★P-WORLDのURLは余計なものを外して渡してください★"
+                  "（正しい形: https://www.p-world.co.jp/machine/database/<機種ID>）"
+                  f"／渡された値: {args.official_url}")
+            return 1
         if _pw_machine_url(args.official_url) and not args.expect_maker:
             print("★P-WORLDのURLを手で渡すときは --expect-maker が要ります★"
                   "（機種ページに出るメーカー名。例: --expect-maker ミズホ）"
@@ -4046,6 +4089,27 @@ def main() -> int:
         if apply_it:
             _pend.mark_tried(pend, work["url"])
             _pend.save(pend)
+        # ★覚えた表示名と食い違ったことがあるなら、公開の前で止める★
+        #   （2026-08-13・依頼171のP2）待ち行列に残すだけでは誰も見ない。
+        #   ページが元の表示名へ戻っていると照合は通り、公開後に
+        #   待ち行列ごと消えて**食い違いの記録が誰にも届かない**。
+        _cf = work.get("pworld_maker_conflict") or []
+        if _cf:
+            _t = (f"{work.get('name') or work['url']}: "
+                  "メーカーの表示名が途中で変わりました")
+            _d = (f"覚えていた表示名: {work.get('pworld_maker')}\n"
+                  f"あとから出てきた表示名: {'／'.join(_cf)}\n"
+                  f"URL: {work['url']}\n\n"
+                  "★同じ機種か、別機種にURLが使い回されたのかを確かめてください★\n"
+                  "確かめたら、待ち行列の pworld_maker_conflict を消してください。")
+            if apply_it and _ledger(_pw_slug_hint(work["url"]), "structural",
+                                    "MATERIAL", "PWORLD_MAKER_CONFLICT", _t, _d):
+                _log(f"  ★表示名の食い違いを台帳へ上げました: {work['url']}")
+            else:
+                _log(f"  ★表示名の食い違いがあります（台帳へ上げられません）"
+                     f": {work['url']}")
+            print(f"  ★止めました: 表示名が途中で変わりました（{work['url']}）")
+            continue
         res = run_one(work["name"], work["url"], work["maker"],
                       work["release"], apply_it,
                       release_is_cache=True,       # ★待ち行列の年月は控え★
