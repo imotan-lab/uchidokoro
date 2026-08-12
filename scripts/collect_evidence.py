@@ -158,9 +158,14 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
         def _read(where, url, got, publisher=None, html=None):
             try:
                 page = _nw._get(url) if html is None else html
+                # ★切ってから潰す★（2026-08-13・依頼175で実証）
+                #   cut_user_area は「見出しだけの行」を行単位で探すのに、
+                #   先に _norm で改行を潰していたので**一度も効いていなかった**。
+                #   そのため読者の書き込み（「ボーナス天井510G...?軽すぎない?」）が
+                #   解析情報と同じ顔で抜粋に入っていた。
+                _visible = _nw._visible_text(page)
                 got[where] = {"url": url, "publisher": publisher,
-                              "text": _cl.cut_user_area(
-                                  _cl._norm(_nw._visible_text(page)))}
+                              "text": _cl._norm(_cl.cut_user_area(_visible))}
             except Exception as e:        # noqa: BLE001
                 got[where] = {"url": url, "publisher": publisher,
                               "error": str(e)[:80]}
