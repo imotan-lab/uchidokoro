@@ -12,7 +12,8 @@
   1. `machines/{新しいslug}/index.html` を**新規に**作る
   2. `assets/data/machine-details/{新しいslug}.json` を新規に作る
   3. `machines.json` に1件足す
-  ★sitemap は触らない★（preview は載せない決まり）
+  ★sitemap は判定書しだい★（2026-08-04〜。AUTO_INDEXABLE のときだけ1行足す。
+    AUTO_PENDING では触らない＝載せてはいけない機種を載せた事故を検知するため）
   ★既存ページは作り直さない・消さない・上書きしない★
 
 ★書く順番（Codexの指摘）★
