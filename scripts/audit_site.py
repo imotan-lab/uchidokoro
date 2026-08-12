@@ -289,7 +289,14 @@ def check_8_readme_count(machines: list) -> list[str]:
     #   ルールを書いた場所こそ、静かに戻りやすい。
     for rel in ("README.md", "about.html", "guide-ichiran.html", "CLAUDE.md",
                 "index.html"):
-        text = load_text(BASE / rel)
+        # ★手元にしか無いファイルは、無くても止めない★（2026-08-12）
+        #   CLAUDE.md は Git 管理外なので CI には存在しない。
+        #   読めないだけで**サイトの配信が落ちた**（実際に3回の失敗メール）。
+        #   ★見張りたいのは「書いてあること」であって「在ること」ではない★
+        p = BASE / rel
+        if not p.is_file():
+            continue
+        text = load_text(p)
         for m in _TOTAL_COUNT_PAT.finditer(text):
             ngs.append(f"{rel}: サイト全体の機種数が書かれています"
                        f"（{m.group(0)[:30]!r}）。全体件数は表示しない方針です")
