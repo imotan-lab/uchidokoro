@@ -3801,6 +3801,11 @@ def main() -> int:
                     help="既知URL全部の題を一度だけ控える（すり替え検知の基準）")
     ap.add_argument("--official-url", dest="official_url")
     ap.add_argument("--maker")
+    # ★P-WORLDのURLを手で渡すときは、メーカーの表示名も名乗る★
+    #   （2026-08-13・依頼170のP2）待ち行列を通らないので覚えた値が無く、
+    #   同じ内部IDにぶら下がる別名のどれでも通ってしまう。
+    ap.add_argument("--expect-maker", dest="expect_maker", default="",
+                    help="P-WORLDの機種ページに出るメーカー名（例: ミズホ）")
     ap.add_argument("--release", default="")
     args = ap.parse_args()
     if args.selftest:
@@ -3886,9 +3891,16 @@ def main() -> int:
         if not (args.official_url and args.maker):
             print("★--name と一緒に --official-url --maker が必要です★")
             return 1
+        # ★P-WORLDのURLなら表示名を必ず名乗ってもらう★（依頼170のP2）
+        if _pw_machine_url(args.official_url) and not args.expect_maker:
+            print("★P-WORLDのURLを手で渡すときは --expect-maker が要ります★"
+                  "（機種ページに出るメーカー名。例: --expect-maker ミズホ）"
+                  "／同じ系列の別名を見分けるために使います")
+            return 1
         res = run_one(args.name, args.official_url, args.maker, args.release,
                       args.apply,
-                      before_write=lambda: _claim_today(args.official_url))
+                      before_write=lambda: _claim_today(args.official_url),
+                      expect_maker=args.expect_maker)
         # ★1機種だけ試す経路でも、公開したら最後まで通す★（Codex17回目）
         #   ここだけ push を呼んでいなかったので、手元に変更が残り、
         #   翌日の実行が「許していない変更がある」で止まっていた。

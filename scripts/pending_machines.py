@@ -98,8 +98,19 @@ def add(data: dict, name: str, url: str, maker: str, release: str,
         # ★名前や登場年月が変わることがある（公式の書き換え）★
         it["name"], it["maker"], it["release"] = name, maker, release
         for k, v in (extra or {}).items():
-            if v:                         # ★空では上書きしない★
-                it[k] = v
+            if not v:
+                continue                  # ★空では上書きしない★
+            old = it.get(k)
+            if old and old != v:
+                # ★一度覚えたものは変えない★（2026-08-13・依頼170のP1）
+                #   ここを上書きにすると、翌日のカレンダーが違う表示名を
+                #   返しただけで**公開直前の照合がその値に合わせて緩む**
+                #   （同じ系列の別名を見分ける守りが消える）。
+                #   食い違いは残しておき、判断は人・2AIに回す。
+                it.setdefault(k + "_conflict", []).append(v)
+                it[k + "_conflict"] = sorted(set(it[k + "_conflict"]))[:5]
+                continue
+            it[k] = v
     else:
         data["items"][url] = {
             "name": name, "url": url, "maker": maker, "release": release,
@@ -239,6 +250,15 @@ def selftest() -> int:
         reason="2回目", extra={"pworld_maker": "", "pworld_id": ""})
     t("★★空では上書きしない★★（一度覚えたものを消さない）",
       _d["items"]["https://x/1"].get("pworld_maker") == "ミズホ")
+    # ★違う値でも上書きしない★（2026-08-13・依頼170のP1）
+    #   翌日のカレンダーが別の表示名を返しただけで、
+    #   公開直前の照合がその値に合わせて緩むのを防ぐ。
+    add(_d, "試験機", "https://x/1", "universal", "2026-11",
+        reason="3回目", extra={"pworld_maker": "メーシー"})
+    t("★★違う値が来ても上書きしない★★（守りが緩まない）",
+      _d["items"]["https://x/1"].get("pworld_maker") == "ミズホ")
+    t("　食い違いは残す（あとで人・2AIが見る）",
+      _d["items"]["https://x/1"].get("pworld_maker_conflict") == ["メーシー"])
     t("　手掛かりを渡さなくても今までどおり動く",
       add(_d, "別機", "https://x/2", "m", "2026-12").get("name") == "別機")
 
