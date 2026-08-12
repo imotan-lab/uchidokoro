@@ -328,7 +328,11 @@ def discover_pworld(persist: bool = True) -> dict:
     else:
         out["watched"].append("p-world")
     for q in got.get("queued") or []:
-        out["candidates"].append(q["url"])
+        # ★discover() と同じ形で入れる★（呼ぶ側が official_name / release を読む）
+        out["candidates"].append({
+            "maker": q["maker"], "url": q["url"],
+            "official_name": q["name"],
+            "release": {"value": q["release"]}})
         out["first_time"].append(f"{q['name']} / {q['url']}")
         _log(f"  カレンダーから: {q['name']}（{q['maker']}・{q['release']}）")
     unknown = []
@@ -1000,13 +1004,23 @@ def _machine_class(slug: str) -> str:
     return "区分不明"
 
 
+# ★同定できなかった、という印★（2026-08-12・依頼166のP0）
+#   止める判定は「決まった文言が入っているか」で見ている。
+#   新しい同定（P-WORLD）の文言は当然そこに無いので、
+#   **同定が失敗しても公開が止まらなかった**（実際に確かめた）。
+#   文言を足していく形は、経路が増えるたびに同じ穴が開く。
+#   ★同定の失敗にはこの印を必ず付ける★＝文言に関係なく止まる。
+IDENTITY_FAILED = "★本人性を確かめられませんでした★"
+
+
 def blocking_problems(problems: list) -> list:
     """★書いてはいけない理由だけを取り出す★（新台追加も更新も同じ判定を使う）
 
     2026-08-05・Codex102回目: 更新側がこれを見ておらず、
     転載の疑いなど「材料は返るが公開してはいけない」場合を素通りしていた。
     """
-    return [p for p in problems if any(w in p for w in BLOCKING)]
+    return [p for p in problems
+            if IDENTITY_FAILED in p or any(w in p for w in BLOCKING)]
 
 
 def _blocking(problems: list) -> list:
@@ -1100,6 +1114,13 @@ def _evidence_ref(vo: dict) -> str:
     ev = vo.get("identity_evidence") or {}
     if not ev:
         return ""
+    # ★証拠は binding ごとに形が違う★（2026-08-12・依頼166のP1）
+    #   一覧カード用の形で組み立てると、P-WORLDの証拠は
+    #   存在しないカード番号を指す文字列になり、あとから確かめられない。
+    if ev.get("kind") == "PWORLD_MACHINE_PAGE":
+        return "pworld:%s 型式=%s 検定=%s 確認日=%s" % (
+            ev.get("pworld_machine_id", ""), ev.get("model_code", ""),
+            ev.get("shinsa", ""), ev.get("checked_at", ""))
     return str(ev.get("evidence_ref")
                or (ev.get("list_html_sha256", "") + f" #card{ev.get('card_index')}"))
 
@@ -1162,6 +1183,76 @@ def _card_identity(name: str, official_url: str, maker: str, exc):
     return got
 
 
+_PW_MACHINE_RE = re.compile(
+    r"^https?://(?:www\.)?p-world\.co\.jp/machine/database/(\d{1,7})/?$")
+
+
+def _pw_machine_url(url: str) -> str:
+    """P-WORLDの機種ページなら機種IDを返す（違えば空）。"""
+    m = _PW_MACHINE_RE.match(str(url or "").strip())
+    return m.group(1) if m else ""
+
+
+def _verify_pworld(name: str, official_url: str, maker: str,
+                   release: str) -> dict:
+    """★P-WORLDの機種ページで身元を確かめる★（2026-08-12）
+
+    返す形は verify_official と同じ（呼ぶ側を変えないため）。
+    ★メーカーも突き合わせる★＝名簿の表示名と、ページの表示名が同じか。
+      ここを見ないと、別会社の機種を渡されたまま進んでしまう。
+    """
+    import pworld_discover as _pd
+    import pworld_machine as _pm
+    out = {"problems": [], "release": ""}
+    mid = _pw_machine_url(official_url)
+
+    def _ng(why: str) -> dict:
+        # ★同定の失敗は必ず止まる印を付ける★（依頼166のP0）
+        out["problems"].append(f"{IDENTITY_FAILED} {why}")
+        return out
+
+    # 名簿から「このメーカーIDの名前」を引く（逆引き）
+    # ★別名も許す★（依頼166のP1）＝入口は name と directory_names の
+    #   どちらでも `universal` に決まるのに、こちらが name だけを見ていると
+    #   「ミズホ」「ユニバーサルブロス」の機種が**必ず食い違い扱い**になる。
+    try:
+        cats = _sj.read_json(_pd.MAKER_CATALOG, expect=dict)["catalogs"]
+    except Exception as e:                # noqa: BLE001
+        return _ng(f"メーカー名簿を読めません: {e}")
+    conf = cats.get(maker) or {}
+    allow = [conf.get("name")] + list(conf.get("directory_names") or [])
+    allow = [str(x) for x in allow if x]
+    if maker and not allow:
+        return _ng(f"メーカーが名簿にありません: {maker!r}")
+    got = _pm.verify(mid, name)
+    if got.get("problems"):
+        out["problems"] += [f"{IDENTITY_FAILED} {x}" for x in got["problems"]]
+        return out
+    # ★メーカーは名簿の名前のどれかと一致すること★
+    page_maker = str(got.get("maker") or "")
+    if allow and page_maker and _pd._norm(page_maker) not in {
+            _pd._norm(x) for x in allow}:
+        return _ng(f"メーカーが食い違います（名簿: {'／'.join(allow)} / "
+                   f"機種ページ: {page_maker}）")
+    out["release"] = got.get("release") or ""
+    out["identity_name"] = got.get("name") or name
+    out["identity_binding"] = "PWORLD_MACHINE_PAGE"
+    # ★何で確かめたかを残す★（機種IDが身元）
+    # ★証拠は binding ごとに形が違う★（依頼166のP1）
+    #   一覧カード用の形で渡すと `#cardNone` という**存在しない参照**になる。
+    out["identity_evidence"] = {
+        "kind": "PWORLD_MACHINE_PAGE",
+        "pworld_machine_id": mid,
+        "url": official_url,
+        "model_code": got.get("model_code", ""),
+        "shinsa": got.get("shinsa", ""),
+        "release": out["release"],
+        "checked_at": __import__("datetime").date.today().isoformat()}
+    _log(f"  P-WORLDの機種ページで同定しました: {out['identity_name']} "
+         f"/ 機種ID {mid} / {out['release']}")
+    return out
+
+
 def verify_official(name: str, official_url: str,
                     maker: str = "", release: str = "",
                     release_is_cache: bool = False) -> dict:
@@ -1185,6 +1276,12 @@ def verify_official(name: str, official_url: str,
     **記事に使うのは渡された値ではなく、この公式の値**。
     """
     out = {"problems": [], "release": ""}
+    # ★P-WORLDの機種ページはそちらで確かめる★（2026-08-12・入口をここ一本にした）
+    #   以降の検査は「メーカー公式のドメインか」を見るので、
+    #   P-WORLDのURLは必ず弾かれる（実際に試して確認した）。
+    #   機種ページ側は機種IDでの同定・種目・転送・派生機まで見ている。
+    if _pw_machine_url(official_url):
+        return _verify_pworld(name, official_url, maker, release)
     # ★転送された先も検査する★（2026-08-02・Codex26回目）
     #   渡されたURLだけ見ていたので、メーカーAのURLが別の場所へ転送されると、
     #   転送先の中身をメーカーAの公式として通せた。
@@ -2705,6 +2802,32 @@ def selftest() -> int:
             t("　質問は run_one が持ち回る（黙って捨てない）",
               'out["ask_2ai"] = _ba.checker_questions(mat)'
               in inspect.getsource(run_one))
+            # ★同定の失敗は「文言」ではなく「印」で止める★（依頼166のP0）
+            #   止める判定は決まった文言の一致で見ていたので、
+            #   新しい同定（P-WORLD）の文言は一致せず、
+            #   **同定が失敗しても公開が止まらなかった**（実際に確かめた）。
+            _idf = [f"{IDENTITY_FAILED} メーカーが食い違います",
+                    f"{IDENTITY_FAILED} 機種名が一致しません",
+                    f"{IDENTITY_FAILED} パチスロのページではありません",
+                    f"{IDENTITY_FAILED} 導入開始の日付が読めません",
+                    f"{IDENTITY_FAILED} 機種ページを取得できません: timeout"]
+            t("★★同定の失敗は必ず公開を止める★★（文言に頼らない）",
+              all(_blocking([x]) for x in _idf))
+            #   ★対照実験★＝印を外すと、どれも止まらない
+            t("　（対照）印が無いと素通りする",
+              not any(_blocking([x.replace(IDENTITY_FAILED, "").strip()])
+                      for x in _idf))
+            t("★★P-WORLDの証跡は一覧カードの形で書かない★★"
+              "（存在しないカード番号を指さない）",
+              "pworld:10513" in _evidence_ref({"identity_evidence": {
+                  "kind": "PWORLD_MACHINE_PAGE", "pworld_machine_id": "10513",
+                  "model_code": "S1", "shinsa": "5S1", "checked_at": "2026-08-12"}})
+              and "card" not in _evidence_ref({"identity_evidence": {
+                  "kind": "PWORLD_MACHINE_PAGE", "pworld_machine_id": "10513"}}))
+            t("　一覧カードの証跡は今までどおり",
+              "#card2" in _evidence_ref({"identity_evidence": {
+                  "list_html_sha256": "abc", "card_index": 2}}))
+
             t("★★天井・AT・CZ・リセットだけ採れた機種も「材料あり」と数える★★"
               "（基本スペック直下しか見ず記事を永久に作れなかった・Codex57回目"
               "／リセットは依頼160のP1-6）",
