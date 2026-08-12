@@ -25,7 +25,7 @@
   "guide-rate.html": "0d13ee58c64421c3dbc3c422128720741fba3b67cfd65e8d980fc94a66a856a5",
   "guide-reset.html": "79fcc06cbce7c1326f56d1b2582c77cb5ad53773a79bdad6b91c233a6866603c",
   "guide-yamedoki.html": "c942817c9ef5faac33a6bf7d09bfd2ed692ce8c5391f36101cff4620186af8b1",
-  "index.html": "98a49ed4ee215dbee3f3de9304cd14a6f60547a2c7e013b86f881b71208b5056",
+  "index.html": "94534246e5d2e57f5f6a1865bf8fb02797c297c591f719bf555ce01f87c59932",
   "machine.html": "d91f4fddd9e11f5e506e74613c7cde66cc794a91e84de1848760faf0ccf43fb4",
   "manifest.json": "23be5d18069cfeb2c331b135f8976478e36543b3213006b991ed91e53a9bb90e",
   "meta-auto.js": "bbdd01f25211761643292d3b3305f64262f024b2cb59ea3d3d9f9b9216a27a89",
@@ -49,7 +49,7 @@
   "scripts/hub_prose.json": "e72916960e547c4a88351ba0886a643dc0248e290a204af0269b7d2f91388380",
   "scripts/preview_site.py": "8ef4c5eef6c1749df51c1c8c3edfebd2a4af427b8e0ae52287e724776dc7849a",
   "scripts/safe_json.py": "43f61703cbe7e1ea93ee2602fe9be45662957c8929aef62d649b6fc0493e0006",
-  "service-worker.js": "579ff7615fbb98450c65babf4b4c4f330f61c604834fcb283926b7c24f0f8711",
+  "service-worker.js": "c9c85a0d7cce349f1816b469bd7908d68fdcf2e4c13275b99e4a686962010f83",
   "setting.html": "0dbb05bc5ab19183d49a0ab836205fb5fb1d85866059739fbf333c879d3de7b2"
  }
 }
