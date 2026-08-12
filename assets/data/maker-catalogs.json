@@ -1,206 +1,221 @@
 {
- "schema_version": "maker-catalogs/v1",
- "_note": "★新台を見つける唯一の入口★ メーカー公式の『パチスロ機種一覧』ページだけを見る。まとめサイトの機種名は読まない（名前の照合が要らなくなり、機種の取り違えが起きない）。ここに無いメーカーの新台は見つからないが、それは『出さない』側の失敗なので安全。人が保守するのはこのファイルだけで、機種ごとの作業はゼロ。",
- "_how_to_add": "メーカー公式サイトの『パチスロ機種一覧』ページのURLと、そのページ内で個別機種ページを指すリンクの形（link_prefix）を書く。追加したら scripts/new_machine_watch.py --check <id> で、機種が取れることを確かめる。",
- "catalogs": {
-  "bellco": {
-   "name": "ベルコ",
-   "list_url": "https://www.s-bellco.co.jp/products/slot/",
-   "link_prefix": "https://www.s-bellco.co.jp/products/slot/",
-   "min_expected": 50,
-   "status": "ACTIVE",
-   "list_marker": "パチスロ機種"
+  "schema_version": "maker-catalogs/v1",
+  "_note": "★新台を見つける唯一の入口★ メーカー公式の『パチスロ機種一覧』ページだけを見る。まとめサイトの機種名は読まない（名前の照合が要らなくなり、機種の取り違えが起きない）。ここに無いメーカーの新台は見つからないが、それは『出さない』側の失敗なので安全。人が保守するのはこのファイルだけで、機種ごとの作業はゼロ。",
+  "_how_to_add": "メーカー公式サイトの『パチスロ機種一覧』ページのURLと、そのページ内で個別機種ページを指すリンクの形（link_prefix）を書く。追加したら scripts/new_machine_watch.py --check <id> で、機種が取れることを確かめる。",
+  "catalogs": {
+    "bellco": {
+      "name": "ベルコ",
+      "list_url": "https://www.s-bellco.co.jp/products/slot/",
+      "link_prefix": "https://www.s-bellco.co.jp/products/slot/",
+      "min_expected": 50,
+      "status": "ACTIVE",
+      "list_marker": "パチスロ機種"
+    },
+    "kitadenshi": {
+      "name": "北電子",
+      "list_url": "https://www.kitadenshi.co.jp/slot/",
+      "link_prefix": "https://www.kitadenshi.co.jp/slot/",
+      "min_expected": 5,
+      "status": "ACTIVE",
+      "list_marker": "パチスロ製品情報",
+      "directory_names": [
+        "北電子"
+      ]
+    },
+    "universal": {
+      "name": "ユニバーサル",
+      "list_url": "https://www.universal-777.com/product/slot/",
+      "link_prefix": "https://www.universal-777.com/product/slot/",
+      "min_expected": 15,
+      "status": "ACTIVE",
+      "fetch": "render",
+      "_checked": "2026-07-31 描画後に20件取得。JSエラーは出るがリンクは揃う（健全性として件数を記録）",
+      "list_marker": "パチスロ|",
+      "directory_names": [
+        "ユニバーサルエンターテインメント",
+        "ミズホ",
+        "メーシー",
+        "アクロス",
+        "ユニバーサルブロス"
+      ]
+    },
+    "enterrise": {
+      "name": "エンターライズ",
+      "list_url": "https://www.enterrise.co.jp/slot.php",
+      "link_prefix": "https://www.enterrise.co.jp/slot/",
+      "min_expected": 4,
+      "status": "ACTIVE",
+      "_checked": "2026-07-31 静的HTMLで6件取得・個別ページのタイトルが機種名であることを確認",
+      "list_marker": "株式会社 エンターライズ",
+      "directory_names": [
+        "レオスター"
+      ]
+    },
+    "heiwa": {
+      "name": "平和",
+      "list_url": "https://www.heiwanet.co.jp/products/pachislot/",
+      "link_prefix": "https://www.heiwanet.co.jp/products/pachislot/",
+      "min_expected": 4,
+      "status": "ACTIVE",
+      "_checked": "2026-07-31 年別アーカイブを除外する仕組みを入れて5件取得・タイトルが機種名であることを確認",
+      "list_marker": "パチスロ機種一覧",
+      "directory_names": [
+        "オリンピア"
+      ]
+    },
+    "daitogiken": {
+      "name": "大都技研",
+      "list_url": "https://www.daitogiken.com/products/slot/",
+      "link_prefix": "https://www.daitogiken.com/contents/product/slot/",
+      "min_expected": 40,
+      "status": "ACTIVE",
+      "_checked": "2026-07-31 静的HTMLで49件取得・個別ページのタイトルが機種名であることを確認（一覧と機種ページでURLの階層が違う）",
+      "list_marker": "スロット機種",
+      "directory_names": [
+        "大都技研",
+        "大都",
+        "パオン・ディーピー",
+        "パオンディーピー"
+      ]
+    },
+    "sankyo": {
+      "name": "SANKYO",
+      "list_url": "https://www.sankyo-fever.co.jp/products/slot/",
+      "link_prefix": "https://www.sankyo-fever.co.jp/products/slot/",
+      "min_expected": 5,
+      "status": "BLOCKED",
+      "_why": "★bot対策(Incapsula)が入っており、機械からは中身を取得できない（2026-07-31確認）。回避はしない（規約・検知回避に当たるため）。対象外として明示する★"
+    },
+    "sammy": {
+      "name": "サミー",
+      "list_url": "https://www.sammy.co.jp/japanese/products/pachislot/",
+      "link_prefix": "https://www.sammy.co.jp/japanese/product/pachislot/",
+      "min_expected": 30,
+      "status": "ACTIVE",
+      "fetch": "render",
+      "_checked": "2026-07-31 描画後に機種リンク取得（一覧は products・機種ページは product と階層が違う）。networkidle は落ち着かないため待ち切れなくても記録して進む",
+      "list_marker": "パチスロ機種情報"
+    },
+    "newgin": {
+      "name": "ニューギン",
+      "list_url": "https://www.newgin.co.jp/machine/slot/",
+      "link_prefix": "https://www.newgin.co.jp/pub/machine/",
+      "min_expected": 25,
+      "status": "ACTIVE",
+      "_checked": "2026-07-31 静的HTMLで34件取得。★一覧にパチンコ機も混じる★が、個別ページの判定(looks_like_slot)で落ちるので新台としては通らない（理由は毎回報告される）",
+      "list_marker": "パチスロ |"
+    },
+    "yamasa_next": {
+      "name": "山佐ネクスト",
+      "list_url": "https://yamasa-next.co.jp/",
+      "link_prefix": "https://yamasa-next.co.jp/slot/",
+      "min_expected": 2,
+      "status": "ACTIVE",
+      "_checked": "2026-07-31 トップページに機種が並ぶ（3件）。★/machine/ を頼むとトップへ転送されるため、最初からトップを一覧として読む★",
+      "list_marker": "山佐ネクスト",
+      "directory_names": [
+        "山佐",
+        "山佐ネクスト"
+      ]
+    },
+    "kpe": {
+      "name": "KPE",
+      "list_url": "https://www.kpe.co.jp/products/",
+      "link_prefix": "https://www.kpe.co.jp/products/",
+      "min_expected": 3,
+      "status": "NEEDS_SETUP",
+      "_why": "描画しても機種ごとの個別ページが存在しない（製品情報が画像・PDFのみと思われる。2026-07-31確認）",
+      "directory_names": [
+        "コナミアミューズメント",
+        "KPE"
+      ]
+    },
+    "daxel": {
+      "name": "ダクセル",
+      "list_url": "https://www.daxel.co.jp/products/",
+      "link_prefix": "https://www.daxel.co.jp/",
+      "min_expected": 5,
+      "status": "NEEDS_SETUP",
+      "_why": "機種ページがドメイン直下(http://www.daxel.co.jp/{slug}/)で会社案内等と同じ階層。さらにhttpとhttpsが混在する（2026-07-31確認）。機種だけを選り分ける手立てが要る"
+    },
+    "fujishoji": {
+      "name": "藤商事",
+      "list_url": "https://www.fujimarukun.co.jp/products/all/",
+      "link_prefix": "https://www.fujimarukun.co.jp/products/",
+      "min_expected": 90,
+      "status": "ACTIVE",
+      "fetch": "render",
+      "_checked": "2026-08-03 描画で285機種URL取得（静的はTLS握手拒否）。全機種一覧＝パチンコ混在で、規格印（e/P/CR）の除外後116件。スロ表記（パチスロ/スマスロ）の取り漏れ0を実測。残る旧作の漏れ6件（CRA/PFAIRY等）は初回登録で吸収",
+      "list_marker": "全機種ラインナップ",
+      "pachinko_marks": true,
+      "_why_marks": "一覧のカードに『パチンコ』と書かず、名前の頭の規格印（e/P/CR）だけで種目が分かるため。他社では使わない（2026-08-04・Codex83回目）"
+    },
+    "7sho": {
+      "name": "七匠",
+      "list_url": null,
+      "link_prefix": null,
+      "min_expected": 1,
+      "status": "NEEDS_SETUP",
+      "_why": "公式サイトの機種一覧URLを特定できていない（社名から推測したドメインでは接続できず。2026-07-31）。★推測URLを登録しない★＝別会社のページを機種一覧として読む事故を避けるため"
+    },
+    "oizumi": {
+      "name": "オーイズミ",
+      "list_url": "https://oizumi.co.jp/products/backnumber/",
+      "link_prefix": "https://www.oizumi.co.jp/machine/",
+      "min_expected": 15,
+      "status": "ACTIVE",
+      "fetch": "render",
+      "_checked": "2026-08-03 描画で30機種URL取得（静的はTLS握手拒否）。スロ専業。一覧はoizumi.co.jp・機種はwww.oizumi.co.jp/machine/配下。旧作の入れ子（dc500/dc711）は下の階層として対象外",
+      "list_marker": "機種一覧",
+      "allow_list_card_identity": true,
+      "list_card": {
+        "card_tag": "li",
+        "card_class": "slotItem",
+        "name_class": "name",
+        "type_class": "category",
+        "year_class": "__year"
+      },
+      "_why_list_card": "公式の証明書が期限切れで個別ページを取得できない（台帳#209）。一覧は読めており、カードに機種名・種目・登場年月が揃っているため、同定の根拠を一覧カードに置く（2026-08-04・Codex92回目で条件つき承認）"
+    },
+    "pioneer": {
+      "name": "パイオニア",
+      "list_url": null,
+      "link_prefix": null,
+      "min_expected": 1,
+      "status": "NEEDS_SETUP",
+      "_why": "公式サイトの機種一覧URLを特定できていない（社名から推測したドメインでは接続できず。2026-07-31）。★推測URLを登録しない★＝別会社のページを機種一覧として読む事故を避けるため"
+    },
+    "net": {
+      "name": "ネット",
+      "list_url": null,
+      "link_prefix": null,
+      "min_expected": 1,
+      "status": "NEEDS_SETUP",
+      "_why": "公式サイトの機種一覧URLを特定できていない（社名から推測したドメインでは接続できず。2026-07-31）。★推測URLを登録しない★＝別会社のページを機種一覧として読む事故を避けるため",
+      "directory_names": [
+        "NET",
+        "ネット"
+      ]
+    },
+    "kyoraku": {
+      "name": "京楽",
+      "status": "WATCH_OFF",
+      "_why": "P-WORLDのカレンダーに出るが名簿に無く、L ソードアート・オンライン オルタナティブ ガンゲイル・オンラインを待たせていた（2026-08-12）"
+    },
+    "sanslay": {
+      "name": "サンスリー",
+      "status": "WATCH_OFF",
+      "_why": "同上。L聖闘士星矢 黄金十二宮 を待たせていた"
+    },
+    "olympia_estate": {
+      "name": "オリンピアエステート",
+      "status": "WATCH_OFF",
+      "_why": "同上。L転生王女と天才令嬢の魔法革命 を待たせていた"
+    }
   },
-  "kitadenshi": {
-   "name": "北電子",
-   "list_url": "https://www.kitadenshi.co.jp/slot/",
-   "link_prefix": "https://www.kitadenshi.co.jp/slot/",
-   "min_expected": 5,
-   "status": "ACTIVE",
-   "list_marker": "パチスロ製品情報",
-   "directory_names": [
-    "北電子"
-   ]
-  },
-  "universal": {
-   "name": "ユニバーサル",
-   "list_url": "https://www.universal-777.com/product/slot/",
-   "link_prefix": "https://www.universal-777.com/product/slot/",
-   "min_expected": 15,
-   "status": "ACTIVE",
-   "fetch": "render",
-   "_checked": "2026-07-31 描画後に20件取得。JSエラーは出るがリンクは揃う（健全性として件数を記録）",
-   "list_marker": "パチスロ|",
-   "directory_names": [
-    "ユニバーサルエンターテインメント",
-    "ミズホ",
-    "メーシー",
-    "アクロス",
-    "ユニバーサルブロス"
-   ]
-  },
-  "enterrise": {
-   "name": "エンターライズ",
-   "list_url": "https://www.enterrise.co.jp/slot.php",
-   "link_prefix": "https://www.enterrise.co.jp/slot/",
-   "min_expected": 4,
-   "status": "ACTIVE",
-   "_checked": "2026-07-31 静的HTMLで6件取得・個別ページのタイトルが機種名であることを確認",
-   "list_marker": "株式会社 エンターライズ",
-   "directory_names": [
-    "レオスター"
-   ]
-  },
-  "heiwa": {
-   "name": "平和",
-   "list_url": "https://www.heiwanet.co.jp/products/pachislot/",
-   "link_prefix": "https://www.heiwanet.co.jp/products/pachislot/",
-   "min_expected": 4,
-   "status": "ACTIVE",
-   "_checked": "2026-07-31 年別アーカイブを除外する仕組みを入れて5件取得・タイトルが機種名であることを確認",
-   "list_marker": "パチスロ機種一覧",
-   "directory_names": [
-    "オリンピア"
-   ]
-  },
-  "daitogiken": {
-   "name": "大都技研",
-   "list_url": "https://www.daitogiken.com/products/slot/",
-   "link_prefix": "https://www.daitogiken.com/contents/product/slot/",
-   "min_expected": 40,
-   "status": "ACTIVE",
-   "_checked": "2026-07-31 静的HTMLで49件取得・個別ページのタイトルが機種名であることを確認（一覧と機種ページでURLの階層が違う）",
-   "list_marker": "スロット機種",
-   "directory_names": [
-    "大都技研",
-    "大都",
-    "パオン・ディーピー",
-    "パオンディーピー"
-   ]
-  },
-  "sankyo": {
-   "name": "SANKYO",
-   "list_url": "https://www.sankyo-fever.co.jp/products/slot/",
-   "link_prefix": "https://www.sankyo-fever.co.jp/products/slot/",
-   "min_expected": 5,
-   "status": "BLOCKED",
-   "_why": "★bot対策(Incapsula)が入っており、機械からは中身を取得できない（2026-07-31確認）。回避はしない（規約・検知回避に当たるため）。対象外として明示する★"
-  },
-  "sammy": {
-   "name": "サミー",
-   "list_url": "https://www.sammy.co.jp/japanese/products/pachislot/",
-   "link_prefix": "https://www.sammy.co.jp/japanese/product/pachislot/",
-   "min_expected": 30,
-   "status": "ACTIVE",
-   "fetch": "render",
-   "_checked": "2026-07-31 描画後に機種リンク取得（一覧は products・機種ページは product と階層が違う）。networkidle は落ち着かないため待ち切れなくても記録して進む",
-   "list_marker": "パチスロ機種情報"
-  },
-  "newgin": {
-   "name": "ニューギン",
-   "list_url": "https://www.newgin.co.jp/machine/slot/",
-   "link_prefix": "https://www.newgin.co.jp/pub/machine/",
-   "min_expected": 25,
-   "status": "ACTIVE",
-   "_checked": "2026-07-31 静的HTMLで34件取得。★一覧にパチンコ機も混じる★が、個別ページの判定(looks_like_slot)で落ちるので新台としては通らない（理由は毎回報告される）",
-   "list_marker": "パチスロ |"
-  },
-  "yamasa_next": {
-   "name": "山佐ネクスト",
-   "list_url": "https://yamasa-next.co.jp/",
-   "link_prefix": "https://yamasa-next.co.jp/slot/",
-   "min_expected": 2,
-   "status": "ACTIVE",
-   "_checked": "2026-07-31 トップページに機種が並ぶ（3件）。★/machine/ を頼むとトップへ転送されるため、最初からトップを一覧として読む★",
-   "list_marker": "山佐ネクスト",
-   "directory_names": [
-    "山佐",
-    "山佐ネクスト"
-   ]
-  },
-  "kpe": {
-   "name": "KPE",
-   "list_url": "https://www.kpe.co.jp/products/",
-   "link_prefix": "https://www.kpe.co.jp/products/",
-   "min_expected": 3,
-   "status": "NEEDS_SETUP",
-   "_why": "描画しても機種ごとの個別ページが存在しない（製品情報が画像・PDFのみと思われる。2026-07-31確認）",
-   "directory_names": [
-    "コナミアミューズメント",
-    "KPE"
-   ]
-  },
-  "daxel": {
-   "name": "ダクセル",
-   "list_url": "https://www.daxel.co.jp/products/",
-   "link_prefix": "https://www.daxel.co.jp/",
-   "min_expected": 5,
-   "status": "NEEDS_SETUP",
-   "_why": "機種ページがドメイン直下(http://www.daxel.co.jp/{slug}/)で会社案内等と同じ階層。さらにhttpとhttpsが混在する（2026-07-31確認）。機種だけを選り分ける手立てが要る"
-  },
-  "fujishoji": {
-   "name": "藤商事",
-   "list_url": "https://www.fujimarukun.co.jp/products/all/",
-   "link_prefix": "https://www.fujimarukun.co.jp/products/",
-   "min_expected": 90,
-   "status": "ACTIVE",
-   "fetch": "render",
-   "_checked": "2026-08-03 描画で285機種URL取得（静的はTLS握手拒否）。全機種一覧＝パチンコ混在で、規格印（e/P/CR）の除外後116件。スロ表記（パチスロ/スマスロ）の取り漏れ0を実測。残る旧作の漏れ6件（CRA/PFAIRY等）は初回登録で吸収",
-   "list_marker": "全機種ラインナップ",
-   "pachinko_marks": true,
-   "_why_marks": "一覧のカードに『パチンコ』と書かず、名前の頭の規格印（e/P/CR）だけで種目が分かるため。他社では使わない（2026-08-04・Codex83回目）"
-  },
-  "7sho": {
-   "name": "七匠",
-   "list_url": null,
-   "link_prefix": null,
-   "min_expected": 1,
-   "status": "NEEDS_SETUP",
-   "_why": "公式サイトの機種一覧URLを特定できていない（社名から推測したドメインでは接続できず。2026-07-31）。★推測URLを登録しない★＝別会社のページを機種一覧として読む事故を避けるため"
-  },
-  "oizumi": {
-   "name": "オーイズミ",
-   "list_url": "https://oizumi.co.jp/products/backnumber/",
-   "link_prefix": "https://www.oizumi.co.jp/machine/",
-   "min_expected": 15,
-   "status": "ACTIVE",
-   "fetch": "render",
-   "_checked": "2026-08-03 描画で30機種URL取得（静的はTLS握手拒否）。スロ専業。一覧はoizumi.co.jp・機種はwww.oizumi.co.jp/machine/配下。旧作の入れ子（dc500/dc711）は下の階層として対象外",
-   "list_marker": "機種一覧",
-   "allow_list_card_identity": true,
-   "list_card": {
-    "card_tag": "li",
-    "card_class": "slotItem",
-    "name_class": "name",
-    "type_class": "category",
-    "year_class": "__year"
-   },
-   "_why_list_card": "公式の証明書が期限切れで個別ページを取得できない（台帳#209）。一覧は読めており、カードに機種名・種目・登場年月が揃っているため、同定の根拠を一覧カードに置く（2026-08-04・Codex92回目で条件つき承認）"
-  },
-  "pioneer": {
-   "name": "パイオニア",
-   "list_url": null,
-   "link_prefix": null,
-   "min_expected": 1,
-   "status": "NEEDS_SETUP",
-   "_why": "公式サイトの機種一覧URLを特定できていない（社名から推測したドメインでは接続できず。2026-07-31）。★推測URLを登録しない★＝別会社のページを機種一覧として読む事故を避けるため"
-  },
-  "net": {
-   "name": "ネット",
-   "list_url": null,
-   "link_prefix": null,
-   "min_expected": 1,
-   "status": "NEEDS_SETUP",
-   "_why": "公式サイトの機種一覧URLを特定できていない（社名から推測したドメインでは接続できず。2026-07-31）。★推測URLを登録しない★＝別会社のページを機種一覧として読む事故を避けるため",
-   "directory_names": [
-    "NET",
-    "ネット"
-   ]
+  "_notes": {
+    "olympia": "オリンピアの機種は平和(heiwa)のページに載るため、heiwaで検出できる（2026-07-31確認）",
+    "konami": "KONAMI本体のサイトはアーケード専用。パチスロはKPEが扱う",
+    "list_marker": "★一覧ページの印★ ページの題(title)が この語で始まること。機種ページの題は機種名から始まるので区別できる（本文照合では区別できなかった・2026-07-31）"
   }
- },
- "_notes": {
-  "olympia": "オリンピアの機種は平和(heiwa)のページに載るため、heiwaで検出できる（2026-07-31確認）",
-  "konami": "KONAMI本体のサイトはアーケード専用。パチスロはKPEが扱う",
-  "list_marker": "★一覧ページの印★ ページの題(title)が この語で始まること。機種ページの題は機種名から始まるので区別できる（本文照合では区別できなかった・2026-07-31）"
- }
 }
