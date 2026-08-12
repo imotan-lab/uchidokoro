@@ -1900,6 +1900,42 @@ def give_up_now(pend: dict, url: str, name: str, problems: list) -> None:
         _log(f"  ✗ 待ち行列から出せませんでした: {e}")
 
 
+def _fill_missing_pworld(work: dict) -> dict:
+    """★P-WORLDの機種ページから名前と導入日を読み直す★（2026-08-13）
+
+    見出し（h1）が機種名。題（title）には宣伝用の語が並ぶので使わない。
+    ★使い回しの判定は残す★＝芯や規格の印が変わっていたら止める。
+    """
+    import pworld_machine as _pm
+    try:
+        got = _pm.parse(_nw._get(work["url"]))
+    except Exception as e:                # noqa: BLE001
+        _log(f"  機種ページを見直せませんでした: {e}")
+        return work
+    new_name = str(got.get("name") or "")
+    if new_name:
+        if work.get("name") and work["name"] != new_name:
+            _old_core = _mc._ci.normalize_core(work["name"])
+            _new_core = _mc._ci.normalize_core(new_name)
+            _og, _ng2 = _mc._gen_mark(work["name"]), _mc._gen_mark(new_name)
+            if _og and _ng2 and _og != _ng2:
+                work["_name_conflict"] = new_name
+                _log(f"  ★規格の印が変わっています（使い回しの疑い）: "
+                     f"{work['name'][:30]} → {new_name[:30]}★")
+                return work
+            if _old_core and _new_core and _old_core != _new_core:
+                work["_name_conflict"] = new_name
+                _log(f"  ★機種名の芯が変わっています（使い回しの疑い）: "
+                     f"{work['name'][:30]} → {new_name[:30]}★")
+                return work
+            _log(f"  名前を機種ページの現在値に直します: "
+                 f"{work['name'][:30]} → {new_name[:30]}")
+        work["name"] = new_name
+    if got.get("release"):
+        work["release"] = got["release"][:7]   # 待ち行列は年月まで
+    return work
+
+
 def fill_missing(work: dict) -> dict:
     """★毎回、公式ページを見直して名前と年月を最新にする★
 
@@ -1910,6 +1946,12 @@ def fill_missing(work: dict) -> dict:
       **読めた時は必ず公式の現在値で置き換える**（読めなければ従来値のまま）。
       こちらで作らないのは従来どおり（公式に無ければ空のまま）。
     """
+    # ★P-WORLDはP-WORLDの読み方で★（2026-08-13・夜間タスクが検出）
+    #   メーカー公式用の読み方は「ページの題＝機種名」とみなす。
+    #   P-WORLDの題には宣伝用の語が並ぶので、名前が変わったように見え、
+    #   **使い回しの疑いで全件が落ちた**（2026-08-12の夜に実際に発生）。
+    if _pw_machine_url(work.get("url", "")):
+        return _fill_missing_pworld(work)
     try:
         c = _nw.classify(work["url"], None)
     except Exception as e:                # noqa: BLE001
@@ -2862,6 +2904,30 @@ def selftest() -> int:
               "（公開まで止まる）",
               bool(_blocking(_r["problems"]))
               and any("メーカーを読めませんでした" in x for x in _r["problems"]))
+            # ★名前の読み直しもP-WORLDの読み方で★（2026-08-13・夜間タスクが検出）
+            #   メーカー公式用の読み方は「ページの題＝機種名」。
+            #   P-WORLDの題には宣伝用の語が並ぶので、名前が変わったように見え、
+            #   **カレンダーから見つけた11件が全部落ちた**（実際に発生）。
+            _pmm = __import__("pworld_machine")
+            _keep_get = _nw._get
+            _nw._get = lambda *a, **k: _pmm._FIX
+            try:
+                _w = fill_missing({
+                    "name": "マイジャグラーVI",
+                    "url": "https://www.p-world.co.jp/machine/database/10513",
+                    "maker": "kitadenshi", "release": "2026-10"})
+                _w2 = fill_missing({
+                    "name": "スマスロ北斗の拳",
+                    "url": "https://www.p-world.co.jp/machine/database/10513",
+                    "maker": "kitadenshi", "release": "2026-10"})
+            finally:
+                _nw._get = _keep_get
+            t("★★P-WORLDの題の宣伝文を機種名にしない★★"
+              "（見出しから読む・11件が全部落ちた原因）",
+              _w["name"] == "マイジャグラーVI" and not _w.get("_name_conflict"))
+            t("★★それでも使い回しの疑いは止める★★（別機種の名前なら印を付ける）",
+              _w2.get("_name_conflict") == "マイジャグラーVI")
+            t("　導入年月も機種ページから直す", _w["release"] == "2026-10")
             t("　一覧カードの証跡は今までどおり",
               "#card2" in _evidence_ref({"identity_evidence": {
                   "list_html_sha256": "abc", "card_index": 2}}))
