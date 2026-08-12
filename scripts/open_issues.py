@@ -516,6 +516,33 @@ def cmd_add(path, args):
                      reason_code=args.reason_code)
 
 
+def open_questions(path) -> list:
+    """★まだ答えが出ていない「2AIに聞くこと」★（2026-08-12）
+
+    人を中継役にしないため、翌日のタスクがここから1件拾って答える。
+    古いものから返す（放置を作らない）。
+    """
+    data = _load(path)
+    return sorted(
+        (i for i in data["issues"]
+         if i.get("status") == "open" and i.get("reason_code") == "ASK_2AI"),
+        key=lambda i: (str(i.get("first_seen") or ""), i.get("id") or 0))
+
+
+def cmd_questions(path, args):
+    """未回答の質問を1件だけ出す（無ければ何も出さない＝タスクは次へ進む）。"""
+    items = open_questions(path)
+    if not items:
+        print("2AIに聞くことはありません")
+        return 0
+    for it in items[:max(1, int(getattr(args, "limit", 1) or 1))]:
+        print(f"#{it['id']} [{it['slug']}] {it['title']}")
+        for line in str(it.get("detail") or "").splitlines():
+            print(f"      {line}")
+        print(f"      （初出 {it.get('first_seen')}・経過{_days_open(it)}日）")
+    return 0
+
+
 def cmd_list(path, args):
     data = _load(path)
     items = data["issues"] if args.all else [i for i in data["issues"] if i["status"] == "open"]
@@ -630,6 +657,10 @@ def main():
     p = sub.add_parser("list")
     p.add_argument("--all", action="store_true")
 
+    # ★未回答の「2AIに聞くこと」を取り出す★（2026-08-12・人を中継役にしない）
+    p = sub.add_parser("questions", help="まだ答えが出ていない2AIへの質問")
+    p.add_argument("--limit", type=int, default=1)
+
     sub.add_parser("digest")
 
     p = sub.add_parser("close")
@@ -641,7 +672,8 @@ def main():
     args = ap.parse_args()
     path = Path(args.file) if args.file else DEFAULT_FILE
     fn = {"add": cmd_add, "list": cmd_list, "digest": cmd_digest, "close": cmd_close,
-          "severity": cmd_severity, "blocking": cmd_blocking}[args.cmd]
+          "severity": cmd_severity, "blocking": cmd_blocking,
+          "questions": cmd_questions}[args.cmd]
     sys.exit(fn(path, args))
 
 
