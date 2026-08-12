@@ -1888,6 +1888,20 @@ def usable_material(mat: dict) -> dict:
     return out
 
 
+def _ask_key(question: str) -> str:
+    """★質問の見分け★（2026-08-12・依頼164）
+
+    同じ機種でも別の質問なら別の案件にする。
+    質問の文そのものは長いので、確定値の項目名を鍵にする。
+    見つからなければ質問の先頭を短く切って使う。
+    """
+    m = re.search(r"--field\s+([A-Za-z_][A-Za-z0-9_]*)", question or "")
+    if m:
+        return m.group(1)
+    head = re.sub(r"[^\wぁ-んァ-ヶ一-龠ー]+", "", str(question or ""))[:16]
+    return head or "unknown"
+
+
 def _ask_ledger(slug: str, name: str, question: str) -> bool:
     """★2AIで決まらなかったことを台帳へ★（2026-08-12・運営者決定）
 
@@ -1897,13 +1911,17 @@ def _ask_ledger(slug: str, name: str, question: str) -> bool:
     """
     return _ledger(
         slug, "quality", "QUALITY", "ASK_2AI",
-        f"{name}: 2AIで決まらなかった項目があります",
+        # ★質問ごとに別の案件にする★（2026-08-12・依頼164のP1）
+        #   機種名だけだと、同じ機種の**別の質問**が同じ案件に合流し、
+        #   片方の回数が満了しただけで新しい質問まで自動の輪から消える。
+        f"{name}: 2AIで決まらなかった項目があります（{_ask_key(question)}）",
         f"{question}\n\n"
         "★機械では決められない意味の判断です★\n"
-        "★人が判断する案件ではありません★＝翌朝の更新タスク（STEP 0-C）が"
-        "この行を拾い、2AIで原文を読んで決めて confirmed_values へ記録します。"
-        "記録されれば次の実行から自動で反映され、この行は閉じられます。\n"
-        "3日続けて決まらなかったときだけ、人の出番になります。")
+        "★人が判断する案件ではありません★＝新台タスクが同じ晩のうちに、"
+        "材料を変えながらやり直します（手元の出典→3つ目の出典→検索で別系統）。"
+        "決まれば confirmed_values へ記録し、この行は閉じられます。\n"
+        "やり直しの上限に達したときだけ、人の出番になります"
+        "（上限は open_issues.py の ASK_MAX_ATTEMPTS）。")
 
 
 

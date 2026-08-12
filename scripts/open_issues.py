@@ -526,8 +526,11 @@ def open_questions(path) -> list:
     return sorted(
         (i for i in data["issues"]
          if i.get("status") == "open" and i.get("reason_code") == "ASK_2AI"
-         # ★上限に達したものは自動では拾わない★＝人へ渡したものを毎晩やり直さない
-         and int(i.get("attempts") or 0) < ASK_MAX_ATTEMPTS),
+         # ★人へ渡し終えたものだけ外す★（2026-08-12・依頼164のP1）
+         #   回数だけで外すと、メールに失敗した質問が
+         #   **自動の輪からも通知からも同時に消える**。
+         #   知らせ終えた（notified_at がある）ものだけを外す。
+         and not i.get("notified_at")),
         key=lambda i: (str(i.get("first_seen") or ""), i.get("id") or 0))
 
 
@@ -555,14 +558,52 @@ def cmd_attempt(path, args):
         notes = hit.setdefault("attempt_notes", [])
         notes.append(f"{_today()}: {args.note}")
         del notes[:-ASK_MAX_ATTEMPTS]      # 直近ぶんだけ残す
-    _save(path, data)
     n = hit["attempts"]
+    if n >= ASK_MAX_ATTEMPTS:
+        hit["needs_notify"] = True        # ★送るまで残す印★
+    _save(path, data)
     print(f"#{args.id} やり直し {n} 回目 / 上限 {ASK_MAX_ATTEMPTS}")
     if n >= ASK_MAX_ATTEMPTS:
         # ★ここではメールを送らない★（送るのはタスク側。台帳は台帳の仕事だけ）
-        print("★NOTIFY_HUMAN★ 3回やって決まりませんでした。人に知らせてください")
+        print(f"★NOTIFY_HUMAN★ {ASK_MAX_ATTEMPTS}回やって決まりませんでした。"
+              "人に知らせて、送れたら notified --id で印を付けてください")
         return 0
-    print("まだ自分でやり直します（次回のタスクが同じ質問を拾います）")
+    print("まだ自分でやり直します（材料を変えて次の回へ）")
+    return 0
+
+
+def cmd_notified(path, args):
+    """★メールを送れたときだけ呼ぶ★（2026-08-12・依頼164のP1）
+
+    送信の成否を確かめずに自動の輪から外すと、
+    送れなかった質問がどこからも見えなくなる。
+    """
+    data = _load(path)
+    hit = next((i for i in data["issues"] if i.get("id") == args.id), None)
+    if hit is None:
+        print(f"★#{args.id} は台帳にありません★")
+        return 1
+    hit["notified_at"] = _today()
+    hit.pop("needs_notify", None)
+    _save(path, data)
+    print(f"#{args.id} 人へ知らせ済みにしました（自動では拾いません）")
+    return 0
+
+
+def cmd_notifications(path, args):
+    """★まだ知らせていない質問★（メール送信に失敗しても消えないための一覧）"""
+    data = _load(path)
+    items = [i for i in data["issues"]
+             if i.get("status") == "open" and i.get("needs_notify")]
+    if not items:
+        print("知らせるべき質問はありません")
+        return 0
+    for it in items:
+        print(f"#{it['id']} [{it['slug']}] {it['title']}")
+        for line in str(it.get("detail") or "").splitlines():
+            print(f"      {line}")
+        for note in (it.get("attempt_notes") or []):
+            print(f"      ・試したこと: {note}")
     return 0
 
 
@@ -576,6 +617,8 @@ def cmd_questions(path, args):
         print(f"#{it['id']} [{it['slug']}] {it['title']}")
         for line in str(it.get("detail") or "").splitlines():
             print(f"      {line}")
+        for note in (it.get("attempt_notes") or []):
+            print(f"      ・試したこと: {note}")
         print(f"      （初出 {it.get('first_seen')}・経過{_days_open(it)}日"
               f"・やり直し{int(it.get('attempts') or 0)}回"
               f"／上限{ASK_MAX_ATTEMPTS}回）")
@@ -705,6 +748,11 @@ def main():
     p.add_argument("--id", type=int, required=True)
     p.add_argument("--note", default="", help="何を試したか（短く）")
 
+    # ★送れたときだけ印を付ける★（送信の成否を確かめずに輪から外さない）
+    sub.add_parser("notifications", help="まだ知らせていない質問")
+    p = sub.add_parser("notified", help="メールを送れた質問に印を付ける")
+    p.add_argument("--id", type=int, required=True)
+
     sub.add_parser("digest")
 
     p = sub.add_parser("close")
@@ -717,7 +765,9 @@ def main():
     path = Path(args.file) if args.file else DEFAULT_FILE
     fn = {"add": cmd_add, "list": cmd_list, "digest": cmd_digest, "close": cmd_close,
           "severity": cmd_severity, "blocking": cmd_blocking,
-          "questions": cmd_questions, "attempt": cmd_attempt}[args.cmd]
+          "questions": cmd_questions, "attempt": cmd_attempt,
+          "notified": cmd_notified,
+          "notifications": cmd_notifications}[args.cmd]
     sys.exit(fn(path, args))
 
 

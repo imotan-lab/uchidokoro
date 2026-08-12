@@ -45,6 +45,11 @@ import safe_json as _sj               # noqa: E402
 
 STATE_PATH = r"C:/Users/imao_/Documents/uchidokoro/task_guard.json"
 CODEX_ROUND_LIMIT = 3
+# ★2AIへの質問（やり直し）は別勘定★（2026-08-12・依頼164のP1）
+#   同じ勘定にすると「質問に3回使うと新台の突き合わせが0回」になり、
+#   **新台の公開か、質問の解決か、どちらかが必ず欠ける晩**ができる。
+#   新台の枠を先に守り、質問には質問の枠を渡す。
+CODEX_ASK_ROUND_LIMIT = 3
 MACHINES_PER_DAY = 1
 # ★1日の機種数を数えないタスク★（2026-08-07・運営者決定）
 #   新台は導入日が決まっていて待てない。分かり次第そのまま記事にする。
@@ -577,18 +582,26 @@ def claim(task: str, slug: str, path: str = STATE_PATH) -> dict:
         _save(path, data)
         return e
 
-def codex_round(task: str, path: str = STATE_PATH) -> int:
-    """Codexへ1往復ぶん使う。★上限を超えたら拒否（必ず終わるため）★"""
+def codex_round(task: str, path: str = STATE_PATH, lane: str = "main") -> int:
+    """Codexへ1往復ぶん使う。★上限を超えたら拒否（必ず終わるため）★
+
+    ★lane="ask" は2AIへの質問のやり直し用★（2026-08-12・依頼164のP1）
+      新台の突き合わせと同じ勘定にすると枠を食い合い、
+      どちらかが必ず欠ける晩ができる。勘定を分けて両立させる。
+    """
+    key = "codex_rounds" if lane == "main" else f"codex_rounds_{lane}"
+    limit = CODEX_ROUND_LIMIT if lane == "main" else CODEX_ASK_ROUND_LIMIT
     with _Exclusive(path):
         data = _load(path)
         e = _entry(data, task)
-        if e["codex_rounds"] >= CODEX_ROUND_LIMIT:
+        used = int(e.get(key) or 0)
+        if used >= limit:
             raise GuardError(
-                f"Codexとの相談が上限（{CODEX_ROUND_LIMIT}往復）に達しました。"
+                f"Codexとの相談が上限（{limit}往復・{lane}）に達しました。"
                 f"結論づかず扱いで台帳に登録して終わってください")
-        e["codex_rounds"] += 1
+        e[key] = used + 1
         _save(path, data)
-        return e["codex_rounds"]
+        return e[key]
 
 def before_write(task: str, slug: str, path: str = STATE_PATH) -> dict:
     """記事を書き換える前の確認。★触ってよい段階か毎回聞き直す★"""
@@ -846,6 +859,14 @@ def selftest() -> int:
         finally:
             cp.assess = _keep_assess
         t("★★台帳で止まっている機種は担当にできない★★（台帳#272）", blocked)
+        # ★ここから先は本番の台帳を見ない★（2026-08-12）
+        #   以前は素の claim を呼んでいたので、本番の台帳で hokuto が
+        #   止まっている日は**自己テストがそこで落ちた**（実際に発生）。
+        #   道具の振る舞いを見る試験が、その日のデータで変わってはいけない。
+        #   既に一覧にある機種は READY、まだ無い機種は NO_MACHINE（実際と同じ形）
+        _known = {"hokuto", "enen", "galfy"}
+        cp.assess = lambda sl, *a, **k: {
+            "stage": "READY" if sl in _known else "NO_MACHINE"}
         t("　断られた日でも枠は残る（次の候補を選べる）",
           claim("t", "hokuto", fp0)["target_slug"] == "hokuto")
 
@@ -906,6 +927,7 @@ def selftest() -> int:
         t("★★記録が読めないときは今日は動かさない（fail-closed）★★",
           raises(lambda: claim("t", "hokuto", fp), "読めません"))
     finally:
+        cp.assess = _keep_assess          # ★本物へ戻す★
         shutil.rmtree(tmpdir, ignore_errors=True)
 
     t("★書き換えてよい段階と触ってはいけない段階が重ならない★",
@@ -962,6 +984,8 @@ def main() -> int:
     sub.add_parser("day")                  # 今日の使用状況
     p = sub.add_parser("codex")
     p.add_argument("--task", required=True)
+    # ★質問のやり直しは別勘定★（2026-08-12・依頼164）新台の枠を食わない
+    p.add_argument("--lane", default="main", choices=["main", "ask"])
     p = sub.add_parser("status")
     p.add_argument("--task", required=True)
 
@@ -983,7 +1007,10 @@ def main() -> int:
     elif args.cmd == "day":
         print(json.dumps(day_status(), ensure_ascii=False, indent=1))
     elif args.cmd == "codex":
-        print(f"Codex相談 {codex_round(args.task)}/{CODEX_ROUND_LIMIT} 回目")
+        _lane = getattr(args, "lane", "main") or "main"
+        _lim = CODEX_ROUND_LIMIT if _lane == "main" else CODEX_ASK_ROUND_LIMIT
+        print(f"Codex相談 {codex_round(args.task, lane=_lane)}/{_lim} 回目"
+              + ("" if _lane == "main" else f"（{_lane}の枠）"))
     elif args.cmd == "before-write":
         print(json.dumps(before_write(args.task, args.slug), ensure_ascii=False, indent=1))
     elif args.cmd == "before-commit":
