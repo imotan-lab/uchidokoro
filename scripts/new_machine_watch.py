@@ -1248,6 +1248,16 @@ def scan_maker(maker_id: str, conf: dict, seen: dict, record: bool = True) -> di
     out = {"maker": maker_id, "name": conf.get("name"), "new": [], "problem": None,
            "total": 0, "first_time": maker_id not in seen["makers"], "state": "OK",
            "retention": None}
+    # ★巡回に要るものが無ければ、落ちずに問題として返す★（2026-08-13・依頼172）
+    #   名簿の役割が「巡回する先」から「メーカーの同定」へ広がり、
+    #   list_url を持たない社（WATCH_OFF）が入っている。--check や
+    #   設定ミスで直接呼ぶと KeyError で異常終了していた（実際に再現）。
+    _missing = [k for k in ("list_url", "link_prefix") if not conf.get(k)]
+    if _missing:
+        out["problem"] = ("巡回に要る項目がありません: " + "／".join(_missing)
+                          + "（この社は見張りの対象ではありません）")
+        out["state"] = "NOT_WATCHABLE"
+        return out
     render = str(conf.get("fetch") or "static") == "render"
     health = {}
     try:

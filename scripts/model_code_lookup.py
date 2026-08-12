@@ -596,24 +596,76 @@ def _maker_core_owners(core_text: str) -> set:
     ように飾りを足す。逆に名簿に無い表記（コナミ…はKPEの名鑑表記）は
     どの社も指さない＝判定不能として扱う。
     """
-    owners = set()
+    hits = []
     try:
         got = json.load(open(_w.CATALOGS, encoding="utf-8"))
         for mid, conf in (got.get("catalogs") or {}).items():
-            if not isinstance(conf, dict) or "list_url" not in conf:
+            # ★巡回しない社（list_url なし）も名簿として見る★（2026-08-13）
+            #   名簿の役割は「巡回する先」から「メーカーの同定」へ広がった。
+            #   巡回対象の絞り込みは呼ぶ側（is_catalog＋status=ACTIVE）が持つ。
+            #   外していたため、京楽・サンスリー等の名鑑ページが
+            #   「解決できません」で材料から全部落ちていた（実ログで発生）。
+            if not isinstance(conf, dict):
                 continue
             # ★名鑑での別名（directory_names）も見る★（2026-08-02・Codex44回目）
             #   KPE↔コナミアミューズメント、ユニバーサル↔ミズホ/メーシー/アクロス等。
             #   別名が解決できるほど「別の社」の検知が広がる（誤拒否は増えない）。
             toks = [str(conf.get("name") or ""), str(mid)]
             toks += [str(x) for x in (conf.get("directory_names") or [])]
+            best = 0
             for tok in toks:
                 c = _ci.normalize_core(tok)
                 if c and c in core_text:
-                    owners.add(mid)
+                    best = max(best, len(c))
+            if best:
+                hits.append((best, mid))
     except Exception:                     # noqa: BLE001
         return set()
-    return owners
+    # ★★最も具体的に当たった社だけを採る★★（2026-08-13）
+    #   素直な包含だと「オリンピア」（平和の別名）が
+    #   「オリンピアエステート」に当たり、**別の社の機種**として
+    #   P-WORLD自身のページまで弾いていた（実ログで発生）。
+    #   当たった芯のうち最長のものだけを残す＝より具体的な名前が勝つ。
+    #   同じ長さで複数社が並ぶのは名簿の矛盾（下の自動試験が見張る）。
+    if not hits:
+        return set()
+    top = max(n for n, _ in hits)
+    best = {mid for n, mid in hits if n == top}
+    # ★同じ長さで複数社が並んだら「決められない」とする★（2026-08-13・依頼172）
+    #   どちらでも通ってしまうと、メーカー違いの材料を採る恐れがある。
+    #   空集合＝DIRECTORY_MAKER_UNRESOLVED で止まる（fail-closed）。
+    return best if len(best) == 1 else set()
+
+
+def _identity_group(maker_id: str) -> str:
+    """★メーカー欄の照合だけに使う「同じグループ」★（2026-08-13・依頼172）
+
+    名鑑によって同じ機種を「平和」と「オリンピアエステート」で書き分ける。
+    平和の公式が両社をグループ会社（パチンコ機・パチスロ機の開発・製造）と
+    載せていることを確かめたうえで、**照合のときだけ**同じ扱いにする。
+
+    ★別名（directory_names）で1社に潰さない理由★
+      ①入口の索引が「同じ名前が2社にある」として対応を無効化する
+      ②法人格の区別が消える
+    ★出典の数は増えない★＝独立性はホスト（サイト）の数で数えているため。
+    未設定なら空文字＝別の社として扱う（fail-closed）。
+    """
+    if not maker_id:
+        return ""
+    try:
+        got = json.load(open(_w.CATALOGS, encoding="utf-8"))
+        conf = (got.get("catalogs") or {}).get(maker_id)
+        if isinstance(conf, dict):
+            return str(conf.get("maker_identity_group") or "")
+    except Exception:                     # noqa: BLE001
+        return ""
+    return ""
+
+
+def _same_identity_group(expected: str, owners: set) -> bool:
+    """期待する社と、名鑑が指した社が同じグループか。"""
+    g = _identity_group(expected)
+    return bool(g) and any(_identity_group(o) == g for o in owners)
 
 
 def lookup(url: str, official_name: str, expected_maker: str = "") -> dict:
@@ -658,7 +710,8 @@ def lookup(url: str, official_name: str, expected_maker: str = "") -> dict:
         if mk:
             owners = _maker_core_owners(
                 _ci.normalize_core(mk).replace("株式会社", ""))
-            if owners and expected_maker not in owners:
+            if (owners and expected_maker not in owners
+                    and not _same_identity_group(expected_maker, owners)):
                 out["reason"] = (f"DIRECTORY_MAKER_MISMATCH（名鑑のメーカー欄が"
                                  f"別の社を指しています: {mk[:30]}）")
                 return out
@@ -738,6 +791,40 @@ def agree(results: list) -> dict:
             "observed_model_code": shown.get(only) if only else None,
             "observed_hosts": sorted(codes[only]) if only else [],
             "why": f"型式名が1つの名鑑にしか載っていません: {detail}"}
+
+
+# ------------------------------------------------------- selftest の補助
+
+def _catalog_tokens(conf: dict, mid: str) -> set:
+    """★照合に実際に使う呼び名の全部★（name・別名・メーカーID）。"""
+    toks = [str(conf.get("name") or ""), str(mid)]
+    toks += [str(x) for x in (conf.get("directory_names") or [])]
+    return {_ci.normalize_core(x) for x in toks if x} - {""}
+
+
+def _catalog_name_collisions() -> list:
+    """同じ呼び名が2社にまたがっていないか（またがると1社に絞れない）。"""
+    seen: dict = {}
+    try:
+        cats = json.load(open(_w.CATALOGS, encoding="utf-8"))["catalogs"]
+    except Exception:                     # noqa: BLE001
+        return [("名簿が読めません", [])]
+    for mid, conf in cats.items():
+        if not isinstance(conf, dict):
+            continue
+        for c in _catalog_tokens(conf, mid):
+            seen.setdefault(c, set()).add(mid)
+    return [(c, sorted(ms)) for c, ms in seen.items() if len(ms) > 1]
+
+
+def _write_tmp_catalogs(cats: dict) -> None:
+    """試験のあいだだけ名簿を差し替える（本物には触らない）。"""
+    import tempfile
+    fd, tmp = tempfile.mkstemp(suffix=".json")
+    os.close(fd)
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"catalogs": cats}, f, ensure_ascii=False)
+    _w.CATALOGS = tmp
 
 
 # ---------------------------------------------------------------- selftest
@@ -957,6 +1044,45 @@ def selftest() -> int:
                        expected_maker="heiwa"),
                 setattr(_w, "_get", _w._get_bak40))[2])()
       ["reason"].startswith("DIRECTORY_MAKER_MISMATCH"))
+    # ★★2026-08-13・実ログ（手動実行）で3機種が材料0件になった件★★
+    #   名鑑のメーカー欄を名簿で解決できず、P-WORLD自身のページまで
+    #   「別の社」として弾かれていた。原因は2つで、両方ここで見張る。
+    t("★★巡回しない社（list_urlなし）も名簿として解決できる★★"
+      "（京楽・サンスリー等が『解決できません』で落ちていた）",
+      _maker_core_owners(_ci.normalize_core("京楽産業.")) == {"kyoraku"}
+      and _maker_core_owners(_ci.normalize_core("サンスリー")) == {"sanslay"})
+    t("★★別名が別名を含むときは、より具体的に当たった社が勝つ★★"
+      "（『オリンピア』＝平和の別名が『オリンピアエステート』に当たっていた）",
+      _maker_core_owners(_ci.normalize_core("オリンピアエステート"))
+      == {"olympia_estate"}
+      and _maker_core_owners(_ci.normalize_core("オリンピア")) == {"heiwa"})
+    t("　従来どおり、名簿に無い表記はどの社も指さない（判定不能）",
+      _maker_core_owners(_ci.normalize_core("架空スロット工業")) == set())
+    t("★★名簿の中で同じ呼び名が2社にまたがっていない★★"
+      "（またがると『最も具体的な社』が決められず、材料が全部落ちる）"
+      "／★照合に使うメーカーIDも同じ土俵で見る★（依頼172）",
+      not _catalog_name_collisions())
+    t("★★同じ長さで2社が並んだら『決められない』で止める★★（依頼172のP2）"
+      "／どちらでも通ると、メーカー違いの材料を採る恐れがある",
+      (lambda: (setattr(_w, "_cat_bak", _w.CATALOGS),
+                _write_tmp_catalogs({
+                    "aa": {"name": "テスト社", "status": "WATCH_OFF"},
+                    "bb": {"name": "テスト社", "status": "WATCH_OFF"}}),
+                _maker_core_owners(_ci.normalize_core("テスト社")),
+                setattr(_w, "CATALOGS", _w._cat_bak))[2])() == set())
+    t("★★名鑑が同じグループの別会社名で書いていても通す★★（依頼172のP1）"
+      "／平和⇔オリンピアエステート（公式のグループ会社一覧で確認）",
+      _same_identity_group("olympia_estate", {"heiwa"})
+      and _same_identity_group("heiwa", {"olympia_estate"}))
+    t("　グループが決まっていない社どうしは、従来どおり別の社",
+      _same_identity_group("sammy", {"universal"}) is False
+      and _same_identity_group("", {"heiwa"}) is False)
+    t("★★巡回に要るものが無い社は、落ちずに『見張りの対象外』で返る★★"
+      "（--check kyoraku が KeyError で異常終了していた・依頼172のP1）",
+      (lambda r: r["state"] == "NOT_WATCHABLE" and bool(r["problem"]))(
+          _w.scan_maker("kyoraku",
+                        {"name": "京楽", "status": "WATCH_OFF"},
+                        {"makers": {}}, record=False)))
     t("　名簿の別名（コナミアミューズメント→KPE）は解決されて通る"
       "（KPEのとんスキ実データを弾かないため）",
       (lambda: (setattr(_w, "_get_bak41", _w._get),
