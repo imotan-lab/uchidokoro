@@ -341,9 +341,14 @@ def page_is_machine(html: str, official_name: str,
                 #   _decor_compound で同じ扱いをしていたのに、ここだけ
                 #   単語の完全一致だったため、**題に機種名が丸ごと載っている
                 #   ちょんぼりすたのページが落ちて**いた（実測）。
-                #   _decor_compound は派生印（「SP新台」）を弾くので緩みはしない。
+                # ★ただし厳格な経路だけに限る★（2026-08-13・依頼173のP1）
+                #   ゆるい経路は「残り全部」を見ないので、
+                #   「L対象機 新台解析 L別機種」の後ろの別機種を見落とす
+                #   （Codexの反例。実際に (True,'OK') になることを確認した）。
+                #   材料集め（天井・AT・CZ・スペック）と型式照合はすべて
+                #   strict_all_tail=True なので、これで目的は満たせる。
                 if (k >= len(words) or words[k] in _DECOR_CORES
-                        or _decor_compound(raw[k])):
+                        or (strict_all_tail and _decor_compound(raw[k]))):
                     # ★名前より前の語も全部見る★（2026-08-02・Codex24〜25回目）
                     #   「P 北斗の拳」「パチンコ 北斗の拳」「別機種 | L北斗の拳」の
                     #   ように**前に別の意味の語がある題**が通っていた。
@@ -1090,6 +1095,42 @@ def selftest() -> int:
                           "L北斗の拳", strict_all_tail=True)[0] is False
       and page_is_machine("<title>別機種の話 L北斗の拳 新台解析</title>",
                           "L北斗の拳", strict_all_tail=True)[0] is False)
+    # ★★2026-08-13・依頼173のP1（Codexの反例）★★
+    #   飾りの連結語をゆるい経路でも許すと、後ろの別機種を見落とす。
+    #   ゆるい経路は「残り全部」を見ないため、ここだけは締めておく。
+    t("★★ゆるい経路では、飾りの連結語の後ろに別機種があれば本人にしない★★"
+      "（confirmed_values / machine_sources が使う経路・依頼173のP1）",
+      page_is_machine("<title>L対象機 新台解析 L別機種</title>",
+                      "L対象機")[0] is False)
+    t("　厳格な経路（材料集め・型式照合）では、その題は規格印の食い違いで弾く",
+      page_is_machine("<title>L対象機 新台解析 L別機種</title>",
+                      "L対象機", strict_all_tail=True)[0] is False)
+    t("★★読点を区切りから外しても、並んだ別機種は本人にしない★★"
+      "（Codexが挙げた3つの形・依頼173）",
+      all(page_is_machine(f"<title>{_t}</title>", "L対象機")[0] is False
+          and page_is_machine(f"<title>{_t}</title>", "L対象機",
+                              strict_all_tail=True)[0] is False
+          for _t in ("L対象機、L別機種", "L対象機、 L別機種",
+                     "L対象機、新台解析、L別機種")))
+    t("★★名鑑が「三洋物産」と書いたサンスリー製の機種を本人と認める★★"
+      "（名簿の解決だけでなく、照合そのものを見る・依頼173のP2）",
+      (lambda: (setattr(_w, "_get_bak173", _w._get),
+                setattr(_w, "_get", lambda u, timeout=20:
+                        "<title>L試験機 パチスロ新台 | P-WORLD</title>"
+                        "<p>メーカー名：三洋物産</p><p>型式名：L試験1</p>"),
+                lookup("https://nana-press.com/x", "L試験機",
+                       expected_maker="sanslay"),
+                setattr(_w, "_get", _w._get_bak173))[2])()
+      ["identity_ok"] is True)
+    t("　グループの外の社なら、今までどおり別の社として弾く",
+      (lambda: (setattr(_w, "_get_bak174", _w._get),
+                setattr(_w, "_get", lambda u, timeout=20:
+                        "<title>L試験機 パチスロ新台 | P-WORLD</title>"
+                        "<p>メーカー名：サミー</p><p>型式名：L試験1</p>"),
+                lookup("https://nana-press.com/x", "L試験機",
+                       expected_maker="sanslay"),
+                setattr(_w, "_get", _w._get_bak174))[2])()
+      ["reason"].startswith("DIRECTORY_MAKER_MISMATCH"))
     t("★★巡回しない社（list_urlなし）も名簿として解決できる★★"
       "（京楽・サンスリー等が『解決できません』で落ちていた）",
       _maker_core_owners(_ci.normalize_core("京楽産業.")) == {"kyoraku"}
