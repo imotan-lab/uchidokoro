@@ -211,6 +211,21 @@
       "name": "オリンピアエステート",
       "status": "WATCH_OFF",
       "_why": "同上。L転生王女と天才令嬢の魔法革命 を待たせていた"
+    },
+    "amtex": {
+      "name": "アムテックス",
+      "status": "WATCH_OFF",
+      "_why": "P-WORLDのカレンダー（過去1か月）に出るが名簿に無かった（例: L南国育ち SPECIAL・2026-08-12）"
+    },
+    "okk": {
+      "name": "オッケー.",
+      "status": "WATCH_OFF",
+      "_why": "同上（例: L ULTRAMAN 最終決戦）"
+    },
+    "seiryu": {
+      "name": "清龍ゲームジャパン",
+      "status": "WATCH_OFF",
+      "_why": "同上（例: LBトリプルクラウンX‐300）"
     }
   },
   "_notes": {

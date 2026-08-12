@@ -130,12 +130,19 @@ class _Reader(HTMLParser):
 
 
 def _read_count(text: str) -> dict:
-    """「全3機種 パチンコ2機種 / パチスロ1機種」を読む（★答え合わせ用★）。"""
+    """「全3機種 パチンコ2機種 / パチスロ1機種」を読む（★答え合わせ用★）。
+
+    ★0機種の日は「パチスロ-機種」とハイフンで書かれる★（2026-08-12・実データ）
+      数字だけを見ていたので「読めない」と判定して止まっていた。
+      ラベル自体は在るので、ハイフンは0として読む
+      （ラベルごと消えている場合は今までどおり「読めない」＝止める）。
+    """
     out = {}
     for label, key in (("全", "all"), ("パチンコ", "pachi"), ("パチスロ", "slot")):
-        m = re.search(re.escape(label) + r"\s*(\d+)\s*機種", text)
+        m = re.search(re.escape(label) + r"\s*(\d+|[-−ー―])\s*機種", text)
         if m:
-            out[key] = int(m.group(1))
+            v = m.group(1)
+            out[key] = int(v) if v.isdigit() else 0
     return out
 
 
@@ -329,6 +336,12 @@ def selftest() -> int:
         '<p class="machineList-header-count">全3機種 パチンコ2機種 / パチスロ1機種</p>', "")
     t("★★件数の申告が読めなければ止まる★★（0件を新台なしと取り違えない）",
       raises(lambda: parse(no_count), "件数の申告が読めません"))
+    #   ★0機種の日はハイフンで書かれる★（実データで確認）
+    t("★★0機種はハイフンで書かれる（それを0として読む）★★",
+      _read_count("全1機種 パチンコ1機種 / パチスロ-機種")
+      == {"all": 1, "pachi": 1, "slot": 0})
+    t("　ラベルごと無い場合は「読めない」",
+      "slot" not in _read_count("全1機種 パチンコ1機種"))
     t("★★申告の内訳が合わなければ止まる★★",
       raises(lambda: parse(_FIX.replace("パチンコ2機種", "パチンコ1機種")), "内訳が合いません"))
     t("★★1つの行に複数の機種IDがあれば止まる★★（サムネイルと題が別機種）",

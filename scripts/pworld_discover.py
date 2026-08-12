@@ -124,7 +124,9 @@ def run(apply_it: bool = False, before: bool = False) -> dict:
     for row in rows:
         got = check_one(row, index)
         if not got["ok"]:
-            out["held"].append({"name": row["name"], "reason": got["reason"]})
+            # ★メーカー名も一緒に返す★（名簿に無い会社を知らせるため）
+            out["held"].append({"name": row["name"], "reason": got["reason"],
+                                "maker": row.get("maker", "")})
             # ★飛ばさずに待ち行列へ残す★（翌晩また試す）
             if apply_it:
                 _pend.add(data, row["name"], row["url"], "", "",

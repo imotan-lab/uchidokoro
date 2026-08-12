@@ -231,6 +231,80 @@ def recheck_known(mid: str, r: dict, seen: dict, out: dict) -> None:
 USE_MAKER_WATCH = False
 
 
+# ★知らせ済みのメーカーを覚えておく場所★（同じ会社で毎晩鳴らさない）
+UNKNOWN_MAKERS = r"C:/Users/imao_/Documents/uchidokoro/pworld_unknown_makers.json"
+
+
+def _tell_unknown_makers(rows: list) -> None:
+    """★名簿に無いメーカーをメールで知らせる★（2026-08-12・運営者の指示）
+
+    名簿は「メーカーの表示名 → 内部の呼び名」の対応表。
+    ここに無い会社の新台は、どのメーカーとして記録するか決まらないので
+    記事を作れない。★推測で結ばない★（別会社の機種になる）。
+
+    ★同じ会社では一度だけ★／★送れなくても新台の処理は止めない★
+    """
+    import json
+    try:
+        known = _sj.read_json(UNKNOWN_MAKERS, expect=dict, allow_missing=True,
+                              default={"makers": {}})
+    except Exception as e:                # noqa: BLE001
+        _log(f"  知らせ済みの控えを読めません（全部知らせます）: {e}")
+        known = {"makers": {}}
+    fresh = [(m, n) for m, n in rows if m not in (known.get("makers") or {})]
+    if not fresh:
+        _log("  名簿に無いメーカーはすべて連絡済みです")
+        return
+    lines = ["P-WORLDのカレンダーに、名簿に無いメーカーの新台が出ています。",
+             "このままだと記事を作れません（どのメーカーとして記録するか決まらないため）。",
+             "",
+             "★名簿に足してください★",
+             "  ファイル: assets/data/maker-catalogs.json",
+             "  書き方  : \"<内部の呼び名>\": {\"name\": \"<表示名>\", "
+             "\"status\": \"WATCH_OFF\"}",
+             "  ★推測で既存の会社に結び付けないこと★（別会社の機種になります）",
+             ""]
+    for m, n in fresh:
+        lines.append(f"  ・{m}    （例: {n}）")
+    lines += ["", "足したあとは、翌晩の新台タスクが自動で拾います。"]
+    ops = r"C:/Users/imao_/Documents/uchidokoro/ops"
+    try:
+        os.makedirs(ops, exist_ok=True)
+        sub = os.path.join(ops, "unknown_maker_subject.txt")
+        body = os.path.join(ops, "unknown_maker_body.txt")
+        with open(sub, "w", encoding="utf-8") as f:
+            f.write("🟡 うちどころ: 名簿に無いメーカーの新台があります（%d社）"
+                    % len(fresh))
+        with open(body, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+        r = subprocess.run(
+            [sys.executable, r"C:/Users/imao_/.claude/send_notify.py", "notify",
+             "--subject-file", sub, "--body-file", body],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+        if r.returncode != 0:
+            # ★送れなくても止めない★（次の晩にまた知らせる＝控えを更新しない）
+            _log(f"  ★メールを送れませんでした★: {(r.stderr or r.stdout)[:200]}")
+            return
+    except Exception as e:                # noqa: BLE001
+        _log(f"  ★メールを送れませんでした★: {type(e).__name__}: {e}")
+        return
+    _log("  名簿に無いメーカーを知らせました: "
+         + "／".join(m for m, _ in fresh))
+    # ★送れてから控える★（送信前に控えると、失敗した会社を二度と知らせない）
+    for m, n in fresh:
+        import datetime
+        known.setdefault("makers", {})[m] = {
+            "first_seen": datetime.date.today().isoformat(), "example": n}
+    try:
+        tmp = UNKNOWN_MAKERS + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(known, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, UNKNOWN_MAKERS)
+    except Exception as e:                # noqa: BLE001
+        _log(f"  知らせ済みの控えを書けません（次回また知らせます）: {e}")
+
+
 def discover_pworld(persist: bool = True) -> dict:
     """P-WORLDの導入カレンダーから新台候補を出す。
 
@@ -257,8 +331,14 @@ def discover_pworld(persist: bool = True) -> dict:
         out["candidates"].append(q["url"])
         out["first_time"].append(f"{q['name']} / {q['url']}")
         _log(f"  カレンダーから: {q['name']}（{q['maker']}・{q['release']}）")
+    unknown = []
     for h in got.get("held") or []:
         _log(f"  待たせます: {h['name']} ← {h['reason'][:120]}")
+        # ★名簿に無いメーカーは、その都度知らせる★（2026-08-12・運営者の指示）
+        if h.get("maker") and "名簿にありません" in (h.get("reason") or ""):
+            unknown.append((h["maker"], h["name"]))
+    if unknown and persist:
+        _tell_unknown_makers(unknown)
     _log(f"P-WORLDのカレンダー: 候補{got.get('looked', 0)}件 / "
          f"待ち行列へ{len(out['candidates'])}件 / 待たせた{len(got.get('held') or [])}件")
     return out
