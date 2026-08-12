@@ -2845,8 +2845,12 @@ def selftest() -> int:
             _no_maker = _pm_mod._FIX.replace(
                 '<tr><td>メーカー　：<a href="/x">北電子</a></td></tr>', "")
             _keep_verify = _pm_mod.verify
-            _pm_mod.verify = lambda *a, **k: _pm_mod.parse(_no_maker) | {
-                "problems": ["メーカーが読めません"]}
+            # ★下位が黙っていても、上位が止めることを見る★（依頼168のP2）
+            #   偽の verify に問題を持たせると、下位が止めた後の
+            #   「印付け」しか見ないことになり、
+            #   **上位自身の守りを壊しても試験が通って**しまう。
+            _pm_mod.verify = lambda *a, **k: dict(
+                _pm_mod.parse(_no_maker), problems=[])
             try:
                 _r = _verify_pworld(
                     "マイジャグラーVI",
@@ -2854,8 +2858,10 @@ def selftest() -> int:
                     "kitadenshi", "2026-10")
             finally:
                 _pm_mod.verify = _keep_verify
-            t("★★メーカーを読めないページは公開まで止める★★（印が付く）",
-              bool(_blocking(_r["problems"])))
+            t("★★下位が黙っていても、上位がメーカー空を止める★★"
+              "（公開まで止まる）",
+              bool(_blocking(_r["problems"]))
+              and any("メーカーを読めませんでした" in x for x in _r["problems"]))
             t("　一覧カードの証跡は今までどおり",
               "#card2" in _evidence_ref({"identity_evidence": {
                   "list_html_sha256": "abc", "card_index": 2}}))
