@@ -73,11 +73,22 @@ FIELD_TARGETS = {
 # 基本スペック側（spec_lookup.FIELDS の鍵）はそのまま adopted へ入る
 
 
+# ★2AIだけが答えられる項目★（2026-08-12・運営者決定「人が直す項目をなくす」）
+#   機械の側で決めようとすると場合分けが増えるだけなので、
+#   「機械は質問を出す・2AIが答えて記録する」形にする。
+AI_ONLY_FIELDS = {
+    # 天井が複数ある機種（通常時／AT間／スルー）で、
+    # 早見表の「天井まで残り」に使う値はどれか。
+    "checker_ceiling": "adopted",
+}
+
+
 def allowed_fields() -> dict:
     """受け取ってよい項目 → 入れ先。"""
     import spec_lookup as _sp
     out = {k: "adopted" for k in _sp.FIELDS}
     out.update(FIELD_TARGETS)
+    out.update(AI_ONLY_FIELDS)
     return out
 
 
@@ -86,6 +97,11 @@ def allowed_fields() -> dict:
 #   そのあと記事生成が c["benefit"] で落ち続ける状態になっていた。
 #   ★引用と照合する表示値★も項目ごとに決める（内部の記号は照合しない）。
 VALUE_SHAPES = {
+    # ★早見表に使う通常時の天井★（2026-08-12）
+    #   天井が複数ある機種で、2AIが「通常時の天井はこれ」と決めた値。
+    #   なぜその値かを --why に必ず残す。
+    "checker_ceiling": {"required": ("games",), "enums": {},
+                        "quoted": ("games",)},
     "ceiling": {"required": ("kind", "amount", "unit", "benefit"),
                 "enums": {"kind": ("GAME", "CYCLE", "POINT")},
                 "quoted": ("amount", "unit")},
@@ -156,6 +172,12 @@ VALUE_PATTERNS = {
     "ceiling": {
         "amount": (_re.compile(r"^\d{1,5}$"), "数だけ（単位は unit に書く）"),
         "unit": (_re.compile(r"^[GＧ]|pt|周期|スルー|まいる$"), "単位"),
+    },
+    # ★早見表に使う通常時の天井★（2026-08-12）
+    #   「天井まで残り」を引き算に使うので、+α のような幅は受け取らない。
+    "checker_ceiling": {
+        "games": (_re.compile(r"^\d{2,5}$"),
+                  "数だけ（+αや単位は書かない。例: 1000）"),
     },
     # ★朝一・リセット★（2026-08-12）
     "reset": {
@@ -795,9 +817,13 @@ def selftest() -> int:
           and "ceiling" not in (mat.get("adopted") or {}))
 
         import spec_lookup as _sp
-        t("　基本スペック側の項目は spec_lookup が知っている鍵だけ",
-          all(k in _sp.FIELDS for k, v in allowed_fields().items()
-              if v == "adopted"))
+        # ★adopted に入るのは spec_lookup が知っている鍵か、
+        #   2AIだけが答えられる鍵（AI_ONLY_FIELDS）★（2026-08-12）
+        t("　基本スペック側の項目は spec_lookup か AI_ONLY_FIELDS の鍵だけ",
+          all(k in _sp.FIELDS or k in AI_ONLY_FIELDS
+              for k, v in allowed_fields().items() if v == "adopted"))
+        t("　2AIだけが答える鍵にも値の形がある（何でも受け取らない）",
+          all(k in VALUE_SHAPES for k in AI_ONLY_FIELDS))
 
         mat2 = {"ceilings": {"adopted": [{"kind": "GAME", "amount": "1000",
                                           "unit": "G", "benefit": "AT",

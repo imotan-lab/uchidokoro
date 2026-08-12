@@ -281,13 +281,37 @@ def build_machine(slug, name, maker, official_url, release, material,
     }
 
 
+def checker_questions(material) -> list:
+    """★機械が決められないことを、2AIへの質問として出す★（2026-08-12）
+
+    運営者決定「人が直す項目をなくす。困ったら2AIで判断。
+    それでも無理ならメールで知らせる」。
+    黙って空にすると誰も気づかないので、必ず質問の形で外へ出す。
+    """
+    adopted = material.get("adopted") or {}
+    ceilings = [c for c in ((material.get("ceilings") or {}).get("adopted") or [])
+                if (c or {}).get("kind") == "GAME"]
+    if len(ceilings) < 2 or adopted.get("checker_ceiling"):
+        return []
+    amounts = " / ".join(f"{c.get('amount')}{c.get('unit')}"
+                         f"（{c.get('benefit')}）" for c in ceilings)
+    return ["★通常時の天井はどれか判断してください★"
+            f"（確認できたG数天井: {amounts}）"
+            "／早見表の「天井まで残り」に使います。決めたら "
+            "confirmed_values.py --record --field checker_ceiling "
+            "--value-file <{\"games\": \"1000\"} を書いたファイル> "
+            "--why <理由> --by 2AI で記録してください"]
+
+
 def build_checker(material) -> dict | None:
     """早見表の材料（天井・50枚あたりG数）だけの checker を作る。
 
     ★入れられるものが1つも無ければ作らない★（空の器を置かない）
     ★天井は「G数の天井がちょうど1つ」のときだけ★
       通常時／AT間／スルーのように複数あるとき、どれを通常時の天井として
-      扱うかは**意味の判断**なので機械は決めない（2AI・人が後で入れる）。
+      扱うかは**意味の判断**なので機械は決めない。
+      ★放置しない★＝決まっていなければ checker_questions() が質問を出し、
+      2AIが決めて confirmed_values に記録する（運営者決定 2026-08-12）。
     """
     adopted = material.get("adopted") or {}
     out: dict = {}
@@ -299,11 +323,24 @@ def build_checker(material) -> dict | None:
     ceilings = [c for c in ((material.get("ceilings") or {}).get("adopted") or [])
                 if (c or {}).get("kind") == "GAME"]
     mode = {}
+
+    def _as_int(x):
+        m = re.match(r"^(\d{2,5})", str(x or "").strip())
+        return int(m.group(1)) if m and 0 < int(m.group(1)) <= 20000 else None
+
     if len(ceilings) == 1:
         # 「1000」「1000+α」どちらも 1000 として読む（+αは前兆ぶんで幅がある）
-        m = re.match(r"^(\d{2,5})", str(ceilings[0].get("amount") or "").strip())
-        if m and 0 < int(m.group(1)) <= 20000:
-            mode["ceiling"] = int(m.group(1))
+        if (v := _as_int(ceilings[0].get("amount"))) is not None:
+            mode["ceiling"] = v
+    elif len(ceilings) >= 2:
+        # ★2AIが決めた値があればそれを使う★（2026-08-12・運営者決定）
+        #   どれが通常時の天井かは意味の判断なので機械は決めない。
+        #   ただし**放置もしない**＝決まっていなければ質問として出す（下）。
+        picked = _as_int(((adopted.get("checker_ceiling") or {})
+                          .get("value") or {}).get("games"))
+        if picked is not None and picked in {_as_int(c.get("amount"))
+                                             for c in ceilings}:
+            mode["ceiling"] = picked
     if not out and not mode:
         return None
     out["unit"] = "G"
@@ -770,6 +807,32 @@ def selftest() -> int:
       "（文字列の \"false\" で断り書きが消えない）",
       CEILING_PARTIAL_NOTE in _ceil_body(_d_false)
       and CEILING_PARTIAL_NOTE not in _ceil_body(_d_true))
+    # ★機械が決められないことは質問として出す★（2026-08-12・運営者決定）
+    #   「人が直す項目をなくす。困ったら2AIで判断。それでも無理ならメール」。
+    #   黙って空にすると誰も気づかず、その欄は永久に埋まらない。
+    def _mat_ceil(*amounts, picked=None):
+        mm = {"adopted": {}, "need_third": {}, "thin": {},
+              "ceilings": {"adopted": [{"kind": "GAME", "amount": a, "unit": "G",
+                                        "benefit": "AT当選"} for a in amounts]}}
+        if picked:
+            mm["adopted"]["checker_ceiling"] = {"value": {"games": picked}}
+        return mm
+
+    t("★★天井が1つなら機械が決めてよい★★",
+      (build_checker(_mat_ceil("1000")) or {}).get("normal") == {"ceiling": 1000}
+      and not checker_questions(_mat_ceil("1000")))
+    #   ★入れるものが何も無ければ checker ごと作らない★ので None になる。
+    #   大事なのは「黙って終わらせず、質問が必ず1件出ること」。
+    t("★★天井が2つ以上なら決めずに2AIへ質問する★★（黙って空にしない）",
+      build_checker(_mat_ceil("800", "1200")) is None
+      and len(checker_questions(_mat_ceil("800", "1200"))) == 1)
+    t("★★2AIが決めたら、その値を使い質問は消える★★",
+      (build_checker(_mat_ceil("800", "1200", picked="1200")) or {})
+      .get("normal") == {"ceiling": 1200}
+      and not checker_questions(_mat_ceil("800", "1200", picked="1200")))
+    t("★★出典に無い値を答えても採らない★★（2AIでも値は発明できない）",
+      build_checker(_mat_ceil("800", "1200", picked="999")) is None)
+
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
     if ng:

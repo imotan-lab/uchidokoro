@@ -1888,6 +1888,25 @@ def usable_material(mat: dict) -> dict:
     return out
 
 
+def _ask_ledger(slug: str, name: str, question: str) -> None:
+    """★2AIで決まらなかったことを台帳へ★（2026-08-12・運営者決定）
+
+    「人が直す項目をなくす」ので、機械が決められないことは 2AI へ回す。
+    それでも答えが出ないまま公開まで来たときだけ、ここで知らせる。
+    ★メールを送るのは台帳のまとめ（翌朝）★＝公開処理はメールで止めない。
+    """
+    ok = _ledger(
+        slug, "quality", "QUALITY", "ASK_2AI",
+        f"{name}: 2AIで決まらなかった項目があります",
+        f"{question}\n\n"
+        "★機械では決められない意味の判断です★\n"
+        "2AIで原文を読んで決め、confirmed_values へ記録してください。"
+        "記録されれば次の実行から自動で反映されます。")
+    # ★知らせられなくても公開は止めない★（ログには必ず残る）
+    if not ok:
+        _log(f"  ★2AIへの質問を台帳に載せられませんでした★: {question[:80]}")
+
+
 def run_one(name, official_url, maker, release, apply_it=False,
             release_is_cache=False,
             before_write=None) -> dict:
@@ -1973,6 +1992,13 @@ def run_one(name, official_url, maker, release, apply_it=False,
     # ★天井・AT・CZの採用分も材料に数える★（2026-08-03・Codex57回目。
     #   基本スペック直下しか見ておらず、天井などが2媒体一致していても
     #   「材料なし」で記事を永久に作れなかった）
+    # ★機械が決められないことは、質問として持ち回る★（2026-08-12・運営者決定）
+    #   黙って空にすると誰も気づかないまま、その欄は永久に埋まらない。
+    #   ①ここで質問を出す ②2AIが答えて confirmed_values へ記録する
+    #   ③公開まで答えが出なければ台帳へ＝翌朝のまとめメールで知らせる
+    out["ask_2ai"] = _ba.checker_questions(mat)
+    for q in out["ask_2ai"]:
+        _log(f"  ★2AIに聞くこと: {q[:160]}")
     usable_mat = usable_material(mat)
     if not usable_mat:
         out["problems"].append("採用できた材料がありません（記事を作りません）")
@@ -2023,6 +2049,12 @@ def run_one(name, official_url, maker, release, apply_it=False,
         #   「待ち行列にも無い・手元だけ変わっている」状態になり、
         #   翌日の実行が残骸で止まって、誰も気づかないまま進まなくなる。
         out["pending_url"] = official_url
+        # ★2AIの答えが出ないまま公開まで来たらメールで知らせる★
+        #   （2026-08-12・運営者決定「困ったら2AI、それでも無理ならメール」）
+        #   台帳に載せると翌朝のまとめメールで届く。
+        #   ★同じ題は重複しない★ので毎晩は鳴らない。
+        for q in out.get("ask_2ai") or []:
+            _ask_ledger(out["slug"], name, q)
     _log(f"=== 機種の処理終了: {name} / 止めた理由{len(out['blocked'])}件 "
          f"/ 問題{len(out['problems'])}件 ===")
     return out
@@ -2503,6 +2535,29 @@ def selftest() -> int:
                 _mods[_k] = usable_material(
                     {"adopted": {"model_code": "L試験機"},
                      _k: {"adopted": [{"x": 1}]}})
+            # ★2AIで決まらなければメールで知らせる★（2026-08-12・運営者決定）
+            #   台帳へ載せる＝翌朝のまとめメールで届く。
+            #   ★載せられなくても公開は止めない★（ログには必ず残す）
+            _asked = []
+            _keep_ledger_fn = globals()["_ledger"]
+            globals()["_ledger"] = lambda *a: (_asked.append(a), True)[1]
+            try:
+                _ask_ledger("zzz", "試験機", "天井はどれですか")
+                _ok_call = (len(_asked) == 1 and _asked[0][0] == "zzz"
+                            and _asked[0][3] == "ASK_2AI")
+                globals()["_ledger"] = lambda *a: False    # 載せられない場合
+                _ask_ledger("zzz", "試験機", "天井はどれですか")
+                _no_raise = True
+            except Exception:                        # noqa: BLE001
+                _ok_call, _no_raise = False, False
+            finally:
+                globals()["_ledger"] = _keep_ledger_fn
+            t("★★2AIで決まらなかった質問は台帳へ載せる★★（翌朝のメールで届く）",
+              _ok_call)
+            t("★★台帳に載せられなくても公開を止めない★★", _no_raise)
+            t("　質問は run_one が持ち回る（黙って捨てない）",
+              'out["ask_2ai"] = _ba.checker_questions(mat)'
+              in inspect.getsource(run_one))
             t("★★天井・AT・CZ・リセットだけ採れた機種も「材料あり」と数える★★"
               "（基本スペック直下しか見ず記事を永久に作れなかった・Codex57回目"
               "／リセットは依頼160のP1-6）",
