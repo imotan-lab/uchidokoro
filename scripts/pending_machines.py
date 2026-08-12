@@ -76,8 +76,14 @@ def save(data: dict) -> None:
 
 
 def add(data: dict, name: str, url: str, maker: str, release: str,
-        reason: str = "") -> dict:
-    """待ち行列に入れる（既にあれば試した回数と理由を更新する）。"""
+        reason: str = "", extra: dict | None = None) -> dict:
+    """待ち行列に入れる（既にあれば試した回数と理由を更新する）。
+
+    ★extra＝あとで引き直せない手掛かり★（2026-08-13・台帳#335）
+      P-WORLDのメーカー表示名など、カレンダーから消えると
+      **待ち行列だけでは二度と分からなくなる**ものを持たせる。
+      ★空では上書きしない★（一度覚えたものを消さない）。
+    """
     # ★名前が無くても覚える★（2026-07-31・Codex17回目）
     #   公式ページを読めなかったURLは名前が取れない。
     #   そこで拒否すると、**そのURLは既知になったまま二度と出てこない**＝機種が消える。
@@ -91,11 +97,15 @@ def add(data: dict, name: str, url: str, maker: str, release: str,
         it["last_reason"] = reason[:300]
         # ★名前や登場年月が変わることがある（公式の書き換え）★
         it["name"], it["maker"], it["release"] = name, maker, release
+        for k, v in (extra or {}).items():
+            if v:                         # ★空では上書きしない★
+                it[k] = v
     else:
         data["items"][url] = {
             "name": name, "url": url, "maker": maker, "release": release,
             "first_seen": _today(), "last_try": _today(), "tries": 1,
-            "last_reason": reason[:300]}
+            "last_reason": reason[:300],
+            **{k: v for k, v in (extra or {}).items() if v}}
     return data["items"][url]
 
 
@@ -215,6 +225,22 @@ def selftest() -> int:
       _raises(lambda: _check_schema({"schema": "べつのもの", "items": {}})))
     t("　中身が壊れていても止まる",
       _raises(lambda: _check_schema({"schema": SCHEMA, "items": []})))
+
+    # ★あとで引き直せない手掛かりを覚える★（2026-08-13・台帳#335）
+    #   P-WORLDのメーカー表示名は、カレンダーから消えると
+    #   待ち行列だけでは二度と分からない。
+    _d = {"items": {}}
+    add(_d, "試験機", "https://x/1", "", "", reason="確かめられません",
+        extra={"pworld_maker": "ミズホ", "pworld_id": "10546"})
+    t("★★覚えた手掛かりが残る★★（メーカーを引き直せる）",
+      _d["items"]["https://x/1"].get("pworld_maker") == "ミズホ"
+      and _d["items"]["https://x/1"].get("pworld_id") == "10546")
+    add(_d, "試験機", "https://x/1", "universal", "2026-11",
+        reason="2回目", extra={"pworld_maker": "", "pworld_id": ""})
+    t("★★空では上書きしない★★（一度覚えたものを消さない）",
+      _d["items"]["https://x/1"].get("pworld_maker") == "ミズホ")
+    t("　手掛かりを渡さなくても今までどおり動く",
+      add(_d, "別機", "https://x/2", "m", "2026-12").get("name") == "別機")
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")

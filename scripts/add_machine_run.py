@@ -1261,7 +1261,8 @@ def _verify_pworld(name: str, official_url: str, maker: str,
 
 def verify_official(name: str, official_url: str,
                     maker: str = "", release: str = "",
-                    release_is_cache: bool = False) -> dict:
+                    release_is_cache: bool = False,
+                    expect_maker: str = "") -> dict:
     """★公式ページが本当にその機種か確かめる★（Codex指摘1・実際に再現した穴）
 
     以前は名前とURLを別々に受け取り、照合していなかった。
@@ -1287,7 +1288,9 @@ def verify_official(name: str, official_url: str,
     #   P-WORLDのURLは必ず弾かれる（実際に試して確認した）。
     #   機種ページ側は機種IDでの同定・種目・転送・派生機まで見ている。
     if _pw_machine_url(official_url):
-        return _verify_pworld(name, official_url, maker, release)
+        # ★最初に確かめた表示名があれば、そちらと完全一致させる★（台帳#335の項目5）
+        return _verify_pworld(name, official_url, maker, release,
+                              expect_maker=expect_maker)
     # ★転送された先も検査する★（2026-08-02・Codex26回目）
     #   渡されたURLだけ見ていたので、メーカーAのURLが別の場所へ転送されると、
     #   転送先の中身をメーカーAの公式として通せた。
@@ -2207,14 +2210,15 @@ def _ask_ledger(slug: str, name: str, question: str) -> bool:
 
 def run_one(name, official_url, maker, release, apply_it=False,
             release_is_cache=False,
-            before_write=None) -> dict:
+            before_write=None, expect_maker: str = "") -> dict:
     """1機種を最後まで進める。"""
     out = {"name": name, "slug": None, "wrote": [], "problems": [], "blocked": []}
     _log(f"=== 機種の処理開始: {name} / {maker} / {release} / {official_url} "
          f"/ 書き込み={'する' if apply_it else 'しない'} ===")
     # ★①まず公式ページと名前が同じ機種を指しているか★
     vo = verify_official(name, official_url, maker, release,
-                         release_is_cache=release_is_cache)
+                         release_is_cache=release_is_cache,
+                         expect_maker=expect_maker)
     out["problems"] += vo["problems"]
     # ★記事に載せるのは公式に書いてある年月★（渡された値ではない）
     release = vo["release"] or release
@@ -2981,6 +2985,22 @@ def selftest() -> int:
             t("★★正常なページで芯が違えば、今までどおり止める★★",
               _fm(_pmm._FIX, _self, "スマスロ北斗の拳").get("_name_conflict")
               == "マイジャグラーVI")
+            # ★覚えた表示名で再確認する★（2026-08-13・台帳#335の項目5）
+            #   内部IDだけだと、同じIDにぶら下がる別名（ミズホ／メーシー…）の
+            #   どれでも通り、公開直前の再確認が緩くなる。
+            _mk = __import__("pworld_machine")
+            _keep2 = _mk.verify
+            _mk.verify = lambda *a, **k: dict(_mk.parse(_mk._FIX), problems=[])
+            try:
+                _a = _verify_pworld("マイジャグラーVI", "https://www.p-world.co.jp/machine/database/10513", "kitadenshi", "2026-10", expect_maker="北電子")
+                _b = _verify_pworld("マイジャグラーVI", "https://www.p-world.co.jp/machine/database/10513", "kitadenshi", "2026-10", expect_maker="ちがう社")
+                _c = _verify_pworld("マイジャグラーVI", "https://www.p-world.co.jp/machine/database/10513", "kitadenshi", "2026-10")
+            finally:
+                _mk.verify = _keep2
+            t("★★覚えた表示名と違えば止める★★（同じ系列の別名も見分ける）",
+              not _a["problems"] and bool(_blocking(_b["problems"])))
+            t("　覚えていなければ名簿の名前で見る（今までどおり）",
+              not _c["problems"])
             t("　一覧カードの証跡は今までどおり",
               "#card2" in _evidence_ref({"identity_evidence": {
                   "list_html_sha256": "abc", "card_index": 2}}))
@@ -3982,7 +4002,9 @@ def main() -> int:
         res = run_one(work["name"], work["url"], work["maker"],
                       work["release"], apply_it,
                       release_is_cache=True,       # ★待ち行列の年月は控え★
-                      before_write=lambda u=work["url"]: _claim_today(u))
+                      before_write=lambda u=work["url"]: _claim_today(u),
+                      # ★最初に確かめたメーカーの表示名★（台帳#335の項目5）
+                      expect_maker=work.get("pworld_maker", ""))
         for b in res.get("blocked") or []:
             print("  ★止めました: " + b[:150])
         if res.get("wrote"):

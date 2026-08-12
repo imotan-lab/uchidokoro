@@ -129,17 +129,27 @@ def run(apply_it: bool = False, before: bool = False) -> dict:
                                 "maker": row.get("maker", "")})
             # ★飛ばさずに待ち行列へ残す★（翌晩また試す）
             if apply_it:
+                # ★メーカーの表示名と機種IDは必ず残す★（台帳#335の項目4）
+                #   これが無いと、カレンダーから消えたあと
+                #   待ち行列だけではメーカーを引き直せない。
                 _pend.add(data, row["name"], row["url"], "", "",
-                          reason=got["reason"])
+                          reason=got["reason"],
+                          extra={"pworld_maker": row.get("maker", ""),
+                                 "pworld_id": row.get("machine_id", "")})
             continue
         out["queued"].append({"name": row["name"], "url": row["url"],
                               "maker": got["maker_id"],
                               "release": got.get("release")
                               or row["release_date"]})
         if apply_it:
+            # ★最初に確かめた表示名を覚える★（台帳#335の項目5）
+            #   公開直前の再確認で内部IDしか無いと、同じIDにぶら下がる
+            #   別名（ミズホ／メーシー…）のどれでも通ってしまう。
             _pend.add(data, row["name"], row["url"], got["maker_id"],
                       got.get("release") or row["release_date"],
-                      reason="P-WORLDのカレンダーから")
+                      reason="P-WORLDのカレンダーから",
+                      extra={"pworld_maker": row.get("maker", ""),
+                             "pworld_id": row.get("machine_id", "")})
     if apply_it:
         _pend.save(data)
     return out
