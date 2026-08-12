@@ -226,6 +226,44 @@ def recheck_known(mid: str, r: dict, seen: dict, out: dict) -> None:
             titles[url] = now_t           # 初回は覚えるだけ
 
 
+# ★入口の切り替え★（2026-08-12・運営者決定でP-WORLD一本にした）
+#   真にするとメーカー公式11社の見張りに戻る。仕組みは残してある。
+USE_MAKER_WATCH = False
+
+
+def discover_pworld(persist: bool = True) -> dict:
+    """P-WORLDの導入カレンダーから新台候補を出す。
+
+    ★discover() と同じ形を返す★（呼ぶ側を変えないため）。
+    ★persist=False（下見）は何も書かない★＝待ち行列にも触らない。
+    """
+    import pworld_discover as _pd
+    out = {"candidates": [], "problems": [], "first_time": [],
+           "watched": [], "not_watched": []}
+    try:
+        got = _pd.run(apply_it=persist)
+    except Exception as e:                # noqa: BLE001
+        # ★読めなかったことを「新台なし」にしない★
+        out["problems"].append(
+            f"P-WORLDのカレンダーを読めません: {type(e).__name__}: {e}")
+        out["not_watched"].append("p-world")
+        return out
+    out["problems"] += got.get("problems") or []
+    if got.get("problems"):
+        out["not_watched"].append("p-world")
+    else:
+        out["watched"].append("p-world")
+    for q in got.get("queued") or []:
+        out["candidates"].append(q["url"])
+        out["first_time"].append(f"{q['name']} / {q['url']}")
+        _log(f"  カレンダーから: {q['name']}（{q['maker']}・{q['release']}）")
+    for h in got.get("held") or []:
+        _log(f"  待たせます: {h['name']} ← {h['reason'][:120]}")
+    _log(f"P-WORLDのカレンダー: 候補{got.get('looked', 0)}件 / "
+         f"待ち行列へ{len(out['candidates'])}件 / 待たせた{len(got.get('held') or [])}件")
+    return out
+
+
 def discover(persist: bool = True) -> dict:
     """メーカー公式の一覧から新台候補を出す。
 
@@ -3478,7 +3516,15 @@ def main() -> int:
         if apply_it:
             _log("★戻すまで進みません（--recover --apply で戻してください）★")
             return 1
-    d = discover(persist=apply_it)
+    # ★入口は P-WORLD の導入カレンダー一本★（2026-08-12・運営者決定）
+    #   これまではメーカー公式11社の一覧を見張っていた（discover）。
+    #   作りが11通りあるぶん、証明書切れ・soft404・派生機の紛れ込みへの
+    #   対策が積み上がっていた。カレンダーは1つの作りなので入口をここに寄せる。
+    #   ★戻したいときは USE_MAKER_WATCH を真にする★（仕組みは消していない）
+    if USE_MAKER_WATCH:
+        d = discover(persist=apply_it)
+    else:
+        d = discover_pworld(persist=apply_it)
     for x in d["first_time"]:
         print("初回として記録:", x)
     # ★隔離したメーカーの復旧確認（毎晩1URL）★（2026-08-04・Codex65回目）
