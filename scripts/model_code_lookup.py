@@ -145,7 +145,13 @@ _DECOR_CORES = {_ci.normalize_core(w) or w for w in _DECOR}
 # ★題を区切る記号★（サイト側の飾りを切り離す）
 #   ★「・」「-」は入れない★＝機種名そのものに使われる
 #   （「すーぱぁびん娘・極」を割ると、別機種を本人にしてしまう）
-_TITLE_SEPS = "|｜(（)）[［]］【】/／<＞>＜、,"
+#   ★「、」「,」も入れない★（2026-08-13・実データで発生）
+#     「Lパチスロ 彼女、お借りします」が「彼女」と「お借りします」に割れ、
+#     題に機種名が丸ごと載っている3つの名鑑すべてが NAME_CORE_MISMATCH で
+#     落ちていた（ちょんぼりすた・DMM・ナナプレスで実測）。
+#     読点は原作タイトルにそのまま入る（「彼女、お借りします」）。
+#     飾りが読点で並ぶ題は、区切らなくても飾り語として扱われるので困らない。
+_TITLE_SEPS = "|｜(（)）[［]］【】/／<＞>＜"
 
 
 def title_parts(title: str) -> list:
@@ -329,7 +335,15 @@ def page_is_machine(html: str, official_name: str,
                 k = j + 1
                 while k < len(words) and words[k] == "":
                     k += 1               # 販売区分語などは芯が空になる
-                if k >= len(words) or words[k] in _DECOR_CORES:
+                # ★飾りを連結した語も飾りとして見る★（2026-08-13・実データ）
+                #   「新台解析」「やめどきまとめ」のように、サイトが飾りを
+                #   つないで1語で書くことがある。後ろの断片を見る _after_ok は
+                #   _decor_compound で同じ扱いをしていたのに、ここだけ
+                #   単語の完全一致だったため、**題に機種名が丸ごと載っている
+                #   ちょんぼりすたのページが落ちて**いた（実測）。
+                #   _decor_compound は派生印（「SP新台」）を弾くので緩みはしない。
+                if (k >= len(words) or words[k] in _DECOR_CORES
+                        or _decor_compound(raw[k])):
                     # ★名前より前の語も全部見る★（2026-08-02・Codex24〜25回目）
                     #   「P 北斗の拳」「パチンコ 北斗の拳」「別機種 | L北斗の拳」の
                     #   ように**前に別の意味の語がある題**が通っていた。
@@ -1047,6 +1061,35 @@ def selftest() -> int:
     # ★★2026-08-13・実ログ（手動実行）で3機種が材料0件になった件★★
     #   名鑑のメーカー欄を名簿で解決できず、P-WORLD自身のページまで
     #   「別の社」として弾かれていた。原因は2つで、両方ここで見張る。
+    # ★★2026-08-13・実データ（Lパチスロ 彼女、お借りします）★★
+    #   3つの名鑑すべてが題に機種名を丸ごと載せているのに全部落ちていた。
+    _kanojo = "Lパチスロ 彼女、お借りします"
+    t("★★機種名の読点で名前を割らない★★"
+      "（「彼女、お借りします」が「彼女」と「お借りします」に割れていた）",
+      title_parts("Lパチスロ 彼女、お借りします 新台解析")
+      == ["Lパチスロ 彼女、お借りします 新台解析"])
+    t("★★飾りを連結した語（新台解析）が次に来ても本人と分かる★★"
+      "（後ろの断片を見る _after_ok とここの扱いが食い違っていた）",
+      page_is_machine("<title>Lパチスロ 彼女、お借りします 新台解析|"
+                      "天井・設定判別・やめどきまとめ | "
+                      "ちょんぼりすた パチスロ解析</title>",
+                      _kanojo, strict_all_tail=True)[0] is True)
+    t("　同じ機種をDMM・ナナプレスの実在の題でも通す",
+      page_is_machine("<title>Lパチスロ 彼女、お借りします(新台スマスロ)"
+                      "パチスロ|設定判別・天井・ゾーン・解析・打ち方・ヤメ時"
+                      "</title>", _kanojo, strict_all_tail=True)[0] is True
+      and page_is_machine("<title>【彼女、お借りします(スマスロ)】解析情報まとめ"
+                          " 天井・設定判別・スペック・打ち方・やめどき</title>",
+                          _kanojo, strict_all_tail=True)[0] is True)
+    t("★★緩めていないこと＝派生印・別規格・前置は今までどおり弾く★★",
+      page_is_machine("<title>Lすーぱぁびん娘 SP新台|天井・解析</title>",
+                      "Lすーぱぁびん娘", strict_all_tail=True)[0] is False
+      and page_is_machine("<title>S北斗の拳 新台解析 | x</title>",
+                          "L北斗の拳", strict_all_tail=True)[0] is False
+      and page_is_machine("<title>P 北斗の拳 新台解析 | x</title>",
+                          "L北斗の拳", strict_all_tail=True)[0] is False
+      and page_is_machine("<title>別機種の話 L北斗の拳 新台解析</title>",
+                          "L北斗の拳", strict_all_tail=True)[0] is False)
     t("★★巡回しない社（list_urlなし）も名簿として解決できる★★"
       "（京楽・サンスリー等が『解決できません』で落ちていた）",
       _maker_core_owners(_ci.normalize_core("京楽産業.")) == {"kyoraku"}

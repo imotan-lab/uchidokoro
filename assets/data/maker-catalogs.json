@@ -207,7 +207,16 @@
     "sanslay": {
       "name": "サンスリー",
       "status": "WATCH_OFF",
-      "_why": "同上。L聖闘士星矢 黄金十二宮 を待たせていた"
+      "maker_identity_group": "sanyo_group",
+      "_why": "同上。L聖闘士星矢 黄金十二宮 を待たせていた",
+      "_group_why": "2026-08-13 三洋物産の公式『会社概要』に 株式会社サンスリー（設立 平成12年3月・事業内容『遊技機の開発・製造』・本社所在地は三洋物産と同じ）が載っている（https://www.sanyobussan.co.jp/corporate/outline.html で確認）。P-WORLDは『サンスリー』、ナナプレスは『三洋物産』と書き分けるため、★メーカー欄の照合だけ★同じ扱いにする。法人格は分けたまま"
+    },
+    "sanyo_bussan": {
+      "name": "三洋物産",
+      "status": "WATCH_OFF",
+      "maker_identity_group": "sanyo_group",
+      "_why": "名鑑（ナナプレス）がサンスリー製の機種を『三洋物産』と書くため、名簿で解決できず材料が全部落ちていた（2026-08-13・L聖闘士星矢 黄金十二宮で発生）",
+      "_group_why": "サンスリーと同じ SANYO グループ（上記 sanslay の _group_why を参照）。★別名で1社に潰さず、法人格は分けたまま照合だけ同じ扱いにする★"
     },
     "olympia_estate": {
       "name": "オリンピアエステート",
