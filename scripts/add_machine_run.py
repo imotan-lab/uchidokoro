@@ -2162,7 +2162,17 @@ def run_one(name, official_url, maker, release, apply_it=False,
     #   手順書には書いてあったが、実行器が呼んでいなかった。
     # ★名前・公式URL・型式名のどれか1つでも一致したら疑う★（2026-07-31・Codex指摘）
     #   型式名は新台では無いことが多いので、無いこと自体は警告にしない。
-    for slug, ename, why in _cd.find_duplicates(name, official_urls=[official_url]):
+    # ★同定で読めた型式名も渡す★（2026-08-12・依頼166のP1）
+    #   入口の切替直後は、同じ機種が旧URLとP-WORLDの2経路から入りうる。
+    #   URLが違うのでURL一致では結べず、名前の書き方も揃わないことがある。
+    #   ★これは「出典2件で採用した値」ではない★＝重複を見つけるためだけに使う。
+    _ident_codes = []
+    _ev = vo.get("identity_evidence") or {}
+    if _ev.get("kind") == "PWORLD_MACHINE_PAGE" and _ev.get("model_code"):
+        _ident_codes.append(_ev["model_code"])
+    for slug, ename, why in _cd.find_duplicates(
+            name, official_urls=[official_url],
+            model_codes=_ident_codes or None):
         out["problems"].append(
             f"既に登録されている疑い: slug={slug} name={ename}（{why}）"
             f"／新しいslugで作らず、更新タスクで直すこと")
