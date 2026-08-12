@@ -184,11 +184,25 @@ class BuildError(RuntimeError):
     pass
 
 
-def slug_from_url(official_url: str) -> str:
-    """公式ページのURLの末尾から slug を作る。★名前から作らない★
+# ★P-WORLDの機種ページ★（2026-08-12・新台の見つけ方をここ一本にした）
+_PWORLD_MACHINE = re.compile(
+    r"^https?://(?:www\.)?p-world\.co\.jp/machine/database/(\d{1,7})/?$")
 
-    名前から作ると表記ゆれで揺れる。URLは機種ごとに1つなので安定する。
+
+def slug_from_url(official_url: str) -> str:
+    """ページのURLから slug を作る。★名前から作らない★
+
+    名前から作ると表記ゆれで揺れるし、読み方を機械が決めることになる。
+    URLは機種ごとに1つなので安定する。
+
+    ★P-WORLDは機種IDが数字なので `pw_<機種ID>` にする★（2026-08-12）
+      末尾をそのまま使うと数字だけの slug になり、
+      英字で始まる決まりに合わずに止まっていた。
+      機種IDは変わらないので、URLと同じくらい安定した名前になる。
     """
+    m = _PWORLD_MACHINE.match(str(official_url or "").strip())
+    if m:
+        return "pw_" + m.group(1)
     tail = official_url.rstrip("/").rsplit("/", 1)[-1].lower()
     tail = re.sub(r"[^a-z0-9_]", "_", tail).strip("_")
     if not _SLUG_OK.match(tail):
@@ -219,7 +233,9 @@ def _fmt_release(ymd: str) -> str:
 
 
 # 本人性の結び付け方（どの公式ページで確かめたか）
-IDENTITY_BINDINGS = ("OFFICIAL_PRODUCT_PAGE", "MAKER_LIST_CARD")
+#   ★PWORLD_MACHINE_PAGE★（2026-08-12）＝P-WORLDの機種ページ（機種IDが身元）
+IDENTITY_BINDINGS = ("OFFICIAL_PRODUCT_PAGE", "MAKER_LIST_CARD",
+                     "PWORLD_MACHINE_PAGE")
 
 
 def build_machine(slug, name, maker, official_url, release, material,
@@ -851,6 +867,16 @@ def selftest() -> int:
     t("　候補に有る答えなら質問は消える",
       not checker_questions(_mat_ceil("800", "1200", picked="1200")))
 
+    # ★P-WORLDの機種ページから記事の名前を作る★（2026-08-12）
+    #   末尾が数字なので、そのままだと英字で始まる決まりに合わず止まっていた。
+    t("★★P-WORLDのURLからは pw_<機種ID> を作る★★",
+      slug_from_url("https://www.p-world.co.jp/machine/database/10513") == "pw_10513"
+      and slug_from_url("https://www.p-world.co.jp/machine/database/10513/")
+      == "pw_10513")
+    t("　メーカー公式のURLは今までどおり",
+      slug_from_url("https://www.kitadenshi.co.jp/slot/myjuggler6/") == "myjuggler6")
+    t("★★P-WORLDの身元の結び付け方を受け付ける★★",
+      "PWORLD_MACHINE_PAGE" in IDENTITY_BINDINGS)
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
     if ng:
