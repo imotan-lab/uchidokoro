@@ -1194,7 +1194,8 @@ def _pw_machine_url(url: str) -> str:
 
 
 def _verify_pworld(name: str, official_url: str, maker: str,
-                   release: str, expect_maker: str = "") -> dict:
+                   release: str, expect_maker: str = "",
+                   release_is_cache: bool = False) -> dict:
     """★P-WORLDの機種ページで身元を確かめる★（2026-08-12）
 
     返す形は verify_official と同じ（呼ぶ側を変えないため）。
@@ -1241,6 +1242,17 @@ def _verify_pworld(name: str, official_url: str, maker: str,
         return _ng(f"メーカーが食い違います（期待: {'／'.join(want)} / "
                    f"機種ページ: {page_maker}）")
     out["release"] = got.get("release") or ""
+    # ★渡された年月と食い違わないか★（2026-08-13・台帳#335の項目3）
+    #   メーカー公式経路にはある守りが、こちらには無かった。
+    #   ★控え（待ち行列の年月）は照合しない★＝古い控えで止めない
+    #   （メーカー公式経路と同じ扱い）。
+    if release and not release_is_cache and out["release"]:
+        if str(release)[:7] != out["release"][:7]:
+            return _ng(f"登場年月が機種ページと違います"
+                       f"（機種ページ={out['release']} / 渡された値={release}）")
+    # ★新台の範囲か★＝古い機種を新台として通さない
+    if out["release"] and not _nw.is_recent(out["release"][:7]):
+        return _ng(f"登場年月が新台の範囲外です（{out['release']}）")
     out["identity_name"] = got.get("name") or name
     out["identity_binding"] = "PWORLD_MACHINE_PAGE"
     # ★何で確かめたかを残す★（機種IDが身元）
@@ -1290,7 +1302,8 @@ def verify_official(name: str, official_url: str,
     if _pw_machine_url(official_url):
         # ★最初に確かめた表示名があれば、そちらと完全一致させる★（台帳#335の項目5）
         return _verify_pworld(name, official_url, maker, release,
-                              expect_maker=expect_maker)
+                              expect_maker=expect_maker,
+                              release_is_cache=release_is_cache)
     # ★転送された先も検査する★（2026-08-02・Codex26回目）
     #   渡されたURLだけ見ていたので、メーカーAのURLが別の場所へ転送されると、
     #   転送先の中身をメーカーAの公式として通せた。
@@ -3001,6 +3014,28 @@ def selftest() -> int:
               not _a["problems"] and bool(_blocking(_b["problems"])))
             t("　覚えていなければ名簿の名前で見る（今までどおり）",
               not _c["problems"])
+            # ★新台の範囲と年月の照合★（2026-08-13・台帳#335の項目3）
+            #   メーカー公式経路にはある守りが、P-WORLD経路には無かった。
+            _mk2 = __import__("pworld_machine")
+            _k3 = _mk2.verify
+            _mk2.verify = lambda *a, **k: dict(_mk2.parse(_mk2._FIX), problems=[])
+            _kold = _nw.is_recent
+            try:
+                _u = "https://www.p-world.co.jp/machine/database/10513"
+                _same = _verify_pworld("マイジャグラーVI", _u, "kitadenshi", "2026-10")
+                _diff = _verify_pworld("マイジャグラーVI", _u, "kitadenshi", "2026-09")
+                _cache = _verify_pworld("マイジャグラーVI", _u, "kitadenshi", "2026-09", release_is_cache=True)
+                _nw.is_recent = lambda *a, **k: False
+                _oldm = _verify_pworld("マイジャグラーVI", _u, "kitadenshi", "2026-10")
+            finally:
+                _mk2.verify = _k3
+                _nw.is_recent = _kold
+            t("★★渡された年月と機種ページが違えば止める★★",
+              not _same["problems"] and bool(_blocking(_diff["problems"])))
+            t("　待ち行列の控えでは止めない（古い控えで機種を失わない）",
+              not _cache["problems"])
+            t("★★新台の範囲外なら止める★★（古い機種を新台にしない）",
+              bool(_blocking(_oldm["problems"])))
             t("　一覧カードの証跡は今までどおり",
               "#card2" in _evidence_ref({"identity_evidence": {
                   "list_html_sha256": "abc", "card_index": 2}}))
