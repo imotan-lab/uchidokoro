@@ -206,6 +206,13 @@ def is_meta_heading(text: str) -> bool:
     return bool(_META_TAIL_RE.match(t))
 # 区間をさらに割る記号（「アズールレーン スマスロ(アズレン)」→ 両方を候補にする）
 _SPLIT_RE = re.compile(r"[()（）｜|／,、，]+")
+# ★読点は機種名の中にも出る★（2026-08-14）
+#   「Lパチスロ 彼女、お借りします」を割ると「彼女」「お借りします」になり、
+#   **正式名称そのままのタイトルが自機種と認められなくなる**
+#   （＝その機種のページを一枚も使えず、記事を育てられない）。
+#   括弧・｜・／は必ず区切りだが、読点は名前の一部でありうるので、
+#   読点で割れたときだけ「割る前の形」も候補に残す。
+_COMMA_RE = re.compile(r"[,、，]")
 
 # ─────────────────────────────────────────────
 # 世代・媒体タグ（同名の旧機種／パチンコ版と混ざらないための必須条件）
@@ -308,7 +315,7 @@ def title_tokens(title: str, cores=()) -> list[str]:
         return []
     t = unicodedata.normalize("NFKC", str(title))
     parts = [t]
-    for sep in ("【", "】", "[", "]", "「", "」", "|", "、", ",", "。",
+    for sep in ("【", "】", "[", "]", "「", "」", "|", "。",
                 "»", "≫", "<", ">"):
         parts = [q for p_ in parts for q in p_.split(sep)]
     cores = [c for c in (cores or ()) if c]
@@ -316,7 +323,20 @@ def title_tokens(title: str, cores=()) -> list[str]:
         if any(normalize_core(w) and normalize_core(w) in c for c in cores):
             continue          # 機種名の一部になっている語では割らない
         parts = [q for p_ in parts for q in p_.split(w)]
-    return [p_.strip() for p_ in parts if p_.strip()]
+    # ★読点は最後に、しかも自機種名を壊さないときだけ割る★（2026-08-14）
+    #   停止語（天井・解析…）と同じ扱い＝**機種名の一部になっている読点では割らない**。
+    #   「Lパチスロ 彼女、お借りします」を割ると断片「Lパチスロ 彼女」ができ、
+    #   「パチスロ○○」＝別機種の名指し、として**自分のページが不合格**になっていた
+    #   （＝この機種の出典を一枚も使えず、記事を育てられない）。
+    #   ★停止語を切ったあとに見る★＝「…お借りします 天井狙いまとめ」のように
+    #   後ろに語が付いた形でも、切ったあとなら芯が自機種と一致する。
+    kept = []
+    for p_ in parts:
+        if _COMMA_RE.search(p_) and normalize_core(p_) not in cores:
+            kept += _COMMA_RE.split(p_)
+        else:
+            kept.append(p_)
+    return [p_.strip() for p_ in kept if p_.strip()]
 
 
 # 自機種の芯の直後に来てよい助詞（これだけなら「自分の話」とみなす）。
@@ -1161,6 +1181,36 @@ def selftest() -> int:
                                         sp["reject_name_cores"])[0]):
                     pos_fail.append((m["slug"], pat[:40]))
         eq(pos_fail[:5], [], f"正式名称のタイトルが落ちた（{len(pos_fail)}件）")
+
+        # ★★読点を含む機種名（2026-08-14）★★
+        #   「Lパチスロ 彼女、お借りします」を読点で割ると断片
+        #   「Lパチスロ 彼女」ができ、「パチスロ○○」＝別機種の名指しとして
+        #   **自分のページが不合格**になっていた（この機種の出典を一枚も使えない）。
+        #   ★読点で割らないようにするだけでは危ない★ので、
+        #   「読点で機種を並べた比較記事は今までどおり落ちる」ことも併せて見る。
+        _kanojo = {"slug": "t_kano", "name": "Lパチスロ 彼女、お借りします",
+                   "info": "スマスロAT"}
+        _hokuto = {"slug": "t_hoku", "name": "スマスロ北斗の拳", "info": "スマスロAT"}
+        _sp = identity_spec(_kanojo, [_kanojo, _hokuto])
+        eq(check_title("【Lパチスロ 彼女、お借りします】天井・解析",
+                       _sp["machine_cores"], _sp["reject_cores"],
+                       _sp["reject_name_cores"])[0], True,
+           "★読点を含む正式名称のタイトルが合格する★")
+        eq(check_title("Lパチスロ 彼女、お借りします 天井狙いまとめ",
+                       _sp["machine_cores"], _sp["reject_cores"],
+                       _sp["reject_name_cores"])[0], True,
+           "★読点を含む正式名称（括弧なし）も合格する★")
+        eq(check_title("彼女、お借りします、スマスロ北斗の拳の天井まとめ",
+                       _sp["machine_cores"], _sp["reject_cores"],
+                       _sp["reject_name_cores"])[0], False,
+           "★（対照）読点で他機種を並べた記事は今までどおり落ちる★")
+        eq(title_tokens("Lパチスロ 彼女、お借りします 天井狙いまとめ",
+                        _sp["machine_cores"]),
+           ["Lパチスロ 彼女、お借りします", "狙い"],
+           "★機種名の中の読点では割らない（停止語と同じ扱い）★")
+        eq(title_tokens("北斗の拳、吉宗の天井", ["ほくとのけん"]),
+           ["北斗の拳", "吉宗の"],
+           "　機種名でない読点は今までどおり割る")
 
         # ★負例の総当たり（2026-07-21 Codex指摘: 「落とす能力」を測っていない）★
         #   全機種について、別機種を意味する定型パターンのタイトルを機械生成し、

@@ -2258,7 +2258,8 @@ def _ask_key(question: str) -> str:
     return head or "unknown"
 
 
-def _ask_ledger(slug: str, name: str, question: str) -> bool:
+def _ask_ledger(slug: str, name: str, question: str, key: str = "",
+                code: str = "ASK_2AI") -> bool:
     """★2AIで決まらなかったことを台帳へ★（2026-08-12・運営者決定）
 
     「人が直す項目をなくす」ので、機械が決められないことは 2AI へ回す。
@@ -2266,11 +2267,11 @@ def _ask_ledger(slug: str, name: str, question: str) -> bool:
     ★メールを送るのは台帳のまとめ（翌朝）★＝公開処理はメールで止めない。
     """
     return _ledger(
-        slug, "quality", "QUALITY", "ASK_2AI",
+        slug, "quality", "QUALITY", code,
         # ★質問ごとに別の案件にする★（2026-08-12・依頼164のP1）
         #   機種名だけだと、同じ機種の**別の質問**が同じ案件に合流し、
         #   片方の回数が満了しただけで新しい質問まで自動の輪から消える。
-        f"{name}: 2AIで決まらなかった項目があります（{_ask_key(question)}）",
+        f"{name}: 2AIで決まらなかった項目があります（{(key or _ask_key(question))}）",
         f"{question}\n\n"
         "★機械では決められない意味の判断です★\n"
         "★人が判断する案件ではありません★＝新台タスクが同じ晩のうちに、"
@@ -2326,9 +2327,21 @@ def run_one(name, official_url, maker, release, apply_it=False,
     out["problems"] += got["problems"]
     # ★メーカー欄で決められなかったものは、その場で2AIへ聞く★
     #   （人が名簿に足すまで待たない。運営者の方針）
-    for _q in got.get("maker_questions") or []:
-        out.setdefault("ask_2ai", []).append(_q["text"])
+    # ★メーカーの質問は別に持つ★（2026-08-14・依頼190のP1）
+    #   以前は ask_2ai へ足していたが、後段の checker_questions が
+    #   **同じ配列を丸ごと上書き**するため消えていた。
+    #   さらに材料不足だと台帳処理の前に終わるので、★ここで台帳へ入れる★。
+    out["maker_questions"] = list(got.get("maker_questions") or [])
+    for _q in out["maker_questions"]:
         _log(f"  ★2AIに聞くこと（メーカー）: {_q['text'][:120]}")
+        # ★メーカー表記の質問だけ見分けられるようにする★（依頼190）
+        #   聞き方が違う（記事の原文ではなく名鑑と公式の会社情報を読む）ので、
+        #   手順書の STEP 3-B-M へ確実に振り分けるため。
+        if apply_it and not _ask_ledger(out["slug"], name, _q["text"],
+                                        key=_q.get("key"),
+                                        code="ASK_2AI_MAKER"):
+            out["problems"].append(
+                f"メーカーの質問を台帳に載せられません: {_q.get('key')}")
     # ★公式が年月を出さない機種は、名鑑2票一致の月で先行記事にする★
     #   （2026-08-02・Codex47回目に条件つきで承認。山佐は導入年月が画像のみ）
     #   条件＝型式が一致した同じ2名鑑の月が一致（gatherが判定済み）。

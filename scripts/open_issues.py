@@ -410,6 +410,27 @@ def selftest() -> int:
           and "人の判断が要ります" in rows["s7"]["title"]
           and rows["s7"]["detail"]
           == "grow_legacy.py --next が止まりました: 形が違います")
+        # ★★聞くことの種類を増やしても輪から外れない★★（2026-08-14・依頼190）
+        _q = tempfile.NamedTemporaryFile(
+            suffix=".json", delete=False, mode="w", encoding="utf-8")
+        _q.write(json.dumps({"next_id": 4, "issues": [
+            {"id": 1, "status": "open", "reason_code": "ASK_2AI",
+             "first_seen": "2026-08-01"},
+            {"id": 2, "status": "open", "reason_code": "ASK_2AI_MAKER",
+             "first_seen": "2026-08-02"},
+            {"id": 3, "status": "open", "reason_code": "GROW_VALUE_LOST",
+             "first_seen": "2026-08-03"},
+        ]}, ensure_ascii=False))
+        _q.close()
+        try:
+            _ids = [i["id"] for i in open_questions(Path(_q.name))]
+            t("★★メーカー表記の質問も同じ晩の輪に入る★★（依頼190）"
+              "／理由コードを完全一致で見ていたので、種類を増やすと"
+              "**黙って自動の輪から外れる**ところだった",
+              _ids == [1, 2])
+            t("　（対照）関係ない理由コードは拾わない", 3 not in _ids)
+        finally:
+            os.unlink(_q.name)
     finally:
         LOCK_PATH = keep
         # ★後片付けは必ず通る場所へ★（依頼143の指摘3）
@@ -529,7 +550,12 @@ def open_questions(path) -> list:
     data = _load(path)
     return sorted(
         (i for i in data["issues"]
-         if i.get("status") == "open" and i.get("reason_code") == "ASK_2AI"
+         # ★ASK_2AI で始まるものはすべて拾う★（2026-08-14・依頼190）
+         #   メーカー表記の質問（ASK_2AI_MAKER）は聞き方が違うだけで、
+         #   ★同じ晩に片づける★点は同じ。ここを完全一致にしていると、
+         #   新しい種類を足したときに**黙って自動の輪から外れる**。
+         if i.get("status") == "open"
+         and str(i.get("reason_code") or "").startswith("ASK_2AI")
          # ★人へ渡し終えたものだけ外す★（2026-08-12・依頼164のP1）
          #   回数だけで外すと、メールに失敗した質問が
          #   **自動の輪からも通知からも同時に消える**。

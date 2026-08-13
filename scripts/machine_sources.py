@@ -1009,6 +1009,8 @@ def missing(limit: int = 0) -> list:
             if key not in seen:
                 seen.add(key)
                 have.append(rec.get("publisher"))
+        # ★共同で作ることがある組は1票にまとめる★（2026-08-14・依頼190のP1）
+        seen = _sl.merge_joint(seen)
         if len(seen) < 2:
             rows.append({"slug": m["slug"], "name": m.get("name"),
                          "have": have, "votes": len(seen),

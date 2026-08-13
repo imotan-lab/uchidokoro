@@ -682,6 +682,10 @@ def plan_one(slug: str, gather=None, verify=None, probe=None) -> dict:
     """
     out = {"slug": slug, "problems": [], "machine": None, "detail": None,
            "was": None, "now": None, "checked": False, "unchanged": False,
+           # ★お知らせは「問題」に入れない★（2026-08-14・依頼190のP1）
+           #   「出典の顔ぶれが変わりました／いつもどおり調べます」を
+           #   problems に入れていたため、**その文自身が更新を止めていた**。
+           "notes": [], "nothing_new_only": False,
            # ★読む入力は全部指紋に入れる★（2026-08-11・依頼148の指摘2）
            #   2AIの確定値を読むようにしたのに、そこだけ監視の外だった。
            #   計画のあと・書き込みの前に確定値を取り消しても、
@@ -743,7 +747,13 @@ def plan_one(slug: str, gather=None, verify=None, probe=None) -> dict:
                     out["unchanged"] = True
                     return out
             elif _now and _now != _known:
-                out["problems"].append(
+                # ★これは「調べる理由」であって「できない理由」ではない★
+                #   （2026-08-14・依頼190のP1）problems に入れると
+                #   後段の `if out["problems"]: return` で必ず止まり、
+                #   それでも main は新しい顔ぶれを控えるので、
+                #   ★新しい出典を見つけた日だけ書けず、翌日は見送る★
+                #   という逆流ができていた。
+                out["notes"].append(
                     f"出典の顔ぶれが変わりました（{len(_known)}件→{len(_now)}件）"
                     "／いつもどおり調べます")
 
@@ -827,9 +837,14 @@ def plan_one(slug: str, gather=None, verify=None, probe=None) -> dict:
     old_detail = _sj.read_json(dp, expect=dict) if os.path.isfile(dp) else {}
     lost = text_kept(old_detail, detail)
     out["problems"] += lost
-    out["problems"] += nothing_new(cur.get("page_decision"),
-                                   machine.get("page_decision"),
-                                   old_detail, detail)
+    # ★ここまで問題ゼロなら「最後まで読み比べられた」★（依頼190のP1④）
+    #   その上で nothing_new だけが立つ＝「調べたが足すものが無い」。
+    #   このときは基準を進めてよい（次回の様子見が効く）。
+    _clean = not out["problems"]
+    _nn = nothing_new(cur.get("page_decision"), machine.get("page_decision"),
+                      old_detail, detail)
+    out["problems"] += _nn
+    out["nothing_new_only"] = bool(_clean and _nn)
     # ★「前に載っていた内容が再現できない」は人へ回す★（黙って止め続けない）
     if lost or any("消えます" in p for p in out["problems"]):
         ledger_once(
@@ -1296,6 +1311,30 @@ def selftest() -> int:
       _probe_run(True, ["https://x.test/a"],
                  now=["https://x.test/a", "https://x.test/b"])
       .get("unchanged") is False)
+    _r = _probe_run(True, ["https://x.test/a"],
+                    now=["https://x.test/a", "https://x.test/b"])
+    t("★★顔ぶれが変わったこと自体では更新を止めない★★（2026-08-14・依頼190）"
+      "／お知らせを problems に入れていたので、その文自身が止めていた",
+      any("顔ぶれが変わりました" in n for n in _r.get("notes") or [])
+      and not any("顔ぶれが変わりました" in p for p in _r["problems"]))
+    t("　（対照）お知らせを problems に入れると必ず止まる"
+      "＝新しい出典を見つけた日だけ書けず、翌日は見送りになる",
+      bool([p for p in (_r["problems"] + ["顔ぶれが変わりました"])
+            if "顔ぶれが変わりました" in p]))
+    # ★自分の本文を読む試験は、探す文字列を割って書く★
+    #   （そのまま書くと**この試験の文自身**が数に入って自己参照になる）
+    _gsrc = io.open(os.path.abspath(__file__), encoding="utf-8").read()
+    _c1, _c2 = "_pp.con", "firm("
+    _d1, _d2 = "def _absor", "bed()"
+    t("★★見たページの基準を進めるのは「書けた」「足すものが無い」だけ★★"
+      "（2026-08-14・依頼190のP1）／以前は下見でも失敗でも進んでいた",
+      _gsrc.count(_c1 + _c2) == 1
+      and (_d1 + _d2) in _gsrc
+      and _gsrc.index(_c1 + _c2) > _gsrc.index(_d1 + _d2)
+      and _gsrc.index(_d1 + _d2) > _gsrc.index("remember_sources(a.slug"))
+    t("　（対照）checked だけを条件にすると、下見でも基準が進む"
+      "＝いまは a.apply を必ず見ている",
+      "a.apply and got.get(\"checked\") and got.get(\"probe_rows\")" in _gsrc)
     t("　顔ぶれを数え直せなかったときも見送らない（fail-closed）",
       _probe_run(True, ["https://x.test/a"], now=[]).get("unchanged") is False)
     t("★★出典が1つも変わっていなければ、その日は見送る★★（台帳#346）",
@@ -1484,10 +1523,24 @@ def main() -> int:
     #   一時的に一部しか見つからなかっただけで**出典の集合が縮む**。
     #   ★変化を見つけたページの基準も、ここまで来てから進める★
     #   （その場で進めると、確認に失敗しても翌日は「変化なし」になる）
+    for _n in got.get("notes") or []:
+        print("  （お知らせ）" + _n)
     if got.get("checked") and got.get("source_urls"):
         remember_sources(a.slug, got["source_urls"])
-        if got.get("probe_rows"):
-            _pp.confirm(got["probe_rows"])
+
+    def _absorbed():
+        """★見たページの基準を進めてよいか★（2026-08-14・依頼190のP1④）
+
+        以前は「材料まで見に行けた（checked）」だけで進めていたので、
+        **その後で失敗しても・下見だけでも**基準が進み、
+        次の日は「変化なし」で見送れてしまった＝変化を永久に取りこぼす。
+        進めてよいのは次の2つだけ。
+          ・実際に書けた
+          ・最後まで読み比べて「足すものが無い」と分かった
+        """
+        if not (a.apply and got.get("checked") and got.get("probe_rows")):
+            return False
+        return _pp.confirm(got["probe_rows"])
     # ★控えるのは「書き込む実行」で「最後まで成立した」時だけ★
     #   （2026-08-13・依頼181のP1／依頼182のP1で条件を狭めた）
     #   ・下見で控えると、書いていないのに次の予定日まで候補から外れる
@@ -1496,8 +1549,12 @@ def main() -> int:
     #      のどれでも「確認できた」ことにはならない）
     #   ★変化なしで正常に終わった時は控えてよい★＝見に行けているため。
     if got["problems"]:
-        if a.apply and got.get("checked") and got.get("was") == got.get("now"):
-            mark_checked(a.slug, _dt.date.today())   # 変化なしで終わった
+        if a.apply and got.get("nothing_new_only"):
+            # ★調べたが足すものが無かった＝正常に終わっている★
+            #   （以前の条件 `was == now` は、problems があるときは
+            #     now が None のままなので**一度も成立しなかった**）
+            mark_checked(a.slug, _dt.date.today())
+            _absorbed()
         print("できません:")
         for p in got["problems"]:
             print("  -", p)
@@ -1511,6 +1568,7 @@ def main() -> int:
     # ★書けたときだけ控える★（依頼182のP1）
     if not r["problems"]:
         mark_checked(a.slug, _dt.date.today())
+        _absorbed()
     for p in r["problems"]:
         print("  -", p)
     if r["wrote"]:

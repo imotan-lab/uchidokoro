@@ -73,8 +73,51 @@ def load() -> dict:
     if not isinstance(got, dict) or got.get("schema_version") != SCHEMA:
         raise CacheError(
             f"控えの版が違います（{got.get('schema_version') if isinstance(got, dict) else '?'}）")
-    got.setdefault("machines", {})
+    if not isinstance(got.get("machines"), dict):
+        raise CacheError("控えの中身が壊れています（machines が組ではありません）")
+    # ★読むときも中身を確かめる★（2026-08-14・依頼190のP1）
+    #   書くときだけ検査していたので、手で書き足したレコードが
+    #   **根拠も判断者も無いまま信用される**経路があった。
+    for slug, rows in got["machines"].items():
+        if not isinstance(rows, list):
+            raise CacheError(f"控えが壊れています（{slug} が並びではありません）")
+        for rec in rows:
+            _check_record(slug, rec)
     return got
+
+
+def _check_record(slug: str, rec) -> None:
+    """1件ぶんの控えを確かめる（★読むときも書くときも同じ物差し★）。"""
+    if not isinstance(rec, dict):
+        raise CacheError(f"控えが壊れています（{slug}）")
+    if rec.get("verdict") not in VERDICTS:
+        raise CacheError(f"控えの結論が不正です（{slug}）: {rec.get('verdict')!r}")
+    for k in ("expected", "seen", "why", "decided_at"):
+        if not str(rec.get(k) or "").strip():
+            raise CacheError(f"控えに「{k}」がありません（{slug}）")
+    by = rec.get("agreed_by")
+    if not isinstance(by, list) or len(set(by)) < 2:
+        raise CacheError(f"控えの判断者が足りません（{slug}）: {by!r}"
+                         "／★違う2者で決めます★")
+    ev = rec.get("evidence")
+    if not isinstance(ev, list) or not ev:
+        raise CacheError(f"控えに根拠がありません（{slug}）")
+    kinds = set()
+    for e in ev:
+        if not isinstance(e, dict):
+            raise CacheError(f"控えの根拠が組ではありません（{slug}）")
+        if not str(e.get("url") or "").startswith(("http://", "https://")):
+            raise CacheError(f"控えの根拠のURLが不正です（{slug}）: {e.get('url')!r}")
+        if len(" ".join(str(e.get("quote") or "").split())) < MIN_QUOTE:
+            raise CacheError(f"控えの逐語引用が短すぎます（{slug}）")
+        if e.get("kind") not in KINDS:
+            raise CacheError(f"控えの根拠の種類が不正です（{slug}）: {e.get('kind')!r}")
+        kinds.add(e.get("kind"))
+    # ★「同じ」と決めるには、名鑑の観測と公式の関係の両方が要る★
+    #   片方だけでは「グループ会社と分かっただけ」で採用できてしまう。
+    if rec["verdict"] == "MATCH" and kinds != set(KINDS):
+        raise CacheError(f"「同じ」と決めるには{'と'.join(KINDS)}の両方が要ります"
+                         f"（{slug}）: いまは {sorted(kinds)}")
 
 
 def save(got: dict) -> None:
@@ -105,10 +148,47 @@ def verdict_for(slug: str, expected: str, seen: str, store=None):
     return None
 
 
+def verify_evidence(evidence: list, fetch=None) -> None:
+    """★根拠の逐語引用が、本当にそのページにあるか確かめる★
+
+    ★なぜ要るか（2026-08-14・依頼190のP1）★
+      形（URLらしい文字列・8文字以上の引用）だけを見ていたので、
+      **URLも引用も「言うだけ」で通った**。
+      当サイトの原則は「言うだけでは通さない＝そのページに実在する逐語を
+      根拠に出させ、機械が確かめる」なので、ここが抜けていると
+      根拠の無い MATCH を控えられてしまう。
+
+    ★取れなければ控えない★（fail-closed）＝取得できない・引用が見つからない
+      ときは例外にする。「たぶん合っている」で通さない。
+    """
+    if fetch is None:
+        import new_machine_watch as _w
+
+        def fetch(u):
+            return _w._get(u)
+    import new_machine_watch as _w
+    for e in evidence:
+        url = str(e.get("url") or "")
+        try:
+            html = fetch(url)
+        except Exception as ex:            # noqa: BLE001
+            raise CacheError(f"根拠のページを取得できません（{url}）: "
+                             f"{str(ex)[:80]}")
+        body = " ".join(_w._visible_text(html or "").split())
+        q = " ".join(str(e.get("quote") or "").split())
+        if q not in body:
+            raise CacheError(
+                f"根拠の逐語引用がそのページに見つかりません（{url}）: "
+                f"{q[:40]}／★写した文だけを根拠にします★")
+
+
 def remember(slug: str, expected: str, seen: str, verdict: str,
              why: str, by: list, evidence: list, decided_at: str,
-             store=None) -> dict:
-    """結論を控える。★根拠が無ければ受け取らない★"""
+             store=None, fetch=None) -> dict:
+    """結論を控える。★根拠が無ければ受け取らない★
+
+    ★逐語引用は実際にそのページから取ってきて照合する★（依頼190のP1）
+    """
     if verdict not in VERDICTS:
         raise CacheError(f"結論は {'/'.join(VERDICTS)} のどちらかです: {verdict!r}")
     for k, v in (("slug", slug), ("expected", expected), ("seen", seen),
@@ -130,6 +210,10 @@ def remember(slug: str, expected: str, seen: str, verdict: str,
         if e.get("kind") not in KINDS:
             raise CacheError(f"根拠の種類は {'/'.join(KINDS)} のどれかです: "
                              f"{e.get('kind')!r}")
+    verify_evidence(evidence, fetch)
+    _check_record(slug, {"expected": expected, "seen": seen,
+                         "verdict": verdict, "why": why, "agreed_by": by,
+                         "evidence": evidence, "decided_at": decided_at})
     got = store if store is not None else load()
     rows = got.setdefault("machines", {}).setdefault(slug, [])
     k = key_of(seen)
@@ -167,6 +251,35 @@ def forget(slug: str, expected: str, seen: str, store=None) -> bool:
 
 # ---------------------------------------------------------------- selftest
 
+def _bad_load() -> bool:
+    """★手で書き足した根拠なしのレコードを、読むときに弾けるか★（試験用）"""
+    import copy
+    good = {"schema_version": SCHEMA, "machines": {"pw_1": [
+        {"expected": "sanslay", "seen": "三洋物産", "verdict": "MATCH",
+         "why": "理由", "agreed_by": ["claude", "codex"],
+         "decided_at": "2026-08-14",
+         "evidence": [{"url": "https://x.test/a", "quote": "メーカー 三洋物産",
+                       "kind": "directory_observation"},
+                      {"url": "https://x.test/b", "quote": "株式会社サンスリー",
+                       "kind": "official_relationship"}]}]}}
+    for bad in ({"verdict": "MATCH", "expected": "sanslay", "seen": "三洋物産"},
+                dict(good["machines"]["pw_1"][0], agreed_by=["claude"]),
+                dict(good["machines"]["pw_1"][0], agreed_by=["claude", "claude"]),
+                dict(good["machines"]["pw_1"][0], evidence=[]),
+                dict(good["machines"]["pw_1"][0],
+                     evidence=good["machines"]["pw_1"][0]["evidence"][:1])):
+        g = copy.deepcopy(good)
+        g["machines"]["pw_1"] = [bad]
+        try:
+            for slug, rows in g["machines"].items():
+                for rec in rows:
+                    _check_record(slug, rec)
+            return False
+        except CacheError:
+            pass
+    return True
+
+
 def selftest() -> int:
     results = []
 
@@ -180,10 +293,21 @@ def selftest() -> int:
            "kind": "official_relationship"}]
     st = _empty()
 
+    _pages = {
+        "https://x.test/a": "<p>メーカー 三洋物産 / 機種一覧</p>",
+        "https://x.test/b": "<p>株式会社サンスリー 遊技機の開発・製造 を行います</p>",
+    }
+
+    def _fetch(u):
+        if u not in _pages:
+            raise RuntimeError("404")
+        return _pages[u]
+
     def _ok(**kw):
         base = dict(slug="pw_1", expected="sanslay", seen="三洋物産",
                     verdict="MATCH", why="理由", by=["claude", "codex"],
-                    evidence=ev, decided_at="2026-08-14", store=st)
+                    evidence=ev, decided_at="2026-08-14", store=st,
+                    fetch=_fetch)
         base.update(kw)
         try:
             remember(**base)
@@ -210,6 +334,22 @@ def selftest() -> int:
       not _ok(by=["claude"]))
     t("　同じ組を2度控えても増えない",
       (_ok(why="別の理由") and len(st["machines"]["pw_1"]) == 1))
+    # ★★言うだけでは通さない（2026-08-14・依頼190のP1）★★
+    t("★★逐語引用がそのページに無ければ受け取らない★★"
+      "／以前はURLも引用も言うだけで通った",
+      not _ok(evidence=[dict(ev[0], quote="どこにも書いていない文字列"),
+                        ev[1]]))
+    t("　（対照）そのページにある文なら通る＝検査が厳しすぎるのではない",
+      _ok(evidence=[dict(ev[0], quote="メーカー 三洋物産"), ev[1]],
+          slug="pw_taisyo"))
+    t("　ページを取れなければ控えない（fail-closed）",
+      not _ok(evidence=[dict(ev[0], url="https://x.test/nai"), ev[1]]))
+    t("★★「同じ」と決めるには名鑑の観測と公式の関係の両方が要る★★",
+      not _ok(evidence=[ev[0]]) and not _ok(evidence=[ev[1]]))
+    t("　（対照）「違う」と決めるのは片方でもよい",
+      _ok(verdict="MISMATCH", evidence=[ev[0]], slug="pw_mis"))
+    t("★★読むときも同じ物差しで確かめる★★（手で書き足しても信用しない）",
+      _bad_load())
     t("　取り消せる",
       forget("pw_1", "sanslay", "三洋物産", st)
       and verdict_for("pw_1", "sanslay", "三洋物産", st) is None)
@@ -275,6 +415,7 @@ def main() -> int:
                 return 1
             ev.append({"url": parts[0], "quote": parts[1], "kind": parts[2]})
         import datetime
+        # ★CLIでは取ってくる役を差し替えない★＝本物のページで照合する
         rec = remember(slug, a.expected or "", a.seen or "", a.verdict or "",
                        a.why or "", [x.strip() for x in
                                      str(a.by or "").split(",") if x.strip()],

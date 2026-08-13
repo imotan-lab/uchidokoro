@@ -322,6 +322,8 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
         except Exception:                 # noqa: BLE001
             # ★引けないものは票にしない★（仮の名前を作らない）
             unknown.append(v.get("url"))
+    # ★共同で作ることがある組は1票にまとめる★（2026-08-14・依頼190のP1）
+    keys = _sl.merge_joint(keys)
     out["usable_lineages"] = len(keys)
     out["lineage_unknown"] = unknown
     out["unreported_quarantine"] = unreported

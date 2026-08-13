@@ -430,6 +430,10 @@ def check_sources(sources: list) -> list:
             keys.add(_sl.vote_key(s["publisher"]))
         except _sl.LineageError as e:
             raise ConfirmedError(str(e))
+    # ★共同で作ることがある組は1票にまとめる★（2026-08-14・依頼190のP1）
+    #   一撃とDMMぱちタウンには共同取材の企画が実在する（「双龍玉」）。
+    #   ★値を控える場所がいちばん危ない★ので、ここは確かめるまで数えない。
+    keys = _sl.merge_joint(keys)
     if len(keys) < 2:
         raise ConfirmedError(
             "同じ発行者の出典が2つあるだけです（独立した2系列が要ります）: "

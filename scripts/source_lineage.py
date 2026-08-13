@@ -97,6 +97,60 @@ def vote_groups(reg: dict | None = None) -> dict:
     return {pid: "vote:" + min(ms) for root, ms in members.items() for pid in ms}
 
 
+def joint_pairs(reg: dict | None = None) -> list:
+    """★共同で作ることがある発行者の組★（source-registry の joint_production）
+
+    ★なぜ要るか（2026-08-14・依頼190のP1）★
+      一撃とDMMぱちタウンは別会社だが、**共同取材の企画が実在する**
+      （「双龍玉」）。共同制作の記事は2社の名前が並んでいても取材は1つで、
+      独立2票と数えると「2つの出典が一致した」の土台が崩れる。
+      名鑑側の JSON に注意書きは書いてあったが、**読むコードが無かった**＝
+      無人の処理では何の関門にもなっていなかった。
+
+    ★迷ったら数えない★＝共同かどうかは記事を読まないと分からないので、
+      この組が顔ぶれに揃ったときは**まとめて1票**として扱う。
+      別の発行者をもう1つ足せば2票に届く（＝作業は止まらない）。
+    """
+    reg = reg if reg is not None else load_registry()
+    got = reg.get("joint_production") or []
+    if not isinstance(got, list):
+        raise LineageError("joint_production は並びで書きます")
+    pubs = _active(reg)
+    out = []
+    for row in got:
+        if not isinstance(row, dict):
+            raise LineageError("joint_production の要素は組（辞書）で書きます")
+        ps = row.get("publishers")
+        if not isinstance(ps, list) or len(ps) < 2:
+            raise LineageError(f"joint_production の publishers が不正です: {ps!r}")
+        for p in ps:
+            if p not in pubs:
+                raise LineageError(
+                    f"joint_production に知らない（またはACTIVEでない）"
+                    f"発行者があります: {p}")
+        if not str(row.get("why") or "").strip():
+            raise LineageError("joint_production には理由（why）が要ります")
+        out.append(list(ps))
+    return out
+
+
+def merge_joint(keys, reg: dict | None = None) -> set:
+    """★共同制作がありうる組が揃っていたら、1票にまとめる★
+
+    票のかたまり（vote:xxx）の集合を受け取り、まとめ直した集合を返す。
+    ★1社でも欠けていれば何もしない★＝関係ない機種の邪魔をしない。
+    """
+    reg = reg if reg is not None else load_registry()
+    g = vote_groups(reg)
+    out = set(keys)
+    for pair in joint_pairs(reg):
+        ks = sorted({g[p] for p in pair if p in g})
+        if len(ks) > 1 and all(k in out for k in ks):
+            out -= set(ks)
+            out.add(ks[0])          # ★まとめて1票★
+    return out
+
+
 def vote_key(publisher_id: str, reg: dict | None = None) -> str:
     """発行者IDから票の単位を返す。★登録が無ければ例外★"""
     g = vote_groups(reg)
@@ -126,12 +180,32 @@ def vote_key_of_url(url: str, reg: dict | None = None) -> str:
 
 
 def count_votes(publisher_ids, reg: dict | None = None) -> int:
-    """★独立した出典が何票あるか★（同じかたまりは何本あっても1票）"""
+    """★独立した出典が何票あるか★（同じかたまりは何本あっても1票）
+
+    ★共同制作がありうる組もまとめる★（2026-08-14・依頼190のP1）
+    """
     reg = reg if reg is not None else load_registry()
-    return len({vote_key(p, reg) for p in publisher_ids})
+    return len(merge_joint({vote_key(p, reg) for p in publisher_ids}, reg))
 
 
 # ---------------------------------------------------------------- selftest
+
+def _bad_joint(reg: dict) -> bool:
+    """★壊れた joint_production は止まるか★（試験用）"""
+    import copy
+    for bad in ([{"publishers": ["1geki"], "why": "x"}],
+                [{"publishers": ["1geki", "zzz-nai"], "why": "x"}],
+                [{"publishers": ["1geki", "dmm-ptown"], "why": ""}],
+                {"publishers": []}):
+        r = copy.deepcopy(reg)
+        r["joint_production"] = bad
+        try:
+            joint_pairs(r)
+            return False
+        except LineageError:
+            pass
+    return True
+
 
 def selftest() -> int:
     results = []
@@ -155,6 +229,19 @@ def selftest() -> int:
     t("★★1社しか無ければ何本URLがあっても1票★★",
       count_votes(["p-world", "hazuse", "p-world"], reg) == 1)
     t("　別の2社なら2票", count_votes(["chonborista", "nana-press"], reg) == 2)
+
+    # ★★共同制作の組（2026-08-14・依頼190のP1⑤）★★
+    t("★★共同で作ることがある組は1票にまとめる★★（一撃とDMMぱちタウン）"
+      "／共同取材の記事を独立2票と数えると土台が崩れる",
+      count_votes(["1geki", "dmm-ptown"], reg) == 1)
+    t("　（対照）まとめないと2票になる＝これが直す前の姿",
+      len({g["1geki"], g["dmm-ptown"]}) == 2)
+    t("　もう1社足せば2票に届く（作業は止まらない）",
+      count_votes(["1geki", "dmm-ptown", "chonborista"], reg) == 2)
+    t("　片方だけなら何もしない（関係ない機種の邪魔をしない）",
+      count_votes(["1geki", "chonborista"], reg) == 2)
+    t("　登録の形が壊れていたら止める（黙って素通りしない）",
+      _bad_joint(reg))
 
     ok = False
     try:

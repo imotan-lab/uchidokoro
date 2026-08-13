@@ -671,9 +671,19 @@ def _relation_group(maker_id: str) -> str:
         got = json.load(open(_w.CATALOGS, encoding="utf-8"))
         conf = (got.get("catalogs") or {}).get(maker_id)
         if isinstance(conf, dict):
-            # ★古い名前も読む★（maker_identity_group からの移行中）
-            return str(conf.get("maker_relation_group")
-                       or conf.get("maker_identity_group") or "")
+            # ★古い名前は読まずに止める★（2026-08-14・依頼190のP2）
+            #   `maker_identity_group` は「全機種で自動的に通す許可」だった。
+            #   互換で読み続けると、名簿に旧名を足すだけで**廃止した挙動が
+            #   静かに戻る**。名前だけ変えても意味が戻せるなら直っていない。
+            if "maker_identity_group" in conf:
+                raise LookupError_(
+                    f"名簿に古い項目 maker_identity_group があります"
+                    f"（{maker_id}）／★これは廃止しました★＝"
+                    "全機種で自動的に通す許可でした。"
+                    "2AIへ回す印にするなら maker_relation_group に書き換えます")
+            return str(conf.get("maker_relation_group") or "")
+    except LookupError_:
+        raise
     except Exception:                     # noqa: BLE001
         return ""
     return ""
@@ -685,35 +695,10 @@ def _related(expected: str, owners: set) -> bool:
     return bool(g) and any(_relation_group(o) == g for o in owners)
 
 
-def _identity_group(maker_id: str) -> str:
-    """★メーカー欄の照合だけに使う「同じグループ」★（2026-08-13・依頼172）
-
-    名鑑によって同じ機種を「平和」と「オリンピアエステート」で書き分ける。
-    平和の公式が両社をグループ会社（パチンコ機・パチスロ機の開発・製造）と
-    載せていることを確かめたうえで、**照合のときだけ**同じ扱いにする。
-
-    ★別名（directory_names）で1社に潰さない理由★
-      ①入口の索引が「同じ名前が2社にある」として対応を無効化する
-      ②法人格の区別が消える
-    ★出典の数は増えない★＝独立性はホスト（サイト）の数で数えているため。
-    未設定なら空文字＝別の社として扱う（fail-closed）。
-    """
-    if not maker_id:
-        return ""
-    try:
-        got = json.load(open(_w.CATALOGS, encoding="utf-8"))
-        conf = (got.get("catalogs") or {}).get(maker_id)
-        if isinstance(conf, dict):
-            return str(conf.get("maker_identity_group") or "")
-    except Exception:                     # noqa: BLE001
-        return ""
-    return ""
-
-
-def _same_identity_group(expected: str, owners: set) -> bool:
-    """期待する社と、名鑑が指した社が同じグループか。"""
-    g = _identity_group(expected)
-    return bool(g) and any(_identity_group(o) == g for o in owners)
+# ★旧 `_identity_group` / `_same_identity_group` は削除した★
+#   （2026-08-14・依頼190のP2）どこからも呼ばれていないのに
+#   **旧項目を読むコードだけが残っていた**。読む場所が残っていると、
+#   あとで誰かが繋ぎ直せてしまう。
 
 
 def lookup(url: str, official_name: str, expected_maker: str = "") -> dict:
@@ -1210,6 +1195,25 @@ def selftest() -> int:
     t("　関係の無い社どうしは、そのまま別の社",
       _related("sammy", {"universal"}) is False
       and _related("", {"heiwa"}) is False)
+
+    def _old_field_stops():
+        """★旧項目を足せば元に戻せる、を塞げたか★（依頼190のP2）"""
+        _bak = _w.CATALOGS
+        try:
+            _write_tmp_catalogs({"zz": {"name": "テスト社", "status": "WATCH_OFF",
+                                        "maker_identity_group": "grp"}})
+            try:
+                _relation_group("zz")
+                return False
+            except LookupError_:
+                return True
+        finally:
+            _w.CATALOGS = _bak
+
+    t("★★廃止した旧項目 maker_identity_group は読まずに止める★★"
+      "（2026-08-14・依頼190のP2）／互換で読み続けると、名簿に旧名を足すだけで"
+      "「全機種で自動的に通す」が静かに戻る",
+      _old_field_stops())
     t("★★メーカー欄の判定が三つに分かれる★★（依頼189）"
       "／MATCH＝名簿で一致／UNKNOWN＝2AIへ／MISMATCH＝使わない",
       (lambda f: [f("サンスリー"), f("三洋物産"), f("サミー"), f("架空社")]
