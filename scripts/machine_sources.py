@@ -522,6 +522,11 @@ def record(slug: str, url: str, why: str, by: list,
 
     rec = {
         "url": url,
+        # ★どこから来た機種か★（2026-08-14・台帳#350）
+        #   記事がまだ無い新台の控えは、待ち行列が打ち切られると
+        #   **誰も使わないのに巡回だけされ続ける**。印を残しておき、
+        #   読むときに「いまも生きているか」を見る。
+        "origin": ("pending" if machine(slug).get("_pending") else "machine"),
         "publisher": got["publisher"],
         "lineage": got["lineage"],
         "title": got["title"][:120],
@@ -959,14 +964,48 @@ def remember_check(slug: str, url: str, got: dict) -> dict:
     return _update_one(slug, url, _change)
 
 
+def orphaned(slug: str, rec: dict) -> bool:
+    """★もう誰も使わない控えか★（2026-08-14・台帳#350）
+
+    記事がまだ無い新台のために控えたもので、
+    ・記事にもなっていない（machines.json に無い）
+    ・待ち行列にも居ない（60日で打ち切られた）
+    のときだけ「置き去り」とみなす。
+
+    ★消さない★＝同じ機種が再登場したら、そのまま復帰できるようにする。
+      巡回（取り直し）の対象から外すだけ。
+    """
+    if str(rec.get("origin") or "") != "pending":
+        return False
+    try:
+        machine(slug)
+        return False                      # 記事になった or まだ待ち行列に居る
+    except SourceError:
+        return True
+
+
 def recheck_all(slug: str = "", apply: bool = False) -> list:
-    """控えを順に確かめる。★--apply で手がかりを保存し直す（取り直し）★"""
+    """控えを順に確かめる。★--apply で手がかりを保存し直す（取り直し）★
+
+    ★置き去りの控えは見に行かない★（2026-08-14・台帳#350）
+      待ち行列が打ち切られた新台の控えを毎回取りに行くと、
+      要らない通信・ページ消滅による隔離・台帳のノイズが増える。
+    """
     data = load()
     rows = []
     for s, recs in sorted((data.get("machines") or {}).items()):
         if slug and s != slug:
             continue
         for rec in recs:
+            if orphaned(s, rec):
+                rows.append({"slug": s, "url": rec.get("url"),
+                             "publisher": rec.get("publisher"),
+                             "state": "ORPHANED",
+                             "why": "記事にも待ち行列にも無い新台の控えです"
+                                    "（見に行きません・消しもしません）",
+                             "had_marks": bool(rec.get("identity_marks")),
+                             "title_now": None, "model_now": None})
+                continue
             try:
                 got = recheck(s, rec)
             except Exception as e:          # noqa: BLE001
@@ -1137,6 +1176,20 @@ def selftest() -> int:
           machine("pw_test_new").get("_pending") is True)
     finally:
         globals()["_pending_machine"] = _pm_bak
+
+    # ★★置き去りの控えは見に行かない（2026-08-14・台帳#350）★★
+    _pm_bak2 = globals().get("_pending_machine")
+    try:
+        globals()["_pending_machine"] = lambda s: {}
+        t("★★記事にも待ち行列にも無い新台の控えは、巡回しない★★（台帳#350）"
+          "／要らない通信・ページ消滅の隔離・台帳のノイズを増やさない",
+          orphaned("pw_kieta", {"origin": "pending"}) is True)
+        t("　（対照）記事になった機種の控えは今までどおり巡回する",
+          orphaned(ms[0]["slug"], {"origin": "pending"}) is False)
+        t("　印の無い（もともと記事があった）控えは、そのまま巡回する",
+          orphaned("pw_kieta", {}) is False)
+    finally:
+        globals()["_pending_machine"] = _pm_bak2
 
     try:
         t("★★登録されていないサイトは使わない★★（票に数えられない）",

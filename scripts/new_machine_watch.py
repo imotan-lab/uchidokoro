@@ -876,12 +876,29 @@ def _visible_text(html: str) -> str:
     文書の順番と「タグ境界＝行」の形は従来どおり（見出しの次の行に値、を保つ）。
     解析に失敗したときだけ旧実装（非表示は読まれる）へ退避する。
     """
-    p = _CardParser()
     try:
-        p.feed(html or "")
+        root = parse_tree(html)
     except Exception:                     # noqa: BLE001
         return _visible_text_regex(html)
+    return text_of_tree(root)
 
+
+def parse_tree(html: str):
+    """HTMLを要素の木にする（★読めなければ例外★）。"""
+    p = _CardParser()
+    p.feed(html or "")
+    return p.root
+
+
+def text_of_tree(root) -> str:
+    """★木から「画面に出る文字」を作る唯一の場所★（2026-08-14・台帳#351）
+
+    ★ここを分けた理由★
+      投稿欄を箱ごと落とす処理（user_area）が、自前で木をたどって
+      本文を作っていた。そちらは aside/nav/footer/header を外していないので、
+      **同じHTMLから2通りの本文ができる**状態だった。
+      落とす役目（user_area）と、本文にする役目（ここ）を分ける。
+    """
     out = []
 
     def _walk(n, hidden):
@@ -898,7 +915,7 @@ def _visible_text(html: str) -> str:
         for c in n["children"]:
             _walk(c, h)
 
-    _walk(p.root, False)
+    _walk(root, False)
     t = unicodedata.normalize("NFKC", chr(10).join(out))
     return chr(10).join(x.strip() for x in t.splitlines() if x.strip())
 

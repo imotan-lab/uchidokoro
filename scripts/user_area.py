@@ -148,12 +148,12 @@ def visible_text(html: str, url: str = "", conf: dict | None = None) -> str:
     rules = [r for r in (ua.get("drop") or []) if isinstance(r, dict)]
     if not rules:
         return _nw._visible_text(html or "")
-    p = _nw._CardParser()
     try:
-        p.feed(html or "")
+        root = _nw.parse_tree(html)
     except Exception as e:               # noqa: BLE001
         # ★読めないものを「危なくない」とは言えない★
         raise UserAreaError(f"HTMLを解析できません（投稿欄を落とせません）: {e}")
+
     # ★落とす前に「守る対象の箱」が居るか確かめる★（2026-08-14・依頼196のP1）
     #   以前は落とした数を数えていただけで、使っていなかった。
     #   相手が id と 印（markers）を**同時に**変えると、
@@ -162,39 +162,27 @@ def visible_text(html: str, url: str = "", conf: dict | None = None) -> str:
     # ★書いた箱は「全部」そろっていること★（2026-08-14・依頼198）
     #   まとめて渡すと「どれか1つあれば合格」になる。1つずつ見る。
     need_b = [r for r in (ua.get("require_before") or []) if isinstance(r, dict)]
-    miss_b = [r for r in need_b if not _find(p.root, [r])]
+    miss_b = [r for r in need_b if not _find(root, [r])]
     if miss_b:
         raise UserAreaError(
             f"落とすはずの箱が見つかりません（{miss_b}）"
             "／★このページは出典に使いません★"
             "（相手のHTMLの作りが変わった可能性があります）")
-    dropped = strip_tree(p.root, rules)
+    dropped = strip_tree(root, rules)
     # ★落とした後に「本文の箱」が残っているか確かめる★
     #   落としすぎ（機種データごと消える）にも気づけるようにする。
     need_a = [r for r in (ua.get("require_after") or []) if isinstance(r, dict)]
-    miss_a = [r for r in need_a if not _find(p.root, [r])]
+    miss_a = [r for r in need_a if not _find(root, [r])]
     if miss_a:
         raise UserAreaError(
             f"落としたあとに本文の箱が残っていません（{miss_a}）"
             "／★このページは出典に使いません★（落としすぎの疑い）")
-    out = []
-
-    def _walk(nd, hidden):
-        hid = hidden or _nw._CardParser.attr_hidden(nd)
-        if nd["tag"] in ("script", "style", "noscript", "template"):
-            return
-        if nd["tag"] == "#text":
-            if not hid:
-                out.extend(nd["text"])
-            return
-        for ch in nd["children"]:
-            _walk(ch, hid)
-
-    _walk(p.root, False)
+    # ★本文にするのは new_machine_watch の役目★（2026-08-14・台帳#351）
+    #   ここで自前に木をたどっていたので、aside/nav/footer/header の
+    #   扱いが本家とずれていた（同じHTMLから2通りの本文ができていた）。
+    #   ★落とすのがこの器の役目／本文にするのは共通の役目★
     import re
-    import unicodedata
-    text = unicodedata.normalize("NFKC", "\n".join(
-        x.strip() for x in out if x and x.strip()))
+    text = _nw.text_of_tree(root)
     # ★落とし損ねていないか確かめる★（fail-closed）
     left = [m for m in (ua.get("markers") or [])
             if str(m) and str(m) in text]

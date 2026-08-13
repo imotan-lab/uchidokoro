@@ -1349,10 +1349,9 @@ VOTE_MODULES = ("spec_lookup.py", "ceiling_lookup.py", "at_spec_lookup.py",
                 "cz_lookup.py", "model_code_lookup.py")
 # 票のかたまりを入れている入れ物によく使う名前
 _VOTE_WORDS = ("sources", "srcs", "lins", "lineage", "hosts", "votes")
-# ★短い変数名は完全一致で見る★（2026-08-14）
-#   直す前の spec_lookup は `len(s) >= 2` だった。"s" を部分一致に混ぜると
-#   何にでも当たるので、**そのままの名前**のときだけ数える。
-_VOTE_VARS = ("s", "srcs", "keys", "lins", "seen", "hosts", "pubs")
+# 票を作っている呼び出し（この結果を入れた変数は「票の入れ物」）
+_VOTE_MAKERS = ("vote_key", "vote_lineage", "_indep", "independent",
+                "merge_joint")
 
 
 def _raw_vote_counts(src: str, fname: str) -> list:
@@ -1363,9 +1362,16 @@ def _raw_vote_counts(src: str, fname: str) -> list:
       さらに直した翌日、cz_lookup にもう2か所残っていた（Codexが発見）。
       数える場所が散らばると、必ずまた繋ぎ忘れる。
 
-    見るのは2つだけ:
-      ・len(…票の入れ物…) を 2 と比べている
-      ・-len(…票の入れ物…) を並び替えの鍵にしている（多数決）
+    ★見方は2つを組み合わせる★（2026-08-14・台帳#349）
+      ①**形**で見る … `len(x) >= 2` / `2 <= len(x)` / `len(x) == 2` /
+                       `-len(x)` / `key=len, reverse=True`
+      ②**由来**で見る … その x が票から来ているか
+                       （`votes.items()` から取り出した・`vote_key()` の結果を
+                         入れた・名前が sources/hosts/lins などである）
+
+      形だけで見ると、文字列の長さ検査や試験の件数比較まで拾って
+      **18件の誤検知**が出た（実測）。名前だけで見ると書き方の違いを見逃す。
+      両方を要る条件にする。
     """
     import ast
     out = []
@@ -1373,32 +1379,85 @@ def _raw_vote_counts(src: str, fname: str) -> list:
         tree = ast.parse(src)
     except SyntaxError as e:
         return [f"{fname}: 読めません（{e}）"]
+    # ★自己試験の中は見ない★（2026-08-14・台帳#349）
+    #   試験は「採れた出典が2件」のような件数の確認を普通にする。
+    #   見るのは**本番の採用地点**だけでよい。
+    for _fn in list(ast.walk(tree)):
+        if isinstance(_fn, ast.FunctionDef) and "selftest" in _fn.name:
+            _fn.body = []
 
-    def _is_len_of_votes(node) -> bool:
-        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-                and node.func.id == "len" and node.args):
-            return False
-        arg = node.args[0]
-        if isinstance(arg, ast.Name) and arg.id in _VOTE_VARS:
+    def _seg(node) -> str:
+        return (ast.get_source_segment(src, node) or "")[:60]
+
+    def _names_of(target) -> set:
+        got = set()
+        for n in ast.walk(target):
+            if isinstance(n, ast.Name):
+                got.add(n.id)
+        return got
+
+    # ★票の入れ物の名前を集める（由来をたどる）★
+    vote_names = set()
+    for node in ast.walk(tree):
+        it = getattr(node, "iter", None)
+        if it is not None and isinstance(node, (ast.For, ast.comprehension)):
+            seg = ast.get_source_segment(src, it) or ""
+            if any(w in seg for w in _VOTE_WORDS):
+                vote_names |= _names_of(node.target)
+        if isinstance(node, (ast.Assign, ast.AugAssign, ast.AnnAssign)):
+            val = getattr(node, "value", None)
+            if val is None:
+                continue
+            seg = ast.get_source_segment(src, val) or ""
+            if any(w in seg for w in _VOTE_WORDS + _VOTE_MAKERS):
+                tg = node.targets if isinstance(node, ast.Assign) \
+                    else [node.target]
+                for t in tg:
+                    vote_names |= _names_of(t)
+
+    def _about_votes(node) -> bool:
+        """その式は票のことを言っているか。"""
+        seg = ast.get_source_segment(src, node) or ""
+        if any(w in seg for w in _VOTE_WORDS):
             return True
-        seg = ast.get_source_segment(src, arg) or ""
-        return any(w in seg for w in _VOTE_WORDS)
+        base = node
+        while isinstance(base, (ast.Subscript, ast.Attribute)):
+            base = base.value
+        return isinstance(base, ast.Name) and base.id in vote_names
+
+    def _is_len(node) -> bool:
+        return (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "len" and bool(node.args)
+                and _about_votes(node.args[0]))
+
+    def _is_two(node) -> bool:
+        return isinstance(node, ast.Constant) and node.value == 2
 
     for node in ast.walk(tree):
-        if isinstance(node, ast.Compare) and _is_len_of_votes(node.left):
-            for op, cmp in zip(node.ops, node.comparators):
-                if isinstance(op, (ast.GtE, ast.Lt, ast.Gt, ast.LtE)) \
-                        and isinstance(cmp, ast.Constant) and cmp.value == 2:
-                    out.append(f"{fname}:{node.lineno} "
-                               + (ast.get_source_segment(src, node) or "")[:60])
+        # ① len(票) と 2 の比較（左右どちらでも・等号でも）
+        if isinstance(node, ast.Compare):
+            sides = [node.left] + list(node.comparators)
+            hit = any((_is_len(a) and _is_two(b)) or (_is_two(a) and _is_len(b))
+                      for a, b in zip(sides, sides[1:]))
+            if hit and all(isinstance(o, (ast.GtE, ast.Lt, ast.Gt, ast.LtE,
+                                          ast.Eq, ast.NotEq))
+                           for o in node.ops):
+                out.append(f"{fname}:{node.lineno} " + _seg(node))
+        # ② -len(票) を並び替えの鍵にしている（多数決）
         if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub) \
-                and isinstance(node.operand, ast.Call) \
-                and isinstance(node.operand.func, ast.Name) \
-                and node.operand.func.id == "len":
-            seg = ast.get_source_segment(src, node.operand) or ""
-            if any(w in seg for w in ("sources", "names", "srcs", "lins")):
+                and _is_len(node.operand):
+            out.append(f"{fname}:{node.lineno} 並び替えの鍵に生の件数: "
+                       + _seg(node))
+        # ③ key=len と reverse=True を一緒に使っている（同じく多数決）
+        if isinstance(node, ast.Call):
+            kw = {k.arg: k.value for k in node.keywords if k.arg}
+            rev, key = kw.get("reverse"), kw.get("key")
+            if isinstance(rev, ast.Constant) and rev.value is True \
+                    and key is not None and node.args \
+                    and "len" in (ast.get_source_segment(src, key) or "") \
+                    and _about_votes(node.args[0]):
                 out.append(f"{fname}:{node.lineno} 並び替えの鍵に生の件数: "
-                           + (ast.get_source_segment(src, node) or "")[:60])
+                           + _seg(node))
     return out
 
 
@@ -1421,16 +1480,25 @@ def check_39_vote_counting(machines: list) -> list[str]:
         for hit in _raw_vote_counts(path.read_text(encoding="utf-8"), fn):
             ngs.append(hit + "／★source_lineage.independent() を通してください★")
     # ★見張りが壊れていないか、その場で確かめる★（直す前の姿を入れて試す）
-    _before = ("def f(e, per, votes):\n"
+    # ★直す前の書き方と、同じ意味の別の書き方★（2026-08-14・台帳#349）
+    #   ここに並べた7つを全部見つけられなければ、見張りは働いていない。
+    _before = ("def f(e, per, votes, codes):\n"
                "    for nk, e in per.items():\n"
                "        if len(e['sources']) < 2:\n"
                "            continue\n"
-               "        d = sorted(e['names'], key=lambda n: (-len(e['names'][n]), n))\n"
+               "        d = sorted(e['names'], key=lambda n: (-len(e['sources'][n]), n))\n"
                "    agreed = [(fp, s) for fp, s in votes.items() if len(s) >= 2]\n"
-               "    return [c for c, hosts in codes.items() if len(hosts) >= 2]\n")
-    if len(_raw_vote_counts(_before, "（見張りの試験）")) < 4:
+               "    ok = [c for c, hosts in codes.items() if len(hosts) >= 2]\n"
+               "    keys = {vote_key(p) for p in pubs}\n"
+               "    x = 2 <= len(keys)\n"
+               "    y = len(keys) == 2\n"
+               "    z = sorted(keys, key=len, reverse=True)\n"
+               "    return ok\n")
+    _found = _raw_vote_counts(_before, "（見張りの試験）")
+    if len(_found) < 7:
         ngs.append("★票の数え方の見張りが働いていません★"
-                   "（直す前の書き方を見つけられません）")
+                   f"（直す前の7つの書き方のうち {len(_found)} つしか"
+                   "見つけられません）")
     return ngs
 
 
