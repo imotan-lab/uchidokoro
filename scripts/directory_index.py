@@ -169,7 +169,7 @@ def anchor_core(text: str, aggressive: bool = False) -> str:
 
 
 def build_index(html: str, base_url: str, link_pattern: str,
-                title_class: str = "") -> dict:
+                title_class: str = "", title_tag: str = "") -> dict:
     """1つの入口から {機種名の芯: [(URL, 元の文字), ...]} を作る。
 
     ★リンクはHTML解析で読む★（2026-08-02・Codex52回目）
@@ -180,13 +180,20 @@ def build_index(html: str, base_url: str, link_pattern: str,
     """
     idx: dict = {}
     rx = re.compile(link_pattern)
+    # ★題の場所は「クラス」か「タグ」のどちらか一方で指す★（2026-08-14・依頼188）
+    #   両方あると、どちらを見ればよいか決まらない＝設定の誤りとして止める。
+    if title_class and title_tag:
+        return {"_PROBLEM_": [("", "名簿の設定が誤っています："
+                                   "title_class と title_tag は"
+                                   "どちらか一方だけにしてください")]}
+    _where = title_class or title_tag
     # ★題の場所が決まっている名鑑は、そこだけを読む★（2026-08-06・台帳#189）
-    pairs = (_w.visible_anchor_titles(html, title_class) if title_class
+    pairs = (_w.visible_anchor_titles(html, title_class, title_tag) if _where
              else _w._visible_anchor_pairs(html))
     # ★題を取れなかったリンクを黙って捨てない★（2026-08-06・Codex123回目）
     #   新しいカードだけ作りが変わって題を取れなくても、既存カードが
     #   最低件数を満たせば「面は正常」に見え、**新台だけ消える**（#189の再発）。
-    if title_class:
+    if _where:
         all_links = [(h, t) for h, t in (_w._visible_anchor_pairs(html) or [])
                      if rx.search(h)]
         got = {h for h, _ in (pairs or []) if rx.search(h)}
@@ -306,7 +313,8 @@ def scan_directory(dir_id: str, conf: dict) -> dict:
                     break
                 extra.append(got)
         idx = build_index(html, sf["url"], conf["link_pattern"],
-                          title_class=str(conf.get("title_class") or ""))
+                          title_class=str(conf.get("title_class") or ""),
+                          title_tag=str(conf.get("title_tag") or ""))
         # ★題を読めないカードがあれば、その面は使わない★（#189の再発防止）
         if "_PROBLEM_" in idx:
             out["problems"].append(f"{sf['url']}: {idx['_PROBLEM_'][0][1]}")
@@ -320,7 +328,8 @@ def scan_directory(dir_id: str, conf: dict) -> dict:
         # ★2ページ目以降も同じ入口として足す★（1ページ目の健全さは上で見た）
         for page_url, page_html in extra:
             more = build_index(page_html, page_url, conf["link_pattern"],
-                               title_class=str(conf.get("title_class") or ""))
+                               title_class=str(conf.get("title_class") or ""),
+                               title_tag=str(conf.get("title_tag") or ""))
             if "_PROBLEM_" in more:
                 out["problems"].append(
                     f"{page_url}: {more['_PROBLEM_'][0][1]}")
@@ -527,6 +536,39 @@ def selftest() -> int:
             '<a href="/slot/belko-slot/111111/">Lスーパービンゴネオ スロット 解析</a>'
             '<a href="/about/">会社案内</a>'
             '<a href="/slot/belko-slot/260918/?utm=1">Lすーぱぁびん娘 まとめ</a>')
+    # ★★2026-08-14・依頼188（題をタグで指す）★★
+    #   一撃は機種名を <h4> に入れており、クラス名が無い。
+    _TAG_HTML = (
+        '<a href="/slot/l_x/"><div><h4>L試験機</h4>'
+        '<p class="maker_item">サミー</p>'
+        '<p class="last_updated">導入開始日：2026年04月06日</p></div></a>')
+    _tag_idx = build_index(_TAG_HTML, "https://x.test/", r"/slot/[a-z0-9_]+/",
+                           title_tag="h4")
+    t("★★題をタグで指せる★★（クラス名が無い名鑑・依頼188）",
+      _ci.normalize_core("L試験機") in _tag_idx)
+    # ★実物と同じ形で確かめる★（メーカーの英字＋読み＋タイプ＋更新日）
+    #   これが混ざると anchor_core では剥がしきれない（実際に一致しなかった）。
+    _REAL_HTML = (
+        '<a href="/slot/l_x/"><div><h4>L試験機</h4>'
+        '<p class="maker_item">CROSSALPHA（クロスアルファ）</p>'
+        '<p class="type_item"><span class="type">ATタイプ</span>'
+        '<span class="type">天井</span></p>'
+        '<p class="last_updated">導入開始日：2026年04月06日'
+        '最終更新日：2026年04月25日</p></div></a>')
+    t("★★タグで指さないと、メーカーや更新日まで芯に混ざる★★（実物の形）",
+      _ci.normalize_core("L試験機") not in build_index(
+          _REAL_HTML, "https://x.test/", r"/slot/[a-z0-9_]+/"))
+    t("　タグで指せば、実物の形でも機種名だけを読める",
+      _ci.normalize_core("L試験機") in build_index(
+          _REAL_HTML, "https://x.test/", r"/slot/[a-z0-9_]+/", title_tag="h4"))
+    t("★★クラスとタグの両方を指定したら、設定の誤りとして止める★★",
+      "_PROBLEM_" in build_index(_TAG_HTML, "https://x.test/",
+                                 r"/slot/[a-z0-9_]+/",
+                                 title_class="x", title_tag="h4"))
+    t("　題を読めないリンクがあれば、タグ指定でも知らせる",
+      "_PROBLEM_" in build_index(
+          _TAG_HTML + '<a href="/slot/l_y/"><span>題なし</span></a>',
+          "https://x.test/", r"/slot/[a-z0-9_]+/", title_tag="h4"))
     idx = build_index(HTML, "https://d.example/slot/", r"/slot/[a-z\-]+/\d+")
     key = _ci.normalize_core("Lすーぱぁびん娘")
     t("★機種名から個別ページURLを引ける★",

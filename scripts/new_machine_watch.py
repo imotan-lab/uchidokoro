@@ -334,7 +334,7 @@ def _visible_anchor_pairs(html: str):
     return out
 
 
-def visible_anchor_titles(html: str, title_class: str):
+def visible_anchor_titles(html: str, title_class: str, title_tag: str = ""):
     """★リンクの中の「題」だけを取り出す★（2026-08-06・台帳#189）
 
     名鑑によっては、1つのリンクの中に機種名・メーカー・機械割・紹介文が
@@ -360,10 +360,19 @@ def visible_anchor_titles(html: str, title_class: str):
         h = (hidden or node["tag"] in ("script", "style", "noscript", "template")
              or _CardParser.attr_hidden(node))
         got = []
-        if not h and title_class in str(node["attrs"].get("class") or "").split():
-            t = _node_text(node).strip()
-            if t:
-                got.append(t)
+        # ★題の場所は「クラス」か「タグ」で指す★（2026-08-14・依頼188）
+        #   一撃は機種名を <h4> に入れていてクラス名が無い。
+        #   ★守りは同じ★＝見えている題がちょうど1つのときだけ使う。
+        if not h:
+            if title_class:
+                _hit = title_class in str(
+                    node["attrs"].get("class") or "").split()
+            else:
+                _hit = bool(title_tag) and node["tag"] == title_tag
+            if _hit:
+                t = _node_text(node).strip()
+                if t:
+                    got.append(t)
         for c in node["children"]:
             got += _titles_of(c, h)
         return got
