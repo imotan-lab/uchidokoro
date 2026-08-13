@@ -178,6 +178,39 @@ def interval_days(release: str, today, conf=None) -> int:
     return int(conf.get("default_interval_days") or 7)
 
 
+NEW_MACHINE_DAYS = 30             # ★新台と呼ぶのは導入後この日数まで★
+
+
+def is_new_machine(release: str, today, days: int = NEW_MACHINE_DAYS) -> bool:
+    """いま「新台期間」か（導入日当日を0日目として days 日目まで）。
+
+    ★これは「新台タスクが面倒を見る範囲」★（2026-08-13・運営者の方針）
+      新台期間のあいだは新台タスクが育て、過ぎたら更新タスクの通常ローテへ回す。
+      そうしないと新台が優先の上位に居座り続け、既存機種が永久に回らない。
+
+    ★月までしか分からない導入日は、日を勝手に補わない★
+      「2026-09」に月初を当てると最大30日早く終わってしまう。
+      月全体を導入されうる期間として扱い、**月末＋30日**までを新台期間とする
+      （月末を導入日として保存するわけではない。判定のときだけ使う）。
+
+    ★導入前は新台期間に入れない★＝そちらは公開と育成の担当。
+      ここは「導入後に人手で厚くする番が来るか」を決めるための線。
+    """
+    r = str(release or "").strip()
+    m = re.match(r"^(\d{4})-(\d{2})(?:-(\d{2}))?$", r)
+    if not m:
+        return False                       # 読めない＝新台と推測しない
+    y, mo = int(m.group(1)), int(m.group(2))
+    if m.group(3):
+        start = _dt.date(y, mo, int(m.group(3)))
+        end = start + _dt.timedelta(days=days)
+    else:
+        start = _dt.date(y, mo, 1)
+        nxt = _dt.date(y + (mo == 12), (mo % 12) + 1, 1)
+        end = (nxt - _dt.timedelta(days=1)) + _dt.timedelta(days=days)
+    return start <= today <= end
+
+
 def due(slug: str, release: str, today, state: dict, conf=None) -> bool:
     """今日その機種を見るか（★前に見た日が分からなければ見る★）。"""
     last = str((state or {}).get(slug) or "").strip()
@@ -1111,6 +1144,28 @@ def selftest() -> int:
     def _rel(off):
         return (_T - _dtm.timedelta(days=off)).isoformat()
 
+    t("★★新台期間は導入日当日から30日目まで★★（2026-08-13・運営者の方針）"
+      "／31日目からは更新タスクの通常ローテへ回す",
+      [is_new_machine(_rel(o), _T) for o in (-1, 0, 30, 31)]
+      == [False, True, True, False])
+    t("★★月までしか分からない機種は、月末＋30日まで新台期間★★"
+      "（月初を仮の導入日にすると最大30日早く終わる）",
+      is_new_machine("2026-07", _dtm.date(2026, 7, 1)) is True
+      and is_new_machine("2026-07", _dtm.date(2026, 8, 30)) is True
+      and is_new_machine("2026-07", _dtm.date(2026, 8, 31)) is False)
+    t("　12月の機種でも月末を正しく出せる（年をまたぐ計算）",
+      is_new_machine("2026-12", _dtm.date(2026, 12, 31)) is True
+      and is_new_machine("2026-12", _dtm.date(2027, 1, 30)) is True
+      and is_new_machine("2026-12", _dtm.date(2027, 1, 31)) is False)
+    t("★★導入前と、読めない導入日は新台期間に入れない★★"
+      "（導入前は公開と育成の担当／読めない値を新台と推測しない）",
+      is_new_machine("2026-11", _T) is False
+      and is_new_machine("", _T) is False
+      and is_new_machine("へんな値", _T) is False)
+    t("★★日が判明したら、その日からの数え方に切り替わる★★"
+      "（控えを持たず毎回 release_date から出すため、訂正にも追従する）",
+      is_new_machine("2026-07", _dtm.date(2026, 8, 15)) is True
+      and is_new_machine("2026-07-01", _dtm.date(2026, 8, 15)) is False)
     t("★★境界値ちょうどで間隔が変わる★★（導入日当日は「導入後0日」＝毎日）",
       [interval_days(_rel(o), _T) for o in
        (-31, -30, -8, -7, -1, 0, 30, 31, 60, 61)]
