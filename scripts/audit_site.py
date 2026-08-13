@@ -1263,6 +1263,26 @@ def check_35_risky_atoms(machines: list) -> list[str]:
     return []
 
 
+def _skill_contract(base: str) -> dict:
+    """★どのタスクが動いていて、どれを止めたか★を外の設定から読む。
+
+    ★公開されるこのファイルにタスク名を書かない★（2026-08-13・依頼177）
+      手順書をリポジトリへ置かない理由（内部構成が読まれる）と同じ。
+      置き場に `tasks-contract.json` を置き、そこから読む。
+      無ければこの検査は行わない（黙って通す＝別PCと同じ扱い）。
+    """
+    import json
+    p = os.path.join(base, "tasks-contract.json")
+    if not os.path.isfile(p):
+        return {}
+    try:
+        with open(p, encoding="utf-8") as f:
+            got = json.load(f)
+    except Exception:                     # noqa: BLE001
+        return {}
+    return got if isinstance(got, dict) else {}
+
+
 def check_37_skill_vs_code(machines: list) -> list[str]:
     """★手順書が、いま無いものを指していないか★（2026-08-13新設）
 
@@ -1282,18 +1302,27 @@ def check_37_skill_vs_code(machines: list) -> list[str]:
       ②止めたタスクを「実行する」と書いていないか
     """
     import re
-    base = "C:/Users/imao_/.claude/scheduled-tasks"
+    # ★このファイルは公開される★（2026-08-13・依頼177のP1）
+    #   手順書をリポジトリに置かない理由（ユーザー名・内部構成が読まれる）と
+    #   同じ理屈で、**その置き場をここに書いてもいけない**。
+    #   置き場は環境変数か、ホームからの相対で組み立てる。
+    #   タスク名も外の設定から読む（無ければ検査そのものを行わない）。
+    base = os.environ.get("UCHIDOKORO_TASKS_DIR") or os.path.join(
+        os.path.expanduser("~"), ".claude", "scheduled-tasks")
     if not os.path.isdir(base):
         return []                      # 別PCなど。手順書が無いだけで止めない
     ng = []
-    # ★止めたタスク★＝CLAUDE.mdの決定（再開せず add-machine/update-machine が後継）
-    stopped = ("uchidokoro-new-machine", "uchidokoro-auto-add",
-               "uchidokoro-verify", "uchidokoro-fact-check")
-    live = ("uchidokoro-add-machine", "uchidokoro-update-machine",
-            "uchidokoro-quality-review", "task-watchdog")
+    conf = _skill_contract(base)
+    if not conf:
+        return []                      # 契約が無ければ検査対象外（黙って通す）
+    stopped = tuple(conf.get("stopped") or ())
+    live = tuple(conf.get("live") or ())
     for task in live:
         f = os.path.join(base, task, "SKILL.md")
         if not os.path.isfile(f):
+            # ★契約に載っているのに手順書が無い★（依頼177のP1）
+            #   以前は黙って飛ばしていたので、消えても気づけなかった。
+            ng.append(f"{task}: 動かすことになっている手順書がありません")
             continue
         try:
             with open(f, encoding="utf-8") as _fh:

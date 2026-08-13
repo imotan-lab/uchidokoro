@@ -217,7 +217,10 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
                     #   （2026-08-11・運営者の指摘「機械で取れないものは2AIで取る」）
                     #   機械は「題では分からない」と言うだけ。同じ機種かどうかは
                     #   ClaudeとCodexが本文を読んで決め、控えへ登録すれば以後使える。
-                    body = _cl.cut_user_area(_cl._norm(_nw._visible_text(page)))
+                    # ★ここも切ってから潰す★（2026-08-13・依頼177のP1）
+                    #   通常の経路だけ直していたので、2AIへ渡す抜粋には
+                    #   まだ口コミが混ざり得た（改行を先に消すと見出しで切れない）。
+                    body = _cl._norm(_cl.cut_user_area(_nw._visible_text(page)))
                     got[dir_id] = {"url": r["url"], "publisher": pub,
                                    "state": "IDENTITY_UNVERIFIED",
                                    "error": "題ではこの機種のページか分かりません"

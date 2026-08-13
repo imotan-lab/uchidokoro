@@ -2169,7 +2169,12 @@ def push_after_publish(slug: str, already_committed: bool = False) -> list:
 #   ここは run_one の中に埋まっていて、試験は**本文に文字列があるか**しか
 #   見られなかった。項目を1つ増やしても試験は通り、実際に数えているかは
 #   確かめられない。★数える場所を関数にして、試験は実際に呼ぶ★
-MODULE_FIELDS = ("ceilings", "at_specs", "czs", "resets")
+# ★ゲームの流れも「記事の中身」に数える★（2026-08-13・台帳#344）
+#   2AIが2出典一致で決めた流れを材料に足すところまで通っていたのに、
+#   ここで数えていなかったので「採用できた材料がありません」で止まっていた
+#   （実際にモグモグ風林火山で発生）。導入前は流れが先に出るので、
+#   数えないと**いちばん鮮度が価値になる時期に記事が作れない**。
+MODULE_FIELDS = ("ceilings", "at_specs", "czs", "resets", "gameplays")
 
 
 def usable_material(mat: dict) -> dict:
@@ -2865,7 +2870,10 @@ def selftest() -> int:
             #   数える対象を増やし忘れても試験は通った。
             _only_model = {"adopted": {"model_code": "L試験機"}}
             _mods = {}
-            for _k in ("ceilings", "at_specs", "czs", "resets"):
+            # ★数える対象は定数から取る★（2026-08-13・台帳#344）
+            #   ここに列挙を書き写していたので、MODULE_FIELDS を増やしても
+            #   試験は素通りした（実際 gameplays を足したとき気づけなかった）。
+            for _k in MODULE_FIELDS:
                 _mods[_k] = usable_material(
                     {"adopted": {"model_code": "L試験機"},
                      _k: {"adopted": [{"x": 1}]}})
