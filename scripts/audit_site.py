@@ -1368,9 +1368,10 @@ def _vote_names_in(fn, src) -> set:
     """
     import ast
     names = set()
+    own = _own_nodes(fn)
     for _ in range(4):                     # ★伝わらなくなるまで繰り返す★
         before = len(names)
-        for node in ast.walk(fn):
+        for node in own:
             it = getattr(node, "iter", None)
             if it is not None and isinstance(node, (ast.For, ast.comprehension)):
                 if _looks_vote(it, src, names):
@@ -1406,7 +1407,26 @@ def _looks_vote(node, src, names) -> bool:
     return isinstance(base, ast.Name) and base.id in names
 
 
-def _vote_params(tree, src) -> dict:
+def _own_nodes(scope):
+    """★その関数**だけ**のノード★（入れ子の関数の中には入らない）
+
+    （2026-08-14・依頼201のP3）`ast.walk` は入れ子の関数まで歩くので、
+    外側と内側で同じ名前を使うと由来が混ざる。
+    `lambda` は式の一部なので中まで見る（`key=lambda n: -len(...)`）。
+    """
+    import ast
+    out, stack = [], list(getattr(scope, "body", []) or [])
+    while stack:
+        n = stack.pop()
+        out.append(n)
+        for ch in ast.iter_child_nodes(n):
+            if isinstance(ch, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue                   # ★中の関数は自分の名前で見る★
+            stack.append(ch)
+    return out
+
+
+def _vote_params(tree, src, known: dict | None = None) -> dict:
     """★票を渡されている引数★（関数名 → 引数名の集合）
 
     `def enough(keys): return len(keys) >= 2` は、それだけ見ると
@@ -1417,16 +1437,26 @@ def _vote_params(tree, src) -> dict:
     funcs = {n.name: n for n in ast.walk(tree)
              if isinstance(n, ast.FunctionDef)}
     out = {}
-    for node in ast.walk(tree):
-        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
-            continue
-        fn = funcs.get(node.func.id)
-        if fn is None:
-            continue
-        args = [a.arg for a in fn.args.args]
-        for i, a in enumerate(node.args):
-            if i < len(args) and _looks_vote(a, src, set()):
-                out.setdefault(fn.name, set()).add(args[i])
+    # ★呼び出し側で分かっている名前を使う★（2026-08-14・依頼201のP2）
+    #   空集合で見ていたので、`keys = independent(votes); enough(keys)` の
+    #   ように**別名を挟むと引数の追跡が途切れて**いた。
+    callers = {}
+    for f in funcs.values():
+        callers[f.name] = _vote_names_in(f, src)
+    top_names = known.get("", set()) if known else set()
+    for owner in list(funcs.values()) + [tree]:
+        here = callers.get(getattr(owner, "name", ""), top_names)
+        for node in _own_nodes(owner):
+            if not (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name)):
+                continue
+            fn = funcs.get(node.func.id)
+            if fn is None:
+                continue
+            args = [a.arg for a in fn.args.args]
+            for i, a in enumerate(node.args):
+                if i < len(args) and _looks_vote(a, src, here):
+                    out.setdefault(fn.name, set()).add(args[i])
     return out
 
 
@@ -1474,9 +1504,7 @@ def _raw_vote_counts(src: str, fname: str) -> list:
         def _is_two(node) -> bool:
             return isinstance(node, ast.Constant) and node.value == 2
 
-        for node in ast.walk(scope):
-            if isinstance(node, ast.FunctionDef) and node is not scope:
-                continue                   # 中の関数は自分の名前で見る
+        for node in _own_nodes(scope):
             if isinstance(node, ast.Compare):
                 sides = [node.left] + list(node.comparators)
                 hit = any((_is_len(a) and _is_two(b))
@@ -1594,6 +1622,17 @@ _WATCHDOG_MUST_FIND = {
     "その場で並べ替えた": "def f(votes):\n"
     "    keys = independent(votes)\n"
     "    keys.sort(key=len, reverse=True)\n",
+    # ★2026-08-14・依頼201でCodexが挙げた見逃し例★
+    "別名を挟んで引数に渡した": "def enough(keys):\n"
+    "    return len(keys) >= 2\n"
+    "def g(votes):\n"
+    "    keys = independent(votes)\n"
+    "    return enough(keys)\n",
+    "入れ子の関数の外側": "def outer(votes):\n"
+    "    keys = independent(votes)\n"
+    "    def inner(rows):\n"
+    "        return rows\n"
+    "    return len(keys) >= 2\n",
 }
 
 # ★見張りが止めてはいけない形★（行き過ぎの検知）
@@ -1606,6 +1645,14 @@ _WATCHDOG_MUST_PASS = {
     "    return keys\n"
     "def b(keys):\n"
     "    return len(keys) >= 2\n",
+    # ★入れ子の関数の中の同じ名前は、外の票と混ぜない★（依頼201のP3）
+    "入れ子の関数の中の同じ名前": "def outer(votes):\n"
+    "    keys = independent(votes)\n"
+    "    return keys\n"
+    "def other():\n"
+    "    def inner(keys):\n"
+    "        return len(keys) >= 2\n"
+    "    return inner\n",
 }
 
 

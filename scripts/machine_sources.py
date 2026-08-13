@@ -327,7 +327,13 @@ def _pending_machine(slug: str) -> dict:
             continue
         name = str(it.get("name") or "").strip()
         if not name:
-            return {}                     # 名前が無ければ同定できない
+            # ★居るのに名前が空＝「無い」ではない★（2026-08-14・依頼201のP2）
+            #   待ち行列は名前なしでも覚える作りなので、これは普通に起きる。
+            #   {} を返すと「待ち行列にも居ない」＝置き去り扱いになり、
+            #   生きている新台の控えが巡回から外れる。
+            raise PendingUnreadable(
+                f"待ち行列に居ますが名前がありません（{slug}）"
+                "／同定できないので使いませんが、置き去りにもしません")
         return {"slug": slug, "name": name, "_pending": True,
                 "identity": {"official_product_url": url}}
     return {}
@@ -974,6 +980,25 @@ def remember_check(slug: str, url: str, got: dict) -> dict:
     return _update_one(slug, url, _change)
 
 
+def _no_name_is_not_absent() -> bool:
+    """★待ち行列に居るのに名前が空＝置き去りにしない★（試験用）"""
+    import pending_machines as _pm
+    _bak = _pm.load
+    try:
+        _pm.load = lambda: {"items": {
+            "https://www.p-world.co.jp/machine/database/99999": {
+                "url": "https://www.p-world.co.jp/machine/database/99999",
+                "name": ""}}}
+        try:
+            _pending_machine("pw_99999")
+            return False                   # 例外にならなければ不合格
+        except PendingUnreadable:
+            pass
+        return orphaned("pw_99999", {"origin": "pending"}) is False
+    finally:
+        _pm.load = _bak
+
+
 def backfill_origin(apply: bool = False) -> list:
     """★印の無い古い控えに「どこから来たか」を補う★（2026-08-14・依頼200のP2）
 
@@ -1228,6 +1253,11 @@ def selftest() -> int:
 
     # ★★置き去りの控えは見に行かない（2026-08-14・台帳#350）★★
     _pm_bak2 = globals().get("_pending_machine")
+    # ★ここは本物の _pending_machine を使う★（待ち行列だけ差し替える）
+    t("★★待ち行列に居るのに名前が空でも、置き去りにしない★★"
+      "（2026-08-14・依頼201のP2）／待ち行列は名前なしでも覚える作りなので、"
+      "「無い」と扱うと生きている新台の控えが巡回から外れる",
+      _no_name_is_not_absent())
     try:
         globals()["_pending_machine"] = lambda s: {}
         t("★★記事にも待ち行列にも無い新台の控えは、巡回しない★★（台帳#350）"
