@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "_why": "★育てる処理を見に行く間隔★（2026-08-13・台帳#346）。毎朝すべての新台をフル確認すると1機種8分×機種数かかり、11月導入機を80日間毎日見ることになる（実測45分の大半が「変化なし」の確認だった）。解析サイトは導入の1〜2週間前から埋め始めるので、遠い機種は間隔を空ける。",
+  "_rules": "offset_days = 今日 - 導入日（導入日当日は 0 ＝導入後に入れる）。範囲は from_days 以上 to_days 以下。空白と重複を作らない。",
+  "_precision_month": "導入日が「2026-09」のように月までしか分からない機種は、月初を仮の日付にしない（最大30日早く導入後扱いになる）。month_interval_days を使う。日が判明したら通常のルールへ移る。",
+  "default_interval_days": 7,
+  "month_interval_days": 3,
+  "ranges": [
+    { "from_days": -36500, "to_days": -31, "interval_days": 7, "_label": "導入前31日以上" },
+    { "from_days": -30, "to_days": -8, "interval_days": 3, "_label": "導入前8〜30日" },
+    { "from_days": -7, "to_days": -1, "interval_days": 1, "_label": "導入前1〜7日" },
+    { "from_days": 0, "to_days": 30, "interval_days": 1, "_label": "導入日〜導入後30日" },
+    { "from_days": 31, "to_days": 60, "interval_days": 3, "_label": "導入後31〜60日" },
+    { "from_days": 61, "to_days": 36500, "interval_days": 7, "_label": "導入後61日以降" }
+  ]
+}

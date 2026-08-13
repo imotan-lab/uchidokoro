@@ -32,7 +32,9 @@
 from __future__ import annotations
 
 import argparse
+import datetime as _dt
 import json
+import re
 import os
 import sys
 
@@ -59,15 +61,190 @@ def _log(msg: str) -> None:
     print(msg)
 
 
-def targets(rows: list) -> list:
-    """育てる対象（`AUTO_PENDING` の機種）。"""
+# ★見に行く間隔★（2026-08-13・台帳#346）
+#   毎朝すべての新台をフル確認すると1機種8分×機種数かかる。
+#   実測: 2026-08-13の更新タスクは45分で、その大半が「変化なし」の確認だった。
+#   11月導入機を80日間毎日見ても、解析サイトはまだ「準備中」で空振りが確定する。
+#   ★コード側に既定値を持ち、設定ファイルで上書きする★
+#     設定が壊れても全機種の確認が止まらないようにするため
+#     （壊れていたら設定を丸ごと捨てて既定値で続け、必ず知らせる）。
+FREQ_PATH = os.path.join(BASE, "assets", "data", "grow-machine-frequency.json")
+FREQ_DEFAULT = {
+    "schema_version": 1,
+    "default_interval_days": 7,
+    "month_interval_days": 3,
+    "ranges": [
+        {"from_days": -36500, "to_days": -31, "interval_days": 7},
+        {"from_days": -30, "to_days": -8, "interval_days": 3},
+        {"from_days": -7, "to_days": -1, "interval_days": 1},
+        {"from_days": 0, "to_days": 30, "interval_days": 1},
+        {"from_days": 31, "to_days": 60, "interval_days": 3},
+        {"from_days": 61, "to_days": 36500, "interval_days": 7},
+    ],
+}
+_FREQ_KEYS = {"schema_version", "default_interval_days", "month_interval_days",
+              "ranges"}
+_RANGE_KEYS = {"from_days", "to_days", "interval_days"}
+
+
+def freq_problems(conf) -> list:
+    """設定の壊れ方を並べる（★1つでもあれば設定ごと捨てる★）。"""
+    ng = []
+    if not isinstance(conf, dict):
+        return ["設定が辞書ではありません"]
+    if conf.get("schema_version") != 1:
+        ng.append(f"schema_version が 1 ではありません: "
+                  f"{conf.get('schema_version')!r}")
+    for k in conf:
+        if k.startswith("_"):
+            continue                       # 覚え書きは自由
+        if k not in _FREQ_KEYS:
+            ng.append(f"知らない項目です: {k}")
+    for k in ("default_interval_days", "month_interval_days"):
+        v = conf.get(k)
+        if not isinstance(v, int) or isinstance(v, bool) or not 1 <= v <= 7:
+            ng.append(f"{k} は1〜7の整数で書きます: {v!r}")
+    rs = conf.get("ranges")
+    if not isinstance(rs, list) or not rs:
+        return ng + ["ranges がありません"]
+    seen = []
+    for r in rs:
+        if not isinstance(r, dict):
+            ng.append("ranges の中身が辞書ではありません")
+            continue
+        for k in r:
+            if not k.startswith("_") and k not in _RANGE_KEYS:
+                ng.append(f"ranges に知らない項目があります: {k}")
+        a, b = r.get("from_days"), r.get("to_days")
+        iv = r.get("interval_days")
+        if not all(isinstance(x, int) and not isinstance(x, bool)
+                   for x in (a, b, iv)):
+            ng.append(f"ranges の値が整数ではありません: {r}")
+            continue
+        if a > b:
+            ng.append(f"範囲が逆です: {a}〜{b}")
+        if not 1 <= iv <= 7:
+            ng.append(f"interval_days は1〜7で書きます: {iv}")
+        seen.append((a, b))
+    seen.sort()
+    for i in range(1, len(seen)):
+        if seen[i][0] <= seen[i - 1][1]:
+            ng.append(f"範囲が重なっています: {seen[i - 1]} と {seen[i]}")
+        elif seen[i][0] != seen[i - 1][1] + 1:
+            ng.append(f"範囲に隙間があります: {seen[i - 1]} と {seen[i]}")
+    if not any(a <= 0 <= b for a, b in seen):
+        ng.append("導入日当日（0日）がどの範囲にも入っていません")
+    return ng
+
+
+def load_freq() -> dict:
+    """設定を読む。★壊れていたら丸ごと捨てて既定値で続ける★"""
+    try:
+        with open(FREQ_PATH, encoding="utf-8") as f:
+            got = json.load(f)
+    except FileNotFoundError:
+        return FREQ_DEFAULT
+    except Exception as e:                # noqa: BLE001
+        print(f"★間隔の設定を読めません（既定値で続けます）: {e}★")
+        return FREQ_DEFAULT
+    bad = freq_problems(got)
+    if bad:
+        print("★間隔の設定が壊れています（既定値で続けます）★")
+        for b in bad:
+            print("  -", b)
+        return FREQ_DEFAULT
+    return got
+
+
+def interval_days(release: str, today, conf=None) -> int:
+    """その機種を何日おきに見るか。
+
+    ★月までしか分からない導入日は、日を勝手に補わない★
+      月初を仮の日付にすると、最大30日早く「導入後」扱いになる。
+      月精度は専用の間隔（既定3日）で見る。
+    """
+    conf = conf or load_freq()
+    r = str(release or "").strip()
+    m = re.match(r"^(\d{4})-(\d{2})(?:-(\d{2}))?$", r)
+    if not m:
+        return int(conf.get("default_interval_days") or 7)
+    if not m.group(3):
+        return int(conf.get("month_interval_days") or 3)
+    day = _dt.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    off = (today - day).days
+    for rg in conf.get("ranges") or []:
+        if int(rg["from_days"]) <= off <= int(rg["to_days"]):
+            return int(rg["interval_days"])
+    return int(conf.get("default_interval_days") or 7)
+
+
+def due(slug: str, release: str, today, state: dict, conf=None) -> bool:
+    """今日その機種を見るか（★前に見た日が分からなければ見る★）。"""
+    last = str((state or {}).get(slug) or "").strip()
+    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", last)
+    if not m:
+        return True                        # 記録が無い・壊れている＝見る
+    seen = _dt.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    return (today - seen).days >= interval_days(release, today, conf)
+
+
+STATE_PATH = r"C:/Users/imao_/Documents/uchidokoro/state.json"
+STATE_KEY = "grow_check"          # ★見に行った日の控え★（rotation_check と同じ流儀）
+
+
+def _state_all() -> dict:
+    """state.json 全体（読めなければ空）。"""
+    try:
+        with open(STATE_PATH, encoding="utf-8") as f:
+            got = json.load(f)
+        return got if isinstance(got, dict) else {}
+    except Exception:                     # noqa: BLE001
+        return {}
+
+
+def last_checked() -> dict:
+    """slug → 最後に見に行った日（YYYY-MM-DD）。"""
+    got = (_state_all().get(STATE_KEY) or {}).get("last_checked")
+    return got if isinstance(got, dict) else {}
+
+
+def mark_checked(slug: str, today) -> bool:
+    """今日見たことを控える。★書けなくても処理は止めない★
+
+    控えられなければ、その機種は翌日また見に行くだけ（安全側）。
+    """
+    try:
+        got = _state_all()
+        box = got.setdefault(STATE_KEY, {})
+        box.setdefault("_why", "★育てる処理を見に行った日★（2026-08-13・台帳#346）"
+                               "。導入日からの距離で間隔を変えるために使う。"
+                               "消えても困らない（その機種を翌日また見るだけ）")
+        box.setdefault("last_checked", {})[slug] = today.isoformat()
+        tmp = STATE_PATH + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(got, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, STATE_PATH)
+        return True
+    except Exception as e:                # noqa: BLE001
+        print(f"  見に行った日を控えられません（続けます）: {e}")
+        return False
+
+
+def targets(rows: list, today=None, state: dict = None,
+            conf=None) -> list:
+    """育てる対象（`AUTO_PENDING` の機種のうち、今日見る日のもの）。"""
     out = []
     for m in rows:
         try:
-            if _pdz.machine_class(m) == "AUTO_PENDING":
-                out.append(m["slug"])
+            if _pdz.machine_class(m) != "AUTO_PENDING":
+                continue
         except _pdz.DecisionError:
             continue                       # 壊れているものは別途 audit が拾う
+        if today is not None and not due(m["slug"],
+                                        str(m.get("release_date") or ""),
+                                        today, state or {}, conf):
+            continue
+        out.append(m["slug"])
     return out
 
 
@@ -927,6 +1104,59 @@ def selftest() -> int:
                         {"manufacturer_id": "a", "announced_name": "L機"}))
     # 区分が AUTO_PENDING でなければ育てない
     got = plan_one("hokuto")
+    # ★★2026-08-13・台帳#346（見に行く間隔）★★
+    import datetime as _dtm          # ★既存の試験が _dt を別用途で使っている★
+    _T = _dtm.date(2026, 8, 13)
+
+    def _rel(off):
+        return (_T - _dtm.timedelta(days=off)).isoformat()
+
+    t("★★境界値ちょうどで間隔が変わる★★（導入日当日は「導入後0日」＝毎日）",
+      [interval_days(_rel(o), _T) for o in
+       (-31, -30, -8, -7, -1, 0, 30, 31, 60, 61)]
+      == [7, 3, 3, 1, 1, 1, 1, 3, 3, 7])
+    t("★★月までしか分からない導入日は、日を補わず専用の間隔で見る★★"
+      "（月初を仮の日にすると最大30日早く「導入後」になる）",
+      interval_days("2026-09", _T) == 3
+      and interval_days("2026-11", _T) == 3)
+    t("　読めない導入日は既定の間隔",
+      interval_days("", _T) == 7 and interval_days("へんな値", _T) == 7)
+    t("★★前に見た日が分からなければ必ず見る★★（記録が消えても止まらない）",
+      due("x", _rel(200), _T, {}) is True
+      and due("x", _rel(200), _T, {"x": "こわれた日付"}) is True)
+    t("　間隔ぶん経つまでは見ない／経ったら見る",
+      due("x", _rel(200), _T, {"x": (_T - _dtm.timedelta(days=6)).isoformat()})
+      is False
+      and due("x", _rel(200), _T, {"x": (_T - _dtm.timedelta(days=7)).isoformat()})
+      is True)
+    t("★★設定が壊れていたら丸ごと捨てて既定値で続ける★★"
+      "（全機種の確認が止まらないように）",
+      all(freq_problems(_b) for _b in (
+          None, {}, {"schema_version": 2},
+          {"schema_version": 1, "default_interval_days": 7,
+           "month_interval_days": 3, "ranges": []},
+          {"schema_version": 1, "default_interval_days": 7,
+           "month_interval_days": 3,
+           "ranges": [{"from_days": 1, "to_days": 5, "interval_days": 1}]},
+      )))
+    t("　いま置いてある設定は壊れていない",
+      not freq_problems(load_freq()))
+    t("★★範囲の重なり・隙間・上限違反を見つける★★",
+      any("重なって" in x for x in freq_problems(
+          {"schema_version": 1, "default_interval_days": 7,
+           "month_interval_days": 3,
+           "ranges": [{"from_days": -36500, "to_days": 10, "interval_days": 1},
+                      {"from_days": 5, "to_days": 36500, "interval_days": 7}]}))
+      and any("隙間" in x for x in freq_problems(
+          {"schema_version": 1, "default_interval_days": 7,
+           "month_interval_days": 3,
+           "ranges": [{"from_days": -36500, "to_days": 0, "interval_days": 1},
+                      {"from_days": 5, "to_days": 36500, "interval_days": 7}]}))
+      and any("interval_days" in x for x in freq_problems(
+          {"schema_version": 1, "default_interval_days": 7,
+           "month_interval_days": 3,
+           "ranges": [{"from_days": -36500, "to_days": 36500,
+                       "interval_days": 99}]})))
     t("★★既存機種（判定書なし）は育てる対象にしない★★",
       any("育てる対象ではありません" in p for p in got["problems"]))
     t("　知らないslugは対象にしない",
@@ -999,11 +1229,23 @@ def main() -> int:
     if a.selftest:
         return selftest()
     rows = _read_rows()
-    tg = targets(rows)
+    # ★今日見る分だけを選ぶ★（2026-08-13・台帳#346）
+    #   毎朝すべてをフル確認すると1機種8分×機種数かかる。
+    #   導入日からの距離で間隔を変える（設定＝grow-machine-frequency.json）。
+    _today = _dt.date.today()
+    _seen = last_checked()
+    tg = targets(rows, _today, _seen)
     if not a.slug:
+        _all = targets(rows)
         print(f"育てる対象: {len(tg)}機種 " + " ".join(tg[:10]))
+        if len(_all) > len(tg):
+            print(f"（{len(_all) - len(tg)}機種は今日は見ません＝"
+                  f"導入日から遠いので間隔を空けています）")
         return 0
     got = plan_one(a.slug)
+    # ★見に行った事実を控える★（結果が「変化なし」でも見たことに変わりない）
+    #   ここで控えないと、間隔を空けても毎日フル確認してしまう。
+    mark_checked(a.slug, _dt.date.today())
     if got["problems"]:
         print("できません:")
         for p in got["problems"]:
