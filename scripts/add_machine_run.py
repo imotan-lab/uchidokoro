@@ -46,6 +46,10 @@ for _s in (sys.stdout, sys.stderr):
 import build_new_article as _ba       # noqa: E402
 import check_duplicate as _cd        # noqa: E402
 import at_spec_lookup as _at        # noqa: E402
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
 import ceiling_lookup as _cl         # noqa: E402
 import cz_lookup as _cz              # noqa: E402
 import directory_index as _di         # noqa: E402
@@ -86,7 +90,7 @@ def _log(msg: str) -> None:
     print(line)
     try:
         subprocess.run(
-            [sys.executable, r"C:/Users/imao_/.claude/log.py",
+            [sys.executable, _lp.LOG_PY,
              f"add_machine_{date.today().isoformat()}", msg],
             capture_output=True, text=True, encoding="utf-8", errors="replace",
             timeout=30)
@@ -232,7 +236,7 @@ USE_MAKER_WATCH = False
 
 
 # ★知らせ済みのメーカーを覚えておく場所★（同じ会社で毎晩鳴らさない）
-UNKNOWN_MAKERS = r"C:/Users/imao_/Documents/uchidokoro/pworld_unknown_makers.json"
+UNKNOWN_MAKERS = _lp.doc("pworld_unknown_makers.json")
 
 
 def _tell_unknown_makers(rows: list) -> None:
@@ -267,7 +271,7 @@ def _tell_unknown_makers(rows: list) -> None:
     for m, n in fresh:
         lines.append(f"  ・{m}    （例: {n}）")
     lines += ["", "足したあとは、翌晩の新台タスクが自動で拾います。"]
-    ops = r"C:/Users/imao_/Documents/uchidokoro/ops"
+    ops = _lp.OPS
     try:
         os.makedirs(ops, exist_ok=True)
         sub = os.path.join(ops, "unknown_maker_subject.txt")
@@ -278,7 +282,7 @@ def _tell_unknown_makers(rows: list) -> None:
         with open(body, "w", encoding="utf-8") as f:
             f.write("\n".join(lines))
         r = subprocess.run(
-            [sys.executable, r"C:/Users/imao_/.claude/send_notify.py", "notify",
+            [sys.executable, _lp.NOTIFY, "notify",
              "--subject-file", sub, "--body-file", body],
             capture_output=True, text=True, encoding="utf-8", errors="replace",
             env={**os.environ, "PYTHONIOENCODING": "utf-8"})
@@ -1487,7 +1491,7 @@ def verify_official(name: str, official_url: str,
     return out
 
 
-RELEASE_OVERRIDES = r"C:/Users/imao_/Documents/uchidokoro/release_overrides.json"
+RELEASE_OVERRIDES = r"（書類フォルダ）/uchidokoro/release_overrides.json"
 
 
 def _release_override(url: str):

@@ -39,7 +39,11 @@ import subprocess
 import sys
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RECEIPT_DIR = r"C:/Users/imao_/Documents/uchidokoro/codex_receipts"
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+RECEIPT_DIR = _lp.doc("codex_receipts")
 SCHEMA = "codex-receipt/v1"
 
 try:

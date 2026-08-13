@@ -48,6 +48,10 @@ BASE = Path(__file__).resolve().parent.parent
 SCRIPTS = BASE / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
 import apply_external_fix          # noqa: E402（書き戻し器）
 import claim_identity              # noqa: E402
 import shadow_claims               # noqa: E402（claim抽出・比較器）
@@ -55,11 +59,15 @@ import shadow_codex                # noqa: E402（Codex実行・出典再取得�
 import shadow_gold                 # noqa: E402（許可ドメイン定義）
 import verify_claims               # noqa: E402（ページ取得＝矛盾スキャン用）
 
-DOC = Path(r"C:/Users/imao_/Documents/uchidokoro")
+DOC = Path(_lp.DOCS)
 STATE_PATH = DOC / "state.json"
 LOG_DIR = DOC / "logs"
 AUDIT_DIR = DOC / "codex_audit"
-SEND_NOTIFY = r"C:/Users/imao_/.claude/send_notify.py"
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+SEND_NOTIFY = _lp.claude("send_notify.py")
 OPEN_ISSUES = SCRIPTS / "open_issues.py"
 TASK_ID = "uchidokoro-codex-audit"
 

@@ -47,7 +47,11 @@ sys.path.insert(0, os.path.join(BASE, "scripts"))
 import safe_json as _sj               # noqa: E402
 
 CATALOGS = os.path.join(BASE, "assets", "data", "maker-catalogs.json")
-SEEN_PATH = r"C:/Users/imao_/Documents/uchidokoro/seen_machine_urls.json"
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+SEEN_PATH = _lp.doc("seen_machine_urls.json")
 UA = "uchidokoro-new-machine-watch/1.0 (+https://uchidokoro.com)"
 MAX_BYTES = 5 * 1024 * 1024
 
@@ -968,7 +972,7 @@ def release_month(text: str, assume_release_context: bool = False):
 # ★運営者が確認した登場年月の控え★（2026-08-10）
 #   公式が画像や「発売」表記でしか書かない機種のための逃げ道。
 #   ここは**読むだけ**（無人タスクは書かない）。正本は add_machine_run と同じファイル。
-RELEASE_OVERRIDES = r"C:/Users/imao_/Documents/uchidokoro/release_overrides.json"
+RELEASE_OVERRIDES = _lp.doc("release_overrides.json")
 
 
 def release_override(url: str):

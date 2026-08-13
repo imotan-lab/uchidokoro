@@ -68,7 +68,11 @@ REGISTRY = os.path.join(BASE, "assets", "data", "source-registry.json")
 MACHINES = os.path.join(BASE, "assets", "data", "machines.json")
 # ★控えはリポジトリの外★（release_overrides.json と同じ置き場）
 #   公開物に他サイトのURL一覧を混ぜないため。控えはDropboxへ保全する。
-STORE = r"C:/Users/imao_/Documents/uchidokoro/machine_sources.json"
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+STORE = _lp.doc("machine_sources.json")
 
 SCHEMA = "machine-sources/v1"
 

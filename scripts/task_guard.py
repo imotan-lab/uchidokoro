@@ -43,7 +43,11 @@ sys.path.insert(0, os.path.join(BASE, "scripts"))
 import claim_pipeline as cp           # noqa: E402
 import safe_json as _sj               # noqa: E402
 
-STATE_PATH = r"C:/Users/imao_/Documents/uchidokoro/task_guard.json"
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+STATE_PATH = _lp.doc("task_guard.json")
 CODEX_ROUND_LIMIT = 3
 # ★2AIへの質問（やり直し）は別勘定★（2026-08-12・依頼164のP1）
 #   同じ勘定にすると「質問に3回使うと新台の突き合わせが0回」になり、

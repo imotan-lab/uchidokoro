@@ -45,10 +45,14 @@ def _changed_paths() -> list:
 
 def _warn_unreported() -> None:
     """Codexへ未報告のスクリプト変更があれば、pushの直前に知らせる。
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
 
     ★止めない★（当日中にpushする鉄則があるため）。目に入れるのが目的。
     """
-    state = r"C:/Users/imao_/Documents/uchidokoro/last_codex_report.json"
+    state = _lp.doc("last_codex_report.json")
     try:
         with open(state, encoding="utf-8") as fh:
             last = json.load(fh).get("commit")

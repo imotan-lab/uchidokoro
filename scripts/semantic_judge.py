@@ -34,7 +34,11 @@ except Exception:
 
 _NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 BASE = Path(__file__).resolve().parent.parent
-DOC = Path(r"C:/Users/imao_/Documents/uchidokoro")
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+DOC = Path(_lp.DOCS)
 JUDGE_DIR = DOC / "gpt_research" / "judge"
 _WINGET_CODEX = Path(os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\WinGet\Links\codex.exe"))
 CODEX_EXE = os.environ.get("SEMANTIC_JUDGE_EXE") or (

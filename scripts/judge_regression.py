@@ -36,7 +36,11 @@ except Exception:
 
 BASE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE / "scripts"))
-DOC = Path(r"C:/Users/imao_/Documents/uchidokoro")
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+DOC = Path(_lp.DOCS)
 SET_PATH = DOC / "gpt_research" / "judge" / "hard_cases.json"
 RESULT_PATH = DOC / "gpt_research" / "judge" / "regression_result.json"
 

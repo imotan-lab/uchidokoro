@@ -42,7 +42,7 @@ fencing token（run_id照合）」をコードで保証する。
     穴3（ゾンビ実行の復帰）→ run_id（UUID）を fencing token とし、書き込み直前に check。
                              heartbeat/release も所有者一致時のみ実行される
 
-ログ: C:/Users/imao_/Documents/uchidokoro/logs/task_lock.log（全操作を記録）
+ログ: （書類フォルダ）/uchidokoro/logs/task_lock.log（全操作を記録）
 """
 from __future__ import annotations
 import argparse
@@ -59,9 +59,13 @@ try:
 except Exception:
     pass
 
-LOCK_PATH = r"C:/Users/imao_/Documents/uchidokoro/task.lock"
-LOG_PATH = r"C:/Users/imao_/Documents/uchidokoro/logs/task_lock.log"
-CTX_DIR = r"C:/Users/imao_/Documents/uchidokoro"
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+LOCK_PATH = _lp.doc("task.lock")
+LOG_PATH = _lp.doc("logs/task_lock.log")
+CTX_DIR = _lp.DOCS
 STALE_MINUTES = 30  # 最終heartbeatからこの分数を超えたら異常終了の残骸とみなす
 
 

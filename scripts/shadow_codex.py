@@ -64,7 +64,11 @@ def _identity_spec(machine: dict) -> dict:
     ms = json.loads((BASE / "assets" / "data" / "machines.json").read_text(encoding="utf-8"))
     return claim_identity.identity_spec(machine, ms)
 
-DOC = Path(r"C:/Users/imao_/Documents/uchidokoro")
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+DOC = Path(_lp.DOCS)
 RESEARCH = DOC / "gpt_research"
 WORKDIR = RESEARCH / "workdir"            # Codexの作業室（リポジトリ外・read-only実行）
 SNAPDIR = RESEARCH / "input_snapshot"
@@ -72,7 +76,11 @@ RESULTDIR = RESEARCH / "results"          # 追記専用（上書きしない）
 EVIDENCE_DIR = RESEARCH / "claims_check"  # verify_claims用の一時claimsファイル
 STATE_PATH = RESEARCH / "shadow_state.json"
 LOG_DIR = DOC / "logs"
-SEND_NOTIFY = r"C:/Users/imao_/.claude/send_notify.py"
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+SEND_NOTIFY = _lp.claude("send_notify.py")
 
 # ── epoch定義（変更したら新epoch。異なるepochの成績は混算しない）──
 # epoch1-shadow: 本運転（シャドー隔離）開始epoch。CLI/モデル/effort/prompt/Schema/

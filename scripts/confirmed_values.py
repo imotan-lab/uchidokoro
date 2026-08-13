@@ -20,7 +20,7 @@
   ★出典は独立2系列★＝同じ発行者の2ページは1票（source_lineage で数える）。
   ★値を発明しない★＝引用に現れない値は記録できない（機械が確かめる）。
 
-置き場: C:/Users/imao_/Documents/uchidokoro/confirmed_values.json
+置き場: （書類フォルダ）/uchidokoro/confirmed_values.json
         （リポジトリ外・Dropboxへ保全）
 
 使い方:
@@ -47,7 +47,11 @@ import safe_json as _sj              # noqa: E402
 import source_lineage as _sl         # noqa: E402
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-STORE = r"C:/Users/imao_/Documents/uchidokoro/confirmed_values.json"
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+STORE = _lp.doc("confirmed_values.json")
 SCHEMA = "confirmed-values/v1"
 
 # ★2人そろって初めて記録できる★（片方だけの読みは採らない）
@@ -524,7 +528,7 @@ def bind_machine(official_url: str) -> tuple:
     # ①待ち行列（まだ登録されていない新台）
     try:
         pend = _sj.read_json(
-            r"C:/Users/imao_/Documents/uchidokoro/add_machine_pending.json",
+            _lp.doc("add_machine_pending.json"),
             expect=dict)
         for u, it in (pend.get("items") or {}).items():
             if u.rstrip("/") == str(official_url).rstrip("/"):

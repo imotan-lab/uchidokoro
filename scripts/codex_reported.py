@@ -35,7 +35,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import codex_receipt as _cr          # noqa: E402
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-STATE = r"C:/Users/imao_/Documents/uchidokoro/last_codex_report.json"
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+STATE = _lp.doc("last_codex_report.json")
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")

@@ -33,7 +33,11 @@ import time
 from pathlib import Path
 
 # x_poster.py, refresh_x_cookies.py を import パスに追加
-sys.path.insert(0, "C:/Users/imao_/.claude")
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+sys.path.insert(0, _lp.CLAUDE)
 from datetime import datetime  # noqa: E402
 from x_poster import post_tweet, count_x_weight, MAX_TWEET_WEIGHT  # noqa: E402
 from refresh_x_cookies import refresh_with_auto_chrome  # noqa: E402
@@ -46,7 +50,11 @@ import page_decision as _pd_x  # noqa: E402  ★区分の唯一の判定箇所�
 
 PREV_PATH = PROJECT_DIR / "scripts" / "machines_prev.json"
 RESULT_PATH = PROJECT_DIR / "scripts" / "x_post_result.json"
-LOG_DIR = Path("C:/Users/imao_/Documents/uchidokoro/logs")
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+LOG_DIR = Path(_lp.doc("logs"))
 DETACHED_LOG = LOG_DIR / "post_to_x_detached.log"
 
 ACCOUNT = "uchidokoro"
@@ -255,7 +263,7 @@ def main():
     if args.detach and not args._child and not args.dry_run:
         child_argv = [a for a in sys.argv[1:] if a != "--detach"] + ["--_child"]
         _relaunch_detached(child_argv)
-        print(f"[detach] バックグラウンドで投稿処理を開始しました。ログ: C:/Users/imao_/Documents/uchidokoro/logs/post_to_x_detached.log")
+        print(f"[detach] バックグラウンドで投稿処理を開始しました。ログ: （書類フォルダ）/uchidokoro/logs/post_to_x_detached.log")
         return 0
 
     _log("=" * 60)

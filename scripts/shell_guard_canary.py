@@ -6,7 +6,7 @@
   この見張りは「文章を書いただけでコマンドが実行される」事故（2026-08-08）への
   対策なので、抜け道が見つかるたびにここへ足して、二度と戻らないようにする。
 
-見張り本体は `C:/Users/imao_/.claude/shell_guard.py`（リポジトリ外）。
+見張り本体は `（Claudeの設定フォルダ）/shell_guard.py`（リポジトリ外）。
 PreToolUse（matcher: Bash）に登録してある。
 
 使い方:
@@ -18,7 +18,11 @@ import json
 import subprocess
 import sys
 
-GUARD = r"C:/Users/imao_/.claude/shell_guard.py"
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+GUARD = _lp.claude("shell_guard.py")
 BQ = chr(96)                 # バッククォート
 SUB = chr(36) + "("          # コマンド置換の始まり
 DQ = chr(34)

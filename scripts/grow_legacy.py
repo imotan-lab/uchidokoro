@@ -99,7 +99,11 @@ _LABELED = re.compile(r"^\*\*(?P<label>[^*]+)\*\*\s*[：:]\s*(?P<value>.+)$")
 # ★状態は専用ファイル★（2026-08-06・Codex132回目）
 #   state.json を共有すると、読めなかった時に **他タスクの履歴まで消して**
 #   上書きしうる。この道具の記録だけを別ファイルに持つ。
-STATE = "C:/Users/imao_/Documents/uchidokoro/legacy_grow_state.json"
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+STATE = _lp.doc("legacy_grow_state.json")
 # ★一時的な不調（時間が解決する）とそうでないものを分ける★
 #   ★台帳を読めないのは入れない★（2026-08-06・Codex133回目 #2）
 #     台帳全体の障害なのに機種ごとに数えると、週1運転では3回目まで

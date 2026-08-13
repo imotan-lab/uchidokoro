@@ -23,7 +23,7 @@ backup_guard.py — Dropboxバックアップの秘密情報ガード（二層�
 ★検知ログ・標準出力には秘密値そのものを一切出さない★
 （ファイル名・JSONキーのパス・検知ルール名のみ。値や前後の文字列は転載禁止）
 
-ログ: C:/Users/imao_/Documents/uchidokoro/logs/backup_guard.log
+ログ: （書類フォルダ）/uchidokoro/logs/backup_guard.log
 """
 from __future__ import annotations
 import argparse
@@ -39,7 +39,11 @@ try:
 except Exception:
     pass
 
-LOG_PATH = r"C:/Users/imao_/Documents/uchidokoro/logs/backup_guard.log"
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+LOG_PATH = _lp.doc("logs/backup_guard.log")
 
 # ── 前段copy用: バックアップを許可するファイル名（完全一覧・basename照合）──
 ALLOW_BASENAMES = {
@@ -494,7 +498,7 @@ def cmd_copy(src: str, dst: str, optional: bool) -> int:
 
 # ── gpt_research のバックアップ対象定義（2026-07-18 チャッピー限定許可）──
 #   触ってよいDropboxルート（ユーザー厳命: この階層より上へ出ない）
-DROPBOX_ROOT_ALLOWED = r"C:/Users/imao_/今電 Dropbox/今電　今尾笙夢"
+DROPBOX_ROOT_ALLOWED = _lp.DROPBOX
 TREE_INCLUDE_DIRS = {"gold_eval", "results", "input_snapshot"}
 TREE_INCLUDE_GLOBS = ["gold_set_v*.json", "codex_schema_*.json",
                       "gold_freeze_log*.txt", "shadow_state.json",

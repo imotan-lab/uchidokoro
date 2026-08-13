@@ -1075,6 +1075,10 @@ def check_31_codex_report(machines: list) -> list[str]:
       `Documents/uchidokoro/last_codex_report.json` に「最後に報告した時点の
       コミット」を記録する。それ以降に scripts/ を触ったコミットが
       たまっていたら NG にする。
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
 
     ★報告したら記録する★（2026-08-09に領収書方式へ変更・依頼126）
       python scripts/codex_reported.py --receipt <領収書のパス>
@@ -1083,7 +1087,7 @@ def check_31_codex_report(machines: list) -> list[str]:
       バッククォートをシェルが実行して**報告していないのに印が付いた**。
     """
     import subprocess
-    STATE = r"C:/Users/imao_/Documents/uchidokoro/last_codex_report.json"
+    STATE = _lp.doc("last_codex_report.json")
     # ★1件でも知らせる★（2026-08-09。3件まで黙っていた）
     #   「3件たまってから」だと、2件までは何も出ないので気づけない。
     #   実際この日、コードを直しては報告せずに進み、運営者から
@@ -1343,6 +1347,44 @@ def check_37_skill_vs_code(machines: list) -> list[str]:
     return sorted(set(ng))
 
 
+def check_38_home_path_leak(machines: list) -> list[str]:
+    """★公開されるファイルに、このパソコンのログイン名が出ていないか★
+
+    ★なぜ要るか★（2026-08-14・運営者の指示）
+      このリポジトリは公開されている。にもかかわらず、スクリプトに
+      利用者フォルダの絶対パスを直書きしていたため、運営者の本名
+      （Windowsのログイン名）とフォルダ構成が誰にでも読める状態だった
+      （25ファイル・52か所）。置き場は local_paths.py に集めた。
+
+    ★うっかり書き戻したらここで止まる★
+      置き場が要るときは local_paths（_lp.doc / _lp.claude / _lp.DOCS …）を使う。
+    """
+    import subprocess
+    me = os.path.basename(os.path.expanduser("~"))
+    if not me:
+        return []
+    try:
+        files = subprocess.run(["git", "ls-files"], cwd=BASE,
+                               capture_output=True, encoding="utf-8",
+                               errors="replace").stdout.split()
+    except Exception as e:                # noqa: BLE001
+        return [f"ファイル一覧を取れません: {e}"]
+    ng = []
+    for rel in files:
+        p = os.path.join(BASE, rel)
+        if not os.path.isfile(p):
+            continue
+        try:
+            with open(p, encoding="utf-8", errors="replace") as f:
+                body = f.read()
+        except Exception:                 # noqa: BLE001
+            continue
+        n = body.count(me)
+        if n:
+            ng.append(f"{rel}: ログイン名が{n}か所（local_paths を使ってください）")
+    return sorted(ng)
+
+
 CHECKS = [
     ("1_インラインstyle", check_1_inline_style),
     ("2_サブパス残骸", check_2_old_subpath),
@@ -1381,6 +1423,7 @@ CHECKS = [
     ("35_危ない表現の残り", check_35_risky_atoms),
     ("36_同じ事実の重複行", check_36_duplicate_facts),
     ("37_手順書と実装の食い違い", check_37_skill_vs_code),
+    ("38_ログイン名の露出", check_38_home_path_leak),
 ]
 
 

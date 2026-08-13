@@ -84,7 +84,11 @@ except Exception:
     claim_identity = None
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) uchidokoro-claim-verifier/1.0"
-LOG_DIR = "C:/Users/imao_/Documents/uchidokoro/logs"
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+LOG_DIR = _lp.doc("logs")
 Page = namedtuple("Page", "text title final_url")
 # ★D-1a構造保持取得用: 生HTML＋title＋最終URL＋本文hash（fetch_html が返す・fetch_pageは不変）
 HtmlSnapshot = namedtuple("HtmlSnapshot", "html title final_url html_sha256")

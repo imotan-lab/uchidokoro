@@ -27,7 +27,7 @@ kind の目安:
   environment       環境問題（python3スタブ等）
   other             その他
 
-保存先: C:/Users/imao_/Documents/uchidokoro/open_issues.json（--fileで上書き可・テスト用）
+保存先: （書類フォルダ）/uchidokoro/open_issues.json（--fileで上書き可・テスト用）
 """
 import argparse
 import datetime
@@ -41,7 +41,11 @@ try:
 except Exception:
     pass
 
-DEFAULT_FILE = Path("C:/Users/imao_/Documents/uchidokoro/open_issues.json")
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+DEFAULT_FILE = Path(_lp.doc("open_issues.json"))
 
 # ---------------------------------------------------------------- 自由文の受け取り
 # ★なぜファイル渡しにするか（2026-08-09）★
@@ -55,7 +59,7 @@ DEFAULT_FILE = Path("C:/Users/imao_/Documents/uchidokoro/open_issues.json")
 #   ★文章はファイルに書き、コマンドにはパスだけを渡す★＝中身は読まれるだけで
 #   実行されない。無人タスクが動いている間は、直接指定を受け付けない。
 
-LOCK_PATH = Path("C:/Users/imao_/Documents/uchidokoro/task.lock")
+LOCK_PATH = Path(_lp.doc("task.lock"))
 LOCK_STALE_MIN = 30           # task_lock.py と同じ（これを超えたら残骸とみなす）
 MAX_TEXT_BYTES = 64 * 1024
 
@@ -63,8 +67,8 @@ MAX_TEXT_BYTES = 64 * 1024
 #   どこのファイルでも読めると、うっかり認証情報のファイルを指したときに
 #   台帳やメールへその中身が写る。置き場を決めておけば起こらない。
 TEXT_ROOTS = (
-    Path("C:/Users/imao_/Documents/uchidokoro/ops"),
-    Path("C:/Users/imao_/Desktop/個人用/うちどころ/_design"),
+    Path(_lp.doc("ops")),
+    Path(_lp.DESIGN),
 )
 
 

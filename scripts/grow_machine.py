@@ -243,10 +243,14 @@ def due(slug: str, release: str, today, state: dict, conf=None) -> bool:
 #   ★一時的に読めなかっただけで、他タスクの履歴をまとめて消す★恐れがあった
 #   （読めない＝空扱い → そこへ自分の分だけ足して全体を上書き）。
 #   この控えは消えても再確認が増えるだけなので、専用ファイルに分ける。
-STATE_PATH = r"C:/Users/imao_/Documents/uchidokoro/grow_check.json"
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+STATE_PATH = _lp.doc("grow_check.json")
 
 
-PROBE_STATE = r"C:/Users/imao_/Documents/uchidokoro/grow_sources.json"
+PROBE_STATE = _lp.doc("grow_sources.json")
 
 
 def _probe_state() -> dict:

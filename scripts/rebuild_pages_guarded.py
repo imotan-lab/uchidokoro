@@ -21,7 +21,7 @@
 使い方:
   # 許した文字列を1行ずつ書いたファイルを用意する（変更前と変更後の両方）
   python scripts/rebuild_pages_guarded.py --slug sf6 --slug tonsuki \\
-      --expect-file C:/Users/imao_/Documents/uchidokoro/ops/expected.txt
+      --expect-file （書類フォルダ）/uchidokoro/ops/expected.txt
   python scripts/rebuild_pages_guarded.py --slug sf6 --expect-file ... --apply
 
   # 何が変わるのか分からないときは、まず下見だけ流して差分を読む

@@ -28,8 +28,10 @@ TMO="${4:-900}"
 ATT="${5:-2}"
 EFF="${6:-high}"
 
-REPO="C:/Users/imao_/Desktop/個人用/うちどころ"
-REVIEW="C:/Users/imao_/Documents/uchidokoro/tools/codex_review.sh"
+# ★このファイルは公開される★（2026-08-14）＝ログイン名を書かない。
+#   置き場はこのスクリプトの位置と、ホームから組み立てる。
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+REVIEW="${UCHIDOKORO_DOCS:-$HOME/Documents/uchidokoro}/tools/codex_review.sh"
 HEARTBEAT_EVERY=300      # 5分（ロックのstale判定30分に対して十分短く）
 
 if [ ! -f "$CTX" ]; then

@@ -42,7 +42,11 @@ sys.path.insert(0, os.path.join(BASE, "scripts"))
 
 import new_machine_watch as _w        # noqa: E402
 
-STORE = r"C:/Users/imao_/Documents/uchidokoro/page_probe.json"
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+STORE = _lp.doc("page_probe.json")
 SCHEMA = 1
 
 

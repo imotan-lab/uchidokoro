@@ -159,6 +159,10 @@ def selftest() -> int:
     return 1 if ng else 0
 
 
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--selftest", action="store_true")
@@ -181,7 +185,7 @@ def main() -> int:
     print("次に実行してください（★往復の回数はガードが数えます★）:")
     print("  python scripts/task_guard.py codex --task add-machine")
     print(f'  bash scripts/codex_with_lock.sh <CTX> "{fp}" '
-          f'"C:/Users/imao_/Documents/uchidokoro/gpt_research/spec_{args.slug}.txt" 900 2 high')
+          f'_lp.doc("gpt_research/spec_{args.slug}.txt") 900 2 high')
     return 0
 
 

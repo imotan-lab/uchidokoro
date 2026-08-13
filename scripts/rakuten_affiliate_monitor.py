@@ -10,7 +10,7 @@
 - 未ログイン検知時は「再ログインしてください」を1通だけ送る（毎週のスパム防止）。
 - 月初の最初の実行で稼働確認のハートビートメールを1通送る（サイレント死の早期検知）。
 - それ以外（変化なし）はメールを送らずログのみ（通知を最小化）。
-- ログは全行ファイル出力（C:/Users/imao_/Documents/uchidokoro/logs/rakuten_monitor.log）。
+- ログは全行ファイル出力（（書類フォルダ）/uchidokoro/logs/rakuten_monitor.log）。
 
 使い方:
   python scripts/rakuten_affiliate_monitor.py --login      # 初回: 専用プロファイルで両サイトにログイン（実Chrome起動）
@@ -29,15 +29,23 @@ from datetime import datetime
 from pathlib import Path
 
 # send_notify.send_mail を利用
-sys.path.insert(0, "C:/Users/imao_/.claude")
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+sys.path.insert(0, _lp.CLAUDE)
 try:
     from send_notify import send_mail  # noqa: E402
 except Exception:  # 単体テスト用フォールバック
     send_mail = None
 
-PROFILE_DIR = Path("C:/Users/imao_/.claude/rakuten_a8_monitor_profile")
-STATE_PATH = Path("C:/Users/imao_/Documents/uchidokoro/rakuten_monitor_state.json")
-LOG_DIR = Path("C:/Users/imao_/Documents/uchidokoro/logs")
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+PROFILE_DIR = Path(_lp.claude("rakuten_a8_monitor_profile"))
+STATE_PATH = Path(_lp.doc("rakuten_monitor_state.json"))
+LOG_DIR = Path(_lp.doc("logs"))
 LOG_PATH = LOG_DIR / "rakuten_monitor.log"
 CHROME_EXE = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
 

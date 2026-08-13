@@ -34,7 +34,11 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-sys.path.insert(0, "C:/Users/imao_/.claude")
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+sys.path.insert(0, _lp.CLAUDE)
 from x_poster import post_tweet, count_x_weight, MAX_TWEET_WEIGHT  # noqa: E402
 from refresh_x_cookies import refresh_with_auto_chrome  # noqa: E402
 from clear_x_cache import clear_account, human_size  # noqa: E402
@@ -43,7 +47,11 @@ from send_notify import send_mail  # noqa: E402
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 MACHINES_PATH = PROJECT_DIR / "assets" / "data" / "machines.json"
 RESULT_PATH = PROJECT_DIR / "scripts" / "x_post_result.json"
-LOG_DIR = Path("C:/Users/imao_/Documents/uchidokoro/logs")
+import os as _os_lp                 # noqa: E402
+import sys as _sys_lp               # noqa: E402
+_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
+import local_paths as _lp           # noqa: E402
+LOG_DIR = Path(_lp.doc("logs"))
 DETACHED_LOG = LOG_DIR / "post_update_to_x_detached.log"
 
 ACCOUNT = "uchidokoro"
@@ -329,7 +337,7 @@ def main():
     if args.detach and not args._child and not args.dry_run:
         child_argv = [a for a in sys.argv[1:] if a != "--detach"] + ["--_child"]
         _relaunch_detached(child_argv)
-        print(f"[detach] バックグラウンドで投稿処理を開始しました。ログ: C:/Users/imao_/Documents/uchidokoro/logs/post_update_to_x_detached.log")
+        print(f"[detach] バックグラウンドで投稿処理を開始しました。ログ: （書類フォルダ）/uchidokoro/logs/post_update_to_x_detached.log")
         return 0
 
     machine = find_machine(args.slug)
