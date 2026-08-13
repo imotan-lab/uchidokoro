@@ -1416,7 +1416,13 @@ def _own_nodes(scope):
     `lambda` は式の一部なので中まで見る（`key=lambda n: -len(...)`）。
     """
     import ast
-    out, stack = [], list(getattr(scope, "body", []) or [])
+    # ★はじめの並びからも関数を外す★（2026-08-14・依頼204）
+    #   子だけを外していたので、**モジュール直下に書いた関数の中身**が
+    #   まるごとモジュールの走査に入り、全関数の名前が混ざっていた
+    #   （＝別の関数の票が流れ込み、無関係な検査を誤って止める）。
+    out = []
+    stack = [n for n in (getattr(scope, "body", []) or [])
+             if not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
     while stack:
         n = stack.pop()
         out.append(n)
@@ -1428,13 +1434,44 @@ def _own_nodes(scope):
 
 
 def _defs_in(scope) -> dict:
-    """その入れ物**の直下**で定義されている関数（名前 → ノード）。"""
+    """その入れ物**の直下**で定義されている関数（名前 → ノード）。
+
+    ★同じ名前を2回定義したら、あとに書いたほうが勝つ★（依頼204）
+      実行時と同じにしないと、実際に使われる定義を見逃す。
+    """
     import ast
     out = {}
-    for n in _own_nodes(scope):
+    for n in getattr(scope, "body", []) or []:
         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            out[n.name] = n
+            out[n.name] = n                # 後勝ち（本文の順に見る）
     return out
+
+
+def _shadowed(name: str, scope) -> bool:
+    """その名前が、引数や代入で**関数以外**に束ねられているか（依頼204）。
+
+    `def g(votes, enough): return enough(...)` の `enough` は
+    モジュールの関数ではなく引数。ここを見ないと、無関係な関数に
+    票の印が付いて**自動運用を誤って止める**。
+    """
+    import ast
+    a = getattr(scope, "args", None)
+    if a is not None:
+        for x in (list(getattr(a, "posonlyargs", []) or []) + list(a.args)
+                  + list(a.kwonlyargs)
+                  + [y for y in (a.vararg, a.kwarg) if y]):
+            if x.arg == name:
+                return True
+    for n in _own_nodes(scope):
+        if isinstance(n, ast.Assign):
+            for t in n.targets:
+                if isinstance(t, ast.Name) and t.id == name:
+                    return True
+        if isinstance(n, (ast.AnnAssign, ast.AugAssign)):
+            t = n.target
+            if isinstance(t, ast.Name) and t.id == name:
+                return True
+    return False
 
 
 def _resolve(name: str, owner, chain: dict, tree):
@@ -1449,6 +1486,8 @@ def _resolve(name: str, owner, chain: dict, tree):
         got = _defs_in(here).get(name)
         if got is not None:
             return got
+        if here is not tree and _shadowed(name, here):
+            return None                    # ★引数や変数で隠れている★
         here = chain.get(id(here))
     return _defs_in(tree).get(name)
 
@@ -1720,6 +1759,12 @@ _WATCHDOG_MUST_FIND = {
     "    a1 = independent(votes)\n"
     "    a2 = a1\n    a3 = a2\n    a4 = a3\n    a5 = a4\n"
     "    return len(a5) >= 2\n",
+    "同じ名前を2回定義（あとが本物）": "def enough(text):\n"
+    "    return text\n"
+    "def enough(keys):\n"
+    "    return len(keys) >= 2\n"
+    "def g(votes):\n"
+    "    return enough(independent(votes))\n",
     "入れ子の関数の外側": "def outer(votes):\n"
     "    keys = independent(votes)\n"
     "    def inner(rows):\n"
@@ -1752,6 +1797,18 @@ _WATCHDOG_MUST_PASS = {
     "    return helper\n",
     "asyncの自己試験": "async def selftest_vote():\n"
     "    return len(sources) == 2\n",
+    # ★2026-08-14・依頼204でCodexが挙げた3つ★
+    "別の関数を経由しても名前が流れ込まない": "def enough(items):\n"
+    "    return len(items) >= 2\n"
+    "def a3(votes):\n"
+    "    keys = independent(votes)\n"
+    "    return keys\n"
+    "def b3(keys):\n"
+    "    return enough(keys)\n",
+    "引数で同じ名前が隠れている": "def enough(keys):\n"
+    "    return len(keys) >= 2\n"
+    "def g(votes, enough):\n"
+    "    return enough(independent(votes))\n",
     # ★入れ子の関数の中の同じ名前は、外の票と混ぜない★（依頼201のP3）
     "入れ子の関数の中の同じ名前": "def outer(votes):\n"
     "    keys = independent(votes)\n"
