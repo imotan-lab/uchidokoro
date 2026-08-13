@@ -270,7 +270,10 @@ def compare(pages: list) -> dict:
 
     adopted, need_third = [], []
     for nk, e in sorted(per.items()):
-        if len(e["sources"]) < 2:
+        # ★CZが「ある」と決めるのも独立票で数える★（2026-08-14・依頼193のP1）
+        #   継続G数と期待度は守っていたのに、**CZの存在そのもの**は
+        #   生の票数のままだった（一撃＋DMMだけでCZを採れた）。
+        if _sl._indep(e["sources"]) < 2:
             need_third.append({"name": sorted(e["names"])[0],
                                "why": "1つの出典にしかありません",
                                "candidates": [{"sources": sorted(e["sources"])}]})
@@ -278,7 +281,10 @@ def compare(pages: list) -> dict:
         games, gs = _pick(e["games"])
         rate, rs = _pick(e["rate"])
         # 表記が割れたときは、票の多い書き方を出す（同数なら並べ替えて決める）
-        display = sorted(e["names"], key=lambda n: (-len(e["names"][n]), n))[0]
+        # ★ここも独立票で数える★（依頼193のP1）＝共同制作の組の表記が
+        #   不当に多数派になるのを防ぐ。
+        display = sorted(e["names"],
+                         key=lambda n: (-_sl._indep(e["names"][n]), n))[0]
         adopted.append({"name": display, "games": games, "rate": rate,
                         "sources": sorted(e["sources"]),
                         "games_disputed": games is None and len(e["games"]) > 1,
@@ -410,6 +416,29 @@ def selftest() -> int:
     t("　1つの出典にしか無いCZは採らない",
       compare([A, mk("chonborista.com", [])])["adopted"] == []
       and compare([A, mk("chonborista.com", [])])["need_third"])
+
+    # ★★共同で作ることがある組は1票（2026-08-14・依頼193のP1）★★
+    #   継続G数と期待度は守っていたのに、**CZが「ある」と決めるところ**だけ
+    #   生の票数のままで、一撃＋DMMだけでCZを採れていた。
+    _J1 = mk("1geki.jp", [one("すぱ娘チャレンジ", "4G+α", "約40%")])
+    _J2 = mk("p-town.dmm.com", [one("すぱ娘チャレンジ", "4G+α", "約40%")])
+    _rj = compare([_J1, _J2])
+    t("★★一撃とDMMだけではCZを採らない★★（共同取材の企画が実在するため）",
+      _rj["adopted"] == [] and bool(_rj["need_third"]))
+    t("　（対照）別の社を1つ足せば今までどおり採れる",
+      len(compare([_J1, _J2,
+                   mk("chonborista.com",
+                      [one("すぱ娘チャレンジ", "4G+α", "約40%")])])["adopted"]) == 1)
+    t("★表示する書き方の多数決も独立票で数える★"
+      "（共同制作の組の表記が不当に多数派にならない）",
+      compare([mk("1geki.jp", [one("上位クライMAXライブCHALLENGE", "10G", "約50%")]),
+               mk("p-town.dmm.com",
+                  [one("上位クライMAXライブCHALLENGE", "10G", "約50%")]),
+               mk("chonborista.com",
+                  [one("上位クライMAXライブチャレンジ", "10G", "約50%")]),
+               mk("nana-press.com",
+                  [one("上位クライMAXライブチャレンジ", "10G", "約50%")])])
+      ["adopted"][0]["name"] == "上位クライMAXライブチャレンジ")
     t("★採り切れなかった語は報告に残す（載せない判断には使わない）★",
       compare([{**A, "unresolved": ["ユニゾンチャレンジ"]}, B])["unresolved"]
       == ["ユニゾンチャレンジ"])

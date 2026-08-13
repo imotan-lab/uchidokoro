@@ -49,6 +49,11 @@ import local_paths as _lp             # noqa: E402
 STORE = _lp.doc("maker_identity_cache.json")
 SCHEMA = "maker-identity-cache/v1"
 VERDICTS = ("MATCH", "MISMATCH")
+# ★「2AIで決めます」を機械の約束にする★（2026-08-14・依頼193のP2）
+#   以前は ["foo", "bar"] のような**架空のID2つ**でも「違う2者」だった。
+#   ★これは本人確認ではない★＝手で ["claude","codex"] と書くことは防げない。
+#   増えたらここだけ直す。
+ALLOWED_AGREERS = frozenset({"claude", "codex"})
 MIN_QUOTE = 8                          # 逐語引用の最低の長さ
 KINDS = ("directory_observation", "official_relationship")
 
@@ -101,7 +106,12 @@ def _check_record(slug: str, rec) -> None:
     if not isinstance(by, list) or not all(
             isinstance(x, str) and x.strip() for x in by):
         raise CacheError(f"控えの判断者が不正です（{slug}）: {by!r}")
-    if len({x.strip().casefold() for x in by}) < 2:
+    ids = {x.strip().casefold() for x in by}
+    if not ids <= ALLOWED_AGREERS:
+        raise CacheError(
+            f"控えに知らない判断者がいます（{slug}）: "
+            f"{sorted(ids - ALLOWED_AGREERS)}／★{sorted(ALLOWED_AGREERS)} だけです★")
+    if len(ids) < 2:
         raise CacheError(f"控えの判断者が足りません（{slug}）: {by!r}"
                          "／★違う2者で決めます★")
     ev = rec.get("evidence")
@@ -213,6 +223,31 @@ def official_hosts(expected: str) -> set:
     return out
 
 
+def directory_hosts() -> set:
+    """★名鑑として登録されているホスト★（directory-catalogs.json の ACTIVE）
+
+    ★新しい名簿は作らない★＝すでにある名鑑の登録簿から導く。
+    """
+    import directory_index as _di
+    import safe_json as _sj
+    import source_lineage as _sl
+    reg = _sl.load_registry()
+    pubs = {pid: p for pid, p in (reg.get("publishers") or {}).items()
+            if p.get("status") == "ACTIVE"}
+    cats = _sj.read_json(_di.CATALOGS, expect=dict).get("directories") or {}
+    out = set()
+    for c in cats.values():
+        if not isinstance(c, dict) or c.get("status") != "ACTIVE":
+            continue
+        p = pubs.get(str(c.get("publisher_id") or ""))
+        for h in (p or {}).get("canonical_hosts") or []:
+            if str(h).strip():
+                out.add(str(h).strip().lower())
+    if not out:
+        raise CacheError("名鑑の登録簿が空です（根拠を確かめられません）")
+    return out
+
+
 def check_evidence_source(e: dict, expected: str) -> None:
     """★根拠のURLが、その種類にふさわしい出どころか★（依頼192のP1）
 
@@ -227,10 +262,11 @@ def check_evidence_source(e: dict, expected: str) -> None:
         raise CacheError(f"根拠のURLからホストを取れません: {url}")
     kind = e.get("kind")
     if kind == "directory_observation":
-        import source_lineage as _sl
-        try:
-            _sl.publisher_of_host(host)
-        except _sl.LineageError:
+        # ★「登録済みの発行者」ではなく「登録済みの名鑑」に限る★
+        #   （2026-08-14・依頼193のP2）source-registry には解析サイトや
+        #   メーカー公式も ACTIVE で載っているので、それだけで見ると
+        #   **名鑑でないページを「名鑑での観測」として渡せた**＝役割の分離が崩れる。
+        if host not in directory_hosts():
             raise CacheError(
                 f"名鑑として登録されていないサイトです: {host}"
                 "／★観測の根拠は登録済みの名鑑から採ります★")
@@ -276,8 +312,12 @@ def verify_evidence(evidence: list, fetch=None, expected: str = "") -> None:
                              f"{str(ex)[:80]}")
         # ★転送された先も同じ許可の中か見る★（依頼192のP1）
         #   許可したURLから許可外へ飛ばされたら、それは別の出どころ。
+        # ★ホストが同じでも必ず見る★（2026-08-14・依頼193のP2）
+        #   以前は「ホストが変わったときだけ」だったので、
+        #   同じ社の https → http という降格が素通りした
+        #   （＝そのあとの本文は通信経路で書き換えられうる）。
         fin = _w.LAST_FINAL_URL.get("url")
-        if expected and fin and _host_of(fin) != _host_of(url):
+        if expected and fin:
             check_evidence_source(dict(e, url=fin), expected)
         body = " ".join(_w._visible_text(html or "").split())
         q = " ".join(str(e.get("quote") or "").split())
@@ -485,6 +525,22 @@ def selftest() -> int:
     t("　登録されていない名鑑からは観測を採らない",
       not _ok(evidence=[dict(ev[0], url="https://example.com/x"), ev[1]],
               slug="pw_dir"))
+    # ★★2026-08-14・依頼193のP2★★
+    t("★★名鑑でない登録済みサイトを「名鑑での観測」にできない★★"
+      "／source-registry には解析サイトやメーカー公式も載っているので、"
+      "「登録済みの発行者」だけで見ると役割の分離が崩れる",
+      "www.kitadenshi.co.jp" not in directory_hosts()
+      and "nana-press.com" in directory_hosts())
+    t("★★判断者は決めた2つ以外を受け取らない★★"
+      "／以前は架空のID2つでも「違う2者」だった",
+      not _ok(by=["foo", "bar"], slug="pw_by")
+      and not _ok(by=["claude", "gemini"], slug="pw_by2"))
+    t("　（対照）決めた2つなら通る", _ok(by=["codex", "claude"], slug="pw_by3"))
+    t("★★同じ社でも https から http へ落とされたら受け取らない★★"
+      "／ホストが変わったときだけ見ていたので素通りしていた",
+      not _ok(slug="pw_down",
+              fetch=lambda u: (_w_last(u.replace("https://", "http://")),
+                               _pages[u])[1]))
     t("　http（暗号化なし）の根拠は受け取らない",
       not _ok(evidence=[dict(ev[0], url=_DIR.replace("https://", "http://")),
                         ev[1]], slug="pw_http"))
