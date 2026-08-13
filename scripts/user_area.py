@@ -159,19 +159,23 @@ def visible_text(html: str, url: str = "", conf: dict | None = None) -> str:
     #   相手が id と 印（markers）を**同時に**変えると、
     #   1つも落とせないまま正常終了し、AIの要約が本文へ戻る。
     #   ★飾りを含む13個の合計ではなく、名指しした箱で見る★
+    # ★書いた箱は「全部」そろっていること★（2026-08-14・依頼198）
+    #   まとめて渡すと「どれか1つあれば合格」になる。1つずつ見る。
     need_b = [r for r in (ua.get("require_before") or []) if isinstance(r, dict)]
-    if need_b and not _find(p.root, need_b):
+    miss_b = [r for r in need_b if not _find(p.root, [r])]
+    if miss_b:
         raise UserAreaError(
-            f"落とすはずの箱が見つかりません（{need_b}）"
+            f"落とすはずの箱が見つかりません（{miss_b}）"
             "／★このページは出典に使いません★"
             "（相手のHTMLの作りが変わった可能性があります）")
     dropped = strip_tree(p.root, rules)
     # ★落とした後に「本文の箱」が残っているか確かめる★
     #   落としすぎ（機種データごと消える）にも気づけるようにする。
     need_a = [r for r in (ua.get("require_after") or []) if isinstance(r, dict)]
-    if need_a and not _find(p.root, need_a):
+    miss_a = [r for r in need_a if not _find(p.root, [r])]
+    if miss_a:
         raise UserAreaError(
-            f"落としたあとに本文の箱が残っていません（{need_a}）"
+            f"落としたあとに本文の箱が残っていません（{miss_a}）"
             "／★このページは出典に使いません★（落としすぎの疑い）")
     out = []
 
@@ -220,6 +224,21 @@ _SAMPLE = """<html><body>
  </ul></div>
 </div>
 </body></html>"""
+
+
+def _all_required_checked() -> bool:
+    """★必須の箱は全部そろうことを求めているか★（試験用）
+
+    片方だけある形を渡して、ちゃんと止まるかを見る。
+    """
+    conf = {"hosts": ["x.test"], "drop": [{"id": "bbs"}],
+            "markers": [],
+            "require_before": [{"id": "bbs"}, {"id": "sonzai_shinai"}]}
+    try:
+        visible_text(_SAMPLE, conf=conf)
+        return False
+    except UserAreaError:
+        return True
 
 
 def selftest() -> int:
@@ -298,6 +317,42 @@ def selftest() -> int:
     real = _conf("www.p-world.co.jp")
     t("★★P-WORLDの決まりごとが名鑑に登録されている★★",
       bool(real.get("drop")) and bool(real.get("markers")))
+    # ★本番の設定を名指しで見る★（2026-08-14・依頼198のP2）
+    #   試験の中で作った設定（_req）だけを見ていたので、
+    #   **本番から require_* が消えても試験は合格**していた。
+    t("★★本番の必須アンカーが消えたら気づく★★"
+      "（落とす前は掲示板の箱／落とした後は機種データの箱）",
+      real.get("require_before") == [{"id": "bbs"}]
+      and real.get("require_after") == [{"id": "spec"}])
+    t("　落とす箱に掲示板とAIのまとめが入っている",
+      {"id": "bbs"} in (real.get("drop") or [])
+      and {"class": "bbsAiMatome"} in (real.get("drop") or []))
+    t("　落とし損ねの印が3つとも入っている",
+      set(real.get("markers") or [])
+      >= {"AIがまとめた内容", "AI投稿まとめ", "活発なトピック"})
+    # ★★他の名鑑も登録されているか（2026-08-14・台帳#348）★★
+    #   ★一律に同じ規則をコピーしていない★＝サイトごとに実HTMLを見て決めた。
+    _dmm = _conf("p-town.dmm.com")
+    t("★★DMMぱちタウンの口コミ・評価も箱ごと落とす★★（台帳#348）",
+      {"class": "list-machinesreviews"} in (_dmm.get("drop") or [])
+      and {"class": "machine-userreview"} in (_dmm.get("drop") or [])
+      and _dmm.get("require_after") == [{"class": "list-machineinformation"},
+                                        {"class": "wysiwyg-box"}])
+    _chon = _conf("chonborista.com")
+    t("★★ちょんぼりすたのコメント・評価も箱ごと落とす★★（台帳#348）",
+      {"class": "commentlist"} in (_chon.get("drop") or [])
+      and {"id": "hyouka"} in (_chon.get("drop") or [])
+      and _chon.get("require_after") == [{"id": "entry"}])
+    t("　（対照）投稿フォームは必須に入れない"
+      "＝コメントを閉じたページには無いため",
+      {"id": "commentform"} in (_chon.get("drop") or [])
+      and {"id": "commentform"} not in (_chon.get("require_before") or []))
+    t("　なな徹はまだ登録しない（構造を確かめていないため）",
+      _conf("nana-press.com") == {})
+    t("★★必須の箱は「どれか1つ」ではなく「全部」そろうこと★★（依頼198）",
+      (lambda: [
+          _ok for _ok in [False]
+      ] and _all_required_checked())())
     t("　サブドメインでも引ける", _conf("www.p-world.co.jp") == _conf("p-world.co.jp"))
     t("　知らないホストは空", _conf("example.com") == {})
 

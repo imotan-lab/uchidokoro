@@ -212,7 +212,44 @@
    "surface_pattern": "^https://chonborista\\.com/slot/(?![0-9]+/)[a-z0-9\\-]+/$",
    "_why_surface_pattern": "入口の登録漏れを毎回機械が数えるため（2026-08-06・scripts/directory_coverage.py）",
    "max_pages": 1,
-   "_why_max_pages": "番号のページ送りは実際には404を返す飾りだった（2026-08-07に実機確認）。深いページはたどれないので1頁のみ。古い機種は machine_sources.py の控えで補う"
+   "_why_max_pages": "番号のページ送りは実際には404を返す飾りだった（2026-08-07に実機確認）。深いページはたどれないので1頁のみ。古い機種は machine_sources.py の控えで補う",
+   "user_area": {
+    "hosts": [
+     "chonborista.com"
+    ],
+    "drop": [
+     {
+      "id": "hyouka"
+     },
+     {
+      "class": "commentlist"
+     },
+     {
+      "id": "commentform"
+     },
+     {
+      "id": "comments-title"
+     }
+    ],
+    "require_before": [
+     {
+      "id": "hyouka"
+     },
+     {
+      "class": "commentlist"
+     }
+    ],
+    "require_after": [
+     {
+      "id": "entry"
+     }
+    ],
+    "markers": [
+     "COMMENTS & REVIEW",
+     "共感した"
+    ],
+    "_why": "★読者のコメントと評価を出典に数えない★（2026-08-14・台帳#348）。実ページ（206971・252081・207921・226056）を取ってきて構造を確かめた＝hyouka（星の評価・WP Customer Reviews）／commentlist（コメントの一覧）／commentform（投稿フォーム）／comments-title（COMMENTS & REVIEW の見出し）。★commentform はコメントを閉じたページには無い★ので、必須には入れない。落とした後に残ることを求めるのは entry（記事本体）＝4ページすべてに実在する。"
+   }
   },
   "p-world": {
    "name": "P-WORLD",
@@ -434,7 +471,43 @@
    "surface_pattern": "^https://p-town\\.dmm\\.com/(?:machines/[a-z_]+|makers/\\d+)/?$",
    "_why_surface_pattern": "入口の登録漏れを毎回機械が数えるため（2026-08-06・scripts/directory_coverage.py）",
    "max_pages": 6,
-   "_why_max_pages": "一覧が数ページに分かれており、1頁目だけでは古い機種が索引に入らないため（2026-08-07・台帳#264）。上限は毎晩の取得回数とのつり合いで決める"
+   "_why_max_pages": "一覧が数ページに分かれており、1頁目だけでは古い機種が索引に入らないため（2026-08-07・台帳#264）。上限は毎晩の取得回数とのつり合いで決める",
+   "user_area": {
+    "hosts": [
+     "p-town.dmm.com"
+    ],
+    "drop": [
+     {
+      "class": "machine-userreview"
+     },
+     {
+      "class": "list-machinesreviews"
+     },
+     {
+      "class": "machine-shop-by-prefecture"
+     }
+    ],
+    "require_before": [
+     {
+      "class": "machine-userreview"
+     },
+     {
+      "class": "list-machinesreviews"
+     }
+    ],
+    "require_after": [
+     {
+      "class": "list-machineinformation"
+     },
+     {
+      "class": "wysiwyg-box"
+     }
+    ],
+    "markers": [
+     "ユーザー評価"
+    ],
+    "_why": "★読者の口コミと評価点を出典に数えない★（2026-08-14・台帳#348）。実ページ（機種4709・4912・4992）を取ってきて構造を確かめた＝machine-userreview（ユーザー評価の点数）と list-machinesreviews（口コミの一覧・1件ごとに点数つき）に入っている。machine-shop-by-prefecture は設置店の一覧で、店名が大量に混ざるので併せて落とす。★見出し「ユーザー口コミ・評価詳細」は残るが、中身は空になる★（見出しは節の外にあり、そこに読者の書き込みは無い）。落とした後に残ることを求めるのは list-machineinformation（機種の基本情報）と wysiwyg-box（解析の本文）＝3ページすべてに実在することを確認した。"
+   }
   },
   "nana-press": {
    "name": "なな徹",

@@ -397,6 +397,40 @@ def as_request(got: dict) -> str:
 
 # ------------------------------------------------------------------ selftest
 
+def _one_bad_page_selftest() -> bool:
+    """★1件が落とせなくても、他の名鑑は残るか★（2026-08-14・依頼198のP2）
+
+    未同定ページの経路（2AIへ渡す抜粋を作る側）は、通常の経路の外にある。
+    ここで例外が外へ出ると、**他の名鑑まで含めて材料集めが丸ごと止まる**。
+    実際にその形を作って、1件だけがエラーになることを確かめる。
+    """
+    import user_area as _ua2
+    bad = "https://ng.test/x"
+    good = "https://ok.test/y"
+
+    def _clean(page, url=""):
+        if url == bad:
+            raise _ua2.UserAreaError("投稿欄を落としきれません（試験）")
+        return "天井は999Gです。" * 20
+
+    def fetch(name):
+        got = {}
+        for dir_id, url in (("dirA", bad), ("dirB", good)):
+            try:
+                got[dir_id] = {"url": url, "publisher": "chonborista",
+                               "text": _clean(None, url)}
+            except Exception as e:            # noqa: BLE001
+                got[dir_id] = {"url": url, "publisher": "chonborista",
+                               "error": str(e)[:120]}
+        return got
+
+    r = collect("t_bad", ["ceiling"], fetch=fetch, name="試験機")
+    src = r.get("sources") or {}
+    return (bool(src.get("dirA", {}).get("error"))
+            and not src.get("dirB", {}).get("error")
+            and (src.get("dirB", {}).get("text_len") or 0) > 0)
+
+
 def selftest() -> int:
     ok, ran = True, [0]
 
@@ -405,6 +439,13 @@ def selftest() -> int:
         ran[0] += 1
         print(("✅ " if cond else "❌ ") + name)
         ok = ok and bool(cond)
+
+    # ★★1件が落とせなくても、他の名鑑は残る（2026-08-14・依頼198のP2）★★
+    #   未同定ページの経路は通常の経路の外にあるので、
+    #   そこで例外が外へ出ると材料集めが丸ごと止まる。
+    t("★★投稿欄を落とせないページが1件あっても、他の出典は残る★★"
+      "／危ないページを使わないことと、処理が止まることは別",
+      _one_bad_page_selftest())
 
     T = ("天井は通常時999G+αで、到達時はボーナスに当選。 "
          "AT純増は約8.0枚/G。 ST「ショウタイム」は10G継続、継続率は約50%。 "
