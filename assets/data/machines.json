@@ -11816,11 +11816,12 @@
     "NO_UNIQUE_GAMEPLAY"
    ],
    "claims": [
-    "games_per_50"
+    "games_per_50",
+    "model_code"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-08-13",
-   "input_digest": "sha256:2892361577b630ade0f3ffdcee989251159747fabc870fe4c433f862fbae80eb"
+   "decided_at": "2026-08-14",
+   "input_digest": "sha256:5a59b141a821291c2474c1eeb13b63d56ef0ba7b41aa767c044275e128411316"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-09-07",
@@ -11828,12 +11829,13 @@
    "manufacturer_id": "universal",
    "official_product_url": "https://www.p-world.co.jp/machine/database/10510",
    "announced_name": "スマスロ タコスロ",
-   "identity_tier": "CATALOG_BOUND",
+   "identity_tier": "CATALOG_CODE_MATCHED",
    "identity_binding": "PWORLD_MACHINE_PAGE",
    "identity_evidence_ref": "pworld:10510 型式=LB／タコスロBD 検定=6S0085 確認日=2026-08-13",
    "market_release_date": "2026-09-07",
-   "observed_model_code": "LB/タコスロBD",
-   "_observed_model_code_sources": [
+   "regulatory_model_code": "LB/タコスロBD",
+   "_model_code_sources": [
+    "1geki.jp",
     "p-world.co.jp"
    ]
   },
