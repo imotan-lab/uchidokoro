@@ -453,6 +453,37 @@ def build_detail(slug, name, release, material) -> dict:
             jp = "メインAT純増" if c["mode"] == "MAIN_AT" else "上位AT純増"
             facts.append([jp, f"約{c['net']}枚/G"])
 
+    # ★ゲームの流れ（数値でないもの）★（2026-08-13・台帳#344）
+    #   導入前〜直後は「名前と流れが先に出て、数値は後」。数値が要る器しか
+    #   無かったので、いちばん鮮度が価値になる時期に書けなかった。
+    #   ★自由文は保存しない★＝2AIが構造にして記録したものから定型文を作る。
+    #   ★claimには数えない★＝confirmed_values 由来は page_decision が除外する。
+    flows = (material.get("gameplays") or {}).get("adopted") or []
+    if flows:
+        _lines = []
+        for f in flows:
+            _head = f"{f['when']}は" if f.get("when") else ""
+            _line = f"{_head}**{f['trigger']}**から**{f['leads_to']}**へ進みます"
+            if f.get("gains"):
+                _line += "（" + "・".join(str(g) for g in f["gains"]) + "を獲得）"
+            _lines.append(_line)
+        _old = (boxes.get("ゲーム性") or {}).get("body") or []
+        _old = [x for x in _old if x not in PENDING_TEXTS]
+        boxes["ゲーム性"] = {"title": "ゲーム性", "body": _old + _lines}
+
+    # ★AT名との対応が付かない純増★（2026-08-13・台帳#344）
+    #   出典が「純増約3.1枚or約7.4枚/G」としか書かず、どちらがメインで
+    #   どちらが上位か割り当てていないとき、**モードへ割り当てない**。
+    #   ★順に並べると読者が対応を推測する★ので、必ず断りを添える。
+    _unmapped = ((material.get("adopted") or {}).get("at_net_unmapped") or {})
+    _uv = (_unmapped.get("value") or {}).get("values") or []
+    if _uv:
+        _txt = ("**AT純増（AT名との対応は未確認）**："
+                + "、".join(f"約{v}枚/G" for v in _uv))
+        _cur = (boxes.get("ゲーム性") or {}).get("body") or []
+        _cur = [x for x in _cur if x not in PENDING_TEXTS]
+        boxes["ゲーム性"] = {"title": "ゲーム性", "body": _cur + [_txt]}
+
     # ★朝一・リセット★（2026-08-12・運営者決定）
     #   原文を集める側には前から話題があったのに、書く処理が無かったため
     #   **情報が揃っても永久に空のまま**だった。
@@ -662,6 +693,43 @@ def selftest() -> int:
       "（2026-08-04・Codex71〜72回目）",
       "status" not in m and m["publication_policy"] == _pd.SCHEMA
       and _pd.machine_class(m) in ("AUTO_INDEXABLE", "AUTO_PENDING"))
+    # ★★2026-08-13・台帳#344（数値でないゲーム性）★★
+    def _gp_mat(flows=None, unmapped=None):
+        m = {"adopted": {}, "ceilings": {"adopted": []},
+             "at_specs": {"adopted": []}, "czs": {"adopted": []},
+             "resets": {"adopted": []}}
+        if flows:
+            m["gameplays"] = {"adopted": flows}
+        if unmapped:
+            m["adopted"]["at_net_unmapped"] = {
+                "value": {"values": unmapped, "mapping": "UNCONFIRMED"},
+                "_from": "confirmed_values"}
+        return m
+
+    def _gp_body(mat):
+        d = build_detail("pw_x", "試験機", "2026-09-07", mat)
+        got = next((x for x in d["sections"] if x["title"] == "ゲーム性"), None)
+        return (got or {}).get("body") or []
+
+    t("★★確定値が無ければ、ゲーム性は未確認のまま★★（台帳#344）",
+      _gp_body(_gp_mat()) == [PENDING_TEXT])
+    t("★★2AIが構造で記録した流れを、定型文にして書く★★（台帳#344）",
+      _gp_body(_gp_mat([{"when": "通常時", "trigger": "周期抽選",
+                         "leads_to": "CZ"}]))
+      == ["通常時は**周期抽選**から**CZ**へ進みます"])
+    t("　条件が無い流れは「〜は」を付けずに書く／結果があれば添える",
+      _gp_body(_gp_mat([{"trigger": "全国制覇", "leads_to": "上位CZ",
+                         "gains": ["上乗せ", "武将参戦"]}]))
+      == ["**全国制覇**から**上位CZ**へ進みます（上乗せ・武将参戦を獲得）"])
+    t("★★AT名と対応の付かない純増は、必ず断りを添えて書く★★"
+      "（順に並べると読者が対応を推測してしまう）",
+      _gp_body(_gp_mat(unmapped=["3.1", "7.4"]))
+      == ["**AT純増（AT名との対応は未確認）**：約3.1枚/G、約7.4枚/G"])
+    t("★★ゲームの流れは公開ゲートのclaimに数えない★★"
+      "（記事には出すが、検索に載せる判定は変えない）",
+      (lambda: __import__("page_decision").claims_from_material(
+          _gp_mat([{"trigger": "全国制覇", "leads_to": "上位CZ"}],
+                  unmapped=["3.1"])) == [])())
     t("★★固有ゲーム性が無い材料は indexable にならない★★"
       "（spec系claimだけでは検索に載せない）",
       _pd.machine_class(m) == "AUTO_PENDING"
