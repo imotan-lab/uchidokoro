@@ -269,12 +269,58 @@ def urls_for(slug: str, data: dict | None = None) -> list:
 # ---------------------------------------------------------------- 機種の情報
 
 def machine(slug: str) -> dict:
+    """その機種の情報。★記事がまだ無い新台は待ち行列から引く★
+
+    ★なぜ要るか（2026-08-13・台帳#347）★
+      新台は「記事を作る材料を集める段階」で出典の同定が要ります。
+      ところが控えは machines.json に載っている機種にしか書けなかったので、
+      **2AIが一度出した結論を毎晩捨てて**同じ判断をやり直していました。
+
+      実例: L ソードアート・オンライン オルタナティブ ガンゲイル・オンライン。
+      なな徹の題が略称（ガンゲイルオンライン）で機械の照合を通らず、
+      2AIが本文（正式名称とメーカーが完全一致）を読んで同じ機種と判断したのに、
+      控えへ登録できず毎晩ナナプレスを除外したまま材料集めをやり直していた。
+
+    ★名前を自己申告させない★
+      待ち行列（add_machine_pending.json）に入っている名前とURLを使い、
+      **slugはP-WORLDのURLから決めたもの**と突き合わせます。
+    """
     ms = _sj.read_json(MACHINES, expect=(dict, list))
     ms = ms["machines"] if isinstance(ms, dict) else ms
     for m in ms:
         if m.get("slug") == slug:
             return m
-    raise SourceError(f"機種が見つかりません: {slug}")
+    got = _pending_machine(slug)
+    if got:
+        return got
+    raise SourceError(f"機種が見つかりません: {slug}"
+                      "（記事にも、新台の待ち行列にもありません）")
+
+
+def _pending_machine(slug: str) -> dict:
+    """待ち行列の中の、まだ記事になっていない新台（無ければ空）。"""
+    try:
+        import build_new_article as _ba
+        import pending_machines as _pm
+        items = (_pm.load() or {}).get("items") or {}
+        # ★待ち行列はURLをかぎにした組★（並びで来ても読めるようにしておく）
+        items = list(items.values()) if isinstance(items, dict) else list(items)
+    except Exception:                     # noqa: BLE001
+        return {}                         # ★待ち行列が無くても止めない★
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        url = str(it.get("url") or "")
+        if not url:
+            continue
+        if _ba.slug_from_url(url) != slug:
+            continue
+        name = str(it.get("name") or "").strip()
+        if not name:
+            return {}                     # 名前が無ければ同定できない
+        return {"slug": slug, "name": name, "_pending": True,
+                "identity": {"official_product_url": url}}
+    return {}
 
 
 def _text_of(html: str) -> str:
@@ -1070,6 +1116,28 @@ def selftest() -> int:
             "<body><h1>" + name + "</h1><p>" + ("天井は999Gです。" * 40)
             + "</p></body>")
 
+    # ★★記事がまだ無い新台も引ける（2026-08-14・台帳#347）★★
+    #   新台は「記事を作る材料を集める段階」で出典の同定が要る。
+    #   控えが machines.json にある機種にしか書けないと、
+    #   2AIが一度出した結論を毎晩捨てて同じ判断をやり直すことになる。
+    _pm_bak = globals().get("_pending_machine")
+    try:
+        globals()["_pending_machine"] = lambda s: (
+            {"slug": s, "name": "L試験の新台", "_pending": True}
+            if s == "pw_test_new" else {})
+        t("★★記事がまだ無い新台も、待ち行列から引ける★★（台帳#347）",
+          machine("pw_test_new").get("name") == "L試験の新台")
+        _ng = False
+        try:
+            machine("pw_shiranai")
+        except SourceError:
+            _ng = True
+        t("　待ち行列にも記事にも無いslugは、今までどおり止まる", _ng)
+        t("　（対照）名前を自己申告させない＝待ち行列の名前を使う",
+          machine("pw_test_new").get("_pending") is True)
+    finally:
+        globals()["_pending_machine"] = _pm_bak
+
     try:
         t("★★登録されていないサイトは使わない★★（票に数えられない）",
           check(slug, "https://example.com/x", html=body, pubs=pubs)["problems"])
@@ -1503,11 +1571,29 @@ def main() -> int:
                     help="判断した人（claude / codex / 運営者。カンマ区切り）")
     ap.add_argument("--override-identity", default="",
                     help="題が機種名と一致しないときの理由")
+    # ★自由文はファイルで渡せるようにする★（2026-08-14）
+    #   長い理由をコマンドに書くと、中の記号がシェルに実行される
+    #   （2026-08-08に実際に発生）。台帳やメールと同じく、
+    #   ★文章はファイルに書いて、コマンドにはパスだけを渡す★形にそろえる。
+    ap.add_argument("--why-file", dest="why_file", default="",
+                    help="理由を書いたファイル（--why と同時には使えません）")
+    ap.add_argument("--override-identity-file", dest="override_identity_file",
+                    default="", help="同定の理由を書いたファイル")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
 
     if a.selftest:
         return selftest()
+    # ★ファイル渡しは台帳と同じ受け取り方を使う★（置き場も同じ制限）
+    #   ＝ops / _design の下だけ・大きさとUTF-8を確かめる・制御文字を弾く。
+    try:
+        import open_issues as _oi
+        a.why = _oi._read_text_arg(a.why, a.why_file, "why")
+        a.override_identity = _oi._read_text_arg(
+            a.override_identity, a.override_identity_file, "override-identity")
+    except SystemExit as e:
+        print(str(e))
+        return 2
     try:
         if a.check:
             if not (a.slug and a.url):
