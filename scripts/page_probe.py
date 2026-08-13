@@ -143,18 +143,40 @@ def check(url: str, store: dict = None) -> dict:
         return out
     fp = fingerprint(body)
     old = str(rec.get("fingerprint") or "")
-    got.setdefault("pages", {})[url] = {
-        "fingerprint": fp,
-        "etag": head.get("etag") or "",
-        "last_modified": head.get("last_modified") or "",
-    }
+    # ★変わっていたときは、この場で基準を書き換えない★
+    #   （2026-08-14・依頼185のP1）以前はここで新しい指紋を控えていたので、
+    #   **そのあとのフル確認が失敗しても、翌日は「変化なし」**になっていた
+    #   ＝一度気づいた変化を、確かめないまま見送り続ける。
+    #   基準を進めてよいのは「フル確認まで終わった」とき（confirm）。
+    new_mark = {"fingerprint": fp,
+                "etag": head.get("etag") or "",
+                "last_modified": head.get("last_modified") or ""}
+    out["mark"] = new_mark
     if not old:
         out.update(state="FIRST", why="はじめて見るページです")
     elif old == fp:
         out.update(state="SAME", why="本文の指紋が同じです")
+        got.setdefault("pages", {})[url] = new_mark   # 変わっていないので進めてよい
     else:
         out.update(state="CHANGED", why="本文が変わっています")
     return out
+
+
+def confirm(rows: list) -> bool:
+    """★フル確認まで終わってから基準を進める★（依頼185のP1）
+
+    `check_all` が返した行をそのまま渡す。変化を見つけたページの
+    新しい指紋を、ここで初めて控える。
+    """
+    if not rows:
+        return False
+    got = _load()
+    n = 0
+    for r in rows:
+        if r.get("mark") and r.get("state") in ("FIRST", "CHANGED"):
+            got.setdefault("pages", {})[r["url"]] = r["mark"]
+            n += 1
+    return _save(got) if n else False
 
 
 def check_all(urls: list) -> dict:
@@ -200,14 +222,23 @@ def selftest() -> int:
         globals()["_conditional_get"] = lambda u, e, m, timeout=20: (
             "changed", "<p>天井999G</p>", {})
         st = {"pages": {}}
-        t("　はじめて見るページは FIRST",
-          check("https://x.test/a", st)["state"] == "FIRST")
-        t("★★2回目に同じ本文なら SAME★★",
+        _r1 = check("https://x.test/a", st)
+        t("　はじめて見るページは FIRST", _r1["state"] == "FIRST")
+        t("★★フル確認が終わるまで基準を進めない★★（依頼185のP1）"
+          "／進めてしまうと、確認に失敗しても翌日は「変化なし」になる",
+          not (st.get("pages") or {}).get("https://x.test/a")
+          and bool(_r1.get("mark")))
+        # ★フル確認が終わった体で基準を進める★
+        (st.setdefault("pages", {})).__setitem__("https://x.test/a", _r1["mark"])
+        t("★★基準を進めたあとに同じ本文なら SAME★★",
           check("https://x.test/a", st)["state"] == "SAME")
         globals()["_conditional_get"] = lambda u, e, m, timeout=20: (
             "changed", "<p>天井777G</p>", {})
         t("★★本文が変われば CHANGED★★",
           check("https://x.test/a", st)["state"] == "CHANGED")
+        t("★★変わったページの基準は、その場では進まない★★",
+          (st["pages"]["https://x.test/a"]["fingerprint"]
+           == _r1["mark"]["fingerprint"]))
 
         # ★1つでも SAME でなければ、まとめては飛ばさない★
         globals()["_conditional_get"] = lambda u, e, m, timeout=20: (

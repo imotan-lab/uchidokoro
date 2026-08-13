@@ -653,6 +653,25 @@ def _detail_path(slug: str) -> str:
     return os.path.join(DETAILS, f"{slug}.json")
 
 
+def find_sources(machine: dict) -> list:
+    """いまの出典の顔ぶれ（URL）を数え直す。★軽い工程★
+
+    ★なぜ要るか★（2026-08-14・依頼185のP1）
+      既知ページの中身だけを見て見送ると、**別の名鑑に新しく記事が出ても
+      永久に気づかない**。顔ぶれが変わっていないことも確かめてから見送る。
+      失敗したら空を返す＝呼ぶ側は「見送らない」（fail-closed）。
+    """
+    try:
+        import directory_index as _di
+        ident = machine.get("identity") or {}
+        name = ident.get("announced_name") or machine.get("name") or ""
+        if not name:
+            return []
+        return [str(u) for u in _di.found_urls(_di.find(name)) if u]
+    except Exception:                     # noqa: BLE001
+        return []
+
+
 def plan_one(slug: str, gather=None, verify=None, probe=None) -> dict:
     """育てられるか調べて、新しい機種データ・記事を作る（★書き込まない★）。
 
@@ -703,15 +722,30 @@ def plan_one(slug: str, gather=None, verify=None, probe=None) -> dict:
     #     （出典が消えたり書き換わったりしても古い値を出し続けるため）。
     #   ★確かめられなかったページは「変化なし」に数えない★（fail-closed）
     #   ★新しい出典を探す工程は省かない★＝ここは既知のURLしか見ない。
+    # ★見送ってよいのは「出典の顔ぶれも中身も同じ」ときだけ★
+    #   （2026-08-14・依頼185のP1）以前は既知URLだけを見て見送っていたので、
+    #   ★別の名鑑に新しく記事が出ても永久に気づかなかった★
+    #   （「新しい出典を探す工程は省かない」と書いておきながら省いていた）。
+    #   いまは先に**いまの出典の顔ぶれ**を数え直し、前回と同じで、
+    #   かつ既知ページが全部同じときだけ見送る。
+    out["probe_rows"] = []
     if probe is not False:
-        _known = list((_probe_state().get(slug) or {}).get("urls") or [])
+        _known = sorted((_probe_state().get(slug) or {}).get("urls") or [])
         if _known:
-            _pr = (probe or _pp.check_all)(_known)
-            if _pr.get("skip"):
+            _now = sorted(find_sources(cur) or [])
+            if _now and _now == _known:
+                _pr = (probe or _pp.check_all)(_known)
+                out["probe_rows"] = _pr.get("rows") or []
+                if _pr.get("skip"):
+                    out["problems"].append(
+                        "出典の顔ぶれも中身も前回から変わっていません"
+                        "（今日は見送ります）")
+                    out["unchanged"] = True
+                    return out
+            elif _now and _now != _known:
                 out["problems"].append(
-                    "出典が前回から変わっていません（今日は見送ります）")
-                out["unchanged"] = True
-                return out
+                    f"出典の顔ぶれが変わりました（{len(_known)}件→{len(_now)}件）"
+                    "／いつもどおり調べます")
 
     ident = cur.get("identity") or {}
     name = ident.get("announced_name") or cur.get("name")
@@ -1238,10 +1272,14 @@ def selftest() -> int:
         return (_T - _dtm.timedelta(days=off)).isoformat()
 
     # ★★2026-08-13・台帳#346（軽い様子見）★★
-    def _probe_run(skip, known):
+    def _probe_run(skip, known, now=None):
+        # ★出典を探す工程も差し替える★（試験で実サイトへ出ない）
         _bk = globals()["_probe_state"]
+        _bf = globals()["find_sources"]
         globals()["_probe_state"] = (
             lambda: ({"pw_10523": {"urls": known}} if known else {}))
+        globals()["find_sources"] = (
+            lambda m: list(known if now is None else now))
         try:
             return plan_one("pw_10523",
                             probe=lambda u: {"skip": skip, "rows": []},
@@ -1251,7 +1289,15 @@ def selftest() -> int:
                                                     "release": "2026-09-07"})
         finally:
             globals()["_probe_state"] = _bk
+            globals()["find_sources"] = _bf
 
+    t("★★出典の顔ぶれが変わったら見送らない★★（2026-08-14・依頼185のP1）"
+      "／別の名鑑に新しく記事が出ても永久に気づかない状態だった",
+      _probe_run(True, ["https://x.test/a"],
+                 now=["https://x.test/a", "https://x.test/b"])
+      .get("unchanged") is False)
+    t("　顔ぶれを数え直せなかったときも見送らない（fail-closed）",
+      _probe_run(True, ["https://x.test/a"], now=[]).get("unchanged") is False)
     t("★★出典が1つも変わっていなければ、その日は見送る★★（台帳#346）",
       _probe_run(True, ["https://x.test/a"]).get("unchanged") is True)
     t("★★1つでも変わった・確かめられないなら、いつもどおり調べる★★"
@@ -1433,9 +1479,15 @@ def main() -> int:
                   f"導入日から遠いので間隔を空けています）")
         return 0
     got = plan_one(a.slug)
-    # ★次回の様子見のために、見た出典を控える★（台帳#346）
-    if got.get("source_urls"):
+    # ★次回の様子見のための控えは「材料まで見に行けた」ときだけ★
+    #   （2026-08-14・依頼185のP1）失敗した回の顔ぶれで上書きすると、
+    #   一時的に一部しか見つからなかっただけで**出典の集合が縮む**。
+    #   ★変化を見つけたページの基準も、ここまで来てから進める★
+    #   （その場で進めると、確認に失敗しても翌日は「変化なし」になる）
+    if got.get("checked") and got.get("source_urls"):
         remember_sources(a.slug, got["source_urls"])
+        if got.get("probe_rows"):
+            _pp.confirm(got["probe_rows"])
     # ★控えるのは「書き込む実行」で「最後まで成立した」時だけ★
     #   （2026-08-13・依頼181のP1／依頼182のP1で条件を狭めた）
     #   ・下見で控えると、書いていないのに次の予定日まで候補から外れる
