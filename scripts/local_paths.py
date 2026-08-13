@@ -52,32 +52,63 @@ DESIGN = os.path.join(REPO, "_design")
 # ★Dropboxの控え先★（環境変数が無ければホームの下を探す）
 #   ★フォルダ名に本名が入るので、コードには書かない★
 def _find_dropbox() -> str:
-    """ホームの下から Dropbox の置き場を探す。
+    """バックアップして良い場所を1つに決める。★迷ったら空を返す★
 
-    ★中に本名のフォルダが1つだけあるなら、そこまで降りる★
-      （会社の共有Dropboxは「◯◯ Dropbox / 個人名」の作りになっている）。
-      見つからなければ空。呼ぶ側が「使えない」と分かるようにする。
+    ★ここは「触ってよい範囲の上限」になる★（2026-08-14・依頼185のP0）
+      取り違えると、別の同期先へ書類を書き出してしまう。
+      そこで**曖昧なときは絶対に返さない**。
+      呼ぶ側（backup_guard）は空なら断る。
+
+    ★見つけ方★
+      ①環境変数 `UCHIDOKORO_DROPBOX` があればそれ（★中身を検査する★）
+      ②無ければホームの下を探し、**候補がちょうど1つで、
+        その中の個人フォルダもちょうど1つ**のときだけ返す。
+        0個・2個以上・階層が曖昧なら空。
     """
-    root = os.environ.get("UCHIDOKORO_DROPBOX")
-    if root:
-        return root
+    def ok(p: str) -> str:
+        """使ってよい場所か確かめる（★危ない場所は断る★）。"""
+        if not p:
+            return ""
+        p = os.path.abspath(p)
+        if not os.path.isdir(p):
+            return ""
+        # ★ドライブの根・ホームそのものは断る★（範囲が広すぎる）
+        if os.path.dirname(p) == p or os.path.normcase(p) == \
+                os.path.normcase(os.path.abspath(HOME)):
+            return ""
+        return p
+
+    named = os.environ.get("UCHIDOKORO_DROPBOX")
+    if named:
+        return ok(named)
+    # ②リポジトリの外に置いた設定（★公開されない場所★）
+    #   自動探索はホームに似た名前のフォルダが複数あると決められない
+    #   （実際に文字化けした「◯◯ Dropbox」が並んでいた）。
+    #   置き場をここに書いておけば、名前を公開せずに正確に指せる。
+    try:
+        import json
+        with open(os.path.join(CLAUDE, "uchidokoro_paths.json"),
+                  encoding="utf-8") as f:
+            got = json.load(f)
+        if isinstance(got, dict) and got.get("dropbox"):
+            return ok(str(got["dropbox"]))
+    except Exception:                     # noqa: BLE001
+        pass
     if not os.path.isdir(HOME):
         return ""
-    for name in sorted(os.listdir(HOME)):
-        if "Dropbox" not in name:
-            continue
-        top = os.path.join(HOME, name)
-        if not os.path.isdir(top):
-            continue
-        # ★隠しフォルダと共有フォルダを除いて数える★
-        #   （`.dropbox.cache` や「◯◯ チーム フォルダ」が混ざるため）
-        #   ★1つに絞れないときは降りない★＝バックアップ先を取り違えない。
-        subs = [x for x in os.listdir(top)
-                if os.path.isdir(os.path.join(top, x))
-                and not x.startswith(".")
-                and "チーム" not in x and "team" not in x.lower()]
-        return os.path.join(top, subs[0]) if len(subs) == 1 else top
-    return ""
+    tops = [os.path.join(HOME, n) for n in sorted(os.listdir(HOME))
+            if "Dropbox" in n and os.path.isdir(os.path.join(HOME, n))]
+    if len(tops) != 1:
+        return ""                          # ★0個・2個以上は決めない★
+    top = tops[0]
+    # 隠しフォルダと共有フォルダを除く（`.dropbox.cache`／「◯◯ チーム フォルダ」）
+    subs = [x for x in os.listdir(top)
+            if os.path.isdir(os.path.join(top, x))
+            and not x.startswith(".")
+            and "チーム" not in x and "team" not in x.lower()]
+    if len(subs) != 1:
+        return ""                          # ★親へ広げない★（依頼185のP0）
+    return ok(os.path.join(top, subs[0]))
 
 
 DROPBOX = _find_dropbox()

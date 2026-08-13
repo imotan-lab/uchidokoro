@@ -513,6 +513,12 @@ TREE_EXCLUDE_EXT = {".tmp"}
 
 
 def _under(path: str, root: str) -> bool:
+    # ★上限が決まっていなければ、何も許さない★（2026-08-14・依頼185のP0）
+    #   以前は root が空だと abspath("") ＝**いまの作業フォルダ**になり、
+    #   その配下ならDropboxとして許してしまった。
+    #   置き場が見つからないときは「断る」が正しい（fail-closed）。
+    if not str(root or "").strip():
+        return False
     try:
         return os.path.commonpath([os.path.abspath(path), os.path.abspath(root)]) \
             == os.path.abspath(root)
