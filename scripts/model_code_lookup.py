@@ -1196,13 +1196,33 @@ def selftest() -> int:
                     "bb": {"name": "テスト社", "status": "WATCH_OFF"}}),
                 _maker_core_owners(_ci.normalize_core("テスト社")),
                 setattr(_w, "CATALOGS", _w._cat_bak))[2])() == set())
-    t("★★名鑑が同じグループの別会社名で書いていても通す★★（依頼172のP1）"
-      "／平和⇔オリンピアエステート（公式のグループ会社一覧で確認）",
-      _same_identity_group("olympia_estate", {"heiwa"})
-      and _same_identity_group("heiwa", {"olympia_estate"}))
-    t("　グループが決まっていない社どうしは、従来どおり別の社",
-      _same_identity_group("sammy", {"universal"}) is False
-      and _same_identity_group("", {"heiwa"}) is False)
+    # ★★2026-08-14・依頼189で方針を変えた★★
+    #   以前は「同じグループなら全機種で自動的に通す」だったが、
+    #   公式は「グループ会社」と書いているだけで、
+    #   ★全機種でメーカー名を入れ替えてよいとは書いていない★。
+    #   1回の判断ミスが以後すべての機種で関門を無効にするので、
+    #   いまは「2AIへ回す価値のある関係」の印にとどめる。
+    t("★★同じグループでも自動では通さない★★（依頼189・方針変更）"
+      "／『関係あり』として2AIへ回す印にする",
+      _related("olympia_estate", {"heiwa"})
+      and _related("heiwa", {"olympia_estate"})
+      and _related("sanslay", {"sanyo_bussan"}))
+    t("　関係の無い社どうしは、そのまま別の社",
+      _related("sammy", {"universal"}) is False
+      and _related("", {"heiwa"}) is False)
+    t("★★メーカー欄の判定が三つに分かれる★★（依頼189）"
+      "／MATCH＝名簿で一致／UNKNOWN＝2AIへ／MISMATCH＝使わない",
+      (lambda f: [f("サンスリー"), f("三洋物産"), f("サミー"), f("架空社")]
+       == ["MATCH", "UNKNOWN", "MISMATCH", "UNKNOWN"])(
+          lambda seen: (lambda: (
+              setattr(_w, "_get_bak189", _w._get),
+              setattr(_w, "_get", lambda u, timeout=20:
+                      "<title>L試験機 パチスロ新台 | P-WORLD</title>"
+                      f"<p>メーカー名：{seen}</p><p>型式名：L試験1</p>"),
+              lookup("https://x.test/a", "L試験機",
+                     expected_maker="sanslay"),
+              setattr(_w, "_get", _w._get_bak189))[2])()
+          ["maker_check"]["state"]))
     t("★★巡回に要るものが無い社は、落ちずに『見張りの対象外』で返る★★"
       "（--check kyoraku が KeyError で異常終了していた・依頼172のP1）",
       (lambda r: r["state"] == "NOT_WATCHABLE" and bool(r["problem"]))(

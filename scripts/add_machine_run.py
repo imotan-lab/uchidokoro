@@ -50,6 +50,7 @@ import os as _os_lp                 # noqa: E402
 import sys as _sys_lp               # noqa: E402
 _sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
 import local_paths as _lp           # noqa: E402
+import maker_identity_cache as _mic   # noqa: E402
 import ceiling_lookup as _cl         # noqa: E402
 import cz_lookup as _cz              # noqa: E402
 import directory_index as _di         # noqa: E402
@@ -555,7 +556,7 @@ def discover(persist: bool = True) -> dict:
     return out
 
 
-def gather(name: str, maker: str = "") -> dict:
+def gather(name: str, maker: str = "", slug: str = "") -> dict:
     """1機種ぶんの材料を集める。★止まった理由も返す★"""
     got = {"name": name, "urls": [], "model_code": None, "material": None,
            "problems": []}
@@ -586,10 +587,54 @@ def gather(name: str, maker: str = "") -> dict:
     #   他社名の題（GEN_MARK_CONFLICT）等で型式照合に落ちたページが、
     #   理由の文字列が DIRECTORY_MAKER_* でないため材料収集に復活していた。
     #   本人と確かめられていないページは票にも材料にもしない）
+    # ★★分からないメーカー欄は、機種ごとの控えを見てから決める★★
+    #   （2026-08-14・依頼189。運営者の「名簿でよくトラブる」を受けて）
+    #   ①名簿で一致        … そのまま使う
+    #   ②この機種の控えにある … その結論に従う
+    #   ③どちらでもない     … ★人を待たず2AIへ聞く★（質問を返す）
+    #   ★控えが読めないときは、今までどおり除外する★（fail-closed）
+    got["maker_questions"] = []
+    _cache_ok, _cache = True, None
+    try:
+        _cache = _mic.load()
+    except Exception as e:                # noqa: BLE001
+        _cache_ok = False
+        _log(f"  メーカーの控えを読めません（今までどおり除きます）: {e}")
+    _unknown_ok = set()                   # 控えで「同じ」と決まっているURL
+    for r in looks:
+        mc = r.get("maker_check") or {}
+        if mc.get("state") != "UNKNOWN" or not r.get("identity_ok"):
+            continue
+        _v = None
+        if _cache_ok and slug:
+            _v = _mic.verdict_for(slug, mc.get("expected") or maker,
+                                  mc.get("seen") or "", _cache)
+        if _v == "MATCH":
+            _unknown_ok.add(r["url"])
+            _log(f"  （この機種では同じメーカーと決めてあります）"
+                 f"{mc.get('seen')} ⇔ {mc.get('expected')}")
+        elif _v == "MISMATCH":
+            pass                          # 決めてある＝除外のまま・もう聞かない
+        elif slug:
+            got["maker_questions"].append({
+                "key": f"maker:{mc.get('expected')}:{_mic.key_of(mc.get('seen'))}",
+                "text": (
+                    f"★この機種で「{mc.get('seen')}」と「{mc.get('expected')}」は"
+                    f"同じメーカーとして扱えますか★／"
+                    f"名鑑 {r['url']} のメーカー欄が「{mc.get('seen')}」です。"
+                    "公式の資料で関係を確かめ、決めたら "
+                    "python scripts/maker_identity_cache.py --record "
+                    f"--official-url <P-WORLDのURL> --expected {mc.get('expected')} "
+                    f"--seen {mc.get('seen')} --verdict MATCH/MISMATCH "
+                    "--why <理由> --by claude,codex "
+                    "--evidence \"<URL>|<逐語引用>|official_relationship\" "
+                    "で控えてください（★この機種にだけ効きます★）"),
+            })
     _bad_maker = {r["url"] for r in looks
-                  if str(r.get("reason") or "").startswith(
+                  if r["url"] not in _unknown_ok
+                  and (str(r.get("reason") or "").startswith(
                       ("DIRECTORY_MAKER_MISMATCH", "DIRECTORY_MAKER_UNRESOLVED"))
-                  or not r.get("identity_ok")}
+                       or not r.get("identity_ok"))}
     if _bad_maker:
         _bad_msgs = []
         for r in looks:
@@ -2273,8 +2318,17 @@ def run_one(name, official_url, maker, release, apply_it=False,
         out["problems"].append(
             f"既に登録されている疑い: slug={slug} name={ename}（{why}）"
             f"／新しいslugで作らず、更新タスクで直すこと")
-    got = gather(name, maker)
+    # ★slugを先に決めてから材料を集める★（2026-08-14・依頼189）
+    #   メーカー欄が「分からない」ときに、**この機種の控え**を見るため。
+    #   以前は材料集めのあとで slug を決めていたので、控えを引けなかった。
+    out["slug"] = _ba.slug_from_url(official_url)
+    got = gather(name, maker, slug=out["slug"])
     out["problems"] += got["problems"]
+    # ★メーカー欄で決められなかったものは、その場で2AIへ聞く★
+    #   （人が名簿に足すまで待たない。運営者の方針）
+    for _q in got.get("maker_questions") or []:
+        out.setdefault("ask_2ai", []).append(_q["text"])
+        _log(f"  ★2AIに聞くこと（メーカー）: {_q['text'][:120]}")
     # ★公式が年月を出さない機種は、名鑑2票一致の月で先行記事にする★
     #   （2026-08-02・Codex47回目に条件つきで承認。山佐は導入年月が画像のみ）
     #   条件＝型式が一致した同じ2名鑑の月が一致（gatherが判定済み）。
@@ -2308,7 +2362,6 @@ def run_one(name, official_url, maker, release, apply_it=False,
         else:
             _log("（下見）待ち行列には触りません")
         return out
-    out["slug"] = _ba.slug_from_url(official_url)
     mat = got["material"]
     # ★2AIで突き合わせて確定した値を材料に足す★（2026-08-09・台帳#273）
     #   機械の抽出は「載っているのに読めない」が普通に起きる（実測: パリピ孔明は

@@ -62,8 +62,9 @@
       "directory_names": [
         "オリンピア"
       ],
-      "maker_identity_group": "heiwa_group",
-      "_group_why": "2026-08-13 平和の公式『グループ会社』に 株式会社オリンピア／株式会社オリンピアエステート が『パチンコ機・パチスロ機の開発・製造』として載っている（https://www.heiwanet.co.jp/company/company-top/connection/ で確認）。名鑑によって同じ機種を『平和』『オリンピアエステート』と書き分けるため、★メーカー欄の照合だけ★同じ扱いにする。法人格は分けたまま・出典の数は増えない（独立性はホスト数で数えるため）"
+      "_group_why": "2026-08-13 平和の公式『グループ会社』に 株式会社オリンピア／株式会社オリンピアエステート が『パチンコ機・パチスロ機の開発・製造』として載っている（https://www.heiwanet.co.jp/company/company-top/connection/ で確認）。名鑑によって同じ機種を『平和』『オリンピアエステート』と書き分けるため、★メーカー欄の照合だけ★同じ扱いにする。法人格は分けたまま・出典の数は増えない（独立性はホスト数で数えるため）",
+      "maker_relation_group": "heiwa_group",
+      "_why_relation": "★これは「同じ会社」という許可ではない★（2026-08-14・依頼189）。公式は「グループ会社」と書いているだけで、全機種でメーカー名を入れ替えてよいとは書いていない。1回の判断ミスが以後すべての機種で関門を無効にするので、ここは「即座に別物と決めつけず、機種ごとに2AIへ聞く」ための印にした。機種ごとの結論は Documents/uchidokoro/maker_identity_cache.json に控える。"
     },
     "daitogiken": {
       "name": "大都技研",
@@ -207,23 +208,26 @@
     "sanslay": {
       "name": "サンスリー",
       "status": "WATCH_OFF",
-      "maker_identity_group": "sanyo_group",
       "_why": "同上。L聖闘士星矢 黄金十二宮 を待たせていた",
-      "_group_why": "2026-08-13 三洋物産の公式『会社概要』に 株式会社サンスリー（設立 平成12年3月・事業内容『遊技機の開発・製造』・本社所在地は三洋物産と同じ）が載っている（https://www.sanyobussan.co.jp/corporate/outline.html で確認）。P-WORLDは『サンスリー』、ナナプレスは『三洋物産』と書き分けるため、★メーカー欄の照合だけ★同じ扱いにする。法人格は分けたまま"
+      "_group_why": "2026-08-13 三洋物産の公式『会社概要』に 株式会社サンスリー（設立 平成12年3月・事業内容『遊技機の開発・製造』・本社所在地は三洋物産と同じ）が載っている（https://www.sanyobussan.co.jp/corporate/outline.html で確認）。P-WORLDは『サンスリー』、ナナプレスは『三洋物産』と書き分けるため、★メーカー欄の照合だけ★同じ扱いにする。法人格は分けたまま",
+      "maker_relation_group": "sanyo_group",
+      "_why_relation": "★これは「同じ会社」という許可ではない★（2026-08-14・依頼189）。公式は「グループ会社」と書いているだけで、全機種でメーカー名を入れ替えてよいとは書いていない。1回の判断ミスが以後すべての機種で関門を無効にするので、ここは「即座に別物と決めつけず、機種ごとに2AIへ聞く」ための印にした。機種ごとの結論は Documents/uchidokoro/maker_identity_cache.json に控える。"
     },
     "sanyo_bussan": {
       "name": "三洋物産",
       "status": "WATCH_OFF",
-      "maker_identity_group": "sanyo_group",
       "_why": "名鑑（ナナプレス）がサンスリー製の機種を『三洋物産』と書くため、名簿で解決できず材料が全部落ちていた（2026-08-13・L聖闘士星矢 黄金十二宮で発生）",
-      "_group_why": "サンスリーと同じ SANYO グループ（上記 sanslay の _group_why を参照）。★別名で1社に潰さず、法人格は分けたまま照合だけ同じ扱いにする★"
+      "_group_why": "サンスリーと同じ SANYO グループ（上記 sanslay の _group_why を参照）。★別名で1社に潰さず、法人格は分けたまま照合だけ同じ扱いにする★",
+      "maker_relation_group": "sanyo_group",
+      "_why_relation": "★これは「同じ会社」という許可ではない★（2026-08-14・依頼189）。公式は「グループ会社」と書いているだけで、全機種でメーカー名を入れ替えてよいとは書いていない。1回の判断ミスが以後すべての機種で関門を無効にするので、ここは「即座に別物と決めつけず、機種ごとに2AIへ聞く」ための印にした。機種ごとの結論は Documents/uchidokoro/maker_identity_cache.json に控える。"
     },
     "olympia_estate": {
       "name": "オリンピアエステート",
       "status": "WATCH_OFF",
-      "maker_identity_group": "heiwa_group",
       "_why": "同上。L転生王女と天才令嬢の魔法革命 を待たせていた",
-      "_group_why": "2026-08-13 平和と同じグループ（上記 heiwa の _group_why を参照）。P-WORLDは『オリンピアエステート』、ちょんぼりすた・ナナプレスは『平和』と書き分けている"
+      "_group_why": "2026-08-13 平和と同じグループ（上記 heiwa の _group_why を参照）。P-WORLDは『オリンピアエステート』、ちょんぼりすた・ナナプレスは『平和』と書き分けている",
+      "maker_relation_group": "heiwa_group",
+      "_why_relation": "★これは「同じ会社」という許可ではない★（2026-08-14・依頼189）。公式は「グループ会社」と書いているだけで、全機種でメーカー名を入れ替えてよいとは書いていない。1回の判断ミスが以後すべての機種で関門を無効にするので、ここは「即座に別物と決めつけず、機種ごとに2AIへ聞く」ための印にした。機種ごとの結論は Documents/uchidokoro/maker_identity_cache.json に控える。"
     },
     "amtex": {
       "name": "アムテックス",
