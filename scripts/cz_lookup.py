@@ -263,7 +263,9 @@ def compare(pages: list) -> dict:
           値を書いていない出典（None）は反対票には数えない。
         """
         real = {v: srcs for v, srcs in d.items() if v is not None}
-        ok = [(v, srcs) for v, srcs in real.items() if len(srcs) >= 2]
+        # ★票の数は source_lineage が決める★（2026-08-14・依頼192のP1）
+        ok = [(v, srcs) for v, srcs in real.items()
+              if _sl._indep(srcs) >= 2]
         return ok[0] if len(ok) == 1 and len(real) == 1 else (None, set())
 
     adopted, need_third = [], []

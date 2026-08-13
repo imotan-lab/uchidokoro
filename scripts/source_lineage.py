@@ -97,6 +97,19 @@ def vote_groups(reg: dict | None = None) -> dict:
     return {pid: "vote:" + min(ms) for root, ms in members.items() for pid in ms}
 
 
+def independent(keys, reg: dict | None = None) -> int:
+    """★独立していると数えてよい票の数★（2026-08-14・依頼192のP1）
+
+    ★ここを通さずに `len(集合)` で数えない★
+      票のかたまり（vote:xxx）を作るところまでは各抽出器がやるが、
+      **「何票あるか」を決めるのはこの関数だけ**にする。
+      共同制作の組（joint_production）をまとめる処理は、
+      数える場所が散らばっていると必ず繋ぎ忘れる
+      （実際、依頼190で入れたときに材料を採用する本体を通していなかった）。
+    """
+    return len(merge_joint({k for k in (keys or ()) if k}, reg))
+
+
 def joint_pairs(reg: dict | None = None) -> list:
     """★共同で作ることがある発行者の組★（source-registry の joint_production）
 
@@ -236,6 +249,11 @@ def selftest() -> int:
       count_votes(["1geki", "dmm-ptown"], reg) == 1)
     t("　（対照）まとめないと2票になる＝これが直す前の姿",
       len({g["1geki"], g["dmm-ptown"]}) == 2)
+    t("★★票を数えるのはこの関数だけ★★（各抽出器はここを通す）",
+      independent({g["1geki"], g["dmm-ptown"]}, reg) == 1
+      and independent({g["1geki"], g["chonborista"]}, reg) == 2
+      and independent({g["1geki"], "", None}, reg) == 1
+      and independent(set(), reg) == 0)
     t("　もう1社足せば2票に届く（作業は止まらない）",
       count_votes(["1geki", "dmm-ptown", "chonborista"], reg) == 2)
     t("　片方だけなら何もしない（関係ない機種の邪魔をしない）",

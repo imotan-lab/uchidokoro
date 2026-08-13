@@ -656,6 +656,18 @@ def _maker_core_owners(core_text: str) -> set:
     return best if len(best) == 1 else set()
 
 
+def _sl_votes(hosts) -> int:
+    """★独立した票の数★（同じ会社の別ホストは1票・共同制作の組もまとめる）"""
+    import source_lineage as _sl2
+    keys = set()
+    for h in hosts or ():
+        try:
+            keys.add(_sl2.vote_key_of_url("https://" + str(h).lstrip("/")))
+        except _sl2.LineageError:
+            continue          # ★登録されていないサイトは票に数えない★
+    return _sl2.independent(keys)
+
+
 def _relation_group(maker_id: str) -> str:
     """★2AIへ回す価値のある関係★（2026-08-14・依頼189）
 
@@ -793,6 +805,10 @@ def agree(results: list) -> dict:
         #   抽出は - − – — 等を許すのに、比較で別物にすると恒久CONFLICTになる。
         return re.sub("[‐‑–—−]", "-", t)
 
+    # ★ホストの数ではなく「独立した票の数」で数える★（2026-08-14・依頼192のP1）
+    #   同じ会社の別ホスト（P-WORLDと羽伏せ）が2票になり、
+    #   共同制作の組（一撃×DMM）も2票になっていた。
+    #   ＝「独立2出典」の土台が、型式名のところだけ崩れていた。
     codes = {}          # 比較鍵 -> hosts集合
     shown = {}          # 比較鍵 -> 最初に見つかった表示値
     for r in results:
@@ -811,7 +827,7 @@ def agree(results: list) -> dict:
                        + json.dumps({k: sorted(v) for k, v in codes.items()},
                                     ensure_ascii=False)}
     for code, hosts in codes.items():
-        if len(hosts) >= 2:
+        if _sl_votes(hosts) >= 2:
             return {"model_code": shown[code], "hosts": sorted(hosts),
                     "adopted": True}
     # ★「まだ載っていない」と「食い違う」を分ける★（2026-07-31・Codex21回目）

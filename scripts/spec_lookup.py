@@ -303,6 +303,12 @@ def _lineage(host: str) -> str:
     return host          # 未登録は他と束ねない（＝1票として扱う）
 
 
+def _indep(keys) -> int:
+    """★独立した票の数（共同制作の組はまとめる）★＝数える場所は1つ"""
+    import source_lineage as _sl2
+    return _sl2.independent(keys)
+
+
 def vote_lineage(host: str) -> str:
     """★票を数えるときの系列★ 登録されていないサイトは空を返す。
 
@@ -358,7 +364,9 @@ def compare(pages: list) -> dict:
             votes.setdefault(fp, set()).add(lin)
         if not votes:
             continue
-        agreed = [(fp, s) for fp, s in votes.items() if len(s) >= 2]
+        # ★票の数は source_lineage が決める★（2026-08-14・依頼192のP1）
+        #   共同制作の組（一撃×DMM）を独立2票と数えないため。
+        agreed = [(fp, s) for fp, s in votes.items() if _indep(s) >= 2]
         # ★反対票が1票でもあれば採らない★（2026-08-02・Codex56回目。
         #   「97.8% 2票＋99.9% 1票」を97.8%で採用し、不一致を報告にも
         #   残していなかった。値が割れている間は保留＝人・翌日へ）

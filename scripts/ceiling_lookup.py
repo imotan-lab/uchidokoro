@@ -736,7 +736,9 @@ def verified_cz_names(pages: list) -> list:
     by_name: dict = {}
     for (nm, lin) in cnt:
         by_name.setdefault(nm, set()).add(lin)
-    return sorted(nm for nm, lins in by_name.items() if len(lins) >= 2)
+    # ★票の数は source_lineage が決める★（2026-08-14・依頼192のP1）
+    return sorted(nm for nm, lins in by_name.items()
+                  if _sl._indep(lins) >= 2)
 
 
 def apply_cz_aliases(items: list, cz_names, page_names=None) -> list:
@@ -808,7 +810,9 @@ def compare(pages: list, cz_names=None) -> dict:
     _has_plain = {k for (k, c) in by_kind if c is None}
     _ambiguous = _has_counted & _has_plain
     for (kind, _cnt), items in by_kind.items():
-        agreed = [(k, v) for k, v in items if len(v["sources"]) >= 2]
+        # ★票の数は source_lineage が決める★（2026-08-14・依頼192のP1）
+        agreed = [(k, v) for k, v in items
+                  if _sl._indep(v["sources"]) >= 2]
         # ★大手2サイトが合致したら採用する★（2026-08-06・運営者決定）
         #   これまでは「3つ目の出典が違う書き方をしていたら全部保留」だった。
         #   実際には、同じ天井を別の言い方で書いているだけのことが多く、

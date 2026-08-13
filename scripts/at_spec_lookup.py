@@ -145,7 +145,8 @@ def compare(pages: list) -> dict:
     for k, v in votes.items():
         by_mode.setdefault(v["sample"]["mode"], []).append(v)
     for mode, items in by_mode.items():
-        agreed = [v for v in items if len(v["sources"]) >= 2]
+        # ★票の数は source_lineage が決める★（2026-08-14・依頼192のP1）
+        agreed = [v for v in items if _sl._indep(v["sources"]) >= 2]
         # ★反対票が1票でもあれば採らない★（2026-08-02・Codex56回目）
         if len(agreed) == 1 and len(items) == 1:
             c = dict(agreed[0]["sample"])

@@ -96,7 +96,12 @@ def _check_record(slug: str, rec) -> None:
         if not str(rec.get(k) or "").strip():
             raise CacheError(f"控えに「{k}」がありません（{slug}）")
     by = rec.get("agreed_by")
-    if not isinstance(by, list) or len(set(by)) < 2:
+    # ★表記ゆれを「違う2者」にしない★（2026-08-14・依頼192のP2）
+    #   ["codex", " codex"] や ["codex", None] が2者として通っていた。
+    if not isinstance(by, list) or not all(
+            isinstance(x, str) and x.strip() for x in by):
+        raise CacheError(f"控えの判断者が不正です（{slug}）: {by!r}")
+    if len({x.strip().casefold() for x in by}) < 2:
         raise CacheError(f"控えの判断者が足りません（{slug}）: {by!r}"
                          "／★違う2者で決めます★")
     ev = rec.get("evidence")
@@ -133,10 +138,20 @@ def key_of(seen: str) -> str:
     return _ci.normalize_core(str(seen or "")).replace("株式会社", "")
 
 
-def verdict_for(slug: str, expected: str, seen: str, store=None):
+def verdict_for(slug: str, expected: str, seen: str, store=None,
+                fetch=None):
     """この機種について前に決めた結論（無ければ None）。
 
     ★完全一致で引く★＝(機種・期待する社・名鑑の表記の芯) の3つ。
+
+    ★「同じ」として使う時だけ、根拠が実在するか確かめ直す★
+      （2026-08-14・依頼192のP1）書くときに照合しても、
+      **控えは手で書き足せるただのファイル**なので、
+      形だけ整った偽の根拠で `MATCH` を作れてしまう。
+      使う直前に取り直せば、それが通らない。
+      ★取れない・引用が見つからないなら「決めていない」と同じ扱い★
+      （None を返す＝もう一度2AIへ回る。fail-closed）
+      `MISMATCH` は「使わない」側なので取り直さない（遅くする意味がない）。
     """
     if not slug or not expected or not seen:
         return None
@@ -144,11 +159,94 @@ def verdict_for(slug: str, expected: str, seen: str, store=None):
     k = key_of(seen)
     for rec in (got.get("machines") or {}).get(slug) or []:
         if rec.get("expected") == expected and key_of(rec.get("seen")) == k:
-            return rec.get("verdict")
+            v = rec.get("verdict")
+            if v == "MATCH":
+                try:
+                    verify_evidence(rec.get("evidence") or [], fetch, expected)
+                except CacheError:
+                    return None
+            return v
     return None
 
 
-def verify_evidence(evidence: list, fetch=None) -> None:
+def _host_of(url: str) -> str:
+    """URLからホストを取り出す（★文字列の前方一致で見ない★）。"""
+    import urllib.parse
+    return (urllib.parse.urlsplit(str(url or "")).hostname or "").lower()
+
+
+def official_hosts(expected: str) -> set:
+    """★「公式の関係」を示してよいホスト★（名簿に人が登録したものだけ）
+
+    ★なぜ名簿にするか（2026-08-14・依頼192のP1）★
+      引用が実在するかを見るだけでは、**第三者の記事でも通ってしまう**。
+      「HTTPSである」「公式を名乗っている」「会社名が書いてある」は
+      公式であることの根拠にならない。中身から機械に推測させず、
+      **人が開いて確かめたホストだけ**を許可する。
+
+    ★関係する社のぶんも合わせる★＝関係は2社の間のことなので、
+      親会社の公式が説明していることがある（平和⇔オリンピアエステート）。
+    """
+    if not expected:
+        return set()
+    import new_machine_watch as _w
+    try:
+        cats = (json.load(open(_w.CATALOGS, encoding="utf-8"))
+                .get("catalogs") or {})
+    except Exception as e:                 # noqa: BLE001
+        raise CacheError(f"名簿を読めません（根拠を確かめられません）: {e}")
+    me = cats.get(expected)
+    if not isinstance(me, dict):
+        raise CacheError(f"名簿に「{expected}」がありません")
+    grp = str(me.get("maker_relation_group") or "")
+    out = set()
+    for mid, conf in cats.items():
+        if not isinstance(conf, dict):
+            continue
+        same = (mid == expected) or (
+            grp and str(conf.get("maker_relation_group") or "") == grp)
+        if not same:
+            continue
+        for h in conf.get("official_relationship_hosts") or []:
+            if str(h).strip():
+                out.add(str(h).strip().lower())
+    return out
+
+
+def check_evidence_source(e: dict, expected: str) -> None:
+    """★根拠のURLが、その種類にふさわしい出どころか★（依頼192のP1）
+
+    directory_observation … 登録済みの名鑑（source-registry にある発行者）
+    official_relationship … 名簿に登録した公式ホスト
+    """
+    url = str(e.get("url") or "")
+    if not url.startswith("https://"):
+        raise CacheError(f"根拠は https のページだけです: {url}")
+    host = _host_of(url)
+    if not host:
+        raise CacheError(f"根拠のURLからホストを取れません: {url}")
+    kind = e.get("kind")
+    if kind == "directory_observation":
+        import source_lineage as _sl
+        try:
+            _sl.publisher_of_host(host)
+        except _sl.LineageError:
+            raise CacheError(
+                f"名鑑として登録されていないサイトです: {host}"
+                "／★観測の根拠は登録済みの名鑑から採ります★")
+    elif kind == "official_relationship":
+        allow = official_hosts(expected)
+        if host not in allow:
+            raise CacheError(
+                f"公式として登録されていないサイトです: {host}"
+                f"／★許可: {sorted(allow) or '（未登録）'}★"
+                "／第三者の記事・検索結果の要約は公式の根拠になりません。"
+                "新しく足すときは名簿の official_relationship_hosts に登録します")
+    else:
+        raise CacheError(f"根拠の種類が不正です: {kind!r}")
+
+
+def verify_evidence(evidence: list, fetch=None, expected: str = "") -> None:
     """★根拠の逐語引用が、本当にそのページにあるか確かめる★
 
     ★なぜ要るか（2026-08-14・依頼190のP1）★
@@ -169,11 +267,18 @@ def verify_evidence(evidence: list, fetch=None) -> None:
     import new_machine_watch as _w
     for e in evidence:
         url = str(e.get("url") or "")
+        if expected:
+            check_evidence_source(e, expected)
         try:
             html = fetch(url)
         except Exception as ex:            # noqa: BLE001
             raise CacheError(f"根拠のページを取得できません（{url}）: "
                              f"{str(ex)[:80]}")
+        # ★転送された先も同じ許可の中か見る★（依頼192のP1）
+        #   許可したURLから許可外へ飛ばされたら、それは別の出どころ。
+        fin = _w.LAST_FINAL_URL.get("url")
+        if expected and fin and _host_of(fin) != _host_of(url):
+            check_evidence_source(dict(e, url=fin), expected)
         body = " ".join(_w._visible_text(html or "").split())
         q = " ".join(str(e.get("quote") or "").split())
         if q not in body:
@@ -210,7 +315,7 @@ def remember(slug: str, expected: str, seen: str, verdict: str,
         if e.get("kind") not in KINDS:
             raise CacheError(f"根拠の種類は {'/'.join(KINDS)} のどれかです: "
                              f"{e.get('kind')!r}")
-    verify_evidence(evidence, fetch)
+    verify_evidence(evidence, fetch, expected)
     _check_record(slug, {"expected": expected, "seen": seen,
                          "verdict": verdict, "why": why, "agreed_by": by,
                          "evidence": evidence, "decided_at": decided_at})
@@ -287,21 +392,34 @@ def selftest() -> int:
         results.append((name, bool(cond)))
         print(("✅ " if cond else "❌ ") + name)
 
-    ev = [{"url": "https://x.test/a", "quote": "メーカー 三洋物産",
+    # ★出どころも試験の一部★（登録済みの名鑑／登録済みの公式ホスト）
+    _DIR = "https://nana-press.com/x"                 # 登録済みの名鑑
+    _OFF = "https://www.sanyobussan.co.jp/corporate/"  # 名簿に登録した公式
+    _3RD = "https://chonborista.com/kaisetsu"          # 名鑑だが公式ではない
+    ev = [{"url": _DIR, "quote": "メーカー 三洋物産",
            "kind": "directory_observation"},
-          {"url": "https://x.test/b", "quote": "株式会社サンスリー 遊技機の開発・製造",
+          {"url": _OFF, "quote": "株式会社サンスリー 遊技機の開発・製造",
            "kind": "official_relationship"}]
     st = _empty()
 
     _pages = {
-        "https://x.test/a": "<p>メーカー 三洋物産 / 機種一覧</p>",
-        "https://x.test/b": "<p>株式会社サンスリー 遊技機の開発・製造 を行います</p>",
+        _DIR: "<p>メーカー 三洋物産 / 機種一覧</p>",
+        _OFF: "<p>株式会社サンスリー 遊技機の開発・製造 を行います</p>",
+        # ★第三者の記事に同じ文が実在しても、公式の根拠にはならない★
+        _3RD: "<p>株式会社サンスリー 遊技機の開発・製造 を行います（解説）</p>",
     }
 
     def _fetch(u):
         if u not in _pages:
             raise RuntimeError("404")
+        _w_last(u)                    # ★転送なし＝最後のURLは自分自身★
         return _pages[u]
+
+    def _w_last(u):
+        """取ってくる役が「最後に着いたURL」を控える（本物と同じ形）。"""
+        import new_machine_watch as _w
+        _w.LAST_FINAL_URL["url"] = u
+        return u
 
     def _ok(**kw):
         base = dict(slug="pw_1", expected="sanslay", seen="三洋物産",
@@ -317,7 +435,19 @@ def selftest() -> int:
 
     t("★★根拠つきなら控えられる★★", _ok())
     t("　控えた結論を引ける",
-      verdict_for("pw_1", "sanslay", "株式会社三洋物産", st) == "MATCH")
+      verdict_for("pw_1", "sanslay", "株式会社三洋物産", st, _fetch) == "MATCH")
+    # ★★使うときにも根拠を取り直す（2026-08-14・依頼192のP1）★★
+    #   控えは手で書き足せるただのファイルなので、
+    #   書くときだけ照合しても、形だけ整った偽の根拠で「同じ」を作れる。
+    t("★★根拠のページが取れなくなったら「同じ」として使わない★★"
+      "／手で書き足した偽の根拠を、使う直前に落とす",
+      verdict_for("pw_1", "sanslay", "三洋物産", st,
+                  lambda u: (_ for _ in ()).throw(RuntimeError("404"))) is None)
+    t("　（対照）取り直せるうちは今までどおり使える",
+      verdict_for("pw_1", "sanslay", "三洋物産", st, _fetch) == "MATCH")
+    t("　引用が消えていたら使わない",
+      verdict_for("pw_1", "sanslay", "三洋物産", st,
+                  lambda u: "<p>ページが作り替えられました</p>") is None)
     t("★★機種が違えば効かない★★（全機種に一律で効かせない）",
       verdict_for("pw_2", "sanslay", "三洋物産", st) is None)
     t("　期待する社が違えば効かない",
@@ -346,6 +476,26 @@ def selftest() -> int:
       not _ok(evidence=[dict(ev[0], url="https://x.test/nai"), ev[1]]))
     t("★★「同じ」と決めるには名鑑の観測と公式の関係の両方が要る★★",
       not _ok(evidence=[ev[0]]) and not _ok(evidence=[ev[1]]))
+    # ★★出どころも見る（2026-08-14・依頼192のP1）★★
+    #   引用が実在するかを見るだけでは、第三者の記事でも通ってしまう。
+    t("★★第三者の記事は「公式の関係」の根拠にならない★★"
+      "／同じ文がそこに実在しても、公式であることの根拠にはならない",
+      not _ok(evidence=[ev[0], dict(ev[1], url=_3RD)], slug="pw_3rd"))
+    t("　（対照）名簿に登録した公式ホストなら通る", _ok(slug="pw_off"))
+    t("　登録されていない名鑑からは観測を採らない",
+      not _ok(evidence=[dict(ev[0], url="https://example.com/x"), ev[1]],
+              slug="pw_dir"))
+    t("　http（暗号化なし）の根拠は受け取らない",
+      not _ok(evidence=[dict(ev[0], url=_DIR.replace("https://", "http://")),
+                        ev[1]], slug="pw_http"))
+    t("★★許可したURLから許可外へ転送されたら受け取らない★★",
+      not _ok(slug="pw_redir",
+              fetch=lambda u: (_w_last(_3RD), _pages[_OFF])[1]
+              if u == _OFF else (_w_last(u), _pages[u])[1]))
+    t("　公式ホストは関係する社のぶんも合わせて見る"
+      "（平和⇔オリンピアエステート）",
+      official_hosts("olympia_estate") == official_hosts("heiwa")
+      and "www.heiwanet.co.jp" in official_hosts("olympia_estate"))
     t("　（対照）「違う」と決めるのは片方でもよい",
       _ok(verdict="MISMATCH", evidence=[ev[0]], slug="pw_mis"))
     t("★★読むときも同じ物差しで確かめる★★（手で書き足しても信用しない）",
