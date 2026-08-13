@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import io
 import json
 import re
 import os
@@ -143,6 +144,8 @@ def load_freq() -> dict:
         with open(FREQ_PATH, encoding="utf-8") as f:
             got = json.load(f)
     except FileNotFoundError:
+        # ★消えたことに気づけるように知らせる★（依頼181のP2）
+        print(f"★間隔の設定がありません（既定値で続けます）: {FREQ_PATH}★")
         return FREQ_DEFAULT
     except Exception as e:                # noqa: BLE001
         print(f"★間隔の設定を読めません（既定値で続けます）: {e}★")
@@ -156,6 +159,26 @@ def load_freq() -> dict:
     return got
 
 
+def parse_release(release: str):
+    """導入日を読む → (年月日, 精度) か (None, "") 。
+
+    ★カレンダーに無い日付で落ちない★（2026-08-13・依頼181のP1）
+      「2026-02-30」は正規表現には通るが date() が例外を投げる。
+      以前はここで**候補列挙そのものが止まって**いた。
+      読めない値は「不明」として扱う（新台と推測しない・必ず見に行く）。
+    """
+    m = re.match(r"^(\d{4})-(\d{2})(?:-(\d{2}))?$", str(release or "").strip())
+    if not m:
+        return None, ""
+    try:
+        if m.group(3):
+            return _dt.date(int(m.group(1)), int(m.group(2)),
+                            int(m.group(3))), "day"
+        return _dt.date(int(m.group(1)), int(m.group(2)), 1), "month"
+    except ValueError:
+        return None, ""
+
+
 def interval_days(release: str, today, conf=None) -> int:
     """その機種を何日おきに見るか。
 
@@ -164,13 +187,11 @@ def interval_days(release: str, today, conf=None) -> int:
       月精度は専用の間隔（既定3日）で見る。
     """
     conf = conf or load_freq()
-    r = str(release or "").strip()
-    m = re.match(r"^(\d{4})-(\d{2})(?:-(\d{2}))?$", r)
-    if not m:
+    day, prec = parse_release(release)
+    if not day:
         return int(conf.get("default_interval_days") or 7)
-    if not m.group(3):
+    if prec == "month":
         return int(conf.get("month_interval_days") or 3)
-    day = _dt.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
     off = (today - day).days
     for rg in conf.get("ranges") or []:
         if int(rg["from_days"]) <= off <= int(rg["to_days"]):
@@ -196,64 +217,68 @@ def is_new_machine(release: str, today, days: int = NEW_MACHINE_DAYS) -> bool:
     ★導入前は新台期間に入れない★＝そちらは公開と育成の担当。
       ここは「導入後に人手で厚くする番が来るか」を決めるための線。
     """
-    r = str(release or "").strip()
-    m = re.match(r"^(\d{4})-(\d{2})(?:-(\d{2}))?$", r)
-    if not m:
+    start, prec = parse_release(release)
+    if not start:
         return False                       # 読めない＝新台と推測しない
-    y, mo = int(m.group(1)), int(m.group(2))
-    if m.group(3):
-        start = _dt.date(y, mo, int(m.group(3)))
+    if prec == "day":
         end = start + _dt.timedelta(days=days)
     else:
-        start = _dt.date(y, mo, 1)
-        nxt = _dt.date(y + (mo == 12), (mo % 12) + 1, 1)
+        nxt = _dt.date(start.year + (start.month == 12),
+                       (start.month % 12) + 1, 1)
         end = (nxt - _dt.timedelta(days=1)) + _dt.timedelta(days=days)
     return start <= today <= end
 
 
 def due(slug: str, release: str, today, state: dict, conf=None) -> bool:
     """今日その機種を見るか（★前に見た日が分からなければ見る★）。"""
-    last = str((state or {}).get(slug) or "").strip()
-    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", last)
-    if not m:
+    seen, prec = parse_release(str((state or {}).get(slug) or ""))
+    if not seen or prec != "day":
         return True                        # 記録が無い・壊れている＝見る
-    seen = _dt.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
     return (today - seen).days >= interval_days(release, today, conf)
 
 
-STATE_PATH = r"C:/Users/imao_/Documents/uchidokoro/state.json"
-STATE_KEY = "grow_check"          # ★見に行った日の控え★（rotation_check と同じ流儀）
-
-
-def _state_all() -> dict:
-    """state.json 全体（読めなければ空）。"""
-    try:
-        with open(STATE_PATH, encoding="utf-8") as f:
-            got = json.load(f)
-        return got if isinstance(got, dict) else {}
-    except Exception:                     # noqa: BLE001
-        return {}
+# ★見に行った日の控えは、共有の state.json とは別に持つ★
+#   （2026-08-13・依頼181のP0）以前は state.json 全体を読んで書き戻していたので、
+#   ★一時的に読めなかっただけで、他タスクの履歴をまとめて消す★恐れがあった
+#   （読めない＝空扱い → そこへ自分の分だけ足して全体を上書き）。
+#   この控えは消えても再確認が増えるだけなので、専用ファイルに分ける。
+STATE_PATH = r"C:/Users/imao_/Documents/uchidokoro/grow_check.json"
 
 
 def last_checked() -> dict:
     """slug → 最後に見に行った日（YYYY-MM-DD）。"""
-    got = (_state_all().get(STATE_KEY) or {}).get("last_checked")
-    return got if isinstance(got, dict) else {}
+    try:
+        with open(STATE_PATH, encoding="utf-8") as f:
+            got = json.load(f)
+        got = (got or {}).get("last_checked")
+        return got if isinstance(got, dict) else {}
+    except Exception:                     # noqa: BLE001
+        return {}
 
 
 def mark_checked(slug: str, today) -> bool:
     """今日見たことを控える。★書けなくても処理は止めない★
 
     控えられなければ、その機種は翌日また見に行くだけ（安全側）。
+    ★一時ファイルの名前を重ねない★＝同時に走っても互いを壊さない。
     """
     try:
-        got = _state_all()
-        box = got.setdefault(STATE_KEY, {})
-        box.setdefault("_why", "★育てる処理を見に行った日★（2026-08-13・台帳#346）"
+        got = {}
+        if os.path.exists(STATE_PATH):
+            try:
+                with open(STATE_PATH, encoding="utf-8") as f:
+                    got = json.load(f)
+                if not isinstance(got, dict):
+                    got = {}
+            except Exception as e:        # noqa: BLE001
+                # ★読めないときは書かない★（消してしまわないため）
+                print(f"  見に行った日の控えを読めません（書きません）: {e}")
+                return False
+        got.setdefault("_why", "★育てる処理を見に行った日★（2026-08-13・台帳#346）"
                                "。導入日からの距離で間隔を変えるために使う。"
                                "消えても困らない（その機種を翌日また見るだけ）")
-        box.setdefault("last_checked", {})[slug] = today.isoformat()
-        tmp = STATE_PATH + ".tmp"
+        got.setdefault("last_checked", {})[slug] = today.isoformat()
+        tmp = f"{STATE_PATH}.{os.getpid()}.tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(got, f, ensure_ascii=False, indent=1)
         os.replace(tmp, STATE_PATH)
@@ -593,7 +618,7 @@ def plan_one(slug: str, gather=None, verify=None) -> dict:
       古い計画で相手の追加を消せた。読む前に取れば必ず食い違って止まる。
     """
     out = {"slug": slug, "problems": [], "machine": None, "detail": None,
-           "was": None, "now": None,
+           "was": None, "now": None, "checked": False,
            # ★読む入力は全部指紋に入れる★（2026-08-11・依頼148の指摘2）
            #   2AIの確定値を読むようにしたのに、そこだけ監視の外だった。
            #   計画のあと・書き込みの前に確定値を取り消しても、
@@ -671,6 +696,9 @@ def plan_one(slug: str, gather=None, verify=None) -> dict:
         out["problems"].append("材料を集められません: "
                                + " / ".join(got.get("problems") or [])[:200])
         return out
+    # ★ここまで来たら「実際に見に行けた」★（依頼181のP1）
+    #   本人性の確認や材料集めに失敗した機種を「確認済み」にしない。
+    out["checked"] = True
     # ★2AIで確定した値も材料に足す★（2026-08-11・台帳#316）
     #   足す場所が add_machine_run の中の1か所にしか無かったので、
     #   **確定値を載せた機種はここで「前に載っていた内容が再現できない」**
@@ -1144,6 +1172,23 @@ def selftest() -> int:
     def _rel(off):
         return (_T - _dtm.timedelta(days=off)).isoformat()
 
+    t("★★カレンダーに無い日付で落ちない★★（依頼181のP1）"
+      "／以前は候補を並べる処理ごと止まっていた",
+      all(is_new_machine(_b, _T) is False and interval_days(_b, _T) == 7
+          for _b in ("2026-02-30", "2026-13-01", "2026-11-31", "へんな値", "")))
+    t("★★壊れた控えは「未確認」として必ず見に行く★★（依頼181のP1）",
+      all(due("x", "2026-08-01", _T, {"x": _b}) is True
+          for _b in ("2026-02-30", "こわれた", "")))
+    t("★★見に行った日の控えは共有の state.json と別ファイル★★"
+      "（依頼181のP0・一時的に読めないだけで他タスクの履歴を消さない）",
+      "state.json" not in STATE_PATH and STATE_PATH.endswith("grow_check.json"))
+    t("★★控えが読めないときは書かない★★（消してしまわないため）",
+      (lambda: (lambda tmp: (
+          io.open(tmp, "w", encoding="utf-8").write("{こわれたJSON"),
+          globals().__setitem__("STATE_PATH", tmp),
+          mark_checked("x", _T) is False
+          and io.open(tmp, encoding="utf-8").read() == "{こわれたJSON",
+      )[-1])(__import__("tempfile").mktemp(suffix=".json")))())
     t("★★新台期間は導入日当日から30日目まで★★（2026-08-13・運営者の方針）"
       "／31日目からは更新タスクの通常ローテへ回す",
       [is_new_machine(_rel(o), _T) for o in (-1, 0, 30, 31)]
@@ -1298,9 +1343,14 @@ def main() -> int:
                   f"導入日から遠いので間隔を空けています）")
         return 0
     got = plan_one(a.slug)
-    # ★見に行った事実を控える★（結果が「変化なし」でも見たことに変わりない）
-    #   ここで控えないと、間隔を空けても毎日フル確認してしまう。
-    mark_checked(a.slug, _dt.date.today())
+    # ★材料まで見に行けた時だけ控える★（2026-08-13・依頼181のP1）
+    #   以前は本人性の確認に失敗しても、下見だけでも「確認済み」にしていた。
+    #   ★実際には見られていない機種が、次の予定日まで候補から外れる★
+    #   ＝その間に材料が増えても拾えない。
+    #   `--apply` の時だけ控えるのは行き過ぎ（下見でも外部は全部読んでいる）
+    #   なので、「材料集めまで成立したか」を条件にする。
+    if a.apply and got.get("checked"):
+        mark_checked(a.slug, _dt.date.today())
     if got["problems"]:
         print("できません:")
         for p in got["problems"]:

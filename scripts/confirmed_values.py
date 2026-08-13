@@ -314,8 +314,18 @@ def check_shape(field: str, value) -> list:
         if v and not pat.match(v):
             raise ConfirmedError(f"{field}: 「{k}」は{jp}の形で書きます（いま {v!r}）")
     # ★引用と照合するのは、実際に書いた項目だけ★
-    return [str(value[k]).strip() for k in shape["quoted"]
-            if str(value.get(k) or "").strip()]
+    # ★配列は要素ごとに照合する★（2026-08-13・依頼181のP1）
+    #   以前は str() で丸ごと1つの語にしていたので、引用に
+    #   「['上乗せ', '武将参戦']」というPythonの書き方が無い限り必ず落ちた
+    #   ＝gains を含む正しい材料を1件も記録できなかった。
+    out = []
+    for k in shape["quoted"]:
+        v = value.get(k)
+        if isinstance(v, (list, tuple)):
+            out += [str(x).strip() for x in v if str(x or "").strip()]
+        elif str(v or "").strip():
+            out.append(str(v).strip())
+    return out
 
 
 class ConfirmedError(Exception):
@@ -912,6 +922,14 @@ def selftest() -> int:
     t("　種類に合った形は通る",
       _passes("reset", {"kind": "CEILING_SHORTENED", "games": "600"})
       and _passes("reset", {"kind": "MORNING_STATE", "state": "高確スタート"}))
+
+    t("★★配列（gains）は要素ごとに引用と照合する★★（依頼181のP1）"
+      "／以前は丸ごと1語にしていたので、正しい材料も記録できなかった",
+      (lambda got: "武将参戦" in got and "上乗せ" in got
+       and not any("[" in x for x in got))(
+          check_shape("gameplay", {"when": "AT中", "trigger": "参戦チャンス",
+                                   "leads_to": "上乗せ",
+                                   "gains": ["上乗せ", "武将参戦"]})))
 
     ng = sum(1 for _, o in results if not o)
     print()
