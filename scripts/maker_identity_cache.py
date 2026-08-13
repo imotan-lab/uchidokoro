@@ -593,6 +593,11 @@ def main() -> int:
     ap.add_argument("--seen", help="名鑑のメーカー欄に書かれていた表記")
     ap.add_argument("--verdict", choices=VERDICTS)
     ap.add_argument("--why")
+    # ★自由文はファイルでも渡せる★（2026-08-14）
+    #   長い理由をコマンドに書くと、中の記号がシェルに実行される
+    #   （2026-08-08に実際に発生）。台帳・メールと同じ受け取り方にそろえる。
+    ap.add_argument("--why-file", dest="why_file", default="",
+                    help="理由を書いたファイル（--why と同時には使えません）")
     ap.add_argument("--by", help="判断した者（カンマ区切り・2つ以上）")
     ap.add_argument("--evidence", action="append", default=[],
                     help="URL|逐語引用|種類（種類: "
@@ -602,6 +607,13 @@ def main() -> int:
     a = ap.parse_args()
     if a.selftest:
         return selftest()
+    # ★ファイル渡しは台帳と同じ受け取り方を使う★（置き場の制限つき）
+    try:
+        import open_issues as _oi
+        a.why = _oi._read_text_arg(a.why or "", a.why_file, "why")
+    except SystemExit as e:
+        print(str(e))
+        return 2
     try:
         if a.list:
             got = load()
