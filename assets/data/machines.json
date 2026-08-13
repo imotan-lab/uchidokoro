@@ -11785,5 +11785,68 @@
     "p-world.co.jp"
    ]
   }
+ },
+ {
+  "slug": "pw_10510",
+  "name": "スマスロ タコスロ",
+  "seo": {
+   "title": "スマスロ タコスロ スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v1",
+  "page_decision": {
+   "schema_version": "page-decision/v1",
+   "indexable": false,
+   "confirmed_topics": [
+    "spec"
+   ],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "setting",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3",
+    "CATEGORIES_LT_2",
+    "NO_UNIQUE_GAMEPLAY"
+   ],
+   "claims": [
+    "games_per_50"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-08-13",
+   "input_digest": "sha256:2892361577b630ade0f3ffdcee989251159747fabc870fe4c433f862fbae80eb"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-09-07",
+  "identity": {
+   "manufacturer_id": "universal",
+   "official_product_url": "https://www.p-world.co.jp/machine/database/10510",
+   "announced_name": "スマスロ タコスロ",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "PWORLD_MACHINE_PAGE",
+   "identity_evidence_ref": "pworld:10510 型式=LB／タコスロBD 検定=6S0085 確認日=2026-08-13",
+   "market_release_date": "2026-09-07",
+   "observed_model_code": "LB/タコスロBD",
+   "_observed_model_code_sources": [
+    "p-world.co.jp"
+   ]
+  },
+  "checker": {
+   "coinRate": 36.6,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {}
+  }
  }
 ]
