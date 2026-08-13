@@ -656,6 +656,35 @@ def _maker_core_owners(core_text: str) -> set:
     return best if len(best) == 1 else set()
 
 
+def _relation_group(maker_id: str) -> str:
+    """★2AIへ回す価値のある関係★（2026-08-14・依頼189）
+
+    ★これは「同じ会社」という許可ではない★
+      公式は「グループ会社」と書いているだけで、
+      **全機種でメーカー名を入れ替えてよいとは書いていない**。
+      1回の判断ミスが以後すべての機種で関門を無効にするので、
+      ここは「即座に別物と決めつけず、機種ごとに2AIへ聞く」ための印にする。
+    """
+    if not maker_id:
+        return ""
+    try:
+        got = json.load(open(_w.CATALOGS, encoding="utf-8"))
+        conf = (got.get("catalogs") or {}).get(maker_id)
+        if isinstance(conf, dict):
+            # ★古い名前も読む★（maker_identity_group からの移行中）
+            return str(conf.get("maker_relation_group")
+                       or conf.get("maker_identity_group") or "")
+    except Exception:                     # noqa: BLE001
+        return ""
+    return ""
+
+
+def _related(expected: str, owners: set) -> bool:
+    """期待する社と、名鑑が指した社が「関係のありそうな」間柄か。"""
+    g = _relation_group(expected)
+    return bool(g) and any(_relation_group(o) == g for o in owners)
+
+
 def _identity_group(maker_id: str) -> str:
     """★メーカー欄の照合だけに使う「同じグループ」★（2026-08-13・依頼172）
 
@@ -729,12 +758,25 @@ def lookup(url: str, official_name: str, expected_maker: str = "") -> dict:
         if mk:
             owners = _maker_core_owners(
                 _ci.normalize_core(mk).replace("株式会社", ""))
-            if (owners and expected_maker not in owners
-                    and not _same_identity_group(expected_maker, owners)):
+            # ★★見えた事実を返す・使ってよいかは呼ぶ側が決める★★
+            #   （2026-08-14・依頼189。Codexの設計）
+            #   MATCH    … 名簿で一致（そのまま使える）
+            #   UNKNOWN  … 解決できない／関係のありそうな社（★2AIへ回す★）
+            #   MISMATCH … 明らかに別の社（使わない）
+            if expected_maker in owners:
+                _state = "MATCH"
+            elif not owners or _related(expected_maker, owners):
+                _state = "UNKNOWN"
+            else:
+                _state = "MISMATCH"
+            out["maker_check"] = {"state": _state, "seen": mk,
+                                  "expected": expected_maker,
+                                  "owners": sorted(owners)}
+            if _state == "MISMATCH":
                 out["reason"] = (f"DIRECTORY_MAKER_MISMATCH（名鑑のメーカー欄が"
                                  f"別の社を指しています: {mk[:30]}）")
                 return out
-            if not owners:
+            if _state == "UNKNOWN":
                 # ★解決できない表記の票は採用しない★（2026-08-02・Codex51回目）
                 #   44回目は「ログだけ残して育てる」段階案だったが、
                 #   同名別会社機を異なる2名鑑が載せると誤った型式を
