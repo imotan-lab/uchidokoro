@@ -297,6 +297,10 @@ def machine(slug: str) -> dict:
                       "（記事にも、新台の待ち行列にもありません）")
 
 
+class PendingUnreadable(SourceError):
+    """新台の待ち行列を読めない（★「無い」と混ぜない★）。"""
+
+
 def _pending_machine(slug: str) -> dict:
     """待ち行列の中の、まだ記事になっていない新台（無ければ空）。"""
     try:
@@ -305,8 +309,14 @@ def _pending_machine(slug: str) -> dict:
         items = (_pm.load() or {}).get("items") or {}
         # ★待ち行列はURLをかぎにした組★（並びで来ても読めるようにしておく）
         items = list(items.values()) if isinstance(items, dict) else list(items)
-    except Exception:                     # noqa: BLE001
-        return {}                         # ★待ち行列が無くても止めない★
+    except FileNotFoundError:
+        return {}                         # ★待ち行列がまだ無い＝素通り★
+    except Exception as e:                # noqa: BLE001
+        # ★「読めない」を「無い」にしない★（2026-08-14・依頼200のP2）
+        #   壊れた待ち行列を「存在しない」と扱うと、
+        #   生きている新台の控えまで置き去り（ORPHANED）と誤判定し、
+        #   **見張りが黙って止まる**。読めないことは読めないと言う。
+        raise PendingUnreadable(f"待ち行列を読めません: {str(e)[:80]}")
     for it in items:
         if not isinstance(it, dict):
             continue
@@ -964,6 +974,41 @@ def remember_check(slug: str, url: str, got: dict) -> dict:
     return _update_one(slug, url, _change)
 
 
+def backfill_origin(apply: bool = False) -> list:
+    """★印の無い古い控えに「どこから来たか」を補う★（2026-08-14・依頼200のP2）
+
+    origin は 2026-08-14 から付け始めたので、それ以前の控えには無い。
+    印が無いものは「記事のある機種」として扱われ、置き去りの判定が効かない。
+
+    ★判断のしかた★＝そのslugが machines.json にあれば machine、
+      無ければ pending（記事がまだ無い新台のために控えたもの）。
+    ★一度きり★＝補ったあとは record() が付ける。
+    """
+    ms = _sj.read_json(MACHINES, expect=(dict, list))
+    ms = ms["machines"] if isinstance(ms, dict) else ms
+    known = {m.get("slug") for m in ms}
+    out = []
+
+    def _do(data):
+        out.clear()
+        for slug, recs in (data.get("machines") or {}).items():
+            for rec in recs:
+                if rec.get("origin"):
+                    continue
+                got = "machine" if slug in known else "pending"
+                out.append({"slug": slug, "url": rec.get("url"),
+                            "origin": got})
+                rec["origin"] = got
+        return data if out else None
+
+    if apply:
+        # ★書くときは他の実行と同じ鍵を通す★（丸ごと書き戻すため）
+        _update(_do)
+    else:
+        _do(load())
+    return out
+
+
 def orphaned(slug: str, rec: dict) -> bool:
     """★もう誰も使わない控えか★（2026-08-14・台帳#350）
 
@@ -980,6 +1025,10 @@ def orphaned(slug: str, rec: dict) -> bool:
     try:
         machine(slug)
         return False                      # 記事になった or まだ待ち行列に居る
+    except PendingUnreadable:
+        # ★確かめられないなら置き去りにしない★（2026-08-14・依頼200のP2）
+        #   「無い」と「確かめられない」は別。巡回を続ける側に倒す。
+        return False
     except SourceError:
         return True
 
@@ -1188,6 +1237,12 @@ def selftest() -> int:
           orphaned(ms[0]["slug"], {"origin": "pending"}) is False)
         t("　印の無い（もともと記事があった）控えは、そのまま巡回する",
           orphaned("pw_kieta", {}) is False)
+        globals()["_pending_machine"] = (
+            lambda s: (_ for _ in ()).throw(PendingUnreadable("壊れています")))
+        t("★★待ち行列を読めないときは置き去りにしない★★（依頼200のP2）"
+          "／「無い」と「確かめられない」を混ぜると、生きている新台の控えまで"
+          "巡回から外れ、見張りが黙って止まる",
+          orphaned("pw_kieta", {"origin": "pending"}) is False)
     finally:
         globals()["_pending_machine"] = _pm_bak2
 
