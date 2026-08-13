@@ -1371,7 +1371,7 @@ def _vote_names_in(fn, src, seed=None) -> set:
     #   `def enough(keys): alias = keys; len(alias) >= 2` を追えるように。
     names = set(seed or ())
     own = _own_nodes(fn)
-    for _ in range(4):                     # ★伝わらなくなるまで繰り返す★
+    while True:                            # ★増えなくなるまで（固定点）★
         before = len(names)
         for node in own:
             it = getattr(node, "iter", None)
@@ -1388,8 +1388,7 @@ def _vote_names_in(fn, src, seed=None) -> set:
                     for t in tg:
                         names |= _names_of(t)
         if len(names) == before:
-            break
-    return names
+            return names
 
 
 def _names_of(target) -> set:
@@ -1428,50 +1427,95 @@ def _own_nodes(scope):
     return out
 
 
+def _defs_in(scope) -> dict:
+    """その入れ物**の直下**で定義されている関数（名前 → ノード）。"""
+    import ast
+    out = {}
+    for n in _own_nodes(scope):
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            out[n.name] = n
+    return out
+
+
+def _resolve(name: str, owner, chain: dict, tree):
+    """★呼び出し先は「いちばん近いところ」の定義を選ぶ★（依頼203）
+
+    同じ名前の関数が別々の入れ物にあると、名前で引いただけでは
+    無関係なほうにまで票の印が付く（誤って止める）。
+    呼び出し位置から外側へ順にたどり、最初に見つかった定義を使う。
+    """
+    here = owner
+    while here is not None:
+        got = _defs_in(here).get(name)
+        if got is not None:
+            return got
+        here = chain.get(id(here))
+    return _defs_in(tree).get(name)
+
+
+def _scope_chain(tree) -> dict:
+    """関数 → その関数を囲んでいる関数（外側が無ければ None）。"""
+    import ast
+
+    chain = {}
+
+    def _walk(scope):
+        for fn in _defs_in(scope).values():
+            chain[id(fn)] = None if scope is tree else scope
+            _walk(fn)
+
+    _walk(tree)
+    return chain
+
+
 def _vote_params(tree, src) -> dict:
     """★票を渡されている引数★（関数のノード → 引数名の集合）
 
     `def enough(keys): len(keys) >= 2` は、それだけ見ると票の話か分からない。
     同じファイルの呼び出し側が `enough(independent(votes))` としていれば票である。
 
-    ★何段でも伝える★（2026-08-14・依頼202のP2）
-      `g → relay → enough` のように挟まっても届くよう、増えなくなるまで繰り返す。
+    ★何段でも伝える★（2026-08-14・依頼202〜203）
+      `g → r1 → … → enough` と何段挟まっても届くよう、
+      **増えなくなるまで**繰り返す（回数で打ち切らない）。
+      名前も引数も有限で、集合は増える一方なので必ず止まる。
     ★キーワードで渡した場合も見る★（`enough(keys=keys)`）
-    ★関数は名前ではなくノードで持つ★（同名の局所関数が混ざらないように）
-      同じ名前の関数が複数あるときは**全部に印を付ける**（見逃さない側に倒す）。
+    ★同じ名前の関数は「いちばん近いほう」を選ぶ★（別の入れ物のものを巻き込まない）
     """
     import ast
-    by_name = {}
-    for n in ast.walk(tree):
-        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            by_name.setdefault(n.name, []).append(n)
-    funcs = [f for v in by_name.values() for f in v]
+    funcs = [n for n in ast.walk(tree)
+             if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    chain = _scope_chain(tree)
     out = {}                               # id(関数) -> 引数名の集合
-    for _ in range(6):                     # ★増えなくなるまで★
+    while True:                            # ★増えなくなるまで（固定点）★
         before = sum(len(v) for v in out.values())
         base = {id(f): _vote_names_in(f, src, out.get(id(f))) for f in funcs}
+        top = _vote_names_in(tree, src)
         for owner in funcs + [tree]:
-            here = base.get(id(owner)) or _vote_names_in(tree, src)
+            # ★関数の集合が空でも、モジュールの名前で埋めない★（依頼203）
+            #   埋めると、別の関数で見つけた名前がここへ流れ込み、
+            #   無関係な `len(keys) >= 2` を誤って止める。
+            here = top if owner is tree else base.get(id(owner), set())
             for node in _own_nodes(owner):
                 if not (isinstance(node, ast.Call)
                         and isinstance(node.func, ast.Name)):
                     continue
-                for fn in by_name.get(node.func.id, []):
-                    pos = [a.arg for a in
-                           list(getattr(fn.args, "posonlyargs", []) or [])
-                           + list(fn.args.args)]
-                    kwn = {a.arg for a in
-                           list(fn.args.args) + list(fn.args.kwonlyargs)}
-                    for i, a in enumerate(node.args):
-                        if i < len(pos) and _looks_vote(a, src, here):
-                            out.setdefault(id(fn), set()).add(pos[i])
-                    for k in node.keywords:
-                        if k.arg and k.arg in kwn \
-                                and _looks_vote(k.value, src, here):
-                            out.setdefault(id(fn), set()).add(k.arg)
+                fn = _resolve(node.func.id, owner, chain, tree)
+                if fn is None:
+                    continue
+                pos = [a.arg for a in
+                       list(getattr(fn.args, "posonlyargs", []) or [])
+                       + list(fn.args.args)]
+                kwn = {a.arg for a in
+                       list(fn.args.args) + list(fn.args.kwonlyargs)}
+                for i, a in enumerate(node.args):
+                    if i < len(pos) and _looks_vote(a, src, here):
+                        out.setdefault(id(fn), set()).add(pos[i])
+                for k in node.keywords:
+                    if k.arg and k.arg in kwn \
+                            and _looks_vote(k.value, src, here):
+                        out.setdefault(id(fn), set()).add(k.arg)
         if sum(len(v) for v in out.values()) == before:
-            break
-    return out
+            return out
 
 
 def _raw_vote_counts(src: str, fname: str) -> list:
@@ -1498,7 +1542,8 @@ def _raw_vote_counts(src: str, fname: str) -> list:
         return [f"{fname}: 読めません（{e}）"]
     # ★自己試験の中は見ない★（試験は件数の確認を普通にする）
     for _fn in list(ast.walk(tree)):
-        if isinstance(_fn, ast.FunctionDef) and "selftest" in _fn.name:
+        if isinstance(_fn, (ast.FunctionDef, ast.AsyncFunctionDef)) \
+                and "selftest" in _fn.name:
             _fn.body = []
     params = _vote_params(tree, src)
 
@@ -1556,7 +1601,8 @@ def _raw_vote_counts(src: str, fname: str) -> list:
         _scan(fn, _vote_names_in(fn, src, _p) | _p)
     # 関数の外（モジュール直下）も見る
     top = ast.Module(body=[b for b in tree.body
-                           if not isinstance(b, ast.FunctionDef)],
+                           if not isinstance(b, (ast.FunctionDef,
+                                                 ast.AsyncFunctionDef))],
                      type_ignores=[])
     _scan(top, _vote_names_in(top, src))
     return sorted(set(out))
@@ -1659,6 +1705,21 @@ _WATCHDOG_MUST_FIND = {
     "    return len(alias) >= 2\n"
     "def g(votes):\n"
     "    return enough(independent(votes))\n",
+    "7段挟んで渡した": "def enough(keys):\n"
+    "    return len(keys) >= 2\n"
+    "def r1(x):\n    return enough(x)\n"
+    "def r2(x):\n    return r1(x)\n"
+    "def r3(x):\n    return r2(x)\n"
+    "def r4(x):\n    return r3(x)\n"
+    "def r5(x):\n    return r4(x)\n"
+    "def r6(x):\n    return r5(x)\n"
+    "def g(votes):\n"
+    "    keys = independent(votes)\n"
+    "    return r6(keys)\n",
+    "別名を5回つないだ": "def f(votes):\n"
+    "    a1 = independent(votes)\n"
+    "    a2 = a1\n    a3 = a2\n    a4 = a3\n    a5 = a4\n"
+    "    return len(a5) >= 2\n",
     "入れ子の関数の外側": "def outer(votes):\n"
     "    keys = independent(votes)\n"
     "    def inner(rows):\n"
@@ -1676,6 +1737,21 @@ _WATCHDOG_MUST_PASS = {
     "    return keys\n"
     "def b(keys):\n"
     "    return len(keys) >= 2\n",
+    "別の関数から名前が流れ込まない": "def a2(votes):\n"
+    "    keys = independent(votes)\n"
+    "    return keys\n"
+    "def b2(keys):\n"
+    "    return len(keys) >= 2\n",
+    "同じ名前の入れ子の関数": "def outer(votes):\n"
+    "    def helper(keys):\n"
+    "        return independent(keys)\n"
+    "    return helper(independent(votes))\n"
+    "def other():\n"
+    "    def helper(text):\n"
+    "        return len(text) >= 2\n"
+    "    return helper\n",
+    "asyncの自己試験": "async def selftest_vote():\n"
+    "    return len(sources) == 2\n",
     # ★入れ子の関数の中の同じ名前は、外の票と混ぜない★（依頼201のP3）
     "入れ子の関数の中の同じ名前": "def outer(votes):\n"
     "    keys = independent(votes)\n"
