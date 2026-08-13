@@ -44,7 +44,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import build_new_article as _ba          # noqa: E402
 import confirmed_values as _cv           # noqa: E402
 import open_issues as _oi                # noqa: E402
-import page_decision as _pdz             # noqa: E402
+import page_decision as _pdz
+import page_probe as _pp             # noqa: E402
 import publish_new_machine as _pub       # noqa: E402
 import safe_json as _sj                  # noqa: E402
 
@@ -243,6 +244,45 @@ def due(slug: str, release: str, today, state: dict, conf=None) -> bool:
 #   （読めない＝空扱い → そこへ自分の分だけ足して全体を上書き）。
 #   この控えは消えても再確認が増えるだけなので、専用ファイルに分ける。
 STATE_PATH = r"C:/Users/imao_/Documents/uchidokoro/grow_check.json"
+
+
+PROBE_STATE = r"C:/Users/imao_/Documents/uchidokoro/grow_sources.json"
+
+
+def _probe_state() -> dict:
+    """機種ごとに「前回見た出典URL」を持つ（軽い様子見に使う）。"""
+    try:
+        with open(PROBE_STATE, encoding="utf-8") as f:
+            got = json.load(f)
+        return got if isinstance(got, dict) else {}
+    except Exception:                     # noqa: BLE001
+        return {}
+
+
+def remember_sources(slug: str, urls: list) -> bool:
+    """見た出典URLを控える。★読めないときは書かない★"""
+    if not urls:
+        return False
+    try:
+        got = {}
+        if os.path.exists(PROBE_STATE):
+            try:
+                with open(PROBE_STATE, encoding="utf-8") as f:
+                    got = json.load(f)
+                if not isinstance(got, dict):
+                    got = {}
+            except Exception as e:        # noqa: BLE001
+                print(f"  出典の控えを読めません（書きません）: {e}")
+                return False
+        got[slug] = {"urls": sorted(set(str(u) for u in urls))}
+        tmp = f"{PROBE_STATE}.{os.getpid()}.tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(got, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, PROBE_STATE)
+        return True
+    except Exception as e:                # noqa: BLE001
+        print(f"  出典を控えられません（続けます）: {e}")
+        return False
 
 
 def last_checked() -> dict:
@@ -609,7 +649,7 @@ def _detail_path(slug: str) -> str:
     return os.path.join(DETAILS, f"{slug}.json")
 
 
-def plan_one(slug: str, gather=None, verify=None) -> dict:
+def plan_one(slug: str, gather=None, verify=None, probe=None) -> dict:
     """育てられるか調べて、新しい機種データ・記事を作る（★書き込まない★）。
 
     ★指紋は「読む前」に取る★（2026-08-05・Codex103回目の指摘1）
@@ -618,7 +658,7 @@ def plan_one(slug: str, gather=None, verify=None) -> dict:
       古い計画で相手の追加を消せた。読む前に取れば必ず食い違って止まる。
     """
     out = {"slug": slug, "problems": [], "machine": None, "detail": None,
-           "was": None, "now": None, "checked": False,
+           "was": None, "now": None, "checked": False, "unchanged": False,
            # ★読む入力は全部指紋に入れる★（2026-08-11・依頼148の指摘2）
            #   2AIの確定値を読むようにしたのに、そこだけ監視の外だった。
            #   計画のあと・書き込みの前に確定値を取り消しても、
@@ -652,6 +692,23 @@ def plan_one(slug: str, gather=None, verify=None) -> dict:
     if out["problems"]:
         return out
 
+    # ★★軽い様子見★★（2026-08-13・台帳#346・運営者の採用）
+    #   前回見た出典が1つも変わっていなければ、その日は何もしない。
+    #   ★これは「今日は書かなくてよいか」の判定にだけ使う★
+    #   ＝「変わっていないから前の材料を使い回して書く」は絶対にしない
+    #     （出典が消えたり書き換わったりしても古い値を出し続けるため）。
+    #   ★確かめられなかったページは「変化なし」に数えない★（fail-closed）
+    #   ★新しい出典を探す工程は省かない★＝ここは既知のURLしか見ない。
+    if probe is not False:
+        _known = list((_probe_state().get(slug) or {}).get("urls") or [])
+        if _known:
+            _pr = (probe or _pp.check_all)(_known)
+            if _pr.get("skip"):
+                out["problems"].append(
+                    "出典が前回から変わっていません（今日は見送ります）")
+                out["unchanged"] = True
+                return out
+
     ident = cur.get("identity") or {}
     name = ident.get("announced_name") or cur.get("name")
     maker = ident.get("manufacturer_id") or ""
@@ -684,6 +741,10 @@ def plan_one(slug: str, gather=None, verify=None) -> dict:
     # ② 材料を集め直す
     gather = gather or _amr.gather
     got = gather(name, maker)
+    # ★次回の「軽い様子見」に使うため、見た出典URLを控える★
+    #   （2026-08-13・台帳#346）ここで初めて確定するので、
+    #   材料を集めたあとに控える。書けなくても処理は止めない。
+    out["source_urls"] = list(got.get("urls") or [])
     # ★材料が返っても「書いてはいけない理由」があれば止める★
     #   （2026-08-05・Codex102回目の指摘1。転載の疑いなどは
     #     material が作られても新台側では公開を止めている）
@@ -1172,6 +1233,31 @@ def selftest() -> int:
     def _rel(off):
         return (_T - _dtm.timedelta(days=off)).isoformat()
 
+    # ★★2026-08-13・台帳#346（軽い様子見）★★
+    def _probe_run(skip, known):
+        _bk = globals()["_probe_state"]
+        globals()["_probe_state"] = (
+            lambda: ({"pw_10523": {"urls": known}} if known else {}))
+        try:
+            return plan_one("pw_10523",
+                            probe=lambda u: {"skip": skip, "rows": []},
+                            gather=lambda *a, **k: {"urls": [], "problems": [],
+                                                    "material": None},
+                            verify=lambda *a, **k: {"problems": [],
+                                                    "release": "2026-09-07"})
+        finally:
+            globals()["_probe_state"] = _bk
+
+    t("★★出典が1つも変わっていなければ、その日は見送る★★（台帳#346）",
+      _probe_run(True, ["https://x.test/a"]).get("unchanged") is True)
+    t("★★1つでも変わった・確かめられないなら、いつもどおり調べる★★"
+      "（★確かめられなかったページを『変化なし』に数えない★）",
+      _probe_run(False, ["https://x.test/a"]).get("unchanged") is False)
+    t("　前回の出典を控えていなければ、様子見せずに調べる",
+      _probe_run(True, []).get("unchanged") is False)
+    t("★★見送るときは材料を作らない★★"
+      "（『変わっていないから前の材料を使い回す』をしないため）",
+      _probe_run(True, ["https://x.test/a"]).get("machine") is None)
     t("★★カレンダーに無い日付で落ちない★★（依頼181のP1）"
       "／以前は候補を並べる処理ごと止まっていた",
       all(is_new_machine(_b, _T) is False and interval_days(_b, _T) == 7
@@ -1343,6 +1429,9 @@ def main() -> int:
                   f"導入日から遠いので間隔を空けています）")
         return 0
     got = plan_one(a.slug)
+    # ★次回の様子見のために、見た出典を控える★（台帳#346）
+    if got.get("source_urls"):
+        remember_sources(a.slug, got["source_urls"])
     # ★控えるのは「書き込む実行」で「最後まで成立した」時だけ★
     #   （2026-08-13・依頼181のP1／依頼182のP1で条件を狭めた）
     #   ・下見で控えると、書いていないのに次の予定日まで候補から外れる
