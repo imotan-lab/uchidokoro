@@ -1343,15 +1343,16 @@ def main() -> int:
                   f"導入日から遠いので間隔を空けています）")
         return 0
     got = plan_one(a.slug)
-    # ★材料まで見に行けた時だけ控える★（2026-08-13・依頼181のP1）
-    #   以前は本人性の確認に失敗しても、下見だけでも「確認済み」にしていた。
-    #   ★実際には見られていない機種が、次の予定日まで候補から外れる★
-    #   ＝その間に材料が増えても拾えない。
-    #   `--apply` の時だけ控えるのは行き過ぎ（下見でも外部は全部読んでいる）
-    #   なので、「材料集めまで成立したか」を条件にする。
-    if a.apply and got.get("checked"):
-        mark_checked(a.slug, _dt.date.today())
+    # ★控えるのは「書き込む実行」で「最後まで成立した」時だけ★
+    #   （2026-08-13・依頼181のP1／依頼182のP1で条件を狭めた）
+    #   ・下見で控えると、書いていないのに次の予定日まで候補から外れる
+    #   ・材料が増えていた機種は、実際に書けたのを見てから控える
+    #     （書込み前の監査で止まった／指紋が食い違った／書いたあと戻した、
+    #      のどれでも「確認できた」ことにはならない）
+    #   ★変化なしで正常に終わった時は控えてよい★＝見に行けているため。
     if got["problems"]:
+        if a.apply and got.get("checked") and got.get("was") == got.get("now"):
+            mark_checked(a.slug, _dt.date.today())   # 変化なしで終わった
         print("できません:")
         for p in got["problems"]:
             print("  -", p)
@@ -1362,6 +1363,9 @@ def main() -> int:
         print("（下見です。書き込むには --apply）")
         return 0
     r = apply_one(got)
+    # ★書けたときだけ控える★（依頼182のP1）
+    if not r["problems"]:
+        mark_checked(a.slug, _dt.date.today())
     for p in r["problems"]:
         print("  -", p)
     if r["wrote"]:

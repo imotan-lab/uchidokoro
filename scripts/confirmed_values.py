@@ -158,6 +158,11 @@ VALUE_SHAPES = {
 }
 
 
+# ★配列で受け取る項目★（2026-08-13・依頼182のP1）
+#   ここに無い項目に配列を渡したら拒否する（記事が壊れるため）。
+LIST_FIELDS = ("gains",)
+
+
 def base_field(field: str) -> str:
     """「at#パーティータイム」→「at」。
 
@@ -318,12 +323,27 @@ def check_shape(field: str, value) -> list:
     #   以前は str() で丸ごと1つの語にしていたので、引用に
     #   「['上乗せ', '武将参戦']」というPythonの書き方が無い限り必ず落ちた
     #   ＝gains を含む正しい材料を1件も記録できなかった。
+    # ★配列を許すのは gains だけ★（2026-08-13・依頼182のP1）
+    #   全項目で配列を許すと、trigger に配列を渡しても引用照合を通り、
+    #   記事に「**['参戦チャンス', '別契機']**から」とPythonの書き方が出る
+    #   （実際に再現した）。項目ごとに受け取る形を決める。
     out = []
     for k in shape["quoted"]:
         v = value.get(k)
-        if isinstance(v, (list, tuple)):
-            out += [str(x).strip() for x in v if str(x or "").strip()]
-        elif str(v or "").strip():
+        if k in LIST_FIELDS:
+            if v is None or (isinstance(v, str) and not v.strip()):
+                continue
+            if not isinstance(v, (list, tuple)):
+                raise ConfirmedError(f"{field}: 「{k}」は文字列の配列で書きます")
+            for x in v:
+                if not isinstance(x, str) or not x.strip():
+                    raise ConfirmedError(
+                        f"{field}: 「{k}」の中身は空でない文字列だけです")
+                out.append(x.strip())
+            continue
+        if isinstance(v, (list, tuple, dict)):
+            raise ConfirmedError(f"{field}: 「{k}」は文字列で書きます")
+        if str(v or "").strip():
             out.append(str(v).strip())
     return out
 
@@ -930,6 +950,18 @@ def selftest() -> int:
           check_shape("gameplay", {"when": "AT中", "trigger": "参戦チャンス",
                                    "leads_to": "上乗せ",
                                    "gains": ["上乗せ", "武将参戦"]})))
+
+    t("★★配列を許すのは gains だけ★★（依頼182のP1）"
+      "／全項目で許すと記事にPythonの配列表記が出る（再現済み）",
+      all(not _passes("gameplay", {"trigger": ["あ", "い"], "leads_to": "上乗せ"})
+          for _ in (1,))
+      and not _passes("gameplay", {"trigger": "参戦チャンス",
+                                   "leads_to": "上乗せ", "gains": "文字列"})
+      and not _passes("gameplay", {"trigger": "参戦チャンス",
+                                   "leads_to": "上乗せ", "gains": ["ok", ""]})
+      and _passes("gameplay", {"trigger": "参戦チャンス",
+                               "leads_to": "上乗せ",
+                               "gains": ["上乗せ", "武将参戦"]}))
 
     ng = sum(1 for _, o in results if not o)
     print()
