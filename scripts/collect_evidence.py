@@ -222,7 +222,17 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
                     # ★ここも箱ごと落としてから★（2026-08-14・台帳#345）
                     #   2AIへ渡す抜粋にAIの要約が混ざると、2AIが
                     #   「出典に書いてある」と誤って判断できてしまう。
-                    body = _ua.clean_text(page, r["url"])
+                    # ★落とせなかったときも、その1件だけを落とす★
+                    #   （2026-08-14・依頼196のP1）ここは通常経路の
+                    #   _read() の外なので、例外がそのまま外へ出ると
+                    #   **他の名鑑まで含めて材料集めが丸ごと止まる**。
+                    #   危ないページを使わないことと、処理が止まることは別。
+                    try:
+                        body = _ua.clean_text(page, r["url"])
+                    except Exception as _e:      # noqa: BLE001
+                        got[dir_id] = {"url": r["url"], "publisher": pub,
+                                       "error": str(_e)[:120]}
+                        continue
                     got[dir_id] = {"url": r["url"], "publisher": pub,
                                    "state": "IDENTITY_UNVERIFIED",
                                    "error": "題ではこの機種のページか分かりません"

@@ -93,6 +93,16 @@ def _matches(node, rule: dict) -> bool:
     return False
 
 
+def _find(node, rules: list) -> bool:
+    """その木の中に、決めた箱があるか（★守る対象が居るかを数える★）。"""
+    for ch in node.get("children") or []:
+        if ch.get("tag") == "#text":
+            continue
+        if any(_matches(ch, r) for r in rules) or _find(ch, rules):
+            return True
+    return False
+
+
 def strip_tree(node, rules: list) -> int:
     """木から対象の箱を落とす。落とした数を返す。"""
     n = 0
@@ -144,7 +154,25 @@ def visible_text(html: str, url: str = "", conf: dict | None = None) -> str:
     except Exception as e:               # noqa: BLE001
         # ★読めないものを「危なくない」とは言えない★
         raise UserAreaError(f"HTMLを解析できません（投稿欄を落とせません）: {e}")
+    # ★落とす前に「守る対象の箱」が居るか確かめる★（2026-08-14・依頼196のP1）
+    #   以前は落とした数を数えていただけで、使っていなかった。
+    #   相手が id と 印（markers）を**同時に**変えると、
+    #   1つも落とせないまま正常終了し、AIの要約が本文へ戻る。
+    #   ★飾りを含む13個の合計ではなく、名指しした箱で見る★
+    need_b = [r for r in (ua.get("require_before") or []) if isinstance(r, dict)]
+    if need_b and not _find(p.root, need_b):
+        raise UserAreaError(
+            f"落とすはずの箱が見つかりません（{need_b}）"
+            "／★このページは出典に使いません★"
+            "（相手のHTMLの作りが変わった可能性があります）")
     dropped = strip_tree(p.root, rules)
+    # ★落とした後に「本文の箱」が残っているか確かめる★
+    #   落としすぎ（機種データごと消える）にも気づけるようにする。
+    need_a = [r for r in (ua.get("require_after") or []) if isinstance(r, dict)]
+    if need_a and not _find(p.root, need_a):
+        raise UserAreaError(
+            f"落としたあとに本文の箱が残っていません（{need_a}）"
+            "／★このページは出典に使いません★（落としすぎの疑い）")
     out = []
 
     def _walk(nd, hidden):
@@ -227,6 +255,31 @@ def selftest() -> int:
       "999G" in old and "1/324" in old)
     t("　（対照）同じ形でも、箱で落とせば消える",
       "999G" not in visible_text(_no_h2, conf=ua))
+
+    _req = {**ua, "require_before": [{"id": "bbs"}],
+            "require_after": [{"class": "spec"}]}
+    t("　（対照）必須の箱がそろっていれば通る",
+      "LB/タコスロBD" in visible_text(_SAMPLE, conf=_req))
+    _ok2 = False
+    try:
+        # ★相手が箱の名前も印も同時に変えた形★＝落とせないまま通ってしまう
+        visible_text(_SAMPLE.replace('id="bbs"', 'id="board2"')
+                     .replace("bbsAiMatome", "aiMatome2")
+                     .replace("bbsThreadBox", "threadBox2")
+                     .replace("AIがまとめた内容", "AIによる要約")
+                     .replace("AI投稿まとめ", "AI要約"),
+                     conf=_req)
+    except UserAreaError:
+        _ok2 = True
+    t("★★箱の名前と印が同時に変わっても気づく★★（2026-08-14・依頼196のP1）"
+      "／落とすはずの箱が見つからなければ、そのページは使わない", _ok2)
+    _ok3 = False
+    try:
+        visible_text(_SAMPLE, conf={**_req, "drop": [{"class": "spec"},
+                                                     {"id": "bbs"}]})
+    except UserAreaError:
+        _ok3 = True
+    t("　落としすぎ（本文の箱ごと消えた）にも気づく", _ok3)
 
     ok = False
     try:
