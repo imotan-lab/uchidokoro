@@ -27,6 +27,9 @@ import os
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import local_paths as _lp        # noqa: E402
+
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # この形のファイルが変わっていたら、記事データを触ったとみなす
@@ -45,11 +48,6 @@ def _changed_paths() -> list:
 
 def _warn_unreported() -> None:
     """Codexへ未報告のスクリプト変更があれば、pushの直前に知らせる。
-import os as _os_lp                 # noqa: E402
-import sys as _sys_lp               # noqa: E402
-_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
-import local_paths as _lp           # noqa: E402
-
     ★止めない★（当日中にpushする鉄則があるため）。目に入れるのが目的。
     """
     state = _lp.doc("last_codex_report.json")

@@ -61,6 +61,7 @@ sys.path.insert(0, str(BASE / "scripts"))
 from ci_safe import redact as _redact   # noqa: E402  ★CIでは原文を出さない★
 import safe_json as _sj                 # noqa: E402  ★壊れた入力は診断で止める★
 import page_decision as _pd            # noqa: E402  ★区分の唯一の判定箇所★
+import local_paths as _lp             # noqa: E402  ★置き場は1か所で決める★
 
 # ★ビルドの出力は監査の対象外★（2026-07-30）
 #   .preview-site/ は公開されない写し（全ページ noindex・robots全面Disallow）、
@@ -1075,11 +1076,6 @@ def check_31_codex_report(machines: list) -> list[str]:
       `Documents/uchidokoro/last_codex_report.json` に「最後に報告した時点の
       コミット」を記録する。それ以降に scripts/ を触ったコミットが
       たまっていたら NG にする。
-import os as _os_lp                 # noqa: E402
-import sys as _sys_lp               # noqa: E402
-_sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
-import local_paths as _lp           # noqa: E402
-
     ★報告したら記録する★（2026-08-09に領収書方式へ変更・依頼126）
       python scripts/codex_reported.py --receipt <領収書のパス>
       領収書は codex_review.sh がCodexを実際に呼んで成功したときにだけ発行する。
@@ -1382,6 +1378,21 @@ def check_38_home_path_leak(machines: list) -> list[str]:
         n = body.count(me)
         if n:
             ng.append(f"{rel}: ログイン名が{n}か所（local_paths を使ってください）")
+        # ★置き場を使うと書いたのに、読み込んでいないファイルを見つける★
+        #   （2026-08-14）docstringの中に読み込む行が入ってしまい、
+        #   **構文は通るのに実行時に落ちる**という壊れ方が実際に2件あった。
+        if rel.endswith(".py") and "_lp." in body                 and not rel.endswith("local_paths.py"):
+            import ast
+            try:
+                _tree = ast.parse(body)
+            except SyntaxError:
+                ng.append(f"{rel}: 構文が壊れています")
+                continue
+            if not any(isinstance(_n, ast.Import)
+                       and any(_a.name == "local_paths" for _a in _n.names)
+                       for _n in ast.walk(_tree)):
+                ng.append(f"{rel}: local_paths を使っているのに"
+                          f"読み込んでいません（説明文の中に入っていませんか）")
     return sorted(ng)
 
 
