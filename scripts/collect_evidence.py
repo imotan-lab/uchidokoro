@@ -36,8 +36,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import safe_json as _sj                  # noqa: E402
+import safe_json as _sj
 import source_lineage as _sl             # noqa: E402
+import user_area as _ua                  # noqa: E402
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -158,14 +159,12 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
         def _read(where, url, got, publisher=None, html=None):
             try:
                 page = _nw._get(url) if html is None else html
-                # ★切ってから潰す★（2026-08-13・依頼175で実証）
-                #   cut_user_area は「見出しだけの行」を行単位で探すのに、
-                #   先に _norm で改行を潰していたので**一度も効いていなかった**。
-                #   そのため読者の書き込み（「ボーナス天井510G...?軽すぎない?」）が
-                #   解析情報と同じ顔で抜粋に入っていた。
-                _visible = _nw._visible_text(page)
+                # ★読んでよい本文にするのは user_area だけ★（台帳#345）
+                #   ①名鑑に決まりごとがあれば**箱ごと落とす**（P-WORLDのAI欄）
+                #   ②無ければ行単位で切る（従来どおり・依頼175で順番を直した分）
+                #   落としきれないときは例外になり、そのページは出典に使わない。
                 got[where] = {"url": url, "publisher": publisher,
-                              "text": _cl._norm(_cl.cut_user_area(_visible))}
+                              "text": _ua.clean_text(page, url)}
             except Exception as e:        # noqa: BLE001
                 got[where] = {"url": url, "publisher": publisher,
                               "error": str(e)[:80]}
@@ -220,7 +219,10 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
                     # ★ここも切ってから潰す★（2026-08-13・依頼177のP1）
                     #   通常の経路だけ直していたので、2AIへ渡す抜粋には
                     #   まだ口コミが混ざり得た（改行を先に消すと見出しで切れない）。
-                    body = _cl._norm(_cl.cut_user_area(_nw._visible_text(page)))
+                    # ★ここも箱ごと落としてから★（2026-08-14・台帳#345）
+                    #   2AIへ渡す抜粋にAIの要約が混ざると、2AIが
+                    #   「出典に書いてある」と誤って判断できてしまう。
+                    body = _ua.clean_text(page, r["url"])
                     got[dir_id] = {"url": r["url"], "publisher": pub,
                                    "state": "IDENTITY_UNVERIFIED",
                                    "error": "題ではこの機種のページか分かりません"

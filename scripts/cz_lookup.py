@@ -273,9 +273,15 @@ def compare(pages: list) -> dict:
         # ★CZが「ある」と決めるのも独立票で数える★（2026-08-14・依頼193のP1）
         #   継続G数と期待度は守っていたのに、**CZの存在そのもの**は
         #   生の票数のままだった（一撃＋DMMだけでCZを採れた）。
-        if _sl._indep(e["sources"]) < 2:
+        _votes = _sl._indep(e["sources"])
+        if _votes < 2:
+            # ★「1つの出典」ではなく「独立した票が足りない」と言う★
+            #   （2026-08-14・依頼194のP2）出典が2件あっても共同制作の組なら
+            #   1票なので、「URLをもう1件」と読むと手当てを誤る。
             need_third.append({"name": sorted(e["names"])[0],
-                               "why": "1つの出典にしかありません",
+                               "why": f"独立した出典が2票に届きません"
+                                      f"（出典{len(e['sources'])}件・{_votes}票）",
+                               "independent_votes": _votes,
                                "candidates": [{"sources": sorted(e["sources"])}]})
             continue
         games, gs = _pick(e["games"])
@@ -425,6 +431,10 @@ def selftest() -> int:
     _rj = compare([_J1, _J2])
     t("★★一撃とDMMだけではCZを採らない★★（共同取材の企画が実在するため）",
       _rj["adopted"] == [] and bool(_rj["need_third"]))
+    t("　止まった理由が「出典が1件」ではなく「独立した票が足りない」と出る"
+      "／手当てのしかたを誤らせないため",
+      _rj["need_third"][0].get("independent_votes") == 1
+      and "出典2件・1票" in _rj["need_third"][0]["why"])
     t("　（対照）別の社を1つ足せば今までどおり採れる",
       len(compare([_J1, _J2,
                    mk("chonborista.com",

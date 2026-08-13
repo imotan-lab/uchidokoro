@@ -1343,6 +1343,97 @@ def check_37_skill_vs_code(machines: list) -> list[str]:
     return sorted(set(ng))
 
 
+# ★票の数え方を扱ってよいモジュール★（2026-08-14・依頼194のCodexの助言）
+#   ここに挙げたものの中では、独立票の数え方は source_lineage に一本化する。
+VOTE_MODULES = ("spec_lookup.py", "ceiling_lookup.py", "at_spec_lookup.py",
+                "cz_lookup.py", "model_code_lookup.py")
+# 票のかたまりを入れている入れ物によく使う名前
+_VOTE_WORDS = ("sources", "srcs", "lins", "lineage", "hosts", "votes")
+# ★短い変数名は完全一致で見る★（2026-08-14）
+#   直す前の spec_lookup は `len(s) >= 2` だった。"s" を部分一致に混ぜると
+#   何にでも当たるので、**そのままの名前**のときだけ数える。
+_VOTE_VARS = ("s", "srcs", "keys", "lins", "seen", "hosts", "pubs")
+
+
+def _raw_vote_counts(src: str, fname: str) -> list:
+    """★票を自前で数えている場所★を探す。
+
+    ★なぜ要るか★（2026-08-14）
+      共同制作の組をまとめる処理を入れたとき、**採用地点を1つ通し忘れた**。
+      さらに直した翌日、cz_lookup にもう2か所残っていた（Codexが発見）。
+      数える場所が散らばると、必ずまた繋ぎ忘れる。
+
+    見るのは2つだけ:
+      ・len(…票の入れ物…) を 2 と比べている
+      ・-len(…票の入れ物…) を並び替えの鍵にしている（多数決）
+    """
+    import ast
+    out = []
+    try:
+        tree = ast.parse(src)
+    except SyntaxError as e:
+        return [f"{fname}: 読めません（{e}）"]
+
+    def _is_len_of_votes(node) -> bool:
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "len" and node.args):
+            return False
+        arg = node.args[0]
+        if isinstance(arg, ast.Name) and arg.id in _VOTE_VARS:
+            return True
+        seg = ast.get_source_segment(src, arg) or ""
+        return any(w in seg for w in _VOTE_WORDS)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Compare) and _is_len_of_votes(node.left):
+            for op, cmp in zip(node.ops, node.comparators):
+                if isinstance(op, (ast.GtE, ast.Lt, ast.Gt, ast.LtE)) \
+                        and isinstance(cmp, ast.Constant) and cmp.value == 2:
+                    out.append(f"{fname}:{node.lineno} "
+                               + (ast.get_source_segment(src, node) or "")[:60])
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub) \
+                and isinstance(node.operand, ast.Call) \
+                and isinstance(node.operand.func, ast.Name) \
+                and node.operand.func.id == "len":
+            seg = ast.get_source_segment(src, node.operand) or ""
+            if any(w in seg for w in ("sources", "names", "srcs", "lins")):
+                out.append(f"{fname}:{node.lineno} 並び替えの鍵に生の件数: "
+                           + (ast.get_source_segment(src, node) or "")[:60])
+    return out
+
+
+def check_39_vote_counting(machines: list) -> list[str]:
+    """★独立した票の数え方が、正本を通っているか★（2026-08-14）
+
+    ★これは記事の正しさに直結する★＝「独立した2つの出典が一致したら採用」の
+      2 を各所で自前に数えると、同じ会社の別サイトや共同制作の組を
+      2票と数えてしまい、土台が崩れる。
+
+    ★この検査自体が効いているかは selftest で見る★
+      （直す前の2つの書き方を実際に見つけられることを確かめる）
+    """
+    ngs = []
+    for fn in VOTE_MODULES:
+        path = BASE / "scripts" / fn
+        if not path.is_file():
+            ngs.append(f"{fn}: ありません（VOTE_MODULES を直してください）")
+            continue
+        for hit in _raw_vote_counts(path.read_text(encoding="utf-8"), fn):
+            ngs.append(hit + "／★source_lineage.independent() を通してください★")
+    # ★見張りが壊れていないか、その場で確かめる★（直す前の姿を入れて試す）
+    _before = ("def f(e, per, votes):\n"
+               "    for nk, e in per.items():\n"
+               "        if len(e['sources']) < 2:\n"
+               "            continue\n"
+               "        d = sorted(e['names'], key=lambda n: (-len(e['names'][n]), n))\n"
+               "    agreed = [(fp, s) for fp, s in votes.items() if len(s) >= 2]\n"
+               "    return [c for c, hosts in codes.items() if len(hosts) >= 2]\n")
+    if len(_raw_vote_counts(_before, "（見張りの試験）")) < 4:
+        ngs.append("★票の数え方の見張りが働いていません★"
+                   "（直す前の書き方を見つけられません）")
+    return ngs
+
+
 def check_38_home_path_leak(machines: list) -> list[str]:
     """★公開されるファイルに、このパソコンのログイン名が出ていないか★
 
@@ -1435,6 +1526,7 @@ CHECKS = [
     ("36_同じ事実の重複行", check_36_duplicate_facts),
     ("37_手順書と実装の食い違い", check_37_skill_vs_code),
     ("38_ログイン名の露出", check_38_home_path_leak),
+    ("39_票の数え方", check_39_vote_counting),
 ]
 
 

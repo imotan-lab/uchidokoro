@@ -231,10 +231,19 @@ def directory_hosts() -> set:
     import directory_index as _di
     import safe_json as _sj
     import source_lineage as _sl
-    reg = _sl.load_registry()
-    pubs = {pid: p for pid, p in (reg.get("publishers") or {}).items()
-            if p.get("status") == "ACTIVE"}
-    cats = _sj.read_json(_di.CATALOGS, expect=dict).get("directories") or {}
+    # ★読めないときも CacheError にする★（2026-08-14・依頼194のP2）
+    #   ここで別の例外が出ると、verdict_for が拾えず**新台の処理ごと落ちる**。
+    #   守りたいのは「根拠を確かめられないなら使わない」であって、
+    #   その晩の処理を全部止めることではない。
+    try:
+        reg = _sl.load_registry()
+        pubs = {pid: p for pid, p in (reg.get("publishers") or {}).items()
+                if p.get("status") == "ACTIVE"}
+        cats = _sj.read_json(_di.CATALOGS, expect=dict).get("directories") or {}
+    except CacheError:
+        raise
+    except Exception as e:                 # noqa: BLE001
+        raise CacheError(f"名鑑の登録簿を読めません（根拠を確かめられません）: {e}")
     out = set()
     for c in cats.values():
         if not isinstance(c, dict) or c.get("status") != "ACTIVE":
@@ -526,11 +535,18 @@ def selftest() -> int:
       not _ok(evidence=[dict(ev[0], url="https://example.com/x"), ev[1]],
               slug="pw_dir"))
     # ★★2026-08-14・依頼193のP2★★
+    _KIT = "https://www.kitadenshi.co.jp/company/"
+    _pages[_KIT] = "<p>メーカー 三洋物産 と記載のあるページ</p>"
     t("★★名鑑でない登録済みサイトを「名鑑での観測」にできない★★"
       "／source-registry には解析サイトやメーカー公式も載っているので、"
-      "「登録済みの発行者」だけで見ると役割の分離が崩れる",
+      "「登録済みの発行者」だけで見ると役割の分離が崩れる"
+      "／★集合だけでなく、関所（_ok）まで通して確かめる★",
       "www.kitadenshi.co.jp" not in directory_hosts()
-      and "nana-press.com" in directory_hosts())
+      and "nana-press.com" in directory_hosts()
+      and not _ok(evidence=[dict(ev[0], url=_KIT), ev[1]], slug="pw_kit"))
+    t("　（対照）同じ本文でも、名鑑のページなら観測として通る",
+      _ok(evidence=[dict(ev[0], quote="メーカー 三洋物産"), ev[1]],
+          slug="pw_kit2"))
     t("★★判断者は決めた2つ以外を受け取らない★★"
       "／以前は架空のID2つでも「違う2者」だった",
       not _ok(by=["foo", "bar"], slug="pw_by")

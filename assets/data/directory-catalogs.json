@@ -254,7 +254,59 @@
    "surface_pattern": "^https://www\\.p-world\\.co\\.jp/(database/machine[a-z0-9_/\\.\\-]*|_machine/t_machine\\.cgi\\?mode=slot_type&key=[A-Za-z0-9_\\.]+&start=0)$",
    "_why_surface_pattern": "入口の登録漏れを毎回機械が数えるため（2026-08-06・scripts/directory_coverage.py）",
    "max_pages": 40,
-   "_why_max_pages": "一覧が数ページに分かれており、1頁目だけでは古い機種が索引に入らないため（2026-08-07・台帳#264）。上限は毎晩の取得回数とのつり合いで決める"
+   "_why_max_pages": "一覧が数ページに分かれており、1頁目だけでは古い機種が索引に入らないため（2026-08-07・台帳#264）。上限は毎晩の取得回数とのつり合いで決める",
+   "user_area": {
+    "hosts": [
+     "p-world.co.jp"
+    ],
+    "drop": [
+     {
+      "id": "bbs"
+     },
+     {
+      "id": "hyoka"
+     },
+     {
+      "id": "gNavi"
+     },
+     {
+      "id": "header"
+     },
+     {
+      "id": "footer"
+     },
+     {
+      "id": "copyright"
+     },
+     {
+      "id": "copyrightMemo"
+     },
+     {
+      "id": "gHallSearch"
+     },
+     {
+      "id": "city_list"
+     },
+     {
+      "id": "pref_dir"
+     },
+     {
+      "class": "bbsAiMatome"
+     },
+     {
+      "class": "bbsThreadBox"
+     },
+     {
+      "class": "bbsPostImages"
+     }
+    ],
+    "markers": [
+     "AIがまとめた内容",
+     "AI投稿まとめ",
+     "活発なトピック"
+    ],
+    "_why": "★AIが要約した欄と読者の投稿を出典に数えない★（2026-08-13・台帳#345）。2026-08-14に実際のページ（機種10510）を取ってきて構造を確かめた＝掲示板ぜんぶが <div id=\"bbs\"> の中にあり、その中に bbsAiMatome（AIのまとめ）と bbsThreadBox（投稿の一覧）が入っている。★行では切れない★＝断り書き「最近の投稿をもとにAIがまとめた内容を…」は要約本文より後ろにあるので、そこから切っても要約が残る。markers は落とし損ねの見張り＝落としたあとにこの語が本文に残っていたらそのページを出典に使わない（fail-closed）。★2026-08-14に実際のページ（機種10510）のid一覧を数えて決めた★＝bbs（掲示板とAIのまとめ）／hyoka（読者の人気投票）／gNavi・header・footer・copyright（サイトの飾り）／gHallSearch・city_list・pref_dir（設置店検索＝店名が大量に混ざる）。残るのは spec・how_to・analysis・peak・update＝サイト自身が書いた機種データ。"
+   }
   },
   "dmm-ptown": {
    "name": "DMMぱちタウン",
