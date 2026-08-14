@@ -32,6 +32,7 @@ sys.path.insert(0, os.path.join(BASE, "scripts"))
 
 import model_code_lookup as _mc       # noqa: E402
 import new_machine_watch as _w        # noqa: E402
+import user_area as _ua              # noqa: E402
 import html_tables as _ht            # noqa: E402
 import spec_lookup as _sl             # noqa: E402
 
@@ -194,6 +195,10 @@ def read_page(url: str, official_name: str) -> dict:
            "ok": False, "reason": "", "czs": []}
     try:
         html = _w._get(url)
+        # ★取ってきた直後に、投稿欄・AI欄を箱ごと落とす★（2026-08-14・台帳#345）
+        #   ここを通さないと、**表を生のHTMLから読む処理**に読者の書き込みが入る。
+        #   落としきれないときは例外＝そのページは使わない（fail-closed）。
+        html = _ua.clean_html(html, url)
     except Exception as e:
         out["reason"] = f"取得できません: {e}"
         return out

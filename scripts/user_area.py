@@ -46,6 +46,8 @@ import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from html.parser import HTMLParser as _HTMLParser  # noqa: E402
+
 import safe_json as _sj              # noqa: E402
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -192,6 +194,92 @@ def visible_text(html: str, url: str = "", conf: dict | None = None) -> str:
             f"／★このページは出典に使いません★"
             f"（落とせた箱: {dropped}件・相手のHTMLが変わった可能性があります）")
     return re.sub(r"\n{3,}", "\n\n", text)
+
+
+# ---------------------------------------------------------------- HTMLから落とす
+
+class _Cutter(_HTMLParser):
+    """★HTMLの文字列から、落とす箱の範囲を見つける★（2026-08-14）
+
+    ★なぜ要るか★
+      画面に出る文字（visible_text）だけを守っても足りない。
+      天井・スペック・CZ・型式を採る処理は**表（table）を生のHTMLから**読むので、
+      投稿欄の中の表がそのまま材料になりうる。
+      そこで**HTMLの段階で**箱ごと切り落とし、以後の処理すべてを守る。
+
+    ★正規表現で切らない★＝HTMLとして解析し、開始タグと対応する終了タグの
+      位置を数えて範囲を出す。
+    """
+
+    def __init__(self, raw: str, rules: list):
+        super().__init__(convert_charrefs=False)
+        self.raw = raw
+        self.rules = rules
+        self.cuts = []                     # [(開始, 終了)]
+        self._depth = 0                    # 落とす箱の中にいる深さ
+        self._start = None
+        self._tag = ""
+        # 行の先頭が文字列全体の何文字目かを先に数えておく
+        self._line_at = [0]
+        for line in raw.splitlines(keepends=True):
+            self._line_at.append(self._line_at[-1] + len(line))
+
+    def _pos(self) -> int:
+        ln, off = self.getpos()
+        return self._line_at[min(ln - 1, len(self._line_at) - 1)] + off
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("br", "img", "meta", "link", "input", "hr", "source"):
+            return
+        if self._depth:
+            if tag == self._tag:
+                self._depth += 1
+            return
+        node = {"attrs": dict(attrs)}
+        if any(_matches(node, r) for r in self.rules):
+            self._start = self._pos()
+            self._tag = tag
+            self._depth = 1
+
+    def handle_endtag(self, tag):
+        if not self._depth or tag != self._tag:
+            return
+        self._depth -= 1
+        if self._depth:
+            return
+        p = self.raw.find(">", self._pos())
+        end = (p + 1) if p >= 0 else len(self.raw)
+        self.cuts.append((self._start, end))
+        self._start, self._tag = None, ""
+
+
+def clean_html(html: str, url: str = "", conf: dict | None = None) -> str:
+    """★投稿欄・AI欄を、HTMLの段階で箱ごと落とす★
+
+    ★これを取ってくる直後に通す★＝以後の処理（表を読む・文を読む）が
+    まとめて守られる。決まりごとの無いホストはそのまま返す。
+    """
+    ua = conf if conf is not None else conf_for_url(url)
+    rules = [r for r in (ua.get("drop") or []) if isinstance(r, dict)]
+    if not rules or not html:
+        return html
+    # ★落とす前に守る対象が居るか／落とした後に本文が残るか★は
+    #   visible_text と同じ物差しで見る（そちらが例外を出す）。
+    visible_text(html, url, ua)
+    p = _Cutter(html, rules)
+    try:
+        p.feed(html)
+        p.close()
+    except Exception as e:                 # noqa: BLE001
+        raise UserAreaError(f"HTMLを解析できません（箱を落とせません）: {e}")
+    out, last = [], 0
+    for a, b in sorted(p.cuts):
+        if a < last:
+            continue                       # 入れ子は外側だけ切る
+        out.append(html[last:a])
+        last = b
+    out.append(html[last:])
+    return "".join(out)
 
 
 # ---------------------------------------------------------------- selftest

@@ -39,6 +39,7 @@ sys.path.insert(0, os.path.join(BASE, "scripts"))
 
 import claim_identity as _ci          # noqa: E402
 import new_machine_watch as _w        # noqa: E402
+import user_area as _ua              # noqa: E402
 
 # 型式名が書かれている形（★見出しの次の行に値がある形もある★）
 _LABELS = ("型式名", "型式")
@@ -723,6 +724,10 @@ def lookup(url: str, official_name: str, expected_maker: str = "") -> dict:
            "model_code": None, "reason": "", "identity_ok": False}
     try:
         html = _w._get(url)
+        # ★取ってきた直後に、投稿欄・AI欄を箱ごと落とす★（2026-08-14・台帳#345）
+        #   ここを通さないと、**表を生のHTMLから読む処理**に読者の書き込みが入る。
+        #   落としきれないときは例外＝そのページは使わない（fail-closed）。
+        html = _ua.clean_html(html, url)
     except Exception as e:
         out["reason"] = f"取得できません: {e}"
         return out
@@ -893,6 +898,10 @@ def _write_tmp_catalogs(cats: dict) -> None:
 
 def selftest() -> int:
     results = []
+    # ★試験の作り物HTMLには投稿欄の箱が無い★（2026-08-14・台帳#345）
+    #   ここで見たいのは型式名とメーカー欄の判定であって、箱落としではない。
+    #   箱落としそのものは user_area の試験と、実ページで確かめている。
+    _ua.clean_html = lambda html, url="", conf=None: html
 
     def t(name, cond):
         results.append((name, bool(cond)))
