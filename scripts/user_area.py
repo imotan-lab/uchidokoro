@@ -81,6 +81,24 @@ def conf_for_url(url: str) -> dict:
     return _conf(urllib.parse.urlsplit(str(url or "")).hostname or "")
 
 
+def is_machine_page(url: str, conf: dict) -> bool:
+    """そのURLは「機種ページ」か（2026-08-15）。
+
+    ★必須アンカーは機種ページにだけ求める★
+      一覧ページ・カレンダーには口コミ欄も掲示板も無いのが当たり前。
+      そこで「無い＝作りが変わった」と判定すると、
+      **新台を見つける入口（P-WORLDの導入カレンダー）まで丸ごと使えなくなる**。
+      実際に3つの名鑑すべてで一覧ページが止まることを確認した。
+
+    ★形を書いていなければ「機種ページ」として扱う★（今までどおり厳しく見る）
+    """
+    import re
+    pat = str(conf.get("page_pattern") or "")
+    if not pat or not url:
+        return True
+    return bool(re.match(pat, str(url)))
+
+
 def _matches(node, rule: dict) -> bool:
     """その要素が落とす対象か（id または class の**語**で見る）。"""
     a = node.get("attrs") or {}
@@ -163,7 +181,10 @@ def visible_text(html: str, url: str = "", conf: dict | None = None) -> str:
     #   ★飾りを含む13個の合計ではなく、名指しした箱で見る★
     # ★書いた箱は「全部」そろっていること★（2026-08-14・依頼198）
     #   まとめて渡すと「どれか1つあれば合格」になる。1つずつ見る。
-    need_b = [r for r in (ua.get("require_before") or []) if isinstance(r, dict)]
+    # ★必須アンカーは機種ページにだけ求める★（2026-08-15）
+    _mp = is_machine_page(url, ua)
+    need_b = ([r for r in (ua.get("require_before") or []) if isinstance(r, dict)]
+              if _mp else [])
     miss_b = [r for r in need_b if not _find(root, [r])]
     if miss_b:
         raise UserAreaError(
@@ -173,7 +194,8 @@ def visible_text(html: str, url: str = "", conf: dict | None = None) -> str:
     dropped = strip_tree(root, rules)
     # ★落とした後に「本文の箱」が残っているか確かめる★
     #   落としすぎ（機種データごと消える）にも気づけるようにする。
-    need_a = [r for r in (ua.get("require_after") or []) if isinstance(r, dict)]
+    need_a = ([r for r in (ua.get("require_after") or []) if isinstance(r, dict)]
+              if _mp else [])
     miss_a = [r for r in need_a if not _find(root, [r])]
     if miss_a:
         raise UserAreaError(
@@ -425,6 +447,26 @@ def selftest() -> int:
       and {"id": "commentform"} not in (_chon.get("require_before") or []))
     t("　なな徹はまだ登録しない（構造を確かめていないため）",
       _conf("nana-press.com") == {})
+    # ★★必須アンカーは機種ページにだけ求める（2026-08-15）★★
+    #   一覧ページ・カレンダーには口コミ欄も掲示板も無いのが当たり前。
+    #   そこで止めると**新台を見つける入口（導入カレンダー）まで使えなくなる**。
+    _pw = _conf("www.p-world.co.jp")
+    t("★★一覧やカレンダーを機種ページ扱いしない★★（2026-08-15）"
+      "／ここを間違えると、新台を見つける入口が丸ごと止まる",
+      is_machine_page("https://www.p-world.co.jp/machine/database/10510", _pw)
+      and not is_machine_page(
+          "https://www.p-world.co.jp/database/machine/introduce_calendar.cgi",
+          _pw))
+    t("　ちょんぼりすた・DMMも同じ（機種ページだけ厳しく見る）",
+      is_machine_page("https://chonborista.com/slot/orinpia-slot/264134/",
+                      _chon)
+      and not is_machine_page("https://chonborista.com/slot/", _chon)
+      and is_machine_page("https://p-town.dmm.com/machines/4709", _dmm)
+      and not is_machine_page("https://p-town.dmm.com/machines", _dmm))
+    t("　形を書いていない名鑑は、今までどおり厳しく見る",
+      is_machine_page("https://x.test/anything", {}))
+    t("　（対照）一覧ページでも、落とす箱と印は今までどおり効く",
+      bool(_pw.get("drop")) and bool(_pw.get("markers")))
     t("★★必須の箱は「どれか1つ」ではなく「全部」そろうこと★★（依頼198）",
       (lambda: [
           _ok for _ok in [False]
