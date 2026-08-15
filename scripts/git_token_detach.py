@@ -30,12 +30,18 @@ import re
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import local_paths as _lp           # noqa: E402
+
 TOKEN = re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}")
 # ★このPCで鍵を埋め込んでいるリポジトリ★（2026-08-14に実際に数えた）
+#   ★利用者フォルダの絶対パスを直書きしない★（監査38）＝公開リポジトリに
+#   運営者のログイン名が出るため。置き場は local_paths から組み立てる。
 REPOS = [
-    r"C:/Users/imao_/Desktop/個人用/うちどころ",
-    r"C:/Users/imao_/Desktop/個人用/わんさかんさい",
-    r"C:/Users/imao_/Desktop/imaden-corporation/今電 HP",
+    os.path.join(_lp.HOME, "Desktop", "個人用", "うちどころ"),
+    os.path.join(_lp.HOME, "Desktop", "個人用", "わんさかんさい"),
+    os.path.join(_lp.HOME, "Desktop", "imaden-corporation", "今電 HP"),
 ]
 
 
@@ -92,8 +98,8 @@ def main() -> int:
                        capture_output=True, text=True, encoding="utf-8")
     print("  credential.helper store:",
           "設定しました" if not r.returncode else "失敗 " + (r.stderr or "")[:80])
-    print("  置き場: C:/Users/imao_/.git-credentials"
-          "（★リポジトリの外なのでCodexからは読めません★）")
+    print("  置き場: " + os.path.join(_lp.HOME, ".git-credentials")
+          + "（★リポジトリの外なのでCodexからは読めません★）")
 
     print()
     print("■ URLから鍵を外します")
