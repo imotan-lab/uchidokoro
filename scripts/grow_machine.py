@@ -1630,6 +1630,66 @@ def selftest() -> int:
       and _n2["regulatory_model_code"] == "L見える子ちゃんSC"
       and _n2["_model_code_sources"] == _o["_model_code_sources"])
 
+    # ★★回数の記録は、どの終わり方でもちょうど1回★★（2026-08-16・依頼223）
+    #   包み（main）を消したり、finally を外したりする退行を捕まえる。
+    #   ★本物のログにも通信にも触らない★＝中身とログを偽物へ差し替える。
+    _keep_log = globals()["_log"]
+    _keep_inner = globals()["_main"]
+    _keep_argv = list(sys.argv)
+    _lines = []
+    try:
+        globals()["_log"] = lambda m: _lines.append(str(m))
+
+        def _count(argv, inner):
+            _lines.clear()
+            sys.argv = ["x"] + list(argv)
+            globals()["_main"] = inner
+            try:
+                main()
+            except Exception:                    # noqa: BLE001
+                pass
+            return len([x for x in _lines if "取りに行った回数" in x])
+
+        _ok_n = _count([], lambda: 0)
+        _ret_n = _count([], lambda: 3)
+
+        class _Boom(Exception):
+            pass
+
+        _raised = {"got": None}
+
+        def _boom():
+            raise _Boom("わざと")
+
+        _lines.clear()
+        sys.argv = ["x"]
+        globals()["_main"] = _boom
+        try:
+            main()
+        except _Boom as e:
+            _raised["got"] = str(e)
+        _exc_n = len([x for x in _lines if "取りに行った回数" in x])
+        _self_n = _count(["--selftest"], lambda: 0)
+        t("★★回数の記録は、どの終わり方でもちょうど1回★★"
+          "（正常・途中で返る・例外）",
+          _ok_n == 1 and _ret_n == 1 and _exc_n == 1)
+        t("★★例外はそのまま外へ出す★★（記録のために握りつぶさない）",
+          _raised["got"] == "わざと")
+        t("★★自己試験では本番の記録を書かない★★",
+          _self_n == 0)
+        # ★はじめに持ち分を0へ戻してから数える★（依頼223）
+        #   戻さないと、前の実行のぶんが混ざって実数が分からない。
+        import new_machine_watch as _nwt
+        _nwt.FETCH_BUDGET["used"] = 99
+        _count([], lambda: 0)
+        t("★★実行のはじめに、取りに行った回数を0へ戻す★★"
+          "（前の実行のぶんが混ざらない）",
+          _nwt.FETCH_BUDGET["used"] == 0)
+    finally:
+        globals()["_log"] = _keep_log
+        globals()["_main"] = _keep_inner
+        sys.argv = _keep_argv
+
     print(f"\n{ran[0]}/{ran[0]} 合格" if ok else "\n不合格あり")
     return 0 if ok else 1
 
