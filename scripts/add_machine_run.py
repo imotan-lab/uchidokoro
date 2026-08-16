@@ -363,6 +363,9 @@ def discover_calendar(persist: bool = True) -> dict:
 
 def gather(name: str, maker: str = "", slug: str = "") -> dict:
     """1機種ぶんの材料を集める。★止まった理由も返す★"""
+    # ★何のために取りに行くかを名乗る★（2026-08-16・依頼218）
+    import new_machine_watch as _nwp
+    _nwp.FETCH_PURPOSE["now"] = _nwp.FETCH_PURPOSE.get("now") or "claim_material"
     got = {"name": name, "urls": [], "model_code": None, "material": None,
            "problems": []}
     fr = _di.find(name)

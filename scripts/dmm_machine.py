@@ -243,7 +243,8 @@ def fetch(machine_id: str, get=None) -> dict:
     if not _ok:
         raise MachineError("通信の名簿が通しません: " + _why)
     try:
-        html = (get or _w._get)(u)
+        with _w.fetching("machine_identity"):
+            html = (get or _w._get)(u)
     except Exception as e:                 # noqa: BLE001
         raise MachineError(f"取得できません（{u}）: {str(e)[:90]}")
     # ★転送された先も確かめる★（2026-08-16・Codex依頼212の指摘7）

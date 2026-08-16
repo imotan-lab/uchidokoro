@@ -155,7 +155,8 @@ def fetch(year: int, month: int, get=None) -> list:
     if not _ok:
         raise CalendarError("通信の名簿が通しません: " + _why)
     try:
-        html = (get or _w._get)(u)
+        with _w.fetching("new_machine_discovery"):
+            html = (get or _w._get)(u)
     except Exception as e:                 # noqa: BLE001
         raise CalendarError(f"カレンダーを取得できません（{u}）: {str(e)[:90]}")
     return parse(html, year, month)

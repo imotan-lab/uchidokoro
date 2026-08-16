@@ -404,6 +404,9 @@ def lookup_hits(index: dict, core: str) -> list:
 
 def find(official_name: str, catalogs: dict | None = None) -> dict:
     """正式名称から、各名鑑の個別ページURLを探す。"""
+    # ★何のために取りに行くかを名乗る★（2026-08-16・依頼218）
+    import new_machine_watch as _nwp
+    _nwp.FETCH_PURPOSE["now"] = _nwp.FETCH_PURPOSE.get("now") or "claim_material"
     cats = catalogs or _sj.read_json(CATALOGS, expect=dict)["directories"]
     core = _ci.normalize_core(official_name)
     out = {"official_name": official_name, "core": core, "results": {}}

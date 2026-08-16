@@ -140,6 +140,28 @@ FETCH_PURPOSE = {"now": ""}
 _SELFTEST = {"on": False}
 
 
+import contextlib as _ctx
+
+
+@_ctx.contextmanager
+def fetching(purpose: str):
+    """★これから何のために取りに行くかを名乗る★（2026-08-16・依頼218）
+
+    使い方:
+        with new_machine_watch.fetching("machine_identity"):
+            html = new_machine_watch._get(url)
+
+    ★入れ子にできる★＝中の用途が優先され、抜けると元へ戻る。
+    ★例外で抜けても必ず戻す★
+    """
+    keep = FETCH_PURPOSE.get("now") or ""
+    FETCH_PURPOSE["now"] = str(purpose or "")
+    try:
+        yield
+    finally:
+        FETCH_PURPOSE["now"] = keep
+
+
 def check_before_fetch(url: str) -> None:
     """★取りに行く前に、必ずここを通す★（禁止先・規約の名簿）
 
@@ -153,8 +175,18 @@ def check_before_fetch(url: str) -> None:
     #     このモジュールの変数で、しかも自己試験の中でだけ立てる）。
     if _SELFTEST["on"]:
         return
+    # ★用途を名乗らなければ通さない★（2026-08-16・依頼218）
+    #   前は名乗らなければ「材料」とみなしていた。いちばん狭い扱いなので
+    #   間違って広く通ることは無かったが、**関所が用途を見る意味が薄れる**。
+    #   （新しい取得の道が増えたとき、名乗らないまま材料として通ってしまう）
+    purpose = FETCH_PURPOSE.get("now") or ""
+    if not purpose:
+        raise WatchError(
+            "何のために取りに行くのかを名乗っていません"
+            "／★`with new_machine_watch.fetching(\"用途\"):` で囲んでください★"
+            f"（{url[:60]}）")
     import automation_policy as _ap
-    ok, why = _ap.allows(url, FETCH_PURPOSE.get("now") or "claim_material")
+    ok, why = _ap.allows(url, purpose)
     if not ok:
         raise WatchError("通信の名簿が通しません: " + why)
 
@@ -2130,18 +2162,22 @@ def selftest() -> int:
                 except WatchError:
                     return True
 
-            def _blocked_any(u):
+            def _blocked_any(u, purpose="machine_identity"):
                 """禁止先は BlockedHostError で止まる（例外の型が違う）"""
-                try:
-                    check_before_fetch(u)
-                    return False
-                except Exception:            # noqa: BLE001
-                    return True
+                with fetching(purpose):   # ★用途は必ず名乗る★
+                    try:
+                        check_before_fetch(u)
+                        return False
+                    except Exception:        # noqa: BLE001
+                        return True
 
             t("★★禁止先への転送は、行く前に止まる★★（規約・台帳#376）",
               _blocked_any("https://www.p-world.co.jp/machine/database/1"))
             t("★★名簿に無い先への転送も、行く前に止まる★★",
               _blocked_any("https://shiranai.example/x"))
+            t("★★何のために取りに行くかを名乗らなければ通さない★★"
+              "（名乗らないと自動で材料扱いにしていた・依頼218）",
+              _blocked_any("https://p-town.dmm.com/machines/5049", ""))
             t("　（対照）名簿にある先への転送は通る",
               not _blocked_any("https://p-town.dmm.com/machines/5049"))
             t("★★許した道筋の外への転送は止まる★★（同じサイトでも）",
