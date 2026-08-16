@@ -452,11 +452,31 @@ def _gather(name: str, maker: str = "", slug: str = "") -> dict:
                     "--evidence \"<URL>|<逐語引用>|official_relationship\" "
                     "で控えてください（★この機種にだけ効きます★）"),
             })
+    # ★メーカー欄が「決まらない」だけでは材料から外さない★
+    #   （2026-08-17・運営者判断／台帳#381）
+    #   ★なぜ変えたか★＝この照合は、機種の正体をP-WORLDの「メーカー欄」で
+    #   決めていた頃の名残。いまの正体は **DMMの機種ID＋機種名の完全照合**
+    #   （シリーズ違いも弾く）で、メーカー欄はもう正体を決めていない。
+    #   それなのに「名鑑は平和・こちらはオリンピアエステート」という
+    #   **書き方の違いだけで材料を全部捨てて**いた（実際に3機種とも全滅）。
+    #   ★外すのは UNRESOLVED（解決できない）だけ★
+    #     MISMATCH（明らかに別の社）と、機種名の照合に落ちたものは今までどおり除く。
+    #   ★食い違いは消さない★＝理由は問題として残し、2AIへの問いも出し続ける。
     _bad_maker = {r["url"] for r in looks
                   if r["url"] not in _unknown_ok
                   and (str(r.get("reason") or "").startswith(
-                      ("DIRECTORY_MAKER_MISMATCH", "DIRECTORY_MAKER_UNRESOLVED"))
+                      "DIRECTORY_MAKER_MISMATCH")
                        or not r.get("identity_ok"))}
+    # 決まらなかったものは「使うが、決まっていないと記録する」
+    _unresolved = [r for r in looks
+                   if r["url"] not in _bad_maker
+                   and str(r.get("reason") or "").startswith(
+                       "DIRECTORY_MAKER_UNRESOLVED")]
+    for r in _unresolved:
+        _log(f"  （メーカー欄は決まらないが、機種名は合うので材料に使う）"
+             f"{r['url']} → {str(r.get('reason'))[:110]}")
+        got.setdefault("maker_unresolved", []).append(
+            {"url": r["url"], "reason": str(r.get("reason") or "")[:300]})
     if _bad_maker:
         _bad_msgs = []
         for r in looks:
