@@ -1001,6 +1001,38 @@ def _verify_dmm(name: str, official_url: str, maker: str,
 
 
 
+# ★自己試験の最中か★（架空のURLを使うので同定元の縛りだけ外す）
+#   ★本番で立つことはない★＝selftest() の中でだけ真にする。
+#   ★規約の関所は外れない★＝あちらは new_machine_watch 側で別に見る。
+_IDENTITY_SELFTEST = {"on": False}
+
+
+def identity_url_problem(official_url: str) -> str:
+    """★同定に使ってよいURLか★（だめなら理由・よければ空）
+
+    （2026-08-16・依頼217の指摘2）
+    ★規約の関所とは別の縛り★＝あちらは「通信してよいか」を決める。
+    ちょんぼりすた・なな徹は**材料としては通信を許している**ので、
+    そのURLを同定に渡すと関所は通してしまう。
+    「機種の正体を決めてよいのはDMMの機種ページだけ」は業務上の決まりなので、
+    ここで別に見る。★通信の前に断る★＝止まる前に取りに行かない。
+
+    ★呼ぶ場所は3つ★ verify_official / fill_missing / 手で渡す入口
+    """
+    u = str(official_url or "").strip()
+    if not u:
+        return "機種ページのURLがありません"
+    if _dmm_machine_id(u):
+        return ""
+    if _IDENTITY_SELFTEST["on"]:
+        return ""                      # ★試験は架空のURLを使う★
+    if _pw_machine_url(u):
+        return ("P-WORLDのURLは使えません"
+                "（利用規約でプログラムからの取得が禁止・台帳#376）")
+    return (f"同定に使えるのはDMMの機種ページだけです: {u[:70]}"
+            "／★出典の材料と、機種の正体を決める根拠は別です★")
+
+
 def verify_official(name: str, official_url: str,
                     maker: str = "", release: str = "",
                     release_is_cache: bool = False,
@@ -1029,6 +1061,10 @@ def verify_official(name: str, official_url: str,
     #   以降の検査は「メーカー公式のドメインか」を見るので、
     #   P-WORLDのURLは必ず弾かれる（実際に試して確認した）。
     #   機種ページ側は機種IDでの同定・種目・転送・派生機まで見ている。
+    # ★DMMの機種ページ以外は、通信する前に断る★（依頼217の指摘2）
+    _ng = identity_url_problem(official_url)
+    if _ng:
+        return {"problems": [f"{IDENTITY_FAILED} {_ng}"], "release": ""}
     # ★同定の正はDMM★（2026-08-16・台帳#376）
     if _dmm_machine_id(official_url):
         # ★最初に確かめた表示名があれば、そちらと完全一致させる★（台帳#335の項目5）
@@ -1744,6 +1780,11 @@ def fill_missing(work: dict) -> dict:
     #   メーカー公式用の読み方は「ページの題＝機種名」とみなす。
     #   P-WORLDの題には宣伝用の語が並ぶので、名前が変わったように見え、
     #   **使い回しの疑いで全件が落ちた**（2026-08-12の夜に実際に発生）。
+    # ★DMMの機種ページ以外は、通信する前に断る★（依頼217の指摘2）
+    _ng = identity_url_problem(work.get("identity_url", ""))
+    if _ng:
+        _log(f"  同定に使えないURLなので見直しません: {_ng[:110]}")
+        return work
     # ★同定の正はDMM★（2026-08-16・台帳#376）。P-WORLDへは通信できない。
     if _dmm_machine_id(work.get("identity_url", "")):
         return _fill_missing_dmm(work)
@@ -2187,6 +2228,7 @@ def run_one(name, official_url, maker, release, apply_it=False,
 # ---------------------------------------------------------------- selftest
 
 def selftest() -> int:
+    _IDENTITY_SELFTEST["on"] = True   # ★架空のURLを使うので同定元は見ない★
     import inspect
     results = []
     nl = chr(10)
@@ -3117,6 +3159,34 @@ def selftest() -> int:
 
 
 
+            # ★★同定に使えるのはDMMの機種ページだけ★★（依頼217の指摘2）
+            #   規約の関所は「通信してよいか」を決める。ちょんぼりすた・
+            #   なな徹は材料として通信を許しているので、そのURLを同定に
+            #   渡すと関所は通してしまう。★別の縛りとして見る★
+            _IDENTITY_SELFTEST["on"] = False   # ★ここだけ本番と同じ扱い★
+            try:
+                _calls = []
+                _keep_g = _nw._get
+                _nw._get = lambda u, timeout=20: (_calls.append(u), "")[1]
+                try:
+                    _r_ok = identity_url_problem(
+                        "https://p-town.dmm.com/machines/5049")
+                    _r_ch = identity_url_problem("https://chonborista.com/slot/x/")
+                    _r_na = identity_url_problem("https://nana-press.com/kaiseki/x/")
+                    _r_mk = identity_url_problem("https://m.example/products/slot/x/")
+                    _r_pw = identity_url_problem(
+                        "https://www.p-world.co.jp/machine/database/1")
+                    _v = verify_official("試験機", "https://chonborista.com/slot/x/", "m")
+                finally:
+                    _nw._get = _keep_g
+                t("★★同定に使えるのはDMMの機種ページだけ★★"
+                  "（材料として通信を許した先でも、機種の正体は決めさせない）",
+                  _r_ok == "" and _r_ch and _r_na and _r_mk and _r_pw)
+                t("★★止まる前に取りに行かない★★（通信の前に断る）",
+                  _calls == [] and bool(_blocking(_v["problems"])))
+                t("　P-WORLDのURLは理由も規約だと分かる", "規約" in _r_pw)
+            finally:
+                _IDENTITY_SELFTEST["on"] = True
             # ★コミット文に書く区分★（2026-08-05・Codex99回目）
             t("　コミット文の区分: 実データから決まった区分を返す",
               _machine_class(sorted(

@@ -140,6 +140,45 @@ FETCH_PURPOSE = {"now": ""}
 _SELFTEST = {"on": False}
 
 
+def check_before_fetch(url: str) -> None:
+    """★取りに行く前に、必ずここを通す★（禁止先・規約の名簿）
+
+    （2026-08-16・依頼217の指摘3）
+    転送のたび・ブラウザで開くときも呼ぶ。**通信の前に呼ぶ**のが要点で、
+    「取ってから最終URLを見る」では、もう取りに行ったあとになる。
+    """
+    _bh.check(url)
+    #   ★試験のときだけ外せる★＝試験は架空のURL（x.example 等）を使うので、
+    #     名簿に載せようがない。★本番では絶対に外れない★（環境変数ではなく
+    #     このモジュールの変数で、しかも自己試験の中でだけ立てる）。
+    if _SELFTEST["on"]:
+        return
+    import automation_policy as _ap
+    ok, why = _ap.allows(url, FETCH_PURPOSE.get("now") or "claim_material")
+    if not ok:
+        raise WatchError("通信の名簿が通しません: " + why)
+
+
+class _GuardedRedirect(urllib.request.HTTPRedirectHandler):
+    """★転送先も、行く前に確かめる★（依頼217の指摘3）
+
+    urlopen は転送を自動で追うので、そのままだと
+    **禁止先や名簿に無い先へ、止まる前に取りに行って**しまう。
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        check_before_fetch(newurl)       # ★行く前に断る★
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+# ★転送の見張りを、標準の urlopen に仕込む★（2026-08-16・依頼217の指摘3）
+#   ここで opener を作って渡す形にすると、**試験が urlopen を差し替えても
+#   効かなくなる**（実際にネットへ出てしまった）。
+#   install_opener なら urlopen 経由のままなので、試験の差し替えも生きる。
+urllib.request.install_opener(
+    urllib.request.build_opener(_GuardedRedirect()))
+
+
 def _get(url: str, timeout: int = 20) -> str:
     # ★規約で自動取得を禁じている先へは通信しない★（2026-08-16・台帳#376）
     #   巡回設定を1か所消し忘れても、ここで止まる（最後の砦）。
@@ -152,12 +191,7 @@ def _get(url: str, timeout: int = 20) -> str:
     #   ★試験のときだけ外せる★＝試験は架空のURL（x.example 等）を使うので、
     #     名簿に載せようがない。★本番では絶対に外れない★（環境変数ではなく
     #     このモジュールの変数で、しかも自己試験の中でだけ立てる）。
-    if not _SELFTEST["on"]:
-        import automation_policy as _ap
-        _ok, _why = _ap.allows(url,
-                               FETCH_PURPOSE.get("now") or "claim_material")
-        if not _ok:
-            raise WatchError("通信の名簿が通しません: " + _why)
+    check_before_fetch(url)
     hit = _CACHE.get(url)
     if hit is not None:
         FETCH_COUNT["cached"] += 1
@@ -1217,6 +1251,9 @@ def _save_seen(data: dict) -> None:
 
 
 def _get_rendered(url: str, link_prefix: str = "") -> tuple:
+    # ★ブラウザで開くときも関所を通す★（2026-08-16・依頼217の指摘3）
+    #   ここは page.goto() を直接呼ぶので、_get の関所を通らなかった。
+    check_before_fetch(url)
     """★ブラウザで描画してから読む★（機種リンクがJavaScriptで作られる社向け）
 
     ★「ブラウザが起動できた」だけでは成功と見なさない★（Codex指摘・2026-07-31）
@@ -1471,6 +1508,7 @@ def describe(url: str) -> dict:
 # ---------------------------------------------------------------- selftest
 
 def selftest() -> int:
+    import inspect
     _SELFTEST["on"] = True          # ★架空のURLを使うので名簿は見ない★
     results = []
 
@@ -2138,6 +2176,43 @@ def selftest() -> int:
       not _SLUGLIKE.match("../etc") and not _SLUGLIKE.match("A B")
       and _SLUGLIKE.match("lbinko"))
 
+    # ★★転送先も、行く前に関所を通す★★（2026-08-16・依頼217の指摘3）
+    #   urlopen は転送を自動で追うので、そのままだと
+    #   **禁止先や名簿に無い先へ、止まる前に取りに行って**いた。
+    _keep_st = _SELFTEST["on"]
+    _SELFTEST["on"] = False          # ★ここだけ本番と同じ扱いで見る★
+    try:
+        def _redirect_blocked(u):
+            try:
+                check_before_fetch(u)
+                return False
+            except WatchError:
+                return True
+
+        def _blocked_any(u):
+            """禁止先は BlockedHostError で止まる（例外の型が違う）"""
+            try:
+                check_before_fetch(u)
+                return False
+            except Exception:            # noqa: BLE001
+                return True
+
+        t("★★禁止先への転送は、行く前に止まる★★（規約・台帳#376）",
+          _blocked_any("https://www.p-world.co.jp/machine/database/1"))
+        t("★★名簿に無い先への転送も、行く前に止まる★★",
+          _blocked_any("https://shiranai.example/x"))
+        t("　（対照）名簿にある先への転送は通る",
+          not _blocked_any("https://p-town.dmm.com/machines/5049"))
+        t("★★許した道筋の外への転送は止まる★★（同じサイトでも）",
+          _blocked_any("https://p-town.dmm.com/shops/1"))
+        t("　転送の見張りが urlopen に繋がっている",
+          "install_opener" in inspect.getsource(sys.modules[__name__])
+          and "check_before_fetch" in inspect.getsource(_GuardedRedirect
+                                                       .redirect_request))
+        t("★★ブラウザで開くときも関所を通す★★（page.goto は _get を通らない）",
+          "check_before_fetch" in inspect.getsource(_get_rendered))
+    finally:
+        _SELFTEST["on"] = _keep_st
     ng = [n for n, ok in results if not ok]
     print(f"\n{len(results) - len(ng)}/{len(results)} 合格")
     if ng:
