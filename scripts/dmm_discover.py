@@ -187,13 +187,20 @@ def rebind_waiting(data: dict, rows: list, checked: dict | None = None) -> list:
             it["identity_url"] = got.get("url") or r["url"]
             it["identity_source"] = "dmm"
             it["release"] = r["release_date"]
+            # ★機種IDが取れたら READY にする★（2026-08-16・依頼215の指摘2）
+            #   READY は「公開してよい」ではなく
+            #   **「機種ページが分かっていて、記事づくりの列でもう一度
+            #   確かめられる状態」**と決める。
+            #   確かめられなかった分を AWAITING_DMM_ID に残すと、
+            #   ①記事づくりの対象外 ②60日打ち切りの対象外
+            #   ③「DMMに載っていない」と誤って知らせる、の3つが重なり、
+            #   **確かめられない機種が永久に溜まる**（新規の候補は
+            #   READY で入るので、扱いも食い違う）。
+            it["state"] = _pm.READY
             if not got.get("ok"):
-                # ★確かめられていないうちは READY にしない★
-                #   （記事づくりの列に入れない。進めるのは巡回だけ）
                 it["last_reason"] = ("DMMに載りましたが、まだ確かめられません: "
                                      + str(got.get("reason") or "")[:200])
                 continue
-            it["state"] = _pm.READY
             it["maker"] = got.get("maker_id") or it.get("maker") or ""
             # ★覚えた表示名は上書きしない★（違う値は食い違いとして残す）
             _remember(it, "dmm_maker", got.get("dmm_maker"))
@@ -307,11 +314,20 @@ def selftest() -> int:
     #   導入日・メーカーのどれかで落ちても、**一度 READY になった状態は
     #   戻らない**ので、確かめていない控えが記事づくりの列に入っていた。
     ngc = {"5079": {"ok": False, "reason": "機種ページを確かめられません"}}
-    t("★★機種ページを確かめられなければ結び直さない★★"
-      "（一度READYにすると戻せない）",
+    t("★★確かめられなかった機種を『結び直した』ことにしない★★"
+      "（メーカーや導入日を、確かめないまま控えへ書かない）",
       rebind_waiting(d, rows, ngc) == []
-      and d["items"][it["queue_id"]]["state"] == _pm.AWAITING_DMM_ID)
-    t("　判定そのものが無いときも結ばない", rebind_waiting(d, rows, {}) == [])
+      and not d["items"][it["queue_id"]].get("maker"))
+    t("★★ただし機種IDが取れたら記事づくりの列には入れる★★"
+      "（待ち状態のまま置くと、60日打ち切りにもDMM未掲載の知らせにも"
+      "当たらず永久に溜まる）",
+      d["items"][it["queue_id"]]["state"] == _pm.READY
+      and d["items"][it["queue_id"]]["source_machine_id"] == "5079")
+    # ★確かめられた晩は、別の控えで見る★
+    #   （上で READY になっているので、同じ控えはもう結び直しの対象外）
+    d = _pm._empty()
+    it = _pm.add(d, "スマスロ ラグナドール", "", "", "2026-11",
+                 reason="DMMのカレンダーに無い", state=_pm.AWAITING_DMM_ID)
     got = rebind_waiting(d, rows, okc)
     t("★★DMMに載ったら、待っていた控えをそのまま使う★★"
       "（新しい控えを二重に作らない）",
@@ -348,8 +364,7 @@ def selftest() -> int:
             identity_source="dmm")
     t("★★確認に失敗した晩に、控えが2件に増えない★★"
       "（機種IDを先に結んでおくから同じ控えが見つかる）",
-      len(d3["items"]) == 1
-      and d3["items"][w3["queue_id"]]["state"] == _pm.AWAITING_DMM_ID)
+      len(d3["items"]) == 1)
     # 翌晩、確かめられた
     rebind_waiting(d3, rows, okc)
     _pm.add(d3, "スマスロ ラグナドール", rows[0]["url"], "mizuho", "2026-11-02",
@@ -414,7 +429,7 @@ def main() -> int:
         print("  入れました %-34s %s  %s" % (q["name"][:32], q["release"],
                                         q["url"]))
     for h in got["held"]:
-        print("  待たせます %-34s %s" % (h["name"][:32], h["reason"][:90]))
+        print("  もう一度みます %-30s %s" % (h["name"][:30], h["reason"][:86]))
     for r in got["rebound"]:
         print("  結び直し   %-8s %s" % (r["queue_id"], r["name"][:40]))
     for p in got["problems"]:

@@ -41,6 +41,7 @@ import sys
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
 
+import automation_policy as _ap      # noqa: E402
 import blocked_hosts as _bh          # noqa: E402
 import html_tables as _ht            # noqa: E402
 import new_machine_watch as _w       # noqa: E402
@@ -234,7 +235,13 @@ def name_matches(heading: str, calendar_name: str, my_tags=None) -> tuple:
 
 def fetch(machine_id: str, get=None) -> dict:
     u = URL % machine_id
-    _bh.check(u)
+    _bh.check(u)                           # ★禁止先なら通信しない★
+    # ★規約を確かめた先か★（2026-08-16・依頼215の指摘3／台帳#376）
+    #   名簿に載っていない・用途違い・確認期限切れなら通さない。
+    #   ★JSONを置くだけでは関所にならない★＝実際の通信がここを通る。
+    _ok, _why = _ap.allows(u, "machine_identity")
+    if not _ok:
+        raise MachineError("通信の名簿が通しません: " + _why)
     try:
         html = (get or _w._get)(u)
     except Exception as e:                 # noqa: BLE001

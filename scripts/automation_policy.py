@@ -121,7 +121,12 @@ def allows(url: str, purpose: str = "", today: str = "",
     if not any(path.startswith(p) for p in conf["path_prefixes"]):
         return False, (f"{host} で通してよい道筋ではありません"
                        f"（{path[:40]} / 許可: {conf['path_prefixes']}）")
-    if purpose and purpose not in conf["purpose"]:
+    # ★用途は必ず名乗ること★（2026-08-16・依頼215の指摘3）
+    #   空を「照合しない」にすると、用途を書かずに呼べば検査を素通りできる。
+    if not purpose:
+        return False, (f"{host} へ通信する用途が指定されていません"
+                       "／★何のために取りに行くかを名乗ってください★")
+    if purpose not in conf["purpose"]:
         return False, (f"{host} をこの用途では通しません"
                        f"（{purpose} / 許可: {conf['purpose']}）")
     return True, f"{host} は確認済みです（規約 {conf['checked_at']} 確認）"
@@ -145,13 +150,19 @@ def disagreements(policy: dict | None = None) -> list:
             ng.append(f"{h}: 通さないと書いてあるのに、"
                       "黒い名簿（blocked_hosts）に入っていません"
                       "／★最後の砦が効きません★")
-    # 巡回先の設定に、名簿で通していない先が生きていないか
-    p = os.path.join(BASE, "assets", "data", "directory-catalogs.json")
-    if os.path.isfile(p):
+    # ★巡回先の設定に、名簿で通していない先が生きていないか★
+    #   ★名鑑もメーカー公式も両方みる★（2026-08-16・依頼215の指摘3）
+    #   片方だけだと「監査は0件なのに、名簿に無い先へ実通信できる」形が残る。
+    for fname, purpose in (("directory-catalogs.json", "claim_material"),
+                           ("maker-catalogs.json", "new_machine_discovery")):
+        p = os.path.join(BASE, "assets", "data", fname)
+        if not os.path.isfile(p):
+            continue
         try:
             cats = _sj.read_json(p, expect=dict)
         except Exception as e:            # noqa: BLE001
-            return ng + [f"巡回先の設定を読めません: {str(e)[:100]}"]
+            ng.append(f"{fname} を読めません: {str(e)[:100]}")
+            continue
         for cid, conf in (cats.get("catalogs") or {}).items():
             if not isinstance(conf, dict) or conf.get("status") == "OFF_TOS":
                 continue
@@ -159,11 +170,13 @@ def disagreements(policy: dict | None = None) -> list:
                 u = conf.get(key)
                 if not u:
                     continue
-                ok, why = allows(u, policy=d)
-                if not ok and "載っていません" in why:
-                    ng.append(f"巡回先 {cid} の {key} が通信の名簿に"
-                              f"ありません: {_host_of(u)}"
-                              "／★規約を確かめて載せてください★")
+                # ★理由を問わず、通せない先が生きていたら知らせる★
+                #   前は「載っていません」だけを見ていたので、
+                #   PENDING・期限切れ・道筋違いを見逃していた。
+                ok, why = allows(u, purpose, policy=d)
+                if not ok:
+                    ng.append(f"{fname} の {cid}（{key}）へは通せません: "
+                              f"{_host_of(u)} / {why[:110]}")
                 break
     return ng
 

@@ -404,11 +404,20 @@ def _carry_identity(old: dict, new: dict) -> list:
                   "／★別機種のページに変わった疑い★")
         return ng
     if got:
-        # 同じ値（書き方の違いは吸収）。今の欄をそのまま使い、
-        # ★昔の欄に値を残さない★＝矛盾した併記を作らない。
+        # ★同じ値（書き方の違いは吸収）★
+        #   ★昔と同じ欄・同じ書き方に寄せる★（2026-08-16・依頼215の指摘1）
+        #   ここで今の欄（観測値）に置き換えると、
+        #   そのあとの identity_same が「採用値が取れなくなりました」で
+        #   止める（実測で再現）。同じ値なのだから、昔の採用をそのまま保つ。
         for k, _s in _CARRY_CODE:
-            if k != new_key:
-                new.pop(k, None)
+            new.pop(k, None)
+            if k != ok_key:
+                new.pop(_s, None)
+        new[ok_key] = want
+        if old.get(want_src):
+            new[want_src] = old[want_src]
+        if old.get("identity_tier"):
+            new["identity_tier"] = old["identity_tier"]
         return ng
     # 材料が黙っている（出典が読めなくなった晩）＝昔の採用を維持する
     new[ok_key] = want
