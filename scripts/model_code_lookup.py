@@ -767,18 +767,35 @@ def lookup(url: str, official_name: str, expected_maker: str = "") -> dict:
             #   MATCH    … 名簿で一致（そのまま使える）
             #   UNKNOWN  … 解決できない／関係のありそうな社（★2AIへ回す★）
             #   MISMATCH … 明らかに別の社（使わない）
+            # ★「関係のある社」と「まったく分からない社」を分ける★
+            #   （2026-08-17・依頼225のCodex指摘2）
+            #   前はどちらも UNKNOWN にまとめていたので、
+            #   「名簿に無いだけの任意の別会社」まで同じ扱いになっていた。
+            #   ★同名で別メーカーの機種は実在する★
+            #   （パチスロ犬夜叉＝2016年ロデオ／2022年クロスアルファ）ので、
+            #   まったく分からない社は通してはいけない。
             if expected_maker in owners:
                 _state = "MATCH"
-            elif not owners or _related(expected_maker, owners):
-                _state = "UNKNOWN"
+            elif owners and _related(expected_maker, owners):
+                _state = "RELATED"      # 関係のありそうな社（2AIへ回す）
+            elif not owners:
+                _state = "UNKNOWN"      # どの社か分からない（使わない）
             else:
-                _state = "MISMATCH"
+                _state = "MISMATCH"     # 明らかに別の社（使わない）
             out["maker_check"] = {"state": _state, "seen": mk,
                                   "expected": expected_maker,
                                   "owners": sorted(owners)}
             if _state == "MISMATCH":
                 out["reason"] = (f"DIRECTORY_MAKER_MISMATCH（名鑑のメーカー欄が"
                                  f"別の社を指しています: {mk[:30]}）")
+                return out
+            if _state == "RELATED":
+                # ★関係のありそうな社★＝2AIへ回す。材料には使ってよい
+                #   （正体は機種名の完全照合とDMMの機種IDで担保している）が、
+                #   ★型式名の票には入れない★（同定の芯なので厳しいまま）。
+                out["reason"] = (f"DIRECTORY_MAKER_RELATED（名鑑のメーカー欄は"
+                                 f"関係のある社です: {mk[:30]}。同一かは2AIで"
+                                 f"決めてください）")
                 return out
             if _state == "UNKNOWN":
                 # ★解決できない表記の票は採用しない★（2026-08-02・Codex51回目）
@@ -1242,10 +1259,12 @@ def selftest() -> int:
       "（2026-08-14・依頼190のP2）／互換で読み続けると、名簿に旧名を足すだけで"
       "「全機種で自動的に通す」が静かに戻る",
       _old_field_stops())
-    t("★★メーカー欄の判定が三つに分かれる★★（依頼189）"
-      "／MATCH＝名簿で一致／UNKNOWN＝2AIへ／MISMATCH＝使わない",
+    t("★★メーカー欄の判定が四つに分かれる★★（2026-08-17・依頼225）"
+      "／MATCH＝名簿で一致／RELATED＝関係のある社（2AIへ・材料には使う）"
+      "／UNKNOWN＝どの社か分からない（使わない）／MISMATCH＝別の社（使わない）"
+      "★同名で別メーカーの機種は実在する★のでUNKNOWNは通さない",
       (lambda f: [f("サンスリー"), f("三洋物産"), f("サミー"), f("架空社")]
-       == ["MATCH", "UNKNOWN", "MISMATCH", "UNKNOWN"])(
+       == ["MATCH", "RELATED", "MISMATCH", "UNKNOWN"])(
           lambda seen: (lambda: (
               setattr(_w, "_get_bak189", _w._get),
               setattr(_w, "_get", lambda u, timeout=20:

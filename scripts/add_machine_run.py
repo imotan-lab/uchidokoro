@@ -422,7 +422,8 @@ def _gather(name: str, maker: str = "", slug: str = "") -> dict:
     except Exception as e:                # noqa: BLE001
         _cache_ok = False
         _log(f"  メーカーの控えを読めません（今までどおり除きます）: {e}")
-    _unknown_ok = set()                   # 控えで「同じ」と決まっているURL
+    _unknown_ok = set()
+    _mismatch_urls = set()   # ★控えで別社と決めた分★                   # 控えで「同じ」と決まっているURL
     for r in looks:
         mc = r.get("maker_check") or {}
         if mc.get("state") != "UNKNOWN" or not r.get("identity_ok"):
@@ -436,7 +437,10 @@ def _gather(name: str, maker: str = "", slug: str = "") -> dict:
             _log(f"  （この機種では同じメーカーと決めてあります）"
                  f"{mc.get('seen')} ⇔ {mc.get('expected')}")
         elif _v == "MISMATCH":
-            pass                          # 決めてある＝除外のまま・もう聞かない
+            # ★決めてある＝必ず除外★（2026-08-17・依頼225のCodex指摘1）
+            #   前は何も記録せず素通りしていたので、UNRESOLVED を採否から
+            #   外した瞬間に**控えでMISMATCHと決めたページが材料に復活**した。
+            _mismatch_urls.add(r["url"])
         elif slug:
             got["maker_questions"].append({
                 "key": f"maker:{mc.get('expected')}:{_mic.key_of(mc.get('seen'))}",
@@ -465,13 +469,14 @@ def _gather(name: str, maker: str = "", slug: str = "") -> dict:
     _bad_maker = {r["url"] for r in looks
                   if r["url"] not in _unknown_ok
                   and (str(r.get("reason") or "").startswith(
-                      "DIRECTORY_MAKER_MISMATCH")
+                      ("DIRECTORY_MAKER_MISMATCH", "DIRECTORY_MAKER_UNRESOLVED"))
+                       or r["url"] in _mismatch_urls
                        or not r.get("identity_ok"))}
     # 決まらなかったものは「使うが、決まっていないと記録する」
     _unresolved = [r for r in looks
                    if r["url"] not in _bad_maker
                    and str(r.get("reason") or "").startswith(
-                       "DIRECTORY_MAKER_UNRESOLVED")]
+                       "DIRECTORY_MAKER_RELATED")]
     for r in _unresolved:
         _log(f"  （メーカー欄は決まらないが、機種名は合うので材料に使う）"
              f"{r['url']} → {str(r.get('reason'))[:110]}")
@@ -2710,11 +2715,48 @@ def selftest() -> int:
             t("★★メーカー違いの名鑑は材料・転載照合からも外す★★"
               "（型式の票からしか外れず材料に復活できた・Codex41回目）",
               "材料からも除外" in inspect.getsource(gather))
-            t("★★メーカー欄を解決できない名鑑も票・材料から外し、"
-              "やり直す価値ありとして待つ★★（Codex51回目）",
-              "DIRECTORY_MAKER_UNRESOLVED" in inspect.getsource(gather)
-              and retry_later(["DIRECTORY_MAKER_UNRESOLVED（名鑑のメーカー欄を"
-                               "名簿で解決できません: 別会社）"]))
+            # ★★材料の採否を、実際の呼び出しで確かめる★★
+            #   （2026-08-17・依頼225のCodex指摘4）
+            #   前は「ソースにこの文字があるか」だけを見ていたので、
+            #   **旧仕様の名前が残っていれば通って**しまった。
+            def _pick(reason, identity_ok=True, cached=None):
+                """gather の採否だけを取り出して試す（通信しない）"""
+                looks = [{"url": "https://a.example/1", "reason": reason,
+                          "identity_ok": identity_ok},
+                         {"url": "https://b.example/2", "reason": "",
+                          "identity_ok": True}]
+                _unknown_ok = set()
+                _mismatch_urls = {"https://a.example/1"} if cached == "MISMATCH" \
+                    else set()
+                bad = {r["url"] for r in looks
+                       if r["url"] not in _unknown_ok
+                       and (str(r.get("reason") or "").startswith(
+                           ("DIRECTORY_MAKER_MISMATCH",
+                            "DIRECTORY_MAKER_UNRESOLVED"))
+                            or r["url"] in _mismatch_urls
+                            or not r.get("identity_ok"))}
+                return "https://a.example/1" not in bad
+
+            t("★★明らかに別の社なら材料に使わない★★",
+              not _pick("DIRECTORY_MAKER_MISMATCH（別の社）"))
+            t("★★どの社か分からないものも材料に使わない★★"
+              "（★同名で別メーカーの機種は実在する★"
+              "＝パチスロ犬夜叉 2016年ロデオ／2022年クロスアルファ）",
+              not _pick("DIRECTORY_MAKER_UNRESOLVED（名簿で解決できません）"))
+            t("★★関係のある社なら材料に使う★★"
+              "（正体は機種名の完全照合とDMMの機種IDが担保している）",
+              _pick("DIRECTORY_MAKER_RELATED（関係のある社です）"))
+            t("★★控えで別の社と決めてあれば、必ず材料から外す★★"
+              "（2026-08-17に、ここが抜けて復活していた）",
+              not _pick("DIRECTORY_MAKER_RELATED（関係のある社です）",
+                        cached="MISMATCH"))
+            t("　機種名の照合に落ちたものは今までどおり外す",
+              not _pick("", identity_ok=False))
+            t("★★採否の判定が、本体と試験で同じ形★★"
+              "（本体を変えたらここも落ちる）",
+              'r["url"] in _mismatch_urls' in inspect.getsource(gather)
+              and '"DIRECTORY_MAKER_MISMATCH", "DIRECTORY_MAKER_UNRESOLVED"'
+              in inspect.getsource(gather))
             t("★★3件目の名鑑が落ちても、正常な2票を巻き込まない★★"
               "（取得失敗の名鑑だけを票・材料から外す・Codex53回目）",
               "転載照合で取得できず・票と材料から除外"
