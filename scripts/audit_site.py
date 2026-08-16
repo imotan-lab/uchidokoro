@@ -562,12 +562,29 @@ def check_16_writing_style(machines: list) -> list[str]:
     return ngs
 
 
-def _strip_identity(text: str) -> str:
-    """★同定の控え（identity）だけを外した本文★（2026-08-16）
+# ★見ないでよいのは「機械が同定に使う跡」だけ★（2026-08-16・依頼213の指摘）
+#   ★identity 全部を外すのは行き過ぎ★＝そこに読者向けの文字列
+#   （announced_name・型式名）を混ぜれば検査を逃げられてしまう。
+#   ★machines.json は読者が取得できる★（Pagesはリポジトリ全体を配信する。
+#   `/assets/data/*.json` は200＝publish-pages.yml に明記）。
+#   描画されないだけで「読者から見えない」わけではないので、
+#   外すのは**URL・証跡・出典ドメイン・結び付け方**に限る。
+_EVIDENCE_KEYS = {
+    "official_product_url", "identity_binding", "identity_evidence_ref",
+    "identity_evidence", "_model_code_sources", "_observed_model_code_sources",
+    "_legacy_evidence_ref", "_legacy_official_product_url",
+}
 
-    ★文字列を切り貼りしない★＝JSONとして読み直し、identity を落としてから
+
+def _strip_identity(text: str) -> str:
+    """★同定に使う跡（URL・証跡・出典ドメイン）だけを外した本文★
+
+    ★文字列を切り貼りしない★＝JSONとして読み直し、決めた項目だけ落としてから
     もう一度文字にする。正規表現で括弧を数えると、入れ子や記号で崩れる。
     読めなければ**そのまま全部見る**（見落とすより厳しいほうに倒す）。
+
+    ★`announced_name` と型式名は外さない★＝読者が読める文字列なので、
+    ここに他サイト名が入れば今までどおりNGにする。
     """
     import json as _json
     try:
@@ -578,8 +595,11 @@ def _strip_identity(text: str) -> str:
     if not isinstance(ms, list):
         return text
     for m in ms:
-        if isinstance(m, dict):
-            m.pop("identity", None)
+        ident = m.get("identity") if isinstance(m, dict) else None
+        if isinstance(ident, dict):
+            for k in list(ident):
+                if k in _EVIDENCE_KEYS:
+                    ident.pop(k, None)
     return _json.dumps(d, ensure_ascii=False)
 
 
@@ -1728,10 +1748,21 @@ def check_40_slug_binding(machines: list) -> list[str]:
       **増やせない対応表**（scripts/slug_binding.py）に閉じ込めてあるので、
       表が壊れていないか・全機種がその二択に収まっているかを毎回見る。
     """
+    import publish_new_machine as _pn
     import slug_binding as _sb
     ngs = list(_sb.audit_against_site())
     for m in machines:
         ident = m.get("identity") or {}
+        # ★identity に知らない項目が混ざっていないか★（2026-08-16・依頼213）
+        #   公開の関所（_IDENTITY_KEYS）は新台の経路しか通らないので、
+        #   **既にある機種の identity は誰も見ていなかった**。
+        #   ここで全機種を毎回見る＝移行や手直しで増えた項目に気づける。
+        extra = sorted(set(ident) - _pn._IDENTITY_KEYS)
+        if extra:
+            ngs.append(f"{m.get('slug')}: identity に許可されていない項目が"
+                       f"あります: {extra[:5]}"
+                       "／★publish_new_machine._IDENTITY_KEYS に足すか、"
+                       "書かないようにしてください★")
         url = str(ident.get("official_product_url") or "").strip()
         if not url:
             continue                     # identity未登録の機種は他の項目が見る

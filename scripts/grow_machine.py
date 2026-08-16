@@ -350,6 +350,51 @@ def targets(rows: list, today=None, state: dict = None,
     return out
 
 
+# ★育てても持ち越す控え★（2026-08-16・依頼213の指摘2／台帳#376）
+#   ここに無いものは、育てるたびに identity を作り直す過程で落ちる。
+_CARRY_PLAIN = ("_legacy_evidence_ref", "_legacy_official_product_url")
+#   ★型式名は「今の材料と食い違わないこと」を確かめてから持ち越す★
+_CARRY_CODE = (("regulatory_model_code", "_model_code_sources"),
+               ("observed_model_code", "_observed_model_code_sources"))
+
+
+def _carry_identity(old: dict, new: dict) -> list:
+    """★確かめ済みの控えを、育てたあとの identity へ持ち越す★
+
+    ★なぜ要るのか（2026-08-16・台帳#376）★
+      規約でP-WORLDと一撃を出典から外したので、**当時2つの出典で
+      確かめた型式名が、いま集め直すと1つ以下しか出てこない**
+      （実データ: 5機種がこの形）。作り直しに任せると
+      「型式名が取れなくなりました」で育てられなくなる。
+
+    ★当時の確認は本物★（Codexも検定番号について同じ結論）なので値は残す。
+    ★ただし黙って上書きしない★＝
+      **いま集めた材料が別の値を出したら止める**（URLの使い回し・別機種の
+      ページに変わった、という本当に危ない形はここで捕まえる）。
+      材料が黙っているとき（出典が読めなくなった）だけ持ち越す。
+    """
+    ng = []
+    if not isinstance(new, dict) or not isinstance(old, dict):
+        return ng
+    for k in _CARRY_PLAIN:
+        if old.get(k):
+            new[k] = old[k]
+    for code_key, src_key in _CARRY_CODE:
+        want = old.get(code_key)
+        if not want:
+            continue
+        got = new.get(code_key)
+        if got and got != want:
+            ng.append(f"型式名が変わっています（{want!r} → {got!r}）"
+                      "／★別機種のページに変わった疑い★")
+            continue
+        if not got:
+            new[code_key] = want
+            if old.get(src_key):
+                new[src_key] = old[src_key]
+    return ng
+
+
 def identity_same(old: dict, new: dict) -> list:
     """本人性が変わっていないか（★変わっていたら育てない★）。"""
     ng = []
@@ -360,7 +405,15 @@ def identity_same(old: dict, new: dict) -> list:
                   # ★登場年月も不変★（2026-08-05・Codex102回目の指摘3。
                   #   仕様に書いていたのに比べていなかった＝公式の誤抽出や
                   #   一時的な表記変更で「打てる時期」を書き換えられた）
-                  ("market_release_date", "登場年月")):
+                  ("market_release_date", "登場年月"),
+                  # ★1出典しか無い型式の観測値も不変★（2026-08-16・依頼213）
+                  #   記事には出ないが同定の手がかり。育てるたびに
+                  #   落ちると、確かめ直せない機種の唯一の材料が消える。
+                  ("observed_model_code", "観測した型式名"),
+                  # ★移行前に確かめた記録も不変★（台帳#376）
+                  #   ★検定番号はDMMには無い★ので、これが唯一の記録。
+                  ("_legacy_evidence_ref", "移行前に確かめた記録"),
+                  ("_legacy_official_product_url", "移行前の機種ページURL")):
         a, b = (old or {}).get(k), (new or {}).get(k)
         if a and b and a != b:
             ng.append(f"{jp}が変わっています（{a!r} → {b!r}）")
@@ -827,6 +880,10 @@ def plan_one(slug: str, gather=None, verify=None, probe=None) -> dict:
         slug, vo.get("identity_name") or name, maker, url, release, mat,
         identity_binding=ident.get("identity_binding", ""),
         identity_evidence_ref=ident.get("identity_evidence_ref", ""))
+    # ★育てても消えてはいけない控え★（2026-08-16・依頼213の指摘2）
+    #   identity は毎回作り直すので、明示的に引き継がないと落ちる。
+    #   ★検定番号はDMMには無い★＝移行前の記録が唯一の記録になる。
+    out["problems"] += _carry_identity(ident, machine.get("identity"))
     detail = _ba.build_detail(slug, vo.get("identity_name") or name, release, mat)
     # ③ 本人性が変わっていないか
     out["problems"] += identity_same(ident, machine.get("identity") or {})
@@ -1490,6 +1547,64 @@ def selftest() -> int:
     #   ★対照実験★＝昔の姿（断り書きを最初から数えない）では素通りする
     t("　（対照）断り書きを数えないと、消すだけの更新が通る",
       not text_kept(_ceil_box(["**天井**：800G"]), _sneak))
+
+    # ★★移行した機種を育てても、確かめ済みの控えが消えないこと★★
+    #   （2026-08-16・依頼213の指摘2／台帳#376）
+    #   規約でP-WORLDと一撃を出典から外したので、当時2つの出典で確かめた
+    #   型式名が、いま集め直すと1つ以下しか出てこない機種がある。
+    #   ★実データ（移行した7機種）で確かめる★＝作り話の値では意味がない。
+    import safe_json as _sj2
+    _raw = _sj2.read_json(_ba.MACHINES, expect=(dict, list))
+    _ms = _raw["machines"] if isinstance(_raw, dict) else _raw
+    _moved = [m for m in _ms
+              if "p-town" in str((m.get("identity") or {}).get(
+                  "official_product_url") or "")]
+
+    def _regrow(m):
+        """育てたときと同じ道で identity を作り直す（材料は空＝出典が読めない晩）"""
+        i = m.get("identity") or {}
+        made = _ba.build_machine(
+            m["slug"], m["name"], i.get("manufacturer_id", ""),
+            i["official_product_url"], i.get("market_release_date", ""), {},
+            identity_binding=i.get("identity_binding", ""),
+            identity_evidence_ref=i.get("identity_evidence_ref", ""))
+        ni = made.get("identity") or {}
+        return i, ni, _carry_identity(i, ni)
+
+    _lost = []
+    for _m in _moved:
+        _old, _new, _ng = _regrow(_m)
+        if _ng or identity_same(_old, _new):
+            _lost.append(_m["slug"])
+    t("★★移行した機種を育てても、確かめ済みの控えが消えない★★"
+      f"（実データ{len(_moved)}機種・型式名／移行前の記録／観測値）",
+      len(_moved) >= 7 and not _lost)
+    # ★対照実験★＝持ち越さない昔の姿では、実際に落ちることを見せる
+    _would = []
+    for _m in _moved:
+        _i = _m.get("identity") or {}
+        _made = _ba.build_machine(
+            _m["slug"], _m["name"], _i.get("manufacturer_id", ""),
+            _i["official_product_url"], _i.get("market_release_date", ""), {},
+            identity_binding=_i.get("identity_binding", ""),
+            identity_evidence_ref=_i.get("identity_evidence_ref", ""))
+        if identity_same(_i, _made.get("identity") or {}):
+            _would.append(_m["slug"])
+    t("　（対照）持ち越さない昔の姿では、実際に型式名が落ちて育てられない",
+      len(_would) >= 5)
+    # ★★別の型式名が出てきたら、持ち越しではなく止める★★
+    _o = {"regulatory_model_code": "L見える子ちゃんSC",
+          "_model_code_sources": ["p-town.dmm.com", "p-world.co.jp"]}
+    _n = {"regulatory_model_code": "L別機種XX"}
+    t("★★いま集めた材料が別の型式名なら止める★★"
+      "（URLが別機種に使い回された形をここで捕まえる）",
+      bool(_carry_identity(dict(_o), _n))
+      and _n["regulatory_model_code"] == "L別機種XX")
+    _n2 = {}
+    t("　材料が黙っているときだけ持ち越す（出典が読めなくなった晩）",
+      not _carry_identity(dict(_o), _n2)
+      and _n2["regulatory_model_code"] == "L見える子ちゃんSC"
+      and _n2["_model_code_sources"] == _o["_model_code_sources"])
 
     print(f"\n{ran[0]}/{ran[0]} 合格" if ok else "\n不合格あり")
     return 0 if ok else 1

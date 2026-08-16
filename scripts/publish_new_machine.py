@@ -582,7 +582,11 @@ _IDENTITY_KEYS = {"manufacturer_id", "official_product_url", "announced_name",
                   #   （依頼131 P0-2で実際に指摘された）
                   "observed_model_code", "_observed_model_code_sources",
                   # ★どの公式ページで本人性を確かめたか★（2026-08-04・台帳#209）
-                  "identity_binding", "identity_evidence_ref"}
+                  "identity_binding", "identity_evidence_ref",
+                  # ★移行前に確かめた記録★（2026-08-16・台帳#376）
+                  #   ★検定番号はDMMには無い★ので、ここが唯一の記録になる。
+                  #   ★ここに足さないと、育てた瞬間に消える★
+                  "_legacy_evidence_ref", "_legacy_official_product_url"}
 _RELEASE_OK = re.compile(r"^(20[0-9]{2}-[0-9]{2}(-[0-9]{2})?)?$")
 
 

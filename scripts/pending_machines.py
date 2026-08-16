@@ -234,11 +234,55 @@ def give_up(data: dict, today: str = "") -> list:
     today = today or _today()
     out = []
     for qid, it in list(data["items"].items()):
+        if it.get("state") != READY:
+            # ★DMMに載るのを待っている控えは打ち切らない★
+            #   （2026-08-16・依頼213の指摘4）
+            #   8月に見つけた11月導入の機種は、載るのを待っているだけで
+            #   60日たつ。ここで区別しないと、**待たせるために作った控えを
+            #   待ち終わる前に捨てる**（聖闘士星矢がまさにその形）。
+            #   期限を過ぎた分は calendar_missing_due() が台帳へ知らせ、
+            #   ★控えは残したまま★載るのを待ち続ける。
+            continue
         if waited_days(it, today) < GIVE_UP_DAYS:
             continue
         if int(it.get("runs", 0)) < 1:
             continue                      # ★まだ一度も試していない★
         out.append(data["items"].pop(qid))
+    return out
+
+
+def month_end(ym: str) -> str:
+    """その月の最終日（★導入日が月までしか分からないときの期限★）。"""
+    y, m = int(str(ym)[:4]), int(str(ym)[5:7])
+    y2, m2 = (y + 1, 1) if m == 12 else (y, m + 1)
+    return (date(y2, m2, 1) - __import__("datetime").timedelta(days=1)) \
+        .isoformat()
+
+
+def calendar_missing_due(data: dict, today: str = "") -> list:
+    """★DMMに載らないまま導入日を過ぎた控え★（台帳へ一度だけ知らせる）
+
+    （2026-08-16・依頼213／Codexの助言）
+    ★控えは消さない★＝知らせたあとも載るのを待ち続ける
+    （あとから載れば自動の経路へ戻せる）。
+    日まで分かっていればその日、月までなら月末を期限とする。
+    """
+    today = today or _today()
+    out = []
+    for it in data["items"].values():
+        if it.get("state") != AWAITING_DMM_ID:
+            continue
+        if it.get("calendar_missing_reported_at"):
+            continue                      # ★知らせるのは一度だけ★
+        rel = str(it.get("release") or "")
+        if len(rel) == 7:
+            limit = month_end(rel)
+        elif len(rel) == 10:
+            limit = rel
+        else:
+            continue                      # 期限を決められない＝知らせない
+        if today >= limit:
+            out.append(it)
     return out
 
 
@@ -255,11 +299,20 @@ def mark_tried(data: dict, queue_id: str) -> None:
     it["runs"] = int(it.get("runs", 0)) + 1
 
 
-def due(data: dict) -> list:
-    """今日やり直すもの。★古いものから★（先に見つけたものを先に）"""
-    return sorted(data["items"].values(),
-                  key=lambda x: (x.get("first_seen") or "",
-                                 x.get("queue_id") or ""))
+def due(data: dict, all_states: bool = False) -> list:
+    """今日やり直すもの。★古いものから★（先に見つけたものを先に）
+
+    ★機種ページが分かっているものだけ返す★（2026-08-16・依頼213の指摘4）
+      DMMに載るのを待っている控えは、記事づくりの列に入れない。
+      入れると毎晩「試した」ことになり、**待っているだけなのに
+      60日で打ち切られる**（聖闘士星矢がその形）。
+      待っている分を進めるのは巡回（dmm_discover）だけ。
+      一覧を見たいときは all_states=True。
+    """
+    xs = [x for x in data["items"].values()
+          if all_states or x.get("state") == READY]
+    return sorted(xs, key=lambda x: (x.get("first_seen") or "",
+                                     x.get("queue_id") or ""))
 
 
 # ----------------------------------------------------------------- migrate
@@ -412,6 +465,30 @@ def selftest() -> int:
     _same = find_by_core(_w, "Ｌ聖闘士星矢　黄金十二宮")
     t("★機種名の芯が同じ控えを見つけられる★（全半角・記号の差を吸収）",
       len(_same) == 1 and _same[0]["queue_id"] == _it["queue_id"])
+    # ★★待っている控えを、待ち終わる前に捨てない★★（2026-08-16・依頼213の指摘4）
+    #   8月に見つけた11月導入の機種は、載るのを待っているだけで60日たつ。
+    #   区別しないと「待たせるために作った控え」を待ち終わる前に捨てる。
+    _w["items"][_it["queue_id"]]["first_seen"] = "2026-01-01"
+    mark_tried(_w, _it["queue_id"])
+    t("★★DMMに載るのを待っている控えは60日で打ち切らない★★"
+      "（待たせるために作った控えを、待ち終わる前に捨てない）",
+      give_up(_w, "2026-08-16") == [] and _it["queue_id"] in _w["items"])
+    t("★★待っている控えは記事づくりの列に入れない★★"
+      "（入れると毎晩『試した』ことになる）",
+      due(_w) == [] and len(due(_w, all_states=True)) == 1)
+    # ★★導入日を過ぎたら一度だけ知らせる★★（控えは消さない）
+    t("　月末が期限になる（導入日が月までしか分からないとき）",
+      month_end("2026-11") == "2026-11-30" and month_end("2026-12")
+      == "2026-12-31" and month_end("2028-02") == "2028-02-29")
+    _w["items"][_it["queue_id"]]["release"] = "2026-11"
+    t("★★導入の月が終わるまでは知らせない★★",
+      calendar_missing_due(_w, "2026-11-29") == [])
+    _due = calendar_missing_due(_w, "2026-11-30")
+    t("★★導入の月が終わってもDMMに無ければ知らせる★★（★控えは消さない★）",
+      len(_due) == 1 and _it["queue_id"] in _w["items"])
+    _w["items"][_it["queue_id"]]["calendar_missing_reported_at"] = "2026-11-30"
+    t("　知らせるのは一度だけ（毎晩は鳴らさない）",
+      calendar_missing_due(_w, "2026-12-25") == [])
     t("　似ているだけの名前は結び付けない（★前方一致で寄せない★）",
       find_by_core(_w, "L聖闘士星矢") == [])
 

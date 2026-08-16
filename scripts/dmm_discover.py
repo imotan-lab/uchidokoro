@@ -150,7 +150,7 @@ def check_one(row: dict, index: dict) -> dict:
     return out
 
 
-def rebind_waiting(data: dict, rows: list) -> list:
+def rebind_waiting(data: dict, rows: list, checked: dict | None = None) -> list:
     """★DMMに載るのを待っていた控えを、載った時点で結び直す★
 
     P-WORLD時代に見つけた機種が、DMMのカレンダーに遅れて載ることがある
@@ -160,18 +160,33 @@ def rebind_waiting(data: dict, rows: list) -> list:
     ★結び付けるのは機種名の芯が完全に一致したときだけ★
       前方一致・似ている判定はしない（当サイトの鉄則）。
       決まらないものは二重に持ったまま人・2AIに見てもらう。
+
+    ★機種ページを確かめてからでないと READY にしない★
+      （2026-08-16・依頼213の指摘3）
+      前はカレンダーに名前が出ただけで READY にしていた。
+      機種ページの取得・機種名・導入日・メーカーのどれかで落ちても
+      **一度 READY になった状態は戻らない**ので、
+      確かめられていない控えが記事づくりの列に入ってしまう。
+      `checked` は check_one() の結果（機種ID → 判定）。
+      ★合格したものだけ結び直す★
     """
     import pending_machines as _pm
     done = []
     for r in rows:
+        got = (checked or {}).get(r["id"])
+        if not (got and got.get("ok")):
+            continue                    # ★確かめられていないものは結ばない★
         for it in _pm.find_by_core(data, r["name"]):
             if it.get("state") != _pm.AWAITING_DMM_ID:
                 continue
             it["state"] = _pm.READY
-            it["identity_url"] = r["url"]
+            it["identity_url"] = got.get("url") or r["url"]
             it["identity_source"] = "dmm"
             it["source_machine_id"] = r["id"]
             it["release"] = r["release_date"]
+            it["maker"] = got.get("maker_id") or it.get("maker") or ""
+            if got.get("dmm_maker"):
+                it["dmm_maker"] = got["dmm_maker"]
             it["last_reason"] = "DMMのカレンダーに載ったので結び直しました"
             done.append(it)
     return done
@@ -192,12 +207,16 @@ def run(apply_it: bool = False, today=None) -> dict:
     out["looked"] = len(rows)
     index = maker_index()
     data = _pend.load() if apply_it else None
+    # ★先に全部の機種ページを確かめる★（2026-08-16・依頼213の指摘3）
+    #   確かめてからでないと「待っていた控え」を READY にできない。
+    checked = {row["id"]: check_one(row, index) for row in rows}
     if apply_it:
-        # ★待っていた控えを先に結び直す★（新しい控えを二重に作らないため）
+        # ★確かめられたものだけ、待っていた控えへ結び直す★
+        #   （新しい控えを二重に作らないため、記事づくりより先にやる）
         out["rebound"] = [{"queue_id": x["queue_id"], "name": x["name"]}
-                          for x in rebind_waiting(data, rows)]
+                          for x in rebind_waiting(data, rows, checked)]
     for row in rows:
-        got = check_one(row, index)
+        got = checked[row["id"]]
         if not got["ok"]:
             out["held"].append({"name": row["name"], "reason": got["reason"],
                                 "maker": got.get("dmm_maker", "")})
@@ -255,7 +274,19 @@ def selftest() -> int:
     rows = [{"id": "5079", "name": "スマスロ ラグナドール",
              "url": "https://p-town.dmm.com/machines/5079",
              "release_date": "2026-11-02", "kind": "パチスロ"}]
-    got = rebind_waiting(d, rows)
+    okc = {"5079": {"ok": True, "url": rows[0]["url"], "maker_id": "mizuho",
+                    "dmm_maker": "ミズホ"}}
+    # ★★確かめられていないものは結ばない★★（2026-08-16・依頼213の指摘3）
+    #   前は名前が出ただけで READY にしていた。機種ページの取得・機種名・
+    #   導入日・メーカーのどれかで落ちても、**一度 READY になった状態は
+    #   戻らない**ので、確かめていない控えが記事づくりの列に入っていた。
+    ngc = {"5079": {"ok": False, "reason": "機種ページを確かめられません"}}
+    t("★★機種ページを確かめられなければ結び直さない★★"
+      "（一度READYにすると戻せない）",
+      rebind_waiting(d, rows, ngc) == []
+      and d["items"][it["queue_id"]]["state"] == _pm.AWAITING_DMM_ID)
+    t("　判定そのものが無いときも結ばない", rebind_waiting(d, rows, {}) == [])
+    got = rebind_waiting(d, rows, okc)
     t("★★DMMに載ったら、待っていた控えをそのまま使う★★"
       "（新しい控えを二重に作らない）",
       len(got) == 1 and len(d["items"]) == 1
@@ -263,14 +294,17 @@ def selftest() -> int:
       and d["items"][it["queue_id"]]["source_machine_id"] == "5079")
     t("　結び直したら導入日も日まで入る",
       d["items"][it["queue_id"]]["release"] == "2026-11-02")
+    t("　確かめたメーカーも一緒に控える",
+      d["items"][it["queue_id"]]["maker"] == "mizuho"
+      and d["items"][it["queue_id"]]["dmm_maker"] == "ミズホ")
     # 2回目は何も起きない（もう待っていない）
-    t("　同じものを二度結び直さない", rebind_waiting(d, rows) == [])
+    t("　同じものを二度結び直さない", rebind_waiting(d, rows, okc) == [])
     # 別機種は結び付かない
     d2 = _pm._empty()
     _pm.add(d2, "L聖闘士星矢 黄金十二宮", "", "", "2026-11",
             state=_pm.AWAITING_DMM_ID)
     t("★★別の機種には結び付けない★★（前方一致で寄せない）",
-      rebind_waiting(d2, rows) == [])
+      rebind_waiting(d2, rows, okc) == [])
 
     # ★★候補は「まだ記事が無いもの」だけ★★（保存したカレンダーで試す）
     import dmm_calendar as _dc

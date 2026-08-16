@@ -1175,6 +1175,13 @@ def _evidence_ref(vo: dict) -> str:
     # ★証拠は binding ごとに形が違う★（2026-08-12・依頼166のP1）
     #   一覧カード用の形で組み立てると、P-WORLDの証拠は
     #   存在しないカード番号を指す文字列になり、あとから確かめられない。
+    if ev.get("kind") == "DMM_MACHINE_PAGE":
+        # ★DMMには検定番号が無い★ので、型式・メーカー・導入日で指す。
+        #   型式も未導入の新台には無いので「未掲載」と書く（空にしない）。
+        return "dmm:%s 型式=%s メーカー=%s 導入=%s 確認日=%s" % (
+            ev.get("dmm_machine_id", ""),
+            ev.get("model_code") or "未掲載", ev.get("maker", ""),
+            ev.get("release", ""), ev.get("checked_at", ""))
     if ev.get("kind") == "PWORLD_MACHINE_PAGE":
         return "pworld:%s 型式=%s 検定=%s 確認日=%s" % (
             ev.get("pworld_machine_id", ""), ev.get("model_code", ""),
@@ -1245,8 +1252,21 @@ _PW_MACHINE_RE = re.compile(
     r"^https?://(?:www\.)?p-world\.co\.jp/machine/database/(\d{1,7})/?$")
 
 
-def _pw_slug_hint(url: str) -> str:
-    """台帳のslug欄に入れる目印（機種IDが分かればそれ、無ければ site）。"""
+def _slug_hint(url: str) -> str:
+    """台帳のslug欄に入れる目印（機種IDが分かればそれ、無ければ site）。
+
+    ★DMMのURLも見る★（2026-08-16・台帳#376）。移行前に公開した機種は
+    slugが pw_ のままなので、増やせない対応表（slug_binding）で読み替える
+    ＝台帳の目印が、実際に公開されているページのslugと一致する。
+    """
+    import slug_binding as _sb
+    mid = _dmm_machine_id(url)
+    if mid:
+        want = "dmm_" + mid
+        for old, new in _sb.LEGACY_BINDINGS.items():
+            if new == want:
+                return old              # 公開済みの機種は昔のslugのまま
+        return want
     mid = _pw_machine_url(url)
     return ("pw_" + mid) if mid else "site"
 
@@ -1449,11 +1469,13 @@ def verify_official(name: str, official_url: str,
                            expect_maker=expect_maker,
                            release_is_cache=release_is_cache)
     if _pw_machine_url(official_url):
-        # ★ここへは来ない★（blocked_hosts が通信を止める）。
-        #   P-WORLDのURLを持った控えは移行で AWAITING_DMM_ID になっている。
-        return _verify_pworld(name, official_url, maker, release,
-                              expect_maker=expect_maker,
-                              release_is_cache=release_is_cache)
+        # ★入口で断る★（2026-08-16・依頼213）
+        #   「通信で止まる」に頼ると、規約違反の一歩手前まで進んでしまう。
+        #   手で --official-url を渡した時もここで止める。
+        return {"problems": [f"{IDENTITY_FAILED} P-WORLDのURLは使えません"
+                             "（利用規約でプログラムからの取得が禁止・台帳#376）"
+                             "／★DMMの機種ページのURLを使ってください★"],
+                "release": ""}
     # ★転送された先も検査する★（2026-08-02・Codex26回目）
     #   渡されたURLだけ見ていたので、メーカーAのURLが別の場所へ転送されると、
     #   転送先の中身をメーカーAの公式として通せた。
@@ -2070,6 +2092,28 @@ def give_up_now(pend: dict, queue_id: str, url: str, name: str,
             _log(f"待ち行列から出して台帳へ移しました: {name or url}")
     except Exception as e:                # noqa: BLE001
         _log(f"  ✗ 待ち行列から出せませんでした: {e}")
+
+
+def _expect_maker(work: dict) -> str:
+    """★最初に確かめたメーカーの表示名★（出典に合わせて選ぶ）
+
+    （2026-08-16・依頼213の指摘5）
+    控えには出典ごとに別の欄で覚えている（`dmm_maker` / `pworld_maker`）。
+    どちらか片方だけを見ると、
+      ・DMMの控えにP-WORLD時代の表示名をぶつけて**合っているのに止まる**
+      ・DMM内で表示名が変わっても**気づけない**
+    のどちらかが起きる。
+    """
+    if str(work.get("identity_source") or "") == "dmm":
+        return str(work.get("dmm_maker") or "")
+    return str(work.get("pworld_maker") or "")
+
+
+def _maker_conflicts(work: dict) -> list:
+    """★覚えている表示名と食い違った値★（出典に合わせて選ぶ）"""
+    key = ("dmm_maker" if str(work.get("identity_source") or "") == "dmm"
+           else "pworld_maker")
+    return list(work.get(key + "_conflict") or [])
 
 
 def _dmm_machine_id(url: str) -> str:
@@ -2785,13 +2829,15 @@ def selftest() -> int:
           and not retry_later(["型式名: 名鑑ごとに型式名が食い違っています: {}"]))
         t("★★待ち行列は最後に試した日が古い順に回す★★"
           "（見つけた日だけで並べると6件目以降が一度も試されない・Codex21回目）",
-          [x["url"] for x in pick_work({"items": {
-              "https://x/a": {"name": "a", "url": "https://x/a", "maker": "m",
-                              "release": "2026-09", "first_seen": "2026-07-01",
-                              "last_try": "2026-07-31", "tries": 1},
-              "https://x/b": {"name": "b", "url": "https://x/b", "maker": "m",
-                              "release": "2026-09", "first_seen": "2026-07-20",
-                              "last_try": "2026-07-01", "tries": 1}}})]
+          [x["identity_url"] for x in pick_work({"items": {
+              "q_1": {"queue_id": "q_1", "state": "READY", "name": "a",
+                      "identity_url": "https://x/a", "maker": "m",
+                      "release": "2026-09", "first_seen": "2026-07-01",
+                      "last_try": "2026-07-31", "tries": 1},
+              "q_2": {"queue_id": "q_2", "state": "READY", "name": "b",
+                      "identity_url": "https://x/b", "maker": "m",
+                      "release": "2026-09", "first_seen": "2026-07-20",
+                      "last_try": "2026-07-01", "tries": 1}}})]
           == ["https://x/b", "https://x/a"])
         t("★★書けた時点で必ず目印を残す★★"
           "（コミット前に止まると目印が無く、翌日なにも復旧できなかった・Codex21回目）",
@@ -3718,16 +3764,27 @@ def selftest() -> int:
             t("★★詰まっている機種が後ろを塞がない★★"
               "（最古の1件しか見ず、最大60日待たされていた・Codex18回目）",
               len(pick_work({"items": {
-                  f"https://x/{i}": {
-                      "name": f"n{i}", "url": f"https://x/{i}", "maker": "m",
-                      "release": "2026-09", "first_seen": f"2026-07-0{i+1}",
+                  f"q_{i}": {
+                      "queue_id": f"q_{i}", "state": "READY",
+                      "name": f"n{i}", "identity_url": f"https://x/{i}",
+                      "maker": "m", "release": "2026-09",
+                      "first_seen": f"2026-07-0{i+1}",
                       "last_try": "", "tries": 1} for i in range(3)}})) == 3)
             t("★★一晩に見る件数に上限を置かない★★（2026-08-07・運営者決定）",
               len(pick_work({"items": {
-                  f"https://x/{i}": {
-                      "name": f"n{i}", "url": f"https://x/{i}", "maker": "m",
-                      "release": "2026-09", "first_seen": "2026-07-01",
+                  f"q_{i}": {
+                      "queue_id": f"q_{i}", "state": "READY",
+                      "name": f"n{i}", "identity_url": f"https://x/{i}",
+                      "maker": "m", "release": "2026-09",
+                      "first_seen": "2026-07-01",
                       "last_try": "", "tries": 1} for i in range(30)}})) == 30)
+            t("★★DMMに載るのを待っている控えは記事づくりの列に入れない★★"
+              "（入れると毎晩『試した』ことになり、待っているだけで打ち切られる）",
+              pick_work({"items": {"q_1": {"queue_id": "q_1",
+                  "state": "AWAITING_DMM_ID", "name": "待ち",
+                  "identity_url": "", "maker": "", "release": "2026-11",
+                  "first_seen": "2026-07-01", "last_try": "",
+                  "tries": 1}}}) == [])
             _dtm = __import__("datetime").datetime
 
             def _late(h, m, sch=True):
@@ -4241,6 +4298,25 @@ def main() -> int:
                  and int(it.get("runs", 0)) >= 1]
         if would:
             print(f"（下見）60日超えの待ち {len(would)} 件は --apply の実行が処理します")
+    # ★DMMに載らないまま導入日を過ぎた機種を、一度だけ台帳へ★
+    #   （2026-08-16・依頼213／Codexの助言どおり「巡回のあと・記事づくりの前」）
+    #   ここなら「その晩の巡回でも結び付かなかった」と確定している。
+    #   ★控えは消さない★＝あとから載れば自動の経路へ戻せる。
+    for it in (_pend.calendar_missing_due(pend) if apply_it else []):
+        if _ledger("site", "structural", "MATERIAL", "DMM_CALENDAR_MISSING",
+                   "導入日を過ぎてもDMMのカレンダーに載りません",
+                   f"{it['name']} / 登場 {it.get('release', '')} / "
+                   f"見つけた日 {it.get('first_seen', '')} / "
+                   f"移行前のURL: {it.get('legacy_url', '')} / "
+                   "★控えは残してあります（載れば自動で結び直します）★"):
+            # ★台帳に残せた時だけ「知らせた」ことにする★
+            #   残せないまま印を付けると、二度と知らせない機種になる。
+            it["calendar_missing_reported_at"] = _pend._today()
+            _pend.save(pend)
+            _log(f"  ★DMMに載らないまま導入日を過ぎました: {it['name']}★")
+        else:
+            _log(f"  DMM未掲載を台帳に残せませんでした（明晩また知らせます）"
+                 f": {it['name']}")
     # ★待ちすぎた分は黙って消さず、台帳に残す★
     for it in (_pend.give_up(pend) if apply_it else []):
         if not _ledger("site", "structural", "MATERIAL", "PENDING_GAVE_UP",
@@ -4316,29 +4392,41 @@ def main() -> int:
         #   （2026-08-13・依頼171のP2）待ち行列に残すだけでは誰も見ない。
         #   ページが元の表示名へ戻っていると照合は通り、公開後に
         #   待ち行列ごと消えて**食い違いの記録が誰にも届かない**。
-        _cf = work.get("pworld_maker_conflict") or []
+        # ★出典に合わせた欄を見る★（2026-08-16・依頼213の指摘5）
+        #   DMMの控えなら dmm_maker_conflict を見る。片方だけ見ていると、
+        #   DMM内で表示名が変わっても気づけない。
+        _cfkey = ("dmm_maker"
+                  if str(work.get("identity_source") or "") == "dmm"
+                  else "pworld_maker")
+        _cf = _maker_conflicts(work)
         if _cf:
-            _t = (f"{work.get('name') or work['url']}: "
+            _t = (f"{work.get('name') or work['identity_url']}: "
                   "メーカーの表示名が途中で変わりました")
-            _d = (f"覚えていた表示名: {work.get('pworld_maker')}\n"
+            _d = (f"覚えていた表示名: {_expect_maker(work)}\n"
                   f"あとから出てきた表示名: {'／'.join(_cf)}\n"
-                  f"URL: {work['url']}\n\n"
+                  f"URL: {work['identity_url']}\n\n"
                   "★同じ機種か、別機種にURLが使い回されたのかを確かめてください★\n"
-                  "確かめたら、待ち行列の pworld_maker_conflict を消してください。")
-            if apply_it and _ledger(_pw_slug_hint(work["identity_url"]), "structural",
-                                    "MATERIAL", "PWORLD_MAKER_CONFLICT", _t, _d):
-                _log(f"  ★表示名の食い違いを台帳へ上げました: {work['url']}")
+                  f"確かめたら、待ち行列の {_cfkey}_conflict を"
+                  "消してください。")
+            if apply_it and _ledger(_slug_hint(work["identity_url"]), "structural",
+                                    "MATERIAL", "MAKER_NAME_CONFLICT", _t, _d):
+                _log(f"  ★表示名の食い違いを台帳へ上げました: "
+                     f"{work['identity_url']}")
             else:
                 _log(f"  ★表示名の食い違いがあります（台帳へ上げられません）"
-                     f": {work['url']}")
-            print(f"  ★止めました: 表示名が途中で変わりました（{work['url']}）")
+                     f": {work['identity_url']}")
+            print("  ★止めました: 表示名が途中で変わりました"
+                  f"（{work['identity_url']}）")
             continue
         res = run_one(work["name"], work["identity_url"], work["maker"],
                       work["release"], apply_it,
                       release_is_cache=True,       # ★待ち行列の年月は控え★
                       before_write=lambda u=work["identity_url"]: _claim_today(u),
                       # ★最初に確かめたメーカーの表示名★（台帳#335の項目5）
-                      expect_maker=work.get("pworld_maker", ""),
+                      #   ★出典に合わせて選ぶ★（2026-08-16・依頼213の指摘5）
+                      #   DMMの控えにP-WORLD時代の表示名をぶつけると、
+                      #   合っているのに食い違い扱いで止まる。
+                      expect_maker=_expect_maker(work),
                       # ★どの控えを外すかはIDで渡す★（URLは変わりうる）
                       pending_id=work.get("queue_id", ""))
         for b in res.get("blocked") or []:

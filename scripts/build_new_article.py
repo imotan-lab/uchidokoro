@@ -246,8 +246,12 @@ def _fmt_release(ymd: str) -> str:
 
 # 本人性の結び付け方（どの公式ページで確かめたか）
 #   ★PWORLD_MACHINE_PAGE★（2026-08-12）＝P-WORLDの機種ページ（機種IDが身元）
+#   ★DMM_MACHINE_PAGE★（2026-08-16・台帳#376）＝DMMの機種ページ
+#     規約でP-WORLDへ通信できなくなったので、同定の正はこちら。
+#     ★ここに足さないと、新台は公開の関所で必ず止まる★
+#     （移行した7機種を育てるときも同じ場所で止まる）
 IDENTITY_BINDINGS = ("OFFICIAL_PRODUCT_PAGE", "MAKER_LIST_CARD",
-                     "PWORLD_MACHINE_PAGE")
+                     "PWORLD_MACHINE_PAGE", "DMM_MACHINE_PAGE")
 
 
 def build_machine(slug, name, maker, official_url, release, material,
