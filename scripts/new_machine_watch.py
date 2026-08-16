@@ -94,7 +94,7 @@ FETCH_COUNT = {"n": 0, "cached": 0, "redirect": 0}
 #   1晩に複数機種を回すので、**3機種ぶん＋余裕**を持たせて 800 とする。
 #   ★これは「ここで止める」ための栓であって、目標値ではない★
 #   （減らす工夫＝索引の走査を絞る・控えを使うは別途・台帳#379）。
-FETCH_BUDGET = {"limit": 800, "used": 0}
+FETCH_BUDGET = {"limit": 800, "used": 0, "tried": 0}
 
 
 class BudgetError(Exception):
@@ -106,17 +106,23 @@ def budget_reset(limit: int | None = None) -> None:
     if limit is not None:
         FETCH_BUDGET["limit"] = int(limit)
     FETCH_BUDGET["used"] = 0
+    FETCH_BUDGET["tried"] = 0
     FETCH_COUNT.update({"n": 0, "cached": 0, "redirect": 0})
 
 
 def budget_spend(url: str) -> None:
     """★外へ出る直前に1回ぶん使う★（上限を超えたら止める）"""
-    FETCH_BUDGET["used"] += 1
+    # ★止めた1回は「使った」に入れない★（2026-08-16・依頼221の指摘2）
+    #   先に増やしてから判定すると、**外へ出ていない回**まで実通信として
+    #   数えてしまう（呼び出し側が例外を拾って続けると、さらにずれる）。
+    #   ★数えるのは、外へ出ると決まってから★
     lim = int(FETCH_BUDGET.get("limit") or 0)
-    if lim and FETCH_BUDGET["used"] > lim:
+    FETCH_BUDGET["tried"] = int(FETCH_BUDGET.get("tried") or 0) + 1
+    if lim and FETCH_BUDGET["used"] >= lim:
         raise BudgetError(
-            f"1回の実行で取りに行く回数が上限（{lim}回）を超えました"
-            f"／★ここで止めます★（{FETCH_BUDGET['used']}回目・{url[:60]}）")
+            f"1回の実行で取りに行く回数が上限（{lim}回）に達しました"
+            f"／★ここで止めます★（{FETCH_BUDGET['used']}回まで・{url[:60]}）")
+    FETCH_BUDGET["used"] += 1
 
 
 def cache_clear() -> None:

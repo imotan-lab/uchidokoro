@@ -103,18 +103,25 @@ def _conditional_get(url: str, etag: str, modified: str, timeout: int = 20):
     if modified:
         req.add_header("If-Modified-Since", modified)
     try:
-        _bh.check(url)          # ★禁止先へは通信しない★（台帳#376）
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            body = r.read(_w.MAX_BYTES + 1)
-            if len(body) > _w.MAX_BYTES:
-                return "unknown", "", {}
-            charset = r.headers.get_content_charset() or "utf-8"
-            head = {"etag": r.headers.get("ETag") or "",
-                    "last_modified": r.headers.get("Last-Modified") or ""}
-            try:
-                return "changed", body.decode(charset, "replace"), head
-            except LookupError:
-                return "changed", body.decode("utf-8", "replace"), head
+        # ★同じ通信口を通す★（2026-08-16・依頼221の指摘1）
+        #   ここだけ素の urlopen を使っていたので、
+        #   ①回数に入らない ②転送が見張られない ③転送先の名簿確認が
+        #   通信の前に行われない、の3つが起きていた。
+        #   ★用途を名乗り、名簿と回数の関所を通してから外へ出る★
+        with _w.fetching("claim_material"):
+            _w.check_before_fetch(url)   # 禁止先・名簿・用途（台帳#376）
+            _w.budget_spend(url)         # ★回数に入れる★
+            with _w.guarded_open(req, timeout=timeout) as r:
+                body = r.read(_w.MAX_BYTES + 1)
+                if len(body) > _w.MAX_BYTES:
+                    return "unknown", "", {}
+                charset = r.headers.get_content_charset() or "utf-8"
+                head = {"etag": r.headers.get("ETag") or "",
+                        "last_modified": r.headers.get("Last-Modified") or ""}
+                try:
+                    return "changed", body.decode(charset, "replace"), head
+                except LookupError:
+                    return "changed", body.decode("utf-8", "replace"), head
     except urllib.error.HTTPError as e:
         if e.code == 304:
             return "same", "", {}

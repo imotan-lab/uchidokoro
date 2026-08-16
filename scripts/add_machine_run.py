@@ -3242,6 +3242,23 @@ def selftest() -> int:
 
 
 def main() -> int:
+    """★取りに行った回数を、実行のどこで終わっても必ず残す★
+
+    （2026-08-16・依頼221の指摘2）
+    前は巡回の直後に記録していたので、**回数の大半を占める材料探し
+    （1機種あたり213回）が入らず**、`--name` の経路には記録が無かった。
+    """
+    _nw.budget_reset()
+    try:
+        return _main()
+    finally:
+        _log(f"取りに行った回数: {_nw.FETCH_BUDGET['used']} 回"
+             f"（上限 {_nw.FETCH_BUDGET['limit']} 回 / 転送 "
+             f"{_nw.FETCH_COUNT.get('redirect', 0)} 回 / 控えで済んだ "
+             f"{_nw.FETCH_COUNT.get('cached', 0)} 回）")
+
+
+def _main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--apply", action="store_true", help="実際に書き込む")
@@ -3420,10 +3437,6 @@ def main() -> int:
     #   ★止めたまま残さない★＝残すと「まだ生きている」と誤読される
     #   （実際に、移行の作業中に誤って「メーカー公式の規約確認が要る」と
     #     報告してしまった）。戻したくなったらgitの履歴から取る。
-    # ★1回の実行で取りに行ける回数を戻す★（2026-08-16・台帳#379）
-    #   実測で1機種あたり221回（巡回8＋索引213）。1晩に複数機種を回すので
-    #   3機種ぶん＋余裕＝800回で止める。★止めるための栓であって目標ではない★
-    _nw.budget_reset()
     d = discover_calendar(persist=apply_it)
     for x in d["first_time"]:
         print("初回として記録:", x)
@@ -3474,11 +3487,6 @@ def main() -> int:
     if apply_it:
         _pend.save(pend)                  # ★下見は古い姿を書き戻さない★（Codex30回目）
     print(f"新台候補: {len(d['candidates'])} 件 / 確認が要る: {len(d['problems'])} 件")
-    # ★何回取りに行ったかを必ず残す★（相手への負担を後から確かめられるように）
-    _log(f"取りに行った回数: {_nw.FETCH_BUDGET['used']} 回"
-         f"（上限 {_nw.FETCH_BUDGET['limit']} 回 / 転送 "
-         f"{_nw.FETCH_COUNT.get('redirect', 0)} 回 / 控えで済んだ "
-         f"{_nw.FETCH_COUNT.get('cached', 0)} 回）")
     # ★「新台なし」とは言わない★ 見られた社に限った話であることを必ず書く
     print(f"  正常に見られたメーカー: {len(d['watched'])} 社"
           + (f"（{', '.join(d['watched'])}）" if d["watched"] else ""))
@@ -3622,6 +3630,12 @@ def main() -> int:
 #   囲みにしたので gather は薄い包みになった。試験や監査が中身を読むとき、
 #   包みだけ見えると**守りが消えたように見える**（実際に試験が落ちた）。
 gather.__wrapped__ = _gather
+
+
+# ★中身を見に来たら元の関数を返す★（2026-08-16・依頼221）
+#   回数の記録を実行全体で囲むため main を薄い包みにした。
+#   試験や監査が中身を読むとき、包みだけ見えると守りが消えて見える。
+main.__wrapped__ = _main
 
 
 if __name__ == "__main__":
