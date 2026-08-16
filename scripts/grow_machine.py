@@ -1635,6 +1635,26 @@ def selftest() -> int:
 
 
 def main() -> int:
+    """★取りに行った回数を、実行のどこで終わっても必ず残す★
+
+    （2026-08-16・依頼222の指摘2）
+    育てる処理は page_probe からも外へ出る。ここで戻さないと、
+    **この経路で増えた回数がプロセスの終わりに消える**。
+    """
+    _is_selftest = "--selftest" in (sys.argv[1:] or [])
+    import new_machine_watch as _nwg
+    _nwg.budget_reset()
+    try:
+        return _main()
+    finally:
+        if not _is_selftest:
+            _log(f"取りに行った回数: {_nwg.FETCH_BUDGET['used']} 回"
+                 f"（上限 {_nwg.FETCH_BUDGET['limit']} 回 / 転送 "
+                 f"{_nwg.FETCH_COUNT.get('redirect', 0)} 回 / 控えで済んだ "
+                 f"{_nwg.FETCH_COUNT.get('cached', 0)} 回）")
+
+
+def _main() -> int:
     ap = argparse.ArgumentParser(description="新台経路の機種を育てる")
     ap.add_argument("--slug")
     ap.add_argument("--apply", action="store_true")
@@ -1714,6 +1734,10 @@ def main() -> int:
         print("書きました: " + " ".join(os.path.relpath(x, BASE).replace(os.sep, "/")
                                          for x in r["wrote"]))
     return 1 if r["problems"] else 0
+
+
+# ★中身を見に来たら元の関数を返す★（2026-08-16・依頼222）
+main.__wrapped__ = _main
 
 
 if __name__ == "__main__":

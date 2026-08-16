@@ -3248,14 +3248,19 @@ def main() -> int:
     前は巡回の直後に記録していたので、**回数の大半を占める材料探し
     （1機種あたり213回）が入らず**、`--name` の経路には記録が無かった。
     """
+    # ★自己試験は本番のログに混ぜない★（2026-08-16・依頼222の指摘1）
+    #   selftest は自分でログを差し替えて、戻してから返る。そのあとに
+    #   ここで書くと**本物のログへ書いてしまう**（既存の保護を私が壊した）。
+    _is_selftest = "--selftest" in (sys.argv[1:] or [])
     _nw.budget_reset()
     try:
         return _main()
     finally:
-        _log(f"取りに行った回数: {_nw.FETCH_BUDGET['used']} 回"
-             f"（上限 {_nw.FETCH_BUDGET['limit']} 回 / 転送 "
-             f"{_nw.FETCH_COUNT.get('redirect', 0)} 回 / 控えで済んだ "
-             f"{_nw.FETCH_COUNT.get('cached', 0)} 回）")
+        if not _is_selftest:
+            _log(f"取りに行った回数: {_nw.FETCH_BUDGET['used']} 回"
+                 f"（上限 {_nw.FETCH_BUDGET['limit']} 回 / 転送 "
+                 f"{_nw.FETCH_COUNT.get('redirect', 0)} 回 / 控えで済んだ "
+                 f"{_nw.FETCH_COUNT.get('cached', 0)} 回）")
 
 
 def _main() -> int:

@@ -2366,6 +2366,35 @@ def selftest() -> int:
                       len(_pgone) == 1 and _ppw.FETCH_BUDGET["used"] == 1,
                       extra=f"外へ出た{len(_pgone)}件 / "
                             f"数えた{_ppw.FETCH_BUDGET['used']}回")
+                    # ★対照★＝名簿に無い先なら、1件も外へ出ない
+                    #   （2026-08-16・依頼222）これが無いと、page_probe から
+                    #   関所の呼び出しを消しても試験が通ってしまう。
+                    _pgone.clear()
+                    _ppw.budget_reset(0)
+                    _keep_st2 = _ppw._SELFTEST["on"]
+                    _ppw._SELFTEST["on"] = False   # ★ここだけ本番と同じ★
+                    try:
+                        try:
+                            _pp._conditional_get(
+                                "https://shiranai.example/x", "", "")
+                        except Exception:        # noqa: BLE001
+                            pass
+                        t("★★page_probe も、名簿に無い先へは1件も出ない★★"
+                          "（関所を外すとここが落ちる）",
+                          _pgone == [] and _ppw.FETCH_BUDGET["used"] == 0,
+                          extra=f"外へ出た{len(_pgone)}件 / "
+                                f"数えた{_ppw.FETCH_BUDGET['used']}回")
+                        _pgone.clear()
+                        _ppw.budget_reset(0)
+                        try:
+                            _pp._conditional_get(
+                                "https://www.p-world.co.jp/x", "", "")
+                        except Exception:        # noqa: BLE001
+                            pass
+                        t("　禁止先へも1件も出ない（台帳#376）",
+                          _pgone == [] and _ppw.FETCH_BUDGET["used"] == 0)
+                    finally:
+                        _ppw._SELFTEST["on"] = _keep_st2
                 finally:
                     _ppw.OPENER.open = _keep_pp
             finally:
