@@ -11473,17 +11473,19 @@
   "release_date": "2026-09-07",
   "identity": {
    "manufacturer_id": "pioneer",
-   "official_product_url": "https://www.p-world.co.jp/machine/database/10501",
+   "official_product_url": "https://p-town.dmm.com/machines/5042",
    "announced_name": "パチスロ見える子ちゃん",
    "identity_tier": "CATALOG_CODE_MATCHED",
-   "identity_binding": "PWORLD_MACHINE_PAGE",
-   "identity_evidence_ref": "pworld:10501 型式=L見える子ちゃんSC 検定=6S0265 確認日=2026-08-13",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5042 型式=L見える子ちゃんSC メーカー=パイオニア 導入=2026-09-07 確認日=2026-08-16",
    "market_release_date": "2026-09-07",
    "regulatory_model_code": "L見える子ちゃんSC",
    "_model_code_sources": [
     "p-town.dmm.com",
     "p-world.co.jp"
-   ]
+   ],
+   "_legacy_evidence_ref": "pworld:10501 型式=L見える子ちゃんSC 検定=6S0265 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10501"
   }
  },
  {
@@ -11527,17 +11529,19 @@
   "release_date": "2026-09-07",
   "identity": {
    "manufacturer_id": "sammy",
-   "official_product_url": "https://www.p-world.co.jp/machine/database/10503",
+   "official_product_url": "https://p-town.dmm.com/machines/5033",
    "announced_name": "スマスロ リコリス・リコイル",
    "identity_tier": "CATALOG_CODE_MATCHED",
-   "identity_binding": "PWORLD_MACHINE_PAGE",
-   "identity_evidence_ref": "pworld:10503 型式=L スマスロ リコリス・リコイル KX 検定=6S0400 確認日=2026-08-13",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5033 型式=L スマスロ リコリス・リコイル KX メーカー=サミー 導入=2026-09-07 確認日=2026-08-16",
    "market_release_date": "2026-09-07",
    "regulatory_model_code": "L スマスロ リコリス・リコイル KX",
    "_model_code_sources": [
     "p-town.dmm.com",
     "p-world.co.jp"
-   ]
+   ],
+   "_legacy_evidence_ref": "pworld:10503 型式=L スマスロ リコリス・リコイル KX 検定=6S0400 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10503"
   },
   "checker": {
    "coinRate": 31.8,
@@ -11591,16 +11595,18 @@
   "release_date": "2026-10-05",
   "identity": {
    "manufacturer_id": "kitadenshi",
-   "official_product_url": "https://www.p-world.co.jp/machine/database/10513",
+   "official_product_url": "https://p-town.dmm.com/machines/5054",
    "announced_name": "マイジャグラーVI",
    "identity_tier": "CATALOG_BOUND",
-   "identity_binding": "PWORLD_MACHINE_PAGE",
-   "identity_evidence_ref": "pworld:10513 型式=SマイジャグラーVI KK 検定=5S0437 確認日=2026-08-13",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5054 型式=未掲載 メーカー=北電子 導入=2026-10-05 確認日=2026-08-16",
    "market_release_date": "2026-10-05",
    "observed_model_code": "SマイジャグラーVI KK",
    "_observed_model_code_sources": [
     "p-world.co.jp"
-   ]
+   ],
+   "_legacy_evidence_ref": "pworld:10513 型式=SマイジャグラーVI KK 検定=5S0437 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10513"
   }
  },
  {
@@ -11644,16 +11650,18 @@
   "release_date": "2026-10-05",
   "identity": {
    "manufacturer_id": "sammy",
-   "official_product_url": "https://www.p-world.co.jp/machine/database/10521",
+   "official_product_url": "https://p-town.dmm.com/machines/5061",
    "announced_name": "スマスロ 獣王",
    "identity_tier": "CATALOG_BOUND",
-   "identity_binding": "PWORLD_MACHINE_PAGE",
-   "identity_evidence_ref": "pworld:10521 型式=L 獣王 XZ 検定=6S0560 確認日=2026-08-13",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5061 型式=未掲載 メーカー=サミー 導入=2026-10-05 確認日=2026-08-16",
    "market_release_date": "2026-10-05",
    "observed_model_code": "L 獣王 XZ",
    "_observed_model_code_sources": [
     "p-world.co.jp"
-   ]
+   ],
+   "_legacy_evidence_ref": "pworld:10521 型式=L 獣王 XZ 検定=6S0560 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10521"
   },
   "checker": {
    "coinRate": 31.8,
@@ -11708,18 +11716,20 @@
   "release_date": "2026-09-07",
   "identity": {
    "manufacturer_id": "sankyo",
-   "official_product_url": "https://www.p-world.co.jp/machine/database/10543",
+   "official_product_url": "https://p-town.dmm.com/machines/5065",
    "announced_name": "Lパチスロ 彼女、お借りします",
    "identity_tier": "CATALOG_CODE_MATCHED",
-   "identity_binding": "PWORLD_MACHINE_PAGE",
-   "identity_evidence_ref": "pworld:10543 型式=Lレンタル彼女bK 検定=630270 確認日=2026-08-13",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5065 型式=Lレンタル彼女bK メーカー=SANKYO 導入=2026-09-07 確認日=2026-08-16",
    "market_release_date": "2026-09-07",
    "regulatory_model_code": "Lレンタル彼女bK",
    "_model_code_sources": [
     "chonborista.com",
     "p-town.dmm.com",
     "p-world.co.jp"
-   ]
+   ],
+   "_legacy_evidence_ref": "pworld:10543 型式=Lレンタル彼女bK 検定=630270 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10543"
   },
   "checker": {
    "coinRate": 31.0,
@@ -11773,17 +11783,19 @@
   "release_date": "2026-09-07",
   "identity": {
    "manufacturer_id": "net",
-   "official_product_url": "https://www.p-world.co.jp/machine/database/10523",
+   "official_product_url": "https://p-town.dmm.com/machines/5059",
    "announced_name": "モグモグ風林火山 大海戦の巻",
    "identity_tier": "CATALOG_CODE_MATCHED",
-   "identity_binding": "PWORLD_MACHINE_PAGE",
-   "identity_evidence_ref": "pworld:10523 型式=Lモグモグ風林火山 大海戦の巻ZB 検定=531225 確認日=2026-08-13",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5059 型式=Lモグモグ風林火山 大海戦の巻ZB メーカー=ネット 導入=2026-09-07 確認日=2026-08-16",
    "market_release_date": "2026-09-07",
    "regulatory_model_code": "Lモグモグ風林火山 大海戦の巻ZB",
    "_model_code_sources": [
     "p-town.dmm.com",
     "p-world.co.jp"
-   ]
+   ],
+   "_legacy_evidence_ref": "pworld:10523 型式=Lモグモグ風林火山 大海戦の巻ZB 検定=531225 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10523"
   }
  },
  {
@@ -11827,17 +11839,19 @@
   "release_date": "2026-09-07",
   "identity": {
    "manufacturer_id": "universal",
-   "official_product_url": "https://www.p-world.co.jp/machine/database/10510",
+   "official_product_url": "https://p-town.dmm.com/machines/5049",
    "announced_name": "スマスロ タコスロ",
    "identity_tier": "CATALOG_CODE_MATCHED",
-   "identity_binding": "PWORLD_MACHINE_PAGE",
-   "identity_evidence_ref": "pworld:10510 型式=LB／タコスロBD 検定=6S0085 確認日=2026-08-13",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5049 型式=LB/タコスロBD メーカー=ユニバーサルブロス 導入=2026-09-07 確認日=2026-08-16",
    "market_release_date": "2026-09-07",
    "regulatory_model_code": "LB/タコスロBD",
    "_model_code_sources": [
     "1geki.jp",
     "p-world.co.jp"
-   ]
+   ],
+   "_legacy_evidence_ref": "pworld:10510 型式=LB／タコスロBD 検定=6S0085 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10510"
   },
   "checker": {
    "coinRate": 36.6,

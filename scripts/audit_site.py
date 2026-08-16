@@ -562,6 +562,27 @@ def check_16_writing_style(machines: list) -> list[str]:
     return ngs
 
 
+def _strip_identity(text: str) -> str:
+    """★同定の控え（identity）だけを外した本文★（2026-08-16）
+
+    ★文字列を切り貼りしない★＝JSONとして読み直し、identity を落としてから
+    もう一度文字にする。正規表現で括弧を数えると、入れ子や記号で崩れる。
+    読めなければ**そのまま全部見る**（見落とすより厳しいほうに倒す）。
+    """
+    import json as _json
+    try:
+        d = _json.loads(text)
+    except Exception:                     # noqa: BLE001
+        return text
+    ms = d["machines"] if isinstance(d, dict) else d
+    if not isinstance(ms, list):
+        return text
+    for m in ms:
+        if isinstance(m, dict):
+            m.pop("identity", None)
+    return _json.dumps(d, ensure_ascii=False)
+
+
 def check_17_external_site_names(machines: list) -> list[str]:
     """他サイト名の露出検知
 
@@ -591,7 +612,14 @@ def check_17_external_site_names(machines: list) -> list[str]:
     # machines.json も対象（checker.note / strategy / seo.title 等）
     mj = BASE / "assets" / "data" / "machines.json"
     if mj.is_file():
-        text = load_text(mj)
+        # ★同定の控え（identity）は読者に出ない★（2026-08-16・台帳#376）
+        #   ここには機種ページのURLが入る。規約でDMMへ移した結果、
+        #   同定用のURLに "DMM" が含まれるようになったが、
+        #   **読者向けページには一切出ない**（描画側は identity を読まない。
+        #   実データで machines/{slug}/index.html に0件であることを確認）。
+        #   ★見るのを狭めるのはここだけ★＝本文・見出し・checker の注記は
+        #   今までどおり全部見る。
+        text = _strip_identity(load_text(mj))
         for s in sites:
             c = text.count(s)
             if c:
