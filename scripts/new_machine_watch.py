@@ -82,13 +82,47 @@ _CACHE: dict = {}
 _CACHE_MAX = 400
 _LAST_AT: dict = {}
 MIN_INTERVAL = float(os.environ.get("UCHI_FETCH_INTERVAL", "2.0"))
-FETCH_COUNT = {"n": 0, "cached": 0}   # ★何回取りに行ったか★
+FETCH_COUNT = {"n": 0, "cached": 0, "redirect": 0}
+# ★1回の実行で外へ出てよい回数の上限★（2026-08-16・依頼220の指摘3）
+#   相手のサーバーに負担をかけないため。★転送も1回として数える★
+#   （転送は別のページを取りに行くので、数えないと実数が分からない）。
+#   ★超えたら止める★＝黙って続けない。何回で止まったかを理由に出す。
+#   ★実測して決めた値★（2026-08-16・上限なしで1機種を通して数えた）
+#     新台の巡回（カレンダー4か月＋機種ページ4件）      8回
+#     材料を探す（名鑑の索引を1機種ぶん）             213回
+#     ＝1機種あたり 221回。
+#   1晩に複数機種を回すので、**3機種ぶん＋余裕**を持たせて 800 とする。
+#   ★これは「ここで止める」ための栓であって、目標値ではない★
+#   （減らす工夫＝索引の走査を絞る・控えを使うは別途・台帳#379）。
+FETCH_BUDGET = {"limit": 800, "used": 0}
+
+
+class BudgetError(Exception):
+    """1回の実行で取りに行く回数が上限を超えた（★止める★）。"""
+
+
+def budget_reset(limit: int | None = None) -> None:
+    """★実行のはじめに呼ぶ★（1回ぶんの持ち分を戻す）"""
+    if limit is not None:
+        FETCH_BUDGET["limit"] = int(limit)
+    FETCH_BUDGET["used"] = 0
+    FETCH_COUNT.update({"n": 0, "cached": 0, "redirect": 0})
+
+
+def budget_spend(url: str) -> None:
+    """★外へ出る直前に1回ぶん使う★（上限を超えたら止める）"""
+    FETCH_BUDGET["used"] += 1
+    lim = int(FETCH_BUDGET.get("limit") or 0)
+    if lim and FETCH_BUDGET["used"] > lim:
+        raise BudgetError(
+            f"1回の実行で取りに行く回数が上限（{lim}回）を超えました"
+            f"／★ここで止めます★（{FETCH_BUDGET['used']}回目・{url[:60]}）")
 
 
 def cache_clear() -> None:
     _CACHE.clear()
     _LAST_AT.clear()
-    FETCH_COUNT.update({"n": 0, "cached": 0})
+    FETCH_COUNT.update({"n": 0, "cached": 0, "redirect": 0})
 
 
 def _wait_turn(url: str) -> None:
@@ -200,15 +234,24 @@ class _GuardedRedirect(urllib.request.HTTPRedirectHandler):
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         check_before_fetch(newurl)       # ★行く前に断る★
+        budget_spend(newurl)             # ★転送も1回として数える★
+        FETCH_COUNT["redirect"] += 1
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-# ★転送の見張りを、標準の urlopen に仕込む★（2026-08-16・依頼217の指摘3）
-#   ここで opener を作って渡す形にすると、**試験が urlopen を差し替えても
-#   効かなくなる**（実際にネットへ出てしまった）。
-#   install_opener なら urlopen 経由のままなので、試験の差し替えも生きる。
-urllib.request.install_opener(
-    urllib.request.build_opener(_GuardedRedirect()))
+# ★このモジュール専用の通信口★（2026-08-16・依頼220の指摘1）
+#   前は install_opener でプログラム全体の urlopen を差し替えていた。
+#   すると**別の場所（page_probe など）まで巻き込み**、そちらは用途を
+#   名乗っていないので転送のたびに止まっていた（安全側に倒れるが、
+#   「他へ影響しない」は嘘だった）。
+#   ★ここだけの通信口にする★＝影響がこのモジュールの中で閉じる。
+#   ★試験はこの通信口を差し替える★（グローバルの urlopen ではなく）。
+OPENER = urllib.request.build_opener(_GuardedRedirect())
+
+
+def guarded_open(req, timeout: int = 20):
+    """★このモジュールが外へ出るときの唯一の口★（転送も見張る）"""
+    return OPENER.open(req, timeout=timeout)
 
 
 def _get(url: str, timeout: int = 20) -> str:
@@ -230,11 +273,12 @@ def _get(url: str, timeout: int = 20) -> str:
         LAST_FINAL_URL["url"] = hit[1]   # 転送の検査が働くように控えも戻す
         return hit[0]
     _wait_turn(url)
+    budget_spend(url)                      # ★上限を超えたらここで止まる★
     FETCH_COUNT["n"] += 1
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     LAST_FINAL_URL["url"] = None
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with guarded_open(req, timeout=timeout) as r:
             if r.status != 200:
                 raise WatchError(f"HTTP {r.status}: {url}")
             LAST_FINAL_URL["url"] = r.geturl()
@@ -1498,7 +1542,7 @@ def selftest() -> int:
 
         # ── ★同じページを取り直さない★（2026-08-05・取得回数の削減）
         import urllib.request as _ur
-        _real_open, _hits = _ur.urlopen, {"n": 0}
+        _real_open, _hits = OPENER.open, {"n": 0}
 
         class _Res:
             status = 200
@@ -1509,7 +1553,7 @@ def selftest() -> int:
             def read(self, n=None): return b"<html>ok</html>"
 
         try:
-            _ur.urlopen = lambda *a, **k: (_hits.__setitem__("n", _hits["n"] + 1),
+            OPENER.open = lambda *a, **k: (_hits.__setitem__("n", _hits["n"] + 1),
                                             _Res())[1]
             _iv, MIN = MIN_INTERVAL, 0.0
             globals()["MIN_INTERVAL"] = 0.0
@@ -1525,7 +1569,7 @@ def selftest() -> int:
             globals()["_get"]("https://x.example/a")
             t("　控えを消せば取り直す", _hits["n"] == 3)
         finally:
-            _ur.urlopen = _real_open
+            OPENER.open = _real_open
             globals()["MIN_INTERVAL"] = _iv
             cache_clear()
 
@@ -2182,6 +2226,29 @@ def selftest() -> int:
               _blocked_any("https://www.p-world.co.jp/machine/database/1"))
             t("★★名簿に無い先への転送も、行く前に止まる★★",
               _blocked_any("https://shiranai.example/x"))
+            # ★★1回の実行で取りに行く回数に上限がある★★（依頼220）
+            _keep_bud = dict(FETCH_BUDGET)
+            try:
+                budget_reset(2)
+                _spent = []
+                for _i in range(4):
+                    try:
+                        budget_spend("https://p-town.dmm.com/machines/%d" % _i)
+                        _spent.append("ok")
+                    except BudgetError:
+                        _spent.append("stop")
+                t("★★上限の手前までは通り、次の1回は通信の前に止まる★★"
+                  "（相手のサーバーに負担をかけない栓）",
+                  _spent == ["ok", "ok", "stop", "stop"])
+                budget_reset(0)
+                budget_spend("https://p-town.dmm.com/machines/1")
+                t("　上限0は「上限なし」（実際の回数を測るときに使う）", True)
+            finally:
+                FETCH_BUDGET.clear()
+                FETCH_BUDGET.update(_keep_bud)
+            t("★★転送も1回として数える★★（数えないと実数が分からない）",
+              "budget_spend" in inspect.getsource(
+                  _GuardedRedirect.redirect_request))
             t("★★何のために取りに行くかを名乗らなければ通さない★★"
               "（名乗らないと自動で材料扱いにしていた・依頼218）",
               _blocked_any("https://p-town.dmm.com/machines/5049", ""))
@@ -2189,8 +2256,15 @@ def selftest() -> int:
               not _blocked_any("https://p-town.dmm.com/machines/5049"))
             t("★★許した道筋の外への転送は止まる★★（同じサイトでも）",
               _blocked_any("https://p-town.dmm.com/shops/1"))
-            t("　転送の見張りが urlopen に繋がっている",
-              "install_opener" in inspect.getsource(sys.modules[__name__])
+            t("★★プログラム全体の通信を差し替えない★★"
+              "（page_probe など別の場所まで巻き込んでいた）",
+              urllib.request._opener is None
+              or not isinstance(
+                  getattr(urllib.request._opener, "handlers", [None])[0]
+                  if getattr(urllib.request._opener, "handlers", None)
+                  else None, _GuardedRedirect))
+            t("　転送の見張りが、このモジュールの通信口に繋がっている",
+              "_GuardedRedirect" in inspect.getsource(sys.modules[__name__])
               and "check_before_fetch" in inspect.getsource(_GuardedRedirect
                                                            .redirect_request))
             t("★★ブラウザで描画して読む経路は削除した★★"
