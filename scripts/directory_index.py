@@ -274,7 +274,10 @@ def _surface_pages(url: str, max_pages: int, first_html: str = ""):
         if cur in seen:
             continue
         seen.add(cur)
-        html = _w._get(cur)
+        # ★用途を名乗ってから取りに行く★（依頼218）
+        #   ここは find() の外（scan_directory）からも呼ばれる。
+        with _w.fetching("claim_material"):
+            html = _w._get(cur)
         yield cur, html
         for u in more_pages(html, url):
             if u not in seen and u not in queue:
@@ -293,7 +296,9 @@ def scan_directory(dir_id: str, conf: dict) -> dict:
     for sf in conf.get("surfaces") or []:
         out["surfaces_total"] += 1
         try:
-            html = _w._get(sf["url"])
+            # ★用途を名乗ってから取りに行く★（依頼218）
+            with _w.fetching("claim_material"):
+                html = _w._get(sf["url"])
         except Exception as e:
             out["problems"].append(f"{sf['url']}: 取得できません（{e}）")
             continue

@@ -163,7 +163,9 @@ def baseline_titles() -> int:
     from datetime import date as _date
     for i, url in enumerate(todo, 1):
         try:
-            html = _nw._get(url)
+            # ★用途を名乗ってから取りに行く★（2026-08-16・依頼218）
+            with _nw.fetching("machine_identity"):
+                html = _nw._get(url)
             t = unicodedata.normalize("NFKC", _nw.page_title(html)).strip()
             if t:
                 titles[url] = t
@@ -207,7 +209,9 @@ def recheck_known(mid: str, r: dict, seen: dict, out: dict) -> None:
     for url in known[:RECHECK_PER_MAKER]:
         checked[url] = _date.today().isoformat()   # ★試したら必ず末尾へ★
         try:
-            html = _nw._get(url)
+            # ★用途を名乗ってから取りに行く★（依頼218）
+            with _nw.fetching("machine_identity"):
+                html = _nw._get(url)
         except Exception as e:            # noqa: BLE001
             _log(f"  再確認できませんでした（次のローテで再試行）: {url} / {e}")
             continue
@@ -1102,7 +1106,12 @@ def verify_official(name: str, official_url: str,
     if isinstance(_fin, dict):
         _fin["url"] = None
     try:
-        html = _nw._get(official_url)
+        # ★用途を名乗ってから取りに行く★（依頼218）
+        #   ここは「そのページがこの機種か」を確かめる＝machine_identity。
+        #   名乗りが無いと関所が例外を投げ、下の except が
+        #   「取得できない」と読み替えて**静かに同定が落ちる**。
+        with _nw.fetching("machine_identity"):
+            html = _nw._get(official_url)
     except Exception as e:
         # ★取得できない時、同じ公式の一覧カードで確かめ直す★
         #   （2026-08-04・台帳#209、Codex92回目で条件つき承認）

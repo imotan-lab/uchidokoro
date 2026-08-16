@@ -482,7 +482,9 @@ def main() -> int:
         ap.print_help()
         return 0
     import new_machine_watch as _nw
-    html = _nw._get(a.url)
+    # ★用途を名乗ってから取りに行く★（依頼218）
+    with _nw.fetching("claim_material"):
+        html = _nw._get(a.url)
     ua = conf_for_url(a.url)
     print(f"決まりごと: {ua or '（無し＝素通し）'}")
     try:

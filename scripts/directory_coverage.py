@@ -69,7 +69,9 @@ def check(dir_id: str, conf: dict) -> dict:
                                            (conf.get("surfaces") or [])[:6]]
     for s in [{"url": u} for u in roots]:
         try:
-            html = _w._get(s["url"])
+            # ★用途を名乗ってから取りに行く★（依頼218）
+            with _w.fetching("claim_material"):
+                html = _w._get(s["url"])
         except Exception as e:            # noqa: BLE001
             out["problems"].append(f"{s['url']}: 取得できません（{e}）")
             continue

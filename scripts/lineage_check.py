@@ -71,7 +71,9 @@ def check(urls: list) -> dict:
     texts, errs, failed = {}, [], []
     for u in urls:
         try:
-            texts[u] = _w._visible_text(_w._get(u))
+            # ★用途を名乗ってから取りに行く★（依頼218）
+            with _w.fetching("claim_material"):
+                texts[u] = _w._visible_text(_w._get(u))
         except Exception as e:
             errs.append(f"{u}: 取得できません（{e}）")
             failed.append(u)

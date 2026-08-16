@@ -453,7 +453,11 @@ def verify_source(src: dict, name: str, fetch=None) -> dict:
         import new_machine_watch as _w
 
         def fetch(u):
-            return _w._get(u)
+            # ★用途を名乗ってから取りに行く★（2026-08-16・依頼218）
+            #   名乗らないと通信の名簿が通さない。ここは2AIが決めた値の
+            #   逐語を出典ページで確かめる＝記事の材料なので `claim_material`。
+            with _w.fetching("claim_material"):
+                return _w._get(u)
     import hashlib
 
     import model_code_lookup as _mc

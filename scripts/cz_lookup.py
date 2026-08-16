@@ -194,7 +194,9 @@ def read_page(url: str, official_name: str) -> dict:
     out = {"url": url, "host": url.split("/")[2].lower().removeprefix("www."),
            "ok": False, "reason": "", "czs": []}
     try:
-        html = _w._get(url)
+        # ★用途を名乗ってから取りに行く★（2026-08-16・依頼218）
+        with _w.fetching("claim_material"):
+            html = _w._get(url)
         # ★取ってきた直後に、投稿欄・AI欄を箱ごと落とす★（2026-08-14・台帳#345）
         #   ここを通さないと、**表を生のHTMLから読む処理**に読者の書き込みが入る。
         #   落としきれないときは例外＝そのページは使わない（fail-closed）。

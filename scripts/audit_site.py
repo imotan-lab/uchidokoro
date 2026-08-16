@@ -1752,6 +1752,116 @@ def check_41_automation_policy(machines: list) -> list[str]:
         return [f"通信の名簿を確かめられません: {str(e)[:150]}"]
 
 
+def check_42_fetch_purpose(machines: list) -> list[str]:
+    """★通信の入口が「用途を名乗る」囲みの中にあるか★（2026-08-17・依頼225）
+
+    ★なぜ機械で見張るのか★
+      2026-08-16 に「取りに行く前に用途を名乗る」を必須にしたとき、
+      **呼び出し側を全部は直していなかった**。そのため
+      collect_evidence / machine_sources / confirmed_values ほか計11箇所が
+      「名乗っていません」で必ず落ちる状態になり、
+      ★更新タスクは出典0件・新台タスクは確定値を書き戻せない★まま
+      1日気づかれなかった。自己試験は全部通っていた（偽物の取得へ
+      差し替えて試験するので、関所を踏まない）。
+
+    ★同じ型の事故★＝関所を厳しくして、通る側の更新が漏れる。
+      文章の約束では守られないので、ここで数える。
+
+    見方は素朴でよい＝`_get(` を呼んでいる行より上に、
+    同じか浅いインデントの `fetching(` の囲みがあるか。
+    ★見つからなければ「疑い」として挙げる★（判断は人がする）。
+    """
+    import re as _re
+    ngs: list[str] = []
+    sdir = BASE / "scripts"
+    # ★除外条件を作り込まない★（2026-08-17）
+    #   最初の版は「試験の差し替えを外す」つもりで `= _nw._get` を除外に入れ、
+    #   **捕まえたい `page = _nw._get(url)` まで一緒に外して**しまった
+    #   （対照実験で発覚）。呼び出しかどうかは丸括弧の有無で決まるので、
+    #   `_get(` と書いてある行だけを見れば足りる。差し替え（`_w._get = 偽物`）は
+    #   丸括弧が続かないので、そもそもここに来ない。
+    call = _re.compile(
+        r"(?<![A-Za-z0-9_])(?:_w|_nw|_nwp|new_machine_watch)\._get\s*\(")
+    for path in sorted(sdir.glob("*.py")):
+        if path.name in ("new_machine_watch.py",):
+            continue                      # 取得口そのもの
+        lines = path.read_text(encoding="utf-8").split("\n")
+        for i, line in enumerate(lines):
+            # 説明文（#から後ろ）はコードではないので見ない
+            if not call.search(line.split("#")[0]):
+                continue
+            indent = len(line) - len(line.lstrip())
+            # 上へさかのぼって、囲んでいる `with ... fetching(` を探す
+            ok = False
+            for j in range(i - 1, max(-1, i - 40), -1):
+                prev = lines[j]
+                if not prev.strip():
+                    continue
+                pind = len(prev) - len(prev.lstrip())
+                if pind >= indent:
+                    continue
+                if "fetching(" in prev:
+                    ok = True
+                    break
+                if _re.match(r"\s*(def|class)\s", prev):
+                    break                 # 関数の頭まで来たら囲みは無い
+                indent = pind
+            if not ok:
+                ngs.append(
+                    f"{path.name}:{i + 1} 用途を名乗らずに取りに行っています"
+                    "（with new_machine_watch.fetching(\"用途\"): で囲む）")
+    return ngs
+
+
+def check_43_undefined_names(machines: list) -> list[str]:
+    """★消したはずの名前を呼び続けていないか★（2026-08-17・依頼225）
+
+    ★なぜ★ 台帳#377 で `_ensure_list` の**定義だけ**を消して
+    呼び出しが残り、grow_machine が毎朝 NameError で落ちていた。
+    実行するまで分からない一方、名前を探すだけなら実行せずに分かる。
+    ★自己試験では見つからなかった★（その経路を踏む試験が無かった）。
+
+    決まりごと＝**そのファイルのどこにも束ねられていない名前を呼んでいたら挙げる**。
+
+    ★正規表現では数えない★（2026-08-17・最初に書いた版は7件すべて誤検知だった＝
+      `from X import _num` / タプル代入 / lambda の既定引数 / 文字列の中の字面）。
+      ここは字面ではなく**構文**の話なので、Python自身に読ませる。
+      束ね方（import・代入・for・with as・except as・引数・内包表記）を
+      一つずつ場合分けするのではなく、`ast` が Store と呼ぶものを全部拾う。
+    """
+    import ast as _ast
+    import builtins as _bi
+    ngs: list[str] = []
+    for path in sorted((BASE / "scripts").glob("*.py")):
+        src = path.read_text(encoding="utf-8")
+        try:
+            tree = _ast.parse(src, filename=path.name)
+        except SyntaxError as e:
+            ngs.append(f"{path.name}:{e.lineno} 文として読めません（{e.msg}）")
+            continue
+        bound = set(dir(_bi))
+        for n in _ast.walk(tree):
+            if isinstance(n, (_ast.FunctionDef, _ast.AsyncFunctionDef,
+                              _ast.ClassDef)):
+                bound.add(n.name)
+            elif isinstance(n, _ast.Name) and isinstance(n.ctx, _ast.Store):
+                bound.add(n.id)
+            elif isinstance(n, _ast.alias):
+                bound.add((n.asname or n.name).split(".")[0])
+            elif isinstance(n, _ast.ExceptHandler) and n.name:
+                bound.add(n.name)
+            elif isinstance(n, _ast.arg):
+                bound.add(n.arg)
+            elif isinstance(n, (_ast.Global, _ast.Nonlocal)):
+                bound.update(n.names)
+        for n in _ast.walk(tree):
+            if (isinstance(n, _ast.Call) and isinstance(n.func, _ast.Name)
+                    and n.func.id not in bound):
+                ngs.append(f"{path.name}:{n.lineno} "
+                           f"定義の無い {n.func.id}() を呼んでいます")
+    return ngs
+
+
 def check_40_slug_binding(machines: list) -> list[str]:
     """★slugと機種ページURLの対応★（2026-08-16・台帳#376／Codex依頼212）
 
@@ -2020,6 +2130,8 @@ CHECKS = [
     ("39_票の数え方", check_39_vote_counting),
     ("40_slugと機種ページURLの対応", check_40_slug_binding),
     ("41_自動で通信してよい先", check_41_automation_policy),
+    ("42_通信の用途の名乗り", check_42_fetch_purpose),
+    ("43_定義の無い内部関数の呼び出し", check_43_undefined_names),
 ]
 
 

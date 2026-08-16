@@ -723,7 +723,9 @@ def lookup(url: str, official_name: str, expected_maker: str = "") -> dict:
     out = {"url": url, "official_name": official_name,
            "model_code": None, "reason": "", "identity_ok": False}
     try:
-        html = _w._get(url)
+        # ★用途を名乗ってから取りに行く★（2026-08-16・依頼218）
+        with _w.fetching("claim_material"):
+            html = _w._get(url)
         # ★取ってきた直後に、投稿欄・AI欄を箱ごと落とす★（2026-08-14・台帳#345）
         #   ここを通さないと、**表を生のHTMLから読む処理**に読者の書き込みが入る。
         #   落としきれないときは例外＝そのページは使わない（fail-closed）。
