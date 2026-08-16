@@ -412,22 +412,19 @@ def selftest() -> int:
     t("　決まりごとの無いホストは素通し",
       "999G" in visible_text(_SAMPLE, conf={}))
 
-    real = _conf("www.p-world.co.jp")
-    t("★★P-WORLDの決まりごとが名鑑に登録されている★★",
-      bool(real.get("drop")) and bool(real.get("markers")))
-    # ★本番の設定を名指しで見る★（2026-08-14・依頼198のP2）
-    #   試験の中で作った設定（_req）だけを見ていたので、
-    #   **本番から require_* が消えても試験は合格**していた。
-    t("★★本番の必須アンカーが消えたら気づく★★"
-      "（落とす前は掲示板の箱／落とした後は機種データの箱）",
-      real.get("require_before") == [{"id": "bbs"}]
-      and real.get("require_after") == [{"id": "spec"}])
-    t("　落とす箱に掲示板とAIのまとめが入っている",
-      {"id": "bbs"} in (real.get("drop") or [])
-      and {"class": "bbsAiMatome"} in (real.get("drop") or []))
-    t("　落とし損ねの印が3つとも入っている",
-      set(real.get("markers") or [])
-      >= {"AIがまとめた内容", "AI投稿まとめ", "活発なトピック"})
+    # ★★2026-08-16・台帳#376★★
+    #   P-WORLDと一撃は、規約でプログラム取得が禁止されていたので名鑑から外した。
+    #   ★決まりごと（落とす箱・印）はJSONに残してある★＝許諾が取れて戻すとき、
+    #   もう一度実ページを調べ直さずに済むように。ここでは**効いていないこと**を見る。
+    import blocked_hosts as _bh2
+    t("★★規約で外した名鑑の決まりごとは効かない★★（P-WORLD・一撃）",
+      _conf("www.p-world.co.jp") == {} and _conf("1geki.jp") == {})
+    t("★★そもそも機械が通信しない★★（最後の砦）",
+      _bh2.is_blocked("https://www.p-world.co.jp/machine/database/10510")
+      and _bh2.is_blocked("https://1geki.jp/slot/x/"))
+    t("　（対照）使ってよい名鑑は通信できる",
+      not _bh2.is_blocked("https://p-town.dmm.com/machines/4709")
+      and not _bh2.is_blocked("https://chonborista.com/slot/x/1/"))
     # ★★他の名鑑も登録されているか（2026-08-14・台帳#348）★★
     #   ★一律に同じ規則をコピーしていない★＝サイトごとに実HTMLを見て決めた。
     _dmm = _conf("p-town.dmm.com")
@@ -450,14 +447,8 @@ def selftest() -> int:
     # ★★必須アンカーは機種ページにだけ求める（2026-08-15）★★
     #   一覧ページ・カレンダーには口コミ欄も掲示板も無いのが当たり前。
     #   そこで止めると**新台を見つける入口（導入カレンダー）まで使えなくなる**。
-    _pw = _conf("www.p-world.co.jp")
     t("★★一覧やカレンダーを機種ページ扱いしない★★（2026-08-15）"
       "／ここを間違えると、新台を見つける入口が丸ごと止まる",
-      is_machine_page("https://www.p-world.co.jp/machine/database/10510", _pw)
-      and not is_machine_page(
-          "https://www.p-world.co.jp/database/machine/introduce_calendar.cgi",
-          _pw))
-    t("　ちょんぼりすた・DMMも同じ（機種ページだけ厳しく見る）",
       is_machine_page("https://chonborista.com/slot/orinpia-slot/264134/",
                       _chon)
       and not is_machine_page("https://chonborista.com/slot/", _chon)
@@ -466,12 +457,12 @@ def selftest() -> int:
     t("　形を書いていない名鑑は、今までどおり厳しく見る",
       is_machine_page("https://x.test/anything", {}))
     t("　（対照）一覧ページでも、落とす箱と印は今までどおり効く",
-      bool(_pw.get("drop")) and bool(_pw.get("markers")))
+      bool(_dmm.get("drop")) and bool(_chon.get("drop")))
     t("★★必須の箱は「どれか1つ」ではなく「全部」そろうこと★★（依頼198）",
       (lambda: [
           _ok for _ok in [False]
       ] and _all_required_checked())())
-    t("　サブドメインでも引ける", _conf("www.p-world.co.jp") == _conf("p-world.co.jp"))
+    t("　サブドメインでも引ける", _conf("p-town.dmm.com") == _conf("p-town.dmm.com"))
     t("　知らないホストは空", _conf("example.com") == {})
 
     ng = sum(1 for _, o in results if not o)

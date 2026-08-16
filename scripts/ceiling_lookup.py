@@ -913,7 +913,7 @@ def selftest() -> int:
       from_table("<table><tr><th>天井G数</th><td>1200pt</td></tr>"
                  "<tr><th>恩恵</th><td>AT当選</td></tr></table>") == [])
 
-    A = {"url": "https://www.p-world.co.jp/x", "host": "p-world.co.jp", "ok": True,
+    A = {"url": "https://nana-press.com/x", "host": "nana-press.com", "ok": True,
          "ceilings": [{"kind": "GAME", "amount": 1200, "unit": "G",
                        "counted": "通常時", "benefit": "AT", "raw": ""}]}
     B = {"url": "https://chonborista.com/y", "host": "chonborista.com", "ok": True,
@@ -930,7 +930,7 @@ def selftest() -> int:
     r3 = compare([A, D])
     t("　値が違えば採らない", not r3["adopted"])
     t("　1出典だけなら採らない", not compare([A])["adopted"])
-    E = {**B, "host": "p-world.co.jp"}
+    E = {**B, "host": "nana-press.com"}
     t("★同じ運営元の2ページを2票と数えない★", not compare([A, E])["adopted"])
     t("　機種が違うページの内容は混ぜない",
       not compare([{**A, "ok": False}, B])["adopted"])
@@ -941,8 +941,8 @@ def selftest() -> int:
                                        "counted": cnt, "benefit": "AT",
                                        "certainty": "PLAIN", "raw": ""}]}
     t("★★『通常時1200G』と『AT間1200G』を同じ天井にしない★★（実際に起きた値漏れ）",
-      not compare([mk("p-world.co.jp", "通常時"), mk("chonborista.com", "AT間")])["adopted"])
-    _r = compare([mk("chonborista.com", None), mk("p-world.co.jp", "通常時")])
+      not compare([mk("nana-press.com", "通常時"), mk("chonborista.com", "AT間")])["adopted"])
+    _r = compare([mk("chonborista.com", None), mk("nana-press.com", "通常時")])
     t("★★片方が条件を書いていないだけなら、条件つきの方を残す★★（条件を消さない）",
       len(_r["adopted"]) == 1 and _r["adopted"][0]["counted"] == "通常時")
     t("　その場合も2出典ぶんの票として数える",
@@ -957,7 +957,7 @@ def selftest() -> int:
                          {"kind": "GAME", "amount": 1200, "unit": "G",
                           "counted": "AT間", "benefit": "AT",
                           "certainty": "PLAIN", "raw": ""}]}
-    r56 = compare([mk3("p-world.co.jp"), mk3("chonborista.com")])
+    r56 = compare([mk3("nana-press.com"), mk3("chonborista.com")])
     t("★★数える対象が違う2つのG数天井は、両方2出典一致なら両方採る★★"
       "（kindだけで束ねると互いを食い違い扱いにして全部落とした・Codex56回目）",
       len(r56["adopted"]) == 2
@@ -1113,19 +1113,19 @@ def selftest() -> int:
       "（2026-08-06・運営者決定。出典ごとの書き方の違いにすぎない）",
       _key(p999) == _key(p999n))
     _mix = compare([{"ok": True, "host": "chonborista.com", "ceilings": [p999]},
-                    {"ok": True, "host": "www.p-world.co.jp",
+                    {"ok": True, "host": "nana-press.com",
                      "ceilings": [p999n]}])["adopted"]
     t("★★表示は深い側（+α付き）にそろえる★★（早く打ち始める事故を防ぐ）",
       len(_mix) == 1 and _mix[0]["plus_alpha"] is True)
     # ★出典の並び順で+αが消えないか★（2026-08-07・台帳#248。
     #   票のまとめ先が「最初に来た1件」だったので、+α無しが先に来ると消えていた）
     _rev = compare([{"ok": True, "host": "chonborista.com", "ceilings": [p999n]},
-                    {"ok": True, "host": "www.p-world.co.jp",
+                    {"ok": True, "host": "nana-press.com",
                      "ceilings": [p999]}])["adopted"]
     t("★★+α無しが先に来ても+αは消えない★★（並び順に左右されない）",
       len(_rev) == 1 and _rev[0]["plus_alpha"] is True)
     _both = compare([{"ok": True, "host": "chonborista.com", "ceilings": [p999n]},
-                     {"ok": True, "host": "www.p-world.co.jp",
+                     {"ok": True, "host": "nana-press.com",
                       "ceilings": [p999n]}])["adopted"]
     t("　どちらも+α無しなら、+αを足さない（無い物を書かない）",
       len(_both) == 1 and _both[0]["plus_alpha"] is False)
@@ -1196,13 +1196,13 @@ def selftest() -> int:
     _other = _atom("GAME", 1000, "G", role="EXPLICIT_CEILING", phase="通常時",
                    counted="通常時", count_note="内部G数", benefit="AT")
     got = compare([_pg("chonborista.com", [_plain]),
-                   _pg("www.p-world.co.jp", [_noted])])["adopted"]
+                   _pg("nana-press.com", [_noted])])["adopted"]
     t("★★片方だけが数え方の但し書きを書いていても、同じ天井として数える★★"
       "（実データで1票ずつに割れて届かなかった）",
       len(got) == 1 and got[0]["count_note"] == "液晶G数")
     t("★★但し書きが両方にあって中身が違えば寄せない★★（液晶G数と内部G数は別物）",
       compare([_pg("chonborista.com", [_noted]),
-               _pg("www.p-world.co.jp", [_other])])["adopted"] == [])
+               _pg("nana-press.com", [_other])])["adopted"] == [])
     t("　括弧の但し書きつきの文も読める",
       explicit_ceilings("通常時を最大1000G+α消化(液晶G数)で天井到達。"
                         "到達後はATに当選する。")[0]["count_note"] == "液晶G数")

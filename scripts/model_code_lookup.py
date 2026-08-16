@@ -924,17 +924,17 @@ def selftest() -> int:
           "なお導入は8月です。</p>")[0] is None)
 
     t("★★独立2つの名鑑で一致して初めて採用★★",
-      agree([{"url": "https://www.p-world.co.jp/x", "model_code": "Lびん娘NY1"},
+      agree([{"url": "https://nana-press.com/x", "model_code": "Lびん娘NY1"},
              {"url": "https://p-town.dmm.com/y", "model_code": "Lびん娘NY1"}])["adopted"]
       is True)
     t("　1つだけでは採用しない",
-      agree([{"url": "https://www.p-world.co.jp/x",
+      agree([{"url": "https://nana-press.com/x",
               "model_code": "Lびん娘NY1"}])["adopted"] is False)
     t("★同じサイトの2ページを2票と数えない★",
-      agree([{"url": "https://www.p-world.co.jp/x", "model_code": "A1"},
-             {"url": "https://p-world.co.jp/y", "model_code": "A1"}])["adopted"] is False)
+      agree([{"url": "https://nana-press.com/x", "model_code": "A1"},
+             {"url": "https://nana-press.com/y", "model_code": "A1"}])["adopted"] is False)
     t("　食い違ったら採用しない（理由を残す）",
-      agree([{"url": "https://www.p-world.co.jp/x", "model_code": "A1"},
+      agree([{"url": "https://nana-press.com/x", "model_code": "A1"},
              {"url": "https://p-town.dmm.com/y", "model_code": "B2"}])["adopted"] is False)
 
     t("★★一致する場合はちゃんと通る★★（全部落ちていて気づかない事故を防ぐ）",
@@ -1009,9 +1009,10 @@ def selftest() -> int:
       == (None, "MODEL_CODE_NOT_FOUND"))
     t("★★型式名の空白差を食い違いにしない★★"
       "（CONFLICTだと機種ごと自動経路から外れていた・Codex24回目）",
-      agree([{"url": "https://www.p-world.co.jp/x", "model_code": "Lびん娘NY1"},
+      agree([{"url": "https://nana-press.com/x", "model_code": "Lびん娘NY1"},
              {"url": "https://p-town.dmm.com/y", "model_code": "Lびん娘 NY1"}])
-      == {"model_code": "Lびん娘NY1", "hosts": ["p-town.dmm.com", "p-world.co.jp"],
+      == {"model_code": "Lびん娘NY1",
+          "hosts": sorted(["p-town.dmm.com", "nana-press.com"]),
           "adopted": True})
     # ★★Codex25回目（自分で再現してから直した）★★
     t("★★区切りの後ろの断片でも、元の題の前置を見る★★（Codex25回目）",
@@ -1070,7 +1071,7 @@ def selftest() -> int:
                       "東京グール | ちょんぼりすた パチスロ解析</title>",
                       "L 東京喰種")[0] is True)
     t("★★型式名のダッシュ表記差を食い違いにしない★★（Codex32回目）",
-      agree([{"url": "https://www.p-world.co.jp/x", "model_code": "LTEST-A"},
+      agree([{"url": "https://nana-press.com/x", "model_code": "LTEST-A"},
              {"url": "https://p-town.dmm.com/y", "model_code": "LTEST−A"}])
       ["adopted"] is True)
     t("★★「(スマスロ SP)」の派生印を略称として許さない★★"
@@ -1111,7 +1112,7 @@ def selftest() -> int:
                 setattr(_w, "_get", lambda u, timeout=20:
                     "<title>L試験機 パチスロ新台 | P-WORLD</title>"
                     "<p>メーカー名：サミー</p><p>型式名：L試験1</p>"),
-                lookup("https://www.p-world.co.jp/x", "L試験機",
+                lookup("https://nana-press.com/x", "L試験機",
                        expected_maker="heiwa"),
                 setattr(_w, "_get", _w._get_bak40))[2])()
       ["reason"].startswith("DIRECTORY_MAKER_MISMATCH"))
@@ -1264,7 +1265,7 @@ def selftest() -> int:
                 setattr(_w, "_get", lambda u, timeout=20:
                     "<title>L試験機 パチスロ新台 | P-WORLD</title>"
                     "<p>メーカー名：コナミアミューズメント</p><p>型式名：L試験1</p>"),
-                lookup("https://www.p-world.co.jp/x", "L試験機",
+                lookup("https://nana-press.com/x", "L試験機",
                        expected_maker="kpe"),
                 setattr(_w, "_get", _w._get_bak41))[2])()["model_code"] == "L試験1")
     # ★★Codex51回目★★
@@ -1274,7 +1275,7 @@ def selftest() -> int:
                 setattr(_w, "_get", lambda u, timeout=20:
                     "<title>L試験機 パチスロ新台 | P-WORLD</title>"
                     "<p>メーカー名：名簿にない別会社</p><p>型式名：L別物1</p>"),
-                lookup("https://www.p-world.co.jp/x", "L試験機",
+                lookup("https://nana-press.com/x", "L試験機",
                        expected_maker="heiwa"),
                 setattr(_w, "_get", _w._get_bak51))[2])()
       ["reason"].startswith("DIRECTORY_MAKER_UNRESOLVED"))
@@ -1334,7 +1335,7 @@ def selftest() -> int:
                 setattr(_w, "_get", lambda u, timeout=20:
                     "<title>L対象機(サミー) パチスロ新台 | P-WORLD</title>"
                     "<p>型式名：L別物1</p>"),
-                lookup("https://www.p-world.co.jp/x", "L対象機",
+                lookup("https://nana-press.com/x", "L対象機",
                        expected_maker="heiwa"),
                 setattr(_w, "_get", _w._get_bak56))[2])()
       .get("identity_ok") is False
@@ -1342,7 +1343,7 @@ def selftest() -> int:
                     setattr(_w, "_get", lambda u, timeout=20:
                         "<title>L対象機 パチスロ新台 | P-WORLD</title>"
                         "<p>まだ型式は載っていません</p>"),
-                    lookup("https://www.p-world.co.jp/x", "L対象機",
+                    lookup("https://nana-press.com/x", "L対象機",
                            expected_maker="heiwa"),
                     setattr(_w, "_get", _w._get_bak57))[2])()
       .get("identity_ok") is True)

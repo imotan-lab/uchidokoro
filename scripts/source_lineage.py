@@ -206,9 +206,9 @@ def count_votes(publisher_ids, reg: dict | None = None) -> int:
 def _bad_joint(reg: dict) -> bool:
     """★壊れた joint_production は止まるか★（試験用）"""
     import copy
-    for bad in ([{"publishers": ["1geki"], "why": "x"}],
-                [{"publishers": ["1geki", "zzz-nai"], "why": "x"}],
-                [{"publishers": ["1geki", "dmm-ptown"], "why": ""}],
+    for bad in ([{"publishers": ["dmm-ptown"], "why": "x"}],
+                [{"publishers": ["dmm-ptown", "zzz-nai"], "why": "x"}],
+                [{"publishers": ["dmm-ptown", "nana-press"], "why": ""}],
                 {"publishers": []}):
         r = copy.deepcopy(reg)
         r["joint_production"] = bad
@@ -232,32 +232,39 @@ def selftest() -> int:
 
     t("　登録済みの発行者はすべて票の単位を持つ",
       all(g.get(p) for p in _active(reg)))
-    t("★★同じ転載系列は1票★★（P-WORLDと羽伏せ）",
-      g.get("p-world") == g.get("hazuse") and g.get("p-world"))
+    # ★2026-08-16・台帳#376★ P-WORLD・一撃・羽伏せは規約により票から外した。
+    #   （P-WORLDと羽伏せが同じ転載系列だったことは registry に記録が残る）
+    t("★★規約で外した出典は票に数えない★★（P-WORLD・一撃・羽伏せ）",
+      all(p not in g for p in ("p-world", "hazuse", "1geki")))
     t("★★同じ転載系列は1票★★（ちょんぼりすたとやんちゃプレス）",
       g.get("chonborista") == g.get("yancha-press"))
     t("　別の会社どうしは別の票",
-      len({g.get("chonborista"), g.get("nana-press"), g.get("dmm-ptown"),
-           g.get("1geki")}) == 4)
+      len({g.get("chonborista"), g.get("nana-press"),
+           g.get("dmm-ptown")}) == 3)
+    t("★★同じ転載系列は1票★★（ちょんぼりすたとやんちゃプレス）",
+      g.get("chonborista") == g.get("yancha-press") and g.get("chonborista"))
     t("★★1社しか無ければ何本URLがあっても1票★★",
-      count_votes(["p-world", "hazuse", "p-world"], reg) == 1)
+      count_votes(["chonborista", "yancha-press", "chonborista"], reg) == 1)
     t("　別の2社なら2票", count_votes(["chonborista", "nana-press"], reg) == 2)
 
     # ★★共同制作の組（2026-08-14・依頼190のP1⑤）★★
-    t("★★共同で作ることがある組は1票にまとめる★★（一撃とDMMぱちタウン）"
+    # ★共同制作の設定はいま空★（一撃を規約で外したため・履歴は registry に残る）
+    #   仕組みは残す＝また共同制作の組が出てきたら登録するだけで効く。
+    t("★★共同で作ることがある組は1票にまとめる★★（仕組みは残っている）"
       "／共同取材の記事を独立2票と数えると土台が崩れる",
-      count_votes(["1geki", "dmm-ptown"], reg) == 1)
-    t("　（対照）まとめないと2票になる＝これが直す前の姿",
-      len({g["1geki"], g["dmm-ptown"]}) == 2)
+      merge_joint({g["chonborista"], g["dmm-ptown"]},
+                  {**reg, "joint_production": [
+                      {"publishers": ["chonborista", "dmm-ptown"],
+                       "why": "試験"}]}) == {min(g["chonborista"],
+                                                g["dmm-ptown"])})
+    t("　（対照）登録が無ければまとめない",
+      len(merge_joint({g["chonborista"], g["dmm-ptown"]}, reg)) == 2)
     t("★★票を数えるのはこの関数だけ★★（各抽出器はここを通す）",
-      independent({g["1geki"], g["dmm-ptown"]}, reg) == 1
-      and independent({g["1geki"], g["chonborista"]}, reg) == 2
-      and independent({g["1geki"], "", None}, reg) == 1
+      independent({g["chonborista"], g["dmm-ptown"]}, reg) == 2
+      and independent({g["chonborista"], "", None}, reg) == 1
       and independent(set(), reg) == 0)
-    t("　もう1社足せば2票に届く（作業は止まらない）",
-      count_votes(["1geki", "dmm-ptown", "chonborista"], reg) == 2)
-    t("　片方だけなら何もしない（関係ない機種の邪魔をしない）",
-      count_votes(["1geki", "chonborista"], reg) == 2)
+    t("　いま共同制作の登録は空（一撃を規約で外したため）",
+      joint_pairs(reg) == [])
     t("　登録の形が壊れていたら止める（黙って素通りしない）",
       _bad_joint(reg))
 
@@ -276,10 +283,20 @@ def selftest() -> int:
     t("　知らないホストも止める", ok)
 
     t("　ホストから票の単位を引ける",
-      vote_key_of_url("https://www.p-world.co.jp/x") == g.get("p-world"))
+      vote_key_of_url("https://p-town.dmm.com/x") == g.get("dmm-ptown"))
     t("　同じ会社の別ホストは同じ票",
-      vote_key_of_url("https://hazuse.com/y")
-      == vote_key_of_url("https://p-world.co.jp/z"))
+      vote_key_of_url("https://www.slopachi-quest.com/y")
+      == vote_key_of_url("https://slopachi-quest.com/z"))
+    # ★規約で外した先は、票にもホストからも引けない★（2026-08-16・台帳#376）
+    _ng = 0
+    for _u in ("https://www.p-world.co.jp/x", "https://1geki.jp/y",
+               "https://hazuse.com/z"):
+        try:
+            vote_key_of_url(_u)
+        except LineageError:
+            _ng += 1
+    t("★★規約で外した先はホストからも引けない★★"
+      "（票にも材料にも混ざらない）", _ng == 3)
 
     bad = sum(1 for _, o in results if not o)
     print()

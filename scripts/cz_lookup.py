@@ -392,13 +392,13 @@ def selftest() -> int:
                          "czs": czs, "unresolved": []}
     one = lambda n, g, r: {"name": n, "games": g, "rate": r, "raw": ""}
 
-    A = mk("p-world.co.jp", [one("すぱ娘チャレンジ", "4G+α", "約40%")])
+    A = mk("nana-press.com", [one("すぱ娘チャレンジ", "4G+α", "約40%")])
     B = mk("chonborista.com", [one("すぱ娘チャレンジ", "4G+α", "約40%")])
     r = compare([A, B])
     t("★2出典一致なら採用★",
       len(r["adopted"]) == 1 and r["adopted"][0]["games"] == "4G+α")
     t("　同じ運営元の2ページを2票と数えない",
-      not compare([A, mk("p-world.co.jp", B["czs"])])["adopted"])
+      not compare([A, mk("nana-press.com", B["czs"])])["adopted"])
 
     # ★Codexと相談した案D：項目ごとに採る★
     C = mk("chonborista.com", [one("すぱ娘チャレンジ", "4G+α", "50%以上")])
@@ -416,7 +416,7 @@ def selftest() -> int:
       (not r56["adopted"]) or r56["adopted"][0].get("games") is None)
 
     # ★英語表記とカタカナ表記の差だけをそろえる★
-    D1 = mk("p-world.co.jp", [one("上位クライMAXライブCHALLENGE", "10G", "約50%")])
+    D1 = mk("nana-press.com", [one("上位クライMAXライブCHALLENGE", "10G", "約50%")])
     D2 = mk("chonborista.com", [one("上位クライMAXライブチャレンジ", "10G", "約50%")])
     t("★★CHALLENGE と チャレンジ を同じCZとして扱う★★（公式で固有部分を確認済み）",
       len(compare([D1, D2])["adopted"]) == 1)
@@ -431,29 +431,52 @@ def selftest() -> int:
     # ★★共同で作ることがある組は1票（2026-08-14・依頼193のP1）★★
     #   継続G数と期待度は守っていたのに、**CZが「ある」と決めるところ**だけ
     #   生の票数のままで、一撃＋DMMだけでCZを採れていた。
-    _J1 = mk("1geki.jp", [one("すぱ娘チャレンジ", "4G+α", "約40%")])
+    _J1 = mk("chonborista.com", [one("すぱ娘チャレンジ", "4G+α", "約40%")])
     _J2 = mk("p-town.dmm.com", [one("すぱ娘チャレンジ", "4G+α", "約40%")])
     _rj = compare([_J1, _J2])
-    t("★★一撃とDMMだけではCZを採らない★★（共同取材の企画が実在するため）",
-      _rj["adopted"] == [] and bool(_rj["need_third"]))
-    t("　止まった理由が「出典が1件」ではなく「独立した票が足りない」と出る"
-      "／手当てのしかたを誤らせないため",
-      _rj["need_third"][0].get("independent_votes") == 1
-      and "出典2件・1票" in _rj["need_third"][0]["why"])
-    t("　（対照）別の社を1つ足せば今までどおり採れる",
-      len(compare([_J1, _J2,
-                   mk("chonborista.com",
-                      [one("すぱ娘チャレンジ", "4G+α", "約40%")])])["adopted"]) == 1)
-    t("★表示する書き方の多数決も独立票で数える★"
-      "（共同制作の組の表記が不当に多数派にならない）",
-      compare([mk("1geki.jp", [one("上位クライMAXライブCHALLENGE", "10G", "約50%")]),
-               mk("p-town.dmm.com",
-                  [one("上位クライMAXライブCHALLENGE", "10G", "約50%")]),
-               mk("chonborista.com",
-                  [one("上位クライMAXライブチャレンジ", "10G", "約50%")]),
-               mk("nana-press.com",
-                  [one("上位クライMAXライブチャレンジ", "10G", "約50%")])])
-      ["adopted"][0]["name"] == "上位クライMAXライブチャレンジ")
+    # ★★2026-08-16・台帳#376★★
+    #   一撃は規約により外したので、共同制作の登録はいま空。
+    #   ★仕組みは残っている★ので、一時的に登録して効くことを確かめる。
+    import source_lineage as _sl2
+    _bak = _sl2.load_registry
+    try:
+        _reg = _sl2.load_registry()
+        _sl2.load_registry = lambda path=None: {
+            **_reg, "joint_production": [
+                {"publishers": ["chonborista", "dmm-ptown"], "why": "試験"}]}
+        _rj2 = compare([mk("chonborista.com",
+                           [one("すぱ娘チャレンジ", "4G+α", "約40%")]),
+                        mk("p-town.dmm.com",
+                           [one("すぱ娘チャレンジ", "4G+α", "約40%")])])
+        t("★★共同で作ることがある組だけではCZを採らない★★"
+          "（共同取材の記事を独立2票と数えると土台が崩れる）",
+          _rj2["adopted"] == [] and bool(_rj2["need_third"]))
+        t("　止まった理由が「出典が1件」ではなく「独立した票が足りない」と出る"
+          "／手当てのしかたを誤らせないため",
+          _rj2["need_third"][0].get("independent_votes") == 1
+          and "出典2件・1票" in _rj2["need_third"][0]["why"])
+        t("　（対照）別の社を1つ足せば今までどおり採れる",
+          len(compare([mk("chonborista.com",
+                          [one("すぱ娘チャレンジ", "4G+α", "約40%")]),
+                       mk("p-town.dmm.com",
+                          [one("すぱ娘チャレンジ", "4G+α", "約40%")]),
+                       mk("nana-press.com",
+                          [one("すぱ娘チャレンジ", "4G+α", "約40%")])])
+              ["adopted"]) == 1)
+        # ★表示する書き方の多数決も独立票で数える★
+        #   共同制作の組（2社だが1票）が、独立2社の書き方に勝たないこと。
+        _disp = compare([
+            mk("chonborista.com", [one("上位クライMAXライブCHALLENGE", "10G", "約50%")]),
+            mk("p-town.dmm.com", [one("上位クライMAXライブCHALLENGE", "10G", "約50%")]),
+            mk("nana-press.com", [one("上位クライMAXライブチャレンジ", "10G", "約50%")]),
+            mk("slopachi-quest.com",
+               [one("上位クライMAXライブチャレンジ", "10G", "約50%")])])["adopted"]
+        t("★表示する書き方の多数決も独立票で数える★"
+          "（共同制作の組の表記が不当に多数派にならない）",
+          _disp and _disp[0]["name"] == "上位クライMAXライブチャレンジ")
+    finally:
+        _sl2.load_registry = _bak
+
     t("★採り切れなかった語は報告に残す（載せない判断には使わない）★",
       compare([{**A, "unresolved": ["ユニゾンチャレンジ"]}, B])["unresolved"]
       == ["ユニゾンチャレンジ"])

@@ -42,7 +42,8 @@
    "ownership_group_id": "own-1geki",
    "content_lineage_id": "lin-1geki",
    "tier": "MAJOR_ANALYSIS",
-   "status": "ACTIVE"
+   "status": "OFF_TOS",
+   "_why_off": "★規約で自動取得が禁止されている★（2026-08-16・台帳#376）。P-WORLD 総合利用規約 第8条「プログラムを用いたアクセスなど、通常のブラウザアクセス以外の方法で本サービスを利用する行為」／一撃 利用規約 第3条「自動化ツール・ボット・スクレイピング等により本サイトの情報を大量取得・再配布する行為」。★人がブラウザで見るのは自由／機械では取りに行かない★。通信そのものは scripts/blocked_hosts.py が止める（最後の砦）。★許諾が取れたら運営者の判断で戻す★"
   },
   "dmm-ptown": {
    "name": "DMM ぱちタウン",
@@ -63,8 +64,9 @@
    "ownership_group_id": "own-p-world",
    "content_lineage_id": "lin-hazuse",
    "tier": "DIRECTORY",
-   "status": "ACTIVE",
-   "_lineage_why": "P-WORLDのページ末尾に解析情報の出所として「HAZUSE調べ」と明記がある（2026-07-31 Codexが実ページで確認）。HAZUSE本体を出典に加えるときに★別票として数えないため★、同じ系列に揃えておく。"
+   "status": "OFF_TOS",
+   "_lineage_why": "P-WORLDのページ末尾に解析情報の出所として「HAZUSE調べ」と明記がある（2026-07-31 Codexが実ページで確認）。HAZUSE本体を出典に加えるときに★別票として数えないため★、同じ系列に揃えておく。",
+   "_why_off": "★規約で自動取得が禁止されている★（2026-08-16・台帳#376）。P-WORLD 総合利用規約 第8条「プログラムを用いたアクセスなど、通常のブラウザアクセス以外の方法で本サービスを利用する行為」／一撃 利用規約 第3条「自動化ツール・ボット・スクレイピング等により本サイトの情報を大量取得・再配布する行為」。★人がブラウザで見るのは自由／機械では取りに行かない★。通信そのものは scripts/blocked_hosts.py が止める（最後の砦）。★許諾が取れたら運営者の判断で戻す★"
   },
   "maker-kitadenshi": {
    "name": "北電子（メーカー公式）",
@@ -96,8 +98,9 @@
    "ownership_group_id": "own-hazuse",
    "content_lineage_id": "lin-hazuse",
    "tier": "MAJOR_ANALYSIS",
-   "status": "ACTIVE",
-   "_note": "★P-WORLDの解析情報の出所★ P-WORLDと同じ系列なので2票に数えない。"
+   "status": "OFF_TOS",
+   "_note": "★P-WORLDの解析情報の出所★ P-WORLDと同じ系列なので2票に数えない。",
+   "_why_off": "★P-WORLDと同じ転載系列★（2026-08-16・台帳#376）。P-WORLDを外したので、同じ系列のこちらも票から外す。hazuse.com 自体の規約は未確認。"
   },
   "yancha-press": {
    "name": "やんちゃプレス",
@@ -125,14 +128,21 @@
   "実戦値と解析値は別物として扱う（同じ値でも一致判定しない）",
   "共同制作がありうる組（joint_production）は、独立と確かめるまで1票にまとめる"
  ],
- "joint_production": [
+ "joint_production": [],
+ "_joint_production_history": [
   {
-   "publishers": [
-    "1geki",
-    "dmm-ptown"
-   ],
-   "why": "★共同取材企画が実在する★（「双龍玉」）。2社の名前が並んでいても取材は1つ＝1票。2026-08-14にCodexの指摘で登録",
-   "since": "2026-08-14"
+   "removed_at": "2026-08-16",
+   "why": "一撃を規約により外したため（台帳#376）。★一撃を戻すときはこれも戻す★",
+   "entries": [
+    {
+     "publishers": [
+      "1geki",
+      "dmm-ptown"
+     ],
+     "why": "★共同取材企画が実在する★（「双龍玉」）。2社の名前が並んでいても取材は1つ＝1票。2026-08-14にCodexの指摘で登録",
+     "since": "2026-08-14"
+    }
+   ]
   }
  ]
 }

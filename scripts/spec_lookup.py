@@ -487,7 +487,7 @@ def selftest() -> int:
       normalize_games("約3G") is None and normalize_games("約300G") is None)
     t("　G数として読めなければ採らない", normalize_games("約2.8枚") is None)
 
-    A = {"url": "https://www.p-world.co.jp/x", "host": "p-world.co.jp", "ok": True,
+    A = {"url": "https://nana-press.com/x", "host": "nana-press.com", "ok": True,
          "reason": "OK", "fields": {"payout_rate": {"1": "97.8%"}}}
     B = {"url": "https://p-town.dmm.com/y", "host": "p-town.dmm.com", "ok": True,
          "reason": "OK", "fields": {"payout_rate": {"1": "97.8%"}}}
@@ -507,7 +507,7 @@ def selftest() -> int:
     t("★★2票一致でも反対票が1票あれば採らない★★"
       "（97.8%×2＋99.9%×1を採用し不一致を報告にも残さなかった・Codex56回目）",
       not r23["adopted"] and "payout_rate" in r23["need_third"])
-    B2 = {**B, "url": "https://p-world.co.jp/y", "host": "p-world.co.jp"}
+    B2 = {**B, "url": "https://nana-press.com/y", "host": "nana-press.com"}
     r4 = compare([A, B2])
     t("★同じ運営元の2ページを2票と数えない★", not r4["adopted"])
     r5 = compare([{**A, "ok": False, "fields": {}}, B])
@@ -533,7 +533,7 @@ def selftest() -> int:
       setting_labels(["設定", "設定1", "1/1", "設定L", "調査中"]) == ["1", "L"])
     t("　設定判別・設定L搭載機などの文は設定名にしない",
       setting_labels(["設定判別", "設定L搭載機", "設定6以上"]) == [])
-    PW = {"url": "https://www.p-world.co.jp/x", "host": "p-world.co.jp", "ok": True,
+    PW = {"url": "https://nana-press.com/x", "host": "nana-press.com", "ok": True,
           "reason": "OK", "setting_labels": ["1", "6", "L"],
           "fields": {"payout_rate": {"1": "97.8%", "6": "112.5%"}}}
     CB = {**PW, "url": "https://chonborista.com/y", "host": "chonborista.com",
@@ -549,7 +549,7 @@ def selftest() -> int:
       settings_may_be_non_contiguous(R) is True)
 
     # ★実際に compare を通したときに効くか★（宣言だけで終わらせない）
-    P = {"url": "https://www.p-world.co.jp/x", "host": "p-world.co.jp", "ok": True,
+    P = {"url": "https://nana-press.com/x", "host": "nana-press.com", "ok": True,
          "reason": "OK", "fields": {"net_increase": "約2.8枚"}}
     Q = {"url": "https://chonborista.com/y", "host": "chonborista.com", "ok": True,
          "reason": "OK", "fields": {"net_increase": "約2.8枚"}}

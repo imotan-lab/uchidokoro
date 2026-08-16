@@ -228,7 +228,7 @@ def selftest() -> int:
       == [("MAIN_AT", 2.8)]
       and from_tables(_HID) == [])
 
-    A = {"url": "https://www.p-world.co.jp/x", "host": "p-world.co.jp", "ok": True,
+    A = {"url": "https://nana-press.com/x", "host": "nana-press.com", "ok": True,
          "specs": [{"mode": "MAIN_AT", "games": 100, "net": 2.8, "raw": ""}]}
     B = {"url": "https://chonborista.com/y", "host": "chonborista.com", "ok": True,
          "specs": [{"mode": "MAIN_AT", "games": 100, "net": 2.8, "raw": ""}]}
@@ -239,7 +239,7 @@ def selftest() -> int:
     t("★★モードが違えば別物として扱う（同じ値でも合算しない）★★",
       not compare([A, D])["adopted"] and len(compare([A, D])["need_third"]) == 2)
     t("　同じ運営元の2ページを2票と数えない",
-      not compare([A, {**B, "host": "p-world.co.jp"}])["adopted"])
+      not compare([A, {**B, "host": "nana-press.com"}])["adopted"])
     E = {"url": "https://p-town.dmm.com/z", "host": "p-town.dmm.com", "ok": True,
          "specs": [{"mode": "MAIN_AT", "games": 100, "net": 3.0, "raw": ""}]}
     t("★★2票一致でも反対票が1票あれば採らない★★（Codex56回目）",
