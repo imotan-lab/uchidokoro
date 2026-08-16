@@ -426,7 +426,12 @@ def _gather(name: str, maker: str = "", slug: str = "") -> dict:
     _mismatch_urls = set()   # ★控えで別社と決めた分★                   # 控えで「同じ」と決まっているURL
     for r in looks:
         mc = r.get("maker_check") or {}
-        if mc.get("state") != "UNKNOWN" or not r.get("identity_ok"):
+        # ★RELATED も控えを見る★（2026-08-17・依頼226のCodex指摘1）
+        #   前は UNKNOWN だけ見ていたので、RELATED は
+        #   ①控えを引かない ②控えのMISMATCHを効かせない ③2AIへ問わない
+        #   の3つを丸ごと素通りしていた。
+        if mc.get("state") not in ("UNKNOWN", "RELATED") \
+                or not r.get("identity_ok"):
             continue
         _v = None
         if _cache_ok and slug:
@@ -471,17 +476,32 @@ def _gather(name: str, maker: str = "", slug: str = "") -> dict:
                   and (str(r.get("reason") or "").startswith(
                       ("DIRECTORY_MAKER_MISMATCH", "DIRECTORY_MAKER_UNRESOLVED"))
                        or r["url"] in _mismatch_urls
+                       or (str(r.get("reason") or "").startswith(
+                           "DIRECTORY_MAKER_RELATED")
+                           and r["url"] not in _unknown_ok)
                        or not r.get("identity_ok"))}
     # 決まらなかったものは「使うが、決まっていないと記録する」
+    # ★RELATEDは「関係がありそう」という印であって「同じ会社」ではない★
+    #   （2026-08-17・依頼226のCodex指摘2）
+    #   DMMの機種IDは名鑑のURLと結び付いていないので、会社同士の関係だけでは
+    #   「そのページが今回の機種のものだ」と言い切れない。
+    #   ★控えでMATCHと決めてある時だけ材料に使う★（_unknown_ok に入る）。
+    #   決めていなければ2AIへ問いを出し、今回は使わない。
     _unresolved = [r for r in looks
-                   if r["url"] not in _bad_maker
+                   if r["url"] in _unknown_ok
                    and str(r.get("reason") or "").startswith(
                        "DIRECTORY_MAKER_RELATED")]
     for r in _unresolved:
         _log(f"  （メーカー欄は決まらないが、機種名は合うので材料に使う）"
              f"{r['url']} → {str(r.get('reason'))[:110]}")
-        got.setdefault("maker_unresolved", []).append(
-            {"url": r["url"], "reason": str(r.get("reason") or "")[:300]})
+        got.setdefault("maker_relation_checks", []).append(
+            {"url": r["url"],
+             "expected": (r.get("maker_check") or {}).get("expected", ""),
+             "seen": (r.get("maker_check") or {}).get("seen", ""),
+             "owners": (r.get("maker_check") or {}).get("owners", []),
+             "verdict": "MATCH",          # ここへ来るのは控えで決めた分だけ
+             "material_used": True,
+             "model_code_vote_used": False})
     if _bad_maker:
         _bad_msgs = []
         for r in looks:
@@ -2131,6 +2151,10 @@ def run_one(name, official_url, maker, release, apply_it=False,
     #   **同じ配列を丸ごと上書き**するため消えていた。
     #   さらに材料不足だと台帳処理の前に終わるので、★ここで台帳へ入れる★。
     out["maker_questions"] = list(got.get("maker_questions") or [])
+    # ★例外的なメーカー関係を根拠に採否した事実を残す★（依頼226のCodex指摘）
+    #   材料が足りずに早く終わるときも残す＝あとから由来を確かめられる。
+    out["maker_relation_checks"] = list(
+        got.get("maker_relation_checks") or [])
     for _q in out["maker_questions"]:
         _log(f"  ★2AIに聞くこと（メーカー）: {_q['text'][:120]}")
         # ★メーカー表記の質問だけ見分けられるようにする★（依頼190）
@@ -2720,22 +2744,28 @@ def selftest() -> int:
             #   前は「ソースにこの文字があるか」だけを見ていたので、
             #   **旧仕様の名前が残っていれば通って**しまった。
             def _pick(reason, identity_ok=True, cached=None):
-                """gather の採否だけを取り出して試す（通信しない）"""
+                """★本体と同じ式で採否を試す★（通信しない）
+
+                ★式を写さない★（2026-08-17・依頼226のCodex指摘）
+                写すと、本体を変えたときに試験だけ古いまま通ってしまう
+                （実際そうなっていた）。本体の式を取り出してその場で動かす。
+                """
+                import re as _re
+                _m = _re.search(r"    _bad_maker = \{(.+?)\}\n",
+                                inspect.getsource(gather), _re.S)
+                if not _m:
+                    raise AssertionError("本体の採否の式を取り出せません")
                 looks = [{"url": "https://a.example/1", "reason": reason,
                           "identity_ok": identity_ok},
                          {"url": "https://b.example/2", "reason": "",
                           "identity_ok": True}]
-                _unknown_ok = set()
-                _mismatch_urls = {"https://a.example/1"} if cached == "MISMATCH" \
-                    else set()
-                bad = {r["url"] for r in looks
-                       if r["url"] not in _unknown_ok
-                       and (str(r.get("reason") or "").startswith(
-                           ("DIRECTORY_MAKER_MISMATCH",
-                            "DIRECTORY_MAKER_UNRESOLVED"))
-                            or r["url"] in _mismatch_urls
-                            or not r.get("identity_ok"))}
-                return "https://a.example/1" not in bad
+                env = {"looks": looks, "str": str,
+                       "_unknown_ok": ({"https://a.example/1"}
+                                       if cached == "MATCH" else set()),
+                       "_mismatch_urls": ({"https://a.example/1"}
+                                          if cached == "MISMATCH" else set())}
+                exec("_bad_maker = {" + _m.group(1) + "}", env)   # noqa: S102
+                return "https://a.example/1" not in env["_bad_maker"]
 
             t("★★明らかに別の社なら材料に使わない★★",
               not _pick("DIRECTORY_MAKER_MISMATCH（別の社）"))
@@ -2743,13 +2773,20 @@ def selftest() -> int:
               "（★同名で別メーカーの機種は実在する★"
               "＝パチスロ犬夜叉 2016年ロデオ／2022年クロスアルファ）",
               not _pick("DIRECTORY_MAKER_UNRESOLVED（名簿で解決できません）"))
-            t("★★関係のある社なら材料に使う★★"
-              "（正体は機種名の完全照合とDMMの機種IDが担保している）",
-              _pick("DIRECTORY_MAKER_RELATED（関係のある社です）"))
+            t("★★関係のある社でも、控えで決めていなければ使わない★★"
+              "（RELATEDは『2AIへ回す価値がある』印であって『同じ会社』ではない。"
+              "DMMの機種IDは名鑑のURLと結び付いていない）",
+              not _pick("DIRECTORY_MAKER_RELATED（関係のある社です）"))
+            t("★★関係のある社で、控えでMATCHと決めてあれば使う★★",
+              _pick("DIRECTORY_MAKER_RELATED（関係のある社です）",
+                    cached="MATCH"))
             t("★★控えで別の社と決めてあれば、必ず材料から外す★★"
               "（2026-08-17に、ここが抜けて復活していた）",
               not _pick("DIRECTORY_MAKER_RELATED（関係のある社です）",
                         cached="MISMATCH"))
+            t("★★控えを見る対象に RELATED が入っている★★"
+              "（前は UNKNOWN だけで、RELATED は控えも2AIも素通りしていた）",
+              '("UNKNOWN", "RELATED")' in inspect.getsource(gather))
             t("　機種名の照合に落ちたものは今までどおり外す",
               not _pick("", identity_ok=False))
             t("★★採否の判定が、本体と試験で同じ形★★"

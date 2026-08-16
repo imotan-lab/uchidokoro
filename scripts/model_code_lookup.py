@@ -759,6 +759,16 @@ def lookup(url: str, official_name: str, expected_maker: str = "") -> dict:
     #     名簿=KPE）をまた弾いてしまう（実ページで確認済み）。
     if expected_maker:
         mk = extract_maker_name(html)
+        if not mk:
+            # ★メーカー欄が読めないのも「どの社か分からない」★
+            #   （2026-08-17・依頼226のCodex指摘3）
+            #   前は4つの判定を一度も通らず、そのまま材料にも型式の票にも
+            #   使えていた（隠れた5つ目の状態になっていた）。
+            out["maker_check"] = {"state": "UNKNOWN", "seen": "",
+                                  "expected": expected_maker, "owners": []}
+            out["reason"] = ("DIRECTORY_MAKER_UNRESOLVED（名鑑のメーカー欄を"
+                             "読めません）")
+            return out
         if mk:
             owners = _maker_core_owners(
                 _ci.normalize_core(mk).replace("株式会社", ""))
