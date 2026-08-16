@@ -46,6 +46,7 @@ import os as _os_lp                 # noqa: E402
 import sys as _sys_lp               # noqa: E402
 _sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
 import local_paths as _lp           # noqa: E402
+import blocked_hosts as _bh     # noqa: E402
 STORE = _lp.doc("page_probe.json")
 SCHEMA = 1
 
@@ -102,6 +103,7 @@ def _conditional_get(url: str, etag: str, modified: str, timeout: int = 20):
     if modified:
         req.add_header("If-Modified-Since", modified)
     try:
+        _bh.check(url)          # ★禁止先へは通信しない★（台帳#376）
         with urllib.request.urlopen(req, timeout=timeout) as r:
             body = r.read(_w.MAX_BYTES + 1)
             if len(body) > _w.MAX_BYTES:

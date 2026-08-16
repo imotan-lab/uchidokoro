@@ -43,6 +43,8 @@ from datetime import datetime, timezone
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
 
+import blocked_hosts as _bh     # noqa: E402
+
 import claim_evidence as ce           # noqa: E402
 import claim_inventory as ci          # noqa: E402
 import safe_json as _sj               # noqa: E402
@@ -260,6 +262,7 @@ def fetch(url: str, slug: str, timeout: int = 20) -> dict:
 
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     try:
+        _bh.check(url)          # ★禁止先へは通信しない★（台帳#376）
         with urllib.request.urlopen(req, timeout=timeout) as r:
             body = r.read(MAX_BYTES + 1)
             status = r.status

@@ -51,6 +51,7 @@ import os as _os_lp                 # noqa: E402
 import sys as _sys_lp               # noqa: E402
 _sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
 import local_paths as _lp           # noqa: E402
+import blocked_hosts as _bh     # noqa: E402
 SEEN_PATH = _lp.doc("seen_machine_urls.json")
 UA = "uchidokoro-new-machine-watch/1.0 (+https://uchidokoro.com)"
 MAX_BYTES = 5 * 1024 * 1024
@@ -130,6 +131,9 @@ def _decode(body: bytes, charset: str, hdr_charset: str | None) -> str:
 
 
 def _get(url: str, timeout: int = 20) -> str:
+    # ★規約で自動取得を禁じている先へは通信しない★（2026-08-16・台帳#376）
+    #   巡回設定を1か所消し忘れても、ここで止まる（最後の砦）。
+    _bh.check(url)
     hit = _CACHE.get(url)
     if hit is not None:
         FETCH_COUNT["cached"] += 1
