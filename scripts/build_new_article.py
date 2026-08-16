@@ -187,6 +187,12 @@ class BuildError(RuntimeError):
 # ★P-WORLDの機種ページ★（2026-08-12・新台の見つけ方をここ一本にした）
 _PWORLD_MACHINE = re.compile(
     r"^https?://(?:www\.)?p-world\.co\.jp/machine/database/(\d{1,7})/?$")
+# ★DMMぱちタウンの機種ページ★（2026-08-16・台帳#376）
+#   規約でP-WORLDへ通信できなくなったので、同定の正はDMMへ移した。
+#   ★ホスト・道筋・IDを厳しく見る★（末尾だけ見ると別サイトのURLでも
+#   同じslugを作れてしまう＝Codex依頼212の指摘5）
+_DMM_MACHINE = re.compile(
+    r"^https?://p-town\.dmm\.com/machines/(\d{1,7})/?$")
 
 
 def slug_from_url(official_url: str) -> str:
@@ -200,7 +206,13 @@ def slug_from_url(official_url: str) -> str:
       英字で始まる決まりに合わずに止まっていた。
       機種IDは変わらないので、URLと同じくらい安定した名前になる。
     """
-    m = _PWORLD_MACHINE.match(str(official_url or "").strip())
+    u = str(official_url or "").strip()
+    # ★DMMが今の正★（2026-08-16・台帳#376）。移行前の pw_ は
+    #   scripts/slug_binding.py の対応表だけが結びつける（増やせない表）。
+    m = _DMM_MACHINE.match(u)
+    if m:
+        return "dmm_" + m.group(1)
+    m = _PWORLD_MACHINE.match(u)
     if m:
         return "pw_" + m.group(1)
     tail = official_url.rstrip("/").rsplit("/", 1)[-1].lower()
@@ -937,6 +949,11 @@ def selftest() -> int:
 
     # ★P-WORLDの機種ページから記事の名前を作る★（2026-08-12）
     #   末尾が数字なので、そのままだと英字で始まる決まりに合わず止まっていた。
+    t("★★DMMのURLからは dmm_<機種ID> を作る★★（2026-08-16・台帳#376）",
+      slug_from_url("https://p-town.dmm.com/machines/5049") == "dmm_5049"
+      and slug_from_url("https://p-town.dmm.com/machines/5049/") == "dmm_5049")
+    t("　★別サイトの似たURLでは同じslugを作らない★（ホストと道筋まで見る）",
+      raises(lambda: slug_from_url("https://example.com/machines/5049")))
     t("★★P-WORLDのURLからは pw_<機種ID> を作る★★",
       slug_from_url("https://www.p-world.co.jp/machine/database/10513") == "pw_10513"
       and slug_from_url("https://www.p-world.co.jp/machine/database/10513/")

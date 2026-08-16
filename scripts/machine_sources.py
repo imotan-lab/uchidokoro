@@ -323,7 +323,11 @@ def _pending_machine(slug: str) -> dict:
         url = str(it.get("url") or "")
         if not url:
             continue
-        if _ba.slug_from_url(url) != slug:
+        # ★移行した公開済み機種も見つけられるようにする★
+        #   （2026-08-16・台帳#376）URLがDMMへ変わった7機種は、
+        #   URLから作り直すと `dmm_*` になり `pw_*` の控えと結びつかない。
+        import slug_binding as _sb
+        if not _sb.check(slug, url)[0]:
             continue
         name = str(it.get("name") or "").strip()
         if not name:

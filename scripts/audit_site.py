@@ -70,15 +70,22 @@ import local_paths as _lp             # noqa: E402  ★置き場は1か所で決
 #   ★写し自身の検査は build_preview_site.py が、成果物の検査は
 #     build_pages_artifact.py の audit() が別に行う★
 BUILD_DIRS = {".preview-site", "_site", "_site.next"}
+# ★試験用に保存した他所のページも対象外★（2026-08-16）
+#   tests/fixtures/ には**他サイトの実ページをそのまま保存**してある。
+#   これは「ネットに出ずに試験を回す」ための材料で、公開もしないし
+#   当サイトのひな型でもないので、当サイトの物差し（base href・
+#   インラインstyle等）で測ると直しようのないNGが出る。
+#   ★中身は絶対に書き換えない★＝書き換えたら試験が実物と食い違う。
+FIXTURE_DIRS = {"tests"}
 
 
 def is_build_output(path: Path) -> bool:
-    """ビルド出力（写し・成果物）配下のパスか。"""
+    """ビルド出力（写し・成果物）・試験用の保存ページ配下のパスか。"""
     try:
         rel = path.resolve().relative_to(BASE.resolve())
     except ValueError:
         return False
-    return bool(set(rel.parts) & BUILD_DIRS)
+    return bool(set(rel.parts) & (BUILD_DIRS | FIXTURE_DIRS))
 
 
 def site_html_files() -> list[Path]:
@@ -1682,6 +1689,30 @@ def check_39_vote_counting(machines: list) -> list[str]:
     return ngs
 
 
+def check_40_slug_binding(machines: list) -> list[str]:
+    """★slugと機種ページURLの対応★（2026-08-16・台帳#376／Codex依頼212）
+
+    ★なぜ監査するのか★
+      「slugは機種ページのURLから作る」という決まりが、
+      **別機種の記事を別機種のURLで公開する事故**を止めている。
+      規約でP-WORLDからDMMへ移した公開済み7機種だけは、読者のリンクを
+      切らないため `pw_*` のまま公開し続ける。その例外を
+      **増やせない対応表**（scripts/slug_binding.py）に閉じ込めてあるので、
+      表が壊れていないか・全機種がその二択に収まっているかを毎回見る。
+    """
+    import slug_binding as _sb
+    ngs = list(_sb.audit_against_site())
+    for m in machines:
+        ident = m.get("identity") or {}
+        url = str(ident.get("official_product_url") or "").strip()
+        if not url:
+            continue                     # identity未登録の機種は他の項目が見る
+        ok, why = _sb.check(m.get("slug", ""), url)
+        if not ok:
+            ngs.append(f"{m.get('slug')}: {why}")
+    return ngs
+
+
 # ★見張りが必ず見つけるべき形★（直す前の実物＋同じ意味の別の書き方）
 #   2026-08-14・依頼194〜200。★実際に本番コードにあった形から作った★
 _WATCHDOG_MUST_FIND = {
@@ -1913,6 +1944,7 @@ CHECKS = [
     ("37_手順書と実装の食い違い", check_37_skill_vs_code),
     ("38_ログイン名の露出", check_38_home_path_leak),
     ("39_票の数え方", check_39_vote_counting),
+    ("40_slugと機種ページURLの対応", check_40_slug_binding),
 ]
 
 

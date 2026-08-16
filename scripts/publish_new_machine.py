@@ -671,8 +671,15 @@ def check_machine(slug: str, machine: dict) -> list:
         url = ident.get("official_product_url") or ""
         if url and not url.startswith("https://"):
             ng.append(f"公式URLが https ではありません: {url[:60]}")
-        if url and _ba.slug_from_url(url) != slug:
-            ng.append(f"slug が公式URLの末尾と合いません（{slug} / {url[:60]}）")
+        # ★slugとURLの対応は slug_binding が唯一の判定箇所★
+        #   （2026-08-16・台帳#376／Codex依頼212の指摘5）
+        #   DMMへ移した公開済み7機種は `pw_*` のまま公開し続けるので、
+        #   素の一致だけでは止まる。増やせない対応表で二択にしている。
+        if url:
+            import slug_binding as _sb
+            _ok, _why = _sb.check(slug, url)
+            if not _ok:
+                ng.append(f"slug と公式URLが対応していません: {_why}")
         mid = ident.get("manufacturer_id") or ""
         if mid:
             try:
