@@ -1250,70 +1250,6 @@ def _save_seen(data: dict) -> None:
             os.remove(tmp)
 
 
-def _get_rendered(url: str, link_prefix: str = "") -> tuple:
-    # ★ブラウザで開くときも関所を通す★（2026-08-16・依頼217の指摘3）
-    #   ここは page.goto() を直接呼ぶので、_get の関所を通らなかった。
-    check_before_fetch(url)
-    """★ブラウザで描画してから読む★（機種リンクがJavaScriptで作られる社向け）
-
-    ★「ブラウザが起動できた」だけでは成功と見なさない★（Codex指摘・2026-07-31）
-      JavaScriptエラー・通信遮断・Cookie画面・遅延読み込み未完了でも、
-      リンク0件のまま正常終了しうる。そこで健全性を一緒に返し、
-      呼び出し側が「読めなかった」と「読めたが新台なし」を区別できるようにする。
-
-    返すもの: (html, health)
-      health = {"status", "final_url", "js_errors", "problem"}
-    """
-    try:
-        from playwright.sync_api import sync_playwright
-    except Exception as e:                       # noqa: BLE001
-        raise WatchError(f"描画取得を使えません（Playwrightが要ります）: {e}")
-    health = {"status": None, "final_url": None, "js_errors": [], "problem": None,
-              "idle_timeout": False, "unstable": False, "counted": None}
-    try:
-        with sync_playwright() as pw:
-            br = pw.chromium.launch()
-            try:
-                page = br.new_page()
-                page.on("pageerror", lambda e: health["js_errors"].append(str(e)[:120]))
-                resp = page.goto(url, wait_until="domcontentloaded", timeout=45000)
-                health["status"] = resp.status if resp else None
-                # ★通信が落ち着くまで待つ。落ち着かなくても記録して先へ進む★
-                #   networkidle を必須にすると、広告や計測が鳴り続ける社で
-                #   毎回タイムアウトして「読めない」になる（サミーで実際に発生）。
-                #   代わりに「待ち切れなかった」ことを健全性として残し、
-                #   件数の下限・残存率の検査で取りこぼしを見つける。
-                try:
-                    page.wait_for_load_state("networkidle", timeout=15000)
-                except Exception:               # noqa: BLE001
-                    health["idle_timeout"] = True
-                page.wait_for_timeout(2000)
-                # ★件数が続けて変わらないことを確かめる★（2026-07-31・Codex優先度4）
-                #   遅延読み込みの途中で読むと、件数は正常なのに新台だけ落ちる。
-                #   同じ数が3回続くまで待ち、続かなければ「まだ増えている」と記録する。
-                if link_prefix:
-                    same, last = 0, -1
-                    for _ in range(8):
-                        n = len(product_urls(page.content(), url, link_prefix))
-                        same = same + 1 if n == last else 0
-                        last = n
-                        if same >= 2:
-                            break
-                        page.wait_for_timeout(1500)
-                    health["unstable"] = same < 2
-                    health["counted"] = last
-                health["final_url"] = page.url
-                html = page.content()
-            finally:
-                br.close()
-    except Exception as e:                       # noqa: BLE001
-        raise WatchError(f"描画できません: {type(e).__name__}: {e}")
-    if health["status"] != 200:
-        health["problem"] = f"HTTP {health['status']} が返りました"
-    else:
-        # ★静的取得と同じ判定を使う★（www の扱いが食い違っていた・Codex指摘）
-        health["problem"] = redirect_problem(url, health["final_url"])
-    return html, health
 
 
 # ★一覧が丸ごと別物に差し替わったことを見抜くための条件★
@@ -1508,716 +1444,724 @@ def describe(url: str) -> dict:
 # ---------------------------------------------------------------- selftest
 
 def selftest() -> int:
-    import inspect
-    _SELFTEST["on"] = True          # ★架空のURLを使うので名簿は見ない★
-    results = []
-
-    def t(name, cond):
-        results.append((name, bool(cond)))
-        print(("✅" if cond else "❌") + " " + name)
-
-    # ── ★同じページを取り直さない★（2026-08-05・取得回数の削減）
-    import urllib.request as _ur
-    _real_open, _hits = _ur.urlopen, {"n": 0}
-
-    class _Res:
-        status = 200
-        headers = type("H", (), {"get_content_charset": lambda self: "utf-8"})()
-        def __enter__(self): return self
-        def __exit__(self, *a): return False
-        def geturl(self): return "https://x.example/a"
-        def read(self, n=None): return b"<html>ok</html>"
-
+    # ★印は必ず元へ戻す★（2026-08-16・依頼218の指摘3）
+    #   例外で抜けたときに真のまま残ると、同じ手続きの中で
+    #   **本番の取得が名簿を見ないまま通ってしまう**。
+    _keep_selftest = _SELFTEST["on"]
+    _SELFTEST["on"] = True   # ★架空のURLを使うので名簿は見ない★
     try:
-        _ur.urlopen = lambda *a, **k: (_hits.__setitem__("n", _hits["n"] + 1),
-                                        _Res())[1]
-        _iv, MIN = MIN_INTERVAL, 0.0
-        globals()["MIN_INTERVAL"] = 0.0
-        cache_clear()
-        globals()["_get"]("https://x.example/a")
-        globals()["_get"]("https://x.example/a")
-        globals()["_get"]("https://x.example/b")
-        t("★★同じページは1度しか取りに行かない★★（相手への負担を減らす）",
-          _hits["n"] == 2 and FETCH_COUNT["n"] == 2 and FETCH_COUNT["cached"] == 1)
-        t("　使い回しても到達先の控えは戻る（転送の検査が働く）",
-          LAST_FINAL_URL["url"] == "https://x.example/a")
-        cache_clear()
-        globals()["_get"]("https://x.example/a")
-        t("　控えを消せば取り直す", _hits["n"] == 3)
-    finally:
-        _ur.urlopen = _real_open
-        globals()["MIN_INTERVAL"] = _iv
-        cache_clear()
+        import inspect
+        results = []
 
-    LIST = "https://m.example/products/slot/"
-    html = ('<a href="/products/slot/aaa/">A</a>'
-            '<a href="/products/slot/bbb/">B</a>'
-            '<a href="/products/slot/">一覧</a>'
-            '<a href="/products/pachinko/ccc/">パチンコ</a>'
-            '<a href="/products/slot/aaa/spec/">下の階層</a>'
-            '<a href="https://other.example/products/slot/ddd/">よそ</a>')
-    got = product_urls(html, LIST, LIST)
-    t("★個別機種ページだけを取る★",
-      got == ["https://m.example/products/slot/aaa/",
-              "https://m.example/products/slot/bbb/"])
-    t("　一覧ページ自身を機種と数えない", LIST not in got)
-    t("★★接頭辞の下に一覧がある形でも、一覧自身を機種にしない★★"
-      "（藤商事 /products/all/ が機種として登録されていた・Codex83回目）",
-      product_urls('<a href="/products/all/">一覧</a>'
-                   '<a href="/products/7up/">機種</a>',
-                   "https://m.example/products/all/",
-                   "https://m.example/products/")
-      == ["https://m.example/products/7up/"])
-    t("　パチンコ側・よそのサイト・下の階層は取らない",
-      not any("pachinko" in u or "other.example" in u or "spec" in u for u in got))
-    t("★★年別アーカイブ（2009・2010…）を機種と数えない★★（平和で確認）",
-      product_urls('<a href="/products/slot/2009/">2009年</a>'
-                   '<a href="/products/slot/sns3/">機種</a>', LIST, LIST)
-      == ["https://m.example/products/slot/sns3/"])
-    t("　#や?が付いていても同じURLとして1件にする",
-      product_urls('<a href="/products/slot/aaa/?x=1">A</a>'
-                   '<a href="/products/slot/aaa/#top">A</a>', LIST, LIST)
-      == ["https://m.example/products/slot/aaa/"])
+        def t(name, cond):
+            results.append((name, bool(cond)))
+            print(("✅" if cond else "❌") + " " + name)
 
-    t("★タイトルから機種名だけを取る★",
-      machine_name("<title>Lすーぱぁびん娘|機種情報|BELLCO(ベルコ株式会社)</title>")
-      == "Lすーぱぁびん娘")
-    t("　全角の区切りでも取れる",
-      machine_name("<title>テスト機　情報｜メーカー</title>") == "テスト機 情報")
+        # ── ★同じページを取り直さない★（2026-08-05・取得回数の削減）
+        import urllib.request as _ur
+        _real_open, _hits = _ur.urlopen, {"n": 0}
 
-    conf = {"name": "t", "list_url": LIST, "link_prefix": LIST, "min_expected": 5}
-    seen = {"makers": {"t": {"urls": ["https://m.example/products/slot/aaa/"]}}}
+        class _Res:
+            status = 200
+            headers = type("H", (), {"get_content_charset": lambda self: "utf-8"})()
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def geturl(self): return "https://x.example/a"
+            def read(self, n=None): return b"<html>ok</html>"
 
-    class _Stub:
-        def __init__(self, h): self.h = h
+        try:
+            _ur.urlopen = lambda *a, **k: (_hits.__setitem__("n", _hits["n"] + 1),
+                                            _Res())[1]
+            _iv, MIN = MIN_INTERVAL, 0.0
+            globals()["MIN_INTERVAL"] = 0.0
+            cache_clear()
+            globals()["_get"]("https://x.example/a")
+            globals()["_get"]("https://x.example/a")
+            globals()["_get"]("https://x.example/b")
+            t("★★同じページは1度しか取りに行かない★★（相手への負担を減らす）",
+              _hits["n"] == 2 and FETCH_COUNT["n"] == 2 and FETCH_COUNT["cached"] == 1)
+            t("　使い回しても到達先の控えは戻る（転送の検査が働く）",
+              LAST_FINAL_URL["url"] == "https://x.example/a")
+            cache_clear()
+            globals()["_get"]("https://x.example/a")
+            t("　控えを消せば取り直す", _hits["n"] == 3)
+        finally:
+            _ur.urlopen = _real_open
+            globals()["MIN_INTERVAL"] = _iv
+            cache_clear()
 
-    import builtins  # noqa: F401
-    global _get
-    real_get = _get
-    try:
-        def _fake(u, timeout=20, _h=None):
-            LAST_FINAL_URL["url"] = u          # ★本物と同じく到達先を残す★
-            return _h if _h is not None else html
+        LIST = "https://m.example/products/slot/"
+        html = ('<a href="/products/slot/aaa/">A</a>'
+                '<a href="/products/slot/bbb/">B</a>'
+                '<a href="/products/slot/">一覧</a>'
+                '<a href="/products/pachinko/ccc/">パチンコ</a>'
+                '<a href="/products/slot/aaa/spec/">下の階層</a>'
+                '<a href="https://other.example/products/slot/ddd/">よそ</a>')
+        got = product_urls(html, LIST, LIST)
+        t("★個別機種ページだけを取る★",
+          got == ["https://m.example/products/slot/aaa/",
+                  "https://m.example/products/slot/bbb/"])
+        t("　一覧ページ自身を機種と数えない", LIST not in got)
+        t("★★接頭辞の下に一覧がある形でも、一覧自身を機種にしない★★"
+          "（藤商事 /products/all/ が機種として登録されていた・Codex83回目）",
+          product_urls('<a href="/products/all/">一覧</a>'
+                       '<a href="/products/7up/">機種</a>',
+                       "https://m.example/products/all/",
+                       "https://m.example/products/")
+          == ["https://m.example/products/7up/"])
+        t("　パチンコ側・よそのサイト・下の階層は取らない",
+          not any("pachinko" in u or "other.example" in u or "spec" in u for u in got))
+        t("★★年別アーカイブ（2009・2010…）を機種と数えない★★（平和で確認）",
+          product_urls('<a href="/products/slot/2009/">2009年</a>'
+                       '<a href="/products/slot/sns3/">機種</a>', LIST, LIST)
+          == ["https://m.example/products/slot/sns3/"])
+        t("　#や?が付いていても同じURLとして1件にする",
+          product_urls('<a href="/products/slot/aaa/?x=1">A</a>'
+                       '<a href="/products/slot/aaa/#top">A</a>', LIST, LIST)
+          == ["https://m.example/products/slot/aaa/"])
 
-        _get = _fake
-        r = scan_maker("t", conf, seen, record=False)
-        t("★★取れた数が少なすぎたら『新台なし』と言わない★★（黙って止まる事故を防ぐ）",
-          r["problem"] is not None and r["new"] == [])
-        conf2 = {**conf, "min_expected": 2}
-        r2 = scan_maker("t", conf2, seen, record=False)
-        t("　数が足りていれば、知らないURLだけを新台とする",
-          r2["problem"] is None and r2["new"] == ["https://m.example/products/slot/bbb/"])
-        r3 = scan_maker("zzz", conf2, {"makers": {}}, record=False)
-        t("★★初回は全部を新台にしない（覚えるだけ）★★",
-          r3["first_time"] is True and r3["new"] == [])
-        # ★一覧ではない画面が返ったとき★（2026-07-31・Codex優先度3）
-        _get = lambda u, timeout=20: _fake(u, _h="<p>ただいまメンテナンス中です</p>" + html)
-        r_bad = scan_maker("t", {**conf, "min_expected": 2}, seen, record=False)
-        t("★★メンテナンス・拒否・年齢確認の画面を一覧として読まない★★"
-          "（そこそこリンクがあると件数の下限では通ってしまう）",
-          r_bad["problem"] is not None and r_bad["state"] == "FETCH_FAILED")
-        # ★一覧ページの印★（2026-07-31・Codex優先度2）
-        _get = _fake
-        titled = "<title>パチスロ機種一覧|テスト社</title>" + html
-        _get = lambda u, timeout=20: _fake(u, _h=titled)   # noqa: E731
-        r_mk = scan_maker("t", {**conf, "min_expected": 2,
-                                "list_marker": "スロット機種"}, seen, record=False)
-        t("★★一覧ページの題が印で始まらなければ『新台なし』と扱わない★★",
-          r_mk["problem"] is not None and r_mk["state"] == "PARSE_SUSPECT")
-        r_mk2 = scan_maker("t", {**conf, "min_expected": 2,
-                                 "list_marker": "パチスロ機種一覧"}, seen, record=False)
-        t("　題が印で始まれば通る", r_mk2["problem"] is None)
-        machine_titled = "<title>スマスロ○○|パチスロ機種一覧|テスト社</title>" + html
-        _get = lambda u, timeout=20: _fake(u, _h=machine_titled)   # noqa: E731
-        r_mk3 = scan_maker("t", {**conf, "min_expected": 2,
-                                 "list_marker": "パチスロ機種一覧"}, seen, record=False)
-        t("★★機種ページの題（一覧の題を末尾に含む）を一覧と間違えない★★"
-          "（本文で照合していた時は区別できなかった）",
-          r_mk3["problem"] is not None)
-        _get = _fake
+        t("★タイトルから機種名だけを取る★",
+          machine_name("<title>Lすーぱぁびん娘|機種情報|BELLCO(ベルコ株式会社)</title>")
+          == "Lすーぱぁびん娘")
+        t("　全角の区切りでも取れる",
+          machine_name("<title>テスト機　情報｜メーカー</title>") == "テスト機 情報")
 
-        # ★別のドメインへ転送されたとき★（2026-07-31・Codex優先度1）
-        _get = lambda u, timeout=20: (           # noqa: E731
-            LAST_FINAL_URL.__setitem__("url", "https://よそ.example/top/") or html)
-        r_red = scan_maker("t", {**conf, "min_expected": 2}, seen, record=False)
-        t("★★別のドメインへ転送されたら『新台なし』と扱わない★★"
-          "（正しいURLを叩いてもトップや別サイトが返ることがある）",
-          r_red["problem"] is not None and r_red["state"] == "FETCH_FAILED")
-        t("★★一覧を頼んだのにトップページへ飛ばされたら異常とする★★"
-          "（山佐ネクストで実際に起きていた）",
-          redirect_problem("https://www.x.example/machine/", "https://x.example/"))
-        t("★★最終URLが分からないときは正常と言わない★★（Codex指摘・確認済み）",
-          redirect_problem("https://x.example/machine/", None))
-        t("★★同じサイトの中でも別のページへ飛ばされたら異常★★",
-          redirect_problem("https://x.example/machine/", "https://x.example/products/"))
-        t("★www の有無だけの転送は異常としない★",
-          not redirect_problem("https://www.x.example/machine/",
-                               "https://x.example/machine/"))
-        t("　別のドメインへ飛んだら異常",
-          redirect_problem("https://x.example/machine/",
-                           "https://y.example/machine/"))
-        _get = _fake
-        r_ok = scan_maker("t", {**conf, "min_expected": 2}, seen, record=False)
-        t("　同じドメインなら通る", r_ok["problem"] is None)
+        conf = {"name": "t", "list_url": LIST, "link_prefix": LIST, "min_expected": 5}
+        seen = {"makers": {"t": {"urls": ["https://m.example/products/slot/aaa/"]}}}
 
-        # ★一覧が丸ごと別物に入れ替わったとき★（自分で再現した）
-        many = "".join(f'<a href="/products/slot/new{i}/">x</a>' for i in range(55))
-        old_seen = {"makers": {"t": {"urls": [f"{LIST}old{i}/" for i in range(60)]}}}
-        _get = lambda u, timeout=20: _fake(u, _h=many)   # noqa: E731
-        r5 = scan_maker("t", {**conf, "min_expected": 50}, old_seen, record=False)
-        t("★★前に見たURLが大量に消えたら『新台』と扱わない★★"
-          "（件数だけ見ていると55件が新台になった）",
-          r5["problem"] is not None and r5["new"] == []
-          and r5["state"] == "PARSE_SUSPECT")
-        # ★一度に増えすぎたとき★
-        base = [f"{LIST}a{i}/" for i in range(50)]
-        grow = "".join(f'<a href="/products/slot/a{i}/">x</a>' for i in range(50)) +             "".join(f'<a href="/products/slot/z{i}/">x</a>' for i in range(20))
-        _get = lambda u, timeout=20: _fake(u, _h=grow)   # noqa: E731
-        r6 = scan_maker("t", {**conf, "min_expected": 50},
-                        {"makers": {"t": {"urls": base}}}, record=False)
-        t("★一度に増えすぎたときも『新台』と扱わない★",
-          r6["problem"] is not None and r6["new"] == [])
-        # ★普通に1件増えたときは通る★
-        one = "".join(f'<a href="/products/slot/a{i}/">x</a>' for i in range(51))
-        _get = lambda u, timeout=20: _fake(u, _h=one)    # noqa: E731
-        r7 = scan_maker("t", {**conf, "min_expected": 50},
-                        {"makers": {"t": {"urls": base}}}, record=False)
-        t("　普通に1件増えたときはちゃんと新台として出る",
-          r7["problem"] is None and r7["new"] == [f"{LIST}a50/"]
-          and r7["state"] == "OK")
-        _get = lambda u, timeout=20: (_ for _ in ()).throw(WatchError("落ちた"))  # noqa: E731
-        r4 = scan_maker("t", conf2, seen, record=False)
-        t("　取得に失敗したら理由を残して止まる（新台なしにしない）",
-          r4["problem"] and r4["new"] == [])
-    finally:
-        _get = real_get
+        class _Stub:
+            def __init__(self, h): self.h = h
 
-    from datetime import date
-    TODAY = date(2026, 7, 31)
-    t("★★古い機種のページを新台にしない★★（記録が消えても全機種が押し寄せない）",
-      not is_recent("2024-12", TODAY) and not is_recent("2023-08", TODAY))
-    t("　導入直後（先月）も拾う", is_recent("2026-06", TODAY))
-    t("　事前告知（半年先まで）は拾う",
-      is_recent("2026-08", TODAY) and is_recent("2027-01", TODAY))
-    t("　それより先は拾わない（噂・別機種の混入を避ける）",
-      not is_recent("2027-03", TODAY))
-    t("★★ありえない月は通さない★★（13月が新台として通っていた・実際に再現）",
-      not is_recent("2026-13", TODAY) and not is_recent("2026-00", TODAY)
-      and not is_recent("2026-99", TODAY))
-    t("　年月として読めない値は通さない",
-      not is_recent("", TODAY) and not is_recent("2026", TODAY)
-      and not is_recent("にせ-99", TODAY))
-    t("★公式が書いた登場年月をそのまま持つ（日を補わない）★",
-      release_month("2026年8月登場")["value"] == "2026-08"
-      and release_month("2026年8月登場")["precision"] == "month")
-    # ★★Codex26回目（ページ最初の年月を無条件に使っていた）★★
-    _nl = chr(10)
-    t("★★お知らせの年月より、導入の行の年月を採る★★（Codex26回目）",
-      release_month("お知らせ更新：2026年7月" + _nl + "導入予定：2026年9月")["value"]
-      == "2026-09")
-    t("　導入らしい行どうしで食い違えば選ばない",
-      release_month("導入予定：2026年9月" + _nl + "2026年8月登場") is None)
-    t("　導入の行が無く、年月が複数あれば選ばない",
-      release_month("2026年7月の話" + _nl + "2026年9月の話") is None)
-    t("　導入の文脈が無い単独の年月は、個別ページでは採らない（Codex30回目で厳格化）",
-      release_month("Lテスト機 2026年9月") is None)
-    t("　雑音の行（更新・お知らせ・©）の年月は使わない",
-      release_month("最終更新 2026年7月") is None
-      and release_month("Copyright 2026年1月") is None)
-    # ★★Codex30回目★★
-    t("★★導入の文脈が無い唯一の年月は採らない★★"
-      "（「キャンペーン期間 2026.9」を登場月にできた・Codex30回目）",
-      release_month("キャンペーン期間 2026.9") is None
-      and release_month("Lテスト機のページ 2026.9") is None)
-    t("　一覧のカード（文脈ありとみなす）だけは唯一の年月を使える",
-      release_month("Lテスト機 2026.9", assume_release_context=True)["value"]
-      == "2026-09")
-    t("★★グッズ発売・予約の月をカードの導入月にしない★★（Codex53回目）",
-      release_month("グッズ発売 2026.9", assume_release_context=True) is None
-      and release_month("予約商品 2026.9", assume_release_context=True) is None
-      and release_month("導入予定 2026.9")["value"] == "2026-09")
-    t("　見出しの次の行の年月も文脈として読む（表の形）",
-      release_month("導入予定日" + chr(10) + "2026年9月")["value"] == "2026-09")
-    t("★★名前の中のハイフンで題を切らない★★"
-      "（A-SLOT+が「A」になり正しい新台を台帳送りにした・Codex30回目）",
-      machine_name("<title>A-SLOT+</title>") == "A-SLOT+"
-      and machine_name("<title>Lテスト機 - メーカー公式</title>") == "Lテスト機"
-      and machine_name("<title>Lテスト機|公式</title>") == "Lテスト機")
-    t("★★同じ機種へ画像と題で2回リンクするカードからも年月を取れる★★（Codex30回目）",
-      list_release_hints(
-          '<div><a href="https://m.example/products/slot/rikoriko/">'
-          '<img src="x.jpg"></a>'
-          '<a href="https://m.example/products/slot/rikoriko/">リコリコ</a>'
-          '<p>2026.9</p></div>'
-          '<div><a href="https://m.example/products/slot/juoh/">獣王</a></div>',
-          "https://m.example/products/slot/",
-          "https://m.example/products/slot/")
-      .get("https://m.example/products/slot/rikoriko/") == "2026-09")
-    # ★★Codex31回目：ページに機種が1種類しか無ければカードの境界を決められない★★
-    t("★★機種URLが1種類だけのページからは年月を採らない★★"
-      "（根まで上がって「展示会 2026.9」を登場月にできた・Codex31回目）",
-      list_release_hints(
-          '<div>展示会 2026.9</div>'
-          '<div><a href="https://m.example/products/slot/newone/">新機種</a></div>',
-          "https://m.example/products/slot/",
-          "https://m.example/products/slot/") == {})
-    t("★★一重引用符の href も読む★★"
-      "（新しい1件だけ'…'だと永久に検出されなかった・Codex30回目）",
-      product_urls("<a href='https://m.example/products/slot/shin_dai/'>新台</a>",
-                   "https://m.example/products/slot/",
-                   "https://m.example/products/slot/")
-      == ["https://m.example/products/slot/shin_dai/"])
-    t("　classify は題の全文も返す（発見時に基準の題を控えるため）",
-      "page_title" in __import__("inspect").getsource(classify))
-    # ★★Codex27回目：サミーの一覧は「2026.9」形式・個別ページに年月なし★★
-    t("★★「2026.9」形式も読める★★（サミーの一覧の実形式・Codex27回目）",
-      release_month("導入 2026.9")["value"] == "2026-09"
-      and release_month("導入 2026/10")["value"] == "2026-10")
-    t("　「2026.13」は年月として読まない",
-      release_month("導入 2026.13") is None)
-    t("　小数・連番を年月と取り違えない",
-      release_month("導入 12026.9") is None
-      and release_month("導入 2026.91") is None)
-    _list_html = (
-        '<div><a href="https://m.example/products/slot/rikoriko/">リコリコ</a>'
-        '<p>2026.9</p></div>'
-        '<div><a href="https://m.example/products/slot/juoh/">獣王</a>'
-        '<p>2026.10</p></div>'
-        '<div><a href="https://m.example/products/slot/nazo/">なぞ</a>'
-        '<p>2026.9 と 2026.11</p></div>')
-    _hints = list_release_hints(_list_html, "https://m.example/products/slot/",
-                                "https://m.example/products/slot/")
-    t("★★一覧のカードから「URL→登場年月」を取れる★★（Codex27回目）",
-      _hints.get("https://m.example/products/slot/rikoriko/") == "2026-09"
-      and _hints.get("https://m.example/products/slot/juoh/") == "2026-10")
-    t("　カードに年月が2つあれば採らない（選ばない）",
-      "https://m.example/products/slot/nazo/" not in _hints)
-    # ★★Codex29回目：隣のカードの年月を盗らない★★
-    _atk = ('<div><a href="https://m.example/products/slot/alpha/">A</a></div>'
-            '<div><span>導入 2026.10</span>'
-            '<a href="https://m.example/products/slot/bravo/">B</a></div>')
-    _h2 = list_release_hints(_atk, "https://m.example/products/slot/",
-                             "https://m.example/products/slot/")
-    t("★★リンクより前にある年月は、そのカードの機種に付く★★"
-      "（平らな窓だと前の機種が盗っていた・Codex29回目）",
-      _h2.get("https://m.example/products/slot/bravo/") == "2026-10"
-      and "https://m.example/products/slot/alpha/" not in _h2)
-    # ★★Codex32回目★★
-    t("★★カード内のscriptの日付を登場年月にしない★★（Codex32回目）",
-      list_release_hints(
-          '<div><a href="https://m.example/products/slot/newone/">新機種</a>'
-          '<script>window.__D__={"updatedAt":"2026.09.01"}</script></div>'
-          '<div><a href="https://m.example/products/slot/other/">別機種</a></div>',
-          "https://m.example/products/slot/",
-          "https://m.example/products/slot/") == {})
-    t("★★クエリで機種を指す未対応の形を見つけて知らせる★★"
-      "（黙って見逃すと件数も残存率も正常のまま新台だけ落ちる・Codex32回目）",
-      query_style_machine_links(
-          '<a href="https://m.example/products/slot/?machine=newone">新機種</a>',
-          "https://m.example/products/slot/",
-          "https://m.example/products/slot/")
-      == ["https://m.example/products/slot/?machine=newone"])
-    t("　ページ送りなどの無害なクエリでは騒がない",
-      query_style_machine_links(
-          '<a href="https://m.example/products/slot/?page=2">次へ</a>'
-          '<a href="https://m.example/products/slot/?sort=new">並び替え</a>',
-          "https://m.example/products/slot/",
-          "https://m.example/products/slot/") == [])
-    # ★★Codex51回目★★
-    t("★★分類キー（?cat=機種名）を無害と決めつけない★★（Codex51回目）",
-      query_style_machine_links(
-          '<a href="https://m.example/products/slot/?cat=new_machine">新機種</a>',
-          "https://m.example/products/slot/",
-          "https://m.example/products/slot/")
-      == ["https://m.example/products/slot/?cat=new_machine"])
-    t("★★一覧（list_url）側のクエリ形も検査する★★"
-      "（一覧と機種置き場が別の5社で検知できなかった・Codex51回目）",
-      query_style_machine_links(
-          '<a href="?machine=new_machine">L新機種</a>',
-          "https://m.example/machine/slot/",
-          "https://m.example/pub/machine/")
-      == ["https://m.example/machine/slot/?machine=new_machine"])
-    # ★★Codex33回目★★
-    t("★★templateの中の日付を本文として読まない★★（Codex33回目）",
-      release_month(_visible_text(
-          "<template><p>導入 2026年10月</p></template><body>本文</body>")) is None)
-    t("★★カードの外の年月（同じ区画の告知）を機種に付けない★★（Codex33回目）",
-      list_release_hints(
-          '<section><p>展示会 2026.9</p>'
-          '<div><a href="https://m.example/products/slot/newone/">新機種</a></div>'
-          '</section>'
-          '<section><a href="https://m.example/products/slot/other/">別機種</a>'
-          '</section>',
-          "https://m.example/products/slot/",
-          "https://m.example/products/slot/") == {})
-    t("★★大文字HREF・引用符なしhrefのリンクも読む★★"
-      "（読み飛ばすとその新台だけ永久に見逃す・Codex33回目）",
-      product_urls('<A HREF="https://m.example/products/slot/newone/">新台</A>',
-                   "https://m.example/products/slot/",
-                   "https://m.example/products/slot/")
-      == ["https://m.example/products/slot/newone/"]
-      and product_urls('<a href=https://m.example/products/slot/newtwo/>新台</a>',
+        import builtins  # noqa: F401
+        global _get
+        real_get = _get
+        try:
+            def _fake(u, timeout=20, _h=None):
+                LAST_FINAL_URL["url"] = u          # ★本物と同じく到達先を残す★
+                return _h if _h is not None else html
+
+            _get = _fake
+            r = scan_maker("t", conf, seen, record=False)
+            t("★★取れた数が少なすぎたら『新台なし』と言わない★★（黙って止まる事故を防ぐ）",
+              r["problem"] is not None and r["new"] == [])
+            conf2 = {**conf, "min_expected": 2}
+            r2 = scan_maker("t", conf2, seen, record=False)
+            t("　数が足りていれば、知らないURLだけを新台とする",
+              r2["problem"] is None and r2["new"] == ["https://m.example/products/slot/bbb/"])
+            r3 = scan_maker("zzz", conf2, {"makers": {}}, record=False)
+            t("★★初回は全部を新台にしない（覚えるだけ）★★",
+              r3["first_time"] is True and r3["new"] == [])
+            # ★一覧ではない画面が返ったとき★（2026-07-31・Codex優先度3）
+            _get = lambda u, timeout=20: _fake(u, _h="<p>ただいまメンテナンス中です</p>" + html)
+            r_bad = scan_maker("t", {**conf, "min_expected": 2}, seen, record=False)
+            t("★★メンテナンス・拒否・年齢確認の画面を一覧として読まない★★"
+              "（そこそこリンクがあると件数の下限では通ってしまう）",
+              r_bad["problem"] is not None and r_bad["state"] == "FETCH_FAILED")
+            # ★一覧ページの印★（2026-07-31・Codex優先度2）
+            _get = _fake
+            titled = "<title>パチスロ機種一覧|テスト社</title>" + html
+            _get = lambda u, timeout=20: _fake(u, _h=titled)   # noqa: E731
+            r_mk = scan_maker("t", {**conf, "min_expected": 2,
+                                    "list_marker": "スロット機種"}, seen, record=False)
+            t("★★一覧ページの題が印で始まらなければ『新台なし』と扱わない★★",
+              r_mk["problem"] is not None and r_mk["state"] == "PARSE_SUSPECT")
+            r_mk2 = scan_maker("t", {**conf, "min_expected": 2,
+                                     "list_marker": "パチスロ機種一覧"}, seen, record=False)
+            t("　題が印で始まれば通る", r_mk2["problem"] is None)
+            machine_titled = "<title>スマスロ○○|パチスロ機種一覧|テスト社</title>" + html
+            _get = lambda u, timeout=20: _fake(u, _h=machine_titled)   # noqa: E731
+            r_mk3 = scan_maker("t", {**conf, "min_expected": 2,
+                                     "list_marker": "パチスロ機種一覧"}, seen, record=False)
+            t("★★機種ページの題（一覧の題を末尾に含む）を一覧と間違えない★★"
+              "（本文で照合していた時は区別できなかった）",
+              r_mk3["problem"] is not None)
+            _get = _fake
+
+            # ★別のドメインへ転送されたとき★（2026-07-31・Codex優先度1）
+            _get = lambda u, timeout=20: (           # noqa: E731
+                LAST_FINAL_URL.__setitem__("url", "https://よそ.example/top/") or html)
+            r_red = scan_maker("t", {**conf, "min_expected": 2}, seen, record=False)
+            t("★★別のドメインへ転送されたら『新台なし』と扱わない★★"
+              "（正しいURLを叩いてもトップや別サイトが返ることがある）",
+              r_red["problem"] is not None and r_red["state"] == "FETCH_FAILED")
+            t("★★一覧を頼んだのにトップページへ飛ばされたら異常とする★★"
+              "（山佐ネクストで実際に起きていた）",
+              redirect_problem("https://www.x.example/machine/", "https://x.example/"))
+            t("★★最終URLが分からないときは正常と言わない★★（Codex指摘・確認済み）",
+              redirect_problem("https://x.example/machine/", None))
+            t("★★同じサイトの中でも別のページへ飛ばされたら異常★★",
+              redirect_problem("https://x.example/machine/", "https://x.example/products/"))
+            t("★www の有無だけの転送は異常としない★",
+              not redirect_problem("https://www.x.example/machine/",
+                                   "https://x.example/machine/"))
+            t("　別のドメインへ飛んだら異常",
+              redirect_problem("https://x.example/machine/",
+                               "https://y.example/machine/"))
+            _get = _fake
+            r_ok = scan_maker("t", {**conf, "min_expected": 2}, seen, record=False)
+            t("　同じドメインなら通る", r_ok["problem"] is None)
+
+            # ★一覧が丸ごと別物に入れ替わったとき★（自分で再現した）
+            many = "".join(f'<a href="/products/slot/new{i}/">x</a>' for i in range(55))
+            old_seen = {"makers": {"t": {"urls": [f"{LIST}old{i}/" for i in range(60)]}}}
+            _get = lambda u, timeout=20: _fake(u, _h=many)   # noqa: E731
+            r5 = scan_maker("t", {**conf, "min_expected": 50}, old_seen, record=False)
+            t("★★前に見たURLが大量に消えたら『新台』と扱わない★★"
+              "（件数だけ見ていると55件が新台になった）",
+              r5["problem"] is not None and r5["new"] == []
+              and r5["state"] == "PARSE_SUSPECT")
+            # ★一度に増えすぎたとき★
+            base = [f"{LIST}a{i}/" for i in range(50)]
+            grow = "".join(f'<a href="/products/slot/a{i}/">x</a>' for i in range(50)) +             "".join(f'<a href="/products/slot/z{i}/">x</a>' for i in range(20))
+            _get = lambda u, timeout=20: _fake(u, _h=grow)   # noqa: E731
+            r6 = scan_maker("t", {**conf, "min_expected": 50},
+                            {"makers": {"t": {"urls": base}}}, record=False)
+            t("★一度に増えすぎたときも『新台』と扱わない★",
+              r6["problem"] is not None and r6["new"] == [])
+            # ★普通に1件増えたときは通る★
+            one = "".join(f'<a href="/products/slot/a{i}/">x</a>' for i in range(51))
+            _get = lambda u, timeout=20: _fake(u, _h=one)    # noqa: E731
+            r7 = scan_maker("t", {**conf, "min_expected": 50},
+                            {"makers": {"t": {"urls": base}}}, record=False)
+            t("　普通に1件増えたときはちゃんと新台として出る",
+              r7["problem"] is None and r7["new"] == [f"{LIST}a50/"]
+              and r7["state"] == "OK")
+            _get = lambda u, timeout=20: (_ for _ in ()).throw(WatchError("落ちた"))  # noqa: E731
+            r4 = scan_maker("t", conf2, seen, record=False)
+            t("　取得に失敗したら理由を残して止まる（新台なしにしない）",
+              r4["problem"] and r4["new"] == [])
+        finally:
+            _get = real_get
+
+        from datetime import date
+        TODAY = date(2026, 7, 31)
+        t("★★古い機種のページを新台にしない★★（記録が消えても全機種が押し寄せない）",
+          not is_recent("2024-12", TODAY) and not is_recent("2023-08", TODAY))
+        t("　導入直後（先月）も拾う", is_recent("2026-06", TODAY))
+        t("　事前告知（半年先まで）は拾う",
+          is_recent("2026-08", TODAY) and is_recent("2027-01", TODAY))
+        t("　それより先は拾わない（噂・別機種の混入を避ける）",
+          not is_recent("2027-03", TODAY))
+        t("★★ありえない月は通さない★★（13月が新台として通っていた・実際に再現）",
+          not is_recent("2026-13", TODAY) and not is_recent("2026-00", TODAY)
+          and not is_recent("2026-99", TODAY))
+        t("　年月として読めない値は通さない",
+          not is_recent("", TODAY) and not is_recent("2026", TODAY)
+          and not is_recent("にせ-99", TODAY))
+        t("★公式が書いた登場年月をそのまま持つ（日を補わない）★",
+          release_month("2026年8月登場")["value"] == "2026-08"
+          and release_month("2026年8月登場")["precision"] == "month")
+        # ★★Codex26回目（ページ最初の年月を無条件に使っていた）★★
+        _nl = chr(10)
+        t("★★お知らせの年月より、導入の行の年月を採る★★（Codex26回目）",
+          release_month("お知らせ更新：2026年7月" + _nl + "導入予定：2026年9月")["value"]
+          == "2026-09")
+        t("　導入らしい行どうしで食い違えば選ばない",
+          release_month("導入予定：2026年9月" + _nl + "2026年8月登場") is None)
+        t("　導入の行が無く、年月が複数あれば選ばない",
+          release_month("2026年7月の話" + _nl + "2026年9月の話") is None)
+        t("　導入の文脈が無い単独の年月は、個別ページでは採らない（Codex30回目で厳格化）",
+          release_month("Lテスト機 2026年9月") is None)
+        t("　雑音の行（更新・お知らせ・©）の年月は使わない",
+          release_month("最終更新 2026年7月") is None
+          and release_month("Copyright 2026年1月") is None)
+        # ★★Codex30回目★★
+        t("★★導入の文脈が無い唯一の年月は採らない★★"
+          "（「キャンペーン期間 2026.9」を登場月にできた・Codex30回目）",
+          release_month("キャンペーン期間 2026.9") is None
+          and release_month("Lテスト機のページ 2026.9") is None)
+        t("　一覧のカード（文脈ありとみなす）だけは唯一の年月を使える",
+          release_month("Lテスト機 2026.9", assume_release_context=True)["value"]
+          == "2026-09")
+        t("★★グッズ発売・予約の月をカードの導入月にしない★★（Codex53回目）",
+          release_month("グッズ発売 2026.9", assume_release_context=True) is None
+          and release_month("予約商品 2026.9", assume_release_context=True) is None
+          and release_month("導入予定 2026.9")["value"] == "2026-09")
+        t("　見出しの次の行の年月も文脈として読む（表の形）",
+          release_month("導入予定日" + chr(10) + "2026年9月")["value"] == "2026-09")
+        t("★★名前の中のハイフンで題を切らない★★"
+          "（A-SLOT+が「A」になり正しい新台を台帳送りにした・Codex30回目）",
+          machine_name("<title>A-SLOT+</title>") == "A-SLOT+"
+          and machine_name("<title>Lテスト機 - メーカー公式</title>") == "Lテスト機"
+          and machine_name("<title>Lテスト機|公式</title>") == "Lテスト機")
+        t("★★同じ機種へ画像と題で2回リンクするカードからも年月を取れる★★（Codex30回目）",
+          list_release_hints(
+              '<div><a href="https://m.example/products/slot/rikoriko/">'
+              '<img src="x.jpg"></a>'
+              '<a href="https://m.example/products/slot/rikoriko/">リコリコ</a>'
+              '<p>2026.9</p></div>'
+              '<div><a href="https://m.example/products/slot/juoh/">獣王</a></div>',
+              "https://m.example/products/slot/",
+              "https://m.example/products/slot/")
+          .get("https://m.example/products/slot/rikoriko/") == "2026-09")
+        # ★★Codex31回目：ページに機種が1種類しか無ければカードの境界を決められない★★
+        t("★★機種URLが1種類だけのページからは年月を採らない★★"
+          "（根まで上がって「展示会 2026.9」を登場月にできた・Codex31回目）",
+          list_release_hints(
+              '<div>展示会 2026.9</div>'
+              '<div><a href="https://m.example/products/slot/newone/">新機種</a></div>',
+              "https://m.example/products/slot/",
+              "https://m.example/products/slot/") == {})
+        t("★★一重引用符の href も読む★★"
+          "（新しい1件だけ'…'だと永久に検出されなかった・Codex30回目）",
+          product_urls("<a href='https://m.example/products/slot/shin_dai/'>新台</a>",
                        "https://m.example/products/slot/",
                        "https://m.example/products/slot/")
-      == ["https://m.example/products/slot/newtwo/"])
-    # ★★Codex34回目★★
-    t("★★同じ機種に別の月が出たら採らない★★（注目欄と一覧の食い違い・Codex34回目）",
-      list_release_hints(
-          '<div class="pick"><a href="https://m.example/products/slot/aaa1/">A</a>'
-          '<p>2026.9</p></div>'
-          '<div class="pick"><a href="https://m.example/products/slot/bbb1/">B</a></div>'
-          '<li class="all"><a href="https://m.example/products/slot/aaa1/">A</a>'
-          '<p>2026.10</p></li>'
-          '<li class="all"><a href="https://m.example/products/slot/bbb1/">B</a></li>',
-          "https://m.example/products/slot/",
-          "https://m.example/products/slot/").get(
-              "https://m.example/products/slot/aaa1/") is None)
-    t("★★template内のリンクで「繰り返し」を偽装できない★★（Codex34回目）",
-      list_release_hints(
-          '<template><div><a href="https://m.example/products/slot/ghost/">幽霊'
-          '</a></div></template>'
-          '<div><span>導入 2026.10</span>'
-          '<a href="https://m.example/products/slot/real1/">実在</a></div>'
-          '<p><a href="https://m.example/products/slot/real2/">実在2</a></p>',
-          "https://m.example/products/slot/",
-          "https://m.example/products/slot/") == {})
-    t("★★個別パス＋クエリの機種リンクも検知する★★（/detail/?machine=新台・Codex34回目）",
-      query_style_machine_links(
-          '<a href="https://m.example/products/slot/detail/?machine=newone">新台</a>',
-          "https://m.example/products/slot/",
-          "https://m.example/products/slot/") != [])
-    t("★★発見時にも転送先を検査する★★（同一メーカー内の別ページ転送・Codex34回目）",
-      "redirect_problem" in __import__("inspect").getsource(classify))
-    # ★★Codex35回目★★
-    t("★★クエリだけ違うページへの転送も「別のページ」★★（Codex35回目）",
-      redirect_problem("https://m.example/products/slot/aaa1/",
-                       "https://m.example/products/slot/aaa1/?machine=bbb1")
-      is not None)
-    t("★★scriptやtemplateの中のリンクを機種数に数えない★★（Codex35回目）",
-      product_urls('<template><a href="https://m.example/products/slot/kakushi1/">x'
-                   '</a></template>'
-                   '<a href="https://m.example/products/slot/mieru1/">y</a>',
-                   "https://m.example/products/slot/",
-                   "https://m.example/products/slot/")
-      == ["https://m.example/products/slot/mieru1/"])
-    t("　data-href を href として拾わない",
-      product_urls('<a data-href="https://m.example/products/slot/nise1/">x</a>',
-                   "https://m.example/products/slot/",
-                   "https://m.example/products/slot/") == [])
-    t("★★「?id=42」「?machine=日本語」も検知する★★（形の検査で素通りした・Codex35回目）",
-      query_style_machine_links(
-          '<a href="https://m.example/products/slot/?id=42">a</a>',
-          "https://m.example/products/slot/",
-          "https://m.example/products/slot/") != []
-      and query_style_machine_links(
-          '<a href="https://m.example/products/slot/detail/?machine=新台">a</a>',
-          "https://m.example/products/slot/",
-          "https://m.example/products/slot/") != [])
-    # ★★Codex36回目★★
-    t("★★NEWS（大文字）も雑音として弾く★★（Codex36回目）",
-      release_month("NEWS 2026.9", assume_release_context=True) is None)
-    t("★★「slug/index.shtml」形の機種を拾う★★（ニューギンで実際に取りこぼしていた）",
-      product_urls('<a href="https://m.example/products/slot/cross_b/index.shtml">x</a>',
-                   "https://m.example/products/slot/",
-                   "https://m.example/products/slot/")
-      == ["https://m.example/products/slot/cross_b/"])
-    t("★★対応していない形のリンクを知らせる★★（黙って捨てない・Codex36回目）",
-      shape_warnings('<a href="https://m.example/products/slot/NewMachine/">x</a>'
-                     '<a href="https://m.example/products/slot/ok_one/">y</a>',
-                     "https://m.example/products/slot/",
-                     "https://m.example/products/slot/") == ["NewMachine"])
-    t("　既知の機種の下層ページでは騒がない",
-      shape_warnings('<a href="https://m.example/products/slot/ok_one/">y</a>'
-                     '<a href="https://m.example/products/slot/ok_one/spec.html">s</a>',
-                     "https://m.example/products/slot/",
-                     "https://m.example/products/slot/") == [])
-    t("★★HTTP200のメンテ画面を「回胴機でない」と誤判定しない★★（Codex36回目）",
-      (lambda c: any("読める状態ではありません" in r for r in c["reasons"])
-       and not any("パチスロのページに見えません" in r for r in c["reasons"]))(
-          (lambda: (globals().__setitem__("_get_bak", globals()["_get"]),
-                    globals().__setitem__("_get", lambda u, timeout=20:
-                        "<title>Access Denied</title><p>ただいまメンテナンス中です</p>"),
-                    classify("https://m.example/products/slot/x1/", None),
-                    globals().__setitem__("_get", globals()["_get_bak"]))[2])()))
-    # ★★Codex37回目★★
-    t("★★index.shtml形のカードからも年月を取れる★★（Codex37回目）",
-      list_release_hints(
-          '<div><a href="https://m.example/products/slot/cross_b/index.shtml">x</a>'
-          '<p>導入 2026.9</p></div>'
-          '<div><a href="https://m.example/products/slot/konan_s/index.shtml">y</a>'
-          '<p>導入 2026.10</p></div>',
-          "https://m.example/products/slot/",
-          "https://m.example/products/slot/")
-      == {"https://m.example/products/slot/cross_b/": "2026-09",
-          "https://m.example/products/slot/konan_s/": "2026-10"})
-    # ★★Codex38回目★★
-    _real_get38 = globals()["_get"]
-    globals()["_get"] = lambda u, timeout=20: (
-        "<title>ページが見つかりません</title>"
-        "<nav>パチスロ製品情報</nav><p>お探しのページはありません</p>")
-    try:
-        _c38 = classify("https://m.example/products/slot/x2/", None,
-                        list_release="2026-09")
-    finally:
-        globals()["_get"] = _real_get38
-    t("★★エラー画面の題を機種名にしない★★"
-      "（誤った名前が待ち行列に固定され永久理由で機種を失った・Codex38回目）",
-      not _c38["ok"]
-      and any("読める状態ではありません" in r for r in _c38["reasons"]))
-    t("★★既知機種の下層ディレクトリ（新機種かもしれない）は知らせる★★（Codex38回目）",
-      shape_warnings('<a href="https://m.example/products/slot/ok_one/">y</a>'
-                     '<a href="https://m.example/products/slot/ok_one/new_kishu/">n</a>',
-                     "https://m.example/products/slot/",
-                     "https://m.example/products/slot/") == ["ok_one/new_kishu"])
-    # ★★Codex39回目★★
-    t("★★関連商品の「発売」を導入の文脈にしない★★（Codex39回目）",
-      release_month("オリジナルサウンドトラック発売 2026年9月") is None
-      and release_month("2026年9月導入予定")["value"] == "2026-09")
-    t("★★ハッシュ経路（#/machine/…）のリンクを知らせる★★（Codex39回目）",
-      shape_warnings('<a href="https://m.example/products/slot/#/machine/newone">n</a>'
-                     '<a href="https://m.example/products/slot/ok_one/">y</a>',
-                     "https://m.example/products/slot/",
-                     "https://m.example/products/slot/") == ["#/machine/newone"])
-    t("　ページ内ジャンプ（#top）では騒がない",
-      shape_warnings('<a href="https://m.example/products/slot/#top">t</a>'
-                     '<a href="https://m.example/products/slot/ok_one/">y</a>',
-                     "https://m.example/products/slot/",
-                     "https://m.example/products/slot/") == [])
-    t("★★既知機種の下の拡張子つき別機種（new_variant.html）も知らせる★★（Codex39回目）",
-      shape_warnings('<a href="https://m.example/products/slot/ok_one/">y</a>'
-                     '<a href="https://m.example/products/slot/ok_one/new_variant.html">n</a>',
-                     "https://m.example/products/slot/",
-                     "https://m.example/products/slot/")
-      == ["ok_one/new_variant.html"])
-    # ★★Codex40回目（実ページ由来）★★
-    t("★★かぎ括弧の題から機種名を取れる★★（山佐・大都の実形式・Codex40回目）",
-      machine_name("<title>「スマスロパリピ孔明」公式サイト</title>")
-      == "スマスロパリピ孔明"
-      and machine_name("<title>大都技研「スロット ワールドダイスター」"
-                       "製品サイトはこちら!</title>") == "スロット ワールドダイスター")
-    # ★★Codex41回目★★
-    t("★★titleの実体参照をほどく★★（&amp;のままだと芯が合わず2票を確保できない）",
-      page_title("<title>L A&amp;B｜メーカー</title>") == "L A&B|メーカー"
-      and machine_name("<title>L A&amp;B｜メーカー</title>") == "L A&B")
-    t("★★hidden属性・display:noneのリンクを数えない★★（Codex41回目）",
-      product_urls('<div hidden><a href="https://m.example/products/slot/old1/">o'
-                   '</a></div>'
-                   '<div style="display:none">'
-                   '<a href="https://m.example/products/slot/old2/">o</a></div>'
-                   '<a href="https://m.example/products/slot/mieru1/">y</a>',
-                   "https://m.example/products/slot/",
-                   "https://m.example/products/slot/")
-      == ["https://m.example/products/slot/mieru1/"])
-    t("　hidden内の年月もカードから読まない",
-      list_release_hints(
-          '<div><a href="https://m.example/products/slot/aaa2/">A</a>'
-          '<span hidden>導入 2026.9</span></div>'
-          '<div><a href="https://m.example/products/slot/bbb2/">B</a></div>',
-          "https://m.example/products/slot/",
-          "https://m.example/products/slot/") == {})
-    # ★★Codex42回目★★
-    t("★★hiddenの祖先の下のカード群から年月を採らない★★（Codex42回目）",
-      list_release_hints(
-          '<a href="https://m.example/products/slot/aaa3/">A</a>'
-          '<a href="https://m.example/products/slot/bbb3/">B</a>'
-          '<section hidden>'
-          '<div><a href="https://m.example/products/slot/aaa3/">A</a>'
-          '<p>導入 2025.9</p></div>'
-          '<div><a href="https://m.example/products/slot/bbb3/">B</a>'
-          '<p>導入 2025.10</p></div></section>',
-          "https://m.example/products/slot/",
-          "https://m.example/products/slot/") == {})
-    # ★★Codex43回目★★
-    t("★★hiddenの中の年月を本文として読まない★★（Codex43回目）",
-      release_month(_visible_text(
-          "<h1>L試験機 パチスロ</h1><div hidden>導入 2026年10月</div>"
-          "<p>導入時期は未定</p>")) is None
-      and "導入 2026年10月" not in _visible_text(
-          "<div hidden>導入 2026年10月</div><p>見える本文</p>"))
-    t("　見出しの次の行に値がある形は従来どおり読める（型式抽出の形を壊さない）",
-      _visible_text("<p>型式名  :</p><p>Lびん娘NY1</p>").splitlines()
-      == ["型式名  :", "Lびん娘NY1"])
-    # ★★Codex46回目★★
-    _real_get46 = globals()["_get"]
-    globals()["_get"] = lambda u, timeout=20: (
-        "<title>L新機種</title><p>COMING SOON</p>")
-    try:
-        _c46 = classify("https://m.example/products/slot/soon1/", None)
-    finally:
-        globals()["_get"] = _real_get46
-    t("★★予告だけの薄いページ（題L○○＋COMING SOON）を永久理由にしない★★"
-      "（完成後も再分類されず既知に沈んだ・Codex46回目）",
-      not any("パチスロのページに見えません" in r for r in _c46["reasons"])
-      and any("登場年月" in r for r in _c46["reasons"]))
-    # ★★Codex47回目★★
-    _real_get47 = globals()["_get"]
-    globals()["_get"] = lambda u, timeout=20: (
-        "<title>L試験機</title><body>パチスロ 導入予定 2026年9月</body>")
-    try:
-        _c47 = classify("https://m.example/products/slot/x3/", None,
-                        today=__import__("datetime").date(2026, 8, 2),
-                        list_release="2026-10")
-    finally:
-        globals()["_get"] = _real_get47
-    t("★★個別ページと一覧の月が食い違ったら選ばない★★（Codex47回目）",
-      not _c47["ok"]
-      and any("食い違っています" in r for r in _c47["reasons"]))
-    # ★★Codex48回目★★
-    t("★★関連商品の「リリース」を台の登場文脈にしない★★（Codex48回目）",
-      release_month("サウンドトラック リリース 2026年9月") is None
-      and release_month("2026年9月導入予定")["value"] == "2026-09")
-    # ★★Codex49回目★★
-    t("★★カード扱い（単独月）でも関連商品のリリース月は採らない★★（Codex49回目）",
-      release_month("サウンドトラック リリース 2026年9月",
-                    assume_release_context=True) is None
-      and release_month("Lテスト機 2026.9",
-                        assume_release_context=True)["value"] == "2026-09")
-    # ★★Codex50回目★★
-    t("★★パチンコと明記されたカードのURLを機種から外す★★"
-      "（ニューギン実在形＝パチンコの増加で監視が恒久停止しえた・Codex50回目）",
-      filter_slot_urls(
-          '<li><a href="https://m.example/pub/m/slotone/">機種A</a>'
-          '<span>パチスロ</span></li>'
-          '<li><a href="https://m.example/pub/m/pachione/">機種P</a>'
-          '<span>パチンコ</span></li>',
-          "https://m.example/pub/m/", "https://m.example/pub/m/",
-          ["https://m.example/pub/m/slotone/",
-           "https://m.example/pub/m/pachione/"])
-      == (["https://m.example/pub/m/slotone/"],
-          ["https://m.example/pub/m/pachione/"]))
-    t("★★ぱちんこの規格印（e/P/CR）で始まる名前を機種から外す★★"
-      "（藤商事実在形＝カードに「パチンコ」と書かず印だけで種目が分かる・2026-08-03）",
-      filter_slot_urls(
-          '<li><a href="https://m.example/products/eisekai/">ｅ異世界でチート能力</a></li>'
-          '<li><a href="https://m.example/products/pfairy/">P FAIRY TAIL</a></li>'
-          '<li><a href="https://m.example/products/crabare/">CR 暴れん坊将軍</a></li>'
-          '<li><a href="https://m.example/products/ltoaru/">スマスロ とある魔術の禁書目録2</a></li>'
-          '<li><a href="https://m.example/products/psword/">パチスロ 戦国†恋姫</a></li>',
-          "https://m.example/products/all/", "https://m.example/products/",
-          ["https://m.example/products/eisekai/",
-           "https://m.example/products/pfairy/",
-           "https://m.example/products/crabare/",
-           "https://m.example/products/ltoaru/",
-           "https://m.example/products/psword/"], use_marks=True)
-      == (["https://m.example/products/ltoaru/",
-           "https://m.example/products/psword/"],
-          ["https://m.example/products/crabare/",
-           "https://m.example/products/eisekai/",
-           "https://m.example/products/pfairy/"]))
-    t("★★規格印での除外は、指定したメーカーだけで効く★★"
-      "（全社に効かせると将来 P/e で始まる回胴機が黙って消える・Codex83回目）",
-      filter_slot_urls(
-          '<li><a href="https://m.example/products/eisekai/">ｅ異世界でチート能力</a></li>',
-          "https://m.example/products/all/", "https://m.example/products/",
-          ["https://m.example/products/eisekai/"])
-      == (["https://m.example/products/eisekai/"], []))
-    t("　CRUSH等のCR始まり英単語・L/S機は外さない",
-      filter_slot_urls(
-          '<li><a href="https://m.example/products/crush/">CRUSH FEVER</a></li>'
-          '<li><a href="https://m.example/products/lshin/">L真ウルトラマン</a></li>',
-          "https://m.example/products/all/", "https://m.example/products/",
-          ["https://m.example/products/crush/",
-           "https://m.example/products/lshin/"])[1] == [])
-    t("★★脇の領域（aside）の導入月を本文にしない★★（Codex50回目）",
-      release_month(_visible_text(
-          "<h1>L新機種</h1><p>COMING SOON</p>"
-          "<aside>旧機種A 2026年9月導入</aside>")) is None)
-    t("★★?page=の値が数字でなければ検知する★★（Codex50回目）",
-      query_style_machine_links(
-          '<a href="https://m.example/products/slot/?page=new_machine">n</a>',
-          "https://m.example/products/slot/",
-          "https://m.example/products/slot/") != []
-      and query_style_machine_links(
-          '<a href="https://m.example/products/slot/?page=2">2</a>',
-          "https://m.example/products/slot/",
-          "https://m.example/products/slot/") == [])
-    t("　カードの構造が無いページでは採らない（安全側）",
-      list_release_hints(
-          '<a href="https://m.example/products/slot/alpha/">A</a> 導入 2026.9 '
-          '<a href="https://m.example/products/slot/bravo/">B</a>',
-          "https://m.example/products/slot/",
-          "https://m.example/products/slot/") == {})
-    # ★個別ページに年月が無くても、一覧の控えがあれば通る★
-    _real_get_cls = globals()["_get"]
-    globals()["_get"] = lambda u, timeout=20: (
-        "<title>スマスロ リコリコ|Sammy</title><body>パチスロ 純増 AT機</body>")
-    try:
-        _c1 = classify("https://m.example/products/slot/rikoriko2/", None,
-                       today=__import__("datetime").date(2026, 8, 2),
-                       list_release="2026-09")
-        _c2 = classify("https://m.example/products/slot/rikoriko2/", None,
-                       today=__import__("datetime").date(2026, 8, 2))
-    finally:
-        globals()["_get"] = _real_get_cls
-    t("★★個別に年月が無くても、公式一覧の控えで通せる★★（Codex27回目）",
-      (_c1.get("release") or {}).get("value") == "2026-09"
-      and not any("登場年月" in r for r in _c1["reasons"]))
-    t("　控えが無ければ従来どおり「書いていません」で止まる",
-      any("登場年月" in r for r in _c2["reasons"]))
-    t("　scriptの中身を本文に混ぜない（偽の年月・数値を拾わない）",
-      "パチスロ" not in _visible_text(
-          '<script>var x="パチスロ純増99枚";</script><p>Lテスト機</p>'))
-    t("★パチスロのページでなければ通さない★",
-      not looks_like_slot("これは景品の紹介ページです"))
+          == ["https://m.example/products/slot/shin_dai/"])
+        t("　classify は題の全文も返す（発見時に基準の題を控えるため）",
+          "page_title" in __import__("inspect").getsource(classify))
+        # ★★Codex27回目：サミーの一覧は「2026.9」形式・個別ページに年月なし★★
+        t("★★「2026.9」形式も読める★★（サミーの一覧の実形式・Codex27回目）",
+          release_month("導入 2026.9")["value"] == "2026-09"
+          and release_month("導入 2026/10")["value"] == "2026-10")
+        t("　「2026.13」は年月として読まない",
+          release_month("導入 2026.13") is None)
+        t("　小数・連番を年月と取り違えない",
+          release_month("導入 12026.9") is None
+          and release_month("導入 2026.91") is None)
+        _list_html = (
+            '<div><a href="https://m.example/products/slot/rikoriko/">リコリコ</a>'
+            '<p>2026.9</p></div>'
+            '<div><a href="https://m.example/products/slot/juoh/">獣王</a>'
+            '<p>2026.10</p></div>'
+            '<div><a href="https://m.example/products/slot/nazo/">なぞ</a>'
+            '<p>2026.9 と 2026.11</p></div>')
+        _hints = list_release_hints(_list_html, "https://m.example/products/slot/",
+                                    "https://m.example/products/slot/")
+        t("★★一覧のカードから「URL→登場年月」を取れる★★（Codex27回目）",
+          _hints.get("https://m.example/products/slot/rikoriko/") == "2026-09"
+          and _hints.get("https://m.example/products/slot/juoh/") == "2026-10")
+        t("　カードに年月が2つあれば採らない（選ばない）",
+          "https://m.example/products/slot/nazo/" not in _hints)
+        # ★★Codex29回目：隣のカードの年月を盗らない★★
+        _atk = ('<div><a href="https://m.example/products/slot/alpha/">A</a></div>'
+                '<div><span>導入 2026.10</span>'
+                '<a href="https://m.example/products/slot/bravo/">B</a></div>')
+        _h2 = list_release_hints(_atk, "https://m.example/products/slot/",
+                                 "https://m.example/products/slot/")
+        t("★★リンクより前にある年月は、そのカードの機種に付く★★"
+          "（平らな窓だと前の機種が盗っていた・Codex29回目）",
+          _h2.get("https://m.example/products/slot/bravo/") == "2026-10"
+          and "https://m.example/products/slot/alpha/" not in _h2)
+        # ★★Codex32回目★★
+        t("★★カード内のscriptの日付を登場年月にしない★★（Codex32回目）",
+          list_release_hints(
+              '<div><a href="https://m.example/products/slot/newone/">新機種</a>'
+              '<script>window.__D__={"updatedAt":"2026.09.01"}</script></div>'
+              '<div><a href="https://m.example/products/slot/other/">別機種</a></div>',
+              "https://m.example/products/slot/",
+              "https://m.example/products/slot/") == {})
+        t("★★クエリで機種を指す未対応の形を見つけて知らせる★★"
+          "（黙って見逃すと件数も残存率も正常のまま新台だけ落ちる・Codex32回目）",
+          query_style_machine_links(
+              '<a href="https://m.example/products/slot/?machine=newone">新機種</a>',
+              "https://m.example/products/slot/",
+              "https://m.example/products/slot/")
+          == ["https://m.example/products/slot/?machine=newone"])
+        t("　ページ送りなどの無害なクエリでは騒がない",
+          query_style_machine_links(
+              '<a href="https://m.example/products/slot/?page=2">次へ</a>'
+              '<a href="https://m.example/products/slot/?sort=new">並び替え</a>',
+              "https://m.example/products/slot/",
+              "https://m.example/products/slot/") == [])
+        # ★★Codex51回目★★
+        t("★★分類キー（?cat=機種名）を無害と決めつけない★★（Codex51回目）",
+          query_style_machine_links(
+              '<a href="https://m.example/products/slot/?cat=new_machine">新機種</a>',
+              "https://m.example/products/slot/",
+              "https://m.example/products/slot/")
+          == ["https://m.example/products/slot/?cat=new_machine"])
+        t("★★一覧（list_url）側のクエリ形も検査する★★"
+          "（一覧と機種置き場が別の5社で検知できなかった・Codex51回目）",
+          query_style_machine_links(
+              '<a href="?machine=new_machine">L新機種</a>',
+              "https://m.example/machine/slot/",
+              "https://m.example/pub/machine/")
+          == ["https://m.example/machine/slot/?machine=new_machine"])
+        # ★★Codex33回目★★
+        t("★★templateの中の日付を本文として読まない★★（Codex33回目）",
+          release_month(_visible_text(
+              "<template><p>導入 2026年10月</p></template><body>本文</body>")) is None)
+        t("★★カードの外の年月（同じ区画の告知）を機種に付けない★★（Codex33回目）",
+          list_release_hints(
+              '<section><p>展示会 2026.9</p>'
+              '<div><a href="https://m.example/products/slot/newone/">新機種</a></div>'
+              '</section>'
+              '<section><a href="https://m.example/products/slot/other/">別機種</a>'
+              '</section>',
+              "https://m.example/products/slot/",
+              "https://m.example/products/slot/") == {})
+        t("★★大文字HREF・引用符なしhrefのリンクも読む★★"
+          "（読み飛ばすとその新台だけ永久に見逃す・Codex33回目）",
+          product_urls('<A HREF="https://m.example/products/slot/newone/">新台</A>',
+                       "https://m.example/products/slot/",
+                       "https://m.example/products/slot/")
+          == ["https://m.example/products/slot/newone/"]
+          and product_urls('<a href=https://m.example/products/slot/newtwo/>新台</a>',
+                           "https://m.example/products/slot/",
+                           "https://m.example/products/slot/")
+          == ["https://m.example/products/slot/newtwo/"])
+        # ★★Codex34回目★★
+        t("★★同じ機種に別の月が出たら採らない★★（注目欄と一覧の食い違い・Codex34回目）",
+          list_release_hints(
+              '<div class="pick"><a href="https://m.example/products/slot/aaa1/">A</a>'
+              '<p>2026.9</p></div>'
+              '<div class="pick"><a href="https://m.example/products/slot/bbb1/">B</a></div>'
+              '<li class="all"><a href="https://m.example/products/slot/aaa1/">A</a>'
+              '<p>2026.10</p></li>'
+              '<li class="all"><a href="https://m.example/products/slot/bbb1/">B</a></li>',
+              "https://m.example/products/slot/",
+              "https://m.example/products/slot/").get(
+                  "https://m.example/products/slot/aaa1/") is None)
+        t("★★template内のリンクで「繰り返し」を偽装できない★★（Codex34回目）",
+          list_release_hints(
+              '<template><div><a href="https://m.example/products/slot/ghost/">幽霊'
+              '</a></div></template>'
+              '<div><span>導入 2026.10</span>'
+              '<a href="https://m.example/products/slot/real1/">実在</a></div>'
+              '<p><a href="https://m.example/products/slot/real2/">実在2</a></p>',
+              "https://m.example/products/slot/",
+              "https://m.example/products/slot/") == {})
+        t("★★個別パス＋クエリの機種リンクも検知する★★（/detail/?machine=新台・Codex34回目）",
+          query_style_machine_links(
+              '<a href="https://m.example/products/slot/detail/?machine=newone">新台</a>',
+              "https://m.example/products/slot/",
+              "https://m.example/products/slot/") != [])
+        t("★★発見時にも転送先を検査する★★（同一メーカー内の別ページ転送・Codex34回目）",
+          "redirect_problem" in __import__("inspect").getsource(classify))
+        # ★★Codex35回目★★
+        t("★★クエリだけ違うページへの転送も「別のページ」★★（Codex35回目）",
+          redirect_problem("https://m.example/products/slot/aaa1/",
+                           "https://m.example/products/slot/aaa1/?machine=bbb1")
+          is not None)
+        t("★★scriptやtemplateの中のリンクを機種数に数えない★★（Codex35回目）",
+          product_urls('<template><a href="https://m.example/products/slot/kakushi1/">x'
+                       '</a></template>'
+                       '<a href="https://m.example/products/slot/mieru1/">y</a>',
+                       "https://m.example/products/slot/",
+                       "https://m.example/products/slot/")
+          == ["https://m.example/products/slot/mieru1/"])
+        t("　data-href を href として拾わない",
+          product_urls('<a data-href="https://m.example/products/slot/nise1/">x</a>',
+                       "https://m.example/products/slot/",
+                       "https://m.example/products/slot/") == [])
+        t("★★「?id=42」「?machine=日本語」も検知する★★（形の検査で素通りした・Codex35回目）",
+          query_style_machine_links(
+              '<a href="https://m.example/products/slot/?id=42">a</a>',
+              "https://m.example/products/slot/",
+              "https://m.example/products/slot/") != []
+          and query_style_machine_links(
+              '<a href="https://m.example/products/slot/detail/?machine=新台">a</a>',
+              "https://m.example/products/slot/",
+              "https://m.example/products/slot/") != [])
+        # ★★Codex36回目★★
+        t("★★NEWS（大文字）も雑音として弾く★★（Codex36回目）",
+          release_month("NEWS 2026.9", assume_release_context=True) is None)
+        t("★★「slug/index.shtml」形の機種を拾う★★（ニューギンで実際に取りこぼしていた）",
+          product_urls('<a href="https://m.example/products/slot/cross_b/index.shtml">x</a>',
+                       "https://m.example/products/slot/",
+                       "https://m.example/products/slot/")
+          == ["https://m.example/products/slot/cross_b/"])
+        t("★★対応していない形のリンクを知らせる★★（黙って捨てない・Codex36回目）",
+          shape_warnings('<a href="https://m.example/products/slot/NewMachine/">x</a>'
+                         '<a href="https://m.example/products/slot/ok_one/">y</a>',
+                         "https://m.example/products/slot/",
+                         "https://m.example/products/slot/") == ["NewMachine"])
+        t("　既知の機種の下層ページでは騒がない",
+          shape_warnings('<a href="https://m.example/products/slot/ok_one/">y</a>'
+                         '<a href="https://m.example/products/slot/ok_one/spec.html">s</a>',
+                         "https://m.example/products/slot/",
+                         "https://m.example/products/slot/") == [])
+        t("★★HTTP200のメンテ画面を「回胴機でない」と誤判定しない★★（Codex36回目）",
+          (lambda c: any("読める状態ではありません" in r for r in c["reasons"])
+           and not any("パチスロのページに見えません" in r for r in c["reasons"]))(
+              (lambda: (globals().__setitem__("_get_bak", globals()["_get"]),
+                        globals().__setitem__("_get", lambda u, timeout=20:
+                            "<title>Access Denied</title><p>ただいまメンテナンス中です</p>"),
+                        classify("https://m.example/products/slot/x1/", None),
+                        globals().__setitem__("_get", globals()["_get_bak"]))[2])()))
+        # ★★Codex37回目★★
+        t("★★index.shtml形のカードからも年月を取れる★★（Codex37回目）",
+          list_release_hints(
+              '<div><a href="https://m.example/products/slot/cross_b/index.shtml">x</a>'
+              '<p>導入 2026.9</p></div>'
+              '<div><a href="https://m.example/products/slot/konan_s/index.shtml">y</a>'
+              '<p>導入 2026.10</p></div>',
+              "https://m.example/products/slot/",
+              "https://m.example/products/slot/")
+          == {"https://m.example/products/slot/cross_b/": "2026-09",
+              "https://m.example/products/slot/konan_s/": "2026-10"})
+        # ★★Codex38回目★★
+        _real_get38 = globals()["_get"]
+        globals()["_get"] = lambda u, timeout=20: (
+            "<title>ページが見つかりません</title>"
+            "<nav>パチスロ製品情報</nav><p>お探しのページはありません</p>")
+        try:
+            _c38 = classify("https://m.example/products/slot/x2/", None,
+                            list_release="2026-09")
+        finally:
+            globals()["_get"] = _real_get38
+        t("★★エラー画面の題を機種名にしない★★"
+          "（誤った名前が待ち行列に固定され永久理由で機種を失った・Codex38回目）",
+          not _c38["ok"]
+          and any("読める状態ではありません" in r for r in _c38["reasons"]))
+        t("★★既知機種の下層ディレクトリ（新機種かもしれない）は知らせる★★（Codex38回目）",
+          shape_warnings('<a href="https://m.example/products/slot/ok_one/">y</a>'
+                         '<a href="https://m.example/products/slot/ok_one/new_kishu/">n</a>',
+                         "https://m.example/products/slot/",
+                         "https://m.example/products/slot/") == ["ok_one/new_kishu"])
+        # ★★Codex39回目★★
+        t("★★関連商品の「発売」を導入の文脈にしない★★（Codex39回目）",
+          release_month("オリジナルサウンドトラック発売 2026年9月") is None
+          and release_month("2026年9月導入予定")["value"] == "2026-09")
+        t("★★ハッシュ経路（#/machine/…）のリンクを知らせる★★（Codex39回目）",
+          shape_warnings('<a href="https://m.example/products/slot/#/machine/newone">n</a>'
+                         '<a href="https://m.example/products/slot/ok_one/">y</a>',
+                         "https://m.example/products/slot/",
+                         "https://m.example/products/slot/") == ["#/machine/newone"])
+        t("　ページ内ジャンプ（#top）では騒がない",
+          shape_warnings('<a href="https://m.example/products/slot/#top">t</a>'
+                         '<a href="https://m.example/products/slot/ok_one/">y</a>',
+                         "https://m.example/products/slot/",
+                         "https://m.example/products/slot/") == [])
+        t("★★既知機種の下の拡張子つき別機種（new_variant.html）も知らせる★★（Codex39回目）",
+          shape_warnings('<a href="https://m.example/products/slot/ok_one/">y</a>'
+                         '<a href="https://m.example/products/slot/ok_one/new_variant.html">n</a>',
+                         "https://m.example/products/slot/",
+                         "https://m.example/products/slot/")
+          == ["ok_one/new_variant.html"])
+        # ★★Codex40回目（実ページ由来）★★
+        t("★★かぎ括弧の題から機種名を取れる★★（山佐・大都の実形式・Codex40回目）",
+          machine_name("<title>「スマスロパリピ孔明」公式サイト</title>")
+          == "スマスロパリピ孔明"
+          and machine_name("<title>大都技研「スロット ワールドダイスター」"
+                           "製品サイトはこちら!</title>") == "スロット ワールドダイスター")
+        # ★★Codex41回目★★
+        t("★★titleの実体参照をほどく★★（&amp;のままだと芯が合わず2票を確保できない）",
+          page_title("<title>L A&amp;B｜メーカー</title>") == "L A&B|メーカー"
+          and machine_name("<title>L A&amp;B｜メーカー</title>") == "L A&B")
+        t("★★hidden属性・display:noneのリンクを数えない★★（Codex41回目）",
+          product_urls('<div hidden><a href="https://m.example/products/slot/old1/">o'
+                       '</a></div>'
+                       '<div style="display:none">'
+                       '<a href="https://m.example/products/slot/old2/">o</a></div>'
+                       '<a href="https://m.example/products/slot/mieru1/">y</a>',
+                       "https://m.example/products/slot/",
+                       "https://m.example/products/slot/")
+          == ["https://m.example/products/slot/mieru1/"])
+        t("　hidden内の年月もカードから読まない",
+          list_release_hints(
+              '<div><a href="https://m.example/products/slot/aaa2/">A</a>'
+              '<span hidden>導入 2026.9</span></div>'
+              '<div><a href="https://m.example/products/slot/bbb2/">B</a></div>',
+              "https://m.example/products/slot/",
+              "https://m.example/products/slot/") == {})
+        # ★★Codex42回目★★
+        t("★★hiddenの祖先の下のカード群から年月を採らない★★（Codex42回目）",
+          list_release_hints(
+              '<a href="https://m.example/products/slot/aaa3/">A</a>'
+              '<a href="https://m.example/products/slot/bbb3/">B</a>'
+              '<section hidden>'
+              '<div><a href="https://m.example/products/slot/aaa3/">A</a>'
+              '<p>導入 2025.9</p></div>'
+              '<div><a href="https://m.example/products/slot/bbb3/">B</a>'
+              '<p>導入 2025.10</p></div></section>',
+              "https://m.example/products/slot/",
+              "https://m.example/products/slot/") == {})
+        # ★★Codex43回目★★
+        t("★★hiddenの中の年月を本文として読まない★★（Codex43回目）",
+          release_month(_visible_text(
+              "<h1>L試験機 パチスロ</h1><div hidden>導入 2026年10月</div>"
+              "<p>導入時期は未定</p>")) is None
+          and "導入 2026年10月" not in _visible_text(
+              "<div hidden>導入 2026年10月</div><p>見える本文</p>"))
+        t("　見出しの次の行に値がある形は従来どおり読める（型式抽出の形を壊さない）",
+          _visible_text("<p>型式名  :</p><p>Lびん娘NY1</p>").splitlines()
+          == ["型式名  :", "Lびん娘NY1"])
+        # ★★Codex46回目★★
+        _real_get46 = globals()["_get"]
+        globals()["_get"] = lambda u, timeout=20: (
+            "<title>L新機種</title><p>COMING SOON</p>")
+        try:
+            _c46 = classify("https://m.example/products/slot/soon1/", None)
+        finally:
+            globals()["_get"] = _real_get46
+        t("★★予告だけの薄いページ（題L○○＋COMING SOON）を永久理由にしない★★"
+          "（完成後も再分類されず既知に沈んだ・Codex46回目）",
+          not any("パチスロのページに見えません" in r for r in _c46["reasons"])
+          and any("登場年月" in r for r in _c46["reasons"]))
+        # ★★Codex47回目★★
+        _real_get47 = globals()["_get"]
+        globals()["_get"] = lambda u, timeout=20: (
+            "<title>L試験機</title><body>パチスロ 導入予定 2026年9月</body>")
+        try:
+            _c47 = classify("https://m.example/products/slot/x3/", None,
+                            today=__import__("datetime").date(2026, 8, 2),
+                            list_release="2026-10")
+        finally:
+            globals()["_get"] = _real_get47
+        t("★★個別ページと一覧の月が食い違ったら選ばない★★（Codex47回目）",
+          not _c47["ok"]
+          and any("食い違っています" in r for r in _c47["reasons"]))
+        # ★★Codex48回目★★
+        t("★★関連商品の「リリース」を台の登場文脈にしない★★（Codex48回目）",
+          release_month("サウンドトラック リリース 2026年9月") is None
+          and release_month("2026年9月導入予定")["value"] == "2026-09")
+        # ★★Codex49回目★★
+        t("★★カード扱い（単独月）でも関連商品のリリース月は採らない★★（Codex49回目）",
+          release_month("サウンドトラック リリース 2026年9月",
+                        assume_release_context=True) is None
+          and release_month("Lテスト機 2026.9",
+                            assume_release_context=True)["value"] == "2026-09")
+        # ★★Codex50回目★★
+        t("★★パチンコと明記されたカードのURLを機種から外す★★"
+          "（ニューギン実在形＝パチンコの増加で監視が恒久停止しえた・Codex50回目）",
+          filter_slot_urls(
+              '<li><a href="https://m.example/pub/m/slotone/">機種A</a>'
+              '<span>パチスロ</span></li>'
+              '<li><a href="https://m.example/pub/m/pachione/">機種P</a>'
+              '<span>パチンコ</span></li>',
+              "https://m.example/pub/m/", "https://m.example/pub/m/",
+              ["https://m.example/pub/m/slotone/",
+               "https://m.example/pub/m/pachione/"])
+          == (["https://m.example/pub/m/slotone/"],
+              ["https://m.example/pub/m/pachione/"]))
+        t("★★ぱちんこの規格印（e/P/CR）で始まる名前を機種から外す★★"
+          "（藤商事実在形＝カードに「パチンコ」と書かず印だけで種目が分かる・2026-08-03）",
+          filter_slot_urls(
+              '<li><a href="https://m.example/products/eisekai/">ｅ異世界でチート能力</a></li>'
+              '<li><a href="https://m.example/products/pfairy/">P FAIRY TAIL</a></li>'
+              '<li><a href="https://m.example/products/crabare/">CR 暴れん坊将軍</a></li>'
+              '<li><a href="https://m.example/products/ltoaru/">スマスロ とある魔術の禁書目録2</a></li>'
+              '<li><a href="https://m.example/products/psword/">パチスロ 戦国†恋姫</a></li>',
+              "https://m.example/products/all/", "https://m.example/products/",
+              ["https://m.example/products/eisekai/",
+               "https://m.example/products/pfairy/",
+               "https://m.example/products/crabare/",
+               "https://m.example/products/ltoaru/",
+               "https://m.example/products/psword/"], use_marks=True)
+          == (["https://m.example/products/ltoaru/",
+               "https://m.example/products/psword/"],
+              ["https://m.example/products/crabare/",
+               "https://m.example/products/eisekai/",
+               "https://m.example/products/pfairy/"]))
+        t("★★規格印での除外は、指定したメーカーだけで効く★★"
+          "（全社に効かせると将来 P/e で始まる回胴機が黙って消える・Codex83回目）",
+          filter_slot_urls(
+              '<li><a href="https://m.example/products/eisekai/">ｅ異世界でチート能力</a></li>',
+              "https://m.example/products/all/", "https://m.example/products/",
+              ["https://m.example/products/eisekai/"])
+          == (["https://m.example/products/eisekai/"], []))
+        t("　CRUSH等のCR始まり英単語・L/S機は外さない",
+          filter_slot_urls(
+              '<li><a href="https://m.example/products/crush/">CRUSH FEVER</a></li>'
+              '<li><a href="https://m.example/products/lshin/">L真ウルトラマン</a></li>',
+              "https://m.example/products/all/", "https://m.example/products/",
+              ["https://m.example/products/crush/",
+               "https://m.example/products/lshin/"])[1] == [])
+        t("★★脇の領域（aside）の導入月を本文にしない★★（Codex50回目）",
+          release_month(_visible_text(
+              "<h1>L新機種</h1><p>COMING SOON</p>"
+              "<aside>旧機種A 2026年9月導入</aside>")) is None)
+        t("★★?page=の値が数字でなければ検知する★★（Codex50回目）",
+          query_style_machine_links(
+              '<a href="https://m.example/products/slot/?page=new_machine">n</a>',
+              "https://m.example/products/slot/",
+              "https://m.example/products/slot/") != []
+          and query_style_machine_links(
+              '<a href="https://m.example/products/slot/?page=2">2</a>',
+              "https://m.example/products/slot/",
+              "https://m.example/products/slot/") == [])
+        t("　カードの構造が無いページでは採らない（安全側）",
+          list_release_hints(
+              '<a href="https://m.example/products/slot/alpha/">A</a> 導入 2026.9 '
+              '<a href="https://m.example/products/slot/bravo/">B</a>',
+              "https://m.example/products/slot/",
+              "https://m.example/products/slot/") == {})
+        # ★個別ページに年月が無くても、一覧の控えがあれば通る★
+        _real_get_cls = globals()["_get"]
+        globals()["_get"] = lambda u, timeout=20: (
+            "<title>スマスロ リコリコ|Sammy</title><body>パチスロ 純増 AT機</body>")
+        try:
+            _c1 = classify("https://m.example/products/slot/rikoriko2/", None,
+                           today=__import__("datetime").date(2026, 8, 2),
+                           list_release="2026-09")
+            _c2 = classify("https://m.example/products/slot/rikoriko2/", None,
+                           today=__import__("datetime").date(2026, 8, 2))
+        finally:
+            globals()["_get"] = _real_get_cls
+        t("★★個別に年月が無くても、公式一覧の控えで通せる★★（Codex27回目）",
+          (_c1.get("release") or {}).get("value") == "2026-09"
+          and not any("登場年月" in r for r in _c1["reasons"]))
+        t("　控えが無ければ従来どおり「書いていません」で止まる",
+          any("登場年月" in r for r in _c2["reasons"]))
+        t("　scriptの中身を本文に混ぜない（偽の年月・数値を拾わない）",
+          "パチスロ" not in _visible_text(
+              '<script>var x="パチスロ純増99枚";</script><p>Lテスト機</p>'))
+        t("★パチスロのページでなければ通さない★",
+          not looks_like_slot("これは景品の紹介ページです"))
 
-    t("★★『18歳未満』があっても、一覧の印と機種リンクがあれば止めない★★"
-      "（パチスロメーカーのサイトには当たり前に書いてある・Codex指摘）",
-      bad_page("<p>18歳未満の方は入場できません</p>", looks_like_list=True) is None)
-    t("　一覧の証拠が無ければ、その語を根拠に止める",
-      bad_page("<p>18歳未満の方は入場できません</p>", looks_like_list=False))
-    t("★アクセス拒否・メンテナンスは、一覧の証拠があっても止める★",
-      bad_page("<p>ただいまメンテナンス中です</p>", looks_like_list=True))
-    t("★★残存率は丸める前の値で比べる★★（0.7996 が 0.8 になって通っていた）",
-      (7996 / 10000) < RETENTION_MIN)
-    t("★一度に増えてよいのは5件まで（割合で緩めない）★", MAX_NEW_PER_SCAN == 5)
-    t("★覚え書きをメーカーとして数えない★",
-      is_catalog({"status": "ACTIVE"}) and not is_catalog({"olympia": "平和に載る"}))
-    t("★機種らしくない文字列は取らない★",
-      not _SLUGLIKE.match("../etc") and not _SLUGLIKE.match("A B")
-      and _SLUGLIKE.match("lbinko"))
+        t("★★『18歳未満』があっても、一覧の印と機種リンクがあれば止めない★★"
+          "（パチスロメーカーのサイトには当たり前に書いてある・Codex指摘）",
+          bad_page("<p>18歳未満の方は入場できません</p>", looks_like_list=True) is None)
+        t("　一覧の証拠が無ければ、その語を根拠に止める",
+          bad_page("<p>18歳未満の方は入場できません</p>", looks_like_list=False))
+        t("★アクセス拒否・メンテナンスは、一覧の証拠があっても止める★",
+          bad_page("<p>ただいまメンテナンス中です</p>", looks_like_list=True))
+        t("★★残存率は丸める前の値で比べる★★（0.7996 が 0.8 になって通っていた）",
+          (7996 / 10000) < RETENTION_MIN)
+        t("★一度に増えてよいのは5件まで（割合で緩めない）★", MAX_NEW_PER_SCAN == 5)
+        t("★覚え書きをメーカーとして数えない★",
+          is_catalog({"status": "ACTIVE"}) and not is_catalog({"olympia": "平和に載る"}))
+        t("★機種らしくない文字列は取らない★",
+          not _SLUGLIKE.match("../etc") and not _SLUGLIKE.match("A B")
+          and _SLUGLIKE.match("lbinko"))
 
-    # ★★転送先も、行く前に関所を通す★★（2026-08-16・依頼217の指摘3）
-    #   urlopen は転送を自動で追うので、そのままだと
-    #   **禁止先や名簿に無い先へ、止まる前に取りに行って**いた。
-    _keep_st = _SELFTEST["on"]
-    _SELFTEST["on"] = False          # ★ここだけ本番と同じ扱いで見る★
-    try:
-        def _redirect_blocked(u):
-            try:
-                check_before_fetch(u)
-                return False
-            except WatchError:
-                return True
+        # ★★転送先も、行く前に関所を通す★★（2026-08-16・依頼217の指摘3）
+        #   urlopen は転送を自動で追うので、そのままだと
+        #   **禁止先や名簿に無い先へ、止まる前に取りに行って**いた。
+        _keep_st = _SELFTEST["on"]
+        _SELFTEST["on"] = False          # ★ここだけ本番と同じ扱いで見る★
+        try:
+            def _redirect_blocked(u):
+                try:
+                    check_before_fetch(u)
+                    return False
+                except WatchError:
+                    return True
 
-        def _blocked_any(u):
-            """禁止先は BlockedHostError で止まる（例外の型が違う）"""
-            try:
-                check_before_fetch(u)
-                return False
-            except Exception:            # noqa: BLE001
-                return True
+            def _blocked_any(u):
+                """禁止先は BlockedHostError で止まる（例外の型が違う）"""
+                try:
+                    check_before_fetch(u)
+                    return False
+                except Exception:            # noqa: BLE001
+                    return True
 
-        t("★★禁止先への転送は、行く前に止まる★★（規約・台帳#376）",
-          _blocked_any("https://www.p-world.co.jp/machine/database/1"))
-        t("★★名簿に無い先への転送も、行く前に止まる★★",
-          _blocked_any("https://shiranai.example/x"))
-        t("　（対照）名簿にある先への転送は通る",
-          not _blocked_any("https://p-town.dmm.com/machines/5049"))
-        t("★★許した道筋の外への転送は止まる★★（同じサイトでも）",
-          _blocked_any("https://p-town.dmm.com/shops/1"))
-        t("　転送の見張りが urlopen に繋がっている",
-          "install_opener" in inspect.getsource(sys.modules[__name__])
-          and "check_before_fetch" in inspect.getsource(_GuardedRedirect
-                                                       .redirect_request))
-        t("★★ブラウザで開くときも関所を通す★★（page.goto は _get を通らない）",
-          "check_before_fetch" in inspect.getsource(_get_rendered))
+            t("★★禁止先への転送は、行く前に止まる★★（規約・台帳#376）",
+              _blocked_any("https://www.p-world.co.jp/machine/database/1"))
+            t("★★名簿に無い先への転送も、行く前に止まる★★",
+              _blocked_any("https://shiranai.example/x"))
+            t("　（対照）名簿にある先への転送は通る",
+              not _blocked_any("https://p-town.dmm.com/machines/5049"))
+            t("★★許した道筋の外への転送は止まる★★（同じサイトでも）",
+              _blocked_any("https://p-town.dmm.com/shops/1"))
+            t("　転送の見張りが urlopen に繋がっている",
+              "install_opener" in inspect.getsource(sys.modules[__name__])
+              and "check_before_fetch" in inspect.getsource(_GuardedRedirect
+                                                           .redirect_request))
+            t("★★ブラウザで描画して読む経路は削除した★★"
+              "（転送の行き先を行く前に止められず、しかも呼ばれないため）",
+              not hasattr(sys.modules[__name__], "_get_rendered"))
+        finally:
+            _SELFTEST["on"] = _keep_st
+        ng = [n for n, ok in results if not ok]
+        print(f"\n{len(results) - len(ng)}/{len(results)} 合格")
+        if ng:
+            print("失敗:", ng)
+        return 1 if ng else 0
     finally:
-        _SELFTEST["on"] = _keep_st
-    ng = [n for n, ok in results if not ok]
-    print(f"\n{len(results) - len(ng)}/{len(results)} 合格")
-    if ng:
-        print("失敗:", ng)
-    return 1 if ng else 0
+        _SELFTEST["on"] = _keep_selftest
 
 
 def main() -> int:

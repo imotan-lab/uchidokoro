@@ -1289,13 +1289,9 @@ def _release_from_official_list(maker: str, official_url: str) -> str:
             conf = cats.get(maker)
             if conf and _nw.is_catalog(conf) \
                     and str(conf.get("status") or "") == "ACTIVE":
-                if str(conf.get("fetch") or "static") == "render":
-                    html, health = _nw._get_rendered(conf["list_url"],
-                                                     conf["link_prefix"])
-                    if health.get("problem"):
-                        html = ""
-                else:
-                    html = _nw._get(conf["list_url"])
+                # ★メーカー公式の一覧を読む経路は削除済み★（台帳#377）
+                #   `list_url` はもう名簿に無いので、ここへは来ない。
+                html = ""
                 if html:
                     # ★健全な一覧と確かめてから控えを使う★（2026-08-02・Codex31回目）
                     #   見張りと同じ検査（印・最低件数・拒否画面）を通す。
@@ -2228,7 +2224,6 @@ def run_one(name, official_url, maker, release, apply_it=False,
 # ---------------------------------------------------------------- selftest
 
 def selftest() -> int:
-    _IDENTITY_SELFTEST["on"] = True   # ★架空のURLを使うので同定元は見ない★
     import inspect
     results = []
     nl = chr(10)
@@ -3253,7 +3248,15 @@ def main() -> int:
     ap.add_argument("--release", default="")
     args = ap.parse_args()
     if args.selftest:
-        return selftest()
+        # ★印は必ず元へ戻す★（2026-08-16・依頼218の指摘3）
+        #   例外で抜けたときに真のまま残ると、同じ手続きの中で
+        #   **本番の同定が縛りを見ないまま通ってしまう**。
+        _keep_id = _IDENTITY_SELFTEST["on"]
+        _IDENTITY_SELFTEST["on"] = True   # ★試験は架空のURLを使う★
+        try:
+            return selftest()
+        finally:
+            _IDENTITY_SELFTEST["on"] = _keep_id
 
     if args.baseline_titles:
         return baseline_titles()
