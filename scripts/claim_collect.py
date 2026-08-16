@@ -321,9 +321,16 @@ def selftest() -> int:
     t("★出典レジストリに無いホストからは取らない★",
       raises(lambda: fetch("https://evil.example/x", "hokuto"), "レジストリ"))
     t("★機種データに無い slug では取らない★",
-      raises(lambda: fetch("https://www.p-world.co.jp/x", "zzz_none"), "ありません"))
+      raises(lambda: fetch("https://nana-press.com/x", "zzz_none"), "ありません"))
     t("★★型式が未登録の機種では証拠にしない★★（別機種に流用されるため）",
-      raises(lambda: fetch("https://www.p-world.co.jp/x", "hokuto"), "型式"))
+      raises(lambda: fetch("https://nana-press.com/x", "hokuto"), "型式"))
+    # ★★2026-08-16・台帳#376★★ 規約で自動取得を禁じている先には通信しない。
+    t("★★規約で外した先からは取らない★★（P-WORLD・一撃）"
+      "／レジストリからも外したので、そちらで先に止まる",
+      raises(lambda: fetch("https://www.p-world.co.jp/x", "hokuto"))
+      and raises(lambda: fetch("https://1geki.jp/x", "hokuto"))
+      and _bh.is_blocked("https://www.p-world.co.jp/x")
+      and _bh.is_blocked("https://1geki.jp/x"))
 
     t("　タグを外して本文にできる",
       _strip_tags("<p>設定1</p><table><tr><td>97.2%</td></tr></table>")

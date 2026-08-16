@@ -491,8 +491,10 @@ def auto_adoptable(claim: dict, allow: dict | None = None) -> bool:
 
 
 # テストで使う実在の発行者（レジストリに載っているもの）
+# ★2026-08-16・台帳#376★ 一撃は規約により票から外したので、
+#   試験の出典も、いま票に数えられる社へ差し替えた。
 _TEST_PUBS = {"a": ("chonborista", "chonborista.com"),
-              "b": ("1geki", "1geki.jp")}
+              "b": ("nana-press", "nana-press.com")}
 
 
 def _use_test_evidence_dir():
@@ -738,7 +740,8 @@ def selftest() -> int:
           _mk_ledger([reg_claim(host_b="nazo.example", pub_b="nazo")]), "t", reg)))
     t("★★発行者の申告がURLと違えば止める（なりすまし）★★",
       raises(lambda: validate_ledger(
-          _mk_ledger([reg_claim(host_b="1geki.jp", pub_b="chonborista")]), "t", reg)))
+          _mk_ledger([reg_claim(host_b="nana-press.com", pub_b="chonborista")]),
+          "t", reg)))
     fake = reg_claim()
     fake["sources"][1]["trust_snapshot"]["ownership_group_id"] = "own-nazo"
     t("★運営元の申告がレジストリと違えば止める",
