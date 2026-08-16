@@ -721,27 +721,6 @@ def blocked_by_ledger(slug: str) -> list:
     return [f"台帳に止めるべき案件があります: {' / '.join(why)}"] if why else []
 
 
-def _ensure_list(maker: str) -> None:
-    """一覧カードで同定する社なら、健全に読めた一覧を控えておく。
-
-    ★条件は夜の見張りと同じ★＝`state=OK` のときだけ控える。
-    読めなければ何もしない（＝同定は「公式が読めない」で止まる）。
-    """
-    import add_machine_run as _amr
-    import new_machine_watch as _nw
-    if not maker or maker in _amr.LIST_SNAPSHOT:
-        return
-    try:
-        cats = _sj.read_json(_nw.CATALOGS, expect=dict)["catalogs"]
-        conf = cats.get(maker) or {}
-        if not conf.get("allow_list_card_identity"):
-            return
-        r = _nw.scan_maker(maker, conf, _nw._load_seen())
-        if r.get("state") == "OK" and r.get("list_html"):
-            _amr.LIST_SNAPSHOT[maker] = r["list_html"]
-    except Exception as e:                # noqa: BLE001
-        _log(f"  一覧を読めませんでした（{maker}）: {type(e).__name__}: {e}")
-
 
 def _read_rows() -> list:
     return _sj.read_rows(MACHINES)

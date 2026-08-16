@@ -32,6 +32,18 @@ sys.path.insert(0, os.path.join(BASE, "scripts"))
 
 MACHINES = os.path.join(BASE, "assets", "data", "machines.json")
 
+# ★メーカー公式で同定していた機種の移し先★（2026-08-16・実データで確認）
+#   出典は大手サイトへ寄せると決めたのに、この3件だけメーカー公式のままだった。
+#   ★slugは変えない★（読者のリンクと検索の登録が生きている）＝
+#   これらは元々メーカー公式のURL末尾から作ったslugなので、
+#   slug_binding の「新しい機種」判定にも「対応表」にも当てはまらない。
+#   そこで **移した3件だけの対応表** を slug_binding 側に持つ。
+MAKER_TO_DMM = {
+    "garei_zero_re": "5028",   # Lパチスロ 喰霊-零-Re（一覧カードで同定していた）
+    "prskkm": "5057",          # スマスロパリピ孔明
+    "ssb1": "5064",            # L青春ブタ野郎はバニーガール先輩の夢を見ない
+}
+
 
 def plan() -> tuple:
     """移す内容を組み立てる。返すもの: (移す一覧, 止める理由)"""
@@ -47,14 +59,25 @@ def plan() -> tuple:
     for m in ms:
         ident = m.get("identity") or {}
         url = str(ident.get("official_product_url") or "")
-        if "p-world" not in url:
-            continue
         slug = m.get("slug")
-        want = _sb.LEGACY_BINDINGS.get(slug)
-        if not want:
-            ng.append(f"{slug}: 対応表にありません／★勝手に移しません★")
+        if "p-world" in url:
+            want = _sb.LEGACY_BINDINGS.get(slug)
+            if not want:
+                ng.append(f"{slug}: 対応表にありません／★勝手に移しません★")
+                continue
+            mid = want.split("_", 1)[1]
+        elif ident.get("identity_binding") in ("MAKER_LIST_CARD",
+                                               "OFFICIAL_PRODUCT_PAGE"):
+            # ★メーカー公式で同定していた機種も移す★（2026-08-16・運営者判断）
+            #   「出典は大手サイトに寄せる」と決めたのに、ここだけ
+            #   メーカー公式が残っていた。残すと巡回の仕組みも消せない。
+            mid = MAKER_TO_DMM.get(slug)
+            if not mid:
+                ng.append(f"{slug}: 移し先のDMM機種IDが分かりません")
+                continue
+            want = "dmm_" + mid
+        else:
             continue
-        mid = want.split("_", 1)[1]
         try:
             got = _dm.fetch(mid)
         except _dm.MachineError as e:
@@ -74,12 +97,16 @@ def plan() -> tuple:
                           f"（手元={have} / DMM={got['model_code']}）")
                 continue
         # ★導入日が合うこと★（DMMが月までなら月で比べる）
+        # ★どちらが細かいか分からないので、短いほうに合わせて比べる★
+        #   （手元が「2026-08」でDMMが「2026-08-17」＝食い違いではない）
         rel = str(ident.get("market_release_date") or "")
-        if rel and got["release_date"] and not rel.startswith(
-                got["release_date"][:len(got["release_date"])]):
-            ng.append(f"{slug}: 導入日が食い違います"
-                      f"（手元={rel} / DMM={got['release_date']}）")
-            continue
+        dmm_rel = got["release_date"]
+        if rel and dmm_rel:
+            k = min(len(rel), len(dmm_rel))
+            if rel[:k] != dmm_rel[:k]:
+                ng.append(f"{slug}: 導入日が食い違います"
+                          f"（手元={rel} / DMM={dmm_rel}）")
+                continue
         new = dict(ident)
         # ★P-WORLDで確かめた記録は消さない★（検定番号はここにしか残らない）
         if ident.get("identity_evidence_ref"):

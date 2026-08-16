@@ -11319,17 +11319,19 @@
   "release_date": "2026-08",
   "identity": {
    "manufacturer_id": "oizumi",
-   "official_product_url": "https://www.oizumi.co.jp/machine/garei-zero-re/",
+   "official_product_url": "https://p-town.dmm.com/machines/5028",
    "announced_name": "Lパチスロ 喰霊-零-Re",
    "identity_tier": "CATALOG_CODE_MATCHED",
-   "identity_binding": "MAKER_LIST_CARD",
-   "identity_evidence_ref": "identity_evidence/13674f64333e5765e7fd009beb11fe73c52ed2f5c2b4498532d06218adf767fb.html #card0",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5028 型式=Lパチスロ喰霊零Re/L3 メーカー=オーイズミ 導入=2026-08-17 確認日=2026-08-16",
    "market_release_date": "2026-08",
    "regulatory_model_code": "Lパチスロ喰霊零Re/L3",
    "_model_code_sources": [
     "p-town.dmm.com",
     "p-world.co.jp"
-   ]
+   ],
+   "_legacy_evidence_ref": "identity_evidence/13674f64333e5765e7fd009beb11fe73c52ed2f5c2b4498532d06218adf767fb.html #card0",
+   "_legacy_official_product_url": "https://www.oizumi.co.jp/machine/garei-zero-re/"
   }
  },
  {
@@ -11369,15 +11371,17 @@
   "release_date": "2026-10",
   "identity": {
    "manufacturer_id": "yamasa_next",
-   "official_product_url": "https://yamasa-next.co.jp/slot/prskkm/",
+   "official_product_url": "https://p-town.dmm.com/machines/5057",
    "announced_name": "スマスロパリピ孔明",
    "identity_tier": "CATALOG_BOUND",
-   "identity_binding": "OFFICIAL_PRODUCT_PAGE",
+   "identity_binding": "DMM_MACHINE_PAGE",
    "market_release_date": "2026-10",
    "observed_model_code": "Lパチスロパリピ孔明YE05H",
    "_observed_model_code_sources": [
     "p-world.co.jp"
-   ]
+   ],
+   "_legacy_official_product_url": "https://yamasa-next.co.jp/slot/prskkm/",
+   "identity_evidence_ref": "dmm:5057 型式=未掲載 メーカー=山佐 導入=2026-10-05 確認日=2026-08-16"
   }
  },
  {
@@ -11420,16 +11424,18 @@
   "release_date": "2026-09",
   "identity": {
    "manufacturer_id": "heiwa",
-   "official_product_url": "https://www.heiwanet.co.jp/products/pachislot/ssb1/",
+   "official_product_url": "https://p-town.dmm.com/machines/5064",
    "announced_name": "L青春ブタ野郎はバニーガール先輩の夢を見ない",
    "identity_tier": "CATALOG_CODE_MATCHED",
-   "identity_binding": "OFFICIAL_PRODUCT_PAGE",
+   "identity_binding": "DMM_MACHINE_PAGE",
    "market_release_date": "2026-09",
    "regulatory_model_code": "L青春ブタ野郎L1",
    "_model_code_sources": [
     "p-town.dmm.com",
     "p-world.co.jp"
-   ]
+   ],
+   "_legacy_official_product_url": "https://www.heiwanet.co.jp/products/pachislot/ssb1/",
+   "identity_evidence_ref": "dmm:5064 型式=L青春ブタ野郎L1 メーカー=オリンピア 導入=2026-09-07 確認日=2026-08-16"
   }
  },
  {

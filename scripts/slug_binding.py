@@ -52,9 +52,18 @@ LEGACY_BINDINGS = {
     "pw_10521": "dmm_5061",   # スマスロ 獣王
     "pw_10523": "dmm_5059",   # モグモグ風林火山 大海戦の巻
     "pw_10543": "dmm_5065",   # Lパチスロ 彼女、お借りします
+    # ★メーカー公式で同定していた3件★（2026-08-16・運営者判断）
+    #   出典は大手サイトへ寄せると決めたのに、ここだけメーカー公式が
+    #   残っていた。残すとメーカー巡回の仕組みごと消せないので移した。
+    #   slugはメーカー公式のURL末尾から作った形なので、機種IDから
+    #   作り直すと一致しない＝この表が唯一の結び付け。
+    "garei_zero_re": "dmm_5028",   # Lパチスロ 喰霊-零-Re
+    "prskkm": "dmm_5057",          # スマスロパリピ孔明
+    "ssb1": "dmm_5064",            # L青春ブタ野郎はバニーガール先輩の夢を見ない
 }
 
-_LEGACY_KEY = re.compile(r"^pw_\d+$")
+# 移行前のslugの形（★P-WORLD由来と、メーカー公式のURL末尾由来の2種類★）
+_LEGACY_KEY = re.compile(r"^(pw_\d+|[a-z][a-z0-9_]{1,40})$")
 _LEGACY_VAL = re.compile(r"^dmm_\d+$")
 
 
@@ -75,9 +84,9 @@ def _derive(identity_url: str) -> str:
 def audit_table() -> list:
     """★対応表そのものの点検★（壊れていたら使わせない）。"""
     bad = []
-    if len(LEGACY_BINDINGS) != 7:
-        bad.append(f"件数が7件ではありません（{len(LEGACY_BINDINGS)}件）"
-                   "／★この表は移行した7件で終わりです★")
+    if len(LEGACY_BINDINGS) != 10:
+        bad.append(f"件数が10件ではありません（{len(LEGACY_BINDINGS)}件）"
+                   "／★この表は移行した10件で終わりです★")
     vals = list(LEGACY_BINDINGS.values())
     if len(set(vals)) != len(vals):
         dup = sorted({v for v in vals if vals.count(v) > 1})
@@ -158,6 +167,10 @@ def selftest() -> int:
     PW = "https://www.p-world.co.jp/machine/database/%s"
 
     t("★★対応表そのものが正しい★★（件数・形・重複）", not audit_table())
+    t("　メーカー公式で同定していた3件も入っている（大手サイトへ寄せた）",
+      LEGACY_BINDINGS.get("garei_zero_re") == "dmm_5028"
+      and LEGACY_BINDINGS.get("prskkm") == "dmm_5057"
+      and LEGACY_BINDINGS.get("ssb1") == "dmm_5064")
     t("★★表の左側は本当に公開中の機種★★（架空のslugが混ざっていない）",
       not audit_against_site())
 

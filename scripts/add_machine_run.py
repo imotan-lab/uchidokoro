@@ -60,11 +60,9 @@ import model_code_lookup as _mc       # noqa: E402
 import new_machine_watch as _nw       # noqa: E402
 import pending_machines as _pend      # noqa: E402
 import page_decision as _pdz          # noqa: E402
-import list_card_identity as _lci     # noqa: E402  ★一覧カードでの同定★
 import claim_identity as _ci          # noqa: E402  ★機種名の芯の照合★
 import prepush_gate as _pg            # noqa: E402
 import publish_new_machine as _pub    # noqa: E402
-import quarantine_machines as _quar   # noqa: E402
 import safe_json as _sj               # noqa: E402
 import spec_lookup as _sl             # noqa: E402
 
@@ -233,7 +231,7 @@ def recheck_known(mid: str, r: dict, seen: dict, out: dict) -> None:
 
 # ★入口の切り替え★（2026-08-12・運営者決定でP-WORLD一本にした）
 #   真にするとメーカー公式11社の見張りに戻る。仕組みは残してある。
-USE_MAKER_WATCH = False
+
 
 
 # ★知らせ済みのメーカーを覚えておく場所★（同じ会社で毎晩鳴らさない）
@@ -361,208 +359,6 @@ def discover_calendar(persist: bool = True) -> dict:
          f"結び直し{len(got.get('rebound') or [])}件")
     return out
 
-
-def discover(persist: bool = True) -> dict:
-    """メーカー公式の一覧から新台候補を出す。
-
-    ★persist=False（下見）は何も書かない★（2026-08-02・Codex30回目）
-      下見はロックを持たないので、本番実行と重なると
-      古い状態の保存が新しい記録を消す競合が起きえた。
-      下見では待ち行列・台帳・seen・再確認のどれにも書かない。
-    """
-    cats = _sj.read_json(_nw.CATALOGS, expect=dict)["catalogs"]
-    seen = _nw._load_seen()
-    out = {"candidates": [], "problems": [], "first_time": [],
-           # ★「新台なし」と言えるのは、正常に読めたメーカーの話だけ★
-           #   （2026-07-31・Codexの指摘。読めなかった社と混ぜない）
-           "watched": [], "not_watched": []}
-    for mid, conf in cats.items():
-        if not _nw.is_catalog(conf):
-            continue                      # ★覚え書きはメーカーではない★
-        if conf.get("status") != "ACTIVE":
-            out["not_watched"].append(f"{mid}（{conf.get('status')}）")
-            continue
-        r = _nw.scan_maker(mid, conf, seen)
-        _log(f"見張り {mid}: 状態={r['state']} 一覧={r['total']}件 "
-             f"新しいURL={len(r['new'])}件 残存率={r.get('retention')}")
-        if r["problem"]:
-            out["problems"].append(f"{mid}: {r['problem']}")
-            out["not_watched"].append(f"{mid}（{r['state']}）")
-            _log(f"  ✗ {mid}: {r['problem'][:120]}")
-            continue
-        out["watched"].append(mid)
-        # ★state=OK の一覧だけを控える★（あとで一覧カード同定に使う唯一の証跡）
-        #   ★状態そのものを見る★（2026-08-04・Codex93回目の指摘7。
-        #     problem が空でも PARSE_SUSPECT 等はあり得るので、
-        #     「問題が無い」ではなく「OKと判定された」を条件にする）
-        if r.get("state") == "OK" and r.get("list_html"):
-            LIST_SNAPSHOT[mid] = r["list_html"]
-        # ★対応していない形のリンクが混ざっていたら台帳へ★（Codex36回目・社は止めない）
-        for w_ in (r.get("shape_warnings") or [])[:5]:
-            out["problems"].append(
-                f"{mid}: 対応していない形の機種リンクがあります: {w_}"
-                "（名簿の直しが要ります）")
-        if r["first_time"]:
-            out["first_time"].append(f"{mid}（{r['total']}件を記録）")
-            # ★初回でも「これから出る新台」は拾う★（2026-08-02・Codex36回目）
-            #   監視開始時に既に載っていた新台を既知に沈めない。
-            #   登場年月が新台の範囲のものだけ、通常の分類を通して待ち行列へ。
-            # ★初回に読めないURLが多すぎる時は、通常行列でなく隔離へ★
-            #   （2026-08-03・台帳#210 → 2026-08-04・Codex65回目で設計を是正）
-            #   藤商事116件・オーイズミ29件の既存ラインナップが「読めない＝
-            #   明日やり直す」の救済で行列へ無差別流入し、本物の新台が最悪29晩
-            #   後回しになった。かといって捨てるとseenに残ったまま二度と分類
-            #   されず、一覧に既載だった未導入新台（実例: L喰霊-零-Re）が沈む。
-            #   → 第三の置き場＝隔離（quarantine_machines）。復旧を毎晩1件だけ
-            #   確かめ、直ったら分類し直して新台の範囲だけ行列へ移す。
-            #   境目の MAX_NEW_PER_SCAN は「障害の証明」ではなく
-            #   「通常行列へ一晩に入れてよい上限」として使う（Codexの指摘2）。
-            #   数えるのは読めない失敗（_OUTAGE）だけ＝年月未掲載など
-            #   ページ自体は読めた理由は従来どおり通常行列で待つ。
-            hints0 = r.get("hints") or {}
-            first_classified = []         # (url, c)  c=None は打ち切り後の未分類
-            outage = 0
-            for url in (r.get("initial_urls") or []):
-                if outage > _nw.MAX_NEW_PER_SCAN:
-                    # ★障害と分かってからも全URLへ当たりに行かない★（Codexの指摘4）
-                    #   未分類のまま隔離し、復旧後に分類し直す。
-                    first_classified.append((url, None))
-                    continue
-                c = _nw.classify(url, None, list_release=hints0.get(url))
-                first_classified.append((url, c))
-                if (not c["ok"]) and _is_outage(c["reasons"]):
-                    outage += 1
-            too_many = outage > _nw.MAX_NEW_PER_SCAN
-            quarantined = {}
-            for url, c in first_classified:
-                kept0 = True
-                hint = hints0.get(url) or ""
-                if c is None or (too_many and (not c["ok"])
-                                 and _is_outage(c["reasons"])):
-                    # ★障害の巻き添えは隔離へ★（seenには残す＝翌日の
-                    #   「一度に145件増」PARSE_SUSPECT誤爆を防ぐ）
-                    #   ただし一覧カードの年月が新台の範囲なら、障害中でも
-                    #   通常行列で毎日やり直す（未導入新台を復旧待ちに巻き込まない）
-                    if hint and _nw.is_recent(hint):
-                        if persist:
-                            kept0 = _remember_url(
-                                "", url, mid, hint,
-                                "初回・メーカー側の障害中だが一覧カードの年月が新台範囲")
-                    else:
-                        quarantined[url] = hint
-                elif c["ok"]:
-                    out["candidates"].append({"maker": mid, **c})
-                    if persist:
-                        kept0 = _remember_url(
-                            c.get("official_name") or "", url, mid,
-                            (c.get("release") or {}).get("value") or "",
-                            "初回の一覧から（新台の範囲内）")
-                elif retry_later(c["reasons"]):
-                    # ★初回の晩だけ読めなかった将来の新台を沈めない★（Codex37回目）
-                    #   取得失敗・メンテ・年月未掲載は明日には変わりうる。
-                    if persist:
-                        kept0 = _remember_url(
-                            c.get("official_name") or "", url, mid,
-                            (c.get("release") or {}).get("value") or "",
-                            "初回に読めなかった: " + " / ".join(c["reasons"])[:200])
-                elif hint and _nw.is_recent(hint):
-                    # ★一覧カードの年月が新台の範囲なら、分類失敗の種類を問わず残す★
-                    #   （2026-08-02・Codex39回目。先行公開直後の薄い個別ページが
-                    #     「パチスロのページに見えません」＝永久理由になり、
-                    #     初回記録で既知に沈んでいた）
-                    if persist:
-                        kept0 = _remember_url(
-                            c.get("official_name") or "", url, mid, hint,
-                            "初回・個別ページが未完成の疑い: "
-                            + " / ".join(c["reasons"])[:200])
-                # 範囲外など「やり直しても変わらない」は初回の古い機種＝台帳に残さない
-                if persist and not kept0:
-                    # ★どこにも残せなかったURLは「見た」ことにしない★（Codex37回目）
-                    _forget(seen, mid, url)
-                    out["problems"].append(
-                        f"{url}: 初回に残せなかったので『見た』ことにしません")
-            if quarantined:
-                out["problems"].append(
-                    f"{mid}: 初回一覧で読めない個別ページが、通常の待ち行列へ"
-                    f"一晩に入れてよい上限（{_nw.MAX_NEW_PER_SCAN}件）を超えたため、"
-                    f"{len(quarantined)}件を別枠（隔離）に保留しました。"
-                    "毎晩1件ずつ復旧を確かめ、直ったら分類し直して"
-                    "新台の範囲だけ行列へ入れます")
-                if persist:
-                    qd = _quar.load()
-                    _quar.add(qd, mid, quarantined,
-                              f"初回一覧の読めない個別ページ {outage} 件超")
-                    _quar.save(qd)
-            continue
-        for url in r["new"]:
-            # ★公式一覧のカードの年月を控えとして渡す★（2026-08-02・Codex27回目）
-            #   個別ページに年月が無いメーカー（サミー等）でも記事化できるように。
-            c = _nw.classify(url, None,
-                             list_release=(r.get("hints") or {}).get(url))
-            kept = True
-            if c["ok"]:
-                out["candidates"].append({"maker": mid, **c})
-                # ★seen を書く前に覚える★（2026-07-31・Codex17回目）
-                #   あとで覚える形だと、その間に落ちたときに
-                #   「既知のURLだが待ち行列にも無い」＝永久に消えた機種になる。
-                kept = (_remember_url(c.get("official_name") or "", url, mid,
-                                      (c.get("release") or {}).get("value") or "",
-                                      "見つけたばかり")
-                        if persist else True)
-            else:
-                out["problems"].append(f"{url}: " + " / ".join(c["reasons"]))
-                # ★ここで取りこぼしていた★（2026-07-31・Codex16回目）
-                #   このあと _save_seen で「見たことがあるURL」になるので、
-                #   翌日はもう新台に出てこない。
-                #   一晩だけページが取れなかっただけでも、その機種は永久に消えていた。
-                #   あとで載る見込みがある理由なら、待ち行列に入れて毎日やり直す。
-                if retry_later(c["reasons"]):
-                    kept = (_remember_url(
-                        c.get("official_name") or "", url, mid,
-                        (c.get("release") or {}).get("value") or "",
-                        " / ".join(c["reasons"])[:300]) if persist else True)
-                else:
-                    # ★やり直しても変わらない理由は、その場で1件ずつ台帳へ★
-                    #   （2026-08-02・Codex26回目）まとめ登録は失敗を無視し
-                    #   1500字で切るので、誤判定されたURLが台帳にも残らないまま
-                    #   既知になり、**翌日から二度と出てこなかった**。
-                    #   台帳に残せた時だけ既知にする（残せなければ明日また出てくる）。
-                    kept = (_ledger(
-                        "site", "structural", "MATERIAL", "URL_PERMANENT_REJECT",
-                        "新URLを記事化の対象から外しました（やり直しても変わらない理由）",
-                        f"{url} / " + " / ".join(c["reasons"])[:900])
-                        if persist else True)
-            if not kept:
-                # ★どこにも残せなかったURLは「見た」ことにしない★
-                #   （2026-07-31・Codex20回目）
-                #   待ち行列にも台帳にも残らないまま既知にすると、
-                #   翌日から新台に出てこない＝その機種は黙って消える。
-                #   覚えないでおけば、明日もう一度あたらしいURLとして出てくる。
-                _forget(seen, mid, url)
-                out["problems"].append(
-                    f"{url}: どこにも残せなかったので『見た』ことにしません")
-            elif c.get("official_name"):
-                # ★URLごとの機種名を覚える★（2026-08-02・Codex28回目）
-                #   既知URLの中身が別機種にすり替わったことに気づくため。
-                seen.setdefault("names", {})[url] = c["official_name"]
-            # ★発見した時点で「基準の題」も控える★（2026-08-02・Codex30回目）
-            #   最初の再確認までにURLが使い回されると、
-            #   新しい機種の題を基準として覚えてしまう空白があった。
-            if kept and c.get("page_title"):
-                from datetime import date as _date30
-                seen.setdefault("known_titles", {})[url] = c["page_title"]
-                seen.setdefault("name_checked", {})[url] =                     _date30.today().isoformat()
-        # ★既知URLの中身がすり替わっていないか、毎晩少しずつ見る★
-        #   （2026-08-02・Codex28回目。全件毎晩は重いのでローテーション）
-        if persist:
-            recheck_known(mid, r, seen, out)
-    if persist:
-        _nw._save_seen(seen)
-    else:
-        _log("（下見）seen・待ち行列・台帳には何も書きません")
-    _log(f"見張り終了: 正常{len(out['watched'])}社 / 見られず{len(out['not_watched'])}社 "
-         f"/ 新台候補{len(out['candidates'])}件 / 確認が要る{len(out['problems'])}件")
-    return out
 
 
 def gather(name: str, maker: str = "", slug: str = "") -> dict:
@@ -903,93 +699,6 @@ def _is_outage(reasons: list) -> bool:
     return any(str(x).startswith(_OUTAGE_PREFIXES) for x in reasons)
 
 
-def probe_quarantine(persist: bool) -> dict:
-    """★隔離したメーカーの復旧確認（毎晩1URLだけ）と、復旧後の分類し直し★
-
-    （2026-08-04・Codex65回目の設計）
-    - まだ読めない: 確かめた記録だけ残して待つ（障害中サイトへ負荷をかけない）
-    - 読めた=復旧: そのメーカーの隔離分を全部分類し直し、
-      新台の範囲・やり直す価値のあるものだけ通常の行列へ移す。
-      古い機種と分かった分は隔離から外すだけ（seenに残っているので再流入しない）。
-    - 行列に入れられなかった分は隔離に残す（黙って消さない）。
-    """
-    out = {"probed": [], "recovered": [], "requeued": 0, "problems": []}
-    try:
-        qd = _quar.load()
-    except Exception as e:                # noqa: BLE001
-        out["problems"].append(f"隔離簿が読めません: {e}")
-        return out
-    if not _quar.makers(qd):
-        return out
-    if not persist:
-        _log(f"（下見）隔離中 {len(_quar.makers(qd))} 社の復旧確認は"
-             "--apply の実行が行います")
-        return out
-    for mid in _quar.makers(qd):
-        url = _quar.pick_probe(qd, mid)
-        if not url:
-            continue
-        # ★選んだURLにも保存済みヒントを渡す★（Codex66回目の指摘3。
-        #   渡さないと「ページに年月なし＋古いヒント」が範囲外と
-        #   分類されず、古いヒントを年月にして行列へ入っていた）
-        hint0 = (_quar.urls_of(qd, mid).get(url) or {}).get("hint") or ""
-        c = _nw.classify(url, None, list_release=(hint0 or None))
-        out["probed"].append(f"{mid}: {url}")
-        _quar.mark_probe(qd, mid, url)    # ★結果を問わず「今晩確かめた」を記録★
-        if (not c["ok"]) and _is_outage(c["reasons"]):
-            _log(f"隔離の復旧確認 {mid}: まだ読めません（{url}）")
-            continue
-        # ★読めた＝復旧の兆し。隔離分を分類し直す★
-        #   ★1URLの復旧をメーカー全体の復旧と混同しない★（Codex66回目の指摘2。
-        #     残りが引き続き取得不能なら隔離に残す＝取得不能のまま行列へ戻さない）
-        #   ★通常行列へ移すのは一晩に MAX_NEW_PER_SCAN 件まで★（行列投入の上限。
-        #     残りは明晩の復旧確認から続きを流す）
-        out["recovered"].append(mid)
-        _log(f"隔離の復旧確認 {mid}: 読めました。分類し直します")
-        moved = 0
-        fetched = 0
-        # ★復旧を確認できたURLを必ず最初に処理する★（Codex68回目・実害/中）
-        #   辞書順のまま取得上限で打ち切ると、確認済みURLが後ろの並びの時に
-        #   処理されず隔離に残り、次に選ばれるまで最大144晩かかり得た。
-        _qm_urls = _quar.urls_of(qd, mid)
-        ordered = ([(url, _qm_urls.get(url) or {})]
-                   + [kv for kv in sorted(_qm_urls.items()) if kv[0] != url])
-        for u, rec in ordered:
-            if moved >= _nw.MAX_NEW_PER_SCAN:
-                _log(f"隔離の分類し直し {mid}: 今晩の行列投入上限"
-                     f"（{_nw.MAX_NEW_PER_SCAN}件）に達したので続きは明晩")
-                break
-            if u != url and fetched >= RECLASSIFY_FETCH_PER_NIGHT:
-                # ★部分復旧の夜に残り全件へ取得しに行かない★（Codex67回目）
-                _log(f"隔離の分類し直し {mid}: 今晩の取得上限"
-                     f"（{RECLASSIFY_FETCH_PER_NIGHT}件）に達したので続きは明晩")
-                break
-            hint = rec.get("hint") or ""
-            if u == url:
-                cu = c
-            else:
-                fetched += 1
-                cu = _nw.classify(u, None, list_release=(hint or None))
-            if (not cu["ok"]) and _is_outage(cu["reasons"]):
-                continue    # ★このURLはまだ読めない＝隔離に残す★
-            if cu["ok"] or (hint and _nw.is_recent(hint)):
-                if _remember_url(cu.get("official_name") or "", u, mid,
-                                 (cu.get("release") or {}).get("value")
-                                 or hint or "",
-                                 "隔離からの復旧分類"):
-                    out["requeued"] += 1
-                    moved += 1
-                    _quar.remove_url(qd, mid, u)
-                # 行列に入れられなかった分は隔離に残す（明日また試す）
-            elif not retry_later(cu["reasons"]):
-                # 範囲外など「やり直しても変わらない」＝初回の古い機種。
-                # seenに残っているので、外すだけで再流入しない。
-                _quar.remove_url(qd, mid, u)
-            # 読めたが年月不明などは隔離で待つ（通常行列を汚さない・
-            # 公式が年月を書けば ok になって次の晩に移る）
-    _quar.save(qd)
-    return out
-
 
 # ★書き込みを止める理由★（Codex指摘3・自分で再現を確認）
 #   以前は problems を文字列で並べるだけで、**中身を見ずに書き込めた**。
@@ -1085,10 +794,6 @@ def _blocking(problems: list) -> list:
     return blocking_problems(problems)
 
 
-# ★その晩に「正常に読めた」一覧のスナップショット★（メーカーID → HTML）
-#   ★同じ証跡を使う★（2026-08-04・Codex92回目。公開前に取り直すと、
-#     夜の見張りが確かめた残存率・急増・描画の安定とは別物になる）
-LIST_SNAPSHOT: dict = {}
 
 
 # ★同定に使った一覧HTMLの保管場所★（リポジトリの外・上書きしない）
@@ -1182,70 +887,9 @@ def _evidence_ref(vo: dict) -> str:
             ev.get("dmm_machine_id", ""),
             ev.get("model_code") or "未掲載", ev.get("maker", ""),
             ev.get("release", ""), ev.get("checked_at", ""))
-    if ev.get("kind") == "PWORLD_MACHINE_PAGE":
-        return "pworld:%s 型式=%s 検定=%s 確認日=%s" % (
-            ev.get("pworld_machine_id", ""), ev.get("model_code", ""),
-            ev.get("shinsa", ""), ev.get("checked_at", ""))
     return str(ev.get("evidence_ref")
                or (ev.get("list_html_sha256", "") + f" #card{ev.get('card_index')}"))
 
-
-def _card_identity(name: str, official_url: str, maker: str, exc):
-    """公式の個別ページが読めない時だけ、同じ公式の一覧カードで同定する。
-
-    条件を1つでも欠いたら None（＝従来どおり「取得できません」で止まる）。
-    exc: 個別ページの取得で出た例外そのもの（★型で証明書の失敗か判定する★）
-    """
-    _log("  一覧カードでの同定を試みます（取得失敗の中身: "
-         + " / ".join(_lci.exc_reasons(exc))[:160] + "）")
-    if not _lci.tls_failure(exc):
-        return None                       # 許した失敗（証明書・TLS）以外は代替しない
-    try:
-        cats = _sj.read_json(_nw.CATALOGS, expect=dict)["catalogs"]
-        conf = cats.get(maker) or {}
-    except Exception as e:                # noqa: BLE001
-        _log(f"  一覧カードでの同定: メーカー名簿を読めません（{e}）")
-        return None
-    if not conf.get("allow_list_card_identity") or not conf.get("list_card"):
-        return None                       # ★メーカーごとの明示許可制★
-    html = LIST_SNAPSHOT.get(maker)
-    if not html:
-        _log("  一覧カードでの同定: その晩に正常に読めた一覧がありません")
-        return None
-    try:
-        # ★相対で書かれたリンクも数える★（2026-08-04・Codex93回目の指摘5）
-        #   絶対URLだけ数えていたので、同じカードに相対表記の別機種が
-        #   入っていても「URLは1つ」と見なして通せた。
-        got = _lci.identify(html, conf["list_card"], official_url,
-                            list_url=str(conf.get("list_url") or ""),
-                            link_prefix=str(conf.get("link_prefix") or ""))
-    except _lci.CardError as e:
-        _log(f"  一覧カードでの同定: {e}")
-        return None
-    if not got["ok"]:
-        _log("  一覧カードでの同定: " + " / ".join(got["problems"])[:160])
-        return None
-    # ★L版とS版を取り違えない★（2026-08-04・Codex93回目の指摘1。自分で再現した）
-    #   芯の比較は表記ゆれを吸収するために規格の印を落とすので、
-    #   「S北斗の拳」のカードで「L北斗の拳」を通せた。
-    #   両方に印があって食い違うときは必ず弾く（既存の名鑑照合と同じ規則）。
-    m_card, m_want = _mc._gen_mark(got["name"]), _mc._gen_mark(name)
-    if m_card and m_want and m_card != m_want:
-        _log(f"  一覧カードの規格が違います（{m_card}版 / {m_want}版・"
-             f"{got['name']!r} / {name!r}）")
-        return None
-    # ★名前は一覧カードのものを正として、こちらの名前と芯で照合する★
-    #   （表記ゆれは吸収するが、別機種は通さない＝既存の正規化を使う）
-    if _ci.normalize_core(got["name"]) != _ci.normalize_core(name):
-        _log(f"  一覧カードの機種名と一致しません（{got['name']!r} / {name!r}）")
-        return None
-    # ★根拠を確かに保管できた時だけ同定を成立させる★（Codex94回目の指摘4）
-    ref = _save_evidence(html, got["evidence"])
-    if not ref:
-        _log("  一覧カードでの同定: 根拠を保管できないので使いません（明日やり直します）")
-        return None
-    got["evidence"]["evidence_ref"] = ref
-    return got
 
 
 _PW_MACHINE_RE = re.compile(
@@ -1356,83 +1000,6 @@ def _verify_dmm(name: str, official_url: str, maker: str,
     return out
 
 
-def _verify_pworld(name: str, official_url: str, maker: str,
-                   release: str, expect_maker: str = "",
-                   release_is_cache: bool = False) -> dict:
-    """★P-WORLDの機種ページで身元を確かめる★（2026-08-12）
-
-    返す形は verify_official と同じ（呼ぶ側を変えないため）。
-    ★メーカーも突き合わせる★＝名簿の表示名と、ページの表示名が同じか。
-      ここを見ないと、別会社の機種を渡されたまま進んでしまう。
-    """
-    import pworld_discover as _pd
-    import pworld_machine as _pm
-    out = {"problems": [], "release": ""}
-    mid = _pw_machine_url(official_url)
-
-    def _ng(why: str) -> dict:
-        # ★同定の失敗は必ず止まる印を付ける★（依頼166のP0）
-        out["problems"].append(f"{IDENTITY_FAILED} {why}")
-        return out
-
-    # 名簿から「このメーカーIDの名前」を引く（逆引き）
-    # ★別名も許す★（依頼166のP1）＝入口は name と directory_names の
-    #   どちらでも `universal` に決まるのに、こちらが name だけを見ていると
-    #   「ミズホ」「ユニバーサルブロス」の機種が**必ず食い違い扱い**になる。
-    try:
-        cats = _sj.read_json(_pd.MAKER_CATALOG, expect=dict)["catalogs"]
-    except Exception as e:                # noqa: BLE001
-        return _ng(f"メーカー名簿を読めません: {e}")
-    conf = cats.get(maker) or {}
-    allow = [conf.get("name")] + list(conf.get("directory_names") or [])
-    allow = [str(x) for x in allow if x]
-    if maker and not allow:
-        return _ng(f"メーカーが名簿にありません: {maker!r}")
-    got = _pm.verify(mid, name)
-    if got.get("problems"):
-        out["problems"] += [f"{IDENTITY_FAILED} {x}" for x in got["problems"]]
-        return out
-    # ★メーカーは名簿の名前のどれかと一致すること★
-    page_maker = str(got.get("maker") or "")
-    if allow and not page_maker:
-        # ★読めなかったことを、確かめたことにしない★（依頼167のP0）
-        return _ng("機種ページのメーカーを読めませんでした")
-    # ★最初に確かめた表示名があれば、そちらと完全一致させる★（依頼167のP1）
-    #   内部IDだけを渡すと、同じIDにぶら下がる別名（ミズホ／メーシー／
-    #   アクロス…）のどれでも通ってしまい、公開前の再確認が緩くなる。
-    want = [expect_maker] if expect_maker else allow
-    if want and _pd._norm(page_maker) not in {_pd._norm(x) for x in want}:
-        return _ng(f"メーカーが食い違います（期待: {'／'.join(want)} / "
-                   f"機種ページ: {page_maker}）")
-    out["release"] = got.get("release") or ""
-    # ★渡された年月と食い違わないか★（2026-08-13・台帳#335の項目3）
-    #   メーカー公式経路にはある守りが、こちらには無かった。
-    #   ★控え（待ち行列の年月）は照合しない★＝古い控えで止めない
-    #   （メーカー公式経路と同じ扱い）。
-    if release and not release_is_cache and out["release"]:
-        if str(release)[:7] != out["release"][:7]:
-            return _ng(f"登場年月が機種ページと違います"
-                       f"（機種ページ={out['release']} / 渡された値={release}）")
-    # ★新台の範囲か★＝古い機種を新台として通さない
-    if out["release"] and not _nw.is_recent(out["release"][:7]):
-        return _ng(f"登場年月が新台の範囲外です（{out['release']}）")
-    out["identity_name"] = got.get("name") or name
-    out["identity_binding"] = "PWORLD_MACHINE_PAGE"
-    # ★何で確かめたかを残す★（機種IDが身元）
-    # ★証拠は binding ごとに形が違う★（依頼166のP1）
-    #   一覧カード用の形で渡すと `#cardNone` という**存在しない参照**になる。
-    out["identity_evidence"] = {
-        "kind": "PWORLD_MACHINE_PAGE",
-        "pworld_machine_id": mid,
-        "url": official_url,
-        "model_code": got.get("model_code", ""),
-        "shinsa": got.get("shinsa", ""),
-        "release": out["release"],
-        "checked_at": __import__("datetime").date.today().isoformat()}
-    _log(f"  P-WORLDの機種ページで同定しました: {out['identity_name']} "
-         f"/ 機種ID {mid} / {out['release']}")
-    return out
-
 
 def verify_official(name: str, official_url: str,
                     maker: str = "", release: str = "",
@@ -1495,9 +1062,10 @@ def verify_official(name: str, official_url: str,
         # ★失敗の中身まで見る★（2026-08-04。_get の文言は
         #   「取得できません（URLError）」までしか書かないので、
         #   例外の連鎖をたどらないと証明書エラーだと分からなかった）
-        # ★判定は例外の型で行う★（文言では代替に逃がさない・Codex94回目の指摘2）
-        card = (_card_identity(name, official_url, maker, e)
-                if _lci.tls_failure(e) else None)
+        # ★一覧カードでの同定は廃止★（2026-08-16・運営者判断）
+        #   出典は大手サイトへ寄せると決めたので、メーカー公式の一覧で
+        #   同定する経路ごと消した（該当していた3機種はDMMへ移した）。
+        card = None
         if card is not None:
             out["release"] = card["release"]
             # ★カードの公式名を正として後段へ渡す★（2026-08-04・Codex93回目の指摘2）
@@ -2161,58 +1729,6 @@ def _fill_missing_dmm(work: dict) -> dict:
     return work
 
 
-def _fill_missing_pworld(work: dict) -> dict:
-    """★P-WORLDの機種ページから名前と導入日を読み直す★（2026-08-13）
-
-    見出し（h1）が機種名。題（title）には宣伝用の語が並ぶので使わない。
-    ★使い回しの判定は残す★＝芯や規格の印が変わっていたら止める。
-    """
-    import pworld_machine as _pm
-    mid = _pw_machine_url(work.get("identity_url", ""))
-    try:
-        html = _nw._get(work["identity_url"])
-        final = (getattr(_nw, "LAST_FINAL_URL", None) or {}).get("url")
-    except Exception as e:                # noqa: BLE001
-        _log(f"  機種ページを見直せませんでした: {e}")
-        return work
-    # ★確かめてから比べる★（2026-08-13・依頼169のP1）
-    #   ページが読めただけでは「同じ機種のページ」とは言えない。
-    #   転送・パチンコ・障害ページのどれでも、形が整っていれば読めてしまう。
-    #   確かめる前に名前の食い違いを「使い回し」と決めつけると、
-    #   **正しい新台をその晩に永久に取りこぼす**。
-    #   ここでは今の名前で同定し、通らなければ**何もしない**
-    #   （待ち行列はそのまま残し、翌晩やり直す）。
-    chk = _pm.verify(mid, work.get("name") or "", html=html, final_url=final)
-    _why = [x for x in (chk.get("problems") or [])
-            if "機種名が一致しません" not in x]
-    if _why:
-        # ★名前以外の理由（転送・種目・障害）なら、判定材料にしない★
-        _log(f"  機種ページを確かめられないので名前は直しません: {_why[0][:90]}")
-        return work
-    got = chk
-    new_name = str(got.get("name") or "")
-    if new_name:
-        if work.get("name") and work["name"] != new_name:
-            _old_core = _mc._ci.normalize_core(work["name"])
-            _new_core = _mc._ci.normalize_core(new_name)
-            _og, _ng2 = _mc._gen_mark(work["name"]), _mc._gen_mark(new_name)
-            if _og and _ng2 and _og != _ng2:
-                work["_name_conflict"] = new_name
-                _log(f"  ★規格の印が変わっています（使い回しの疑い）: "
-                     f"{work['name'][:30]} → {new_name[:30]}★")
-                return work
-            if _old_core and _new_core and _old_core != _new_core:
-                work["_name_conflict"] = new_name
-                _log(f"  ★機種名の芯が変わっています（使い回しの疑い）: "
-                     f"{work['name'][:30]} → {new_name[:30]}★")
-                return work
-            _log(f"  名前を機種ページの現在値に直します: "
-                 f"{work['name'][:30]} → {new_name[:30]}")
-        work["name"] = new_name
-    if got.get("release"):
-        work["release"] = got["release"][:7]   # 待ち行列は年月まで
-    return work
-
 
 def fill_missing(work: dict) -> dict:
     """★毎回、公式ページを見直して名前と年月を最新にする★
@@ -2231,11 +1747,6 @@ def fill_missing(work: dict) -> dict:
     # ★同定の正はDMM★（2026-08-16・台帳#376）。P-WORLDへは通信できない。
     if _dmm_machine_id(work.get("identity_url", "")):
         return _fill_missing_dmm(work)
-    if _pw_machine_url(work.get("identity_url", "")):
-        # ★ここへは来ない（blocked_hosts が通信を止める）★
-        #   移行前の控えは state=AWAITING_DMM_ID になっていて
-        #   identity_url が空なので、そもそもここに入らない。
-        return _fill_missing_pworld(work)
     try:
         c = _nw.classify(work["identity_url"], None)
     except Exception as e:                # noqa: BLE001
@@ -2517,8 +2028,6 @@ def run_one(name, official_url, maker, release, apply_it=False,
     #   ★これは「出典2件で採用した値」ではない★＝重複を見つけるためだけに使う。
     _ident_codes = []
     _ev = vo.get("identity_evidence") or {}
-    if _ev.get("kind") == "PWORLD_MACHINE_PAGE" and _ev.get("model_code"):
-        _ident_codes.append(_ev["model_code"])
     for slug, ename, why in _cd.find_duplicates(
             name, official_urls=[official_url],
             model_codes=_ident_codes or None):
@@ -2866,9 +2375,6 @@ def selftest() -> int:
           "下見では触りません" in inspect.getsource(main)
           and inspect.getsource(main).index("if args.apply:")
           < inspect.getsource(main).index("retry_push_first()"))
-        t("★★やり直しても変わらないURLは、台帳に残せた時だけ既知にする★★"
-          "（まとめ登録は失敗無視＋1500字切りで、機種が黙って消えた・Codex26回目）",
-          "URL_PERMANENT_REJECT" in inspect.getsource(discover))
         t("★★メーカー照合は転送先（最終URL）に対して行う★★"
           "（別の場所へ転送されても元のURLで照合していた・Codex26回目）",
           "LAST_FINAL_URL" in inspect.getsource(verify_official)
@@ -3085,11 +2591,6 @@ def selftest() -> int:
             t("　読めなかったURLも巡回の末尾へ送る（同じ3件で詰まらない）",
               "checked[url] = _date.today().isoformat()   # ★試したら必ず末尾へ★"
               in inspect.getsource(recheck_known))
-            t("★★下見は seen・待ち行列・台帳のどれにも書かない★★"
-              "（ロック無しの下見の保存が本番実行の記録を消せた・Codex30回目）",
-              "persist" in inspect.signature(discover).parameters
-              and "if persist:" in inspect.getsource(discover)
-              and "d = discover(persist=apply_it)" in inspect.getsource(main))
             _src_pp = inspect.getsource(push_after_publish)
             t("★★pushするSHAは関所に入る前に固定し、後で増えたら出さない★★"
               "（関所の後のHEAD取り直しで未検査コミットを出せた・Codex35回目）",
@@ -3127,9 +2628,6 @@ def selftest() -> int:
               "規格（L/S）が公式名" in inspect.getsource(gather))
             t("★★公開前の照合でも soft 404（題がエラー文）を待つ★★（Codex39回目）",
               "題がエラー文です" in inspect.getsource(verify_official))
-            t("★★初回・カード年月が新台範囲なら分類失敗でも残す★★"
-              "（薄い先行ページが永久理由で既知に沈んだ・Codex39回目）",
-              "初回・個別ページが未完成の疑い" in inspect.getsource(discover))
             t("★★メーカー違いの名鑑は材料・転載照合からも外す★★"
               "（型式の票からしか外れず材料に復活できた・Codex41回目）",
               "材料からも除外" in inspect.getsource(gather))
@@ -3204,13 +2702,6 @@ def selftest() -> int:
             t("　（対照）印が無いと素通りする",
               not any(_blocking([x.replace(IDENTITY_FAILED, "").strip()])
                       for x in _idf))
-            t("★★P-WORLDの証跡は一覧カードの形で書かない★★"
-              "（存在しないカード番号を指さない）",
-              "pworld:10513" in _evidence_ref({"identity_evidence": {
-                  "kind": "PWORLD_MACHINE_PAGE", "pworld_machine_id": "10513",
-                  "model_code": "S1", "shinsa": "5S1", "checked_at": "2026-08-12"}})
-              and "card" not in _evidence_ref({"identity_evidence": {
-                  "kind": "PWORLD_MACHINE_PAGE", "pworld_machine_id": "10513"}}))
             # ★メーカーが読めないページは同定成功にしない★（依頼167のP0）
             # ★下位が黙っていても、上位が止めることを見る★（依頼168のP2）
             #   偽の fetch に問題を持たせると、下位が止めた後の
@@ -3267,44 +2758,6 @@ def selftest() -> int:
                 t("　導入年月も機種ページから直す", _w["release"] == "2026-09")
             else:
                 t("★試験用の保存ページがありません（tests/fixtures）★", False)
-            # ★覚えた表示名で再確認する★（2026-08-13・台帳#335の項目5）
-            #   内部IDだけだと、同じIDにぶら下がる別名（ミズホ／メーシー…）の
-            #   どれでも通り、公開直前の再確認が緩くなる。
-            _mk = __import__("pworld_machine")
-            _keep2 = _mk.verify
-            _mk.verify = lambda *a, **k: dict(_mk.parse(_mk._FIX), problems=[])
-            try:
-                _a = _verify_pworld("マイジャグラーVI", "https://www.p-world.co.jp/machine/database/10513", "kitadenshi", "2026-10", expect_maker="北電子")
-                _b = _verify_pworld("マイジャグラーVI", "https://www.p-world.co.jp/machine/database/10513", "kitadenshi", "2026-10", expect_maker="ちがう社")
-                _c = _verify_pworld("マイジャグラーVI", "https://www.p-world.co.jp/machine/database/10513", "kitadenshi", "2026-10")
-            finally:
-                _mk.verify = _keep2
-            t("★★覚えた表示名と違えば止める★★（同じ系列の別名も見分ける）",
-              not _a["problems"] and bool(_blocking(_b["problems"])))
-            t("　覚えていなければ名簿の名前で見る（今までどおり）",
-              not _c["problems"])
-            # ★新台の範囲と年月の照合★（2026-08-13・台帳#335の項目3）
-            #   メーカー公式経路にはある守りが、P-WORLD経路には無かった。
-            _mk2 = __import__("pworld_machine")
-            _k3 = _mk2.verify
-            _mk2.verify = lambda *a, **k: dict(_mk2.parse(_mk2._FIX), problems=[])
-            _kold = _nw.is_recent
-            try:
-                _u = "https://www.p-world.co.jp/machine/database/10513"
-                _same = _verify_pworld("マイジャグラーVI", _u, "kitadenshi", "2026-10")
-                _diff = _verify_pworld("マイジャグラーVI", _u, "kitadenshi", "2026-09")
-                _cache = _verify_pworld("マイジャグラーVI", _u, "kitadenshi", "2026-09", release_is_cache=True)
-                _nw.is_recent = lambda *a, **k: False
-                _oldm = _verify_pworld("マイジャグラーVI", _u, "kitadenshi", "2026-10")
-            finally:
-                _mk2.verify = _k3
-                _nw.is_recent = _kold
-            t("★★渡された年月と機種ページが違えば止める★★",
-              not _same["problems"] and bool(_blocking(_diff["problems"])))
-            t("　待ち行列の控えでは止めない（古い控えで機種を失わない）",
-              not _cache["problems"])
-            t("★★新台の範囲外なら止める★★（古い機種を新台にしない）",
-              bool(_blocking(_oldm["problems"])))
             # ★手で渡すときの入口を、実際に main() で確かめる★
             #   （2026-08-13・依頼171のP3）引数の判定や受け渡しが将来外れても
             #   気づけるように、通し（main）で見る。
@@ -3430,630 +2883,6 @@ def selftest() -> int:
             t("★★隠しh1の「パチスロ」でパチンコページを通さない★★"
               "（可視h1限定＋パチンコ語は共存でも打ち消さない・Codex55回目）",
               any("パチスロのページに見えません" in x for x in v12["problems"]))
-            t("★★初回に読めなかった将来の新台を沈めない★★（Codex37回目）",
-              "初回に読めなかった" in inspect.getsource(discover)
-              and "初回に残せなかったので" in inspect.getsource(discover))
-            # ★★#210＋Codex65回目: 初回の障害URLは隔離へ・復旧後に分類し直す★★
-            #   （文字列の有無ではなく、偽の一覧とURLで挙動そのものを確かめる）
-            _real_qstore = _quar.STORE
-            _quar.STORE = os.path.join(_tmpdir, "quarantine.json")
-            _real_rj = _sj.read_json
-            _real_ls = _nw._load_seen
-            _real_ss = _nw._save_seen
-            _real_sm = _nw.scan_maker
-            _real_cl = _nw.classify
-            try:
-                Q_URLS = [f"https://q.maker.test/slot/m{i}/" for i in range(8)]
-                _fake_cat = {"catalogs": {"qm": {
-                    "status": "ACTIVE", "name": "試験メーカー",
-                    "list_url": "https://q.maker.test/slot/",
-                    "link_prefix": "https://q.maker.test/slot/"}}}
-
-                def _fake_rj(path, expect=None, **kw):
-                    if str(path) == str(_nw.CATALOGS):
-                        return _fake_cat
-                    return _real_rj(path, expect=expect, **kw)
-                _sj.read_json = _fake_rj
-                _nw._load_seen = lambda: {"schema": "seen-machine-urls/v1",
-                                          "makers": {}}
-                _nw._save_seen = lambda s: None
-                _q_calls = []
-
-                def _cl_outage(url, seen_entry=None, list_release=None):
-                    _q_calls.append(url)
-                    return {"ok": False, "official_name": "", "release": None,
-                            "reasons": ["公式ページが読める状態ではありません"
-                                        "（取得できません（URLError SSL））"]}
-                _nw.classify = _cl_outage
-                _nw.scan_maker = lambda mid, conf, seen, record=True: {
-                    "maker": mid, "state": "FIRST_TIME", "first_time": True,
-                    "problem": None, "total": len(Q_URLS), "new": [],
-                    "initial_urls": list(Q_URLS),
-                    "hints": {Q_URLS[7]: "2026-09"},
-                    "retention": None, "shape_warnings": []}
-                def _q_urls(pend):
-                    """★待ち行列に入っているURL★（鍵はIDになったので中身を見る）"""
-                    return [x.get("identity_url", "")
-                            for x in _pend.due(pend)]
-
-                _pend.save(_pend._empty())
-                d65 = discover(persist=True)
-                p65 = _pend.load()
-                q65 = _quar.load()
-                t("★★初回の障害URL群は通常行列に入れない★★"
-                  "（8件全滅→行列は一覧年月ありの1件だけ・台帳#210）",
-                  _q_urls(p65) == [Q_URLS[7]])
-                t("★★一覧カードの年月が新台範囲なら障害中でも行列で待つ★★"
-                  "（喰霊が沈んだ形の再発防止）",
-                  Q_URLS[7] in _q_urls(p65)
-                  and Q_URLS[7] not in _quar.urls_of(q65, "qm"))
-                t("★★巻き添え分は隔離簿に残る（捨てない・行列にも入れない）★★",
-                  len(_quar.urls_of(q65, "qm")) == 7)
-                t("★★障害と分かったら残りのURLへ当たりに行かない★★"
-                  "（上限+1=6回で打ち切り・全116アクセスを繰り返さない）",
-                  len(_q_calls) == _nw.MAX_NEW_PER_SCAN + 1)
-                t("　隔離したことは「確認が要る」に報告される",
-                  any("隔離" in x for x in d65["problems"]))
-                # --- まだ読めない晩: 1URLだけ確かめて待つ ---
-                _q_calls.clear()
-                r65 = probe_quarantine(persist=True)
-                q65b = _quar.load()
-                t("★★復旧確認は一晩にメーカーへ1URLだけ★★",
-                  len(_q_calls) == 1 and r65["probed"]
-                  and not r65["recovered"]
-                  and len(_quar.urls_of(q65b, "qm")) == 7)
-                # --- 復旧した晩: 分類し直して新台だけ行列へ ---
-                # （翌晩に進めたことにする＝メーカー単位の確認日を消す）
-                _q65r = _quar.load()
-                _q65r["makers"]["qm"]["probe_date"] = ""
-                _quar.save(_q65r)
-
-                def _cl_fixed(url, seen_entry=None, list_release=None):
-                    _q_calls.append(url)
-                    if url == Q_URLS[0]:
-                        return {"ok": True, "official_name": "L試験新台Q",
-                                "release": {"value": "2026-09"}, "reasons": []}
-                    return {"ok": False, "official_name": "", "release": None,
-                            "reasons": ["登場年月が新台の範囲外です（2011-11）"]}
-                _nw.classify = _cl_fixed
-                r66 = probe_quarantine(persist=True)
-                p66 = _pend.load()
-                q66 = _quar.load()
-                t("★★復旧したら隔離分を分類し直し、新台の範囲だけ行列へ★★"
-                  "（喰霊の恒久救済経路）",
-                  r66["recovered"] == ["qm"] and r66["requeued"] == 1
-                  and Q_URLS[0] in _q_urls(p66))
-                t("★★古い機種と分かった分は隔離から外れ、行列にも入らない★★",
-                  _quar.makers(q66) == []
-                  and all(u not in _q_urls(p66) for u in Q_URLS[1:7]))
-                # --- 下見は隔離を確かめにも行かない ---
-                _quar.save(_quar.add(_quar.load(), "qm",
-                                     {Q_URLS[1]: ""}, "試験"))
-                _q_calls.clear()
-                r67 = probe_quarantine(persist=False)
-                t("★★下見は復旧確認に行かない（隔離簿も書かない）★★",
-                  not _q_calls and not r67["probed"]
-                  and len(_quar.urls_of(_quar.load(), "qm")) == 1)
-            finally:
-                _quar.STORE = _real_qstore
-                _sj.read_json = _real_rj
-                _nw._load_seen = _real_ls
-                _nw._save_seen = _real_ss
-                _nw.scan_maker = _real_sm
-                _nw.classify = _real_cl
-            # ★★Codex66回目: 実際の取得失敗（WatchError形式）で確かめる★★
-            #   分類器はモックせず本物を使い、通信層（urlopen）だけを偽る。
-            #   前の試験の偽分類器はHTTP200障害画面の形しか出しておらず、
-            #   実際のSSL失敗（「取得できません（URLError）: url」）では
-            #   隔離判定に入らない穴を見逃していた。
-            import urllib.request as _ur66
-            import urllib.error as _ue66
-            import email.message as _em66
-            _real_uo = _ur66.urlopen
-
-            class _FR66:
-                def __init__(self, url, body):
-                    self._u, self._b = url, body.encode("utf-8")
-                    self.status = 200
-                    self.headers = _em66.Message()
-
-                def geturl(self):
-                    return self._u
-
-                def read(self, n=-1):
-                    return self._b
-
-                def __enter__(self):
-                    return self
-
-                def __exit__(self, *a):
-                    return False
-
-            _quar.STORE = os.path.join(_tmpdir, "quarantine2.json")
-            _sj.read_json = _fake_rj
-            _nw._load_seen = lambda: {"schema": "seen-machine-urls/v1",
-                                      "makers": {}}
-            _nw._save_seen = lambda s: None
-            Q2 = [f"https://q2.maker.test/slot/m{i}/" for i in range(8)]
-            _nw.scan_maker = lambda mid, conf, seen, record=True: {
-                "maker": mid, "state": "FIRST_TIME", "first_time": True,
-                "problem": None, "total": len(Q2), "new": [],
-                "initial_urls": list(Q2), "hints": {Q2[7]: "2026-09"},
-                "retention": None, "shape_warnings": []}
-            _uo_calls = []
-
-            def _uo_ssl(req, timeout=20):
-                _uo_calls.append(getattr(req, "full_url", str(req)))
-                raise _ue66.URLError("SSLV3_ALERT_HANDSHAKE_FAILURE")
-            # ★前段の試験が偽物にした _get を本物へ戻す★
-            #   （通信層 urlopen を偽る意味が無くなるため）
-            _get_before66 = _nw._get
-            _nw._get = _true_get
-            try:
-                # --- 実SSL全滅: 隔離に入り、行列はヒント1件だけ ---
-                _ur66.urlopen = _uo_ssl
-                _pend.save(_pend._empty())
-                d66 = discover(persist=True)
-                p66a = _pend.load()
-                q66a = _quar.load()
-                t("★★実際のSSL失敗（取得できません（URLError））でも隔離に入る★★"
-                  "（Codex66回目の指摘1・#210の再発防止の本丸）",
-                  _q_urls(p66a) == [Q2[7]]
-                  and len(_quar.urls_of(q66a, "qm")) == 7)
-                t("★★実SSL失敗でも上限+1回で残りへのアクセスを打ち切る★★",
-                  len(_uo_calls) == _nw.MAX_NEW_PER_SCAN + 1)
-                # --- 1URLだけ復旧・残りはSSL失敗のまま ---
-                _OK_HTML = ("<title>L試験新台Q2</title><h1>L試験新台Q2</h1>"
-                            "<p>パチスロ 2026年9月導入予定</p>")
-
-                def _uo_partial(req, timeout=20):
-                    u = getattr(req, "full_url", str(req))
-                    _uo_calls.append(u)
-                    if u == Q2[0]:
-                        return _FR66(u, _OK_HTML)
-                    raise _ue66.URLError("SSLV3_ALERT_HANDSHAKE_FAILURE")
-                _ur66.urlopen = _uo_partial
-                q66b = _quar.load()
-                q66b["makers"]["qm"]["urls"][Q2[0]]["hint"] = "2026-09"
-                _quar.save(q66b)
-                r68 = probe_quarantine(persist=True)
-                p66b = _pend.load()
-                q66c = _quar.load()
-                t("★★1URLの復旧で、まだ読めない残りを行列へ戻さない★★"
-                  "（Codex66回目の指摘2・読めた1件だけ行列へ）",
-                  r68["requeued"] == 1 and Q2[0] in _q_urls(p66b)
-                  and all(u not in _q_urls(p66b) for u in Q2[1:7])
-                  and len(_quar.urls_of(q66c, "qm")) == 6)
-                # --- 部分復旧の夜: 残りの障害URLへ全件取得しに行かない ---
-                #     （Codex67回目の反例＝moved上限は障害URLでは増えないため、
-                #       取得件数そのものの上限が要る）
-                _cap_before = globals()["RECLASSIFY_FETCH_PER_NIGHT"]
-                globals()["RECLASSIFY_FETCH_PER_NIGHT"] = 3
-                Q4 = [f"https://q4.maker.test/slot/m{i}/" for i in range(8)]
-
-                def _uo_partial4(req, timeout=20):
-                    u = getattr(req, "full_url", str(req))
-                    _uo_calls.append(u)
-                    if u == Q4[0]:
-                        return _FR66(u, _OK_HTML)
-                    raise _ue66.URLError("SSLV3_ALERT_HANDSHAKE_FAILURE")
-                _ur66.urlopen = _uo_partial4
-                q66f = _quar.load()
-                _quar.add(q66f, "qm4",
-                          {u: ("2026-09" if u == Q4[0] else "") for u in Q4},
-                          "試験")
-                _quar.save(q66f)
-                _uo_calls.clear()
-                r68b = probe_quarantine(persist=True)
-                q66g = _quar.load()
-                t("★★部分復旧の夜は取得件数にも上限（残り全件へ当たりに行かない）★★"
-                  "（Codex67回目・復旧確認1回＋上限3回で打ち切り）",
-                  len(_uo_calls) == 1 + 3 and r68b["requeued"] == 1
-                  and len(_quar.urls_of(q66g, "qm4")) == 7)
-                # --- 復旧URLが辞書順の末尾でも、取得上限より先に処理される ---
-                #     （Codex68回目の反例＝先頭復旧の試験では検出できない）
-                Q5 = [f"https://q5.maker.test/slot/m{i}/" for i in range(8)]
-
-                def _uo_partial5(req, timeout=20):
-                    u = getattr(req, "full_url", str(req))
-                    _uo_calls.append(u)
-                    if u == Q5[7]:
-                        return _FR66(u, _OK_HTML)
-                    raise _ue66.URLError("SSLV3_ALERT_HANDSHAKE_FAILURE")
-                _ur66.urlopen = _uo_partial5
-                q66h = _quar.load()
-                _quar.add(q66h, "qm5",
-                          {u: ("2026-09" if u == Q5[7] else "") for u in Q5},
-                          "試験")
-                # 復旧確認がm7を選ぶよう、m0〜m6は確認済みの古い日付にしておく
-                for _i in range(7):
-                    q66h["makers"]["qm5"]["urls"][Q5[_i]]["last_probe"] = \
-                        "2026-08-01"
-                _quar.save(q66h)
-                _uo_calls.clear()
-                r68c = probe_quarantine(persist=True)
-                p66d = _pend.load()
-                t("★★復旧URLが並びの末尾でも取得上限より先に処理される★★"
-                  "（Codex68回目＝確認済みの復旧URLを隔離に取り残さない・"
-                  "呼び出し順と隔離からの除去まで確認＝Codex69回目）",
-                  r68c["requeued"] >= 1 and Q5[7] in _q_urls(p66d)
-                  and _uo_calls == [Q5[7], Q5[0], Q5[1], Q5[2]]
-                  and Q5[7] not in _quar.urls_of(_quar.load(), "qm5"))
-                globals()["RECLASSIFY_FETCH_PER_NIGHT"] = _cap_before
-                # --- 古いヒント＋ページに年月なし: 行列に入れず隔離から外す ---
-                _OLD_HTML = ("<title>旧機X</title><h1>旧機X</h1>"
-                             "<p>パチスロの製品情報</p>")
-                _u3 = "https://q3.maker.test/slot/old1/"
-
-                def _uo_old(req, timeout=20):
-                    return _FR66(getattr(req, "full_url", str(req)), _OLD_HTML)
-                _ur66.urlopen = _uo_old
-                q66d = _quar.load()
-                _quar.add(q66d, "qm3", {_u3: "2011-11"}, "試験")
-                _quar.save(q66d)
-                r69 = probe_quarantine(persist=True)
-                p66c = _pend.load()
-                q66e = _quar.load()
-                t("★★復旧確認のURLにも保存済みヒントを渡す★★"
-                  "（Codex66回目の指摘3＝古いヒント＋年月なしページは"
-                  "範囲外として行列に入れず隔離から外す）",
-                  _u3 not in p66c["items"]
-                  and _quar.urls_of(q66e, "qm3") == {})
-                t("★★同じ晩に確かめ済みのメーカーは再確認しない★★"
-                  "（qm はこの晩すでに確認済み＝qm3 だけが確かめられる）",
-                  all(not x.startswith("qm:") for x in r69["probed"]))
-            finally:
-                _ur66.urlopen = _real_uo
-                _nw._get = _get_before66
-                _quar.STORE = _real_qstore
-                _sj.read_json = _real_rj
-                _nw._load_seen = _real_ls
-                _nw._save_seen = _real_ss
-                _nw.scan_maker = _real_sm
-            t("★★発見した時点で基準の題を控える★★"
-              "（最初の再確認までの使い回しを見逃した・Codex30回目）",
-              "known_titles" in inspect.getsource(discover)
-              and "page_title" in inspect.getsource(discover))
-            t("★★下見は待ち行列・台帳を変えない★★"
-              "（60日打ち切り・試行記録・台帳送りが下見でも進んでいた・Codex28回目）",
-              "60日超えの待ち" in inspect.getsource(main)
-              and "if apply_it:" in inspect.getsource(main)
-              and "（下見）やり直しても変わらない理由です" in inspect.getsource(main))
-            _nw._get = lambda u, timeout=20: "<title>Lすーぱぁびん娘|EXAMPLE</title>"
-            t("★★既に登録されている機種は作らない★★（実際に二重登録できた・2026-07-31）",
-              _blocking(["既に登録されている疑い: slug=super_binmusume"]))
-            t("　実データでも既存機種を見つけられる",
-              _cd.find_duplicates("Lすーぱぁびん娘"))
-            # ★名前が違っても、公式URL・型式名で捕まえる★（Codex指摘・2026-07-31）
-            import json as _json
-            import tempfile as _tmp
-            _real_m = _cd.MACHINES
-            _dir = _tmp.mkdtemp(prefix="uchi_dup_")
-            try:
-                _f = os.path.join(_dir, "machines.json")
-                with open(_f, "w", encoding="utf-8") as _fh:
-                    _json.dump([{"slug": "aaa", "name": "ぜんぜん違う名前",
-                                 "identity": {
-                                     "official_product_url":
-                                         "https://www.example.jp/products/slot/x/",
-                                     "regulatory_model_code": "Lびん娘NY1"}}],
-                               _fh, ensure_ascii=False)
-                _cd.MACHINES = __import__("pathlib").Path(_f)
-                t("★★名前が違っても公式URLが同じなら疑う★★"
-                  "（追跡パラメータ・wwwの有無は無視する）",
-                  _cd.find_duplicates("新しい名前", official_urls=[
-                      "https://example.jp/products/slot/x?utm_source=z"]))
-                t("★名前が違っても型式名が同じなら疑う★",
-                  _cd.find_duplicates("新しい名前", model_codes=["Ｌびん娘 NY1"]))
-                t("　手がかりが無ければ疑わない（型式が無いこと自体は警告にしない）",
-                  not _cd.find_duplicates("新しい名前"))
-            finally:
-                _cd.MACHINES = _real_m
-                __import__("shutil").rmtree(_dir, ignore_errors=True)
-            t("　実在しない名前なら重複としない",
-              not _cd.find_duplicates("そんな機種はありませんXYZ"))
-            t("★★公式ページを開けないときは記事を作らない★★（機種を確かめられていない）",
-              _blocking(["公式ページを取得できません: 取得できません（URLError）"]))
-            _nw._get = lambda u, timeout=20: (
-                _ for _ in ()).throw(RuntimeError("開けない"))
-            r5 = run_one("L試験機", "https://m.example/products/slot/zzz/", "m", "2026-09")
-            t("★★試したときの架空機種は待ち行列に入れない★★（実際に混入した）",
-              _remember("通し確認機ZZZ",
-                        "https://m.example/products/slot/zzz_x/", "m",
-                        "2026-09", ["名鑑の個別ページが 1 件"]) is None)
-            t("★★詰まっている機種が後ろを塞がない★★"
-              "（最古の1件しか見ず、最大60日待たされていた・Codex18回目）",
-              len(pick_work({"items": {
-                  f"q_{i}": {
-                      "queue_id": f"q_{i}", "state": "READY",
-                      "name": f"n{i}", "identity_url": f"https://x/{i}",
-                      "maker": "m", "release": "2026-09",
-                      "first_seen": f"2026-07-0{i+1}",
-                      "last_try": "", "tries": 1} for i in range(3)}})) == 3)
-            t("★★一晩に見る件数に上限を置かない★★（2026-08-07・運営者決定）",
-              len(pick_work({"items": {
-                  f"q_{i}": {
-                      "queue_id": f"q_{i}", "state": "READY",
-                      "name": f"n{i}", "identity_url": f"https://x/{i}",
-                      "maker": "m", "release": "2026-09",
-                      "first_seen": "2026-07-01",
-                      "last_try": "", "tries": 1} for i in range(30)}})) == 30)
-            t("★★DMMに載るのを待っている控えは記事づくりの列に入れない★★"
-              "（入れると毎晩『試した』ことになり、待っているだけで打ち切られる）",
-              pick_work({"items": {"q_1": {"queue_id": "q_1",
-                  "state": "AWAITING_DMM_ID", "name": "待ち",
-                  "identity_url": "", "maker": "", "release": "2026-11",
-                  "first_seen": "2026-07-01", "last_try": "",
-                  "tries": 1}}}) == [])
-            _dtm = __import__("datetime").datetime
-
-            def _late(h, m, sch=True):
-                return past_deadline(_dtm(2026, 8, 8, h, m), scheduled=sch)
-            t("　代わりに時刻で区切る（更新タスクとぶつからないため）",
-              _late(5, 30) and not _late(2, 0) and not _late(23, 45))
-            t("★★遅れて起動した無人実行も止める★★（2026-08-11・台帳#293）"
-              "＝以前は08:00より後だと締切が効かず、件数無制限で走れた",
-              _late(8, 30) and _late(14, 0) and _late(22, 59))
-            t("　手で流すときは締切を効かせない（人が見ている）",
-              not _late(14, 0, sch=False) and not _late(5, 30, sch=False))
-            # ★★ロックを失ったら、出す手前で全部止まる★★（依頼154の②）
-            #   ここが無いと、30分以上止まってロックが別の実行へ移ったあと
-            #   復帰した旧い実行が、そのままコミット・pushできてしまう。
-            #   ★再開経路（retry_push_first）も push_after_publish を通る★
-            _keep_lost = list(_LOCK_LOST)
-            _keep_ctx = os.environ.get("UCHIDOKORO_LOCK_CTX")
-            try:
-                _LOCK_LOST.clear()
-                os.environ.pop("UCHIDOKORO_LOCK_CTX", None)
-                t("　ロックを持っていれば関所は通る（手動＝CTX無し）",
-                  lock_still_mine("試験") == [])
-                _LOCK_LOST.append("生存信号を打てません")
-                t("★★生存信号を失ったら出さない★★",
-                  bool(lock_still_mine("試験")))
-                _LOCK_LOST.clear()
-                os.environ["UCHIDOKORO_LOCK_CTX"] = os.path.join(
-                    _tmpdir, "no_such_ctx.json")
-                t("★★CTXはあるが今は持っていない場合も出さない★★",
-                  bool(lock_still_mine("試験")))
-                _LOCK_LOST.append("失った")
-                t("★★失った状態では push_after_publish が入口で止まる★★"
-                  "（未完了公開の再開経路もここを通る）",
-                  bool(push_after_publish("dummy_slug")))
-
-                # ★★3か所の配置を、順序つきで固定する★★（依頼155の②）
-                #   入口だけを見ていると、commit直前・push直前の検査が
-                #   消えても気づけない。「何回目の確認で落とすか」を変えて、
-                #   git が呼ばれないことまで確かめる。
-                _keep_lsm = globals()["lock_still_mine"]
-                _keep_run = globals()["subprocess"].run
-                try:
-                    # (何回目の確認で落とすか, 名前, 呼ばれてはいけない, 呼ばれるべき)
-                    for stop_at, jp, ban, must in (
-                            (2, "コミットの直前", ("commit", "push"), ()),
-                            (3, "pushの直前", ("push",), ("commit",))):
-                        seen, gits = [0], []
-
-                        def _lsm(where, _n=stop_at, _s=seen):
-                            _s[0] += 1
-                            return [] if _s[0] < _n else [f"{where}: 止めます"]
-
-                        def _run(cmd, *a, **k):
-                            if cmd and cmd[0] == "git":
-                                gits.append(cmd[1] if len(cmd) > 1 else "")
-                            class R:
-                                returncode, stdout, stderr = 0, "", ""
-                            return R()
-                        globals()["lock_still_mine"] = _lsm
-                        globals()["subprocess"].run = _run
-                        out = push_after_publish("dummy_slug")
-                        t(f"★★{jp}で失ったら、そこから先へ進まない★★",
-                          bool(out) and not any(g in gits for g in ban)
-                          and all(g in gits for g in must))
-                finally:
-                    globals()["lock_still_mine"] = _keep_lsm
-                    globals()["subprocess"].run = _keep_run
-
-                # ★再開経路の3分岐とも、出す経路を必ず通る★（依頼156のP2）
-                #   以前は「何か返ってくれば合格」だったので、
-                #   push_after_publish を呼ばずに別の理由で失敗しても通った。
-                _keep_pap = globals()["push_after_publish"]
-                try:
-                    # ★3分岐とも、呼ばれ方（slugと already_committed）まで見る★
-                    #   （依頼157のP2）以前は slug しか見ておらず、
-                    #   誤った already_committed で呼んでも通った。
-                    #   ★COMMITTED は実データと同じく sha を持つ★（依頼158のP2）
-                    #     再開側は sha と現在のHEADの一致を見てから進むので、
-                    #     空のままだとその判定を素通りしていた。
-                    for stage, committed, on_top, sha in (
-                            ("WRITTEN", False, False, ""),
-                            ("WRITTEN", True, True, ""),
-                            ("COMMITTED", True, False, "headcommit"),
-                            # ★記録したコミットが先端でない＝人が確かめる★
-                            #   （出さずに止まるので called は空のまま）
-                            ("COMMITTED", None, False, "furuisha")):
-                        called = []
-                        globals()["push_after_publish"] = (
-                            lambda slug, already_committed=False, _c=called:
-                            _c.append((slug, already_committed))
-                            or ["入口で止めました"])
-                        io.open(PUSH_PENDING, "w", encoding="utf-8").write(
-                            json.dumps({"slug": "t_resume", "sha": sha,
-                                        "stage": stage,
-                                        "parent": "oyacommit" if on_top else "",
-                                        "at": "2026/08/11 00:00:00"}))
-                        _keep_top = globals()["_committed_on_top"]
-                        _keep_head = globals()["_head"]
-                        try:
-                            globals()["_committed_on_top"] = (
-                                lambda parent, slug, _v=on_top: _v)
-                            globals()["_head"] = (lambda _v=sha: "headcommit" if _v != "furuisha" else "atarasii")
-                            out = retry_push_first()
-                        finally:
-                            globals()["_committed_on_top"] = _keep_top
-                            globals()["_head"] = _keep_head
-                        if committed is None:
-                            t("★★記録したコミットが先端でなければ、出さずに止まる★★"
-                              "（あとから別のコミットが乗っている＝人が確かめる）",
-                              bool(out) and called == []
-                              and any("別のコミット" in x for x in out))
-                        else:
-                            t(f"　未完了公開（{stage}/コミット済み={committed}）の再開も、"
-                              "出す経路を必ず通る",
-                              bool(out) and called == [("t_resume", committed)])
-                finally:
-                    globals()["push_after_publish"] = _keep_pap
-                    try:
-                        os.remove(PUSH_PENDING)
-                    except OSError:
-                        pass
-            finally:
-                _LOCK_LOST.clear()
-                _LOCK_LOST.extend(_keep_lost)
-                if _keep_ctx is None:
-                    os.environ.pop("UCHIDOKORO_LOCK_CTX", None)
-                else:
-                    os.environ["UCHIDOKORO_LOCK_CTX"] = _keep_ctx
-            # ★試験が本番のどこにも書かないことを、まとめて確かめる★
-            #   （2026-08-11・実際に2つ汚した＝台帳と未pushの目印）
-            t("★★試験が本番の未pushの目印を触らない★★"
-              "（dummy_slug が残り、次の実行が未完了公開として処理しかけた）",
-              PUSH_PENDING.startswith(_tmpdir))
-            t("★★試験が本番の待ち行列を触らない★★（架空機種が入り込んだ）",
-              _pend.STORE.startswith(_tmpdir))
-            t("　実際に開けない公式URLでは組み立てまで進まない",
-              "preview" not in r5
-              and any("公式ページを取得できません" in x for x in r5["blocked"]))
-            _nw._get = lambda u, timeout=20: (
-                "<title>Lすーぱぁびん娘|EXAMPLE</title><body>パチスロ 2026年9月 登場</body>")
-            t("　同じ機種なら通る",
-              verify_official("Lすーぱぁびん娘", "https://m.example/products/slot/lbinko/",
-                              "m")["problems"] == [])
-            t("★★登場年月を渡さなくても、公式から必ず取って確かめる★★"
-              "（空で渡せば検査ごと飛ばせた・Codex17回目）",
-              verify_official("Lすーぱぁびん娘",
-                              "https://m.example/products/slot/lbinko/",
-                              "m")["release"] == "2026-09")
-            _nw._get = lambda u, timeout=20: (
-                "<title>Lすーぱぁびん娘|EXAMPLE</title><body>パチスロ 2019年4月 登場</body>")
-            t("★★古い機種を新台として出せない★★"
-              "（--name の経路は新台の範囲を見ていなかった・Codex17回目）",
-              any("範囲外" in x for x in verify_official(
-                  "Lすーぱぁびん娘", "https://m.example/products/slot/lbinko/",
-                  "m")["problems"]))
-            # ---- 一覧カードでの同定（2026-08-04・Codex93回目の直し）
-            import io as _io
-            import ssl as _ssl
-            import urllib.error as _ue
-            real_cats = _nw.CATALOGS
-            _cat = os.path.join(_tmpdir, "cat.json")
-            _cardspec = {"card_tag": "li", "card_class": "slotItem",
-                         "name_class": "name", "type_class": "category",
-                         "year_class": "__year"}
-            with _io.open(_cat, "w", encoding="utf-8") as f:
-                json.dump({"catalogs": {"z": {
-                    "name": "Z", "status": "ACTIVE",
-                    "list_url": "https://z.example/list/",
-                    "link_prefix": "https://z.example/m/",
-                    "allow_list_card_identity": True,
-                    "list_card": _cardspec}}}, f, ensure_ascii=False)
-            _nw.CATALOGS = _cat
-            real_evdir = globals()["EVIDENCE_DIR"]     # ★本物の保管場所を汚さない★
-            globals()["EVIDENCE_DIR"] = os.path.join(_tmpdir, "ev")
-
-            def _card(slug, name, year="2026.09", href=None):
-                return (f'<li class="slotItem"><div class="name">{name}</div>'
-                        f'<p class="category">パチスロ</p>'
-                        f'<p class="category __year">{year}</p>'
-                        f'<a href="{href or ("https://z.example/m/" + slug + "/")}">'
-                        "くわしく見る</a></li>")
-
-            def _list_html(first):
-                return ("<html><body><ul>" + first + _card("aa", "Lほかの機種")
-                        + _card("bb", "Lべつの機種") + "</ul></body></html>")
-
-            _tls = _ue.URLError(_ssl.SSLCertVerificationError("expired"))
-            _fail = lambda u, timeout=20: (_ for _ in ()).throw(
-                Exception("取得できません（URLError）: " + u))
-
-            def _fail_tls(u, timeout=20):
-                raise Exception("取得できません（URLError）: " + u) from _tls
-
-            LIST_SNAPSHOT["z"] = _list_html(_card("hokuto", "L北斗の拳"))
-            _nw._get = _fail_tls
-            t("★★L版のカードでS版を通さない★★（Codex93回目・自分で再現した）",
-              _card_identity("S北斗の拳", "https://z.example/m/hokuto/", "z",
-                             _tls) is None)
-            t("　同じ規格なら一覧カードで同定できる",
-              (_card_identity("L北斗の拳", "https://z.example/m/hokuto/", "z",
-                              _tls) or {}).get("release") == "2026-09")
-            t("★★証明書の失敗は例外の型で見分ける★★（文言だけでは通さない）",
-              _lci.tls_failure(_tls)
-              and not _lci.tls_failure(_ue.URLError("timed out"))
-              and not _lci.tls_failure(Exception(
-                  "取得できません: [SSL: CERTIFICATE_VERIFY_FAILED]")))
-            _vo = verify_official("L北斗の拳", "https://z.example/m/hokuto/", "z")
-            t("★★カードの公式名を後段へ渡す★★（Codex93回目の指摘2）",
-              _vo.get("identity_name") == "L北斗の拳"
-              and _vo.get("identity_binding") == "MAKER_LIST_CARD")
-            t("★★同定の根拠にした一覧HTMLを保管する★★（あとから確かめられる）",
-              os.path.exists((_vo.get("identity_evidence") or {}).get("saved_path", ""))
-              and "identity_evidence/" in _evidence_ref(_vo))
-            # 相対で書かれた別機種のリンクが同じカードにあれば数える
-            LIST_SNAPSHOT["z"] = _list_html(
-                '<li class="slotItem"><div class="name">L北斗の拳</div>'
-                '<p class="category">パチスロ</p>'
-                '<p class="category __year">2026.09</p>'
-                '<a href="https://z.example/m/hokuto/">くわしく見る</a>'
-                '<a href="/m/betsu/">こちらも</a></li>')
-            t("★★相対で書かれた別機種のリンクも数える★★（Codex93回目の指摘5）",
-              _card_identity("L北斗の拳", "https://z.example/m/hokuto/", "z",
-                             _tls) is None)
-            # 取得失敗が証明書以外なら代替しない
-            LIST_SNAPSHOT["z"] = _list_html(_card("hokuto", "L北斗の拳"))
-            t("　証明書以外の失敗では一覧カードに逃がさない",
-              _card_identity("L北斗の拳", "https://z.example/m/hokuto/", "z",
-                             _ue.URLError("timed out")) is None)
-            # ★根拠を保管できないなら公開しない★（Codex94回目の指摘4）
-            _blocked = os.path.join(_tmpdir, "ev_blocked")
-            _io.open(_blocked, "w").write("これはフォルダではありません")
-            globals()["EVIDENCE_DIR"] = _blocked
-            t("★★同定の根拠を保管できない晩は公開しない★★（指紋だけでは確かめられない）",
-              _card_identity("L北斗の拳", "https://z.example/m/hokuto/", "z",
-                             _tls) is None)
-            globals()["EVIDENCE_DIR"] = os.path.join(_tmpdir, "ev")
-            # ★書き途中で壊れた保管を「済み」と思い込まない★
-            _card_identity("L北斗の拳", "https://z.example/m/hokuto/", "z", _tls)
-            _files = [f for f in os.listdir(globals()["EVIDENCE_DIR"])
-                      if f.endswith(".html")]
-            _io.open(os.path.join(globals()["EVIDENCE_DIR"], _files[0]),
-                     "w", encoding="utf-8").write("壊れた中身")
-            _got2 = _card_identity("L北斗の拳", "https://z.example/m/hokuto/",
-                                   "z", _tls)
-            t("★★壊れた保管は書き直してから使う★★",
-              _got2 is not None
-              and _io.open((_got2["evidence"]["saved_path"]),
-                           "rb").read().decode("utf-8") == LIST_SNAPSHOT["z"])
-            t("★★保管したファイルの実バイトの指紋が、名前の指紋と一致する★★"
-              "（Codex95回目・改行変換で食い違っていた）",
-              _sha_bytes(_io.open(_got2["evidence"]["saved_path"], "rb").read())
-              == os.path.basename(_got2["evidence"]["saved_path"])[:-5])
-            t("　書き途中のファイルを残さない",
-              not [f for f in os.listdir(globals()["EVIDENCE_DIR"])
-                   if ".tmp" in f])
-            # ★置き換えで失敗しても残骸を残さない★（同・指摘3）
-            for _f in os.listdir(globals()["EVIDENCE_DIR"]):
-                os.remove(os.path.join(globals()["EVIDENCE_DIR"], _f))
-            _real_replace = os.replace
-            try:
-                os.replace = lambda a, b: (_ for _ in ()).throw(OSError("失敗"))
-                _bad = _card_identity("L北斗の拳", "https://z.example/m/hokuto/",
-                                      "z", _tls)
-            finally:
-                os.replace = _real_replace
-            t("★★置き換えに失敗した晩は公開せず、残骸も残さない★★",
-              _bad is None
-              and not [f for f in os.listdir(globals()["EVIDENCE_DIR"])
-                       if ".tmp" in f])
             # ★コミット文に書く区分★（2026-08-05・Codex99回目）
             t("　コミット文の区分: 実データから決まった区分を返す",
               _machine_class(sorted(
@@ -4063,6 +2892,7 @@ def selftest() -> int:
                   "LEGACY_COMPLETE", "LEGACY_PREVIEW",
                   "AUTO_INDEXABLE", "AUTO_PENDING"))
             # ★本番の一覧は読むだけ★（書き換えない・依頼157のP1）
+            import io as _io
             _real_ms = os.path.join(_tmpdir, "machines_for_test.json")
             _keep_mp = globals()["MACHINES_PATH"]
             globals()["MACHINES_PATH"] = _real_ms
@@ -4079,9 +2909,7 @@ def selftest() -> int:
                   _machine_class("t1") == "区分不明")
             finally:
                 globals()["MACHINES_PATH"] = _keep_mp
-            LIST_SNAPSHOT.pop("z", None)
             _nw.CATALOGS = real_cats
-            globals()["EVIDENCE_DIR"] = real_evdir
         finally:
             _nw._get, _mc.page_is_machine = real_get, real_page
     finally:
@@ -4265,27 +3093,15 @@ def main() -> int:
         if apply_it:
             _log("★戻すまで進みません（--recover --apply で戻してください）★")
             return 1
-    # ★入口は P-WORLD の導入カレンダー一本★（2026-08-12・運営者決定）
-    #   これまではメーカー公式11社の一覧を見張っていた（discover）。
-    #   作りが11通りあるぶん、証明書切れ・soft404・派生機の紛れ込みへの
-    #   対策が積み上がっていた。カレンダーは1つの作りなので入口をここに寄せる。
-    #   ★戻したいときは USE_MAKER_WATCH を真にする★（仕組みは消していない）
-    if USE_MAKER_WATCH:
-        d = discover(persist=apply_it)
-    else:
-        d = discover_calendar(persist=apply_it)
+    # ★入口はDMMの導入カレンダー一本★（2026-08-16・台帳#376）
+    #   メーカー公式11社の一覧を見張る仕組み（discover）は
+    #   2026-08-12に止め、2026-08-16に**削除**した。
+    #   ★止めたまま残さない★＝残すと「まだ生きている」と誤読される
+    #   （実際に、移行の作業中に誤って「メーカー公式の規約確認が要る」と
+    #     報告してしまった）。戻したくなったらgitの履歴から取る。
+    d = discover_calendar(persist=apply_it)
     for x in d["first_time"]:
         print("初回として記録:", x)
-    # ★隔離したメーカーの復旧確認（毎晩1URL）★（2026-08-04・Codex65回目）
-    q = probe_quarantine(persist=apply_it)
-    for x in q["probed"]:
-        _log(f"隔離の復旧確認: {x}")
-    for mzz in q["recovered"]:
-        _log(f"★隔離が復旧: {mzz} / 行列へ移した数は下記★")
-    if q["requeued"]:
-        _log(f"隔離から行列へ: {q['requeued']} 件")
-    for x in q["problems"]:
-        d["problems"].append(x)
     # ★見つけたが記事にできていない機種を、必ず待ち行列に入れる★
     # ★候補は discover() の中で、seen を書く前に待ち行列へ入れてある★
     pend = _pend.load()

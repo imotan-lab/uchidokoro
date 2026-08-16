@@ -5,16 +5,12 @@
  "catalogs": {
   "bellco": {
    "name": "ベルコ",
-   "list_url": "https://www.s-bellco.co.jp/products/slot/",
-   "link_prefix": "https://www.s-bellco.co.jp/products/slot/",
    "min_expected": 50,
    "status": "ACTIVE",
    "list_marker": "パチスロ機種"
   },
   "kitadenshi": {
    "name": "北電子",
-   "list_url": "https://www.kitadenshi.co.jp/slot/",
-   "link_prefix": "https://www.kitadenshi.co.jp/slot/",
    "min_expected": 5,
    "status": "ACTIVE",
    "list_marker": "パチスロ製品情報",
@@ -24,8 +20,6 @@
   },
   "universal": {
    "name": "ユニバーサル",
-   "list_url": "https://www.universal-777.com/product/slot/",
-   "link_prefix": "https://www.universal-777.com/product/slot/",
    "min_expected": 15,
    "status": "ACTIVE",
    "fetch": "render",
@@ -41,8 +35,6 @@
   },
   "enterrise": {
    "name": "エンターライズ",
-   "list_url": "https://www.enterrise.co.jp/slot.php",
-   "link_prefix": "https://www.enterrise.co.jp/slot/",
    "min_expected": 4,
    "status": "ACTIVE",
    "_checked": "2026-07-31 静的HTMLで6件取得・個別ページのタイトルが機種名であることを確認",
@@ -53,8 +45,6 @@
   },
   "heiwa": {
    "name": "平和",
-   "list_url": "https://www.heiwanet.co.jp/products/pachislot/",
-   "link_prefix": "https://www.heiwanet.co.jp/products/pachislot/",
    "min_expected": 4,
    "status": "ACTIVE",
    "_checked": "2026-07-31 年別アーカイブを除外する仕組みを入れて5件取得・タイトルが機種名であることを確認",
@@ -73,8 +63,6 @@
   },
   "daitogiken": {
    "name": "大都技研",
-   "list_url": "https://www.daitogiken.com/products/slot/",
-   "link_prefix": "https://www.daitogiken.com/contents/product/slot/",
    "min_expected": 40,
    "status": "ACTIVE",
    "_checked": "2026-07-31 静的HTMLで49件取得・個別ページのタイトルが機種名であることを確認（一覧と機種ページでURLの階層が違う）",
@@ -88,16 +76,12 @@
   },
   "sankyo": {
    "name": "SANKYO",
-   "list_url": "https://www.sankyo-fever.co.jp/products/slot/",
-   "link_prefix": "https://www.sankyo-fever.co.jp/products/slot/",
    "min_expected": 5,
    "status": "BLOCKED",
    "_why": "★bot対策(Incapsula)が入っており、機械からは中身を取得できない（2026-07-31確認）。回避はしない（規約・検知回避に当たるため）。対象外として明示する★"
   },
   "sammy": {
    "name": "サミー",
-   "list_url": "https://www.sammy.co.jp/japanese/products/pachislot/",
-   "link_prefix": "https://www.sammy.co.jp/japanese/product/pachislot/",
    "min_expected": 30,
    "status": "ACTIVE",
    "fetch": "render",
@@ -106,8 +90,6 @@
   },
   "newgin": {
    "name": "ニューギン",
-   "list_url": "https://www.newgin.co.jp/machine/slot/",
-   "link_prefix": "https://www.newgin.co.jp/pub/machine/",
    "min_expected": 25,
    "status": "ACTIVE",
    "_checked": "2026-07-31 静的HTMLで34件取得。★一覧にパチンコ機も混じる★が、個別ページの判定(looks_like_slot)で落ちるので新台としては通らない（理由は毎回報告される）",
@@ -115,8 +97,6 @@
   },
   "yamasa_next": {
    "name": "山佐ネクスト",
-   "list_url": "https://yamasa-next.co.jp/",
-   "link_prefix": "https://yamasa-next.co.jp/slot/",
    "min_expected": 2,
    "status": "ACTIVE",
    "_checked": "2026-07-31 トップページに機種が並ぶ（3件）。★/machine/ を頼むとトップへ転送されるため、最初からトップを一覧として読む★",
@@ -128,8 +108,6 @@
   },
   "kpe": {
    "name": "KPE",
-   "list_url": "https://www.kpe.co.jp/products/",
-   "link_prefix": "https://www.kpe.co.jp/products/",
    "min_expected": 3,
    "status": "NEEDS_SETUP",
    "_why": "描画しても機種ごとの個別ページが存在しない（製品情報が画像・PDFのみと思われる。2026-07-31確認）",
@@ -140,16 +118,12 @@
   },
   "daxel": {
    "name": "ダクセル",
-   "list_url": "https://www.daxel.co.jp/products/",
-   "link_prefix": "https://www.daxel.co.jp/",
    "min_expected": 5,
    "status": "NEEDS_SETUP",
    "_why": "機種ページがドメイン直下(http://www.daxel.co.jp/{slug}/)で会社案内等と同じ階層。さらにhttpとhttpsが混在する（2026-07-31確認）。機種だけを選り分ける手立てが要る"
   },
   "fujishoji": {
    "name": "藤商事",
-   "list_url": "https://www.fujimarukun.co.jp/products/all/",
-   "link_prefix": "https://www.fujimarukun.co.jp/products/",
    "min_expected": 90,
    "status": "ACTIVE",
    "fetch": "render",
@@ -160,22 +134,17 @@
   },
   "7sho": {
    "name": "七匠",
-   "list_url": null,
-   "link_prefix": null,
    "min_expected": 1,
    "status": "NEEDS_SETUP",
    "_why": "公式サイトの機種一覧URLを特定できていない（社名から推測したドメインでは接続できず。2026-07-31）。★推測URLを登録しない★＝別会社のページを機種一覧として読む事故を避けるため"
   },
   "oizumi": {
    "name": "オーイズミ",
-   "list_url": "https://oizumi.co.jp/products/backnumber/",
-   "link_prefix": "https://www.oizumi.co.jp/machine/",
    "min_expected": 15,
    "status": "ACTIVE",
    "fetch": "render",
    "_checked": "2026-08-03 描画で30機種URL取得（静的はTLS握手拒否）。スロ専業。一覧はoizumi.co.jp・機種はwww.oizumi.co.jp/machine/配下。旧作の入れ子（dc500/dc711）は下の階層として対象外",
    "list_marker": "機種一覧",
-   "allow_list_card_identity": true,
    "list_card": {
     "card_tag": "li",
     "card_class": "slotItem",
@@ -187,16 +156,12 @@
   },
   "pioneer": {
    "name": "パイオニア",
-   "list_url": null,
-   "link_prefix": null,
    "min_expected": 1,
    "status": "NEEDS_SETUP",
    "_why": "公式サイトの機種一覧URLを特定できていない（社名から推測したドメインでは接続できず。2026-07-31）。★推測URLを登録しない★＝別会社のページを機種一覧として読む事故を避けるため"
   },
   "net": {
    "name": "ネット",
-   "list_url": null,
-   "link_prefix": null,
    "min_expected": 1,
    "status": "NEEDS_SETUP",
    "_why": "公式サイトの機種一覧URLを特定できていない（社名から推測したドメインでは接続できず。2026-07-31）。★推測URLを登録しない★＝別会社のページを機種一覧として読む事故を避けるため",
@@ -269,5 +234,6 @@
   "olympia": "オリンピアの機種は平和(heiwa)のページに載るため、heiwaで検出できる（2026-07-31確認）",
   "konami": "KONAMI本体のサイトはアーケード専用。パチスロはKPEが扱う",
   "list_marker": "★一覧ページの印★ ページの題(title)が この語で始まること。機種ページの題は機種名から始まるので区別できる（本文照合では区別できなかった・2026-07-31）"
- }
+ },
+ "_why_no_list_url": "★メーカー公式の巡回は2026-08-16に削除しました★（台帳#376）出典は大手サイトへ寄せると決めたので、巡回先のURLも残しません。この名簿はいま「メーカー名から社を同定する」ためだけに使います。★止めたまま残さない★＝残すと「まだ生きている」と誤読されます。"
 }
