@@ -172,8 +172,13 @@ def add(data: dict, name: str, url: str, maker: str, release: str,
             it["source_machine_id"] = str(source_machine_id)
         if identity_source:
             it["identity_source"] = identity_source
-        if state != it.get("state") and state == READY:
-            it["state"] = READY          # 機種ページが見つかった＝待ちが解けた
+        # ★状態は勝手に進めない★（2026-08-16・依頼214の指摘3）
+        #   以前はここで「機種ページのURLが来た＝待ちが解けた」として
+        #   READY へ戻していた。しかし巡回は**確かめられなかった機種も**
+        #   控えへ入れ直すので、確かめていないものが READY になり、
+        #   その晩の記事づくりの列に入っていた。
+        #   ★待ちを解くのは、機種ページを確かめられた時だけ★
+        #   （dmm_discover.rebind_waiting が check_one の合格を見て決める）
         for k, v in (extra or {}).items():
             if not v:
                 continue                  # ★空では上書きしない★
@@ -489,6 +494,24 @@ def selftest() -> int:
     _w["items"][_it["queue_id"]]["calendar_missing_reported_at"] = "2026-11-30"
     t("　知らせるのは一度だけ（毎晩は鳴らさない）",
       calendar_missing_due(_w, "2026-12-25") == [])
+    # ★★機種ページのURLが来ただけでは、待ちを解かない★★
+    #   （2026-08-16・依頼214の指摘3）
+    #   巡回は**確かめられなかった機種も**控えへ入れ直す。ここで
+    #   READY へ戻していたので、確かめていないものが記事づくりの列に入った。
+    _w2 = _empty()
+    _wt = add(_w2, "待っている機種", "", "", "2026-11", state=AWAITING_DMM_ID)
+    # 巡回が機種IDを結んだ状態（rebind_waiting がやること）
+    _wt["source_machine_id"] = "5079"
+    add(_w2, "待っている機種", DMM + "5079", "", "",
+        reason="確かめられませんでした", source_machine_id="5079")
+    t("★★機種ページのURLが来ただけでは待ちを解かない★★"
+      "（確かめられていないものを記事づくりの列に入れない）",
+      len(_w2["items"]) == 1
+      and _w2["items"][_wt["queue_id"]]["state"] == AWAITING_DMM_ID
+      and due(_w2) == [])
+    t("　（対照）新しい機種は今までどおり READY で入る",
+      add(_empty(), "新しい機種", DMM + "5080", "m", "2026-11",
+          source_machine_id="5080")["state"] == READY)
     t("　似ているだけの名前は結び付けない（★前方一致で寄せない★）",
       find_by_core(_w, "L聖闘士星矢") == [])
 

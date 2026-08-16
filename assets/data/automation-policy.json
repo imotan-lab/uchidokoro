@@ -1,0 +1,49 @@
+{
+ "schema": "automation-policy/v1",
+ "_why": "★機械が自動で通信してよい先を、規約の確認つきで決める唯一の名簿★（2026-08-16・台帳#376）。P-WORLDと一撃へ、規約を読まないまま毎晩アクセスしていた。巡回先の設定（directory-catalogs.json）にURLを足すだけで通信できてしまったのが原因。ここに APPROVED として載っていて、用途と道筋が合っているときだけ通す。",
+ "_rules": [
+  "★載っていない先は通さない★（PENDING も BLOCKED も同じく通さない）",
+  "★robots.txt は取得の作法であって、規約の許諾ではない★（RFC 9309）。規約本文を読むこと",
+  "★blocked_hosts.py が常に優先★（ここで APPROVED でも、あちらで止めていれば止まる）",
+  "★確認期限を過ぎたら通さない★（規約は書き換わる。読み直して日付を更新する）",
+  "★用途と道筋（path_prefix）まで一致すること★＝新台の発見に許した先で、記事本文を丸ごと取りに行かない"
+ ],
+ "hosts": {
+  "p-town.dmm.com": {
+   "purpose": ["new_machine_discovery", "machine_identity"],
+   "path_prefixes": ["/machines/"],
+   "method": "http_get",
+   "terms_url": "https://p-town.dmm.com/utilization",
+   "checked_at": "2026-08-16",
+   "checked_by": "運営者",
+   "why": "利用規約に、プログラムを用いたアクセスやデータ収集を一律に禁じる条項が見当たらない。新台カレンダーと機種ページを、1機種あたり1回の取得で参照する。",
+   "evidence_ref": "_design/tos_review_2026-08-16.md",
+   "recheck_by": "2027-02-16",
+   "status": "APPROVED"
+  },
+  "www.p-world.co.jp": {
+   "purpose": [],
+   "path_prefixes": [],
+   "method": "",
+   "terms_url": "https://www.p-world.co.jp/kiyaku.htm",
+   "checked_at": "2026-08-16",
+   "checked_by": "運営者",
+   "why": "★総合利用規約 第8条★でプログラムを用いたアクセス・データ収集を禁じている。2026-08-16に停止し、新台の入口をDMMへ移した（台帳#376）。",
+   "evidence_ref": "_design/tos_review_2026-08-16.md",
+   "recheck_by": "",
+   "status": "BLOCKED"
+  },
+  "1geki.jp": {
+   "purpose": [],
+   "path_prefixes": [],
+   "method": "",
+   "terms_url": "https://1geki.jp/kiyaku/",
+   "checked_at": "2026-08-16",
+   "checked_by": "運営者",
+   "why": "★利用規約 第3条★で自動化ツール・ボット・スクレイピングによる大量取得と再配布を禁じている。2026-08-16に出典・巡回先の両方から外した（台帳#376）。",
+   "evidence_ref": "_design/tos_review_2026-08-16.md",
+   "recheck_by": "",
+   "status": "BLOCKED"
+  }
+ }
+}

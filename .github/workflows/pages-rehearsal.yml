@@ -120,13 +120,14 @@ jobs:
           python scripts/publish_new_machine.py --selftest
           python scripts/prepush_gate.py --selftest
           python scripts/add_machine_health.py --selftest
-          # ★新台の入口（P-WORLD一本）★（2026-08-12・依頼168のP1）
+          # ★新台の入口（DMMぱちタウン一本）★（2026-08-16・台帳#376）
           #   ここが一覧に無いと、同じ壊れ方をしてもCIは緑のまま通る。
+          #   ★automation_policy は「規約を確かめずに巡回先を足す」ことの関所★
           python scripts/dmm_calendar.py --selftest
           python scripts/dmm_machine.py --selftest
           python scripts/dmm_discover.py --selftest
           python scripts/slug_binding.py --selftest
-          python scripts/pending_machines.py --selftest
+          python scripts/automation_policy.py --selftest
           python scripts/grow_machine.py --selftest
           python scripts/add_machine_run.py --selftest
           python scripts/open_issues.py --selftest

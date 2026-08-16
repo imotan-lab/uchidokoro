@@ -1737,6 +1737,21 @@ def check_39_vote_counting(machines: list) -> list[str]:
     return ngs
 
 
+def check_41_automation_policy(machines: list) -> list[str]:
+    """★自動で通信してよい先の名簿が、他の設定と食い違っていないか★
+
+    （2026-08-16・台帳#376／Codex依頼214の助言）
+    ★JSONを置くだけでは関所にならない★＝巡回先の設定・黒い名簿と
+    毎回突き合わせる。ここが赤いまま自動タスクを動かすと、
+    今回と同じ「規約を読まないまま毎晩アクセスする」形に戻る。
+    """
+    import automation_policy as _ap
+    try:
+        return list(_ap.disagreements())
+    except Exception as e:                # noqa: BLE001
+        return [f"通信の名簿を確かめられません: {str(e)[:150]}"]
+
+
 def check_40_slug_binding(machines: list) -> list[str]:
     """★slugと機種ページURLの対応★（2026-08-16・台帳#376／Codex依頼212）
 
@@ -2004,6 +2019,7 @@ CHECKS = [
     ("38_ログイン名の露出", check_38_home_path_leak),
     ("39_票の数え方", check_39_vote_counting),
     ("40_slugと機種ページURLの対応", check_40_slug_binding),
+    ("41_自動で通信してよい先", check_41_automation_policy),
 ]
 
 

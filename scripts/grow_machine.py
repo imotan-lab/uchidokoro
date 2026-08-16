@@ -379,19 +379,52 @@ def _carry_identity(old: dict, new: dict) -> list:
     for k in _CARRY_PLAIN:
         if old.get(k):
             new[k] = old[k]
-    for code_key, src_key in _CARRY_CODE:
-        want = old.get(code_key)
-        if not want:
-            continue
-        got = new.get(code_key)
-        if got and got != want:
-            ng.append(f"型式名が変わっています（{want!r} → {got!r}）"
-                      "／★別機種のページに変わった疑い★")
-            continue
-        if not got:
-            new[code_key] = want
-            if old.get(src_key):
-                new[src_key] = old[src_key]
+
+    def _code(d):
+        """★型式名は採用値と観測値のどちらかに入る★（欄をまたいで見る）
+
+        （2026-08-16・依頼214の指摘1）
+        欄ごとに比べていたので、**昔の採用値Aと今の観測値B**が
+        別々の欄に同居して素通りしていた（逆向きも同じ）。
+        型式名は機種に1つなので、欄ではなく**値**で比べる。
+        """
+        for k, s in _CARRY_CODE:
+            if d.get(k):
+                return k, d[k], s
+        return "", "", ""
+
+    ok_key, want, want_src = _code(old)
+    if not want:
+        return ng
+    new_key, got, _ = _code(new)
+    import claim_identity as _ci
+    if got and _ci.normalize_core(got) != _ci.normalize_core(want):
+        # ★別の型式名が出てきた＝別機種のページに変わった疑い★
+        ng.append(f"型式名が変わっています（{want!r} → {got!r}）"
+                  "／★別機種のページに変わった疑い★")
+        return ng
+    if got:
+        # 同じ値（書き方の違いは吸収）。今の欄をそのまま使い、
+        # ★昔の欄に値を残さない★＝矛盾した併記を作らない。
+        for k, _s in _CARRY_CODE:
+            if k != new_key:
+                new.pop(k, None)
+        return ng
+    # 材料が黙っている（出典が読めなくなった晩）＝昔の採用を維持する
+    new[ok_key] = want
+    if old.get(want_src):
+        new[want_src] = old[want_src]
+    for k, s in _CARRY_CODE:
+        if k != ok_key:
+            new.pop(k, None)
+            new.pop(s, None)
+    # ★当時の確からしさも維持する★（2026-08-16・依頼214の指摘2）
+    #   いま集め直すと独立2出典がそろわないので、作り直した identity は
+    #   必ず CATALOG_BOUND に落ちる。**型式名だけ戻して段だけ落とす**のは
+    #   当時の確認を半分否定することになるので、段も一緒に戻す。
+    #   ★下げないのではなく「当時の採用をそのまま維持する」★
+    if old.get("identity_tier"):
+        new["identity_tier"] = old["identity_tier"]
     return ng
 
 
@@ -410,6 +443,9 @@ def identity_same(old: dict, new: dict) -> list:
                   #   記事には出ないが同定の手がかり。育てるたびに
                   #   落ちると、確かめ直せない機種の唯一の材料が消える。
                   ("observed_model_code", "観測した型式名"),
+                  # ★確からしさの段も不変★（2026-08-16・依頼214の指摘2）
+                  #   型式名だけ戻して段が落ちると、当時の確認を半分否定する。
+                  ("identity_tier", "本人性の段"),
                   # ★移行前に確かめた記録も不変★（台帳#376）
                   #   ★検定番号はDMMには無い★ので、これが唯一の記録。
                   ("_legacy_evidence_ref", "移行前に確かめた記録"),

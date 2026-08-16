@@ -173,23 +173,49 @@ def rebind_waiting(data: dict, rows: list, checked: dict | None = None) -> list:
     import pending_machines as _pm
     done = []
     for r in rows:
-        got = (checked or {}).get(r["id"])
-        if not (got and got.get("ok")):
-            continue                    # ★確かめられていないものは結ばない★
+        got = (checked or {}).get(r["id"]) or {}
         for it in _pm.find_by_core(data, r["name"]):
             if it.get("state") != _pm.AWAITING_DMM_ID:
                 continue
-            it["state"] = _pm.READY
+            # ★機種IDは、確かめられなくても先に結ぶ★
+            #   （2026-08-16・依頼214の指摘3）
+            #   結ばずに先へ進むと、そのあと `add()` が**同じ機種の控えを
+            #   もう1件**作る（機種IDで探しても見つからないため）。
+            #   翌晩に確かめられて元の控えも READY になると、
+            #   **同じ機種の控えが2件**になる。
+            it["source_machine_id"] = r["id"]
             it["identity_url"] = got.get("url") or r["url"]
             it["identity_source"] = "dmm"
-            it["source_machine_id"] = r["id"]
             it["release"] = r["release_date"]
+            if not got.get("ok"):
+                # ★確かめられていないうちは READY にしない★
+                #   （記事づくりの列に入れない。進めるのは巡回だけ）
+                it["last_reason"] = ("DMMに載りましたが、まだ確かめられません: "
+                                     + str(got.get("reason") or "")[:200])
+                continue
+            it["state"] = _pm.READY
             it["maker"] = got.get("maker_id") or it.get("maker") or ""
-            if got.get("dmm_maker"):
-                it["dmm_maker"] = got["dmm_maker"]
+            # ★覚えた表示名は上書きしない★（違う値は食い違いとして残す）
+            _remember(it, "dmm_maker", got.get("dmm_maker"))
             it["last_reason"] = "DMMのカレンダーに載ったので結び直しました"
             done.append(it)
     return done
+
+
+def _remember(item: dict, key: str, value) -> None:
+    """★一度覚えたものは変えない★（違う値は食い違いとして残す）
+
+    （2026-08-16・依頼214）待ち行列の `add()` と同じ扱いにする。
+    ここだけ直接代入にすると、**公開直前の照合がその値に合わせて緩む**。
+    """
+    if not value:
+        return
+    old = item.get(key)
+    if old and old != value:
+        item.setdefault(key + "_conflict", []).append(value)
+        item[key + "_conflict"] = sorted(set(item[key + "_conflict"]))[:5]
+        return
+    item[key] = value
 
 
 def run(apply_it: bool = False, today=None) -> dict:
@@ -305,6 +331,41 @@ def selftest() -> int:
             state=_pm.AWAITING_DMM_ID)
     t("★★別の機種には結び付けない★★（前方一致で寄せない）",
       rebind_waiting(d2, rows, okc) == [])
+
+    # ★★確認に失敗した晩と、成功した晩を通しで見る★★
+    #   （2026-08-16・依頼214の指摘3）
+    #   失敗した晩に機種IDを結んでおかないと、そのあと add() が
+    #   **同じ機種の控えをもう1件**作り、翌晩に元の控えも READY になって
+    #   **同じ機種が2件**になる。
+    d3 = _pm._empty()
+    w3 = _pm.add(d3, "スマスロ ラグナドール", "", "", "2026-11",
+                 reason="DMMのカレンダーに無い", state=_pm.AWAITING_DMM_ID)
+    ng3 = {"5079": {"ok": False, "reason": "メーカーが名簿にありません"}}
+    rebind_waiting(d3, rows, ng3)
+    # 失敗した晩も、巡回は「待たせる」ぶんを控えへ入れる（run() と同じ道）
+    _pm.add(d3, "スマスロ ラグナドール", rows[0]["url"], "", "",
+            reason="メーカーが名簿にありません", source_machine_id="5079",
+            identity_source="dmm")
+    t("★★確認に失敗した晩に、控えが2件に増えない★★"
+      "（機種IDを先に結んでおくから同じ控えが見つかる）",
+      len(d3["items"]) == 1
+      and d3["items"][w3["queue_id"]]["state"] == _pm.AWAITING_DMM_ID)
+    # 翌晩、確かめられた
+    rebind_waiting(d3, rows, okc)
+    _pm.add(d3, "スマスロ ラグナドール", rows[0]["url"], "mizuho", "2026-11-02",
+            reason="DMMのカレンダーから", source_machine_id="5079",
+            identity_source="dmm")
+    t("★★翌晩に確かめられても、控えは1件のまま★★",
+      len(d3["items"]) == 1
+      and d3["items"][w3["queue_id"]]["state"] == _pm.READY)
+    # ★覚えた表示名は上書きしない★
+    d4 = _pm._empty()
+    w4 = _pm.add(d4, "スマスロ ラグナドール", "", "", "2026-11",
+                 state=_pm.AWAITING_DMM_ID)
+    rebind_waiting(d4, rows, okc)
+    rebind_waiting(d4, rows, {"5079": dict(okc["5079"], dmm_maker="メーシー")})
+    t("　覚えたメーカーの表示名は上書きしない（食い違いは残す）",
+      d4["items"][w4["queue_id"]].get("dmm_maker") == "ミズホ")
 
     # ★★候補は「まだ記事が無いもの」だけ★★（保存したカレンダーで試す）
     import dmm_calendar as _dc
