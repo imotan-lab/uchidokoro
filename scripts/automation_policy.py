@@ -175,22 +175,38 @@ def disagreements(policy: dict | None = None) -> list:
                       "／★形が変わっていないか確かめてください★")
             continue
         for cid, conf in got.items():
-            if not isinstance(conf, dict) or conf.get("status") == "OFF_TOS":
+            if not isinstance(conf, dict):
+                # ★形が違うものを黙って飛ばさない★（依頼217の指摘1）
+                ng.append(f"{fname} の {cid}: 設定の形が違います"
+                          "／★確かめられないので通しません★")
+                continue
+            if conf.get("status") == "OFF_TOS":
                 continue
             urls = [conf.get(k) for k in ("list_url", "base_url", "url")]
-            urls += [s.get("url") for s in (conf.get("surfaces") or [])
-                     if isinstance(s, dict)]
+            sf = conf.get("surfaces")
+            if sf is not None and not isinstance(sf, list):
+                ng.append(f"{fname} の {cid}: surfaces が配列ではありません")
+                continue
+            for s in (sf or []):
+                if not isinstance(s, dict):
+                    ng.append(f"{fname} の {cid}: surfaces の要素の形が違います")
+                    continue
+                urls.append(s.get("url"))
+            # ★同じホストでも道筋ごとに見る★（2026-08-16・依頼217の指摘1）
+            #   ホストで束ねていたので、DMMの `/machines` が通った時点で
+            #   **同じホストの `/makers/44` を見ずに飛ばして**いた
+            #   （＝許可していない道筋が0件に見えていた・実測で確認）。
             seen = set()
             for u in [x for x in urls if x]:
-                h = _host_of(u)
-                if h in seen:
-                    continue              # 同じホストは1回だけ知らせる
-                seen.add(h)
+                key = (_host_of(u), urllib.parse.urlsplit(str(u)).path or "/")
+                if key in seen:
+                    continue              # 同じホスト＋同じ道筋は1回だけ
+                seen.add(key)
                 # ★理由を問わず、通せない先が生きていたら知らせる★
                 ok, why = allows(u, purpose, policy=d)
                 if not ok:
                     ng.append(f"{fname} の {cid} へは通せません: "
-                              f"{h} / {why[:110]}")
+                              f"{key[0]}{key[1]} / {why[:100]}")
     return ng
 
 
@@ -248,6 +264,57 @@ def selftest() -> int:
 
     t("★★黒い名簿と食い違っていない★★（BLOCKED は必ず止まる）",
       not [x for x in disagreements(d) if "黒い名簿" in x])
+
+    # ★★同じホストでも道筋ごとに見る★★（2026-08-16・依頼217の指摘1）
+    #   ホストで束ねていたので、DMMの `/machines` が通った時点で
+    #   **同じホストの `/makers/44` を見ずに飛ばして**いた（実測で再現）。
+    import copy
+    import json as _json
+    import tempfile as _tf
+
+    def _with(dirs):
+        """試験用の巡回先の設定を、その場だけ差し替えて見る。"""
+        import safe_json as _sj2
+        real = _sj2.read_json
+        fd, p = _tf.mkstemp(suffix=".json")
+        os.close(fd)
+        with open(p, "w", encoding="utf-8") as f:
+            _json.dump({"schema_version": "x", "directories": dirs}, f,
+                       ensure_ascii=False)
+
+        def fake(path, **k):
+            if path.endswith("directory-catalogs.json"):
+                return real(p, **k)
+            if path.endswith("maker-catalogs.json"):
+                return {"catalogs": {}}
+            return real(path, **k)
+        _sj2.read_json = fake
+        try:
+            return disagreements(copy.deepcopy(d))
+        finally:
+            _sj2.read_json = real
+            os.unlink(p)
+
+    _same_host = {"x": {"status": "ACTIVE", "surfaces": [
+        {"url": "https://p-town.dmm.com/machines/1"},
+        {"url": "https://p-town.dmm.com/shops/1"}]}}
+    t("★★同じホストでも、許していない道筋は見逃さない★★"
+      "（ホストで束ねていたので0件に見えていた）",
+      any("/shops/1" in x for x in _with(_same_host)))
+    t("　surfaces の中の許した道筋は通る",
+      not [x for x in _with({"x": {"status": "ACTIVE", "surfaces": [
+          {"url": "https://p-town.dmm.com/machines/1"}]}}) if "shops" in x])
+    t("★★設定の形が違ったら黙って飛ばさない★★（fail-closed）",
+      bool(_with({"x": "これは辞書ではない"}))
+      and bool(_with({"x": {"status": "ACTIVE", "surfaces": "配列ではない"}}))
+      and bool(_with({"x": {"status": "ACTIVE", "surfaces": ["辞書ではない"]}})))
+    t("　OFF_TOS の巡回先は見ない（もう使わないので）",
+      not _with({"x": {"status": "OFF_TOS", "surfaces": [
+          {"url": "https://www.p-world.co.jp/x"}]}}))
+    t("★★規約の記録がGitに載っていること★★"
+      "（載っていないと、根拠が他のPCから読めない）",
+      all(os.path.isfile(os.path.join(BASE, c["evidence_ref"]))
+          for c in d["hosts"].values() if c.get("evidence_ref")))
 
     ng = sum(1 for _, o in results if not o)
     print()
