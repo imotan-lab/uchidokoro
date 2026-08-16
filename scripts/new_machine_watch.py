@@ -1542,9 +1542,10 @@ def selftest() -> int:
         import inspect
         results = []
 
-        def t(name, cond):
+        def t(name, cond, extra=""):
             results.append((name, bool(cond)))
-            print(("✅" if cond else "❌") + " " + name)
+            print(("✅" if cond else "❌") + " " + name
+                  + ((" ← " + str(extra)) if (extra and not cond) else ""))
 
         # ── ★同じページを取り直さない★（2026-08-05・取得回数の削減）
         import urllib.request as _ur
@@ -2255,6 +2256,132 @@ def selftest() -> int:
             t("★★転送も1回として数える★★（数えないと実数が分からない）",
               "budget_spend" in inspect.getsource(
                   _GuardedRedirect.redirect_request))
+            # ★★ここから4本は「挙動」で確かめる★★（依頼221・Codexの指摘）
+            #   ソースの文字を見る試験は、実装を替えても文字が残れば通る。
+            #   偽の通信口を差し込んで、**実際に何回外へ出たか**で見る。
+            _keep_open = OPENER.open
+            _keep_bud2 = dict(FETCH_BUDGET)
+            _keep_cnt = dict(FETCH_COUNT)
+            try:
+                _went = []          # 実際に外へ出た先
+
+                class _FakeResp:
+                    headers = _ur.HTTPMessage() if hasattr(_ur, "HTTPMessage") \
+                        else type("H", (), {"get_content_charset":
+                                            lambda self: "utf-8",
+                                            "get": lambda self, k,
+                                            d=None: d})()
+                    status = 200
+
+                    def read(self, n=-1):
+                        return b"<html><title>x</title></html>"
+
+                    def geturl(self):
+                        return _went[-1] if _went else ""
+
+                    def __enter__(self):
+                        return self
+
+                    def __exit__(self, *a):
+                        return False
+
+                def _fake_open(req, timeout=20):
+                    _went.append(getattr(req, "full_url", str(req)))
+                    return _FakeResp()
+
+                OPENER.open = _fake_open
+
+                # ①上限Nなら、実際に外へ出るのは正確にN件で止まる
+                budget_reset(3)
+                cache_clear()
+                budget_reset(3)
+                _went.clear()
+                _stopped = False
+                with fetching("machine_identity"):
+                    for _i in range(6):
+                        try:
+                            _get("https://p-town.dmm.com/machines/%d" % _i)
+                        except BudgetError:
+                            _stopped = True
+                            break
+                t("★★上限3回なら、実際に外へ出るのは3件で止まる★★"
+                  "（数えるだけでなく、本当に通信が止まることを見る）",
+                  len(_went) == 3 and _stopped
+                  and FETCH_BUDGET["used"] == 3)
+
+                # ②許していない転送先へは、行かずに止まる
+                budget_reset(0)
+                cache_clear()
+                budget_reset(0)
+                _went.clear()
+                _h = _GuardedRedirect()
+
+                class _Req:
+                    full_url = "https://p-town.dmm.com/machines/1"
+                    headers = {}
+                    unverifiable = False
+
+                    def get_full_url(self):
+                        return self.full_url
+
+                    def get_method(self):
+                        return "GET"
+
+                    def has_header(self, k):
+                        return False
+
+                _blocked_hop = False
+                with fetching("machine_identity"):
+                    try:
+                        _h.redirect_request(_Req(), None, 302, "", {},
+                                            "https://www.p-world.co.jp/x")
+                    except Exception:            # noqa: BLE001
+                        _blocked_hop = True
+                t("★★許していない転送先へは、行かずに止まる★★"
+                  "（転送の記録が1件も増えない）",
+                  _blocked_hop and _went == []
+                  and FETCH_BUDGET["used"] == 0)
+
+                # ③page_probe も同じ通信口・同じ数え方を通る
+                # ★page_probe が見ている実物を差し替える★
+                #   このファイルをスクリプトとして動かすと、こちらは
+                #   `__main__` になり、page_probe は**別のコピー**を読む。
+                #   自分の側だけ差し替えても届かないので、相手の側で見る。
+                import page_probe as _pp
+                _ppw = _pp._w
+                _keep_pp = _ppw.OPENER.open
+                _pgone = []
+                _ppw.OPENER.open = lambda req, timeout=20: (
+                    _pgone.append(getattr(req, "full_url", str(req))),
+                    _FakeResp())[1]
+                _ppw.budget_reset(0)
+                try:
+                    try:
+                        _pp._conditional_get(
+                            "https://p-town.dmm.com/machines/5049", "", "")
+                    except Exception:            # noqa: BLE001
+                        pass
+                    t("★★page_probe も同じ通信口を通り、回数に入る★★"
+                      "（ここだけ素の通信を使っていた）",
+                      len(_pgone) == 1 and _ppw.FETCH_BUDGET["used"] == 1,
+                      extra=f"外へ出た{len(_pgone)}件 / "
+                            f"数えた{_ppw.FETCH_BUDGET['used']}回")
+                finally:
+                    _ppw.OPENER.open = _keep_pp
+            finally:
+                OPENER.open = _keep_open
+                FETCH_BUDGET.clear()
+                FETCH_BUDGET.update(_keep_bud2)
+                FETCH_COUNT.clear()
+                FETCH_COUNT.update(_keep_cnt)
+                cache_clear()
+
+            # ④読み込んでも、プログラム全体の通信口は変わっていない
+            t("★★読み込んでも全体の通信口を変えない★★"
+              "（前は page_probe まで巻き込んでいた）",
+              _ur._opener is None
+              or not any(isinstance(h, _GuardedRedirect)
+                         for h in getattr(_ur._opener, "handlers", [])))
             t("★★何のために取りに行くかを名乗らなければ通さない★★"
               "（名乗らないと自動で材料扱いにしていた・依頼218）",
               _blocked_any("https://p-town.dmm.com/machines/5049", ""))
