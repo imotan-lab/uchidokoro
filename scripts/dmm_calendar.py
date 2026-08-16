@@ -33,6 +33,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime as _dt
 import os
 import re
 import sys
@@ -54,8 +55,13 @@ _ITEM = re.compile(
     r'<div class="iconara"><span class="(?P<cls>[^"]*)">(?P<kind>[^<]+)</span>',
     re.S)
 # ★カードの数を別の見方でも数える★（欠けに気づくため）
+#   ★IDの形を要求しない★（2026-08-16・Codex依頼212の指摘7）
+#   前は `href="/machines/\d+"` まで求めていたので、**リンクが壊れたカードは
+#   そもそも「カード」として数えられず、数が合ってしまい黙って消えて**いました。
+#   ここは「機種カードらしき箱の数」だけを数え、中身が読めるかは _ITEM に任せる。
+#   （素の `<li class="item">` は店舗一覧にも使われるので、見出しの形まで見る）
 _ITEM_HEAD = re.compile(r'<li class="item">\s*<div class="title">'
-                        r'<a class="link" href="/machines/\d+"')
+                        r'<a class="link" href="')
 # ★ページ自身が名乗る月★（「2026年09月の導入機種」）
 _MONTH_HEAD = re.compile(r"(\d{4})年(\d{2})月の導入機種")
 
@@ -65,8 +71,23 @@ class CalendarError(Exception):
 
 
 def _slot(cls: str, kind: str) -> bool:
-    """パチスロか（★見た目の印と文字の両方で見る★）。"""
-    return ("-slot" in str(cls or "")) or ("スロ" in str(kind or ""))
+    """パチスロか。★印と文字が食い違えば止める★
+
+    ★orで見てはいけない★（2026-08-16・Codex依頼212の指摘7／実測で確認）
+      前は「印が -slot」または「文字に『スロ』」のどちらかで真としていました。
+      これだと **印はパチンコなのに文字はパチスロ**（またはその逆）という
+      矛盾した表示をそのまま通してしまいます。
+      種別を取り違えるとパチンコの記事を作りかねないので、
+      **食い違ったら『読めなかった』ことにして止めます**（迷ったら止める）。
+    """
+    by_mark = "-slot" in str(cls or "")
+    by_text = "スロ" in str(kind or "")
+    if by_mark != by_text:
+        raise CalendarError(
+            f"パチスロ／パチンコの印と文字が食い違います"
+            f"（印=「{str(cls or '')[:30]}」 文字=「{str(kind or '')[:20]}」）"
+            "／★どちらか分からないので使いません★")
+    return by_mark
 
 
 def parse(html: str, year: int, month: int) -> list:
@@ -102,6 +123,14 @@ def parse(html: str, year: int, month: int) -> list:
         seen.add(mid)
         if not _slot(m.group("cls"), m.group("kind")):
             continue                       # ① パチンコは扱わない
+        # ★実在する日か確かめる★（2026-08-16・Codex依頼212の指摘3）
+        #   形だけ見ていると 2026-02-31 のような日も通ります（実測で確認）。
+        try:
+            _dt.date(int(m.group("y")), int(m.group("m")), int(m.group("d")))
+        except ValueError:
+            raise CalendarError(
+                f"導入日が実在しません: {m.group('y')}年{m.group('m')}月"
+                f"{m.group('d')}日（{m.group('name')[:24]}）")
         out.append({
             "id": mid,
             "url": "https://p-town.dmm.com/machines/%s" % mid,
@@ -197,6 +226,31 @@ def selftest() -> int:
         _dup = html[:_e] + html[_s:_e] + html[_e:]
         t("★★同じ機種IDが2回出たら止める★★（数え違いの元）",
           raises(lambda: parse(_dup, 2026, 9)))
+        # ★★リンクが壊れたカードが黙って消えないこと★★
+        #   （2026-08-16・Codex依頼212の指摘7）
+        #   前は数える側もIDの形を要求していたので、壊れたカードは
+        #   「無かったこと」になり、数が合って素通りしていた。
+        # ★試験はパチスロのカードを狙う★（パチンコのカードは読み飛ばすので、
+        #   そこを壊しても止まらない＝試験が試験になっていないことになる）
+        _slotm = next(m for m in _ITEM.finditer(html)
+                      if "-slot" in m.group("cls"))
+        _card = html[_slotm.start():_slotm.end()]
+
+        def _swap(old, new):
+            return html.replace(_card, _card.replace(old, new, 1), 1)
+
+        t("★★機種リンクが壊れたカードは『読めなかった』にする★★"
+          "（黙って1件消えないこと）",
+          raises(lambda: parse(_swap('href="/machines/',
+                                     'href="/machines/x'), 2026, 9)))
+        t("★★種別の印と文字が食い違えば止める★★（取り違えるとパチンコの記事を作る）",
+          raises(lambda: parse(_swap(">%s</span>" % _slotm.group("kind"),
+                                     ">パチンコ</span>"), 2026, 9)))
+        t("★★導入日が実在しない日なら止める★★（2026年02月31日）",
+          raises(lambda: parse(_swap(
+              "%s年%s月%s日" % (_slotm.group("y"), _slotm.group("m"),
+                             _slotm.group("d")),
+              "2026年02月31日"), 2026, 9)))
 
     t("★★規約で禁止された先には通信しない★★（P-WORLDのカレンダー）",
       _bh.is_blocked(

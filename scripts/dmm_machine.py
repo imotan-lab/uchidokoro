@@ -100,12 +100,25 @@ def parse(html: str, want_id: str = "") -> dict:
     if not html:
         raise MachineError("ページが空です")
     # ① ページが名乗るID（正規URL）
+    # ★canonicalが無ければ止める★（2026-08-16・Codex依頼212の指摘7）
+    #   前は「無ければ want_id を使う」形でしたが、それだと
+    #   **canonicalを消したページに別のIDを名乗らせて通せて**しまいます
+    #   （実測: canonical無し＋ID 9999 で素通りした）。名乗りが無いページは
+    #   同定に使いません（★迷ったら同定しない★）。
     m = re.search(r'<link[^>]+rel="canonical"[^>]+href="([^"]+)"', html)
-    said = ""
-    if m:
-        mm = _ID_IN_URL.search(m.group(1))
-        said = mm.group(1) if mm else ""
-    if want_id and said and said != str(want_id):
+    if not m:
+        raise MachineError("ページに正規URL（canonical）がありません"
+                           "／★どの機種のページか名乗っていないので使いません★")
+    said_url = m.group(1)
+    # ★別ホストのcanonicalは受け付けない★（IDだけ合っていても別サイト）
+    if not re.match(r"^(https?:)?//p-town\.dmm\.com/", said_url) and \
+            not said_url.startswith("/machines/"):
+        raise MachineError(f"正規URLがDMMのものではありません: {said_url[:70]}")
+    mm = _ID_IN_URL.search(said_url)
+    if not mm:
+        raise MachineError(f"正規URLから機種IDを読めません: {said_url[:70]}")
+    said = mm.group(1)
+    if want_id and said != str(want_id):
         raise MachineError(
             f"URLのIDと、ページが名乗るIDが違います（URL {want_id} / ページ {said}）")
     # 表から取る（★1つ目の表が基本情報★）
@@ -180,19 +193,43 @@ def _machine_name(html: str, title: str) -> str:
     return " ".join(str(title).split("|")[0].split())
 
 
-def name_matches(heading: str, calendar_name: str) -> bool:
+def name_matches(heading: str, calendar_name: str, my_tags=None) -> tuple:
     """★カレンダーの機種名が、機種ページの見出しと同じ機種を指すか★
 
-    見出しは飾りが付くので、**カレンダーの名前の芯が見出しの芯の頭にある**
-    ことを求める（前方一致）。芯は claim_identity の正規化を使う
-    （「L」「スマスロ」等の飾り・全半角・記号の差を吸収する）。
+    返すもの: (合格?, 理由)
+
+    ★前方一致にしてはいけない★（2026-08-16・Codex依頼212の指摘2／実測で確認）
+      見出しには飾りが付くので、前は「カレンダー名の芯が見出しの芯の頭にある」
+      で見ていました。しかしこれだと**シリーズ物が素通り**します。
+
+          カレンダー「スマスロ 獣王」 ← 見出し「スマスロ 獣王 王者の帰還 …」 → 通ってしまう
+          カレンダー「L北斗の拳」    ← 見出し「L北斗の拳 強敵 …」        → 通ってしまう
+
+      機種IDが一致していても消えません。**カレンダー側が短い名前で
+      別シリーズのIDに結んでいたら、同じIDのまま誤同定します**。
+
+    ★新しい場合分けを足さず、既にある完全一致器を使う★（当サイトの鉄則）
+      `claim_identity.check_title` は「一致した芯を真に含むより長い候補が
+      タイトルにあれば不合格」＝シリーズ違い・続編よけを既に持っています。
+      世代・種別（L／スマスロ／パチンコ）は `check_tags` が見ます。
     """
     import claim_identity as _ci
-    a = _ci.normalize_core(str(calendar_name or ""))
-    b = _ci.normalize_core(str(heading or ""))
-    if len(a) < 2 or not b:
-        return False
-    return b.startswith(a)
+    core = _ci.normalize_core(str(calendar_name or ""))
+    head = " ".join(str(heading or "").split())
+    if len(core) < 2:
+        return False, "カレンダーの機種名が短すぎて同定に使えません"
+    if not head:
+        return False, "機種ページの見出しがありません"
+    ok, why = _ci.check_title(head, [core])
+    if not ok:
+        return False, why
+    # 世代・種別（L／スマスロ／パチンコ）の食い違いを見る。
+    # ★自機種のタグはカレンダーの機種名から読む★（そちらが飾りの無い正）
+    tags = my_tags if my_tags is not None else _ci.detect_tags(calendar_name)
+    ok2, why2 = _ci.check_tags(head, tags, [core])
+    if not ok2:
+        return False, why2
+    return True, "見出しと一致"
 
 
 def fetch(machine_id: str, get=None) -> dict:
@@ -202,6 +239,19 @@ def fetch(machine_id: str, get=None) -> dict:
         html = (get or _w._get)(u)
     except Exception as e:                 # noqa: BLE001
         raise MachineError(f"取得できません（{u}）: {str(e)[:90]}")
+    # ★転送された先も確かめる★（2026-08-16・Codex依頼212の指摘7）
+    #   要求したIDのURLが別の機種へ転送されていたら、中身は別機種です。
+    #   canonicalと二重に見ることで、片方だけ細工されても止まります。
+    final = (getattr(_w, "LAST_FINAL_URL", {}) or {}).get("url")
+    if final:
+        _bh.check(final)                   # 転送先が禁止ホストでも止める
+        mf = _ID_IN_URL.search(final)
+        if not mf:
+            raise MachineError(f"転送先が機種ページではありません: {final[:70]}")
+        if mf.group(1) != str(machine_id):
+            raise MachineError(
+                f"別の機種へ転送されました（要求 {machine_id} / 転送先 "
+                f"{mf.group(1)}）")
     return parse(html, str(machine_id))
 
 
@@ -241,15 +291,45 @@ def selftest() -> int:
           g["maker"] == "ユニバーサルブロス")
         t("　見出しを取れる（★機種名の正はカレンダー側★）",
           "タコスロ" in g["heading"])
+        ok_ = lambda head, cal: name_matches(head, cal)[0]   # noqa: E731
         t("★★カレンダーの名前と機種ページの見出しを照合できる★★",
-          name_matches(g["heading"], "スマスロ タコスロ")
-          and not name_matches(g["heading"], "スマスロ北斗の拳"))
+          ok_(g["heading"], "スマスロ タコスロ")
+          and not ok_(g["heading"], "スマスロ北斗の拳"))
         t("　飾りの違い（L／スマスロ／全半角）は吸収する",
-          name_matches("L 転生王女と天才令嬢の魔法革命 （新台スマスロ）パチスロ｜天井",
-                       "L転生王女と天才令嬢の魔法革命"))
+          ok_("L 転生王女と天才令嬢の魔法革命 （新台スマスロ）パチスロ｜天井",
+              "L転生王女と天才令嬢の魔法革命"))
+        # ★★シリーズ違いを通さない★★（2026-08-16・Codex依頼212の指摘2）
+        #   前は前方一致だったので「スマスロ 獣王」が
+        #   「スマスロ 獣王 王者の帰還」のページに当たっていた（実測）。
+        #   機種IDが合っていても、カレンダー側が短い名前で別シリーズの
+        #   IDに結んでいたら誤同定するので、名前でも止める。
+        t("★★シリーズ違い・続編のページを通さない★★"
+          "（獣王 ← 獣王 王者の帰還／北斗の拳 ← 北斗の拳 強敵）",
+          not ok_("スマスロ 獣王 王者の帰還 （新台スマスロ）パチスロ｜設定判別",
+                  "スマスロ 獣王")
+          and not ok_("L北斗の拳 強敵 （新台スマスロ）パチスロ｜天井",
+                      "L北斗の拳"))
+        t("　（対照）同じ機種なら飾りが付いていても通る",
+          ok_("スマスロ ラグナドール （新台スマスロ）パチスロ｜設定判別・天井",
+              "スマスロ ラグナドール"))
+        t("★★パチンコ版のページを通さない★★",
+          not ok_("Pモグモグ風林火山 （新台パチンコ）パチンコ｜ボーダー",
+                  "モグモグ風林火山 大海戦の巻"))
+        t("　短すぎる名前は同定に使わない", not ok_(g["heading"], "L"))
         t("　導入予定かどうかも分かる", g["planned"] is True)
         t("★★URLのIDとページが名乗るIDが違えば止める★★",
           raises(lambda: parse(h, "9999"), "違います"))
+        # ★★名乗りが無いページを通さない★★（2026-08-16・Codex依頼212の指摘7）
+        #   前は canonical が無ければ要求したIDを信じていたので、
+        #   canonicalを消したページに別IDを名乗らせて通せた（実測）。
+        _noc = re.sub(r'<link[^>]+rel="canonical"[^>]*>', "", h)
+        t("★★正規URL（canonical）が無ければ止める★★"
+          "（消せば別IDで通せてしまうため）",
+          raises(lambda: parse(_noc, "9999"), "canonical"))
+        _other = re.sub(r'(<link[^>]+rel="canonical"[^>]+href=")[^"]+',
+                        r"\1https://example.com/machines/5049", h)
+        t("★★別のサイトの正規URLは受け付けない★★（IDだけ合っていても別物）",
+          raises(lambda: parse(_other, "5049"), "DMM"))
         # ★★型式名は「まだ無い」ことがある（2026-08-16）★★
         #   未導入の新台は型式名が載らない。必須にすると新台を扱えない。
         _nocode = parse(h.replace("型式名", "型式めい"), "5049")
