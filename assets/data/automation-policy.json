@@ -52,28 +52,36 @@
    "status": "BLOCKED"
   },
   "chonborista.com": {
-   "purpose": [],
-   "path_prefixes": [],
-   "method": "",
-   "terms_url": "",
-   "checked_at": "",
-   "checked_by": "",
-   "evidence_ref": "",
-   "recheck_by": "",
-   "why": "★規約をまだ確かめていません★（2026-08-16）。ちょんぼりすたは記事の材料として毎晩読んでいた先ですが、P-WORLD・一撃と同じく規約を読まないまま巡回していました。確かめるまで通しません（通信は機械が止めます）。",
-   "status": "PENDING"
+   "purpose": [
+    "claim_material"
+   ],
+   "path_prefixes": [
+    "/slot"
+   ],
+   "method": "http_get",
+   "terms_url": "https://chonborista.com/privacy/",
+   "checked_at": "2026-08-16",
+   "checked_by": "運営者",
+   "evidence_ref": "_design/tos_review_2026-08-16.md",
+   "recheck_by": "2027-02-16",
+   "why": "★利用規約が存在しない★（フッターは運営者情報・プライバシーポリシー・サイトマップ・お問い合わせのみ）。プライバシーポリシーにもプログラム取得・転載・複製の記載は無し。robots.txt は /wp-admin/ のみ禁止で記事の領域は許可。取得は1機種あたり数ページ・夜1回。★規約が新設されたら読み直す★",
+   "status": "APPROVED"
   },
   "nana-press.com": {
-   "purpose": [],
-   "path_prefixes": [],
-   "method": "",
-   "terms_url": "",
-   "checked_at": "",
-   "checked_by": "",
-   "evidence_ref": "",
-   "recheck_by": "",
-   "why": "★規約をまだ確かめていません★（2026-08-16）。なな徹は記事の材料として毎晩読んでいた先ですが、P-WORLD・一撃と同じく規約を読まないまま巡回していました。確かめるまで通しません（通信は機械が止めます）。",
-   "status": "PENDING"
+   "purpose": [
+    "claim_material"
+   ],
+   "path_prefixes": [
+    "/kaiseki"
+   ],
+   "method": "http_get",
+   "terms_url": "https://nana-press.com/terms",
+   "checked_at": "2026-08-16",
+   "checked_by": "運営者",
+   "evidence_ref": "_design/tos_review_2026-08-16.md",
+   "recheck_by": "2027-02-16",
+   "why": "★プログラム・ボット・スクレイピングの禁止条項は無い★（P-WORLD・一撃との決定的な違い）。第11条1項(4)「当社のサーバーに過度の負担を及ぼす行為」は禁じるが、1機種あたり数ページ・夜1回なので当たらない。★第7条1項(1)「本サービスを通じて入手したコンテンツの複製」に注意★＝証跡として原文を保存するのは形式上これに当たる。柱書きが禁じるのは権利侵害となる複製で、照合のための保存は情報解析の範囲という読み方もできるが法律の判断。運営者の判断でまず承認し、証跡の持ち方は別途見直す。",
+   "status": "APPROVED"
   }
  }
 }
