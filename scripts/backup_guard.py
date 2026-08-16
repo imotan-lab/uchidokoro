@@ -62,6 +62,11 @@ ALLOW_BASENAMES = {
     #   AIが探して機械が確かめた結果。失うと同じ調べ直しをやり直すことになる。
     #   中身は公開サイトのURLと判断理由だけで、認証情報を含まない。
     "uchidokoro_machine_sources.json",
+    # ★見つけたが、まだ記事にできていない新台の控え★（2026-08-16・台帳#376）
+    #   ★ここが失われると「見つけたのに記事にしていない機種」が丸ごと消える★
+    #   （どの機種を見たかの記憶がなくなり、二度と出てこない）。
+    #   中身は機種名・公開ページのURL・待った日数だけで、認証情報を含まない。
+    "uchidokoro_add_machine_pending.json",
     # 自動タスクの手順書（{taskId}_SKILL.md の形で保存する）
     "uchidokoro-fact-check_SKILL.md",
     "SKILL.md",

@@ -1,30 +1,30 @@
-"""pending_machines.py — 見つけたが記事にできなかった新台を覚えておく。
+# -*- coding: utf-8 -*-
+"""pending_machines.py — 見つけたが、まだ記事にできていない新台の控え。
 
-★なぜ要るか（2026-07-31・実データで見つけた）★
-  メーカー公式で新台を見つけても、名鑑サイトにはまだページが無いことがある。
-  実例: 平和「L青春ブタ野郎はバニーガール先輩の夢を見ない」（2026年9月登場）
-        → 名鑑2件のうち1件にしか載っておらず、材料を集められず止まった。
+★何のためにあるか★
+  新台を見つけても、材料がそろわず記事にできない日がある。そこで
+  「見つけた事実」だけを覚えておき、翌日以降にやり直す。
+  ★数値や記事は持たない★（持つと古い値が生き残る）。
 
-  ところが見つけたURLは「既知」として記録されるので、
-  **翌日はもう『新台』に出てこない＝二度と処理されない**。
-  早く見つけた機種ほど取りこぼすことになり、鮮度を上げる目的と正反対だった。
+★v2：主キーをURLから採番したIDへ変えた★（2026-08-16・台帳#376／Codex依頼212）
+  規約でP-WORLDからDMMへ移したとき、**同じ機種のURLが変わりました**。
+  URLを主キーにしていると、URLが変わった瞬間に
+  「別の機種」として二重に入るか、控えが迷子になります。
 
-  そこで「見つけたが記事にできていない機種」をここに残し、毎日やり直す。
+  そこで**一度だけ採番したID（queue_id）を主キー**にし、URLは中身の
+  ひとつに格下げしました。移行前のURLは `legacy_url` に履歴として残しますが、
+  ★取りに行く先には使いません★（そもそも blocked_hosts が通信を止めます）。
 
-★覚えるのは事実だけ★
-  機種名・公式URL・メーカー・登場年月・いつ見つけたか・何回試したか・直近の理由。
-  数値や記事の中身は持たない（作り直すたびに出典から採り直す）。
-
-★あきらめる時は必ず記録に残す★
-  黙って消すと、誰も気づかないまま機種が抜ける。
+★状態★
+  READY             … 機種ページが分かっている（DMMの機種ID付き）
+  AWAITING_DMM_ID   … 機種は分かっているが、DMMのカレンダーにまだ載っていない
+                      （P-WORLD時代に見つけたもの。★消さずに毎晩見に行く★）
 
 使い方:
     python scripts/pending_machines.py list
-    python scripts/pending_machines.py add --name ... --url ... --maker ... --release ...
-    python scripts/pending_machines.py done --url ...
     python scripts/pending_machines.py --selftest
+    python scripts/pending_machines.py migrate --apply   # v1 → v2
 """
-
 from __future__ import annotations
 
 import argparse
@@ -40,10 +40,16 @@ import safe_json as _sj                # noqa: E402
 
 STORE = os.path.join(os.path.expanduser("~"), "Documents", "uchidokoro",
                      "add_machine_pending.json")
-SCHEMA = "add-machine-pending/v1"
+SCHEMA = "add-machine-pending/v2"
+SCHEMA_V1 = "add-machine-pending/v1"
 
 # ★これ以上待っても載らないなら、人に見てもらう★
 GIVE_UP_DAYS = 60
+
+# 状態（★増やすときはここだけを直す★）
+READY = "READY"
+AWAITING_DMM_ID = "AWAITING_DMM_ID"
+STATES = (READY, AWAITING_DMM_ID)
 
 
 class PendingError(RuntimeError):
@@ -54,15 +60,32 @@ def _today() -> str:
     return date.today().isoformat()
 
 
+def _empty() -> dict:
+    return {"schema": SCHEMA, "next_id": 1, "items": {}}
+
+
 def load() -> dict:
     """待ち行列を読む。★壊れていたら止まる（黙って空にしない）★"""
     if not os.path.exists(STORE):
-        return {"schema": SCHEMA, "items": {}}
+        return _empty()
     got = _sj.read_json(STORE, expect=dict)
+    if got.get("schema") == SCHEMA_V1:
+        raise PendingError(
+            "待ち行列がまだ古い形（v1）です／"
+            "★python scripts/pending_machines.py migrate --apply で移してください★")
     if got.get("schema") != SCHEMA:
         raise PendingError(f"待ち行列の形が違います: {got.get('schema')!r}")
     if not isinstance(got.get("items"), dict):
         raise PendingError("待ち行列の中身が壊れています")
+    if not isinstance(got.get("next_id"), int) or got["next_id"] < 1:
+        raise PendingError("待ち行列の採番が壊れています")
+    for qid, it in got["items"].items():
+        if not isinstance(it, dict):
+            raise PendingError(f"待ち行列の項目が壊れています: {qid}")
+        if it.get("queue_id") != qid:
+            raise PendingError(f"待ち行列の鍵と中身が食い違います: {qid}")
+        if it.get("state") not in STATES:
+            raise PendingError(f"知らない状態です（{qid}）: {it.get('state')!r}")
     return got
 
 
@@ -75,28 +98,82 @@ def save(data: dict) -> None:
     os.replace(tmp, STORE)              # ★書き換え中に壊れないように★
 
 
+def _next_qid(data: dict) -> str:
+    """★一度だけ採番する★（使い回さない・空きを詰めない）"""
+    n = int(data.get("next_id", 1))
+    while ("q_%04d" % n) in data["items"]:
+        n += 1                          # 念のため（採番が巻き戻っていた場合）
+    data["next_id"] = n + 1
+    return "q_%04d" % n
+
+
+def find_by_machine_id(data: dict, source_machine_id: str) -> dict | None:
+    """DMMの機種IDで探す（★同じ機種を二重に持たないため★）。"""
+    mid = str(source_machine_id or "").strip()
+    if not mid:
+        return None
+    for it in data["items"].values():
+        if str(it.get("source_machine_id") or "") == mid:
+            return it
+    return None
+
+
+def find_by_core(data: dict, name: str):
+    """★機種名の芯が完全一致するもの★（DMMにまだ載っていない控えとの結び付け用）
+
+    ★前方一致や似ている判定はしない★（当サイトの鉄則）。
+    完全一致で決まらないものは、二重に持ったまま人・2AIに見てもらう。
+    取りこぼすより二重のほうが安全（取りこぼすと機種が消える）。
+    """
+    import claim_identity as _ci
+    core = _ci.normalize_core(str(name or ""))
+    if len(core) < 2:
+        return []
+    return [it for it in data["items"].values()
+            if _ci.normalize_core(str(it.get("name") or "")) == core]
+
+
 def add(data: dict, name: str, url: str, maker: str, release: str,
-        reason: str = "", extra: dict | None = None) -> dict:
+        reason: str = "", extra: dict | None = None,
+        source_machine_id: str = "", identity_source: str = "",
+        state: str = READY) -> dict:
     """待ち行列に入れる（既にあれば試した回数と理由を更新する）。
 
+    ★同じ機種かどうかは「DMMの機種ID」で見る★（2026-08-16）
+      URLは変わりうるが、機種IDは機種ごとに1つ。
+      機種IDが分からないとき（移行前の控え）はURLで探す。
+
     ★extra＝あとで引き直せない手掛かり★（2026-08-13・台帳#335）
-      P-WORLDのメーカー表示名など、カレンダーから消えると
-      **待ち行列だけでは二度と分からなくなる**ものを持たせる。
-      ★空では上書きしない★（一度覚えたものを消さない）。
+      カレンダーから消えると待ち行列だけでは二度と分からなくなるもの。
+      ★空では上書きしない／違う値でも上書きしない★（食い違いは残す）。
     """
     # ★名前が無くても覚える★（2026-07-31・Codex17回目）
-    #   公式ページを読めなかったURLは名前が取れない。
-    #   そこで拒否すると、**そのURLは既知になったまま二度と出てこない**＝機種が消える。
-    #   名前は翌日もう一度公式を見て埋める（記事にできるかは別の所で見る）。
-    if not url:
-        raise PendingError("公式URLは必ず要ります")
-    it = data["items"].get(url)
+    #   ページを読めなかったURLは名前が取れない。そこで拒否すると、
+    #   **そのURLは既知になったまま二度と出てこない**＝機種が消える。
+    if state not in STATES:
+        raise PendingError(f"知らない状態です: {state!r}")
+    if state == READY and not url:
+        raise PendingError("機種ページのURLは必ず要ります")
+    if state == AWAITING_DMM_ID and not str(name or "").strip():
+        raise PendingError("機種ページが無いときは、せめて名前が要ります")
+    it = find_by_machine_id(data, source_machine_id)
+    if it is None and url:
+        it = next((x for x in data["items"].values()
+                   if str(x.get("identity_url") or "") == url), None)
     if it:
         it["tries"] = int(it.get("tries", 0)) + 1
         it["last_try"] = _today()
         it["last_reason"] = reason[:300]
         # ★名前や登場年月が変わることがある（公式の書き換え）★
         it["name"], it["maker"], it["release"] = name, maker, release
+        if url:
+            it["identity_url"] = url
+        if source_machine_id:
+            it["source_machine_id"] = str(source_machine_id)
+        if identity_source:
+            it["identity_source"] = identity_source
+        if state != it.get("state") and state == READY:
+            it["state"] = READY          # 機種ページが見つかった＝待ちが解けた
         for k, v in (extra or {}).items():
             if not v:
                 continue                  # ★空では上書きしない★
@@ -104,25 +181,37 @@ def add(data: dict, name: str, url: str, maker: str, release: str,
             if old and old != v:
                 # ★一度覚えたものは変えない★（2026-08-13・依頼170のP1）
                 #   ここを上書きにすると、翌日のカレンダーが違う表示名を
-                #   返しただけで**公開直前の照合がその値に合わせて緩む**
-                #   （同じ系列の別名を見分ける守りが消える）。
-                #   食い違いは残しておき、判断は人・2AIに回す。
+                #   返しただけで**公開直前の照合がその値に合わせて緩む**。
                 it.setdefault(k + "_conflict", []).append(v)
                 it[k + "_conflict"] = sorted(set(it[k + "_conflict"]))[:5]
                 continue
             it[k] = v
-    else:
-        data["items"][url] = {
-            "name": name, "url": url, "maker": maker, "release": release,
-            "first_seen": _today(), "last_try": _today(), "tries": 1,
-            "last_reason": reason[:300],
-            **{k: v for k, v in (extra or {}).items() if v}}
-    return data["items"][url]
+        return it
+    qid = _next_qid(data)
+    data["items"][qid] = {
+        "queue_id": qid, "state": state,
+        "name": name, "identity_url": url, "maker": maker, "release": release,
+        "identity_source": identity_source or ("dmm" if url else ""),
+        "source_machine_id": str(source_machine_id or ""),
+        "first_seen": _today(), "last_try": _today(), "tries": 1,
+        "last_reason": reason[:300],
+        **{k: v for k, v in (extra or {}).items() if v}}
+    return data["items"][qid]
 
 
-def done(data: dict, url: str) -> bool:
+def fetch_url(item: dict) -> str:
+    """★取りに行ってよいURL★（移行前のURLは絶対に返さない）
+
+    `legacy_url` は履歴として残すが、再取得には使わない。
+    （そもそも blocked_hosts.py が通信を止めるが、
+      **そこへ持って行かない**のがここの役目）
+    """
+    return str((item or {}).get("identity_url") or "")
+
+
+def done(data: dict, queue_id: str) -> bool:
     """記事にできたので外す。"""
-    return data["items"].pop(url, None) is not None
+    return data["items"].pop(str(queue_id or ""), None) is not None
 
 
 def waited_days(item: dict, today: str = "") -> int:
@@ -144,22 +233,22 @@ def give_up(data: dict, today: str = "") -> list:
     """
     today = today or _today()
     out = []
-    for url, it in list(data["items"].items()):
+    for qid, it in list(data["items"].items()):
         if waited_days(it, today) < GIVE_UP_DAYS:
             continue
         if int(it.get("runs", 0)) < 1:
             continue                      # ★まだ一度も試していない★
-        out.append(data["items"].pop(url))
+        out.append(data["items"].pop(qid))
     return out
 
 
-def mark_tried(data: dict, url: str) -> None:
+def mark_tried(data: dict, queue_id: str) -> None:
     """★実際に記事づくりを試したことを残す★（2026-07-31・Codex21回目）
 
     これが無いと、詰まっている先頭の数件だけを毎晩見続けて、
     **6件目以降は一度も試されないまま60日で打ち切られる**。
     """
-    it = data["items"].get(url)
+    it = data["items"].get(str(queue_id or ""))
     if not it:
         return
     it["last_try"] = _today()
@@ -169,7 +258,43 @@ def mark_tried(data: dict, url: str) -> None:
 def due(data: dict) -> list:
     """今日やり直すもの。★古いものから★（先に見つけたものを先に）"""
     return sorted(data["items"].values(),
-                  key=lambda x: (x.get("first_seen") or "", x.get("url") or ""))
+                  key=lambda x: (x.get("first_seen") or "",
+                                 x.get("queue_id") or ""))
+
+
+# ----------------------------------------------------------------- migrate
+
+def migrate_v1(old: dict) -> dict:
+    """★v1（URLが鍵）をv2（採番したIDが鍵）へ移す★
+
+    移行前のURLは `legacy_url` に残す（履歴・取りに行く先には使わない）。
+    P-WORLDの控えは機種ページを取りに行けないので AWAITING_DMM_ID。
+    """
+    import blocked_hosts as _bh
+    out = _empty()
+    for url, it in sorted((old.get("items") or {}).items()):
+        it = dict(it)
+        it.pop("url", None)
+        blocked = _bh.is_blocked(url)
+        qid = _next_qid(out)
+        row = {"queue_id": qid,
+               "state": AWAITING_DMM_ID if blocked else READY,
+               "name": it.pop("name", ""), "maker": it.pop("maker", ""),
+               "release": it.pop("release", ""),
+               "identity_url": "" if blocked else url,
+               "identity_source": "" if blocked else "dmm",
+               "source_machine_id": "",
+               "first_seen": it.pop("first_seen", _today()),
+               "last_try": it.pop("last_try", _today()),
+               "tries": int(it.pop("tries", 1)),
+               "last_reason": it.pop("last_reason", "")}
+        if blocked:
+            # ★履歴として残すが、取りに行く先には使わない★
+            row["legacy_url"] = url
+            row["legacy_source"] = "p-world"
+        row.update(it)                    # 覚えた手掛かり（pworld_maker 等）
+        out["items"][qid] = row
+    return out
 
 
 # ---------------------------------------------------------------- selftest
@@ -182,85 +307,141 @@ def selftest() -> int:
         results.append((name, bool(cond)))
         print(("✅" if cond else "❌") + " " + name)
 
-    d = {"schema": SCHEMA, "items": {}}
-    add(d, "テスト機", "https://m.example/x/", "m", "2026-09", "名鑑にまだ無い")
+    DMM = "https://p-town.dmm.com/machines/"
+    d = _empty()
+    a1 = add(d, "テスト機", DMM + "5049", "m", "2026-09", "名鑑にまだ無い",
+             source_machine_id="5049")
     t("★見つけた機種を覚える★", len(d["items"]) == 1)
+    t("　主キーは採番したID（URLではない）",
+      a1["queue_id"] == "q_0001" and d["items"]["q_0001"] is a1)
     t("　覚えるのは事実だけ（数値や記事は持たない）",
-      set(d["items"]["https://m.example/x/"]) == {
-          "name", "url", "maker", "release", "first_seen", "last_try",
-          "tries", "last_reason"})
-    add(d, "テスト機", "https://m.example/x/", "m", "2026-09", "まだ無い")
+      set(a1) == {"queue_id", "state", "name", "identity_url", "maker",
+                  "release", "identity_source", "source_machine_id",
+                  "first_seen", "last_try", "tries", "last_reason"})
+    add(d, "テスト機", DMM + "5049", "m", "2026-09", "まだ無い",
+        source_machine_id="5049")
     t("★★同じ機種を二重に持たない（試した回数が増える）★★",
-      len(d["items"]) == 1 and d["items"]["https://m.example/x/"]["tries"] == 2)
-    add(d, "テスト機（改名）", "https://m.example/x/", "m", "2026-10")
+      len(d["items"]) == 1 and d["items"]["q_0001"]["tries"] == 2)
+    # ★★URLが変わっても同じ機種と分かる★★（v2の要）
+    add(d, "テスト機", DMM + "5049?ref=x", "m", "2026-09", "URLが変わった",
+        source_machine_id="5049")
+    t("★★URLが変わっても同じ機種として扱う★★（機種IDで見るから）",
+      len(d["items"]) == 1 and d["items"]["q_0001"]["tries"] == 3)
+    add(d, "テスト機（改名）", DMM + "5049", "m", "2026-10",
+        source_machine_id="5049")
     t("　公式が名前や登場月を書き換えたら追従する",
-      d["items"]["https://m.example/x/"]["name"] == "テスト機（改名）"
-      and d["items"]["https://m.example/x/"]["release"] == "2026-10")
+      d["items"]["q_0001"]["name"] == "テスト機（改名）"
+      and d["items"]["q_0001"]["release"] == "2026-10")
 
-    t("★記事にできたら外す★", done(d, "https://m.example/x/") and not d["items"])
-    t("　無いものを外そうとしても壊れない", done(d, "https://m.example/none/") is False)
+    t("★記事にできたら外す★", done(d, "q_0001") and not d["items"])
+    t("　無いものを外そうとしても壊れない", done(d, "q_9999") is False)
+    t("★★採番は使い回さない★★（消したIDを次の機種に当てない）",
+      add(d, "次の機種", DMM + "5050", "m", "2026-09",
+          source_machine_id="5050")["queue_id"] == "q_0002")
 
-    d2 = {"schema": SCHEMA, "items": {}}
-    add(d2, "古い機種", "https://m.example/old/", "m", "2026-01")
-    d2["items"]["https://m.example/old/"]["first_seen"] = "2026-01-01"
-    mark_tried(d2, "https://m.example/old/")      # ★一度は試している★
-    add(d2, "新しい機種", "https://m.example/new/", "m", "2026-09")
+    d2 = _empty()
+    add(d2, "古い機種", DMM + "1", "m", "2026-01", source_machine_id="1")
+    d2["items"]["q_0001"]["first_seen"] = "2026-01-01"
+    mark_tried(d2, "q_0001")                       # ★一度は試している★
+    add(d2, "新しい機種", DMM + "2", "m", "2026-09", source_machine_id="2")
     t("★★待ちすぎたものだけ取り出す★★（黙って消さない・台帳に残すため）",
       [x["name"] for x in give_up(d2, "2026-07-31")] == ["古い機種"]
       and len(d2["items"]) == 1)
-    t("　まだ待てるものは残る", "https://m.example/new/" in d2["items"])
+    t("　まだ待てるものは残る", "q_0002" in d2["items"])
 
-    d3 = {"schema": SCHEMA, "items": {}}
-    add(d3, "あと", "https://m.example/b/", "m", "2026-09")
-    d3["items"]["https://m.example/b/"]["first_seen"] = "2026-07-30"
-    add(d3, "さき", "https://m.example/a/", "m", "2026-09")
-    d3["items"]["https://m.example/a/"]["first_seen"] = "2026-07-01"
-    d4 = {"schema": SCHEMA, "items": {}}
-    add(d4, "一度も試していない機種", "https://m.example/never/", "m", "2026-01")
-    d4["items"]["https://m.example/never/"]["first_seen"] = "2026-01-01"
+    d3 = _empty()
+    add(d3, "あと", DMM + "8", "m", "2026-09", source_machine_id="8")
+    d3["items"]["q_0001"]["first_seen"] = "2026-07-30"
+    add(d3, "さき", DMM + "9", "m", "2026-09", source_machine_id="9")
+    d3["items"]["q_0002"]["first_seen"] = "2026-07-01"
+    t("★先に見つけたものから試す★", [x["name"] for x in due(d3)] == ["さき", "あと"])
+
+    d4 = _empty()
+    add(d4, "一度も試していない機種", DMM + "7", "m", "2026-01",
+        source_machine_id="7")
+    d4["items"]["q_0001"]["first_seen"] = "2026-01-01"
     t("★★一度も記事づくりを試していないものは打ち切らない★★"
       "（先頭が詰まると後ろは一度も試されない・Codex21回目）",
-      give_up(d4) == [] and "https://m.example/never/" in d4["items"])
-    mark_tried(d4, "https://m.example/never/")
-    t("　一度でも試したものは、待ちすぎたら取り出す",
-      len(give_up(d4)) == 1)
-
-    t("★先に見つけたものから試す★", [x["name"] for x in due(d3)] == ["さき", "あと"])
+      give_up(d4) == [] and "q_0001" in d4["items"])
+    mark_tried(d4, "q_0001")
+    t("　一度でも試したものは、待ちすぎたら取り出す", len(give_up(d4)) == 1)
 
     t("★★名前が無くても覚える★★"
       "（読めなかったURLを拒否すると、既知のまま二度と出てこない・Codex17回目）",
-      add({"items": {}}, "", "https://x/", "m", "2026-09")["url"] == "https://x/")
-    t("　公式URLだけは必ず要る",
-      _raises(lambda: add({"items": {}}, "X", "", "m", "2026-09")))
+      add(_empty(), "", DMM + "3", "m", "2026-09")["identity_url"] == DMM + "3")
+    t("　機種ページのURLは必ず要る",
+      _raises(lambda: add(_empty(), "X", "", "m", "2026-09")))
     t("★★形が違う待ち行列は読まずに止まる★★（黙って空にしない）",
       _raises(lambda: _check_schema({"schema": "べつのもの", "items": {}})))
     t("　中身が壊れていても止まる",
       _raises(lambda: _check_schema({"schema": SCHEMA, "items": []})))
 
     # ★あとで引き直せない手掛かりを覚える★（2026-08-13・台帳#335）
-    #   P-WORLDのメーカー表示名は、カレンダーから消えると
-    #   待ち行列だけでは二度と分からない。
-    _d = {"items": {}}
-    add(_d, "試験機", "https://x/1", "", "", reason="確かめられません",
+    _d = _empty()
+    add(_d, "試験機", DMM + "4", "", "", reason="確かめられません",
+        source_machine_id="4",
         extra={"pworld_maker": "ミズホ", "pworld_id": "10546"})
     t("★★覚えた手掛かりが残る★★（メーカーを引き直せる）",
-      _d["items"]["https://x/1"].get("pworld_maker") == "ミズホ"
-      and _d["items"]["https://x/1"].get("pworld_id") == "10546")
-    add(_d, "試験機", "https://x/1", "universal", "2026-11",
-        reason="2回目", extra={"pworld_maker": "", "pworld_id": ""})
+      _d["items"]["q_0001"].get("pworld_maker") == "ミズホ"
+      and _d["items"]["q_0001"].get("pworld_id") == "10546")
+    add(_d, "試験機", DMM + "4", "universal", "2026-11", reason="2回目",
+        source_machine_id="4", extra={"pworld_maker": "", "pworld_id": ""})
     t("★★空では上書きしない★★（一度覚えたものを消さない）",
-      _d["items"]["https://x/1"].get("pworld_maker") == "ミズホ")
-    # ★違う値でも上書きしない★（2026-08-13・依頼170のP1）
-    #   翌日のカレンダーが別の表示名を返しただけで、
-    #   公開直前の照合がその値に合わせて緩むのを防ぐ。
-    add(_d, "試験機", "https://x/1", "universal", "2026-11",
-        reason="3回目", extra={"pworld_maker": "メーシー"})
+      _d["items"]["q_0001"].get("pworld_maker") == "ミズホ")
+    add(_d, "試験機", DMM + "4", "universal", "2026-11", reason="3回目",
+        source_machine_id="4", extra={"pworld_maker": "メーシー"})
     t("★★違う値が来ても上書きしない★★（守りが緩まない）",
-      _d["items"]["https://x/1"].get("pworld_maker") == "ミズホ")
+      _d["items"]["q_0001"].get("pworld_maker") == "ミズホ")
     t("　食い違いは残す（あとで人・2AIが見る）",
-      _d["items"]["https://x/1"].get("pworld_maker_conflict") == ["メーシー"])
-    t("　手掛かりを渡さなくても今までどおり動く",
-      add(_d, "別機", "https://x/2", "m", "2026-12").get("name") == "別機")
+      _d["items"]["q_0001"].get("pworld_maker_conflict") == ["メーシー"])
+
+    # ★★DMMにまだ載っていない機種を、消さずに待たせる★★（2026-08-16）
+    _w = _empty()
+    _it = add(_w, "L聖闘士星矢 黄金十二宮", "", "", "2026-11-02",
+              reason="DMMのカレンダーに無い", state=AWAITING_DMM_ID)
+    t("★★機種ページが無くても控えを持てる★★"
+      "（DMMに載るのが遅い機種を落とさない）",
+      _it["state"] == AWAITING_DMM_ID and _it["identity_url"] == "")
+    t("　機種ページが無いときは、せめて名前が要る",
+      _raises(lambda: add(_empty(), "", "", "", "2026-11",
+                          state=AWAITING_DMM_ID)))
+    t("★★取りに行ってよいURLに、移行前のURLは出てこない★★",
+      fetch_url({"identity_url": "", "legacy_url": "https://www.p-world.co.jp/x"})
+      == "")
+    # DMMに現れたら、同じ控えを READY にできる
+    _same = find_by_core(_w, "Ｌ聖闘士星矢　黄金十二宮")
+    t("★機種名の芯が同じ控えを見つけられる★（全半角・記号の差を吸収）",
+      len(_same) == 1 and _same[0]["queue_id"] == _it["queue_id"])
+    t("　似ているだけの名前は結び付けない（★前方一致で寄せない★）",
+      find_by_core(_w, "L聖闘士星矢") == [])
+
+    # ★★v1からの移行★★
+    _v1 = {"schema": SCHEMA_V1, "items": {
+        "https://www.p-world.co.jp/machine/database/10536": {
+            "name": "L聖闘士星矢 黄金十二宮", "url": "https://www.p-world.co.jp/"
+            "machine/database/10536", "maker": "", "release": "2026-11",
+            "first_seen": "2026-08-01", "last_try": "2026-08-15", "tries": 3,
+            "last_reason": "材料不足", "pworld_maker": "サミー"},
+        "https://p-town.dmm.com/machines/5086": {
+            "name": "L転生王女と天才令嬢の魔法革命",
+            "url": "https://p-town.dmm.com/machines/5086", "maker": "",
+            "release": "2026-10", "first_seen": "2026-08-10",
+            "last_try": "2026-08-15", "tries": 1, "last_reason": ""}}}
+    _v2 = migrate_v1(_v1)
+    _pw = [x for x in _v2["items"].values() if "聖闘士" in x["name"]][0]
+    _dm = [x for x in _v2["items"].values() if "転生王女" in x["name"]][0]
+    t("★★v1から移せる（鍵が採番したIDになる）★★",
+      _v2["schema"] == SCHEMA and len(_v2["items"]) == 2
+      and all(k.startswith("q_") for k in _v2["items"]))
+    t("★★取りに行けないURLの控えは待ち状態にする★★（消さない）",
+      _pw["state"] == AWAITING_DMM_ID and _pw["identity_url"] == ""
+      and _pw["legacy_url"].endswith("/10536"))
+    t("　移行しても、覚えた手掛かりは失わない",
+      _pw.get("pworld_maker") == "サミー" and _pw["tries"] == 3)
+    t("　取りに行けるURLの控えはそのまま使える",
+      _dm["state"] == READY and _dm["identity_url"].endswith("/5086"))
+    t("★★移したものをそのまま読める★★（形の検査を通る）",
+      _check_ok(_v2))
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
@@ -276,6 +457,18 @@ def _check_schema(got: dict) -> None:
         raise PendingError("中身が壊れています")
 
 
+def _check_ok(data: dict) -> bool:
+    """load() と同じ検査を、ファイルを介さずに掛ける。"""
+    try:
+        _check_schema(data)
+        for qid, it in data["items"].items():
+            if it.get("queue_id") != qid or it.get("state") not in STATES:
+                return False
+        return isinstance(data.get("next_id"), int) and data["next_id"] >= 1
+    except PendingError:
+        return False
+
+
 def _raises(fn) -> bool:
     try:
         fn()
@@ -286,23 +479,53 @@ def _raises(fn) -> bool:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", nargs="?", choices=["list", "add", "done"])
+    ap.add_argument("cmd", nargs="?",
+                    choices=["list", "add", "done", "migrate"])
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--apply", action="store_true")
     ap.add_argument("--name", default="")
     ap.add_argument("--url", default="")
     ap.add_argument("--maker", default="")
     ap.add_argument("--release", default="")
     ap.add_argument("--reason", default="")
+    ap.add_argument("--queue-id", default="")
+    ap.add_argument("--machine-id", default="")
     args = ap.parse_args()
+    sys.stdout.reconfigure(encoding="utf-8")
     if args.selftest:
         return selftest()
+    if args.cmd == "migrate":
+        if not os.path.exists(STORE):
+            print("待ち行列がまだありません")
+            return 0
+        got = _sj.read_json(STORE, expect=dict)
+        if got.get("schema") == SCHEMA:
+            print("すでに新しい形（v2）です")
+            return 0
+        if got.get("schema") != SCHEMA_V1:
+            print(f"★知らない形です: {got.get('schema')!r}★")
+            return 1
+        new = migrate_v1(got)
+        print(f"{len(got.get('items') or {})}件 → {len(new['items'])}件")
+        for it in due(new):
+            print("  %-8s %-11s %-34s %s" % (
+                it["queue_id"], it["state"], it["name"][:32],
+                it.get("identity_url") or ("（旧: " + str(
+                    it.get("legacy_url") or "")[-24:] + "）")))
+        if not args.apply:
+            print(chr(10) + "★下見です（--apply で書き換えます）★")
+            return 0
+        save(new)
+        print(chr(10) + "移しました: " + STORE)
+        return 0
     data = load()
     if args.cmd == "add":
-        add(data, args.name, args.url, args.maker, args.release, args.reason)
+        it = add(data, args.name, args.url, args.maker, args.release,
+                 args.reason, source_machine_id=args.machine_id)
         save(data)
-        print(f"待ち行列に入れました: {args.name}")
+        print(f"待ち行列に入れました: {it['queue_id']} {args.name}")
     elif args.cmd == "done":
-        if done(data, args.url):
+        if done(data, args.queue_id):
             save(data)
             print("外しました")
         else:
@@ -311,9 +534,11 @@ def main() -> int:
         items = due(data)
         print(f"待っている新台: {len(items)} 件")
         for it in items:
-            print(f"  {it['release']} {it['name'][:36]}"
+            print(f"  {it['queue_id']} [{it['state']}] {it['release']} "
+                  f"{it['name'][:34]}"
                   f"（{waited_days(it)}日待ち・{it['tries']}回試した）")
-            print(f"    理由: {it.get('last_reason', '')[:90]}")
+            if it.get("last_reason"):
+                print(f"    理由: {it.get('last_reason', '')[:90]}")
     return 0
 
 

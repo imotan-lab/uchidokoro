@@ -122,9 +122,11 @@ jobs:
           python scripts/add_machine_health.py --selftest
           # ★新台の入口（P-WORLD一本）★（2026-08-12・依頼168のP1）
           #   ここが一覧に無いと、同じ壊れ方をしてもCIは緑のまま通る。
-          python scripts/pworld_calendar.py --selftest
-          python scripts/pworld_machine.py --selftest
-          python scripts/pworld_discover.py --selftest
+          python scripts/dmm_calendar.py --selftest
+          python scripts/dmm_machine.py --selftest
+          python scripts/dmm_discover.py --selftest
+          python scripts/slug_binding.py --selftest
+          python scripts/pending_machines.py --selftest
           python scripts/grow_machine.py --selftest
           python scripts/add_machine_run.py --selftest
           python scripts/open_issues.py --selftest

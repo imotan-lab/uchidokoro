@@ -310,28 +310,35 @@ def _tell_unknown_makers(rows: list) -> None:
         _log(f"  知らせ済みの控えを書けません（次回また知らせます）: {e}")
 
 
-def discover_pworld(persist: bool = True) -> dict:
-    """P-WORLDの導入カレンダーから新台候補を出す。
+def discover_calendar(persist: bool = True) -> dict:
+    """★DMMぱちタウンの導入カレンダーから新台候補を出す★（2026-08-16・台帳#376）
+
+    ★P-WORLDから移した★
+      P-WORLDの利用規約がプログラムからのアクセスとデータ収集を禁じていた。
+      通信そのものは blocked_hosts.py が止める（最後の砦）。
 
     ★discover() と同じ形を返す★（呼ぶ側を変えないため）。
     ★persist=False（下見）は何も書かない★＝待ち行列にも触らない。
     """
-    import pworld_discover as _pd
+    import dmm_discover as _dd
     out = {"candidates": [], "problems": [], "first_time": [],
            "watched": [], "not_watched": []}
     try:
-        got = _pd.run(apply_it=persist)
+        got = _dd.run(apply_it=persist)
     except Exception as e:                # noqa: BLE001
         # ★読めなかったことを「新台なし」にしない★
         out["problems"].append(
-            f"P-WORLDのカレンダーを読めません: {type(e).__name__}: {e}")
-        out["not_watched"].append("p-world")
+            f"DMMのカレンダーを読めません: {type(e).__name__}: {e}")
+        out["not_watched"].append("dmm-ptown")
         return out
     out["problems"] += got.get("problems") or []
     if got.get("problems"):
-        out["not_watched"].append("p-world")
+        out["not_watched"].append("dmm-ptown")
     else:
-        out["watched"].append("p-world")
+        out["watched"].append("dmm-ptown")
+    for r in got.get("rebound") or []:
+        # ★DMMに遅れて載った機種を、待っていた控えへ結び直した★
+        _log(f"  待っていた控えを結び直しました: {r['queue_id']} {r['name']}")
     for q in got.get("queued") or []:
         # ★discover() と同じ形で入れる★（呼ぶ側が official_name / release を読む）
         out["candidates"].append({
@@ -348,8 +355,10 @@ def discover_pworld(persist: bool = True) -> dict:
             unknown.append((h["maker"], h["name"]))
     if unknown and persist:
         _tell_unknown_makers(unknown)
-    _log(f"P-WORLDのカレンダー: 候補{got.get('looked', 0)}件 / "
-         f"待ち行列へ{len(out['candidates'])}件 / 待たせた{len(got.get('held') or [])}件")
+    _log(f"DMMのカレンダー: 候補{got.get('looked', 0)}件 / "
+         f"待ち行列へ{len(out['candidates'])}件 / "
+         f"待たせた{len(got.get('held') or [])}件 / "
+         f"結び直し{len(got.get('rebound') or [])}件")
     return out
 
 
@@ -1248,6 +1257,85 @@ def _pw_machine_url(url: str) -> str:
     return m.group(1) if m else ""
 
 
+def _verify_dmm(name: str, official_url: str, maker: str,
+                release: str, expect_maker: str = "",
+                release_is_cache: bool = False) -> dict:
+    """★DMMの機種ページで身元を確かめる★（2026-08-16・台帳#376）
+
+    返す形は verify_official と同じ（呼ぶ側を変えないため）。
+    ★メーカーも突き合わせる★＝名簿の表示名と、ページの表示名が同じか。
+      ここを見ないと、別会社の機種を渡されたまま進んでしまう。
+
+    ★機種名は「見出しから作らない」★
+      DMMの見出しはSEOの飾りつきなので、機種名の正はカレンダー側。
+      ここでは**渡された名前がそのページの機種を指しているか**だけを見る。
+
+    ★型式名は無いことがある★（未導入の新台）。同定の芯は
+      **機種ID＋機種名＋メーカー＋導入日**で、型式名はあれば足す。
+    """
+    import dmm_discover as _dd
+    import dmm_machine as _dm
+    out = {"problems": [], "release": ""}
+    mid = _dmm_machine_id(official_url)
+
+    def _ng(why: str) -> dict:
+        out["problems"].append(f"{IDENTITY_FAILED} {why}")
+        return out
+
+    try:
+        cats = _sj.read_json(_dd.MAKER_CATALOG, expect=dict)["catalogs"]
+    except Exception as e:                # noqa: BLE001
+        return _ng(f"メーカー名簿を読めません: {e}")
+    conf = cats.get(maker) or {}
+    allow = [conf.get("name")] + list(conf.get("directory_names") or [])
+    allow = [str(x) for x in allow if x]
+    if maker and not allow:
+        return _ng(f"メーカーが名簿にありません: {maker!r}")
+    try:
+        got = _dm.fetch(mid)
+    except _dm.MachineError as e:
+        return _ng(str(e)[:220])
+    ok, why = _dm.name_matches(got["heading"], name)
+    if not ok:
+        return _ng(f"機種名が機種ページと合いません: {why[:180]}")
+    page_maker = str(got.get("maker") or "")
+    if allow and not page_maker:
+        # ★読めなかったことを、確かめたことにしない★（依頼167のP0）
+        return _ng("機種ページのメーカーを読めませんでした")
+    # ★最初に確かめた表示名があれば、そちらと完全一致させる★（依頼167のP1）
+    want = [expect_maker] if expect_maker else allow
+    if want and _dd._norm(page_maker) not in {_dd._norm(x) for x in want}:
+        return _ng(f"メーカーが食い違います（期待: {'／'.join(want)} / "
+                   f"機種ページ: {page_maker}）")
+    out["release"] = got.get("release_date") or ""
+    # ★渡された年月と食い違わないか★（★控えは照合しない★）
+    #   ★機種ページが月までのときは月で比べる★（日は勝手に決めない）
+    if release and not release_is_cache and out["release"]:
+        if str(release)[:7] != out["release"][:7]:
+            return _ng(f"登場年月が機種ページと違います"
+                       f"（機種ページ={out['release']} / 渡された値={release}）")
+    if out["release"] and not _nw.is_recent(out["release"][:7]):
+        return _ng(f"登場年月が新台の範囲外です（{out['release']}）")
+    # ★機種名は渡された値（＝カレンダー側）を正とする★
+    out["identity_name"] = name
+    out["identity_binding"] = "DMM_MACHINE_PAGE"
+    out["identity_evidence"] = {
+        "kind": "DMM_MACHINE_PAGE",
+        "dmm_machine_id": mid,
+        "url": got.get("url") or official_url,
+        "model_code": got.get("model_code", ""),
+        # ★型式名が無いことは異常ではない★（未導入の新台には載らない）
+        "has_model_code": bool(got.get("has_model_code")),
+        "maker": page_maker,
+        "release": out["release"],
+        "release_precision": got.get("release_precision", ""),
+        "checked_at": __import__("datetime").date.today().isoformat()}
+    _log(f"  DMMの機種ページで同定しました: {out['identity_name']} "
+         f"/ 機種ID {mid} / {out['release']}"
+         + ("" if got.get("has_model_code") else "（型式名はまだ載っていません）"))
+    return out
+
+
 def _verify_pworld(name: str, official_url: str, maker: str,
                    release: str, expect_maker: str = "",
                    release_is_cache: bool = False) -> dict:
@@ -1354,8 +1442,15 @@ def verify_official(name: str, official_url: str,
     #   以降の検査は「メーカー公式のドメインか」を見るので、
     #   P-WORLDのURLは必ず弾かれる（実際に試して確認した）。
     #   機種ページ側は機種IDでの同定・種目・転送・派生機まで見ている。
-    if _pw_machine_url(official_url):
+    # ★同定の正はDMM★（2026-08-16・台帳#376）
+    if _dmm_machine_id(official_url):
         # ★最初に確かめた表示名があれば、そちらと完全一致させる★（台帳#335の項目5）
+        return _verify_dmm(name, official_url, maker, release,
+                           expect_maker=expect_maker,
+                           release_is_cache=release_is_cache)
+    if _pw_machine_url(official_url):
+        # ★ここへは来ない★（blocked_hosts が通信を止める）。
+        #   P-WORLDのURLを持った控えは移行で AWAITING_DMM_ID になっている。
         return _verify_pworld(name, official_url, maker, release,
                               expect_maker=expect_maker,
                               release_is_cache=release_is_cache)
@@ -1665,7 +1760,12 @@ def _remember_url(name, url, maker, release, reason) -> bool:
         return True
     try:
         pend = _pend.load()
-        _pend.add(pend, name, url, maker, release, reason)
+        # ★機種IDも渡す★（2026-08-16・台帳#376）
+        #   URLは変わりうるが機種IDは機種ごとに1つ。同じ機種を
+        #   二重に持たないための鍵になる。
+        _pend.add(pend, name, url, maker, release, reason,
+                  source_machine_id=_dmm_machine_id(url),
+                  identity_source="dmm" if _dmm_machine_id(url) else "")
         _pend.save(pend)
         return True
     except Exception as e:                # noqa: BLE001
@@ -1880,11 +1980,11 @@ def finish_publish(res: dict, pend: dict = None) -> list:
     ng = push_after_publish(res["slug"])
     if ng:
         return ng
-    url = res.get("pending_url")
-    if url:
+    qid = res.get("pending_id")
+    if qid:
         if pend is None:
             pend = _pend.load()
-        if _pend.done(pend, url):
+        if _pend.done(pend, qid):
             _pend.save(pend)
             _log(f"待ち行列から外しました: {res.get('name')}")
     return []
@@ -1941,10 +2041,11 @@ def pick_work(pend: dict) -> list:
     items = _pend.due(pend)
     return sorted(items, key=lambda x: (x.get("last_try") or "",
                                         x.get("first_seen") or "",
-                                        x.get("url")))
+                                        x.get("queue_id") or ""))
 
 
-def give_up_now(pend: dict, url: str, name: str, problems: list) -> None:
+def give_up_now(pend: dict, queue_id: str, url: str, name: str,
+                problems: list) -> None:
     """★何度やっても無理なものは、行列から出して台帳へ★
 
     行列に残すと、そのぶん後ろが詰まる。
@@ -1964,11 +2065,56 @@ def give_up_now(pend: dict, url: str, name: str, problems: list) -> None:
         _log(f"  台帳に残せなかったので待ち行列に残します: {name or url}")
         return
     try:
-        if _pend.done(pend, url):
+        if _pend.done(pend, queue_id):
             _pend.save(pend)
             _log(f"待ち行列から出して台帳へ移しました: {name or url}")
     except Exception as e:                # noqa: BLE001
         _log(f"  ✗ 待ち行列から出せませんでした: {e}")
+
+
+def _dmm_machine_id(url: str) -> str:
+    """DMMの機種ページのURLなら、その機種IDを返す（違えば空）。"""
+    import re as _re
+    m = _re.match(r"^https?://p-town\.dmm\.com/machines/(\d{1,7})/?$",
+                  str(url or "").strip())
+    return m.group(1) if m else ""
+
+
+def _fill_missing_dmm(work: dict) -> dict:
+    """★DMMの機種ページから名前と導入日を読み直す★（2026-08-16・台帳#376）
+
+    ★見出しから機種名を作らない★（DMMの見出しはSEOの飾りつき）。
+    ここは**待ち行列が覚えている名前が、まだそのページの機種を指しているか**
+    を確かめるだけにする。指していなければ使い回しの疑いとして止める。
+    ★取れるのは導入日（と、あれば型式名・メーカー）★
+    """
+    import dmm_machine as _dm
+    mid = _dmm_machine_id(work.get("identity_url", ""))
+    if not mid:
+        return work
+    try:
+        got = _dm.fetch(mid)
+    except _dm.MachineError as e:
+        _log(f"  機種ページを見直せませんでした: {str(e)[:110]}")
+        return work
+    # ★名前が今もこのページの機種を指しているか★
+    name = str(work.get("name") or "")
+    if name:
+        ok, why = _dm.name_matches(got["heading"], name)
+        if not ok:
+            # ★ここで名前を書き換えない★（見出しは飾りつきで機種名ではない）
+            #   指していないなら、使い回しか別機種。翌晩やり直すのではなく
+            #   止めて人・2AIに見てもらう（黙って別機種の記事を作らないため）。
+            work["_name_conflict"] = got["heading"][:60]
+            _log(f"  ★待ち行列の名前が機種ページと合いません: {why[:110]}★")
+            return work
+    if got.get("release_date"):
+        work["release"] = got["release_date"][:7]   # 待ち行列は年月まで
+    if got.get("maker") and not work.get("dmm_maker"):
+        work["dmm_maker"] = got["maker"]
+    if got.get("model_code") and not work.get("dmm_model_code"):
+        work["dmm_model_code"] = got["model_code"]
+    return work
 
 
 def _fill_missing_pworld(work: dict) -> dict:
@@ -1978,9 +2124,9 @@ def _fill_missing_pworld(work: dict) -> dict:
     ★使い回しの判定は残す★＝芯や規格の印が変わっていたら止める。
     """
     import pworld_machine as _pm
-    mid = _pw_machine_url(work.get("url", ""))
+    mid = _pw_machine_url(work.get("identity_url", ""))
     try:
-        html = _nw._get(work["url"])
+        html = _nw._get(work["identity_url"])
         final = (getattr(_nw, "LAST_FINAL_URL", None) or {}).get("url")
     except Exception as e:                # noqa: BLE001
         _log(f"  機種ページを見直せませんでした: {e}")
@@ -2038,10 +2184,16 @@ def fill_missing(work: dict) -> dict:
     #   メーカー公式用の読み方は「ページの題＝機種名」とみなす。
     #   P-WORLDの題には宣伝用の語が並ぶので、名前が変わったように見え、
     #   **使い回しの疑いで全件が落ちた**（2026-08-12の夜に実際に発生）。
-    if _pw_machine_url(work.get("url", "")):
+    # ★同定の正はDMM★（2026-08-16・台帳#376）。P-WORLDへは通信できない。
+    if _dmm_machine_id(work.get("identity_url", "")):
+        return _fill_missing_dmm(work)
+    if _pw_machine_url(work.get("identity_url", "")):
+        # ★ここへは来ない（blocked_hosts が通信を止める）★
+        #   移行前の控えは state=AWAITING_DMM_ID になっていて
+        #   identity_url が空なので、そもそもここに入らない。
         return _fill_missing_pworld(work)
     try:
-        c = _nw.classify(work["url"], None)
+        c = _nw.classify(work["identity_url"], None)
     except Exception as e:                # noqa: BLE001
         _log(f"  公式ページを見直せませんでした: {e}")
         return work
@@ -2293,7 +2445,8 @@ def _ask_ledger(slug: str, name: str, question: str, key: str = "",
 
 def run_one(name, official_url, maker, release, apply_it=False,
             release_is_cache=False,
-            before_write=None, expect_maker: str = "") -> dict:
+            before_write=None, expect_maker: str = "",
+            pending_id: str = "") -> dict:
     """1機種を最後まで進める。"""
     out = {"name": name, "slug": None, "wrote": [], "problems": [], "blocked": []}
     _log(f"=== 機種の処理開始: {name} / {maker} / {release} / {official_url} "
@@ -2472,7 +2625,7 @@ def run_one(name, official_url, maker, release, apply_it=False,
         #   ここで外すと、関所やpushで止まったとき
         #   「待ち行列にも無い・手元だけ変わっている」状態になり、
         #   翌日の実行が残骸で止まって、誰も気づかないまま進まなくなる。
-        out["pending_url"] = official_url
+        out["pending_id"] = pending_id
     _log(f"=== 機種の処理終了: {name} / 止めた理由{len(out['blocked'])}件 "
          f"/ 問題{len(out['problems'])}件 ===")
     return out
@@ -2687,18 +2840,21 @@ def selftest() -> int:
         _pend.STORE = os.path.join(_tmpdir, "pend_resurrect.json")
         globals()["_ledger"] = lambda *a, **k: True
         try:
-            _pd = {"schema": _pend.SCHEMA, "items": {}}
-            _pend.add(_pd, "残る機種", "https://m.example/stay/", "m", "2026-09")
-            _pend.add(_pd, "台帳行き", "https://m.example/dead/", "m", "2026-09")
+            _pd = _pend._empty()
+            _stay = _pend.add(_pd, "残る機種", "https://m.example/stay/", "m",
+                              "2026-09")
+            _dead = _pend.add(_pd, "台帳行き", "https://m.example/dead/", "m",
+                              "2026-09")
             _pend.save(_pd)
-            give_up_now(_pd, "https://m.example/dead/", "台帳行き", ["x"])
-            _pend.mark_tried(_pd, "https://m.example/stay/")   # ループの次の周
+            give_up_now(_pd, _dead["queue_id"], "https://m.example/dead/",
+                        "台帳行き", ["x"])
+            _pend.mark_tried(_pd, _stay["queue_id"])           # ループの次の周
             _pend.save(_pd)
             _after = _pend.load()["items"]
             t("★★台帳へ移した機種が次の保存で蘇らない★★"
               "（毎晩蘇って行列に居座り、台帳にも同じ件が積まれ続けた・2026-08-01実機）",
-              "https://m.example/dead/" not in _after
-              and "https://m.example/stay/" in _after)
+              _dead["queue_id"] not in _after
+              and _stay["queue_id"] in _after)
             t("　行列の保存は呼び出し元の1オブジェクトに一本化",
               "pend" in inspect.signature(give_up_now).parameters
               and "pend" in inspect.signature(finish_publish).parameters)
@@ -3010,87 +3166,61 @@ def selftest() -> int:
               and "card" not in _evidence_ref({"identity_evidence": {
                   "kind": "PWORLD_MACHINE_PAGE", "pworld_machine_id": "10513"}}))
             # ★メーカーが読めないページは同定成功にしない★（依頼167のP0）
-            _pm_mod = __import__("pworld_machine")
-            _no_maker = _pm_mod._FIX.replace(
-                '<tr><td>メーカー　：<a href="/x">北電子</a></td></tr>', "")
-            _keep_verify = _pm_mod.verify
             # ★下位が黙っていても、上位が止めることを見る★（依頼168のP2）
-            #   偽の verify に問題を持たせると、下位が止めた後の
+            #   偽の fetch に問題を持たせると、下位が止めた後の
             #   「印付け」しか見ないことになり、
             #   **上位自身の守りを壊しても試験が通って**しまう。
-            _pm_mod.verify = lambda *a, **k: dict(
-                _pm_mod.parse(_no_maker), problems=[])
+            import dmm_machine as _dm_mod
+            _keep_fetch2 = _dm_mod.fetch
+            _dm_mod.fetch = lambda mid, **k: {
+                "id": str(mid), "url": "https://p-town.dmm.com/machines/5049",
+                "heading": "スマスロ タコスロ （新台スマスロ）パチスロ｜天井",
+                "model_code": "LB/タコスロBD", "has_model_code": True,
+                "maker": "",                       # ★メーカーが読めなかった★
+                "release_date": "2026-09-07", "release_precision": "day",
+                "release_raw": "2026年09月07日（月）予定", "planned": True}
             try:
-                _r = _verify_pworld(
-                    "マイジャグラーVI",
-                    "https://www.p-world.co.jp/machine/database/10513",
-                    "kitadenshi", "2026-10")
+                _r = _verify_dmm(
+                    "スマスロ タコスロ",
+                    "https://p-town.dmm.com/machines/5049",
+                    "universal", "2026-09")
             finally:
-                _pm_mod.verify = _keep_verify
+                _dm_mod.fetch = _keep_fetch2
             t("★★下位が黙っていても、上位がメーカー空を止める★★"
               "（公開まで止まる）",
               bool(_blocking(_r["problems"]))
               and any("メーカーを読めませんでした" in x for x in _r["problems"]))
-            # ★名前の読み直しもP-WORLDの読み方で★（2026-08-13・夜間タスクが検出）
-            #   メーカー公式用の読み方は「ページの題＝機種名」。
-            #   P-WORLDの題には宣伝用の語が並ぶので、名前が変わったように見え、
-            #   **カレンダーから見つけた11件が全部落ちた**（実際に発生）。
-            _pmm = __import__("pworld_machine")
-            _keep_get = _nw._get
-            _nw._get = lambda *a, **k: _pmm._FIX
-            try:
-                _w = fill_missing({
-                    "name": "マイジャグラーVI",
-                    "url": "https://www.p-world.co.jp/machine/database/10513",
-                    "maker": "kitadenshi", "release": "2026-10"})
-                _w2 = fill_missing({
-                    "name": "スマスロ北斗の拳",
-                    "url": "https://www.p-world.co.jp/machine/database/10513",
-                    "maker": "kitadenshi", "release": "2026-10"})
-            finally:
-                _nw._get = _keep_get
-            t("★★P-WORLDの題の宣伝文を機種名にしない★★"
-              "（見出しから読む・11件が全部落ちた原因）",
-              _w["name"] == "マイジャグラーVI" and not _w.get("_name_conflict"))
-            t("★★それでも使い回しの疑いは止める★★（別機種の名前なら印を付ける）",
-              _w2.get("_name_conflict") == "マイジャグラーVI")
-            t("　導入年月も機種ページから直す", _w["release"] == "2026-10")
-            # ★確かめる前に「使い回し」と決めつけない★（2026-08-13・依頼169のP1）
-            #   ページが読めただけでは同じ機種のページとは言えない。
-            #   転送・パチンコ・欠けたページでも形が整えば読めてしまい、
-            #   名前が違えば**正しい新台をその晩に永久に取りこぼす**。
-            def _fm(html, final, nm="スマスロ 獣王"):
-                _k, _kf = _nw._get, dict(getattr(_nw, "LAST_FINAL_URL", {}) or {})
-                _nw._get = lambda *a, **k: html
-                if hasattr(_nw, "LAST_FINAL_URL"):
-                    _nw.LAST_FINAL_URL["url"] = final
+            # ★名前の読み直しはDMMの読み方で★（2026-08-16・台帳#376）
+            #   DMMの見出しはSEOの飾りつきなので、**見出しから機種名を作らない**。
+            #   ここは「待ち行列が覚えている名前が、まだそのページの機種を
+            #   指しているか」だけを見る（指していなければ使い回しの疑い）。
+            _dmf = os.path.join(BASE, "tests", "fixtures",
+                                "dmm_machine_5049.html")
+            if os.path.isfile(_dmf):
+                import dmm_machine as _dmm
+                _dhtml = io.open(_dmf, encoding="utf-8").read()
+                _keep_fetch = _dmm.fetch
+                _dmm.fetch = lambda mid, **k: _dmm.parse(_dhtml, str(mid))
                 try:
-                    return fill_missing({
-                        "name": nm, "maker": "kitadenshi", "release": "2026-10",
-                        "url": "https://www.p-world.co.jp/machine/database/10513"})
+                    _w = fill_missing({
+                        "name": "スマスロ タコスロ",
+                        "identity_url": "https://p-town.dmm.com/machines/5049",
+                        "maker": "universal", "release": "2026-08"})
+                    _w2 = fill_missing({
+                        "name": "スマスロ北斗の拳",
+                        "identity_url": "https://p-town.dmm.com/machines/5049",
+                        "maker": "universal", "release": "2026-08"})
                 finally:
-                    _nw._get = _k
-                    if hasattr(_nw, "LAST_FINAL_URL"):
-                        _nw.LAST_FINAL_URL.clear()
-                        _nw.LAST_FINAL_URL.update(_kf)
-
-            _self = "https://www.p-world.co.jp/machine/database/10513"
-            _pachi = _pmm._FIX.replace(
-                '<span class="kisyuTag-slot">パチスロ</span>',
-                '<span class="kisyuTag-slot">パチンコ</span>')
-            _broken = _pmm._FIX.replace(
-                '<tr><td>メーカー　：<a href="/x">北電子</a></td></tr>', "")
-            _r1 = _fm(_pmm._FIX,
-                      "https://www.p-world.co.jp/machine/database/99999")
-            _r2 = _fm(_pachi, _self)
-            _r3 = _fm(_broken, _self)
-            t("★★確かめられないページで「使い回し」と決めつけない★★"
-              "（転送・パチンコ・欠け）",
-              all(x["name"] == "スマスロ 獣王" and not x.get("_name_conflict")
-                  for x in (_r1, _r2, _r3)))
-            t("★★正常なページで芯が違えば、今までどおり止める★★",
-              _fm(_pmm._FIX, _self, "スマスロ北斗の拳").get("_name_conflict")
-              == "マイジャグラーVI")
+                    _dmm.fetch = _keep_fetch
+                t("★★DMMの見出しから機種名を作らない★★"
+                  "（飾りつきの見出しを名前にすると全件が使い回し扱いになる）",
+                  _w["name"] == "スマスロ タコスロ"
+                  and not _w.get("_name_conflict"))
+                t("★★それでも使い回しの疑いは止める★★（別機種の名前なら印を付ける）",
+                  bool(_w2.get("_name_conflict")))
+                t("　導入年月も機種ページから直す", _w["release"] == "2026-09")
+            else:
+                t("★試験用の保存ページがありません（tests/fixtures）★", False)
             # ★覚えた表示名で再確認する★（2026-08-13・台帳#335の項目5）
             #   内部IDだけだと、同じIDにぶら下がる別名（ミズホ／メーシー…）の
             #   どれでも通り、公開直前の再確認が緩くなる。
@@ -3295,16 +3425,21 @@ def selftest() -> int:
                     "initial_urls": list(Q_URLS),
                     "hints": {Q_URLS[7]: "2026-09"},
                     "retention": None, "shape_warnings": []}
-                _pend.save({"schema": _pend.SCHEMA, "items": {}})
+                def _q_urls(pend):
+                    """★待ち行列に入っているURL★（鍵はIDになったので中身を見る）"""
+                    return [x.get("identity_url", "")
+                            for x in _pend.due(pend)]
+
+                _pend.save(_pend._empty())
                 d65 = discover(persist=True)
                 p65 = _pend.load()
                 q65 = _quar.load()
                 t("★★初回の障害URL群は通常行列に入れない★★"
                   "（8件全滅→行列は一覧年月ありの1件だけ・台帳#210）",
-                  list(p65["items"]) == [Q_URLS[7]])
+                  _q_urls(p65) == [Q_URLS[7]])
                 t("★★一覧カードの年月が新台範囲なら障害中でも行列で待つ★★"
                   "（喰霊が沈んだ形の再発防止）",
-                  Q_URLS[7] in p65["items"]
+                  Q_URLS[7] in _q_urls(p65)
                   and Q_URLS[7] not in _quar.urls_of(q65, "qm"))
                 t("★★巻き添え分は隔離簿に残る（捨てない・行列にも入れない）★★",
                   len(_quar.urls_of(q65, "qm")) == 7)
@@ -3341,10 +3476,10 @@ def selftest() -> int:
                 t("★★復旧したら隔離分を分類し直し、新台の範囲だけ行列へ★★"
                   "（喰霊の恒久救済経路）",
                   r66["recovered"] == ["qm"] and r66["requeued"] == 1
-                  and Q_URLS[0] in p66["items"])
+                  and Q_URLS[0] in _q_urls(p66))
                 t("★★古い機種と分かった分は隔離から外れ、行列にも入らない★★",
                   _quar.makers(q66) == []
-                  and all(u not in p66["items"] for u in Q_URLS[1:7]))
+                  and all(u not in _q_urls(p66) for u in Q_URLS[1:7]))
                 # --- 下見は隔離を確かめにも行かない ---
                 _quar.save(_quar.add(_quar.load(), "qm",
                                      {Q_URLS[1]: ""}, "試験"))
@@ -3411,13 +3546,13 @@ def selftest() -> int:
             try:
                 # --- 実SSL全滅: 隔離に入り、行列はヒント1件だけ ---
                 _ur66.urlopen = _uo_ssl
-                _pend.save({"schema": _pend.SCHEMA, "items": {}})
+                _pend.save(_pend._empty())
                 d66 = discover(persist=True)
                 p66a = _pend.load()
                 q66a = _quar.load()
                 t("★★実際のSSL失敗（取得できません（URLError））でも隔離に入る★★"
                   "（Codex66回目の指摘1・#210の再発防止の本丸）",
-                  list(p66a["items"]) == [Q2[7]]
+                  _q_urls(p66a) == [Q2[7]]
                   and len(_quar.urls_of(q66a, "qm")) == 7)
                 t("★★実SSL失敗でも上限+1回で残りへのアクセスを打ち切る★★",
                   len(_uo_calls) == _nw.MAX_NEW_PER_SCAN + 1)
@@ -3440,8 +3575,8 @@ def selftest() -> int:
                 q66c = _quar.load()
                 t("★★1URLの復旧で、まだ読めない残りを行列へ戻さない★★"
                   "（Codex66回目の指摘2・読めた1件だけ行列へ）",
-                  r68["requeued"] == 1 and Q2[0] in p66b["items"]
-                  and all(u not in p66b["items"] for u in Q2[1:7])
+                  r68["requeued"] == 1 and Q2[0] in _q_urls(p66b)
+                  and all(u not in _q_urls(p66b) for u in Q2[1:7])
                   and len(_quar.urls_of(q66c, "qm")) == 6)
                 # --- 部分復旧の夜: 残りの障害URLへ全件取得しに行かない ---
                 #     （Codex67回目の反例＝moved上限は障害URLでは増えないため、
@@ -3495,7 +3630,7 @@ def selftest() -> int:
                 t("★★復旧URLが並びの末尾でも取得上限より先に処理される★★"
                   "（Codex68回目＝確認済みの復旧URLを隔離に取り残さない・"
                   "呼び出し順と隔離からの除去まで確認＝Codex69回目）",
-                  r68c["requeued"] >= 1 and Q5[7] in p66d["items"]
+                  r68c["requeued"] >= 1 and Q5[7] in _q_urls(p66d)
                   and _uo_calls == [Q5[7], Q5[0], Q5[1], Q5[2]]
                   and Q5[7] not in _quar.urls_of(_quar.load(), "qm5"))
                 globals()["RECLASSIFY_FETCH_PER_NIGHT"] = _cap_before
@@ -4081,7 +4216,7 @@ def main() -> int:
     if USE_MAKER_WATCH:
         d = discover(persist=apply_it)
     else:
-        d = discover_pworld(persist=apply_it)
+        d = discover_calendar(persist=apply_it)
     for x in d["first_time"]:
         print("初回として記録:", x)
     # ★隔離したメーカーの復旧確認（毎晩1URL）★（2026-08-04・Codex65回目）
@@ -4110,12 +4245,12 @@ def main() -> int:
     for it in (_pend.give_up(pend) if apply_it else []):
         if not _ledger("site", "structural", "MATERIAL", "PENDING_GAVE_UP",
                        f"新台を{_pend.GIVE_UP_DAYS}日待っても記事にできませんでした",
-                       f"{it['name']} / {it['url']} / "
+                       f"{it['name']} / {it.get('identity_url', '')} / "
                        f"直近の理由: {it.get('last_reason', '')}"):
             # ★台帳に残せなかったら行列へ戻す★（2026-07-31・Codex20回目）
             #   give_up() は返す前に外してしまうので、そのまま保存すると
             #   **待ち行列にも台帳にも無い機種**になる。
-            pend["items"][it["url"]] = it
+            pend["items"][it["queue_id"]] = it
             _log(f"  台帳に残せなかったので待ち行列に戻しました: {it['name']}")
             continue
         print(f"  ★{_pend.GIVE_UP_DAYS}日待っても記事にできませんでした: {it['name']}★")
@@ -4159,22 +4294,23 @@ def main() -> int:
                    f"{work['_name_conflict'][:30]}）")
             print("  ★止めました: " + msg)
             if apply_it:
-                give_up_now(pend, work["url"], work["name"], [msg])
+                give_up_now(pend, work["queue_id"], work["identity_url"],
+                            work["name"], [msg])
             else:
                 print("（下見）--apply の実行が台帳へ移します")
             continue
         if not (work["name"] and work["maker"]):
-            _log(f"  まだ記事にできません（名前かメーカーが取れない）: {work['url']}")
+            _log(f"  まだ記事にできません（名前かメーカーが取れない）: {work['identity_url']}")
             # ★早く抜けるときも試した日を残す★（残さないと毎晩ここで詰まる）
             if apply_it:
-                _pend.mark_tried(pend, work["url"])
+                _pend.mark_tried(pend, work["queue_id"])
                 _pend.save(pend)
             continue
         _log(f"試す: {work['name']} / {work['maker']} / {work['release']}")
         # ★試したことを必ず残す★（残さないと同じものばかり選ばれる）
         # ★下見では残さない★（試行記録・巡回順を進めない・Codex28回目）
         if apply_it:
-            _pend.mark_tried(pend, work["url"])
+            _pend.mark_tried(pend, work["queue_id"])
             _pend.save(pend)
         # ★覚えた表示名と食い違ったことがあるなら、公開の前で止める★
         #   （2026-08-13・依頼171のP2）待ち行列に残すだけでは誰も見ない。
@@ -4189,7 +4325,7 @@ def main() -> int:
                   f"URL: {work['url']}\n\n"
                   "★同じ機種か、別機種にURLが使い回されたのかを確かめてください★\n"
                   "確かめたら、待ち行列の pworld_maker_conflict を消してください。")
-            if apply_it and _ledger(_pw_slug_hint(work["url"]), "structural",
+            if apply_it and _ledger(_pw_slug_hint(work["identity_url"]), "structural",
                                     "MATERIAL", "PWORLD_MAKER_CONFLICT", _t, _d):
                 _log(f"  ★表示名の食い違いを台帳へ上げました: {work['url']}")
             else:
@@ -4197,12 +4333,14 @@ def main() -> int:
                      f": {work['url']}")
             print(f"  ★止めました: 表示名が途中で変わりました（{work['url']}）")
             continue
-        res = run_one(work["name"], work["url"], work["maker"],
+        res = run_one(work["name"], work["identity_url"], work["maker"],
                       work["release"], apply_it,
                       release_is_cache=True,       # ★待ち行列の年月は控え★
-                      before_write=lambda u=work["url"]: _claim_today(u),
+                      before_write=lambda u=work["identity_url"]: _claim_today(u),
                       # ★最初に確かめたメーカーの表示名★（台帳#335の項目5）
-                      expect_maker=work.get("pworld_maker", ""))
+                      expect_maker=work.get("pworld_maker", ""),
+                      # ★どの控えを外すかはIDで渡す★（URLは変わりうる）
+                      pending_id=work.get("queue_id", ""))
         for b in res.get("blocked") or []:
             print("  ★止めました: " + b[:150])
         if res.get("wrote"):
@@ -4231,7 +4369,8 @@ def main() -> int:
         # ★やり直しても変わらない理由なら、行列から出して後ろを通す★
         if res.get("blocked") and not retry_later(res["problems"]):
             if apply_it:
-                give_up_now(pend, work["url"], work["name"], res["problems"])
+                give_up_now(pend, work["queue_id"], work["identity_url"],
+                            work["name"], res["problems"])
             else:
                 print("（下見）やり直しても変わらない理由です"
                       "（--apply の実行が台帳へ移します）: " + work["name"])
