@@ -361,11 +361,21 @@ def discover_calendar(persist: bool = True) -> dict:
 
 
 
-def gather(name: str, maker: str = "", slug: str = "") -> dict:
-    """1機種ぶんの材料を集める。★止まった理由も返す★"""
-    # ★何のために取りに行くかを名乗る★（2026-08-16・依頼218）
+def gather(*a, **k):
+    """★何のために取りに行くかを名乗ってから中身を動かす★
+
+    （2026-08-16・依頼219の指摘1）
+    前は共有の値へ直接入れていたので、**抜けたあとも残って**いた。
+    残ると、そのあとの「名乗っていない取得」が材料として通ってしまい、
+    関所の意味が崩れる。★囲みにして必ず元へ戻す★
+    """
     import new_machine_watch as _nwp
-    _nwp.FETCH_PURPOSE["now"] = _nwp.FETCH_PURPOSE.get("now") or "claim_material"
+    with _nwp.fetching("claim_material"):
+        return _gather(*a, **k)
+
+
+def _gather(name: str, maker: str = "", slug: str = "") -> dict:
+    """1機種ぶんの材料を集める。★止まった理由も返す★"""
     got = {"name": name, "urls": [], "model_code": None, "material": None,
            "problems": []}
     fr = _di.find(name)
@@ -3161,6 +3171,7 @@ def selftest() -> int:
             #   規約の関所は「通信してよいか」を決める。ちょんぼりすた・
             #   なな徹は材料として通信を許しているので、そのURLを同定に
             #   渡すと関所は通してしまう。★別の縛りとして見る★
+            _keep_idst = _IDENTITY_SELFTEST["on"]   # ★保存値へ戻す★
             _IDENTITY_SELFTEST["on"] = False   # ★ここだけ本番と同じ扱い★
             try:
                 _calls = []
@@ -3184,7 +3195,7 @@ def selftest() -> int:
                   _calls == [] and bool(_blocking(_v["problems"])))
                 t("　P-WORLDのURLは理由も規約だと分かる", "規約" in _r_pw)
             finally:
-                _IDENTITY_SELFTEST["on"] = True
+                _IDENTITY_SELFTEST["on"] = _keep_idst
             # ★コミット文に書く区分★（2026-08-05・Codex99回目）
             t("　コミット文の区分: 実データから決まった区分を返す",
               _machine_class(sorted(
@@ -3596,6 +3607,12 @@ def main() -> int:
     _log(f"★新台追加タスク 終了★ 新台候補{len(d['candidates'])}件 "
          f"/ 待っている新台{len(waiting)}件 / 確認が要る{len(d['problems'])}件")
     return 1 if d["problems"] else 0
+
+
+# ★中身を見に来たら元の関数を返す★（2026-08-16・依頼219）
+#   囲みにしたので gather は薄い包みになった。試験や監査が中身を読むとき、
+#   包みだけ見えると**守りが消えたように見える**（実際に試験が落ちた）。
+gather.__wrapped__ = _gather
 
 
 if __name__ == "__main__":

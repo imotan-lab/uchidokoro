@@ -402,11 +402,21 @@ def lookup_hits(index: dict, core: str) -> list:
     return hits
 
 
-def find(official_name: str, catalogs: dict | None = None) -> dict:
-    """正式名称から、各名鑑の個別ページURLを探す。"""
-    # ★何のために取りに行くかを名乗る★（2026-08-16・依頼218）
+def find(*a, **k):
+    """★何のために取りに行くかを名乗ってから中身を動かす★
+
+    （2026-08-16・依頼219の指摘1）
+    前は共有の値へ直接入れていたので、**抜けたあとも残って**いた。
+    残ると、そのあとの「名乗っていない取得」が材料として通ってしまい、
+    関所の意味が崩れる。★囲みにして必ず元へ戻す★
+    """
     import new_machine_watch as _nwp
-    _nwp.FETCH_PURPOSE["now"] = _nwp.FETCH_PURPOSE.get("now") or "claim_material"
+    with _nwp.fetching("claim_material"):
+        return _find(*a, **k)
+
+
+def _find(official_name: str, catalogs: dict | None = None) -> dict:
+    """正式名称から、各名鑑の個別ページURLを探す。"""
     cats = catalogs or _sj.read_json(CATALOGS, expect=dict)["directories"]
     core = _ci.normalize_core(official_name)
     out = {"official_name": official_name, "core": core, "results": {}}
@@ -672,6 +682,12 @@ def main() -> int:
         return 0 if urls else 1
     ap.print_help()
     return 0
+
+
+# ★中身を見に来たら元の関数を返す★（2026-08-16・依頼219）
+#   囲みにしたので find は薄い包みになった。試験や監査が中身を読むとき、
+#   包みだけ見えると**守りが消えたように見える**（実際に試験が落ちた）。
+find.__wrapped__ = _find
 
 
 if __name__ == "__main__":

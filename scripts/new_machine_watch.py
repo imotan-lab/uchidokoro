@@ -1321,11 +1321,18 @@ def scan_maker(maker_id: str, conf: dict, seen: dict, record: bool = True) -> di
                           + "（この社は見張りの対象ではありません）")
         out["state"] = "NOT_WATCHABLE"
         return out
-    render = str(conf.get("fetch") or "static") == "render"
+    # ★ブラウザで描画して読む道は削除済み★（2026-08-16・依頼219）
+    #   転送の行き先を行く前に止められないため。設定に render と書いてあっても
+    #   ★通さない★（黙って素の取得に落とすと、止めた意味がなくなる）。
     health = {}
     try:
-        if render:
-            html, health = _get_rendered(conf["list_url"], conf["link_prefix"])
+        if str(conf.get("fetch") or "static") == "render":
+            out["problem"] = ("ブラウザで描画して読む道は削除しました"
+                             "（転送の行き先を行く前に止められないため）")
+            out["state"] = "NOT_WATCHABLE"
+            return out
+        if False:
+            html, health = None, {}
             if health.get("problem"):
                 out["problem"] = health["problem"]
                 out["state"] = "FETCH_FAILED"
