@@ -10,8 +10,14 @@
  ],
  "hosts": {
   "p-town.dmm.com": {
-   "purpose": ["new_machine_discovery", "machine_identity"],
-   "path_prefixes": ["/machines/"],
+   "purpose": [
+    "new_machine_discovery",
+    "machine_identity",
+    "claim_material"
+   ],
+   "path_prefixes": [
+    "/machines"
+   ],
    "method": "http_get",
    "terms_url": "https://p-town.dmm.com/utilization",
    "checked_at": "2026-08-16",
@@ -44,6 +50,30 @@
    "evidence_ref": "_design/tos_review_2026-08-16.md",
    "recheck_by": "",
    "status": "BLOCKED"
+  },
+  "chonborista.com": {
+   "purpose": [],
+   "path_prefixes": [],
+   "method": "",
+   "terms_url": "",
+   "checked_at": "",
+   "checked_by": "",
+   "evidence_ref": "",
+   "recheck_by": "",
+   "why": "★規約をまだ確かめていません★（2026-08-16）。ちょんぼりすたは記事の材料として毎晩読んでいた先ですが、P-WORLD・一撃と同じく規約を読まないまま巡回していました。確かめるまで通しません（通信は機械が止めます）。",
+   "status": "PENDING"
+  },
+  "nana-press.com": {
+   "purpose": [],
+   "path_prefixes": [],
+   "method": "",
+   "terms_url": "",
+   "checked_at": "",
+   "checked_by": "",
+   "evidence_ref": "",
+   "recheck_by": "",
+   "why": "★規約をまだ確かめていません★（2026-08-16）。なな徹は記事の材料として毎晩読んでいた先ですが、P-WORLD・一撃と同じく規約を読まないまま巡回していました。確かめるまで通しません（通信は機械が止めます）。",
+   "status": "PENDING"
   }
  }
 }

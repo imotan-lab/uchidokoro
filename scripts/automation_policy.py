@@ -153,8 +153,13 @@ def disagreements(policy: dict | None = None) -> list:
     # ★巡回先の設定に、名簿で通していない先が生きていないか★
     #   ★名鑑もメーカー公式も両方みる★（2026-08-16・依頼215の指摘3）
     #   片方だけだと「監査は0件なのに、名簿に無い先へ実通信できる」形が残る。
-    for fname, purpose in (("directory-catalogs.json", "claim_material"),
-                           ("maker-catalogs.json", "new_machine_discovery")):
+    #   ★設定の形は名簿ごとに違う★（2026-08-16・依頼216の指摘1）
+    #   directory-catalogs は `directories[].surfaces[].url` に実URLを持つ。
+    #   前は `catalogs[].list_url` しか見ていなかったので、
+    #   **実際に毎晩取りに行く先を1つも見ておらず、0件＝安全に見えていた**。
+    for fname, purpose, top in (
+            ("directory-catalogs.json", "claim_material", "directories"),
+            ("maker-catalogs.json", "new_machine_discovery", "catalogs")):
         p = os.path.join(BASE, "assets", "data", fname)
         if not os.path.isfile(p):
             continue
@@ -163,21 +168,29 @@ def disagreements(policy: dict | None = None) -> list:
         except Exception as e:            # noqa: BLE001
             ng.append(f"{fname} を読めません: {str(e)[:100]}")
             continue
-        for cid, conf in (cats.get("catalogs") or {}).items():
+        got = cats.get(top)
+        if not isinstance(got, dict):
+            # ★形が変わったら「問題なし」にしない★（黙って見逃さない）
+            ng.append(f"{fname}: {top} が見当たりません"
+                      "／★形が変わっていないか確かめてください★")
+            continue
+        for cid, conf in got.items():
             if not isinstance(conf, dict) or conf.get("status") == "OFF_TOS":
                 continue
-            for key in ("list_url", "base_url", "url"):
-                u = conf.get(key)
-                if not u:
-                    continue
+            urls = [conf.get(k) for k in ("list_url", "base_url", "url")]
+            urls += [s.get("url") for s in (conf.get("surfaces") or [])
+                     if isinstance(s, dict)]
+            seen = set()
+            for u in [x for x in urls if x]:
+                h = _host_of(u)
+                if h in seen:
+                    continue              # 同じホストは1回だけ知らせる
+                seen.add(h)
                 # ★理由を問わず、通せない先が生きていたら知らせる★
-                #   前は「載っていません」だけを見ていたので、
-                #   PENDING・期限切れ・道筋違いを見逃していた。
                 ok, why = allows(u, purpose, policy=d)
                 if not ok:
-                    ng.append(f"{fname} の {cid}（{key}）へは通せません: "
-                              f"{_host_of(u)} / {why[:110]}")
-                break
+                    ng.append(f"{fname} の {cid} へは通せません: "
+                              f"{h} / {why[:110]}")
     return ng
 
 

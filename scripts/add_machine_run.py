@@ -2883,6 +2883,240 @@ def selftest() -> int:
             t("★★隠しh1の「パチスロ」でパチンコページを通さない★★"
               "（可視h1限定＋パチンコ語は共存でも打ち消さない・Codex55回目）",
               any("パチスロのページに見えません" in x for x in v12["problems"]))
+            _nw._get = lambda u, timeout=20: "<title>Lすーぱぁびん娘|EXAMPLE</title>"
+            t("★★既に登録されている機種は作らない★★（実際に二重登録できた・2026-07-31）",
+              _blocking(["既に登録されている疑い: slug=super_binmusume"]))
+            t("　実データでも既存機種を見つけられる",
+              _cd.find_duplicates("Lすーぱぁびん娘"))
+            # ★名前が違っても、公式URL・型式名で捕まえる★（Codex指摘・2026-07-31）
+            import json as _json
+            import tempfile as _tmp
+            _real_m = _cd.MACHINES
+            _dir = _tmp.mkdtemp(prefix="uchi_dup_")
+            try:
+                _f = os.path.join(_dir, "machines.json")
+                with open(_f, "w", encoding="utf-8") as _fh:
+                    _json.dump([{"slug": "aaa", "name": "ぜんぜん違う名前",
+                                 "identity": {
+                                     "official_product_url":
+                                         "https://www.example.jp/products/slot/x/",
+                                     "regulatory_model_code": "Lびん娘NY1"}}],
+                               _fh, ensure_ascii=False)
+                _cd.MACHINES = __import__("pathlib").Path(_f)
+                t("★★名前が違っても公式URLが同じなら疑う★★"
+                  "（追跡パラメータ・wwwの有無は無視する）",
+                  _cd.find_duplicates("新しい名前", official_urls=[
+                      "https://example.jp/products/slot/x?utm_source=z"]))
+                t("★名前が違っても型式名が同じなら疑う★",
+                  _cd.find_duplicates("新しい名前", model_codes=["Ｌびん娘 NY1"]))
+                t("　手がかりが無ければ疑わない（型式が無いこと自体は警告にしない）",
+                  not _cd.find_duplicates("新しい名前"))
+            finally:
+                _cd.MACHINES = _real_m
+                __import__("shutil").rmtree(_dir, ignore_errors=True)
+            t("　実在しない名前なら重複としない",
+              not _cd.find_duplicates("そんな機種はありませんXYZ"))
+            t("★★公式ページを開けないときは記事を作らない★★（機種を確かめられていない）",
+              _blocking(["公式ページを取得できません: 取得できません（URLError）"]))
+            _nw._get = lambda u, timeout=20: (
+                _ for _ in ()).throw(RuntimeError("開けない"))
+            r5 = run_one("L試験機", "https://m.example/products/slot/zzz/", "m", "2026-09")
+            t("★★試したときの架空機種は待ち行列に入れない★★（実際に混入した）",
+              _remember("通し確認機ZZZ",
+                        "https://m.example/products/slot/zzz_x/", "m",
+                        "2026-09", ["名鑑の個別ページが 1 件"]) is None)
+            t("★★詰まっている機種が後ろを塞がない★★"
+              "（最古の1件しか見ず、最大60日待たされていた・Codex18回目）",
+              len(pick_work({"items": {
+                  f"q_{i}": {
+                      "queue_id": f"q_{i}", "state": "READY",
+                      "name": f"n{i}", "identity_url": f"https://x/{i}",
+                      "maker": "m", "release": "2026-09",
+                      "first_seen": f"2026-07-0{i+1}",
+                      "last_try": "", "tries": 1} for i in range(3)}})) == 3)
+            t("★★一晩に見る件数に上限を置かない★★（2026-08-07・運営者決定）",
+              len(pick_work({"items": {
+                  f"q_{i}": {
+                      "queue_id": f"q_{i}", "state": "READY",
+                      "name": f"n{i}", "identity_url": f"https://x/{i}",
+                      "maker": "m", "release": "2026-09",
+                      "first_seen": "2026-07-01",
+                      "last_try": "", "tries": 1} for i in range(30)}})) == 30)
+            t("★★DMMに載るのを待っている控えは記事づくりの列に入れない★★"
+              "（入れると毎晩『試した』ことになり、待っているだけで打ち切られる）",
+              pick_work({"items": {"q_1": {"queue_id": "q_1",
+                  "state": "AWAITING_DMM_ID", "name": "待ち",
+                  "identity_url": "", "maker": "", "release": "2026-11",
+                  "first_seen": "2026-07-01", "last_try": "",
+                  "tries": 1}}}) == [])
+            _dtm = __import__("datetime").datetime
+
+            def _late(h, m, sch=True):
+                return past_deadline(_dtm(2026, 8, 8, h, m), scheduled=sch)
+            t("　代わりに時刻で区切る（更新タスクとぶつからないため）",
+              _late(5, 30) and not _late(2, 0) and not _late(23, 45))
+            t("★★遅れて起動した無人実行も止める★★（2026-08-11・台帳#293）"
+              "＝以前は08:00より後だと締切が効かず、件数無制限で走れた",
+              _late(8, 30) and _late(14, 0) and _late(22, 59))
+            t("　手で流すときは締切を効かせない（人が見ている）",
+              not _late(14, 0, sch=False) and not _late(5, 30, sch=False))
+            # ★★ロックを失ったら、出す手前で全部止まる★★（依頼154の②）
+            #   ここが無いと、30分以上止まってロックが別の実行へ移ったあと
+            #   復帰した旧い実行が、そのままコミット・pushできてしまう。
+            #   ★再開経路（retry_push_first）も push_after_publish を通る★
+            _keep_lost = list(_LOCK_LOST)
+            _keep_ctx = os.environ.get("UCHIDOKORO_LOCK_CTX")
+            try:
+                _LOCK_LOST.clear()
+                os.environ.pop("UCHIDOKORO_LOCK_CTX", None)
+                t("　ロックを持っていれば関所は通る（手動＝CTX無し）",
+                  lock_still_mine("試験") == [])
+                _LOCK_LOST.append("生存信号を打てません")
+                t("★★生存信号を失ったら出さない★★",
+                  bool(lock_still_mine("試験")))
+                _LOCK_LOST.clear()
+                os.environ["UCHIDOKORO_LOCK_CTX"] = os.path.join(
+                    _tmpdir, "no_such_ctx.json")
+                t("★★CTXはあるが今は持っていない場合も出さない★★",
+                  bool(lock_still_mine("試験")))
+                _LOCK_LOST.append("失った")
+                t("★★失った状態では push_after_publish が入口で止まる★★"
+                  "（未完了公開の再開経路もここを通る）",
+                  bool(push_after_publish("dummy_slug")))
+
+                # ★★3か所の配置を、順序つきで固定する★★（依頼155の②）
+                #   入口だけを見ていると、commit直前・push直前の検査が
+                #   消えても気づけない。「何回目の確認で落とすか」を変えて、
+                #   git が呼ばれないことまで確かめる。
+                _keep_lsm = globals()["lock_still_mine"]
+                _keep_run = globals()["subprocess"].run
+                try:
+                    # (何回目の確認で落とすか, 名前, 呼ばれてはいけない, 呼ばれるべき)
+                    for stop_at, jp, ban, must in (
+                            (2, "コミットの直前", ("commit", "push"), ()),
+                            (3, "pushの直前", ("push",), ("commit",))):
+                        seen, gits = [0], []
+
+                        def _lsm(where, _n=stop_at, _s=seen):
+                            _s[0] += 1
+                            return [] if _s[0] < _n else [f"{where}: 止めます"]
+
+                        def _run(cmd, *a, **k):
+                            if cmd and cmd[0] == "git":
+                                gits.append(cmd[1] if len(cmd) > 1 else "")
+                            class R:
+                                returncode, stdout, stderr = 0, "", ""
+                            return R()
+                        globals()["lock_still_mine"] = _lsm
+                        globals()["subprocess"].run = _run
+                        out = push_after_publish("dummy_slug")
+                        t(f"★★{jp}で失ったら、そこから先へ進まない★★",
+                          bool(out) and not any(g in gits for g in ban)
+                          and all(g in gits for g in must))
+                finally:
+                    globals()["lock_still_mine"] = _keep_lsm
+                    globals()["subprocess"].run = _keep_run
+
+                # ★再開経路の3分岐とも、出す経路を必ず通る★（依頼156のP2）
+                #   以前は「何か返ってくれば合格」だったので、
+                #   push_after_publish を呼ばずに別の理由で失敗しても通った。
+                _keep_pap = globals()["push_after_publish"]
+                try:
+                    # ★3分岐とも、呼ばれ方（slugと already_committed）まで見る★
+                    #   （依頼157のP2）以前は slug しか見ておらず、
+                    #   誤った already_committed で呼んでも通った。
+                    #   ★COMMITTED は実データと同じく sha を持つ★（依頼158のP2）
+                    #     再開側は sha と現在のHEADの一致を見てから進むので、
+                    #     空のままだとその判定を素通りしていた。
+                    for stage, committed, on_top, sha in (
+                            ("WRITTEN", False, False, ""),
+                            ("WRITTEN", True, True, ""),
+                            ("COMMITTED", True, False, "headcommit"),
+                            # ★記録したコミットが先端でない＝人が確かめる★
+                            #   （出さずに止まるので called は空のまま）
+                            ("COMMITTED", None, False, "furuisha")):
+                        called = []
+                        globals()["push_after_publish"] = (
+                            lambda slug, already_committed=False, _c=called:
+                            _c.append((slug, already_committed))
+                            or ["入口で止めました"])
+                        io.open(PUSH_PENDING, "w", encoding="utf-8").write(
+                            json.dumps({"slug": "t_resume", "sha": sha,
+                                        "stage": stage,
+                                        "parent": "oyacommit" if on_top else "",
+                                        "at": "2026/08/11 00:00:00"}))
+                        _keep_top = globals()["_committed_on_top"]
+                        _keep_head = globals()["_head"]
+                        try:
+                            globals()["_committed_on_top"] = (
+                                lambda parent, slug, _v=on_top: _v)
+                            globals()["_head"] = (lambda _v=sha: "headcommit" if _v != "furuisha" else "atarasii")
+                            out = retry_push_first()
+                        finally:
+                            globals()["_committed_on_top"] = _keep_top
+                            globals()["_head"] = _keep_head
+                        if committed is None:
+                            t("★★記録したコミットが先端でなければ、出さずに止まる★★"
+                              "（あとから別のコミットが乗っている＝人が確かめる）",
+                              bool(out) and called == []
+                              and any("別のコミット" in x for x in out))
+                        else:
+                            t(f"　未完了公開（{stage}/コミット済み={committed}）の再開も、"
+                              "出す経路を必ず通る",
+                              bool(out) and called == [("t_resume", committed)])
+                finally:
+                    globals()["push_after_publish"] = _keep_pap
+                    try:
+                        os.remove(PUSH_PENDING)
+                    except OSError:
+                        pass
+            finally:
+                _LOCK_LOST.clear()
+                _LOCK_LOST.extend(_keep_lost)
+                if _keep_ctx is None:
+                    os.environ.pop("UCHIDOKORO_LOCK_CTX", None)
+                else:
+                    os.environ["UCHIDOKORO_LOCK_CTX"] = _keep_ctx
+            # ★試験が本番のどこにも書かないことを、まとめて確かめる★
+            #   （2026-08-11・実際に2つ汚した＝台帳と未pushの目印）
+            t("★★試験が本番の未pushの目印を触らない★★"
+              "（dummy_slug が残り、次の実行が未完了公開として処理しかけた）",
+              PUSH_PENDING.startswith(_tmpdir))
+            t("★★試験が本番の待ち行列を触らない★★（架空機種が入り込んだ）",
+              _pend.STORE.startswith(_tmpdir))
+            t("　実際に開けない公式URLでは組み立てまで進まない",
+              "preview" not in r5
+              and any("公式ページを取得できません" in x for x in r5["blocked"]))
+            _nw._get = lambda u, timeout=20: (
+                "<title>Lすーぱぁびん娘|EXAMPLE</title><body>パチスロ 2026年9月 登場</body>")
+            t("　同じ機種なら通る",
+              verify_official("Lすーぱぁびん娘", "https://m.example/products/slot/lbinko/",
+                              "m")["problems"] == [])
+            t("★★登場年月を渡さなくても、公式から必ず取って確かめる★★"
+              "（空で渡せば検査ごと飛ばせた・Codex17回目）",
+              verify_official("Lすーぱぁびん娘",
+                              "https://m.example/products/slot/lbinko/",
+                              "m")["release"] == "2026-09")
+            _nw._get = lambda u, timeout=20: (
+                "<title>Lすーぱぁびん娘|EXAMPLE</title><body>パチスロ 2019年4月 登場</body>")
+            t("★★古い機種を新台として出せない★★"
+              "（--name の経路は新台の範囲を見ていなかった・Codex17回目）",
+              any("範囲外" in x for x in verify_official(
+                  "Lすーぱぁびん娘", "https://m.example/products/slot/lbinko/",
+                  "m")["problems"]))
+            # ---- 一覧カードでの同定（2026-08-04・Codex93回目の直し）
+            import io as _io
+            import ssl as _ssl
+            import urllib.error as _ue
+            real_cats = _nw.CATALOGS
+            _cat = os.path.join(_tmpdir, "cat.json")
+            _cardspec = {"card_tag": "li", "card_class": "slotItem",
+                         "name_class": "name", "type_class": "category",
+                         "year_class": "__year"}
+            _nw.CATALOGS = _cat
+
+
+
             # ★コミット文に書く区分★（2026-08-05・Codex99回目）
             t("　コミット文の区分: 実データから決まった区分を返す",
               _machine_class(sorted(

@@ -130,10 +130,34 @@ def _decode(body: bytes, charset: str, hdr_charset: str | None) -> str:
         return body.decode("utf-8", "replace")
 
 
+# ★いま何のために取りに行くか★（2026-08-16・依頼216の指摘1）
+#   通信の名簿は「用途と道筋が合っているか」まで見るので、
+#   呼び出し側がここへ用途を入れてから取りに行く。
+#   ★名乗らなければ「材料」扱い★＝いちばん狭い許可で判定される。
+FETCH_PURPOSE = {"now": ""}
+# ★自己試験の最中か★（架空のURLを使うので名簿の確認だけ外す）
+#   ★本番で立つことはない★＝selftest() の中でだけ真にする。
+_SELFTEST = {"on": False}
+
+
 def _get(url: str, timeout: int = 20) -> str:
     # ★規約で自動取得を禁じている先へは通信しない★（2026-08-16・台帳#376）
     #   巡回設定を1か所消し忘れても、ここで止まる（最後の砦）。
     _bh.check(url)
+    # ★規約を確かめた先か★（2026-08-16・依頼216の指摘1）
+    #   ここが**全部の取得が通る唯一の入口**なので、名簿の確認もここへ置く。
+    #   個々の呼び出し側に置くと、必ずどこかが漏れる（実際に漏れていた）。
+    #   ★用途は呼び出し側が名乗る★（`FETCH_PURPOSE` に入れる）。
+    #   名乗りが無いときは「材料を取りに行く」とみなす（いちばん狭い扱い）。
+    #   ★試験のときだけ外せる★＝試験は架空のURL（x.example 等）を使うので、
+    #     名簿に載せようがない。★本番では絶対に外れない★（環境変数ではなく
+    #     このモジュールの変数で、しかも自己試験の中でだけ立てる）。
+    if not _SELFTEST["on"]:
+        import automation_policy as _ap
+        _ok, _why = _ap.allows(url,
+                               FETCH_PURPOSE.get("now") or "claim_material")
+        if not _ok:
+            raise WatchError("通信の名簿が通しません: " + _why)
     hit = _CACHE.get(url)
     if hit is not None:
         FETCH_COUNT["cached"] += 1
@@ -1447,6 +1471,7 @@ def describe(url: str) -> dict:
 # ---------------------------------------------------------------- selftest
 
 def selftest() -> int:
+    _SELFTEST["on"] = True          # ★架空のURLを使うので名簿は見ない★
     results = []
 
     def t(name, cond):
