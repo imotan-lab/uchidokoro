@@ -308,7 +308,12 @@ def verify_evidence(evidence: list, fetch=None, expected: str = "") -> None:
         import new_machine_watch as _w
 
         def fetch(u):
-            return _w._get(u)
+            # ★何のために取りに行くかを名乗る★（2026-08-17）
+            #   8/16に「名乗らなければ通さない」形にしたとき、ここを
+            #   直し忘れて**必ず例外**になっていた（実際に新台が止まった）。
+            #   用途＝メーカーの同定（逐語引用が本当にそのページにあるか確かめる）
+            with _w.fetching("maker_identity"):
+                return _w._get(u)
     import new_machine_watch as _w
     for e in evidence:
         url = str(e.get("url") or "")
