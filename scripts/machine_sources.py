@@ -427,7 +427,11 @@ def check(slug: str, url: str, html: str | None = None,
 
     if html is None:
         try:
-            html = _w._get(url)
+            # ★用途を名乗ってから取りに行く★（2026-08-16・依頼218）
+            #   控えが読むのは記事のページ＝材料なので `claim_material`。
+            #   名乗り漏れで控えが全滅していた（2026-08-17に発覚）。
+            with _w.fetching("claim_material"):
+                html = _w._get(url)
         except Exception as e:              # noqa: BLE001
             out["problems"].append(f"取得できません（{e}）")
             return out
@@ -757,7 +761,9 @@ def recheck(slug: str, rec: dict, html: str | None = None,
 
     if html is None:
         try:
-            html = _w._get(url)
+            # ★用途を名乗ってから取りに行く★（依頼218・上と同じ理由）
+            with _w.fetching("claim_material"):
+                html = _w._get(url)
         except Exception as e:              # noqa: BLE001
             msg = str(e)
             # ★無くなったページは「一時的に読めない」ではない★（依頼135・P2）

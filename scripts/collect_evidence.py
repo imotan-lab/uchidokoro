@@ -158,7 +158,15 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
 
         def _read(where, url, got, publisher=None, html=None):
             try:
-                page = _nw._get(url) if html is None else html
+                # ★何のために取りに行くかを名乗る★（2026-08-16・依頼218）
+                #   名乗らないと通信の名簿が通さない。ここが集めるのは
+                #   記事の材料なので `claim_material`。名乗りを付け忘れて
+                #   いたため、2026-08-17は全出典が0件になっていた。
+                if html is None:
+                    with _nw.fetching("claim_material"):
+                        page = _nw._get(url)
+                else:
+                    page = html
                 # ★読んでよい本文にするのは user_area だけ★（台帳#345）
                 #   ①名鑑に決まりごとがあれば**箱ごと落とす**（P-WORLDのAI欄）
                 #   ②無ければ行単位で切る（従来どおり・依頼175で順番を直した分）
@@ -204,7 +212,9 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
                 #   別機種に差し替わると、そのまま材料になっていた。
                 pub = (cats.get(dir_id) or {}).get("publisher_id")
                 try:
-                    page = _nw._get(r["url"])
+                    # ★用途を名乗ってから取りに行く★（依頼218・上と同じ理由）
+                    with _nw.fetching("claim_material"):
+                        page = _nw._get(r["url"])
                 except Exception as e:    # noqa: BLE001
                     got[dir_id] = {"url": r["url"], "publisher": pub,
                                    "error": str(e)[:80]}

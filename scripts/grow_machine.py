@@ -838,14 +838,11 @@ def plan_one(slug: str, gather=None, verify=None, probe=None) -> dict:
     name = ident.get("announced_name") or cur.get("name")
     maker = ident.get("manufacturer_id") or ""
     url = ident.get("official_product_url") or ""
-    # ① 本人性を確かめ直す（公式が読めなければ同じ公式の一覧カード）
+    # ① 本人性を確かめ直す（同定はDMMの機種ページで行う）
+    #   ★以前ここで一覧カード用の下ごしらえをしていた★（`_ensure_list`）。
+    #   メーカー公式の巡回は 2026-08-16（台帳#377）に仕組みごと消したので、
+    #   呼び出しだけが残って **毎朝 NameError で落ちていた**（2026-08-17に発覚）。
     import add_machine_run as _amr
-    if verify is None:
-        # ★一覧カードで同定する社は、先に一覧を読んでおく★（2026-08-05）
-        #   夜の見張りとは別の実行なので控えが空で、
-        #   「その晩に正常に読めた一覧がありません」で必ず止まっていた。
-        #   ここでも**健全に読めた（state=OK）一覧だけ**を控える＝条件は同じ。
-        _ensure_list(maker)
     verify = verify or _amr.verify_official
     # ★登録済みの登場年月を渡して照合させる★（空だと検査ごと素通りする）
     old_release = str(cur.get("release_date") or "")
