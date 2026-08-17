@@ -638,6 +638,25 @@ def material_page_identity_ok(page, official_name: str, *,
         （Codexの指摘2＝弱いプロファイルでメーカー関門を迂回させない）
     """
     html = getattr(page, "cleaned_html", page)   # 器でも生HTMLでも受ける
+    # ★★器で渡されたら、指紋をその場で数え直す★★
+    #   （2026-08-17・Codex依頼238の厚み）器は書き換えられるので、
+    #   作った時の指紋を信じない。★いま持っている本文から数える★
+    _sha = ""
+    if not isinstance(page, str):
+        import hashlib
+        _sha = hashlib.sha256(str(html or "").encode("utf-8")).hexdigest()
+        # ★★取りに行った先と着いた先が違うページは、通常でも使わない★★
+        #   （2026-08-17・Codex依頼238のP1）
+        #   ★穴だったところ★＝控えで救う側は転送を拒否していたのに、
+        #   **厳格な同定に通る「普通のページ」は、ここで即座に通していた**。
+        #   別ページへ転送されていても、その本文が同じ機種に見えれば
+        #   材料として採用され、公開まで到達し得た（例外側は直したが、
+        #   通常側が隣で残っていた）。
+        import maker_identity_cache as _micr
+        _req = getattr(page, "requested_url", "")
+        _fin = getattr(page, "final_url", "")
+        if _req and _micr.url_key(_req) != _micr.url_key(_fin):
+            return False, "REDIRECTED"
     ok, why = page_is_machine(html, official_name, strict_all_tail=True,
                               extra_tail_ok=extra_tail_ok)
     if ok:
@@ -649,7 +668,6 @@ def material_page_identity_ok(page, official_name: str, *,
         return False, why
     # ★★指紋で照合する★★（URLではない）
     #   器で渡されていないと指紋が無い＝確かめようがないので通さない。
-    _sha = getattr(page, "sha256", "")
     if not _sha:
         return False, "GRANT_NO_PAGE_FINGERPRINT"
     if _sha not in set(grant):

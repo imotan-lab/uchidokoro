@@ -763,13 +763,39 @@ def _gather(name: str, maker: str = "", slug: str = "",
     #   保証が無く、同じ型の穴が5回続いた。
     #   ここで取った器を、控えの再確認と読取器の両方へ渡す。
     #   ★取れなかったページは材料にしない★（fail-closed）
-    _pages = {}
+    _pages, _drop = {}, set()
     for _u in list(got["urls"]):
         try:
-            _pages[_u] = _fp.fetch(_u, "claim_material")
+            _pg = _fp.fetch(_u, "claim_material")
         except _fp.PageError as e:        # noqa: BLE001
             _log(f"  （取れないので材料から外します）{_u} → {str(e)[:90]}")
             got["problems"].append(f"材料のページを取れません: {str(e)[:100]}")
+            _drop.add(_u)
+            continue
+        # ★★取りに行った先と着いた先が違うページは使わない★★
+        #   （2026-08-17・Codex依頼238のP1）
+        #   ★控えで救う側だけ転送を見ていた★＝厳格な同定に通る「普通の
+        #   ページ」は素通りしていたので、別ページへ転送されていても
+        #   その本文が同じ機種に見えれば公開まで到達し得た。
+        #   ★ここで一括して見る★＝例外側と通常側で扱いを分けない。
+        if _mic.url_key(_pg.requested_url) != _mic.url_key(_pg.final_url):
+            _log(f"  （別のページへ転送されるので材料から外します）"
+                 f"{_u} → {_pg.final_url}")
+            got["problems"].append(
+                f"材料のページが転送されます（{_u} → {_pg.final_url}）")
+            _drop.add(_u)
+            continue
+        _pages[_u] = _pg
+    # ★★外すときは、材料の一覧と票の両方から外す★★
+    #   （取れなかったURLを残すと、読取器が自分で取り直してしまう）
+    if _drop:
+        got["urls"] = [u for u in got["urls"] if u not in _drop]
+        looks = [r for r in looks if r.get("url") not in _drop]
+        if len(got["urls"]) < 2:
+            got["problems"].append(
+                f"名鑑の個別ページが {len(got['urls'])} 件しか残りません"
+                "（取れない・転送されるページを除いた結果）")
+            return got
     _cache_ok, _cache = True, None
     try:
         _cache = _mic.load()
@@ -2660,6 +2686,14 @@ def selftest() -> int:
         print(("✅" if cond else "❌") + " " + name)
 
     real_find, real_read, real_lookup = _di.find, _sl.read_page, _mc.lookup
+    # ★★試験でも材料のページは「器」で取る★★（2026-08-17・台帳#393）
+    #   本番は材料集めの前に1回だけ取りに行く。偽物がそこを満たさないと
+    #   「取れない／転送される」と判定されて全部落ちる。
+    #   ★到達先は要求元と同じにする★（転送なしのページを模す）
+    real_fetch = _fp.fetch
+    _fp.fetch = lambda u, purpose="claim_material", get=None: _fp.FetchedPage(
+        u, u, "<title>L試験機 スロット 新台 解析 | ちょんぼりすた</title>"
+           "<div>機種名 L試験機</div>")
 
     def _MKC(k):
         """★偽の名鑑ページにも、本番の約束を守らせる★（2026-08-17・依頼230）
@@ -2947,6 +2981,29 @@ def selftest() -> int:
         t("★★★確かめた本文と1文字でも違えば、許可証は効かない★★★"
           "（台帳#393の不変条件＝URLではなく本文で束縛する）",
           not _other_ok)
+        # ★★★2026-08-17・Codex依頼238のP1★★★
+        #   控えで救う側だけ転送を見ていて、**厳格な同定に通る普通のページ**は
+        #   素通りしていた（例外側は直したが通常側が隣で残っていた）。
+        _HTML_OK = ("<title>L試験機 スロット 新台 解析 | ちょんぼりすた</title>"
+                    "<div>機種名 L試験機</div><div>メーカー 京楽</div>")
+        _R1 = "https://chonborista.com/slot/x/111/"
+        _R2 = "https://chonborista.com/slot/x/999/"
+        t("★★★普通のページでも、別ページへ転送されていたら使わない★★★",
+          _mc.material_page_identity_ok(
+              _fp.FetchedPage(_R1, _R2, _HTML_OK), "L試験機")
+          == (False, "REDIRECTED"))
+        t("　（対照）転送が無ければ通る",
+          _mc.material_page_identity_ok(
+              _fp.FetchedPage(_R1, _R1, _HTML_OK), "L試験機")[0])
+        # ★器を後から書き換えても効かない★（指紋は関所で数え直す）
+        _pg_mut = _fp.FetchedPage(_R1, _R1, _HTML_OK)
+        _g_mut = frozenset({_pg_mut.sha256})
+        _pg_mut.cleaned_html = _HTML_OK + "<p>あとから足した</p>"
+        t("★★器の本文を後から書き換えても、許可証は効かない★★"
+          "（作った時の指紋を信じない）",
+          _mc.material_page_identity_ok(
+              _pg_mut, "L別の機種", grant=_g_mut,
+              expected_maker="kyoraku")[1] == "GRANT_CONTENT_MISMATCH")
 
         # ★★★非対称な転送★★★（2026-08-17・Codex依頼236の指摘）
         #   ★穴だったところ★＝控えに保存したURL（/ 付き）だけを取り直して
@@ -4015,6 +4072,7 @@ def selftest() -> int:
             _nw._get, _mc.page_is_machine = real_get, real_page
     finally:
         _di.find, _sl.read_page, _mc.lookup = real_find, real_read, real_lookup
+        _fp.fetch = real_fetch
         _lc.check = real_lc
         _pend.STORE = real_store
         globals()["PUSH_PENDING"] = real_mark
