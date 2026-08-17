@@ -244,6 +244,20 @@ def _check_record(slug: str, rec, reg=None) -> None:
                          f"／★{'/'.join(sorted(PROOF_PROFILES))} のどれか★")
     if rec["verdict"] != "ACCEPT_MATERIAL":
         return
+    # ★★弱い型で救えるのは、メーカー欄が本当に一致している時だけ★★
+    #   （2026-08-17・Codex依頼233の指摘2）
+    #   題の不一致は「弱い証明」なので、メーカー欄まで食い違うページを
+    #   ここで通すと**メーカーの関門を丸ごと迂回**できてしまう。
+    #   ★RELATED（関係のある社）も救わない★＝それは maker_field の話。
+    if prof == "title_name_core_mismatch":
+        import model_code_lookup as _mcl1
+        _owners = _mcl1._maker_core_owners(key_of(rec.get("seen")))
+        if str(rec.get("expected") or "") not in _owners:
+            raise CacheError(
+                f"題の不一致で救えるのは、メーカー欄が名簿で一致する時だけです"
+                f"（{slug}）: 期待 {rec.get('expected')!r}／"
+                f"名鑑「{rec.get('seen')}」→ {sorted(_owners) or '（不明）'}"
+                "／★関係のある社・不明・別の社は、この弱い型では救いません★")
     # ---------------- ここから下は「材料に使う」と決めた控えだけの検査 ----------
     # ★対象ページ自身が根拠に入っていること★（対象と根拠の取り違えを防ぐ）
     if tgt.rstrip("/") not in {str(e.get("url") or "").rstrip("/") for e in ev}:
@@ -972,14 +986,37 @@ def selftest() -> int:
     # ★★★題が略称のときの証明（2026-08-17・台帳#390）★★★
     st2 = _empty()
 
+    # ★弱い型はメーカー欄が名簿で一致する組でしか使えない★（依頼233の指摘2）
+    #   ＝平和⇔オリンピアエステートは RELATED なのでここでは使えない。
+    #   実例に合わせて 京楽（kyoraku）で試す。
+    _KY, _KYS = "kyoraku", "京楽"
+    _QKY = f"機種名 {_MN} メーカー {_KYS} 導入日 2026年10月5日"
+
+    def _page_ky(title=None):
+        """★京楽の名鑑ページ★（弱い型はメーカー欄が名簿で一致する組だけ）"""
+        t0 = (title if title is not None
+              else f"{_MN} スロット 新台 天井 解析 | ちょんぼりすた")
+        return (f"<title>{t0}</title>"
+                f'<div id="hyouka">星の評価</div>'
+                f'<ul class="commentlist"><li>読者の書き込み</li></ul>'
+                f'<div id="entry"><div>機種名 {_MN}</div>'
+                f"<div>メーカー {_KYS}</div>"
+                f"<div>導入日 2026年10月5日</div></div>")
+
+    def _fetch_ky(u):
+        _w_last(u)
+        return _page_ky()
+
     def _ok2(**kw):
         base = dict(slug="dmm_5073", target_url=_C,
                     proof_profile="title_name_core_mismatch",
-                    expected=_EXPECTED, seen=_SEEN,
+                    expected=_KY, seen=_KYS,
                     verdict="ACCEPT_MATERIAL", why="理由",
-                    by=["claude", "codex"], evidence=[ev[0]],
+                    by=["claude", "codex"],
+                    evidence=[{"url": _C, "quote": _QKY,
+                               "kind": "directory_observation"}],
                     decided_at="2026-08-17", machine_name=_MN,
-                    release_date=_REL, store=st2, fetch=_fetch)
+                    release_date=_REL, store=st2, fetch=_fetch_ky)
         base.update(kw)
         try:
             remember(**base)
@@ -991,19 +1028,11 @@ def selftest() -> int:
     #   ★5回目の同じ失敗★＝前は普通の題のページで試していたので、
     #   救う対象そのもの（NAME_CORE_MISMATCH）を一度も通しておらず、
     #   **控えを作れない＝機能しない**ことに気づけなかった。
-    _NICK = ("<title>【ガンゲイル(スマスロ)】解析情報まとめ 天井・設定判別"
-             "・打ち方・やめどき</title>"
-             '<div id="hyouka">星の評価</div>'
-             '<ul class="commentlist"><li>読者の書き込み</li></ul>'
-             f'<div id="entry"><div>機種名 {_MN}</div>'
-             f"<div>メーカー {_SEEN}</div>"
-             "<div>導入日 2026年10月5日</div></div>")
+    _NICK = _page_ky(title="【ガンゲイル(スマスロ)】解析情報まとめ 天井・設定判別")
 
     def _fetch_nick(u):
-        if u == _C:
-            _w_last(u)
-            return _NICK
-        return _fetch(u)
+        _w_last(u)
+        return _NICK
 
     import model_code_lookup as _mcl_t
     _pim = _mcl_t.page_is_machine(_NICK, _MN, strict_all_tail=True)
@@ -1013,7 +1042,7 @@ def selftest() -> int:
       "（前は救う対象そのものを厳格同定で拒否していて、控えを作れなかった）",
       _ok2(fetch=_fetch_nick, slug="dmm_nick"))
     t("★★★作った控えで、そのページを材料に使えるところまで通る★★★",
-      verdict_for("dmm_nick", _EXPECTED, _SEEN, st2, _fetch_nick,
+      verdict_for("dmm_nick", _KY, _KYS, st2, _fetch_nick,
                   material_url=_C, machine_name=_MN, release_date=_REL,
                   want_profile="title_name_core_mismatch")
       == "ACCEPT_MATERIAL")
@@ -1024,32 +1053,28 @@ def selftest() -> int:
     #   4つの読取器が転送先の本文から値を読めた。
     _C2 = "https://chonborista.com/slot/orinpia-slot/777777/"
     t("★★★控えたページが別の機種ページへ転送されていたら使わない★★★",
-      verdict_for("dmm_nick", _EXPECTED, _SEEN, st2,
+      verdict_for("dmm_nick", _KY, _KYS, st2,
                   lambda u: (_w_last(_C2), _NICK)[1],
                   material_url=_C, machine_name=_MN, release_date=_REL,
                   want_profile="title_name_core_mismatch") is None)
     t("★★題の不一致“以外”で落ちるページは、この型でも救わない★★",
       not _ok2(slug="dmm_notitle",
-               fetch=lambda u: (_w_last(u), _NICK.replace(
-                   "<title>【ガンゲイル(スマスロ)】解析情報まとめ 天井・設定判別"
-                   "・打ち方・やめどき</title>", ""))[1]
-               if u == _C else _fetch(u)))
+               fetch=lambda u: (_w_last(u), _page_ky(title=""))[1]))
     t("★★本文にDMMの正式名がそのまま無ければ救わない★★",
       not _ok2(slug="dmm_noname",
                fetch=lambda u: (_w_last(u),
-                                _NICK.replace(_MN, "L別のなにか"))[1]
-               if u == _C else _fetch(u)))
+                                _NICK.replace(_MN, "L別のなにか"))[1]))
     t("★★題が略称のときは、そのページ1件で控えられる★★"
       "（2件目の名鑑は別途、正規の同定を通っている）", _ok2())
     t("　（対照）メーカーの食い違いのほうは、今までどおり2名鑑が要る",
       not _ok2(proof_profile="maker_field", slug="dmm_x"))
     t("★★★題の不一致で作った控えを、メーカーの食い違いに流用できない★★★"
       "（証明の型が違えば効かない）",
-      verdict_for("dmm_5073", _EXPECTED, _SEEN, st2, _fetch,
+      verdict_for("dmm_5073", _KY, _KYS, st2, _fetch_ky,
                   material_url=_C, machine_name=_MN, release_date=_REL,
                   want_profile="maker_field") is None)
     t("　（対照）同じ型で引けば効く",
-      verdict_for("dmm_5073", _EXPECTED, _SEEN, st2, _fetch,
+      verdict_for("dmm_5073", _KY, _KYS, st2, _fetch_ky,
                   material_url=_C, machine_name=_MN, release_date=_REL,
                   want_profile="title_name_core_mismatch")
       == "ACCEPT_MATERIAL")
