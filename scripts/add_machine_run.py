@@ -401,6 +401,9 @@ def write_maker_relation_record(slug: str, name: str, checks: list,
             f"- DMMのメーカー: {c.get('expected', '')}",
             f"- 名鑑のメーカー欄: {c.get('seen', '')}",
             f"- 名簿が指した社: {'/'.join(c.get('owners') or []) or '（なし）'}",
+            f"- 票のかたまり: {c.get('vote_key') or '（取れませんでした）'}",
+            f"- 突き合わせたDMMの機種: {c.get('machine_name', '')}"
+            f"（導入日 {c.get('release_date', '')}）",
             f"- 結論: {c.get('verdict', '')}",
             f"- 根拠の範囲: {c.get('basis_scope', '')}",
             f"- 会社関係の機械確認: {c.get('relationship_verified')}",
@@ -467,9 +470,18 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
                        r.get("url") or "")
         if v == "ACCEPT_MATERIAL":
             accepted.add(r["url"])
+            # ★どの発行者の票として入ったかも残す★（Codex依頼229）
+            #   ★記録が取れなくても採否は変えない★（記録は監査のためのもの）
+            try:
+                import source_lineage as _sl2
+                _vk = _sl2.vote_key_of_url(r["url"])
+            except Exception:              # noqa: BLE001
+                _vk = ""
             notes.append(
                 {"url": r["url"], "expected": mc.get("expected", ""),
                  "seen": mc.get("seen", ""), "owners": mc.get("owners", []),
+                 "vote_key": _vk,
+                 "machine_name": machine_name, "release_date": release_date,
                  # ★決めたのは会社の同一性ではない★（依頼228の指摘5）
                  "verdict": "ACCEPT_MATERIAL",
                  "relationship_verified": False,
