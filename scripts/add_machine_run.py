@@ -2894,14 +2894,16 @@ def selftest() -> int:
         _fake_sl_read = _sl.read_page
         _sl.read_page = real_read
         try:
-            _readers = {}
+            _readers, _readers_why = {}, {}
             for _mod, _nm in ((_sl, "基本スペック"), (_cl, "天井"),
                               (_cz, "CZ"), (_at, "AT仕様")):
+                _ng_r = _mod.read_page(_TU2, _MN2, expected_maker="kyoraku",
+                                       grant=None)
                 _readers[_nm] = (
                     _mod.read_page(_TU2, _MN2, expected_maker="kyoraku",
                                    grant=frozenset({_TU2})).get("ok"),
-                    _mod.read_page(_TU2, _MN2, expected_maker="kyoraku",
-                                   grant=None).get("ok"))
+                    _ng_r.get("ok"))
+                _readers_why[_nm] = _ng_r.get("reason")
         finally:
             _nw._get = _real_get2
             _sl.read_page = _fake_sl_read
@@ -2911,6 +2913,35 @@ def selftest() -> int:
           "（本物の略称の題で。前は控えすら作れなかった）",
           _made and _v2 == "ACCEPT_MATERIAL" and _readers_ok
           and not _reader_ng)
+        t("　許可証が無いときの断り方も見る（4つとも題の不一致で断る）",
+          all(str(_r) == "NAME_CORE_MISMATCH" for _r in _readers_why.values()))
+
+        # ★★★非対称な転送★★★（2026-08-17・Codex依頼236の指摘）
+        #   ★穴だったところ★＝控えに保存したURL（/ 付き）だけを取り直して
+        #   いたので、「/ 付きは正常・実行時の / 無しだけ別機種へ転送」を
+        #   一度も見ていなかった。許可証には実行時のURLが入り、
+        #   読取器はそちらを取りに行くので、別機種の本文が材料に入り得た。
+        _TU_RUN = _TU2.rstrip("/")          # 実行時に名鑑から見つかるURL
+        _OTHER = "https://chonborista.com/slot/orinpia-slot/777777/"
+
+        def _f_asym(u):
+            # ★/ 付きは正しいページ・/ 無しだけ別機種へ転送★
+            _nw.LAST_FINAL_URL["url"] = (_OTHER if u == _TU_RUN else u)
+            return _NICK2
+
+        _v_asym = _mic.verdict_for("dmm_e2e", "kyoraku", "京楽", _st2, _f_asym,
+                                   material_url=_TU_RUN, machine_name=_MN2,
+                                   release_date="2026-10-05",
+                                   want_profile="title_name_core_mismatch")
+        t("★★★実行時のURLだけが別機種へ転送されていたら、使わない★★★"
+          "（控えのURLは正常なので、保存側だけ見ていた頃は素通りした）",
+          _v_asym is None)
+        t("　（対照）転送が無ければ、その形でも使える",
+          _mic.verdict_for("dmm_e2e", "kyoraku", "京楽", _st2, _f2,
+                           material_url=_TU_RUN, machine_name=_MN2,
+                           release_date="2026-10-05",
+                           want_profile="title_name_core_mismatch")
+          == "ACCEPT_MATERIAL")
         _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": "LB/タコスロBD",
                                         "reason": "OK"}
         t("★★BT型式（LB/…）を規格印ありとして採用する★★"

@@ -169,7 +169,7 @@ def _has_core(haystack: str, needle: str) -> bool:
     return n in _ci.normalize_core(str(haystack or ""))
 
 
-def _check_record(slug: str, rec, reg=None) -> None:
+def _check_record(slug: str, rec, reg=None, require_final: bool = True) -> None:
     """1件ぶんの控えを確かめる（★読むときも書くときも同じ物差し★）。"""
     if not isinstance(rec, dict):
         raise CacheError(f"控えが壊れています（{slug}）")
@@ -321,6 +321,14 @@ def _check_record(slug: str, rec, reg=None) -> None:
         raise CacheError(
             f"控えの relationship_verified は false です（{slug}）"
             "／★会社の関係は機械で確かめていません★")
+    # ★到達先は必須★（2026-08-17・Codex依頼236の厚み）
+    #   使うときに「記録時と同じ所へ着いたか」を比べる相手なので、
+    #   無い控えは比べようがない＝受け取らない（fail-closed）。
+    _ofu_ok = str(rec.get("observed_final_url") or "").startswith("https://")
+    if require_final and not _ofu_ok:
+        raise CacheError(
+            f"控えに observed_final_url がありません（{slug}）"
+            "／★記録した時にどこへ着いたかが無いと、使うときに比べられません★")
 
 
 def save(got: dict) -> None:
@@ -408,7 +416,8 @@ def verdict_for(slug: str, expected: str = "", seen: str = "", store=None,
         # ★④根拠が今もそのページに実在するか（毎回取り直す）★
         try:
             finals = verify_evidence(rec.get("evidence") or [], fetch,
-                                     expected, rec)
+                                     expected, rec,
+                                     runtime_target=str(material_url))
         except CacheError:
             return None
         # ★★⑤いま取ってきた到達先が、控えた対象ページと同じか★★
@@ -563,7 +572,7 @@ def date_forms(iso: str) -> list:
 
 
 def verify_evidence(evidence: list, fetch=None, expected: str = "",
-                    rec=None) -> dict:
+                    rec=None, runtime_target: str = "") -> dict:
     """★根拠の逐語引用が、本当にそのページにあるか確かめる★
 
     ★なぜ要るか（2026-08-14・依頼190のP1）★
@@ -588,8 +597,20 @@ def verify_evidence(evidence: list, fetch=None, expected: str = "",
                 return _w._get(u)
     import new_machine_watch as _w
     finals = {}          # ★URLごとの到達先★（対象ページの転送を見るため）
+    _tgt_key = url_key((rec or {}).get("target_url"))
     for e in evidence:
         url = str(e.get("url") or "")
+        # ★★対象ページは「実行時に見つかったURL」で取りに行く★★
+        #   （2026-08-17・Codex依頼236）
+        #   ★穴だったところ★＝控えに保存したURLだけを取り直していたので、
+        #   「保存した / 付きは正常・実行時の / 無しだけ別機種へ転送」
+        #   という**非対称**を一度も見ていなかった。
+        #   許可証には実行時のURLが入り、読取器はそちらを取りに行くので、
+        #   別機種の本文が材料に入り得た。
+        #   ★確かめる相手と、あとで読む相手を同じにする★
+        if runtime_target and _tgt_key and url_key(url) == _tgt_key:
+            url = runtime_target
+            e = dict(e, url=url)
         if expected:
             check_evidence_source(e, expected)
         try:
@@ -748,8 +769,11 @@ def remember(slug: str, expected: str, seen: str, verdict: str,
                     "relationship_verified": False})
     # ★書く前に、読むときと同じ物差しを通す★（順番を変えない）
     #   先に形を確かめてから通信する＝形が違う控えのために外へ出ない。
-    _check_record(slug, rec)
-    _finals = verify_evidence(evidence, fetch, expected, rec)
+    # ★①形だけ先に見る★（形が違う控えのために外へ出ない）
+    #   到達先はまだ取りに行っていないので、そこだけ後回しにする。
+    _check_record(slug, rec, require_final=False)
+    _finals = verify_evidence(evidence, fetch, expected, rec,
+                              runtime_target=str(target_url))
     # ★最後に着いたURLも残す★（記録時と使用時で転送先が変わるのを防ぐ）
     #   ★根拠の「最後に取ったページ」ではなく、対象ページのぶんを見る★
     #   （2026-08-17。最初そこを間違え、根拠2件目の到達先と比べていた＝自己試験が検知）
@@ -760,6 +784,8 @@ def remember(slug: str, expected: str, seen: str, verdict: str,
             "／★転送先を対象として控えるかは、2AIが決め直します★")
     if _fin:
         rec["observed_final_url"] = _fin
+    # ★③到達先まで入れて、読むときとまったく同じ物差しで見直す★
+    _check_record(slug, rec)
     got = store if store is not None else load()
     rows = got.setdefault("machines", {}).setdefault(slug, [])
     _t = url_key(target_url)
