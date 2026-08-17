@@ -2006,6 +2006,24 @@ def _fill_missing_dmm(work: dict) -> dict:
         work["release"] = got["release_date"][:7]   # 待ち行列は年月まで
     if got.get("maker") and not work.get("dmm_maker"):
         work["dmm_maker"] = got["maker"]
+    # ★★名簿に足された社を、待ち行列にも効かせる★★（2026-08-17）
+    #   ★穴だったところ★＝控えに入った時点で名簿に無かった社は
+    #   `maker` が空のまま固定され、**あとで名簿へ足しても直らなかった**。
+    #   毎晩「名前かメーカーが取れない」で飛ばされ、その機種は永久に公開
+    #   できない（実例: LBトリプルクラウンX-300／清龍ジャパン。
+    #   名簿には同じ日に足してあったのに、待ち行列が古いままだった）。
+    #   ★新しい照合の規則は作らない★＝見つけたときと同じ索引を通す。
+    if not work.get("maker") and got.get("maker"):
+        try:
+            import dmm_discover as _dd2
+            _mid = _dd2.maker_index().get(_dd2._norm(got["maker"]))
+        except Exception as e:            # noqa: BLE001
+            _mid = ""
+            _log(f"  メーカー名簿を読めません（結び直しません）: {e}")
+        if _mid:
+            work["maker"] = _mid
+            _log(f"  名簿に載ったのでメーカーを結びました: "
+                 f"{got['maker']} → {_mid}")
     if got.get("model_code") and not work.get("dmm_model_code"):
         work["dmm_model_code"] = got["model_code"]
     return work
@@ -3062,6 +3080,34 @@ def selftest() -> int:
               "（エラー題の名前がorのせいで直らなかった・Codex38回目）",
               "名前を公式の現在値に直します" in inspect.getsource(fill_missing)
               and " or (c.get" not in inspect.getsource(fill_missing))
+            # ★★名簿に足された社を、待ち行列にも効かせる★★（2026-08-17）
+            #   ★直す前はここが通らなかった★＝控えに入った時点で名簿に
+            #   無かった社は maker が空のまま固定され、あとで名簿へ足しても
+            #   毎晩「名前かメーカーが取れない」で飛ばされ続けた。
+            import dmm_machine as _dm_fm
+            _real_dm_fetch = _dm_fm.fetch
+            _dm_fm.fetch = lambda mid, get=None: {
+                "id": mid, "heading": "LB試験機X-300 （新台スマスロ）パチスロ｜天井",
+                "maker": "清龍ジャパン", "release_date": "2026-08-03",
+                "model_code": "", "has_model_code": False,
+                "url": f"https://p-town.dmm.com/machines/{mid}"}
+            try:
+                _w_no_maker = fill_missing(
+                    {"name": "LB試験機X-300", "maker": "",
+                     "identity_url": "https://p-town.dmm.com/machines/5089",
+                     "release": "2026-08"})
+                _w_unknown = fill_missing(
+                    {"name": "LB試験機X-300", "maker": "",
+                     "identity_url": "https://p-town.dmm.com/machines/5089",
+                     "release": "2026-08"})
+            finally:
+                _dm_fm.fetch = _real_dm_fetch
+            t("★★名簿に載ったメーカーは、待ち行列でも結び直す★★"
+              "（足しても直らず、その機種を永久に公開できなかった）",
+              _w_no_maker.get("maker") == "seiryu_japan")
+            t("　（対照）既に入っている値は上書きしない",
+              fill_missing(dict(_w_unknown, maker="daitogiken")).get("maker")
+              == "daitogiken")
             t("★★規格を読めない公式名では型式を採用しない★★"
               "（照合を飛ばすと同名旧機種の型式・材料で新台を書けた・Codex39回目）",
               "規格（L/S）が公式名" in inspect.getsource(gather))
