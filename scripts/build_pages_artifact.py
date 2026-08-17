@@ -1635,6 +1635,16 @@ def build() -> int:
 
         assert_all_verbatim_approved(work)
         template_hashes = check_template_approved(work)
+        # ★どの出典を材料に採るかを決める側も、公開の直前に照合する★
+        #   （2026-08-17・台帳#389／Codex依頼232の指示）
+        #   ★あちらは「公開物の契約」・こちらは「材料の契約」★＝意味が違うので
+        #   集合を分けている。どちらか一方だけ通しても公開できない。
+        sys.path.insert(0, str(BASE / "scripts"))
+        import material_contract as _mcon
+        try:
+            _mcon.check(str(work))
+        except _mcon.ContractError as e:
+            raise BuildError("材料の採否の契約が一致しません: " + str(e))
 
         run(work, "scripts/build_public_data.py", "--apply")
         # ★公開HTMLを書くのはこのスクリプトだけ★（Codex 23巡目 条件7の設計）
