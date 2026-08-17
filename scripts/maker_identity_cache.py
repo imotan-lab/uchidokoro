@@ -78,6 +78,14 @@ BASIS_SCOPE = "directory_consensus_only"
 #   増えたらここだけ直す。
 ALLOWED_AGREERS = frozenset({"claude", "codex"})
 MIN_QUOTE = 8                          # 逐語引用の最低の長さ
+# ★引用は「事実の欄の写し」までにとどめる★（2026-08-17・Codex依頼229の指摘3）
+#   なな徹の規約（第7条1項(1)「入手したコンテンツの複製」）について、
+#   運営者は2026-08-17に**「機種名・メーカー欄・導入日という事実の欄だけ・
+#   1件50字前後・記事本文や表は保存しない」という前提で**「続ける」と判断した。
+#   ★その前提をコードで守らせる★＝以前は下限しか無く、記事本文を丸ごと
+#   引用として保存できた（判断の前提を実装が保証していなかった）。
+MAX_QUOTE = 120                        # 逐語引用の最大の長さ
+MAX_EVIDENCE = 4                       # 根拠の件数の上限
 # ★根拠は名鑑の観測だけ★（2026-08-17・依頼228）
 #   `official_relationship`（メーカー公式の会社関係ページ）は**削除した**。
 #   運営者が「メーカー公式は使わない」と決めたため（止めずに消す）。
@@ -169,14 +177,25 @@ def _check_record(slug: str, rec, reg=None) -> None:
     ev = rec.get("evidence")
     if not isinstance(ev, list) or not ev:
         raise CacheError(f"控えに根拠がありません（{slug}）")
+    if len(ev) > MAX_EVIDENCE:
+        raise CacheError(f"控えの根拠が多すぎます（{slug}）: {len(ev)}件"
+                         f"／★{MAX_EVIDENCE}件までです（写しは最小限に）★")
     kinds = set()
     for e in ev:
         if not isinstance(e, dict):
             raise CacheError(f"控えの根拠が組ではありません（{slug}）")
         if not str(e.get("url") or "").startswith(("http://", "https://")):
             raise CacheError(f"控えの根拠のURLが不正です（{slug}）: {e.get('url')!r}")
-        if len(" ".join(str(e.get("quote") or "").split())) < MIN_QUOTE:
+        q1 = " ".join(str(e.get("quote") or "").split())
+        if len(q1) < MIN_QUOTE:
             raise CacheError(f"控えの逐語引用が短すぎます（{slug}）")
+        # ★長すぎる引用は受け取らない★（2026-08-17・Codex依頼229の指摘3）
+        #   規約の判断は「事実の欄の写しにとどまる」という前提で出ている。
+        if len(q1) > MAX_QUOTE:
+            raise CacheError(
+                f"控えの逐語引用が長すぎます（{slug}）: {len(q1)}字"
+                f"／★{MAX_QUOTE}字までです＝機種名・メーカー欄・導入日の"
+                "欄だけを写します（記事本文や表は写しません）★")
         if e.get("kind") not in KINDS:
             raise CacheError(f"控えの根拠の種類が不正です（{slug}）: {e.get('kind')!r}")
         kinds.add(e.get("kind"))
@@ -211,9 +230,15 @@ def _check_record(slug: str, rec, reg=None) -> None:
     #   （自前で len() すると共同制作の組をまとめ忘れる＝監査39が見張る）
     import source_lineage as _sl
     try:
-        keys = {_sl.vote_key_of_url(str(e.get("url")), reg) for e in ev}
+        per = [_sl.vote_key_of_url(str(e.get("url")), reg) for e in ev]
     except Exception as e:                 # noqa: BLE001
         raise CacheError(f"根拠の出どころを数えられません（{slug}）: {e}")
+    # ★同じ発行者から2つ以上写さない★（2026-08-17・Codex依頼229の指摘3）
+    #   写しを最小限にするため。票の数え方（independent）とは別の目的。
+    if len(set(per)) != len(per):
+        raise CacheError(f"同じ名鑑から2件以上の引用を控えています（{slug}）"
+                         "／★1つの名鑑につき1件までです★")
+    keys = set(per)
     if _sl.independent(keys, reg) < MIN_DIRECTORIES:
         raise CacheError(
             f"材料に使うと決めるには独立した名鑑が{MIN_DIRECTORIES}つ要ります"
@@ -243,10 +268,24 @@ def key_of(seen: str) -> str:
 
 
 def verdict_for(slug: str, expected: str, seen: str, store=None,
-                fetch=None):
+                fetch=None, material_url: str = "",
+                machine_name: str = "", release_date: str = ""):
     """この機種について前に決めた結論（無ければ None）。
 
     ★完全一致で引く★＝(機種・期待する社・名鑑の表記の芯) の3つ。
+
+    ★★「使う」と答えるには、対象そのものと結び付いていること★★
+      （2026-08-17・Codex依頼229の指摘1）
+      前は鍵が (機種・期待する社・表記) の3つだけだったので、
+        ①別機種の機種名・導入日・根拠を手で書いた控えでも、
+          読むときにDMMと突き合わせずに「使う」を返せた
+        ②いま採否を決めようとしているURLを渡していないので、
+          **控えの根拠に入っていない別の名鑑ページまで**「使う」になった
+      そこで `ACCEPT_MATERIAL` を返すのは、
+        ・`material_url` が控えの根拠のURLに含まれる
+        ・控えの `machine_name` / `release_date` が、DMMで確かめた値と一致する
+      ときだけにした。★どれか1つでも渡されていなければ答えない★（fail-closed）。
+      `REJECT_MATERIAL`（使わない側）は今までどおり、鍵が合えば返す。
 
     ★「材料に使う」として使う時だけ、根拠が実在するか確かめ直す★
       （2026-08-14・依頼192のP1）書くときに照合しても、
@@ -262,15 +301,28 @@ def verdict_for(slug: str, expected: str, seen: str, store=None,
     got = store if store is not None else load()
     k = key_of(seen)
     for rec in (got.get("machines") or {}).get(slug) or []:
-        if rec.get("expected") == expected and key_of(rec.get("seen")) == k:
-            v = rec.get("verdict")
-            if v == "ACCEPT_MATERIAL":
-                try:
-                    verify_evidence(rec.get("evidence") or [], fetch, expected,
-                                    rec)
-                except CacheError:
-                    return None
+        if rec.get("expected") != expected or key_of(rec.get("seen")) != k:
+            continue
+        v = rec.get("verdict")
+        if v != "ACCEPT_MATERIAL":
             return v
+        # ★①いま決めようとしているページが、控えの根拠そのものか★
+        urls = {str(e.get("url") or "").rstrip("/")
+                for e in (rec.get("evidence") or [])}
+        if not material_url or str(material_url).rstrip("/") not in urls:
+            return None
+        # ★②控えが名乗る機種が、DMMで確かめた機種と同じか★
+        if not machine_name or not release_date:
+            return None
+        if not _has_core(str(rec.get("machine_name") or ""), machine_name) \
+                or str(rec.get("release_date") or "") != str(release_date):
+            return None
+        # ★③根拠が今もそのページに実在するか（毎回取り直す）★
+        try:
+            verify_evidence(rec.get("evidence") or [], fetch, expected, rec)
+        except CacheError:
+            return None
+        return v
     return None
 
 
@@ -453,10 +505,34 @@ def verify_evidence(evidence: list, fetch=None, expected: str = "",
             raise CacheError(
                 f"根拠の逐語引用がそのページに見つかりません（{url}）: "
                 f"{q[:40]}／★写した文だけを根拠にします★")
+        # ★★メーカー欄そのものを取り出して比べる★★
+        #   （2026-08-17・Codex依頼229の指摘2）
+        #   前は「seen という文字がページのどこかにあるか」しか見ていなかった。
+        #   それだと、メーカー欄は別の社なのに本文のどこかに「平和」と
+        #   書いてあるページでも「平和表記の2件目」に数えられた。
+        #   ★新しい読み取りを書かない★＝名鑑のメーカー欄を読む役は
+        #   model_code_lookup.extract_maker_name にあるので、そこを通す。
+        seen = str((rec or {}).get("seen") or "")
+        if seen:
+            import model_code_lookup as _mcl
+            mk = _mcl.extract_maker_name(html or "")
+            if not mk:
+                raise CacheError(
+                    f"そのページのメーカー欄を読めません（{url}）"
+                    "／★読めないものを「確かめた」ことにしません★")
+            if key_of(mk) != key_of(seen):
+                raise CacheError(
+                    f"そのページのメーカー欄が控えと違います（{url}）: "
+                    f"ページ「{mk[:20]}」／控え「{seen[:20]}」")
         # ★そのページが本当にこの機種のページか★（2026-08-17・運営者判断）
         #   機種名は引用の中で見ている（_check_record）。ここでは導入日を
         #   ページ本文で見る。同名で別メーカーの機種は導入年が違うので、
         #   ここが効く（パチスロ犬夜叉＝2016年／2022年）。
+        #   ★弱い検査だと分かっていて残している★（Codex依頼229の指摘2）＝
+        #   名鑑ごとの「導入日の欄」を読む役はまだ無く、それを書くと
+        #   サイトごとの場合分けになる（当サイトが避けている形）。
+        #   本人性の主たる担保は、上のメーカー欄の一致と、引用に機種名が
+        #   入っていること、そして本体の同定（identity_ok）。
         want = date_forms(str((rec or {}).get("release_date") or ""))
         if want and not any(w in body for w in want):
             raise CacheError(
@@ -590,6 +666,17 @@ def _bad_load() -> bool:
         _rec(release_date="2026/10/05"),               # 日付の形が違う
         _rec(basis_scope="whatever"),                  # 守りの範囲を偽る
         _rec(relationship_verified=True),              # 会社の関係を確かめた、と偽る
+        # ★写しが長すぎる／多すぎる／同じ名鑑から2件★（依頼229の指摘3）
+        _rec(evidence=[{"url": _C, "quote": _QC + "。" + "解析情報。" * 30,
+                        "kind": "directory_observation"},
+                       {"url": _N, "quote": _QN,
+                        "kind": "directory_observation"}]),
+        _rec(evidence=[{"url": _C, "quote": _QC,
+                        "kind": "directory_observation"},
+                       {"url": "https://chonborista.com/slot/x/2/",
+                        "quote": _QC, "kind": "directory_observation"}]),
+        _rec(evidence=[{"url": _C, "quote": _QC,
+                        "kind": "directory_observation"}] * 5),
         # 引用に機種名が入っていない（別機種の欄でも通っていた）
         _rec(evidence=[{"url": _C, "quote": "メーカー 平和 の機種一覧です",
                         "kind": "directory_observation"},
@@ -625,11 +712,21 @@ def selftest() -> int:
         print(("✅ " if cond else "❌ ") + name)
 
     st = _empty()
+
+    # ★名鑑のページと同じ形で作る★（2026-08-17・Codex依頼229の指摘2）
+    #   メーカー欄は「行の頭がメーカー」で読み取る（extract_maker_name）ので、
+    #   1行にべた書きした偽ページでは**本番の読み取りを通らない**。
+    #   ★関所を通る形の偽物でなければ、関所の試験にならない★
+    def _page(maker=_SEEN, day="2026年10月5日", name=_MN):
+        return (f"<div>機種名 {name}</div>"
+                f"<div>メーカー {maker}</div>"
+                f"<div>導入日 {day}</div>")
+
     _pages = {
-        _C: f"<p>{_QC} 導入日 2026年10月5日</p>",
-        _N: f"<p>{_QN}</p>",
-        _LIST: f"<p>{_QC} 導入日 2026年10月5日 の一覧</p>",
-        _KIT: f"<p>{_QC} 導入日 2026年10月5日</p>",
+        _C: _page(),
+        _N: _page(day="2026/10/5"),
+        _LIST: _page(),
+        _KIT: _page(),
     }
 
     def _w_last(u):
@@ -646,6 +743,15 @@ def selftest() -> int:
 
     ev = _rec()["evidence"]
 
+    def _ask(slug="dmm_5086", expected=_EXPECTED, seen=_SEEN, store=None,
+             fetch=None, url=_C, name=_MN, day=_REL):
+        """★本番と同じ渡し方で引く★（対象URL・DMMで確かめた機種名と導入日）"""
+        return verdict_for(slug, expected, seen,
+                           st if store is None else store,
+                           _fetch if fetch is None else fetch,
+                           material_url=url, machine_name=name,
+                           release_date=day)
+
     def _ok(**kw):
         base = dict(slug="dmm_5086", expected=_EXPECTED, seen=_SEEN,
                     verdict="ACCEPT_MATERIAL", why="理由",
@@ -660,28 +766,49 @@ def selftest() -> int:
             return False
 
     t("★★独立2名鑑の根拠つきなら控えられる★★", _ok())
-    t("　控えた結論を引ける",
-      verdict_for("dmm_5086", _EXPECTED, "株式会社平和", st, _fetch)
-      == "ACCEPT_MATERIAL")
+    t("　控えた結論を引ける", _ask(seen="株式会社平和") == "ACCEPT_MATERIAL")
+
+    # ★★★2026-08-17・Codex依頼229の指摘1★★★
+    #   控えの鍵が (機種・期待する社・表記) の3つだけだったので、
+    #   ①別機種の名前と日付を手で書いた控えでも「使う」を返せた
+    #   ②いま決めようとしているURLを渡していないので、
+    #     控えの根拠に入っていない別のページまで「使う」になった
+    t("★★★控えの根拠に入っていないページには効かない★★★"
+      "（前は採否対象のURLを渡していなかったので、同じ名鑑の別ページまで通った）",
+      _ask(url="https://chonborista.com/slot/orinpia-slot/999999/") is None)
+    t("　（対照）控えの根拠そのものなら通る",
+      _ask(url=_C) == "ACCEPT_MATERIAL" and _ask(url=_N) == "ACCEPT_MATERIAL")
+    t("★★★控えが名乗る機種がDMMと違えば効かない★★★"
+      "（別機種の機種名・導入日を手で書いた控えを、読むときに落とす）",
+      _ask(name="L別の機種") is None and _ask(day="2026-11-02") is None)
+    t("★★対象を渡さなければ答えない★★（fail-closed）",
+      _ask(url="") is None and _ask(name="") is None and _ask(day="") is None)
 
     # ★★使うときにも根拠を取り直す（2026-08-14・依頼192のP1）★★
     t("★★根拠のページが取れなくなったら材料に使わない★★"
       "／手で書き足した偽の根拠を、使う直前に落とす",
-      verdict_for("dmm_5086", _EXPECTED, _SEEN, st,
-                  lambda u: (_ for _ in ()).throw(RuntimeError("404"))) is None)
+      _ask(fetch=lambda u: (_ for _ in ()).throw(RuntimeError("404"))) is None)
     t("　（対照）取り直せるうちは今までどおり使える",
-      verdict_for("dmm_5086", _EXPECTED, _SEEN, st, _fetch)
-      == "ACCEPT_MATERIAL")
+      _ask() == "ACCEPT_MATERIAL")
     t("　引用が消えていたら使わない",
-      verdict_for("dmm_5086", _EXPECTED, _SEEN, st,
-                  lambda u: "<p>ページが作り替えられました</p>") is None)
+      _ask(fetch=lambda u: "<p>ページが作り替えられました</p>") is None)
 
     # ★★2026-08-17・依頼228で足した守り★★
     t("★★導入日がそのページに無ければ材料に使わない★★"
       "／同名で別メーカーの機種は導入年が違う（犬夜叉＝2016年／2022年）",
-      verdict_for("dmm_5086", _EXPECTED, _SEEN, st,
-                  lambda u: (_w_last(u), f"<p>{_QC} 導入日は未定です</p>")[1]
-                  if u == _C else (_w_last(u), _pages[u])[1]) is None)
+      _ask(fetch=lambda u: (_w_last(u), _page(day="未定"))[1]
+           if u == _C else (_w_last(u), _pages[u])[1]) is None)
+    # ★★★2026-08-17・Codex依頼229の指摘2★★★
+    #   前は「seen という文字がページのどこかにあるか」しか見ていなかったので、
+    #   メーカー欄が別の社でも、本文のどこかに「平和」とあれば通った。
+    t("★★★メーカー欄が別の社なら、本文に同じ文字があっても使わない★★★"
+      "（前はページのどこかに文字があれば「2件目の名鑑」に数えられた）",
+      _ask(fetch=lambda u: (_w_last(u), _page(maker="サミー")
+                            + "<div>関連: 平和 の機種はこちら</div>")[1]
+           if u == _C else (_w_last(u), _pages[u])[1]) is None)
+    t("　メーカー欄を読めないページも使わない（読めない＝確かめていない）",
+      _ask(fetch=lambda u: (_w_last(u), f"<div>{_QC} 導入日 2026年10月5日</div>")[1]
+           if u == _C else (_w_last(u), _pages[u])[1]) is None)
     t("★★名鑑1つだけでは控えられない★★（独立2名鑑が要る）",
       not _ok(evidence=[ev[0]], slug="dmm_1"))
     t("　（対照）2つあれば通る＝厳しすぎるのではない", _ok(slug="dmm_2"))
@@ -705,6 +832,27 @@ def selftest() -> int:
     t("　根拠の種類を勝手に作れない",
       not _ok(evidence=[ev[0], dict(ev[1], kind="でっちあげ")],
               slug="dmm_kind"))
+
+    # ★★★2026-08-17・Codex依頼229の指摘3★★★
+    #   運営者の判断（なな徹の規約・「事実の欄だけ・短い抜粋なので続ける」）を
+    #   コードで守らせる。前は下限しか無く、記事本文を丸ごと控えられた。
+    _C2 = "https://chonborista.com/slot/orinpia-slot/264135/"
+    _pages[_C2] = _page()
+    _long = _QC + "。" + "この機種の解析情報をお届けします。" * 12
+    _pages[_C] = _page() + f"<div>{_long}</div>"
+    t("★★★長すぎる引用は控えられない★★★"
+      "（記事本文を丸ごと写せた＝規約の判断の前提が守られていなかった）",
+      len(_long) > MAX_QUOTE
+      and not _ok(evidence=[dict(ev[0], quote=_long), ev[1]], slug="dmm_long"))
+    _pages[_C] = _page()
+    t("　（対照）欄の写しの長さなら通る＝厳しすぎるのではない",
+      len(_QC) <= MAX_QUOTE and _ok(slug="dmm_short"))
+    t("★★同じ名鑑から2件は控えない★★（写しは最小限に）",
+      not _ok(evidence=[ev[0], dict(ev[0], url=_C2)], slug="dmm_two"))
+    t("★★根拠の件数にも上限がある★★",
+      not _ok(evidence=[ev[0], ev[1], dict(ev[0], url=_C2),
+                        dict(ev[1], url=_N), dict(ev[0], url=_C)],
+              slug="dmm_many"))
 
     # ★★以前からの守り（v1で入れたもの）が生きているか★★
     t("★★機種が違えば効かない★★（全機種に一律で効かせない）",

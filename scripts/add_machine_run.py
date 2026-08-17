@@ -233,12 +233,15 @@ def recheck_known(mid: str, r: dict, seen: dict, out: dict) -> None:
             titles[url] = now_t           # 初回は覚えるだけ
 
 
-# ★入口の切り替え★（2026-08-12・運営者決定でP-WORLD一本にした）
-#   真にするとメーカー公式11社の見張りに戻る。仕組みは残してある。
-
+# ★入口はDMMぱちタウンだけ★（2026-08-16・台帳#376／2026-08-17に説明を更新）
+#   ★「真にすると公式の見張りに戻る」という切り替えは**もうありません**★
+#   仕組みごと削除済みです（2026-08-16・台帳#377）。この行が残っていたせいで
+#   「まだ戻せる」と読める状態でした（Codex依頼229の指摘）。
 
 
 # ★知らせ済みのメーカーを覚えておく場所★（同じ会社で毎晩鳴らさない）
+#   ★ファイル名は旧入口の名残★＝中身は「名簿に無いメーカー」の控えで、
+#   いまはDMMのカレンダーから来る（置き場を変えると控えが消えるので名前は据え置き）
 UNKNOWN_MAKERS = _lp.doc("pworld_unknown_makers.json")
 
 
@@ -262,7 +265,7 @@ def _tell_unknown_makers(rows: list) -> None:
     if not fresh:
         _log("  名簿に無いメーカーはすべて連絡済みです")
         return
-    lines = ["P-WORLDのカレンダーに、名簿に無いメーカーの新台が出ています。",
+    lines = ["DMMぱちタウンの導入カレンダーに、名簿に無いメーカーの新台が出ています。",
              "このままだと記事を作れません（どのメーカーとして記録するか決まらないため）。",
              "",
              "★名簿に足してください★",
@@ -415,7 +418,8 @@ def write_maker_relation_record(slug: str, name: str, checks: list,
 
 
 def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
-                            verdict_of=None) -> dict:
+                            verdict_of=None, machine_name="",
+                            release_date="") -> dict:
     """★メーカー欄を見て、どの名鑑ページを材料に使うか決める★
 
     ★ここを関数にした理由★（2026-08-17・Codex依頼228の指摘1と、その原因）
@@ -439,10 +443,16 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
       relation_checks … 控えで通したページの記録（判断記録に残す）
     """
     if verdict_of is None:
-        def verdict_of(expected, seen):
+        def verdict_of(expected, seen, url):
             if not (cache_ok and slug):
                 return None
-            return _mic.verdict_for(slug, expected, seen, cache)
+            # ★対象そのものを渡す★（2026-08-17・Codex依頼229の指摘1）
+            #   いま決めようとしているページのURLと、DMMで確かめた
+            #   機種名・導入日を渡さないと「使う」は返らない（fail-closed）。
+            return _mic.verdict_for(slug, expected, seen, cache,
+                                    material_url=url,
+                                    machine_name=machine_name,
+                                    release_date=release_date)
     accepted, rejected, questions, notes = set(), set(), [], []
     for r in looks or []:
         mc = r.get("maker_check") or {}
@@ -453,7 +463,8 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
         #   （パチスロ犬夜叉＝2016年ロデオ／2022年クロスアルファ）。
         if mc.get("state") != "RELATED" or not r.get("identity_ok"):
             continue
-        v = verdict_of(mc.get("expected") or maker, mc.get("seen") or "")
+        v = verdict_of(mc.get("expected") or maker, mc.get("seen") or "",
+                       r.get("url") or "")
         if v == "ACCEPT_MATERIAL":
             accepted.add(r["url"])
             notes.append(
@@ -494,18 +505,28 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
                     "使うと決めるには独立した名鑑が2つ要ります★）"),
             })
     # ★★材料から外すもの★★
-    #   ①MISMATCH ②UNRESOLVED（★控えでも救わない★）
+    #   ①MISMATCH ②UNKNOWN（★控えでも救わない★）
     #   ③RELATED（控えで「使う」と決めた時だけ残す）
-    #   ④控えで「使わない」と決めたページ ⑤機種名の照合に落ちたページ
+    #   ④控えで「使わない」と決めたページ ⑤同定に落ちたページ
     #   ★残せるのは accepted に入ったものだけ★
-    bad = {r["url"] for r in looks or []
-           if r["url"] not in accepted
-           and (str(r.get("reason") or "").startswith(
-               ("DIRECTORY_MAKER_MISMATCH",
-                "DIRECTORY_MAKER_UNRESOLVED",
-                "DIRECTORY_MAKER_RELATED"))
-                or r["url"] in rejected
-                or not r.get("identity_ok"))}
+    #
+    #   ★★判定は「状態」で見る。理由の文でなく★★
+    #     （2026-08-17・Codex依頼229の厚みの指摘）
+    #     前は reason の文字列の頭で見ていたので、
+    #     `state` が UNKNOWN のままでも**理由文を書き換えるだけで除外を
+    #     すり抜けられた**（隣り合う契約が静かにずれる形）。
+    #     状態を正本にすれば、文言を直しても採否は変わらない。
+    #   ★状態が読めないページも外す★（fail-closed）
+    _USE_STATES = ("MATCH",)          # そのまま材料に使ってよい状態
+    bad = set()
+    for r in looks or []:
+        if r["url"] in accepted:
+            continue
+        st = (r.get("maker_check") or {}).get("state")
+        if not r.get("identity_ok") or r["url"] in rejected:
+            bad.add(r["url"])
+        elif st is not None and st not in _USE_STATES:
+            bad.add(r["url"])
     return {"accepted": accepted, "rejected_by_cache": rejected,
             "bad": bad, "questions": questions, "relation_checks": notes}
 
@@ -523,8 +544,15 @@ def gather(*a, **k):
         return _gather(*a, **k)
 
 
-def _gather(name: str, maker: str = "", slug: str = "") -> dict:
-    """1機種ぶんの材料を集める。★止まった理由も返す★"""
+def _gather(name: str, maker: str = "", slug: str = "",
+            machine_name: str = "", release_date: str = "") -> dict:
+    """1機種ぶんの材料を集める。★止まった理由も返す★
+
+    ★machine_name / release_date は「DMMの機種ページで確かめた値」★
+      （2026-08-17・Codex依頼229の指摘1）メーカー欄の控えを引くときに、
+      控えが名乗る機種がこの機種と同じかを突き合わせるために使う。
+      渡されなければ控えは効かない（fail-closed）。
+    """
     got = {"name": name, "urls": [], "model_code": None, "material": None,
            "problems": []}
     fr = _di.find(name)
@@ -574,7 +602,9 @@ def _gather(name: str, maker: str = "", slug: str = "") -> dict:
         _cache_ok = False
         _log(f"  メーカーの控えを読めません（今までどおり除きます）: {e}")
     # ★判定は maker_material_decision に集めてある★（試験もそこを通す）
-    _dec = maker_material_decision(looks, slug, maker, _cache, _cache_ok)
+    _dec = maker_material_decision(looks, slug, maker, _cache, _cache_ok,
+                                   machine_name=machine_name or name,
+                                   release_date=release_date)
     got["maker_questions"] = _dec["questions"]
     _bad_maker = _dec["bad"]
     for _n in _dec["relation_checks"]:
@@ -2223,7 +2253,12 @@ def run_one(name, official_url, maker, release, apply_it=False,
     #   メーカー欄が「分からない」ときに、**この機種の控え**を見るため。
     #   以前は材料集めのあとで slug を決めていたので、控えを引けなかった。
     out["slug"] = _ba.slug_from_url(official_url)
-    got = gather(name, maker, slug=out["slug"])
+    # ★DMMで確かめた機種名・導入日を材料集めへ渡す★
+    #   （2026-08-17・Codex依頼229の指摘1）メーカー欄の控えを、
+    #   **この機種のもの**だと突き合わせてから使うため。
+    got = gather(name, maker, slug=out["slug"],
+                 machine_name=vo.get("identity_name") or name,
+                 release_date=str(vo.get("release") or ""))
     out["problems"] += got["problems"]
     # ★メーカー欄で決められなかったものは、その場で2AIへ聞く★
     #   （人が名簿に足すまで待たない。運営者の方針）
@@ -2236,12 +2271,20 @@ def run_one(name, official_url, maker, release, apply_it=False,
     #   材料が足りずに早く終わるときも残す＝あとから由来を確かめられる。
     out["maker_relation_checks"] = list(
         got.get("maker_relation_checks") or [])
-    # ★判断記録にも残す★（2026-08-17・Codex依頼228の指摘7）
-    #   実行の戻り値とログだけでは、あとから由来をたどれない。
-    if apply_it and out["maker_relation_checks"]:
-        _rec_path = write_maker_relation_record(
-            out["slug"], name, out["maker_relation_checks"])
-        _log(f"  メーカー欄の採否を判断記録へ: {_rec_path or '★書けませんでした★'}")
+    # ★判断記録は「結果が出てから」書く★（2026-08-17・Codex依頼229の厚み）
+    #   前はここで書いていたので、後段で転載照合に失敗しても・材料が採れなくても・
+    #   公開が止まっても「材料に使った」と残った（記録が事実と違う）。
+    #   実際に最後まで残ったURLと、記事を作れたかを入れて、出口で書く。
+    def _write_relation_record(created: bool):
+        rows = out.get("maker_relation_checks") or []
+        if not (apply_it and rows):
+            return
+        alive = set(got.get("urls") or [])
+        for _n in rows:
+            _n["material_used"] = _n["url"] in alive
+            _n["article_created"] = bool(created)
+        p = write_maker_relation_record(out["slug"], name, rows)
+        _log(f"  メーカー欄の採否を判断記録へ: {p or '★書けませんでした★'}")
     for _q in out["maker_questions"]:
         _log(f"  ★2AIに聞くこと（メーカー）: {_q['text'][:120]}")
         # ★メーカー表記の質問だけ見分けられるようにする★（依頼190）
@@ -2321,6 +2364,7 @@ def run_one(name, official_url, maker, release, apply_it=False,
     # ★②同定に関わる問題があれば、材料が採れていても作らない★
     out["blocked"] = _blocking(out["problems"])
     if out["blocked"] or not usable_mat:
+        _write_relation_record(created=False)
         for b in out["blocked"]:
             _log(f"  ★止めました: {b[:140]}")
         if apply_it:
@@ -2365,6 +2409,7 @@ def run_one(name, official_url, maker, release, apply_it=False,
         out["problems"] += res["problems"]
         if res["problems"]:
             out["blocked"] = res["problems"]
+            _write_relation_record(created=False)
             return out
         _log(f"公開しました: {out['slug']} / 書いたファイル{len(out['wrote'])}件 "
              + " ".join(os.path.relpath(w, BASE).replace(os.sep, "/")
@@ -2374,6 +2419,7 @@ def run_one(name, official_url, maker, release, apply_it=False,
         #   「待ち行列にも無い・手元だけ変わっている」状態になり、
         #   翌日の実行が残骸で止まって、誰も気づかないまま進まなくなる。
         out["pending_id"] = pending_id
+    _write_relation_record(created=bool(out.get("wrote")))
     _log(f"=== 機種の処理終了: {name} / 止めた理由{len(out['blocked'])}件 "
          f"/ 問題{len(out['problems'])}件 ===")
     return out
@@ -2446,6 +2492,43 @@ def selftest() -> int:
         g2 = gather("L試験機")
         t("　2件そろえば型式名と材料を集める",
           g2["model_code"] == "L1" and g2["material"] is not None)
+
+        # ★★★gather() を通して採否を確かめる★★★
+        #   （2026-08-17・Codex依頼229。判定関数だけの試験では、
+        #     「状態ではなく理由の文で決めている」という隣の契約の壊れ方を
+        #     検知できなかった。★理由の文をわざと本番と違う言い回しにして★
+        #     採否が状態で決まっていることを見る）
+        _real_vf = _mic.verdict_for
+
+        def _g_urls(state, cached=None, identity_ok=True):
+            _mc.lookup = lambda u, n, **k: {
+                "url": u, "identity_ok": identity_ok, "model_code": "L1",
+                "reason": "（この文言は採否に関係しません）",
+                "maker_check": {"state": state, "seen": "平和",
+                                "expected": "olympia_estate",
+                                "owners": ["heiwa"]}}
+            _mic.verdict_for = lambda *a, **k: cached
+            try:
+                return len(gather("L試験機", "olympia_estate", slug="dmm_5086",
+                                  machine_name="L試験機",
+                                  release_date="2026-10-05")["urls"])
+            finally:
+                _mic.verdict_for = _real_vf
+
+        t("★★名簿で一致した名鑑は、gatherを通しても残る★★",
+          _g_urls("MATCH") == 2)
+        t("★★★どの社か分からないものは、控えで『使う』と決めてあっても"
+          "gatherを通して外れる★★★（理由の文に頼らず状態で決める）",
+          _g_urls("UNKNOWN", cached="ACCEPT_MATERIAL") == 0)
+        t("★★関係のある社は、控えで『使う』と決めてあれば残る★★",
+          _g_urls("RELATED", cached="ACCEPT_MATERIAL") == 2)
+        t("★★関係のある社でも、控えが無ければ外れる★★",
+          _g_urls("RELATED", cached=None) == 0)
+        t("★★控えで『使わない』と決めてあれば外れる★★",
+          _g_urls("RELATED", cached="REJECT_MATERIAL") == 0)
+        t("★★明らかに別の社は外れる★★", _g_urls("MISMATCH") == 0)
+        t("　同定に落ちたページも外れる",
+          _g_urls("MATCH", identity_ok=False) == 0)
         _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": "LB/タコスロBD",
                                         "reason": "OK"}
         t("★★BT型式（LB/…）を規格印ありとして採用する★★"
@@ -2850,7 +2933,8 @@ def selftest() -> int:
                                           "expected": "heiwa"}}]
                 dec = maker_material_decision(
                     looks, "dmm_5086", "olympia_estate",
-                    verdict_of=lambda e, s: cached)
+                    verdict_of=lambda e, s, u: cached,
+                    machine_name="L試験機", release_date="2026-10-05")
                 return (_U not in dec["bad"], dec)
 
             t("★★明らかに別の社なら材料に使わない★★",
