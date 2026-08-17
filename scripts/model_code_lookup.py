@@ -609,6 +609,50 @@ def extract_maker_name(html: str) -> str:
     return ""
 
 
+def material_page_identity_ok(html: str, official_name: str, *,
+                              url: str = "", expected_maker: str = "",
+                              extra_tail_ok: set | None = None,
+                              grant=None):
+    """★材料に使ってよいページかを見る、唯一の場所★（2026-08-17・台帳#390）
+
+    返すもの: (通してよいか, 理由)
+
+    ★なぜ1か所にまとめるか★（Codex依頼233の指摘7）
+      基本スペック・天井・CZ・AT仕様の読取器が**それぞれ**同定をやり直して
+      いたので、材料集めの段階でページを通しても**値を読む段階でまた落ちた**。
+      例外の扱いを4か所に写すと、必ずどこかがずれる。
+
+    ★grant＝「この機種について、このページを材料に使ってよい」と2AIが決めた控え★
+      （maker_identity_cache が根拠を取り直して確かめ済みのURLの集まり）
+      ★弱い側で救えるのは題の不一致（NAME_CORE_MISMATCH）だけ★＝
+        別機種・規格違い・題が読めない等の落ち方は、控えがあっても通さない
+        （Codexの指摘3＝複数の失敗理由を弱い方へ落とさない）
+      ★通すときも、メーカー欄が今もDMMと合っているかをその場で見る★
+        （Codexの指摘2＝弱いプロファイルでメーカー関門を迂回させない）
+    """
+    ok, why = page_is_machine(html, official_name, strict_all_tail=True,
+                              extra_tail_ok=extra_tail_ok)
+    if ok:
+        return True, "OK"
+    # ★救えるのは題の不一致だけ★
+    if why != "NAME_CORE_MISMATCH":
+        return False, why
+    if not grant or not url:
+        return False, why
+    if str(url).rstrip("/") not in {str(u).rstrip("/") for u in grant}:
+        return False, why
+    # ★このページを使うと決めた前提（メーカー欄が合う）が今も成り立つか★
+    mk = extract_maker_name(html)
+    if not mk:
+        return False, "GRANT_MAKER_UNREADABLE"
+    if expected_maker:
+        owners = _maker_core_owners(
+            _ci.normalize_core(mk).replace("株式会社", ""))
+        if expected_maker not in owners:
+            return False, "GRANT_MAKER_MISMATCH"
+    return True, "OK_BY_GRANT"
+
+
 def _maker_core_owners(core_text: str) -> set:
     """その文字列が名簿のどの社を指すか（名前・IDの芯の**包含**で見る）。
 
@@ -739,6 +783,14 @@ def lookup(url: str, official_name: str, expected_maker: str = "") -> dict:
         else None)
     if not ok:
         out["reason"] = why
+        # ★2AIへ回す価値があるかの印★（2026-08-17・台帳#390／Codexの③）
+        #   ★これは「本人だ」という判断ではない★＝機械がしてよいのは
+        #   「完全一致の文字列があるか見る」までで、そこから本人性を
+        #   結論づけるのは二段目の意味判断（Codex依頼233の4）。
+        #   題が略称のときだけ、候補として印を付ける。
+        if why == "NAME_CORE_MISMATCH" and official_name:
+            body = " ".join(_w._visible_text(html).split())
+            out["name_in_body"] = str(official_name).strip() in body
         return out
     out["identity_ok"] = True
     # ★同定に通ったページの導入年月を控えとして返す★（2026-08-02・Codex47回目）

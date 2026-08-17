@@ -190,7 +190,8 @@ def mentioned_names(text: str) -> set:
     return out
 
 
-def read_page(url: str, official_name: str) -> dict:
+def read_page(url: str, official_name: str, *,
+              expected_maker: str = "", grant=None) -> dict:
     out = {"url": url, "host": url.split("/")[2].lower().removeprefix("www."),
            "ok": False, "reason": "", "czs": []}
     try:
@@ -207,8 +208,11 @@ def read_page(url: str, official_name: str) -> dict:
     # ★材料の照合も厳格側で★（2026-08-02・Codex55回目。緩い側だと
     #   「機種名 新台 BLACK」のような未知の版名が装飾語の後ろで通り、
     #   別バージョンの値を2媒体一致で採用できた）
-    ok, why = _mc.page_is_machine(html, official_name,
-                                  strict_all_tail=True)
+    # ★材料に使ってよいかは共通の関所で見る★（2026-08-17・台帳#390）
+    #   ここに例外の扱いを写さない（4か所に写すと必ずずれる）
+    ok, why = _mc.material_page_identity_ok(
+        html, official_name, url=url,
+        expected_maker=expected_maker, grant=grant)
     if not ok:
         out["reason"] = why
         return out

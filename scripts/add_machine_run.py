@@ -425,6 +425,16 @@ def write_maker_relation_record(slug: str, name: str, checks: list,
         return ""
 
 
+def _host_of_url(url: str) -> str:
+    import urllib.parse
+    return (urllib.parse.urlsplit(str(url or "")).hostname or "").lower()
+
+
+def mc_expected(r: dict, maker: str) -> str:
+    """そのページに期待している社（読めていなければ引数のメーカー）。"""
+    return (r.get("maker_check") or {}).get("expected") or maker
+
+
 def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
                             verdict_of=None, machine_name="",
                             release_date="") -> dict:
@@ -451,16 +461,19 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
       relation_checks … 控えで通したページの記録（判断記録に残す）
     """
     if verdict_of is None:
-        def verdict_of(expected, seen, url):
+        def verdict_of(expected, seen, url, profile="maker_field"):
             if not (cache_ok and slug):
                 return None
             # ★対象そのものを渡す★（2026-08-17・Codex依頼229の指摘1）
             #   いま決めようとしているページのURLと、DMMで確かめた
             #   機種名・導入日を渡さないと「使う」は返らない（fail-closed）。
+            # ★求めている証明の型も渡す★（台帳#390）＝題の不一致で作った控えを
+            #   メーカーの食い違いに流用させない。
             return _mic.verdict_for(slug, expected, seen, cache,
                                     material_url=url,
                                     machine_name=machine_name,
-                                    release_date=release_date)
+                                    release_date=release_date,
+                                    want_profile=profile)
     accepted, rejected, questions, notes = set(), set(), [], []
     # ★★控えを読めないなら、どのページも使わない★★
     #   （2026-08-17・Codex依頼232の指摘）
@@ -489,8 +502,11 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
         #   ★束縛（URL・機種名・導入日）を渡さずに引く★＝
         #   「使う」は返らない（fail-closed）ので、通信もしない。
         if st != "RELATED":
+            # ★「使わない」は対象ページで引く★（2026-08-17・台帳#390）
+            #   v2までは表記だけで引いていたので、対象を渡さないと
+            #   引けなかった。いまは鍵が (機種・対象ページ) なので必ず渡す。
             if verdict_of(mc.get("expected") or maker, mc.get("seen") or "",
-                          "") == "REJECT_MATERIAL":
+                          r.get("url") or "") == "REJECT_MATERIAL":
                 rejected.add(r["url"])
             continue
         # ★控えを「使う」側で引くのは RELATED だけ★（依頼228の指摘1）
@@ -550,6 +566,72 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
                     "|directory_observation\" "
                     "で控えてください（★この機種にだけ効きます／"
                     "使うと決めるには独立した名鑑が2つ要ります★）"),
+            })
+    # ★★題が略称で同定に落ちたページを、2AIへ回す★★
+    #   （2026-08-17・台帳#390／Codex依頼233）
+    #   実例＝なな徹は題が「【ガンゲイルオンライン(スマスロ)】…」で、本文には
+    #   正式名がある。★機械が「本文に正式名があるから本人だ」と決めてはいけない★
+    #   （それが二段目の意味判断）。機械は**候補として出す**までにする。
+    #   ★足切り（Codexの③）★＝この4つを満たすものだけ2AIへ回す:
+    #     ①その名鑑の機種ページの形に一致 ②投稿欄を落とせた
+    #     ③落ちた理由が厳密に NAME_CORE_MISMATCH ④除去後の本文にDMMの
+    #       正式名が完全一致で存在
+    #   ★④が真でも identity_ok にはしない★（返せるのは候補だけ）
+    for r in looks or []:
+        if r.get("identity_ok") or r.get("reason") != "NAME_CORE_MISMATCH":
+            continue
+        if not slug or not machine_name:
+            continue
+        # ★足切り★＝投稿欄を落とした本文にDMMの正式名が完全一致であること
+        #   （lookup が印を付ける。無ければ2AIへ回さない）
+        if not r.get("name_in_body"):
+            continue
+        # ★その名鑑の機種ページの形に一致していること★
+        try:
+            _conf = _mic.directory_of(_host_of_url(r.get("url") or ""))
+            _pat = str(_conf.get("machine_page_pattern") or "")
+            if not _pat or not __import__("re").match(_pat, r.get("url") or ""):
+                continue
+        except Exception:                  # noqa: BLE001
+            continue                       # 名鑑を引けないものは回さない
+        v = verdict_of(mc_expected(r, maker), (r.get("maker_check") or {})
+                       .get("seen") or "", r.get("url") or "",
+                       "title_name_core_mismatch")
+        if v == "ACCEPT_MATERIAL":
+            accepted.add(r["url"])
+            notes.append({"url": r["url"], "expected": mc_expected(r, maker),
+                          "seen": (r.get("maker_check") or {}).get("seen", ""),
+                          "owners": [], "vote_key": "",
+                          "machine_name": machine_name,
+                          "release_date": release_date,
+                          "verdict": "ACCEPT_MATERIAL",
+                          "proof_profile": "title_name_core_mismatch",
+                          "relationship_verified": False,
+                          "basis_scope": _mic.BASIS_SCOPE,
+                          "eligible_at_collection_end": None,
+                          "article_created": None,
+                          "model_code_vote_used": False})
+        elif v != "REJECT_MATERIAL":
+            questions.append({
+                "key": f"title:{slug}:{r['url']}",
+                "text": (
+                    f"★この名鑑ページを、この機種の材料に使ってよいですか★／"
+                    f"{r['url']} は題が略称で、機械の同定に落ちました"
+                    f"（NAME_CORE_MISMATCH）。DMMの正式名は「{machine_name}」"
+                    f"（導入日 {release_date}）です。"
+                    "★機械は『本文に正式名があるから本人だ』とは決めません★＝"
+                    "そこは2AIが本文と欄の関係を読んで判断してください。"
+                    "決めたら python scripts/maker_identity_cache.py --record "
+                    "--machine-url https://p-town.dmm.com/machines/<機種ID> "
+                    f"--machine-name \"{machine_name}\" "
+                    f"--target-url {r['url']} "
+                    "--proof-profile title_name_core_mismatch "
+                    "--verdict ACCEPT_MATERIAL/REJECT_MATERIAL "
+                    "--why-file <理由を書いたファイル> --by claude,codex "
+                    "--evidence \"<そのページのURL>|<機種名とメーカー欄と導入日を"
+                    "含む逐語引用>|directory_observation\" "
+                    "で控えてください（★メーカー欄がDMMと一致していることが"
+                    "必要です★）"),
             })
     # ★★材料から外すもの★★
     #   ①MISMATCH ②UNKNOWN（★控えでも救わない★）
@@ -670,6 +752,10 @@ def _gather(name: str, maker: str = "", slug: str = "",
     _dec = maker_material_decision(looks, slug, maker, _cache, _cache_ok,
                                    machine_name=machine_name or name,
                                    release_date=release_date)
+    # ★控えで「使う」と決めたページの許可証★（2026-08-17・台帳#390）
+    #   材料を読む部品も**それぞれ**同定をやり直すので、ここで通しただけでは
+    #   値を読む段階でまた落ちる。同じ許可を全部の読取器へ渡す。
+    _grant = frozenset(_dec["accepted"])
     got["maker_questions"] = _dec["questions"]
     _bad_maker = _dec["bad"]
     for _n in _dec["relation_checks"]:
@@ -802,7 +888,8 @@ def _gather(name: str, maker: str = "", slug: str = "",
         「本文にCZが6つあるのに3つしか採れなかった」ような取りこぼしが
         誰にも伝わらないまま、材料だけが減っていた。
         """
-        pages = [mod.read_page(u, name) for u in got["urls"]]
+        pages = [mod.read_page(u, name, expected_maker=maker,
+                              grant=_grant) for u in got["urls"]]
         for pg in pages:
             if not pg.get("ok"):
                 got["problems"].append(
@@ -830,7 +917,8 @@ def _gather(name: str, maker: str = "", slug: str = "",
     # ★天井はCZ名の突き合わせつきで採る★（2026-08-06）
     #   出典によって「CZ」と書く所と「関所チャレンジ」と書く所がある。
     #   ★独立2出典が『CZ＝その名前』と書いている時だけ★同じ物として扱う。
-    _cl_pages = [_cl.read_page(u, name) for u in got["urls"]]
+    _cl_pages = [_cl.read_page(u, name, expected_maker=maker,
+                               grant=_grant) for u in got["urls"]]
     for _pg in _cl_pages:
         if not _pg.get("ok"):
             got["problems"].append(
@@ -2594,7 +2682,7 @@ def selftest() -> int:
                 "candidates": [], "surfaces": "1/1", "index_size": 9, "problems": []}
             for k, h in (("a", "chonborista.com"), ("b", "nana-press.com"))}}
         _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": "L1", "reason": "OK", **_MKC(k)}
-        _sl.read_page = lambda u, n: {
+        _sl.read_page = lambda u, n, **k: {
             "url": u, "host": u.split("/")[2], "ok": True, "reason": "OK",
             "fields": {"payout_rate": {"1": "97.3%"}}}
         g2 = gather("L試験機")
@@ -2708,6 +2796,36 @@ def selftest() -> int:
           _dec_ng["bad"] == {"https://chonborista.com/1"}
           and _dec_ng["accepted"] == set()
           and _dec_ng.get("cache_unreadable") is True)
+
+        # ★★★題が略称のときの経路★★★（2026-08-17・台帳#390）
+        _TU = "https://chonborista.com/slot/orinpia-slot/264134/"
+
+        def _title_dec(cached=None, name_in_body=True, url=_TU):
+            looks = [{"url": url, "identity_ok": False,
+                      "reason": "NAME_CORE_MISMATCH",
+                      "name_in_body": name_in_body}]
+            return maker_material_decision(
+                looks, "dmm_5073", "kyoraku",
+                verdict_of=lambda e, s, u, prof="": cached,
+                machine_name="L試験機", release_date="2026-11-02")
+
+        t("★★題が略称で落ちたページは、控えがあれば材料に戻る★★",
+          _TU in _title_dec(cached="ACCEPT_MATERIAL")["accepted"])
+        t("★★控えが無ければ材料に使わず、2AIへ問いを出す★★"
+          "（★機械が『本文に正式名があるから本人だ』とは決めない★）",
+          _title_dec()["accepted"] == set()
+          and len(_title_dec()["questions"]) == 1
+          and _TU in _title_dec()["bad"])
+        t("★★★足切り＝本文にDMMの正式名が無いものは2AIへ回さない★★★"
+          "（毎晩ぜんぶ回すと、本当に別機種のページも掛かり続ける）",
+          _title_dec(name_in_body=False)["questions"] == []
+          and _TU in _title_dec(name_in_body=False)["bad"])
+        t("★★その名鑑の機種ページの形でないURLは回さない★★",
+          _title_dec(url="https://chonborista.com/slot/orinpia-slot/")
+          ["questions"] == [])
+        t("　控えで『使わない』と決めてあれば、問いも出さない",
+          _title_dec(cached="REJECT_MATERIAL")["questions"] == []
+          and _title_dec(cached="REJECT_MATERIAL")["accepted"] == set())
         _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": "LB/タコスロBD",
                                         "reason": "OK"}
         t("★★BT型式（LB/…）を規格印ありとして採用する★★"
@@ -2908,14 +3026,14 @@ def selftest() -> int:
           and "status" not in r["preview"]["machine"])
         t("　slugは公式URLから作る", r["slug"] == "zzz")
 
-        _sl.read_page = lambda u, n: {"url": u, "host": u.split("/")[2], "ok": True,
+        _sl.read_page = lambda u, n, **k: {"url": u, "host": u.split("/")[2], "ok": True,
                                       "reason": "OK", "fields": {}}
         r2 = run_one("L試験機", "https://m.example/products/slot/zzz/", "m", "2026-09")
         t("★★材料がゼロなら記事を作らない★★",
           "preview" not in r2 and any("採用できた材料" in p for p in r2["problems"]))
 
         # -------- Codexの反例（2026-07-31・自分で再現を確認してから修正）
-        _sl.read_page = lambda u, n: {
+        _sl.read_page = lambda u, n, **k: {
             "url": u, "host": u.split("/")[2], "ok": True, "reason": "OK",
             "fields": {"payout_rate": {"1": "97.3%"}}}
         _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": None,
@@ -3140,7 +3258,7 @@ def selftest() -> int:
                                           "expected": "heiwa"}}]
                 dec = maker_material_decision(
                     looks, "dmm_5086", "olympia_estate",
-                    verdict_of=lambda e, s, u: cached,
+                    verdict_of=lambda e, s, u, prof="maker_field": cached,
                     machine_name="L試験機", release_date="2026-10-05")
                 return (_U not in dec["bad"], dec)
 

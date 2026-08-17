@@ -68,8 +68,26 @@ STORE = _lp.doc("maker_identity_cache.json")
 # ★v2＝意味を変えた（2026-08-17・依頼228）★
 #   「会社が同じか」ではなく「この名鑑ページを材料に使うか」。
 #   版を上げるので、v1の控えはそのままでは読めない（＝黙って混ざらない）。
-SCHEMA = "maker-identity-cache/v2"
+# ★v3＝鍵を「機種＋対象ページ」にした（2026-08-17・台帳#390／Codex依頼233）★
+#   v2は (機種・期待する社・名鑑の表記) で引き、そのあと対象URLが根拠に
+#   含まれるかを見ていました。すると
+#     ①メーカーの食い違いが無い場合（題が略称、など）は鍵を作れない
+#     ②根拠が2ページあると、そのどちらも対象ページになり得る
+#   ので、★対象ページを独立した必須の項目★にしました。
+SCHEMA = "maker-identity-cache/v3"
 VERDICTS = ("ACCEPT_MATERIAL", "REJECT_MATERIAL")
+# ★何をもって「使ってよい」と言えるか★＝原因ごとに必要な根拠が違う。
+#   ★説明ではなく、読むときにも厳格に確かめる判別子★（Codexの指示）
+PROOF_PROFILES = {
+    # 名鑑のメーカー欄がDMMと違う（v2からの継続）
+    #   → ★独立した名鑑2つ★の観測が要る
+    "maker_field": {"min_directories": 2, "needs_maker": True},
+    # 名鑑の題・見出しが略称で、機種の同定に落ちる
+    #   → ★対象ページ自身＋DMM★でよい（2件目の名鑑は別途正規の同定を通る）
+    #   → ただし★メーカー欄が読めてDMMと一致していること★が必須
+    #     （題もメーカーも食い違うページを、弱い側で通さないため）
+    "title_name_core_mismatch": {"min_directories": 1, "needs_maker": True},
+}
 # ★何を根拠にしたか★＝控えを読む人・監査が、守りの範囲を取り違えないための印。
 BASIS_SCOPE = "directory_consensus_only"
 # ★「2AIで決めます」を機械の約束にする★（2026-08-14・依頼193のP2）
@@ -212,9 +230,26 @@ def _check_record(slug: str, rec, reg=None) -> None:
     if len(set(per)) != len(per):
         raise CacheError(f"同じ名鑑から2件以上の引用を控えています（{slug}）"
                          "／★1つの名鑑につき1件までです★")
+    # ★★対象ページは、根拠から推測せず、控え自身が名乗る★★
+    #   （2026-08-17・台帳#390／Codex依頼233の指摘1）
+    #   前は「根拠のURLのどれか」＝**2ページあればどちらも対象になり得た**。
+    #   「使わない」側も対象URLで引くので、結論によらず必須。
+    tgt = str(rec.get("target_url") or "")
+    if not tgt.startswith("https://"):
+        raise CacheError(f"控えに target_url がありません（{slug}）"
+                         "／★どのページの採否かを名乗らせます★")
+    prof = rec.get("proof_profile")
+    if prof not in PROOF_PROFILES:
+        raise CacheError(f"控えの proof_profile が不正です（{slug}）: {prof!r}"
+                         f"／★{'/'.join(sorted(PROOF_PROFILES))} のどれか★")
     if rec["verdict"] != "ACCEPT_MATERIAL":
         return
     # ---------------- ここから下は「材料に使う」と決めた控えだけの検査 ----------
+    # ★対象ページ自身が根拠に入っていること★（対象と根拠の取り違えを防ぐ）
+    if tgt.rstrip("/") not in {str(e.get("url") or "").rstrip("/") for e in ev}:
+        raise CacheError(
+            f"対象ページが根拠に入っていません（{slug}）: {tgt}"
+            "／★採否を決めたページ自身の観測を根拠に入れます★")
     # ★①どの機種のページかを、控え自身が名乗る★（2026-08-17・依頼228の指摘2）
     #   v1は「登録済みの名鑑のホストである」ことしか見ていなかったので、
     #   **同じ名鑑の別機種ページ・関連記事・同名別メーカー機のページ**でも
@@ -254,9 +289,14 @@ def _check_record(slug: str, rec, reg=None) -> None:
     #   ★票の数は source_lineage.independent() だけで決める★
     #   （自前で len() すると共同制作の組をまとめ忘れる＝監査39が見張る）
     keys = set(per)     # ★1つの名鑑につき1件は上で確かめ済み★
-    if _sl.independent(keys, reg) < MIN_DIRECTORIES:
+    # ★必要な名鑑の数は「なぜ機械が決められなかったか」で変わる★
+    #   maker_field              … 名鑑どうしの一致が要るので2つ
+    #   title_name_core_mismatch … そのページ自身＋DMMで足りるので1つ
+    #     （★2件目の名鑑は別途、正規の同定を通っている★）
+    _need = PROOF_PROFILES[prof]["min_directories"]
+    if _sl.independent(keys, reg) < _need:
         raise CacheError(
-            f"材料に使うと決めるには独立した名鑑が{MIN_DIRECTORIES}つ要ります"
+            f"「{prof}」で材料に使うと決めるには独立した名鑑が{_need}つ要ります"
             f"（{slug}）: いまは {_sl.independent(keys, reg)}")
     # ★④守りの範囲を控え自身に書かせる★（2026-08-17・Codex依頼228の指摘5）
     #   これを読み落として「会社が同じと確かめた」と誤読されないようにする。
@@ -282,51 +322,57 @@ def key_of(seen: str) -> str:
     return _ci.normalize_core(str(seen or "")).replace("株式会社", "")
 
 
-def verdict_for(slug: str, expected: str, seen: str, store=None,
+def verdict_for(slug: str, expected: str = "", seen: str = "", store=None,
                 fetch=None, material_url: str = "",
-                machine_name: str = "", release_date: str = ""):
-    """この機種について前に決めた結論（無ければ None）。
+                machine_name: str = "", release_date: str = "",
+                want_profile: str = ""):
+    """この機種について、★このページを★使うと決めてあるか（無ければ None）。
 
-    ★完全一致で引く★＝(機種・期待する社・名鑑の表記の芯) の3つ。
+    ★★鍵は (機種・対象ページ) の2つ★★（2026-08-17・台帳#390／Codex依頼233）
+      v2は (機種・期待する社・名鑑の表記) で引いていました。しかし
+        ①メーカーの食い違いが無い場合（題が略称、など）は鍵を作れない
+        ②根拠が2ページあると、そのどちらも対象になり得る
+      ので、対象ページを鍵にしました。
+      ★「使わない」も必ず対象ページで引きます★（表記だけで流用しない）
 
     ★★「使う」と答えるには、対象そのものと結び付いていること★★
       （2026-08-17・Codex依頼229の指摘1）
-      前は鍵が (機種・期待する社・表記) の3つだけだったので、
-        ①別機種の機種名・導入日・根拠を手で書いた控えでも、
-          読むときにDMMと突き合わせずに「使う」を返せた
-        ②いま採否を決めようとしているURLを渡していないので、
-          **控えの根拠に入っていない別の名鑑ページまで**「使う」になった
-      そこで `ACCEPT_MATERIAL` を返すのは、
-        ・`material_url` が控えの根拠のURLに含まれる
-        ・控えの `machine_name` / `release_date` が、DMMで確かめた値と一致する
-      ときだけにした。★どれか1つでも渡されていなければ答えない★（fail-closed）。
-      `REJECT_MATERIAL`（使わない側）は今までどおり、鍵が合えば返す。
+      ・控えの `target_url` が `material_url` と一致する
+      ・控えの `machine_name` / `release_date` が、DMMで確かめた値と一致する
+      ・控えの `proof_profile` が、呼ぶ側が求めている証明の型と一致する
+        （★題の不一致で作った控えを、メーカーの食い違いに流用させない★）
+      ・（メーカーの食い違いで作った控えなら）期待する社・名鑑の表記も一致する
+      ★どれか1つでも渡されていなければ答えません★（fail-closed）
 
     ★「材料に使う」として使う時だけ、根拠が実在するか確かめ直す★
-      （2026-08-14・依頼192のP1）書くときに照合しても、
-      **控えは手で書き足せるただのファイル**なので、
+      （2026-08-14・依頼192のP1）控えは手で書き足せるただのファイルなので、
       形だけ整った偽の根拠で `ACCEPT_MATERIAL` を作れてしまう。
       使う直前に取り直せば、それが通らない。
       ★取れない・引用が見つからないなら「決めていない」と同じ扱い★
       （None を返す＝もう一度2AIへ回る。fail-closed）
-      `REJECT_MATERIAL` は「使わない」側なので取り直さない（遅くする意味がない）。
+      `REJECT_MATERIAL` は「使わない」側なので取り直さない。
     """
-    if not slug or not expected or not seen:
+    if not slug or not material_url:
         return None
     got = store if store is not None else load()
-    k = key_of(seen)
+    _t = str(material_url).rstrip("/")
     for rec in (got.get("machines") or {}).get(slug) or []:
-        if rec.get("expected") != expected or key_of(rec.get("seen")) != k:
+        if str(rec.get("target_url") or "").rstrip("/") != _t:
             continue
         v = rec.get("verdict")
         if v != "ACCEPT_MATERIAL":
-            return v
-        # ★①いま決めようとしているページが、控えの根拠そのものか★
-        urls = {str(e.get("url") or "").rstrip("/")
-                for e in (rec.get("evidence") or [])}
-        if not material_url or str(material_url).rstrip("/") not in urls:
+            return v                       # ★使わない側は対象が合えば返す★
+        # ★①求めている証明の型と一致するか★
+        if not want_profile or rec.get("proof_profile") != want_profile:
             return None
-        # ★②控えが名乗る機種が、DMMで確かめた機種と同じか★
+        # ★②メーカーの食い違いで決めた控えなら、その組も一致すること★
+        if PROOF_PROFILES[want_profile].get("needs_maker") \
+                and rec.get("expected") is not None \
+                and str(rec.get("expected") or ""):
+            if rec.get("expected") != expected \
+                    or key_of(rec.get("seen")) != key_of(seen):
+                return None
+        # ★③控えが名乗る機種が、DMMで確かめた機種と同じか★
         if not machine_name or not release_date:
             return None
         if not _has_core(str(rec.get("machine_name") or ""), machine_name) \
@@ -472,7 +518,7 @@ def date_forms(iso: str) -> list:
 
 
 def verify_evidence(evidence: list, fetch=None, expected: str = "",
-                    rec=None) -> None:
+                    rec=None) -> dict:
     """★根拠の逐語引用が、本当にそのページにあるか確かめる★
 
     ★なぜ要るか（2026-08-14・依頼190のP1）★
@@ -496,6 +542,7 @@ def verify_evidence(evidence: list, fetch=None, expected: str = "",
             with _w.fetching("maker_identity"):
                 return _w._get(u)
     import new_machine_watch as _w
+    finals = {}          # ★URLごとの到達先★（対象ページの転送を見るため）
     for e in evidence:
         url = str(e.get("url") or "")
         if expected:
@@ -512,6 +559,7 @@ def verify_evidence(evidence: list, fetch=None, expected: str = "",
         #   同じ社の https → http という降格が素通りした
         #   （＝そのあとの本文は通信経路で書き換えられうる）。
         fin = _w.LAST_FINAL_URL.get("url")
+        finals[url] = fin or url
         if expected and fin:
             check_evidence_source(dict(e, url=fin), expected)
         # ★★本体とまったく同じ下ごしらえをする★★
@@ -579,20 +627,27 @@ def verify_evidence(evidence: list, fetch=None, expected: str = "",
         #   引用そのものに機種名・メーカー欄・導入日が入っていることは
         #   `_check_record` が確かめ、その引用がページに実在することは
         #   すぐ上で確かめている。だからここに別の日付検査は要らない。
+    return finals
 
 
 def remember(slug: str, expected: str, seen: str, verdict: str,
              why: str, by: list, evidence: list, decided_at: str,
              machine_name: str = "", release_date: str = "",
+             target_url: str = "", proof_profile: str = "maker_field",
              store=None, fetch=None) -> dict:
     """結論を控える。★根拠が無ければ受け取らない★
 
     ★逐語引用は実際にそのページから取ってきて照合する★（依頼190のP1）
     ★機種名と導入日はDMMの機種ページから取る★（呼ぶ側に名乗らせない）
+    ★どのページの採否かを名乗らせる★（2026-08-17・台帳#390。根拠から推測しない）
     """
     if verdict not in VERDICTS:
         raise CacheError(f"結論は {'/'.join(VERDICTS)} のどちらかです: {verdict!r}")
-    for k, v in (("slug", slug), ("expected", expected), ("seen", seen),
+    if proof_profile not in PROOF_PROFILES:
+        raise CacheError(f"証明の型が不正です: {proof_profile!r}"
+                         f"／★{'/'.join(sorted(PROOF_PROFILES))} のどれか★")
+    for k, v in (("slug", slug), ("target_url", target_url),
+                 ("expected", expected), ("seen", seen),
                  ("why", why), ("decided_at", decided_at)):
         if not str(v or "").strip():
             raise CacheError(f"「{k}」が要ります")
@@ -611,7 +666,8 @@ def remember(slug: str, expected: str, seen: str, verdict: str,
         if e.get("kind") not in KINDS:
             raise CacheError(f"根拠の種類は {'/'.join(KINDS)} のどれかです: "
                              f"{e.get('kind')!r}")
-    rec = {"expected": expected, "seen": seen, "verdict": verdict,
+    rec = {"target_url": target_url, "proof_profile": proof_profile,
+           "expected": expected, "seen": seen, "verdict": verdict,
            "why": why, "evidence": evidence, "agreed_by": by,
            "decided_at": decided_at}
     if verdict == "ACCEPT_MATERIAL":
@@ -622,13 +678,23 @@ def remember(slug: str, expected: str, seen: str, verdict: str,
     # ★書く前に、読むときと同じ物差しを通す★（順番を変えない）
     #   先に形を確かめてから通信する＝形が違う控えのために外へ出ない。
     _check_record(slug, rec)
-    verify_evidence(evidence, fetch, expected, rec)
+    _finals = verify_evidence(evidence, fetch, expected, rec)
+    # ★最後に着いたURLも残す★（記録時と使用時で転送先が変わるのを防ぐ）
+    #   ★根拠の「最後に取ったページ」ではなく、対象ページのぶんを見る★
+    #   （2026-08-17。最初そこを間違え、根拠2件目の到達先と比べていた＝自己試験が検知）
+    _fin = str((_finals or {}).get(str(target_url), "")).rstrip("/")
+    if _fin and _fin != str(target_url).rstrip("/"):
+        raise CacheError(
+            f"対象ページが転送されました（{target_url} → {_fin}）"
+            "／★転送先を対象として控えるかは、2AIが決め直します★")
+    if _fin:
+        rec["observed_final_url"] = _fin
     got = store if store is not None else load()
     rows = got.setdefault("machines", {}).setdefault(slug, [])
-    k = key_of(seen)
+    _t = str(target_url).rstrip("/")
     for i, old in enumerate(rows):
-        if old.get("expected") == expected and key_of(old.get("seen")) == k:
-            rows[i] = rec                # ★同じ組は上書き（増やさない）★
+        if str(old.get("target_url") or "").rstrip("/") == _t:
+            rows[i] = rec                # ★同じページは上書き（増やさない）★
             break
     else:
         rows.append(rec)
@@ -637,13 +703,19 @@ def remember(slug: str, expected: str, seen: str, verdict: str,
     return rec
 
 
-def forget(slug: str, expected: str, seen: str, store=None) -> bool:
-    """控えを消す（判断を取り消すとき）。"""
+def _fin_url() -> str:
+    """取ってくる役が最後に着いたURL（試験で差し替えた時は空）。"""
+    import new_machine_watch as _w
+    return str((getattr(_w, "LAST_FINAL_URL", {}) or {}).get("url") or "")
+
+
+def forget(slug: str, target_url: str, store=None) -> bool:
+    """控えを消す（判断を取り消すとき）。★対象ページで指す★"""
     got = store if store is not None else load()
     rows = (got.get("machines") or {}).get(slug) or []
-    k = key_of(seen)
+    _t = str(target_url).rstrip("/")
     left = [r for r in rows
-            if not (r.get("expected") == expected and key_of(r.get("seen")) == k)]
+            if str(r.get("target_url") or "").rstrip("/") != _t]
     if len(left) == len(rows):
         return False
     if left:
@@ -677,7 +749,8 @@ _QN = f"機種名 {_MN} メーカー {_SEEN} 導入日 2026/10/5"
 
 def _rec(**kw) -> dict:
     """試験用の、正しい形の控え1件。"""
-    base = {"expected": _EXPECTED, "seen": _SEEN, "verdict": "ACCEPT_MATERIAL",
+    base = {"target_url": _C, "proof_profile": "maker_field",
+            "expected": _EXPECTED, "seen": _SEEN, "verdict": "ACCEPT_MATERIAL",
             "why": "理由", "agreed_by": ["claude", "codex"],
             "decided_at": "2026-08-17", "machine_name": _MN,
             "release_date": _REL, "basis_scope": BASIS_SCOPE,
@@ -812,16 +885,19 @@ def selftest() -> int:
     ev = _rec()["evidence"]
 
     def _ask(slug="dmm_5086", expected=_EXPECTED, seen=_SEEN, store=None,
-             fetch=None, url=_C, name=_MN, day=_REL):
+             fetch=None, url=_C, name=_MN, day=_REL,
+             profile="maker_field"):
         """★本番と同じ渡し方で引く★（対象URL・DMMで確かめた機種名と導入日）"""
         return verdict_for(slug, expected, seen,
                            st if store is None else store,
                            _fetch if fetch is None else fetch,
                            material_url=url, machine_name=name,
-                           release_date=day)
+                           release_date=day, want_profile=profile)
 
     def _ok(**kw):
-        base = dict(slug="dmm_5086", expected=_EXPECTED, seen=_SEEN,
+        base = dict(slug="dmm_5086", target_url=_C,
+                    proof_profile="maker_field",
+                    expected=_EXPECTED, seen=_SEEN,
                     verdict="ACCEPT_MATERIAL", why="理由",
                     by=["claude", "codex"], evidence=ev,
                     decided_at="2026-08-17", machine_name=_MN,
@@ -844,8 +920,53 @@ def selftest() -> int:
     t("★★★控えの根拠に入っていないページには効かない★★★"
       "（前は採否対象のURLを渡していなかったので、同じ名鑑の別ページまで通った）",
       _ask(url="https://chonborista.com/slot/orinpia-slot/999999/") is None)
-    t("　（対照）控えの根拠そのものなら通る",
-      _ask(url=_C) == "ACCEPT_MATERIAL" and _ask(url=_N) == "ACCEPT_MATERIAL")
+    t("　（対照）控えた対象ページなら通る", _ask(url=_C) == "ACCEPT_MATERIAL")
+    # ★★根拠に入っているだけのページは、対象にならない★★
+    #   （2026-08-17・台帳#390／Codex依頼233の指摘1）
+    #   v2は根拠のどれでも対象になり得たので、2ページぶんの採否が
+    #   1件の控えで決まっていた。v3は1ページにつき1件。
+    t("★★★根拠に入っているだけのページは、それだけでは使えない★★★"
+      "（採否は対象ページごとに控える）",
+      _ask(url=_N) is None)
+    t("　（対照）そのページも対象として控えれば使える",
+      _ok(target_url=_N, slug="dmm_5086") and _ask(url=_N) == "ACCEPT_MATERIAL")
+
+    # ★★★題が略称のときの証明（2026-08-17・台帳#390）★★★
+    st2 = _empty()
+
+    def _ok2(**kw):
+        base = dict(slug="dmm_5073", target_url=_C,
+                    proof_profile="title_name_core_mismatch",
+                    expected=_EXPECTED, seen=_SEEN,
+                    verdict="ACCEPT_MATERIAL", why="理由",
+                    by=["claude", "codex"], evidence=[ev[0]],
+                    decided_at="2026-08-17", machine_name=_MN,
+                    release_date=_REL, store=st2, fetch=_fetch)
+        base.update(kw)
+        try:
+            remember(**base)
+            return True
+        except CacheError:
+            return False
+
+    t("★★題が略称のときは、そのページ1件で控えられる★★"
+      "（2件目の名鑑は別途、正規の同定を通っている）", _ok2())
+    t("　（対照）メーカーの食い違いのほうは、今までどおり2名鑑が要る",
+      not _ok2(proof_profile="maker_field", slug="dmm_x"))
+    t("★★★題の不一致で作った控えを、メーカーの食い違いに流用できない★★★"
+      "（証明の型が違えば効かない）",
+      verdict_for("dmm_5073", _EXPECTED, _SEEN, st2, _fetch,
+                  material_url=_C, machine_name=_MN, release_date=_REL,
+                  want_profile="maker_field") is None)
+    t("　（対照）同じ型で引けば効く",
+      verdict_for("dmm_5073", _EXPECTED, _SEEN, st2, _fetch,
+                  material_url=_C, machine_name=_MN, release_date=_REL,
+                  want_profile="title_name_core_mismatch")
+      == "ACCEPT_MATERIAL")
+    t("　証明の型を勝手に作れない",
+      not _ok2(proof_profile="でっちあげ", slug="dmm_y"))
+    t("　対象ページを名乗らなければ控えられない",
+      not _ok2(target_url="", slug="dmm_z"))
     t("★★★控えが名乗る機種がDMMと違えば効かない★★★"
       "（別機種の機種名・導入日を手で書いた控えを、読むときに落とす）",
       _ask(name="L別の機種") is None and _ask(day="2026-11-02") is None)
@@ -970,8 +1091,10 @@ def selftest() -> int:
       not _ok(by=["foo", "bar"], slug="dmm_by")
       and not _ok(by=["claude", "gemini"], slug="dmm_by2"))
     t("　（対照）決めた2つなら通る", _ok(by=["codex", "claude"], slug="dmm_by3"))
-    t("　同じ組を2度控えても増えない",
-      (_ok(why="別の理由") and len(st["machines"]["dmm_5086"]) == 1))
+    t("　同じ対象ページを2度控えても増えない",
+      (_ok(why="別の理由")
+       and sum(1 for r in st["machines"]["dmm_5086"]
+               if r.get("target_url") == _C) == 1))
     t("★★逐語引用がそのページに無ければ受け取らない★★"
       "／以前はURLも引用も言うだけで通った",
       not _ok(evidence=[dict(ev[0], quote=f"機種名 {_MN} メーカー {_SEEN} 嘘"),
@@ -1002,7 +1125,7 @@ def selftest() -> int:
     t("★★読むときも同じ物差しで確かめる★★（手で書き足しても信用しない）",
       _bad_load())
     t("　取り消せる",
-      forget("dmm_5086", _EXPECTED, _SEEN, st)
+      forget("dmm_5086", _C, st)
       and verdict_for("dmm_5086", _EXPECTED, _SEEN, st) is None)
 
     # ★日付の書き方をならすところ★（相手の作りを読むのではない）
@@ -1027,6 +1150,13 @@ def main() -> int:
                          "（slug・導入日はここから決める）")
     ap.add_argument("--machine-name", dest="machine_name", default="",
                     help="カレンダーに載っている機種名（DMMの見出しと照合する）")
+    # ★どのページの採否かを名乗らせる★（2026-08-17・台帳#390）
+    ap.add_argument("--target-url", dest="target_url", default="",
+                    help="採否を決める名鑑の機種ページURL")
+    ap.add_argument("--proof-profile", dest="proof_profile",
+                    default="maker_field",
+                    choices=sorted(PROOF_PROFILES),
+                    help="なぜ機械が決められなかったか（証明の型）")
     ap.add_argument("--expected", help="期待している社（名簿のキー）")
     ap.add_argument("--seen", help="名鑑のメーカー欄に書かれていた表記")
     ap.add_argument("--verdict", choices=VERDICTS)
@@ -1127,7 +1257,9 @@ def main() -> int:
                        a.why or "", [x.strip() for x in
                                      str(a.by or "").split(",") if x.strip()],
                        ev, a.at or datetime.date.today().isoformat(),
-                       machine_name, release_date)
+                       machine_name, release_date,
+                       target_url=a.target_url,
+                       proof_profile=a.proof_profile)
         print(json.dumps({"state": "RECORDED", "slug": slug, **rec},
                          ensure_ascii=False)[:300])
         return 0
