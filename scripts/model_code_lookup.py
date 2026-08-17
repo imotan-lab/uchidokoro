@@ -639,7 +639,9 @@ def material_page_identity_ok(html: str, official_name: str, *,
         return False, why
     if not grant or not url:
         return False, why
-    if str(url).rstrip("/") not in {str(u).rstrip("/") for u in grant}:
+    # ★URLのそろえ方は控えと同じ1か所を通す★（2026-08-17・依頼235の指摘1）
+    import maker_identity_cache as _micu
+    if _micu.url_key(url) not in {_micu.url_key(u) for u in grant}:
         return False, why
     # ★このページを使うと決めた前提（メーカー欄が合う）が今も成り立つか★
     mk = extract_maker_name(html)

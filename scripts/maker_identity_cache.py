@@ -260,7 +260,7 @@ def _check_record(slug: str, rec, reg=None) -> None:
                 "／★関係のある社・不明・別の社は、この弱い型では救いません★")
     # ---------------- ここから下は「材料に使う」と決めた控えだけの検査 ----------
     # ★対象ページ自身が根拠に入っていること★（対象と根拠の取り違えを防ぐ）
-    if tgt.rstrip("/") not in {str(e.get("url") or "").rstrip("/") for e in ev}:
+    if url_key(tgt) not in {url_key(e.get("url")) for e in ev}:
         raise CacheError(
             f"対象ページが根拠に入っていません（{slug}）: {tgt}"
             "／★採否を決めたページ自身の観測を根拠に入れます★")
@@ -336,6 +336,19 @@ def key_of(seen: str) -> str:
     return _ci.normalize_core(str(seen or "")).replace("株式会社", "")
 
 
+def url_key(url: str) -> str:
+    """★URLを比べるときの唯一のそろえ方★（2026-08-17・Codex依頼235の指摘1）
+
+    ★穴だったところ★＝同じURLを、ある所では末尾の `/` を外して比べ、
+      別の所（到達先の表）では**生の文字列**を鍵にしていた。
+      すると「控えは `/` 付き・実行時は `/` 無し」というだけで
+      **到達先の表を引けず、照合が丸ごと飛んで**しまい、
+      そのまま「使う」に到達した。
+    ★そろえ方を1か所にする★＝比べる時は必ずこれを通す。
+    """
+    return str(url or "").rstrip("/")
+
+
 def verdict_for(slug: str, expected: str = "", seen: str = "", store=None,
                 fetch=None, material_url: str = "",
                 machine_name: str = "", release_date: str = "",
@@ -369,9 +382,9 @@ def verdict_for(slug: str, expected: str = "", seen: str = "", store=None,
     if not slug or not material_url:
         return None
     got = store if store is not None else load()
-    _t = str(material_url).rstrip("/")
+    _t = url_key(material_url)
     for rec in (got.get("machines") or {}).get(slug) or []:
-        if str(rec.get("target_url") or "").rstrip("/") != _t:
+        if url_key(rec.get("target_url")) != _t:
             continue
         v = rec.get("verdict")
         if v != "ACCEPT_MATERIAL":
@@ -406,11 +419,14 @@ def verdict_for(slug: str, expected: str = "", seen: str = "", store=None,
         #   転送先も機種ページの形に合うので転送自体は止まらず、
         #   名前・メーカー・日付・引用がそこにも在れば「使う」を返し、
         #   4つの読取器が**転送先の本文から値を読む**経路が残っていた。
-        _fin = str((finals or {}).get(str(material_url), "")).rstrip("/")
-        if _fin and _fin != _t:
+        _fin = str((finals or {}).get(_t, ""))
+        # ★到達先が取れないときは拒否する★（2026-08-17・依頼235）
+        #   前は空なら素通りだったので、鍵のそろえ方がずれた瞬間に
+        #   照合が丸ごと飛んだ。取れない＝確かめていない。
+        if not _fin or _fin != _t:
             return None
-        _ofu = str(rec.get("observed_final_url") or "").rstrip("/")
-        if _ofu and _fin and _fin != _ofu:
+        _ofu = url_key(rec.get("observed_final_url"))
+        if _ofu and _fin != _ofu:
             return None
         return v
     return None
@@ -588,7 +604,10 @@ def verify_evidence(evidence: list, fetch=None, expected: str = "",
         #   同じ社の https → http という降格が素通りした
         #   （＝そのあとの本文は通信経路で書き換えられうる）。
         fin = _w.LAST_FINAL_URL.get("url")
-        finals[url] = fin or url
+        # ★取れなかったものを「同じURLに着いた」ことにしない★
+        #   （2026-08-17・依頼235）＝以前は `fin or url` と補っていたので、
+        #   到達先を一度も観測できていなくても照合が通ってしまった。
+        finals[url_key(url)] = url_key(fin) if fin else ""
         if expected and fin:
             check_evidence_source(dict(e, url=fin), expected)
         # ★★本体とまったく同じ下ごしらえをする★★
@@ -640,8 +659,8 @@ def verify_evidence(evidence: list, fetch=None, expected: str = "",
             #     ③メーカー欄がDMMと一致すること（すぐ下の共通処理で見る）
             #   ★「本人だ」と決めるのは2AI★＝機械は上の3つを確かめるだけ。
             _prof = str((rec or {}).get("proof_profile") or "")
-            _is_target = (str(url).rstrip("/")
-                          == str((rec or {}).get("target_url") or "").rstrip("/"))
+            _is_target = (url_key(url)
+                          == url_key((rec or {}).get("target_url")))
             if not _ok_id and _prof == "title_name_core_mismatch" and _is_target:
                 if _why_id != "NAME_CORE_MISMATCH":
                     raise CacheError(
@@ -734,8 +753,8 @@ def remember(slug: str, expected: str, seen: str, verdict: str,
     # ★最後に着いたURLも残す★（記録時と使用時で転送先が変わるのを防ぐ）
     #   ★根拠の「最後に取ったページ」ではなく、対象ページのぶんを見る★
     #   （2026-08-17。最初そこを間違え、根拠2件目の到達先と比べていた＝自己試験が検知）
-    _fin = str((_finals or {}).get(str(target_url), "")).rstrip("/")
-    if _fin and _fin != str(target_url).rstrip("/"):
+    _fin = str((_finals or {}).get(url_key(target_url), ""))
+    if not _fin or _fin != url_key(target_url):
         raise CacheError(
             f"対象ページが転送されました（{target_url} → {_fin}）"
             "／★転送先を対象として控えるかは、2AIが決め直します★")
@@ -743,9 +762,9 @@ def remember(slug: str, expected: str, seen: str, verdict: str,
         rec["observed_final_url"] = _fin
     got = store if store is not None else load()
     rows = got.setdefault("machines", {}).setdefault(slug, [])
-    _t = str(target_url).rstrip("/")
+    _t = url_key(target_url)
     for i, old in enumerate(rows):
-        if str(old.get("target_url") or "").rstrip("/") == _t:
+        if url_key(old.get("target_url")) == _t:
             rows[i] = rec                # ★同じページは上書き（増やさない）★
             break
     else:
@@ -765,9 +784,9 @@ def forget(slug: str, target_url: str, store=None) -> bool:
     """控えを消す（判断を取り消すとき）。★対象ページで指す★"""
     got = store if store is not None else load()
     rows = (got.get("machines") or {}).get(slug) or []
-    _t = str(target_url).rstrip("/")
+    _t = url_key(target_url)
     left = [r for r in rows
-            if str(r.get("target_url") or "").rstrip("/") != _t]
+            if url_key(r.get("target_url")) != _t]
     if len(left) == len(rows):
         return False
     if left:
@@ -1055,6 +1074,33 @@ def selftest() -> int:
     t("★★★控えたページが別の機種ページへ転送されていたら使わない★★★",
       verdict_for("dmm_nick", _KY, _KYS, st2,
                   lambda u: (_w_last(_C2), _NICK)[1],
+                  material_url=_C, machine_name=_MN, release_date=_REL,
+                  want_profile="title_name_core_mismatch") is None)
+    # ★★★末尾の / の違いで、到達先の照合を迂回できないこと★★★
+    #   （2026-08-17・Codex依頼235の指摘1）
+    #   ★穴だったところ★＝対象の同一性は「/ を外して」比べるのに、
+    #   到達先の表は**生の文字列**を鍵にしていた。
+    #   「控えは / 付き・実行時は / 無し」というだけで表を引けず、
+    #   照合が丸ごと飛んで「使う」に到達した。
+    _C_NOSLASH = _C.rstrip("/")
+    t("　（前提）控えと実行時で末尾の / が違っても、同じ対象として引ける",
+      url_key(_C) == url_key(_C_NOSLASH))
+    t("★★★末尾の / が違っても、到達先の照合は飛ばない★★★",
+      verdict_for("dmm_nick", _KY, _KYS, st2, _fetch_nick,
+                  material_url=_C_NOSLASH, machine_name=_MN,
+                  release_date=_REL,
+                  want_profile="title_name_core_mismatch")
+      == "ACCEPT_MATERIAL")
+    t("★★★その形でも、別の機種ページへ転送されていれば拒否する★★★"
+      "（前はここが素通りだった）",
+      verdict_for("dmm_nick", _KY, _KYS, st2,
+                  lambda u: (_w_last(_C2), _NICK)[1],
+                  material_url=_C_NOSLASH, machine_name=_MN,
+                  release_date=_REL,
+                  want_profile="title_name_core_mismatch") is None)
+    t("　到達先が取れないときも拒否する（取れない＝確かめていない）",
+      verdict_for("dmm_nick", _KY, _KYS, st2,
+                  lambda u: (_w_last(""), _NICK)[1],
                   material_url=_C, machine_name=_MN, release_date=_REL,
                   want_profile="title_name_core_mismatch") is None)
     t("★★題の不一致“以外”で落ちるページは、この型でも救わない★★",

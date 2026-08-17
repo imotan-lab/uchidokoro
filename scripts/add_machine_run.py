@@ -611,7 +611,10 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
         if v == "ACCEPT_MATERIAL":
             accepted.add(r["url"])
             notes.append({"url": r["url"], "expected": mc_expected(r, maker),
-                          "seen": (r.get("maker_check") or {}).get("seen", ""),
+                          # ★この経路に maker_check は無い★（依頼235の指摘2）
+                          #   題の不一致では作られないので、観測した
+                          #   メーカー欄をそのまま記録に残す（空にしない）。
+                          "seen": _seen,
                           "owners": [], "vote_key": "",
                           "machine_name": machine_name,
                           "release_date": release_date,
@@ -2882,14 +2885,28 @@ def selftest() -> int:
                                material_url=_TU2, machine_name=_MN2,
                                release_date="2026-10-05",
                                want_profile="title_name_core_mismatch")
-        _readers_ok = all(
-            _mc.material_page_identity_ok(
-                _NICK2, _MN2, url=_TU2, expected_maker="kyoraku",
-                grant=frozenset({_TU2}))[0]
-            for _ in range(1))
-        _reader_ng = _mc.material_page_identity_ok(
-            _NICK2, _MN2, url=_TU2, expected_maker="kyoraku",
-            grant=None)[0]
+        # ★★4つの読取器を実際に呼ぶ★★（2026-08-17・Codex依頼235の厚みの指摘）
+        #   前は共通の関所を1回呼んでいるだけで、read_page を1つも通して
+        #   いなかった（range(1) で回していた＝試験の形だけ）。
+        _real_get2 = _nw._get
+        _nw._get = lambda u, timeout=20: _NICK2
+        # ★偽の読取器に差し替わったままでは意味がない★＝本物に戻して呼ぶ
+        _fake_sl_read = _sl.read_page
+        _sl.read_page = real_read
+        try:
+            _readers = {}
+            for _mod, _nm in ((_sl, "基本スペック"), (_cl, "天井"),
+                              (_cz, "CZ"), (_at, "AT仕様")):
+                _readers[_nm] = (
+                    _mod.read_page(_TU2, _MN2, expected_maker="kyoraku",
+                                   grant=frozenset({_TU2})).get("ok"),
+                    _mod.read_page(_TU2, _MN2, expected_maker="kyoraku",
+                                   grant=None).get("ok"))
+        finally:
+            _nw._get = _real_get2
+            _sl.read_page = _fake_sl_read
+        _readers_ok = all(a for a, _ in _readers.values())
+        _reader_ng = any(b for _, b in _readers.values())
         t("★★★控えを作る→採否→読取器の関所、まで一続きで通る★★★"
           "（本物の略称の題で。前は控えすら作れなかった）",
           _made and _v2 == "ACCEPT_MATERIAL" and _readers_ok
