@@ -462,6 +462,20 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
                                     machine_name=machine_name,
                                     release_date=release_date)
     accepted, rejected, questions, notes = set(), set(), [], []
+    # ★★控えを読めないなら、どのページも使わない★★
+    #   （2026-08-17・Codex依頼232の指摘）
+    #   ★穴だったところ★＝控えが読めないと `verdict_of` が常に「答えなし」を
+    #   返すので、**「使わない」と決めてあるページかどうかも分からない**まま
+    #   `MATCH` のページが材料にも型式名の票にも残っていた。
+    #   コメントには「控えが読めないときは除外する（fail-closed）」と
+    #   書いてありながら、実装は逆だった。
+    #   ★読めない＝安全とは言えない★ので、その晩はこの機種を止める。
+    if not cache_ok:
+        return {"accepted": set(),
+                "rejected_by_cache": {r["url"] for r in looks or []},
+                "bad": {r["url"] for r in looks or []},
+                "questions": [], "relation_checks": [],
+                "cache_unreadable": True}
     for r in looks or []:
         mc = r.get("maker_check") or {}
         if not r.get("identity_ok"):
@@ -563,7 +577,8 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
         elif maker and st not in _USE_STATES:
             bad.add(r["url"])
     return {"accepted": accepted, "rejected_by_cache": rejected,
-            "bad": bad, "questions": questions, "relation_checks": notes}
+            "bad": bad, "questions": questions, "relation_checks": notes,
+            "cache_unreadable": False}
 
 
 def gather(*a, **k):
@@ -646,7 +661,11 @@ def _gather(name: str, maker: str = "", slug: str = "",
         _cache = _mic.load()
     except Exception as e:                # noqa: BLE001
         _cache_ok = False
-        _log(f"  メーカーの控えを読めません（今までどおり除きます）: {e}")
+        _log(f"  ★メーカーの控えを読めません（この機種は今夜は止めます）★: {e}")
+        got["problems"].append(
+            f"メーカー照合の控えを読めません（{str(e)[:100]}）"
+            "／★読めない＝「使わないと決めたページ」があるかも分からない"
+            "ので、材料を使いません★")
     # ★判定は maker_material_decision に集めてある★（試験もそこを通す）
     _dec = maker_material_decision(looks, slug, maker, _cache, _cache_ok,
                                    machine_name=machine_name or name,
@@ -2654,6 +2673,23 @@ def selftest() -> int:
                   for u in (_gm.get("observed_model_hosts") or []))
           and all("p-town.dmm.com" not in u for u in _gm["urls"]))
         t("　（対照）正常な2件はそのまま残る", len(_gm["urls"]) == 2)
+
+        # ★★★2026-08-17・Codex依頼232の指摘★★★
+        #   控えを読めないと「使わないと決めたページ」があるかも分からない。
+        #   ★前は MATCH のページがそのまま材料にも票にも残っていた★
+        #   （コメントには fail-closed と書いてあった）。
+        _dec_ng = maker_material_decision(
+            [{"url": "https://chonborista.com/1", "identity_ok": True,
+              "reason": "OK",
+              "maker_check": {"state": "MATCH", "seen": "平和",
+                              "expected": "olympia_estate",
+                              "owners": ["heiwa"]}}],
+            "dmm_5086", "olympia_estate", cache=None, cache_ok=False)
+        t("★★★控えを読めないときは、どのページも材料に使わない★★★"
+          "（読めない＝『使わないと決めた分』が分からない・fail-closed）",
+          _dec_ng["bad"] == {"https://chonborista.com/1"}
+          and _dec_ng["accepted"] == set()
+          and _dec_ng.get("cache_unreadable") is True)
         _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": "LB/タコスロBD",
                                         "reason": "OK"}
         t("★★BT型式（LB/…）を規格印ありとして採用する★★"

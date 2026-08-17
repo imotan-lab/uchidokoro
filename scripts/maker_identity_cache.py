@@ -244,7 +244,7 @@ def _check_record(slug: str, rec, reg=None) -> None:
         #   **この機種のもの**だと言えない。同じ引用に入っていれば、
         #   機種名・メーカー欄・導入日が同じ場所にあると確かめられる。
         #   ★実データで収まることを確かめてから入れた★（2026-08-17）＝
-        #   ちょんぼりすた112字・なな徹108字（上限120字）。
+        #   ちょんぼりすた52字・なな徹48字（上限120字）。
         _days = date_forms(str(rec.get("release_date")))
         if not any(d in q for d in _days):
             raise CacheError(
@@ -725,6 +725,12 @@ def _bad_load() -> bool:
                         "kind": "directory_observation"},
                        {"url": _N, "quote": "メーカー 平和 の解析一覧です",
                         "kind": "directory_observation"}]),
+        # ★機種名とメーカーは正しいが、導入日だけ無い★（依頼232の指摘）
+        #   この検査だけ将来消えたときに、試験が気づけるようにする
+        _rec(evidence=[{"url": _C, "quote": f"機種名 {_MN} メーカー {_SEEN}",
+                        "kind": "directory_observation"},
+                       {"url": _N, "quote": f"機種名 {_MN} メーカー {_SEEN}",
+                        "kind": "directory_observation"}]),
         # 引用にメーカー欄の表記が入っていない
         _rec(evidence=[{"url": _C, "quote": f"機種名 {_MN} の解析",
                         "kind": "directory_observation"},
@@ -872,10 +878,14 @@ def selftest() -> int:
     #   材料になるページ自身は本体の同定を通るが、控えの2件目以降の根拠には
     #   同じ検査が無かった。別機種のページの「関連機種」欄に対象名・メーカー・
     #   日付が並んでいれば、独立2名鑑の1票になり得た。
+    # ★題は実在の言い回しにする★（2026-08-17・Codex依頼232の指摘）
+    #   「| 名鑑」のような知らない語を入れると、**機種名の照合が壊れていても
+    #   末尾語だけで拒否されて試験が通る**（違う理由で合格してしまう）。
     t("★★★別機種のページは、対象名もメーカーも日付も載っていても使わない★★★"
       "（本体と同じ本人性の検査を、控えの根拠にも通す）",
       _ask(fetch=lambda u: (_w_last(u),
-                            _page(title="L別の機種 スロット 新台 | 名鑑"))[1]
+                            _page(title="L別の機種 スロット 新台 天井 解析"
+                                        " | ちょんぼりすた"))[1]
            if u == _C else (_w_last(u), _pages[u])[1]) is None)
     # ★★★2026-08-17・Codex依頼231の指摘2★★★
     #   本体は取得直後に投稿欄・AI欄を箱ごと落としてから読む。控えの再確認は
