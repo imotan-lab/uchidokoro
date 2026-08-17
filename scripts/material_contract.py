@@ -66,6 +66,14 @@ CONTRACT_INPUTS = frozenset({
     "scripts/blocked_hosts.py",
     # 投稿欄・AI欄を落とす役（落とし損ねると読者の書き込みが材料になる）
     "scripts/user_area.py",
+    # ★材料の値を読む側★（2026-08-17・Codex依頼234の厚みの指摘）
+    #   4つとも共通の関所（material_page_identity_ok）を通しているが、
+    #   その1行を将来消しても #389 の指紋検査だけでは通ってしまうため、
+    #   同じ契約の中に置いて「変えたら承認し直す」を強制する。
+    "scripts/spec_lookup.py",
+    "scripts/ceiling_lookup.py",
+    "scripts/cz_lookup.py",
+    "scripts/at_spec_lookup.py",
     # メーカー・名鑑の設定
     "assets/data/maker-catalogs.json",
     "assets/data/directory-catalogs.json",
@@ -190,9 +198,15 @@ def _deps_changed(want: dict, now: dict) -> list:
     if not isinstance(got_imp, dict):
         raise ContractError("承認の控えに imports（辞書）がありません")
     diffs = []
+    known = set((want.get("files") or {}))
     for name, mods in sorted(now["imports"].items()):
         old = got_imp.get(name)
         if old is None:
+            # ★集合に新しく入れたファイルは「顔ぶれが変わった」ではない★
+            #   （2026-08-17）＝新入りは、集合が増えたことが承認の差分に出る。
+            #   ★既存のファイルなのに依存の記録が無いときは止める★（fail-closed）
+            if name not in known:
+                continue
             raise ContractError(f"承認の控えに {name} の依存がありません")
         if list(old) != list(mods):
             diffs.append((name, sorted(set(mods) - set(old)),

@@ -791,6 +791,13 @@ def lookup(url: str, official_name: str, expected_maker: str = "") -> dict:
         if why == "NAME_CORE_MISMATCH" and official_name:
             body = " ".join(_w._visible_text(html).split())
             out["name_in_body"] = str(official_name).strip() in body
+            # ★メーカー欄は「見えた事実」として返す★
+            #   （2026-08-17・Codex依頼234の指摘2）
+            #   題の不一致で先に戻っていたので、メーカー欄を一度も読まず、
+            #   救う側（title_name_core_mismatch）が**必ず空の表記で控えを引き**、
+            #   永久に一致しなかった。★状態（maker_check）は作らない★＝
+            #   4つの判定を増やさない。ここは事実の観測だけ。
+            out["observed_maker"] = extract_maker_name(html)
         return out
     out["identity_ok"] = True
     # ★同定に通ったページの導入年月を控えとして返す★（2026-08-02・Codex47回目）

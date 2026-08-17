@@ -545,7 +545,11 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
             rejected.add(r["url"])
         elif slug:
             questions.append({
-                "key": f"maker:{mc.get('expected')}:{_mic.key_of(mc.get('seen'))}",
+                # ★v3は「1ページにつき1判断」★（Codex依頼234の指摘5）
+                #   キーに対象ページを入れないと、同じ表記の2ページが
+                #   台帳で同じ案件に合流し、片方の判断が見えなくなる。
+                "key": (f"maker:{mc.get('expected')}:"
+                        f"{_mic.key_of(mc.get('seen'))}:{r['url']}"),
                 "text": (
                     f"★この名鑑ページを、この機種の材料に使ってよいですか★／"
                     f"名鑑 {r['url']} のメーカー欄が「{mc.get('seen')}」で、"
@@ -556,6 +560,8 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
                     "python scripts/maker_identity_cache.py --record "
                     "--machine-url https://p-town.dmm.com/machines/<機種ID> "
                     "--machine-name <カレンダーの機種名> "
+                    f"--target-url {r['url']} "
+                    "--proof-profile maker_field "
                     f"--expected {mc.get('expected')} "
                     f"--seen {mc.get('seen')} "
                     "--verdict ACCEPT_MATERIAL/REJECT_MATERIAL "
@@ -594,8 +600,13 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
                 continue
         except Exception:                  # noqa: BLE001
             continue                       # 名鑑を引けないものは回さない
-        v = verdict_of(mc_expected(r, maker), (r.get("maker_check") or {})
-                       .get("seen") or "", r.get("url") or "",
+        # ★題の不一致では maker_check が作られない★（同定で先に戻るため）。
+        #   メーカー欄は「見えた事実」として lookup が返す observed_maker を使う。
+        #   （2026-08-17・Codex依頼234の指摘2。ここが空だと控えを永久に引けない）
+        _seen = str(r.get("observed_maker") or "")
+        if not _seen:
+            continue                       # メーカー欄が読めないものは回さない
+        v = verdict_of(mc_expected(r, maker), _seen, r.get("url") or "",
                        "title_name_core_mismatch")
         if v == "ACCEPT_MATERIAL":
             accepted.add(r["url"])
@@ -626,6 +637,8 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
                     f"--machine-name \"{machine_name}\" "
                     f"--target-url {r['url']} "
                     "--proof-profile title_name_core_mismatch "
+                    f"--expected {mc_expected(r, maker)} "
+                    f"--seen \"{_seen}\" "
                     "--verdict ACCEPT_MATERIAL/REJECT_MATERIAL "
                     "--why-file <理由を書いたファイル> --by claude,codex "
                     "--evidence \"<そのページのURL>|<機種名とメーカー欄と導入日を"
@@ -2800,10 +2813,14 @@ def selftest() -> int:
         # ★★★題が略称のときの経路★★★（2026-08-17・台帳#390）
         _TU = "https://chonborista.com/slot/orinpia-slot/264134/"
 
-        def _title_dec(cached=None, name_in_body=True, url=_TU):
+        def _title_dec(cached=None, name_in_body=True, url=_TU,
+                       observed_maker="京楽"):
+            # ★本番と同じ形の返り値にする★＝題の不一致では maker_check が
+            #   作られず、メーカー欄は observed_maker として返る（依頼234）
             looks = [{"url": url, "identity_ok": False,
                       "reason": "NAME_CORE_MISMATCH",
-                      "name_in_body": name_in_body}]
+                      "name_in_body": name_in_body,
+                      "observed_maker": observed_maker}]
             return maker_material_decision(
                 looks, "dmm_5073", "kyoraku",
                 verdict_of=lambda e, s, u, prof="": cached,
@@ -2826,6 +2843,10 @@ def selftest() -> int:
         t("　控えで『使わない』と決めてあれば、問いも出さない",
           _title_dec(cached="REJECT_MATERIAL")["questions"] == []
           and _title_dec(cached="REJECT_MATERIAL")["accepted"] == set())
+        t("★★メーカー欄を読めないページは2AIへ回さない★★"
+          "（読めない＝この型の前提が確かめられない）",
+          _title_dec(observed_maker="")["questions"] == []
+          and _title_dec(observed_maker="")["accepted"] == set())
         _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": "LB/タコスロBD",
                                         "reason": "OK"}
         t("★★BT型式（LB/…）を規格印ありとして採用する★★"

@@ -378,10 +378,25 @@ def verdict_for(slug: str, expected: str = "", seen: str = "", store=None,
         if not _has_core(str(rec.get("machine_name") or ""), machine_name) \
                 or str(rec.get("release_date") or "") != str(release_date):
             return None
-        # ★③根拠が今もそのページに実在するか（毎回取り直す）★
+        # ★④根拠が今もそのページに実在するか（毎回取り直す）★
         try:
-            verify_evidence(rec.get("evidence") or [], fetch, expected, rec)
+            finals = verify_evidence(rec.get("evidence") or [], fetch,
+                                     expected, rec)
         except CacheError:
+            return None
+        # ★★⑤いま取ってきた到達先が、控えた対象ページと同じか★★
+        #   （2026-08-17・Codex依頼234の指摘1）
+        #   ★穴だったところ★＝記録するときは転送を拒否し、到達先も残して
+        #   いたのに、**使うときは一度も比べていなかった**。
+        #   同じ名鑑の中の**別の機種ページ**へ転送されると、
+        #   転送先も機種ページの形に合うので転送自体は止まらず、
+        #   名前・メーカー・日付・引用がそこにも在れば「使う」を返し、
+        #   4つの読取器が**転送先の本文から値を読む**経路が残っていた。
+        _fin = str((finals or {}).get(str(material_url), "")).rstrip("/")
+        if _fin and _fin != _t:
+            return None
+        _ofu = str(rec.get("observed_final_url") or "").rstrip("/")
+        if _ofu and _fin and _fin != _ofu:
             return None
         return v
     return None
@@ -599,7 +614,30 @@ def verify_evidence(evidence: list, fetch=None, expected: str = "",
                 html or "", mn, strict_all_tail=True,
                 extra_tail_ok=(_mcl0.maker_brand_cores(expected)
                                if expected else None))
-            if not _ok_id:
+            # ★★救う対象そのものを、同じ検査で拒否していた★★
+            #   （2026-08-17・Codex依頼234の指摘2）
+            #   `title_name_core_mismatch` は**題が合わないページを救う**ための
+            #   型なのに、ここで厳格な同定をかけ直していたので
+            #   **控えを作れず、許可証が永久に生まれなかった**（機能しない）。
+            #   ★対象ページだけ、その型に合った確かめ方をする★
+            #     ①落ち方が厳密に NAME_CORE_MISMATCH であること
+            #       （別機種・規格違い・題が無い等は今までどおり拒否）
+            #     ②投稿欄を落とした本文に、DMMの正式名が**完全一致**であること
+            #     ③メーカー欄がDMMと一致すること（すぐ下の共通処理で見る）
+            #   ★「本人だ」と決めるのは2AI★＝機械は上の3つを確かめるだけ。
+            _prof = str((rec or {}).get("proof_profile") or "")
+            _is_target = (str(url).rstrip("/")
+                          == str((rec or {}).get("target_url") or "").rstrip("/"))
+            if not _ok_id and _prof == "title_name_core_mismatch" and _is_target:
+                if _why_id != "NAME_CORE_MISMATCH":
+                    raise CacheError(
+                        f"題の不一致以外の理由で落ちています（{url}）: "
+                        f"{str(_why_id)[:60]}／★この型で救えるのは題だけです★")
+                if str(mn).strip() not in body:
+                    raise CacheError(
+                        f"本文にDMMの正式名がそのままありません（{url}）"
+                        "／★略称の題を救うには、正式名が本文にあることが要ります★")
+            elif not _ok_id:
                 raise CacheError(
                     f"そのページはこの機種のページではありません（{url}）: "
                     f"{str(_why_id)[:60]}")
@@ -949,6 +987,58 @@ def selftest() -> int:
         except CacheError:
             return False
 
+    # ★★★ここは「本物の題の不一致」で試す★★★（2026-08-17・Codex依頼234の指摘2）
+    #   ★5回目の同じ失敗★＝前は普通の題のページで試していたので、
+    #   救う対象そのもの（NAME_CORE_MISMATCH）を一度も通しておらず、
+    #   **控えを作れない＝機能しない**ことに気づけなかった。
+    _NICK = ("<title>【ガンゲイル(スマスロ)】解析情報まとめ 天井・設定判別"
+             "・打ち方・やめどき</title>"
+             '<div id="hyouka">星の評価</div>'
+             '<ul class="commentlist"><li>読者の書き込み</li></ul>'
+             f'<div id="entry"><div>機種名 {_MN}</div>'
+             f"<div>メーカー {_SEEN}</div>"
+             "<div>導入日 2026年10月5日</div></div>")
+
+    def _fetch_nick(u):
+        if u == _C:
+            _w_last(u)
+            return _NICK
+        return _fetch(u)
+
+    import model_code_lookup as _mcl_t
+    _pim = _mcl_t.page_is_machine(_NICK, _MN, strict_all_tail=True)
+    t("　（前提）この偽ページは本当に題の不一致で落ちる",
+      _pim == (False, "NAME_CORE_MISMATCH"))
+    t("★★★題が略称の本物のページで、控えを作れる★★★"
+      "（前は救う対象そのものを厳格同定で拒否していて、控えを作れなかった）",
+      _ok2(fetch=_fetch_nick, slug="dmm_nick"))
+    t("★★★作った控えで、そのページを材料に使えるところまで通る★★★",
+      verdict_for("dmm_nick", _EXPECTED, _SEEN, st2, _fetch_nick,
+                  material_url=_C, machine_name=_MN, release_date=_REL,
+                  want_profile="title_name_core_mismatch")
+      == "ACCEPT_MATERIAL")
+    # ★★★使うときにも到達先を見る★★★（2026-08-17・Codex依頼234の指摘1）
+    #   ★穴だったところ★＝記録時は転送を拒否し到達先も残していたのに、
+    #   使うときは一度も比べていなかった。同じ名鑑の**別の機種ページ**へ
+    #   転送されると、転送先も機種ページの形に合うので止まらず、
+    #   4つの読取器が転送先の本文から値を読めた。
+    _C2 = "https://chonborista.com/slot/orinpia-slot/777777/"
+    t("★★★控えたページが別の機種ページへ転送されていたら使わない★★★",
+      verdict_for("dmm_nick", _EXPECTED, _SEEN, st2,
+                  lambda u: (_w_last(_C2), _NICK)[1],
+                  material_url=_C, machine_name=_MN, release_date=_REL,
+                  want_profile="title_name_core_mismatch") is None)
+    t("★★題の不一致“以外”で落ちるページは、この型でも救わない★★",
+      not _ok2(slug="dmm_notitle",
+               fetch=lambda u: (_w_last(u), _NICK.replace(
+                   "<title>【ガンゲイル(スマスロ)】解析情報まとめ 天井・設定判別"
+                   "・打ち方・やめどき</title>", ""))[1]
+               if u == _C else _fetch(u)))
+    t("★★本文にDMMの正式名がそのまま無ければ救わない★★",
+      not _ok2(slug="dmm_noname",
+               fetch=lambda u: (_w_last(u),
+                                _NICK.replace(_MN, "L別のなにか"))[1]
+               if u == _C else _fetch(u)))
     t("★★題が略称のときは、そのページ1件で控えられる★★"
       "（2件目の名鑑は別途、正規の同定を通っている）", _ok2())
     t("　（対照）メーカーの食い違いのほうは、今までどおり2名鑑が要る",
@@ -1214,7 +1304,13 @@ def main() -> int:
             return 1
         slug = "dmm_" + m.group(1)
         if a.forget:
-            ok = forget(slug, a.expected or "", a.seen or "")
+            # ★v3は対象ページで指す★（2026-08-17・Codex依頼234の指摘4）
+            #   旧いまま (expected, seen) を渡していたので、3番目の引数に
+            #   文字列が入り、控えを取り消す手順そのものが壊れていた。
+            if not a.target_url:
+                print("★--target-url が要ります（どのページの控えを消すか）★")
+                return 1
+            ok = forget(slug, a.target_url)
             print("消しました" if ok else "その控えはありません")
             return 0 if ok else 1
         ev = []
