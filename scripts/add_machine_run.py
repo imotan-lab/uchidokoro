@@ -407,8 +407,13 @@ def write_maker_relation_record(slug: str, name: str, checks: list,
             f"- 結論: {c.get('verdict', '')}",
             f"- 根拠の範囲: {c.get('basis_scope', '')}",
             f"- 会社関係の機械確認: {c.get('relationship_verified')}",
-            f"- 材料に使った: {c.get('material_used')}"
-            f" / 型式名の票に入れた: {c.get('model_code_vote_used')}",
+            # ★名前を実態に合わせた★（2026-08-17・Codex依頼230）
+            #   「材料に使った」ではなく「材料集めの最後まで残った」。
+            #   そこから値が採用されたかは、また別のこと。
+            f"- 材料集めの最後まで残った: "
+            f"{c.get('eligible_at_collection_end')}",
+            f"- 記事を作れた: {c.get('article_created')}",
+            f"- 型式名の票に入れた: {c.get('model_code_vote_used')}",
             "",
         ]
     try:
@@ -459,13 +464,26 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
     accepted, rejected, questions, notes = set(), set(), [], []
     for r in looks or []:
         mc = r.get("maker_check") or {}
-        # ★控えを見るのは RELATED だけ★（2026-08-17・Codex依頼228の指摘1）
+        if not r.get("identity_ok"):
+            continue
+        st = mc.get("state")
+        # ★★「使わない」と決めた控えは、状態によらず必ず効かせる★★
+        #   （2026-08-17・Codex依頼230の指摘1）
+        #   前は RELATED のときしか控えを見ていなかったので、
+        #   **名簿を直して同じ表記が MATCH になった瞬間に、
+        #   「使わない」と決めたページが材料へ戻れた**。
+        #   ★束縛（URL・機種名・導入日）を渡さずに引く★＝
+        #   「使う」は返らない（fail-closed）ので、通信もしない。
+        if st != "RELATED":
+            if verdict_of(mc.get("expected") or maker, mc.get("seen") or "",
+                          "") == "REJECT_MATERIAL":
+                rejected.add(r["url"])
+            continue
+        # ★控えを「使う」側で引くのは RELATED だけ★（依頼228の指摘1）
         #   UNKNOWN は「メーカー欄を読めない」か「名簿に無い**任意の別会社**」。
         #   救うと、2つの名鑑が同じ表記をしただけで別会社の機種を材料に戻せる。
         #   ★同名で別メーカーの機種は実在する★
         #   （パチスロ犬夜叉＝2016年ロデオ／2022年クロスアルファ）。
-        if mc.get("state") != "RELATED" or not r.get("identity_ok"):
-            continue
         v = verdict_of(mc.get("expected") or maker, mc.get("seen") or "",
                        r.get("url") or "")
         if v == "ACCEPT_MATERIAL":
@@ -486,7 +504,10 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
                  "verdict": "ACCEPT_MATERIAL",
                  "relationship_verified": False,
                  "basis_scope": _mic.BASIS_SCOPE,
-                 "material_used": True, "model_code_vote_used": False})
+                 # ★実際の結果は出口で入れ直す★（決めた時点では分からない）
+                 "eligible_at_collection_end": None,
+                 "article_created": None,
+                 "model_code_vote_used": False})
         elif v == "REJECT_MATERIAL":
             # ★決めてある＝必ず除外★（2026-08-17・依頼225のCodex指摘1）
             #   前は何も記録せず素通りしていたので、採否を変えた瞬間に
@@ -528,7 +549,9 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
     #     `state` が UNKNOWN のままでも**理由文を書き換えるだけで除外を
     #     すり抜けられた**（隣り合う契約が静かにずれる形）。
     #     状態を正本にすれば、文言を直しても採否は変わらない。
-    #   ★状態が読めないページも外す★（fail-closed）
+    #   ★状態が読めないページも外す★（fail-closed・2026-08-17・依頼230）
+    #     ★ただし、メーカーを期待していない呼び方のときは、この関門自体が無い★
+    #     （`maker` が空＝照合する相手がいない。lookup も maker_check を作らない）
     _USE_STATES = ("MATCH",)          # そのまま材料に使ってよい状態
     bad = set()
     for r in looks or []:
@@ -537,7 +560,7 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
         st = (r.get("maker_check") or {}).get("state")
         if not r.get("identity_ok") or r["url"] in rejected:
             bad.add(r["url"])
-        elif st is not None and st not in _USE_STATES:
+        elif maker and st not in _USE_STATES:
             bad.add(r["url"])
     return {"accepted": accepted, "rejected_by_cache": rejected,
             "bad": bad, "questions": questions, "relation_checks": notes}
@@ -583,6 +606,17 @@ def _gather(name: str, maker: str = "", slug: str = "",
         return got
     # ★名鑑にも期待するメーカーを渡す★（2026-08-02・Codex40回目）
     looks = [_mc.lookup(u, name, expected_maker=maker) for u in got["urls"]]
+    # ★★約束が守られているかを、その場で確かめる★★
+    #   （2026-08-17・Codex依頼230の厚みの指摘）
+    #   メーカーを期待して引いたなら、判定（state）が必ず返るのが約束。
+    #   返っていないものを「判定なし＝素通り」にすると、隣の契約が変わった
+    #   ときに**メーカーの関門を静かに抜ける**。読めなかった扱い（UNKNOWN）に
+    #   倒しておく＝使わない側（fail-closed）。
+    if maker:
+        for r in looks:
+            if not (r.get("maker_check") or {}).get("state"):
+                r["maker_check"] = {"state": "UNKNOWN", "seen": "",
+                                    "expected": maker, "owners": []}
     # ★メーカー違いと判明した名鑑は、材料・転載照合からも外す★
     #   （2026-08-02・Codex41回目。型式の票からしか外していなかったので、
     #     同名の別メーカー機のページが材料の2票に復活できた）
@@ -2293,7 +2327,9 @@ def run_one(name, official_url, maker, release, apply_it=False,
             return
         alive = set(got.get("urls") or [])
         for _n in rows:
-            _n["material_used"] = _n["url"] in alive
+            # ★「材料に使った」ではなく「材料集めの最後まで残った」★
+            #   （2026-08-17・Codex依頼230。そこから値が採用されたかは別）
+            _n["eligible_at_collection_end"] = _n["url"] in alive
             _n["article_created"] = bool(created)
         p = write_maker_relation_record(out["slug"], name, rows)
         _log(f"  メーカー欄の採否を判断記録へ: {p or '★書けませんでした★'}")
@@ -2449,6 +2485,19 @@ def selftest() -> int:
         print(("✅" if cond else "❌") + " " + name)
 
     real_find, real_read, real_lookup = _di.find, _sl.read_page, _mc.lookup
+
+    def _MKC(k):
+        """★偽の名鑑ページにも、本番の約束を守らせる★（2026-08-17・依頼230）
+
+        本番の `lookup()` は、メーカーを期待して呼ばれたら**必ず**
+        メーカー欄の判定（maker_check）を返す。偽物がそれを返さないと、
+        ★関門を通らない形の偽物で関門を試す★ことになる（同じ失敗を3回した）。
+        """
+        m = k.get("expected_maker")
+        if not m:
+            return {}
+        return {"maker_check": {"state": "MATCH", "seen": m, "expected": m,
+                                "owners": [m]}}
     # ★転載照合は試験では常に成功扱い★（2026-08-02・Codex53回目の変更で
     #   取得失敗が「そのページを票から外す」ようになり、架空URLの試験が
     #   全部外されてしまうため。lineage_check 自体の挙動は同スクリプトの
@@ -2497,7 +2546,7 @@ def selftest() -> int:
             k: {"state": "FOUND", "url": f"https://{h}/1", "why": "",
                 "candidates": [], "surfaces": "1/1", "index_size": 9, "problems": []}
             for k, h in (("a", "chonborista.com"), ("b", "nana-press.com"))}}
-        _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": "L1", "reason": "OK"}
+        _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": "L1", "reason": "OK", **_MKC(k)}
         _sl.read_page = lambda u, n: {
             "url": u, "host": u.split("/")[2], "ok": True, "reason": "OK",
             "fields": {"payout_rate": {"1": "97.3%"}}}
@@ -2541,6 +2590,15 @@ def selftest() -> int:
         t("★★明らかに別の社は外れる★★", _g_urls("MISMATCH") == 0)
         t("　同定に落ちたページも外れる",
           _g_urls("MATCH", identity_ok=False) == 0)
+        # ★★★2026-08-17・Codex依頼230の指摘1★★★
+        #   控えを見るのが RELATED のときだけだったので、名簿を直して
+        #   同じ表記が MATCH になった瞬間に、「使わない」と決めたページが
+        #   材料へ戻れた。★決めてある＝必ず除外★という契約と逆だった。
+        t("★★★控えで『使わない』と決めたページは、名簿で一致に変わっても"
+          "戻らない★★★（前は MATCH になった瞬間に材料へ復活できた）",
+          _g_urls("MATCH", cached="REJECT_MATERIAL") == 0)
+        t("　どの社か分からない側でも、控えの『使わない』は効く",
+          _g_urls("UNKNOWN", cached="REJECT_MATERIAL") == 0)
         _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": "LB/タコスロBD",
                                         "reason": "OK"}
         t("★★BT型式（LB/…）を規格印ありとして採用する★★"
@@ -2551,7 +2609,7 @@ def selftest() -> int:
         t("　S型式との取り違えは引き続き拒否",
           gather("スマスロ タコスロ")["model_code"] is None)
         _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": "L1",
-                                        "reason": "OK"}
+                                        "reason": "OK", **_MKC(k)}
 
         # ★公式ページは本物を想定して差し替える★
         #   （開けなければ止まる作りなので、通る場合の試験には中身が要る）
@@ -2752,7 +2810,7 @@ def selftest() -> int:
             "url": u, "host": u.split("/")[2], "ok": True, "reason": "OK",
             "fields": {"payout_rate": {"1": "97.3%"}}}
         _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": None,
-                                   "reason": "MODEL_CODE_NOT_FOUND"}
+                                   "reason": "MODEL_CODE_NOT_FOUND", **_MKC(k)}
         r3 = run_one("L試験機", "https://m.example/products/slot/zzz/", "m", "2026-09")
         # ★2026-08-09・運営者決定で契約が変わった★
         #   以前は「型式名が確定しなければ記事を作らない」だった。
@@ -2768,13 +2826,13 @@ def selftest() -> int:
         # ★取り違えを防ぐ検査は残す★＝型式が名鑑ごとに食い違うなら作らない
         _mc.lookup = lambda u, n, **k: {
             "url": u, "identity_ok": True, "reason": "OK",
-            "model_code": "L1" if "chonborista.com" in u else "L9"}
+            "model_code": "L1" if "chonborista.com" in u else "L9", **_MKC(k)}
         r3b = run_one("L試験機", "https://m.example/products/slot/zzz/", "m", "2026-09")
         t("★★型式名が名鑑ごとに食い違うときは作らない★★（別機種の資料が混じっている）",
           "preview" not in r3b
           and any("食い違" in x for x in r3b["blocked"]))
 
-        _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": "L1", "reason": "OK"}
+        _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": "L1", "reason": "OK", **_MKC(k)}
         _di.find = lambda n, c=None: {"results": {
             "a": {"state": "FOUND", "url": "https://chonborista.com/1", "why": "",
                   "candidates": [], "surfaces": "1/1", "index_size": 9, "problems": []},
@@ -2790,7 +2848,7 @@ def selftest() -> int:
         # ★票が成立しなかった時は、3件目の曖昧さも残す★（Codex28回目）
         _real_lookup28 = _mc.lookup
         _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": None,
-                                   "reason": "MODEL_CODE_NOT_FOUND"}
+                                   "reason": "MODEL_CODE_NOT_FOUND", **_MKC(k)}
         r4c = run_one("L試験機", "https://m.example/products/slot/zzz/", "m", "2026-09")
         _mc.lookup = _real_lookup28
         t("★★票が成立しなければ、使わなかった名鑑の曖昧さも問題として残す★★"

@@ -199,6 +199,19 @@ def _check_record(slug: str, rec, reg=None) -> None:
         if e.get("kind") not in KINDS:
             raise CacheError(f"控えの根拠の種類が不正です（{slug}）: {e.get('kind')!r}")
         kinds.add(e.get("kind"))
+    # ★★写しの量の制限は、結論によらず先に効かせる★★
+    #   （2026-08-17・Codex依頼230の指摘2）
+    #   前はここが「使う」と決めた控えの検査の中にあったので、
+    #   **「使わない」の控えなら同じ名鑑から4件まで写せた**＝
+    #   規約について運営者が許した保存の範囲を、結論を変えるだけで越えられた。
+    import source_lineage as _sl
+    try:
+        per = [_sl.vote_key_of_url(str(e.get("url")), reg) for e in ev]
+    except Exception as e:                 # noqa: BLE001
+        raise CacheError(f"根拠の出どころを数えられません（{slug}）: {e}")
+    if len(set(per)) != len(per):
+        raise CacheError(f"同じ名鑑から2件以上の引用を控えています（{slug}）"
+                         "／★1つの名鑑につき1件までです★")
     if rec["verdict"] != "ACCEPT_MATERIAL":
         return
     # ---------------- ここから下は「材料に使う」と決めた控えだけの検査 ----------
@@ -228,17 +241,7 @@ def _check_record(slug: str, rec, reg=None) -> None:
     # ★③独立した名鑑が2つ以上★（2026-08-17・依頼228）
     #   ★票の数は source_lineage.independent() だけで決める★
     #   （自前で len() すると共同制作の組をまとめ忘れる＝監査39が見張る）
-    import source_lineage as _sl
-    try:
-        per = [_sl.vote_key_of_url(str(e.get("url")), reg) for e in ev]
-    except Exception as e:                 # noqa: BLE001
-        raise CacheError(f"根拠の出どころを数えられません（{slug}）: {e}")
-    # ★同じ発行者から2つ以上写さない★（2026-08-17・Codex依頼229の指摘3）
-    #   写しを最小限にするため。票の数え方（independent）とは別の目的。
-    if len(set(per)) != len(per):
-        raise CacheError(f"同じ名鑑から2件以上の引用を控えています（{slug}）"
-                         "／★1つの名鑑につき1件までです★")
-    keys = set(per)
+    keys = set(per)     # ★1つの名鑑につき1件は上で確かめ済み★
     if _sl.independent(keys, reg) < MIN_DIRECTORIES:
         raise CacheError(
             f"材料に使うと決めるには独立した名鑑が{MIN_DIRECTORIES}つ要ります"
@@ -505,6 +508,21 @@ def verify_evidence(evidence: list, fetch=None, expected: str = "",
             raise CacheError(
                 f"根拠の逐語引用がそのページに見つかりません（{url}）: "
                 f"{q[:40]}／★写した文だけを根拠にします★")
+        # ★★そのページが本当にこの機種のページか、本体と同じ物差しで見る★★
+        #   （2026-08-17・Codex依頼230）
+        #   ★穴だったところ★＝材料になるページ自身は本体の同定（identity_ok）を
+        #   通るが、**控えの2件目以降の根拠には同じ検査が無かった**。
+        #   別機種のページの「関連機種」欄に対象名・メーカー・日付が並んでいれば、
+        #   独立2名鑑の1票になり得た。
+        #   ★名鑑ごとの新しい読み取りは書かない★＝本体が使う page_is_machine を通す。
+        mn = str((rec or {}).get("machine_name") or "")
+        if mn:
+            import model_code_lookup as _mcl0
+            _ok_id, _why_id = _mcl0.page_is_machine(html or "", mn)
+            if not _ok_id:
+                raise CacheError(
+                    f"そのページはこの機種のページではありません（{url}）: "
+                    f"{str(_why_id)[:60]}")
         # ★★メーカー欄そのものを取り出して比べる★★
         #   （2026-08-17・Codex依頼229の指摘2）
         #   前は「seen という文字がページのどこかにあるか」しか見ていなかった。
@@ -717,8 +735,13 @@ def selftest() -> int:
     #   メーカー欄は「行の頭がメーカー」で読み取る（extract_maker_name）ので、
     #   1行にべた書きした偽ページでは**本番の読み取りを通らない**。
     #   ★関所を通る形の偽物でなければ、関所の試験にならない★
-    def _page(maker=_SEEN, day="2026年10月5日", name=_MN):
-        return (f"<div>機種名 {name}</div>"
+    def _page(maker=_SEEN, day="2026年10月5日", name=_MN, title=None):
+        # ★題（title）も本物の名鑑と同じ形で持たせる★
+        #   本人性の検査（page_is_machine）は題と見出しを見るので、
+        #   題の無い偽ページでは**その関門を通らない**（＝関門の試験にならない）。
+        t = title if title is not None else f"{name} スロット 新台 天井 | 名鑑"
+        return (f"<title>{t}</title>"
+                f"<div>機種名 {name}</div>"
                 f"<div>メーカー {maker}</div>"
                 f"<div>導入日 {day}</div>")
 
@@ -805,6 +828,18 @@ def selftest() -> int:
       "（前はページのどこかに文字があれば「2件目の名鑑」に数えられた）",
       _ask(fetch=lambda u: (_w_last(u), _page(maker="サミー")
                             + "<div>関連: 平和 の機種はこちら</div>")[1]
+           if u == _C else (_w_last(u), _pages[u])[1]) is None)
+    # ★★★2026-08-17・Codex依頼230★★★
+    #   材料になるページ自身は本体の同定を通るが、控えの2件目以降の根拠には
+    #   同じ検査が無かった。別機種のページの「関連機種」欄に対象名・メーカー・
+    #   日付が並んでいれば、独立2名鑑の1票になり得た。
+    t("★★★別機種のページは、対象名もメーカーも日付も載っていても使わない★★★"
+      "（本体と同じ本人性の検査を、控えの根拠にも通す）",
+      _ask(fetch=lambda u: (_w_last(u),
+                            _page(title="L別の機種 スロット 新台 | 名鑑"))[1]
+           if u == _C else (_w_last(u), _pages[u])[1]) is None)
+    t("　題の無いページも使わない（本人性を確かめられない）",
+      _ask(fetch=lambda u: (_w_last(u), _page(title=""))[1]
            if u == _C else (_w_last(u), _pages[u])[1]) is None)
     t("　メーカー欄を読めないページも使わない（読めない＝確かめていない）",
       _ask(fetch=lambda u: (_w_last(u), f"<div>{_QC} 導入日 2026年10月5日</div>")[1]
