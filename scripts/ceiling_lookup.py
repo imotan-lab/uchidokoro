@@ -40,6 +40,7 @@ sys.path.insert(0, os.path.join(BASE, "scripts"))
 import html_tables as _ht             # noqa: E402
 import model_code_lookup as _mc       # noqa: E402
 import new_machine_watch as _w        # noqa: E402
+import fetched_page as _fp
 import user_area as _ua              # noqa: E402
 import spec_lookup as _sl             # noqa: E402
 
@@ -523,18 +524,21 @@ def from_text_pairs(text: str) -> list:
 
 
 def read_page(url: str, official_name: str, *,
-              expected_maker: str = "", grant=None) -> dict:
+              expected_maker: str = "", grant=None, page=None) -> dict:
     """1ページから天井の一式を採る。★機種が違えば何も採らない★"""
     out = {"url": url, "host": url.split("/")[2].lower().removeprefix("www."),
            "ok": False, "reason": "", "ceilings": [], "cz_names": set()}
     try:
         # ★用途を名乗ってから取りに行く★（2026-08-16・依頼218）
-        with _w.fetching("claim_material"):
-            html = _w._get(url)
-        # ★取ってきた直後に、投稿欄・AI欄を箱ごと落とす★（2026-08-14・台帳#345）
-        #   ここを通さないと、**表を生のHTMLから読む処理**に読者の書き込みが入る。
-        #   落としきれないときは例外＝そのページは使わない（fail-closed）。
-        html = _ua.clean_html(html, url)
+        # ★★取り直さない★★（2026-08-17・台帳#393／Codex依頼237の診断）
+        #   ★穴の根本★＝ここで各読取器が自分で取り直していたので、
+        #   「検証した本文」と「実際に読む本文」が同じであることを
+        #   誰も保証していなかった（同じ型の穴が5回続いた原因）。
+        #   渡されたら**その本文をそのまま読む**。
+        #   渡されないときだけ自分で取る（投稿欄を落とすのも器の中でやる）。
+        if page is None:
+            page = _fp.fetch(url, "claim_material")
+        html = page.cleaned_html
     except Exception as e:
         out["reason"] = f"取得できません: {e}"
         return out
@@ -544,7 +548,7 @@ def read_page(url: str, official_name: str, *,
     # ★材料に使ってよいかは共通の関所で見る★（2026-08-17・台帳#390）
     #   ここに例外の扱いを写さない（4か所に写すと必ずずれる）
     ok, why = _mc.material_page_identity_ok(
-        html, official_name, url=url,
+        page, official_name, url=url,
         expected_maker=expected_maker, grant=grant)
     if not ok:
         out["reason"] = why
@@ -983,7 +987,13 @@ def selftest() -> int:
             {"kind": "GAME", "amount": 1200, "unit": "G", "counted": "AT間",
              "benefit": "AT", "certainty": "PLAIN", "raw": ""}]
         _g["from_table"] = lambda lines: []
-        _w._get = lambda u, timeout=20: "<title>x</title><body>天井</body>"
+        # ★偽の取得役にも本番の約束を守らせる★（2026-08-17・台帳#393）
+        #   本番の _get は到達先（LAST_FINAL_URL）を必ず残す。
+        #   残さない偽物では、取得の器（fetched_page）を通らない。
+        def _fake_get(u, timeout=20):
+            _w.LAST_FINAL_URL["url"] = u
+            return "<title>x</title><body>天井</body>"
+        _w._get = _fake_get
         _mc.page_is_machine = lambda *a, **k: (True, "OK")
         _p56 = read_page("https://nana-press.com/1", "L試験機")
         t("★★同じG数で数える対象が違う天井を、ページ内で両方残す★★"

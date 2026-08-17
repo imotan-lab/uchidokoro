@@ -609,7 +609,7 @@ def extract_maker_name(html: str) -> str:
     return ""
 
 
-def material_page_identity_ok(html: str, official_name: str, *,
+def material_page_identity_ok(page, official_name: str, *,
                               url: str = "", expected_maker: str = "",
                               extra_tail_ok: set | None = None,
                               grant=None):
@@ -622,14 +622,22 @@ def material_page_identity_ok(html: str, official_name: str, *,
       いたので、材料集めの段階でページを通しても**値を読む段階でまた落ちた**。
       例外の扱いを4か所に写すと、必ずどこかがずれる。
 
-    ★grant＝「この機種について、このページを材料に使ってよい」と2AIが決めた控え★
-      （maker_identity_cache が根拠を取り直して確かめ済みのURLの集まり）
+    ★★page は FetchedPage（取ってきた本文と指紋を持つ器）★★
+      （2026-08-17・台帳#393／Codex依頼237の診断）
+      ★以前は生のHTMLとURLを別々に受け取っていた★ので、
+      「確かめた本文」と「あとで読む本文」が同じであることを
+      **誰も保証していなかった**。同じ型の穴が5回続いた原因がここ。
+
+    ★grant＝2AIが「材料に使ってよい」と決めた★本文の指紋★の集まり★
+      ★URLではなく指紋で照合する★＝URLの書き方の違い（末尾の / 等）や
+        転送で結び直しが必要になる余地を、そもそも作らない。
       ★弱い側で救えるのは題の不一致（NAME_CORE_MISMATCH）だけ★＝
         別機種・規格違い・題が読めない等の落ち方は、控えがあっても通さない
         （Codexの指摘3＝複数の失敗理由を弱い方へ落とさない）
       ★通すときも、メーカー欄が今もDMMと合っているかをその場で見る★
         （Codexの指摘2＝弱いプロファイルでメーカー関門を迂回させない）
     """
+    html = getattr(page, "cleaned_html", page)   # 器でも生HTMLでも受ける
     ok, why = page_is_machine(html, official_name, strict_all_tail=True,
                               extra_tail_ok=extra_tail_ok)
     if ok:
@@ -637,12 +645,15 @@ def material_page_identity_ok(html: str, official_name: str, *,
     # ★救えるのは題の不一致だけ★
     if why != "NAME_CORE_MISMATCH":
         return False, why
-    if not grant or not url:
+    if not grant:
         return False, why
-    # ★URLのそろえ方は控えと同じ1か所を通す★（2026-08-17・依頼235の指摘1）
-    import maker_identity_cache as _micu
-    if _micu.url_key(url) not in {_micu.url_key(u) for u in grant}:
-        return False, why
+    # ★★指紋で照合する★★（URLではない）
+    #   器で渡されていないと指紋が無い＝確かめようがないので通さない。
+    _sha = getattr(page, "sha256", "")
+    if not _sha:
+        return False, "GRANT_NO_PAGE_FINGERPRINT"
+    if _sha not in set(grant):
+        return False, "GRANT_CONTENT_MISMATCH"
     # ★このページを使うと決めた前提（メーカー欄が合う）が今も成り立つか★
     mk = extract_maker_name(html)
     if not mk:

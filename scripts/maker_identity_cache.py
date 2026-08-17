@@ -360,7 +360,7 @@ def url_key(url: str) -> str:
 def verdict_for(slug: str, expected: str = "", seen: str = "", store=None,
                 fetch=None, material_url: str = "",
                 machine_name: str = "", release_date: str = "",
-                want_profile: str = ""):
+                want_profile: str = "", runtime_page=None):
     """この機種について、★このページを★使うと決めてあるか（無ければ None）。
 
     ★★鍵は (機種・対象ページ) の2つ★★（2026-08-17・台帳#390／Codex依頼233）
@@ -417,7 +417,8 @@ def verdict_for(slug: str, expected: str = "", seen: str = "", store=None,
         try:
             finals = verify_evidence(rec.get("evidence") or [], fetch,
                                      expected, rec,
-                                     runtime_target=str(material_url))
+                                     runtime_target=str(material_url),
+                                     runtime_page=runtime_page)
         except CacheError:
             return None
         # ★★⑤いま取ってきた到達先が、控えた対象ページと同じか★★
@@ -572,7 +573,8 @@ def date_forms(iso: str) -> list:
 
 
 def verify_evidence(evidence: list, fetch=None, expected: str = "",
-                    rec=None, runtime_target: str = "") -> dict:
+                    rec=None, runtime_target: str = "",
+                    runtime_page=None) -> dict:
     """★根拠の逐語引用が、本当にそのページにあるか確かめる★
 
     ★なぜ要るか（2026-08-14・依頼190のP1）★
@@ -608,16 +610,28 @@ def verify_evidence(evidence: list, fetch=None, expected: str = "",
         #   許可証には実行時のURLが入り、読取器はそちらを取りに行くので、
         #   別機種の本文が材料に入り得た。
         #   ★確かめる相手と、あとで読む相手を同じにする★
+        _use_page = None
         if runtime_target and _tgt_key and url_key(url) == _tgt_key:
             url = runtime_target
             e = dict(e, url=url)
+            # ★★確かめる本文と、あとで読む本文を同じ物にする★★
+            #   （2026-08-17・台帳#393）取ってきた器が渡されていれば、
+            #   ここで取り直さずその本文を確かめる。
+            #   ★取り直すと「確かめた本文」と「読む本文」が別物になり得る★
+            _use_page = runtime_page
         if expected:
             check_evidence_source(e, expected)
-        try:
-            html = fetch(url)
-        except Exception as ex:            # noqa: BLE001
-            raise CacheError(f"根拠のページを取得できません（{url}）: "
-                             f"{str(ex)[:80]}")
+        if _use_page is not None:
+            html = _use_page.cleaned_html
+            _w.LAST_FINAL_URL["url"] = _use_page.final_url
+            _pre_cleaned = True
+        else:
+            _pre_cleaned = False
+            try:
+                html = fetch(url)
+            except Exception as ex:        # noqa: BLE001
+                raise CacheError(f"根拠のページを取得できません（{url}）: "
+                                 f"{str(ex)[:80]}")
         # ★転送された先も同じ許可の中か見る★（依頼192のP1）
         #   許可したURLから許可外へ飛ばされたら、それは別の出どころ。
         # ★ホストが同じでも必ず見る★（2026-08-14・依頼193のP2）
@@ -639,12 +653,14 @@ def verify_evidence(evidence: list, fetch=None, expected: str = "",
         #   ★読者の書き込みに含まれる文字が根拠になり得た★。
         #   「本体と同じ物差し」と書きながら、実装が違っていた。
         #   ★落としきれないページは使わない★（fail-closed）
-        import user_area as _ua
-        try:
-            html = _ua.clean_html(html or "", url)
-        except Exception as ex:            # noqa: BLE001
-            raise CacheError(f"投稿欄を落としきれないページです（{url}）: "
-                             f"{str(ex)[:80]}")
+        if not _pre_cleaned:
+            import user_area as _ua
+            try:
+                html = _ua.clean_html(html or "", url)
+            except Exception as ex:        # noqa: BLE001
+                raise CacheError(
+                    f"投稿欄を落としきれないページです（{url}）: "
+                    f"{str(ex)[:80]}")
         body = " ".join(_w._visible_text(html or "").split())
         q = " ".join(str(e.get("quote") or "").split())
         if q not in body:

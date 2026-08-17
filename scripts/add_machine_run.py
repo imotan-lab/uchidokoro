@@ -46,6 +46,7 @@ for _s in (sys.stdout, sys.stderr):
 import build_new_article as _ba       # noqa: E402
 import check_duplicate as _cd        # noqa: E402
 import at_spec_lookup as _at        # noqa: E402
+import fetched_page as _fp           # noqa: E402
 import os as _os_lp                 # noqa: E402
 import sys as _sys_lp               # noqa: E402
 _sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
@@ -437,7 +438,7 @@ def mc_expected(r: dict, maker: str) -> str:
 
 def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
                             verdict_of=None, machine_name="",
-                            release_date="") -> dict:
+                            release_date="", pages=None) -> dict:
     """★メーカー欄を見て、どの名鑑ページを材料に使うか決める★
 
     ★ここを関数にした理由★（2026-08-17・Codex依頼228の指摘1と、その原因）
@@ -469,11 +470,13 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
             #   機種名・導入日を渡さないと「使う」は返らない（fail-closed）。
             # ★求めている証明の型も渡す★（台帳#390）＝題の不一致で作った控えを
             #   メーカーの食い違いに流用させない。
+            # ★確かめる本文＝あとで読取器が読む本文★（台帳#393）
             return _mic.verdict_for(slug, expected, seen, cache,
                                     material_url=url,
                                     machine_name=machine_name,
                                     release_date=release_date,
-                                    want_profile=profile)
+                                    want_profile=profile,
+                                    runtime_page=(pages or {}).get(url))
     accepted, rejected, questions, notes = set(), set(), [], []
     # ★★控えを読めないなら、どのページも使わない★★
     #   （2026-08-17・Codex依頼232の指摘）
@@ -754,6 +757,19 @@ def _gather(name: str, maker: str = "", slug: str = "",
     #     （パチスロ犬夜叉＝2016年ロデオ／2022年クロスアルファ）。
     #     依頼225で決めた判定表もこれと同じ（UNKNOWN＝使わない）。
     #   ★控えが読めないときは、今までどおり除外する★（fail-closed）
+    # ★★材料に使う候補を、ここで1回だけ取る★★（2026-08-17・台帳#393）
+    #   ★以前は「材料集め」「控えの再確認」「4つの読取器」が
+    #   それぞれ取り直していた★ので、確かめた本文と読む本文が同じである
+    #   保証が無く、同じ型の穴が5回続いた。
+    #   ここで取った器を、控えの再確認と読取器の両方へ渡す。
+    #   ★取れなかったページは材料にしない★（fail-closed）
+    _pages = {}
+    for _u in list(got["urls"]):
+        try:
+            _pages[_u] = _fp.fetch(_u, "claim_material")
+        except _fp.PageError as e:        # noqa: BLE001
+            _log(f"  （取れないので材料から外します）{_u} → {str(e)[:90]}")
+            got["problems"].append(f"材料のページを取れません: {str(e)[:100]}")
     _cache_ok, _cache = True, None
     try:
         _cache = _mic.load()
@@ -767,11 +783,17 @@ def _gather(name: str, maker: str = "", slug: str = "",
     # ★判定は maker_material_decision に集めてある★（試験もそこを通す）
     _dec = maker_material_decision(looks, slug, maker, _cache, _cache_ok,
                                    machine_name=machine_name or name,
-                                   release_date=release_date)
+                                   release_date=release_date,
+                                   pages=_pages)
     # ★控えで「使う」と決めたページの許可証★（2026-08-17・台帳#390）
     #   材料を読む部品も**それぞれ**同定をやり直すので、ここで通しただけでは
     #   値を読む段階でまた落ちる。同じ許可を全部の読取器へ渡す。
-    _grant = frozenset(_dec["accepted"])
+    # ★★許可証は「本文の指紋」で出す★★（2026-08-17・台帳#393）
+    #   URLで出していたので、書き方の違い（末尾の / 等）や転送のたびに
+    #   結び直しが必要になり、同じ型の穴が5回続いた。
+    #   指紋なら「確かめた本文そのもの」以外は通らない。
+    _grant = frozenset(
+        _pages[u].sha256 for u in _dec["accepted"] if u in _pages)
     got["maker_questions"] = _dec["questions"]
     _bad_maker = _dec["bad"]
     for _n in _dec["relation_checks"]:
@@ -905,7 +927,8 @@ def _gather(name: str, maker: str = "", slug: str = "",
         誰にも伝わらないまま、材料だけが減っていた。
         """
         pages = [mod.read_page(u, name, expected_maker=maker,
-                              grant=_grant) for u in got["urls"]]
+                              grant=_grant, page=_pages.get(u))
+                 for u in got["urls"]]
         for pg in pages:
             if not pg.get("ok"):
                 got["problems"].append(
@@ -934,7 +957,8 @@ def _gather(name: str, maker: str = "", slug: str = "",
     #   出典によって「CZ」と書く所と「関所チャレンジ」と書く所がある。
     #   ★独立2出典が『CZ＝その名前』と書いている時だけ★同じ物として扱う。
     _cl_pages = [_cl.read_page(u, name, expected_maker=maker,
-                               grant=_grant) for u in got["urls"]]
+                               grant=_grant, page=_pages.get(u))
+                 for u in got["urls"]]
     for _pg in _cl_pages:
         if not _pg.get("ok"):
             got["problems"].append(
@@ -2888,8 +2912,10 @@ def selftest() -> int:
         # ★★4つの読取器を実際に呼ぶ★★（2026-08-17・Codex依頼235の厚みの指摘）
         #   前は共通の関所を1回呼んでいるだけで、read_page を1つも通して
         #   いなかった（range(1) で回していた＝試験の形だけ）。
-        _real_get2 = _nw._get
-        _nw._get = lambda u, timeout=20: _NICK2
+        # ★取ってきた器を作り、許可証は★その本文の指紋★で出す★
+        #   （2026-08-17・台帳#393。URLではなく本文で束縛する）
+        _pg2 = _fp.FetchedPage(_TU2, _TU2, _NICK2)
+        _grant2 = frozenset({_pg2.sha256})
         # ★偽の読取器に差し替わったままでは意味がない★＝本物に戻して呼ぶ
         _fake_sl_read = _sl.read_page
         _sl.read_page = real_read
@@ -2898,14 +2924,17 @@ def selftest() -> int:
             for _mod, _nm in ((_sl, "基本スペック"), (_cl, "天井"),
                               (_cz, "CZ"), (_at, "AT仕様")):
                 _ng_r = _mod.read_page(_TU2, _MN2, expected_maker="kyoraku",
-                                       grant=None)
+                                       grant=None, page=_pg2)
                 _readers[_nm] = (
                     _mod.read_page(_TU2, _MN2, expected_maker="kyoraku",
-                                   grant=frozenset({_TU2})).get("ok"),
+                                   grant=_grant2, page=_pg2).get("ok"),
                     _ng_r.get("ok"))
                 _readers_why[_nm] = _ng_r.get("reason")
+            # ★★本文が1文字でも違えば、許可証は効かない★★（不変条件の核）
+            _pg_mod = _fp.FetchedPage(_TU2, _TU2, _NICK2 + "<p>あとから足した</p>")
+            _other_ok = _sl.read_page(_TU2, _MN2, expected_maker="kyoraku",
+                                      grant=_grant2, page=_pg_mod).get("ok")
         finally:
-            _nw._get = _real_get2
             _sl.read_page = _fake_sl_read
         _readers_ok = all(a for a, _ in _readers.values())
         _reader_ng = any(b for _, b in _readers.values())
@@ -2915,6 +2944,9 @@ def selftest() -> int:
           and not _reader_ng)
         t("　許可証が無いときの断り方も見る（4つとも題の不一致で断る）",
           all(str(_r) == "NAME_CORE_MISMATCH" for _r in _readers_why.values()))
+        t("★★★確かめた本文と1文字でも違えば、許可証は効かない★★★"
+          "（台帳#393の不変条件＝URLではなく本文で束縛する）",
+          not _other_ok)
 
         # ★★★非対称な転送★★★（2026-08-17・Codex依頼236の指摘）
         #   ★穴だったところ★＝控えに保存したURL（/ 付き）だけを取り直して

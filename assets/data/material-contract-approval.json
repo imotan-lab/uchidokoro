@@ -6,17 +6,18 @@
   "assets/data/directory-catalogs.json": "7c788f24fd0ff777c22a4a772150288ae8095bc5a7027be47da66842176e779d",
   "assets/data/maker-catalogs.json": "612fa17f5b50f509475096b51ca1f4d8c261c5805e22e337875aa478054c0b3c",
   "assets/data/source-registry.json": "4de7d0c863653c916c8ec419dc8454c1f26b0ecf1f96f0a8e313823470518e47",
-  "scripts/add_machine_run.py": "ea67260e65fecbbe13496d1eb78e9e96579500e0ddd3452e63500c10d40e892d",
-  "scripts/at_spec_lookup.py": "bc8f1bd5facf6929cd4fdc966a6ac16993daea2c5ac758734736f1259130fb6e",
+  "scripts/add_machine_run.py": "753f250de1531e829ac0b9b20202ebe27b1bebb8c19708d5b0d84943dedb98a2",
+  "scripts/at_spec_lookup.py": "e27ba0d701b652c77ea88cf05717bb9168643d9383fc5bcee879714714944e54",
   "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
   "scripts/blocked_hosts.py": "553ac0a6f0f0baf563100458937efa167826c4347f815ace1a70e39769909b7d",
-  "scripts/ceiling_lookup.py": "ede9c8886b10f5016a9c780f5c531dd96356d51115aaf8876c3694dc8d6cb814",
-  "scripts/cz_lookup.py": "c96f2eabebd970eee262dd32b8d6e7314298f8e85e19a3553b6b1e8646a630a8",
-  "scripts/maker_identity_cache.py": "39f921c7425cd3b65d6e5dbf28ad4fe91673dfe8e0a6509b58310c6c174ece64",
-  "scripts/model_code_lookup.py": "bfaec7ba6f0c88147ac34b02bcaf7de07cb04a06f50a4b3dc7b301d08aa13200",
+  "scripts/ceiling_lookup.py": "9a36904651e226106dd2ee53e71602378c55122087789354b052215f8d62d5aa",
+  "scripts/cz_lookup.py": "c93dde73b9a8c162bdd4fecfbf251e7ad7b3d0c87dba55e6005a140bd695d73e",
+  "scripts/fetched_page.py": "89c8186772e4704c1c944f054176a398e3857936accf9ae16a34ebb36da6afa3",
+  "scripts/maker_identity_cache.py": "530a5b9077e78077b0dde36ddb7a5c7ff90a08b2eef5776ff3761978428cb463",
+  "scripts/model_code_lookup.py": "9a519bbc65784f8d1353340a007b026172d754a2171d9139ba65c7951b32ebec",
   "scripts/new_machine_watch.py": "15af901a9468c82e9f40dbf8ddb7ba581f1b98938493a5c47d2d53d6465cd48f",
   "scripts/source_lineage.py": "4f1305e3cfb492461c7b81c25adea71d0bdc5ae51d970e1473ca5143c6e38610",
-  "scripts/spec_lookup.py": "af9587e923a188a19ec17feb1167602298f0b2a45d4d9e2b3eda49154f82f644",
+  "scripts/spec_lookup.py": "5d26c3e60dff046dc5f4fd270b4a232cad21d14264a4a74f2c7983b6554012a4",
   "scripts/user_area.py": "2f96a1d44cda5b1324fe1d44b85cf5913d608b0f67303cb188ed503d926ec91a"
  },
  "imports": {
@@ -31,6 +32,7 @@
    "directory_index",
    "dmm_discover",
    "dmm_machine",
+   "fetched_page",
    "lineage_check",
    "maker_identity_cache",
    "model_code_lookup",
@@ -44,6 +46,7 @@
    "spec_lookup"
   ],
   "scripts/at_spec_lookup.py": [
+   "fetched_page",
    "html_tables",
    "model_code_lookup",
    "new_machine_watch",
@@ -55,6 +58,7 @@
   ],
   "scripts/blocked_hosts.py": [],
   "scripts/ceiling_lookup.py": [
+   "fetched_page",
    "html_tables",
    "model_code_lookup",
    "new_machine_watch",
@@ -62,11 +66,17 @@
    "user_area"
   ],
   "scripts/cz_lookup.py": [
+   "fetched_page",
    "html_tables",
    "model_code_lookup",
    "new_machine_watch",
    "source_lineage",
    "spec_lookup",
+   "user_area"
+  ],
+  "scripts/fetched_page.py": [
+   "maker_identity_cache",
+   "new_machine_watch",
    "user_area"
   ],
   "scripts/maker_identity_cache.py": [
@@ -80,7 +90,6 @@
   ],
   "scripts/model_code_lookup.py": [
    "claim_identity",
-   "maker_identity_cache",
    "new_machine_watch",
    "source_lineage",
    "user_area"
@@ -93,6 +102,7 @@
   "scripts/source_lineage.py": [],
   "scripts/spec_lookup.py": [
    "claim_inventory",
+   "fetched_page",
    "html_tables",
    "model_code_lookup",
    "new_machine_watch",
@@ -104,5 +114,6 @@
    "ceiling_lookup",
    "new_machine_watch"
   ]
- }
+ },
+ "_deps_changed_why": "2026-08-17（台帳#390／Codex依頼235の指摘1）\n\nmodel_code_lookup が maker_identity_cache を取り込むようになりました。\n\n■ なぜ増えたか\n  URLを比べるときのそろえ方が2か所にあり、片方は「末尾の / を外して」、\n  もう片方は「生の文字列」を鍵にしていました。そのズレだけで\n  到達先の照合が丸ごと飛び、別の機種ページへ転送された本文が\n  材料の読取器に入る経路が残っていました（Codexが検出）。\n  ★そろえ方を1か所（maker_identity_cache.url_key）にまとめた★ので、\n  許可証を照合する側（model_code_lookup.material_page_identity_ok）が\n  そこを呼びます。\n\n■ 集合に入れるか、ここでは持たないか → ★入れる（既に両方とも集合の中）★\n  maker_identity_cache も model_code_lookup も、もともと\n  material-contract-approval の対象です。よって新しい依存が\n  契約の外へ出ることはありません。どちらを変えても承認し直しが要ります。\n\n■ 循環について\n  maker_identity_cache も model_code_lookup を取り込みますが、\n  どちらも**関数の中での取り込み**なので実行時に問題は起きません\n  （自己試験で確認済み）。\n  ★将来どちらかを module 直下の import に変えるときは、この点を見ること★"
 }
