@@ -113,6 +113,12 @@ jobs:
           python scripts/lineage_check.py --selftest
           python scripts/model_code_lookup.py --selftest
           python scripts/directory_index.py --selftest
+          # ★材料の採否の契約★（2026-08-17・Codex依頼237の厚み3）
+          #   add_machine_run の回帰試験はCIで動いていたが、
+          #   控えの契約そのもの（64件）はCIに載っていなかった。
+          python scripts/maker_identity_cache.py --selftest
+          python scripts/material_contract.py --selftest
+          python scripts/material_contract.py --check
           python scripts/build_new_article.py --selftest
           python scripts/new_machine_watch.py --selftest
           python scripts/pending_machines.py --selftest
