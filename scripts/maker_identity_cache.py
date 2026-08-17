@@ -238,6 +238,18 @@ def _check_record(slug: str, rec, reg=None) -> None:
             raise CacheError(
                 f"根拠の逐語引用にメーカー欄の表記が入っていません（{slug}）: "
                 f"{q[:40]}／★「{rec.get('seen')}」を含む引用にします★")
+        # ★導入日も同じ引用の中に入れる★（2026-08-17・Codex依頼231の判断）
+        #   ★なぜ「ページのどこかにある」ではだめか★＝更新日・関連記事・
+        #   別の説明の中の日付でも通ってしまい、その日付が
+        #   **この機種のもの**だと言えない。同じ引用に入っていれば、
+        #   機種名・メーカー欄・導入日が同じ場所にあると確かめられる。
+        #   ★実データで収まることを確かめてから入れた★（2026-08-17）＝
+        #   ちょんぼりすた112字・なな徹108字（上限120字）。
+        _days = date_forms(str(rec.get("release_date")))
+        if not any(d in q for d in _days):
+            raise CacheError(
+                f"根拠の逐語引用に導入日が入っていません（{slug}）: "
+                f"{q[:40]}／★{_days[0]} などを含む引用にします★")
     # ★③独立した名鑑が2つ以上★（2026-08-17・依頼228）
     #   ★票の数は source_lineage.independent() だけで決める★
     #   （自前で len() すると共同制作の組をまとめ忘れる＝監査39が見張る）
@@ -502,6 +514,20 @@ def verify_evidence(evidence: list, fetch=None, expected: str = "",
         fin = _w.LAST_FINAL_URL.get("url")
         if expected and fin:
             check_evidence_source(dict(e, url=fin), expected)
+        # ★★本体とまったく同じ下ごしらえをする★★
+        #   （2026-08-17・Codex依頼231の指摘2）
+        #   本体（model_code_lookup.lookup）は取ってきた直後に
+        #   **投稿欄・AIがまとめた欄を箱ごと落として**から読む。
+        #   控えの再確認はそれを通していなかったので、
+        #   ★読者の書き込みに含まれる文字が根拠になり得た★。
+        #   「本体と同じ物差し」と書きながら、実装が違っていた。
+        #   ★落としきれないページは使わない★（fail-closed）
+        import user_area as _ua
+        try:
+            html = _ua.clean_html(html or "", url)
+        except Exception as ex:            # noqa: BLE001
+            raise CacheError(f"投稿欄を落としきれないページです（{url}）: "
+                             f"{str(ex)[:80]}")
         body = " ".join(_w._visible_text(html or "").split())
         q = " ".join(str(e.get("quote") or "").split())
         if q not in body:
@@ -518,7 +544,13 @@ def verify_evidence(evidence: list, fetch=None, expected: str = "",
         mn = str((rec or {}).get("machine_name") or "")
         if mn:
             import model_code_lookup as _mcl0
-            _ok_id, _why_id = _mcl0.page_is_machine(html or "", mn)
+            # ★本体と同じ厳しさで呼ぶ★（2026-08-17・Codex依頼231の指摘2）
+            #   本体は strict_all_tail=True と、そのメーカーの通称を渡している。
+            #   既定値のまま呼ぶと**未知の版名が付いたページ**が通り得た。
+            _ok_id, _why_id = _mcl0.page_is_machine(
+                html or "", mn, strict_all_tail=True,
+                extra_tail_ok=(_mcl0.maker_brand_cores(expected)
+                               if expected else None))
             if not _ok_id:
                 raise CacheError(
                     f"そのページはこの機種のページではありません（{url}）: "
@@ -542,20 +574,11 @@ def verify_evidence(evidence: list, fetch=None, expected: str = "",
                 raise CacheError(
                     f"そのページのメーカー欄が控えと違います（{url}）: "
                     f"ページ「{mk[:20]}」／控え「{seen[:20]}」")
-        # ★そのページが本当にこの機種のページか★（2026-08-17・運営者判断）
-        #   機種名は引用の中で見ている（_check_record）。ここでは導入日を
-        #   ページ本文で見る。同名で別メーカーの機種は導入年が違うので、
-        #   ここが効く（パチスロ犬夜叉＝2016年／2022年）。
-        #   ★弱い検査だと分かっていて残している★（Codex依頼229の指摘2）＝
-        #   名鑑ごとの「導入日の欄」を読む役はまだ無く、それを書くと
-        #   サイトごとの場合分けになる（当サイトが避けている形）。
-        #   本人性の主たる担保は、上のメーカー欄の一致と、引用に機種名が
-        #   入っていること、そして本体の同定（identity_ok）。
-        want = date_forms(str((rec or {}).get("release_date") or ""))
-        if want and not any(w in body for w in want):
-            raise CacheError(
-                f"そのページに導入日が見つかりません（{url}）: "
-                f"{want[0]} など／★別の機種のページの可能性があります★")
+        # ★導入日は「引用の中に入っていること」で見る★
+        #   （2026-08-17・Codex依頼231の判断で、ページ本文のどこか、をやめた）
+        #   引用そのものに機種名・メーカー欄・導入日が入っていることは
+        #   `_check_record` が確かめ、その引用がページに実在することは
+        #   すぐ上で確かめている。だからここに別の日付検査は要らない。
 
 
 def remember(slug: str, expected: str, seen: str, verdict: str,
@@ -646,7 +669,9 @@ _C = "https://chonborista.com/slot/orinpia-slot/264134/"    # 名鑑①の機種
 _N = "https://nana-press.com/kaiseki/machine/1233/"         # 名鑑②の機種ページ
 _LIST = "https://chonborista.com/slot/orinpia-slot/"        # 一覧（機種ページでない）
 _KIT = "https://www.kitadenshi.co.jp/company/"              # 名鑑ではない登録先
-_QC = f"機種名 {_MN} メーカー {_SEEN}"
+# ★引用には機種名・メーカー欄・導入日の3つが入る★（2026-08-17・依頼231）
+#   実在の2ページで52字・48字に収まることを確かめてから決めた形。
+_QC = f"機種名 {_MN} メーカー {_SEEN} 導入日 2026年10月5日"
 _QN = f"機種名 {_MN} メーカー {_SEEN} 導入日 2026/10/5"
 
 
@@ -735,15 +760,29 @@ def selftest() -> int:
     #   メーカー欄は「行の頭がメーカー」で読み取る（extract_maker_name）ので、
     #   1行にべた書きした偽ページでは**本番の読み取りを通らない**。
     #   ★関所を通る形の偽物でなければ、関所の試験にならない★
-    def _page(maker=_SEEN, day="2026年10月5日", name=_MN, title=None):
-        # ★題（title）も本物の名鑑と同じ形で持たせる★
-        #   本人性の検査（page_is_machine）は題と見出しを見るので、
-        #   題の無い偽ページでは**その関門を通らない**（＝関門の試験にならない）。
-        t = title if title is not None else f"{name} スロット 新台 天井 | 名鑑"
+    def _page(maker=_SEEN, day="2026年10月5日", name=_MN, title=None,
+              posts="読者の書き込みです"):
+        """★本物の名鑑ページと同じ形の偽ページ★
+
+        ★ここで手を抜くと関門の試験にならない★（2026-08-17に3回やった）
+          ①題（title）… 本人性の検査（page_is_machine）が見る
+          ②行として立つメーカー欄 … extract_maker_name が見る
+          ③投稿欄（hyouka / commentlist）と本体（entry）
+            … 投稿欄を箱ごと落とす処理（user_area.clean_html）が
+              「その形のページか」を確かめるので、無いと必ず例外になる
+        """
+        # ★題も実在の名鑑と同じ言い回しにする★＝本人性の検査は厳格モードで
+        #   呼ぶので、知らない語（「名鑑」等）が入ると弾かれる（実際に弾かれた）。
+        t = (title if title is not None
+             else f"{name} スロット 新台 天井 解析 | ちょんぼりすた")
         return (f"<title>{t}</title>"
+                f'<div id="hyouka">星の評価</div>'
+                f'<ul class="commentlist"><li>{posts}</li></ul>'
+                f'<div id="entry">'
                 f"<div>機種名 {name}</div>"
                 f"<div>メーカー {maker}</div>"
-                f"<div>導入日 {day}</div>")
+                f"<div>導入日 {day}</div>"
+                f"</div>")
 
     _pages = {
         _C: _page(),
@@ -837,6 +876,22 @@ def selftest() -> int:
       "（本体と同じ本人性の検査を、控えの根拠にも通す）",
       _ask(fetch=lambda u: (_w_last(u),
                             _page(title="L別の機種 スロット 新台 | 名鑑"))[1]
+           if u == _C else (_w_last(u), _pages[u])[1]) is None)
+    # ★★★2026-08-17・Codex依頼231の指摘2★★★
+    #   本体は取得直後に投稿欄・AI欄を箱ごと落としてから読む。控えの再確認は
+    #   それを通していなかったので、★読者の書き込みが根拠になり得た★。
+    t("★★★投稿欄に書かれた別のメーカー名を、根拠にしない★★★"
+      "（本体と同じく、投稿欄を箱ごと落としてから読む）",
+      _ask(fetch=lambda u: (_w_last(u),
+                            _page(posts="メーカー サミー だと思う"))[1]
+           if u == _C else (_w_last(u), _pages[u])[1]) == "ACCEPT_MATERIAL")
+    t("　投稿欄を落とせない形のページは使わない（fail-closed）",
+      _ask(fetch=lambda u: (_w_last(u),
+                            "<title>L転生王女と天才令嬢の魔法革命 スロット 新台"
+                            " 解析 | ちょんぼりすた</title>"
+                            "<div>機種名 L転生王女と天才令嬢の魔法革命</div>"
+                            "<div>メーカー 平和</div>"
+                            "<div>導入日 2026年10月5日</div>")[1]
            if u == _C else (_w_last(u), _pages[u])[1]) is None)
     t("　題の無いページも使わない（本人性を確かめられない）",
       _ask(fetch=lambda u: (_w_last(u), _page(title=""))[1]

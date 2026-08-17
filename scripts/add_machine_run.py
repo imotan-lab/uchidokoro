@@ -667,6 +667,13 @@ def _gather(name: str, maker: str = "", slug: str = "",
                      f"{r['url']} → {r['reason']}")
                 _bad_msgs.append(str(r["reason"]))
         got["urls"] = [u for u in got["urls"] if u not in _bad_maker]
+        # ★★票のほうからも同時に外す★★（2026-08-17・Codex依頼231の指摘1）
+        #   ★消し漏らしていたところ★＝材料の一覧（urls）だけ削って、
+        #   型式名と登場年月を数える `looks` を削っていなかった。そのため
+        #   「控えで使わないと決めたページ」の型式名が独立票に残り、
+        #   採用されると `regulatory_model_code` として**公開物に出る**経路が
+        #   あった。★材料と票は必ず同時に外す★
+        looks = [r for r in looks if r["url"] not in _bad_maker]
         if len(got["urls"]) < 2:
             got["problems"] += unused_msgs
             got["problems"] += _bad_msgs      # ★なぜ除外したかを行列・台帳に残す★
@@ -2371,6 +2378,9 @@ def run_one(name, official_url, maker, release, apply_it=False,
                 f"／新しいslugで作らず、更新タスクで直すこと")
     if not got["material"]:
         out["blocked"] = _blocking(out["problems"])
+        # ★材料が足りずに早く終わるときも記録を残す★
+        #   （2026-08-17・Codex依頼231。ここだけ書き忘れていた）
+        _write_relation_record(created=False)
         if apply_it:
             _remember(name, official_url, maker, release, out["problems"])
         else:
@@ -2599,6 +2609,51 @@ def selftest() -> int:
           _g_urls("MATCH", cached="REJECT_MATERIAL") == 0)
         t("　どの社か分からない側でも、控えの『使わない』は効く",
           _g_urls("UNKNOWN", cached="REJECT_MATERIAL") == 0)
+
+        # ★★★2026-08-17・Codex依頼231の指摘1★★★
+        #   材料の一覧（urls）だけ削って、型式名と登場年月を数える looks を
+        #   削っていなかった。★正常2件＋外した1件★を混ぜて、
+        #   外したページの型式名が採用されないところまで見る。
+        def _g_mixed():
+            _di.find = lambda n, c=None: {"results": {
+                k: {"state": "FOUND", "url": f"https://{h}/1", "why": "",
+                    "candidates": [], "surfaces": "1/1", "index_size": 9,
+                    "problems": []}
+                for k, h in (("a", "chonborista.com"), ("b", "nana-press.com"),
+                             ("c", "p-town.dmm.com"))}}
+            # 3件目（DMM）だけ、メーカー欄の表記が違い、控えで
+            # 「使わない」と決めてあることにする。
+            # ★MATCH 側は対象URLを渡さない呼び方★（通信しないため）なので、
+            #   控えは (機種・期待する社・表記) で引かれる。表記で分ける。
+            # ★型式名を持つのは、外すページだけにする★
+            #   （両方が持っていると、正常な2票で採用されてしまい、
+            #     消し漏らしがあっても試験が通ってしまう）
+            _mc.lookup = lambda u, n, **k: {
+                "url": u, "identity_ok": True, "reason": "OK",
+                "model_code": "L9" if "p-town" in u else None,
+                "release_hint": "2029-12" if "p-town" in u else "2026-11",
+                "maker_check": {
+                    "state": "MATCH",
+                    "seen": "べつ表記" if "p-town" in u else "平和",
+                    "expected": "olympia_estate", "owners": ["heiwa"]}}
+            _mic.verdict_for = (lambda slug, ex, se, st=None, fe=None, **k:
+                                "REJECT_MATERIAL" if se == "べつ表記" else None)
+            try:
+                return gather("L試験機", "olympia_estate", slug="dmm_5086",
+                              machine_name="L試験機",
+                              release_date="2026-10-05")
+            finally:
+                _mic.verdict_for = _real_vf
+
+        _gm = _g_mixed()
+        t("★★★控えで『使わない』と決めたページは、型式名の票からも外れる★★★"
+          "（前は材料からだけ外れ、型式名は独立票に残って公開物へ出得た）",
+          _gm["model_code"] is None
+          and not _gm.get("observed_model_code")
+          and all("p-town.dmm.com" not in u
+                  for u in (_gm.get("observed_model_hosts") or []))
+          and all("p-town.dmm.com" not in u for u in _gm["urls"]))
+        t("　（対照）正常な2件はそのまま残る", len(_gm["urls"]) == 2)
         _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True, "model_code": "LB/タコスロBD",
                                         "reason": "OK"}
         t("★★BT型式（LB/…）を規格印ありとして採用する★★"
