@@ -1401,7 +1401,11 @@ def check_37_skill_vs_code(machines: list) -> list[str]:
 # ★票の数え方を扱ってよいモジュール★（2026-08-14・依頼194のCodexの助言）
 #   ここに挙げたものの中では、独立票の数え方は source_lineage に一本化する。
 VOTE_MODULES = ("spec_lookup.py", "ceiling_lookup.py", "at_spec_lookup.py",
-                "cz_lookup.py", "model_code_lookup.py")
+                "cz_lookup.py", "model_code_lookup.py",
+                # ★2026-08-17・依頼228★ メーカー照合の控えも独立票を数える
+                #   ようになった（材料に使うには独立2名鑑）。ここに載せないと、
+                #   将来 len(集合) に戻したとき監査39が見逃す。
+                "maker_identity_cache.py")
 # 票のかたまりを入れている入れ物によく使う名前
 _VOTE_WORDS = ("sources", "srcs", "lins", "lineage", "hosts", "votes")
 # 票を作っている呼び出し（この結果を入れた変数は「票の入れ物」）

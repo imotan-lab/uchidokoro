@@ -1,36 +1,54 @@
-"""maker_identity_cache.py — 「この機種について、この2つのメーカー表記は同じか」の控え。
+"""maker_identity_cache.py — 「この名鑑ページを、この機種の材料に使うか」の控え。
 
-★何のためか★（2026-08-14・運営者の指示／Codexの設計）
+★何を決める器か（2026-08-17・依頼228でv2へ）★
+  ★★これは「会社が同じか」を決める器ではない★★
+  平和とオリンピアエステート、三洋物産とサンスリーは**別法人**である。
+  それなのに v1 は結論を `MATCH`（＝同じ）と書き、ログにも
+  「同じメーカーと決めてあります」と出していた。**事実と合っていない**
+  （Codex依頼228の指摘5）。決めているのは会社の同一性ではなく、
+  **その名鑑ページを、このDMM機種の材料として使うかどうか**でしかない。
+
+  そこで結論を言い換えた:
+    ACCEPT_MATERIAL … この名鑑ページを、この機種の材料に使う
+    REJECT_MATERIAL … 使わない
+  控えには `basis_scope`（何を根拠にしたか）と
+  `relationship_verified`（会社の関係を機械で確かめたか＝いまは常に false）を残す。
+
+★なぜ要るか★
   名鑑によって同じ機種のメーカー欄が違う。
-    L転生王女 … P-WORLD「オリンピアエステート」／他2社「平和」
-    L聖闘士星矢 … P-WORLD「サンスリー」／なな徹「三洋物産」
+    L転生王女 … DMM「オリンピアエステート」／ちょんぼりすた・なな徹「平和」
   これまでは名簿（maker-catalogs.json）に**人が足すまで**その機種が止まっていた。
 
-★やめたこと★
-  「同じグループだから全機種で同じ会社」と扱うのをやめた。
-  公式は「グループ会社」と書いているだけで、
-  ★全機種でメーカー名を入れ替えてよいとは書いていない★。
-  1回の判断ミスが、以後すべての機種で関門を無効にしてしまう。
+★会社の関係はどこで見るか（2026-08-17・運営者判断）★
+  ★メーカー公式へは通信しない★（運営者が2026-08-16に取りやめ）。
+  グループ関係は `maker-catalogs.json` の `maker_relation_group` に入っている。
+  **これはリポジトリの中にあり、変更に承認が要るファイル**で、
+  根拠（日本遊技機工業組合のグループ会社一覧を人が読んだこと）は
+  `_group_why` に書いてある。★機械はそこへも取りに行かない★＝
+  名簿を読むだけ。だから新しい通信先が増えない。
 
-★いまの形★
-  ①名簿で一致／正式な別名 → 使う
-  ②**この機種について**前に決めた結論があれば、それに従う（この器）
-  ③解決できない・関係のありそうな会社 → その場で2AIへ回す
-  ④それ以外 → 使わない
+★使ってよいのは RELATED のときだけ★（2026-08-17・Codex依頼228の指摘1）
+  ①名簿で一致（MATCH）              … そのまま使う（この器は要らない）
+  ②関係のありそうな社（RELATED）    … **この器を見る**
+  ③どの社か分からない（UNKNOWN）    … ★救わない★＝常に除く
+  ④明らかに別の社（MISMATCH）        … 常に除く
+  ★UNKNOWN を控えで救ってはいけない★＝名簿に無いだけの**任意の別会社**まで
+  同じ扱いになる。同名で別メーカーの機種は実在する
+  （パチスロ犬夜叉＝2016年ロデオ／2022年クロスアルファ）。
 
 ★答えが出ない状態は保存しない★
-  `MATCH` と `MISMATCH` だけを控える。`UNKNOWN` は「まだ決めていない」＝
-  レコードが無い状態として扱う（毎回もう一度考える）。
+  レコードが無い＝「まだ決めていない」（毎回もう一度考える）。
 
 置き場: Documents/uchidokoro/maker_identity_cache.json（リポジトリ外・公開しない）
 
 使い方:
     python scripts/maker_identity_cache.py --list
-    python scripts/maker_identity_cache.py --record --official-url <P-WORLDのURL> \\
-        --expected sanslay --seen 三洋物産 --verdict MATCH \\
+    python scripts/maker_identity_cache.py --record \\
+        --machine-url https://p-town.dmm.com/machines/5086 \\
+        --expected olympia_estate --seen 平和 --verdict ACCEPT_MATERIAL \\
         --why <理由> --by claude,codex \\
         --evidence "https://…|逐語引用|directory_observation" \\
-        --evidence "https://…|逐語引用|official_relationship"
+        --evidence "https://…|逐語引用|directory_observation"
     python scripts/maker_identity_cache.py --selftest
 """
 from __future__ import annotations
@@ -47,15 +65,25 @@ import claim_identity as _ci          # noqa: E402
 import local_paths as _lp             # noqa: E402
 
 STORE = _lp.doc("maker_identity_cache.json")
-SCHEMA = "maker-identity-cache/v1"
-VERDICTS = ("MATCH", "MISMATCH")
+# ★v2＝意味を変えた（2026-08-17・依頼228）★
+#   「会社が同じか」ではなく「この名鑑ページを材料に使うか」。
+#   版を上げるので、v1の控えはそのままでは読めない（＝黙って混ざらない）。
+SCHEMA = "maker-identity-cache/v2"
+VERDICTS = ("ACCEPT_MATERIAL", "REJECT_MATERIAL")
+# ★何を根拠にしたか★＝控えを読む人・監査が、守りの範囲を取り違えないための印。
+BASIS_SCOPE = "directory_consensus_only"
 # ★「2AIで決めます」を機械の約束にする★（2026-08-14・依頼193のP2）
 #   以前は ["foo", "bar"] のような**架空のID2つ**でも「違う2者」だった。
 #   ★これは本人確認ではない★＝手で ["claude","codex"] と書くことは防げない。
 #   増えたらここだけ直す。
 ALLOWED_AGREERS = frozenset({"claude", "codex"})
 MIN_QUOTE = 8                          # 逐語引用の最低の長さ
-KINDS = ("directory_observation", "official_relationship")
+# ★根拠は名鑑の観測だけ★（2026-08-17・依頼228）
+#   `official_relationship`（メーカー公式の会社関係ページ）は**削除した**。
+#   運営者が「メーカー公式は使わない」と決めたため（止めずに消す）。
+KINDS = ("directory_observation",)
+# ★材料に使うと決めるのに要る、独立した名鑑の数★
+MIN_DIRECTORIES = 2
 
 
 class CacheError(Exception):
@@ -83,15 +111,39 @@ def load() -> dict:
     # ★読むときも中身を確かめる★（2026-08-14・依頼190のP1）
     #   書くときだけ検査していたので、手で書き足したレコードが
     #   **根拠も判断者も無いまま信用される**経路があった。
+    # ★出どころの登録簿は1回だけ読む★（レコードごとに読み直さない）
+    _reg = None
+    if any(rows for rows in got["machines"].values()):
+        import source_lineage as _sl
+        try:
+            _reg = _sl.load_registry()
+        except Exception as e:              # noqa: BLE001
+            raise CacheError(f"出典の登録簿を読めません（控えを使いません）: {e}")
     for slug, rows in got["machines"].items():
         if not isinstance(rows, list):
             raise CacheError(f"控えが壊れています（{slug} が並びではありません）")
         for rec in rows:
-            _check_record(slug, rec)
+            _check_record(slug, rec, _reg)
     return got
 
 
-def _check_record(slug: str, rec) -> None:
+_DATE = __import__("re").compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _has_core(haystack: str, needle: str) -> bool:
+    """★表記ゆれをならしてから、含まれているか見る★
+
+    機種名は名鑑ごとに空白・記号の入れ方が違う（「L転生王女と天才令嬢の魔法革命」
+    ／「L転生王女と天才令嬢の 魔法革命」）ので、同定に使っている芯の作り方
+    （claim_identity）にそろえる。★ここで新しい正規表現を書かない★
+    """
+    n = _ci.normalize_core(str(needle or ""))
+    if not n:
+        return False
+    return n in _ci.normalize_core(str(haystack or ""))
+
+
+def _check_record(slug: str, rec, reg=None) -> None:
     """1件ぶんの控えを確かめる（★読むときも書くときも同じ物差し★）。"""
     if not isinstance(rec, dict):
         raise CacheError(f"控えが壊れています（{slug}）")
@@ -128,11 +180,53 @@ def _check_record(slug: str, rec) -> None:
         if e.get("kind") not in KINDS:
             raise CacheError(f"控えの根拠の種類が不正です（{slug}）: {e.get('kind')!r}")
         kinds.add(e.get("kind"))
-    # ★「同じ」と決めるには、名鑑の観測と公式の関係の両方が要る★
-    #   片方だけでは「グループ会社と分かっただけ」で採用できてしまう。
-    if rec["verdict"] == "MATCH" and kinds != set(KINDS):
-        raise CacheError(f"「同じ」と決めるには{'と'.join(KINDS)}の両方が要ります"
-                         f"（{slug}）: いまは {sorted(kinds)}")
+    if rec["verdict"] != "ACCEPT_MATERIAL":
+        return
+    # ---------------- ここから下は「材料に使う」と決めた控えだけの検査 ----------
+    # ★①どの機種のページかを、控え自身が名乗る★（2026-08-17・依頼228の指摘2）
+    #   v1は「登録済みの名鑑のホストである」ことしか見ていなかったので、
+    #   **同じ名鑑の別機種ページ・関連記事・同名別メーカー機のページ**でも
+    #   通った。機種名と導入日を控えに持たせ、根拠がその機種を指すか見る。
+    for k in ("machine_name", "release_date"):
+        if not str(rec.get(k) or "").strip():
+            raise CacheError(f"控えに「{k}」がありません（{slug}）"
+                             "／★どの機種のページかを名乗らせます★")
+    if not _DATE.match(str(rec.get("release_date"))):
+        raise CacheError(f"控えの導入日は YYYY-MM-DD で書きます（{slug}）: "
+                         f"{rec.get('release_date')!r}")
+    # ★②逐語引用そのものに、機種名とメーカー欄が入っていること★
+    #   ページのどこかにあるだけでは足りない（別機種の欄でも通ってしまう）。
+    for e in ev:
+        q = str(e.get("quote") or "")
+        if not _has_core(q, str(rec.get("machine_name"))):
+            raise CacheError(
+                f"根拠の逐語引用に機種名が入っていません（{slug}）: "
+                f"{q[:40]}／★その機種のページだと示す引用にします★")
+        if not _has_core(q, str(rec.get("seen"))):
+            raise CacheError(
+                f"根拠の逐語引用にメーカー欄の表記が入っていません（{slug}）: "
+                f"{q[:40]}／★「{rec.get('seen')}」を含む引用にします★")
+    # ★③独立した名鑑が2つ以上★（2026-08-17・依頼228）
+    #   ★票の数は source_lineage.independent() だけで決める★
+    #   （自前で len() すると共同制作の組をまとめ忘れる＝監査39が見張る）
+    import source_lineage as _sl
+    try:
+        keys = {_sl.vote_key_of_url(str(e.get("url")), reg) for e in ev}
+    except Exception as e:                 # noqa: BLE001
+        raise CacheError(f"根拠の出どころを数えられません（{slug}）: {e}")
+    if _sl.independent(keys, reg) < MIN_DIRECTORIES:
+        raise CacheError(
+            f"材料に使うと決めるには独立した名鑑が{MIN_DIRECTORIES}つ要ります"
+            f"（{slug}）: いまは {_sl.independent(keys, reg)}")
+    # ★④守りの範囲を控え自身に書かせる★（2026-08-17・Codex依頼228の指摘5）
+    #   これを読み落として「会社が同じと確かめた」と誤読されないようにする。
+    if rec.get("basis_scope") != BASIS_SCOPE:
+        raise CacheError(f"控えの basis_scope は {BASIS_SCOPE} です（{slug}）: "
+                         f"{rec.get('basis_scope')!r}")
+    if rec.get("relationship_verified") is not False:
+        raise CacheError(
+            f"控えの relationship_verified は false です（{slug}）"
+            "／★会社の関係は機械で確かめていません★")
 
 
 def save(got: dict) -> None:
@@ -154,14 +248,14 @@ def verdict_for(slug: str, expected: str, seen: str, store=None,
 
     ★完全一致で引く★＝(機種・期待する社・名鑑の表記の芯) の3つ。
 
-    ★「同じ」として使う時だけ、根拠が実在するか確かめ直す★
+    ★「材料に使う」として使う時だけ、根拠が実在するか確かめ直す★
       （2026-08-14・依頼192のP1）書くときに照合しても、
       **控えは手で書き足せるただのファイル**なので、
-      形だけ整った偽の根拠で `MATCH` を作れてしまう。
+      形だけ整った偽の根拠で `ACCEPT_MATERIAL` を作れてしまう。
       使う直前に取り直せば、それが通らない。
       ★取れない・引用が見つからないなら「決めていない」と同じ扱い★
       （None を返す＝もう一度2AIへ回る。fail-closed）
-      `MISMATCH` は「使わない」側なので取り直さない（遅くする意味がない）。
+      `REJECT_MATERIAL` は「使わない」側なので取り直さない（遅くする意味がない）。
     """
     if not slug or not expected or not seen:
         return None
@@ -170,9 +264,10 @@ def verdict_for(slug: str, expected: str, seen: str, store=None,
     for rec in (got.get("machines") or {}).get(slug) or []:
         if rec.get("expected") == expected and key_of(rec.get("seen")) == k:
             v = rec.get("verdict")
-            if v == "MATCH":
+            if v == "ACCEPT_MATERIAL":
                 try:
-                    verify_evidence(rec.get("evidence") or [], fetch, expected)
+                    verify_evidence(rec.get("evidence") or [], fetch, expected,
+                                    rec)
                 except CacheError:
                     return None
             return v
@@ -185,42 +280,36 @@ def _host_of(url: str) -> str:
     return (urllib.parse.urlsplit(str(url or "")).hostname or "").lower()
 
 
-def official_hosts(expected: str) -> set:
-    """★「公式の関係」を示してよいホスト★（名簿に人が登録したものだけ）
+# ★official_hosts() は削除しました★（2026-08-17・依頼228／運営者判断）
+#   メーカー公式の会社関係ページを機械が取りに行く仕組みでした。
+#   会社の関係は maker-catalogs.json の maker_relation_group（承認が要る
+#   リポジトリ内のファイル）で見ます。根拠は同ファイルの _group_why に、
+#   日本遊技機工業組合のグループ会社一覧を**人が読んだ記録**として残しています。
+#   ★止めずに消す★＝残すと「まだ生きている」と誤読され、実際に誤報しました。
 
-    ★なぜ名簿にするか（2026-08-14・依頼192のP1）★
-      引用が実在するかを見るだけでは、**第三者の記事でも通ってしまう**。
-      「HTTPSである」「公式を名乗っている」「会社名が書いてある」は
-      公式であることの根拠にならない。中身から機械に推測させず、
-      **人が開いて確かめたホストだけ**を許可する。
 
-    ★関係する社のぶんも合わせる★＝関係は2社の間のことなので、
-      親会社の公式が説明していることがある（平和⇔オリンピアエステート）。
-    """
-    if not expected:
-        return set()
-    import new_machine_watch as _w
+def directory_of(host: str) -> dict:
+    """★そのホストの名鑑の設定★（ACTIVEのものだけ・無ければ例外）"""
+    import directory_index as _di
+    import safe_json as _sj
+    import source_lineage as _sl
+    h = str(host or "").lower()
     try:
-        cats = (json.load(open(_w.CATALOGS, encoding="utf-8"))
-                .get("catalogs") or {})
+        reg = _sl.load_registry()
+        cats = _sj.read_json(_di.CATALOGS, expect=dict).get("directories") or {}
     except Exception as e:                 # noqa: BLE001
-        raise CacheError(f"名簿を読めません（根拠を確かめられません）: {e}")
-    me = cats.get(expected)
-    if not isinstance(me, dict):
-        raise CacheError(f"名簿に「{expected}」がありません")
-    grp = str(me.get("maker_relation_group") or "")
-    out = set()
-    for mid, conf in cats.items():
-        if not isinstance(conf, dict):
+        raise CacheError(f"名鑑の登録簿を読めません（根拠を確かめられません）: {e}")
+    pubs = {pid: p for pid, p in (reg.get("publishers") or {}).items()
+            if p.get("status") == "ACTIVE"}
+    for c in cats.values():
+        if not isinstance(c, dict) or c.get("status") != "ACTIVE":
             continue
-        same = (mid == expected) or (
-            grp and str(conf.get("maker_relation_group") or "") == grp)
-        if not same:
-            continue
-        for h in conf.get("official_relationship_hosts") or []:
-            if str(h).strip():
-                out.add(str(h).strip().lower())
-    return out
+        p = pubs.get(str(c.get("publisher_id") or ""))
+        for ch in (p or {}).get("canonical_hosts") or []:
+            if str(ch).strip().lower() == h:
+                return c
+    raise CacheError(f"名鑑として登録されていないサイトです: {host}"
+                     "／★観測の根拠は登録済みの名鑑から採ります★")
 
 
 def directory_hosts() -> set:
@@ -260,8 +349,12 @@ def directory_hosts() -> set:
 def check_evidence_source(e: dict, expected: str) -> None:
     """★根拠のURLが、その種類にふさわしい出どころか★（依頼192のP1）
 
-    directory_observation … 登録済みの名鑑（source-registry にある発行者）
-    official_relationship … 名簿に登録した公式ホスト
+    directory_observation … 登録済みの名鑑の、★機種ページ★
+
+    ★ホストだけでは足りない★（2026-08-17・Codex依頼228の指摘4）
+      v1は「登録済みの名鑑のホストか」しか見ていなかったので、
+      同じ名鑑の**一覧ページ・特集記事・別機種のページ**でも通った。
+      名鑑ごとに決めてある機種ページの形（machine_page_pattern）まで見る。
     """
     url = str(e.get("url") or "")
     if not url.startswith("https://"):
@@ -270,28 +363,49 @@ def check_evidence_source(e: dict, expected: str) -> None:
     if not host:
         raise CacheError(f"根拠のURLからホストを取れません: {url}")
     kind = e.get("kind")
-    if kind == "directory_observation":
-        # ★「登録済みの発行者」ではなく「登録済みの名鑑」に限る★
-        #   （2026-08-14・依頼193のP2）source-registry には解析サイトや
-        #   メーカー公式も ACTIVE で載っているので、それだけで見ると
-        #   **名鑑でないページを「名鑑での観測」として渡せた**＝役割の分離が崩れる。
-        if host not in directory_hosts():
-            raise CacheError(
-                f"名鑑として登録されていないサイトです: {host}"
-                "／★観測の根拠は登録済みの名鑑から採ります★")
-    elif kind == "official_relationship":
-        allow = official_hosts(expected)
-        if host not in allow:
-            raise CacheError(
-                f"公式として登録されていないサイトです: {host}"
-                f"／★許可: {sorted(allow) or '（未登録）'}★"
-                "／第三者の記事・検索結果の要約は公式の根拠になりません。"
-                "新しく足すときは名簿の official_relationship_hosts に登録します")
-    else:
-        raise CacheError(f"根拠の種類が不正です: {kind!r}")
+    if kind != "directory_observation":
+        raise CacheError(f"根拠の種類が不正です: {kind!r}"
+                         f"／★いまの種類は {'/'.join(KINDS)} だけです★")
+    # ★「登録済みの発行者」ではなく「登録済みの名鑑」に限る★
+    #   （2026-08-14・依頼193のP2）source-registry には解析サイトや
+    #   メーカー公式も ACTIVE で載っているので、それだけで見ると
+    #   **名鑑でないページを「名鑑での観測」として渡せた**＝役割の分離が崩れる。
+    conf = directory_of(host)
+    pat = str(conf.get("machine_page_pattern") or "")
+    if not pat:
+        # ★決めていない名鑑は使わない★（fail-closed）
+        raise CacheError(
+            f"この名鑑には機種ページの形が決めてありません: {host}"
+            "／★directory-catalogs.json の machine_page_pattern に書きます★")
+    import re as _re
+    if not _re.match(pat, url):
+        raise CacheError(
+            f"その名鑑の機種ページではありません: {url}"
+            f"／★形: {pat}★（一覧・特集・別機種のページは根拠にしません）")
 
 
-def verify_evidence(evidence: list, fetch=None, expected: str = "") -> None:
+def date_forms(iso: str) -> list:
+    """★同じ1つの日付を、よくある書き方に直すだけ★（2026-08-17・依頼228）
+
+    ★これは「サイトごとの場合分け」ではない★＝相手の作りを読むのではなく、
+      **こちらが持っている1つの日付**を標準的な書式で並べるだけ。
+      実データ: ちょんぼりすた「2026年10月5日」／なな徹「2026/10/5」
+    """
+    m = _DATE.match(str(iso or ""))
+    if not m:
+        return []
+    y, mo, d = str(iso)[:4], int(str(iso)[5:7]), int(str(iso)[8:10])
+    out = []
+    for sep in ("/", ".", "-"):
+        out.append(f"{y}{sep}{mo}{sep}{d}")
+        out.append(f"{y}{sep}{mo:02d}{sep}{d:02d}")
+    out.append(f"{y}年{mo}月{d}日")
+    out.append(f"{y}年{mo:02d}月{d:02d}日")
+    return out
+
+
+def verify_evidence(evidence: list, fetch=None, expected: str = "",
+                    rec=None) -> None:
     """★根拠の逐語引用が、本当にそのページにあるか確かめる★
 
     ★なぜ要るか（2026-08-14・依頼190のP1）★
@@ -339,14 +453,25 @@ def verify_evidence(evidence: list, fetch=None, expected: str = "") -> None:
             raise CacheError(
                 f"根拠の逐語引用がそのページに見つかりません（{url}）: "
                 f"{q[:40]}／★写した文だけを根拠にします★")
+        # ★そのページが本当にこの機種のページか★（2026-08-17・運営者判断）
+        #   機種名は引用の中で見ている（_check_record）。ここでは導入日を
+        #   ページ本文で見る。同名で別メーカーの機種は導入年が違うので、
+        #   ここが効く（パチスロ犬夜叉＝2016年／2022年）。
+        want = date_forms(str((rec or {}).get("release_date") or ""))
+        if want and not any(w in body for w in want):
+            raise CacheError(
+                f"そのページに導入日が見つかりません（{url}）: "
+                f"{want[0]} など／★別の機種のページの可能性があります★")
 
 
 def remember(slug: str, expected: str, seen: str, verdict: str,
              why: str, by: list, evidence: list, decided_at: str,
+             machine_name: str = "", release_date: str = "",
              store=None, fetch=None) -> dict:
     """結論を控える。★根拠が無ければ受け取らない★
 
     ★逐語引用は実際にそのページから取ってきて照合する★（依頼190のP1）
+    ★機種名と導入日はDMMの機種ページから取る★（呼ぶ側に名乗らせない）
     """
     if verdict not in VERDICTS:
         raise CacheError(f"結論は {'/'.join(VERDICTS)} のどちらかです: {verdict!r}")
@@ -369,16 +494,21 @@ def remember(slug: str, expected: str, seen: str, verdict: str,
         if e.get("kind") not in KINDS:
             raise CacheError(f"根拠の種類は {'/'.join(KINDS)} のどれかです: "
                              f"{e.get('kind')!r}")
-    verify_evidence(evidence, fetch, expected)
-    _check_record(slug, {"expected": expected, "seen": seen,
-                         "verdict": verdict, "why": why, "agreed_by": by,
-                         "evidence": evidence, "decided_at": decided_at})
-    got = store if store is not None else load()
-    rows = got.setdefault("machines", {}).setdefault(slug, [])
-    k = key_of(seen)
     rec = {"expected": expected, "seen": seen, "verdict": verdict,
            "why": why, "evidence": evidence, "agreed_by": by,
            "decided_at": decided_at}
+    if verdict == "ACCEPT_MATERIAL":
+        rec.update({"machine_name": machine_name,
+                    "release_date": release_date,
+                    "basis_scope": BASIS_SCOPE,
+                    "relationship_verified": False})
+    # ★書く前に、読むときと同じ物差しを通す★（順番を変えない）
+    #   先に形を確かめてから通信する＝形が違う控えのために外へ出ない。
+    _check_record(slug, rec)
+    verify_evidence(evidence, fetch, expected, rec)
+    got = store if store is not None else load()
+    rows = got.setdefault("machines", {}).setdefault(slug, [])
+    k = key_of(seen)
     for i, old in enumerate(rows):
         if old.get("expected") == expected and key_of(old.get("seen")) == k:
             rows[i] = rec                # ★同じ組は上書き（増やさない）★
@@ -410,30 +540,78 @@ def forget(slug: str, expected: str, seen: str, store=None) -> bool:
 
 # ---------------------------------------------------------------- selftest
 
+# ★試験も本物の名鑑・本物の機種ページの形を使う★（2026-08-17・依頼228）
+#   架空のホスト（x.test）では `directory_of` も `machine_page_pattern` も
+#   通らない。**関所を素通りする偽物を使うと、関所の試験にならない**。
+#   取ってくる役だけを差し替える（通信はしない）。
+_MN = "L転生王女と天才令嬢の魔法革命"
+_SEEN = "平和"
+_EXPECTED = "olympia_estate"
+_REL = "2026-10-05"
+_C = "https://chonborista.com/slot/orinpia-slot/264134/"    # 名鑑①の機種ページ
+_N = "https://nana-press.com/kaiseki/machine/1233/"         # 名鑑②の機種ページ
+_LIST = "https://chonborista.com/slot/orinpia-slot/"        # 一覧（機種ページでない）
+_KIT = "https://www.kitadenshi.co.jp/company/"              # 名鑑ではない登録先
+_QC = f"機種名 {_MN} メーカー {_SEEN}"
+_QN = f"機種名 {_MN} メーカー {_SEEN} 導入日 2026/10/5"
+
+
+def _rec(**kw) -> dict:
+    """試験用の、正しい形の控え1件。"""
+    base = {"expected": _EXPECTED, "seen": _SEEN, "verdict": "ACCEPT_MATERIAL",
+            "why": "理由", "agreed_by": ["claude", "codex"],
+            "decided_at": "2026-08-17", "machine_name": _MN,
+            "release_date": _REL, "basis_scope": BASIS_SCOPE,
+            "relationship_verified": False,
+            "evidence": [{"url": _C, "quote": _QC,
+                          "kind": "directory_observation"},
+                         {"url": _N, "quote": _QN,
+                          "kind": "directory_observation"}]}
+    base.update(kw)
+    return base
+
+
 def _bad_load() -> bool:
-    """★手で書き足した根拠なしのレコードを、読むときに弾けるか★（試験用）"""
+    """★手で書き足した控えを、読むときに弾けるか★（試験用）
+
+    ★ここが v1 で足りなかったところ★＝書くときだけ検査していたので、
+      手で書き足したレコードが根拠も判断者も無いまま信用される経路があった。
+    """
     import copy
-    good = {"schema_version": SCHEMA, "machines": {"pw_1": [
-        {"expected": "sanslay", "seen": "三洋物産", "verdict": "MATCH",
-         "why": "理由", "agreed_by": ["claude", "codex"],
-         "decided_at": "2026-08-14",
-         "evidence": [{"url": "https://x.test/a", "quote": "メーカー 三洋物産",
-                       "kind": "directory_observation"},
-                      {"url": "https://x.test/b", "quote": "株式会社サンスリー",
-                       "kind": "official_relationship"}]}]}}
-    for bad in ({"verdict": "MATCH", "expected": "sanslay", "seen": "三洋物産"},
-                dict(good["machines"]["pw_1"][0], agreed_by=["claude"]),
-                dict(good["machines"]["pw_1"][0], agreed_by=["claude", "claude"]),
-                dict(good["machines"]["pw_1"][0], evidence=[]),
-                dict(good["machines"]["pw_1"][0],
-                     evidence=good["machines"]["pw_1"][0]["evidence"][:1])):
-        g = copy.deepcopy(good)
-        g["machines"]["pw_1"] = [bad]
+    bads = [
+        {"verdict": "ACCEPT_MATERIAL", "expected": _EXPECTED, "seen": _SEEN},
+        _rec(agreed_by=["claude"]),                    # 1人だけ
+        _rec(agreed_by=["claude", "claude"]),          # 同じ人を2回
+        _rec(evidence=[]),                             # 根拠なし
+        _rec(evidence=[{"url": _C, "quote": _QC,
+                        "kind": "directory_observation"}]),   # 名鑑1つだけ
+        _rec(machine_name=""),                         # どの機種か名乗らない
+        _rec(release_date=""),                         # 導入日を名乗らない
+        _rec(release_date="2026/10/05"),               # 日付の形が違う
+        _rec(basis_scope="whatever"),                  # 守りの範囲を偽る
+        _rec(relationship_verified=True),              # 会社の関係を確かめた、と偽る
+        # 引用に機種名が入っていない（別機種の欄でも通っていた）
+        _rec(evidence=[{"url": _C, "quote": "メーカー 平和 の機種一覧です",
+                        "kind": "directory_observation"},
+                       {"url": _N, "quote": "メーカー 平和 の解析一覧です",
+                        "kind": "directory_observation"}]),
+        # 引用にメーカー欄の表記が入っていない
+        _rec(evidence=[{"url": _C, "quote": f"機種名 {_MN} の解析",
+                        "kind": "directory_observation"},
+                       {"url": _N, "quote": f"機種名 {_MN} の天井",
+                        "kind": "directory_observation"}]),
+    ]
+    reg = None
+    try:
+        import source_lineage as _sl
+        reg = _sl.load_registry()
+    except Exception:                      # noqa: BLE001
+        return False
+    for bad in bads:
+        g = copy.deepcopy(bad)
         try:
-            for slug, rows in g["machines"].items():
-                for rec in rows:
-                    _check_record(slug, rec)
-            return False
+            _check_record("dmm_5086", g, reg)
+            return False                   # ★通ってしまった＝不合格★
         except CacheError:
             pass
     return True
@@ -446,28 +624,13 @@ def selftest() -> int:
         results.append((name, bool(cond)))
         print(("✅ " if cond else "❌ ") + name)
 
-    # ★出どころも試験の一部★（登録済みの名鑑／登録済みの公式ホスト）
-    _DIR = "https://nana-press.com/x"                 # 登録済みの名鑑
-    _OFF = "https://www.sanyobussan.co.jp/corporate/"  # 名簿に登録した公式
-    _3RD = "https://chonborista.com/kaisetsu"          # 名鑑だが公式ではない
-    ev = [{"url": _DIR, "quote": "メーカー 三洋物産",
-           "kind": "directory_observation"},
-          {"url": _OFF, "quote": "株式会社サンスリー 遊技機の開発・製造",
-           "kind": "official_relationship"}]
     st = _empty()
-
     _pages = {
-        _DIR: "<p>メーカー 三洋物産 / 機種一覧</p>",
-        _OFF: "<p>株式会社サンスリー 遊技機の開発・製造 を行います</p>",
-        # ★第三者の記事に同じ文が実在しても、公式の根拠にはならない★
-        _3RD: "<p>株式会社サンスリー 遊技機の開発・製造 を行います（解説）</p>",
+        _C: f"<p>{_QC} 導入日 2026年10月5日</p>",
+        _N: f"<p>{_QN}</p>",
+        _LIST: f"<p>{_QC} 導入日 2026年10月5日 の一覧</p>",
+        _KIT: f"<p>{_QC} 導入日 2026年10月5日</p>",
     }
-
-    def _fetch(u):
-        if u not in _pages:
-            raise RuntimeError("404")
-        _w_last(u)                    # ★転送なし＝最後のURLは自分自身★
-        return _pages[u]
 
     def _w_last(u):
         """取ってくる役が「最後に着いたURL」を控える（本物と同じ形）。"""
@@ -475,11 +638,20 @@ def selftest() -> int:
         _w.LAST_FINAL_URL["url"] = u
         return u
 
+    def _fetch(u):
+        if u not in _pages:
+            raise RuntimeError("404")
+        _w_last(u)                         # ★転送なし＝最後のURLは自分自身★
+        return _pages[u]
+
+    ev = _rec()["evidence"]
+
     def _ok(**kw):
-        base = dict(slug="pw_1", expected="sanslay", seen="三洋物産",
-                    verdict="MATCH", why="理由", by=["claude", "codex"],
-                    evidence=ev, decided_at="2026-08-14", store=st,
-                    fetch=_fetch)
+        base = dict(slug="dmm_5086", expected=_EXPECTED, seen=_SEEN,
+                    verdict="ACCEPT_MATERIAL", why="理由",
+                    by=["claude", "codex"], evidence=ev,
+                    decided_at="2026-08-17", machine_name=_MN,
+                    release_date=_REL, store=st, fetch=_fetch)
         base.update(kw)
         try:
             remember(**base)
@@ -487,113 +659,126 @@ def selftest() -> int:
         except CacheError:
             return False
 
-    t("★★根拠つきなら控えられる★★", _ok())
+    t("★★独立2名鑑の根拠つきなら控えられる★★", _ok())
     t("　控えた結論を引ける",
-      verdict_for("pw_1", "sanslay", "株式会社三洋物産", st, _fetch) == "MATCH")
+      verdict_for("dmm_5086", _EXPECTED, "株式会社平和", st, _fetch)
+      == "ACCEPT_MATERIAL")
+
     # ★★使うときにも根拠を取り直す（2026-08-14・依頼192のP1）★★
-    #   控えは手で書き足せるただのファイルなので、
-    #   書くときだけ照合しても、形だけ整った偽の根拠で「同じ」を作れる。
-    t("★★根拠のページが取れなくなったら「同じ」として使わない★★"
+    t("★★根拠のページが取れなくなったら材料に使わない★★"
       "／手で書き足した偽の根拠を、使う直前に落とす",
-      verdict_for("pw_1", "sanslay", "三洋物産", st,
+      verdict_for("dmm_5086", _EXPECTED, _SEEN, st,
                   lambda u: (_ for _ in ()).throw(RuntimeError("404"))) is None)
     t("　（対照）取り直せるうちは今までどおり使える",
-      verdict_for("pw_1", "sanslay", "三洋物産", st, _fetch) == "MATCH")
+      verdict_for("dmm_5086", _EXPECTED, _SEEN, st, _fetch)
+      == "ACCEPT_MATERIAL")
     t("　引用が消えていたら使わない",
-      verdict_for("pw_1", "sanslay", "三洋物産", st,
+      verdict_for("dmm_5086", _EXPECTED, _SEEN, st,
                   lambda u: "<p>ページが作り替えられました</p>") is None)
+
+    # ★★2026-08-17・依頼228で足した守り★★
+    t("★★導入日がそのページに無ければ材料に使わない★★"
+      "／同名で別メーカーの機種は導入年が違う（犬夜叉＝2016年／2022年）",
+      verdict_for("dmm_5086", _EXPECTED, _SEEN, st,
+                  lambda u: (_w_last(u), f"<p>{_QC} 導入日は未定です</p>")[1]
+                  if u == _C else (_w_last(u), _pages[u])[1]) is None)
+    t("★★名鑑1つだけでは控えられない★★（独立2名鑑が要る）",
+      not _ok(evidence=[ev[0]], slug="dmm_1"))
+    t("　（対照）2つあれば通る＝厳しすぎるのではない", _ok(slug="dmm_2"))
+    t("★★同じ名鑑の2ページでは2つに数えない★★",
+      not _ok(evidence=[ev[0], dict(ev[0], url=_LIST)], slug="dmm_same"))
+    t("★★その名鑑の機種ページでないURLは根拠にできない★★"
+      "／一覧・特集・別機種のページ",
+      not _ok(evidence=[dict(ev[0], url=_LIST), ev[1]], slug="dmm_list"))
+    t("★★引用に機種名が入っていなければ控えられない★★",
+      not _ok(evidence=[dict(ev[0], quote="メーカー 平和 の一覧"),
+                        dict(ev[1], quote="メーカー 平和 の解析")],
+              slug="dmm_noname"))
+    t("★★引用にメーカー欄の表記が入っていなければ控えられない★★",
+      not _ok(evidence=[dict(ev[0], quote=f"機種名 {_MN} の解析"),
+                        dict(ev[1], quote=f"機種名 {_MN} の天井")],
+              slug="dmm_nomaker"))
+    t("★★「公式の関係」という根拠はもう受け取らない★★"
+      "／メーカー公式を見るのをやめた（運営者判断・2026-08-17）",
+      not _ok(evidence=[ev[0], dict(ev[1], kind="official_relationship")],
+              slug="dmm_off"))
+    t("　根拠の種類を勝手に作れない",
+      not _ok(evidence=[ev[0], dict(ev[1], kind="でっちあげ")],
+              slug="dmm_kind"))
+
+    # ★★以前からの守り（v1で入れたもの）が生きているか★★
     t("★★機種が違えば効かない★★（全機種に一律で効かせない）",
-      verdict_for("pw_2", "sanslay", "三洋物産", st) is None)
+      verdict_for("dmm_9999", _EXPECTED, _SEEN, st) is None)
     t("　期待する社が違えば効かない",
-      verdict_for("pw_1", "sammy", "三洋物産", st) is None)
+      verdict_for("dmm_5086", "sammy", _SEEN, st) is None)
     t("★★答えが出ない状態は控えない★★", not _ok(verdict="UNKNOWN"))
     t("★★根拠が無ければ受け取らない★★",
       not _ok(evidence=[]) and not _ok(
-          evidence=[{"url": "https://x.test/a", "quote": "短い",
-                     "kind": "directory_observation"}]))
-    t("　根拠の種類を勝手に作れない",
-      not _ok(evidence=[{"url": "https://x.test/a", "quote": "メーカー 三洋物産",
-                         "kind": "でっちあげ"}]))
+          evidence=[dict(ev[0], quote="短い"), ev[1]]))
     t("★★判断した者が1人だけなら受け取らない★★（2AIで決める）",
       not _ok(by=["claude"]))
-    t("　同じ組を2度控えても増えない",
-      (_ok(why="別の理由") and len(st["machines"]["pw_1"]) == 1))
-    # ★★言うだけでは通さない（2026-08-14・依頼190のP1）★★
-    t("★★逐語引用がそのページに無ければ受け取らない★★"
-      "／以前はURLも引用も言うだけで通った",
-      not _ok(evidence=[dict(ev[0], quote="どこにも書いていない文字列"),
-                        ev[1]]))
-    t("　（対照）そのページにある文なら通る＝検査が厳しすぎるのではない",
-      _ok(evidence=[dict(ev[0], quote="メーカー 三洋物産"), ev[1]],
-          slug="pw_taisyo"))
-    t("　ページを取れなければ控えない（fail-closed）",
-      not _ok(evidence=[dict(ev[0], url="https://x.test/nai"), ev[1]]))
-    t("★★「同じ」と決めるには名鑑の観測と公式の関係の両方が要る★★",
-      not _ok(evidence=[ev[0]]) and not _ok(evidence=[ev[1]]))
-    # ★★出どころも見る（2026-08-14・依頼192のP1）★★
-    #   引用が実在するかを見るだけでは、第三者の記事でも通ってしまう。
-    t("★★第三者の記事は「公式の関係」の根拠にならない★★"
-      "／同じ文がそこに実在しても、公式であることの根拠にはならない",
-      not _ok(evidence=[ev[0], dict(ev[1], url=_3RD)], slug="pw_3rd"))
-    t("　（対照）名簿に登録した公式ホストなら通る", _ok(slug="pw_off"))
-    t("　登録されていない名鑑からは観測を採らない",
-      not _ok(evidence=[dict(ev[0], url="https://example.com/x"), ev[1]],
-              slug="pw_dir"))
-    # ★★2026-08-14・依頼193のP2★★
-    _KIT = "https://www.kitadenshi.co.jp/company/"
-    _pages[_KIT] = "<p>メーカー 三洋物産 と記載のあるページ</p>"
-    t("★★名鑑でない登録済みサイトを「名鑑での観測」にできない★★"
-      "／source-registry には解析サイトやメーカー公式も載っているので、"
-      "「登録済みの発行者」だけで見ると役割の分離が崩れる"
-      "／★集合だけでなく、関所（_ok）まで通して確かめる★",
-      "www.kitadenshi.co.jp" not in directory_hosts()
-      and "nana-press.com" in directory_hosts()
-      and not _ok(evidence=[dict(ev[0], url=_KIT), ev[1]], slug="pw_kit"))
-    t("　（対照）同じ本文でも、名鑑のページなら観測として通る",
-      _ok(evidence=[dict(ev[0], quote="メーカー 三洋物産"), ev[1]],
-          slug="pw_kit2"))
     t("★★判断者は決めた2つ以外を受け取らない★★"
       "／以前は架空のID2つでも「違う2者」だった",
-      not _ok(by=["foo", "bar"], slug="pw_by")
-      and not _ok(by=["claude", "gemini"], slug="pw_by2"))
-    t("　（対照）決めた2つなら通る", _ok(by=["codex", "claude"], slug="pw_by3"))
+      not _ok(by=["foo", "bar"], slug="dmm_by")
+      and not _ok(by=["claude", "gemini"], slug="dmm_by2"))
+    t("　（対照）決めた2つなら通る", _ok(by=["codex", "claude"], slug="dmm_by3"))
+    t("　同じ組を2度控えても増えない",
+      (_ok(why="別の理由") and len(st["machines"]["dmm_5086"]) == 1))
+    t("★★逐語引用がそのページに無ければ受け取らない★★"
+      "／以前はURLも引用も言うだけで通った",
+      not _ok(evidence=[dict(ev[0], quote=f"機種名 {_MN} メーカー {_SEEN} 嘘"),
+                        ev[1]], slug="dmm_lie"))
+    t("　ページを取れなければ控えない（fail-closed）",
+      not _ok(evidence=[dict(ev[0], url=_C.replace("264134", "999999")),
+                        ev[1]], slug="dmm_nai"))
+    t("★★名鑑でない登録済みサイトを「名鑑での観測」にできない★★"
+      "／source-registry には解析サイトも載っているので、"
+      "「登録済みの発行者」だけで見ると役割の分離が崩れる",
+      "www.kitadenshi.co.jp" not in directory_hosts()
+      and "nana-press.com" in directory_hosts()
+      and not _ok(evidence=[dict(ev[0], url=_KIT), ev[1]], slug="dmm_kit"))
     t("★★同じ社でも https から http へ落とされたら受け取らない★★"
       "／ホストが変わったときだけ見ていたので素通りしていた",
-      not _ok(slug="pw_down",
+      not _ok(slug="dmm_down",
               fetch=lambda u: (_w_last(u.replace("https://", "http://")),
                                _pages[u])[1]))
     t("　http（暗号化なし）の根拠は受け取らない",
-      not _ok(evidence=[dict(ev[0], url=_DIR.replace("https://", "http://")),
-                        ev[1]], slug="pw_http"))
+      not _ok(evidence=[dict(ev[0], url=_C.replace("https://", "http://")),
+                        ev[1]], slug="dmm_http"))
     t("★★許可したURLから許可外へ転送されたら受け取らない★★",
-      not _ok(slug="pw_redir",
-              fetch=lambda u: (_w_last(_3RD), _pages[_OFF])[1]
-              if u == _OFF else (_w_last(u), _pages[u])[1]))
-    t("　公式ホストは関係する社のぶんも合わせて見る"
-      "（平和⇔オリンピアエステート）",
-      official_hosts("olympia_estate") == official_hosts("heiwa")
-      and "www.heiwanet.co.jp" in official_hosts("olympia_estate"))
-    t("　（対照）「違う」と決めるのは片方でもよい",
-      _ok(verdict="MISMATCH", evidence=[ev[0]], slug="pw_mis"))
+      not _ok(slug="dmm_redir",
+              fetch=lambda u: (_w_last(_KIT), _pages[_C])[1]
+              if u == _C else (_w_last(u), _pages[u])[1]))
+    t("　（対照）「使わない」と決めるのは名鑑1つでもよい",
+      _ok(verdict="REJECT_MATERIAL", evidence=[ev[0]], slug="dmm_rej"))
     t("★★読むときも同じ物差しで確かめる★★（手で書き足しても信用しない）",
       _bad_load())
     t("　取り消せる",
-      forget("pw_1", "sanslay", "三洋物産", st)
-      and verdict_for("pw_1", "sanslay", "三洋物産", st) is None)
+      forget("dmm_5086", _EXPECTED, _SEEN, st)
+      and verdict_for("dmm_5086", _EXPECTED, _SEEN, st) is None)
+
+    # ★日付の書き方をならすところ★（相手の作りを読むのではない）
+    t("　同じ日付を、名鑑ごとの書き方に直せる"
+      "（ちょんぼりすた「2026年10月5日」／なな徹「2026/10/5」）",
+      "2026年10月5日" in date_forms(_REL) and "2026/10/5" in date_forms(_REL)
+      and date_forms("") == [] and date_forms("2026/10/05") == [])
 
     ng = sum(1 for _, o in results if not o)
     print()
     print("%d/%d 合格" % (len(results) - ng, len(results)))
     return 1 if ng else 0
 
-
 def main() -> int:
     ap = argparse.ArgumentParser(description="機種ごとのメーカー同一性の控え")
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--record", action="store_true")
     ap.add_argument("--forget", action="store_true")
-    ap.add_argument("--official-url", dest="official_url",
-                    help="P-WORLDの機種ページ（slugはここから決める）")
+    # ★DMMの機種ページだけ★（2026-08-17・依頼228／台帳#376でP-WORLDは停止）
+    ap.add_argument("--machine-url", dest="machine_url",
+                    help="DMMの機種ページ https://p-town.dmm.com/machines/<ID>"
+                         "（slug・導入日はここから決める）")
+    ap.add_argument("--machine-name", dest="machine_name", default="",
+                    help="カレンダーに載っている機種名（DMMの見出しと照合する）")
     ap.add_argument("--expected", help="期待している社（名簿のキー）")
     ap.add_argument("--seen", help="名鑑のメーカー欄に書かれていた表記")
     ap.add_argument("--verdict", choices=VERDICTS)
@@ -633,15 +818,23 @@ def main() -> int:
         if not (a.record or a.forget):
             ap.print_help()
             return 0
-        # ★slugは自己申告させない★＝P-WORLDのURLから決める
-        import build_new_article as _ba
-        if not a.official_url:
-            print("★--official-url が要ります（slugをそこから決めます）★")
+        # ★slugは自己申告させない★＝DMMの機種URLから決める
+        #   ★形を厳しく見る★（2026-08-17・Codex依頼228の指摘2）
+        #   前は共通の slug_from_url に任せていたので、DMM/P-WORLD以外の
+        #   URLは**末尾がそのままslug**になり、
+        #   `https://example.com/dmm_5086/` のような外部URLでも
+        #   狙ったslugの控えを作れた。
+        import re as _re
+        if not a.machine_url:
+            print("★--machine-url が要ります（slugをそこから決めます）★")
             return 1
-        slug = _ba.slug_from_url(a.official_url)
-        if not slug:
-            print(f"★そのURLからslugを決められません: {a.official_url}★")
+        m = _re.match(r"^https://p-town\.dmm\.com/machines/(\d+)/?$",
+                      str(a.machine_url).strip())
+        if not m:
+            print(f"★DMMの機種ページのURLだけです: {a.machine_url}★"
+                  "／形: https://p-town.dmm.com/machines/<機種ID>")
             return 1
+        slug = "dmm_" + m.group(1)
         if a.forget:
             ok = forget(slug, a.expected or "", a.seen or "")
             print("消しました" if ok else "その控えはありません")
@@ -654,11 +847,39 @@ def main() -> int:
                 return 1
             ev.append({"url": parts[0], "quote": parts[1], "kind": parts[2]})
         import datetime
+        # ★機種名と導入日はDMMの機種ページから取る★（2026-08-17・依頼228）
+        #   ★呼ぶ側の自己申告で決めない★＝控えは手で書けるファイルなので、
+        #   ここを言うだけで通すと「別機種の名前と日付」で根拠を作れてしまう。
+        #   「使わない」と決めるだけなら機種の紐づけは要らない（取りに行かない）。
+        machine_name, release_date = "", ""
+        if a.verdict == "ACCEPT_MATERIAL":
+            if not str(a.machine_name or "").strip():
+                print("★--machine-name が要ります"
+                      "（カレンダーに載っている機種名）★")
+                return 1
+            import dmm_machine as _dm
+            try:
+                got_m = _dm.fetch(m.group(1))
+            except Exception as e:         # noqa: BLE001
+                print(f"★DMMの機種ページを読めません: {str(e)[:120]}★")
+                return 1
+            ok_name, why_name = _dm.name_matches(got_m.get("heading") or "",
+                                                 a.machine_name)
+            if not ok_name:
+                print(f"★その機種名はDMMの機種ページと一致しません: {why_name}★")
+                return 1
+            machine_name = str(a.machine_name).strip()
+            release_date = str(got_m.get("release_date") or "")
+            if not _DATE.match(release_date):
+                print(f"★DMMから導入日を取れません（{release_date!r}）★"
+                      "／日が確定していない機種は控えられません")
+                return 1
         # ★CLIでは取ってくる役を差し替えない★＝本物のページで照合する
         rec = remember(slug, a.expected or "", a.seen or "", a.verdict or "",
                        a.why or "", [x.strip() for x in
                                      str(a.by or "").split(",") if x.strip()],
-                       ev, a.at or datetime.date.today().isoformat())
+                       ev, a.at or datetime.date.today().isoformat(),
+                       machine_name, release_date)
         print(json.dumps({"state": "RECORDED", "slug": slug, **rec},
                          ensure_ascii=False)[:300])
         return 0

@@ -206,6 +206,8 @@
     }
    ],
    "link_pattern": "/slot/[a-z\\-]+/\\d+",
+   "machine_page_pattern": "^https://chonborista\\.com/slot/[a-z0-9\\-]+/\\d+/?$",
+   "_why_machine_page_pattern": "★メーカー照合の根拠は「その名鑑の機種ページ」だけから採る★（2026-08-17・依頼228／Codexの指摘4）。以前はホスト名しか見ていなかったので、同じ名鑑の一覧ページ・特集記事・別機種のページでも根拠として通った。ここに合わない根拠は maker_identity_cache が受け取らない（fail-closed）。",
    "min_expected": 20,
    "status": "ACTIVE",
    "_why_surfaces": "メーカー別の入口を全部登録する（2026-08-06）。2つしか登録しておらず、ユニバーサル等の新台が『一覧に載っていない』扱いになっていた",
@@ -468,6 +470,8 @@
     }
    ],
    "link_pattern": "/machines/\\d+",
+   "machine_page_pattern": "^https://p-town\\.dmm\\.com/machines/\\d+/?$",
+   "_why_machine_page_pattern": "★メーカー照合の根拠は「その名鑑の機種ページ」だけから採る★（2026-08-17・依頼228／Codexの指摘4）。以前はホスト名しか見ていなかったので、同じ名鑑の一覧ページ・特集記事・別機種のページでも根拠として通った。ここに合わない根拠は maker_identity_cache が受け取らない（fail-closed）。",
    "min_expected": 10,
    "status": "ACTIVE",
    "_verified": "2026-07-31 Claudeが確認。/machines(31件)・/machines/slot(20件)・/makers/44(20件) のいずれにも Lすーぱぁびん娘(5038) が含まれる。/machines/smart_slot だけだと入らなかった。★1つの入口では足りないことの実例★",
@@ -563,6 +567,8 @@
     }
    ],
    "link_pattern": "/kaiseki/machine/\\d+",
+   "machine_page_pattern": "^https://nana-press\\.com/kaiseki/machine/\\d+/?$",
+   "_why_machine_page_pattern": "★メーカー照合の根拠は「その名鑑の機種ページ」だけから採る★（2026-08-17・依頼228／Codexの指摘4）。以前はホスト名しか見ていなかったので、同じ名鑑の一覧ページ・特集記事・別機種のページでも根拠として通った。ここに合わない根拠は maker_identity_cache が受け取らない（fail-closed）。",
    "min_expected": 50,
    "max_pages": 1,
    "status": "ACTIVE",

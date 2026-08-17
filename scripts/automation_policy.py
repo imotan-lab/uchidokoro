@@ -86,6 +86,20 @@ def _host_of(url: str) -> str:
     return (urllib.parse.urlsplit(str(url or "")).hostname or "").lower()
 
 
+def _under(path: str, prefix: str) -> bool:
+    """★道筋は「区切りのところ」で比べる★（2026-08-17・Codex依頼228の指摘4）
+
+    ★なぜ startswith ではだめか★
+      `/slot` を許すと `/slot-other`（別のディレクトリ）まで通っていた。
+      文字の前方一致は、道筋の親子関係ではない。
+    """
+    p = "/" + str(path or "").strip("/")
+    q = "/" + str(prefix or "").strip("/")
+    if q == "/":                      # 「サイト全部」を許した場合
+        return True
+    return p == q or p.startswith(q + "/")
+
+
 def allows(url: str, purpose: str = "", today: str = "",
            policy: dict | None = None) -> tuple:
     """★このURLへ、この用途で通信してよいか★
@@ -118,7 +132,7 @@ def allows(url: str, purpose: str = "", today: str = "",
                        f"（{conf.get('recheck_by')}）"
                        "／★読み直して日付を更新してください★")
     path = urllib.parse.urlsplit(str(url)).path or "/"
-    if not any(path.startswith(p) for p in conf["path_prefixes"]):
+    if not any(_under(path, p) for p in conf["path_prefixes"]):
         return False, (f"{host} で通してよい道筋ではありません"
                        f"（{path[:40]} / 許可: {conf['path_prefixes']}）")
     # ★用途は必ず名乗ること★（2026-08-16・依頼215の指摘3）
@@ -236,6 +250,24 @@ def selftest() -> int:
     ok, why = allows("https://p-town.dmm.com/shops/1", "", "2026-08-16", d)
     t("★★同じサイトでも、許した道筋の外は通さない★★"
       "（新台の発見に許した先で、店舗情報を取りに行かない）", not ok)
+    # ★★道筋は区切りのところで比べる★★（2026-08-17・Codex依頼228の指摘4）
+    #   ★直す前はここが通っていた★＝文字の前方一致で見ていたので、
+    #   `/machines` を許すと `/machines-secret` のような**別のディレクトリ**
+    #   まで通った。名簿の道筋の意味が骨抜きになる。
+    ok, why = allows("https://p-town.dmm.com/machines-secret/1",
+                     "machine_identity", "2026-08-16", d)
+    t("★★似た名前の別ディレクトリを通さない★★"
+      "（/machines を許しても /machines-secret は別の場所）", not ok)
+    ok, why = allows("https://p-town.dmm.com/machines", "machine_identity",
+                     "2026-08-16", d)
+    t("　（対照）道筋そのものは通る", ok)
+    ok, why = allows("https://p-town.dmm.com/machines/5086",
+                     "machine_identity", "2026-08-16", d)
+    t("　（対照）その下のページも通る", ok)
+    t("　（部品）区切りで比べている",
+      _under("/machines/5086", "/machines") and _under("/machines", "/machines")
+      and not _under("/machines-secret/1", "/machines")
+      and not _under("/machinesx", "/machines"))
     ok, why = allows("https://p-town.dmm.com/machines/1", "x_no_such",
                      "2026-08-16", d)
     t("★★許していない用途では通さない★★", not ok)
