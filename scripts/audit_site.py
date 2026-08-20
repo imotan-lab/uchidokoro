@@ -1817,6 +1817,40 @@ def check_42_fetch_purpose(machines: list) -> list[str]:
     return ngs
 
 
+def check_44_empty_settei_box(machines: list) -> list[str]:
+    """★設定示唆まとめの箱が、中身なしで読者に出ていないか★（2026-08-21・台帳#150）
+
+    ★なぜ★ `machine.html` は `type:"settei"` の箱を描くとき、
+    見出しとバッジ凡例（弱/中/強/確）を**先に必ず出してから**表を並べる。
+    中身が無いと「見出しと凡例だけ」が読者に残る。
+    台帳#150 は「43/113機種がこの状態」と記録し、あわせて
+    **「audit_site.py の全項目が検知できない」**とも書いていた。ここで塞ぐ。
+
+    ★行が1つあることと、中身が描けることは別★（2026-08-21・Codex依頼245）
+      `rows: [{"trigger":"","hint":""}]` は行1つだが、画面には空のセルが2つ出るだけ。
+      数えるのは「実際に文字が出るセルを持つ行」。
+
+    判定は `scripts/recheck.py` に任せる（★同じ規則を2か所に書かない★）。
+    """
+    sys.path.insert(0, str(BASE / "scripts"))
+    try:
+        import recheck as _rc
+    except Exception as e:                                   # noqa: BLE001
+        return [f"再検査の道具を読み込めません: {type(e).__name__}: {e}"]
+
+    out = []
+    for m in machines:
+        slug = m.get("slug")
+        if not slug:
+            continue
+        r = _rc.run("settei_filled", {"slug": slug})
+        if r["result"] == _rc.FAIL:
+            out.append(f"{slug}: {r['detail']}")
+        elif r["result"] == _rc.ERROR:
+            out.append(f"{slug}: 検査が失敗しました（{r['detail']}）")
+    return out
+
+
 def check_43_undefined_names(machines: list) -> list[str]:
     """★消したはずの名前を呼び続けていないか★（2026-08-17・依頼225）
 
@@ -2136,6 +2170,7 @@ CHECKS = [
     ("41_自動で通信してよい先", check_41_automation_policy),
     ("42_通信の用途の名乗り", check_42_fetch_purpose),
     ("43_定義の無い内部関数の呼び出し", check_43_undefined_names),
+    ("44_中身なしの設定示唆の箱", check_44_empty_settei_box),
 ]
 
 

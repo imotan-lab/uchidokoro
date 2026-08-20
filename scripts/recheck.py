@@ -185,6 +185,43 @@ def _is_int(v) -> bool:
 #     見出しとバッジ凡例（弱/中/強/確）を必ず描いてから表を並べる。
 #     中身が無いと「見出しと凡例だけ」が残る（台帳#150 の型）。
 
+def _cell_text(cell) -> str:
+    """★そのセルが読者の画面に出す文字★（machine.html と同じ取り出し方）
+
+    描画側は `typeof c === "object" && c !== null` なら `c.text` を、
+    そうでなければ値そのものを出す。
+    """
+    if isinstance(cell, dict):
+        cell = cell.get("text")
+    if cell is None or isinstance(cell, bool):
+        return ""
+    if isinstance(cell, (int, float)):
+        return str(cell)
+    if isinstance(cell, str):
+        return cell.strip()
+    return ""
+
+
+def _row_has_text(row, two_cells: bool) -> bool:
+    """その行に、実際に文字が出るセルが1つ以上あるか。
+
+    （依頼245の指摘1: 行が1つあることと、中身が描けることは別。
+     `rows: [{"trigger":"","hint":""}]` は行1つだが、画面には空のセルが2つ出るだけ）
+    """
+    if two_cells:
+        # 「表が無いときの rows」＝描画側は row[0]/row[1]（または trigger/hint）だけを見る
+        if isinstance(row, list):
+            cells = [row[0] if len(row) > 0 else None,
+                     row[1] if len(row) > 1 else None]
+        elif isinstance(row, dict):
+            cells = [row.get("trigger"), row.get("hint")]
+        else:
+            cells = [row]
+    else:
+        cells = row if isinstance(row, list) else [row]
+    return any(_cell_text(c) != "" for c in cells)
+
+
 def _settei_renderable_rows(section: dict):
     """★machine.html と同じ順序で「実際に描かれる行」を数える★
 
@@ -213,14 +250,16 @@ def _settei_renderable_rows(section: dict):
             for row in rows:
                 if not isinstance(row, (list, str, dict)):
                     return 0, "表の行の形が想定外です"
-            n += len(rows)
+                # ★行の数ではなく「文字が出る行」を数える★（依頼245の指摘1）
+                if _row_has_text(row, two_cells=False):
+                    n += 1
         return n, ""
     rows = section.get("rows")
     if rows is None:
         return 0, ""
     if not isinstance(rows, list):
         return 0, "行が配列ではありません"
-    return len(rows), ""
+    return sum(1 for row in rows if _row_has_text(row, two_cells=True)), ""
 
 
 def check_settei_filled(args: dict) -> dict:
@@ -263,7 +302,10 @@ def check_settei_filled(args: dict) -> dict:
             if isinstance(psec, list):
                 pset = [s for s in psec
                         if isinstance(s, dict) and s.get("type") == "settei"]
-                projected_ok = all(_settei_renderable_rows(s)[0] > 0 for s in pset)
+                # ★箱が0個なら「射影側も空でない」とは言えない★（依頼245の防御1）
+                #   all([]) は真になるので、bool(pset) を先に見る
+                projected_ok = bool(pset) and all(
+                    _settei_renderable_rows(s)[0] > 0 for s in pset)
     except Exception:                                        # noqa: BLE001
         projected_ok = None      # 射影が通らない＝Phase 1 未配線。いまは判断に使わない
 
@@ -588,6 +630,13 @@ def closeable(condition):
     res = run(check, dict(args))
     if res.get("result") != PASS:
         return False, f"再検査が {res.get('result')} でした: {res.get('detail')}", res
+
+    # ★検査のあいだに手元が動いていないか、もう一度見る★（依頼245の防御2）
+    #   前だけ見ていると、検査中に別のプロセスが書き換えた内容で合格し得る。
+    if res.get("commit_sha") != want_commit or head_commit() != want_commit:
+        return False, "検査中にコミットが変わりました", res
+    if not repo_clean():
+        return False, "検査中に未コミットの変更が入りました", res
     return True, "再検査が合格しました", res
 
 
@@ -608,7 +657,29 @@ def _cmd_list():
 def _cmd_run(check, slug, rate, run_all, as_json):
     # ★名簿そのものが壊れていても、約束した終了コードから外れない★（依頼244の指摘4）
     try:
-        slugs = [m.get("slug") for m in _machines() if m.get("slug")] if run_all else [slug]
+        if run_all:
+            # ★欠落を黙って除外しない★（依頼245の指摘2）
+            #   以前は `if m.get("slug")` で slug の無い行を落としていたので、
+            #   棚卸しに使うと対象が静かに減った。重複も見ていなかった。
+            rows_in = _machines()
+            slugs, seen, bad = [], set(), []
+            for i, m in enumerate(rows_in):
+                if not isinstance(m, dict):
+                    bad.append(f"{i}番目が辞書ではありません")
+                    continue
+                s = m.get("slug")
+                if not isinstance(s, str) or not SLUG_RE.match(s):
+                    bad.append(f"{i}番目のslugが不正です: {s!r}")
+                    continue
+                if s in seen:
+                    bad.append(f"slugが重複しています: {s}")
+                    continue
+                seen.add(s)
+                slugs.append(s)
+            if bad:
+                raise ValueError("機種の名簿が使えません: " + " / ".join(bad[:5]))
+        else:
+            slugs = [slug]
     except Exception as e:                                   # noqa: BLE001
         msg = f"machines.json を読めません: {type(e).__name__}: {e}"
         if as_json:
@@ -712,6 +783,30 @@ def _selftest():
     t("★行が配列でなければ想定外★",
       _settei_renderable_rows({"tables": [{"headers": ["a"], "rows": "x"}]})[1] != "")
 
+    # --- ★「行はあるが、画面には何も出ない」を数えない★（依頼245の指摘1）
+    t("★空の行（rows: []）は0行★", _settei_renderable_rows({"rows": []}) == (0, ""))
+    t("★中身の無い行（rows: [[]]）は0行★",
+      _settei_renderable_rows({"rows": [[]]}) == (0, ""))
+    t("★空文字だけの行（trigger/hint）は0行★",
+      _settei_renderable_rows({"rows": [{"trigger": "", "hint": ""}]}) == (0, ""))
+    t("★空文字だけの行（配列）は0行★",
+      _settei_renderable_rows({"rows": [["", "  "]]}) == (0, ""))
+    t("★表の中の空文字だけの行も0行★",
+      _settei_renderable_rows({"tables": [{"headers": ["a", "b"],
+                                           "rows": [["", ""], [{"text": " "}]]}]})
+      == (0, ""))
+    t("片方だけ文字があれば1行",
+      _settei_renderable_rows({"rows": [{"trigger": "宵越し", "hint": ""}]}) == (1, ""))
+    t("バッジの中の文字も数える",
+      _settei_renderable_rows({"tables": [{"headers": ["a"],
+                                           "rows": [[{"text": "強", "badge": "strong"}]]}]})
+      == (1, ""))
+    t("★3列目に文字があっても、rows分岐は先頭2つしか見ない（JSと同じ）★",
+      _settei_renderable_rows({"rows": [["", "", "見えない"]]}) == (0, ""))
+    t("★真偽値は文字として数えない★",
+      _settei_renderable_rows({"rows": [[True, False]]}) == (0, ""))
+    t("数値は文字として数える", _settei_renderable_rows({"rows": [[0, ""]]}) == (1, ""))
+
     # --- ★負例★ わざと空箱を入れたら、必ず FAIL になること
     slug0 = None
     for m in _machines():
@@ -724,27 +819,43 @@ def _selftest():
     if slug0:
         real_loader = globals()["_load_detail"]
 
-        def _empty_box(_slug):
-            detail, raw, why = real_loader(_slug)
-            if detail is None:
-                return detail, raw, why
-            hacked = json.loads(json.dumps(detail))
-            for s in hacked.get("sections") or []:
-                if s.get("type") == "settei":
-                    s.pop("tables", None)
-                    s["rows"] = []               # ★中身なしの箱にする★
-            return hacked, raw, ""
-        try:
-            globals()["_load_detail"] = _empty_box
-            bad = run("settei_filled", {"slug": slug0})
-            t("★空箱を入れたら必ず不合格になる★", bad["result"] == FAIL)
-            t("★その状態では閉じられない★",
-              not closeable({"check": "settei_filled",
-                             "version": CHECKS["settei_filled"]["version"],
-                             "args": {"slug": slug0},
-                             "expected_commit": head_commit()})[0])
-        finally:
-            globals()["_load_detail"] = real_loader
+        def _make_loader(new_rows):
+            def _loader(_slug):
+                detail, raw, why = real_loader(_slug)
+                if detail is None:
+                    return detail, raw, why
+                hacked = json.loads(json.dumps(detail))
+                for s in hacked.get("sections") or []:
+                    if s.get("type") == "settei":
+                        s.pop("tables", None)
+                        s["rows"] = json.loads(json.dumps(new_rows))
+                return hacked, raw, ""
+            return _loader
+
+        # ★「空っぽに見える箱」を4通り作って、どれも必ず不合格になること★
+        #   （依頼245の指摘1: 行が1つあるだけで合格していた）
+        for label, rows in (
+                ("行が無い", []),
+                ("空の行が1つ", [[]]),
+                ("空文字の2セル", [{"trigger": "", "hint": ""}]),
+                ("空白だけの配列", [["", "  "]])):
+            try:
+                globals()["_load_detail"] = _make_loader(rows)
+                bad = run("settei_filled", {"slug": slug0})
+                t(f"★空箱（{label}）は必ず不合格★", bad["result"] == FAIL)
+                ok2, _why2, res2 = closeable(
+                    {"check": "settei_filled",
+                     "version": CHECKS["settei_filled"]["version"],
+                     "args": {"slug": slug0},
+                     "expected_commit": head_commit()})
+                # ★作業ツリーが汚れていると、再検査まで行かずに断られる★
+                #   （それも正しい動作なので、そのときは「断られたこと」だけを見る。
+                #     綺麗なときは「再検査が FAIL だったこと」まで確かめる）
+                reached = repo_clean()
+                t(f"★空箱（{label}）では閉じられない★",
+                  (not ok2) and ((res2 or {}).get("result") == FAIL if reached else True))
+            finally:
+                globals()["_load_detail"] = real_loader
 
     # --- 閉鎖条件の縛り（★結果の辞書を一切受け取らない★）
     cond = {"check": "settei_filled", "version": CHECKS["settei_filled"]["version"],
