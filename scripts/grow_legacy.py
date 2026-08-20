@@ -890,8 +890,11 @@ def run(slug: str, apply_it: bool, gather=None) -> dict:
     # ★★止める理由があるときは、材料があっても書かない★★
     #   （2026-08-20・Codex依頼239）＝型式の食い違い等が出ていても、
     #   材料さえあれば旧方式の記事を更新できてしまっていた。
+    #   ★私用の別名ではなく公開関数を呼ぶ★（2026-08-20・Codex依頼240の指摘3）
+    #     `_blocking` は `blocking_problems` の別名にすぎず、別名を消したときに
+    #     旧経路だけが静かに止まる。新台側（grow_machine）と同じ関数へそろえる。
     import add_machine_run as _amr2
-    _blk = _amr2._blocking(got.get("problems") or [])
+    _blk = _amr2.blocking_problems(got.get("problems") or [])
     if _blk:
         return {"slug": slug,
                 "problems": ["★止めました★ " + x for x in _blk]}

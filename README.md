@@ -81,9 +81,14 @@ GitHub Pages で運用する静的スロット狙い目サイトです。
 
 新台検出・先行記事公開・解析データ追記・X投稿は会社PCの Claude Code スケジュールタスクで実行：
 
-- `uchidokoro-auto-add`（毎日0時）：解析待ち再チェック＋全機種ローテーション
-- `uchidokoro-new-machine`（毎日23:30）：3週間先までの新台検出・先行記事モード公開
-- `uchidokoro-verify`（毎日5:05）：全機種ローテーションチェック
+- `uchidokoro-add-machine`（毎晩23:30）：DMMぱちタウンの導入カレンダーから新台を見つけて記事を作り公開
+- `uchidokoro-update-machine`（毎朝5:05）：1日1機種ずつ記事を育てる
+- `uchidokoro-quality-review`（毎日6:04）：記事をAIで読み比べて品質を評価
+- `task-watchdog`（毎朝8:03）：上記の稼働を点検し、止まっていれば復旧＋通知
+
+※旧タスク（`uchidokoro-auto-add` / `uchidokoro-new-machine` / `uchidokoro-verify`）は
+2026-07-24に停止し、2026-08-20に削除しました。**同じ名前で作り直さないでください**
+（停止理由と経緯は `CLAUDE.md` および `CLAUDE_history.md` に記載）。
 
 月曜稼働率ランキングも会社PCのスケジュールタスクで自動並べ替え。
 X投稿（@uchidokoro）：新台追加・解析データ判明時に自動投稿（Playwright方式）。
