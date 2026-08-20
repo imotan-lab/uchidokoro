@@ -688,8 +688,21 @@ def codex_round(task: str, path: str = STATE_PATH, lane: str = "main") -> int:
 
 # ★同じ機種で空振りが続いたら、しばらく選ばない★（2026-08-21・依頼246の防御4）
 #   手順書にだけ書いてあって実装が無かったので、無人実行が守る保証が無かった。
-REPAIR_FAIL_LIMIT = 2          # 続けてこの回数だけ「直せなかった」ら休ませる
+REPAIR_FAIL_LIMIT = 2          # 続けてこの「日数」だけ直せなかったら休ませる
 REPAIR_COOLDOWN_DAYS = 7       # 休ませる日数
+# ★数え方をはっきりさせる★（2026-08-21・依頼247の防御3）
+#   `cooldown_until` = 休みに入った日 + 7日。`until > today` の間だけ断る。
+#   ＝**休みに入った日を1日目として7日間**休み、8日目から選べる。
+#   （「翌日から7日」ではない。曖昧なままにしない）
+#
+# ★1日の機種数と、書き換えの予算は別物★（2026-08-21・依頼247の防御4）
+#   MACHINES_PER_DAY … 1日に「担当してよい機種の数」
+#   assets/data/task-budget.json … 1日に「書き換えてよい数」を種類別に決める
+#     writes_total=3 / writes_fix=2 / writes_grow=1
+#   ★3機種＝修正2＋育成1★なので、両者は食い違っていない。
+#   ★予算を上げるのは段階のルールに従う★（task-budget.json の _next_stage：
+#     7日連続で完走し既存記事の修正が10件以上できたら writes_fix=3 へ）。
+#   ここを勝手に上げない。
 
 
 def _repair_book(data: dict) -> dict:
@@ -737,6 +750,20 @@ def record_repair(slug: str, fixed: bool, path: str = STATE_PATH,
     """
     with _Exclusive(path):
         data = _load(path)
+        # ★「直せた」は自己申告では通さない★（2026-08-21・依頼247の防御2）
+        #   直す前は `--fixed yes` と言うだけで回数が0に戻り、休みも解けた。
+        #   ★機械が確かめられる根拠＝コミットの関所を通ったこと★
+        #   （before_commit が通ると final_stage が入る）。
+        #   ★通っていなければ「直せた」とは認めない★
+        if fixed:
+            passed = any(
+                isinstance(v, dict) and v.get("guard_slug") == slug
+                and v.get("final_stage") and v.get("run_date") == _today()
+                for v in (data.get("tasks") or {}).values())
+            if not passed:
+                raise GuardError(
+                    f"{slug} は今日コミットの関所を通っていません"
+                    "（before-commit を通ってから --fixed yes を記録してください）")
         book = _repair_book(data)
         rec = book.setdefault(slug, {"fails": 0, "cooldown_until": None, "why": ""})
         if fixed:
@@ -924,10 +951,23 @@ def before_commit(task: str, slug: str, path: str = STATE_PATH) -> dict:
         return a
 
 def done(task: str, slug: str, stage: str, path: str = STATE_PATH) -> dict:
+    """その機種の作業を終える。
 
+    ★直す経路で担当した機種は、結果を記録しないと終われない★
+      （2026-08-21・依頼247の防御2。`repaired` を呼ばずに終われたので、
+        空振りが数えられず、いつまでも同じ機種を選び続けられた）
+    """
     with _Exclusive(path):
         data = _load(path)
         e = _entry(data, task)
+        if e.get("repairing") and e.get("guard_slug") == slug:
+            rec = _repair_book(data).get(slug) or {}
+            marked = (rec.get("last_seen") == _today())
+            if not marked:
+                raise GuardError(
+                    f"{slug} は直す経路で担当したので、終える前に結果の記録が要ります: "
+                    f"python scripts/task_guard.py repaired --slug {slug} "
+                    "--fixed yes|no --why …")
         e["final_stage"] = stage
         e["finished_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         _save(path, data)
@@ -1317,6 +1357,15 @@ def selftest() -> int:
             t("★★休み中は担当できない（枠は使わない）★★",
               raises(lambda: claim("t7", "kabaneri", fp7, repairing=True,
                                    issues=["1"]), "休みです"))
+            # ★「直せた」は自己申告では通らない★（依頼247の防御2・対照実験）
+            t("★★コミットの関所を通っていなければ直せた扱いにできない★★",
+              raises(lambda: record_repair("kabaneri", True, fp7), "通っていません"))
+            # 関所を通った記録を作ってから、もう一度
+            _d7 = _load(fp7)
+            _d7.setdefault("tasks", {})["tX"] = {
+                "run_date": _today(), "guard_slug": "kabaneri",
+                "final_stage": "IDENTITY_PENDING"}
+            _save(fp7, _d7)
             record_repair("kabaneri", True, fp7)
             t("★直せたら休みは解ける★", repair_cooldown("kabaneri", fp7)[0] is False)
             t("　直せたら回数も0に戻る",
@@ -1378,6 +1427,18 @@ def selftest() -> int:
             before_write("t8", "bbb", fpA, repairing=True)
             t("　2機種目も before-write を通せばコミットできる",
               before_commit("t8", "bbb", fpA)["stage"] == "IDENTITY_PENDING")
+
+            # --- ★直す経路は、結果を記録しないと終われない★（依頼247の防御2）
+            fpC = os.path.join(tmpdir, "guard_done.json")
+            claim("tA", "kabaneri", fpC, repairing=True, issues=["1"])
+            before_write("tA", "kabaneri", fpC, repairing=True)
+            t("★★結果を記録せずに終えようとすると断られる★★",
+              raises(lambda: done("tA", "kabaneri", "IDENTITY_PENDING", fpC),
+                     "結果の記録が要ります"))
+            record_repair("kabaneri", False, fpC, why="材料は揃ったが決められなかった")
+            t("　記録してあれば終えられる",
+              done("tA", "kabaneri", "IDENTITY_PENDING", fpC)["final_stage"]
+              == "IDENTITY_PENDING")
 
             # --- ★直すと言った案件が消えていたら止める★（依頼247の指摘2）
             fpB = os.path.join(tmpdir, "guard_said.json")
