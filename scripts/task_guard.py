@@ -66,7 +66,15 @@ CODEX_ASK_ROUND_LIMIT = 3
 #     **機種ごとに独立して**効く。3機種＝守られた作業が3回であって、
 #     守りの緩い作業が1回になるわけではない。
 #   ★戻すならここだけ★（手順書の文言も一緒に直すこと）
-MACHINES_PER_DAY = 3
+#   ★2026-08-21に 3 → 1 へ戻した★（Codex依頼248の判断）
+#     機種の切り替えは直したが、**修理モードの迂回**（before-write を
+#     --repairing なしで呼び直すと検査が飛ぶ）と、**通常経路で別機種の
+#     ファイルを混ぜられる**穴が残っていたため。
+#   ★3へ戻す条件（依頼248）★
+#     ①修理モードが claim のあと変更できない
+#     ②合格した差分とコミットが同じだと確かめられる
+#     ③writes_fix と3機種運用を一致させた通しの試験が通る
+MACHINES_PER_DAY = 1
 # ★1日の機種数を数えないタスク★（2026-08-07・運営者決定）
 #   新台は導入日が決まっていて待てない。分かり次第そのまま記事にする。
 UNLIMITED_MACHINE_TASKS = frozenset({"add-machine"})
@@ -649,7 +657,16 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
                     + " / ".join(f"#{n}" for n in sorted(unknown))
                     + f"（止めているのは {' / '.join('#%d' % n for n in sorted(have))}）")
             e0 = _entry(data, task)
+            # ★担当中は案件も変えられない★（依頼248の指摘1）
+            if e0.get("repair_issues") and sorted(want) != e0["repair_issues"]:
+                raise GuardError(
+                    f"{slug} は #{' #'.join(str(n) for n in e0['repair_issues'])} を"
+                    "直す担当です。途中で案件を変えられません")
             e0["repair_issues"] = sorted(want)
+
+        # ★修理モードは担当を取った時に固定する★（依頼248の指摘1）
+        _e1 = _entry(data, task)
+        _e1["repairing"] = bool(repairing)
 
         done_today = d.setdefault("slugs_today", [])
         # 途中まで進めた機種を続ける場合は、新しく数えない
@@ -774,6 +791,18 @@ def record_repair(slug: str, fixed: bool, path: str = STATE_PATH,
             #   直す前は、同じ晩に2回記録するだけで休みに入れた。
             rec["why"] = why[:200]
         else:
+            # ★★「続けて」＝日が飛んだら数え直す★★（2026-08-21・依頼248の指摘4）
+            #   直す前は「今日と同じか」しか見ていなかったので、
+            #   8月1日と8月20日の失敗でも2回と数えて休みに入れた。
+            prev = str(rec.get("last_fail_date") or "")
+            if prev:
+                try:
+                    gap = (datetime.strptime(_today(), "%Y-%m-%d")
+                           - datetime.strptime(prev, "%Y-%m-%d")).days
+                except ValueError:
+                    gap = 99
+                if gap > 1:
+                    rec["fails"] = 0        # 間が空いた＝続いていない
             rec["fails"] = int(rec.get("fails") or 0) + 1
             rec["why"] = why[:200]
             rec["last_fail_date"] = _today()
@@ -840,7 +869,22 @@ def before_write(task: str, slug: str, path: str = STATE_PATH,
             raise GuardError(
                 f"{slug} の担当を確保していません（記録は {e.get('guard_slug')!r} のものです）")
         a = cp.assess(slug, repairing=repairing)
-        e["repairing"] = bool(repairing)
+        # ★★修理モードは担当を取った時に決まる。あとから変えられない★★
+        #   （2026-08-21・Codex依頼248の指摘1）
+        #   直す前は呼ぶたびに上書きしていたので、
+        #     ①--repairing で claim ②--repairing で before-write
+        #     ③台帳から案件が消える ④--repairing **なし**で before-write を呼び直す
+        #   とすると repairing=False になり、
+        #   「案件が消えたら止める」も「その機種以外のファイルを載せない」も
+        #   **まるごと飛んだ**。
+        claimed = bool(e.get("repairing"))
+        if bool(repairing) != claimed:
+            raise GuardError(
+                f"{slug} は "
+                + ("直す経路で担当しています" if claimed else "ふつうに担当しています")
+                + "。担当を取ったときと違う呼び方はできません"
+                + ("（--repairing を付けてください）" if claimed
+                   else "（--repairing は付けられません）"))
         # ★基準は最初の1回だけ★（2026-08-21・Codex依頼246の指摘2）
         #   呼ぶたびに上書きしていたので、
         #     ①書き始める ②新しい重大案件を見つけて台帳へ登録する
@@ -930,6 +974,23 @@ def before_commit(task: str, slug: str, path: str = STATE_PATH) -> dict:
                     f"直す経路では {slug} 以外のファイルを一緒にコミットできません: "
                     + " / ".join(bad[:3])
                     + (f" ほか{len(bad) - 3}件" if len(bad) > 3 else ""))
+        else:
+            # ★ふつうの更新でも、別の機種のデータは混ぜない★
+            #   （2026-08-21・Codex依頼248の指摘2。直す経路にだけ付けていたので、
+            #     機種Aの関所を通しながら機種Bのデータを同じコミットへ入れられた。
+            #     Bの中身は誰も検査していない）
+            #   ★ふつうの更新は、その機種の外にも正当に触るものがある★
+            #     （machines.json・sitemap・service-worker・ハブページ）ので、
+            #     ★別の機種のデータだけを見る★（機種をまたぐ混入だけを止める）。
+            other = [x for x in _unrelated_changes(slug)
+                     if x.startswith("assets/data/machine-details/")
+                     or x.startswith("machines/")]
+            if other:
+                raise GuardError(
+                    f"{slug} の担当なのに、別の機種のファイルが混ざっています: "
+                    + " / ".join(other[:3])
+                    + (f" ほか{len(other) - 3}件" if len(other) > 3 else "")
+                    + " → 分けてコミットしてください")
         # ★知らない段階なら止める★（fail-closed）
         if a["stage"] not in set(WRITABLE_STAGES) | set(FROZEN_STAGES) | {"READY"}:
             raise GuardError(f"直したあとの段階が想定外です: {a['stage']}")
@@ -1349,9 +1410,12 @@ def selftest() -> int:
                 if i == 0:
                     t(f"　{REPAIR_FAIL_LIMIT - 1}日目ではまだ休まない",
                       repair_cooldown("kabaneri", fp7)[0] is False)
-                # 翌日にする（同じ日に何度呼んでも1回、が効いているため）
+                # ★「昨日」にする★（同じ日に何度呼んでも1回、が効いているため）
+                #   ★日が飛ぶと数え直される★ので、必ず前日にする（依頼248の指摘4）
                 _d = _load(fp7)
-                _repair_book(_d)["kabaneri"]["last_fail_date"] = "2000-01-0%d" % (i + 1)
+                _yesterday = (datetime.strptime(_today(), "%Y-%m-%d")
+                              - timedelta(days=1)).strftime("%Y-%m-%d")
+                _repair_book(_d)["kabaneri"]["last_fail_date"] = _yesterday
                 _save(fp7, _d)
             t("★★続けて直せなければ休みに入る★★", repair_cooldown("kabaneri", fp7)[0])
             t("★★休み中は担当できない（枠は使わない）★★",
@@ -1421,12 +1485,70 @@ def selftest() -> int:
             fpA = os.path.join(tmpdir, "guard_two.json")
             claim("t8", "aaa", fpA, repairing=True, issues=["1"])
             before_write("t8", "aaa", fpA, repairing=True)
+            # ★1日の上限に関係なく、機種を切り替えたときの守りを見る試験★
+            #   （上限が1でも3でも、この守りは同じように効かなければならない）
+            _dA = _load(fpA)
+            _day(_dA)["slugs_today"] = []
+            _save(fpA, _dA)
             claim("t8", "bbb", fpA, repairing=True, issues=["1"])
             t("★★2機種目は before-write を呼ばないとコミットできない★★",
               raises(lambda: before_commit("t8", "bbb", fpA), "記録がありません"))
             before_write("t8", "bbb", fpA, repairing=True)
             t("　2機種目も before-write を通せばコミットできる",
               before_commit("t8", "bbb", fpA)["stage"] == "IDENTITY_PENDING")
+
+            # --- ★修理モードは担当のあと変えられない★（依頼248の指摘1・対照実験）
+            fpD = os.path.join(tmpdir, "guard_mode.json")
+
+            def _two(slug, repairing=False):
+                return {"stage": "IDENTITY_PENDING", "reasons": [],
+                        "ledger_blocking": ["#1 ひとつめ", "#2 ふたつめ"]}
+
+            cp.assess = _two
+            claim("tB", "kabaneri", fpD, repairing=True, issues=["1"])
+            before_write("tB", "kabaneri", fpD, repairing=True)
+            t("★★--repairing なしで呼び直して通常モードへ落とせない★★",
+              raises(lambda: before_write("tB", "kabaneri", fpD), "違う呼び方"))
+            t("★担当中に案件を差し替えられない★",
+              raises(lambda: claim("tB", "kabaneri", fpD, repairing=True,
+                                   issues=["2"]), "案件を変えられません"))
+            # ふつうに担当した機種へ、あとから --repairing は付けられない
+            _dD = _load(fpD)
+            _day(_dD)["slugs_today"] = []
+            _save(fpD, _dD)
+            claim("tC", "hokuto", fpD)
+            t("　ふつうに担当した機種に --repairing は付けられない",
+              raises(lambda: before_write("tC", "hokuto", fpD, repairing=True),
+                     "違う呼び方"))
+            cp.assess = _fake_assess
+
+            # --- ★日が飛んだら「続けて」ではない★（依頼248の指摘4）
+            fpE = os.path.join(tmpdir, "guard_gap.json")
+            record_repair("zzz_gap", False, fpE, why="決められなかった")
+            _dE = _load(fpE)
+            _repair_book(_dE)["zzz_gap"]["last_fail_date"] = "2026-08-01"
+            _save(fpE, _dE)
+            record_repair("zzz_gap", False, fpE, why="ずっとあとの日にまた失敗")
+            t("★★日が飛んでいたら数え直す（休みに入らない）★★",
+              repair_cooldown("zzz_gap", fpE)[0] is False)
+            t("　数え直されている", _load(fpE)["repair"]["zzz_gap"]["fails"] == 1)
+
+            # --- ★ふつうの経路でも別機種のデータは混ぜられない★（依頼248の指摘2）
+            fpF = os.path.join(tmpdir, "guard_mix.json")
+            cp.assess = lambda s, **k: {"stage": "IDENTITY_PENDING", "reasons": [],
+                                        "ledger_blocking": []}
+            claim("tD", "kabaneri", fpF)
+            before_write("tD", "kabaneri", fpF)
+            globals()["_unrelated_changes"] = lambda s: [
+                "assets/data/machine-details/hokuto.json", "sitemap.xml"]
+            t("★★ふつうの更新でも、別機種のデータが混ざっていたら止める★★",
+              raises(lambda: before_commit("tD", "kabaneri", fpF), "別の機種のファイル"))
+            globals()["_unrelated_changes"] = lambda s: ["sitemap.xml",
+                                                        "service-worker.js"]
+            t("　その機種の外でも、機種データでなければ通る（sitemap等）",
+              before_commit("tD", "kabaneri", fpF)["stage"] == "IDENTITY_PENDING")
+            globals()["_unrelated_changes"] = lambda s: []
+            cp.assess = _fake_assess
 
             # --- ★直す経路は、結果を記録しないと終われない★（依頼247の防御2）
             fpC = os.path.join(tmpdir, "guard_done.json")
@@ -1582,8 +1704,13 @@ def main() -> int:
         #   手で渡させると忘れるので、そのとき止めている案件をここで引く。
         try:
             _ids = _issue_ids(cp.assess(args.slug, repairing=True).get("ledger_blocking"))
-        except Exception:                                    # noqa: BLE001
-            _ids = set()
+        except Exception as _e:                              # noqa: BLE001
+            # ★控えが取れないまま休みに入れない★（2026-08-21・依頼248の指摘4）
+            #   空集合で控えると、あとで新しい重大案件が来ても休みが解けない
+            #   （＝公開済みの誤情報の修正が最大7日遅れる）。
+            print(f"★案件の控えを取れませんでした（{type(_e).__name__}）★")
+            print("  この状態では記録しません。原因を直してから、もう一度実行してください")
+            return 3
         print(json.dumps(record_repair(args.slug, args.fixed == "yes",
                                        why=args.why, issues=_ids),
                          ensure_ascii=False, indent=1))
