@@ -605,6 +605,21 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
         #   以前はタスクごとに数えていたので、**タスク名を変えれば**
         #   同じ日に何機種でも担当できた。
         d = _day(data)
+        # ★★別の機種に移ったら、前の機種の関所の記録を必ず捨てる★★
+        #   （2026-08-21・Codex依頼247の指摘1。1日3機種にした瞬間に生きた穴）
+        #   記録はタスク単位で1つしかないので、機種を変えても
+        #   mutation_started / stage_before / ledger_before / repairing が残り、
+        #   ★2機種目は before-write を呼ばなくてもコミットの関所を通れた★
+        #   （実際に再現した）。さらに ledger_before は最初の1回しか書かないので、
+        #   1機種目の案件番号と2機種目を比べてしまう。
+        #   ★捨てるのは、下で新しい記録を書く前★（順番を逆にすると消してしまう）
+        _e0 = _entry(data, task)
+        if _e0.get("guard_slug") and _e0.get("guard_slug") != slug:
+            for _k in ("mutation_started", "stage_before", "ledger_before",
+                       "repairing", "repair_issues", "final_stage"):
+                _e0.pop(_k, None)
+        _e0["guard_slug"] = slug
+
         # ★数を数える★（2026-08-21・MACHINES_PER_DAY を 1 → 3 にしたときに直した）
         #   それまでは「今日の担当は1つ」という書き方で**数えていなかった**ので、
         #   設定値を増やしても文言が変わるだけで挙動は1機種のままだった。
@@ -613,7 +628,9 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
             # ★休み中の機種は担当させない★（2026-08-21・依頼246の防御4）
             #   記録するだけでは守れないので、ここで実際に断る。
             #   ★枠は使わない★＝呼び出し側は次の候補へ進める。
-            resting, why_rest = repair_cooldown(slug, path)
+            # ★いま止めている案件を渡す★＝新しい案件が来ていれば休みが解ける
+            _now_ids = _issue_ids(cp.assess(slug, repairing=True).get("ledger_blocking"))
+            resting, why_rest = repair_cooldown(slug, path, issues=_now_ids)
             if resting:
                 raise GuardError(why_rest + "。枠は使っていないので、次の候補を選んでください")
             # ★どの案件を直すのかを言わせる★（2026-08-21・Codex依頼246の指摘3）
@@ -679,11 +696,17 @@ def _repair_book(data: dict) -> dict:
     return data.setdefault("repair", {})
 
 
-def repair_cooldown(slug: str, path: str = STATE_PATH) -> tuple[bool, str]:
+def repair_cooldown(slug: str, path: str = STATE_PATH, issues=None) -> tuple[bool, str]:
     """その機種はいま休み中か。戻り値 (休み中か, 理由)。
 
     ★数えるのは「材料が揃っても直せなかった」回数だけ★（依頼246の防御4）
       通信の失敗・ロック待ち・Codexの利用制限は数えない（呼び出し側が渡さない）。
+
+    ★新しい案件が出たら休みは解ける★（2026-08-21・依頼247の指摘4）
+      休みは slug 単位なので、#100 の空振りで休んでいる間に
+      新しい誤情報の案件 #200 が同じ機種へ来ても、最大7日直せなかった。
+      **公開済みの記事を直すための経路でそれは実害**なので、
+      休みに入った時点の案件より新しいものが来たら解く。
     """
     data = _load(path)
     rec = _repair_book(data).get(slug) or {}
@@ -691,14 +714,22 @@ def repair_cooldown(slug: str, path: str = STATE_PATH) -> tuple[bool, str]:
     if not until:
         return False, ""
     today = _today()
-    if str(until) > today:
-        return True, (f"{slug} は {until} まで休みです"
-                      f"（続けて {rec.get('fails', 0)} 回直せませんでした）")
-    return False, ""
+    if str(until) <= today:
+        return False, ""
+    known = set(rec.get("issues") or [])
+    now_ids = set(issues or [])
+    # ★何を見て休みに入ったか分からないときは解かない★
+    #   （控えが空だと「いまある案件は全部新しい」に見えて、休みが無意味になる）
+    fresh = (now_ids - known) if known else set()
+    if fresh:
+        return False, (f"新しい案件（{' / '.join('#%d' % n for n in sorted(fresh))}）"
+                       "が来たので休みを解きます")
+    return True, (f"{slug} は {until} まで休みです"
+                  f"（続けて {rec.get('fails', 0)} 回直せませんでした）")
 
 
 def record_repair(slug: str, fixed: bool, path: str = STATE_PATH,
-                  why: str = "") -> dict:
+                  why: str = "", issues=None) -> dict:
     """直せたか直せなかったかを記録する。★直せたら回数は0に戻す★
 
     fixed=True  … 何かしら前へ進んだ（回数を0に戻し、休みも解除）
@@ -709,13 +740,23 @@ def record_repair(slug: str, fixed: bool, path: str = STATE_PATH,
         book = _repair_book(data)
         rec = book.setdefault(slug, {"fails": 0, "cooldown_until": None, "why": ""})
         if fixed:
-            rec.update({"fails": 0, "cooldown_until": None, "why": ""})
+            rec.update({"fails": 0, "cooldown_until": None, "why": "", "issues": []})
+        elif rec.get("last_fail_date") == _today():
+            # ★同じ日に何度呼んでも1回★（2026-08-21・依頼247の防御1）
+            #   仕様は「2**日**続けて直せなかったら」。呼んだ回数ではない。
+            #   直す前は、同じ晩に2回記録するだけで休みに入れた。
+            rec["why"] = why[:200]
         else:
             rec["fails"] = int(rec.get("fails") or 0) + 1
             rec["why"] = why[:200]
+            rec["last_fail_date"] = _today()
             if rec["fails"] >= REPAIR_FAIL_LIMIT:
                 until = datetime.now() + timedelta(days=REPAIR_COOLDOWN_DAYS)
                 rec["cooldown_until"] = until.strftime("%Y-%m-%d")
+                # ★休みに入った時点で見ていた案件を控える★
+                #   これより新しい案件が来たら休みを解く（依頼247の指摘4）
+                rec["issues"] = sorted({int(x) for x in (issues or [])
+                                        if str(x).strip().isdigit()})
         rec["last_seen"] = _today()
         _save(path, data)
         return dict(rec)
@@ -742,10 +783,14 @@ def _unrelated_changes(slug: str) -> list:
         name = line[3:].strip().strip('"')
         if not name:
             continue
-        if " -> " in name:                 # 名前の変更
-            name = name.split(" -> ", 1)[1]
-        if not any(name.startswith(a) for a in allow):
-            out.append(name)
+        # ★名前の変更は「移動元」も見る★（2026-08-21・依頼247の指摘3）
+        #   移動先だけ見ていたので、`R 別機種/index.html -> 対象機種/index.html`
+        #   のように**別機種のファイルを消して流用する**変更が同じコミットに入れた。
+        names = [x.strip().strip('"') for x in name.split(" -> ")] if " -> " in name \
+            else [name]
+        for nm in names:
+            if nm and not any(nm.startswith(a) for a in allow):
+                out.append(nm)
     return out
 
 
@@ -763,6 +808,10 @@ def before_write(task: str, slug: str, path: str = STATE_PATH,
         e = _entry(data, task)
         if e["target_slug"] != slug:
             raise GuardError(f"今日の担当は {e['target_slug']} です（{slug} ではありません）")
+        # ★関所の記録がこの機種のものか確かめる★（依頼247の指摘1）
+        if e.get("guard_slug") != slug:
+            raise GuardError(
+                f"{slug} の担当を確保していません（記録は {e.get('guard_slug')!r} のものです）")
         a = cp.assess(slug, repairing=repairing)
         e["repairing"] = bool(repairing)
         # ★基準は最初の1回だけ★（2026-08-21・Codex依頼246の指摘2）
@@ -802,6 +851,12 @@ def before_commit(task: str, slug: str, path: str = STATE_PATH) -> dict:
         # ★書き換えを始めた記録が無ければコミットさせない★
         #   （2026-08-05・Codex113回目の指摘5。before-write を通らずに
         #     コミットへ来た場合、悪化していないかを比べる基準が無い）
+        # ★その記録がこの機種のものであること★（依頼247の指摘1）
+        #   これが無いと、1機種目の記録で2機種目のコミットが通った。
+        if e.get("guard_slug") != slug:
+            raise GuardError(
+                f"{slug} の関所の記録がありません（記録は {e.get('guard_slug')!r} のものです）"
+                "＝コミットさせません")
         if not e.get("mutation_started") or not e.get("stage_before"):
             raise GuardError(
                 f"{slug} は書き換えを始めた記録がありません"
@@ -820,6 +875,25 @@ def before_commit(task: str, slug: str, path: str = STATE_PATH) -> dict:
                     f"直した結果、台帳の止める案件が増えました（{len(grew)}件）: "
                     + " / ".join(f"#{n}" for n in sorted(grew)[:3])
                     + " → コミットせず、変更を戻すか台帳で扱ってください")
+            # ★直すと言った案件が、いまも「直す対象」であること★（依頼247の指摘2）
+            #   番号を控えるだけで一度も見ていなかったので、
+            #   指定した案件と無関係な変更でも通り得た。
+            #   ★機械が言えるのはここまで★＝
+            #     「その案件がまだ生きている（＝直したと称して消えていない）」
+            #     「案件が増えていない」「その機種のファイルしか触っていない」。
+            #   ★中身がその案件の修理かどうかは2AIの領分★（機械では決めない）。
+            said = set(e.get("repair_issues") or [])
+            if not said:
+                raise GuardError(
+                    f"{slug} は直す案件が控えられていません"
+                    "（--repairing で claim し直してください）")
+            gone = said - after_ids
+            if gone:
+                # ★無人タスクは台帳を閉じない★＝消えていたら、想定外のことが起きている
+                raise GuardError(
+                    "直すと言った案件が台帳から消えています: "
+                    + " / ".join(f"#{n}" for n in sorted(gone))
+                    + "（無人タスクは台帳を閉じません。コミットせずに終わってください）")
             # ★直すと言った案件と関係ないファイルを載せない★（依頼246の指摘3）
             #   これが無いと「CRITICALが1件でもある機種なら何を書き換えてもよい」
             #   という許可証になる。触ってよいのはその機種のものだけ。
@@ -1141,6 +1215,8 @@ def selftest() -> int:
             globals()["_unrelated_changes"] = lambda s: []
             t("★ふつうに入ると、いままでどおり止まる★",
               raises(lambda: before_write("t2", "hokuto", fp), "触ってはいけない"))
+            # ★直す経路は「どの案件を直すか」を控えてから★（依頼247の指摘2）
+            claim("t2", "hokuto", fp, repairing=True, issues=["1"])
             got = before_write("t2", "hokuto", fp, repairing=True)
             t("★直す経路なら書き込みへ進める★", got["stage"] == "IDENTITY_PENDING")
             t("★飛ばしたことが判定側にも伝わっている★", calls.get("repairing") is True)
@@ -1224,11 +1300,19 @@ def selftest() -> int:
             # --- ★空振りが続いたら休ませる（依頼246の防御4）★
             fp7 = os.path.join(tmpdir, "guard_cool.json")
             t("　はじめは休みではない", repair_cooldown("kabaneri", fp7)[0] is False)
-            record_repair("kabaneri", False, fp7, why="材料が揃わなかった")
-            t(f"　{REPAIR_FAIL_LIMIT - 1}回目ではまだ休まない",
-              repair_cooldown("kabaneri", fp7)[0] is False)
-            for _ in range(REPAIR_FAIL_LIMIT - 1):
-                record_repair("kabaneri", False, fp7, why="また直せなかった")
+            # ★数えるのは「日」なので、日をまたがせて試す★（依頼247の防御1）
+            #   ★理由の文も仕様どおりに★＝記録するのは
+            #   「材料が揃っても直せなかった」ときだけ（材料不足は記録しない）
+            for i in range(REPAIR_FAIL_LIMIT):
+                record_repair("kabaneri", False, fp7,
+                              why="材料は揃ったが、どちらが正しいか決められなかった")
+                if i == 0:
+                    t(f"　{REPAIR_FAIL_LIMIT - 1}日目ではまだ休まない",
+                      repair_cooldown("kabaneri", fp7)[0] is False)
+                # 翌日にする（同じ日に何度呼んでも1回、が効いているため）
+                _d = _load(fp7)
+                _repair_book(_d)["kabaneri"]["last_fail_date"] = "2000-01-0%d" % (i + 1)
+                _save(fp7, _d)
             t("★★続けて直せなければ休みに入る★★", repair_cooldown("kabaneri", fp7)[0])
             t("★★休み中は担当できない（枠は使わない）★★",
               raises(lambda: claim("t7", "kabaneri", fp7, repairing=True,
@@ -1238,11 +1322,76 @@ def selftest() -> int:
             t("　直せたら回数も0に戻る",
               (_load(fp7)["repair"]["kabaneri"]["fails"]) == 0)
 
-            # ★本物の見張りが、いまの手元の変更を実際に見つけることも確かめる★
+            # --- ★名前の変更は移動元も見る★（依頼247の指摘3）
+            #   ★`or True` を付けた書き方をやめた★＝何が起きても合格していた。
+            #   実際のパーサーに、gitの出力の形をそのまま食わせる。
             globals()["_unrelated_changes"] = _keep_unrel0
-            t("★本物の見張りは、その機種以外の変更を実際に見つける★",
-              any(not x.startswith("assets/data/machine-details/kabaneri")
-                  for x in _unrelated_changes("kabaneri")) or True)
+            _keep_run = subprocess.run
+
+            class _R:
+                returncode = 0
+                stdout = ("R  machines/other/index.html -> machines/target/index.html\n"
+                          " M assets/data/machine-details/target.json\n"
+                          " M scripts/nazono.py\n")
+
+            try:
+                subprocess.run = lambda *a, **k: _R()
+                bad2 = _unrelated_changes("target")
+                t("★★名前の変更は移動元も見つける★★",
+                  "machines/other/index.html" in bad2)
+                t("　移動先が対象内なら、そこは挙げない",
+                  "machines/target/index.html" not in bad2)
+                t("　その機種の記事データは挙げない",
+                  "assets/data/machine-details/target.json" not in bad2)
+                t("　関係ないスクリプトは挙げる", "scripts/nazono.py" in bad2)
+            finally:
+                subprocess.run = _keep_run
+            globals()["_unrelated_changes"] = lambda s: []
+
+            # --- ★同じ日に何度呼んでも1回★（依頼247の防御1）
+            fp8 = os.path.join(tmpdir, "guard_day.json")
+            for _ in range(5):
+                record_repair("zzz_same_day", False, fp8, why="材料が揃っても決められない")
+            t("★★同じ日に何回記録しても休みには入らない★★",
+              repair_cooldown("zzz_same_day", fp8)[0] is False)
+            t("　数えているのは日数（呼んだ回数ではない）",
+              _load(fp8)["repair"]["zzz_same_day"]["fails"] == 1)
+
+            # --- ★新しい案件が来たら休みは解ける★（依頼247の指摘4）
+            fp9 = os.path.join(tmpdir, "guard_fresh.json")
+            data9 = _load(fp9)
+            _repair_book(data9)["zzz_rest"] = {
+                "fails": 2, "cooldown_until": "2099-12-31", "issues": [100]}
+            _save(fp9, data9)
+            t("　同じ案件のままなら休み",
+              repair_cooldown("zzz_rest", fp9, issues={100})[0])
+            t("★★新しい案件が来たら休みが解ける★★",
+              repair_cooldown("zzz_rest", fp9, issues={100, 200})[0] is False)
+
+            # --- ★別の機種に移ったら前の記録を捨てる★（依頼247の指摘1・対照実験）
+            fpA = os.path.join(tmpdir, "guard_two.json")
+            claim("t8", "aaa", fpA, repairing=True, issues=["1"])
+            before_write("t8", "aaa", fpA, repairing=True)
+            claim("t8", "bbb", fpA, repairing=True, issues=["1"])
+            t("★★2機種目は before-write を呼ばないとコミットできない★★",
+              raises(lambda: before_commit("t8", "bbb", fpA), "記録がありません"))
+            before_write("t8", "bbb", fpA, repairing=True)
+            t("　2機種目も before-write を通せばコミットできる",
+              before_commit("t8", "bbb", fpA)["stage"] == "IDENTITY_PENDING")
+
+            # --- ★直すと言った案件が消えていたら止める★（依頼247の指摘2）
+            fpB = os.path.join(tmpdir, "guard_said.json")
+            claim("t9", "kabaneri", fpB, repairing=True, issues=["1"])
+            before_write("t9", "kabaneri", fpB, repairing=True)
+
+            def _closed(slug, repairing=False):
+                return {"stage": "IDENTITY_PENDING", "reasons": [],
+                        "ledger_blocking": []}       # ★#1 が消えた★
+
+            cp.assess = _closed
+            t("★★直すと言った案件が台帳から消えていたら止める★★",
+              raises(lambda: before_commit("t9", "kabaneri", fpB), "消えています"))
+            cp.assess = _fake_assess
         finally:
             cp.assess = _real_assess
             # ★差し替えた見張りを必ず戻す★（試験のあとに本番の関所が緩まないように）
@@ -1368,8 +1517,15 @@ def main() -> int:
     elif args.cmd == "done":
         print(json.dumps(done(args.task, args.slug, args.stage), ensure_ascii=False, indent=1))
     elif args.cmd == "repaired":
+        # ★休みに入るときは「何を見ていたか」を控える★（依頼247の指摘4）
+        #   手で渡させると忘れるので、そのとき止めている案件をここで引く。
+        try:
+            _ids = _issue_ids(cp.assess(args.slug, repairing=True).get("ledger_blocking"))
+        except Exception:                                    # noqa: BLE001
+            _ids = set()
         print(json.dumps(record_repair(args.slug, args.fixed == "yes",
-                                       why=args.why), ensure_ascii=False, indent=1))
+                                       why=args.why, issues=_ids),
+                         ensure_ascii=False, indent=1))
     elif args.cmd == "cooldown":
         resting, why = repair_cooldown(args.slug)
         print(json.dumps({"slug": args.slug, "resting": resting, "why": why},
