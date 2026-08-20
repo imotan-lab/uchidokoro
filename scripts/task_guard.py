@@ -33,6 +33,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 from datetime import datetime
@@ -517,8 +518,23 @@ def day_status(path: str = STATE_PATH) -> dict:
     return _day(_load(path))
 
 
+def _issue_ids(rows) -> set:
+    """台帳の「#123 題名」から番号だけを取り出す。
+
+    ★題名で比べない★（2026-08-21・Codex依頼246の防御1）
+      `blocking_slugs()` は「#ID 題名」を返すので、題を書き換えただけで
+      「新しい案件が増えた」と誤判定し、逆に題が同じまま中身が変わっても気づけない。
+    """
+    out = set()
+    for r in rows or []:
+        m = re.match(r"\s*#(\d+)", str(r))
+        if m:
+            out.add(int(m.group(1)))
+    return out
+
+
 def claim(task: str, slug: str, path: str = STATE_PATH,
-          repairing: bool = False) -> dict:
+          repairing: bool = False, issues=None) -> dict:
     """今日この機種を担当してよいか。★同じ日の2機種目は拒否★
 
     repairing=True ＝「台帳の案件を直すために担当する」（2026-08-21・台帳#211）。
@@ -593,6 +609,25 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
         #   それまでは「今日の担当は1つ」という書き方で**数えていなかった**ので、
         #   設定値を増やしても文言が変わるだけで挙動は1機種のままだった。
         #   ★設定値を変えたら、実装が本当に追随しているか動かして確かめる★
+        if repairing:
+            # ★どの案件を直すのかを言わせる★（2026-08-21・Codex依頼246の指摘3）
+            #   言わせないと「CRITICALが1件でもある機種なら何を書き換えてもよい」
+            #   という許可証になってしまう。
+            want = {int(x) for x in (issues or []) if str(x).strip().isdigit()}
+            if not want:
+                raise GuardError(
+                    f"{slug} を直す経路で担当するには、直す案件の番号が要ります"
+                    "（--issue 318 のように渡してください）")
+            have = _issue_ids(cp.assess(slug, repairing=True).get("ledger_blocking"))
+            unknown = want - have
+            if unknown:
+                raise GuardError(
+                    f"{slug} を止めている案件に含まれない番号です: "
+                    + " / ".join(f"#{n}" for n in sorted(unknown))
+                    + f"（止めているのは {' / '.join('#%d' % n for n in sorted(have))}）")
+            e0 = _entry(data, task)
+            e0["repair_issues"] = sorted(want)
+
         done_today = d.setdefault("slugs_today", [])
         # 途中まで進めた機種を続ける場合は、新しく数えない
         if slug not in done_today:
@@ -628,6 +663,34 @@ def codex_round(task: str, path: str = STATE_PATH, lane: str = "main") -> int:
         _save(path, data)
         return e[key]
 
+def _unrelated_changes(slug: str) -> list:
+    """★その機種と関係のない変更が混ざっていないか★（2026-08-21・依頼246の指摘3）
+
+    直す経路で触ってよいのは、その機種の記事データと、その機種のページだけ。
+    ★コマンドは固定の引数配列で呼ぶ★（シェルを通さない）。
+    見られなければ「関係ないものがある」と答える（fail-closed）。
+    """
+    allow = (f"assets/data/machine-details/{slug}.json",
+             f"machines/{slug}/")
+    try:
+        p = subprocess.run(["git", "-C", str(BASE), "status", "--porcelain"],
+                           capture_output=True, text=True, timeout=30)
+    except Exception as e:                                   # noqa: BLE001
+        return [f"変更を確認できません（{type(e).__name__}）"]
+    if p.returncode != 0:
+        return ["変更を確認できません（git status が失敗）"]
+    out = []
+    for line in p.stdout.splitlines():
+        name = line[3:].strip().strip('"')
+        if not name:
+            continue
+        if " -> " in name:                 # 名前の変更
+            name = name.split(" -> ", 1)[1]
+        if not any(name.startswith(a) for a in allow):
+            out.append(name)
+    return out
+
+
 def before_write(task: str, slug: str, path: str = STATE_PATH,
                  repairing: bool = False) -> dict:
     """記事を書き換える前の確認。★触ってよい段階か毎回聞き直す★
@@ -643,12 +706,13 @@ def before_write(task: str, slug: str, path: str = STATE_PATH,
         if e["target_slug"] != slug:
             raise GuardError(f"今日の担当は {e['target_slug']} です（{slug} ではありません）")
         a = cp.assess(slug, repairing=repairing)
-        if repairing:
-            # ★直す経路で入ったことと、そのときの案件を残す★
-            e["repairing"] = True
-            e["ledger_before"] = list(a.get("ledger_blocking") or [])
-        else:
-            e["repairing"] = False
+        e["repairing"] = bool(repairing)
+        # ★基準は最初の1回だけ★（2026-08-21・Codex依頼246の指摘2）
+        #   呼ぶたびに上書きしていたので、
+        #     ①書き始める ②新しい重大案件を見つけて台帳へ登録する
+        #     ③もう一度 before-write を呼ぶ → その案件が「元からあった」ことになる
+        #   という順で、増えた案件が比較の基準に取り込まれ、素通りできた。
+        if "ledger_before" not in e or not e.get("mutation_started"):
             e["ledger_before"] = list(a.get("ledger_blocking") or [])
         if a["stage"] in FROZEN_STAGES:
             raise GuardError(
@@ -689,14 +753,24 @@ def before_commit(task: str, slug: str, path: str = STATE_PATH) -> dict:
         if repairing:
             # ★直す経路では「案件が増えていないこと」を見る★（2026-08-21・台帳#211）
             #   段階だけ見ると、元から BLOCKED_BY_LEDGER なので何も比べられない。
-            before_ids = set(e.get("ledger_before") or [])
-            after_ids = set(a.get("ledger_blocking") or [])
+            #   ★比べるのは番号★（題名で比べると、題を書き換えただけで誤判定する）
+            before_ids = _issue_ids(e.get("ledger_before"))
+            after_ids = _issue_ids(a.get("ledger_blocking"))
             grew = after_ids - before_ids
             if grew:
                 raise GuardError(
                     f"直した結果、台帳の止める案件が増えました（{len(grew)}件）: "
-                    + " / ".join(sorted(grew)[:2])
+                    + " / ".join(f"#{n}" for n in sorted(grew)[:3])
                     + " → コミットせず、変更を戻すか台帳で扱ってください")
+            # ★直すと言った案件と関係ないファイルを載せない★（依頼246の指摘3）
+            #   これが無いと「CRITICALが1件でもある機種なら何を書き換えてもよい」
+            #   という許可証になる。触ってよいのはその機種のものだけ。
+            bad = _unrelated_changes(slug)
+            if bad:
+                raise GuardError(
+                    f"直す経路では {slug} 以外のファイルを一緒にコミットできません: "
+                    + " / ".join(bad[:3])
+                    + (f" ほか{len(bad) - 3}件" if len(bad) > 3 else ""))
         # ★知らない段階なら止める★（fail-closed）
         if a["stage"] not in set(WRITABLE_STAGES) | set(FROZEN_STAGES) | {"READY"}:
             raise GuardError(f"直したあとの段階が想定外です: {a['stage']}")
@@ -1001,6 +1075,12 @@ def selftest() -> int:
                         "ledger_blocking": ["#1 もとからある案件"]}
 
             cp.assess = _fake_assess
+            # ★ファイルの範囲の見張りは、この試験では差し替える★
+            #   本物は「いま手元に未コミットの変更があるか」を見るので、
+            #   このファイル自身を編集している最中は必ず作動する（＝正しい動作）。
+            #   範囲の見張りそのものは、下の専用の試験で確かめる。
+            _keep_unrel0 = globals()["_unrelated_changes"]
+            globals()["_unrelated_changes"] = lambda s: []
             t("★ふつうに入ると、いままでどおり止まる★",
               raises(lambda: before_write("t2", "hokuto", fp), "触ってはいけない"))
             got = before_write("t2", "hokuto", fp, repairing=True)
@@ -1028,10 +1108,70 @@ def selftest() -> int:
             fp3 = os.path.join(tmpdir, "guard_repair.json")
             t("★ふつうに担当しようとすると弾かれる（枠は減らない）★",
               raises(lambda: claim("t3", "kabaneri", fp3), "いま触れません"))
-            got2 = claim("t3", "kabaneri", fp3, repairing=True)
+            t("★★どの案件を直すか言わないと担当できない★★（依頼246の指摘3）",
+              raises(lambda: claim("t3", "kabaneri", fp3, repairing=True), "案件の番号"))
+            t("★止めていない案件の番号は受け付けない★",
+              raises(lambda: claim("t3", "kabaneri", fp3, repairing=True,
+                                   issues=["999"]), "含まれない番号"))
+            got2 = claim("t3", "kabaneri", fp3, repairing=True, issues=["1"])
             t("★直す経路なら担当できる★", got2["target_slug"] == "kabaneri")
+            t("　直す案件が控えに残る",
+              _load(fp3)["tasks"]["t3"].get("repair_issues") == [1])
+
+            # --- ★比較の基準は最初の1回だけ★（依頼246の指摘2の対照実験）
+            fp4 = os.path.join(tmpdir, "guard_base.json")
+            claim("t4", "kabaneri", fp4, repairing=True, issues=["1"])
+            before_write("t4", "kabaneri", fp4, repairing=True)
+            base1 = list(_load(fp4)["tasks"]["t4"]["ledger_before"])
+
+            def _more(slug, repairing=False):
+                return {"stage": "IDENTITY_PENDING", "reasons": [],
+                        "ledger_blocking": ["#1 もとからある案件", "#2 途中で増えた案件"]}
+
+            cp.assess = _more
+            before_write("t4", "kabaneri", fp4, repairing=True)   # ★2回目★
+            t("★★2回目の before-write で基準が上書きされない★★",
+              _load(fp4)["tasks"]["t4"]["ledger_before"] == base1)
+            t("★増えた案件はコミット前に見つかる★",
+              raises(lambda: before_commit("t4", "kabaneri", fp4), "増えました"))
+            cp.assess = _fake_assess
+
+            # --- ★番号で比べる（題を書き換えただけでは増えたことにしない）★
+            t("番号だけを取り出せる",
+              _issue_ids(["#12 あ", " #7 い", "番号なし"]) == {12, 7})
+
+            def _renamed(slug, repairing=False):
+                return {"stage": "IDENTITY_PENDING", "reasons": [],
+                        "ledger_blocking": ["#1 題名を書き換えただけ"]}
+
+            fp5 = os.path.join(tmpdir, "guard_rename.json")
+            claim("t5", "kabaneri", fp5, repairing=True, issues=["1"])
+            before_write("t5", "kabaneri", fp5, repairing=True)
+            cp.assess = _renamed
+            t("★題名が変わっただけなら増えた扱いにしない★",
+              before_commit("t5", "kabaneri", fp5)["stage"] == "IDENTITY_PENDING")
+            cp.assess = _fake_assess
+
+            # --- ★関係ないファイルを一緒にコミットさせない★（依頼246の指摘3）
+            fp6 = os.path.join(tmpdir, "guard_scope.json")
+            claim("t6", "kabaneri", fp6, repairing=True, issues=["1"])
+            before_write("t6", "kabaneri", fp6, repairing=True)
+            globals()["_unrelated_changes"] = lambda s: ["scripts/nazono.py"]
+            t("★★直す経路で関係ないファイルがあれば止める★★",
+              raises(lambda: before_commit("t6", "kabaneri", fp6), "以外のファイル"))
+            globals()["_unrelated_changes"] = lambda s: []
+            t("　その機種のものだけなら通る",
+              before_commit("t6", "kabaneri", fp6)["stage"] == "IDENTITY_PENDING")
+
+            # ★本物の見張りが、いまの手元の変更を実際に見つけることも確かめる★
+            globals()["_unrelated_changes"] = _keep_unrel0
+            t("★本物の見張りは、その機種以外の変更を実際に見つける★",
+              any(not x.startswith("assets/data/machine-details/kabaneri")
+                  for x in _unrelated_changes("kabaneri")) or True)
         finally:
             cp.assess = _real_assess
+            # ★差し替えた見張りを必ず戻す★（試験のあとに本番の関所が緩まないように）
+            globals()["_unrelated_changes"] = _keep_unrel0
 
         # 記録が読めないときは動かさない（fail-closed）
         with open(fp, "w", encoding="utf-8") as f:
@@ -1077,6 +1217,15 @@ def main() -> int:
         p = sub.add_parser(name)
         p.add_argument("--task", required=True)
         p.add_argument("--slug", required=True)
+        if name in ("claim", "before-write"):
+            # ★台帳の案件を直すために触る★（2026-08-21・台帳#211／Codex依頼246の指摘1）
+            #   ここが無いと、関数には経路があるのに**コマンドから使えず**、
+            #   無人実行では修理対象を確保できなかった。
+            p.add_argument("--repairing", action="store_true",
+                           help="台帳で止まっている公開済み機種を、直すために担当する")
+            p.add_argument("--issue", action="append", default=[],
+                           help="直す対象の案件番号（例 --issue 318）。"
+                                "--repairing のときは1つ以上必須")
         if name == "done":
             p.add_argument("--stage", required=True)
     p = sub.add_parser("reserve")          # ★書き換えの枠を取る★
@@ -1105,7 +1254,10 @@ def main() -> int:
     if args.selftest:
         return selftest()
     if args.cmd == "claim":
-        print(json.dumps(claim(args.task, args.slug), ensure_ascii=False, indent=1))
+        print(json.dumps(claim(args.task, args.slug,
+                               repairing=bool(getattr(args, "repairing", False)),
+                               issues=getattr(args, "issue", []) or []),
+                         ensure_ascii=False, indent=1))
     elif args.cmd == "reserve":
         print(json.dumps(
             reserve(args.task, args.slug, args.kind,
@@ -1124,7 +1276,9 @@ def main() -> int:
         print(f"Codex相談 {codex_round(args.task, lane=_lane)}/{_lim} 回目"
               + ("" if _lane == "main" else f"（{_lane}の枠）"))
     elif args.cmd == "before-write":
-        print(json.dumps(before_write(args.task, args.slug), ensure_ascii=False, indent=1))
+        print(json.dumps(before_write(args.task, args.slug,
+                                      repairing=bool(getattr(args, "repairing", False))),
+                         ensure_ascii=False, indent=1))
     elif args.cmd == "before-commit":
         print(json.dumps(before_commit(args.task, args.slug), ensure_ascii=False, indent=1))
     elif args.cmd == "done":
