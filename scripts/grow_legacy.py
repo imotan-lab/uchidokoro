@@ -871,11 +871,30 @@ def run(slug: str, apply_it: bool, gather=None) -> dict:
     if gather is None:
         import add_machine_run as _amr
         gather = _amr.gather
-    got = gather(m["name"])
+    # ★★メーカーを名乗って材料を集める★★（2026-08-20・Codex依頼239）
+    #   ★穴だったところ★＝メーカーを渡していなかったので、
+    #   **メーカー欄の関門がまるごと働かず**、同名で別メーカーのページを
+    #   材料に採れた（同名別メーカーの機種は実在する）。
+    #   ★分からないなら集めない★（fail-closed）
+    _maker = str((m.get("identity") or {}).get("manufacturer_id") or "")
+    if not _maker:
+        return {"slug": slug,
+                "problems": ["メーカーが分からないので材料を集めません"
+                             "（identity.manufacturer_id がありません）"
+                             "／★メーカー欄の関門が働かないため★"]}
+    got = gather(m["name"], _maker, slug=slug)
     mat = got.get("material") or {}
     if not mat:
         return {"slug": slug, "problems": ["材料を集められません: "
                                            + " / ".join(got.get("problems") or [])[:160]]}
+    # ★★止める理由があるときは、材料があっても書かない★★
+    #   （2026-08-20・Codex依頼239）＝型式の食い違い等が出ていても、
+    #   材料さえあれば旧方式の記事を更新できてしまっていた。
+    import add_machine_run as _amr2
+    _blk = _amr2._blocking(got.get("problems") or [])
+    if _blk:
+        return {"slug": slug,
+                "problems": ["★止めました★ " + x for x in _blk]}
     path = os.path.join(DETAILS, f"{slug}.json")
     sha_before = _sha(path)
     detail = _sj.read_json(path, expect=dict)

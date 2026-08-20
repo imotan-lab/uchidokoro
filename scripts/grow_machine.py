@@ -749,7 +749,8 @@ def find_sources(machine: dict) -> list:
         return []
 
 
-def plan_one(slug: str, gather=None, verify=None, probe=None) -> dict:
+def plan_one(slug: str, gather=None, verify=None, probe=None,
+             find=None) -> dict:
     """育てられるか調べて、新しい機種データ・記事を作る（★書き込まない★）。
 
     ★指紋は「読む前」に取る★（2026-08-05・Codex103回目の指摘1）
@@ -813,7 +814,7 @@ def plan_one(slug: str, gather=None, verify=None, probe=None) -> dict:
     if probe is not False:
         _known = sorted((_probe_state().get(slug) or {}).get("urls") or [])
         if _known:
-            _now = sorted(find_sources(cur) or [])
+            _now = sorted((find or find_sources)(cur) or [])
             if _now and _now == _known:
                 _pr = (probe or _pp.check_all)(_known)
                 out["probe_rows"] = _pr.get("rows") or []
@@ -862,7 +863,16 @@ def plan_one(slug: str, gather=None, verify=None, probe=None) -> dict:
         return out
     # ② 材料を集め直す
     gather = gather or _amr.gather
-    got = gather(name, maker)
+    # ★★機種を名乗って材料を集める★★（2026-08-20・Codex依頼239）
+    #   ★穴だったところ★＝slug を渡していなかったので、
+    #   `maker_material_decision` が**機種ごとの控えを引かず**、
+    #   2AIが「このページは使わない」と決めた分が
+    #   更新経路では効いていなかった。名簿の変更でそのページが
+    #   MATCH になった瞬間、拒否を無視して材料に戻せた。
+    #   （新台経路は最初から渡している。更新経路だけ抜けていた）
+    got = gather(name, maker, slug=slug,
+                 machine_name=vo.get("identity_name") or name,
+                 release_date=str(vo.get("release") or ""))
     # ★次回の「軽い様子見」に使うため、見た出典URLを控える★
     #   （2026-08-13・台帳#346）ここで初めて確定するので、
     #   材料を集めたあとに控える。書けなくても処理は止めない。
@@ -1282,9 +1292,13 @@ def selftest() -> int:
     try:
         globals()["_file_sha"] = lambda p: (order.append("sha"), real_sha(p))[1]
         globals()["_read_rows"] = lambda: (order.append("rows"), real_rows())[1]
+        # ★★試験はネットへ出ない★★（2026-08-20）
+        #   出典探しだけ本物のままだったので、rate limit で待たされ
+        #   **自己試験そのものがハングして誰も回せなかった**。
         plan_one("garei_zero_re",
                  gather=lambda *a, **k: {"material": None, "problems": []},
-                 verify=lambda *a, **k: {"problems": [], "release": ""})
+                 verify=lambda *a, **k: {"problems": [], "release": ""},
+                 find=lambda *a, **k: [])
     finally:
         globals()["_file_sha"], globals()["_read_rows"] = real_sha, real_rows
     t("★★指紋を取り終えてから一覧を読んでいる★★（順番が戻ったら落ちる）",
