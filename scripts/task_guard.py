@@ -607,14 +607,28 @@ def codex_round(task: str, path: str = STATE_PATH, lane: str = "main") -> int:
         _save(path, data)
         return e[key]
 
-def before_write(task: str, slug: str, path: str = STATE_PATH) -> dict:
-    """記事を書き換える前の確認。★触ってよい段階か毎回聞き直す★"""
+def before_write(task: str, slug: str, path: str = STATE_PATH,
+                 repairing: bool = False) -> dict:
+    """記事を書き換える前の確認。★触ってよい段階か毎回聞き直す★
+
+    repairing=True ＝「台帳の案件を直すために触る」（2026-08-21・台帳#211）。
+    ★台帳による停止だけを飛ばす★（公開済みの記事に限る＝claim_pipeline.repairable）。
+    ★飛ばしても、そのとき台帳に何件あったかを記録する★＝
+      あとで「直した結果、案件が増えていないか」を比べるため。
+    """
     with _Exclusive(path):
         data = _load(path)
         e = _entry(data, task)
         if e["target_slug"] != slug:
             raise GuardError(f"今日の担当は {e['target_slug']} です（{slug} ではありません）")
-        a = cp.assess(slug)
+        a = cp.assess(slug, repairing=repairing)
+        if repairing:
+            # ★直す経路で入ったことと、そのときの案件を残す★
+            e["repairing"] = True
+            e["ledger_before"] = list(a.get("ledger_blocking") or [])
+        else:
+            e["repairing"] = False
+            e["ledger_before"] = list(a.get("ledger_blocking") or [])
         if a["stage"] in FROZEN_STAGES:
             raise GuardError(
                 f"{slug} は触ってはいけない段階です: {a['stage']} / "
@@ -649,7 +663,19 @@ def before_commit(task: str, slug: str, path: str = STATE_PATH) -> dict:
             raise GuardError(
                 f"{slug} は書き換えを始めた記録がありません"
                 "（before-write を通っていない＝コミットさせません）")
-        a = cp.assess(slug)
+        repairing = bool(e.get("repairing"))
+        a = cp.assess(slug, repairing=repairing)
+        if repairing:
+            # ★直す経路では「案件が増えていないこと」を見る★（2026-08-21・台帳#211）
+            #   段階だけ見ると、元から BLOCKED_BY_LEDGER なので何も比べられない。
+            before_ids = set(e.get("ledger_before") or [])
+            after_ids = set(a.get("ledger_blocking") or [])
+            grew = after_ids - before_ids
+            if grew:
+                raise GuardError(
+                    f"直した結果、台帳の止める案件が増えました（{len(grew)}件）: "
+                    + " / ".join(sorted(grew)[:2])
+                    + " → コミットせず、変更を戻すか台帳で扱ってください")
         # ★知らない段階なら止める★（fail-closed）
         if a["stage"] not in set(WRITABLE_STAGES) | set(FROZEN_STAGES) | {"READY"}:
             raise GuardError(f"直したあとの段階が想定外です: {a['stage']}")
@@ -912,16 +938,53 @@ def selftest() -> int:
         #   以前は `or True` が付いていて、何が起きても合格していた）
         _real_assess = cp.assess
         try:
-            cp.assess = lambda slug: {"stage": FROZEN_STAGES[0],
-                                      "reasons": ["試験"]}
+            # ★偽物は本番と同じ形で受け取る★（2026-08-21）
+            #   `repairing=` を足したとき、`lambda slug:` のままだと
+            #   TypeError で落ち、関所の判定を試験できていなかった。
+            cp.assess = lambda slug, **k: {"stage": FROZEN_STAGES[0],
+                                           "reasons": ["試験"]}
             t("★★止めるべき機種は触らせない★★",
               raises(lambda: before_write("t2", "hokuto", fp), "触ってはいけない"))
-            cp.assess = lambda slug: {"stage": "READY", "reasons": []}
+            cp.assess = lambda slug, **k: {"stage": "READY", "reasons": []}
             t("★すでに公開してよい機種は書き換えない★",
               raises(lambda: before_write("t2", "hokuto", fp), "理由がありません"))
-            cp.assess = lambda slug: {"stage": "でたらめ", "reasons": []}
+            cp.assess = lambda slug, **k: {"stage": "でたらめ", "reasons": []}
             t("★知らない段階なら書かない★",
               raises(lambda: before_write("t2", "hokuto", fp), "想定外"))
+
+            # --- ★直す経路（台帳#211・2026-08-21）★
+            #   台帳で止まっている機種でも、公開済みの記事なら直せる。
+            #   ただし「案件が増えたらコミットさせない」は必ず効くこと。
+            calls = {}
+
+            def _fake_assess(slug, repairing=False):
+                calls["repairing"] = repairing
+                if repairing:
+                    return {"stage": "IDENTITY_PENDING", "reasons": [],
+                            "ledger_blocking": ["#1 もとからある案件"]}
+                return {"stage": "BLOCKED_BY_LEDGER", "reasons": ["#1 もとからある案件"],
+                        "ledger_blocking": ["#1 もとからある案件"]}
+
+            cp.assess = _fake_assess
+            t("★ふつうに入ると、いままでどおり止まる★",
+              raises(lambda: before_write("t2", "hokuto", fp), "触ってはいけない"))
+            got = before_write("t2", "hokuto", fp, repairing=True)
+            t("★直す経路なら書き込みへ進める★", got["stage"] == "IDENTITY_PENDING")
+            t("★飛ばしたことが判定側にも伝わっている★", calls.get("repairing") is True)
+
+            # 案件が増えていなければコミットできる
+            ok = before_commit("t2", "hokuto", fp)
+            t("★案件が増えていなければコミットできる★",
+              ok["stage"] == "IDENTITY_PENDING")
+
+            # ★案件が増えたらコミットさせない★（対照実験）
+            def _grew(slug, repairing=False):
+                return {"stage": "IDENTITY_PENDING", "reasons": [],
+                        "ledger_blocking": ["#1 もとからある案件", "#2 直した拍子に増えた案件"]}
+
+            cp.assess = _grew
+            t("★★直した結果、案件が増えたらコミットさせない★★",
+              raises(lambda: before_commit("t2", "hokuto", fp), "増えました"))
         finally:
             cp.assess = _real_assess
 

@@ -67,8 +67,52 @@ def _detail(slug: str):
     return _sj.read_json(fp, expect=dict)
 
 
-def assess(slug: str) -> dict:
-    """機種1つの段階と、次にやることを返す。★何も書き換えない★"""
+def repairable(slug: str, machine: dict | None = None) -> tuple[bool, str]:
+    """★その機種は「直すために触ってよい」か★（2026-08-21・台帳#211）
+
+    ★なぜ要るのか★
+      台帳に重い案件がある機種は BLOCKED_BY_LEDGER になり、更新タスクが触らない。
+      しかし **止まっているのは直す作業だけで、読者は守られていない**
+      （`page_decision` は台帳を見ないので、間違った記事はそのまま公開され続ける）。
+      しかも無人タスクは台帳を閉じないので、**その機種は永久に解けない**。
+      2026-08-21時点で54機種がこの状態だった。
+
+    ★線の引き方★
+      - すでに公開されている記事（LEGACY_COMPLETE）→ **直せる**
+        （間違ったまま置くほうが有害。直す以外に案件が解ける道がない）
+      - まだ公開していない新台（AUTO_PENDING 等）→ **止めたまま**
+        （ここでは台帳の関門が本当の仕事をしている＝早すぎる公開を止めている）
+
+    ★これは「公開してよい」という意味ではない★＝記事を直してよいだけ。
+      公開の判定は page_decision が別に行う。
+    """
+    try:
+        import page_decision as _pd
+    except Exception as e:                                   # noqa: BLE001
+        return False, f"区分を判定できません: {type(e).__name__}"
+    try:
+        m = machine if machine is not None else _machine(slug)
+    except Exception as e:                                   # noqa: BLE001
+        return False, f"機種データが読めません: {type(e).__name__}"
+    if not m:
+        return False, "machines.json にありません"
+    try:
+        klass = _pd.machine_class(m)
+    except Exception as e:                                   # noqa: BLE001
+        return False, f"区分を決められません: {type(e).__name__}"
+    if klass != "LEGACY_COMPLETE":
+        return False, f"公開済みの記事ではありません（{klass}）"
+    return True, "公開済みの記事なので直してよい"
+
+
+def assess(slug: str, repairing: bool = False) -> dict:
+    """機種1つの段階と、次にやることを返す。★何も書き換えない★
+
+    repairing=True のときは**台帳による停止だけを飛ばす**（2026-08-21・台帳#211）。
+    ★飛ばしてよいのは `repairable()` が真の機種だけ★＝呼び出し側が確かめる。
+    飛ばしても台帳の中身は `ledger_blocking` に必ず入れて返すので、
+    「知らずに素通りした」にはならない。
+    """
     out = {"slug": slug, "stage": "HOLD", "reasons": [], "next_action": ""}
     try:
         machine = _machine(slug)
@@ -90,11 +134,21 @@ def assess(slug: str) -> dict:
         out["reasons"] = [f"要確認台帳が読めません: {type(e).__name__}: {e}"]
         out["next_action"] = "台帳を直す（読めないうちは公開しない）"
         return out
-    if blocking:
+    # ★台帳の中身は、飛ばす場合も必ず持ち帰る★（知らずに素通りしたことにしない）
+    out["ledger_blocking"] = list(blocking)
+    if blocking and not repairing:
         out["stage"] = "BLOCKED_BY_LEDGER"
         out["reasons"] = blocking
         out["next_action"] = "台帳の案件を解決してから閉じる"
         return out
+    if blocking and repairing:
+        # ★直すために飛ばしてよいのは、公開済みの記事だけ★（台帳#211）
+        ok, why = repairable(slug, machine)
+        if not ok:
+            out["stage"] = "BLOCKED_BY_LEDGER"
+            out["reasons"] = blocking + [f"直す経路も使えません: {why}"]
+            out["next_action"] = "台帳の案件を解決してから閉じる"
+            return out
 
     # --- ② 機種を特定できるか（メーカー・型式コード）
     missing = ci.identity_missing(machine)
