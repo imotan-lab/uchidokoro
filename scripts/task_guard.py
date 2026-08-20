@@ -506,8 +506,14 @@ def day_status(path: str = STATE_PATH) -> dict:
     return _day(_load(path))
 
 
-def claim(task: str, slug: str, path: str = STATE_PATH) -> dict:
+def claim(task: str, slug: str, path: str = STATE_PATH,
+          repairing: bool = False) -> dict:
     """今日この機種を担当してよいか。★同じ日の2機種目は拒否★
+
+    repairing=True ＝「台帳の案件を直すために担当する」（2026-08-21・台帳#211）。
+    ★ここを直さないと、直す経路そのものが動かない★＝
+      担当を確保する時点で `BLOCKED_BY_LEDGER` を見て弾いていたので、
+      before_write まで到達できなかった（2026-08-21に実装直後に発見）。
 
     ★新台の追加だけは1日の機種数を数えない★（2026-08-07・運営者決定）
       新台は導入日が決まっていて待てない。分かり次第そのまま記事にする。
@@ -554,7 +560,7 @@ def claim(task: str, slug: str, path: str = STATE_PATH) -> dict:
         #   （2026-08-08に実際に発生。galfy で1機種も直せずに終了）。
         #   ★ここで拒否すれば枠は減らない★＝呼び出し側は次の候補へ進める。
         try:
-            stage = cp.assess(slug).get("stage")
+            stage = cp.assess(slug, repairing=repairing).get("stage")
         except Exception as e:            # noqa: BLE001
             # ★判定できないときも枠を使わせない★（2026-08-09・依頼127）
             #   以前は「従来どおり通す」だったので、assess が例外になる機種を
@@ -985,6 +991,16 @@ def selftest() -> int:
             cp.assess = _grew
             t("★★直した結果、案件が増えたらコミットさせない★★",
               raises(lambda: before_commit("t2", "hokuto", fp), "増えました"))
+
+            # --- ★担当の確保も直す経路を通す★（実装直後に見つけた穴）
+            #   ここが古い判定のままだと、before_write まで到達できず
+            #   直す経路が丸ごと動かない。
+            cp.assess = _fake_assess
+            fp3 = os.path.join(tmpdir, "guard_repair.json")
+            t("★ふつうに担当しようとすると弾かれる（枠は減らない）★",
+              raises(lambda: claim("t3", "kabaneri", fp3), "いま触れません"))
+            got2 = claim("t3", "kabaneri", fp3, repairing=True)
+            t("★直す経路なら担当できる★", got2["target_slug"] == "kabaneri")
         finally:
             cp.assess = _real_assess
 
