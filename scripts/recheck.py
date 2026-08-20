@@ -407,7 +407,60 @@ def check_rumor_not_declared_empty(args: dict) -> dict:
     return _result(PASS, "噂の箱は「無い」と宣言していません", args, observed=observed)
 
 
-# --- 検査③（観測どまり）: 記事の目安表とチェッカーの区切り -------------------
+# --- 検査③: 交換率の順で、狙い目ラインが逆転していないか ----------------------
+#   ★読者に見える★＝チェッカーは既定で eq56（5.6枚）を表示する。
+#     交換率が良いほど浅く狙えるはずなのに、良い交換率の方が深い値が出ると、
+#     読者は「条件が良いのに、より回さないと狙えない」という誤った案内を受ける。
+#   ★機械で判定できる★＝数値の並びを見るだけ。意味の判断は要らない。
+#   台帳#165 の検出方法（交換率が良い→悪いの順に単調か）をそのまま使う。
+
+RATE_ORDER = ("eq56", "rate55", "rate50", "rate45")   # 良い → 悪い
+
+
+def check_rate_monotonic(args: dict) -> dict:
+    slug = args.get("slug")
+    if not valid_slug(slug):
+        return _result(NOT_APPLICABLE, "machines.json にその機種がありません", args)
+
+    checker = (_machine(slug) or {}).get("checker")
+    if not isinstance(checker, dict):
+        return _result(NOT_APPLICABLE, "狙い目チェッカーの設定がありません", args)
+
+    checked = 0
+    bad = []
+    for mode, conf in checker.items():
+        if not isinstance(conf, dict):
+            continue
+        by = conf.get("byRate")
+        if not isinstance(by, dict):
+            continue
+        for key in ("caution", "good", "excellent"):
+            vals = []
+            for r in RATE_ORDER:
+                v = (by.get(r) or {}).get(key) if isinstance(by.get(r), dict) else None
+                if _is_int(v):
+                    vals.append((r, v))
+            if len(vals) < 2:
+                continue
+            checked += 1
+            seq = [v for _, v in vals]
+            if any(seq[i] > seq[i + 1] for i in range(len(seq) - 1)):
+                bad.append({"mode": mode, "key": key,
+                            "values": {r: v for r, v in vals}})
+
+    if not checked:
+        return _result(NOT_APPLICABLE, "交換率ごとの設定がありません", args)
+    observed = {"checked": checked, "reversed": bad}
+    if bad:
+        where = " / ".join(f"{b['mode']}.{b['key']}" for b in bad[:3])
+        return _result(FAIL,
+                       f"交換率が良いほうが深い値になっています（{len(bad)}組: {where}）",
+                       args, observed=observed)
+    return _result(PASS, "交換率の順に、狙い目ラインが浅い→深いで並んでいます",
+                   args, observed=observed)
+
+
+# --- 検査④（観測どまり）: 記事の目安表とチェッカーの区切り -------------------
 #   ★closeable=False★ 記事の evTable は公開ページで使われていないため、
 #     ここで一致していても「読者に正しく届いた」ことにはならない（依頼243の指摘1）。
 #     作業用データの手入れの目印として残す。
@@ -590,6 +643,13 @@ CHECKS = {
         "closeable": True,          # ★読者に見える★ 「無い」と書いた箱が出ている
         "title": "噂の箱に「噂はありません」と書いたまま出していないか",
         "fn": check_rumor_not_declared_empty,
+        "args_spec": {"slug": (str, True, None)},
+    },
+    "rate_monotonic": {
+        "version": 1,
+        "closeable": True,          # ★読者に見える★ 既定表示の値が逆転する
+        "title": "交換率が良いほうが深い狙い目になっていないか",
+        "fn": check_rate_monotonic,
         "args_spec": {"slug": (str, True, None)},
     },
     "evtable_vs_checker": {
