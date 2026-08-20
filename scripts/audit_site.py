@@ -1851,6 +1851,39 @@ def check_44_empty_settei_box(machines: list) -> list[str]:
     return out
 
 
+def check_45_rumor_declared_empty(machines: list) -> list[str]:
+    """★噂の箱に「噂はありません」と書いたまま出していないか★（2026-08-21・台帳#334）
+
+    ★なぜ★ 運営者の決定（2026-08-12・CLAUDE.md）＝
+    「rumor は中身ができてから出す。空の箱は『あるのに載せていない』と読める」。
+    実際には56機種が、黄色い枠と見出しを描いたうえで
+    「現時点で目立った噂・未確定情報はありません」と書いて公開していた。
+
+    ★ここで見るのはサイト自身が書いた定型文だけ★＝他所の日本語を読み解くのではなく、
+    **うちの生成物が自分で「無い」と宣言している**ことを見つける。
+    中身が有るか無いかの判断はしない（それは2AIの仕事）。
+
+    判定は `scripts/recheck.py` に任せる（★同じ規則を2か所に書かない★）。
+    """
+    sys.path.insert(0, str(BASE / "scripts"))
+    try:
+        import recheck as _rc
+    except Exception as e:                                   # noqa: BLE001
+        return [f"再検査の道具を読み込めません: {type(e).__name__}: {e}"]
+
+    out = []
+    for m in machines:
+        slug = m.get("slug")
+        if not slug:
+            continue
+        r = _rc.run("rumor_not_declared_empty", {"slug": slug})
+        if r["result"] == _rc.FAIL:
+            out.append(f"{slug}: {r['detail']}")
+        elif r["result"] == _rc.ERROR:
+            out.append(f"{slug}: 検査が失敗しました（{r['detail']}）")
+    return out
+
+
 def check_43_undefined_names(machines: list) -> list[str]:
     """★消したはずの名前を呼び続けていないか★（2026-08-17・依頼225）
 
@@ -2171,6 +2204,7 @@ CHECKS = [
     ("42_通信の用途の名乗り", check_42_fetch_purpose),
     ("43_定義の無い内部関数の呼び出し", check_43_undefined_names),
     ("44_中身なしの設定示唆の箱", check_44_empty_settei_box),
+    ("45_中身なしの噂の箱", check_45_rumor_declared_empty),
 ]
 
 
