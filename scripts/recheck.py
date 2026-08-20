@@ -343,7 +343,71 @@ def check_settei_filled(args: dict) -> dict:
                    args, observed=observed)
 
 
-# --- 検査②（観測どまり）: 記事の目安表とチェッカーの区切り -------------------
+# --- 検査②: 噂の箱が「噂はありません」と言いながら出ていないか ---------------
+#   ★読者に見える★＝machine.html は type:"rumor" のとき
+#     黄色い枠と「⚠ 噂・未確定情報」の見出しを必ず描いてから本文を並べる。
+#     その中に「噂はありません」と書いてあれば、読者は
+#     「わざわざ枠を作って、何も無いと言っている」ページを見ることになる。
+#
+#   ★運営者の決定（2026-08-12・CLAUDE.md）★
+#     「rumor は★中身ができてから出す★。噂や小ネタが無い機種のほうが多く、
+#       空の箱は『あるのに載せていない』と読める」
+#
+#   ★ここで見るのは「サイト自身が書いた定型文」だけ★
+#     他所の日本語を読み解くのではなく、**うちの生成物が自分で
+#     「無い」と宣言している**ことを見つける。だから意味の判断にはならない。
+#     ★中身が有るか無いかの判断はしない★（それは2AIの仕事）＝
+#     この検査が言えるのは「無いと書いてある箱が出ている」ことだけ。
+
+NO_RUMOR_PHRASES = (
+    "噂・未確定情報はありません",
+    "噂はありません",
+    "未確定情報はありません",
+)
+
+
+def check_rumor_not_declared_empty(args: dict) -> dict:
+    slug = args.get("slug")
+    if not valid_slug(slug):
+        return _result(NOT_APPLICABLE, "machines.json にその機種がありません", args)
+
+    detail, raw, why = _load_detail(slug)
+    if detail is None:
+        return _result(NOT_APPLICABLE, why, args)
+
+    sections = detail.get("sections")
+    if not isinstance(sections, list):
+        return _result(NOT_APPLICABLE, "記事に本文の箱がありません", args)
+
+    rumor = [s for s in sections
+             if isinstance(s, dict) and s.get("type") == "rumor"]
+    if not rumor:
+        return _result(NOT_APPLICABLE, "噂の箱がありません", args, observed={"boxes": 0})
+
+    declared = []
+    for i, s in enumerate(rumor):
+        body = s.get("body")
+        if not isinstance(body, list):
+            return _result(NOT_APPLICABLE, "噂の箱の本文の形が想定外です", args)
+        for j, line in enumerate(body):
+            if not isinstance(line, str):
+                continue
+            for ph in NO_RUMOR_PHRASES:
+                if ph in line:
+                    declared.append({"box": i, "line": j, "phrase": ph})
+                    break
+
+    observed = {"boxes": len(rumor), "declared_empty": declared,
+                "served_digest": _sha(raw)}
+    if declared:
+        return _result(FAIL,
+                       f"噂の箱に「噂はありません」と書いたまま出しています"
+                       f"（{len(declared)}行）",
+                       args, observed=observed)
+    return _result(PASS, "噂の箱は「無い」と宣言していません", args, observed=observed)
+
+
+# --- 検査③（観測どまり）: 記事の目安表とチェッカーの区切り -------------------
 #   ★closeable=False★ 記事の evTable は公開ページで使われていないため、
 #     ここで一致していても「読者に正しく届いた」ことにはならない（依頼243の指摘1）。
 #     作業用データの手入れの目印として残す。
@@ -519,6 +583,13 @@ CHECKS = {
         "closeable": True,          # ★読者に見える★ 見出しと凡例だけが残る型
         "title": "設定示唆まとめの箱が中身なしで出ていないか",
         "fn": check_settei_filled,
+        "args_spec": {"slug": (str, True, None)},
+    },
+    "rumor_not_declared_empty": {
+        "version": 1,
+        "closeable": True,          # ★読者に見える★ 「無い」と書いた箱が出ている
+        "title": "噂の箱に「噂はありません」と書いたまま出していないか",
+        "fn": check_rumor_not_declared_empty,
         "args_spec": {"slug": (str, True, None)},
     },
     "evtable_vs_checker": {
