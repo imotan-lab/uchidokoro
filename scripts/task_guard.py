@@ -30,6 +30,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -850,6 +851,126 @@ def _unrelated_changes(slug: str) -> list:
     return out
 
 
+def _git(*args) -> tuple[int, str]:
+    """★固定の引数配列でgitを呼ぶ★（シェルを通さない）。戻り値 (終了コード, 標準出力)"""
+    try:
+        p = subprocess.run(["git", "-C", str(BASE), *args],
+                           capture_output=True, text=True, timeout=60)
+    except Exception as e:                                   # noqa: BLE001
+        return 1, f"{type(e).__name__}: {e}"
+    return p.returncode, p.stdout
+
+
+def _changed_files() -> tuple[list, str]:
+    """いま変わっているファイルの一覧。読めなければ理由を返す。"""
+    rc, out = _git("status", "--porcelain")
+    if rc != 0:
+        return [], "git status が失敗しました"
+    names = []
+    for line in out.splitlines():
+        nm = line[3:].strip().strip('"')
+        if not nm:
+            continue
+        if " -> " in nm:                    # 名前の変更は「変更後」を見る
+            nm = nm.split(" -> ", 1)[1].strip().strip('"')
+        names.append(nm)
+    return sorted(set(names)), ""
+
+
+def _file_digest(rel: str) -> str:
+    """手元のファイルの中身の指紋。消えている場合は DELETED。"""
+    p = os.path.join(BASE, rel.replace("/", os.sep))
+    if not os.path.isfile(p):
+        return "DELETED"
+    h = hashlib.sha256()
+    with open(p, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _commit_digest(commit: str, rel: str) -> str:
+    """そのコミットの中でのファイルの中身の指紋。無ければ DELETED。"""
+    rc, out = _git("cat-file", "-e", f"{commit}:{rel}")
+    if rc != 0:
+        return "DELETED"
+    try:
+        p = subprocess.run(["git", "-C", str(BASE), "show", f"{commit}:{rel}"],
+                           capture_output=True, timeout=60)
+    except Exception:                                        # noqa: BLE001
+        return "ERROR"
+    if p.returncode != 0:
+        return "ERROR"
+    return hashlib.sha256(p.stdout).hexdigest()
+
+
+def verify_commit(task: str, slug: str, commit: str,
+                  path: str = STATE_PATH) -> dict:
+    """★関所が見た内容と、実際のコミットが同じか確かめる★
+    （2026-08-21・Codex依頼248の指摘3）
+
+    ★なぜ要るのか★
+      before_commit が「OK」と言ったあとに、別のファイルを足してから
+      コミットできた。関所が見た内容と、公開される内容が結び付いていなかった。
+
+    確かめること:
+      ①コミットが触ったファイルが、関所のときと**過不足なく同じ**
+      ②その中身の指紋が、関所のときと同じ
+      ③そのコミットが、いまの HEAD である
+
+    ★これが通らないうちは push しない★（手順書で必須にする）
+    """
+    if not re.fullmatch(r"[0-9a-f]{7,40}", str(commit or "")):
+        raise GuardError(f"コミットの指定が不正です: {commit!r}")
+    with _Exclusive(path):
+        data = _load(path)
+        e = _entry(data, task)
+        if e.get("guard_slug") != slug:
+            raise GuardError(
+                f"{slug} の関所の記録がありません（記録は {e.get('guard_slug')!r}）")
+        approved = e.get("approved_files")
+        if not isinstance(approved, dict) or not approved:
+            raise GuardError(
+                f"{slug} は関所の記録に「見た内容」がありません"
+                "（before-commit を通っていない＝pushさせません）")
+
+        rc, head = _git("rev-parse", "HEAD")
+        if rc != 0:
+            raise GuardError("いまのコミットを読めません")
+        head = head.strip()
+        if not head.startswith(commit) and not commit.startswith(head[:len(commit)]):
+            raise GuardError(f"いまのコミットが違います（HEAD={head[:12]}）")
+
+        rc, out = _git("diff-tree", "--no-commit-id", "--name-only", "-r", commit)
+        if rc != 0:
+            raise GuardError("コミットの中身を読めません")
+        in_commit = sorted({x.strip() for x in out.splitlines() if x.strip()})
+
+        extra = [x for x in in_commit if x not in approved]
+        if extra:
+            raise GuardError(
+                "関所が見ていないファイルがコミットに入っています: "
+                + " / ".join(extra[:3])
+                + (f" ほか{len(extra) - 3}件" if len(extra) > 3 else ""))
+        missing = [x for x in approved if x not in in_commit]
+        if missing:
+            raise GuardError(
+                "関所が見たファイルがコミットに入っていません: "
+                + " / ".join(missing[:3])
+                + (f" ほか{len(missing) - 3}件" if len(missing) > 3 else ""))
+        changed = [x for x in in_commit if _commit_digest(commit, x) != approved[x]]
+        if changed:
+            raise GuardError(
+                "関所が見たあとで中身が変わったファイルがあります: "
+                + " / ".join(changed[:3])
+                + (f" ほか{len(changed) - 3}件" if len(changed) > 3 else ""))
+
+        e["verified_commit"] = head
+        _save(path, data)
+        return {"slug": slug, "commit": head, "files": len(in_commit),
+                "ok": True}
+
+
 def before_write(task: str, slug: str, path: str = STATE_PATH,
                  repairing: bool = False) -> dict:
     """記事を書き換える前の確認。★触ってよい段階か毎回聞き直す★
@@ -1007,6 +1128,17 @@ def before_commit(task: str, slug: str, path: str = STATE_PATH) -> dict:
             raise GuardError(
                 f"直した結果、公開を止めるべき状態になりました（{before} → {a['stage']}）。"
                 f"コミットせず、変更を戻すか台帳で扱ってください")
+        # ★★見た内容の指紋を残す★★（2026-08-21・Codex依頼248の指摘3）
+        #   ここが無いと、「OK」と言ったあとに別のファイルを足してコミットできた。
+        #   push の前に `verify-commit` でこの指紋と突き合わせる。
+        files, why_f = _changed_files()
+        if why_f:
+            raise GuardError(f"変更を確認できないのでコミットさせません: {why_f}")
+        if not files:
+            raise GuardError(
+                f"{slug} は変更がありません（コミットするものがありません）")
+        e["approved_files"] = {f: _file_digest(f) for f in files}
+        e["verified_commit"] = None
         e["final_stage"] = a["stage"]
         _save(path, data)
         return a
@@ -1497,6 +1629,71 @@ def selftest() -> int:
             t("　2機種目も before-write を通せばコミットできる",
               before_commit("t8", "bbb", fpA)["stage"] == "IDENTITY_PENDING")
 
+            # --- ★関所が見た内容とコミットを結び付ける★（依頼248の指摘3）
+            #   本物のgitを呼ぶので、gitの出力だけ差し替えて筋を確かめる。
+            fpG = os.path.join(tmpdir, "guard_bind.json")
+            claim("tE", "kabaneri", fpG, repairing=True, issues=["1"])
+            before_write("tE", "kabaneri", fpG, repairing=True)
+
+            _keep_changed = globals()["_changed_files"]
+            _keep_fd = globals()["_file_digest"]
+            _keep_cd = globals()["_commit_digest"]
+            _keep_git = globals()["_git"]
+            try:
+                globals()["_changed_files"] = lambda: (
+                    ["assets/data/machine-details/kabaneri.json"], "")
+                globals()["_file_digest"] = lambda rel: "AAA"
+                before_commit("tE", "kabaneri", fpG)
+                t("　関所が見た内容の指紋が残る",
+                  _load(fpG)["tasks"]["tE"]["approved_files"]
+                  == {"assets/data/machine-details/kabaneri.json": "AAA"})
+
+                globals()["_git"] = lambda *a: (
+                    (0, "abc1234\n") if a[0] == "rev-parse"
+                    else (0, "assets/data/machine-details/kabaneri.json\n"))
+                globals()["_commit_digest"] = lambda c, rel: "AAA"
+                t("★関所と同じ内容ならpushしてよい★",
+                  verify_commit("tE", "kabaneri", "abc1234", fpG)["ok"])
+
+                globals()["_commit_digest"] = lambda c, rel: "BBB"
+                t("★★関所のあとで中身が変わっていたら止める★★",
+                  raises(lambda: verify_commit("tE", "kabaneri", "abc1234", fpG),
+                         "中身が変わった"))
+
+                globals()["_commit_digest"] = lambda c, rel: "AAA"
+                globals()["_git"] = lambda *a: (
+                    (0, "abc1234\n") if a[0] == "rev-parse"
+                    else (0, "assets/data/machine-details/kabaneri.json\n"
+                             "scripts/nazono.py\n"))
+                t("★★関所が見ていないファイルが入っていたら止める★★",
+                  raises(lambda: verify_commit("tE", "kabaneri", "abc1234", fpG),
+                         "見ていないファイル"))
+
+                globals()["_git"] = lambda *a: (
+                    (0, "abc1234\n") if a[0] == "rev-parse" else (0, "\n"))
+                t("★関所が見たファイルが入っていなければ止める★",
+                  raises(lambda: verify_commit("tE", "kabaneri", "abc1234", fpG),
+                         "入っていません"))
+
+                globals()["_git"] = lambda *a: (
+                    (0, "999999\n") if a[0] == "rev-parse"
+                    else (0, "assets/data/machine-details/kabaneri.json\n"))
+                t("★別のコミットなら止める★",
+                  raises(lambda: verify_commit("tE", "kabaneri", "abc1234", fpG),
+                         "いまのコミットが違います"))
+            finally:
+                globals()["_changed_files"] = _keep_changed
+                globals()["_file_digest"] = _keep_fd
+                globals()["_commit_digest"] = _keep_cd
+                globals()["_git"] = _keep_git
+
+            # ★関所を通っていなければ verify も通らない★
+            fpH = os.path.join(tmpdir, "guard_nobind.json")
+            claim("tF", "kabaneri", fpH, repairing=True, issues=["1"])
+            t("★★before-commit を通っていなければ push させない★★",
+              raises(lambda: verify_commit("tF", "kabaneri", "abc1234", fpH),
+                     "見た内容"))
+
             # --- ★修理モードは担当のあと変えられない★（依頼248の指摘1・対照実験）
             fpD = os.path.join(tmpdir, "guard_mode.json")
 
@@ -1665,6 +1862,12 @@ def main() -> int:
     p.add_argument("--why", default="", help="no のときの理由（短く）")
     p = sub.add_parser("cooldown")
     p.add_argument("--slug", required=True)
+    # ★関所が見た内容と、実際のコミットが同じか確かめる★（依頼248の指摘3）
+    p = sub.add_parser("verify-commit")
+    p.add_argument("--task", required=True)
+    p.add_argument("--slug", required=True)
+    p.add_argument("--commit", required=True,
+                   help="いま作ったコミット（git rev-parse HEAD の値）")
 
     args = ap.parse_args()
     if args.selftest:
@@ -1699,6 +1902,9 @@ def main() -> int:
         print(json.dumps(before_commit(args.task, args.slug), ensure_ascii=False, indent=1))
     elif args.cmd == "done":
         print(json.dumps(done(args.task, args.slug, args.stage), ensure_ascii=False, indent=1))
+    elif args.cmd == "verify-commit":
+        print(json.dumps(verify_commit(args.task, args.slug, args.commit),
+                         ensure_ascii=False, indent=1))
     elif args.cmd == "repaired":
         # ★休みに入るときは「何を見ていたか」を控える★（依頼247の指摘4）
         #   手で渡させると忘れるので、そのとき止めている案件をここで引く。
