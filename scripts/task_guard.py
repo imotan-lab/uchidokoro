@@ -54,7 +54,18 @@ CODEX_ROUND_LIMIT = 3
 #   **新台の公開か、質問の解決か、どちらかが必ず欠ける晩**ができる。
 #   新台の枠を先に守り、質問には質問の枠を渡す。
 CODEX_ASK_ROUND_LIMIT = 3
-MACHINES_PER_DAY = 1
+# ★1日に触ってよい機種の数★（2026-08-21に 1 → 3・台帳#211）
+#   ★変えた理由＝入る量と出る量が釣り合っていなかった★
+#     2026-08-21に数えたら、台帳へ入るのが1日12.9件、出るのが1日1機種。
+#     この比率では何をやっても永久に減らない（実際、数週間ずっと減っていなかった）。
+#     作る側（品質レビュー）は「20件たまっていたらその日は作らない」で止めたが、
+#     出口が1機種のままだと、たまった93件に93日かかる。
+#   ★増やしても1機種あたりの守りは変わらない★
+#     claim → before_write → before_commit（悪化していないか）は
+#     **機種ごとに独立して**効く。3機種＝守られた作業が3回であって、
+#     守りの緩い作業が1回になるわけではない。
+#   ★戻すならここだけ★（手順書の文言も一緒に直すこと）
+MACHINES_PER_DAY = 3
 # ★1日の機種数を数えないタスク★（2026-08-07・運営者決定）
 #   新台は導入日が決まっていて待てない。分かり次第そのまま記事にする。
 UNLIMITED_MACHINE_TASKS = frozenset({"add-machine"})
@@ -578,16 +589,20 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
         #   以前はタスクごとに数えていたので、**タスク名を変えれば**
         #   同じ日に何機種でも担当できた。
         d = _day(data)
-        cur = d.get("target_slug")
-        if cur and cur != slug:
-            raise GuardError(
-                f"今日はすでに {cur} を担当しています（1日{MACHINES_PER_DAY}機種）。"
-                f"{slug} は明日以降に回してください")
+        # ★数を数える★（2026-08-21・MACHINES_PER_DAY を 1 → 3 にしたときに直した）
+        #   それまでは「今日の担当は1つ」という書き方で**数えていなかった**ので、
+        #   設定値を増やしても文言が変わるだけで挙動は1機種のままだった。
+        #   ★設定値を変えたら、実装が本当に追随しているか動かして確かめる★
+        done_today = d.setdefault("slugs_today", [])
+        # 途中まで進めた機種を続ける場合は、新しく数えない
+        if slug not in done_today:
+            if len(done_today) >= MACHINES_PER_DAY:
+                raise GuardError(
+                    f"今日はすでに {len(done_today)} 機種を担当しています"
+                    f"（1日{MACHINES_PER_DAY}機種・{' / '.join(done_today)}）。"
+                    f"{slug} は明日以降に回してください")
+            done_today.append(slug)
         d["target_slug"] = slug
-        if e["target_slug"] and e["target_slug"] != slug:
-            raise GuardError(
-                f"今日はすでに {e['target_slug']} を担当しています（1日{MACHINES_PER_DAY}機種）。"
-                f"{slug} は明日以降に回してください")
         e["target_slug"] = slug
         _save(path, data)
         return e
@@ -900,7 +915,11 @@ def selftest() -> int:
         #   止まっている日は**自己テストがそこで落ちた**（実際に発生）。
         #   道具の振る舞いを見る試験が、その日のデータで変わってはいけない。
         #   既に一覧にある機種は READY、まだ無い機種は NO_MACHINE（実際と同じ形）
-        _known = {"hokuto", "enen", "galfy"}
+        # ★1日の上限を数える試験ぶんも、ここに入れておく★（2026-08-21）
+        #   上限を増やしたら「担当できる機種」も増やす必要がある。
+        #   本番データを見に行かせない（その日の台帳で試験の結果が変わらないように）。
+        _spares = ["sp_a", "sp_b", "sp_c", "sp_d", "sp_e", "sp_f"]
+        _known = {"hokuto", "enen", "galfy"} | set(_spares)
         cp.assess = lambda sl, *a, **k: {
             "stage": "READY" if sl in _known else "NO_MACHINE"}
         t("　断られた日でも枠は残る（次の候補を選べる）",
@@ -909,10 +928,18 @@ def selftest() -> int:
         t("★1機種目は担当できる★", claim("t", "hokuto", fp)["target_slug"] == "hokuto")
         t("　同じ機種なら何度呼んでもよい（再開できる）",
           claim("t", "hokuto", fp)["target_slug"] == "hokuto")
-        t("★★同じ日の2機種目は拒否する★★（1日1機種が実際に効く）",
+        # ★上限は「数」で効く★（2026-08-21・MACHINES_PER_DAY を 1 → 3 にした）
+        #   設定値を変えたら実装が本当に追随するか、ここで確かめる。
+        for i in range(1, MACHINES_PER_DAY):
+            _s = _spares[i - 1]
+            t(f"　{i + 1}機種目までは担当できる",
+              claim("t", _s, fp)["target_slug"] == _s)
+        t("★★上限を超えた機種は拒否する★★（1日の上限が実際に効く）",
           raises(lambda: claim("t", "enen", fp), "1日"))
-        t("★★タスク名を変えても1日1機種は迂回できない★★（Codex114回目の指摘5）",
+        t("★★タスク名を変えても1日の上限は迂回できない★★（Codex114回目の指摘5）",
           raises(lambda: claim("t2", "enen", fp), "1日"))
+        t("　上限に入っている機種なら、別タスクからでも続けられる",
+          claim("t2", "hokuto", fp)["target_slug"] == "hokuto")
 
         # ★新台の追加だけは機種数を数えない★（2026-08-07・運営者決定）
         #   新台は導入日が決まっていて待てないため。
@@ -921,8 +948,10 @@ def selftest() -> int:
                 for i in range(5)]
         t("★★新台の追加は同じ晩に何機種でも担当できる★★",
           many == ["n%d" % i for i in range(5)])
-        t("　新台を何件やっても他のタスクの1日1機種は残る",
+        t("　新台を何件やっても他のタスクの1日の上限は残る",
           claim("t3", "hokuto", fp2)["target_slug"] == "hokuto"
+          and all(claim("t3", _spares[i - 1], fp2)["target_slug"] == _spares[i - 1]
+                  for i in range(1, MACHINES_PER_DAY))
           and raises(lambda: claim("t3", "enen", fp2), "1日"))
         for i in range(5, 40):
             claim("add-machine", "n%d" % i, fp2)
