@@ -67,6 +67,11 @@ def _detail(slug: str):
     return _sj.read_json(fp, expect=dict)
 
 
+# ★読者にもう届いている区分★（＝直してよい。公開してよい、ではない）
+#   ここを増やすときは「その区分の記事は本当に検索から見られるか」を先に確かめる。
+PUBLISHED_CLASSES = ("LEGACY_COMPLETE", "AUTO_INDEXABLE")
+
+
 def repairable(slug: str, machine: dict | None = None) -> tuple[bool, str]:
     """★その機種は「直すために触ってよい」か★（2026-08-21・台帳#211）
 
@@ -77,11 +82,18 @@ def repairable(slug: str, machine: dict | None = None) -> tuple[bool, str]:
       しかも無人タスクは台帳を閉じないので、**その機種は永久に解けない**。
       2026-08-21時点で54機種がこの状態だった。
 
-    ★線の引き方★
-      - すでに公開されている記事（LEGACY_COMPLETE）→ **直せる**
+    ★線の引き方＝「読者にもう届いているか」だけで決める★
+      - すでに公開されている記事 → **直せる**
         （間違ったまま置くほうが有害。直す以外に案件が解ける道がない）
-      - まだ公開していない新台（AUTO_PENDING 等）→ **止めたまま**
+        ＝`LEGACY_COMPLETE`（既存記事）と `AUTO_INDEXABLE`（新台経路で公開済み）
+      - まだ公開していない記事 → **止めたまま**
         （ここでは台帳の関門が本当の仕事をしている＝早すぎる公開を止めている）
+        ＝`AUTO_PENDING`（判定書がindexableでない）と `LEGACY_PREVIEW`（旧7件・凍結）
+
+    ★AUTO_INDEXABLE を入れた理由★（2026-08-21・Codex依頼246の防御3）
+      いま該当は0件（120 LEGACY_COMPLETE + 10 AUTO_PENDING）だが、
+      新台経路で公開した機種はいずれここに来る。そのとき
+      「公開されているのに直せない」＝いま直した穴が別の形で再発する。
 
     ★これは「公開してよい」という意味ではない★＝記事を直してよいだけ。
       公開の判定は page_decision が別に行う。
@@ -100,9 +112,9 @@ def repairable(slug: str, machine: dict | None = None) -> tuple[bool, str]:
         klass = _pd.machine_class(m)
     except Exception as e:                                   # noqa: BLE001
         return False, f"区分を決められません: {type(e).__name__}"
-    if klass != "LEGACY_COMPLETE":
+    if klass not in PUBLISHED_CLASSES:
         return False, f"公開済みの記事ではありません（{klass}）"
-    return True, "公開済みの記事なので直してよい"
+    return True, f"公開済みの記事なので直してよい（{klass}）"
 
 
 def assess(slug: str, repairing: bool = False) -> dict:
@@ -229,6 +241,43 @@ def selftest() -> int:
                       "NEEDS_EVIDENCE", "READY", "HOLD"})
     t("★無い機種は NO_MACHINE（黙って READY にしない）★",
       assess("zzz_no_such_machine")["stage"] == "NO_MACHINE")
+
+    # --- ★直す経路（2026-08-21・台帳#211／Codex依頼246の防御2）★
+    #   本番データに寄りかからないよう、台帳と区分は差し替えて確かめる。
+    _keep_block = oi.blocking_slugs
+    _keep_mach = globals()["_machine"]
+    try:
+        oi.blocking_slugs = lambda: {"zz_fake": ["#1 止める案件", "#2 もう1件"]}
+
+        for klass, should in (("LEGACY_COMPLETE", True), ("AUTO_INDEXABLE", True),
+                              ("AUTO_PENDING", False), ("LEGACY_PREVIEW", False)):
+            import page_decision as _pd
+            _keep_class = _pd.machine_class
+            try:
+                _pd.machine_class = lambda m, policy=None, _k=klass: _k
+                globals()["_machine"] = lambda s: {"slug": s}
+                ok, _why = repairable("zz_fake")
+                t(f"　{klass} は直してよい={should}", ok is should)
+                got = assess("zz_fake", repairing=True)
+                if should:
+                    t(f"　{klass}: 直す経路では台帳で止まらない",
+                      got["stage"] != "BLOCKED_BY_LEDGER")
+                else:
+                    t(f"★{klass}: 直す経路でも止まる★",
+                      got["stage"] == "BLOCKED_BY_LEDGER")
+                t(f"　{klass}: 止めている案件は必ず持ち帰る",
+                  len(got.get("ledger_blocking") or []) == 2)
+            finally:
+                _pd.machine_class = _keep_class
+
+        globals()["_machine"] = lambda s: {"slug": s}
+        t("★ふつうの評価では、いままでどおり台帳で止まる★",
+          assess("zz_fake")["stage"] == "BLOCKED_BY_LEDGER")
+        t("★止めている案件が無ければ、飛ばすものが無い★",
+          not (assess("other_slug", repairing=True).get("ledger_blocking") or []))
+    finally:
+        oi.blocking_slugs = _keep_block
+        globals()["_machine"] = _keep_mach
 
     # 実データ：いまは全機種が型式未登録か台帳で止まっているはず
     real = assess_all()

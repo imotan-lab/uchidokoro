@@ -36,7 +36,7 @@ import re
 import subprocess
 import sys
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
@@ -610,6 +610,12 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
         #   設定値を増やしても文言が変わるだけで挙動は1機種のままだった。
         #   ★設定値を変えたら、実装が本当に追随しているか動かして確かめる★
         if repairing:
+            # ★休み中の機種は担当させない★（2026-08-21・依頼246の防御4）
+            #   記録するだけでは守れないので、ここで実際に断る。
+            #   ★枠は使わない★＝呼び出し側は次の候補へ進める。
+            resting, why_rest = repair_cooldown(slug, path)
+            if resting:
+                raise GuardError(why_rest + "。枠は使っていないので、次の候補を選んでください")
             # ★どの案件を直すのかを言わせる★（2026-08-21・Codex依頼246の指摘3）
             #   言わせないと「CRITICALが1件でもある機種なら何を書き換えてもよい」
             #   という許可証になってしまう。
@@ -662,6 +668,58 @@ def codex_round(task: str, path: str = STATE_PATH, lane: str = "main") -> int:
         e[key] = used + 1
         _save(path, data)
         return e[key]
+
+# ★同じ機種で空振りが続いたら、しばらく選ばない★（2026-08-21・依頼246の防御4）
+#   手順書にだけ書いてあって実装が無かったので、無人実行が守る保証が無かった。
+REPAIR_FAIL_LIMIT = 2          # 続けてこの回数だけ「直せなかった」ら休ませる
+REPAIR_COOLDOWN_DAYS = 7       # 休ませる日数
+
+
+def _repair_book(data: dict) -> dict:
+    return data.setdefault("repair", {})
+
+
+def repair_cooldown(slug: str, path: str = STATE_PATH) -> tuple[bool, str]:
+    """その機種はいま休み中か。戻り値 (休み中か, 理由)。
+
+    ★数えるのは「材料が揃っても直せなかった」回数だけ★（依頼246の防御4）
+      通信の失敗・ロック待ち・Codexの利用制限は数えない（呼び出し側が渡さない）。
+    """
+    data = _load(path)
+    rec = _repair_book(data).get(slug) or {}
+    until = rec.get("cooldown_until")
+    if not until:
+        return False, ""
+    today = _today()
+    if str(until) > today:
+        return True, (f"{slug} は {until} まで休みです"
+                      f"（続けて {rec.get('fails', 0)} 回直せませんでした）")
+    return False, ""
+
+
+def record_repair(slug: str, fixed: bool, path: str = STATE_PATH,
+                  why: str = "") -> dict:
+    """直せたか直せなかったかを記録する。★直せたら回数は0に戻す★
+
+    fixed=True  … 何かしら前へ進んだ（回数を0に戻し、休みも解除）
+    fixed=False … 材料が揃っても直せなかった（回数+1。上限に達したら休みへ）
+    """
+    with _Exclusive(path):
+        data = _load(path)
+        book = _repair_book(data)
+        rec = book.setdefault(slug, {"fails": 0, "cooldown_until": None, "why": ""})
+        if fixed:
+            rec.update({"fails": 0, "cooldown_until": None, "why": ""})
+        else:
+            rec["fails"] = int(rec.get("fails") or 0) + 1
+            rec["why"] = why[:200]
+            if rec["fails"] >= REPAIR_FAIL_LIMIT:
+                until = datetime.now() + timedelta(days=REPAIR_COOLDOWN_DAYS)
+                rec["cooldown_until"] = until.strftime("%Y-%m-%d")
+        rec["last_seen"] = _today()
+        _save(path, data)
+        return dict(rec)
+
 
 def _unrelated_changes(slug: str) -> list:
     """★その機種と関係のない変更が混ざっていないか★（2026-08-21・依頼246の指摘3）
@@ -1163,6 +1221,23 @@ def selftest() -> int:
             t("　その機種のものだけなら通る",
               before_commit("t6", "kabaneri", fp6)["stage"] == "IDENTITY_PENDING")
 
+            # --- ★空振りが続いたら休ませる（依頼246の防御4）★
+            fp7 = os.path.join(tmpdir, "guard_cool.json")
+            t("　はじめは休みではない", repair_cooldown("kabaneri", fp7)[0] is False)
+            record_repair("kabaneri", False, fp7, why="材料が揃わなかった")
+            t(f"　{REPAIR_FAIL_LIMIT - 1}回目ではまだ休まない",
+              repair_cooldown("kabaneri", fp7)[0] is False)
+            for _ in range(REPAIR_FAIL_LIMIT - 1):
+                record_repair("kabaneri", False, fp7, why="また直せなかった")
+            t("★★続けて直せなければ休みに入る★★", repair_cooldown("kabaneri", fp7)[0])
+            t("★★休み中は担当できない（枠は使わない）★★",
+              raises(lambda: claim("t7", "kabaneri", fp7, repairing=True,
+                                   issues=["1"]), "休みです"))
+            record_repair("kabaneri", True, fp7)
+            t("★直せたら休みは解ける★", repair_cooldown("kabaneri", fp7)[0] is False)
+            t("　直せたら回数も0に戻る",
+              (_load(fp7)["repair"]["kabaneri"]["fails"]) == 0)
+
             # ★本物の見張りが、いまの手元の変更を実際に見つけることも確かめる★
             globals()["_unrelated_changes"] = _keep_unrel0
             t("★本物の見張りは、その機種以外の変更を実際に見つける★",
@@ -1249,6 +1324,15 @@ def main() -> int:
     p.add_argument("--lane", default="main", choices=["main", "ask"])
     p = sub.add_parser("status")
     p.add_argument("--task", required=True)
+    # ★直せたか直せなかったかを記録する★（2026-08-21・依頼246の防御4）
+    p = sub.add_parser("repaired")
+    p.add_argument("--slug", required=True)
+    p.add_argument("--fixed", choices=["yes", "no"], required=True,
+                   help="yes=前へ進んだ / no=材料が揃っても直せなかった"
+                        "（通信の失敗やロック待ちは記録しない）")
+    p.add_argument("--why", default="", help="no のときの理由（短く）")
+    p = sub.add_parser("cooldown")
+    p.add_argument("--slug", required=True)
 
     args = ap.parse_args()
     if args.selftest:
@@ -1283,6 +1367,13 @@ def main() -> int:
         print(json.dumps(before_commit(args.task, args.slug), ensure_ascii=False, indent=1))
     elif args.cmd == "done":
         print(json.dumps(done(args.task, args.slug, args.stage), ensure_ascii=False, indent=1))
+    elif args.cmd == "repaired":
+        print(json.dumps(record_repair(args.slug, args.fixed == "yes",
+                                       why=args.why), ensure_ascii=False, indent=1))
+    elif args.cmd == "cooldown":
+        resting, why = repair_cooldown(args.slug)
+        print(json.dumps({"slug": args.slug, "resting": resting, "why": why},
+                         ensure_ascii=False))
     elif args.cmd == "status":
         print(json.dumps(_load(STATE_PATH)["tasks"].get(args.task, {}),
                          ensure_ascii=False, indent=1))
