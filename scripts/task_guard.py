@@ -655,6 +655,17 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
                 + "へ変えられません（日を改めるか、別の機種にしてください）"
                 "。枠は使っていません")
 
+        # ★★無人タスクは、記録されていないコードでは動かない★★
+        #   （2026-08-21・台帳#237/#270）
+        _dirty = unattended_dirty_code(task)
+        if _dirty:
+            raise GuardError(
+                "コミットされていないスクリプトがあります: "
+                + " / ".join(_dirty[:3])
+                + (f" ほか{len(_dirty) - 3}件" if len(_dirty) > 3 else "")
+                + "。★無人タスクは記録されたコードだけで動きます★"
+                "（対話セッションでコミットしてください）。枠は使っていません")
+
         # ★書けない機種を担当にして枠を捨てない★（2026-08-08・台帳#272）
         #   台帳に未解決のCRITICAL案件がある機種は before_write が拒否する。
         #   ところが claim は段階を見ていなかったので、担当に確保した時点で
@@ -1057,6 +1068,41 @@ def _changed_files() -> tuple[list, str]:
             nm = nm.split(" -> ", 1)[1].strip().strip('"')
         names.append(nm)
     return sorted(set(names)), ""
+
+
+# ★★無人タスクは「記録されたコード」だけで動く★★（2026-08-21・台帳#237/#270）
+#   ★実際に起きたこと★
+#     2026-08-05 の add-machine 実行中に、対話セッションが
+#     scripts/task_guard.py を書き換えていた（23:37:57 開始 / 23:38:57 変更）。
+#     2026-08-07 は、未コミットの scripts/add_machine_run.py と task_guard.py で
+#     無人実行がまるごと走った。
+#   ★何がまずいか★
+#     ①レビューも記録もされていないコードで公開処理が動く
+#     ②作業ツリーにしか無いので、PCが壊れたら消える
+#     ③1回の実行の中で新旧が混ざりうる
+#       （起動時に読んだ版で走りつつ、途中の subprocess は新しい版を読む）
+#   ★止める場所★＝担当を取るところ（claim）。ここで断れば枠も使わない。
+#   ★対話セッションは止めない★＝ここを通るのは無人タスクだけ。
+UNATTENDED_TASKS = ("add-machine", "update-machine", "quality-review",
+                    "uchidokoro-add-machine", "uchidokoro-update-machine",
+                    "uchidokoro-quality-review")
+
+
+def unattended_dirty_code(task: str) -> list:
+    """無人タスクが「記録されていないコード」で動こうとしていないか。
+
+    ★見るのは scripts/ の中だけ★＝記事データや台帳は、
+      無人タスク自身が書くものなので対象にしない。
+    ★読めないときは空を返す★＝git が無い環境で止めない（呼ぶ側が判断）。
+    """
+    if not any(str(task).endswith(t) or str(task) == t
+               for t in UNATTENDED_TASKS):
+        return []
+    names, why = _changed_files()
+    if why:
+        return []
+    return sorted(n for n in names
+                  if n.startswith("scripts/") and n.endswith(".py"))
 
 
 def _file_digest(rel: str) -> str:
@@ -1672,6 +1718,29 @@ def selftest() -> int:
             "stage": "READY" if sl in _known else "NO_MACHINE"}
         t("　断られた日でも枠は残る（次の候補を選べる）",
           claim("t", "hokuto", fp0)["target_slug"] == "hokuto")
+
+        # --- ★★無人タスクは記録されていないコードでは動かない★★
+        #   （2026-08-21・台帳#237/#270）
+        #   ★実際に起きたこと★＝無人実行の最中に対話セッションが
+        #   task_guard.py を書き換えていた／未コミットのまま一晩走った。
+        _keep_ch = globals()["_changed_files"]
+        try:
+            globals()["_changed_files"] = lambda: (
+                ["scripts/task_guard.py", "assets/data/machines.json"], "")
+            t("★★無人タスクは、未コミットのスクリプトがあると担当できない★★",
+              raises(lambda: claim("update-machine", "hokuto",
+                                   os.path.join(tmpdir, "dirty.json")),
+                     "コミットされていない"))
+            t("　見るのは scripts/ の中だけ（記事データは無人タスク自身が書く）",
+              unattended_dirty_code("update-machine")
+              == ["scripts/task_guard.py"])
+            t("★対話セッションは止めない★",
+              unattended_dirty_code("interactive") == [])
+            globals()["_changed_files"] = lambda: ([], "git status が失敗しました")
+            t("　git が読めないときは止めない（呼ぶ側が判断する）",
+              unattended_dirty_code("update-machine") == [])
+        finally:
+            globals()["_changed_files"] = _keep_ch
 
         t("★1機種目は担当できる★", claim("t", "hokuto", fp)["target_slug"] == "hokuto")
         t("　同じ機種なら何度呼んでもよい（再開できる）",
