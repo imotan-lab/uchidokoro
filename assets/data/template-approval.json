@@ -51,7 +51,7 @@
   "scripts/hub_prose.json": "e72916960e547c4a88351ba0886a643dc0248e290a204af0269b7d2f91388380",
   "scripts/preview_site.py": "8ef4c5eef6c1749df51c1c8c3edfebd2a4af427b8e0ae52287e724776dc7849a",
   "scripts/safe_json.py": "43f61703cbe7e1ea93ee2602fe9be45662957c8929aef62d649b6fc0493e0006",
-  "service-worker.js": "07666c16304f3a426c0bd0ec11d6c1964c559d9b8872030658964c51b02ff14b",
+  "service-worker.js": "8e1e1da7ba75af6c45f52a689ccb0553f1c9df0e18b22eadabeb943859cc8696",
   "setting.html": "0dbb05bc5ab19183d49a0ab836205fb5fb1d85866059739fbf333c879d3de7b2"
  }
 }

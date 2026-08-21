@@ -475,6 +475,20 @@ def is_allowlisted(basename: str, src: str | None = None) -> bool:
 
 
 def cmd_copy(src: str, dst: str, optional: bool) -> int:
+    # ★★行き先は絶対パスで書く★★（2026-08-21・実際に間違えた）
+    #   相対パスを渡すと**いま居るところ**の下に作られる。
+    #   実際、Dropboxへ入れたつもりのSKILL.mdが
+    #   ★リポジトリの中に Claude_backup/ として出来ていた★
+    #   （気づかなければ、そのままコミットされて公開リポジトリに載る）。
+    #   ★バックアップは「別の場所へ置く」のが目的★なので、
+    #   行き先が曖昧なまま実行させない（fail-closed）。
+    if not os.path.isabs(dst):
+        _log(f"copy: 行き先が絶対パスではありません: {dst}")
+        print("DST_NOT_ABSOLUTE")
+        print("★行き先は絶対パスで書いてください★"
+              "（相対パスだと、いま居るところの下に作られます。"
+              "実際にリポジトリの中へバックアップが出来た事故があります）")
+        return 2
     base = os.path.basename(src)
     dst_base = os.path.basename(dst)
     if not os.path.exists(src):
@@ -660,6 +674,24 @@ def selftest() -> int:
     with contextlib.redirect_stdout(io.StringIO()):
         rc = cmd_copy(p, os.path.join(dst_dir, "SKILL.md"), False)
     t("許可リスト内の正常ファイルはコピー成功", rc == 0 and os.path.exists(os.path.join(dst_dir, "SKILL.md")))
+    # 1b. ★★行き先が相対パスなら断る★★（2026-08-21・実際に間違えた）
+    #   Dropboxへ入れたつもりのSKILL.mdが、リポジトリの中へ作られていた。
+    #   気づかなければ、そのままコミットされて公開リポジトリに載る。
+    p = w("SKILL.md", "# tejunsho")
+    _cwd = os.getcwd()
+    os.chdir(d)
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = cmd_copy(p, os.path.join("relative_dst", "SKILL.md"), False)
+        t("★★行き先が相対パスなら断る★★（いま居るところの下に作られる）",
+          rc == 2 and not os.path.exists(os.path.join(d, "relative_dst")))
+    finally:
+        os.chdir(_cwd)
+    with contextlib.redirect_stdout(io.StringIO()):
+        rc = cmd_copy(p, os.path.join(dst_dir, "sub", "SKILL.md"), False)
+    t("　絶対パスなら通る",
+      rc == 0 and os.path.exists(os.path.join(dst_dir, "sub", "SKILL.md")))
+
     # 2. 許可リスト外はコピー拒否
     p = w("mystery_data.json", "{}")
     with contextlib.redirect_stdout(io.StringIO()):

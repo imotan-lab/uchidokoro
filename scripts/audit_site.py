@@ -1875,11 +1875,46 @@ def check_47_model_code_in_html(machines: list) -> list[str]:
       記事データにも残っているなら、それは別の話（データ側の違反）で、
       そちらは公開前の検査が見ている。ここは**届いていない**ことを見る。
 
+    ★記事データそのものも見る★（2026-08-21に追加）
+      2026-08-21に全機種を調べたら、★9機種の記事に型式名が出ていた★
+      （tonsuki / toaru_index2 / sf6 / jashinchan / super_binmusume /
+        world_dai_star / yajikita_mairu / galfy / yabachiba）。
+      HTMLだけ見ていると、記事データに書いた時点では気づけない。
+
     直し方:
-      新台経路  python scripts/build_machine_pages.py --rebuild-auto <slug>
-      旧形式    python scripts/build_machine_pages.py --legacy --slug <slug>
+      記事データ  python scripts/strip_model_code.py --apply
+      新台経路    python scripts/build_machine_pages.py --rebuild-auto <slug>
+      旧形式      python scripts/build_machine_pages.py --legacy --slug <slug>
     """
     ng = []
+    # ★記事データに型式名の見出しが残っていないか★
+    try:
+        import strip_model_code as _smc
+        for m in machines:
+            slug = m.get("slug")
+            if not slug:
+                continue
+            dp = os.path.join(BASE, "assets", "data",
+                              "machine-details", f"{slug}.json")
+            if not os.path.isfile(dp):
+                continue
+            try:
+                d = load_json(dp)
+            except Exception:
+                continue
+            plan = _smc.plan_for(d)
+            n = len(plan["drop_body"]) + len(plan["drop_fact"])
+            if n:
+                ng.append(
+                    f"{slug}: 記事データに型式名の行が {n} 件あります"
+                    "（python scripts/strip_model_code.py --apply で消せます）")
+            for _si, _bi, line in plan["mixed"]:
+                ng.append(
+                    f"{slug}: 型式名が他の情報と同じ行にあります: {line[:50]!r}"
+                    "（行ごと消すと他の情報も消えるので、人が決めてください）")
+    except Exception as e:            # noqa: BLE001
+        ng.append(f"記事データの型式名を調べられません（{type(e).__name__}: {e}）")
+
     for m in machines:
         slug = m.get("slug")
         if not slug:
