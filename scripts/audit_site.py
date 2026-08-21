@@ -1851,6 +1851,36 @@ def check_44_empty_settei_box(machines: list) -> list[str]:
     return out
 
 
+def check_46_pochipochi_reachable(machines: list) -> list[str]:
+    """★ポチポチくんの案内が出るのに、飛び先が準備中になっていないか★
+    （2026-08-21・台帳#252）
+
+    ★なぜ★ 記事ページに「小役カウンター ポチポチくん →」が**有効なリンク**として
+    出るのに、飛んだ先が「準備中」になる＝★読者が空振りする★。
+    ★新台が増えるたびに増える構造★＝新しく足した機種はどのリストにも入らない。
+    実際、2026-08-07に15件だったものが2026-08-21には24件になっていた。
+
+    判定は `scripts/recheck.py` に任せる（★同じ規則を2か所に書かない★）。
+    """
+    sys.path.insert(0, str(BASE / "scripts"))
+    try:
+        import recheck as _rc
+    except Exception as e:                                   # noqa: BLE001
+        return [f"再検査の道具を読み込めません: {type(e).__name__}: {e}"]
+
+    out = []
+    for m in machines:
+        slug = m.get("slug")
+        if not slug:
+            continue
+        r = _rc.run("pochipochi_reachable", {"slug": slug})
+        if r["result"] == _rc.FAIL:
+            out.append(f"{slug}: {r['detail']}")
+        elif r["result"] == _rc.ERROR:
+            out.append(f"{slug}: 検査が失敗しました（{r['detail']}）")
+    return out
+
+
 def check_45_rumor_declared_empty(machines: list) -> list[str]:
     """★噂の箱に「噂はありません」と書いたまま出していないか★（2026-08-21・台帳#334）
 
@@ -2205,6 +2235,7 @@ CHECKS = [
     ("43_定義の無い内部関数の呼び出し", check_43_undefined_names),
     ("44_中身なしの設定示唆の箱", check_44_empty_settei_box),
     ("45_中身なしの噂の箱", check_45_rumor_declared_empty),
+    ("46_ポチポチくんの案内と飛び先", check_46_pochipochi_reachable),
 ]
 
 

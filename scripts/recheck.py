@@ -460,7 +460,45 @@ def check_rate_monotonic(args: dict) -> dict:
                    args, observed=observed)
 
 
-# --- 検査④（観測どまり）: 注記の「通常◯◯G」が実際の値と合っているか ----------
+# --- 検査④: ポチポチくんの案内が出るのに飛び先が準備中になっていないか --------
+#   ★読者に見える★＝記事ページに「小役カウンター ポチポチくん →」が
+#     有効なリンクとして出るのに、飛んだ先が「準備中」になる＝読者が空振りする。
+#   ★新台が増えるたびに増える構造★＝新しく足した機種はどのリストにも入らない。
+#     2026-08-07に15件だったものが、2026-08-21には24件になっていた（台帳#252）。
+
+def check_pochipochi_reachable(args: dict) -> dict:
+    slug = args.get("slug")
+    if not valid_slug(slug):
+        return _result(NOT_APPLICABLE, "machines.json にその機種がありません", args)
+    try:
+        with open(os.path.join(BASE, "setting.html"), encoding="utf-8") as f:
+            setting = f.read()
+        with open(os.path.join(BASE, "machine.html"), encoding="utf-8") as f:
+            mh = f.read()
+    except Exception as e:                                   # noqa: BLE001
+        return _result(ERROR, f"ページを読めません: {type(e).__name__}", args)
+
+    has_config = re.search(r"[\"']?" + re.escape(slug) + r"[\"']?\s*:\s*\{", setting)
+
+    def _listed(name):
+        m = re.search(name + r"\s*=\s*\[([^\]]*)\]", mh)
+        if not m:
+            return False
+        return ("'" + slug + "'") in m.group(1) or ('"' + slug + '"') in m.group(1)
+
+    observed = {"has_config": bool(has_config),
+                "no_setting_diff": _listed("noSettingDiff"),
+                "no_analysis": _listed("noAnalysis")}
+    if has_config or observed["no_setting_diff"] or observed["no_analysis"]:
+        return _result(PASS, "ポチポチくんの案内と飛び先が食い違っていません",
+                       args, observed=observed)
+    return _result(FAIL,
+                   "ポチポチくんの案内が出るのに、飛び先が準備中になります"
+                   "（MACHINE_CONFIGS にも noSettingDiff/noAnalysis にも無い）",
+                   args, observed=observed)
+
+
+# --- 検査⑤（観測どまり）: 注記の「通常◯◯G」が実際の値と合っているか ----------
 #   ★読者に見える★＝交換率を選ぶと注記が画面に出る。
 #     そこに書いてある「通常450G」等が実際の狙い目と違うと、読者の判断が変わる。
 #   ★観測どまりにする理由★＝注記が古いのか、値のほうが誤りかを機械が決められない。
@@ -699,6 +737,13 @@ CHECKS = {
         "closeable": True,          # ★読者に見える★ 既定表示の値が逆転する
         "title": "交換率が良いほうが深い狙い目になっていないか",
         "fn": check_rate_monotonic,
+        "args_spec": {"slug": (str, True, None)},
+    },
+    "pochipochi_reachable": {
+        "version": 1,
+        "closeable": True,          # ★読者に見える★ 案内どおりに飛べるか
+        "title": "ポチポチくんの案内が出るのに飛び先が準備中になっていないか",
+        "fn": check_pochipochi_reachable,
         "args_spec": {"slug": (str, True, None)},
     },
     "note_vs_threshold": {
