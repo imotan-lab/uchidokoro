@@ -460,7 +460,56 @@ def check_rate_monotonic(args: dict) -> dict:
                    args, observed=observed)
 
 
-# --- 検査④（観測どまり）: 記事の目安表とチェッカーの区切り -------------------
+# --- 検査④（観測どまり）: 注記の「通常◯◯G」が実際の値と合っているか ----------
+#   ★読者に見える★＝交換率を選ぶと注記が画面に出る。
+#     そこに書いてある「通常450G」等が実際の狙い目と違うと、読者の判断が変わる。
+#   ★観測どまりにする理由★＝注記が古いのか、値のほうが誤りかを機械が決められない。
+#     どちらかへそろえるには出典が要る（2AIの仕事）。
+
+_NOTE_NORMAL = re.compile(r"通常(\d{3,4})G")
+
+
+def check_note_vs_threshold(args: dict) -> dict:
+    slug = args.get("slug")
+    if not valid_slug(slug):
+        return _result(NOT_APPLICABLE, "machines.json にその機種がありません", args)
+    checker = (_machine(slug) or {}).get("checker")
+    if not isinstance(checker, dict):
+        return _result(NOT_APPLICABLE, "狙い目チェッカーの設定がありません", args)
+    normal = checker.get("normal")
+    if not isinstance(normal, dict):
+        return _result(NOT_APPLICABLE, "通常時の設定がありません", args)
+
+    checked = 0
+    bad = []
+    for mode, conf in checker.items():
+        if not isinstance(conf, dict):
+            continue
+        for rate, rv in (conf.get("byRate") or {}).items():
+            note = (rv or {}).get("note")
+            if not isinstance(note, str):
+                continue
+            for num in _NOTE_NORMAL.findall(note):
+                checked += 1
+                nb = (normal.get("byRate") or {}).get(rate)
+                src = nb if isinstance(nb, dict) else normal
+                good = src.get("good")
+                if _is_int(good) and good != int(num):
+                    bad.append({"mode": mode, "rate": rate,
+                                "note_says": int(num), "actual": good})
+    if not checked:
+        return _result(NOT_APPLICABLE, "注記に「通常◯◯G」の記述がありません", args)
+    observed = {"checked": checked, "mismatch": bad}
+    if bad:
+        where = " / ".join(f"{b['mode']}.{b['rate']} 注記{b['note_says']}G↔実際{b['actual']}G"
+                           for b in bad[:3])
+        return _result(FAIL, f"注記の「通常◯◯G」が実際と違います（{where}）",
+                       args, observed=observed)
+    return _result(PASS, "注記の「通常◯◯G」は実際の狙い目と一致しています",
+                   args, observed=observed)
+
+
+# --- 検査⑤（観測どまり）: 記事の目安表とチェッカーの区切り -------------------
 #   ★closeable=False★ 記事の evTable は公開ページで使われていないため、
 #     ここで一致していても「読者に正しく届いた」ことにはならない（依頼243の指摘1）。
 #     作業用データの手入れの目印として残す。
@@ -650,6 +699,13 @@ CHECKS = {
         "closeable": True,          # ★読者に見える★ 既定表示の値が逆転する
         "title": "交換率が良いほうが深い狙い目になっていないか",
         "fn": check_rate_monotonic,
+        "args_spec": {"slug": (str, True, None)},
+    },
+    "note_vs_threshold": {
+        "version": 1,
+        "closeable": False,         # ★観測どまり★ どちらが正しいかは出典が要る
+        "title": "注記の「通常◯◯G」が実際の狙い目と合っているか",
+        "fn": check_note_vs_threshold,
         "args_spec": {"slug": (str, True, None)},
     },
     "evtable_vs_checker": {

@@ -625,7 +625,11 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
         _e0 = _entry(data, task)
         if _e0.get("guard_slug") and _e0.get("guard_slug") != slug:
             for _k in ("mutation_started", "stage_before", "ledger_before",
-                       "repairing", "repair_issues", "final_stage"):
+                       "repairing", "repair_issues", "final_stage",
+                       # ★照合の記録も捨てる★（2026-08-21・Codex依頼249）
+                       #   これが残ると、1機種目の「見た内容」で
+                       #   2機種目の verify-commit が通ってしまう。
+                       "approved_files", "verified_commit"):
                 _e0.pop(_k, None)
         _e0["guard_slug"] = slug
 
@@ -841,22 +845,67 @@ def _shared_file_touches_others(rel: str, slug: str) -> bool:
         if rc != 0:
             return True
         try:
-            old = {m.get("slug"): m for m in json.loads(out)}
+            old = json.loads(out)
             with open(os.path.join(BASE, rel.replace("/", os.sep)),
                       encoding="utf-8") as f:
-                new = {m.get("slug"): m for m in json.load(f)}
+                new = json.load(f)
         except Exception:                                    # noqa: BLE001
             return True
-        if set(old) != set(new):
-            return True          # 機種が増減している＝この経路の仕事ではない
-        for s in old:
-            if s == slug:
+        if not isinstance(old, list) or not isinstance(new, list):
+            return True
+        # ★並びと重複まで見る★（2026-08-21・Codex依頼249の防御1）
+        #   辞書にすると、同じslugを増やしても集合が変わらず
+        #   「機種の増減を止める」という約束を守れていなかった。
+        if len(old) != len(new):
+            return True
+        for a, b in zip(old, new):
+            sa, sb = a.get("slug"), b.get("slug")
+            if sa != sb:
+                return True          # 同じ位置に同じ機種が居ない＝並びが動いた
+            if sa == slug:
                 continue
-            if old[s] != new[s]:
+            if a != b:
                 return True
         return False
-    # ★キャッシュ版・サイトマップは中身を持たない（どの機種の話でもない）★
-    return False
+    if rel == "service-worker.js":
+        # ★★これは全読者への応答を変えられる実行コード★★
+        #   （2026-08-21・Codex依頼249の指摘3。「中身を持たない共有ファイル」ではない）
+        #   記事を直すときに触ってよいのは**キャッシュ名の1行だけ**。
+        rc, out = _git("show", f"HEAD:{rel}")
+        if rc != 0:
+            return True
+        try:
+            with open(os.path.join(BASE, rel.replace("/", os.sep)),
+                      encoding="utf-8") as f:
+                now = f.read()
+        except Exception:                                    # noqa: BLE001
+            return True
+        a = _normalize_eol(out.encode("utf-8")).decode("utf-8").splitlines()
+        b = _normalize_eol(now.encode("utf-8")).decode("utf-8").splitlines()
+        if len(a) != len(b):
+            return True                  # 行数が変わっている＝1行の差し替えではない
+        diff = [i for i, (x, y) in enumerate(zip(a, b)) if x != y]
+        if len(diff) != 1:
+            return True
+        line = b[diff[0]]
+        # ★変わってよいのは CACHE_NAME の行だけ★
+        return not re.match(r"^const CACHE_NAME = 'uchidokoro-v\d+';\s*$", line)
+    if rel == "sitemap.xml":
+        # ★その機種のURLの出入りだけを許す★（他の機種の行が動いていたら止める）
+        rc, out = _git("show", f"HEAD:{rel}")
+        if rc != 0:
+            return True
+        try:
+            with open(os.path.join(BASE, rel.replace("/", os.sep)),
+                      encoding="utf-8") as f:
+                now = f.read()
+        except Exception:                                    # noqa: BLE001
+            return True
+        mine = f"/machines/{slug}/"
+        a = [x.strip() for x in out.splitlines() if mine not in x]
+        b = [x.strip() for x in now.splitlines() if mine not in x]
+        return a != b
+    return True                          # ★知らない共有ファイルは許さない★
 
 
 def _unrelated_changes(slug: str) -> list:
@@ -903,13 +952,25 @@ def _unrelated_changes(slug: str) -> list:
 
 
 def _git(*args) -> tuple[int, str]:
-    """★固定の引数配列でgitを呼ぶ★（シェルを通さない）。戻り値 (終了コード, 標準出力)"""
+    """★固定の引数配列でgitを呼ぶ★（シェルを通さない）。戻り値 (終了コード, 標準出力)
+
+    ★文字コードは必ず UTF-8 で読む★（2026-08-21・実データで落ちた）
+      `text=True` だけだと Windows の既定（cp932）で読もうとして、
+      日本語を含むファイルの中身を取り出したときに例外になり、
+      **戻り値が None になって呼び出し側が AttributeError で落ちた**。
+      ★試験では気づけない型★＝差し替えた偽物は日本語を含まなかった。
+    """
     try:
         p = subprocess.run(["git", "-C", str(BASE), *args],
-                           capture_output=True, text=True, timeout=60)
+                           capture_output=True, timeout=60)
     except Exception as e:                                   # noqa: BLE001
         return 1, f"{type(e).__name__}: {e}"
-    return p.returncode, p.stdout
+    try:
+        out = p.stdout.decode("utf-8")
+    except UnicodeDecodeError:
+        # ★読めない中身は「読めない」と返す★（勝手に化けさせない）
+        return 1, ""
+    return p.returncode, out
 
 
 def _changed_files() -> tuple[list, str]:
@@ -1655,10 +1716,13 @@ def selftest() -> int:
             _keep_run = subprocess.run
 
             class _R:
+                # ★本番と同じ形で返す★（2026-08-21）
+                #   `_git` は subprocess の**バイト列**を UTF-8 で読む実装なので、
+                #   偽物が str を返すと本番では起きない失敗になる。
                 returncode = 0
                 stdout = ("R  machines/other/index.html -> machines/target/index.html\n"
                           " M assets/data/machine-details/target.json\n"
-                          " M scripts/nazono.py\n")
+                          " M scripts/nazono.py\n").encode("utf-8")
 
             try:
                 subprocess.run = lambda *a, **k: _R()
@@ -1791,6 +1855,83 @@ def selftest() -> int:
                 globals()["_shared_file_touches_others"] = _keep_shared
                 globals()["_git"] = _keep_git2
                 globals()["_unrelated_changes"] = lambda s: []   # 元の差し替えに戻す
+
+            # --- ★共通ファイルの中身まで見る★（依頼249の指摘3・防御1）
+            _keep_git3 = globals()["_git"]
+            try:
+                # service-worker.js はキャッシュ名の1行だけ
+                base_sw = ("const CACHE_NAME = 'uchidokoro-v1';\n"
+                           "self.addEventListener('fetch', e => {});\n")
+                globals()["_git"] = lambda *a: (0, base_sw)
+                import builtins as _bi0
+                _real_open0 = _bi0.open
+
+                def _sw_open(p, *a, **k):
+                    if str(p).endswith("service-worker.js"):
+                        import io as _io0
+                        return _io0.StringIO(_sw_open.payload)
+                    return _real_open0(p, *a, **k)
+
+                _bi0.open = _sw_open
+                try:
+                    _sw_open.payload = ("const CACHE_NAME = 'uchidokoro-v2';\n"
+                                        "self.addEventListener('fetch', e => {});\n")
+                    t("★★キャッシュ名の1行だけなら許す★★",
+                      _shared_file_touches_others("service-worker.js", "a") is False)
+                    _sw_open.payload = ("const CACHE_NAME = 'uchidokoro-v1';\n"
+                                        "self.addEventListener('fetch', e => {evil();});\n")
+                    t("★★中のコードを変えたら止める★★",
+                      _shared_file_touches_others("service-worker.js", "a"))
+                    _sw_open.payload = base_sw + "// 追加\n"
+                    t("★★行を増やしたら止める★★",
+                      _shared_file_touches_others("service-worker.js", "a"))
+                    _sw_open.payload = ("const CACHE_NAME = 'evil';\n"
+                                        "self.addEventListener('fetch', e => {});\n")
+                    t("★キャッシュ名の形が違えば止める★",
+                      _shared_file_touches_others("service-worker.js", "a"))
+                finally:
+                    _bi0.open = _real_open0
+
+                # machines.json の並び・重複
+                globals()["_git"] = lambda *a: (
+                    0, json.dumps([{"slug": "a", "x": 1}, {"slug": "b", "x": 2}],
+                                  ensure_ascii=False))
+                _keep_open = None
+                import builtins as _bi
+                _real_open = _bi.open
+
+                def _fake_open(p, *a, **k):
+                    if str(p).endswith("machines.json"):
+                        import io as _io2
+                        return _io2.StringIO(_fake_open.payload)
+                    return _real_open(p, *a, **k)
+
+                _bi.open = _fake_open
+                try:
+                    _fake_open.payload = json.dumps(
+                        [{"slug": "a", "x": 9}, {"slug": "b", "x": 2}],
+                        ensure_ascii=False)
+                    t("　自分の機種の項目だけ変わっているなら許す",
+                      _shared_file_touches_others("assets/data/machines.json", "a")
+                      is False)
+                    t("★★他の機種が変わっていたら止める★★",
+                      _shared_file_touches_others("assets/data/machines.json", "b"))
+                    _fake_open.payload = json.dumps(
+                        [{"slug": "b", "x": 2}, {"slug": "a", "x": 1}],
+                        ensure_ascii=False)
+                    t("★★並びが入れ替わっていたら止める★★",
+                      _shared_file_touches_others("assets/data/machines.json", "a"))
+                    _fake_open.payload = json.dumps(
+                        [{"slug": "a", "x": 1}, {"slug": "a", "x": 1},
+                         {"slug": "b", "x": 2}], ensure_ascii=False)
+                    t("★★機種が増えていたら止める（重複でも）★★",
+                      _shared_file_touches_others("assets/data/machines.json", "a"))
+                finally:
+                    _bi.open = _real_open
+                t("★知らない共有ファイルは許さない★",
+                  _shared_file_touches_others("assets/img/logo.png", "a"))
+            finally:
+                globals()["_git"] = _keep_git3
 
             # --- ★改行の違いでは食い違わせない★（台帳#430・対照実験）
             t("　改行だけ違うものは同じ指紋になる",
