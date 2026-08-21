@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import json
 import os
 import subprocess
@@ -75,6 +76,57 @@ def _warn_unreported() -> None:
     print()
 
 
+def _verified_range() -> list:
+    """★無人タスクが直したコミットが、照合を通っているか★（2026-08-21・Codex依頼249）
+
+    ★なぜ要るのか★
+      `task_guard verify-commit`（関所が見た内容と実際のコミットの突き合わせ）を
+      作ったが、**push の側が見ていなかった**。
+      ・verify-commit を省いても push できた
+      ・先に未pushのコミットが積まれていると、最新1件だけ照合しても
+        それ以前が一緒に push された
+
+    ここでは「無人タスクが作ったコミット」だけを対象にする
+    （対話セッションの手作業まで止めると、鉄則4「当日中にpush」が守れない）。
+
+    戻り値: 止めるべき理由の一覧（空なら通してよい）
+    """
+    state = _lp.doc("task_guard.json")
+    try:
+        with open(state, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except Exception:                      # noqa: BLE001
+        return []                          # 記録が無い＝無人タスクは動いていない
+    # ★対象はその日の無人タスクだけ★（2026-08-21）
+    #   全期間の記録を見ると、対話セッションが手で作ったコミットまで
+    #   「照合していない」と止めてしまい、鉄則4（当日中にpush）が守れない。
+    today = datetime.now().strftime("%Y-%m-%d")
+    verified, active = set(), False
+    for name, e in (data.get("tasks") or {}).items():
+        if not isinstance(e, dict) or e.get("run_date") != today:
+            continue
+        if not e.get("guard_slug"):
+            continue
+        active = True              # 今日、関所を通った機種がある
+        if e.get("verified_commit"):
+            verified.add(str(e["verified_commit"]))
+    if not active:
+        return []                  # 今日は無人タスクが機種を触っていない
+    # いま push しようとしているコミットのうち、無人タスクが作ったもの
+    r = subprocess.run(["git", "log", "--format=%H %s", "origin/main..HEAD"],
+                       cwd=BASE, capture_output=True)
+    if r.returncode != 0:
+        return []
+    out = []
+    for line in r.stdout.decode("utf-8", "replace").splitlines():
+        if not line.strip():
+            continue
+        sha, _, subject = line.partition(" ")
+        if sha not in verified:
+            out.append(f"{sha[:12]} {subject[:60]}")
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="push前の検査")
     ap.add_argument("--always", action="store_true")
@@ -86,6 +138,22 @@ def main() -> int:
     #   **忘れようのない場所（pushの瞬間）に出す**。
     #   ★止めはしない★＝当日中のpushは別の鉄則（未pushで残すと夜の公開が止まる）。
     _warn_unreported()
+
+    # ★★照合を通っていないコミットは push させない★★（2026-08-21・Codex依頼249）
+    #   verify-commit を作っても、push側が見ていなければ素通りできた。
+    #   ★対象は「無人タスクが照合の記録を残している場合」だけ★
+    #   （対話セッションの手作業まで止めると、当日中にpushする鉄則が守れない）
+    unverified = _verified_range()
+    if unverified:
+        print()
+        print("★★関所の照合を通っていないコミットがあります★★")
+        for x in unverified[:5]:
+            print("   " + x)
+        print("   → python scripts/task_guard.py verify-commit "
+              "--task <タスク> --slug <機種> --commit <コミット>")
+        print("   （関所が見た内容と、実際にpushする内容が同じかを確かめてください）")
+        print()
+        return 1
 
     changed = _changed_paths()
     hit = [p for p in changed if any(p.startswith(w) or p == w for w in WATCH)]
