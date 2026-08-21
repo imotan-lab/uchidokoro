@@ -54,6 +54,20 @@ CONTRACT_INPUTS = frozenset({
     "scripts/maker_identity_cache.py",
     # 採否を使う側・公開への接続
     "scripts/add_machine_run.py",
+    # ★★DMM側の取得器★★（2026-08-21・台帳#425）
+    #   ★なぜ材料の契約に入れるのか★
+    #     採否を決める最後の関門（maker_identity_cache）は、控えを作るときに
+    #     `dmm_machine.fetch()` の戻り値を**そのまま信用して**
+    #     機種名の照合と導入日（YYYY-MM-DD でなければ控えを拒否）を決めている
+    #     （1496行で実際に import している）。
+    #     ＝★「この名鑑ページを材料に使ってよいか」の判断が、
+    #        dmm_machine の読み取り結果に乗っている★。
+    #     ここが集合の外だと、書き換えても承認をやり直さずに通ってしまう。
+    #   ★関門だけを守っても、その関門が信用している側が野放しなら意味がない★
+    "scripts/dmm_machine.py",
+    "scripts/dmm_calendar.py",
+    "scripts/dmm_discover.py",
+    "scripts/slug_binding.py",
     # 独立した票の数え方
     "scripts/source_lineage.py",
     "assets/data/source-registry.json",

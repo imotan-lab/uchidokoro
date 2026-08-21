@@ -12,10 +12,14 @@
   "scripts/blocked_hosts.py": "553ac0a6f0f0baf563100458937efa167826c4347f815ace1a70e39769909b7d",
   "scripts/ceiling_lookup.py": "9a36904651e226106dd2ee53e71602378c55122087789354b052215f8d62d5aa",
   "scripts/cz_lookup.py": "c93dde73b9a8c162bdd4fecfbf251e7ad7b3d0c87dba55e6005a140bd695d73e",
+  "scripts/dmm_calendar.py": "ad0ae2ffb3977307cf361e4a137288e9bccdd1f15fb43e560aa629c5942a6930",
+  "scripts/dmm_discover.py": "894d76b027c1508020d71640a74f3f0a02fbd8d6a1d42e3a15a2e8764d008592",
+  "scripts/dmm_machine.py": "d87e650a99f2677b718fd0bcc622da7c4eaeee03bfd0d3d91f2ddba87c9fa3b0",
   "scripts/fetched_page.py": "89c8186772e4704c1c944f054176a398e3857936accf9ae16a34ebb36da6afa3",
   "scripts/maker_identity_cache.py": "b17ec543bb00b9daf55b9918202f220f89b3b034b822d9c2d01b1c6221e54ed8",
   "scripts/model_code_lookup.py": "308a3c7094df313c9a1fb291dc9088921ffc1e870fdffc87b472ff25ee707ad5",
   "scripts/new_machine_watch.py": "72319ceacf38d0a8b71bf5ec442664187224a8a8288376e49425027198acbe15",
+  "scripts/slug_binding.py": "17c235c10cd7fed94d4c774bbe7b88c87349eff214bedaa22182d3fe79f26af6",
   "scripts/source_lineage.py": "3bc6d55450f8d39e099d88a73f3c662f02e95915d5fe83d981ffd759c9b3881a",
   "scripts/spec_lookup.py": "5d26c3e60dff046dc5f4fd270b4a232cad21d14264a4a74f2c7983b6554012a4",
   "scripts/user_area.py": "2f96a1d44cda5b1324fe1d44b85cf5913d608b0f67303cb188ed503d926ec91a"
@@ -74,6 +78,25 @@
    "spec_lookup",
    "user_area"
   ],
+  "scripts/dmm_calendar.py": [
+   "automation_policy",
+   "blocked_hosts",
+   "new_machine_watch"
+  ],
+  "scripts/dmm_discover.py": [
+   "blocked_hosts",
+   "claim_identity",
+   "dmm_calendar",
+   "dmm_machine",
+   "pending_machines"
+  ],
+  "scripts/dmm_machine.py": [
+   "automation_policy",
+   "blocked_hosts",
+   "claim_identity",
+   "html_tables",
+   "new_machine_watch"
+  ],
   "scripts/fetched_page.py": [
    "maker_identity_cache",
    "new_machine_watch",
@@ -99,6 +122,10 @@
    "automation_policy",
    "blocked_hosts",
    "page_probe"
+  ],
+  "scripts/slug_binding.py": [
+   "blocked_hosts",
+   "build_new_article"
   ],
   "scripts/source_lineage.py": [
    "blocked_hosts"
