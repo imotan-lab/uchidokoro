@@ -654,6 +654,85 @@ def check_body_vs_checker(args: dict) -> dict:
                    args, observed=observed)
 
 
+# 判定書の topic → 記事の箱の見出し
+_TOPIC2TITLE = {
+    "gameplay": "ゲーム性",
+    "cz": "確認できたCZ",
+    "ceiling": "天井・恩恵",
+    "setting": "設定示唆まとめ",
+    "strategy": "当サイトの狙い目",
+    "reset": "朝一・リセット情報",
+}
+_PENDING_TEXT = "未確認です。確認でき次第、この欄に掲載します。"
+
+
+def check_decision_vs_body(args: dict) -> dict:
+    """判定書が「未確認」と言っている箱に、記事が中身を書いていないか
+
+    ★なぜ見るか（2026-08-21・台帳#358）★
+      新台経路の記事は「判定書（PageDecision v1）」を持ち、
+      どの話題が確認済みでどれが未確認かを記録している。
+      ★判定書が pending と言っている箱に、記事が断定を書いていた★
+
+      実例（2026-08-21）
+        pw_10523  判定書 gameplay=pending ／ 記事「通常時は周期抽選からCZへ進みます」
+        prskkm    判定書 claims=[] ／ 記事「継続率約73%（出典2件で一致と明記）」
+        ssb1      判定書 claims=[model_code] ／ 記事「純増約8.0枚（同上）」
+
+      ★判定書は claims から毎回計算し直す設計★なので、
+      記事に書いてある事実が claims に入っていないのはおかしい。
+      ＝記事が claims 由来でない値を持っているか、claims の保存が落ちている。
+
+    ★どちらを直すかは、ここでは決めない★
+      記事の行を落とすのか、claims を作り直すのかは出典を見る話。
+      ＝★観測どまりの検査★。
+    """
+    slug = args.get("slug")
+    if not valid_slug(slug):
+        return _result(NOT_APPLICABLE, "machines.json にその機種がありません", args)
+    machine = _machine(slug) or {}
+    pd = machine.get("page_decision")
+    if not isinstance(pd, dict):
+        return _result(NOT_APPLICABLE, "判定書がありません（新台経路ではない）",
+                       args)
+    pend = set(pd.get("pending_topics") or [])
+    if not pend:
+        return _result(NOT_APPLICABLE, "未確認の話題がありません", args)
+    detail, _raw, _why = _load_detail(slug)
+    if not isinstance(detail, dict):
+        return _result(NOT_APPLICABLE, _why or "記事データがありません", args)
+
+    bad = []
+    for sec in detail.get("sections") or []:
+        title = str(sec.get("title") or "")
+        topic = None
+        for t, ti in _TOPIC2TITLE.items():
+            if ti == title:
+                topic = t
+                break
+        if topic is None or topic not in pend:
+            continue
+        body = [x for x in (sec.get("body") or []) if isinstance(x, str)]
+        txt = "".join(body).strip()
+        if not txt:
+            continue
+        # ★未確認の断りが入っていれば正しい★（言い回しは2通りある）
+        if _PENDING_TEXT in txt or txt.startswith("未確認"):
+            continue
+        bad.append({"title": title, "topic": topic, "lines": len(body),
+                    "first": body[0][:60] if body else ""})
+    observed = {"pending_topics": sorted(pend),
+                "claims": list(pd.get("claims") or []), "mismatch": bad}
+    if bad:
+        where = " / ".join(f"{b['title']}（{b['lines']}行）" for b in bad[:3])
+        return _result(
+            FAIL,
+            f"判定書は未確認と言っているのに記事が書いています（{where}）",
+            args, observed=observed)
+    return _result(PASS, "判定書が未確認と言っている箱は、記事も未確認です",
+                   args, observed=observed)
+
+
 def check_note_vs_threshold(args: dict) -> dict:
     slug = args.get("slug")
     if not valid_slug(slug):
@@ -905,6 +984,13 @@ CHECKS = {
         "closeable": False,         # ★観測どまり★ どちらを直すかは出典が要る
         "title": "記事の交換率ごとの狙い目が、チェッカーと合っているか",
         "fn": check_body_vs_checker,
+        "args_spec": {"slug": (str, True, None)},
+    },
+    "decision_vs_body": {
+        "version": 1,
+        "closeable": False,         # ★観測どまり★ どちらを直すかは出典が要る
+        "title": "判定書が未確認と言っている箱に、記事が書いていないか",
+        "fn": check_decision_vs_body,
         "args_spec": {"slug": (str, True, None)},
     },
     "note_vs_threshold": {
@@ -1299,6 +1385,15 @@ def _selftest():
       _bv({"slug": "hokuto"})["result"] in (PASS, NOT_APPLICABLE))
     t("★★これも観測どまり（どちらを直すかは出典が要る）★★",
       CHECKS["body_vs_checker"]["closeable"] is False)
+
+    # --- ★判定書と記事の食い違い★（2026-08-21・台帳#358）
+    _dv = check_decision_vs_body
+    t("★判定書が未確認と言っている箱に記事が書いていれば不合格★",
+      _dv({"slug": "pw_10523"})["result"] == FAIL)
+    t("　判定書が無い機種（旧方式）は判定しない",
+      _dv({"slug": "hokuto"})["result"] == NOT_APPLICABLE)
+    t("★★これも観測どまり（記事を消すか claims を作り直すかは出典が要る）★★",
+      CHECKS["decision_vs_body"]["closeable"] is False)
 
     # --- 観測どまりの検査では閉じない
     t("★観測どまりの検査は、PASSでも閉じられない★",
