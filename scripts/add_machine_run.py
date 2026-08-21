@@ -2676,6 +2676,22 @@ def selftest() -> int:
     results = []
     nl = chr(10)
 
+    # ★★試験は本番の控えを読まない★★（2026-08-22・実際に落ちて分かった）
+    #   ★直す前に起きたこと★＝
+    #     maker_identity_cache.load() は**控え全件**を検査する。
+    #     試験の中ではメーカー名簿や出典まわりを偽物へ差し替えているので、
+    #     ★本番に実在する控えがその偽物に引っかかって例外になり★、
+    #     まったく関係のない試験（L試験機の下見）が KeyError で落ちた。
+    #     実際の文言＝「期待 kyoraku ／名鑑「京楽」→ （不明）」
+    #     ＝偽の名簿では京楽を引けないだけで、本番では通っている控え。
+    #   ＝★試験の結果が本番のデータ次第で変わる★という重い欠陥。
+    #     dmm_5073 の控えを1件足しただけで CI 再現が赤くなった。
+    #   ★空の置き場を指す★＝読んでも書いても本番に触らない。
+    import tempfile as _tf_mic
+    _mic_keep_store = _mic.STORE
+    _mic.STORE = os.path.join(_tf_mic.mkdtemp(prefix='uchi_mic_'),
+                              'maker_identity_cache.json')
+
     def t(name, cond):
         results.append((name, bool(cond)))
         print(("✅" if cond else "❌") + " " + name)
@@ -4136,6 +4152,9 @@ def selftest() -> int:
         sys.argv = _keep_argv
 
     ng = [n for n, ok in results if not ok]
+    # ★控えの置き場を元へ戻す★（試験のあとに本番へ影響を残さない）
+    _mic.STORE = _mic_keep_store
+
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
     if ng:
         print("失敗:", ng)
