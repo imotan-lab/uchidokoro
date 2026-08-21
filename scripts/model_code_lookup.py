@@ -283,7 +283,16 @@ def page_is_machine(html: str, official_name: str,
     if not core:
         return False, "OFFICIAL_NAME_HAS_NO_CORE"
     want_gen = _gen_mark(official_name)
-    gen_conflict = False
+    # ★★落ちた理由を混ぜない★★（2026-08-22・Codexの指摘／実害あり）
+    #   ★直す前★＝4つの別々の落ち方が全部 GEN_MARK_CONFLICT を名乗っていた。
+    #   実際 pw_10510（タコスロ）は「規格印の食い違い」と報告されていたが、
+    #   本当の理由は★題の後ろの「ボーナストリガー」を飾りとして分解できない★
+    #   ことだった（L/Sの比較は成功していた）。
+    #   ＝**丸1日、原因を取り違えて調べた**（台帳#453の記述も誤っていた）。
+    #   ★採否は1文字も変えない★＝名前を分けるだけ。異常の正体を隠さないため。
+    gen_conflict = False        # 規格の印（L/S）が食い違う＝別機種
+    tail_conflict = False       # 名前の後ろの語を飾りとして説明できない
+    deriv_conflict = False      # 派生機の印（SP等）が後ろにある
     # ★題そのものも候補に入れる★（機種名の中に括弧が入ることがある）
     #   「甲鉄城のカバネリ 海門(うなと)決戦」は、区切ると名前が割れてしまう。
     # ★断片にしても「元の題でその前に何があったか」を持ち歩く★
@@ -378,7 +387,7 @@ def page_is_machine(html: str, official_name: str,
                     #     派生機の公式URL「…（SP）|BELLCO」が通ってしまった）
                     if not all(_after_ok(a, core, official_name, extra_tail_ok)
                                for a in after):
-                        gen_conflict = True
+                        tail_conflict = True
                         continue
                     # ★同じ断片の残りの語も全部見る★（2026-08-02・Codex32回目）
                     #   「名前 新台 SP」は最初の飾り（新台）で検査を
@@ -390,7 +399,7 @@ def page_is_machine(html: str, official_name: str,
                     if strict_all_tail and not _after_ok(
                             " ".join(raw[j + 1:]), core,
                             official_name, extra_tail_ok):
-                        gen_conflict = True
+                        tail_conflict = True
                         continue
                     # ★材料の照合でも、明確な派生の印だけは拒む★
                     #   （2026-08-02・Codex33回目。独立2つの解析サイトが
@@ -398,11 +407,16 @@ def page_is_machine(html: str, official_name: str,
                     #     2票一致も規格印も通ってしまうため）
                     if not strict_all_tail and _has_deriv_mark(
                             [_ci.normalize_core(w) for w in raw[j + 1:]]):
-                        gen_conflict = True
+                        deriv_conflict = True
                         continue
                     return True, "OK"
+    # ★強い証拠から順に名乗る★（同時に立ちうるため）
     if gen_conflict:
         return False, "GEN_MARK_CONFLICT"
+    if deriv_conflict:
+        return False, "DERIV_MARK_CONFLICT"
+    if tail_conflict:
+        return False, "TAIL_CONFLICT"
     return False, "NAME_CORE_MISMATCH"
 
 
@@ -1090,6 +1104,34 @@ def selftest() -> int:
     t("★★S版のページをL版の本人にしない★★（規格が違えば別機種・Codex23回目）",
       page_is_machine("<title>S北斗の拳 新台 | P-WORLD</title>",
                       "L北斗の拳") == (False, "GEN_MARK_CONFLICT"))
+
+    # ★★落ちた理由を混ぜない★★（2026-08-22・実害があった）
+    #   ★直す前★＝4つの別々の落ち方が全部 GEN_MARK_CONFLICT を名乗っていた。
+    #   pw_10510（タコスロ）は「規格印の食い違い」と報告されていたが、
+    #   本当は★題の後ろの「ボーナストリガー」を飾りとして分解できない★だけで、
+    #   L/Sの比較は成功していた。＝**丸1日、原因を取り違えて調べた**。
+    def _pg(_t):
+        return "<html><head><title>" + _t + "</title></head><body></body></html>"
+
+    t("★★後ろの飾りを説明できないのは TAIL_CONFLICT★★"
+      "（規格印の食い違いと名乗っていた）",
+      page_is_machine(
+          _pg("スマスロ タコスロ(新台スマスロ)パチスロ|"
+              "ボーナストリガー・設定判別・天井・ゾーン・解析・打ち方・ヤメ時"),
+          "スマスロ タコスロ", strict_all_tail=True)
+      == (False, "TAIL_CONFLICT"))
+    t("　飾りが全部説明できる題は今までどおり通る",
+      page_is_machine(
+          _pg("スマスロ ゴジラ対エヴァンゲリオン(新台スマスロ)パチスロ|"
+              "ボーナス・設定判別・天井・解析"),
+          "スマスロ ゴジラ対エヴァンゲリオン", strict_all_tail=True)
+      == (True, "OK"))
+    t("★規格印が本当に食い違うときは今までどおり GEN_MARK_CONFLICT★",
+      page_is_machine(_pg("S北斗の拳 パチスロ新台"), "L北斗の拳")
+      == (False, "GEN_MARK_CONFLICT"))
+    t("　芯がそもそも合わないときは NAME_CORE_MISMATCH",
+      page_is_machine(_pg("まったく別の機種 パチスロ新台"), "L北斗の拳")
+      == (False, "NAME_CORE_MISMATCH"))
     t("　逆（L版のページをS版の本人に）も弾く",
       page_is_machine("<title>L北斗の拳 新台 | P-WORLD</title>",
                       "S北斗の拳")[0] is False)
