@@ -1160,7 +1160,17 @@ def check_31_codex_report(machines: list) -> list[str]:
         r = subprocess.run(["git", "log", "--oneline", f"{last}..HEAD", "--",
                             "scripts/"], cwd=BASE, capture_output=True)
         if r.returncode != 0:
-            return []      # 記録のコミットが無い等。監査を落とさない
+            # ★★黙って通さない★★（2026-08-21・台帳#295の③）
+            #   直す前は空を返していたので、
+            #   ★記録が壊れているときに「未報告0件」に見えた★
+            #   （記録のコミットが消えた・rebaseで別物になった等）。
+            #   ＝見張りが効かなくなったことに誰も気づけない。
+            _err = (r.stderr or b"").decode("utf-8", "replace").strip()
+            return [f"Codexへの未報告を数えられません"
+                    f"（記録のコミット {str(last)[:12]} を git が見つけられません）"
+                    f": {_err[:120]}"
+                    " → python scripts/codex_receipt.py list で領収書を確かめ、"
+                    "python scripts/codex_reported.py --receipt <領収書> で記録し直す"]
         text = r.stdout.decode("utf-8", "replace")
         lines = [x for x in text.splitlines() if x.strip()]
     except Exception as e:
