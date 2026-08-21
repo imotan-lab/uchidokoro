@@ -1380,12 +1380,9 @@ def selftest() -> int:
                      expected_maker="sanslay"),
               setattr(_w, "_get", _w._get_bak189))[2])()
           ["maker_check"]["state"]))
-    t("★★巡回に要るものが無い社は、落ちずに『見張りの対象外』で返る★★"
-      "（--check kyoraku が KeyError で異常終了していた・依頼172のP1）",
-      (lambda r: r["state"] == "NOT_WATCHABLE" and bool(r["problem"]))(
-          _w.scan_maker("kyoraku",
-                        {"name": "京楽", "status": "WATCH_OFF"},
-                        {"makers": {}}, record=False)))
+    # ★この位置にあった試験は消した★（2026-08-21・台帳#379の【4】）
+    #   scan_maker（メーカー公式の巡回）そのものを消したため。
+    #   ★止めた仕組みの試験だけを残さない★＝残すと「まだ生きている」と読める。
     t("　名簿の別名（コナミアミューズメント→KPE）は解決されて通る"
       "（KPEのとんスキ実データを弾かないため）",
       (lambda: (setattr(_w, "_get_bak41", _w._get),

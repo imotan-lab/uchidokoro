@@ -14,8 +14,8 @@
   "scripts/cz_lookup.py": "c93dde73b9a8c162bdd4fecfbf251e7ad7b3d0c87dba55e6005a140bd695d73e",
   "scripts/fetched_page.py": "89c8186772e4704c1c944f054176a398e3857936accf9ae16a34ebb36da6afa3",
   "scripts/maker_identity_cache.py": "b17ec543bb00b9daf55b9918202f220f89b3b034b822d9c2d01b1c6221e54ed8",
-  "scripts/model_code_lookup.py": "f1f5b5964964147130fcdbc43e9a96135403219b237789ee3a2f2098dd39b38e",
-  "scripts/new_machine_watch.py": "15af901a9468c82e9f40dbf8ddb7ba581f1b98938493a5c47d2d53d6465cd48f",
+  "scripts/model_code_lookup.py": "308a3c7094df313c9a1fb291dc9088921ffc1e870fdffc87b472ff25ee707ad5",
+  "scripts/new_machine_watch.py": "5aa9cb43bb01a69463f57286d2fab1767ee02f28d14dc144adbd2a7648d53f3e",
   "scripts/source_lineage.py": "3bc6d55450f8d39e099d88a73f3c662f02e95915d5fe83d981ffd759c9b3881a",
   "scripts/spec_lookup.py": "5d26c3e60dff046dc5f4fd270b4a232cad21d14264a4a74f2c7983b6554012a4",
   "scripts/user_area.py": "2f96a1d44cda5b1324fe1d44b85cf5913d608b0f67303cb188ed503d926ec91a"

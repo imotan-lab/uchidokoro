@@ -29,6 +29,8 @@
 
 from __future__ import annotations
 
+import datetime
+import time
 import argparse
 import functools
 import hashlib
@@ -78,26 +80,81 @@ _WS = "[ " + chr(9) + chr(13) + chr(10) + "]*"
 LOCK = os.path.join(BASE, ".publish.lock")
 
 
+# ★★残骸を時間で片付ける★★（2026-08-21・台帳#379の【4】を直しているときに発見）
+#   直す前の _OnlyOne は「ファイルがあれば必ず断る」だけだった。
+#   ＝★公開処理が途中で死ぬと、目印が永久に残って以後の新台公開が全部止まる★。
+#   しかも止まり方が「いま別の処理が動いています」なので、
+#   **動いていないのに動いていると言い続ける**（原因に辿り着けない）。
+#   実際に PID 1692 の残骸が丸1日残っていて、この形で再現した。
+#
+#   ★時間で見る（生き死にを見に行かない）★
+#     Windows で os.kill(pid, 0) は「問い合わせ」ではなく**終了させる**ので使えない。
+#     task_lock.py と同じ「最後に触れてから30分」を残骸の目安にする。
+#     公開1回は数分で終わるので、30分動いていれば異常。
+#
+#   ★これは途中終了の防御を弱めない★
+#     公開が途中で終わったことは **別の目印**（_MARK・1186行の検査）が持っている。
+#     ロックの残骸を片付けても、その機種は
+#     「前回の公開が途中で終わっています → --recover」で止まったまま。
+#     ＝片付けるのは「入口の閂」だけで、「やりかけの後始末」は人と --recover の担当。
+LOCK_STALE_MINUTES = 30
+
+
 class _OnlyOne:
     """★同時に2つ公開しない★（2026-07-31・Codex指摘4）
 
     2機種を同時に公開すると、どちらも同じ古い machines.json を読み、
     後から置き換えた方が先の追加を消してしまう。
     ロックファイルを「排他作成」で作れた側だけが進む。
+
+    ★ただし残骸は片付ける★（2026-08-21）＝上の説明を参照。
     """
 
     def __init__(self, path=LOCK):
         self.path = path
         self.fd = None
+        self.evicted = None       # ★残骸を片付けたら、その事実を残す★
+
+    def _age_minutes(self):
+        """目印に最後に触れてから何分たったか（読めなければ大きい値＝残骸扱い）"""
+        try:
+            return (time.time() - os.path.getmtime(self.path)) / 60.0
+        except OSError:
+            return 0.0            # 消えていた＝もう残骸ではない
+
+    def _create(self):
+        self.fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(self.fd, str(os.getpid()).encode())
 
     def __enter__(self):
         try:
-            self.fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            os.write(self.fd, str(os.getpid()).encode())
+            self._create()
         except FileExistsError:
-            raise PublishError(
-                "いま別の公開処理が動いています（同時に2つは公開しません）。"
-                f"止まったままなら {self.path} を消してください")
+            age = self._age_minutes()
+            if age < LOCK_STALE_MINUTES:
+                raise PublishError(
+                    "いま別の公開処理が動いています（同時に2つは公開しません）。"
+                    f"{age:.0f}分前から動いています。"
+                    f"止まったままなら {self.path} を消してください")
+            # ★残骸だった★＝原子的に退避してから、もう一度だけ作る。
+            #   退避に負けた（他が先に片付けた）ら、素直に断る。
+            dst = self.path + ".stale." + datetime.datetime.now().strftime(
+                "%Y%m%d%H%M%S")
+            try:
+                os.replace(self.path, dst)
+            except OSError as e:
+                raise PublishError(
+                    f"止まったままの目印を片付けられませんでした（{e}）。"
+                    f"{self.path} を確かめてください")
+            try:
+                self._create()
+            except FileExistsError:
+                raise PublishError(
+                    "いま別の公開処理が動いています（同時に2つは公開しません）")
+            self.evicted = {"age_minutes": round(age, 1), "moved_to": dst}
+            print(f"★{age:.0f}分ぶん止まっていた目印を片付けました★"
+                  f"（{os.path.basename(dst)} へ退避）。"
+                  "前回が途中で終わっていれば、この後の検査が止めます")
         return self
 
     def __exit__(self, *exc):
@@ -2570,6 +2627,33 @@ def selftest() -> int:
               os.path.join(BASE, ".publish.lock.test")).__enter__()))
     t("　抜けたらロックは消える",
       not os.path.exists(os.path.join(BASE, ".publish.lock.test")))
+
+    # ★★止まったままの目印を、時間で片付ける★★（2026-08-21）
+    #   ★直す前に実際に起きていたこと★＝PID 1692 の残骸が丸1日残り、
+    #   「いま別の公開処理が動いています」と言い続けた。
+    #   ＝★誰も動いていないのに、新台公開が永久に止まる★
+    _lt = os.path.join(BASE, ".publish.lock.stale_test")
+    try:
+        with open(_lt, "w") as _f3:
+            _f3.write("9999")
+        t("★動いている間の目印は片付けない★（同時公開の防御は残す）",
+          _raises(lambda: _OnlyOne(_lt).__enter__()))
+        _old = time.time() - (LOCK_STALE_MINUTES + 1) * 60
+        os.utime(_lt, (_old, _old))
+        with _OnlyOne(_lt) as _one2:
+            t("★★30分より古い目印は残骸として片付けて通る★★"
+              "（直す前はここで永久に止まっていた）",
+              _one2.evicted is not None
+              and _one2.evicted["age_minutes"] > LOCK_STALE_MINUTES)
+            _moved = _one2.evicted["moved_to"]
+        t("　残骸は消さずに退避してある（後から中身を見られる）",
+          os.path.exists(_moved))
+        t("　抜けたら新しい目印も消える", not os.path.exists(_lt))
+        os.remove(_moved)
+    finally:
+        for _leftover in (_lt,):
+            if os.path.exists(_leftover):
+                os.remove(_leftover)
 
     # ★sitemap は1文字も変えない★
     with open(SITEMAP, encoding="utf-8") as _f2:
