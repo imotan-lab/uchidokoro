@@ -13,7 +13,7 @@
   "scripts/ceiling_lookup.py": "9a36904651e226106dd2ee53e71602378c55122087789354b052215f8d62d5aa",
   "scripts/cz_lookup.py": "c93dde73b9a8c162bdd4fecfbf251e7ad7b3d0c87dba55e6005a140bd695d73e",
   "scripts/fetched_page.py": "89c8186772e4704c1c944f054176a398e3857936accf9ae16a34ebb36da6afa3",
-  "scripts/maker_identity_cache.py": "530a5b9077e78077b0dde36ddb7a5c7ff90a08b2eef5776ff3761978428cb463",
+  "scripts/maker_identity_cache.py": "b17ec543bb00b9daf55b9918202f220f89b3b034b822d9c2d01b1c6221e54ed8",
   "scripts/model_code_lookup.py": "f1f5b5964964147130fcdbc43e9a96135403219b237789ee3a2f2098dd39b38e",
   "scripts/new_machine_watch.py": "15af901a9468c82e9f40dbf8ddb7ba581f1b98938493a5c47d2d53d6465cd48f",
   "scripts/source_lineage.py": "3bc6d55450f8d39e099d88a73f3c662f02e95915d5fe83d981ffd759c9b3881a",
@@ -117,6 +117,5 @@
    "ceiling_lookup",
    "new_machine_watch"
   ]
- },
- "_deps_changed_why": "source_lineage が blocked_hosts を取り込むようにしたため（2026-08-21・台帳#376/#416）。\n\n■ なぜ必要になったか\n\n票を数える source_lineage.independent() が素通しで、\n規約で自動取得を止めたサイト（P-WORLD・一撃）の古いURLが1票として数えられていた。\n実測: p-world + nana-press → 2票（取りに行けない出典で「独立2出典」が成立）。\n\n「独立した2つの出典」の2を数えるのはこの関数だけ、という設計なので、\nここで止めるのが筋。止める先の名簿は blocked_hosts が持っているため取り込む。\n\n■ この依存を材料の契約に入れてよい理由\n\nblocked_hosts は「規約で自動取得を禁じられている先」を固定で持つだけのモジュールで、\nすでに材料の採否に関わる new_machine_watch から使われている\n（通信そのものを止める役）。source_lineage から使うのは同じ名簿の参照であり、\n新しい判断を持ち込むものではない。\n\n★むしろ、入れないほうが危ない★＝\nblocked_hosts の中身が変わると票の数え方が変わるのに、\n契約が「顔ぶれが変わっていない」と言い続けることになる。\n\n■ 承認する範囲\n\nscripts/source_lineage.py の imports に blocked_hosts が増えたこと。\n減ったものは無い。"
+ }
 }

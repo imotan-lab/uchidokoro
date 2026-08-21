@@ -154,6 +154,34 @@ def load() -> dict:
 
 
 _DATE = __import__("re").compile(r"^\d{4}-\d{2}-\d{2}$")
+# ★導入前の新台はDMMも月までしか書かない★（2026-08-21・台帳#424）
+#   日精度を必須にしていたので、**2AIが決めても控えられなかった**
+#   （2026-08-20に実際に発生: dmm_5073 は "2026-11"／"2026年11月上旬予定"）。
+#   導入日は「機種を取り違えないための鍵」なので、★DMMが持っている精度で鍵にする★。
+#   ★粗くしたぶんは、突き合わせも同じ精度で行う★（下の _release_same）。
+_MONTH = __import__("re").compile(r"^\d{4}-\d{2}$")
+
+
+def _release_key_ok(v) -> bool:
+    """控えの鍵として使える形か（日まで／月まで）。"""
+    s = str(v or "")
+    return bool(_DATE.match(s) or _MONTH.match(s))
+
+
+def _release_same(a, b) -> bool:
+    """控えの導入日と、いまDMMで確かめた導入日が同じか。
+
+    ★片方が月までなら、月で比べる★（粗いほうに合わせる）。
+      控え "2026-11" ／ いま "2026-11-07" → 同じ扱い
+      控え "2026-11" ／ いま "2026-12-01" → 違う
+    ★どちらかが空なら「同じ」とは言わない★
+    """
+    x, y = str(a or ""), str(b or "")
+    if not x or not y:
+        return False
+    if _MONTH.match(x) or _MONTH.match(y):
+        return x[:7] == y[:7]
+    return x == y
 
 
 def _has_core(haystack: str, needle: str) -> bool:
@@ -272,8 +300,8 @@ def _check_record(slug: str, rec, reg=None, require_final: bool = True) -> None:
         if not str(rec.get(k) or "").strip():
             raise CacheError(f"控えに「{k}」がありません（{slug}）"
                              "／★どの機種のページかを名乗らせます★")
-    if not _DATE.match(str(rec.get("release_date"))):
-        raise CacheError(f"控えの導入日は YYYY-MM-DD で書きます（{slug}）: "
+    if not _release_key_ok(str(rec.get("release_date"))):
+        raise CacheError(f"控えの導入日は YYYY-MM-DD か YYYY-MM で書きます（{slug}）: "
                          f"{rec.get('release_date')!r}")
     # ★②逐語引用そのものに、機種名とメーカー欄が入っていること★
     #   ページのどこかにあるだけでは足りない（別機種の欄でも通ってしまう）。
@@ -411,7 +439,7 @@ def verdict_for(slug: str, expected: str = "", seen: str = "", store=None,
         if not machine_name or not release_date:
             return None
         if not _has_core(str(rec.get("machine_name") or ""), machine_name) \
-                or str(rec.get("release_date") or "") != str(release_date):
+                or not _release_same(rec.get("release_date"), release_date):
             return None
         # ★④根拠が今もそのページに実在するか（毎回取り直す）★
         try:
@@ -1337,6 +1365,27 @@ def selftest() -> int:
       "2026年10月5日" in date_forms(_REL) and "2026/10/5" in date_forms(_REL)
       and date_forms("") == [] and date_forms("2026/10/05") == [])
 
+    # --- ★導入前の新台（月精度）でも控えられる★（2026-08-21・台帳#424）
+    #   直す前は日精度を必須にしていたので、**2AIが決めても控えられなかった**
+    #   （2026-08-20に実際に発生: dmm_5073 は "2026-11"／"2026年11月上旬予定"）。
+    t("★★月までしか分からなくても鍵として使える★★", _release_key_ok("2026-11"))
+    t("　日まで分かっていれば当然使える", _release_key_ok("2026-11-07"))
+    t("★年だけ・空・でたらめは使えない★",
+      not _release_key_ok("2026") and not _release_key_ok("")
+      and not _release_key_ok("2026年11月"))
+
+    t("★★控えが月まで・いまが日までなら、月で比べて同じ扱い★★",
+      _release_same("2026-11", "2026-11-07"))
+    t("　逆向き（控えが日まで・いまが月まで）も同じ",
+      _release_same("2026-11-07", "2026-11"))
+    t("★★月が違えば別物★★", not _release_same("2026-11", "2026-12-01"))
+    t("★年が違えば別物★", not _release_same("2026-11", "2027-11-07"))
+    t("　日まで同士は、いままでどおり完全一致で見る",
+      _release_same("2026-11-07", "2026-11-07")
+      and not _release_same("2026-11-07", "2026-11-08"))
+    t("★どちらかが空なら「同じ」とは言わない★",
+      not _release_same("", "2026-11-07") and not _release_same("2026-11", ""))
+
     ng = sum(1 for _, o in results if not o)
     print()
     print("%d/%d 合格" % (len(results) - ng, len(results)))
@@ -1457,9 +1506,9 @@ def main() -> int:
                 return 1
             machine_name = str(a.machine_name).strip()
             release_date = str(got_m.get("release_date") or "")
-            if not _DATE.match(release_date):
+            if not _release_key_ok(release_date):
                 print(f"★DMMから導入日を取れません（{release_date!r}）★"
-                      "／日が確定していない機種は控えられません")
+                      "／年月すら分からない機種は控えられません")
                 return 1
         # ★CLIでは取ってくる役を差し替えない★＝本物のページで照合する
         rec = remember(slug, a.expected or "", a.seen or "", a.verdict or "",
