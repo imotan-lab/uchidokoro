@@ -857,10 +857,23 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
         out["problems"] += [f"本人性を確かめ直せません: {p}" for p in vo["problems"]]
         return out
     if old_release and vo.get("release") and vo["release"] != old_release:
-        out["problems"].append(
-            f"登場年月が変わっています（{old_release} → {vo['release']}）"
-            "／自動では直しません")
-        return out
+        # ★★「月だけ」→「日まで」は食い違いではない★★（2026-08-21・台帳#383）
+        #   2026-08-16 に公開済み機種の身元を DMM へ移した（台帳#377）。
+        #   移す前は「2026-08」のように月だけだった機種があり、DMM は日まで持つ。
+        #   ★同じ月をより細かく言っているだけ★なので、止める理由がない。
+        #   直す前は、この形で**育てるレーンが全機種止まっていた**
+        #   （2026-08-17に garei_zero_re / prskkm / ssb1 の3件が全部これ）。
+        #
+        #   ★見るのは形だけ★＝新しい値が古い値の続きになっているか
+        #   （「2026-08」+「-」で始まるか）。意味の判断はしていない。
+        #   ★release_date は勝手に書き換えない★＝ここでは通すだけ。
+        #   細かくするかどうかは別の判断（値を作る話になるため）。
+        _new, _old = str(vo["release"]), str(old_release)
+        if not (_new.startswith(_old + "-") and len(_old) == 7):
+            out["problems"].append(
+                f"登場年月が変わっています（{old_release} → {vo['release']}）"
+                "／自動では直しません")
+            return out
     # ② 材料を集め直す
     gather = gather or _amr.gather
     # ★★機種を名乗って材料を集める★★（2026-08-20・Codex依頼239）
@@ -1709,6 +1722,20 @@ def selftest() -> int:
         t("★★実行のはじめに、取りに行った回数を0へ戻す★★"
           "（前の実行のぶんが混ざらない）",
           _nwt.FETCH_BUDGET["used"] == 0)
+
+        # --- ★「月だけ」→「日まで」は食い違いにしない★（台帳#383・対照実験）
+        def _rel(old, new):
+            """plan_one の判定と同じ形で、止めるかどうかだけを見る"""
+            o, n = str(old), str(new)
+            return not (n.startswith(o + "-") and len(o) == 7)
+
+        t("★★月だけ→日まで は止めない★★（DMM移行で全機種が止まっていた形）",
+          _rel("2026-08", "2026-08-17") is False)
+        t("　別の月なら、いままでどおり止める", _rel("2026-08", "2026-09-01"))
+        t("　別の年なら止める", _rel("2026-08", "2027-08-17"))
+        t("★日付が短くなる方向は止める★", _rel("2026-08-17", "2026-08"))
+        t("　月の形でなければ止める（2026 のような粗い値）",
+          _rel("2026", "2026-08"))
     finally:
         globals()["_log"] = _keep_log
         globals()["_main"] = _keep_inner
