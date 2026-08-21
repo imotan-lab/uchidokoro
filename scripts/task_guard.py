@@ -617,6 +617,37 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
             e["target_slug"] = slug
             _save(path, data)
             return e
+        # ★★修理モードは担当を取った時に固定する★★（依頼248の指摘1）
+        #
+        # ★2026-08-21に本当に固定した★（Codexの再指摘）
+        #   ★直す前は、あとから無条件に上書きしていた★＝
+        #   同じ機種をもう一度 claim すれば、モードを好きに変えられた。
+        #   実際に両方向とも通ることを確かめた（対照実験）：
+        #     直す経路（#318）で担当 → repairing=False で取り直す
+        #       → repairing が False になり、**案件番号だけが残った**
+        #     ふつうに担当 → repairing=True で取り直す
+        #       → ★ふつうの担当が、あとから直す担当に化けた★
+        #   ＝台帳の関門を後から外せる（＝「直す」の名目で何でも書ける）。
+        #
+        # ★★どの検査よりも先に置く★★＝
+        #   後ろに置くと「触ってはいけない段階です」など**別の理由**で
+        #   断られてしまい、この関門が効いているのか分からない
+        #   （実際、段階の検査の後ろに置いたら試験が別の文言で落ちた）。
+        #
+        # ★同じ機種のあいだだけ★＝別の機種へ移るときは下で記録ごと
+        #   捨てているので、今までどおり通る。
+        _e_now = _entry(data, task)
+        if _e_now.get("guard_slug") == slug:
+            _prev_mode = _e_now.get("repairing")
+            if _prev_mode is not None and bool(_prev_mode) != bool(repairing):
+                raise GuardError(
+                    f"{slug} は"
+                    + ("直す経路" if _prev_mode else "ふつうの経路")
+                    + "の担当です。途中で"
+                    + ("ふつうの経路" if _prev_mode else "直す経路")
+                    + "へ変えられません（日を改めるか、別の機種にしてください）"
+                    "。枠は使っていません")
+
         # ★書けない機種を担当にして枠を捨てない★（2026-08-08・台帳#272）
         #   台帳に未解決のCRITICAL案件がある機種は before_write が拒否する。
         #   ところが claim は段階を見ていなかったので、担当に確保した時点で
@@ -662,6 +693,7 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
                 _e0.pop(_k, None)
         _e0["guard_slug"] = slug
 
+
         # ★数を数える★（2026-08-21・MACHINES_PER_DAY を 1 → 3 にしたときに直した）
         #   それまでは「今日の担当は1つ」という書き方で**数えていなかった**ので、
         #   設定値を増やしても文言が変わるだけで挙動は1機種のままだった。
@@ -698,7 +730,7 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
                     "直す担当です。途中で案件を変えられません")
             e0["repair_issues"] = sorted(want)
 
-        # ★修理モードは担当を取った時に固定する★（依頼248の指摘1）
+        # ★修理モードの記録★（固定の検査は上へ移した）
         _e1 = _entry(data, task)
         _e1["repairing"] = bool(repairing)
 
@@ -1127,9 +1159,21 @@ def verify_commit(task: str, slug: str, commit: str,
                 + (f" ほか{len(changed) - 3}件" if len(changed) > 3 else ""))
 
         e["verified_commit"] = head
+        # ★★その日ぶんは消さずにためる★★（2026-08-21・Codexの指摘3）
+        #   ★直す前に何が起きるか★＝
+        #     記録はタスクに1つしかなく、機種を替えると捨てられる。
+        #     1日3機種にしたので、3機種ぶんをコミットしてから
+        #     **最後にまとめて push すると、1・2機種目が「照合していない」
+        #     扱いになり、push の関所が止める**。
+        #   ＝機種ごとに push すれば動くが、まとめると動かない、という
+        #     やり方に依存した作りだった。
+        #   ★日ごとの一覧は機種を替えても消さない★（_day は日付で切り替わる）。
+        _dv = _day(data).setdefault("verified_commits", [])
+        if head not in _dv:
+            _dv.append(head)
         _save(path, data)
         return {"slug": slug, "commit": head, "files": len(in_commit),
-                "ok": True}
+                "ok": True, "verified_today": len(_dv)}
 
 
 def before_write(task: str, slug: str, path: str = STATE_PATH,
@@ -1714,6 +1758,11 @@ def selftest() -> int:
             globals()["_file_digest"] = lambda rel: "TESTDIGEST"
             t("★ふつうに入ると、いままでどおり止まる★",
               raises(lambda: before_write("t2", "hokuto", fp), "触ってはいけない"))
+            # ★★別の記録で試す★★（2026-08-21）
+            #   同じ機種で「ふつう→直す」へ変えるのは、
+            #   モードの固定を入れた時点で**断られるのが正しい**
+            #   （この試験は「直す経路なら進める」ことを見たいので分ける）。
+            fp = os.path.join(tmpdir, "guard_repair_lane.json")
             # ★直す経路は「どの案件を直すか」を控えてから★（依頼247の指摘2）
             claim("t2", "hokuto", fp, repairing=True, issues=["1"])
             got = before_write("t2", "hokuto", fp, repairing=True)
@@ -1750,6 +1799,25 @@ def selftest() -> int:
             t("★直す経路なら担当できる★", got2["target_slug"] == "kabaneri")
             t("　直す案件が控えに残る",
               _load(fp3)["tasks"]["t3"].get("repair_issues") == [1])
+
+            # --- ★★担当を取ったあと、経路を変えられない★★
+            #   （2026-08-21・Codexの再指摘。★両方向を試す★）
+            #   ★直す前は、同じ機種をもう一度 claim すれば
+            #     モードを好きに変えられた（対照実験で両方向とも通った）★
+            #     ＝台帳の関門を後から外せる。
+            t("★★直す担当を、あとからふつうの担当に変えられない★★",
+              raises(lambda: claim("t3", "kabaneri", fp3), "変えられません"))
+            fp3b = os.path.join(tmpdir, "guard_repair_rev.json")
+            cp.assess = lambda sl, repairing=False: {
+                "stage": "IDENTITY_PENDING", "reasons": [],
+                "ledger_blocking": ["#1 テストの案件"]}
+            claim("t3b", "kabaneri", fp3b)
+            t("★★ふつうの担当を、あとから直す担当に変えられない★★",
+              raises(lambda: claim("t3b", "kabaneri", fp3b, repairing=True,
+                                   issues=["1"]), "変えられません"))
+            t("　同じ経路で取り直すのは通る（やり直しを塞がない）",
+              claim("t3b", "kabaneri", fp3b)["target_slug"] == "kabaneri")
+            cp.assess = _fake_assess
 
             # --- ★比較の基準は最初の1回だけ★（依頼246の指摘2の対照実験）
             fp4 = os.path.join(tmpdir, "guard_base.json")
@@ -1923,6 +1991,22 @@ def selftest() -> int:
                 globals()["_commit_digest"] = lambda c, rel: "AAA"
                 t("★関所と同じ内容ならpushしてよい★",
                   verify_commit("tE", "kabaneri", "abc1234", fpG)["ok"])
+                # ★★その日ぶんの照合済みは、機種を替えても消えない★★
+                #   （2026-08-21・Codexの指摘3）
+                #   ★直す前は、機種を替えると verified_commit が捨てられ、
+                #     3機種ぶんをためて最後にまとめて push すると
+                #     1・2機種目が「照合していない」ことになって止まった★
+                t("　その日の照合済み一覧に残る",
+                  "abc1234" in _load(fpG)["day"].get("verified_commits", []))
+                _e_sw = _entry(_load(fpG), "tE")
+                _dat_sw = _load(fpG)
+                _entry(_dat_sw, "tE")["guard_slug"] = "ちがう機種"
+                _save(fpG, _dat_sw)
+                t("★★機種を替えても、その日の照合済み一覧は消えない★★",
+                  "abc1234" in _load(fpG)["day"].get("verified_commits", []))
+                _dat_sw2 = _load(fpG)
+                _entry(_dat_sw2, "tE")["guard_slug"] = "kabaneri"
+                _save(fpG, _dat_sw2)
 
                 globals()["_commit_digest"] = lambda c, rel: "BBB"
                 t("★★関所のあとで中身が変わっていたら止める★★",

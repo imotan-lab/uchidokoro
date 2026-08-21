@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import datetime
 import time
+import uuid
 import argparse
 import functools
 import hashlib
@@ -48,6 +49,7 @@ import build_new_article as _ba         # noqa: E402
 import page_decision as _pdz            # noqa: E402  ★区分の唯一の判定箇所★
 import new_machine_watch as _nwz       # noqa: E402  ★メーカー名簿★
 import html_check as _hc                # noqa: E402
+import task_lock as _tl                 # noqa: E402  ★見張りを借りる★
 import safe_json as _sj                 # noqa: E402
 
 MACHINES = os.path.join(BASE, "assets", "data", "machines.json")
@@ -92,12 +94,32 @@ LOCK = os.path.join(BASE, ".publish.lock")
 #     task_lock.py と同じ「最後に触れてから30分」を残骸の目安にする。
 #     公開1回は数分で終わるので、30分動いていれば異常。
 #
+#   ★★実測で分かったこと（2026-08-21）★★
+#     Windows では、目印を掴んでいる間は OS がファイルを守るので
+#     **動いている処理からは、古くなっていても奪えない**（os.replace が
+#     WinError 32 で失敗する）。＝奪えるのは本当に死んだ処理の目印だけ。
+#     生き死にの検査を自前で書かずに済んでいる。
+#     ★ただしそれに寄りかからない★＝下の「印」で持ち主を確かめる。
+#
+#   ★★持ち主を印で確かめる★★（Codexの指摘・2026-08-21）
+#     PIDだけでは足りない（PIDは使い回される）。
+#     印が無いと、★奪われた側が終わるときに、いま動いている側の目印を
+#     消してしまう★＝「同時に2つ公開しない」という肝心の守りが破れる。
+#
+#   ★★長い処理は touch() で「まだ動いている」と伝える★★
+#     --recover を挟む経路が30分を超えても、正常なら奪われないように。
+#
 #   ★これは途中終了の防御を弱めない★
 #     公開が途中で終わったことは **別の目印**（_MARK・1186行の検査）が持っている。
 #     ロックの残骸を片付けても、その機種は
 #     「前回の公開が途中で終わっています → --recover」で止まったまま。
 #     ＝片付けるのは「入口の閂」だけで、「やりかけの後始末」は人と --recover の担当。
 LOCK_STALE_MINUTES = 30
+# ★監査の子プロセスに制限時間を置く★（2026-08-21・Codexの指摘2）
+#   ★これが無いと、監査が固まったときに目印を持ったまま止まり続ける★
+#   → 30分を超えて残骸とみなされ、別の処理に奪われる。
+#   実測では数秒で終わる。5分は十分な余裕。
+AUDIT_TIMEOUT_SEC = 300
 
 
 class _OnlyOne:
@@ -113,7 +135,24 @@ class _OnlyOne:
     def __init__(self, path=LOCK):
         self.path = path
         self.fd = None
+        self.token = None         # ★自分の目印だと分かる印★
         self.evicted = None       # ★残骸を片付けたら、その事実を残す★
+        self.lost = None          # ★途中で奪われていたら、その事実を残す★
+
+    def touch(self) -> bool:
+        """★まだ動いていることを目印に伝える★（2026-08-21・Codexの指摘）
+
+        長くかかる経路（--recover など）が、正常に動いているのに
+        「30分動いていない＝残骸」と見なされて奪われるのを防ぐ。
+        ★自分の目印でなくなっていたら False★（呼び出し側が止まれる）。
+        """
+        if not self._still_mine():
+            return False
+        try:
+            os.utime(self.path, None)
+            return True
+        except OSError:
+            return False
 
     def _age_minutes(self):
         """目印に最後に触れてから何分たったか（読めなければ大きい値＝残骸扱い）"""
@@ -123,47 +162,104 @@ class _OnlyOne:
             return 0.0            # 消えていた＝もう残骸ではない
 
     def _create(self):
+        # ★★自分の目印だと分かる印を書く★★（2026-08-21・Codexの指摘）
+        #   PIDだけでは足りない＝PIDは使い回される。
+        #   ★これが無いと、奪われた側が終わるときに
+        #     「いま動いている別の処理の目印」を消してしまう★。
+        self.token = f"{os.getpid()}:{uuid.uuid4().hex}"
         self.fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        os.write(self.fd, str(os.getpid()).encode())
+        os.write(self.fd, self.token.encode())
+        os.fsync(self.fd)
+
+    def _still_mine(self) -> bool:
+        """いまある目印が、自分が作ったものかどうか。"""
+        try:
+            with open(self.path, "rb") as f:
+                return f.read().decode("utf-8", "replace").strip() == self.token
+        except OSError:
+            return False
 
     def __enter__(self):
-        try:
-            self._create()
-        except FileExistsError:
-            age = self._age_minutes()
-            if age < LOCK_STALE_MINUTES:
-                raise PublishError(
-                    "いま別の公開処理が動いています（同時に2つは公開しません）。"
-                    f"{age:.0f}分前から動いています。"
-                    f"止まったままなら {self.path} を消してください")
-            # ★残骸だった★＝原子的に退避してから、もう一度だけ作る。
-            #   退避に負けた（他が先に片付けた）ら、素直に断る。
-            dst = self.path + ".stale." + datetime.datetime.now().strftime(
-                "%Y%m%d%H%M%S")
-            try:
-                os.replace(self.path, dst)
-            except OSError as e:
-                raise PublishError(
-                    f"止まったままの目印を片付けられませんでした（{e}）。"
-                    f"{self.path} を確かめてください")
+        # ★★取得・退避・解放をひとつの見張りの中で直列化する★★
+        #   （2026-08-21・Codexの指摘2）
+        #   ★これが無いと何が起きるか★＝
+        #     ①先行が「自分の目印だ」と確かめる
+        #     ②その直後、後続が残骸とみなして退避し、自分の目印を作る
+        #     ③先行が削除する → ★後続の目印が消える★
+        #     ＝「同時に2つ公開しない」という肝心の守りが破れる。
+        #   所有者を確かめてから消すまでの隙間を、見張りごと塞ぐ。
+        #   ★見張りは task_lock._Guard を借りる★（同じ規則を2か所に書かない）
+        with _tl._Guard(self.path):
             try:
                 self._create()
             except FileExistsError:
-                raise PublishError(
-                    "いま別の公開処理が動いています（同時に2つは公開しません）")
-            self.evicted = {"age_minutes": round(age, 1), "moved_to": dst}
-            print(f"★{age:.0f}分ぶん止まっていた目印を片付けました★"
-                  f"（{os.path.basename(dst)} へ退避）。"
-                  "前回が途中で終わっていれば、この後の検査が止めます")
+                age = self._age_minutes()
+                if age < LOCK_STALE_MINUTES:
+                    raise PublishError(
+                        "いま別の公開処理が動いています（同時に2つは公開しません）。"
+                        f"{age:.0f}分前から動いています。"
+                        f"止まったままなら {self.path} を消してください")
+                # ★残骸だった★＝原子的に退避してから、もう一度だけ作る。
+                #   退避に負けた（他が先に片付けた）ら、素直に断る。
+                dst = self.path + ".stale." + datetime.datetime.now().strftime(
+                    "%Y%m%d%H%M%S")
+                try:
+                    os.replace(self.path, dst)
+                except OSError as e:
+                    raise PublishError(
+                        f"止まったままの目印を片付けられませんでした（{e}）。"
+                        f"{self.path} を確かめてください")
+                try:
+                    self._create()
+                except FileExistsError:
+                    raise PublishError(
+                        "いま別の公開処理が動いています（同時に2つは公開しません）")
+                self.evicted = {"age_minutes": round(age, 1), "moved_to": dst}
+                print(f"★{age:.0f}分ぶん止まっていた目印を片付けました★"
+                      f"（{os.path.basename(dst)} へ退避）。"
+                      "前回が途中で終わっていれば、この後の検査が止めます")
         return self
 
     def __exit__(self, *exc):
+        # ★★自分の目印でなければ消さない★★（2026-08-21・Codexの指摘）
+        #   ★直す前に起きえたこと★＝
+        #     ①Aが30分を超えて動いている（正常だが遅い）
+        #     ②Bが「残骸だ」と見なしてAの目印を退避し、自分の目印を作る
+        #     ③Aが終わって os.remove する
+        #     → ★Bの目印が消える★＝以後、Cが割り込めてしまう。
+        #   ＝同時に2つ公開しない、という肝心の守りが破れる。
+        # ★fdを閉じてから確かめる★（2026-08-21・Codexの指摘2）
+        #   ★直す前は、確かめる → 閉じる → 消す の順だった★＝
+        #   閉じてから消すまでの間に後続が入り込む余地があった
+        #   （閉じた瞬間にWindowsの守りが外れるため）。
+        #   見張りの中で「閉じる → 確かめる → 消す」をひと続きにする。
         if self.fd is not None:
-            os.close(self.fd)
+            try:
+                os.close(self.fd)
+            except OSError:
+                pass
+            self.fd = None
         try:
-            os.remove(self.path)
-        except OSError:
-            pass
+            _guard = _tl._Guard(self.path)
+            _guard.__enter__()
+        except Exception:
+            _guard = None
+        try:
+            mine = self._still_mine()
+            if mine:
+                try:
+                    os.remove(self.path)
+                except OSError:
+                    pass
+        finally:
+            if _guard is not None:
+                _guard.__exit__()
+        if not mine:
+            self.lost = True
+            print("★この処理の目印は、途中で別の処理に引き取られていました★"
+                  "（自分のものではないので消しません）。"
+                  "同じ時間帯に2つ動いていた可能性があるので、"
+                  "公開結果を確かめてください")
         return False
 
 
@@ -872,11 +968,23 @@ def run_site_audit(ignore_in_progress: bool = False) -> list:
       目印を正しく持っている側だけが、この項目を外してよい。
       ★push の関所では絶対に外さない★（そこは残骸を止める場所）。
     """
-    r = subprocess.run([sys.executable, os.path.join(BASE, "scripts", "audit_site.py"),
-                        "--json"],
-                       cwd=BASE, capture_output=True, text=True,
-                       encoding="utf-8", errors="replace",
-                       env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+    # ★★必ず終わらせる★★（2026-08-21・Codexの指摘2）
+    #   ★直す前は制限時間が無かった★＝監査が固まると、
+    #   公開処理も --recover も**目印を持ったまま止まり続ける**。
+    #   すると30分を超えて残骸とみなされ、別の処理に奪われる。
+    #   監査は数秒で終わるので、5分あれば十分。
+    try:
+        r = subprocess.run([sys.executable,
+                            os.path.join(BASE, "scripts", "audit_site.py"),
+                            "--json"],
+                           cwd=BASE, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace",
+                           timeout=AUDIT_TIMEOUT_SEC,
+                           env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+    except subprocess.TimeoutExpired:
+        # ★止まったことを「合格」にしない★
+        return [f"監査が {AUDIT_TIMEOUT_SEC} 秒で終わりませんでした"
+                "（監査そのものが固まっている可能性があります）"]
     # ★監査そのものが壊れて終わった場合を「合格」にしない★（2026-08-01〜02・Codex23〜24回目）
     #   1回目の直しは「❌の行が無い非0は異常」だったが、
     #   ❌を1行出した**あとに**落ちると素通りする穴が残っていた（Codex24回目）。
@@ -1212,9 +1320,14 @@ def _publish_prebuilt(slug: str, machine: dict, detail: dict,
     """
     if not apply_it:
         return _publish(slug, machine, detail, apply_it=False)
-    with _OnlyOne():
+    with _OnlyOne() as _one:
+        # ★★長い工程の合間に「まだ動いている」と伝える★★
+        #   （2026-08-21・Codexの指摘2＝touch が誰からも呼ばれていなかった）
+        #   これが無いと、監査や検査で30分を超えたときに
+        #   **正常に動いているのに残骸とみなされて奪われる**。
         return _publish(slug, machine, detail, apply_it=True,
-                        before_write=before_write, on_written=on_written)
+                        before_write=before_write, on_written=on_written,
+                        keepalive=_one.touch)
 
 
 # ★外から使ってよいのは publish_from_material だけ★（2026-07-31・Codex指摘4）
@@ -1224,9 +1337,24 @@ __all__ = ["publish_from_material", "check_page", "check_detail", "check_machine
 
 
 def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
-             before_write=None, on_written=None) -> dict:
-    """新台1件を公開する。★ページを先に置き、最後に一覧へ足す★"""
+             before_write=None, on_written=None, keepalive=None) -> dict:
+    """新台1件を公開する。★ページを先に置き、最後に一覧へ足す★
+
+    ★keepalive★＝「まだ動いている」と目印に伝える呼び出し（省略可）。
+      長い工程（監査など）の前後で呼ぶ。★戻り値が False なら
+      目印が自分のものでなくなっている★＝そのまま進めない。
+    """
     out = {"slug": slug, "problems": [], "wrote": [], "html_bytes": 0}
+
+    def _alive(where: str):
+        """★目印を持ったままか確かめる★（持っていなければ止める）"""
+        if keepalive is None:
+            return
+        if not keepalive():
+            raise PublishError(
+                f"公開の目印が自分のものでなくなりました（{where}）。"
+                "別の処理に引き取られた可能性があるので、ここで止めます")
+
     rows = _sj.read_rows(MACHINES)
     out["problems"] += check_before(slug, machine, rows)
     # ★区分（index対象かどうか）はここで一度だけ決めて全検査に配る★
@@ -1251,7 +1379,9 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
             "（中途半端な状態のまま『正常』として公開できてしまいます）。"
             "`python scripts/publish_new_machine.py --recover` で元に戻してください")
         return out
+    _alive("公開前の監査")
     out["problems"] += run_site_audit()
+    _alive("公開前の監査のあと")
     # ★一覧・ランキングが、いまのデータと一致しているか★
     #   ずれたまま作り直すと、既存の公開内容まで変えてしまう。
     for x in check_hubs_untouched():
@@ -1536,7 +1666,9 @@ def _publish(slug: str, machine: dict, detail: dict, apply_it: bool = False,
     # ★終わったあとにもう一度★
     #   ここは自分が「公開中」の目印を持っている最中なので、項目33だけ外す。
     #   （外さないと、書けた記事を毎回自分で取り消していた・実機で判明）
+    _alive("最後の監査")
     late2 += run_site_audit(ignore_in_progress=True)
+    _alive("最後の監査のあと")
     late2 += check_counts(len(rows), slug)
     with open(page, encoding="utf-8") as f:          # ★最後にもう一度★
         if _sha(f.read()) != _sha(html):
@@ -2650,6 +2782,47 @@ def selftest() -> int:
           os.path.exists(_moved))
         t("　抜けたら新しい目印も消える", not os.path.exists(_lt))
         os.remove(_moved)
+
+        # ★★持ち主の印★★（2026-08-21・Codexの指摘）
+        #   ★直す前に起きえたこと★＝
+        #     ①Aが動いている ②Bが残骸とみなして奪う ③Aが終わる
+        #     → ★os.remove が無条件だったのでBの目印が消えた★
+        #     ＝以後Cが割り込める＝同時に2つ公開しない、が破れる
+        _lt2 = os.path.join(BASE, ".publish.lock.owner_test")
+        _stale2 = []
+        try:
+            _a = _OnlyOne(_lt2)
+            _a.__enter__()
+            _old2 = time.time() - (LOCK_STALE_MINUTES + 1) * 60
+            os.utime(_lt2, (_old2, _old2))
+            t("★★動いている処理の目印は、古くなっても奪えない★★"
+              "（掴んでいる間はOSが守る・Windows実測）",
+              _raises(lambda: _OnlyOne(_lt2).__enter__()))
+            # ★処理が死んだのと同じ状態にする★（OSが後始末する）
+            os.close(_a.fd)
+            _a.fd = None
+            os.utime(_lt2, (_old2, _old2))
+            _b = _OnlyOne(_lt2)
+            _b.__enter__()
+            _stale2.append(_b.evicted["moved_to"])
+            t("　死んだ処理の目印だけが奪える", _b.evicted is not None)
+            _a.__exit__()
+            t("★★奪われた側が終わっても、いま動いている側の目印は消さない★★",
+              os.path.exists(_lt2) and _a.lost is True)
+            with open(_lt2, encoding="utf-8") as _f4:
+                t("　残っている印は、奪った側のもの",
+                  _f4.read().strip() == _b.token)
+            t("　その状態で3つ目は割り込めない",
+              _raises(lambda: _OnlyOne(_lt2).__enter__()))
+            os.utime(_lt2, (_old2, _old2))
+            t("★長い処理は touch() で『まだ動いている』と伝えられる★",
+              _b.touch() and (time.time() - os.path.getmtime(_lt2)) < 60)
+            _b.__exit__()
+            t("　持ち主が終われば目印は消える", not os.path.exists(_lt2))
+        finally:
+            for _x in [_lt2] + _stale2:
+                if os.path.exists(_x):
+                    os.remove(_x)
     finally:
         for _leftover in (_lt,):
             if os.path.exists(_leftover):

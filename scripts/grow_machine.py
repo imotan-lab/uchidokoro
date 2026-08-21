@@ -437,6 +437,27 @@ def _carry_identity(old: dict, new: dict) -> list:
     return ng
 
 
+def release_refined(old: str, new: str) -> bool:
+    """★「月だけ」→「日まで」は食い違いではない★（2026-08-21・台帳#441）
+
+    ★なぜ1か所にまとめたか★
+      同じ判断が2か所に要るのに、片方（verify のあと）にしか入っていなかった。
+      そのため identity の不変検査（identity_same）が
+      「登場年月が変わっています（'2026-08' → '2026-08-17'）」で止め、
+      ★garei_zero_re が育てられないままだった★（実データで再現）。
+      ＝★同じ規則を2か所に書かない★。
+
+    ★見るのは形だけ★＝新しい値が古い値の続きになっているか。
+      意味の判断（本当に同じ導入日か）はしていない。
+      月が変わっていれば続きにならないので通らない。
+
+    ★片側だけの細分化しか認めない★＝「日まで」→「月だけ」は通さない
+      （分かっていたことが分からなくなるのは、ただの後退）。
+    """
+    o, n = str(old or ""), str(new or "")
+    return len(o) == 7 and n.startswith(o + "-") and len(n) == 10
+
+
 def identity_same(old: dict, new: dict) -> list:
     """本人性が変わっていないか（★変わっていたら育てない★）。"""
     ng = []
@@ -461,6 +482,9 @@ def identity_same(old: dict, new: dict) -> list:
                   ("_legacy_official_product_url", "移行前の機種ページURL")):
         a, b = (old or {}).get(k), (new or {}).get(k)
         if a and b and a != b:
+            # ★月だけ→日まで、は食い違いにしない★（台帳#441）
+            if k == "market_release_date" and release_refined(a, b):
+                continue
             ng.append(f"{jp}が変わっています（{a!r} → {b!r}）")
         if a and not b:
             ng.append(f"{jp}が取れなくなりました（登録済み: {a!r}）")
@@ -868,8 +892,7 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
         #   （「2026-08」+「-」で始まるか）。意味の判断はしていない。
         #   ★release_date は勝手に書き換えない★＝ここでは通すだけ。
         #   細かくするかどうかは別の判断（値を作る話になるため）。
-        _new, _old = str(vo["release"]), str(old_release)
-        if not (_new.startswith(_old + "-") and len(_old) == 7):
+        if not release_refined(old_release, vo["release"]):
             out["problems"].append(
                 f"登場年月が変わっています（{old_release} → {vo['release']}）"
                 "／自動では直しません")
@@ -1723,11 +1746,15 @@ def selftest() -> int:
           "（前の実行のぶんが混ざらない）",
           _nwt.FETCH_BUDGET["used"] == 0)
 
-        # --- ★「月だけ」→「日まで」は食い違いにしない★（台帳#383・対照実験）
+        # --- ★「月だけ」→「日まで」は食い違いにしない★（台帳#383・#441）
+        # ★★本物の関数を通す★★（2026-08-21）
+        #   直す前は、本体の式を試験のなかに**書き写して**いた。
+        #   ＝本体を直しても試験は写しのままなので、
+        #   ★同じ規則がもう1か所（identity_same）に要ることに気づけなかった★。
+        #   実際、identity の不変検査は月→日の細分化で止め続けていて、
+        #   garei_zero_re が育てられないままだった（実データで再現）。
         def _rel(old, new):
-            """plan_one の判定と同じ形で、止めるかどうかだけを見る"""
-            o, n = str(old), str(new)
-            return not (n.startswith(o + "-") and len(o) == 7)
+            return not release_refined(old, new)
 
         t("★★月だけ→日まで は止めない★★（DMM移行で全機種が止まっていた形）",
           _rel("2026-08", "2026-08-17") is False)
@@ -1736,6 +1763,22 @@ def selftest() -> int:
         t("★日付が短くなる方向は止める★", _rel("2026-08-17", "2026-08"))
         t("　月の形でなければ止める（2026 のような粗い値）",
           _rel("2026", "2026-08"))
+        t("　同じ値は「細分化」ではない", _rel("2026-08", "2026-08"))
+        t("　日として短すぎる値は通さない", _rel("2026-08", "2026-08-1"))
+        # ★★identity の不変検査も同じ規則で動く★★（台帳#441・対照実験）
+        t("★★身元の検査でも、月だけ→日まで は止めない★★"
+          "（ここが片側だけ残っていて garei_zero_re が育たなかった）",
+          identity_same({"market_release_date": "2026-08"},
+                        {"market_release_date": "2026-08-17"}) == [])
+        t("　身元の検査でも、別の月なら止める",
+          identity_same({"market_release_date": "2026-08"},
+                        {"market_release_date": "2026-09-01"}) != [])
+        t("　身元の検査でも、日付が短くなる方向は止める",
+          identity_same({"market_release_date": "2026-08-17"},
+                        {"market_release_date": "2026-08"}) != [])
+        t("　登場年月いがいの項目は、いままでどおり食い違いで止める",
+          identity_same({"manufacturer_id": "a"},
+                        {"manufacturer_id": "b"}) != [])
     finally:
         globals()["_log"] = _keep_log
         globals()["_main"] = _keep_inner

@@ -102,6 +102,15 @@ def _verified_range() -> list:
     #   「照合していない」と止めてしまい、鉄則4（当日中にpush）が守れない。
     today = datetime.now().strftime("%Y-%m-%d")
     verified, active = set(), False
+    # ★★その日ぶんの照合済みは、機種を替えても消えない★★
+    #   （2026-08-21・Codexの指摘3）
+    #   タスクごとの verified_commit は機種を替えると捨てられるので、
+    #   ★3機種ぶんをためて最後にまとめて push すると、
+    #     1・2機種目が「照合していない」ことになって止まった★。
+    _day = (data.get("day") or {})
+    if str(_day.get("date") or "") == today:
+        for c in (_day.get("verified_commits") or []):
+            verified.add(str(c))
     for name, e in (data.get("tasks") or {}).items():
         if not isinstance(e, dict) or e.get("run_date") != today:
             continue

@@ -38,6 +38,8 @@ as.log
 # Codexへ渡す確認依頼（自動生成・コミットしない）
 _design/spec_review/
 .publish.lock
+.publish.lock*.guard
+.recover.lock.guard
 .publish.lock.stale.*
 .publish.lock.evicttest*
 .publish.lock.stale_test
