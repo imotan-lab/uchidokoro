@@ -181,6 +181,32 @@ class _OnlyOne:
         os.write(self.fd, self.token.encode())
         os.fsync(self.fd)
 
+    def _holder_is_dead(self) -> bool:
+        """★目印を作った処理が、確かに終わっているか★
+
+        ★分からないときは False（＝奪わない）★＝安全側。
+        生き死にの見方は `task_guard._Exclusive._alive` を借りる
+        （★同じ規則を2か所に書かない★）。
+        Windows の `os.kill(pid, 0)` は問い合わせではなく**終了させる**ので、
+        向こうと同じく `tasklist` で見る。
+        """
+        try:
+            with open(self.path, encoding="utf-8") as f:
+                raw = f.read().strip()
+        except OSError:
+            return False
+        head = raw.split(":", 1)[0]
+        if not head.isdigit():
+            return False              # 印の形が違う＝分からない
+        pid = int(head)
+        if pid <= 0 or pid == os.getpid():
+            return False
+        try:
+            import task_guard as _tg
+            return not _tg._Exclusive._alive(pid)
+        except Exception:             # noqa: BLE001
+            return False              # 確かめられない＝奪わない
+
     def _still_mine(self) -> bool:
         """いまある目印が、自分が作ったものかどうか。"""
         try:
@@ -204,7 +230,19 @@ class _OnlyOne:
                 self._create()
             except FileExistsError:
                 age = self._age_minutes()
-                if age < LOCK_STALE_MINUTES:
+                # ★★持ち主が死んでいると確かめられたら、30分待たない★★
+                #   （2026-08-21・実際に起きた）
+                #   ★何が起きたか★＝手元で試験を強制終了したら目印が残り、
+                #   以後の実行が「2分前から動いています」と言い続けた。
+                #   ＝**動いていないのに動いていると言う**（原因に辿り着けない）。
+                #   夜の公開タスクが（セッション制限などで）落ちた晩にも同じ形になる。
+                #
+                #   ★安全側の作り★
+                #     ・「生きている」と分かるとき／分からないときは奪わない
+                #       （PIDは使い回されるので、生きて見えたら時間の規則に任せる）
+                #     ・「死んでいる」と確かめられたときだけ早く片付ける
+                #   ＝いままでより緩くはならない（待つ場面は今までどおり待つ）。
+                if age < LOCK_STALE_MINUTES and not self._holder_is_dead():
                     raise PublishError(
                         "いま別の公開処理が動いています（同時に2つは公開しません）。"
                         f"{age:.0f}分前から動いています。"
@@ -2782,14 +2820,60 @@ def selftest() -> int:
     t("　抜けたらロックは消える",
       not os.path.exists(os.path.join(BASE, ".publish.lock.test")))
 
+    # ★★持ち主が死んでいると分かったら、30分待たずに片付ける★★
+    #   （2026-08-21・実際に起きた形。対照実験つき）
+    #   手元で試験を強制終了したら目印が残り、以後の実行が
+    #   「2分前から動いています」と言い続けた＝原因に辿り着けない。
+    _dl = os.path.join(BASE, ".publish.lock.dead_test")
+    try:
+        # ★居ないPID★を書く（tasklist が見つけられないもの）
+        _dead_pid = 999999
+        with open(_dl, "w", encoding="utf-8") as _fd:
+            _fd.write(f"{_dead_pid}:deadbeef")
+        _od = _OnlyOne(_dl)
+        try:
+            with _od:
+                t("★★死んだ持ち主の目印は、30分待たずに片付ける★★"
+                  "（動いていないのに動いていると言い続けていた）",
+                  _od.evicted is not None)
+        except PublishError:
+            t("★★死んだ持ち主の目印は、30分待たずに片付ける★★"
+              "（動いていないのに動いていると言い続けていた）", False)
+
+        # ★対照★ 生きている持ち主からは、時間内なら奪わない
+        with open(_dl, "w", encoding="utf-8") as _fd:
+            _fd.write(f"{os.getpid()}:alive")
+        _oa = _OnlyOne(_dl)
+        t("★★生きている持ち主からは奪わない★★（PIDは使い回されるため）",
+          _raises(lambda: _oa.__enter__()))
+
+        # ★印の形が読めないときも奪わない★（安全側）
+        with open(_dl, "w", encoding="utf-8") as _fd:
+            _fd.write("形が違う印")
+        _ou = _OnlyOne(_dl)
+        t("　印の形が分からないときは奪わない（安全側）",
+          _raises(lambda: _ou.__enter__()))
+    finally:
+        for _n in os.listdir(BASE):
+            if _n.startswith(".publish.lock.dead_test"):
+                try:
+                    os.remove(os.path.join(BASE, _n))
+                except OSError:
+                    pass
+
     # ★★止まったままの目印を、時間で片付ける★★（2026-08-21）
     #   ★直す前に実際に起きていたこと★＝PID 1692 の残骸が丸1日残り、
     #   「いま別の公開処理が動いています」と言い続けた。
     #   ＝★誰も動いていないのに、新台公開が永久に止まる★
     _lt = os.path.join(BASE, ".publish.lock.stale_test")
     try:
-        with open(_lt, "w") as _f3:
-            _f3.write("9999")
+        # ★★持ち主が生きている印を書く★★（2026-08-21に直した）
+        #   ★直す前は居ないPID（9999）を書いていた★ので、
+        #   「死んだ持ち主なら早く片付ける」を足した途端この試験が落ちた。
+        #   ＝試験の書き方が、確かめたい中身（動いている間は奪わない）と
+        #   合っていなかった。★動いているPID＝自分のPIDで書く★。
+        with open(_lt, "w", encoding="utf-8") as _f3:
+            _f3.write(f"{os.getpid()}:alive")
         t("★動いている間の目印は片付けない★（同時公開の防御は残す）",
           _raises(lambda: _OnlyOne(_lt).__enter__()))
         _old = time.time() - (LOCK_STALE_MINUTES + 1) * 60
@@ -2945,8 +3029,13 @@ def selftest() -> int:
                 if _pd2.machine_class(m) in ("LEGACY_PREVIEW", "AUTO_PENDING")),
                None)
     if _np:
+        # ★落ちた理由をその場で出す★（2026-08-21）
+        #   ＝理由を言わない赤は、CIで見ても手元で見ても直せない。
+        _served = check_served(_np)
+        if _served:
+            print(f"   （{_np} を引けなかった理由: " + " / ".join(_served) + "）")
         t("★★実際にHTTPで引いて200とnoindexを確かめられる★★"
-          "（ファイルがあるだけでは足りない）", check_served(_np) == [])
+          "（ファイルがあるだけでは足りない）", _served == [])
     else:
         t("　検索に載せない機種が1つも無いので、この確認は行わない"
           "（★対象が無いこと自体は正常★）", True)

@@ -79,6 +79,18 @@ BUILD_DIRS = {".preview-site", "_site", "_site.next"}
 FIXTURE_DIRS = {"tests"}
 
 
+# ★他サイト名の名簿（監査17と recheck.competitor_names_gone が共有する正本）★
+#   ★同じ規則を2か所に書かない★（2026-08-21）＝
+#   自動修理が「他サイト名を消した」と言うとき、閉じてよいかを判定する検査は
+#   監査とまったく同じ名簿で見ないといけない。
+COMPETITOR_NAMES = (
+    # 競合解析サイト
+    "スロパチクエスト", "ちょんぼりすた", "ナナプレス", "DMM", "ぱちタウン", "スロラボ",
+    # 削除されたアフィリエイトサービス（もしもアフィリエイト・パチスロでは利用不可）
+    "もしもアフィリエイト", "moshimo.com", "af.moshimo", "i.moshimo",
+)
+
+
 def is_build_output(path: Path) -> bool:
     """ビルド出力（写し・成果物）・試験用の保存ページ配下のパスか。"""
     try:
@@ -564,6 +576,18 @@ def check_16_writing_style(machines: list) -> list[str]:
         except Exception:
             continue
         plain_sentences = []
+        # ★★表の注記も見る★★（2026-08-21・台帳#332）
+        #   ★直す前は body だけだった★ので、設定示唆まとめの
+        #   `tables[].note` に常体が残っていた
+        #   （実例＝hokuto「…高設定否定にならない。」）。
+        #   ★直す側（fix_plain_style）と同じ場所を見る★
+        try:
+            import fix_plain_style as _fps2
+            for _w, _old, _new, _title in _fps2.plan_for(d):
+                if _w[0] in ("table_note", "sec_note"):
+                    plain_sentences.append((_title, _old[:80]))
+        except Exception:                 # noqa: BLE001
+            pass
         for s in d.get("sections", []):
             if s.get("type") == "settei":
                 continue
@@ -644,12 +668,8 @@ def check_17_external_site_names(machines: list) -> list[str]:
     """
     import re as _re
     ngs = []
-    sites = [
-        # 競合解析サイト
-        "スロパチクエスト", "ちょんぼりすた", "ナナプレス", "DMM", "ぱちタウン", "スロラボ",
-        # 削除されたアフィリエイトサービス（もしもアフィリエイト・パチスロでは利用不可）
-        "もしもアフィリエイト", "moshimo.com", "af.moshimo", "i.moshimo",
-    ]
+    # ★名簿は下の COMPETITOR_NAMES が正本★（recheck の competitor_names_gone も同じ物を読む）
+    sites = list(COMPETITOR_NAMES)
     # 業界用語と区別：「DMM」は「DMM ぱちタウン」サイト名のみ検出（他用途は無いと仮定）
     detail_dir = BASE / "assets" / "data" / "machine-details"
     for jf in sorted(detail_dir.glob("*.json")):
@@ -1434,6 +1454,25 @@ def check_37_skill_vs_code(machines: list) -> list[str]:
             for st in stopped:
                 if st in line and "を実行" in line:
                     ng.append(f"{task}: 止めたタスク {st} を実行するよう書いています")
+        # ★★Codexを素で呼んでいないか★★（2026-08-21・Codexの設計レビュー）
+        #   ★実際に起きていたこと★＝更新タスクの手順書は、上のほうで
+        #   「必ず codex_with_lock.sh 経由」と決めておきながら、
+        #   STEP 4 だけ codex_review.sh を**直接**呼んでいた（しかも待ち60分）。
+        #   ロックは最後のheartbeatから30分で他のタスクに奪われるので、
+        #     相談中にロックを失う → CTXを見失う → ★黙って終わる★
+        #   ＝起動はしたのに何もせず死ぬ（lastRunAt では検知できない型）。
+        #   ★2回同じ食い違いを作らないよう、機械に見張らせる★
+        #
+        #   ★見方は単純にする★＝「bash で始まる行」だけを呼び出しとみなす。
+        #   説明の文章の中で名前を挙げるのは構わない（それは呼び出しではない）。
+        for i, line in enumerate(text.splitlines(), 1):
+            bare = line.lstrip()
+            if not bare.startswith("bash "):
+                continue
+            if "codex_review.sh" in bare and "codex_with_lock" not in bare:
+                ng.append(
+                    f"{task}: {i}行目でCodexを素で呼んでいます"
+                    "（codex_with_lock.sh 経由にしてください）")
     return sorted(set(ng))
 
 

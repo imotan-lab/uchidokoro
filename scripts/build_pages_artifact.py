@@ -166,6 +166,17 @@ APPROVED_INPUTS = frozenset({
     #   渡していない」が見つかった。関所が見ていない場所だった。
     "scripts/grow_machine.py",
     "scripts/grow_legacy.py",
+    # ★★2AIが決めた直しを記事データへ書く側★★（2026-08-21）
+    #   ★同じ理由で入れる★＝どれも machine-details/{slug}.json を直接書く。
+    #   しかも slug を指定しなければ**全機種を一度に**書き換える
+    #   （fix_plain_style / strip_model_code は run(slug=None) で全機種）。
+    #   ＝「ここを直せば何でも書ける」がそのまま当てはまる。
+    #   ★入れ忘れていた★＝2026-08-21に作った当日は承認の集合に入れておらず、
+    #   grow_machine / grow_legacy と同じ役なのに関所が見ていなかった。
+    "scripts/decide_now.py",
+    "scripts/apply_prose_dedup.py",
+    "scripts/fix_plain_style.py",
+    "scripts/strip_model_code.py",
     # ★★新台を記事にして公開するまでの一式★★（2026-08-21・台帳#420）
     #   ★契約が「直接依存に閉じていなかった」★＝
     #   契約に入っている側が中で呼んでいるのに、呼ばれる側は指紋の対象外だった。

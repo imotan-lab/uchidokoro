@@ -67,6 +67,13 @@ ENDINGS = (
     ("重要だ。", "重要です。"),
     ("有効だ。", "有効です。"),
     ("である。", "です。"),
+    # ★表の注記でだけ出てくる終わり方★（2026-08-21・台帳#332・実データ4件）
+    #   dumbbell「…出ないので注意。」／gineiden_dnt「…状況判断が必要。」
+    #   hanabi「設定1では出現しない。」／hokuto「…高設定否定にならない。」
+    ("ので注意。", "ので注意してください。"),
+    ("が必要。", "が必要です。"),
+    ("出現しない。", "出現しません。"),
+    ("ならない。", "なりません。"),
 )
 # ★左右が同じ対は入れない★（何も変わらない書き換えを作らないため）
 ENDINGS = tuple((a, b) for a, b in ENDINGS if a != b)
@@ -74,13 +81,13 @@ ENDINGS = tuple((a, b) for a, b in ENDINGS if a != b)
 _SKIP_HEAD = ("**", "・", "-", "＊", "※")
 
 
-def rewrite_sentence(sent: str):
+def rewrite_sentence(sent: str, min_len: int = 12):
     """1文を書き換えた結果を返す（変えないなら None）。"""
     s = str(sent or "")
     t = s.strip()
     if not t.endswith("。"):
         return None                     # ①句点で終わっていない
-    if len(t) < 12:
+    if len(t) < min_len:
         # ②短すぎる
         # ★2026-08-21に20→12へ下げた★＝「朝一から複数の狙い目が広がる。」(14字)
         #   「スルー数はAT終了でリセットされる。」(17字) を取りこぼしていた。
@@ -95,27 +102,66 @@ def rewrite_sentence(sent: str):
     return None
 
 
+def _rewrite_line(line: str, min_len: int = 12):
+    """1行ぶんを書き換えた結果を返す（変えないなら None）。
+
+    ★注記は文が短い★（2026-08-21・台帳#332）＝
+      「設定1では出現しない。」は11字で、本文用の下限（12字）に届かない。
+      注記だけ下限を下げる。★表に載っている終わり方だけを直す★という
+      強い絞りは変えていないので、下げても短い項目名は巻き込まない。
+    """
+    if not isinstance(line, str):
+        return None
+    parts = re.split(r"(?<=。)", line)
+    new_parts, hit = [], False
+    for p in parts:
+        r = rewrite_sentence(p, min_len=min_len)
+        if r is not None:
+            new_parts.append(r)
+            hit = True
+        else:
+            new_parts.append(p)
+    return "".join(new_parts) if hit else None
+
+
 def plan_for(detail: dict) -> list:
-    """書き換える場所を返す（★書かない★）。"""
+    """書き換える場所を返す（★書かない★）。
+
+    ★★表の中の注記も見る★★（2026-08-21・台帳#332）
+      ★直す前は body だけを見ていた★ので、
+      設定示唆まとめの `tables[].note` に常体が残っていた
+      （実例＝hokuto「…高設定否定にならない。」「…参考程度に。」）。
+      台帳#332 が「#122のスキャンはbodyのみでtables配下のnoteを見ていない
+      ＝検知の穴」と指摘していたとおりだった。
+
+      ★設定示唆の節そのものは body を持たない★ので、
+      「type が settei なら丸ごと飛ばす」も一緒に見直した
+      （飛ばすのは行の並び＝rows/tables の中身であって、注記ではない）。
+
+    戻り値の場所の書き方:
+      ("body", si, bi)           … 本文の行
+      ("table_note", si, ti)     … 表の注記
+      ("sec_note", si, key)      … 節の注記（note / resultNote）
+    """
     out = []
     for si, sec in enumerate(detail.get("sections") or []):
-        if sec.get("type") == "settei":
-            continue
-        for bi, line in enumerate(sec.get("body") or []):
-            if not isinstance(line, str):
-                continue
-            parts = re.split(r"(?<=。)", line)
-            new_parts, hit = [], False
-            for p in parts:
-                r = rewrite_sentence(p)
-                if r is not None:
-                    new_parts.append(r)
-                    hit = True
-                else:
-                    new_parts.append(p)
-            if hit:
-                out.append((si, bi, line, "".join(new_parts),
-                            str(sec.get("title") or "")))
+        if sec.get("type") != "settei":
+            for bi, line in enumerate(sec.get("body") or []):
+                got = _rewrite_line(line)
+                if got is not None:
+                    out.append((("body", si, bi), line, got,
+                                str(sec.get("title") or "")))
+        # ★表の注記は、設定示唆の節でも見る★
+        for ti, tbl in enumerate(sec.get("tables") or []):
+            got = _rewrite_line(tbl.get("note"), min_len=9)
+            if got is not None:
+                out.append((("table_note", si, ti), tbl.get("note"), got,
+                            str(sec.get("title") or "") + "／表の注記"))
+        for key in ("note", "resultNote"):
+            got = _rewrite_line(sec.get(key), min_len=9)
+            if got is not None:
+                out.append((("sec_note", si, key), sec.get(key), got,
+                            str(sec.get("title") or "") + f"／{key}"))
     return out
 
 
@@ -139,8 +185,15 @@ def run(slug: str | None = None, apply_it: bool = False) -> dict:
         result["n"] += len(plan)
         result["changed"].append({"slug": sl, "items": plan})
         if apply_it:
-            for si, bi, _old, new, _t in plan:
-                d["sections"][si]["body"][bi] = new
+            for where, _old, new, _t in plan:
+                kind, si, key = where
+                sec = d["sections"][si]
+                if kind == "body":
+                    sec["body"][key] = new
+                elif kind == "table_note":
+                    sec["tables"][key]["note"] = new
+                else:
+                    sec[key] = new
             tmp = p + ".tmp"
             with io.open(tmp, "w", encoding="utf-8", newline="\n") as f:
                 json.dump(d, f, ensure_ascii=False, indent=1)
@@ -181,14 +234,26 @@ def _selftest() -> int:
       is None)
     t("　1行に2文あっても、当てはまる文だけ直す",
       plan_for({"sections": [{"title": "x", "body": [
-          "天井は999Gです。AT間天井とボーナス間天井は独立してカウントされる。"]}]})[0][3]
+          "天井は999Gです。AT間天井とボーナス間天井は独立してカウントされる。"]}]})[0][2]
       == "天井は999Gです。AT間天井とボーナス間天井は独立してカウントされます。")
-    t("　設定示唆の表は触らない",
+    t("　設定示唆の節の「行の並び」は触らない",
       plan_for({"sections": [{"title": "x", "type": "settei", "body": [
           "高設定域では通常時のモード移行率が優遇されているとの見方がある。"]}]}) == [])
+    # ★★表の中の注記は見る★★（2026-08-21・台帳#332）
+    #   ★直す前は body だけ見ていた★ので、設定示唆まとめの tables[].note に
+    #   常体が残っていた（実例＝hokuto「…高設定否定にならない。」）。
+    _tn = plan_for({"sections": [{"title": "設定示唆まとめ", "type": "settei",
+                                  "tables": [{"note": "設定6を8000G回しても"
+                                              "出現率は約20%あることがある。"}]}]})
+    t("★★設定示唆の表の注記も直す★★（#122のスキャンが見ていなかった穴）",
+      len(_tn) == 1 and _tn[0][0][0] == "table_note"
+      and _tn[0][2].endswith("あります。"))
+    t("　節の注記（resultNote）も見る",
+      len(plan_for({"sections": [{"title": "x", "resultNote":
+                                  "スイカ確率で設定を推測できる。"}]})) == 1)
 
     print()
-    print(f"{11 - len(ng)}/11 " + ("合格" if not ng else "不合格"))
+    print(f"{13 - len(ng)}/13 " + ("合格" if not ng else "不合格"))
     return 1 if ng else 0
 
 
@@ -206,7 +271,7 @@ def main() -> int:
           + f" {len(r['changed'])} 機種 / {r['n']} 行")
     for c in r["changed"]:
         print(f"  {c['slug']}")
-        for _si, _bi, old, new, title in c["items"]:
+        for _where, old, new, title in c["items"]:
             # ★変わったところだけを見せる★
             i = 0
             while i < min(len(old), len(new)) and old[i] == new[i]:

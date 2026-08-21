@@ -572,7 +572,7 @@ def _issue_ids(rows) -> set:
 
 
 def claim(task: str, slug: str, path: str = STATE_PATH,
-          repairing: bool = False, issues=None) -> dict:
+          repairing: bool = False, issues=None, finding=None) -> dict:
     """今日この機種を担当してよいか。★同じ日の2機種目は拒否★
 
     repairing=True ＝「台帳の案件を直すために担当する」（2026-08-21・台帳#211）。
@@ -716,6 +716,26 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
         #   それまでは「今日の担当は1つ」という書き方で**数えていなかった**ので、
         #   設定値を増やしても文言が変わるだけで挙動は1機種のままだった。
         #   ★設定値を変えたら、実装が本当に追随しているか動かして確かめる★
+        if finding:
+            # ★★台帳番号ではなく「見つけたもの」で担当する経路★★
+            #   （2026-08-21・Codexの設計レビュー）
+            #   ★なぜ要るか★＝直す経路は台帳番号を必須にしているので、
+            #   「その場で2AIが決めて直す」流れをそのままでは通せなかった。
+            #   台帳は人が付けた札で、しかも人しか閉じない。
+            #   ★札の代わりに、いまのHEADで見つけ直した内容そのもの★を鍵にする。
+            import repair_journal as _rj
+            try:
+                _rec = _rj.load(str(finding))
+            except Exception as _e:           # noqa: BLE001
+                raise GuardError(f"見つけたものの記録を読めません: {_e}")
+            if _rec.get("slug") != slug:
+                raise GuardError(
+                    f"#{finding} は {_rec.get('slug')!r} のものです（{slug} ではありません）")
+            if _rec.get("state") == _rj.ESCALATED:
+                raise GuardError(
+                    f"#{finding} は人へ回した後です（{_rj.MAX_ATTEMPTS}回で決まらなかった）")
+            _entry(data, task)["decision_finding"] = str(finding)
+
         if repairing:
             # ★休み中の機種は担当させない★（2026-08-21・依頼246の防御4）
             #   記録するだけでは守れないので、ここで実際に断る。
@@ -1232,7 +1252,7 @@ def verify_commit(task: str, slug: str, commit: str,
 
 
 def before_write(task: str, slug: str, path: str = STATE_PATH,
-                 repairing: bool = False) -> dict:
+                 repairing: bool = False, finding=None) -> dict:
     """記事を書き換える前の確認。★触ってよい段階か毎回聞き直す★
 
     repairing=True ＝「台帳の案件を直すために触る」（2026-08-21・台帳#211）。
@@ -1249,6 +1269,42 @@ def before_write(task: str, slug: str, path: str = STATE_PATH,
         if e.get("guard_slug") != slug:
             raise GuardError(
                 f"{slug} の担当を確保していません（記録は {e.get('guard_slug')!r} のものです）")
+        if finding or e.get("decision_finding"):
+            # ★★「2AIが決めた」ことを、書く直前にもう一度確かめる★★
+            #   （2026-08-21・Codexの設計レビュー
+            #    「適用直前に変更前指紋を再照合」「AI合意が書き換え許可証に
+            #     ならないようにする」）
+            import repair_journal as _rj
+            _fid = str(finding or e.get("decision_finding"))
+            if e.get("decision_finding") and _fid != e["decision_finding"]:
+                raise GuardError(
+                    f"{slug} は #{e['decision_finding']} を直す担当です。"
+                    "途中で対象を変えられません")
+            try:
+                _rec = _rj.load(_fid)
+            except Exception as _ex:          # noqa: BLE001
+                raise GuardError(f"見つけたものの記録を読めません: {_ex}")
+            if _rec.get("slug") != slug:
+                raise GuardError(f"#{_fid} は {_rec.get('slug')!r} のものです")
+            if _rec.get("state") != "AGREED":
+                raise GuardError(
+                    f"#{_fid} はまだ書いてよい段階ではありません"
+                    f"（いま {_rec.get('state')} ／ AGREED になってから書けます）")
+            # ★見つけたときから記事が変わっていないか★
+            _want = _rec.get("source_sha256") or ""
+            if _want:
+                _dp = os.path.join(BASE, "assets", "data", "machine-details",
+                                   slug + ".json")
+                if not os.path.exists(_dp):
+                    raise GuardError(f"{slug} の記事データがありません")
+                with open(_dp, encoding="utf-8") as _f:
+                    _now = hashlib.sha256(_f.read().encode("utf-8")
+                                          .replace(b"\r\n", b"\n")).hexdigest()
+                if _now != _want:
+                    raise GuardError(
+                        f"#{_fid} を見つけたときから記事が変わっています"
+                        f"（{_want[:12]}… → {_now[:12]}…）。見つけ直してください")
+
         a = cp.assess(slug, repairing=repairing)
         # ★★修理モードは担当を取った時に決まる。あとから変えられない★★
         #   （2026-08-21・Codex依頼248の指摘1）
@@ -1509,6 +1565,97 @@ def _machines_per_day_tests(t, tmpdir) -> None:
                  contract_sha256=SHA)
     t("　同じ機種なら、担当の数は増えない（やり直しを塞がない）",
       bool(r2["token"]) and _load(sp2)["day"]["slugs_today"] == ["mpd_same"])
+
+
+def _finding_tests(t, tmpdir) -> None:
+    """★見つけたもの（finding）で担当する経路の試験★
+
+    ★なぜ要るか★＝直す経路は台帳番号を必須にしていたので、
+    「その場で2AIが決めて直す」流れをそのまま通せなかった。
+    台帳番号は人が付けた札で、しかも人しか閉じない。
+
+    ★守っているもの★
+      ・合意する前は書けない（AI合意が書き換え許可証にならないように）
+      ・別の機種の記録では担当できない
+      ・打ち切った後の記録では担当できない
+      ・見つけたときから記事が変わっていたら書かせない
+      ・担当した対象を途中で変えられない
+    """
+    import repair_journal as rj
+
+    keep_store = rj.STORE
+    rj.STORE = os.path.join(tmpdir, "repairs")
+    fp = os.path.join(tmpdir, "finding_state.json")
+    try:
+        # ★実データから「いま書ける機種」を選ぶ★
+        #   （固定名にすると、その機種が台帳で止まった日に試験が落ちる）
+        slug = None
+        for _m in _sj.read_rows(os.path.join(BASE, "assets", "data", "machines.json")):
+            try:
+                if cp.assess(_m["slug"])["stage"] in WRITABLE_STAGES:
+                    slug = _m["slug"]
+                    break
+            except Exception:             # noqa: BLE001
+                continue
+        if not slug:
+            t("　（いま書ける機種が1つも無いので、この確認は行わない）", True)
+            return
+        dp = os.path.join(BASE, "assets", "data", "machine-details",
+                          slug + ".json")
+        with open(dp, encoding="utf-8") as f:
+            sha = hashlib.sha256(
+                f.read().encode("utf-8").replace(b"\r\n", b"\n")).hexdigest()
+
+        fid = rj.detect(slug, "text_gone", "この文はためしの文です。", "x",
+                        source_sha256=sha)["finding_id"]
+
+        claim("t_find", slug, fp, finding=fid)
+        t("　見つけたもので担当できる（台帳番号は要らない）",
+          day_status(fp).get("target_slug") == slug)
+
+        t("★★合意する前は書けない★★（AI合意を書き換え許可証にしない）",
+          _raises(lambda: before_write("t_find", slug, fp), "AGREED"))
+
+        _other = "zzz_other_machine"
+        fid_other = rj.detect(_other, "text_gone", "よその機種の文です。",
+                              "y")["finding_id"]
+        t("★★別の機種の記録では担当できない★★",
+          _raises(lambda: claim("t_find2", slug, fp, finding=fid_other),
+                  _other))
+
+        fid_esc = rj.detect(slug, "text_gone", "打ち切る文です。",
+                            "z")["finding_id"]
+        for _ in range(rj.MAX_ATTEMPTS):
+            rj.attempt(fid_esc, "決まらない")
+        t("★★人へ回した後の記録では担当できない★★",
+          _raises(lambda: claim("t_find3", slug, fp, finding=fid_esc),
+                  "人へ回した"))
+
+        vp = os.path.join(tmpdir, "v.md")
+        with open(vp, "w", encoding="utf-8") as f:
+            f.write("私の判定: この文は前と同じ内容なので消してよいと考えます。")
+        rj.seal_claude(fid, vp)
+        rj.record_codex(fid, "b" * 64, "Codexの判定です。同じく消してよいです。")
+        rj.agree(fid, [{"op": "drop", "why": "重複"}], "text_gone",
+                 ["Claude", "codex"])
+        t("　合意したら書ける", not _raises(lambda: before_write("t_find", slug, fp)))
+
+        fid_moved = rj.detect(slug, "text_gone", "別のためしの文です。", "w",
+                              source_sha256="0" * 64)["finding_id"]
+        rj.seal_claude(fid_moved, vp)
+        rj.record_codex(fid_moved, "b" * 64,
+                        "Codexの判定です。同じく消してよいと考えます。")
+        rj.agree(fid_moved, [{"op": "drop", "why": "重複"}], "text_gone",
+                 ["Claude", "codex"])
+        claim("t_find4", slug, fp, finding=fid_moved)
+        t("★★見つけたときから記事が変わっていたら書かせない★★",
+          _raises(lambda: before_write("t_find4", slug, fp), "変わっています"))
+
+        t("★★担当した対象を途中で変えられない★★",
+          _raises(lambda: before_write("t_find4", slug, fp, finding=fid),
+                  "変えられません"))
+    finally:
+        rj.STORE = keep_store
 
 
 def _budget_tests(t, tmpdir) -> None:
@@ -2363,6 +2510,9 @@ def selftest() -> int:
     try:
         _machines_per_day_tests(t, _d)
         _budget_tests(t, _d)
+        # ★★台帳番号ではなく「見つけたもの」で担当する経路★★
+        #   （2026-08-21・Codexの設計レビュー）
+        _finding_tests(t, _d)
     finally:
         _sh.rmtree(_d, ignore_errors=True)
 
@@ -2390,6 +2540,14 @@ def main() -> int:
             p.add_argument("--issue", action="append", default=[],
                            help="直す対象の案件番号（例 --issue 318）。"
                                 "--repairing のときは1つ以上必須")
+            # ★★台帳番号ではなく「見つけたもの」で担当する★★
+            #   （2026-08-21・Codexの設計レビュー）
+            #   台帳番号は人が付けた札で、しかも人しか閉じない。
+            #   その場で2AIが決めて直す流れは、いまのHEADで見つけ直した
+            #   内容そのもの（repair_journal の finding_id）を鍵にする。
+            p.add_argument("--decision", default=None, metavar="FINDING_ID",
+                           help="見つけたものの番号（repair_journal --list で出る）。"
+                                "書くには AGREED まで進んでいることが必要")
         if name == "done":
             p.add_argument("--stage", required=True)
     p = sub.add_parser("reserve")          # ★書き換えの枠を取る★
@@ -2435,7 +2593,8 @@ def main() -> int:
     if args.cmd == "claim":
         print(json.dumps(claim(args.task, args.slug,
                                repairing=bool(getattr(args, "repairing", False)),
-                               issues=getattr(args, "issue", []) or []),
+                               issues=getattr(args, "issue", []) or [],
+                               finding=getattr(args, "decision", None)),
                          ensure_ascii=False, indent=1))
     elif args.cmd == "reserve":
         print(json.dumps(
@@ -2456,7 +2615,8 @@ def main() -> int:
               + ("" if _lane == "main" else f"（{_lane}の枠）"))
     elif args.cmd == "before-write":
         print(json.dumps(before_write(args.task, args.slug,
-                                      repairing=bool(getattr(args, "repairing", False))),
+                                      repairing=bool(getattr(args, "repairing", False)),
+                                      finding=getattr(args, "decision", None)),
                          ensure_ascii=False, indent=1))
     elif args.cmd == "before-commit":
         print(json.dumps(before_commit(args.task, args.slug), ensure_ascii=False, indent=1))

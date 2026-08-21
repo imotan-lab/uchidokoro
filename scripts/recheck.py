@@ -940,10 +940,216 @@ def _result(result: str, detail: str, args: dict, observed=None) -> dict:
     }
 
 
+# --- ★その場で直せる型の「閉じられる検査」★ ---------------------------------
+#   （2026-08-21・Codexの設計レビュー）
+#   ★指摘★＝「再検査が未実装の問題型は自動修正の対象にしない」。
+#   いままで閉じられる検査は4つしかなく、
+#   ★文体・型式名・他サイト名・重複★＝品質レビューが毎朝いちばん多く挙げる型に
+#   対応する検査が無かった。＝「直せても機械的に閉じられない」ままだった。
+#
+#   ★この4つが「閉じられる」と言える理由★
+#     どれも**記事データだけを見れば白黒が付く**（出典を見に行かなくていい）。
+#     どちらが正しいかを選ぶ判断が入らない。
+
+
+def _competitor_hits(text: str) -> list:
+    """★他サイト名がそのまま出ていないか★（監査17と同じ名簿を使う）"""
+    sys.path.insert(0, os.path.join(BASE, "scripts"))
+    import audit_site as _a
+    names = getattr(_a, "COMPETITOR_NAMES", None)
+    if not names:
+        names = ["スロパチクエスト", "ちょんぼりすた", "ナナプレス", "DMM",
+                 "ぱちタウン", "スロラボ", "もしもアフィリエイト",
+                 "moshimo.com", "af.moshimo", "i.moshimo"]
+    return [n for n in names if n in text]
+
+
+def check_plain_style_gone(args: dict) -> dict:
+    """★文体そろえが直せる文末が残っていないか★
+
+    ★これは「常体が無い」ことの証明ではない★（2026-08-21・対照実験で判明）
+      見ているのは fix_plain_style.ENDINGS の19通りだけ。
+      壊した状態を作って試したら「…確定する。」「…となる。」は素通りした。
+      ＝**この検査だけを根拠に「文体混在は直った」と閉じてはいけない**。
+      文体の案件を閉じるときは text_gone で逐語が消えたことも確かめる。
+    """
+    slug = args.get("slug")
+    if not valid_slug(slug):
+        return _result(NOT_APPLICABLE, "machines.json にその機種がありません", args)
+    detail, raw, why = _load_detail(slug)
+    if detail is None:
+        return _result(NOT_APPLICABLE, why, args)
+    try:
+        sys.path.insert(0, os.path.join(BASE, "scripts"))
+        import fix_plain_style as _f
+        plan = _f.plan_for(detail)
+    except Exception as e:                                   # noqa: BLE001
+        return _result(ERROR, f"検査できません: {type(e).__name__}", args)
+    if plan:
+        ex = [old for (_w, old, _new, _t) in plan[:3]]
+        return _result(FAIL, f"常体の文末が {len(plan)} 箇所あります", args,
+                       {"count": len(plan), "例": ex})
+    return _result(PASS, "常体の文末はありません", args, {"count": 0})
+
+
+def check_model_code_gone(args: dict) -> dict:
+    """型式名・検定番号が読者に出ていないか（記事データと公開HTMLの両方）。"""
+    slug = args.get("slug")
+    if not valid_slug(slug):
+        return _result(NOT_APPLICABLE, "machines.json にその機種がありません", args)
+    detail, raw, why = _load_detail(slug)
+    if detail is None:
+        return _result(NOT_APPLICABLE, why, args)
+    try:
+        sys.path.insert(0, os.path.join(BASE, "scripts"))
+        import strip_model_code as _s
+        plan = _s.plan_for(detail)
+    except Exception as e:                                   # noqa: BLE001
+        return _result(ERROR, f"検査できません: {type(e).__name__}", args)
+    n = sum(len(v) for v in plan.values())
+
+    # ★記事データを直しても、HTMLを描き直さないと読者には届いたまま★
+    #   （2026-08-21・台帳#434）
+    html_hits = []
+    hp = os.path.join(BASE, "machines", slug, "index.html")
+    if os.path.exists(hp):
+        htxt = _read_text(hp)
+        for lab in getattr(_s, "LABELS", ()):
+            if lab in htxt:
+                html_hits.append(lab)
+
+    if n or html_hits:
+        return _result(
+            FAIL,
+            f"型式名が残っています（記事データ {n} 箇所 ／ 公開HTML {len(html_hits)} 語）",
+            args, {"data": n, "html": html_hits})
+    return _result(PASS, "型式名はありません", args,
+                   {"data": 0, "html": [], "html_checked": os.path.exists(hp)})
+
+
+def check_competitor_names_gone(args: dict) -> dict:
+    """他サイト名がそのまま出ていないか（記事データと公開HTML）。"""
+    slug = args.get("slug")
+    if not valid_slug(slug):
+        return _result(NOT_APPLICABLE, "machines.json にその機種がありません", args)
+    detail, raw, why = _load_detail(slug)
+    if detail is None:
+        return _result(NOT_APPLICABLE, why, args)
+    try:
+        hits = _competitor_hits(raw)
+    except Exception as e:                                   # noqa: BLE001
+        return _result(ERROR, f"検査できません: {type(e).__name__}", args)
+
+    html_hits = []
+    hp = os.path.join(BASE, "machines", slug, "index.html")
+    if os.path.exists(hp):
+        html_hits = _competitor_hits(_read_text(hp))
+
+    if hits or html_hits:
+        return _result(
+            FAIL,
+            "他サイト名が出ています: " + " / ".join(sorted(set(hits + html_hits))),
+            args, {"data": hits, "html": html_hits})
+    return _result(PASS, "他サイト名はありません", args,
+                   {"data": [], "html": [], "html_checked": os.path.exists(hp)})
+
+
+def check_duplicate_prose_gone(args: dict) -> dict:
+    """同じ判断を2度読ませている箇所が残っていないか。
+
+    ★閉じられる理由★＝候補が0件になるのは、記事データだけで確かめられる。
+    ★閉じられない場合★＝2AIが「どちらも残す」と決めた記事は、
+      候補が残るので**永久にPASSしない**。それでよい（勝手に閉じない側に倒す）。
+    """
+    slug = args.get("slug")
+    if not valid_slug(slug):
+        return _result(NOT_APPLICABLE, "machines.json にその機種がありません", args)
+    detail, raw, why = _load_detail(slug)
+    if detail is None:
+        return _result(NOT_APPLICABLE, why, args)
+    try:
+        sys.path.insert(0, os.path.join(BASE, "scripts"))
+        import find_duplicate_prose as _d
+        rows = _d.scan(slug=slug)
+    except Exception as e:                                   # noqa: BLE001
+        return _result(ERROR, f"検査できません: {type(e).__name__}", args)
+    if rows:
+        return _result(FAIL, f"よく似た文の組が {len(rows)} 件あります", args,
+                       {"count": len(rows)})
+    return _result(PASS, "よく似た文の組はありません", args, {"count": 0})
+
+
+def check_text_gone(args: dict) -> dict:
+    """★指摘された逐語が、記事データにも公開HTMLにも無いこと★
+
+    （2026-08-21・Codexの設計レビュー「問題箇所の逐語と位置を固定する」）
+    ★これが要る理由★＝型ごとの検査は、その型の**直せる範囲**しか見ていない。
+      文体の検査は19通りの文末しか知らないので、
+      「…となる。」を直しても直さなくてもPASSしてしまう（対照実験で確認）。
+      指摘された文そのものが消えたことを見れば、型を問わず確かめられる。
+    ★判断は要らない★＝あるか無いかだけ。
+    """
+    slug = args.get("slug")
+    text = args.get("text")
+    if not valid_slug(slug):
+        return _result(NOT_APPLICABLE, "machines.json にその機種がありません", args)
+    if not isinstance(text, str) or len(text.strip()) < 4:
+        return _result(NOT_APPLICABLE, "確かめる逐語がありません（4字以上）", args)
+    detail, raw, why = _load_detail(slug)
+    if detail is None:
+        return _result(NOT_APPLICABLE, why, args)
+
+    in_data = text in raw
+    hp = os.path.join(BASE, "machines", slug, "index.html")
+    in_html = os.path.exists(hp) and text in _read_text(hp)
+    where = [w for w, hit in (("記事データ", in_data), ("公開HTML", in_html)) if hit]
+    if where:
+        return _result(FAIL, "指摘された文がまだ残っています: " + " / ".join(where),
+                       args, {"data": in_data, "html": in_html})
+    return _result(PASS, "指摘された文はどこにもありません", args,
+                   {"data": False, "html": False,
+                    "html_checked": os.path.exists(hp)})
+
+
 # --- 検査の名簿 -----------------------------------------------------------
 # ★ここに無い名前は動かない★（台帳から来た文字列でコマンドを組み立てない）
 
 CHECKS = {
+    "text_gone": {
+        "version": 1,
+        "closeable": True,          # ★型を問わず使える★ あるか無いかだけ
+        "title": "指摘された逐語が記事データ・公開HTMLから消えているか",
+        "fn": check_text_gone,
+        "args_spec": {"slug": (str, True, None), "text": (str, True, None)},
+    },
+    "plain_style_gone": {
+        "version": 1,
+        "closeable": True,          # ★記事データだけで白黒が付く★
+        "title": "文体そろえが直せる文末（19通り）が残っていないか",
+        "fn": check_plain_style_gone,
+        "args_spec": {"slug": (str, True, None)},
+    },
+    "model_code_gone": {
+        "version": 1,
+        "closeable": True,          # ★記事データと公開HTMLの両方を見る★
+        "title": "型式名・検定番号が読者に出ていないか",
+        "fn": check_model_code_gone,
+        "args_spec": {"slug": (str, True, None)},
+    },
+    "competitor_names_gone": {
+        "version": 1,
+        "closeable": True,          # ★名簿は監査17と同じ★
+        "title": "他サイト名がそのまま出ていないか",
+        "fn": check_competitor_names_gone,
+        "args_spec": {"slug": (str, True, None)},
+    },
+    "duplicate_prose_gone": {
+        "version": 1,
+        "closeable": True,          # ★候補0件は記事データだけで確かめられる★
+        "title": "同じ判断を2度読ませている箇所が残っていないか",
+        "fn": check_duplicate_prose_gone,
+        "args_spec": {"slug": (str, True, None)},
+    },
     "settei_filled": {
         "version": 1,
         "closeable": True,          # ★読者に見える★ 見出しと凡例だけが残る型
