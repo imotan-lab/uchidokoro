@@ -1119,6 +1119,17 @@ def selftest() -> int:
     _keep_ledger, _tmp_dir = _oi_mod.DEFAULT_FILE, tempfile.mkdtemp()
     _oi_mod.DEFAULT_FILE = _oi_mod.Path(_tmp_dir) / "issues.json"
 
+    # ★★自己試験は外へ出ない★★（2026-08-21・台帳#419／CIが2回落ちた原因）
+    #   `plan_one` は `find` を渡さないと `find_sources()` を呼び、
+    #   その先で `directory_index.find` → `new_machine_watch._get` と進んで
+    #   **本物の名鑑を取りに行く**（取得間隔の待ちで止まる）。
+    #   ★CI（通信できない）では必ず落ちる★／★手元では数分待たされて完走しない★。
+    #   `plan_one` の呼び出しが9か所あり、毎回 `find=` を書くのは漏れるので、
+    #   ★出どころの `find_sources` 自体を試験の間だけ差し替える★。
+    #   ★本番の姿は変えていない★（この関数を抜けたら必ず元へ戻す）。
+    _keep_find = globals()["find_sources"]
+    globals()["find_sources"] = lambda machine: []
+
     def _ceil_box(lines):
         return {"slug": "zzz",
                 "sections": [{"title": "天井・恩恵", "body": lines}]}
@@ -1559,6 +1570,8 @@ def selftest() -> int:
     t("★★自己テストは本番の台帳に書かない★★（実際にごみが3件入ったので固定する）",
       _not_the_real_ledger())
     _oi_mod.DEFAULT_FILE = _keep_ledger
+    # ★差し替えた出典探しを必ず戻す★（試験のあとに本番が空を返さないように）
+    globals()["find_sources"] = _keep_find
     import shutil
     shutil.rmtree(_tmp_dir, ignore_errors=True)
     # ★断り書きだけ消す更新は止める★（2026-08-12・依頼161）
