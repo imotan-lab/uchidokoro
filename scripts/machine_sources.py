@@ -845,10 +845,15 @@ def issue_args(slug: str, rec: dict, got: dict) -> list:
         + " --url <URL> --why <理由> --by 運営者",
         "  ※ページが元どおりに戻った場合は、次の収集で自動的に解除されます。",
     ])
-    return ["add", "--source", "machine-sources", "--slug", slug,
-            "--kind", "external_value", "--severity", "CRITICAL",
-            "--reason-code", "SOURCE_PAGE_CHANGED",
-            "--title", title, "--detail", detail]
+    # ★オプション名を自分で並べない★（2026-08-21・台帳#312）
+    #   ★並べる場所は open_issues.add_argv の1か所★
+    #   ここは python とスクリプトのパスを呼び出し側が付けていたので、
+    #   その2つを外して返す（呼び出し側の形は変えない）。
+    import open_issues as _oi
+    return _oi.add_argv(source="machine-sources", slug=slug,
+                        kind="external_value", severity="CRITICAL",
+                        reason_code="SOURCE_PAGE_CHANGED",
+                        title=title, detail=detail)[2:]
 
 
 def report_changed(slug: str, rec: dict, got: dict) -> bool:

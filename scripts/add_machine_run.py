@@ -111,11 +111,14 @@ def _ledger(slug, kind, severity, code, title, detail) -> bool:
       **待ち行列にも台帳にも無い機種**になる。
       公式URLは既知なので、二度と出てこない＝黙って消える。
     """
+    # ★オプション名を自分で並べない★（2026-08-21・台帳#312）
+    #   CLIの引数を増減させると、こういう箇所が黙って失敗する（#300と同じ型）。
+    #   ★並べる場所は open_issues.add_argv の1か所★
+    import open_issues as _oi
     r = subprocess.run(
-        [sys.executable, os.path.join(BASE, "scripts", "open_issues.py"), "add",
-         "--source", "add-machine", "--slug", slug, "--kind", kind,
-         "--severity", severity, "--reason-code", code,
-         "--title", title, "--detail", detail],
+        _oi.add_argv(source="add-machine", slug=slug, kind=kind,
+                     severity=severity, reason_code=code,
+                     title=title, detail=detail),
         cwd=BASE, capture_output=True, text=True,
         encoding="utf-8", errors="replace",
         # ★引数配列で渡している＝シェルを通らない★（2026-08-09）

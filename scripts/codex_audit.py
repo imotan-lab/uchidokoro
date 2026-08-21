@@ -1082,9 +1082,12 @@ def add_issue(slug: str, kind: str, title: str, detail: str) -> None:
     ★登録に失敗したら記録して後で異常として扱う（黙って消さない）★
     """
     try:
-        r = subprocess.run([sys.executable, str(OPEN_ISSUES), "add",
-                            "--source", "codex-audit", "--slug", slug,
-                            "--kind", kind, "--title", title, "--detail", detail],
+        # ★オプション名を自分で並べない★（2026-08-21・台帳#312）
+        import open_issues as _oi
+        r = subprocess.run(_oi.add_argv(source="codex-audit", slug=slug,
+                                        kind=kind, severity="CRITICAL",
+                                        title=title, detail=detail,
+                                        script=str(OPEN_ISSUES)),
                            capture_output=True, text=True, timeout=60,
                            # ★引数配列＝シェルを通らないので直接指定してよい★
                            env={**os.environ, "UCHIDOKORO_ARGV_CALL": "1"},

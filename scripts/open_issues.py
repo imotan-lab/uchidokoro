@@ -478,6 +478,46 @@ def selftest() -> int:
     return 1 if ng else 0
 
 
+def add_argv(*, source, slug, kind, title, severity, detail="",
+             reason_code=None, python=None, script=None) -> list:
+    """★別プロセスから台帳へ登録するときの引数列を作る唯一の場所★
+
+    （2026-08-21・台帳#312）
+
+    ★なぜ要るのか★
+      コード側が「--source」「--slug」…とオプション名を**自分で並べて**
+      別プロセスを起動している箇所が3つあった
+      （add_machine_run / codex_audit / machine_sources）。
+      ★CLIのオプション名や必須項目を変えると、3つとも黙って失敗しうる★。
+      #300 と同じ型（オプション名への依存がコードの各所に散る）。
+
+      ★オプション名を書く場所をここ1か所にする★＝
+      CLIを変えたらここだけ直せばよい。
+
+    ★シェルを通さない★＝引数の配列をそのまま subprocess へ渡す前提。
+      （自由文をシェル文字列に入れない、という運用の線・鉄則1c）
+
+    使い方:
+        subprocess.run(open_issues.add_argv(source=..., slug=..., ...),
+                       cwd=BASE, capture_output=True)
+    """
+    import sys as _sys
+    py = python or _sys.executable
+    sc = script or os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "open_issues.py")
+    if not str(title or "").strip():
+        raise ValueError("title が空です")
+    argv = [py, sc, "add",
+            "--source", str(source), "--slug", str(slug),
+            "--kind", str(kind), "--severity", str(severity),
+            "--title", str(title)]
+    if detail:
+        argv += ["--detail", str(detail)]
+    if reason_code:
+        argv += ["--reason-code", str(reason_code)]
+    return argv
+
+
 def add_issue(path, *, source, slug, kind, title, severity, detail="",
               reason_code=None):
     """★コードから台帳へ登録する入口★（CLIの引数の形に左右されない）

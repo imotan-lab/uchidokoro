@@ -1861,6 +1861,50 @@ def check_44_empty_settei_box(machines: list) -> list[str]:
     return out
 
 
+def check_48_ledger_argv(machines: list) -> list[str]:
+    """台帳CLIのオプション名を、あちこちで並べていないか
+
+    ★なぜ見張るか（2026-08-21・台帳#312）★
+      コード側が「--source」「--slug」…と**自分で並べて**台帳CLIを
+      別プロセスで起動している箇所が3つあった。
+      ★CLIの引数を増減させると、3つとも黙って失敗しうる★
+      （台帳#300とまったく同じ型＝オプション名への依存が各所に散る）。
+
+    ★並べてよいのは2か所だけ★
+      ・open_issues.add_argv … 引数列を作る唯一の場所
+      ・open_issues の argparse 定義 … CLIそのもの
+
+    ★どこかに増えたら知らせる★＝新しい呼び出し口を足すときに
+      「add_argv を使う」を思い出せるようにする。
+    """
+    import glob
+    ng = []
+    for path in sorted(glob.glob(os.path.join(BASE, "scripts", "*.py"))):
+        rel = "scripts/" + os.path.basename(path)
+        try:
+            with open(path, encoding="utf-8") as f:
+                src = f.read()
+        except OSError:
+            continue
+        if rel == "scripts/open_issues.py":
+            continue          # ★ここが唯一の置き場（add_argv と argparse 定義）★
+        if rel == "scripts/audit_site.py":
+            continue          # この検査自身
+        # ★★「台帳CLIを起動している並び」だけを見る★★
+        #   ★自分のCLIを定義しているだけの add_argument("--source"…) は別物★
+        #   （confirmed_values を誤って挙げたので絞った）。
+        #   台帳へ登録する呼び出しは、必ず "add" のあとに
+        #   --source と --slug と --kind が並ぶ。
+        for m in re.finditer(r'"add"\s*,', src):
+            seg = src[m.start():m.start() + 400]
+            if '"--source"' in seg and '"--slug"' in seg and '"--kind"' in seg:
+                ng.append(
+                    f"{rel}: 台帳CLIのオプション名を自分で並べています"
+                    "（open_issues.add_argv を使ってください・台帳#312）")
+                break
+    return ng
+
+
 def check_47_model_code_in_html(machines: list) -> list[str]:
     """公開ページに型式名が焼き込まれたまま残っていないか
 
@@ -2337,6 +2381,7 @@ CHECKS = [
     ("45_中身なしの噂の箱", check_45_rumor_declared_empty),
     ("46_ポチポチくんの案内と飛び先", check_46_pochipochi_reachable),
     ("47_公開ページに残った型式名", check_47_model_code_in_html),
+    ("48_台帳CLIの引数の並べ場所", check_48_ledger_argv),
 ]
 
 
