@@ -166,6 +166,23 @@ APPROVED_INPUTS = frozenset({
     #   渡していない」が見つかった。関所が見ていない場所だった。
     "scripts/grow_machine.py",
     "scripts/grow_legacy.py",
+    # ★★新台を記事にして公開するまでの一式★★（2026-08-21・台帳#420）
+    #   ★契約が「直接依存に閉じていなかった」★＝
+    #   契約に入っている側が中で呼んでいるのに、呼ばれる側は指紋の対象外だった。
+    #   ＝呼ばれる側を書き換えれば、承認をやり直さずに公開物を変えられた。
+    #   ★どちらの契約にも入っていなかった6本★＝
+    #     build_new_article  … 材料から記事データを組み立てる
+    #     page_decision      … 区分と判定書（検索に載せるかを決める唯一の場所）
+    #     publish_new_machine… 新台1機種を公開する専用経路
+    #     prepush_gate       … push してよいかを決める最後の関所
+    #     check_duplicate    … 二重登録を止める
+    #     pending_machines   … まだ記事にできていない新台の控え
+    "scripts/build_new_article.py",
+    "scripts/page_decision.py",
+    "scripts/publish_new_machine.py",
+    "scripts/prepush_gate.py",
+    "scripts/check_duplicate.py",
+    "scripts/pending_machines.py",
     "scripts/gates.py",
     "scripts/audit_public.py",
     "scripts/claim_reconcile.py",

@@ -11,14 +11,19 @@
   "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
   "scripts/blocked_hosts.py": "553ac0a6f0f0baf563100458937efa167826c4347f815ace1a70e39769909b7d",
   "scripts/ceiling_lookup.py": "9a36904651e226106dd2ee53e71602378c55122087789354b052215f8d62d5aa",
+  "scripts/confirmed_values.py": "4b7dc84c1c4f77f72e6e18c7679cb7f425c1fb67b9eb22980400af918bf66944",
   "scripts/cz_lookup.py": "c93dde73b9a8c162bdd4fecfbf251e7ad7b3d0c87dba55e6005a140bd695d73e",
+  "scripts/directory_index.py": "5c6e1471c073b2462b056b0cd6c2f7ee7a2fa8d26f8696213a6e891b896dbdc5",
   "scripts/dmm_calendar.py": "ad0ae2ffb3977307cf361e4a137288e9bccdd1f15fb43e560aa629c5942a6930",
   "scripts/dmm_discover.py": "894d76b027c1508020d71640a74f3f0a02fbd8d6a1d42e3a15a2e8764d008592",
   "scripts/dmm_machine.py": "d87e650a99f2677b718fd0bcc622da7c4eaeee03bfd0d3d91f2ddba87c9fa3b0",
   "scripts/fetched_page.py": "89c8186772e4704c1c944f054176a398e3857936accf9ae16a34ebb36da6afa3",
+  "scripts/html_tables.py": "426a34333ab98c7c33b197acf2096f3575a0c27381d5557abbaa16d700a1c7e6",
+  "scripts/lineage_check.py": "2bbb9cfdad4cdf6edc22f1a3f4cec20f804ccceb66453a88d83d8572d86d6e98",
   "scripts/maker_identity_cache.py": "b17ec543bb00b9daf55b9918202f220f89b3b034b822d9c2d01b1c6221e54ed8",
   "scripts/model_code_lookup.py": "308a3c7094df313c9a1fb291dc9088921ffc1e870fdffc87b472ff25ee707ad5",
   "scripts/new_machine_watch.py": "72319ceacf38d0a8b71bf5ec442664187224a8a8288376e49425027198acbe15",
+  "scripts/page_probe.py": "25d0411b1552d018ab1e528a58be1ce1d53a4e47de68f84fc2f951ccaa1f182d",
   "scripts/slug_binding.py": "17c235c10cd7fed94d4c774bbe7b88c87349eff214bedaa22182d3fe79f26af6",
   "scripts/source_lineage.py": "3bc6d55450f8d39e099d88a73f3c662f02e95915d5fe83d981ffd759c9b3881a",
   "scripts/spec_lookup.py": "5d26c3e60dff046dc5f4fd270b4a232cad21d14264a4a74f2c7983b6554012a4",
@@ -69,6 +74,15 @@
    "spec_lookup",
    "user_area"
   ],
+  "scripts/confirmed_values.py": [
+   "build_new_article",
+   "claim_identity",
+   "claim_inventory",
+   "model_code_lookup",
+   "new_machine_watch",
+   "source_lineage",
+   "spec_lookup"
+  ],
   "scripts/cz_lookup.py": [
    "fetched_page",
    "html_tables",
@@ -77,6 +91,10 @@
    "source_lineage",
    "spec_lookup",
    "user_area"
+  ],
+  "scripts/directory_index.py": [
+   "claim_identity",
+   "new_machine_watch"
   ],
   "scripts/dmm_calendar.py": [
    "automation_policy",
@@ -102,6 +120,11 @@
    "new_machine_watch",
    "user_area"
   ],
+  "scripts/html_tables.py": [],
+  "scripts/lineage_check.py": [
+   "new_machine_watch",
+   "spec_lookup"
+  ],
   "scripts/maker_identity_cache.py": [
    "claim_identity",
    "directory_index",
@@ -122,6 +145,10 @@
    "automation_policy",
    "blocked_hosts",
    "page_probe"
+  ],
+  "scripts/page_probe.py": [
+   "blocked_hosts",
+   "new_machine_watch"
   ],
   "scripts/slug_binding.py": [
    "blocked_hosts",

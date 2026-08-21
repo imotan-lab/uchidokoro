@@ -1890,6 +1890,56 @@ def check_44_empty_settei_box(machines: list) -> list[str]:
     return out
 
 
+def check_50_contract_closure(machines: list) -> list[str]:
+    """契約が「取り込んでいる相手」まで閉じているか
+
+    ★なぜ見張るか（2026-08-21・台帳#420）★
+      承認の関所は「この57枚の書類に判子を押した」と数えているが、
+      ★その書類が中で呼んでいる別のファイルは数に入っていなかった★。
+      ＝呼ばれる側を書き換えれば、承認をやり直さずに中身を変えられた。
+
+      実測（2026-08-21）＝どちらの契約にも入っていない直接依存が **6本**
+      （build_new_article / page_decision / publish_new_machine /
+        prepush_gate / check_duplicate / pending_machines）。
+      いずれも新台を記事にして公開するまでの一式で、
+      ★書き換えれば公開物が変わる★ものだった。
+
+    ★見るのは「どちらの契約にも入っていない」ものだけ★
+      材料の契約か公開物の契約のどちらかに入っていればよい。
+      ＝役割の違うものを無理に片方へ寄せない。
+
+    直し方＝どちらかの集合へ足して、その契約を承認し直す
+      材料の採否を決める側     → scripts/material_contract.py --approve
+      公開物を作る側           → scripts/build_pages_artifact.py --approve
+    """
+    ng = []
+    try:
+        import json as _j
+        sys.path.insert(0, os.path.join(BASE, "scripts"))
+        import build_pages_artifact as _bpa
+        ap = os.path.join(BASE, "assets", "data",
+                          "material-contract-approval.json")
+        with open(ap, encoding="utf-8") as f:
+            a = _j.load(f)
+        mat = set(a.get("files") or {})
+        pub = set(_bpa.APPROVED_INPUTS)
+        deps = set()
+        for _k, v in (a.get("imports") or {}).items():
+            for x in (v or []):
+                deps.add("scripts/" + str(x) + ".py")
+        for d in sorted(deps):
+            if d in mat or d in pub:
+                continue
+            if not os.path.isfile(os.path.join(BASE, d)):
+                continue          # 手元に無いものは対象外
+            ng.append(
+                f"{d}: 契約に入っている側が取り込んでいるのに、"
+                "どちらの契約にも入っていません（台帳#420）")
+    except Exception as e:            # noqa: BLE001
+        ng.append(f"契約の閉じ方を調べられません（{type(e).__name__}: {e}）")
+    return ng
+
+
 def check_49_equivalence_label(machines: list) -> list[str]:
     """「等価＝5.6枚」と書いていないか（サイト内ガイドと矛盾する）
 
@@ -2458,6 +2508,7 @@ CHECKS = [
     ("47_公開ページに残った型式名", check_47_model_code_in_html),
     ("48_台帳CLIの引数の並べ場所", check_48_ledger_argv),
     ("49_等価の呼び方", check_49_equivalence_label),
+    ("50_契約が依存まで閉じているか", check_50_contract_closure),
 ]
 
 

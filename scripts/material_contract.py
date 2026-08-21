@@ -80,6 +80,21 @@ CONTRACT_INPUTS = frozenset({
     "scripts/blocked_hosts.py",
     # 投稿欄・AI欄を落とす役（落とし損ねると読者の書き込みが材料になる）
     "scripts/user_area.py",
+    # ★★材料の採否・値を左右する直接の依存★★（2026-08-21・台帳#420）
+    #   ★契約が「直接依存に閉じていなかった」★＝
+    #   契約に入っている側が中で呼んでいるのに、呼ばれる側は指紋の対象外だった。
+    #   ＝呼ばれる側を書き換えれば、承認をやり直さずに採否を変えられた。
+    #   ★入れる基準＝材料の採否・値そのものを左右するか★
+    #     directory_index  … どのURLを候補にするかを決める
+    #     lineage_check    … 転載を見抜いて票と材料から外す（独立2出典の土台）
+    #     html_tables      … 値の表を「区画」として読む共通部品
+    #     confirmed_values … 2AIで確定した値を材料へ足す
+    #     page_probe       … 出典が変わったかを見て、取り直すかを決める
+    "scripts/directory_index.py",
+    "scripts/lineage_check.py",
+    "scripts/html_tables.py",
+    "scripts/confirmed_values.py",
+    "scripts/page_probe.py",
     # ★取ってきた本文を1個のデータとして持ち回る器★（2026-08-17・台帳#393）
     #   「確かめた本文」と「あとで読む本文」を同じ物にする土台なので、
     #   材料の採否そのものと同じ集合に置く。
