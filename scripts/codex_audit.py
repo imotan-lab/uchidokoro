@@ -1082,19 +1082,14 @@ def add_issue(slug: str, kind: str, title: str, detail: str) -> None:
     ★登録に失敗したら記録して後で異常として扱う（黙って消さない）★
     """
     try:
-        # ★オプション名を自分で並べない★（2026-08-21・台帳#312）
+        # ★★実行まで1か所に閉じ込める★★（2026-08-21・Codexの再指摘）
         import open_issues as _oi
-        r = subprocess.run(_oi.add_argv(source="codex-audit", slug=slug,
-                                        kind=kind, severity="CRITICAL",
-                                        title=title, detail=detail,
-                                        script=str(OPEN_ISSUES)),
-                           capture_output=True, text=True, timeout=60,
-                           # ★引数配列＝シェルを通らないので直接指定してよい★
-                           env={**os.environ, "UCHIDOKORO_ARGV_CALL": "1"},
-                           creationflags=_NO_WINDOW)
-        if r.returncode != 0:
+        ok, out = _oi.run_add(source="codex-audit", slug=slug, kind=kind,
+                              severity="CRITICAL", title=title, detail=detail,
+                              script=str(OPEN_ISSUES))
+        if not ok:
             ISSUE_FAILURES.append(f"{slug}:{title[:40]}")
-            log(f"台帳登録が失敗（処理は継続）: {(r.stderr or r.stdout or '')[:200]}")
+            log(f"台帳登録が失敗（処理は継続）: {out[:200]}")
     except Exception as e:
         ISSUE_FAILURES.append(f"{slug}:{title[:40]}")
         log(f"台帳登録に失敗（処理は継続）: {e}")

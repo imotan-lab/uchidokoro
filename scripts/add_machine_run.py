@@ -111,23 +111,15 @@ def _ledger(slug, kind, severity, code, title, detail) -> bool:
       **待ち行列にも台帳にも無い機種**になる。
       公式URLは既知なので、二度と出てこない＝黙って消える。
     """
-    # ★オプション名を自分で並べない★（2026-08-21・台帳#312）
-    #   CLIの引数を増減させると、こういう箇所が黙って失敗する（#300と同じ型）。
-    #   ★並べる場所は open_issues.add_argv の1か所★
+    # ★★実行まで1か所に閉じ込める★★（2026-08-21・Codexの再指摘）
+    #   ★オプション名を並べる場所も、別プロセスを起動する場所も1つ★
+    #   ＝字面の監査に頼らず、書きようがない形にする。
     import open_issues as _oi
-    r = subprocess.run(
-        _oi.add_argv(source="add-machine", slug=slug, kind=kind,
-                     severity=severity, reason_code=code,
-                     title=title, detail=detail),
-        cwd=BASE, capture_output=True, text=True,
-        encoding="utf-8", errors="replace",
-        # ★引数配列で渡している＝シェルを通らない★（2026-08-09）
-        #   台帳は無人タスクの実行中、シェル経由の直接指定を断るようにしたが、
-        #   ここは文章が実行される経路ではないので通してよい。
-        env={**os.environ, "PYTHONIOENCODING": "utf-8",
-             "UCHIDOKORO_ARGV_CALL": "1"})
-    if r.returncode != 0:
-        _log(f"  ★台帳に登録できませんでした: {(r.stderr or r.stdout)[:200]}★")
+    ok, out = _oi.run_add(source="add-machine", slug=slug, kind=kind,
+                          severity=severity, reason_code=code,
+                          title=title, detail=detail)
+    if not ok:
+        _log(f"  ★台帳に登録できませんでした: {out[:200]}★")
         return False
     return True
 

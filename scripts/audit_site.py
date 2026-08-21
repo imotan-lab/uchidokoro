@@ -1903,8 +1903,19 @@ def check_48_ledger_argv(machines: list) -> list[str]:
       ・open_issues.add_argv … 引数列を作る唯一の場所
       ・open_issues の argparse 定義 … CLIそのもの
 
-    ★どこかに増えたら知らせる★＝新しい呼び出し口を足すときに
-      「add_argv を使う」を思い出せるようにする。
+    ★★これは主防御ではない（補助の見張り）★★（2026-08-21・Codexの再指摘）
+      字面で探しているので、次のような書き方は拾えない:
+        ・'add' や '--source' のように単引用符で書く
+        ・cmd = ["add"] のあとから extend() する
+        ・オプション名を定数や変数に入れる
+        ・400字より離れたところで組み立てる
+      ★本当の守りは「書きようがない形にする」こと★＝
+        ・同じプロセスでよければ `open_issues.add_issue()`
+        ・別プロセスが要るなら `open_issues.run_add()`
+          （引数列を作るのも起動するのも、その中だけ）
+      3系統（add_machine_run / codex_audit / machine_sources）は
+      2026-08-21に run_add() へ寄せた。
+      ここは「うっかり戻した」を早めに見つけるための網。
     """
     import glob
     ng = []

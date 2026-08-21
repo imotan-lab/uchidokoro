@@ -145,13 +145,21 @@ class _OnlyOne:
         長くかかる経路（--recover など）が、正常に動いているのに
         「30分動いていない＝残骸」と見なされて奪われるのを防ぐ。
         ★自分の目印でなくなっていたら False★（呼び出し側が止まれる）。
+
+        ★★見張りの中で確かめてから触る★★（2026-08-21・Codexの再指摘）
+          ★直す前は「持ち主を確かめる → utime」が見張りの外だった★＝
+          Windows では掴んでいる fd が実質守っていたが、
+          POSIX では途中で差し替えられ、
+          **Bの目印をAが touch して成功扱いにする**競合が残っていた。
         """
-        if not self._still_mine():
-            return False
         try:
-            os.utime(self.path, None)
-            return True
-        except OSError:
+            with _tl._Guard(self.path):
+                if not self._still_mine():
+                    return False
+                os.utime(self.path, None)
+                return True
+        except Exception:                 # noqa: BLE001
+            # ★見張りを取れないときは「触れた」と言わない★（fail-closed）
             return False
 
     def _age_minutes(self):
@@ -228,32 +236,44 @@ class _OnlyOne:
         #     ③Aが終わって os.remove する
         #     → ★Bの目印が消える★＝以後、Cが割り込めてしまう。
         #   ＝同時に2つ公開しない、という肝心の守りが破れる。
-        # ★fdを閉じてから確かめる★（2026-08-21・Codexの指摘2）
-        #   ★直す前は、確かめる → 閉じる → 消す の順だった★＝
-        #   閉じてから消すまでの間に後続が入り込む余地があった
-        #   （閉じた瞬間にWindowsの守りが外れるため）。
-        #   見張りの中で「閉じる → 確かめる → 消す」をひと続きにする。
-        if self.fd is not None:
-            try:
-                os.close(self.fd)
-            except OSError:
-                pass
-            self.fd = None
+        # ★★見張りを先に取る → その中で閉じる・確かめる・消す★★
+        #   （2026-08-21・Codexの再指摘）
+        #   ★直す前の穴★＝見張りが取れなかったときに `_guard = None` にして
+        #   **そのまま削除処理を続けていた**。すると次の順で事故が起きる:
+        #     ①Aが見張りを取れずに（時間切れ等）自分の印を読む
+        #     ②Bが見張りの中でAを残骸として退避し、Bの印を作る
+        #     ③Aが os.remove() する → ★Bの目印が消える★
+        #   ＝「同時に2つ公開しない」が破れる。
+        #   ★見張りを取れなければ消さない★（fail-closed）。
+        mine = False
         try:
-            _guard = _tl._Guard(self.path)
-            _guard.__enter__()
-        except Exception:
-            _guard = None
-        try:
-            mine = self._still_mine()
-            if mine:
+            with _tl._Guard(self.path):
+                if self.fd is not None:
+                    try:
+                        os.close(self.fd)
+                    except OSError:
+                        pass
+                    self.fd = None
+                mine = self._still_mine()
+                if mine:
+                    try:
+                        os.remove(self.path)
+                    except OSError:
+                        pass
+        except Exception as e:            # noqa: BLE001
+            # ★見張りが取れないまま消さない★＝残骸として残るほうが安全。
+            #   30分たてば次の処理が正しい手順で片付ける。
+            if self.fd is not None:
                 try:
-                    os.remove(self.path)
+                    os.close(self.fd)
                 except OSError:
                     pass
-        finally:
-            if _guard is not None:
-                _guard.__exit__()
+                self.fd = None
+            self.lost = "GUARD_FAILED"
+            print(f"★公開の目印を片付けられませんでした（{type(e).__name__}）★"
+                  f" {self.path} はそのまま残ります"
+                  "（30分たてば次の処理が正しい手順で片付けます）")
+            return False
         if not mine:
             self.lost = True
             print("★この処理の目印は、途中で別の処理に引き取られていました★"
@@ -2827,6 +2847,29 @@ def selftest() -> int:
         for _leftover in (_lt,):
             if os.path.exists(_leftover):
                 os.remove(_leftover)
+
+    # ★★描き直しの経路（--rebuild-auto）に穴が無いか★★
+    #   （2026-08-21・Codexの再指摘）
+    #   ★この経路は「公開中の誤りを消す」ためのもの★なので、
+    #   区分を動かす仕事はしない。動いていたら断る。
+    import subprocess as _sp_rb
+    _rb = os.path.join(BASE, "scripts", "build_machine_pages.py")
+    with open(_rb, encoding="utf-8") as _f_rb:
+        _rb_src = _f_rb.read()
+    t("★★描き直しの経路が、いまのページの区分と判定書を突き合わせる★★"
+      "（判定書だけ変えて noindex を外せた）",
+      "was_noindex = (\"noindex\" in before)" in _rb_src
+      and "was_noindex != want_noindex" in _rb_src)
+    t("★★描き直しの経路が、記事データと機種データも検査する★★"
+      "（check_page だけでは記事の変更がそのまま届いた）",
+      "check_detail(slug, detail)" in _rb_src
+      and "check_machine(slug, machine)" in _rb_src
+      and "check_only_allowed_values(slug, machine, detail, html)" in _rb_src)
+    t("　描き直しの経路が check_page に記事データを渡す",
+      "check_page(slug, html, expect_noindex=want_noindex," in _rb_src
+      and "detail=detail)" in _rb_src)
+    t("　描き直しの経路が公開ロックを通る",
+      "with _pub._OnlyOne():" in _rb_src)
 
     # ★sitemap は1文字も変えない★
     with open(SITEMAP, encoding="utf-8") as _f2:

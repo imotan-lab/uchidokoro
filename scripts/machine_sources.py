@@ -820,8 +820,13 @@ def quarantined(rec: dict) -> bool:
     return str((rec.get("last_check") or {}).get("state") or "") == CHECK_CHANGED
 
 
-def issue_args(slug: str, rec: dict, got: dict) -> list:
-    """隔離を台帳へ登録するときの引数（★組み立てだけ・実行はしない★）。"""
+def issue_texts(slug: str, rec: dict, got: dict):
+    """隔離を台帳へ登録するときの題と本文（★文章だけ・実行はしない★）。
+
+    ★2026-08-21に引数列を返すのをやめた★（Codexの再指摘）＝
+      オプション名を並べるのも、別プロセスを起こすのも
+      `open_issues.run_add()` に閉じ込めた。ここは文章だけを作る。
+    """
     title = ("控えの出典が別のページに変わった疑い: %s（%s）"
              % (slug, rec.get("publisher") or "?"))
     detail = "\n".join([
@@ -845,15 +850,7 @@ def issue_args(slug: str, rec: dict, got: dict) -> list:
         + " --url <URL> --why <理由> --by 運営者",
         "  ※ページが元どおりに戻った場合は、次の収集で自動的に解除されます。",
     ])
-    # ★オプション名を自分で並べない★（2026-08-21・台帳#312）
-    #   ★並べる場所は open_issues.add_argv の1か所★
-    #   ここは python とスクリプトのパスを呼び出し側が付けていたので、
-    #   その2つを外して返す（呼び出し側の形は変えない）。
-    import open_issues as _oi
-    return _oi.add_argv(source="machine-sources", slug=slug,
-                        kind="external_value", severity="CRITICAL",
-                        reason_code="SOURCE_PAGE_CHANGED",
-                        title=title, detail=detail)[2:]
+    return title, detail
 
 
 def report_changed(slug: str, rec: dict, got: dict) -> bool:
@@ -865,17 +862,18 @@ def report_changed(slug: str, rec: dict, got: dict) -> bool:
     """
     if got.get("state") != CHECK_CHANGED:
         return True
+    # ★★実行まで1か所に閉じ込める★★（2026-08-21・Codexの再指摘）
+    #   ★オプション名を並べる場所も、別プロセスを起動する場所も1つ★
     try:
-        import subprocess
-        r = subprocess.run(
-            [sys.executable, os.path.join(BASE, "scripts", "open_issues.py")]
-            + issue_args(slug, rec, got),
-            # ★シェルを通らない引数配列なので直接指定でよい★（台帳#295）
-            env=dict(os.environ, UCHIDOKORO_ARGV_CALL="1"),
-            capture_output=True, timeout=60, check=False)
-        if r.returncode == 0:
+        import open_issues as _oi
+        title, detail = issue_texts(slug, rec, got)
+        ok, out = _oi.run_add(source="machine-sources", slug=slug,
+                              kind="external_value", severity="CRITICAL",
+                              reason_code="SOURCE_PAGE_CHANGED",
+                              title=title, detail=detail)
+        if ok:
             return True
-        why = (r.stderr or b"").decode("utf-8", "replace")[:200]
+        why = out[:200]
     except Exception as e:                  # noqa: BLE001
         why = str(e)[:200]
     print("★台帳へ登録できませんでした（%s / %s）★: %s"
@@ -1520,10 +1518,15 @@ def selftest() -> int:
         #   握りつぶす作りなので、引数が1つ違うだけで**誰にも届かなくなる**。
         led = os.path.join(tmpdir, "issues.json")
         import subprocess
+        import open_issues as _oi_t
+        _ttl, _dtl = issue_texts(slug, marked, R(marked, other))
         rr = subprocess.run(
             [sys.executable, os.path.join(BASE, "scripts", "open_issues.py"),
              "--file", led]
-            + issue_args(slug, marked, R(marked, other)),
+            + _oi_t.add_argv(source="machine-sources", slug=slug,
+                             kind="external_value", severity="CRITICAL",
+                             reason_code="SOURCE_PAGE_CHANGED",
+                             title=_ttl, detail=_dtl)[2:],
             env=dict(os.environ, UCHIDOKORO_ARGV_CALL="1"),
             capture_output=True, timeout=60, check=False)
         t("★★隔離は台帳が実際に受け取れる形で送る★★（届かなければ誰も気づけない）",

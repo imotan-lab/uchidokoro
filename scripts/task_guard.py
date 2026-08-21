@@ -634,19 +634,26 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
         #   断られてしまい、この関門が効いているのか分からない
         #   （実際、段階の検査の後ろに置いたら試験が別の文言で落ちた）。
         #
-        # ★同じ機種のあいだだけ★＝別の機種へ移るときは下で記録ごと
-        #   捨てているので、今までどおり通る。
-        _e_now = _entry(data, task)
-        if _e_now.get("guard_slug") == slug:
-            _prev_mode = _e_now.get("repairing")
-            if _prev_mode is not None and bool(_prev_mode) != bool(repairing):
-                raise GuardError(
-                    f"{slug} は"
-                    + ("直す経路" if _prev_mode else "ふつうの経路")
-                    + "の担当です。途中で"
-                    + ("ふつうの経路" if _prev_mode else "直す経路")
-                    + "へ変えられません（日を改めるか、別の機種にしてください）"
-                    "。枠は使っていません")
+        # ★★記録は「日ごと・機種ごと」に持つ★★（2026-08-21・Codexの再指摘）
+        #   ★直す前の穴＝A→B→A★
+        #     ①Aを直す経路で担当 ②Bを担当（このときAの記録は捨てられる）
+        #     ③Aをふつうの経路で担当 → ★通ってしまった★
+        #   タスク単位の記録（guard_slug）は機種を替えると捨てるので、
+        #   戻ってきたときに「前は何だったか」が残っていなかった。
+        #   ★タスク名を変える迂回も同じ★（記録がタスクごとだったため）。
+        #
+        #   → day（日ごと・タスク名をまたいで1つ）に機種ごとのモードを残す。
+        #     日が変われば _day() が丸ごと作り直すので、翌日は自由に選べる。
+        _modes = _day(data).setdefault("claim_modes_by_slug", {})
+        _prev_mode = _modes.get(slug)
+        if _prev_mode is not None and bool(_prev_mode) != bool(repairing):
+            raise GuardError(
+                f"{slug} は今日"
+                + ("直す経路" if _prev_mode else "ふつうの経路")
+                + "で担当しました。同じ日に"
+                + ("ふつうの経路" if _prev_mode else "直す経路")
+                + "へ変えられません（日を改めるか、別の機種にしてください）"
+                "。枠は使っていません")
 
         # ★書けない機種を担当にして枠を捨てない★（2026-08-08・台帳#272）
         #   台帳に未解決のCRITICAL案件がある機種は before_write が拒否する。
@@ -733,6 +740,8 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
         # ★修理モードの記録★（固定の検査は上へ移した）
         _e1 = _entry(data, task)
         _e1["repairing"] = bool(repairing)
+        # ★日ごと・機種ごとにも残す★＝機種を替えて戻ってきても変えられない
+        _day(data).setdefault("claim_modes_by_slug", {})[slug] = bool(repairing)
 
         done_today = d.setdefault("slugs_today", [])
         # 途中まで進めた機種を続ける場合は、新しく数えない
@@ -1817,6 +1826,21 @@ def selftest() -> int:
                                    issues=["1"]), "変えられません"))
             t("　同じ経路で取り直すのは通る（やり直しを塞がない）",
               claim("t3b", "kabaneri", fp3b)["target_slug"] == "kabaneri")
+            # --- ★★機種を替えて戻ってきてもモードは変えられない★★
+            #   （2026-08-21・Codexの再指摘。★A→B→A で通っていた★）
+            #   記録がタスク単位（guard_slug）だったので、機種を替えた時点で
+            #   捨てられ、戻ってきたときに「前は何だったか」が残らなかった。
+            #   タスク名を変える迂回も同じ理由で通っていた。
+            fp3c = os.path.join(tmpdir, "guard_aba.json")
+            claim("tA", "kabaneri", fp3c, repairing=True, issues=["1"])
+            claim("tA", "hokuto", fp3c, repairing=True, issues=["1"])
+            t("★★A→B→A でモードを変えられない★★",
+              raises(lambda: claim("tA", "kabaneri", fp3c), "変えられません"))
+            t("★★タスク名を変えても変えられない★★",
+              raises(lambda: claim("tZ", "kabaneri", fp3c), "変えられません"))
+            t("　同じ経路なら戻ってこられる",
+              claim("tA", "kabaneri", fp3c, repairing=True,
+                    issues=["1"])["target_slug"] == "kabaneri")
             cp.assess = _fake_assess
 
             # --- ★比較の基準は最初の1回だけ★（依頼246の指摘2の対照実験）

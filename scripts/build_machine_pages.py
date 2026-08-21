@@ -599,9 +599,18 @@ def _rebuild_auto(slug: str) -> int:
       ②描くのは `publish_new_machine.render()`
         ＝★そのページを最初に作ったのと同じ関数★（別の描き方を持ち込まない）
       ③書く前に `publish_new_machine.check_page()` を通す
-      ④★区分が変わっていたら書かない★（AUTO_* 以外は対象外）
+      ④★区分が動いていたら書かない★
+        ＝いまのページの noindex の有無と、判定書の区分が食い違ったら断る。
+        （2026-08-21・Codexの再指摘。★直す前は「いまが新台経路か」しか
+          見ておらず、判定書だけ変えれば noindex を外せた★）
       ⑤★noindex が消えていたら書かない★
-      ⑥公開データ（assets/data/public/）は読まない
+      ⑥★記事データ・機種データ・値の検査も通す★
+        （check_detail / check_machine / check_only_allowed_values /
+          check_page に detail を渡す）
+        ＝★直す前は check_page しか通していなかった★ので、
+          記事データを変えてから実行すればそのままHTMLへ届けられた。
+      ⑦★公開ロックを通す★＝夜の公開処理と同時に書かない
+      ⑧公開データ（assets/data/public/）は読まない
         ＝裏取り済みとして公開する経路には決してならない
     """
     sys.path.insert(0, str(BASE / "scripts"))
@@ -632,17 +641,45 @@ def _rebuild_auto(slug: str) -> int:
         return 1
     before = out.read_text(encoding="utf-8")
 
+    # ★★いまのページと同じ区分でしか描き直さない★★
+    #   （2026-08-21・Codexの再指摘）
+    #   ★直す前の穴★＝「いまが新台経路か」しか見ていなかったので、
+    #     ①既存HTMLは AUTO_PENDING（noindex）
+    #     ②machines.json の判定書が AUTO_INDEXABLE に変わる
+    #     ③--rebuild-auto を実行
+    #   とすると★noindex を外したHTMLを書けた★＝
+    #   区分を上げる正しい経路（公開判定）を迂回できた。
+    #   ★この経路は「誤りを消す」ためのもの★なので、
+    #   区分を動かすのは仕事ではない。動いていたら断る。
+    was_noindex = ("noindex" in before)
+    want_noindex = (cls == "AUTO_PENDING")
+    if was_noindex != want_noindex:
+        print(f"★{slug} は区分が動いています"
+              f"（いまのページ: {'noindex あり' if was_noindex else 'noindex なし'}"
+              f" ／ 判定書: {cls}）。"
+              "この経路では区分を変えません★")
+        print("  区分を変えるのは公開判定の仕事です"
+              "（apply_indexing_policy / 新台の公開経路）")
+        return 1
+
     html = _pub.render(slug, machine, detail)
 
     # ★書く前に確かめる★
-    want_noindex = (cls == "AUTO_PENDING")
     if want_noindex and "noindex" not in html:
         print("★描き直したページに noindex がありません。書きません★")
         return 1
     if not want_noindex and "noindex" in html:
         print("★検索に載せる区分なのに noindex が入っています。書きません★")
         return 1
-    problems = _pub.check_page(slug, html, expect_noindex=want_noindex)
+    # ★★記事データと機種データも検査する★★（2026-08-21・Codexの再指摘）
+    #   ★直す前は check_page しか通していなかった★＝
+    #   記事データを変えてから実行すれば、その変更をそのままHTMLへ届けられた。
+    problems = []
+    problems += _pub.check_detail(slug, detail)
+    problems += _pub.check_machine(slug, machine)
+    problems += _pub.check_only_allowed_values(slug, machine, detail, html)
+    problems += _pub.check_page(slug, html, expect_noindex=want_noindex,
+                                detail=detail)
     if problems:
         print("★描き直したページが検査を通りません。書きません★")
         for x in problems[:5]:
@@ -653,9 +690,12 @@ def _rebuild_auto(slug: str) -> int:
         print(f"{slug}: 変わりません（描き直す必要がありませんでした）")
         return 0
 
-    tmp = out.with_suffix(".html.tmp")
-    tmp.write_text(html, encoding="utf-8", newline="")
-    os.replace(tmp, out)
+    # ★公開ロックを通す★（2026-08-21・Codexの再指摘）
+    #   夜の公開処理と同時に走ると、同じページを2つの処理が書きうる。
+    with _pub._OnlyOne():
+        tmp = out.with_suffix(".html.tmp")
+        tmp.write_text(html, encoding="utf-8", newline="")
+        os.replace(tmp, out)
     print(f"{slug}: 描き直しました（{len(before)} → {len(html)} 字・区分 {cls}）")
     return 0
 

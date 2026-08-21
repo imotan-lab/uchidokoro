@@ -518,6 +518,42 @@ def add_argv(*, source, slug, kind, title, severity, detail="",
     return argv
 
 
+def run_add(*, source, slug, kind, title, severity, detail="",
+            reason_code=None, timeout=60, script=None):
+    """★別プロセスで台帳へ登録する唯一の関数★（引数列を作って実行まで行う）
+
+    （2026-08-21・Codexの再指摘）
+
+    ★なぜ「引数列を返すだけ」では足りなかったか★
+      add_argv だけだと、呼ぶ側が subprocess を書く。
+      ★字面の監査（項目48）では、変数に入れる書き方や単引用符を拾えない★
+      とCodexに指摘され、実際そのとおりだった。
+      ＝「オプション名を並べない」を**監査で見張る**のではなく、
+        **実行ごと1か所に閉じ込める**ほうが確実。
+
+    ★同じプロセスで良いなら add_issue() を直接呼ぶこと★
+      別プロセスが要るのは「呼び出し元が落ちても登録は残したい」
+      「環境を分けたい」場合だけ。
+
+    戻り値: (成功したか, 出力の抜粋)
+    """
+    import subprocess as _sp
+    argv = add_argv(source=source, slug=slug, kind=kind, title=title,
+                    severity=severity, detail=detail,
+                    reason_code=reason_code, script=script)
+    try:
+        r = _sp.run(argv, cwd=os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))),
+            capture_output=True, timeout=timeout,
+            # ★引数配列＝シェルを通らないので直接指定してよい★（台帳#295）
+            env=dict(os.environ, UCHIDOKORO_ARGV_CALL="1"))
+    except Exception as e:            # noqa: BLE001
+        return False, f"{type(e).__name__}: {e}"
+    out = (r.stdout or b"").decode("utf-8", "replace") \
+        + (r.stderr or b"").decode("utf-8", "replace")
+    return r.returncode == 0, out[:300]
+
+
 def add_issue(path, *, source, slug, kind, title, severity, detail="",
               reason_code=None):
     """★コードから台帳へ登録する入口★（CLIの引数の形に左右されない）
