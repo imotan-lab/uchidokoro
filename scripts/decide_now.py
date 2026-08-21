@@ -19,11 +19,25 @@
   gather は候補を並べるだけ。どれを直すかは
   Claude と Codex が同じ材料を読んで決める。
 
-★★その場で決めてよいのは「記事内で完結する食い違い」だけ★★
-  品質レビューの評価基準がもともとそう縛られている＝
-  「C評価の根拠にできるのは記事内で完結する事実のみ」。
-  ＝定義上、外部の出典を見なくても判定できる。
-  ★出典が要るもの（値そのものの正誤）はここで決めない★＝メールへ回す。
+★★「記事内で決まらない」は、台帳へ回す理由にならない★★
+  （2026-08-22・運営者の指摘「台帳に回すなって　その場で解決しろって」）
+
+  ★私の間違い★＝この道具を「記事の中だけを見る」作りにしたので、
+  記事だけで決まらないものが**その場で台帳へ落ちた**。
+  ＝人の待ち行列を作らない、という目的そのものに反していた。
+
+  ★正しい順番★＝**①機械 → ②2AI → ③メール**（CLAUDE.md・2026-08-12の決定）
+    ②は1回ではない。★その晩のうちに3回まで・回ごとに材料を増やす★
+      1回目 … 記事の中だけで詰める（この道具の gather）
+      2回目 … ★出典の原文を取りに行く★（collect_evidence）
+      3回目 … 検索して別系統の出典を足す
+    決まったら値を控える（confirmed_values・★出典に無い値は機械が弾く★）
+    ★3回やって決まらなかったものだけ★が人の出番（NOTIFY_HUMAN）。
+
+  ★この道具の役どころ★＝**1回目**（記事の中だけで決まる分）。
+  ここで決まらなかったものは、★台帳ではなく2回目へ送る★。
+  送り先は `collect_evidence.py --slug X --topic …` と `confirmed_values.py`。
+  進み具合は `repair_journal.py` が数える（`attempt()` が3回で ESCALATED）。
 
 ★★直してよいのは「消す・言い換える」だけ★★
   ・重複した行を消す
@@ -124,7 +138,44 @@ def gather(slug: str) -> dict:
             for sec in (d.get("sections") or []) if isinstance(sec, dict)
         ],
     }
+    # ★★機種データも渡す★★（2026-08-22・実データで穴が出た）
+    #   ★渡していなかったせいで起きたこと★＝
+    #   goji_eva の「当サイトの狙い目」に何ゲームから狙うかが書いておらず、
+    #   2AIは「外部の出典が要る」と結論して**台帳へ落とした**。
+    #   ところが machines.json には
+    #     strategy: 等価640G〜（状況不問） / リセット時360G〜
+    #   と★サイト自身の狙い目が既に載っていた★。
+    #   ＝外部など要らない、サイト内で閉じた食い違いだった。
+    #   ★記事データだけを見せると、サイトが自分で持っている答えに気づけない★
+    out["machine"] = {}
+    try:
+        rows = _sj.read_rows(os.path.join(BASE, "assets", "data",
+                                          "machines.json"))
+        m = next((x for x in rows if x.get("slug") == slug), None)
+        if m:
+            ck = m.get("checker") or {}
+            out["machine"] = {
+                "name": m.get("name"),
+                "info": m.get("info"),
+                # ★一覧・トップページに出ている、この機種の狙い目★
+                "strategy": m.get("strategy"),
+                "seo_title": (m.get("seo") or {}).get("title"),
+                # ★チェッカーが既定で出す区切り★（読者が実際に押して見る数値）
+                "checker_modes": [
+                    {"key": md.get("key"), "label": md.get("label"),
+                     "caution": md.get("caution"), "max": md.get("max")}
+                    for md in (ck.get("modes") or []) if isinstance(md, dict)
+                ],
+            }
+    except Exception as e:                                   # noqa: BLE001
+        out.setdefault("problems", []).append(
+            f"機種データを読めません: {type(e).__name__}")
+
     out["how_to_decide"] = (
+        "★記事データと機種データの両方を読んでください★。"
+        "『当サイトの狙い目』のような節は、機種データの strategy や "
+        "チェッカーの区切りと食い違っていることがあります"
+        "（★それは外部の出典を見なくても分かる食い違いです★）。"
         "★手がかりは網羅ではありません★。記事の全文を読んで、"
         "手がかりに無い食い違い・重複・言い回しの問題も自分で見つけてください。"
         "決めてよいのは『消す』『意味を変えずに言い換える』だけです。"
@@ -215,6 +266,16 @@ def _load_decision(path: str) -> dict:
     return d
 
 
+def _machine_row(slug: str) -> dict:
+    """この機種について machines.json が持っているもの（★読むだけ★）"""
+    try:
+        rows = _sj.read_rows(os.path.join(BASE, "assets", "data",
+                                          "machines.json"))
+        return next((x for x in rows if x.get("slug") == slug), {}) or {}
+    except Exception:                                        # noqa: BLE001
+        return {}
+
+
 def _numbers(s: str) -> list:
     import re
     return re.findall(r"\d+(?:\.\d+)?", str(s or ""))
@@ -264,13 +325,48 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
             f"判断したときから記事が変わっています（{want[:12]}… → {got[:12]}…）")
         return result
 
+    # ★サイトがこの機種について公開しているもの全部★（数値の出どころを照合する的）
+    published = raw + "\n" + json.dumps(_machine_row(slug), ensure_ascii=False)
+
     for a in dec["actions"]:
         if a["op"] == "replace":
-            # ★★数値が変わる言い換えは受け取らない★★（新値発明禁止）
-            if _numbers(a["before"]) != _numbers(a["after"]):
-                result["problems"].append(
-                    f"数値が変わる言い換えは受け取りません: {a['before'][:40]!r}")
-                return result
+            nb, na = _numbers(a["before"]), _numbers(a["after"])
+            if nb != na:
+                # ★★数値が変わる言い換えは、出どころを言えたときだけ受け取る★★
+                #   （2026-08-22・運営者の指摘「台帳に回すな　その場で解決しろ」）
+                #
+                #   ★これが無かったせいで起きたこと★＝
+                #   goji_eva の「当サイトの狙い目」に何ゲームから狙うかが
+                #   書かれておらず、2AIは直せずに**台帳へ落とした**。
+                #   ところが machines.json には
+                #     strategy: 等価640G〜（状況不問） / リセット時360G〜
+                #   と★サイト自身の狙い目が既に載っていた★。
+                #   ＝数値を作る話ではなく、サイトの中で閉じた食い違いだった。
+                #
+                #   ★受け取る条件★＝決定が `numbers_from` に**逐語**を書き、
+                #     ①その逐語が、この機種についてサイトが公開しているもの
+                #       （記事データ＋機種データ）に**そのまま**あること
+                #     ②足す数値が、その逐語の中に全部あること
+                #   ＝★機械は「どこから来た数値か」だけを確かめる★。
+                #     どれを載せるかは2AIが決める（機械は判断しない）。
+                src = a.get("numbers_from")
+                if not src:
+                    result["problems"].append(
+                        f"数値が変わる言い換えには出どころが要ります"
+                        f"（numbers_from に逐語で）: {a['before'][:34]!r}")
+                    return result
+                if src not in published:
+                    result["problems"].append(
+                        f"出どころの逐語が、この機種の公開データに見つかりません: "
+                        f"{src[:44]!r}")
+                    return result
+                added = sorted(set(na) - set(nb))
+                missing = [n for n in added if n not in _numbers(src)]
+                if missing:
+                    result["problems"].append(
+                        "出どころに無い数値を足そうとしています: "
+                        + " / ".join(missing[:4]))
+                    return result
         if a["op"] == "drop":
             # ★★消すことで「どちらが正解か」を選んでしまう場合は受け取らない★★
             #   （2026-08-21・Codexの設計レビュー）
@@ -357,11 +453,24 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
     after_all = _simulate(d, plan)
     # ★数値は token で比べる★（部分一致だと「97.7」の中の「7」に当たる）
     lost = sorted(set(_numbers(raw)) - set(_numbers(after_all)))
-    if lost:
+    # ★消えてよい数値は、決定が1つずつ理由つきで名指ししたものだけ★
+    #   （2026-08-22。goji_eva の「6.4割」＝640÷1000 の派生表現で、
+    #    実際の天井は 1000G+α なので厳密な割合ではなかった。
+    #    ★出典から取った事実ではなく、当サイトが計算した値★なので消せる。
+    #    ★機械にはその区別が付かない★ので、2AIに名指しさせて記録に残す）
+    ok_to_lose = {}
+    for item in dec.get("numbers_removed") or []:
+        if isinstance(item, dict) and item.get("n") and item.get("why"):
+            ok_to_lose[str(item["n"])] = item["why"]
+    still = [n for n in lost if n not in ok_to_lose]
+    if still:
         result["problems"].append(
-            "全部やると記事から無くなる数値があります: " + " / ".join(lost[:6])
-            + "（重複を1つにするだけのはずが、両方消える決定になっています）")
+            "全部やると記事から無くなる数値があります: " + " / ".join(still[:6])
+            + "（重複を1つにするだけなら消えないはずです。"
+            "消してよいなら numbers_removed に理由つきで名指ししてください）")
         return result
+    for n, why in ok_to_lose.items():
+        result.setdefault("removed_numbers", []).append({"n": n, "why": why})
 
     for kind, si, bi, a in plan:
         result["done"].append({"op": a["op"], "why": a["why"][:60]})
@@ -583,6 +692,86 @@ def _selftest() -> int:
           "（1件ずつ見るだけでは両方とも通っていた）",
           bool(rh2["problems"]) and "700" in "".join(rh2["problems"]))
 
+        # ★★数値が変わる言い換えは、出どころを言えたときだけ通す★★
+        #   （2026-08-22・運営者の指摘「台帳に回すな　その場で解決しろ」）
+        #   ★これが無いと、サイト自身が既に公開している値でさえ書けず、
+        #     決められないものが台帳（人の待ち行列）へ落ちた★
+        K = {"slug": "k", "sections": [
+            {"title": "当サイトの狙い目",
+             "body": ["天井1000Gに対して6.4割のラインです。",
+                      "スルーが多い台はさらに期待できます。"]}]}
+        with io.open(os.path.join(td, "k.json"), "w",
+                     encoding="utf-8", newline="\n") as f:
+            json.dump(K, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+
+        def dec_k(act, removed=None):
+            r = os.path.join(td, "dk.json")
+            body = {"schema_version": SCHEMA, "slug": "k",
+                    "decided_by": ["Claude", "codex"], "actions": [act]}
+            if removed:
+                body["numbers_removed"] = removed
+            io.open(r, "w", encoding="utf-8").write(
+                json.dumps(body, ensure_ascii=False))
+            return r
+
+        base_act = {"op": "replace",
+                    "before": "天井1000Gに対して6.4割のラインです。",
+                    "after": "当サイトの狙い目は640G〜です。",
+                    "why": "…"}
+
+        rk1 = apply_decision(dec_k(dict(base_act)))
+        t("★★出どころを言わない数値の変更は受け取らない★★",
+          bool(rk1["problems"]) and "出どころ" in "".join(rk1["problems"]))
+
+        rk2 = apply_decision(dec_k(
+            dict(base_act, numbers_from="サイトのどこにも無い逐語")))
+        t("★★出どころの逐語がサイトに無ければ受け取らない★★",
+          bool(rk2["problems"]) and "見つかりません" in "".join(rk2["problems"]))
+
+        # ★出どころは、この機種の公開データに実在する逐語でなければならない★
+        #   ここでは記事の中の別の行を出どころにする
+        K2 = {"slug": "k2", "sections": [
+            {"title": "当サイトの狙い目",
+             "body": ["天井1000Gに対して6.4割のラインです。",
+                      "スルーが多い台はさらに期待できます。"]},
+            {"title": "狙い目の根拠",
+             "body": ["等価狙い目は640G〜です。", "根拠はこうです。"]}]}
+        with io.open(os.path.join(td, "k2.json"), "w",
+                     encoding="utf-8", newline="\n") as f:
+            json.dump(K2, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+
+        def dec_k2(act, removed=None):
+            r = os.path.join(td, "dk2.json")
+            body = {"schema_version": SCHEMA, "slug": "k2",
+                    "decided_by": ["Claude", "codex"], "actions": [act]}
+            if removed:
+                body["numbers_removed"] = removed
+            io.open(r, "w", encoding="utf-8").write(
+                json.dumps(body, ensure_ascii=False))
+            return r
+
+        rk3 = apply_decision(dec_k2(
+            dict(base_act, after="当サイトの狙い目は555G〜です。",
+                 numbers_from="等価狙い目は640G〜です。"),
+            removed=[{"n": "6.4", "why": "派生値"},
+                     {"n": "1000", "why": "他にある"}]))
+        t("★★出どころに無い数値は足せない★★（でっち上げを止める）",
+          bool(rk3["problems"]) and "555" in "".join(rk3["problems"]))
+
+        rk4 = apply_decision(dec_k2(
+            dict(base_act, numbers_from="等価狙い目は640G〜です。")))
+        t("★★消える数値を名指ししていなければ受け取らない★★",
+          bool(rk4["problems"]) and "6.4" in "".join(rk4["problems"]))
+
+        rk5 = apply_decision(dec_k2(
+            dict(base_act, numbers_from="等価狙い目は640G〜です。"),
+            removed=[{"n": "6.4", "why": "640÷1000の派生表現で独立した情報がない"},
+                     {"n": "1000", "why": "わざと：ここでは消えないが名指ししても害はない"}]))
+        t("　出どころが実在し、消える数値を理由つきで名指しすれば通る",
+          not rk5["problems"])
+
         r7 = apply_decision(dec([{"op": "drop", "text": "B の行です。",
                                   "why": "…"}]), apply_it=True)
         t("　通れば書ける", r7.get("wrote") is True)
@@ -594,7 +783,7 @@ def _selftest() -> int:
         globals()["DETAILS"] = _keep
 
     print()
-    print(f"{17 - len(ng)}/17 " + ("合格" if not ng else "不合格"))
+    print(f"{22 - len(ng)}/22 " + ("合格" if not ng else "不合格"))
     return 1 if ng else 0
 
 
