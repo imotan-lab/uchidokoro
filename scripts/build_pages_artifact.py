@@ -154,6 +154,18 @@ APPROVED_INPUTS = frozenset({
     "scripts/build_hub_pages.py",
     "scripts/build_public_data.py",
     "scripts/build_ledger.py",
+    # ★★毎朝すべての機種の記事データを書き換える側★★（2026-08-21・台帳#438）
+    #   grow_machine / grow_legacy は machine-details/{slug}.json と
+    #   machines.json を直接書く。＝★ここを直せば何でも書ける★
+    #   （このかたまりの見出しがそのまま当てはまる）。
+    #   ★材料の契約ではない★＝あちらは「材料の採否を決める側」で、
+    #   採否を決めているのは add_machine_run / maker_identity_cache。
+    #   grow_* は決まった採否を1機種に当てはめて記事へ書く側。
+    #   ★実際に穴が溜まっていた★＝2026-08-20の依頼239で
+    #   「grow_machine が slug を名乗っていない」「grow_legacy がメーカーを
+    #   渡していない」が見つかった。関所が見ていない場所だった。
+    "scripts/grow_machine.py",
+    "scripts/grow_legacy.py",
     "scripts/gates.py",
     "scripts/audit_public.py",
     "scripts/claim_reconcile.py",
