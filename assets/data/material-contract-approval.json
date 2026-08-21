@@ -16,7 +16,7 @@
   "scripts/maker_identity_cache.py": "530a5b9077e78077b0dde36ddb7a5c7ff90a08b2eef5776ff3761978428cb463",
   "scripts/model_code_lookup.py": "f1f5b5964964147130fcdbc43e9a96135403219b237789ee3a2f2098dd39b38e",
   "scripts/new_machine_watch.py": "15af901a9468c82e9f40dbf8ddb7ba581f1b98938493a5c47d2d53d6465cd48f",
-  "scripts/source_lineage.py": "4f1305e3cfb492461c7b81c25adea71d0bdc5ae51d970e1473ca5143c6e38610",
+  "scripts/source_lineage.py": "3bc6d55450f8d39e099d88a73f3c662f02e95915d5fe83d981ffd759c9b3881a",
   "scripts/spec_lookup.py": "5d26c3e60dff046dc5f4fd270b4a232cad21d14264a4a74f2c7983b6554012a4",
   "scripts/user_area.py": "2f96a1d44cda5b1324fe1d44b85cf5913d608b0f67303cb188ed503d926ec91a"
  },
@@ -100,7 +100,9 @@
    "blocked_hosts",
    "page_probe"
   ],
-  "scripts/source_lineage.py": [],
+  "scripts/source_lineage.py": [
+   "blocked_hosts"
+  ],
   "scripts/spec_lookup.py": [
    "claim_inventory",
    "fetched_page",
@@ -116,5 +118,5 @@
    "new_machine_watch"
   ]
  },
- "_deps_changed_why": "2026-08-17（台帳#390／Codex依頼235の指摘1）\n\nmodel_code_lookup が maker_identity_cache を取り込むようになりました。\n\n■ なぜ増えたか\n  URLを比べるときのそろえ方が2か所にあり、片方は「末尾の / を外して」、\n  もう片方は「生の文字列」を鍵にしていました。そのズレだけで\n  到達先の照合が丸ごと飛び、別の機種ページへ転送された本文が\n  材料の読取器に入る経路が残っていました（Codexが検出）。\n  ★そろえ方を1か所（maker_identity_cache.url_key）にまとめた★ので、\n  許可証を照合する側（model_code_lookup.material_page_identity_ok）が\n  そこを呼びます。\n\n■ 集合に入れるか、ここでは持たないか → ★入れる（既に両方とも集合の中）★\n  maker_identity_cache も model_code_lookup も、もともと\n  material-contract-approval の対象です。よって新しい依存が\n  契約の外へ出ることはありません。どちらを変えても承認し直しが要ります。\n\n■ 循環について\n  maker_identity_cache も model_code_lookup を取り込みますが、\n  どちらも**関数の中での取り込み**なので実行時に問題は起きません\n  （自己試験で確認済み）。\n  ★将来どちらかを module 直下の import に変えるときは、この点を見ること★"
+ "_deps_changed_why": "source_lineage が blocked_hosts を取り込むようにしたため（2026-08-21・台帳#376/#416）。\n\n■ なぜ必要になったか\n\n票を数える source_lineage.independent() が素通しで、\n規約で自動取得を止めたサイト（P-WORLD・一撃）の古いURLが1票として数えられていた。\n実測: p-world + nana-press → 2票（取りに行けない出典で「独立2出典」が成立）。\n\n「独立した2つの出典」の2を数えるのはこの関数だけ、という設計なので、\nここで止めるのが筋。止める先の名簿は blocked_hosts が持っているため取り込む。\n\n■ この依存を材料の契約に入れてよい理由\n\nblocked_hosts は「規約で自動取得を禁じられている先」を固定で持つだけのモジュールで、\nすでに材料の採否に関わる new_machine_watch から使われている\n（通信そのものを止める役）。source_lineage から使うのは同じ名簿の参照であり、\n新しい判断を持ち込むものではない。\n\n★むしろ、入れないほうが危ない★＝\nblocked_hosts の中身が変わると票の数え方が変わるのに、\n契約が「顔ぶれが変わっていない」と言い続けることになる。\n\n■ 承認する範囲\n\nscripts/source_lineage.py の imports に blocked_hosts が増えたこと。\n減ったものは無い。"
 }
