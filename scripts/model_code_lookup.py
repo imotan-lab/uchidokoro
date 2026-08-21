@@ -626,7 +626,7 @@ def extract_maker_name(html: str) -> str:
 def material_page_identity_ok(page, official_name: str, *,
                               url: str = "", expected_maker: str = "",
                               extra_tail_ok: set | None = None,
-                              grant=None):
+                              grant=None, dmm_identity: dict | None = None):
     """★材料に使ってよいページかを見る、唯一の場所★（2026-08-17・台帳#390）
 
     返すもの: (通してよいか, 理由)
@@ -671,6 +671,17 @@ def material_page_identity_ok(page, official_name: str, *,
         _fin = getattr(page, "final_url", "")
         if _req and _micr.url_key(_req) != _micr.url_key(_fin):
             return False, "REDIRECTED"
+    # ★★DMMの機種ページは、DMM自身の決まりで確かめる★★（2026-08-22・台帳#453）
+    #   ★ここにも要る理由★＝lookup（型式の票）だけ直しても、
+    #   材料を読む側はこの関所を通るので、**同じ理由でもう一度落ちる**。
+    #   実測（2026-08-22）＝lookup を直した直後の走行で、
+    #   「基本スペック／天井／ATの仕様／CZ」が全部 TAIL_CONFLICT で落ちた。
+    #   ★片方だけ直した★＝CLAUDE.md の監査42・43と同じ轍。
+    if dmm_identity:
+        ok, why = dmm_identity_ok(html, dmm_identity)
+        if ok:
+            return True, "OK"
+        return False, why
     ok, why = page_is_machine(html, official_name, strict_all_tail=True,
                               extra_tail_ok=extra_tail_ok)
     if ok:
@@ -803,8 +814,70 @@ def _related(expected: str, owners: set) -> bool:
 #   あとで誰かが繋ぎ直せてしまう。
 
 
-def lookup(url: str, official_name: str, expected_maker: str = "") -> dict:
-    """1つの名鑑ページから型式名を引く。★機種が違えば採らない★"""
+def dmm_identity_ok(html: str, ident: dict) -> tuple:
+    """★DMMの機種ページを、DMM自身の決まりで確かめる★（2026-08-22・台帳#453）
+
+    ★なぜ別の契約にするか（Codexの設計レビュー）★
+      DMMの機種ページには**専用の同定経路がすでにある**
+      （機種ID・canonical・転送先・機種名・種別・メーカー・導入年月）。
+      そこを通ったページに、さらに**汎用のSEO題検査**を重ねると、
+      ★DMMが題に何を書くかという、こちらに関係のない事情で落ちる★。
+
+      実際 pw_10510（スマスロ タコスロ）は、題の後ろの「ボーナストリガー」を
+      飾りとして分解できないという理由だけで材料からも票からも外れ、
+      ★5日間ずっと記事にできなかった★。
+      「ボーナストリガー」を飾りの辞書に足す直し方は採らない
+      （未知のSEO語が出るたびに辞書が増える構造が残るため）。
+
+    ★「DMMのページなら無条件で通す」ではない★
+      呼ぶ側が**確かめ済みの束**（機種ID・機種名・メーカー・導入日）を渡し、
+      いま材料として取ってきた**その本文**に対して同じ束を確かめ直す。
+      ＝URL文字列だけを信用しない（転送・canonicalの差し替え・
+        カレンダーの誤リンク・中身の入れ替えを見る）。
+
+    渡す束: {"machine_id": "5049", "name": "スマスロ タコスロ",
+             "maker_names": ["ユニバーサルブロス", …], "release": "2026-09-07"}
+    返り値: (ok, 理由)
+    """
+    import dmm_machine as _dm
+    want_id = str((ident or {}).get("machine_id") or "")
+    if not want_id:
+        return False, "DMM_IDENTITY_NOT_GIVEN"
+    try:
+        got = _dm.parse(html, want_id)
+    except Exception as e:                # noqa: BLE001
+        return False, f"DMM_PAGE_UNREADABLE:{type(e).__name__}"
+    # ★機種名★（DMM自身の決まりで見る＝SEOの飾りは name_matches が扱う）
+    want_name = str((ident or {}).get("name") or "")
+    if not want_name:
+        return False, "DMM_IDENTITY_NOT_GIVEN"
+    ok, why = _dm.name_matches(got.get("heading") or "", want_name)
+    if not ok:
+        return False, f"DMM_NAME_MISMATCH:{str(why)[:60]}"
+    # ★メーカー★（読めなかったことを、確かめたことにしない）
+    want_makers = [str(x) for x in ((ident or {}).get("maker_names") or []) if x]
+    page_maker = str(got.get("maker") or "")
+    if want_makers:
+        if not page_maker:
+            return False, "DMM_MAKER_UNREADABLE"
+        import dmm_discover as _dd
+        if _dd._norm(page_maker) not in {_dd._norm(x) for x in want_makers}:
+            return False, f"DMM_MAKER_MISMATCH:{page_maker[:30]}"
+    # ★導入日★（★機種ページが月までのときは月で比べる★＝日は勝手に決めない）
+    want_rel = str((ident or {}).get("release") or "")
+    page_rel = str(got.get("release_date") or "")
+    if want_rel and page_rel and want_rel[:7] != page_rel[:7]:
+        return False, f"DMM_RELEASE_MISMATCH:{page_rel[:10]}"
+    return True, "OK_DMM_IDENTITY"
+
+
+def lookup(url: str, official_name: str, expected_maker: str = "",
+           dmm_identity: dict | None = None) -> dict:
+    """1つの名鑑ページから型式名を引く。★機種が違えば採らない★
+
+    ★dmm_identity を渡すと、DMMの機種ページは DMM自身の決まりで確かめる★
+      （2026-08-22・台帳#453）。渡さなければ今までどおり汎用の題検査。
+    """
     # ★identity_ok＝このページが本人だと確かめられたか★（2026-08-02・Codex56回目）
     #   型式照合で不合格（他社名の題等）になったページが、理由の文字列が
     #   DIRECTORY_MAKER_* でないため材料収集に復活していた。
@@ -822,10 +895,14 @@ def lookup(url: str, official_name: str, expected_maker: str = "") -> dict:
     except Exception as e:
         out["reason"] = f"取得できません: {e}"
         return out
-    ok, why = page_is_machine(
-        html, official_name, strict_all_tail=True,
-        extra_tail_ok=maker_brand_cores(expected_maker) if expected_maker
-        else None)
+    if dmm_identity:
+        # ★発行元ごとの同定方式★（機種別の例外でも「2段目」でもない）
+        ok, why = dmm_identity_ok(html, dmm_identity)
+    else:
+        ok, why = page_is_machine(
+            html, official_name, strict_all_tail=True,
+            extra_tail_ok=maker_brand_cores(expected_maker) if expected_maker
+            else None)
     if not ok:
         out["reason"] = why
         # ★2AIへ回す価値があるかの印★（2026-08-17・台帳#390／Codexの③）

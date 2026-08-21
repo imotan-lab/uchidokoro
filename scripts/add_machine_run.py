@@ -715,8 +715,46 @@ def _gather(name: str, maker: str = "", slug: str = "",
         got["problems"].append(
             f"名鑑の個別ページが {len(got['urls'])} 件しか見つかりません（2件以上が要る）")
         return got
+    # ★★DMMの機種ページは、DMM自身の決まりで確かめる★★（2026-08-22・台帳#453）
+    #   ★なぜ分けるか（Codexの設計レビュー）★
+    #     DMMの機種ページには**専用の同定経路がすでにある**
+    #     （機種ID・canonical・転送先・機種名・種別・メーカー・導入年月）。
+    #     そこを通ったページに、さらに汎用のSEO題検査を重ねると、
+    #     ★DMMが題に何を書くかという、こちらに関係のない事情で落ちる★。
+    #     実際 pw_10510（スマスロ タコスロ）は、題の後ろの「ボーナストリガー」を
+    #     飾りとして分解できないだけで材料からも票からも外れ、5日間止まった。
+    #
+    #   ★「DMMのページなら無条件で通す」ではない★＝
+    #     ここで束（機種ID・機種名・メーカーの表示名・導入日）を渡し、
+    #     材料として取ってきた**その本文**に対して同じ束を確かめ直す。
+    #
+    #   ★確かめ済みの値が無いときは束を渡さない★（fail-closed）＝
+    #     machine_name / release_date は「DMMの機種ページで確かめた値」で、
+    #     渡されていなければ今までどおり汎用の題検査を通す。
+    _maker_names = []
+    if maker:
+        try:
+            import dmm_discover as _dd_names
+            _c = (_sj.read_json(_dd_names.MAKER_CATALOG,
+                                expect=dict)["catalogs"].get(maker) or {})
+            _maker_names = [str(x) for x in
+                            ([_c.get("name")] + list(_c.get("directory_names") or []))
+                            if x]
+        except Exception:                 # noqa: BLE001
+            _maker_names = []             # 読めない＝束を弱めない（下で使わない）
+
+    def _ident_for(u: str):
+        mid = _dmm_machine_id(u)
+        if not mid or not machine_name or not release_date:
+            return None                   # ★確かめた値が無ければ渡さない★
+        if not _maker_names:
+            return None                   # ★メーカーを縛れないなら渡さない★
+        return {"machine_id": mid, "name": machine_name,
+                "maker_names": _maker_names, "release": release_date}
+
     # ★名鑑にも期待するメーカーを渡す★（2026-08-02・Codex40回目）
-    looks = [_mc.lookup(u, name, expected_maker=maker) for u in got["urls"]]
+    looks = [_mc.lookup(u, name, expected_maker=maker,
+                        dmm_identity=_ident_for(u)) for u in got["urls"]]
     # ★★約束が守られているかを、その場で確かめる★★
     #   （2026-08-17・Codex依頼230の厚みの指摘）
     #   メーカーを期待して引いたなら、判定（state）が必ず返るのが約束。
@@ -948,7 +986,8 @@ def _gather(name: str, maker: str = "", slug: str = "",
         誰にも伝わらないまま、材料だけが減っていた。
         """
         pages = [mod.read_page(u, name, expected_maker=maker,
-                              grant=_grant, page=_pages.get(u))
+                              grant=_grant, page=_pages.get(u),
+                              dmm_identity=_ident_for(u))
                  for u in got["urls"]]
         for pg in pages:
             if not pg.get("ok"):
@@ -978,7 +1017,8 @@ def _gather(name: str, maker: str = "", slug: str = "",
     #   出典によって「CZ」と書く所と「関所チャレンジ」と書く所がある。
     #   ★独立2出典が『CZ＝その名前』と書いている時だけ★同じ物として扱う。
     _cl_pages = [_cl.read_page(u, name, expected_maker=maker,
-                               grant=_grant, page=_pages.get(u))
+                               grant=_grant, page=_pages.get(u),
+                               dmm_identity=_ident_for(u))
                  for u in got["urls"]]
     for _pg in _cl_pages:
         if not _pg.get("ok"):
@@ -1313,6 +1353,32 @@ def _pw_machine_url(url: str) -> str:
     """P-WORLDの機種ページなら機種IDを返す（違えば空）。"""
     m = _PW_MACHINE_RE.match(str(url or "").strip())
     return m.group(1) if m else ""
+
+
+# ★止まった理由の符丁★（2026-08-22。★自由文を見張りに使わない★）
+#   文言はいつでも書き換わるので、見張りが読むのは短い符丁だけにする。
+#   ここに無い形は OTHER になる（＝符丁が増え続けない）。
+_BLOCKER_CODES = (
+    ("名鑑の個別ページが", "NOT_ENOUGH_DIRECTORIES"),
+    ("メーカー照合の控えを読めません", "MAKER_CACHE_UNREADABLE"),
+    ("メーカー", "MAKER_UNRESOLVED"),
+    ("採用できた材料", "NO_MATERIAL"),
+    ("型式", "MODEL_CODE_MISSING"),
+    ("取れません", "FETCH_FAILED"),
+    ("担当", "NOT_TODAYS_TARGET"),
+)
+
+
+def _blocker_code(res: dict) -> str:
+    """止まった理由を短い符丁にする（★最初に当たったものだけ★）。"""
+    text = " ".join(str(x) for x in
+                    ((res.get("blocked") or []) + (res.get("problems") or [])))
+    if not text.strip():
+        return ""
+    for word, code in _BLOCKER_CODES:
+        if word in text:
+            return code
+    return "OTHER"
 
 
 def _verify_dmm(name: str, official_url: str, maker: str,
@@ -4510,6 +4576,16 @@ def _main() -> int:
                       pending_id=work.get("queue_id", ""))
         for b in res.get("blocked") or []:
             print("  ★止めました: " + b[:150])
+        # ★★止まった理由を、機種ごとに符丁で残す★★（2026-08-22・Codexの指摘）
+        #   ★これが無くて起きたこと★＝5日連続で公開0件だったのに、
+        #   毎日エラーなく完走していたので誰も気づかなかった。
+        #   ★同じ理由で2回続いたら知らせる★のが主監視（add_machine_health）。
+        #   ★自由文は入れない★＝文言を変えるたびに見張りが壊れるため、
+        #   最初に見つかった符丁だけを残す。
+        if apply_it and not res.get("wrote"):
+            _pend.mark_blocked(pend, work.get("queue_id", ""),
+                               _blocker_code(res))
+            _pend.save(pend)
         if res.get("wrote"):
             ng = finish_publish(res, pend)
             for x in ng:
@@ -4529,6 +4605,10 @@ def _main() -> int:
             # ★公開できても続ける★（2026-08-07・運営者決定）
             #   新台は導入日が決まっていて待てない。分かり次第そのまま作る。
             _log(f"  公開しました → 次の機種へ（{res['slug']}）")
+            if apply_it:
+                # ★公開できたので、止まっていた連続を切る★（2026-08-22）
+                _pend.mark_unblocked(pend, work.get("queue_id", ""))
+                _pend.save(pend)
             continue
         if any("今日の担当ではありません" in p for p in res.get("problems") or []):
             _log("  今日の担当ではありません → 今日はここまで")

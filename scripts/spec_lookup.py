@@ -254,8 +254,15 @@ def per_setting_from_tables(html: str, columns: tuple, unit: str) -> dict:
 
 
 def read_page(url: str, official_name: str, *,
-              expected_maker: str = "", grant=None, page=None) -> dict:
-    """名鑑1件ぶんを読む。★機種が違えば何も採らない★"""
+              expected_maker: str = "", grant=None, page=None,
+              dmm_identity: dict | None = None) -> dict:
+    """名鑑1件ぶんを読む。★機種が違えば何も採らない★
+
+    ★dmm_identity を渡すと、DMMの機種ページは DMM自身の決まりで確かめる★
+      （2026-08-22・台帳#453）。渡さなければ今までどおり汎用の題検査。
+      ★束の中身の検査は `material_page_identity_ok` に任せる★
+      （同じ規則を4か所に写さない）。
+    """
     out = {"url": url, "host": url.split("/")[2].lower().removeprefix("www."),
            "ok": False, "reason": "", "fields": {}}
     try:
@@ -279,7 +286,8 @@ def read_page(url: str, official_name: str, *,
     #   ここに例外の扱いを写さない（4か所に写すと必ずずれる）
     ok, why = _mc.material_page_identity_ok(
         page, official_name, url=url,
-        expected_maker=expected_maker, grant=grant)
+        expected_maker=expected_maker, grant=grant,
+        dmm_identity=dmm_identity)
     if not ok:
         out["reason"] = why
         return out

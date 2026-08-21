@@ -524,7 +524,8 @@ def from_text_pairs(text: str) -> list:
 
 
 def read_page(url: str, official_name: str, *,
-              expected_maker: str = "", grant=None, page=None) -> dict:
+              expected_maker: str = "", grant=None, page=None,
+              dmm_identity: dict | None = None) -> dict:
     """1ページから天井の一式を採る。★機種が違えば何も採らない★"""
     out = {"url": url, "host": url.split("/")[2].lower().removeprefix("www."),
            "ok": False, "reason": "", "ceilings": [], "cz_names": set()}
@@ -547,9 +548,13 @@ def read_page(url: str, official_name: str, *,
     #   別バージョンの値を2媒体一致で採用できた）
     # ★材料に使ってよいかは共通の関所で見る★（2026-08-17・台帳#390）
     #   ここに例外の扱いを写さない（4か所に写すと必ずずれる）
+    # ★DMMの機種ページは DMM自身の決まりで確かめる★（2026-08-22・台帳#453）
+    #   束の中身の検査は material_page_identity_ok に任せる
+    #   （同じ規則を4か所に写さない）。
     ok, why = _mc.material_page_identity_ok(
         page, official_name, url=url,
-        expected_maker=expected_maker, grant=grant)
+        expected_maker=expected_maker, grant=grant,
+        dmm_identity=dmm_identity)
     if not ok:
         out["reason"] = why
         return out

@@ -38,6 +38,12 @@ PENDING_WARN_DAYS = 30
 #   毎晩1回挑むので、7回＝1週間ぶん詰まっている状態。
 #   ★実測（2026-08-22）★ q_0001=13回 / q_0004=20回 だった。
 STUCK_TRIES = 7
+# ★同じ理由で続けて止まった回数のしきい値★（2026-08-22・Codexの助言）
+#   ★主監視はこちら★＝機種ごとに見るので、他の機種が公開されていても
+#   「1機種だけ永久に止まっている」を見つけられる。
+#   2回＝1回だと正常な未成立（名鑑にまだ載っていない等）が多すぎ、
+#   3回だと夜間タスク3回ぶんを失って遅い。
+BLOCKER_STREAK = 2
 # ★このタスクを動かし始めた日★（それより前は「ログが無い」のが当たり前）
 FIRST_RUN_DATE = "2026-07-31"
 
@@ -138,6 +144,22 @@ def check_stuck() -> list:
             continue
         if str(it.get("state") or "") != "READY":
             continue          # まだカレンダーに載っていない＝待つのが正常
+        # ★★主監視：同じ理由で続けて止まっていないか★★
+        #   （2026-08-22・Codexの指摘）
+        #   ★全体の「公開0件」だけを見ていると足りない★＝
+        #   他の機種が毎日1件ずつ公開される裏で、1機種だけ永久に止まっていても
+        #   見つからない。★機種ごとに、同じ理由が続いた回数を見る★。
+        #   Nは2＝1回だと「名鑑にまだ載っていない」等の正常な未成立が多すぎ、
+        #   3回だと夜間タスク3回ぶんを失って遅い（Codexの助言）。
+        streak = int(it.get("blocker_streak") or 0)
+        code = str(it.get("last_blocker") or "")
+        if code and streak >= BLOCKER_STREAK:
+            ng.append(
+                f"{it.get('name')} が同じ理由で {streak} 回続けて止まっています"
+                f"（理由: {code}／{it.get('identity_url')}）")
+            continue          # 同じ機種を二重に挙げない
+
+        # ★補助：理由が毎回変わっていても、長く作れていないなら知らせる★
         tries = int(it.get("tries") or 0)
         if tries >= STUCK_TRIES:
             ng.append(
@@ -244,6 +266,41 @@ def selftest() -> int:
         _fake({"q_1": {"name": "あと1回", "state": "READY",
                        "tries": STUCK_TRIES - 1}})
         t("　しきい値の手前では知らせない", check_stuck() == [])
+
+        # ★★主監視：同じ理由で続けて止まっている機種★★（2026-08-22）
+        #   ★これが要る理由★＝全体の「公開0件」だけを見ていると、
+        #   他の機種が毎日1件ずつ公開される裏で、1機種だけ永久に止まっていても
+        #   見つからない（Codexの指摘）。
+        _fake({"q_1": {"name": "同じ理由で止まる機種", "state": "READY",
+                       "tries": 2, "last_blocker": "TAIL_CONFLICT",
+                       "blocker_streak": BLOCKER_STREAK,
+                       "identity_url": "https://p-town.dmm.com/machines/1"}})
+        _r2 = check_stuck()
+        t("★★同じ理由で2回続けて止まったら知らせる★★"
+          "（★試した回数がまだ少なくても★）",
+          len(_r2) == 1 and "TAIL_CONFLICT" in _r2[0]
+          and "同じ理由で止まる機種" in _r2[0])
+
+        _fake({"q_1": {"name": "1回だけ", "state": "READY", "tries": 1,
+                       "last_blocker": "TAIL_CONFLICT", "blocker_streak": 1}})
+        t("　1回だけなら知らせない（正常な未成立が多いため）", check_stuck() == [])
+
+        _fake({"q_1": {"name": "毎回ちがう理由", "state": "READY", "tries": 3,
+                       "last_blocker": "", "blocker_streak": 0}})
+        t("　理由が続いていなければ、回数のほうで見る（まだしきい値未満）",
+          check_stuck() == [])
+
+        _fake({"q_1": {"name": "両方あてはまる", "state": "READY",
+                       "tries": STUCK_TRIES, "last_blocker": "NO_MATERIAL",
+                       "blocker_streak": BLOCKER_STREAK}})
+        t("★同じ機種を二重に挙げない★", len(check_stuck()) == 1)
+
+        _fake({"q_1": {"name": "カレンダー待ちで理由あり",
+                       "state": "AWAITING_DMM_ID", "tries": 9,
+                       "last_blocker": "NOT_ENOUGH_DIRECTORIES",
+                       "blocker_streak": 9}})
+        t("★★カレンダー待ちは理由が続いても知らせない★★"
+          "（うちの都合ではない）", check_stuck() == [])
 
         _fake({"q_1": {"name": "カレンダー待ち", "state": "AWAITING_DMM_ID",
                        "tries": 99}})

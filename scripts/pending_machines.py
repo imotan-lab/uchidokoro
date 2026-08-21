@@ -291,17 +291,77 @@ def calendar_missing_due(data: dict, today: str = "") -> list:
     return out
 
 
-def mark_tried(data: dict, queue_id: str) -> None:
+def mark_tried(data: dict, queue_id: str, blocker: str = "") -> None:
     """★実際に記事づくりを試したことを残す★（2026-07-31・Codex21回目）
 
     これが無いと、詰まっている先頭の数件だけを毎晩見続けて、
     **6件目以降は一度も試されないまま60日で打ち切られる**。
+
+    ★★なぜ止まったかも残す★★（2026-08-22・Codexの設計レビュー）
+      ★これが無くて起きたこと★＝新台タスクは5日連続で公開0件だったのに、
+      毎日エラーなく完走していたので誰も気づかなかった。
+      「何回試したか」だけでは、**同じ理由で止まり続けているのか**
+      **毎回違う理由なのか**が分からない。
+
+      ★同じ理由で2回続いたら知らせる★のが主監視（add_machine_health）。
+      全体の「公開0件」だけを見ていると、
+      ★他の機種が毎日出ている裏で、1機種だけ永久に止まっていても
+      見つからない★（Codexの指摘）。
+
+      blocker は短い符丁（例: TAIL_CONFLICT / NOT_ENOUGH_DIRECTORIES /
+      MAKER_UNKNOWN / NO_MATERIAL）。★自由文を入れない★＝
+      文言を変えるたびに見張りが壊れるため。
     """
     it = data["items"].get(str(queue_id or ""))
     if not it:
         return
     it["last_try"] = _today()
     it["runs"] = int(it.get("runs", 0)) + 1
+    b = str(blocker or "").strip()[:40]
+    if b:
+        if it.get("last_blocker") == b:
+            it["blocker_streak"] = int(it.get("blocker_streak", 0)) + 1
+        else:
+            it["last_blocker"] = b
+            it["blocker_streak"] = 1
+    else:
+        # ★理由が分からない回は連続を切る★（誤って積み上げない）
+        it["last_blocker"] = ""
+        it["blocker_streak"] = 0
+
+
+def mark_blocked(data: dict, queue_id: str, blocker: str) -> None:
+    """★試したあとで、止まった理由だけを足す★（2026-08-22）
+
+    `mark_tried` は**試す前**に呼ぶ（途中で落ちても記録が残るように）ので、
+    そこでは理由がまだ分からない。結果が出てから、ここで足す。
+
+    ★同じ理由が続いた回数を数える★＝
+      `add_machine_health` が「同じ理由で2回止まったら知らせる」に使う。
+      全体の「公開0件」だけを見ていると、
+      ★他の機種が毎日出ている裏で1機種だけ永久に止まっていても
+      見つからない★（2026-08-22・Codexの指摘）。
+    """
+    it = data["items"].get(str(queue_id or ""))
+    if not it:
+        return
+    b = str(blocker or "").strip()[:40]
+    if not b:
+        return
+    if it.get("last_blocker") == b:
+        it["blocker_streak"] = int(it.get("blocker_streak", 0)) + 1
+    else:
+        it["last_blocker"] = b
+        it["blocker_streak"] = 1
+
+
+def mark_unblocked(data: dict, queue_id: str) -> None:
+    """★止まらずに進んだので、連続を切る★（2026-08-22）"""
+    it = data["items"].get(str(queue_id or ""))
+    if not it:
+        return
+    it["last_blocker"] = ""
+    it["blocker_streak"] = 0
 
 
 def due(data: dict, all_states: bool = False) -> list:
