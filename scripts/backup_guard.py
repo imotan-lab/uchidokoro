@@ -530,8 +530,15 @@ DROPBOX_ROOT_ALLOWED = _lp.DROPBOX
 #   （どの機種をどのページで同定したか、の唯一の記録）。
 #   中身は公開サイトのHTMLで、秘密は含まない
 #   （それでも下の秘密検査は全ファイルに掛かる）。
+# ★直しの実行記録も退避する★（2026-08-22・台帳#458）
+#   置き場は Documents/uchidokoro/repairs/（repair_journal.py）。
+#   ★端末が壊れると、途中まで進んだ直しが全部消える★＝
+#   どの段階まで行ったか（判定に封をした・Codexの返事を受けた・
+#   直した・pushした・再検査した）が唯一ここにしか無い。
+#   中身は機種名・逐語・指紋・コミットIDで、秘密は含まない
+#   （それでも下の秘密検査は全ファイルに掛かる）。
 TREE_INCLUDE_DIRS = {"gold_eval", "results", "input_snapshot",
-                     "identity_evidence"}
+                     "identity_evidence", "repairs"}
 TREE_INCLUDE_GLOBS = ["gold_set_v*.json", "codex_schema_*.json",
                       "gold_freeze_log*.txt", "shadow_state.json",
                       # ★2AIの判断記録★（2026-08-11・台帳#317）
