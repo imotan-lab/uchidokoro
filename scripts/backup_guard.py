@@ -524,7 +524,14 @@ def cmd_copy(src: str, dst: str, optional: bool) -> int:
 # ── gpt_research のバックアップ対象定義（2026-07-18 チャッピー限定許可）──
 #   触ってよいDropboxルート（ユーザー厳命: この階層より上へ出ない）
 DROPBOX_ROOT_ALLOWED = _lp.DROPBOX
-TREE_INCLUDE_DIRS = {"gold_eval", "results", "input_snapshot"}
+# ★同定の根拠（一覧カードのHTML）も退避する★（2026-08-21・台帳#224）
+#   置き場は Documents/uchidokoro/identity_evidence/ の1か所だけだった。
+#   ★端末やディスクが壊れると、全部の証跡を失う★
+#   （どの機種をどのページで同定したか、の唯一の記録）。
+#   中身は公開サイトのHTMLで、秘密は含まない
+#   （それでも下の秘密検査は全ファイルに掛かる）。
+TREE_INCLUDE_DIRS = {"gold_eval", "results", "input_snapshot",
+                     "identity_evidence"}
 TREE_INCLUDE_GLOBS = ["gold_set_v*.json", "codex_schema_*.json",
                       "gold_freeze_log*.txt", "shadow_state.json",
                       # ★2AIの判断記録★（2026-08-11・台帳#317）
