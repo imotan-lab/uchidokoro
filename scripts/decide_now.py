@@ -65,8 +65,27 @@ import strip_model_code as _smc      # noqa: E402
 DETAILS = os.path.join(BASE, "assets", "data", "machine-details")
 SCHEMA = "decide-now/v1"
 
-# ★その場で決めてよい種類★（これ以外はここで扱わない）
-KINDS = ("重複", "文体", "型式名", "時制")
+# ★★種類の名簿は「扱ってよいもの」ではない★★（2026-08-22・運営者の指摘）
+#   > いやいやいや　だから機械的にやらずに２AIで判断して結論を出すようにしてよ
+#
+#   ★直す前の間違い★＝ここに「重複・文体・型式名・時制」と書いて、
+#   **それ以外は扱わない**ことにしていた。＝先に型を決めておくやり方で、
+#   「機械的にやらない」の逆だった（何度も指摘されている型）。
+#
+#   ★いまの役★＝機械が**先に気づけたものに付ける札**でしかない。
+#   2AIはこの札に縛られず、記事そのものを読んで決める。
+#   ★手がかりは網羅ではない★＝ここに出ないものも直してよい。
+HINT_KINDS = ("重複", "文体", "型式名", "時制")
+
+# ★★守るのは「型」ではなく「変更そのものの性質」★★
+#   （Codexの線引きもこちらだった）
+#   1. 新しい事実・新しい数値を書かない（消す・言い換えるだけ）
+#   2. 数値が変わる言い換えは受け取らない
+#   3. 消して数値が記事から無くなるなら受け取らない（＝どちらが正解かを選ばない）
+#   4. 判断者は2つ以上
+#   5. 記事の指紋を照合（見つけたときから変わっていたらやり直し）
+#   6. 直したあと、その文が消えたことを機械が確かめられる（recheck の text_gone）
+#   ★この6つを満たすなら、何を直すかは2AIが決める★
 
 
 def _detail(slug: str):
@@ -77,12 +96,43 @@ def _detail(slug: str):
 
 
 def gather(slug: str) -> dict:
-    """1機種ぶんの「その場で決められる候補」を集める（★直さない★）。"""
-    out = {"slug": slug, "schema_version": SCHEMA, "candidates": []}
+    """1機種ぶんの材料を集める（★決めない・直さない★）。
+
+    ★★渡すのは記事そのもの★★（2026-08-22・運営者の指摘）
+      機械が挙げる手がかりは**網羅ではない**。2AIは記事の全文を読んで、
+      手がかりに無いものも含めて自分で見つけて結論を出す。
+      ここが「候補の一覧だけ」を渡す作りだと、
+      ★機械が気づけた型しか直らない★＝先に型を決めているのと同じになる。
+    """
+    out = {"slug": slug, "schema_version": SCHEMA,
+           "hints": [], "candidates": []}
     d = _detail(slug)
     if not isinstance(d, dict):
         out["problems"] = ["記事データがありません"]
         return out
+
+    # ★★記事の全文★★（2AIが読む本体。手がかりはこの下の「おまけ」）
+    out["article"] = {
+        "name": d.get("name") or slug,
+        "sections": [
+            {"title": sec.get("title") or "",
+             "type": sec.get("type") or "",
+             "body": [x for x in (sec.get("body") or [])
+                      if isinstance(x, str)],
+             "notes": [t.get("note") for t in (sec.get("tables") or [])
+                       if isinstance(t, dict) and t.get("note")]}
+            for sec in (d.get("sections") or []) if isinstance(sec, dict)
+        ],
+    }
+    out["how_to_decide"] = (
+        "★手がかりは網羅ではありません★。記事の全文を読んで、"
+        "手がかりに無い食い違い・重複・言い回しの問題も自分で見つけてください。"
+        "決めてよいのは『消す』『意味を変えずに言い換える』だけです。"
+        "★新しい数値・新しい事実は書かないでください★。"
+        "数字が食い違っているとき、片方を消すのは"
+        "『もう片方が正解だ』と決めたのと同じなので、出典を見ずにやらないでください"
+        "（機械も受け取りません）。"
+    )
 
     # ① 同じ判断を2度読ませている候補（★どちらを消すかは決めない★）
     for g in _fdp.scan(_fdp.DEFAULT_SECTIONS, 0.62, slug):
@@ -132,8 +182,12 @@ def gather(slug: str) -> dict:
                 "decide": "時間で嘘になる語。落とすか言い換える（数値は触らない）。",
             })
 
-    out["counts"] = {k: sum(1 for c in out["candidates"] if c["kind"] == k)
-                     for k in KINDS}
+    # ★機械が先に気づけたものは「手がかり」として別に置く★
+    #   （candidates という名前のままだと「これが全部」と読める）
+    out["hints"] = out["candidates"]
+    out["counts"] = {k: sum(1 for c in out["hints"] if c["kind"] == k)
+                     for k in HINT_KINDS}
+    out["counts"]["_note"] = "★この数は機械が気づけた分だけ★（網羅ではない）"
     return out
 
 
@@ -164,6 +218,29 @@ def _load_decision(path: str) -> dict:
 def _numbers(s: str) -> list:
     import re
     return re.findall(r"\d+(?:\.\d+)?", str(s or ""))
+
+
+def _simulate(detail: dict, plan: list) -> str:
+    """★決定を全部あてたら記事がどうなるか★（書かずに文字列で返す）
+
+    ★書き込みと同じ手順でなければ意味がない★ので、
+    実際に書く側（下の `apply_it` の中）と同じ順で当てる。
+    """
+    import copy
+    d = copy.deepcopy(detail)
+    dropping = {}
+    for kind, si, bi, a in plan:
+        if kind == "replace":
+            d["sections"][si]["body"][bi] = a["after"]
+        elif kind == "table_note":
+            d["sections"][si]["tables"][bi]["note"] = a["after"]
+        elif kind == "drop":
+            dropping.setdefault(si, set()).add(bi)
+    for si, idxs in dropping.items():
+        body = d["sections"][si]["body"]
+        d["sections"][si]["body"] = [x for i, x in enumerate(body)
+                                     if i not in idxs]
+    return json.dumps(d, ensure_ascii=False)
 
 
 def apply_decision(path: str, apply_it: bool = False) -> dict:
@@ -211,7 +288,12 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
             if nums:
                 # ★消すのは1行だけ★＝同じ文が2つあるなら1つは残る
                 rest = raw.replace(a["text"], "", 1)
-                lost = [n for n in nums if n not in rest]
+                # ★★数値は「文字が含まれるか」で見ない★★
+                #   （2026-08-22・実データで素通りして分かった）
+                #   ★直す前は n not in rest と書いていた★＝部分一致なので
+                #   「97.7%」の中の 7 に当たって通ってしまった。
+                #   ＝「最大7pt」を消しても「7は残っている」と誤判定した。
+                lost = sorted(set(nums) - set(_numbers(rest)))
                 if lost:
                     result["problems"].append(
                         "消すと記事から無くなる数値があります: "
@@ -264,6 +346,22 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
             result["problems"].append(
                 f"「{d['sections'][si].get('title')}」が空になります")
             return result
+
+    # ★★全部やったあとで数値が消えていないか★★（2026-08-22・実データで穴を発見）
+    #   ★1件ずつ見るだけでは足りなかった★＝
+    #   重複した2行を**両方**消す決定を出すと、
+    #   どちらの行も「単体では、もう片方に同じ数値が残る」ので通ってしまい、
+    #   ★結果としてその数値が記事から丸ごと消える★。
+    #   実際 goji_eva で「700G＋α・5回・360G」が全部消える決定が通った。
+    #   → ★決定を全部あてた後の姿で数え直す★。
+    after_all = _simulate(d, plan)
+    # ★数値は token で比べる★（部分一致だと「97.7」の中の「7」に当たる）
+    lost = sorted(set(_numbers(raw)) - set(_numbers(after_all)))
+    if lost:
+        result["problems"].append(
+            "全部やると記事から無くなる数値があります: " + " / ".join(lost[:6])
+            + "（重複を1つにするだけのはずが、両方消える決定になっています）")
+        return result
 
     for kind, si, bi, a in plan:
         result["done"].append({"op": a["op"], "why": a["why"][:60]})
@@ -423,6 +521,68 @@ def _selftest() -> int:
         r9 = apply_decision(rz)
         t("　同じ数値が他の行にも残る削除（重複）は通る", not r9["problems"])
 
+        # ★★数値は token で比べる★★（2026-08-22・実データで素通りして分かった）
+        #   ★直す前は「文字が含まれるか」で見ていた★ので、
+        #   「最大7pt」を消しても「97.7%」の中の 7 に当たって通ってしまった。
+        G = {"slug": "g", "sections": [
+            {"title": "天井・恩恵",
+             "body": ["ポイントは最大7ptです。",
+                      "機械割は97.7%です。",
+                      "天井は1000Gです。"]}]}
+        with io.open(os.path.join(td, "g.json"), "w",
+                     encoding="utf-8", newline="\n") as f:
+            json.dump(G, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+
+        def dec_g(actions):
+            r = os.path.join(td, "dg.json")
+            io.open(r, "w", encoding="utf-8").write(json.dumps(
+                {"schema_version": SCHEMA, "slug": "g",
+                 "decided_by": ["Claude", "codex"], "actions": actions},
+                ensure_ascii=False))
+            return r
+
+        rg = apply_decision(dec_g([{"op": "drop",
+                                    "text": "ポイントは最大7ptです。",
+                                    "why": "わざと"}]))
+        t("★★消すと無くなる数値を、他の数値の一部で見逃さない★★"
+          "（97.7%の中の7に当たっていた）",
+          bool(rg["problems"]) and "7" in "".join(rg["problems"]))
+
+        # ★★全部やったあとで数値が消えるのを見る★★
+        #   1件ずつ見るだけだと、重複した2行を「両方」消す決定が通ってしまう。
+        H = {"slug": "h", "sections": [
+            {"title": "天井・恩恵",
+             "body": ["リセットは700Gに短縮されます。",
+                      "リセット時は700Gに短縮されます。",
+                      "通常時の天井は1000Gです。"]}]}
+        with io.open(os.path.join(td, "h.json"), "w",
+                     encoding="utf-8", newline="\n") as f:
+            json.dump(H, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+
+        def dec_h(actions):
+            r = os.path.join(td, "dh.json")
+            io.open(r, "w", encoding="utf-8").write(json.dumps(
+                {"schema_version": SCHEMA, "slug": "h",
+                 "decided_by": ["Claude", "codex"], "actions": actions},
+                ensure_ascii=False))
+            return r
+
+        rh1 = apply_decision(dec_h([{"op": "drop",
+                                     "text": "リセットは700Gに短縮されます。",
+                                     "why": "重複の片方"}]))
+        t("　重複の片方だけを消すのは通る", not rh1["problems"])
+
+        rh2 = apply_decision(dec_h([
+            {"op": "drop", "text": "リセットは700Gに短縮されます。",
+             "why": "重複の片方"},
+            {"op": "drop", "text": "リセット時は700Gに短縮されます。",
+             "why": "もう片方も"}]))
+        t("★★両方消して数値が記事から無くなる決定は受け取らない★★"
+          "（1件ずつ見るだけでは両方とも通っていた）",
+          bool(rh2["problems"]) and "700" in "".join(rh2["problems"]))
+
         r7 = apply_decision(dec([{"op": "drop", "text": "B の行です。",
                                   "why": "…"}]), apply_it=True)
         t("　通れば書ける", r7.get("wrote") is True)
@@ -434,7 +594,7 @@ def _selftest() -> int:
         globals()["DETAILS"] = _keep
 
     print()
-    print(f"{14 - len(ng)}/14 " + ("合格" if not ng else "不合格"))
+    print(f"{17 - len(ng)}/17 " + ("合格" if not ng else "不合格"))
     return 1 if ng else 0
 
 
