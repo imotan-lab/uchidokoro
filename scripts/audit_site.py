@@ -1890,6 +1890,41 @@ def check_44_empty_settei_box(machines: list) -> list[str]:
     return out
 
 
+def check_49_equivalence_label(machines: list) -> list[str]:
+    """「等価＝5.6枚」と書いていないか（サイト内ガイドと矛盾する）
+
+    ★なぜ見張るか（2026-08-21・台帳#219）★
+      サイト内ガイド `guide-rate.html` の定義は
+        等価（5.0枚）… 借りた時と同じ価値で換金できる最も有利な条件
+        5.6枚      … 当サイトが基準としている交換率
+      ＝★「等価」と「5.6枚」は別のもの★。
+
+      ところが記事側に「等価（5.6枚等価）」「5.6枚等価」という書き方が
+      4機種8箇所あった（biohazard / bofuri / neoplanet / tensura）。
+      ★ガイドを読んだ人が記事を読むと、話が食い違う★。
+
+    ★数値の話ではない★＝呼び方だけの問題なので、
+      見つけたら「5.6枚」へ言い換える（数値は触らない）。
+    """
+    import glob
+    ng = []
+    det = os.path.join(BASE, "assets", "data", "machine-details")
+    for path in sorted(glob.glob(os.path.join(det, "*.json"))):
+        slug = os.path.basename(path)[:-5]
+        try:
+            with open(path, encoding="utf-8") as f:
+                txt = f.read()
+        except OSError:
+            continue
+        n = txt.count("5.6枚等価")
+        if n:
+            ng.append(
+                f"{slug}: 「5.6枚等価」という書き方が {n} 箇所あります"
+                "（ガイドの定義は 等価=5.0枚 / 5.6枚 は別物）。"
+                "「5.6枚」へ言い換えてください")
+    return ng
+
+
 def check_48_ledger_argv(machines: list) -> list[str]:
     """台帳CLIのオプション名を、あちこちで並べていないか
 
@@ -2422,6 +2457,7 @@ CHECKS = [
     ("46_ポチポチくんの案内と飛び先", check_46_pochipochi_reachable),
     ("47_公開ページに残った型式名", check_47_model_code_in_html),
     ("48_台帳CLIの引数の並べ場所", check_48_ledger_argv),
+    ("49_等価の呼び方", check_49_equivalence_label),
 ]
 
 
