@@ -97,10 +97,31 @@ class ContractError(Exception):
 
 
 def _sha(path: str) -> str:
+    """★改行をそろえてから指紋を取る★（2026-08-21・台帳#430と同じ型）
+
+    ★直す前に何が起きたか★
+      この会社PCは `core.autocrlf=true` なので、
+      **git の中は LF・チェックアウトすると CRLF** になる。
+      ところがここは読んだ中身をそのまま数えていたので、
+      ★同じ内容のファイルでも「どうチェックアウトしたか」で指紋が変わった★。
+
+      実際、CIと同じ条件を再現するために綺麗なクローンを作ったら
+      automation-policy.json が「承認済みの内容と違います」で落ちた。
+      中身は1文字も違わないのに、である。
+
+      ★公開物の契約（build_pages_artifact.template_sha）は最初から
+        そろえていた★ので、materialだけが取り残されていた。
+
+    ★同じ規則を2か所に書かない★＝あちらと同じ「CRLF→LF」にそろえる。
+    """
     h = hashlib.sha256()
     with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
+        data = f.read()
+    # ★中身がプログラムでない（画像など）ものは入っていない集合だが、
+    #   万一入っても壊さないように、NULを含むものはそのまま数える★
+    if b"\x00" not in data[:8000]:
+        data = data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    h.update(data)
     return h.hexdigest()
 
 
