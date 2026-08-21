@@ -819,24 +819,67 @@ def record_repair(slug: str, fixed: bool, path: str = STATE_PATH,
         return dict(rec)
 
 
+SHARED_FILES = ("assets/data/machines.json", "service-worker.js", "sitemap.xml")
+
+
+def _shared_file_touches_others(rel: str, slug: str) -> bool:
+    """全機種共通のファイルで、その機種以外の項目まで変わっていないか。
+
+    ★なぜ要るのか★（2026-08-21・台帳#429）
+      狙い目チェッカーの値は `assets/data/machines.json`（全機種共通）にある。
+      直す経路が「その機種のファイルだけ」しか許していなかったので、
+      **チェッカーの値を直す道が完全に塞がっていた**
+      （2026-08-21の更新タスクが実際に行き止まりに当たった）。
+    ★かといって丸ごと許すと、他の機種の値も一緒に変えられる★
+      → **その機種の項目だけが変わっているか**を見る。
+
+    戻り値 True＝他の機種にも変更が及んでいる（＝止めるべき）。
+    ★読めないときは True★（fail-closed）。
+    """
+    if rel == "assets/data/machines.json":
+        rc, out = _git("show", f"HEAD:{rel}")
+        if rc != 0:
+            return True
+        try:
+            old = {m.get("slug"): m for m in json.loads(out)}
+            with open(os.path.join(BASE, rel.replace("/", os.sep)),
+                      encoding="utf-8") as f:
+                new = {m.get("slug"): m for m in json.load(f)}
+        except Exception:                                    # noqa: BLE001
+            return True
+        if set(old) != set(new):
+            return True          # 機種が増減している＝この経路の仕事ではない
+        for s in old:
+            if s == slug:
+                continue
+            if old[s] != new[s]:
+                return True
+        return False
+    # ★キャッシュ版・サイトマップは中身を持たない（どの機種の話でもない）★
+    return False
+
+
 def _unrelated_changes(slug: str) -> list:
     """★その機種と関係のない変更が混ざっていないか★（2026-08-21・依頼246の指摘3）
 
-    直す経路で触ってよいのは、その機種の記事データと、その機種のページだけ。
+    直す経路で触ってよいのは、
+      ①その機種の記事データ ②その機種のページ
+      ③全機種共通のファイル（machines.json / service-worker.js / sitemap.xml）
+        ただし **machines.json はその機種の項目だけが変わっている場合に限る**
+        （2026-08-21・台帳#429。チェッカーの値がここにあるため）
     ★コマンドは固定の引数配列で呼ぶ★（シェルを通さない）。
     見られなければ「関係ないものがある」と答える（fail-closed）。
     """
     allow = (f"assets/data/machine-details/{slug}.json",
              f"machines/{slug}/")
-    try:
-        p = subprocess.run(["git", "-C", str(BASE), "status", "--porcelain"],
-                           capture_output=True, text=True, timeout=30)
-    except Exception as e:                                   # noqa: BLE001
-        return [f"変更を確認できません（{type(e).__name__}）"]
-    if p.returncode != 0:
+    # ★gitを呼ぶ入口は1つにそろえる★（2026-08-21）
+    #   ここだけ subprocess を直接呼んでいたので、試験で差し替えても
+    #   **本物のgitを見に行き、その時のリポジトリの状態で結果が変わっていた**。
+    rc, stdout = _git("status", "--porcelain")
+    if rc != 0:
         return ["変更を確認できません（git status が失敗）"]
     out = []
-    for line in p.stdout.splitlines():
+    for line in stdout.splitlines():
         name = line[3:].strip().strip('"')
         if not name:
             continue
@@ -846,8 +889,16 @@ def _unrelated_changes(slug: str) -> list:
         names = [x.strip().strip('"') for x in name.split(" -> ")] if " -> " in name \
             else [name]
         for nm in names:
-            if nm and not any(nm.startswith(a) for a in allow):
-                out.append(nm)
+            if not nm:
+                continue
+            if any(nm.startswith(a) for a in allow):
+                continue
+            if nm in SHARED_FILES:
+                # ★共通ファイルは、その機種の話に収まっているときだけ許す★
+                if _shared_file_touches_others(nm, slug):
+                    out.append(nm + "（他の機種にも変更が及んでいます）")
+                continue
+            out.append(nm)
     return out
 
 
@@ -878,15 +929,34 @@ def _changed_files() -> tuple[list, str]:
 
 
 def _file_digest(rel: str) -> str:
-    """手元のファイルの中身の指紋。消えている場合は DELETED。"""
+    """手元のファイルの中身の指紋。消えている場合は DELETED。
+
+    ★改行の書き方の違いで食い違わせない★（2026-08-21・台帳#430）
+      この会社PCは `core.autocrlf=true` なので、リポジトリの中はLF、
+      作業ファイルはCRLFで保存される。**中身は同じで改行だけが違う**のに、
+      バイトで比べると必ず食い違い、verify-commit が毎回止まっていた
+      （2026-08-21の更新タスクが実測: コミット10168バイト/CRLF 0個 対
+        作業ファイル10392バイト/CRLF 224個）。
+      → ★gitがリポジトリへ入れる形（LF）にそろえてから指紋を取る★
+      ★中身が本当に変わっていれば、そろえても指紋は変わる★ので守りは弱まらない。
+    """
     p = os.path.join(BASE, rel.replace("/", os.sep))
     if not os.path.isfile(p):
         return "DELETED"
-    h = hashlib.sha256()
     with open(p, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
+        data = f.read()
+    return hashlib.sha256(_normalize_eol(data)).hexdigest()
+
+
+def _normalize_eol(data: bytes) -> bytes:
+    """改行をLFにそろえる（★中身の比較のためだけ★）。
+
+    ★画像などのバイナリは触らない★＝NUL文字が入っていたらそのまま返す
+    （gitも同じ考え方でバイナリを判定する）。
+    """
+    if b"\x00" in data[:8000]:
+        return data
+    return data.replace(b"\r\n", b"\n")
 
 
 def _commit_digest(commit: str, rel: str) -> str:
@@ -901,7 +971,8 @@ def _commit_digest(commit: str, rel: str) -> str:
         return "ERROR"
     if p.returncode != 0:
         return "ERROR"
-    return hashlib.sha256(p.stdout).hexdigest()
+    # ★手元と同じ物差しで比べる★（台帳#430。git の中はLFなので普通はそのまま）
+    return hashlib.sha256(_normalize_eol(p.stdout)).hexdigest()
 
 
 def verify_commit(task: str, slug: str, commit: str,
@@ -1446,6 +1517,16 @@ def selftest() -> int:
             #   範囲の見張りそのものは、下の専用の試験で確かめる。
             _keep_unrel0 = globals()["_unrelated_changes"]
             globals()["_unrelated_changes"] = lambda s: []
+            # ★★試験は本物のgitの状態に依存させない★★（2026-08-21）
+            #   CIは作業ツリーが綺麗なので `_changed_files()` が空を返し、
+            #   before_commit の「変更がありません」で落ちた。
+            #   手元は編集中で汚れていたため通っており、★手元とCIで結果が違った★。
+            #   道具の振る舞いを見る試験が、その時のリポジトリの状態で変わってはいけない。
+            _keep_changed0 = globals()["_changed_files"]
+            _keep_fd0 = globals()["_file_digest"]
+            globals()["_changed_files"] = lambda: (
+                ["assets/data/machine-details/kabaneri.json"], "")
+            globals()["_file_digest"] = lambda rel: "TESTDIGEST"
             t("★ふつうに入ると、いままでどおり止まる★",
               raises(lambda: before_write("t2", "hokuto", fp), "触ってはいけない"))
             # ★直す経路は「どの案件を直すか」を控えてから★（依頼247の指摘2）
@@ -1687,6 +1768,40 @@ def selftest() -> int:
                 globals()["_commit_digest"] = _keep_cd
                 globals()["_git"] = _keep_git
 
+            # --- ★共通ファイルは「その機種の話に収まっていれば」許す★（台帳#429）
+            _keep_shared = globals()["_shared_file_touches_others"]
+            _keep_git2 = globals()["_git"]
+            # ★本物の _unrelated_changes を試す★
+            #   （この試験のかたまりでは差し替えてあるので、ここだけ戻す）
+            globals()["_unrelated_changes"] = _keep_unrel0
+            try:
+                globals()["_git"] = lambda *a: (0, "M  assets/data/machines.json\n")
+                globals()["_shared_file_touches_others"] = lambda rel, s: False
+                t("★★チェッカーの値を直すために machines.json を触れる★★",
+                  _unrelated_changes("kabaneri") == [])
+                globals()["_shared_file_touches_others"] = lambda rel, s: True
+                got3 = _unrelated_changes("kabaneri")
+                t("★★他の機種まで変わっていたら止める★★",
+                  len(got3) == 1 and "他の機種" in got3[0])
+                globals()["_git"] = lambda *a: (0, "M  scripts/nazono.py\n")
+                globals()["_shared_file_touches_others"] = lambda rel, s: False
+                t("　共通ファイル以外は、いままでどおり止める",
+                  _unrelated_changes("kabaneri") == ["scripts/nazono.py"])
+            finally:
+                globals()["_shared_file_touches_others"] = _keep_shared
+                globals()["_git"] = _keep_git2
+                globals()["_unrelated_changes"] = lambda s: []   # 元の差し替えに戻す
+
+            # --- ★改行の違いでは食い違わせない★（台帳#430・対照実験）
+            t("　改行だけ違うものは同じ指紋になる",
+              hashlib.sha256(_normalize_eol(b"a\r\nb\r\n")).hexdigest()
+              == hashlib.sha256(_normalize_eol(b"a\nb\n")).hexdigest())
+            t("★★中身が変われば、改行をそろえても指紋は変わる★★",
+              hashlib.sha256(_normalize_eol(b"a\r\nb\r\n")).hexdigest()
+              != hashlib.sha256(_normalize_eol(b"a\r\nc\r\n")).hexdigest())
+            t("★バイナリは触らない（NULがあればそのまま）★",
+              _normalize_eol(b"\x00a\r\nb") == b"\x00a\r\nb")
+
             # ★関所を通っていなければ verify も通らない★
             fpH = os.path.join(tmpdir, "guard_nobind.json")
             claim("tF", "kabaneri", fpH, repairing=True, issues=["1"])
@@ -1776,6 +1891,8 @@ def selftest() -> int:
             cp.assess = _real_assess
             # ★差し替えた見張りを必ず戻す★（試験のあとに本番の関所が緩まないように）
             globals()["_unrelated_changes"] = _keep_unrel0
+            globals()["_changed_files"] = _keep_changed0
+            globals()["_file_digest"] = _keep_fd0
 
         # 記録が読めないときは動かさない（fail-closed）
         with open(fp, "w", encoding="utf-8") as f:
