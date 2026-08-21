@@ -185,6 +185,31 @@ BUDGET_PATH = os.path.join(
     "assets", "data", "task-budget.json")
 
 
+def _alive_posix(pid: int, killer=None) -> bool:
+    """★POSIX（Linux・CI）での生き死に★
+
+    ★関数に切り出した理由★（2026-08-21）
+      ★Windowsからは、この道を一度も動かせない★＝
+      `os.name` で分けただけでは、CI（Linux）で通る道が手元で未実行のまま
+      push されることになる。**それがまさに今回CIを赤くした形**。
+      問い合わせる手だてを差し替えられるようにして、
+      手元でも3つの答え（居る／居ない／権限が無い）を実際に動かして確かめる。
+
+    `os.kill(pid, 0)` は POSIX では**問い合わせ**（何も送らない）。
+    ★Windows では問い合わせではなく終了させるので、ここへは来ない★
+    """
+    k = killer or os.kill
+    try:
+        k(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False                      # ★居ないと確かめられた★
+    except PermissionError:
+        return True                       # 居るが自分のものではない＝奪わない
+    except Exception:                     # noqa: BLE001
+        return True                       # 分からないときは奪わない（安全側）
+
+
 class _Exclusive:
     """★同時に2つ動いても枠を超えさせない★（2026-08-05・Codex110回目の指摘5）
 
@@ -199,17 +224,32 @@ class _Exclusive:
 
     @staticmethod
     def _alive(pid: int) -> bool:
-        """そのプロセスがまだ動いているか（居なければ鍵を奪ってよい）。"""
+        """そのプロセスがまだ動いているか（居なければ鍵を奪ってよい）。
+
+        ★★OSで見方が違う★★（2026-08-21・CIが赤くなって分かった）
+          ★直す前は `tasklist` だけを見ていた★＝Windows専用のコマンド。
+          Linux（CI）には無いので例外になり、「分からない＝生きている」に
+          倒れていた。＝**Linuxでは、どんなPIDを渡しても常に「生きている」**。
+          手元（Windows）では正しく動くので、★ci_repro では再現できない★。
+          ★これはCLAUDE.mdに書いてあるOSの罠を2度踏んだ形★。
+
+        ・Windows … `tasklist` で問い合わせる
+          （`os.kill(pid, 0)` は Windows では問い合わせではなく**終了させる**）
+        ・それ以外 … `os.kill(pid, 0)`（POSIXでは問い合わせ。送信しない）
+        ★分からないときは「生きている」と答える★＝奪わない（安全側）。
+        """
         if pid <= 0:
             return False
-        try:
-            import subprocess
-            r = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"],
-                               capture_output=True, text=True, timeout=10,
-                               encoding="utf-8", errors="replace")
-            return str(pid) in (r.stdout or "")
-        except Exception:                 # noqa: BLE001
-            return True                   # 分からないときは奪わない（安全側）
+        if os.name == "nt":
+            try:
+                import subprocess
+                r = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+                                   capture_output=True, text=True, timeout=10,
+                                   encoding="utf-8", errors="replace")
+                return str(pid) in (r.stdout or "")
+            except Exception:             # noqa: BLE001
+                return True               # 分からないときは奪わない（安全側）
+        return _alive_posix(pid)
 
     def _take_over(self) -> bool:
         """残っている鍵を奪ってよいか調べ、よければ消す。"""
@@ -1567,6 +1607,33 @@ def _machines_per_day_tests(t, tmpdir) -> None:
       bool(r2["token"]) and _load(sp2)["day"]["slugs_today"] == ["mpd_same"])
 
 
+def _alive_posix_tests(t) -> None:
+    """★Linux側の道を、Windowsからも実際に動かす★（2026-08-21）
+
+    ★なぜ要るか★＝`os.name` で分けると、CIで通る道が手元で一度も
+    動かないまま push される。実際それでCIが赤くなった。
+    """
+    def gone(pid, sig):
+        raise ProcessLookupError
+
+    def denied(pid, sig):
+        raise PermissionError
+
+    def here(pid, sig):
+        return None
+
+    def broken(pid, sig):
+        raise OSError("よく分からない失敗")
+
+    t("　（Linux）居るプロセスは生きている", _alive_posix(1, here) is True)
+    t("★★（Linux）居ないプロセスは死んでいると分かる★★"
+      "（tasklist だけだとLinuxでは常に生きている扱いだった）",
+      _alive_posix(999999, gone) is False)
+    t("　（Linux）権限が無いときは奪わない", _alive_posix(1, denied) is True)
+    t("　（Linux）分からないときは奪わない（安全側）",
+      _alive_posix(1, broken) is True)
+
+
 def _finding_tests(t, tmpdir) -> None:
     """★見つけたもの（finding）で担当する経路の試験★
 
@@ -2513,6 +2580,9 @@ def selftest() -> int:
         # ★★台帳番号ではなく「見つけたもの」で担当する経路★★
         #   （2026-08-21・Codexの設計レビュー）
         _finding_tests(t, _d)
+        # ★★Linux（CI）側の生き死にの見方も、手元で動かして確かめる★★
+        #   （2026-08-21・これを怠ってCIが赤くなった）
+        _alive_posix_tests(t)
     finally:
         _sh.rmtree(_d, ignore_errors=True)
 

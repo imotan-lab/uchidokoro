@@ -2826,8 +2826,16 @@ def selftest() -> int:
     #   「2分前から動いています」と言い続けた＝原因に辿り着けない。
     _dl = os.path.join(BASE, ".publish.lock.dead_test")
     try:
-        # ★居ないPID★を書く（tasklist が見つけられないもの）
-        _dead_pid = 999999
+        # ★★本当に終わったプロセスのPIDを使う★★（2026-08-21に直した）
+        #   ★直す前は 999999 という決め打ちだった★＝
+        #   Windows の tasklist では確かに見つからないが、
+        #   Linux では実在しうるPIDなので「居ないこと」の保証にならない。
+        #   ★実際に1つ動かして、終わるまで待った PID★なら、
+        #   どちらのOSでも確実に「もう居ない」。
+        import subprocess as _sp
+        _proc = _sp.Popen([sys.executable, "-c", "pass"])
+        _proc.wait()
+        _dead_pid = _proc.pid
         with open(_dl, "w", encoding="utf-8") as _fd:
             _fd.write(f"{_dead_pid}:deadbeef")
         _od = _OnlyOne(_dl)
