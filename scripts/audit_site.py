@@ -1861,6 +1861,61 @@ def check_44_empty_settei_box(machines: list) -> list[str]:
     return out
 
 
+def check_47_model_code_in_html(machines: list) -> list[str]:
+    """公開ページに型式名が焼き込まれたまま残っていないか
+
+    ★なぜ見張るか（2026-08-21・台帳#434）★
+      CLAUDE.md の決定＝「★型式名は記事には書かない。取り違えを防ぐ
+      同定にだけ使う★」。ところが garei_zero_re は、記事データからは
+      消したのに**公開HTMLには残り続けていた**。
+      ＝★記事データを直しても、読者に見えるページには届かない★
+      （HTMLは生成物なので、描き直さないと変わらない）。
+
+    ★見るのは「記事データに無いのにHTMLにある」ときだけ★
+      記事データにも残っているなら、それは別の話（データ側の違反）で、
+      そちらは公開前の検査が見ている。ここは**届いていない**ことを見る。
+
+    直し方:
+      新台経路  python scripts/build_machine_pages.py --rebuild-auto <slug>
+      旧形式    python scripts/build_machine_pages.py --legacy --slug <slug>
+    """
+    ng = []
+    for m in machines:
+        slug = m.get("slug")
+        if not slug:
+            continue
+        ident = m.get("identity") or {}
+        codes = [str(ident.get("regulatory_model_code") or ""),
+                 str(ident.get("observed_model_code") or "")]
+        codes = [c for c in codes if len(c) >= 4]
+        if not codes:
+            continue
+        page = os.path.join(BASE, "machines", slug, "index.html")
+        if not os.path.isfile(page):
+            continue
+        try:
+            with open(page, encoding="utf-8") as f:
+                html = f.read()
+        except OSError:
+            continue
+        detail_path = os.path.join(BASE, "assets", "data",
+                                   "machine-details", f"{slug}.json")
+        detail_text = ""
+        if os.path.isfile(detail_path):
+            try:
+                with open(detail_path, encoding="utf-8") as f:
+                    detail_text = f.read()
+            except OSError:
+                pass
+        for c in codes:
+            if c in html and c not in detail_text:
+                ng.append(
+                    f"{slug}: 公開ページに型式名 {c!r} が残っています"
+                    "（記事データからは消えているので、ページを描き直してください）")
+                break
+    return ng
+
+
 def check_46_pochipochi_reachable(machines: list) -> list[str]:
     """★ポチポチくんの案内が出るのに、飛び先が準備中になっていないか★
     （2026-08-21・台帳#252）
@@ -2246,6 +2301,7 @@ CHECKS = [
     ("44_中身なしの設定示唆の箱", check_44_empty_settei_box),
     ("45_中身なしの噂の箱", check_45_rumor_declared_empty),
     ("46_ポチポチくんの案内と飛び先", check_46_pochipochi_reachable),
+    ("47_公開ページに残った型式名", check_47_model_code_in_html),
 ]
 
 

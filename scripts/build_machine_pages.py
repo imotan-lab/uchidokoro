@@ -27,6 +27,7 @@ machine.html 側の JS は articleSections / infoTableBody を innerHTML="" で�
 from __future__ import annotations
 import html
 import json
+import os
 import re
 import shutil
 import sys
@@ -583,6 +584,82 @@ LEGACY_NOTE = ("数値は各種解析情報をもとにまとめた当サイト�
                "出典の照合は順次進めています。")
 
 
+def _rebuild_auto(slug: str) -> int:
+    """★新台経路のページを1枚だけ描き直す★（2026-08-21・台帳#434）
+
+    ★なぜ要るのか★
+      `--legacy` は「公開中の危険な記述を消す手段が無いのは本末転倒」
+      という理由で作られた。★新台経路には、その手段が無いままだった★。
+      実際 garei_zero_re は、記事データから型式名を消したのに
+      公開HTMLには残り続けていた（CLAUDE.md「型式名は記事に書かない」に反する）。
+
+    ★抜け道にしないための線★
+      ①**1機種ずつしか描き直せない**（一括再生成にならない）
+        ＝もとの拒否が守っていたのは「翌朝の一括再生成が noindex を剥がす」こと。
+      ②描くのは `publish_new_machine.render()`
+        ＝★そのページを最初に作ったのと同じ関数★（別の描き方を持ち込まない）
+      ③書く前に `publish_new_machine.check_page()` を通す
+      ④★区分が変わっていたら書かない★（AUTO_* 以外は対象外）
+      ⑤★noindex が消えていたら書かない★
+      ⑥公開データ（assets/data/public/）は読まない
+        ＝裏取り済みとして公開する経路には決してならない
+    """
+    sys.path.insert(0, str(BASE / "scripts"))
+    import publish_new_machine as _pub
+    import safe_json as _sj3
+
+    rows = _sj3.read_rows(BASE / "assets" / "data" / "machines.json")
+    hit = [m for m in rows if m.get("slug") == slug]
+    if len(hit) != 1:
+        print(f"★{slug} が machines.json に {len(hit)} 件です（1件でないと触りません）★")
+        return 1
+    machine = hit[0]
+    cls = _pd.machine_class(machine)
+    if cls not in ("AUTO_INDEXABLE", "AUTO_PENDING"):
+        print(f"★{slug} は新台経路の機種ではありません（{cls}）。"
+              "旧形式なら --legacy を使ってください★")
+        return 1
+
+    dpath = BASE / "assets" / "data" / "machine-details" / f"{slug}.json"
+    if not dpath.is_file():
+        print(f"★{slug} の記事データがありません★")
+        return 1
+    detail = _sj3.read_json(dpath, expect=dict)
+
+    out = BASE / "machines" / slug / "index.html"
+    if not out.is_file():
+        print(f"★{slug} の公開ページがありません（新しく作る経路ではありません）★")
+        return 1
+    before = out.read_text(encoding="utf-8")
+
+    html = _pub.render(slug, machine, detail)
+
+    # ★書く前に確かめる★
+    want_noindex = (cls == "AUTO_PENDING")
+    if want_noindex and "noindex" not in html:
+        print("★描き直したページに noindex がありません。書きません★")
+        return 1
+    if not want_noindex and "noindex" in html:
+        print("★検索に載せる区分なのに noindex が入っています。書きません★")
+        return 1
+    problems = _pub.check_page(slug, html, expect_noindex=want_noindex)
+    if problems:
+        print("★描き直したページが検査を通りません。書きません★")
+        for x in problems[:5]:
+            print("  ✗ " + str(x)[:120])
+        return 1
+
+    if html == before:
+        print(f"{slug}: 変わりません（描き直す必要がありませんでした）")
+        return 0
+
+    tmp = out.with_suffix(".html.tmp")
+    tmp.write_text(html, encoding="utf-8", newline="")
+    os.replace(tmp, out)
+    print(f"{slug}: 描き直しました（{len(before)} → {len(html)} 字・区分 {cls}）")
+    return 0
+
+
 def _build_legacy(only_slug: str | None = None) -> int:
     """★いま公開中の旧形式ページを作り直す★（2026-07-30・Codex「これだけはやれ」③）
 
@@ -940,12 +1017,20 @@ if __name__ == "__main__":
     _p.add_argument("--legacy", action="store_true",
                     help="いま公開中の旧形式ページを作り直す"
                          "（裏取りゲートが有効なら実行しない・公開データは読まない）")
+    _p.add_argument("--rebuild-auto", default=None, metavar="SLUG",
+                    help="新台経路のページを1枚だけ描き直す"
+                         "（公開中の誤りを消すため・区分とnoindexを確かめてから書く）")
     _a = _p.parse_args()
     # ★どんな壊れた入力でも traceback にしない★（Codex 閉鎖条件5・27巡目）
     import sys as _s9
     _s9.path.insert(0, str(BASE / "scripts"))
     import safe_json as _sj9
     try:
+        if _a.rebuild_auto:
+            if _a.preview or _a.legacy or _a.slug:
+                print("★--rebuild-auto は他の指定と一緒には使えません★")
+                raise SystemExit(1)
+            raise SystemExit(_rebuild_auto(_a.rebuild_auto) or 0)
         raise SystemExit(main(_a.preview, _a.legacy, _a.slug) or 0)
     except SystemExit:
         raise
