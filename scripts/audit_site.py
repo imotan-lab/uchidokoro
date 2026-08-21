@@ -524,13 +524,32 @@ def check_16_writing_style(machines: list) -> list[str]:
     detail_dir = BASE / "assets" / "data" / "machine-details"
 
     def _is_plain(sent: str) -> bool:
+        """★見つけ方は fix_plain_style の表と同じにする★
+        （2026-08-21・台帳#233・#122）
+
+        ★直す前に取りこぼしていた形★＝
+          「〜がある。」「〜活用できる。」「〜広がる。」「〜変わる。」など。
+          品質レビューが9機種で見つけていたのに、この検査は0件だった
+          ＝★人が読んで見つかるものを、機械が見落としていた★。
+
+        ★同じ規則を2か所に書かない★＝
+          直す側（fix_plain_style.ENDINGS）が持っている「常体の終わり方」を
+          そのまま使う。直す側に形を足せば、この検査も一緒に増える。
+        """
         s = sent.rstrip("。、,!?").strip()
         if not s:
             return False
         last = s[-5:]
         if _re.search(r"(?:です|ます|でしょう|ません|でした|ました|ください|でしょ)$", last):
             return False
-        return bool(_re.search(r"(?:だ|である|した|する|った|ない|だが|だろう|だろ|なる|させる|られる|られた)$", last))
+        if _re.search(r"(?:だ|である|した|する|った|ない|だが|だろう|だろ|なる|させる|られる|られた)$", last):
+            return True
+        # ★直す側の表に載っている終わり方も常体として数える★
+        try:
+            import fix_plain_style as _fps
+            return any(s.endswith(a.rstrip("。")) for a, _b in _fps.ENDINGS)
+        except Exception:            # noqa: BLE001
+            return False
 
     for m in machines:
         if _pd.machine_class(m) != "LEGACY_COMPLETE":
@@ -554,8 +573,18 @@ def check_16_writing_style(machines: list) -> list[str]:
                 continue
             sents = [x for x in _re.split(r"(?<=。)", text) if x.strip()]
             for sent in sents:
+                # ★★見出しの行は文ではない★★（2026-08-21）
+                #   「**機種名**：スマスロ転生したらスライムだった件」を
+                #   ★常体だと言っていた★＝機種名の末尾を語尾と読んでいた。
+                #   ★直す側（fix_plain_style）と同じ条件で外す★＝
+                #   見出し・箇条書きの行頭、句点で終わらない行。
+                _t = sent.strip()
+                if _t.startswith(("**", "・", "-", "＊", "※")):
+                    continue
+                if not _t.endswith("。"):
+                    continue
                 if _is_plain(sent):
-                    plain_sentences.append((s.get("title", ""), sent.strip()))
+                    plain_sentences.append((s.get("title", ""), _t))
         if plain_sentences:
             for title, sent in plain_sentences[:2]:  # 機種ごとに最大2件
                 ngs.append(f"{slug}: 常体文混在 [{_redact(title)}] {_redact(sent)}")
