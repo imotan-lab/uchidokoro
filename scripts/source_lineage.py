@@ -107,7 +107,45 @@ def independent(keys, reg: dict | None = None) -> int:
       数える場所が散らばっていると必ず繋ぎ忘れる
       （実際、依頼190で入れたときに材料を採用する本体を通していなかった）。
     """
-    return len(merge_joint({k for k in (keys or ()) if k}, reg))
+    return len(merge_joint({k for k in (keys or ()) if k
+                            if not _is_blocked(k)}, reg))
+
+
+def _is_blocked(key) -> bool:
+    """★規約で自動取得を止めた先は票に数えない★（2026-08-21・台帳#416/#376）
+
+    ★なぜ★ P-WORLD と一撃は規約でプログラムからの取得を禁じているため
+    `blocked_hosts.py` が通信を止めている。ところが**票を数えるここでは
+    素通し**だったので、控えに残っている古いURLが1票として数えられ、
+    「独立2出典」が**取りに行けない出典で成立し得た**
+    （2026-08-21に実測: p-world + nana-press が 2票と数えられた）。
+
+    ★実際の収集経路では UNUSABLE になる★ので二重の守りだが、
+    ★票を数えるのはこの関数だけ★という設計なら、ここで止めるのが筋。
+
+    キーは `lin-hazuse`（P-WORLD）や URL そのものが来ることがあるので両方見る。
+    ★分からないものは通す★＝ここで止めすぎると正当な出典まで落ちる。
+    """
+    s = str(key or "")
+    if not s:
+        return False
+    try:
+        import blocked_hosts as _bh
+    except Exception:                                        # noqa: BLE001
+        return False
+    if "://" in s:
+        try:
+            _bh.check(s)
+            return False
+        except Exception:                                    # noqa: BLE001
+            return True
+    # 発行者キーの形（source-registry の登録名）
+    return s in _BLOCKED_PUBLISHERS
+
+
+# ★規約で止めた発行者★（source-registry の登録名。blocked_hosts と対で維持する）
+_BLOCKED_PUBLISHERS = frozenset({"lin-hazuse", "lin-1geki", "hazuse", "1geki",
+                                 "p-world", "lin-p-world"})
 
 
 def joint_pairs(reg: dict | None = None) -> list:
@@ -236,6 +274,23 @@ def selftest() -> int:
     #   （P-WORLDと羽伏せが同じ転載系列だったことは registry に記録が残る）
     t("★★規約で外した出典は票に数えない★★（P-WORLD・一撃・羽伏せ）",
       all(p not in g for p in ("p-world", "hazuse", "1geki")))
+
+    # ★★名簿から外すだけでは足りなかった★★（2026-08-21・台帳#416/#376）
+    #   `independent()` は渡されたキーを数えるだけだったので、
+    #   **控えに残っている古いURL**（machine_sources に12件あった）が
+    #   1票として数えられ、「独立2出典」が取りに行けない出典で成立し得た。
+    #   実測: p-world + nana-press が 2票と数えられた。
+    t("★★止めた先のURLは票に数えない★★",
+      independent(["https://www.p-world.co.jp/machine/database/10358",
+                   "https://nana-press.com/kaiseki/machine/1055/"]) == 1)
+    t("★止めた先のURL（一撃）も数えない★",
+      independent(["https://1geki.jp/slot/l_bofuri/",
+                   "https://chonborista.com/slot/x/"]) == 1)
+    t("★古い控えの発行者キーも数えない★",
+      independent(["lin-hazuse", "lin-nana-press"]) == 1)
+    t("　生きている出典2つは、いままでどおり2票",
+      independent(["https://nana-press.com/a", "https://chonborista.com/b"]) == 2)
+    t("　空や None は数えない", independent([None, "", "https://nana-press.com/a"]) == 1)
     t("★★同じ転載系列は1票★★（ちょんぼりすたとやんちゃプレス）",
       g.get("chonborista") == g.get("yancha-press"))
     t("　別の会社どうしは別の票",
