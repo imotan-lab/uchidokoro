@@ -4,12 +4,14 @@
   無人で動くので、翌朝ログを開いて自分で読むのは手間だし見落とす。
   「見るべき5点」を機械が代わりに見て、要るときだけ知らせる。
 
-★見る5点（台帳 #176）★
+★見る6点（台帳 #176／⑥は2026-08-22追加）★
   ① 「開始★」と「終了★」が対で出ているか（片方だけならサイレント死）
   ② 各社の状態が OK 以外になっていないか（FETCH_FAILED / PARSE_SUSPECT）
   ③ 残存率が下がっていないか（一覧の作りが変わった兆候）
   ④ 「前回の公開が途中で終わっています」が出ていないか
   ⑤ 待ち行列が増え続けていないか（名鑑に載らないまま60日で台帳へ）
+  ⑥ ★機種ページは分かっているのに、何度やっても記事にできていない機種★
+     （2026-08-22追加。5日連続で公開0件だったのに誰も気づかなかったため）
 
 使い方:
     python scripts/add_machine_health.py             # 昨日ぶんを見る
@@ -32,6 +34,10 @@ LOG_DIR = os.path.join(os.path.expanduser("~"), "Documents", "uchidokoro", "logs
 
 # 待ち行列がこの日数を超えたら知らせる（60日で台帳へ行く前の予告）
 PENDING_WARN_DAYS = 30
+# ★機種ページが分かっているのに作れていない回数のしきい値★（2026-08-22）
+#   毎晩1回挑むので、7回＝1週間ぶん詰まっている状態。
+#   ★実測（2026-08-22）★ q_0001=13回 / q_0004=20回 だった。
+STUCK_TRIES = 7
 # ★このタスクを動かし始めた日★（それより前は「ログが無い」のが当たり前）
 FIRST_RUN_DATE = "2026-07-31"
 
@@ -92,6 +98,52 @@ def check_pending() -> list:
         if days >= PENDING_WARN_DAYS:
             ng.append(f"{it['name']} が {days} 日待っています"
                       f"（{_pend.GIVE_UP_DAYS} 日で台帳へ）")
+    return ng
+
+
+def check_stuck() -> list:
+    """★★何度やっても記事にできていない機種がないか★★（2026-08-22新設）
+
+    ★なぜ要るか（実際に5日間気づかなかった）★
+      新台タスクは 8/17〜8/21 の5日連続で **1本も公開していない**のに、
+      毎日エラーなく完走していた（STATUS: COMPLETED_NO_CHANGE）。
+      うちは「静かなのが正常」なのでメールも来ず、番人も異常と見なさない。
+      ＝★「異常なし」と「何も作れていない」を区別できていなかった★。
+
+    ★ログの文章を読み取らない★（2026-08-22の判断）
+      「公開なし: 候補4件すべて…」のような文はいつでも書き換わる。
+      そこを読み取ると、文言を直しただけで見張りが壊れる。
+      ★代わりに、待ち行列がすでに持っている数を見る★＝
+      `tries`（その機種に何回挑んだか）は毎晩機械が増やしている。
+
+    ★待っているだけの機種と、詰まっている機種を分ける★
+      AWAITING_DMM_ID … DMMのカレンダーにまだ載っていない
+                        ＝**待つのが正常**（うちの都合ではない）
+      READY           … 機種ページは分かっている
+                        ＝**材料さえ採れれば作れるはず**なのに作れていない
+      前者は check_pending（日数）が見る。ここが見るのは後者だけ。
+
+    実測（2026-08-22）＝q_0001 は13回、q_0004 は20回試して未達だった。
+    """
+    import pending_machines as _pend
+    ng = []
+    try:
+        data = _pend.load()
+    except Exception as e:                # noqa: BLE001
+        return [f"待ち行列を読めません: {e}"]
+    items = data.get("items") or {}
+    rows = list(items.values()) if isinstance(items, dict) else list(items)
+    for it in rows:
+        if not isinstance(it, dict):
+            continue
+        if str(it.get("state") or "") != "READY":
+            continue          # まだカレンダーに載っていない＝待つのが正常
+        tries = int(it.get("tries") or 0)
+        if tries >= STUCK_TRIES:
+            ng.append(
+                f"{it.get('name')} は機種ページが分かっているのに "
+                f"{tries} 回作れていません（★材料が採れない理由を人が見てください★"
+                f"／{it.get('identity_url')}）")
     return ng
 
 
@@ -172,6 +224,41 @@ def selftest() -> int:
         LOG_DIR = real
         __import__("shutil").rmtree(d, ignore_errors=True)
 
+    # ★★何度やっても作れていない機種を見つける★★（2026-08-22新設）
+    #   ★これが無かったので、5日連続で公開0件でも誰も気づかなかった★
+    #   （毎日エラーなく COMPLETED_NO_CHANGE で完走していた）
+    import pending_machines as _pend_t
+    _keep_load = _pend_t.load
+    try:
+        def _fake(items):
+            _pend_t.load = lambda: {"schema": "x", "next_id": 9, "items": items}
+
+        _fake({"q_1": {"name": "詰まっている機種", "state": "READY",
+                       "tries": STUCK_TRIES,
+                       "identity_url": "https://p-town.dmm.com/machines/1"}})
+        _r = check_stuck()
+        t("★★機種ページが分かっているのに作れていない機種を見つける★★"
+          "（5日連続0件に誰も気づかなかった型）",
+          len(_r) == 1 and "詰まっている機種" in _r[0] and str(STUCK_TRIES) in _r[0])
+
+        _fake({"q_1": {"name": "あと1回", "state": "READY",
+                       "tries": STUCK_TRIES - 1}})
+        t("　しきい値の手前では知らせない", check_stuck() == [])
+
+        _fake({"q_1": {"name": "カレンダー待ち", "state": "AWAITING_DMM_ID",
+                       "tries": 99}})
+        t("★★DMMのカレンダー待ちは何回でも知らせない★★"
+          "（うちの都合ではないので、待つのが正常）", check_stuck() == [])
+
+        _fake({})
+        t("　待ち行列が空なら何も言わない", check_stuck() == [])
+
+        _pend_t.load = lambda: (_ for _ in ()).throw(RuntimeError("読めません"))
+        t("　待ち行列を読めないときは、そう言う（黙らない）",
+          any("読めません" in x for x in check_stuck()))
+    finally:
+        _pend_t.load = _keep_load
+
     t("　いまのサイトの状態も見られる", isinstance(check_now(), list))
     t("　待ち行列も見られる", isinstance(check_pending(), list))
 
@@ -190,7 +277,7 @@ def main() -> int:
     if args.selftest:
         return selftest()
     day = args.date or (date.today() - timedelta(days=1)).isoformat()
-    ng = check_log(day) + check_pending() + check_now()
+    ng = check_log(day) + check_pending() + check_stuck() + check_now()
     if not ng:
         print(f"✅ {day}: 気になる点はありません")
         return 0
