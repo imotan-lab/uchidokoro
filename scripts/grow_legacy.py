@@ -1489,6 +1489,44 @@ def selftest() -> int:                    # noqa: C901
         halted10 = "名簿と合いません" in str(e)
     t("★★記事の中身が別機種なら書かない★★", halted10)
 
+    # --- ★★メーカーの関門が働いていること★★（2026-08-21・台帳#422のその2）
+    #   2026-08-20（d7cf88d）に「メーカーを渡していなかったので、
+    #   メーカー欄の関門がまるごと働かず、同名で別メーカーのページを
+    #   材料に採れた」を直した。★その境界を固定する試験が無かった★＝
+    #   直したことが、次に誰かが触ったときに静かに戻りうる。
+    #   ★★字面で見ない★★＝同じ語が別の行にもあるので、
+    #     「_maker が書いてある」では戻ったことを検知できない
+    #     （実際、直す前の姿に戻して試したら素通りした）。
+    #     ★偽物の gather を渡して、何が渡ってくるかを実際に見る★
+    _seen_args = {}
+
+    def _spy_gather(name, maker=None, slug=None, **kw):
+        _seen_args["name"] = name
+        _seen_args["maker"] = maker
+        _seen_args["slug"] = slug
+        return {"material": {}, "problems": ["試験用（材料は返しません）"]}
+
+    _tgt = targets()
+    if _tgt:
+        _slug_gl = _tgt[0]["slug"]
+        _seen_args.clear()
+        run(_slug_gl, False, gather=_spy_gather)
+        t("★★メーカーを gather へ実際に渡している★★（関門が働く）",
+          bool(_seen_args.get("maker")))
+        t("　slug も渡している（別機種の材料を混ぜない）",
+          _seen_args.get("slug") == _slug_gl)
+    else:
+        t("　対象の機種が無いので、この試験は飛ばす", True)
+        t("　（同上）", True)
+
+    import inspect as _isp
+    _src_gl = _isp.getsource(sys.modules[__name__])
+    t("★★メーカーが分からない機種では材料を集めない★★（fail-closed）",
+      "メーカーが分からないので材料を集めません" in _src_gl)
+    t("★止める理由があるときは、材料があっても書かない★"
+      "（私用の別名ではなく公開関数を呼ぶ）",
+      "blocking_problems" in _src_gl)
+
     print(f"\n{ran[0]}/{ran[0]} 合格" if ok else "\n不合格あり")
     return 0 if ok else 1
 
