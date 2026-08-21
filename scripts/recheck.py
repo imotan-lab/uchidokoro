@@ -507,6 +507,153 @@ def check_pochipochi_reachable(args: dict) -> dict:
 _NOTE_NORMAL = re.compile(r"通常(\d{3,4})G")
 
 
+_STRAT_G = __import__("re").compile(r"(\d{2,4})\s*G")
+
+
+def check_strategy_vs_checker(args: dict) -> dict:
+    """一覧の「狙い目」と、チェッカーが既定で出す値がそろっているか
+
+    ★なぜ見るか（2026-08-21・台帳#152）★
+      トップページの一覧に出る `strategy`（例「等価470G〜 / リセット180G〜」）は
+      チェッカーの**既定の値**（`checker.normal.good`）と同じ数字で書かれている。
+      ところが記事ページのチェッカーは、交換率を選ぶと
+      **`byRate[その交換率]` の値で上書き**する（machine.html 493行）。
+      最初に選ばれているのは `defaultRate`（多くは eq56＝5.6枚）。
+
+      ＝★一覧で「等価470G〜」と読んだ人が、記事のチェッカーでは480Gを見る★
+      実測（2026-08-21）＝通常時だけで17機種が食い違っていた。
+
+    ★どちらが正しいかは、ここでは決めない★
+      一覧の数字を直すのか、交換率ごとの値を直すのかは出典を見る話。
+      さらに「等価」が5.6枚を指すのかも別に整理が要る（台帳#219・#186）。
+      ＝★観測どまりの検査★（closeable にしない）。
+    """
+    slug = args.get("slug")
+    if not valid_slug(slug):
+        return _result(NOT_APPLICABLE, "machines.json にその機種がありません", args)
+    machine = _machine(slug) or {}
+    checker = machine.get("checker")
+    if not isinstance(checker, dict):
+        return _result(NOT_APPLICABLE, "狙い目チェッカーの設定がありません", args)
+    strategy = str(machine.get("strategy") or "")
+    if not strategy:
+        return _result(NOT_APPLICABLE, "一覧の狙い目がありません", args)
+    nums = {int(n) for n in _STRAT_G.findall(strategy)}
+    if not nums:
+        return _result(NOT_APPLICABLE, "一覧の狙い目にG数がありません", args)
+
+    md = checker.get("modeData") or {}
+    base = md.get("normal") if isinstance(md.get("normal"), dict) \
+        else checker.get("normal")
+    if not isinstance(base, dict):
+        return _result(NOT_APPLICABLE, "通常時の設定がありません", args)
+    top = base.get("good")
+    dflt = checker.get("defaultRate")
+    if not dflt:
+        return _result(NOT_APPLICABLE, "既定の交換率が決まっていません", args)
+    br = (base.get("byRate") or {}).get(dflt)
+    if not isinstance(br, dict) or "good" not in br:
+        return _result(NOT_APPLICABLE, "既定の交換率の狙い目がありません", args)
+    shown = br.get("good")
+    if not _is_int(top) or not _is_int(shown):
+        return _result(NOT_APPLICABLE, "狙い目が数ではありません", args)
+
+    observed = {"strategy": strategy[:60], "strategy_numbers": sorted(nums),
+                "default_rate": dflt, "checker_shows": shown,
+                "fallback": top}
+    if shown in nums:
+        return _result(PASS,
+                       f"一覧の狙い目に、チェッカーが出す値（{shown}G）が入っています",
+                       args, observed=observed)
+    if top in nums and top != shown:
+        return _result(
+            FAIL,
+            f"一覧は {top}G と書いていますが、チェッカーは既定の交換率"
+            f"（{dflt}）で {shown}G を出します",
+            args, observed=observed)
+    return _result(
+        FAIL,
+        f"一覧の狙い目 {sorted(nums)} に、チェッカーが出す値（{shown}G）が"
+        "ありません", args, observed=observed)
+
+
+# 記事の書き方 → チェッカーの交換率のキー
+_RATE_LABELS = {"5.6枚": "eq56", "6.0枚": "rate55",
+                "6.5枚": "rate50", "7.0枚": "rate45"}
+_BODY_RATE = __import__("re").compile(
+    r"【\s*(5\.6枚|6\.0枚|6\.5枚|7\.0枚)[^】]*】\s*\**\s*(\d{2,4})\s*G")
+
+
+def check_body_vs_checker(args: dict) -> dict:
+    """記事の「当サイトの狙い目」の交換率ごとのG数が、チェッカーと合っているか
+
+    ★なぜ見るか（2026-08-21・台帳#234を確かめて分かった）★
+      台帳#234 は「値自体は存在するので**誤情報ではなく**、行の欠落」と
+      見立てていたが、★実際は記事とチェッカーが90〜110G食い違っていた★。
+
+      実例（2026-08-21）
+        darlifra  記事 6.0枚 420G ／ チェッカー 510G（+90）
+        nanatsuma 記事 6.0枚 555G ／ チェッカー 660G（+105）
+        dmc5_st   記事 5.6枚 690G ／ チェッカー 750G（+60）
+
+      ★一覧で見た数字と、記事のチェッカーが100G以上ずれる★＝
+      打つ／打たないが変わる。読者に見える食い違い。
+
+    ★どちらが正しいかは、ここでは決めない★
+      きれいな一定の差になっているので「片方だけまとめて直した跡」に見えるが、
+      どちらを直すかは出典を見る話。＝★観測どまりの検査★。
+    """
+    slug = args.get("slug")
+    if not valid_slug(slug):
+        return _result(NOT_APPLICABLE, "machines.json にその機種がありません", args)
+    machine = _machine(slug) or {}
+    checker = machine.get("checker")
+    if not isinstance(checker, dict):
+        return _result(NOT_APPLICABLE, "狙い目チェッカーの設定がありません", args)
+    md = checker.get("modeData") or {}
+    base = md.get("normal") if isinstance(md.get("normal"), dict) \
+        else checker.get("normal")
+    if not isinstance(base, dict):
+        return _result(NOT_APPLICABLE, "通常時の設定がありません", args)
+    by = base.get("byRate") or {}
+    if not by:
+        return _result(NOT_APPLICABLE, "交換率ごとの設定がありません", args)
+
+    detail, _raw, _why = _load_detail(slug)
+    if not isinstance(detail, dict):
+        return _result(NOT_APPLICABLE, _why or "記事データがありません", args)
+
+    checked, bad = 0, []
+    for sec in detail.get("sections") or []:
+        if str(sec.get("title") or "") != "当サイトの狙い目":
+            continue
+        for line in sec.get("body") or []:
+            if not isinstance(line, str):
+                continue
+            for label, num in _BODY_RATE.findall(line):
+                key = _RATE_LABELS[label]
+                got = (by.get(key) or {}).get("good")
+                if not _is_int(got):
+                    continue
+                checked += 1
+                if got != int(num):
+                    bad.append({"rate": label, "body": int(num),
+                                "checker": got})
+    if not checked:
+        return _result(NOT_APPLICABLE,
+                       "記事に交換率ごとのG数の記載がありません", args)
+    observed = {"checked": checked, "mismatch": bad}
+    if bad:
+        where = " / ".join(
+            f"{b['rate']} 記事{b['body']}G↔チェッカー{b['checker']}G"
+            for b in bad[:3])
+        return _result(FAIL,
+                       f"記事の狙い目がチェッカーと違います（{where}）",
+                       args, observed=observed)
+    return _result(PASS, "記事の交換率ごとのG数はチェッカーと一致しています",
+                   args, observed=observed)
+
+
 def check_note_vs_threshold(args: dict) -> dict:
     slug = args.get("slug")
     if not valid_slug(slug):
@@ -744,6 +891,20 @@ CHECKS = {
         "closeable": True,          # ★読者に見える★ 案内どおりに飛べるか
         "title": "ポチポチくんの案内が出るのに飛び先が準備中になっていないか",
         "fn": check_pochipochi_reachable,
+        "args_spec": {"slug": (str, True, None)},
+    },
+    "strategy_vs_checker": {
+        "version": 1,
+        "closeable": False,         # ★観測どまり★ どちらを直すかは出典が要る
+        "title": "一覧の狙い目と、チェッカーが既定で出す値がそろっているか",
+        "fn": check_strategy_vs_checker,
+        "args_spec": {"slug": (str, True, None)},
+    },
+    "body_vs_checker": {
+        "version": 1,
+        "closeable": False,         # ★観測どまり★ どちらを直すかは出典が要る
+        "title": "記事の交換率ごとの狙い目が、チェッカーと合っているか",
+        "fn": check_body_vs_checker,
         "args_spec": {"slug": (str, True, None)},
     },
     "note_vs_threshold": {
@@ -1113,6 +1274,31 @@ def _selftest():
               "observation_digest": "c" * 64}
     t("★偽の合格の辞書を渡しても、そもそも受け取らない★",
       not closeable(forged)[0])
+
+    # --- ★一覧の狙い目とチェッカーの突き合わせ★（2026-08-21・台帳#152）
+    _sv = check_strategy_vs_checker
+    t("★一覧の数字が、チェッカーの出す値と違えば不合格★",
+      _sv({"slug": "iza_bancho"})["result"] == FAIL)
+    t("　一覧にチェッカーの値が入っていれば合格",
+      _sv({"slug": "hokuto"})["result"] in (PASS, NOT_APPLICABLE))
+    t("　機種が無ければ判定しない",
+      _sv({"slug": "zzz_test"})["result"] == NOT_APPLICABLE)
+    t("★★どちらが正しいかは決めない（観測どまり）★★",
+      CHECKS["strategy_vs_checker"]["closeable"] is False)
+    t("　観測どまりなので、PASSでも閉じられない",
+      not closeable({"check": "strategy_vs_checker",
+                     "version": CHECKS["strategy_vs_checker"]["version"],
+                     "args": {"slug": "hokuto"},
+                     "expected_commit": head_commit()})[0])
+
+    # --- ★記事の交換率ごとの狙い目とチェッカー★（2026-08-21・台帳#234を確かめて）
+    _bv = check_body_vs_checker
+    t("★記事とチェッカーが違えば不合格★",
+      _bv({"slug": "darlifra"})["result"] == FAIL)
+    t("　合っていれば合格（または対象外）",
+      _bv({"slug": "hokuto"})["result"] in (PASS, NOT_APPLICABLE))
+    t("★★これも観測どまり（どちらを直すかは出典が要る）★★",
+      CHECKS["body_vs_checker"]["closeable"] is False)
 
     # --- 観測どまりの検査では閉じない
     t("★観測どまりの検査は、PASSでも閉じられない★",
