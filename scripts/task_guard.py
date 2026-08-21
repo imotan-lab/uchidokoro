@@ -75,7 +75,24 @@ CODEX_ASK_ROUND_LIMIT = 3
 #     ①修理モードが claim のあと変更できない
 #     ②合格した差分とコミットが同じだと確かめられる
 #     ③writes_fix と3機種運用を一致させた通しの試験が通る
-MACHINES_PER_DAY = 1
+#
+# ★★同日中に 1 → 3 へ戻した（条件3つとも満たしたため）★★（2026-08-21）
+#   ①claim() が repairing を確定し、before_write が食い違いを断る
+#     （_e1["repairing"] を claim で書き、before_write が照合する）
+#   ②verify_commit() が approved_files の指紋と HEAD を突き合わせる
+#     ＝関所が見た差分と、実際のコミットが同じだと確かめられる
+#   ③_machines_per_day_tests を新設した。
+#     ★この試験を書いたら、その場で本物の穴が出た★＝
+#       reserve() は target_slug（1つだけ）で数えていたので、
+#       ★MACHINES_PER_DAY を3にしても2機種目は予約の段階で必ず断られた★。
+#       ＝設定値だけ変えても動かない形だった（文言だけ「1日3機種」になる）。
+#       これが依頼248の言う「writes_fix と3機種運用の不一致」の正体。
+#       reserve() を claim() と同じ slugs_today で数えるように直した。
+#
+#   ★数の根拠★ 3機種 = 修正2 + 育成1（assets/data/task-budget.json）。
+#     この一致を試験が毎回確かめる（片方だけ動かしたら落ちる）。
+#   ★戻すならここだけ★（手順書の文言も一緒に直すこと）
+MACHINES_PER_DAY = 3
 # ★1日の機種数を数えないタスク★（2026-08-07・運営者決定）
 #   新台は導入日が決まっていて待てない。分かり次第そのまま記事にする。
 UNLIMITED_MACHINE_TASKS = frozenset({"add-machine"})
@@ -342,10 +359,22 @@ def reserve(task: str, slug: str, kind: str, path: str = STATE_PATH,
             raise GuardError(f"今日は止めています（{d['halted']}）")
         # ★書き換えの枠でも「今日の担当」を守る★（Codex115回目のP1-6）
         #   claim() を呼ばずに reserve() だけ使えば、何機種でも直せた。
-        cur = d.get("target_slug")
-        if cur and cur != slug:
-            raise GuardError(
-                f"今日はすでに {cur} を担当しています（1日{MACHINES_PER_DAY}機種）")
+        #
+        # ★★数える場所を1つにする★★（2026-08-21・MACHINES_PER_DAY の条件③）
+        #   直す前は、claim() が slugs_today の**件数**で数えるのに対し、
+        #   ここは target_slug（1つだけ）で見ていた。
+        #   ＝★MACHINES_PER_DAY を3にしても、2機種目は予約の段階で必ず断られる★。
+        #   設定値だけ変えても動かない形だった（文言には「1日3機種」と出るのに）。
+        #   これが「writes_fix と3機種運用が一致していない」の正体。
+        #   ★同じ規則を2か所に書かない★＝claim() と同じ slugs_today で数える。
+        _seen_today = d.setdefault("slugs_today", [])
+        if slug not in _seen_today:
+            if len(_seen_today) >= MACHINES_PER_DAY:
+                raise GuardError(
+                    f"今日はすでに {len(_seen_today)} 機種を担当しています"
+                    f"（1日{MACHINES_PER_DAY}機種・{' / '.join(_seen_today)}）。"
+                    f"{slug} は明日以降に回してください")
+            _seen_today.append(slug)
         d["target_slug"] = slug
         # ★締切を過ぎたら新しい書き換えに着手しない★（途中で朝を迎えないため）
         if datetime.now().strftime("%H:%M") >= b["deadline_hhmm"]:
@@ -1300,6 +1329,89 @@ def done(task: str, slug: str, stage: str, path: str = STATE_PATH) -> dict:
 
 # ---------------------------------------------------------------- selftest
 
+def _machines_per_day_tests(t, tmpdir) -> None:
+    """★★1日の機種数と、書き換えの予算を「一緒に」通す試験★★
+
+    （2026-08-21・MACHINES_PER_DAY を 3 へ戻す条件③）
+
+    ★なぜ要るか★
+      それまでの試験は、この2つを**別々にしか見ていなかった**。
+        ・_budget_tests は担当（target_slug / slugs_today）を毎回消してから
+          予算だけを見る
+        ・claim の試験は予算を通らない
+      そのため「機種数は3にできるのに、予約の段階で2機種目が断られる」
+      という食い違いが**どちらの試験にも映らなかった**。
+      実際そうなっていた＝reserve() は target_slug（1つだけ）で見ていて、
+      MACHINES_PER_DAY を3にしても2機種目で必ず止まった。
+
+    ★ここで確かめること★
+      1日 = MACHINES_PER_DAY 機種 で、
+      その内訳が writes_fix + writes_grow ちょうどに収まること。
+      （設定＝3機種 ＝ 修正2 ＋ 育成1）
+    """
+    import json as _j
+    bp = os.path.join(tmpdir, "mpd_budget.json")
+    sp = os.path.join(tmpdir, "mpd_state.json")
+    # ★本番と同じ内訳を使う★（assets/data/task-budget.json と同じ形）
+    real = budget()
+    with open(bp, "w", encoding="utf-8") as f:
+        _j.dump({"schema_version": "task-budget/v1",
+                 "writes_total": real["writes_total"],
+                 "writes_fix": real["writes_fix"],
+                 "writes_grow": real["writes_grow"],
+                 "inspections": real["inspections"],
+                 "deadline_hhmm": "23:59"}, f)
+    SHA = "sha256:" + "a" * 64
+
+    t("★★1日の機種数と、書き換えの内訳が食い違っていない★★"
+      "（機種数 = 修正枠 + 育成枠）",
+      MACHINES_PER_DAY == real["writes_fix"] + real["writes_grow"]
+      and MACHINES_PER_DAY <= real["writes_total"])
+
+    def take(kind, slug):
+        """予約 → 着手 → 巻き戻し、を1機種ぶん通す（担当は消さない）"""
+        r = reserve("t", slug, kind, path=sp, budget_path=bp,
+                    contract_sha256=SHA)
+        begin_apply(r["token"], slug, kind, SHA, "t-" + slug, path=sp)
+        advance(r["token"], "ROLLED_BACK_VERIFIED", path=sp)
+        return r
+
+    # ★担当を消さずに、機種を替えながら枠を使い切る★
+    fixes = real["writes_fix"]
+    ok = True
+    for i in range(fixes):
+        ok = ok and bool(take("fix", "mpd_fix_%d" % i)["token"])
+    t(f"★★修正の枠ぶん（{fixes}機種）を、担当を消さずに続けて取れる★★"
+      "（直す前は2機種目の予約で必ず断られた）", ok)
+
+    for i in range(real["writes_grow"]):
+        ok = ok and bool(take("grow", "mpd_grow_%d" % i)["token"])
+    t(f"　育てる枠ぶん（{real['writes_grow']}機種）も続けて取れる", ok)
+
+    t("★★機種数を使い切ったら、次の機種は断る★★",
+      _raises(lambda: take("fix", "mpd_over"), "機種"))
+
+    st = day_status(path=sp)
+    t("　使った数が、設定した内訳とぴったり合っている",
+      st["writes"]["total"] == real["writes_total"]
+      and st["writes"]["fix"] == real["writes_fix"]
+      and st["writes"]["grow"] == real["writes_grow"])
+    t("　担当した機種の数も同じ",
+      len(_load(sp)["day"]["slugs_today"]) == MACHINES_PER_DAY)
+
+    # ★同じ機種を続けるのは、いつでも通る（やり直しを塞がない）★
+    #   ★別の記録で試す★＝上で枠を使い切っているため
+    sp2 = os.path.join(tmpdir, "mpd_state2.json")
+    r1 = reserve("t", "mpd_same", "fix", path=sp2, budget_path=bp,
+                 contract_sha256=SHA)
+    begin_apply(r1["token"], "mpd_same", "fix", SHA, "t-same", path=sp2)
+    advance(r1["token"], "ROLLED_BACK_VERIFIED", path=sp2)
+    r2 = reserve("t", "mpd_same", "fix", path=sp2, budget_path=bp,
+                 contract_sha256=SHA)
+    t("　同じ機種なら、担当の数は増えない（やり直しを塞がない）",
+      bool(r2["token"]) and _load(sp2)["day"]["slugs_today"] == ["mpd_same"])
+
+
 def _budget_tests(t, tmpdir) -> None:
     """1日の予算（書き換えた数で数える）の試験。"""
     import json as _j
@@ -1311,10 +1423,14 @@ def _budget_tests(t, tmpdir) -> None:
                  "deadline_hhmm": "23:59"}, f)
 
     def res(kind, slug, close=True):
-        # ★1日1機種の縛りとは別に、予算の増減だけを見たい★
-        #   （担当は日ごとに1つなので、担当を書き換えてから取る）
+        # ★1日の機種数の縛りとは別に、予算の増減だけを見たい★
+        #   （担当をいったん白紙にしてから取る）
+        # ★slugs_today も消す★（2026-08-21）＝reserve() が claim() と同じ
+        #   数え方になったので、target_slug だけ消しても機種数で止まる。
+        #   ★両方を一緒に見る試験は _machines_per_day_tests にある★
         _d0 = _load(sp)
         _day(_d0)["target_slug"] = None
+        _day(_d0)["slugs_today"] = []
         _save(sp, _d0)
         r = reserve("t", slug, kind, path=sp, budget_path=bp,
                     contract_sha256="sha256:" + "a" * 64)
@@ -1347,12 +1463,20 @@ def _budget_tests(t, tmpdir) -> None:
     # 止めたら、タスク名を変えても通らない
     halt("監査に引っかかったため", path=sp)
     sp6 = os.path.join(tmpdir, "state_claim.json")
-    reserve("t", "きめた機種", "fix", path=sp6, budget_path=bp,
-            contract_sha256="sha256:" + "a" * 64)
-    t("★★claim を呼ばなくても、1日1機種は守られる★★（Codex115回目のP1-6）",
+    # ★claim を呼ばずに reserve だけ使っても、1日の機種数は守られる★
+    #   （Codex115回目のP1-6。★2026-08-21に「1機種」から「MACHINES_PER_DAY
+    #     機種」へ書き直した★＝reserve も claim と同じ slugs_today で数える）
+    for _i in range(MACHINES_PER_DAY):
+        reserve("t", "きめた機種%d" % _i, "fix", path=sp6, budget_path=bp,
+                contract_sha256="sha256:" + "a" * 64)
+        _d6 = _load(sp6)
+        _day(_d6)["writes"] = {"total": 0, "fix": 0, "grow": 0}
+        _d6["reservations"] = []
+        _save(sp6, _d6)
+    t("★★claim を呼ばなくても、1日の機種数は守られる★★（Codex115回目のP1-6）",
       _raises(lambda: reserve("t", "ちがう機種", "fix", path=sp6, budget_path=bp,
                               contract_sha256="sha256:" + "a" * 64),
-              "担当しています"))
+              "機種"))
     t("★★止めた日は、別のタスク名でも書けない★★",
       _raises(lambda: reserve("別のタスク", "g", "fix", path=sp,
                               budget_path=bp, contract_sha256="sha256:" + "a" * 64),
@@ -2060,6 +2184,7 @@ def selftest() -> int:
     import shutil as _sh
     _d = _tf.mkdtemp(prefix="guard_")
     try:
+        _machines_per_day_tests(t, _d)
         _budget_tests(t, _d)
     finally:
         _sh.rmtree(_d, ignore_errors=True)
