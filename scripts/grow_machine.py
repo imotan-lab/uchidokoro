@@ -491,16 +491,33 @@ def identity_same(old: dict, new: dict) -> list:
     return ng
 
 
-def claims_grew(old_decision: dict, new_decision: dict) -> list:
+def claims_grew(old_decision: dict, material: dict) -> list:
     """材料が「増えるだけ」か（★減る・変わるのは中止★）。
 
     ★これだけでは足りない★（2026-08-05・Codex102回目）
       claim ID は「天井のゲーム数」までしか表さないので、
       **800G → 999G の書き換えは同じIDのまま通ってしまう**。
       値そのものは `text_kept()` で見る（前に載っていた文が消えないこと）。
+
+    ★★比べる相手を変えた（2026-08-23・台帳#461）★★
+      前は「昔の濃さ一覧」と「今夜の濃さ一覧」を比べていた。
+      濃さ一覧は**2AIが確定した値を意図的に外す**ので、
+      ★2AIで確定させるほど「事実が消えた」と判定される★状態だった
+      （実測: 喰霊-零-Re は6件確定させた晩に「3件消えた」で止まった）。
+
+      いまは **「昔に裏取りできていたもの」が「今夜知っていること」に
+      残っているか** を見る。左は濃さ一覧（＝当時ちゃんと裏が取れた分だけ）、
+      右は回帰用の射影（＝2AIの確定値も含む）。
+      ★左右で意味が違うのは意図的★＝濃さ一覧 ⊆ 知っていること なので、
+      「当時確かめられた事実が今夜どこにも無い」ときだけ止まる。
+      ★今夜の判定書どうしを比べてはいけない★（Codexの指摘）。
+
+    ★もう作らない claim は損失に数えない★（RETIRED_CLAIMS）＝
+      外した直後に「型式名が消えた」で全機種が止まるのを防ぐ。
     """
-    old = list((old_decision or {}).get("claims") or [])
-    new = list((new_decision or {}).get("claims") or [])
+    old = [c for c in ((old_decision or {}).get("claims") or [])
+           if c not in _pdz.RETIRED_CLAIMS]
+    new = _pdz.regression_claims_from_material(material)
     lost = [c for c in old if c not in new]
     if lost:
         return [f"確認済みだった事実が消えます: {', '.join(sorted(lost)[:5])}"]
@@ -587,6 +604,12 @@ def _match(old_u, new_units) -> bool:
                for n in new_units)
 
 
+# ★登場時期の行の頭★（2026-08-23・台帳#461）
+#   `build_new_article` が書く形と揃える。★ズレたら試験が落ちる★
+#   （_release_line_tests が実際に生成させて頭を確かめる）。
+RELEASE_LINE_PREFIX = "**登場時期**："
+
+
 def _units(detail: dict) -> list:
     """読者に出ている中身を、比べられる単位に分ける。
 
@@ -618,6 +641,15 @@ def _units(detail: dict) -> list:
         #   判定しない（読者に情報を与える文ではない）。
         if t == "出典2件で一致した内容だけを載せています。":
             return True
+        # ★同じ日に廃止したもう1つ＝空の噂の箱★（2026-08-23・台帳#461）
+        #   「噂の箱は中身があるときだけ出す」と決めた（2026-08-12・運営者判断）
+        #   ので、いまの生成器はこの文を**二度と出さない**。
+        #   ★これが無いと8/12より前の3記事は永久に育たない★
+        #   （garei_zero_re 08-07 / prskkm 08-10 / ssb1 08-11・実測）。
+        #   ★完全一致だけ★＝箱ごと免除しない。実際の噂の本文が同居していても
+        #   そちらは今までどおり守られる（Codexの指摘を狭い側で満たす）。
+        if t == _ba.RUMOR_SECTION["body"][0]:
+            return True
         return (t == _ba.PENDING_TEXT) or (_ba.PENDING_ITEM in t) \
             or (t == getattr(_ba, "PENDING_TEXT_OLD", "\0")) \
             or (t.strip() == "確認中") or ("確認できていない" in t) \
@@ -627,6 +659,16 @@ def _units(detail: dict) -> list:
         title = str(s.get("title"))
         for b in (s.get("body") or []):
             t = str(b).strip()
+            if t.startswith(RELEASE_LINE_PREFIX):
+                # ★登場時期はここで比べない★（2026-08-23・台帳#461）
+                #   ★同じ規則を2か所に書かない★＝登場年月は
+                #   `identity_same()`（不変）と `release_refined()`
+                #   （「月だけ」→「日まで」だけ許す）が既に守っている。
+                #   ここは**その値を文にした写し**なので、書き方を変えた日に
+                #   （2026-08-12「2026年8月（公式確認）」→
+                #    「2026年8月17日 導入」）**再現できない文**になり、
+                #   ★中身は前より正確なのに更新が永久に止まった★（実測）。
+                continue
             if t and not _pending(t):
                 out.append(("body", title, t))
         for tb in (s.get("tables") or []):
@@ -650,9 +692,14 @@ def _units(detail: dict) -> list:
         val = str((box or {}).get("value") or "")
         if val and not _pending(val):
             out.append(("box", lab, val))
-    lead = str(detail.get("lead") or "").strip()
-    if lead and not _pending(lead):
-        out.append(("lead", lead))
+    # ★導入文もここでは比べない★（2026-08-23・台帳#461）
+    #   導入文は機種名と登場時期だけをはめ込んだ定型文
+    #   （LEAD_TEMPLATE / LEAD_NO_DATE）で、独自の事実を持たない。
+    #   機種名は `identity_same()` の announced_name が、
+    #   登場時期は `release_refined()` が守っている。
+    #   ★ここで比べると、上の登場時期と同じ理由で二重に止める★
+    #   （実測: 「…登場時期は2026年8月（公式発表を確認済み）。」が
+    #     いまの生成器では二度と出ない）。
     return out
 
 
@@ -955,8 +1002,8 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     # ③ 本人性が変わっていないか
     out["problems"] += identity_same(ident, machine.get("identity") or {})
     # ④ 材料は増えるだけか（IDの増減と、載っている文の両方で見る）
-    out["problems"] += claims_grew(cur.get("page_decision"),
-                                   machine.get("page_decision"))
+    #   ★右は「今夜の判定書」ではなく「今夜の材料」★（2026-08-23・台帳#461）
+    out["problems"] += claims_grew(cur.get("page_decision"), mat)
     dp = _detail_path(slug)
     old_detail = _sj.read_json(dp, expect=dict) if os.path.isfile(dp) else {}
     lost = text_kept(old_detail, detail)
@@ -1206,12 +1253,32 @@ def selftest() -> int:
         print(("✅ " if cond else "❌ ") + name)
         ok = ok and bool(cond)
 
+    # ★右は「今夜の材料」★（2026-08-23・台帳#461で引数の意味を変えた）
+    _RNG = {"value": {"low": 97, "high": 110}}
+    _G50 = {"value": {"games": 36.1}}
+    _MAT_A = {"adopted": {"payout_range": _RNG}}
+    _MAT_AB = {"adopted": {"payout_range": _RNG, "games_per_50": _G50}}
     t("★★確認済みの事実が消える更新は拒否する★★",
-      claims_grew({"claims": ["a", "b"]}, {"claims": ["a"]})
-      and "消えます" in claims_grew({"claims": ["a", "b"]},
-                                    {"claims": ["a"]})[0])
-    t("　増えていれば通る", not claims_grew({"claims": ["a"]},
-                                            {"claims": ["a", "b"]}))
+      claims_grew({"claims": ["payout_range", "games_per_50"]}, _MAT_A)
+      and "消えます" in claims_grew(
+          {"claims": ["payout_range", "games_per_50"]}, _MAT_A)[0])
+    t("　増えていれば通る",
+      not claims_grew({"claims": ["payout_range"]}, _MAT_AB))
+    # ★★型式名は消えても止めない★★（2026-08-23・台帳#461）
+    #   ★これが無いと、型式名を濃さから外した翌朝に全機種が止まる★
+    t("★★もう作らない claim（型式名）の消失だけでは止めない★★",
+      not claims_grew({"claims": ["model_code", "payout_range"]}, _MAT_A))
+    t("　型式名以外が消えていれば、やはり止める",
+      claims_grew({"claims": ["model_code", "games_per_50"]}, _MAT_A))
+    # ★★2AIで確定させた値は「消えた」にならない★★
+    #   ★直す前の姿★＝濃さ一覧どうしを比べていたので、
+    #   2AIが確定させるほど「事実が消えた」と判定された（喰霊-零-Reの実例）。
+    _MAT_CV = {"adopted": {"payout_range": {**_RNG,
+                                            "_from": "confirmed_values"}}}
+    t("★★2AIの確定値しか無くても「消えた」とは言わない★★",
+      not claims_grew({"claims": ["payout_range"]}, _MAT_CV))
+    t("　それでも検索の濃さには数えない（公開判定は変えていない）",
+      _pdz.index_claims_from_material(_MAT_CV) == [])
     # ── 前に載っていた内容が消える/変わる更新を止める（Codex102/103回目）
     OLD = {"lead": "この機種の紹介です。",
            "factTable": [["型式名", "L機/1"], ["機械割", "97.0%〜110.0%"]],
@@ -1244,10 +1311,24 @@ def selftest() -> int:
     t("★★factTableの値を書き換えても止める★★",
       text_kept(OLD, _mod(lambda d: d["factTable"].__setitem__(
           1, ["機械割", "99.0%〜115.0%"]))))
-    t("★★まとめ箱・リード文の書き換えも止める★★",
+    t("★★まとめ箱の書き換えは止める★★",
       text_kept(OLD, _mod(lambda d: d["summaryBoxes"][0].__setitem__(
-          "value", "999G")))
-      and text_kept(OLD, _mod(lambda d: d.__setitem__("lead", "別の紹介文。"))))
+          "value", "999G"))))
+    # ★★導入文はここでは比べない★★（2026-08-23・台帳#461で変更）
+    #   ★守りを外したのではなく、守る場所を1つにした★＝
+    #   導入文は「機種名」と「登場時期」をはめ込んだ定型文で、
+    #   独自の事実を持たない。両方とも下の2つが止めるので、
+    #   ここで比べると**書き方を変えた日に二重に止める**だけになる。
+    t("　導入文の文言そのものは、ここでは止めない",
+      not text_kept(OLD, _mod(lambda d: d.__setitem__(
+          "lead", "別の紹介文。登場時期は2026年8月17日 導入。"))))
+    t("★★その代わり、機種名が変わったら本人性の検査が止める★★",
+      identity_same({"announced_name": "Lパチスロ A"},
+                    {"announced_name": "Lパチスロ B"}))
+    t("★★登場年月が変わったら止まる（細かくなるのだけ許す）★★",
+      release_refined("2026-08", "2026-08-17")
+      and not release_refined("2026-08", "2026-09-01")
+      and not release_refined("2026-08-17", "2026-08"))
     t("★★項目ごとの「未確認」を埋める更新は通す★★（Codex103回目・正しい更新を拒んでいた）",
       not text_kept(OLD, _mod(lambda d: d["sections"][0]["body"].__setitem__(
           1, "**50枚あたりのゲーム数**：約32G"))))
@@ -1257,6 +1338,40 @@ def selftest() -> int:
     t("★★同じ表の行が減ったら止める★★",
       text_kept(OLD, _mod(lambda d: d["sections"][1]["tables"][0]
                           .__setitem__("rows", []))))
+    # ★★2026-08-12に廃止した書き方（台帳#461）★★
+    #   ★これが無いと8/12より前の3記事は永久に育たない★
+    _RUMOR_LINE = _ba.RUMOR_SECTION["body"][0]
+    _with_rumor = _mod(lambda d: d["sections"].append(
+        {"title": "噂・未確定情報", "type": "rumor", "body": [_RUMOR_LINE]}))
+    t("★★空の噂の箱の決まり文句は、消えてよい★★",
+      not text_kept(_with_rumor, OLD))
+    t("★★本物の噂の本文が消えるのは、今までどおり止める★★",
+      text_kept(_mod(lambda d: d["sections"].append(
+          {"title": "噂・未確定情報", "type": "rumor",
+           "body": ["**噂・公式未確認**：設定6は毎ゲームBGM変化との噂があります。"]})),
+          OLD))
+    t("　似ているだけの文は免除しない（完全一致だけ）",
+      text_kept(_mod(lambda d: d["sections"].append(
+          {"title": "噂・未確定情報", "type": "rumor",
+           "body": [_RUMOR_LINE.replace("掲載しません", "掲載しません。※追記")]})),
+          OLD))
+    # ★登場時期の書き方が変わっても止めない★（中身は前より正確になっている）
+    _old_rel = _mod(lambda d: d["sections"][0]["body"].insert(
+        0, "**登場時期**：2026年8月（公式確認）"))
+    _new_rel = _mod(lambda d: d["sections"][0]["body"].insert(
+        0, "**登場時期**：2026年8月17日 導入"))
+    t("★★登場時期の書き方が変わっただけでは止めない★★",
+      not text_kept(_old_rel, _new_rel))
+    # ★★頭がズレたら気づく★★（build_new_article が書く形と揃っているか）
+    _spec = [s for s in _ba.build_detail(
+        "zzz", "試験機", "2026-08-17",
+        {"adopted": {}, "ceilings": {"adopted": []},
+         "at_specs": {"adopted": []}, "czs": {"adopted": []},
+         "setting_hints": {"adopted": []}}).get("sections", [])
+        if s.get("title") == "基本スペック"]
+    t("★★登場時期の行の頭が、実際の生成物と一致している★★",
+      bool(_spec) and any(str(b).startswith(RELEASE_LINE_PREFIX)
+                          for b in (_spec[0].get("body") or [])))
     # ── ★本物の build_detail で、暫定表現が埋まる更新を通す★（Codex104回目）
     def _mat(**kw):
         m = {"adopted": {"model_code": {"value": "L機/1", "sources": ["a", "b"]}},

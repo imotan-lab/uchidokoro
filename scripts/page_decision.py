@@ -47,8 +47,21 @@ POLICY_MODES = ("normal", "force_noindex_new_auto")
 TOPICS = ("gameplay", "cz", "ceiling", "spec", "setting", "strategy", "reset")
 
 # claim ID → カテゴリ（★同一claimの水増し・複数カテゴリ加算を許さない★）
-_SPEC_CLAIMS = ("model_code", "payout_range", "games_per_50",
-                "at_prob", "payout_rate")
+_SPEC_CLAIMS = ("payout_range", "games_per_50", "at_prob", "payout_rate")
+
+# ★もう新しくは作らない claim★（2026-08-23・台帳#461）
+#   ★型式名を外した理由★＝**記事には書かない決まり**（決定事項表／監査47が
+#   記事データと公開HTMLの両方から消す）。読者が一度も見ない値で
+#   「検索に載せてよい濃さ」（MIN_CLAIMS=3）を測っていた。
+#   ★機種名・メーカー・登場時期を数えないのとまったく同じ理由★
+#   （下の説明文＝Codex70回目。型式名も「本人性に使う情報」で、
+#     置き場も identity.regulatory_model_code）。
+#   ★消さずに残す理由★＝すでに model_code を claim に持つ機種が6件ある。
+#   `_category()` は知らない claim を例外で弾くので、**消すとその6件が
+#   読めなくなって止まる**（fail-closed が裏目に出る）。
+#   ★実測（2026-08-23）★＝判定書つき10機種は全部すでに indexable=False。
+#   外して検索から落ちるページは**0件**。
+RETIRED_CLAIMS = ("model_code",)
 
 # 品質ライン（契約 §5）
 MIN_CLAIMS = 3
@@ -100,14 +113,29 @@ def _bad_value(v) -> bool:
     return (not s) or s.lower() in ("none", "null", "nan", "-")
 
 
-def claims_from_material(material: dict) -> list:
+def _from_2ai(v) -> bool:
+    """2AIが確定させた値か（機械の裏取りをまだ通っていない）。"""
+    return isinstance(v, dict) and v.get("_from") == "confirmed_values"
+
+
+def _claims(material: dict, *, count_confirmed: bool) -> list:
     """材料から一意claim IDの一覧を作る（契約 §4）。
 
     ★機種名・メーカー・登場時期は数えない★（本人性に使う情報であって
-    「中身の濃さ」ではない。Codex70回目）。
+    「中身の濃さ」ではない。Codex70回目）。★型式名も同じ★＝RETIRED_CLAIMS。
     ★setで重複排除★＝同じclaimを何度足しても点数は変わらない。
     ★欠けた値からclaimを作らない★（Codex74回目。作れば「中身がある」と
       数えてしまう。材料が壊れているなら止める＝fail-closed）
+
+    ★★2つの意味を分けた（2026-08-23・台帳#461）★★
+      count_confirmed=False … 「検索に載せてよい濃さ」（今までどおり）
+      count_confirmed=True  … 「今夜そのことを知っているか」（消失の判定用）
+      ★分けた理由★＝同じ一覧を `grow_machine.claims_grew` が
+      「事実が消えたか」の判定に使っていた。濃さの一覧は2AIの確定値を
+      **意図的に外す**ので、★2AIで確定させるほど「消えた」と判定された★
+      （実測: 喰霊-零-Re は6件確定させた晩に「3件消えた」で止まった）。
+      ★「知っていること全部」ではない★（Codexの指摘）＝
+      gameplay・reset などは同じ体系のIDを持たない。**回帰検査用の射影**。
     """
     got = set()
     adopted = (material or {}).get("adopted") or {}
@@ -118,10 +146,10 @@ def claims_from_material(material: dict) -> list:
         #   記事に載せる材料としては使うが、claim の裏取り（verify_claims）を
         #   まだ通っていない。数えると、機械が確かめていない値で
         #   検索に載る判定が出てしまう。★載せるのは裏取り後★
-        if v and not (isinstance(v, dict) and v.get("_from") == "confirmed_values"):
+        if v and (count_confirmed or not _from_2ai(v)):
             got.add(key)
     for c in ((material or {}).get("ceilings") or {}).get("adopted") or []:
-        if isinstance(c, dict) and c.get("_from") == "confirmed_values":
+        if _from_2ai(c) and not count_confirmed:
             continue
         kind = (c or {}).get("kind")
         if kind not in CEILING_KINDS:
@@ -131,7 +159,7 @@ def claims_from_material(material: dict) -> list:
         counted = "" if _bad_value(c.get("counted")) else str(c["counted"]).strip()
         got.add(f"ceiling:{kind}:{counted}")
     for c in ((material or {}).get("at_specs") or {}).get("adopted") or []:
-        if isinstance(c, dict) and c.get("_from") == "confirmed_values":
+        if _from_2ai(c) and not count_confirmed:
             continue    # ★裏取り前の値は濃さに数えない★（依頼130 P1-3）
         mode = (c or {}).get("mode")
         if mode not in AT_MODES:
@@ -144,7 +172,7 @@ def claims_from_material(material: dict) -> list:
             raise DecisionError(f"ATの値がありません: {c!r}")
         got.add(f"at:{mode}")
     for c in ((material or {}).get("czs") or {}).get("adopted") or []:
-        if isinstance(c, dict) and c.get("_from") == "confirmed_values":
+        if _from_2ai(c) and not count_confirmed:
             continue    # ★裏取り前の値は濃さに数えない★（依頼130 P1-3）
         nm = _norm_name((c or {}).get("name"))
         if _bad_value(nm):
@@ -153,9 +181,35 @@ def claims_from_material(material: dict) -> list:
     return sorted(got)
 
 
+def index_claims_from_material(material: dict) -> list:
+    """★検索に載せてよい濃さ★（品質ライン MIN_CLAIMS/MIN_CATEGORIES 用）。
+
+    2AIが確定させただけの値は数えない（機械の裏取り前）。
+    """
+    return _claims(material, count_confirmed=False)
+
+
+def regression_claims_from_material(material: dict) -> list:
+    """★今夜そのことを知っているか★（消失の判定＝回帰検査だけに使う）。
+
+    ★公開の判定には使わない★＝ここに入っても検索には載らない。
+    ★「知っていること全部」ではない★（Codexの指摘）＝
+      gameplay・reset・checker_ceiling などは同じ体系のIDを持たない。
+      あくまで claim 体系で表せる範囲の**射影**。
+    """
+    return _claims(material, count_confirmed=True)
+
+
+def claims_from_material(material: dict) -> list:
+    """★旧名★＝「検索に載せてよい濃さ」。呼び出し側を壊さないために残す。"""
+    return index_claims_from_material(material)
+
+
 def _category(claim: str) -> str:
     """claim ID の**形まで**確かめてカテゴリを返す（不正は例外）。"""
-    if claim in _SPEC_CLAIMS:
+    # ★もう作らないものも「読める」ままにする★（2026-08-23・台帳#461）
+    #   保存済みの判定書に model_code を持つ機種が6件ある。
+    if claim in _SPEC_CLAIMS or claim in RETIRED_CLAIMS:
         return "spec"
     if claim.startswith("ceiling:"):
         parts = claim.split(":")
@@ -376,27 +430,27 @@ def selftest() -> int:
     FORCE = {"schema_version": POLICY_SCHEMA,
              "mode": "force_noindex_new_auto", "reason": "試験"}
     # 材料: claim3件・カテゴリ2種・ゲーム性あり = 合格ライン丁度
-    MAT_OK = {"adopted": {"model_code": {"value": "L試験A1"},
+    MAT_OK = {"adopted": {"games_per_50": {"value": {"games": 36.1}},
                           "payout_range": {"value": {"low": 97, "high": 110}}},
               "at_specs": {"adopted": [{"mode": "MAIN_AT",
                                         "games": 30, "net": 2.8}]}}
     d = decide(MAT_OK, NORMAL, "2026-08-04")
     t("★claim3件・2カテゴリ・固有ゲーム性あり → indexable★",
       d["indexable"] and d["reason_codes"] == []
-      and d["claims"] == ["at:MAIN_AT", "model_code", "payout_range"])
+      and d["claims"] == ["at:MAIN_AT", "games_per_50", "payout_range"])
     t("　topicsが導出される（spec+gameplay確定・残りpending）",
       d["confirmed_topics"] == ["gameplay", "spec"]
       and "ceiling" in d["pending_topics"]
       and "strategy" in d["pending_topics"])
     # claimを1件削る → 不合格＋理由コード
-    MAT_2 = {"adopted": {"model_code": {"value": "L試験A1"}},
+    MAT_2 = {"adopted": {"payout_range": {"value": {"low": 97, "high": 110}}},
              "at_specs": {"adopted": [{"mode": "MAIN_AT",
                                        "games": 30, "net": 2.8}]}}
     d2 = decide(MAT_2, NORMAL, "2026-08-04")
     t("★claim1件減 → indexable=false＋理由コード★",
       not d2["indexable"] and "CLAIMS_LT_3" in d2["reason_codes"])
     # ゲーム性なし（spec3件だけ）→ 不合格
-    MAT_SPEC = {"adopted": {"model_code": {"value": "x"},
+    MAT_SPEC = {"adopted": {"at_prob": {"value": 1},
                             "payout_range": {"value": 1},
                             "games_per_50": {"value": 1}}}
     d3 = decide(MAT_SPEC, NORMAL, "2026-08-04")
@@ -499,6 +553,35 @@ def selftest() -> int:
     t("★★policyを切り替えたら、成果物が古い機種を一覧できる★★",
       stale_decisions([m_auto, {"slug": "x"}], FORCE) == ["a"]
       and stale_decisions([m_auto], NORMAL) == [])
+    # ★★型式名を濃さから外した（2026-08-23・台帳#461）★★
+    MAT_CODE = {"adopted": {"model_code": {"value": "L試験A1"},
+                            "payout_range": {"value": {"low": 97, "high": 110}}},
+                "at_specs": {"adopted": [{"mode": "MAIN_AT",
+                                          "games": 30, "net": 2.8}]}}
+    t("★★新しい材料の型式名は「濃さ」に数えない★★",
+      index_claims_from_material(MAT_CODE) == ["at:MAIN_AT", "payout_range"])
+    t("★★型式名だけでは品質ラインに届かない（claim2件）★★",
+      not decide(MAT_CODE, NORMAL, "2026-08-04")["indexable"])
+    # ★保存済みの判定書は今までどおり読める★（6機種が model_code を持つ）
+    t("★★昔の判定書の型式名は今までどおり読める★★",
+      _category("model_code") == "spec"
+      and decide_from_claims(["model_code", "payout_range", "at:MAIN_AT"],
+                             "normal", "2026-08-04")["indexable"])
+    # ★★2AIの確定値は「濃さ」には数えず「知っている」には数える★★
+    CV = {"_from": "confirmed_values"}
+    MAT_CV = {"adopted": {"games_per_50": {**CV, "value": {"games": 36.1}}},
+              "ceilings": {"adopted": [{**CV, "kind": "GAME", "amount": 999,
+                                        "counted": "通常時"}]},
+              "at_specs": {"adopted": [{**CV, "mode": "MAIN_AT", "net": 1.0}]},
+              "czs": {"adopted": [{**CV, "name": "解放の刻"}]}}
+    t("★★2AIの確定値は検索の濃さに数えない（今までどおり）★★",
+      index_claims_from_material(MAT_CV) == [])
+    t("★★2AIの確定値も「知っている」には数える（消失の判定用）★★",
+      regression_claims_from_material(MAT_CV)
+      == ["at:MAIN_AT", "ceiling:GAME:通常時", "cz:解放の刻", "games_per_50"])
+    t("　機械が裏取りした値は、どちらの数え方でも同じ",
+      index_claims_from_material(MAT_OK)
+      == regression_claims_from_material(MAT_OK))
     # 実ファイルのpolicyが読める（形式検査）
     try:
         p = load_policy()
