@@ -11261,32 +11261,28 @@
   "page_decision": {
    "schema_version": "page-decision/v1",
    "indexable": false,
-   "confirmed_topics": [
-    "spec"
-   ],
+   "confirmed_topics": [],
    "pending_topics": [
     "gameplay",
     "cz",
     "ceiling",
+    "spec",
     "setting",
     "strategy",
     "reset"
    ],
    "reason_codes": [
+    "CLAIMS_LT_3",
     "CATEGORIES_LT_2",
     "NO_UNIQUE_GAMEPLAY"
    ],
-   "claims": [
-    "games_per_50",
-    "model_code",
-    "payout_range"
-   ],
+   "claims": [],
    "policy_mode": "normal",
-   "decided_at": "2026-08-07",
-   "input_digest": "sha256:a69e6d5f3b462a7b1933aade6d4711d7a18aad02576620a7049d27c61f311d13"
+   "decided_at": "2026-08-23",
+   "input_digest": "sha256:bc6afcc73e2d1ee3c2ad7aff9d94202e38b0941e0611da7976e64ac835bd1e62"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-08",
+  "release_date": "2026-08-17",
   "identity": {
    "manufacturer_id": "oizumi",
    "official_product_url": "https://p-town.dmm.com/machines/5028",
@@ -11294,14 +11290,27 @@
    "identity_tier": "CATALOG_CODE_MATCHED",
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5028 型式=Lパチスロ喰霊零Re/L3 メーカー=オーイズミ 導入=2026-08-17 確認日=2026-08-16",
-   "market_release_date": "2026-08",
+   "market_release_date": "2026-08-17",
+   "_legacy_evidence_ref": "identity_evidence/13674f64333e5765e7fd009beb11fe73c52ed2f5c2b4498532d06218adf767fb.html #card0",
+   "_legacy_official_product_url": "https://www.oizumi.co.jp/machine/garei-zero-re/",
    "regulatory_model_code": "Lパチスロ喰霊零Re/L3",
    "_model_code_sources": [
     "p-town.dmm.com",
     "p-world.co.jp"
+   ]
+  },
+  "checker": {
+   "coinRate": 36.1,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
    ],
-   "_legacy_evidence_ref": "identity_evidence/13674f64333e5765e7fd009beb11fe73c52ed2f5c2b4498532d06218adf767fb.html #card0",
-   "_legacy_official_product_url": "https://www.oizumi.co.jp/machine/garei-zero-re/"
+   "normal": {
+    "ceiling": 999
+   }
   }
  },
  {
