@@ -641,6 +641,30 @@ def cmd_backup_design(src_dir: str, dst_dir: str) -> int:
     return 0 if ng == 0 else 1
 
 
+# ★★運営者が「これは承知の上」と決めたもの★★（2026-08-22）
+#   ★なぜ要るか★＝見張りの範囲を広げたら、うちどころ以外のプロジェクトの
+#   バックアップから16件が出た。運営者の判断は
+#   ★「Dropboxは安全とみなす。触らない」★（2026-08-22）。
+#   ★このままだと毎朝🟠が出続ける★＝「静かなのが正常」が崩れ、
+#   本物の警告が埋もれる。＝**承知しているものは基準値に置き、
+#   新しく増えた分だけ知らせる**。
+#   ★消すのではなく、記録して黙らせる★（検知そのものは続ける）。
+BASELINE = os.path.join(os.path.expanduser("~"), "Documents", "uchidokoro",
+                        "backup_scan_baseline.json")
+
+
+def _load_baseline() -> dict:
+    """承知済みの一覧を読む。★読めなければ「無い」ではなく止める★"""
+    if not os.path.exists(BASELINE):
+        return {"schema": "backup-scan-baseline/v1", "accepted": {}}
+    import json as _j
+    with open(BASELINE, encoding="utf-8") as f:
+        got = _j.load(f)
+    if not isinstance(got, dict) or "accepted" not in got:
+        raise SystemExit("★基準値の形が違います★: " + BASELINE)
+    return got
+
+
 def cmd_scan(root: str) -> int:
     total = 0
     hits = []
@@ -654,15 +678,59 @@ def cmd_scan(root: str) -> int:
             if findings:
                 rel = os.path.relpath(p, root)
                 hits.append((rel, findings))
-    if hits:
-        print(f"⚠ 秘密パターン検知: {len(hits)}件（走査 {total}ファイル）")
-        for rel, findings in hits:
+    base = _load_baseline().get("accepted") or {}
+    # ★同じ場所でも、検知の中身が増えていたら新しい扱い★
+    #   （承知したのは「そのとき見えていたもの」であって、
+    #     あとから足された秘密まで承知したことにはならない）
+    known, fresh = [], []
+    for rel, findings in hits:
+        want = base.get(rel.replace(os.sep, "/"))
+        if want is not None and set(findings) <= set(want.get("findings") or []):
+            known.append((rel, findings))
+        else:
+            fresh.append((rel, findings))
+    if fresh:
+        print(f"⚠ 秘密パターン検知: {len(fresh)}件"
+              f"（走査 {total}ファイル／承知済み {len(known)}件は除く）")
+        for rel, findings in fresh:
             line = f"  - {rel} → {', '.join(findings)}"
             print(line)
             _log(f"scan: ⚠ {rel} → {', '.join(findings)}")
         return 1
-    print(f"✅ 検出なし（走査 {total}ファイル）")
-    _log(f"scan: ✅ 検出なし（{root}・{total}ファイル）")
+    print(f"✅ 新しい検知なし（走査 {total}ファイル／承知済み {len(known)}件）")
+    _log(f"scan: ✅ 新しい検知なし（{root}・{total}ファイル・承知済み{len(known)}件）")
+    return 0
+
+
+def cmd_accept(root: str) -> int:
+    """★いま出ている検知を「承知済み」として記録する★（2026-08-22）
+
+    ★運営者が判断したときだけ実行する★（無人タスクからは呼ばない）。
+    記録するのは**場所と検知の種類だけ**＝★中身は書かない★。
+    """
+    import json as _j
+    total = 0
+    acc = {}
+    for dirpath, _dirs, files in os.walk(root):
+        for fn in files:
+            total += 1
+            p = os.path.join(dirpath, fn)
+            findings = ([] if is_allowlisted(fn) else name_findings(fn)) + content_findings(p)
+            if findings:
+                rel = os.path.relpath(p, root).replace(os.sep, "/")
+                acc[rel] = {"findings": sorted(set(findings))}
+    got = {"schema": "backup-scan-baseline/v1",
+           "why": "運営者の判断（2026-08-22）＝Dropboxは安全とみなす。"
+                  "うちどころ以外のプロジェクトの控えに元からあったもので、"
+                  "新しい漏れではない。★消さずに記録して黙らせる★",
+           "decided_by": "運営者",
+           "accepted": acc}
+    os.makedirs(os.path.dirname(BASELINE), exist_ok=True)
+    with open(BASELINE, "w", encoding="utf-8", newline="\n") as f:
+        _j.dump(got, f, ensure_ascii=False, indent=1, sort_keys=True)
+        f.write("\n")
+    print(f"承知済みとして記録: {len(acc)}件（走査 {total}ファイル）→ {BASELINE}")
+    _log(f"accept: {len(acc)}件を承知済みとして記録")
     return 0
 
 
@@ -1028,7 +1096,7 @@ def selftest() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Dropboxバックアップの秘密情報ガード")
     parser.add_argument("command", nargs="?",
-                        choices=["copy", "scan", "backup-tree", "backup-design"])
+                        choices=["copy", "scan", "accept", "backup-tree", "backup-design"])
     parser.add_argument("src", nargs="?")
     parser.add_argument("dst", nargs="?")
     parser.add_argument("--dir", help="scan: 走査対象ディレクトリ")
@@ -1054,7 +1122,12 @@ def main() -> int:
         if not args.dir:
             parser.error("scan には --dir が必要")
         return cmd_scan(args.dir)
-    parser.error("コマンドを指定（copy/scan か --selftest）")
+    if args.command == "accept":
+        # ★運営者が判断したときだけ★（無人タスクからは呼ばない）
+        if not args.dir:
+            parser.error("accept には --dir が必要")
+        return cmd_accept(args.dir)
+    parser.error("コマンドを指定（copy/scan/accept か --selftest）")
     return 2
 
 
