@@ -320,7 +320,17 @@ def _pending_machine(slug: str) -> dict:
     for it in items:
         if not isinstance(it, dict):
             continue
-        url = str(it.get("url") or "")
+        # ★★待ち行列のURLは、待ち行列の入口から取る★★（2026-08-23・台帳#459）
+        #   ★踏んだこと★＝ここは `it.get("url")` を直に読んでいた。
+        #   2026-08-16のDMM移行（台帳#376）で待ち行列は `identity_url` へ
+        #   変わり、migrate が古い `url` を**明示的に捨てて**いたので、
+        #   ★待ち行列の全項目が「URLが無い」と見なされて素通り★していた。
+        #   ＝記事のまだ無い新台の出典を控えに登録できず、
+        #     2AIで同定を決めても毎晩やり直しになっていた（実測5件すべて）。
+        #   ★`fetch_url()` は「取りに行ってよいURL」を返す唯一の入口★＝
+        #   移行前のURL（legacy_url）は絶対に返さない。字面で読むと
+        #   その約束ごと外れる。
+        url = _pm.fetch_url(it)
         if not url:
             continue
         # ★移行した公開済み機種も見つけられるようにする★
@@ -994,20 +1004,58 @@ def remember_check(slug: str, url: str, got: dict) -> dict:
 
 
 def _no_name_is_not_absent() -> bool:
-    """★待ち行列に居るのに名前が空＝置き去りにしない★（試験用）"""
+    """★待ち行列に居るのに名前が空＝置き去りにしない★（試験用）
+
+    ★★形は手で書かない。本物の書き手に作らせる★★（2026-08-23・台帳#459）
+      ★踏んだこと★＝ここは項目を手で組んでいて、鍵が古い `url` のままだった。
+      2026-08-16のDMM移行で待ち行列は `identity_url` へ変わっていたのに、
+      **この試験だけが古い形で合格し続けた**＝
+      ★試験が、直すべきバグそのものを固定していた★。
+      `pending_machines.add()` に作らせれば、鍵の名前がまた変わっても
+      勝手に追随する（食い違いようがない）。
+    """
     import pending_machines as _pm
     _bak = _pm.load
     try:
-        _pm.load = lambda: {"items": {
-            "https://www.p-world.co.jp/machine/database/99999": {
-                "url": "https://www.p-world.co.jp/machine/database/99999",
-                "name": ""}}}
+        _data = _pm._empty()
+        _it = _pm.add(_data, "",
+                      "https://p-town.dmm.com/machines/99999",
+                      "試験メーカー", "2026-12")
+        # ★名前が空の状態を作る★（待ち行列は名前なしでも覚える作り）
+        _it["name"] = ""
+        _pm.load = lambda: _data
         try:
-            _pending_machine("pw_99999")
+            _pending_machine("dmm_99999")
             return False                   # 例外にならなければ不合格
         except PendingUnreadable:
             pass
-        return orphaned("pw_99999", {"origin": "pending"}) is False
+        return orphaned("dmm_99999", {"origin": "pending"}) is False
+    finally:
+        _pm.load = _bak
+
+
+def _pending_url_key_tests(t) -> None:
+    """★待ち行列のURLを、待ち行列の入口から取っているか★（台帳#459）
+
+    ★これが無いと、また片方だけ直したときに黙って全件素通りする★
+    （実測＝2026-08-16の移行から2026-08-23まで、待ち行列5件すべてが
+      「URLが無い」と見なされ、新台の出典を1件も控えられなかった）。
+    """
+    import pending_machines as _pm
+    _url = "https://p-town.dmm.com/machines/99999"
+    _data = _pm._empty()
+    _it = _pm.add(_data, "試験機", _url, "試験メーカー", "2026-12")
+    t("★★待ち行列の項目から、取りに行ってよいURLが読める★★",
+      _pm.fetch_url(_it) == _url)
+    t("★★字面の url ではなく fetch_url を使っている★★",
+      not _it.get("url"))          # ★書き手は url を持たない＝直読みは必ず空★
+    _bak = _pm.load
+    try:
+        _pm.load = lambda: _data
+        _got = _pending_machine("dmm_99999")
+        t("★★記事のまだ無い新台が、控えの側から見つかる★★",
+          _got.get("name") == "試験機"
+          and (_got.get("identity") or {}).get("official_product_url") == _url)
     finally:
         _pm.load = _bak
 
@@ -1271,6 +1319,7 @@ def selftest() -> int:
       "（2026-08-14・依頼201のP2）／待ち行列は名前なしでも覚える作りなので、"
       "「無い」と扱うと生きている新台の控えが巡回から外れる",
       _no_name_is_not_absent())
+    _pending_url_key_tests(t)         # ★台帳#459（鍵の名前がまた変わったら落ちる）★
     try:
         globals()["_pending_machine"] = lambda s: {}
         t("★★記事にも待ち行列にも無い新台の控えは、巡回しない★★（台帳#350）"
