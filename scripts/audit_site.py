@@ -1947,41 +1947,138 @@ def check_44_empty_settei_box(machines: list) -> list[str]:
     return out
 
 
+# ★★監査51そのものの試験★★（2026-08-22・Codexの指摘を全部当てる）
+#   ★なぜ要るか★＝最初の版は正規表現で書いたので `ng = sum(...)` を見逃し、
+#   ★自分で作った見張りが、自分の3件目（maker_identity_cache）を見逃した★。
+#   ＝**その見張りは「赤なのに緑」を1件、実際に通していた**（実証済み）。
+#   Codexが「この形は見逃す」と挙げたものを、ここで全部当てる。
+# ★止めなければならない形★
+_TALLY_MUST_CATCH = {
+    "sum(...)": "def selftest():\n    results = []\n    def t(n, c): results.append((n, c))\n    t('a', True)\n    ng = sum(1 for _, o in results if not o)\n    t('b', True)\n",
+    "別の変数名": "def selftest():\n    results = []\n    def t(n, c): results.append((n, c))\n    t('a', True)\n    bad = [n for n, o in results if not o]\n    t('b', True)\n",
+    "all(...)": "def selftest():\n    results = []\n    def t(n, c): results.append((n, c))\n    t('a', True)\n    ok_all = all(o for _, o in results)\n    t('b', True)\n",
+    "複数行の式": "def selftest():\n    results = []\n    def t(n, c): results.append((n, c))\n    t('a', True)\n    ng = [n for n, o in results\n          if not o]\n    t('b', True)\n",
+    "表示なし・英語": "def selftest():\n    results = []\n    def t(n, c): results.append((n, c))\n    t('a', True)\n    ng = len([1 for _, o in results if not o])\n    t('b', True)\n",
+}
+
+# ★止めてはいけない形★（行き過ぎの検知）
+_TALLY_MUST_PASS = {
+    "正しい形（数えるのは最後）": "def selftest():\n    results = []\n    def t(n, c): results.append((n, c))\n    t('a', True)\n    t('b', True)\n    ng = [n for n, o in results if not o]\n",
+    "selftest でない関数": "def helper():\n    results = []\n    def t(n, c): results.append((n, c))\n    ng = [n for n, o in results if not o]\n    t('b', True)\n",
+    "試験が1件も無い": "def selftest():\n    results = []\n    ng = [n for n, o in results if not o]\n",
+}
+
+
+def selftest_51() -> int:
+    """監査51が、見逃すと言われた形を全部捕まえるか。"""
+    bad = []
+    for name, src in _TALLY_MUST_CATCH.items():
+        got = bool(selftest_tally_gaps(src))
+        print(("  OK   " if got else "  ★NG ") + f"止める: {name}")
+        if not got:
+            bad.append(name)
+    for name, src in _TALLY_MUST_PASS.items():
+        got = bool(selftest_tally_gaps(src))
+        print(("  OK   " if not got else "  ★NG ") + f"止めない: {name}")
+        if got:
+            bad.append(name)
+    n = len(_TALLY_MUST_CATCH) + len(_TALLY_MUST_PASS)
+    print(f"{n - len(bad)}/{n} 合格")
+    return 1 if bad else 0
+
+
 def check_51_selftest_tally(machines: list) -> list:
-    """★試験の数え方が早すぎないか★（2026-08-22新設・自分で踏んだ）
+    # ★見張り自身が働いているかを、毎回いっしょに確かめる★（2026-08-22）
+    #   ★理由★＝最初の版は正規表現で書いたので sum(...) を見逃し、
+    #   ★見張りが「赤なのに緑」を1件、実際に通していた★。
+    #   見張りの試験を別コマンドにすると、走らせ忘れて同じことが起きる。
+    """★試験の数え方が早すぎないか★（2026-08-22新設・自分で2度踏んだ）
 
-    ★何が起きたか★＝`pending_machines.py` で、失敗を数える行が
-    集計より**手前**にあった。そのため**あとから足した試験が❌でも**
+    ★何が起きたか★＝失敗を数える行が、試験より**手前**にあると、
+    あとの試験が❌でも
 
-        44/44 合格   （終了コード 0）
+        84/84 合格   （終了コード 0）
 
-    と表示された。＝★試験が落ちても緑に見える★＝いちばん危ない壊れ方。
-    新しい試験を末尾に足すのは自然な操作なので、放っておくとまた起きる。
+    と出る。＝★試験が落ちても緑に見える★＝いちばん危ない壊れ方。
 
-    ★見るのは1つだけ★＝
-      `ng = [... for ... in results ...]` の行より**後ろ**に、
-      まだ `t(...)` の呼び出しが残っていないか。
-      （`ng = []` のように空で初めて足していく形は正しいので見ない）
+    ★実際に2本で起きていた★
+      pending_machines … 4件が数えられていなかった
+      gates            … 6件
+      maker_identity_cache … 11件（★台帳#454の直しを守る試験そのもの★。
+        わざと壊すと❌が6件出るのに「84/84 合格」で通った＝実証済み）
+
+    ★★正規表現をやめてASTで見る★★（2026-08-22・Codexの指摘）
+      ★最初の版は正規表現で書いたので、`ng = sum(...)` の形を見逃した★
+      （変数名・内包表記かどうか・「合格」の字の有無に依存していた）。
+      ＝**自分で作った見張りが、自分の3件目を見逃した**。
+      CLAUDE.md の監査43と同じ結論＝★字面でなく構文で数える★。
+
+    ★見るもの★＝selftest らしき関数ごとに
+      ①`results`（試験の記録）を**まとめて読む**式が現れる位置
+      ②そのあとに `t(...)` などの**試験の呼び出し**が残っていないか
+    変数名も表示の文言も見ない。
     """
-    import re as _re
-    tally = _re.compile(r"^\s*ng\s*=\s*\[[^\]]*\bfor\b[^\]]*\bresults\b")
-    call = _re.compile(r"^\s{4,}t\(")
-    shown = _re.compile(r"print\(.*合格")
+    # ★★見張り自身が働いているかを、毎回いっしょに確かめる★★（2026-08-22）
+    #   ★理由★＝最初の版は正規表現で書いたので sum(...) を見逃し、
+    #   ★見張りが「赤なのに緑」を1件、実際に通していた★。
+    #   見張りの試験を別コマンドにすると走らせ忘れるので、ここで必ず通す。
     ng = []
+    import io as _io_51, contextlib as _cl_51
+    _buf = _io_51.StringIO()
+    with _cl_51.redirect_stdout(_buf):
+        _self_ng = selftest_51()
+    if _self_ng:
+        ng.append("★この見張り自身の試験が落ちています★: "
+                  + " / ".join(x.strip() for x in _buf.getvalue().split(chr(10))
+                                if x.strip().startswith("★NG")))
     for f in sorted((BASE / "scripts").glob("*.py")):
-        lines = load_text(f).split("\n")
-        at = [i for i, x in enumerate(lines) if tally.match(x)]
-        out = [i for i, x in enumerate(lines) if shown.search(x)]
-        if not at or not out:
-            continue
-        last, end = max(at), max(out)
-        rest = [i for i, x in enumerate(lines)
-                if last < i < end and call.match(x)]
-        if rest:
-            ng.append(f"{f.name}: {last + 1}行目で失敗を数えたあと、"
-                      f"集計までに試験が {len(rest)} 件あります"
+        for fn_name, line, after in selftest_tally_gaps(load_text(f)):
+            ng.append(f"{f.name}: {fn_name} が {line}行目で試験の記録を"
+                      f"まとめて読んだあと、試験が {after} 件あります"
                       f"（★その分は数えられず、落ちても合格と出ます★）")
     return ng
+
+
+def selftest_tally_gaps(src: str) -> list:
+    """★数え上げより後ろに残っている試験を返す★（文字列からも試せる形）
+
+    返り値: [(関数名, 数え上げの行, 残っている試験の数), …]
+    """
+    import ast as _ast
+    try:
+        tree = _ast.parse(src)
+    except SyntaxError:
+        return []
+    out = []
+    for fn in _ast.walk(tree):
+        if not isinstance(fn, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+            continue
+        if "selftest" not in fn.name:
+            continue
+        tally = []
+        for st in _ast.walk(fn):
+            if not isinstance(st, _ast.Assign):
+                continue
+            # ★results をまとめて読む代入★（＝数え上げ）
+            #   `results.append(...)` のような「足す側」は代入ではないので入らない
+            if any(isinstance(n, _ast.Name) and n.id == "results"
+                   for n in _ast.walk(st.value)):
+                tally.append(st.lineno)
+        if not tally:
+            continue
+        first = min(tally)
+        after = 0
+        for st in _ast.walk(fn):
+            if not isinstance(st, _ast.Call):
+                continue
+            if getattr(st, "lineno", 0) <= first:
+                continue
+            nm = getattr(st.func, "id", "") or getattr(st.func, "attr", "")
+            if nm == "t":
+                after += 1
+        if after:
+            out.append((fn.name, first, after))
+    return out
 
 
 def check_50_contract_closure(machines: list) -> list[str]:

@@ -20,7 +20,7 @@
   "scripts/fetched_page.py": "89c8186772e4704c1c944f054176a398e3857936accf9ae16a34ebb36da6afa3",
   "scripts/html_tables.py": "426a34333ab98c7c33b197acf2096f3575a0c27381d5557abbaa16d700a1c7e6",
   "scripts/lineage_check.py": "2bbb9cfdad4cdf6edc22f1a3f4cec20f804ccceb66453a88d83d8572d86d6e98",
-  "scripts/maker_identity_cache.py": "fb533f4eb8fc3bbb6430918976f2a302e35d7242fb6366ad31bc32928c074c52",
+  "scripts/maker_identity_cache.py": "5209e7812e92cbcdbe04512b901923353cce99ff817e9c59bc26de2c6908e88e",
   "scripts/model_code_lookup.py": "311e968d3ed3378e4e72470eb3dc777084331d7dfd257f36a74e30925de87093",
   "scripts/new_machine_watch.py": "72319ceacf38d0a8b71bf5ec442664187224a8a8288376e49425027198acbe15",
   "scripts/page_probe.py": "25d0411b1552d018ab1e528a58be1ce1d53a4e47de68f84fc2f951ccaa1f182d",

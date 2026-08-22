@@ -1432,7 +1432,6 @@ def selftest() -> int:
     t("★どちらかが空なら「同じ」とは言わない★",
       not _release_same("", "2026-11-07") and not _release_same("2026-11", ""))
 
-    ng = sum(1 for _, o in results if not o)
     print()
     # ★★月までしか分からない導入日★★（2026-08-22・台帳#454）
     #   ★直す前★＝date_forms("2026-11") が空の配列を返し、
@@ -1466,6 +1465,11 @@ def selftest() -> int:
     t("　形が想定外なら空を返す（説明文で落ちない）",
       date_forms("へんな値") == [] and date_forms("") == [])
 
+    # ★★数えるのは、全部の試験が終わったこの場所だけ★★（2026-08-22）
+    #   ★直す前★＝ここより手前で数えていたので、あとに続く11件が
+    #   ❌でも「84/84 合格」終了コード0 になっていた。
+    #   ★実証★＝台帳#454の直しをわざと壊すと❌が6件出るのに緑のまま通った。
+    ng = sum(1 for _, o in results if not o)
     print("%d/%d 合格" % (len(results) - ng, len(results)))
     return 1 if ng else 0
 
