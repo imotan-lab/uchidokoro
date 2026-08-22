@@ -1372,6 +1372,52 @@ def selftest() -> int:
     t("★★登場時期の行の頭が、実際の生成物と一致している★★",
       bool(_spec) and any(str(b).startswith(RELEASE_LINE_PREFIX)
                           for b in (_spec[0].get("body") or [])))
+    # ★★比べない、と決めた前提そのものを固定する★★（2026-08-23・Codexの指摘）
+    #   ★なぜ要るか★＝登場時期の行と導入文を比較から外した根拠は
+    #   「どちらも機種名と登場時期しか入っていない定型文だから」。
+    #   ★将来その行に別の事実が足されたら、根拠が崩れるのに誰も気づかない★
+    #   （頭の一致だけを見る試験では通ってしまう）。
+    #   ＝**中身が定型どおりであること**を毎回確かめる。
+    def _built(rel):
+        return _ba.build_detail(
+            "zzz", "試験機", rel,
+            {"adopted": {}, "ceilings": {"adopted": []},
+             "at_specs": {"adopted": []}, "czs": {"adopted": []},
+             "setting_hints": {"adopted": []}})
+
+    def _rel_lines(d):
+        for s in (d.get("sections") or []):
+            if s.get("title") == "基本スペック":
+                return [str(b) for b in (s.get("body") or [])
+                        if str(b).startswith(RELEASE_LINE_PREFIX)]
+        return []
+
+    # ★★期待する文は、生成する側の定数から作らない★★（2026-08-23）
+    #   ★対照実験で判明した★＝はじめ `_ba.LEAD_TEMPLATE.format(...)` と
+    #   比べていたので、**テンプレートに事実を足すと両辺が一緒に動いて**
+    #   試験が絶対に落ちなかった（導入文に「天井は999Gです。」を足しても
+    #   終了コード0・❌0件）。＝自分で自分を採点していた。
+    #   ★実際の文字列をここに書く★＝文言を変えたらここも落ちるので、
+    #   「比べないと決めた前提がまだ成り立つか」を人が見直すことになる。
+    _WANT = {
+        "2026-08-17": ("**登場時期**：2026年8月17日 導入",
+                       "試験機の機種情報ページです。登場時期は2026年8月17日 導入。"),
+        "2026-08": ("**登場時期**：2026年8月頃",
+                    "試験機の機種情報ページです。登場時期は2026年8月頃。"),
+    }
+    _ok_rel = True
+    _ok_lead = True
+    for _rel, (_want_line, _want_lead) in _WANT.items():
+        _d = _built(_rel)
+        if _rel_lines(_d) != [_want_line]:     # ★1行だけ・中身もそのまま★
+            _ok_rel = False
+        if _d.get("lead") != _want_lead:
+            _ok_lead = False
+    t("★★登場時期の行は1行だけで、登場時期しか入らない★★", _ok_rel)
+    t("★★導入文は機種名と登場時期だけ（別の事実が混ざっていない）★★", _ok_lead)
+    t("　登場時期が無いときの導入文も定型どおり",
+      _built("").get("lead")
+      == "試験機のページです。登場時期は当サイトでは確認できていません。")
     # ── ★本物の build_detail で、暫定表現が埋まる更新を通す★（Codex104回目）
     def _mat(**kw):
         m = {"adopted": {"model_code": {"value": "L機/1", "sources": ["a", "b"]}},
