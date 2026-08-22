@@ -656,7 +656,7 @@ BASELINE = os.path.join(os.path.expanduser("~"), "Documents", "uchidokoro",
 def _load_baseline() -> dict:
     """承知済みの一覧を読む。★読めなければ「無い」ではなく止める★"""
     if not os.path.exists(BASELINE):
-        return {"schema": "backup-scan-baseline/v1", "accepted": {}}
+        return {"schema": "backup-scan-baseline/v2", "accepted": {}}
     import json as _j
     with open(BASELINE, encoding="utf-8") as f:
         got = _j.load(f)
@@ -665,10 +665,53 @@ def _load_baseline() -> dict:
     return got
 
 
+# ★「秘密を見つけた」ではなく「確かめられなかった」印★（2026-08-22）
+#   中身を読めていないので、指紋が変わっても「秘密が変わった」とは言えない。
+#   ★書き足されるログは毎回指紋が変わる★ので、ここを分けないと永久に鳴る。
+_UNVERIFIABLE = ("確かめられません",)
+
+
+def _is_unverifiable(finding: str) -> bool:
+    return any(w in str(finding or "") for w in _UNVERIFIABLE)
+
+
+def _sha_file(path: str) -> str:
+    """★中身が変わったかを見るための指紋★（中身そのものは残さない）"""
+    import hashlib
+    h = hashlib.sha256()
+    try:
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+    except OSError:
+        return ""
+    return h.hexdigest()
+
+
+def _walk(root: str, bad: list):
+    """★入れなかったフォルダを黙って飛ばさない★（2026-08-22・Codexの指摘）"""
+    def _oops(e):
+        bad.append(f"読めないフォルダがあります: {getattr(e, 'filename', '?')}")
+    return os.walk(root, onerror=_oops)
+
+
+def _root_key(root: str) -> str:
+    """走査ルートをそろえた形にする（別の場所の基準値を流用させない）。"""
+    return os.path.normcase(os.path.abspath(root)).replace(os.sep, "/")
+
+
 def cmd_scan(root: str) -> int:
+    # ★走査先が本当にあるか★（2026-08-22・Codexの指摘）
+    #   ★直す前★＝存在しない場所でも0ファイル走査で「検知なし」終了コード0。
+    #   ＝**見ていないのに緑**という、いちばん危ない返し方。
+    if not os.path.isdir(root):
+        print(f"★走査先がありません: {root}★")
+        _log(f"scan: ★走査先がありません: {root}★")
+        return 1
     total = 0
     hits = []
-    for dirpath, _dirs, files in os.walk(root):
+    walk_ng = []
+    for dirpath, _dirs, files in _walk(root, walk_ng):
         for fn in files:
             total += 1
             p = os.path.join(dirpath, fn)
@@ -677,18 +720,48 @@ def cmd_scan(root: str) -> int:
             findings = ([] if is_allowlisted(fn) else name_findings(fn)) + content_findings(p)
             if findings:
                 rel = os.path.relpath(p, root)
-                hits.append((rel, findings))
-    base = _load_baseline().get("accepted") or {}
+                hits.append((rel, findings, _sha_file(p)))
+    if walk_ng:
+        for w in walk_ng:
+            print("  ★" + w)
+            _log("scan: ★" + w)
+    got = _load_baseline()
+    # ★★別の場所の基準値を流用させない★★（2026-08-22・Codexの指摘）
+    want_root = str(got.get("root") or "")
+    if want_root and want_root != _root_key(root):
+        # ★別の場所を調べるのは正当な操作★なので断らない。
+        #   ★ただし基準値は使わない★＝そこで承知したものではないため。
+        #   （断ってしまうと、別の場所を調べること自体ができなくなる）
+        print("★基準値は別の場所のものなので使いません★")
+        _log("scan: 基準値の走査ルートが違うので使わない")
+        base = {}
+    else:
+        base = got.get("accepted") or {}
     # ★同じ場所でも、検知の中身が増えていたら新しい扱い★
     #   （承知したのは「そのとき見えていたもの」であって、
     #     あとから足された秘密まで承知したことにはならない）
     known, fresh = [], []
-    for rel, findings in hits:
+    for rel, findings, sha in hits:
         want = base.get(rel.replace(os.sep, "/"))
-        if want is not None and set(findings) <= set(want.get("findings") or []):
-            known.append((rel, findings))
-        else:
-            fresh.append((rel, findings))
+        # ★★中身が変わっていたら、検知の種類が同じでも新しい扱い★★
+        #   （2026-08-22・Codexの指摘）
+        #   ★直す前★＝種類の集合だけを見ていたので、
+        #     ①古いトークンを新しいトークンへ差し替える
+        #     ②同じファイルにトークンをもう1個足す
+        #   のどちらも「承知済み」のまま素通りした（種類は同じだから）。
+        # ★★「確かめられなかった」だけの検知は、指紋を見ない★★
+        #   （2026-08-22・対照実験で分かった）
+        #   ★何が起きたか★＝`delete_guard.log` のような**書き足されるログ**は
+        #   毎回指紋が変わるので、永久に「新しい検知」になり続けた。
+        #   ＝★消そうとしたノイズを、自分で作り直していた★。
+        #   ★そもそも中身を見られていない★ので、指紋を比べる意味がない。
+        #   （本当に秘密を見つけた検知だけ、中身が変わったら知らせる）
+        unverifiable = all(_is_unverifiable(x) for x in findings)
+        ok = (want is not None
+              and set(findings) <= set(want.get("findings") or [])
+              and (unverifiable
+                   or str(want.get("sha256") or "") == sha))
+        (known if ok else fresh).append((rel, findings))
     if fresh:
         print(f"⚠ 秘密パターン検知: {len(fresh)}件"
               f"（走査 {total}ファイル／承知済み {len(known)}件は除く）")
@@ -709,17 +782,29 @@ def cmd_accept(root: str) -> int:
     記録するのは**場所と検知の種類だけ**＝★中身は書かない★。
     """
     import json as _j
+    if not os.path.isdir(root):
+        print(f"★走査先がありません: {root}★")
+        return 1
     total = 0
     acc = {}
-    for dirpath, _dirs, files in os.walk(root):
+    walk_ng = []
+    for dirpath, _dirs, files in _walk(root, walk_ng):
         for fn in files:
             total += 1
             p = os.path.join(dirpath, fn)
             findings = ([] if is_allowlisted(fn) else name_findings(fn)) + content_findings(p)
             if findings:
                 rel = os.path.relpath(p, root).replace(os.sep, "/")
-                acc[rel] = {"findings": sorted(set(findings))}
-    got = {"schema": "backup-scan-baseline/v1",
+                acc[rel] = {"findings": sorted(set(findings)),
+                            "sha256": _sha_file(p)}
+    if walk_ng:
+        # ★読めないフォルダがあるまま基準値を作らない★（見えていない分を承知できない）
+        for w in walk_ng:
+            print("  ★" + w)
+        print("★読めないフォルダがあるので基準値を作りません★")
+        return 1
+    got = {"schema": "backup-scan-baseline/v2",
+           "root": _root_key(root),
            "why": "運営者の判断（2026-08-22）＝Dropboxは安全とみなす。"
                   "うちどころ以外のプロジェクトの控えに元からあったもので、"
                   "新しい漏れではない。★消さずに記録して黙らせる★",
@@ -732,6 +817,66 @@ def cmd_accept(root: str) -> int:
     print(f"承知済みとして記録: {len(acc)}件（走査 {total}ファイル）→ {BASELINE}")
     _log(f"accept: {len(acc)}件を承知済みとして記録")
     return 0
+
+
+def _baseline_tests(t) -> None:
+    """★承知済みの仕組みの試験★（2026-08-22・Codexが挙げた穴を全部当てる）
+
+    ★なぜ要るか★＝「承知済みで黙らせる」は、間違えると
+    ★本当に危ないものを見逃す★方向に働く。実データで1回試すだけでは足りない。
+    """
+    import tempfile as _tf
+    import shutil as _sh
+
+    keep = globals()["BASELINE"]
+    d = _tf.mkdtemp(prefix="uchi_bl_")
+    root = os.path.join(d, "root")
+    os.makedirs(root)
+    globals()["BASELINE"] = os.path.join(d, "baseline.json")
+    try:
+        p1 = os.path.join(root, "a.txt")
+        with open(p1, "w", encoding="utf-8") as f:
+            f.write("github_token = ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+        t("　基準値が無ければ検知する", cmd_scan(root) == 1)
+
+        t("　承知済みにできる", cmd_accept(root) == 0)
+        t("★承知したものでは鳴らない★", cmd_scan(root) == 0)
+
+        # ★★中身を差し替えても、検知の種類は同じ★★
+        with open(p1, "w", encoding="utf-8") as f:
+            f.write("github_token = ghp_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB")
+        t("★★中身を別の値へ差し替えたら知らせる★★"
+          "（検知の種類が同じでも見逃さない）", cmd_scan(root) == 1)
+
+        # ★★同じファイルにもう1個足す★★
+        cmd_accept(root)
+        with open(p1, "a", encoding="utf-8") as f:
+            f.write("\ngithub_token = ghp_CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC")
+        t("★★同じ種類の秘密をもう1個足したら知らせる★★", cmd_scan(root) == 1)
+
+        # ★★新しいファイルが増えたら★★
+        cmd_accept(root)
+        p2 = os.path.join(root, "b.txt")
+        with open(p2, "w", encoding="utf-8") as f:
+            f.write("github_token = ghp_DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD")
+        t("★新しいファイルが増えたら知らせる★", cmd_scan(root) == 1)
+
+        # ★★存在しない場所★★
+        t("★★走査先が無いときは緑にしない★★"
+          "（0件走査で「検知なし」になっていた）",
+          cmd_scan(os.path.join(d, "no_such_place")) == 1)
+
+        # ★★別の場所では基準値を使わない★★
+        cmd_accept(root)
+        other = os.path.join(d, "other")
+        os.makedirs(other)
+        with open(os.path.join(other, "a.txt"), "w", encoding="utf-8") as f:
+            f.write("github_token = ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+        t("★★別の場所では承知済みを流用しない★★"
+          "（同じ相対パスでも別物）", cmd_scan(other) == 1)
+    finally:
+        globals()["BASELINE"] = keep
+        _sh.rmtree(d, ignore_errors=True)
 
 
 def selftest() -> int:
@@ -1088,6 +1233,10 @@ def selftest() -> int:
         rc_out2 = cmd_backup_design(des, os.path.join(d, "outside_dropbox2"))
     t("backup-design: 認可ルート外の宛先を拒否", rc_out2 == 2)
 
+    # ★★承知済みの仕組みの試験★★（2026-08-22・Codexが挙げた穴を全部当てる）
+    _baseline_tests(t)
+
+    # ★数えるのは、全部の試験が終わったこの場所だけ★（監査51）
     ok = all(c for _, c in results)
     print(f"\nselftest: {sum(1 for _, c in results if c)}/{len(results)} 合格")
     return 0 if ok else 1
