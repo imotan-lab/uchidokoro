@@ -85,7 +85,7 @@
    "type": "settei",
    "tables": [
     {
-     "label": "設定別の数値（出典2件で一致）",
+     "label": "設定別の数値（設定4・設定5のFB初当りを除き、出典2件で一致）",
      "wide": true,
      "headers": [
       "設定",
