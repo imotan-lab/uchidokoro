@@ -87,6 +87,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # ★★どの検査が落ちたかを必ず残す★★（2026-08-22）
+          #   ★これが無くて困ったこと★＝失敗しても実行ページに出るのは
+          #   「Process completed with exit code 1」だけで、
+          #   ★どのスクリプトが落ちたのか分からない★。
+          #   ログ本体はリポジトリの権限が無いと読めない（APIは403）。
+          #   手元（Windows）で再現できない失敗のときは、これだと手掛かりが無い。
+          #   ★ERRトラップで、落ちたコマンドそのものを注記として出す★
+          #   （ci_repro は「python で始まる行」を読むので、この行は影響しない）
+          trap 'echo "::error title=Self-tests::★落ちた検査: ${BASH_COMMAND}★"' ERR
           python scripts/claim_evidence.py --selftest
           python scripts/claim_ledger.py --selftest
           python scripts/claim_c5.py --selftest
@@ -191,6 +200,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # ★落ちたところを注記に出す★（2026-08-22）＝「exit code 1」だけでは手掛かりが無い
+          trap 'echo "::error title=Check the publish gate::★落ちたところ: ${BASH_COMMAND}★"' ERR
           on="$(python -c 'import sys; sys.path.insert(0, "scripts"); from build_public_data import claim_gate_enabled; print("true" if claim_gate_enabled() else "false")')"
           echo "on=${on}" >> "$GITHUB_OUTPUT"
           echo "publish gate: ${on}"
@@ -212,6 +223,8 @@ jobs:
           PAGES_DEPLOY_ENABLED: ${{ vars.PAGES_DEPLOY_ENABLED }}
         run: |
           set -euo pipefail
+          # ★落ちたところを注記に出す★（2026-08-22）＝「exit code 1」だけでは手掛かりが無い
+          trap 'echo "::error title=Build from an empty artifact directory::★落ちたところ: ${BASH_COMMAND}★"' ERR
           python scripts/build_pages_artifact.py
 
       - name: Audit the artifact independently
@@ -219,6 +232,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # ★落ちたところを注記に出す★（2026-08-22）＝「exit code 1」だけでは手掛かりが無い
+          trap 'echo "::error title=Audit the artifact independently::★落ちたところ: ${BASH_COMMAND}★"' ERR
           python scripts/audit_public.py \
             --file _site/assets/data/machines.json \
             --details-dir _site/assets/data/machine-details
@@ -228,6 +243,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # ★落ちたところを注記に出す★（2026-08-22）＝「exit code 1」だけでは手掛かりが無い
+          trap 'echo "::error title=Verify deterministic content hash::★落ちたところ: ${BASH_COMMAND}★"' ERR
           first="$(python -c \
             'import json; print(json.load(open("_site/artifact-manifest.json", encoding="utf-8"))["content_sha256"])')"
           rm -rf _site
