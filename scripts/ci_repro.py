@@ -44,12 +44,36 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WF = os.path.join(BASE, ".github", "workflows", "pages-rehearsal.yml")
 
 # ★通信を断つ差し込み★（Pythonが起動時に必ず読む名前）
+# ★★外へは出さない。ただし自分自身（localhost）は通す★★（2026-08-22）
+#   ★直す前に起きていたこと★＝localhost まで塞いでいたので、
+#   「公開したページを実際にHTTPで引いて確かめる」試験が
+#   ★ci_repro では絶対に通らなかった★（毎回1件が赤）。
+#   ＝**CIでは通るのに手元の再現では落ちる**という、
+#   ci_repro の存在意義そのものに反する食い違いだった。
+#   本物のCIは localhost の簡易サーバを普通に使えるので、そちらへ合わせる。
+#
+#   ★外部への通信は今までどおり止める★＝
+#   CIは通信できない前提で組んであり、そこは変えない。
 BLOCK = (
     "import socket\n"
-    "def _no(*a, **k):\n"
+    "_real_conn = socket.socket.connect\n"
+    "_real_create = socket.create_connection\n"
+    "_LOCAL = ('127.0.0.1', '::1', 'localhost')\n"
+    "def _is_local(addr):\n"
+    "    try:\n"
+    "        return str(addr[0]) in _LOCAL\n"
+    "    except Exception:\n"
+    "        return False\n"
+    "def _conn(self, addr, *a, **k):\n"
+    "    if _is_local(addr):\n"
+    "        return _real_conn(self, addr, *a, **k)\n"
     "    raise OSError('通信は禁止（CI再現）')\n"
-    "socket.socket.connect = _no\n"
-    "socket.create_connection = _no\n"
+    "def _create(addr, *a, **k):\n"
+    "    if _is_local(addr):\n"
+    "        return _real_create(addr, *a, **k)\n"
+    "    raise OSError('通信は禁止（CI再現）')\n"
+    "socket.socket.connect = _conn\n"
+    "socket.create_connection = _create\n"
 )
 
 

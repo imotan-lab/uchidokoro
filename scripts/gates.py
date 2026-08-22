@@ -3072,7 +3072,6 @@ def selftest() -> int:
             ok = True
         t(f"不変条件: {label} 違反を検出", ok)
 
-    ng = [n for n, c in results if not c]
     # ★天井（ceiling）と50枚あたりG数（coinRate）★（2026-08-12）
     #   刻みの表が「天井 − 現在G」を出すので、0以下や真偽値が混ざると
     #   「天井まで残り -200G」のような表示になる。関所で止める。
@@ -3100,6 +3099,12 @@ def selftest() -> int:
       bool(_ck_ceil(hitRate=400)) and not _ck_ceil(hitRate=0.5)
       and not _ck_ceil(hitRate=1) and not _ck_ceil(hitRate=0))
 
+    # ★★数えるのは、全部の試験が終わったこの場所だけ★★（2026-08-22）
+    #   ★直す前★＝ここより手前で数えていたので、あとに続く6件の試験が
+    #   ❌でも「合格」と表示され、終了コードも0だった。
+    #   ＝**試験が落ちても緑に見える**という、いちばん危ない壊れ方。
+    #   pending_machines で実際にこれに引っかかった（2026-08-22）。
+    ng = [n for n, c in results if not c]
     print(f"\n{len(results) - len(ng)}/{len(results)} 合格")
     if ng:
         print("失敗:", ng)

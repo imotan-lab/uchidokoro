@@ -1234,6 +1234,36 @@ def check_sitemap_added(before_text: str, slug: str) -> list:
     return ng
 
 
+def _get_with_retry(url: str, opener=None, tries: int = 3):
+    """★つながらなかっただけでは諦めない★（2026-08-22）
+
+    ★なぜ切り出したか★＝直したことを**時間を測らずに**確かめるため。
+      最初は「404なら1秒未満で返る」と書いたが、
+      ★機械が混んでいると1秒を超えて落ちる★＝また「たまに落ちる検査」を
+      作ってしまった。★時間で判定する試験を書かない★。
+      いまは「何回呼んだか」を数えて確かめる（下の試験）。
+
+    ★入れ直すのは「つながらない」ときだけ★
+      サーバーが答えているもの（404 など＝HTTPError）は、
+      何度引いても同じなので繰り返さない。
+    """
+    import urllib.error
+    import urllib.request
+    get = opener or urllib.request.urlopen
+    last = None
+    for i in range(tries):
+        try:
+            with get(url, timeout=20) as r:
+                return r.status, r.read(400000).decode("utf-8", "replace")
+        except urllib.error.HTTPError:
+            raise                      # ★答えが返っている＝繰り返さない★
+        except (urllib.error.URLError, OSError, TimeoutError) as e:
+            last = e
+            if i + 1 < tries:
+                time.sleep(0.3 * (i + 1))
+    raise last if last else RuntimeError("引けませんでした")
+
+
 def check_served(slug: str, expect_noindex: bool = True) -> list:
     """★実際にHTTPで返るか確かめる★（ファイルがあるだけでは足りない）
 
@@ -1243,6 +1273,7 @@ def check_served(slug: str, expect_noindex: bool = True) -> list:
     import http.server
     import socketserver
     import threading
+    import urllib.error
     import urllib.request
 
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=BASE)
@@ -1256,10 +1287,18 @@ def check_served(slug: str, expect_noindex: bool = True) -> list:
     ng = []
     try:
         url = f"http://127.0.0.1:{port}/machines/{slug}/"
-        with urllib.request.urlopen(url, timeout=10) as r:
-            if r.status != 200:
-                ng.append(f"公開したページが HTTP {r.status} を返します")
-            body = r.read(400000).decode("utf-8", "replace")
+        # ★★つながらなかっただけで落とさない★★（2026-08-22）
+        #   ★実際に起きたこと★＝この試験が CI で1回だけ落ち、
+        #   同じコミットをやり直したら緑になった（コード側は無関係）。
+        #   手元でも、他の処理と並行に走らせたときだけ落ちていた。
+        #   ＝★たまに落ちる検査は、本物の赤と見分けが付かなくなる★ので直す。
+        #
+        #   ★見分ける★＝つながらない（接続の失敗・時間切れ）は入れ直す。
+        #   ★中身の判定は1回でも通らなければ失敗のまま★
+        #   （200でない・robots が違う、は何度やっても同じなので繰り返さない）。
+        status, body = _get_with_retry(url)
+        if status != 200:
+            ng.append(f"公開したページが HTTP {status} を返します")
         vals = _hc.meta_values(_hc.parse(body), "robots")
         if expect_noindex:
             if len(vals) != 1 or "noindex" not in vals[0]:
@@ -3049,6 +3088,32 @@ def selftest() -> int:
           "（★対象が無いこと自体は正常★）", True)
     t("　存在しない機種なら引けないと分かる",
       any("引けません" in x for x in check_served("zzz_nothing_here")))
+    # ★★つながらなかっただけで落とさない★★（2026-08-22）
+    #   ★実際に起きたこと★＝この試験が CI で1回だけ落ち、
+    #   同じ内容をやり直したら緑になった（コード側は無関係）。
+    #   ★たまに落ちる検査は、本物の赤と見分けが付かなくなる★。
+    #   ★ただし「サーバーが答えている」ものは繰り返さない★＝
+    #   404 は何度引いても404なので、待ち時間を無駄にしない。
+    #   ★時間では測らない★＝混んでいると落ちる「たまに落ちる検査」になる。
+    #   ★何回呼んだかを数える★
+    import urllib.error as _ue_t
+
+    def _counting(exc):
+        n = {"n": 0}
+
+        def _op(url, timeout=None):
+            n["n"] += 1
+            raise exc
+        return _op, n
+
+    _op, _n = _counting(_ue_t.HTTPError("u", 404, "nf", {}, None))
+    t("★★サーバーが答えているとき（404）は入れ直さない★★"
+      "（繰り返しても答えは変わらないので待つだけ無駄）",
+      _raises(lambda: _get_with_retry("http://x/", opener=_op)) and _n["n"] == 1)
+
+    _op2, _n2 = _counting(_ue_t.URLError("つながらない"))
+    t("★つながらないときは入れ直す（3回まで）★",
+      _raises(lambda: _get_with_retry("http://x/", opener=_op2)) and _n2["n"] == 3)
 
     # ★★書き込みのどこで失敗しても、中途半端な状態を残さない★★
     #   （2026-07-31・Codexが最も勧めた「障害注入」）

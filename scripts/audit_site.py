@@ -1947,6 +1947,43 @@ def check_44_empty_settei_box(machines: list) -> list[str]:
     return out
 
 
+def check_51_selftest_tally(machines: list) -> list:
+    """★試験の数え方が早すぎないか★（2026-08-22新設・自分で踏んだ）
+
+    ★何が起きたか★＝`pending_machines.py` で、失敗を数える行が
+    集計より**手前**にあった。そのため**あとから足した試験が❌でも**
+
+        44/44 合格   （終了コード 0）
+
+    と表示された。＝★試験が落ちても緑に見える★＝いちばん危ない壊れ方。
+    新しい試験を末尾に足すのは自然な操作なので、放っておくとまた起きる。
+
+    ★見るのは1つだけ★＝
+      `ng = [... for ... in results ...]` の行より**後ろ**に、
+      まだ `t(...)` の呼び出しが残っていないか。
+      （`ng = []` のように空で初めて足していく形は正しいので見ない）
+    """
+    import re as _re
+    tally = _re.compile(r"^\s*ng\s*=\s*\[[^\]]*\bfor\b[^\]]*\bresults\b")
+    call = _re.compile(r"^\s{4,}t\(")
+    shown = _re.compile(r"print\(.*合格")
+    ng = []
+    for f in sorted((BASE / "scripts").glob("*.py")):
+        lines = load_text(f).split("\n")
+        at = [i for i, x in enumerate(lines) if tally.match(x)]
+        out = [i for i, x in enumerate(lines) if shown.search(x)]
+        if not at or not out:
+            continue
+        last, end = max(at), max(out)
+        rest = [i for i, x in enumerate(lines)
+                if last < i < end and call.match(x)]
+        if rest:
+            ng.append(f"{f.name}: {last + 1}行目で失敗を数えたあと、"
+                      f"集計までに試験が {len(rest)} 件あります"
+                      f"（★その分は数えられず、落ちても合格と出ます★）")
+    return ng
+
+
 def check_50_contract_closure(machines: list) -> list[str]:
     """契約が「取り込んでいる相手」まで閉じているか
 
@@ -2566,6 +2603,7 @@ CHECKS = [
     ("48_台帳CLIの引数の並べ場所", check_48_ledger_argv),
     ("49_等価の呼び方", check_49_equivalence_label),
     ("50_契約が依存まで閉じているか", check_50_contract_closure),
+    ("51_試験の数え方が早すぎないか", check_51_selftest_tally),
 ]
 
 

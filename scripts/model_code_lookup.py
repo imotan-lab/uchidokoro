@@ -854,19 +854,31 @@ def dmm_identity_ok(html: str, ident: dict) -> tuple:
     ok, why = _dm.name_matches(got.get("heading") or "", want_name)
     if not ok:
         return False, f"DMM_NAME_MISMATCH:{str(why)[:60]}"
+    # ★★束が欠けていたら答えない★★（2026-08-22・Codexの指摘で直した）
+    #   ★直す前★＝maker_names が空なら照合を飛ばし、release が空でも飛ばし、
+    #   **本文から導入日を読めなくても飛ばして**最後に成功していた。
+    #   ＝「渡されなかったものは確かめない」＝関門として成り立っていない。
+    #   呼ぶ側（_ident_for）が完全な束しか作らないので実害は出ていなかったが、
+    #   ★この関数自身が束を確かめる★契約でなければ、隣を変えた日に破れる。
     # ★メーカー★（読めなかったことを、確かめたことにしない）
     want_makers = [str(x) for x in ((ident or {}).get("maker_names") or []) if x]
+    if not want_makers:
+        return False, "DMM_IDENTITY_NOT_GIVEN:maker_names"
     page_maker = str(got.get("maker") or "")
-    if want_makers:
-        if not page_maker:
-            return False, "DMM_MAKER_UNREADABLE"
-        import dmm_discover as _dd
-        if _dd._norm(page_maker) not in {_dd._norm(x) for x in want_makers}:
-            return False, f"DMM_MAKER_MISMATCH:{page_maker[:30]}"
+    if not page_maker:
+        return False, "DMM_MAKER_UNREADABLE"
+    import dmm_discover as _dd
+    if _dd._norm(page_maker) not in {_dd._norm(x) for x in want_makers}:
+        return False, f"DMM_MAKER_MISMATCH:{page_maker[:30]}"
     # ★導入日★（★機種ページが月までのときは月で比べる★＝日は勝手に決めない）
     want_rel = str((ident or {}).get("release") or "")
+    if not want_rel:
+        return False, "DMM_IDENTITY_NOT_GIVEN:release"
     page_rel = str(got.get("release_date") or "")
-    if want_rel and page_rel and want_rel[:7] != page_rel[:7]:
+    if not page_rel:
+        # ★読めなかったことを、確かめたことにしない★
+        return False, "DMM_RELEASE_UNREADABLE"
+    if want_rel[:7] != page_rel[:7]:
         return False, f"DMM_RELEASE_MISMATCH:{page_rel[:10]}"
     return True, "OK_DMM_IDENTITY"
 

@@ -317,17 +317,17 @@ def mark_tried(data: dict, queue_id: str, blocker: str = "") -> None:
         return
     it["last_try"] = _today()
     it["runs"] = int(it.get("runs", 0)) + 1
-    b = str(blocker or "").strip()[:40]
-    if b:
-        if it.get("last_blocker") == b:
-            it["blocker_streak"] = int(it.get("blocker_streak", 0)) + 1
-        else:
-            it["last_blocker"] = b
-            it["blocker_streak"] = 1
-    else:
-        # ★理由が分からない回は連続を切る★（誤って積み上げない）
-        it["last_blocker"] = ""
-        it["blocker_streak"] = 0
+    # ★★ここでは連続の理由を触らない★★（2026-08-22・Codexの指摘で直した）
+    #   ★直す前に何が起きていたか★＝
+    #     本番は毎晩 mark_tried（試す前）→ mark_blocked（結果が出てから）の順。
+    #     mark_tried が理由なしで呼ばれると連続を0へ戻していたので、
+    #     ★同じ理由で何晩止まっても streak は毎回1に戻り、2に届かなかった★
+    #     ＝「同じ理由で2回続いたら知らせる」が**一度も発火しない**。
+    #   ★私の試験が見逃した理由★＝streak=2 の偽物を直接作って
+    #     通知側だけを調べていた。**本番の順で2晩通していなかった**。
+    #   ＝状態を変えるのは mark_blocked（＋1）と mark_unblocked（0）だけにする。
+    if blocker:
+        mark_blocked(data, queue_id, blocker)
 
 
 def mark_blocked(data: dict, queue_id: str, blocker: str) -> None:
@@ -603,6 +603,44 @@ def selftest() -> int:
     t("★★移したものをそのまま読める★★（形の検査を通る）",
       _check_ok(_v2))
 
+    # ★★本番と同じ順で2晩通す★★（2026-08-22・Codexの指摘で作り直した）
+    #   ★直す前の試験の誤り★＝blocker_streak=2 の偽物を直接作って
+    #   通知側だけを調べていた。だから
+    #   ★mark_tried が毎晩0へ戻していた配線漏れを見逃した★
+    #   （同じ理由で何晩止まっても streak は1のまま＝通知が一度も出ない）。
+    #   ＝★最終状態を直接置かず、状態の移り変わりを実際に通す★
+    _d2 = {"schema": SCHEMA, "next_id": 2,
+           "items": {"q_1": {"queue_id": "q_1", "name": "試験機",
+                             "state": "READY", "tries": 0, "runs": 0}}}
+    for _ in range(2):
+        mark_tried(_d2, "q_1")                       # ←本番はこの順
+        mark_blocked(_d2, "q_1", "TAIL_CONFLICT")
+    t("★★本番の順で2晩通すと、同じ理由の連続が2になる★★"
+      "（mark_tried が毎晩0へ戻していた）",
+      _d2["items"]["q_1"].get("blocker_streak") == 2
+      and _d2["items"]["q_1"].get("last_blocker") == "TAIL_CONFLICT")
+
+    mark_tried(_d2, "q_1")
+    mark_blocked(_d2, "q_1", "NO_MATERIAL")
+    t("　理由が変わったら1から数え直す",
+      _d2["items"]["q_1"]["blocker_streak"] == 1
+      and _d2["items"]["q_1"]["last_blocker"] == "NO_MATERIAL")
+
+    mark_unblocked(_d2, "q_1")
+    t("　公開できたら連続は消える",
+      _d2["items"]["q_1"]["blocker_streak"] == 0
+      and _d2["items"]["q_1"]["last_blocker"] == "")
+
+    mark_tried(_d2, "q_1")
+    t("★理由なしの mark_tried は連続を消さない★",
+      "blocker_streak" in _d2["items"]["q_1"])
+
+    # ★★数えるのは、全部の試験が終わったこの場所だけ★★（2026-08-22）
+    #   ★実際にやらかしたこと★＝ここより**手前**で ng を計算していたので、
+    #   あとから足した試験が❌でも
+    #   ★「44/44 合格」と表示され、終了コードも0だった★。
+    #   ＝**試験が落ちても緑に見える**＝いちばん危ない壊れ方。
+    #   （新しい試験を末尾に足すのは自然な操作なので、また起きる）
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
     if ng:
