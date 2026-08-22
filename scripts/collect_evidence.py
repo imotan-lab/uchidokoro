@@ -632,8 +632,16 @@ def main() -> int:
     if a.selftest:
         return selftest()
     if not a.slug:
+        # ★★何もしていないのに「成功」を返さない★★（2026-08-22）
+        #   ★実際に踏んだ★＝--name だけで呼んだら help を出して終了コード0。
+        #   ＝無人タスクからは「その工程は済んだ」に見える。
+        #   （今日ずっと追いかけていた「試験が落ちても緑」と同じ形）
+        #   ★新台にはまだ machines.json の slug が無い★ので、
+        #   DMMの機種IDから作った slug（dmm_<機種ID>）を渡す。
         ap.print_help()
-        return 0
+        print()
+        print("★--slug が要ります★（新台なら dmm_<機種ID>。--name だけでは動きません）")
+        return 2
     topics = a.topic or list(TOPICS)
     for t in topics:
         if t not in TOPICS:
