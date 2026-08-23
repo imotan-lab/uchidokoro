@@ -1198,7 +1198,8 @@ def _is_outage(reasons: list) -> bool:
 # ★書き込みを止める理由★（Codex指摘3・自分で再現を確認）
 #   以前は problems を文字列で並べるだけで、**中身を見ずに書き込めた**。
 #   機種の同定に関わる問題が1つでもあれば、材料が採れていても書かない。
-BLOCKING = ("AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY",
+BLOCKING = ("CONFIRMED_VALUES_UNREADABLE",
+            "AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY",
             # ★型式名は「別機種と取り違えない」ためだけに使う★（2026-08-09・運営者決定）
             #   実測: 型式名を載せているのは P-WORLD だけだった。
             #   DMMは描画して読んでも載せておらず、なな徹・ちょんぼりすた・
@@ -2733,7 +2734,13 @@ def run_one(name, official_url, maker, release, apply_it=False,
             _log("  2AIで確定した値を材料に足しました: " + " / ".join(_added))
     except Exception as e:                # noqa: BLE001
         # ★読めないことを黙って「無い」にしない★
-        out["problems"].append(f"2AIの確定値を読めません: {type(e).__name__}: {e}")
+        # ★★読めないときは止める★★（2026-08-24・Codexの6回目）
+        #   ★直す前は「問題」に足すだけで、停止条件に入っていなかった★ので、
+        #   控えが読めなくても**機械が採れた分だけで記事を作って公開**していた。
+        #   ＝2AIが確定させた値が抜けた記事が、黙って世に出る。
+        out["problems"].append(
+            f"CONFIRMED_VALUES_UNREADABLE: 2AIの確定値を読めません:"
+            f" {type(e).__name__}: {e}")
     out["adopted"] = sorted(field_label(k) for k in mat["adopted"])
     out["held"] = sorted(field_label(k) for k in mat["need_third"])
     out["thin"] = sorted(field_label(k) for k in mat["thin"])
@@ -4308,6 +4315,15 @@ def selftest() -> int:
       field_label("payout_range") == _sl.FIELDS["payout_range"]["jp"])
     t("　知らない項目でも止まらず、分かる形で出す（黙って消さない）",
       field_label("zzz_unknown") == "zzz_unknown（名前が未登録）")
+
+    # ★★控えが読めないときは新台を作らない★★（2026-08-24・Codexの6回目）
+    #   ★直す前は「問題」に足すだけで停止条件に入っていなかった★ので、
+    #   2AIが確定させた値が抜けた記事が、黙って世に出た。
+    t("★★控えを読めないときは止まる★★"
+      "／★2AIの値が抜けた記事を黙って公開しない★",
+      blocking_problems(["CONFIRMED_VALUES_UNREADABLE: 2AIの確定値を読めません"]))
+    t("　（対照）ふつうの問題では止めない",
+      not blocking_problems(["ただのお知らせ"]))
 
     ng = [n for n, ok in results if not ok]
     # ★控えの置き場を元へ戻す★（試験のあとに本番へ影響を残さない）

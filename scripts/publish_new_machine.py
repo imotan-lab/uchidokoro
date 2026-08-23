@@ -3299,20 +3299,30 @@ def selftest() -> int:
     import shutil as _sh
     import tempfile as _tf4
     _dir4 = _tf4.mkdtemp(prefix="uchi_fault_")
-    # ★試験が追跡ファイルの中身（改行コードを含む）を変えないようにする★
-    #   巻き戻しは中身を戻すが、書き直す以上どうしても改行が揃ってしまう。
-    #   元のバイト列を控え、試験の最後にそのまま書き戻す。
-    _bytes4 = {}
-    for _rel4 in list(HUB_FILES) + ["assets/data/machines.json"]:
-        _f4 = os.path.join(BASE, _rel4)
-        with open(_f4, "rb") as _fh4:
-            _bytes4[_f4] = _fh4.read()
-    # ★障害注入は本番の目印を触らない★（試験の残骸で監査が赤くなるため）
+    # ★★写しの上でやる★★（2026-08-24・Codexが3回すすめた）
+    #   ★直す前は本番のファイルへ実際に書いてから戻していた★ので、
+    #     ①強制終了されると巻き戻しが走らず、偽の機種が残る
+    #     ②戻す処理そのものが、同時に行われた人の作業を消し得る
+    #     ③本番のファイルが一瞬だけ食い違い、監査やpushがその途中を見る
+    #   ★掃除で受け止めるのをやめ、そもそも本番を触らない★
+    _work4 = os.path.join(_dir4, "work")
+    #   ★.git も写す★＝掃除は git に問い合わせて「元の中身」を決めるので、
+    #   除くと**その守りを写しの上では一度も確かめられない**
+    #   （2026-08-24に実際そうなった。CI再現の道具でも同じ罠を踏んでいる）。
+    _sh.copytree(BASE, _work4, ignore=_sh.ignore_patterns(
+        "__pycache__", "node_modules", ".preview-site", "_site"))
+    _real_base = BASE
     _real_ip = IN_PROGRESS
-    globals()["IN_PROGRESS"] = os.path.join(_dir4, "in_progress.json")
+    globals()["BASE"] = _work4
+    globals()["IN_PROGRESS"] = os.path.join(_work4,
+                                            ".publish-in-progress.json")
+    # ★写しの側の場所へ向け直す★（読み込み時に決まった定数を持っているもの）
+    _bytes4 = {}
     _real = {"write_atomic": write_atomic, "build_hubs": build_hubs,
              "check_served": check_served, "run_site_audit": run_site_audit,
              "check_after": check_after, "MACHINES": MACHINES}
+    globals()["MACHINES"] = os.path.join(_work4, "assets", "data",
+                                         "machines.json")
     try:
         def _snapshot():
             """公開に関わるファイルの指紋（元のままか確かめる用）。"""
@@ -3482,6 +3492,7 @@ def selftest() -> int:
         for k, v in _real.items():
             globals()[k] = v
         globals()["IN_PROGRESS"] = _real_ip
+        globals()["BASE"] = _real_base          # ★本番へ戻す★
         # ★★戻すのは「試験が汚した時」だけ★★（2026-08-24・Codexの4回目の指摘）
         #   ★直す前は無条件に書き戻していた★＝
         #   試験の最中に人や別の処理が正当な変更をしていたら、

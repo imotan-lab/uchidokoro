@@ -186,12 +186,10 @@ MUTATIONS = [
     {
         "why": "天井の網羅性を申告だけで信じる（読者を守る一文が消える・Codex5回目）",
         "file": "scripts/build_new_article.py",
-        "before": "        _complete = ((material.get(\"ceilings\") or {})"
-                  ".get(\"complete\") is True\n"
-                  "                     and _confirmed_by_2ai(_cflag, slug, _recs)\n"
-                  "                     and (_cflag or {}).get(\"value\") is True)",
-        "after": "        _complete = ((material.get(\"ceilings\") or {})"
-                 ".get(\"complete\") is True)",
+        "before": "                     and _confirmed_by_2ai(_cflag, slug, _recs)\n"
+                  "                     and ((_cflag or {}).get(\"value\") or {}).get(\n"
+                  "                         \"complete\") == \"YES\")",
+        "after": "                     )",
         "run": ["scripts/build_new_article.py"],
     },
     {
@@ -204,6 +202,29 @@ MUTATIONS = [
                  '                   ("czs", ("basis", "games_basis",\n'
                  '                            "rate_basis")))',
         "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "内側の値だけ見て通す（外側に別の表示値を足せる・Codex6回目）",
+        "file": "scripts/build_new_article.py",
+        "before": '    return _core(val) == got or {"value": val} == got',
+        "after": '    return (_core(val) == got or {"value": val} == got\n'
+                 '            or val == got.get("value"))',
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "控えを読むとき契約を確かめない（偽の記録が通る・Codex6回目）",
+        "file": "scripts/confirmed_values.py",
+        "before": "    if strict:\n        bad = []",
+        "after": "    if False:\n        bad = []",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "控えが読めなくても新台を作る（2AIの値が抜けた記事が出る・Codex6回目）",
+        "file": "scripts/add_machine_run.py",
+        "before": 'BLOCKING = ("CONFIRMED_VALUES_UNREADABLE",\n'
+                  '            "AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY",',
+        "after": 'BLOCKING = ("AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY",',
+        "run": ["scripts/add_machine_run.py"],
     },
     {
         "why": "試験用の偽の機種を掃除しない（2026-08-24・自分で踏んだ）",

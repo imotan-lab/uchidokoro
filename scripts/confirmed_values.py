@@ -143,14 +143,12 @@ VALUE_SHAPES = {
     #   なぜその値かを --why に必ず残す。
     "checker_ceiling": {"required": ("games",), "enums": {},
                         "quoted": ("games",)},
-    # ★AT名との対応が付かない純増★（2026-08-24）
-    #   ★対応が付かないことを明示する★ので mapping は UNCONFIRMED だけ。
-    "at_net_unmapped": {"required": ("values", "mapping"),
-                        "enums": {"mapping": ("UNCONFIRMED",)},
-                        "quoted": ()},
     # ★天井はこれで全部か★（2026-08-24）
-    #   ★真偽値そのもの★＝辞書ではないので、形の検査は下の値パターンで見る。
-    "ceilings_complete": {"required": (), "enums": {}, "quoted": ()},
+    #   ★辞書で持つ★＝この仕組みは値を辞書で扱う契約なので、
+    #   真偽値そのものだと公式の登録口を通れない（Codexの6回目で判明）。
+    "ceilings_complete": {"required": ("complete",),
+                          "enums": {"complete": ("YES",)},
+                          "quoted": ()},
     "ceiling": {"required": ("kind", "amount", "unit", "benefit"),
                 "enums": {"kind": ("GAME", "CYCLE", "POINT")},
                 "quoted": ("amount", "unit")},
@@ -197,14 +195,15 @@ VALUE_SHAPES = {
     #   どちらが上位か割り当てていないとき、**モードへ割り当てない**。
     #   ★順番に並べると読者が対応を推測する★ので、記事側は
     #   「AT名との対応は未確認」と明記して並べる。
-    "at_net_unmapped": {"required": ("values",), "enums": {},
+    "at_net_unmapped": {"required": ("values", "mapping"),
+                        "enums": {"mapping": ("UNCONFIRMED",)},
                         "quoted": ()},
 }
 
 
 # ★配列で受け取る項目★（2026-08-13・依頼182のP1）
 #   ここに無い項目に配列を渡したら拒否する（記事が壊れるため）。
-LIST_FIELDS = ("gains",)
+LIST_FIELDS = ("gains", "values")
 
 
 def base_field(field: str) -> str:
@@ -253,13 +252,6 @@ VALUE_PATTERNS = {
     "checker_ceiling": {
         "games": (_re.compile(r"^\d{2,5}$"),
                   "数だけ（+αや単位は書かない。例: 1000）"),
-    },
-    # ★AT名との対応が付かない純増★（2026-08-24）
-    "at_net_unmapped": {
-        "values": (_re.compile(r"^[\d.]{1,6}$"),
-                   "純増の数だけ（単位は書かない。例: 3.1）"),
-        "mapping": (_re.compile(r"^UNCONFIRMED$"),
-                    "対応が付かないことの明示（UNCONFIRMED のみ）"),
     },
     # ★朝一・リセット★（2026-08-12）
     "reset": {
@@ -424,13 +416,90 @@ def _empty() -> dict:
     return {"schema_version": SCHEMA, "machines": {}}
 
 
-def load() -> dict:
+# ★1件の記録に必ずある鍵★（record が書く形）
+RECORD_KEYS = ("value", "sources", "lineages", "agreed_by", "why",
+               "decided_at")
+# ★あってもよい鍵★（あとから足した任意のもの）
+RECORD_OPTIONAL = ("verified_at", "identity_override", "official_url")
+
+
+def validate_record(field: str, rec) -> list:
+    """★1件の記録が、書き込みと同じ契約を満たしているか★
+
+    ★★なぜ読み込み側でも見るか★★（2026-08-24・Codexの6回目）
+      ★直す前は `load()` が版番号しか見ていなかった★ので、
+      控えのファイルへ**形だけ正しい偽の記録**を置けば、
+      出典0件・判断者0人でも根拠の関所を越えて記事に出せた。
+      ＝「書き込み口を厳しくしても、読み込み口が同じ契約を検証していない」
+        （あなたが挙げた3原因の2つ目そのもの）。
+
+    ★戻り値は問題の一覧★（空なら合格）。
+    """
+    ng = []
+    base = base_field(field)
+    if base not in allowed_fields():
+        ng.append(f"知らない項目です: {field}")
+        return ng
+    if not isinstance(rec, dict):
+        ng.append(f"{field}: 記録が辞書ではありません")
+        return ng
+    for k in RECORD_KEYS:
+        if k not in rec:
+            ng.append(f"{field}: {k} がありません")
+    if ng:
+        return ng
+    extra = [k for k in rec
+             if k not in RECORD_KEYS and k not in RECORD_OPTIONAL]
+    if extra:
+        ng.append(f"{field}: 知らない鍵があります: {extra}")
+    try:
+        check_shape(base, rec["value"])
+    except Exception as e:                                   # noqa: BLE001
+        ng.append(f"{field}: 値の形が違います（{str(e)[:80]}）")
+    src = rec.get("sources")
+    if not isinstance(src, list) or not src:
+        ng.append(f"{field}: 出典がありません")
+    else:
+        for i, x in enumerate(src):
+            if not isinstance(x, dict) or not x.get("url") \
+                    or not x.get("quote"):
+                ng.append(f"{field}: 出典{i + 1}にURLか引用がありません")
+    who = rec.get("agreed_by")
+    if not isinstance(who, list) or len({str(x).lower() for x in who}) < 2:
+        ng.append(f"{field}: 判断者が2つ未満です（{who!r}）")
+    if not str(rec.get("why") or "").strip():
+        ng.append(f"{field}: なぜその値かの記録がありません")
+    d = str(rec.get("decided_at") or "")
+    if len(d) != 10 or d[4] != "-" or d[7] != "-":
+        ng.append(f"{field}: 決めた日の形が違います（{d!r}）")
+    return ng
+
+
+def load(strict: bool = True) -> dict:
+    """控えを読む。★1件ずつ契約を確かめる★（2026-08-24・Codexの6回目）
+
+    strict=False は、直すために中身を見たいときだけ使う。
+    """
     if not os.path.exists(STORE):
         return _empty()
     got = _sj.read_json(STORE, expect=dict)
     if got.get("schema_version") != SCHEMA:
         raise ConfirmedError(f"確定値の形が違います: {got.get('schema_version')}")
     got.setdefault("machines", {})
+    if strict:
+        bad = []
+        for slug, rows in (got.get("machines") or {}).items():
+            if not isinstance(rows, dict):
+                bad.append(f"{slug}: 記録の並びが辞書ではありません")
+                continue
+            for field, rec in rows.items():
+                bad += [f"{slug} / {x}" for x in validate_record(field, rec)]
+        if bad:
+            # ★止める★＝偽の記録を「読めた」ことにしない（fail-closed）
+            raise ConfirmedError(
+                "確定値の控えに、契約を満たさない記録があります: "
+                + " ／ ".join(bad[:5])
+                + (f" ほか{len(bad) - 5}件" if len(bad) > 5 else ""))
     return got
 
 
@@ -961,6 +1030,34 @@ def selftest() -> int:
         t("　基本スペック側の項目は spec_lookup か AI_ONLY_FIELDS の鍵だけ",
           all(k in _sp.FIELDS or k in AI_ONLY_FIELDS
               for k, v in allowed_fields().items() if v == "adopted"))
+        # ★★控えを読むときも契約を確かめる★★（2026-08-24・Codexの6回目）
+        #   ★直す前は版番号しか見ていなかった★ので、控えへ形だけ正しい
+        #   偽の記録を置けば、出典0件・判断者0人でも関所を越えられた。
+        _keep_store = STORE
+        try:
+            import tempfile as _tf9
+            STORE = os.path.join(_tf9.mkdtemp(prefix="cvbad_"),
+                                 "confirmed_values.json")
+            with open(STORE, "w", encoding="utf-8") as _fh9:
+                json.dump({"schema_version": SCHEMA, "machines": {
+                    "zzz": {"ceiling": {"value": {"kind": "GAME",
+                                                  "amount": "999",
+                                                  "unit": "G",
+                                                  "benefit": "AT"}}}}},
+                          _fh9, ensure_ascii=False)
+            _bad_raised = False
+            try:
+                load()
+            except ConfirmedError:
+                _bad_raised = True
+            t("★★出典も判断者も無い記録は、読む時点で断る★★"
+              "／★書き込み口だけ厳しくしても、読み込み口が素通りなら意味がない★",
+              _bad_raised)
+            t("　（対照）中身を見ない読み方なら通ってしまう",
+              isinstance(load(strict=False), dict))
+        finally:
+            STORE = _keep_store
+
         t("　2AIだけが答える鍵にも値の形がある（何でも受け取らない）",
           all(k in VALUE_SHAPES for k in AI_ONLY_FIELDS))
 

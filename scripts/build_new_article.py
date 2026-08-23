@@ -215,8 +215,14 @@ def _confirmed_by_2ai(row, slug: str = "", records=None) -> bool:
         return False                     # ★その項目の控えが実在しない★
     got = _core(row)
     val = (rec or {}).get("value")
-    # 控えの値そのもの（辞書）／値を包んだ形（{"value": ...}）の両方に合わせる
-    return _core(val) == got or {"value": val} == got or val == got.get("value")
+    # ★★完全一致だけを通す★★（2026-08-24・Codexの6回目）
+    #   ★直す前は「内側の value が一致すれば真」も許していた★ので、
+    #   控えの正しい値を内側に置いたまま、**外側に別の表示値を足せた**。
+    #   （例：控えは 1000G 天井、外側に amount=9999 を足す
+    #     → 照合は内側だけを見て通り、記事は外側の 9999 を出す）
+    #   ＝読者への誤情報経路。余分な鍵がある形は拒否する。
+    #   控えの値そのもの（辞書）／値を包んだ形（{"value": ...}）だけを認める。
+    return _core(val) == got or {"value": val} == got
 
 
 def _tag(row, key: str = "basis", slug: str = "", records=None) -> str:
@@ -628,7 +634,8 @@ def build_detail(slug, name, release, material) -> dict:
         _cflag = (material.get("adopted") or {}).get("ceilings_complete")
         _complete = ((material.get("ceilings") or {}).get("complete") is True
                      and _confirmed_by_2ai(_cflag, slug, _recs)
-                     and (_cflag or {}).get("value") is True)
+                     and ((_cflag or {}).get("value") or {}).get(
+                         "complete") == "YES")
         if not _complete:
             body.append(CEILING_PARTIAL_NOTE)
         boxes["天井・恩恵"] = {"title": "天井・恩恵", "body": body}
@@ -936,34 +943,60 @@ def selftest() -> int:
       "（2026-08-04・Codex71〜72回目）",
       "status" not in m and m["publication_policy"] == _pd.SCHEMA
       and _pd.machine_class(m) in ("AUTO_INDEXABLE", "AUTO_PENDING"))
-    def _ledger(slug, field_values, extra=None):
-        """控えに実在させる（★機械が読むのと同じファイル★）。
+    def _ledger(_slug_unused, field_values, extra=None):
+        # ★slugは登録関数が公式URLから引く★（試験が名乗らない＝本番と同じ）
+        """控えに実在させる。★本物の登録関数を通す★（2026-08-24・Codexの6回目）
 
-        ★項目名は本物の名簿にあるものだけ使う★（2026-08-24・Codexの5回目）
-          以前は `gameplay_0` のような**本番では登録できない名前**で
-          控えを作っていた。＝本番の登録契約を満たさない試験だった。
-        extra: {項目名: 値} ＝ adopted 側に入る確定値
+        ★直す前は控えのJSONを手で書いていた★＝
+          出典の実在照合も、判断者も、値と引用の突き合わせも通っていなかった。
+          ＝「試験が実際の登録関数を通さず、都合のよいJSONを直接作る」型。
+        ★ここでは通信だけを差し替える★（`fetch` を渡す）。
+          それ以外は本番とまったく同じ道を通る。
         """
-        data = {"schema_version": _cv_t.SCHEMA, "machines": {}}
-        rows = {}
+        # ★★置き場ごと一時の場所へ向ける★★（本番の道をそのまま通すため）
+        #   `record()` は公式URLから機種名を**正本から引く**ので、
+        #   待ち行列も同じ置き場に用意する。
+        #   ★本物の書類フォルダには一切触らない★
+        import local_paths as _lp_t
+        _d = _tf_t.mkdtemp(prefix="cv_")
+        _lp_real = _lp_t.DOCS
+        _lp_t.DOCS = _d
+        _cv_t.STORE = os.path.join(_d, "confirmed_values.json")
+        _url = "https://p-town.dmm.com/machines/dmm_1/pw_x/"
+        with open(os.path.join(_d, "add_machine_pending.json"), "w",
+                  encoding="utf-8") as _fh:
+            json.dump({"items": {_url: {"name": "L試験機"}}}, _fh,
+                      ensure_ascii=False)
 
-        def _rec(v):
-            return {"value": v,
-                    "sources": [{"url": "https://p-town.dmm.com/machines/dmm_1",
-                                 "quote": "試験用"}],
-                    "agreed_by": ["Claude", "Codex"],
-                    "decided_at": "2026-08-24"}
-        for _k, _v in (extra or {}).items():
-            rows[_k] = _rec(_v)
-        for i, v in enumerate(field_values):
-            # ★名簿にある名前★（gameplay / gameplay#2 …）
-            rows["gameplay" if i == 0 else f"gameplay#{i + 1}"] = _rec(v)
-        data["machines"][slug] = rows
-        os.makedirs(os.path.dirname(_cv_t.STORE), exist_ok=True)
-        with open(_cv_t.STORE, "w", encoding="utf-8") as fh:
-            json.dump(data, fh, ensure_ascii=False)
+        def _fake_fetch(url, _quotes=None):
+            # ★そのページに引用が実在する★状態を作る（通信だけの代役）
+            body = " ".join(_quotes or [])
+            return ("<html><head><title>L試験機 スペック</title></head>"
+                    f"<body><h1>L試験機</h1><p>{body}</p></body></html>")
 
-    # ★★2026-08-13・台帳#344（数値でないゲーム性）★★
+        def _put(field, value):
+            toks = _cv_t.check_shape(_cv_t.base_field(field), value)
+            # ★全角の記号は見えている文字の取り出しで半角へ直る★ので使わない
+            quote = "L試験機の解析 " + " ".join(toks) + " と確認できました。"
+            _cv_t.record(
+                "", field, value,
+                [{"url": "https://p-town.dmm.com/machines/dmm_1",
+                  "publisher": "dmm-ptown", "quote": quote},
+                 {"url": "https://chonborista.com/slot/dmm_1",
+                  "publisher": "chonborista", "quote": quote}],
+                ["claude", "codex"],
+                "2AIで出典2件を突き合わせ、同じ値であることを確かめました",
+                official_url=_url,
+                fetch=lambda u, q=(quote,): _fake_fetch(u, q))
+
+        try:
+            for _k, _v in (extra or {}).items():
+                _put(_k, _v)
+            for _i, _v in enumerate(field_values):
+                _put("gameplay" if _i == 0 else f"gameplay#{_i + 1}", _v)
+        finally:
+            _lp_t.DOCS = _lp_real      # ★本物の置き場へ必ず戻す★
+
     def _gp_mat(flows=None, unmapped=None):
         m = {"adopted": {}, "ceilings": {"adopted": []},
              "at_specs": {"adopted": []}, "czs": {"adopted": []},
@@ -1061,6 +1094,20 @@ def selftest() -> int:
         t(f"★★関所は {_box} の根拠なしを断る★★"
           "（名簿から外したら、ここが落ちる）",
           _raises(lambda m=_bare: require_basis(m, "zzz")))
+
+    # ★★外側に別の表示値を足した形は通さない★★（2026-08-24・Codexの6回目）
+    #   ★控えの正しい値を内側に置いたまま、外に嘘の値を足せた★＝
+    #   照合は内側だけを見て通り、記事は外側を出す（読者への誤情報経路）。
+    _mat_extra = json.loads(json.dumps(_mat_signed))
+    for _r in _mat_extra["gameplays"]["adopted"]:
+        # ★控えとまったく同じ形を内側に置く★（出典欄は控えに無いので外す）
+        _r["value"] = {k: v for k, v in _r.items()
+                       if not k.startswith("_") and k != "sources"}
+        _r["leads_to"] = "嘘の行き先"
+    t("★★内側が控えと一致していても、外側に別の値があれば断る★★"
+      "／★控えは正しいまま、記事だけ嘘になる経路★",
+      _raises(lambda: build_detail("pw_x", "試験機", "2026-09-07",
+                                   _mat_extra)))
 
     t("★★別の項目の控えでは通らない★★"
       "／★値だけを照合すると、出玉率の控えでAT確率を通せてしまう★",
@@ -1298,9 +1345,10 @@ def selftest() -> int:
     _mat_true["ceilings"]["complete"] = True
     # ★★「全部そろった」には控えの裏付けが要る★★（2026-08-24・Codexの5回目）
     #   ★申告だけでは断り書きは消えない★ので、本物の取り込みで裏付けを入れる。
-    _ledger("zzz_complete", [], extra={"ceilings_complete": True})
-    _cv_t.merge_into(_mat_true, "zzz_complete")
-    _d_true = build_detail("zzz_complete", "試験機", "2026-09", _mat_true)
+    _ledger("pw_x", [],
+            extra={"ceilings_complete": {"complete": "YES"}})
+    _cv_t.merge_into(_mat_true, "pw_x")
+    _d_true = build_detail("pw_x", "試験機", "2026-09", _mat_true)
     # ★対照★ 控えが無ければ、申告があっても断り書きは残る
     _mat_claim = json.loads(json.dumps(_mat_false))
     _mat_claim["ceilings"]["complete"] = True
