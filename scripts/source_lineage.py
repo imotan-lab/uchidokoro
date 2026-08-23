@@ -224,6 +224,41 @@ def publisher_of_host(host: str, reg: dict | None = None) -> str:
     raise LineageError("登録されていないサイトです: " + str(host))
 
 
+def publisher_of_host_any(host: str, reg: dict | None = None) -> str:
+    """★誰が出したページか★だけを引く（★いま使ってよいかは見ない★）
+
+    ★★なぜ分けるか★★（2026-08-24・Codexの7回目を直していて気づいた）
+      `publisher_of_host` は **ACTIVE な出典しか返さない**。
+      これは「いまここへ巡回してよいか」を見る規則で、
+      ★過去に記録した控えを読み直す用途には合わない★。
+
+      実例＝P-WORLDは規約により巡回を止めた（OFF_TOS）が、
+      止める前に2出典で確かめて記録した値は**当時は正当**。
+      読み直しのたびに「登録されていないサイト」と言われると、
+      ★正しい記録のせいで新台の公開が止まる★。
+
+      ＝同じ規則を「巡回してよいか」と「誰が出したか」の
+        2つの目的に使っていたのが間違い。
+    """
+    reg = reg if reg is not None else load_registry()
+    h = str(host or "").lower()
+    for pid, p in (reg.get("publishers") or {}).items():
+        for c in p.get("canonical_hosts") or []:
+            if str(c).lower() == h:
+                return pid
+    raise LineageError("登録されていないサイトです: " + str(host))
+
+
+def vote_key_any(publisher_id: str, reg: dict | None = None) -> str:
+    """★当時の票の単位★（状態を問わずに引く）"""
+    reg = reg if reg is not None else load_registry()
+    p = (reg.get("publishers") or {}).get(str(publisher_id or ""))
+    if not p:
+        raise LineageError("知らない出典です: " + str(publisher_id))
+    return "vote:" + str(p.get("content_lineage_id")
+                         or publisher_id).replace("lin-", "")
+
+
 def vote_key_of_url(url: str, reg: dict | None = None) -> str:
     reg = reg if reg is not None else load_registry()
     host = urllib.parse.urlsplit(str(url or "")).hostname or ""

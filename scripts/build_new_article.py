@@ -974,26 +974,44 @@ def selftest() -> int:
             return ("<html><head><title>L試験機 スペック</title></head>"
                     f"<body><h1>L試験機</h1><p>{body}</p></body></html>")
 
-        def _put(field, value):
-            toks = _cv_t.check_shape(_cv_t.base_field(field), value)
-            # ★全角の記号は見えている文字の取り出しで半角へ直る★ので使わない
-            quote = "L試験機の解析 " + " ".join(toks) + " と確認できました。"
+        def _put(field, value, quote):
+            """★引用は呼ぶ側が固定の文で渡す★（2026-08-24・Codexの7回目）
+
+            ★直す前は `check_shape()` の戻り値から引用を作っていた★＝
+              照合すべき値が誤って空になっても、引用側も空になるので
+              **試験は緑のまま**（実際に純増でそうなっていた）。
+            ★出典も `parse_source("URL|引用")` から作る★＝
+              発行者を自己申告せず、URLから引かせる（本番と同じ道）。
+            """
             _cv_t.record(
                 "", field, value,
-                [{"url": "https://p-town.dmm.com/machines/dmm_1",
-                  "publisher": "dmm-ptown", "quote": quote},
-                 {"url": "https://chonborista.com/slot/dmm_1",
-                  "publisher": "chonborista", "quote": quote}],
+                [_cv_t.parse_source(
+                    "https://p-town.dmm.com/machines/dmm_1|" + quote),
+                 _cv_t.parse_source(
+                    "https://chonborista.com/slot/dmm_1|" + quote)],
                 ["claude", "codex"],
                 "2AIで出典2件を突き合わせ、同じ値であることを確かめました",
                 official_url=_url,
                 fetch=lambda u, q=(quote,): _fake_fetch(u, q))
 
+        # ★固定の引用★（検査対象から作らない。値がここに書いてある）
+        _QUOTES = {
+            "ceilings_complete": "L試験機の解析 天井は YES 全部そろいました。",
+            "at_net_unmapped": "L試験機の解析 純増は 3.1 と 7.4 の2種類です。",
+        }
+
+        def _flow_quote(f):
+            got = [f.get("when"), f.get("trigger"), f.get("leads_to")]
+            got += list(f.get("gains") or [])
+            return ("L試験機の解析 " + " ".join(str(x) for x in got if x)
+                    + " と確認できました。")
+
         try:
             for _k, _v in (extra or {}).items():
-                _put(_k, _v)
+                _put(_k, _v, _QUOTES[_k])
             for _i, _v in enumerate(field_values):
-                _put("gameplay" if _i == 0 else f"gameplay#{_i + 1}", _v)
+                _put("gameplay" if _i == 0 else f"gameplay#{_i + 1}", _v,
+                     _flow_quote(_v))
         finally:
             _lp_t.DOCS = _lp_real      # ★本物の置き場へ必ず戻す★
 

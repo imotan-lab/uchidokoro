@@ -227,6 +227,29 @@ MUTATIONS = [
         "run": ["scripts/add_machine_run.py"],
     },
     {
+        "why": "純増を引用と照合しない（出典に無い数を載せられる・Codex7回目）",
+        "file": "scripts/confirmed_values.py",
+        "before": '                        "quoted": ("values",)},',
+        "after": '                        "quoted": ()},',
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "控えが消えても0件として通す（確定値が全部抜けた記事が出る・Codex7回目）",
+        "file": "scripts/confirmed_values.py",
+        "before": "        if require_exists:",
+        "after": "        if False:",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "控えの系列を数え直さない（1出典の記録が通る・Codex7回目）",
+        "file": "scripts/confirmed_values.py",
+        "before": "                if len(got) < 2:\n"
+                  '                    ng.append(f"{field}: '
+                  '独立した2系列になっていません（{got}）")',
+        "after": "                pass",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
         "why": "試験用の偽の機種を掃除しない（2026-08-24・自分で踏んだ）",
         "file": "scripts/publish_new_machine.py",
         "before": "        if apply_it:\n"

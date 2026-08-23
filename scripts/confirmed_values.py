@@ -195,9 +195,13 @@ VALUE_SHAPES = {
     #   どちらが上位か割り当てていないとき、**モードへ割り当てない**。
     #   ★順番に並べると読者が対応を推測する★ので、記事側は
     #   「AT名との対応は未確認」と明記して並べる。
+    # ★引用と照合する★（2026-08-24・Codexの7回目）
+    #   ★直す前は照合対象が空だった★ので、出典に「999」が無くても
+    #   `values=["999"]` を登録でき、記事に「約999枚/G」と出せた。
+    #   「約3.1枚」を値にすれば「約約3.1枚枚/G」も通った。
     "at_net_unmapped": {"required": ("values", "mapping"),
                         "enums": {"mapping": ("UNCONFIRMED",)},
-                        "quoted": ()},
+                        "quoted": ("values",)},
 }
 
 
@@ -252,6 +256,13 @@ VALUE_PATTERNS = {
     "checker_ceiling": {
         "games": (_re.compile(r"^\d{2,5}$"),
                   "数だけ（+αや単位は書かない。例: 1000）"),
+    },
+    # ★AT名との対応が付かない純増★（2026-08-24・Codexの7回目）
+    #   ★記事は「約{値}枚/G」と書く★ので、値は数だけ。
+    #   単位や「約」を入れると「約約3.1枚枚/G」になる（実際に通っていた）。
+    "at_net_unmapped": {
+        "values": (_re.compile(r"^\d{1,2}(\.\d)?$"),
+                   "純増の数だけ（単位も「約」も書かない。例: 3.1）"),
     },
     # ★朝一・リセット★（2026-08-12）
     "reset": {
@@ -375,7 +386,18 @@ def check_shape(field: str, value) -> list:
                 f"{'/'.join(extra)} は使いません（記事に出ないので受け取りません）")
     # ★単位の種類を確かめる★（依頼132 P0-2／依頼134で項目ごとに分けた）
     for k, (pat, jp) in (VALUE_PATTERNS.get(base_field(field)) or {}).items():
-        v = str(value.get(k) or "").strip()
+        got = value.get(k)
+        # ★配列は要素ごとに見る★（2026-08-24・Codexの7回目）
+        #   丸ごと str() にすると「['999']」になり、どんな形も通らないか、
+        #   逆に検査が素通りする。
+        if isinstance(got, (list, tuple)):
+            for x in got:
+                xs = str(x or "").strip()
+                if xs and not pat.match(xs):
+                    raise ConfirmedError(
+                        f"{field}: 「{k}」は{jp}の形で書きます（いま {xs!r}）")
+            continue
+        v = str(got or "").strip()
         if v and not pat.match(v):
             raise ConfirmedError(f"{field}: 「{k}」は{jp}の形で書きます（いま {v!r}）")
     # ★引用と照合するのは、実際に書いた項目だけ★
@@ -469,22 +491,75 @@ def validate_record(field: str, rec) -> list:
         ng.append(f"{field}: 判断者が2つ未満です（{who!r}）")
     if not str(rec.get("why") or "").strip():
         ng.append(f"{field}: なぜその値かの記録がありません")
+    # ★★以下は「通信のいらない再計算」★★（2026-08-24・Codexの7回目）
+    #   ★直す前は、鍵がある/形が合うところまでしか見ていなかった★ので、
+    #   出典1件・系列0件・理由1文字・実在しない日付・
+    #   ★引用に無い値★でも読み込めた（＝そのまま記事へ届く）。
+    if len(str(rec.get("why") or "").strip()) < MIN_WHY:
+        ng.append(f"{field}: なぜその値かの記録が短すぎます（{MIN_WHY}文字以上）")
     d = str(rec.get("decided_at") or "")
-    if len(d) != 10 or d[4] != "-" or d[7] != "-":
-        ng.append(f"{field}: 決めた日の形が違います（{d!r}）")
+    try:
+        datetime.date.fromisoformat(d)
+    except Exception:                                        # noqa: BLE001
+        ng.append(f"{field}: 決めた日が実在しません（{d!r}）")
+    if isinstance(src, list) and src:
+        # ★発行者はURLから引き直す★（申告された発行者名を信じない）
+        pubs = []
+        for i, x in enumerate(src):
+            if not isinstance(x, dict):
+                continue
+            import urllib.parse as _up
+            host = _up.urlsplit(str((x or {}).get("url") or "")).hostname or ""
+            try:
+                # ★当時の出典として引く★（いま巡回してよいかは別の話）
+                pubs.append(_sl.publisher_of_host_any(host))
+            except Exception as e:                           # noqa: BLE001
+                ng.append(f"{field}: 出典{i + 1}の発行者を引けません"
+                          f"（{str(e)[:60]}）")
+        # ★独立した2系列を数え直す★（保存された系列を信じない）
+        if len(pubs) == len(src):
+            try:
+                got = sorted({_sl.vote_key_any(p) for p in pubs})
+                if len(got) < 2:
+                    ng.append(f"{field}: 独立した2系列になっていません（{got}）")
+                keep = sorted(rec.get("lineages") or [])
+                if keep and keep != got:
+                    ng.append(f"{field}: 保存された系列と数え直しが違います"
+                              f"（{keep} ≠ {got}）")
+            except Exception as e:                           # noqa: BLE001
+                ng.append(f"{field}: 系列を数え直せません（{str(e)[:60]}）")
+        # ★値が、保存された引用に実在するか★（記録した時と同じ照合）
+        try:
+            toks = check_shape(base, rec["value"])
+        except Exception:                                    # noqa: BLE001
+            toks = []
+        for i, x in enumerate(src):
+            q = " ".join(str((x or {}).get("quote") or "").split())
+            for tk in toks:
+                if tk not in q:
+                    ng.append(f"{field}: 値『{tk}』が出典{i + 1}の引用にありません")
     return ng
 
 
-def load(strict: bool = True) -> dict:
+def load(strict: bool = True, require_exists: bool = False) -> dict:
     """控えを読む。★1件ずつ契約を確かめる★（2026-08-24・Codexの6回目）
 
     strict=False は、直すために中身を見たいときだけ使う。
     """
     if not os.path.exists(STORE):
+        if require_exists:
+            # ★★「消えた」を「0件」と読まない★★（2026-08-24・Codexの7回目）
+            #   ★直す前は不存在を正常な0件として返していた★ので、
+            #   控えが消えた日に**2AIの確定値が全部抜けた記事**を
+            #   何事もなかったように作れた。
+            raise ConfirmedError(f"確定値の控えがありません: {STORE}")
         return _empty()
     got = _sj.read_json(STORE, expect=dict)
     if got.get("schema_version") != SCHEMA:
         raise ConfirmedError(f"確定値の形が違います: {got.get('schema_version')}")
+    if require_exists and not isinstance(got.get("machines"), dict):
+        # ★中身の入れ物ごと無い／空でないものが入っている★
+        raise ConfirmedError("確定値の控えに機種の並びがありません")
     got.setdefault("machines", {})
     if strict:
         bad = []
@@ -796,8 +871,12 @@ def forget(slug: str, field: str) -> dict:
 
 
 def for_slug(slug: str, data: dict | None = None) -> dict:
-    """機械が毎回読む側（無人タスクはここだけ使う）。"""
-    d = data if data is not None else load()
+    """機械が毎回読む側（無人タスクはここだけ使う）。
+
+    ★控えが無い／壊れているときは止める★（2026-08-24・Codexの7回目）
+      作るのは `record()` の仕事。読む側が黙って0件にしない。
+    """
+    d = data if data is not None else load(require_exists=True)
     return dict((d.get("machines") or {}).get(slug) or {})
 
 
@@ -1057,6 +1136,69 @@ def selftest() -> int:
               isinstance(load(strict=False), dict))
         finally:
             STORE = _keep_store
+
+        # ★★純増は引用と照合する★★（2026-08-24・Codexの7回目）
+        #   ★直す前は照合対象が空だった★ので、出典に無い数を載せられた。
+        _np_toks = check_shape("at_net_unmapped",
+                               {"values": ["3.1", "7.4"],
+                                "mapping": "UNCONFIRMED"})
+        t("★★純増の値は引用と照合する★★"
+          "／★照合しないと、出典に無い数を記事に載せられる★",
+          "3.1" in _np_toks and "7.4" in _np_toks)
+        _np_bad = False
+        try:
+            check_shape("at_net_unmapped",
+                        {"values": ["約3.1枚"], "mapping": "UNCONFIRMED"})
+        except ConfirmedError:
+            _np_bad = True
+        t("　単位や「約」の付いた値は受け取らない（約約3.1枚枚/G になる）",
+          _np_bad)
+
+        # ★★控えが消えたら止まる★★（2026-08-24・Codexの7回目）
+        #   ★直す前は不存在を正常な0件として返していた★ので、
+        #   控えが消えた日に**確定値が全部抜けた記事**を作れた。
+        _keep2 = STORE
+        try:
+            import tempfile as _tf8
+            STORE = os.path.join(_tf8.mkdtemp(prefix="cvnone_"),
+                                 "confirmed_values.json")
+            _gone = False
+            try:
+                load(require_exists=True)
+            except ConfirmedError:
+                _gone = True
+            t("★★控えが消えていたら、無人の読み口は止まる★★"
+              "／★『0件』と読むと、確定値が全部抜けた記事が黙って出る★",
+              _gone)
+            t("　（対照）作る側の読み方なら、無くても0件で始められる",
+              load(strict=False)["machines"] == {})
+            # ★機種の並びが無い／別の形★も止める
+            with open(STORE, "w", encoding="utf-8") as _fh8:
+                json.dump({"schema_version": SCHEMA}, _fh8)
+            _gone2 = False
+            try:
+                load(require_exists=True)
+            except ConfirmedError:
+                _gone2 = True
+            t("　機種の並びが無い控えも止める", _gone2)
+        finally:
+            STORE = _keep2
+
+        # ★★系列を数え直す★★（保存された系列を信じない）
+        _one = {"value": {"kind": "GAME", "amount": "999", "unit": "G",
+                          "benefit": "AT"},
+                "sources": [{"url": "https://chonborista.com/slot/x",
+                             "quote": "999 G AT"}],
+                # ★保存された系列は「数え直した結果」と同じにする★
+                #   （食い違いの検査に助けられると、系列の数の検査を
+                #     外しても試験が緑のままになる＝実際にそうなった）
+                "lineages": ["vote:chonborista"],
+                "agreed_by": ["claude", "codex"],
+                "why": "2AIで突き合わせました",
+                "decided_at": "2026-08-24"}
+        t("★★1つの出典しか無い記録は、控えを読む時点で断る★★"
+          "／★保存された系列の申告を信じない★",
+          any("系列" in x for x in validate_record("ceiling", _one)))
 
         t("　2AIだけが答える鍵にも値の形がある（何でも受け取らない）",
           all(k in VALUE_SHAPES for k in AI_ONLY_FIELDS))
