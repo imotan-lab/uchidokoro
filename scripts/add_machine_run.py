@@ -43,6 +43,7 @@ for _s in (sys.stdout, sys.stderr):
     if _s is not None and hasattr(_s, "reconfigure"):
         _s.reconfigure(encoding="utf-8", errors="replace")
 
+import adoption_basis as _ab         # noqa: E402
 import build_new_article as _ba       # noqa: E402
 import check_duplicate as _cd        # noqa: E402
 import at_spec_lookup as _at        # noqa: E402
@@ -711,10 +712,29 @@ def _gather(name: str, maker: str = "", slug: str = "",
     _log(f"材料集め開始: {name} / 名鑑{len(got['urls'])}件 "
          + " ".join(f"{d}={v['state']}" for d, v in fr["results"].items()))
     if len(got["urls"]) < 2:
-        got["problems"] += unused_msgs    # ★なぜ足りないかも残す★
-        got["problems"].append(
-            f"名鑑の個別ページが {len(got['urls'])} 件しか見つかりません（2件以上が要る）")
-        return got
+        # ★★DMM単独の例外★★（2026-08-23・運営者決定）
+        #   「新台公開1週間前でもDMMしかない状態なら、DMMのだけを正として
+        #     記事にしていいよ」
+        #   ★ここを通さないと、採否の判定（adoption_basis）まで到達しない★
+        #   ＝実測でこれに気づいた。抽出器へ配線しただけでは、
+        #     材料集めの入口で早期returnしていて一度も呼ばれなかった。
+        #   ★通してよいのは「1件だけ・それがDMM・導入が近い」ときだけ★。
+        #   値ごとの採否はこのあと adoption_basis が6条件で判断する
+        #   （ここは入口を開けるだけで、採用を決めてはいない）。
+        _solo_ok = (len(got["urls"]) == 1
+                    and bool(_dmm_machine_id(got["urls"][0]))
+                    and bool(machine_name) and bool(release_date)
+                    and _ab.near_release(str(release_date)))
+        if not _solo_ok:
+            got["problems"] += unused_msgs    # ★なぜ足りないかも残す★
+            got["problems"].append(
+                f"名鑑の個別ページが {len(got['urls'])} 件しか見つかりません（2件以上が要る）")
+            return got
+        # ★1件で進む理由は必ず残す★（黙って例外を通さない）
+        got["problems"] += unused_msgs
+        got["single_source_exception"] = True
+        _log("  ★DMM単独の例外で材料集めを続けます★"
+             f"（導入{release_date}・7日前以降／運営者決定 2026-08-23）")
     # ★★DMMの機種ページは、DMM自身の決まりで確かめる★★（2026-08-22・台帳#453）
     #   ★なぜ分けるか（Codexの設計レビュー）★
     #     DMMの機種ページには**専用の同定経路がすでにある**
@@ -751,6 +771,22 @@ def _gather(name: str, maker: str = "", slug: str = "",
             return None                   # ★メーカーを縛れないなら渡さない★
         return {"machine_id": mid, "name": machine_name,
                 "maker_names": _maker_names, "release": release_date}
+
+    # ★★DMM単独で採ってよいかの文脈★★（2026-08-23・運営者決定）
+    #   「新台公開1週間前でもDMMしかない状態なら、DMMのだけを正として
+    #     記事にしていいよ」
+    #   ★渡せる条件は _ident_for と同じ★＝DMMの機種ページで
+    #   機種名・メーカー・導入日を確かめられているときだけ。
+    #   ★確かめていなければ空で渡す★＝空なら今までどおり独立2票のみ採用
+    #   （adoption_basis 側が fail-closed で落とす）。
+    #   ★導入日が月までしか分からないときも例外は効かない★
+    #   （near_release が日精度を要求する）。
+    _adopt_ctx = {}
+    if machine_name and release_date and _maker_names:
+        _adopt_ctx = {"release_date": str(release_date),
+                      # ★この導入日はDMMの機種ページで確かめたもの★
+                      "release_source": "dmm-ptown",
+                      "identity_verified": True}
 
     # ★名鑑にも期待するメーカーを渡す★（2026-08-02・Codex40回目）
     looks = [_mc.lookup(u, name, expected_maker=maker,
@@ -993,7 +1029,8 @@ def _gather(name: str, maker: str = "", slug: str = "",
             if not pg.get("ok"):
                 got["problems"].append(
                     f"{jp}: {pg['host']} を使えませんでした（{pg.get('reason', '')[:90]}）")
-        return mod.compare(pages)
+        # ★DMM単独の例外の文脈を渡す★（空なら今までどおり独立2票のみ）
+        return mod.compare(pages, ctx=_adopt_ctx)
 
     got["material"] = _read(_sl, "基本スペック")
     # ★型式名の正本は mv（独立2票）★（2026-08-02・Codex29回目）
@@ -1025,7 +1062,11 @@ def _gather(name: str, maker: str = "", slug: str = "",
             got["problems"].append(
                 f"天井: {_pg['host']} を使えませんでした（{_pg.get('reason','')[:90]}）")
     got["material"]["ceilings"] = _cl.compare(
-        _cl_pages, cz_names=_cl.verified_cz_names(_cl_pages))
+        _cl_pages,
+        # ★CZ名の確認にも同じ文脈を渡す★＝本体だけ通すと
+        #   「天井は採れるがCZ名に寄せられない」半端な状態になる
+        cz_names=_cl.verified_cz_names(_cl_pages, ctx=_adopt_ctx),
+        ctx=_adopt_ctx)
     for nt in got["material"]["ceilings"]["need_third"]:
         got["problems"].append(f"{nt['jp']}: {nt['why']}")
     # ★ATの仕様はモードごとに★（純増を混ぜたら誤情報）

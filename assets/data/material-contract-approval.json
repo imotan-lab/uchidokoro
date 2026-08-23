@@ -6,7 +6,7 @@
   "assets/data/directory-catalogs.json": "20e4e5aa7937c6a2029b368006e67fd3b4a7ba61fb20655bc214ab2416898e7c",
   "assets/data/maker-catalogs.json": "612fa17f5b50f509475096b51ca1f4d8c261c5805e22e337875aa478054c0b3c",
   "assets/data/source-registry.json": "4de7d0c863653c916c8ec419dc8454c1f26b0ecf1f96f0a8e313823470518e47",
-  "scripts/add_machine_run.py": "ff55b4f05cb42711ce948a7d81defabe59ff32a4e459be10c086526a10423ab3",
+  "scripts/add_machine_run.py": "d11ab8311653828b32fa9dcdc057d1d2a4ba7c42dcad51dd3412bd7662d3995b",
   "scripts/adoption_basis.py": "8bfda9fae09b45bd81a5094880656d85be00104145d76a6dcd6ae451dfb4c35f",
   "scripts/at_spec_lookup.py": "74f11d27f804891ec42eba1568d500405469457ed95502396fff9f3627e084f2",
   "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
@@ -32,6 +32,7 @@
  },
  "imports": {
   "scripts/add_machine_run.py": [
+   "adoption_basis",
    "at_spec_lookup",
    "build_new_article",
    "ceiling_lookup",
@@ -182,5 +183,5 @@
    "new_machine_watch"
   ]
  },
- "_deps_changed_why": "2026-08-23、4つの抽出器（cz / at_spec / ceiling / spec）が\nadoption_basis を取り込むようになったので、その理由。\n\n■ なぜ取り込むのか\n  運営者決定「新台公開1週間前でもDMMしかない状態なら、\n  そのDMMのだけを正として記事にしていいよ」を実装したため。\n\n  これまで各抽出器は `_indep(sources) >= 2` と**自前で閾値を書いて**いた。\n  ★実測で6か所以上に散らばっていた★ので、片方だけ直す事故が起きやすい\n  （今日すでに4回踏んでいる型）。\n\n  そこで「その票数で採ってよいか」を adoption_basis の1か所に集め、\n  各抽出器はそれを呼ぶ形にした。\n\n■ 何を adoption_basis に入れたか\n  ・独立2票以上 → 今までどおり採用（INDEPENDENT_MULTI）\n  ・DMM単独 → 6条件を全部満たしたときだけ採用\n      支持がDMMだけ／導入7日前以降／導入日が日まで確定／\n      導入日の出どころがDMM／DMMの機種ページで本人性確認済み／\n      同じ項目で別の値を出している出典が無い\n  ・それ以外 → 不採用\n\n■ ★票の数え方は触っていない★\n  source_lineage.independent() が「何票あるか」を決める唯一の場所、\n  という設計はそのまま。adoption_basis はそれを呼ぶ側。\n  監査39（票の数え方）も0件のまま。\n\n■ ★材料の契約に入れる★\n  adoption_basis は**採否そのものを決める**ので、集合の外に置けない。\n  外にあると、条件を1行ゆるめるだけで承認をやり直さずに\n  1出典の内容を公開できてしまう。\n  → CONTRACT_INPUTS に scripts/adoption_basis.py を追加した。\n\n■ ★ここでは持たない、を選ばなかった理由★\n  「採否を決める最後の関門を守っても、その関門が信用している側が\n  野放しなら意味がない」（dmm_machine を入れたときと同じ理屈）。\n  今回は関門そのものなので、なおさら外せない。"
+ "_deps_changed_why": "2026-08-23、add_machine_run が adoption_basis を取り込むようになった理由。\n\n■ なぜ取り込むのか\n  ★実データで走らせて分かったこと★＝\n  4つの抽出器へ採否の判定を配線しただけでは、**一度も呼ばれなかった**。\n\n  gather() の入口に「名鑑の個別ページが2件以上ないと進めない」という\n  早期returnがあり、DMMしか無い機種はそこで止まっていた。\n\n    if len(got[\"urls\"]) < 2:\n        return got          ← ここで終わり（採否の判定に到達しない）\n\n  ＝★入口を開けないと、運営者決定（DMM単独で記事にしてよい）が効かない★。\n\n■ 何に使うか\n  入口の判定にだけ使う。\n    ・1件だけ ／ それがDMMの機種ページ ／ 機種名と導入日を確かめ済み\n    ・adoption_basis.near_release（導入7日前以降・日精度）\n  この4つがそろったときだけ、1件でも材料集めを続ける。\n\n  ★入口は開けるだけで、採用を決めていない★＝\n  値ごとの採否はこのあと adoption_basis.classify_support が\n  6条件で判断する（支持がDMMだけ／導入7日前以降／導入日が日まで確定／\n  導入日の出どころがDMM／本人性確認済み／別の値を出す出典が無い）。\n\n  ★1件で進んだ理由は必ずログと problems に残す★（黙って例外を通さない）。\n\n■ ★材料の契約に入れるべきもの★\n  add_machine_run は既に契約に入っている（採否を使う側・公開への接続）。\n  adoption_basis も今日追加した（採否そのものを決める側）。\n  今回はその2つが直接つながっただけなので、集合は変わらない。"
 }
