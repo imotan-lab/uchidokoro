@@ -630,8 +630,16 @@ def build_detail(slug, name, release, material) -> dict:
         got = adopted.get(key)
         if not got:
             continue
-        rows = [[f"設定{k}", got["value"][k]] for k in sorted(got["value"])]
+        # ★値ごとに根拠を名乗る★（2026-08-23・Codexの再レビューP0-2）
+        #   ★ここだけ名乗りが無かった★＝spec_lookup は at_prob/payout_rate にも
+        #   DMM単独の例外を当てられるので、設定別の値が
+        #   **断りなしで普通の値として**読者に出る状態だった。
+        _tag = _basis_tag(got.get("basis"))
+        rows = [[f"設定{k}", f"{got['value'][k]}{_tag}"]
+                for k in sorted(got["value"])]
         note = "出典で確認が取れた設定のみ掲載しています。"
+        if _tag:
+            note += SINGLE_SOURCE_NOTE
         # ★値が採れていない設定があるなら、その名前を出す★
         #   （黙って省くと「これで全部」と読まれ、段数を誤って伝えることになる）
         un = material.get("setting_labels_unconfirmed") or []

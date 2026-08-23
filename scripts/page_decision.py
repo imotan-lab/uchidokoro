@@ -113,6 +113,15 @@ def _bad_value(v) -> bool:
     return (not s) or s.lower() in ("none", "null", "nan", "-")
 
 
+def _bad_value_deep(v) -> bool:
+    """値そのものが空か（組の中まで見る）。★spec系の検査に使う★"""
+    if isinstance(v, dict):
+        return (not v) or any(_bad_value_deep(x) for x in v.values())
+    if isinstance(v, (list, tuple)):
+        return (not v) or any(_bad_value_deep(x) for x in v)
+    return _bad_value(v)
+
+
 def _from_2ai(v) -> bool:
     """2AIが確定させた値か（機械の裏取りをまだ通っていない）。"""
     return isinstance(v, dict) and v.get("_from") == "confirmed_values"
@@ -180,6 +189,13 @@ def _claims(material: dict, *, count_confirmed: bool) -> list:
     adopted = (material or {}).get("adopted") or {}
     for key in _SPEC_CLAIMS:
         v = adopted.get(key)
+        # ★★spec系も「検査が先」★★（2026-08-23・Codexの再レビューP1）
+        #   ★天井・AT・CZだけ直して、ここを忘れていた★＝
+        #   根拠なしの壊れたspec材料が黙って読み飛ばされていた。
+        if v is not None and not isinstance(v, dict):
+            raise DecisionError(f"{key} の形が違います: {v!r}")
+        if isinstance(v, dict) and "value" in v and _bad_value_deep(v["value"]):
+            raise DecisionError(f"{key} の値がありません: {v!r}")
         # ★2AIが確定した値は「検索に載せてよい濃さ」に数えない★
         #   （2026-08-09・依頼130 P1-3）
         #   記事に載せる材料としては使うが、claim の裏取り（verify_claims）を

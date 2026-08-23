@@ -141,26 +141,45 @@ def other_sources_known(slug: str, index_urls) -> tuple:
         saved = _ms.urls_for(slug)
     except Exception as e:                                   # noqa: BLE001
         return True, f"控えを読めません（{str(e)[:40]}）"
+    # ★★索引と控えの「和集合」で見る★★（2026-08-23・Codexの再レビューP0-1）
+    #   ★直す前は「索引にもある控えは別口ではない」と外していた★。
+    #   ところがその索引のページは、このあと個別に読むときに落ちる
+    #   （題が略称・HTMLが変わった・読み取り失敗）。
+    #   落ちたページは票から外れるので、
+    #     ①DMMと別出典が索引で見つかる
+    #     ②控えの確認は「索引にもある」と無視
+    #     ③別出典が ok=False で落ちる
+    #     ④票に残るのはDMMだけ
+    #     ⑤★「DMM単独」として採用が復活する★
+    #   ＝塞いだはずの「知っている別出典との食い違いを見ない経路」が残っていた。
+    #   ★索引に載っているかを問わず、DMM以外を1件でも知っていれば止める★
+    others = []
     try:
-        seen = {_ms.url_key(u) for u in (index_urls or []) if u}
+        for u in (index_urls or []):
+            if u and not is_dmm_only([_vote_key_of(str(u))]):
+                others.append(str(u))
     except Exception:                                        # noqa: BLE001
         return True, "URLをそろえて比べられません"
-    others = []
     for rec in (saved or []):
         u = str((rec or {}).get("url") or "")
         if not u:
             continue
-        try:
-            if _ms.url_key(u) in seen:
-                continue                  # 索引でも見つかっている＝別口ではない
-        except Exception:                                    # noqa: BLE001
-            return True, "URLをそろえて比べられません"
         if is_dmm_only([_vote_key_of(u)]):
             continue                      # DMM自身の別ページは「別の出典」ではない
         others.append(u)
     if others:
-        return True, ("控えに別の出典があります（索引では拾えていません）: "
-                      + " / ".join(others[:2]))
+        # ★同じURLを2度言わない★（索引と控えの両方にあることは普通）
+        uniq = []
+        for u in others:
+            try:
+                k = _ms.url_key(u)
+            except Exception:                                # noqa: BLE001
+                return True, "URLをそろえて比べられません"
+            if k not in [x[0] for x in uniq]:
+                uniq.append((k, u))
+        return True, ("DMM以外の出典を知っています"
+                      "（索引・控えのどちらかにあります）: "
+                      + " / ".join(u for _, u in uniq[:2]))
     return False, ""
 
 

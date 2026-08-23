@@ -7,7 +7,7 @@
   "assets/data/maker-catalogs.json": "612fa17f5b50f509475096b51ca1f4d8c261c5805e22e337875aa478054c0b3c",
   "assets/data/source-registry.json": "4de7d0c863653c916c8ec419dc8454c1f26b0ecf1f96f0a8e313823470518e47",
   "scripts/add_machine_run.py": "5099b85360d393cfa6f91b567d9a783c02236b743f23fa355cccfc5ce716ec80",
-  "scripts/adoption_basis.py": "0aaf271f7ed401d1cbdf3e63770708af088369b454c78afb3a8a536c41a25b9e",
+  "scripts/adoption_basis.py": "9aef3ca66dbf3354397e0b443601ef7942f7276f3059501613bac0dedff8b3c7",
   "scripts/at_spec_lookup.py": "74f11d27f804891ec42eba1568d500405469457ed95502396fff9f3627e084f2",
   "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
   "scripts/blocked_hosts.py": "553ac0a6f0f0baf563100458937efa167826c4347f815ace1a70e39769909b7d",
@@ -196,6 +196,5 @@
    "ceiling_lookup",
    "new_machine_watch"
   ]
- },
- "_deps_changed_why": "2026-08-23、adoption_basis が build_new_article と page_decision を\n取り込むようになった理由。\n\n■ ★試験の中だけで使う★\n  Codexの敵対的レビュー指摘7「入口から検索判定までの実結合試験が無い」に\n  対応して、`_end_to_end_tests()` を足した。\n  そこで**部品をまたいだ食い違い**を見るために、この2つを呼んでいる。\n\n    材料 → 採否（adoption_basis）\n         → 記事の名乗り（build_new_article）\n         → 検索の濃さ（page_decision）\n\n  ★本番の経路では呼んでいない★＝classify_support / near_release /\n  other_sources_known はどれもこの2つに触らない。\n\n■ ★なぜ結合試験が要るのか★\n  今日だけで★5回★「片方だけ直した」を踏んだ。\n\n    ①D案の配線を lookup だけに入れて材料側を忘れた\n    ②試験が自分の作った材料を採点していた（LEAD_TEMPLATE）\n    ③待ち行列の鍵が変わったのに控え側が字面のまま\n    ④抽出器に配線したが入口の早期returnで一度も呼ばれなかった\n    ⑤basis を cz と at にだけ入れて spec と ceiling を忘れた\n\n  ★どれも部品ごとの試験は全部緑だった★。\n  部品をまたいで見る場所が無いと、同じ型をまた踏む。\n\n■ ★材料の採否の集合には入れない★\n  ・build_new_article … 読者向けの記事を組み立てる側。採否は決めない。\n    （公開契約 build_pages_artifact --approve の57件には既に入っている）\n  ・page_decision … 検索に載せるかを決める側。採否は決めない。\n    （同じく公開契約に入っている）\n\n  ★どちらも「採否を決める側」ではない★ので、材料の契約へは入れない。\n  ★試験のためだけの依存で契約の集合を膨らませない★＝\n  集合が広がるほど、承認のやり直しが増えて意味が薄れる。\n\n  ★もし本番の経路でこの2つを呼ぶようになったら、そのときは入れる★。"
+ }
 }
