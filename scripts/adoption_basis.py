@@ -346,10 +346,111 @@ def selftest() -> int:
     t("★★判定日は日本時間で決める★★（CIのUTCで1日ずれない）",
       isinstance(_today_jst(), _dt.date))
 
+    _end_to_end_tests(t)
+
     ng = sum(1 for _, o in results if not o)
     print()
     print("%d/%d 合格" % (len(results) - ng, len(results)))
     return 1 if ng else 0
+
+
+def _end_to_end_tests(t) -> None:
+    """★★入口から検索判定までを一続きで通す★★（2026-08-23・Codexの指摘7）
+
+    ★なぜ要るか★＝今日だけで★5回★「片方だけ直した」を踏んだ。
+
+      ①D案の配線を lookup だけに入れて材料側を忘れた
+      ②試験が自分の作った材料を採点していた（LEAD_TEMPLATE）
+      ③待ち行列の鍵が変わったのに控え側が字面のまま
+      ④抽出器に配線したが**入口の早期returnで一度も呼ばれなかった**
+      ⑤basis を cz と at にだけ入れて spec と ceiling を忘れた
+
+    ★どれも「部品ごとの試験」は全部緑だった★。
+    ここは**部品をまたいで**、
+      材料 → 採否 → 記事の名乗り → 検索の濃さ
+    が食い違っていないことを見る。
+    """
+    import build_new_article as _ba
+    import page_decision as _pd
+
+    D = "vote:dmm-ptown"
+    C = "vote:chonborista"
+    DAY = _dt.date(2026, 8, 23)
+    CTX = {"release_date": "2026-08-20", "release_source": "dmm-ptown",
+           "identity_verified": True}
+
+    def _mat(sup):
+        """採否の結果を、そのまま材料の形にする（★手で basis を書かない★）"""
+        b = sup["basis"]
+        return {"adopted": {"payout_range": {"basis": b, "sources": ["a"],
+                                             "value": {"low": 97.0,
+                                                       "high": 110.0,
+                                                       "unit": "%"}}},
+                "ceilings": {"adopted": [{"basis": b, "kind": "GAME",
+                                          "amount": 999, "unit": "G",
+                                          "benefit": "AT当選",
+                                          "sources": ["a"]}]},
+                "at_specs": {"adopted": [{"basis": b, "mode": "MAIN_AT",
+                                          "net": 1.0, "sources": ["a"]}]}}
+
+    def _texts(d):
+        out = []
+        for sec in (d.get("sections") or []):
+            out += [str(x) for x in (sec.get("body") or [])]
+        for row in (d.get("factTable") or []):
+            out += [str(x) for x in (row or [])]
+        return out
+
+    # ①DMM単独のとき
+    solo = classify_support([D], CTX, DAY)
+    m_solo = _mat(solo)
+    d_solo = _ba.build_detail("zzz", "試験機", "2026-08-20", m_solo)
+    t("★★通し：DMM単独→採用され、記事に名乗りが付き、検索には数えない★★",
+      solo["accepted"]
+      and any("DMMぱちタウン単独確認" in x for x in _texts(d_solo))
+      and _pd.index_claims_from_material(m_solo) == []
+      and len(_pd.regression_claims_from_material(m_solo)) == 3)
+
+    # ②独立2出典のとき
+    multi = classify_support([D, C], CTX, DAY)
+    m_multi = _mat(multi)
+    d_multi = _ba.build_detail("zzz", "試験機", "2026-08-20", m_multi)
+    t("★★通し：独立2出典→名乗りは出ず、検索の濃さに数える★★",
+      multi["accepted"]
+      and not any("DMMぱちタウン単独確認" in x for x in _texts(d_multi))
+      and len(_pd.index_claims_from_material(m_multi)) == 3)
+
+    # ③★採否と表示と検索がそろっているか★（片方だけ直したら落ちる）
+    t("★★採否・名乗り・検索の3つが同じ根拠を見ている★★"
+      "／★今日5回踏んだ「片方だけ直した」をここで捕まえる★",
+      (solo["index_countable"] is False
+       and _pd.index_claims_from_material(m_solo) == [])
+      and (multi["index_countable"] is True
+           and _pd.index_claims_from_material(m_multi) != []))
+
+    # ③-b ★★根拠を保存し忘れた経路★★（2026-08-23）
+    #   ★対照実験で分かった★＝上の①②は材料が必ず basis を持つので、
+    #   黒名簿へ戻しても同じ結果になり **27/27 のまま通ってしまった**。
+    #   ＝★また「自分で作った材料で採点」していた（今日4回目）★。
+    #   黒名簿の危険は「根拠が**無い**値」でしか現れないので、
+    #   抽出器が保存し忘れた形をここで作る。
+    m_forgot = _mat(solo)
+    for _k in ("ceilings", "at_specs"):
+        for _c in m_forgot[_k]["adopted"]:
+            _c.pop("basis", None)
+    m_forgot["adopted"]["payout_range"].pop("basis", None)
+    t("★★通し：根拠を保存し忘れた値は、検索の濃さに数えない★★"
+      "／★黒名簿だとここが素通りして、1出典の内容が検索に出る★",
+      _pd.index_claims_from_material(m_forgot) == [])
+    t("　それでも壊れた材料は例外で止まる（数えないことと検査は別）",
+      _pd.regression_claims_from_material(m_forgot) != [])
+
+    # ④控えに別の出典があるときは、通し全体が止まる
+    blocked = classify_support([D], {**CTX, "other_sources_known": True,
+                                     "other_sources_why": "控えに別の出典"},
+                               DAY)
+    t("★★通し：控えに別の出典があれば、採用そのものが起きない★★",
+      not blocked["accepted"] and blocked["basis"] == NOT_ADOPTED)
 
 
 def main() -> int:
