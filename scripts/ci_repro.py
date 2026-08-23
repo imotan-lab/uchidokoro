@@ -99,10 +99,19 @@ def _run(cmds: list, root: str, no_net: bool) -> list:
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     sc = None
     if no_net:
-        sc = os.path.join(root, "sitecustomize.py")
+        # ★★リポジトリの中に置かない★★（2026-08-24・自分で踏んだ）
+        #   ★直す前は root（＝作業ツリー）に sitecustomize.py を作っていた★。
+        #   この道具を強制終了すると片付けが走らず、**通信を塞ぐファイルが
+        #   リポジトリに居座る**。python -c や python -m を作業場所から
+        #   動かすと読み込まれるので、★通信できない理由が分からなくなる★。
+        #   （実際に残っていたのを git status で見つけた）
+        #   別の場所に置いて、そこだけを見せれば残っても誰にも当たらない。
+        import tempfile as _tf
+        _d = _tf.mkdtemp(prefix="ci_repro_nonet_")
+        sc = os.path.join(_d, "sitecustomize.py")
         with open(sc, "w", encoding="utf-8") as f:
             f.write(BLOCK)
-        env["PYTHONPATH"] = root
+        env["PYTHONPATH"] = _d
     bad = []
     try:
         for c in cmds:
@@ -119,8 +128,9 @@ def _run(cmds: list, root: str, no_net: bool) -> list:
             if code != 0:
                 bad.append((c, out[-800:], err[-400:]))
     finally:
-        if sc and os.path.isfile(sc):
-            os.remove(sc)
+        if sc:
+            import shutil as _sh2
+            _sh2.rmtree(os.path.dirname(sc), ignore_errors=True)
     return bad
 
 

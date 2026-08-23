@@ -1987,6 +1987,42 @@ def selftest_51() -> int:
     return 1 if bad else 0
 
 
+def check_52_test_residue(machines: list) -> list:
+    """★試験用の偽の機種が残っていないか★（2026-08-24新設・自分で踏んだ）
+
+    ★何が起きたか★
+      障害注入の試験は**本番のファイルへ実際に書いてから元へ戻す**。
+      その試験を強制終了したら巻き戻しが走らず、
+      「再開確認機ZZZ」という偽の機種の記事データとページが残った。
+
+    ★なぜ怖いか★
+      残ったままだと、夜の公開の関所が
+      「許していないファイルが混ざっている」と見なして
+      **その晩の公開を丸ごと止める**。
+      しかも**エラーではないので誰にも届かない**
+      ＝2026-08-22に直した「静かに0件が続く」とまったく同じ型。
+
+    ★掃除そのものは試験の側でやる★（始めと終わりの2回）。
+      ここは**別の道で残った時に気づくため**の見張り。
+    """
+    import glob as _g
+    ng = []
+    for pat, what in ((os.path.join(BASE, "machines", "zzz_*"), "ページ"),
+                      (os.path.join(BASE, "assets", "data", "machine-details",
+                                    "zzz_*.json"), "記事データ")):
+        for x in _g.glob(pat):
+            ng.append(f"試験用の残骸（{what}）が残っています: "
+                      f"{os.path.relpath(x, BASE)}"
+                      "／★このままだと夜の公開が丸ごと止まります★"
+                      "／掃除＝python -c "
+                      "\"import sys;sys.path.insert(0,'scripts');"
+                      "import publish_new_machine as p;"
+                      "p.purge_test_residue()\"")
+    for m in machines:
+        if str(m.get("slug") or "").startswith("zzz_"):
+            ng.append(f"機種一覧に試験用の機種が残っています: {m.get('slug')}")
+    return ng
+
 def check_51_selftest_tally(machines: list) -> list:
     # ★見張り自身が働いているかを、毎回いっしょに確かめる★（2026-08-22）
     #   ★理由★＝最初の版は正規表現で書いたので sum(...) を見逃し、
@@ -2701,6 +2737,7 @@ CHECKS = [
     ("49_等価の呼び方", check_49_equivalence_label),
     ("50_契約が依存まで閉じているか", check_50_contract_closure),
     ("51_試験の数え方が早すぎないか", check_51_selftest_tally),
+    ("52_試験用の残骸", check_52_test_residue),
 ]
 
 

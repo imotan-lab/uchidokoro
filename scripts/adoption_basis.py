@@ -464,6 +464,63 @@ def _end_to_end_tests(t) -> None:
     t("　それでも壊れた材料は例外で止まる（数えないことと検査は別）",
       _pd.regression_claims_from_material(m_forgot) != [])
 
+    # ③-c ★★本物の抽出器の戻り値をそのまま流す★★
+    #   （2026-08-23・Codexの再レビュー「名前は通し試験だが producer の
+    #     保存漏れを直接は検出できない」）
+    #   ★上の _mat() は手作り★＝抽出器が basis を保存し忘れても気づけない。
+    #   ここは spec_lookup.compare() の**戻り値そのもの**を記事と検索へ渡す。
+    import spec_lookup as _sl_mod
+
+    def _page(host, payout):
+        """抽出器が返す形の「読めたページ」（★材料は手で作らない★）"""
+        # ★形は抽出器側の決まりに合わせる★（fields）
+        return {"url": f"https://{host}/x", "host": host, "ok": True,
+                "reason": "OK", "fields": {"payout_range": payout}}
+
+    try:
+        _real = _sl_mod.compare(
+            [_page("p-town.dmm.com", {"low": 97.0, "high": 110.0, "unit": "%"})],
+            ctx=CTX)
+        _got = (_real.get("adopted") or {}).get("payout_range") or {}
+        t("★★本物の抽出器が根拠を保存している★★"
+          "／★手作りの材料では、保存し忘れに気づけない★",
+          _got.get("basis") == DMM_SINGLE_NEAR_RELEASE)
+        t("　その戻り値をそのまま渡すと、検索の濃さには数えない",
+          _pd.index_claims_from_material(_real) == []
+          and _pd.regression_claims_from_material(_real) == ["payout_range"])
+    except Exception as e:                                   # noqa: BLE001
+        t(f"★★本物の抽出器を通せません（{type(e).__name__}: {str(e)[:50]}）★★",
+          False)
+
+    # ★★天井の抽出器も本物を通す★★（2026-08-23）
+    #   ★Codexの指摘を読んだ直後に、また片方だけ直した★＝
+    #   spec_lookup だけ本物にして ceiling_lookup を手作りのまま残し、
+    #   ミューテーション試験に「天井の根拠保存を消しても気づかない」と
+    #   名指しされた（★今日6回目の「片方だけ」★）。
+    import ceiling_lookup as _cl_mod
+
+    def _cpage(host):
+        return {"url": f"https://{host}/x", "host": host, "ok": True,
+                "reason": "", "cz_names": set(),
+                "ceilings": [{"kind": "GAME", "amount": 999, "unit": "G",
+                              "counted": "通常時", "benefit": "AT当選",
+                              "certainty": "確定", "raw": "999G"}]}
+
+    try:
+        _rc = _cl_mod.compare([_cpage("p-town.dmm.com")], ctx=CTX)
+        _cg = (_rc.get("adopted") or [{}])[0]
+        t("★★本物の天井の抽出器が根拠を保存している★★"
+          "／★手作りの材料では、保存し忘れに気づけない★",
+          _cg.get("basis") == DMM_SINGLE_NEAR_RELEASE)
+        # ★compare は adopted を配列で返す★＝材料の形に包んでから渡す
+        _rc_mat = {"ceilings": {"adopted": _rc.get("adopted") or []}}
+        t("　その戻り値をそのまま渡すと、検索の濃さには数えない",
+          _pd.index_claims_from_material(_rc_mat) == []
+          and _pd.regression_claims_from_material(_rc_mat) != [])
+    except Exception as e:                                   # noqa: BLE001
+        t(f"★★本物の天井の抽出器を通せません（{type(e).__name__}: "
+          f"{str(e)[:50]}）★★", False)
+
     # ④控えに別の出典があるときは、通し全体が止まる
     blocked = classify_support([D], {**CTX, "other_sources_known": True,
                                      "other_sources_why": "控えに別の出典"},

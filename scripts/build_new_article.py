@@ -833,7 +833,11 @@ def selftest() -> int:
     MAT_SS = {"adopted": {
         "payout_range": {**SS, "value": {"low": 97.0, "high": 110.0,
                                          "unit": "%"}, "sources": ["a"]},
-        "games_per_50": {**SS, "value": {"games": 36.1}, "sources": ["a"]}},
+        "games_per_50": {**SS, "value": {"games": 36.1}, "sources": ["a"]},
+        # ★設定別の表も入れる★（Codexの指摘＝前回の材料に無かったので
+        #   名乗りの抜けを検出できなかった）
+        "payout_rate": {**SS, "value": {"1": "97.0%", "6": "110.0%"},
+                        "sources": ["a"]}},
         "ceilings": {"adopted": [{**SS, "kind": "GAME", "amount": 999,
                                   "unit": "G", "benefit": "AT当選",
                                   "sources": ["a"]}]},
@@ -856,7 +860,7 @@ def selftest() -> int:
         return out
 
     _texts = _all_text(_d_ss)
-    _NUM_MARKS = ("97.0%", "36.1G", "999G", "約1.0枚", "8G")
+    _NUM_MARKS = ("97.0%", "36.1G", "999G", "約1.0枚", "8G", "110.0%")
     _naked = [t for t in _texts
               if any(m in t for m in _NUM_MARKS)
               and "DMMぱちタウン単独確認" not in t]

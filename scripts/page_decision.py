@@ -685,6 +685,18 @@ def selftest() -> int:
                                      "net": None}]}}))
       and _raises(lambda: index_claims_from_material(
           {"czs": {"adopted": [{"name": ""}]}})))
+    # ★★spec系も壊れていれば例外で止まる★★（2026-08-23）
+    #   ★ミューテーション試験に名指しされた★＝天井・AT・CZだけ見ていて、
+    #   spec系の検査を消しても誰も気づかなかった。
+    t("★★spec系の壊れた材料も例外で止まる★★"
+      "／★数えないことと、検査を飛ばすことは別★",
+      _raises(lambda: index_claims_from_material(
+          {"adopted": {"payout_range": {**IM, "value": {"low": None,
+                                                        "high": 110}}}}))
+      and _raises(lambda: index_claims_from_material(
+          {"adopted": {"games_per_50": {**IM, "value": {}}}}))
+      and _raises(lambda: index_claims_from_material(
+          {"adopted": {"payout_rate": "文字列は形が違う"}})))
     t("★★対照：外していなければ5claim・4カテゴリで検索に載ってしまう★★"
       "／件数に期待して安全だと思わない",
       len(regression_claims_from_material(MAT_SS)) == 5)

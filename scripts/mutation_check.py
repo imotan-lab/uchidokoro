@@ -34,6 +34,12 @@ import subprocess
 import sys
 import tempfile
 
+# ★自分の出力も utf-8 で★（親が cp932 だと理由を出す所で落ちる）
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:                                            # noqa: BLE001
+    pass
+
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # ★壊し方の一覧★（Codexが挙げた6つ＋自分で踏んだ分）
@@ -107,6 +113,25 @@ MUTATIONS = [
         "run": ["scripts/page_decision.py"],
     },
     {
+        "why": "設定別の表が根拠を名乗らない（前回の見落とし）",
+        "file": "scripts/build_new_article.py",
+        "before": '        rows = [[f"設定{k}", f"{got[\'value\'][k]}{_tag}"]\n'
+                  '                for k in sorted(got["value"])]',
+        "after": '        rows = [[f"設定{k}", got["value"][k]]\n'
+                 '                for k in sorted(got["value"])]',
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "試験用の偽の機種を掃除しない（2026-08-24・自分で踏んだ）",
+        "file": "scripts/publish_new_machine.py",
+        "before": "        if apply_it:\n"
+                  "            _sh.rmtree(d, ignore_errors=True)",
+        "after": "        if False:\n"
+                 "            _sh.rmtree(d, ignore_errors=True)",
+        # ★この1本だけ4分ほどかかる★（本番と同じ経路を丸ごと通すため）
+        "run": ["scripts/publish_new_machine.py"],
+    },
+    {
         "why": "保存名の案内を出さない（台帳#464の再発）",
         "file": "scripts/backup_guard.py",
         "before": '        findings.append("allowlist:リスト外" + hint)',
@@ -116,29 +141,48 @@ MUTATIONS = [
 ]
 
 
-def _run_tests(root: str, scripts: list) -> bool:
-    """その写しで試験を流し、★1つでも赤ければ True★"""
+def _run_tests(root: str, scripts: list) -> tuple:
+    """その写しで試験を流す。
+
+    返すもの: (1つでも赤いか, どの試験がなぜ赤いか)
+    ★理由を返す★＝「壊す前から赤い」とだけ言われても原因に迫れない
+      （2026-08-23に実際そうなって、切り分けに時間を使った）。
+    """
+    # ★★子の文字コードを必ず指定する★★（2026-08-23・実際に踏んだ）
+    #   Windowsの既定は cp932 なので、試験が出す「✅」で子が落ちる。
+    #   ＝★守りが壊れていなくても赤くなる★ので、道具の判定が全部無意味になる。
+    #   手で試すときは PYTHONIOENCODING を付けていたので通り、
+    #   道具から呼ぶと落ちる、という食い違いになっていた。
+    env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
     for rel in scripts:
         r = subprocess.run([sys.executable, os.path.join(root, rel),
                             "--selftest"],
                            capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", cwd=root)
+                           encoding="utf-8", errors="replace", cwd=root,
+                           env=env)
         if r.returncode != 0:
-            return True
-    return False
+            out = (r.stdout or "") + (r.stderr or "")
+            ng = [x for x in out.splitlines() if x.startswith("❌")]
+            why = ng[0][:70] if ng else (out.strip().splitlines() or [""])[-1][:70]
+            return True, f"{rel}: {why}"
+    return False, ""
 
 
 def check(only: str = "") -> int:
     tmp = tempfile.mkdtemp(prefix="mut_")
     ng = []
+    # ★★写しは1つだけ作って使い回す★★（2026-08-23）
+    #   ★直す前は壊し方の数だけ丸ごと複製していた★ので、
+    #   11回の複製で不安定になり、**全部が「壊す前から赤い」**になった
+    #   （道具の判定が信用できない状態＝直したい病気そのもの）。
+    #   1つ作って、壊したファイルを毎回**元の中身へ戻す**ほうが速くて確実。
+    root = os.path.join(tmp, "work")
+    shutil.copytree(BASE, root, ignore=shutil.ignore_patterns(
+        ".git", "__pycache__", "node_modules", ".preview-site", "_site"))
     try:
         for i, m in enumerate(MUTATIONS, 1):
             if only and only not in m["why"]:
                 continue
-            root = os.path.join(tmp, f"m{i}")
-            shutil.copytree(BASE, root, ignore=shutil.ignore_patterns(
-                ".git", "__pycache__", "node_modules", ".preview-site",
-                "_site", "machines"))
             p = os.path.join(root, m["file"])
             src = open(p, encoding="utf-8").read()
             if src.count(m["before"]) != 1:
@@ -146,9 +190,26 @@ def check(only: str = "") -> int:
                       f"（目印が {src.count(m['before'])} 件）")
                 ng.append(m["why"] + "（目印が見つからない）")
                 continue
+            # ★★壊す前に、その写しで試験が通ることを確かめる★★
+            #   （2026-08-23・作った直後に自分で踏んだ）
+            #   ★直す前は「終了コードが0以外＝捕まえた」としていた★ので、
+            #   写しの環境エラー（コピーから外したフォルダ等）まで
+            #   「捕まえた」と数えていた。＝★道具自身が嘘をつく★。
+            #   壊す前が赤いなら、その結果は何の証拠にもならない。
+            _red, _why = _run_tests(root, m["run"])
+            if _red:
+                print(f"  ★ND {i}. {m['why']}"
+                      "（★壊す前から赤い＝この写しでは確かめられない★）")
+                print(f"        {_why}")
+                ng.append(m["why"] + "（壊す前から赤い）")
+                continue
             open(p, "w", encoding="utf-8", newline="\n").write(
                 src.replace(m["before"], m["after"], 1))
-            caught = _run_tests(root, m["run"])
+            try:
+                caught, _ = _run_tests(root, m["run"])
+            finally:
+                # ★★必ず元の中身へ戻す★★（次の壊し方に持ち越さない）
+                open(p, "w", encoding="utf-8", newline="\n").write(src)
             print(("  OK   " if caught else "  ★NG ")
                   + f"{i}. {m['why']}")
             if not caught:

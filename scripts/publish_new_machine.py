@@ -2269,10 +2269,80 @@ def _raises(fn) -> bool:
     return False
 
 
+TEST_SLUG_PREFIX = "zzz_"
+
+
+def purge_test_residue(apply_it: bool = True) -> list:
+    """★試験用の残骸（zzz_ で始まる機種）を消す★（2026-08-24・自分で踏んだ）
+
+    ★なぜ要るか★
+      障害注入の試験は**本番のファイルへ実際に書いてから元へ戻す**。
+      ★途中で強制終了されると、その巻き戻しが走らない★ので
+      「再開確認機ZZZ」のような偽の機種がリポジトリに残る。
+
+      残ると公開前の関所が「許していないファイル」と見なして
+      **夜の公開を丸ごと止める**。
+      ＝★エラーも出ないまま公開0件が続く★（2026-08-22に直したのと同じ型）。
+
+    ★消し方を2つに分ける★
+      ・追跡されていない残骸（記事データ・ページ）＝そのまま消す
+      ・追跡ファイル（機種一覧・早見表）＝**zzz_ の行しか変わっていない時だけ**
+        HEAD へ戻す。他の変更が混ざっていたら**触らずに報告**する
+        （★人の作業を巻き添えにしない★）。
+    """
+    import glob as _g
+    import shutil as _sh
+    import subprocess as _sp
+    found = []
+
+    def _git(*a):
+        return _sp.run(["git"] + list(a), cwd=BASE, capture_output=True,
+                       text=True, encoding="utf-8", errors="replace")
+
+    for d in _g.glob(os.path.join(BASE, "machines", TEST_SLUG_PREFIX + "*")):
+        found.append(os.path.relpath(d, BASE).replace(chr(92), "/"))
+        if apply_it:
+            _sh.rmtree(d, ignore_errors=True)
+    for f in _g.glob(os.path.join(BASE, "assets", "data", "machine-details",
+                                  TEST_SLUG_PREFIX + "*.json")):
+        found.append(os.path.relpath(f, BASE).replace(chr(92), "/"))
+        if apply_it:
+            os.remove(f)
+
+    for rel in ("assets/data/machines.json",) + tuple(HUB_FILES):
+        d = _git("diff", "-U0", "--", rel).stdout or ""
+        if not d.strip():
+            # ★中身は同じでも「変更あり」と出ることがある★（2026-08-24・実測）
+            #   試験が書き直すと改行コードが LF になり、
+            #   中身が1文字も違わないのに git は変更として数える。
+            #   ＝夜の公開で「許していないファイル」に見えるのは同じ。
+            #   中身が同じなら戻して困る人はいないので、そろえる。
+            if _git("status", "--porcelain", "--", rel).stdout.strip():
+                found.append(rel + "（改行コードだけ）")
+                if apply_it:
+                    _git("checkout", "--", rel)
+            continue
+        changed = [x for x in d.splitlines()
+                   if (x.startswith("+") or x.startswith("-"))
+                   and not x.startswith(("+++", "---"))]
+        if not changed:
+            continue
+        # ★zzz_ の行しか動いていない時だけ戻す★
+        if all(TEST_SLUG_PREFIX in x for x in changed):
+            found.append(rel)
+            if apply_it:
+                _git("checkout", "--", rel)
+        elif any(TEST_SLUG_PREFIX in x for x in changed):
+            found.append(rel + "（★他の変更と混ざっているので触りません★）")
+    return found
+
+
 def selftest() -> int:
     import inspect
     import inspect
     import tempfile as _tf
+    # ★★始める前に、前回の残骸を掃除する★★（強制終了された時の受け皿）
+    purge_test_residue(apply_it=True)
     results = []
     nl = chr(10)
 
@@ -3238,6 +3308,13 @@ def selftest() -> int:
             os.remove(IN_PROGRESS)
         t("　中途半端な一時ファイルを残さない",
           not [x for x in os.listdir(BASE) if ".tmp." in x or ".new." in x])
+        # ★★偽の機種を1件も残さない★★（2026-08-24）
+        #   ★強制終了で実際に残った★＝公開前の関所が
+        #   「許していないファイル」と見なし、夜の公開を丸ごと止める。
+        purge_test_residue(apply_it=True)
+        t("★★試験用の偽の機種を1件も残さない★★"
+          "（残すと夜の公開が丸ごと止まる）",
+          purge_test_residue(apply_it=False) == [])
     finally:
         for k, v in _real.items():
             globals()[k] = v
