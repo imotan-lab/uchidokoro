@@ -721,14 +721,23 @@ def _gather(name: str, maker: str = "", slug: str = "",
         #   ★通してよいのは「1件だけ・それがDMM・導入が近い」ときだけ★。
         #   値ごとの採否はこのあと adoption_basis が6条件で判断する
         #   （ここは入口を開けるだけで、採用を決めてはいない）。
+        #   ★控えに別の出典があるなら、それは「DMMしかない」ではない★
+        #     （2026-08-23・Codexの敵対的レビューP0。索引は1ページしか
+        #       読めない名鑑があるので、記事があるのに出ないことが実際にある）
+        _other_here, _other_why_here = _ab.other_sources_known(slug, got["urls"])
         _solo_ok = (len(got["urls"]) == 1
                     and bool(_dmm_machine_id(got["urls"][0]))
                     and bool(machine_name) and bool(release_date)
-                    and _ab.near_release(str(release_date)))
+                    and _ab.near_release(str(release_date))
+                    and not _other_here)
         if not _solo_ok:
             got["problems"] += unused_msgs    # ★なぜ足りないかも残す★
             got["problems"].append(
                 f"名鑑の個別ページが {len(got['urls'])} 件しか見つかりません（2件以上が要る）")
+            if _other_here:
+                # ★なぜ例外を使わなかったかを残す★（黙って落とさない）
+                got["problems"].append(
+                    "DMM単独の例外は使いませんでした: " + _other_why_here[:120])
             return got
         # ★1件で進む理由は必ず残す★（黙って例外を通さない）
         got["problems"] += unused_msgs
@@ -783,10 +792,21 @@ def _gather(name: str, maker: str = "", slug: str = "",
     #   （near_release が日精度を要求する）。
     _adopt_ctx = {}
     if machine_name and release_date and _maker_names:
+        # ★★「DMM単独」と名乗る前に、控えを確かめる★★
+        #   （2026-08-23・Codexの敵対的レビューP0）
+        #   索引は1ページしか読めない名鑑があるので、
+        #   ★記事があるのに索引に出ない★ことが実際に起きる（台帳#468）。
+        #   控えに別の発行者の出典があるなら、それは「DMM単独」ではない。
+        #   ★読めないときは例外を通さない★（fail-closed）
+        _other, _other_why = _ab.other_sources_known(slug, got["urls"])
+        if _other:
+            _log(f"  ★DMM単独の例外は使いません★: {_other_why[:120]}")
         _adopt_ctx = {"release_date": str(release_date),
                       # ★この導入日はDMMの機種ページで確かめたもの★
                       "release_source": "dmm-ptown",
-                      "identity_verified": True}
+                      "identity_verified": True,
+                      "other_sources_known": bool(_other),
+                      "other_sources_why": _other_why}
 
     # ★名鑑にも期待するメーカーを渡す★（2026-08-02・Codex40回目）
     looks = [_mc.lookup(u, name, expected_maker=maker,

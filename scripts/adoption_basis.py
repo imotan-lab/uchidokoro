@@ -104,6 +104,74 @@ def near_release(release_date: str, today: _dt.date | None = None) -> bool:
     return (today or _today_jst()) >= d - _dt.timedelta(days=NEAR_RELEASE_DAYS)
 
 
+def other_sources_known(slug: str, index_urls) -> tuple:
+    """★索引に出ていないだけで、別の出典を知っていないか★
+
+    ★なぜ要るか（2026-08-23・Codexの敵対的レビューP0）★
+      新台経路は**索引で見つかったURLだけ**を材料候補にする。
+      一方、人と2AIが確かめた出典は `machine_sources` に控えてあるが、
+      そちらは `collect_evidence` でしか使われていない。
+
+      そのため次の経路が成立していた:
+        ①DMMは索引で見つかる
+        ②ちょんぼりすたにも記事があり、URLを控えてある
+        ③しかし索引の1ページ制限や表記差で拾えない
+        ④gather にはDMMだけが渡る
+        ⑤★「DMM単独」と誤判定して、控えのページと食い違っていても気づかない★
+
+      ＝**誤情報に到達する経路**。
+
+    ★ここでやること★＝「DMM単独だ」と名乗る前に、
+      **控えに別の発行者の出典が無いか**だけを確かめる。
+      ★材料には足さない★（足すには同定・メーカー照合・本文の同一性など
+      条件が多く、別の作業になる。ここは**例外を名乗らせない**だけ）。
+
+    ★読めないときは「知っている」と答える★＝例外を通さない側（fail-closed）。
+
+    返すもの: (別の出典を知っているか, 理由)
+    """
+    try:
+        sys.path.insert(0, os.path.join(BASE, "scripts"))
+        import machine_sources as _ms
+    except Exception as e:                                   # noqa: BLE001
+        return True, f"控えを読み込めません（{type(e).__name__}）"
+    if not slug:
+        return True, "slugが分からないので確かめられません"
+    try:
+        saved = _ms.urls_for(slug)
+    except Exception as e:                                   # noqa: BLE001
+        return True, f"控えを読めません（{str(e)[:40]}）"
+    try:
+        seen = {_ms.url_key(u) for u in (index_urls or []) if u}
+    except Exception:                                        # noqa: BLE001
+        return True, "URLをそろえて比べられません"
+    others = []
+    for rec in (saved or []):
+        u = str((rec or {}).get("url") or "")
+        if not u:
+            continue
+        try:
+            if _ms.url_key(u) in seen:
+                continue                  # 索引でも見つかっている＝別口ではない
+        except Exception:                                    # noqa: BLE001
+            return True, "URLをそろえて比べられません"
+        if is_dmm_only([_vote_key_of(u)]):
+            continue                      # DMM自身の別ページは「別の出典」ではない
+        others.append(u)
+    if others:
+        return True, ("控えに別の出典があります（索引では拾えていません）: "
+                      + " / ".join(others[:2]))
+    return False, ""
+
+
+def _vote_key_of(url: str) -> str:
+    """そのURLの票のかたまり（読めなければURLをそのまま返す）。"""
+    try:
+        return _sl.vote_key_of_url(url) or str(url)
+    except Exception:                                        # noqa: BLE001
+        return str(url)
+
+
 def classify_support(vote_keys, ctx: dict | None = None,
                      today: _dt.date | None = None,
                      registry: dict | None = None) -> dict:
@@ -137,6 +205,13 @@ def classify_support(vote_keys, ctx: dict | None = None,
     if c.get("rival_values"):
         # ★反対の値がある値は例外にしない★＝食い違いを1出典で決めない
         reasons.append("同じ項目で別の値を出している出典があります")
+    # ★★索引に出ていないだけの出典を「無い」と扱わない★★
+    #   （2026-08-23・Codexの敵対的レビューP0）
+    #   ★呼び出し側が確かめて渡す★＝ここで勝手に控えを読みに行くと、
+    #   試験のたびに実データへ触りに行くことになる。
+    if c.get("other_sources_known"):
+        reasons.append(str(c.get("other_sources_why")
+                           or "索引に出ていない別の出典を知っています"))
     if reasons:
         return {"accepted": False, "independent_votes": n,
                 "basis": NOT_ADOPTED, "index_countable": False,
@@ -214,6 +289,51 @@ def selftest() -> int:
     t("★★同じ項目で別の値を出している出典があれば通さない★★"
       "／食い違いを1出典で決めない",
       not classify_support([D], {**OK_CTX, "rival_values": True},
+                           DAY)["accepted"])
+    # ★★索引に出ていないだけの出典を「無い」と扱わない★★
+    #   （2026-08-23・Codexの敵対的レビューP0）
+    #   ★実際に成立していた誤情報の経路★＝
+    #   ちょんぼりすたに記事があり控えてもあるのに、索引の1ページ制限で
+    #   拾えず、DMM単独と誤判定して**食い違いを見逃す**。
+    t("★★控えに別の出典があるなら「DMM単独」と名乗らない★★"
+      "／★これが無いと、控えのページと食い違っていても気づかない★",
+      not classify_support([D], {**OK_CTX, "other_sources_known": True,
+                                 "other_sources_why": "控えにちょんぼりすた"},
+                           DAY)["accepted"])
+    t("　断った理由に、控えの中身が出る",
+      "控えにちょんぼりすた"
+      in classify_support([D], {**OK_CTX, "other_sources_known": True,
+                                "other_sources_why": "控えにちょんぼりすた"},
+                          DAY)["why"])
+    # ★控えを読む側の試験★（実データに触らない形で確かめる）
+    t("★★slugが分からなければ「知っている」と答える★★（安全側）",
+      other_sources_known("", ["https://p-town.dmm.com/machines/1"])[0])
+    t("　控えに何も無ければ「知らない」と答える",
+      not other_sources_known("存在しない機種zzz",
+                              ["https://p-town.dmm.com/machines/1"])[0])
+
+    # ★★控えを読めないときは「知っている」に倒す★★（安全側）
+    #   ★対照実験で、この分岐を見ている試験が無いと分かった★（2026-08-23）
+    #   ここが破れると、控えが壊れた日に1出典で公開できてしまう。
+    def _with_broken_ledger():
+        import machine_sources as _ms
+        _bak = _ms.urls_for
+        try:
+            def _boom(slug, data=None):
+                raise RuntimeError("控えが壊れています（試験）")
+            _ms.urls_for = _boom
+            return other_sources_known("zzz", ["https://p-town.dmm.com/x"])
+        finally:
+            _ms.urls_for = _bak
+
+    _broken = _with_broken_ledger()
+    t("★★控えを読めないときは「別の出典を知っている」に倒す★★"
+      "／★控えが壊れた日に1出典で公開させない★",
+      _broken[0] is True and "控えを読めません" in _broken[1])
+    t("　そのときは例外そのものが通らない",
+      not classify_support([D], {**OK_CTX,
+                                 "other_sources_known": _broken[0],
+                                 "other_sources_why": _broken[1]},
                            DAY)["accepted"])
     t("　票が0なら通さない",
       not classify_support([], OK_CTX, DAY)["accepted"])

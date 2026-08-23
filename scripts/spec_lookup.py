@@ -413,7 +413,13 @@ def compare(pages: list, ctx: dict | None = None) -> dict:
                     "value": json.loads(agreed[0][0])}
                 continue
             adopted[key] = {"value": json.loads(agreed[0][0]),
-                            "sources": sorted(agreed[0][1])}
+                            "sources": sorted(agreed[0][1]),
+                            # ★どんな根拠で採ったかを必ず残す★
+                            #   （2026-08-23・Codexの指摘P0）
+                            #   ★保存し忘れると検索の濃さに数えられてしまう★＝
+                            #   ここが抜けていたので、DMM単独の機械割・コイン持ちが
+                            #   普通のclaimとして数えられていた。
+                            "basis": _sups[agreed[0][0]]["basis"]}
         elif len(votes) > 1:
             need_third[key] = {fp[:200]: sorted(s) for fp, s in votes.items()}
         else:

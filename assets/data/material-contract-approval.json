@@ -6,12 +6,12 @@
   "assets/data/directory-catalogs.json": "5591ed5621ec452553899b7440a1fdd3a9c0c09c6f3ce9d3d875b3e24ebe1491",
   "assets/data/maker-catalogs.json": "612fa17f5b50f509475096b51ca1f4d8c261c5805e22e337875aa478054c0b3c",
   "assets/data/source-registry.json": "4de7d0c863653c916c8ec419dc8454c1f26b0ecf1f96f0a8e313823470518e47",
-  "scripts/add_machine_run.py": "d11ab8311653828b32fa9dcdc057d1d2a4ba7c42dcad51dd3412bd7662d3995b",
-  "scripts/adoption_basis.py": "8bfda9fae09b45bd81a5094880656d85be00104145d76a6dcd6ae451dfb4c35f",
+  "scripts/add_machine_run.py": "5099b85360d393cfa6f91b567d9a783c02236b743f23fa355cccfc5ce716ec80",
+  "scripts/adoption_basis.py": "e4bc330552b927c708510683e6843f1ad8f893475118c1a71e7096299a1a9d3d",
   "scripts/at_spec_lookup.py": "74f11d27f804891ec42eba1568d500405469457ed95502396fff9f3627e084f2",
   "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
   "scripts/blocked_hosts.py": "553ac0a6f0f0baf563100458937efa167826c4347f815ace1a70e39769909b7d",
-  "scripts/ceiling_lookup.py": "bccd95b8ed91a73f66daa02bb262fdfc090c4d3331ffa1352ed66a0a4a0e0c20",
+  "scripts/ceiling_lookup.py": "167bd72afe8399bd426f553dad2f3838e139d1709492ae3fcd13d36edafb4340",
   "scripts/confirmed_values.py": "57ccc4bddee5c5ac9da26f65bcd4fbe3a3d36ae2f70bb13c49317c422d5b8fd2",
   "scripts/cz_lookup.py": "24727d5876e0a5e233ff6c913e96ae3d3fc50d7e5d5869b019e443bde374b02b",
   "scripts/directory_index.py": "5c6e1471c073b2462b056b0cd6c2f7ee7a2fa8d26f8696213a6e891b896dbdc5",
@@ -21,13 +21,14 @@
   "scripts/fetched_page.py": "89c8186772e4704c1c944f054176a398e3857936accf9ae16a34ebb36da6afa3",
   "scripts/html_tables.py": "426a34333ab98c7c33b197acf2096f3575a0c27381d5557abbaa16d700a1c7e6",
   "scripts/lineage_check.py": "2bbb9cfdad4cdf6edc22f1a3f4cec20f804ccceb66453a88d83d8572d86d6e98",
+  "scripts/machine_sources.py": "41b3bdfdfdb4faa85c9fe0bae6630a50bcd5db6ac860699c3c5aa3ffb8c07003",
   "scripts/maker_identity_cache.py": "5209e7812e92cbcdbe04512b901923353cce99ff817e9c59bc26de2c6908e88e",
   "scripts/model_code_lookup.py": "311e968d3ed3378e4e72470eb3dc777084331d7dfd257f36a74e30925de87093",
   "scripts/new_machine_watch.py": "72319ceacf38d0a8b71bf5ec442664187224a8a8288376e49425027198acbe15",
   "scripts/page_probe.py": "25d0411b1552d018ab1e528a58be1ce1d53a4e47de68f84fc2f951ccaa1f182d",
   "scripts/slug_binding.py": "17c235c10cd7fed94d4c774bbe7b88c87349eff214bedaa22182d3fe79f26af6",
   "scripts/source_lineage.py": "3bc6d55450f8d39e099d88a73f3c662f02e95915d5fe83d981ffd759c9b3881a",
-  "scripts/spec_lookup.py": "e2f5fe824f0da1d84d0a86fdcd165449852815d9e93491c3063a8c2e23c8a541",
+  "scripts/spec_lookup.py": "89aa58008b1e8935d7ab04bb619c0175a2c72b60a2d62da081c8b4ec21fb78dd",
   "scripts/user_area.py": "2ad89b9634c4ecae568cdc791e951e6efcb5fc8eca61eebdd2955f136727509d"
  },
  "imports": {
@@ -57,6 +58,7 @@
    "spec_lookup"
   ],
   "scripts/adoption_basis.py": [
+   "machine_sources",
    "source_lineage"
   ],
   "scripts/at_spec_lookup.py": [
@@ -133,6 +135,16 @@
    "new_machine_watch",
    "spec_lookup"
   ],
+  "scripts/machine_sources.py": [
+   "build_new_article",
+   "claim_identity",
+   "directory_index",
+   "model_code_lookup",
+   "new_machine_watch",
+   "pending_machines",
+   "slug_binding",
+   "source_lineage"
+  ],
   "scripts/maker_identity_cache.py": [
    "claim_identity",
    "directory_index",
@@ -182,5 +194,6 @@
    "ceiling_lookup",
    "new_machine_watch"
   ]
- }
+ },
+ "_deps_changed_why": "2026-08-23、adoption_basis が machine_sources を取り込むようになった理由。\n\n■ なぜ取り込むのか\n  Codexの敵対的レビューP0＝\n  「本当は第2出典があるのに『DMM単独』と判定できる」。\n\n  新台経路は**索引で見つかったURLだけ**を材料候補にする。\n  一方、人と2AIが確かめた出典は machine_sources に控えてあるが、\n  そちらは collect_evidence でしか使われていない。\n\n  成立していた経路:\n    ①DMMは索引で見つかる\n    ②ちょんぼりすたにも記事があり、URLを控えてある\n    ③しかし索引の1ページ制限や表記差で拾えない（台帳#468で実測）\n    ④gather にはDMMだけが渡る\n    ⑤★「DMM単独」と誤判定して、控えのページと食い違っていても気づかない★\n  ＝**誤情報に到達する経路**。\n\n■ 何に使うか（★材料には足さない★）\n  「DMM単独だ」と名乗る前に、**控えに別の発行者の出典が無いか**だけを見る。\n  あれば例外を使わない（＝今までどおり独立2出典を求める）。\n\n  ★材料に足さないのは意図的★＝足すには同定・メーカー照合・\n  再検査した本文と読む本文の同一性など条件が多く（Codexが8点挙げた）、\n  別の作業になる。ここは**例外を名乗らせない**だけにして、\n  ★危険を先に止める★。\n\n■ ★読めないときは例外を通さない★（fail-closed）\n  控えを読めない・URLをそろえられない場合は「別の出典を知っている」と答える。\n  ＝控えが壊れた日に1出典で公開されない。\n  ★この分岐を見る試験が無いことを対照実験で発見して追加した★\n  （外すと 21/23 で2件が落ちる）。\n\n■ ★材料の契約に入れる必要はあるか★\n  machine_sources 自体は既に「採否を左右する直接の依存」ではなかったが、\n  ★いまは採否（DMM単独を名乗ってよいか）を左右する★ので、\n  集合へ入れるのが筋。\n  → CONTRACT_INPUTS に scripts/machine_sources.py を追加した。"
 }

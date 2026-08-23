@@ -79,6 +79,13 @@ CONTRACT_INPUTS = frozenset({
     #   ★ここが集合の外だと、条件を1行ゆるめるだけで
     #     承認をやり直さずに1出典の内容を公開できてしまう★
     "scripts/adoption_basis.py",
+    # ★★人と2AIが確かめた出典の控え★★（2026-08-23・Codexの敵対的レビューP0）
+    #   ★なぜ採否に効くのか★＝「DMM単独だ」と名乗ってよいかを、
+    #   ここに別の発行者の出典が無いかで判断する。
+    #   索引は1ページしか読めない名鑑があるので、★記事があるのに索引に
+    #   出ない★ことが実際にある（台帳#468で実測）。控えを見ないと
+    #   「DMMしかない」と誤判定して、食い違いを見逃す経路が成立していた。
+    "scripts/machine_sources.py",
     # 通信してよい先（規約の承認）
     "scripts/new_machine_watch.py",
     "scripts/automation_policy.py",

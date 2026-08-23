@@ -136,10 +136,25 @@ def _single_source(v) -> bool:
 
 
 def _skip_for_index(v, count_confirmed: bool) -> bool:
-    """検索の濃さに数えないもの（★回帰検査では数える★）。"""
+    """検索の濃さに数えないもの（★回帰検査では数える★）。
+
+    ★★白名簿にした（2026-08-23・Codexの敵対的レビューP0）★★
+      ★直す前は黒名簿だった★＝「DMM単独のときだけ外す」。
+      これだと ★根拠を保存し忘れた経路が「普通のclaim」として数えられる★。
+
+      実際そうなっていた＝`spec_lookup` と `ceiling_lookup` は
+      採用値に basis を保存しておらず、**DMM単独の機械割・コイン持ち・天井が
+      検索の濃さに数えられていた**（＝1出典だけの内容が検索に出る経路）。
+      ★私は「除外を入れた」と報告していたが、実際には破れていた★。
+
+      ★白名簿なら、保存し忘れは「数えない」側に倒れる★＝
+      安全側で落ちるので、同じ抜け方が二度と起きない。
+    """
     if count_confirmed:
         return False                      # 回帰検査＝知っているかを見る側
-    return _from_2ai(v) or _single_source(v)
+    # ★数えてよいのは「独立2出典で採った」と明示されたものだけ★
+    return not (isinstance(v, dict)
+                and str(v.get("basis") or "") == "INDEPENDENT_MULTI")
 
 
 def _claims(material: dict, *, count_confirmed: bool) -> list:
@@ -173,19 +188,20 @@ def _claims(material: dict, *, count_confirmed: bool) -> list:
         if v and not _skip_for_index(v, count_confirmed):
             got.add(key)
     for c in ((material or {}).get("ceilings") or {}).get("adopted") or []:
-        if _skip_for_index(c, count_confirmed):
-            continue
+        # ★★壊れていないかを先に見る★★（2026-08-23）
+        #   ★白名簿を検査より前に置くと、根拠の無い壊れた材料が
+        #     黙って読み飛ばされ、fail-closed が壊れる★（入れた直後に踏んだ）
         kind = (c or {}).get("kind")
         if kind not in CEILING_KINDS:
             raise DecisionError(f"天井の種類が不明です: {kind!r}")
         if _bad_value(c.get("amount")):
             raise DecisionError(f"天井の値がありません: {c!r}")
+        if _skip_for_index(c, count_confirmed):
+            continue                 # ★数えないだけ（検査は済ませた）★
         counted = "" if _bad_value(c.get("counted")) else str(c["counted"]).strip()
         got.add(f"ceiling:{kind}:{counted}")
     for c in ((material or {}).get("at_specs") or {}).get("adopted") or []:
-        if _skip_for_index(c, count_confirmed):
-            continue    # ★裏取り前・単独確認は濃さに数えない★
-        mode = (c or {}).get("mode")
+        mode = (c or {}).get("mode")   # ★検査が先★（上と同じ理由）
         if mode not in AT_MODES:
             raise DecisionError(f"ATのモードが不明です: {mode!r}")
         # ★どれか1つでも中身があればclaimにする★（2026-08-09）
@@ -194,13 +210,15 @@ def _claims(material: dict, *, count_confirmed: bool) -> list:
         #   両方必須だと、確かに分かっている継続率まで捨てることになる。
         if all(_bad_value(c.get(k)) for k in ("games", "net", "loop_rate")):
             raise DecisionError(f"ATの値がありません: {c!r}")
+        if _skip_for_index(c, count_confirmed):
+            continue                 # ★数えないだけ（検査は済ませた）★
         got.add(f"at:{mode}")
     for c in ((material or {}).get("czs") or {}).get("adopted") or []:
-        if _skip_for_index(c, count_confirmed):
-            continue    # ★裏取り前・単独確認は濃さに数えない★
-        nm = _norm_name((c or {}).get("name"))
+        nm = _norm_name((c or {}).get("name"))   # ★検査が先★
         if _bad_value(nm):
             raise DecisionError(f"CZの名前がありません: {c!r}")
+        if _skip_for_index(c, count_confirmed):
+            continue                 # ★数えないだけ（検査は済ませた）★
         got.add(f"cz:{nm}")
     return sorted(got)
 
@@ -450,13 +468,18 @@ def selftest() -> int:
         except DecisionError:
             return True
 
+    # ★白名簿に合わせて、試験の材料も実物と同じく根拠を持たせる★
+    #   （2026-08-23）実物の抽出器は必ず basis を入れる。
+    #   ★根拠の無い材料は「数えない」側に落ちる★のが新しい決まり。
+    IM = {"basis": "INDEPENDENT_MULTI"}
     NORMAL = {"schema_version": POLICY_SCHEMA, "mode": "normal", "reason": ""}
     FORCE = {"schema_version": POLICY_SCHEMA,
              "mode": "force_noindex_new_auto", "reason": "試験"}
     # 材料: claim3件・カテゴリ2種・ゲーム性あり = 合格ライン丁度
-    MAT_OK = {"adopted": {"games_per_50": {"value": {"games": 36.1}},
-                          "payout_range": {"value": {"low": 97, "high": 110}}},
-              "at_specs": {"adopted": [{"mode": "MAIN_AT",
+    MAT_OK = {"adopted": {"games_per_50": {**IM, "value": {"games": 36.1}},
+                          "payout_range": {**IM,
+                                           "value": {"low": 97, "high": 110}}},
+              "at_specs": {"adopted": [{**IM, "mode": "MAIN_AT",
                                         "games": 30, "net": 2.8}]}}
     d = decide(MAT_OK, NORMAL, "2026-08-04")
     t("★claim3件・2カテゴリ・固有ゲーム性あり → indexable★",
@@ -467,16 +490,17 @@ def selftest() -> int:
       and "ceiling" in d["pending_topics"]
       and "strategy" in d["pending_topics"])
     # claimを1件削る → 不合格＋理由コード
-    MAT_2 = {"adopted": {"payout_range": {"value": {"low": 97, "high": 110}}},
-             "at_specs": {"adopted": [{"mode": "MAIN_AT",
+    MAT_2 = {"adopted": {"payout_range": {**IM,
+                                          "value": {"low": 97, "high": 110}}},
+             "at_specs": {"adopted": [{**IM, "mode": "MAIN_AT",
                                        "games": 30, "net": 2.8}]}}
     d2 = decide(MAT_2, NORMAL, "2026-08-04")
     t("★claim1件減 → indexable=false＋理由コード★",
       not d2["indexable"] and "CLAIMS_LT_3" in d2["reason_codes"])
     # ゲーム性なし（spec3件だけ）→ 不合格
-    MAT_SPEC = {"adopted": {"at_prob": {"value": 1},
-                            "payout_range": {"value": 1},
-                            "games_per_50": {"value": 1}}}
+    MAT_SPEC = {"adopted": {"at_prob": {**IM, "value": 1},
+                            "payout_range": {**IM, "value": 1},
+                            "games_per_50": {**IM, "value": 1}}}
     d3 = decide(MAT_SPEC, NORMAL, "2026-08-04")
     t("★spec3件だけ（カテゴリ1種・ゲーム性なし）→ 不合格★",
       not d3["indexable"] and "CATEGORIES_LT_2" in d3["reason_codes"]
@@ -484,8 +508,8 @@ def selftest() -> int:
     # 並べ替え・重複で不変
     MAT_DUP = {"adopted": dict(MAT_OK["adopted"]),
                "at_specs": {"adopted": [
-                   {"mode": "MAIN_AT", "games": 30, "net": 2.8},
-                   {"mode": "MAIN_AT", "games": 30, "net": 2.8}]}}
+                   {**IM, "mode": "MAIN_AT", "games": 30, "net": 2.8},
+                   {**IM, "mode": "MAIN_AT", "games": 30, "net": 2.8}]}}
     d4 = decide(MAT_DUP, NORMAL, "2026-08-04")
     t("★同一claimの重複追加で点数・digestが変わらない★",
       d4["claims"] == d["claims"] and d4["input_digest"] == d["input_digest"])
@@ -564,9 +588,9 @@ def selftest() -> int:
           {"ceilings": {"adopted": [{"kind": None, "amount": 800}]}})))
     t("　正しい材料からは今までどおりclaimが出る",
       claims_from_material(
-          {"ceilings": {"adopted": [{"kind": "GAME", "amount": 800,
+          {"ceilings": {"adopted": [{**IM, "kind": "GAME", "amount": 800,
                                      "counted": "通常時"}]},
-           "czs": {"adopted": [{"name": "喰霊チャンス"}]}})
+           "czs": {"adopted": [{**IM, "name": "喰霊チャンス"}]}})
       == ["ceiling:GAME:通常時", "cz:喰霊チャンス"])
     t("★実在しない日付（2026-99-99）の判定書は通さない★",
       _raises(lambda: validate_decision({**d, "decided_at": "2026-99-99"})))
@@ -578,9 +602,10 @@ def selftest() -> int:
       stale_decisions([m_auto, {"slug": "x"}], FORCE) == ["a"]
       and stale_decisions([m_auto], NORMAL) == [])
     # ★★型式名を濃さから外した（2026-08-23・台帳#461）★★
-    MAT_CODE = {"adopted": {"model_code": {"value": "L試験A1"},
-                            "payout_range": {"value": {"low": 97, "high": 110}}},
-                "at_specs": {"adopted": [{"mode": "MAIN_AT",
+    MAT_CODE = {"adopted": {"model_code": {**IM, "value": "L試験A1"},
+                            "payout_range": {**IM,
+                                             "value": {"low": 97, "high": 110}}},
+                "at_specs": {"adopted": [{**IM, "mode": "MAIN_AT",
                                           "games": 30, "net": 2.8}]}}
     t("★★新しい材料の型式名は「濃さ」に数えない★★",
       index_claims_from_material(MAT_CODE) == ["at:MAIN_AT", "payout_range"])
@@ -621,6 +646,29 @@ def selftest() -> int:
     t("★★DMM単独の値は検索の濃さに数えない★★"
       "／★これが無いと1出典だけの内容が検索に出る★",
       index_claims_from_material(MAT_SS) == [])
+    # ★★根拠を保存し忘れた値も数えない★★（2026-08-23・Codexの敵対的レビューP0）
+    #   ★実際に起きていた★＝spec_lookup と ceiling_lookup が basis を
+    #   保存しておらず、DMM単独の機械割・コイン持ち・天井が
+    #   **普通のclaimとして数えられていた**（＝1出典の内容が検索に出る経路）。
+    #   ★黒名簿（DMM単独だけ外す）では、保存し忘れが素通りする★ので白名簿にした。
+    NOB = {"adopted": {"payout_range": {"value": {"low": 97, "high": 110}},
+                       "games_per_50": {"value": {"games": 36.1}}},
+           "ceilings": {"adopted": [{"kind": "GAME", "amount": 999,
+                                     "counted": "通常時"}]},
+           "at_specs": {"adopted": [{"mode": "MAIN_AT", "net": 1.0}]}}
+    t("★★根拠が付いていない値は、検索の濃さに数えない★★"
+      "／保存し忘れを「普通のclaim」として通さない",
+      index_claims_from_material(NOB) == [])
+    t("★★それでも壊れた材料は今までどおり例外で止まる★★"
+      "／★数えないことと、検査を飛ばすことは別★"
+      "（白名簿を検査より前に置いて、入れた直後にここを壊した）",
+      _raises(lambda: index_claims_from_material(
+          {"ceilings": {"adopted": [{"kind": None, "amount": 800}]}}))
+      and _raises(lambda: index_claims_from_material(
+          {"at_specs": {"adopted": [{"mode": "MAIN_AT", "games": None,
+                                     "net": None}]}}))
+      and _raises(lambda: index_claims_from_material(
+          {"czs": {"adopted": [{"name": ""}]}})))
     t("★★対照：外していなければ5claim・4カテゴリで検索に載ってしまう★★"
       "／件数に期待して安全だと思わない",
       len(regression_claims_from_material(MAT_SS)) == 5)

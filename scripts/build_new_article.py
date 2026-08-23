@@ -743,11 +743,17 @@ def selftest() -> int:
     t("　slugにできない形は拒否する",
       raises(lambda: slug_from_url("https://x.example/products/slot/%%%/")))
 
+    # ★実物の抽出器は採用値に必ず根拠を入れる★（2026-08-23）
+    #   ★根拠の無い値は「検索の濃さに数えない」側に落ちる★ので、
+    #   試験の材料も実物と同じ形にしておく（手で作った形で通さない）。
+    IM = {"basis": "INDEPENDENT_MULTI"}
     MAT = {"adopted": {
-        "model_code": {"value": "Lびん娘NY1", "sources": ["a", "b"]},
-        "payout_range": {"value": {"low": 97.3, "high": 112.5, "unit": "%"},
+        "model_code": {**IM, "value": "Lびん娘NY1", "sources": ["a", "b"]},
+        "payout_range": {**IM,
+                         "value": {"low": 97.3, "high": 112.5, "unit": "%"},
                          "sources": ["a", "b"]},
-        "payout_rate": {"value": {"1": "97.3%", "6": "112.5%"}, "sources": ["a", "b"]},
+        "payout_rate": {**IM, "value": {"1": "97.3%", "6": "112.5%"},
+                        "sources": ["a", "b"]},
     }}
     m = build_machine("lbinko", "Lすーぱぁびん娘", "bellco",
                       "https://www.s-bellco.co.jp/products/slot/lbinko/", "2026-08", MAT)
@@ -798,7 +804,8 @@ def selftest() -> int:
       and "NO_UNIQUE_GAMEPLAY" in m["page_decision"]["reason_codes"])
     MAT_FULL = dict(MAT)
     MAT_FULL["at_specs"] = {"adopted": [
-        {"mode": "MAIN_AT", "games": 30, "net": 2.8, "sources": ["a", "b"]}]}
+        {**IM, "mode": "MAIN_AT", "games": 30, "net": 2.8,
+         "sources": ["a", "b"]}]}
     m_full = build_machine("lbinko", "Lすーぱぁびん娘", "bellco",
                            "https://www.s-bellco.co.jp/products/slot/lbinko/",
                            "2026-08", MAT_FULL)

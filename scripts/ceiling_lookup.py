@@ -858,6 +858,12 @@ def compare(pages: list, cz_names=None, ctx: dict | None = None) -> dict:
         if len(agreed) == 1 and kind not in _ambiguous:
             c = dict(agreed[0][1]["sample"])
             c["sources"] = sorted(agreed[0][1]["sources"])
+            # ★どんな根拠で採ったかを必ず残す★（2026-08-23・Codexの指摘P0）
+            #   ★保存し忘れると検索の濃さに数えられてしまう★＝
+            #   ここが抜けていたので、DMM単独の天井が普通のclaimとして
+            #   数えられ、1出典だけの内容が検索に出る経路になっていた。
+            c["basis"] = next(sup["basis"] for k3, v3, sup in _sups
+                              if k3 == agreed[0][0])
             # ★表示は深い側（+α付き）にそろえる★（早く打ち始める事故を防ぐ）
             #   ★票そのものが持つ集約値を使う★（並び順に左右されない）
             c["plus_alpha"] = bool(agreed[0][1].get("plus_alpha"))
