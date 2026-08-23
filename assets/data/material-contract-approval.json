@@ -16,7 +16,7 @@
   "scripts/directory_index.py": "5c6e1471c073b2462b056b0cd6c2f7ee7a2fa8d26f8696213a6e891b896dbdc5",
   "scripts/dmm_calendar.py": "ad0ae2ffb3977307cf361e4a137288e9bccdd1f15fb43e560aa629c5942a6930",
   "scripts/dmm_discover.py": "894d76b027c1508020d71640a74f3f0a02fbd8d6a1d42e3a15a2e8764d008592",
-  "scripts/dmm_machine.py": "d87e650a99f2677b718fd0bcc622da7c4eaeee03bfd0d3d91f2ddba87c9fa3b0",
+  "scripts/dmm_machine.py": "99045256ca097d6e5c5345935e68b4362e634f53bf7ae32fda9f1b0d0c2d1471",
   "scripts/fetched_page.py": "89c8186772e4704c1c944f054176a398e3857936accf9ae16a34ebb36da6afa3",
   "scripts/html_tables.py": "426a34333ab98c7c33b197acf2096f3575a0c27381d5557abbaa16d700a1c7e6",
   "scripts/lineage_check.py": "2bbb9cfdad4cdf6edc22f1a3f4cec20f804ccceb66453a88d83d8572d86d6e98",
