@@ -80,8 +80,19 @@ CLAIM_BOXES = ("adopted", "ceilings", "at_specs", "czs")
 #   この2つが根拠の関所を素通りしていた（Codexが実際に見つけた）。
 #   ★増やしたら `build_new_article._BASIS_REQUIRED` にも足す★
 #   （足し忘れは build_new_article の自己試験が落とす）。
-READER_BOXES = ("adopted", "ceilings", "at_specs", "czs", "gameplays",
-                "resets")
+#   ★★2026-08-24：定義しただけで誰も読んでいなかった★★（Codexの5回目）
+#   ★私は「名簿を1か所にした」と報告したが、関所は別の手書き表を読んでいた★
+#   ＝「名簿を作っても実処理がその名簿を読んでいない」という、
+#     まさに直したかった型を、直したつもりの場所で作っていた。
+#   → 箱ごとに必要な根拠の鍵まで持たせ、関所がここから組み立てる。
+READER_BOXES = {
+    "adopted": ("basis",),            # 基本スペック（払い出し・50枚あたり…）
+    "ceilings": ("basis",),           # 天井
+    "at_specs": ("basis",),           # AT
+    "czs": ("basis", "games_basis", "rate_basis"),     # CZ
+    "gameplays": ("basis",),          # ゲームの流れ
+    "resets": ("basis",),             # 朝一・リセット
+}
 
 RETIRED_CLAIMS = ("model_code",)
 

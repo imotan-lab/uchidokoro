@@ -159,10 +159,10 @@ MUTATIONS = [
         "run": ["scripts/build_new_article.py"],
     },
     {
-        "why": "ゲーム性・リセットを根拠の関所から外す（Codex4回目・素通りしていた）",
-        "file": "scripts/build_new_article.py",
-        "before": '    ("gameplays", ("basis",)),        # ゲームの流れ\n'
-                  '    ("resets", ("basis",)),           # 朝一・リセット',
+        "why": "ゲーム性・リセットを名簿から外す（Codex4回目・素通りしていた）",
+        "file": "scripts/page_decision.py",
+        "before": '    "gameplays": ("basis",),          # ゲームの流れ\n'
+                  '    "resets": ("basis",),             # 朝一・リセット',
         "after": "",
         "run": ["scripts/build_new_article.py"],
     },
@@ -174,6 +174,36 @@ MUTATIONS = [
                   "        return lab",
         "after": "",
         "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "控えの項目名を照合しない（別項目の控えで通る・Codex5回目）",
+        "file": "scripts/build_new_article.py",
+        "before": "    rec = (recs or {}).get(field)",
+        "after": "    rec = ((recs or {}).get(field)\n"
+                 "           or next(iter((recs or {}).values()), None))",
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "天井の網羅性を申告だけで信じる（読者を守る一文が消える・Codex5回目）",
+        "file": "scripts/build_new_article.py",
+        "before": "        _complete = ((material.get(\"ceilings\") or {})"
+                  ".get(\"complete\") is True\n"
+                  "                     and _confirmed_by_2ai(_cflag, slug, _recs)\n"
+                  "                     and (_cflag or {}).get(\"value\") is True)",
+        "after": "        _complete = ((material.get(\"ceilings\") or {})"
+                 ".get(\"complete\") is True)",
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "関所が名簿ではなく自前の表を読む（名簿が飾りになる・Codex5回目）",
+        "file": "scripts/build_new_article.py",
+        "before": "_BASIS_REQUIRED = tuple(_pd.READER_BOXES.items())",
+        "after": '_BASIS_REQUIRED = (("adopted", ("basis",)),\n'
+                 '                   ("ceilings", ("basis",)),\n'
+                 '                   ("at_specs", ("basis",)),\n'
+                 '                   ("czs", ("basis", "games_basis",\n'
+                 '                            "rate_basis")))',
+        "run": ["scripts/build_new_article.py"],
     },
     {
         "why": "試験用の偽の機種を掃除しない（2026-08-24・自分で踏んだ）",

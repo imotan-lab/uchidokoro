@@ -114,19 +114,11 @@ def _basis_tag(basis) -> str:
     return BASIS_SUFFIX[t]
 
 
-# ★根拠を持たせる場所★（材料の中で「採用した値」が入る箱）
-_BASIS_REQUIRED = (
-    ("adopted", ("basis",)),          # 基本スペック（払い出し・50枚あたり…）
-    ("ceilings", ("basis",)),         # 天井
-    ("at_specs", ("basis",)),         # AT
-    ("czs", ("basis", "games_basis", "rate_basis")),   # CZ
-    # ★★この2つが抜けていた★★（2026-08-24・Codexの4回目の指摘）
-    #   どちらも**読者に文章として出る**のに関所を通っていなかった。
-    #   ＝根拠も出どころも無い行を、そのまま記事にできた。
-    #   ★中身は2AIが確定した値だけ★なので、印さえあれば今までどおり通る。
-    ("gameplays", ("basis",)),        # ゲームの流れ
-    ("resets", ("basis",)),           # 朝一・リセット
-)
+# ★根拠を持たせる場所★＝★名簿そのものを読む★（2026-08-24・Codexの5回目）
+#   ★手書きの表をやめた★＝以前は同じ内容を2か所に書いており、
+#   「名簿を1か所にした」と報告しながら**関所は手書きの表を読んでいた**。
+#   ここで組み立てれば、名簿に足した箱は必ず関所を通る。
+_BASIS_REQUIRED = tuple(_pd.READER_BOXES.items())
 
 
 def require_basis(material: dict, slug: str = "") -> None:
@@ -141,7 +133,7 @@ def require_basis(material: dict, slug: str = "") -> None:
     ★CZの G数・期待度は、値があるときだけ根拠を求める★
       （値が無いのに根拠だけ要求すると、正しい材料を弾いてしまう）
     """
-    recs = _2ai_records(slug) if slug else []
+    recs = _2ai_records(slug) if slug else {}
     for box, keys in _BASIS_REQUIRED:
         got = (material or {}).get(box) or {}
         rows = got.get("adopted") if isinstance(got, dict) else None
@@ -168,17 +160,19 @@ def require_basis(material: dict, slug: str = "") -> None:
                 _basis_tag(c.get(k))
 
 
-def _2ai_records(slug: str) -> list:
-    """その機種について、控えに実在する2AIの確定値を読む。
+def _2ai_records(slug: str) -> dict:
+    """その機種について、控えに実在する2AIの確定値を読む（項目名→記録）。
 
     ★読めなければ「1件も無い」とする★＝印だけの行は通らなくなる。
     （fail-closed。控えが壊れた日に、根拠の無い値を公開しない）
+    ★項目名のまま返す★（2026-08-24・Codexの5回目＝値だけで照合すると、
+      別項目の控えを証明に使えてしまう）。
     """
     try:
         import confirmed_values as _cv
-        return list((_cv.for_slug(slug) or {}).values())
+        return dict(_cv.for_slug(slug) or {})
     except Exception:                                        # noqa: BLE001
-        return []
+        return {}
 
 
 def _core(d):
@@ -212,13 +206,17 @@ def _confirmed_by_2ai(row, slug: str = "", records=None) -> bool:
         return False
     if not slug:
         return False                     # ★どの機種の控えを見ればよいか分からない★
+    field = row.get("_field")
+    if not field:
+        return False                     # ★どの項目の控えかが分からない★
+    recs = records if records is not None else _2ai_records(slug)
+    rec = (recs or {}).get(field)
+    if not rec:
+        return False                     # ★その項目の控えが実在しない★
     got = _core(row)
-    for rec in (records if records is not None else _2ai_records(slug)):
-        val = (rec or {}).get("value")
-        # 控えの値そのもの（辞書）／値を包んだ形（{"value": ...}）の両方に合わせる
-        if _core(val) == got or {"value": val} == got or val == got.get("value"):
-            return True
-    return False
+    val = (rec or {}).get("value")
+    # 控えの値そのもの（辞書）／値を包んだ形（{"value": ...}）の両方に合わせる
+    return _core(val) == got or {"value": val} == got or val == got.get("value")
 
 
 def _tag(row, key: str = "basis", slug: str = "", records=None) -> str:
@@ -622,7 +620,16 @@ def build_detail(slug, name, release, material) -> dict:
         #   truthy で見ると、外から来た "false" という**文字列**でも
         #   断り書きが消える（網羅性が未確認なのに全部に見える）。
         #   ★いまこの旗を立てる処理は無い＝2AIが対話で入れたときだけ★
-        if (material.get("ceilings") or {}).get("complete") is not True:
+        # ★★「全部そろった」と言えるのは、控えに裏付けがあるときだけ★★
+        #   （2026-08-24・Codexの5回目）
+        #   ★直す前は材料の生の真偽値だけで断り書きが消えた★。
+        #   これは「ほかにも天井があるかもしれない」という
+        #   **読者を守る一文**を、誰の証跡も無しに外せるということ。
+        _cflag = (material.get("adopted") or {}).get("ceilings_complete")
+        _complete = ((material.get("ceilings") or {}).get("complete") is True
+                     and _confirmed_by_2ai(_cflag, slug, _recs)
+                     and (_cflag or {}).get("value") is True)
+        if not _complete:
             body.append(CEILING_PARTIAL_NOTE)
         boxes["天井・恩恵"] = {"title": "天井・恩恵", "body": body}
         for c in ceil:
@@ -674,9 +681,12 @@ def build_detail(slug, name, release, material) -> dict:
         for f in flows:
             _head = f"{f['when']}は" if f.get("when") else ""
             _line = f"{_head}**{f['trigger']}**から**{f['leads_to']}**へ進みます"
+            # ★根拠の名乗り★（2026-08-24・Codexの5回目＝ここだけ抜けていた）
+            #   関所は通るのに表示で名乗らないと、DMM単独の行が
+            #   独立2出典の値と**同じ顔で**読者に出る。
             if f.get("gains"):
                 _line += "（" + "・".join(str(g) for g in f["gains"]) + "を獲得）"
-            _lines.append(_line)
+            _lines.append(_line + _t(f))
         _old = (boxes.get("ゲーム性") or {}).get("body") or []
         _old = [x for x in _old if x not in PENDING_TEXTS]
         boxes["ゲーム性"] = {"title": "ゲーム性", "body": _old + _lines}
@@ -689,7 +699,7 @@ def build_detail(slug, name, release, material) -> dict:
     _uv = (_unmapped.get("value") or {}).get("values") or []
     if _uv:
         _txt = ("**AT純増（AT名との対応は未確認）**："
-                + "、".join(f"約{v}枚/G" for v in _uv))
+                + "、".join(f"約{v}枚/G" for v in _uv) + _t(_unmapped))
         _cur = (boxes.get("ゲーム性") or {}).get("body") or []
         _cur = [x for x in _cur if x not in PENDING_TEXTS]
         boxes["ゲーム性"] = {"title": "ゲーム性", "body": _cur + [_txt]}
@@ -703,12 +713,14 @@ def build_detail(slug, name, release, material) -> dict:
         body = []
         for c in resets:
             kind = c.get("kind")
+            # ★根拠の名乗り★（2026-08-24・Codexの5回目＝ここも抜けていた）
+            _m = _t(c)
             if kind == "CEILING_SHORTENED":
-                body.append(f"**設定変更後の天井**：{c['games']}G")
+                body.append(f"**設定変更後の天井**：{c['games']}G{_m}")
             elif kind == "MORNING_STATE":
-                body.append(f"**朝一の状態**：{c['state']}")
+                body.append(f"**朝一の状態**：{c['state']}{_m}")
             elif kind == "ADVANTAGE_RESET":
-                body.append(f"**有利区間**：{c['state']}")
+                body.append(f"**有利区間**：{c['state']}{_m}")
         if body:
             boxes["朝一・リセット情報"] = {"title": "朝一・リセット情報",
                                           "body": body}
@@ -924,22 +936,54 @@ def selftest() -> int:
       "（2026-08-04・Codex71〜72回目）",
       "status" not in m and m["publication_policy"] == _pd.SCHEMA
       and _pd.machine_class(m) in ("AUTO_INDEXABLE", "AUTO_PENDING"))
+    def _ledger(slug, field_values, extra=None):
+        """控えに実在させる（★機械が読むのと同じファイル★）。
+
+        ★項目名は本物の名簿にあるものだけ使う★（2026-08-24・Codexの5回目）
+          以前は `gameplay_0` のような**本番では登録できない名前**で
+          控えを作っていた。＝本番の登録契約を満たさない試験だった。
+        extra: {項目名: 値} ＝ adopted 側に入る確定値
+        """
+        data = {"schema_version": _cv_t.SCHEMA, "machines": {}}
+        rows = {}
+
+        def _rec(v):
+            return {"value": v,
+                    "sources": [{"url": "https://p-town.dmm.com/machines/dmm_1",
+                                 "quote": "試験用"}],
+                    "agreed_by": ["Claude", "Codex"],
+                    "decided_at": "2026-08-24"}
+        for _k, _v in (extra or {}).items():
+            rows[_k] = _rec(_v)
+        for i, v in enumerate(field_values):
+            # ★名簿にある名前★（gameplay / gameplay#2 …）
+            rows["gameplay" if i == 0 else f"gameplay#{i + 1}"] = _rec(v)
+        data["machines"][slug] = rows
+        os.makedirs(os.path.dirname(_cv_t.STORE), exist_ok=True)
+        with open(_cv_t.STORE, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False)
+
     # ★★2026-08-13・台帳#344（数値でないゲーム性）★★
     def _gp_mat(flows=None, unmapped=None):
         m = {"adopted": {}, "ceilings": {"adopted": []},
              "at_specs": {"adopted": []}, "czs": {"adopted": []},
              "resets": {"adopted": []}}
         if flows:
-            # ★本番と同じ印を付ける★（2026-08-24・Codexの4回目の指摘）
-            #   ここは confirmed_values が入れる箱なので、
-            #   本番の行は必ず 2AI の印を持っている。
-            #   ★印の無い手作りで試験していたので、関所の抜けに気づけなかった★
-            m["gameplays"] = {"adopted": [
-                {**f, "_from": "confirmed_values"} for f in flows]}
+            # ★★本物の取り込みに作らせる★★（2026-08-24・Codexの5回目）
+            #   ★直す前は印を手で付けていた★＝本番では
+            #   `confirmed_values.merge_into` が入れるので、
+            #   **その処理が刻む印（項目名など）を試験が知らないまま**だった。
+            #   ＝「都合のよいJSONを直接作る試験」。
+            #   ここでは控えを先に用意し、本番と同じ関数に入れさせる。
+            _ledger("pw_x", flows)
+            _cv_t.merge_into(m, "pw_x")
         if unmapped:
-            m["adopted"]["at_net_unmapped"] = {
-                "value": {"values": unmapped, "mapping": "UNCONFIRMED"},
-                "_from": "confirmed_values"}
+            # ★★本物の取り込みに作らせる★★（2026-08-24・Codexの5回目）
+            #   ★手で印を付けていた★＝本番が刻む項目名を知らないまま
+            #   試験していたので、照合の抜けに気づけなかった。
+            _ledger("pw_x", [], extra={"at_net_unmapped": {
+                "values": unmapped, "mapping": "UNCONFIRMED"}})
+            _cv_t.merge_into(m, "pw_x")
         return m
 
     # ★★控えを実際に作って、本番と同じ読み口で照合させる★★
@@ -960,31 +1004,6 @@ def selftest() -> int:
             return True
         return False
 
-    def _ledger(slug, field_values, extra=None):
-        """控えに実在させる（★機械が読むのと同じファイル★）。
-
-        extra: {項目名: 値} ＝ adopted 側に入る確定値
-        """
-        data = {"schema_version": _cv_t.SCHEMA, "machines": {}}
-        rows = {}
-        for _k, _v in (extra or {}).items():
-            rows[_k] = {
-                "value": _v,
-                "sources": [{"url": "https://p-town.dmm.com/machines/dmm_1",
-                             "quote": "試験用"}],
-                "agreed_by": ["Claude", "Codex"],
-                "decided_at": "2026-08-24"}
-        for i, v in enumerate(field_values):
-            rows[f"gameplay_{i}"] = {
-                "value": v,
-                "sources": [{"url": "https://p-town.dmm.com/machines/dmm_1",
-                             "quote": "試験用"}],
-                "agreed_by": ["Claude", "Codex"],
-                "decided_at": "2026-08-24"}
-        data["machines"][slug] = rows
-        os.makedirs(os.path.dirname(_cv_t.STORE), exist_ok=True)
-        with open(_cv_t.STORE, "w", encoding="utf-8") as fh:
-            json.dump(data, fh, ensure_ascii=False)
 
     def _gp_body(mat):
         d = build_detail("pw_x", "試験機", "2026-09-07", mat)
@@ -998,21 +1017,61 @@ def selftest() -> int:
     t("★★2AIが構造で記録した流れを、定型文にして書く★★（台帳#344）",
       _gp_body(_gp_mat(_f1))
       == ["通常時は**周期抽選**から**CZ**へ進みます"])
-    # ★★対照実験★★＝控えに無い流れは、印が付いていても公開を断る
-    #   （＝印は自己申告では通らない）
-    _ledger("pw_x", [])
+    # ★★対照実験★★＝本物の取り込みで作った材料でも、
+    #   そのあと控えから消えていれば公開を断る（＝印だけでは通らない）
+    _mat_signed = _gp_mat(_f1)          # 本物の取り込みが印を刻んだ材料
+    _ledger("pw_x", [])                 # 控えを空にする
     t("★★控えに無い値は、2AIの印が付いていても公開を断る★★"
       "／★印は材料の中の文字列なので、誰でも付けられる★",
-      _raises(lambda: _gp_body(_gp_mat(_f1))))
+      _raises(lambda: build_detail("pw_x", "試験機", "2026-09-07",
+                                   _mat_signed)))
     _ledger("pw_x", _f1)
+    # ★★項目名まで見ている★★（別項目の控えを証明に使えない）
+    _mat_wrong = json.loads(json.dumps(_mat_signed))
+    for _r in _mat_wrong["gameplays"]["adopted"]:
+        _r["_field"] = "cz"             # 実在するが、この値の項目ではない
+    # ★★関所そのものを直接試す★★（2026-08-24）
+    #   ★これが無いと、名簿から箱を外しても試験が緑のままだった★＝
+    #   表示の道が別に名乗りを求めるので、**関所を外した影響が見えなかった**。
+    #   ＝守りが二重にあるとき、片方を消しても気づけない。
+    # ★★試験の側で「あるべき箱」を書き留める★★（2026-08-24）
+    #   ★直す前は名簿そのものを回していた★＝名簿から箱を減らすと
+    #   **試験のケースも一緒に減って、緑のまま**だった。
+    #   ＝壊す対象からケースを作る試験は、その対象を壊しても気づけない。
+    _MUST_GATE = ("adopted", "ceilings", "at_specs", "czs", "gameplays",
+                  "resets")
+    t("★★読者に出る箱が、名簿から漏れていない★★"
+      "（箱を減らしたら、ここで落ちる）",
+      set(_MUST_GATE) <= set(_pd.READER_BOXES))
+    for _box in _MUST_GATE:
+        if _box == "adopted":
+            _bare = {"adopted": {"payout_range": {"value": {"low": 97,
+                                                            "high": 110}}}}
+        else:
+            _bare = {"adopted": {}, _box: {"adopted": [{"name": "x",
+                                                        "kind": "GAME",
+                                                        "amount": 999,
+                                                        "unit": "G",
+                                                        "when": "通常時",
+                                                        "trigger": "a",
+                                                        "leads_to": "b",
+                                                        "state": "高確",
+                                                        "mode": "MAIN_AT",
+                                                        "net": 2.0}]}}
+        t(f"★★関所は {_box} の根拠なしを断る★★"
+          "（名簿から外したら、ここが落ちる）",
+          _raises(lambda m=_bare: require_basis(m, "zzz")))
+
+    t("★★別の項目の控えでは通らない★★"
+      "／★値だけを照合すると、出玉率の控えでAT確率を通せてしまう★",
+      _raises(lambda: build_detail("pw_x", "試験機", "2026-09-07",
+                                   _mat_wrong)))
     _f2 = [{"trigger": "全国制覇", "leads_to": "上位CZ",
             "gains": ["上乗せ", "武将参戦"]}]
     _ledger("pw_x", _f2)
     t("　条件が無い流れは「〜は」を付けずに書く／結果があれば添える",
       _gp_body(_gp_mat(_f2))
       == ["**全国制覇**から**上位CZ**へ進みます（上乗せ・武将参戦を獲得）"])
-    _ledger("pw_x", [], extra={"at_net_unmapped": {
-        "values": ["3.1", "7.4"], "mapping": "UNCONFIRMED"}})
     t("★★AT名と対応の付かない純増は、必ず断りを添えて書く★★"
       "（順に並べると読者が対応を推測してしまう）",
       _gp_body(_gp_mat(unmapped=["3.1", "7.4"]))
@@ -1237,11 +1296,24 @@ def selftest() -> int:
     _d_false = build_detail("zzz", "試験機", "2026-09", _mat_false)
     _mat_true = json.loads(json.dumps(_mat_false))
     _mat_true["ceilings"]["complete"] = True
-    _d_true = build_detail("zzz", "試験機", "2026-09", _mat_true)
+    # ★★「全部そろった」には控えの裏付けが要る★★（2026-08-24・Codexの5回目）
+    #   ★申告だけでは断り書きは消えない★ので、本物の取り込みで裏付けを入れる。
+    _ledger("zzz_complete", [], extra={"ceilings_complete": True})
+    _cv_t.merge_into(_mat_true, "zzz_complete")
+    _d_true = build_detail("zzz_complete", "試験機", "2026-09", _mat_true)
+    # ★対照★ 控えが無ければ、申告があっても断り書きは残る
+    _mat_claim = json.loads(json.dumps(_mat_false))
+    _mat_claim["ceilings"]["complete"] = True
+    _d_claim = build_detail("zzz", "試験機", "2026-09", _mat_claim)
 
     def _ceil_body(d):
         return next(x["body"] for x in d["sections"] if x["title"] == "天井・恩恵")
 
+    t("★★控えの裏付けが無ければ、申告があっても断り書きは残る★★"
+      "／★『ほかにも天井があるかも』は読者を守る一文★",
+      CEILING_PARTIAL_NOTE in next(
+          x["body"] for x in _d_claim["sections"]
+          if x["title"] == "天井・恩恵"))
     t("★★天井の網羅性は真偽値の真だけ★★"
       "（文字列の \"false\" で断り書きが消えない）",
       CEILING_PARTIAL_NOTE in _ceil_body(_d_false)

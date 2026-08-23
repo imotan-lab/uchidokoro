@@ -99,6 +99,16 @@ AI_ONLY_FIELDS = {
     # 天井が複数ある機種（通常時／AT間／スルー）で、
     # 早見表の「天井まで残り」に使う値はどれか。
     "checker_ceiling": "adopted",
+    # ★AT名との対応が付かない純増★（2026-08-24・Codexの5回目）
+    #   記事に出す形も、値の形も決まっているのに**名簿に無かった**ので、
+    #   ★2AIが正しく答えても公式の記録経路から入れられなかった★。
+    #   ＝正しい回答が公開に届かない停止経路（型式名・天井と同じ型）。
+    "at_net_unmapped": "adopted",
+    # ★「確認できた天井がこれで全部か」★（2026-08-24・Codexの5回目）
+    #   ★直す前は材料の生の真偽値だけで断り書きが消えた★＝
+    #   「ほかにも天井があるかもしれません」という**読者を守る一文**を、
+    #   誰の証跡も無しに消せた。＝未確認の網羅性を断定していた。
+    "ceilings_complete": "adopted",
 }
 
 # ★★人が読む名前★★（2026-08-24・Codexの4回目の指摘）
@@ -109,6 +119,8 @@ AI_ONLY_FIELDS = {
 #   ★2AIが正しく答えた機種ほど公開できない★状態だった（実際に再現）。
 AI_ONLY_LABELS = {
     "checker_ceiling": "早見表に使う天井",
+    "at_net_unmapped": "AT純増（AT名との対応は未確認）",
+    "ceilings_complete": "天井はこれで全部か",
 }
 
 
@@ -131,6 +143,14 @@ VALUE_SHAPES = {
     #   なぜその値かを --why に必ず残す。
     "checker_ceiling": {"required": ("games",), "enums": {},
                         "quoted": ("games",)},
+    # ★AT名との対応が付かない純増★（2026-08-24）
+    #   ★対応が付かないことを明示する★ので mapping は UNCONFIRMED だけ。
+    "at_net_unmapped": {"required": ("values", "mapping"),
+                        "enums": {"mapping": ("UNCONFIRMED",)},
+                        "quoted": ()},
+    # ★天井はこれで全部か★（2026-08-24）
+    #   ★真偽値そのもの★＝辞書ではないので、形の検査は下の値パターンで見る。
+    "ceilings_complete": {"required": (), "enums": {}, "quoted": ()},
     "ceiling": {"required": ("kind", "amount", "unit", "benefit"),
                 "enums": {"kind": ("GAME", "CYCLE", "POINT")},
                 "quoted": ("amount", "unit")},
@@ -233,6 +253,13 @@ VALUE_PATTERNS = {
     "checker_ceiling": {
         "games": (_re.compile(r"^\d{2,5}$"),
                   "数だけ（+αや単位は書かない。例: 1000）"),
+    },
+    # ★AT名との対応が付かない純増★（2026-08-24）
+    "at_net_unmapped": {
+        "values": (_re.compile(r"^[\d.]{1,6}$"),
+                   "純増の数だけ（単位は書かない。例: 3.1）"),
+        "mapping": (_re.compile(r"^UNCONFIRMED$"),
+                    "対応が付かないことの明示（UNCONFIRMED のみ）"),
     },
     # ★朝一・リセット★（2026-08-12）
     "reset": {
@@ -728,6 +755,12 @@ def merge_into(material: dict, slug: str) -> list:
             "sources": [s["url"] for s in rec.get("sources") or []],
             # ★どこから来た値かを残す★（あとで追える）
             "_from": "confirmed_values",
+            # ★★どの項目の控えかを刻む★★（2026-08-24・Codexの5回目）
+            #   ★直す前は値だけを照合していた★ので、
+            #   同じ形の値があれば**別項目の控えを証明に使えた**
+            #   （例：出玉率の控えで AT初当たり確率を通す）。
+            #   表示は項目名に従うので、値を**別の意味で**読者へ出せた。
+            "_field": field,
             "_agreed_by": rec.get("agreed_by"),
             "_decided_at": rec.get("decided_at"),
         }
@@ -750,6 +783,7 @@ def merge_into(material: dict, slug: str) -> list:
             row = dict(rec["value"]) if isinstance(rec["value"], dict) else {
                 "value": rec["value"]}
             row["_from"] = "confirmed_values"
+            row["_field"] = field          # ★どの項目の控えか★（上と同じ理由）
             row["sources"] = stamped["sources"]
             rows.append(row)
         added.append(field)

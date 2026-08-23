@@ -2272,6 +2272,36 @@ def _raises(fn) -> bool:
 TEST_SLUG_PREFIX = "zzz_"
 
 
+def _only_test_added(now: bytes, before: bytes, path: str) -> bool:
+    """★増えたのが試験用の機種だけか★（2026-08-24・Codexの5回目）
+
+    ★「印が入っているか」では足りない★＝試験の印が残っている最中に
+    人が別の正当な編集をすると、印を理由に**その編集ごと書き戻す**。
+    中身から試験用の機種を取り除いて、始めたときと一致するかで決める。
+    """
+    if TEST_SLUG_PREFIX.encode() not in now:
+        return False
+    try:
+        cur = now.decode("utf-8")
+        old = before.decode("utf-8")
+    except Exception:                                        # noqa: BLE001
+        return False
+    if path.endswith(".json"):
+        import json as _j
+        try:
+            a = _j.loads(cur)
+            b = _j.loads(old)
+        except Exception:                                    # noqa: BLE001
+            return False
+        if isinstance(a, list) and isinstance(b, list):
+            kept = [x for x in a
+                    if not str((x or {}).get("slug") or "").startswith(
+                        TEST_SLUG_PREFIX)]
+            return kept == b
+        return False
+    keep = [x for x in cur.splitlines() if TEST_SLUG_PREFIX not in x]
+    return keep == old.splitlines()
+
 def _same_as_head_without_test(rel: str, _git) -> bool:
     """★試験用の機種を取り除いたら、HEAD と同じ中身になるか★
 
@@ -3459,15 +3489,19 @@ def selftest() -> int:
         #   作業中の変更は失われる）。
         #   → いまの中身に試験用の印（zzz_）が無く、かつ元と違うなら、
         #     それは**誰かの正当な変更**なので触らずに知らせる。
+        #   ★★「印があれば全部戻す」でもまだ足りない★★
+        #   （2026-08-24・Codexの5回目）＝試験の印が残っている最中に
+        #   人が正当な編集を加えると、**印があることを理由に丸ごと書き戻す**。
+        #   → 中身で判断する＝「試験用の機種を取り除いたら、
+        #     始めたときと同じ中身になるか」。ならなければ触らない。
         for _f4, _b4 in _bytes4.items():
             with open(_f4, "rb") as _fh4:
                 _now4 = _fh4.read()
             if _now4 == _b4:
                 continue
-            if TEST_SLUG_PREFIX.encode() not in _now4:
-                print(f"⚠ {os.path.relpath(_f4, BASE)} は試験の外で"
-                      "変わっているので戻しません"
-                      "（試験用の印が入っていません）")
+            if not _only_test_added(_now4, _b4, _f4):
+                print(f"⚠ {os.path.relpath(_f4, BASE)} は試験の外でも"
+                      "変わっているので戻しません（人の作業を消さないため）")
                 continue
             with open(_f4, "wb") as _fh5:
                 _fh5.write(_b4)
