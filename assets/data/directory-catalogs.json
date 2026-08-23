@@ -214,7 +214,7 @@
    "surface_pattern": "^https://chonborista\\.com/slot/(?![0-9]+/)[a-z0-9\\-]+/$",
    "_why_surface_pattern": "入口の登録漏れを毎回機械が数えるため（2026-08-06・scripts/directory_coverage.py）",
    "max_pages": 1,
-   "_why_max_pages": "番号のページ送りは実際には404を返す飾りだった（2026-08-07に実機確認）。深いページはたどれないので1頁のみ。古い機種は machine_sources.py の控えで補う",
+   "_why_max_pages": "番号のページ送りは実際には404を返す飾りだった（2026-08-07に実機確認）。深いページはたどれないので1頁のみ。★2026-08-23訂正★＝以前ここには「古い機種は machine_sources.py の控えで補う」と書いていたが、★それが本当なのは collect_evidence の経路だけ★。add_machine_run.gather と grow_machine.find_sources は索引しか見ない（machine_sources を import すらしていない）。＝新台タスク・育成タスクの材料集めでは補完が効かない。実測（2026-08-23）＝ちょんぼりすたに記事があるのに索引で拾えない機種が少なくとも3件（タコスロ・青ブタ・ラグナドール）。原因は3つとも別＝①飾り語の名簿に無い語で剥がしが止まる（技術介入）②題の中の通称が芯に残る（青ブタ）③そもそも1頁目に無い（ラグナドール）",
    "user_area": {
     "hosts": [
      "chonborista.com"
