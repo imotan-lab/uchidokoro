@@ -150,6 +150,32 @@ MUTATIONS = [
         "run": ["scripts/adoption_basis.py"],
     },
     {
+        "why": "2AIの印を自己申告で通す（誰でも関所を開けられる・Codex4回目）",
+        "file": "scripts/build_new_article.py",
+        "before": "    if not slug:\n"
+                  "        return False                     "
+                  "# ★どの機種の控えを見ればよいか分からない★",
+        "after": "    return True",
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "ゲーム性・リセットを根拠の関所から外す（Codex4回目・素通りしていた）",
+        "file": "scripts/build_new_article.py",
+        "before": '    ("gameplays", ("basis",)),        # ゲームの流れ\n'
+                  '    ("resets", ("basis",)),           # 朝一・リセット',
+        "after": "",
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "2AIだけが答える項目の表示名を引かない（新台追加がKeyErrorで止まる）",
+        "file": "scripts/add_machine_run.py",
+        "before": "    lab = _cv.AI_ONLY_LABELS.get(k)\n"
+                  "    if lab:\n"
+                  "        return lab",
+        "after": "",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
         "why": "試験用の偽の機種を掃除しない（2026-08-24・自分で踏んだ）",
         "file": "scripts/publish_new_machine.py",
         "before": "        if apply_it:\n"

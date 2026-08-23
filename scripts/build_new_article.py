@@ -120,10 +120,16 @@ _BASIS_REQUIRED = (
     ("ceilings", ("basis",)),         # 天井
     ("at_specs", ("basis",)),         # AT
     ("czs", ("basis", "games_basis", "rate_basis")),   # CZ
+    # ★★この2つが抜けていた★★（2026-08-24・Codexの4回目の指摘）
+    #   どちらも**読者に文章として出る**のに関所を通っていなかった。
+    #   ＝根拠も出どころも無い行を、そのまま記事にできた。
+    #   ★中身は2AIが確定した値だけ★なので、印さえあれば今までどおり通る。
+    ("gameplays", ("basis",)),        # ゲームの流れ
+    ("resets", ("basis",)),           # 朝一・リセット
 )
 
 
-def require_basis(material: dict) -> None:
+def require_basis(material: dict, slug: str = "") -> None:
     """★採用した値すべてに、分かる根拠が付いているか★（公開の境界で見る）
 
     ★名乗りを出す場所だけを見ても足りない★（2026-08-24）
@@ -135,6 +141,7 @@ def require_basis(material: dict) -> None:
     ★CZの G数・期待度は、値があるときだけ根拠を求める★
       （値が無いのに根拠だけ要求すると、正しい材料を弾いてしまう）
     """
+    recs = _2ai_records(slug) if slug else []
     for box, keys in _BASIS_REQUIRED:
         got = (material or {}).get(box) or {}
         rows = got.get("adopted") if isinstance(got, dict) else None
@@ -150,7 +157,7 @@ def require_basis(material: dict) -> None:
             #   ★名簿は判定書と同じものを読む★＝同じ規則を2か所に書かない。
             if name in getattr(_pd, "RETIRED_CLAIMS", ()):
                 continue
-            if _confirmed_by_2ai(c):
+            if _confirmed_by_2ai(c, slug, recs):
                 continue                 # ★2AIの確定値は別の道で根拠が残る★
             for k in keys:
                 # ★G数・期待度は、値があるときだけ根拠を求める★
@@ -161,21 +168,62 @@ def require_basis(material: dict) -> None:
                 _basis_tag(c.get(k))
 
 
-def _confirmed_by_2ai(row) -> bool:
-    """★2AIが確定させた値か★（根拠は別の道で残っている）
+def _2ai_records(slug: str) -> list:
+    """その機種について、控えに実在する2AIの確定値を読む。
 
-    `confirmed_values` に記録された値は、
-    出典URL・逐語・判断者・決めた日が控えに残っている。
-    ★機械の抽出器が採った値とは根拠の残し方が違うだけ★なので、
-    ここで basis が無いことを理由に公開を断らない。
-    ★ただし「無いから通す」ではなく「この印がある時だけ通す」★。
+    ★読めなければ「1件も無い」とする★＝印だけの行は通らなくなる。
+    （fail-closed。控えが壊れた日に、根拠の無い値を公開しない）
     """
-    return isinstance(row, dict) and row.get("_from") == "confirmed_values"
+    try:
+        import confirmed_values as _cv
+        return list((_cv.for_slug(slug) or {}).values())
+    except Exception:                                        # noqa: BLE001
+        return []
 
 
-def _tag(row, key: str = "basis") -> str:
+def _core(d):
+    """出所や出典URLを除いた「値そのもの」（控えとの照合に使う）。"""
+    if not isinstance(d, dict):
+        return d
+    return {k: v for k, v in d.items()
+            if not str(k).startswith("_") and k != "sources"}
+
+
+def _confirmed_by_2ai(row, slug: str = "", records=None) -> bool:
+    """★2AIが確定させた値か★（★自己申告では通さない★）
+
+    ★★2026-08-24・Codexの4回目の指摘★★
+      ★直す前は文字列を1つ見るだけだった★＝
+
+          row.get("_from") == "confirmed_values"
+
+      これは**材料の中の文字列**なので、誰でも付けられる。
+      ＝任意のスペック行に印を付ければ、根拠の関所を素通りして
+      公開まで到達できた（＝関所を自分で開ける鍵を配っていた）。
+
+    ★直した後★＝印に加えて、**その機種の控えに同じ値が実在するか**を見る。
+      控えには出典URL・逐語・判断者・決めた日が入っており、
+      記録するときに機械が出典を取りに行って照合している。
+
+    ★slug が渡されないときは通さない★（fail-closed）。
+    """
+    if not (isinstance(row, dict)
+            and row.get("_from") == "confirmed_values"):
+        return False
+    if not slug:
+        return False                     # ★どの機種の控えを見ればよいか分からない★
+    got = _core(row)
+    for rec in (records if records is not None else _2ai_records(slug)):
+        val = (rec or {}).get("value")
+        # 控えの値そのもの（辞書）／値を包んだ形（{"value": ...}）の両方に合わせる
+        if _core(val) == got or {"value": val} == got or val == got.get("value"):
+            return True
+    return False
+
+
+def _tag(row, key: str = "basis", slug: str = "", records=None) -> str:
     """★その値に付ける名乗り★（行ごと渡す＝根拠の出どころを見分けるため）"""
-    if _confirmed_by_2ai(row):
+    if _confirmed_by_2ai(row, slug, records):
         return ""
     return _basis_tag((row or {}).get(key))
 
@@ -388,7 +436,7 @@ def build_machine(slug, name, maker, official_url, release, material,
       確かめたのか（2026-08-04・台帳#209）。★どちらも公式だが粒度が違う★ので
       機械可読に残す。
     """
-    require_basis(material)          # ★根拠の無い値は公開しない★
+    require_basis(material, slug)    # ★根拠の無い値は公開しない★
     ident = {"manufacturer_id": maker, "official_product_url": official_url,
              "announced_name": name, "identity_tier": "CATALOG_BOUND"}
     if identity_binding:
@@ -521,7 +569,13 @@ def build_checker(material) -> dict | None:
 
 def build_detail(slug, name, release, material) -> dict:
     """記事データを作る。★集まった材料だけを表に入れる★"""
-    require_basis(material)          # ★根拠の無い値は記事にしない★
+    require_basis(material, slug)    # ★根拠の無い値は記事にしない★
+    # ★控えを1回だけ読む★（行ごとに読むと機種の数だけ遅くなる）
+    _recs = _2ai_records(slug)
+
+    def _t(row, key: str = "basis") -> str:
+        """★この機種の控えと突き合わせたうえで名乗る★"""
+        return _tag(row, key, slug, _recs)
     adopted = material.get("adopted") or {}
     facts = []
     # ★型式名は記事に書かない★（2026-08-09・運営者決定）
@@ -533,11 +587,11 @@ def build_detail(slug, name, release, material) -> dict:
         v = rng["value"]
         facts.append(["機械割",
                       f"{v['low']}%〜{v['high']}%"
-                      f"{_tag(rng)}"])
+                      f"{_t(rng)}"])
     if (g50 := adopted.get("games_per_50")):
         facts.append(["50枚あたり",
                       f"約{g50['value']['games']:g}G"
-                      f"{_tag(g50)}"])
+                      f"{_t(g50)}"])
 
     boxes = {}          # title -> section（確認できたものだけ中身が入る）
     # ★天井・恩恵★（一式で採れたものだけ。値だけでは載せない）
@@ -553,7 +607,7 @@ def build_detail(slug, name, release, material) -> dict:
             #   断りなしで出る状態だった。
             body.append(f"**{jp}**：{c['amount']}{c['unit']}{counted} "
                         f"／ 恩恵：{c['benefit']}"
-                        f"{_tag(c)}")
+                        f"{_t(c)}")
         # ★断り書きは「1つしか確認できていないとき」だけ★
         #   （2026-08-12・運営者決定）
         #   天井は1機種に1つとは限らない（通常時／AT間／スルー）。
@@ -575,7 +629,7 @@ def build_detail(slug, name, release, material) -> dict:
             jp = {"GAME": "ゲーム数天井", "CYCLE": "周期天井",
                   "POINT": "ポイント天井"}.get(c["kind"], "天井")
             facts.append([jp, f"{c['amount']}{c['unit']}"
-                              f"{_tag(c)}"])
+                              f"{_t(c)}"])
 
     # ★ATの仕様★（モードごとに分けて書く。混ぜたら誤情報）
     ats = (material.get("at_specs") or {}).get("adopted") or []
@@ -600,14 +654,14 @@ def build_detail(slug, name, release, material) -> dict:
                 jp = f"{jp}「{c['label']}」"
             # ★値ごとに根拠を名乗る★（2026-08-23・Codexの指摘4）
             body.append(f"**{jp}**：" + " ／ ".join(parts)
-                        + _tag(c))
+                        + _t(c))
         boxes["ゲーム性"] = {"title": "ゲーム性", "body": body}
         for c in sorted(ats, key=lambda x: x["mode"]):
             if not c.get("net"):
                 continue
             jp = "メインAT純増" if c["mode"] == "MAIN_AT" else "上位AT純増"
             facts.append([jp,
-                          f"約{c['net']}枚/G{_tag(c)}"])
+                          f"約{c['net']}枚/G{_t(c)}"])
 
     # ★ゲームの流れ（数値でないもの）★（2026-08-13・台帳#344）
     #   導入前〜直後は「名前と流れが先に出て、数値は後」。数値が要る器しか
@@ -672,14 +726,14 @@ def build_detail(slug, name, release, material) -> dict:
                 # ★値ごとに根拠を添える★（2026-08-23・Codexの指摘）
                 #   表ごとに一括で名乗ると、1つでも単独確認が混ざった瞬間に
                 #   ★表全体の名乗りが嘘★になる（台帳#443と同じ型）。
-                parts.append(f"継続{c['games']}{_tag(c, "games_basis")}")
+                parts.append(f"継続{c['games']}{_t(c, "games_basis")}")
             elif c.get("games_disputed"):
                 parts.append("継続G数は出典で食い違い")
             if c.get("rate"):
-                parts.append(f"期待度 {c['rate']}{_tag(c, "rate_basis")}")
+                parts.append(f"期待度 {c['rate']}{_t(c, "rate_basis")}")
             elif c.get("rate_disputed"):
                 parts.append("期待度は出典で書き方が異なります")
-            rows.append([c["name"] + _tag(c),
+            rows.append([c["name"] + _t(c),
                          " ／ ".join(parts) if parts else "確認中"])
         boxes["確認できたCZ"] = {
             "title": "確認できたCZ", "type": "settei",
@@ -702,12 +756,12 @@ def build_detail(slug, name, release, material) -> dict:
     rng = adopted.get("payout_range")
     spec_body.append(
         f"**機械割**：{rng['value']['low']}%〜{rng['value']['high']}%"
-        f"{_tag(rng)}" if rng
+        f"{_t(rng)}" if rng
         else f"**機械割**：{PENDING_ITEM}")
     g50 = adopted.get("games_per_50")
     spec_body.append(
         f"**50枚あたりのゲーム数**：約{g50['value']['games']:g}G"
-        f"{_tag(g50)}" if g50
+        f"{_t(g50)}" if g50
         else f"**50枚あたりのゲーム数**：{PENDING_ITEM}")
     boxes["基本スペック"] = {"title": "基本スペック", "body": spec_body}
 
@@ -721,7 +775,7 @@ def build_detail(slug, name, release, material) -> dict:
         #   ★ここだけ名乗りが無かった★＝spec_lookup は at_prob/payout_rate にも
         #   DMM単独の例外を当てられるので、設定別の値が
         #   **断りなしで普通の値として**読者に出る状態だった。
-        _mark = _tag(got)
+        _mark = _t(got)
         rows = [[f"設定{k}", f"{got['value'][k]}{_mark}"]
                 for k in sorted(got["value"])]
         note = "出典で確認が取れた設定のみ掲載しています。"
@@ -876,12 +930,61 @@ def selftest() -> int:
              "at_specs": {"adopted": []}, "czs": {"adopted": []},
              "resets": {"adopted": []}}
         if flows:
-            m["gameplays"] = {"adopted": flows}
+            # ★本番と同じ印を付ける★（2026-08-24・Codexの4回目の指摘）
+            #   ここは confirmed_values が入れる箱なので、
+            #   本番の行は必ず 2AI の印を持っている。
+            #   ★印の無い手作りで試験していたので、関所の抜けに気づけなかった★
+            m["gameplays"] = {"adopted": [
+                {**f, "_from": "confirmed_values"} for f in flows]}
         if unmapped:
             m["adopted"]["at_net_unmapped"] = {
                 "value": {"values": unmapped, "mapping": "UNCONFIRMED"},
                 "_from": "confirmed_values"}
         return m
+
+    # ★★控えを実際に作って、本番と同じ読み口で照合させる★★
+    #   （2026-08-24・Codexの4回目の指摘＝2AIの印が自己申告だった）
+    #   ★印だけの手作りで試験すると、照合を外しても気づけない★ので、
+    #   本物の置き場（一時ディレクトリ）へ控えを書いてから記事を作る。
+    import tempfile as _tf_t
+
+    import confirmed_values as _cv_t
+    _cv_t.STORE = os.path.join(_tf_t.mkdtemp(prefix="cv_"),
+                               "confirmed_values.json")
+
+    def _raises(fn) -> bool:
+        """★その呼び出しが例外で止まるか★（止まらなければ守りが無い）"""
+        try:
+            fn()
+        except Exception:                                    # noqa: BLE001
+            return True
+        return False
+
+    def _ledger(slug, field_values, extra=None):
+        """控えに実在させる（★機械が読むのと同じファイル★）。
+
+        extra: {項目名: 値} ＝ adopted 側に入る確定値
+        """
+        data = {"schema_version": _cv_t.SCHEMA, "machines": {}}
+        rows = {}
+        for _k, _v in (extra or {}).items():
+            rows[_k] = {
+                "value": _v,
+                "sources": [{"url": "https://p-town.dmm.com/machines/dmm_1",
+                             "quote": "試験用"}],
+                "agreed_by": ["Claude", "Codex"],
+                "decided_at": "2026-08-24"}
+        for i, v in enumerate(field_values):
+            rows[f"gameplay_{i}"] = {
+                "value": v,
+                "sources": [{"url": "https://p-town.dmm.com/machines/dmm_1",
+                             "quote": "試験用"}],
+                "agreed_by": ["Claude", "Codex"],
+                "decided_at": "2026-08-24"}
+        data["machines"][slug] = rows
+        os.makedirs(os.path.dirname(_cv_t.STORE), exist_ok=True)
+        with open(_cv_t.STORE, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False)
 
     def _gp_body(mat):
         d = build_detail("pw_x", "試験機", "2026-09-07", mat)
@@ -890,14 +993,26 @@ def selftest() -> int:
 
     t("★★確定値が無ければ、ゲーム性は未確認のまま★★（台帳#344）",
       _gp_body(_gp_mat()) == [PENDING_TEXT])
+    _f1 = [{"when": "通常時", "trigger": "周期抽選", "leads_to": "CZ"}]
+    _ledger("pw_x", _f1)
     t("★★2AIが構造で記録した流れを、定型文にして書く★★（台帳#344）",
-      _gp_body(_gp_mat([{"when": "通常時", "trigger": "周期抽選",
-                         "leads_to": "CZ"}]))
+      _gp_body(_gp_mat(_f1))
       == ["通常時は**周期抽選**から**CZ**へ進みます"])
+    # ★★対照実験★★＝控えに無い流れは、印が付いていても公開を断る
+    #   （＝印は自己申告では通らない）
+    _ledger("pw_x", [])
+    t("★★控えに無い値は、2AIの印が付いていても公開を断る★★"
+      "／★印は材料の中の文字列なので、誰でも付けられる★",
+      _raises(lambda: _gp_body(_gp_mat(_f1))))
+    _ledger("pw_x", _f1)
+    _f2 = [{"trigger": "全国制覇", "leads_to": "上位CZ",
+            "gains": ["上乗せ", "武将参戦"]}]
+    _ledger("pw_x", _f2)
     t("　条件が無い流れは「〜は」を付けずに書く／結果があれば添える",
-      _gp_body(_gp_mat([{"trigger": "全国制覇", "leads_to": "上位CZ",
-                         "gains": ["上乗せ", "武将参戦"]}]))
+      _gp_body(_gp_mat(_f2))
       == ["**全国制覇**から**上位CZ**へ進みます（上乗せ・武将参戦を獲得）"])
+    _ledger("pw_x", [], extra={"at_net_unmapped": {
+        "values": ["3.1", "7.4"], "mapping": "UNCONFIRMED"}})
     t("★★AT名と対応の付かない純増は、必ず断りを添えて書く★★"
       "（順に並べると読者が対応を推測してしまう）",
       _gp_body(_gp_mat(unmapped=["3.1", "7.4"]))

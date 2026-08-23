@@ -72,6 +72,17 @@ _SPEC_CLAIMS = ("payout_range", "games_per_50", "at_prob", "payout_rate")
 #   1つずつ書いていると、必ずどれかを書き忘れる。
 CLAIM_BOXES = ("adopted", "ceilings", "at_specs", "czs")
 
+# ★★読者に出る箱の名簿（正本）★★（2026-08-24・Codexの4回目の指摘）
+#   ★CLAIM_BOXES とは別物★＝あちらは「検索の濃さを数える箱」、
+#   こちらは「記事に文章として出る箱」。
+#   ★分けた理由★＝gameplays / resets は検索の濃さには数えないが、
+#   **読者には出る**。CLAIM_BOXES だけを見ていたので、
+#   この2つが根拠の関所を素通りしていた（Codexが実際に見つけた）。
+#   ★増やしたら `build_new_article._BASIS_REQUIRED` にも足す★
+#   （足し忘れは build_new_article の自己試験が落とす）。
+READER_BOXES = ("adopted", "ceilings", "at_specs", "czs", "gameplays",
+                "resets")
+
 RETIRED_CLAIMS = ("model_code",)
 
 # 品質ライン（契約 §5）

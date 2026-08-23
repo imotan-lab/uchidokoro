@@ -101,6 +101,16 @@ AI_ONLY_FIELDS = {
     "checker_ceiling": "adopted",
 }
 
+# ★★人が読む名前★★（2026-08-24・Codexの4回目の指摘）
+#   ★これが無いと新台追加が止まる★＝
+#   `add_machine_run` は材料の adopted のキーを
+#   `spec_lookup.FIELDS[k]["jp"]` で表示名にしていた。
+#   2AIだけが答える項目は FIELDS に無いので **KeyError** になり、
+#   ★2AIが正しく答えた機種ほど公開できない★状態だった（実際に再現）。
+AI_ONLY_LABELS = {
+    "checker_ceiling": "早見表に使う天井",
+}
+
 
 def allowed_fields() -> dict:
     """受け取ってよい項目 → 入れ先。"""

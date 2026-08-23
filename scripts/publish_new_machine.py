@@ -2272,6 +2272,47 @@ def _raises(fn) -> bool:
 TEST_SLUG_PREFIX = "zzz_"
 
 
+def _same_as_head_without_test(rel: str, _git) -> bool:
+    """★試験用の機種を取り除いたら、HEAD と同じ中身になるか★
+
+    ★なぜ中身で見るか★（2026-08-24・Codexの4回目の指摘）
+      行の字面（zzz_ を含むか）で判断すると、
+      機種一覧のJSONのように**1機種が複数行の塊**になっている場合、
+      塊の中の zzz_ を含まない行のせいで判断できない。
+      ＝偽の機種が丸ごと残っていても掃除が働かない。
+
+    ★人の作業を巻き添えにしない★は変わらない＝
+      取り除いても HEAD と一致しないなら、別の変更が混ざっているので触らない。
+    """
+    head = _git("show", f"HEAD:{rel}").stdout
+    if not head:
+        return False
+    cur_path = os.path.join(BASE, rel)
+    try:
+        with open(cur_path, encoding="utf-8") as fh:
+            cur = fh.read()
+    except OSError:
+        return False
+    if TEST_SLUG_PREFIX not in cur:
+        return False                     # 試験用の残骸ではない
+    if rel.endswith(".json"):
+        import json as _j
+        try:
+            a = _j.loads(cur)
+            b = _j.loads(head)
+        except Exception:                                    # noqa: BLE001
+            return False
+        if isinstance(a, list) and isinstance(b, list):
+            kept = [x for x in a
+                    if not str((x or {}).get("slug") or "").startswith(
+                        TEST_SLUG_PREFIX)]
+            return kept == b
+        return False
+    # HTML（早見表）＝試験用の機種が出てくる行を落として比べる
+    keep = [x for x in cur.splitlines() if TEST_SLUG_PREFIX not in x]
+    return keep == [x for x in head.splitlines()
+                    if TEST_SLUG_PREFIX not in x] and keep == head.splitlines()
+
 def purge_test_residue(apply_it: bool = True) -> list:
     """★試験用の残骸（zzz_ で始まる機種）を消す★（2026-08-24・自分で踏んだ）
 
@@ -2351,8 +2392,13 @@ def purge_test_residue(apply_it: bool = True) -> list:
                    and not x.startswith(("+++", "---"))]
         if not changed:
             continue
-        # ★zzz_ の行しか動いていない時だけ戻す★
-        if all(TEST_SLUG_PREFIX in x for x in changed):
+        # ★★行の字面だけでは足りない★★（2026-08-24・Codexの4回目の指摘）
+        #   ★直す前は「動いた行が全部 zzz_ を含むとき」だけ戻していた★。
+        #   機種一覧のJSONは1機種が十数行の塊なので、
+        #   その中には `"info": "",` のような **zzz_ を含まない行**が必ずある。
+        #   ＝★偽の機種が丸ごと残っていても、掃除は報告するだけだった★。
+        #   → 中身で判断する＝「試験用の機種を取り除いたら HEAD と同じか」。
+        if _same_as_head_without_test(rel, _git):
             found.append(rel)
             if apply_it:
                 _git("checkout", "--", rel)
@@ -3382,15 +3428,49 @@ def selftest() -> int:
         t("　（対照）本物の公開途中の目印には触らない",
           os.path.isfile(IN_PROGRESS))
         os.remove(IN_PROGRESS)
+        # ★★機種一覧に入り込んだ偽の機種も戻せる★★
+        #   （2026-08-24・Codexの4回目の指摘＝行の字面では戻せなかった）
+        #   ★1機種は十数行の塊で、その中に zzz_ を含まない行が必ずある★ので、
+        #   「動いた行が全部 zzz_ を含む時だけ戻す」では**一度も戻らなかった**。
+        import json as _js9
+        _rows9 = _sj.read_rows(MACHINES)
+        _n9 = len(_rows9)
+        _rows9.append({"slug": "zzz_purge_json", "name": "掃除試験ZZZ",
+                       "seo": {"title": "x"}, "info": "", "strategy": "",
+                       "aliases": []})
+        with open(MACHINES, "w", encoding="utf-8", newline="\n") as _fh9:
+            _fh9.write(_js9.dumps(_rows9, ensure_ascii=False, indent=1) + "\n")
+        _saw9 = purge_test_residue(apply_it=True)
+        _after9 = _sj.read_rows(MACHINES)
+        t("★★機種一覧に入り込んだ偽の機種を戻せる★★"
+          "（行の字面ではなく、中身で判断する）",
+          any("machines.json" in x for x in _saw9)
+          and len(_after9) == _n9
+          and not [r for r in _after9
+                   if str(r.get("slug") or "").startswith(TEST_SLUG_PREFIX)])
     finally:
         for k, v in _real.items():
             globals()[k] = v
         globals()["IN_PROGRESS"] = _real_ip
-        for _f4, _b4 in _bytes4.items():        # ★元のバイト列に戻す★
+        # ★★戻すのは「試験が汚した時」だけ★★（2026-08-24・Codexの4回目の指摘）
+        #   ★直す前は無条件に書き戻していた★＝
+        #   試験の最中に人や別の処理が正当な変更をしていたら、
+        #   ★それを黙って消していた★（追跡ファイルなので git には残るが、
+        #   作業中の変更は失われる）。
+        #   → いまの中身に試験用の印（zzz_）が無く、かつ元と違うなら、
+        #     それは**誰かの正当な変更**なので触らずに知らせる。
+        for _f4, _b4 in _bytes4.items():
             with open(_f4, "rb") as _fh4:
-                if _fh4.read() != _b4:
-                    with open(_f4, "wb") as _fh5:
-                        _fh5.write(_b4)
+                _now4 = _fh4.read()
+            if _now4 == _b4:
+                continue
+            if TEST_SLUG_PREFIX.encode() not in _now4:
+                print(f"⚠ {os.path.relpath(_f4, BASE)} は試験の外で"
+                      "変わっているので戻しません"
+                      "（試験用の印が入っていません）")
+                continue
+            with open(_f4, "wb") as _fh5:
+                _fh5.write(_b4)
         _sh.rmtree(_dir4, ignore_errors=True)
 
     # ★項目23（説明書の大きさ）だけが赤なら公開は止めない★

@@ -2579,6 +2579,27 @@ def _ask_ledger(slug: str, name: str, question: str, key: str = "",
 
 
 
+def field_label(k: str) -> str:
+    """項目の表示名。★知らない項目でも止まらない・黙って消さない★
+
+    （2026-08-24・Codexの4回目の指摘＝2AIだけが答える項目が
+      `spec_lookup.FIELDS` に無く、**KeyError で新台追加が止まっていた**）
+    ★2AIが「早見表に使う天井はどれか」に正しく答えた機種ほど
+      公開できない★という状態だった（実際に再現した）。
+
+    ★関数として外に出してある★＝試験が**本物を呼べる**ように。
+    中に隠したままだと、試験が同じ式を書き写すことになり、
+    ★写しを採点する試験★になってしまう（今日それを何度もやった）。
+    """
+    got = _sl.FIELDS.get(k)
+    if got:
+        return got["jp"]
+    lab = _cv.AI_ONLY_LABELS.get(k)
+    if lab:
+        return lab
+    return f"{k}（名前が未登録）"          # ★消さずに、分かる形で出す★
+
+
 def run_one(name, official_url, maker, release, apply_it=False,
             release_is_cache=False,
             before_write=None, expect_maker: str = "",
@@ -2713,9 +2734,9 @@ def run_one(name, official_url, maker, release, apply_it=False,
     except Exception as e:                # noqa: BLE001
         # ★読めないことを黙って「無い」にしない★
         out["problems"].append(f"2AIの確定値を読めません: {type(e).__name__}: {e}")
-    out["adopted"] = sorted(_sl.FIELDS[k]["jp"] for k in mat["adopted"])
-    out["held"] = sorted(_sl.FIELDS[k]["jp"] for k in mat["need_third"])
-    out["thin"] = sorted(_sl.FIELDS[k]["jp"] for k in mat["thin"])
+    out["adopted"] = sorted(field_label(k) for k in mat["adopted"])
+    out["held"] = sorted(field_label(k) for k in mat["need_third"])
+    out["thin"] = sorted(field_label(k) for k in mat["thin"])
     # ★型式名だけでは「材料あり」と数えない★（2026-08-02・Codex29回目の副作用対策）
     #   型式名は identity の正本として adopted に入れるが、
     #   それしか無い記事（スペックも天井も無い）を作ってはいけない。
@@ -4277,6 +4298,16 @@ def selftest() -> int:
         globals()["_log"] = _keep_log
         globals()["_main"] = _keep_inner
         sys.argv = _keep_argv
+
+    # ★★2AIだけが答える項目でも、新台追加が止まらない★★
+    #   （2026-08-24・Codexの4回目の指摘＝実際に KeyError を再現した）
+    t("★★2AIだけが答える項目の表示名を作れる★★"
+      "／★以前は KeyError で新台追加そのものが止まっていた★",
+      field_label("checker_ceiling") == "早見表に使う天井")
+    t("　いままでどおりの項目も同じ名前で出る",
+      field_label("payout_range") == _sl.FIELDS["payout_range"]["jp"])
+    t("　知らない項目でも止まらず、分かる形で出す（黙って消さない）",
+      field_label("zzz_unknown") == "zzz_unknown（名前が未登録）")
 
     ng = [n for n, ok in results if not ok]
     # ★控えの置き場を元へ戻す★（試験のあとに本番へ影響を残さない）
