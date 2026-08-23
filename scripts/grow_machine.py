@@ -604,6 +604,17 @@ def _match(old_u, new_units) -> bool:
                for n in new_units)
 
 
+# ★★言い換えた表のラベル★★（2026-08-23）
+#   ★なぜ要るか★＝表のラベルは `_pending()` を通らず、比較の**鍵そのもの**。
+#   ラベルを変えた瞬間、既存記事は「前に載っていた表が消えた」と判定され、
+#   ★その機種は永久に更新できなくなる★（実測2件: garei_zero_re / prskkm）。
+#   ★なぜ変えたか★＝DMM単独確認の値が1件でも混ざると
+#   「出典2件で確認できた」が嘘になるため、表題を中立にした（台帳#443と同じ型）。
+#   ★同じ表を指す言い換えだけを書く★（意味の違うラベルを混ぜない）
+RENAMED_TABLE_LABELS = {
+    "出典2件で確認できたCZ": "確認できたCZ",
+}
+
 # ★登場時期の行の頭★（2026-08-23・台帳#461）
 #   `build_new_article` が書く形と揃える。★ズレたら試験が落ちる★
 #   （_release_line_tests が実際に生成させて頭を確かめる）。
@@ -673,6 +684,8 @@ def _units(detail: dict) -> list:
                 out.append(("body", title, t))
         for tb in (s.get("tables") or []):
             label = str((tb or {}).get("label") or "")
+            # ★言い換えたラベルは同じ表として比べる★（上の説明を参照）
+            label = RENAMED_TABLE_LABELS.get(label, label)
             headers = tuple(str(x) for x in ((tb or {}).get("headers") or []))
             for row in ((tb or {}).get("rows") or []):
                 # ★未確定の欄だけを「何が来てもよい」にする★

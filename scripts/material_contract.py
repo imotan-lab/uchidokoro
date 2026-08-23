@@ -71,6 +71,14 @@ CONTRACT_INPUTS = frozenset({
     # 独立した票の数え方
     "scripts/source_lineage.py",
     "assets/data/source-registry.json",
+    # ★★その票数で採ってよいかを決める側★★（2026-08-23・運営者決定）
+    #   「新台公開1週間前でもDMMしかない状態なら、DMMのだけを正として
+    #     記事にしていい」を実装した場所。
+    #   ★source_lineage が「何票あるか」／ここが「その票数で採ってよいか」★
+    #   ＝採否そのものを決めるので、材料の契約から外せない。
+    #   ★ここが集合の外だと、条件を1行ゆるめるだけで
+    #     承認をやり直さずに1出典の内容を公開できてしまう★
+    "scripts/adoption_basis.py",
     # 通信してよい先（規約の承認）
     "scripts/new_machine_watch.py",
     "scripts/automation_policy.py",

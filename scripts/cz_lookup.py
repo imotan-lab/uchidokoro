@@ -30,6 +30,7 @@ import unicodedata
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
 
+import adoption_basis as _ab          # noqa: E402
 import model_code_lookup as _mc       # noqa: E402
 import new_machine_watch as _w        # noqa: E402
 import fetched_page as _fp
@@ -248,7 +249,7 @@ def read_page(url: str, official_name: str, *,
     return out
 
 
-def compare(pages: list) -> dict:
+def compare(pages: list, ctx: dict | None = None) -> dict:
     """★CZごとに、項目ごとに採る★（2026-07-31・Codexと相談した案D）
 
     以前は「継続G数と期待度が両方一致」しないと丸ごと捨てていた。
@@ -257,7 +258,14 @@ def compare(pages: list) -> dict:
 
     ★総数や「全種類」は決して言わない★
       どの出典も「これで全部」とは書いていないため、一覧の完全性は判定できない。
+
+    ★★採否は adoption_basis が決める★★（2026-08-23）
+      ★票を数えるのは source_lineage のまま★で、
+      「その票数で採ってよいか」だけを渡す。
+      ★ctx を渡さなければ今までとまったく同じ判定★＝独立2票のみ採用。
+      ctx を渡すと、DMM単独＋導入7日前以降の例外が効く（運営者決定）。
     """
+    _ctx = dict(ctx or {})
     per: dict = {}
     unresolved = set()
     for p in pages:
@@ -284,17 +292,26 @@ def compare(pages: list) -> dict:
         """
         real = {v: srcs for v, srcs in d.items() if v is not None}
         # ★票の数は source_lineage が決める★（2026-08-14・依頼192のP1）
-        ok = [(v, srcs) for v, srcs in real.items()
-              if _sl._indep(srcs) >= 2]
-        return ok[0] if len(ok) == 1 and len(real) == 1 else (None, set())
+        # ★採ってよいかは adoption_basis が決める★（2026-08-23）
+        rival = len(real) > 1        # ★別の値を出している出典がある★
+        ok = []
+        for v, srcs in real.items():
+            sup = _ab.classify_support(srcs, {**_ctx, "rival_values": rival})
+            if sup["accepted"]:
+                ok.append((v, srcs, sup["basis"]))
+        return ok[0] if len(ok) == 1 and len(real) == 1 else (None, set(), "")
 
     adopted, need_third = [], []
     for nk, e in sorted(per.items()):
         # ★CZが「ある」と決めるのも独立票で数える★（2026-08-14・依頼193のP1）
         #   継続G数と期待度は守っていたのに、**CZの存在そのもの**は
         #   生の票数のままだった（一撃＋DMMだけでCZを採れた）。
-        _votes = _sl._indep(e["sources"])
-        if _votes < 2:
+        # ★★存在の採否もここを通す★★（2026-08-23・Codexの指摘）
+        #   値の採用とは別に「CZの存在自体が2票か」の判定がある＝
+        #   数え直す場所が2つあるので、片方だけ直す事故を避けて両方通す。
+        _sup = _ab.classify_support(e["sources"], _ctx)
+        _votes = _sup["independent_votes"]
+        if not _sup["accepted"]:
             # ★「1つの出典」ではなく「独立した票が足りない」と言う★
             #   （2026-08-14・依頼194のP2）出典が2件あっても共同制作の組なら
             #   1票なので、「URLをもう1件」と読むと手当てを誤る。
@@ -304,8 +321,8 @@ def compare(pages: list) -> dict:
                                "independent_votes": _votes,
                                "candidates": [{"sources": sorted(e["sources"])}]})
             continue
-        games, gs = _pick(e["games"])
-        rate, rs = _pick(e["rate"])
+        games, gs, games_basis = _pick(e["games"])
+        rate, rs, rate_basis = _pick(e["rate"])
         # 表記が割れたときは、票の多い書き方を出す（同数なら並べ替えて決める）
         # ★ここも独立票で数える★（依頼193のP1）＝共同制作の組の表記が
         #   不当に多数派になるのを防ぐ。
@@ -313,6 +330,12 @@ def compare(pages: list) -> dict:
                          key=lambda n: (-_sl._indep(e["names"][n]), n))[0]
         adopted.append({"name": display, "games": games, "rate": rate,
                         "sources": sorted(e["sources"]),
+                        # ★値ごとに「どんな根拠で採ったか」を残す★（2026-08-23）
+                        #   読者への名乗りはここから作る。
+                        #   ★表示文から根拠を逆算しない★（Codexの指摘）
+                        "basis": _sup["basis"],
+                        "games_basis": games_basis,
+                        "rate_basis": rate_basis,
                         "games_disputed": games is None and len(e["games"]) > 1,
                         "rate_disputed": rate is None and len(e["rate"]) > 1})
     # ★採用できたCZは「採れなかった語」に出さない★（2026-07-31・実行して気づいた）
@@ -449,6 +472,31 @@ def selftest() -> int:
     _J1 = mk("chonborista.com", [one("すぱ娘チャレンジ", "4G+α", "約40%")])
     _J2 = mk("p-town.dmm.com", [one("すぱ娘チャレンジ", "4G+α", "約40%")])
     _rj = compare([_J1, _J2])
+    # ★★DMM単独の例外（2026-08-23・運営者決定）★★
+    #   「新台公開1週間前でもDMMしかない状態なら、DMMのだけを正として記事にしていい」
+    _DMM_CTX = {"release_date": "2026-08-20", "release_source": "dmm-ptown",
+                "identity_verified": True}
+    _solo = [mk("p-town.dmm.com", [one("すぱ娘チャレンジ", "4G+α", "約40%")])]
+    t("★★ctx を渡さなければ今までどおり（DMM単独では採らない）★★",
+      compare(_solo)["adopted"] == [] and bool(compare(_solo)["need_third"]))
+    _ok = compare(_solo, _DMM_CTX)
+    t("★★DMM単独＋導入7日前以降なら採る★★（運営者決定）",
+      len(_ok["adopted"]) == 1
+      and _ok["adopted"][0]["name"] == "すぱ娘チャレンジ")
+    t("★★採った根拠が値ごとに残る★★（読者への名乗りをここから作る）",
+      _ok["adopted"][0]["basis"] == _ab.DMM_SINGLE_NEAR_RELEASE
+      and _ok["adopted"][0]["games_basis"] == _ab.DMM_SINGLE_NEAR_RELEASE)
+    t("★★ちょんぼりすた単独は ctx があっても採らない★★（例外はDMMだけ）",
+      compare([mk("chonborista.com",
+                  [one("すぱ娘チャレンジ", "4G+α", "約40%")])],
+              _DMM_CTX)["adopted"] == [])
+    t("★★導入がまだ先ならDMM単独でも採らない★★",
+      compare(_solo, {**_DMM_CTX, "release_date": "2026-12-01"})["adopted"] == [])
+    t("　独立2票のときは根拠が「独立2出典で一致」になる",
+      (compare([mk("chonborista.com", [one("すぱ娘チャレンジ", "4G+α", "約40%")]),
+                mk("nana-press.com", [one("すぱ娘チャレンジ", "4G+α", "約40%")])],
+               _DMM_CTX)["adopted"] or [{}])[0].get("basis")
+      == _ab.INDEPENDENT_MULTI)
     # ★★2026-08-16・台帳#376★★
     #   一撃は規約により外したので、共同制作の登録はいま空。
     #   ★仕組みは残っている★ので、一時的に登録して効くことを確かめる。

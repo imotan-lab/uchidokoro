@@ -7,12 +7,13 @@
   "assets/data/maker-catalogs.json": "612fa17f5b50f509475096b51ca1f4d8c261c5805e22e337875aa478054c0b3c",
   "assets/data/source-registry.json": "4de7d0c863653c916c8ec419dc8454c1f26b0ecf1f96f0a8e313823470518e47",
   "scripts/add_machine_run.py": "ff55b4f05cb42711ce948a7d81defabe59ff32a4e459be10c086526a10423ab3",
-  "scripts/at_spec_lookup.py": "6f9f75fe051bf9a1f7d89da5e04f35084b1b4902d1c81bc33c3e6a04681e5fc2",
+  "scripts/adoption_basis.py": "8bfda9fae09b45bd81a5094880656d85be00104145d76a6dcd6ae451dfb4c35f",
+  "scripts/at_spec_lookup.py": "74f11d27f804891ec42eba1568d500405469457ed95502396fff9f3627e084f2",
   "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
   "scripts/blocked_hosts.py": "553ac0a6f0f0baf563100458937efa167826c4347f815ace1a70e39769909b7d",
-  "scripts/ceiling_lookup.py": "e1c84894f01b8531bb6e8409d49252161a7cf0ffd03ad1c95018f0025d508066",
+  "scripts/ceiling_lookup.py": "bccd95b8ed91a73f66daa02bb262fdfc090c4d3331ffa1352ed66a0a4a0e0c20",
   "scripts/confirmed_values.py": "57ccc4bddee5c5ac9da26f65bcd4fbe3a3d36ae2f70bb13c49317c422d5b8fd2",
-  "scripts/cz_lookup.py": "f927c6e628f594e92d9aabb794f1dd952f3d90ba9ad4302a88156fb593e22fa5",
+  "scripts/cz_lookup.py": "24727d5876e0a5e233ff6c913e96ae3d3fc50d7e5d5869b019e443bde374b02b",
   "scripts/directory_index.py": "5c6e1471c073b2462b056b0cd6c2f7ee7a2fa8d26f8696213a6e891b896dbdc5",
   "scripts/dmm_calendar.py": "ad0ae2ffb3977307cf361e4a137288e9bccdd1f15fb43e560aa629c5942a6930",
   "scripts/dmm_discover.py": "894d76b027c1508020d71640a74f3f0a02fbd8d6a1d42e3a15a2e8764d008592",
@@ -26,7 +27,7 @@
   "scripts/page_probe.py": "25d0411b1552d018ab1e528a58be1ce1d53a4e47de68f84fc2f951ccaa1f182d",
   "scripts/slug_binding.py": "17c235c10cd7fed94d4c774bbe7b88c87349eff214bedaa22182d3fe79f26af6",
   "scripts/source_lineage.py": "3bc6d55450f8d39e099d88a73f3c662f02e95915d5fe83d981ffd759c9b3881a",
-  "scripts/spec_lookup.py": "77005e0e846797d92dc86098ab559cb6625dabf8d69e71cfa39a93664a2cb709",
+  "scripts/spec_lookup.py": "e2f5fe824f0da1d84d0a86fdcd165449852815d9e93491c3063a8c2e23c8a541",
   "scripts/user_area.py": "2f96a1d44cda5b1324fe1d44b85cf5913d608b0f67303cb188ed503d926ec91a"
  },
  "imports": {
@@ -54,7 +55,11 @@
    "source_lineage",
    "spec_lookup"
   ],
+  "scripts/adoption_basis.py": [
+   "source_lineage"
+  ],
   "scripts/at_spec_lookup.py": [
+   "adoption_basis",
    "fetched_page",
    "html_tables",
    "model_code_lookup",
@@ -67,6 +72,7 @@
   ],
   "scripts/blocked_hosts.py": [],
   "scripts/ceiling_lookup.py": [
+   "adoption_basis",
    "fetched_page",
    "html_tables",
    "model_code_lookup",
@@ -84,6 +90,7 @@
    "spec_lookup"
   ],
   "scripts/cz_lookup.py": [
+   "adoption_basis",
    "fetched_page",
    "html_tables",
    "model_code_lookup",
@@ -160,6 +167,7 @@
    "blocked_hosts"
   ],
   "scripts/spec_lookup.py": [
+   "adoption_basis",
    "claim_inventory",
    "fetched_page",
    "html_tables",
@@ -173,5 +181,6 @@
    "ceiling_lookup",
    "new_machine_watch"
   ]
- }
+ },
+ "_deps_changed_why": "2026-08-23、4つの抽出器（cz / at_spec / ceiling / spec）が\nadoption_basis を取り込むようになったので、その理由。\n\n■ なぜ取り込むのか\n  運営者決定「新台公開1週間前でもDMMしかない状態なら、\n  そのDMMのだけを正として記事にしていいよ」を実装したため。\n\n  これまで各抽出器は `_indep(sources) >= 2` と**自前で閾値を書いて**いた。\n  ★実測で6か所以上に散らばっていた★ので、片方だけ直す事故が起きやすい\n  （今日すでに4回踏んでいる型）。\n\n  そこで「その票数で採ってよいか」を adoption_basis の1か所に集め、\n  各抽出器はそれを呼ぶ形にした。\n\n■ 何を adoption_basis に入れたか\n  ・独立2票以上 → 今までどおり採用（INDEPENDENT_MULTI）\n  ・DMM単独 → 6条件を全部満たしたときだけ採用\n      支持がDMMだけ／導入7日前以降／導入日が日まで確定／\n      導入日の出どころがDMM／DMMの機種ページで本人性確認済み／\n      同じ項目で別の値を出している出典が無い\n  ・それ以外 → 不採用\n\n■ ★票の数え方は触っていない★\n  source_lineage.independent() が「何票あるか」を決める唯一の場所、\n  という設計はそのまま。adoption_basis はそれを呼ぶ側。\n  監査39（票の数え方）も0件のまま。\n\n■ ★材料の契約に入れる★\n  adoption_basis は**採否そのものを決める**ので、集合の外に置けない。\n  外にあると、条件を1行ゆるめるだけで承認をやり直さずに\n  1出典の内容を公開できてしまう。\n  → CONTRACT_INPUTS に scripts/adoption_basis.py を追加した。\n\n■ ★ここでは持たない、を選ばなかった理由★\n  「採否を決める最後の関門を守っても、その関門が信用している側が\n  野放しなら意味がない」（dmm_machine を入れたときと同じ理屈）。\n  今回は関門そのものなので、なおさら外せない。"
 }

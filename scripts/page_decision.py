@@ -118,6 +118,30 @@ def _from_2ai(v) -> bool:
     return isinstance(v, dict) and v.get("_from") == "confirmed_values"
 
 
+def _single_source(v) -> bool:
+    """★DMM単独で採った値か★（2026-08-23・運営者決定の例外）
+
+    ★検索の濃さには数えない★＝記事には載せるが、
+    「検索に載せてよい濃さ」の点にはしない（2AIの確定値と同じ二層化）。
+
+    ★★件数に期待して安全だと思わないこと★★（Codexの指摘で気づいた）
+      私は「DMM単独なら claim 2件以下だから、どうせ noindex になる」と
+      考えていたが、**運営者決定は「DMMページにあるものは全部採用」**なので、
+      DMMだけで 機械割・天井・AT・CZ が採れると
+      claim 5件・カテゴリ4種・固有ゲーム性ありになり
+      ★AUTO_INDEXABLE になり得る★。だから明示的に外す。
+    """
+    return (isinstance(v, dict)
+            and str(v.get("basis") or "") == "DMM_SINGLE_NEAR_RELEASE")
+
+
+def _skip_for_index(v, count_confirmed: bool) -> bool:
+    """検索の濃さに数えないもの（★回帰検査では数える★）。"""
+    if count_confirmed:
+        return False                      # 回帰検査＝知っているかを見る側
+    return _from_2ai(v) or _single_source(v)
+
+
 def _claims(material: dict, *, count_confirmed: bool) -> list:
     """材料から一意claim IDの一覧を作る（契約 §4）。
 
@@ -146,10 +170,10 @@ def _claims(material: dict, *, count_confirmed: bool) -> list:
         #   記事に載せる材料としては使うが、claim の裏取り（verify_claims）を
         #   まだ通っていない。数えると、機械が確かめていない値で
         #   検索に載る判定が出てしまう。★載せるのは裏取り後★
-        if v and (count_confirmed or not _from_2ai(v)):
+        if v and not _skip_for_index(v, count_confirmed):
             got.add(key)
     for c in ((material or {}).get("ceilings") or {}).get("adopted") or []:
-        if _from_2ai(c) and not count_confirmed:
+        if _skip_for_index(c, count_confirmed):
             continue
         kind = (c or {}).get("kind")
         if kind not in CEILING_KINDS:
@@ -159,8 +183,8 @@ def _claims(material: dict, *, count_confirmed: bool) -> list:
         counted = "" if _bad_value(c.get("counted")) else str(c["counted"]).strip()
         got.add(f"ceiling:{kind}:{counted}")
     for c in ((material or {}).get("at_specs") or {}).get("adopted") or []:
-        if _from_2ai(c) and not count_confirmed:
-            continue    # ★裏取り前の値は濃さに数えない★（依頼130 P1-3）
+        if _skip_for_index(c, count_confirmed):
+            continue    # ★裏取り前・単独確認は濃さに数えない★
         mode = (c or {}).get("mode")
         if mode not in AT_MODES:
             raise DecisionError(f"ATのモードが不明です: {mode!r}")
@@ -172,8 +196,8 @@ def _claims(material: dict, *, count_confirmed: bool) -> list:
             raise DecisionError(f"ATの値がありません: {c!r}")
         got.add(f"at:{mode}")
     for c in ((material or {}).get("czs") or {}).get("adopted") or []:
-        if _from_2ai(c) and not count_confirmed:
-            continue    # ★裏取り前の値は濃さに数えない★（依頼130 P1-3）
+        if _skip_for_index(c, count_confirmed):
+            continue    # ★裏取り前・単独確認は濃さに数えない★
         nm = _norm_name((c or {}).get("name"))
         if _bad_value(nm):
             raise DecisionError(f"CZの名前がありません: {c!r}")
@@ -582,6 +606,30 @@ def selftest() -> int:
     t("　機械が裏取りした値は、どちらの数え方でも同じ",
       index_claims_from_material(MAT_OK)
       == regression_claims_from_material(MAT_OK))
+    # ★★DMM単独で採った値も検索の濃さに数えない★★（2026-08-23・運営者決定）
+    #   ★私が間違えた点★＝「DMM単独なら claim 2件以下だから、どうせ
+    #   noindex になる」と考えたが、運営者決定は「DMMページにあるものは
+    #   全部採用」なので、DMMだけで5claim・4カテゴリになり得る。
+    SS = {"basis": "DMM_SINGLE_NEAR_RELEASE"}
+    MAT_SS = {"adopted": {"payout_range": {**SS, "value": {"low": 97,
+                                                           "high": 110}},
+                          "games_per_50": {**SS, "value": {"games": 36.1}}},
+              "ceilings": {"adopted": [{**SS, "kind": "GAME", "amount": 999,
+                                        "counted": "通常時"}]},
+              "at_specs": {"adopted": [{**SS, "mode": "MAIN_AT", "net": 1.0}]},
+              "czs": {"adopted": [{**SS, "name": "解放の刻"}]}}
+    t("★★DMM単独の値は検索の濃さに数えない★★"
+      "／★これが無いと1出典だけの内容が検索に出る★",
+      index_claims_from_material(MAT_SS) == [])
+    t("★★対照：外していなければ5claim・4カテゴリで検索に載ってしまう★★"
+      "／件数に期待して安全だと思わない",
+      len(regression_claims_from_material(MAT_SS)) == 5)
+    t("★★DMM単独だけの機種は indexable にならない★★",
+      not decide(MAT_SS, NORMAL, "2026-08-23")["indexable"])
+    t("　DMM単独の値も「知っている」には数える（消失の判定用）",
+      regression_claims_from_material(MAT_SS)
+      == ["at:MAIN_AT", "ceiling:GAME:通常時", "cz:解放の刻",
+          "games_per_50", "payout_range"])
     # 実ファイルのpolicyが読める（形式検査）
     try:
         p = load_policy()

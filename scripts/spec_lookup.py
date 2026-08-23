@@ -36,6 +36,7 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
 
 import claim_inventory as _ci         # noqa: E402
+import adoption_basis as _ab        # noqa: E402
 import html_tables as _ht             # noqa: E402
 import model_code_lookup as _mc       # noqa: E402
 import new_machine_watch as _w        # noqa: E402
@@ -356,11 +357,15 @@ def vote_lineage(host: str) -> str:
     #   「材料不足」に見えて原因が分からなくなる。例外はそのまま上げる。
 
 
-def compare(pages: list) -> dict:
+def compare(pages: list, ctx: dict | None = None) -> dict:
     """★2件が一致したものだけ採る★ 食い違いは『第三の出典が要る』として返す。
 
     ★採取ルールを必ず読む★（読めなければ例外で止まる＝ルール無しで採らない）
+
+    ★★採否は adoption_basis が決める★★（2026-08-23）
+      ★ctx を渡さなければ今までとまったく同じ判定★＝独立2票のみ採用。
     """
+    _ctx = dict(ctx or {})
     rules = load_rules()
     adopted: dict = {}
     need_third: dict = {}
@@ -389,7 +394,12 @@ def compare(pages: list) -> dict:
             continue
         # ★票の数は source_lineage が決める★（2026-08-14・依頼192のP1）
         #   共同制作の組（一撃×DMM）を独立2票と数えないため。
-        agreed = [(fp, s) for fp, s in votes.items() if _indep(s) >= 2]
+        # ★採ってよいかは adoption_basis が決める★（2026-08-23）
+        _rival = len(votes) > 1      # ★別の値を出している出典がある★
+        _sups = {fp: _ab.classify_support(
+            s, {**_ctx, "rival_values": _rival}) for fp, s in votes.items()}
+        agreed = [(fp, s) for fp, s in votes.items()
+                  if _sups[fp]["accepted"]]
         # ★反対票が1票でもあれば採らない★（2026-08-02・Codex56回目。
         #   「97.8% 2票＋99.9% 1票」を97.8%で採用し、不一致を報告にも
         #   残していなかった。値が割れている間は保留＝人・翌日へ）

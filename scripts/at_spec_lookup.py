@@ -29,6 +29,7 @@ import unicodedata
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
 
+import adoption_basis as _ab         # noqa: E402
 import html_tables as _ht            # noqa: E402
 import model_code_lookup as _mc       # noqa: E402
 import new_machine_watch as _w        # noqa: E402
@@ -147,8 +148,14 @@ def read_page(url: str, official_name: str, *,
     return out
 
 
-def compare(pages: list) -> dict:
-    """★モード・純増・G数がすべて一致したものだけ採る★"""
+def compare(pages: list, ctx: dict | None = None) -> dict:
+    """★モード・純増・G数がすべて一致したものだけ採る★
+
+    ★★採否は adoption_basis が決める★★（2026-08-23）
+      ★ctx を渡さなければ今までとまったく同じ判定★＝独立2票のみ採用。
+      ctx を渡すと、DMM単独＋導入7日前以降の例外が効く（運営者決定）。
+    """
+    _ctx = dict(ctx or {})
     votes: dict = {}
     for p in pages:
         if not p.get("ok"):
@@ -166,11 +173,19 @@ def compare(pages: list) -> dict:
         by_mode.setdefault(v["sample"]["mode"], []).append(v)
     for mode, items in by_mode.items():
         # ★票の数は source_lineage が決める★（2026-08-14・依頼192のP1）
-        agreed = [v for v in items if _sl._indep(v["sources"]) >= 2]
+        # ★採ってよいかは adoption_basis が決める★（2026-08-23）
+        _rival = len(items) > 1        # ★別の値を出している出典がある★
+        _sups = [(v, _ab.classify_support(v["sources"],
+                                          {**_ctx, "rival_values": _rival}))
+                 for v in items]
+        agreed = [v for v, sup in _sups if sup["accepted"]]
         # ★反対票が1票でもあれば採らない★（2026-08-02・Codex56回目）
         if len(agreed) == 1 and len(items) == 1:
             c = dict(agreed[0]["sample"])
             c["sources"] = sorted(agreed[0]["sources"])
+            # ★どんな根拠で採ったかを残す★（読者への名乗りの元）
+            c["basis"] = next(sup["basis"] for v, sup in _sups
+                              if v is agreed[0])
             adopted.append(c)
         else:
             need_third.append({

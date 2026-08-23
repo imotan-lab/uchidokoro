@@ -71,6 +71,47 @@ STALE_WORDS = ("導入予定", "登場予定", "導入前")
 #   確認が取れたらこの1文を中身に差し替えるだけで済む。
 # ★運営者が選んだ文言（2026-08-12）★／「解析待ち」は導入後に嘘になるので使わない
 #   （当サイトが確認していない、はいつ見ても正しい）
+# ★★根拠の名乗り（2026-08-23・運営者決定＋Codexの設計）★★
+#   ★なぜ値ごとに書くのか★＝表ごとに「出典2件で確認」と一括で名乗ると、
+#   DMM単独確認が1件でも混ざった瞬間に**表全体の名乗りが嘘**になる。
+#   これは台帳#443（sf6・確かめていない「2件で一致」の名乗り）とまったく同じ型で、
+#   ★誤情報より悪い「根拠の詐称」★になる。
+#   ★表示文から根拠を逆算しない★＝根拠区分（basis）から表示文を作る。
+BASIS_SUFFIX = {
+    # 独立2出典は今までどおり何も書かない（それが当サイトの既定だから）
+    "INDEPENDENT_MULTI": "",
+    "DMM_SINGLE_NEAR_RELEASE": "（DMMぱちタウン単独確認）",
+}
+# ★単独確認が混ざったときだけ足す断り書き★
+SINGLE_SOURCE_NOTE = (
+    "「DMMぱちタウン単独確認」は、導入が近い機種について"
+    "同サイトの掲載内容のみで確認したものです。"
+    "ほかの解析サイトでまだ確認できていません。")
+
+
+def _basis_tag(basis) -> str:
+    """★値のうしろに付ける根拠の名乗り★（知らない区分では何も名乗らない）"""
+    return BASIS_SUFFIX.get(str(basis or ""), "")
+
+
+def _has_single_source(items) -> bool:
+    """その箱に「単独確認」の値が1つでも混ざっているか。"""
+    for c in (items or []):
+        if not isinstance(c, dict):
+            continue
+        for k in ("basis", "games_basis", "rate_basis"):
+            if str(c.get(k) or "") == "DMM_SINGLE_NEAR_RELEASE":
+                return True
+    return False
+
+
+def _cz_note(czs) -> str:
+    """CZの表の注記。★単独確認が混ざったときだけ断りを足す★"""
+    base = ("確認が取れたCZのみを載せています。"
+            "全種類をまとめたものではありません。")
+    return (base + SINGLE_SOURCE_NOTE) if _has_single_source(czs) else base
+
+
 PENDING_TEXT = "未確認（確認でき次第掲載します）"
 # ★以前の文言★（既に公開した記事に入っている。未確認として扱い続ける）
 PENDING_TEXT_OLD = "未確認です。確認でき次第、この欄に掲載します。"
@@ -529,20 +570,25 @@ def build_detail(slug, name, release, material) -> dict:
         for c in czs:
             parts = []
             if c.get("games"):
-                parts.append(f"継続{c['games']}")
+                # ★値ごとに根拠を添える★（2026-08-23・Codexの指摘）
+                #   表ごとに一括で名乗ると、1つでも単独確認が混ざった瞬間に
+                #   ★表全体の名乗りが嘘★になる（台帳#443と同じ型）。
+                parts.append(f"継続{c['games']}{_basis_tag(c.get('games_basis'))}")
             elif c.get("games_disputed"):
                 parts.append("継続G数は出典で食い違い")
             if c.get("rate"):
-                parts.append(f"期待度 {c['rate']}")
+                parts.append(f"期待度 {c['rate']}{_basis_tag(c.get('rate_basis'))}")
             elif c.get("rate_disputed"):
                 parts.append("期待度は出典で書き方が異なります")
-            rows.append([c["name"], " ／ ".join(parts) if parts else "確認中"])
+            rows.append([c["name"] + _basis_tag(c.get("basis")),
+                         " ／ ".join(parts) if parts else "確認中"])
         boxes["確認できたCZ"] = {
             "title": "確認できたCZ", "type": "settei",
-            "tables": [{"label": "出典2件で確認できたCZ",
+            # ★表題は中立に★（2026-08-23）＝「出典2件で確認できた」と
+            #   言い切ると、DMM単独確認が1件でも混ざったとき嘘になる。
+            "tables": [{"label": "確認できたCZ",
                         "headers": ["CZ", "確認できた内容"], "rows": rows,
-                        "note": "確認が取れたCZのみを載せています。"
-                                "全種類をまとめたものではありません。"}]}
+                        "note": _cz_note(czs)}]}
 
     # ★どの機種にも必ずある項目は、未確認でも欄ごと出す★
     #   （2026-08-04・Codex77回目の指摘2。一部だけ埋まった箱では、

@@ -37,6 +37,7 @@ import unicodedata
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
 
+import adoption_basis as _ab         # noqa: E402
 import html_tables as _ht             # noqa: E402
 import model_code_lookup as _mc       # noqa: E402
 import new_machine_watch as _w        # noqa: E402
@@ -741,8 +742,11 @@ def cz_names_in_page(text: str) -> set:
     return out
 
 
-def verified_cz_names(pages: list) -> list:
-    """★独立2出典が同じ名前をCZだと書いている時だけ採る★"""
+def verified_cz_names(pages: list, ctx: dict | None = None) -> list:
+    """★独立2出典が同じ名前をCZだと書いている時だけ採る★
+
+    ★ctx を渡すと DMM単独＋導入7日前以降の例外が効く★（2026-08-23）
+    """
     from collections import Counter
     cnt = Counter()
     for p in pages:
@@ -757,8 +761,12 @@ def verified_cz_names(pages: list) -> list:
     for (nm, lin) in cnt:
         by_name.setdefault(nm, set()).add(lin)
     # ★票の数は source_lineage が決める★（2026-08-14・依頼192のP1）
+    # ★採ってよいかは adoption_basis が決める★（2026-08-23）
+    #   ★ここも通す★＝天井文の「CZ」を名前に寄せてよいかの判断なので、
+    #   本体だけ直すと「天井は採れるがCZ名に寄せられない」半端な状態になる。
+    _ctx = dict(ctx or {})
     return sorted(nm for nm, lins in by_name.items()
-                  if _sl._indep(lins) >= 2)
+                  if _ab.classify_support(lins, _ctx)["accepted"])
 
 
 def apply_cz_aliases(items: list, cz_names, page_names=None) -> list:
@@ -784,8 +792,13 @@ def apply_cz_aliases(items: list, cz_names, page_names=None) -> list:
     return out
 
 
-def compare(pages: list, cz_names=None) -> dict:
-    """★値・種類・恩恵がすべて一致したものだけ採る★"""
+def compare(pages: list, cz_names=None, ctx: dict | None = None) -> dict:
+    """★値・種類・恩恵がすべて一致したものだけ採る★
+
+    ★★採否は adoption_basis が決める★★（2026-08-23）
+      ★ctx を渡さなければ今までとまったく同じ判定★＝独立2票のみ採用。
+    """
+    _ctx = dict(ctx or {})
     votes: dict = {}
     for p in pages:
         if not p.get("ok"):
@@ -831,8 +844,12 @@ def compare(pages: list, cz_names=None) -> dict:
     _ambiguous = _has_counted & _has_plain
     for (kind, _cnt), items in by_kind.items():
         # ★票の数は source_lineage が決める★（2026-08-14・依頼192のP1）
-        agreed = [(k, v) for k, v in items
-                  if _sl._indep(v["sources"]) >= 2]
+        # ★採ってよいかは adoption_basis が決める★（2026-08-23）
+        _rival = len(items) > 1        # ★別の値を出している出典がある★
+        _sups = [(k, v, _ab.classify_support(v["sources"],
+                                             {**_ctx, "rival_values": _rival}))
+                 for k, v in items]
+        agreed = [(k, v) for k, v, sup in _sups if sup["accepted"]]
         # ★大手2サイトが合致したら採用する★（2026-08-06・運営者決定）
         #   これまでは「3つ目の出典が違う書き方をしていたら全部保留」だった。
         #   実際には、同じ天井を別の言い方で書いているだけのことが多く、
