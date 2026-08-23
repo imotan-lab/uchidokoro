@@ -7,7 +7,7 @@
   "assets/data/maker-catalogs.json": "612fa17f5b50f509475096b51ca1f4d8c261c5805e22e337875aa478054c0b3c",
   "assets/data/source-registry.json": "4de7d0c863653c916c8ec419dc8454c1f26b0ecf1f96f0a8e313823470518e47",
   "scripts/add_machine_run.py": "5099b85360d393cfa6f91b567d9a783c02236b743f23fa355cccfc5ce716ec80",
-  "scripts/adoption_basis.py": "542a2904d3eee5347f3f6957cd260a807e6bfbe7532992ddf0df282ec150acc9",
+  "scripts/adoption_basis.py": "23a9f8de31ed614c23151884608671541b4c8aa6cb2a38ca0bd1bc0f533f3284",
   "scripts/at_spec_lookup.py": "74f11d27f804891ec42eba1568d500405469457ed95502396fff9f3627e084f2",
   "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
   "scripts/blocked_hosts.py": "553ac0a6f0f0baf563100458937efa167826c4347f815ace1a70e39769909b7d",
@@ -200,6 +200,5 @@
    "ceiling_lookup",
    "new_machine_watch"
   ]
- },
- "_deps_changed_why": "adoption_basis が at_spec_lookup と cz_lookup も取り込むようになった理由\n\n★試験の中だけで呼ぶ★（_end_to_end_tests の内側で import している）。\n本番の経路（classify_support / near_release / other_sources_known /\nindex_countable）はどれにも触らない。\n\n★なぜ足したか★\n  Codexの3回目のレビューで\n  「ATの basis 保存は自己試験が確認しておらず、\n    mutation_check にもATの保存漏れ変異が無い」と名指しされた。\n  実際そのとおりで、★天井とスペックだけ本物を通し、AT と CZ は\n  手作りの材料のままだった★（今日7回目の「片方だけ直した」）。\n\n  抽出器は4つ（spec / ceiling / at / cz）で、\n  ★どれか1つでも根拠を保存し忘れると、その値だけ断りなしで読者に出る★。\n  本物を通さない限り、その保存漏れは永久に見えない。\n\n★材料の採否の集合には入れない★\n  この4つは「値を取り出す側」であって、採否を決める側ではない。\n  採否を決めるのは adoption_basis と add_machine_run /\n  maker_identity_cache で、これらは既に集合に入っている。\n  ★試験のためだけの依存で契約を膨らませると、\n    契約が「本番で効く変更」を選び出す力が薄まる★。\n\n★ただし取り込む以上は野放しにしない★\n  4つとも、根拠の保存を消すと mutation_check（1・2・12・13番）が赤くなる。\n  ＝契約とは別の経路で、機械が見張っている。"
+ }
 }

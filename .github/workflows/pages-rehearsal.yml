@@ -152,6 +152,11 @@ jobs:
           #   本当の原因は grow_machine の samefile() だった。
           #   この4本は、置き場を存在しない場所へ向けても通ることを確認済み。
           python scripts/check_duplicate.py --name "存在しない機種テスト用XYZ"
+          # ★守りをわざと壊して、試験が赤くなるか確かめる★（2026-08-24）
+          #   ★試験が通ること自体は「守りが効いている」証拠にならない★＝
+          #   実際、根拠の保存を消しても全部緑のままだった時期がある。
+          #   時間のかかる1件は --fast で外す（飛ばしたことは出力に出る）。
+          python scripts/mutation_check.py --fast
 
       - name: Repository audits
         shell: bash

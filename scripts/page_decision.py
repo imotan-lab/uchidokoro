@@ -61,6 +61,17 @@ _SPEC_CLAIMS = ("payout_range", "games_per_50", "at_prob", "payout_rate")
 #   読めなくなって止まる**（fail-closed が裏目に出る）。
 #   ★実測（2026-08-23）★＝判定書つき10機種は全部すでに indexable=False。
 #   外して検索から落ちるページは**0件**。
+# ★★claim が入る箱の名簿（正本）★★（2026-08-24・Codexの3回目の指摘4）
+#   ★増やしたら3か所に効く★＝
+#     ①ここ ②`_claims` の各ループ ③`adoption_basis` の通し試験の表
+#   ★書き忘れを機械が見つける★＝
+#     ・②は page_decision の自己試験（ループの中に箱の名前が出るか）
+#     ・③は adoption_basis の自己試験（表の箱がこの名簿と一致するか）
+#   ★なぜ要るか★＝天井とスペックだけ本物の抽出器を通し、
+#   AT と CZ を手作りの材料のまま残した（1日に7回「片方だけ直した」）。
+#   1つずつ書いていると、必ずどれかを書き忘れる。
+CLAIM_BOXES = ("adopted", "ceilings", "at_specs", "czs")
+
 RETIRED_CLAIMS = ("model_code",)
 
 # 品質ライン（契約 §5）
@@ -697,6 +708,20 @@ def selftest() -> int:
           {"adopted": {"games_per_50": {**IM, "value": {}}}}))
       and _raises(lambda: index_claims_from_material(
           {"adopted": {"payout_rate": "文字列は形が違う"}})))
+    # ★★名簿の箱が、本当に読まれているか★★（2026-08-24・Codexの3回目の指摘4）
+    #   ★名簿を置いただけでは、実物とずれる★＝
+    #   `CLAIM_BOXES` に足したのに `_claims` のループに足し忘れると、
+    #   その家族の値は**検査もされず、数えられもしない**まま公開される。
+    #   ★字面で確かめる★＝ループの中に箱の名前が出ているか。
+    import inspect as _insp
+    _src_claims = _insp.getsource(_claims)
+    t("★★名簿の箱は全部 _claims が読んでいる★★"
+      "（名簿に足してループに足し忘れると、その家族は素通りする）",
+      all(f'"{b}"' in _src_claims or f"'{b}'" in _src_claims
+          for b in CLAIM_BOXES))
+    t("　（対照）実在しない箱を名簿に入れたら気づく",
+      not all(f'"{b}"' in _src_claims
+              for b in tuple(CLAIM_BOXES) + ("zzz_no_such_box",)))
     t("★★対照：外していなければ5claim・4カテゴリで検索に載ってしまう★★"
       "／件数に期待して安全だと思わない",
       len(regression_claims_from_material(MAT_SS)) == 5)

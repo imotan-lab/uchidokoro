@@ -191,14 +191,26 @@ def _run_tests(root: str, scripts: list) -> tuple:
         if r.returncode != 0:
             out = (r.stdout or "") + (r.stderr or "")
             ng = [x for x in out.splitlines() if x.startswith("❌")]
-            why = ng[0][:70] if ng else (out.strip().splitlines() or [""])[-1][:70]
-            return True, f"{rel}: {why}"
-    return False, ""
+            # ★★どう捕まえたのかを区別する★★（2026-08-24・Codexの3回目の指摘2）
+            #   ★直す前は「終了コードが0以外＝捕まえた」だけだった★ので、
+            #   壊し方が**構文エラーになっただけ**でも合格に見えた。
+            #   ＝「その守りを見ている試験がある」証拠にならない。
+            #   ★試験が❌を出したのか、ただ落ちたのかを必ず表に出す★。
+            if ng:
+                return "試験が❌", f"{rel}: {ng[0][:70]}"
+            why = (out.strip().splitlines() or [""])[-1][:70]
+            return "落ちただけ", f"{rel}: {why}"
+    return "", ""
 
 
-def check(only: str = "") -> int:
+# ★時間のかかる試験★（1本で4分ほど＝本番と同じ経路を丸ごと通すため）
+#   CIでは外し、手元の通し確認で回す。
+SLOW = ("scripts/publish_new_machine.py",)
+
+
+def check(only: str = "", fast: bool = False) -> int:
     tmp = tempfile.mkdtemp(prefix="mut_")
-    ng = []
+    ng, weak, skipped = [], [], []
     # ★★写しは1つだけ作って使い回す★★（2026-08-23）
     #   ★直す前は壊し方の数だけ丸ごと複製していた★ので、
     #   11回の複製で不安定になり、**全部が「壊す前から赤い」**になった
@@ -216,6 +228,10 @@ def check(only: str = "") -> int:
     try:
         for i, m in enumerate(MUTATIONS, 1):
             if only and only not in m["why"]:
+                continue
+            if fast and any(x in SLOW for x in m["run"]):
+                print(f"  --   {i}. {m['why']}（★時間がかかるので飛ばした★）")
+                skipped.append(m["why"])
                 continue
             p = os.path.join(root, m["file"])
             src = open(p, encoding="utf-8").read()
@@ -240,23 +256,47 @@ def check(only: str = "") -> int:
             open(p, "w", encoding="utf-8", newline="\n").write(
                 src.replace(m["before"], m["after"], 1))
             try:
-                caught, _ = _run_tests(root, m["run"])
+                caught, _cwhy = _run_tests(root, m["run"])
             finally:
                 # ★★必ず元の中身へ戻す★★（次の壊し方に持ち越さない）
                 open(p, "w", encoding="utf-8", newline="\n").write(src)
             print(("  OK   " if caught else "  ★NG ")
-                  + f"{i}. {m['why']}")
+                  + f"{i}. {m['why']}"
+                  + (f"  ［{caught}］" if caught else ""))
+            if caught == "落ちただけ":
+                # ★合格には数えるが、質は落ちる★＝
+                #   「その守りを見ている試験がある」ではなく
+                #   「壊すと動かなくなる」しか言えていない。
+                weak.append(f"{i}. {m['why']}（{_cwhy[:60]}）")
             if not caught:
                 ng.append(m["why"])
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print()
+    if skipped:
+        # ★飛ばしたことを黙らない★（「全部OK」に見せない）
+        print(f"★{len(skipped)}件は時間の都合で飛ばしました"
+              "（手元で python scripts/mutation_check.py を回してください）★")
+        for x in skipped:
+            print("   -", x)
+        print()
+    if weak:
+        print("★『試験が❌を出した』ではなく『ただ落ちた』もの★"
+              "（守りを見ている試験がある証拠にはなりません）")
+        for x in weak:
+            print("   -", x)
+        print()
     if ng:
         print(f"★{len(ng)}件の守りが、試験で守られていません★")
         for x in ng:
             print("   -", x)
         return 1
-    print(f"{len(MUTATIONS)}/{len(MUTATIONS)} すべて試験が捕まえます")
+    # ★飛ばした分を数に含めない★（2026-08-24＝「全部OK」に見せない）
+    #   ★1件飛ばして 15/15 と出していた★＝この書き方がまさに
+    #   プロジェクトが禁じている「黙って削る」だった。
+    done = len(MUTATIONS) - len(skipped)
+    print(f"{done}/{len(MUTATIONS)} 試したものは、すべて試験が捕まえます"
+          + (f"（★{len(skipped)}件は未確認★）" if skipped else ""))
     return 0
 
 
@@ -264,6 +304,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="守りを壊して試験が赤くなるか見る")
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--only", default="")
+    ap.add_argument("--fast", action="store_true",
+                    help="時間のかかる試験を飛ばす（CI用）")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.list:
@@ -282,7 +324,7 @@ def main() -> int:
             print("❌ " + x)
         print(f"{len(MUTATIONS) - len(bad)}/{len(MUTATIONS)} 合格")
         return 1 if bad else 0
-    return check(a.only)
+    return check(a.only, fast=a.fast)
 
 
 if __name__ == "__main__":

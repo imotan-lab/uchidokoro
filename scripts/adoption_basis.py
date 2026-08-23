@@ -472,113 +472,112 @@ def _end_to_end_tests(t) -> None:
     t("　それでも壊れた材料は例外で止まる（数えないことと検査は別）",
       _pd.regression_claims_from_material(m_forgot) != [])
 
-    # ③-c ★★本物の抽出器の戻り値をそのまま流す★★
-    #   （2026-08-23・Codexの再レビュー「名前は通し試験だが producer の
-    #     保存漏れを直接は検出できない」）
-    #   ★上の _mat() は手作り★＝抽出器が basis を保存し忘れても気づけない。
-    #   ここは spec_lookup.compare() の**戻り値そのもの**を記事と検索へ渡す。
+    # ③-c ★★本物の抽出器の戻り値をそのまま流す（4つの家族を1つの表で）★★
+    #   （2026-08-24・Codexの3回目の指摘4＝
+    #     「手書きの変異を増やすより、対象集合を1か所に固定せよ」）
+    #
+    #   ★なぜ表にするか★＝天井とスペックだけ本物を通し、
+    #   AT と CZ を手作りのまま残した（今日7回目の「片方だけ直した」）。
+    #   ★1つずつ書くと、必ずどれかを書き忘れる★。
+    #   ここに1行足せば、その家族にも同じ検査が全部かかる。
+    #
+    #   見るもの（家族ごとに同じ6つ）
+    #     ①本物の抽出器が根拠を保存している
+    #     ②その戻り値は検索の濃さに数えない（単独確認だから）
+    #     ③けれど「知っているか」には数える（回帰の判定用）
+    #     ④記事にすると単独確認の名乗りが付く
+    #     ⑤根拠を落とすと**公開そのものを断る**
+    #     ⑥根拠を落としても検索の濃さには数えない（白名簿）
+    import at_spec_lookup as _at_mod
+    import build_new_article as _ba_mod
+    import ceiling_lookup as _cl_mod
+    import cz_lookup as _cz_mod
     import spec_lookup as _sl_mod
 
-    def _page(host, payout):
-        """抽出器が返す形の「読めたページ」（★材料は手で作らない★）"""
-        # ★形は抽出器側の決まりに合わせる★（fields）
-        return {"url": f"https://{host}/x", "host": host, "ok": True,
-                "reason": "OK", "fields": {"payout_range": payout}}
+    def _base(host, **kw):
+        d = {"url": f"https://{host}/x", "host": host, "ok": True,
+             "reason": "OK"}
+        d.update(kw)
+        return d
 
-    try:
-        _real = _sl_mod.compare(
-            [_page("p-town.dmm.com", {"low": 97.0, "high": 110.0, "unit": "%"})],
-            ctx=CTX)
-        _got = (_real.get("adopted") or {}).get("payout_range") or {}
-        t("★★本物の抽出器が根拠を保存している★★"
-          "／★手作りの材料では、保存し忘れに気づけない★",
-          _got.get("basis") == DMM_SINGLE_NEAR_RELEASE)
-        t("　その戻り値をそのまま渡すと、検索の濃さには数えない",
-          _pd.index_claims_from_material(_real) == []
-          and _pd.regression_claims_from_material(_real) == ["payout_range"])
-    except Exception as e:                                   # noqa: BLE001
-        t(f"★★本物の抽出器を通せません（{type(e).__name__}: {str(e)[:50]}）★★",
-          False)
+    FAMILIES = (
+        ("スペック", _sl_mod, "adopted",
+         lambda h: _base(h, fields={"payout_range": {"low": 97.0,
+                                                     "high": 110.0,
+                                                     "unit": "%"}})),
+        ("天井", _cl_mod, "ceilings",
+         lambda h: _base(h, cz_names=set(),
+                         ceilings=[{"kind": "GAME", "amount": 999, "unit": "G",
+                                    "counted": "通常時", "benefit": "AT当選",
+                                    "certainty": "確定", "raw": "999G"}])),
+        ("AT", _at_mod, "at_specs",
+         lambda h: _base(h, specs=[{"mode": "MAIN_AT", "games": 30,
+                                    "net": 2.8}])),
+        ("CZ", _cz_mod, "czs",
+         lambda h: _base(h, unresolved=[],
+                         czs=[{"name": "試験CZ", "games": "8G",
+                               "rate": "50%"}])),
+    )
 
-    # ★★天井の抽出器も本物を通す★★（2026-08-23）
-    #   ★Codexの指摘を読んだ直後に、また片方だけ直した★＝
-    #   spec_lookup だけ本物にして ceiling_lookup を手作りのまま残し、
-    #   ミューテーション試験に「天井の根拠保存を消しても気づかない」と
-    #   名指しされた（★今日6回目の「片方だけ」★）。
-    import ceiling_lookup as _cl_mod
+    def _rows_of(res, box):
+        """抽出器の戻り値から、採用した行の一覧を取り出す。"""
+        got = res.get("adopted")
+        if box == "adopted":                 # スペックは辞書で返る
+            return list((got or {}).values())
+        return list(got or [])
 
-    def _cpage(host):
-        return {"url": f"https://{host}/x", "host": host, "ok": True,
-                "reason": "", "cz_names": set(),
-                "ceilings": [{"kind": "GAME", "amount": 999, "unit": "G",
-                              "counted": "通常時", "benefit": "AT当選",
-                              "certainty": "確定", "raw": "999G"}]}
+    def _mat_of(res, box):
+        """抽出器の戻り値を、そのまま材料の形にする（★手で作らない★）。"""
+        if box == "adopted":
+            return {"adopted": res.get("adopted") or {}}
+        return {"adopted": {}, box: {"adopted": res.get("adopted") or []}}
 
-    try:
-        _rc = _cl_mod.compare([_cpage("p-town.dmm.com")], ctx=CTX)
-        _cg = (_rc.get("adopted") or [{}])[0]
-        t("★★本物の天井の抽出器が根拠を保存している★★"
-          "／★手作りの材料では、保存し忘れに気づけない★",
-          _cg.get("basis") == DMM_SINGLE_NEAR_RELEASE)
-        # ★compare は adopted を配列で返す★＝材料の形に包んでから渡す
-        _rc_mat = {"ceilings": {"adopted": _rc.get("adopted") or []}}
-        t("　その戻り値をそのまま渡すと、検索の濃さには数えない",
-          _pd.index_claims_from_material(_rc_mat) == []
-          and _pd.regression_claims_from_material(_rc_mat) != [])
-    except Exception as e:                                   # noqa: BLE001
-        t(f"★★本物の天井の抽出器を通せません（{type(e).__name__}: "
-          f"{str(e)[:50]}）★★", False)
+    def _strip(mat, box):
+        """根拠だけを落とした材料（＝抽出器が保存し忘れた形）。"""
+        import json as _json
+        out = _json.loads(_json.dumps(mat))
+        rows = (out.get("adopted") or {}).values() if box == "adopted" \
+            else (out.get(box) or {}).get("adopted") or []
+        for r in rows:
+            if isinstance(r, dict):
+                for k in ("basis", "games_basis", "rate_basis"):
+                    r.pop(k, None)
+        return out
 
-    # ★★ATとCZの抽出器も本物を通す★★（2026-08-24・Codexの3回目の指摘1）
-    #   ★4つのうち2つだけ本物にしていた★＝AT と CZ は手作りの材料のままで、
-    #   「根拠を保存し忘れても気づかない」状態が残っていた（今日7回目の片方だけ）。
-    #   ★家族（spec / ceiling / at / cz）は必ず4つとも同じ扱いにする★。
-    import at_spec_lookup as _at_mod
-    import cz_lookup as _cz_mod
-
-    def _apage(host):
-        return {"url": f"https://{host}/x", "host": host, "ok": True,
-                "reason": "",
-                "specs": [{"mode": "MAIN_AT", "games": 30, "net": 2.8}]}
-
-    def _zpage(host):
-        return {"url": f"https://{host}/x", "host": host, "ok": True,
-                "reason": "", "unresolved": [],
-                "czs": [{"name": "試験CZ", "games": "8G", "rate": "50%"}]}
-
-    for _label, _mod, _page, _box in (
-            ("AT", _at_mod, _apage, "at_specs"),
-            ("CZ", _cz_mod, _zpage, "czs")):
+    for _name, _mod, _box, _page_of in FAMILIES:
         try:
-            _r = _mod.compare([_page("p-town.dmm.com")], ctx=CTX)
-            _g = (_r.get("adopted") or [{}])[0]
-            t(f"★★本物の{_label}の抽出器が根拠を保存している★★"
+            _res = _mod.compare([_page_of("p-town.dmm.com")], ctx=CTX)
+            _rows = _rows_of(_res, _box)
+            t(f"★★本物の{_name}の抽出器が根拠を保存している★★"
               "／★手作りの材料では、保存し忘れに気づけない★",
-              _g.get("basis") == DMM_SINGLE_NEAR_RELEASE)
-            _mat = {_box: {"adopted": _r.get("adopted") or []}}
-            t(f"　{_label}の戻り値をそのまま渡すと、検索の濃さには数えない",
-              _pd.index_claims_from_material(_mat) == []
-              and _pd.regression_claims_from_material(_mat) != [])
-            # ★記事の名乗りも本物の戻り値で確かめる★
-            #   （根拠を保存し忘れたら、公開そのものを断る）
-            import build_new_article as _ba_mod
+              bool(_rows) and all(
+                  r.get("basis") == DMM_SINGLE_NEAR_RELEASE for r in _rows))
+            _mat_real = _mat_of(_res, _box)
+            t(f"　{_name}：単独確認は検索の濃さに数えない",
+              _pd.index_claims_from_material(_mat_real) == [])
+            t(f"　{_name}：それでも「知っている」には数える",
+              _pd.regression_claims_from_material(_mat_real) != [])
             _txt = str(_ba_mod.build_detail("zzz", "試験機", "2026-08-24",
-                                            {"adopted": {}, **_mat}))
-            t(f"　{_label}の値には単独確認の名乗りが付く",
+                                            _mat_real))
+            t(f"　{_name}：記事にすると単独確認の名乗りが付く",
               "DMMぱちタウン単独確認" in _txt)
-            _stripped = {_box: {"adopted": [
-                {k: v for k, v in (row or {}).items() if k != "basis"}
-                for row in (_r.get("adopted") or [])]}}
-            t(f"★★{_label}の根拠を落とした材料は公開を断る★★"
+            _mat_bare = _strip(_mat_real, _box)
+            t(f"★★{_name}：根拠を落とした材料は公開を断る★★"
               "／★空で流すと断りなしの普通の値として読者に出る★",
-              _raises_build(lambda: _ba_mod.build_detail(
-                  "zzz", "試験機", "2026-08-24",
-                  {"adopted": {}, **_stripped})))
+              _raises_build(lambda m=_mat_bare: _ba_mod.build_detail(
+                  "zzz", "試験機", "2026-08-24", m)))
+            t(f"　{_name}：根拠を落としても検索の濃さには数えない（白名簿）",
+              _pd.index_claims_from_material(_mat_bare) == [])
         except AssertionError:
             raise
         except Exception as e:                               # noqa: BLE001
-            t(f"★★本物の{_label}の抽出器を通せません（{type(e).__name__}: "
-              f"{str(e)[:50]}）★★", False)
+            t(f"★★本物の{_name}の抽出器を通せません"
+              f"（{type(e).__name__}: {str(e)[:50]}）★★", False)
+
+    # ★家族の顔ぶれが増えたら、必ずこの表にも足す★
+    t("★★家族の名簿と、この表が一致している★★"
+      "（新しい家族を足したのに、ここへ足し忘れたら落ちる）",
+      {x[2] for x in FAMILIES} == set(_pd.CLAIM_BOXES))
 
     # ④控えに別の出典があるときは、通し全体が止まる
     blocked = classify_support([D], {**CTX, "other_sources_known": True,
