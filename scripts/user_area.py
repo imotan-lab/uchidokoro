@@ -154,6 +154,16 @@ def _declared_count(node, rule: dict):
     box = _first(node, [rule])
     if box is None:
         return None
+    # ★★件数の場所を名指しする★★（2026-08-23・Codexの反例①）
+    #   ★直す前は箱の中の「最初のN件」を拾っていた★ので、
+    #   投稿とは無関係な「0件」が先に出る作りに変わると、
+    #   ★それで要求を解除できてしまった★（実際に試験で再現）。
+    #   名指しした場所が見つからなければ None＝要求する側（安全側）。
+    where = rule.get("count_in")
+    if isinstance(where, dict):
+        box = _first(box, [where])
+        if box is None:
+            return None
     m = _re.search(r"(\d+)\s*件", _node_text(box))
     return int(m.group(1)) if m else None
 
@@ -540,12 +550,62 @@ def selftest() -> int:
            "require_before": [
                {"class": "wrap"},
                {"class": "reviews",
-                "only_if_count_in": {"class": "wrap"}}],
+                "only_if_count_in": {"class": "wrap",
+                                     "count_in": {"class": "count"}}}],
            "require_after": [{"class": "spec"}]}
     _page = ('<html><body><div class="machine">'
              '<div class="wrap"><span class="count">（%s件）</span></div>'
              '%s<div class="spec">天井999G</div></div></body></html>')
     _rev = '<div class="reviews">面白い台でした</div>'
+
+    def _try_multi():
+        """★件数が複数入っている形★（Codexの反例①）
+
+        投稿とは無関係な「0件」が先に出る作りに変わったとき、
+        それで要求を解除してしまわないか。
+        """
+        page = ('<html><body><div class="machine">'
+                '<div class="wrap"><span class="other">（0件）</span>'
+                '<span class="count">（44件）</span></div>'
+                '<div class="spec">天井999G</div></div></body></html>')
+        try:
+            clean_html(page, "https://cg.test/machine/1", conf=_CG)
+            return "OK"
+        except UserAreaError:
+            return "NG"
+
+    def _real_pages():
+        """★実物のHTMLで確かめる★（Codexの反例②）
+
+        合成HTMLだけだと、相手の本当の作りとずれていても気づけない。
+        `scripts/_fixtures/` に投稿欄まわりだけを切り出して置いてある。
+        """
+        import io as _io
+        import os as _os
+        out = {}
+        base = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                             "_fixtures")
+
+        def _run(name, mutate=None):
+            p = _os.path.join(base, name)
+            if not _os.path.isfile(p):
+                return ("NOFILE", "")
+            html = _io.open(p, encoding="utf-8").read()
+            if mutate:
+                html = mutate(html)
+            try:
+                return ("OK", clean_html(html,
+                                         "https://p-town.dmm.com/machines/1"))
+            except UserAreaError as e:
+                return ("NG", str(e))
+
+        out["zero"] = _run("dmm_reviews_zero.html")
+        out["many"] = _run("dmm_reviews_many.html")
+        # ★44件と言っているのに一覧の箱が消えた形★＝相手が名前を変えた疑い
+        out["many_renamed"] = _run(
+            "dmm_reviews_many.html",
+            lambda h: h.replace("list-machinesreviews", "list-renamed"))
+        return out
 
     def _try(cnt, with_list):
         try:
@@ -570,6 +630,23 @@ def selftest() -> int:
     t("★★件数を読めないときは求める（安全側）★★",
       clean_html.__name__ == "clean_html"
       and (lambda: _try("", False)[0] == "NG")())
+    # ★★Codexが挙げた反例★★（2026-08-23の敵対的レビュー）
+    #   ①件数が複数入っていたら、先頭の無関係な「0件」で要求を解除できないか
+    t("★★別の「N件」が先にあっても、投稿の件数で判断する★★"
+      "／先頭の無関係な0件で要求を解除させない",
+      _try_multi() == "NG")
+    #   ②実物のHTMLで確かめる（合成HTMLだけで済ませない）
+    _real = _real_pages()
+    t("★★実物：レビュー0件の機種は通り、投稿欄が残らない★★",
+      _real["zero"][0] == "OK"
+      and "machine-userreview" not in _real["zero"][1])
+    t("★★実物：レビュー44件の機種も通り、投稿欄が残らない★★",
+      _real["many"][0] == "OK"
+      and "machine-userreview" not in _real["many"][1]
+      and "list-machinesreviews" not in _real["many"][1])
+    t("★★実物：44件なのに一覧の箱を消したら止まる★★"
+      "／相手が箱の名前を変えた形をここで捕まえる",
+      _real["many_renamed"][0] == "NG")
 
     ng = sum(1 for _, o in results if not o)
     print()

@@ -3,7 +3,7 @@
  "_why": "★どの出典を材料に採るかを決める側の指紋★（台帳#389）。ここと実ファイルが一致する時だけ公開物を作れる。中身を直したらこのファイルも更新すること（python scripts/material_contract.py --approve）＝レビューに載せるための仕組み。",
  "files": {
   "assets/data/automation-policy.json": "690c83977ac1d9e7346e177bd20942dd5aa569177b9915eaf3a6422eb8a13465",
-  "assets/data/directory-catalogs.json": "5591ed5621ec452553899b7440a1fdd3a9c0c09c6f3ce9d3d875b3e24ebe1491",
+  "assets/data/directory-catalogs.json": "dfb012f4e3dca9fa2d0cfa98db66adaea89943fa14c33061f022b10678df18dd",
   "assets/data/maker-catalogs.json": "612fa17f5b50f509475096b51ca1f4d8c261c5805e22e337875aa478054c0b3c",
   "assets/data/source-registry.json": "4de7d0c863653c916c8ec419dc8454c1f26b0ecf1f96f0a8e313823470518e47",
   "scripts/add_machine_run.py": "5099b85360d393cfa6f91b567d9a783c02236b743f23fa355cccfc5ce716ec80",
@@ -29,7 +29,7 @@
   "scripts/slug_binding.py": "17c235c10cd7fed94d4c774bbe7b88c87349eff214bedaa22182d3fe79f26af6",
   "scripts/source_lineage.py": "3bc6d55450f8d39e099d88a73f3c662f02e95915d5fe83d981ffd759c9b3881a",
   "scripts/spec_lookup.py": "89aa58008b1e8935d7ab04bb619c0175a2c72b60a2d62da081c8b4ec21fb78dd",
-  "scripts/user_area.py": "2ad89b9634c4ecae568cdc791e951e6efcb5fc8eca61eebdd2955f136727509d"
+  "scripts/user_area.py": "315993098ac269aa468e670ac66002324169ed199283a25b7894d16ef284867f"
  },
  "imports": {
   "scripts/add_machine_run.py": [
@@ -194,6 +194,5 @@
    "ceiling_lookup",
    "new_machine_watch"
   ]
- },
- "_deps_changed_why": "2026-08-23、adoption_basis が machine_sources を取り込むようになった理由。\n\n■ なぜ取り込むのか\n  Codexの敵対的レビューP0＝\n  「本当は第2出典があるのに『DMM単独』と判定できる」。\n\n  新台経路は**索引で見つかったURLだけ**を材料候補にする。\n  一方、人と2AIが確かめた出典は machine_sources に控えてあるが、\n  そちらは collect_evidence でしか使われていない。\n\n  成立していた経路:\n    ①DMMは索引で見つかる\n    ②ちょんぼりすたにも記事があり、URLを控えてある\n    ③しかし索引の1ページ制限や表記差で拾えない（台帳#468で実測）\n    ④gather にはDMMだけが渡る\n    ⑤★「DMM単独」と誤判定して、控えのページと食い違っていても気づかない★\n  ＝**誤情報に到達する経路**。\n\n■ 何に使うか（★材料には足さない★）\n  「DMM単独だ」と名乗る前に、**控えに別の発行者の出典が無いか**だけを見る。\n  あれば例外を使わない（＝今までどおり独立2出典を求める）。\n\n  ★材料に足さないのは意図的★＝足すには同定・メーカー照合・\n  再検査した本文と読む本文の同一性など条件が多く（Codexが8点挙げた）、\n  別の作業になる。ここは**例外を名乗らせない**だけにして、\n  ★危険を先に止める★。\n\n■ ★読めないときは例外を通さない★（fail-closed）\n  控えを読めない・URLをそろえられない場合は「別の出典を知っている」と答える。\n  ＝控えが壊れた日に1出典で公開されない。\n  ★この分岐を見る試験が無いことを対照実験で発見して追加した★\n  （外すと 21/23 で2件が落ちる）。\n\n■ ★材料の契約に入れる必要はあるか★\n  machine_sources 自体は既に「採否を左右する直接の依存」ではなかったが、\n  ★いまは採否（DMM単独を名乗ってよいか）を左右する★ので、\n  集合へ入れるのが筋。\n  → CONTRACT_INPUTS に scripts/machine_sources.py を追加した。"
+ }
 }

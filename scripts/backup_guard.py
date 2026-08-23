@@ -62,15 +62,14 @@ ALLOW_BASENAMES = {
     #   AIが探して機械が確かめた結果。失うと同じ調べ直しをやり直すことになる。
     #   中身は公開サイトのURLと判断理由だけで、認証情報を含まない。
     "uchidokoro_machine_sources.json",
-    # ★2AIで確定した値の控え★（2026-08-23・台帳#464）
-    #   ★上の machine_sources とまったく同じ性質★＝失うと同じ手間を
-    #   もう一度払うことになる（出典の取り直し・Codexの枠・両AIの読み比べ）。
-    #   実測（喰霊-零-Re）＝1機種の材料集めで222回の取得。
-    #   中身は確定した値・公開サイトのURL・そのページに実在する逐語・
-    #   判断者と理由だけで、認証情報を含まない（秘密検査は全ファイルに掛かる）。
-    #   ★confirmed_values.py の冒頭が「Dropboxへ保全」と書いているのに
-    #     機械が断っていた★＝手順書と実装の食い違いだった。
-    "uchidokoro_confirmed_values.json",
+    # ★★ここに confirmed_values を足さないこと★★（2026-08-23・台帳#464）
+    #   ★2026-08-09から既に下（96行あたり）に載っている★。
+    #   私は「名簿に無いから拒否された」と誤解して重複追加したが、
+    #   ★集合なので何の効果も無かった★。
+    #   ★本当の原因★＝無人タスクが保存先を `confirmed_values.json` にしていた。
+    #   名簿は**保存名**で照合するので、`uchidokoro_` が無ければ当然落ちる。
+    #   → 直したのは手順書（保存名に uchidokoro_ を付ける）と、
+    #     拒否の文言（似た名前が許可されていればその名前を出す）。
     # ★見つけたが、まだ記事にできていない新台の控え★（2026-08-16・台帳#376）
     #   ★ここが失われると「見つけたのに記事にしていない機種」が丸ごと消える★
     #   （どの機種を見たかの記憶がなくなり、二度と出てこない）。
@@ -513,7 +512,19 @@ def cmd_copy(src: str, dst: str, optional: bool) -> int:
     # （例: state.json → uchidokoro_state.json にリネームコピーする運用のため。
     #   ただし秘密パターンの名前検査はsrc/dst両方に掛ける＝リネームによるすり替えを防ぐ）
     if not is_allowlisted(dst_base, src):
-        findings.append("allowlist:リスト外")
+        # ★★似た名前が許可されているなら、それを言う★★（2026-08-23・台帳#464）
+        #   ★なぜ要るか★＝実際に一晩無駄にした。
+        #   無人タスクが保存先を `confirmed_values.json` にして拒否されたが、
+        #   許可名簿にあるのは `uchidokoro_confirmed_values.json` だった。
+        #   「リスト外」としか出ないので、**名簿に足りないのだと誤解して
+        #   すでに載っている名前を重複追加する**という無意味な直しをした。
+        #   ★機械が知っていることを、その場で言えば済む★
+        hint = ""
+        for allowed in ALLOW_BASENAMES:
+            if allowed.endswith(dst_base) and allowed != dst_base:
+                hint = f"／★保存名を「{allowed}」にしてください★"
+                break
+        findings.append("allowlist:リスト外" + hint)
     for b in {base, dst_base}:
         if os.path.splitext(b.lower())[1] in ARCHIVE_EXTENSIONS:
             findings.append("archive:圧縮ファイルは原則バックアップ禁止")
@@ -933,6 +944,25 @@ def selftest() -> int:
     with contextlib.redirect_stdout(io.StringIO()):
         rc = cmd_copy(p, os.path.join(dst_dir, "mystery_data.json"), False)
     t("許可リスト外ファイルはコピー拒否", rc == 1 and not os.path.exists(os.path.join(dst_dir, "mystery_data.json")))
+    # ★★接頭辞を付け忘れたときは、正しい保存名を教える★★（2026-08-23・台帳#464）
+    #   ★なぜ要るか＝実際に一晩無駄にした★
+    #   無人タスクが保存先を confirmed_values.json にして拒否されたが、
+    #   「リスト外」としか出ないので、**名簿に足りないのだと誤解して
+    #   すでに載っている名前を重複追加する**という無意味な直しをした。
+    p_pre = w("confirmed_values.json", "{}")
+    _buf = io.StringIO()
+    with contextlib.redirect_stdout(_buf):
+        rc_pre = cmd_copy(p_pre, os.path.join(dst_dir, "confirmed_values.json"),
+                          False)
+    _out = _buf.getvalue()
+    t("★★接頭辞の付け忘れは、正しい保存名を教えてから断る★★"
+      "／★「リスト外」だけだと名簿の不足と誤解する（実際にした）★",
+      rc_pre == 1 and "uchidokoro_confirmed_values.json" in _out)
+    with contextlib.redirect_stdout(io.StringIO()):
+        rc_ok = cmd_copy(p_pre,
+                         os.path.join(dst_dir,
+                                      "uchidokoro_confirmed_values.json"), False)
+    t("　（対照）正しい保存名なら通る", rc_ok == 0)
     # 3. 秘密ファイル名（gmail_config/x_storage）は拒否
     p1 = w("gmail_config.json", json.dumps({"gmail_address": "a@b", "app_password": "xxxx xxxx xxxx xxxx"}))
     p2 = w("x_storage_uchidokoro.json", json.dumps({"cookies": [{"name": "a", "value": "b", "domain": "x.com"}] * 3}))

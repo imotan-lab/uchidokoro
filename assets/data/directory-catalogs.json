@@ -503,7 +503,10 @@
      {
       "class": "list-machinesreviews",
       "only_if_count_in": {
-       "class": "machine-userreview"
+       "class": "machine-userreview",
+       "count_in": {
+        "class": "count"
+       }
       }
      }
     ],

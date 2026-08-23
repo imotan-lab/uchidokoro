@@ -444,9 +444,13 @@ def build_detail(slug, name, release, material) -> dict:
     #   同定に使う値は identity.regulatory_model_code に残す（読者には出ない）。
     if (rng := adopted.get("payout_range")):
         v = rng["value"]
-        facts.append(["機械割", f"{v['low']}%〜{v['high']}%"])
+        facts.append(["機械割",
+                      f"{v['low']}%〜{v['high']}%"
+                      f"{_basis_tag(rng.get('basis'))}"])
     if (g50 := adopted.get("games_per_50")):
-        facts.append(["50枚あたり", f"約{g50['value']['games']:g}G"])
+        facts.append(["50枚あたり",
+                      f"約{g50['value']['games']:g}G"
+                      f"{_basis_tag(g50.get('basis'))}"])
 
     boxes = {}          # title -> section（確認できたものだけ中身が入る）
     # ★天井・恩恵★（一式で採れたものだけ。値だけでは載せない）
@@ -457,8 +461,12 @@ def build_detail(slug, name, release, material) -> dict:
             jp = {"GAME": "ゲーム数天井", "CYCLE": "周期天井",
                   "POINT": "ポイント天井"}.get(c["kind"], "天井")
             counted = f"（{c['counted']}を数えます）" if c.get("counted") else ""
+            # ★値ごとに根拠を名乗る★（2026-08-23・Codexの指摘4）
+            #   ★CZの表だけ直して本文を忘れていた★＝単独確認の天井が
+            #   断りなしで出る状態だった。
             body.append(f"**{jp}**：{c['amount']}{c['unit']}{counted} "
-                        f"／ 恩恵：{c['benefit']}")
+                        f"／ 恩恵：{c['benefit']}"
+                        f"{_basis_tag(c.get('basis'))}")
         # ★断り書きは「1つしか確認できていないとき」だけ★
         #   （2026-08-12・運営者決定）
         #   天井は1機種に1つとは限らない（通常時／AT間／スルー）。
@@ -479,7 +487,8 @@ def build_detail(slug, name, release, material) -> dict:
         for c in ceil:
             jp = {"GAME": "ゲーム数天井", "CYCLE": "周期天井",
                   "POINT": "ポイント天井"}.get(c["kind"], "天井")
-            facts.append([jp, f"{c['amount']}{c['unit']}"])
+            facts.append([jp, f"{c['amount']}{c['unit']}"
+                              f"{_basis_tag(c.get('basis'))}"])
 
     # ★ATの仕様★（モードごとに分けて書く。混ぜたら誤情報）
     ats = (material.get("at_specs") or {}).get("adopted") or []
@@ -502,13 +511,16 @@ def build_detail(slug, name, release, material) -> dict:
                 parts.append(f"継続率{c['loop_rate']}")
             if c.get("label"):
                 jp = f"{jp}「{c['label']}」"
-            body.append(f"**{jp}**：" + " ／ ".join(parts))
+            # ★値ごとに根拠を名乗る★（2026-08-23・Codexの指摘4）
+            body.append(f"**{jp}**：" + " ／ ".join(parts)
+                        + _basis_tag(c.get("basis")))
         boxes["ゲーム性"] = {"title": "ゲーム性", "body": body}
         for c in sorted(ats, key=lambda x: x["mode"]):
             if not c.get("net"):
                 continue
             jp = "メインAT純増" if c["mode"] == "MAIN_AT" else "上位AT純増"
-            facts.append([jp, f"約{c['net']}枚/G"])
+            facts.append([jp,
+                          f"約{c['net']}枚/G{_basis_tag(c.get('basis'))}"])
 
     # ★ゲームの流れ（数値でないもの）★（2026-08-13・台帳#344）
     #   導入前〜直後は「名前と流れが先に出て、数値は後」。数値が要る器しか
@@ -602,11 +614,13 @@ def build_detail(slug, name, release, material) -> dict:
     # ★型式名は書かない★（2026-08-09・運営者決定。同定専用にした）
     rng = adopted.get("payout_range")
     spec_body.append(
-        f"**機械割**：{rng['value']['low']}%〜{rng['value']['high']}%" if rng
+        f"**機械割**：{rng['value']['low']}%〜{rng['value']['high']}%"
+        f"{_basis_tag(rng.get('basis'))}" if rng
         else f"**機械割**：{PENDING_ITEM}")
     g50 = adopted.get("games_per_50")
     spec_body.append(
-        f"**50枚あたりのゲーム数**：約{g50['value']['games']:g}G" if g50
+        f"**50枚あたりのゲーム数**：約{g50['value']['games']:g}G"
+        f"{_basis_tag(g50.get('basis'))}" if g50
         else f"**50枚あたりのゲーム数**：{PENDING_ITEM}")
     boxes["基本スペック"] = {"title": "基本スペック", "body": spec_body}
 
@@ -802,6 +816,52 @@ def selftest() -> int:
       "（spec系claimだけでは検索に載せない）",
       _pd.machine_class(m) == "AUTO_PENDING"
       and "NO_UNIQUE_GAMEPLAY" in m["page_decision"]["reason_codes"])
+    # ★★単独確認の値には、どこに出ても必ず名乗りが付く★★
+    #   （2026-08-23・Codexの敵対的レビュー指摘4）
+    #   ★私はCZの表しか直しておらず★、機械割・50枚あたり・天井・AT・
+    #   factTable には**断りなしで単独確認の値が出る**状態だった。
+    #   ＝台帳#443（sf6・確かめていない「2件で一致」の名乗り）と同じ型。
+    SS = {"basis": "DMM_SINGLE_NEAR_RELEASE"}
+    MAT_SS = {"adopted": {
+        "payout_range": {**SS, "value": {"low": 97.0, "high": 110.0,
+                                         "unit": "%"}, "sources": ["a"]},
+        "games_per_50": {**SS, "value": {"games": 36.1}, "sources": ["a"]}},
+        "ceilings": {"adopted": [{**SS, "kind": "GAME", "amount": 999,
+                                  "unit": "G", "benefit": "AT当選",
+                                  "sources": ["a"]}]},
+        "at_specs": {"adopted": [{**SS, "mode": "MAIN_AT", "net": 1.0,
+                                  "sources": ["a"]}]},
+        "czs": {"adopted": [{**SS, "name": "試験CZ", "games": "8G",
+                             "games_basis": SS["basis"], "sources": ["a"]}]}}
+    _d_ss = build_detail("zzz", "試験機", "2026-08-17", MAT_SS)
+
+    def _all_text(d):
+        out = []
+        for sec in (d.get("sections") or []):
+            out += [str(x) for x in (sec.get("body") or [])]
+            for tb in (sec.get("tables") or []):
+                out.append(str(tb.get("note") or ""))
+                for row in (tb.get("rows") or []):
+                    out += [str(x) for x in (row or [])]
+        for row in (d.get("factTable") or []):
+            out += [str(x) for x in (row or [])]
+        return out
+
+    _texts = _all_text(_d_ss)
+    _NUM_MARKS = ("97.0%", "36.1G", "999G", "約1.0枚", "8G")
+    _naked = [t for t in _texts
+              if any(m in t for m in _NUM_MARKS)
+              and "DMMぱちタウン単独確認" not in t]
+    t("★★単独確認の値は、どこに出ても必ず名乗りが付く★★"
+      "／★付け忘れると「根拠の詐称」になる（台帳#443と同じ型）★",
+      _texts and not _naked)
+    if _naked:
+        print("   ★名乗りが付いていない箇所★: " + " / ".join(_naked[:3]))
+    t("　独立2出典のときは何も名乗らない（今までどおりの見た目）",
+      not any("DMMぱちタウン単独確認" in x
+              for x in _all_text(build_detail("zzz", "試験機", "2026-08-17",
+                                              MAT))))
+
     MAT_FULL = dict(MAT)
     MAT_FULL["at_specs"] = {"adopted": [
         {**IM, "mode": "MAIN_AT", "games": 30, "net": 2.8,
