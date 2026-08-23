@@ -3,7 +3,7 @@
  "_why": "★どの出典を材料に採るかを決める側の指紋★（台帳#389）。ここと実ファイルが一致する時だけ公開物を作れる。中身を直したらこのファイルも更新すること（python scripts/material_contract.py --approve）＝レビューに載せるための仕組み。",
  "files": {
   "assets/data/automation-policy.json": "690c83977ac1d9e7346e177bd20942dd5aa569177b9915eaf3a6422eb8a13465",
-  "assets/data/directory-catalogs.json": "20e4e5aa7937c6a2029b368006e67fd3b4a7ba61fb20655bc214ab2416898e7c",
+  "assets/data/directory-catalogs.json": "5591ed5621ec452553899b7440a1fdd3a9c0c09c6f3ce9d3d875b3e24ebe1491",
   "assets/data/maker-catalogs.json": "612fa17f5b50f509475096b51ca1f4d8c261c5805e22e337875aa478054c0b3c",
   "assets/data/source-registry.json": "4de7d0c863653c916c8ec419dc8454c1f26b0ecf1f96f0a8e313823470518e47",
   "scripts/add_machine_run.py": "d11ab8311653828b32fa9dcdc057d1d2a4ba7c42dcad51dd3412bd7662d3995b",
@@ -28,7 +28,7 @@
   "scripts/slug_binding.py": "17c235c10cd7fed94d4c774bbe7b88c87349eff214bedaa22182d3fe79f26af6",
   "scripts/source_lineage.py": "3bc6d55450f8d39e099d88a73f3c662f02e95915d5fe83d981ffd759c9b3881a",
   "scripts/spec_lookup.py": "e2f5fe824f0da1d84d0a86fdcd165449852815d9e93491c3063a8c2e23c8a541",
-  "scripts/user_area.py": "2f96a1d44cda5b1324fe1d44b85cf5913d608b0f67303cb188ed503d926ec91a"
+  "scripts/user_area.py": "2ad89b9634c4ecae568cdc791e951e6efcb5fc8eca61eebdd2955f136727509d"
  },
  "imports": {
   "scripts/add_machine_run.py": [
@@ -182,6 +182,5 @@
    "ceiling_lookup",
    "new_machine_watch"
   ]
- },
- "_deps_changed_why": "2026-08-23、add_machine_run が adoption_basis を取り込むようになった理由。\n\n■ なぜ取り込むのか\n  ★実データで走らせて分かったこと★＝\n  4つの抽出器へ採否の判定を配線しただけでは、**一度も呼ばれなかった**。\n\n  gather() の入口に「名鑑の個別ページが2件以上ないと進めない」という\n  早期returnがあり、DMMしか無い機種はそこで止まっていた。\n\n    if len(got[\"urls\"]) < 2:\n        return got          ← ここで終わり（採否の判定に到達しない）\n\n  ＝★入口を開けないと、運営者決定（DMM単独で記事にしてよい）が効かない★。\n\n■ 何に使うか\n  入口の判定にだけ使う。\n    ・1件だけ ／ それがDMMの機種ページ ／ 機種名と導入日を確かめ済み\n    ・adoption_basis.near_release（導入7日前以降・日精度）\n  この4つがそろったときだけ、1件でも材料集めを続ける。\n\n  ★入口は開けるだけで、採用を決めていない★＝\n  値ごとの採否はこのあと adoption_basis.classify_support が\n  6条件で判断する（支持がDMMだけ／導入7日前以降／導入日が日まで確定／\n  導入日の出どころがDMM／本人性確認済み／別の値を出す出典が無い）。\n\n  ★1件で進んだ理由は必ずログと problems に残す★（黙って例外を通さない）。\n\n■ ★材料の契約に入れるべきもの★\n  add_machine_run は既に契約に入っている（採否を使う側・公開への接続）。\n  adoption_basis も今日追加した（採否そのものを決める側）。\n  今回はその2つが直接つながっただけなので、集合は変わらない。"
+ }
 }

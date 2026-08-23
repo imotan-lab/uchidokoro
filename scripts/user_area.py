@@ -123,6 +123,54 @@ def _find(node, rules: list) -> bool:
     return False
 
 
+def _node_text(node) -> str:
+    """その箱の中の文字だけを集める（★中身を読むためだけ★）。"""
+    out = []
+    for ch in node.get("children") or []:
+        if ch.get("tag") == "#text":
+            out.append(str(ch.get("text") or ""))
+        else:
+            out.append(_node_text(ch))
+    return " ".join(" ".join(out).split())
+
+
+def _declared_count(node, rule: dict):
+    """★そのページが自分で言っている件数★（読めなければ None）。
+
+    ★なぜ要るか（2026-08-23・台帳#460）★
+      DMMの機種ページは投稿欄の枠に件数を書いている。
+
+        ユーザー評価（0件）   → 一覧の箱は描画されない
+        ユーザー評価（44件）  → 一覧の箱が描画される
+
+      ★「一覧の箱が必ずある」と要求すると、レビューが0件の機種は
+      永久に出典に使えない★（＝解析サイトが扱わないマイナー機種そのもの）。
+      正しい要求は「枠は必ずある／一覧は件数が1件以上のときだけ必ずある」。
+
+    ★読めなければ None を返す★＝呼び出し側は「要求する」側に倒す
+      （相手が件数の書き方を変えた可能性を、安全側に扱う）。
+    """
+    import re as _re
+    box = _first(node, [rule])
+    if box is None:
+        return None
+    m = _re.search(r"(\d+)\s*件", _node_text(box))
+    return int(m.group(1)) if m else None
+
+
+def _first(node, rules: list):
+    """その木の中で最初に見つかった箱（無ければ None）。"""
+    for ch in node.get("children") or []:
+        if ch.get("tag") == "#text":
+            continue
+        if any(_matches(ch, r) for r in rules):
+            return ch
+        got = _first(ch, rules)
+        if got is not None:
+            return got
+    return None
+
+
 def strip_tree(node, rules: list) -> int:
     """木から対象の箱を落とす。落とした数を返す。"""
     n = 0
@@ -185,7 +233,22 @@ def visible_text(html: str, url: str = "", conf: dict | None = None) -> str:
     _mp = is_machine_page(url, ua)
     need_b = ([r for r in (ua.get("require_before") or []) if isinstance(r, dict)]
               if _mp else [])
-    miss_b = [r for r in need_b if not _find(root, [r])]
+
+    def _required_now(r: dict) -> bool:
+        """★その箱を「必ずある」と求めてよいか★（2026-08-23・台帳#460）
+
+        ★件数で条件が付いた箱★＝そのページが「0件」と言っているなら、
+        描かれていなくて当然なので求めない。
+        ★読めないときは求める★＝相手が書き方を変えた可能性を安全側に扱う。
+        """
+        gate = r.get("only_if_count_in")
+        if not isinstance(gate, dict):
+            return True
+        n = _declared_count(root, gate)
+        return n != 0                     # None（読めない）でも求める
+
+    miss_b = [r for r in need_b
+              if _required_now(r) and not _find(root, [r])]
     if miss_b:
         raise UserAreaError(
             f"落とすはずの箱が見つかりません（{miss_b}）"
@@ -329,6 +392,7 @@ def _all_required_checked() -> bool:
 
     片方だけある形を渡して、ちゃんと止まるかを見る。
     """
+    # （下の本体は従来どおり。件数の条件つきの試験は _count_gate_tests）
     conf = {"hosts": ["x.test"], "drop": [{"id": "bbs"}],
             "markers": [],
             "require_before": [{"id": "bbs"}, {"id": "sonzai_shinai"}]}
@@ -464,6 +528,48 @@ def selftest() -> int:
       ] and _all_required_checked())())
     t("　サブドメインでも引ける", _conf("p-town.dmm.com") == _conf("p-town.dmm.com"))
     t("　知らないホストは空", _conf("example.com") == {})
+
+    # ★★件数で条件が付いた箱★★（2026-08-23・台帳#460）
+    #   ★実データで見つけた★＝DMMの投稿一覧は**レビューが1件も無い機種には
+    #   描画されない**（5089は「ユーザー評価（0件）」で一覧が無い／
+    #   5028は「（44件）」で有る）。「必ずある」と求めていたので、
+    #   ★レビューが付かないマイナー機種は永久に出典に使えなかった★
+    #   ＝今回の運営者決定（DMM単独で記事にしてよい）が救おうとしている層そのもの。
+    _CG = {"hosts": ["cg.test"], "drop": [{"class": "reviews"}],
+           "markers": [],
+           "require_before": [
+               {"class": "wrap"},
+               {"class": "reviews",
+                "only_if_count_in": {"class": "wrap"}}],
+           "require_after": [{"class": "spec"}]}
+    _page = ('<html><body><div class="machine">'
+             '<div class="wrap"><span class="count">（%s件）</span></div>'
+             '%s<div class="spec">天井999G</div></div></body></html>')
+    _rev = '<div class="reviews">面白い台でした</div>'
+
+    def _try(cnt, with_list):
+        try:
+            got = clean_html(_page % (cnt, _rev if with_list else ''),
+                             "https://cg.test/machine/1", conf=_CG)
+            return ("OK", got)
+        except UserAreaError as e:
+            return ("NG", str(e))
+
+    t("★★0件と書いてあれば、一覧が無くても通す★★"
+      "／これが無いとレビューの付かない機種は永久に使えない",
+      _try("0", False)[0] == "OK")
+    t("★★0件でも、一覧があれば必ず落とす★★（通すことと落とさないことは別）",
+      _try("0", True)[0] == "OK"
+      and "面白い台でした" not in _try("0", True)[1])
+    t("★★1件以上と書いてあるのに一覧が無ければ止める★★"
+      "／相手が箱の名前を変えた形をここで捕まえる",
+      _try("44", False)[0] == "NG")
+    t("　1件以上で一覧があれば通し、中身は落とす",
+      _try("44", True)[0] == "OK"
+      and "面白い台でした" not in _try("44", True)[1])
+    t("★★件数を読めないときは求める（安全側）★★",
+      clean_html.__name__ == "clean_html"
+      and (lambda: _try("", False)[0] == "NG")())
 
     ng = sum(1 for _, o in results if not o)
     print()
