@@ -63,7 +63,7 @@ MUTATIONS = [
     {
         "why": "記事が根拠を名乗らなくなる",
         "file": "scripts/build_new_article.py",
-        "before": '    return BASIS_SUFFIX.get(str(basis or ""), "")',
+        "before": "    return _basis_tag((row or {}).get(key))",
         "after": '    return ""',
         "run": ["scripts/build_new_article.py", "scripts/adoption_basis.py"],
     },
@@ -115,11 +115,39 @@ MUTATIONS = [
     {
         "why": "設定別の表が根拠を名乗らない（前回の見落とし）",
         "file": "scripts/build_new_article.py",
-        "before": '        rows = [[f"設定{k}", f"{got[\'value\'][k]}{_tag}"]\n'
+        "before": '        rows = [[f"設定{k}", f"{got[\'value\'][k]}{_mark}"]\n'
                   '                for k in sorted(got["value"])]',
         "after": '        rows = [[f"設定{k}", got["value"][k]]\n'
                  '                for k in sorted(got["value"])]',
         "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "根拠のない値を空で流す（読者に断りなしで出る・Codex3回目P0）",
+        "file": "scripts/build_new_article.py",
+        "before": '    t = str(basis or "")\n'
+                  "    if t not in BASIS_SUFFIX:\n"
+                  "        raise BuildError(\n"
+                  '            f"採用した値に根拠がありません（区分: {basis!r}）／"\n'
+                  '            "★根拠の分からない値は記事にしません★"\n'
+                  '            "／抽出器が basis を保存し忘れていないか確かめてください")\n'
+                  "    return BASIS_SUFFIX[t]",
+        "after": '    return BASIS_SUFFIX.get(str(basis or ""), "")',
+        "run": ["scripts/adoption_basis.py"],
+    },
+    {
+        "why": "ATの抽出器が根拠を保存し忘れる（Codex3回目・未カバーだった）",
+        "file": "scripts/at_spec_lookup.py",
+        "before": '            c["basis"] = next(sup["basis"] for v, sup in _sups\n'
+                  "                              if v is agreed[0])",
+        "after": "",
+        "run": ["scripts/adoption_basis.py"],
+    },
+    {
+        "why": "CZの抽出器が根拠を保存し忘れる（Codex3回目・未カバーだった）",
+        "file": "scripts/cz_lookup.py",
+        "before": '                        "basis": _sup["basis"],',
+        "after": "",
+        "run": ["scripts/adoption_basis.py"],
     },
     {
         "why": "試験用の偽の機種を掃除しない（2026-08-24・自分で踏んだ）",
@@ -177,8 +205,14 @@ def check(only: str = "") -> int:
     #   （道具の判定が信用できない状態＝直したい病気そのもの）。
     #   1つ作って、壊したファイルを毎回**元の中身へ戻す**ほうが速くて確実。
     root = os.path.join(tmp, "work")
+    # ★★.git も一緒に写す★★（2026-08-24・壊し方12を足したら判明）
+    #   ★直す前は .git を除いていた★ので、
+    #   git に問い合わせる検査（監査29の「追跡ファイルの一覧」など）が
+    #   **壊す前から赤い**状態になり、その守りを一切確かめられなかった。
+    #   ＝★写しが本物と違うと、道具そのものが役に立たなくなる★。
+    #   22MB ほどなので、写す方を選ぶ。
     shutil.copytree(BASE, root, ignore=shutil.ignore_patterns(
-        ".git", "__pycache__", "node_modules", ".preview-site", "_site"))
+        "__pycache__", "node_modules", ".preview-site", "_site"))
     try:
         for i, m in enumerate(MUTATIONS, 1):
             if only and only not in m["why"]:

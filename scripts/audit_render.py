@@ -415,10 +415,13 @@ def selftest_dom() -> int:
         ok_all = ok_all and bool(cond)
         print(("✅" if cond else "❌") + " " + name)
 
+    _IM = {"basis": "INDEPENDENT_MULTI"}     # ★本番の材料は必ず根拠を持つ★
     mat = {"adopted": {"model_code": {"value": "L1"},
-                       "payout_range": {"value": {"low": 97, "high": 110}},
-                       "payout_rate": {"value": {"1": "97%", "6": "110%"}}},
-           "at_specs": {"adopted": [{"mode": "MAIN_AT", "games": 30,
+                       "payout_range": {**_IM,
+                                        "value": {"low": 97, "high": 110}},
+                       "payout_rate": {**_IM,
+                                       "value": {"1": "97%", "6": "110%"}}},
+           "at_specs": {"adopted": [{**_IM, "mode": "MAIN_AT", "games": 30,
                                      "net": 2.8}]}}
     det = _ba.build_detail("zzz", "試験機", "2026-09", mat)
     inner = "".join(_bmp.render_section(x) for x in det["sections"])
@@ -504,10 +507,13 @@ def selftest() -> int:
         ok_all = ok_all and bool(cond)
         print(("✅" if cond else "❌") + " " + name)
 
+    _IM = {"basis": "INDEPENDENT_MULTI"}     # ★本番の材料は必ず根拠を持つ★
     mat = {"adopted": {"model_code": {"value": "L1"},
-                       "payout_range": {"value": {"low": 97, "high": 110}},
-                       "payout_rate": {"value": {"1": "97%", "6": "110%"}}},
-           "at_specs": {"adopted": [{"mode": "MAIN_AT", "games": 30,
+                       "payout_range": {**_IM,
+                                        "value": {"low": 97, "high": 110}},
+                       "payout_rate": {**_IM,
+                                       "value": {"1": "97%", "6": "110%"}}},
+           "at_specs": {"adopted": [{**_IM, "mode": "MAIN_AT", "games": 30,
                                      "net": 2.8}]}}
     det = _ba.build_detail("zzz", "試験機", "2026-09", mat)
 

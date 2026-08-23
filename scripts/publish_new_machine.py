@@ -2309,6 +2309,30 @@ def purge_test_residue(apply_it: bool = True) -> list:
         if apply_it:
             os.remove(f)
 
+    # ★★公開途中の目印も残骸になる★★（2026-08-24・Codexの3回目の指摘3）
+    #   自己試験は**本物の目印**を書く（監査は別プロセスなので、
+    #   偽物に差し替えると再現できない）。強制終了されると
+    #   `.publish-in-progress.json` が残り、
+    #   ★以後の新台追加が「前回の公開途中です」で永久に止まる★。
+    #   `.push-pending.json` も同じで、偽の機種のpush待ちとして残る。
+    #   ★試験用のslug（zzz_）が書いてある時だけ消す★
+    #   ＝本物の公開途中には絶対に触らない。
+    import json as _js
+    for mk in (IN_PROGRESS, os.path.join(BASE, ".push-pending.json")):
+        if not os.path.isfile(mk):
+            continue
+        try:
+            _slug = str((_js.load(open(mk, encoding="utf-8")) or {}).get("slug")
+                        or "")
+        except Exception:                                    # noqa: BLE001
+            continue                    # ★読めないものは触らない★
+        if not _slug.startswith(TEST_SLUG_PREFIX):
+            continue                    # ★本物の公開途中★
+        found.append(os.path.relpath(mk, BASE).replace(chr(92), "/")
+                     + f"（{_slug} の目印）")
+        if apply_it:
+            os.remove(mk)
+
     for rel in ("assets/data/machines.json",) + tuple(HUB_FILES):
         d = _git("diff", "-U0", "--", rel).stdout or ""
         if not d.strip():
@@ -2463,12 +2487,19 @@ def selftest() -> int:
     # ★★記事の箱をページ側で構造ごと確かめる★★（2026-08-04・Codex77〜79回目）
     #   平坦化した文字の比較では、クラス・見出し・表を壊しても通っていた。
     #   記事データから描き直したHTMLと、そのまま突き合わせる。
-    _mat_ok = {"adopted": {"model_code": {"value": "L1"},
-                           "payout_range": {"value": {"low": 97, "high": 110}},
-                           "payout_rate": {"value": {"1": "97%", "6": "110%"}}},
-               "at_specs": {"adopted": [{"mode": "MAIN_AT", "games": 30,
+    # ★根拠は必ず持たせる★（2026-08-24＝本番の材料は必ず basis を持つ。
+    #   持たない材料は build_detail が公開を断る）
+    _IM = {"basis": "INDEPENDENT_MULTI"}
+    _mat_ok = {"adopted": {"model_code": {**_IM, "value": "L1"},
+                           "payout_range": {**_IM,
+                                            "value": {"low": 97, "high": 110}},
+                           "payout_rate": {**_IM,
+                                           "value": {"1": "97%", "6": "110%"}}},
+               "at_specs": {"adopted": [{**_IM, "mode": "MAIN_AT", "games": 30,
                                          "net": 2.8}]},
-               "czs": {"adopted": [{"name": "試験チャンス", "games": "20G"}]}}
+               "czs": {"adopted": [{**_IM, "name": "試験チャンス",
+                                    "games": "20G",
+                                    "games_basis": _IM["basis"]}]}}
     _det_ok = _ba.build_detail("zzz_test", "試験機", "2026-09", _mat_ok)
     _inner = "".join(_bmp.render_section(x) for x in _det_ok["sections"])
     _html_ok = ("<html><head></head><body>"
@@ -3315,6 +3346,42 @@ def selftest() -> int:
         t("★★試験用の偽の機種を1件も残さない★★"
           "（残すと夜の公開が丸ごと止まる）",
           purge_test_residue(apply_it=False) == [])
+        # ★★掃除そのものを試す★★（2026-08-24・壊し方12が赤くならなかった）
+        #   ★うまくいった回には残骸が出ない★ので、
+        #   「最後に残っていない」だけでは掃除が働いた証拠にならない。
+        #   （実際、掃除を止めても試験は緑のままだった）
+        #   → わざと残骸を置いて、消えることを確かめる。
+        _probe = "zzz_purge_probe"
+        _pd_dir = os.path.join(BASE, "machines", _probe)
+        _pd_json = os.path.join(BASE, "assets", "data", "machine-details",
+                                f"{_probe}.json")
+        os.makedirs(_pd_dir, exist_ok=True)
+        with open(os.path.join(_pd_dir, "index.html"), "w",
+                  encoding="utf-8") as _fh:
+            _fh.write("<!-- 掃除の試験用 -->")
+        with open(_pd_json, "w", encoding="utf-8") as _fh:
+            _fh.write("{}")
+        _saw = purge_test_residue(apply_it=True)
+        t("★★わざと置いた残骸を、実際に消す★★"
+          "（『残っていない』ではなく『消した』を確かめる）",
+          any(_probe in x for x in _saw)
+          and not os.path.isdir(_pd_dir)
+          and not os.path.isfile(_pd_json))
+        # ★目印の残骸も同じように確かめる★
+        with open(IN_PROGRESS, "w", encoding="utf-8") as _fh:
+            _fh.write('{"slug": "zzz_marker_probe", "name": "試験"}')
+        _saw2 = purge_test_residue(apply_it=True)
+        t("★★試験用の公開途中の目印も消す★★"
+          "（残すと以後の新台追加が永久に止まる）",
+          any("zzz_marker_probe" in x for x in _saw2)
+          and not os.path.isfile(IN_PROGRESS))
+        # ★対照★ 本物の公開途中には触らない
+        with open(IN_PROGRESS, "w", encoding="utf-8") as _fh:
+            _fh.write('{"slug": "hokuto", "name": "本物"}')
+        purge_test_residue(apply_it=True)
+        t("　（対照）本物の公開途中の目印には触らない",
+          os.path.isfile(IN_PROGRESS))
+        os.remove(IN_PROGRESS)
     finally:
         for k, v in _real.items():
             globals()[k] = v

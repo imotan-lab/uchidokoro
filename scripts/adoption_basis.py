@@ -373,6 +373,14 @@ def selftest() -> int:
     return 1 if ng else 0
 
 
+def _raises_build(fn) -> bool:
+    """★その呼び出しが例外で止まるか★（止まらなければ守りが無い）"""
+    try:
+        fn()
+    except Exception:                                        # noqa: BLE001
+        return True
+    return False
+
 def _end_to_end_tests(t) -> None:
     """★★入口から検索判定までを一続きで通す★★（2026-08-23・Codexの指摘7）
 
@@ -520,6 +528,57 @@ def _end_to_end_tests(t) -> None:
     except Exception as e:                                   # noqa: BLE001
         t(f"★★本物の天井の抽出器を通せません（{type(e).__name__}: "
           f"{str(e)[:50]}）★★", False)
+
+    # ★★ATとCZの抽出器も本物を通す★★（2026-08-24・Codexの3回目の指摘1）
+    #   ★4つのうち2つだけ本物にしていた★＝AT と CZ は手作りの材料のままで、
+    #   「根拠を保存し忘れても気づかない」状態が残っていた（今日7回目の片方だけ）。
+    #   ★家族（spec / ceiling / at / cz）は必ず4つとも同じ扱いにする★。
+    import at_spec_lookup as _at_mod
+    import cz_lookup as _cz_mod
+
+    def _apage(host):
+        return {"url": f"https://{host}/x", "host": host, "ok": True,
+                "reason": "",
+                "specs": [{"mode": "MAIN_AT", "games": 30, "net": 2.8}]}
+
+    def _zpage(host):
+        return {"url": f"https://{host}/x", "host": host, "ok": True,
+                "reason": "", "unresolved": [],
+                "czs": [{"name": "試験CZ", "games": "8G", "rate": "50%"}]}
+
+    for _label, _mod, _page, _box in (
+            ("AT", _at_mod, _apage, "at_specs"),
+            ("CZ", _cz_mod, _zpage, "czs")):
+        try:
+            _r = _mod.compare([_page("p-town.dmm.com")], ctx=CTX)
+            _g = (_r.get("adopted") or [{}])[0]
+            t(f"★★本物の{_label}の抽出器が根拠を保存している★★"
+              "／★手作りの材料では、保存し忘れに気づけない★",
+              _g.get("basis") == DMM_SINGLE_NEAR_RELEASE)
+            _mat = {_box: {"adopted": _r.get("adopted") or []}}
+            t(f"　{_label}の戻り値をそのまま渡すと、検索の濃さには数えない",
+              _pd.index_claims_from_material(_mat) == []
+              and _pd.regression_claims_from_material(_mat) != [])
+            # ★記事の名乗りも本物の戻り値で確かめる★
+            #   （根拠を保存し忘れたら、公開そのものを断る）
+            import build_new_article as _ba_mod
+            _txt = str(_ba_mod.build_detail("zzz", "試験機", "2026-08-24",
+                                            {"adopted": {}, **_mat}))
+            t(f"　{_label}の値には単独確認の名乗りが付く",
+              "DMMぱちタウン単独確認" in _txt)
+            _stripped = {_box: {"adopted": [
+                {k: v for k, v in (row or {}).items() if k != "basis"}
+                for row in (_r.get("adopted") or [])]}}
+            t(f"★★{_label}の根拠を落とした材料は公開を断る★★"
+              "／★空で流すと断りなしの普通の値として読者に出る★",
+              _raises_build(lambda: _ba_mod.build_detail(
+                  "zzz", "試験機", "2026-08-24",
+                  {"adopted": {}, **_stripped})))
+        except AssertionError:
+            raise
+        except Exception as e:                               # noqa: BLE001
+            t(f"★★本物の{_label}の抽出器を通せません（{type(e).__name__}: "
+              f"{str(e)[:50]}）★★", False)
 
     # ④控えに別の出典があるときは、通し全体が止まる
     blocked = classify_support([D], {**CTX, "other_sources_known": True,

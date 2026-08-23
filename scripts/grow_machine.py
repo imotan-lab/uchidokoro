@@ -1432,6 +1432,26 @@ def selftest() -> int:
       _built("").get("lead")
       == "試験機のページです。登場時期は当サイトでは確認できていません。")
     # ── ★本物の build_detail で、暫定表現が埋まる更新を通す★（Codex104回目）
+    def _stamp_basis(m):
+        """★試験の材料に根拠を足す★（2026-08-24）
+
+        ★ここの試験が見ているのは「育てる判断」であって根拠ではない★。
+        本番の材料は抽出器が必ず根拠を入れる（adoption_basis の通し試験が
+        本物の抽出器4つで確かめている）ので、ここでは形だけ合わせる。
+        ★根拠そのものの守りは、そちらとミューテーション試験が見る★。
+        """
+        for box in ("ceilings", "at_specs", "czs"):
+            for row in ((m.get(box) or {}).get("adopted") or []):
+                if isinstance(row, dict):
+                    row.setdefault("basis", "INDEPENDENT_MULTI")
+                    for k in ("games", "rate"):
+                        if row.get(k) not in (None, "", []):
+                            row.setdefault(k + "_basis", "INDEPENDENT_MULTI")
+        for k, row in ((m.get("adopted") or {}).items()):
+            if isinstance(row, dict) and k not in _pdz.RETIRED_CLAIMS:
+                row.setdefault("basis", "INDEPENDENT_MULTI")
+        return m
+
     def _mat(**kw):
         m = {"adopted": {"model_code": {"value": "L機/1", "sources": ["a", "b"]}},
              "need_third": {}, "thin": {},
@@ -1440,11 +1460,14 @@ def selftest() -> int:
              "czs": {"adopted": [], "need_third": []},
              "setting_labels_seen": [], "setting_labels_unconfirmed": []}
         m.update(kw)
-        return m
+        return _stamp_basis(m)
 
     cz_thin = _mat(czs={"adopted": [{"name": "喰霊チャンス",
+                                     "basis": "INDEPENDENT_MULTI",
                                      "sources": ["a", "b"]}], "need_third": []})
     cz_full = _mat(czs={"adopted": [{"name": "喰霊チャンス", "games": 10,
+                                     "basis": "INDEPENDENT_MULTI",
+                                     "games_basis": "INDEPENDENT_MULTI",
                                      "sources": ["a", "b"]}], "need_third": []})
     d_thin = _ba.build_detail("x", "L機", "2026-08", cz_thin)
     d_full = _ba.build_detail("x", "L機", "2026-08", cz_full)
@@ -1465,7 +1488,7 @@ def selftest() -> int:
                 "czs": {"adopted": [], "need_third": []},
                 "setting_labels_seen": [], "setting_labels_unconfirmed": []}
         base.update(kw)
-        return base
+        return _stamp_basis(base)
 
     _thin = _m2(czs={"adopted": [{"name": "CZ-A", "sources": ["a", "b"]}],
                      "need_third": []})

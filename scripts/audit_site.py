@@ -1987,6 +1987,9 @@ def selftest_51() -> int:
     return 1 if bad else 0
 
 
+_IN_52 = False
+
+
 def check_52_test_residue(machines: list) -> list:
     """★試験用の偽の機種が残っていないか★（2026-08-24新設・自分で踏んだ）
 
@@ -2006,7 +2009,8 @@ def check_52_test_residue(machines: list) -> list:
       ここは**別の道で残った時に気づくため**の見張り。
     """
     import glob as _g
-    ng = []
+    ng = ["★見張り52自身が働いていません★: " + x
+          for x in (_check_52_selftest() if not _IN_52 else [])]
     for pat, what in ((os.path.join(BASE, "machines", "zzz_*"), "ページ"),
                       (os.path.join(BASE, "assets", "data", "machine-details",
                                     "zzz_*.json"), "記事データ")):
@@ -2021,7 +2025,75 @@ def check_52_test_residue(machines: list) -> list:
     for m in machines:
         if str(m.get("slug") or "").startswith("zzz_"):
             ng.append(f"機種一覧に試験用の機種が残っています: {m.get('slug')}")
+    # ★早見表にも入り込む★（2026-08-24・Codexの3回目の指摘3）
+    #   ★機種一覧だけ見ても足りない★＝公開の関所は
+    #   早見表の変更も「許していないファイル」として数える。
+    for rel in ("guide-tenjo-ranking.html", "guide-reset-ranking.html",
+                "guide-suru-tenjo.html", "guide-ichiran.html"):
+        f = os.path.join(BASE, rel)
+        if not os.path.isfile(f):
+            continue
+        if "zzz_" in open(f, encoding="utf-8", errors="replace").read():
+            ng.append(f"早見表に試験用の機種が残っています: {rel}")
+    # ★公開途中の目印★（残ると以後の新台追加が永久に止まる）
+    for rel in (".publish-in-progress.json", ".push-pending.json"):
+        f = os.path.join(BASE, rel)
+        if not os.path.isfile(f):
+            continue
+        try:
+            import json as _j
+            slug = str((_j.load(open(f, encoding="utf-8")) or {}).get("slug")
+                       or "")
+        except Exception:                                    # noqa: BLE001
+            continue
+        if slug.startswith("zzz_"):
+            ng.append(f"試験用の公開途中の目印が残っています: {rel}"
+                      f"（{slug}）／★以後の新台追加が止まります★")
     return ng
+
+
+def _check_52_selftest() -> list:
+    """★見張り52が本当に働くかを、毎回いっしょに確かめる★（対照実験）
+
+    ★なぜコードに置くか★（2026-08-24・Codexの3回目の指摘）
+      手で1回やった対照実験は、コードのどこにも残らない。
+      ★残らない確認は、次の変更で静かに壊れる★。
+      項目51と同じやり方で、監査を回すたびに一緒に試す。
+
+    ★本物のファイルは作らない★＝一時ディレクトリを BASE に見せかけて試す。
+    """
+    import tempfile as _tf
+    global BASE
+    bad = []
+    real = BASE
+    global _IN_52
+    d = _tf.mkdtemp(prefix="audit52_")
+    try:
+        BASE = d
+        _IN_52 = True
+        if check_52_test_residue([]) != []:
+            bad.append("何も無いのに鳴った")
+        os.makedirs(os.path.join(d, "machines", "zzz_probe"))
+        if not check_52_test_residue([]):
+            bad.append("★偽の機種を置いても黙っていた★")
+        if not check_52_test_residue([{"slug": "zzz_probe"}]):
+            bad.append("★一覧の偽の機種を見つけられない★")
+        with open(os.path.join(d, ".publish-in-progress.json"), "w",
+                  encoding="utf-8") as fh:
+            fh.write('{"slug": "zzz_probe"}')
+        if not [x for x in check_52_test_residue([]) if "目印" in x]:
+            bad.append("★試験用の目印を見つけられない★")
+        with open(os.path.join(d, ".publish-in-progress.json"), "w",
+                  encoding="utf-8") as fh:
+            fh.write('{"slug": "hokuto"}')
+        if [x for x in check_52_test_residue([]) if "目印" in x]:
+            bad.append("★本物の公開途中まで残骸扱いした★")
+    finally:
+        BASE = real
+        _IN_52 = False
+        import shutil as _sh
+        _sh.rmtree(d, ignore_errors=True)
+    return bad
 
 def check_51_selftest_tally(machines: list) -> list:
     # ★見張り自身が働いているかを、毎回いっしょに確かめる★（2026-08-22）

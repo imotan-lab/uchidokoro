@@ -90,9 +90,94 @@ SINGLE_SOURCE_NOTE = (
 
 
 def _basis_tag(basis) -> str:
-    """★値のうしろに付ける根拠の名乗り★（知らない区分では何も名乗らない）"""
-    return BASIS_SUFFIX.get(str(basis or ""), "")
+    """★値のうしろに付ける根拠の名乗り★
 
+    ★★知らない区分は公開しない★★（2026-08-24・Codexの3回目の指摘1）
+      ★直す前は空文字を返していた★。すると、
+
+        ①抽出器が根拠を保存し忘れる
+        ②検索の濃さには数えない（白名簿なので、ここは安全側に働く）
+        ③★けれど記事には**断りなしの普通の値**として出る★
+
+      という経路が通った。★検索に載せなくても読者はページを見られる★ので、
+      「DMMだけで確認した値」が2出典で確かめた値と同じ顔で並ぶ。
+      ＝当サイトが根拠を偽ったことになる（台帳#443と同じ型）。
+
+      → ★空で流さず、公開そのものを断る★。
+    """
+    t = str(basis or "")
+    if t not in BASIS_SUFFIX:
+        raise BuildError(
+            f"採用した値に根拠がありません（区分: {basis!r}）／"
+            "★根拠の分からない値は記事にしません★"
+            "／抽出器が basis を保存し忘れていないか確かめてください")
+    return BASIS_SUFFIX[t]
+
+
+# ★根拠を持たせる場所★（材料の中で「採用した値」が入る箱）
+_BASIS_REQUIRED = (
+    ("adopted", ("basis",)),          # 基本スペック（払い出し・50枚あたり…）
+    ("ceilings", ("basis",)),         # 天井
+    ("at_specs", ("basis",)),         # AT
+    ("czs", ("basis", "games_basis", "rate_basis")),   # CZ
+)
+
+
+def require_basis(material: dict) -> None:
+    """★採用した値すべてに、分かる根拠が付いているか★（公開の境界で見る）
+
+    ★名乗りを出す場所だけを見ても足りない★（2026-08-24）
+      表示のたびに `_basis_tag` を通せば大半は捕まるが、
+      **表示の仕方を1つ足したときに通し忘れる**（今日それを4回やった）。
+      材料の側で一度だけ全部を見ておけば、
+      表示の書き方が変わっても抜けない。
+
+    ★CZの G数・期待度は、値があるときだけ根拠を求める★
+      （値が無いのに根拠だけ要求すると、正しい材料を弾いてしまう）
+    """
+    for box, keys in _BASIS_REQUIRED:
+        got = (material or {}).get(box) or {}
+        rows = got.get("adopted") if isinstance(got, dict) else None
+        if rows is None and isinstance(got, dict):
+            items = list(got.items())           # adopted直下が辞書の形
+        else:
+            items = [("", x) for x in (rows or [])]
+        for name, c in items:
+            if not isinstance(c, dict):
+                continue
+            # ★読者に出さない値には名乗りを求めない★（2026-08-24）
+            #   型式名は記事に書かない決まりで、監査47が消している。
+            #   ★名簿は判定書と同じものを読む★＝同じ規則を2か所に書かない。
+            if name in getattr(_pd, "RETIRED_CLAIMS", ()):
+                continue
+            if _confirmed_by_2ai(c):
+                continue                 # ★2AIの確定値は別の道で根拠が残る★
+            for k in keys:
+                # ★G数・期待度は、値があるときだけ根拠を求める★
+                #   （値が無いのに根拠だけ要求すると正しい材料まで弾く）
+                if k != "basis" and c.get(k.replace("_basis", "")) in (
+                        None, "", []):
+                    continue
+                _basis_tag(c.get(k))
+
+
+def _confirmed_by_2ai(row) -> bool:
+    """★2AIが確定させた値か★（根拠は別の道で残っている）
+
+    `confirmed_values` に記録された値は、
+    出典URL・逐語・判断者・決めた日が控えに残っている。
+    ★機械の抽出器が採った値とは根拠の残し方が違うだけ★なので、
+    ここで basis が無いことを理由に公開を断らない。
+    ★ただし「無いから通す」ではなく「この印がある時だけ通す」★。
+    """
+    return isinstance(row, dict) and row.get("_from") == "confirmed_values"
+
+
+def _tag(row, key: str = "basis") -> str:
+    """★その値に付ける名乗り★（行ごと渡す＝根拠の出どころを見分けるため）"""
+    if _confirmed_by_2ai(row):
+        return ""
+    return _basis_tag((row or {}).get(key))
 
 def _has_single_source(items) -> bool:
     """その箱に「単独確認」の値が1つでも混ざっているか。"""
@@ -303,6 +388,7 @@ def build_machine(slug, name, maker, official_url, release, material,
       確かめたのか（2026-08-04・台帳#209）。★どちらも公式だが粒度が違う★ので
       機械可読に残す。
     """
+    require_basis(material)          # ★根拠の無い値は公開しない★
     ident = {"manufacturer_id": maker, "official_product_url": official_url,
              "announced_name": name, "identity_tier": "CATALOG_BOUND"}
     if identity_binding:
@@ -435,6 +521,7 @@ def build_checker(material) -> dict | None:
 
 def build_detail(slug, name, release, material) -> dict:
     """記事データを作る。★集まった材料だけを表に入れる★"""
+    require_basis(material)          # ★根拠の無い値は記事にしない★
     adopted = material.get("adopted") or {}
     facts = []
     # ★型式名は記事に書かない★（2026-08-09・運営者決定）
@@ -446,11 +533,11 @@ def build_detail(slug, name, release, material) -> dict:
         v = rng["value"]
         facts.append(["機械割",
                       f"{v['low']}%〜{v['high']}%"
-                      f"{_basis_tag(rng.get('basis'))}"])
+                      f"{_tag(rng)}"])
     if (g50 := adopted.get("games_per_50")):
         facts.append(["50枚あたり",
                       f"約{g50['value']['games']:g}G"
-                      f"{_basis_tag(g50.get('basis'))}"])
+                      f"{_tag(g50)}"])
 
     boxes = {}          # title -> section（確認できたものだけ中身が入る）
     # ★天井・恩恵★（一式で採れたものだけ。値だけでは載せない）
@@ -466,7 +553,7 @@ def build_detail(slug, name, release, material) -> dict:
             #   断りなしで出る状態だった。
             body.append(f"**{jp}**：{c['amount']}{c['unit']}{counted} "
                         f"／ 恩恵：{c['benefit']}"
-                        f"{_basis_tag(c.get('basis'))}")
+                        f"{_tag(c)}")
         # ★断り書きは「1つしか確認できていないとき」だけ★
         #   （2026-08-12・運営者決定）
         #   天井は1機種に1つとは限らない（通常時／AT間／スルー）。
@@ -488,7 +575,7 @@ def build_detail(slug, name, release, material) -> dict:
             jp = {"GAME": "ゲーム数天井", "CYCLE": "周期天井",
                   "POINT": "ポイント天井"}.get(c["kind"], "天井")
             facts.append([jp, f"{c['amount']}{c['unit']}"
-                              f"{_basis_tag(c.get('basis'))}"])
+                              f"{_tag(c)}"])
 
     # ★ATの仕様★（モードごとに分けて書く。混ぜたら誤情報）
     ats = (material.get("at_specs") or {}).get("adopted") or []
@@ -513,14 +600,14 @@ def build_detail(slug, name, release, material) -> dict:
                 jp = f"{jp}「{c['label']}」"
             # ★値ごとに根拠を名乗る★（2026-08-23・Codexの指摘4）
             body.append(f"**{jp}**：" + " ／ ".join(parts)
-                        + _basis_tag(c.get("basis")))
+                        + _tag(c))
         boxes["ゲーム性"] = {"title": "ゲーム性", "body": body}
         for c in sorted(ats, key=lambda x: x["mode"]):
             if not c.get("net"):
                 continue
             jp = "メインAT純増" if c["mode"] == "MAIN_AT" else "上位AT純増"
             facts.append([jp,
-                          f"約{c['net']}枚/G{_basis_tag(c.get('basis'))}"])
+                          f"約{c['net']}枚/G{_tag(c)}"])
 
     # ★ゲームの流れ（数値でないもの）★（2026-08-13・台帳#344）
     #   導入前〜直後は「名前と流れが先に出て、数値は後」。数値が要る器しか
@@ -585,14 +672,14 @@ def build_detail(slug, name, release, material) -> dict:
                 # ★値ごとに根拠を添える★（2026-08-23・Codexの指摘）
                 #   表ごとに一括で名乗ると、1つでも単独確認が混ざった瞬間に
                 #   ★表全体の名乗りが嘘★になる（台帳#443と同じ型）。
-                parts.append(f"継続{c['games']}{_basis_tag(c.get('games_basis'))}")
+                parts.append(f"継続{c['games']}{_tag(c, "games_basis")}")
             elif c.get("games_disputed"):
                 parts.append("継続G数は出典で食い違い")
             if c.get("rate"):
-                parts.append(f"期待度 {c['rate']}{_basis_tag(c.get('rate_basis'))}")
+                parts.append(f"期待度 {c['rate']}{_tag(c, "rate_basis")}")
             elif c.get("rate_disputed"):
                 parts.append("期待度は出典で書き方が異なります")
-            rows.append([c["name"] + _basis_tag(c.get("basis")),
+            rows.append([c["name"] + _tag(c),
                          " ／ ".join(parts) if parts else "確認中"])
         boxes["確認できたCZ"] = {
             "title": "確認できたCZ", "type": "settei",
@@ -615,12 +702,12 @@ def build_detail(slug, name, release, material) -> dict:
     rng = adopted.get("payout_range")
     spec_body.append(
         f"**機械割**：{rng['value']['low']}%〜{rng['value']['high']}%"
-        f"{_basis_tag(rng.get('basis'))}" if rng
+        f"{_tag(rng)}" if rng
         else f"**機械割**：{PENDING_ITEM}")
     g50 = adopted.get("games_per_50")
     spec_body.append(
         f"**50枚あたりのゲーム数**：約{g50['value']['games']:g}G"
-        f"{_basis_tag(g50.get('basis'))}" if g50
+        f"{_tag(g50)}" if g50
         else f"**50枚あたりのゲーム数**：{PENDING_ITEM}")
     boxes["基本スペック"] = {"title": "基本スペック", "body": spec_body}
 
@@ -634,11 +721,11 @@ def build_detail(slug, name, release, material) -> dict:
         #   ★ここだけ名乗りが無かった★＝spec_lookup は at_prob/payout_rate にも
         #   DMM単独の例外を当てられるので、設定別の値が
         #   **断りなしで普通の値として**読者に出る状態だった。
-        _tag = _basis_tag(got.get("basis"))
-        rows = [[f"設定{k}", f"{got['value'][k]}{_tag}"]
+        _mark = _tag(got)
+        rows = [[f"設定{k}", f"{got['value'][k]}{_mark}"]
                 for k in sorted(got["value"])]
         note = "出典で確認が取れた設定のみ掲載しています。"
-        if _tag:
+        if _mark:
             note += SINGLE_SOURCE_NOTE
         # ★値が採れていない設定があるなら、その名前を出す★
         #   （黙って省くと「これで全部」と読まれ、段数を誤って伝えることになる）
@@ -1028,7 +1115,8 @@ def selftest() -> int:
     # ★天井の断り書きは「本物の真」でしか消えない★（2026-08-12・依頼161）
     #   truthy で見ると、外から来た "false" という**文字列**でも消える。
     _mat_false = {"adopted": {}, "need_third": {}, "thin": {},
-                  "ceilings": {"adopted": [{"kind": "GAMES", "amount": "800",
+                  "ceilings": {"adopted": [{"basis": "INDEPENDENT_MULTI",
+                                            "kind": "GAMES", "amount": "800",
                                             "unit": "G", "benefit": "AT当選"}],
                                "complete": "false"}}
     _d_false = build_detail("zzz", "試験機", "2026-09", _mat_false)
@@ -1048,7 +1136,8 @@ def selftest() -> int:
     #   黙って空にすると誰も気づかず、その欄は永久に埋まらない。
     def _mat_ceil(*amounts, picked=None):
         mm = {"adopted": {}, "need_third": {}, "thin": {},
-              "ceilings": {"adopted": [{"kind": "GAME", "amount": a, "unit": "G",
+              "ceilings": {"adopted": [{"basis": "INDEPENDENT_MULTI",
+                                        "kind": "GAME", "amount": a, "unit": "G",
                                         "benefit": "AT当選"} for a in amounts]}}
         if picked:
             mm["adopted"]["checker_ceiling"] = {"value": {"games": picked}}
