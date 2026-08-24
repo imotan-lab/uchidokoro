@@ -3,7 +3,7 @@
  "_why": "★どの出典を材料に採るかを決める側の指紋★（台帳#389）。ここと実ファイルが一致する時だけ公開物を作れる。中身を直したらこのファイルも更新すること（python scripts/material_contract.py --approve）＝レビューに載せるための仕組み。",
  "files": {
   "assets/data/automation-policy.json": "690c83977ac1d9e7346e177bd20942dd5aa569177b9915eaf3a6422eb8a13465",
-  "assets/data/directory-catalogs.json": "dfb012f4e3dca9fa2d0cfa98db66adaea89943fa14c33061f022b10678df18dd",
+  "assets/data/directory-catalogs.json": "653acd885991006c2a3ef2da043092f350f007ea18be4a348ca882c256aea2fa",
   "assets/data/maker-catalogs.json": "612fa17f5b50f509475096b51ca1f4d8c261c5805e22e337875aa478054c0b3c",
   "assets/data/source-registry.json": "4de7d0c863653c916c8ec419dc8454c1f26b0ecf1f96f0a8e313823470518e47",
   "scripts/add_machine_run.py": "986e3f62ff7e327cbaae4ff287994b15ec1fca0ab0c1e8bd49c8084d59b5f3d3",
@@ -12,7 +12,7 @@
   "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
   "scripts/blocked_hosts.py": "553ac0a6f0f0baf563100458937efa167826c4347f815ace1a70e39769909b7d",
   "scripts/ceiling_lookup.py": "167bd72afe8399bd426f553dad2f3838e139d1709492ae3fcd13d36edafb4340",
-  "scripts/confirmed_values.py": "33dd1c36fbec37f049fef1f665b42d0c4accbd14f1953db3887897462b78edf0",
+  "scripts/confirmed_values.py": "9b63d136b6b0d82f377a940a0b9f555a7faa10095d3d4a76231ea27567958ffe",
   "scripts/cz_lookup.py": "24727d5876e0a5e233ff6c913e96ae3d3fc50d7e5d5869b019e443bde374b02b",
   "scripts/directory_index.py": "5c6e1471c073b2462b056b0cd6c2f7ee7a2fa8d26f8696213a6e891b896dbdc5",
   "scripts/dmm_calendar.py": "ad0ae2ffb3977307cf361e4a137288e9bccdd1f15fb43e560aa629c5942a6930",
@@ -97,7 +97,8 @@
    "model_code_lookup",
    "new_machine_watch",
    "source_lineage",
-   "spec_lookup"
+   "spec_lookup",
+   "user_area"
   ],
   "scripts/cz_lookup.py": [
    "adoption_basis",
@@ -201,5 +202,6 @@
    "ceiling_lookup",
    "new_machine_watch"
   ]
- }
+ },
+ "_deps_changed_why": "confirmed_values が user_area を取り込むようになった理由\n\n★本番の経路で使う★。\n\n★なぜ足したか★\n  Codexの11回目の指摘＝引用の照合を、画面に出る文字の上でやっていた。\n  そのため、★投稿欄の決まりごとが無いサイトでは読者の書き込みが残り★、\n  それを逐語引用として記録・再検証できた。\n\n  `user_area.clean_text` は\n    ・決まりごとがある → 箱ごと落とす\n    ・決まりごとが無い → 行単位で切る\n  の使い分けを1か所で持っている。★そこだけを呼ぶ★のが正しい形。\n\n★材料の採否の集合に入れる★\n  何を「出典に書いてある」と見なすかを直接左右する。\n  ここが変われば、どの文が根拠として通るかが変わる。\n\n★user_area は既に集合に入っている★\n  （2026-08-14に「投稿欄・AIがまとめた欄を箱ごと落とす」として登録済み）。\n  今回はその依存関係が confirmed_values からも伸びただけで、\n  契約の外側へ出るものは増えていない。"
 }

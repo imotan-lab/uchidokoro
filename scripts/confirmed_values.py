@@ -709,13 +709,23 @@ def verify_source(src: dict, name: str, fetch=None) -> dict:
 
     import model_code_lookup as _mc
     import new_machine_watch as _w
+    import user_area as _ua
     try:
         html = fetch(src["url"])
     except Exception as e:                 # noqa: BLE001
         raise ConfirmedError(f"出典を取得できません（{src['url']}）: {str(e)[:80]}")
 
     def text_of(h):
-        return " ".join(_w._visible_text(h).split())
+        # ★★出典として読んでよい本文の上で照合する★★（2026-08-24・Codexの11回目）
+        #   ★直す前は画面に出る文字をそのまま見ていた★ので、
+        #   **投稿欄の決まりごとが無いサイト**（スロパチクエスト・やんちゃプレス）
+        #   では読者のコメントがそのまま残り、
+        #   ★読者の書き込みを逐語引用として記録・再検証できた★。
+        #   `user_area.clean_text` は
+        #     ・決まりごとがある → 箱ごと落とす
+        #     ・決まりごとが無い → 行単位で切る
+        #   の使い分けを1か所で持っている。**そこだけを呼ぶ**。
+        return " ".join(_ua.clean_text(h, src.get("url") or "").split())
     ok, why = _mc.page_is_machine(html, name)
     if not ok:
         # ★機械が弾いたら、それはAIの出番の合図★（2026-08-11・運営者の指摘）
@@ -955,12 +965,21 @@ def _default_fetch(url: str) -> str:
     import urllib.parse as _up
     import fetched_page as _fp
     got = _fp.fetch(url, "claim_material")
+    # ★同じ発行者なら通す★（2026-08-24・Codexの11回目）
+    #   ★ホスト名の文字で比べていた★ので、www の有無をそろえるだけの
+    #   転送でも止まった＝**正しい本番を止める型**。
     a = (_up.urlsplit(url).hostname or "").lower()
     b = (_up.urlsplit(got.final_url).hostname or "").lower()
     if a != b:
-        raise ConfirmedError(
-            f"別のサイトへ転送されています（{url} → {got.final_url}）"
-            "／★着いた先のURLで登録し直してください★")
+        try:
+            same = (_sl.publisher_of_host_any(a)
+                    == _sl.publisher_of_host_any(b))
+        except Exception:                                    # noqa: BLE001
+            same = False
+        if not same:
+            raise ConfirmedError(
+                f"別のサイトへ転送されています（{url} → {got.final_url}）"
+                "／★着いた先のURLで登録し直してください★")
     return got.cleaned_html
 
 

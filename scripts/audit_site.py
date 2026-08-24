@@ -2095,6 +2095,63 @@ def _check_52_selftest() -> list:
         _sh.rmtree(d, ignore_errors=True)
     return bad
 
+def check_53_source_user_area(machines: list) -> list:
+    """★出典に使う先の投稿欄★（2026-08-24新設・Codexの11回目）
+
+    ★何が危ないか★＝投稿欄の決まりごとを登録していないサイトは、
+    読者の書き込みが本文と一緒に読める。
+    ★同じ誤った値が2サイトの投稿欄にあり、2AIがそれを逐語引用に選ぶと★、
+    独立2出典として記録できてしまう。
+
+    ★見るのは「通信してよい先」だけ★＝名簿に載っていないサイトは
+    そもそも取りに行けないので出典にできない（実測で確認）。
+
+    ★どちらかが要る★
+      ・投稿欄の決まりごとが登録されている（箱ごと落とせる）
+      ・「投稿欄が無いことを確かめた」記録がある（`_no_user_area_why`）
+    ★「いま無かった」は永久の保証ではない★ので、記録には確かめた日を書く。
+    """
+    import json as _j
+    ng = []
+    try:
+        pol = _j.load(open(os.path.join(BASE, "assets", "data",
+                                        "automation-policy.json"),
+                           encoding="utf-8"))
+        cat = _j.load(open(os.path.join(BASE, "assets", "data",
+                                        "directory-catalogs.json"),
+                           encoding="utf-8"))
+    except Exception as e:                                   # noqa: BLE001
+        return [f"名簿を読めません: {str(e)[:60]}"]
+    hosts = pol.get("hosts") or {}
+    # ★名鑑のURLの形からホスト名を引く★（名鑑は host を直接持っていない）
+    import urllib.parse as _up
+    ua_by_host = {}
+    for d in (cat.get("directories") or {}).values():
+        if not isinstance(d, dict):
+            continue
+        got = set()
+        for x in (d.get("surfaces") or []):
+            h = _up.urlsplit(str((x or {}).get("url") or "")).hostname or ""
+            if h:
+                got.add(h.lower())
+        for h in got:
+            ua_by_host[h] = d.get("user_area") or {}
+    for host, v in hosts.items():
+        if not isinstance(v, dict):
+            continue
+        if v.get("status") != "APPROVED":
+            continue
+        # ★用途に「材料を読む」が入っている先だけ★（発見や同定だけなら関係ない）
+        if "claim_material" not in (v.get("purpose") or []):
+            continue
+        ua = ua_by_host.get(str(host).lower()) or {}
+        if ua.get("drop") or ua.get("_no_user_area_why"):
+            continue
+        ng.append(f"{host}: 出典に使う先なのに、投稿欄の決まりごとも"
+                  "「投稿欄が無いことを確かめた記録」もありません"
+                  "／★読者の書き込みが根拠になり得ます★")
+    return ng
+
 def check_51_selftest_tally(machines: list) -> list:
     # ★見張り自身が働いているかを、毎回いっしょに確かめる★（2026-08-22）
     #   ★理由★＝最初の版は正規表現で書いたので sum(...) を見逃し、
@@ -2810,6 +2867,7 @@ CHECKS = [
     ("50_契約が依存まで閉じているか", check_50_contract_closure),
     ("51_試験の数え方が早すぎないか", check_51_selftest_tally),
     ("52_試験用の残骸", check_52_test_residue),
+    ("53_出典の投稿欄", check_53_source_user_area),
 ]
 
 
