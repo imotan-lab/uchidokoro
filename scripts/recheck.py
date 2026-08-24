@@ -798,11 +798,22 @@ def check_decision_vs_body(args: dict) -> dict:
             #   「1行に語が全部そろう」規則をそのまま当てると必ず落ちる。
             _val = (_rec or {}).get("value")
             if isinstance(_val, dict) and _tp:
+                # ★★項目ごとに分ける★★（2026-08-25・Codexの23回目）
+                #   ★直す前は「話題→設定→値」だった★ので、
+                #   at_prob と payout_rate はどちらも話題が `setting` で、
+                #   **同じ設定番号を後から来た項目が上書き**していた。
+                #   ＝正しい2つの表を止めたり、別項目の値を根拠にしたりする。
                 for _k, _v in _val.items():
                     if str(_k).strip() and str(_v or "").strip():
-                        _pairs.setdefault(_tp, {})[str(_k).strip()] = str(_v)
+                        _pairs.setdefault(_tp, {}).setdefault(
+                            _b, {})[str(_k).strip()] = str(_v)
     except FileNotFoundError:
-        _by_topic, _pairs = {}, {}         # ★控えが無い機械では今までどおり★
+        # ★★実際にはここへ来ない★★（2026-08-25・Codexの23回目）
+        #   控えが本当に無いとき `confirmed_values` は ConfirmedError を出す。
+        #   ★線引きの正体は「CIでは先に空の控えを作っている」こと★＝
+        #   永続環境で消えたら止まる／まっさらなCIでは明示的に作る、が正しい姿。
+        #   この枝は念のため残すが、説明を実態に合わせる。
+        _by_topic, _pairs = {}, {}
     except Exception as _e_cv:                               # noqa: BLE001
         # ★★控えが読めないときも止まる★★（2026-08-25・Codexの22回目）
         #   ★直す前は空にして先へ進んでいた★ので、
@@ -847,6 +858,7 @@ def check_decision_vs_body(args: dict) -> dict:
         if topic is None or topic not in pend:
             continue
         body = [x for x in (sec.get("body") or []) if isinstance(x, str)]
+        _tbl_bad = []                      # 表の行のうち、控えと合わないもの
         # ★★表の行も中身★★（2026-08-25・Codexの22回目）
         #   ★直す前は body だけ見て、空ならその箱を読み飛ばしていた★ので、
         #   設定別の値は `tables` に出るのに**一度も検査されていなかった**。
@@ -860,18 +872,30 @@ def check_decision_vs_body(args: dict) -> dict:
                 return str(x.get("text") or "")
             return str(x or "")
 
-        def _row_backed(label: str, val: str) -> bool:
-            """★その行が「設定→値」の控えどおりか★
+        # ★表の見出し → 控えの項目名★（記事を作る側と同じ言い方）
+        _TBL_FIELD = {"AT初当たり確率": "at_prob", "出玉率": "payout_rate"}
 
-            ★1つの確定値が表の複数行に対応する★ので、
-            行ごとに「その設定の値として控えにあるか」を見る。
+        def _row_backed(tbl: dict, label: str, val: str) -> bool:
+            """★その行が「その表の項目・その設定」の控えどおりか★
+
+            ★1つの確定値が表の複数行に対応する★ので、行ごとに見る。
+            ★★表ごとに項目を特定する★★（2026-08-25・Codexの23回目）
+              同じ「設定」話題に項目が2つ（AT初当たり確率・出玉率）あるので、
+              項目を見ないと**別項目の値を根拠にできる**。
+            ★値は完全一致★＝`1/300` と `1/3000` は別の値。
+              部分一致だと桁違いの値が通る（実測で通っていた）。
             """
-            _p = _pairs.get(topic) or {}
+            _field = _TBL_FIELD.get(str(tbl.get("label") or "").strip())
+            if not _field:
+                return False               # 知らない表は免除しない
+            _p = (_pairs.get(topic) or {}).get(_field) or {}
             _lab = label.replace("設定", "").strip()
             want = _p.get(_lab) or _p.get(label.strip())
             if not want:
-                return False
-            return _cv_rc.token_in_quote(want, val) or want in val
+                return False               # その設定の控えが無い
+            # ★名乗り（DMM単独確認）は付いていてよいので、前から比べる★
+            _v = val.strip()
+            return _v == want or _v.startswith(want + "（")
 
         for _tb in (sec.get("tables") or []):
             for _row in (_tb.get("rows") or []):
@@ -880,10 +904,15 @@ def check_decision_vs_body(args: dict) -> dict:
                 _cells = [_cell(x) for x in _row if _cell(x).strip()]
                 if len(_cells) < 2:
                     continue
-                if _row_backed(_cells[0], "：".join(_cells[1:])):
+                if _row_backed(_tb, _cells[0], "：".join(_cells[1:])):
                     continue               # 控えどおりの行は数えない
-                body.append("：".join(_cells))
-        txt = "".join(body).strip()
+                # ★★表の行は、表の規則だけで決める★★
+                #   （2026-08-25・Codexの23回目。実測で素通りを確認）
+                #   ★本文用の判定へ渡すと、別の設定の同じ値で免除される★＝
+                #     控えが「設定1=1/300」だけの機種で、
+                #     表に「設定3=1/300」を足しても通っていた。
+                _tbl_bad.append("：".join(_cells))
+        txt = "".join(body + _tbl_bad).strip()
         if not txt:
             continue
         # ★★未確認の断りは「それだけ」のときに正しい★★
@@ -901,6 +930,8 @@ def check_decision_vs_body(args: dict) -> dict:
         #   ★断り書きの行そのものは数えない★（中身ではないため）
         _left = [x for x in _nonempty
                  if x not in _isnote and not _backed(x, topic)]
+        # ★表の行は、表の規則で外れた時点で数える★（本文の免除を通さない）
+        _left += _tbl_bad
         if not _left:
             continue
         bad.append({"title": title, "topic": topic, "lines": len(_left),
@@ -2035,22 +2066,74 @@ def _selftest():
                 "slug": sl, "name": "試験機",
                 "page_decision": {"pending_topics": ["setting"]}}
 
-            def _tbl22(rows):
+            def _tbl22(*tables):
+                """★記事と同じ形★＝表には見出し（label）が付く。"""
                 return lambda sl: ({"sections": [
-                    {"title": "設定示唆まとめ", "body": [],
-                     "tables": [{"rows": rows}]}]}, "", "")
+                    {"title": "設定示唆まとめ", "body": [], "type": "settei",
+                     "tables": [
+                         {"label": lb, "headers": ["設定", lb],
+                          "rows": [[k, {"text": v, "badge": "hint"}]
+                                   for k, v in rows]}
+                         for lb, rows in tables]}]}, "", "")
 
+            _AT = "AT初当たり確率"
+            _PO = "出玉率"
             globals()["_load_detail"] = _tbl22(
-                [["設定1", {"text": "1/300", "badge": "hint"}],
-                 ["設定6", {"text": "1/200", "badge": "hint"}]])
+                (_AT, [("設定1", "1/300"), ("設定6", "1/200")]))
             t("★★表の行も検査する（確定値どおりなら通す）★★",
               _dv({"slug": "zzz_t22"})["result"] in (PASS, NOT_APPLICABLE))
             globals()["_load_detail"] = _tbl22(
-                [["設定1", {"text": "1/300", "badge": "hint"}],
-                 ["設定3", {"text": "1/250", "badge": "hint"}]])
+                (_AT, [("設定1", "1/300"), ("設定3", "1/250")]))
             t("★★表に根拠の無い行が混ざれば止める★★"
               "／★body だけ見ていた頃は、表の値を一度も検査していなかった★",
               _dv({"slug": "zzz_t22"})["result"] == FAIL)
+            # ★★Codexの23回目：4つの反例★★
+            globals()["_load_detail"] = _tbl22(
+                (_AT, [("設定1", "1/3000")]))
+            t("★★同じ設定で値だけ違う（1/300→1/3000）は止める★★"
+              "／★部分一致だと桁違いの値が通る★",
+              _dv({"slug": "zzz_t22"})["result"] == FAIL)
+            globals()["_load_detail"] = _tbl22(
+                (_AT, [("設定1", "1/300"), ("設定3", "1/300")]))
+            t("★★控えに無い設定が、既知の値をコピーしていれば止める★★"
+              "／★表で外れても本文の判定で免除されると素通りする★",
+              _dv({"slug": "zzz_t22"})["result"] == FAIL)
+            # ★★控えが1件だけの機種で、その値をコピーする形★★
+            #   （2026-08-25・Codexの23回目。★実測で素通りしていた★）
+            #   表の行を本文用の判定へ渡すと、
+            #   「その値がどこかにある」だけで免除されてしまう。
+            _cur23a = json.load(open(_cv19.STORE, encoding="utf-8"))
+            _cur23a["machines"]["zzz_t23a"] = {
+                "at_prob": _rec20({"1": "1/300"})}
+            json.dump(_cur23a, open(_cv19.STORE, "w", encoding="utf-8"),
+                      ensure_ascii=False)
+            globals()["_load_detail"] = _tbl22((_AT, [("設定1", "1/300")]))
+            t("　控えが1件だけでも、そのとおりなら通る",
+              _dv({"slug": "zzz_t23a"})["result"] in (PASS, NOT_APPLICABLE))
+            globals()["_load_detail"] = _tbl22(
+                (_AT, [("設定1", "1/300"), ("設定3", "1/300")]))
+            t("★★控えが1件だけの機種で値をコピーしても止める★★"
+              "／★表の行を本文の判定へ渡すと、値がどこかにあるだけで免除される★",
+              _dv({"slug": "zzz_t23a"})["result"] == FAIL)
+            # ★2つの表（項目ちがい）が同時に正しいなら通る★
+            _cur23 = json.load(open(_cv19.STORE, encoding="utf-8"))
+            _cur23["machines"]["zzz_t23"] = {
+                "at_prob": _rec20({"1": "1/300", "6": "1/200"}),
+                "payout_rate": _rec20({"1": "97.3%", "6": "110.5%"})}
+            json.dump(_cur23, open(_cv19.STORE, "w", encoding="utf-8"),
+                      ensure_ascii=False)
+            globals()["_load_detail"] = _tbl22(
+                (_AT, [("設定1", "1/300"), ("設定6", "1/200")]),
+                (_PO, [("設定1", "97.3%"), ("設定6", "110.5%")]))
+            t("★★項目ちがいの2つの表が、どちらも正しければ通る★★"
+              "／★話題だけで持つと、後から来た項目が上書きして正しい表を止める★",
+              _dv({"slug": "zzz_t23"})["result"] in (PASS, NOT_APPLICABLE))
+            globals()["_load_detail"] = _tbl22(
+                (_AT, [("設定1", "97.3%")]),
+                (_PO, [("設定1", "1/300")]))
+            t("★★2つの表の値を入れ替えたら止める★★"
+              "／★項目を見ないと、別項目の値を根拠にできる★",
+              _dv({"slug": "zzz_t23"})["result"] == FAIL)
             # ★★形が判定できないときも止まる★★
             _keep_shape = _cv19.check_shape
             try:

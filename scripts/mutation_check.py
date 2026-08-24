@@ -486,6 +486,34 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "表を項目ごとに分けない（別項目の値を根拠にできる・Codex23回目）",
+        "file": "scripts/recheck.py",
+        "before": "            _field = _TBL_FIELD.get(str(tbl.get(\"label\") or \"\").strip())",
+        "after": "            _field = \"at_prob\"",
+        "run": ["scripts/recheck.py"],
+    },
+    {
+        "why": "表の値を部分一致で見る（1/300 が 1/3000 を通す・Codex23回目）",
+        "file": "scripts/recheck.py",
+        "before": "            return _v == want or _v.startswith(want + \"（\")",
+        "after": "            return want in _v",
+        "run": ["scripts/recheck.py"],
+    },
+    {
+        "why": "表の行を本文の判定へ渡す（値のコピーが免除される・Codex23回目）",
+        "file": "scripts/recheck.py",
+        "before": "        _left += _tbl_bad",
+        "after": "        pass",
+        "run": ["scripts/recheck.py"],
+    },
+    {
+        "why": "控えを読めなくても黙って進む（正しい記事を毎回止める・Codex22回目）",
+        "file": "scripts/recheck.py",
+        "before": "        return _result(ERROR, f\"確定値を読めません: {_e_cv}\", args)",
+        "after": "        _by_topic, _pairs = {}, {}",
+        "run": ["scripts/recheck.py"],
+    },
+    {
         "why": "表の行を見ない（設定別の値が一度も検査されない・Codex22回目）",
         "file": "scripts/recheck.py",
         "before": "        for _tb in (sec.get(\"tables\") or []):",
@@ -495,7 +523,7 @@ MUTATIONS = [
     {
         "why": "表の行を組で見ない（正しい表を毎回『直せ』にする・Codex22回目）",
         "file": "scripts/recheck.py",
-        "before": "                if _row_backed(_cells[0], \"：\".join(_cells[1:])):",
+        "before": "                if _row_backed(_tb, _cells[0], \"：\".join(_cells[1:])):",
         "after": "                if False:",
         "run": ["scripts/recheck.py"],
     },
