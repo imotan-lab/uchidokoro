@@ -998,6 +998,18 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
         _added = _cv.merge_into(mat, slug)
         if _added:
             _log("  2AIで確定した値を材料に足しました: " + " / ".join(_added))
+            # ★★育てる側も、出典を取り直して確かめる★★
+            #   （2026-08-24・Codexの17回目）
+            #   ★新台側だけ再確認を通していた★＝
+            #   出典が変わっても、控えを手で書き換えられても、
+            #   **育てる経路だけは値を公開できた**。
+            #   ＝「record も load も grow も緑。繋ぐと再確認が抜ける」型。
+            _rv = _cv.reverify(slug, name=vo.get("identity_name") or name,
+                               official_url=url)
+            if _rv:
+                out["problems"] += [
+                    f"控えを確かめ直せません: {x}" for x in _rv]
+                return out
     except Exception as e:                    # noqa: BLE001
         out["problems"].append(
             f"2AIの確定値を読めません: {type(e).__name__}: {e}")
@@ -2031,6 +2043,16 @@ def selftest() -> int:
         globals()["_log"] = _keep_log
         globals()["_main"] = _keep_inner
         sys.argv = _keep_argv
+
+    # ★★育てる側も出典を確かめ直している★★（2026-08-24・Codexの17回目）
+    #   ★新台側だけ再確認を通していた★＝
+    #   出典が変わっても、控えを手で書き換えられても、
+    #   **育てる経路だけは値を公開できた**。
+    #   ＝「record も load も grow も緑。繋ぐと再確認が抜ける」型。
+    import inspect as _insp17
+    t("★★育てる側も、2AIの控えを取り直して確かめる★★"
+      "／★ここが抜けると、控えの手書きが記事に出る★",
+      "_cv.reverify(" in _insp17.getsource(plan_one))
 
     print(f"\n{ran[0]}/{ran[0]} 合格" if ok else "\n不合格あり")
     return 0 if ok else 1

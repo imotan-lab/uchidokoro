@@ -2421,7 +2421,7 @@ def push_after_publish(slug: str, already_committed: bool = False) -> list:
         #   「先行記事・status: preview」は新台経路では**もう使っていない**表現で、
         #   実際の成果物（判定書つき・statusなし）と食い違っていた）
         msg = (f"feat(machines): 新台 {slug} を追加（{_machine_class(slug)}）\n\n"
-               "出典2件で一致した項目だけを載せています。"
+               "出典2件で一致した項目だけを載せています（DMM単独確認の値は記事に明記）。"
                "検索に載せるかは判定書（PageDecision v1）が決めます。\n\n"
                "Co-Authored-By: Claude <自動タスク> <noreply@anthropic.com>\n")
         ng = lock_still_mine("コミットの直前")

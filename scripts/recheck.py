@@ -698,6 +698,30 @@ def check_decision_vs_body(args: dict) -> dict:
     pend = set(pd.get("pending_topics") or [])
     if not pend:
         return _result(NOT_APPLICABLE, "未確認の話題がありません", args)
+    # ★★「検索に載せてよい濃さ」と「知っているか」は別の話★★
+    #   （2026-08-24・Codexの17回目）
+    #   ★2AIで確定した値とDMM単独の値は、記事には出るが濃さには数えない★
+    #   （運営者の決定）。そのため判定書は pending なのに記事に本文がある、
+    #   という**見かけの食い違い**が必ず起きる。
+    #   ここでそれを不整合と呼ぶと、★正しい記事を毎回「直せ」と言い続ける★。
+    #   → その機種に2AIの確定値があるなら、その話題は見ない。
+    try:
+        sys.path.insert(0, os.path.join(BASE, "scripts"))
+        import confirmed_values as _cv_rc
+        _known = set()
+        for _f in (_cv_rc.for_slug(slug) or {}):
+            _base = _cv_rc.base_field(_f)
+            _known.add({"ceiling": "ceiling", "at": "gameplay",
+                        "cz": "cz", "reset": "strategy",
+                        "gameplay": "gameplay"}.get(_base, "spec"))
+        if _known:
+            pend = pend - _known
+            if not pend:
+                return _result(NOT_APPLICABLE,
+                               "未確認の話題は、2AIで確定した値で埋まっています"
+                               "（検索の濃さには数えないだけ）", args)
+    except Exception:                                        # noqa: BLE001
+        pass                               # ★読めなければ今までどおり見る★
     detail, _raw, _why = _load_detail(slug)
     if not isinstance(detail, dict):
         return _result(NOT_APPLICABLE, _why or "記事データがありません", args)
@@ -953,10 +977,24 @@ def _result(result: str, detail: str, args: dict, observed=None) -> dict:
 
 
 def _competitor_hits(text: str) -> list:
-    """★他サイト名がそのまま出ていないか★（監査17と同じ名簿を使う）"""
+    """★他サイト名がそのまま出ていないか★（★監査17と同じ見方をする★）
+
+    ★★2026-08-24・Codexの17回目★★
+      ★名簿も、名乗りの扱いも、監査17とずれていた★＝
+        ・正当な「DMMぱちタウン単独確認」→ 監査17は通す／こちらはNG
+        ・「なな徹」「1geki.jp」→ 監査17はNG／こちらは通す
+      後者は★問題を誤って「直った」と閉じてしまう★経路。
+      ★同じ規則を2か所に書かない★＝監査17の部品をそのまま呼ぶ。
+    """
     sys.path.insert(0, os.path.join(BASE, "scripts"))
     import audit_site as _a
-    names = getattr(_a, "COMPETITOR_NAMES", None)
+    # ★根拠の名乗りは外してから見る★（監査17と同じ）
+    try:
+        text = _a.strip_allowed_basis(text)
+    except Exception:                                        # noqa: BLE001
+        pass
+    names = list(getattr(_a, "COMPETITOR_NAMES", None) or [])
+    names += list(getattr(_a, "_COMPETITOR_ALIASES", None) or [])
     if not names:
         names = ["スロパチクエスト", "ちょんぼりすた", "ナナプレス", "DMM",
                  "ぱちタウン", "スロラボ", "もしもアフィリエイト",
@@ -1592,10 +1630,62 @@ def _selftest():
     t("★★これも観測どまり（どちらを直すかは出典が要る）★★",
       CHECKS["body_vs_checker"]["closeable"] is False)
 
+    # ★★監査17と同じ見方をしている★★（2026-08-24・Codexの17回目）
+    #   ★名簿も名乗りの扱いもずれていた★＝
+    #     正しい「DMMぱちタウン単独確認」を NG にし、
+    #     「なな徹」「1geki.jp」は素通りしていた。
+    #     後者は**問題を誤って「直った」と閉じる**経路。
+    t("★★根拠の名乗りは他サイト名に数えない★★"
+      "／★数えると、正しい記事を毎回『直せ』と言い続ける★",
+      not _competitor_hits("天井は999G（DMMぱちタウン単独確認）です。"))
+    t("　（対照）名乗り以外で出たら、ちゃんと数える",
+      _competitor_hits("スロパチクエストによると999Gです。"))
+    t("★★一意な別表記も数える★★（監査17と同じ名簿）",
+      _competitor_hits("なな徹によると999Gです。")
+      and _competitor_hits("1geki.jp によると999Gです。"))
+
     # --- ★判定書と記事の食い違い★（2026-08-21・台帳#358）
     _dv = check_decision_vs_body
-    t("★判定書が未確認と言っている箱に記事が書いていれば不合格★",
-      _dv({"slug": "pw_10523"})["result"] == FAIL)
+    # ★★2AIで確定した値がある機種は対象外★★（2026-08-24・Codexの17回目）
+    #   ★pw_10523 はゲーム性を2AIで確定させてある★＝
+    #   記事には出るが検索の濃さには数えない（運営者の決定）ので、
+    #   判定書は pending のまま。★これを不整合と呼ばない★。
+    # ★★控えがあるか無いかで結果を変えない試験にする★★
+    #   （2026-08-24＝控えが無い機械では確定値も無いので、
+    #     同じ機種の結果が変わる。**環境で結果が変わる試験は書かない**）
+    t("　（対照）機種が無ければ判定しない",
+      _dv({"slug": "zzz_no_such_machine"})["result"] == NOT_APPLICABLE)
+    # ★★2AIの確定値で埋まっている話題は、不整合と呼ばない★★
+    #   （2026-08-24・Codexの17回目）
+    #   ★控えを実際に作って確かめる★＝本物の置き場には触らない
+    import tempfile as _tf17
+    sys.path.insert(0, os.path.join(BASE, "scripts"))
+    import confirmed_values as _cv17
+    _keep17 = _cv17.STORE
+    try:
+        _cv17.STORE = os.path.join(_tf17.mkdtemp(prefix="rc17_"),
+                                   "confirmed_values.json")
+        _cv17.init_store()
+        _no = _dv({"slug": "pw_10523"})["result"]
+        json.dump({"schema_version": _cv17.SCHEMA, "machines": {
+            "pw_10523": {"gameplay": {
+                "value": {"when": "通常時", "trigger": "周期抽選",
+                          "leads_to": "CZ"},
+                "sources": [{"url": "https://chonborista.com/slot/x",
+                             "quote": "通常時 周期抽選 CZ"},
+                            {"url": "https://nana-press.com/kaiseki/x",
+                             "quote": "通常時 周期抽選 CZ"}],
+                "lineages": ["vote:chonborista", "vote:nana-press"],
+                "agreed_by": ["claude", "codex"],
+                "why": "2AIで突き合わせました",
+                "decided_at": "2026-08-24", "official_url": ""}}}},
+            open(_cv17.STORE, "w", encoding="utf-8"), ensure_ascii=False)
+        _yes = _dv({"slug": "pw_10523"})["result"]
+        t("★★確定値があれば、その話題は不整合と呼ばない★★"
+          "／★呼ぶと、正しい記事を毎回『直せ』と言い続ける★",
+          _yes in (PASS, NOT_APPLICABLE) and _no == FAIL)
+    finally:
+        _cv17.STORE = _keep17
     t("　判定書が無い機種（旧方式）は判定しない",
       _dv({"slug": "hokuto"})["result"] == NOT_APPLICABLE)
     t("★★これも観測どまり（記事を消すか claims を作り直すかは出典が要る）★★",

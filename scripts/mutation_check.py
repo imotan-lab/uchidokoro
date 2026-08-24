@@ -412,8 +412,8 @@ MUTATIONS = [
     {
         "why": "名前を部分一致で見る（moreView が review に当たる・実ページで踏んだ）",
         "file": "scripts/user_area.py",
-        "before": "                    if w in toks:",
-        "after": "                    if w in names.lower():",
+        "before": "            for w in _UA_ATTR_WEAK:\n                if w in toks:",
+        "after": "            for w in _UA_ATTR_WEAK:\n                if w in names.lower():",
         "run": ["scripts/user_area.py"],
     },
     {
@@ -427,15 +427,15 @@ MUTATIONS = [
     {
         "why": "弱い語も見出しに含むだけで止める（編集部コメントで止まる・Codex15回目）",
         "file": "scripts/user_area.py",
-        "before": "                        if bare.lower() in (w.lower(), w.lower() + \"一覧\",",
-        "after": "                        if w.lower() in low or bare.lower() in (w.lower(),",
+        "before": "                if bare.lower() in (w.lower(), w.lower() + \"一覧\",",
+        "after": "                if w.lower() in low or bare.lower() in (w.lower(),",
         "run": ["scripts/user_area.py"],
     },
     {
         "why": "弱い語を見出しでまったく見ない（名前が弱い第二投稿欄が通る・Codex15回目）",
         "file": "scripts/user_area.py",
-        "before": "                    for w in USER_AREA_WEAK:",
-        "after": "                    for w in ():",
+        "before": "            for w in USER_AREA_WEAK:",
+        "after": "            for w in ():",
         "run": ["scripts/user_area.py"],
     },
     {
@@ -456,8 +456,8 @@ MUTATIONS = [
     {
         "why": "弱い名前の箱を、中身を見ずに素通しする（見出し無しの投稿表・Codex16回目）",
         "file": "scripts/user_area.py",
-        "before": "                        self._weak.append([w, self._depth, False])",
-        "after": "                        pass",
+        "before": "                if w in toks:\n                    return w           # ★中身を見てから決める★",
+        "after": "                if False:\n                    return w",
         "run": ["scripts/user_area.py"],
     },
     {
@@ -466,6 +466,29 @@ MUTATIONS = [
         "before": "            for w in _UA_ATTR_STRONG:",
         "after": "            for w in _UA_ATTR_HINTS:",
         "run": ["scripts/user_area.py"],
+    },
+    {
+        "why": "対応しない終了タグでも積みを崩す（箱が早く閉じて見逃す・Codex17回目）",
+        "file": "scripts/user_area.py",
+        "before": "            if tag in _VOID or tag not in "
+                  "[x[0] for x in self.stack]:\n"
+                  "                return",
+        "after": "            if False:\n                return",
+        "run": ["scripts/user_area.py"],
+    },
+    {
+        "why": "育てる側で出典を確かめ直さない（控えの手書きが通る・Codex17回目）",
+        "file": "scripts/grow_machine.py",
+        "before": "            _rv = _cv.reverify(slug, name=vo.get(\"identity_name\") or name,",
+        "after": "            _rv = [] and (slug, vo.get(\"identity_name\") or name,",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "recheck が監査17と別の見方をする（正しい記事をNGにする・Codex17回目）",
+        "file": "scripts/recheck.py",
+        "before": "        text = _a.strip_allowed_basis(text)",
+        "after": "        pass",
+        "run": ["scripts/recheck.py"],
     },
     {
         "why": "試験用の偽の機種を掃除しない（2026-08-24・自分で踏んだ）",

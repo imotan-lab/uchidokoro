@@ -399,10 +399,15 @@ def looks_like_user_area(html: str) -> list:
       すでに決まりごとがあるサイトが**別の箱で投稿欄を足した**場合は
       素通りした（古い箱があるので必須箱の検査も通る）。
       → ★掃除のあとの中身を、全サイトで見る★。
-      決まりごとが正しければ、投稿欄は既に消えているので何も出ない。
 
     ★字面ではなく、組み立てたHTMLの要素で見る★
       引用符や空白の違い、見出しの入れ子（h2 の中の span）で見逃さない。
+
+    ★★入れ子は「開いたタグの積み重ね」で数える★★（2026-08-24・Codexの17回目）
+      ★直す前は深さを足し引きしていた★ので、
+        ・`script` は足さないのに、終了タグは種類を問わず引く
+        ・`img` は足すのに、終了タグが来ない
+      という非対称があり、**見逃しと誤検知の両方**が起きた。
 
     ★これは「落とす場所を決める」処理ではない★＝
       見つかったら**そのページを出典に使わない**（fail-closed）。
@@ -410,23 +415,41 @@ def looks_like_user_area(html: str) -> list:
     """
     import html as _htmlmod
     import html.parser as _hp
+    import re as _re3
 
+    # ★終了タグが来ない要素★（積まない）
+    _VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input",
+             "link", "meta", "param", "source", "track", "wbr"}
+    # ★中身を見ない要素★（積むが、名前も見出しも読まない）
+    _SKIP = {"script", "style", "noscript", "template"}
     found = []
 
     class _P(_hp.HTMLParser):
         def __init__(self):
             super().__init__(convert_charrefs=True)
-            self._head = None          # いま見出しの中か
-            self._buf = []
-            self._depth = 0
-            self._weak = []            # 弱い名前の箱（中身待ち）
+            self.stack = []            # 開いているタグ（名前, 弱い箱か, 中身あり）
+            self.head = None           # いま見出しの中か（積みの位置）
+            self.buf = []
+
+        def handle_startendtag(self, tag, attrs):
+            self._look(tag, attrs)     # <img /> の形（積まない）
 
         def handle_starttag(self, tag, attrs):
-            # ★画面に出ないものは見ない★（2026-08-24・実ページで判明）
-            #   読み込みの部品（script）の名前で止まっていた。
-            #   読者に出る本文ではないので対象外。
-            if tag in ("script", "style", "link", "meta", "noscript"):
+            if tag in _VOID:
+                self._look(tag, attrs)
                 return
+            weak = "" if tag in _SKIP else self._look(tag, attrs)
+            self.stack.append([tag, weak, False])
+            if tag in ("table", "textarea", "form"):
+                for it in self.stack:
+                    it[2] = True       # 中に投稿らしい作りがあった
+            if tag in ("h1", "h2", "h3", "h4", "h5", "h6") and tag not in _SKIP:
+                self.head, self.buf = len(self.stack), []
+
+        def _look(self, tag, attrs):
+            """その要素の名前を見る（強い名前ならその場で、弱い名前は保留）。"""
+            if tag in _SKIP:
+                return ""
             d = {k.lower(): (v or "") for k, v in attrs}
             if tag == "textarea":
                 found.append("入力欄: textarea")
@@ -434,69 +457,57 @@ def looks_like_user_area(html: str) -> list:
                 found.append("入力欄: contenteditable")
             if str(d.get("type", "")).strip().lower() == "comment":
                 found.append("入力欄: type=comment")
-            # ★★名前は語の区切りで見る★★（2026-08-24・実ページで誤検知した）
-            #   ★部分一致にしていた★ので、なな徹の `el_moreView` の中の
-            #   「moreview」に「review」が含まれて**正常なページが止まった**。
-            #   ＝守りを厳しくして本番を止める型。
-            import re as _re3
             names = str(d.get("id", "")) + " " + str(d.get("class", ""))
-            # 記号・大文字の切れ目で語に割る（moreView → more / view）
             toks = {x.lower() for x in _re3.findall(
                 r"[A-Z]+(?![a-z])|[A-Z][a-z]+|[a-z]+|[0-9]+", names)}
             joined = "".join(sorted(toks))
             for w in _UA_ATTR_STRONG:
                 if w in toks or w in joined:
                     found.append(f"箱の名前: {w}")
-                    break
-            else:
-                for w in _UA_ATTR_WEAK:
-                    if w in toks:
-                        # ★弱い名前は、中に投稿らしい作りがある時だけ★
-                        self._weak.append([w, self._depth, False])
-                        break
-            self._depth += 1
-            if tag in ("table", "textarea", "form"):
-                for it in self._weak:
-                    it[2] = True           # 中に投稿らしい作りがあった
-            if tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
-                self._head, self._buf = tag, []
+                    return ""
+            for w in _UA_ATTR_WEAK:
+                if w in toks:
+                    return w           # ★中身を見てから決める★
+            return ""
 
         def handle_endtag(self, tag):
-            self._depth = max(0, self._depth - 1)
-            while self._weak and self._weak[-1][1] >= self._depth:
-                w, _d, hit = self._weak.pop()
-                if hit:
-                    found.append(f"箱の名前: {w}（中に投稿らしい作り）")
-            if self._head and tag == self._head:
-                txt = " ".join("".join(self._buf).split())
-                low = txt.lower()
-                hit = ""
-                for w in USER_AREA_STRONG:
-                    if w.lower() in low:
-                        hit = w
-                        break
-                if not hit:
-                    # ★弱い語は「見出しがその語そのもの」のときだけ★
-                    #   （区画の名前として置かれている形）
-                    bare = txt.strip(" 　:：・-—|/［］[]（）()")
-                    for w in USER_AREA_WEAK:
-                        if bare.lower() in (w.lower(), w.lower() + "一覧",
-                                            w.lower() + "欄"):
-                            hit = w
-                            break
-                if hit:
-                    found.append(f"見出し: {hit}")
-                self._head, self._buf = None, []
+            if tag in _VOID or tag not in [x[0] for x in self.stack]:
+                return                 # 閉じ忘れ・対応しない終了タグは無視
+            while self.stack:
+                name, weak, hit = self.stack.pop()
+                if weak and hit:
+                    found.append(f"箱の名前: {weak}（中に投稿らしい作り）")
+                if self.head and len(self.stack) < self.head:
+                    self._close_head()
+                if name == tag:
+                    break
+
+        def _close_head(self):
+            txt = " ".join("".join(self.buf).split())
+            self.head, self.buf = None, []
+            low = txt.lower()
+            for w in USER_AREA_STRONG:
+                if w.lower() in low:
+                    found.append(f"見出し: {w}")
+                    return
+            # ★弱い語は「見出しがその語そのもの」のときだけ★
+            bare = txt.strip(" \u3000:：・-—|/［］[]（）()")
+            for w in USER_AREA_WEAK:
+                if bare.lower() in (w.lower(), w.lower() + "一覧",
+                                    w.lower() + "欄"):
+                    found.append(f"見出し: {w}")
+                    return
 
         def handle_data(self, data):
-            if self._head:
-                self._buf.append(data)
+            if self.head:
+                self.buf.append(data)
 
     try:
         _P().feed(_htmlmod.unescape(str(html or "")))
     except Exception:                                        # noqa: BLE001
         return ["組み立てられないHTML"]                      # ★使わない側に倒す★
     return sorted(set(found))
+
 
 def clean_html(html: str, url: str = "", conf: dict | None = None) -> str:
     """★投稿欄・AI欄を、HTMLの段階で箱ごと落とす★
@@ -861,7 +872,24 @@ def selftest() -> int:
             ("弱い名前＋表だけ（見出しなし）",
              '<html><body><section class="rating-list">'
              "<table><tr><th>天井</th><td>555G</td></tr></table>"
-             "</section></body></html>", True)):
+             "</section></body></html>", True),
+            # ★★入れ子の数え方★★（2026-08-24・Codexの17回目）
+            #   ★深さを足し引きしていたので、両方向に壊れていた★＝
+            #     ・script は足さないのに終了タグは引く → 箱が早く閉じて見逃す
+            #     ・img は足すのに終了タグが来ない → 箱が閉じず後続を誤認
+            ("箱の中に script があっても見逃さない",
+             '<html><body><section class="rating-list"><script></script>'
+             "<table><tr><td>555G</td></tr></table></section></body></html>",
+             True),
+            ("閉じ忘れの終了タグで、箱が早く閉じない",
+             '<html><body><section class="rating-list"></div>'
+             "<table><tr><td>555G</td></tr></table></section></body></html>",
+             True),
+            ("img のあとの正しい表を、前の箱の中身と誤認しない",
+             '<html><body><section class="related-posts"><img src="x">'
+             '</section><section class="spec">'
+             "<table><tr><td>999G</td></tr></table></section></body></html>",
+             False)):
         t("★残存検査：" + _n + "★ → "
           + ("止める" if _want else "通す"),
           bool(looks_like_user_area(_h)) is _want)
