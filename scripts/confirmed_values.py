@@ -1770,6 +1770,8 @@ def main() -> int:
     ap.add_argument("--record", action="store_true")
     ap.add_argument("--forget", action="store_true")
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--init", action="store_true",
+                    help="★初回だけ★空の控えを作る（復旧には使わない）")
     ap.add_argument("--slug", default="")
     ap.add_argument("--official-url", dest="official_url", default="",
                     help="★推奨★ 公式URL（slugと正式名称を正本から引く）")

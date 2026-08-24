@@ -107,6 +107,11 @@ jobs:
           python scripts/audit_public.py --selftest
           python scripts/build_pages_artifact.py --selftest
           python scripts/build_hub_pages.py --selftest
+          # ★★控えを初回として作る★★（2026-08-24）
+          #   ★CIの機械には確定値の控えが無い★＝
+          #   「無ければ止まる」に変えた日に、CIが2回続けて赤くなった。
+          #   ★初回と「消えた」を区別する★方針どおり、明示的に作る。
+          python scripts/confirmed_values.py --init
           # ★今日足したものもCIで見る★（手元だけで確かめない）
           python scripts/numerals.py --selftest
           python scripts/safe_json.py --selftest

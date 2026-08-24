@@ -97,6 +97,12 @@ def _commands(step: str) -> list:
 
 def _run(cmds: list, root: str, no_net: bool) -> list:
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+    # ★★控えの有無という食い違い★★（2026-08-24・実際にCIが2回赤くなった）
+    #   ★手元には控えがあり、CIの機械には無い★。
+    #   OSの違いは手元では再現できないが、**これは再現できる**。
+    if os.environ.get("UCHI_EMPTY_DOCS"):
+        import tempfile as _tf2
+        env["UCHIDOKORO_DOCS"] = _tf2.mkdtemp(prefix="ci_empty_docs_")
     sc = None
     if no_net:
         # ★★リポジトリの中に置かない★★（2026-08-24・自分で踏んだ）
@@ -136,6 +142,8 @@ def _run(cmds: list, root: str, no_net: bool) -> list:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="CIの検査を手元で再現する")
+    ap.add_argument("--empty-docs", action="store_true",
+                    help="★控えが1つも無い機械として流す★（CIと同じ条件）")
     ap.add_argument("--clone", action="store_true",
                     help="綺麗な写しを作って流す（★CIに最も近い★）")
     ap.add_argument("--audits", action="store_true",
@@ -143,6 +151,8 @@ def main() -> int:
     ap.add_argument("--with-net", action="store_true",
                     help="通信を断たない（ふだんは断つ）")
     a = ap.parse_args()
+    if a.empty_docs:
+        os.environ["UCHI_EMPTY_DOCS"] = "1"
 
     cmds = _commands("Self-tests")
     if a.audits:
