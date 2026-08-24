@@ -2095,6 +2095,59 @@ def _check_52_selftest() -> list:
         _sh.rmtree(d, ignore_errors=True)
     return bad
 
+_IN_53 = False
+
+
+def _check_53_selftest() -> list:
+    """★見張り53が本当に働くかを、毎回いっしょに確かめる★（対照実験）
+
+    （2026-08-24・Codexの12回目＝「記録があるだけで永久に緑」を防ぐ）
+    ★本物の名簿は触らない★＝作り物の名簿を渡して判定だけ見る。
+    """
+    import datetime as _dt
+    bad = []
+    yday = (_dt.date.today() - _dt.timedelta(days=1)).isoformat()
+    ok_ua = {"_no_user_area_why": "確かめた", "_checked_at": "2026-08-24",
+             "_checked_by": "試験", "_recheck_by": "2999-01-01"}
+    for name, ua, want in (
+            ("決まりごとも記録も無い", {}, True),
+            ("記録はあるが期限切れ", {**ok_ua, "_recheck_by": yday}, True),
+            ("記録はあるが確かめた人が無い",
+             {**ok_ua, "_checked_by": ""}, True),
+            ("期限の形が違う", {**ok_ua, "_recheck_by": "2026/13/45"}, True),
+            ("そろっている", ok_ua, False),
+            ("箱ごと落とせる", {"drop": [{"selector": "x"}]}, False)):
+        got = bool(_judge_53_user_area(ua))
+        if got != want:
+            bad.append(f"★{name}★ → {'鳴った' if got else '黙った'}")
+    return bad
+
+
+def _judge_53_user_area(ua: dict) -> list:
+    """1つの出典について、投稿欄の備えが足りているか（★判定はここだけ★）"""
+    import datetime as _dt
+    ng = []
+    if ua.get("drop"):
+        return ng                          # 箱ごと落とせる
+    why = str(ua.get("_no_user_area_why") or "").strip()
+    if not why:
+        return ["投稿欄の決まりごとも「投稿欄が無いことを確かめた記録」も"
+                "ありません／★読者の書き込みが根拠になり得ます★"]
+    for k in ("_checked_at", "_checked_by", "_recheck_by"):
+        if not str(ua.get(k) or "").strip():
+            ng.append(f"投稿欄を確かめた記録に {k} がありません")
+    rb = str(ua.get("_recheck_by") or "").strip()
+    if rb:
+        try:
+            due = _dt.date.fromisoformat(rb)
+        except Exception:                                    # noqa: BLE001
+            ng.append(f"再確認の期限の形が違います（{rb!r}）")
+        else:
+            if due < _dt.date.today():
+                ng.append(f"投稿欄の確認が期限切れです（{rb}）"
+                          "／★実ページを見て確かめ直してください★")
+    return ng
+
 def check_53_source_user_area(machines: list) -> list:
     """★出典に使う先の投稿欄★（2026-08-24新設・Codexの11回目）
 
@@ -2112,7 +2165,10 @@ def check_53_source_user_area(machines: list) -> list:
     ★「いま無かった」は永久の保証ではない★ので、記録には確かめた日を書く。
     """
     import json as _j
-    ng = []
+    global _IN_53
+    ng = ["★見張り53自身が働いていません★: " + x
+          for x in (_check_53_selftest() if not _IN_53 else [])]
+    _IN_53 = True
     try:
         pol = _j.load(open(os.path.join(BASE, "assets", "data",
                                         "automation-policy.json"),
@@ -2121,7 +2177,10 @@ def check_53_source_user_area(machines: list) -> list:
                                         "directory-catalogs.json"),
                            encoding="utf-8"))
     except Exception as e:                                   # noqa: BLE001
-        return [f"名簿を読めません: {str(e)[:60]}"]
+        _IN_53 = False
+        return ng + [f"名簿を読めません: {str(e)[:60]}"]
+    finally:
+        _IN_53 = False
     hosts = pol.get("hosts") or {}
     # ★名鑑のURLの形からホスト名を引く★（名鑑は host を直接持っていない）
     import urllib.parse as _up
@@ -2144,12 +2203,15 @@ def check_53_source_user_area(machines: list) -> list:
         # ★用途に「材料を読む」が入っている先だけ★（発見や同定だけなら関係ない）
         if "claim_material" not in (v.get("purpose") or []):
             continue
-        ua = ua_by_host.get(str(host).lower()) or {}
-        if ua.get("drop") or ua.get("_no_user_area_why"):
-            continue
-        ng.append(f"{host}: 出典に使う先なのに、投稿欄の決まりごとも"
-                  "「投稿欄が無いことを確かめた記録」もありません"
-                  "／★読者の書き込みが根拠になり得ます★")
+        # ★www の有無はそろえて引く★（名簿は別名も持つが、名鑑は素のホスト）
+        _h = str(host).lower()
+        ua = (ua_by_host.get(_h)
+              or ua_by_host.get(_h[4:] if _h.startswith("www.") else "www." + _h)
+              or {})
+        # ★★記録があるだけでは通さない★★（2026-08-24・Codexの12回目）
+        #   ★「いま無い」は永久の保証ではない★＝
+        #   サイト側が普通の改修で投稿欄を足した時点で、経路が開く。
+        ng += [f"{host}: {x}" for x in _judge_53_user_area(ua)]
     return ng
 
 def check_51_selftest_tally(machines: list) -> list:
@@ -2891,7 +2953,40 @@ CHECKS = [
 INFO_ONLY = {"9_記事文字数", "23_CLAUDE_md肥大検知", "31_Codexへの未報告"}
 
 
+def selftest() -> int:
+    """★見張り自身が働いているかを確かめる★（2026-08-24新設）
+
+    ★なぜ要るか★＝見張りを足しても、その見張りが空振りしていることがある
+    （実際、監査53は名簿の鍵の名前を取り違えて**1件も見つけない**状態だった）。
+    ★ここは判定だけを試す★＝本物の名簿もサイトも触らない。
+    """
+    results = []
+
+    def t(name, cond):
+        results.append((name, bool(cond)))
+        print(("✅ " if cond else "❌ ") + name)
+
+    for x in _check_52_selftest():
+        t("★見張り52★ " + x, False)
+    t("★★見張り52（試験用の残骸）が働いている★★", not _check_52_selftest())
+    for x in _check_53_selftest():
+        t("★見張り53★ " + x, False)
+    t("★★見張り53（出典の投稿欄）が働いている★★", not _check_53_selftest())
+    t("★★試験の数え方の見張りが働いている★★（項目51）",
+      not check_51_selftest_tally([]))
+    ng = [n for n, ok in results if not ok]
+    print(f"{chr(10)}{len(results) - len(ng)}/{len(results)} 合格")
+    if ng:
+        print("失敗:", ng[:5])
+    return 1 if ng else 0
+
 def main():
+    # ★見張り自身の対照実験だけを回す★（2026-08-24）
+    if "--selftest" in sys.argv:
+        # ★戻り値ではなく終了コードで返す★（2026-08-24・自分で踏んだ）
+        #   この main の戻り値はどこにも使われていないので、
+        #   ★赤でも終了コード0で終わって「合格」に見えていた★。
+        sys.exit(selftest())
     try:
         machines = load_json(BASE / "assets" / "data" / "machines.json")
     except _sj.SafeJsonError as e:

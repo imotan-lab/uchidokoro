@@ -716,16 +716,29 @@ def verify_source(src: dict, name: str, fetch=None) -> dict:
         raise ConfirmedError(f"出典を取得できません（{src['url']}）: {str(e)[:80]}")
 
     def text_of(h):
-        # ★★出典として読んでよい本文の上で照合する★★（2026-08-24・Codexの11回目）
-        #   ★直す前は画面に出る文字をそのまま見ていた★ので、
-        #   **投稿欄の決まりごとが無いサイト**（スロパチクエスト・やんちゃプレス）
-        #   では読者のコメントがそのまま残り、
-        #   ★読者の書き込みを逐語引用として記録・再検証できた★。
-        #   `user_area.clean_text` は
-        #     ・決まりごとがある → 箱ごと落とす
-        #     ・決まりごとが無い → 行単位で切る
-        #   の使い分けを1か所で持っている。**そこだけを呼ぶ**。
-        return " ".join(_ua.clean_text(h, src.get("url") or "").split())
+        """★出典として読んでよい本文★（★1回だけ作って全部これを使う★）
+
+        ★★2026-08-24・Codexの12回目★★
+          ★私は前回、同定の根拠の側だけを直して「引用の照合を直した」と
+          報告していた★。読者に出る値の引用は `_visible_text` のままで、
+          **投稿欄の決まりごとが無いサイトでは読者の書き込みが通った**。
+          ＝また「片方だけ直した」。
+
+        ★二重に掃除しない★（Codexの12回目・停止型）
+          取ってくる時点で `fetched_page.fetch` が**箱を落とし済み**。
+          そこへもう一度 `clean_text` を通すと、
+          決まりごとのあるサイトでは「落とす前に必須の箱があること」を
+          求める検査に引っかかり、**正常なページを拒否する**。
+          → ★足りないのは「決まりごとが無いサイトの行切り」だけ★なので、
+            そこだけを足す。
+        """
+        # ★行で切る処理なので、切る前に1行へ潰さない★（2026-08-24・自分で踏んだ）
+        raw = _w._visible_text(h)
+        ua = _ua.conf_for_url(src.get("url") or "")
+        if [r for r in (ua.get("drop") or []) if isinstance(r, dict)]:
+            return " ".join(raw.split())   # 箱で落とし済み（行では切らない）
+        import ceiling_lookup as _cl9
+        return " ".join(_cl9.cut_user_area(raw).split())
     ok, why = _mc.page_is_machine(html, name)
     if not ok:
         # ★機械が弾いたら、それはAIの出番の合図★（2026-08-11・運営者の指摘）
@@ -785,7 +798,8 @@ def verify_source(src: dict, name: str, fetch=None) -> dict:
                 text_of(html).encode("utf-8")).hexdigest(),
             "at": datetime.date.today().isoformat(),
         }
-    text = " ".join(_w._visible_text(html).split())
+    # ★同じ本文を使う★（2026-08-24・Codexの12回目＝ここが直っていなかった）
+    text = text_of(html)
     quote = " ".join(str(src["quote"]).split())
     if quote not in text:
         raise ConfirmedError(
@@ -1734,6 +1748,45 @@ def selftest() -> int:
               _moved)
         finally:
             _w10._get = _real_get10
+
+        # ★★決まりごとが無いサイトでも、投稿文は引用にできない★★
+        #   （2026-08-24・Codexの12回目）
+        #   ★前回は同定の根拠の側だけ直して「引用を直した」と報告していた★。
+        #   読者に出る値の引用は素通しのままだった＝また「片方だけ直した」。
+        #   ★決まりごとがあるサイトで試すと、取ってくる時点で箱が落ちるので
+        #     この抜けを検出できない★ので、**決まりごとが無いサイト**で試す。
+        import new_machine_watch as _w12
+        import user_area as _ua12
+        _norule = "https://nana-press.com/kaiseki/machine/1/"
+        t("　（前提）この先には投稿欄の決まりごとが無い",
+          not [r for r in (_ua12.conf_for_url(_norule).get("drop") or [])
+               if isinstance(r, dict)])
+        _nr_html = ("<html><head><title>L試験機 解析</title></head><body>"
+                    "<h1>L試験機</h1><p>天井は999Gです。</p>"
+                    "<h2>口コミ</h2><p>読者A 天井は555Gだと思う</p>"
+                    "</body></html>")
+        _real_get12 = _w12._get
+
+        def _g12(_x, timeout=20):
+            _w12.LAST_FINAL_URL["url"] = _x
+            return _nr_html
+        try:
+            _w12._get = _g12
+            _nr_bad = False
+            try:
+                verify_source({"url": _norule,
+                               "quote": "読者A 天井は555Gだと思う"},
+                              "L試験機")
+            except ConfirmedError:
+                _nr_bad = True
+            t("★★決まりごとが無いサイトでも、投稿文は引用にできない★★"
+              "／★読者の書き込みが読者向けの値の根拠になっていた★",
+              _nr_bad)
+            t("　（対照）本文に書いてあるものは通る",
+              verify_source({"url": _norule, "quote": "天井は999Gです。"},
+                            "L試験機").get("verified_at"))
+        finally:
+            _w12._get = _real_get12
 
         # ★★2AIで通した出典は、指紋の箱ごと必須★★
         #   ★直す前は「箱があるときだけ」見ていた★ので、箱ごと消すと素通り。

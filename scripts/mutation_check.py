@@ -353,6 +353,27 @@ MUTATIONS = [
         "run": ["scripts/confirmed_values.py"],
     },
     {
+        "why": "引用の照合だけ素通しに戻す（投稿文が根拠になる・Codex12回目）",
+        "file": "scripts/confirmed_values.py",
+        "before": "    text = text_of(html)",
+        "after": '    text = " ".join(_w._visible_text(html).split())',
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "行で切る前に1行へ潰す（行切りが効かなくなる・2026-08-24に自分で踏んだ）",
+        "file": "scripts/confirmed_values.py",
+        "before": "        raw = _w._visible_text(h)",
+        "after": '        raw = " ".join(_w._visible_text(h).split())',
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "投稿欄の確認の期限切れを見ない（Codex12回目）",
+        "file": "scripts/audit_site.py",
+        "before": "            if due < _dt.date.today():",
+        "after": "            if False:",
+        "run": ["scripts/audit_site.py"],
+    },
+    {
         "why": "試験用の偽の機種を掃除しない（2026-08-24・自分で踏んだ）",
         "file": "scripts/publish_new_machine.py",
         "before": "        if apply_it:\n"
