@@ -491,8 +491,13 @@ def validate_record(field: str, rec) -> list:
                     or not x.get("quote"):
                 ng.append(f"{field}: 出典{i + 1}にURLか引用がありません")
     who = rec.get("agreed_by")
-    if not isinstance(who, list) or len({str(x).lower() for x in who}) < 2:
-        ng.append(f"{field}: 判断者が2つ未満です（{who!r}）")
+    # ★★書き込みと同じ顔ぶれを求める★★（2026-08-24・Codexの9回目）
+    #   ★直す前は「違う文字列が2つ」で通した★ので、
+    #   手書きの `["a", "b"]` が読み直しを素通りした。
+    if not isinstance(who, list) or not (
+            set(REQUIRED_JUDGES) <= {str(x).lower() for x in who}):
+        ng.append(f"{field}: 判断者に {'/'.join(REQUIRED_JUDGES)} が"
+                  f"そろっていません（{who!r}）")
     if not str(rec.get("why") or "").strip():
         ng.append(f"{field}: なぜその値かの記録がありません")
     # ★★以下は「通信のいらない再計算」★★（2026-08-24・Codexの7回目）
@@ -681,14 +686,12 @@ def verify_source(src: dict, name: str, fetch=None) -> dict:
     の2つを機械が確かめる。
     """
     if fetch is None:
-        import new_machine_watch as _w
-
-        def fetch(u):
-            # ★用途を名乗ってから取りに行く★（2026-08-16・依頼218）
-            #   名乗らないと通信の名簿が通さない。ここは2AIが決めた値の
-            #   逐語を出典ページで確かめる＝記事の材料なので `claim_material`。
-            with _w.fetching("claim_material"):
-                return _w._get(u)
+        # ★取り直しの道は1本★（2026-08-24・Codexの9回目）
+        #   ★直す前は生のHTMLをそのまま読んでいた★ので、
+        #   **読者の書き込み欄に書かれた文**を逐語引用として
+        #   記録・再検証できた（材料を読む側は落としているのに、
+        #   確定値の経路だけ抜けていた）。
+        fetch = _default_fetch
     import hashlib
 
     import model_code_lookup as _mc
@@ -866,7 +869,9 @@ def record(slug: str, field: str, value, sources: list, by: list,
                     "（★出典ごとに同じ値を支えている必要があります★）")
     # ★引用が本当にそのページにあるか・そのページがその機種かを確かめる★
     sources = [verify_source(dict(s), name, fetch) for s in sources]
-    data = load()
+    # ★控えが無いときは作らない★（2026-08-24・Codexの9回目）
+    #   初回は `--init`、消失は復旧。ここで黙って作ると両者を区別できない。
+    data = load(strict=False, require_exists=True)
     rec = {
         "value": value,
         "sources": sources,
@@ -902,7 +907,35 @@ def _tokens(value) -> list:
     return [str(value)]
 
 
-def reverify(slug: str, fetch=None) -> list:
+def init_store() -> str:
+    """★初回だけ、空の正本を作る★（2026-08-24・Codexの9回目）
+
+    ★★初回と「消えた」を区別する★★
+      直す前は `record()` が不存在を正常な初回として空から作っていたので、
+      ★消失事故のあとにも、何事もなかったように空の控えが再生した★。
+      作るのはこの入口だけにし、ほかは「無ければ止まる」に統一する。
+
+    ★復旧のときは使わない★＝控えのバックアップから戻すこと。
+    """
+    if os.path.exists(STORE):
+        raise ConfirmedError(f"すでにあります（作り直しません）: {STORE}")
+    os.makedirs(os.path.dirname(STORE), exist_ok=True)
+    tmp = STORE + ".init"
+    with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+        json.dump(_empty(), fh, ensure_ascii=False, indent=1)
+        fh.write("\n")
+    os.replace(tmp, STORE)                 # ★途中の形を残さない★
+    return STORE
+
+
+def _default_fetch(url: str) -> str:
+    """★出典を取り直す既定の道★（投稿欄を落とす唯一の入口を通る）"""
+    import fetched_page as _fp
+    return _fp.fetch(url, "claim_material").cleaned_html
+
+
+def reverify(slug: str, fetch=None, name: str = "",
+             official_url: str = "") -> list:
     """★公開しようとしている機種の控えだけ、取り直して確かめる★
 
     ★★なぜ要るか★★（2026-08-24・Codexの8回目）
@@ -920,9 +953,12 @@ def reverify(slug: str, fetch=None) -> list:
     if not rows:
         return ng                          # 確定値が無い機種は何もしない
     # ★機種の正本を引き直す★（slugと正式名称が今も同じか）
+    #   ★呼ぶ側が確かめ済みの名前・URLを持っていればそれを使う★
+    #   （2026-08-24・Codexの9回目＝まだ一覧に無い新台は自力で引けない）
     urls = {str((r or {}).get("official_url") or "") for r in rows.values()}
     urls.discard("")
-    name = ""
+    if official_url:
+        urls.add(official_url)
     for u in urls:
         try:
             got_slug, got_name = bind_machine(u)
@@ -951,32 +987,58 @@ def reverify(slug: str, fetch=None) -> list:
     if not name:
         ng.append(f"{slug}: 正式名称を引けないので出典を確かめ直せません")
         return ng
-    seen = {}
+    # ★★取ってくるのは1回・照合は全部★★（2026-08-24・Codexの9回目）
+    #   ★直す前は「確かめた結果」をURLごとに使い回していた★ので、
+    #   同じURLを2つの項目で使うと、**2件目の引用は一度も照合されなかった**
+    #   （例：天井の引用は残っているが、純増の引用は消えている → 通る）。
+    pages = {}
+
+    def _html_of(url):
+        if url not in pages:
+            try:
+                pages[url] = fetch(url) if fetch else _default_fetch(url)
+            except Exception as e:                           # noqa: BLE001
+                pages[url] = e
+        return pages[url]
+
     for field, r in rows.items():
         for src in (r.get("sources") or []):
             url = str((src or {}).get("url") or "")
             if not url:
                 continue
-            if url in seen:
-                got = seen[url]
-            else:
-                try:
-                    got = verify_source(dict(src), name or slug, fetch)
-                    seen[url] = got
-                except Exception as e:                       # noqa: BLE001
-                    seen[url] = None
-                    ng.append(f"{slug} / {field}: 出典を確かめ直せません"
-                              f"（{url}／{str(e)[:60]}）")
-                    continue
-            if got is None:
+            html = _html_of(url)
+            if isinstance(html, Exception):
+                ng.append(f"{slug} / {field}: 出典を取り直せません"
+                          f"（{url}／{str(html)[:60]}）")
                 continue
-            # ★本人性を2AIの判断で通した出典は、本文が変わっていないか見る★
+            try:
+                # ★引用ごとに必ず照合する★（取得はしない＝上で1回だけ）
+                got = verify_source(dict(src), name or slug,
+                                    lambda _u, _h=html: _h)
+            except Exception as e:                           # noqa: BLE001
+                ng.append(f"{slug} / {field}: 出典を確かめ直せません"
+                          f"（{url}／{str(e)[:60]}）")
+                continue
+            # ★★2AIで通した出典は、いまの本文の指紋と必ず比べる★★
+            #   （2026-08-24・Codexの9回目）
+            #   ★直す前は「新しく作られた指紋」と比べていた★ので、
+            #   ①ページが機械で同定できるようになると指紋が作られず素通り
+            #   ②控えから指紋だけ消すと比較そのものが飛んだ
+            #   → **いまの本文から自分で計算して**比べる。
             old = (src or {}).get("identity_override") or {}
-            new = (got or {}).get("identity_override") or {}
-            if old.get("text_sha256") and new.get("text_sha256") \
-                    and old["text_sha256"] != new["text_sha256"]:
-                ng.append(f"{slug} / {field}: 出典の本文が変わっています"
-                          f"（{url}）／2AIで判断し直してください")
+            if old:
+                import hashlib as _hl
+                import new_machine_watch as _w9
+                now_sha = _hl.sha256(
+                    " ".join(_w9._visible_text(html).split()).encode("utf-8")
+                ).hexdigest()
+                if not old.get("text_sha256"):
+                    ng.append(f"{slug} / {field}: 2AIで通した出典に"
+                              f"本文の指紋がありません（{url}）"
+                              "／判断し直してください")
+                elif old["text_sha256"] != now_sha:
+                    ng.append(f"{slug} / {field}: 出典の本文が変わっています"
+                              f"（{url}）／2AIで判断し直してください")
     return ng
 
 def forget(slug: str, field: str) -> dict:
@@ -991,14 +1053,34 @@ def forget(slug: str, field: str) -> dict:
     return {"state": "FORGOTTEN"}
 
 
+def for_slug_checked(slug: str) -> dict:
+    """★その機種の記録だけを、契約つきで読む★（2026-08-24・Codexの9回目）
+
+    ★全件を厳しく見ると、無関係な古い1件で今夜の新台が止まる★。
+    控えの存在と入れ物は必ず確かめ、**中身の契約は対象機種だけ**見る。
+    """
+    d = load(strict=False, require_exists=True)
+    rows = dict((d.get("machines") or {}).get(slug) or {})
+    bad = []
+    for field, rec in rows.items():
+        bad += validate_record(field, rec)
+    if bad:
+        raise ConfirmedError(
+            f"{slug} の確定値が契約を満たしていません: "
+            + " ／ ".join(bad[:5])
+            + (f" ほか{len(bad) - 5}件" if len(bad) > 5 else ""))
+    return rows
+
+
 def for_slug(slug: str, data: dict | None = None) -> dict:
     """機械が毎回読む側（無人タスクはここだけ使う）。
 
     ★控えが無い／壊れているときは止める★（2026-08-24・Codexの7回目）
       作るのは `record()` の仕事。読む側が黙って0件にしない。
     """
-    d = data if data is not None else load(require_exists=True)
-    return dict((d.get("machines") or {}).get(slug) or {})
+    if data is not None:
+        return dict((data.get("machines") or {}).get(slug) or {})
+    return for_slug_checked(slug)
 
 
 def merge_into(material: dict, slug: str) -> list:
@@ -1107,6 +1189,7 @@ def selftest() -> int:
     global STORE
     keep = STORE
     STORE = os.path.join(tempfile.mkdtemp(), "confirmed_values.json")
+    init_store()          # ★初回は明示的に作る★（2026-08-24・Codexの9回目）
     try:
         t("★★発行者は名乗らせずURLから引く★★（別ホストに名前を付けて通せた）",
           parse_source("https://chonborista.com/1|" + Q1)["publisher"]
@@ -1469,6 +1552,111 @@ def selftest() -> int:
         finally:
             STORE = _keep3
 
+        # ★★出典の投稿欄は根拠にしない★★（2026-08-24・Codexの9回目）
+        #   ★材料を読む側は落としているのに、確定値の経路だけ抜けていた★＝
+        #   ちょんぼりすたの読者コメントに「天井999G」とあれば、
+        #   それを逐語引用として記録・再検証できた。
+        _ua_url = "https://chonborista.com/slot/orinpia-slot/264134/"
+        _ua_html = ('<title>L試験機 スロット 新台 解析 | ちょんぼりすた</title>'
+                    '<div id="hyouka">星の評価</div>'
+                    '<ul class="commentlist"><li>読者の書き込み '
+                    '天井は999G と確認できました。</li></ul>'
+                    '<div id="entry"><div>機種名 L試験機</div>'
+                    '<div>メーカー 京楽</div></div>')
+        # ★★既定の道をそのまま通す★★（通信の手だてだけ差し替える）
+        #   ★取得の関数を渡して試すと、既定の道を一度も通らない★＝
+        #   既定を壊しても試験が緑のままだった（実際にそうなった）。
+        import new_machine_watch as _w9b
+        _real_get9 = _w9b._get
+
+        def _g9(_x, timeout=20):
+            _w9b.LAST_FINAL_URL["url"] = _x       # ★到達先を名乗る★
+            return _ua_html
+        try:
+            _w9b._get = _g9
+            _ua_bad = False
+            try:
+                verify_source(
+                    {"url": _ua_url,
+                     "quote": "読者の書き込み 天井は999G と確認できました。"},
+                    "L試験機")
+            except ConfirmedError:
+                _ua_bad = True
+            t("★★出典ページの投稿欄は根拠にできない★★"
+              "／★読者の書き込みを『出典に書いてある』にできた★",
+              _ua_bad)
+            t("　（対照）本文に書いてあるものは通る",
+              verify_source({"url": _ua_url, "quote": "機種名 L試験機"},
+                            "L試験機").get("verified_at"))
+        finally:
+            _w9b._get = _real_get9
+
+        # ★★読み直しの判断者は、書き込みと同じ顔ぶれ★★
+        _judge = {"value": {"kind": "GAME", "amount": "999", "unit": "G",
+                            "benefit": "AT当選"},
+                  "sources": [
+                      {"url": "https://chonborista.com/slot/x",
+                       "quote": "999 G AT当選"},
+                      {"url": "https://nana-press.com/kaiseki/x",
+                       "quote": "999 G AT当選"}],
+                  "lineages": ["vote:chonborista", "vote:nana-press"],
+                  "agreed_by": ["a", "b"],
+                  "why": "2AIで突き合わせました",
+                  "decided_at": "2026-08-24"}
+        t("★★読み直しでも判断者の顔ぶれを求める★★"
+          "／★『違う文字列が2つ』では、手書きの記録が通る★",
+          any("判断者" in x for x in validate_record("ceiling", _judge)))
+
+        # ★★控えが無いときに黙って作らない★★（消失と初回を区別する）
+        _keep4 = STORE
+        try:
+            import tempfile as _tf6
+            _dinit = _tf6.mkdtemp(prefix="cvinit_")
+            STORE = os.path.join(_dinit, "confirmed_values.json")
+            # ★機種の正本も一時の場所に用意する★
+            #   （記録は公式URLから機種名を引くので、無いと別の理由で落ちる）
+            _lp_real6 = _lp.DOCS
+            _lp.DOCS = _dinit
+            _iurl = "https://m.example/products/slot/zzz_init/"
+            with open(os.path.join(_dinit, "add_machine_pending.json"), "w",
+                      encoding="utf-8") as _fh6:
+                json.dump({"items": {_iurl: {"name": "L試験機"}}}, _fh6,
+                          ensure_ascii=False)
+            # ★本物の登録関数を、出典もそろえて呼ぶ★
+            #   （そろっていないと別の理由で落ち、控えの話にならない）
+            _iq = "L試験機の解析 999 G AT当選 と確認できました。"
+
+            def _ifetch(u):
+                return ("<html><head><title>L試験機</title></head><body>"
+                        f"<h1>L試験機</h1><p>{_iq}</p></body></html>")
+            _made = False
+            try:
+                record("", "ceiling",
+                       {"kind": "GAME", "amount": "999",
+                        "unit": "G", "benefit": "AT当選"},
+                       [parse_source("https://chonborista.com/slot/x|" + _iq),
+                        parse_source("https://nana-press.com/kaiseki/x|" + _iq)],
+                       ["claude", "codex"], "2AIで突き合わせました",
+                       official_url=_iurl, fetch=_ifetch)
+            except ConfirmedError as e:
+                _made = "控えがありません" in str(e)
+            except Exception:                                # noqa: BLE001
+                _made = False
+            t("★★控えが無いときに、記録が勝手に作らない★★"
+              "／★消失事故のあとに空の控えが黙って再生していた★",
+              _made and not os.path.exists(STORE))
+            t("　初回は明示的に作る（--init）",
+              init_store() == STORE and os.path.exists(STORE))
+            _twice = False
+            try:
+                init_store()
+            except ConfirmedError:
+                _twice = True
+            t("　すでにあるなら作り直さない", _twice)
+        finally:
+            STORE = _keep4
+            _lp.DOCS = _lp_real6
+
         t("　2AIだけが答える鍵にも値の形がある（何でも受け取らない）",
           all(k in VALUE_SHAPES for k in AI_ONLY_FIELDS))
 
@@ -1605,6 +1793,10 @@ def main() -> int:
 
     if a.selftest:
         return selftest()
+    if a.init:
+        # ★初回と「消えた」を区別する★＝復旧はバックアップから戻すこと
+        print("作りました: " + init_store())
+        return 0
     try:
         if a.record:
             if a.value_file:

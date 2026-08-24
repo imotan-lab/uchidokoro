@@ -6,13 +6,13 @@
   "assets/data/directory-catalogs.json": "dfb012f4e3dca9fa2d0cfa98db66adaea89943fa14c33061f022b10678df18dd",
   "assets/data/maker-catalogs.json": "612fa17f5b50f509475096b51ca1f4d8c261c5805e22e337875aa478054c0b3c",
   "assets/data/source-registry.json": "4de7d0c863653c916c8ec419dc8454c1f26b0ecf1f96f0a8e313823470518e47",
-  "scripts/add_machine_run.py": "498d2823f7f4389c5dbe9d7c5b9fdb2f4fb691c627316d669515bec87875a5a7",
+  "scripts/add_machine_run.py": "986e3f62ff7e327cbaae4ff287994b15ec1fca0ab0c1e8bd49c8084d59b5f3d3",
   "scripts/adoption_basis.py": "23a9f8de31ed614c23151884608671541b4c8aa6cb2a38ca0bd1bc0f533f3284",
   "scripts/at_spec_lookup.py": "74f11d27f804891ec42eba1568d500405469457ed95502396fff9f3627e084f2",
   "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
   "scripts/blocked_hosts.py": "553ac0a6f0f0baf563100458937efa167826c4347f815ace1a70e39769909b7d",
   "scripts/ceiling_lookup.py": "167bd72afe8399bd426f553dad2f3838e139d1709492ae3fcd13d36edafb4340",
-  "scripts/confirmed_values.py": "6ef96e4fc06c700b3badb26e1c34006cc9ec83cdd441a7b6bb6630c366a45632",
+  "scripts/confirmed_values.py": "3c0e40b3860e28fc23f105b35e79997e79965d067fbd28277d3fdfec5f22e051",
   "scripts/cz_lookup.py": "24727d5876e0a5e233ff6c913e96ae3d3fc50d7e5d5869b019e443bde374b02b",
   "scripts/directory_index.py": "5c6e1471c073b2462b056b0cd6c2f7ee7a2fa8d26f8696213a6e891b896dbdc5",
   "scripts/dmm_calendar.py": "ad0ae2ffb3977307cf361e4a137288e9bccdd1f15fb43e560aa629c5942a6930",
@@ -93,6 +93,7 @@
    "build_new_article",
    "claim_identity",
    "claim_inventory",
+   "fetched_page",
    "model_code_lookup",
    "new_machine_watch",
    "source_lineage",
@@ -200,5 +201,6 @@
    "ceiling_lookup",
    "new_machine_watch"
   ]
- }
+ },
+ "_deps_changed_why": "confirmed_values が fetched_page を取り込むようになった理由\n\n★本番の経路で使う★（試験の中だけではない）。\n\n★なぜ足したか★\n  Codexの9回目の指摘＝出典ページを確かめ直すときに、\n  ★生のHTMLをそのまま読んでいた★。\n  そのため、ちょんぼりすたの読者コメント欄に「天井999G」と\n  書かれていれば、それを逐語引用として記録・再検証できた。\n\n  材料を読む側（add_machine_run の経路）は\n  `fetched_page.fetch` を通して投稿欄を箱ごと落としているのに、\n  ★確定値の経路だけ抜けていた★。\n  ＝同じ危険に対して、通る道によって守りが違う状態。\n\n★材料の採否の集合に入れる★\n  `fetched_page` は「取ってきて、投稿欄を落として、指紋まで作る」場所で、\n  ★何を材料として読むかを直接左右する★。\n  ここが変われば、どの文が根拠として通るかが変わる。\n  ＝材料の契約に入れるのが正しい。\n\n★契約の閉じ方★\n  監査50が「契約に入っている側が取り込んでいる相手」まで見るので、\n  `fetched_page` を入れることで、その依存（user_area / new_machine_watch）も\n  契約の内側に入る。どちらも既に集合にある。"
 }

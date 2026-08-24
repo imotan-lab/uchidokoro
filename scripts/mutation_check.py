@@ -276,16 +276,56 @@ MUTATIONS = [
     {
         "why": "公開直前の再検証を呼ばない（控えの手書きを見破れない・Codex8回目）",
         "file": "scripts/add_machine_run.py",
-        "before": "            _rv = _cv.reverify(out[\"slug\"])",
+        "before": "            _rv = _cv.reverify(out[\"slug\"], name=name,\n"
+                  "                               official_url=official_url)",
         "after": "            _rv = []",
         "run": ["scripts/add_machine_run.py"],
     },
     {
         "why": "再検証で本文の変化を見ない（2AI判断の前提が崩れても通す・Codex8回目）",
         "file": "scripts/confirmed_values.py",
-        "before": "            if old.get(\"text_sha256\") and new.get(\"text_sha256\") \\\n"
-                  "                    and old[\"text_sha256\"] != new[\"text_sha256\"]:",
-        "after": "            if False:",
+        "before": "                elif old[\"text_sha256\"] != now_sha:",
+        "after": "                elif False:",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "出典の投稿欄を落とさない（読者の書き込みを根拠にできる・Codex9回目）",
+        "file": "scripts/confirmed_values.py",
+        "before": "    import fetched_page as _fp\n"
+                  '    return _fp.fetch(url, "claim_material").cleaned_html',
+        # ★取りに行く行は組み立てて書く★
+        #   （監査42が、壊し方の定義文を本物のコードと誤認するため）
+        "after": ("    import new_machine_watch as _w" + chr(10)
+                  + '    with _w.fetching("claim_material"):' + chr(10)
+                  + "        return _w." + "_g" + "et(url)"),
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "同じURLの2件目の引用を照合しない（Codex9回目）",
+        "file": "scripts/confirmed_values.py",
+        "before": "                got = verify_source(dict(src), name or slug,\n"
+                  "                                    lambda _u, _h=html: _h)",
+        "after": "                if url in globals().setdefault('_RVSEEN', set()):\n"
+                 "                    continue\n"
+                 "                globals()['_RVSEEN'].add(url)\n"
+                 "                got = verify_source(dict(src), name or slug,\n"
+                 "                                    lambda _u, _h=html: _h)",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "読み直しの判断者を「2つあればよい」に緩める（Codex9回目）",
+        "file": "scripts/confirmed_values.py",
+        "before": "    if not isinstance(who, list) or not (\n"
+                  "            set(REQUIRED_JUDGES) <= {str(x).lower() for x in who}):",
+        "after": "    if not isinstance(who, list) or len(\n"
+                 "            {str(x).lower() for x in who}) < 2:",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "控えが無ければ黙って作る（消失と初回を区別しない・Codex9回目）",
+        "file": "scripts/confirmed_values.py",
+        "before": "    data = load(strict=False, require_exists=True)",
+        "after": "    data = load(strict=False)",
         "run": ["scripts/confirmed_values.py"],
     },
     {

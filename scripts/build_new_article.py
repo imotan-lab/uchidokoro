@@ -962,6 +962,8 @@ def selftest() -> int:
         _lp_real = _lp_t.DOCS
         _lp_t.DOCS = _d
         _cv_t.STORE = os.path.join(_d, "confirmed_values.json")
+        if not os.path.exists(_cv_t.STORE):
+            _cv_t.init_store()   # ★初回は明示的に作る★
         _url = "https://p-town.dmm.com/machines/dmm_1/pw_x/"
         with open(os.path.join(_d, "add_machine_pending.json"), "w",
                   encoding="utf-8") as _fh:

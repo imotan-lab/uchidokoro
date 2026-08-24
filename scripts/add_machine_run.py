@@ -2737,7 +2737,10 @@ def run_one(name, official_url, maker, release, apply_it=False,
             #   ★控えの読み直しは、保存されたURLと引用を信じている★ので、
             #   控えを手で書き換えられたら偽の引用でも通る。
             #   ★全件はやらない★＝いま書こうとしている機種だけ・出典は各1回。
-            _rv = _cv.reverify(out["slug"])
+            # ★確かめ済みの名前とURLを渡す★（2026-08-24・Codexの9回目）
+            #   まだ一覧に無い新台は、控えだけでは機種名を引けない。
+            _rv = _cv.reverify(out["slug"], name=name,
+                               official_url=official_url)
             if _rv:
                 out["problems"] += [
                     f"CONFIRMED_VALUES_UNREADABLE: 控えを確かめ直せません: {x}"
