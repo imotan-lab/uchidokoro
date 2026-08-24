@@ -485,6 +485,15 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "写しへの向け直しを1つ漏らす"
+               "（試験が本物のリポジトリを汚し、夜の公開が丸ごと止まる）",
+        "file": "scripts/publish_new_machine.py",
+        "before": "        if (_k4.isupper() and isinstance(_v4, str)",
+        "after": "        if (_k4.isupper() and _k4 != \"DETAILS\" "
+                 "and isinstance(_v4, str)",
+        "run": ["scripts/publish_new_machine.py"],
+    },
+    {
         "why": "閉じ忘れた投稿欄を確定しない"
                "（ページが途中で終わると投稿欄を見逃す・Codex18回目）",
         "file": "scripts/user_area.py",

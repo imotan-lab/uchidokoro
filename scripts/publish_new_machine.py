@@ -3317,12 +3317,33 @@ def selftest() -> int:
     globals()["IN_PROGRESS"] = os.path.join(_work4,
                                             ".publish-in-progress.json")
     # ★写しの側の場所へ向け直す★（読み込み時に決まった定数を持っているもの）
+    # ★★向け直し漏れが1つでもあると、本物のリポジトリへ書く★★
+    #   （2026-08-24・実際に踏んだ）＝
+    #   `BASE` `IN_PROGRESS` `MACHINES` だけ直していたので、
+    #   記事データは `DETAILS`（読み込み時に決まる）を通って
+    #   **本物のリポジトリへ書かれていた**。
+    #   しかも後片づけの確認は**写しの側**を見るので、
+    #   ★試験は「残っていません」と言いながら残していた★。
+    #   ＝夜の公開が「許していないファイル」で丸ごと止まる経路。
+    #   → ★BASE から作る定数は、機械的に全部たどって向け直す★
+    #     （名前を並べると、次に足した定数でまた漏れる）。
     _bytes4 = {}
     _real = {"write_atomic": write_atomic, "build_hubs": build_hubs,
              "check_served": check_served, "run_site_audit": run_site_audit,
-             "check_after": check_after, "MACHINES": MACHINES}
-    globals()["MACHINES"] = os.path.join(_work4, "assets", "data",
-                                         "machines.json")
+             "check_after": check_after}
+    for _k4, _v4 in list(globals().items()):
+        if (_k4.isupper() and isinstance(_v4, str)
+                and _v4.startswith(_real_base + os.sep)):
+            _real[_k4] = _v4
+            globals()[_k4] = _work4 + _v4[len(_real_base):]
+    # ★向け直せたことを、試験のはじめに確かめる★（黙って漏れない）
+    _leak4 = [k for k, v in globals().items()
+              if k.isupper() and isinstance(v, str)
+              and v.startswith(_real_base + os.sep)]
+    t("★★写しの上で試すとき、本物を指す場所が1つも残らない★★"
+      "／★残ると本物のリポジトリを汚し、夜の公開が止まる★"
+      + ("／残り: " + "／".join(_leak4) if _leak4 else ""),
+      not _leak4)
     try:
         def _snapshot():
             """公開に関わるファイルの指紋（元のままか確かめる用）。"""

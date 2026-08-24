@@ -58,7 +58,7 @@
   "scripts/pending_machines.py": "174b3386455fb93a969c6ccafd728d07e19080ca807283b66deec9d1e50810d0",
   "scripts/prepush_gate.py": "238555a6ddeb0751f55d4f6736bd05eff6994613435e4c5fb8ce8b3a757267aa",
   "scripts/preview_site.py": "8ef4c5eef6c1749df51c1c8c3edfebd2a4af427b8e0ae52287e724776dc7849a",
-  "scripts/publish_new_machine.py": "5cfe0afebbfc8361507d0237e01828aa9e9141ac6fb043c279e6eefa5f304118",
+  "scripts/publish_new_machine.py": "6cc4816e1b63df85c8ad481a61e06f1ea601f88c2e5862300d67382f36c14fba",
   "scripts/safe_json.py": "43f61703cbe7e1ea93ee2602fe9be45662957c8929aef62d649b6fc0493e0006",
   "scripts/strip_model_code.py": "e59ca6ab73a718cdf111572f2b090cd3104ae149142563df40b969acdb126d98",
   "service-worker.js": "06bd2bd6f9fbdd823791a6b65015bc21c91e1828dbef37fe143c5d45baf625d2",

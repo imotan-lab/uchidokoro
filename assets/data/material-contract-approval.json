@@ -29,7 +29,7 @@
   "scripts/slug_binding.py": "17c235c10cd7fed94d4c774bbe7b88c87349eff214bedaa22182d3fe79f26af6",
   "scripts/source_lineage.py": "706cbbd437ba491995e233e9758a73f7672e27a47021cfc1274f0c2e9d9f79ed",
   "scripts/spec_lookup.py": "89aa58008b1e8935d7ab04bb619c0175a2c72b60a2d62da081c8b4ec21fb78dd",
-  "scripts/user_area.py": "4e6426e4ec5417d4c779b98d9dd2f43dcdaf7d2e8f806ee60e2dfe44575c8389"
+  "scripts/user_area.py": "d91f56c245d179338e0ad6452443d6787bf50b0ab9796569cf4171b8aba8d0b0"
  },
  "imports": {
   "scripts/add_machine_run.py": [
