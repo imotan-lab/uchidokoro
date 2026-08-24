@@ -486,6 +486,38 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "見出しだけで投稿欄が残っていると判定する"
+               "（レビューが付いた機種が全部、出典に使えなくなる・台帳#473）",
+        "file": "scripts/user_area.py",
+        "before": "            if _hit or len(body) >= _PEND_MIN:",
+        "after": "            if True:",
+        "run": ["scripts/user_area.py"],
+    },
+    {
+        "why": "見出しの下を「次の見出しまで」で数える"
+               "（末尾が投稿欄のページでfooterの文字を拾う・台帳#473）",
+        "file": "scripts/user_area.py",
+        "before": "                if self.pend and len(self.stack) < self.pend[3]:",
+        "after": "                if False:",
+        "run": ["scripts/user_area.py"],
+    },
+    {
+        "why": "記事ページ自身の無効化を検査が見ない"
+               "（新台が作った瞬間に必ず監査46で落ちる・台帳#469）",
+        "file": "scripts/recheck.py",
+        "before": "    _by_page = page_disables_pochipochi(mh, _machine(slug) or {})",
+        "after": "    _by_page = False",
+        "run": ["scripts/recheck.py"],
+    },
+    {
+        "why": "止めた理由より先に材料の注意書きを見る"
+               "（見張りがいちばん無害な理由を報告する・台帳#474）",
+        "file": "scripts/add_machine_run.py",
+        "before": "    hit = _pick(res.get(\"blocked\"))",
+        "after": "    hit = \"\"",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
         "why": "復旧が空の機種ディレクトリを監査より後に消す"
                "（強制終了のあと復旧が永久に詰まり、新台公開が全部止まる）",
         "file": "scripts/publish_new_machine.py",

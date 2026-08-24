@@ -6,7 +6,7 @@
   "assets/data/directory-catalogs.json": "787c06d3b57416bf1d11d37d76941194bcda2e810a971c8bd2fb62c90db1da3a",
   "assets/data/maker-catalogs.json": "612fa17f5b50f509475096b51ca1f4d8c261c5805e22e337875aa478054c0b3c",
   "assets/data/source-registry.json": "2449477484e8def3fae001065de72ce208943a44487cb5dcd109a7af101f3687",
-  "scripts/add_machine_run.py": "cc1424eb9de07e2442568f25ddf9073d7b54f8edba85e6fed1db11b2852661f7",
+  "scripts/add_machine_run.py": "3fcc40adc40d8d76dc12267eec9fafcc19151f647920fcb1bc598636e0d28b31",
   "scripts/adoption_basis.py": "23a9f8de31ed614c23151884608671541b4c8aa6cb2a38ca0bd1bc0f533f3284",
   "scripts/at_spec_lookup.py": "74f11d27f804891ec42eba1568d500405469457ed95502396fff9f3627e084f2",
   "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
@@ -29,7 +29,7 @@
   "scripts/slug_binding.py": "17c235c10cd7fed94d4c774bbe7b88c87349eff214bedaa22182d3fe79f26af6",
   "scripts/source_lineage.py": "706cbbd437ba491995e233e9758a73f7672e27a47021cfc1274f0c2e9d9f79ed",
   "scripts/spec_lookup.py": "89aa58008b1e8935d7ab04bb619c0175a2c72b60a2d62da081c8b4ec21fb78dd",
-  "scripts/user_area.py": "656f4776404aa887c7494a4b5448020c6c780417c4d1985d9be28548c33be392"
+  "scripts/user_area.py": "8c72c4ce16381b2b1a6afc67d34b812a8e470fe51ade1490170e59b5e62c340a"
  },
  "imports": {
   "scripts/add_machine_run.py": [

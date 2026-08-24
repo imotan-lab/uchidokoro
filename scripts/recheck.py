@@ -466,6 +466,30 @@ def check_rate_monotonic(args: dict) -> dict:
 #   ★新台が増えるたびに増える構造★＝新しく足した機種はどのリストにも入らない。
 #     2026-08-07に15件だったものが、2026-08-21には24件になっていた（台帳#252）。
 
+_PAGE_DISABLE = re.compile(
+    r'machine\.status\s*===\s*"preview"[^\n]*?'
+    r'publication_policy\s*===\s*"page-decision/v1"[^\n]*?'
+    r'available:\s*false')
+
+
+def page_disables_pochipochi(mh: str, row: dict) -> bool:
+    """★記事ページ自身が、その機種のポチポチくんを無効にしているか★
+
+    ★なぜ要るか（2026-08-24の夜・台帳#469。新台が2晩公開できなかった）★
+      `machine.html` は新台経路（page-decision/v1）と preview を
+      **名簿より先に**「解析データ判明後に対応」で無効にしている。
+      ★検査だけがそれを知らず、名簿に無いという理由で必ず落としていた★
+      ＝新台は作った瞬間に必ず落ちる＝1件も公開できない。
+    ★実装を読んで判断する★＝ページからその分岐が消えたら、また落ちる。
+    ★関数にする理由★＝試験が**本番の machine.html を書き換えずに**
+      「分岐が消えた姿」を試せるようにするため（承認対象なので触らない）。
+    """
+    if not _PAGE_DISABLE.search(str(mh or "")):
+        return False
+    return (row.get("status") == "preview"
+            or row.get("publication_policy") == "page-decision/v1")
+
+
 def check_pochipochi_reachable(args: dict) -> dict:
     slug = args.get("slug")
     if not valid_slug(slug):
@@ -486,10 +510,21 @@ def check_pochipochi_reachable(args: dict) -> dict:
             return False
         return ("'" + slug + "'") in m.group(1) or ('"' + slug + '"') in m.group(1)
 
+    # ★★記事ページ自身が「解析待ち」として無効にしている場合★★
+    #   （2026-08-24の夜・台帳#469。★新台が2晩公開できなかった原因★）
+    #   `machine.html` は新台経路（page-decision/v1）と preview を
+    #   **名簿より先に**「解析データ判明後に対応」で無効にしている。
+    #   ★検査だけがそれを知らず、名簿に無いという理由で必ず落としていた★
+    #   ＝新台は作った瞬間に必ずこの検査に落ちる＝1件も公開できない。
+    #   ★実装を読んで判断する★＝ページからその分岐が消えたら、また落ちる。
+    _by_page = page_disables_pochipochi(mh, _machine(slug) or {})
+
     observed = {"has_config": bool(has_config),
                 "no_setting_diff": _listed("noSettingDiff"),
-                "no_analysis": _listed("noAnalysis")}
-    if has_config or observed["no_setting_diff"] or observed["no_analysis"]:
+                "no_analysis": _listed("noAnalysis"),
+                "disabled_by_page": _by_page}
+    if (has_config or observed["no_setting_diff"]
+            or observed["no_analysis"] or _by_page):
         return _result(PASS, "ポチポチくんの案内と飛び先が食い違っていません",
                        args, observed=observed)
     return _result(FAIL,
@@ -1836,6 +1871,47 @@ def _selftest():
       _dv({"slug": "hokuto"})["result"] == NOT_APPLICABLE)
     t("★★これも観測どまり（記事を消すか claims を作り直すかは出典が要る）★★",
       CHECKS["decision_vs_body"]["closeable"] is False)
+
+    # ★★新台はポチポチくんの名簿に無くても、ページが無効にしている★★
+    #   （2026-08-24の夜・台帳#469。★新台が2晩1件も公開できなかった★）
+    #   machine.html は新台経路と preview を**名簿より先に**
+    #   「解析データ判明後に対応」で無効にしている。
+    #   ★検査だけがそれを知らず、必ず落としていた★
+    _pr = check_pochipochi_reachable
+    _keepm2 = _machine
+    try:
+        globals()["_machine"] = lambda sl: {
+            "slug": sl, "name": "新台試験",
+            "publication_policy": "page-decision/v1"}
+        _keepv = globals()["valid_slug"]
+        globals()["valid_slug"] = lambda sl: True
+        t("★★新台（page-decision/v1）は落とさない★★"
+          "／★落とすと新台は1件も公開できない★",
+          _pr({"slug": "zzz_new_route"})["result"] == PASS)
+        globals()["_machine"] = lambda sl: {"slug": sl, "name": "旧preview",
+                                            "status": "preview"}
+        t("　先行記事（preview）も落とさない",
+          _pr({"slug": "zzz_preview"})["result"] == PASS)
+        # ★対照★＝ページからその分岐が消えたら、無効とみなさない
+        #   ★本番の machine.html は1文字も触らない★（承認対象）
+        _mh_real = open(os.path.join(BASE, "machine.html"),
+                        encoding="utf-8").read()
+        _row_new = {"publication_policy": "page-decision/v1"}
+        t("　いまのページは、新台を無効にしている",
+          page_disables_pochipochi(_mh_real, _row_new) is True)
+        t("★★（対照）ページの無効化が消えたら、無効とみなさない★★"
+          "／★これが無いと『いつでもPASS』の抜け穴になる★",
+          page_disables_pochipochi(
+              _mh_real.replace(
+                  'machine.status === "preview" || '
+                  'machine.publication_policy === "page-decision/v1"',
+                  'machine.status === "zzz-none"', 1),
+              _row_new) is False)
+        t("　新台でも先行記事でもない機種は、この道では通さない",
+          page_disables_pochipochi(_mh_real, {"slug": "hokuto"}) is False)
+        globals()["valid_slug"] = _keepv
+    finally:
+        globals()["_machine"] = _keepm2
 
     # --- 観測どまりの検査では閉じない
     t("★観測どまりの検査は、PASSでも閉じられない★",

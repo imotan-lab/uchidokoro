@@ -381,6 +381,9 @@ USER_AREA_WORDS = USER_AREA_STRONG + USER_AREA_WEAK
 #       ・見出しの無い `class="rating-list"` + 表は**素通り**
 #     どちらも実在の形。
 #   ★強い名前★＝その名前が付いていれば投稿欄と見なしてよい
+# ★見出しの下に「これだけ文字があれば書き込みが残っている」とみなす長さ★
+#   （2026-08-24・台帳#473）短い飾り（一覧へ・件数など）で止めないため。
+_PEND_MIN = 15
 _UA_ATTR_STRONG = ("bbs", "kuchikomi", "respond", "userpost", "userposts",
                    "commentlist", "commentform", "commentsarea",
                    "testimonial", "testimonials")
@@ -431,6 +434,7 @@ def looks_like_user_area(html: str) -> list:
             self.head = None           # いま見出しの中か（積みの位置）
             self.buf = []
             self.hidden = 0            # 画面に出ない要素の中にいる（積みの位置）
+            self.pend = None           # 当たった見出し（下に中身があるか待つ）
 
         def handle_startendtag(self, tag, attrs):
             # ★★画面に出ない中は、自己終了タグも読まない★★
@@ -464,6 +468,9 @@ def looks_like_user_area(html: str) -> list:
             if tag in ("table", "textarea", "form"):
                 for it in self.stack:
                     it[2] = True       # 中に投稿らしい作りがあった
+                if self.pend:
+                    self.pend = (self.pend[0], True, self.pend[2],
+                                 self.pend[3])
             if tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
                 self.head, self.buf = len(self.stack), []
 
@@ -500,6 +507,13 @@ def looks_like_user_area(html: str) -> list:
                     found.append(f"箱の名前: {weak}（中に投稿らしい作り）")
                 if self.head and len(self.stack) < self.head:
                     self._close_head()
+                if self.pend and len(self.stack) < self.pend[3]:
+                    # ★★「次の見出しまで」ではなく「その節が閉じるまで」★★
+                    #   （2026-08-24の夜・台帳#473の2つ目の顔）
+                    #   ★節のあとに見出しが無いページ（末尾が投稿欄）だと、
+                    #   footerの文字まで「見出しの下の中身」に数えていた★
+                    #   ＝実測でラグナドールが止まった。
+                    self._resolve_pending()
                 if self.hidden and len(self.stack) < self.hidden:
                     self.hidden = 0
                 if name == tag:
@@ -518,26 +532,52 @@ def looks_like_user_area(html: str) -> list:
                     found.append(f"箱の名前: {weak}（中に投稿らしい作り）")
             if self.head:
                 self._close_head()
+            self._resolve_pending()    # ★最後の見出しの分も決める★
+
+        def _resolve_pending(self):
+            """★見出しの下に、実際の書き込みがあった時だけ止める★
+
+            ★なぜ（2026-08-24の夜・台帳#473。私が入れた守りが本番を止めた）★
+              名鑑（DMM）は投稿欄の**中身だけ**を落とし、
+              見出しは節の外にあるので残る設計になっている（2026-08-14に明記）。
+              見出しだけで止めると、**レビューが付いている機種が全部**
+              出典に使えなくなる（実測＝4機種中2機種／人気機種ほど付く）。
+              ★見出しは読者の書き込みではない★ので、
+              下に書き込みらしいもの（十分な長さの文・表・入力欄）が
+              あるときだけ「掃除しきれていない」と言う。
+            """
+            if not self.pend:
+                return
+            _w, _hit, _txt, _d = self.pend
+            self.pend = None
+            body = " ".join("".join(_txt).split())
+            if _hit or len(body) >= _PEND_MIN:
+                found.append(f"見出し: {_w}")
 
         def _close_head(self):
             txt = " ".join("".join(self.buf).split())
             self.head, self.buf = None, []
             low = txt.lower()
+            self._resolve_pending()        # 前の見出しの分を先に決める
             for w in USER_AREA_STRONG:
                 if w.lower() in low:
-                    found.append(f"見出し: {w}")
+                    self.pend = (w, False, [], len(self.stack))
                     return
             # ★弱い語は「見出しがその語そのもの」のときだけ★
             bare = txt.strip(" \u3000:：・-—|/［］[]（）()")
             for w in USER_AREA_WEAK:
                 if bare.lower() in (w.lower(), w.lower() + "一覧",
                                     w.lower() + "欄"):
-                    found.append(f"見出し: {w}")
+                    self.pend = (w, False, [], len(self.stack))
                     return
 
         def handle_data(self, data):
-            if self.head and not self.hidden:
+            if self.hidden:
+                return
+            if self.head:
                 self.buf.append(data)
+            elif self.pend:
+                self.pend[2].append(data)
 
     try:
         _p = _P()
@@ -859,7 +899,9 @@ def selftest() -> int:
              "<html><body><h2>掲示板</h2>"
              "<table><tr><td>555G</td></tr></table></body></html>", True),
             ("見出しの入れ子",
-             "<html><body><h2><span>口コミ</span></h2></body></html>", True),
+             "<html><body><section><h2><span>口コミ</span></h2>"
+             "<p>この台は前作より甘いと思います。3000枚出ました。</p>"
+             "</section></body></html>", True),
             ("決まりごとがあるサイトの第二の投稿欄",
              '<html><body><div id="bbs">旧</div>'
              '<div class="comment-list">新</div></body></html>', True),
@@ -906,8 +948,28 @@ def selftest() -> int:
             #   ★隣の規則に助けられない形にする★＝
             #   下2つは「見出しだけ」「弱い名前＋表だけ」で、
             #   片方の規則を消すと必ず落ちる。
-            ("見出しだけ（弱い語がその語そのもの）",
-             "<html><body><h2>レビュー</h2></body></html>", True),
+            ("弱い語がその語そのものの見出し＋書き込み",
+             "<html><body><section><h2>レビュー</h2>"
+             "<p>設定6っぽい挙動でした。朝から回して差枚プラスです。</p>"
+             "</section></body></html>", True),
+            # ★★見出しだけなら止めない★★（2026-08-24の夜・台帳#473）
+            #   ★名鑑は投稿欄の中身だけを落とし、見出しは節の外なので残る★
+            #   （2026-08-14に分かったうえでそう設計してある）。
+            #   見出しで止めると**レビューが付いている機種が全部**使えなくなる
+            #   （実測＝DMMの4機種中2機種。人気機種ほど付く）。
+            ("見出しだけ（中身は掃除済み）＝止めない",
+             "<html><body><section><h2>ユーザー口コミ・評価詳細</h2>"
+             "</section><section><h2>スペック</h2>"
+             "<table><tr><td>999G</td></tr></table></section></body></html>",
+             False),
+            ("ページの最後が見出しだけ＝止めない（後ろのfooterを数えない）",
+             "<html><body><section><h2>口コミ</h2></section>"
+             "<footer>会社概要 プライバシーポリシー お問い合わせ 利用規約"
+             "</footer></body></html>", False),
+            ("見出しの下に投稿の表が残っていれば止める",
+             "<html><body><section><h2>口コミ</h2>"
+             "<table><tr><td>読者A</td></tr></table></section></body></html>",
+             True),
             ("弱い名前＋表だけ（見出しなし）",
              '<html><body><section class="rating-list">'
              "<table><tr><th>天井</th><td>555G</td></tr></table>"

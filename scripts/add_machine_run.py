@@ -1421,6 +1421,14 @@ def _pw_machine_url(url: str) -> str:
 #   文言はいつでも書き換わるので、見張りが読むのは短い符丁だけにする。
 #   ここに無い形は OTHER になる（＝符丁が増え続けない）。
 _BLOCKER_CODES = (
+    # ★★公開直前の関所で落ちた形を先に見る★★
+    #   （2026-08-24の夜・台帳#474。★見張りが2晩、無害な理由を報告していた★）
+    #   X-300は記事を作るところまで進み、公開直前の監査で止まったのに、
+    #   材料集めの段階で出た「型式名がまだ載っていません」に先に当たって
+    #   `MODEL_CODE_MISSING` と記録されていた。
+    #   ＝★いちばん深くまで進んだ機種について、いちばん無害な理由を報告する★
+    ("サイト監査", "BLOCKED_BY_SITE_AUDIT"),
+    ("公開の関所", "BLOCKED_BY_PREPUSH_GATE"),
     ("名鑑の個別ページが", "NOT_ENOUGH_DIRECTORIES"),
     ("メーカー照合の控えを読めません", "MAKER_CACHE_UNREADABLE"),
     ("メーカー", "MAKER_UNRESOLVED"),
@@ -1432,15 +1440,35 @@ _BLOCKER_CODES = (
 
 
 def _blocker_code(res: dict) -> str:
-    """止まった理由を短い符丁にする（★最初に当たったものだけ★）。"""
+    """止まった理由を短い符丁にする。
+
+    ★★「止めた理由」を先に見る★★（2026-08-24の夜・台帳#474）
+      ★直す前は blocked と problems を混ぜて、先に当たった語を採っていた★。
+      problems には材料集めの途中の注意書き（型式名がまだ無い等）が
+      たくさん入るので、**公開直前で止まった機種ほど無害な符丁**になった。
+      ＝見張りが「型式名が無いだけ」と報告し、本当の理由（監査で停止）が
+        2晩埋もれた。
+      → まず blocked（止めた理由そのもの）だけで探し、
+        当たらなければ problems を見る。
+    """
+    def _pick(items) -> str:
+        text = " ".join(str(x) for x in (items or []))
+        if not text.strip():
+            return ""
+        for word, code in _BLOCKER_CODES:
+            if word in text:
+                return code
+        return ""
+
+    hit = _pick(res.get("blocked"))
+    if hit:
+        return hit
+    hit = _pick(res.get("problems"))
+    if hit:
+        return hit
     text = " ".join(str(x) for x in
                     ((res.get("blocked") or []) + (res.get("problems") or [])))
-    if not text.strip():
-        return ""
-    for word, code in _BLOCKER_CODES:
-        if word in text:
-            return code
-    return "OTHER"
+    return "OTHER" if text.strip() else ""
 
 
 def _verify_dmm(name: str, official_url: str, maker: str,
@@ -4344,6 +4372,24 @@ def selftest() -> int:
       blocking_problems(["CONFIRMED_VALUES_UNREADABLE: 2AIの確定値を読めません"]))
     t("　（対照）ふつうの問題では止めない",
       not blocking_problems(["ただのお知らせ"]))
+
+    # ★★止めた理由の符丁が、いちばん無害な理由に落ちない★★
+    #   （2026-08-24の夜・台帳#474。★見張りが2晩、本当の理由を隠していた★）
+    t("★★公開直前の監査で止まったら、その符丁になる★★"
+      "／★材料の注意書きに先に当たると、見張りが無害な理由を報告する★",
+      _blocker_code({
+          "blocked": ["公開できませんでした: サイト監査: "
+                      "46_ポチポチくんの案内と飛び先: 1件 dmm_5089"],
+          "problems": ["型式名がまだどの名鑑にも載っていません",
+                       "天井: 取れません"]}) == "BLOCKED_BY_SITE_AUDIT")
+    t("　材料だけで止まった時は、いままでどおりの符丁",
+      _blocker_code({"blocked": [],
+                     "problems": ["型式名がまだどの名鑑にも載っていません"]})
+      == "MODEL_CODE_MISSING")
+    t("　止まっていなければ符丁は空",
+      _blocker_code({"blocked": [], "problems": []}) == "")
+    t("　どれにも当たらなければ OTHER",
+      _blocker_code({"blocked": ["よく分からない理由"]}) == "OTHER")
 
     ng = [n for n, ok in results if not ok]
     # ★控えの置き場を元へ戻す★（試験のあとに本番へ影響を残さない）
