@@ -1797,7 +1797,7 @@ def selftest() -> int:
             except ConfirmedError as _e13:
                 _why13 = str(_e13)
             t("　止まる場所は「取ってくる段」（表も文章もまとめて守れる）",
-              "投稿欄がありそうなのに決まりごとがありません" in _why13)
+              "掃除のあとにも投稿欄が残っています" in _why13)
 
             # ★対照★ 投稿欄が無いページなら、これまでどおり通る
             _nr_clean = ("<html><head><title>L試験機 解析</title></head><body>"

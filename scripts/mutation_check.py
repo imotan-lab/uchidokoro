@@ -374,13 +374,6 @@ MUTATIONS = [
         "run": ["scripts/audit_site.py"],
     },
     {
-        "why": "投稿欄がありそうでも取ってくる（表の中の投稿が材料になる・Codex13回目）",
-        "file": "scripts/fetched_page.py",
-        "before": "        hint = _ua.looks_like_user_area(cleaned)",
-        "after": "        hint = []",
-        "run": ["scripts/confirmed_values.py"],
-    },
-    {
         "why": "再確認の指紋を別の作り方で出す（本文が同じでも止まる・Codex13回目）",
         "file": "scripts/confirmed_values.py",
         "before": "                now_sha = _hl.sha256(\n"
@@ -397,6 +390,38 @@ MUTATIONS = [
         "before": "        bad = [r for r in drops if not (r.get(\"id\") "
                   "or r.get(\"class\"))]",
         "after": "        bad = []",
+        "run": ["scripts/audit_site.py"],
+    },
+    {
+        "why": "残存検査を「決まりごとが無いサイト」だけにする（Codex14回目）",
+        "file": "scripts/fetched_page.py",
+        "before": "    hint = _ua.looks_like_user_area(cleaned)",
+        "after": "    hint = ([] if [r for r in "
+                 "(_ua.conf_for_url(url).get(\"drop\") or [])\n"
+                 "            if isinstance(r, dict)]\n"
+                 "            else _ua.looks_like_user_area(cleaned))",
+        "run": ["scripts/fetched_page.py"],
+    },
+    {
+        "why": "投稿欄の語を行切りと別々に持つ（片方だけ見逃す・Codex14回目）",
+        "file": "scripts/ceiling_lookup.py",
+        "before": "    for w in _user_area_words():",
+        "after": "    for w in _USER_AREA:",
+        "run": ["scripts/user_area.py"],
+    },
+    {
+        "why": "名前を部分一致で見る（moreView が review に当たる・実ページで踏んだ）",
+        "file": "scripts/user_area.py",
+        "before": "                if w in toks or w.replace(\"-\", \"\") in toks:",
+        "after": "                if w in names.lower():",
+        "run": ["scripts/user_area.py"],
+    },
+    {
+        "why": "必須箱が無くても通す（相手が名前を変えたら素通り・Codex14回目）",
+        "file": "scripts/audit_site.py",
+        "before": "        if not [r for r in (ua.get(\"require_before\") or [])\n"
+                  "                if isinstance(r, dict)]:",
+        "after": "        if False:",
         "run": ["scripts/audit_site.py"],
     },
     {

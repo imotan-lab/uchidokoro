@@ -389,8 +389,28 @@ def url_key(url: str) -> str:
       **到達先の表を引けず、照合が丸ごと飛んで**しまい、
       そのまま「使う」に到達した。
     ★そろえ方を1か所にする★＝比べる時は必ずこれを通す。
+
+    ★★www の有無もそろえる★★（2026-08-24・Codexの14回目）
+      ★直す前は末尾の `/` だけ★だったので、
+      `https://nana-press.com/...` → `https://www.nana-press.com/...` の
+      ような**正常な転送**でも「別のページへ飛ばされた」と見なし、
+      ★新台タスクが止まった★（＝守りを厳しくして本番を止める型）。
+      ★別のページへの転送は今までどおり止まる★＝道筋が違えば鍵も違う。
     """
-    return str(url or "").rstrip("/")
+    import urllib.parse as _up
+    t = str(url or "").rstrip("/")
+    try:
+        sp = _up.urlsplit(t)
+        host = (sp.hostname or "").lower()
+        if host.startswith("www."):
+            host = host[4:]
+        if not host:
+            return t
+        port = f":{sp.port}" if sp.port else ""
+        return _up.urlunsplit((sp.scheme, host + port, sp.path, sp.query,
+                               ""))
+    except Exception:                                        # noqa: BLE001
+        return t
 
 
 def verdict_for(slug: str, expected: str = "", seen: str = "", store=None,

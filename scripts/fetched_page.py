@@ -93,18 +93,19 @@ def fetch(url: str, purpose: str = "claim_material", get=None) -> FetchedPage:
         cleaned = _ua.clean_html(raw or "", url)
     except Exception as e:                 # noqa: BLE001
         raise PageError(f"投稿欄を落としきれません（{url}）: {str(e)[:120]}")
-    # ★★決まりごとが無いのに投稿欄らしき作りがあれば、使わない★★
-    #   （2026-08-24・Codexの13回目）
+    # ★★掃除のあとに投稿欄が残っていないか★★（2026-08-24・Codexの14回目）
     #   ★行切りは文章にしか効かない★＝天井・スペック・AT・CZは
     #   **HTMLの表を直接読む**ので、投稿欄の中に表があれば材料に入る。
+    #   ★全サイトで見る★＝決まりごとが無いサイトだけでなく、
+    #   **決まりごとがあるサイトが別の箱で投稿欄を足した場合**も止める
+    #   （古い箱があるので必須箱の検査は通ってしまう）。
+    #   決まりごとが正しければ、ここでは何も出ない。
     #   ★止めるだけ★＝どこが投稿欄かは2AIが判断し、名鑑に決まりごとを登録する。
-    if not [r for r in (_ua.conf_for_url(url).get("drop") or [])
-            if isinstance(r, dict)]:
-        hint = _ua.looks_like_user_area(cleaned)
-        if hint:
-            raise PageError(
-                f"投稿欄がありそうなのに決まりごとがありません（{url}）: "
-                f"{hint[:3]}／★2AIで投稿欄の場所を決めて名鑑に登録してください★")
+    hint = _ua.looks_like_user_area(cleaned)
+    if hint:
+        raise PageError(
+            f"掃除のあとにも投稿欄が残っています（{url}）: {hint[:3]}"
+            "／★2AIで投稿欄の場所を決めて名鑑に登録してください★")
     return FetchedPage(url, fin, cleaned)
 
 
@@ -176,6 +177,29 @@ def selftest() -> int:
         t("　取得できないページは使わない", False)
     except PageError:
         t("　取得できないページは使わない", True)
+
+    # ★★決まりごとがあるサイトでも、残存検査は効く★★
+    #   （2026-08-24・Codexの14回目＝別の箱で投稿欄を足された場合）
+    #   ★決まりごとがあるサイトだけ検査を飛ばすと、ここが素通りする★
+    _second = ('<title>L試験機 スロット 新台 解析 | ちょんぼりすた</title>'
+               '<div id="hyouka">星の評価</div>'
+               '<ul class="commentlist"><li>旧い書き込み</li></ul>'
+               '<div id="entry"><div>機種名 L試験機</div>'
+               '<div>メーカー 京楽</div></div>'
+               '<div class="comment-list"><p>新しい投稿欄</p></div>')
+
+    def _get_second(u, timeout=20):
+        _w.LAST_FINAL_URL["url"] = u
+        return _second
+    _blocked2 = False
+    try:
+        fetch(C, get=_get_second)
+    except PageError:
+        _blocked2 = True
+    t("★★決まりごとがあるサイトが別の箱で投稿欄を足しても止める★★"
+      "／★古い箱があるので必須箱の検査は通ってしまう★",
+      _blocked2)
+
 
     ng = sum(1 for _, o in results if not o)
     print()

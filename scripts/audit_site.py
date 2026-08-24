@@ -2119,7 +2119,17 @@ def _check_53_selftest() -> list:
             ("そろっている", ok_ua, False),
             ("★掃除が理解できない決まりごと★",
              {"drop": [{"selector": "x"}]}, True),
-            ("箱ごと落とせる", {"drop": [{"id": "comments"}]}, False)):
+            # ★必須箱はあるが、決まりごとの形が違う★
+            #   （この形でないと、必須箱の検査に助けられて
+            #     「id/classを見る」を外しても気づけない）
+            ("★形だけ違う（必須箱はある）★",
+             {"drop": [{"selector": "x"}],
+              "require_before": [{"id": "x"}]}, True),
+            ("★必須箱が無い★（相手が名前を変えたら素通り）",
+             {"drop": [{"id": "comments"}]}, True),
+            ("箱ごと落とせる（必須箱つき）",
+             {"drop": [{"id": "comments"}],
+              "require_before": [{"id": "comments"}]}, False)):
         got = bool(_judge_53_user_area(ua))
         if got != want:
             bad.append(f"★{name}★ → {'鳴った' if got else '黙った'}")
@@ -2142,6 +2152,14 @@ def _judge_53_user_area(ua: dict) -> list:
         if bad:
             return [f"投稿欄の決まりごとに id も class もありません: {bad[:2]}"
                     "／★掃除の処理が理解できない形です★"]
+        # ★★落とせたことを確かめる備えがあるか★★（2026-08-24・Codexの14回目）
+        #   ★id や class があるだけでは足りない★＝相手が名前を変えたら
+        #   **0箱削除でも通ってしまう**。
+        #   ★必須箱（require_before）★があれば、消える前に居たことを確かめられる。
+        if not [r for r in (ua.get("require_before") or [])
+                if isinstance(r, dict)]:
+            return ["投稿欄の決まりごとに必須箱（require_before）がありません"
+                    "／★相手が名前を変えると、0箱削除でも通ります★"]
         return ng                          # 箱ごと落とせる
     why = str(ua.get("_no_user_area_why") or "").strip()
     if not why:

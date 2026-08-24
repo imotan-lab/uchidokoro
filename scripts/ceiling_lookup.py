@@ -256,6 +256,16 @@ def normalize_counted(text):
 #   ★P-WORLDのAI要約欄は行で切らない★＝「最近の投稿をもとにAIがまとめた内容を
 #     表示しています」の断り書きより**前**に要約本文が置かれている恐れがあるため、
 #     行単位で切ると安全側にならない。P-WORLDの扱いは台帳へ回す。
+def _user_area_words():
+    """★投稿欄を指す語は user_area が正本★（2026-08-24・Codexの14回目）
+
+    ★別々に持っていたので、片方だけが知っている語ができた★＝
+      「掲示板」の中の表が、取ってくる関門を素通りした。
+    """
+    import user_area as _ua_words
+    return _ua_words.USER_AREA_WORDS
+
+
 _USER_AREA = ("掲示板", "口コミ", "みんなの感想", "コメント一覧",
               "ユーザー口コミ・評価詳細", "導入前評価", "COMMENTS & REVIEW",
               "ユーザー評価", "コメント&評価", "コメントや評価を投稿")
@@ -270,7 +280,7 @@ def cut_user_area(text: str) -> str:
     #   そこで切って**本文ごと落ちる**。
     #   いちばん後ろに現れた見出しを1つだけ選ぶ。
     last = -1
-    for w in _USER_AREA:
+    for w in _user_area_words():
         for m in re.finditer(rf"(?m)^\s*{re.escape(w)}\s*$", text):
             last = max(last, m.start())
     return text if last < 0 else text[:last]

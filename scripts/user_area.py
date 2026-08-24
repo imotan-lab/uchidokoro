@@ -348,40 +348,106 @@ class _Cutter(_HTMLParser):
         self._start, self._tag = None, ""
 
 
-# ★投稿欄がありそうな手がかり★（★どれを残すかは決めない。止めるだけ★）
-#   （2026-08-24・Codexの13回目）
-#   ★例外リストではない★＝ここに挙げるのは「読むのをやめる合図」であって、
-#   「この箱を落として残りを読む」という判断ではない。
-#   判断（どこが投稿欄か）は2AIがして、名鑑に決まりごとを登録する。
-_USER_AREA_HINTS = (
-    "<textarea", 'type="comment"', "commentform", "comment-form",
-    "comments-area", "commentlist", "review-form", "reviewform",
+# ★★投稿欄を指す語の正本★★（2026-08-24・Codexの14回目）
+#   ★行切り（ceiling_lookup）と、残っていないかの見張りが、
+#     別々の語を持っていた★ので、
+#   「掲示板」の中の表が**取ってくる関門を素通り**した
+#   （文章は後から切れるが、天井・スペック・AT・CZは**表を直接読む**）。
+#   ★語は1か所★＝どちらもここを読む。
+#   ★★意味を読まなくても判る語だけ★★（CLAUDE.mdの原則）
+#   ★「レビュー」「感想」の単体は入れない★＝編集部の「実戦レビュー」でも
+#   止まってしまう（＝正しい本番を止める型）。
+#   入れ物の名前（class="reviews" 等）は別に見ているので、
+#   本物の投稿欄はそちらでも捕まる。
+USER_AREA_WORDS = (
+    "掲示板", "口コミ", "クチコミ", "みんなの感想", "みんなの評価",
+    "みんなのレビュー", "ユーザーレビュー", "ユーザー評価",
+    "コメント一覧", "コメント", "返信一覧", "書き込み", "投稿する",
+    "ユーザー口コミ・評価詳細", "導入前評価", "COMMENTS & REVIEW",
+    "コメント&評価", "コメントや評価を投稿", "User Reviews",
 )
-_USER_AREA_WORDS = ("コメント", "口コミ", "レビュー", "みんなの評価",
-                    "書き込み", "投稿する")
+
+# ★入れ物の名前に出る手がかり★（id / class）
+#   ★語として一致させる★（部分一致にすると moreView が review に当たる）
+_UA_ATTR_HINTS = ("comment", "comments", "review", "reviews", "bbs",
+                  "kuchikomi", "respond", "thread", "reply", "userpost")
 
 
 def looks_like_user_area(html: str) -> list:
-    """★投稿欄がありそうか★（決まりごとが無いページ向けの見張り）
+    """★掃除のあとに投稿欄が残っていないか★（★止めるだけ★）
+
+    ★★2026-08-24・Codexの14回目★★
+      ★直す前は「決まりごとが無いサイト」だけを見ていた★ので、
+      すでに決まりごとがあるサイトが**別の箱で投稿欄を足した**場合は
+      素通りした（古い箱があるので必須箱の検査も通る）。
+      → ★掃除のあとの中身を、全サイトで見る★。
+      決まりごとが正しければ、投稿欄は既に消えているので何も出ない。
+
+    ★字面ではなく、組み立てたHTMLの要素で見る★
+      引用符や空白の違い、見出しの入れ子（h2 の中の span）で見逃さない。
 
     ★これは「落とす場所を決める」処理ではない★＝
       見つかったら**そのページを出典に使わない**（fail-closed）。
       どこが投稿欄かは2AIが判断し、名鑑に決まりごとを登録する。
     """
-    h = str(html or "")
-    got = [x for x in _USER_AREA_HINTS if x in h.lower()]
-    low = h.lower()
-    if "<form" in low:
-        for w in _USER_AREA_WORDS:
-            if w in h:
-                got.append(w)
-                break
-    for w in _USER_AREA_WORDS:
-        # 見出しの中に出てくるもの（本文中の言及は拾わない）
-        import re as _re2
-        if _re2.search(r"<h[1-6][^>]*>[^<]{0,20}" + _re2.escape(w), h):
-            got.append("見出し: " + w)
-    return sorted(set(got))
+    import html as _htmlmod
+    import html.parser as _hp
+
+    found = []
+
+    class _P(_hp.HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self._head = None          # いま見出しの中か
+            self._buf = []
+
+        def handle_starttag(self, tag, attrs):
+            # ★画面に出ないものは見ない★（2026-08-24・実ページで判明）
+            #   読み込みの部品（script）の名前で止まっていた。
+            #   読者に出る本文ではないので対象外。
+            if tag in ("script", "style", "link", "meta", "noscript"):
+                return
+            d = {k.lower(): (v or "") for k, v in attrs}
+            if tag == "textarea":
+                found.append("入力欄: textarea")
+            if "contenteditable" in d:
+                found.append("入力欄: contenteditable")
+            if str(d.get("type", "")).strip().lower() == "comment":
+                found.append("入力欄: type=comment")
+            # ★★名前は語の区切りで見る★★（2026-08-24・実ページで誤検知した）
+            #   ★部分一致にしていた★ので、なな徹の `el_moreView` の中の
+            #   「moreview」に「review」が含まれて**正常なページが止まった**。
+            #   ＝守りを厳しくして本番を止める型。
+            import re as _re3
+            names = str(d.get("id", "")) + " " + str(d.get("class", ""))
+            # 記号・大文字の切れ目で語に割る（moreView → more / view）
+            toks = {x.lower() for x in _re3.findall(
+                r"[A-Z]+(?![a-z])|[A-Z][a-z]+|[a-z]+|[0-9]+", names)}
+            for w in _UA_ATTR_HINTS:
+                if w in toks or w.replace("-", "") in toks:
+                    found.append(f"箱の名前: {w}")
+                    break
+            if tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
+                self._head, self._buf = tag, []
+
+        def handle_endtag(self, tag):
+            if self._head and tag == self._head:
+                txt = " ".join("".join(self._buf).split())
+                for w in USER_AREA_WORDS:
+                    if w.lower() in txt.lower():
+                        found.append(f"見出し: {w}")
+                        break
+                self._head, self._buf = None, []
+
+        def handle_data(self, data):
+            if self._head:
+                self._buf.append(data)
+
+    try:
+        _P().feed(_htmlmod.unescape(str(html or "")))
+    except Exception:                                        # noqa: BLE001
+        return ["組み立てられないHTML"]                      # ★使わない側に倒す★
+    return sorted(set(found))
 
 def clean_html(html: str, url: str = "", conf: dict | None = None) -> str:
     """★投稿欄・AI欄を、HTMLの段階で箱ごと落とす★
@@ -682,6 +748,56 @@ def selftest() -> int:
     t("★★実物：44件なのに一覧の箱を消したら止まる★★"
       "／相手が箱の名前を変えた形をここで捕まえる",
       _real["many_renamed"][0] == "NG")
+
+    # ★★掃除のあとに投稿欄が残っていないか★★（2026-08-24・Codexの14回目）
+    #   ★下の形は実ページで踏んだもの★＝
+    #     ・掲示板の中の表（文章は後で切れるが、表は読まれる）
+    #     ・決まりごとがあるサイトが**別の箱で**投稿欄を足した
+    #     ・編集部の「実戦レビュー」で止まる（＝正しい本番を止める型）
+    #     ・el_moreView の中の review で止まる（部分一致の誤検知）
+    for _n, _h, _want in (
+            ("掲示板の中の表",
+             "<html><body><h2>掲示板</h2>"
+             "<table><tr><td>555G</td></tr></table></body></html>", True),
+            ("見出しの入れ子",
+             "<html><body><h2><span>口コミ</span></h2></body></html>", True),
+            ("決まりごとがあるサイトの第二の投稿欄",
+             '<html><body><div id="bbs">旧</div>'
+             '<div class="comment-list">新</div></body></html>', True),
+            ("入力欄", "<html><body><textarea></textarea></body></html>", True),
+            ("検索フォームと編集部の実戦レビュー",
+             '<html><body><form><input name="q"></form>'
+             "<h2>実戦レビュー</h2></body></html>", False),
+            ("moreView は review ではない",
+             '<html><body><div class="el_moreViewBox">続きを見る</div>'
+             "</body></html>", False),
+            ("読み込みの部品は見ない",
+             '<html><body><script id="comment-js"></script><p>本文</p>'
+             "</body></html>", False),
+            ("普通の機種ページ",
+             "<html><body><h1>L試験機</h1>"
+             "<table><tr><td>999G</td></tr></table></body></html>", False)):
+        t("★残存検査：" + _n + "★ → "
+          + ("止める" if _want else "通す"),
+          bool(looks_like_user_area(_h)) is _want)
+
+    # ★語の正本は1つ★（行切りと残存検査が別の語を持つと片方だけ見逃す）
+    # ★★行切りが「新しい語」でも切れるか★★（2026-08-24・Codexの14回目）
+    #   ★語を1か所にしたのに、行切りが古い一覧を読んだままだと★
+    #   「クチコミ」のような**あとから足した語では切れない**。
+    #   ★本体の cut_user_area を呼んで確かめる★（名簿を見比べるだけでは足りない）
+    import ceiling_lookup as _cl_cut
+    _txt_cut = "天井は999Gです。" + chr(10) + "クチコミ" + chr(10) + "読者A 555G"
+    t("★★行切りは、あとから足した語でも切れる★★"
+      "／★古い一覧を読んだままだと切れない★",
+      "999" in _cl_cut.cut_user_area(_txt_cut)
+      and "555" not in _cl_cut.cut_user_area(_txt_cut))
+
+
+    import ceiling_lookup as _cl_w
+    t("★★投稿欄の語は1か所★★（行切りと残存検査が同じものを読む）",
+      tuple(_cl_w._user_area_words()) == tuple(USER_AREA_WORDS))
+
 
     ng = sum(1 for _, o in results if not o)
     print()
