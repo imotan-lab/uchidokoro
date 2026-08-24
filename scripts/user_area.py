@@ -375,14 +375,20 @@ USER_AREA_WORDS = USER_AREA_STRONG + USER_AREA_WEAK
 
 # ★入れ物の名前に出る手がかり★（id / class）
 #   ★語として一致させる★（部分一致にすると moreView が review に当たる）
-#   ★弱い言葉は入れない★（2026-08-24・実ページで誤検知した）
-#     related-posts（関連記事）や rating-btn（評価ボタン）で
-#     ★正常なページが止まった★。
-#     区画の名前が弱くても、★中の見出しの規則で捕まる★
-#     （Codexが挙げた rating-list ＋ 見出し「レビュー」もそれで止まる）。
-_UA_ATTR_HINTS = ("comment", "comments", "review", "reviews", "bbs",
-                  "kuchikomi", "respond", "thread", "reply", "userpost",
-                  "testimonial", "testimonials")
+#   ★★入れ物の名前も二段階★★（2026-08-24・Codexの16回目）
+#     ★見出しだけ二段階にして、名前は一段階のままだった★＝
+#       ・`class="review"` + 見出し「実戦レビュー」で**正しい本番が止まる**
+#       ・見出しの無い `class="rating-list"` + 表は**素通り**
+#     どちらも実在の形。
+#   ★強い名前★＝その名前が付いていれば投稿欄と見なしてよい
+_UA_ATTR_STRONG = ("bbs", "kuchikomi", "respond", "userpost", "userposts",
+                   "commentlist", "commentform", "commentsarea",
+                   "testimonial", "testimonials")
+#   ★弱い名前★＝中に**投稿らしい作り**があるときだけ見なす
+#     （表・入力欄・書き込みの様式）。関連記事の一覧は通る。
+_UA_ATTR_WEAK = ("comment", "comments", "review", "reviews", "rating",
+                 "ratings", "posts", "voice", "voices", "reply", "thread")
+_UA_ATTR_HINTS = _UA_ATTR_STRONG + _UA_ATTR_WEAK
 
 
 def looks_like_user_area(html: str) -> list:
@@ -412,6 +418,8 @@ def looks_like_user_area(html: str) -> list:
             super().__init__(convert_charrefs=True)
             self._head = None          # いま見出しの中か
             self._buf = []
+            self._depth = 0
+            self._weak = []            # 弱い名前の箱（中身待ち）
 
         def handle_starttag(self, tag, attrs):
             # ★画面に出ないものは見ない★（2026-08-24・実ページで判明）
@@ -435,14 +443,30 @@ def looks_like_user_area(html: str) -> list:
             # 記号・大文字の切れ目で語に割る（moreView → more / view）
             toks = {x.lower() for x in _re3.findall(
                 r"[A-Z]+(?![a-z])|[A-Z][a-z]+|[a-z]+|[0-9]+", names)}
-            for w in _UA_ATTR_HINTS:
-                if w in toks or w.replace("-", "") in toks:
+            joined = "".join(sorted(toks))
+            for w in _UA_ATTR_STRONG:
+                if w in toks or w in joined:
                     found.append(f"箱の名前: {w}")
                     break
+            else:
+                for w in _UA_ATTR_WEAK:
+                    if w in toks:
+                        # ★弱い名前は、中に投稿らしい作りがある時だけ★
+                        self._weak.append([w, self._depth, False])
+                        break
+            self._depth += 1
+            if tag in ("table", "textarea", "form"):
+                for it in self._weak:
+                    it[2] = True           # 中に投稿らしい作りがあった
             if tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
                 self._head, self._buf = tag, []
 
         def handle_endtag(self, tag):
+            self._depth = max(0, self._depth - 1)
+            while self._weak and self._weak[-1][1] >= self._depth:
+                w, _d, hit = self._weak.pop()
+                if hit:
+                    found.append(f"箱の名前: {w}（中に投稿らしい作り）")
             if self._head and tag == self._head:
                 txt = " ".join("".join(self._buf).split())
                 low = txt.lower()
@@ -796,6 +820,14 @@ def selftest() -> int:
             ("moreView は review ではない",
              '<html><body><div class="el_moreViewBox">続きを見る</div>'
              "</body></html>", False),
+            # ★★中に表があっても、moreView は review ではない★★
+            #   ★部分一致に戻すと、この形で正常なページが止まる★
+            #   （弱い名前は「中に投稿らしい作り」があると止めるので、
+            #     表を入れた形でないと違いが出ない）
+            ("moreView の中に表があっても止めない",
+             '<html><body><div class="el_moreViewBox">'
+             "<table><tr><td>999G</td></tr></table></div></body></html>",
+             False),
             ("読み込みの部品は見ない",
              '<html><body><script id="comment-js"></script><p>本文</p>'
              "</body></html>", False),
@@ -819,7 +851,17 @@ def selftest() -> int:
              "</div></body></html>", False),
             ("評価ボタンは通す（rating-btn）",
              '<html><body><a class="rating-btn">評価する</a></body></html>',
-             False)):
+             False),
+            # ★★その形だけが効く試験★★（2026-08-24）
+            #   ★隣の規則に助けられない形にする★＝
+            #   下2つは「見出しだけ」「弱い名前＋表だけ」で、
+            #   片方の規則を消すと必ず落ちる。
+            ("見出しだけ（弱い語がその語そのもの）",
+             "<html><body><h2>レビュー</h2></body></html>", True),
+            ("弱い名前＋表だけ（見出しなし）",
+             '<html><body><section class="rating-list">'
+             "<table><tr><th>天井</th><td>555G</td></tr></table>"
+             "</section></body></html>", True)):
         t("★残存検査：" + _n + "★ → "
           + ("止める" if _want else "通す"),
           bool(looks_like_user_area(_h)) is _want)

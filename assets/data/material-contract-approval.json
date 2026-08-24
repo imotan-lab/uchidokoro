@@ -22,14 +22,14 @@
   "scripts/html_tables.py": "426a34333ab98c7c33b197acf2096f3575a0c27381d5557abbaa16d700a1c7e6",
   "scripts/lineage_check.py": "2bbb9cfdad4cdf6edc22f1a3f4cec20f804ccceb66453a88d83d8572d86d6e98",
   "scripts/machine_sources.py": "41b3bdfdfdb4faa85c9fe0bae6630a50bcd5db6ac860699c3c5aa3ffb8c07003",
-  "scripts/maker_identity_cache.py": "d67289d158f8a30ecf6fd8cd4bae161fda14eb8c3da2bdb74f4e7a5cb52798be",
+  "scripts/maker_identity_cache.py": "bde5e29a5444b2d0dc70b9b0683199c28d9b2e104be5452bfea8a02df39a15c2",
   "scripts/model_code_lookup.py": "311e968d3ed3378e4e72470eb3dc777084331d7dfd257f36a74e30925de87093",
   "scripts/new_machine_watch.py": "72319ceacf38d0a8b71bf5ec442664187224a8a8288376e49425027198acbe15",
   "scripts/page_probe.py": "25d0411b1552d018ab1e528a58be1ce1d53a4e47de68f84fc2f951ccaa1f182d",
   "scripts/slug_binding.py": "17c235c10cd7fed94d4c774bbe7b88c87349eff214bedaa22182d3fe79f26af6",
   "scripts/source_lineage.py": "706cbbd437ba491995e233e9758a73f7672e27a47021cfc1274f0c2e9d9f79ed",
   "scripts/spec_lookup.py": "89aa58008b1e8935d7ab04bb619c0175a2c72b60a2d62da081c8b4ec21fb78dd",
-  "scripts/user_area.py": "024c0d4c8ce5fecc071887a5812df8d7ea0b263fdd6a54dbdfa10feb8683b49a"
+  "scripts/user_area.py": "3b32f43cef0f1db71a4ae2eab7c4c175e98bdba1696e79128e597477385cda49"
  },
  "imports": {
   "scripts/add_machine_run.py": [

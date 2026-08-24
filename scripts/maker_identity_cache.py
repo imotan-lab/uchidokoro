@@ -398,7 +398,7 @@ def url_key(url: str) -> str:
       ★別のページへの転送は今までどおり止まる★＝道筋が違えば鍵も違う。
     """
     import urllib.parse as _up
-    t = str(url or "").rstrip("/")
+    t = str(url or "")
     try:
         sp = _up.urlsplit(t)
         host = (sp.hostname or "").lower()
@@ -410,8 +410,12 @@ def url_key(url: str) -> str:
         #   もう一方の正規化器（machine_sources.url_key）と扱いをそろえる。
         _default = {"http": 80, "https": 443}.get((sp.scheme or "").lower())
         port = f":{sp.port}" if sp.port and sp.port != _default else ""
-        return _up.urlunsplit((sp.scheme, host + port, sp.path, sp.query,
-                               ""))
+        # ★道筋の末尾だけを落とす★（2026-08-24・Codexの16回目）
+        #   ★URL全体の末尾で落としていた★ので、
+        #   `/x/?a=1` と `/x?a=1` が別ページ扱いになり、
+        #   正常な末尾スラッシュの転送でも止まった。
+        path = sp.path.rstrip("/")
+        return _up.urlunsplit((sp.scheme, host + port, path, sp.query, ""))
     except Exception:                                        # noqa: BLE001
         return t
 
@@ -1501,7 +1505,12 @@ def selftest() -> int:
             ("https://nana-press.com/x", "https://nana-press.com:443/x", True),
             ("https://nana-press.com/x/", "https://nana-press.com/x", True),
             ("https://nana-press.com/x", "https://nana-press.com/y", False),
-            ("https://nana-press.com/x", "https://chonborista.com/x", False)):
+            ("https://nana-press.com/x", "https://chonborista.com/x", False),
+            # ★問い合わせが付いていても末尾はそろえる★（Codexの16回目）
+            ("https://nana-press.com/x/?a=1", "https://nana-press.com/x?a=1",
+             True),
+            ("https://nana-press.com/x?a=1", "https://nana-press.com/x?a=2",
+             False)):
         t(f"★URLのそろえ方：{_a[-12:]} と {_b[-12:]} は"
           + ("同じ" if _same else "別"),
           (url_key(_a) == url_key(_b)) is _same)

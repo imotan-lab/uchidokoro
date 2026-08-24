@@ -83,6 +83,27 @@ FIXTURE_DIRS = {"tests"}
 #   ★同じ規則を2か所に書かない★（2026-08-21）＝
 #   自動修理が「他サイト名を消した」と言うとき、閉じてよいかを判定する検査は
 #   監査とまったく同じ名簿で見ないといけない。
+def strip_allowed_basis(t: str) -> str:
+    """★根拠の名乗りだけを外す★（他サイト名の検査の前に通す）
+
+    ★★2026-08-24・Codexの16回目★★
+      運営者が決めた「DMM単独確認」の名乗りは、
+      **読者に根拠を正しく伝えるために意図して書いている**もの。
+      ここを他サイト名として弾くと、
+      ★その例外を使った記事は必ず監査で巻き戻され、一度も公開できない★
+      （実際そうなっていた。記事づくりと監査を別々に試験していて見えなかった）。
+    ★正本は build_new_article 側の文言★＝そちらを変えたらここも自動で合う。
+    ★外から呼べる形にしてある★＝記事づくりの試験がここを通して確かめる。
+    """
+    import build_new_article as _ba_names
+    out = str(t or "")
+    for _ok in list(_ba_names.BASIS_SUFFIX.values()) + [
+            _ba_names.SINGLE_SOURCE_NOTE]:
+        if _ok:
+            out = out.replace(_ok, "")
+    return out
+
+
 COMPETITOR_NAMES = (
     # 競合解析サイト
     "スロパチクエスト", "ちょんぼりすた", "ナナプレス", "DMM", "ぱちタウン", "スロラボ",
@@ -107,6 +128,12 @@ COMPETITOR_NAMES = (
 #   紛らわしい名前は、更新タスクの STEP 1-Q（2AIが記事を読む）が見る。
 #   「からくりサーカス」も同じ理由で入れない（★機種名★）。
 _NOT_COMPETITOR_NAMES_WHY = "一撃・からくりサーカス＝普通の語／機種名なので入れない"
+# ★★曖昧な表示名と、一意な別表記は分ける★★（2026-08-24・Codexの16回目）
+#   「一撃」を外す判断は正しいが、★一意な別表記まで外す理由はない★。
+#   ドメインや、ほかの意味を持たない呼び方は入れる。
+_COMPETITOR_ALIASES = ("1geki.jp", "1geki", "なな徹", "やんちゃプレス",
+                       "ハズセ", "HAZUSE", "slopachi-quest",
+                       "chonborista", "nana-press", "yancha-press")
 
 
 def is_build_output(path: Path) -> bool:
@@ -687,11 +714,18 @@ def check_17_external_site_names(machines: list) -> list[str]:
     import re as _re
     ngs = []
     # ★名簿は下の COMPETITOR_NAMES が正本★（recheck の competitor_names_gone も同じ物を読む）
-    sites = list(COMPETITOR_NAMES)
+    sites = list(COMPETITOR_NAMES) + list(_COMPETITOR_ALIASES)
     # 業界用語と区別：「DMM」は「DMM ぱちタウン」サイト名のみ検出（他用途は無いと仮定）
     detail_dir = BASE / "assets" / "data" / "machine-details"
+    # ★★根拠の名乗りだけは別扱い★★（2026-08-24・Codexの16回目）
+    #   ★運営者が決めた「DMM単独確認」の名乗り★は、
+    #   **読者に根拠を正しく伝えるために意図して書いている**もの。
+    #   ここを他サイト名として弾くと、
+    #   ★その例外を使った記事は必ず監査で巻き戻され、一度も公開できない★
+    #   （実際そうなっていた。記事づくりと監査を別々に試験していて見えなかった）。
+    #   ★正本は build_new_article 側の文言★＝そちらを変えたらここも自動で合う。
     for jf in sorted(detail_dir.glob("*.json")):
-        text = load_text(jf)
+        text = strip_allowed_basis(load_text(jf))
         for s in sites:
             c = text.count(s)
             if c:

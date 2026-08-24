@@ -1476,6 +1476,41 @@ def selftest() -> int:
       slug_from_url("https://www.kitadenshi.co.jp/slot/myjuggler6/") == "myjuggler6")
     t("★★P-WORLDの身元の結び付け方を受け付ける★★",
       "PWORLD_MACHINE_PAGE" in IDENTITY_BINDINGS)
+    # ★★DMM単独の名乗りが、監査まで通るか★★（2026-08-24・Codexの16回目）
+    #   ★記事づくりと監査を別々に試験していたので見えなかった★＝
+    #   記事は「（DMMぱちタウン単独確認）」と書くのに、
+    #   監査17は「DMM」「ぱちタウン」を無条件でNGにしていた。
+    #   ＝★運営者が決めた例外を使った記事は、一度も公開できなかった★。
+    _d_ss_txt = json.dumps(_d_ss, ensure_ascii=False)
+    import audit_site as _as16
+    # ★★監査17そのものを回す★★（呼び出し側の分岐まで通す）
+    #   ★処理を呼ぶだけでは、監査が実際にそれを通しているか分からない★
+    #   （前の版はそうなっていて、壊し方が捕まえられなかった）。
+    #   本物の書類には触らず、一時の置き場を監査に見せる。
+    import pathlib as _pl16
+    import shutil as _sh16
+    import tempfile as _tf16
+    _d16 = _tf16.mkdtemp(prefix="audit17_")
+    _md16 = _pl16.Path(_d16) / "assets" / "data" / "machine-details"
+    _md16.mkdir(parents=True, exist_ok=True)
+    (_md16 / "zzz_ss.json").write_text(_d_ss_txt, encoding="utf-8")
+    _base16 = _as16.BASE
+    try:
+        _as16.BASE = _pl16.Path(_d16)
+        _ng16 = _as16.check_17_external_site_names([])
+        t("★★DMM単独の名乗りは、監査17を通る★★"
+          "／★通らないと、その例外を使った記事は永久に公開できない★",
+          not _ng16)
+        # ★対照★ 名乗り以外で他サイト名が出たら、ちゃんと止まる
+        (_md16 / "zzz_bad.json").write_text(
+            '{"sections": [{"body": ["スロパチクエストによると"]}]}',
+            encoding="utf-8")
+        t("　（対照）名乗り以外で他サイト名が出たら、ちゃんと止まる",
+          _as16.check_17_external_site_names([]))
+    finally:
+        _as16.BASE = _base16
+        _sh16.rmtree(_d16, ignore_errors=True)
+
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
     if ng:

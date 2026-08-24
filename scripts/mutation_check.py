@@ -412,8 +412,8 @@ MUTATIONS = [
     {
         "why": "名前を部分一致で見る（moreView が review に当たる・実ページで踏んだ）",
         "file": "scripts/user_area.py",
-        "before": "                if w in toks or w.replace(\"-\", \"\") in toks:",
-        "after": "                if w in names.lower():",
+        "before": "                    if w in toks:",
+        "after": "                    if w in names.lower():",
         "run": ["scripts/user_area.py"],
     },
     {
@@ -445,6 +445,27 @@ MUTATIONS = [
                   "sp.port != _default else \"\"",
         "after": "        port = f\":{sp.port}\" if sp.port else \"\"",
         "run": ["scripts/maker_identity_cache.py"],
+    },
+    {
+        "why": "根拠の名乗りも他サイト名として弾く（例外が永久に公開できない・Codex16回目）",
+        "file": "scripts/audit_site.py",
+        "before": "        text = strip_allowed_basis(load_text(jf))",
+        "after": "        text = load_text(jf)",
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "弱い名前の箱を、中身を見ずに素通しする（見出し無しの投稿表・Codex16回目）",
+        "file": "scripts/user_area.py",
+        "before": "                        self._weak.append([w, self._depth, False])",
+        "after": "                        pass",
+        "run": ["scripts/user_area.py"],
+    },
+    {
+        "why": "弱い名前でも即止める（実戦レビューで止まる・Codex16回目）",
+        "file": "scripts/user_area.py",
+        "before": "            for w in _UA_ATTR_STRONG:",
+        "after": "            for w in _UA_ATTR_HINTS:",
+        "run": ["scripts/user_area.py"],
     },
     {
         "why": "試験用の偽の機種を掃除しない（2026-08-24・自分で踏んだ）",
