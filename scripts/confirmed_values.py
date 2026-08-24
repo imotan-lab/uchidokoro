@@ -92,6 +92,42 @@ FIELD_TARGETS = {
 # 基本スペック側（spec_lookup.FIELDS の鍵）はそのまま adopted へ入る
 
 
+# ★★確定値が「記事のどの箱」に出るかの正本★★（2026-08-25・Codexの20回目）
+#   ★なぜ1か所に置くか★＝読む側（recheck）が自前の小さな表を持っていたため、
+#   `reset` と `at_net_unmapped` が**どの話題にも結び付かず**、
+#   ★2AIで正しく確定した行まで「根拠がない」と言われていた★（再現済み）。
+#   ＝正しい記事を毎日「直せ」と言い続ける経路。
+#   ★読者に出る項目は、ここに必ず話題を書く★（書き忘れは検査が知らせる）。
+#   ★空文字は「記事に出さない項目」★（型式名など）。
+FIELD_TOPICS = {
+    "ceiling": "ceiling",           # 天井・恩恵
+    "at": "gameplay",               # ゲーム性
+    "cz": "cz",                     # 確認できたCZ
+    "gameplay": "gameplay",         # ゲーム性
+    "reset": "reset",               # 朝一・リセット情報
+    "at_net_unmapped": "gameplay",  # ゲーム性（AT名との対応は未確認）
+    "checker_ceiling": "ceiling",   # 早見表に使う天井（本文にも出る）
+    "ceilings_complete": "ceiling",  # 「これで全部か」の断り書き
+    "payout_range": "spec",         # 基本スペック（機械割）
+    "games_per_50": "spec",         # 基本スペック（50枚あたり）
+    "model_code": "",               # ★読者には出さない★
+}
+
+
+def topic_of(field: str) -> str:
+    """その項目が記事のどの話題に出るか（空＝読者に出さない）。
+
+    ★知らない項目は例外にする★＝黙って spec に落とすと、
+    足した項目が**どの話題でも根拠にならない**まま気づけない。
+    """
+    base = base_field(field)
+    if base not in FIELD_TOPICS:
+        raise ConfirmedError(
+            f"確定値の項目 {base!r} が、記事のどの話題に出るか決まっていません"
+            "（scripts/confirmed_values.py の FIELD_TOPICS に足してください）")
+    return FIELD_TOPICS[base]
+
+
 # ★2AIだけが答えられる項目★（2026-08-12・運営者決定「人が直す項目をなくす」）
 #   機械の側で決めようとすると場合分けが増えるだけなので、
 #   「機械は質問を出す・2AIが答えて記録する」形にする。
@@ -664,7 +700,15 @@ def token_in_quote(token: str, quote: str) -> bool:
     for m in _re.finditer(_re.escape(t), q):
         before = q[m.start() - 1] if m.start() > 0 else ""
         after = q[m.end()] if m.end() < len(q) else ""
-        if before in "0123456789." or after in "0123456789.":
+        # ★★空文字は「どんな文字列にも含まれる」★★（2026-08-25・自分で踏んだ）
+        #   ★直す前は `before in "0123456789."` と書いていた★ので、
+        #   数字が**文頭または文末**にあると before/after が空文字になり、
+        #   Python では `"" in "0123..."` が真になって**必ず弾いていた**。
+        #   ＝引用に「600G」「天井は600」と書いてあっても照合できない
+        #     ＝★2AIが正しく確定した値を記録できない★（正しい答えが入らない経路）。
+        #   実測＝'600G' も '天井は600' も False だった。
+        if (before and before in "0123456789.") \
+                or (after and after in "0123456789."):
             continue                       # ★別の数の一部★
         return True
     return False
@@ -2052,6 +2096,20 @@ def selftest() -> int:
                                    "gains": ["a", ""]})
       and _passes("gameplay", {"trigger": "x", "leads_to": "y",
                                "gains": ["上乗せ"]}))
+
+    # ★★数字が文頭・文末にあっても照合できる★★（2026-08-25・自分で踏んだ）
+    #   ★空文字はどんな文字列にも含まれる★ので、
+    #   `before in "0123456789."` と書くと**文頭・文末で必ず弾いていた**。
+    #   ＝引用に「600G」「天井は600」と書いてあっても記録できない
+    #     ＝2AIが正しく確定した値が入らない（正しい答えが届かない経路）。
+    for _q20 in ("600G", "600", "天井は600", "A 600 B", "天井は600です"):
+        t("　引用「" + _q20 + "」に 600 が書いてあると分かる",
+          token_in_quote("600", _q20))
+    # ★対照★＝別の数の一部は今までどおり弾く
+    for _t20, _q20 in (("3.1", "純増は13.1枚/G"), ("100", "天井は1000G"),
+                       ("3.1", "3.10枚"), ("600", "1600G")):
+        t("　（対照）" + _t20 + " は「" + _q20 + "」の中の別の数と混同しない",
+          not token_in_quote(_t20, _q20))
 
     ng = sum(1 for _, o in results if not o)
     print()

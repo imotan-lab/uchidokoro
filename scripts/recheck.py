@@ -758,14 +758,16 @@ def check_decision_vs_body(args: dict) -> dict:
         import page_decision as _pd_rc
         for _f, _rec in (_cv_rc.for_slug(slug) or {}).items():
             _b = _cv_rc.base_field(_f)
-            # ★話題は判定書と同じ決め方で引く★（同じ規則を2か所に書かない）
+            # ★★話題は正本から引く★★（2026-08-25・Codexの20回目）
+            #   ★直す前はここに小さな表を自前で持っていた★ので、
+            #   `reset` と `at_net_unmapped` がどの話題にも結び付かず、
+            #   **2AIで正しく確定した行まで「根拠がない」**と言われていた。
             try:
-                _tp = _pd_rc.topics_from_claims([{
-                    "ceiling": "ceiling:x:1", "at": "at:x", "cz": "cz:x",
-                    "gameplay": "at:x"}.get(_b, "model_code")])[0]
-                _tp = _tp[0] if _tp else "spec"
+                _tp = _cv_rc.topic_of(_b)
             except Exception:                                # noqa: BLE001
-                _tp = "spec"
+                continue          # 話題が決まっていない項目は根拠にしない
+            if not _tp:
+                continue          # 読者に出さない項目（型式名など）
             try:
                 _tk = [str(x) for x in _cv_rc.check_shape(
                     _b, (_rec or {}).get("value")) if str(x).strip()]
@@ -1850,6 +1852,69 @@ def _selftest():
             globals()["_load_detail"] = _det([_PENDING_TEXT])
             t("　断り書きだけの箱は、いままでどおり正しい",
               _dv({"slug": "zzz_t19"})["result"] in (PASS, NOT_APPLICABLE))
+            # ★★表に出る確定値は、どれも根拠として効く★★
+            #   （2026-08-25・Codexの20回目。★reset と at_net_unmapped が
+            #     どの話題にも結び付かず、正しい記事を毎日「直せ」と
+            #     言っていた★＝再現してから直した）
+            def _rec20(v):
+                _q = " ".join(str(x) for x in
+                              (v.values() if isinstance(v, dict) else [v]))
+                return {"value": v,
+                        "sources": [{"url": "https://chonborista.com/slot/x",
+                                     "quote": _q},
+                                    {"url": "https://nana-press.com/kaiseki/x",
+                                     "quote": _q}],
+                        "lineages": ["vote:chonborista", "vote:nana-press"],
+                        "agreed_by": ["claude", "codex"],
+                        "why": "2AIで突き合わせました",
+                        "decided_at": "2026-08-25", "official_url": ""}
+
+            json.dump({"schema_version": _cv19.SCHEMA, "machines": {
+                "zzz_t20": {
+                    "reset": _rec20({"kind": "CEILING_SHORTENED",
+                                     "games": 600}),
+                    "at_net_unmapped": _rec20({"values": ["3.1", "7.4"],
+                                               "mapping": "UNCONFIRMED"})}}},
+                open(_cv19.STORE, "w", encoding="utf-8"), ensure_ascii=False)
+            globals()["_machine"] = lambda sl: {
+                "slug": sl, "name": "試験機",
+                "page_decision": {"pending_topics": ["reset", "gameplay"]}}
+
+            def _det20(title, rows):
+                return lambda sl: ({"sections": [
+                    {"title": title, "body": rows}]}, "", "")
+
+            globals()["_load_detail"] = _det20(
+                "朝一・リセット情報", ["**設定変更後の天井**：600G"])
+            t("★★朝一・リセットの確定値も根拠として効く★★"
+              "／★効かないと、正しい記事を毎日『直せ』と言い続ける★",
+              _dv({"slug": "zzz_t20"})["result"] in (PASS, NOT_APPLICABLE))
+            globals()["_load_detail"] = _det20(
+                "朝一・リセット情報", ["**設定変更後の天井**：700G"])
+            t("　値を変えた行は止める（確定値と違う数）",
+              _dv({"slug": "zzz_t20"})["result"] == FAIL)
+            globals()["_load_detail"] = _det20(
+                "ゲーム性",
+                ["**AT純増（AT名との対応は未確認）**：約3.1枚/G、約7.4枚/G"])
+            t("　AT名との対応が未確認の純増も根拠として効く",
+              _dv({"slug": "zzz_t20"})["result"] in (PASS, NOT_APPLICABLE))
+            globals()["_load_detail"] = _det20(
+                "朝一・リセット情報",
+                ["**設定変更後の天井**：600G", "朝一は必ず有利区間が切れます"])
+            t("　同じ箱に根拠の無い行が混ざれば止める",
+              _dv({"slug": "zzz_t20"})["result"] == FAIL)
+            # ★★表に出る項目で、話題が決まっていないものが無いこと★★
+            #   ★これが今回の見落としを機械で捕まえる★
+            _miss20 = []
+            for _f in (list(_cv19.FIELD_TARGETS) + list(_cv19.AI_ONLY_FIELDS)):
+                try:
+                    _cv19.topic_of(_f)
+                except Exception:                            # noqa: BLE001
+                    _miss20.append(_f)
+            t("★★確定値の項目に、記事の話題が決まっていないものが無い★★"
+              "／★足し忘れると、その項目は根拠にならず正しい記事を止める★"
+              + ("" if not _miss20 else "／未定義: " + "／".join(_miss20)),
+              not _miss20)
             # ★話題ちがいの確定値では免除しない★
             globals()["_machine"] = lambda sl: {
                 "slug": sl, "name": "試験機",

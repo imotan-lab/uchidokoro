@@ -486,6 +486,22 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "文頭・文末の数字を照合できなくする"
+               "（2AIが正しく確定した値が記録できない・2026-08-25）",
+        "file": "scripts/confirmed_values.py",
+        "before": "        if (before and before in \"0123456789.\") \\",
+        "after": "        if (before in \"0123456789.\") \\",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "確定値の項目に、記事の話題を決めなくてよくする"
+               "（reset・純増が根拠にならず、正しい記事を止める・Codex20回目）",
+        "file": "scripts/recheck.py",
+        "before": "                _tp = _cv_rc.topic_of(_b)",
+        "after": "                _tp = \"spec\"",
+        "run": ["scripts/recheck.py"],
+    },
+    {
         "why": "見出しだけで投稿欄が残っていると判定する"
                "（レビューが付いた機種が全部、出典に使えなくなる・台帳#473）",
         "file": "scripts/user_area.py",
