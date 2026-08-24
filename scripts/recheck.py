@@ -1869,13 +1869,18 @@ def _selftest():
                         "why": "2AIで突き合わせました",
                         "decided_at": "2026-08-25", "official_url": ""}
 
-            json.dump({"schema_version": _cv19.SCHEMA, "machines": {
-                "zzz_t20": {
-                    "reset": _rec20({"kind": "CEILING_SHORTENED",
-                                     "games": 600}),
-                    "at_net_unmapped": _rec20({"values": ["3.1", "7.4"],
-                                               "mapping": "UNCONFIRMED"})}}},
-                open(_cv19.STORE, "w", encoding="utf-8"), ensure_ascii=False)
+            # ★★前の試験の材料を消さない★★（2026-08-25・自分で踏んだ）
+            #   ★丸ごと書き換えていた★ので、後ろにある
+            #   「別の話題の確定値では免除しない」の材料（zzz_t19 の gameplay）が
+            #   消え、★その守りを壊しても試験が緑★になっていた
+            #   （壊し方の通し確認が push 前に検知）。
+            _cur20 = json.load(open(_cv19.STORE, encoding="utf-8"))
+            _cur20["machines"]["zzz_t20"] = {
+                "reset": _rec20({"kind": "CEILING_SHORTENED", "games": 600}),
+                "at_net_unmapped": _rec20({"values": ["3.1", "7.4"],
+                                           "mapping": "UNCONFIRMED"})}
+            json.dump(_cur20, open(_cv19.STORE, "w", encoding="utf-8"),
+                      ensure_ascii=False)
             globals()["_machine"] = lambda sl: {
                 "slug": sl, "name": "試験機",
                 "page_decision": {"pending_topics": ["reset", "gameplay"]}}
