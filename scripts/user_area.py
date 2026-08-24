@@ -354,23 +354,35 @@ class _Cutter(_HTMLParser):
 #   「掲示板」の中の表が**取ってくる関門を素通り**した
 #   （文章は後から切れるが、天井・スペック・AT・CZは**表を直接読む**）。
 #   ★語は1か所★＝どちらもここを読む。
-#   ★★意味を読まなくても判る語だけ★★（CLAUDE.mdの原則）
-#   ★「レビュー」「感想」の単体は入れない★＝編集部の「実戦レビュー」でも
-#   止まってしまう（＝正しい本番を止める型）。
-#   入れ物の名前（class="reviews" 等）は別に見ているので、
-#   本物の投稿欄はそちらでも捕まる。
-USER_AREA_WORDS = (
+#   ★★二段階にする★★（2026-08-24・Codexの15回目）
+#   ★強い語★＝見出しに**含まれていれば**投稿欄と見なしてよい語。
+#     （「掲示板」「ユーザーレビュー」など、ほかの意味で使われない）
+#   ★弱い語★＝見出しが**その語そのもの**のときだけ見なす。
+#     「レビュー」「コメント」「感想」「評価」は普通の言葉でもあるので、
+#     含むだけで止めると **「実戦レビュー」「編集部コメント」** で
+#     ★正しい本番が止まる★。逆に、見出しがその語そのものなら区画の名前。
+USER_AREA_STRONG = (
     "掲示板", "口コミ", "クチコミ", "みんなの感想", "みんなの評価",
     "みんなのレビュー", "ユーザーレビュー", "ユーザー評価",
-    "コメント一覧", "コメント", "返信一覧", "書き込み", "投稿する",
+    "ユーザーコメント", "コメント一覧", "返信一覧", "書き込み", "投稿する",
     "ユーザー口コミ・評価詳細", "導入前評価", "COMMENTS & REVIEW",
     "コメント&評価", "コメントや評価を投稿", "User Reviews",
 )
+USER_AREA_WEAK = ("レビュー", "コメント", "感想", "評価", "口コミ",
+                  "Reviews", "Comments")
+# ★行切り（行がその語だけ）と、名簿の突き合わせに使う一覧★
+USER_AREA_WORDS = USER_AREA_STRONG + USER_AREA_WEAK
 
 # ★入れ物の名前に出る手がかり★（id / class）
 #   ★語として一致させる★（部分一致にすると moreView が review に当たる）
+#   ★弱い言葉は入れない★（2026-08-24・実ページで誤検知した）
+#     related-posts（関連記事）や rating-btn（評価ボタン）で
+#     ★正常なページが止まった★。
+#     区画の名前が弱くても、★中の見出しの規則で捕まる★
+#     （Codexが挙げた rating-list ＋ 見出し「レビュー」もそれで止まる）。
 _UA_ATTR_HINTS = ("comment", "comments", "review", "reviews", "bbs",
-                  "kuchikomi", "respond", "thread", "reply", "userpost")
+                  "kuchikomi", "respond", "thread", "reply", "userpost",
+                  "testimonial", "testimonials")
 
 
 def looks_like_user_area(html: str) -> list:
@@ -433,10 +445,23 @@ def looks_like_user_area(html: str) -> list:
         def handle_endtag(self, tag):
             if self._head and tag == self._head:
                 txt = " ".join("".join(self._buf).split())
-                for w in USER_AREA_WORDS:
-                    if w.lower() in txt.lower():
-                        found.append(f"見出し: {w}")
+                low = txt.lower()
+                hit = ""
+                for w in USER_AREA_STRONG:
+                    if w.lower() in low:
+                        hit = w
                         break
+                if not hit:
+                    # ★弱い語は「見出しがその語そのもの」のときだけ★
+                    #   （区画の名前として置かれている形）
+                    bare = txt.strip(" 　:：・-—|/［］[]（）()")
+                    for w in USER_AREA_WEAK:
+                        if bare.lower() in (w.lower(), w.lower() + "一覧",
+                                            w.lower() + "欄"):
+                            hit = w
+                            break
+                if hit:
+                    found.append(f"見出し: {hit}")
                 self._head, self._buf = None, []
 
         def handle_data(self, data):
@@ -776,7 +801,25 @@ def selftest() -> int:
              "</body></html>", False),
             ("普通の機種ページ",
              "<html><body><h1>L試験機</h1>"
-             "<table><tr><td>999G</td></tr></table></body></html>", False)):
+             "<table><tr><td>999G</td></tr></table></body></html>", False),
+            # ★★弱い語は「見出しがその語そのもの」のときだけ★★
+            #   （2026-08-24・Codexの15回目）
+            ("名前が弱くても、見出しが「レビュー」なら止める",
+             '<html><body><section class="rating-list"><h2>レビュー</h2>'
+             "<table><tr><td>555G</td></tr></table></section></body></html>",
+             True),
+            ("編集部コメントは通す（普通の言葉）",
+             "<html><body><h2>編集部コメント</h2><p>記事</p></body></html>",
+             False),
+            ("実戦レビューは通す（普通の言葉）",
+             "<html><body><h2>実戦レビュー</h2><p>記事</p></body></html>",
+             False),
+            ("関連記事の入れ物は通す（related-posts）",
+             '<html><body><div class="related-posts"><a href="/x">別の記事</a>'
+             "</div></body></html>", False),
+            ("評価ボタンは通す（rating-btn）",
+             '<html><body><a class="rating-btn">評価する</a></body></html>',
+             False)):
         t("★残存検査：" + _n + "★ → "
           + ("止める" if _want else "通す"),
           bool(looks_like_user_area(_h)) is _want)

@@ -406,7 +406,10 @@ def url_key(url: str) -> str:
             host = host[4:]
         if not host:
             return t
-        port = f":{sp.port}" if sp.port else ""
+        # ★既定のポートは書いても書かなくても同じ★（2026-08-24・Codexの15回目）
+        #   もう一方の正規化器（machine_sources.url_key）と扱いをそろえる。
+        _default = {"http": 80, "https": 443}.get((sp.scheme or "").lower())
+        port = f":{sp.port}" if sp.port and sp.port != _default else ""
         return _up.urlunsplit((sp.scheme, host + port, sp.path, sp.query,
                                ""))
     except Exception:                                        # noqa: BLE001
@@ -1489,6 +1492,20 @@ def selftest() -> int:
     #   ★直す前★＝ここより手前で数えていたので、あとに続く11件が
     #   ❌でも「84/84 合格」終了コード0 になっていた。
     #   ★実証★＝台帳#454の直しをわざと壊すと❌が6件出るのに緑のまま通った。
+    # ★★正常な転送で止めない★★（2026-08-24・Codexの14〜15回目）
+    #   ★www の有無だけ／既定ポートの有無だけで「別ページへ飛ばされた」と
+    #     見なして、新台タスクが止まっていた★
+    for _a, _b, _same in (
+            ("https://nana-press.com/kaiseki/machine/1/",
+             "https://www.nana-press.com/kaiseki/machine/1/", True),
+            ("https://nana-press.com/x", "https://nana-press.com:443/x", True),
+            ("https://nana-press.com/x/", "https://nana-press.com/x", True),
+            ("https://nana-press.com/x", "https://nana-press.com/y", False),
+            ("https://nana-press.com/x", "https://chonborista.com/x", False)):
+        t(f"★URLのそろえ方：{_a[-12:]} と {_b[-12:]} は"
+          + ("同じ" if _same else "別"),
+          (url_key(_a) == url_key(_b)) is _same)
+
     ng = sum(1 for _, o in results if not o)
     print("%d/%d 合格" % (len(results) - ng, len(results)))
     return 1 if ng else 0

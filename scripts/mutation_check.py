@@ -425,6 +425,28 @@ MUTATIONS = [
         "run": ["scripts/audit_site.py"],
     },
     {
+        "why": "弱い語も見出しに含むだけで止める（編集部コメントで止まる・Codex15回目）",
+        "file": "scripts/user_area.py",
+        "before": "                        if bare.lower() in (w.lower(), w.lower() + \"一覧\",",
+        "after": "                        if w.lower() in low or bare.lower() in (w.lower(),",
+        "run": ["scripts/user_area.py"],
+    },
+    {
+        "why": "弱い語を見出しでまったく見ない（名前が弱い第二投稿欄が通る・Codex15回目）",
+        "file": "scripts/user_area.py",
+        "before": "                    for w in USER_AREA_WEAK:",
+        "after": "                    for w in ():",
+        "run": ["scripts/user_area.py"],
+    },
+    {
+        "why": "既定ポートをそろえない（正常な転送で止まる・Codex15回目）",
+        "file": "scripts/maker_identity_cache.py",
+        "before": "        port = f\":{sp.port}\" if sp.port and "
+                  "sp.port != _default else \"\"",
+        "after": "        port = f\":{sp.port}\" if sp.port else \"\"",
+        "run": ["scripts/maker_identity_cache.py"],
+    },
+    {
         "why": "試験用の偽の機種を掃除しない（2026-08-24・自分で踏んだ）",
         "file": "scripts/publish_new_machine.py",
         "before": "        if apply_it:\n"
