@@ -486,6 +486,34 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "表の行を見ない（設定別の値が一度も検査されない・Codex22回目）",
+        "file": "scripts/recheck.py",
+        "before": "        for _tb in (sec.get(\"tables\") or []):",
+        "after": "        for _tb in []:",
+        "run": ["scripts/recheck.py"],
+    },
+    {
+        "why": "表の行を組で見ない（正しい表を毎回『直せ』にする・Codex22回目）",
+        "file": "scripts/recheck.py",
+        "before": "                if _row_backed(_cells[0], \"：\".join(_cells[1:])):",
+        "after": "                if False:",
+        "run": ["scripts/recheck.py"],
+    },
+    {
+        "why": "記事が読まない項目も受け取る（2AIの答えが迷子になる・Codex22回目）",
+        "file": "scripts/confirmed_values.py",
+        "before": "    for _k in CLOSED_FIELDS:",
+        "after": "    for _k in ():",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "確定値の形が判定できなくても黙って進む（Codex22回目）",
+        "file": "scripts/recheck.py",
+        "before": "                return _result(ERROR, f\"確定値の項目の話題が決まっていません: \"\n                                      f\"{_e_tp}\", args)\n            if not _tp:\n                continue          # 読者に出さない項目（型式名など）\n            try:\n                _tk = [str(x) for x in _cv_rc.check_shape(\n                    _b, (_rec or {}).get(\"value\")) if str(x).strip()]\n            except Exception as _e_sh:                       # noqa: BLE001\n                # ★★形が判定できないときも止まる★★\n                #   （2026-08-25・Codexの22回目。話題の例外と同じ扱い）\n                #   ★直す前は continue で飛ばしていた★ので、\n                #   その項目が根拠にならないまま静かに進み、\n                #   正しい記事を止める側に倒れていた。\n                return _result(ERROR, f\"確定値の形を判定できません: {_e_sh}\",\n                               args)",
+        "after": "                continue",
+        "run": ["scripts/recheck.py"],
+    },
+    {
         "why": "根拠の行を数の境界なしで見る"
                "（確定値600が記事の1600Gを根拠にする・Codex21回目）",
         "file": "scripts/recheck.py",

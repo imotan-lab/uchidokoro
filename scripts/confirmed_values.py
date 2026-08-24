@@ -114,7 +114,13 @@ FIELD_TOPICS = {
     #   ★記事の「設定示唆まとめ」の表に出るのに、対応表に無かった★
     "at_prob": "setting",           # AT初当たり確率（設定別）
     "payout_rate": "setting",       # 出玉率（設定別）
-    "net_increase": "gameplay",     # 純増（ゲーム性）
+    # ★素の net_increase は受け取らない★（2026-08-25・Codexの22回目）
+    #   ★受け取れるのに、記事を作る側が一度も読まない★状態だった＝
+    #   2AIが正しく答えても**公開に届かない**（型式名・天井と同じ型）。
+    #   しかも採取規則は「純増はどのモードか」を必須にしているのに、
+    #   素の値は自由な文字として通っていた。
+    #   ★構造化された `at` か `at_net_unmapped` を使う★（どちらも記事に出る）。
+    "net_increase": "",             # ★受け口を閉じた（下の除外と対）★
     "model_code": "",               # ★読者には出さない★
 }
 
@@ -165,12 +171,25 @@ AI_ONLY_LABELS = {
 }
 
 
+# ★2AIの受け口から外す項目★（2026-08-25・Codexの22回目）
+#   受け取れても記事に届かないもの＝答えが迷子になるので、入口で断る。
+CLOSED_FIELDS = ("net_increase",)
+
+
 def allowed_fields() -> dict:
-    """受け取ってよい項目 → 入れ先。"""
+    """受け取ってよい項目 → 入れ先。
+
+    ★★記事に届かない項目は受け取らない★★（2026-08-25・Codexの22回目）
+      ★受け取れるのに、記事を作る側が一度も読まない項目があった★
+      （素の `net_increase`）＝2AIが正しく答えても**公開に届かない**。
+      入口で断れば、答えが迷子にならず「どの項目を使えばよいか」も分かる。
+    """
     import spec_lookup as _sp
     out = {k: "adopted" for k in _sp.FIELDS}
     out.update(FIELD_TARGETS)
     out.update(AI_ONLY_FIELDS)
+    for _k in CLOSED_FIELDS:
+        out.pop(_k, None)
     return out
 
 
@@ -2122,6 +2141,17 @@ def selftest() -> int:
                        ("1", "1,600G")):
         t("　（対照）" + _t20 + " は「" + _q20 + "」の中の別の数と混同しない",
           not token_in_quote(_t20, _q20))
+
+    # ★★記事に届かない項目は受け取らない★★（2026-08-25・Codexの22回目）
+    #   ★素の net_increase は受け取れるのに、記事が一度も読まなかった★
+    #   ＝2AIが正しく答えても公開に届かない（答えが迷子になる）。
+    t("★★記事が読まない項目は、入口で断る（net_increase）★★"
+      "／★受け取れるのに届かないと、2AIの答えが迷子になる★",
+      "net_increase" not in allowed_fields())
+    t("　構造化された受け口は開いたまま（at / at_net_unmapped）",
+      "at" in allowed_fields() and "at_net_unmapped" in allowed_fields())
+    t("　閉じた項目は、記事の話題も空（読者に出さない印）",
+      topic_of("net_increase") == "")
 
     ng = sum(1 for _, o in results if not o)
     print()

@@ -756,6 +756,7 @@ def check_decision_vs_body(args: dict) -> dict:
     #     ②その値の語が**全部そろっている**行だけ根拠ありとする
     #       （＝その確定値から書かれた行だけが通る）
     _by_topic = {}
+    _pairs = {}                            # 話題 → {設定: 値}
     try:
         sys.path.insert(0, os.path.join(BASE, "scripts"))
         import confirmed_values as _cv_rc
@@ -781,12 +782,33 @@ def check_decision_vs_body(args: dict) -> dict:
             try:
                 _tk = [str(x) for x in _cv_rc.check_shape(
                     _b, (_rec or {}).get("value")) if str(x).strip()]
-            except Exception:                                # noqa: BLE001
-                continue
+            except Exception as _e_sh:                       # noqa: BLE001
+                # ★★形が判定できないときも止まる★★
+                #   （2026-08-25・Codexの22回目。話題の例外と同じ扱い）
+                #   ★直す前は continue で飛ばしていた★ので、
+                #   その項目が根拠にならないまま静かに進み、
+                #   正しい記事を止める側に倒れていた。
+                return _result(ERROR, f"確定値の形を判定できません: {_e_sh}",
+                               args)
             if _tk:
                 _by_topic.setdefault(_tp, []).append(_tk)
-    except Exception:                                        # noqa: BLE001
-        _by_topic = {}                     # ★読めなければ今までどおり見る★
+            # ★★設定ごとの値は「設定→値」の組で持つ★★
+            #   （2026-08-25・Codexの22回目）
+            #   ★1つの確定値が表の複数行に対応する★ので、
+            #   「1行に語が全部そろう」規則をそのまま当てると必ず落ちる。
+            _val = (_rec or {}).get("value")
+            if isinstance(_val, dict) and _tp:
+                for _k, _v in _val.items():
+                    if str(_k).strip() and str(_v or "").strip():
+                        _pairs.setdefault(_tp, {})[str(_k).strip()] = str(_v)
+    except FileNotFoundError:
+        _by_topic, _pairs = {}, {}         # ★控えが無い機械では今までどおり★
+    except Exception as _e_cv:                               # noqa: BLE001
+        # ★★控えが読めないときも止まる★★（2026-08-25・Codexの22回目）
+        #   ★直す前は空にして先へ進んでいた★ので、
+        #   控えが壊れていると**全部が「根拠なし」**になり、
+        #   正しい記事を毎回「直せ」と言い続けた。
+        return _result(ERROR, f"確定値を読めません: {_e_cv}", args)
 
     def _backed(line: str, topic: str) -> bool:
         """★その行が「検索の濃さに数えない根拠」で書かれているか★
@@ -825,6 +847,42 @@ def check_decision_vs_body(args: dict) -> dict:
         if topic is None or topic not in pend:
             continue
         body = [x for x in (sec.get("body") or []) if isinstance(x, str)]
+        # ★★表の行も中身★★（2026-08-25・Codexの22回目）
+        #   ★直す前は body だけ見て、空ならその箱を読み飛ばしていた★ので、
+        #   設定別の値は `tables` に出るのに**一度も検査されていなかった**。
+        #   ＝判定書が「未確認」と言っている設定の箱に、
+        #     根拠のない値が並んでいても PASS した。
+        #   ★行ごとに見る★＝設定と値の組を1行として扱う
+        #   （表を丸ごと1つの文字列にすると、余分な行まで一緒に免除される）。
+        def _cell(x) -> str:
+            """表のセルの文字（★2列目はバッジ付きの辞書★）。"""
+            if isinstance(x, dict):
+                return str(x.get("text") or "")
+            return str(x or "")
+
+        def _row_backed(label: str, val: str) -> bool:
+            """★その行が「設定→値」の控えどおりか★
+
+            ★1つの確定値が表の複数行に対応する★ので、
+            行ごとに「その設定の値として控えにあるか」を見る。
+            """
+            _p = _pairs.get(topic) or {}
+            _lab = label.replace("設定", "").strip()
+            want = _p.get(_lab) or _p.get(label.strip())
+            if not want:
+                return False
+            return _cv_rc.token_in_quote(want, val) or want in val
+
+        for _tb in (sec.get("tables") or []):
+            for _row in (_tb.get("rows") or []):
+                if not isinstance(_row, (list, tuple)):
+                    continue
+                _cells = [_cell(x) for x in _row if _cell(x).strip()]
+                if len(_cells) < 2:
+                    continue
+                if _row_backed(_cells[0], "：".join(_cells[1:])):
+                    continue               # 控えどおりの行は数えない
+                body.append("：".join(_cells))
         txt = "".join(body).strip()
         if not txt:
             continue
@@ -1965,6 +2023,43 @@ def _selftest():
               "／★足し忘れると、その項目は根拠にならず正しい記事を止める★"
               + ("" if not _miss20 else "／未定義: " + "／".join(_miss20)),
               not _miss20)
+            # ★★設定別の表の行も見る★★（2026-08-25・Codexの22回目）
+            #   ★直す前は body だけ見て、空ならその箱を読み飛ばしていた★＝
+            #   設定別の値は `tables` に出るので**一度も検査されていなかった**。
+            _cur22 = json.load(open(_cv19.STORE, encoding="utf-8"))
+            _cur22["machines"]["zzz_t22"] = {
+                "at_prob": _rec20({"1": "1/300", "6": "1/200"})}
+            json.dump(_cur22, open(_cv19.STORE, "w", encoding="utf-8"),
+                      ensure_ascii=False)
+            globals()["_machine"] = lambda sl: {
+                "slug": sl, "name": "試験機",
+                "page_decision": {"pending_topics": ["setting"]}}
+
+            def _tbl22(rows):
+                return lambda sl: ({"sections": [
+                    {"title": "設定示唆まとめ", "body": [],
+                     "tables": [{"rows": rows}]}]}, "", "")
+
+            globals()["_load_detail"] = _tbl22(
+                [["設定1", {"text": "1/300", "badge": "hint"}],
+                 ["設定6", {"text": "1/200", "badge": "hint"}]])
+            t("★★表の行も検査する（確定値どおりなら通す）★★",
+              _dv({"slug": "zzz_t22"})["result"] in (PASS, NOT_APPLICABLE))
+            globals()["_load_detail"] = _tbl22(
+                [["設定1", {"text": "1/300", "badge": "hint"}],
+                 ["設定3", {"text": "1/250", "badge": "hint"}]])
+            t("★★表に根拠の無い行が混ざれば止める★★"
+              "／★body だけ見ていた頃は、表の値を一度も検査していなかった★",
+              _dv({"slug": "zzz_t22"})["result"] == FAIL)
+            # ★★形が判定できないときも止まる★★
+            _keep_shape = _cv19.check_shape
+            try:
+                _cv19.check_shape = lambda f, v: (_ for _ in ()).throw(
+                    _cv19.ConfirmedError("試験：形が判定できません"))
+                t("　確定値の形が判定できなければ、判定せず止まる",
+                  _dv({"slug": "zzz_t22"})["result"] == ERROR)
+            finally:
+                _cv19.check_shape = _keep_shape
             # ★★話題が決まっていない項目があれば、黙って進まない★★
             #   （2026-08-25・Codexの21回目。★fail-closed になっていなかった★）
             _keep_topic = _cv19.topic_of
