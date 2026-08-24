@@ -479,9 +479,44 @@ MUTATIONS = [
     {
         "why": "育てる側で出典を確かめ直さない（控えの手書きが通る・Codex17回目）",
         "file": "scripts/grow_machine.py",
-        "before": "            _rv = _cv.reverify(slug, name=vo.get(\"identity_name\") or name,",
-        "after": "            _rv = [] and (slug, vo.get(\"identity_name\") or name,",
+        "before": "            _rv = _cv.reverify(slug, name=vo.get(\"identity_name\") or name,\n"
+                  "                               official_url=url)",
+        "after": "            _rv = []",
         "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "閉じ忘れた投稿欄を確定しない"
+               "（ページが途中で終わると投稿欄を見逃す・Codex18回目）",
+        "file": "scripts/user_area.py",
+        "before": "        _p.close_all()",
+        "after": "        pass",
+        "run": ["scripts/user_area.py"],
+    },
+    {
+        "why": "画面に出ない要素の中身まで読む"
+               "（template の中を見て正常なページを止める・Codex18回目）",
+        "file": "scripts/user_area.py",
+        "before": "            if self.hidden:\n"
+                  "                if tag not in _VOID:",
+        "after": "            if False:\n"
+                 "                if tag not in _VOID:",
+        "run": ["scripts/user_area.py"],
+    },
+    {
+        "why": "話題まるごと免除に戻す"
+               "（根拠のない断定が同じ箱に紛れると素通り・Codex18回目）",
+        "file": "scripts/recheck.py",
+        "before": "        _left = [x for x in body if x.strip() and not _backed(x)]",
+        "after": "        _left = [] if any(_backed(x) for x in body) else body",
+        "run": ["scripts/recheck.py"],
+    },
+    {
+        "why": "DMM単独の名乗りを根拠と認めない"
+               "（運営者が決めた書き方の記事を毎日『直せ』にする・Codex18回目）",
+        "file": "scripts/recheck.py",
+        "before": "            if _mark and _mark in line:",
+        "after": "            if False:",
+        "run": ["scripts/recheck.py"],
     },
     {
         "why": "recheck が監査17と別の見方をする（正しい記事をNGにする・Codex17回目）",
@@ -567,9 +602,12 @@ def check(only: str = "", fast: bool = False) -> int:
     shutil.copytree(BASE, root, ignore=shutil.ignore_patterns(
         "__pycache__", "node_modules", ".preview-site", "_site"))
     try:
+        _want = [x.strip() for x in str(only or "").split(",") if x.strip()]
+        tried = 0
         for i, m in enumerate(MUTATIONS, 1):
-            if only and only not in m["why"]:
+            if _want and not any(w in m["why"] for w in _want):
                 continue
+            tried += 1
             if fast and any(x in SLOW for x in m["run"]):
                 print(f"  --   {i}. {m['why']}（★時間がかかるので飛ばした★）")
                 skipped.append(m["why"])
@@ -635,9 +673,18 @@ def check(only: str = "", fast: bool = False) -> int:
     # ★飛ばした分を数に含めない★（2026-08-24＝「全部OK」に見せない）
     #   ★1件飛ばして 15/15 と出していた★＝この書き方がまさに
     #   プロジェクトが禁じている「黙って削る」だった。
-    done = len(MUTATIONS) - len(skipped)
-    print(f"{done}/{len(MUTATIONS)} 試したものは、すべて試験が捕まえます"
-          + (f"（★{len(skipped)}件は未確認★）" if skipped else ""))
+    # ★★1件も試していないのに「全部OK」と言わない★★（2026-08-24）
+    #   ★--only が一致しなくても 61/61 と出ていた★＝
+    #   **プロジェクトが禁じている「早すぎる数え方」を道具自身がやっていた**
+    #   （監査51で見張っている型そのもの）。
+    if tried == 0:
+        print("★1件も試していません★（--only が何にも一致しませんでした）")
+        return 1
+    done = tried - len(skipped)
+    print(f"{done}/{tried} 試したものは、すべて試験が捕まえます"
+          + (f"（★{len(skipped)}件は未確認★）" if skipped else "")
+          + (f"／★全{len(MUTATIONS)}通りのうち絞り込み中★"
+             if tried != len(MUTATIONS) else ""))
     return 0
 
 

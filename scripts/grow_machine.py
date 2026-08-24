@@ -1613,6 +1613,37 @@ def selftest() -> int:
     t("★★育てる処理も2AIの確定値を読む★★"
       "（読まないと、確定値を載せた機種は毎日『再現できません』で止まる）",
       seen and seen[0] == ("garei_zero_re", True))
+    # ★★出典の取り直しも、呼んだかどうかで見る★★（2026-08-24・Codexの18回目）
+    #   ★直す前はソースに文字列があるかを見ていた★＝
+    #   綴り違いでも、呼ばれない場所に書いてあっても通ってしまう。
+    #   ★止まることまで確かめる★＝問題を返したら記事を作らない。
+    _rvseen = []
+    _real_rv = _cv.reverify
+    try:
+        def _rvspy(slug_, **kw):
+            _rvseen.append((slug_, kw.get("name"), kw.get("official_url")))
+            return []
+        _cv.reverify = _rvspy
+        _cv.merge_into = lambda mat, slug_: ["ceiling"]
+        plan_one("garei_zero_re",
+                 gather=lambda *a, **k: {"material": the_mat, "problems": []},
+                 verify=lambda *a, **k: {"problems": [], "release": ""})
+        t("★★育てる側も、出典を取り直して確かめる★★"
+          "／★ここが抜けると、控えの手書きが記事に出る★",
+          _rvseen and _rvseen[0][0] == "garei_zero_re" and _rvseen[0][1])
+        # ★問題を返したら、記事を作らずに止まる★
+        _cv.reverify = lambda slug_, **kw: ["出典を確かめ直せません"]
+        _stop = plan_one(
+            "garei_zero_re",
+            gather=lambda *a, **k: {"material": the_mat, "problems": []},
+            verify=lambda *a, **k: {"problems": [], "release": ""})
+        t("　確かめ直せなければ、記事を作らずに止まる",
+          any("確かめ直せません" in str(x)
+              for x in (_stop.get("problems") or [])))
+    finally:
+        _cv.reverify = _real_rv
+        _cv.merge_into = real_merge
+
     t("　2AIの確定値も計画の指紋に入っている"
       "（計画のあとに取り消されたら食い違って止まる）",
       _cv.STORE in (plan_one(
@@ -2043,16 +2074,6 @@ def selftest() -> int:
         globals()["_log"] = _keep_log
         globals()["_main"] = _keep_inner
         sys.argv = _keep_argv
-
-    # ★★育てる側も出典を確かめ直している★★（2026-08-24・Codexの17回目）
-    #   ★新台側だけ再確認を通していた★＝
-    #   出典が変わっても、控えを手で書き換えられても、
-    #   **育てる経路だけは値を公開できた**。
-    #   ＝「record も load も grow も緑。繋ぐと再確認が抜ける」型。
-    import inspect as _insp17
-    t("★★育てる側も、2AIの控えを取り直して確かめる★★"
-      "／★ここが抜けると、控えの手書きが記事に出る★",
-      "_cv.reverify(" in _insp17.getsource(plan_one))
 
     print(f"\n{ran[0]}/{ran[0]} 合格" if ok else "\n不合格あり")
     return 0 if ok else 1

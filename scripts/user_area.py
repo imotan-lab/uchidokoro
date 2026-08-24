@@ -430,20 +430,33 @@ def looks_like_user_area(html: str) -> list:
             self.stack = []            # 開いているタグ（名前, 弱い箱か, 中身あり）
             self.head = None           # いま見出しの中か（積みの位置）
             self.buf = []
+            self.hidden = 0            # 画面に出ない要素の中にいる（積みの位置）
 
         def handle_startendtag(self, tag, attrs):
             self._look(tag, attrs)     # <img /> の形（積まない）
 
         def handle_starttag(self, tag, attrs):
+            # ★★画面に出ない中身は、丸ごと読まない★★（Codexの18回目）
+            #   ★直す前は「その要素の名前を見ない」だけ★だったので、
+            #   `<template>` の中の投稿欄らしき作りを見て
+            #   **正常なページを止めていた**（画面には出ないのに）。
+            if self.hidden:
+                if tag not in _VOID:
+                    self.stack.append([tag, "", False])
+                return
+            if tag in _SKIP:
+                self.hidden = len(self.stack) + 1
+                self.stack.append([tag, "", False])
+                return
             if tag in _VOID:
                 self._look(tag, attrs)
                 return
-            weak = "" if tag in _SKIP else self._look(tag, attrs)
+            weak = self._look(tag, attrs)
             self.stack.append([tag, weak, False])
             if tag in ("table", "textarea", "form"):
                 for it in self.stack:
                     it[2] = True       # 中に投稿らしい作りがあった
-            if tag in ("h1", "h2", "h3", "h4", "h5", "h6") and tag not in _SKIP:
+            if tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
                 self.head, self.buf = len(self.stack), []
 
         def _look(self, tag, attrs):
@@ -472,15 +485,31 @@ def looks_like_user_area(html: str) -> list:
 
         def handle_endtag(self, tag):
             if tag in _VOID or tag not in [x[0] for x in self.stack]:
-                return                 # 閉じ忘れ・対応しない終了タグは無視
+                return                 # 対応しない終了タグは無視
             while self.stack:
                 name, weak, hit = self.stack.pop()
                 if weak and hit:
                     found.append(f"箱の名前: {weak}（中に投稿らしい作り）")
                 if self.head and len(self.stack) < self.head:
                     self._close_head()
+                if self.hidden and len(self.stack) < self.hidden:
+                    self.hidden = 0
                 if name == tag:
                     break
+
+        def close_all(self):
+            """★★最後まで閉じられなかった箱も確定する★★（Codexの18回目）
+
+            ★直す前は終了タグのときだけ確定していた★ので、
+            ページが `</section>` を書かずに終わると
+            **投稿欄の中の表を見逃した**（本当の閉じ忘れ）。
+            """
+            while self.stack:
+                _n, weak, hit = self.stack.pop()
+                if weak and hit:
+                    found.append(f"箱の名前: {weak}（中に投稿らしい作り）")
+            if self.head:
+                self._close_head()
 
         def _close_head(self):
             txt = " ".join("".join(self.buf).split())
@@ -499,11 +528,13 @@ def looks_like_user_area(html: str) -> list:
                     return
 
         def handle_data(self, data):
-            if self.head:
+            if self.head and not self.hidden:
                 self.buf.append(data)
 
     try:
-        _P().feed(_htmlmod.unescape(str(html or "")))
+        _p = _P()
+        _p.feed(_htmlmod.unescape(str(html or "")))
+        _p.close_all()                 # ★閉じ忘れも確定する★
     except Exception:                                        # noqa: BLE001
         return ["組み立てられないHTML"]                      # ★使わない側に倒す★
     return sorted(set(found))
@@ -889,6 +920,33 @@ def selftest() -> int:
              '<html><body><section class="related-posts"><img src="x">'
              '</section><section class="spec">'
              "<table><tr><td>999G</td></tr></table></section></body></html>",
+             False),
+            # ★★閉じ忘れたまま終わるページ★★（2026-08-24・Codexの18回目）
+            #   ★終了タグのときだけ確定していた★ので、
+            #   `</section>` を書かずに終わると**投稿欄の中の表を見逃した**。
+            #   ＝★手で確かめただけで試験に入れていなかった★
+            #     （壊し方の通し確認が教えてくれた）
+            ("最後まで閉じられていない投稿欄も見つける",
+             '<html><body><section class="rating-list">'
+             "<table><tr><td>555G</td></tr></table>",
+             True),
+            ("見出しが閉じられていなくても見つける",
+             "<html><body><h2>読者の口コミ</h2>"
+             "<table><tr><td>555G</td></tr></table>",
+             True),
+            # ★★画面に出ない要素の中身は読まない★★（同上）
+            #   ★直す前はその要素の名前を見ないだけ★だったので、
+            #   `<template>` の中の作りを見て**正常なページを止めた**。
+            ("template の中の投稿欄らしき作りでは止めない",
+             '<html><body><template><section class="commentlist">'
+             "<table><tr><td>x</td></tr></table></section></template>"
+             "<section class=\"spec\">"
+             "<table><tr><td>999G</td></tr></table></section></body></html>",
+             False),
+            ("noscript の中の見出しでも止めない",
+             "<html><body><noscript><h2>読者の口コミ</h2>"
+             "<table><tr><td>x</td></tr></table></noscript>"
+             "</body></html>",
              False)):
         t("★残存検査：" + _n + "★ → "
           + ("止める" if _want else "通す"),

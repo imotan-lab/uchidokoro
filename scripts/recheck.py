@@ -705,23 +705,40 @@ def check_decision_vs_body(args: dict) -> dict:
     #   という**見かけの食い違い**が必ず起きる。
     #   ここでそれを不整合と呼ぶと、★正しい記事を毎回「直せ」と言い続ける★。
     #   → その機種に2AIの確定値があるなら、その話題は見ない。
+    #   ★★話題まるごと免除しない★★（2026-08-24・Codexの18回目）
+    #   ★直す前は「その機種に確定値が1件でもあれば話題ごと見ない」★だった。
+    #   純増だけ確定していても、「ゲーム性」の中の**無関係な断定**まで
+    #   検査の外に出てしまう。→ ★行ごとに、その行の根拠を見る★。
+    _tokens = []
     try:
         sys.path.insert(0, os.path.join(BASE, "scripts"))
         import confirmed_values as _cv_rc
-        _known = set()
-        for _f in (_cv_rc.for_slug(slug) or {}):
-            _base = _cv_rc.base_field(_f)
-            _known.add({"ceiling": "ceiling", "at": "gameplay",
-                        "cz": "cz", "reset": "strategy",
-                        "gameplay": "gameplay"}.get(_base, "spec"))
-        if _known:
-            pend = pend - _known
-            if not pend:
-                return _result(NOT_APPLICABLE,
-                               "未確認の話題は、2AIで確定した値で埋まっています"
-                               "（検索の濃さには数えないだけ）", args)
+        for _f, _rec in (_cv_rc.for_slug(slug) or {}).items():
+            try:
+                _tokens += _cv_rc.check_shape(_cv_rc.base_field(_f),
+                                              (_rec or {}).get("value"))
+            except Exception:                                # noqa: BLE001
+                continue
     except Exception:                                        # noqa: BLE001
-        pass                               # ★読めなければ今までどおり見る★
+        _tokens = []                       # ★読めなければ今までどおり見る★
+    _tokens = [str(x) for x in _tokens if str(x).strip()]
+
+    def _backed(line: str) -> bool:
+        """★その行が「検索の濃さに数えない根拠」で書かれているか★
+
+        ①DMM単独確認の名乗りが付いている（運営者の決定）
+        ②2AIで確定した値が、その行に出ている
+        どちらも**記事には出るが濃さには数えない**ので、
+        判定書が pending なのは正しい＝食い違いではない。
+        """
+        try:
+            import build_new_article as _ba_rc
+            _mark = _ba_rc.BASIS_SUFFIX.get("DMM_SINGLE_NEAR_RELEASE") or ""
+            if _mark and _mark in line:
+                return True
+        except Exception:                                    # noqa: BLE001
+            pass
+        return any(tk in line for tk in _tokens)
     detail, _raw, _why = _load_detail(slug)
     if not isinstance(detail, dict):
         return _result(NOT_APPLICABLE, _why or "記事データがありません", args)
@@ -743,8 +760,13 @@ def check_decision_vs_body(args: dict) -> dict:
         # ★未確認の断りが入っていれば正しい★（言い回しは2通りある）
         if _PENDING_TEXT in txt or txt.startswith("未確認"):
             continue
-        bad.append({"title": title, "topic": topic, "lines": len(body),
-                    "first": body[0][:60] if body else ""})
+        # ★★行ごとに見る★★（2026-08-24・Codexの18回目）
+        #   根拠のある行（DMM単独の名乗り／2AIで確定した値）は数えない。
+        _left = [x for x in body if x.strip() and not _backed(x)]
+        if not _left:
+            continue
+        bad.append({"title": title, "topic": topic, "lines": len(_left),
+                    "first": _left[0][:60]})
     observed = {"pending_topics": sorted(pend),
                 "claims": list(pd.get("claims") or []), "mismatch": bad}
     if bad:
@@ -1686,6 +1708,37 @@ def _selftest():
           _yes in (PASS, NOT_APPLICABLE) and _no == FAIL)
     finally:
         _cv17.STORE = _keep17
+    # ★★行ごとに見ているか★★（2026-08-24・Codexの18回目）
+    #   ★話題まるごと免除だと、根拠のない断定が同じ箱に紛れても素通りする★
+    #   ＝ここは「読者に誤情報が出る経路」なので、必ず行で見る。
+    import build_new_article as _ba18
+    _mark18 = _ba18.BASIS_SUFFIX["DMM_SINGLE_NEAR_RELEASE"]
+    _keepm, _keepd = _machine, _load_detail
+    try:
+        globals()["_machine"] = lambda sl: {
+            "slug": sl, "name": "試験機",
+            "page_decision": {"pending_topics": ["gameplay"]}}
+
+        def _det(rows):
+            return lambda sl: ({"sections": [
+                {"title": "ゲーム性", "body": rows}]}, "", "")
+
+        globals()["_load_detail"] = _det(["通常時は周期抽選からCZへ進みます"
+                                          + _mark18])
+        t("★★DMM単独の名乗りが付いた行は、不整合と呼ばない★★"
+          "／★呼ぶと、運営者が決めた書き方の記事が毎日『直せ』になる★",
+          _dv({"slug": "zzz_t18"})["result"] in (PASS, NOT_APPLICABLE))
+        globals()["_load_detail"] = _det([
+            "通常時は周期抽選からCZへ進みます" + _mark18,
+            "AT中の純増は約8.0枚です"])
+        _mix = _dv({"slug": "zzz_t18"})
+        t("★★同じ箱に根拠のない断定が混ざっていれば、それだけを挙げる★★"
+          "／★話題ごと免除すると、この行が検査の外に出る★",
+          _mix["result"] == FAIL
+          and "純増" in json.dumps(_mix, ensure_ascii=False))
+    finally:
+        globals()["_machine"], globals()["_load_detail"] = _keepm, _keepd
+
     t("　判定書が無い機種（旧方式）は判定しない",
       _dv({"slug": "hokuto"})["result"] == NOT_APPLICABLE)
     t("★★これも観測どまり（記事を消すか claims を作り直すかは出典が要る）★★",
