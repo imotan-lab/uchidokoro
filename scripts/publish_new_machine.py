@@ -2164,11 +2164,72 @@ def _recover(apply_it: bool = False) -> dict:
         out["todo"].append("早見表4ページを作り直す")
 
     if apply_it:
+        # ★★空になった機種ディレクトリは、監査より先に消す★★
+        #   （2026-08-24・Codexの19回目の指摘4を直していて見つけた**本物の不具合**）
+        #   ★直す前は監査のあとに消していた★ので、
+        #     ①強制終了で公開が中断される
+        #     ②`--recover` がファイルは消すが、空のディレクトリは残ったまま
+        #     ③直後の監査が「孤児ディレクトリ」で落ちる
+        #     ④復旧が**自分の後始末を全部取り消して**目印を残す
+        #     ⑤何度やり直しても同じ＝★目印が永久に残る★
+        #     ⑥目印がある間は新台の公開が全部止まる（誰にも通知されない）
+        #   ★試験が空だったので、一度も見つからなかった★
+        #     （「対象を作れなかったら合格」になっていた）
+        _emptied = None
+        _d0 = os.path.join(BASE, "machines", slug)
+        if os.path.isdir(_d0) and not os.listdir(_d0):
+            try:
+                os.rmdir(_d0)
+                _emptied = _d0
+            except OSError:               # noqa: PERF203
+                _emptied = None
+        # ★★退避中のファイルは「まだある物」として数えない★★
+        #   （2026-08-24・同じ不具合の2つ目の顔）
+        #   ★退避先はその機種ディレクトリの中★（`index.html.recover.1234`）
+        #   なので、監査から見ると**常に孤児ディレクトリが残っている**。
+        #   ＝強制終了のあと、復旧は**何度やっても自分の監査に落ちる**。
+        #   ★これは「例外を作る」のではなく、
+        #     この処理自身の作業用ファイルを勘定に入れないという話★
+        #     （項目33を外しているのと同じ理由）。
+        #   ★パスの区切りをそろえてから比べる★＝目印の中は "machines/x/…"
+        #     なので、Windowsでは "\\" と "/" が混ざって一致しない
+        #     （直す前はここが常に空集合になり、この守りが効いていなかった）
+        _held_names = {os.path.basename(h) for _r, _f, h, _w in held_map
+                       if os.path.normpath(os.path.dirname(h))
+                       == os.path.normpath(_d0)}
+        _in_dir = set(os.listdir(_d0)) if os.path.isdir(_d0) else set()
+        _only_held = bool(_in_dir) and _in_dir <= _held_names
         # ★戻し終わったか確かめてから目印を消す★
         #   監査の項目33は「目印がある＝途中」を見るので、
         #   消す前に回すと自分の目印を自分で見つけて永久に詰まる。
-        ng = [x for x in run_site_audit() if "33_" not in x]
+        # ★★この処理自身の作業用のものを、勘定に入れない★★
+        #   ①項目33＝「途中の目印がある」（昔から除外している）
+        #   ②項目52＝同じ目印を別の言い方で見つける（2026-08-24に新設した）
+        #     ★除外を足し忘れたので、復旧が自分の目印を見て自分を止めた★
+        #   ③項目6・52＝退避中のファイルがその機種ディレクトリに残っている
+        #   ★これは例外リストではない★＝まだ後始末の途中で、
+        #     どれもこの処理が最後に消すもの。人が置いた物は1つも外さない。
+        _mine = [".publish-in-progress.json"]
+        _dirmark = os.path.join("machines", slug)
+
+        def _about_mine(line: str) -> bool:
+            _l = line.replace("/", os.sep)
+            if "33_" in line:
+                return True
+            if "52_" in line and slug in line and any(m in line for m in _mine):
+                return True
+            if _only_held and _dirmark in _l and ("6_" in line or "52_" in line):
+                return True
+            return False
+
+        ng = [x for x in run_site_audit() if not _about_mine(x)]
         if ng:
+            # ★消したディレクトリも戻してから巻き戻す★（何もしなかった形へ）
+            if _emptied:
+                try:
+                    os.makedirs(_emptied, exist_ok=True)
+                except OSError:           # noqa: PERF203
+                    pass
             _undo_all()
             out["problems"] += ng
             out["problems"].append(
@@ -2200,6 +2261,7 @@ def _recover(apply_it: bool = False) -> dict:
                 "--recover --apply でやり直せます）: "
                 + " / ".join(_del_fail)[:200] + "★")
             return out
+        # ★上で消せなかった時のための念のため★（普通はもう無い）
         d = os.path.join(BASE, "machines", slug)
         if os.path.isdir(d) and not os.listdir(d):
             os.rmdir(d)
@@ -3360,8 +3422,27 @@ def selftest() -> int:
         _mat4 = {"adopted": {}, "need_third": {}, "thin": {}}
         _before4 = _snapshot()
 
-        def _try_with(name, breaker):
-            globals()[name] = breaker
+        def _try_with(name, breaker, skip=0, need_fire=True):
+            """★skip 回は本物を通し、その次の呼び出しで壊す★
+
+            ★なぜ要るか（2026-08-24・Codexの19回目）★
+              `build_hubs` と `run_site_audit` は**書き込みより前にも**呼ばれる
+              （公開前の監査と、早見表がズレていないかの確認）。
+              そのまま壊すと**書き込み前に止まる**ので、
+              「元のまま」なのは当たり前＝★巻き戻しを一度も試していない★。
+              ＝壊し方が守りではなく手前の関門を叩いていた（型⑧の変種）。
+            """
+            _seen = {"n": 0, "fired": False}
+            _orig = _real[name]
+
+            def _gate(*a, **k):
+                if _seen["n"] < skip:
+                    _seen["n"] += 1
+                    return _orig(*a, **k)
+                _seen["fired"] = True
+                return breaker(*a, **k)
+
+            globals()[name] = _gate
             try:
                 publish_from_material(_slug4, "障害注入確認機", "bellco",
                                       f"https://m.example/products/slot/{_slug4}/",
@@ -3380,6 +3461,13 @@ def selftest() -> int:
                                f"{_slug4}.json")
             if os.path.isfile(dp4):
                 os.remove(dp4)
+            # ★★壊し方が実際に発火したことを要求する★★
+            #   ★手前で止まって一度も呼ばれなくても「元のまま」で合格した★
+            #   ★need_fire=False は「別の場所を壊す」使い方★＝
+            #     置き換え直後の中断のように、この関数は素通しにして
+            #     `os.replace` の側を壊す場合。発火は呼び出し側が確かめる。
+            if need_fire and not _seen["fired"]:
+                return False
             return ok
 
         def _boom(*_a, **_k):
@@ -3388,16 +3476,30 @@ def selftest() -> int:
         def _interrupt(*_a, **_k):
             raise KeyboardInterrupt()
 
-        t("★★早見表を作る所で失敗しても、完全に元のまま★★",
+        # ★★発火要求そのものを直接試す★★（2026-08-24）
+        #   ★壊し方の通し確認で「壊しても試験が緑」と出た★＝
+        #   いまの使い方ではどれも発火するので、この守りを見ている試験が無い。
+        #   ＝将来、呼ばれる順番が変わって手前で止まるようになっても気づけない。
+        t("★★壊し方が一度も発火しなければ、合格にしない★★"
+          "／★これが無いと『元のまま』が当たり前の状態で緑になる★",
+          _try_with("check_after", _boom, skip=99) is False)
+        # ★書き込みより前で壊れる場合★（手前の関門が働くこと）
+        t("　早見表の作成が公開前に壊れたら、そもそも書き始めない",
           _try_with("build_hubs", _boom))
+        t("　公開前の監査が壊れたら、そもそも書き始めない",
+          _try_with("run_site_audit", lambda *a, **k: ["わざとNG"]))
+        # ★★書き込みのあとで壊れる場合★★（巻き戻しが働くこと）
+        #   ★ここが本命★＝作ってしまったものを全部戻せるか。
+        t("★★早見表を作り直す所（書き込み後）で失敗しても、完全に元のまま★★",
+          _try_with("build_hubs", _boom, skip=1))
         t("★★配信の確認で失敗しても、完全に元のまま★★",
           _try_with("check_served", _boom))
-        t("★★最後の監査で失敗しても、完全に元のまま★★",
-          _try_with("run_site_audit", lambda: ["わざとNG"]))
+        t("★★最後の監査（書き込み後）で失敗しても、完全に元のまま★★",
+          _try_with("run_site_audit", lambda *a, **k: ["わざとNG"], skip=1))
         t("★★最終確認で失敗しても、完全に元のまま★★",
           _try_with("check_after", lambda *a, **k: ["わざとNG"]))
-        t("★★Ctrl+C（中断）でも、完全に元のまま★★",
-          _try_with("build_hubs", _interrupt))
+        t("★★Ctrl+C（中断・書き込み後）でも、完全に元のまま★★",
+          _try_with("build_hubs", _interrupt, skip=1))
         # ★置き換えた直後に中断される狭い窓★（Codex指摘・実際に再現した）
         _real_replace = os.replace
         for _nth in (1, 2, 3, 4, 5):
@@ -3411,36 +3513,100 @@ def selftest() -> int:
 
             os.replace = _replace_then_stop
             try:
-                _ok = _try_with("check_served", _real["check_served"])
+                _ok = _try_with("check_served", _real["check_served"],
+                                need_fire=False)
             finally:
                 os.replace = _real_replace
+            # ★★中断が実際に起きたことを確かめる★★（2026-08-24）
+            #   ★置き換えが _nth 回に届かなければ、何も試していない★
             t(f"★★{_nth}回目の置き換え直後に中断されても元のまま★★",
-              _ok)
+              _ok and _cnt["i"] >= _nth)
         # ★復旧が途中で落ちても、もう一度走らせて完走できるか★
         #   （2026-07-31・Codex12回目「各中断点から再開できるか」）
-        #   「ページだけ消えた」状態を作ってから復旧を走らせる。
+        # ★★本物の強制終了が残す状態から始める★★（2026-08-24・Codexの19回目）
+        #   ★直す前は失敗させるだけだった★ので、巻き戻しが全部片付けてしまい、
+        #   **復旧の対象が一度もできていなかった**（＝何も試していなかった）。
+        #   ★書いた中身を変えてから失敗させる手も採らない★＝
+        #     復旧は「作ったときと中身が違う」ものを**わざと消さない**（正しい）。
+        #     それでは復旧が完走しないので、試験の題材として誤り。
+        #   → ★別のプロセスで公開を始め、書き終えた直後に強制終了させる★。
+        #     巻き戻しも目印の後始末も走らない＝本番の電源断と同じ形。
         _s5 = "zzz_resume_test"
-        globals()["check_after"] = lambda *a, **k: ["わざとNG"]
+        _dp5 = os.path.join(BASE, "assets", "data", "machine-details",
+                            f"{_s5}.json")
+        _kill_py = os.path.join(BASE, "_zzz_kill_after_write.py")
+        with open(_kill_py, "w", encoding="utf-8") as _fh:
+            _fh.write(
+                "import os, sys" + chr(10)
+                + "sys.path.insert(0, os.path.join(os.path.dirname("
+                + "os.path.abspath(__file__)), 'scripts'))" + chr(10)
+                + "import publish_new_machine as P" + chr(10)
+                + "P.check_served = lambda *a, **k: os._exit(9)" + chr(10)
+                + "P.publish_from_material(" + repr(_s5)
+                + ", '再開確認機ZZZ', 'bellco', "
+                + repr(f"https://m.example/products/slot/{_s5}/")
+                + ", '2026-09', {'adopted': {}, 'need_third': {}, "
+                + "'thin': {}}, apply_it=True)" + chr(10))
         try:
-            publish_from_material(_s5, "再開確認機ZZZ", "bellco",
-                                  f"https://m.example/products/slot/{_s5}/",
-                                  "2026-09", {"adopted": {}, "need_third": {},
-                                              "thin": {}}, apply_it=True)
-        except BaseException:                # noqa: BLE001
-            pass
+            _kill_rc = subprocess.run([sys.executable, _kill_py], cwd=BASE,
+                                      capture_output=True,
+                                      timeout=600).returncode
         finally:
-            globals()["check_after"] = _real["check_after"]
+            if os.path.isfile(_kill_py):
+                os.remove(_kill_py)
+        t("　強制終了の試験が、実際に強制終了で終わっている", _kill_rc == 9)
+        # ★★復旧が要る状態になっているか★★（ここが無いと何も試していない）
         _pg5 = os.path.join(BASE, "machines", _s5, "index.html")
-        _made5 = os.path.isfile(_pg5)
-        if _made5:
+        _made5 = (os.path.isfile(_dp5) and os.path.isfile(_pg5)
+                  and os.path.exists(IN_PROGRESS))
+        t("　強制終了は、ページ・記事データ・目印を残している", _made5)
+        # ★★①強制終了そのままの形から復旧できるか★★
+        #   （2026-08-24・ここで**本物の不具合**が出た）
+        #   ★退避先はその機種ディレクトリの中★なので、監査から見ると
+        #   **常に孤児ディレクトリが残っている**ように見え、
+        #   復旧は自分の監査に落ちて**何度やっても目印が消えなかった**。
+        #   ＝目印が残る＝以後の新台公開が**全部止まる**（誰にも通知されない）。
+        _r5a = recover(apply_it=True)
+        t("★★強制終了そのままの形から、復旧が完走する★★"
+          "／★ここが詰まると新台の公開が永久に止まる★",
+          not _r5a["problems"] and not os.path.exists(IN_PROGRESS)
+          and not os.path.isdir(os.path.join(BASE, "machines", _s5))
+          and not os.path.isfile(_dp5))
+        # ★★②復旧が途中で落ちた形（ページだけ消えた）からも復旧できるか★★
+        _kill2 = os.path.join(BASE, "_zzz_kill_after_write2.py")
+        with open(_kill2, "w", encoding="utf-8") as _fh:
+            _fh.write(
+                "import os, sys" + chr(10)
+                + "sys.path.insert(0, os.path.join(os.path.dirname("
+                + "os.path.abspath(__file__)), 'scripts'))" + chr(10)
+                + "import publish_new_machine as P" + chr(10)
+                + "P.check_served = lambda *a, **k: os._exit(9)" + chr(10)
+                + "P.publish_from_material(" + repr(_s5)
+                + ", '再開確認機ZZZ', 'bellco', "
+                + repr(f"https://m.example/products/slot/{_s5}/")
+                + ", '2026-09', {'adopted': {}, 'need_third': {}, "
+                + "'thin': {}}, apply_it=True)" + chr(10))
+        try:
+            subprocess.run([sys.executable, _kill2], cwd=BASE,
+                           capture_output=True, timeout=600)
+        finally:
+            if os.path.isfile(_kill2):
+                os.remove(_kill2)
+        if os.path.isfile(_pg5):
             os.remove(_pg5)                  # ★復旧の途中で落ちた状態★
         _r5 = recover(apply_it=True)
         _left5 = (os.path.isdir(os.path.join(BASE, "machines", _s5))
                   or os.path.isfile(os.path.join(
                       BASE, "assets", "data", "machine-details", f"{_s5}.json"))
                   or any(m.get("slug") == _s5 for m in _sj.read_rows(MACHINES)))
-        t("★★復旧が途中で落ちても、もう一度走らせれば完走する★★",
-          (not _made5) or (not _left5 and not _r5["problems"]))
+        # ★★「作れなかったら合格」をやめる★★（2026-08-24・Codexの19回目）
+        #   ★直す前は `not _made5 or …` だった★ので、
+        #   **復旧の対象を作れなかった回も合格**していた（＝何も試していない）。
+        t("★★復旧が途中で落ちても、もう一度走らせれば完走する★★"
+          + ("" if not _r5["problems"]
+             else "／理由: " + " / ".join(str(x) for x in _r5["problems"])[:200])
+          + ("" if not _left5 else "／残骸あり"),
+          not _left5 and not _r5["problems"])
         _sh.rmtree(os.path.join(BASE, "machines", _s5), ignore_errors=True)
         if os.path.exists(IN_PROGRESS):
             os.remove(IN_PROGRESS)

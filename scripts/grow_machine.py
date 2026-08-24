@@ -1628,18 +1628,42 @@ def selftest() -> int:
         plan_one("garei_zero_re",
                  gather=lambda *a, **k: {"material": the_mat, "problems": []},
                  verify=lambda *a, **k: {"problems": [], "release": ""})
+        # ★★「空でない」ではなく「その機種の正しい名前か」を見る★★
+        #   （2026-08-24・Codexの19回目）
+        #   ★直す前は name が真かどうかしか見ていなかった★ので、
+        #   別の機種名を渡しても通った（＝別機種の控えで照合できてしまう）。
+        _want_nm = ([r for r in _read_rows()
+                     if r.get("slug") == "garei_zero_re"]
+                    or [{}])[0].get("name") or ""
         t("★★育てる側も、出典を取り直して確かめる★★"
           "／★ここが抜けると、控えの手書きが記事に出る★",
-          _rvseen and _rvseen[0][0] == "garei_zero_re" and _rvseen[0][1])
-        # ★問題を返したら、記事を作らずに止まる★
-        _cv.reverify = lambda slug_, **kw: ["出典を確かめ直せません"]
-        _stop = plan_one(
-            "garei_zero_re",
-            gather=lambda *a, **k: {"material": the_mat, "problems": []},
-            verify=lambda *a, **k: {"problems": [], "release": ""})
-        t("　確かめ直せなければ、記事を作らずに止まる",
+          _rvseen and _rvseen[0][0] == "garei_zero_re")
+        t("　その機種の名前を渡している（別機種の控えで照合させない）",
+          bool(_want_nm) and _rvseen and _rvseen[0][1] == _want_nm)
+        t("　公式URLも渡している（機種を引き直せるように）",
+          _rvseen and _rvseen[0][2])
+        # ★★問題を返したら「記事そのものが作られない」ことまで見る★★
+        #   ★直す前は問題文があるかしか見ていなかった★ので、
+        #   記事を作ったうえで問題も返す、という形でも通った。
+        _built = []
+        _real_bm, _real_bd = _ba.build_machine, _ba.build_detail
+        try:
+            _ba.build_machine = lambda *a, **k: _built.append("machine")
+            _ba.build_detail = lambda *a, **k: _built.append("detail")
+            _cv.reverify = lambda slug_, **kw: ["出典を確かめ直せません"]
+            _stop = plan_one(
+                "garei_zero_re",
+                gather=lambda *a, **k: {"material": the_mat, "problems": []},
+                verify=lambda *a, **k: {"problems": [], "release": ""})
+        finally:
+            _ba.build_machine, _ba.build_detail = _real_bm, _real_bd
+        t("　確かめ直せなければ、その理由を返す",
           any("確かめ直せません" in str(x)
               for x in (_stop.get("problems") or [])))
+        t("★★確かめ直せなければ、記事を1文字も作らない★★"
+          "／★作ってから止めると、次の工程が拾える形で残る★",
+          not _built and _stop.get("machine") is None
+          and _stop.get("detail") is None)
     finally:
         _cv.reverify = _real_rv
         _cv.merge_into = real_merge

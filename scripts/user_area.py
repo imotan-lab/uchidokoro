@@ -433,6 +433,14 @@ def looks_like_user_area(html: str) -> list:
             self.hidden = 0            # 画面に出ない要素の中にいる（積みの位置）
 
         def handle_startendtag(self, tag, attrs):
+            # ★★画面に出ない中は、自己終了タグも読まない★★
+            #   （2026-08-24・Codexの19回目）
+            #   ★直す前はここだけ `hidden` を見ていなかった★ので、
+            #   `<template><input type="comment" /></template>` のような
+            #   **画面に出ない中の1つのタグだけで正常なページを止めた**
+            #   （`<input>` は通るのに `<input />` は止まる、という食い違い）。
+            if self.hidden:
+                return
             self._look(tag, attrs)     # <img /> の形（積まない）
 
         def handle_starttag(self, tag, attrs):
@@ -947,7 +955,23 @@ def selftest() -> int:
              "<html><body><noscript><h2>読者の口コミ</h2>"
              "<table><tr><td>x</td></tr></table></noscript>"
              "</body></html>",
-             False)):
+             False),
+            # ★★画面に出ない中の自己終了タグ★★（2026-08-24・Codexの19回目）
+            #   ★<input> は通るのに <input /> だけ止まる、という食い違いだった★
+            ("template の中の <input /> でも止めない",
+             '<html><body><template><input type="comment" /></template>'
+             "<table><tr><td>999G</td></tr></table></body></html>",
+             False),
+            ("template の中の <textarea /> でも止めない",
+             '<html><body><template><textarea name="comment" /></template>'
+             "<table><tr><td>999G</td></tr></table></body></html>",
+             False),
+            # ★対照★＝画面に出る側の <input /> は今までどおり見る
+            ("画面に出る <input /> は今までどおり投稿欄と見る",
+             '<html><body><section class="entry">'
+             '<input type="comment" /><table><tr><td>x</td></tr></table>'
+             "</section></body></html>",
+             True)):
         t("★残存検査：" + _n + "★ → "
           + ("止める" if _want else "通す"),
           bool(looks_like_user_area(_h)) is _want)

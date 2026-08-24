@@ -709,25 +709,43 @@ def check_decision_vs_body(args: dict) -> dict:
     #   ★直す前は「その機種に確定値が1件でもあれば話題ごと見ない」★だった。
     #   純増だけ確定していても、「ゲーム性」の中の**無関係な断定**まで
     #   検査の外に出てしまう。→ ★行ごとに、その行の根拠を見る★。
-    _tokens = []
+    #   ★★短い語の「どれか1つ」で免除しない★★（2026-08-24・Codexの19回目）
+    #   ★直す前は、その機種の確定値から集めた語のどれか1つが行にあれば通した★＝
+    #   ゲーム性の確定値に「CZ」が含まれていると、
+    #   **根拠のない「CZ当選率は90%です」まで免除**された（再現済み）。
+    #   → ①話題ごとに分ける（その箱の話題の確定値だけ見る）
+    #     ②その値の語が**全部そろっている**行だけ根拠ありとする
+    #       （＝その確定値から書かれた行だけが通る）
+    _by_topic = {}
     try:
         sys.path.insert(0, os.path.join(BASE, "scripts"))
         import confirmed_values as _cv_rc
+        import page_decision as _pd_rc
         for _f, _rec in (_cv_rc.for_slug(slug) or {}).items():
+            _b = _cv_rc.base_field(_f)
+            # ★話題は判定書と同じ決め方で引く★（同じ規則を2か所に書かない）
             try:
-                _tokens += _cv_rc.check_shape(_cv_rc.base_field(_f),
-                                              (_rec or {}).get("value"))
+                _tp = _pd_rc.topics_from_claims([{
+                    "ceiling": "ceiling:x:1", "at": "at:x", "cz": "cz:x",
+                    "gameplay": "at:x"}.get(_b, "model_code")])[0]
+                _tp = _tp[0] if _tp else "spec"
+            except Exception:                                # noqa: BLE001
+                _tp = "spec"
+            try:
+                _tk = [str(x) for x in _cv_rc.check_shape(
+                    _b, (_rec or {}).get("value")) if str(x).strip()]
             except Exception:                                # noqa: BLE001
                 continue
+            if _tk:
+                _by_topic.setdefault(_tp, []).append(_tk)
     except Exception:                                        # noqa: BLE001
-        _tokens = []                       # ★読めなければ今までどおり見る★
-    _tokens = [str(x) for x in _tokens if str(x).strip()]
+        _by_topic = {}                     # ★読めなければ今までどおり見る★
 
-    def _backed(line: str) -> bool:
+    def _backed(line: str, topic: str) -> bool:
         """★その行が「検索の濃さに数えない根拠」で書かれているか★
 
         ①DMM単独確認の名乗りが付いている（運営者の決定）
-        ②2AIで確定した値が、その行に出ている
+        ②**この話題の**2AI確定値の語が、その行に**全部**出ている
         どちらも**記事には出るが濃さには数えない**ので、
         判定書が pending なのは正しい＝食い違いではない。
         """
@@ -738,7 +756,8 @@ def check_decision_vs_body(args: dict) -> dict:
                 return True
         except Exception:                                    # noqa: BLE001
             pass
-        return any(tk in line for tk in _tokens)
+        return any(all(tk in line for tk in _tk)
+                   for _tk in _by_topic.get(topic) or [])
     detail, _raw, _why = _load_detail(slug)
     if not isinstance(detail, dict):
         return _result(NOT_APPLICABLE, _why or "記事データがありません", args)
@@ -757,12 +776,21 @@ def check_decision_vs_body(args: dict) -> dict:
         txt = "".join(body).strip()
         if not txt:
             continue
-        # ★未確認の断りが入っていれば正しい★（言い回しは2通りある）
-        if _PENDING_TEXT in txt or txt.startswith("未確認"):
+        # ★★未確認の断りは「それだけ」のときに正しい★★
+        #   （2026-08-24・Codexの19回目）
+        #   ★直す前は箱の先頭が「未確認」なら後続を一切見なかった★＝
+        #     未確認（確認でき次第掲載します）
+        #     AT中の純増は約99枚です      ← ★これが素通りした★（再現済み）
+        _nonempty = [x for x in body if x.strip()]
+        _isnote = [x for x in _nonempty
+                   if _PENDING_TEXT in x or x.strip().startswith("未確認")]
+        if _isnote and len(_isnote) == len(_nonempty):
             continue
         # ★★行ごとに見る★★（2026-08-24・Codexの18回目）
         #   根拠のある行（DMM単独の名乗り／2AIで確定した値）は数えない。
-        _left = [x for x in body if x.strip() and not _backed(x)]
+        #   ★断り書きの行そのものは数えない★（中身ではないため）
+        _left = [x for x in _nonempty
+                 if x not in _isnote and not _backed(x, topic)]
         if not _left:
             continue
         bad.append({"title": title, "topic": topic, "lines": len(_left),
@@ -1689,18 +1717,31 @@ def _selftest():
                                    "confirmed_values.json")
         _cv17.init_store()
         _no = _dv({"slug": "pw_10523"})["result"]
+        # ★★記事にある行の数だけ材料を置く★★（2026-08-24・Codexの19回目）
+        #   ★1件しか置いていなかった★ので、行ごとに見る形へ直した途端に
+        #   2行目が「根拠なし」になり、**正しい記事を止めた**。
+        #   ＝守りを厳しくして本番を止める型（自分で踏んだ）。
+        def _rec17(v):
+            # ★引用文はその値から作る★＝読み込み側の契約
+            #   （値の語が引用に無ければ弾かれる）を通すため。
+            #   ★手で書いた引用にしていたので、2件目が黙って落ちていた★
+            _q = " ".join(str(x) for x in v.values())
+            return {"value": v,
+                    "sources": [{"url": "https://chonborista.com/slot/x",
+                                 "quote": _q},
+                                {"url": "https://nana-press.com/kaiseki/x",
+                                 "quote": _q}],
+                    "lineages": ["vote:chonborista", "vote:nana-press"],
+                    "agreed_by": ["claude", "codex"],
+                    "why": "2AIで突き合わせました",
+                    "decided_at": "2026-08-24", "official_url": ""}
         json.dump({"schema_version": _cv17.SCHEMA, "machines": {
-            "pw_10523": {"gameplay": {
-                "value": {"when": "通常時", "trigger": "周期抽選",
-                          "leads_to": "CZ"},
-                "sources": [{"url": "https://chonborista.com/slot/x",
-                             "quote": "通常時 周期抽選 CZ"},
-                            {"url": "https://nana-press.com/kaiseki/x",
-                             "quote": "通常時 周期抽選 CZ"}],
-                "lineages": ["vote:chonborista", "vote:nana-press"],
-                "agreed_by": ["claude", "codex"],
-                "why": "2AIで突き合わせました",
-                "decided_at": "2026-08-24", "official_url": ""}}}},
+            "pw_10523": {
+                "gameplay": _rec17({"when": "通常時", "trigger": "周期抽選",
+                                    "leads_to": "CZ"}),
+                "gameplay#上位": _rec17({"when": "全国制覇",
+                                        "trigger": "全国制覇",
+                                        "leads_to": "上位CZ"})}}},
             open(_cv17.STORE, "w", encoding="utf-8"), ensure_ascii=False)
         _yes = _dv({"slug": "pw_10523"})["result"]
         t("★★確定値があれば、その話題は不整合と呼ばない★★"

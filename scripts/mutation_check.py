@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -485,6 +486,22 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "復旧が空の機種ディレクトリを監査より後に消す"
+               "（強制終了のあと復旧が永久に詰まり、新台公開が全部止まる）",
+        "file": "scripts/publish_new_machine.py",
+        "before": "        if os.path.isdir(_d0) and not os.listdir(_d0):",
+        "after": "        if False:",
+        "run": ["scripts/publish_new_machine.py"],
+    },
+    {
+        "why": "復旧の退避ファイルを『まだある物』として数える"
+               "（監査が孤児ディレクトリと言い、復旧が自分の後始末を取り消す）",
+        "file": "scripts/publish_new_machine.py",
+        "before": "        _only_held = bool(_in_dir) and _in_dir <= _held_names",
+        "after": "        _only_held = False",
+        "run": ["scripts/publish_new_machine.py"],
+    },
+    {
         "why": "写しへの向け直しを1つ漏らす"
                "（試験が本物のリポジトリを汚し、夜の公開が丸ごと止まる）",
         "file": "scripts/publish_new_machine.py",
@@ -515,9 +532,53 @@ MUTATIONS = [
         "why": "話題まるごと免除に戻す"
                "（根拠のない断定が同じ箱に紛れると素通り・Codex18回目）",
         "file": "scripts/recheck.py",
-        "before": "        _left = [x for x in body if x.strip() and not _backed(x)]",
-        "after": "        _left = [] if any(_backed(x) for x in body) else body",
+        "before": "        _left = [x for x in _nonempty\n"
+                  "                 if x not in _isnote and not _backed(x, topic)]",
+        "after": "        _left = [] if any(_backed(x, topic)\n"
+                 "                          for x in _nonempty) else _nonempty",
         "run": ["scripts/recheck.py"],
+    },
+    {
+        "why": "確定値の語を「どれか1つ」で免除する"
+               "（無関係な断定が短い語の一致だけで通る・Codex19回目）",
+        "file": "scripts/recheck.py",
+        "before": "        return any(all(tk in line for tk in _tk)",
+        "after": "        return any(any(tk in line for tk in _tk)",
+        "run": ["scripts/recheck.py"],
+    },
+    {
+        "why": "確定値を話題で分けない"
+               "（別の話題の値で免除される・Codex19回目）",
+        "file": "scripts/recheck.py",
+        "before": "                   for _tk in _by_topic.get(topic) or [])",
+        "after": "                   for _v in _by_topic.values() for _tk in _v)",
+        "run": ["scripts/recheck.py"],
+    },
+    {
+        "why": "「未確認」で始まる箱を丸ごと免除する"
+               "（2行目の断定が素通り・Codex19回目）",
+        "file": "scripts/recheck.py",
+        "before": "        if _isnote and len(_isnote) == len(_nonempty):",
+        "after": "        if _isnote:",
+        "run": ["scripts/recheck.py"],
+    },
+    {
+        "why": "画面に出ない中の自己終了タグを読む"
+               "（template の中の input だけで正常なページを止める・Codex19回目）",
+        "file": "scripts/user_area.py",
+        "before": "            if self.hidden:\n"
+                  "                return\n"
+                  "            self._look(tag, attrs)     # <img /> の形（積まない）",
+        "after": "            self._look(tag, attrs)     # <img /> の形（積まない）",
+        "run": ["scripts/user_area.py"],
+    },
+    {
+        "why": "障害注入が発火しなくても合格にする"
+               "（手前で止まって巻き戻しを一度も試さない・Codex19回目）",
+        "file": "scripts/publish_new_machine.py",
+        "before": "            if need_fire and not _seen[\"fired\"]:",
+        "after": "            if False:",
+        "run": ["scripts/publish_new_machine.py"],
     },
     {
         "why": "DMM単独の名乗りを根拠と認めない"
@@ -554,6 +615,9 @@ MUTATIONS = [
 ]
 
 
+_SCORE = re.compile(r"(\d+)\s*/\s*(\d+)\s*合格")
+
+
 def _run_tests(root: str, scripts: list) -> tuple:
     """その写しで試験を流す。
 
@@ -583,6 +647,15 @@ def _run_tests(root: str, scripts: list) -> tuple:
             #   ★試験が❌を出したのか、ただ落ちたのかを必ず表に出す★。
             if ng:
                 return "試験が❌", f"{rel}: {ng[0][:70]}"
+            # ★★「N/M 合格」も試験の失敗★★（2026-08-24・Codexの19回目）
+            #   ★直す前は ❌ で始まる行しか見ていなかった★ので、
+            #   「83/84 合格」と出している**本物の試験の失敗**まで
+            #   「ただ落ちただけ」に分類していた（20件中18件がこれ）。
+            #   ＝道具の分類が雑で、質の判定が信用できなくなっていた。
+            for line in out.splitlines():
+                m = _SCORE.search(line)
+                if m and int(m.group(1)) < int(m.group(2)):
+                    return "試験が❌", f"{rel}: {line.strip()[:70]}"
             why = (out.strip().splitlines() or [""])[-1][:70]
             return "落ちただけ", f"{rel}: {why}"
     return "", ""
@@ -648,15 +721,17 @@ def check(only: str = "", fast: bool = False) -> int:
             finally:
                 # ★★必ず元の中身へ戻す★★（次の壊し方に持ち越さない）
                 open(p, "w", encoding="utf-8", newline="\n").write(src)
-            print(("  OK   " if caught else "  ★NG ")
+            print(("  OK   " if caught == "試験が❌" else "  ★NG ")
                   + f"{i}. {m['why']}"
                   + (f"  ［{caught}］" if caught else ""))
             if caught == "落ちただけ":
-                # ★合格には数えるが、質は落ちる★＝
-                #   「その守りを見ている試験がある」ではなく
-                #   「壊すと動かなくなる」しか言えていない。
+                # ★★合格に数えない★★（2026-08-24・Codexの19回目）
+                #   ★直す前は合格に数えていた★ので、
+                #   構文エラー・環境エラーで落ちただけのものが
+                #   「その守りを見ている試験がある」証拠に化けていた。
                 weak.append(f"{i}. {m['why']}（{_cwhy[:60]}）")
-            if not caught:
+                ng.append(m["why"] + "（試験が❌を出していない＝ただ落ちただけ）")
+            elif not caught:
                 ng.append(m["why"])
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
