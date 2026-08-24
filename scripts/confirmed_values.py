@@ -1261,8 +1261,21 @@ def selftest() -> int:
     global STORE
     keep = STORE
     STORE = os.path.join(tempfile.mkdtemp(), "confirmed_values.json")
-    init_store()          # ★初回は明示的に作る★（2026-08-24・Codexの9回目）
+    # ★★下ごしらえが落ちても、❌として数える★★（2026-08-24）
+    #   ★直す前はここで例外が出ると、試験は1つも❌を出さずに終わった★＝
+    #   壊し方の通し確認から見ると「ただ落ちただけ」になり、
+    #   **その守りを見ている試験がある証拠にならなかった**。
+    _init_ok, _init_why = True, ""
     try:
+        init_store()      # ★初回は明示的に作る★（2026-08-24・Codexの9回目）
+    except Exception as _e:                                  # noqa: BLE001
+        _init_ok, _init_why = False, f"{type(_e).__name__}: {_e}"
+        with open(STORE, "w", encoding="utf-8") as _fh:      # 続けるための土台
+            json.dump({"schema_version": SCHEMA, "machines": {}}, _fh)
+    try:
+        t("★★控えが無い所では、初回の作成ができる★★"
+          "／★『消えた』と『初回』を区別できないと、確定値が抜けた記事が出る★"
+          + ("" if _init_ok else "／理由: " + _init_why), _init_ok)
         t("★★発行者は名乗らせずURLから引く★★（別ホストに名前を付けて通せた）",
           parse_source("https://chonborista.com/1|" + Q1)["publisher"]
           == "chonborista")
@@ -1717,8 +1730,14 @@ def selftest() -> int:
             t("★★控えが無いときに、記録が勝手に作らない★★"
               "／★消失事故のあとに空の控えが黙って再生していた★",
               _made and not os.path.exists(STORE))
-            t("　初回は明示的に作る（--init）",
-              init_store() == STORE and os.path.exists(STORE))
+            # ★表明の中で例外が出ると、試験ごと落ちて❌が1つも出ない★
+            #   （2026-08-24＝壊し方の通し確認から見ると「ただ落ちただけ」）
+            try:
+                _mk = init_store() == STORE and os.path.exists(STORE)
+            except Exception as _e2:                         # noqa: BLE001
+                _mk = False
+                print("  （初回作成が例外: " + type(_e2).__name__ + "）")
+            t("　初回は明示的に作る（--init）", _mk)
             _twice = False
             try:
                 init_store()

@@ -1777,6 +1777,58 @@ def _selftest():
           "／★話題ごと免除すると、この行が検査の外に出る★",
           _mix["result"] == FAIL
           and "純増" in json.dumps(_mix, ensure_ascii=False))
+        # ★★確定値がある機種でも、免除は「その値から書かれた行」だけ★★
+        #   （2026-08-24・Codexの19回目。3件とも再現してから直した）
+        import tempfile as _tf19
+        import confirmed_values as _cv19
+        _keep19 = _cv19.STORE
+        try:
+            _cv19.STORE = os.path.join(_tf19.mkdtemp(prefix="rc19_"),
+                                       "confirmed_values.json")
+            _cv19.init_store()
+            json.dump({"schema_version": _cv19.SCHEMA, "machines": {
+                "zzz_t19": {"gameplay": {
+                    "value": {"when": "通常時", "trigger": "周期抽選",
+                              "leads_to": "CZ"},
+                    "sources": [{"url": "https://chonborista.com/slot/x",
+                                 "quote": "通常時 周期抽選 CZ"},
+                                {"url": "https://nana-press.com/kaiseki/x",
+                                 "quote": "通常時 周期抽選 CZ"}],
+                    "lineages": ["vote:chonborista", "vote:nana-press"],
+                    "agreed_by": ["claude", "codex"],
+                    "why": "2AIで突き合わせました",
+                    "decided_at": "2026-08-24", "official_url": ""}}}},
+                open(_cv19.STORE, "w", encoding="utf-8"), ensure_ascii=False)
+            globals()["_load_detail"] = _det(["CZ当選率は90%です"])
+            t("★★短い語が1つ一致しただけでは免除しない★★"
+              "／★免除すると、根拠のない断定が『CZ』の一致だけで通る★",
+              _dv({"slug": "zzz_t19"})["result"] == FAIL)
+            globals()["_load_detail"] = _det([
+                "通常時は周期抽選からCZへ進みます"])
+            t("　その値から書かれた行（語が全部そろう）は免除する",
+              _dv({"slug": "zzz_t19"})["result"] in (PASS, NOT_APPLICABLE))
+            globals()["_load_detail"] = _det([
+                "未確認（確認でき次第掲載します）", "AT中の純増は約99枚です"])
+            t("★★『未確認』で始まっても、後ろの断定は見る★★"
+              "／★箱ごと免除すると、2行目が素通りする★",
+              _dv({"slug": "zzz_t19"})["result"] == FAIL)
+            globals()["_load_detail"] = _det([_PENDING_TEXT])
+            t("　断り書きだけの箱は、いままでどおり正しい",
+              _dv({"slug": "zzz_t19"})["result"] in (PASS, NOT_APPLICABLE))
+            # ★話題ちがいの確定値では免除しない★
+            globals()["_machine"] = lambda sl: {
+                "slug": sl, "name": "試験機",
+                "page_decision": {"pending_topics": ["ceiling"]}}
+            globals()["_load_detail"] = _det(["天井は周期抽選で999Gです"])
+            _o = _TOPIC2TITLE["ceiling"]
+            globals()["_load_detail"] = lambda sl: ({"sections": [
+                {"title": _o, "body": ["天井は通常時の周期抽選からCZで999G"]}]},
+                "", "")
+            t("★★別の話題の確定値では免除しない★★"
+              "／★話題で分けないと、ゲーム性の値で天井の断定が通る★",
+              _dv({"slug": "zzz_t19"})["result"] == FAIL)
+        finally:
+            _cv19.STORE = _keep19
     finally:
         globals()["_machine"], globals()["_load_detail"] = _keepm, _keepd
 
