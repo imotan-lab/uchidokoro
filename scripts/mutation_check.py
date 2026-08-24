@@ -486,11 +486,36 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "根拠の行を数の境界なしで見る"
+               "（確定値600が記事の1600Gを根拠にする・Codex21回目）",
+        "file": "scripts/recheck.py",
+        "before": "        return any(all(_cv_rc.token_in_quote(tk, line) "
+                  "for tk in _tk)",
+        "after": "        return any(all(tk in line for tk in _tk)",
+        "run": ["scripts/recheck.py"],
+    },
+    {
+        "why": "けた区切りのカンマを数の境界と見ない"
+               "（600 が 1,600G に一致する・Codex21回目）",
+        "file": "scripts/confirmed_values.py",
+        "before": "        if (before and before in \"0123456789.,\") \\",
+        "after": "        if (before and before in \"0123456789.\") \\",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "話題が決まっていない項目を黙って飛ばす"
+               "（fail-closed にならず、正しい記事を止める・Codex21回目）",
+        "file": "scripts/recheck.py",
+        "before": "                return _result(ERROR, f\"確定値の項目の話題が決まっていません: \"\n                                      f\"{_e_tp}\", args)",
+        "after": "                continue",
+        "run": ["scripts/recheck.py"],
+    },
+    {
         "why": "文頭・文末の数字を照合できなくする"
                "（2AIが正しく確定した値が記録できない・2026-08-25）",
         "file": "scripts/confirmed_values.py",
-        "before": "        if (before and before in \"0123456789.\") \\",
-        "after": "        if (before in \"0123456789.\") \\",
+        "before": "        if (before and before in \"0123456789.,\") \\",
+        "after": "        if (before in \"0123456789.,\") \\",
         "run": ["scripts/confirmed_values.py"],
     },
     {
@@ -590,8 +615,10 @@ MUTATIONS = [
         "why": "確定値の語を「どれか1つ」で免除する"
                "（無関係な断定が短い語の一致だけで通る・Codex19回目）",
         "file": "scripts/recheck.py",
-        "before": "        return any(all(tk in line for tk in _tk)",
-        "after": "        return any(any(tk in line for tk in _tk)",
+        "before": "        return any(all(_cv_rc.token_in_quote(tk, line) "
+                  "for tk in _tk)",
+        "after": "        return any(any(_cv_rc.token_in_quote(tk, line) "
+                 "for tk in _tk)",
         "run": ["scripts/recheck.py"],
     },
     {

@@ -691,6 +691,10 @@ def check_body_vs_checker(args: dict) -> dict:
 
 # 判定書の topic → 記事の箱の見出し
 _TOPIC2TITLE = {
+    # ★基本スペック★（2026-08-25・Codexの21回目）
+    #   ★対応表には spec があるのに、ここに無かった★＝
+    #   その話題の箱を検査が一度も見ていなかった。
+    "spec": "基本スペック",
     "gameplay": "ゲーム性",
     "cz": "確認できたCZ",
     "ceiling": "天井・恩恵",
@@ -764,8 +768,14 @@ def check_decision_vs_body(args: dict) -> dict:
             #   **2AIで正しく確定した行まで「根拠がない」**と言われていた。
             try:
                 _tp = _cv_rc.topic_of(_b)
-            except Exception:                                # noqa: BLE001
-                continue          # 話題が決まっていない項目は根拠にしない
+            except Exception as _e_tp:                       # noqa: BLE001
+                # ★★握り潰さない★★（2026-08-25・Codexの21回目）
+                #   ★直す前は continue で黙って飛ばしていた★ので、
+                #   「知らない項目は例外にする」と書きながら、実処理では
+                #   **その項目が根拠にならないまま静かに進んで**いた。
+                #   ＝正しい記事を止める側に倒れる（fail-closed になっていない）。
+                return _result(ERROR, f"確定値の項目の話題が決まっていません: "
+                                      f"{_e_tp}", args)
             if not _tp:
                 continue          # 読者に出さない項目（型式名など）
             try:
@@ -793,7 +803,12 @@ def check_decision_vs_body(args: dict) -> dict:
                 return True
         except Exception:                                    # noqa: BLE001
             pass
-        return any(all(tk in line for tk in _tk)
+        # ★★数の境界を守る★★（2026-08-25・Codexの21回目）
+        #   ★直す前はただの部分一致だった★ので、
+        #   確定値 600 が記事の「1600G」を、3.1 が「13.1」を
+        #   **根拠あり**にしていた（＝出典に無い数を根拠つきに見せる）。
+        #   ★照合の規則は1か所★＝控えの登録と同じ `token_in_quote` を通す。
+        return any(all(_cv_rc.token_in_quote(tk, line) for tk in _tk)
                    for _tk in _by_topic.get(topic) or [])
     detail, _raw, _why = _load_detail(slug)
     if not isinstance(detail, dict):
@@ -1898,6 +1913,21 @@ def _selftest():
                 "朝一・リセット情報", ["**設定変更後の天井**：700G"])
             t("　値を変えた行は止める（確定値と違う数）",
               _dv({"slug": "zzz_t20"})["result"] == FAIL)
+            # ★★数の境界★★（2026-08-25・Codexの21回目）
+            #   ★直す前はただの部分一致だった★ので、
+            #   確定値 600 が記事の「1600G」を根拠ありにしていた。
+            for _bad21 in ("**設定変更後の天井**：1600G",
+                           "**設定変更後の天井**：1,600G",
+                           "**設定変更後の天井**：600000G"):
+                globals()["_load_detail"] = _det20("朝一・リセット情報",
+                                                   [_bad21])
+                t("★★別の数（" + _bad21[-8:] + "）を 600 の根拠にしない★★",
+                  _dv({"slug": "zzz_t20"})["result"] == FAIL)
+            globals()["_load_detail"] = _det20(
+                "ゲーム性",
+                ["**AT純増（AT名との対応は未確認）**：約13.1枚/G、約7.4枚/G"])
+            t("★★13.1 を 3.1 の根拠にしない★★",
+              _dv({"slug": "zzz_t20"})["result"] == FAIL)
             globals()["_load_detail"] = _det20(
                 "ゲーム性",
                 ["**AT純増（AT名との対応は未確認）**：約3.1枚/G、約7.4枚/G"])
@@ -1910,16 +1940,44 @@ def _selftest():
               _dv({"slug": "zzz_t20"})["result"] == FAIL)
             # ★★表に出る項目で、話題が決まっていないものが無いこと★★
             #   ★これが今回の見落としを機械で捕まえる★
-            _miss20 = []
-            for _f in (list(_cv19.FIELD_TARGETS) + list(_cv19.AI_ONLY_FIELDS)):
+            # ★★受け取れる項目を全部回す★★（2026-08-25・Codexの21回目）
+            #   ★直す前は2つの名簿だけ★だったので、
+            #   `spec_lookup.FIELDS` の at_prob / payout_rate / net_increase が
+            #   **記事の表に出るのに対応表に無い**まま素通りしていた。
+            import spec_lookup as _sl21
+            _all21 = (list(_cv19.FIELD_TARGETS) + list(_cv19.AI_ONLY_FIELDS)
+                      + list(_sl21.FIELDS))
+            _miss20, _notitle21 = [], []
+            for _f in _all21:
                 try:
-                    _cv19.topic_of(_f)
+                    _tp21 = _cv19.topic_of(_f)
                 except Exception:                            # noqa: BLE001
                     _miss20.append(_f)
+                    continue
+                # ★話題が決まっていても、見出しの対応が無ければ検査が届かない★
+                if _tp21 and _tp21 not in _TOPIC2TITLE:
+                    _notitle21.append(f"{_f}→{_tp21}")
+            t("★★話題に対応する見出しが決まっている★★"
+              "／★無いと、その話題の箱を検査が一度も見ない★"
+              + ("" if not _notitle21 else "／" + "／".join(_notitle21)),
+              not _notitle21)
             t("★★確定値の項目に、記事の話題が決まっていないものが無い★★"
               "／★足し忘れると、その項目は根拠にならず正しい記事を止める★"
               + ("" if not _miss20 else "／未定義: " + "／".join(_miss20)),
               not _miss20)
+            # ★★話題が決まっていない項目があれば、黙って進まない★★
+            #   （2026-08-25・Codexの21回目。★fail-closed になっていなかった★）
+            _keep_topic = _cv19.topic_of
+            try:
+                _cv19.topic_of = lambda f: (_ for _ in ()).throw(
+                    _cv19.ConfirmedError("試験：話題が決まっていません"))
+                globals()["_load_detail"] = _det20(
+                    "朝一・リセット情報", ["**設定変更後の天井**：600G"])
+                t("★★話題が決まっていない項目があれば、判定せず止まる★★"
+                  "／★黙って飛ばすと、正しい記事を止める側に倒れる★",
+                  _dv({"slug": "zzz_t20"})["result"] == ERROR)
+            finally:
+                _cv19.topic_of = _keep_topic
             # ★話題ちがいの確定値では免除しない★
             globals()["_machine"] = lambda sl: {
                 "slug": sl, "name": "試験機",
