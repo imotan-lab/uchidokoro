@@ -512,6 +512,19 @@ def validate_record(field: str, rec) -> list:
     except Exception:                                        # noqa: BLE001
         ng.append(f"{field}: 決めた日が実在しません（{d!r}）")
     if isinstance(src, list) and src:
+        # ★★2AIで通した出典は、指紋の箱ごと必須★★（2026-08-24・Codexの10回目）
+        #   ★直す前は「箱があるときだけ」見ていた★ので、
+        #   箱ごと消すと比較が全部飛んだ。
+        for i, x in enumerate(src):
+            if not isinstance(x, dict):
+                continue
+            if not (x.get("identity_why") or x.get("identity_proof")):
+                continue
+            ov = x.get("identity_override") or {}
+            sha = str(ov.get("text_sha256") or "")
+            if len(sha) != 64 or any(c not in "0123456789abcdef" for c in sha):
+                ng.append(f"{field}: 2AIで通した出典{i + 1}に本文の指紋が"
+                          "ありません（判断し直してください）")
         # ★発行者はURLから引き直す★（申告された発行者名を信じない）
         pubs = []
         for i, x in enumerate(src):
@@ -929,9 +942,26 @@ def init_store() -> str:
 
 
 def _default_fetch(url: str) -> str:
-    """★出典を取り直す既定の道★（投稿欄を落とす唯一の入口を通る）"""
+    """★出典を取り直す既定の道★（投稿欄を落とす唯一の入口を通る）
+
+    ★★別のサイトへ転送されていたら使わない★★（2026-08-24・Codexの10回目）
+      ★直す前は本文だけ受け取って、着いた先を捨てていた★。すると、
+        ・投稿欄を落とす決まりは**頼んだURL**の側で選ばれる
+        ・実際の本文は**着いた先**のもの
+        ・票は頼んだURLの発行者として数える
+      ＝★投稿欄が残る／同じページが2票になる★が同時に成立しうる。
+      いまは着いた先が別のホストなら断る（そのURLで登録し直すこと）。
+    """
+    import urllib.parse as _up
     import fetched_page as _fp
-    return _fp.fetch(url, "claim_material").cleaned_html
+    got = _fp.fetch(url, "claim_material")
+    a = (_up.urlsplit(url).hostname or "").lower()
+    b = (_up.urlsplit(got.final_url).hostname or "").lower()
+    if a != b:
+        raise ConfirmedError(
+            f"別のサイトへ転送されています（{url} → {got.final_url}）"
+            "／★着いた先のURLで登録し直してください★")
+    return got.cleaned_html
 
 
 def reverify(slug: str, fetch=None, name: str = "",
@@ -1060,7 +1090,13 @@ def for_slug_checked(slug: str) -> dict:
     控えの存在と入れ物は必ず確かめ、**中身の契約は対象機種だけ**見る。
     """
     d = load(strict=False, require_exists=True)
-    rows = dict((d.get("machines") or {}).get(slug) or {})
+    raw = (d.get("machines") or {})
+    if slug in raw and not isinstance(raw[slug], dict):
+        # ★★空の入れ物を「0件」と読まない★★（2026-08-24・Codexの10回目）
+        #   `[]` や `""` や null だと、契約違反にならず「確定値なし」で進んだ。
+        raise ConfirmedError(
+            f"{slug} の確定値の入れ物が壊れています（{type(raw[slug]).__name__}）")
+    rows = dict(raw.get(slug) or {})
     bad = []
     for field, rec in rows.items():
         bad += validate_record(field, rec)
@@ -1657,6 +1693,68 @@ def selftest() -> int:
             STORE = _keep4
             _lp.DOCS = _lp_real6
 
+        # ★★別のサイトへ転送されていたら使わない★★（2026-08-24・Codexの10回目）
+        #   ★本文だけ受け取って着いた先を捨てていた★ので、
+        #   投稿欄の決まりは頼んだURL側・本文は着いた先、という
+        #   食い違いが起きた（同じページが2票にもなり得る）。
+        import new_machine_watch as _w10
+        _real_get10 = _w10._get
+
+        def _g10(_x, timeout=20):
+            _w10.LAST_FINAL_URL["url"] = "https://nana-press.com/kaiseki/x/"
+            return "<html><head><title>x</title></head><body>y</body></html>"
+        try:
+            _w10._get = _g10
+            _moved = False
+            try:
+                _default_fetch("https://chonborista.com/slot/x/")
+            except ConfirmedError as e:
+                _moved = "転送" in str(e)
+            t("★★別のサイトへ転送された出典は使わない★★"
+              "／★投稿欄の決まりと本文が食い違い、票も二重になる★",
+              _moved)
+        finally:
+            _w10._get = _real_get10
+
+        # ★★2AIで通した出典は、指紋の箱ごと必須★★
+        #   ★直す前は「箱があるときだけ」見ていた★ので、箱ごと消すと素通り。
+        _nobox = {"value": {"kind": "GAME", "amount": "999", "unit": "G",
+                            "benefit": "AT当選"},
+                  "sources": [
+                      {"url": "https://chonborista.com/slot/x",
+                       "quote": "999 G AT当選",
+                       "identity_why": "2AIで機種名と導入日を突き合わせました",
+                       "identity_proof": "L試験機 の解析です。"},
+                      {"url": "https://nana-press.com/kaiseki/x",
+                       "quote": "999 G AT当選"}],
+                  "lineages": ["vote:chonborista", "vote:nana-press"],
+                  "agreed_by": ["claude", "codex"],
+                  "why": "2AIで突き合わせました",
+                  "decided_at": "2026-08-24"}
+        t("★★2AIで通した出典に指紋の箱が無ければ断る★★"
+          "／★箱ごと消せば比較が全部飛んだ★",
+          any("指紋" in x for x in validate_record("ceiling", _nobox)))
+
+        # ★★対象機種の入れ物が壊れていたら「0件」と読まない★★
+        _keep10 = STORE
+        try:
+            import tempfile as _tf10
+            STORE = os.path.join(_tf10.mkdtemp(prefix="cvbox_"),
+                                 "confirmed_values.json")
+            with open(STORE, "w", encoding="utf-8") as _fh10:
+                json.dump({"schema_version": SCHEMA,
+                           "machines": {"zzz_box": []}}, _fh10)
+            _box = False
+            try:
+                for_slug_checked("zzz_box")
+            except ConfirmedError as e:
+                _box = "入れ物" in str(e)
+            t("★★入れ物が壊れていたら『確定値なし』にしない★★"
+              "／★空の配列や null が『0件』として素通りしていた★",
+              _box)
+        finally:
+            STORE = _keep10
+
         t("　2AIだけが答える鍵にも値の形がある（何でも受け取らない）",
           all(k in VALUE_SHAPES for k in AI_ONLY_FIELDS))
 
@@ -1772,6 +1870,8 @@ def main() -> int:
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--init", action="store_true",
                     help="★初回だけ★空の控えを作る（復旧には使わない）")
+    ap.add_argument("--if-missing", dest="if_missing", action="store_true",
+                    help="--init と一緒に使う＝すでにあるなら何もしない")
     ap.add_argument("--slug", default="")
     ap.add_argument("--official-url", dest="official_url", default="",
                     help="★推奨★ 公式URL（slugと正式名称を正本から引く）")
@@ -1797,6 +1897,10 @@ def main() -> int:
         return selftest()
     if a.init:
         # ★初回と「消えた」を区別する★＝復旧はバックアップから戻すこと
+        if a.if_missing and os.path.exists(STORE):
+            # ★機械が何度も流す場所のための形★（CIは毎回まっさら）
+            print("すでにあります（何もしません）: " + STORE)
+            return 0
         print("作りました: " + init_store())
         return 0
     try:

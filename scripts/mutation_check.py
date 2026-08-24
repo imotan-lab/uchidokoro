@@ -291,13 +291,14 @@ MUTATIONS = [
     {
         "why": "出典の投稿欄を落とさない（読者の書き込みを根拠にできる・Codex9回目）",
         "file": "scripts/confirmed_values.py",
-        "before": "    import fetched_page as _fp\n"
-                  '    return _fp.fetch(url, "claim_material").cleaned_html',
+        "before": "    got = _fp.fetch(url, \"claim_material\")",
         # ★取りに行く行は組み立てて書く★
         #   （監査42が、壊し方の定義文を本物のコードと誤認するため）
         "after": ("    import new_machine_watch as _w" + chr(10)
                   + '    with _w.fetching("claim_material"):' + chr(10)
-                  + "        return _w." + "_g" + "et(url)"),
+                  + "        _raw = _w." + "_g" + "et(url)" + chr(10)
+                  + "    import fetched_page as _fp2" + chr(10)
+                  + "    got = _fp2.FetchedPage(url, url, _raw)"),
         "run": ["scripts/confirmed_values.py"],
     },
     {
@@ -326,6 +327,29 @@ MUTATIONS = [
         "file": "scripts/confirmed_values.py",
         "before": "    data = load(strict=False, require_exists=True)",
         "after": "    data = load(strict=False)",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "転送先を捨てる（投稿欄の決まりと本文が食い違う・Codex10回目）",
+        "file": "scripts/confirmed_values.py",
+        "before": "    if a != b:",
+        "after": "    if False:",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "指紋の箱ごと消されても通す（Codex10回目）",
+        "file": "scripts/confirmed_values.py",
+        "before": "            if not (x.get(\"identity_why\") "
+                  "or x.get(\"identity_proof\")):\n"
+                  "                continue",
+        "after": "            continue",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "壊れた入れ物を「0件」と読む（Codex10回目）",
+        "file": "scripts/confirmed_values.py",
+        "before": "    if slug in raw and not isinstance(raw[slug], dict):",
+        "after": "    if False:",
         "run": ["scripts/confirmed_values.py"],
     },
     {
