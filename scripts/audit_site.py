@@ -2115,8 +2115,11 @@ def _check_53_selftest() -> list:
             ("記録はあるが確かめた人が無い",
              {**ok_ua, "_checked_by": ""}, True),
             ("期限の形が違う", {**ok_ua, "_recheck_by": "2026/13/45"}, True),
+            ("確かめた日の形が違う", {**ok_ua, "_checked_at": "きのう"}, True),
             ("そろっている", ok_ua, False),
-            ("箱ごと落とせる", {"drop": [{"selector": "x"}]}, False)):
+            ("★掃除が理解できない決まりごと★",
+             {"drop": [{"selector": "x"}]}, True),
+            ("箱ごと落とせる", {"drop": [{"id": "comments"}]}, False)):
         got = bool(_judge_53_user_area(ua))
         if got != want:
             bad.append(f"★{name}★ → {'鳴った' if got else '黙った'}")
@@ -2127,7 +2130,18 @@ def _judge_53_user_area(ua: dict) -> list:
     """1つの出典について、投稿欄の備えが足りているか（★判定はここだけ★）"""
     import datetime as _dt
     ng = []
+    drops = [r for r in (ua.get("drop") or []) if isinstance(r, dict)]
     if ua.get("drop"):
+        # ★★中身まで見る★★（2026-08-24・Codexの13回目）
+        #   ★truthy なら即合格にしていた★ので、
+        #   掃除の処理が理解できない形でも監査だけ緑になれた。
+        #   掃除側が見るのは id と class（`user_area._match`）。
+        if not drops:
+            return ["投稿欄の決まりごとの形が違います（辞書の配列で書きます）"]
+        bad = [r for r in drops if not (r.get("id") or r.get("class"))]
+        if bad:
+            return [f"投稿欄の決まりごとに id も class もありません: {bad[:2]}"
+                    "／★掃除の処理が理解できない形です★"]
         return ng                          # 箱ごと落とせる
     why = str(ua.get("_no_user_area_why") or "").strip()
     if not why:
@@ -2136,6 +2150,14 @@ def _judge_53_user_area(ua: dict) -> list:
     for k in ("_checked_at", "_checked_by", "_recheck_by"):
         if not str(ua.get(k) or "").strip():
             ng.append(f"投稿欄を確かめた記録に {k} がありません")
+    # ★確かめた日も日付として読めること★（2026-08-24・Codexの13回目）
+    #   ★空でないことしか見ていなかった★ので、でたらめな日付でも通った。
+    ca = str(ua.get("_checked_at") or "").strip()
+    if ca:
+        try:
+            _dt.date.fromisoformat(ca)
+        except Exception:                                    # noqa: BLE001
+            ng.append(f"確かめた日の形が違います（{ca!r}）")
     rb = str(ua.get("_recheck_by") or "").strip()
     if rb:
         try:

@@ -93,6 +93,18 @@ def fetch(url: str, purpose: str = "claim_material", get=None) -> FetchedPage:
         cleaned = _ua.clean_html(raw or "", url)
     except Exception as e:                 # noqa: BLE001
         raise PageError(f"投稿欄を落としきれません（{url}）: {str(e)[:120]}")
+    # ★★決まりごとが無いのに投稿欄らしき作りがあれば、使わない★★
+    #   （2026-08-24・Codexの13回目）
+    #   ★行切りは文章にしか効かない★＝天井・スペック・AT・CZは
+    #   **HTMLの表を直接読む**ので、投稿欄の中に表があれば材料に入る。
+    #   ★止めるだけ★＝どこが投稿欄かは2AIが判断し、名鑑に決まりごとを登録する。
+    if not [r for r in (_ua.conf_for_url(url).get("drop") or [])
+            if isinstance(r, dict)]:
+        hint = _ua.looks_like_user_area(cleaned)
+        if hint:
+            raise PageError(
+                f"投稿欄がありそうなのに決まりごとがありません（{url}）: "
+                f"{hint[:3]}／★2AIで投稿欄の場所を決めて名鑑に登録してください★")
     return FetchedPage(url, fin, cleaned)
 
 

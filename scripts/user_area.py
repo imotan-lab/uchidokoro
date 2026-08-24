@@ -348,6 +348,41 @@ class _Cutter(_HTMLParser):
         self._start, self._tag = None, ""
 
 
+# ★投稿欄がありそうな手がかり★（★どれを残すかは決めない。止めるだけ★）
+#   （2026-08-24・Codexの13回目）
+#   ★例外リストではない★＝ここに挙げるのは「読むのをやめる合図」であって、
+#   「この箱を落として残りを読む」という判断ではない。
+#   判断（どこが投稿欄か）は2AIがして、名鑑に決まりごとを登録する。
+_USER_AREA_HINTS = (
+    "<textarea", 'type="comment"', "commentform", "comment-form",
+    "comments-area", "commentlist", "review-form", "reviewform",
+)
+_USER_AREA_WORDS = ("コメント", "口コミ", "レビュー", "みんなの評価",
+                    "書き込み", "投稿する")
+
+
+def looks_like_user_area(html: str) -> list:
+    """★投稿欄がありそうか★（決まりごとが無いページ向けの見張り）
+
+    ★これは「落とす場所を決める」処理ではない★＝
+      見つかったら**そのページを出典に使わない**（fail-closed）。
+      どこが投稿欄かは2AIが判断し、名鑑に決まりごとを登録する。
+    """
+    h = str(html or "")
+    got = [x for x in _USER_AREA_HINTS if x in h.lower()]
+    low = h.lower()
+    if "<form" in low:
+        for w in _USER_AREA_WORDS:
+            if w in h:
+                got.append(w)
+                break
+    for w in _USER_AREA_WORDS:
+        # 見出しの中に出てくるもの（本文中の言及は拾わない）
+        import re as _re2
+        if _re2.search(r"<h[1-6][^>]*>[^<]{0,20}" + _re2.escape(w), h):
+            got.append("見出し: " + w)
+    return sorted(set(got))
+
 def clean_html(html: str, url: str = "", conf: dict | None = None) -> str:
     """★投稿欄・AI欄を、HTMLの段階で箱ごと落とす★
 

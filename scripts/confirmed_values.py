@@ -690,6 +690,29 @@ def check_sources(sources: list) -> list:
     return sorted(keys)
 
 
+def page_text(html: str, url: str) -> str:
+    """★出典として読んでよい本文★（★ここだけが作る★）
+
+    ★★2026-08-24・Codexの13回目★★
+      ★保存するときの指紋は `text_of()`、公開前の再確認は `_visible_text()` と
+      別々に作っていた★。投稿欄の決まりごとが無いサイトに見出しができると、
+        ・保存時＝投稿欄より前の本文
+        ・再確認時＝投稿欄を含む全文
+      になり、**本文が変わっていないのに指紋が食い違って本番が止まる**。
+
+    ★二重に掃除しない★＝取ってくる時点で箱は落ちている。
+      足りないのは「決まりごとが無いサイトの行切り」だけ。
+    ★行で切る処理なので、切る前に1行へ潰さない★（2026-08-24に踏んだ）。
+    """
+    import ceiling_lookup as _cl
+    import new_machine_watch as _w2
+    import user_area as _ua2
+    raw = _w2._visible_text(html)
+    ua = _ua2.conf_for_url(url or "")
+    if [r for r in (ua.get("drop") or []) if isinstance(r, dict)]:
+        return " ".join(raw.split())       # 箱で落とし済み（行では切らない）
+    return " ".join(_cl.cut_user_area(raw).split())
+
 def verify_source(src: dict, name: str, fetch=None) -> dict:
     """★出典のページを実際に取ってきて確かめる★（2026-08-09・依頼130 P0-2）
 
@@ -716,29 +739,8 @@ def verify_source(src: dict, name: str, fetch=None) -> dict:
         raise ConfirmedError(f"出典を取得できません（{src['url']}）: {str(e)[:80]}")
 
     def text_of(h):
-        """★出典として読んでよい本文★（★1回だけ作って全部これを使う★）
-
-        ★★2026-08-24・Codexの12回目★★
-          ★私は前回、同定の根拠の側だけを直して「引用の照合を直した」と
-          報告していた★。読者に出る値の引用は `_visible_text` のままで、
-          **投稿欄の決まりごとが無いサイトでは読者の書き込みが通った**。
-          ＝また「片方だけ直した」。
-
-        ★二重に掃除しない★（Codexの12回目・停止型）
-          取ってくる時点で `fetched_page.fetch` が**箱を落とし済み**。
-          そこへもう一度 `clean_text` を通すと、
-          決まりごとのあるサイトでは「落とす前に必須の箱があること」を
-          求める検査に引っかかり、**正常なページを拒否する**。
-          → ★足りないのは「決まりごとが無いサイトの行切り」だけ★なので、
-            そこだけを足す。
-        """
-        # ★行で切る処理なので、切る前に1行へ潰さない★（2026-08-24・自分で踏んだ）
-        raw = _w._visible_text(h)
-        ua = _ua.conf_for_url(src.get("url") or "")
-        if [r for r in (ua.get("drop") or []) if isinstance(r, dict)]:
-            return " ".join(raw.split())   # 箱で落とし済み（行では切らない）
-        import ceiling_lookup as _cl9
-        return " ".join(_cl9.cut_user_area(raw).split())
+        """★共通の本文づくりを呼ぶだけ★（作る場所は `page_text` 1か所）"""
+        return page_text(h, src.get("url") or "")
     ok, why = _mc.page_is_machine(html, name)
     if not ok:
         # ★機械が弾いたら、それはAIの出番の合図★（2026-08-11・運営者の指摘）
@@ -1092,9 +1094,10 @@ def reverify(slug: str, fetch=None, name: str = "",
             if old:
                 import hashlib as _hl
                 import new_machine_watch as _w9
+                # ★保存したときと同じ作り方で本文を出す★
+                #   （2026-08-24・Codexの13回目＝別々に作っていた）
                 now_sha = _hl.sha256(
-                    " ".join(_w9._visible_text(html).split()).encode("utf-8")
-                ).hexdigest()
+                    page_text(html, url).encode("utf-8")).hexdigest()
                 if not old.get("text_sha256"):
                     ng.append(f"{slug} / {field}: 2AIで通した出典に"
                               f"本文の指紋がありません（{url}）"
@@ -1779,14 +1782,116 @@ def selftest() -> int:
                               "L試験機")
             except ConfirmedError:
                 _nr_bad = True
-            t("★★決まりごとが無いサイトでも、投稿文は引用にできない★★"
-              "／★読者の書き込みが読者向けの値の根拠になっていた★",
+            t("★★決まりごとが無いサイトに投稿欄があれば、そのページを使わない★★"
+              "／★行切りは文章にしか効かない＝表を読む経路が守れない★"
+              "（2026-08-24・Codexの13回目）",
               _nr_bad)
-            t("　（対照）本文に書いてあるものは通る",
+            # ★★どこで止まったかまで見る★★（取得の段で止まるのが正しい）
+            #   ★「例外が出た」だけで満足しない★＝別の理由で落ちていても
+            #   試験は緑になる（今日それを1度やった）。
+            _why13 = ""
+            try:
+                verify_source({"url": _norule,
+                               "quote": "読者A 天井は555Gだと思う"},
+                              "L試験機")
+            except ConfirmedError as _e13:
+                _why13 = str(_e13)
+            t("　止まる場所は「取ってくる段」（表も文章もまとめて守れる）",
+              "投稿欄がありそうなのに決まりごとがありません" in _why13)
+
+            # ★対照★ 投稿欄が無いページなら、これまでどおり通る
+            _nr_clean = ("<html><head><title>L試験機 解析</title></head><body>"
+                         "<h1>L試験機</h1><p>天井は999Gです。</p></body></html>")
+
+            def _g13(_x, timeout=20):
+                _w12.LAST_FINAL_URL["url"] = _x
+                return _nr_clean
+            _w12._get = _g13
+            t("　（対照）投稿欄が無いページは、これまでどおり通る",
               verify_source({"url": _norule, "quote": "天井は999Gです。"},
                             "L試験機").get("verified_at"))
         finally:
             _w12._get = _real_get12
+
+        # ★★奥の層も直接試す★★（2026-08-24・Codexの13回目のあと）
+        #   ★取ってくる段で止める守りを入れたら、その先の守りが
+        #     試験で一度も通らなくなった★（壊し方3件が捕まらなくなった）。
+        #   守りは重ねてある（取得で止める／行で切る／引用を照合する）ので、
+        #   ★奥の層は取得を通さずに直接試す★。
+        _deep_url = "https://nana-press.com/kaiseki/machine/2/"
+        _deep_html = ("<html><head><title>L試験機 解析</title></head><body>"
+                      "<h1>L試験機</h1><p>天井は999Gです。</p>"
+                      "<p>口コミ</p><p>読者A 天井は555Gだと思う</p>"
+                      "</body></html>")
+        t("★★決まりごとが無いページは、投稿より前だけを本文にする★★"
+          "／★行で切る前に1行へ潰すと、切れなくなる★",
+          "999" in page_text(_deep_html, _deep_url)
+          and "555" not in page_text(_deep_html, _deep_url))
+        _deep_bad = False
+        try:
+            verify_source({"url": _deep_url,
+                           "quote": "読者A 天井は555Gだと思う"},
+                          "L試験機", lambda _u: _deep_html)
+        except ConfirmedError:
+            _deep_bad = True
+        t("★★引用の照合も同じ本文の上でやる★★"
+          "／★ここだけ素通しに戻すと、投稿文が根拠になる★",
+          _deep_bad)
+        t("　（対照）本文に書いてあるものは通る",
+          verify_source({"url": _deep_url, "quote": "天井は999Gです。"},
+                        "L試験機", lambda _u: _deep_html).get("verified_at"))
+
+        # ★★指紋も同じ作り方で出す★★（保存時と再確認で食い違わせない）
+        #   ★自分で計算して比べるだけでは、本体を通らない★
+        #   （2026-08-24＝それをやって、壊し方が捕まえられなかった）。
+        #   ★本体の reverify を通して確かめる★
+        import hashlib as _hl13
+        _keep13 = STORE
+        try:
+            import tempfile as _tf13
+            STORE = os.path.join(_tf13.mkdtemp(prefix="cvsha_"),
+                                 "confirmed_values.json")
+            _rows_m13 = _sj.read_json(
+                os.path.join(BASE, "assets", "data", "machines.json"),
+                expect=(dict, list))
+            _rows_m13 = (_rows_m13["machines"]
+                         if isinstance(_rows_m13, dict) else _rows_m13)
+            _slug13 = str(_rows_m13[0]["slug"])
+            _name13 = str(_rows_m13[0]["name"])
+            _h13 = ("<html><head><title>解析まとめ</title></head><body>"
+                    f"<p>{_name13} の解析です。</p><p>天井は999Gです。</p>"
+                    "<p>口コミ</p><p>読者A 天井は555Gだと思う</p></body></html>")
+            # ★保存時と同じ作り方で指紋を作る★
+            _sha13 = _hl13.sha256(
+                page_text(_h13, _deep_url).encode("utf-8")).hexdigest()
+            json.dump({"schema_version": SCHEMA, "machines": {_slug13: {
+                "ceiling": {
+                    "value": {"kind": "GAME", "amount": "999", "unit": "G",
+                              "benefit": "AT当選"},
+                    "sources": [
+                        {"url": _deep_url, "quote": "天井は999Gです。",
+                         "identity_why": "2AIで機種名と導入日を合わせました",
+                         "identity_proof": f"{_name13} の解析です。",
+                         "identity_override": {
+                             "why": "2AIで機種名と導入日を合わせました",
+                             "proof": f"{_name13} の解析です。",
+                             "machine_said": "NAME_CORE_MISMATCH",
+                             "text_sha256": _sha13,
+                             "at": "2026-08-24"}},
+                        {"url": "https://chonborista.com/slot/x",
+                         "quote": "天井は999Gです。"}],
+                    "lineages": ["vote:chonborista", "vote:nana-press"],
+                    "agreed_by": ["claude", "codex"],
+                    "why": "2AIで突き合わせました",
+                    "decided_at": "2026-08-24",
+                    "official_url": ""}}}},
+                open(STORE, "w", encoding="utf-8"), ensure_ascii=False)
+            _rv13 = reverify(_slug13, fetch=lambda _u: _h13)
+            t("★★保存した指紋と同じ作り方なら、本文が同じ限り止まらない★★"
+              "／★別の作り方だと、本文が変わっていないのに本番が止まる★",
+              not [x for x in _rv13 if "本文が変わって" in x])
+        finally:
+            STORE = _keep13
 
         # ★★2AIで通した出典は、指紋の箱ごと必須★★
         #   ★直す前は「箱があるときだけ」見ていた★ので、箱ごと消すと素通り。

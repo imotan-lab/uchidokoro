@@ -40,6 +40,15 @@ import subprocess
 import sys
 import tempfile
 
+# ★★自分の出力は必ず utf-8★★（2026-08-24・自分で踏んだ）
+#   ★結果をファイルへ落とすと、Windowsの既定（cp932）で書かれる★。
+#   それを utf-8 として読むと日本語が化け、
+#   ★「★NG」を探しても見つからず「NGなし」と誤読する★（実際にやった）。
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:                                            # noqa: BLE001
+    pass
+
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WF = os.path.join(BASE, ".github", "workflows", "pages-rehearsal.yml")
 

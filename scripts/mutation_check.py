@@ -362,8 +362,8 @@ MUTATIONS = [
     {
         "why": "行で切る前に1行へ潰す（行切りが効かなくなる・2026-08-24に自分で踏んだ）",
         "file": "scripts/confirmed_values.py",
-        "before": "        raw = _w._visible_text(h)",
-        "after": '        raw = " ".join(_w._visible_text(h).split())',
+        "before": "    raw = _w2._visible_text(html)",
+        "after": '    raw = " ".join(_w2._visible_text(html).split())',
         "run": ["scripts/confirmed_values.py"],
     },
     {
@@ -371,6 +371,32 @@ MUTATIONS = [
         "file": "scripts/audit_site.py",
         "before": "            if due < _dt.date.today():",
         "after": "            if False:",
+        "run": ["scripts/audit_site.py"],
+    },
+    {
+        "why": "投稿欄がありそうでも取ってくる（表の中の投稿が材料になる・Codex13回目）",
+        "file": "scripts/fetched_page.py",
+        "before": "        hint = _ua.looks_like_user_area(cleaned)",
+        "after": "        hint = []",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "再確認の指紋を別の作り方で出す（本文が同じでも止まる・Codex13回目）",
+        "file": "scripts/confirmed_values.py",
+        "before": "                now_sha = _hl.sha256(\n"
+                  "                    page_text(html, url).encode(\"utf-8\")"
+                  ").hexdigest()",
+        "after": "                now_sha = _hl.sha256(\n"
+                 "                    \" \".join(_w9._visible_text(html)"
+                 ".split()).encode(\"utf-8\")).hexdigest()",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "掃除が理解できない決まりごとでも通す（Codex13回目）",
+        "file": "scripts/audit_site.py",
+        "before": "        bad = [r for r in drops if not (r.get(\"id\") "
+                  "or r.get(\"class\"))]",
+        "after": "        bad = []",
         "run": ["scripts/audit_site.py"],
     },
     {

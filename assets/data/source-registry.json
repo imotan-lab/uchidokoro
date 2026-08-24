@@ -6,7 +6,8 @@
   "chonborista": {
    "name": "ちょんぼりすた",
    "canonical_hosts": [
-    "chonborista.com"
+    "chonborista.com",
+    "www.chonborista.com"
    ],
    "ownership_group_id": "own-chonborista",
    "content_lineage_id": "lin-chonborista",
@@ -27,7 +28,8 @@
   "nana-press": {
    "name": "なな徹（ナナプレス）",
    "canonical_hosts": [
-    "nana-press.com"
+    "nana-press.com",
+    "www.nana-press.com"
    ],
    "ownership_group_id": "own-nana-press",
    "content_lineage_id": "lin-nana-press",
@@ -37,7 +39,8 @@
   "1geki": {
    "name": "一撃",
    "canonical_hosts": [
-    "1geki.jp"
+    "1geki.jp",
+    "www.1geki.jp"
    ],
    "ownership_group_id": "own-1geki",
    "content_lineage_id": "lin-1geki",
@@ -48,7 +51,8 @@
   "dmm-ptown": {
    "name": "DMM ぱちタウン",
    "canonical_hosts": [
-    "p-town.dmm.com"
+    "p-town.dmm.com",
+    "www.p-town.dmm.com"
    ],
    "ownership_group_id": "own-dmm",
    "content_lineage_id": "lin-dmm-ptown",
