@@ -250,6 +250,45 @@ MUTATIONS = [
         "run": ["scripts/confirmed_values.py"],
     },
     {
+        "why": "数を部分一致で照合する（13.1の中の3.1が通る・Codex8回目）",
+        "file": "scripts/confirmed_values.py",
+        "before": "    if not _NUMBERISH.match(t):\n"
+                  "        return t in q                      "
+                  "# 文字の値は今までどおり",
+        "after": "    if True:\n        return t in q",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "系列が空なら比べない（0件の記録が通る・Codex8回目）",
+        "file": "scripts/confirmed_values.py",
+        "before": "                if keep != got:",
+        "after": "                if keep and keep != got:",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "手作業の口から公開できる（控えを通らない・Codex8回目）",
+        "file": "scripts/build_new_article.py",
+        "before": "        return 1\n    return 0",
+        "after": "        print(apply(slug, machine, detail))\n"
+                 "        return 0\n    return 0",
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "公開直前の再検証を呼ばない（控えの手書きを見破れない・Codex8回目）",
+        "file": "scripts/add_machine_run.py",
+        "before": "            _rv = _cv.reverify(out[\"slug\"])",
+        "after": "            _rv = []",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "再検証で本文の変化を見ない（2AI判断の前提が崩れても通す・Codex8回目）",
+        "file": "scripts/confirmed_values.py",
+        "before": "            if old.get(\"text_sha256\") and new.get(\"text_sha256\") \\\n"
+                  "                    and old[\"text_sha256\"] != new[\"text_sha256\"]:",
+        "after": "            if False:",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
         "why": "試験用の偽の機種を掃除しない（2026-08-24・自分で踏んだ）",
         "file": "scripts/publish_new_machine.py",
         "before": "        if apply_it:\n"

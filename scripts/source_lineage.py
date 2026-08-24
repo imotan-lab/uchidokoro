@@ -59,14 +59,22 @@ def _active(reg: dict) -> dict:
             if p.get("status") == "ACTIVE"}
 
 
-def vote_groups(reg: dict | None = None) -> dict:
+def vote_groups(reg: dict | None = None, pubs: dict | None = None) -> dict:
     """発行者ID → 票のかたまりのID。
 
     ownership（運営元が同じ）と lineage（転載系列が同じ）の
     **どちらかでつながる発行者は1つのかたまり**にする。
+
+    ★pubs★ 対象の発行者を差し替えたいときだけ渡す
+      （2026-08-24・Codexの8回目）。
+      ★算法は共通のまま★＝「状態を無視したい」ときに
+      **別の数え方を書き起こすと、必ず食い違う**。
+      実際、書き起こした版は転載系列しか見ておらず、
+      同じ運営の2社を2票と数え、共同制作の組もまとめず、
+      メーカー公式では票の名前まで変わっていた。
     """
     reg = reg if reg is not None else load_registry()
-    pubs = _active(reg)
+    pubs = _active(reg) if pubs is None else pubs
     parent: dict = {}
 
     def find(x):
@@ -249,14 +257,23 @@ def publisher_of_host_any(host: str, reg: dict | None = None) -> str:
     raise LineageError("登録されていないサイトです: " + str(host))
 
 
-def vote_key_any(publisher_id: str, reg: dict | None = None) -> str:
-    """★当時の票の単位★（状態を問わずに引く）"""
+def vote_groups_any(reg: dict | None = None) -> dict:
+    """★状態を無視した票のかたまり★（算法は正本とまったく同じ）
+
+    （2026-08-24・Codexの8回目）
+    ★書き起こさない★＝対象の発行者を「全部」にするだけ。
+    """
     reg = reg if reg is not None else load_registry()
-    p = (reg.get("publishers") or {}).get(str(publisher_id or ""))
-    if not p:
+    return vote_groups(reg, pubs=dict(reg.get("publishers") or {}))
+
+
+def vote_key_any(publisher_id: str, reg: dict | None = None) -> str:
+    """★当時の票の単位★（状態を問わずに引く。まとめ方は正本と同じ）"""
+    reg = reg if reg is not None else load_registry()
+    key = vote_groups_any(reg).get(str(publisher_id or ""))
+    if not key:
         raise LineageError("知らない出典です: " + str(publisher_id))
-    return "vote:" + str(p.get("content_lineage_id")
-                         or publisher_id).replace("lin-", "")
+    return key
 
 
 def vote_key_of_url(url: str, reg: dict | None = None) -> str:

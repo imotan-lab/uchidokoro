@@ -1127,6 +1127,47 @@ def selftest() -> int:
       _raises(lambda: build_detail("pw_x", "試験機", "2026-09-07",
                                    _mat_extra)))
 
+    # ★★控えを通らない書き込み口が残っていない★★（2026-08-24・Codexの8回目）
+    #   ★字面で見るのをやめた★＝同じ語が2か所にあると、
+    #   片方を書き換えても試験が緑のままだった（実際にそうなった）。
+    #   ★実際に動かして、書けないことを確かめる★
+    import contextlib as _ctx8
+    import io as _io8
+    _argv8 = sys.argv[:]
+    _slug8 = "zzz_cli_probe"
+    _det8 = os.path.join(BASE, "assets", "data", "machine-details",
+                         f"{_slug8}.json")
+    #   ★「例外で落ちた」を「止まった」と数えない★＝
+    #     書き込み関数が別の理由で失敗しても、口が開いていることに変わりはない。
+    #     ★実際に呼ばれたかどうかを見る★
+    _called8 = []
+    _real_apply8 = globals()["apply"]
+
+    def _spy8(*a, **k):
+        _called8.append(a)
+        return []
+
+    try:
+        globals()["apply"] = _spy8
+        sys.argv = ["build_new_article.py", "--apply",
+                    "--name", "L試験機",
+                    "--maker", "bellco",
+                    "--official-url",
+                    f"https://m.example/products/slot/{_slug8}/"]
+        with _ctx8.redirect_stdout(_io8.StringIO()):
+            try:
+                _rc8 = main()
+            except SystemExit as e:                          # noqa: BLE001
+                _rc8 = e.code if isinstance(e.code, int) else 1
+            except Exception:                                # noqa: BLE001
+                _rc8 = 1
+    finally:
+        globals()["apply"] = _real_apply8
+        sys.argv = _argv8
+    t("★★手作業の口からは公開できない★★"
+      "／★無人の経路だけ塞いでも、手元の口が開いていれば同じこと★",
+      not _called8 and _rc8 != 0 and not os.path.isfile(_det8))
+
     t("★★別の項目の控えでは通らない★★"
       "／★値だけを照合すると、出玉率の控えでAT確率を通せてしまう★",
       _raises(lambda: build_detail("pw_x", "試験機", "2026-09-07",
@@ -1461,16 +1502,23 @@ def main() -> int:
     machine = build_machine(slug, args.name, args.maker, args.official_url,
                             args.release, material)
     detail = build_detail(slug, args.name, args.release, material)
-    if not args.apply:
-        print("（dry-run／--apply で書き込みます）")
-        print(json.dumps({"machine": machine, "detail": detail},
-                         ensure_ascii=False, indent=1)[:2600])
-        return 0
-    wrote = apply(slug, machine, detail)
-    print("書き込みました:")
-    for w in wrote:
-        print("  " + w)
-    print(chr(10) + "★このあと必ず★ python scripts/claim_pipeline.py --slug " + slug)
+    print("（下見だけです。この口からは公開しません）")
+    print(json.dumps({"machine": machine, "detail": detail},
+                     ensure_ascii=False, indent=1)[:2600])
+    if args.apply:
+        # ★★控えを通らない書き込み口を残さない★★（2026-08-24・Codexの8回目）
+        #   ★この口は `confirmed_values.merge_into()` を通らなかった★ので、
+        #   材料に2AIの印が最初から無ければ、**控えが消えていても**
+        #   確定値を抜いた記事を書けた。
+        #   ＝無人タスクの経路だけ塞いでも、手元の口が開いていれば同じこと。
+        print(chr(10)
+              + "★この口からは公開しません★"
+              + chr(10)
+              + "新台の公開は python scripts/add_machine_run.py を使います"
+              + chr(10)
+              + "（控えの読み込み・2AIの確定値の取り込み・"
+              + "公開前の関所を通ります）")
+        return 1
     return 0
 
 

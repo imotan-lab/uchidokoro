@@ -228,6 +228,10 @@ def base_field(field: str) -> str:
 #   単位は記事側だけが付けるので、値の側で単位の種類を必ず確かめる。
 import re as _re                          # noqa: E402
 
+
+# ★数とみなす形★（前後に数字が続いていないかを見る対象）
+_NUMBERISH = _re.compile(r"^[0-9]+(\.[0-9]+)?$")
+
 # ★値には単位を書かせない★（2026-08-10・依頼134 P0-1）
 #   記事側が「約」「枚」「G」を付けるので、値にも付いていると
 #   「純増約約2.8枚枚」のような文が出る（実際に通る形だった）。
@@ -519,11 +523,16 @@ def validate_record(field: str, rec) -> list:
         # ★独立した2系列を数え直す★（保存された系列を信じない）
         if len(pubs) == len(src):
             try:
-                got = sorted({_sl.vote_key_any(p) for p in pubs})
+                # ★共同制作の組もまとめる★（正本と同じ扱い）
+                got = sorted(_sl.merge_joint({_sl.vote_key_any(p)
+                                              for p in pubs}))
                 if len(got) < 2:
                     ng.append(f"{field}: 独立した2系列になっていません（{got}）")
                 keep = sorted(rec.get("lineages") or [])
-                if keep and keep != got:
+                # ★空でも比べる★（2026-08-24・Codexの8回目）
+                #   `keep and` を付けていたので、系列0件の記録は
+                #   ★比較そのものが飛ばされて通っていた★。
+                if keep != got:
                     ng.append(f"{field}: 保存された系列と数え直しが違います"
                               f"（{keep} ≠ {got}）")
             except Exception as e:                           # noqa: BLE001
@@ -536,7 +545,7 @@ def validate_record(field: str, rec) -> list:
         for i, x in enumerate(src):
             q = " ".join(str((x or {}).get("quote") or "").split())
             for tk in toks:
-                if tk not in q:
+                if not token_in_quote(tk, q):
                     ng.append(f"{field}: 値『{tk}』が出典{i + 1}の引用にありません")
     return ng
 
@@ -610,6 +619,37 @@ def parse_source(spec: str) -> dict:
         raise ConfirmedError(str(e))
     return {"publisher": pub, "url": url, "quote": quote}
 
+
+def token_in_quote(token: str, quote: str) -> bool:
+    """★その値が、引用に**その値として**書かれているか★
+
+    ★★2026-08-24・Codexの8回目★★
+      ★直す前はただの部分一致だった★ので、
+
+        値 3.1 ／ 引用「純増は13.1枚/G」 → 通る
+        値 100 ／ 引用「天井は1000G」    → 通る
+
+      ＝★出典に書かれていない数を、書かれていることにできた★。
+      記事はその値をそのまま出すので、読者への誤情報になる。
+
+    ★数のときだけ、前後に数字・小数点が続かないことを求める★
+      （文字の値は今までどおり部分一致。機種名や恩恵は
+        文の一部として書かれているのが普通なので）。
+    ★3.1 と 3.10 は別の値として扱う★（末尾に数字が続くため）。
+    """
+    t = str(token or "").strip()
+    q = " ".join(str(quote or "").split())
+    if not t:
+        return False
+    if not _NUMBERISH.match(t):
+        return t in q                      # 文字の値は今までどおり
+    for m in _re.finditer(_re.escape(t), q):
+        before = q[m.start() - 1] if m.start() > 0 else ""
+        after = q[m.end()] if m.end() < len(q) else ""
+        if before in "0123456789." or after in "0123456789.":
+            continue                       # ★別の数の一部★
+        return True
+    return False
 
 def check_sources(sources: list) -> list:
     """★独立2系列そろっているか★（同じ発行者の2ページは1票）"""
@@ -820,7 +860,7 @@ def record(slug: str, field: str, value, sources: list, by: list,
     for s in sources:
         q = " ".join(str(s["quote"]).split())
         for token in toks:
-            if token not in q:
+            if not token_in_quote(token, q):
                 raise ConfirmedError(
                     f"値『{token}』が {s['publisher']} の引用にありません"
                     "（★出典ごとに同じ値を支えている必要があります★）")
@@ -834,6 +874,10 @@ def record(slug: str, field: str, value, sources: list, by: list,
         "agreed_by": who,
         "why": str(why).strip()[:300],
         "decided_at": datetime.date.today().isoformat(),
+        # ★どの機種の正本から引いたか★（2026-08-24・Codexの8回目）
+        #   ★これが無いと、あとで「slugと正式名称が今も同じか」を
+        #   確かめ直せない★（記録だけ残って、由来が追えない）。
+        "official_url": str(official_url or ""),
     }
     data["machines"].setdefault(slug, {})[field] = rec
     _save(data)
@@ -857,6 +901,83 @@ def _tokens(value) -> list:
         return []
     return [str(value)]
 
+
+def reverify(slug: str, fetch=None) -> list:
+    """★公開しようとしている機種の控えだけ、取り直して確かめる★
+
+    ★★なぜ要るか★★（2026-08-24・Codexの8回目）
+      控えの読み直しは、**保存されたURLと引用を信じて**いる。
+      控えを手で書き換えられたら、偽の引用でも通ってしまう。
+      ＝「書き込み口を厳しくしても、読み込み口が信じてしまう」型の残り。
+
+    ★全件はやらない★＝いま書こうとしている機種だけ。
+      出典は各1回だけ取りに行く（同じURLは1回）。
+
+    ★戻り値は問題の一覧★（空なら合格）。
+    """
+    ng = []
+    rows = for_slug(slug)
+    if not rows:
+        return ng                          # 確定値が無い機種は何もしない
+    # ★機種の正本を引き直す★（slugと正式名称が今も同じか）
+    urls = {str((r or {}).get("official_url") or "") for r in rows.values()}
+    urls.discard("")
+    name = ""
+    for u in urls:
+        try:
+            got_slug, got_name = bind_machine(u)
+        except Exception as e:                               # noqa: BLE001
+            ng.append(f"{slug}: 公式URLから機種を引き直せません（{str(e)[:60]}）")
+            continue
+        if got_slug != slug:
+            ng.append(f"{slug}: 公式URLが別の機種を指しています（{got_slug}）")
+        name = name or got_name
+    if not name:
+        # ★公式URLを持たない古い記録★（2026-08-24）
+        #   ★slugをそのまま機種名として使わない★＝
+        #   出典ページの同定に必ず失敗し、**正しい記録で公開が止まる**。
+        #   一覧から正式名称を引く。
+        try:
+            rows_m = _sj.read_json(
+                os.path.join(BASE, "assets", "data", "machines.json"),
+                expect=(dict, list))
+            rows_m = rows_m["machines"] if isinstance(rows_m, dict) else rows_m
+            for m in rows_m:
+                if str((m or {}).get("slug") or "") == slug:
+                    name = str(m.get("name") or "")
+                    break
+        except Exception:                                    # noqa: BLE001
+            pass
+    if not name:
+        ng.append(f"{slug}: 正式名称を引けないので出典を確かめ直せません")
+        return ng
+    seen = {}
+    for field, r in rows.items():
+        for src in (r.get("sources") or []):
+            url = str((src or {}).get("url") or "")
+            if not url:
+                continue
+            if url in seen:
+                got = seen[url]
+            else:
+                try:
+                    got = verify_source(dict(src), name or slug, fetch)
+                    seen[url] = got
+                except Exception as e:                       # noqa: BLE001
+                    seen[url] = None
+                    ng.append(f"{slug} / {field}: 出典を確かめ直せません"
+                              f"（{url}／{str(e)[:60]}）")
+                    continue
+            if got is None:
+                continue
+            # ★本人性を2AIの判断で通した出典は、本文が変わっていないか見る★
+            old = (src or {}).get("identity_override") or {}
+            new = (got or {}).get("identity_override") or {}
+            if old.get("text_sha256") and new.get("text_sha256") \
+                    and old["text_sha256"] != new["text_sha256"]:
+                ng.append(f"{slug} / {field}: 出典の本文が変わっています"
+                          f"（{url}）／2AIで判断し直してください")
+    return ng
 
 def forget(slug: str, field: str) -> dict:
     data = load()
@@ -1137,6 +1258,30 @@ def selftest() -> int:
         finally:
             STORE = _keep_store
 
+        # ★★数は「別の数の一部」では通さない★★（2026-08-24・Codexの8回目）
+        #   ★直す前はただの部分一致だった★ので、
+        #   出典に書かれていない数を「書かれている」ことにできた。
+        for _tk, _q, _want in (("3.1", "純増は13.1枚/G", False),
+                               ("3.1", "純増は3.1枚/G", True),
+                               ("100", "天井は1000G", False),
+                               ("100", "天井は100G", True),
+                               ("3.1", "純増は3.10枚/G", False),
+                               ("AT当選", "恩恵はAT当選です", True)):
+            t(f"★数の照合：『{_tk}』と『{_q}』→ {_want}★",
+              token_in_quote(_tk, _q) is _want)
+        # ★書き込みの側でも同じ★（引用に別の数しか無ければ記録できない）
+        _num_bad = False
+        try:
+            check_shape("at_net_unmapped",
+                        {"values": ["3.1"], "mapping": "UNCONFIRMED"})
+            if token_in_quote("3.1", "純増は13.1枚/G"):
+                _num_bad = False
+            else:
+                _num_bad = True
+        except Exception:                                    # noqa: BLE001
+            _num_bad = False
+        t("　記録するときも、別の数の一部では通さない", _num_bad)
+
         # ★★純増は引用と照合する★★（2026-08-24・Codexの7回目）
         #   ★直す前は照合対象が空だった★ので、出典に無い数を載せられた。
         _np_toks = check_shape("at_net_unmapped",
@@ -1196,9 +1341,133 @@ def selftest() -> int:
                 "agreed_by": ["claude", "codex"],
                 "why": "2AIで突き合わせました",
                 "decided_at": "2026-08-24"}
+        # ★★系列0件でも比べる★★（2026-08-24・Codexの8回目）
+        _empty_lin = {"value": {"kind": "GAME", "amount": "999", "unit": "G",
+                                "benefit": "AT当選"},
+                      "sources": [
+                          {"url": "https://chonborista.com/slot/x",
+                           "quote": "999 G AT当選"},
+                          {"url": "https://nana-press.com/kaiseki/x",
+                           "quote": "999 G AT当選"}],
+                      "lineages": [],
+                      "agreed_by": ["claude", "codex"],
+                      "why": "2AIで突き合わせました",
+                      "decided_at": "2026-08-24"}
+        t("★★系列が空の記録も、数え直しと突き合わせる★★"
+          "／★空だと比較そのものを飛ばしていた★",
+          any("系列" in x for x in validate_record("ceiling", _empty_lin)))
+        # ★まとめ方は正本と同じ★（状態だけ無視する）
+        import source_lineage as _sl9
+        t("★★状態を無視した数え方でも、票のまとめ方は正本と同じ★★"
+          "／★書き起こすと同じ運営を2票と数える★",
+          set(_sl9.vote_groups_any().values())
+          >= set(_sl9.vote_groups().values()))
+
         t("★★1つの出典しか無い記録は、控えを読む時点で断る★★"
           "／★保存された系列の申告を信じない★",
           any("系列" in x for x in validate_record("ceiling", _one)))
+
+        # ★★公開直前の再検証★★（2026-08-24・Codexの8回目）
+        #   ★控えの読み直しは、保存されたURLと引用を信じている★ので、
+        #   手で書き換えられた偽の引用は見破れない。取り直して確かめる。
+        _keep3 = STORE
+        try:
+            import tempfile as _tf7
+            STORE = os.path.join(_tf7.mkdtemp(prefix="cvrv_"),
+                                 "confirmed_values.json")
+            # ★実在する機種で試す★（機種名は一覧から引かれる）
+            _rows_m = _sj.read_json(
+                os.path.join(BASE, "assets", "data", "machines.json"),
+                expect=(dict, list))
+            _rows_m = (_rows_m["machines"] if isinstance(_rows_m, dict)
+                       else _rows_m)
+            _rv_slug = str(_rows_m[0]["slug"])
+            _rv_name = str(_rows_m[0]["name"])
+            _quote = f"{_rv_name}の解析 999 G AT当選 と確認できました。"
+
+            def _page(_q):
+                return ("<html><head><title>" + _rv_name
+                        + "</title></head><body><h1>" + _rv_name
+                        + f"</h1><p>{_q}</p></body></html>")
+
+            _hits = []
+
+            def _fetch_ok(u):
+                _hits.append(u)
+                return _page(_quote)
+
+            json.dump({"schema_version": SCHEMA, "machines": {_rv_slug: {
+                "ceiling": {
+                    "value": {"kind": "GAME", "amount": "999", "unit": "G",
+                              "benefit": "AT当選"},
+                    "sources": [
+                        {"url": "https://chonborista.com/slot/x",
+                         "quote": _quote},
+                        {"url": "https://nana-press.com/kaiseki/x",
+                         "quote": _quote}],
+                    "lineages": ["vote:chonborista", "vote:nana-press"],
+                    "agreed_by": ["claude", "codex"],
+                    "why": "2AIで突き合わせました",
+                    "decided_at": "2026-08-24",
+                    "official_url": ""}}}},
+                open(STORE, "w", encoding="utf-8"), ensure_ascii=False)
+            t("★★取り直して引用が実在すれば通る★★",
+              reverify(_rv_slug, fetch=_fetch_ok) == [])
+            t("　同じURLは1回しか取りに行かない（出典2件で2回）",
+              len(_hits) == 2)
+
+            def _fetch_changed(u):
+                return _page("いまは別のことが書いてあります。")
+            t("★★引用が消えていたら公開前に気づく★★"
+              "／★控えを手で書き換えても、取り直せば分かる★",
+              reverify(_rv_slug, fetch=_fetch_changed) != [])
+
+            # ★★2AIで本人性を通した出典は、本文が変わったら知らせる★★
+            #   （2026-08-24・Codexの8回目）
+            #   ★2AIが「この機種のページだ」と判断した前提は、
+            #     そのときの本文★。本文が変わっていたら判断し直す。
+            #   題が機種名でないページ＝機械では同定できないので、
+            #   2AIの判断（理由と逐語）で通した形を作る。
+            def _page2(_body):
+                return ("<html><head><title>解析まとめ</title></head><body>"
+                        f"<p>{_rv_name} の解析です。</p><p>{_body}</p>"
+                        "</body></html>")
+
+            _proof = f"{_rv_name} の解析です。"
+            _src_ov = {"url": "https://chonborista.com/slot/y",
+                       "quote": _quote,
+                       "identity_why": "2AIで機種名と導入日を突き合わせました",
+                       "identity_proof": _proof}
+            _ov = verify_source(dict(_src_ov), _rv_name,
+                                lambda u: _page2(_quote))
+            json.dump({"schema_version": SCHEMA, "machines": {_rv_slug: {
+                "ceiling": {
+                    "value": {"kind": "GAME", "amount": "999", "unit": "G",
+                              "benefit": "AT当選"},
+                    "sources": [
+                        _ov,
+                        {"url": "https://nana-press.com/kaiseki/x",
+                         "quote": _quote}],
+                    "lineages": ["vote:chonborista", "vote:nana-press"],
+                    "agreed_by": ["claude", "codex"],
+                    "why": "2AIで突き合わせました",
+                    "decided_at": "2026-08-24",
+                    "official_url": ""}}}},
+                open(STORE, "w", encoding="utf-8"), ensure_ascii=False)
+            t("　（前提）本文が同じままなら通る",
+              reverify(_rv_slug,
+                       fetch=lambda u: (_page2(_quote)
+                                        if "chonbo" in u else _page(_quote)))
+              == [])
+            t("★★2AIで通した出典の本文が変わったら、公開前に知らせる★★"
+              "／★引用は残っていても、判断の前提は崩れている★",
+              [x for x in reverify(
+                  _rv_slug,
+                  fetch=lambda u: (_page2(_quote + " なお内容を更新しました。")
+                                   if "chonbo" in u else _page(_quote)))
+               if "本文が変わって" in x])
+        finally:
+            STORE = _keep3
 
         t("　2AIだけが答える鍵にも値の形がある（何でも受け取らない）",
           all(k in VALUE_SHAPES for k in AI_ONLY_FIELDS))

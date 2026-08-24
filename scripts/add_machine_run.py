@@ -2732,6 +2732,17 @@ def run_one(name, official_url, maker, release, apply_it=False,
         _added = _cv.merge_into(mat, out["slug"])
         if _added:
             _log("  2AIで確定した値を材料に足しました: " + " / ".join(_added))
+            # ★★公開直前に、その機種の控えだけ取り直して確かめる★★
+            #   （2026-08-24・Codexの8回目）
+            #   ★控えの読み直しは、保存されたURLと引用を信じている★ので、
+            #   控えを手で書き換えられたら偽の引用でも通る。
+            #   ★全件はやらない★＝いま書こうとしている機種だけ・出典は各1回。
+            _rv = _cv.reverify(out["slug"])
+            if _rv:
+                out["problems"] += [
+                    f"CONFIRMED_VALUES_UNREADABLE: 控えを確かめ直せません: {x}"
+                    for x in _rv]
+                _log("  ★控えの再確認で問題★: " + " / ".join(_rv[:3]))
     except Exception as e:                # noqa: BLE001
         # ★読めないことを黙って「無い」にしない★
         # ★★読めないときは止める★★（2026-08-24・Codexの6回目）
@@ -4315,6 +4326,12 @@ def selftest() -> int:
       field_label("payout_range") == _sl.FIELDS["payout_range"]["jp"])
     t("　知らない項目でも止まらず、分かる形で出す（黙って消さない）",
       field_label("zzz_unknown") == "zzz_unknown（名前が未登録）")
+
+    # ★★再検証が本番経路に繋がっている★★（2026-08-24・Codexの8回目）
+    #   ★作っただけで呼ばれていない★を防ぐ（今日それを名簿でやった）。
+    t("★★公開直前の再検証を、本番の経路から呼んでいる★★"
+      "／★作っただけで繋がっていない、をやらない★",
+      "_cv.reverify(" in inspect.getsource(run_one))
 
     # ★★控えが読めないときは新台を作らない★★（2026-08-24・Codexの6回目）
     #   ★直す前は「問題」に足すだけで停止条件に入っていなかった★ので、
