@@ -932,11 +932,20 @@ def selftest() -> int:
              '<html><body><section class="rating-list"><h2>レビュー</h2>'
              "<table><tr><td>555G</td></tr></table></section></body></html>",
              True),
+            # ★★見出しの下に、記事らしい長さの本文を置く★★（2026-08-25）
+            #   ★直す前は「記事」の2文字だけ★だったので、
+            #   #473 で「見出しの下に中身がある時だけ止める」に変えたあと、
+            #   **弱い語の規則を壊しても、この試験が緑のまま**になっていた
+            #   （＝その守りを見ている試験が無い状態。壊し方の通し確認が検知）。
             ("編集部コメントは通す（普通の言葉）",
-             "<html><body><h2>編集部コメント</h2><p>記事</p></body></html>",
+             "<html><body><section><h2>編集部コメント</h2>"
+             "<p>この記事では立ち回りの目安を、編集部で検証してまとめています。</p>"
+             "</section></body></html>",
              False),
             ("実戦レビューは通す（普通の言葉）",
-             "<html><body><h2>実戦レビュー</h2><p>記事</p></body></html>",
+             "<html><body><section><h2>実戦レビュー</h2>"
+             "<p>実戦で回した結果をもとに、狙い目の目安をまとめています。</p>"
+             "</section></body></html>",
              False),
             ("関連記事の入れ物は通す（related-posts）",
              '<html><body><div class="related-posts"><a href="/x">別の記事</a>'
