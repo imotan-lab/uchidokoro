@@ -11849,5 +11849,50 @@
    ],
    "normal": {}
   }
+ },
+ {
+  "slug": "dmm_5089",
+  "name": "LBトリプルクラウンX-300",
+  "seo": {
+   "title": "LBトリプルクラウンX-300 スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v1",
+  "page_decision": {
+   "schema_version": "page-decision/v1",
+   "indexable": false,
+   "confirmed_topics": [],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "spec",
+    "setting",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3",
+    "CATEGORIES_LT_2",
+    "NO_UNIQUE_GAMEPLAY"
+   ],
+   "claims": [],
+   "policy_mode": "normal",
+   "decided_at": "2026-08-25",
+   "input_digest": "sha256:bc6afcc73e2d1ee3c2ad7aff9d94202e38b0941e0611da7976e64ac835bd1e62"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-08-03",
+  "identity": {
+   "manufacturer_id": "seiryu_japan",
+   "official_product_url": "https://p-town.dmm.com/machines/5089",
+   "announced_name": "LBトリプルクラウンX-300",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5089 型式=未掲載 メーカー=清龍ジャパン 導入=2026-08-03 確認日=2026-08-25",
+   "market_release_date": "2026-08-03"
+  }
  }
 ]
