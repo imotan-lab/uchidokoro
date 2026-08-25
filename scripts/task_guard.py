@@ -92,7 +92,14 @@ CODEX_ASK_ROUND_LIMIT = 3
 #   ★数の根拠★ 3機種 = 修正2 + 育成1（assets/data/task-budget.json）。
 #     この一致を試験が毎回確かめる（片方だけ動かしたら落ちる）。
 #   ★戻すならここだけ★（手順書の文言も一緒に直すこと）
-MACHINES_PER_DAY = 3
+# ★★0 は「上限なし」★★（2026-08-25・運営者の指示で育成の上限を撤廃）
+#   ★件数で止めるのをやめ、締切（deadline_hhmm）で止める★。
+#   頻度の表は「導入日〜30日後は毎日」と言っているのに、
+#   1日3機種（修正2＋育成1）だったため、育成対象10機種では
+#   **1機種あたり10日に1回**しか見られていなかった（表と実装の食い違い）。
+#   ★修正（writes_fix）の枠は据え置き★＝記事の中身を書き換える側なので、
+#   段階ルールを続ける（予算の側で見る）。
+MACHINES_PER_DAY = 0
 # ★1日の機種数を数えないタスク★（2026-08-07・運営者決定）
 #   新台は導入日が決まっていて待てない。分かり次第そのまま記事にする。
 UNLIMITED_MACHINE_TASKS = frozenset({"add-machine"})
@@ -319,8 +326,18 @@ def budget(path: str = BUDGET_PATH) -> dict:
     dl = str(d.get("deadline_hhmm") or "")
     if not re.match(r"^([01]\d|2[0-3]):[0-5]\d$", dl):
         raise GuardError(f"予算の deadline_hhmm が時刻の形ではありません: {dl!r}")
-    if d["writes_fix"] + d["writes_grow"] < d["writes_total"]:
-        raise GuardError("内訳の合計が総枠に届きません（設定の誤り）")
+    # ★★0 は「上限なし」★★（2026-08-25・運営者の指示で育成の上限を撤廃）
+    #   ★件数で止めるのをやめ、締切（deadline_hhmm）だけで止める★。
+    #   頻度の表は「導入日〜30日後は毎日」と言っているのに、
+    #   育成が1日1機種だったため、対象10機種では**1機種あたり10日に1回**しか
+    #   見られていなかった（表と実装の食い違い）。
+    #   ★修正（writes_fix）は据え置き★＝あちらは記事の中身を書き換えるので
+    #   段階ルールを続ける。
+    #   ★内訳の検算は、どちらも上限ありのときだけ★
+    #   （0 が混ざると「合計が総枠に届かない」が常に成り立ってしまう）。
+    if d["writes_total"] and d["writes_fix"] and d["writes_grow"]:
+        if d["writes_fix"] + d["writes_grow"] < d["writes_total"]:
+            raise GuardError("内訳の合計が総枠に届きません（設定の誤り）")
     return d
 
 
@@ -409,7 +426,7 @@ def reserve(task: str, slug: str, kind: str, path: str = STATE_PATH,
         #   ★同じ規則を2か所に書かない★＝claim() と同じ slugs_today で数える。
         _seen_today = d.setdefault("slugs_today", [])
         if slug not in _seen_today:
-            if len(_seen_today) >= MACHINES_PER_DAY:
+            if MACHINES_PER_DAY and len(_seen_today) >= MACHINES_PER_DAY:
                 raise GuardError(
                     f"今日はすでに {len(_seen_today)} 機種を担当しています"
                     f"（1日{MACHINES_PER_DAY}機種・{' / '.join(_seen_today)}）。"
@@ -426,9 +443,10 @@ def reserve(task: str, slug: str, kind: str, path: str = STATE_PATH,
             raise GuardError(
                 f"やりかけの書き換えが残っています（{left[0]['token']} / "
                 f"{left[0]['state']}）。先に片付けてください")
-        if d["writes"]["total"] >= b["writes_total"]:
+        # ★0 は「上限なし」＝件数では止めない（締切だけで止める）★
+        if b["writes_total"] and d["writes"]["total"] >= b["writes_total"]:
             raise GuardError(f"今日の書き換えは上限です（{b['writes_total']}件）")
-        if d["writes"][kind] >= b[f"writes_{kind}"]:
+        if b[f"writes_{kind}"] and d["writes"][kind] >= b[f"writes_{kind}"]:
             raise GuardError(
                 f"{'既存記事の修正' if kind == 'fix' else '育てる処理'}は"
                 f"今日の上限です（{b['writes_' + kind]}件）")
@@ -817,7 +835,7 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
         done_today = d.setdefault("slugs_today", [])
         # 途中まで進めた機種を続ける場合は、新しく数えない
         if slug not in done_today:
-            if len(done_today) >= MACHINES_PER_DAY:
+            if MACHINES_PER_DAY and len(done_today) >= MACHINES_PER_DAY:
                 raise GuardError(
                     f"今日はすでに {len(done_today)} 機種を担当しています"
                     f"（1日{MACHINES_PER_DAY}機種・{' / '.join(done_today)}）。"
@@ -1558,10 +1576,16 @@ def _machines_per_day_tests(t, tmpdir) -> None:
                  "deadline_hhmm": "23:59"}, f)
     SHA = "sha256:" + "a" * 64
 
-    t("★★1日の機種数と、書き換えの内訳が食い違っていない★★"
-      "（機種数 = 修正枠 + 育成枠）",
-      MACHINES_PER_DAY == real["writes_fix"] + real["writes_grow"]
-      and MACHINES_PER_DAY <= real["writes_total"])
+    # ★★取り決めが変わった★★（2026-08-25・運営者の指示）
+    #   ★育成は件数で止めない。止めるのは締切（deadline_hhmm）★。
+    #   修正（writes_fix）は据え置きで段階ルールを続ける。
+    #   ここで確かめるのは「数の辻褄」ではなく、
+    #   ★上限なし（0）と上限あり（正の数）が、それぞれ意図どおり働くこと★。
+    t("★★育成は件数で止めない（上限なしの設定になっている）★★"
+      "／★1日1機種だと、対象10機種で1機種あたり10日に1回しか見られない★",
+      real["writes_grow"] == 0 and MACHINES_PER_DAY == 0)
+    t("　既存記事の修正は、いまも件数で止める（段階ルールを続ける）",
+      real["writes_fix"] > 0)
 
     def take(kind, slug):
         """予約 → 着手 → 巻き戻し、を1機種ぶん通す（担当は消さない）"""
@@ -1579,20 +1603,24 @@ def _machines_per_day_tests(t, tmpdir) -> None:
     t(f"★★修正の枠ぶん（{fixes}機種）を、担当を消さずに続けて取れる★★"
       "（直す前は2機種目の予約で必ず断られた）", ok)
 
-    for i in range(real["writes_grow"]):
+    # ★★育成は、機種を替えながらいくつでも取れる★★
+    #   （2026-08-25・上限を撤廃したので、ここが止まらないことを確かめる）
+    for i in range(12):                    # 育成対象10機種より多く試す
         ok = ok and bool(take("grow", "mpd_grow_%d" % i)["token"])
-    t(f"　育てる枠ぶん（{real['writes_grow']}機種）も続けて取れる", ok)
+    t("★★育てる処理は、機種を替えれば何機種でも取れる★★"
+      "／★止まると、頻度の表（導入30日以内は毎日）が守れない★", ok)
 
-    t("★★機種数を使い切ったら、次の機種は断る★★",
-      _raises(lambda: take("fix", "mpd_over"), "機種"))
+    t("★★修正の枠は、いまも使い切ったら断る★★"
+      "／★こちらは記事の中身を書き換えるので、段階ルールを続ける★",
+      _raises(lambda: take("fix", "mpd_over"), "上限"))
 
     st = day_status(path=sp)
-    t("　使った数が、設定した内訳とぴったり合っている",
-      st["writes"]["total"] == real["writes_total"]
-      and st["writes"]["fix"] == real["writes_fix"]
-      and st["writes"]["grow"] == real["writes_grow"])
-    t("　担当した機種の数も同じ",
-      len(_load(sp)["day"]["slugs_today"]) == MACHINES_PER_DAY)
+    t("　使った数の内訳が、実際に取った数と合っている",
+      st["writes"]["fix"] == real["writes_fix"]
+      and st["writes"]["grow"] == 12
+      and st["writes"]["total"] == real["writes_fix"] + 12)
+    t("　担当した機種の数も、取った数と同じ",
+      len(_load(sp)["day"]["slugs_today"]) == real["writes_fix"] + 12)
 
     # ★同じ機種を続けるのは、いつでも通る（やり直しを塞がない）★
     #   ★別の記録で試す★＝上で枠を使い切っているため
@@ -1779,17 +1807,27 @@ def _budget_tests(t, tmpdir) -> None:
     # ★claim を呼ばずに reserve だけ使っても、1日の機種数は守られる★
     #   （Codex115回目のP1-6。★2026-08-21に「1機種」から「MACHINES_PER_DAY
     #     機種」へ書き直した★＝reserve も claim と同じ slugs_today で数える）
-    for _i in range(MACHINES_PER_DAY):
-        reserve("t", "きめた機種%d" % _i, "fix", path=sp6, budget_path=bp,
-                contract_sha256="sha256:" + "a" * 64)
-        _d6 = _load(sp6)
-        _day(_d6)["writes"] = {"total": 0, "fix": 0, "grow": 0}
-        _d6["reservations"] = []
-        _save(sp6, _d6)
-    t("★★claim を呼ばなくても、1日の機種数は守られる★★（Codex115回目のP1-6）",
-      _raises(lambda: reserve("t", "ちがう機種", "fix", path=sp6, budget_path=bp,
-                              contract_sha256="sha256:" + "a" * 64),
-              "機種"))
+    # ★★上限を撤廃しても、迂回防止の仕組みは残す★★（2026-08-25）
+    #   ★本番は上限なし（0）★なので、試験の中だけ上限を立てて
+    #   「claim を呼ばずに予約だけしても、機種数が守られる」ことを確かめ続ける。
+    _keep_mpd6 = MACHINES_PER_DAY
+    globals()["MACHINES_PER_DAY"] = 3
+    try:
+        for _i in range(MACHINES_PER_DAY):
+            reserve("t", "きめた機種%d" % _i, "fix", path=sp6, budget_path=bp,
+                    contract_sha256="sha256:" + "a" * 64)
+            _d6 = _load(sp6)
+            _day(_d6)["writes"] = {"total": 0, "fix": 0, "grow": 0}
+            _d6["reservations"] = []
+            _save(sp6, _d6)
+        t("★★claim を呼ばなくても、1日の機種数は守られる★★"
+          "（Codex115回目のP1-6・★上限を立てたときに効くこと★）",
+          _raises(lambda: reserve("t", "ちがう機種", "fix", path=sp6,
+                                  budget_path=bp,
+                                  contract_sha256="sha256:" + "a" * 64),
+                  "機種"))
+    finally:
+        globals()["MACHINES_PER_DAY"] = _keep_mpd6
     t("★★止めた日は、別のタスク名でも書けない★★",
       _raises(lambda: reserve("別のタスク", "g", "fix", path=sp,
                               budget_path=bp, contract_sha256="sha256:" + "a" * 64),
@@ -1927,7 +1965,11 @@ def selftest() -> int:
         #   上限を増やしたら「担当できる機種」も増やす必要がある。
         #   本番データを見に行かせない（その日の台帳で試験の結果が変わらないように）。
         _spares = ["sp_a", "sp_b", "sp_c", "sp_d", "sp_e", "sp_f"]
-        _known = {"hokuto", "enen", "galfy"} | set(_spares)
+        # ★上限なしの試験で使う機種も、ここで既知にしておく★
+        #   （2026-08-25。架空のslugのままだと NO_MACHINE で断られ、
+        #     「上限で止まった」と読み違える）
+        _many_slugs = ["u%d" % i for i in range(12)]
+        _known = {"hokuto", "enen", "galfy"} | set(_spares) | set(_many_slugs)
         cp.assess = lambda sl, *a, **k: {
             "stage": "READY" if sl in _known else "NO_MACHINE"}
         t("　断られた日でも枠は残る（次の候補を選べる）",
@@ -1956,6 +1998,12 @@ def selftest() -> int:
         finally:
             globals()["_changed_files"] = _keep_ch
 
+        # ★★上限を撤廃しても、迂回防止の仕組みは残す★★
+        #   （2026-08-25・運営者の指示で本番の上限は 0＝なしにした）
+        #   ★仕組みごと失わないため、試験の中だけ上限を立てて確かめる★
+        #   ＝将来また上限を置いたときに、迂回できないことを保証し続ける。
+        _keep_mpd = MACHINES_PER_DAY
+        globals()["MACHINES_PER_DAY"] = 3
         t("★1機種目は担当できる★", claim("t", "hokuto", fp)["target_slug"] == "hokuto")
         t("　同じ機種なら何度呼んでもよい（再開できる）",
           claim("t", "hokuto", fp)["target_slug"] == "hokuto")
@@ -1989,6 +2037,13 @@ def selftest() -> int:
         t("★★新台には件数の上限を置かない★★（2026-08-07・運営者決定）",
           claim("add-machine", "zzz", fp2)["target_slug"] == "zzz"
           and len(_load(fp2)["day"]["unlimited_slugs"]) == 41)
+        globals()["MACHINES_PER_DAY"] = _keep_mpd
+        # ★本番の設定（上限なし）でも、機種を替えて何機種でも担当できる★
+        fp3 = os.path.join(tmpdir, "guard3.json")
+        _many3 = [claim("t", "u%d" % i, fp3)["target_slug"] for i in range(12)]
+        t("★★上限なしの設定では、何機種でも担当できる★★"
+          "／★ここが止まると、頻度の表（導入30日以内は毎日）が守れない★",
+          _many3 == ["u%d" % i for i in range(12)])
 
         for i in (1, 2, 3):
             codex_round("t", fp)
