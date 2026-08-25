@@ -474,7 +474,8 @@ def build_machine(slug, name, maker, official_url, release, material,
     #   ★v1 は at:/cz: を必ず要求する★ので、ノーマル機（完全告知の
     #   ボーナスタイプ）は材料が全部揃っても永久に検索へ載せられなかった。
     #   v2 は機種の型ごとに線を変える。★型が不明なら載せない★（理由も残る）。
-    decision = _pd.decide_v2(material)
+    # ★同上：配線がそろうまで v1 で判定する★（2026-08-26・Codexの28回目）
+    decision = _pd.decide(material)
     return {
         "slug": slug,
         "name": name,
@@ -487,7 +488,15 @@ def build_machine(slug, name, maker, official_url, release, material,
         # ★狙い目は当サイトの判断なので、確認が取れるまで空にしない・書かない★
         "strategy": "",
         "aliases": [],
-        "publication_policy": _pd.SCHEMA_V2,
+        # ★★v2の発行は、配線が全部そろうまで止める★★（2026-08-26・Codexの28回目）
+        #   ★画面側（index.html / machine.html / meta-auto.js）と
+        #     公開物の生成（build_public_data / apply_indexing_policy 等）が
+        #     まだ v1 しか知らない★ので、v2 で出すと
+        #     **解析待ちの表示が出ず、完成記事に近い顔で読者に出る**。
+        #   ＝いま v2 の機種は0件なので実害は出ていないが、
+        #     今夜の新台からその状態になるところだった。
+        #   ★配線がそろったら SCHEMA_V2 へ戻す★（判定の仕組みは入っている）
+        "publication_policy": _pd.SCHEMA,
         "page_decision": decision,
         # ★既存の未裏取りページ（LEGACY_UNVERIFIED）と混ぜない★
         #   載せた値は出典2件で確認済み。ただし記事は網羅的ではない、という状態。
@@ -987,7 +996,7 @@ def selftest() -> int:
                       "https://www.s-bellco.co.jp/products/slot/lbinko/", "2026-08", MAT)
     t("★★新台は判定書つき（statusを書かない・旧契約と同居しない）★★"
       "（2026-08-04・Codex71〜72回目）",
-      "status" not in m and m["publication_policy"] == _pd.SCHEMA_V2
+      "status" not in m and m["publication_policy"] == _pd.SCHEMA
       and _pd.machine_class(m) in ("AUTO_INDEXABLE", "AUTO_PENDING"))
     def _ledger(_slug_unused, field_values, extra=None):
         # ★slugは登録関数が公式URLから引く★（試験が名乗らない＝本番と同じ）
@@ -1237,10 +1246,11 @@ def selftest() -> int:
                   unmapped=["3.1"])) == [])())
     # ★★v2：型が決まっていなければ載せない★★（2026-08-25）
     #   ★黙って AT の線に倒さない★＝原因が隠れるため（Codexの助言）
+    # ★v2の発行は止めているので、判定を直接呼んで確かめる★（2026-08-26）
     t("★★型が決まっていない材料は indexable にならない★★"
       "／★AT の線に黙って倒すと、原因が見えなくなる★",
-      _pd.machine_class(m) == "AUTO_PENDING"
-      and "MACHINE_PROFILE_UNKNOWN" in m["page_decision"]["reason_codes"])
+      _pd.decide_v2(MAT)["indexable"] is False
+      and "MACHINE_PROFILE_UNKNOWN" in _pd.decide_v2(MAT)["reason_codes"])
     # ★★AT型と分かっていて、固有ゲーム性が無ければ載せない★★（従来の線）
     _m_at = build_machine("lbinko", "Lすーぱぁびん娘", "bellco",
                           "https://www.s-bellco.co.jp/products/slot/lbinko/",
@@ -1274,12 +1284,28 @@ def selftest() -> int:
                                  "games_per_50": {
                                      **IM, "value": {"games": 36.1},
                                      "sources": ["a", "b"]}}})
+    # ★★v2の発行はまだ止めている★★（2026-08-26・Codexの28回目）
+    #   画面側と公開物の生成が v1 しか知らないため。
+    #   ★判定の仕組みは入っている★ので、ここでは v2 を直接呼んで確かめる。
+    #   ★配線がそろったら、build_machine が v2 を出すように戻す★
+    _mat_bonus = {"adopted": {
+        "machine_profile": {**IM, "value": {"profile": "BONUS"},
+                            "sources": ["a", "b"]},
+        "ceiling_state": {**IM, "value": {"state": "NONE"},
+                          "sources": ["a", "b"]},
+        "bonus_prob": {**IM, "value": {"1": "1/300", "6": "1/240"},
+                       "sources": ["a", "b"]},
+        "payout_range": {**IM, "value": {"low": 97.0, "high": 110.0,
+                                         "unit": "%"}, "sources": ["a", "b"]},
+        "games_per_50": {**IM, "value": {"games": 36.1},
+                         "sources": ["a", "b"]}}}
+    _dec_bonus = _pd.decide_v2(_mat_bonus)
     t("★★★ノーマル機も検索に載せられる★★★"
       "／★直す前は at:/cz: が必須で、原理的に永久に載らなかった★",
-      _pd.machine_class(_m_bonus) == "AUTO_INDEXABLE")
+      _dec_bonus["indexable"] is True)
     t("　ノーマル機の判定書に、型と天井の状態が残る",
-      _m_bonus["page_decision"]["machine_profile"] == "BONUS"
-      and _m_bonus["page_decision"]["ceiling_state"] == "NONE")
+      _dec_bonus["machine_profile"] == "BONUS"
+      and _dec_bonus["ceiling_state"] == "NONE")
     # ★★単独確認の値には、どこに出ても必ず名乗りが付く★★
     #   （2026-08-23・Codexの敵対的レビュー指摘4）
     #   ★私はCZの表しか直しておらず★、機械割・50枚あたり・天井・AT・
