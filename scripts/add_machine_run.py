@@ -3544,9 +3544,10 @@ def selftest() -> int:
 
         r = run_one("L試験機", "https://m.example/products/slot/zzz/", "m", "2026-09")
         t("★既定では書き込まない（dry-run）★", r["wrote"] == [])
-        # ★新台は判定書 v2 で作る★（2026-08-26。ノーマル機を載せられるように）
+        # ★版を直に書かない★（2026-08-26。v1↔v2 の切り替えのたびに落ちるため）
+        #   ★見たいのは「既知の版で、statusと同居していない」こと★
         t("　組み立てた結果を返す（中身を見てから書ける）",
-          r["preview"]["machine"]["publication_policy"] == _pdz.SCHEMA_V2
+          r["preview"]["machine"]["publication_policy"] in _pdz.SCHEMAS
           and "status" not in r["preview"]["machine"])
         t("　slugは公式URLから作る", r["slug"] == "zzz")
 
