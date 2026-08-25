@@ -80,13 +80,17 @@ STALE_WORDS = ("導入予定", "登場予定", "導入前")
 BASIS_SUFFIX = {
     # 独立2出典は今までどおり何も書かない（それが当サイトの既定だから）
     "INDEPENDENT_MULTI": "",
-    "DMM_SINGLE_NEAR_RELEASE": "（DMMぱちタウン単独確認）",
+    # ★★サイト名を出さない★★（2026-08-26・運営者の指示）
+    #   ★弱さは伝えるが、どこから採ったかは書かない★
+    "DMM_SINGLE_NEAR_RELEASE": "（未確認）",
 }
 # ★単独確認が混ざったときだけ足す断り書き★
+# ★★サイト名を出さない★★（2026-08-26・運営者の指示）
+#   「ほかサイトのコピーと思われたくない」＝どこから採ったかは書かない。
+#   ★弱さは伝える★＝「確認が1件だけ」であることは読者に必要な情報。
 SINGLE_SOURCE_NOTE = (
-    "「DMMぱちタウン単独確認」は、導入が近い機種について"
-    "同サイトの掲載内容のみで確認したものです。"
-    "ほかの解析サイトでまだ確認できていません。")
+    "「未確認」と付いた値は、確認が1件のみで裏付けが弱いものです。"
+    "確認が取れ次第、更新します。")
 
 
 def _basis_tag(basis) -> str:
@@ -466,7 +470,11 @@ def build_machine(slug, name, maker, official_url, release, material,
     # ★判定書（PageDecision）を機種行に焼き込む★（2026-08-04・Codex71〜72回目）
     #   「先行/完成」の宣言をやめ、検索に載せるかは判定書が決める。
     #   status は書かない（旧契約との同居は machine_class が拒否する）。
-    decision = _pd.decide(material)
+    # ★★新台は v2 で判定する★★（2026-08-25・Codexの27回目）
+    #   ★v1 は at:/cz: を必ず要求する★ので、ノーマル機（完全告知の
+    #   ボーナスタイプ）は材料が全部揃っても永久に検索へ載せられなかった。
+    #   v2 は機種の型ごとに線を変える。★型が不明なら載せない★（理由も残る）。
+    decision = _pd.decide_v2(material)
     return {
         "slug": slug,
         "name": name,
@@ -479,7 +487,7 @@ def build_machine(slug, name, maker, official_url, release, material,
         # ★狙い目は当サイトの判断なので、確認が取れるまで空にしない・書かない★
         "strategy": "",
         "aliases": [],
-        "publication_policy": _pd.SCHEMA,
+        "publication_policy": _pd.SCHEMA_V2,
         "page_decision": decision,
         # ★既存の未裏取りページ（LEGACY_UNVERIFIED）と混ぜない★
         #   載せた値は出典2件で確認済み。ただし記事は網羅的ではない、という状態。
@@ -499,11 +507,38 @@ def checker_questions(material) -> list:
     それでも無理ならメールで知らせる」。
     黙って空にすると誰も気づかないので、必ず質問の形で外へ出す。
     """
+    out = []
     adopted = material.get("adopted") or {}
+    # ★★機種の型が決まっていなければ、必ず聞く★★（2026-08-25・Codexの27回目）
+    #   ★決まらないと検索に載せられない★（v2では MACHINE_PROFILE_UNKNOWN）。
+    #   ★黙って AT に倒さない★＝倒すと原因が隠れる。
+    #   ★機械が本文を読んで決めない★＝意味の判断は2AIの仕事。
+    if not ((adopted.get("machine_profile") or {}).get("value") or {}).get(
+            "profile"):
+        out.append(
+            "★この機種の型を判断してください★"
+            "（AT_CZ＝ATまたはCZを持つ／BONUS＝完全告知などのボーナスタイプ）"
+            "／★決まらないと検索に載せられません★。決めたら "
+            "confirmed_values.py --record --field machine_profile "
+            "--value-file <{\"profile\": \"BONUS\"} を書いたファイル> "
+            "--why <理由> --by 2AI で記録してください")
+    # ★★天井の有無は、型とは別に聞く★★（★型から推論しない★）
+    #   実例＝X-300 は概要が「完全告知のボーナスタイプ」でも天井欄は「調査中」。
+    _has_ceil = bool((material.get("ceilings") or {}).get("adopted"))
+    _cs = ((adopted.get("ceiling_state") or {}).get("value") or {}).get("state")
+    if not _has_ceil and not _cs:
+        out.append(
+            "★この機種に天井があるかを判断してください★"
+            "（PRESENT＝ある／NONE＝ない）"
+            "／★「ボーナスタイプだから天井なし」と決めないでください★"
+            "＝別々に確かめること。決めたら "
+            "confirmed_values.py --record --field ceiling_state "
+            "--value-file <{\"state\": \"NONE\"} を書いたファイル> "
+            "--why <理由> --by 2AI で記録してください")
     ceilings = [c for c in ((material.get("ceilings") or {}).get("adopted") or [])
                 if (c or {}).get("kind") == "GAME"]
     if len(ceilings) < 2:
-        return []
+        return out
     # ★答えがあっても、いまの候補に無ければ聞き直す★（2026-08-12・依頼163の1）
     #   出典が更新されて候補が変わったり、打ち間違いで候補に無い値を
     #   記録したりすると、**採用もされず質問も消える**（永久に空のまま）。
@@ -514,10 +549,10 @@ def checker_questions(material) -> list:
                              for c in ceilings
                              if re.match(r"^(\d{2,5})",
                                          str(c.get("amount") or "").strip())}:
-        return []
+        return out
     amounts = " / ".join(f"{c.get('amount')}{c.get('unit')}"
                          f"（{c.get('benefit')}）" for c in ceilings)
-    return ["★通常時の天井はどれか判断してください★"
+    return out + ["★通常時の天井はどれか判断してください★"
             f"（確認できたG数天井: {amounts}）"
             "／早見表の「天井まで残り」に使います。決めたら "
             "confirmed_values.py --record --field checker_ceiling "
@@ -598,9 +633,20 @@ def build_detail(slug, name, release, material) -> dict:
                       f"{_t(g50)}"])
 
     boxes = {}          # title -> section（確認できたものだけ中身が入る）
+    # ★★天井が無いと確定した機種には、そう書く★★
+    #   （2026-08-25・Codexの27回目）
+    #   ★直す前は「未確認です。確認でき次第、この欄に掲載します。」だった★＝
+    #   天井が無い機種に「確認でき次第」と書いていた（確認される日は来ない）。
+    #   ★型から推論しない★＝2AIが「天井は無い」と確定させたときだけ。
+    _cs = ((material.get("adopted") or {}).get("ceiling_state") or {})
+    _cs_v = (_cs.get("value") or {}).get("state")
     # ★天井・恩恵★（一式で採れたものだけ。値だけでは載せない）
     ceil = (material.get("ceilings") or {}).get("adopted") or []
-    if ceil:
+    if not ceil and _cs_v == "NONE":
+        boxes["天井・恩恵"] = {
+            "title": "天井・恩恵",
+            "body": ["**この機種に天井はありません。**" + _t(_cs)]}
+    elif ceil:
         body = []
         for c in ceil:
             jp = {"GAME": "ゲーム数天井", "CYCLE": "周期天井",
@@ -797,7 +843,7 @@ def build_detail(slug, name, release, material) -> dict:
         _mark = _t(got)
         rows = [[f"設定{k}", f"{got['value'][k]}{_mark}"]
                 for k in sorted(got["value"])]
-        note = "出典で確認が取れた設定のみ掲載しています。"
+        note = "確認が取れた設定のみ掲載しています。"
         if _mark:
             note += SINGLE_SOURCE_NOTE
         # ★値が採れていない設定があるなら、その名前を出す★
@@ -941,7 +987,7 @@ def selftest() -> int:
                       "https://www.s-bellco.co.jp/products/slot/lbinko/", "2026-08", MAT)
     t("★★新台は判定書つき（statusを書かない・旧契約と同居しない）★★"
       "（2026-08-04・Codex71〜72回目）",
-      "status" not in m and m["publication_policy"] == _pd.SCHEMA
+      "status" not in m and m["publication_policy"] == _pd.SCHEMA_V2
       and _pd.machine_class(m) in ("AUTO_INDEXABLE", "AUTO_PENDING"))
     def _ledger(_slug_unused, field_values, extra=None):
         # ★slugは登録関数が公式URLから引く★（試験が名乗らない＝本番と同じ）
@@ -1189,10 +1235,51 @@ def selftest() -> int:
       (lambda: __import__("page_decision").claims_from_material(
           _gp_mat([{"trigger": "全国制覇", "leads_to": "上位CZ"}],
                   unmapped=["3.1"])) == [])())
-    t("★★固有ゲーム性が無い材料は indexable にならない★★"
-      "（spec系claimだけでは検索に載せない）",
+    # ★★v2：型が決まっていなければ載せない★★（2026-08-25）
+    #   ★黙って AT の線に倒さない★＝原因が隠れるため（Codexの助言）
+    t("★★型が決まっていない材料は indexable にならない★★"
+      "／★AT の線に黙って倒すと、原因が見えなくなる★",
       _pd.machine_class(m) == "AUTO_PENDING"
-      and "NO_UNIQUE_GAMEPLAY" in m["page_decision"]["reason_codes"])
+      and "MACHINE_PROFILE_UNKNOWN" in m["page_decision"]["reason_codes"])
+    # ★★AT型と分かっていて、固有ゲーム性が無ければ載せない★★（従来の線）
+    _m_at = build_machine("lbinko", "Lすーぱぁびん娘", "bellco",
+                          "https://www.s-bellco.co.jp/products/slot/lbinko/",
+                          "2026-08",
+                          {**MAT, "adopted": {
+                              **(MAT.get("adopted") or {}),
+                              "machine_profile": {
+                                  **IM, "value": {"profile": "AT_CZ"},
+                                  "sources": ["a", "b"]}}})
+    t("★★AT型なのに固有ゲーム性が無ければ載せない★★（従来の線は維持）",
+      _pd.machine_class(_m_at) == "AUTO_PENDING"
+      and "NO_UNIQUE_GAMEPLAY" in _m_at["page_decision"]["reason_codes"])
+    # ★★ノーマル機は、ボーナス確率があれば載る★★（★今回の欠陥の解消★）
+    _m_bonus = build_machine("zzz_norm", "試験ノーマル機", "bellco",
+                             "https://www.s-bellco.co.jp/products/slot/x/",
+                             "2026-08",
+                             {"adopted": {
+                                 "machine_profile": {
+                                     **IM, "value": {"profile": "BONUS"},
+                                     "sources": ["a", "b"]},
+                                 "ceiling_state": {
+                                     **IM, "value": {"state": "NONE"},
+                                     "sources": ["a", "b"]},
+                                 "bonus_prob": {
+                                     **IM, "value": {"1": "1/300", "6": "1/240"},
+                                     "sources": ["a", "b"]},
+                                 "payout_range": {
+                                     **IM, "value": {"low": 97.0, "high": 110.0,
+                                                     "unit": "%"},
+                                     "sources": ["a", "b"]},
+                                 "games_per_50": {
+                                     **IM, "value": {"games": 36.1},
+                                     "sources": ["a", "b"]}}})
+    t("★★★ノーマル機も検索に載せられる★★★"
+      "／★直す前は at:/cz: が必須で、原理的に永久に載らなかった★",
+      _pd.machine_class(_m_bonus) == "AUTO_INDEXABLE")
+    t("　ノーマル機の判定書に、型と天井の状態が残る",
+      _m_bonus["page_decision"]["machine_profile"] == "BONUS"
+      and _m_bonus["page_decision"]["ceiling_state"] == "NONE")
     # ★★単独確認の値には、どこに出ても必ず名乗りが付く★★
     #   （2026-08-23・Codexの敵対的レビュー指摘4）
     #   ★私はCZの表しか直しておらず★、機械割・50枚あたり・天井・AT・
@@ -1230,16 +1317,19 @@ def selftest() -> int:
 
     _texts = _all_text(_d_ss)
     _NUM_MARKS = ("97.0%", "36.1G", "999G", "約1.0枚", "8G", "110.0%")
+    # ★名乗りの文言は正本から取る★（2026-08-26。文言を変えても試験が追随する）
+    _MARK_SS = BASIS_SUFFIX["DMM_SINGLE_NEAR_RELEASE"]
     _naked = [t for t in _texts
               if any(m in t for m in _NUM_MARKS)
-              and "DMMぱちタウン単独確認" not in t]
-    t("★★単独確認の値は、どこに出ても必ず名乗りが付く★★"
-      "／★付け忘れると「根拠の詐称」になる（台帳#443と同じ型）★",
-      _texts and not _naked)
+              and _MARK_SS not in t]
+    t("★★裏付けの弱い値は、どこに出ても必ず断りが付く★★"
+      "／★付け忘れると「根拠の詐称」になる（台帳#443と同じ型）★"
+      "／★サイト名は出さない（2026-08-26・運営者の指示）★",
+      _texts and not _naked and "DMM" not in _MARK_SS)
     if _naked:
         print("   ★名乗りが付いていない箇所★: " + " / ".join(_naked[:3]))
-    t("　独立2出典のときは何も名乗らない（今までどおりの見た目）",
-      not any("DMMぱちタウン単独確認" in x
+    t("　裏付けが十分なときは何も名乗らない（今までどおりの見た目）",
+      not any(_MARK_SS in x
               for x in _all_text(build_detail("zzz", "試験機", "2026-08-17",
                                               MAT))))
 
@@ -1247,6 +1337,11 @@ def selftest() -> int:
     MAT_FULL["at_specs"] = {"adopted": [
         {**IM, "mode": "MAIN_AT", "games": 30, "net": 2.8,
          "sources": ["a", "b"]}]}
+    # ★v2：型を記録していないと載らない★（2026-08-25）
+    MAT_FULL["adopted"] = {**(MAT.get("adopted") or {}),
+                           "machine_profile": {**IM,
+                                               "value": {"profile": "AT_CZ"},
+                                               "sources": ["a", "b"]}}
     m_full = build_machine("lbinko", "Lすーぱぁびん娘", "bellco",
                            "https://www.s-bellco.co.jp/products/slot/lbinko/",
                            "2026-08", MAT_FULL)
@@ -1431,7 +1526,10 @@ def selftest() -> int:
     #   「人が直す項目をなくす。困ったら2AIで判断。それでも無理ならメール」。
     #   黙って空にすると誰も気づかず、その欄は永久に埋まらない。
     def _mat_ceil(*amounts, picked=None):
-        mm = {"adopted": {}, "need_third": {}, "thin": {},
+        # ★型を入れておく★（2026-08-25にv2で「型が無ければ質問する」を足したため）
+        #   ここで見たいのは天井の質問だけなので、型の質問は出ない状態にする。
+        mm = {"adopted": {"machine_profile": {"value": {"profile": "AT_CZ"}}},
+              "need_third": {}, "thin": {},
               "ceilings": {"adopted": [{"basis": "INDEPENDENT_MULTI",
                                         "kind": "GAME", "amount": a, "unit": "G",
                                         "benefit": "AT当選"} for a in amounts]}}

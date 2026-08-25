@@ -121,6 +121,10 @@ FIELD_TOPICS = {
     #   素の値は自由な文字として通っていた。
     #   ★構造化された `at` か `at_net_unmapped` を使う★（どちらも記事に出る）。
     "net_increase": "",             # ★受け口を閉じた（下の除外と対）★
+    # ★型は読者に出さない★（判定の線を選ぶためだけ）
+    "machine_profile": "",
+    # ★天井の有無は「天井・恩恵」の箱に出る★（「天井はありません」）
+    "ceiling_state": "ceiling",
     "model_code": "",               # ★読者には出さない★
 }
 
@@ -156,6 +160,16 @@ AI_ONLY_FIELDS = {
     #   「ほかにも天井があるかもしれません」という**読者を守る一文**を、
     #   誰の証跡も無しに消せた。＝未確認の網羅性を断定していた。
     "ceilings_complete": "adopted",
+    # ★★機種の型★★（2026-08-25・Codexの27回目の設計助言）
+    #   ★これが無いと、ノーマル機は永久に検索へ載せられない★＝
+    #   掲載判定の3つ目が `at:`/`cz:` を必ず要求していたため。
+    #   ★機械が「完全告知のボーナスタイプ」という文を読み取って決めない★
+    #   ＝意味の判断は2AIの仕事。
+    "machine_profile": "adopted",
+    # ★★天井の有無★★（★型から推論してはいけない★・Codexの助言）
+    #   実例＝X-300 は概要が「完全告知のボーナスタイプ」だが、
+    #   天井欄は「調査中」＝型が分かっても天井の有無は分からない。
+    "ceiling_state": "adopted",
 }
 
 # ★★人が読む名前★★（2026-08-24・Codexの4回目の指摘）
@@ -206,6 +220,14 @@ VALUE_SHAPES = {
     # ★天井はこれで全部か★（2026-08-24）
     #   ★辞書で持つ★＝この仕組みは値を辞書で扱う契約なので、
     #   真偽値そのものだと公式の登録口を通れない（Codexの6回目で判明）。
+    # ★型は3つのどれか★（表示には出さない。掲載判定の線を選ぶだけ）
+    "machine_profile": {"required": ("profile",),
+                        "enums": {"profile": ("AT_CZ", "BONUS")},
+                        "quoted": ()},
+    # ★天井の有無★（PRESENT / NONE のどちらかを確定したときだけ記録する）
+    "ceiling_state": {"required": ("state",),
+                      "enums": {"state": ("PRESENT", "NONE")},
+                      "quoted": ()},
     "ceilings_complete": {"required": ("complete",),
                           "enums": {"complete": ("YES",)},
                           "quoted": ()},

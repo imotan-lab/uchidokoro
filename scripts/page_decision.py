@@ -39,6 +39,26 @@ sys.path.insert(0, os.path.join(BASE, "scripts"))
 import safe_json as _sj                # noqa: E402
 
 SCHEMA = "page-decision/v1"
+# ★★判定書 v2★★（2026-08-25・Codexの27回目の設計助言）
+#   ★なぜ v2 を作るか★＝判定書は項目の**完全一致**を要求するので、
+#   v1 に項目を足すと**既にある11機種が「壊れている」扱い**になる。
+#   v1 は読めるまま残し、v2 へは明示的に移す。
+SCHEMA_V2 = "page-decision/v2"
+SCHEMAS = (SCHEMA, SCHEMA_V2)
+
+# ★★機種の型★★（掲載判定の線を選ぶためだけに使う。claim には数えない）
+#   AT_CZ   … AT または CZ を持つ機種（いままでの前提）
+#   BONUS   … 完全告知などのボーナスタイプ（AT も CZ も無い）
+#   UNKNOWN … まだ決まっていない
+#   ★UNKNOWN を AT_CZ に倒さない★（Codexの助言）＝
+#   倒すと、原因がまた `NO_UNIQUE_GAMEPLAY` に隠れて見えなくなる。
+MACHINE_PROFILES = ("AT_CZ", "BONUS", "UNKNOWN")
+
+# ★★天井の状態★★（★型から推論してはいけない★・Codexの助言）
+#   実例＝X-300 は概要が「完全告知のボーナスタイプ」だが、
+#   天井欄は「調査中」。＝型が分かっても天井の有無は分からない。
+#   PRESENT … 天井がある   NONE … 天井が無い   UNKNOWN … 分からない
+CEILING_STATES = ("PRESENT", "NONE", "UNKNOWN")
 POLICY_SCHEMA = "indexing-policy/v1"
 POLICY_PATH = os.path.join(BASE, "assets", "data", "indexing-policy.json")
 POLICY_MODES = ("normal", "force_noindex_new_auto")
@@ -48,6 +68,12 @@ TOPICS = ("gameplay", "cz", "ceiling", "spec", "setting", "strategy", "reset")
 
 # claim ID → カテゴリ（★同一claimの水増し・複数カテゴリ加算を許さない★）
 _SPEC_CLAIMS = ("payout_range", "games_per_50", "at_prob", "payout_rate")
+# ★★ボーナスタイプの「その機種らしさ」★★（2026-08-25・Codexの27回目）
+#   ★at_prob を流用しない★＝あちらは「AT初当たり確率」専用で、しかも
+#   payout_rate などと同じ `spec` カテゴリ。流用すると
+#   **「種類が2つ以上」の条件が満たせないまま**になる。
+#   ★表全体で1件★＝設定の数やBIG/REGの列ごとに水増ししない。
+_BONUS_CLAIMS = ("bonus_prob",)
 
 # ★もう新しくは作らない claim★（2026-08-23・台帳#461）
 #   ★型式名を外した理由★＝**記事には書かない決まり**（決定事項表／監査47が
@@ -269,7 +295,26 @@ def _claims(material: dict, *, count_confirmed: bool) -> list:
         if _skip_for_index(c, count_confirmed):
             continue                 # ★数えないだけ（検査は済ませた）★
         got.add(f"cz:{nm}")
+    # ★ボーナスタイプの「その機種らしさ」★（2026-08-25）
+    got.update(_bonus_claim(material, count_confirmed))
     return sorted(got)
+
+
+def _bonus_claim(material: dict, count_confirmed: bool) -> list:
+    """★設定別のボーナス確率が採れていれば claim を1件だけ立てる★
+
+    ★表全体で1件★（2026-08-25・Codexの助言）＝
+    設定の数やBIG/REGの列ごとに水増ししない。
+    """
+    v = (material.get("adopted") or {}).get("bonus_prob")
+    if not v:
+        return []
+    if _skip_for_index(v, count_confirmed):
+        return []
+    val = v.get("value")
+    if not isinstance(val, dict) or not val:
+        return []
+    return ["bonus_prob"]
 
 
 def index_claims_from_material(material: dict) -> list:
@@ -302,6 +347,8 @@ def _category(claim: str) -> str:
     #   保存済みの判定書に model_code を持つ機種が6件ある。
     if claim in _SPEC_CLAIMS or claim in RETIRED_CLAIMS:
         return "spec"
+    if claim in _BONUS_CLAIMS:
+        return "bonusflow"                 # ★spec とは別の種類★
     if claim.startswith("ceiling:"):
         parts = claim.split(":")
         if len(parts) != 3 or parts[1] not in CEILING_KINDS \
@@ -341,7 +388,10 @@ def topics_from_claims(claims: list) -> tuple:
 # ---------------------------------------------------------------- decide
 
 REASON_CODES = ("CLAIMS_LT_3", "CATEGORIES_LT_2", "NO_UNIQUE_GAMEPLAY",
-                "POLICY_FORCE_NOINDEX")
+                "POLICY_FORCE_NOINDEX",
+                # ★v2で足した★（2026-08-25）
+                "NO_BONUS_PROB",           # ボーナスタイプなのに確率が無い
+                "MACHINE_PROFILE_UNKNOWN")  # 型が決まっていない
 _DECISION_KEYS = {"schema_version", "indexable", "confirmed_topics",
                   "pending_topics", "reason_codes", "claims", "policy_mode",
                   "decided_at", "input_digest"}
@@ -386,6 +436,111 @@ def decide_from_claims(claims: list, mode: str, decided_at: str = "") -> dict:
     }
 
 
+_DECISION_KEYS_V2 = _DECISION_KEYS | {"machine_profile", "ceiling_state"}
+
+
+def decide_from_claims_v2(claims: list, mode: str, profile: str,
+                          ceiling_state: str = "UNKNOWN",
+                          decided_at: str = "") -> dict:
+    """★判定書 v2★＝機種の型ごとに品質ラインを変える。
+
+    ★★なぜ要るか（2026-08-25・Codexの27回目）★★
+      v1 は3つ目の条件で **at:/cz: を必ず要求**していた。
+      ノーマル機（完全告知のボーナスタイプ）には AT も CZ も**存在しない**ので、
+      ★材料が全部揃っても永久に検索へ載せられない★。
+      実例＝マイジャグラーV は載っているのに、
+      新台経路で作った マイジャグラーVI は永久に載らない。
+
+    ★型と天井の有無は別々★（Codexの助言）＝
+      「ボーナスタイプ」と分かっても、天井が無いとは限らない。
+      実例＝X-300 は概要が「完全告知のボーナスタイプ」だが天井欄は「調査中」。
+
+    ★型そのものは claim に数えない★＝判定の線を選ぶためだけに使う。
+    """
+    if mode not in POLICY_MODES:
+        raise DecisionError(f"policy mode が不明です: {mode!r}")
+    if profile not in MACHINE_PROFILES:
+        raise DecisionError(f"機種の型が不明です: {profile!r}")
+    if ceiling_state not in CEILING_STATES:
+        raise DecisionError(f"天井の状態が不明です: {ceiling_state!r}")
+    claims = sorted(set(claims))
+    confirmed, pending = topics_from_claims(claims)
+    cats = sorted({_category(c) for c in claims})
+    reasons = []
+    if len(claims) < MIN_CLAIMS:
+        reasons.append("CLAIMS_LT_3")
+    if len(cats) < MIN_CATEGORIES:
+        reasons.append("CATEGORIES_LT_2")
+    # ★★型ごとに「その機種らしさ」の求め方を変える★★
+    if profile == "AT_CZ":
+        if not any(c.startswith(("at:", "cz:")) for c in claims):
+            reasons.append("NO_UNIQUE_GAMEPLAY")
+    elif profile == "BONUS":
+        if not any(c in _BONUS_CLAIMS for c in claims):
+            reasons.append("NO_BONUS_PROB")
+    else:                                  # UNKNOWN
+        # ★黙って AT の線に倒さない★＝原因が隠れるため（Codexの助言）
+        reasons.append("MACHINE_PROFILE_UNKNOWN")
+    indexable = not reasons
+    if mode == "force_noindex_new_auto":
+        indexable = False
+        reasons = reasons + ["POLICY_FORCE_NOINDEX"]
+    digest_src = json.dumps(
+        {"schema": SCHEMA_V2, "claims": claims, "mode": mode,
+         "profile": profile, "ceiling_state": ceiling_state},
+        ensure_ascii=False, sort_keys=True)
+    return {
+        "schema_version": SCHEMA_V2,
+        "indexable": indexable,
+        "machine_profile": profile,
+        "ceiling_state": ceiling_state,
+        "confirmed_topics": confirmed,
+        "pending_topics": pending,
+        "reason_codes": reasons,
+        "claims": claims,
+        "policy_mode": mode,
+        "decided_at": decided_at or date.today().isoformat(),
+        "input_digest": "sha256:" + hashlib.sha256(
+            digest_src.encode("utf-8")).hexdigest(),
+    }
+
+
+def profile_from_material(material: dict) -> str:
+    """★材料から機種の型を取る★（2AIが確定させたものだけ）。
+
+    ★機械が本文を読んで決めない★＝意味の判断は2AIの仕事。
+    決まっていなければ UNKNOWN（＝掲載不可・理由も残る）。
+    """
+    v = ((material.get("adopted") or {}).get("machine_profile") or {})
+    got = (v.get("value") or {}).get("profile")
+    return got if got in MACHINE_PROFILES else "UNKNOWN"
+
+
+def ceiling_state_from_material(material: dict) -> str:
+    """★材料から天井の有無を取る★（★型から推論しない★）。
+
+    ★なぜ分けるか（2026-08-25・Codexの27回目）★
+      X-300 は概要が「完全告知のボーナスタイプ」でも、
+      天井欄は「調査中」＝**型が分かっても天井の有無は分からない**。
+    ★天井のclaimが実際にあるなら PRESENT★（そちらが強い証拠）。
+    """
+    if (material.get("ceilings") or {}).get("adopted"):
+        return "PRESENT"
+    v = ((material.get("adopted") or {}).get("ceiling_state") or {})
+    got = (v.get("value") or {}).get("state")
+    return got if got in CEILING_STATES else "UNKNOWN"
+
+
+def decide_v2(material: dict, policy: dict | None = None,
+              decided_at: str = "") -> dict:
+    """★材料から v2 の判定書を作る★（新台経路が使う）。"""
+    policy = policy if policy is not None else load_policy()
+    return decide_from_claims_v2(
+        index_claims_from_material(material), policy["mode"],
+        profile_from_material(material),
+        ceiling_state_from_material(material), decided_at)
+
+
 def decide(material: dict, policy: dict | None = None,
            decided_at: str = "") -> dict:
     """材料から判定書を作る（純関数・材料以外の外部状態は policy だけ）。"""
@@ -404,12 +559,24 @@ def validate_decision(pd: dict) -> None:
     """
     if not isinstance(pd, dict):
         raise DecisionError("判定書が辞書ではありません")
-    missing = sorted(_DECISION_KEYS - set(pd))
-    extra = sorted(set(pd) - _DECISION_KEYS)
+    # ★★v1 と v2 を併読する★★（2026-08-25・Codexの27回目）
+    #   ★v1 に項目を足すと、既にある11機種が「壊れている」扱いになる★ので、
+    #   版ごとに求める項目を分ける。v1 の機種は今までどおり読める。
+    ver = pd.get("schema_version")
+    if ver not in SCHEMAS:
+        raise DecisionError(f"判定書の schema が違います: {ver!r}")
+    keys = _DECISION_KEYS_V2 if ver == SCHEMA_V2 else _DECISION_KEYS
+    missing = sorted(keys - set(pd))
+    extra = sorted(set(pd) - keys)
     if missing or extra:
         raise DecisionError(f"判定書の項目が違います（欠け={missing} 余分={extra}）")
-    if pd["schema_version"] != SCHEMA:
-        raise DecisionError(f"判定書の schema が違います: {pd['schema_version']!r}")
+    if ver == SCHEMA_V2:
+        if pd["machine_profile"] not in MACHINE_PROFILES:
+            raise DecisionError(
+                f"判定書の機種の型が不明です: {pd['machine_profile']!r}")
+        if pd["ceiling_state"] not in CEILING_STATES:
+            raise DecisionError(
+                f"判定書の天井の状態が不明です: {pd['ceiling_state']!r}")
     if not isinstance(pd["indexable"], bool):
         raise DecisionError("判定書の indexable が真偽値ではありません")
     if not isinstance(pd["claims"], list) \
@@ -424,8 +591,14 @@ def validate_decision(pd: dict) -> None:
                             f"{pd['decided_at']!r}")
     for c in pd["claims"]:
         _category(c)                       # 不明なclaim IDはここで例外
-    want = decide_from_claims(pd["claims"], pd["policy_mode"], pd["decided_at"])
-    for k in sorted(_DECISION_KEYS):
+    if ver == SCHEMA_V2:
+        want = decide_from_claims_v2(
+            pd["claims"], pd["policy_mode"], pd["machine_profile"],
+            pd["ceiling_state"], pd["decided_at"])
+    else:
+        want = decide_from_claims(pd["claims"], pd["policy_mode"],
+                                  pd["decided_at"])
+    for k in sorted(keys):
         if pd[k] != want[k]:
             raise DecisionError(
                 f"判定書の {k} が claims から計算し直した値と違います "
@@ -454,7 +627,8 @@ def machine_class(machine: dict, policy: dict | None = None) -> str:
             return "LEGACY_PREVIEW"
         raise DecisionError(
             f"不明な status です: {status!r} (slug={machine.get('slug')})")
-    if pub != SCHEMA:
+    # ★v1 と v2 の両方を認める★（2026-08-25。v1 の機種は今までどおり）
+    if pub not in SCHEMAS:
         raise DecisionError(
             f"不明な publication_policy です: {pub!r} "
             f"(slug={machine.get('slug')})")
@@ -468,7 +642,15 @@ def machine_class(machine: dict, policy: dict | None = None) -> str:
         raise DecisionError(f"{machine.get('slug')}: {e}")
     pd = machine["page_decision"]
     # ★保存値ではなく「いまのpolicyで計算し直した結果」を使う★
-    now = decide_from_claims(pd["claims"], pol_mode, pd["decided_at"])
+    # ★★版に合わせて計算し直す★★（2026-08-25）
+    #   ★ここを v1 のままにすると、v2 の機種は永久に AUTO_PENDING★
+    #   ＝直したはずの欠陥が、最後の一行で元に戻る。
+    if pd.get("schema_version") == SCHEMA_V2:
+        now = decide_from_claims_v2(pd["claims"], pol_mode,
+                                    pd["machine_profile"],
+                                    pd["ceiling_state"], pd["decided_at"])
+    else:
+        now = decide_from_claims(pd["claims"], pol_mode, pd["decided_at"])
     return "AUTO_INDEXABLE" if now["indexable"] else "AUTO_PENDING"
 
 
@@ -760,6 +942,61 @@ def selftest() -> int:
           p.get("mode") in POLICY_MODES)
     except DecisionError as e:
         t(f"★実物の indexing-policy.json が読める★（{e}）", False)
+    # ★★★判定書v2：ノーマル機の救済★★★（2026-08-26・Codexの27回目）
+    #   ★直す前は at:/cz: が必須★＝ジャグラー等は材料が全部揃っても
+    #   **原理的に永久に検索へ載せられなかった**（マイジャグラーV は
+    #   載っているのに、新台経路の VI は永久に載らない、が実際に起きていた）。
+    _c3 = ["payout_range", "games_per_50", "bonus_prob"]
+    _at3 = ["payout_range", "games_per_50", "at:MAIN_AT"]
+    t("★★★ノーマル機は、ボーナス確率があれば載せられる★★★"
+      "／★これが無いと、ジャグラー等の新台は永久に載らない★",
+      decide_from_claims_v2(_c3, "normal", "BONUS")["indexable"] is True)
+    t("★★ボーナスタイプに at:/cz: を求めない★★"
+      "／★求めると、存在しないものを要求することになる★",
+      "NO_UNIQUE_GAMEPLAY"
+      not in decide_from_claims_v2(_c3, "normal", "BONUS")["reason_codes"])
+    t("　ボーナス確率が無ければ載せない（線は緩めない）",
+      "NO_BONUS_PROB"
+      in decide_from_claims_v2(_at3, "normal", "BONUS")["reason_codes"])
+    t("★★AT機の線は今までどおり★★（at:/cz: が要る）",
+      decide_from_claims_v2(_at3, "normal", "AT_CZ")["indexable"] is True
+      and "NO_UNIQUE_GAMEPLAY"
+      in decide_from_claims_v2(_c3, "normal", "AT_CZ")["reason_codes"])
+    t("★★型が不明なら載せない（ATの線に黙って倒さない）★★"
+      "／★倒すと、原因が NO_UNIQUE_GAMEPLAY に隠れて見えなくなる★",
+      decide_from_claims_v2(_c3, "normal", "UNKNOWN")["indexable"] is False
+      and decide_from_claims_v2(_c3, "normal", "UNKNOWN")["reason_codes"]
+      == ["MACHINE_PROFILE_UNKNOWN"])
+    t("　ボーナス確率は spec とは別の種類（種類2つの条件を満たせる）",
+      _category("bonus_prob") != _category("payout_range"))
+    # ★★区分は版に合わせて計算し直す★★
+    #   ★ここが v1 のままだと、v2 の機種は永久に AUTO_PENDING★
+    #   ＝直したはずの欠陥が、最後の一行で元に戻る。
+    _d_v2 = decide_from_claims_v2(_c3, "normal", "BONUS", "NONE", "2026-08-26")
+    _m_v2 = {"slug": "zzz_v2", "name": "試験", "publication_policy": SCHEMA_V2,
+             "page_decision": _d_v2}
+    t("★★v2 の機種が、条件を満たせば AUTO_INDEXABLE になる★★"
+      "／★区分を v1 の式で計算すると、永久に AUTO_PENDING のまま★",
+      machine_class(_m_v2, {"mode": "normal"}) == "AUTO_INDEXABLE")
+    # ★★天井の有無は、型から推論しない★★
+    #   実例＝X-300 は概要が「完全告知のボーナスタイプ」でも天井欄は「調査中」。
+    t("★★型が BONUS でも、天井の有無は分からないまま★★"
+      "／★推論すると、出典に無いことを断定することになる★",
+      ceiling_state_from_material(
+          {"adopted": {"machine_profile": {"value": {"profile": "BONUS"}}}})
+      == "UNKNOWN")
+    t("　天井のclaimが実際にあれば PRESENT",
+      ceiling_state_from_material(
+          {"ceilings": {"adopted": [{"kind": "GAME", "amount": 999}]}})
+      == "PRESENT")
+    t("　2AIが「無い」と確定させたときだけ NONE",
+      ceiling_state_from_material(
+          {"adopted": {"ceiling_state": {"value": {"state": "NONE"}}}})
+      == "NONE")
+    # ★v1 は無傷★
+    t("　v1 の判定書は今までどおり読める（併読）",
+      decide_from_claims(_at3, "normal", "2026-08-26")["indexable"] is True)
+
     print(f"{ran[0]}/{ran[0]} 合格" if ok_all else "不合格あり")
     return 0 if ok_all else 1
 

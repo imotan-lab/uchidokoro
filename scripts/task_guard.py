@@ -100,6 +100,10 @@ CODEX_ASK_ROUND_LIMIT = 3
 #   ★修正（writes_fix）の枠は据え置き★＝記事の中身を書き換える側なので、
 #   段階ルールを続ける（予算の側で見る）。
 MACHINES_PER_DAY = 0
+# ★新台の暴走止め★（2026-08-26・台帳#479）
+#   件数の制限ではなく「明らかにおかしい数」で止める安全弁。
+#   実績＝1晩に処理する新台候補は多くても数件。
+UNLIMITED_RUNAWAY_CAP = 20
 # ★1日の機種数を数えないタスク★（2026-08-07・運営者決定）
 #   新台は導入日が決まっていて待てない。分かり次第そのまま記事にする。
 UNLIMITED_MACHINE_TASKS = frozenset({"add-machine"})
@@ -651,6 +655,19 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
             return {"ok": True, "why": f"{slug} は試験用なので枠を使いません",
                     "test": True}
         data = _load(path)
+        # ★★未コミットのコードでは、どのタスクも担当を取らない★★
+        #   （2026-08-26・台帳#478。★新台タスクだけ効いていなかった★）
+        #   ★歯止めは下（718行あたり）にあったが、新台は上の分岐で
+        #     先に return していたので、一度も通っていなかった★。
+        #   ＝鉄則4「レビューされていないコードで公開処理を走らせない」が
+        #     いちばん危ない経路（公開してpushする側）で破れていた。
+        #   実際、2026-08-25の夜は別の理由（契約のズレ）で偶然止まっただけ。
+        _dirty0 = unattended_dirty_code(task)
+        if _dirty0:
+            raise GuardError(
+                "コミットされていないスクリプトがあります: "
+                + " / ".join(_dirty0[:3])
+                + "（レビューされていないコードで公開処理は走らせません）")
         if task in UNLIMITED_MACHINE_TASKS:
             # ★★名乗りだけで無制限にしない★★（2026-08-11・台帳#294）
             #   以前は「タスク名が add-machine なら無制限」だったので、
@@ -669,8 +686,20 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
                     "新台の無制限枠は使えません（更新タスクの担当です）")
             d = _day(data)
             done = d.setdefault("unlimited_slugs", [])
+            # ★★暴走止め★★（2026-08-26・台帳#479）
+            #   ★説明文には「上限に当たったら止めて知らせる」と書いてあるのに、
+            #     実装は記録するだけで拒否していなかった★。
+            #   同じ晩に何十件も作り続けるのは、うまくいっている状態ではなく
+            #   不具合の形（DMMのカレンダーの読み違い等）。
+            #   ★新台の件数そのものは制限しない★＝導入日が決まっていて待てない。
+            #   ここは「明らかにおかしい数」で止めるだけの安全弁。
+            if slug not in done and len(done) >= UNLIMITED_RUNAWAY_CAP:
+                raise GuardError(
+                    f"同じ晩に新台を {len(done)} 件も作っています"
+                    f"（上限 {UNLIMITED_RUNAWAY_CAP} 件）。"
+                    "うまくいっている状態ではないので止めます")
             if slug not in done:
-                done.append(slug)          # ★記録するだけ・拒否しない★
+                done.append(slug)
             e = _entry(data, task)
             e["target_slug"] = slug
             _save(path, data)
@@ -1928,6 +1957,13 @@ def _raises(fn, word: str = "") -> bool:
 def selftest() -> int:
     import shutil
     results = []
+    # ★★試験中は「未コミットの歯止め」を通す★★（2026-08-26）
+    #   ★この歯止めは本番のためのもの★＝試験は必ず作業ツリーが汚れた状態で
+    #   走る（いま直しているコード自体が未コミット）ので、
+    #   ここで止まると**自分の直しを一度も試せない**。
+    #   ★歯止めそのものは、専用の試験で確かめる★（下の _dirty_guard_tests）。
+    _keep_dirty = globals()["unattended_dirty_code"]
+    globals()["unattended_dirty_code"] = lambda task: []
 
     def t(name, cond):
         results.append((name, bool(cond)))
@@ -1980,9 +2016,26 @@ def selftest() -> int:
         #   ★実際に起きたこと★＝無人実行の最中に対話セッションが
         #   task_guard.py を書き換えていた／未コミットのまま一晩走った。
         _keep_ch = globals()["_changed_files"]
+        _keep_udc = globals()["unattended_dirty_code"]
         try:
+            # ★ここだけ本物に戻す★＝この試験は歯止めそのものを確かめるもの
+            #   （selftest の先頭で、他の試験のために迂回させている）
+            globals()["unattended_dirty_code"] = _keep_dirty
             globals()["_changed_files"] = lambda: (
                 ["scripts/task_guard.py", "assets/data/machines.json"], "")
+            # ★★新台タスクでも効くこと★★（2026-08-26・台帳#478）
+            #   ★直す前は add-machine だけ上の分岐で先に return していた★ので、
+            #   **いちばん危ない経路（公開してpushする側）で破れていた**。
+            _fp478 = os.path.join(tmpdir, "guard478.json")
+            _keep_as = cp.assess
+            try:
+                cp.assess = lambda sl, *a, **k: {"stage": "NO_MACHINE"}
+                t("★★新台タスクでも、未コミットなら担当できない★★"
+                  "／★ここが破れると、レビュー前のコードで公開してpushする★",
+                  raises(lambda: claim("add-machine", "dmm_7777", _fp478),
+                         "コミット"))
+            finally:
+                cp.assess = _keep_as
             t("★★無人タスクは、未コミットのスクリプトがあると担当できない★★",
               raises(lambda: claim("update-machine", "hokuto",
                                    os.path.join(tmpdir, "dirty.json")),
@@ -1997,6 +2050,7 @@ def selftest() -> int:
               unattended_dirty_code("update-machine") == [])
         finally:
             globals()["_changed_files"] = _keep_ch
+            globals()["unattended_dirty_code"] = _keep_udc
 
         # ★★上限を撤廃しても、迂回防止の仕組みは残す★★
         #   （2026-08-25・運営者の指示で本番の上限は 0＝なしにした）
@@ -2032,11 +2086,19 @@ def selftest() -> int:
           and all(claim("t3", _spares[i - 1], fp2)["target_slug"] == _spares[i - 1]
                   for i in range(1, MACHINES_PER_DAY))
           and raises(lambda: claim("t3", "enen", fp2), "1日"))
-        for i in range(5, 40):
+        # ★★新台は「1日◯機種」の枠を使わない★★（2026-08-07・運営者決定）
+        #   ★ただし暴走止めはある★（2026-08-26・台帳#479）＝
+        #   同じ晩に何十件も作り続けるのは不具合の形なので、
+        #   UNLIMITED_RUNAWAY_CAP で止めて知らせる。
+        for i in range(5, UNLIMITED_RUNAWAY_CAP):
             claim("add-machine", "n%d" % i, fp2)
-        t("★★新台には件数の上限を置かない★★（2026-08-07・運営者決定）",
-          claim("add-machine", "zzz", fp2)["target_slug"] == "zzz"
-          and len(_load(fp2)["day"]["unlimited_slugs"]) == 41)
+        t("★★新台は普通の枠を使わない（上限まで続けて担当できる）★★",
+          len(_load(fp2)["day"]["unlimited_slugs"]) == UNLIMITED_RUNAWAY_CAP)
+        t("★★暴走止めに当たったら止めて知らせる★★"
+          "／★説明文には「ある」と書いてあるのに、実装は記録するだけだった★",
+          raises(lambda: claim("add-machine", "n_over", fp2), "上限"))
+        t("　すでに担当した機種なら、上限に当たっていても続けられる",
+          claim("add-machine", "n5", fp2)["target_slug"] == "n5")
         globals()["MACHINES_PER_DAY"] = _keep_mpd
         # ★本番の設定（上限なし）でも、機種を替えて何機種でも担当できる★
         fp3 = os.path.join(tmpdir, "guard3.json")
@@ -2641,6 +2703,7 @@ def selftest() -> int:
     finally:
         _sh.rmtree(_d, ignore_errors=True)
 
+    globals()["unattended_dirty_code"] = _keep_dirty   # ★必ず戻す★
     ng = [n for n, ok in results if not ok]
     print(f"\n{len(results) - len(ng)}/{len(results)} 合格")
     if ng:

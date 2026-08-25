@@ -52,7 +52,10 @@ import safe_json as _sj                  # noqa: E402
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DETAILS = os.path.join(BASE, "assets", "data", "machine-details")
 PENDING = "当サイトでは未確認です。確認でき次第、この欄に掲載します。"
-SOURCED = "（出典2件で一致）"
+# ★記事に出典のことを書かない★（2026-08-26・運営者の指示）
+#   「ほかサイトのコピーと思われたくない」＝裏取りの自慢は読者に要らない。
+#   ★空文字にする★＝呼び出し側を壊さずに、出力から消える。
+SOURCED = ""
 
 # 天井の種類ごとの見出し（★材料に無い言葉を足さない★）
 _KIND_JP = {"GAME": "ゲーム数天井", "CYCLE": "周期天井",

@@ -12,7 +12,7 @@
   "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
   "scripts/blocked_hosts.py": "553ac0a6f0f0baf563100458937efa167826c4347f815ace1a70e39769909b7d",
   "scripts/ceiling_lookup.py": "ad54309152dd7fe19c56ff574f7b468a70ef994e456b4a0a2c2f4a68fb00cf00",
-  "scripts/confirmed_values.py": "79fc661d0fb0eb60aa8f9d93dec1195c0958333f7da95feeb29d2180313a9cb8",
+  "scripts/confirmed_values.py": "0326c249d700c97df876b324ef571327661a12076ab6b39fbfa358e97bc5a8ad",
   "scripts/cz_lookup.py": "24727d5876e0a5e233ff6c913e96ae3d3fc50d7e5d5869b019e443bde374b02b",
   "scripts/directory_index.py": "5c6e1471c073b2462b056b0cd6c2f7ee7a2fa8d26f8696213a6e891b896dbdc5",
   "scripts/dmm_calendar.py": "ad0ae2ffb3977307cf361e4a137288e9bccdd1f15fb43e560aa629c5942a6930",
