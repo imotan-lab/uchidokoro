@@ -46,7 +46,7 @@
       // description生成
       let desc;
       if(isPreview){
-        desc = `${m.name}のスペック・基本情報。出典で確認が取れた項目のみ掲載しています。未掲載の項目は確認でき次第更新します。`
+        desc = `${m.name}のスペック・基本情報。確認が取れた項目のみ掲載しています。未掲載の項目は確認でき次第更新します。`
           + (releaseJp ? `登場時期は${releaseJp}（公式確認）。` : '');
       } else {
         desc = strategy

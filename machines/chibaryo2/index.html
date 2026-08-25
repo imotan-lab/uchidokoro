@@ -59,11 +59,12 @@
     <p id="heroSub" class="hero-sub">チバリヨ2は、通常とリセットで見方がはっきり分かれる機種です。通常は600〜700Gから（スルー数により変動）、リセットは0Gからが基準です。先にどちらの前提で見る台かを固定してからチェッカーを使う方が実戦でズレにくいです。ボーナス後のトップランプとボーナス連数も確認しておくと収支につながります。</p>
     <!-- ★数値の出どころを控えめに明示する★（2026-07-30・運営者判断）
          各種解析情報をもとにまとめた当サイトの整理であって、
-         1つ1つの数値の出典照合はまだ済んでいない、という状態を短く示す。
+         1つ1つの数値の確認はまだ済んでいない、という状態を短く示す。
+         ★記事に出典（どこから採ったか）を書かない★（2026-08-26・運営者の指示）
          照合が済んだ機種から、この文言を差し替えていく。 -->
-    <p class="source-note">数値は各種解析情報をもとにまとめた当サイトの整理です。出典の照合は順次進めています。</p>
+    <p class="source-note">数値は当サイトでまとめた整理です。確認は順次進めています。</p>
     <div id="previewBanner" class="preview-banner is-hidden">
-      <p class="preview-banner-label">⚠ このページは出典で確認が取れた項目のみ掲載しています。</p>
+      <p class="preview-banner-label">⚠ このページは確認が取れた項目のみ掲載しています。</p>
       <p class="preview-banner-body">未掲載の項目は確認でき次第更新します。</p>
       <p id="previewReleaseDate" class="preview-banner-date"></p>
     </div>
@@ -715,7 +716,7 @@ function resolveMachineSlug() {
       // ★狙い目比の断り★ 絶対額の期待値ではないことを必ず書く
       if (Number.isFinite(checker.coinRate) && Number.isFinite(checker.hitRate)) {
         notes.push("「狙い目比」は、当サイトの狙い目ラインを±0円としたときの増減です（深いぶん投資が減る分を、初当たり1/"
-          + checker.hitRate + "で計算）。他サイトが出している金額そのものの期待値とは別のものです。");
+          + checker.hitRate + "で計算）。金額そのものの期待値とは別のものです。");
       }
       if (hasVar) notes.push("スルー・周期は変動要素があるためチェッカーで確認してください。");
       evTableNote.textContent = notes.join(" ");

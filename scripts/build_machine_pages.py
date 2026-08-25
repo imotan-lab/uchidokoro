@@ -101,7 +101,7 @@ def build_title_desc(machine: dict, pochipochi_available: bool = True) -> tuple[
         #   時間で嘘になる語（導入予定・導入前・先行）も使わない。
         title = (machine.get("seo") or {}).get("title") \
             or f"{name} スペック・基本情報"
-        desc = (f"{name}のスペック・基本情報。出典で確認が取れた項目のみ"
+        desc = (f"{name}のスペック・基本情報。確認が取れた項目のみ"
                 "掲載しています。未掲載の項目は確認でき次第更新します。"
                 + (f"登場時期は{release_jp}（公式確認）。" if release_jp else ""))
         return title, desc
@@ -109,7 +109,7 @@ def build_title_desc(machine: dict, pochipochi_available: bool = True) -> tuple[
         # ★時間で嘘になる語（導入予定・導入前）と「天井・狙い目」の名乗りをやめた★
         #   （2026-08-04・Codex70回目。8/3導入後も「導入予定」のmeta説明が残っていた）
         title = f"{name} スペック・基本情報｜解析判明次第更新"
-        desc = (f"{name}のスペック・基本情報。出典で確認が取れた項目のみ掲載し、"
+        desc = (f"{name}のスペック・基本情報。確認が取れた項目のみ掲載し、"
                 "解析データが判明次第、随時更新します。"
                 + (f"登場時期は{release_jp}（公式確認）。" if release_jp else ""))
     elif pochipochi_available:
@@ -580,8 +580,8 @@ def render_all(source_root: Path) -> tuple[dict, list, list]:
 
 # ★旧形式ページの目印★（この文言が全ページに入っていることを機械的に確かめる）
 #   machine.html のテンプレートに直接書いてある。ここと食い違ったら生成を止める。
-LEGACY_NOTE = ("数値は各種解析情報をもとにまとめた当サイトの整理です。"
-               "出典の照合は順次進めています。")
+LEGACY_NOTE = ("数値は当サイトでまとめた整理です。"
+               "確認は順次進めています。")
 
 
 def _rebuild_auto(slug: str) -> int:

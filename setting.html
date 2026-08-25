@@ -204,7 +204,7 @@ function guardPublished(slug) {
       if (ok) return true;
       const main = document.querySelector("main") || document.body;
       main.innerHTML = '<div class="wrap"><h1>準備中です</h1>'
-        + '<p>この機種の数値は出典の確認が済んでいないため、いまは公開していません。</p>'
+        + '<p>この機種の数値は確認が済んでいないため、いまは公開していません。</p>'
         + '<p><a href="index.html">トップページへ戻る</a></p></div>';
       return false;
     });
