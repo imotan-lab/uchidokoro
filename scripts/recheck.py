@@ -2209,6 +2209,30 @@ def _selftest():
                   _dv({"slug": "zzz_t22"})["result"] == ERROR)
             finally:
                 _cv19.check_shape = _keep_shape
+            # ★★本文が断り書きだけでも、表に合わない行があれば止める★★
+            #   （2026-08-25・Codexの24回目）
+            #   ★直す前は先に飛ばしていた★ので、
+            #   「本文＝未確認／表＝根拠なし」の形で表の不一致が消えた。
+            #   ★いまの生成器は作らないが、形としては作れてしまう★。
+            globals()["_machine"] = lambda sl: {
+                "slug": sl, "name": "試験機",
+                "page_decision": {"pending_topics": ["setting"]}}
+            globals()["_load_detail"] = lambda sl: ({"sections": [
+                {"title": "設定示唆まとめ", "type": "settei",
+                 "body": [_PENDING_TEXT],
+                 "tables": [{"label": "AT初当たり確率",
+                             "headers": ["設定", "AT初当たり確率"],
+                             "rows": [["設定3", {"text": "1/250",
+                                                "badge": "hint"}]]}]}]},
+                "", "")
+            t("★★本文が断り書きだけでも、表の根拠なしは止める★★"
+              "／★先に飛ばすと、表の不一致がまるごと消える★",
+              _dv({"slug": "zzz_t22"})["result"] == FAIL)
+            globals()["_load_detail"] = lambda sl: ({"sections": [
+                {"title": "設定示唆まとめ", "type": "settei",
+                 "body": [_PENDING_TEXT], "tables": []}]}, "", "")
+            t("　（対照）本文が断り書きだけで表も無ければ、いままでどおり通す",
+              _dv({"slug": "zzz_t22"})["result"] in (PASS, NOT_APPLICABLE))
             # ★★★材料から記事まで一本で通す試験★★★
             #   （2026-08-25・Codexの24回目の助言）
             #   ★私の直し方の癖＝反例で足りない次元を一段ずつ後付けする★
