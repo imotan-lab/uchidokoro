@@ -45,6 +45,16 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # ★壊し方の一覧★（Codexが挙げた6つ＋自分で踏んだ分）
 #   file … 壊すファイル / before → after / run … 赤くなるべき試験
+# ★★外した壊し方（理由を残す）★★
+#   2026-08-26、運営者の指示で**記事にサイト名を出さない**ことにした
+#   （「ほかサイトのコピーと思われたくない」）。
+#   これにより `strip_allowed_basis`（サイト名入りの名乗りを監査17の
+#   対象から外す仕組み）は、外すものが無くなった＝**壊しても何も起きない**。
+#   ・「根拠の名乗りも他サイト名として弾く」（Codex16回目）
+#   ・「recheck が監査17と別の見方をする」（Codex17回目）
+#   ★仕組み自体は残している★＝将来また名乗りを付けるときに要る。
+#   ★同じ壊し方を戻さないこと★＝いまの取り決めでは必ず「捕まえられない」
+#   と出て、本物の見落としが埋もれる。
 MUTATIONS = [
     {
         "why": "天井の抽出器が根拠を保存し忘れる",
@@ -448,13 +458,6 @@ MUTATIONS = [
         "run": ["scripts/maker_identity_cache.py"],
     },
     {
-        "why": "根拠の名乗りも他サイト名として弾く（例外が永久に公開できない・Codex16回目）",
-        "file": "scripts/audit_site.py",
-        "before": "        text = strip_allowed_basis(load_text(jf))",
-        "after": "        text = load_text(jf)",
-        "run": ["scripts/build_new_article.py"],
-    },
-    {
         "why": "弱い名前の箱を、中身を見ずに素通しする（見出し無しの投稿表・Codex16回目）",
         "file": "scripts/user_area.py",
         "before": "                if w in toks:\n                    return w           # ★中身を見てから決める★",
@@ -820,13 +823,6 @@ MUTATIONS = [
         "file": "scripts/recheck.py",
         "before": "            if _mark and _mark in line:",
         "after": "            if False:",
-        "run": ["scripts/recheck.py"],
-    },
-    {
-        "why": "recheck が監査17と別の見方をする（正しい記事をNGにする・Codex17回目）",
-        "file": "scripts/recheck.py",
-        "before": "        text = _a.strip_allowed_basis(text)",
-        "after": "        pass",
         "run": ["scripts/recheck.py"],
     },
     {
