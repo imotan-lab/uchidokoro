@@ -243,10 +243,24 @@ def classify_support(vote_keys, ctx: dict | None = None,
 
 
 # 読者に見せる言い方（★根拠区分から作る。表示文から逆算しない★）
-READER_LABEL = {
-    INDEPENDENT_MULTI: "独立2出典で一致",
-    DMM_SINGLE_NEAR_RELEASE: "DMMぱちタウン単独確認",
-}
+# ★★記事に出る文言は build_new_article の正本から取る★★（2026-08-26）
+#   ★2026-08-26に運営者の指示でサイト名をやめた★
+#   （「ほかサイトのコピーと思われたくない」）。
+#   ここに写しを持つと、正本を変えても**古い文言のまま試験が期待し続ける**
+#   （実際そうなって、壊し方の通し確認が16件「壊す前から赤い」を出した）。
+def _reader_label_map() -> dict:
+    try:
+        import build_new_article as _ba
+        # ★INDEPENDENT_MULTI は内部の呼び名★（記事には出さない）
+        return {INDEPENDENT_MULTI: "独立2出典で一致",
+                DMM_SINGLE_NEAR_RELEASE:
+                    _ba.BASIS_SUFFIX.get(DMM_SINGLE_NEAR_RELEASE, "").strip("（）")}
+    except Exception:                                        # noqa: BLE001
+        return {INDEPENDENT_MULTI: "独立2出典で一致",
+                DMM_SINGLE_NEAR_RELEASE: "未確認"}
+
+
+READER_LABEL = _reader_label_map()
 
 
 def reader_label(basis: str) -> str:
@@ -360,7 +374,7 @@ def selftest() -> int:
       classify_support([D, N], OK_CTX, DAY)["basis"] == INDEPENDENT_MULTI)
     t("　読者に出す言い方は根拠区分から作る",
       reader_label(INDEPENDENT_MULTI) == "独立2出典で一致"
-      and reader_label(DMM_SINGLE_NEAR_RELEASE) == "DMMぱちタウン単独確認"
+      and reader_label(DMM_SINGLE_NEAR_RELEASE) == READER_LABEL[DMM_SINGLE_NEAR_RELEASE]
       and reader_label("知らない区分") == "")
     t("★★判定日は日本時間で決める★★（CIのUTCで1日ずれない）",
       isinstance(_today_jst(), _dt.date))
@@ -397,6 +411,11 @@ def _end_to_end_tests(t) -> None:
       材料 → 採否 → 記事の名乗り → 検索の濃さ
     が食い違っていないことを見る。
     """
+    # ★記事に出る文言は BASIS_SUFFIX が正本★（READER_LABEL は内部の呼び名）
+    #   ★2026-08-26に取り違えた★＝READER_LABEL を記事の文言だと思って比べ、
+    #   試験が丸ごと落ちた（＝壊し方が16件「壊す前から赤い」になった）。
+    _MARK_ART = __import__("build_new_article").BASIS_SUFFIX[
+        DMM_SINGLE_NEAR_RELEASE]
     import build_new_article as _ba
     import page_decision as _pd
 
@@ -434,7 +453,7 @@ def _end_to_end_tests(t) -> None:
     d_solo = _ba.build_detail("zzz", "試験機", "2026-08-20", m_solo)
     t("★★通し：DMM単独→採用され、記事に名乗りが付き、検索には数えない★★",
       solo["accepted"]
-      and any("DMMぱちタウン単独確認" in x for x in _texts(d_solo))
+      and any(_MARK_ART in x for x in _texts(d_solo))
       and _pd.index_claims_from_material(m_solo) == []
       and len(_pd.regression_claims_from_material(m_solo)) == 3)
 
@@ -444,7 +463,7 @@ def _end_to_end_tests(t) -> None:
     d_multi = _ba.build_detail("zzz", "試験機", "2026-08-20", m_multi)
     t("★★通し：独立2出典→名乗りは出ず、検索の濃さに数える★★",
       multi["accepted"]
-      and not any("DMMぱちタウン単独確認" in x for x in _texts(d_multi))
+      and not any(_MARK_ART in x for x in _texts(d_multi))
       and len(_pd.index_claims_from_material(m_multi)) == 3)
 
     # ③★採否と表示と検索がそろっているか★（片方だけ直したら落ちる）
@@ -559,8 +578,10 @@ def _end_to_end_tests(t) -> None:
               _pd.regression_claims_from_material(_mat_real) != [])
             _txt = str(_ba_mod.build_detail("zzz", "試験機", "2026-08-24",
                                             _mat_real))
-            t(f"　{_name}：記事にすると単独確認の名乗りが付く",
-              "DMMぱちタウン単独確認" in _txt)
+            # ★文言は正本から取る★（2026-08-26。直に書くと、正本を変えても
+            #   古い文言のまま期待し続ける＝この日それで16件が確かめられなかった）
+            t(f"　{_name}：記事にすると裏付けの弱さの断りが付く",
+              _ba_mod.BASIS_SUFFIX[DMM_SINGLE_NEAR_RELEASE] in _txt)
             _mat_bare = _strip(_mat_real, _box)
             t(f"★★{_name}：根拠を落とした材料は公開を断る★★"
               "／★空で流すと断りなしの普通の値として読者に出る★",
