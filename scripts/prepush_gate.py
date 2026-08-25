@@ -40,6 +40,10 @@ for _s in (sys.stdout, sys.stderr):
         _s.reconfigure(encoding="utf-8", errors="replace")
 
 import publish_new_machine as _pub        # noqa: E402
+import safe_json as _sj                 # noqa: E402
+
+# ★push待ちの目印★（公開の目印は関所より先に消えるため）
+PUSH_PENDING = os.path.join(_pub.BASE, ".push-pending.json")
 
 # 想定しているリモート（ここ以外へは出さない）
 WANT_HOST = "github.com"
@@ -84,7 +88,7 @@ def push_remote(branch: str) -> str:
 
 
 def _git(*args, check: bool = False) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", *args], cwd=BASE, capture_output=True,
+    return _run_capped(["git", *args], cwd=BASE, capture_output=True,
                           text=True, encoding="utf-8", errors="replace",
                           check=check)
 
@@ -129,6 +133,54 @@ def allowed_for(slug: str) -> set:
     }
 
 
+# ★★外部プロセスには必ず打ち切り時間を付ける★★（2026-08-25・Codexの26回目）
+PROC_TIMEOUT = 300
+
+
+def _run_capped(args, **kw):
+    """打ち切り時間つきで外部プロセスを動かす（既定 PROC_TIMEOUT 秒）。"""
+    kw.setdefault("timeout", PROC_TIMEOUT)
+    return subprocess.run(args, **kw)   # ★ここだけ素の呼び出し★
+
+
+def _dirty_before(slug: str):
+    """★「公開を始める前に変わっていたファイル」を、目印から取る★
+
+    ★★2つの目印を見る★★（2026-08-25・Codexの26回目）
+      ★公開の目印（.publish-in-progress.json）は、関所を呼ぶ**前**に
+        消される★ので、それだけを見ていた前の作りでは
+        **通常の経路で一度も読めていなかった**（＝遮断が働いていなかった）。
+      push をやり直す経路も push待ちの目印しか読まないので、両方を見る。
+
+    返すもの: (一覧, 止める理由)
+      一覧が None のときは「分からない」＝止める。
+    """
+    for path, name in ((_pub.IN_PROGRESS, "公開の目印"),
+                       (PUSH_PENDING, "push待ちの目印")):
+        try:
+            m = _sj.read_json(path, expect=dict, allow_missing=True,
+                              default=None)
+        except Exception as e:                               # noqa: BLE001
+            return None, f"★{name}を読めません（{type(e).__name__}）★"
+        if not isinstance(m, dict):
+            continue                       # その目印は無い
+        if str(m.get("slug") or "") != slug:
+            return None, (f"★{name}の機種（{m.get('slug')!r}）が"
+                          f"いま出そうとしている機種（{slug!r}）と違います★")
+        if "dirty_before" not in m:
+            return None, (f"★{name}に「始める前の状態」が控えられていません★"
+                          "／★この公開が作った変更だけかを確かめられません★")
+        v = m.get("dirty_before")
+        # ★★null を「綺麗だった」と読まない★★（Codexの26回目）
+        #   git status が失敗すると None が入る。空配列と同じ扱いにすると、
+        #   ★確かめられなかったものを「確かめた」ことにしてしまう★。
+        if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
+            return None, (f"★{name}の「始める前の状態」が読めない形です"
+                          f"（{type(v).__name__}）★")
+        return v, ""
+    return None, ""                        # どちらの目印も無い＝この経路ではない
+
+
 def preexisting(slug: str) -> list:
     """★この公開が作ったのではない変更が、許可対象に残っていないか★
 
@@ -138,26 +190,14 @@ def preexisting(slug: str) -> list:
       そのため、実行前から残っていた別の変更（例：既存機種の記述を
       書き換えた `machines.json`）が、同じ名前のファイルというだけで
       **新台のコミットに便乗して公開**できた。
-      ＝関所の約束（この機種の公開に伴う変更だけを出す）を破る。
-
-    ★見るのは「公開を始める前」の状態★＝
-      publish_new_machine が目印（.publish-in-progress.json）へ
-      `dirty_before` として控えたもの。関所は別プロセスなので、
-      引数ではなく**その目印から読む**（呼び出し側が渡し忘れられない）。
     ★読めないときは「分からない」と答える★（fail-closed）。
     """
-    try:
-        import safe_json as _sj_pg
-        mark = _sj_pg.read_json(_pub.IN_PROGRESS, expect=dict,
-                                allow_missing=True, default=None)
-    except Exception as e:                                   # noqa: BLE001
-        return [f"★公開の目印を読めません（{type(e).__name__}）★"]
-    if not isinstance(mark, dict):
-        return []                          # 目印が無い＝この経路ではない
-    if "dirty_before" not in mark:
-        return ["★公開を始める前の状態が目印に控えられていません★"
-                "／★この公開が作った変更だけかを確かめられません★"]
-    rode = sorted(set(mark.get("dirty_before") or []) & allowed_for(slug))
+    got, why = _dirty_before(slug)
+    if why:
+        return [why]
+    if got is None:
+        return []                          # どちらの目印も無い（この経路ではない）
+    rode = sorted(set(got) & allowed_for(slug))
     if rode:
         return ["★この公開が作ったのではない変更が、許可対象に残っています"
                 "（便乗して公開されます）: " + " / ".join(rode[:5]) + "★"]
@@ -449,6 +489,65 @@ def selftest() -> int:
           not preexisting("dmm_9999"))
     finally:
         _pub.IN_PROGRESS = _keep_ip
+    # ★★★本番と同じ順序で通す試験★★★（2026-08-25・Codexの26回目）
+    #   ★★前の試験は preexisting() を直接呼んでいた★★ので、
+    #   **本番では公開の目印が関所より先に消える**ことに気づけなかった。
+    #   ＝便乗の遮断は、通常の経路で一度も働いていなかった。
+    #   → 「公開の目印を作る → 消える → push待ちの目印だけが残る → 関所」
+    #     の順を、そのまま並べて確かめる。
+    import json as _json26
+    import tempfile as _tf26
+    _keep_ip26, _keep_pp26 = _pub.IN_PROGRESS, PUSH_PENDING
+    try:
+        _d26 = _tf26.mkdtemp(prefix="pg26_")
+        _pub.IN_PROGRESS = os.path.join(_d26, ".publish-in-progress.json")
+        globals()["PUSH_PENDING"] = os.path.join(_d26, ".push-pending.json")
+
+        def _seq26(dirty, drop_ip=True, pp_has=True):
+            """公開の目印を作り、消し、push待ちの目印だけを残す。"""
+            _json26.dump({"slug": "dmm_9999", "name": "試験機",
+                          "restore": {}, "created": {},
+                          "dirty_before": dirty},
+                         open(_pub.IN_PROGRESS, "w", encoding="utf-8"),
+                         ensure_ascii=False)
+            _pp = {"slug": "dmm_9999", "sha": "x", "stage": "COMMITTED",
+                   "parent": "y", "at": "2026-08-25 00:00:00"}
+            if pp_has:
+                _pp["dirty_before"] = dirty
+            _json26.dump(_pp, open(PUSH_PENDING, "w", encoding="utf-8"),
+                         ensure_ascii=False)
+            if drop_ip:                    # ★本番はここで消える★
+                os.remove(_pub.IN_PROGRESS)
+
+        _seq26(["assets/data/machines.json"])
+        t("★★★本番の順序でも、便乗した変更を止める★★★"
+          "／★公開の目印は関所より先に消えるので、引き継ぎが要る★",
+          bool(preexisting("dmm_9999")))
+        _seq26([])
+        t("　本番の順序で、始める前が綺麗なら通す",
+          not preexisting("dmm_9999"))
+        _seq26([], pp_has=False)
+        t("★★引き継がれていなければ止まる★★（＝遮断が働いていない状態）",
+          bool(preexisting("dmm_9999")))
+        _seq26(None)
+        t("★★null（git status が失敗）を「綺麗だった」と読まない★★",
+          bool(preexisting("dmm_9999")))
+        _seq26([])
+        _pp26 = _json26.load(open(PUSH_PENDING, encoding="utf-8"))
+        _pp26["slug"] = "dmm_1111"
+        _json26.dump(_pp26, open(PUSH_PENDING, "w", encoding="utf-8"),
+                     ensure_ascii=False)
+        t("　目印の機種が違えば止める",
+          bool(preexisting("dmm_9999")))
+        for _f26 in (_pub.IN_PROGRESS, PUSH_PENDING):
+            if os.path.isfile(_f26):
+                os.remove(_f26)
+        t("　どちらの目印も無いとき（この経路ではない）は何も言わない",
+          not preexisting("dmm_9999"))
+    finally:
+        _pub.IN_PROGRESS = _keep_ip26
+        globals()["PUSH_PENDING"] = _keep_pp26
+
     # ★★関所の本体が、この検査を通っていること★★（2026-08-25）
     #   ★直す前は preexisting() を直接呼ぶ試験しか無かった★ので、
     #   `check()` からの配線を切っても**試験は緑のまま**だった

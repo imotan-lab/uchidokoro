@@ -1990,7 +1990,7 @@ def _claim_today(official_url: str) -> bool:
         return False
     ctx = os.environ.get("UCHIDOKORO_LOCK_CTX")
     if ctx:
-        c = subprocess.run(
+        c = _run_capped(
             [sys.executable, os.path.join(BASE, "scripts", "task_lock.py"),
              "check", "--ctx", ctx], capture_output=True, text=True,
             encoding="utf-8", errors="replace")
@@ -2000,7 +2000,7 @@ def _claim_today(official_url: str) -> bool:
             _LOCK_LOST.append("check が非0")
             return False
     slug = _ba.slug_from_url(official_url)
-    g = subprocess.run(
+    g = _run_capped(
         [sys.executable, os.path.join(BASE, "scripts", "task_guard.py"),
          "claim", "--task", "add-machine", "--slug", slug],
         cwd=BASE, capture_output=True, text=True,
@@ -2016,10 +2016,45 @@ PUSH_PENDING = os.path.join(BASE, ".push-pending.json")
 
 
 def _head() -> str:
-    r = subprocess.run(["git", "rev-parse", "HEAD"], cwd=BASE,
+    r = _run_capped(["git", "rev-parse", "HEAD"], cwd=BASE,
                        capture_output=True, text=True,
                        encoding="utf-8", errors="replace")
     return (r.stdout or "").strip()
+
+
+# ★★外部プロセスには必ず打ち切り時間を付ける★★
+#   （2026-08-25・Codexの26回目）
+#   ★1か所ずつ書くと必ず漏れる★ので、入口を1つにして既定値を持たせる。
+#   ローカルの処理でも、子プロセスやファイルシステムが固まれば
+#   **上限なく待ち続ける**＝タスクが黙って止まり、ロックが延び、
+#   翌朝の更新タスクまで巻き添えになる。
+#   ★呼ぶ側が timeout を明示したときは、そちらを優先する★。
+PROC_TIMEOUT = 300
+
+
+def _run_capped(args, **kw):
+    """打ち切り時間つきで外部プロセスを動かす（既定 PROC_TIMEOUT 秒）。"""
+    kw.setdefault("timeout", PROC_TIMEOUT)
+    return subprocess.run(args, **kw)   # ★ここだけ素の呼び出し★
+
+
+def _dirty_before_from_mark():
+    """★公開の目印から「始める前に変わっていた一覧」を取る★
+
+    ★取れないときは None を返す★＝関所が「分からない」と答えて止まる。
+    ここで空配列を返すと「綺麗だった」と嘘をつくことになる。
+    """
+    try:
+        m = _sj.read_json(_pub.IN_PROGRESS, expect=dict,
+                          allow_missing=True, default=None)
+    except Exception:                                        # noqa: BLE001
+        return None
+    if not isinstance(m, dict):
+        return None
+    v = m.get("dirty_before")
+    if isinstance(v, list) and all(isinstance(x, str) for x in v):
+        return sorted(set(v))
+    return None
 
 
 def _mark_push_pending(slug: str, sha: str = "", stage: str = "COMMITTED",
@@ -2035,9 +2070,17 @@ def _mark_push_pending(slug: str, sha: str = "", stage: str = "COMMITTED",
       恒久停止**していた（人が直すまで出せない）。
       完成させてから置き換えれば、いつ止まっても目印は前か後の完全な形。
     """
+    # ★★「始める前に何が変わっていたか」をここへ引き継ぐ★★
+    #   （2026-08-25・Codexの26回目。★私の直しは本番では効いていなかった★）
+    #   ★公開の目印（.publish-in-progress.json）は、関所を呼ぶ**前**に
+    #     mark_done() が消す★ので、関所は dirty_before を見られなかった。
+    #   ＝便乗の遮断が、通常の経路では一度も働いていなかった。
+    #   push をやり直す経路もこの目印しか読まないので、ここに載せる。
+    _db = _dirty_before_from_mark()
     _pub.write_atomic(PUSH_PENDING, json.dumps(
         {"slug": slug, "sha": sha, "stage": stage,
-         "parent": parent, "at": _now()}, ensure_ascii=False))
+         "parent": parent, "at": _now(), "dirty_before": _db},
+        ensure_ascii=False))
 
 
 def _clear_push_pending() -> None:
@@ -2053,7 +2096,7 @@ def _committed_on_top(parent: str, slug: str) -> bool:
     先端の親が控えた先端と同じで、その説明に機種名が入っていれば、
     「コミットは通ったが目印を上げる前に止まった」と判断できる。
     """
-    r = subprocess.run(["git", "log", "-1", "--format=%P%x1f%B"], cwd=BASE,
+    r = _run_capped(["git", "log", "-1", "--format=%P%x1f%B"], cwd=BASE,
                        capture_output=True, text=True,
                        encoding="utf-8", errors="replace")
     if r.returncode != 0:
@@ -2089,7 +2132,7 @@ def lock_still_mine(where: str) -> list:
     #   そのため「期限切れ寸前に確認が通り、直後に別の実行が奪う」窓が残る。
     #   heartbeat は所有者の確認と延長を一度に行うので、通った時点から
     #   30分の猶予が付き、この窓が閉じる。
-    c = subprocess.run(
+    c = _run_capped(
         [sys.executable, os.path.join(BASE, "scripts", "task_lock.py"),
          "heartbeat", "--ctx", ctx], capture_output=True, text=True,
         encoding="utf-8", errors="replace")
@@ -2432,7 +2475,7 @@ def push_after_publish(slug: str, already_committed: bool = False) -> list:
         #   これが無いと、関所が「✗」を含む理由を印字しようとした瞬間に
         #   文字コードの失敗で落ち、**止まった本当の理由が化けて失われていた**。
         #   （同じ対策がこのファイルの他の subprocess には入っていた）
-        return subprocess.run([sys.executable, gate, "--slug", slug, *args],
+        return _run_capped([sys.executable, gate, "--slug", slug, *args],
                               cwd=BASE, capture_output=True, text=True,
                               encoding="utf-8", errors="replace",
                               env={**os.environ, "PYTHONIOENCODING": "utf-8"})
@@ -2507,24 +2550,37 @@ def push_after_publish(slug: str, already_committed: bool = False) -> list:
         return [f"push先の先端を確かめられませんでした"
                 f"（{NET_TIMEOUT}秒で打ち切り・pushしていません）"]
     remote_sha = (lr.stdout or "").split()[0] if (lr.stdout or "").split() else ""
-    base_sha = subprocess.run(
+    base_sha = _run_capped(
         ["git", "rev-parse", sc["base"]], cwd=BASE, capture_output=True,
         text=True, encoding="utf-8", errors="replace").stdout.strip()
     if lr.returncode != 0 or not remote_sha:
         return ["push先の先端を確かめられませんでした（pushしていません）: "
                 + _hide((lr.stderr or "").strip())[:200]]
     if remote_sha != base_sha:
+        # ★★取り直せたかどうかを、そのまま伝える★★
+        #   （2026-08-25・Codexの26回目）
+        #   ★直す前は例外を捨てて、必ず「fetchした」と返していた★ので、
+        #   時間切れでも認証失敗でも**取り直せたことになっていた**。
+        #   ＝翌日「新しい基準で確かめ直す」前提が崩れ、同じ所で止まり続ける。
+        _fetched, _why_f = True, ""
         try:
-            subprocess.run(["git", "fetch", sc["remote"]], cwd=BASE,
-                           capture_output=True, text=True,
-                           encoding="utf-8", errors="replace",
-                           timeout=NET_TIMEOUT)
+            _fr = subprocess.run(["git", "fetch", sc["remote"]], cwd=BASE,
+                                 capture_output=True, text=True,
+                                 encoding="utf-8", errors="replace",
+                                 timeout=NET_TIMEOUT)
+            if _fr.returncode != 0:
+                _fetched = False
+                _why_f = _hide((_fr.stderr or "").strip())[:160]
         except subprocess.TimeoutExpired:
-            pass                           # ★取り直せなくても、止めるのは同じ★
-        return [f"push先の先端（{remote_sha[:12]}）が手元の基準（{base_sha[:12]}）と"
-                "違います。fetchしたので、次の実行で確かめ直します（pushしていません）"]
+            _fetched, _why_f = False, f"{NET_TIMEOUT}秒で打ち切り"
+        _tail = ("fetchしたので、次の実行で確かめ直します（pushしていません）"
+                 if _fetched
+                 else f"★fetchできませんでした（{_why_f}）★"
+                      "／次の実行も同じ所で止まります（pushしていません）")
+        return [f"push先の先端（{remote_sha[:12]}）が手元の基準"
+                f"（{base_sha[:12]}）と違います。" + _tail]
     # ★基準が今のHEADの祖先であることも確かめる★（早送り以外は出さない）
-    anc = subprocess.run(["git", "merge-base", "--is-ancestor", base_sha, "HEAD"],
+    anc = _run_capped(["git", "merge-base", "--is-ancestor", base_sha, "HEAD"],
                          cwd=BASE, capture_output=True, text=True,
                          encoding="utf-8", errors="replace")
     if anc.returncode != 0:
@@ -4544,7 +4600,7 @@ def _main() -> int:
         print("★--apply には --ctx（ロックのCTXパス）が必要です★")
         return 1
     if args.apply:
-        r = subprocess.run(
+        r = _run_capped(
             [sys.executable, os.path.join(BASE, "scripts", "task_lock.py"),
              "check", "--ctx", args.ctx], capture_output=True, text=True,
             encoding="utf-8", errors="replace")
@@ -4561,7 +4617,7 @@ def _main() -> int:
         def _heartbeat():
             while not _hb_stop.wait(300):        # 5分ごと
               try:                               # noqa: E111
-                h = subprocess.run(
+                h = _run_capped(
                     [sys.executable,
                      os.path.join(BASE, "scripts", "task_lock.py"),
                      "heartbeat", "--ctx", args.ctx],

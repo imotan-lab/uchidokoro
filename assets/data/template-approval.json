@@ -56,7 +56,7 @@
   "scripts/hub_prose.json": "e72916960e547c4a88351ba0886a643dc0248e290a204af0269b7d2f91388380",
   "scripts/page_decision.py": "852df524972d6399bdbcd27980926c3e9946e42cef9b59738e5d13b8eda91448",
   "scripts/pending_machines.py": "174b3386455fb93a969c6ccafd728d07e19080ca807283b66deec9d1e50810d0",
-  "scripts/prepush_gate.py": "2420db2db52d2afde354ea8d18b6c637f089038335a82fbbec6ed25848ca795d",
+  "scripts/prepush_gate.py": "36b36cd8bbb8a49dcda53dbf52174db0beb0d117b5cea32d1fa5af8ecd9799d7",
   "scripts/preview_site.py": "8ef4c5eef6c1749df51c1c8c3edfebd2a4af427b8e0ae52287e724776dc7849a",
   "scripts/publish_new_machine.py": "d51ae6f8e9fca5596e78799f0ffa8033fe83e95e90a7ff07a8c662ee09bda601",
   "scripts/safe_json.py": "43f61703cbe7e1ea93ee2602fe9be45662957c8929aef62d649b6fc0493e0006",
