@@ -2057,6 +2057,25 @@ def _dirty_before_from_mark():
     return None
 
 
+def _dirty_before_kept(slug: str):
+    """★いま控えてある「始める前の状態」を持ち越す★
+
+    ★同じ機種のものだけ★（別の公開の控えを引き継がない）。
+    読めない・形が違う・機種が違うなら None（＝関所が止める）。
+    """
+    try:
+        m = _sj.read_json(PUSH_PENDING, expect=dict,
+                          allow_missing=True, default=None)
+    except Exception:                                        # noqa: BLE001
+        return None
+    if not isinstance(m, dict) or str(m.get("slug") or "") != slug:
+        return None
+    v = m.get("dirty_before")
+    if isinstance(v, list) and all(isinstance(x, str) for x in v):
+        return v
+    return None
+
+
 def _mark_push_pending(slug: str, sha: str = "", stage: str = "COMMITTED",
                        parent: str = "") -> None:
     """★どのコミットを出そうとしているかまで残す★（Codex20回目）
@@ -2076,7 +2095,16 @@ def _mark_push_pending(slug: str, sha: str = "", stage: str = "COMMITTED",
     #     mark_done() が消す★ので、関所は dirty_before を見られなかった。
     #   ＝便乗の遮断が、通常の経路では一度も働いていなかった。
     #   push をやり直す経路もこの目印しか読まないので、ここに載せる。
+    # ★★一度控えた値を、あとから消さない★★（2026-08-25・本番で踏んだ）
+    #   ★書く場所が3か所ある★＝
+    #     ①公開のあと（on_written）… 公開の目印がまだ生きているので取れる
+    #     ②③push の途中 … ★このときは目印がもう消えている★
+    #   ②③で取り直すと None になり、**関所が「読めない形」で止める**。
+    #   ＝せっかく引き継いだ値を、自分で上書きして壊していた。
+    #   → 目印から取れなければ、いま控えてある値をそのまま持ち越す。
     _db = _dirty_before_from_mark()
+    if _db is None:
+        _db = _dirty_before_kept(slug)
     _pub.write_atomic(PUSH_PENDING, json.dumps(
         {"slug": slug, "sha": sha, "stage": stage,
          "parent": parent, "at": _now(), "dirty_before": _db},
