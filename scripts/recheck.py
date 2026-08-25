@@ -705,6 +705,20 @@ _TOPIC2TITLE = {
 _PENDING_TEXT = "未確認です。確認でき次第、この欄に掲載します。"
 
 
+def _pending_texts() -> tuple:
+    """★記事が使う「未確認」の言い方の一覧★（正本は記事を作る側）。"""
+    try:
+        import build_new_article as _ba_pt
+        return tuple(x for x in (
+            tuple(getattr(_ba_pt, "PENDING_TEXTS", ()) or ())
+            + (getattr(_ba_pt, "PENDING_ITEM", ""),)) if x)
+    except Exception:                                        # noqa: BLE001
+        return ()
+
+
+_PENDING_ALL = _pending_texts()
+
+
 def check_decision_vs_body(args: dict) -> dict:
     """判定書が「未確認」と言っている箱に、記事が中身を書いていないか
 
@@ -807,19 +821,40 @@ def check_decision_vs_body(args: dict) -> dict:
                     if str(_k).strip() and str(_v or "").strip():
                         _pairs.setdefault(_tp, {}).setdefault(
                             _b, {})[str(_k).strip()] = str(_v)
-    except FileNotFoundError:
-        # ★★実際にはここへ来ない★★（2026-08-25・Codexの23回目）
-        #   控えが本当に無いとき `confirmed_values` は ConfirmedError を出す。
-        #   ★線引きの正体は「CIでは先に空の控えを作っている」こと★＝
-        #   永続環境で消えたら止まる／まっさらなCIでは明示的に作る、が正しい姿。
-        #   この枝は念のため残すが、説明を実態に合わせる。
-        _by_topic, _pairs = {}, {}
+    # ★★「控えが無いとき」の枝は置かない★★（2026-08-25・Codexの24回目）
+    #   控えが本当に無いとき `confirmed_values` は ConfirmedError を出すので、
+    #   FileNotFoundError の枝は**一度も通らない**。
+    #   置いたままだと、将来まったく別の FileNotFoundError を
+    #   「控え0件」に読み替えてしまう危険だけが残る。
+    #   ★線引きの正体は「CIでは先に空の控えを明示的に作っている」こと★。
     except Exception as _e_cv:                               # noqa: BLE001
         # ★★控えが読めないときも止まる★★（2026-08-25・Codexの22回目）
         #   ★直す前は空にして先へ進んでいた★ので、
         #   控えが壊れていると**全部が「根拠なし」**になり、
         #   正しい記事を毎回「直せ」と言い続けた。
         return _result(ERROR, f"確定値を読めません: {_e_cv}", args)
+
+    _row_rc = _machine(slug) or {}
+
+    def _identity_line(line: str) -> bool:
+        """★身元の行（機種名・登場時期）は、この検査の対象ではない★
+
+        （2026-08-25・通し試験で判明）
+        ★話題 `spec` に「基本スペック」の箱を結び付けた途端★、
+        機種名や登場時期まで「根拠のない断定」に数えていた。
+        これらは claims ではなく身元で、DMMの機種ページで別に確かめている。
+        ★字面の名簿ではなく、機種一覧の値と突き合わせる★。
+        """
+        _nm = str(_row_rc.get("name") or "").strip()
+        if _nm and _nm in line:
+            return True
+        _rel = str(_row_rc.get("release_date") or "").strip()
+        if _rel:
+            _y, _, _rest = _rel.partition("-")
+            _m = (_rest.split("-")[0] if _rest else "").lstrip("0")
+            if _y and _m and f"{_y}年{_m}月" in line:
+                return True
+        return False
 
     def _backed(line: str, topic: str) -> bool:
         """★その行が「検索の濃さに数えない根拠」で書かれているか★
@@ -874,6 +909,12 @@ def check_decision_vs_body(args: dict) -> dict:
 
         # ★表の見出し → 控えの項目名★（記事を作る側と同じ言い方）
         _TBL_FIELD = {"AT初当たり確率": "at_prob", "出玉率": "payout_rate"}
+        # ★決まった名乗りの一覧★（記事を作る側の正本から取る）
+        try:
+            import build_new_article as _ba_tb
+            _BASIS_MARKS = tuple(x for x in _ba_tb.BASIS_SUFFIX.values() if x)
+        except Exception:                                    # noqa: BLE001
+            _BASIS_MARKS = ()
 
         def _row_backed(tbl: dict, label: str, val: str) -> bool:
             """★その行が「その表の項目・その設定」の控えどおりか★
@@ -885,17 +926,30 @@ def check_decision_vs_body(args: dict) -> dict:
             ★値は完全一致★＝`1/300` と `1/3000` は別の値。
               部分一致だと桁違いの値が通る（実測で通っていた）。
             """
+            _v = val.strip()
+            # ★★DMM単独確認の名乗りは、それ自体が根拠★★
+            #   （2026-08-25・Codexの24回目。★実測でFAILしていた★）
+            #   ★直す前は先に控えを要求していた★ので、
+            #   運営者が決めた「DMM単独で採ってよい」経路の表は
+            #   **控えが無い限り必ず止まった**（機械採取なので控えは無い）。
+            #   ＝正しい書き方の記事を毎回「直せ」と言う。
+            for _bs in _BASIS_MARKS:
+                if _v.endswith(_bs):
+                    return True
             _field = _TBL_FIELD.get(str(tbl.get("label") or "").strip())
             if not _field:
                 return False               # 知らない表は免除しない
             _p = (_pairs.get(topic) or {}).get(_field) or {}
             _lab = label.replace("設定", "").strip()
-            want = _p.get(_lab) or _p.get(label.strip())
+            want = (_p.get(_lab) or _p.get(label.strip()) or "").strip()
             if not want:
                 return False               # その設定の控えが無い
-            # ★名乗り（DMM単独確認）は付いていてよいので、前から比べる★
-            _v = val.strip()
-            return _v == want or _v.startswith(want + "（")
+            # ★★許すのは「値＋決まった名乗り」だけ★★（Codexの24回目）
+            #   ★直す前は丸括弧で始まる任意の追記を許していた★ので、
+            #   「1/300（実際は1/3000）」のような**別の断定**も通った。
+            if _v == want:
+                return True
+            return any(_v == want + _bs for _bs in _BASIS_MARKS)
 
         for _tb in (sec.get("tables") or []):
             for _row in (_tb.get("rows") or []):
@@ -921,15 +975,27 @@ def check_decision_vs_body(args: dict) -> dict:
         #     未確認（確認でき次第掲載します）
         #     AT中の純増は約99枚です      ← ★これが素通りした★（再現済み）
         _nonempty = [x for x in body if x.strip()]
+        # ★★「未確認」の言い方は、記事を作る側の正本から取る★★
+        #   （2026-08-25・通し試験で判明）
+        #   ★検査は自分の文言だけを知っていた★ので、
+        #   記事が使う「未確認（確認でき次第掲載します）」が
+        #   **行の途中にある**形（「**機械割**：未確認（…）」）を
+        #   中身のある断定として数えていた。
+        #   ＝まだ何も書いていない箱を「書いている」と言う。
         _isnote = [x for x in _nonempty
-                   if _PENDING_TEXT in x or x.strip().startswith("未確認")]
-        if _isnote and len(_isnote) == len(_nonempty):
+                   if _PENDING_TEXT in x or x.strip().startswith("未確認")
+                   or any(_pt and _pt in x for _pt in _PENDING_ALL)]
+        # ★表に合わない行があるなら、本文が断り書きだけでも見る★
+        #   （2026-08-25・Codexの24回目。いまの生成器は作らないが、
+        #     形としては「本文＝未確認／表＝根拠なし」が作れてしまう）
+        if _isnote and len(_isnote) == len(_nonempty) and not _tbl_bad:
             continue
         # ★★行ごとに見る★★（2026-08-24・Codexの18回目）
         #   根拠のある行（DMM単独の名乗り／2AIで確定した値）は数えない。
         #   ★断り書きの行そのものは数えない★（中身ではないため）
         _left = [x for x in _nonempty
-                 if x not in _isnote and not _backed(x, topic)]
+                 if x not in _isnote and not _identity_line(x)
+                 and not _backed(x, topic)]
         # ★表の行は、表の規則で外れた時点で数える★（本文の免除を通さない）
         _left += _tbl_bad
         if not _left:
@@ -2143,6 +2209,67 @@ def _selftest():
                   _dv({"slug": "zzz_t22"})["result"] == ERROR)
             finally:
                 _cv19.check_shape = _keep_shape
+            # ★★★材料から記事まで一本で通す試験★★★
+            #   （2026-08-25・Codexの24回目の助言）
+            #   ★私の直し方の癖＝反例で足りない次元を一段ずつ後付けする★
+            #   と指摘された。個々の反例を足すだけでは、
+            #   「本文なし・控えあり・きれいな値」しか試していない。
+            #   → ★本物の生成器（build_detail）で記事を作り、それを検査する★。
+            #     2AIの確定値と、DMM単独の両方で通す。
+            import build_new_article as _ba24
+            import page_decision as _pd_rc
+
+            def _thru(mat, slug24, store=None):
+                """材料 → 記事 → 検査（本物の生成器を通す）。"""
+                if store is not None:
+                    _c = json.load(open(_cv19.STORE, encoding="utf-8"))
+                    _c["machines"][slug24] = store
+                    json.dump(_c, open(_cv19.STORE, "w", encoding="utf-8"),
+                              ensure_ascii=False)
+                _detail = _ba24.build_detail(slug24, "通し試験機", "2026-09", mat)
+                _dec = _pd_rc.decide(mat)
+                globals()["_machine"] = lambda sl: {
+                    "slug": sl, "name": "通し試験機",
+                    "release_date": "2026-09", "page_decision": _dec}
+                globals()["_load_detail"] = lambda sl: (_detail, "", "")
+                return _dv({"slug": slug24})["result"]
+
+            _SS24 = {"basis": "DMM_SINGLE_NEAR_RELEASE"}
+            _mat_dmm = {"adopted": {
+                "payout_rate": {**_SS24, "value": {"1": "97.0%", "6": "110.0%"},
+                                "sources": ["a"]}}}
+            t("★★★通し：DMM単独の設定表が、控えなしで公開判定を通る★★★"
+              "／★運営者が決めた書き方なので、止まると新台が作れない★",
+              _thru(_mat_dmm, "zzz_e2e_dmm") in (PASS, NOT_APPLICABLE))
+            _mat_2ai = {"adopted": {
+                "payout_rate": {"_from": "confirmed_values",
+                                "_field": "payout_rate",
+                                "value": {"1": "97.3%", "6": "110.5%"},
+                                "sources": ["a"]}}}
+            t("★★★通し：2AIの確定値から作った設定表も通る★★★",
+              _thru(_mat_2ai, "zzz_e2e_2ai",
+                    store={"payout_rate": _rec20({"1": "97.3%",
+                                                  "6": "110.5%"})})
+              in (PASS, NOT_APPLICABLE))
+            # ★対照★＝記事を作ったあとで表の値を書き換えたら止まる
+            _detail_bad = _ba24.build_detail("zzz_e2e_2ai", "通し試験機",
+                                             "2026-09", _mat_2ai)
+            for _sec24 in _detail_bad.get("sections") or []:
+                for _tb24 in (_sec24.get("tables") or []):
+                    for _row24 in (_tb24.get("rows") or []):
+                        # ★セルは文字列のことも辞書のこともある★
+                        #   （新台の生成は文字列／既存記事はバッジ付きの辞書）
+                        #   ★片方しか書き換えないと、対照が空振りする★
+                        if isinstance(_row24[1], dict):
+                            _row24[1]["text"] = "99.9%"
+                        else:
+                            _row24[1] = "99.9%"
+            globals()["_machine"] = lambda sl: {
+                "slug": sl, "name": "通し試験機", "release_date": "2026-09",
+                "page_decision": _pd_rc.decide(_mat_2ai)}
+            globals()["_load_detail"] = lambda sl: (_detail_bad, "", "")
+            t("　（対照）記事の表を書き換えたら止まる",
+              _dv({"slug": "zzz_e2e_2ai"})["result"] == FAIL)
             # ★★話題が決まっていない項目があれば、黙って進まない★★
             #   （2026-08-25・Codexの21回目。★fail-closed になっていなかった★）
             _keep_topic = _cv19.topic_of

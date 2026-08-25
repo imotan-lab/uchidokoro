@@ -486,6 +486,41 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "DMM単独の名乗りを表の根拠と認めない（運営者が決めた書き方の記事が作れない・Codex24回目）",
+        "file": "scripts/recheck.py",
+        "before": "            for _bs in _BASIS_MARKS:\n                if _v.endswith(_bs):\n                    return True",
+        "after": "            if False:\n                return True",
+        "run": ["scripts/recheck.py"],
+    },
+    {
+        "why": "名乗りを完全一致で見ない（1/300（実際は1/3000）のような別の断定が通る・Codex24回目）",
+        "file": "scripts/recheck.py",
+        "before": "            return any(_v == want + _bs for _bs in _BASIS_MARKS)",
+        "after": "            return _v.startswith(want)",
+        "run": ["scripts/recheck.py"],
+    },
+    {
+        "why": "記事の「未確認」の言い方を知らない（まだ何も書いていない箱を『書いている』と言う・2026-08-25の通し試験）",
+        "file": "scripts/recheck.py",
+        "before": "                   or any(_pt and _pt in x for _pt in _PENDING_ALL)]",
+        "after": "                   ]",
+        "run": ["scripts/recheck.py"],
+    },
+    {
+        "why": "身元の行を根拠のない断定に数える（機種名・登場時期で正しい記事が止まる・2026-08-25の通し試験）",
+        "file": "scripts/recheck.py",
+        "before": "                 if x not in _isnote and not _identity_line(x)\n                 and not _backed(x, topic)]",
+        "after": "                 if x not in _isnote and not _backed(x, topic)]",
+        "run": ["scripts/recheck.py"],
+    },
+    {
+        "why": "表に合わない行があっても、本文が断り書きだけなら飛ばす（表の不一致が消える・Codex24回目）",
+        "file": "scripts/recheck.py",
+        "before": "        if _isnote and len(_isnote) == len(_nonempty) and not _tbl_bad:",
+        "after": "        if _isnote and len(_isnote) == len(_nonempty):",
+        "run": ["scripts/recheck.py"],
+    },
+    {
         "why": "表を項目ごとに分けない（別項目の値を根拠にできる・Codex23回目）",
         "file": "scripts/recheck.py",
         "before": "            _field = _TBL_FIELD.get(str(tbl.get(\"label\") or \"\").strip())",
@@ -495,8 +530,8 @@ MUTATIONS = [
     {
         "why": "表の値を部分一致で見る（1/300 が 1/3000 を通す・Codex23回目）",
         "file": "scripts/recheck.py",
-        "before": "            return _v == want or _v.startswith(want + \"（\")",
-        "after": "            return want in _v",
+        "before": "            if _v == want:\n                return True",
+        "after": "            if True:\n                return True",
         "run": ["scripts/recheck.py"],
     },
     {
@@ -661,10 +696,8 @@ MUTATIONS = [
         "why": "話題まるごと免除に戻す"
                "（根拠のない断定が同じ箱に紛れると素通り・Codex18回目）",
         "file": "scripts/recheck.py",
-        "before": "        _left = [x for x in _nonempty\n"
-                  "                 if x not in _isnote and not _backed(x, topic)]",
-        "after": "        _left = [] if any(_backed(x, topic)\n"
-                 "                          for x in _nonempty) else _nonempty",
+        "before": "        _left = [x for x in _nonempty\n                 if x not in _isnote and not _identity_line(x)\n                 and not _backed(x, topic)]",
+        "after": "        _left = [] if any(_backed(x, topic)\n                          for x in _nonempty) else _nonempty",
         "run": ["scripts/recheck.py"],
     },
     {
@@ -689,8 +722,8 @@ MUTATIONS = [
         "why": "「未確認」で始まる箱を丸ごと免除する"
                "（2行目の断定が素通り・Codex19回目）",
         "file": "scripts/recheck.py",
-        "before": "        if _isnote and len(_isnote) == len(_nonempty):",
-        "after": "        if _isnote:",
+        "before": "        if _isnote and len(_isnote) == len(_nonempty) and not _tbl_bad:",
+        "after": "        if _isnote and len(_isnote) == len(_nonempty):",
         "run": ["scripts/recheck.py"],
     },
     {
