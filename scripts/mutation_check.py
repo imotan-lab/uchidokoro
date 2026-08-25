@@ -495,8 +495,8 @@ MUTATIONS = [
     {
         "why": "控えが無くても便乗の検査を通す（fail-closed が崩れる・Codex25回目）",
         "file": "scripts/prepush_gate.py",
-        "before": "        return []                          # 目印が無い＝この経路ではない\n    if \"dirty_before\" not in mark:\n        return [\"★公開を始める前の状態が目印に控えられていません★\"\n                \"／★この公開が作った変更だけかを確かめられません★\"]",
-        "after": "        return []",
+        "before": "        if \"dirty_before\" not in m:\n            return None, (f\"★{name}に「始める前の状態」が控えられていません★\"\n                          \"／★この公開が作った変更だけかを確かめられません★\")",
+        "after": "        if \"dirty_before\" not in m:\n            return [], \"\"",
         "run": ["scripts/prepush_gate.py"],
     },
     {
