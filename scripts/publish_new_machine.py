@@ -332,6 +332,32 @@ class _OnlyOne:
 IN_PROGRESS = os.path.join(BASE, ".publish-in-progress.json")
 
 
+def _dirty_now() -> list:
+    """★いま変わっているファイルの一覧★（git から見る・見られなければ None）。
+
+    ★見られないときは None★＝関所が「分からない」と答えて止まる
+    （fail-closed。空の一覧を返すと「綺麗だった」と嘘をつくことになる）。
+    """
+    try:
+        r = subprocess.run(["git", "status", "--porcelain"], cwd=BASE,
+                           capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=60)
+    except Exception:                                        # noqa: BLE001
+        return None
+    if r.returncode != 0:
+        return None
+    out = []
+    for line in (r.stdout or "").splitlines():
+        name = line[3:].strip().strip('"')
+        if not name:
+            continue
+        for x in (name.split(" -> ") if " -> " in name else [name]):
+            x = x.strip().strip('"')
+            if x:
+                out.append(x)
+    return sorted(set(out))
+
+
 def mark_start(slug: str, machine: dict, backup: dict) -> None:
     """★書き始める前に目印を残す★（電源が落ちても残る）
 
@@ -345,6 +371,13 @@ def mark_start(slug: str, machine: dict, backup: dict) -> None:
         "slug": slug, "name": machine.get("name", ""),
         "started_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "pid": os.getpid(),
+        # ★★公開を始める前に変わっていたファイル★★（2026-08-25・Codexの25回目）
+        #   ★許可一覧は「変わってよいファイル名」しか見ていない★ので、
+        #   実行前から残っていた別の変更が、同じ名前というだけで
+        #   **新台のコミットに便乗して公開**できた。
+        #   ここで控えておき、公開前の関所が「この公開が作った変更だけか」を
+        #   確かめられるようにする。★読めないときは分からないと答える★。
+        "dirty_before": _dirty_now(),
         # ★戻し方★ 変える前の中身の指紋
         "restore": {os.path.relpath(k, BASE).replace(os.sep, "/"): _sha(v)
                     for k, v in backup.items() if v is not None},

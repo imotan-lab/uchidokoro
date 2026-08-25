@@ -118,16 +118,55 @@ def allowed_for(slug: str) -> set:
         # ★早見表も変わる★（手順書の add 一覧から漏れていた）
         "guide-tenjo-ranking.html", "guide-reset-ranking.html",
         "guide-suru-tenjo.html", "guide-ichiran.html",
-        # キャッシュ版を上げるので
-        "service-worker.js",
+        # ★★service-worker.js は許可しない★★（2026-08-25・Codexの25回目）
+        #   ★新台の公開経路は、このファイルを1文字も書いていない★
+        #   （publish_new_machine / build_new_article のどちらにも登場しない）。
+        #   丸ごと許可していたので、**実行前から残っていた変更が
+        #   新台のコミットに便乗して公開できた**。
+        #   ＝関所が「この機種の公開に伴う変更だけ」を通す約束を破っていた。
         # ★AUTO_INDEXABLE の公開では sitemap にも1件足す★（2026-08-04・Codex72回目）
         "sitemap.xml",
     }
 
 
+def preexisting(slug: str) -> list:
+    """★この公開が作ったのではない変更が、許可対象に残っていないか★
+
+    ★なぜ要るか（2026-08-25・Codexの25回目）★
+      許可一覧は「新台1機種の公開で変わってよいファイル」を並べたもので、
+      ★変更の**理由**は見ていない★。
+      そのため、実行前から残っていた別の変更（例：既存機種の記述を
+      書き換えた `machines.json`）が、同じ名前のファイルというだけで
+      **新台のコミットに便乗して公開**できた。
+      ＝関所の約束（この機種の公開に伴う変更だけを出す）を破る。
+
+    ★見るのは「公開を始める前」の状態★＝
+      publish_new_machine が目印（.publish-in-progress.json）へ
+      `dirty_before` として控えたもの。関所は別プロセスなので、
+      引数ではなく**その目印から読む**（呼び出し側が渡し忘れられない）。
+    ★読めないときは「分からない」と答える★（fail-closed）。
+    """
+    try:
+        import safe_json as _sj_pg
+        mark = _sj_pg.read_json(_pub.IN_PROGRESS, expect=dict,
+                                allow_missing=True, default=None)
+    except Exception as e:                                   # noqa: BLE001
+        return [f"★公開の目印を読めません（{type(e).__name__}）★"]
+    if not isinstance(mark, dict):
+        return []                          # 目印が無い＝この経路ではない
+    if "dirty_before" not in mark:
+        return ["★公開を始める前の状態が目印に控えられていません★"
+                "／★この公開が作った変更だけかを確かめられません★"]
+    rode = sorted(set(mark.get("dirty_before") or []) & allowed_for(slug))
+    if rode:
+        return ["★この公開が作ったのではない変更が、許可対象に残っています"
+                "（便乗して公開されます）: " + " / ".join(rode[:5]) + "★"]
+    return []
+
+
 def check(slug: str) -> list:
     """push してよいか。★1つでも引っかかったら出さない★"""
-    ng = []
+    ng = list(preexisting(slug))
     left = _pub.unfinished()
     if left:
         ng.append(f"公開が途中で終わっています（{left.get('slug')}）。"
@@ -377,7 +416,64 @@ def selftest() -> int:
     t("　追跡先と push 先がずれていたら止める",
       "追跡先" in inspect.getsource(check_push_scope))
 
+    # ★★この公開が作ったのではない変更を、便乗させない★★
+    #   （2026-08-25・Codexの25回目）
+    #   ★許可一覧は「変わってよいファイル名」しか見ていない★ので、
+    #   実行前から残っていた別の変更が新台のコミットに便乗して公開できた。
+    import json as _json25
+    import tempfile as _tf25
+    _keep_ip = _pub.IN_PROGRESS
+    try:
+        _pub.IN_PROGRESS = os.path.join(_tf25.mkdtemp(prefix="pg25_"),
+                                        ".publish-in-progress.json")
+
+        def _mark25(before):
+            _d = {"slug": "dmm_9999", "name": "試験機", "restore": {},
+                  "created": {}}
+            if before is not None:
+                _d["dirty_before"] = before
+            _json25.dump(_d, open(_pub.IN_PROGRESS, "w", encoding="utf-8"),
+                         ensure_ascii=False)
+
+        _mark25(["assets/data/machines.json"])
+        t("★★始める前からある変更が許可対象なら止める★★"
+          "／★変更の『理由』を見ないと、別の書き換えが便乗して公開される★",
+          bool(preexisting("dmm_9999")))
+        _mark25([])
+        t("　始める前が綺麗なら通す", not preexisting("dmm_9999"))
+        _mark25(None)
+        t("★★控えが無ければ『分からない』と答えて止まる★★（fail-closed）",
+          bool(preexisting("dmm_9999")))
+        os.remove(_pub.IN_PROGRESS)
+        t("　目印が無いとき（この経路ではない）は何も言わない",
+          not preexisting("dmm_9999"))
+    finally:
+        _pub.IN_PROGRESS = _keep_ip
+    # ★★関所の本体が、この検査を通っていること★★（2026-08-25）
+    #   ★直す前は preexisting() を直接呼ぶ試験しか無かった★ので、
+    #   `check()` からの配線を切っても**試験は緑のまま**だった
+    #   （壊し方の通し確認が検知）。
+    _keep_pre = preexisting
+    try:
+        globals()["preexisting"] = lambda slug: ["zzz_便乗の目印"]
+        _out_pre = check("dmm_9999")
+    except Exception as _e_pre:                              # noqa: BLE001
+        _out_pre = [f"例外: {type(_e_pre).__name__}"]
+    finally:
+        globals()["preexisting"] = _keep_pre
+    t("★★関所の本体が、便乗の検査を必ず通る★★"
+      "／★配線を切ると、便乗した変更がそのまま公開される★",
+      any("zzz_便乗の目印" in str(x) for x in (_out_pre or [])))
+
+    t("★★service-worker.js は許可しない★★"
+      "／★新台経路は1文字も書かないのに、丸ごと許可されていた★",
+      "service-worker.js" not in allowed_for("dmm_9999"))
+    # ★★集計は、すべての試験の後ろに置く★★（2026-08-25・監査51が検知）
+    #   ★足した5件が集計より前に無かった★ので、
+    #   その分は数えられず、**落ちても合格と出る**状態だった。
+    #   ＝プロジェクトが見張っている「早すぎる数え方」を自分でやっていた。
     ng = [n for n, ok in results if not ok]
+
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
     if ng:
         print("失敗:", ng)

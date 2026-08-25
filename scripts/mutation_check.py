@@ -486,6 +486,27 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "始める前からある変更を便乗させる（この公開が作っていない書き換えが公開される・Codex25回目）",
+        "file": "scripts/prepush_gate.py",
+        "before": "    ng = list(preexisting(slug))",
+        "after": "    ng = []",
+        "run": ["scripts/prepush_gate.py"],
+    },
+    {
+        "why": "控えが無くても便乗の検査を通す（fail-closed が崩れる・Codex25回目）",
+        "file": "scripts/prepush_gate.py",
+        "before": "        return []                          # 目印が無い＝この経路ではない\n    if \"dirty_before\" not in mark:\n        return [\"★公開を始める前の状態が目印に控えられていません★\"\n                \"／★この公開が作った変更だけかを確かめられません★\"]",
+        "after": "        return []",
+        "run": ["scripts/prepush_gate.py"],
+    },
+    {
+        "why": "push先の確認に時間制限を付けない（固まると理由も残さず止まり続ける・Codex25回目）",
+        "file": "scripts/add_machine_run.py",
+        "before": "            encoding=\"utf-8\", errors=\"replace\", timeout=NET_TIMEOUT)",
+        "after": "            encoding=\"utf-8\", errors=\"replace\")",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
         "why": "DMM単独の名乗りを表の根拠と認めない（運営者が決めた書き方の記事が作れない・Codex24回目）",
         "file": "scripts/recheck.py",
         "before": "            for _bs in _BASIS_MARKS:\n                if _v.endswith(_bs):\n                    return True",

@@ -284,11 +284,20 @@ def _tell_unknown_makers(rows: list) -> None:
                     % len(fresh))
         with open(body, "w", encoding="utf-8") as f:
             f.write("\n".join(lines))
-        r = subprocess.run(
-            [sys.executable, _lp.NOTIFY, "notify",
-             "--subject-file", sub, "--body-file", body],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+        # ★★時間制限を必ず付ける★★（2026-08-25・Codexの25回目）
+        #   ★直す前は制限が無かった★＝メール送信が固まると
+        #   **例外にも戻り値にもならず**、終了の記録も残らない。
+        #   生存信号だけ動き続けてロックが延び、朝の更新タスクまで止まる。
+        try:
+            r = subprocess.run(
+                [sys.executable, _lp.NOTIFY, "notify",
+                 "--subject-file", sub, "--body-file", body],
+                capture_output=True, text=True, encoding="utf-8",
+                errors="replace", timeout=NET_TIMEOUT,
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+        except subprocess.TimeoutExpired:
+            _log(f"  お知らせを送れませんでした（{NET_TIMEOUT}秒で打ち切り）")
+            return
         if r.returncode != 0:
             # ★送れなくても止めない★（次の晩にまた知らせる＝控えを更新しない）
             _log(f"  ★メールを送れませんでした★: {(r.stderr or r.stdout)[:200]}")
@@ -2394,6 +2403,12 @@ def fill_missing(work: dict) -> dict:
     return work
 
 
+# ★通信の打ち切り時間★（2026-08-25・Codexの25回目）
+#   ★通信に時間制限が無いと、固まったときに例外も戻り値も出ず、
+#     終了の記録すら残らない★＝ロックが延びて朝の更新タスクまで止まる。
+NET_TIMEOUT = 120
+
+
 def push_after_publish(slug: str, already_committed: bool = False) -> list:
     """★公開したら関所を通してpushする★（2026-07-31・Codex16回目）
 
@@ -2480,10 +2495,17 @@ def push_after_publish(slug: str, already_committed: bool = False) -> list:
     #   （2026-08-02・Codex24回目）手元の基準が実リモートより進んでいると、
     #   関所は「基準〜HEAD」しか見ないのに、pushは**確かめていない範囲ごと**出せる。
     #   食い違っていたら fetch して止める（次の実行が新しい基準で確かめ直す）。
-    lr = subprocess.run(
-        ["git", "ls-remote", sc["remote"], f"refs/heads/{sc['dest']}"],
-        cwd=BASE, capture_output=True, text=True,
-        encoding="utf-8", errors="replace")
+    # ★★時間制限を必ず付ける★★（2026-08-25・Codexの25回目）
+    #   `git push` には前から付いているのに、ここだけ無かった。
+    #   認証補助が固まると**理由も残さずに止まり続ける**。
+    try:
+        lr = subprocess.run(
+            ["git", "ls-remote", sc["remote"], f"refs/heads/{sc['dest']}"],
+            cwd=BASE, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=NET_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return [f"push先の先端を確かめられませんでした"
+                f"（{NET_TIMEOUT}秒で打ち切り・pushしていません）"]
     remote_sha = (lr.stdout or "").split()[0] if (lr.stdout or "").split() else ""
     base_sha = subprocess.run(
         ["git", "rev-parse", sc["base"]], cwd=BASE, capture_output=True,
@@ -2492,9 +2514,13 @@ def push_after_publish(slug: str, already_committed: bool = False) -> list:
         return ["push先の先端を確かめられませんでした（pushしていません）: "
                 + _hide((lr.stderr or "").strip())[:200]]
     if remote_sha != base_sha:
-        subprocess.run(["git", "fetch", sc["remote"]], cwd=BASE,
-                       capture_output=True, text=True,
-                       encoding="utf-8", errors="replace")
+        try:
+            subprocess.run(["git", "fetch", sc["remote"]], cwd=BASE,
+                           capture_output=True, text=True,
+                           encoding="utf-8", errors="replace",
+                           timeout=NET_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            pass                           # ★取り直せなくても、止めるのは同じ★
         return [f"push先の先端（{remote_sha[:12]}）が手元の基準（{base_sha[:12]}）と"
                 "違います。fetchしたので、次の実行で確かめ直します（pushしていません）"]
     # ★基準が今のHEADの祖先であることも確かめる★（早送り以外は出さない）
@@ -4390,6 +4416,63 @@ def selftest() -> int:
       _blocker_code({"blocked": [], "problems": []}) == "")
     t("　どれにも当たらなければ OTHER",
       _blocker_code({"blocked": ["よく分からない理由"]}) == "OTHER")
+
+    # ★★通信には必ず時間制限★★（2026-08-25・Codexの25回目）
+    #   ★制限が無いと、固まったときに例外も戻り値も出ず、
+    #     終了の記録すら残らない★＝ロックが延びて朝の更新タスクまで止まる。
+    #   ★字面ではなく、実際に呼ばれた引数を見る★
+    import inspect as _insp25
+    _src25 = _insp25.getsource(push_after_publish)
+    t("★★push先の確認にも時間制限がある★★"
+      "／★git push には前から付いていたのに、ここだけ無かった★",
+      "timeout=NET_TIMEOUT" in _src25
+      and "ls-remote" in _src25)
+    t("　取り直し（fetch）にも時間制限がある",
+      _src25.count("timeout=NET_TIMEOUT") >= 2)
+    _spy25 = []
+    _real_run25 = subprocess.run
+    _real_lock25 = lock_still_mine
+
+    # ★★止めるのは「通信するもの」だけ★★（2026-08-25・自分で踏んだ）
+    #   ★はじめは subprocess.run を丸ごと止めた★ので、
+    #   `git rev-parse HEAD` のようなローカルの処理まで例外になり、
+    #   **通信まで一度も届かずに落ちていた**
+    #   ＝「止まった」ように見えて、何も試していない。
+    _NET25 = ("ls-remote", "fetch", "push")
+
+    def _fake_run25(args, **kw):
+        _a = [str(x) for x in args]
+        # ★★関所は「通った」ことにする★★（2026-08-25・自分で踏んだ）
+        #   ★直す前は本物の関所を通していた★ので、
+        #   手元に未コミットの変更があると**そこで先に止まり**、
+        #   通信まで一度も届かなかった。
+        #   ＝★手元の汚れ具合で結果が変わる試験★（CIでは通り、手元では落ちる）。
+        #   ここで見たいのは「通信が固まったとき」だけなので、関所は素通しにする。
+        if any("prepush_gate" in x for x in _a):
+            return subprocess.CompletedProcess(args, 0, "", "")
+        if not any(x in _a for x in _NET25):
+            return _real_run25(args, **kw)     # ローカルはそのまま通す
+        _spy25.append((tuple(_a[:2]), kw.get("timeout")))
+        raise subprocess.TimeoutExpired(args, kw.get("timeout") or 0)
+
+    try:
+        # ★ロックの確認で手前から返らないようにする★
+        #   ここを通さないと、通信まで一度も届かず
+        #   **何も試していないのに緑になる**（2026-08-25・自分で踏んだ）
+        globals()["lock_still_mine"] = lambda *a, **k: []
+        subprocess.run = _fake_run25
+        _out25 = push_after_publish("zzz_timeout_test", already_committed=True)
+    except Exception as _e25:                                # noqa: BLE001
+        _out25 = [f"例外: {type(_e25).__name__}"]
+    finally:
+        subprocess.run = _real_run25
+        globals()["lock_still_mine"] = _real_lock25
+    t("★★通信が固まっても、理由を返して終わる★★"
+      "／★黙って止まり続けると、朝の更新タスクまで巻き添えになる★",
+      any("打ち切り" in str(x) or "確かめられません" in str(x)
+          for x in (_out25 or [])))
+    t("　実際に時間制限つきで呼んでいる",
+      any(tm for _a, tm in _spy25))
 
     ng = [n for n, ok in results if not ok]
     # ★控えの置き場を元へ戻す★（試験のあとに本番へ影響を残さない）
