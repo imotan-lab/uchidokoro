@@ -4,7 +4,7 @@
  "templates": {
   "404.html": "4757679897f8f0f286a1b54ab58d8da1cc5481bc12b90760ae6e849a472cae5d",
   "CNAME": "327a46d0a9fe00ef4a85721fec20aa84af66049b4a2e27029773bc1927b502fa",
-  "about.html": "409cd1bcb9f51515bd03be91e1fa5aff0d6538a5b94e9591a19f16aa2ac86319",
+  "about.html": "60fd50f17e7d595f0ba5f545e572850fde4e14776b64b77fab25b8201f3b84b1",
   "ads.txt": "e652db9bd62edb46d3cb65ec2822cd510b7c1e76becce15c7e60575ddb693a52",
   "assets/css/practical.css": "0b082e128ec667d854e8b14428d70e5a3ac985838d0702ff5599c42e40dc1c8f",
   "assets/data/claim-allowlist.json": "a9aa01b940b4f61925d176072290772e76911ae43b1cb7f39b112bdda65a8a01",
@@ -17,7 +17,7 @@
   "assets/img/icon-512.png": "355dc261d09febe62221c97c22d34f06573f524b0dd38c4f8de5c2c47f8bb9db",
   "assets/img/logo.png": "9e1aecc76bb223c79786f4b0902447358c7f2f3c342b952ebb28649714e162e3",
   "assets/img/ogp.png": "e9cdabcc41b87b7df40924e875e487336a01055ca27995c9211d3402b758886a",
-  "contact.html": "668cc86e3dc04f794c956e8528925da844e00aaa3da851cc35588a34abba00d1",
+  "contact.html": "62b96cdc11338501d03427afc280b7190022db3f3df61c3f045c06eef099be1c",
   "favicon.ico": "f11291f4464eebccdc0242598acffe2aba30fa52ffcf9949482324a096efcdb9",
   "googleafe441235e57f84f.html": "56acd7472d367db67d5d9ec2aae04db0a1d67718b381cd82d77cf4009522bc34",
   "guide-haena.html": "cbb266c0bd2a3c6989f834cd6c11d0241be9495379e7376283162f295fada607",
@@ -61,7 +61,7 @@
   "scripts/publish_new_machine.py": "0f79e0cd70c2ca7871524888d2c78dbfb69d8492549ee980ee470fb7c2138b55",
   "scripts/safe_json.py": "43f61703cbe7e1ea93ee2602fe9be45662957c8929aef62d649b6fc0493e0006",
   "scripts/strip_model_code.py": "e59ca6ab73a718cdf111572f2b090cd3104ae149142563df40b969acdb126d98",
-  "service-worker.js": "b614058779b264319f06de1e2126823ca6a5d1aafcbcaac4c47a3c7ba0b65f84",
+  "service-worker.js": "ace866e6b2064831307f72ba13f3c155b5dac9ca4e022c0c0cbdd512095cc585",
   "setting.html": "6660837bd3c31f6755c4ba8e5728c5ac846d43267534b72680c1a07717601dc3"
  }
 }
