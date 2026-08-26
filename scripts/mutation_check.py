@@ -80,6 +80,20 @@ MUTATIONS = [
     #   「守られていない」と数えると道具の判定が濁る。
     #   ★同じ穴は page_decision 側の2件（凍結を外す・例外にしない）で見ている★
     {
+        "why": "★ひな型そのものの断り書きを変える（二重管理の食い違い）★",
+        "file": "machine.html",
+        "before": "このページは確認が取れた項目のみ掲載しています。",
+        "after": "このページは出典で確認が取れた項目のみ掲載しています。",
+        "run": ["scripts/publish_new_machine.py"],
+    },
+    {
+        "why": "★ひな型との突き合わせを外す★",
+        "file": "scripts/publish_new_machine.py",
+        "before": "    _tn = check_template_notice(_raw_template)",
+        "after": "    _tn = []",
+        "run": ["scripts/publish_new_machine.py"],
+    },
+    {
         "why": "★断り書きの文言を突き合わせない（黙って食い違う）★",
         "file": "scripts/publish_new_machine.py",
         "before": "    ng += check_notice_text(html)",

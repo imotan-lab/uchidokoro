@@ -2974,10 +2974,25 @@ def check_38_home_path_leak(machines: list) -> list[str]:
 _SOURCE_WORDS = (
     "出典", "解析サイト", "情報源", "解析元", "掲載元", "引用元",
     "他サイト", "別サイト",
+    # ★2026-08-26・Codex30回目★＝この見張りを作った翌日に、
+    #   ★実在する4文を見逃していた★ことが分かって足した語。
+    "出所", "情報元", "参照元", "データ元", "外部サイト",
+    "他社サイト", "元サイト",
 )
 # ★数え方の言い回し★（サイト名も「出典」も使わずに、よそから採ったと分かる形）
 _SOURCE_PATTERNS = (
-    r"\d+\s*件で一致", r"\d+\s*出典", r"\d+\s*サイトで一致",
+    # ★数の単位と、続く言い方を広く見る★（2026-08-26・Codex30回目）
+    #   ★直す前は「3サイト以上で確認」を拾えなかった★
+    #   （`\d+サイトで一致` しか見ていなかった＝「以上」「確認」が抜ける）。
+    #   ★全角の数字も見る★
+    r"[0-9０-９]+\s*(?:件|出典|サイト|媒体|社|記事|票)\s*(?:以上)?\s*"
+    r"(?:で|に)?\s*(?:一致|確認|照合|掲載)",
+    # ★「複数の◯◯を〜」の形★（数を書かずに同じことを言える）
+    r"複数の(?:サイト|媒体|記事|解析情報|解析データ|公開情報|情報)"
+    r".{0,12}(?:一致|確認|照合|参考|もとに|基づ)",
+    # ★「解析情報をもとに」の形★（語だけ禁止すると「解析情報待ち」まで拾う）
+    r"(?:解析情報|解析データ|公開情報)\s*(?:を|に)?\s*"
+    r"(?:もとに|基に|参考に|基づ|照合)",
     r"公開されている.{0,14}をもとに",
 )
 # ★この一文だけは通す★（うちの根拠の話ではないもの）
@@ -2989,6 +3004,10 @@ _SOURCE_ALLOWED_SENTENCES = (
     #   うちの根拠の話ではない。★文言を変えると説明として不正確になる★ので
     #   消さずに名指しで通す。
     "ユーザーの過去の当サイトや他サイトへのアクセス情報に基づいた広告を配信する",
+    # ★運営者情報の「どうやって正確さを担保しているか」★（2026-08-26・運営者の判断
+    #   「言い換えて残す」）＝AdSense審査での透明性のために**意図して残した一文**。
+    #   ★どこから採ったかは言っていない★（サイトの種別に触れていない）。
+    "原則として複数の情報を突き合わせて確認しています",
 )
 
 
@@ -3037,6 +3056,24 @@ def _check_54_selftest() -> list:
             ("★AdSenseの定型文は通す★",
              "ユーザーの過去の当サイトや他サイトへのアクセス情報に基づいた"
              "広告を配信することがあります。", False),
+            # ★★実際に見逃していた4文★★（2026-08-26・Codex30回目）
+            #   ★列挙した言い方しか試さないと、語彙の不足に気づけない★
+            ("★実在①（トップ）★", "掲載情報は複数の解析情報を毎日照合し、"
+             "新台の追加やデータの検証を行っています。", True),
+            ("★実在②（交換率ガイド）★", "複数の解析情報を参考にした"
+             "当サイトの目安であり、", True),
+            ("★実在③（お問い合わせ）★", "最新の解析情報に基づいて"
+             "速やかに修正いたします。", True),
+            ("★実在④（記事データ）★", "トロフィー色は3サイト以上で確認。", True),
+            ("　全角の数字でも拾う", "トロフィー色は３サイト以上で確認。", True),
+            ("　『解析情報待ち』は拾わない（普通の言い方）",
+             "詳細な出現率は解析情報待ちです。", False),
+            ("　『解析中』も拾わない", "ゾーン実戦値は解析中です。", False),
+            ("★運営者情報の一文は通す（運営者が残すと決めた）★",
+             "原則として複数の情報を突き合わせて確認しています。", False),
+            ("　その一文に別の違反が続けば鳴る",
+             "原則として複数の情報を突き合わせて確認しています。出典は2件です。",
+             True),
             ("ふつうの記事本文", "天井は999Gで、恩恵はATです。", False),
             ("いまの名乗り（確認1件のみ）", "天井は999G（確認1件のみ）です。", False)):
         got = bool(_judge_54_wording(text))
@@ -3056,12 +3093,19 @@ def _visible_and_meta(html: str) -> str:
     """
     import json as _json
     import re as _re
+    import html_check as _hc54
     try:
-        import html_check as _hc54
         vis = _hc54.visible_text(html)
     except Exception:                                    # noqa: BLE001
         vis = html
-    metas = _re.findall(r'<meta[^>]+content="([^"]*)"', html)
+    # ★引用符の種類に頼らない★（2026-08-26・Codex30回目）
+    #   OGP は property= なので name だけ見ると落ちる。中身だけ全部拾う。
+    try:
+        metas = list(_hc54.parse(html).meta_contents)
+    except Exception:                                # noqa: BLE001
+        metas = _re.findall(
+            r"""<meta[^>]*?content=(?:"([^"]*)"|'([^']*)')""", html)
+        metas = [a or b for a, b in metas]
     lds = []
     for m in _re.finditer(
             r'<script[^>]+application/ld\+json[^>]*>(.*?)</script>',
@@ -3111,10 +3155,10 @@ def check_54_source_wording(machines: list) -> list:
                 continue
             for h in _judge_54_wording(_visible_and_meta(load_text(hf))):
                 ng.append(f"{hf.name}: {h}")
-        # ④ 公開ページ
-        for hf in sorted((BASE / "machines").glob("*/index.html")):
+        # ④ 公開ページ（★checker.html も読者が見る★・2026-08-26・Codex30回目）
+        for hf in sorted((BASE / "machines").glob("*/*.html")):
             for h in _judge_54_wording(_visible_and_meta(load_text(hf))):
-                ng.append(f"machines/{hf.parent.name}/: {h}")
+                ng.append(f"machines/{hf.parent.name}/{hf.name}: {h}")
         # ⑤ X投稿の定型文（文字列だけ）
         for py in ("post_to_x.py", "post_update_to_x.py"):
             p = BASE / "scripts" / py

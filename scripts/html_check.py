@@ -28,6 +28,10 @@ class _Doc(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.metas = []          # [{name, content}]
+        # ★name が無い meta（OGP は property=）も中身だけは拾う★
+        #   （2026-08-26・Codex30回目。監査54が og:description を
+        #     正規表現で読んでいたので、引用符の種類で見逃しが出た）
+        self.meta_contents = []  # [content]
         self.links = []          # [{rel, href}]
         self.bases = []          # [href]
         self.visible = []        # 読者に見える文字
@@ -80,9 +84,12 @@ class _Doc(HTMLParser):
         a = self._attrs(attrs)
         if tag == "body":
             self._in_body = True
-        if tag == "meta" and a.get("name"):
-            self.metas.append({"name": a["name"].lower(),
-                               "content": a.get("content", "")})
+        if tag == "meta":
+            if a.get("content"):
+                self.meta_contents.append(a["content"])
+            if a.get("name"):
+                self.metas.append({"name": a["name"].lower(),
+                                   "content": a.get("content", "")})
         if tag == "link" and a.get("rel"):
             self.links.append({"rel": a["rel"].lower(), "href": a.get("href", "")})
         if tag == "base":

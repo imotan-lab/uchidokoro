@@ -588,6 +588,44 @@ def check_page(slug: str, html: str, expect_noindex: bool = True,
     return ng
 
 
+# ★★ひな型の断り書きと NOTICE_TEXT を突き合わせる★★
+#   （2026-08-26・Codex30回目。★前回の直しは半分だった★）
+#   machine.html のバナーは既定で隠れている（JSで出す）ので、
+#   生成物だけを見る検査は「見える断り書きが0個」で必ず素通りしていた。
+#   ＝二重管理の食い違いを、いつまでも見つけられない。
+#   ★隠れていても中身は読む★＝ひな型そのものを読んで比べる。
+_BANNER_ID = 'id="previewBanner"'
+
+
+def template_notice_text(template: str) -> str:
+    """ひな型のバナーの中の文字（日付の欄は空なので入らない）"""
+    i = template.find(_BANNER_ID)
+    if i < 0:
+        raise PublishError("ひな型に先行記事のバナーがありません")
+    j = template.find("</div>", i)
+    if j < 0:
+        raise PublishError("ひな型のバナーが閉じていません")
+    # ★バナーの開始タグの手前から閉じまで★
+    start = template.rfind("<", 0, i)
+    # ★隠れていても読む★（既定の visible_text は is-hidden を飛ばす＝空になる）
+    #   ここで見たいのは「読者にどう見えるか」ではなく
+    #   ★ひな型と定数が同じ文言か★なので、隠しの扱いを外す。
+    frag = template[start:j + len("</div>")]
+    # ★body で包む★（読み取りは body の中しか拾わないので、
+    #   切り出した断片のままだと必ず空になる＝対照実験で分かった）
+    return _hc.visible_text("<body>" + frag + "</body>", set())
+
+
+def check_template_notice(template: str) -> list:
+    """★ひな型と定数が食い違っていたら止める★（LEGACY_NOTE と同じ扱い）"""
+    got = "".join(template_notice_text(template).split())
+    want = "".join(NOTICE_TEXT.split())
+    if got != want:
+        return ["ひな型（machine.html）の断り書きが NOTICE_TEXT と違います: "
+                f"ひな型={got[:50]!r} / 定数={want[:50]!r}"]
+    return []
+
+
 def check_notice_text(html: str) -> list:
     """★断り書きが、こちらで決めた文言そのものか★（2026-08-26・Codex29回目）
 
@@ -1434,7 +1472,14 @@ def render(slug: str, machine: dict, detail: dict) -> str:
       （ひな型と描画関数は既存119機種と共通のまま・ここでは差し替えない）
     """
     with open(os.path.join(BASE, "machine.html"), encoding="utf-8") as f:
-        template = _bmp.prepare_template(f.read())
+        _raw_template = f.read()
+    # ★★ひな型と NOTICE_TEXT の食い違いは、ここで止める★★
+    #   （2026-08-26・Codex30回目。★生成物だけを見る検査は素通りしていた★＝
+    #     バナーは既定で隠れているので「見える断り書きが0個」で合格になる）
+    _tn = check_template_notice(_raw_template)
+    if _tn:
+        raise PublishError(_tn[0])
+    template = _bmp.prepare_template(_raw_template)
     reasons = _bmp.extract_pochipochi_reasons(template)
     html = _bmp.render_page(template, machine, detail, reasons)
     # ★新台経路はページ全体の断り書きを出さない★（2026-08-04・運営者判断）
@@ -2616,6 +2661,52 @@ def selftest() -> int:
             '<div class="preview-banner" role="note" ' + NOTICE + ">"
             + NOTICE_TEXT + "</div></body></html>")
     t("★作ったページの中身を必ず確かめる★", check_page("zzz_test", good) == [])
+    # ★★ひな型（machine.html）そのものと突き合わせる★★
+    #   （2026-08-26・Codex30回目。★前回の直しは半分だった★＝
+    #     バナーは既定で隠れているので、生成物だけを見る検査は必ず素通りした）
+    with open(os.path.join(BASE, "machine.html"), encoding="utf-8") as _tplf:
+        _tpl_now = _tplf.read()
+    t("★★いまのひな型と NOTICE_TEXT が一致している★★",
+      check_template_notice(_tpl_now) == [])
+    t("★★ひな型だけ文言を変えたら止める★★"
+      "／★これが無いと、二重管理の食い違いを誰も見つけられない★",
+      any("ひな型" in x for x in check_template_notice(
+          _tpl_now.replace("確認が取れた項目のみ",
+                           "出典で確認が取れた項目のみ"))))
+    t("　隠れていても読む（既定の読み方だと必ず空になる）",
+      "未掲載の項目" in template_notice_text(_tpl_now))
+    # ★★呼び出し口（render）そのものを試す★★（2026-08-26）
+    #   ★関数を直接たたく試験だけだと、render から外しても緑のまま★
+    #   （壊し方の道具が「守られていない」と出して分かった）。
+    import shutil as _sh54
+    import tempfile as _tf54
+    _tmpb = _tf54.mkdtemp(prefix="uchi_tplchk_")
+    _keep_base = BASE
+    try:
+        _sh54.copy(os.path.join(BASE, "machine.html"),
+                   os.path.join(_tmpb, "machine.html"))
+        with open(os.path.join(_tmpb, "machine.html"), "r+",
+                  encoding="utf-8") as _f54:
+            _s54 = _f54.read().replace("確認が取れた項目のみ",
+                                       "出典で確認が取れた項目のみ")
+            _f54.seek(0)
+            _f54.write(_s54)
+            _f54.truncate()
+        globals()["BASE"] = _tmpb
+        try:
+            render("zzz_test", {"slug": "zzz_test", "name": "試験"},
+                   {"sections": []})
+            _render_stopped = False
+        except PublishError as _e54:
+            _render_stopped = "ひな型" in str(_e54)
+        except Exception:                                # noqa: BLE001
+            _render_stopped = False
+    finally:
+        globals()["BASE"] = _keep_base
+        _sh54.rmtree(_tmpb, ignore_errors=True)
+    t("★★ページを描く所（render）が、ひな型の食い違いで止まる★★"
+      "／★関数を直接たたく試験だけでは、外されても気づけない★",
+      _render_stopped)
     # ★★断り書きの文言そのものを突き合わせる★★（2026-08-26・Codex29回目の指摘4）
     #   ★直す前は、ひな型側の文言を変えても検査が何も言わなかった★
     #   （`preview_notices()` は目印の**個数**を数えるだけ）。
