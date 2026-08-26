@@ -114,6 +114,10 @@ FIELD_TOPICS = {
     #   ★記事の「設定示唆まとめ」の表に出るのに、対応表に無かった★
     "at_prob": "setting",           # AT初当たり確率（設定別）
     "payout_rate": "setting",       # 出玉率（設定別）
+    # ★★ボーナス確率（設定×BIG/REG/合算）★★（2026-08-26）
+    #   ★カテゴリ（bonusflow）と topic（setting）で答えが違うのは正常★
+    #   ＝カテゴリは「証拠の種類」、topicは「記事のどの話題か」。別の軸。
+    "bonus_prob": "setting",        # ボーナス確率（設定別）
     # ★素の net_increase は受け取らない★（2026-08-25・Codexの22回目）
     #   ★受け取れるのに、記事を作る側が一度も読まない★状態だった＝
     #   2AIが正しく答えても**公開に届かない**（型式名・天井と同じ型）。
@@ -395,6 +399,20 @@ def check_spec_shape(field: str, value) -> list:
             raise ConfirmedError(
                 f"{field}: G数として読めません（5〜100の数）: {value}")
         return [str(value["games"])]
+    if kind == "per_setting_matrix":
+        # ★形の決まりは spec_lookup の1か所★（2026-08-26）
+        #   ★同じ規則を2か所に書かない★＝収集器・受け口・判定書が
+        #   同じ関数を通る（片方だけ緩いと、そこから壊れた値が入る）。
+        try:
+            _sp.validate_bonus_prob_value(value)
+        except _sp.BonusShapeError as e:
+            raise ConfirmedError(f"{field}: {e}")
+        # ★引用の照合に使う語★＝表に出る数値そのもの
+        out = []
+        for st in sorted(value):
+            for ck in sorted(value[st]):
+                out.append(str(value[st][ck]))
+        return out
     if kind == "per_setting":
         if not isinstance(value, dict) or not value:
             raise ConfirmedError(f"{field}: 設定ごとの組で書きます（例: 1 → 値）")
@@ -2175,6 +2193,35 @@ def selftest() -> int:
     t("　閉じた項目は、記事の話題も空（読者に出さない印）",
       topic_of("net_increase") == "")
 
+    # ─── ★ボーナス確率の受け口★（2026-08-26）────────────
+    #   ★形の決まりは spec_lookup の1か所★（同じ規則を2か所に書かない）
+    _bp_ok = {"1": {"big": "1/273.1", "reg": "1/439.8", "total": "1/168.5"},
+              "6": {"big": "1/240.1", "reg": "1/240.1"}}
+
+    def _bp_ng(v):
+        try:
+            check_spec_shape("bonus_prob", v)
+            return False
+        except ConfirmedError:
+            return True
+        except Exception:                                # noqa: BLE001
+            # ★きちんと断らずに落ちたのは合格に数えない★（2026-08-26）
+            #   ★例外で死ぬと試験が❌を1行も出さず「ただ落ちただけ」になる★
+            #   ＝構文エラーと区別がつかず、守りの証拠にならない。
+            return False
+
+    t("★★受け口：正しい形は通る★★", not _bp_ng(_bp_ok))
+    t("★★受け口：昔の平たい形は断る★★"
+      "／★受け口が形を見ないと、壊れた値が控えから記事まで届く★",
+      _bp_ng({"1": "1/273.1"}))
+    t("　受け口：必須の列が欠けていたら断る", _bp_ng({"1": {"big": "1/273"}}))
+    t("　受け口：知らない列は断る",
+      _bp_ng({"1": {"big": "1/273", "reg": "1/439", "zzz": "1/1"}}))
+    t("　受け口：確率の形でない値は断る",
+      _bp_ng({"1": {"big": "273", "reg": "1/439"}}))
+    t("　受け口：照合に使う語として、表の数値を全部返す",
+      sorted(check_spec_shape("bonus_prob", _bp_ok))
+      == sorted(["1/273.1", "1/439.8", "1/168.5", "1/240.1", "1/240.1"]))
     ng = sum(1 for _, o in results if not o)
     print()
     print("%d/%d 合格" % (len(results) - ng, len(results)))

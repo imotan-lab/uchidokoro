@@ -56,6 +56,56 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #   ★同じ壊し方を戻さないこと★＝いまの取り決めでは必ず「捕まえられない」
 #   と出て、本物の見落としが埋もれる。
 MUTATIONS = [
+    # ─── 2026-08-26・ボーナス確率（設定×BIG/REG/合算）─────────
+    {
+        "why": "★形の検査を素通りさせる（壊れた値が記事まで届く）★",
+        "file": "scripts/spec_lookup.py",
+        "before": '    if not isinstance(value, dict) or not value:\n'
+                  '        raise BonusShapeError("ボーナス確率が空でない辞書ではありません")',
+        "after": "    return None",
+        "run": ["scripts/spec_lookup.py", "scripts/build_new_article.py"],
+    },
+    # ★外した壊し方（2026-08-26）★＝「必須の列が無い表も採る」。
+    #   見出し側の検査は、行ごとの検査と**二重**だった
+    #   （片方を消しても結果は同じ＝罠③）。★見出し側を消して1つにした★ので、
+    #   行ごとの検査を壊す形は下の「形の検査を素通り」が見ている。
+    {
+        "why": "★同じページの中の食い違いを見ない（ボーナス確率）★",
+        "file": "scripts/spec_lookup.py",
+        "before": "            if st in merged and merged[st] != cell:\n"
+                  "                conflict = True",
+        "after": "            if False:\n                conflict = True",
+        "run": ["scripts/spec_lookup.py"],
+    },
+    {
+        "why": "★形の検査を、根拠による除外より後ろへ戻す"
+               "（単独確認の壊れた値が素通りする）★",
+        "file": "scripts/page_decision.py",
+        "before": "    import spec_lookup as _sp_bp\n"
+                  "    _sp_bp.validate_bonus_prob_value(v.get(\"value\"))\n"
+                  "    if _skip_for_index(v, count_confirmed):\n"
+                  "        return []",
+        "after": "    if _skip_for_index(v, count_confirmed):\n"
+                 "        return []",
+        # ★記事づくりにも同じ検査がある★ので、そちらでは助けられてしまう。
+        #   claim を数える側を直接たたく試験（page_decision）で見る。
+        "run": ["scripts/page_decision.py"],
+    },
+    {
+        "why": "★受け口（confirmed_values）が形を確かめない★",
+        "file": "scripts/confirmed_values.py",
+        "before": "            _sp.validate_bonus_prob_value(value)",
+        "after": "            pass",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★記事の表が、採れていない列も出す（未確認のセルを作る）★",
+        "file": "scripts/build_new_article.py",
+        "before": '        _keys = [k for k in ("big", "reg", "total")\n'
+                  '                 if any(k in c for c in _bp["value"].values())]',
+        "after": '        _keys = ["big", "reg", "total"]',
+        "run": ["scripts/build_new_article.py"],
+    },
     # ─── 2026-08-26・Codex29回目で足した守り ───────────────
     {
         "why": "★入口（plan）から区分の判定を外す（凍結と版の食い違いを通す）★",

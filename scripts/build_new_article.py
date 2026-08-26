@@ -880,6 +880,29 @@ def build_detail(slug, name, release, material) -> dict:
                      + "もありますが、値が確認できていないため掲載していません。")
         tables.append({"label": label, "headers": ["設定", label], "rows": rows,
                        "note": note})
+    # ★★ボーナス確率（設定 × BIG/REG/合算）★★（2026-08-26）
+    #   ★AT を持たない機種（ジャグラー等）の設定差はここに出る★
+    #   ★列は採れたものだけ★＝合算が無い機種で空の列を作らない。
+    #   ★セルの穴は「未確認」★＝BIG/REG から計算して埋めない（数値を作らない）。
+    _bp = adopted.get("bonus_prob")
+    if _bp:
+        import spec_lookup as _sp_bp
+        _sp_bp.validate_bonus_prob_value(_bp["value"])
+        _mark = _t(_bp)
+        _keys = [k for k in ("big", "reg", "total")
+                 if any(k in c for c in _bp["value"].values())]
+        _hdr = ["設定"] + [_sp_bp.BONUS_COLUMN_LABELS[k] for k in _keys]
+        _rows = []
+        for st in sorted(_bp["value"]):
+            cell = _bp["value"][st]
+            _rows.append([f"設定{st}"]
+                         + [(f"{cell[k]}{_mark}" if k in cell else PENDING_ITEM)
+                            for k in _keys])
+        _note = "確認が取れた設定のみ掲載しています。"
+        if _mark:
+            _note += SINGLE_SOURCE_NOTE
+        tables.append({"label": "ボーナス確率", "headers": _hdr,
+                       "rows": _rows, "note": _note})
     if tables:
         boxes["設定示唆まとめ"] = {"title": "設定示唆まとめ", "type": "settei",
                                   "tables": tables}
@@ -1292,7 +1315,8 @@ def selftest() -> int:
                                      **IM, "value": {"state": "NONE"},
                                      "sources": ["a", "b"]},
                                  "bonus_prob": {
-                                     **IM, "value": {"1": "1/300", "6": "1/240"},
+                                     **IM, "value": {"1": {"big": "1/300", "reg": "1/450"},
+                          "6": {"big": "1/240", "reg": "1/360"}},
                                      "sources": ["a", "b"]},
                                  "payout_range": {
                                      **IM, "value": {"low": 97.0, "high": 110.0,
@@ -1310,7 +1334,8 @@ def selftest() -> int:
                             "sources": ["a", "b"]},
         "ceiling_state": {**IM, "value": {"state": "NONE"},
                           "sources": ["a", "b"]},
-        "bonus_prob": {**IM, "value": {"1": "1/300", "6": "1/240"},
+        "bonus_prob": {**IM, "value": {"1": {"big": "1/300", "reg": "1/450"},
+                          "6": {"big": "1/240", "reg": "1/360"}},
                        "sources": ["a", "b"]},
         "payout_range": {**IM, "value": {"low": 97.0, "high": 110.0,
                                          "unit": "%"}, "sources": ["a", "b"]},
@@ -1651,6 +1676,89 @@ def selftest() -> int:
     finally:
         _as16.BASE = _base16
         _sh16.rmtree(_d16, ignore_errors=True)
+
+
+    # ─── ★ボーナス確率の通し確認★（2026-08-26）────────────────
+    #   ★HTML → 収集 → 採用 → 判定書 → 記事 を1本で通す★
+    #   （部品ごとの試験は全部緑でも、繋ぐと矛盾することがある＝罠⑬）
+    import spec_lookup as _sp_e2e
+
+    def _bonus_html(big1="1/273.1"):
+        return ("<html><body><table>"
+                "<tr><th>設定</th><th>BIG</th><th>REG</th><th>合算</th></tr>"
+                f"<tr><td>設定1</td><td>{big1}</td><td>1/439.8</td>"
+                "<td>1/168.5</td></tr>"
+                "<tr><td>設定6</td><td>1/240.1</td><td>1/240.1</td>"
+                "<td>1/120.0</td></tr>"
+                "</table></body></html>")
+
+    _got_a, _ = _sp_e2e.bonus_matrix_from_tables(_bonus_html())
+    _got_b, _ = _sp_e2e.bonus_matrix_from_tables(_bonus_html())
+    t("★★①収集：本物の抽出器が表を読める★★", _got_a and _got_a == _got_b)
+
+    _mat_e2e = {"adopted": {
+        "machine_profile": {**IM, "value": {"profile": "BONUS"},
+                            "sources": ["a", "b"]},
+        "ceiling_state": {**IM, "value": {"state": "NONE"},
+                          "sources": ["a", "b"]},
+        "bonus_prob": {**IM, "value": _got_a, "sources": ["a", "b"]},
+        "payout_range": {**IM, "value": {"low": 97.0, "high": 110.0,
+                                         "unit": "%"}, "sources": ["a", "b"]},
+        "games_per_50": {**IM, "value": {"games": 36.1},
+                         "sources": ["a", "b"]}}}
+    _dec_e2e = _pd.decide_v2(_mat_e2e)
+    t("★★②判定書：BONUS型でも検索に載せられる★★"
+      "／★これが無いとジャグラー系は永久に AUTO_PENDING★",
+      _dec_e2e["indexable"] is True
+      and "NO_BONUS_PROB" not in _dec_e2e["reason_codes"])
+    t("　ボーナス確率が無ければ載せない（対照）",
+      _pd.decide_v2({"adopted": {k: v for k, v in
+                                 _mat_e2e["adopted"].items()
+                                 if k != "bonus_prob"}})["indexable"] is False)
+    t("　claim は表全体で1件（設定・列で水増ししない）",
+      _dec_e2e["claims"].count("bonus_prob") == 1)
+    t("★★③話題：設定の欄が『未確認』でなくなる★★",
+      "setting" not in _dec_e2e["pending_topics"])
+
+    _art_e2e = build_detail("zzz_bonus", "試験ボーナス機", "2026-09-01",
+                            _mat_e2e)
+    _settei = [s for s in _art_e2e["sections"]
+               if s.get("title") == "設定示唆まとめ"]
+    _tbl = [x for s in _settei for x in (s.get("tables") or [])
+            if x.get("label") == "ボーナス確率"]
+    t("★★④記事：設定示唆まとめに表が出る★★", len(_tbl) == 1)
+    t("　列は BIG / REG / 合算（内部の鍵は出さない）",
+      _tbl and _tbl[0]["headers"] == ["設定", "BIG", "REG", "合算"])
+    t("　値がそのまま出る（作り直さない）",
+      _tbl and _tbl[0]["rows"][0] == ["設定1", "1/273.1", "1/439.8", "1/168.5"])
+    t("　7つの箱の構成は変わらない",
+      [s["title"] for s in _art_e2e["sections"]] == list(SECTION_ORDER))
+
+    # ★合算が無い機種★＝列ごと出さない（★計算して埋めない★）
+    _no_total, _ = _sp_e2e.bonus_matrix_from_tables(
+        _bonus_html().replace("<th>合算</th>", "<th>備考</th>"))
+    _mat_nt = {"adopted": {**_mat_e2e["adopted"],
+                           "bonus_prob": {**IM, "value": _no_total,
+                                          "sources": ["a", "b"]}}}
+    _art_nt = build_detail("zzz_bonus2", "試験ボーナス機2", "2026-09-01",
+                           _mat_nt)
+    _tbl_nt = [x for s in _art_nt["sections"]
+               if s.get("title") == "設定示唆まとめ"
+               for x in (s.get("tables") or [])
+               if x.get("label") == "ボーナス確率"]
+    t("★★合算が無ければ列を出さない（計算して埋めない）★★",
+      _tbl_nt and _tbl_nt[0]["headers"] == ["設定", "BIG", "REG"])
+    # ★壊れた値は記事づくりの手前で止まる★
+    _bad_mat = {"adopted": {**_mat_e2e["adopted"],
+                            "bonus_prob": {**IM, "value": {"1": "1/300"},
+                                           "sources": ["a", "b"]}}}
+    try:
+        build_detail("zzz_bonus3", "試験3", "2026-09-01", _bad_mat)
+        _bad_stopped = False
+    except _sp_e2e.BonusShapeError:
+        _bad_stopped = True
+    t("★★壊れた形は記事を作る前に止まる（黙って読み飛ばさない）★★",
+      _bad_stopped)
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")

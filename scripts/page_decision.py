@@ -321,10 +321,14 @@ def _bonus_claim(material: dict, count_confirmed: bool) -> list:
     v = (material.get("adopted") or {}).get("bonus_prob")
     if not v:
         return []
+    # ★★形の検査を、根拠による除外より**先**に行う★★
+    #   （2026-08-26・Codex31回目。★直す前は逆だった★＝
+    #     単独確認などで先に除外されると、形が壊れた値を
+    #     **誰も見ないまま**素通りさせていた）
+    #   ★静かに「claimなし」に落とさず、例外で止める★
+    import spec_lookup as _sp_bp
+    _sp_bp.validate_bonus_prob_value(v.get("value"))
     if _skip_for_index(v, count_confirmed):
-        return []
-    val = v.get("value")
-    if not isinstance(val, dict) or not val:
         return []
     return ["bonus_prob"]
 
@@ -385,7 +389,9 @@ def topics_from_claims(claims: list) -> tuple:
     for c in claims:
         if c in ("model_code", "payout_range", "games_per_50"):
             confirmed.add("spec")
-        elif c in ("at_prob", "payout_rate"):
+        elif c in ("at_prob", "payout_rate", "bonus_prob"):
+            # ★カテゴリ（bonusflow）と topic（setting）が違うのは正常★
+            #   カテゴリ＝証拠の種類／topic＝記事のどの話題か（別の軸）
             confirmed.add("setting")
         elif c.startswith("ceiling:"):
             confirmed.add("ceiling")
@@ -1036,6 +1042,33 @@ def selftest() -> int:
       == ["MACHINE_PROFILE_UNKNOWN"])
     t("　ボーナス確率は spec とは別の種類（種類2つの条件を満たせる）",
       _category("bonus_prob") != _category("payout_range"))
+    # ★★形の検査は「根拠による除外」より先★★（2026-08-26・Codex31回目）
+    #   ★単独確認（＝検索の濃さには数えない）で、しかも形が壊れた値★を渡す。
+    #   検査が後ろにあると、先に除外されて**誰も形を見ないまま素通り**する。
+    #   ★記事づくりにも同じ検査があるので、そちらに助けられない形で試す★
+    #   ＝claim を数える関数を直接呼ぶ。
+    _bp_broken = {"adopted": {"bonus_prob": {
+        "value": {"1": "1/300"},          # ★昔の平たい形（壊れている）★
+        "basis": "DMM_SINGLE_NEAR_RELEASE",
+        "sources": ["a"]}}}
+    try:
+        _bonus_claim(_bp_broken, False)
+        _bp_stopped = False
+    except Exception as _e_bp:            # noqa: BLE001
+        _bp_stopped = type(_e_bp).__name__ == "BonusShapeError"
+    t("★★壊れたボーナス確率は、単独確認でも見逃さない★★"
+      "／★検査が除外より後ろだと、形を誰も見ないまま素通りする★",
+      _bp_stopped)
+    t("　正しい形なら、単独確認は今までどおり濃さに数えない",
+      _bonus_claim({"adopted": {"bonus_prob": {
+          "value": {"1": {"big": "1/300", "reg": "1/450"}},
+          "basis": "DMM_SINGLE_NEAR_RELEASE", "sources": ["a"]}}},
+          False) == [])
+    t("　正しい形で2出典なら数える",
+      _bonus_claim({"adopted": {"bonus_prob": {
+          "value": {"1": {"big": "1/300", "reg": "1/450"}},
+          "basis": "INDEPENDENT_MULTI", "sources": ["a", "b"]}}},
+          False) == ["bonus_prob"])
     # ★★区分は版に合わせて計算し直す★★
     #   ★ここが v1 のままだと、v2 の機種は永久に AUTO_PENDING★
     #   ＝直したはずの欠陥が、最後の一行で元に戻る。

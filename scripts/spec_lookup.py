@@ -70,7 +70,125 @@ FIELDS = {
     # ★条件（どのモードか）を書かないと載せられない項目★
     #   収集器はまだ条件を取れないので、集めても採用はされず保留になる。
     "net_increase": {"labels": ("純増",), "kind": "text", "jp": "純増"},
+    # ★★ボーナス確率（設定 × BIG/REG/合算）★★（2026-08-26）
+    #   ★AT を持たない機種（ジャグラー等）の「その機種らしさ」★＝
+    #   判定書v2が BONUS 型の掲載条件として要求する唯一の値。
+    #   ★2次元なので専用の kind★（per_setting は1列しか読めない）。
+    "bonus_prob":   {"kind": "per_setting_matrix", "unit": "1/x",
+                     "jp": "ボーナス確率"},
 }
+_SETTING_KEY = re.compile(r"[1-6]")
+# ★★設定 × 列 の表（ボーナス確率）★★（2026-08-26・Codex31回目の設計）
+#   ★見出しの日本語を内部の鍵にしない★＝出典ごとに書き方が違うので、
+#   別名を吸収して `big` / `reg` / `total` に寄せる。
+#   ★合算はこちらで計算しない★＝出典に書いてある時だけ採る（数値を作らない）。
+#   BIG・REGの表示値は丸められているので、計算した合算は出典と一致しない。
+BONUS_COLUMNS = {
+    "big":   ("BIG", "BB", "ビッグ", "BIGボーナス", "BB確率", "BIG確率"),
+    "reg":   ("REG", "RB", "レギュラー", "REGボーナス", "RB確率", "REG確率"),
+    "total": ("合算", "合成", "ボーナス合算", "ボーナス合成", "合算確率",
+              "合成確率"),
+}
+# ★読者に出すときの呼び方★（内部の鍵とは分ける）
+BONUS_COLUMN_LABELS = {"big": "BIG", "reg": "REG", "total": "合算"}
+# ★★どの列が無いと採らないか★★（抽出器に暗黙で埋めない・Codexの助言）
+BONUS_REQUIRED = ("big", "reg")
+
+
+class BonusShapeError(ValueError):
+    """ボーナス確率の形が契約に合わない。★黙って読み飛ばさない★"""
+
+
+def validate_bonus_prob_value(value) -> None:
+    """★bonus_prob の値の形を確かめる唯一の場所★
+
+    ★3か所から呼ぶ★＝収集器 / confirmed_values / page_decision。
+    ★静かに「claimなし」に落とさない★（Codex31回目）＝
+    形が壊れた値を黙って読み飛ばすと、
+    **単独確認の壊れた値**などが誰にも気づかれずに素通りする。
+    """
+    if not isinstance(value, dict) or not value:
+        raise BonusShapeError("ボーナス確率が空でない辞書ではありません")
+    for st, cols in value.items():
+        if not _SETTING_KEY.fullmatch(str(st)):
+            raise BonusShapeError(f"設定の書き方が違います: {st!r}")
+        if not isinstance(cols, dict) or not cols:
+            raise BonusShapeError(f"設定{st}の中身が空でない辞書ではありません")
+        for ck, cv in cols.items():
+            if ck not in BONUS_COLUMNS:
+                raise BonusShapeError(
+                    f"設定{st}に知らない列があります: {ck!r}"
+                    f"（{sorted(BONUS_COLUMNS)} のどれか）")
+            if _ci.normalize_value(cv, "1/x") is None:
+                raise BonusShapeError(
+                    f"設定{st}の{ck}が確率の形ではありません: {cv!r}")
+        missing = [c for c in BONUS_REQUIRED if c not in cols]
+        if missing:
+            raise BonusShapeError(
+                f"設定{st}に{'・'.join(missing)}がありません")
+
+
+def bonus_matrix_from_tables(html: str) -> tuple:
+    """設定ごとの BIG / REG / 合算 を、列見出しで対応づけて読む。
+
+    ★`per_setting_from_tables` と同じ作り★＝表単位＋列見出しの対応。
+    行の走査はしない（同単位の別の列を取り違えるため）。
+    """
+    alias = {}
+    for key, names in BONUS_COLUMNS.items():
+        for n in names:
+            alias[n] = key
+    cands = []
+    for tb in _ht.tables(html):
+        if tb.get("has_span"):
+            continue           # 多段見出しは列がずれる＝不採用
+        rows = tb.get("rows") or []
+        if len(rows) < 2 or not rows[0]:
+            continue
+        header = [" ".join(str(c).split()) for c in rows[0]]
+        if header[0] != "設定":
+            continue
+        cols = {i: alias[h] for i, h in enumerate(header)
+                if i >= 1 and h in alias}
+        # ★必須の列は行ごとに見る★（2026-08-26）
+        #   ★見出しでも見る二重の検査にしていた★ので、片方を消しても
+        #   もう片方が拾い、壊し方の試験で「守られていない」と出た。
+        #   ＝どちらか1つにする（行ごとの検査だけで結果は同じ）。
+        got = {}
+        for r in rows[1:]:
+            if not r:
+                continue
+            m = _SETTING_RE.match(" ".join(str(r[0]).split()))
+            if not m:
+                continue
+            cell = {}
+            for ci, key in cols.items():
+                if len(r) <= ci:
+                    continue
+                v = " ".join(str(r[ci]).split())
+                if _ci.normalize_value(v, "1/x") is not None:
+                    cell[key] = v
+            if all(c in cell for c in BONUS_REQUIRED):
+                got.setdefault(m.group(1), cell)
+        if got:
+            cands.append(got)
+    # ★同じページの中で食い違っていたら採らない★（per_setting と同じ扱い）
+    merged, conflict = {}, False
+    for got in cands:
+        for st, cell in got.items():
+            if st in merged and merged[st] != cell:
+                conflict = True
+            merged.setdefault(st, cell)
+    if conflict:
+        return {}, True
+    if merged:
+        try:
+            validate_bonus_prob_value(merged)
+        except BonusShapeError:
+            return {}, False        # ★契約に合わないものは採らない★
+    return merged, False
+
+
 
 # 範囲の書き方をそろえる（「97.3% ~ 112.5%」も「97.3% 〜 112.5%」も同じ）
 _RANGE_RE = re.compile(r"(\d+(?:\.\d+)?)\s*%\s*[~〜～\-–—]\s*(\d+(?:\.\d+)?)\s*%")
@@ -294,7 +412,14 @@ def read_page(url: str, official_name: str, *,
         return out
     lines = _lines(html)
     for key, spec in FIELDS.items():
-        if spec["kind"] == "per_setting":
+        if spec["kind"] == "per_setting_matrix":
+            v, conflict = bonus_matrix_from_tables(html)
+            if conflict:
+                out["fields"] = {}
+                out["reason"] = (f"同じページの中で{spec['jp']}が"
+                                 "食い違っています（要確認）")
+                return out
+        elif spec["kind"] == "per_setting":
             v, conflict = per_setting_from_tables(html, spec["columns"],
                                                   spec["unit"])
             if conflict:
@@ -427,7 +552,8 @@ def compare(pages: list, ctx: dict | None = None) -> dict:
                          "sources": sorted(next(iter(votes.values())))}
     got_labels = set()
     for key, spec in FIELDS.items():
-        if spec["kind"] == "per_setting" and key in adopted:
+        if (spec["kind"] in ("per_setting", "per_setting_matrix")
+                and key in adopted):
             got_labels |= set(adopted[key]["value"])
     unconfirmed = [x for x in seen_labels if x not in got_labels]
     return {"adopted": adopted, "need_third": need_third, "thin": thin,
@@ -590,6 +716,79 @@ def selftest() -> int:
     _r = compare([P, Q])
     t("★★条件が要る項目は compare でも止まる★★（宣言だけで終わっていない）",
       "net_increase" not in _r["adopted"] and "net_increase" in _r["need_third"])
+
+
+    # ─── ★ボーナス確率（設定 × BIG/REG/合算）★（2026-08-26）──────
+    #   ★実物に近い形で試す★＝手作りの辞書を採点しない（罠①）
+    _BON = ("<html><body><table>"
+            "<tr><th>設定</th><th>BIG</th><th>REG</th><th>合算</th></tr>"
+            "<tr><td>設定1</td><td>1/273.1</td><td>1/439.8</td>"
+            "<td>1/168.5</td></tr>"
+            "<tr><td>設定2</td><td>1/270.8</td><td>1/399.6</td>"
+            "<td>1/161.0</td></tr>"
+            "<tr><td>設定6</td><td>1/240.1</td><td>1/240.1</td>"
+            "<td>1/120.0</td></tr>"
+            "</table></body></html>")
+    _bv, _bc = bonus_matrix_from_tables(_BON)
+    t("★★設定×BIG/REG/合算の表を読める★★",
+      not _bc and _bv.get("1") == {"big": "1/273.1", "reg": "1/439.8",
+                                   "total": "1/168.5"})
+    t("　連番でなくてもよい（設定1・2・6だけの表）",
+      sorted(_bv) == ["1", "2", "6"])
+    # ★見出しの別名を吸収する★（出典ごとに書き方が違う）
+    _bv2, _ = bonus_matrix_from_tables(
+        _BON.replace("<th>BIG</th>", "<th>BB</th>")
+        .replace("<th>REG</th>", "<th>RB</th>")
+        .replace("<th>合算</th>", "<th>合成</th>"))
+    t("　BB/RB/合成 という書き方でも同じ形で読める", _bv2 == _bv)
+    # ★合算が無くてもBIG/REGがあれば採る（★計算では埋めない★）
+    _no_total = _BON.replace("<th>合算</th>", "<th>備考</th>")
+    _bv3, _ = bonus_matrix_from_tables(_no_total)
+    t("★★合算が無くても採る／★こちらでは計算しない★★",
+      _bv3 and all("total" not in c for c in _bv3.values()))
+    # ★必須の列が欠けたら採らない★
+    _no_reg = _BON.replace("<th>REG</th>", "<th>備考</th>")
+    t("★REGが無い表は採らない（必須の列）★",
+      bonus_matrix_from_tables(_no_reg)[0] == {})
+    # ★確率の形でない値は採らない★
+    _bad = _BON.replace("<td>1/439.8</td>", "<td>約440回</td>", 1)
+    t("　確率の形でないセルがある設定は落とす",
+      "1" not in bonus_matrix_from_tables(_bad)[0])
+    # ★同じページの中で食い違ったら採らない★
+    _conf = _BON.replace("</table></body>",
+                         "</table><table>"
+                         "<tr><th>設定</th><th>BIG</th><th>REG</th></tr>"
+                         "<tr><td>設定1</td><td>1/999.9</td>"
+                         "<td>1/439.8</td></tr></table></body>")
+    t("★★同じページの中で食い違ったら採らない★★",
+      bonus_matrix_from_tables(_conf) == ({}, True))
+    # ★多段見出し（rowspan/colspan）は列がずれるので採らない★
+    _span = _BON.replace("<th>BIG</th>", '<th colspan="2">BIG</th>')
+    t("　多段見出しの表は採らない（列がずれる）",
+      bonus_matrix_from_tables(_span)[0] == {})
+
+    # --- 保存契約（★3か所から呼ぶ唯一の検査★）
+    def _shape_ng(v):
+        try:
+            validate_bonus_prob_value(v)
+            return False
+        except BonusShapeError:
+            return True
+
+    t("★★契約：正しい形は通る★★", not _shape_ng(_bv))
+    t("　空は通さない", _shape_ng({}) and _shape_ng(None))
+    t("　設定7 のような鍵は通さない",
+      _shape_ng({"7": {"big": "1/273", "reg": "1/439"}}))
+    t("　知らない列は通さない",
+      _shape_ng({"1": {"big": "1/273", "reg": "1/439", "zzz": "1/1"}}))
+    t("　確率の形でない値は通さない",
+      _shape_ng({"1": {"big": "273", "reg": "1/439"}}))
+    t("★必須の列が欠けていたら通さない★",
+      _shape_ng({"1": {"big": "1/273"}}))
+    t("　昔の平たい形（設定→文字列）は通さない",
+      _shape_ng({"1": "1/273.1"}))
+    t("　合算だけは通さない（BIG/REGが要る）",
+      _shape_ng({"1": {"total": "1/168.5"}}))
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
