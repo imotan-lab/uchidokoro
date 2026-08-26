@@ -19,7 +19,7 @@
   "scripts/dmm_discover.py": "894d76b027c1508020d71640a74f3f0a02fbd8d6a1d42e3a15a2e8764d008592",
   "scripts/dmm_machine.py": "99045256ca097d6e5c5345935e68b4362e634f53bf7ae32fda9f1b0d0c2d1471",
   "scripts/fetched_page.py": "95fbc94faca17f7b5ab2a370501c2db22dee38bc2009e87285d1f3fbf2a928dc",
-  "scripts/html_tables.py": "426a34333ab98c7c33b197acf2096f3575a0c27381d5557abbaa16d700a1c7e6",
+  "scripts/html_tables.py": "7b62bb2c57b6e74bc44da068c93f1e94a6e5034a67d22396621d08549df46715",
   "scripts/lineage_check.py": "2bbb9cfdad4cdf6edc22f1a3f4cec20f804ccceb66453a88d83d8572d86d6e98",
   "scripts/machine_sources.py": "41b3bdfdfdb4faa85c9fe0bae6630a50bcd5db6ac860699c3c5aa3ffb8c07003",
   "scripts/maker_identity_cache.py": "bde5e29a5444b2d0dc70b9b0683199c28d9b2e104be5452bfea8a02df39a15c2",
@@ -28,7 +28,7 @@
   "scripts/page_probe.py": "25d0411b1552d018ab1e528a58be1ce1d53a4e47de68f84fc2f951ccaa1f182d",
   "scripts/slug_binding.py": "17c235c10cd7fed94d4c774bbe7b88c87349eff214bedaa22182d3fe79f26af6",
   "scripts/source_lineage.py": "706cbbd437ba491995e233e9758a73f7672e27a47021cfc1274f0c2e9d9f79ed",
-  "scripts/spec_lookup.py": "0eca5eb6182345a394a35c7166afba03d57e32d9e6e55f03908ddb0a525384ce",
+  "scripts/spec_lookup.py": "dd0f8c2ba4c080f2b4b36aa70a48b6f36373d93d4df74070cb22bad3e92a49ac",
   "scripts/user_area.py": "3b5c5f307aa981c3b24385aee70f5a996b9e704afa41c26d0099bf7451d12420"
  },
  "imports": {

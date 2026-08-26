@@ -42,6 +42,18 @@ _SKIP_TAGS = ("script", "style", "noscript", "template",
 _VOID = ("br", "img", "hr", "input", "meta", "link", "wbr", "source")
 
 
+def _span_num(v) -> int:
+    """rowspan/colspan の数（読めなければ 1 ではなく大きい値＝安全側）"""
+    s = str(v or "").strip()
+    if not s:
+        return 1
+    try:
+        n = int(s)
+    except ValueError:
+        return 9999          # ★読めない指定は「またいでいる」とみなす★
+    return n if n >= 1 else 9999
+
+
 class _TableParser(_HTMLParser):
     """★画面に出る表だけをHTML解析で読む★（2026-08-03・Codex63回目）
 
@@ -126,10 +138,19 @@ class _TableParser(_HTMLParser):
             elif tag in ("th", "td"):
                 self.cell = []
                 d = dict(attrs)
-                for k in ("rowspan", "colspan"):
-                    v = str(d.get(k, "") or "").strip()
-                    if v and v != "1":
-                        self.cur["has_span"] = True
+                # ★★spanが「どこに」あるかを残す★★（2026-08-26・Codex33回目）
+                #   ★真偽だけだと「題の行にしかspanが無い」を証明できない★＝
+                #   列数がそろっていても、データ行のセルが colspan=2 なら
+                #   画面上は1列多く、以後の対応づけが1列ずれる。
+                _rs = _span_num(d.get("rowspan"))
+                _cs = _span_num(d.get("colspan"))
+                if _rs != 1 or _cs != 1:
+                    self.cur["has_span"] = True
+                    self.cur.setdefault("spans", []).append(
+                        {"row": max(0, len(self.cur["rows"]) - 1),
+                         "col": max(0, len(self.cur["rows"][-1]))
+                         if self.cur["rows"] else 0,
+                         "rowspan": _rs, "colspan": _cs})
             elif tag == "caption":
                 self.in_caption = True
                 self.cap_buf = []

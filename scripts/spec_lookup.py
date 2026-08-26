@@ -150,14 +150,11 @@ def bonus_matrix_from_tables(html: str) -> tuple:
             alias[n] = key
     cands = []
     for tb in _ht.tables(html):
-        if tb.get("has_span"):
-            continue           # 多段見出しは列がずれる＝不採用
-        rows = tb.get("rows") or []
-        if len(rows) < 2 or not rows[0]:
+        # ★見出しとデータ行の取り出しは1か所★（per_setting と同じ関数）
+        st = setting_table(tb)
+        if st is None:
             continue
-        header = [" ".join(str(c).split()) for c in rows[0]]
-        if header[0] != "設定":
-            continue
+        header, body = st
         cols = {i: alias[h] for i, h in enumerate(header)
                 if i >= 1 and h in alias}
         # ★★同じ内部列が2つある表は採らない★★（2026-08-26・Codex32回目のP1）
@@ -170,12 +167,7 @@ def bonus_matrix_from_tables(html: str) -> tuple:
         #   もう片方が拾い、壊し方の試験で「守られていない」と出た。
         #   ＝どちらか1つにする（行ごとの検査だけで結果は同じ）。
         got = {}
-        for r in rows[1:]:
-            if not r:
-                continue
-            m = _SETTING_RE.match(" ".join(str(r[0]).split()))
-            if not m:
-                continue
+        for _st_key, r in setting_rows(header, body):
             cell = {}
             for ci, key in cols.items():
                 if len(r) <= ci:
@@ -187,7 +179,7 @@ def bonus_matrix_from_tables(html: str) -> tuple:
                 # ★★同じ設定が2行あって値が違えば食い違い★★
                 #   （2026-08-26・Codex32回目のP1。
                 #     ★直す前は setdefault で最初の行だけ黙って残していた★）
-                _st = m.group(1)
+                _st = _st_key
                 if _st in got and got[_st] != cell:
                     return {}, True
                 got.setdefault(_st, cell)
@@ -340,6 +332,74 @@ def _lines(html: str) -> list:
     return [x.strip() for x in _w._visible_text(html).splitlines()]
 
 
+# ★★「設定」で始まる表の、見出しとデータ行を取り出す唯一の場所★★
+#   （2026-08-26・Codex33回目の設計）
+#
+#   ★なぜ要るか★＝DMMの設定表は**1行目が題**（1セルの colspan）で、
+#   本当の見出しは2行目にある。実測（ファンキージャグラー2）＝
+#     rows[0] = ['打ち方ごとの機械割']
+#     rows[1] = ['設定', '市場調査値', 'チェリー狙い', 'フル攻略']
+#     rows[2] = ['1', '97.0%', ...]        ←★「設定1」ではなく「1」★
+#   いままでは `has_span` の表を丸ごと捨てていたので、
+#   ★DMMからは設定ごとの値を1つも採れていなかった★（実測で確認）。
+#
+#   ★★列数だけで判断しない★★（Codexの指摘）＝
+#   `has_span` は真偽しか持っていなかったので、
+#   「題の行にしかspanが無い」ことを**証明できなかった**。
+#   生のセル数がそろっていても、データ行に colspan=2 があれば
+#   画面上は1列多く、以後の対応づけが1列ずれる。
+#   → `html_tables` に span の位置を残し、ここで**唯一のspanが題セル**か見る。
+_SETTING_CELL = re.compile(r"^(?:設定)?\s*([1-6])$")
+
+
+def setting_table(tb: dict):
+    """(見出し, データ行) を返す。設定の表でなければ None。"""
+    rows = [r for r in (tb.get("rows") or [])]
+    if len(rows) < 2:
+        return None
+    spans = tb.get("spans") or []
+    if not tb.get("has_span"):
+        head, body = rows[0], rows[1:]
+    else:
+        # ★題の行つきの形に、ぴったり合うときだけ通す★
+        first = [c for c in (rows[0] or []) if str(c).strip()]
+        if len(first) != 1 or len(rows) < 3:
+            return None
+        if len(spans) != 1:
+            return None
+        sp = spans[0]
+        if sp.get("row") != 0 or sp.get("col") != 0:
+            return None
+        if sp.get("rowspan") != 1:
+            return None
+        head, body = rows[1], rows[2:]
+        if sp.get("colspan") != len(head):
+            return None
+        for r in body:
+            if not r or not any(str(c).strip() for c in r):
+                continue
+            if len(r) != len(head):
+                return None
+    head = [" ".join(str(c).split()) for c in (head or [])]
+    if not head or head[0] != "設定":
+        return None
+    return head, body
+
+
+def setting_rows(head: list, body: list):
+    """データ行を (設定の番号, 行) で返す。★この表の中だけ数字を許す★
+
+    ★見出しの先頭が「設定」であることを確かめてから★数字を認める。
+    「1位」「01」「1個」は完全一致しないので落ちる。
+    """
+    for r in body:
+        if not r:
+            continue
+        m = _SETTING_CELL.match(" ".join(str(r[0]).split()))
+        if m:
+            yield m.group(1), r
+
+
 def per_setting_from_tables(html: str, columns: tuple, unit: str) -> dict:
     """設定ごとの値を、表の「列見出し」で対応づけて読む。
 
@@ -356,27 +416,28 @@ def per_setting_from_tables(html: str, columns: tuple, unit: str) -> dict:
     """
     cands: list = []
     for tb in _ht.tables(html):
-        if tb.get("has_span"):
-            continue    # ★多段見出し（rowspan/colspan）は列がずれる＝不採用★
-        rows = tb.get("rows") or []
-        if len(rows) < 2 or not rows[0]:
+        # ★見出しとデータ行の取り出しは1か所★（2026-08-26・Codex33回目）
+        #   ★題の行つきの表（DMM）もここで扱う★
+        st = setting_table(tb)
+        if st is None:
             continue
-        header = [" ".join(str(c).split()) for c in rows[0]]
-        if header[0] != "設定":
-            continue                      # 設定ごとの表ではない
+        header, body = st
         for ci in range(1, len(header)):
             if header[ci] not in columns:
                 continue
             got: dict = {}
-            for r in rows[1:]:
-                if not r or len(r) <= ci:
-                    continue
-                m = _SETTING_RE.match(" ".join(str(r[0]).split()))
-                if not m:
+            for key, r in setting_rows(header, body):
+                if len(r) <= ci:
                     continue
                 v = " ".join(str(r[ci]).split())
-                if _ci.normalize_value(v, unit) is not None:
-                    got.setdefault(m.group(1), v)
+                if _ci.normalize_value(v, unit) is None:
+                    continue
+                # ★★同じ設定が2行あって値が違えば食い違い★★
+                #   （2026-08-26・Codex33回目。★bonus 側だけ直していた★＝
+                #     こちらは setdefault で後の行を黙って捨てていた）
+                if key in got and got[key] != v:
+                    return {}, True
+                got.setdefault(key, v)
             if got:
                 cands.append(got)
     # ★同じページの別の表が同じ設定に別の値を出していたら食い違い★
@@ -880,6 +941,75 @@ def selftest() -> int:
       compare([_bpage(_H1, _va),
                _bpage(_H2, _vb)])["adopted"].get(
                    "bonus_prob", {}).get("value") == _va)
+
+
+    # ─── ★題の行つきの表★（2026-08-26・Codex33回目）─────────────
+    #   ★実物の形（DMM・ファンキージャグラー2）をそのまま写す★
+    #     rows[0] = 題（1セルの colspan）
+    #     rows[1] = 本当の見出し
+    #     rows[2] = 「設定1」ではなく「1」
+    _CAP = ("<table>"
+            "<tr><th colspan='4'>打ち方ごとの機械割</th></tr>"
+            "<tr><th>設定</th><th>BIG</th><th>REG</th><th>合算</th></tr>"
+            "<tr><td>1</td><td>1/266.4</td><td>1/439.8</td>"
+            "<td>1/165.9</td></tr>"
+            "<tr><td>6</td><td>1/219.9</td><td>1/262.1</td>"
+            "<td>1/119.6</td></tr>"
+            "</table>")
+    _cv, _cc = bonus_matrix_from_tables(_CAP)
+    t("★★題の行つきの表を読める（DMMの形）★★"
+      "／★読めないと、DMMからは設定ごとの値を1つも採れない★",
+      not _cc and _cv.get("1") == {"big": "1/266.4", "reg": "1/439.8",
+                                   "total": "1/165.9"})
+    t("　設定の欄が『1』でも読める（『設定1』と同じ）", "6" in _cv)
+    # ★題セル以外にも span がある表は通さない★（列が1つずれる）
+    _CAP_SPAN = _CAP.replace("<td>1/266.4</td>",
+                             "<td colspan='2'>1/266.4</td>")
+    t("★★題セル以外に span があれば通さない（列がずれる）★★",
+      bonus_matrix_from_tables(_CAP_SPAN)[0] == {})
+    # ★題セルの幅と見出しの列数が合わない表は通さない★
+    t("★題セルの幅が見出しの列数と違えば通さない★",
+      bonus_matrix_from_tables(
+          _CAP.replace("colspan='4'", "colspan='3'"))[0] == {})
+    # ★データ行の列数がそろっていない表は通さない★
+    t("★データ行の列数がそろっていなければ通さない★",
+      bonus_matrix_from_tables(
+          _CAP.replace("<tr><td>6</td><td>1/219.9</td><td>1/262.1</td>"
+                       "<td>1/119.6</td></tr>",
+                       "<tr><td>6</td><td>1/219.9</td></tr>"))[0] == {})
+    # ★見出しの先頭が「設定」でなければ読まない★（順位表を拾わない）
+    _RANK = _CAP.replace("<th>設定</th>", "<th>順位</th>")
+    t("★★見出しの先頭が『設定』でなければ読まない（順位表を拾わない）★★",
+      bonus_matrix_from_tables(_RANK)[0] == {})
+    # ★数字は完全一致だけ★（1位・01・1個は落とす）
+    for _bad in ("1位", "01", "1個"):
+        t(f"　設定の欄が『{_bad}』なら採らない",
+          "1" not in bonus_matrix_from_tables(
+              _CAP.replace("<td>1</td>", f"<td>{_bad}</td>"))[0])
+    # ★spanの無い表は今までどおり★
+    t("　題の行が無い表は今までどおり読める",
+      bonus_matrix_from_tables(_BON)[0] == _bv)
+    # ★per_setting も同じ関数を通る★
+    _CAP2 = ("<table>"
+             "<tr><th colspan='3'>基本スペック</th></tr>"
+             "<tr><th>設定</th><th>出玉率</th><th>備考</th></tr>"
+             "<tr><td>1</td><td>97.0%</td><td>-</td></tr>"
+             "<tr><td>6</td><td>109.0%</td><td>-</td></tr>"
+             "</table>")
+    t("★★題の行つきの表から、出玉率も読める（同じ関数を通る）★★",
+      per_setting_from_tables(_CAP2, ("出玉率", "機械割"), "%")[0]
+      == {"1": "97.0%", "6": "109.0%"})
+    # ★per_setting でも、同じ設定が2行あって値が違えば食い違い★
+    _DUP2 = _CAP2.replace("</table>",
+                          "<tr><td>1</td><td>99.9%</td><td>-</td></tr></table>")
+    t("★★per_setting でも、同じ設定の重複を黙って捨てない★★"
+      "／★bonus 側だけ直していた★",
+      per_setting_from_tables(_DUP2, ("出玉率", "機械割"), "%") == ({}, True))
+    t("　同じ値の重複行なら止めない",
+      per_setting_from_tables(
+          _CAP2.replace("</table>",
+                        "<tr><td>1</td><td>97.0%</td><td>-</td></tr></table>"),
+          ("出玉率", "機械割"), "%")[0].get("1") == "97.0%")
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")

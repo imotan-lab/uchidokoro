@@ -558,6 +558,22 @@ def checker_questions(material) -> list:
             "confirmed_values.py --record --field machine_profile "
             "--value-file <{\"profile\": \"BONUS\"} を書いたファイル> "
             "--why <理由> --by 2AI で記録してください")
+    # ★★ボーナス確率は、機械では2出典に届かない★★（2026-08-26・実測）
+    #   ★表を持っているのは1社だけ★（他の2社は別の表しか持っていない）＝
+    #   `compare()` は2出典一致を要求するので、機械だけでは永久に採れない。
+    #   ＝★ボーナスタイプ機が検索に載れない★（判定書v2が要求する唯一の値）。
+    #   → うちの決まりどおり「機械が決められないことは質問にする」。
+    _prof = ((adopted.get("machine_profile") or {}).get("value")
+             or {}).get("profile")
+    if _prof == "BONUS" and not (adopted.get("bonus_prob") or {}).get("value"):
+        out.append(
+            "★設定ごとのボーナス確率を突き合わせてください★"
+            "（BIG・REG・合算／★合算は出典に書いてある時だけ★＝計算しない）"
+            "／★決まらないと検索に載せられません★。決めたら "
+            "confirmed_values.py --record --field bonus_prob "
+            '--value-file <{"1": {"big": "1/273.1", "reg": "1/439.8"}, ...} '
+            "を書いたファイル> --why <理由> --by 2AI で記録してください"
+            "（★合算は全設定にあるか、全設定に無いかのどちらか★）")
     # ★★天井の有無は、型とは別に聞く★★（★型から推論しない★）
     #   実例＝X-300 は概要が「完全告知のボーナスタイプ」でも天井欄は「調査中」。
     _has_ceil = bool((material.get("ceilings") or {}).get("adopted"))
@@ -1750,6 +1766,25 @@ def selftest() -> int:
     _got_a, _ = _sp_e2e.bonus_matrix_from_tables(_bonus_html())
     _got_b, _ = _sp_e2e.bonus_matrix_from_tables(_bonus_html())
     t("★★①収集：本物の抽出器が表を読める★★", _got_a and _got_a == _got_b)
+    # ★★ボーナス確率が採れないなら、2AIへ質問を出す★★（2026-08-26・実測）
+    #   ★表を持っている出典が1社しかない★ので、機械だけでは永久に採れない。
+    _q_no_bp = checker_questions({"adopted": {
+        "machine_profile": {**IM, "value": {"profile": "BONUS"},
+                            "sources": ["a", "b"]}}})
+    t("★★ボーナスタイプで確率が採れていなければ質問を出す★★"
+      "／★出さないと、その機種は永久に検索へ載せられない★",
+      any("ボーナス確率" in q for q in _q_no_bp))
+    _q_has_bp = checker_questions({"adopted": {
+        "machine_profile": {**IM, "value": {"profile": "BONUS"},
+                            "sources": ["a", "b"]},
+        "bonus_prob": {**IM, "value": _got_a, "sources": ["a", "b"]}}})
+    t("　採れていれば質問は出さない",
+      not any("ボーナス確率" in q for q in _q_has_bp))
+    _q_at = checker_questions({"adopted": {
+        "machine_profile": {**IM, "value": {"profile": "AT_CZ"},
+                            "sources": ["a", "b"]}}})
+    t("　AT機には聞かない（ボーナス確率は要らない）",
+      not any("ボーナス確率" in q for q in _q_at))
 
     _mat_e2e = {"adopted": {
         "machine_profile": {**IM, "value": {"profile": "BONUS"},

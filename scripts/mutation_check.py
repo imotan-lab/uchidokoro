@@ -56,6 +56,58 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #   ★同じ壊し方を戻さないこと★＝いまの取り決めでは必ず「捕まえられない」
 #   と出て、本物の見落としが埋もれる。
 MUTATIONS = [
+    # ─── 2026-08-26・題の行つきの表（Codex33回目）────────────
+    {
+        "why": "★spanの位置を残さない（題の行だけか証明できなくなる）★",
+        "file": "scripts/html_tables.py",
+        "before": '                    self.cur.setdefault("spans", []).append(',
+        "after": '                    [].append(',
+        "run": ["scripts/spec_lookup.py"],
+    },
+    {
+        "why": "★spanが題セル以外にもある表を通す（列が1つずれる）★",
+        "file": "scripts/spec_lookup.py",
+        "before": "        if len(spans) != 1:\n            return None",
+        "after": "        if False:\n            return None",
+        "run": ["scripts/spec_lookup.py"],
+    },
+    {
+        "why": "★題セルの幅と見出しの列数が合わなくても通す★",
+        "file": "scripts/spec_lookup.py",
+        "before": '        if sp.get("colspan") != len(head):\n            return None',
+        "after": "        if False:\n            return None",
+        "run": ["scripts/spec_lookup.py"],
+    },
+    {
+        "why": "★データ行の列数がそろっていなくても通す★",
+        "file": "scripts/spec_lookup.py",
+        "before": "            if len(r) != len(head):\n                return None",
+        "after": "            if False:\n                return None",
+        "run": ["scripts/spec_lookup.py"],
+    },
+    {
+        "why": "★見出しの先頭が『設定』でなくても読む（順位表まで拾う）★",
+        "file": "scripts/spec_lookup.py",
+        "before": '    if not head or head[0] != "設定":\n        return None',
+        "after": "    if not head:\n        return None",
+        "run": ["scripts/spec_lookup.py"],
+    },
+    {
+        "why": "★per_setting でも同じ設定の重複を黙って最初だけ残す★",
+        "file": "scripts/spec_lookup.py",
+        "before": "                if key in got and got[key] != v:\n"
+                  "                    return {}, True",
+        "after": "                if False:\n                    return {}, True",
+        "run": ["scripts/spec_lookup.py"],
+    },
+    {
+        "why": "★ボーナス確率が採れなくても2AIに聞かない"
+               "（その機種は永久に検索へ載らない）★",
+        "file": "scripts/build_new_article.py",
+        "before": '    if _prof == "BONUS" and not (adopted.get("bonus_prob") or {}).get("value"):',
+        "after": "    if False:",
+        "run": ["scripts/build_new_article.py"],
+    },
     # ─── 2026-08-26・発行の切替点と bonus_prob の残りの守り ────
     {
         "why": "★名乗りを判定書と別に決める（片方だけ v2 になり食い違う）★",
