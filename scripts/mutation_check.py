@@ -85,13 +85,11 @@ MUTATIONS = [
         "after": '    for hf in sorted((base / "machines").glob("*/index.html")):',
         "run": ["scripts/audit_site.py"],
     },
-    {
-        "why": "★経路の判定を v1 限定に戻す（v2 が旧形式扱いになる）★",
-        "file": "scripts/page_decision.py",
-        "before": '    return machine.get("publication_policy") in SCHEMAS',
-        "after": '    return machine.get("publication_policy") == SCHEMA',
-        "run": ["scripts/apply_indexing_policy.py"],
-    },
+    # ★外した壊し方（2026-08-26）★
+    #   「経路の判定を v1 限定に戻す」＝`is_auto` を
+    #   「鍵があるか」に直した（Codex31回目のP0）ことで、
+    #   下の「既知の版の名簿に戻す」と**同じ穴**になった。
+    #   ★同じ穴を2通りで数えない★
     {
         "why": "★緊急スイッチを v1 の式で固定する（v2 を v1 の形で上書き）★",
         "file": "scripts/apply_indexing_policy.py",
