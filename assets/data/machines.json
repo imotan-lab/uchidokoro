@@ -11482,33 +11482,35 @@
   "info": "",
   "strategy": "",
   "aliases": [],
-  "publication_policy": "page-decision/v1",
+  "publication_policy": "page-decision/v2",
   "page_decision": {
-   "schema_version": "page-decision/v1",
+   "schema_version": "page-decision/v2",
    "indexable": false,
+   "machine_profile": "UNKNOWN",
+   "ceiling_state": "UNKNOWN",
    "confirmed_topics": [
+    "setting",
     "spec"
    ],
    "pending_topics": [
     "gameplay",
     "cz",
     "ceiling",
-    "setting",
     "strategy",
     "reset"
    ],
    "reason_codes": [
+    "CLAIMS_LT_3",
     "CATEGORIES_LT_2",
-    "NO_UNIQUE_GAMEPLAY"
+    "MACHINE_PROFILE_UNKNOWN"
    ],
    "claims": [
     "games_per_50",
-    "model_code",
-    "payout_range"
+    "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-08-13",
-   "input_digest": "sha256:a69e6d5f3b462a7b1933aade6d4711d7a18aad02576620a7049d27c61f311d13"
+   "decided_at": "2026-08-27",
+   "input_digest": "sha256:12e66452b1188cbd27065af889db8acdc9707c417026d0f86339812606d6465d"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-09-07",
@@ -11520,13 +11522,13 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5033 型式=L スマスロ リコリス・リコイル KX メーカー=サミー 導入=2026-09-07 確認日=2026-08-16",
    "market_release_date": "2026-09-07",
+   "_legacy_evidence_ref": "pworld:10503 型式=L スマスロ リコリス・リコイル KX 検定=6S0400 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10503",
    "regulatory_model_code": "L スマスロ リコリス・リコイル KX",
    "_model_code_sources": [
     "p-town.dmm.com",
     "p-world.co.jp"
-   ],
-   "_legacy_evidence_ref": "pworld:10503 型式=L スマスロ リコリス・リコイル KX 検定=6S0400 確認日=2026-08-13",
-   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10503"
+   ]
   },
   "checker": {
    "coinRate": 31.8,
@@ -11549,32 +11551,33 @@
   "info": "",
   "strategy": "",
   "aliases": [],
-  "publication_policy": "page-decision/v1",
+  "publication_policy": "page-decision/v2",
   "page_decision": {
-   "schema_version": "page-decision/v1",
+   "schema_version": "page-decision/v2",
    "indexable": false,
+   "machine_profile": "BONUS",
+   "ceiling_state": "UNKNOWN",
    "confirmed_topics": [
+    "setting",
     "spec"
    ],
    "pending_topics": [
     "gameplay",
     "cz",
     "ceiling",
-    "setting",
     "strategy",
     "reset"
    ],
    "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
-    "NO_UNIQUE_GAMEPLAY"
+    "CLAIMS_LT_3"
    ],
    "claims": [
-    "payout_range"
+    "bonus_prob",
+    "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-08-13",
-   "input_digest": "sha256:80efc9eea5b5cd3095784b5e60ddd8bb54509e6c355fb50267715506490b420e"
+   "decided_at": "2026-08-27",
+   "input_digest": "sha256:7145ca9e7a0372c57252ddc514d5231da4700f874bc6efb3d30ae59953bafa51"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-10-05",
@@ -11586,12 +11589,12 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5054 型式=未掲載 メーカー=北電子 導入=2026-10-05 確認日=2026-08-16",
    "market_release_date": "2026-10-05",
+   "_legacy_evidence_ref": "pworld:10513 型式=SマイジャグラーVI KK 検定=5S0437 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10513",
    "observed_model_code": "SマイジャグラーVI KK",
    "_observed_model_code_sources": [
     "p-world.co.jp"
-   ],
-   "_legacy_evidence_ref": "pworld:10513 型式=SマイジャグラーVI KK 検定=5S0437 確認日=2026-08-13",
-   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10513"
+   ]
   }
  },
  {
@@ -11603,33 +11606,35 @@
   "info": "",
   "strategy": "",
   "aliases": [],
-  "publication_policy": "page-decision/v1",
+  "publication_policy": "page-decision/v2",
   "page_decision": {
-   "schema_version": "page-decision/v1",
+   "schema_version": "page-decision/v2",
    "indexable": false,
+   "machine_profile": "UNKNOWN",
+   "ceiling_state": "UNKNOWN",
    "confirmed_topics": [
+    "setting",
     "spec"
    ],
    "pending_topics": [
     "gameplay",
     "cz",
     "ceiling",
-    "setting",
     "strategy",
     "reset"
    ],
    "reason_codes": [
     "CLAIMS_LT_3",
     "CATEGORIES_LT_2",
-    "NO_UNIQUE_GAMEPLAY"
+    "MACHINE_PROFILE_UNKNOWN"
    ],
    "claims": [
     "games_per_50",
-    "payout_range"
+    "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-08-13",
-   "input_digest": "sha256:e72ebb6f928227bfc7ac2e3ae2fd89989ba0e6d8d2286f280759c344647e311b"
+   "decided_at": "2026-08-27",
+   "input_digest": "sha256:12e66452b1188cbd27065af889db8acdc9707c417026d0f86339812606d6465d"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-10-05",
@@ -11641,12 +11646,12 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5061 型式=未掲載 メーカー=サミー 導入=2026-10-05 確認日=2026-08-16",
    "market_release_date": "2026-10-05",
+   "_legacy_evidence_ref": "pworld:10521 型式=L 獣王 XZ 検定=6S0560 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10521",
    "observed_model_code": "L 獣王 XZ",
    "_observed_model_code_sources": [
     "p-world.co.jp"
-   ],
-   "_legacy_evidence_ref": "pworld:10521 型式=L 獣王 XZ 検定=6S0560 確認日=2026-08-13",
-   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10521"
+   ]
   },
   "checker": {
    "coinRate": 31.8,
@@ -11669,33 +11674,35 @@
   "info": "",
   "strategy": "",
   "aliases": [],
-  "publication_policy": "page-decision/v1",
+  "publication_policy": "page-decision/v2",
   "page_decision": {
-   "schema_version": "page-decision/v1",
+   "schema_version": "page-decision/v2",
    "indexable": false,
+   "machine_profile": "UNKNOWN",
+   "ceiling_state": "UNKNOWN",
    "confirmed_topics": [
+    "setting",
     "spec"
    ],
    "pending_topics": [
     "gameplay",
     "cz",
     "ceiling",
-    "setting",
     "strategy",
     "reset"
    ],
    "reason_codes": [
     "CLAIMS_LT_3",
     "CATEGORIES_LT_2",
-    "NO_UNIQUE_GAMEPLAY"
+    "MACHINE_PROFILE_UNKNOWN"
    ],
    "claims": [
     "games_per_50",
-    "model_code"
+    "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-08-13",
-   "input_digest": "sha256:5a59b141a821291c2474c1eeb13b63d56ef0ba7b41aa767c044275e128411316"
+   "decided_at": "2026-08-27",
+   "input_digest": "sha256:12e66452b1188cbd27065af889db8acdc9707c417026d0f86339812606d6465d"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-09-07",
@@ -11707,14 +11714,14 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5065 型式=Lレンタル彼女bK メーカー=SANKYO 導入=2026-09-07 確認日=2026-08-16",
    "market_release_date": "2026-09-07",
-   "regulatory_model_code": "Lレンタル彼女bK",
    "_model_code_sources": [
     "chonborista.com",
     "p-town.dmm.com",
     "p-world.co.jp"
    ],
    "_legacy_evidence_ref": "pworld:10543 型式=Lレンタル彼女bK 検定=630270 確認日=2026-08-13",
-   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10543"
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10543",
+   "regulatory_model_code": "Lレンタル彼女bK"
   },
   "checker": {
    "coinRate": 31.0,
