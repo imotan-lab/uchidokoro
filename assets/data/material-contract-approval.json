@@ -12,7 +12,7 @@
   "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
   "scripts/blocked_hosts.py": "553ac0a6f0f0baf563100458937efa167826c4347f815ace1a70e39769909b7d",
   "scripts/ceiling_lookup.py": "ad54309152dd7fe19c56ff574f7b468a70ef994e456b4a0a2c2f4a68fb00cf00",
-  "scripts/confirmed_values.py": "6cebfaf9586ce4b8ffd1dcffbd1bb83e89062aa9740a18e3db69a13c9ad6e9b4",
+  "scripts/confirmed_values.py": "6ee22fac29bab1e859892580a12688850f18e55974dc9f95ab6e9a9cad1ac010",
   "scripts/cz_lookup.py": "24727d5876e0a5e233ff6c913e96ae3d3fc50d7e5d5869b019e443bde374b02b",
   "scripts/directory_index.py": "5c6e1471c073b2462b056b0cd6c2f7ee7a2fa8d26f8696213a6e891b896dbdc5",
   "scripts/dmm_calendar.py": "ad0ae2ffb3977307cf361e4a137288e9bccdd1f15fb43e560aa629c5942a6930",
@@ -97,6 +97,7 @@
    "fetched_page",
    "model_code_lookup",
    "new_machine_watch",
+   "page_decision",
    "source_lineage",
    "spec_lookup",
    "user_area"
@@ -203,5 +204,6 @@
    "ceiling_lookup",
    "new_machine_watch"
   ]
- }
+ },
+ "_deps_changed_why": "confirmed_values が page_decision を読むようになった理由（2026-08-26）\n\n★読むのは試験の中だけ★＝`selftest()` の通し確認で\n`page_decision.index_claims_from_material()` を呼び、\n「`merge_into()` が刻んだ根拠が、検索の濃さに実際に届くか」を確かめる。\n\n★なぜ要るか★＝Codex35回目の指摘。\n`merge_into()` は `_from: confirmed_values` を刻むが `basis` を刻まず、\n一方で検索の濃さは `basis == INDEPENDENT_MULTI` の値だけを数えていた。\n＝第2の出典を見つけて正しく記録しても claim にならず、\nボーナスタイプ機は永久に検索へ載れなかった。\n★通し確認が緑だったのは、試験が `merge_into()` を通さず\n最初から `basis` を付けた材料を渡していたから★なので、\n**本物の入口から濃さの判定まで1本で通す**必要がある。\n\n★材料の採否の集合には入れない★\n  ・`page_decision` は**公開物の契約**（build_pages_artifact --approve）の側で\n    すでに承認対象になっている（同じものを2つの契約で二重に持たない）。\n  ・`confirmed_values` の**本体の処理**は `page_decision` を使わない\n    （読むのは `selftest()` の中だけ）＝材料の採否を左右しない。\n  ・遅延 import（関数の中）にしてあるので、本体の読み込みには影響しない。"
 }
