@@ -597,7 +597,7 @@ MUTATIONS = [
     {
         "why": "記事にサイト名を出す（ほかサイトのコピーに見える・2026-08-26の運営者の指示）",
         "file": "scripts/build_new_article.py",
-        "before": "    \"DMM_SINGLE_NEAR_RELEASE\": \"（未確認）\",",
+        "before": "    \"DMM_SINGLE_NEAR_RELEASE\": \"（確認1件のみ）\",",
         "after": "    \"DMM_SINGLE_NEAR_RELEASE\": \"（DMMぱちタウン単独確認）\",",
         "run": ["scripts/build_new_article.py"],
     },
