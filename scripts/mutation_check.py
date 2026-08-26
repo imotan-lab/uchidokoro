@@ -196,21 +196,24 @@ MUTATIONS = [
         "run": ["scripts/page_decision.py",
                 "scripts/apply_indexing_policy.py"],
     },
+    # ★外した壊し方（2026-08-26）★＝「置いてよい版の名簿を広げる」。
+    #   解凍して `ENABLED_PUBLICATION_SCHEMAS` と `SCHEMAS` が同じ中身に
+    #   なったので、★「知らない版」の検査が先に拾う★＝名簿を広げても
+    #   結果が変わらない（罠③＝二重の守り）。
+    #   ★名簿の検査そのものは、下の「静かに旧形式扱いにする」が見ている★
+    #   （名簿をわざと狭めて試す場所を run に入れてある）。
     {
-        "why": "★v2の凍結を外す（手で置いたv2が通ってしまう）★",
-        "file": "scripts/page_decision.py",
-        "before": "ENABLED_PUBLICATION_SCHEMAS = (SCHEMA,)",
-        "after": "ENABLED_PUBLICATION_SCHEMAS = SCHEMAS",
-        "run": ["scripts/page_decision.py"],
-    },
-    {
-        "why": "★凍結中の版を、例外ではなく静かに旧形式扱いにする★",
+        "why": "★名簿に無い版を、例外ではなく静かに旧形式扱いにする★",
         "file": "scripts/page_decision.py",
         "before": '    if pub not in ENABLED_PUBLICATION_SCHEMAS:\n'
                   '        raise DecisionError(',
         "after": '    if False:\n'
                  '        raise DecisionError(',
-        "run": ["scripts/page_decision.py"],
+        # ★名簿をわざと狭めて試す場所で見る★（2026-08-26）
+        #   ★page_decision の試験だけでは足りない★＝解凍後は
+        #   名簿と「読める版」が同じ中身なので、そこでは差が出ない。
+        "run": ["scripts/apply_indexing_policy.py",
+                "scripts/build_new_article.py"],
     },
     # ★外した壊し方（2026-08-26）★
     #   「発行の試験を『どちらの版でも合格』に戻す」＝
