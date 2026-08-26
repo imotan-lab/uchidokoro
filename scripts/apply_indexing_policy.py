@@ -70,6 +70,12 @@ def plan(policy: dict | None = None) -> dict:
         if not _pd.is_auto(m):
             continue
         slug = m.get("slug")
+        # ★★区分の判定をここでも通す★★（2026-08-26・Codex31回目のP0）
+        #   ★直す前は判定書**単体**の検査しか呼んでいなかった★ので、
+        #   `machine_class()` が持つ2つの守り
+        #     ①凍結中の版 ②名乗りと中身の版の食い違い
+        #   をどちらも通らずに、noindex と sitemap を書き換えられた。
+        _pd.machine_class(m, policy)
         pd_old = m.get("page_decision") or {}
         _pd.validate_decision(pd_old)          # 壊れていればここで止まる
         # ★版に合わせて計算し直す★（2026-08-26・Codex28回目のP0）
@@ -394,6 +400,36 @@ def selftest() -> int:
             _d2 = _pd.decide_from_claims_v2(
                 ["ceiling:GAME:999", "payout_range", "bonus_prob"],
                 "force_noindex_new_auto", "BONUS", "PRESENT", "2026-08-26")
+            with open(g["MACHINES"], "w", encoding="utf-8") as f:
+                _js.dump([{"slug": "zzz_pol", "name": "試験v2",
+                           "publication_policy": _pd.SCHEMA_V2,
+                           "page_decision": _d2}], f, ensure_ascii=False)
+            # ★★凍結中の v2 は、入口が止める★★（2026-08-26・Codex31回目のP0）
+            #   ★machine_class を直接たたく試験だけでは足りない★＝
+            #   plan がそれを呼ばなくなっても緑のままだった。
+            _pd.ENABLED_PUBLICATION_SCHEMAS = (_pd.SCHEMA,)
+            _frozen_stopped = False
+            try:
+                plan(NORMAL)
+            except _pd.DecisionError as _e_fr:
+                _frozen_stopped = "凍結中" in str(_e_fr)
+            t("★★入口（plan）が、凍結中の v2 を止める★★"
+              "／★止めないと noindex と sitemap を書き換えられる★",
+              _frozen_stopped)
+            # ★★名乗り v1・中身 v2 も入口で止める★★
+            with open(g["MACHINES"], "w", encoding="utf-8") as f:
+                _js.dump([{"slug": "zzz_pol", "name": "試験混在",
+                           "publication_policy": _pd.SCHEMA,
+                           "page_decision": _d2}], f, ensure_ascii=False)
+            _mix_stopped = False
+            try:
+                plan(NORMAL)
+            except _pd.DecisionError as _e_mx:
+                _mix_stopped = "判定書の版" in str(_e_mx)
+            t("★★入口（plan）が、名乗りと中身の食い違いを止める★★",
+              _mix_stopped)
+            # 解凍して、正しい v2 は通ること
+            _pd.ENABLED_PUBLICATION_SCHEMAS = _pd.SCHEMAS
             with open(g["MACHINES"], "w", encoding="utf-8") as f:
                 _js.dump([{"slug": "zzz_pol", "name": "試験v2",
                            "publication_policy": _pd.SCHEMA_V2,

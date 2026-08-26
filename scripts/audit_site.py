@@ -3131,6 +3131,84 @@ def _py_string_literals(path: Path) -> str:
     return " ".join(out)
 
 
+def _scan_54(base) -> list:
+    """★読者に届くものを走査する（本体も対照実験もここを通る）★
+
+    ★切り出した理由★（2026-08-26・Codex31回目のP1）
+      対照実験が `_judge_54_wording()` に文を渡すだけだったので、
+      ★OGPの読み取りや checker.html の走査を外しても緑のまま★だった。
+      ＝罠⑤（関数だけ試して、読み取り経路を試していない）。
+    """
+    ng = []
+    # ① 記事データ
+    for jf in sorted((base / "assets" / "data" / "machine-details")
+                     .glob("*.json")):
+        for h in _judge_54_wording(load_text(jf)):
+            ng.append(f"machine-details/{jf.name}: {h}")
+    # ② 機種一覧（同定の控えは読者に出ないので外す）
+    mj = base / "assets" / "data" / "machines.json"
+    if mj.is_file():
+        for h in _judge_54_wording(_strip_identity(load_text(mj))):
+            ng.append(f"machines.json: {h}")
+    # ③ 固定ページ・ひな型（見える文字＋meta＋JSON-LD）
+    for hf in sorted(base.glob("*.html")):
+        if hf.name == "404.html":
+            continue
+        for h in _judge_54_wording(_visible_and_meta(load_text(hf))):
+            ng.append(f"{hf.name}: {h}")
+    # ④ 公開ページ（★checker.html も読者が見る★・2026-08-26・Codex30回目）
+    for hf in sorted((base / "machines").glob("*/*.html")):
+        for h in _judge_54_wording(_visible_and_meta(load_text(hf))):
+            ng.append(f"machines/{hf.parent.name}/{hf.name}: {h}")
+    # ⑤ X投稿の定型文（文字列だけ）
+    for py in ("post_to_x.py", "post_update_to_x.py"):
+        p = base / "scripts" / py
+        if p.is_file():
+            for h in _judge_54_wording(_py_string_literals(p)):
+                ng.append(f"{py}（投稿文）: {h}")
+    return ng
+
+
+def _check_54_scan_selftest() -> list:
+    """★読み取り経路そのものの対照実験★（一時ディレクトリに実物を置く）"""
+    import shutil as _sh54
+    import tempfile as _tf54
+    bad = []
+    d = _tf54.mkdtemp(prefix="uchi_a54_")
+    try:
+        root = Path(d)
+        (root / "machines" / "zzz_a54").mkdir(parents=True)
+        # ⓐ OGP（property=）の中身
+        (root / "zzz_ogp.html").write_text(
+            '<html><head><meta property="og:description" '
+            'content="出典は2件です"></head><body>本文</body></html>',
+            encoding="utf-8")
+        # ⓑ ポチポチくんのページ（index.html ではない）
+        (root / "machines" / "zzz_a54" / "checker.html").write_text(
+            "<html><body><p>解析サイトの数値です</p></body></html>",
+            encoding="utf-8")
+        # ⓒ 何も無いページ（鳴ってはいけない）
+        (root / "machines" / "zzz_a54" / "index.html").write_text(
+            "<html><body><p>天井は999Gです</p></body></html>",
+            encoding="utf-8")
+        got = _scan_54(root)
+        if not any("zzz_ogp.html" in x for x in got):
+            bad.append("★OGP（property=）の中身を見ていません★")
+        if not any("checker.html" in x for x in got):
+            bad.append("★ポチポチくんのページを見ていません★")
+        if any("zzz_a54/index.html" in x for x in got):
+            bad.append("★問題の無いページで鳴っています★")
+        # ⓓ コメントの中は鳴らない（読者に届かない）
+        (root / "zzz_cmt.html").write_text(
+            "<html><body><!-- 出典は2件です --><p>天井は999G</p></body></html>",
+            encoding="utf-8")
+        if any("zzz_cmt.html" in x for x in _scan_54(root)):
+            bad.append("★コメントの中で鳴っています（読者に届きません）★")
+    finally:
+        _sh54.rmtree(d, ignore_errors=True)
+    return bad
+
+
 def check_54_source_wording(machines: list) -> list:
     """どこから採ったかを読者に見せていないか（★サイト名とは別の型★）"""
     if _IN_54[0]:
@@ -3138,34 +3216,8 @@ def check_54_source_wording(machines: list) -> list:
     _IN_54[0] = True
     try:
         ng = [f"★見張り54そのものが働いていません★: {x}"
-              for x in _check_54_selftest()]
-        # ① 記事データ
-        for jf in sorted((BASE / "assets" / "data" / "machine-details")
-                         .glob("*.json")):
-            for h in _judge_54_wording(load_text(jf)):
-                ng.append(f"machine-details/{jf.name}: {h}")
-        # ② 機種一覧（同定の控えは読者に出ないので外す）
-        mj = BASE / "assets" / "data" / "machines.json"
-        if mj.is_file():
-            for h in _judge_54_wording(_strip_identity(load_text(mj))):
-                ng.append(f"machines.json: {h}")
-        # ③ 固定ページ・ひな型（見える文字＋meta＋JSON-LD）
-        for hf in sorted(BASE.glob("*.html")):
-            if hf.name == "404.html":
-                continue
-            for h in _judge_54_wording(_visible_and_meta(load_text(hf))):
-                ng.append(f"{hf.name}: {h}")
-        # ④ 公開ページ（★checker.html も読者が見る★・2026-08-26・Codex30回目）
-        for hf in sorted((BASE / "machines").glob("*/*.html")):
-            for h in _judge_54_wording(_visible_and_meta(load_text(hf))):
-                ng.append(f"machines/{hf.parent.name}/{hf.name}: {h}")
-        # ⑤ X投稿の定型文（文字列だけ）
-        for py in ("post_to_x.py", "post_update_to_x.py"):
-            p = BASE / "scripts" / py
-            if p.is_file():
-                for h in _judge_54_wording(_py_string_literals(p)):
-                    ng.append(f"{py}（投稿文）: {h}")
-        return ng
+              for x in _check_54_selftest() + _check_54_scan_selftest()]
+        return ng + _scan_54(BASE)
     finally:
         _IN_54[0] = False
 
@@ -3275,6 +3327,11 @@ def selftest() -> int:
         t("★見張り54★ " + x, False)
     t("★★見張り54（どこから採ったかの言い回し）が働いている★★",
       not _check_54_selftest())
+    for x in _check_54_scan_selftest():
+        t("★見張り54の読み取り★ " + x, False)
+    t("★★見張り54が、読者に届くものを実際に読めている★★"
+      "／★文を直接渡す試験だけでは、読み取りを外しても緑になる★",
+      not _check_54_scan_selftest())
     t("★★試験の数え方の見張りが働いている★★（項目51）",
       not check_51_selftest_tally([]))
     ng = [n for n, ok in results if not ok]

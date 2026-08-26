@@ -15,7 +15,7 @@
       if(!m) return;
 
       const isPreview = m.status === "preview"
-        || String(m.publication_policy || "").startsWith("page-decision/");
+        || (m.publication_policy !== undefined);
       const strategy = m.strategy || '';
       const info = m.info || '';
       const releaseDate = m.release_date || ''; // YYYY-MM-DD

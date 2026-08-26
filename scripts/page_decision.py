@@ -645,15 +645,23 @@ def machine_class(machine: dict, policy: dict | None = None) -> str:
     pol_mode = policy.get("mode")
     if pol_mode not in POLICY_MODES:
         raise DecisionError(f"policy mode が不明です: {pol_mode!r}")
-    pub = machine.get("publication_policy")
     status = machine.get("status")
-    if pub is None:
+    # ★★鍵の有無と、値の妥当性を分ける★★（2026-08-26・Codex31回目のP0）
+    #   ★直す前は `pub is None` で分岐★＝
+    #   `"publication_policy": null` を「鍵が無い」と同じ扱いにしていた
+    #   ＝旧形式として公開・indexへ落ちる。
+    if "publication_policy" not in machine:
         if status in (None, "complete"):
             return "LEGACY_COMPLETE"
         if status == "preview":
             return "LEGACY_PREVIEW"
         raise DecisionError(
             f"不明な status です: {status!r} (slug={machine.get('slug')})")
+    pub = machine["publication_policy"]
+    if not isinstance(pub, str) or not pub:
+        raise DecisionError(
+            f"publication_policy が文字ではありません: {pub!r} "
+            f"(slug={machine.get('slug')})")
     # ★v1 と v2 の両方を認める★（2026-08-25。v1 の機種は今までどおり）
     if pub not in SCHEMAS:
         raise DecisionError(
@@ -728,8 +736,15 @@ def is_auto(machine: dict) -> bool:
       そちらは `machine_class()` が例外で止める。
       ★2つを混ぜると、片方を直したときにもう片方が裏目に出る★
       （v1限定にすると旧形式扱い＝いちばん危ない側へ倒れる）。
+
+    ★★名簿ではなく「鍵があるか」で見る★★（2026-08-26・Codex31回目のP0）
+      ★直す前は既知の版の名簿だった★ので、
+      **未知の版・書き間違い・空文字**が旧形式へ落ちた
+      ＝noindex が外れ、sitemap に載る（いちばん危ない側）。
+      ★鍵があるなら、値がおかしくても `machine_class()` が例外で止める★
+      ＝分からないものは止まる側へ倒す。
     """
-    return machine.get("publication_policy") in SCHEMAS
+    return "publication_policy" in machine
 
 
 # ---------------------------------------------------------------- selftest
@@ -1084,8 +1099,25 @@ def selftest() -> int:
                      "publication_policy": SCHEMA,
                      "page_decision": _d_at}, {"mode": "normal"})
       in ("AUTO_INDEXABLE", "AUTO_PENDING"))
-    t("　知らない版は新台経路と見なさない（machine_class が別に止める）",
-      not is_auto({"publication_policy": "page-decision/v9"}))
+    # ★★知らない版は「新台経路」として扱い、machine_class で止める★★
+    #   （2026-08-26・Codex31回目のP0。★前の試験は穴を正解として固定していた★）
+    #   ★旧形式へ落とすと、noindex が外れ sitemap に載る＝いちばん危ない側★
+    t("★★知らない版も新台経路として扱う（旧形式へ落とさない）★★",
+      is_auto({"publication_policy": "page-decision/v9"}))
+    t("　その機種は区分の判定が止める（分からないものは止まる側）",
+      _raises(lambda: machine_class(
+          {"slug": "zzz_x", "publication_policy": "page-decision/v9"},
+          {"mode": "normal"})))
+    t("★★値が null でも旧形式扱いにしない★★"
+      "／★鍵の有無と値の妥当性は別の問い★",
+      is_auto({"publication_policy": None})
+      and _raises(lambda: machine_class(
+          {"slug": "zzz_n", "publication_policy": None},
+          {"mode": "normal"})))
+    t("　空文字も止める",
+      _raises(lambda: machine_class(
+          {"slug": "zzz_e", "publication_policy": ""},
+          {"mode": "normal"})))
     # ★★計算し直しは1か所★★（版の分岐を散らさない）
     t("★★recompute が版に合わせて計算し直す★★",
       recompute(_d_v2, "normal") == decide_from_claims_v2(

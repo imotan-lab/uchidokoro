@@ -473,7 +473,7 @@ def check_rate_monotonic(args: dict) -> dict:
 #   ＝見たいのは「preview と新台経路を、名簿より先に無効にしているか」。
 _PAGE_DISABLE = re.compile(
     r'machine\.status\s*===\s*"preview"[^\n]*?'
-    r'publication_policy[^\n]*?page-decision/[^\n]*?'
+    r'publication_policy[^\n]*?'
     r'available:\s*false')
 
 
@@ -493,9 +493,10 @@ def page_disables_pochipochi(mh: str, row: dict) -> bool:
         return False
     # ★版は問わない★＝ひな型が新台経路をまとめて無効にしているので、
     #   こちらも `page_decision.is_auto` と同じ問いにそろえる。
+    # ★鍵があるかで見る★（2026-08-26・Codex31回目のP0）
+    #   page_decision.is_auto とまったく同じ問いにそろえる。
     return (row.get("status") == "preview"
-            or str(row.get("publication_policy") or "")
-            .startswith("page-decision/"))
+            or "publication_policy" in row)
 
 
 def check_pochipochi_reachable(args: dict) -> dict:

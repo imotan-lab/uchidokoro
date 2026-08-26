@@ -58,6 +58,34 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MUTATIONS = [
     # ─── 2026-08-26・Codex29回目で足した守り ───────────────
     {
+        "why": "★入口（plan）から区分の判定を外す（凍結と版の食い違いを通す）★",
+        "file": "scripts/apply_indexing_policy.py",
+        "before": "        _pd.machine_class(m, policy)",
+        "after": "        pass",
+        "run": ["scripts/apply_indexing_policy.py"],
+    },
+    {
+        "why": "★経路の判定を『既知の版の名簿』に戻す（未知版が旧形式へ落ちる）★",
+        "file": "scripts/page_decision.py",
+        "before": '    return "publication_policy" in machine',
+        "after": '    return machine.get("publication_policy") in SCHEMAS',
+        "run": ["scripts/page_decision.py"],
+    },
+    {
+        "why": "★監査54から OGP（property=）の読み取りを外す★",
+        "file": "scripts/audit_site.py",
+        "before": "        metas = list(_hc54.parse(html).meta_contents)",
+        "after": "        metas = []",
+        "run": ["scripts/audit_site.py"],
+    },
+    {
+        "why": "★監査54の対象を index.html だけに戻す（ポチポチくんを見ない）★",
+        "file": "scripts/audit_site.py",
+        "before": '    for hf in sorted((base / "machines").glob("*/*.html")):',
+        "after": '    for hf in sorted((base / "machines").glob("*/index.html")):',
+        "run": ["scripts/audit_site.py"],
+    },
+    {
         "why": "★経路の判定を v1 限定に戻す（v2 が旧形式扱いになる）★",
         "file": "scripts/page_decision.py",
         "before": '    return machine.get("publication_policy") in SCHEMAS',

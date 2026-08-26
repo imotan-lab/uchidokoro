@@ -270,7 +270,7 @@ function formatReleaseDate(dateStr){
         const row = document.createElement("article");
         row.className = "list-row";
         const isPreview = machine.status === "preview"
-          || String(machine.publication_policy || "").startsWith("page-decision/");
+          || (machine.publication_policy !== undefined);
         const relLabel = formatReleaseDate(machine.release_date);
         const statusBadge = isPreview
           ? '<span class="badge badge--preview">⚠ 解析待ち</span>'
@@ -311,7 +311,7 @@ function formatReleaseDate(dateStr){
         const row = document.createElement("article");
         row.className = "list-row";
         const isPreview = machine.status === "preview"
-          || String(machine.publication_policy || "").startsWith("page-decision/");
+          || (machine.publication_policy !== undefined);
         const isNew = isNewMachine(machine);
         const nameBadge = isPreview
           ? ' <span class="badge badge--preview">⚠ 解析待ち</span>'
