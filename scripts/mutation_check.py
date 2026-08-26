@@ -56,6 +56,38 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #   ★同じ壊し方を戻さないこと★＝いまの取り決めでは必ず「捕まえられない」
 #   と出て、本物の見落としが埋もれる。
 MUTATIONS = [
+    # ─── 2026-08-26・確定値が検索の濃さに届くか（Codex35回目）────
+    {
+        "why": "★確定値に根拠を刻まない（第2出典を見つけても検索へ載らない）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "        if base_field(field) in INDEX_COUNTABLE_FIELDS:",
+        "after": "        if False:",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★系列を数え直さず、出典の数だけで『独立2出典』を名乗る★",
+        "file": "scripts/confirmed_values.py",
+        "before": "    try:\n        n = _sl.independent(keys)",
+        "after": "    try:\n        n = len(rec.get(\"sources\") or [])",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★発行者が分からなくても名乗る（fail-closed が崩れる）★",
+        "file": "scripts/confirmed_values.py",
+        "before": '        except Exception:                                # noqa: BLE001\n'
+                  '            return ""                                    '
+                  '# ★分からなければ名乗らない★',
+        "after": "        except Exception:                                # noqa: BLE001\n"
+                 "            pass",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★確定値の根拠を全項目へ広げる（線が消える）★",
+        "file": "scripts/confirmed_values.py",
+        "before": 'INDEX_COUNTABLE_FIELDS = ("bonus_prob",)',
+        "after": 'INDEX_COUNTABLE_FIELDS = tuple(FIELD_TOPICS)',
+        "run": ["scripts/confirmed_values.py"],
+    },
     # ─── 2026-08-26・題の行つきの表（Codex33回目）────────────
     {
         "why": "★spanの位置を残さない（題の行だけか証明できなくなる）★",

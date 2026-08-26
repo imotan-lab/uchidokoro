@@ -1267,6 +1267,31 @@ def for_slug(slug: str, data: dict | None = None) -> dict:
     return for_slug_checked(slug)
 
 
+# ★★検索の濃さにも数えてよい項目★★（2026-08-26・Codex35回目の穴2）
+#   ★機械では絶対に2出典に届かない項目だけ★＝実測で確かめたものに限る。
+#   ボーナス確率＝BIG/REGの設定表を持つ出典が1社しかない（5機種で実測）。
+#   ★他の項目へ広げない★＝「2AIの確定値は数えない」は他では意味のある線。
+INDEX_COUNTABLE_FIELDS = ("bonus_prob",)
+
+
+def _independent_basis(rec: dict) -> str:
+    """★系列を数え直してから「独立2出典」を名乗る★（保存値を信じない）"""
+    # ★check_sources とまったく同じ数え方★（票の鍵にしてから数える）
+    #   ★URLをそのまま渡さない★＝independent() は**票の鍵**を受け取るので、
+    #   URLを渡すと別々の文字というだけで2票に見えた（試験で判明）。
+    keys = set()
+    for s in (rec.get("sources") or []):
+        try:
+            keys.add(_sl.vote_key(s["publisher"]))
+        except Exception:                                # noqa: BLE001
+            return ""                                    # ★分からなければ名乗らない★
+    try:
+        n = _sl.independent(keys)
+    except Exception:                                    # noqa: BLE001
+        return ""
+    return "INDEPENDENT_MULTI" if n >= 2 else ""
+
+
 def merge_into(material: dict, slug: str) -> list:
     """集めた材料に、2AIが確定した値を足す。★足したものの一覧を返す★
 
@@ -1299,6 +1324,17 @@ def merge_into(material: dict, slug: str) -> list:
             "_agreed_by": rec.get("agreed_by"),
             "_decided_at": rec.get("decided_at"),
         }
+        # ★★検索の濃さにも数える項目だけ、根拠を名乗る★★
+        #   （2026-08-26・Codex35回目の穴2）
+        #   ★直す前は `_from` しか付かず、`_skip_for_index` の白名簿
+        #     （basis == INDEPENDENT_MULTI）に当たらなかった★＝
+        #   第2の出典を見つけて正しく記録しても、
+        #   **claim にならず `NO_BONUS_PROB` のまま検索へ載らない**。
+        #   ★系列は数え直す★（保存された系列を信じない）。
+        if base_field(field) in INDEX_COUNTABLE_FIELDS:
+            _b = _independent_basis(rec)
+            if _b:
+                stamped["basis"] = _b
         if where == "adopted":
             adopted = material.setdefault("adopted", {})
             if field in adopted:
@@ -2231,6 +2267,66 @@ def selftest() -> int:
       sorted(check_spec_shape("bonus_prob", _bp_ok))
       == sorted(["1/273.1", "1/439.8", "1/168.5",
                  "1/240.1", "1/240.1", "1/120.0"]))
+    # ─── ★確定値が検索の濃さに届くか★（2026-08-26・Codex35回目の穴2）
+    #   ★`merge_into` を通す★＝手で `basis` を付けた材料を採点しない。
+    import page_decision as _pd_cv
+    _bp_val = {"1": {"big": "1/273.1", "reg": "1/439.8"},
+               "6": {"big": "1/240.1", "reg": "1/240.1"}}
+    _rec2 = {"value": _bp_val,
+             "sources": [{"url": "https://chonborista.com/slot/x",
+                          "publisher": "chonborista",
+                          "quote": "1/273.1 1/439.8"},
+                         {"url": "https://nana-press.com/kaiseki/machine/1/",
+                          "publisher": "nana-press",
+                          "quote": "1/273.1 1/439.8"}],
+             "agreed_by": ["claude", "codex"]}
+    _rec1 = {**_rec2, "sources": _rec2["sources"][:1]}
+    t("★★独立2系列なら『独立2出典』を名乗る★★"
+      "／★名乗らないと、正しく記録しても claim にならず検索へ載らない★",
+      _independent_basis(_rec2) == "INDEPENDENT_MULTI")
+    t("★1系列だけなら名乗らない★", _independent_basis(_rec1) == "")
+    t("　同じ発行者の2ページも1系列（名乗らない）",
+      _independent_basis({**_rec2, "sources": [
+          {"url": "https://chonborista.com/slot/a",
+           "publisher": "chonborista", "quote": "x"},
+          {"url": "https://chonborista.com/slot/b",
+           "publisher": "chonborista", "quote": "x"}]}) == "")
+    t("★★発行者の分からない出典が1つでも混ざれば名乗らない★★"
+      "／★飛ばして残りで数えると、素性の知れない出典を混ぜられる★",
+      _independent_basis({**_rec2, "sources": _rec2["sources"] + [
+          {"url": "https://x.example/z", "quote": "x"}]}) == "")
+    t("　発行者が分からなければ名乗らない（fail-closed）",
+      _independent_basis({**_rec2, "sources": [
+          {"url": "https://x.example/a", "quote": "x"},
+          {"url": "https://y.example/b", "quote": "x"}]}) == "")
+    # ★本物の入口（merge_into）を通して、claim になるところまで見る★
+    _keep_for = globals()["for_slug"]
+    try:
+        globals()["for_slug"] = lambda s: {"bonus_prob": _rec2}
+        _mat_cv = {"adopted": {}}
+        merge_into(_mat_cv, "zzz_cv")
+        t("★★merge_into が根拠を刻む★★",
+          _mat_cv["adopted"]["bonus_prob"].get("basis") == "INDEPENDENT_MULTI")
+        t("★★その材料が検索の濃さに数えられる★★"
+          "／★これが無いと、第2の出典を見つけても NO_BONUS_PROB のまま★",
+          "bonus_prob" in _pd_cv.index_claims_from_material(_mat_cv))
+        globals()["for_slug"] = lambda s: {"bonus_prob": _rec1}
+        _mat_cv1 = {"adopted": {}}
+        merge_into(_mat_cv1, "zzz_cv")
+        t("★（対照）1系列だけなら濃さに数えない★",
+          "bonus_prob" not in _pd_cv.index_claims_from_material(_mat_cv1))
+        # ★他の項目には広げない★
+        globals()["for_slug"] = lambda s: {
+            "machine_profile": {"value": {"profile": "BONUS"},
+                                "sources": _rec2["sources"],
+                                "agreed_by": ["claude", "codex"]}}
+        _mat_cv2 = {"adopted": {}}
+        merge_into(_mat_cv2, "zzz_cv")
+        t("★★他の項目には根拠を刻まない（線を広げない）★★",
+          "basis" not in _mat_cv2["adopted"]["machine_profile"])
+    finally:
+        globals()["for_slug"] = _keep_for
+
     ng = sum(1 for _, o in results if not o)
     print()
     print("%d/%d 合格" % (len(results) - ng, len(results)))

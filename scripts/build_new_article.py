@@ -536,6 +536,21 @@ def build_machine(slug, name, maker, official_url, release, material,
     }
 
 
+# ★★記録の仕方は1か所で書く★★（2026-08-26・Codex35回目の穴1）
+#   ★質問文ごとに書いていたので、`--by 2AI` のように
+#     **そのまま実行すれば拒否される**書き方が3か所に残っていた★。
+#   `confirmed_values.record()` は項目を問わず、公式URL・判断者2人・
+#   独立2系列の出典を要求する。
+def _record_howto(field: str, example: str) -> str:
+    return ("決めたら confirmed_values.py --record "
+            f"--field {field} --value-file <{example} を書いたファイル> "
+            "--official-url <公式URL> "
+            '--source "<URL1>|<逐語>" --source "<URL2>|<逐語>" '
+            "--why <どう突き合わせたか・8文字以上> --by claude,codex "
+            "で記録してください"
+            "（★公式URL・判断者2人・**発行元の違う2つの出典**が要ります★）")
+
+
 def checker_questions(material) -> list:
     """★機械が決められないことを、2AIへの質問として出す★（2026-08-12）
 
@@ -555,9 +570,7 @@ def checker_questions(material) -> list:
             "★この機種の型を判断してください★"
             "（AT_CZ＝ATまたはCZを持つ／BONUS＝完全告知などのボーナスタイプ）"
             "／★決まらないと検索に載せられません★。決めたら "
-            "confirmed_values.py --record --field machine_profile "
-            "--value-file <{\"profile\": \"BONUS\"} を書いたファイル> "
-            "--why <理由> --by 2AI で記録してください")
+            + _record_howto("machine_profile", '{"profile": "BONUS"}'))
     # ★★ボーナス確率は、機械では2出典に届かない★★（2026-08-26・実測）
     #   ★表を持っているのは1社だけ★（他の2社は別の表しか持っていない）＝
     #   `compare()` は2出典一致を要求するので、機械だけでは永久に採れない。
@@ -593,10 +606,8 @@ def checker_questions(material) -> list:
             "★この機種に天井があるかを判断してください★"
             "（PRESENT＝ある／NONE＝ない）"
             "／★「ボーナスタイプだから天井なし」と決めないでください★"
-            "＝別々に確かめること。決めたら "
-            "confirmed_values.py --record --field ceiling_state "
-            "--value-file <{\"state\": \"NONE\"} を書いたファイル> "
-            "--why <理由> --by 2AI で記録してください")
+            "＝別々に確かめること。"
+            + _record_howto("ceiling_state", '{"state": "NONE"}'))
     ceilings = [c for c in ((material.get("ceilings") or {}).get("adopted") or [])
                 if (c or {}).get("kind") == "GAME"]
     if len(ceilings) < 2:
@@ -616,10 +627,8 @@ def checker_questions(material) -> list:
                          f"（{c.get('benefit')}）" for c in ceilings)
     return out + ["★通常時の天井はどれか判断してください★"
             f"（確認できたG数天井: {amounts}）"
-            "／早見表の「天井まで残り」に使います。決めたら "
-            "confirmed_values.py --record --field checker_ceiling "
-            "--value-file <{\"games\": \"1000\"} を書いたファイル> "
-            "--why <理由> --by 2AI で記録してください"]
+            "／早見表の「天井まで残り」に使います。"
+            + _record_howto("checker_ceiling", '{"games": "1000"}')]
 
 
 def build_checker(material) -> dict | None:
