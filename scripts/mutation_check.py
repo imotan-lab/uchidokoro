@@ -56,6 +56,46 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #   ★同じ壊し方を戻さないこと★＝いまの取り決めでは必ず「捕まえられない」
 #   と出て、本物の見落としが埋もれる。
 MUTATIONS = [
+    # ─── 2026-08-26・発行の切替点と bonus_prob の残りの守り ────
+    {
+        "why": "★名乗りを判定書と別に決める（片方だけ v2 になり食い違う）★",
+        "file": "scripts/build_new_article.py",
+        "before": '        "publication_policy": decision["schema_version"],',
+        "after": '        "publication_policy": _pd.SCHEMA,',
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "★発行する版が『置いてよい版か』を確かめない"
+               "（作れるのに置けない機種を毎晩作る）★",
+        "file": "scripts/build_new_article.py",
+        "before": "    if _pd.EMIT_SCHEMA not in _pd.ENABLED_PUBLICATION_SCHEMAS:",
+        "after": "    if False:",
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "★合算がある設定と無い設定の混在を許す"
+               "（記事の『列ごと出さない』と食い違う）★",
+        "file": "scripts/spec_lookup.py",
+        "before": "    if any(_has) and not all(_has):",
+        "after": "    if False:",
+        "run": ["scripts/spec_lookup.py", "scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★同じ内部列が2つある表も採る（後のセルが黙って上書き）★",
+        "file": "scripts/spec_lookup.py",
+        "before": "        if len(set(cols.values())) != len(cols):\n"
+                  "            continue",
+        "after": "        if False:\n            continue",
+        "run": ["scripts/spec_lookup.py"],
+    },
+    {
+        "why": "★同じ設定が2行あって値が違っても最初だけ残す★",
+        "file": "scripts/spec_lookup.py",
+        "before": "                if _st in got and got[_st] != cell:\n"
+                  "                    return {}, True",
+        "after": "                if False:\n                    return {}, True",
+        "run": ["scripts/spec_lookup.py"],
+    },
     # ─── 2026-08-26・ボーナス確率（設定×BIG/REG/合算）─────────
     {
         "why": "★形の検査を素通りさせる（壊れた値が記事まで届く）★",

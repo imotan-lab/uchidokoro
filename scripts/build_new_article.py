@@ -441,13 +441,19 @@ IDENTITY_BINDINGS = ("OFFICIAL_PRODUCT_PAGE", "MAKER_LIST_CARD",
 
 
 def _emit_schema() -> str:
-    """新台を発行するときの判定書の版（★置いてよい版であること★）"""
-    if _pd.SCHEMA not in _pd.ENABLED_PUBLICATION_SCHEMAS:
+    """新台を発行するときの判定書の版（★置いてよい版であること★）
+
+    ★版そのものは `page_decision.EMIT_SCHEMA` の1か所★（2026-08-26）
+      ここでは「いま置いてよい版か」だけを確かめる。
+      ★確かめないと「作れるが machine_class が拒否する」機種を毎晩作り、
+        エラーも出ずに公開0件が続く★（2026-08-22に5日続いた型）。
+    """
+    if _pd.EMIT_SCHEMA not in _pd.ENABLED_PUBLICATION_SCHEMAS:
         raise BuildError(
-            f"発行しようとしている版 {_pd.SCHEMA!r} は、いま machines.json に"
+            f"発行しようとしている版 {_pd.EMIT_SCHEMA!r} は、いま machines.json に"
             f"置けません（置いてよい版: {_pd.ENABLED_PUBLICATION_SCHEMAS!r}）"
             "／★このまま作ると、公開0件が黙って続きます★")
-    return _pd.SCHEMA
+    return _pd.EMIT_SCHEMA
 
 
 def build_machine(slug, name, maker, official_url, release, material,
@@ -488,8 +494,11 @@ def build_machine(slug, name, maker, official_url, release, material,
     #   ★v1 は at:/cz: を必ず要求する★ので、ノーマル機（完全告知の
     #   ボーナスタイプ）は材料が全部揃っても永久に検索へ載せられなかった。
     #   v2 は機種の型ごとに線を変える。★型が不明なら載せない★（理由も残る）。
-    # ★同上：配線がそろうまで v1 で判定する★（2026-08-26・Codexの28回目）
-    decision = _pd.decide(material)
+    # ★★版は1か所で決める★★（2026-08-26・Codex31〜32回目）
+    #   ★名乗りと判定書を別々に決めない★＝片方だけ切り替えると
+    #   「名乗りと中身の食い違い」を発行側で作れる（今回止めたばかりの穴）。
+    _emit = _emit_schema()
+    decision = _pd.decide_for_schema(material, _emit)
     return {
         "slug": slug,
         "name": name,
@@ -513,7 +522,8 @@ def build_machine(slug, name, maker, official_url, release, material,
         # ★発行してよい版か、ここで確かめる★（2026-08-26）
         #   ★確かめないと「作れるが machine_class が拒否する」機種を毎晩作り、
         #     エラーも出ずに公開0件が続く★（2026-08-22に実際に5日続いた型）。
-        "publication_policy": _emit_schema(),
+        # ★名乗りは判定書自身が名乗る版を使う★（別々に決めない）
+        "publication_policy": decision["schema_version"],
         "page_decision": decision,
         # ★既存の未裏取りページ（LEGACY_UNVERIFIED）と混ぜない★
         #   載せた値は出典2件で確認済み。ただし記事は網羅的ではない、という状態。
@@ -1677,6 +1687,48 @@ def selftest() -> int:
         _as16.BASE = _base16
         _sh16.rmtree(_d16, ignore_errors=True)
 
+
+    # ─── ★発行の切替点が1つか★（2026-08-26・Codex31〜32回目）───────
+    #   ★名乗りと判定書を別々に決めていないこと★を、実際に切り替えて見る。
+    _keep_emit = _pd.EMIT_SCHEMA
+    _keep_en = _pd.ENABLED_PUBLICATION_SCHEMAS
+    try:
+        _m_v1 = build_machine("zzz_emit", "試験", "試験メーカー",
+                              "https://m.example/products/slot/zzz_emit/",
+                              "2026-09-01", _mat_bonus)
+        t("　いまは v1 で発行する（名乗りと判定書がそろっている）",
+          _m_v1["publication_policy"] == _pd.SCHEMA
+          and _m_v1["page_decision"]["schema_version"] == _pd.SCHEMA)
+        # ★1か所だけ切り替える★
+        _pd.EMIT_SCHEMA = _pd.SCHEMA_V2
+        _pd.ENABLED_PUBLICATION_SCHEMAS = _pd.SCHEMAS
+        _m_v2e = build_machine("zzz_emit", "試験", "試験メーカー",
+                              "https://m.example/products/slot/zzz_emit/",
+                              "2026-09-01", _mat_bonus)
+        t("★★EMIT_SCHEMA を変えるだけで、名乗りも判定書も一緒に変わる★★"
+          "／★別々に決めていると、片方だけ v2 になって食い違う★",
+          _m_v2e["publication_policy"] == _pd.SCHEMA_V2
+          and _m_v2e["page_decision"]["schema_version"] == _pd.SCHEMA_V2)
+        t("　その機種は区分の判定を通る（作った物がそのまま置ける）",
+          _pd.machine_class(_m_v2e, {"mode": "normal"}).startswith("AUTO"))
+        # ★置いてよい版でなければ、作る前に止まる★
+        _pd.ENABLED_PUBLICATION_SCHEMAS = (_pd.SCHEMA,)
+        try:
+            build_machine("zzz_emit", "試験", "試験メーカー",
+                              "https://m.example/products/slot/zzz_emit/",
+                              "2026-09-01", _mat_bonus)
+            _emit_stopped = False
+        except BuildError as _e_em:
+            _emit_stopped = "置けません" in str(_e_em)
+        t("★★凍結中の版では、新台を作る前に止まる★★"
+          "／★止めないと、作れるのに置けない機種を毎晩作って公開0件が続く★",
+          _emit_stopped)
+    finally:
+        _pd.EMIT_SCHEMA = _keep_emit
+        _pd.ENABLED_PUBLICATION_SCHEMAS = _keep_en
+    t("　試験のあとで発行の版が戻っている",
+      _pd.EMIT_SCHEMA == _pd.SCHEMA
+      and _pd.ENABLED_PUBLICATION_SCHEMAS == (_pd.SCHEMA,))
 
     # ─── ★ボーナス確率の通し確認★（2026-08-26）────────────────
     #   ★HTML → 収集 → 採用 → 判定書 → 記事 を1本で通す★

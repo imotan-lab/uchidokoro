@@ -126,6 +126,16 @@ def validate_bonus_prob_value(value) -> None:
         if missing:
             raise BonusShapeError(
                 f"設定{st}に{'・'.join(missing)}がありません")
+    # ★★合算は「全部あるか、全部無いか」★★（2026-08-26・Codex32回目のP1）
+    #   ★混ざると、記事が「1設定でも合算があれば列を出し、欠けたセルは未確認」に
+    #     なり、「合算が採れていない機種は列ごと出さない」と食い違う★。
+    _has = [("total" in c) for c in value.values()]
+    if any(_has) and not all(_has):
+        _nan = [st for st, c in value.items() if "total" not in c]
+        raise BonusShapeError(
+            "合算がある設定と無い設定が混ざっています"
+            f"（無い設定: {'・'.join(sorted(_nan))}）"
+            "／★全部あるか、全部無いかにしてください★")
 
 
 def bonus_matrix_from_tables(html: str) -> tuple:
@@ -150,6 +160,11 @@ def bonus_matrix_from_tables(html: str) -> tuple:
             continue
         cols = {i: alias[h] for i, h in enumerate(header)
                 if i >= 1 and h in alias}
+        # ★★同じ内部列が2つある表は採らない★★（2026-08-26・Codex32回目のP1）
+        #   例＝同じ表に「BIG」と「BB」＝どちらも big になり、
+        #   ★後のセルが黙って上書き★していた（どちらが正しいか決められない）。
+        if len(set(cols.values())) != len(cols):
+            continue
         # ★必須の列は行ごとに見る★（2026-08-26）
         #   ★見出しでも見る二重の検査にしていた★ので、片方を消しても
         #   もう片方が拾い、壊し方の試験で「守られていない」と出た。
@@ -169,7 +184,13 @@ def bonus_matrix_from_tables(html: str) -> tuple:
                 if _ci.normalize_value(v, "1/x") is not None:
                     cell[key] = v
             if all(c in cell for c in BONUS_REQUIRED):
-                got.setdefault(m.group(1), cell)
+                # ★★同じ設定が2行あって値が違えば食い違い★★
+                #   （2026-08-26・Codex32回目のP1。
+                #     ★直す前は setdefault で最初の行だけ黙って残していた★）
+                _st = m.group(1)
+                if _st in got and got[_st] != cell:
+                    return {}, True
+                got.setdefault(_st, cell)
         if got:
             cands.append(got)
     # ★同じページの中で食い違っていたら採らない★（per_setting と同じ扱い）
@@ -766,6 +787,25 @@ def selftest() -> int:
     _span = _BON.replace("<th>BIG</th>", '<th colspan="2">BIG</th>')
     t("　多段見出しの表は採らない（列がずれる）",
       bonus_matrix_from_tables(_span)[0] == {})
+    # ★★同じ内部列が2つある表は採らない★★（2026-08-26・Codex32回目のP1）
+    #   ★直す前は後のセルが黙って上書き★＝どちらが正しいか決められない。
+    _dup_col = _BON.replace("<th>合算</th>", "<th>BB</th>")
+    t("★★同じ表に BIG と BB があったら採らない（黙って上書きしない）★★",
+      bonus_matrix_from_tables(_dup_col)[0] == {})
+    # ★★同じ設定が2行あって値が違えば食い違い★★
+    #   ★直す前は最初の行だけ黙って残していた★
+    _dup_row = _BON.replace(
+        "</table>",
+        "<tr><td>設定1</td><td>1/999.9</td><td>1/439.8</td>"
+        "<td>1/168.5</td></tr></table>")
+    t("★★同じ設定が2行あって値が違えば採らない★★",
+      bonus_matrix_from_tables(_dup_row) == ({}, True))
+    _same_row = _BON.replace(
+        "</table>",
+        "<tr><td>設定1</td><td>1/273.1</td><td>1/439.8</td>"
+        "<td>1/168.5</td></tr></table>")
+    t("　同じ値の重複行なら止めない（食い違いではない）",
+      bonus_matrix_from_tables(_same_row)[0].get("1"))
 
     # --- 保存契約（★3か所から呼ぶ唯一の検査★）
     def _shape_ng(v):
@@ -789,6 +829,57 @@ def selftest() -> int:
       _shape_ng({"1": "1/273.1"}))
     t("　合算だけは通さない（BIG/REGが要る）",
       _shape_ng({"1": {"total": "1/168.5"}}))
+    t("★★合算がある設定と無い設定が混ざったら通さない★★"
+      "／★記事の『列ごと出さない』という決めと食い違うため★",
+      _shape_ng({"1": {"big": "1/273", "reg": "1/439", "total": "1/168"},
+                 "6": {"big": "1/240", "reg": "1/240"}}))
+    t("　全設定に合算が無いのは通る",
+      not _shape_ng({"1": {"big": "1/273", "reg": "1/439"},
+                     "6": {"big": "1/240", "reg": "1/240"}}))
+
+    # ─── ★票の数え方（compare）を本物の入口として通す★（Codex32回目のP2）
+    #   ★直す前は、抽出した辞書を手で材料へ入れていた★＝
+    #   「2出典で完全一致したときだけ採用」を一度も確かめていなかった。
+    def _bpage(host, val):
+        # ★名簿に載っている実在の出典を使う★（2026-08-26）
+        #   ★作り物のホスト名だと票に数えられず、常に「採用しない」になる★
+        #   ＝どんな壊し方をしても緑になる試験になってしまう。
+        return {"ok": True, "url": f"https://{host}/x", "host": host,
+                "reason": "OK", "fields": {"bonus_prob": val},
+                "setting_labels": []}
+
+    _H1, _H2 = "nana-press.com", "p-town.dmm.com"
+
+    _V = {"1": {"big": "1/273.1", "reg": "1/439.8", "total": "1/168.5"},
+          "6": {"big": "1/240.1", "reg": "1/240.1", "total": "1/120.0"}}
+    _r_bp = compare([_bpage(_H1, _V), _bpage(_H2, _V)])
+    t("★★①2出典が完全に一致したら採用する★★",
+      _r_bp["adopted"].get("bonus_prob", {}).get("value") == _V)
+    _V1 = {**_V, "1": {**_V["1"], "big": "1/274.0"}}
+    t("★★②1セット違うだけで採用しない★★",
+      "bonus_prob" not in compare(
+          [_bpage(_H1, _V), _bpage(_H2, _V1)])["adopted"])
+    _V2 = {k: v for k, v in _V.items() if k != "6"}
+    t("　③設定が1つ足りないだけで採用しない",
+      "bonus_prob" not in compare(
+          [_bpage(_H1, _V), _bpage(_H2, _V2)])["adopted"])
+    _V3 = {k: {kk: vv for kk, vv in v.items() if kk != "total"}
+           for k, v in _V.items()}
+    t("　④片方に合算が無ければ採用しない",
+      "bonus_prob" not in compare(
+          [_bpage(_H1, _V), _bpage(_H2, _V3)])["adopted"])
+    t("★★⑤1出典だけでは採用しない★★",
+      "bonus_prob" not in compare([_bpage(_H1, _V)])["adopted"])
+    # ★別名の見出しでも、正規化されたあとは同じ票になる★
+    _alias_html = _BON.replace("<th>BIG</th>", "<th>BB</th>") \
+        .replace("<th>REG</th>", "<th>RB</th>") \
+        .replace("<th>合算</th>", "<th>合成</th>")
+    _va, _ = bonus_matrix_from_tables(_BON)
+    _vb, _ = bonus_matrix_from_tables(_alias_html)
+    t("★★⑥見出しの書き方が違う2出典でも、同じ票になる★★",
+      compare([_bpage(_H1, _va),
+               _bpage(_H2, _vb)])["adopted"].get(
+                   "bonus_prob", {}).get("value") == _va)
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")

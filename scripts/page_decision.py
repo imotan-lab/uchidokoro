@@ -57,6 +57,14 @@ SCHEMAS = (SCHEMA, SCHEMA_V2)          # ★判定書単体として読める版
 #   ★False に倒さない★＝旧形式として静かに扱われるほうが危ない。
 ENABLED_PUBLICATION_SCHEMA = SCHEMA
 ENABLED_PUBLICATION_SCHEMAS = (SCHEMA,)
+# ★★いま新台を発行する版★★（2026-08-26・Codex31〜32回目の助言）
+#   ★解凍の切替点を1つにする★＝直す前は
+#     ・名乗り  `_emit_schema()`
+#     ・判定書  `decide(material)`
+#   の**二重指定**で、片方だけ v2 にすると
+#   「名乗りと中身の食い違い」を発行側で作れた（今回止めたばかりの穴）。
+#   ★ここを変えるだけで、名乗りも判定書も一緒に変わる★
+EMIT_SCHEMA = SCHEMA
 
 # ★★機種の型★★（掲載判定の線を選ぶためだけに使う。claim には数えない）
 #   AT_CZ   … AT または CZ を持つ機種（いままでの前提）
@@ -557,6 +565,21 @@ def decide_v2(material: dict, policy: dict | None = None,
         index_claims_from_material(material), policy["mode"],
         profile_from_material(material),
         ceiling_state_from_material(material), decided_at)
+
+
+def decide_for_schema(material: dict, schema: str,
+                      policy: dict | None = None,
+                      decided_at: str = "") -> dict:
+    """★その版で判定書を作る唯一の場所★（2026-08-26）
+
+    ★発行する側は版を1つだけ指定する★＝名乗りは判定書の
+    `schema_version` から取るので、2か所が食い違うことがない。
+    """
+    if schema == SCHEMA_V2:
+        return decide_v2(material, policy, decided_at)
+    if schema == SCHEMA:
+        return decide(material, policy, decided_at)
+    raise DecisionError(f"発行できない版です: {schema!r}")
 
 
 def decide(material: dict, policy: dict | None = None,
