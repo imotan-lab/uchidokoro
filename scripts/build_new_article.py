@@ -566,14 +566,24 @@ def checker_questions(material) -> list:
     _prof = ((adopted.get("machine_profile") or {}).get("value")
              or {}).get("profile")
     if _prof == "BONUS" and not (adopted.get("bonus_prob") or {}).get("value"):
+        # ★★2AIが合意しても「1出典」は「2出典」にならない★★
+        #   （2026-08-26・Codex34回目。★私の最初の質問文は間違いだった★＝
+        #     `confirmed_values.record()` は**独立した2系列の出典**と
+        #     `--by claude,codex` を要求するので、`--by 2AI` では拒否される）
+        #   ＝聞くのは「第2の出典を探すこと」であって「合意すること」ではない。
         out.append(
-            "★設定ごとのボーナス確率を突き合わせてください★"
-            "（BIG・REG・合算／★合算は出典に書いてある時だけ★＝計算しない）"
-            "／★決まらないと検索に載せられません★。決めたら "
-            "confirmed_values.py --record --field bonus_prob "
+            "★設定ごとのボーナス確率（BIG・REG・合算）について、"
+            "★発行元の違う第2の出典を探してください★"
+            "（いまは1社しか表を持っていません）。"
+            "両方に**同じ全設定の**BIG・REGがある時だけ記録します"
+            "／★合算も両方に書かれている時だけ★＝計算しない"
+            "／★全設定にあるか、全設定に無いかのどちらか★。"
+            "第2の出典が見つからなければ**記録しません**（載せません）。"
+            "見つかったら confirmed_values.py --record --field bonus_prob "
             '--value-file <{"1": {"big": "1/273.1", "reg": "1/439.8"}, ...} '
-            "を書いたファイル> --why <理由> --by 2AI で記録してください"
-            "（★合算は全設定にあるか、全設定に無いかのどちらか★）")
+            "を書いたファイル> --official-url <公式URL> "
+            '--source "<URL1>|<逐語>" --source "<URL2>|<逐語>" '
+            "--why <理由> --by claude,codex で記録してください")
     # ★★天井の有無は、型とは別に聞く★★（★型から推論しない★）
     #   実例＝X-300 は概要が「完全告知のボーナスタイプ」でも天井欄は「調査中」。
     _has_ceil = bool((material.get("ceilings") or {}).get("adopted"))
@@ -927,6 +937,13 @@ def build_detail(slug, name, release, material) -> dict:
         _note = "確認が取れた設定のみ掲載しています。"
         if _mark:
             _note += SINGLE_SOURCE_NOTE
+        # ★値が採れていない設定があるなら、その名前を出す★（Codex34回目）
+        #   ★黙って省くと「これで全部」と読まれ、段数を誤って伝える★
+        #   （設定別の表と同じ扱いにそろえる）
+        _un_bp = material.get("setting_labels_unconfirmed") or []
+        if _un_bp:
+            _note += ("この機種には" + "・".join(f"設定{x}" for x in _un_bp)
+                      + "もありますが、値が確認できていないため掲載していません。")
         tables.append({"label": "ボーナス確率", "headers": _hdr,
                        "rows": _rows, "note": _note})
     if tables:

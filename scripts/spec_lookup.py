@@ -328,6 +328,33 @@ def setting_labels(lines: list) -> list:
     return out
 
 
+def setting_labels_from_tables(html: str) -> list:
+    """★確かめた表の第1列からも、設定の名前を集める★（2026-08-26・Codex34回目）
+
+    ★なぜ要るか★＝`setting_labels()` は本文の行から「設定1」の形しか拾わない。
+    DMMの表は行頭が**数字だけ**（「1」）なので、
+    ★設定3の行があるのに値が読めなかった、を検知できない★
+    ＝「採れなかった設定を黙って落とさない」という守りがDMMに効かない。
+
+    ★グローバルに数字行を拾わない★＝`setting_table()` を通った表の
+    第1列だけを見る（順位表などを拾わないため）。
+    """
+    out = []
+    for tb in _ht.tables(html):
+        st = setting_table(tb)
+        if st is None:
+            continue
+        _head, body = st
+        for r in body:
+            if not r:
+                continue
+            cell = " ".join(str(r[0]).split())
+            m = _SETTING_CELL.match(cell) or _SETTING_ANY_RE.match(cell)
+            if m and m.group(1) not in out:
+                out.append(m.group(1))
+    return out
+
+
 def _lines(html: str) -> list:
     return [x.strip() for x in _w._visible_text(html).splitlines()]
 
@@ -514,7 +541,11 @@ def read_page(url: str, official_name: str, *,
             v = single_value(lines, spec["labels"], spec["kind"])
         if v:
             out["fields"][key] = v
+    # ★本文の行と、確かめた表の第1列の**両方**から集める★（Codex34回目）
     out["setting_labels"] = setting_labels(lines)
+    for _lb in setting_labels_from_tables(html):
+        if _lb not in out["setting_labels"]:
+            out["setting_labels"].append(_lb)
     out["ok"] = True
     out["reason"] = "OK"
     return out
@@ -986,6 +1017,37 @@ def selftest() -> int:
         t(f"　設定の欄が『{_bad}』なら採らない",
           "1" not in bonus_matrix_from_tables(
               _CAP.replace("<td>1</td>", f"<td>{_bad}</td>"))[0])
+    # ★条件ごとに1つずつ確かめる★（2026-08-26・Codex34回目）
+    #   ★「7通りの壊し方を捕まえる」＝全条件が試験済み、ではない★
+    t("★題の行の span が row=0/col=0 でなければ通さない★",
+      bonus_matrix_from_tables(
+          _CAP.replace("<tr><th colspan='4'>打ち方ごとの機械割</th></tr>",
+                       "<tr><th>打ち方ごとの機械割</th>"
+                       "<th colspan='3'>x</th></tr>"))[0] == {})
+    t("★題セルが rowspan をまたいでいたら通さない★",
+      bonus_matrix_from_tables(
+          _CAP.replace("colspan='4'", "colspan='4' rowspan='2'"))[0] == {})
+    t("★題の行に中身のあるセルが2つあれば通さない★",
+      bonus_matrix_from_tables(
+          _CAP.replace("<tr><th colspan='4'>打ち方ごとの機械割</th></tr>",
+                       "<tr><th colspan='3'>打ち方ごとの機械割</th>"
+                       "<th>備考</th></tr>"))[0] == {})
+    t("★読めない span の指定（colspan=x）は通さない★",
+      bonus_matrix_from_tables(
+          _CAP.replace("colspan='4'", "colspan='x'"))[0] == {})
+    t("　題の行しか無い表（データ行が無い）は通さない",
+      bonus_matrix_from_tables(
+          "<table><tr><th colspan='2'>題</th></tr>"
+          "<tr><th>設定</th><th>BIG</th></tr></table>")[0] == {})
+    # ★設定の名前を、確かめた表の第1列からも集める★（Codex34回目）
+    t("★★数字だけの行からも設定の名前を集める★★"
+      "／★集めないと『採れなかった設定』を黙って落とす★",
+      setting_labels_from_tables(_CAP) == ["1", "6"])
+    t("　設定の表でなければ集めない（順位表を拾わない）",
+      setting_labels_from_tables(_RANK) == [])
+    t("　『設定L』のような書き方も集める",
+      setting_labels_from_tables(
+          _CAP.replace("<td>6</td>", "<td>設定L</td>")) == ["1", "L"])
     # ★spanの無い表は今までどおり★
     t("　題の行が無い表は今までどおり読める",
       bonus_matrix_from_tables(_BON)[0] == _bv)
@@ -1010,6 +1072,41 @@ def selftest() -> int:
           _CAP2.replace("</table>",
                         "<tr><td>1</td><td>97.0%</td><td>-</td></tr></table>"),
           ("出玉率", "機械割"), "%")[0].get("1") == "97.0%")
+
+    # ─── ★実ページの固定試料★（2026-08-26・Codex34回目）───────────
+    #   ★作り物の表だけで確かめない★＝実物の書き方は想像と違う。
+    #   ★試料は書き換えない★（書き換えたら試験が実物と食い違う）。
+    _fx = os.path.join(BASE, "tests", "fixtures")
+    _f_chon = os.path.join(_fx, "chonborista_funky2.html")
+    _f_dmm = os.path.join(_fx, "dmm_machine_3961.html")
+    if os.path.isfile(_f_chon):
+        _h = open(_f_chon, encoding="utf-8").read()
+        _c = _ua.clean_html(_h, "https://chonborista.com/slot/kitadenshi/144333/")
+        _bv_real, _bc_real = bonus_matrix_from_tables(_c)
+        t("★★実ページから設定ごとのボーナス確率が採れる★★"
+          "（ちょんぼりすた・ファンキージャグラー2）",
+          not _bc_real and sorted(_bv_real) == ["1", "2", "3", "4", "5", "6"]
+          and _bv_real["1"] == {"big": "1/266.4", "reg": "1/439.8",
+                                "total": "1/165.9"})
+        t("　実ページの値が保存契約を通る",
+          validate_bonus_prob_value(_bv_real) is None)
+        t("　実ページから設定の名前も集まる",
+          setting_labels_from_tables(_c) == ["1", "2", "3", "4", "5", "6"])
+    else:
+        t("★実ページの試料がありません（tests/fixtures）★", False)
+    if os.path.isfile(_f_dmm):
+        _h2 = open(_f_dmm, encoding="utf-8").read()
+        _c2 = _ua.clean_html(_h2, "https://p-town.dmm.com/machines/3961")
+        _tbl_ok = [setting_table(tb) for tb in _ht.tables(_c2)]
+        _tbl_ok = [x for x in _tbl_ok if x]
+        t("★★実ページの『題の行つき』の表を読める（DMM）★★"
+          "／★直す前は0件だった★", len(_tbl_ok) >= 2)
+        t("　DMMの機械割は採らない（列の意味が違う＝方針が決まるまで不採用）",
+          per_setting_from_tables(_c2, ("出玉率", "機械割"), "%")[0] == {})
+        t("　DMMからは設定の名前が集まる（採れなかった設定を落とさないため）",
+          setting_labels_from_tables(_c2) == ["1", "2", "3", "4", "5", "6"])
+    else:
+        t("★実ページの試料がありません（DMM）★", False)
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")

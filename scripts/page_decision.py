@@ -55,7 +55,10 @@ SCHEMAS = (SCHEMA, SCHEMA_V2)          # ★判定書単体として読める版
 #   `is_auto()` だけが False という**中間状態**を作れた。
 #   → 置いてよい版をここで名指しし、それ以外は**例外で止める**。
 #   ★False に倒さない★＝旧形式として静かに扱われるほうが危ない。
-ENABLED_PUBLICATION_SCHEMA = SCHEMA_V2
+# ★★単数の定数は置かない★★（2026-08-26・Codex34回目）
+#   ★`EMIT_SCHEMA` とは別に「許可版」の単数を持つと、
+#     `EMIT_SCHEMA` だけ切り替えたときに食い違う★
+#   ＝発行版は `EMIT_SCHEMA`、許可版は `ENABLED_PUBLICATION_SCHEMAS` を直接使う。
 # ★★2026-08-26：解凍した★★（配線・収集器・記事・通し確認がそろったため）
 #   ★v1 も置ける版のまま残す★＝既存11機種は v1 で作られている。
 #   外すと `machine_class()` が全部例外で止める＝サイトの生成が丸ごと止まる。
@@ -705,8 +708,8 @@ def machine_class(machine: dict, policy: dict | None = None) -> str:
     if pub not in ENABLED_PUBLICATION_SCHEMAS:
         raise DecisionError(
             f"いまは {pub!r} を machines.json に置けません"
-            f"（配線がそろうまで凍結中・置いてよいのは "
-            f"{ENABLED_PUBLICATION_SCHEMA!r}）(slug={machine.get('slug')})")
+            f"（置いてよいのは "
+            f"{ENABLED_PUBLICATION_SCHEMAS!r}）(slug={machine.get('slug')})")
     if status is not None:
         raise DecisionError(
             f"publication_policy と status は同居できません "

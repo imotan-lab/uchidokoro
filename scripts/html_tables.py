@@ -388,6 +388,27 @@ def selftest() -> int:
       tables("<h3>x</h3><table><tr><th>a</th><td>1&nbsp;G</td></tr></table>"
              )[0]["pairs"] == [("a", "1 G")])
 
+    # ─── ★spanの読み方★（2026-08-26・Codex34回目）─────────────
+    #   ★読めない指定は「またいでいる」側に倒す★＝
+    #   `colspan="x"` を 1 と読むと、題の行の検査をすり抜ける。
+    t("★★読めない span の指定は『またいでいる』側に倒す★★",
+      _span_num("x") == 9999 and _span_num("") == 1
+      and _span_num("0") == 9999 and _span_num("-1") == 9999
+      and _span_num("2") == 2 and _span_num(None) == 1)
+    _sp1 = tables("<table><tr><th colspan='3'>題</th></tr>"
+                  "<tr><th>a</th><th>b</th><th>c</th></tr>"
+                  "<tr><td>1</td><td>2</td><td>3</td></tr></table>")[0]
+    t("★★spanの位置（行・列・幅）を残す★★"
+      "／★真偽だけだと『題の行にしかspanが無い』を証明できない★",
+      _sp1["spans"] == [{"row": 0, "col": 0, "rowspan": 1, "colspan": 3}])
+    _sp2 = tables("<table><tr><th>a</th><th>b</th></tr>"
+                  "<tr><td rowspan='2'>1</td><td>2</td></tr></table>")[0]
+    t("　データ行の span も、その位置のまま残る",
+      _sp2["spans"] == [{"row": 1, "col": 0, "rowspan": 2, "colspan": 1}])
+    t("　span が無ければ spans は空",
+      "spans" not in tables("<table><tr><th>a</th></tr>"
+                            "<tr><td>1</td></tr></table>")[0])
+
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
     if ng:

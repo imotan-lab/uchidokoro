@@ -3550,7 +3550,7 @@ def selftest() -> int:
         #     凍結している間は、切り替えたら試験が落ちるのが正しい。）
         t("　組み立てた結果を返す（中身を見てから書ける）",
           r["preview"]["machine"]["publication_policy"]
-          == _pdz.ENABLED_PUBLICATION_SCHEMA
+          == _pdz.EMIT_SCHEMA
           and "status" not in r["preview"]["machine"])
         t("　slugは公式URLから作る", r["slug"] == "zzz")
 

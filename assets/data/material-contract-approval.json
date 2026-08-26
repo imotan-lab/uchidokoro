@@ -6,7 +6,7 @@
   "assets/data/directory-catalogs.json": "787c06d3b57416bf1d11d37d76941194bcda2e810a971c8bd2fb62c90db1da3a",
   "assets/data/maker-catalogs.json": "612fa17f5b50f509475096b51ca1f4d8c261c5805e22e337875aa478054c0b3c",
   "assets/data/source-registry.json": "2449477484e8def3fae001065de72ce208943a44487cb5dcd109a7af101f3687",
-  "scripts/add_machine_run.py": "c391257a2a8c63e575520426394501821784b5bbfd12331ef497ba1515ce9061",
+  "scripts/add_machine_run.py": "a274ebc28eca95964e8499583e9d3a497f403347e406be9491695124d1e262e5",
   "scripts/adoption_basis.py": "cf1b77c4e5f3fa80d3dec205880b461efcabdc0c3a511e854e2a3ea3119eb428",
   "scripts/at_spec_lookup.py": "74f11d27f804891ec42eba1568d500405469457ed95502396fff9f3627e084f2",
   "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
@@ -19,7 +19,7 @@
   "scripts/dmm_discover.py": "894d76b027c1508020d71640a74f3f0a02fbd8d6a1d42e3a15a2e8764d008592",
   "scripts/dmm_machine.py": "99045256ca097d6e5c5345935e68b4362e634f53bf7ae32fda9f1b0d0c2d1471",
   "scripts/fetched_page.py": "95fbc94faca17f7b5ab2a370501c2db22dee38bc2009e87285d1f3fbf2a928dc",
-  "scripts/html_tables.py": "7b62bb2c57b6e74bc44da068c93f1e94a6e5034a67d22396621d08549df46715",
+  "scripts/html_tables.py": "5d0f32d7e988ce0696e07b4ac118d119ea4c4e2280b57acee89e0c6ebaa78c3e",
   "scripts/lineage_check.py": "2bbb9cfdad4cdf6edc22f1a3f4cec20f804ccceb66453a88d83d8572d86d6e98",
   "scripts/machine_sources.py": "41b3bdfdfdb4faa85c9fe0bae6630a50bcd5db6ac860699c3c5aa3ffb8c07003",
   "scripts/maker_identity_cache.py": "bde5e29a5444b2d0dc70b9b0683199c28d9b2e104be5452bfea8a02df39a15c2",
@@ -28,7 +28,7 @@
   "scripts/page_probe.py": "25d0411b1552d018ab1e528a58be1ce1d53a4e47de68f84fc2f951ccaa1f182d",
   "scripts/slug_binding.py": "17c235c10cd7fed94d4c774bbe7b88c87349eff214bedaa22182d3fe79f26af6",
   "scripts/source_lineage.py": "706cbbd437ba491995e233e9758a73f7672e27a47021cfc1274f0c2e9d9f79ed",
-  "scripts/spec_lookup.py": "dd0f8c2ba4c080f2b4b36aa70a48b6f36373d93d4df74070cb22bad3e92a49ac",
+  "scripts/spec_lookup.py": "1c4c1d79feb0a69450ec247091f1b2c7963a57b28c5e35e69ea1c085d217d7bc",
   "scripts/user_area.py": "3b5c5f307aa981c3b24385aee70f5a996b9e704afa41c26d0099bf7451d12420"
  },
  "imports": {
