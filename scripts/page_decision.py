@@ -1044,7 +1044,13 @@ def selftest() -> int:
     _saved_enabled = ENABLED_PUBLICATION_SCHEMAS
     try:
         globals()["ENABLED_PUBLICATION_SCHEMAS"] = (SCHEMA, SCHEMA_V2)
-        _cls_v2 = machine_class(_m_v2, {"mode": "normal"})
+        # ★例外で死なせない★（2026-08-26）＝ここで落ちると試験は
+        #   ❌を1行も出さずに終わり、「ただ落ちただけ」に分類される。
+        #   ＝★その守りを見ている試験がある証拠にならない★
+        try:
+            _cls_v2 = machine_class(_m_v2, {"mode": "normal"})
+        except Exception as _e_cls:                      # noqa: BLE001
+            _cls_v2 = f"例外: {type(_e_cls).__name__}: {_e_cls}"
     finally:
         globals()["ENABLED_PUBLICATION_SCHEMAS"] = _saved_enabled
     t("★★解凍すれば v2 は AUTO_INDEXABLE になる★★"

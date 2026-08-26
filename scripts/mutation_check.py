@@ -606,9 +606,17 @@ MUTATIONS = [
     {
         "why": "機種の区分を v1 の式で計算し直す（v2 の機種が永久に AUTO_PENDING になる）",
         "file": "scripts/page_decision.py",
-        "before": "    if pd.get(\"schema_version\") == SCHEMA_V2:",
-        "after": "    if False:",
-        "run": ["scripts/page_decision.py"],
+        # ★分岐を recompute にまとめたので、目印もそちらへ移した★（2026-08-26）
+        # ★ありうる形にする★（2026-08-26）＝版の分岐を書き間違えると、
+        #   「知らない版」で例外になるのではなく**v1の式で計算**してしまう。
+        #   例外で落ちると「ただ落ちただけ」に分類され、守りの証拠にならない。
+        "before": '        return decide_from_claims_v2(\n'
+                  '            pd["claims"], mode, pd["machine_profile"],\n'
+                  '            pd["ceiling_state"], pd["decided_at"])',
+        "after": '        return decide_from_claims(\n'
+                 '            pd["claims"], mode, pd["decided_at"])',
+        "run": ["scripts/page_decision.py",
+                "scripts/apply_indexing_policy.py"],
     },
     {
         "why": "天井の有無を型から推論する（「ボーナスタイプだから天井なし」＝出典に無い断定・Codex27回目）",
