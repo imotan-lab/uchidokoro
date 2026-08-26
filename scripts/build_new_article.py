@@ -677,6 +677,34 @@ def build_checker(material) -> dict | None:
     return out
 
 
+def payout_range_view(adopted: dict):
+    """★記事に出す「機械割の範囲」★（2026-08-27・運営者の判断）
+
+    ①`payout_range` が採れていればそれを使う（今までどおり）
+    ②無ければ、★確認済みの設定別の出玉率★の一番下と一番上を使う
+      （新しい数字は作らない＝その表に載っている値をそのまま指す）
+
+    返すもの: (低い方, 高い方, 根拠を持つ行) ／ 作れなければ None
+    ★名乗りは呼ぶ側が付ける★（_t は build の中の道具なので）
+    """
+    rng = (adopted or {}).get("payout_range")
+    if rng and isinstance(rng.get("value"), dict):
+        v = rng["value"]
+        return v["low"], v["high"], rng
+    got = (adopted or {}).get("payout_rate")
+    if not got or not isinstance(got.get("value"), dict):
+        return None
+    nums = []
+    for raw_v in got["value"].values():
+        m = re.fullmatch(r"\s*([0-9]+(?:\.[0-9]+)?)\s*%\s*", str(raw_v))
+        if not m:
+            return None               # ★読めない値が1つでもあれば作らない★
+        nums.append(float(m.group(1)))
+    if len(nums) < 2:
+        return None                   # ★設定が1つだけなら「範囲」ではない★
+    return min(nums), max(nums), got
+
+
 def build_detail(slug, name, release, material) -> dict:
     """記事データを作る。★集まった材料だけを表に入れる★"""
     require_basis(material, slug)    # ★根拠の無い値は記事にしない★
@@ -693,11 +721,9 @@ def build_detail(slug, name, release, material) -> dict:
     #   載せているのが P-WORLD だけ（実測）なので、記事に出すと
     #   「出典2件で一致した値だけ」という約束も守れない。
     #   同定に使う値は identity.regulatory_model_code に残す（読者には出ない）。
-    if (rng := adopted.get("payout_range")):
-        v = rng["value"]
-        facts.append(["機械割",
-                      f"{v['low']}%〜{v['high']}%"
-                      f"{_t(rng)}"])
+    if (_pr := payout_range_view(adopted)):
+        _lo, _hi, _row = _pr
+        facts.append(["機械割", f"{_lo}%〜{_hi}%{_t(_row)}"])
     if (g50 := adopted.get("games_per_50")):
         facts.append(["50枚あたり",
                       f"約{g50['value']['games']:g}G"
@@ -889,10 +915,9 @@ def build_detail(slug, name, release, material) -> dict:
     spec_body.append(f"**登場時期**：{_fmt_release(release)}"
                      if release else f"**登場時期**：{PENDING_ITEM}")
     # ★型式名は書かない★（2026-08-09・運営者決定。同定専用にした）
-    rng = adopted.get("payout_range")
+    _pr2 = payout_range_view(adopted)
     spec_body.append(
-        f"**機械割**：{rng['value']['low']}%〜{rng['value']['high']}%"
-        f"{_t(rng)}" if rng
+        f"**機械割**：{_pr2[0]}%〜{_pr2[1]}%{_t(_pr2[2])}" if _pr2
         else f"**機械割**：{PENDING_ITEM}")
     g50 = adopted.get("games_per_50")
     spec_body.append(
@@ -1875,6 +1900,46 @@ def selftest() -> int:
         _bad_stopped = True
     t("★★壊れた形は記事を作る前に止まる（黙って読み飛ばさない）★★",
       _bad_stopped)
+
+    # ★★機械割の範囲を、確認済みの設定別の値から書く★★（2026-08-27・運営者の判断）
+    #   ★新しい数字は作らない★＝その表に載っている値の端をそのまま指す。
+    _rate6 = {**IM, "value": {"1": "97.0%", "2": "98.0%", "5": "105.3%",
+                              "6": "109.4%"}, "sources": ["a", "b"]}
+    t("★★設定別の値から範囲を作る（一番下と一番上をそのまま）★★",
+      payout_range_view({"payout_rate": _rate6})[:2] == (97.0, 109.4))
+    t("　採れている範囲があればそちらを使う",
+      payout_range_view({"payout_range": {**IM, "value":
+                                          {"low": 97.0, "high": 110.0}},
+                         "payout_rate": _rate6})[:2] == (97.0, 110.0))
+    # ★飛ばしても2つ以上残る材料で試す★（2026-08-27・壊し方の道具が指摘）
+    #   ★直す前の試験は、飛ばした結果「値が1つ」になっていたので、
+    #     隣の検査（設定が1つなら作らない）に助けられて緑だった★
+    t("★読めない値が1つでもあれば作らない（勝手に飛ばさない）★",
+      payout_range_view({"payout_rate": {**IM, "value":
+                                         {"1": "約97%前後", "2": "98.0%",
+                                          "6": "109.4%"}}})
+      is None)
+    t("　設定が1つだけなら「範囲」にしない",
+      payout_range_view({"payout_rate": {**IM, "value": {"1": "97.0%"}}})
+      is None)
+    t("　値そのものが無ければ作らない",
+      payout_range_view({}) is None)
+    # ★通しで確かめる★＝記事の本文に実際に出るところまで
+    _mat_rate = {"adopted": {k: v for k, v in _mat_e2e["adopted"].items()
+                             if k != "payout_range"}}
+    _mat_rate["adopted"]["payout_rate"] = _rate6
+    _det_rate = build_detail("zzz_rate", "試験R", "2026-09-01", _mat_rate)
+    _spec_rate = [s for s in _det_rate["sections"]
+                  if s["title"] == "基本スペック"][0]["body"]
+    t("★★記事の本文に「97.0%〜109.4%」と出る★★",
+      any("97.0%〜109.4%" in b for b in _spec_rate))
+    t("　範囲も設定別の値も無ければ『未確認』のまま",
+      any(PENDING_ITEM in b and "機械割" in b for b in
+          [s for s in build_detail(
+              "zzz_norate", "試験N", "2026-09-01",
+              {"adopted": {k: v for k, v in _mat_e2e["adopted"].items()
+                           if k != "payout_range"}})["sections"]
+           if s["title"] == "基本スペック"][0]["body"]))
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")

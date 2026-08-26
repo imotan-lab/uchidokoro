@@ -519,6 +519,18 @@ def claims_grew(old_decision: dict, material: dict) -> list:
            if c not in _pdz.RETIRED_CLAIMS]
     new = _pdz.regression_claims_from_material(material)
     lost = [c for c in old if c not in new]
+    # ★★書けるものは「消えた」ことにしない★★（2026-08-27・運営者の判断）
+    #   機械割の範囲は、確認済みの設定別の出玉率から
+    #   一番下と一番上をそのまま書ける（新しい数字は作らない）。
+    #   ★書けるかどうかを決めるのは build_new_article の1か所だけ★
+    #   （同じ規則を2か所に書かない）。
+    if "payout_range" in lost:
+        try:
+            import build_new_article as _ba_pr
+            if _ba_pr.payout_range_view(material.get("adopted") or {}):
+                lost = [c for c in lost if c != "payout_range"]
+        except Exception:                                # noqa: BLE001
+            pass                          # ★読めないときは今までどおり止める★
     if lost:
         return [f"確認済みだった事実が消えます: {', '.join(sorted(lost)[:5])}"]
     return []
@@ -1312,6 +1324,15 @@ def selftest() -> int:
       not claims_grew({"claims": ["payout_range"]}, _MAT_CV))
     t("　それでも検索の濃さには数えない（公開判定は変えていない）",
       _pdz.index_claims_from_material(_MAT_CV) == [])
+    # ★★書けるものは「消えた」ことにしない★★（2026-08-27・運営者の判断）
+    #   確認済みの設定別の値から範囲を書けるなら、その事実は失われていない。
+    _MAT_RATE = {"adopted": {"payout_rate": {"value": {"1": "97.0%",
+                                                       "6": "109.4%"}}}}
+    t("★★設定別の値から範囲を書けるなら「消えた」と言わない★★",
+      not claims_grew({"claims": ["payout_range"]}, _MAT_RATE))
+    t("　書けないとき（値が1つだけ）は、いままでどおり止める",
+      claims_grew({"claims": ["payout_range"]},
+                  {"adopted": {"payout_rate": {"value": {"1": "97.0%"}}}}))
     # ── 前に載っていた内容が消える/変わる更新を止める（Codex102/103回目）
     OLD = {"lead": "この機種の紹介です。",
            "factTable": [["型式名", "L機/1"], ["機械割", "97.0%〜110.0%"]],

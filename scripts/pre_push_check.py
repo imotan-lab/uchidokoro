@@ -184,6 +184,22 @@ def main() -> int:
         print(tail)
         if r.returncode != 0:
             ng.append(name)
+    # ★★壊し方の目印が消えていないか★★（2026-08-27・実際に2回やった）
+    #   ★試験は走らせない★＝目印の文字が実在するか数えるだけ（一瞬で終わる）。
+    #   `ci_repro` の赤を読まずに push して、CIを落としたのがこの型。
+    _mut = subprocess.run(
+        [sys.executable, os.path.join(BASE, "scripts", "mutation_check.py"),
+         "--selftest"],
+        cwd=BASE, capture_output=True, text=True, encoding="utf-8",
+        errors="replace", env=env)
+    if _mut.returncode != 0:
+        print()
+        print("★★壊し方の目印が消えています★★（CIが必ず落ちます）")
+        for _l in (_mut.stdout or "").splitlines():
+            if _l.startswith("❌") or "合格" in _l:
+                print("   " + _l)
+        print("   → 直した場所に合わせて mutation_check.py の目印を直してください")
+        ng.append("壊し方の目印")
     if ng:
         print()
         print("★pushを止めました★ 失敗: " + " / ".join(ng))

@@ -1155,6 +1155,30 @@ MUTATIONS = [
         "after": '        findings.append("allowlist:リスト外")',
         "run": ["scripts/backup_guard.py"],
     },
+    # ─── 2026-08-27・機械割の範囲を設定別の値から書く ───────────
+    {
+        "why": "★読めない値を黙って飛ばす（残った値だけで範囲を作る）★",
+        "file": "scripts/build_new_article.py",
+        "before": "            return None               "
+                  "# ★読めない値が1つでもあれば作らない★",
+        "after": "            continue",
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "★設定1つだけでも「範囲」と書く（同じ値を2度並べる）★",
+        "file": "scripts/build_new_article.py",
+        "before": "    if len(nums) < 2:",
+        "after": "    if len(nums) < 1:",
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "★書ける範囲まで「事実が消えた」と数える（育成が永久に止まる）★",
+        "file": "scripts/grow_machine.py",
+        "before": "            if _ba_pr.payout_range_view("
+                  'material.get("adopted") or {}):',
+        "after": "            if False:",
+        "run": ["scripts/grow_machine.py"],
+    },
 ]
 
 
