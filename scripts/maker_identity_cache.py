@@ -87,6 +87,16 @@ PROOF_PROFILES = {
     #   → ただし★メーカー欄が読めてDMMと一致していること★が必須
     #     （題もメーカーも食い違うページを、弱い側で通さないため）
     "title_name_core_mismatch": {"min_directories": 1, "needs_maker": True},
+    # ★題の後ろの飾りを分解できない★（2026-08-26・実測で25%が該当）
+    #   例＝「機種名 スロット 新台 設定判別 打ち方 プレミアム 解析」の
+    #   「プレミアム」。★飾りの辞書に足す直し方は採らない★ので、
+    #   機械では決められない＝2AIが決めて控える。
+    #   → ★対象ページ自身＋DMM★でよい（上と同じ扱い）
+    #   → ただし★メーカー欄が読めてDMMと一致していること★が必須
+    #   ★救えるのはちょうど TAIL_CONFLICT のときだけ★＝
+    #   別機種（NAME_CORE_MISMATCH）・規格違い（GEN_MARK_CONFLICT）・
+    #   派生機（DERIV_MARK_CONFLICT）は今までどおり拒否する。
+    "title_tail_conflict": {"min_directories": 1, "needs_maker": True},
 }
 # ★何を根拠にしたか★＝控えを読む人・監査が、守りの範囲を取り違えないための印。
 BASIS_SCOPE = "directory_consensus_only"
@@ -799,15 +809,23 @@ def verify_evidence(evidence: list, fetch=None, expected: str = "",
             _prof = str((rec or {}).get("proof_profile") or "")
             _is_target = (url_key(url)
                           == url_key((rec or {}).get("target_url")))
-            if not _ok_id and _prof == "title_name_core_mismatch" and _is_target:
-                if _why_id != "NAME_CORE_MISMATCH":
+            # ★★救える型と、その型で許す落ち方★★
+            #   （2026-08-26。`title_tail_conflict` を足した）
+            #   ★型ごとに落ち方を厳密に決める★＝
+            #   「どれかの型なら何でも救える」にしない。
+            _RESCUE = {"title_name_core_mismatch": "NAME_CORE_MISMATCH",
+                       "title_tail_conflict": "TAIL_CONFLICT"}
+            if not _ok_id and _prof in _RESCUE and _is_target:
+                _want_why = _RESCUE[_prof]
+                if _why_id != _want_why:
                     raise CacheError(
-                        f"題の不一致以外の理由で落ちています（{url}）: "
-                        f"{str(_why_id)[:60]}／★この型で救えるのは題だけです★")
+                        f"この型で救える落ち方ではありません（{url}）: "
+                        f"{str(_why_id)[:60]}／★{_prof} が救えるのは "
+                        f"{_want_why} だけです★")
                 if str(mn).strip() not in body:
                     raise CacheError(
                         f"本文にDMMの正式名がそのままありません（{url}）"
-                        "／★略称の題を救うには、正式名が本文にあることが要ります★")
+                        "／★題を救うには、正式名が本文にあることが要ります★")
             elif not _ok_id:
                 raise CacheError(
                     f"そのページはこの機種のページではありません（{url}）: "
@@ -1514,6 +1532,24 @@ def selftest() -> int:
         t(f"★URLのそろえ方：{_a[-12:]} と {_b[-12:]} は"
           + ("同じ" if _same else "別"),
           (url_key(_a) == url_key(_b)) is _same)
+
+
+    # ─── ★題の後ろの飾りが分解できないページを2AIが救う★（2026-08-26）
+    #   ★実測＝索引が正しく当てた14ページ中3件（ちょんぼりすたの25%）が
+    #     TAIL_CONFLICT だけで材料からも票からも外れていた★
+    #   ★型ごとに、救ってよい落ち方を厳密に決める★
+    #   （「どれかの型なら何でも救える」にしない）
+    _RESCUE_WANT = {"title_name_core_mismatch": "NAME_CORE_MISMATCH",
+                    "title_tail_conflict": "TAIL_CONFLICT"}
+    t("★★救いの型は、名簿と1対1で対応している★★",
+      set(_RESCUE_WANT) <= set(PROOF_PROFILES))
+    t("★★新しい型も、メーカー欄の一致を必ず要求する★★"
+      "／★題もメーカーも食い違うページを弱い側で通さない★",
+      PROOF_PROFILES["title_tail_conflict"]["needs_maker"] is True)
+    t("　新しい型は、対象ページ自身＋DMMでよい（2件目は正規の同定を通る）",
+      PROOF_PROFILES["title_tail_conflict"]["min_directories"] == 1)
+    t("★（対照）名簿に無い型は受け取らない★",
+      "title_zzz_unknown" not in PROOF_PROFILES)
 
     ng = sum(1 for _, o in results if not o)
     print("%d/%d 合格" % (len(results) - ng, len(results)))

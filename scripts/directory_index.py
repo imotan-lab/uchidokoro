@@ -389,22 +389,38 @@ def remainder_is_decor(rest: str) -> bool:
     return False
 
 
-def lookup_hits(index: dict, core: str) -> list:
-    """索引から、この機種名にあたる項目を集める。"""
+# ★★どうやって当てたか★★（2026-08-26・Codex36回目の指摘2）
+#   ★同定の許可に使ってよいのは EXACT_INDEX_CORE だけ★＝
+#   世代表記の同値化・飾りつきの前方一致は、URLを探すには使えても
+#   「このページはこの機種だ」と名乗る根拠にはしない。
+MATCH_EXACT = "EXACT_INDEX_CORE"
+MATCH_GEN = "GEN_EQUIVALENT"
+MATCH_PREFIX = "CORE_PLUS_DECOR"
+
+
+def lookup_hits_kind(index: dict, core: str) -> tuple:
+    """(項目, どうやって当てたか) を返す。"""
     hits = list(index.get(core) or [])
     if hits:
-        return hits
+        return hits, MATCH_EXACT
     # ★世代表記の同値化★（公式「…2」↔名鑑「…II」）
     ck = _ci.canon_num_tail(core)
     for k, v in index.items():
         if k != core and _ci.canon_num_tail(k) == ck:
             hits += v
-    if hits or not core:
-        return hits
+    if hits:
+        return hits, MATCH_GEN
+    if not core:
+        return hits, ""
     for k, v in index.items():           # ★機種名＋飾り の見出し★
         if k != core and k.startswith(core) and remainder_is_decor(k[len(core):]):
             hits += v
-    return hits
+    return hits, (MATCH_PREFIX if hits else "")
+
+
+def lookup_hits(index: dict, core: str) -> list:
+    """索引から、この機種名にあたる項目を集める。"""
+    return lookup_hits_kind(index, core)[0]
 
 
 def find(*a, **k):
@@ -433,7 +449,7 @@ def _find(official_name: str, catalogs: dict | None = None) -> dict:
         if conf.get("status") != "ACTIVE":
             continue
         r = scan_directory(dir_id, conf)
-        hits = lookup_hits(r["index"], core)
+        hits, match_kind = lookup_hits_kind(r["index"], core)
         if r["surfaces_ok"] == 0:
             state, why = "CATALOG_UNHEALTHY", " / ".join(r["problems"])
         elif len(hits) == 1:
@@ -446,6 +462,11 @@ def _find(official_name: str, catalogs: dict | None = None) -> dict:
         out["results"][dir_id] = {
             "state": state, "why": why,
             "url": hits[0][0] if state == "FOUND" else None,
+            # ★同定の許可に使えるのは EXACT_INDEX_CORE だけ★
+            "match_kind": match_kind if state == "FOUND" else "",
+            # ★索引がその項目に使っていた文字★（あとで見比べられるように）
+            "anchor": (hits[0][1] if state == "FOUND" and len(hits[0]) > 1
+                       else ""),
             "candidates": [u for u, _ in hits],
             "surfaces": f"{r['surfaces_ok']}/{r['surfaces_total']}",
             "index_size": len(r["index"]),

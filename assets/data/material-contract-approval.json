@@ -6,7 +6,7 @@
   "assets/data/directory-catalogs.json": "787c06d3b57416bf1d11d37d76941194bcda2e810a971c8bd2fb62c90db1da3a",
   "assets/data/maker-catalogs.json": "612fa17f5b50f509475096b51ca1f4d8c261c5805e22e337875aa478054c0b3c",
   "assets/data/source-registry.json": "2449477484e8def3fae001065de72ce208943a44487cb5dcd109a7af101f3687",
-  "scripts/add_machine_run.py": "a274ebc28eca95964e8499583e9d3a497f403347e406be9491695124d1e262e5",
+  "scripts/add_machine_run.py": "ea14fe11f2825e6b399eff92e562517ecc69ff07f4cd79a28ad33d6c14bd66b2",
   "scripts/adoption_basis.py": "cf1b77c4e5f3fa80d3dec205880b461efcabdc0c3a511e854e2a3ea3119eb428",
   "scripts/at_spec_lookup.py": "74f11d27f804891ec42eba1568d500405469457ed95502396fff9f3627e084f2",
   "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
@@ -14,7 +14,7 @@
   "scripts/ceiling_lookup.py": "ad54309152dd7fe19c56ff574f7b468a70ef994e456b4a0a2c2f4a68fb00cf00",
   "scripts/confirmed_values.py": "6ee22fac29bab1e859892580a12688850f18e55974dc9f95ab6e9a9cad1ac010",
   "scripts/cz_lookup.py": "24727d5876e0a5e233ff6c913e96ae3d3fc50d7e5d5869b019e443bde374b02b",
-  "scripts/directory_index.py": "5c6e1471c073b2462b056b0cd6c2f7ee7a2fa8d26f8696213a6e891b896dbdc5",
+  "scripts/directory_index.py": "a758913881d5b7b6105069e5f3dfcb3e5a64aa2054578094d517166240ad2e21",
   "scripts/dmm_calendar.py": "ad0ae2ffb3977307cf361e4a137288e9bccdd1f15fb43e560aa629c5942a6930",
   "scripts/dmm_discover.py": "894d76b027c1508020d71640a74f3f0a02fbd8d6a1d42e3a15a2e8764d008592",
   "scripts/dmm_machine.py": "99045256ca097d6e5c5345935e68b4362e634f53bf7ae32fda9f1b0d0c2d1471",
@@ -22,8 +22,8 @@
   "scripts/html_tables.py": "5d0f32d7e988ce0696e07b4ac118d119ea4c4e2280b57acee89e0c6ebaa78c3e",
   "scripts/lineage_check.py": "2bbb9cfdad4cdf6edc22f1a3f4cec20f804ccceb66453a88d83d8572d86d6e98",
   "scripts/machine_sources.py": "41b3bdfdfdb4faa85c9fe0bae6630a50bcd5db6ac860699c3c5aa3ffb8c07003",
-  "scripts/maker_identity_cache.py": "bde5e29a5444b2d0dc70b9b0683199c28d9b2e104be5452bfea8a02df39a15c2",
-  "scripts/model_code_lookup.py": "311e968d3ed3378e4e72470eb3dc777084331d7dfd257f36a74e30925de87093",
+  "scripts/maker_identity_cache.py": "4e388827a84cf9840f971118d4c70fa17ccf6cbddf11c955296184f864c627f3",
+  "scripts/model_code_lookup.py": "aa829e6a3ab3d828f08ed349f75b9312a6f45ba3fec61ddcba9f88af61466d19",
   "scripts/new_machine_watch.py": "72319ceacf38d0a8b71bf5ec442664187224a8a8288376e49425027198acbe15",
   "scripts/page_probe.py": "25d0411b1552d018ab1e528a58be1ce1d53a4e47de68f84fc2f951ccaa1f182d",
   "scripts/slug_binding.py": "17c235c10cd7fed94d4c774bbe7b88c87349eff214bedaa22182d3fe79f26af6",
@@ -204,6 +204,5 @@
    "ceiling_lookup",
    "new_machine_watch"
   ]
- },
- "_deps_changed_why": "confirmed_values が page_decision を読むようになった理由（2026-08-26）\n\n★読むのは試験の中だけ★＝`selftest()` の通し確認で\n`page_decision.index_claims_from_material()` を呼び、\n「`merge_into()` が刻んだ根拠が、検索の濃さに実際に届くか」を確かめる。\n\n★なぜ要るか★＝Codex35回目の指摘。\n`merge_into()` は `_from: confirmed_values` を刻むが `basis` を刻まず、\n一方で検索の濃さは `basis == INDEPENDENT_MULTI` の値だけを数えていた。\n＝第2の出典を見つけて正しく記録しても claim にならず、\nボーナスタイプ機は永久に検索へ載れなかった。\n★通し確認が緑だったのは、試験が `merge_into()` を通さず\n最初から `basis` を付けた材料を渡していたから★なので、\n**本物の入口から濃さの判定まで1本で通す**必要がある。\n\n★材料の採否の集合には入れない★\n  ・`page_decision` は**公開物の契約**（build_pages_artifact --approve）の側で\n    すでに承認対象になっている（同じものを2つの契約で二重に持たない）。\n  ・`confirmed_values` の**本体の処理**は `page_decision` を使わない\n    （読むのは `selftest()` の中だけ）＝材料の採否を左右しない。\n  ・遅延 import（関数の中）にしてあるので、本体の読み込みには影響しない。"
+ }
 }

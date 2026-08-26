@@ -591,8 +591,16 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
     #     ③落ちた理由が厳密に NAME_CORE_MISMATCH ④除去後の本文にDMMの
     #       正式名が完全一致で存在
     #   ★④が真でも identity_ok にはしない★（返せるのは候補だけ）
+    # ★★救える落ち方は2つ★★（2026-08-26）
+    #   ・NAME_CORE_MISMATCH … 題が略称
+    #   ・TAIL_CONFLICT     … 題の後ろの飾りを分解できない
+    #     （実測＝索引が正しく当てた14ページ中3件＝ちょんぼりすたの25%）
+    #   ★落ち方ごとに控えの型を分ける★（どちらでも何でも救える、にしない）
+    _RESCUE_PROFILE = {"NAME_CORE_MISMATCH": "title_name_core_mismatch",
+                       "TAIL_CONFLICT": "title_tail_conflict"}
     for r in looks or []:
-        if r.get("identity_ok") or r.get("reason") != "NAME_CORE_MISMATCH":
+        _prof_want = _RESCUE_PROFILE.get(str(r.get("reason") or ""))
+        if r.get("identity_ok") or not _prof_want:
             continue
         if not slug or not machine_name:
             continue
@@ -615,7 +623,7 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
         if not _seen:
             continue                       # メーカー欄が読めないものは回さない
         v = verdict_of(mc_expected(r, maker), _seen, r.get("url") or "",
-                       "title_name_core_mismatch")
+                       _prof_want)
         if v == "ACCEPT_MATERIAL":
             accepted.add(r["url"])
             notes.append({"url": r["url"], "expected": mc_expected(r, maker),
@@ -627,7 +635,7 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
                           "machine_name": machine_name,
                           "release_date": release_date,
                           "verdict": "ACCEPT_MATERIAL",
-                          "proof_profile": "title_name_core_mismatch",
+                          "proof_profile": _prof_want,
                           "relationship_verified": False,
                           "basis_scope": _mic.BASIS_SCOPE,
                           "eligible_at_collection_end": None,
@@ -638,8 +646,11 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
                 "key": f"title:{slug}:{r['url']}",
                 "text": (
                     f"★この名鑑ページを、この機種の材料に使ってよいですか★／"
-                    f"{r['url']} は題が略称で、機械の同定に落ちました"
-                    f"（NAME_CORE_MISMATCH）。DMMの正式名は「{machine_name}」"
+                    f"{r['url']} は"
+                    + ("題が略称で" if _prof_want == "title_name_core_mismatch"
+                       else "題の後ろの飾り語を機械が分解できず")
+                    + "、機械の同定に落ちました"
+                    + f"（{r.get('reason')}）。DMMの正式名は「{machine_name}」"
                     f"（導入日 {release_date}）です。"
                     "★機械は『本文に正式名があるから本人だ』とは決めません★＝"
                     "そこは2AIが本文と欄の関係を読んで判断してください。"
@@ -647,7 +658,7 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
                     "--machine-url https://p-town.dmm.com/machines/<機種ID> "
                     f"--machine-name \"{machine_name}\" "
                     f"--target-url {r['url']} "
-                    "--proof-profile title_name_core_mismatch "
+                    f"--proof-profile {_prof_want} "
                     f"--expected {mc_expected(r, maker)} "
                     f"--seen \"{_seen}\" "
                     "--verdict ACCEPT_MATERIAL/REJECT_MATERIAL "

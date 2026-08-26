@@ -814,6 +814,7 @@ def _related(expected: str, owners: set) -> bool:
 #   あとで誰かが繋ぎ直せてしまう。
 
 
+
 def dmm_identity_ok(html: str, ident: dict) -> tuple:
     """★DMMの機種ページを、DMM自身の決まりで確かめる★（2026-08-22・台帳#453）
 
@@ -921,8 +922,12 @@ def lookup(url: str, official_name: str, expected_maker: str = "",
         #   ★これは「本人だ」という判断ではない★＝機械がしてよいのは
         #   「完全一致の文字列があるか見る」までで、そこから本人性を
         #   結論づけるのは二段目の意味判断（Codex依頼233の4）。
-        #   題が略称のときだけ、候補として印を付ける。
-        if why == "NAME_CORE_MISMATCH" and official_name:
+        #   ★2AIへ回してよい落ち方だけ、候補として印を付ける★（2026-08-26）
+        #     ・NAME_CORE_MISMATCH … 題が略称
+        #     ・TAIL_CONFLICT     … 題の後ろの飾りを分解できない
+        #   ★別機種・規格違い・派生機は今までどおり回さない★
+        #   （GEN_MARK_CONFLICT / DERIV_MARK_CONFLICT は候補にしない）
+        if why in ("NAME_CORE_MISMATCH", "TAIL_CONFLICT") and official_name:
             body = " ".join(_w._visible_text(html).split())
             out["name_in_body"] = str(official_name).strip() in body
             # ★メーカー欄は「見えた事実」として返す★
