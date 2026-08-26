@@ -2950,6 +2950,183 @@ def check_38_home_path_leak(machines: list) -> list[str]:
     return sorted(ng)
 
 
+# ─────────────────────────────────────────────────────────────
+# ★★54_どこから採ったかの言い回し★★（2026-08-26・運営者の指示＋Codex29回目）
+# ─────────────────────────────────────────────────────────────
+#   ★運営者の指示★＝「いちいちほかサイトから引っ張ってきてるって
+#   分かるように書かなくていい」「ほかサイトのコピーと思われたくない」。
+#
+#   ★★監査17（サイト名の名簿）ではこれを見つけられない★★＝
+#   名前を伏せた「出典2件で一致」は**名簿に1件も当たらない**。
+#   実際、記事に148か所・ひな型・meta説明・固定ページに残っていて、
+#   運営者が自分で記事を読んで気づいた。＝別の型なので別の見張りが要る。
+#
+#   ★見るのは読者に届くものだけ★＝
+#     ・HTMLは**見える文字**と meta／OGP／JSON-LD（コメント・scriptは見ない）
+#       ＝2026-08-26に生のまま数えたら、131ページのJSコメント
+#         「JSソース内のURL」が全部引っかかった。
+#     ・記事データ（machine-details）と machines.json は全文
+#       （鍵は英字なので当たらない・identity は読者に出ないので外す）
+#     ・X投稿の定型文は**文字列だけ**を ast で見る（コメントを拾わない）
+#
+#   ★例外はファイル単位にしない★＝その一文だけを名指しする
+#     （ファイルごと外すと、同じファイルに新しく入ったものを見逃す）
+_SOURCE_WORDS = (
+    "出典", "解析サイト", "情報源", "解析元", "掲載元", "引用元",
+    "他サイト", "別サイト",
+)
+# ★数え方の言い回し★（サイト名も「出典」も使わずに、よそから採ったと分かる形）
+_SOURCE_PATTERNS = (
+    r"\d+\s*件で一致", r"\d+\s*出典", r"\d+\s*サイトで一致",
+    r"公開されている.{0,14}をもとに",
+)
+# ★この一文だけは通す★（うちの根拠の話ではないもの）
+_SOURCE_ALLOWED_SENTENCES = (
+    # 受け付けない問い合わせの例（contact.html）
+    "解析情報の有償販売・他社の有料情報源からの転載依頼",
+    "他サイトへの誘導・スパムと判断される内容",
+    # ★Google AdSense の定型の説明（privacy.html）★
+    #   うちの根拠の話ではない。★文言を変えると説明として不正確になる★ので
+    #   消さずに名指しで通す。
+    "ユーザーの過去の当サイトや他サイトへのアクセス情報に基づいた広告を配信する",
+)
+
+
+def _judge_54_wording(text: str) -> list:
+    """★判定はここだけ★（対照実験がこの関数を直接たたく）"""
+    import re as _re
+    t = str(text or "")
+    for ok in _SOURCE_ALLOWED_SENTENCES:
+        t = t.replace(ok, "")
+    hits = []
+    for w in _SOURCE_WORDS:
+        c = t.count(w)
+        if c:
+            hits.append(f"'{w}' × {c}件")
+    for p in _SOURCE_PATTERNS:
+        m = _re.findall(p, t)
+        if m:
+            hits.append(f"'{m[0]}' のような書き方 × {len(m)}件")
+    return hits
+
+
+def _check_54_selftest() -> list:
+    """★見張り54が本当に働くかを、毎回いっしょに確かめる★（対照実験）
+
+    ★本物のファイルは触らない★＝判定の関数に文字列を渡すだけ。
+    （2026-08-24に、本番のファイルへ書いてから戻す作りで
+      偽の機種を残す事故を起こしたので、この形にする）
+    """
+    bad = []
+    for name, text, want in (
+            ("出典という語", "天井は999Gです（出典2件で一致）。", True),
+            ("解析サイト", "解析サイトの数値を基準にしています。", True),
+            ("情報源", "最新の情報は各情報源をご確認ください。", True),
+            ("件数の言い回し", "設定別の数値（2件で一致）。", True),
+            ("出典の数え方", "3出典で確認しました。", True),
+            ("公開されている〜をもとに",
+             "掲載情報は公開されている解析データや実戦値をもとに作成しています。",
+             True),
+            ("★受け付けない問い合わせの一文は通す★",
+             "<li>他サイトへの誘導・スパムと判断される内容</li>", False),
+            ("★有料情報源からの転載依頼も通す★",
+             "<li>解析情報の有償販売・他社の有料情報源からの転載依頼</li>", False),
+            ("★通してよい一文の中に別の違反があれば鳴る★",
+             "<li>他サイトへの誘導・スパムと判断される内容</li>"
+             "<p>出典は2件です</p>", True),
+            ("★AdSenseの定型文は通す★",
+             "ユーザーの過去の当サイトや他サイトへのアクセス情報に基づいた"
+             "広告を配信することがあります。", False),
+            ("ふつうの記事本文", "天井は999Gで、恩恵はATです。", False),
+            ("いまの名乗り（確認1件のみ）", "天井は999G（確認1件のみ）です。", False)):
+        got = bool(_judge_54_wording(text))
+        if got != want:
+            bad.append(f"★{name}★ → {'鳴った' if got else '黙った'}")
+    return bad
+
+
+_IN_54 = [False]
+
+
+def _visible_and_meta(html: str) -> str:
+    """読者に届く文字だけ（見える本文 ＋ meta/OGP/JSON-LD）。
+
+    ★コメントと script は入れない★＝そこに書いてあっても読者は読まない。
+    ★ただし JSON-LD（application/ld+json）は検索結果に出るので入れる★
+    """
+    import json as _json
+    import re as _re
+    try:
+        import html_check as _hc54
+        vis = _hc54.visible_text(html)
+    except Exception:                                    # noqa: BLE001
+        vis = html
+    metas = _re.findall(r'<meta[^>]+content="([^"]*)"', html)
+    lds = []
+    for m in _re.finditer(
+            r'<script[^>]+application/ld\+json[^>]*>(.*?)</script>',
+            html, _re.S):
+        try:
+            lds.append(_json.dumps(_json.loads(m.group(1)), ensure_ascii=False))
+        except Exception:                                # noqa: BLE001
+            lds.append(m.group(1))
+    return " ".join([vis] + metas + lds)
+
+
+def _py_string_literals(path: Path) -> str:
+    """.py の中の**文字列だけ**（コメント・変数名は拾わない）"""
+    import ast as _ast
+    try:
+        tree = _ast.parse(load_text(path))
+    except Exception:                                    # noqa: BLE001
+        return ""
+    out = []
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.Constant) and isinstance(node.value, str):
+            out.append(node.value)
+    return " ".join(out)
+
+
+def check_54_source_wording(machines: list) -> list:
+    """どこから採ったかを読者に見せていないか（★サイト名とは別の型★）"""
+    if _IN_54[0]:
+        return []
+    _IN_54[0] = True
+    try:
+        ng = [f"★見張り54そのものが働いていません★: {x}"
+              for x in _check_54_selftest()]
+        # ① 記事データ
+        for jf in sorted((BASE / "assets" / "data" / "machine-details")
+                         .glob("*.json")):
+            for h in _judge_54_wording(load_text(jf)):
+                ng.append(f"machine-details/{jf.name}: {h}")
+        # ② 機種一覧（同定の控えは読者に出ないので外す）
+        mj = BASE / "assets" / "data" / "machines.json"
+        if mj.is_file():
+            for h in _judge_54_wording(_strip_identity(load_text(mj))):
+                ng.append(f"machines.json: {h}")
+        # ③ 固定ページ・ひな型（見える文字＋meta＋JSON-LD）
+        for hf in sorted(BASE.glob("*.html")):
+            if hf.name == "404.html":
+                continue
+            for h in _judge_54_wording(_visible_and_meta(load_text(hf))):
+                ng.append(f"{hf.name}: {h}")
+        # ④ 公開ページ
+        for hf in sorted((BASE / "machines").glob("*/index.html")):
+            for h in _judge_54_wording(_visible_and_meta(load_text(hf))):
+                ng.append(f"machines/{hf.parent.name}/: {h}")
+        # ⑤ X投稿の定型文（文字列だけ）
+        for py in ("post_to_x.py", "post_update_to_x.py"):
+            p = BASE / "scripts" / py
+            if p.is_file():
+                for h in _judge_54_wording(_py_string_literals(p)):
+                    ng.append(f"{py}（投稿文）: {h}")
+        return ng
+    finally:
+        _IN_54[0] = False
+
+
+
 CHECKS = [
     ("1_インラインstyle", check_1_inline_style),
     ("2_サブパス残骸", check_2_old_subpath),
@@ -3004,6 +3181,7 @@ CHECKS = [
     ("51_試験の数え方が早すぎないか", check_51_selftest_tally),
     ("52_試験用の残骸", check_52_test_residue),
     ("53_出典の投稿欄", check_53_source_user_area),
+    ("54_どこから採ったかの言い回し", check_54_source_wording),
 ]
 
 
@@ -3046,6 +3224,13 @@ def selftest() -> int:
     for x in _check_53_selftest():
         t("★見張り53★ " + x, False)
     t("★★見張り53（出典の投稿欄）が働いている★★", not _check_53_selftest())
+    # ★★2026-08-26：54をここに足し忘れていた★★
+    #   壊し方の道具が見つけた＝「見張り54を黙らせる」を試しても試験は緑だった。
+    #   ＝53には入れてあったのに、同じことを翌週にやった。
+    for x in _check_54_selftest():
+        t("★見張り54★ " + x, False)
+    t("★★見張り54（どこから採ったかの言い回し）が働いている★★",
+      not _check_54_selftest())
     t("★★試験の数え方の見張りが働いている★★（項目51）",
       not check_51_selftest_tally([]))
     ng = [n for n, ok in results if not ok]

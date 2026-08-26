@@ -128,6 +128,34 @@ def _today() -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
 
+# ★★「一晩」の区切り★★（2026-08-26・Codex29回目の指摘3）
+#   ★暦日で数えると、日付をまたぐ夜は上限が2倍になる★
+#   新台タスクは 23:30 に始まり、明け方まで走る。
+#   暦日で数えていたので 23:30〜23:59 に20件、00:00〜 にもう20件が通った。
+#   ★昼を境にする★＝「一晩」は 12:00 から翌 11:59 まで。
+#   （明け方の 04:30 を境にすると、締切を過ぎて走った分が
+#     翌晩に繰り上がって、また枠が空いてしまう）
+NIGHT_ROLLOVER_HOUR = 12
+
+
+def _night_id(now=None) -> str:
+    """その時刻が属する「晩」の名前（＝晩が始まった日の日付）。"""
+    now = now or datetime.now()
+    if now.hour < NIGHT_ROLLOVER_HOUR:
+        now = now - timedelta(days=1)
+    return now.strftime("%Y-%m-%d")
+
+
+def _night(data: dict, now=None) -> dict:
+    """★一晩ぶんの記録★（`_day` とは別の入れ物。暦日で消えない）"""
+    nid = _night_id(now)
+    n = data.setdefault("night", {})
+    if n.get("id") != nid:
+        n.clear()
+        n.update({"id": nid, "slugs": []})
+    return n
+
+
 def _load(path: str) -> dict:
     if not os.path.isfile(path):
         return {"schema": "task-guard/v1", "tasks": {}}
@@ -685,7 +713,11 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
                     f"{slug} はすでに一覧にあります（{stage}）。"
                     "新台の無制限枠は使えません（更新タスクの担当です）")
             d = _day(data)
-            done = d.setdefault("unlimited_slugs", [])
+            # ★★数えるのは「一晩」ぶん★★（2026-08-26・Codex29回目の指摘3）
+            #   ★`_day` は暦日で消えるので、日付をまたぐ夜は上限が2倍になった★
+            done = _night(data).setdefault("slugs", [])
+            # ★暦日の記録も残す★（その日に何件作ったかを見るため。上限には使わない）
+            d.setdefault("unlimited_slugs", [])
             # ★★暴走止め★★（2026-08-26・台帳#479）
             #   ★説明文には「上限に当たったら止めて知らせる」と書いてあるのに、
             #     実装は記録するだけで拒否していなかった★。
@@ -700,6 +732,8 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
                     "うまくいっている状態ではないので止めます")
             if slug not in done:
                 done.append(slug)
+            if slug not in d["unlimited_slugs"]:
+                d["unlimited_slugs"].append(slug)
             e = _entry(data, task)
             e["target_slug"] = slug
             _save(path, data)
@@ -2092,8 +2126,39 @@ def selftest() -> int:
         #   UNLIMITED_RUNAWAY_CAP で止めて知らせる。
         for i in range(5, UNLIMITED_RUNAWAY_CAP):
             claim("add-machine", "n%d" % i, fp2)
-        t("★★新台は普通の枠を使わない（上限まで続けて担当できる）★★",
-          len(_load(fp2)["day"]["unlimited_slugs"]) == UNLIMITED_RUNAWAY_CAP)
+        # ★鍵が無いときに例外で落ちない★（2026-08-26）
+        #   ★落ちると「試験が❌」ではなく「ただ落ちた」になり、
+        #     この守りを見ている試験がある証拠にならない★（壊し方の道具の指摘）
+        _nrec = (_load(fp2).get("night") or {}).get("slugs") or []
+        t("★★新台は普通の枠を使わない（上限まで続けて担当できる）★★"
+          "／★記録は「一晩」の入れ物に入る（暦日の入れ物ではない）★",
+          len(_nrec) == UNLIMITED_RUNAWAY_CAP)
+        t("　上限に当たったら止めて知らせる",
+          raises(lambda: claim("add-machine", "n999", fp2), "同じ晩"))
+        # ★★日付をまたいでも同じ晩として数える★★
+        #   （2026-08-26・Codex29回目の指摘3。★実際に2倍通っていた★）
+        #   ★暦日で数えると 23:30〜23:59 に20件、00:00〜04:30 にもう20件★
+        #   ＝説明文の「1晩20件」と実装が食い違っていた。
+        _n_pre = _night_id(datetime(2026, 8, 26, 23, 45))
+        _n_post = _night_id(datetime(2026, 8, 27, 3, 15))
+        _n_next = _night_id(datetime(2026, 8, 27, 23, 45))
+        t("★★23:45 と、その日をまたいだ 03:15 は同じ晩★★"
+          "／★暦日で数えると別々になり、上限が2倍になる★",
+          _n_pre == _n_post == "2026-08-26")
+        t("　翌日の 23:45 は次の晩（いつまでも同じ晩にはならない）",
+          _n_next == "2026-08-27" and _n_next != _n_pre)
+        t("　昼（12:00）でその日の晩に切り替わる",
+          _night_id(datetime(2026, 8, 27, 11, 59)) == "2026-08-26"
+          and _night_id(datetime(2026, 8, 27, 12, 0)) == "2026-08-27")
+        # ★対照実験★＝入れ物そのものが日付で入れ替わることを見る
+        _nd = {}
+        _night(_nd, datetime(2026, 8, 26, 23, 45))["slugs"].append("zzz_a")
+        _keep_a = list(_night(_nd, datetime(2026, 8, 27, 3, 15))["slugs"])
+        _keep_b = list(_night(_nd, datetime(2026, 8, 27, 23, 45))["slugs"])
+        t("★★日付をまたいでも記録が残る（消えたら上限が空く）★★",
+          _keep_a == ["zzz_a"])
+        t("　次の晩になれば記録は空になる（いつまでも溜まらない）",
+          _keep_b == [])
         t("★★暴走止めに当たったら止めて知らせる★★"
           "／★説明文には「ある」と書いてあるのに、実装は記録するだけだった★",
           raises(lambda: claim("add-machine", "n_over", fp2), "上限"))

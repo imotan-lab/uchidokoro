@@ -56,6 +56,70 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #   ★同じ壊し方を戻さないこと★＝いまの取り決めでは必ず「捕まえられない」
 #   と出て、本物の見落としが埋もれる。
 MUTATIONS = [
+    # ─── 2026-08-26・Codex29回目で足した守り ───────────────
+    {
+        "why": "★v2の凍結を外す（手で置いたv2が通ってしまう）★",
+        "file": "scripts/page_decision.py",
+        "before": "ENABLED_PUBLICATION_SCHEMAS = (SCHEMA,)",
+        "after": "ENABLED_PUBLICATION_SCHEMAS = SCHEMAS",
+        "run": ["scripts/page_decision.py"],
+    },
+    {
+        "why": "★凍結中の版を、例外ではなく静かに旧形式扱いにする★",
+        "file": "scripts/page_decision.py",
+        "before": '    if pub not in ENABLED_PUBLICATION_SCHEMAS:\n'
+                  '        raise DecisionError(',
+        "after": '    if False:\n'
+                 '        raise DecisionError(',
+        "run": ["scripts/page_decision.py"],
+    },
+    # ★外した壊し方（2026-08-26）★
+    #   「発行の試験を『どちらの版でも合格』に戻す」＝
+    #   ★これは守り（コード）ではなく**試験の判定式**を緩める操作★。
+    #   試験を緩めれば試験は通る。当たり前なので、これを
+    #   「守られていない」と数えると道具の判定が濁る。
+    #   ★同じ穴は page_decision 側の2件（凍結を外す・例外にしない）で見ている★
+    {
+        "why": "★断り書きの文言を突き合わせない（黙って食い違う）★",
+        "file": "scripts/publish_new_machine.py",
+        "before": "    ng += check_notice_text(html)",
+        "after": "",
+        "run": ["scripts/publish_new_machine.py"],
+    },
+    {
+        "why": "★暴走止めを暦日で数える（日をまたぐ夜は2倍通る）★",
+        "file": "scripts/task_guard.py",
+        "before": "    if now.hour < NIGHT_ROLLOVER_HOUR:\n"
+                  "        now = now - timedelta(days=1)",
+        "after": "    pass",
+        "run": ["scripts/task_guard.py"],
+    },
+    {
+        "why": "★一晩の記録を暦日の入れ物に戻す★",
+        "file": "scripts/task_guard.py",
+        "before": '            done = _night(data).setdefault("slugs", [])',
+        "after": '            done = d.setdefault("unlimited_slugs", [])',
+        "run": ["scripts/task_guard.py"],
+    },
+    {
+        "why": "★どこから採ったかの見張り（54）を黙らせる★",
+        "file": "scripts/audit_site.py",
+        "before": '    hits = []\n'
+                  '    for w in _SOURCE_WORDS:',
+        "after": '    hits = []\n'
+                 '    for w in ():',
+        "run": ["scripts/audit_site.py"],
+    },
+    {
+        "why": "★見張り54の例外を、一文ではなくファイルごとに広げる★",
+        "file": "scripts/audit_site.py",
+        "before": '    for ok in _SOURCE_ALLOWED_SENTENCES:\n'
+                  '        t = t.replace(ok, "")',
+        "after": '    for ok in _SOURCE_ALLOWED_SENTENCES:\n'
+                 '        if ok in t:\n'
+                 '            return []',
+        "run": ["scripts/audit_site.py"],
+    },
     {
         "why": "天井の抽出器が根拠を保存し忘れる",
         "file": "scripts/ceiling_lookup.py",

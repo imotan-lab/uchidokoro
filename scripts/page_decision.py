@@ -44,7 +44,19 @@ SCHEMA = "page-decision/v1"
 #   v1 に項目を足すと**既にある11機種が「壊れている」扱い**になる。
 #   v1 は読めるまま残し、v2 へは明示的に移す。
 SCHEMA_V2 = "page-decision/v2"
-SCHEMAS = (SCHEMA, SCHEMA_V2)
+SCHEMAS = (SCHEMA, SCHEMA_V2)          # ★判定書単体として読める版★
+# ★★machines.json に置いてよい版★★（2026-08-26・Codex29回目のP0）
+#   ★読めること★と★置いてよいこと★は別物。
+#   v2は配線（is_auto / build_public_data / build_ledger / crosscheck_gates /
+#   apply_indexing_policy / index.html / machine.html / meta-auto.js）が
+#   そろうまで**発行しない**と決めた（c71bb2ea）。
+#   ★ところが止めたのは発行する側の1行だけだった★ので、
+#   手で置けば `validate_decision` も `machine_class` も通り、
+#   `is_auto()` だけが False という**中間状態**を作れた。
+#   → 置いてよい版をここで名指しし、それ以外は**例外で止める**。
+#   ★False に倒さない★＝旧形式として静かに扱われるほうが危ない。
+ENABLED_PUBLICATION_SCHEMA = SCHEMA
+ENABLED_PUBLICATION_SCHEMAS = (SCHEMA,)
 
 # ★★機種の型★★（掲載判定の線を選ぶためだけに使う。claim には数えない）
 #   AT_CZ   … AT または CZ を持つ機種（いままでの前提）
@@ -632,6 +644,13 @@ def machine_class(machine: dict, policy: dict | None = None) -> str:
         raise DecisionError(
             f"不明な publication_policy です: {pub!r} "
             f"(slug={machine.get('slug')})")
+    # ★★既知だが、いま置いてはいけない版★★（2026-08-26・Codex29回目のP0）
+    #   ★「知らない版」と分けて言う★＝原因が違うので直し方も違う。
+    if pub not in ENABLED_PUBLICATION_SCHEMAS:
+        raise DecisionError(
+            f"いまは {pub!r} を machines.json に置けません"
+            f"（配線がそろうまで凍結中・置いてよいのは "
+            f"{ENABLED_PUBLICATION_SCHEMA!r}）(slug={machine.get('slug')})")
     if status is not None:
         raise DecisionError(
             f"publication_policy と status は同居できません "
@@ -975,9 +994,31 @@ def selftest() -> int:
     _d_v2 = decide_from_claims_v2(_c3, "normal", "BONUS", "NONE", "2026-08-26")
     _m_v2 = {"slug": "zzz_v2", "name": "試験", "publication_policy": SCHEMA_V2,
              "page_decision": _d_v2}
-    t("★★v2 の機種が、条件を満たせば AUTO_INDEXABLE になる★★"
+    # ★★いまは v2 を machines.json に置けない★★（2026-08-26・Codex29回目のP0）
+    #   ★手で置いたら「静かに旧形式扱い」ではなく**例外で止まる**こと★
+    try:
+        machine_class(_m_v2, {"mode": "normal"})
+        _v2_frozen = False
+    except DecisionError as _e_v2:
+        _v2_frozen = "凍結中" in str(_e_v2)
+    t("★★手で置いた v2 は、区分の判定そのものが止める★★"
+      "／★False に倒すと旧形式として静かに公開されてしまう★", _v2_frozen)
+    t("　止めた理由が『知らない版』ではなく『いまは置けない版』と分かる",
+      _v2_frozen)
+    # ★★解凍したときに、ちゃんと v2 の式で計算し直すか★★
+    #   ★凍結の試験だけにすると、解凍した日にこの穴が復活する★
+    #   （区分を v1 の式で計算すると、v2 の機種は永久に AUTO_PENDING）
+    _saved_enabled = ENABLED_PUBLICATION_SCHEMAS
+    try:
+        globals()["ENABLED_PUBLICATION_SCHEMAS"] = (SCHEMA, SCHEMA_V2)
+        _cls_v2 = machine_class(_m_v2, {"mode": "normal"})
+    finally:
+        globals()["ENABLED_PUBLICATION_SCHEMAS"] = _saved_enabled
+    t("★★解凍すれば v2 は AUTO_INDEXABLE になる★★"
       "／★区分を v1 の式で計算すると、永久に AUTO_PENDING のまま★",
-      machine_class(_m_v2, {"mode": "normal"}) == "AUTO_INDEXABLE")
+      _cls_v2 == "AUTO_INDEXABLE")
+    t("　試験のあとで凍結が戻っている（試験が本番の設定を汚さない）",
+      ENABLED_PUBLICATION_SCHEMAS == (SCHEMA,))
     # ★★天井の有無は、型から推論しない★★
     #   実例＝X-300 は概要が「完全告知のボーナスタイプ」でも天井欄は「調査中」。
     t("★★型が BONUS でも、天井の有無は分からないまま★★"

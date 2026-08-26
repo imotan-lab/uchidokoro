@@ -584,7 +584,37 @@ def check_page(slug: str, html: str, expect_noindex: bool = True,
     #   ★契約（作るべき箱の一覧）は build_new_article の定数＝独立した正本★
     if detail is not None:
         ng += check_pending_boxes(html, detail)
+    ng += check_notice_text(html)
     return ng
+
+
+def check_notice_text(html: str) -> list:
+    """★断り書きが、こちらで決めた文言そのものか★（2026-08-26・Codex29回目）
+
+    ★なぜ要るか★
+      `NOTICE_TEXT` はひな型（machine.html）と**二重管理**になっている。
+      `LEGACY_NOTE` は食い違うと生成が止まるので気づけるが、
+      こちらは**止まらずに黙って食い違う**。
+      2026-08-26に実際、ひな型の断り書きから「出典」を落としたとき、
+      この検査は何も言わなかった（定数を直したのは私の手作業）。
+
+    ★見るのは「目印のある箱の中身」だけ★
+      ページのどこかに同じ文字があればよい、にはしない
+      （それは以前 Codex に指摘されて直した型）。
+    """
+    doc = _hc.parse(html)
+    notices = _hc.preview_notices(doc, STATE)
+    if not notices:
+        return []                      # ★個数は上の検査の担当★
+    # ★空白の入れ方は問わない★（2026-08-26）
+    #   ★止めたいのは文言の食い違いで、字下げや折り返しではない★。
+    #   ひな型で1行に書いてある文を折り返しただけで落ちていた（対照実験で判明）。
+    got = ["".join((n.get("text") or "").split()) for n in notices]
+    want = "".join(NOTICE_TEXT.split())
+    bad = [g for g in got if g != want]
+    if bad:
+        return [f"断り書きの文言が決めたものと違います: {bad[0][:60]!r}"]
+    return []
 
 
 def check_pending_boxes(html: str, detail: dict) -> list:
@@ -2586,6 +2616,23 @@ def selftest() -> int:
             '<div class="preview-banner" role="note" ' + NOTICE + ">"
             + NOTICE_TEXT + "</div></body></html>")
     t("★作ったページの中身を必ず確かめる★", check_page("zzz_test", good) == [])
+    # ★★断り書きの文言そのものを突き合わせる★★（2026-08-26・Codex29回目の指摘4）
+    #   ★直す前は、ひな型側の文言を変えても検査が何も言わなかった★
+    #   （`preview_notices()` は目印の**個数**を数えるだけ）。
+    #   ＝`LEGACY_NOTE` と違い「止まらずに黙って食い違う」箇所だった。
+    _bad_notice = good.replace(NOTICE_TEXT, "⚠ このページは出典で確認が取れた"
+                               "項目のみ掲載しています。未掲載の項目は確認でき次第"
+                               "更新します。")
+    t("★★断り書きが決めた文言と違えば止める★★"
+      "／★これが無いと、ひな型だけ書き換えても誰も気づかない★",
+      any("断り書きの文言" in x for x in check_page("zzz_test", _bad_notice)))
+    t("　1文字違うだけでも止める（似ていれば通す、にしない）",
+      any("断り書きの文言" in x
+          for x in check_page("zzz_test",
+                              good.replace(NOTICE_TEXT, NOTICE_TEXT + "。"))))
+    t("　空白の入れ方が違うだけなら通す（改行や字下げで落とさない）",
+      check_page("zzz_test", good.replace(
+          NOTICE_TEXT, "  " + NOTICE_TEXT.replace("。", "。\n  "))) == [])
     # ★index対象（AUTO_INDEXABLE）: robots meta が無いことを要求★（Codex72回目）
     good_indexable = good.replace(
         '<meta name="robots" content="noindex,follow">', "")
