@@ -686,8 +686,11 @@ def material_page_identity_ok(page, official_name: str, *,
                               extra_tail_ok=extra_tail_ok)
     if ok:
         return True, "OK"
-    # ★救えるのは題の不一致だけ★
-    if why != "NAME_CORE_MISMATCH":
+    # ★★許可証で救える落ち方★★（2026-08-26。TAIL_CONFLICT を足した）
+    #   ★片方だけ直すと、材料を読む側で同じ理由でもう一度落ちる★
+    #   （CLAUDE.md に前例あり。実際にまた踏んだ）
+    #   ★別機種・規格違い・派生機は今までどおり救わない★
+    if why not in ("NAME_CORE_MISMATCH", "TAIL_CONFLICT"):
         return False, why
     if not grant:
         return False, why

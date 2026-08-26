@@ -130,6 +130,24 @@ def _empty() -> dict:
     return {"schema_version": SCHEMA, "machines": {}}
 
 
+def canon_slug(slug: str) -> str:
+    """★控えの鍵にする形★（2026-08-26・実際に踏んだ穴）
+
+    移行前に公開した機種は、サイト側のslugが `pw_...` のままで、
+    控えの保存側は DMM のURLから `dmm_<機種ID>` を作る。
+    ★そのままだと保存と参照の鍵が一致せず、2AIの結論が永久に効かない★。
+    ★増やせない対応表（slug_binding）で必ず同じ形に寄せる★。
+    """
+    s = str(slug or "").strip()
+    if not s:
+        return s
+    try:
+        import slug_binding as _sb
+    except Exception:                     # noqa: BLE001
+        return s
+    return _sb.LEGACY_BINDINGS.get(s, s)
+
+
 def load() -> dict:
     """控えを読む。★壊れていたら黙って「無い」ことにしない★"""
     if not os.path.exists(STORE):
@@ -464,7 +482,8 @@ def verdict_for(slug: str, expected: str = "", seen: str = "", store=None,
         return None
     got = store if store is not None else load()
     _t = url_key(material_url)
-    for rec in (got.get("machines") or {}).get(slug) or []:
+    # ★鍵は必ず同じ形にそろえる★（移行した機種は pw_ のまま来る）
+    for rec in (got.get("machines") or {}).get(canon_slug(slug)) or []:
         if url_key(rec.get("target_url")) != _t:
             continue
         v = rec.get("verdict")
@@ -944,7 +963,7 @@ def _fin_url() -> str:
 def forget(slug: str, target_url: str, store=None) -> bool:
     """控えを消す（判断を取り消すとき）。★対象ページで指す★"""
     got = store if store is not None else load()
-    rows = (got.get("machines") or {}).get(slug) or []
+    rows = (got.get("machines") or {}).get(canon_slug(slug)) or []
     _t = url_key(target_url)
     left = [r for r in rows
             if url_key(r.get("target_url")) != _t]
@@ -1550,6 +1569,29 @@ def selftest() -> int:
       PROOF_PROFILES["title_tail_conflict"]["min_directories"] == 1)
     t("★（対照）名簿に無い型は受け取らない★",
       "title_zzz_unknown" not in PROOF_PROFILES)
+
+
+    # ─── ★控えの鍵をそろえる★（2026-08-26・実際に踏んだ）──────────
+    #   ★2AIで一致した結論を控えたのに、まったく同じページが除外され続けた★
+    #   保存は DMM のURLから `dmm_<機種ID>`、参照は機種のslug（`pw_...`）で、
+    #   ★鍵が一致せず、移行した10機種は2AIで決めても永久に効かなかった★。
+    import slug_binding as _sb_t
+    t("★★移行した機種のslugは、控えの鍵にそろえる★★"
+      "／★そろえないと、2AIで決めても効かない★",
+      canon_slug("pw_10513") == "dmm_5054")
+    t("　対応表に無いslugはそのまま", canon_slug("dmm_5089") == "dmm_5089")
+    t("　空はそのまま", canon_slug("") == "" and canon_slug(None) == "")
+    t("★対応表の中身は、そのまま鍵に使える形★",
+      all(v.startswith("dmm_") for v in _sb_t.LEGACY_BINDINGS.values()))
+    # ★対照★＝寄せる前の鍵では引けないことを、控えの形で見る
+    _st_t = {"machines": {"dmm_5054": [
+        {"target_url": "https://x.example/a", "verdict": "ACCEPT_MATERIAL",
+         "expected": "kitadenshi", "seen": "北電子",
+         "proof_profile": "title_tail_conflict"}]}}
+    t("　寄せた鍵なら控えが見える",
+      (_st_t["machines"].get(canon_slug("pw_10513")) or []) != [])
+    t("★（対照）寄せないと控えが見えない★",
+      (_st_t["machines"].get("pw_10513") or []) == [])
 
     ng = sum(1 for _, o in results if not o)
     print("%d/%d 合格" % (len(results) - ng, len(results)))

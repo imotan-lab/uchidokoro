@@ -22,8 +22,8 @@
   "scripts/html_tables.py": "5d0f32d7e988ce0696e07b4ac118d119ea4c4e2280b57acee89e0c6ebaa78c3e",
   "scripts/lineage_check.py": "2bbb9cfdad4cdf6edc22f1a3f4cec20f804ccceb66453a88d83d8572d86d6e98",
   "scripts/machine_sources.py": "41b3bdfdfdb4faa85c9fe0bae6630a50bcd5db6ac860699c3c5aa3ffb8c07003",
-  "scripts/maker_identity_cache.py": "4e388827a84cf9840f971118d4c70fa17ccf6cbddf11c955296184f864c627f3",
-  "scripts/model_code_lookup.py": "aa829e6a3ab3d828f08ed349f75b9312a6f45ba3fec61ddcba9f88af61466d19",
+  "scripts/maker_identity_cache.py": "6568e6dc7369a3b95d1b345beed9b9f73aac8ac19b7563ce0e41af91ff86085f",
+  "scripts/model_code_lookup.py": "f45f7e3b30e39495812c765abea20c6a524129d3fbaca88091e9b9760d966eef",
   "scripts/new_machine_watch.py": "72319ceacf38d0a8b71bf5ec442664187224a8a8288376e49425027198acbe15",
   "scripts/page_probe.py": "25d0411b1552d018ab1e528a58be1ce1d53a4e47de68f84fc2f951ccaa1f182d",
   "scripts/slug_binding.py": "17c235c10cd7fed94d4c774bbe7b88c87349eff214bedaa22182d3fe79f26af6",
@@ -161,6 +161,7 @@
    "dmm_machine",
    "model_code_lookup",
    "new_machine_watch",
+   "slug_binding",
    "source_lineage",
    "user_area"
   ],
@@ -204,5 +205,6 @@
    "ceiling_lookup",
    "new_machine_watch"
   ]
- }
+ },
+ "_deps_changed_why": "maker_identity_cache が slug_binding を読むようになった理由（2026-08-26）\n\n★控えの鍵を1つにそろえるため★＝保存は DMM のURLから `dmm_<機種ID>` を作り、\n参照は機種の slug（移行前に公開した機種は `pw_...`）で引いていたので、\n★鍵が一致せず、移行した10機種は2AIで決めても永久に効かなかった★\n（実際に踏んだ＝マイジャグラーVI で控えを記録しても除外され続けた）。\n\n★材料の採否の集合に入れる★\n  ・`slug_binding` は**採否の鍵そのもの**を決めるので、\n    ここが変わると「どの機種の控えを引くか」が変わる＝採否が変わる。\n  ・`slug_binding` の対応表は**増やせない形でコードに固定**してある\n    （新しい機種を足して逃がせない）ので、契約に入れても増え続けない。\n  ・`add_machine_run` は既に `slug_binding` を読んでおり、\n    契約にも入っている。同じ物を同じ扱いにする。"
 }
