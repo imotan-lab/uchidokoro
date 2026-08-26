@@ -252,6 +252,45 @@ def _skip_for_index(v, count_confirmed: bool) -> bool:
                 and str(v.get("basis") or "") == "INDEPENDENT_MULTI")
 
 
+_RATE_PCT = re.compile(r"\s*([0-9]+(?:\.[0-9]+)?)\s*%\s*")
+
+
+def derived_payout_range(adopted: dict):
+    """★確認済みの設定別の値から「機械割の範囲」を作る★（2026-08-27）
+
+    ★運営者の判断★＝確認済みの設定別の値から、その最小と最大を
+    「機械割◯〜◯%」と書いてよい。
+    ★新しい数字は作らない★＝その表に載っている値の端をそのまま指す
+    （中間の値も全部その表に載っている＝出典が割れたときの「幅」とは別物）。
+
+    ★ここに置く理由★＝判定書・記事・消失の判定が同じものを見るため。
+    記事の側だけで作ると、★判定書は「基本スペックは未確認」と言うのに
+    記事が書いている★という食い違いになる（実際に踏んだ）。
+
+    返すもの: (低い方, 高い方, 元になった行) ／ 作れなければ None
+    """
+    got = (adopted or {}).get("payout_rate")
+    if not isinstance(got, dict) or not isinstance(got.get("value"), dict):
+        return None
+    # ★★2AIの確定値からは作らない★★（2026-08-27）
+    #   確定値は「どの話題の裏付けか」を項目ごとに控えてある。
+    #   設定別の出玉率は **設定示唆まとめ** の裏付けなので、そこから
+    #   **基本スペック** の要約行を作ると裏付けが話題をまたぐ。
+    #   ★またぐのを許すと「別の話題の値で免除される」穴が開く★
+    #   （Codex19回目で塞いだ線）。読者はその値を設定別の表で見られる。
+    if got.get("_from") == "confirmed_values":
+        return None
+    nums = []
+    for raw_v in got["value"].values():
+        m = _RATE_PCT.fullmatch(str(raw_v))
+        if not m:
+            return None               # ★読めない値が1つでもあれば作らない★
+        nums.append(float(m.group(1)))
+    if len(nums) < 2:
+        return None                   # ★設定が1つだけなら「範囲」ではない★
+    return min(nums), max(nums), got
+
+
 def _claims(material: dict, *, count_confirmed: bool) -> list:
     """材料から一意claim IDの一覧を作る（契約 §4）。
 
@@ -289,6 +328,14 @@ def _claims(material: dict, *, count_confirmed: bool) -> list:
         #   検索に載る判定が出てしまう。★載せるのは裏取り後★
         if v and not _skip_for_index(v, count_confirmed):
             got.add(key)
+    # ★★消失の判定にだけ、作れる範囲を入れる★★（2026-08-27）
+    #   ★検索の濃さには入れない★＝同じ表から2件になり水増しになる
+    #     （入れてしまい、品質ラインを越える判定を作った。自分で踏んだ）
+    #   ★知っているかの側には入れる★＝設定別の値から機械割を書けるので、
+    #     その事実は失われていない。入れないと育成が永久に止まる。
+    if count_confirmed and "payout_range" not in got:
+        if derived_payout_range(adopted):
+            got.add("payout_range")
     for c in ((material or {}).get("ceilings") or {}).get("adopted") or []:
         # ★★壊れていないかを先に見る★★（2026-08-23）
         #   ★白名簿を検査より前に置くと、根拠の無い壊れた材料が
@@ -408,6 +455,15 @@ def topics_from_claims(claims: list) -> tuple:
             # ★カテゴリ（bonusflow）と topic（setting）が違うのは正常★
             #   カテゴリ＝証拠の種類／topic＝記事のどの話題か（別の軸）
             confirmed.add("setting")
+            if c == "payout_rate":
+                # ★★設定別の出玉率は2つの箱に出る★★（2026-08-27）
+                #   設定示唆まとめ（設定別の表）と、
+                #   基本スペック（その端を並べた「機械割◯〜◯%」）。
+                #   ★数は増やさない★＝同じ表なので claim は1件のまま。
+                #   ここは「どの箱に出るか」を言っているだけ。
+                #   ★これが無いと★判定書が「基本スペックは未確認」と言い、
+                #   記事が機械割を書く食い違いになる（実際に踏んだ）。
+                confirmed.add("spec")
         elif c.startswith("ceiling:"):
             confirmed.add("ceiling")
         elif c.startswith("at:"):
@@ -1208,6 +1264,25 @@ def selftest() -> int:
     # ★v1 は無傷★
     t("　v1 の判定書は今までどおり読める（併読）",
       decide_from_claims(_at3, "normal", "2026-08-26")["indexable"] is True)
+
+    # ── 2026-08-27・機械割の範囲（設定別の値から作る）────────────
+    _RATE = {"adopted": {"payout_rate": {**IM, "value":
+                                         {"1": "97.0%", "6": "109.4%"}}}}
+    t("★★同じ表から2件数えない（範囲は検索の濃さに入れない）★★"
+      "／★入れてしまい、品質ラインを越える判定を作った。自分で踏んだ★",
+      index_claims_from_material(_RATE) == ["payout_rate"])
+    t("★★消失の判定には数える（書けるのだから失われていない）★★",
+      "payout_range" in regression_claims_from_material(_RATE))
+    t("★★設定別の出玉率があれば、基本スペックを『未確認』にしない★★"
+      "／★これが無いと、判定書と記事が食い違う★",
+      "spec" not in topics_from_claims(["payout_rate"])[1])
+    t("　設定別の出玉率が無ければ、基本スペックは未確認のまま",
+      "spec" in topics_from_claims(["bonus_prob"])[1])
+    t("　2AIの確定値からは範囲を作らない（裏付けが話題をまたぐ）",
+      derived_payout_range({"payout_rate":
+                            {"_from": "confirmed_values",
+                             "value": {"1": "97.0%", "6": "109.4%"}}})
+      is None)
 
     print(f"{ran[0]}/{ran[0]} 合格" if ok_all else "不合格あり")
     return 0 if ok_all else 1

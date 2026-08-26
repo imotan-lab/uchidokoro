@@ -1158,7 +1158,7 @@ MUTATIONS = [
     # ─── 2026-08-27・機械割の範囲を設定別の値から書く ───────────
     {
         "why": "★読めない値を黙って飛ばす（残った値だけで範囲を作る）★",
-        "file": "scripts/build_new_article.py",
+        "file": "scripts/page_decision.py",
         "before": "            return None               "
                   "# ★読めない値が1つでもあれば作らない★",
         "after": "            continue",
@@ -1166,18 +1166,34 @@ MUTATIONS = [
     },
     {
         "why": "★設定1つだけでも「範囲」と書く（同じ値を2度並べる）★",
-        "file": "scripts/build_new_article.py",
+        "file": "scripts/page_decision.py",
         "before": "    if len(nums) < 2:",
         "after": "    if len(nums) < 1:",
         "run": ["scripts/build_new_article.py"],
     },
     {
-        "why": "★書ける範囲まで「事実が消えた」と数える（育成が永久に止まる）★",
-        "file": "scripts/grow_machine.py",
-        "before": "            if _ba_pr.payout_range_view("
-                  'material.get("adopted") or {}):',
+        "why": "★2AIの確定値からも範囲を作る"
+               "（裏付けが話題をまたぎ、判定書と記事が食い違う）★",
+        "file": "scripts/page_decision.py",
+        "before": '    if got.get("_from") == "confirmed_values":',
+        "after": "    if False:",
+        # ★通しの試験だけが捕まえる★＝判定書・記事・検査を繋いだ時だけ矛盾する
+        "run": ["scripts/recheck.py"],
+    },
+    {
+        "why": "★範囲を検索の濃さにも数える（同じ表から2件＝水増し）★",
+        "file": "scripts/page_decision.py",
+        "before": '    if count_confirmed and "payout_range" not in got:',
+        "after": '    if "payout_range" not in got:',
+        "run": ["scripts/page_decision.py"],
+    },
+    {
+        "why": "★設定別の出玉率が基本スペックに出ることを忘れる"
+               "（判定書が未確認と言い、記事が書く）★",
+        "file": "scripts/page_decision.py",
+        "before": '            if c == "payout_rate":',
         "after": "            if False:",
-        "run": ["scripts/grow_machine.py"],
+        "run": ["scripts/page_decision.py", "scripts/recheck.py"],
     },
 ]
 
@@ -1197,7 +1213,17 @@ def _run_tests(root: str, scripts: list) -> tuple:
     #   ＝★守りが壊れていなくても赤くなる★ので、道具の判定が全部無意味になる。
     #   手で試すときは PYTHONIOENCODING を付けていたので通り、
     #   道具から呼ぶと落ちる、という食い違いになっていた。
-    env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
+    # ★★読み込み済みファイル（__pycache__）を作らせない★★
+    #   （2026-08-27・実際に踏んだ）
+    #   写しは1つを使い回すので、前の試験が残した読み込み済みファイルが
+    #   次の壊し方に持ち越される。Pythonは **元の日時（秒）と大きさ** だけで
+    #   置き換えを判断するので、★大きさが変わらない壊し方（「2」→「1」など）を
+    #   同じ秒のうちに書くと、古いものがそのまま使われる★
+    #   ＝壊したのに壊れておらず、「守られていません」と誤って報告する。
+    #   ★同じ壊し方が、単独だと捕まえ、まとめて回すと捕まえない★という
+    #   再現しない答えになり、道具そのものが信用できなくなる。
+    env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1",
+               PYTHONDONTWRITEBYTECODE="1")
     for rel in scripts:
         r = subprocess.run([sys.executable, os.path.join(root, rel),
                             "--selftest"],

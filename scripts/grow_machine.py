@@ -520,17 +520,11 @@ def claims_grew(old_decision: dict, material: dict) -> list:
     new = _pdz.regression_claims_from_material(material)
     lost = [c for c in old if c not in new]
     # ★★書けるものは「消えた」ことにしない★★（2026-08-27・運営者の判断）
-    #   機械割の範囲は、確認済みの設定別の出玉率から
-    #   一番下と一番上をそのまま書ける（新しい数字は作らない）。
-    #   ★書けるかどうかを決めるのは build_new_article の1か所だけ★
-    #   （同じ規則を2か所に書かない）。
-    if "payout_range" in lost:
-        try:
-            import build_new_article as _ba_pr
-            if _ba_pr.payout_range_view(material.get("adopted") or {}):
-                lost = [c for c in lost if c != "payout_range"]
-        except Exception:                                # noqa: BLE001
-            pass                          # ★読めないときは今までどおり止める★
+    #   ★ここには何も書かない★＝設定別の値から範囲を作れるかどうかは
+    #   page_decision.derived_payout_range が決め、その結果は上の
+    #   regression_claims_from_material に既に入っている。
+    #   ★直す前は、記事の側だけで作っていたので、判定書が
+    #     「基本スペックは未確認」と言うのに記事が書く食い違いになった★
     if lost:
         return [f"確認済みだった事実が消えます: {', '.join(sorted(lost)[:5])}"]
     return []

@@ -691,18 +691,8 @@ def payout_range_view(adopted: dict):
     if rng and isinstance(rng.get("value"), dict):
         v = rng["value"]
         return v["low"], v["high"], rng
-    got = (adopted or {}).get("payout_rate")
-    if not got or not isinstance(got.get("value"), dict):
-        return None
-    nums = []
-    for raw_v in got["value"].values():
-        m = re.fullmatch(r"\s*([0-9]+(?:\.[0-9]+)?)\s*%\s*", str(raw_v))
-        if not m:
-            return None               # ★読めない値が1つでもあれば作らない★
-        nums.append(float(m.group(1)))
-    if len(nums) < 2:
-        return None                   # ★設定が1つだけなら「範囲」ではない★
-    return min(nums), max(nums), got
+    # ★決めるのは page_decision の1か所だけ★（判定書と記事が同じものを見る）
+    return _pd.derived_payout_range(adopted)
 
 
 def build_detail(slug, name, release, material) -> dict:
@@ -1924,6 +1914,15 @@ def selftest() -> int:
       is None)
     t("　値そのものが無ければ作らない",
       payout_range_view({}) is None)
+    # ★★2AIの確定値からは作らない★★（2026-08-27）
+    #   ★裏付けが話題をまたぐから★＝確定値の設定別の出玉率は
+    #   「設定示唆まとめ」の裏付けとして控えてある。そこから
+    #   「基本スペック」の要約行を作ると、判定書と記事が食い違う
+    #   （通しの試験＝recheck が実際に赤を出した）。
+    t("★★2AIの確定値からは範囲を作らない（裏付けが話題をまたぐ）★★",
+      payout_range_view({"payout_rate": {**IM, "_from": "confirmed_values",
+                                         "value": {"1": "97.3%",
+                                                   "6": "110.5%"}}}) is None)
     # ★通しで確かめる★＝記事の本文に実際に出るところまで
     _mat_rate = {"adopted": {k: v for k, v in _mat_e2e["adopted"].items()
                              if k != "payout_range"}}
