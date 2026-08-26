@@ -255,13 +255,13 @@ def _v2_wiring_tests(t) -> None:
     t("★★v2 の機種も『新台経路』と判定する★★"
       "／★v1限定だと旧形式（公開・index）へ倒れる★",
       _pd.is_auto(m1) and _pd.is_auto(m2) and not _pd.is_auto(legacy))
-    t("　凍結中は v2 を machines.json に置けない",
-      _raises(lambda: _pd.machine_class(m2, pol)))
+    t("★★知らない版は置けない（名簿は生きている）★★",
+      _raises(lambda: _pd.machine_class(
+          {**m2, "publication_policy": "page-decision/v9"}, pol)))
 
     keep = _pd.ENABLED_PUBLICATION_SCHEMAS
     try:
-        _pd.ENABLED_PUBLICATION_SCHEMAS = _pd.SCHEMAS
-        t("　解凍すれば v2 も区分が出る（v1 と同じ AUTO_INDEXABLE）",
+        t("　v2 も v1 も区分が出る（同じ AUTO_INDEXABLE）",
           _pd.machine_class(m2, pol) == "AUTO_INDEXABLE"
           and _pd.machine_class(m1, pol) == "AUTO_INDEXABLE")
         t("★★台帳が v2 も CANDIDATE に倒す★★"
@@ -275,8 +275,8 @@ def _v2_wiring_tests(t) -> None:
               {**m2, "publication_policy": _pd.SCHEMA}, pol)))
     finally:
         _pd.ENABLED_PUBLICATION_SCHEMAS = keep
-    t("　通し確認のあとで凍結が戻っている",
-      _pd.ENABLED_PUBLICATION_SCHEMAS == (_pd.SCHEMA,))
+    t("　通し確認のあとで、置いてよい版の名簿が戻っている",
+      _pd.ENABLED_PUBLICATION_SCHEMAS == keep)
 
     # ★緊急スイッチが版に合わせて計算し直すか★（ここが v1 固定で壊れていた）
     f2 = _pd.recompute(d2, "force_noindex_new_auto")
@@ -412,8 +412,8 @@ def selftest() -> int:
             try:
                 plan(NORMAL)
             except _pd.DecisionError as _e_fr:
-                _frozen_stopped = "凍結中" in str(_e_fr)
-            t("★★入口（plan）が、凍結中の v2 を止める★★"
+                _frozen_stopped = "置けません" in str(_e_fr)
+            t("★★入口（plan）が、置いてよい版でないものを止める★★"
               "／★止めないと noindex と sitemap を書き換えられる★",
               _frozen_stopped)
             # ★★名乗り v1・中身 v2 も入口で止める★★
@@ -428,7 +428,7 @@ def selftest() -> int:
                 _mix_stopped = "判定書の版" in str(_e_mx)
             t("★★入口（plan）が、名乗りと中身の食い違いを止める★★",
               _mix_stopped)
-            # 解凍して、正しい v2 は通ること
+            # 置いてよい版に戻して、正しい v2 は通ること
             _pd.ENABLED_PUBLICATION_SCHEMAS = _pd.SCHEMAS
             with open(g["MACHINES"], "w", encoding="utf-8") as f:
                 _js.dump([{"slug": "zzz_pol", "name": "試験v2",

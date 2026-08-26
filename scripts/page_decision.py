@@ -55,8 +55,11 @@ SCHEMAS = (SCHEMA, SCHEMA_V2)          # ★判定書単体として読める版
 #   `is_auto()` だけが False という**中間状態**を作れた。
 #   → 置いてよい版をここで名指しし、それ以外は**例外で止める**。
 #   ★False に倒さない★＝旧形式として静かに扱われるほうが危ない。
-ENABLED_PUBLICATION_SCHEMA = SCHEMA
-ENABLED_PUBLICATION_SCHEMAS = (SCHEMA,)
+ENABLED_PUBLICATION_SCHEMA = SCHEMA_V2
+# ★★2026-08-26：解凍した★★（配線・収集器・記事・通し確認がそろったため）
+#   ★v1 も置ける版のまま残す★＝既存11機種は v1 で作られている。
+#   外すと `machine_class()` が全部例外で止める＝サイトの生成が丸ごと止まる。
+ENABLED_PUBLICATION_SCHEMAS = (SCHEMA, SCHEMA_V2)
 # ★★いま新台を発行する版★★（2026-08-26・Codex31〜32回目の助言）
 #   ★解凍の切替点を1つにする★＝直す前は
 #     ・名乗り  `_emit_schema()`
@@ -64,7 +67,8 @@ ENABLED_PUBLICATION_SCHEMAS = (SCHEMA,)
 #   の**二重指定**で、片方だけ v2 にすると
 #   「名乗りと中身の食い違い」を発行側で作れた（今回止めたばかりの穴）。
 #   ★ここを変えるだけで、名乗りも判定書も一緒に変わる★
-EMIT_SCHEMA = SCHEMA
+#   ★2026-08-26：v2 で発行する★（ボーナスタイプの新台を扱えるようにする）
+EMIT_SCHEMA = SCHEMA_V2
 
 # ★★機種の型★★（掲載判定の線を選ぶためだけに使う。claim には数えない）
 #   AT_CZ   … AT または CZ を持つ機種（いままでの前提）
@@ -1098,37 +1102,31 @@ def selftest() -> int:
     _d_v2 = decide_from_claims_v2(_c3, "normal", "BONUS", "NONE", "2026-08-26")
     _m_v2 = {"slug": "zzz_v2", "name": "試験", "publication_policy": SCHEMA_V2,
              "page_decision": _d_v2}
-    # ★★いまは v2 を machines.json に置けない★★（2026-08-26・Codex29回目のP0）
-    #   ★手で置いたら「静かに旧形式扱い」ではなく**例外で止まる**こと★
+    # ★★2026-08-26：解凍した★★（配線・収集器・記事・通し確認がそろった）
+    #   ★置いてよい版の名簿そのものは残す★＝知らない版は今までどおり止める。
     try:
-        machine_class(_m_v2, {"mode": "normal"})
-        _v2_frozen = False
-    except DecisionError as _e_v2:
-        _v2_frozen = "凍結中" in str(_e_v2)
-    t("★★手で置いた v2 は、区分の判定そのものが止める★★"
-      "／★False に倒すと旧形式として静かに公開されてしまう★", _v2_frozen)
-    t("　止めた理由が『知らない版』ではなく『いまは置けない版』と分かる",
-      _v2_frozen)
-    # ★★解凍したときに、ちゃんと v2 の式で計算し直すか★★
-    #   ★凍結の試験だけにすると、解凍した日にこの穴が復活する★
-    #   （区分を v1 の式で計算すると、v2 の機種は永久に AUTO_PENDING）
-    _saved_enabled = ENABLED_PUBLICATION_SCHEMAS
-    try:
-        globals()["ENABLED_PUBLICATION_SCHEMAS"] = (SCHEMA, SCHEMA_V2)
-        # ★例外で死なせない★（2026-08-26）＝ここで落ちると試験は
-        #   ❌を1行も出さずに終わり、「ただ落ちただけ」に分類される。
-        #   ＝★その守りを見ている試験がある証拠にならない★
-        try:
-            _cls_v2 = machine_class(_m_v2, {"mode": "normal"})
-        except Exception as _e_cls:                      # noqa: BLE001
-            _cls_v2 = f"例外: {type(_e_cls).__name__}: {_e_cls}"
-    finally:
-        globals()["ENABLED_PUBLICATION_SCHEMAS"] = _saved_enabled
-    t("★★解凍すれば v2 は AUTO_INDEXABLE になる★★"
+        _cls_v2 = machine_class(_m_v2, {"mode": "normal"})
+    except Exception as _e_cls:                          # noqa: BLE001
+        # ★例外で死なせない★＝❌を1行も出さずに終わると
+        #   「ただ落ちただけ」に分類され、守りの証拠にならない。
+        _cls_v2 = f"例外: {type(_e_cls).__name__}: {_e_cls}"
+    t("★★v2 の機種が AUTO_INDEXABLE になる★★"
       "／★区分を v1 の式で計算すると、永久に AUTO_PENDING のまま★",
       _cls_v2 == "AUTO_INDEXABLE")
-    t("　試験のあとで凍結が戻っている（試験が本番の設定を汚さない）",
-      ENABLED_PUBLICATION_SCHEMAS == (SCHEMA,))
+    t("★★v1 の機種は今までどおり置ける★★"
+      "／★既存11機種は v1。外すとサイトの生成が丸ごと止まる★",
+      machine_class({"slug": "zzz_v1keep", "name": "試験",
+                     "publication_policy": SCHEMA,
+                     "page_decision": decide_from_claims(
+                         _at3, "normal", "2026-08-26")},
+                    {"mode": "normal"}) == "AUTO_INDEXABLE")
+    t("★★知らない版は今までどおり止める（名簿は生きている）★★",
+      _raises(lambda: machine_class(
+          {"slug": "zzz_v9", "name": "試験",
+           "publication_policy": "page-decision/v9",
+           "page_decision": _d_v2}, {"mode": "normal"})))
+    t("　発行する版は、置いてよい版に入っている（矛盾していない）",
+      EMIT_SCHEMA in ENABLED_PUBLICATION_SCHEMAS)
     # ★★経路の判定は版を問わない★★（2026-08-26・Codex28回目のP0）
     #   ★v1限定だと、v2の機種は「旧形式」として見える★＝
     #   noindexが外れ、sitemapに載り、gatesの公開経路へ落ちる（いちばん危ない側）。

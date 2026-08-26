@@ -1046,7 +1046,9 @@ def selftest() -> int:
                       "https://www.s-bellco.co.jp/products/slot/lbinko/", "2026-08", MAT)
     t("★★新台は判定書つき（statusを書かない・旧契約と同居しない）★★"
       "（2026-08-04・Codex71〜72回目）",
-      "status" not in m and m["publication_policy"] == _pd.SCHEMA
+      "status" not in m
+      and m["publication_policy"] == _pd.EMIT_SCHEMA
+      and m["publication_policy"] == m["page_decision"]["schema_version"]
       and _pd.machine_class(m) in ("AUTO_INDEXABLE", "AUTO_PENDING"))
     def _ledger(_slug_unused, field_values, extra=None):
         # ★slugは登録関数が公式URLから引く★（試験が名乗らない＝本番と同じ）
@@ -1693,42 +1695,43 @@ def selftest() -> int:
     _keep_emit = _pd.EMIT_SCHEMA
     _keep_en = _pd.ENABLED_PUBLICATION_SCHEMAS
     try:
-        _m_v1 = build_machine("zzz_emit", "試験", "試験メーカー",
-                              "https://m.example/products/slot/zzz_emit/",
-                              "2026-09-01", _mat_bonus)
-        t("　いまは v1 で発行する（名乗りと判定書がそろっている）",
-          _m_v1["publication_policy"] == _pd.SCHEMA
-          and _m_v1["page_decision"]["schema_version"] == _pd.SCHEMA)
-        # ★1か所だけ切り替える★
-        _pd.EMIT_SCHEMA = _pd.SCHEMA_V2
-        _pd.ENABLED_PUBLICATION_SCHEMAS = _pd.SCHEMAS
-        _m_v2e = build_machine("zzz_emit", "試験", "試験メーカー",
-                              "https://m.example/products/slot/zzz_emit/",
-                              "2026-09-01", _mat_bonus)
+        def _emit(slug="zzz_emit"):
+            return build_machine(slug, "試験", "試験メーカー",
+                                 "https://m.example/products/slot/zzz_emit/",
+                                 "2026-09-01", _mat_bonus)
+
+        _m_now = _emit()
+        t("　いま発行する版で、名乗りと判定書がそろっている",
+          _m_now["publication_policy"] == _pd.EMIT_SCHEMA
+          and _m_now["page_decision"]["schema_version"] == _pd.EMIT_SCHEMA)
+        t("　作った物がそのまま置ける（区分の判定を通る）",
+          _pd.machine_class(_m_now, {"mode": "normal"}).startswith("AUTO"))
+        # ★1か所だけ切り替えると、名乗りも判定書も一緒に変わる★
+        _other = (_pd.SCHEMA if _pd.EMIT_SCHEMA == _pd.SCHEMA_V2
+                  else _pd.SCHEMA_V2)
+        _pd.EMIT_SCHEMA = _other
+        _m_alt = _emit()
         t("★★EMIT_SCHEMA を変えるだけで、名乗りも判定書も一緒に変わる★★"
-          "／★別々に決めていると、片方だけ v2 になって食い違う★",
-          _m_v2e["publication_policy"] == _pd.SCHEMA_V2
-          and _m_v2e["page_decision"]["schema_version"] == _pd.SCHEMA_V2)
-        t("　その機種は区分の判定を通る（作った物がそのまま置ける）",
-          _pd.machine_class(_m_v2e, {"mode": "normal"}).startswith("AUTO"))
+          "／★別々に決めていると、片方だけ切り替わって食い違う★",
+          _m_alt["publication_policy"] == _other
+          and _m_alt["page_decision"]["schema_version"] == _other)
         # ★置いてよい版でなければ、作る前に止まる★
-        _pd.ENABLED_PUBLICATION_SCHEMAS = (_pd.SCHEMA,)
+        _pd.ENABLED_PUBLICATION_SCHEMAS = tuple(
+            s for s in _pd.SCHEMAS if s != _other)
         try:
-            build_machine("zzz_emit", "試験", "試験メーカー",
-                              "https://m.example/products/slot/zzz_emit/",
-                              "2026-09-01", _mat_bonus)
+            _emit()
             _emit_stopped = False
         except BuildError as _e_em:
             _emit_stopped = "置けません" in str(_e_em)
-        t("★★凍結中の版では、新台を作る前に止まる★★"
+        t("★★置いてよい版でなければ、新台を作る前に止まる★★"
           "／★止めないと、作れるのに置けない機種を毎晩作って公開0件が続く★",
           _emit_stopped)
     finally:
         _pd.EMIT_SCHEMA = _keep_emit
         _pd.ENABLED_PUBLICATION_SCHEMAS = _keep_en
     t("　試験のあとで発行の版が戻っている",
-      _pd.EMIT_SCHEMA == _pd.SCHEMA
-      and _pd.ENABLED_PUBLICATION_SCHEMAS == (_pd.SCHEMA,))
+      _pd.EMIT_SCHEMA == _keep_emit
+      and _pd.ENABLED_PUBLICATION_SCHEMAS == _keep_en)
 
     # ─── ★ボーナス確率の通し確認★（2026-08-26）────────────────
     #   ★HTML → 収集 → 採用 → 判定書 → 記事 を1本で通す★
