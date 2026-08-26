@@ -558,10 +558,11 @@ MUTATIONS = [
     {
         "why": "控えの系列を数え直さない（1出典の記録が通る・Codex7回目）",
         "file": "scripts/confirmed_values.py",
-        "before": "                if len(got) < 2:\n"
-                  '                    ng.append(f"{field}: '
-                  '独立した2系列になっていません（{got}）")',
-        "after": "                pass",
+        # ★項目ごとの最小値になったので目印を合わせた★（2026-08-27）
+        "before": "                _need = min_sources(base)\n"
+                  "                if len(got) < _need:",
+        "after": "                _need = min_sources(base)\n"
+                 "                if False:",
         "run": ["scripts/confirmed_values.py"],
     },
     {
