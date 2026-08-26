@@ -561,6 +561,27 @@ def decide(material: dict, policy: dict | None = None,
                               policy.get("mode"), decided_at)
 
 
+def recompute(pd: dict, mode: str) -> dict:
+    """★判定書を、その版の式で計算し直す唯一の場所★（2026-08-26）
+
+    ★なぜ1か所にするか★
+      版に合わせた分岐が3か所にあり、うち1か所（`apply_indexing_policy`）は
+      **v1の式で固定**されていた。そのままv2を出すと、
+      緊急スイッチを切り替えた日に**v2の判定書がv1の形で上書き**される。
+      ＝「同じ規則を2か所に書かない」を破っていた。
+
+    ★保存値は使わない★＝claims と mode から作り直す（契約 §3）。
+    """
+    ver = pd.get("schema_version")
+    if ver == SCHEMA_V2:
+        return decide_from_claims_v2(
+            pd["claims"], mode, pd["machine_profile"],
+            pd["ceiling_state"], pd["decided_at"])
+    if ver == SCHEMA:
+        return decide_from_claims(pd["claims"], mode, pd["decided_at"])
+    raise DecisionError(f"判定書の版が不明です: {ver!r}")
+
+
 def validate_decision(pd: dict) -> None:
     """★保存された判定書を、claims から計算し直して丸ごと突き合わせる★
 
@@ -603,13 +624,7 @@ def validate_decision(pd: dict) -> None:
                             f"{pd['decided_at']!r}")
     for c in pd["claims"]:
         _category(c)                       # 不明なclaim IDはここで例外
-    if ver == SCHEMA_V2:
-        want = decide_from_claims_v2(
-            pd["claims"], pd["policy_mode"], pd["machine_profile"],
-            pd["ceiling_state"], pd["decided_at"])
-    else:
-        want = decide_from_claims(pd["claims"], pd["policy_mode"],
-                                  pd["decided_at"])
+    want = recompute(pd, pd["policy_mode"])
     for k in sorted(keys):
         if pd[k] != want[k]:
             raise DecisionError(
@@ -659,17 +674,21 @@ def machine_class(machine: dict, policy: dict | None = None) -> str:
         validate_decision(machine.get("page_decision"))
     except DecisionError as e:
         raise DecisionError(f"{machine.get('slug')}: {e}")
+    # ★★名乗りと中身の版が食い違っていたら止める★★（2026-08-26）
+    #   ★どちらも「既知の版」なので、個別の検査は両方とも通る★。
+    #   食い違ったまま進むと、名乗りで許可を判定し、中身の版で計算する
+    #   ＝**凍結を名乗りだけで越えられる**（v1 と名乗って v2 の式で計算）。
+    _pdver = machine["page_decision"].get("schema_version")
+    if _pdver != pub:
+        raise DecisionError(
+            f"publication_policy({pub!r}) と判定書の版({_pdver!r}) が違います "
+            f"(slug={machine.get('slug')})")
     pd = machine["page_decision"]
     # ★保存値ではなく「いまのpolicyで計算し直した結果」を使う★
     # ★★版に合わせて計算し直す★★（2026-08-25）
     #   ★ここを v1 のままにすると、v2 の機種は永久に AUTO_PENDING★
     #   ＝直したはずの欠陥が、最後の一行で元に戻る。
-    if pd.get("schema_version") == SCHEMA_V2:
-        now = decide_from_claims_v2(pd["claims"], pol_mode,
-                                    pd["machine_profile"],
-                                    pd["ceiling_state"], pd["decided_at"])
-    else:
-        now = decide_from_claims(pd["claims"], pol_mode, pd["decided_at"])
+    now = recompute(pd, pol_mode)
     return "AUTO_INDEXABLE" if now["indexable"] else "AUTO_PENDING"
 
 
@@ -696,7 +715,21 @@ def stale_decisions(machines: list, policy: dict | None = None) -> list:
 
 
 def is_auto(machine: dict) -> bool:
-    return machine.get("publication_policy") == SCHEMA
+    """★新台経路の機種か★（＝`publication_policy` を持つ機種か）
+
+    ★★版は問わない★★（2026-08-26・Codex28回目のP0）
+      ★直す前は v1 だけ True★だったので、v2 の機種は
+      `build_public_data` / `build_ledger` / `crosscheck_gates` /
+      `apply_indexing_policy` / `publish_new_machine` から
+      **旧形式（既存113機種と同じ扱い）として見えていた**。
+      ＝noindex が外れ、sitemap に載り、gates の公開経路へ落ちる。
+
+    ★「置いてよい版か」は別の問い★＝`ENABLED_PUBLICATION_SCHEMAS`。
+      そちらは `machine_class()` が例外で止める。
+      ★2つを混ぜると、片方を直したときにもう片方が裏目に出る★
+      （v1限定にすると旧形式扱い＝いちばん危ない側へ倒れる）。
+    """
+    return machine.get("publication_policy") in SCHEMAS
 
 
 # ---------------------------------------------------------------- selftest
@@ -1019,6 +1052,49 @@ def selftest() -> int:
       _cls_v2 == "AUTO_INDEXABLE")
     t("　試験のあとで凍結が戻っている（試験が本番の設定を汚さない）",
       ENABLED_PUBLICATION_SCHEMAS == (SCHEMA,))
+    # ★★経路の判定は版を問わない★★（2026-08-26・Codex28回目のP0）
+    #   ★v1限定だと、v2の機種は「旧形式」として見える★＝
+    #   noindexが外れ、sitemapに載り、gatesの公開経路へ落ちる（いちばん危ない側）。
+    t("★★v2 の機種も『新台経路』と判定する★★"
+      "／★v1限定だと旧形式（公開・index）へ倒れる★", is_auto(_m_v2))
+    t("　v1 の機種は今までどおり新台経路",
+      is_auto({"publication_policy": SCHEMA}))
+    t("　publication_policy が無い機種は新台経路ではない",
+      not is_auto({"slug": "hokuto"}))
+    _d_at = decide_from_claims(_at3, "normal", "2026-08-26")
+    # ★★名乗りと中身の版の食い違い★★（どちらも既知なので個別の検査は通る）
+    _mix = {"slug": "zzz_mix", "name": "試験",
+            "publication_policy": SCHEMA, "page_decision": _d_v2}
+    try:
+        machine_class(_mix, {"mode": "normal"})
+        _mix_stopped = False
+    except DecisionError as _e_mix:
+        _mix_stopped = "判定書の版" in str(_e_mix)
+    t("★★名乗り v1・中身 v2 の機種は止める★★"
+      "／★止めないと、名乗りで許可を判定し中身の版で計算する＝凍結を越えられる★",
+      _mix_stopped)
+    t("　名乗りと中身がそろっていれば通る（v1）",
+      machine_class({"slug": "zzz_ok", "name": "試験",
+                     "publication_policy": SCHEMA,
+                     "page_decision": _d_at}, {"mode": "normal"})
+      in ("AUTO_INDEXABLE", "AUTO_PENDING"))
+    t("　知らない版は新台経路と見なさない（machine_class が別に止める）",
+      not is_auto({"publication_policy": "page-decision/v9"}))
+    # ★★計算し直しは1か所★★（版の分岐を散らさない）
+    t("★★recompute が版に合わせて計算し直す★★",
+      recompute(_d_v2, "normal") == decide_from_claims_v2(
+          _d_v2["claims"], "normal", _d_v2["machine_profile"],
+          _d_v2["ceiling_state"], _d_v2["decided_at"]))
+    t("　v1 の判定書は v1 の式で計算し直す",
+      recompute(_d_at, "normal") == decide_from_claims(
+          _d_at["claims"], "normal", _d_at["decided_at"]))
+    t("★v2 を v1 の式で計算すると別物になる（＝この分岐は効いている）★",
+      recompute(_d_v2, "normal") != decide_from_claims(
+          _d_v2["claims"], "normal", _d_v2["decided_at"]))
+    t("　版が分からない判定書は計算しない（黙って v1 にしない）",
+      _raises(lambda: recompute({"schema_version": "page-decision/v9",
+                                 "claims": [], "decided_at": "2026-08-26"},
+                                "normal")))
     # ★★天井の有無は、型から推論しない★★
     #   実例＝X-300 は概要が「完全告知のボーナスタイプ」でも天井欄は「調査中」。
     t("★★型が BONUS でも、天井の有無は分からないまま★★"

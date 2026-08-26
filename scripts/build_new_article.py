@@ -440,6 +440,16 @@ IDENTITY_BINDINGS = ("OFFICIAL_PRODUCT_PAGE", "MAKER_LIST_CARD",
                      "PWORLD_MACHINE_PAGE", "DMM_MACHINE_PAGE")
 
 
+def _emit_schema() -> str:
+    """新台を発行するときの判定書の版（★置いてよい版であること★）"""
+    if _pd.SCHEMA not in _pd.ENABLED_PUBLICATION_SCHEMAS:
+        raise BuildError(
+            f"発行しようとしている版 {_pd.SCHEMA!r} は、いま machines.json に"
+            f"置けません（置いてよい版: {_pd.ENABLED_PUBLICATION_SCHEMAS!r}）"
+            "／★このまま作ると、公開0件が黙って続きます★")
+    return _pd.SCHEMA
+
+
 def build_machine(slug, name, maker, official_url, release, material,
                   identity_binding: str = "", identity_evidence_ref: str = "") -> dict:
     """machines.json に足す1件を作る。★確認できた項目だけ★
@@ -500,7 +510,10 @@ def build_machine(slug, name, maker, official_url, release, material,
         #   ＝いま v2 の機種は0件なので実害は出ていないが、
         #     今夜の新台からその状態になるところだった。
         #   ★配線がそろったら SCHEMA_V2 へ戻す★（判定の仕組みは入っている）
-        "publication_policy": _pd.SCHEMA,
+        # ★発行してよい版か、ここで確かめる★（2026-08-26）
+        #   ★確かめないと「作れるが machine_class が拒否する」機種を毎晩作り、
+        #     エラーも出ずに公開0件が続く★（2026-08-22に実際に5日続いた型）。
+        "publication_policy": _emit_schema(),
         "page_decision": decision,
         # ★既存の未裏取りページ（LEGACY_UNVERIFIED）と混ぜない★
         #   載せた値は出典2件で確認済み。ただし記事は網羅的ではない、という状態。

@@ -58,6 +58,29 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MUTATIONS = [
     # ─── 2026-08-26・Codex29回目で足した守り ───────────────
     {
+        "why": "★経路の判定を v1 限定に戻す（v2 が旧形式扱いになる）★",
+        "file": "scripts/page_decision.py",
+        "before": '    return machine.get("publication_policy") in SCHEMAS',
+        "after": '    return machine.get("publication_policy") == SCHEMA',
+        "run": ["scripts/apply_indexing_policy.py"],
+    },
+    {
+        "why": "★緊急スイッチを v1 の式で固定する（v2 を v1 の形で上書き）★",
+        "file": "scripts/apply_indexing_policy.py",
+        "before": '        pd_new = _pd.recompute(pd_old, policy["mode"])',
+        "after": '        pd_new = _pd.decide_from_claims('
+                  'pd_old["claims"], policy["mode"], pd_old["decided_at"])',
+        "run": ["scripts/apply_indexing_policy.py"],
+    },
+    {
+        "why": "★名乗りと中身の版の食い違いを見ない★",
+        "file": "scripts/page_decision.py",
+        "before": "    if _pdver != pub:",
+        "after": "    if False:",
+        "run": ["scripts/page_decision.py",
+                "scripts/apply_indexing_policy.py"],
+    },
+    {
         "why": "★v2の凍結を外す（手で置いたv2が通ってしまう）★",
         "file": "scripts/page_decision.py",
         "before": "ENABLED_PUBLICATION_SCHEMAS = (SCHEMA,)",

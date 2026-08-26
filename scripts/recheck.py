@@ -466,9 +466,14 @@ def check_rate_monotonic(args: dict) -> dict:
 #   ★新台が増えるたびに増える構造★＝新しく足した機種はどのリストにも入らない。
 #     2026-08-07に15件だったものが、2026-08-21には24件になっていた（台帳#252）。
 
+# ★版の書き方に依らない★（2026-08-26）
+#   ★直す前は `=== "page-decision/v1"` の字面を探していた★ので、
+#   ひな型を版に依らない書き方（startsWith("page-decision/")）へ直した瞬間、
+#   ★中身は同じなのに検査が落ち、新台が全部止まった★（実際に鳴った）。
+#   ＝見たいのは「preview と新台経路を、名簿より先に無効にしているか」。
 _PAGE_DISABLE = re.compile(
     r'machine\.status\s*===\s*"preview"[^\n]*?'
-    r'publication_policy\s*===\s*"page-decision/v1"[^\n]*?'
+    r'publication_policy[^\n]*?page-decision/[^\n]*?'
     r'available:\s*false')
 
 
@@ -486,8 +491,11 @@ def page_disables_pochipochi(mh: str, row: dict) -> bool:
     """
     if not _PAGE_DISABLE.search(str(mh or "")):
         return False
+    # ★版は問わない★＝ひな型が新台経路をまとめて無効にしているので、
+    #   こちらも `page_decision.is_auto` と同じ問いにそろえる。
     return (row.get("status") == "preview"
-            or row.get("publication_policy") == "page-decision/v1")
+            or str(row.get("publication_policy") or "")
+            .startswith("page-decision/"))
 
 
 def check_pochipochi_reachable(args: dict) -> dict:
@@ -2370,14 +2378,23 @@ def _selftest():
         _row_new = {"publication_policy": "page-decision/v1"}
         t("　いまのページは、新台を無効にしている",
           page_disables_pochipochi(_mh_real, _row_new) is True)
+        # ★分岐そのものを行ごと落とす★（2026-08-26）
+        #   ★直す前は判定式の**字面**を書いていた★ので、
+        #   ひな型の書き方を変えた瞬間に、対照実験が「消せなかった」ことに
+        #   気づかず落ちた（実際に落ちた）。
+        #   ＝見たいのは「その分岐が無くなったら False になるか」であって、
+        #     どう書かれているかではない。目印は読者向けの文言にする。
+        _mh_gone = chr(10).join(
+            ln for ln in _mh_real.split(chr(10))
+            if "解析データ判明後に対応" not in ln)
+        t("　対照実験が、実際に分岐を消せている",
+          _mh_gone != _mh_real and "解析データ判明後に対応" not in _mh_gone)
         t("★★（対照）ページの無効化が消えたら、無効とみなさない★★"
           "／★これが無いと『いつでもPASS』の抜け穴になる★",
+          page_disables_pochipochi(_mh_gone, _row_new) is False)
+        t("　v2 の機種も、いまのページは無効にしている（版を問わない）",
           page_disables_pochipochi(
-              _mh_real.replace(
-                  'machine.status === "preview" || '
-                  'machine.publication_policy === "page-decision/v1"',
-                  'machine.status === "zzz-none"', 1),
-              _row_new) is False)
+              _mh_real, {"publication_policy": "page-decision/v2"}) is True)
         t("　新台でも先行記事でもない機種は、この道では通さない",
           page_disables_pochipochi(_mh_real, {"slug": "hokuto"}) is False)
         globals()["valid_slug"] = _keepv

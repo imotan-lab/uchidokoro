@@ -735,7 +735,11 @@ def check_only_allowed_values(slug: str, machine: dict, detail: dict,
     if _pdz.is_auto(machine):
         # バナー有無を実物とそろえる（判定書はそのまま使う＝素の描画でも
         # 区分が同じになる。中身の数字は allowed から除外済み）
-        empty_machine["publication_policy"] = _pdz.SCHEMA
+        # ★版は直書きしない★（2026-08-26・Codex28回目のP0）
+        #   ★直す前は v1 固定★＝v2 の機種だと
+        #   `publication_policy`(v1) と判定書の版(v2) が食い違う写しになり、
+        #   見比べ自体が別物になっていた。
+        empty_machine["publication_policy"] = machine["publication_policy"]
         empty_machine["page_decision"] = machine["page_decision"]
     else:
         empty_machine["status"] = "preview"

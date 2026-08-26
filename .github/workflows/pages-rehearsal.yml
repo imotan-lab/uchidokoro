@@ -103,6 +103,12 @@ jobs:
           python scripts/claim_reconcile.py --selftest
           python scripts/extract_setting_rates.py --selftest
           python scripts/build_public_data.py --selftest
+          # ★判定書と緊急スイッチ★（2026-08-26）
+          #   ★どちらもCIで一度も動いていなかった★＝
+          #   公開するか・検索に載せるかを決める中心なのに、
+          #   手元で流したときしか確かめていなかった。
+          python scripts/page_decision.py --selftest
+          python scripts/apply_indexing_policy.py --selftest
           python scripts/gates.py --selftest
           python scripts/audit_public.py --selftest
           python scripts/build_pages_artifact.py --selftest

@@ -72,8 +72,10 @@ def plan(policy: dict | None = None) -> dict:
         slug = m.get("slug")
         pd_old = m.get("page_decision") or {}
         _pd.validate_decision(pd_old)          # 壊れていればここで止まる
-        pd_new = _pd.decide_from_claims(pd_old["claims"], policy["mode"],
-                                        pd_old["decided_at"])
+        # ★版に合わせて計算し直す★（2026-08-26・Codex28回目のP0）
+        #   ★直す前は v1 の式で固定★＝v2 の機種の判定書を
+        #   v1 の形で上書きしていた（緊急スイッチを切り替えた日に起きる）。
+        pd_new = _pd.recompute(pd_old, policy["mode"])
         page = os.path.join(BASE, "machines", slug, "index.html")
         why = []
         if pd_new != pd_old:
@@ -210,6 +212,77 @@ def apply(policy: dict | None = None, apply_it: bool = False) -> dict:
 
 # ---------------------------------------------------------------- selftest
 
+def _v2_wiring_tests(t) -> None:
+    """★v2 の機種が、受け側すべてで v1 と同じ扱いになるか★（通し確認）
+
+    ★★罠⑬の対策★★（2026-08-26）
+      個別の試験はどれも緑だったのに、繋ぐと矛盾していた＝
+        ・`is_auto()` が v1 だけ True → v2 は**旧形式扱い**（noindexが外れる）
+        ・この関数が v1 の式で固定 → v2 の判定書を v1 の形で上書き
+      ★どちらも「その関数だけ」を見ている限り見つからない★ので、
+      同じ claims から作った v1 と v2 を並べて、受け側の答えを見比べる。
+    """
+    import build_ledger as _bl_v2
+
+    def _raises(fn) -> bool:
+        try:
+            fn()
+        except _pd.DecisionError:
+            return True
+        except Exception:                                # noqa: BLE001
+            return False
+        return False
+
+    pol = {"mode": "normal"}
+    d1 = _pd.decide_from_claims(
+        ["ceiling:GAME:999", "payout_range", "at:MAIN_AT"],
+        "normal", "2026-08-26")
+    d2 = _pd.decide_from_claims_v2(
+        ["ceiling:GAME:999", "payout_range", "bonus_prob"],
+        "normal", "BONUS", "PRESENT", "2026-08-26")
+    m1 = {"slug": "zzz_v1", "name": "試験v1",
+          "publication_policy": _pd.SCHEMA, "page_decision": d1}
+    m2 = {"slug": "zzz_v2", "name": "試験v2",
+          "publication_policy": _pd.SCHEMA_V2, "page_decision": d2}
+    legacy = {"slug": "zzz_legacy", "name": "旧形式"}
+
+    t("★★v2 の機種も『新台経路』と判定する★★"
+      "／★v1限定だと旧形式（公開・index）へ倒れる★",
+      _pd.is_auto(m1) and _pd.is_auto(m2) and not _pd.is_auto(legacy))
+    t("　凍結中は v2 を machines.json に置けない",
+      _raises(lambda: _pd.machine_class(m2, pol)))
+
+    keep = _pd.ENABLED_PUBLICATION_SCHEMAS
+    try:
+        _pd.ENABLED_PUBLICATION_SCHEMAS = _pd.SCHEMAS
+        t("　解凍すれば v2 も区分が出る（v1 と同じ AUTO_INDEXABLE）",
+          _pd.machine_class(m2, pol) == "AUTO_INDEXABLE"
+          and _pd.machine_class(m1, pol) == "AUTO_INDEXABLE")
+        t("★★台帳が v2 も CANDIDATE に倒す★★"
+          "／★倒さないと gates の公開経路へ落ちる★",
+          _bl_v2.provisional(m2)["lifecycle"] == "CANDIDATE"
+          and _bl_v2.provisional(m1)["lifecycle"] == "CANDIDATE")
+        t("　台帳は旧形式を今までどおり公開側にする",
+          _bl_v2.provisional(legacy)["lifecycle"] != "CANDIDATE")
+        t("★★名乗り v1・中身 v2 の機種は止める★★",
+          _raises(lambda: _pd.machine_class(
+              {**m2, "publication_policy": _pd.SCHEMA}, pol)))
+    finally:
+        _pd.ENABLED_PUBLICATION_SCHEMAS = keep
+    t("　通し確認のあとで凍結が戻っている",
+      _pd.ENABLED_PUBLICATION_SCHEMAS == (_pd.SCHEMA,))
+
+    # ★緊急スイッチが版に合わせて計算し直すか★（ここが v1 固定で壊れていた）
+    f2 = _pd.recompute(d2, "force_noindex_new_auto")
+    t("★★緊急スイッチで v2 も noindex に倒れる★★",
+      f2["indexable"] is False)
+    t("　倒した結果が v2 の形のまま（v1 の形で上書きしない）",
+      f2.get("schema_version") == _pd.SCHEMA_V2)
+    t("★（対照）v1 の式で計算すると別物になる＝この分岐は効いている★",
+      _pd.decide_from_claims(d2["claims"], "force_noindex_new_auto",
+                             d2["decided_at"]) != f2)
+
+
 def selftest() -> int:
     ok_all = True
     ran = [0]
@@ -311,6 +384,31 @@ def selftest() -> int:
         finally:
             _pub.render, _pub.run_site_audit, _pub.write_atomic = (
                 _real_render, _real_audit, _real_write)
+        # ★★v2 の機種を、本物の入口（plan）に通す★★（2026-08-26）
+        #   ★recompute を直接たたく試験だけでは足りない★＝
+        #   ここが v1 の式で固定されていても、その試験は緑のままだった
+        #   （壊し方の道具が「守られていない」と出して分かった）。
+        _kv2 = _pd.ENABLED_PUBLICATION_SCHEMAS
+        try:
+            _pd.ENABLED_PUBLICATION_SCHEMAS = _pd.SCHEMAS
+            _d2 = _pd.decide_from_claims_v2(
+                ["ceiling:GAME:999", "payout_range", "bonus_prob"],
+                "force_noindex_new_auto", "BONUS", "PRESENT", "2026-08-26")
+            with open(g["MACHINES"], "w", encoding="utf-8") as f:
+                _js.dump([{"slug": "zzz_pol", "name": "試験v2",
+                           "publication_policy": _pd.SCHEMA_V2,
+                           "page_decision": _d2}], f, ensure_ascii=False)
+            _pv2 = plan(NORMAL)
+            _ch2 = [c for c in _pv2["changes"] if c["slug"] == "zzz_pol"]
+            t("★★v2 の機種も、緊急スイッチの入口で拾われる★★",
+              len(_ch2) == 1)
+            _new2 = _pd.recompute(_d2, "normal")
+            t("★★入口が v2 の式で計算し直している★★"
+              "／★v1 の式で固定すると、v2 の判定書が v1 の形で上書きされる★",
+              _ch2 and _ch2[0]["to"] is _new2["indexable"]
+              and _new2.get("schema_version") == _pd.SCHEMA_V2)
+        finally:
+            _pd.ENABLED_PUBLICATION_SCHEMAS = _kv2
     finally:
         (globals()["MACHINES"], globals()["SITEMAP"], globals()["BASE"],
          globals()["DETAILS"]) = _real
@@ -327,6 +425,9 @@ def selftest() -> int:
             "page_decision": d_n}], FORCE) == ["a"])
     t("　下見では何も書かない",
       apply(FORCE, apply_it=False)["wrote"] == [])
+    # ★★v2 の配線の通し確認★★（2026-08-26・Codex28回目のP0）
+    #   ★数える行より前に置く★（監査51＝あとから足した試験が数えられない）
+    _v2_wiring_tests(t)
     print(f"{ran[0]}/{ran[0]} 合格" if ok_all else "不合格あり")
     return 0 if ok_all else 1
 
