@@ -644,8 +644,10 @@ def validate_record(field: str, rec) -> list:
                 # ★共同制作の組もまとめる★（正本と同じ扱い）
                 got = sorted(_sl.merge_joint({_sl.vote_key_any(p)
                                               for p in pubs}))
-                if len(got) < 2:
-                    ng.append(f"{field}: 独立した2系列になっていません（{got}）")
+                _need = min_sources(base)
+                if len(got) < _need:
+                    ng.append(f"{field}: 独立した系列が{_need}つ"
+                              f"ありません（{got}）")
                 keep = sorted(rec.get("lineages") or [])
                 # ★空でも比べる★（2026-08-24・Codexの8回目）
                 #   `keep and` を付けていたので、系列0件の記録は
@@ -781,10 +783,27 @@ def token_in_quote(token: str, quote: str) -> bool:
         return True
     return False
 
-def check_sources(sources: list) -> list:
-    """★独立2系列そろっているか★（同じ発行者の2ページは1票）"""
-    if len(sources) < 2:
-        raise ConfirmedError("出典が2つ要ります（独立した2系列）")
+# ★★出典1つでも確定してよい項目★★（2026-08-27・運営者の判断）
+#   ★数値ではない分類だけ★＝「この機種はボーナスタイプか」のように、
+#   見れば分かるのに1社しか明記していないことがある（実測で確認）。
+#   数値と同じ「2出典」を課すと、★その機種は永久に検索に載せられない★。
+#   ★機械割・確率などの数値は今までどおり2出典★（ここには足さない）。
+#   ★緩めるのは出典の数だけ★＝公式URL・判断者2人・引用の実在確認は
+#   今までどおり全部通す。
+MIN_SOURCES = {"machine_profile": 1}
+MIN_SOURCES_DEFAULT = 2
+
+
+def min_sources(field: str) -> int:
+    """その項目に要る独立系列の数（★既定は2★）"""
+    return MIN_SOURCES.get(base_field(field), MIN_SOURCES_DEFAULT)
+
+
+def check_sources(sources: list, field: str = "") -> list:
+    """★独立した系列がそろっているか★（同じ発行者の2ページは1票）"""
+    need = min_sources(field) if field else MIN_SOURCES_DEFAULT
+    if len(sources) < need:
+        raise ConfirmedError(f"出典が{need}つ要ります（独立した系列）")
     keys = set()
     for s in sources:
         try:
@@ -795,9 +814,9 @@ def check_sources(sources: list) -> list:
     #   一撃とDMMぱちタウンには共同取材の企画が実在する（「双龍玉」）。
     #   ★値を控える場所がいちばん危ない★ので、ここは確かめるまで数えない。
     keys = _sl.merge_joint(keys)
-    if len(keys) < 2:
+    if len(keys) < need:
         raise ConfirmedError(
-            "同じ発行者の出典が2つあるだけです（独立した2系列が要ります）: "
+            f"独立した系列が{need}つ要ります（同じ発行者は1票）: "
             + " / ".join(s["publisher"] for s in sources))
     return sorted(keys)
 
@@ -1004,7 +1023,7 @@ def record(slug: str, field: str, value, sources: list, by: list,
                 % ("/".join(REQUIRED_JUDGES), ",".join(who) or "なし"))
     if len(str(why or "").strip()) < 8:
         raise ConfirmedError("--why（どう突き合わせたか）は8文字以上で書きます")
-    lineages = check_sources(sources)
+    lineages = check_sources(sources, field)
     # ★出典ごとに、その値を支えていることを確かめる★（2026-08-09・依頼130 P1-1）
     #   以前は全出典の引用をつなげてから探していたので、
     #   **1つの出典にしか無い値でも「2出典一致」として通った**。
@@ -2326,6 +2345,39 @@ def selftest() -> int:
           "basis" not in _mat_cv2["adopted"]["machine_profile"])
     finally:
         globals()["for_slug"] = _keep_for
+
+
+    # ─── ★型だけ出典1つでよい★（2026-08-27・運営者の判断）──────────
+    #   ★緩めるのは「数値ではない分類」だけ★＝数値は今までどおり2出典。
+    #   ★実測の背景★＝「マイジャグラーはボーナスタイプ」を明記しているのは
+    #   3社中1社だけ。2出典を課すと、その機種は永久に検索に載せられない。
+    t("★★型は出典1つでよい★★", min_sources("machine_profile") == 1)
+    t("★★数値は今までどおり2出典★★"
+      "／★ここが緩むと、1社の数値がそのまま記事に出る★",
+      min_sources("payout_range") == 2 and min_sources("bonus_prob") == 2
+      and min_sources("ceiling") == 2 and min_sources("at_prob") == 2)
+    t("　知らない項目も2出典（既定は厳しい側）",
+      min_sources("zzz_unknown") == 2)
+    t("　天井の有無は緩めていない（型とは別に確かめる決まり）",
+      min_sources("ceiling_state") == 2)
+
+    _one = [{"publisher": "chonborista", "url": "https://chonborista.com/a",
+             "quote": "仕様 ノーマルタイプ"}]
+
+    def _src_ng(srcs, field):
+        try:
+            check_sources(srcs, field)
+            return False
+        except ConfirmedError:
+            return True
+
+    t("★型なら1系列で通る★", not _src_ng(_one, "machine_profile"))
+    t("★★数値は1系列では通らない★★", _src_ng(_one, "payout_range"))
+    t("　項目を言わなければ2系列を要求する（安全側）", _src_ng(_one, ""))
+    t("　同じ発行者を2つ並べても、型以外は通らない",
+      _src_ng(_one + [{"publisher": "chonborista",
+                       "url": "https://chonborista.com/b",
+                       "quote": "x"}], "bonus_prob"))
 
     ng = sum(1 for _, o in results if not o)
     print()

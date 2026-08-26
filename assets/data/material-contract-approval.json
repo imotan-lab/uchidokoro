@@ -12,7 +12,7 @@
   "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
   "scripts/blocked_hosts.py": "553ac0a6f0f0baf563100458937efa167826c4347f815ace1a70e39769909b7d",
   "scripts/ceiling_lookup.py": "ad54309152dd7fe19c56ff574f7b468a70ef994e456b4a0a2c2f4a68fb00cf00",
-  "scripts/confirmed_values.py": "6ee22fac29bab1e859892580a12688850f18e55974dc9f95ab6e9a9cad1ac010",
+  "scripts/confirmed_values.py": "3b8304acf685cbd4b0b2aa1a38078f4773d82d6484a2af7c2e54b6952e663ac5",
   "scripts/cz_lookup.py": "24727d5876e0a5e233ff6c913e96ae3d3fc50d7e5d5869b019e443bde374b02b",
   "scripts/directory_index.py": "a758913881d5b7b6105069e5f3dfcb3e5a64aa2054578094d517166240ad2e21",
   "scripts/dmm_calendar.py": "ad0ae2ffb3977307cf361e4a137288e9bccdd1f15fb43e560aa629c5942a6930",
@@ -205,6 +205,5 @@
    "ceiling_lookup",
    "new_machine_watch"
   ]
- },
- "_deps_changed_why": "maker_identity_cache が slug_binding を読むようになった理由（2026-08-26）\n\n★控えの鍵を1つにそろえるため★＝保存は DMM のURLから `dmm_<機種ID>` を作り、\n参照は機種の slug（移行前に公開した機種は `pw_...`）で引いていたので、\n★鍵が一致せず、移行した10機種は2AIで決めても永久に効かなかった★\n（実際に踏んだ＝マイジャグラーVI で控えを記録しても除外され続けた）。\n\n★材料の採否の集合に入れる★\n  ・`slug_binding` は**採否の鍵そのもの**を決めるので、\n    ここが変わると「どの機種の控えを引くか」が変わる＝採否が変わる。\n  ・`slug_binding` の対応表は**増やせない形でコードに固定**してある\n    （新しい機種を足して逃がせない）ので、契約に入れても増え続けない。\n  ・`add_machine_run` は既に `slug_binding` を読んでおり、\n    契約にも入っている。同じ物を同じ扱いにする。"
+ }
 }
