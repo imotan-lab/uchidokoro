@@ -61,7 +61,7 @@
   "scripts/publish_new_machine.py": "03b2ec312fdd266f420c4cfc44f2e7114beebdda12a9a6bb41b0684cb8cc2fdd",
   "scripts/safe_json.py": "43f61703cbe7e1ea93ee2602fe9be45662957c8929aef62d649b6fc0493e0006",
   "scripts/strip_model_code.py": "d33516022a49198a846df628298328a326b5c04a8f20d4ccc6e416daf6340c68",
-  "service-worker.js": "208433fea85528702d84f6ae02c7c26e59a0fb7303ea3bf89582d604fd7ecc97",
+  "service-worker.js": "aea14796b048160774d248dbd117686f708ae22e4afd8cc28322930af0063382",
   "setting.html": "6660837bd3c31f6755c4ba8e5728c5ac846d43267534b72680c1a07717601dc3"
  }
 }
