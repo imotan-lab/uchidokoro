@@ -429,8 +429,18 @@ def _numbers(s: str) -> list:
 #   ★断ってよい理由★＝打ち消しや大小を入れ替えるのは
 #     **事実を変える**ことであって、言い換えではない。
 #     事実を変えるには出典が要る（この道具の役目ではない）。
-FLIP_MARKS = ("ない", "なく", "ません", "ませ", "無",
-              "以上", "以下", "未満", "超", "不可", "非")
+# ★★確かめられた反転の語だけを入れる★★（2026-08-27）
+#   ★名簿を増やし続ける作りには限界がある★（Codexの4回目の指摘1）＝
+#   条件・範囲・論理の語は無数にあり、機械には意味が判定できない。
+#   ★ここにあるのは「本番データで実際に通ることを確かめたもの」だけ★。
+#   ★残りは運営者の判断★＝道具にできることを「消すだけ」に狭めるかどうか。
+FLIP_MARKS = (
+    # 打ち消し
+    "ない", "なく", "ません", "ませ", "無", "不可", "非",
+    # 大小・範囲（★enen2 の「以内」→「以降」が実際に通っていた★）
+    "以上", "以下", "未満", "超", "以内", "以降", "以前",
+    # 論理（★bandori の「かつ」→「または」が実際に通っていた★）
+    "かつ", "または", "もしくは", "および", "ならびに")
 
 
 def _flips(s: str) -> list:
@@ -1557,6 +1567,48 @@ def _selftest() -> int:
           "／★『2つ以上のときだけ見る』では素通りしていた★",
           bool(rx3["problems"])
           and "並びが変わって" in "".join(rx3["problems"]))
+
+        # ★★本番データで実際に通っていた反転★★（2026-08-27・Codexの4回目）
+        #   enen2:「650G+α以内」→「以降」／bandori:「かつ」→「または」
+        #   ★どちらも同じ記事の別の行に相手の語があるので、
+        #     「記事に無い言葉」の検査には当たらなかった★
+        Y = {"slug": "y2", "sections": [
+            {"title": "天井・恩恵",
+             "body": ["通常B以上では650G+α以内で当選します。",
+                      "6周期以降かつスルー3以上が狙い目です。",
+                      "650G+α以降は前兆を確認します。",
+                      "または、リセット時は別の話です。"]}]}
+        with io.open(os.path.join(td, "y2.json"), "w",
+                     encoding="utf-8", newline="\n") as f:
+            json.dump(Y, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+
+        def dec_y(act):
+            r = os.path.join(td, "dy.json")
+            io.open(r, "w", encoding="utf-8").write(json.dumps(
+                {"schema_version": SCHEMA, "slug": "y2",
+                 "source_sha256": _sha_of("y2"),
+                 "decided_by": ["Claude", "codex"], "actions": [act]},
+                ensure_ascii=False))
+            return r
+
+        ry1 = apply_decision(dec_y(
+            {"op": "replace", "before": "通常B以上では650G+α以内で当選します。",
+             "after": "通常B以上では650G+α以降で当選します。",
+             "why": "わざと：範囲の反転"}))
+        t("★★範囲の反転（以内→以降）を止める★★"
+          "／★本番の enen2 で実際に通っていた★",
+          bool(ry1["problems"])
+          and "並びが変わって" in "".join(ry1["problems"]))
+
+        ry2 = apply_decision(dec_y(
+            {"op": "replace", "before": "6周期以降かつスルー3以上が狙い目です。",
+             "after": "6周期以降またはスルー3以上が狙い目です。",
+             "why": "わざと：かつ→または"}))
+        t("★★論理の反転（かつ→または）を止める★★"
+          "／★本番の bandori で実際に通っていた★",
+          bool(ry2["problems"])
+          and "並びが変わって" in "".join(ry2["problems"]))
 
         rx4 = apply_decision(dec_x(
             {"op": "replace", "before": "リセットのときの話です。",
