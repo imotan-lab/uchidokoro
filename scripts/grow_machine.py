@@ -333,14 +333,22 @@ def mark_checked(slug: str, today) -> bool:
 
 
 def targets(rows: list, today=None, state: dict = None,
-            conf=None) -> list:
-    """育てる対象（`AUTO_PENDING` の機種のうち、今日見る日のもの）。"""
+            conf=None, broken: list = None) -> list:
+    """育てる対象（`AUTO_PENDING` の機種のうち、今日見る日のもの）。
+
+    ★外したものを `broken` に入れて返す★（2026-08-27・Codexの指摘13）
+      ★直す前は黙って飛ばしていた★ので、判定書が壊れた機種は
+      **永久に候補から消え、全体は exit 0 のまま**だった。
+      ＝誰も気づけない（★飛ばしたことを黙らない★）。
+    """
     out = []
     for m in rows:
         try:
             if _pdz.machine_class(m) != "AUTO_PENDING":
                 continue
-        except _pdz.DecisionError:
+        except _pdz.DecisionError as e:
+            if broken is not None:
+                broken.append(f"{m.get('slug')}: {str(e)[:70]}")
             continue                       # 壊れているものは別途 audit が拾う
         if today is not None and not due(m["slug"],
                                         str(m.get("release_date") or ""),
@@ -2100,6 +2108,22 @@ def selftest() -> int:
         t("　今月・過ぎたものは積む", not _not_yet("2026-08")
           and not _not_yet("2026-08-03") and not _not_yet("2026-07"))
         t("　当日は積む（もう導入されている）", not _not_yet("2026-08-21"))
+        # ── 2026-08-27・Codexのレビュー（指摘13）────────────────
+        #   ★判定書が壊れている機種を黙って外さない★
+        # ★本物の判定書を作らせる★（手書きだと形が合わず、
+        #   ★壊れていない側まで壊れて見えて、対照にならない★）
+        _ok_pd = _pdz.decide({"adopted": {}})
+        _bad_rows = [{"slug": "zzz_broken", "publication_policy": None},
+                     {"slug": "zzz_ok",
+                      "publication_policy": _ok_pd["schema_version"],
+                      "page_decision": _ok_pd}]
+        _got_broken = []
+        _tg = targets(_bad_rows, broken=_got_broken)
+        t("★★判定書が壊れている機種は、黙って外さず名指しする★★"
+          "／★直す前は永久に候補から消え、全体は成功に見えた★",
+          _got_broken and "zzz_broken" in _got_broken[0])
+        t("　壊れていない機種は今までどおり候補になる", _tg == ["zzz_ok"])
+
         t("★★登場時期が分からないときは積む（安全側）★★",
           not _not_yet(""))
         t("　日として短すぎる値は通さない", _rel("2026-08", "2026-08-1"))
@@ -2160,13 +2184,24 @@ def _main() -> int:
     #   導入日からの距離で間隔を変える（設定＝grow-machine-frequency.json）。
     _today = _dt.date.today()
     _seen = last_checked()
-    tg = targets(rows, _today, _seen)
+    _broken = []
+    tg = targets(rows, _today, _seen, broken=_broken)
     if not a.slug:
         _all = targets(rows)
         print(f"育てる対象: {len(tg)}機種 " + " ".join(tg[:10]))
         if len(_all) > len(tg):
             print(f"（{len(_all) - len(tg)}機種は今日は見ません＝"
                   f"導入日から遠いので間隔を空けています）")
+        # ★★外した機種は必ず出す★★（2026-08-27・Codexの指摘13）
+        for _b in _broken:
+            print("  ★判定書が壊れていて候補から外しました★ " + _b)
+        # ★★機種名なしの --apply をはっきり断る★★（Codexの指摘12）
+        #   ★直す前は対象を並べて exit 0★＝
+        #   「やったつもりで1機種も書いていない」が成功に見えた。
+        if a.apply:
+            print("★機種名がありません★ --apply は1機種ずつです"
+                  "（python scripts/grow_machine.py --slug <機種> --apply）")
+            return 2
         return 0
     got = plan_one(a.slug)
     # ★次回の様子見のための控えは「材料まで見に行けた」ときだけ★

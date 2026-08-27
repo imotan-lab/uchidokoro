@@ -214,7 +214,15 @@ def run(slug: str | None = None, apply_it: bool = False) -> dict:
 def _selftest() -> int:
     ng = []
 
+    ran = [0]          # ★実際に試した数を数える★（2026-08-27）
+
+    #   ★直す前は分母が手書きだった★ので、
+
+    #   試験を足しても分母が増えず、足した分が数えられなかった。
+
     def t(name, cond):
+
+        ran[0] += 1
         print(("✅ " if cond else "❌ ") + name)
         if not cond:
             ng.append(name)
@@ -271,7 +279,7 @@ def _selftest() -> int:
       and "確認中" not in src.split('"""')[2])
 
     print()
-    print(f"{15 - len(ng)}/15 " + ("合格" if not ng else "不合格"))
+    print(f"{ran[0] - len(ng)}/{ran[0]} " + ("合格" if not ng else "不合格"))
     return 1 if ng else 0
 
 

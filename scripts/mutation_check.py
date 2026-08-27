@@ -1269,6 +1269,49 @@ MUTATIONS = [
         "after": "    if False:",
         "run": ["scripts/decide_now.py"],
     },
+    # ─── 2026-08-27・Codexのレビュー（記録・育成）────────────────
+    {
+        "why": "★封をした判定を、合意のときに取り直さない"
+               "（答えを見てから書き換えられる＝2AI一致が自己申告）★",
+        "file": "scripts/repair_journal.py",
+        "before": "    if _now != _want:",
+        "after": "    if False:",
+        "run": ["scripts/repair_journal.py"],
+    },
+    {
+        "why": "★決まらなかった回のあと、はじめへ戻さない"
+               "（2回目に入れず、その件が永久に止まる）★",
+        "file": "scripts/repair_journal.py",
+        "before": '    rec["state"] = "DETECTED"',
+        "after": "    pass",
+        "run": ["scripts/repair_journal.py"],
+    },
+    {
+        "why": "★記事の指紋なしでも記録できる"
+               "（後段の照合が丸ごと働かない）★",
+        "file": "scripts/repair_journal.py",
+        "before": '    if len(str(source_sha256 or "")) != 64:',
+        "after": "    if False:",
+        "run": ["scripts/repair_journal.py"],
+    },
+    {
+        "why": "★壊れた記録を黙って外す"
+               "（途中の直しが一覧から消えて誰も気づけない）★",
+        "file": "scripts/repair_journal.py",
+        "before": '            out.append({"state": "BROKEN", '
+                  '"finding_id": n[:-5],',
+        "after": "            continue\n            out.append({"
+                 '"state": "BROKEN", "finding_id": n[:-5],',
+        "run": ["scripts/repair_journal.py"],
+    },
+    {
+        "why": "★判定書が壊れた機種を黙って外す"
+               "（その機種だけ永久に育たない）★",
+        "file": "scripts/grow_machine.py",
+        "before": "            if broken is not None:",
+        "after": "            if False:",
+        "run": ["scripts/grow_machine.py"],
+    },
     {
         "why": "★2AIに基本情報表を見せない（食い違いに気づけない）★",
         "file": "scripts/decide_now.py",
@@ -1284,6 +1327,7 @@ MUTATIONS = [
 
 
 _SCORE = re.compile(r"(\d+)\s*/\s*(\d+)\s*合格")
+_SCORE_ANY = __import__("re").compile(r"(\d+)\s*/\s*(\d+)")
 
 
 def _run_tests(root: str, scripts: list) -> tuple:
@@ -1317,7 +1361,14 @@ def _run_tests(root: str, scripts: list) -> tuple:
                            env=env)
         if r.returncode != 0:
             out = (r.stdout or "") + (r.stderr or "")
-            ng = [x for x in out.splitlines() if x.startswith("❌")]
+            # ★★試験の書き方は1つではない★★（2026-08-27）
+            #   ★直す前は「❌」で始まる行しか見ていなかった★ので、
+            #   「NG 」で書く試験（repair_journal / confirmed_values など）の
+            #   失敗を**全部「ただ落ちただけ」に分類**していた。
+            #   ＝守られているのに「守られていない」と報告する。
+            ng = [x for x in out.splitlines()
+                  if x.startswith("❌") or x.startswith("NG ")
+                  or x.startswith("失敗: ")]
             # ★★どう捕まえたのかを区別する★★（2026-08-24・Codexの3回目の指摘2）
             #   ★直す前は「終了コードが0以外＝捕まえた」だけだった★ので、
             #   壊し方が**構文エラーになっただけ**でも合格に見えた。
@@ -1333,6 +1384,11 @@ def _run_tests(root: str, scripts: list) -> tuple:
             for line in out.splitlines():
                 m = _SCORE.search(line)
                 if m and int(m.group(1)) < int(m.group(2)):
+                    return "試験が❌", f"{rel}: {line.strip()[:70]}"
+                # ★「N/M 不合格」も試験の失敗★（2026-08-27）
+                #   ★合格の形だけ見ていた★ので、
+                #   不合格と書いてある行を読み落としていた。
+                if "不合格" in line and _SCORE_ANY.search(line):
                     return "試験が❌", f"{rel}: {line.strip()[:70]}"
             why = (out.strip().splitlines() or [""])[-1][:70]
             return "落ちただけ", f"{rel}: {why}"
