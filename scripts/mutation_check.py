@@ -1490,14 +1490,6 @@ MUTATIONS = [
         "run": ["scripts/decide_now.py"],
     },
     {
-        "why": "★言い回しで符号まで伏せる（+500枚→-600枚が素通り）★",
-        "file": "scripts/decide_now.py",
-        "before": '    return _re4.sub(r"\\d+(?:\\.\\d+)?", "#", str(s or ""))',
-        "after": '    return _re4.sub(r"[-−▲△+＋]?\\d+(?:\\.\\d+)?", "#", '
-                 'str(s or ""))',
-        "run": ["scripts/decide_now.py"],
-    },
-    {
         "why": "★相談のときに締切を見ない（締切を越えて相談し続ける）★",
         "file": "scripts/task_guard.py",
         "before": '    if _dl and datetime.now().strftime("%H:%M") >= _dl:',
@@ -1538,6 +1530,14 @@ MUTATIONS = [
                   'if x == a["text"])',
         "after": '                _same = 2 if _wording(a["text"]) '
                  'in _wording(raw) else 0',
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★骨組みで符号を見ない（+500枚→-500枚が同じ値に見える）★",
+        "file": "scripts/decide_now.py",
+        "before": '        _SHAPE_RE = _re3.compile(r"[-−▲△+＋]?'
+                  '\\d+(?:\\.\\d+)?")',
+        "after": '        _SHAPE_RE = _re3.compile(r"\\d+(?:\\.\\d+)?")',
         "run": ["scripts/decide_now.py"],
     },
     {
