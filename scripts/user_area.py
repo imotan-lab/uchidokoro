@@ -1065,6 +1065,49 @@ def selftest() -> int:
       tuple(_cl_w._user_area_words()) == tuple(USER_AREA_WORDS))
 
 
+    # ─── ★実ページの固定試料★（2026-08-28・台帳#492）───────────
+    #   ★評価の箱（hyouka）を必須にしていたので、評価が付いていない機種の
+    #     ページを丸ごと出典から外していた★（本番で実際に止まった）。
+    #   ★試料は書き換えない★／評価なしの形は、試料の評価の箱の名前を
+    #     変えて作る（実物から作るので、想像で書いた材料にならない）。
+    _fx2 = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "tests", "fixtures")
+    _f2 = os.path.join(_fx2, "chonborista_funky2.html")
+    if os.path.isfile(_f2):
+        _u2 = "https://chonborista.com/slot/kitadenshi/144333/"
+        _h2 = open(_f2, encoding="utf-8").read()
+        _ok2, _c2 = True, ""
+        try:
+            _c2 = clean_html(_h2, _u2)
+        except Exception:                      # noqa: BLE001
+            _ok2 = False
+        t("★★実ページ（評価あり）は今までどおり出典に使える★★", _ok2)
+        t("★★読者が付けた平均点を材料に残さない★★"
+          "／★rating-btn を落としていなかったので、"
+          "「みんなの評価（平均◯）」がそのまま材料に入っていた★",
+          _ok2 and "みんなの評価" not in visible_text(_c2))
+
+        # ★評価が付いていない機種の形★（評価の箱だけ名前を変える）
+        _h_no = _h2.replace('id="hyouka"', 'id="hyouka-none"')
+        _ok3 = True
+        try:
+            clean_html(_h_no, _u2)
+        except Exception:                      # noqa: BLE001
+            _ok3 = False
+        t("★★評価が付いていない機種のページも出典に使える★★"
+          "／★これを止めていたので、新台とマイナー機種が"
+          "この名鑑を使えなかった★", _ok3)
+
+        # ★対照★＝枠の名前が変わったら気づく
+        _h_bad = _h2.replace('class="rating-btn"', 'class="rating-btn-x"')
+        _ok4 = True
+        try:
+            clean_html(_h_bad, _u2)
+        except Exception:                      # noqa: BLE001
+            _ok4 = False
+        t("　（対照）評価の枠の名前が変わったら、そのページは使わない",
+          _ok4 is False)
+
     ng = sum(1 for _, o in results if not o)
     print()
     print("%d/%d 合格" % (len(results) - ng, len(results)))
