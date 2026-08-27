@@ -685,11 +685,20 @@ def _selftest() -> int:
         # ★★本番と同じ順で3回まわす★★（2026-08-27・Codexの2回目の指摘3）
         #   ★直す前は、封もCodexの受け取りもせずに3回数えていた★
         #   ＝この試験そのものが「判断せずに人へ回せる」穴の実演だった。
-        for i in range(MAX_ATTEMPTS):
-            seal_claude(f2, vp)
-            record_codex(f2, "b" * 64, f"{i + 1}回目のCodexの判定です。" * 2)
-            r2 = attempt(f2, f"{i + 1}回目")
-        t("★★3回で人へ回す★★", load(f2)["state"] == ESCALATED)
+        # ★例外を受け止めて❌として数える★（2026-08-27）
+        #   ★受け止めないと、はじめへ戻す守りを壊したとき
+        #     試験そのものが死ぬ★＝構文エラーと区別がつかない。
+        _st2 = ""
+        try:
+            for i in range(MAX_ATTEMPTS):
+                seal_claude(f2, vp)
+                record_codex(f2, "b" * 64,
+                             f"{i + 1}回目のCodexの判定です。" * 2)
+                r2 = attempt(f2, f"{i + 1}回目")
+            _st2 = load(f2)["state"]
+        except JournalError as e:
+            _st2 = f"進めません: {e}"
+        t("★★3回で人へ回す★★（本番と同じ順で3回まわす）", _st2 == ESCALATED)
         t("　打ち切った後は先へ進めない",
           _try_fail(lambda: seal_claude(f2, vp)))
 
