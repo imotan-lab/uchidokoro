@@ -1228,6 +1228,47 @@ MUTATIONS = [
         "after": "        d[\"factTable\"][i1][0] = after",
         "run": ["scripts/decide_now.py"],
     },
+    # ─── 2026-08-27・Codexのレビュー（更新タスク）で塞いだ穴 ────
+    {
+        "why": "★記事に無い言葉を書き足せる"
+               "（意味の反転・新しい事実が素通りする）★",
+        "file": "scripts/decide_now.py",
+        "before": "            new_w = [w for w in _words(a[\"after\"]) "
+                  "if w not in _blob]",
+        "after": "            new_w = []",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★数値の並びの入れ替えを許す"
+               "（どちらがどちらの値かを取り違えさせられる）★",
+        "file": "scripts/decide_now.py",
+        "before": "            if nb != na and sorted(nb) == sorted(na):",
+        "after": "            if False:",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★数値を裸の数字で見る"
+               "（獲得500枚が残れば天井500Gを消せる）★",
+        "file": "scripts/decide_now.py",
+        "before": "            out.append(m.group(0) + tail)",
+        "after": "            out.append(m.group(0))",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★同じ文字が2か所にあっても場所を言わせない"
+               "（表を直す決定が本文を変える）★",
+        "file": "scripts/decide_now.py",
+        "before": "            if len(spots) > 1:",
+        "after": "            if False:",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★機種の名前を検査しない（置き場の外を書き換えられる）★",
+        "file": "scripts/decide_now.py",
+        "before": "    if not _SLUG_OK.match(s):",
+        "after": "    if False:",
+        "run": ["scripts/decide_now.py"],
+    },
     {
         "why": "★2AIに基本情報表を見せない（食い違いに気づけない）★",
         "file": "scripts/decide_now.py",

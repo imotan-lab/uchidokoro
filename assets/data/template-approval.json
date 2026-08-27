@@ -47,7 +47,7 @@
   "scripts/claim_inventory.py": "80d58f1e483edfd4828dc16a9b568d824c251ead2beb498d5ef4f6898ded9e87",
   "scripts/claim_ledger.py": "8afede1352c4b604d7d4ab9a242214eb3140e8d2f8120f2a9964c1acd0d9c77e",
   "scripts/claim_reconcile.py": "9e54cd1ab7ef6df2b9b5b6aff8e7436e69a9489b3b06f05c8306a49549caacb5",
-  "scripts/decide_now.py": "26af88276b4937591b37b3705c431facf600ea1dbcc64d2fcfebce3eba088d41",
+  "scripts/decide_now.py": "1f6a278b2c0df500c49ea589b4d7808c568f4db4fab84ef7220e1e494ee40b19",
   "scripts/extract_setting_rates.py": "967989f6804dea9cd10d88ac2cb288ccfd2ea7cb08f03bc9351106f7f334249e",
   "scripts/fix_plain_style.py": "dd424deefc46e41360f4e049e22452e62e3d44f933d18a312e2da59321ad9354",
   "scripts/gates.py": "44896042c91092384a895ee580fa0429425376769254cd9aae82d7260fd5a873",
