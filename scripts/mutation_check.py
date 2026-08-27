@@ -1211,6 +1211,34 @@ MUTATIONS = [
         "after": "        _hit = (_pm.load().get(\"items\") or {}).get(official_url)",
         "run": ["scripts/confirmed_values.py"],
     },
+    # ─── 2026-08-27・台帳#487 節の外（表・要約・リード文）を直せる ───
+    {
+        "why": "★節の外を数え直しに入れない"
+               "（表の数値が消えても素通りする）★",
+        "file": "scripts/decide_now.py",
+        # ★目印は前の行ごと取る★（字下げ違いの同じ行に部分一致するため）
+        "before": "        elif kind in OUTSIDE_KINDS:",
+        "after": "        elif False:",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★書き戻す欄を取り違える（隣の欄を壊す）★",
+        "file": "scripts/decide_now.py",
+        "before": "        d[\"factTable\"][i1][i2] = after",
+        "after": "        d[\"factTable\"][i1][0] = after",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★2AIに基本情報表を見せない（食い違いに気づけない）★",
+        "file": "scripts/decide_now.py",
+        # ★2行まとめて置き換える★（1行だけ切ると構文エラーになり、
+        #   「ただ落ちただけ」になって守りの証拠にならない）
+        "before": "        \"factTable\": [list(r) for r in "
+                  "(d.get(\"factTable\") or [])\n"
+                  "                      if isinstance(r, (list, tuple))],",
+        "after": "        \"factTable\": [],",
+        "run": ["scripts/decide_now.py"],
+    },
 ]
 
 

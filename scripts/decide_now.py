@@ -137,6 +137,15 @@ def gather(slug: str) -> dict:
                        if isinstance(t, dict) and t.get("note")]}
             for sec in (d.get("sections") or []) if isinstance(sec, dict)
         ],
+        # ★★節の外にも読者が読むものがある★★（2026-08-27・台帳#487）
+        #   ★渡していなかったせいで起きたこと★＝
+        #   2AIは「基本情報表と本文で用語が食い違う」と気づけず、
+        #   気づいても直す口が無いので**永久に台帳へ落ちていた**。
+        "factTable": [list(r) for r in (d.get("factTable") or [])
+                      if isinstance(r, (list, tuple))],
+        "summaryBoxes": [dict(b) for b in (d.get("summaryBoxes") or [])
+                         if isinstance(b, dict)],
+        "lead": d.get("lead") if isinstance(d.get("lead"), str) else "",
     }
     # ★★機種データも渡す★★（2026-08-22・実データで穴が出た）
     #   ★渡していなかったせいで起きたこと★＝
@@ -242,6 +251,49 @@ def gather(slug: str) -> dict:
     return out
 
 
+# ★★節の外の直せる場所★★（2026-08-27・台帳#487）
+#   ★言い換え（replace）だけ★＝行ごと消す・リード文を空にするは受け取らない。
+#   節の本文と違い、同じ事実が他所に残っている保証が弱いので、
+#   消すと「どちらが正解か」を選んだことになりやすい。
+OUTSIDE_KINDS = ("fact", "summary", "lead")
+
+
+def _outside_plan(d: dict, a: dict) -> tuple | None:
+    """節の外（基本情報表・要約ボックス・リード文）で当たる場所を探す。
+
+    返すもの: (種類, 場所1, 場所2, 決定) ／ 当たらなければ None
+    ★言い換えのときだけ探す★
+    """
+    if a.get("op") != "replace":
+        return None
+    before = a.get("before")
+    for ri, row in enumerate(d.get("factTable") or []):
+        if not isinstance(row, (list, tuple)):
+            continue
+        for ci, cell in enumerate(row):
+            if isinstance(cell, str) and cell == before:
+                return ("fact", ri, ci, a)
+    for bi, box in enumerate(d.get("summaryBoxes") or []):
+        if not isinstance(box, dict):
+            continue
+        for key in ("value", "label"):
+            if isinstance(box.get(key), str) and box[key] == before:
+                return ("summary", bi, key, a)
+    if isinstance(d.get("lead"), str) and d["lead"] == before:
+        return ("lead", 0, 0, a)
+    return None
+
+
+def _write_outside(d: dict, kind: str, i1, i2, after: str) -> None:
+    """節の外へ書き戻す（★探す側と書く側で同じ場所の指し方を使う★）。"""
+    if kind == "fact":
+        d["factTable"][i1][i2] = after
+    elif kind == "summary":
+        d["summaryBoxes"][i1][i2] = after
+    elif kind == "lead":
+        d["lead"] = after
+
+
 def _load_decision(path: str) -> dict:
     d = _sj.read_json(path, expect=dict)
     if d.get("schema_version") != SCHEMA:
@@ -295,6 +347,10 @@ def _simulate(detail: dict, plan: list) -> str:
             d["sections"][si]["body"][bi] = a["after"]
         elif kind == "table_note":
             d["sections"][si]["tables"][bi]["note"] = a["after"]
+        elif kind in OUTSIDE_KINDS:
+            # ★節の外も数え直しに入れる★（2026-08-27・台帳#487）
+            #   ★入れないと★＝表の数値を書き換えても「消えた」と気づけない。
+            _write_outside(d, kind, si, bi, a["after"])
         elif kind == "drop":
             dropping.setdefault(si, set()).add(bi)
     for si, idxs in dropping.items():
@@ -426,6 +482,12 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
             if hit:
                 break
         if not hit:
+            # ★節の外（基本情報表・要約ボックス・リード文）も見る★（台帳#487）
+            got = _outside_plan(d, a)
+            if got:
+                plan.append(got)
+                hit = True
+        if not hit:
             result["problems"].append(
                 f"実データに無い行です（記事が変わった可能性）: "
                 f"{(a.get('text') or a.get('before'))[:44]!r}")
@@ -477,6 +539,10 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
 
     if apply_it:
         for kind, si, bi, a in plan:
+            if kind in OUTSIDE_KINDS:
+                # ★節の外は sections を触らない★（場所の指し方が違う）
+                _write_outside(d, kind, si, bi, a["after"])
+                continue
             sec = d["sections"][si]
             if kind == "replace":
                 sec["body"][bi] = a["after"]
@@ -499,7 +565,14 @@ def _selftest() -> int:
     import tempfile
     ng = []
 
+    ran = [0]
+
     def t(name, cond):
+        # ★試した数を数える★（2026-08-27）
+        #   ★直す前は分母が手書きの「22」だった★ので、
+        #   試験を足しても分母が増えず、★足した分が数えられなかった★
+        #   （監査51が見張っている型そのもの）。
+        ran[0] += 1
         print(("✅ " if cond else "❌ ") + name)
         if not cond:
             ng.append(name)
@@ -772,6 +845,105 @@ def _selftest() -> int:
         t("　出どころが実在し、消える数値を理由つきで名指しすれば通る",
           not rk5["problems"])
 
+        # ── 2026-08-27・台帳#487 節の外（表・要約・リード文）────────
+        #   ★実例（真打 吉宗）★＝基本情報表が「スルーカウントリセット」、
+        #   本文が「周期カウントがリセット」。この機種にスルー天井は無い。
+        #   ★直す前は道具に口が無く、何回やり直しても直らなかった★
+        M = {"slug": "m",
+             "lead": "この機種は2026年4月6日導入。解析は順次更新予定。",
+             "factTable": [["朝一リセット", "スルーカウントリセット"],
+                           ["CZ間天井", "1000G+α（6周期）"],
+                           ["機械割（設定6）", "114.0%"]],
+             "summaryBoxes": [{"label": "狙い目", "value": "等価400G〜"}],
+             "sections": [
+                 {"title": "天井・恩恵",
+                  "body": ["朝一は周期カウントがリセットされます。",
+                           "CZ間天井は1000G+α（6周期）です。"]},
+                 {"title": "当サイトの狙い目",
+                  "body": ["等価400G〜が狙い目です。"]}]}
+        with io.open(os.path.join(td, "m.json"), "w",
+                     encoding="utf-8", newline="\n") as f:
+            json.dump(M, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+
+        def dec_m(actions, removed=None):
+            r = os.path.join(td, "dm.json")
+            body = {"schema_version": SCHEMA, "slug": "m",
+                    "decided_by": ["Claude", "codex"], "actions": actions}
+            if removed:
+                body["numbers_removed"] = removed
+            io.open(r, "w", encoding="utf-8").write(
+                json.dumps(body, ensure_ascii=False))
+            return r
+
+        rm1 = apply_decision(dec_m([
+            {"op": "replace", "before": "スルーカウントリセット",
+             "after": "周期カウントリセット",
+             "why": "この機種にスルー天井は無い（本文と揃える）"}]),
+            apply_it=True)
+        with io.open(os.path.join(td, "m.json"), encoding="utf-8") as f:
+            _m1 = json.load(f)
+        t("★★★基本情報表の食い違いを直せる★★★"
+          "／★これが無くて台帳#276が永久に閉じられなかった★",
+          not rm1["problems"] and _m1["factTable"][0][1] == "周期カウントリセット")
+        t("　直したい欄だけが変わる（隣の行は元のまま）",
+          _m1["factTable"][1][1] == "1000G+α（6周期）"
+          and _m1["factTable"][0][0] == "朝一リセット")
+
+        rm2 = apply_decision(dec_m([
+            {"op": "replace", "before": "等価400G〜",
+             "after": "等価400G〜（CZ間）",
+             "why": "本文と同じ言い方にそろえる"}]), apply_it=True)
+        with io.open(os.path.join(td, "m.json"), encoding="utf-8") as f:
+            _m2 = json.load(f)
+        t("★要約ボックスも直せる★",
+          not rm2["problems"]
+          and _m2["summaryBoxes"][0]["value"] == "等価400G〜（CZ間）")
+
+        rm3 = apply_decision(dec_m([
+            {"op": "replace",
+             "before": "この機種は2026年4月6日導入。解析は順次更新予定。",
+             "after": "この機種は2026年4月6日に登場したスマスロAT機です。",
+             "why": "時間で嘘になる文（順次更新予定）を落とす"}]),
+            apply_it=True)
+        with io.open(os.path.join(td, "m.json"), encoding="utf-8") as f:
+            _m3 = json.load(f)
+        t("★リード文も直せる★（時間で嘘になる文を落とせる）",
+          not rm3["problems"] and "順次更新予定" not in _m3["lead"])
+
+        # ★★節の外でも、全部やったあとの数え直しが効く★★
+        #   ★★1件ずつの検査を通る形にしてある★★（2026-08-27・罠④）
+        #   ★直す前は数値が丸ごと消える書き換えにしていた★ので、
+        #   「出どころが要ります」の検査が**先に**断っており、
+        #   数え直しは一度も動いていなかった（壊しても試験が緑だった）。
+        #   ここでは出どころを言い、足す数値（400）はその逐語にある。
+        #   ＝1件ずつの検査は通る。★消えるのは 114（表にしか無い）★。
+        rm4 = apply_decision(dec_m([
+            {"op": "replace", "before": "114.0%",
+             "after": "等価400G〜", "why": "わざと：表にしか無い数値が消える",
+             "numbers_from": "等価400G〜が狙い目です。"}]))
+        t("★★節の外でも、数え直しが効く（表にしか無い数値が消える）★★"
+          "／★数え直しに入れ忘れると素通りする★",
+          bool(rm4["problems"]) and "114" in "".join(rm4["problems"]))
+
+        rm5 = apply_decision(dec_m([
+            {"op": "drop", "text": "朝一リセット", "why": "わざと：行ごと消す"}]))
+        t("　表の行ごと消す決定は受け取らない（言い換えだけ）",
+          bool(rm5["problems"]))
+
+        rm6 = apply_decision(dec_m([
+            {"op": "replace", "before": "どこにも無い文字列",
+             "after": "x", "why": "わざと"}]))
+        t("　節の外にも無ければ、いままでどおり断る", bool(rm6["problems"]))
+
+        # ★★2AIに見せていないものは直せない★★（2026-08-27・台帳#487）
+        #   ★口を足しただけでは足りない★＝渡していなければ、
+        #   2AIはそこに食い違いがあることに気づけない。
+        _gm = gather("m")["article"]
+        t("★2AIに表・要約・リード文を見せる（見せないものは直せない）★",
+          bool(_gm.get("factTable")) and bool(_gm.get("summaryBoxes"))
+          and bool(_gm.get("lead")))
+
         r7 = apply_decision(dec([{"op": "drop", "text": "B の行です。",
                                   "why": "…"}]), apply_it=True)
         t("　通れば書ける", r7.get("wrote") is True)
@@ -783,7 +955,7 @@ def _selftest() -> int:
         globals()["DETAILS"] = _keep
 
     print()
-    print(f"{22 - len(ng)}/22 " + ("合格" if not ng else "不合格"))
+    print(f"{ran[0] - len(ng)}/{ran[0]} " + ("合格" if not ng else "不合格"))
     return 1 if ng else 0
 
 
