@@ -167,50 +167,8 @@ def main() -> int:
 
     changed = _changed_paths()
     hit = [p for p in changed if any(p.startswith(w) or p == w for w in WATCH)]
-    if not a.always and not hit:
-        print("pre-push: 記事データの変更なし（検査は流しません）")
-        return 0
-    if hit:
-        print(f"pre-push: 記事データの変更 {len(hit)} 件 → 検査を流します")
-
-    # ★★古い読み込み結果を無効にする★★（2026-08-27・2回踏んだ）
-    #   Pythonは「元の日時（秒）と大きさ」だけで作り直すかを決めるので、
-    #   ★大きさが変わらない直しを同じ秒のうちに書くと、古い結果が使われる★
-    #   ＝直したのに直っていない状態のまま、検査が緑になる。
-    #   ★中身は1文字も変えない★（日時だけ）。
-    for _f in glob.glob(os.path.join(BASE, "scripts", "*.py")):
-        try:
-            os.utime(_f, None)
-        except OSError:
-            pass                       # ★触れなくても検査は続ける★
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     ng = []
-    for name, cmd in (("crosscheck_gates", ["crosscheck_gates.py"]),
-                      ("audit_site", ["audit_site.py"])):
-        r = subprocess.run([sys.executable, os.path.join(BASE, "scripts", *cmd)],
-                           cwd=BASE, capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", env=env)
-        tail = "\n".join((r.stdout or "").strip().splitlines()[-6:])
-        print(f"--- {name} (exit={r.returncode}) ---")
-        print(tail)
-        if r.returncode != 0:
-            ng.append(name)
-    # ★★壊し方の目印が消えていないか★★（2026-08-27・実際に2回やった）
-    #   ★試験は走らせない★＝目印の文字が実在するか数えるだけ（一瞬で終わる）。
-    #   `ci_repro` の赤を読まずに push して、CIを落としたのがこの型。
-    _mut = subprocess.run(
-        [sys.executable, os.path.join(BASE, "scripts", "mutation_check.py"),
-         "--selftest"],
-        cwd=BASE, capture_output=True, text=True, encoding="utf-8",
-        errors="replace", env=env)
-    if _mut.returncode != 0:
-        print()
-        print("★★壊し方の目印が消えています★★（CIが必ず落ちます）")
-        for _l in (_mut.stdout or "").splitlines():
-            if _l.startswith("❌") or "合格" in _l:
-                print("   " + _l)
-        print("   → 直した場所に合わせて mutation_check.py の目印を直してください")
-        ng.append("壊し方の目印")
     # ★★触ったスクリプトの守りを、実際に壊して試す★★（2026-08-28）
     #   ★きっかけ★＝守りを手前に足したせいで奥の守りの試験が消え、
     #   それを見落として push し、★GitHubのCIが実際に赤くなった★。
@@ -239,6 +197,52 @@ def main() -> int:
             print("   → 手前に別の守りを足したせいで、"
                   "奥の守りを一度も試さなくなっていないか確かめてください")
             ng.append("壊し方（触った分）")
+    if ng:
+        print()
+        print("★pushを止めました★ 失敗: " + " / ".join(ng))
+        return 1
+    if not a.always and not hit:
+        print("pre-push: 記事データの変更なし（記事の検査は流しません）")
+        return 0
+    if hit:
+        print(f"pre-push: 記事データの変更 {len(hit)} 件 → 検査を流します")
+
+    # ★★古い読み込み結果を無効にする★★（2026-08-27・2回踏んだ）
+    #   Pythonは「元の日時（秒）と大きさ」だけで作り直すかを決めるので、
+    #   ★大きさが変わらない直しを同じ秒のうちに書くと、古い結果が使われる★
+    #   ＝直したのに直っていない状態のまま、検査が緑になる。
+    #   ★中身は1文字も変えない★（日時だけ）。
+    for _f in glob.glob(os.path.join(BASE, "scripts", "*.py")):
+        try:
+            os.utime(_f, None)
+        except OSError:
+            pass                       # ★触れなくても検査は続ける★
+    for name, cmd in (("crosscheck_gates", ["crosscheck_gates.py"]),
+                      ("audit_site", ["audit_site.py"])):
+        r = subprocess.run([sys.executable, os.path.join(BASE, "scripts", *cmd)],
+                           cwd=BASE, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", env=env)
+        tail = "\n".join((r.stdout or "").strip().splitlines()[-6:])
+        print(f"--- {name} (exit={r.returncode}) ---")
+        print(tail)
+        if r.returncode != 0:
+            ng.append(name)
+    # ★★壊し方の目印が消えていないか★★（2026-08-27・実際に2回やった）
+    #   ★試験は走らせない★＝目印の文字が実在するか数えるだけ（一瞬で終わる）。
+    #   `ci_repro` の赤を読まずに push して、CIを落としたのがこの型。
+    _mut = subprocess.run(
+        [sys.executable, os.path.join(BASE, "scripts", "mutation_check.py"),
+         "--selftest"],
+        cwd=BASE, capture_output=True, text=True, encoding="utf-8",
+        errors="replace", env=env)
+    if _mut.returncode != 0:
+        print()
+        print("★★壊し方の目印が消えています★★（CIが必ず落ちます）")
+        for _l in (_mut.stdout or "").splitlines():
+            if _l.startswith("❌") or "合格" in _l:
+                print("   " + _l)
+        print("   → 直した場所に合わせて mutation_check.py の目印を直してください")
+        ng.append("壊し方の目印")
     if ng:
         print()
         print("★pushを止めました★ 失敗: " + " / ".join(ng))
