@@ -61,6 +61,8 @@ import sys
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
 
+import safe_json as _sj                # noqa: E402
+
 SCHEMA = "repair-journal/v1"
 STORE = os.path.join(os.path.expanduser("~"), "Documents", "uchidokoro",
                      "repairs")
@@ -260,6 +262,32 @@ def record_codex(fid: str, material_sha256: str, verdict_text: str) -> dict:
                  codex_verdict_sha256=_sha(verdict_text))
 
 
+def _ops_from_decision(path: str, rec: dict) -> list:
+    """決定ファイルから操作を取り出す（★同じ件・同じ記事であること★）。
+
+    ★ここで確かめる3つ★
+      ①その決定ファイルが、この件（finding_id）のものだと名乗っていること
+      ②機種が同じこと
+      ③見つけたときと同じ記事に対する判断であること
+    """
+    got = _sj.read_json(path, expect=dict)
+    if str(got.get("finding_id") or "") != str(rec["finding_id"]):
+        raise JournalError(
+            "決定ファイルが、この件のものだと名乗っていません"
+            f"（finding_id: {got.get('finding_id')!r}）")
+    if str(got.get("slug") or "") != str(rec.get("slug") or ""):
+        raise JournalError(
+            f"決定ファイルの機種が違います（{got.get('slug')!r}）")
+    _s = str(got.get("source_sha256") or "")
+    if _s and _s != str(rec.get("source_sha256") or ""):
+        raise JournalError(
+            "決定ファイルは、見つけたときとは別の記事に対する判断です")
+    acts = got.get("actions")
+    if not isinstance(acts, list) or not acts:
+        raise JournalError("決定ファイルに actions がありません")
+    return acts
+
+
 def ops_digest(ops) -> str:
     """★合意した操作そのものの指紋★（2026-08-27・Codexの指摘6）
 
@@ -280,6 +308,16 @@ def agree(fid: str, ops: list, recheck_name: str, decided_by: list) -> dict:
     rec = load(fid)
     if not isinstance(decided_by, list) or len(decided_by) < 2:
         raise JournalError("判断者が2つ以上要ります（2AIで決めるため）")
+    # ★★受け取るのは「決定ファイルそのもの」★★（2026-08-27・Codexの指摘6）
+    #   ★直す前は、AIが打ち直した操作の配列を受け取っていた★ので、
+    #   合意した中身と、実際に当てる決定ファイルを結ぶものが無かった。
+    #   ＝★無害な合意を、同じ機種への別の書き換えの許可証にできた★。
+    if isinstance(ops, str):
+        ops = _ops_from_decision(ops, rec)
+    elif isinstance(ops, list):
+        raise JournalError(
+            "操作の配列ではなく、決定ファイルのパスを渡してください"
+            "（合意した中身と、実際に当てる中身を同じものにするため）")
     if not ops:
         raise JournalError("やる操作がありません")
     for o in ops:
@@ -473,6 +511,24 @@ def _selftest() -> int:
     td = tempfile.mkdtemp()
     keep = globals()["STORE"]
     globals()["STORE"] = td
+
+    def _decfile(fid, slug, actions, sha="a" * 64, name="dec"):
+        """★本物の決定ファイルを書く★（2026-08-27・Codexの指摘6）
+
+        ★合意は、これを読む★＝AIが打ち直した配列は受け取らない。
+        """
+        # ★記録の置き場には書かない★（2026-08-27）
+        #   ★同じ場所に置いたら、一覧が決定ファイルまで拾った★
+        #   ＝試験が実際に落ちて分かった。
+        _dd = os.path.join(td, "decisions")
+        os.makedirs(_dd, exist_ok=True)
+        p = os.path.join(_dd, f"{name}.json")
+        io.open(p, "w", encoding="utf-8").write(json.dumps(
+            {"schema_version": "decide-now/v1", "slug": slug,
+             "finding_id": fid, "source_sha256": sha,
+             "decided_by": ["Claude", "codex"], "actions": actions},
+            ensure_ascii=False))
+        return p
     try:
         r = detect("hokuto", "text_gone", "この文はおかしいです。", "sections[0].body[2]",
                    source_sha256="a" * 64, detail="文体")
@@ -531,7 +587,8 @@ def _selftest() -> int:
 
         # 閉じられない検査では合意できない
         try:
-            agree(fid, [{"op": "drop", "why": "重複"}],
+            agree(fid, _decfile(fid, "hokuto",
+                                [{"op": "drop", "text": "x", "why": "重複"}]),
                   "strategy_vs_checker", ["Claude", "codex"])
             t("★★閉じられない検査では合意できない★★", False)
         except JournalError as e:
@@ -539,7 +596,8 @@ def _selftest() -> int:
 
         # 知らない操作
         try:
-            agree(fid, [{"op": "rewrite", "why": "…"}],
+            agree(fid, _decfile(fid, "hokuto",
+                                [{"op": "rewrite", "why": "…"}]),
                   "text_gone", ["Claude", "codex"])
             t("　選べない操作は受け取らない", False)
         except JournalError:
@@ -547,12 +605,16 @@ def _selftest() -> int:
 
         # 判断者1人
         try:
-            agree(fid, [{"op": "drop", "why": "重複"}], "text_gone", ["Claude"])
+            agree(fid, _decfile(fid, "hokuto",
+                                [{"op": "drop", "text": "x", "why": "重複"}]),
+                  "text_gone", ["Claude"])
             t("　判断者が1人では合意にしない", False)
         except JournalError:
             t("　判断者が1人では合意にしない", True)
 
-        rec = agree(fid, [{"op": "drop", "why": "前の段落と同じ内容"}],
+        _ops_ok = [{"op": "drop", "text": "この文はおかしいです。",
+                    "why": "前の段落と同じ内容"}]
+        rec = agree(fid, _decfile(fid, "hokuto", _ops_ok),
                     "text_gone", ["Claude", "codex"])
         t("　2AIが一致したら合意になる", rec["state"] == "AGREED")
 
@@ -602,7 +664,9 @@ def _selftest() -> int:
         record_codex(f7, "d" * 64, "Codexの判定です。" * 3)
         io.open(v7, "w", encoding="utf-8").write("あとから書き換えました。" * 3)
         try:
-            agree(f7, [{"op": "drop", "why": "重複"}],
+            agree(f7, _decfile(f7, "zzz7",
+                               [{"op": "drop", "text": "x", "why": "重複"}],
+                               sha="c" * 64, name="d7"),
                   "text_gone", ["Claude", "codex"])
             t("★★封のあと判定を書き換えたら合意できない★★", False)
         except JournalError as e:
@@ -618,15 +682,75 @@ def _selftest() -> int:
         io.open(v7b, "w", encoding="utf-8").write("私の判定です。" * 5)
         seal_claude(f7b, v7b)
         record_codex(f7b, "d" * 64, "Codexの判定です。" * 3)
-        _a7 = agree(f7b, [{"op": "drop", "why": "重複"}],
+        _ops7b = [{"op": "drop", "text": "x", "why": "重複"}]
+        _a7 = agree(f7b, _decfile(f7b, "zzz7b", _ops7b,
+                                  sha="c" * 64, name="d7b"),
                     "text_gone", ["Claude", "codex"])
         t("　（対照）書き換えていなければ合意できる", _a7["state"] == "AGREED")
         t("★合意した操作の指紋を残す（適用と結び付けるため）★",
           len(str(_a7.get("ops_sha256") or "")) == 64
-          and _a7["ops_sha256"] == ops_digest([{"op": "drop", "why": "重複"}]))
+          and _a7["ops_sha256"] == ops_digest(_ops7b))
         t("　操作が違えば指紋も違う",
           ops_digest([{"op": "drop", "why": "重複"}])
           != ops_digest([{"op": "drop", "why": "別の理由"}]))
+
+        # ★★別の件・別の機種の決定ファイルでは合意できない★★
+        #   （2026-08-27・Codexの指摘6＝合意と適用の結線）
+        r6 = detect("zzz6", "text_gone", "六番の文です。",
+                    source_sha256="6" * 64)
+        f6 = r6["finding_id"]
+        v6 = os.path.join(td, "v6.md")
+        io.open(v6, "w", encoding="utf-8").write("私の判定です。" * 5)
+        seal_claude(f6, v6)
+        record_codex(f6, "6" * 64, "Codexの判定です。" * 3)
+        _ops6 = [{"op": "drop", "text": "x", "why": "重複"}]
+        try:
+            agree(f6, _decfile("よその件", "zzz6", _ops6,
+                               sha="6" * 64, name="d6a"),
+                  "text_gone", ["Claude", "codex"])
+            t("★★別の件の決定ファイルでは合意できない★★", False)
+        except JournalError as e:
+            t("★★別の件の決定ファイルでは合意できない★★"
+              "／★直す前は、無害な合意を別の書き換えの許可証にできた★",
+              "この件のもの" in str(e))
+        try:
+            agree(f6, _decfile(f6, "よその機種", _ops6,
+                               sha="6" * 64, name="d6b"),
+                  "text_gone", ["Claude", "codex"])
+            t("　別の機種の決定ファイルでも合意できない", False)
+        except JournalError as e:
+            t("　別の機種の決定ファイルでも合意できない", "機種が違" in str(e))
+        try:
+            agree(f6, _decfile(f6, "zzz6", _ops6,
+                               sha="7" * 64, name="d6c"),
+                  "text_gone", ["Claude", "codex"])
+            t("　別の記事に対する判断でも合意できない", False)
+        except JournalError as e:
+            t("　別の記事に対する判断でも合意できない", "別の記事" in str(e))
+        _a6 = agree(f6, _decfile(f6, "zzz6", _ops6,
+                                 sha="6" * 64, name="d6d"),
+                    "text_gone", ["Claude", "codex"])
+        t("　（対照）同じ件・同じ機種・同じ記事なら合意できる",
+          _a6["state"] == "AGREED" and _a6["ops_sha256"] == ops_digest(_ops6))
+
+        # ★★打ち直した操作の配列は受け取らない★★（2026-08-27）
+        #   ★これが無いと、合意と決定ファイルが結び付かない★
+        #   （合意はAIが打った配列、適用は決定ファイル＝別物になりうる）
+        r6b = detect("zzz6b", "text_gone", "六番bの文です。",
+                     source_sha256="8" * 64)
+        f6b = r6b["finding_id"]
+        v6b = os.path.join(td, "v6b.md")
+        io.open(v6b, "w", encoding="utf-8").write("私の判定です。" * 5)
+        seal_claude(f6b, v6b)
+        record_codex(f6b, "8" * 64, "Codexの判定です。" * 3)
+        try:
+            agree(f6b, [{"op": "drop", "text": "x", "why": "重複"}],
+                  "text_gone", ["Claude", "codex"])
+            t("★★打ち直した操作の配列では合意できない★★", False)
+        except JournalError as e:
+            t("★★打ち直した操作の配列では合意できない★★"
+              "／★合意と、実際に当てる決定を同じものにするため★",
+              "決定ファイルのパス" in str(e))
 
         # ⑧決まらなかったら、次の回をやり直せる
         r8 = detect("zzz8", "text_gone", "八番の文です。",

@@ -1313,6 +1313,22 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★合意した操作と、当てる操作を突き合わせない"
+               "（無害な合意を別の書き換えの許可証にできる）★",
+        "file": "scripts/decide_now.py",
+        "before": "    _b = _agreement_problem(slug, dec)",
+        "after": "    _b = None",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★合意が、打ち直した操作の配列を受け取る"
+               "（決定ファイルと結び付かない）★",
+        "file": "scripts/repair_journal.py",
+        "before": "    elif isinstance(ops, list):",
+        "after": "    elif False:",
+        "run": ["scripts/repair_journal.py"],
+    },
+    {
         "why": "★2AIに基本情報表を見せない（食い違いに気づけない）★",
         "file": "scripts/decide_now.py",
         # ★2行まとめて置き換える★（1行だけ切ると構文エラーになり、

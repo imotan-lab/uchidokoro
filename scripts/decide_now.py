@@ -467,6 +467,42 @@ def _simulate(detail: dict, plan: list) -> str:
     return json.dumps(d, ensure_ascii=False)
 
 
+def _agreement_problem(slug: str, dec: dict):
+    """合意が生きているなら、その合意どおりかを見る（2026-08-27・指摘6）。
+
+    返すもの: 問題があれば説明の文字列 ／ 無ければ None
+    ★記録が読めないときは止める★（fail-closed）＝
+      読めないことを理由に、合意を素通りさせない。
+    """
+    try:
+        import repair_journal as _rj
+    except Exception:                      # noqa: BLE001
+        return None                        # ★記録の仕組みが無い環境では見ない★
+    try:
+        live = [r for r in _rj.listing("AGREED")
+                if str(r.get("slug") or "") == slug]
+    except Exception as e:                 # noqa: BLE001
+        return f"直しの記録を読めません（{str(e)[:60]}）"
+    if not live:
+        return None                        # ★合意が無いなら今までどおり★
+    fid = str(dec.get("finding_id") or "")
+    if not fid:
+        return ("この機種には合意が生きています。"
+                "決定ファイルに finding_id を書いてください"
+                f"（{live[0].get('finding_id')}）")
+    hit = [r for r in live if str(r.get("finding_id")) == fid]
+    if not hit:
+        return f"その件は、この機種の生きている合意ではありません（{fid}）"
+    want = str(hit[0].get("ops_sha256") or "")
+    got = _rj.ops_digest(dec.get("actions"))
+    if not want:
+        return "合意に操作の指紋がありません（古い記録です。取り直してください）"
+    if want != got:
+        return ("合意した操作と、当てようとしている操作が違います"
+                f"（{want[:12]}… → {got[:12]}…）")
+    return None
+
+
 def apply_decision(path: str, apply_it: bool = False) -> dict:
     """2AIが決めたとおりに直す（★消す・言い換えるだけ★）。"""
     dec = _load_decision(path)
@@ -489,6 +525,17 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
     if want and want != got:
         result["problems"].append(
             f"判断したときから記事が変わっています（{want[:12]}… → {got[:12]}…）")
+        return result
+
+    # ★★合意が生きている機種は、その合意どおりにしか書けない★★
+    #   （2026-08-27・Codexの指摘6）
+    #   ★直す前は、合意した中身と当てる中身を結ぶものが無かった★ので、
+    #   無害な合意を取っておいて、同じ機種へ**まったく別の書き換え**を
+    #   当てられた（途中の関所は「合意済みか」しか見ない）。
+    #   ★合意が無い機種は今までどおり★（新台の経路などは変わらない）。
+    _b = _agreement_problem(slug, dec)
+    if _b:
+        result["problems"].append(_b)
         return result
 
     # ★サイトがこの機種について公開しているもの全部★（数値の出どころを照合する的）
@@ -1246,6 +1293,73 @@ def _selftest() -> int:
           "／★直す前は `../` や絶対パスで外のJSONを書き換えられた★",
           bool(rn9["problems"])
           and "使えない文字" in "".join(rn9["problems"]))
+
+        # ── 2026-08-27・Codexの指摘6（合意と適用の結線）──────────
+        #   ★本物の記録を作って確かめる★（手書きのJSONを置かない）
+        import hashlib as _hl6
+        import repair_journal as _rj6
+        import shutil as _sh6
+        _keep6 = _rj6.STORE
+        _dir6 = tempfile.mkdtemp()
+        try:
+            _rj6.STORE = _dir6
+            Q = {"slug": "q", "sections": [
+                {"title": "天井・恩恵",
+                 "body": ["合意する行です。", "残る行です。", "もう1行です。"]}]}
+            _qp = os.path.join(td, "q.json")
+            with io.open(_qp, "w", encoding="utf-8", newline="\n") as f:
+                json.dump(Q, f, ensure_ascii=False, indent=1)
+                f.write("\n")
+            _qraw = io.open(_qp, encoding="utf-8").read()
+            _qsha = _hl6.sha256(
+                _qraw.encode("utf-8").replace(b"\r\n", b"\n")).hexdigest()
+
+            def _decq(actions, fid=None, name="decq"):
+                p = os.path.join(td, name + ".json")
+                body = {"schema_version": SCHEMA, "slug": "q",
+                        "source_sha256": _qsha,
+                        "decided_by": ["Claude", "codex"], "actions": actions}
+                if fid:
+                    body["finding_id"] = fid
+                io.open(p, "w", encoding="utf-8").write(
+                    json.dumps(body, ensure_ascii=False))
+                return p
+
+            _ops_q = [{"op": "drop", "text": "合意する行です。",
+                       "why": "前の段落と同じ内容"}]
+            _r6 = _rj6.detect("q", "text_gone", "合意する行です。", "",
+                              source_sha256=_qsha)
+            _f6 = _r6["finding_id"]
+            _v6 = os.path.join(td, "v_q.md")
+            io.open(_v6, "w", encoding="utf-8").write("私の判定です。" * 5)
+            _rj6.seal_claude(_f6, _v6)
+            _rj6.record_codex(_f6, "0" * 64, "Codexの判定です。" * 3)
+            _rj6.agree(_f6, _decq(_ops_q, fid=_f6, name="decq_agree"),
+                       "text_gone", ["Claude", "codex"])
+
+            _x1 = apply_decision(_decq(_ops_q))
+            t("★★合意が生きている機種は、件を名乗らないと書けない★★"
+              "／★直す前は、無害な合意を別の書き換えの許可証にできた★",
+              bool(_x1["problems"])
+              and "finding_id" in "".join(_x1["problems"]))
+
+            _x2 = apply_decision(_decq(_ops_q, fid="よその件", name="decq2"))
+            t("　その機種の生きている合意でなければ書けない",
+              bool(_x2["problems"])
+              and "生きている合意ではありません" in "".join(_x2["problems"]))
+
+            _x3 = apply_decision(_decq(
+                [{"op": "drop", "text": "残る行です。", "why": "すり替え"}],
+                fid=_f6, name="decq3"))
+            t("★★合意したあとで中身を差し替えても書けない★★",
+              bool(_x3["problems"])
+              and "違います" in "".join(_x3["problems"]))
+
+            _x4 = apply_decision(_decq(_ops_q, fid=_f6, name="decq4"))
+            t("　（対照）合意どおりなら書ける", not _x4["problems"])
+        finally:
+            _rj6.STORE = _keep6
+            _sh6.rmtree(_dir6, ignore_errors=True)
 
         r7 = apply_decision(dec([{"op": "drop", "text": "B の行です。",
                                   "why": "…"}]), apply_it=True)
