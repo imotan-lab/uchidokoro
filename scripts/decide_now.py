@@ -1746,13 +1746,35 @@ def _selftest() -> int:
         t("　（対照）骨組みが変わらない言い換えは通る", not rx4["problems"])
 
         # ★★判断者は「違う名前が2つ以上」★★（同・Codexの3回目）
+        # ★ほかの検査は全部通る材料にする★（まったく同じ文が2つある）
+        #   ＝判断者の守りだけが効く形（罠④を避ける）
+        BY = {"slug": "by", "sections": [
+            {"title": "天井・恩恵",
+             "body": ["まったく同じ文です。", "まったく同じ文です。",
+                      "ほかの行です。"]}]}
+        with io.open(os.path.join(td, "by.json"), "w",
+                     encoding="utf-8", newline="\n") as f:
+            json.dump(BY, f, ensure_ascii=False, indent=1)
+            f.write("\n")
         _rby = os.path.join(td, "dby.json")
         io.open(_rby, "w", encoding="utf-8").write(json.dumps(
-            {"schema_version": SCHEMA, "slug": "x2",
-             "source_sha256": _sha_of("x2"),
+            {"schema_version": SCHEMA, "slug": "by",
+             "source_sha256": _sha_of("by"),
              "decided_by": ["Claude", "Claude"],
-             "actions": [{"op": "drop", "text": "通常500G", "why": "x"}]},
+             "actions": [{"op": "drop", "text": "まったく同じ文です。",
+                          "why": "重複の片方"}]},
             ensure_ascii=False))
+        # ★対照★＝違う名前なら、この決定は通る（他の検査は全部通る材料）
+        _rby_ok = os.path.join(td, "dby_ok.json")
+        io.open(_rby_ok, "w", encoding="utf-8").write(json.dumps(
+            {"schema_version": SCHEMA, "slug": "by",
+             "source_sha256": _sha_of("by"),
+             "decided_by": ["Claude", "codex"],
+             "actions": [{"op": "drop", "text": "まったく同じ文です。",
+                          "why": "重複の片方"}]},
+            ensure_ascii=False))
+        t("　（対照）違う名前なら、この決定は通る",
+          not apply_decision(_rby_ok)["problems"])
         def _stops(fn, word):
             """★断られること★を見る（例外でも問題の一覧でも合格）。"""
             try:

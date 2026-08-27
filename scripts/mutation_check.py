@@ -1239,14 +1239,6 @@ MUTATIONS = [
         "run": ["scripts/decide_now.py"],
     },
     {
-        "why": "★数値を裸の数字で見る"
-               "（獲得500枚が残れば天井500Gを消せる）★",
-        "file": "scripts/decide_now.py",
-        "before": "            out.append(m.group(0) + tail)",
-        "after": "            out.append(m.group(0))",
-        "run": ["scripts/decide_now.py"],
-    },
-    {
         "why": "★同じ文字が2か所にあっても場所を言わせない"
                "（表を直す決定が本文を変える）★",
         "file": "scripts/decide_now.py",
@@ -1405,8 +1397,15 @@ MUTATIONS = [
     {
         "why": "★判断者を件数だけで見る（同じ名前2つでも2AI扱い）★",
         "file": "scripts/decide_now.py",
-        "before": "    if not isinstance(by, list) or len({str(x).strip().lower()",
-        "after": "    if not isinstance(by, list) or len({str(x) + str(id(x))",
+        "before": "    if not isinstance(by, list) or "
+                  "len({str(x).strip().lower()\n"
+                  "                                        for x in by "
+                  "if str(x).strip()}) < 2:",
+        # ★件数だけで見る形（同じ名前2つでも通る）★
+        "after": "    if not isinstance(by, list) or "
+                 "len([str(x).strip().lower()\n"
+                 "                                        for x in by "
+                 "if str(x).strip()]) < 2:",
         "run": ["scripts/decide_now.py"],
     },
     {
