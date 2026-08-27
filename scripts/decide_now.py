@@ -115,9 +115,10 @@ def _check_slug(slug: str) -> str:
     global _SLUG_OK
     if _SLUG_OK is None:
         import re as _re
-        _SLUG_OK = _re.compile(r"^[a-z0-9_]+$")
+        # ★末尾の改行まで通さない★（`$` は改行の手前にも当たる）
+        _SLUG_OK = _re.compile(r"[a-z0-9_]+\Z")
     s = str(slug or "")
-    if not _SLUG_OK.match(s):
+    if not _SLUG_OK.fullmatch(s):
         raise ValueError(f"機種の名前として使えない文字が入っています: {s[:40]!r}")
     return s
 
@@ -281,26 +282,27 @@ OUTSIDE_KINDS = ("fact", "summary", "lead")
 
 def _where_hits(d: dict, before) -> list:
     """その文字が記事のどこに何か所あるかを数える（2026-08-27・指摘4）。"""
+    # ★★「何か所あるか」を数える★★（2026-08-27・Codexの2回目の指摘2）
+    #   ★直す前は「本文・表…という種類」を数えていた★ので、
+    #   ★同じ本文に同じ行が2つあっても1と数えて素通りした★
+    #   ＝先頭が書き換わり、どちらを直したのか決められない。
     got = []
     for sec in (d.get("sections") or []):
         if not isinstance(sec, dict):
             continue
-        if any(x == before for x in (sec.get("body") or [])):
-            got.append("本文")
-        if any(isinstance(t, dict) and t.get("note") == before
-               for t in (sec.get("tables") or [])):
-            got.append("表の注記")
+        got += ["本文" for x in (sec.get("body") or []) if x == before]
+        got += ["表の注記" for t in (sec.get("tables") or [])
+                if isinstance(t, dict) and t.get("note") == before]
     for row in (d.get("factTable") or []):
-        if isinstance(row, (list, tuple)) and any(c == before for c in row):
-            got.append("基本情報表")
+        if isinstance(row, (list, tuple)):
+            got += ["基本情報表" for c in row if c == before]
     for box in (d.get("summaryBoxes") or []):
-        if isinstance(box, dict) and any(box.get(k) == before
-                                         for k in ("value", "label")):
-            got.append("要約ボックス")
+        if isinstance(box, dict):
+            got += ["要約ボックス" for k in ("value", "label")
+                    if box.get(k) == before]
     if d.get("lead") == before:
         got.append("リード文")
-    # ★同じ場所に2つあっても「その場所」は1つと数える★
-    return sorted(set(got))
+    return got
 
 
 def _outside_plan(d: dict, a: dict, where: str = "") -> tuple | None:
@@ -404,6 +406,44 @@ def _numbers(s: str) -> list:
     return out
 
 
+# ★★意味をひっくり返す印★★（2026-08-27・Codexの2回目の指摘1）
+#   ★内容語だけ見ていた★ので、ひらがなだけで意味を反転できた＝
+#     「天井は500Gです。」→「天井は500Gではありません。」が通っていた
+#     （新しい内容語なし・数値も同じなので、どの検査にも当たらない）。
+#   ★これは名簿だが、意味の判断ではない★＝
+#     機械が「正しいか」を決めるのではなく、
+#     ★打ち消し・大小の印が**新しく現れたら断る**★だけ。
+#   ★断ってよい理由★＝打ち消しや大小を入れ替えるのは
+#     **事実を変える**ことであって、言い換えではない。
+#     事実を変えるには出典が要る（この道具の役目ではない）。
+FLIP_MARKS = ("ない", "なく", "ません", "ませ", "無",
+              "以上", "以下", "未満", "超", "不可", "非")
+
+
+def _flips(s: str) -> list:
+    """その文に出てくる「意味をひっくり返す印」。"""
+    return [w for w in FLIP_MARKS if w in str(s or "")]
+
+
+def _num_pairs(s: str) -> list:
+    """★数値と、その直前の内容語の組★（2026-08-27・Codexの2回目の指摘1）
+
+    ★なぜ要るか★＝「通常500G／リセット600G」→「リセット500G／通常600G」は
+      **数値の並びが同じ**なので、並べ替えの検査にも当たらなかった。
+      ＝★どちらがどちらの値かを丸ごと取り違えさせられる★。
+    ★数値が2つ以上あるときだけ見る★＝1つしかない文で
+      「天井は500Gです」→「500Gが天井です」まで止めると、
+      正しい言い換えを妨げる。
+    """
+    import re as _re2
+    out = []
+    for m in _re2.finditer(r"\d+(?:\.\d+)?", str(s or "")):
+        head = str(s or "")[:m.start()]
+        ws = _words(head)
+        out.append((ws[-1] if ws else "", m.group(0)))
+    return out
+
+
 _WORD_RE = None
 
 
@@ -474,15 +514,27 @@ def _agreement_problem(slug: str, dec: dict):
     ★記録が読めないときは止める★（fail-closed）＝
       読めないことを理由に、合意を素通りさせない。
     """
+    # ★★読めないときは止める★★（2026-08-27・Codexの2回目の指摘4）
+    #   ★直す前は「読めないなら見ない」＝通していた★
+    #   ＝記録の仕組みを壊せば、合意の検査を丸ごと外せた。
     try:
         import repair_journal as _rj
-    except Exception:                      # noqa: BLE001
-        return None                        # ★記録の仕組みが無い環境では見ない★
+    except Exception as e:                 # noqa: BLE001
+        return f"直しの記録の仕組みを読み込めません（{str(e)[:60]}）"
     try:
-        live = [r for r in _rj.listing("AGREED")
-                if str(r.get("slug") or "") == slug]
+        rows = _rj.listing()
     except Exception as e:                 # noqa: BLE001
         return f"直しの記録を読めません（{str(e)[:60]}）"
+    # ★★壊れた記録が1件でもあれば止める★★（同・指摘4）
+    #   壊れた記録は機種が分からないので、
+    #   ★この機種の合意が無い、と言い切れない★（安全側へ倒す）。
+    _bk = [r for r in rows if r.get("state") == "BROKEN"]
+    if _bk:
+        return ("直しの記録に読めないものがあります"
+                f"（{len(_bk)}件・例: {_bk[0].get('finding_id')}）。"
+                "どの機種の合意か分からないので書きません")
+    live = [r for r in rows
+            if r.get("state") == "AGREED" and str(r.get("slug") or "") == slug]
     if not live:
         return None                        # ★合意が無いなら今までどおり★
     fid = str(dec.get("finding_id") or "")
@@ -562,10 +614,45 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
             #   ★物差しは数値と同じ★＝この機種についてサイトが公開している
             #   ものの中に、その語があること。無ければ出どころを言うこと。
             #   ★ひらがなは見ない★（送り仮名・助詞なので言い換えを妨げる）。
+            # ★★意味をひっくり返す印を持ち込ませない★★
+            #   （2026-08-27・Codexの2回目の指摘1）
+            #   ★内容語だけ見ていたので、ひらがなだけで反転できた★
+            #   （「500Gです」→「500Gではありません」が通っていた）。
+            _nf = [w for w in _flips(a["after"])
+                   if w not in _flips(a["before"])]
+            if _nf:
+                result["problems"].append(
+                    "意味をひっくり返す言葉を足そうとしています: "
+                    + " / ".join(_nf[:4])
+                    + "（打ち消し・大小の入れ替えは事実を変えることなので、"
+                    "この道具では直せません。出典で確かめてください）")
+                return result
+            # ★★数値とラベルの対応を入れ替えさせない★★（同・指摘1）
+            #   ★数値の並びが同じなので、並べ替えの検査に当たらなかった★
+            #   （「通常500G／リセット600G」→「リセット500G／通常600G」）。
+            if len(nb) >= 2 and len(na) >= 2:
+                _pb, _pa = _num_pairs(a["before"]), _num_pairs(a["after"])
+                if sorted(_pb) != sorted(_pa):
+                    result["problems"].append(
+                        "数値と、その手前の言葉の組み合わせが変わっています"
+                        f"（{_pb[:3]} → {_pa[:3]}）"
+                        "（どちらがどちらの値かを取り違えさせるので"
+                        "受け取りません）")
+                    return result
             _blob = _content_blob(published)
             new_w = [w for w in _words(a["after"]) if w not in _blob]
             if new_w:
-                _bsrc = _content_blob(a.get("numbers_from") or "")
+                # ★★出どころは、実在する逐語でなければならない★★
+                #   （2026-08-27・Codexの2回目の指摘1）
+                #   ★直す前は中身を見ていなかった★ので、
+                #   numbers_from に**架空の逐語**を書けば新語の検査を抜けられた。
+                _src_w = str(a.get("numbers_from") or "")
+                if _src_w and _src_w not in published:
+                    result["problems"].append(
+                        "出どころの逐語が、この機種の公開データに"
+                        f"見つかりません: {_src_w[:44]!r}")
+                    return result
+                _bsrc = _content_blob(_src_w)
                 still_w = [w for w in new_w if w not in _bsrc]
                 if still_w:
                     result["problems"].append(
@@ -656,15 +743,21 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
                                    "fact", "summary", "lead"):
             result["problems"].append(f"直す場所の指定が不明です: {where!r}")
             return result
-        if a.get("op") == "replace" and not where:
+        if a.get("op") == "replace":
             spots = _where_hits(d, a.get("before"))
+            if where:
+                # ★場所を言っていても、その場所に2つあるなら決められない★
+                _kind = {"body": "本文", "table_note": "表の注記",
+                         "fact": "基本情報表", "summary": "要約ボックス",
+                         "lead": "リード文"}[where]
+                spots = [s for s in spots if s == _kind]
             if len(spots) > 1:
                 result["problems"].append(
-                    "同じ文字が" + "・".join(spots)
-                    + "の"
-                    + str(len(spots))
-                    + "か所にあります。どこを直すか where で指定してください"
-                    "（body / table_note / fact / summary / lead）")
+                    "同じ文字が" + "・".join(sorted(set(spots)))
+                    + "に" + str(len(spots))
+                    + "か所あります。どれを直すか決められません"
+                    "（場所を where で絞る／同じ行が2つあるなら drop で"
+                    "1つ消してください）")
                 return result
         for si, sec in enumerate(d.get("sections") or []):
             if where and where not in ("body", "table_note"):
@@ -1207,10 +1300,36 @@ def _selftest() -> int:
         rn1 = apply_decision(dec_n([
             {"op": "replace", "before": "天井は500Gです。",
              "after": "天井は500G以下です。", "why": "わざと：意味が反転"}]))
-        t("★★記事に無い言葉は書き足せない（意味の反転を止める）★★"
+        t("★★意味をひっくり返す言葉は足せない★★"
           "／★直す前は数値しか見ておらず、素通りしていた★",
           bool(rn1["problems"])
-          and "記事に無い言葉" in "".join(rn1["problems"]))
+          and "ひっくり返す" in "".join(rn1["problems"]))
+        # ★★ひらがなだけの反転も止める★★（2026-08-27・Codexの2回目）
+        #   ★内容語だけ見ていたので、これは素通りしていた★
+        rn1b = apply_decision(dec_n([
+            {"op": "replace", "before": "天井は500Gです。",
+             "after": "天井は500Gではありません。", "why": "わざと"}]))
+        t("★★ひらがなだけの打ち消しも止める★★"
+          "／★内容語だけ見ていたので素通りしていた★",
+          bool(rn1b["problems"])
+          and "ひっくり返す" in "".join(rn1b["problems"]))
+        rn1c = apply_decision(dec_n([
+            {"op": "replace", "before": "天井は500Gです。",
+             "after": "天井は500Gのスマスロです。", "why": "わざと：新しい語"}]))
+        t("★★記事に無い言葉は書き足せない★★",
+          bool(rn1c["problems"])
+          and "記事に無い言葉" in "".join(rn1c["problems"]))
+        # ★★出どころは実在する逐語でなければならない★★（同・2回目）
+        #   ★直す前は中身を見ていなかった★ので、架空の逐語で抜けられた。
+        rn1d = apply_decision(dec_n([
+            {"op": "replace", "before": "天井は500Gです。",
+             "after": "天井は500Gのスマスロです。",
+             "numbers_from": "サイトのどこにも無い逐語です",
+             "why": "わざと"}]))
+        t("★★出どころの逐語が実在しなければ受け取らない★★"
+          "／★架空の逐語を書けば、新語の検査を抜けられた★",
+          bool(rn1d["problems"])
+          and "見つかりません" in "".join(rn1d["problems"]))
         # ★対照★＝助詞をまたぐ組み替えは通る（正しい言い換えを止めない）
         rn2 = apply_decision(dec_n([
             {"op": "replace", "before": "朝一は周期カウントがリセットされます。",
@@ -1280,6 +1399,51 @@ def _selftest() -> int:
             {"op": "replace", "before": "通常500G", "after": "通常500G",
              "where": "fact", "why": "表を直す"}]))
         t("　（対照）場所を言えば通る", not rn7["problems"])
+
+        # ★★同じ場所に2つあっても数える★★（2026-08-27・Codexの2回目の指摘2）
+        #   ★直す前は「本文・表…という種類」を数えていた★ので、
+        #   ★同じ本文に同じ行が2つあっても1と数えて素通りした★
+        V = {"slug": "v", "sections": [
+            {"title": "天井・恩恵",
+             "body": ["同じ行です。", "同じ行です。", "ほかの行です。"]}]}
+        with io.open(os.path.join(td, "v.json"), "w",
+                     encoding="utf-8", newline="\n") as f:
+            json.dump(V, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+        rv = os.path.join(td, "dv.json")
+        io.open(rv, "w", encoding="utf-8").write(json.dumps(
+            {"schema_version": SCHEMA, "slug": "v",
+             "decided_by": ["Claude", "codex"],
+             "actions": [{"op": "replace", "before": "同じ行です。",
+                          "after": "同じ行です。", "why": "場所不明"}]},
+            ensure_ascii=False))
+        rn10 = apply_decision(rv)
+        t("★★同じ本文に同じ行が2つあれば、決められないと断る★★"
+          "／★直す前は先頭が黙って書き換わった★",
+          bool(rn10["problems"]) and "2か所" in "".join(rn10["problems"]))
+
+        # ★★数値とラベルの対応を入れ替えさせない★★（同・指摘1）
+        W = {"slug": "w", "sections": [
+            {"title": "天井・恩恵",
+             "body": ["通常500G／リセット600Gです。", "ほかの行です。"]}]}
+        with io.open(os.path.join(td, "w.json"), "w",
+                     encoding="utf-8", newline="\n") as f:
+            json.dump(W, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+        rw = os.path.join(td, "dw.json")
+        io.open(rw, "w", encoding="utf-8").write(json.dumps(
+            {"schema_version": SCHEMA, "slug": "w",
+             "decided_by": ["Claude", "codex"],
+             "actions": [{"op": "replace",
+                          "before": "通常500G／リセット600Gです。",
+                          "after": "リセット500G／通常600Gです。",
+                          "why": "わざと：ラベルの入れ替え"}]},
+            ensure_ascii=False))
+        rn11 = apply_decision(rw)
+        t("★★数値とラベルの対応の入れ替えを止める★★"
+          "／★数値の並びが同じなので、並べ替えの検査に当たらなかった★",
+          bool(rn11["problems"])
+          and "組み合わせ" in "".join(rn11["problems"]))
 
         # ⑱置き場の外を指せない
         _bad_slug = os.path.join(td, "dbad.json")
@@ -1357,6 +1521,21 @@ def _selftest() -> int:
 
             _x4 = apply_decision(_decq(_ops_q, fid=_f6, name="decq4"))
             t("　（対照）合意どおりなら書ける", not _x4["problems"])
+
+            # ★★記録に読めないものがあれば止める★★
+            #   （2026-08-27・Codexの2回目の指摘4）
+            #   ★直す前は「読めないなら見ない」＝通していた★
+            #   ＝記録の仕組みを壊せば、合意の検査を丸ごと外せた。
+            #   ★壊れた記録は機種が分からない★ので、
+            #   「この機種の合意が無い」と言い切れない（安全側へ倒す）。
+            io.open(os.path.join(_dir6, "broken_x.json"), "w",
+                    encoding="utf-8").write("{こわれています")
+            _x5 = apply_decision(_decq(_ops_q, fid=_f6, name="decq5"))
+            t("★★記録に読めないものがあれば、書かずに止まる★★"
+              "／★直す前は、記録を壊せば合意の検査を外せた★",
+              bool(_x5["problems"])
+              and "読めない" in "".join(_x5["problems"]))
+            os.remove(os.path.join(_dir6, "broken_x.json"))
         finally:
             _rj6.STORE = _keep6
             _sh6.rmtree(_dir6, ignore_errors=True)

@@ -1603,12 +1603,15 @@ def done(task: str, slug: str, stage: str, path: str = STATE_PATH) -> dict:
         #   ★断らない★＝段階名の言い回しは手順書ごとに違うので、
         #   ここで拒否すると正しく動いているタスクを止めかねない。
         #   ★まず見えるようにする★＝「静かに0件が続く」を数えるのが先。
-        _d = data.get("day") or {}
-        _w = _d.get("writes") or {}
-        _today_slugs = _d.get("slugs_today") or []
-        _wrote = int(_w.get("total") or 0)
-        e["work_today"] = {"claimed": len(_today_slugs), "wrote": _wrote}
-        e["no_work"] = (_wrote == 0 and not _today_slugs)
+        # ★★タスク単位で数える★★（2026-08-27・Codexの2回目の指摘7）
+        #   ★直す前はその日全体の数を見ていた★ので、
+        #   ★別のタスクが書いた日は、何もしなくても印が付かなかった★
+        #   ＝まさに見たかった「静かな0件」を見落とす。
+        #   ★予約の履歴にはタスク名が入っている★ので、それで数える。
+        _mine = [r for r in (data.get("reservations") or [])
+                 if r.get("task") == task and r.get("date") == _today()]
+        e["work_today"] = {"reserved": len(_mine), "task": task}
+        e["no_work"] = not _mine
         e["final_stage"] = stage
         e["finished_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         _save(path, data)
@@ -1623,26 +1626,37 @@ def _no_work_tests(t, tmpdir) -> None:
     """
     import json as _jn
     sp = os.path.join(tmpdir, "nowork.json")
-    with open(sp, "w", encoding="utf-8") as f:
-        _jn.dump({"tasks": {}, "day": {"date": _today(),
-                                       "writes": {"total": 0, "fix": 0,
-                                                  "grow": 0},
-                                       "slugs_today": []}}, f)
+
+    def _put(res):
+        with open(sp, "w", encoding="utf-8") as f:
+            _jn.dump({"tasks": {}, "reservations": res,
+                      "day": {"date": _today(),
+                              "writes": {"total": len(res), "fix": len(res),
+                                         "grow": 0},
+                              "slugs_today": [r["slug"] for r in res]}}, f)
+
+    _put([])
     e = done("t_nowork", "", "COMPLETED_NO_CHANGE", path=sp)
     t("★★何もしていない完了に印が付く★★"
       "／★直す前は、作業0件の正常終了を誰も数えられなかった★",
-      e.get("no_work") is True
-      and e["work_today"] == {"claimed": 0, "wrote": 0})
+      e.get("no_work") is True and e["work_today"]["reserved"] == 0)
 
-    with open(sp, "w", encoding="utf-8") as f:
-        _jn.dump({"tasks": {}, "day": {"date": _today(),
-                                       "writes": {"total": 2, "fix": 1,
-                                                  "grow": 1},
-                                       "slugs_today": ["a", "b"]}}, f)
+    # ★★別のタスクが書いた日でも、自分が何もしていなければ印が付く★★
+    #   （2026-08-27・Codexの2回目の指摘7）
+    #   ★直す前はその日全体の数を見ていた★ので、
+    #   ★別のタスクが書いた日は、何もしなくても印が付かなかった★
+    #   ＝まさに見たかった「静かな0件」を見落とす。
+    _put([{"token": "x", "task": "よそのタスク", "slug": "a", "kind": "fix",
+           "state": "RESERVED", "date": _today()}])
     e2 = done("t_nowork", "", "COMPLETED", path=sp)
-    t("　（対照）実際に書いた日は印が付かない",
-      e2.get("no_work") is False
-      and e2["work_today"] == {"claimed": 2, "wrote": 2})
+    t("★★別のタスクが書いた日でも、自分の0件は見落とさない★★",
+      e2.get("no_work") is True and e2["work_today"]["reserved"] == 0)
+
+    _put([{"token": "y", "task": "t_nowork", "slug": "b", "kind": "fix",
+           "state": "RESERVED", "date": _today()}])
+    e3 = done("t_nowork", "", "COMPLETED", path=sp)
+    t("　（対照）自分が書いた日は印が付かない",
+      e3.get("no_work") is False and e3["work_today"]["reserved"] == 1)
 
 
 # ---------------------------------------------------------------- selftest
@@ -1825,7 +1839,16 @@ def _finding_tests(t, tmpdir) -> None:
 
         fid_esc = rj.detect(slug, "text_gone", "打ち切る文です。",
                             "z", source_sha256="9" * 64)["finding_id"]
-        for _ in range(rj.MAX_ATTEMPTS):
+        # ★★本番と同じ順で3回まわす★★（2026-08-27・Codexの2回目の指摘3）
+        #   ★直す前は、封もCodexの受け取りもせずに3回数えていた★
+        #   ＝この試験そのものが「判断せずに人へ回せる」穴の実演だった。
+        _vesc = os.path.join(tmpdir, "v_esc.md")
+        with open(_vesc, "w", encoding="utf-8") as _f:
+            _f.write("私の判定です。この件は決められませんでした。")
+        for _i in range(rj.MAX_ATTEMPTS):
+            rj.seal_claude(fid_esc, _vesc)
+            rj.record_codex(fid_esc, "c" * 64,
+                            f"{_i + 1}回目のCodexの判定です。決まりません。")
             rj.attempt(fid_esc, "決まらない")
         t("★★人へ回した後の記録では担当できない★★",
           _raises(lambda: claim("t_find3", slug, fp, finding=fid_esc),

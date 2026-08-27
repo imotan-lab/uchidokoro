@@ -278,8 +278,15 @@ def _ops_from_decision(path: str, rec: dict) -> list:
     if str(got.get("slug") or "") != str(rec.get("slug") or ""):
         raise JournalError(
             f"決定ファイルの機種が違います（{got.get('slug')!r}）")
+    # ★★指紋は必ず要る★★（2026-08-27・Codexの2回目の指摘5）
+    #   ★直す前は「空なら照合しない」だった★ので、
+    #   書かなければ「同じ記事を見て作られた」の確認を丸ごと外せた。
     _s = str(got.get("source_sha256") or "")
-    if _s and _s != str(rec.get("source_sha256") or ""):
+    if not _s:
+        raise JournalError(
+            "決定ファイルに、見つけたときの記事の指紋（source_sha256）が"
+            "ありません")
+    if _s != str(rec.get("source_sha256") or ""):
         raise JournalError(
             "決定ファイルは、見つけたときとは別の記事に対する判断です")
     acts = got.get("actions")
@@ -434,6 +441,17 @@ def attempt(fid: str, why: str) -> dict:
       判断をやってみて決まらなかった回だけを数える。
     """
     rec = load(fid)
+    # ★★判断をやってみた後でなければ、回数に数えない★★
+    #   （2026-08-27・Codexの2回目の指摘3）
+    #   ★直す前は状態を見ていなかった★ので、
+    #   ★封もCodexの受け取りもせずに3回呼べば人へ回せた★
+    #   ＝「3回やっても決まらなかった」が嘘になる。
+    #   （さらに APPLIED や DONE からでも呼べて、DETECTED へ戻せた）
+    if rec.get("state") != "CODEX_RECEIVED":
+        raise JournalError(
+            f"まだ判断していません（いま {rec.get('state')}）。"
+            "Claudeの判定に封をして、Codexの判定を受け取ってから数えます"
+            "／仕組みの都合なら infra_failure を使ってください")
     rec["attempts"] = int(rec.get("attempts") or 0) + 1
     rec.setdefault("history", []).append(
         {"to": rec["state"], "note": f"決まらなかった（{rec['attempts']}回目）: {why}"})
@@ -469,6 +487,23 @@ def infra_failure(fid: str, why: str) -> dict:
 
 # --- 一覧 -----------------------------------------------------------------
 
+def _broken_why(rec):
+    """記録として成り立っていない理由（無ければ空）。2026-08-27・指摘6。
+
+    ★「JSONとして読めた」＝「記録として正しい」ではない★。
+    """
+    if not isinstance(rec, dict):
+        return f"辞書ではありません（{type(rec).__name__}）"
+    if rec.get("schema_version") != SCHEMA:
+        return f"知らない版です（{rec.get('schema_version')!r}）"
+    for k in ("finding_id", "slug", "check", "quote", "state"):
+        if not rec.get(k):
+            return f"{k} がありません"
+    if rec.get("state") not in FLOW and rec.get("state") != ESCALATED:
+        return f"知らない段階です（{rec.get('state')!r}）"
+    return ""
+
+
 def listing(state: str | None = None) -> list:
     out = []
     if not os.path.isdir(_store()):
@@ -488,6 +523,16 @@ def listing(state: str | None = None) -> list:
             out.append({"state": "BROKEN", "finding_id": n[:-5],
                         "slug": "", "check": "", "quote": "",
                         "_broken": f"{type(e).__name__}: {str(e)[:80]}"})
+            continue
+        # ★★形が正しくても、中身が壊れていれば BROKEN★★
+        #   （2026-08-27・Codexの2回目の指摘6）
+        #   ★直す前は「JSONとして読めたか」だけ見ていた★ので、
+        #   空の辞書・知らない版・欄の欠けは**黙って一覧から消えた**。
+        _why = _broken_why(rec)
+        if _why:
+            out.append({"state": "BROKEN", "finding_id": n[:-5],
+                        "slug": "", "check": "", "quote": "",
+                        "_broken": _why})
             continue
         if state and rec.get("state") != state:
             continue
@@ -637,7 +682,12 @@ def _selftest() -> int:
         # 打ち切り
         f2 = detect("hokuto", "text_gone", "別のおかしな文です。", "x",
                     source_sha256="9" * 64)["finding_id"]
+        # ★★本番と同じ順で3回まわす★★（2026-08-27・Codexの2回目の指摘3）
+        #   ★直す前は、封もCodexの受け取りもせずに3回数えていた★
+        #   ＝この試験そのものが「判断せずに人へ回せる」穴の実演だった。
         for i in range(MAX_ATTEMPTS):
+            seal_claude(f2, vp)
+            record_codex(f2, "b" * 64, f"{i + 1}回目のCodexの判定です。" * 2)
             r2 = attempt(f2, f"{i + 1}回目")
         t("★★3回で人へ回す★★", load(f2)["state"] == ESCALATED)
         t("　打ち切った後は先へ進めない",
@@ -733,6 +783,31 @@ def _selftest() -> int:
         t("　（対照）同じ件・同じ機種・同じ記事なら合意できる",
           _a6["state"] == "AGREED" and _a6["ops_sha256"] == ops_digest(_ops6))
 
+        # ★★決定ファイルの指紋が空なら断る★★
+        #   （2026-08-27・Codexの2回目の指摘5）
+        #   ★直す前は「空なら照合しない」だった★ので、
+        #   書かなければ「同じ記事を見て作られた」の確認を外せた。
+        r5n = detect("zzz5n", "text_gone", "五番nの文です。",
+                     source_sha256="5" * 64)
+        f5n = r5n["finding_id"]
+        v5n = os.path.join(td, "v5n.md")
+        io.open(v5n, "w", encoding="utf-8").write("私の判定です。" * 5)
+        seal_claude(f5n, v5n)
+        record_codex(f5n, "5" * 64, "Codexの判定です。" * 3)
+        _p5n = os.path.join(td, "decisions", "d5n.json")
+        os.makedirs(os.path.dirname(_p5n), exist_ok=True)
+        io.open(_p5n, "w", encoding="utf-8").write(json.dumps(
+            {"schema_version": "decide-now/v1", "slug": "zzz5n",
+             "finding_id": f5n, "decided_by": ["Claude", "codex"],
+             "actions": [{"op": "drop", "text": "x", "why": "重複"}]},
+            ensure_ascii=False))
+        try:
+            agree(f5n, _p5n, "text_gone", ["Claude", "codex"])
+            t("★★指紋の無い決定ファイルでは合意できない★★", False)
+        except JournalError as e:
+            t("★★指紋の無い決定ファイルでは合意できない★★",
+              "指紋" in str(e))
+
         # ★★打ち直した操作の配列は受け取らない★★（2026-08-27）
         #   ★これが無いと、合意と決定ファイルが結び付かない★
         #   （合意はAIが打った配列、適用は決定ファイル＝別物になりうる）
@@ -779,9 +854,37 @@ def _selftest() -> int:
             _st8 = f"進めません: {e}"
         t("　2回目をちゃんと最後まで通せる", _st8 == "CODEX_RECEIVED")
         attempt(f8, "2回目も決まらなかった")
+        io.open(v8, "w", encoding="utf-8").write("3回目の判定です。" * 5)
+        seal_claude(f8, v8)
+        record_codex(f8, "h" * 64, "3回目のCodexの判定です。" * 2)
         _r8c = attempt(f8, "3回目も決まらなかった")
         t("★3回で人へ回す（回数は数え続ける）★",
           _r8c["state"] == ESCALATED and _r8c["attempts"] == 3)
+
+        # ★★判断していないのに回数を数えさせない★★
+        #   （2026-08-27・Codexの2回目の指摘3）
+        r3s = detect("zzz3s", "text_gone", "三番sの文です。",
+                     source_sha256="a" * 64)
+        try:
+            attempt(r3s["finding_id"], "判断していないのに数える")
+            t("★★判断していないのに回数を数えない★★", False)
+        except JournalError as e:
+            t("★★判断していないのに回数を数えない★★"
+              "／★直す前は、封もCodexもせずに3回呼べば人へ回せた★",
+              "まだ判断していません" in str(e))
+
+        # ★★形は正しいが中身が壊れた記録も BROKEN★★（同・指摘6）
+        io.open(os.path.join(td, "empty_rec.json"), "w",
+                encoding="utf-8").write("{}")
+        io.open(os.path.join(td, "oldver_rec.json"), "w",
+                encoding="utf-8").write(
+                    '{"schema_version": "repair-journal/v0"}')
+        _lst2 = listing()
+        t("★★形は正しくても、中身が壊れていれば BROKEN★★"
+          "／★直す前は「JSONとして読めたか」だけ見ていた★",
+          {"empty_rec", "oldver_rec"}
+          <= {x.get("finding_id") for x in _lst2
+              if x.get("state") == "BROKEN"})
 
         # ⑨終わった件と同じ指摘が、記事が変わってから再発したら立て直す
         r9 = detect("zzz9", "text_gone", "九番の文です。",
@@ -801,9 +904,14 @@ def _selftest() -> int:
         io.open(os.path.join(td, "broken_one.json"), "w",
                 encoding="utf-8").write("{壊れています")
         _lst = listing()
-        t("★★壊れた記録を黙って外さない★★"
+        # ★どの壊れ方かを名指しで見る★（2026-08-27）
+        #   ★直す前は「BROKENが1件でもあれば合格」だった★ので、
+        #   読み込みに失敗する記録を黙って外しても、
+        #   ★別の壊れ方（中身が壊れている）が拾って緑のままだった★（罠③）。
+        t("★★読み込めない記録を黙って外さない★★"
           "／★消えると、途中まで進んでいた直しが誰にも見えなくなる★",
-          any(x.get("state") == "BROKEN" for x in _lst))
+          any(x.get("finding_id") == "broken_one"
+              and x.get("state") == "BROKEN" for x in _lst))
     finally:
         globals()["STORE"] = keep
         shutil.rmtree(td, ignore_errors=True)

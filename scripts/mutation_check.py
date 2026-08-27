@@ -1265,7 +1265,7 @@ MUTATIONS = [
     {
         "why": "★機種の名前を検査しない（置き場の外を書き換えられる）★",
         "file": "scripts/decide_now.py",
-        "before": "    if not _SLUG_OK.match(s):",
+        "before": "    if not _SLUG_OK.fullmatch(s):",
         "after": "    if False:",
         "run": ["scripts/decide_now.py"],
     },
@@ -1298,10 +1298,16 @@ MUTATIONS = [
         "why": "★壊れた記録を黙って外す"
                "（途中の直しが一覧から消えて誰も気づけない）★",
         "file": "scripts/repair_journal.py",
+        # ★一覧に出さない形に壊す★（それが本当の穴の姿）
+        #   ★直す前は `_broken` の行を狙っていた★ので、
+        #   中身が空になるだけで BROKEN としては出続け、
+        #   守りが効いたままなのに「守られていない」と報告された。
         "before": '            out.append({"state": "BROKEN", '
-                  '"finding_id": n[:-5],',
-        "after": "            continue\n            out.append({"
-                 '"state": "BROKEN", "finding_id": n[:-5],',
+                  '"finding_id": n[:-5],\n'
+                  '                        "slug": "", "check": "", "quote": "",\n'
+                  '                        "_broken": '
+                  'f"{type(e).__name__}: {str(e)[:80]}"})',
+        "after": "            pass",
         "run": ["scripts/repair_journal.py"],
     },
     {
@@ -1332,8 +1338,83 @@ MUTATIONS = [
         "why": "★何もしていない完了に印を付けない"
                "（作業0件の正常終了を誰も数えられない）★",
         "file": "scripts/task_guard.py",
-        "before": '        e["no_work"] = (_wrote == 0 and not _today_slugs)',
+        "before": '        e["no_work"] = not _mine',
         "after": '        e["no_work"] = False',
+        "run": ["scripts/task_guard.py"],
+    },
+    # ─── 2026-08-27・Codexの2回目（作った守り自体の穴）────────────
+    {
+        "why": "★意味をひっくり返す印を見ない"
+               "（ひらがなだけで「〜ではありません」に書き換えられる）★",
+        "file": "scripts/decide_now.py",
+        "before": "            if _nf:",
+        "after": "            if False:",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★数値とラベルの対応を見ない"
+               "（どちらがどちらの値かを取り違えさせられる）★",
+        "file": "scripts/decide_now.py",
+        "before": "                if sorted(_pb) != sorted(_pa):",
+        "after": "                if False:",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★出どころの逐語が実在するか見ない"
+               "（架空の逐語で新語の検査を抜けられる）★",
+        "file": "scripts/decide_now.py",
+        "before": "                if _src_w and _src_w not in published:",
+        "after": "                if False:",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★場所を種類でしか数えない"
+               "（同じ本文に同じ行が2つあると先頭が黙って変わる）★",
+        "file": "scripts/decide_now.py",
+        "before": '        got += ["本文" for x in (sec.get("body") or []) '
+                  "if x == before]",
+        "after": '        got += ["本文"] if any(x == before '
+                 'for x in (sec.get("body") or [])) else []',
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★記録が読めないときに通す（合意の検査を丸ごと外せる）★",
+        "file": "scripts/decide_now.py",
+        "before": "    if _bk:",
+        "after": "    if False:",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★判断していないのに回数を数える"
+               "（封もCodexもせずに3回呼べば人へ回せる）★",
+        "file": "scripts/repair_journal.py",
+        "before": '    if rec.get("state") != "CODEX_RECEIVED":',
+        "after": "    if False:",
+        "run": ["scripts/repair_journal.py"],
+    },
+    {
+        "why": "★決定ファイルの指紋が空でも通す"
+               "（同じ記事を見て作られたかを確かめない）★",
+        "file": "scripts/repair_journal.py",
+        "before": "    if not _s:",
+        "after": "    if False:",
+        "run": ["scripts/repair_journal.py"],
+    },
+    {
+        "why": "★形が正しければ中身を見ない"
+               "（空の記録・知らない版が黙って一覧から消える）★",
+        "file": "scripts/repair_journal.py",
+        "before": "        _why = _broken_why(rec)",
+        "after": '        _why = ""',
+        "run": ["scripts/repair_journal.py"],
+    },
+    {
+        "why": "★何もしていない印を、その日全体で数える"
+               "（別のタスクが書いた日は見落とす）★",
+        "file": "scripts/task_guard.py",
+        "before": '                 if r.get("task") == task '
+                  'and r.get("date") == _today()]',
+        "after": '                 if r.get("date") == _today()]',
         "run": ["scripts/task_guard.py"],
     },
     {
