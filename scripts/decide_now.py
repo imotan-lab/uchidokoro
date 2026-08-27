@@ -2254,6 +2254,39 @@ def _selftest() -> int:
         t("　（対照）同じ節の中の重複なら、今までどおり通る",
           not apply_decision(_r8b)["problems"])
 
+        # ★★奥の守り（係り先の照合）だけが効く材料★★
+        #   （2026-08-28・罠⑫＝手前に守りを足すと、奥が試されなくなる）
+        #   ・数値が**変わる**書き換え → 「並びの入れ替え」の検査は当たらない
+        #   ・出どころの係り先がひらがなだけ違う
+        #     → 内容の文字だけで比べると同じに見える
+        S8H = {"slug": "s8h", "sections": [
+            {"title": "朝一・リセット情報",
+             "body": ["設定変更ありは500Gです。",
+                      "設定変更なしは600Gです。",
+                      "ほかの行です。"]}]}
+        with io.open(os.path.join(td, "s8h.json"), "w",
+                     encoding="utf-8", newline="\n") as f:
+            json.dump(S8H, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+        _r8h = os.path.join(td, "ds8h.json")
+        io.open(_r8h, "w", encoding="utf-8").write(json.dumps(
+            {"schema_version": SCHEMA, "slug": "s8h",
+             "source_sha256": _sha_of("s8h"),
+             "decided_by": ["Claude", "codex"],
+             "actions": [{"op": "replace",
+                          "before": "設定変更ありは500Gです。",
+                          "after": "設定変更ありは600Gです。",
+                          "why": "わざと：別条件の値を持ち込む",
+                          "numbers_from": "設定変更なしは600Gです。"}]},
+            ensure_ascii=False))
+        _g8h = apply_decision(_r8h)
+        t("★★ひらがなだけ違う係り先の値を持ち込ませない★★"
+          "／★係り先を内容の文字だけで比べると"
+          "『設定変更あり』と『設定変更なし』が同じに見える★"
+          "／★手前の「並びの入れ替え」検査は当たらない材料にしてある★",
+          bool(_g8h["problems"])
+          and "付き先が違います" in "".join(_g8h["problems"]))
+
         # ── 2026-08-28・Codexの9回目 ───────────────────────────
         S9 = {"slug": "s9", "sections": [
             {"title": "設定示唆まとめ",
