@@ -1792,9 +1792,26 @@ def _finding_tests(t, tmpdir) -> None:
         vp = os.path.join(tmpdir, "v.md")
         with open(vp, "w", encoding="utf-8") as f:
             f.write("私の判定: この文は前と同じ内容なので消してよいと考えます。")
+
+        def _decf(_fid, _slug, _sha, _name):
+            """★合意は決定ファイルそのものを読む★（2026-08-27・Codexの指摘6）
+
+            ★打ち直した配列は受け取らない★＝合意した中身と、
+            実際に当てる中身を同じものにするため。
+            """
+            _p = os.path.join(tmpdir, _name + ".json")
+            with open(_p, "w", encoding="utf-8") as _f:
+                json.dump({"schema_version": "decide-now/v1", "slug": _slug,
+                           "finding_id": _fid, "source_sha256": _sha,
+                           "decided_by": ["Claude", "codex"],
+                           "actions": [{"op": "drop", "text": "x",
+                                        "why": "重複"}]},
+                          _f, ensure_ascii=False)
+            return _p
+
         rj.seal_claude(fid, vp)
         rj.record_codex(fid, "b" * 64, "Codexの判定です。同じく消してよいです。")
-        rj.agree(fid, [{"op": "drop", "why": "重複"}], "text_gone",
+        rj.agree(fid, _decf(fid, slug, sha, "d_find"), "text_gone",
                  ["Claude", "codex"])
         t("　合意したら書ける", not _raises(lambda: before_write("t_find", slug, fp)))
 
@@ -1803,8 +1820,8 @@ def _finding_tests(t, tmpdir) -> None:
         rj.seal_claude(fid_moved, vp)
         rj.record_codex(fid_moved, "b" * 64,
                         "Codexの判定です。同じく消してよいと考えます。")
-        rj.agree(fid_moved, [{"op": "drop", "why": "重複"}], "text_gone",
-                 ["Claude", "codex"])
+        rj.agree(fid_moved, _decf(fid_moved, slug, "0" * 64, "d_moved"),
+                 "text_gone", ["Claude", "codex"])
         claim("t_find4", slug, fp, finding=fid_moved)
         t("★★見つけたときから記事が変わっていたら書かせない★★",
           _raises(lambda: before_write("t_find4", slug, fp), "変わっています"))
