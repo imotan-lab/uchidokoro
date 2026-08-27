@@ -1709,7 +1709,7 @@ def _run_tests(root: str, scripts: list) -> tuple:
 SLOW = ("scripts/publish_new_machine.py",)
 
 
-def check(only: str = "", fast: bool = False) -> int:
+def check(only: str = "", fast: bool = False, only_index=None) -> int:
     tmp = tempfile.mkdtemp(prefix="mut_")
     ng, weak, skipped = [], [], []
     # ★★写しは1つだけ作って使い回す★★（2026-08-23）
@@ -1730,6 +1730,8 @@ def check(only: str = "", fast: bool = False) -> int:
         _want = [x.strip() for x in str(only or "").split(",") if x.strip()]
         tried = 0
         for i, m in enumerate(MUTATIONS, 1):
+            if only_index is not None and i not in only_index:
+                continue
             if _want and not any(w in m["why"] for w in _want):
                 continue
             tried += 1
@@ -1819,6 +1821,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="守りを壊して試験が赤くなるか見る")
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--only", default="")
+    ap.add_argument("--files", default="",
+                    help="このファイルを壊す分だけ回す（カンマ区切り）"
+                         "＝push の直前に、触ったところだけ確かめる")
     ap.add_argument("--fast", action="store_true",
                     help="時間のかかる試験を飛ばす（CI用）")
     ap.add_argument("--selftest", action="store_true")
@@ -1839,6 +1844,15 @@ def main() -> int:
             print("❌ " + x)
         print(f"{len(MUTATIONS) - len(bad)}/{len(MUTATIONS)} 合格")
         return 1 if bad else 0
+    if a.files:
+        want = {x.strip().replace("\\", "/")
+                for x in a.files.split(",") if x.strip()}
+        idx = [i for i, m in enumerate(MUTATIONS, 1)
+               if m["file"].replace("\\", "/") in want]
+        if not idx:
+            print("★このファイルを壊す試験はありません★: " + ", ".join(sorted(want)))
+            return 0
+        return check("", fast=a.fast, only_index=set(idx))
     return check(a.only, fast=a.fast)
 
 

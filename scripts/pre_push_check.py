@@ -211,6 +211,34 @@ def main() -> int:
                 print("   " + _l)
         print("   → 直した場所に合わせて mutation_check.py の目印を直してください")
         ng.append("壊し方の目印")
+    # ★★触ったスクリプトの守りを、実際に壊して試す★★（2026-08-28）
+    #   ★きっかけ★＝守りを手前に足したせいで奥の守りの試験が消え、
+    #   それを見落として push し、★GitHubのCIが実際に赤くなった★。
+    #   道具は正しく「★NG」と出していたのに、こちらが読み違えた。
+    #   ★人の注意では止まらないので、機械に止めさせる★。
+    #   ★全部回すと数分かかる★ので、**触ったファイルの分だけ**回す。
+    _touched = sorted({p for p in _changed_paths()
+                       if p.startswith("scripts/") and p.endswith(".py")})
+    if _touched:
+        print()
+        print("--- 壊し方（触ったスクリプトの分だけ） ---")
+        print("   対象: " + " / ".join(_touched))
+        _mf = subprocess.run(
+            [sys.executable, os.path.join(BASE, "scripts", "mutation_check.py"),
+             "--files", ",".join(_touched)],
+            cwd=BASE, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", env=env)
+        for _l in (_mf.stdout or "").splitlines():
+            if _l.startswith("  ★ND") or _l.startswith("  ★NG") \
+                    or "守られていません" in _l or "試したものは" in _l \
+                    or "試験はありません" in _l:
+                print("   " + _l.strip())
+        if _mf.returncode != 0:
+            print("★★守りを壊しても、試験が赤くなりません★★"
+                  "（その守りを見ている試験がありません）")
+            print("   → 手前に別の守りを足したせいで、"
+                  "奥の守りを一度も試さなくなっていないか確かめてください")
+            ng.append("壊し方（触った分）")
     if ng:
         print()
         print("★pushを止めました★ 失敗: " + " / ".join(ng))
