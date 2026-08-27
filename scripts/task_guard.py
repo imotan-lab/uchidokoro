@@ -1776,13 +1776,13 @@ def _finding_tests(t, tmpdir) -> None:
 
         _other = "zzz_other_machine"
         fid_other = rj.detect(_other, "text_gone", "よその機種の文です。",
-                              "y")["finding_id"]
+                              "y", source_sha256="9" * 64)["finding_id"]
         t("★★別の機種の記録では担当できない★★",
           _raises(lambda: claim("t_find2", slug, fp, finding=fid_other),
                   _other))
 
         fid_esc = rj.detect(slug, "text_gone", "打ち切る文です。",
-                            "z")["finding_id"]
+                            "z", source_sha256="9" * 64)["finding_id"]
         for _ in range(rj.MAX_ATTEMPTS):
             rj.attempt(fid_esc, "決まらない")
         t("★★人へ回した後の記録では担当できない★★",
