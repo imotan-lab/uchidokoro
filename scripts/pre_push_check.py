@@ -32,6 +32,21 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import local_paths as _lp        # noqa: E402
 
+# ★★自分の出力は utf-8 に固定する★★（2026-08-28・★実際に push が全部止まった★）
+#   ★何が起きたか★＝この関所は git のフックから呼ばれるので、
+#   出力先が Windows の既定（cp932）になる。
+#   検査は全部通っていたのに、結果の行に含まれる ✅ を書こうとして
+#   UnicodeEncodeError で落ち、★終了コードが 1 になって push が拒否された★。
+#   ＝「検査が通ったのに push できない」状態。しかも
+#     読む側には「関所が止めた」ようにしか見えない。
+#   ★これは罠⑪と同じ型★（ci_repro / mutation_check では対策済みだったが、
+#     この関所は 2026-08-28 に作ったばかりで、同じ手当てが漏れていた）。
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:              # noqa: BLE001
+        pass                       # ★書けなくても検査は続ける★
+
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # この形のファイルが変わっていたら、記事データを触ったとみなす
@@ -137,10 +152,58 @@ def _verified_range() -> list:
     return out
 
 
+def _selftest() -> int:
+    """★自分の出力が utf-8 で書けること★（2026-08-28・実際に push が全部止まった）
+
+    ★この関所は git のフックから呼ばれる★ので、出力先が
+    Windows の既定（cp932）になる。検査は全部通っているのに、
+    結果の行に含まれる ✅ を書こうとして落ち、
+    ★終了コードが 1 になって push が拒否された★。
+    （読む側には「関所が止めた」ようにしか見えない）
+    """
+    ok = []
+
+    def t(name, cond):
+        print(("✅ " if cond else "❌ ") + name)
+        ok.append(bool(cond))
+
+    # ★★本番と同じ形で確かめる★★（2026-08-28・罠④）
+    #   ★いまの設定を見るだけでは足りない★＝試験は
+    #   `PYTHONIOENCODING=utf-8` で走ることが多いので、
+    #   ★固定していなくても utf-8 になり、守りを外しても緑のまま★だった。
+    #   関所は git のフックから **cp932 の設定で** 呼ばれるので、
+    #   自分を その設定で呼び直して、合格の記号が書けるかを見る。
+    _env = {**os.environ, "PYTHONIOENCODING": "cp932"}
+    _env.pop("PYTHONUTF8", None)
+    r = subprocess.run([sys.executable, os.path.abspath(__file__),
+                        "--echo-check"],
+                       capture_output=True, env=_env, cwd=BASE)
+    t("★★Windowsの既定（cp932）で呼ばれても、合格の記号を書ける★★"
+      "／★固定しないと、合格と表示しようとして失敗し、"
+      "『検査は通ったのに push できない』になる★",
+      r.returncode == 0)
+    if r.returncode != 0:
+        print("   " + (r.stderr or b"").decode("utf-8", "replace")
+              .strip().splitlines()[-1][:120])
+    ng = ok.count(False)
+    print(f"{len(ok) - ng}/{len(ok)} 合格")
+    return 1 if ng else 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="push前の検査")
     ap.add_argument("--always", action="store_true")
+    ap.add_argument("--selftest", action="store_true",
+                    help="この関所自身の試験（出力の文字の扱いを確かめる）")
+    ap.add_argument("--echo-check", action="store_true",
+                    help="★試験が内側から呼ぶ★＝合格の記号を書けるか試すだけ")
     a = ap.parse_args()
+    if a.echo_check:
+        # ★合格の記号を書くだけ★（書けなければ例外で終了コードが1になる）
+        print("✅❌★ 監査が使う記号")
+        return 0
+    if a.selftest:
+        return _selftest()
 
     # ★Codexへの未報告をpushの直前に必ず目に入れる★（2026-08-09）
     #   「作ったら報告する」は鉄則1bにもメモリにも書いてあるのに、

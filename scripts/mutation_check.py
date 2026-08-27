@@ -1514,6 +1514,15 @@ MUTATIONS = [
         "run": ["scripts/build_new_article.py"],
     },
     {
+        "why": "★関所が自分の出力の文字の扱いを固定しない"
+               "（Windowsの既定では合格の記号が書けず、"
+               "検査が通っているのに push が拒否される）★",
+        "file": "scripts/pre_push_check.py",
+        "before": '        _s.reconfigure(encoding="utf-8", errors="replace")',
+        "after": "        pass",
+        "run": ["scripts/pre_push_check.py"],
+    },
+    {
         "why": "★数値の並びが変わっても通す"
                "（ラベルの中の数字で係り先が空になり、入れ替えが素通りする）★",
         "file": "scripts/decide_now.py",
