@@ -816,21 +816,31 @@ def _stuck_save(got: dict) -> bool:
         return False
 
 
-def _stuck_count(slug: str, add: int = 0) -> int:
+def _stuck_count(slug: str, add: int = 0, today: str = "") -> int:
     """その機種で「決まらなかった」回数（★機種ごとに数える★）。
 
     ★別の機種の失敗を持ち越さない★／★うまく育った日は0に戻す★。
     置き場は「見に行った日」の控えと同じファイル。
     ★控えを書けなかったときは1回目扱い★＝いきなり人へ報告しない。
     """
+    # ★★同じ日に何度動いても1回と数える★★
+    #   （2026-08-27・Codexの5回目の指摘5）
+    #   ★直す前は「行き詰まりを見つけた回数」だった★ので、
+    #   下見や再起動で同じ晩に3回動くと、
+    #   ★2AIが2回検討していなくても人へ回った★。
+    #   数えたいのは「2AIが別の日に考え直しても決まらなかった」回数。
     got = _stuck_state()
     book = got.setdefault("grow_stuck", {})
-    n = int(book.get(slug) or 0) + add
-    if add:
-        book[slug] = n
+    rec = book.get(slug)
+    if not isinstance(rec, dict):         # ★古い形（数だけ）から移す★
+        rec = {"n": int(rec or 0), "day": ""}
+    today = today or _dt.date.today().isoformat()
+    if add and rec.get("day") != today:
+        rec = {"n": int(rec.get("n") or 0) + add, "day": today}
+        book[slug] = rec
         if not _stuck_save(got):
-            return min(n, 1)
-    return n
+            return min(rec["n"], 1)
+    return int(rec.get("n") or 0)
 
 
 def _stuck_clear(slug: str) -> None:
@@ -840,7 +850,8 @@ def _stuck_clear(slug: str) -> None:
         _stuck_save(got)
 
 
-def grow_result(slug: str, ok: bool, why: str = "") -> dict:
+def grow_result(slug: str, ok: bool, why: str = "",
+                today: str = "") -> dict:
     """★育てた結果を受けて、次にどうするかを決める★（2026-08-27）
 
     ★ここに切り出した理由★＝判断が処理の中に埋まっていると、
@@ -853,7 +864,7 @@ def grow_result(slug: str, ok: bool, why: str = "") -> dict:
     if ok:
         _stuck_clear(slug)
         return {"do": "ok"}
-    n = _stuck_count(slug, add=1)
+    n = _stuck_count(slug, add=1, today=today)
     if n < STUCK_ASK_LIMIT:
         return {"do": "ask", "round": n,
                 "text": ("★2AIで決めてください★ " + slug
@@ -2229,20 +2240,26 @@ def selftest() -> int:
         try:
             globals()["STATE_PATH"] = os.path.join(_dir_s, "s.json")
             # ★本番と同じ入口（grow_result）を通す★
-            _a1 = grow_result("zzz_s", False, "理由")
-            _a2 = grow_result("zzz_s", False, "理由")
+            # ★日をまたいで数える★（同じ日に何度動いても1回）
+            _a1 = grow_result("zzz_s", False, "理由", today="2026-08-01")
+            t("　同じ日に何度動いても増えない",
+              grow_result("zzz_s", False, "理由",
+                          today="2026-08-01")["round"] == 1)
+            _a2 = grow_result("zzz_s", False, "理由", today="2026-08-02")
             t("★★1〜2回目は2AIに聞く（人へ回さない）★★"
               "／★直す前は、その場で人へ回して止まったままだった★",
               _a1["do"] == "ask" and _a2["do"] == "ask"
               and "2AIで決めてください" in _a1["text"])
-            _a3 = grow_result("zzz_s", False, "理由")
+            _a3 = grow_result("zzz_s", False, "理由", today="2026-08-03")
             t("★★3回目でだけ人へ報告する★★",
               _a3["do"] == "ledger" and _a3["round"] == STUCK_ASK_LIMIT)
             t("　機種ごとに数える（よその失敗を持ち越さない）",
-              grow_result("zzz_other", False, "理由")["round"] == 1)
+              grow_result("zzz_other", False, "理由",
+                          today="2026-08-03")["round"] == 1)
             t("★うまく育ったら0に戻す（昔の失敗を数え続けない）★",
               grow_result("zzz_s", True)["do"] == "ok"
-              and grow_result("zzz_s", False, "理由")["do"] == "ask")
+              and grow_result("zzz_s", False, "理由",
+                              today="2026-08-04")["do"] == "ask")
         finally:
             globals()["STATE_PATH"] = _keep_sp
             import shutil as _sh_s

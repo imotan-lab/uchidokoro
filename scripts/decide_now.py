@@ -506,8 +506,11 @@ def _wording(s: str) -> str:
     ★機械はここまで★＝変わったことは分かるが、
     意味が変わったかは分からない。だから2AIに答えさせる。
     """
+    # ★符号は伏せない★（2026-08-27・Codexの5回目）
+    #   ★直す前は符号ごと伏せていた★ので、
+    #   「差枚+500枚」→「差枚-600枚」が同じ見た目になり素通りした。
     import re as _re4
-    return _re4.sub(r"[-−▲△+＋]?\d+(?:\.\d+)?", "#", str(s or ""))
+    return _re4.sub(r"\d+(?:\.\d+)?", "#", str(s or ""))
 
 
 def _num_pairs(s: str) -> list:
@@ -708,8 +711,13 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
             #     が**丸ごと同じ**であることを求める。
             #   ★数値そのものが変わる言い換えには当てない★
             #     （そちらは「出どころの逐語」で見る＝骨組みは当然変わる）。
+            # ★★係り先は、数値が変わるときも必ず見る★★
+            #   （2026-08-27・Codexの5回目の指摘1）
+            #   ★直す前は「数値の顔ぶれが同じとき」しか見ていなかった★ので、
+            #   出どころを付けて数値ごと変えれば、
+            #   「通常800G／リセット700G」のように**逆の対応**で書けた。
+            _sb, _sa = _shape(a["before"]), _shape(a["after"])
             if sorted(nb) == sorted(na):
-                _sb, _sa = _shape(a["before"]), _shape(a["after"])
                 if _sb != _sa:
                     result["problems"].append(
                         "数値が付いている言葉が変わっています"
@@ -717,6 +725,9 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
                         "（どちらがどちらの値かを取り違えさせるので"
                         "受け取りません）")
                     return result
+            # ★数値が変わるときは、機械では正しさを決められない★
+            #   （どの数値がどこに入るかは、出どころとの照合＝下の検査で見る。
+            #     組み立てが変わること自体は2AIが判断して理由を残す）
             _blob = _content_blob(published)
             new_w = [w for w in _words(a["after"]) if w not in _blob]
             if new_w:
@@ -788,6 +799,20 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
                         f"出どころの逐語が、この機種の公開データに見つかりません: "
                         f"{src[:44]!r}")
                     return result
+                # ★★数値だけでなく「どの言葉に付くか」も出どころと同じこと★★
+                #   （2026-08-27・Codexの5回目の指摘1）
+                #   ★直す前は数値の存在だけ見ていた★ので、
+                #   出どころが「通常700G／リセット800G」でも、
+                #   「通常800G／リセット700G」と**逆**に書けた。
+                _src_pairs = _shape(src)
+                _added_pairs = [p for p in _sa if p not in _sb]
+                _miss_p = [p for p in _added_pairs if p not in _src_pairs]
+                if _miss_p:
+                    result["problems"].append(
+                        "出どころと、数値の付き先が違います: "
+                        + " / ".join(f"{w}{n}" for w, n in _miss_p[:4])
+                        + f"（出どころ: {_src_pairs[:4]}）")
+                    return result
                 added = sorted(set(na) - set(nb))
                 missing = [n for n in added if n not in _numbers(src)]
                 if missing:
@@ -808,7 +833,16 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
             #
             #   見方＝消す行に出てくる数値が、消したあとの記事にも
             #   すべて残っているか。1つでも消えるなら受け取らない。
-            nums = _numbers(a["text"])
+            # ★★消すときも「どの言葉に付いた数値か」で見る★★
+            #   （2026-08-27・Codexの5回目の指摘2）
+            #   ★直す前は裸の数字で見ていた★ので、
+            #   「通常時の天井は500G」を消しても
+            #   「リセット時の天井は500G」が残れば通った＝別の事実が消える。
+            # ★★同じ文がもう1つ残るかで見る★★（2026-08-27・Codexの5回目）
+            #   ★数値の直前の言葉だけでは足りなかった★＝
+            #   「通常時の天井は500G」と「リセット時の天井は500G」は
+            #   どちらも（天井, 500G）になり、別の事実が黙って消えた。
+            nums = [_wording(a["text"])] if _shape(a["text"]) else []
             if nums:
                 # ★消すのは1行だけ★＝同じ文が2つあるなら1つは残る
                 rest = raw.replace(a["text"], "", 1)
@@ -817,14 +851,35 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
                 #   ★直す前は n not in rest と書いていた★＝部分一致なので
                 #   「97.7%」の中の 7 に当たって通ってしまった。
                 #   ＝「最大7pt」を消しても「7は残っている」と誤判定した。
-                lost = sorted(set(nums) - set(_numbers(rest)))
+                lost = [x for x in nums if x not in _wording(rest)]
                 if lost:
-                    result["problems"].append(
-                        "消すと記事から無くなる数値があります: "
-                        + " / ".join(lost[:4])
-                        + "（どちらが正解かを選ぶことになるので受け取りません。"
-                        "出典で確かめてください）")
-                    return result
+                    # ★★機械で「重複だ」と言い切れないときは2AIへ★★
+                    #   （2026-08-27・Codexの5回目の指摘2）
+                    #   ★直す前は裸の数字で見ていた★ので、
+                    #   「通常時の天井は500G」を消しても
+                    #   「リセット時の天井は500G」が残れば通った
+                    #   ＝別の事実が消えていた。
+                    #   ★機械は「同じ言葉に付いた同じ数値が残るか」までしか
+                    #     分からない★ので、残らないなら2AIが理由を書く。
+                    _dw = str(a.get("meaning_why") or "").strip()
+                    if len(_dw) < 15:
+                        result["problems"].append(
+                            "同じ文が他に残りません: "
+                            + " / ".join(x[:40] for x in lost[:2])
+                            + "（まったく同じ文の重複なら機械が通します。"
+                            "言い方が違うだけの重複なら、"
+                            "なぜ消してよいかを meaning_why に"
+                            "書いてください・15字以上）")
+                        return result
+                    result.setdefault("meaning_judged", []).append(
+                        {"drop": a["text"][:60], "why": _dw[:120],
+                         "by": list(dec.get("decided_by") or [])})
+                    # ★最後の数え直しは免除しない★（2026-08-27）
+                    #   ★免除したら、重複を「両方」消して値が丸ごと消える
+                    #     決定が通った★（実際に通った）。
+                    #   1件ずつの検査は「別の事実を消していないか」、
+                    #   最後の数え直しは「値が記事から消えていないか」で
+                    #   ★役割が違う★。
 
     # 実際にあたるかを先に全部確かめる（1件でも外れたら何もしない）
     plan = []
@@ -917,7 +972,14 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
     #   → ★決定を全部あてた後の姿で数え直す★。
     after_all = _simulate(d, plan)
     # ★数値は token で比べる★（部分一致だと「97.7」の中の「7」に当たる）
-    lost = sorted(set(_numbers(raw)) - set(_numbers(after_all)))
+    # ★★組で数え直す★★（2026-08-27・Codexの5回目）
+    #   裸の数字だと「別の言葉に付いた同じ数値」で消失を見逃す。
+    # ★ここは「値が記事から丸ごと消えていないか」を見る★（2026-08-27）
+    #   ★組で見ない★＝2AIが「同じ内容だ」と判断した重複の削除まで止まる。
+    #   「別の事実を消していないか」は、1件ずつの検査（同じ文が残るか）の役。
+    lost_pairs = sorted({("", n) for n in _numbers(raw)}
+                        - {("", n) for n in _numbers(after_all)})
+    lost = [n for _, n in lost_pairs]
     # ★消えてよい数値は、決定が1つずつ理由つきで名指ししたものだけ★
     #   （2026-08-22。goji_eva の「6.4割」＝640÷1000 の派生表現で、
     #    実際の天井は 1000G+α なので厳密な割合ではなかった。
@@ -932,16 +994,22 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
     #   決定が「6.4」と名指ししていても「6.4割」に当たるようにする。
     #   ★別の数値には当てない★＝続きが数字や小数点なら別物
     #   （6.4 が 6.44 に当たらないように）。
-    def _excused(tok: str) -> bool:
+    def _excused(pair) -> bool:
+        """名指し（数値）と、2AIが判断した削除の分を許す。
+
+        ★数値の部分で照らす★（2026-08-27）＝組にしたので
+        「天井1000G」のような形になり、「1000」の名指しが当たらなくなっていた。
+        """
+        _w, num = pair
         for n in ok_to_lose:
-            if tok == n:
+            if num == n:
                 return True
-            if tok.startswith(n) and not tok[len(n):len(n) + 1].isdigit() \
-                    and tok[len(n):len(n) + 1] != ".":
+            if num.startswith(n) and not num[len(n):len(n) + 1].isdigit() \
+                    and num[len(n):len(n) + 1] != ".":
                 return True
         return False
 
-    still = [n for n in lost if not _excused(n)]
+    still = [n for w, n in lost_pairs if not _excused((w, n))]
     if still:
         result["problems"].append(
             "全部やると記事から無くなる数値があります: " + " / ".join(still[:6])
@@ -1161,9 +1229,10 @@ def _selftest() -> int:
         rg = apply_decision(dec_g([{"op": "drop",
                                     "text": "ポイントは最大7ptです。",
                                     "why": "わざと"}]))
-        t("★★消すと無くなる数値を、他の数値の一部で見逃さない★★"
-          "（97.7%の中の7に当たっていた）",
-          bool(rg["problems"]) and "7" in "".join(rg["problems"]))
+        t("★★同じ文が他に残らない削除は、2AIの判断を求める★★"
+          "／★裸の数字で見ていたころは、97.7%の中の7に当たって素通りした★",
+          bool(rg["problems"])
+          and "同じ文が他に残りません" in "".join(rg["problems"]))
 
         # ★★全部やったあとで数値が消えるのを見る★★
         #   1件ずつ見るだけだと、重複した2行を「両方」消す決定が通ってしまう。
@@ -1186,16 +1255,24 @@ def _selftest() -> int:
                 ensure_ascii=False))
             return r
 
+        # ★言い回しが少し違う重複は、2AIが「同じ内容だ」と言う★
+        #   （機械は「同じ言葉に付いた同じ数値が残るか」までしか分からない）
         rh1 = apply_decision(dec_h([{"op": "drop",
                                      "text": "リセットは700Gに短縮されます。",
-                                     "why": "重複の片方"}]))
+                                     "why": "重複の片方",
+                                     "meaning_why": "次の行とまったく同じ内容で、言い方だけが違います"}]))
         t("　重複の片方だけを消すのは通る", not rh1["problems"])
 
+        # ★2AIの判断つきにして、最後の数え直しだけが効く形にする★
+        #   （2026-08-27）★そうしないと1件ずつの検査が先に断って、
+        #   狙った守りを一度も試せない★（罠④）。
         rh2 = apply_decision(dec_h([
             {"op": "drop", "text": "リセットは700Gに短縮されます。",
-             "why": "重複の片方"},
+             "why": "重複の片方",
+             "meaning_why": "次の行と同じ内容で、言い方だけが違います"},
             {"op": "drop", "text": "リセット時は700Gに短縮されます。",
-             "why": "もう片方も"}]))
+             "why": "もう片方も",
+             "meaning_why": "前の行と同じ内容で、言い方だけが違います"}]))
         t("★★両方消して数値が記事から無くなる決定は受け取らない★★"
           "（1件ずつ見るだけでは両方とも通っていた）",
           bool(rh2["problems"]) and "700" in "".join(rh2["problems"]))
@@ -1276,7 +1353,8 @@ def _selftest() -> int:
           bool(rk4["problems"]) and "6.4" in "".join(rk4["problems"]))
 
         rk5 = apply_decision(dec_k2(
-            dict(base_act, numbers_from="等価狙い目は640G〜です。"),
+            dict(base_act, numbers_from="等価狙い目は640G〜です。",
+                 meaning_why="サイト自身が公開している狙い目に言い換えただけです"),
             removed=[{"n": "6.4", "why": "640÷1000の派生表現で独立した情報がない"},
                      {"n": "1000", "why": "わざと：ここでは消えないが名指ししても害はない"}]))
         t("　出どころが実在し、消える数値を理由つきで名指しすれば通る",
@@ -1511,9 +1589,10 @@ def _selftest() -> int:
                           "why": "わざと：残るのは500枚だけ"}]},
             ensure_ascii=False))
         rn5 = apply_decision(ru)
-        t("★★単位が違う同じ数字では『残っている』と見なさない★★"
+        t("★★同じ文が他に残らない削除は、2AIの判断を求める★★"
           "／★直す前は「獲得500枚」があれば天井500Gを消せた★",
-          bool(rn5["problems"]) and "500G" in "".join(rn5["problems"]))
+          bool(rn5["problems"])
+          and "同じ文が他に残りません" in "".join(rn5["problems"]))
 
         # ④同じ文字が2か所にある
         rn6 = apply_decision(dec_n([
@@ -1737,6 +1816,57 @@ def _selftest() -> int:
              "after": "天井は500Gです。", "why": "同じ内容",
              "where": "body"}))
         t("　言い回しが変わらなければ、今までどおり通る", not rz3["problems"])
+
+        # ── 2026-08-27・Codexの5回目（機械が守ると言った部分）────
+        S5 = {"slug": "s5", "sections": [
+            {"title": "天井・恩恵",
+             "body": ["通常500G／リセット600G",
+                      "根拠：通常700G／リセット800G",
+                      "差枚+500枚がねらいです。",
+                      "差枚-500枚がねらいです。",
+                      "ほかの行です。"]}]}
+        with io.open(os.path.join(td, "s5.json"), "w",
+                     encoding="utf-8", newline="\n") as f:
+            json.dump(S5, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+
+        def dec_s5(act):
+            r = os.path.join(td, "ds5.json")
+            io.open(r, "w", encoding="utf-8").write(json.dumps(
+                {"schema_version": SCHEMA, "slug": "s5",
+                 "source_sha256": _sha_of("s5"),
+                 "decided_by": ["Claude", "codex"], "actions": [act]},
+                ensure_ascii=False))
+            return r
+
+        # ★出どころと逆の対応で書けないこと★
+        rs1 = apply_decision(dec_s5(
+            {"op": "replace", "before": "通常500G／リセット600G",
+             "after": "通常800G／リセット700G", "why": "わざと：逆の対応",
+             "numbers_from": "根拠：通常700G／リセット800G",
+             "meaning_why": "2AIで判断したことにしています（わざと）"}))
+        t("★★出どころと、数値の付き先が違えば受け取らない★★"
+          "／★数値の存在だけ見ていたので、逆の対応で書けた★",
+          bool(rs1["problems"])
+          and "付き先が違います" in "".join(rs1["problems"]))
+
+        # ★対照★＝出どころどおりなら通る
+        rs2 = apply_decision(dec_s5(
+            {"op": "replace", "before": "通常500G／リセット600G",
+             "after": "通常700G／リセット800G", "why": "出どころどおり",
+             "numbers_from": "根拠：通常700G／リセット800G",
+             "meaning_why": "出どころの値にそろえただけで、対応は同じです"}))
+        t("　（対照）出どころどおりの対応なら通る",
+          not [p for p in rs2["problems"] if "付き先" in p])
+
+        # ★符号が違えば別の文★（消すときに「同じ文」と見なさない）
+        rs3 = apply_decision(dec_s5(
+            {"op": "drop", "text": "差枚+500枚がねらいです。",
+             "why": "わざと：符号だけ違う行が残る"}))
+        t("★★符号が違えば別の文として扱う★★"
+          "／★符号を伏せていたら、+500枚と-500枚が同じ文に見えた★",
+          bool(rs3["problems"])
+          and "同じ文が他に残りません" in "".join(rs3["problems"]))
 
         # ⑱置き場の外を指せない
         _bad_slug = os.path.join(td, "dbad.json")

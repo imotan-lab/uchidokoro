@@ -1491,6 +1491,46 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★出どころと数値の付き先を照らさない"
+               "（出どころと逆の対応で書ける）★",
+        "file": "scripts/decide_now.py",
+        "before": "                if _miss_p:",
+        "after": "                if False:",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★消すときに同じ文が残るかを見ない"
+               "（別の事実が黙って消える）★",
+        "file": "scripts/decide_now.py",
+        "before": '                lost = [x for x in nums '
+                  'if x not in _wording(rest)]',
+        "after": "                lost = []",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★言い回しで符号まで伏せる（+500枚→-600枚が素通り）★",
+        "file": "scripts/decide_now.py",
+        "before": '    return _re4.sub(r"\\d+(?:\\.\\d+)?", "#", str(s or ""))',
+        "after": '    return _re4.sub(r"[-−▲△+＋]?\\d+(?:\\.\\d+)?", "#", '
+                 'str(s or ""))',
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★相談のときに締切を見ない（締切を越えて相談し続ける）★",
+        "file": "scripts/task_guard.py",
+        "before": '    if _dl and datetime.now().strftime("%H:%M") >= _dl:',
+        "after": "    if False:",
+        "run": ["scripts/task_guard.py"],
+    },
+    {
+        "why": "★同じ日に何度動いても数え続ける"
+               "（2AIが検討していなくても人へ回る）★",
+        "file": "scripts/grow_machine.py",
+        "before": '    if add and rec.get("day") != today:',
+        "after": "    if add:",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
         "why": "★2AIに基本情報表を見せない（食い違いに気づけない）★",
         "file": "scripts/decide_now.py",
         # ★2行まとめて置き換える★（1行だけ切ると構文エラーになり、

@@ -914,13 +914,22 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
         _save(path, data)
         return e
 
-def codex_round(task: str, path: str = STATE_PATH, lane: str = "main") -> int:
+def codex_round(task: str, path: str = STATE_PATH, lane: str = "main",
+                budget_path: str = BUDGET_PATH) -> int:
     """Codexへ1往復ぶん使う。★上限を超えたら拒否（必ず終わるため）★
 
     ★lane="ask" は2AIへの質問のやり直し用★（2026-08-12・依頼164のP1）
       新台の突き合わせと同じ勘定にすると枠を食い合い、
       どちらかが必ず欠ける晩ができる。勘定を分けて両立させる。
     """
+    # ★★相談のときも締切を見る★★（2026-08-27・Codexの5回目の指摘4）
+    #   ★回数の上限を外したので、締切だけが「必ず終わる」保証になった★。
+    #   ところが締切の検査は**書き換えの予約のときにしか無かった**ので、
+    #   相談だけを続ければ締切を越えられた。
+    _dl = str((budget(budget_path) or {}).get("deadline_hhmm") or "")
+    if _dl and datetime.now().strftime("%H:%M") >= _dl:
+        raise GuardError(
+            f"締切（{_dl}）を過ぎているので、これ以上は相談しません")
     key = "codex_rounds" if lane == "main" else f"codex_rounds_{lane}"
     limit = CODEX_ROUND_LIMIT if lane == "main" else CODEX_ASK_ROUND_LIMIT
     with _Exclusive(path):
@@ -2262,8 +2271,15 @@ def selftest() -> int:
 
         # ★★いまは上限なし（0）★★（2026-08-27・運営者の指示）
         #   ★仕組みは残す★＝あとで回数を決め直すときに、また効くように。
+        # ★試験は自分の締切を使う★（本番の締切を読むと、
+        #   実行した時刻で落ちたり通ったりする＝たまに落ちる検査になる）
+        _bp = os.path.join(tmpdir, "budget_codex.json")
+        with open(_bp, "w", encoding="utf-8") as _f:
+            json.dump({"schema_version": "task-budget/v1",
+                       "writes_total": 0, "writes_fix": 0, "writes_grow": 0,
+                       "inspections": 0, "deadline_hhmm": "23:59"}, _f)
         for i in (1, 2, 3, 4, 5):
-            codex_round("t", fp)
+            codex_round("t", fp, budget_path=_bp)
         t("★★上限なし（0）なら、何回でも相談できる★★"
           "／★まず通ることを確かめてから回数を決める、という運営者の判断★",
           _load(fp)["tasks"]["t"]["codex_rounds"] == 5)
@@ -2274,9 +2290,20 @@ def selftest() -> int:
         try:
             globals()["CODEX_ROUND_LIMIT"] = 5   # ★既に5回使っている★
             t("　（対照）上限を入れれば止まる",
-              raises(lambda: codex_round("t", fp), "上限"))
+              raises(lambda: codex_round("t", fp, budget_path=_bp), "上限"))
         finally:
             globals()["CODEX_ROUND_LIMIT"] = _keep_lim
+
+        # ★★締切を過ぎたら相談しない★★（2026-08-27・Codexの5回目の指摘4）
+        #   ★回数の上限を外したので、締切だけが「必ず終わる」保証★
+        _bp2 = os.path.join(tmpdir, "budget_over.json")
+        with open(_bp2, "w", encoding="utf-8") as _f:
+            json.dump({"schema_version": "task-budget/v1",
+                       "writes_total": 0, "writes_fix": 0, "writes_grow": 0,
+                       "inspections": 0, "deadline_hhmm": "00:00"}, _f)
+        t("★★締切を過ぎたら、これ以上は相談しない★★"
+          "／★回数の上限を外したので、ここが唯一の歯止め★",
+          raises(lambda: codex_round("t2", fp, budget_path=_bp2), "締切"))
 
         t("★担当していない機種は書き換えられない★",
           raises(lambda: before_write("t", "enen", fp), "今日の担当"))
