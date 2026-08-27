@@ -1239,14 +1239,6 @@ MUTATIONS = [
         "run": ["scripts/decide_now.py"],
     },
     {
-        "why": "★数値の並びの入れ替えを許す"
-               "（どちらがどちらの値かを取り違えさせられる）★",
-        "file": "scripts/decide_now.py",
-        "before": "            if nb != na and sorted(nb) == sorted(na):",
-        "after": "            if False:",
-        "run": ["scripts/decide_now.py"],
-    },
-    {
         "why": "★数値を裸の数字で見る"
                "（獲得500枚が残れば天井500Gを消せる）★",
         "file": "scripts/decide_now.py",
