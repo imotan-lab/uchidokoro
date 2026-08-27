@@ -1111,9 +1111,6 @@ def _gather(name: str, maker: str = "", slug: str = "",
         got["problems"].append(f"{nt['jp']}: {nt['why']}")
     # ★ATの仕様はモードごとに★（純増を混ぜたら誤情報）
     got["material"]["at_specs"] = _read(_at, "ATの仕様")
-    for lb in (got["material"].get("setting_labels_unconfirmed") or []):
-        got["problems"].append(
-            f"設定{lb}: 出典に出てくるが値が確認できていません（設定の段数を誤る恐れ）")
     # ★CZは名前ごとに★（どのCZの期待度か分からないと誤情報）
     got["material"]["czs"] = _read(_cz, "CZ")
     for nt in got["material"]["czs"]["need_third"]:
@@ -2904,6 +2901,17 @@ def run_one(name, official_url, maker, release, apply_it=False,
         out["problems"].append(
             f"CONFIRMED_VALUES_UNREADABLE: 2AIの確定値を読めません:"
             f" {type(e).__name__}: {e}")
+    # ★★「採れていない設定」を数え直す★★（2026-08-28・本番で誤記）
+    #   ★2AIで確定した値は、ここまでで初めて材料に入る★ので、
+    #   集めた時点の一覧のままでは「載せているのに載せていない」と
+    #   報告してしまう（実際に読者向けの注記まで嘘になっていた）。
+    #   ★try の外に置く★＝控えが読めなかった晩でも報告は出す。
+    mat["setting_labels_unconfirmed"] = _sl.unconfirmed_labels(
+        mat.get("setting_labels_seen"), mat.get("adopted"))
+    for _lb in mat["setting_labels_unconfirmed"]:
+        out["problems"].append(
+            f"設定{_lb}: 出典に出てくるが値が確認できていません"
+            "（設定の段数を誤る恐れ）")
     out["adopted"] = sorted(field_label(k) for k in mat["adopted"])
     out["held"] = sorted(field_label(k) for k in mat["need_third"])
     out["thin"] = sorted(field_label(k) for k in mat["thin"])

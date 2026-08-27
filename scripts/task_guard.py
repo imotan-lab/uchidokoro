@@ -151,6 +151,33 @@ def _night_id(now=None) -> str:
     return now.strftime("%Y-%m-%d")
 
 
+def past_deadline(deadline_hhmm: str, now_hhmm: str = "") -> bool:
+    """★締切を「一晩」の中で見る★（2026-08-28・本番で実害）
+
+    ★時刻の文字だけで比べてはいけない★＝
+    夜のタスクは23時30分に始まるので、朝07:20の締切と文字で比べると
+    「もう過ぎている」になり、★毎晩30分なにもできなくなる★。
+
+    一晩は 12:00〜翌11:59（`_night_id` と同じ考え方）。
+      ・いまが夜で、締切が朝 → まだ来ていない
+      ・いまが朝で、締切が夜 → 過ぎている
+      ・同じ側なら、そのまま比べる
+    """
+    dl = str(deadline_hhmm or "")
+    if not dl:
+        return False
+    now = now_hhmm or datetime.now().strftime("%H:%M")
+    now_evening = now >= "12:00"
+    dl_evening = dl >= "12:00"
+    if now_evening and not dl_evening:
+        # ★締切は翌朝＝まだ来ていない★
+        return False
+    if (not now_evening) and dl_evening:
+        # ★締切は昨夜＝過ぎている★
+        return True
+    return now >= dl
+
+
 def _night(data: dict, now=None) -> dict:
     """★一晩ぶんの記録★（`_day` とは別の入れ物。暦日で消えない）"""
     nid = _night_id(now)
@@ -428,7 +455,7 @@ def _day(data: dict) -> dict:
 
 def reserve(task: str, slug: str, kind: str, path: str = STATE_PATH,
             budget_path: str = BUDGET_PATH,
-            contract_sha256: str = "") -> dict:
+            contract_sha256: str = "", now_hhmm: str = "") -> dict:
     """書き換えを1件ぶん予約する（★書き始める前に必ず通す★）。
 
     ★予約した時点で枠を使う★（Codex109回目）
@@ -471,7 +498,7 @@ def reserve(task: str, slug: str, kind: str, path: str = STATE_PATH,
             _seen_today.append(slug)
         d["target_slug"] = slug
         # ★締切を過ぎたら新しい書き換えに着手しない★（途中で朝を迎えないため）
-        if datetime.now().strftime("%H:%M") >= b["deadline_hhmm"]:
+        if past_deadline(b["deadline_hhmm"], now_hhmm):
             raise GuardError(
                 f"新しい書き換えの締切（{b['deadline_hhmm']}）を過ぎています")
         # ★やりかけがあるなら、先にそれを片付ける★
@@ -915,7 +942,7 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
         return e
 
 def codex_round(task: str, path: str = STATE_PATH, lane: str = "main",
-                budget_path: str = BUDGET_PATH) -> int:
+                budget_path: str = BUDGET_PATH, now_hhmm: str = "") -> int:
     """Codexへ1往復ぶん使う。★上限を超えたら拒否（必ず終わるため）★
 
     ★lane="ask" は2AIへの質問のやり直し用★（2026-08-12・依頼164のP1）
@@ -927,7 +954,7 @@ def codex_round(task: str, path: str = STATE_PATH, lane: str = "main",
     #   ところが締切の検査は**書き換えの予約のときにしか無かった**ので、
     #   相談だけを続ければ締切を越えられた。
     _dl = str((budget(budget_path) or {}).get("deadline_hhmm") or "")
-    if _dl and datetime.now().strftime("%H:%M") >= _dl:
+    if past_deadline(_dl, now_hhmm):
         raise GuardError(
             f"締切（{_dl}）を過ぎているので、これ以上は相談しません")
     key = "codex_rounds" if lane == "main" else f"codex_rounds_{lane}"
@@ -1723,7 +1750,7 @@ def _machines_per_day_tests(t, tmpdir) -> None:
 
     def take(kind, slug):
         """予約 → 着手 → 巻き戻し、を1機種ぶん通す（担当は消さない）"""
-        r = reserve("t", slug, kind, path=sp, budget_path=bp,
+        r = reserve("t", slug, kind, path=sp, budget_path=bp, now_hhmm="20:00",
                     contract_sha256=SHA)
         begin_apply(r["token"], slug, kind, SHA, "t-" + slug, path=sp)
         advance(r["token"], "ROLLED_BACK_VERIFIED", path=sp)
@@ -1759,11 +1786,11 @@ def _machines_per_day_tests(t, tmpdir) -> None:
     # ★同じ機種を続けるのは、いつでも通る（やり直しを塞がない）★
     #   ★別の記録で試す★＝上で枠を使い切っているため
     sp2 = os.path.join(tmpdir, "mpd_state2.json")
-    r1 = reserve("t", "mpd_same", "fix", path=sp2, budget_path=bp,
+    r1 = reserve("t", "mpd_same", "fix", path=sp2, budget_path=bp, now_hhmm="20:00",
                  contract_sha256=SHA)
     begin_apply(r1["token"], "mpd_same", "fix", SHA, "t-same", path=sp2)
     advance(r1["token"], "ROLLED_BACK_VERIFIED", path=sp2)
-    r2 = reserve("t", "mpd_same", "fix", path=sp2, budget_path=bp,
+    r2 = reserve("t", "mpd_same", "fix", path=sp2, budget_path=bp, now_hhmm="20:00",
                  contract_sha256=SHA)
     t("　同じ機種なら、担当の数は増えない（やり直しを塞がない）",
       bool(r2["token"]) and _load(sp2)["day"]["slugs_today"] == ["mpd_same"])
@@ -1933,7 +1960,7 @@ def _budget_tests(t, tmpdir) -> None:
         _day(_d0)["target_slug"] = None
         _day(_d0)["slugs_today"] = []
         _save(sp, _d0)
-        r = reserve("t", slug, kind, path=sp, budget_path=bp,
+        r = reserve("t", slug, kind, path=sp, budget_path=bp, now_hhmm="20:00",
                     contract_sha256="sha256:" + "a" * 64)
         if close and r.get("token"):
             # ★1件ずつ片付けてから次へ★（やりかけを2つ持たない）
@@ -1959,7 +1986,7 @@ def _budget_tests(t, tmpdir) -> None:
       _raises(lambda: inspected("t", "c", path=sp, budget_path=bp), "上限"))
     # 試験用の機種は枠を使わない
     t("　試験用の機種は枠を使わない",
-      reserve("t", "zzz_test", "fix", path=sp, budget_path=bp,
+      reserve("t", "zzz_test", "fix", path=sp, budget_path=bp, now_hhmm="20:00",
               contract_sha256="sha256:" + "a" * 64)["test"])
     # 止めたら、タスク名を変えても通らない
     halt("監査に引っかかったため", path=sp)
@@ -1974,7 +2001,7 @@ def _budget_tests(t, tmpdir) -> None:
     globals()["MACHINES_PER_DAY"] = 3
     try:
         for _i in range(MACHINES_PER_DAY):
-            reserve("t", "きめた機種%d" % _i, "fix", path=sp6, budget_path=bp,
+            reserve("t", "きめた機種%d" % _i, "fix", path=sp6, budget_path=bp, now_hhmm="20:00",
                     contract_sha256="sha256:" + "a" * 64)
             _d6 = _load(sp6)
             _day(_d6)["writes"] = {"total": 0, "fix": 0, "grow": 0}
@@ -1983,18 +2010,19 @@ def _budget_tests(t, tmpdir) -> None:
         t("★★claim を呼ばなくても、1日の機種数は守られる★★"
           "（Codex115回目のP1-6・★上限を立てたときに効くこと★）",
           _raises(lambda: reserve("t", "ちがう機種", "fix", path=sp6,
-                                  budget_path=bp,
+                                  budget_path=bp, now_hhmm="20:00",
                                   contract_sha256="sha256:" + "a" * 64),
                   "機種"))
     finally:
         globals()["MACHINES_PER_DAY"] = _keep_mpd6
     t("★★止めた日は、別のタスク名でも書けない★★",
       _raises(lambda: reserve("別のタスク", "g", "fix", path=sp,
-                              budget_path=bp, contract_sha256="sha256:" + "a" * 64),
+                              budget_path=bp, now_hhmm="20:00",
+                              contract_sha256="sha256:" + "a" * 64),
               "止めています"))
     # ★予約の確認と消費が1つのまとまりになっているか★（Codex111回目のP0-4）
     sp4 = os.path.join(tmpdir, "state_begin.json")
-    tk = reserve("t", "m", "fix", path=sp4, budget_path=bp,
+    tk = reserve("t", "m", "fix", path=sp4, budget_path=bp, now_hhmm="20:00",
                  contract_sha256="sha256:" + "a" * 64)["token"]
     begin_apply(tk, "m", "fix", "sha256:" + "a" * 64, "attempt-1", path=sp4)
     t("★★同じ予約を別の処理が同時に使えない★★",
@@ -2018,17 +2046,18 @@ def _budget_tests(t, tmpdir) -> None:
                  "deadline_hhmm": "00:00"}, f)
     t("★★締切を過ぎたら新しい書き換えに着手しない★★",
       _raises(lambda: reserve("t", "z", "fix", path=sp2, budget_path=bp2,
-                              contract_sha256="sha256:" + "a" * 64), "締切"))
+                              contract_sha256="sha256:" + "a" * 64,
+                              now_hhmm="07:00"), "締切"))
     t("★★契約の指紋なしでは修正の枠を取れない★★（別の契約に流用させない）",
       _raises(lambda: reserve("t", "z", "fix", path=sp2, budget_path=bp2),
               "指紋"))
     # ★やりかけがあるうちは次を始めない★
     sp3 = os.path.join(tmpdir, "state_open.json")
-    tok3 = reserve("t", "p", "fix", path=sp3, budget_path=bp,
+    tok3 = reserve("t", "p", "fix", path=sp3, budget_path=bp, now_hhmm="20:00",
                    contract_sha256="sha256:" + "a" * 64)["token"]
     begin_apply(tok3, "p", "fix", "sha256:" + "a" * 64, "t-p", path=sp3)
     t("★★やりかけの書き換えがあるうちは次を始めない★★",
-      _raises(lambda: reserve("t", "p", "fix", path=sp3, budget_path=bp,
+      _raises(lambda: reserve("t", "p", "fix", path=sp3, budget_path=bp, now_hhmm="20:00",
                               contract_sha256="sha256:" + "a" * 64),
               "やりかけ"))
     t("★★決められた順にしか進めない★★（予約直後にpush済みとは書けない）",
@@ -2036,7 +2065,8 @@ def _budget_tests(t, tmpdir) -> None:
     t("★★普通の前進では予約を消費できない★★（照合を飛ばす経路を塞いだ）",
       _raises(lambda: advance(
           reserve("t", "r", "fix", path=os.path.join(tmpdir, "s5.json"),
-                  budget_path=bp, contract_sha256="sha256:" + "a" * 64)["token"],
+                  budget_path=bp, now_hhmm="20:00",
+                  contract_sha256="sha256:" + "a" * 64)["token"],
           "APPLYING", path=os.path.join(tmpdir, "s5.json")), "進めません"))
     t("　同じ段階への再実行は何も起きない（冪等）",
       begin_apply(tok3, "p", "fix", "sha256:" + "a" * 64, "t-p", path=sp3)["state"] == "APPLYING")
@@ -2279,7 +2309,7 @@ def selftest() -> int:
                        "writes_total": 0, "writes_fix": 0, "writes_grow": 0,
                        "inspections": 0, "deadline_hhmm": "23:59"}, _f)
         for i in (1, 2, 3, 4, 5):
-            codex_round("t", fp, budget_path=_bp)
+            codex_round("t", fp, budget_path=_bp, now_hhmm="20:00")
         t("★★上限なし（0）なら、何回でも相談できる★★"
           "／★まず通ることを確かめてから回数を決める、という運営者の判断★",
           _load(fp)["tasks"]["t"]["codex_rounds"] == 5)
@@ -2290,7 +2320,8 @@ def selftest() -> int:
         try:
             globals()["CODEX_ROUND_LIMIT"] = 5   # ★既に5回使っている★
             t("　（対照）上限を入れれば止まる",
-              raises(lambda: codex_round("t", fp, budget_path=_bp), "上限"))
+              raises(lambda: codex_round("t", fp, budget_path=_bp,
+                                        now_hhmm="20:00"), "上限"))
         finally:
             globals()["CODEX_ROUND_LIMIT"] = _keep_lim
 
@@ -2303,7 +2334,39 @@ def selftest() -> int:
                        "inspections": 0, "deadline_hhmm": "00:00"}, _f)
         t("★★締切を過ぎたら、これ以上は相談しない★★"
           "／★回数の上限を外したので、ここが唯一の歯止め★",
-          raises(lambda: codex_round("t2", fp, budget_path=_bp2), "締切"))
+          raises(lambda: codex_round("t2", fp, budget_path=_bp2,
+                                    now_hhmm="07:00"), "締切"))
+        # ★★締切は「一晩」の中で見る★★（2026-08-28・本番で実害）
+        #   ★夜11時半に始まるタスクが、朝7時20分の締切を
+        #   「もう過ぎた」と判定して、毎晩30分なにもできなかった★
+        t("★★夜11時半は、朝7時20分の締切をまだ過ぎていない★★"
+          "／★文字だけで比べて、毎晩30分止まっていた★",
+          past_deadline("07:20", "23:30") is False)
+        t("　朝8時なら、朝7時20分の締切は過ぎている",
+          past_deadline("07:20", "08:00") is True)
+        t("　朝6時なら、まだ過ぎていない",
+          past_deadline("07:20", "06:00") is False)
+        t("　夜の締切（23:59）は、夜11時半にはまだ過ぎていない",
+          past_deadline("23:59", "23:30") is False)
+        t("　夜の締切を、翌朝は過ぎている扱いにする",
+          past_deadline("23:59", "05:00") is True)
+        t("　締切が無ければ、いつでも通す", past_deadline("", "23:30") is False)
+        # ★★入口から通して確かめる★★（鉄則5e＝最終状態を直接置かない）
+        #   ★本番で止まったのは `codex_round` の入口★なので、
+        #   関数だけでなく入口から呼ぶ。
+        _bp3 = os.path.join(tmpdir, "budget_morning.json")
+        with open(_bp3, "w", encoding="utf-8") as _f:
+            json.dump({"schema_version": "task-budget/v1",
+                       "writes_total": 0, "writes_fix": 0, "writes_grow": 0,
+                       "inspections": 0, "deadline_hhmm": "07:20"}, _f)
+        _n0 = _load(fp)["tasks"].get("t3", {}).get("codex_rounds", 0)
+        codex_round("t3", fp, budget_path=_bp3, now_hhmm="23:30")
+        t("★★夜11時半の新台タスクは、朝7時20分の締切で断られない★★"
+          "／★これが本番で毎晩起きていた（相談も書き換えも全部断られた）★",
+          _load(fp)["tasks"]["t3"]["codex_rounds"] == _n0 + 1)
+        t("　（対照）同じ締切でも、朝8時なら断る",
+          raises(lambda: codex_round("t3", fp, budget_path=_bp3,
+                                     now_hhmm="08:00"), "締切"))
 
         t("★担当していない機種は書き換えられない★",
           raises(lambda: before_write("t", "enen", fp), "今日の担当"))

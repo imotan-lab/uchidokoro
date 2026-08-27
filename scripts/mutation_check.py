@@ -1490,10 +1490,43 @@ MUTATIONS = [
         "run": ["scripts/decide_now.py"],
     },
     {
+        "why": "★設定示唆の注記を、材料に保存された古い一覧から決める"
+               "（6段すべて載せている表に「掲載していません」と書く）★",
+        "file": "scripts/build_new_article.py",
+        "before": '        un = _missing_labels(material, got["value"], key)',
+        "after": '        un = material.get("setting_labels_unconfirmed") or []',
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "★ボーナス確率の表の注記も、古い一覧から決める"
+               "（載せている設定を「載せていない」と書く）★",
+        "file": "scripts/build_new_article.py",
+        "before": '        _un_bp = _missing_labels(material, _bp["value"], "bonus_prob")',
+        "after": '        _un_bp = material.get("setting_labels_unconfirmed") or []',
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
         "why": "★相談のときに締切を見ない（締切を越えて相談し続ける）★",
         "file": "scripts/task_guard.py",
-        "before": '    if _dl and datetime.now().strftime("%H:%M") >= _dl:',
+        "before": "    if past_deadline(_dl, now_hhmm):",
         "after": "    if False:",
+        "run": ["scripts/task_guard.py"],
+    },
+    {
+        "why": "★締切を時刻の文字だけで比べる"
+               "（夜11時半のタスクが、朝7時20分の締切を"
+               "「もう過ぎた」と判定して、毎晩30分なにもできない）★",
+        "file": "scripts/task_guard.py",
+        "before": "    if now_evening and not dl_evening:",
+        "after": "    if False and not dl_evening:",
+        "run": ["scripts/task_guard.py"],
+    },
+    {
+        "why": "★朝に、前の晩の締切を「まだ来ていない」と読む"
+               "（締切が効かなくなり、朝まで書き換え続ける）★",
+        "file": "scripts/task_guard.py",
+        "before": "    if (not now_evening) and dl_evening:",
+        "after": "    if False and dl_evening:",
         "run": ["scripts/task_guard.py"],
     },
     {

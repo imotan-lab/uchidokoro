@@ -595,6 +595,29 @@ def vote_lineage(host: str) -> str:
     #   「材料不足」に見えて原因が分からなくなる。例外はそのまま上げる。
 
 
+def unconfirmed_labels(seen: list, adopted: dict) -> list:
+    """★出典に出てくるのに、値が採れていない設定★（数える場所はここだけ）
+
+    ★必ず「いまの採用値」から数え直す★（2026-08-28・本番で誤記）
+      2AIで確定した値は**材料を集めたあとで**足されるので、
+      集めた時点で保存した一覧は古い。
+      ★実害★＝6段すべて載せている表に
+      「設定1〜6もありますが、値が確認できていないため掲載していません」
+      と書いていた（＝載せているものを「載せていない」と言っていた）。
+
+    ★1つの項目だけを渡してもよい★＝
+      「この表に載っていない設定」を数えるときは、その項目だけを渡す。
+    """
+    got = set()
+    for key, spec in FIELDS.items():
+        if spec["kind"] not in ("per_setting", "per_setting_matrix"):
+            continue
+        v = ((adopted or {}).get(key) or {}).get("value")
+        if isinstance(v, dict):
+            got |= set(v)
+    return [x for x in (seen or []) if x not in got]
+
+
 def compare(pages: list, ctx: dict | None = None) -> dict:
     """★2件が一致したものだけ採る★ 食い違いは『第三の出典が要る』として返す。
 
@@ -663,12 +686,7 @@ def compare(pages: list, ctx: dict | None = None) -> dict:
         else:
             thin[key] = {"why": "1つの出典しか取れていません",
                          "sources": sorted(next(iter(votes.values())))}
-    got_labels = set()
-    for key, spec in FIELDS.items():
-        if (spec["kind"] in ("per_setting", "per_setting_matrix")
-                and key in adopted):
-            got_labels |= set(adopted[key]["value"])
-    unconfirmed = [x for x in seen_labels if x not in got_labels]
+    unconfirmed = unconfirmed_labels(seen_labels, adopted)
     return {"adopted": adopted, "need_third": need_third, "thin": thin,
             "setting_labels_seen": seen_labels,
             "setting_labels_unconfirmed": unconfirmed}
@@ -812,6 +830,25 @@ def selftest() -> int:
     CB = {**PW, "url": "https://chonborista.com/y", "host": "chonborista.com",
           "setting_labels": ["1", "6"]}
     rr = compare([PW, CB])
+    # ★★載せているものを「載せていない」と書かない★★（2026-08-28・本番で発生）
+    t("★★2AIで確定した値も「採れている」に数える★★"
+      "／★材料を集めた時点で数えて保存していたので、"
+      "6段すべて載せている表に「掲載していません」と書いていた★",
+      unconfirmed_labels(["1", "2", "3", "4", "5", "6"],
+                         {"at_prob": {"value": {"1": "1/320", "2": "1/314",
+                                                "3": "1/294", "4": "1/276",
+                                                "5": "1/260", "6": "1/246"}}})
+      == [])
+    t("　（対照）採れていない設定は、ちゃんと残る",
+      unconfirmed_labels(["1", "2", "6"],
+                         {"at_prob": {"value": {"1": "1/320", "6": "1/246"}}})
+      == ["2"])
+    t("　1つの項目だけを渡せば「その表に無い設定」を数えられる",
+      unconfirmed_labels(["1", "2", "6"],
+                         {"payout_rate": {"value": {"1": "97.0%"}}})
+      == ["2", "6"])
+    t("　設定ごとではない項目は数えに入れない（型式名などで打ち消さない）",
+      unconfirmed_labels(["1", "6"], {"model_code": {"value": "1"}}) == ["1", "6"])
     t("★★値が採れなかった設定を黙って落とさない★★（設定Lを見落とすと段数を誤る）",
       rr["setting_labels_unconfirmed"] == ["L"])
     t("　値が採れた設定は未確認に入れない",

@@ -6,7 +6,7 @@
   "assets/data/directory-catalogs.json": "787c06d3b57416bf1d11d37d76941194bcda2e810a971c8bd2fb62c90db1da3a",
   "assets/data/maker-catalogs.json": "612fa17f5b50f509475096b51ca1f4d8c261c5805e22e337875aa478054c0b3c",
   "assets/data/source-registry.json": "2449477484e8def3fae001065de72ce208943a44487cb5dcd109a7af101f3687",
-  "scripts/add_machine_run.py": "ea14fe11f2825e6b399eff92e562517ecc69ff07f4cd79a28ad33d6c14bd66b2",
+  "scripts/add_machine_run.py": "66bb02e3d8307ea9537188486b0e1a001635d9f526d8a5ee3893b705c479b181",
   "scripts/adoption_basis.py": "cf1b77c4e5f3fa80d3dec205880b461efcabdc0c3a511e854e2a3ea3119eb428",
   "scripts/at_spec_lookup.py": "74f11d27f804891ec42eba1568d500405469457ed95502396fff9f3627e084f2",
   "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
@@ -28,7 +28,7 @@
   "scripts/page_probe.py": "25d0411b1552d018ab1e528a58be1ce1d53a4e47de68f84fc2f951ccaa1f182d",
   "scripts/slug_binding.py": "17c235c10cd7fed94d4c774bbe7b88c87349eff214bedaa22182d3fe79f26af6",
   "scripts/source_lineage.py": "706cbbd437ba491995e233e9758a73f7672e27a47021cfc1274f0c2e9d9f79ed",
-  "scripts/spec_lookup.py": "1c4c1d79feb0a69450ec247091f1b2c7963a57b28c5e35e69ea1c085d217d7bc",
+  "scripts/spec_lookup.py": "8c165305e7fb540dc7c517b5d40101b0b2cf8a216255ca3099b607c3b9d58bfe",
   "scripts/user_area.py": "3b5c5f307aa981c3b24385aee70f5a996b9e704afa41c26d0099bf7451d12420"
  },
  "imports": {
@@ -206,6 +206,5 @@
    "ceiling_lookup",
    "new_machine_watch"
   ]
- },
- "_deps_changed_why": "confirmed_values が pending_machines を取り込むようにしました（台帳#485・2026-08-27）。\n\n★なぜ取り込むか★\n確定値の受け口（bind_machine）は「その公式URLはどの機種か」を正本から引きます。\nまだ記事になっていない新台は、待ち行列にしか居ません。\n\n★直す前は、待ち行列の中身を自分で読んでいました★＝\n待ち行列の**鍵**を公式URLだと思って比べていたので、\n鍵が採番ID（q_0001…）に変わったあと永久に一致せず、\n★2AIが決めた値を新台へ1件も記録できない★状態が5晩続きました\n（実測：8件で一致したのに全部落ちていた）。\n\n★同じ規則を2か所に書かない★＝待ち行列の形を知っているのは\npending_machines なので、探す口をそちらに作って呼びます\n（`find_by_url`）。自前で読み直すと、次に形が変わったとき同じ事故が起きます。\n\n★契約は閉じています★\npending_machines は「新台を記事にして公開するまでの一式」として\n`build_pages_artifact.py --approve` の承認対象に入っています。\n＝呼ばれる側を黙って書き換えて、採否を変えることはできません。\n\n★採否そのものは変わりません★\nbind_machine が返すのは slug と正式名称だけで、\n「その値を採ってよいか」は今までどおり出典・逐語・判断者の検査が決めます。\nここが直っても、根拠の無い値は通りません。\n\n★空のURLは絶対に当てません★\nDMMのカレンダー待ちの機種は identity_url が空です。\n空どうしが一致すると**別の機種の欄へ保存できてしまう**ので、\n`find_by_url` は空を1か所で断ります（壊すと試験が赤くなることを確認済み）。"
+ }
 }

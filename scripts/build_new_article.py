@@ -677,6 +677,24 @@ def build_checker(material) -> dict | None:
     return out
 
 
+def _missing_labels(material: dict, value: dict, key: str) -> list:
+    """★この表に載っていない設定★（2026-08-28・本番で誤記）
+
+    ★材料に保存された一覧を使わない★＝2AIで確定した値は
+    材料を集めたあとに足されるので、保存された一覧は古い。
+    ★実害★＝6段すべてを載せている表の下に
+    「この機種には設定1〜6もありますが、値が確認できていないため
+      掲載していません」と書いていた。
+    ★数える規則は `spec_lookup.unconfirmed_labels` の1か所★
+    """
+    import spec_lookup as _sl_ml
+    seen = material.get("setting_labels_seen")
+    if seen is None:
+        # ★古い形の材料でも、注記を黙って消さない★
+        seen = material.get("setting_labels_unconfirmed") or []
+    return _sl_ml.unconfirmed_labels(seen, {key: {"value": value}})
+
+
 def payout_range_view(adopted: dict):
     """★記事に出す「機械割の範囲」★（2026-08-27・運営者の判断）
 
@@ -934,7 +952,10 @@ def build_detail(slug, name, release, material) -> dict:
             note += SINGLE_SOURCE_NOTE
         # ★値が採れていない設定があるなら、その名前を出す★
         #   （黙って省くと「これで全部」と読まれ、段数を誤って伝えることになる）
-        un = material.get("setting_labels_unconfirmed") or []
+        # ★★この表の中身から決める★★（2026-08-28・本番で誤記）
+        #   材料に保存された一覧は、2AIで確定した値を足す**前**のもの。
+        #   6段すべて載せている表に「掲載していません」と書いていた。
+        un = _missing_labels(material, got["value"], key)
         if un:
             note += ("この機種には" + "・".join(f"設定{x}" for x in un)
                      + "もありますが、値が確認できていないため掲載していません。")
@@ -964,7 +985,7 @@ def build_detail(slug, name, release, material) -> dict:
         # ★値が採れていない設定があるなら、その名前を出す★（Codex34回目）
         #   ★黙って省くと「これで全部」と読まれ、段数を誤って伝える★
         #   （設定別の表と同じ扱いにそろえる）
-        _un_bp = material.get("setting_labels_unconfirmed") or []
+        _un_bp = _missing_labels(material, _bp["value"], "bonus_prob")
         if _un_bp:
             _note += ("この機種には" + "・".join(f"設定{x}" for x in _un_bp)
                       + "もありますが、値が確認できていないため掲載していません。")
@@ -1947,6 +1968,64 @@ def selftest() -> int:
               {"adopted": {k: v for k, v in _mat_e2e["adopted"].items()
                            if k != "payout_range"}})["sections"]
            if s["title"] == "基本スペック"][0]["body"]))
+
+    # ★★載せているものを「載せていない」と書かない★★
+    #   （2026-08-28・本番で発生／L転生王女と天才令嬢の魔法革命）
+    #   ★本番と同じ形で通す★＝2AIの確定値は材料を集めたあとに足されるので、
+    #   材料には**古い一覧が残ったまま**になる。その形を再現する。
+    _MAT_UN = {
+        "setting_labels_seen": ["1", "2", "3", "4", "5", "6"],
+        # ★集めた時点の一覧（古い）★＝1件も採れていなかったときのもの
+        "setting_labels_unconfirmed": ["1", "2", "3", "4", "5", "6"],
+        "adopted": {"at_prob": {
+            "value": {"1": "1/320.0", "2": "1/314.7", "3": "1/294.2",
+                      "4": "1/276.9", "5": "1/260.0", "6": "1/246.4"},
+            "sources": ["https://a.example/x", "https://b.example/y"],
+            "basis": "INDEPENDENT_MULTI",
+            "_from": "confirmed_values", "_field": "at_prob"}}}
+    _d_un = build_detail("zzz_un", "試験U", "2026-10-05", _MAT_UN)
+    _note_un = [tb["note"] for s in _d_un["sections"]
+                if s.get("type") == "settei" and s["title"] == "設定示唆まとめ"
+                for tb in s["tables"]]
+    t("★★6段すべて載せている表に「掲載していません」と書かない★★"
+      "／★本番で、載せているものを「載せていない」と書いていた★",
+      _note_un and not any("掲載していません" in x for x in _note_un))
+    # ★対照★＝本当に採れていない設定があれば、ちゃんと名前を出す
+    _MAT_UN2 = {**_MAT_UN, "adopted": {"at_prob": {
+        **_MAT_UN["adopted"]["at_prob"],
+        "value": {"1": "1/320.0", "6": "1/246.4"}}}}
+    _note_un2 = [tb["note"] for s in build_detail(
+        "zzz_un2", "試験U2", "2026-10-05", _MAT_UN2)["sections"]
+        if s.get("type") == "settei" and s["title"] == "設定示唆まとめ"
+        for tb in s["tables"]]
+    t("　（対照）採れていない設定は、名前を出して知らせる",
+      any("設定2・設定3・設定4・設定5もありますが" in x for x in _note_un2))
+    # ★ボーナス確率の表も同じ★（片方だけ直すと、もう片方で同じ嘘が出る）
+    _MAT_BUN = {
+        "setting_labels_seen": ["1", "2", "6"],
+        # ★集めた時点の一覧（古い）★
+        "setting_labels_unconfirmed": ["1", "2", "6"],
+        "adopted": {"bonus_prob": {
+            "value": {"1": {"big": "1/273.1", "reg": "1/439.8"},
+                      "2": {"big": "1/270.8", "reg": "1/422.8"},
+                      "6": {"big": "1/240.1", "reg": "1/364.1"}},
+            "sources": ["https://a.example/x", "https://b.example/y"],
+            "basis": "INDEPENDENT_MULTI"}}}
+    _note_bun = [tb["note"] for s in build_detail(
+        "zzz_bun", "試験B", "2026-10-05", _MAT_BUN)["sections"]
+        if s.get("type") == "settei" and s["title"] == "設定示唆まとめ"
+        for tb in s["tables"] if tb.get("label") == "ボーナス確率"]
+    t("★★ボーナス確率の表でも、載せている設定を「載せていない」と書かない★★",
+      _note_bun and not any("掲載していません" in x for x in _note_bun))
+    _MAT_BUN2 = {**_MAT_BUN, "adopted": {"bonus_prob": {
+        **_MAT_BUN["adopted"]["bonus_prob"],
+        "value": {"1": {"big": "1/273.1", "reg": "1/439.8"}}}}}
+    _note_bun2 = [tb["note"] for s in build_detail(
+        "zzz_bun2", "試験B2", "2026-10-05", _MAT_BUN2)["sections"]
+        if s.get("type") == "settei" and s["title"] == "設定示唆まとめ"
+        for tb in s["tables"] if tb.get("label") == "ボーナス確率"]
+    t("　（対照）ボーナス確率でも、採れていない設定は名前を出す",
+      any("設定2・設定6もありますが" in x for x in _note_bun2))
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
