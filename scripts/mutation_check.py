@@ -1477,16 +1477,17 @@ MUTATIONS = [
         "why": "★行き詰まったら、2AIに聞かずすぐ人へ回す"
                "（人が来るまで止まったまま）★",
         "file": "scripts/grow_machine.py",
-        "before": "            if _n < STUCK_ASK_LIMIT:",
-        "after": "            if False:",
+        "before": "    if n < STUCK_ASK_LIMIT:",
+        "after": "    if False:",
         "run": ["scripts/grow_machine.py"],
     },
     {
         "why": "★うまく育っても回数を0に戻さない"
                "（昔の失敗を数え続け、すぐ人へ回す）★",
         "file": "scripts/grow_machine.py",
-        "before": "    _stuck_clear(slug)",
-        "after": "    pass",
+        "before": "        _stuck_clear(slug)\n"
+                  '        return {"do": "ok"}',
+        "after": '        return {"do": "ok"}',
         "run": ["scripts/grow_machine.py"],
     },
     {

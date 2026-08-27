@@ -840,6 +840,34 @@ def _stuck_clear(slug: str) -> None:
         _stuck_save(got)
 
 
+def grow_result(slug: str, ok: bool, why: str = "") -> dict:
+    """★育てた結果を受けて、次にどうするかを決める★（2026-08-27）
+
+    ★ここに切り出した理由★＝判断が処理の中に埋まっていると、
+    通しで動かさないと試験できない＝★その守りを一度も確かめられない★。
+    （CLAUDE.md「奥の層は、手前を通さずに直接呼んで試す」）
+
+    ok=True  … うまく育った → 回数を0に戻す
+    ok=False … 行き詰まった → 1〜2回目は2AIに聞く／3回目で人へ報告
+    """
+    if ok:
+        _stuck_clear(slug)
+        return {"do": "ok"}
+    n = _stuck_count(slug, add=1)
+    if n < STUCK_ASK_LIMIT:
+        return {"do": "ask", "round": n,
+                "text": ("★2AIで決めてください★ " + slug
+                         + " で、前に載せた内容を今夜の材料で再現できません: "
+                         + why
+                         + "／出典を取り直すか、別の出典を当たるか、"
+                         "その内容を落とすかを決めてください"
+                         f"（{n}回目・{STUCK_ASK_LIMIT}回で報告します）")}
+    return {"do": "ledger", "round": n,
+            "detail": (why + f"／★2AIで{STUCK_ASK_LIMIT}回試しても"
+                       "決まりませんでした★／出典の一時的な不調かもしれません。"
+                       "旧い内容は公開されたままです。")}
+
+
 def ledger_once(slug: str, title: str, detail: str,
                 severity: str = "MATERIAL") -> None:
     """★黙って止まり続けない★（2026-08-05・Codex102回目）
@@ -1152,25 +1180,18 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
             #   1〜2回目は2AIに聞く。3回目でどうしても決まらなければ報告する。
             _why = " / ".join(
                 lost + [p for p in out["problems"] if "消えます" in p])[:900]
-            _n = _stuck_count(slug, add=1)
-            if _n < STUCK_ASK_LIMIT:
+            _act = grow_result(slug, False, _why)
+            if _act["do"] == "ask":
                 out.setdefault("questions", []).append({
-                    "text": ("★2AIで決めてください★ " + slug
-                             + " で、前に載せた内容を今夜の材料で再現できません: "
-                             + _why
-                             + "／出典を取り直すか、別の出典を当たるか、"
-                             "その内容を落とすかを決めてください"
-                             f"（{_n}回目・{STUCK_ASK_LIMIT}回で報告します）"),
-                    "kind": "grow_stuck", "slug": slug, "round": _n})
+                    "text": _act["text"], "kind": "grow_stuck",
+                    "slug": slug, "round": _act["round"]})
                 out.setdefault("notes", []).append(
-                    f"2AIに聞きます（{_n}回目・台帳へは積みません）")
+                    f"2AIに聞きます（{_act['round']}回目・台帳へは積みません）")
             else:
                 ledger_once(
                     slug,
                     "確認済みだった内容を再現できません（育てる処理を止めています）",
-                    _why + f"／★2AIで{STUCK_ASK_LIMIT}回試しても決まりませんでした★"
-                    "／出典の一時的な不調かもしれません。"
-                    "旧い内容は公開されたままです。")
+                    _act["detail"])
     if out["problems"]:
         return out
     try:
@@ -1181,7 +1202,7 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     # ★★うまく育ったので、行き詰まりの回数を0に戻す★★（2026-08-27）
     #   ★昔の失敗をいつまでも数えない★（数え続けると、次に1回詰まっただけで
     #   すぐ人への報告になってしまう）。
-    _stuck_clear(slug)
+    grow_result(slug, True)
     out["machine"], out["detail"] = machine, detail
     return out
 
@@ -2207,15 +2228,21 @@ def selftest() -> int:
         _dir_s = _tf_s.mkdtemp()
         try:
             globals()["STATE_PATH"] = os.path.join(_dir_s, "s.json")
-            t("　はじめは1回目", _stuck_count("zzz_s", add=1) == 1)
-            t("　数え続ける", _stuck_count("zzz_s", add=1) == 2)
-            t("★★3回目で人へ回す（それまでは2AIに聞く）★★",
-              _stuck_count("zzz_s", add=1) == STUCK_ASK_LIMIT)
+            # ★本番と同じ入口（grow_result）を通す★
+            _a1 = grow_result("zzz_s", False, "理由")
+            _a2 = grow_result("zzz_s", False, "理由")
+            t("★★1〜2回目は2AIに聞く（人へ回さない）★★"
+              "／★直す前は、その場で人へ回して止まったままだった★",
+              _a1["do"] == "ask" and _a2["do"] == "ask"
+              and "2AIで決めてください" in _a1["text"])
+            _a3 = grow_result("zzz_s", False, "理由")
+            t("★★3回目でだけ人へ報告する★★",
+              _a3["do"] == "ledger" and _a3["round"] == STUCK_ASK_LIMIT)
             t("　機種ごとに数える（よその失敗を持ち越さない）",
-              _stuck_count("zzz_other", add=1) == 1)
-            _stuck_clear("zzz_s")
+              grow_result("zzz_other", False, "理由")["round"] == 1)
             t("★うまく育ったら0に戻す（昔の失敗を数え続けない）★",
-              _stuck_count("zzz_s") == 0)
+              grow_result("zzz_s", True)["do"] == "ok"
+              and grow_result("zzz_s", False, "理由")["do"] == "ask")
         finally:
             globals()["STATE_PATH"] = _keep_sp
             import shutil as _sh_s
