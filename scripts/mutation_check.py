@@ -1514,6 +1514,22 @@ MUTATIONS = [
         "run": ["scripts/build_new_article.py"],
     },
     {
+        "why": "★数値の並びが変わっても通す"
+               "（ラベルの中の数字で係り先が空になり、入れ替えが素通りする）★",
+        "file": "scripts/decide_now.py",
+        "before": "                if [n for _w, n in _sb] != [n for _w, n in _sa]:",
+        "after": "                if False:",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★消す先を毎回もとの記事から探す"
+               "（同じ「消す」を2件並べると、2件やったと報告して1件しか消さない）★",
+        "file": "scripts/decide_now.py",
+        "before": "            _sp = drop_spot(d, a[\"text\"], used=_used_drop)",
+        "after": "            _sp = drop_spot(d, a[\"text\"])",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
         "why": "★係り先を「内容の文字だけ」で比べる"
                "（ひらがな・数字が落ちて、対応の入れ替えが黙って通る）★",
         "file": "scripts/decide_now.py",

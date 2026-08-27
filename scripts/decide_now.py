@@ -327,7 +327,7 @@ def _slot_ok(p, src_pairs) -> bool:
     return any(_slot_key(q[0]) == key and q[1] == p[1] for q in src_pairs)
 
 
-def drop_spot(d: dict, text: str):
+def drop_spot(d: dict, text: str, used=None):
     """★消す先を決める唯一の場所★（返すのは (節の番号, 行の番号) か None）
 
     ★書き込みの計画と、許可の判定が、同じ場所を見るために切り出した★
@@ -335,12 +335,18 @@ def drop_spot(d: dict, text: str):
       ★直す前は、許可は「いちばん多い入れ物」を見て、
         書き込みは「最初に当たった節」を書いていた★＝
       節Bに2件あれば、節Aの1件を消せた（自分で再現した）。
+
+    ★`used` にもう決めた行を渡すと、その行は飛ばす★
+      （2026-08-28・Codexの9回目の指摘2）
+      ★毎回もとの記事から探すと、同じ「消す」を2件並べたときに
+        両方が同じ行を指し、2件やったと報告して1件しか消さない★。
     """
+    seen = used or set()
     for si, sec in enumerate(d.get("sections") or []):
         if not isinstance(sec, dict):
             continue
         for bi, line in enumerate(sec.get("body") or []):
-            if isinstance(line, str) and line == text:
+            if isinstance(line, str) and line == text and (si, bi) not in seen:
                 return si, bi
     return None
 
@@ -610,6 +616,9 @@ def _num_pairs(s: str) -> list:
     return out
 
 
+from collections import Counter as _Counter    # noqa: E402
+
+
 _WORD_RE = None
 
 
@@ -805,6 +814,24 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
                 #   （2026-08-27）★割り当てが変わっていなければ、
                 #   それは言い回しの変化なので2AIへ回す★
                 #   （「かつ→または」を入れ替えと誤判定していた）。
+                # ★★数値の出てくる順番が変わったら、それは入れ替え★★
+                #   （2026-08-28・Codexの9回目の指摘1）
+                #   ★係り先を見ないので、係り先が空でも効く★＝
+                #   `_shape` はラベルの中の数字（設定**1**）も値として読むので、
+                #   「設定1は320G／設定2は314G」では
+                #   ★本当の値の係り先が空文字★になり、
+                #   組の集合が同じになって、どの検査にも当たらなかった。
+                #   （自分で再現した＝そのまま通った）
+                #   ★手順書の約束をそのまま機械にやらせる★＝
+                #   「数値の並びを入れ替える言い換えは受け取らない」。
+                if [n for _w, n in _sb] != [n for _w, n in _sa]:
+                    result["problems"].append(
+                        "数値の並びが入れ替わっています"
+                        f"（{[n for _w, n in _sb][:4]}"
+                        f" → {[n for _w, n in _sa][:4]}）"
+                        "（どちらがどちらの値かを取り違えさせるので"
+                        "受け取りません）")
+                    return result
                 _kb = [("".join(_words(w)), n) for w, n in _sb]
                 _ka = [("".join(_words(w)), n) for w, n in _sa]
                 if sorted(w for w, _ in _kb) == sorted(
@@ -897,7 +924,16 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
                 _src_pairs = _shape(src)
 
 
-                _added_pairs = [p for p in _sa if p not in _sb]
+                # ★★数え上げで比べる★★（2026-08-28・Codexの9回目）
+                #   ★集合だと「同じ値が1件増える」変更が見えない★
+                #   （500Gが1つ→2つ）。
+                _cb = _Counter(_sb)
+                _added_pairs = []
+                for p in _sa:
+                    if _cb.get(p):
+                        _cb[p] -= 1
+                    else:
+                        _added_pairs.append(p)
                 _miss_p = [p for p in _added_pairs
                            if not _slot_ok(p, _src_pairs)]
                 if _miss_p:
@@ -906,7 +942,15 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
                         + " / ".join(f"{w}{n}" for w, n in _miss_p[:4])
                         + f"（出どころ: {_src_pairs[:4]}）")
                     return result
-                added = sorted(set(na) - set(nb))
+                # ★同上＝数え上げで見る★（2026-08-28・Codexの9回目）
+                _cn = _Counter(nb)
+                added = []
+                for n in na:
+                    if _cn.get(n):
+                        _cn[n] -= 1
+                    elif n not in added:
+                        added.append(n)
+                added = sorted(added)
                 missing = [n for n in added if n not in _numbers(src)]
                 if missing:
                     result["problems"].append(
@@ -977,6 +1021,7 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
 
     # 実際にあたるかを先に全部確かめる（1件でも外れたら何もしない）
     plan = []
+    _used_drop = set()          # ★もう消すと決めた行★（同じ行を2度指さない）
     for a in dec["actions"]:
         hit = False
         # ★★同じ文字列が2か所にあるなら、どちらかを言わせる★★
@@ -1006,9 +1051,14 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
                     "1つ消してください）")
                 return result
         # ★消す先は `drop_spot` が決める★（許可の判定と同じ場所を見る）
+        # ★★同じ行を2度指さない★★（2026-08-28・Codexの9回目の指摘2）
+        #   ★直す前は毎回もとの記事から探していた★ので、
+        #   同じ「消す」を2件並べると両方が同じ行を指し、
+        #   ★2件やったと報告して1件しか消さなかった★（自分で再現した）。
         if a["op"] == "drop" and (not where or where == "body"):
-            _sp = drop_spot(d, a["text"])
+            _sp = drop_spot(d, a["text"], used=_used_drop)
             if _sp:
+                _used_drop.add(_sp)
                 plan.append(("drop", _sp[0], _sp[1], a))
                 hit = True
         for si, sec in enumerate(d.get("sections") or []):
@@ -2203,6 +2253,57 @@ def _selftest() -> int:
             ensure_ascii=False))
         t("　（対照）同じ節の中の重複なら、今までどおり通る",
           not apply_decision(_r8b)["problems"])
+
+        # ── 2026-08-28・Codexの9回目 ───────────────────────────
+        S9 = {"slug": "s9", "sections": [
+            {"title": "設定示唆まとめ",
+             "body": ["設定1は320G／設定2は314G", "ほかの行です。"]},
+            {"title": "天井・恩恵",
+             "body": ["天井は500Gです。", "天井は500Gです。",
+                      "天井は500Gです。", "残る行です。"]}]}
+        with io.open(os.path.join(td, "s9.json"), "w",
+                     encoding="utf-8", newline="\n") as f:
+            json.dump(S9, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+
+        def dec_s9(acts, nm="ds9"):
+            r = os.path.join(td, nm + ".json")
+            io.open(r, "w", encoding="utf-8").write(json.dumps(
+                {"schema_version": SCHEMA, "slug": "s9",
+                 "source_sha256": _sha_of("s9"),
+                 "decided_by": ["Claude", "codex"], "actions": acts},
+                ensure_ascii=False))
+            return r
+
+        r91 = apply_decision(dec_s9([
+            {"op": "replace",
+             "before": "設定1は320G／設定2は314G",
+             "after": "設定1は314G／設定2は320G",
+             "why": "わざと：数字を含むラベルの入れ替え",
+             "numbers_from": "設定1は320G／設定2は314G"}]))
+        t("★★数字を含むラベル（設定1／設定2）の入れ替えを止める★★"
+          "／★`_shape` はラベルの中の数字も値として読むので、"
+          "本当の値の係り先が空文字になり、どの検査にも当たらなかった★",
+          bool(r91["problems"])
+          and "数値の並びが入れ替わっています" in "".join(r91["problems"]))
+
+        # ★同じ「消す」を2件並べたら、2件ぶん消えること★
+        #   ★直す前は、両方が同じ行を指して1件しか消えなかった★
+        #   （報告は2件・結果は1件＝食い違い）
+        _r92 = dec_s9([
+            {"op": "drop", "text": "天井は500Gです。", "why": "重複を1つにする"},
+            {"op": "drop", "text": "天井は500Gです。",
+             "why": "重複をもう1つ消す"}], nm="ds9b")
+        _got92 = apply_decision(_r92, apply_it=True)
+        _after92 = json.load(io.open(os.path.join(td, "s9.json"),
+                                     encoding="utf-8"))
+        _left92 = [x for x in _after92["sections"][1]["body"]
+                   if x == "天井は500Gです。"]
+        t("★★同じ「消す」を2件並べたら、2件ぶん消える★★"
+          "／★毎回もとの記事から探していたので、両方が同じ行を指し、"
+          "2件やったと報告して1件しか消さなかった★",
+          not _got92["problems"] and len(_got92["done"]) == 2
+          and len(_left92) == 1)
 
         # ⑱置き場の外を指せない
         _bad_slug = os.path.join(td, "dbad.json")
