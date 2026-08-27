@@ -92,6 +92,21 @@ def _warn_unreported() -> None:
     print()
 
 
+def touches_articles(paths) -> bool:
+    """★読者に出る記事を書き換えているか★（照合を求める範囲）
+
+    ★この関所（verify-commit）が守っているのは記事の書き換え★なので、
+    スクリプトだけの変更には照合を求めない。
+    """
+    for p in paths:
+        p = str(p or "").replace("\\", "/")
+        if p.startswith("assets/data/machine-details/") \
+                or p == "assets/data/machines.json" \
+                or p.startswith("machines/"):
+            return True
+    return False
+
+
 def _verified_range() -> list:
     """★無人タスクが直したコミットが、照合を通っているか★（2026-08-21・Codex依頼249）
 
@@ -147,8 +162,23 @@ def _verified_range() -> list:
         if not line.strip():
             continue
         sha, _, subject = line.partition(" ")
-        if sha not in verified:
-            out.append(f"{sha[:12]} {subject[:60]}")
+        if sha in verified:
+            continue
+        # ★★記事に触っていないコミットには照合を求めない★★（2026-08-28）
+        #   ★直す前は「今日タスクが動いていたら未pushの全部」だった★ので、
+        #   対話セッションが作ったスクリプトの直しまで push できなくなった
+        #   （実際に、夜の新台タスクを直すコミットが止められた）。
+        #   照合は**記事の書き換え**を守る仕組みで、
+        #   無人タスクの記事コミットは必ず記事データに触るので守りは弱まらない。
+        _f = subprocess.run(["git", "show", "--name-only", "--format=", sha],
+                            cwd=BASE, capture_output=True)
+        if _f.returncode == 0:
+            _paths = [x.strip() for x in
+                      _f.stdout.decode("utf-8", "replace").splitlines()
+                      if x.strip()]
+            if not touches_articles(_paths):
+                continue
+        out.append(f"{sha[:12]} {subject[:60]}")
     return out
 
 
@@ -185,6 +215,20 @@ def _selftest() -> int:
     if r.returncode != 0:
         print("   " + (r.stderr or b"").decode("utf-8", "replace")
               .strip().splitlines()[-1][:120])
+    # ★★照合を求める範囲★★（2026-08-28・実際に push が止まった）
+    t("★★記事を書き換えたコミットには照合を求める★★",
+      touches_articles(["assets/data/machine-details/dmm_5086.json"]) is True)
+    t("　機種一覧を書き換えた場合も同じ",
+      touches_articles(["assets/data/machines.json"]) is True)
+    t("　公開ページを書き換えた場合も同じ",
+      touches_articles(["machines/dmm_5089/index.html"]) is True)
+    t("★★スクリプトだけの変更には照合を求めない★★"
+      "／★求めていたので、夜のタスクを直すコミットが push できなかった★",
+      touches_articles(["scripts/pre_push_check.py",
+                        "scripts/mutation_check.py"]) is False)
+    t("　似た名前でも、記事の置き場でなければ求めない",
+      touches_articles(["assets/data/machines-backup.json",
+                        "assets/css/practical.css"]) is False)
     ng = ok.count(False)
     print(f"{len(ok) - ng}/{len(ok)} 合格")
     return 1 if ng else 0

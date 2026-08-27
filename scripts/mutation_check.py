@@ -1514,6 +1514,14 @@ MUTATIONS = [
         "run": ["scripts/build_new_article.py"],
     },
     {
+        "why": "★記事に触っていないコミットにも照合を求める"
+               "（対話セッションの直しが push できず、夜の手当てが届かない）★",
+        "file": "scripts/pre_push_check.py",
+        "before": "        if p.startswith(\"assets/data/machine-details/\") \\",
+        "after": "        if True or p.startswith(\"assets/data/machine-details/\") \\",
+        "run": ["scripts/pre_push_check.py"],
+    },
+    {
         "why": "★関所が自分の出力の文字の扱いを固定しない"
                "（Windowsの既定では合格の記号が書けず、"
                "検査が通っているのに push が拒否される）★",
