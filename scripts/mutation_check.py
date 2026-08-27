@@ -1387,14 +1387,6 @@ MUTATIONS = [
     },
     # ─── 2026-08-27・Codexの3回目（骨組み・指紋・判断者）─────────
     {
-        "why": "★骨組みを比べない"
-               "（打ち消しを消す反転・大小の入れ替え・ラベル差し替えが通る）★",
-        "file": "scripts/decide_now.py",
-        "before": "                if _sb != _sa:",
-        "after": "                if False:",
-        "run": ["scripts/decide_now.py"],
-    },
-    {
         "why": "★判断者を件数だけで見る（同じ名前2つでも2AI扱い）★",
         "file": "scripts/decide_now.py",
         "before": "    if not isinstance(by, list) or "
@@ -1498,15 +1490,6 @@ MUTATIONS = [
         "run": ["scripts/decide_now.py"],
     },
     {
-        "why": "★消すときに同じ文が残るかを見ない"
-               "（別の事実が黙って消える）★",
-        "file": "scripts/decide_now.py",
-        "before": '                lost = [x for x in nums '
-                  'if x not in _wording(rest)]',
-        "after": "                lost = []",
-        "run": ["scripts/decide_now.py"],
-    },
-    {
         "why": "★言い回しで符号まで伏せる（+500枚→-600枚が素通り）★",
         "file": "scripts/decide_now.py",
         "before": '    return _re4.sub(r"\\d+(?:\\.\\d+)?", "#", str(s or ""))',
@@ -1528,6 +1511,34 @@ MUTATIONS = [
         "before": '    if add and rec.get("day") != today:',
         "after": "    if add:",
         "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★係り先を直前の1語で見る"
+               "（通常時とリセット時が同じ『天井』になり、逆に書ける）★",
+        "file": "scripts/decide_now.py",
+        "before": "        ws = [txt[_prev:m.start()].strip()]",
+        "after": "        ws = _words(txt[:m.start()])",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★出どころで当たる先が2つ以上あっても通す"
+               "（どちらの値か決められないのに書ける）★",
+        "file": "scripts/decide_now.py",
+        # ★二段で探す形になったので、ゆるい照合の側を狙う★
+        # ★二段で探す形になったので、ゆるい照合の側を狙う★
+        "before": "    if len(cand) != 1:\n        return False",
+        "after": "    if not cand:\n        return False",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★消すときに、数値を伏せた部分一致で見る"
+               "（数値だけ違う行が残れば消せる）★",
+        "file": "scripts/decide_now.py",
+        "before": '                _same = sum(1 for x in _elements(d) '
+                  'if x == a["text"])',
+        "after": '                _same = 2 if _wording(a["text"]) '
+                 'in _wording(raw) else 0',
+        "run": ["scripts/decide_now.py"],
     },
     {
         "why": "★2AIに基本情報表を見せない（食い違いに気づけない）★",
