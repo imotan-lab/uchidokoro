@@ -293,8 +293,20 @@ OUTSIDE_KINDS = ("fact", "summary", "lead")
 
 
 def _slot_key(a: str) -> str:
-    """係り先の中身（★飾りを落として、内容の文字だけ★）。"""
-    return "".join(_words(a))
+    """係り先（★空白を詰めただけ★＝そのままの文字で比べる）。
+
+    ★内容の文字だけにしてはいけない★（2026-08-28・Codexの8回目の指摘1）
+      `_words` は漢字・カタカナ・英字しか拾わないので、
+      ★ひらがなも数字も落ちる★。
+      そのため「設定変更あり」と「設定変更なし」が同じ鍵になり、
+      ★対応の入れ替えが meaning_why なしで通った★（自分で再現した）。
+
+    ★飾りを落とす必要はもう無い★＝
+      出どころ（numbers_from）は**書き換え後と同じ言い方の逐語**を
+      選ぶ取り決めにしたので、係り先はそのまま一致するはず。
+      一致しなければ★断る★（安全側）。
+    """
+    return "".join(str(a or "").split())
 
 
 def _slot_ok(p, src_pairs) -> bool:
@@ -315,49 +327,37 @@ def _slot_ok(p, src_pairs) -> bool:
     return any(_slot_key(q[0]) == key and q[1] == p[1] for q in src_pairs)
 
 
-def _containers(d: dict) -> list:
-    """★読者に出る文字を「入れ物ごと」に集める★
-       （2026-08-27・Codexの7回目の指摘2）
+def drop_spot(d: dict, text: str):
+    """★消す先を決める唯一の場所★（返すのは (節の番号, 行の番号) か None）
 
-    ★平らに集めてはいけない★＝節が違えば別の事実なのに
-    「重複」と見なしてしまう
-    （【通常時】天井は500Gです。／【リセット時】天井は500Gです。）。
+    ★書き込みの計画と、許可の判定が、同じ場所を見るために切り出した★
+      （2026-08-28・Codexの8回目の指摘2）
+      ★直す前は、許可は「いちばん多い入れ物」を見て、
+        書き込みは「最初に当たった節」を書いていた★＝
+      節Bに2件あれば、節Aの1件を消せた（自分で再現した）。
     """
-    out = []
-    for sec in (d.get("sections") or []):
+    for si, sec in enumerate(d.get("sections") or []):
         if not isinstance(sec, dict):
             continue
-        out.append([x for x in (sec.get("body") or []) if isinstance(x, str)])
-        for t in (sec.get("tables") or []):
-            if not isinstance(t, dict):
-                continue
-            cell = []
-            for row in (t.get("rows") or []):
-                for c in (row or []):
-                    if isinstance(c, str):
-                        cell.append(c)
-                    elif isinstance(c, dict) and isinstance(c.get("text"),
-                                                            str):
-                        cell.append(c["text"])
-            out.append(cell)
-    out.append([c for row in (d.get("factTable") or [])
-                if isinstance(row, (list, tuple))
-                for c in row if isinstance(c, str)])
-    out.append([box.get(k) for box in (d.get("summaryBoxes") or [])
-                if isinstance(box, dict)
-                for k in ("label", "value") if isinstance(box.get(k), str)])
-    return out
+        for bi, line in enumerate(sec.get("body") or []):
+            if isinstance(line, str) and line == text:
+                return si, bi
+    return None
 
 
 def _dup_count(d: dict, text: str) -> int:
-    """★同じ入れ物の中に、丸ごと同じものがいくつあるか★（最大）。
+    """★これから消す節の中に、丸ごと同じものがいくつあるか★
 
-    ★入れ物をまたいだ一致は数えない★＝別の節の同じ文は「別の事実」。
+    ★他の入れ物の重複を根拠にしない★（2026-08-28・Codexの8回目の指摘2）
+      消すのは `drop_spot` が決めた1行なので、
+      数えるのも**その行が入っている節の本文だけ**。
     """
-    best = 0
-    for box in _containers(d):
-        best = max(best, sum(1 for x in box if x == text))
-    return best
+    spot = drop_spot(d, text)
+    if spot is None:
+        return 0
+    si, _bi = spot
+    body = ((d.get("sections") or [])[si] or {}).get("body") or []
+    return sum(1 for x in body if x == text)
 
 
 def _where_hits(d: dict, before) -> list:
@@ -1005,17 +1005,21 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
                     "（場所を where で絞る／同じ行が2つあるなら drop で"
                     "1つ消してください）")
                 return result
+        # ★消す先は `drop_spot` が決める★（許可の判定と同じ場所を見る）
+        if a["op"] == "drop" and (not where or where == "body"):
+            _sp = drop_spot(d, a["text"])
+            if _sp:
+                plan.append(("drop", _sp[0], _sp[1], a))
+                hit = True
         for si, sec in enumerate(d.get("sections") or []):
+            if hit:
+                break
             if where and where not in ("body", "table_note"):
                 break
             body = sec.get("body") or []
             for bi, line in enumerate(body):
                 if not isinstance(line, str):
                     continue
-                if a["op"] == "drop" and line == a["text"]:
-                    plan.append(("drop", si, bi, a))
-                    hit = True
-                    break
                 if a["op"] == "replace" and line == a["before"]:
                     plan.append(("replace", si, bi, a))
                     hit = True
@@ -2137,6 +2141,68 @@ def _selftest() -> int:
           "／★平らに数えていたので、別条件の事実が黙って消えた★",
           bool(r73["problems"])
           and "まったく同じ文が他にありません" in "".join(r73["problems"]))
+
+        # ── 2026-08-28・Codexの8回目 ───────────────────────────
+        S8 = {"slug": "s8", "sections": [
+            {"title": "朝一・リセット情報",
+             "body": ["設定変更ありは500G／設定変更なしは600G",
+                      "天井は500Gです。",
+                      "ほかの行です。"]},
+            {"title": "天井・恩恵",
+             "body": ["天井は500Gです。", "天井は500Gです。",
+                      "通常時の話です。"]}]}
+        with io.open(os.path.join(td, "s8.json"), "w",
+                     encoding="utf-8", newline="\n") as f:
+            json.dump(S8, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+
+        def dec_s8(act):
+            r = os.path.join(td, "ds8.json")
+            io.open(r, "w", encoding="utf-8").write(json.dumps(
+                {"schema_version": SCHEMA, "slug": "s8",
+                 "source_sha256": _sha_of("s8"),
+                 "decided_by": ["Claude", "codex"], "actions": [act]},
+                ensure_ascii=False))
+            return r
+
+        r81 = apply_decision(dec_s8(
+            {"op": "replace",
+             "before": "設定変更ありは500G／設定変更なしは600G",
+             "after": "設定変更ありは600G／設定変更なしは500G",
+             "why": "わざと：ひらがなだけで区別するラベルの入れ替え",
+             "numbers_from": "設定変更ありは500G／設定変更なしは600G"}))
+        t("★★ひらがなだけで区別するラベルの入れ替えを止める★★"
+          "／★係り先を「内容の文字だけ」で見ていたので、"
+          "『あり』『なし』が同じ鍵になり黙って通った★",
+          bool(r81["problems"]))
+
+        r82 = apply_decision(dec_s8(
+            {"op": "drop", "text": "天井は500Gです。",
+             "why": "わざと：別の節の重複を根拠にする"}))
+        t("★★別の節に2件あっても、消す節に1件しか無ければ通さない★★"
+          "／★許可は「いちばん多い入れ物」、書き込みは「最初に当たった節」"
+          "を見ていた＝別条件の事実を消せた★",
+          bool(r82["problems"])
+          and "まったく同じ文が他にありません" in "".join(r82["problems"]))
+
+        # ★対照★＝同じ節の中に2つあるなら、今までどおり通る
+        S8B = {"slug": "s8b", "sections": [
+            {"title": "天井・恩恵",
+             "body": ["天井は500Gです。", "天井は500Gです。", "残る行です。"]}]}
+        with io.open(os.path.join(td, "s8b.json"), "w",
+                     encoding="utf-8", newline="\n") as f:
+            json.dump(S8B, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+        _r8b = os.path.join(td, "ds8b.json")
+        io.open(_r8b, "w", encoding="utf-8").write(json.dumps(
+            {"schema_version": SCHEMA, "slug": "s8b",
+             "source_sha256": _sha_of("s8b"),
+             "decided_by": ["Claude", "codex"],
+             "actions": [{"op": "drop", "text": "天井は500Gです。",
+                          "why": "同じ節の中の重複を1つにする"}]},
+            ensure_ascii=False))
+        t("　（対照）同じ節の中の重複なら、今までどおり通る",
+          not apply_decision(_r8b)["problems"])
 
         # ⑱置き場の外を指せない
         _bad_slug = os.path.join(td, "dbad.json")

@@ -1506,6 +1506,39 @@ MUTATIONS = [
         "run": ["scripts/build_new_article.py"],
     },
     {
+        "why": "★設定の名簿が無いとき、項目をまたいだ古い一覧で代用する"
+               "（この表に無い設定を、少なく言う側に外れる）★",
+        "file": "scripts/build_new_article.py",
+        "before": '        if material.get("setting_labels_unconfirmed") is not None:',
+        "after": "        if False:",
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "★係り先を「内容の文字だけ」で比べる"
+               "（ひらがな・数字が落ちて、対応の入れ替えが黙って通る）★",
+        "file": "scripts/decide_now.py",
+        "before": '    return "".join(str(a or "").split())',
+        "after": '    return "".join(_words(a))',
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★消してよいかを、別の入れ物の重複で数える"
+               "（別条件の事実を、よその節の重複を根拠に消せる）★",
+        "file": "scripts/decide_now.py",
+        "before": "    body = ((d.get(\"sections\") or [])[si] or {}).get(\"body\") or []\n"
+                  "    return sum(1 for x in body if x == text)",
+        "after": "    return sum(1 for sec in (d.get(\"sections\") or [])\n"
+                 "               for x in (sec.get(\"body\") or []) if x == text)",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★締切ちょうどを「まだ来ていない」と読む（1分ぶん取りこぼす）★",
+        "file": "scripts/task_guard.py",
+        "before": "    return now >= dl",
+        "after": "    return now > dl",
+        "run": ["scripts/task_guard.py"],
+    },
+    {
         "why": "★相談のときに締切を見ない（締切を越えて相談し続ける）★",
         "file": "scripts/task_guard.py",
         "before": "    if past_deadline(_dl, now_hhmm):",
@@ -1570,14 +1603,6 @@ MUTATIONS = [
         "before": "    return any(_slot_key(q[0]) == key and q[1] == p[1] "
                   "for q in src_pairs)",
         "after": "    return any(q[1] == p[1] for q in src_pairs)",
-        "run": ["scripts/decide_now.py"],
-    },
-    {
-        "why": "★重複を記事全体で平らに数える"
-               "（節が違う同じ本文を重複と見なし、別の事実が消える）★",
-        "file": "scripts/decide_now.py",
-        "before": "    best = 0\n    for box in _containers(d):",
-        "after": "    best = 0\n    for box in [sum(_containers(d), [])]:",
         "run": ["scripts/decide_now.py"],
     },
     {

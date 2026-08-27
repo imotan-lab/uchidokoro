@@ -690,8 +690,18 @@ def _missing_labels(material: dict, value: dict, key: str) -> list:
     import spec_lookup as _sl_ml
     seen = material.get("setting_labels_seen")
     if seen is None:
-        # ★古い形の材料でも、注記を黙って消さない★
-        seen = material.get("setting_labels_unconfirmed") or []
+        # ★★古い一覧を名簿の代わりにしない★★（2026-08-28・Codexの8回目の指摘5）
+        #   `setting_labels_unconfirmed` は**項目をまたいだ**一覧なので、
+        #   「この表だけに無い設定」を復元できない（少なく言う側に外れる）。
+        #   ★本番では必ず名簿がある★＝`spec_lookup.compare()` が毎回入れる。
+        if material.get("setting_labels_unconfirmed") is not None:
+            # ★名簿だけが欠けている＝作りかけの材料。黙って代用せず止める★
+            raise ValueError(
+                "材料に setting_labels_seen がありません"
+                "（設定の名簿が無いと、表に無い設定を正しく数えられません）")
+        # ★どちらも無い＝設定の名前をひとつも知らない材料★
+        #   知らないものを「掲載していません」とは書けないので、注記は付けない。
+        seen = []
     return _sl_ml.unconfirmed_labels(seen, {key: {"value": value}})
 
 
@@ -2026,6 +2036,25 @@ def selftest() -> int:
         for tb in s["tables"] if tb.get("label") == "ボーナス確率"]
     t("　（対照）ボーナス確率でも、採れていない設定は名前を出す",
       any("設定2・設定6もありますが" in x for x in _note_bun2))
+    # ★古い一覧を名簿の代わりにしない★（2026-08-28・Codexの8回目の指摘5）
+    _MAT_OLD = {"setting_labels_unconfirmed": ["1", "2", "6"],
+                "adopted": dict(_MAT_UN["adopted"])}
+    _raised = False
+    try:
+        build_detail("zzz_old", "試験O", "2026-10-05", _MAT_OLD)
+    except ValueError as _e:
+        _raised = "setting_labels_seen" in str(_e)
+    t("★★名簿だけが欠けた材料は、古い一覧で代用せず止める★★"
+      "／★項目をまたいだ一覧なので、この表に無い設定を少なく言う側に外れる★",
+      _raised)
+    _note_none = [tb["note"] for s in build_detail(
+        "zzz_none", "試験N2", "2026-10-05",
+        {"adopted": dict(_MAT_UN["adopted"])})["sections"]
+        if s.get("type") == "settei" and s["title"] == "設定示唆まとめ"
+        for tb in s["tables"]]
+    t("　設定の名前をひとつも知らない材料では、注記を付けない"
+      "（知らないものを『掲載していません』とは書かない）",
+      _note_none and not any("掲載していません" in x for x in _note_none))
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
