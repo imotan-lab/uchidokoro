@@ -292,71 +292,72 @@ def gather(slug: str) -> dict:
 OUTSIDE_KINDS = ("fact", "summary", "lead")
 
 
-def _slot_match(a: str, b: str) -> bool:
-    """係り先が同じ場所を指していそうか（2026-08-27・Codexの6回目）。
-
-    ★終わりの内容の文字を2つまで（短いほうに合わせて）比べる★
-      ・「通常」と「根拠：通常」→ 一致（通す）
-      ・「等価狙い目は」と「当サイトの狙い目は」→（狙・目）で一致（通す）
-    ★これはゆるい判定★＝「通常時の天井は」と「リセット時の天井は」も
-    一致してしまう。そこは★当たる先が1つに定まらなければ断る★で受ける。
-    """
-    ca = "".join(_words(a))
-    cb = "".join(_words(b))
-    if not ca or not cb:
-        return ca == cb
-    k = min(len(ca), len(cb), 2)
-    return ca[-k:] == cb[-k:]
+def _slot_key(a: str) -> str:
+    """係り先の中身（★飾りを落として、内容の文字だけ★）。"""
+    return "".join(_words(a))
 
 
 def _slot_ok(p, src_pairs) -> bool:
-    """出どころの中で、その係り先が★1つに定まって★数値も同じか。
+    """出どころの中に、★係り先が丸ごと同じで数値も同じ★ものがあるか。
 
-    ★二段で探す★（2026-08-27）
-      ①終わりが丸ごと一致するもの（「根拠：通常時の天井は」と
-        「通常時の天井は」はこれで1つに定まる）
-      ②見つからなければ、ゆるい照合（終わりの内容の文字2つ）
-    ★どちらでも1つに定まらなければ断る★＝どちらの値か決められないので安全側
-    （「通常時の天井は」と「リセット時の天井は」が両方当たる形を止める）。
+    ★ゆるい照合はやめた★（2026-08-27・Codexの7回目の指摘1）＝
+    「1つに定まれば正しい」にしていたので、
+    ★唯一の候補が間違っていても通った★
+    （「通常時の天井は500G」← 出どころは「リセット時の天井は500G」）。
+    ★条件を落として一般化する形★（「天井は500G」← 「リセット時の天井は500G」）
+    も通っていた。
+
+    ★機械が決められるのは「丸ごと同じ」だけ★＝
+    それ以外は2AIが理由を書く（設計どおり）。
+    ★出どころは、書き換え後と同じ言い方の逐語を選ぶこと★
     """
-    def _tight(a, b):
-        a, b = a.strip(), b.strip()
-        return bool(a) and bool(b) and (a.endswith(b) or b.endswith(a))
-
-    cand = [q for q in src_pairs if _tight(p[0], q[0])]
-    if len(cand) != 1:
-        cand = [q for q in src_pairs if _slot_match(p[0], q[0])]
-    if len(cand) != 1:
-        return False
-    return cand[0][1] == p[1]
+    key = _slot_key(p[0])
+    return any(_slot_key(q[0]) == key and q[1] == p[1] for q in src_pairs)
 
 
-def _elements(d: dict) -> list:
-    """★読者に出る文字を、要素ごとに集める★（2026-08-27・Codexの6回目）
+def _containers(d: dict) -> list:
+    """★読者に出る文字を「入れ物ごと」に集める★
+       （2026-08-27・Codexの7回目の指摘2）
 
-    ★記事のJSON全体への部分一致では見誤る★＝
-    別の文の一部にたまたま含まれていても「残っている」に見えた。
+    ★平らに集めてはいけない★＝節が違えば別の事実なのに
+    「重複」と見なしてしまう
+    （【通常時】天井は500Gです。／【リセット時】天井は500Gです。）。
     """
     out = []
     for sec in (d.get("sections") or []):
         if not isinstance(sec, dict):
             continue
-        out += [x for x in (sec.get("body") or []) if isinstance(x, str)]
+        out.append([x for x in (sec.get("body") or []) if isinstance(x, str)])
         for t in (sec.get("tables") or []):
-            if isinstance(t, dict) and isinstance(t.get("note"), str):
-                out.append(t["note"])
-            for row in ((t or {}).get("rows") or []):
-                out += [c for c in (row or []) if isinstance(c, str)]
-    for row in (d.get("factTable") or []):
-        if isinstance(row, (list, tuple)):
-            out += [c for c in row if isinstance(c, str)]
-    for box in (d.get("summaryBoxes") or []):
-        if isinstance(box, dict):
-            out += [box.get(k) for k in ("label", "value")
-                    if isinstance(box.get(k), str)]
-    if isinstance(d.get("lead"), str):
-        out.append(d["lead"])
+            if not isinstance(t, dict):
+                continue
+            cell = []
+            for row in (t.get("rows") or []):
+                for c in (row or []):
+                    if isinstance(c, str):
+                        cell.append(c)
+                    elif isinstance(c, dict) and isinstance(c.get("text"),
+                                                            str):
+                        cell.append(c["text"])
+            out.append(cell)
+    out.append([c for row in (d.get("factTable") or [])
+                if isinstance(row, (list, tuple))
+                for c in row if isinstance(c, str)])
+    out.append([box.get(k) for box in (d.get("summaryBoxes") or [])
+                if isinstance(box, dict)
+                for k in ("label", "value") if isinstance(box.get(k), str)])
     return out
+
+
+def _dup_count(d: dict, text: str) -> int:
+    """★同じ入れ物の中に、丸ごと同じものがいくつあるか★（最大）。
+
+    ★入れ物をまたいだ一致は数えない★＝別の節の同じ文は「別の事実」。
+    """
+    best = 0
+    for box in _containers(d):
+        best = max(best, sum(1 for x in box if x == text))
+    return best
 
 
 def _where_hits(d: dict, before) -> list:
@@ -943,8 +944,8 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
                 #   ★記事のJSON全体への部分一致では見誤る★＝
                 #   別の文の一部にたまたま含まれていても
                 #   「残っている」に見えた。
-                _same = sum(1 for x in _elements(d) if x == a["text"])
-                lost = [] if _same >= 2 else nums
+                # ★同じ入れ物の中で2つ以上あるときだけ★（2026-08-27）
+                lost = [] if _dup_count(d, a["text"]) >= 2 else nums
                 if lost:
                     # ★★機械で「重複だ」と言い切れないときは2AIへ★★
                     #   （2026-08-27・Codexの5回目の指摘2）
@@ -1396,7 +1397,8 @@ def _selftest() -> int:
 
         base_act = {"op": "replace",
                     "before": "天井1000Gに対して6.4割のラインです。",
-                    "after": "当サイトの狙い目は640G〜です。",
+                    # ★出どころと同じ言い方で書く★（2026-08-27）
+                    "after": "等価狙い目は640G〜です。",
                     "why": "…", "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました"}
 
         rk1 = apply_decision(dec_k(dict(base_act)))
@@ -1433,7 +1435,7 @@ def _selftest() -> int:
             return r
 
         rk3 = apply_decision(dec_k2(
-            dict(base_act, after="当サイトの狙い目は555G〜です。",
+            dict(base_act, after="等価狙い目は555G〜です。",
                  numbers_from="等価狙い目は640G〜です。"),
             removed=[{"n": "6.4", "why": "派生値"},
                      {"n": "1000", "why": "他にある"}]))
@@ -1936,7 +1938,7 @@ def _selftest() -> int:
         S5 = {"slug": "s5", "sections": [
             {"title": "天井・恩恵",
              "body": ["通常500G／リセット600G",
-                      "根拠：通常700G／リセット800G",
+                      "通常700G／リセット800G",
                       "差枚+500枚がねらいです。",
                       "差枚-500枚がねらいです。",
                       "ほかの行です。"]}]}
@@ -1958,7 +1960,7 @@ def _selftest() -> int:
         rs1 = apply_decision(dec_s5(
             {"op": "replace", "before": "通常500G／リセット600G",
              "after": "通常800G／リセット700G", "why": "わざと：逆の対応",
-             "numbers_from": "根拠：通常700G／リセット800G",
+             "numbers_from": "通常700G／リセット800G",
              "meaning_why": "2AIで判断したことにしています（わざと）"}))
         t("★★出どころと、数値の付き先が違えば受け取らない★★"
           "／★数値の存在だけ見ていたので、逆の対応で書けた★",
@@ -1969,7 +1971,7 @@ def _selftest() -> int:
         rs2 = apply_decision(dec_s5(
             {"op": "replace", "before": "通常500G／リセット600G",
              "after": "通常700G／リセット800G", "why": "出どころどおり",
-             "numbers_from": "根拠：通常700G／リセット800G",
+             "numbers_from": "通常700G／リセット800G",
              "meaning_why": "出どころの値にそろえただけで、対応は同じです"}))
         t("　（対照）出どころどおりの対応なら通る",
           not [p for p in rs2["problems"] if "付き先" in p])
@@ -1998,7 +2000,7 @@ def _selftest() -> int:
         S6 = {"slug": "s6", "sections": [
             {"title": "天井・恩恵",
              "body": ["通常時の天井は300G／リセット時の天井は400G",
-                      "根拠：通常時の天井は500G／リセット時の天井は700G",
+                      "通常時の天井は500G／リセット時の天井は700G",
                       "控え：300G と 400G はここにも残ります",
                       "通常時の天井は500Gです。",
                       "通常時の天井は600Gです。",
@@ -2025,7 +2027,7 @@ def _selftest() -> int:
              "before": "通常時の天井は300G／リセット時の天井は400G",
              "after": "通常時の天井は700G／リセット時の天井は500G",
              "why": "わざと：出どころと逆の対応",
-             "numbers_from": "根拠：通常時の天井は500G／リセット時の天井は700G",
+             "numbers_from": "通常時の天井は500G／リセット時の天井は700G",
              "meaning_why": "2AIで判断したことにしています（わざと）"}))
         t("★★出どころと逆の対応は受け取らない★★"
           "／★直前の1語で見ていたころは「通常時」も「リセット時」も"
@@ -2064,7 +2066,7 @@ def _selftest() -> int:
              #     狙った守りを試せない＝罠④）
              "after": "CZ間の天井は500G",
              "why": "わざと：どちらの値か決められない",
-             "numbers_from": "根拠：通常時の天井は500G／リセット時の天井は700G",
+             "numbers_from": "通常時の天井は500G／リセット時の天井は700G",
              "meaning_why": "2AIで判断したことにしています（わざと）"}))
         t("★★出どころで1つに定まらなければ断る★★"
           "／★似た係り先が2つあると、どちらの値か決められない★",
@@ -2077,10 +2079,64 @@ def _selftest() -> int:
              "before": "通常時の天井は300G／リセット時の天井は400G",
              "after": "通常時の天井は500G／リセット時の天井は700G",
              "why": "出どころにそろえる",
-             "numbers_from": "根拠：通常時の天井は500G／リセット時の天井は700G",
+             "numbers_from": "通常時の天井は500G／リセット時の天井は700G",
              "meaning_why": "出どころの値にそろえただけで、対応は同じです"}))
         t("　（対照）出どころどおりの対応なら通る",
           not [p for p in r66["problems"] if "付き先" in p])
+
+        # ── 2026-08-27・Codexの7回目 ───────────────────────────
+        S7 = {"slug": "s7", "sections": [
+            {"title": "天井・恩恵",
+             "body": ["通常時の天井は300G",
+                      "リセット時の天井は500G",
+                      "控え：300G はここにも残ります",
+                      "天井は400Gです。"]},
+            {"title": "【通常時】",
+             "body": ["天井は500Gです。", "ほかの行です。"]},
+            {"title": "【リセット時】",
+             "body": ["天井は500Gです。", "べつの行です。"]}]}
+        with io.open(os.path.join(td, "s7.json"), "w",
+                     encoding="utf-8", newline="\n") as f:
+            json.dump(S7, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+
+        def dec_s7(act):
+            r = os.path.join(td, "ds7.json")
+            io.open(r, "w", encoding="utf-8").write(json.dumps(
+                {"schema_version": SCHEMA, "slug": "s7",
+                 "source_sha256": _sha_of("s7"),
+                 "decided_by": ["Claude", "codex"], "actions": [act]},
+                ensure_ascii=False))
+            return r
+
+        r71 = apply_decision(dec_s7(
+            {"op": "replace", "before": "通常時の天井は300G",
+             "after": "通常時の天井は500G", "why": "わざと：別条件の値を持ち込む",
+             "numbers_from": "リセット時の天井は500G",
+             "meaning_why": "2AIで判断したことにしています（わざと）"}))
+        t("★★出どころが別条件なら受け取らない★★"
+          "／★『候補が1つに定まれば正しい』にしていたので、"
+          "唯一の候補が間違っていても通った★",
+          bool(r71["problems"])
+          and "付き先が違います" in "".join(r71["problems"]))
+
+        r72 = apply_decision(dec_s7(
+            {"op": "replace", "before": "天井は400Gです。",
+             "after": "天井は500Gです。", "why": "わざと：条件を落として一般化",
+             "numbers_from": "リセット時の天井は500G",
+             "meaning_why": "2AIで判断したことにしています（わざと）"}))
+        t("★★条件を落として一般化する形も受け取らない★★"
+          "／★終わりの一致で通していたので、条件が落ちた★",
+          bool(r72["problems"])
+          and "付き先が違います" in "".join(r72["problems"]))
+
+        r73 = apply_decision(dec_s7(
+            {"op": "drop", "text": "天井は500Gです。",
+             "why": "わざと：別の節に同じ本文がある"}))
+        t("★★節が違えば「重複」と見なさない★★"
+          "／★平らに数えていたので、別条件の事実が黙って消えた★",
+          bool(r73["problems"])
+          and "まったく同じ文が他にありません" in "".join(r73["problems"]))
 
         # ⑱置き場の外を指せない
         _bad_slug = os.path.join(td, "dbad.json")

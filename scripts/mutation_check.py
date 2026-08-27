@@ -1513,23 +1513,13 @@ MUTATIONS = [
         "run": ["scripts/decide_now.py"],
     },
     {
-        "why": "★出どころで当たる先が2つ以上あっても通す"
-               "（どちらの値か決められないのに書ける）★",
-        "file": "scripts/decide_now.py",
-        # ★二段で探す形になったので、ゆるい照合の側を狙う★
-        # ★二段で探す形になったので、ゆるい照合の側を狙う★
-        "before": "    if len(cand) != 1:\n        return False",
-        "after": "    if not cand:\n        return False",
-        "run": ["scripts/decide_now.py"],
-    },
-    {
         "why": "★消すときに、数値を伏せた部分一致で見る"
                "（数値だけ違う行が残れば消せる）★",
         "file": "scripts/decide_now.py",
-        "before": '                _same = sum(1 for x in _elements(d) '
-                  'if x == a["text"])',
-        "after": '                _same = 2 if _wording(a["text"]) '
-                 'in _wording(raw) else 0',
+        "before": '                lost = [] if _dup_count(d, a["text"]) '
+                  '>= 2 else nums',
+        "after": '                lost = [] if _wording(a["text"]) '
+                 'in _wording(raw) else nums',
         "run": ["scripts/decide_now.py"],
     },
     {
@@ -1538,6 +1528,23 @@ MUTATIONS = [
         "before": '        _SHAPE_RE = _re3.compile(r"[-−▲△+＋]?'
                   '\\d+(?:\\.\\d+)?")',
         "after": '        _SHAPE_RE = _re3.compile(r"\\d+(?:\\.\\d+)?")',
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★出どころの係り先をゆるく照らす"
+               "（別条件の値を持ち込める・条件を落として一般化できる）★",
+        "file": "scripts/decide_now.py",
+        "before": "    return any(_slot_key(q[0]) == key and q[1] == p[1] "
+                  "for q in src_pairs)",
+        "after": "    return any(q[1] == p[1] for q in src_pairs)",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★重複を記事全体で平らに数える"
+               "（節が違う同じ本文を重複と見なし、別の事実が消える）★",
+        "file": "scripts/decide_now.py",
+        "before": "    best = 0\n    for box in _containers(d):",
+        "after": "    best = 0\n    for box in [sum(_containers(d), [])]:",
         "run": ["scripts/decide_now.py"],
     },
     {
