@@ -1344,22 +1344,6 @@ MUTATIONS = [
     },
     # ─── 2026-08-27・Codexの2回目（作った守り自体の穴）────────────
     {
-        "why": "★意味をひっくり返す印を見ない"
-               "（ひらがなだけで「〜ではありません」に書き換えられる）★",
-        "file": "scripts/decide_now.py",
-        "before": "            if _nf:",
-        "after": "            if False:",
-        "run": ["scripts/decide_now.py"],
-    },
-    {
-        "why": "★数値とラベルの対応を見ない"
-               "（どちらがどちらの値かを取り違えさせられる）★",
-        "file": "scripts/decide_now.py",
-        "before": "                if sorted(_pb) != sorted(_pa):",
-        "after": "                if False:",
-        "run": ["scripts/decide_now.py"],
-    },
-    {
         "why": "★出どころの逐語が実在するか見ない"
                "（架空の逐語で新語の検査を抜けられる）★",
         "file": "scripts/decide_now.py",
@@ -1416,6 +1400,61 @@ MUTATIONS = [
                   'and r.get("date") == _today()]',
         "after": '                 if r.get("date") == _today()]',
         "run": ["scripts/task_guard.py"],
+    },
+    # ─── 2026-08-27・Codexの3回目（骨組み・指紋・判断者）─────────
+    {
+        "why": "★骨組みを比べない"
+               "（打ち消しを消す反転・大小の入れ替え・ラベル差し替えが通る）★",
+        "file": "scripts/decide_now.py",
+        "before": "                if _sb != _sa:",
+        "after": "                if False:",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★骨組みに打ち消し・大小を入れない（意味の反転が通る）★",
+        "file": "scripts/decide_now.py",
+        "before": '            r"[-−▲△+＋]?\\d+(?:\\.\\d+)?|" + _marks)',
+        "after": '            r"[-−▲△+＋]?\\d+(?:\\.\\d+)?")',
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★判断者を件数だけで見る（同じ名前2つでも2AI扱い）★",
+        "file": "scripts/decide_now.py",
+        "before": "    if not isinstance(by, list) or len({str(x).strip().lower()",
+        "after": "    if not isinstance(by, list) or len({str(x) + str(id(x))",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★記事の指紋を必須にしない（いつの記事への判断か分からない）★",
+        "file": "scripts/decide_now.py",
+        "before": "    if len(_s) != 64 or any(c not in "
+                  '"0123456789abcdef" for c in _s.lower()):',
+        "after": "    if False:",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★合意の指紋を操作だけにする"
+               "（あとから numbers_removed を足して免除できる）★",
+        "file": "scripts/repair_journal.py",
+        "before": "                 ops=ops, ops_sha256=decision_digest(_dec_raw),",
+        "after": "                 ops=ops, ops_sha256=ops_digest(ops),",
+        "run": ["scripts/repair_journal.py"],
+    },
+    {
+        "why": "★Codexへ渡した材料の指紋を必須にしない★",
+        "file": "scripts/repair_journal.py",
+        "before": "    if len(_m) != 64 or any(c not in "
+                  '"0123456789abcdef" for c in _m.lower()):',
+        "after": "    if False:",
+        "run": ["scripts/repair_journal.py"],
+    },
+    {
+        "why": "★段階ごとの必須欄を見ない（中身が空の合意が健康扱い）★",
+        "file": "scripts/repair_journal.py",
+        "before": "    _need = {",
+        # ★{} or {…} は元の辞書のまま★＝何も壊れない（実際にそうなっていた）
+        "after": "    _need = {} and {",
+        "run": ["scripts/repair_journal.py"],
     },
     {
         "why": "★2AIに基本情報表を見せない（食い違いに気づけない）★",

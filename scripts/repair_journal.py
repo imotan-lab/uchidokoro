@@ -255,6 +255,13 @@ def record_codex(fid: str, material_sha256: str, verdict_text: str) -> dict:
     rec = load(fid)
     if not rec.get("claude_verdict_sha256"):
         raise JournalError("先にClaudeの判定へ封をしてください")
+    # ★★材料の指紋は必ず要る★★（2026-08-27・Codexの3回目の指摘6）
+    #   ★直す前は空でも進めた★ので、
+    #   「予定した材料をCodexが受け取った」ことを何も確かめていなかった。
+    _m = str(material_sha256 or "")
+    if len(_m) != 64 or any(c not in "0123456789abcdef" for c in _m.lower()):
+        raise JournalError(
+            "Codexへ渡した材料の指紋（64桁）が要ります")
     if len((verdict_text or "").strip()) < 20:
         raise JournalError("Codexの判定が短すぎます")
     return _step(rec, "CODEX_RECEIVED", "Codexの判定を受け取った",
@@ -295,6 +302,24 @@ def _ops_from_decision(path: str, rec: dict) -> list:
     return acts
 
 
+DECISION_KEYS = ("schema_version", "slug", "finding_id",
+                 "source_sha256", "actions", "numbers_removed")
+
+
+def decision_digest(dec) -> str:
+    """★決定ファイル全体の指紋★（2026-08-27・Codexの3回目の指摘3）
+
+    ★なぜ actions だけでは足りないか★＝
+      合意のあとで `numbers_removed` を**追記**すれば、
+      本来止まる「記事から数値が消える削除」を免除できた。
+      actions は変わっていないので、操作だけの指紋は一致したまま。
+    ★適用の結果を変えうる欄は、全部ここに入れる★
+    """
+    d = dec if isinstance(dec, dict) else {}
+    return _sha(json.dumps({k: d.get(k) for k in DECISION_KEYS},
+                           ensure_ascii=False, sort_keys=True))
+
+
 def ops_digest(ops) -> str:
     """★合意した操作そのものの指紋★（2026-08-27・Codexの指摘6）
 
@@ -313,13 +338,21 @@ def agree(fid: str, ops: list, recheck_name: str, decided_by: list) -> dict:
       直したあとに機械が確かめ直せないなら、自動で触らせない。
     """
     rec = load(fid)
-    if not isinstance(decided_by, list) or len(decided_by) < 2:
-        raise JournalError("判断者が2つ以上要ります（2AIで決めるため）")
+    # ★★違う名前が2つ以上★★（2026-08-27・Codexの3回目）
+    #   ★件数だけ見ていた★ので ["Claude","Claude"] でも通った。
+    if not isinstance(decided_by, list) \
+            or len({str(x).strip().lower()
+                    for x in decided_by if str(x).strip()}) < 2:
+        raise JournalError(
+            f"**違う**判断者が2つ以上要ります（2AIで決めるため）: "
+            f"{str(decided_by)[:40]}")
     # ★★受け取るのは「決定ファイルそのもの」★★（2026-08-27・Codexの指摘6）
     #   ★直す前は、AIが打ち直した操作の配列を受け取っていた★ので、
     #   合意した中身と、実際に当てる決定ファイルを結ぶものが無かった。
     #   ＝★無害な合意を、同じ機種への別の書き換えの許可証にできた★。
+    _dec_raw = {}
     if isinstance(ops, str):
+        _dec_raw = _sj.read_json(ops, expect=dict)
         ops = _ops_from_decision(ops, rec)
     elif isinstance(ops, list):
         raise JournalError(
@@ -363,7 +396,7 @@ def agree(fid: str, ops: list, recheck_name: str, decided_by: list) -> dict:
             f"{recheck_name} は観測どまりの検査です。"
             "直したことを機械で確かめられない型なので、自動では触りません")
     return _step(rec, "AGREED", "2AIが一致した",
-                 ops=ops, ops_sha256=ops_digest(ops),
+                 ops=ops, ops_sha256=decision_digest(_dec_raw),
                  recheck={"name": recheck_name,
                           "version": spec["version"]},
                  decided_by=list(decided_by))
@@ -501,6 +534,32 @@ def _broken_why(rec):
             return f"{k} がありません"
     if rec.get("state") not in FLOW and rec.get("state") != ESCALATED:
         return f"知らない段階です（{rec.get('state')!r}）"
+    if len(str(rec.get("source_sha256") or "")) != 64:
+        return "記事の指紋がありません"
+    # ★★段階ごとに、そこまでで揃っているはずの欄を見る★★
+    #   （2026-08-27・Codexの3回目の指摘5）
+    #   ★直す前は5欄だけ見ていた★ので、
+    #   「AGREED なのに合意の中身が空」でも健康扱いだった。
+    _need = {"CLAUDE_SEALED": ("claude_verdict_sha256",),
+             "CODEX_RECEIVED": ("claude_verdict_sha256",
+                                "codex_verdict_sha256"),
+             # ★操作の指紋は入れない★（2026-08-27）
+             #   ★今日足した欄なので、それ以前の記録が全部
+             #     「壊れている」ことになり、全機種が止まった★。
+             #   指紋が無いのは壊れているのではなく**古い**。
+             #   ★合意との突き合わせ側が、指紋の無い記録を既に断る★ので、
+             #   その機種だけが止まる（止める範囲が正しくなる）。
+             "AGREED": ("claude_verdict_sha256", "codex_verdict_sha256",
+                        "ops", "recheck", "decided_by")}
+    _st = rec.get("state")
+    _order = list(FLOW)
+    for _s, _keys in _need.items():
+        # ★その段階を通り過ぎていれば、欄は揃っているはず★
+        if _st != ESCALATED and _st in _order \
+                and _order.index(_st) >= _order.index(_s):
+            for _k in _keys:
+                if not rec.get(_k):
+                    return f"{_st} なのに {_k} がありません"
     return ""
 
 
@@ -529,6 +588,11 @@ def listing(state: str | None = None) -> list:
         #   ★直す前は「JSONとして読めたか」だけ見ていた★ので、
         #   空の辞書・知らない版・欄の欠けは**黙って一覧から消えた**。
         _why = _broken_why(rec)
+        # ★★ファイル名と中身の名前が食い違っていたら壊れている★★
+        #   （2026-08-27・Codexの3回目の指摘5）
+        if not _why and rec.get("finding_id") != n[:-5]:
+            _why = (f"ファイル名（{n[:-5]}）と中身の名前"
+                    f"（{rec.get('finding_id')}）が食い違います")
         if _why:
             out.append({"state": "BROKEN", "finding_id": n[:-5],
                         "slug": "", "check": "", "quote": "",
@@ -746,12 +810,21 @@ def _selftest() -> int:
                                   sha="c" * 64, name="d7b"),
                     "text_gone", ["Claude", "codex"])
         t("　（対照）書き換えていなければ合意できる", _a7["state"] == "AGREED")
-        t("★合意した操作の指紋を残す（適用と結び付けるため）★",
+        # ★★指紋は「決定ファイル全体」★★（2026-08-27・Codexの3回目の指摘3）
+        #   ★操作だけだと、合意のあとで numbers_removed を追記して
+        #     「記事から数値が消える削除」を免除できた★
+        #   （操作は変わっていないので指紋は一致したまま）。
+        _d7b = json.load(io.open(os.path.join(td, "decisions", "d7b.json"),
+                                 encoding="utf-8"))
+        t("★合意した決定の指紋を残す（適用と結び付けるため）★",
           len(str(_a7.get("ops_sha256") or "")) == 64
-          and _a7["ops_sha256"] == ops_digest(_ops7b))
-        t("　操作が違えば指紋も違う",
-          ops_digest([{"op": "drop", "why": "重複"}])
-          != ops_digest([{"op": "drop", "why": "別の理由"}]))
+          and _a7["ops_sha256"] == decision_digest(_d7b))
+        t("★★消してよい数値の名指しを足しただけでも指紋が変わる★★"
+          "／★操作だけの指紋では、これを免除できた★",
+          decision_digest(_d7b)
+          != decision_digest({**_d7b,
+                              "numbers_removed": [{"n": "500",
+                                                   "why": "わざと"}]}))
 
         # ★★別の件・別の機種の決定ファイルでは合意できない★★
         #   （2026-08-27・Codexの指摘6＝合意と適用の結線）
@@ -790,7 +863,7 @@ def _selftest() -> int:
                                  sha="6" * 64, name="d6d"),
                     "text_gone", ["Claude", "codex"])
         t("　（対照）同じ件・同じ機種・同じ記事なら合意できる",
-          _a6["state"] == "AGREED" and _a6["ops_sha256"] == ops_digest(_ops6))
+          _a6["state"] == "AGREED" and len(_a6["ops_sha256"]) == 64)
 
         # ★★決定ファイルの指紋が空なら断る★★
         #   （2026-08-27・Codexの2回目の指摘5）
@@ -857,7 +930,7 @@ def _selftest() -> int:
         try:
             io.open(v8, "w", encoding="utf-8").write("2回目の判定です。" * 5)
             seal_claude(f8, v8)
-            record_codex(f8, "g" * 64, "2回目のCodexの判定です。" * 2)
+            record_codex(f8, "ab" * 32, "2回目のCodexの判定です。" * 2)
             _st8 = load(f8)["state"]
         except JournalError as e:
             _st8 = f"進めません: {e}"
@@ -865,7 +938,7 @@ def _selftest() -> int:
         attempt(f8, "2回目も決まらなかった")
         io.open(v8, "w", encoding="utf-8").write("3回目の判定です。" * 5)
         seal_claude(f8, v8)
-        record_codex(f8, "h" * 64, "3回目のCodexの判定です。" * 2)
+        record_codex(f8, "cd" * 32, "3回目のCodexの判定です。" * 2)
         _r8c = attempt(f8, "3回目も決まらなかった")
         t("★3回で人へ回す（回数は数え続ける）★",
           _r8c["state"] == ESCALATED and _r8c["attempts"] == 3)
@@ -881,6 +954,50 @@ def _selftest() -> int:
             t("★★判断していないのに回数を数えない★★"
               "／★直す前は、封もCodexもせずに3回呼べば人へ回せた★",
               "まだ判断していません" in str(e))
+
+        # ★★Codexへ渡した材料の指紋は必ず要る★★
+        #   （2026-08-27・Codexの3回目の指摘6）
+        #   ★直す前は空でも進めた★ので、
+        #   「予定した材料をCodexが受け取った」ことを何も確かめていなかった。
+        r6m = detect("zzz6m", "text_gone", "六番mの文です。",
+                     source_sha256="6" * 64)
+        f6m = r6m["finding_id"]
+        v6m = os.path.join(td, "v6m.md")
+        io.open(v6m, "w", encoding="utf-8").write("私の判定です。" * 5)
+        seal_claude(f6m, v6m)
+        try:
+            record_codex(f6m, "", "Codexの判定です。" * 3)
+            t("★★材料の指紋が空では進めない★★", False)
+        except JournalError as e:
+            t("★★材料の指紋が空では進めない★★", "材料の指紋" in str(e))
+        try:
+            record_codex(f6m, "zz" * 32, "Codexの判定です。" * 3)
+            t("　16進でない指紋も断る", False)
+        except JournalError:
+            t("　16進でない指紋も断る", True)
+
+        # ★★段階ごとに、そこまでで揃っているはずの欄を見る★★
+        #   （2026-08-27・Codexの3回目の指摘5）
+        #   ★直す前は5欄だけ見ていた★ので、
+        #   「AGREED なのに合意の中身が空」でも健康扱いだった。
+        io.open(os.path.join(td, "half_agreed.json"), "w",
+                encoding="utf-8").write(json.dumps(
+                    {"schema_version": SCHEMA, "finding_id": "half_agreed",
+                     "slug": "x", "check": "text_gone", "quote": "x",
+                     "source_sha256": "a" * 64, "state": "AGREED"},
+                    ensure_ascii=False))
+        io.open(os.path.join(td, "wrong_name.json"), "w",
+                encoding="utf-8").write(json.dumps(
+                    {"schema_version": SCHEMA, "finding_id": "べつの名前",
+                     "slug": "x", "check": "text_gone", "quote": "x",
+                     "source_sha256": "a" * 64, "state": "DETECTED"},
+                    ensure_ascii=False))
+        _lst3 = {x.get("finding_id"): x for x in listing()}
+        t("★★中身が空の合意は健康扱いしない★★"
+          "／★直す前は必須の5欄だけ見ていた★",
+          _lst3.get("half_agreed", {}).get("state") == "BROKEN")
+        t("　ファイル名と中身の名前が食い違えば壊れている",
+          _lst3.get("wrong_name", {}).get("state") == "BROKEN")
 
         # ★★形は正しいが中身が壊れた記録も BROKEN★★（同・指摘6）
         io.open(os.path.join(td, "empty_rec.json"), "w",

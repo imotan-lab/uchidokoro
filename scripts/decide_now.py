@@ -353,10 +353,23 @@ def _load_decision(path: str) -> dict:
     if d.get("schema_version") != SCHEMA:
         raise ValueError(f"知らない形です: {d.get('schema_version')!r}")
     by = d.get("decided_by")
-    if not isinstance(by, list) or len(by) < 2:
-        raise ValueError("decided_by に判断者が2つ以上要ります（2AIで決めるため）")
+    # ★★判断者は「違う名前が2つ以上」★★（2026-08-27・Codexの3回目）
+    #   ★直す前は件数だけ見ていた★ので、["Claude","Claude"] でも
+    #   「2AIで決めた」ことになった＝ひとりで決めた結論が通る。
+    if not isinstance(by, list) or len({str(x).strip().lower()
+                                        for x in by if str(x).strip()}) < 2:
+        raise ValueError(
+            "decided_by に**違う**判断者が2つ以上要ります（2AIで決めるため）: "
+            + str(by)[:40])
     if not d.get("slug"):
         raise ValueError("slug がありません")
+    # ★★記事の指紋は必ず要る★★（2026-08-27・Codexの3回目の指摘4）
+    #   ★直す前は「書いてあれば照合する」だった★ので、
+    #   書かなければ「いつの記事に対する判断か」の確認を丸ごと外せた。
+    _s = str(d.get("source_sha256") or "")
+    if len(_s) != 64 or any(c not in "0123456789abcdef" for c in _s.lower()):
+        raise ValueError(
+            "判断したときの記事の指紋（source_sha256・64桁）が要ります")
     acts = d.get("actions")
     if not isinstance(acts, list) or not acts:
         raise ValueError("actions がありません")
@@ -423,6 +436,41 @@ FLIP_MARKS = ("ない", "なく", "ません", "ませ", "無",
 def _flips(s: str) -> list:
     """その文に出てくる「意味をひっくり返す印」。"""
     return [w for w in FLIP_MARKS if w in str(s or "")]
+
+
+_SHAPE_RE = None
+
+
+def _shape(s: str) -> list:
+    """★文の骨組み★（2026-08-27・Codexの3回目）
+
+    「数値」と「意味をひっくり返す印」を**出てくる順に**並べ、
+    それぞれに**直前の内容語**を添えたもの。
+    ★丸ごと同じでなければ断る★＝増えた・減った・入れ替わった、を全部拾う。
+
+    ★符号も見る★＝「+500枚」と「-500枚」は別物
+      （数値だけ見ていると同じに見えてしまう）。
+    """
+    global _SHAPE_RE
+    if _SHAPE_RE is None:
+        import re as _re3
+        _marks = "|".join(_re3.escape(w) for w in
+                          sorted(FLIP_MARKS, key=len, reverse=True))
+        _SHAPE_RE = _re3.compile(
+            r"[-−▲△+＋]?\d+(?:\.\d+)?|" + _marks)
+    txt = str(s or "")
+    out = []
+    for m in _SHAPE_RE.finditer(txt):
+        ws = _words(txt[:m.start()])
+        tail = txt[m.end():m.end() + 1]
+        # ★数値には単位（すぐ後ろの1文字）も添える★
+        tok = m.group(0)
+        if tok[-1].isdigit() and tail and not tail.isspace() \
+                and tail not in ("、", "。", "／", "/", "・", "）", ")", "」",
+                                 "，", ","):
+            tok += tail
+        out.append((ws[-1] if ws else "", tok))
+    return out
 
 
 def _num_pairs(s: str) -> list:
@@ -545,8 +593,12 @@ def _agreement_problem(slug: str, dec: dict):
     hit = [r for r in live if str(r.get("finding_id")) == fid]
     if not hit:
         return f"その件は、この機種の生きている合意ではありません（{fid}）"
+    # ★★決定ファイル全体の指紋で比べる★★（2026-08-27・Codexの3回目の指摘3）
+    #   ★直す前は actions だけだった★ので、合意のあとで
+    #   `numbers_removed` を**追記**すれば、本来止まる削除を免除できた
+    #   （actions は変わっていないので指紋は一致したまま）。
     want = str(hit[0].get("ops_sha256") or "")
-    got = _rj.ops_digest(dec.get("actions"))
+    got = _rj.decision_digest(dec)
     if not want:
         return "合意に操作の指紋がありません（古い記録です。取り直してください）"
     if want != got:
@@ -574,7 +626,8 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
     import hashlib
     want = str(dec.get("source_sha256") or "")
     got = hashlib.sha256(raw.encode("utf-8").replace(b"\r\n", b"\n")).hexdigest()
-    if want and want != got:
+    # ★空はもう来ない（_load_decision が断る）が、念のため不一致として扱う★
+    if want != got:
         result["problems"].append(
             f"判断したときから記事が変わっています（{want[:12]}… → {got[:12]}…）")
         return result
@@ -614,30 +667,25 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
             #   ★物差しは数値と同じ★＝この機種についてサイトが公開している
             #   ものの中に、その語があること。無ければ出どころを言うこと。
             #   ★ひらがなは見ない★（送り仮名・助詞なので言い換えを妨げる）。
-            # ★★意味をひっくり返す印を持ち込ませない★★
-            #   （2026-08-27・Codexの2回目の指摘1）
-            #   ★内容語だけ見ていたので、ひらがなだけで反転できた★
-            #   （「500Gです」→「500Gではありません」が通っていた）。
-            _nf = [w for w in _flips(a["after"])
-                   if w not in _flips(a["before"])]
-            if _nf:
-                result["problems"].append(
-                    "意味をひっくり返す言葉を足そうとしています: "
-                    + " / ".join(_nf[:4])
-                    + "（打ち消し・大小の入れ替えは事実を変えることなので、"
-                    "この道具では直せません。出典で確かめてください）")
-                return result
-            # ★★数値とラベルの対応を入れ替えさせない★★（同・指摘1）
-            #   ★数値の並びが同じなので、並べ替えの検査に当たらなかった★
-            #   （「通常500G／リセット600G」→「リセット500G／通常600G」）。
-            if len(nb) >= 2 and len(na) >= 2:
-                _pb, _pa = _num_pairs(a["before"]), _num_pairs(a["after"])
-                if sorted(_pb) != sorted(_pa):
+            # ★★骨組みが変わる言い換えは受け取らない★★
+            #   （2026-08-27・Codexの3回目の指摘1・2）
+            #   ★直す前は「印が**増えたら**断る」だった★ので、
+            #     ・打ち消しを**消す**反転（「〜ではありません」→「〜です」）
+            #     ・大小を**入れ替える**反転（以上⇄以下・顔ぶれは同じ）
+            #     ・数値が1つのときのラベル差し替え（通常500G→リセット500G）
+            #   が全部通っていた。★穴を1つずつ塞ぐ形では終わらない★。
+            #   → 骨組み（数値・打ち消し・大小を、直前の言葉つきで順に並べたもの）
+            #     が**丸ごと同じ**であることを求める。
+            #   ★数値そのものが変わる言い換えには当てない★
+            #     （そちらは「出どころの逐語」で見る＝骨組みは当然変わる）。
+            if sorted(nb) == sorted(na):
+                _sb, _sa = _shape(a["before"]), _shape(a["after"])
+                if _sb != _sa:
                     result["problems"].append(
-                        "数値と、その手前の言葉の組み合わせが変わっています"
-                        f"（{_pb[:3]} → {_pa[:3]}）"
-                        "（どちらがどちらの値かを取り違えさせるので"
-                        "受け取りません）")
+                        "数値・打ち消し・大小の並びが変わっています"
+                        f"（{_sb[:3]} → {_sa[:3]}）"
+                        "（意味が変わる書き換えなので受け取りません。"
+                        "事実を変えるには出典が要ります）")
                     return result
             _blob = _content_blob(published)
             new_w = [w for w in _words(a["after"]) if w not in _blob]
@@ -900,6 +948,19 @@ def _selftest() -> int:
     td = tempfile.mkdtemp()
     _keep = globals()["DETAILS"]
     globals()["DETAILS"] = td
+
+    def _sha_of(slug):
+        """★その記事のいまの指紋★（決定ファイルに必ず要る）。
+
+        ★記事が無いときは合わない値を返す★＝
+        その試験は「指紋が違う」か「機種が無い」で断られるのが正しい。
+        """
+        import hashlib as _h
+        _p = os.path.join(td, str(slug) + ".json")
+        if not os.path.isfile(_p):
+            return "0" * 64
+        _t = io.open(_p, encoding="utf-8").read().encode("utf-8")
+        return _h.sha256(_t.replace(bytes([13, 10]), bytes([10]))).hexdigest()
     try:
         D = {"slug": "x", "sections": [
             {"title": "ヤメ時の判断",
@@ -913,6 +974,7 @@ def _selftest() -> int:
             q = os.path.join(td, "d.json")
             io.open(q, "w", encoding="utf-8").write(json.dumps(
                 {"schema_version": SCHEMA, "slug": "x",
+                 "source_sha256": _sha_of("x"),
                  "decided_by": list(by), "actions": actions,
                  **({"source_sha256": sha} if sha else {})},
                 ensure_ascii=False))
@@ -991,6 +1053,7 @@ def _selftest() -> int:
             r = os.path.join(td, "dy.json")
             io.open(r, "w", encoding="utf-8").write(json.dumps(
                 {"schema_version": SCHEMA, "slug": "y",
+                 "source_sha256": _sha_of("y"),
                  "decided_by": ["Claude", "codex"], "actions": actions},
                 ensure_ascii=False))
             return r
@@ -1015,6 +1078,7 @@ def _selftest() -> int:
         rz = os.path.join(td, "dz.json")
         io.open(rz, "w", encoding="utf-8").write(json.dumps(
             {"schema_version": SCHEMA, "slug": "z",
+             "source_sha256": _sha_of("z"),
              "decided_by": ["Claude", "codex"],
              "actions": [{"op": "drop",
                           "text": "通常時の天井は 500G です。",
@@ -1040,6 +1104,7 @@ def _selftest() -> int:
             r = os.path.join(td, "dg.json")
             io.open(r, "w", encoding="utf-8").write(json.dumps(
                 {"schema_version": SCHEMA, "slug": "g",
+                 "source_sha256": _sha_of("g"),
                  "decided_by": ["Claude", "codex"], "actions": actions},
                 ensure_ascii=False))
             return r
@@ -1067,6 +1132,7 @@ def _selftest() -> int:
             r = os.path.join(td, "dh.json")
             io.open(r, "w", encoding="utf-8").write(json.dumps(
                 {"schema_version": SCHEMA, "slug": "h",
+                 "source_sha256": _sha_of("h"),
                  "decided_by": ["Claude", "codex"], "actions": actions},
                 ensure_ascii=False))
             return r
@@ -1101,6 +1167,7 @@ def _selftest() -> int:
         def dec_k(act, removed=None):
             r = os.path.join(td, "dk.json")
             body = {"schema_version": SCHEMA, "slug": "k",
+                    "source_sha256": _sha_of("k"),
                     "decided_by": ["Claude", "codex"], "actions": [act]}
             if removed:
                 body["numbers_removed"] = removed
@@ -1138,6 +1205,7 @@ def _selftest() -> int:
         def dec_k2(act, removed=None):
             r = os.path.join(td, "dk2.json")
             body = {"schema_version": SCHEMA, "slug": "k2",
+                    "source_sha256": _sha_of("k2"),
                     "decided_by": ["Claude", "codex"], "actions": [act]}
             if removed:
                 body["numbers_removed"] = removed
@@ -1189,6 +1257,7 @@ def _selftest() -> int:
         def dec_m(actions, removed=None):
             r = os.path.join(td, "dm.json")
             body = {"schema_version": SCHEMA, "slug": "m",
+                    "source_sha256": _sha_of("m"),
                     "decided_by": ["Claude", "codex"], "actions": actions}
             if removed:
                 body["numbers_removed"] = removed
@@ -1292,6 +1361,7 @@ def _selftest() -> int:
             r = os.path.join(td, "dn.json")
             io.open(r, "w", encoding="utf-8").write(json.dumps(
                 {"schema_version": SCHEMA, "slug": "n",
+                 "source_sha256": _sha_of("n"),
                  "decided_by": ["Claude", "codex"], "actions": actions},
                 ensure_ascii=False))
             return r
@@ -1300,10 +1370,10 @@ def _selftest() -> int:
         rn1 = apply_decision(dec_n([
             {"op": "replace", "before": "天井は500Gです。",
              "after": "天井は500G以下です。", "why": "わざと：意味が反転"}]))
-        t("★★意味をひっくり返す言葉は足せない★★"
+        t("★★意味をひっくり返す書き換えは受け取らない★★"
           "／★直す前は数値しか見ておらず、素通りしていた★",
           bool(rn1["problems"])
-          and "ひっくり返す" in "".join(rn1["problems"]))
+          and "並びが変わって" in "".join(rn1["problems"]))
         # ★★ひらがなだけの反転も止める★★（2026-08-27・Codexの2回目）
         #   ★内容語だけ見ていたので、これは素通りしていた★
         rn1b = apply_decision(dec_n([
@@ -1312,7 +1382,7 @@ def _selftest() -> int:
         t("★★ひらがなだけの打ち消しも止める★★"
           "／★内容語だけ見ていたので素通りしていた★",
           bool(rn1b["problems"])
-          and "ひっくり返す" in "".join(rn1b["problems"]))
+          and "並びが変わって" in "".join(rn1b["problems"]))
         rn1c = apply_decision(dec_n([
             {"op": "replace", "before": "天井は500Gです。",
              "after": "天井は500Gのスマスロです。", "why": "わざと：新しい語"}]))
@@ -1353,6 +1423,7 @@ def _selftest() -> int:
         ro = os.path.join(td, "do.json")
         io.open(ro, "w", encoding="utf-8").write(json.dumps(
             {"schema_version": SCHEMA, "slug": "o",
+             "source_sha256": _sha_of("o"),
              "decided_by": ["Claude", "codex"],
              "actions": [{"op": "replace",
                           "before": "通常500G／リセット600Gです。",
@@ -1379,6 +1450,7 @@ def _selftest() -> int:
         ru = os.path.join(td, "du.json")
         io.open(ru, "w", encoding="utf-8").write(json.dumps(
             {"schema_version": SCHEMA, "slug": "u",
+             "source_sha256": _sha_of("u"),
              "decided_by": ["Claude", "codex"],
              "actions": [{"op": "drop", "text": "天井は500Gです。",
                           "why": "わざと：残るのは500枚だけ"}]},
@@ -1413,6 +1485,7 @@ def _selftest() -> int:
         rv = os.path.join(td, "dv.json")
         io.open(rv, "w", encoding="utf-8").write(json.dumps(
             {"schema_version": SCHEMA, "slug": "v",
+             "source_sha256": _sha_of("v"),
              "decided_by": ["Claude", "codex"],
              "actions": [{"op": "replace", "before": "同じ行です。",
                           "after": "同じ行です。", "why": "場所不明"}]},
@@ -1433,6 +1506,7 @@ def _selftest() -> int:
         rw = os.path.join(td, "dw.json")
         io.open(rw, "w", encoding="utf-8").write(json.dumps(
             {"schema_version": SCHEMA, "slug": "w",
+             "source_sha256": _sha_of("w"),
              "decided_by": ["Claude", "codex"],
              "actions": [{"op": "replace",
                           "before": "通常500G／リセット600Gです。",
@@ -1440,15 +1514,97 @@ def _selftest() -> int:
                           "why": "わざと：ラベルの入れ替え"}]},
             ensure_ascii=False))
         rn11 = apply_decision(rw)
-        t("★★数値とラベルの対応の入れ替えを止める★★"
+        t("★★数値とラベルの対応の入れ替えを止める（骨組みが変わる）★★"
           "／★数値の並びが同じなので、並べ替えの検査に当たらなかった★",
           bool(rn11["problems"])
-          and "組み合わせ" in "".join(rn11["problems"]))
+          and "並びが変わって" in "".join(rn11["problems"]))
+
+        # ── 2026-08-27・Codexの3回目（骨組みで見る）────────────
+        X = {"slug": "x2", "sections": [
+            {"title": "天井・恩恵",
+             "body": ["天井は500Gではありません。",
+                      "通常は500G以上、リセットは600G以下です。",
+                      "通常500G",
+                      "リセットのときの話です。"]}]}
+        with io.open(os.path.join(td, "x2.json"), "w",
+                     encoding="utf-8", newline="\n") as f:
+            json.dump(X, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+
+        def dec_x(act):
+            r = os.path.join(td, "dx.json")
+            io.open(r, "w", encoding="utf-8").write(json.dumps(
+                {"schema_version": SCHEMA, "slug": "x2",
+                 "source_sha256": _sha_of("x2"),
+                 "decided_by": ["Claude", "codex"], "actions": [act]},
+                ensure_ascii=False))
+            return r
+
+        rx1 = apply_decision(dec_x(
+            {"op": "replace", "before": "天井は500Gではありません。",
+             "after": "天井は500Gです。", "why": "わざと：打ち消しを消す"}))
+        t("★★打ち消しを『消す』反転も止める★★"
+          "／★『印が増えたら断る』では、消す方向が素通りしていた★",
+          bool(rx1["problems"])
+          and "並びが変わって" in "".join(rx1["problems"]))
+
+        rx2 = apply_decision(dec_x(
+            {"op": "replace",
+             "before": "通常は500G以上、リセットは600G以下です。",
+             "after": "通常は500G以下、リセットは600G以上です。",
+             "why": "わざと：大小の入れ替え"}))
+        t("★★大小の対応の入れ替えも止める（顔ぶれは同じ）★★",
+          bool(rx2["problems"])
+          and "並びが変わって" in "".join(rx2["problems"]))
+
+        rx3 = apply_decision(dec_x(
+            {"op": "replace", "before": "通常500G", "after": "リセット500G",
+             "where": "body", "why": "わざと：ラベルの差し替え"}))
+        t("★★数値が1つでもラベルの差し替えを止める★★"
+          "／★『2つ以上のときだけ見る』では素通りしていた★",
+          bool(rx3["problems"])
+          and "並びが変わって" in "".join(rx3["problems"]))
+
+        rx4 = apply_decision(dec_x(
+            {"op": "replace", "before": "リセットのときの話です。",
+             "after": "リセットのときの話。", "why": "文体をそろえる"}))
+        t("　（対照）骨組みが変わらない言い換えは通る", not rx4["problems"])
+
+        # ★★判断者は「違う名前が2つ以上」★★（同・Codexの3回目）
+        _rby = os.path.join(td, "dby.json")
+        io.open(_rby, "w", encoding="utf-8").write(json.dumps(
+            {"schema_version": SCHEMA, "slug": "x2",
+             "source_sha256": _sha_of("x2"),
+             "decided_by": ["Claude", "Claude"],
+             "actions": [{"op": "drop", "text": "通常500G", "why": "x"}]},
+            ensure_ascii=False))
+        def _stops(fn, word):
+            """★断られること★を見る（例外でも問題の一覧でも合格）。"""
+            try:
+                r = fn()
+            except Exception as e:                           # noqa: BLE001
+                return word in str(e)
+            return bool(r.get("problems")) and word in "".join(r["problems"])
+
+        t("★★同じ名前を2つ並べても「2AIで決めた」にならない★★",
+          _stops(lambda: apply_decision(_rby), "違う"))
+
+        # ★★記事の指紋は必ず要る★★（同・Codexの3回目の指摘4）
+        _rns = os.path.join(td, "dns.json")
+        io.open(_rns, "w", encoding="utf-8").write(json.dumps(
+            {"schema_version": SCHEMA, "slug": "x2",
+             "decided_by": ["Claude", "codex"],
+             "actions": [{"op": "drop", "text": "通常500G", "why": "x"}]},
+            ensure_ascii=False))
+        t("★★記事の指紋の無い決定ファイルは受け取らない★★"
+          "／★直す前は「書いてあれば照合する」だった★",
+          _stops(lambda: apply_decision(_rns), "指紋"))
 
         # ⑱置き場の外を指せない
         _bad_slug = os.path.join(td, "dbad.json")
         io.open(_bad_slug, "w", encoding="utf-8").write(json.dumps(
             {"schema_version": SCHEMA, "slug": "../x",
+             "source_sha256": _sha_of("../x"),
              "decided_by": ["Claude", "codex"],
              "actions": [{"op": "drop", "text": "a", "why": "わざと"}]},
             ensure_ascii=False))
@@ -1481,6 +1637,7 @@ def _selftest() -> int:
             def _decq(actions, fid=None, name="decq"):
                 p = os.path.join(td, name + ".json")
                 body = {"schema_version": SCHEMA, "slug": "q",
+                        "source_sha256": _sha_of("q"),
                         "source_sha256": _qsha,
                         "decided_by": ["Claude", "codex"], "actions": actions}
                 if fid:
