@@ -1598,10 +1598,52 @@ def done(task: str, slug: str, stage: str, path: str = STATE_PATH) -> dict:
                     f"{slug} は直す経路で担当したので、終える前に結果の記録が要ります: "
                     f"python scripts/task_guard.py repaired --slug {slug} "
                     "--fixed yes|no --why …")
+        # ★★何もしていない完了を、記録の上で見えるようにする★★
+        #   （2026-08-27・Codexの指摘17）
+        #   ★断らない★＝段階名の言い回しは手順書ごとに違うので、
+        #   ここで拒否すると正しく動いているタスクを止めかねない。
+        #   ★まず見えるようにする★＝「静かに0件が続く」を数えるのが先。
+        _d = data.get("day") or {}
+        _w = _d.get("writes") or {}
+        _today_slugs = _d.get("slugs_today") or []
+        _wrote = int(_w.get("total") or 0)
+        e["work_today"] = {"claimed": len(_today_slugs), "wrote": _wrote}
+        e["no_work"] = (_wrote == 0 and not _today_slugs)
         e["final_stage"] = stage
         e["finished_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         _save(path, data)
         return e
+
+def _no_work_tests(t, tmpdir) -> None:
+    """★何もしていない完了が、記録の上で見えること★（Codexの指摘17）
+
+    ★断らない★＝段階名の言い回しは手順書ごとに違うので、
+    ここで拒否すると正しく動いているタスクを止めかねない。
+    ★まず見えるようにする★＝「静かに0件が続く」を数えるのが先。
+    """
+    import json as _jn
+    sp = os.path.join(tmpdir, "nowork.json")
+    with open(sp, "w", encoding="utf-8") as f:
+        _jn.dump({"tasks": {}, "day": {"date": _today(),
+                                       "writes": {"total": 0, "fix": 0,
+                                                  "grow": 0},
+                                       "slugs_today": []}}, f)
+    e = done("t_nowork", "", "COMPLETED_NO_CHANGE", path=sp)
+    t("★★何もしていない完了に印が付く★★"
+      "／★直す前は、作業0件の正常終了を誰も数えられなかった★",
+      e.get("no_work") is True
+      and e["work_today"] == {"claimed": 0, "wrote": 0})
+
+    with open(sp, "w", encoding="utf-8") as f:
+        _jn.dump({"tasks": {}, "day": {"date": _today(),
+                                       "writes": {"total": 2, "fix": 1,
+                                                  "grow": 1},
+                                       "slugs_today": ["a", "b"]}}, f)
+    e2 = done("t_nowork", "", "COMPLETED", path=sp)
+    t("　（対照）実際に書いた日は印が付かない",
+      e2.get("no_work") is False
+      and e2["work_today"] == {"claimed": 2, "wrote": 2})
+
 
 # ---------------------------------------------------------------- selftest
 
@@ -2775,6 +2817,7 @@ def selftest() -> int:
     _d = _tf.mkdtemp(prefix="guard_")
     try:
         _machines_per_day_tests(t, _d)
+        _no_work_tests(t, _d)
         _budget_tests(t, _d)
         # ★★台帳番号ではなく「見つけたもの」で担当する経路★★
         #   （2026-08-21・Codexの設計レビュー）

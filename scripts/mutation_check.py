@@ -1329,6 +1329,14 @@ MUTATIONS = [
         "run": ["scripts/repair_journal.py"],
     },
     {
+        "why": "★何もしていない完了に印を付けない"
+               "（作業0件の正常終了を誰も数えられない）★",
+        "file": "scripts/task_guard.py",
+        "before": '        e["no_work"] = (_wrote == 0 and not _today_slugs)',
+        "after": '        e["no_work"] = False',
+        "run": ["scripts/task_guard.py"],
+    },
+    {
         "why": "★2AIに基本情報表を見せない（食い違いに気づけない）★",
         "file": "scripts/decide_now.py",
         # ★2行まとめて置き換える★（1行だけ切ると構文エラーになり、
