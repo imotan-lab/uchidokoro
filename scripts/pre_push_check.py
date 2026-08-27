@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime
 import json
+import glob
 import os
 import subprocess
 import sys
@@ -172,6 +173,16 @@ def main() -> int:
     if hit:
         print(f"pre-push: 記事データの変更 {len(hit)} 件 → 検査を流します")
 
+    # ★★古い読み込み結果を無効にする★★（2026-08-27・2回踏んだ）
+    #   Pythonは「元の日時（秒）と大きさ」だけで作り直すかを決めるので、
+    #   ★大きさが変わらない直しを同じ秒のうちに書くと、古い結果が使われる★
+    #   ＝直したのに直っていない状態のまま、検査が緑になる。
+    #   ★中身は1文字も変えない★（日時だけ）。
+    for _f in glob.glob(os.path.join(BASE, "scripts", "*.py")):
+        try:
+            os.utime(_f, None)
+        except OSError:
+            pass                       # ★触れなくても検査は続ける★
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     ng = []
     for name, cmd in (("crosscheck_gates", ["crosscheck_gates.py"]),

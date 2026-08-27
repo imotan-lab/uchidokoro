@@ -1129,10 +1129,17 @@ def selftest() -> int:
         if not os.path.exists(_cv_t.STORE):
             _cv_t.init_store()   # ★初回は明示的に作る★
         _url = "https://p-town.dmm.com/machines/dmm_1/pw_x/"
-        with open(os.path.join(_d, "add_machine_pending.json"), "w",
-                  encoding="utf-8") as _fh:
-            json.dump({"items": {_url: {"name": "L試験機"}}}, _fh,
-                      ensure_ascii=False)
+        # ★★待ち行列は本物の登録関数で作る★★（2026-08-27・台帳#485）
+        #   ★直す前は手書きのJSONで「鍵＝公式URL」と置いていた★＝
+        #   それは**まさに壊れていた形**で、試験の材料がバグを写していた。
+        #   本物の add/save を通せば、形が変わっても試験が付いてくる。
+        import pending_machines as _pm_t
+        _pm_real = _pm_t.STORE
+        _pm_t.STORE = os.path.join(_d, "add_machine_pending.json")
+        _q_t = _pm_t._empty()
+        _pm_t.add(_q_t, "L試験機", _url, "m", "2026-09",
+                  source_machine_id="dmm_1_pw_x")
+        _pm_t.save(_q_t)
 
         def _fake_fetch(url, _quotes=None):
             # ★そのページに引用が実在する★状態を作る（通信だけの代役）
@@ -1180,6 +1187,7 @@ def selftest() -> int:
                      _flow_quote(_v))
         finally:
             _lp_t.DOCS = _lp_real      # ★本物の置き場へ必ず戻す★
+            _pm_t.STORE = _pm_real     # ★待ち行列の置き場も必ず戻す★
 
     def _gp_mat(flows=None, unmapped=None):
         m = {"adopted": {}, "ceilings": {"adopted": []},
