@@ -1,0 +1,18 @@
+#!/bin/sh
+# ★★push の前の関所★★
+#
+# ★★2026-08-28：この関所は、作った日から一度も動いていなかった★★
+#   2026-08-04 に `.git/hooks/pre-push` へ入れたが、
+#   このリポジトリは `core.hooksPath = scripts/git-hooks` を設定しており、
+#   ★その設定があると `.git/hooks` は丸ごと無視される★。
+#   ＝CLAUDE.md 鉄則5c が「機械的に止まるようにした」と書いている関所は、
+#   24日間ずっと素通りだった（実際、今日それで赤いまま公開した）。
+#   ★置き場をここへ移した★＝ここはリポジトリの中なので、
+#   ★PCを替えても付いてくる★（`.git/hooks` は付いてこない）。
+#   ★必要な設定は core.hooksPath だけ★（clone 直後は
+#     git config core.hooksPath scripts/git-hooks）。
+#
+# 中身は scripts/pre_push_check.py:
+#   ・記事データを触ったら crosscheck / audit を流す
+#   ・触ったスクリプトの守りを実際に壊して、試験が赤くなるか確かめる
+exec python scripts/pre_push_check.py
