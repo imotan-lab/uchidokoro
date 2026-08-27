@@ -302,8 +302,20 @@ def _ops_from_decision(path: str, rec: dict) -> list:
     return acts
 
 
+def _same_deciders(a, b) -> bool:
+    """判断者の顔ぶれが同じか（★大文字小文字と前後の空白は無視★）。"""
+    def _n(x):
+        return {str(v).strip().lower() for v in (x or []) if str(v).strip()}
+    return _n(a) == _n(b)
+
+
 DECISION_KEYS = ("schema_version", "slug", "finding_id",
-                 "source_sha256", "actions", "numbers_removed")
+                 "source_sha256", "actions", "numbers_removed",
+                 # ★「誰が決めたか」も指紋に入れる★（2026-08-27・Codexの4回目）
+                 #   ★入れていなかった★ので、合意のあとで判断者を
+                 #   書き換えても指紋は一致したままだった。
+                 #   適用のときはこの欄で「2AIで決めたか」を判定している。
+                 "decided_by")
 
 
 def decision_digest(dec) -> str:
@@ -354,6 +366,15 @@ def agree(fid: str, ops: list, recheck_name: str, decided_by: list) -> dict:
     if isinstance(ops, str):
         _dec_raw = _sj.read_json(ops, expect=dict)
         ops = _ops_from_decision(ops, rec)
+        # ★★決定ファイルの判断者と、合意の判断者が同じであること★★
+        #   （2026-08-27・Codexの4回目の指摘3）
+        #   ★直す前は別々に見ていた★ので、記録と決定ファイルで
+        #   「誰が決めたか」が食い違っていても分からなかった。
+        if not _same_deciders(_dec_raw.get("decided_by"), decided_by):
+            raise JournalError(
+                "決定ファイルの判断者と、合意の判断者が違います"
+                f"（{str(_dec_raw.get('decided_by'))[:30]} ／ "
+                f"{str(decided_by)[:30]}）")
     elif isinstance(ops, list):
         raise JournalError(
             "操作の配列ではなく、決定ファイルのパスを渡してください"
@@ -908,6 +929,33 @@ def _selftest() -> int:
             t("★★打ち直した操作の配列では合意できない★★"
               "／★合意と、実際に当てる決定を同じものにするため★",
               "決定ファイルのパス" in str(e))
+
+        # ★★判断者は「決定ファイルの値」と同じであること★★
+        #   （2026-08-27・Codexの4回目の指摘3）
+        #   ★直す前は別々に見ていた★ので、記録と決定ファイルで
+        #   「誰が決めたか」が食い違っていても分からなかった。
+        r6d = detect("zzz6d", "text_gone", "六番dの文です。",
+                     source_sha256="d" * 64)
+        f6d = r6d["finding_id"]
+        v6d = os.path.join(td, "v6d.md")
+        io.open(v6d, "w", encoding="utf-8").write("私の判定です。" * 5)
+        seal_claude(f6d, v6d)
+        record_codex(f6d, "d" * 64, "Codexの判定です。" * 3)
+        _p6d = _decfile(f6d, "zzz6d",
+                        [{"op": "drop", "text": "x", "why": "重複"}],
+                        sha="d" * 64, name="d6e")
+        try:
+            agree(f6d, _p6d, "text_gone", ["Claude", "だれか別の人"])
+            t("★★決定ファイルの判断者と食い違えば合意できない★★", False)
+        except JournalError as e:
+            t("★★決定ファイルの判断者と食い違えば合意できない★★",
+              "判断者が違います" in str(e))
+        _a6d = agree(f6d, _p6d, "text_gone", ["Claude", "codex"])
+        t("　（対照）同じ顔ぶれなら合意できる", _a6d["state"] == "AGREED")
+        t("★★「誰が決めたか」を書き換えると指紋も変わる★★"
+          "／★指紋に入れていなかったので、合意後に書き換えられた★",
+          decision_digest({"slug": "x", "decided_by": ["Claude", "codex"]})
+          != decision_digest({"slug": "x", "decided_by": ["Claude", "ほか"]}))
 
         # ⑧決まらなかったら、次の回をやり直せる
         r8 = detect("zzz8", "text_gone", "八番の文です。",

@@ -1449,6 +1449,23 @@ MUTATIONS = [
         "run": ["scripts/repair_journal.py"],
     },
     {
+        "why": "★合意の指紋に「誰が決めたか」を入れない"
+               "（合意後に判断者を書き換えられる）★",
+        "file": "scripts/repair_journal.py",
+        "before": '                 "decided_by")',
+        "after": "                 )",
+        "run": ["scripts/repair_journal.py"],
+    },
+    {
+        "why": "★決定ファイルの判断者と突き合わせない"
+               "（記録と決定で誰が決めたかが食い違う）★",
+        "file": "scripts/repair_journal.py",
+        "before": "        if not _same_deciders(_dec_raw.get"
+                  '("decided_by"), decided_by):',
+        "after": "        if False:",
+        "run": ["scripts/repair_journal.py"],
+    },
+    {
         "why": "★2AIに基本情報表を見せない（食い違いに気づけない）★",
         "file": "scripts/decide_now.py",
         # ★2行まとめて置き換える★（1行だけ切ると構文エラーになり、
