@@ -269,6 +269,18 @@ def gather(slug: str) -> dict:
     out["hints"] = out["candidates"]
     out["counts"] = {k: sum(1 for c in out["hints"] if c["kind"] == k)
                      for k in HINT_KINDS}
+    # ★★条件・範囲・打ち消しの語がある行を教える★★（2026-08-27）
+    #   ★止める判断には使わない★＝2AIが「意味が変わっていないか」を
+    #   見るときの**手がかり**。名簿で機械が判定するのはやめた。
+    for sec in out["article"]["sections"]:
+        for line in sec.get("body") or []:
+            hits = [w for w in HINT_MARKS if w in line]
+            if hits:
+                out["hints"].append(
+                    {"kind": "意味が変わりやすい語", "section": sec["title"],
+                     "words": hits[:5], "line": line[:80],
+                     "note": "この行を書き換えるときは、意味が変わっていないか"
+                             "2AIで確かめて meaning_why に理由を書く"})
     out["counts"]["_note"] = "★この数は機械が気づけた分だけ★（網羅ではない）"
     return out
 
@@ -429,12 +441,13 @@ def _numbers(s: str) -> list:
 #   ★断ってよい理由★＝打ち消しや大小を入れ替えるのは
 #     **事実を変える**ことであって、言い換えではない。
 #     事実を変えるには出典が要る（この道具の役目ではない）。
-# ★★確かめられた反転の語だけを入れる★★（2026-08-27）
-#   ★名簿を増やし続ける作りには限界がある★（Codexの4回目の指摘1）＝
-#   条件・範囲・論理の語は無数にあり、機械には意味が判定できない。
-#   ★ここにあるのは「本番データで実際に通ることを確かめたもの」だけ★。
-#   ★残りは運営者の判断★＝道具にできることを「消すだけ」に狭めるかどうか。
-FLIP_MARKS = (
+# ★★これは「手がかり」であって、判定の道具ではない★★
+#   （2026-08-27・運営者から「機械的に無理なことは2AIで判断しろ」）
+#   ★止める判断には使わない★＝gather が2AIに
+#   「この行には条件・範囲・打ち消しの語があります」と**教える**だけ。
+#   ★名簿で意味を判定しようとしたのが間違いだった★
+#   （名簿は無限に増えるし、機械には意味が分からない）。
+HINT_MARKS = (
     # 打ち消し
     "ない", "なく", "ません", "ませ", "無", "不可", "非",
     # 大小・範囲（★enen2 の「以内」→「以降」が実際に通っていた★）
@@ -445,7 +458,7 @@ FLIP_MARKS = (
 
 def _flips(s: str) -> list:
     """その文に出てくる「意味をひっくり返す印」。"""
-    return [w for w in FLIP_MARKS if w in str(s or "")]
+    return [w for w in HINT_MARKS if w in str(s or "")]
 
 
 _SHAPE_RE = None
@@ -461,13 +474,16 @@ def _shape(s: str) -> list:
     ★符号も見る★＝「+500枚」と「-500枚」は別物
       （数値だけ見ていると同じに見えてしまう）。
     """
+    # ★★意味の語は入れない★★（2026-08-27・運営者から）
+    #   ★名簿で「意味が変わったか」を機械に決めさせない★＝
+    #   名簿は無限に増えるし、機械には意味が分からない。
+    #   ここで見るのは★機械に分かること＝数値がどの言葉に付いているか★だけ。
+    #   （「通常500G」→「リセット500G」は構造の変化なので分かる）
+    #   意味の判断は2AIがして、理由を記録に残す（下の `meaning_why`）。
     global _SHAPE_RE
     if _SHAPE_RE is None:
         import re as _re3
-        _marks = "|".join(_re3.escape(w) for w in
-                          sorted(FLIP_MARKS, key=len, reverse=True))
-        _SHAPE_RE = _re3.compile(
-            r"[-−▲△+＋]?\d+(?:\.\d+)?|" + _marks)
+        _SHAPE_RE = _re3.compile(r"[-−▲△+＋]?\d+(?:\.\d+)?")
     txt = str(s or "")
     out = []
     for m in _SHAPE_RE.finditer(txt):
@@ -481,6 +497,17 @@ def _shape(s: str) -> list:
             tok += tail
         out.append((ws[-1] if ws else "", tok))
     return out
+
+
+def _wording(s: str) -> str:
+    """★言い回し★＝数値を伏せた見た目（2026-08-27）。
+
+    これが変われば「言葉づかいが変わった」＝★意味が変わりうる★。
+    ★機械はここまで★＝変わったことは分かるが、
+    意味が変わったかは分からない。だから2AIに答えさせる。
+    """
+    import re as _re4
+    return _re4.sub(r"[-−▲△+＋]?\d+(?:\.\d+)?", "#", str(s or ""))
 
 
 def _num_pairs(s: str) -> list:
@@ -685,10 +712,10 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
                 _sb, _sa = _shape(a["before"]), _shape(a["after"])
                 if _sb != _sa:
                     result["problems"].append(
-                        "数値・打ち消し・大小の並びが変わっています"
+                        "数値が付いている言葉が変わっています"
                         f"（{_sb[:3]} → {_sa[:3]}）"
-                        "（意味が変わる書き換えなので受け取りません。"
-                        "事実を変えるには出典が要ります）")
+                        "（どちらがどちらの値かを取り違えさせるので"
+                        "受け取りません）")
                     return result
             _blob = _content_blob(published)
             new_w = [w for w in _words(a["after"]) if w not in _blob]
@@ -713,6 +740,25 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
                         "中で閉じている必要があります。"
                         "出どころがあるなら numbers_from に逐語で）")
                     return result
+            # ★★言い回しが変わるなら、2AIが「意味は変わらない」と言うこと★★
+            #   （2026-08-27・運営者から「機械的に無理なことは2AIで判断しろ」）
+            #   ★機械には意味が分からない★＝
+            #   「650G以内」→「650G以降」が意味の反転かどうかは判定できない。
+            #   ★機械は「言い回しが変わった」ことだけを見つけて、
+            #     2AIに答えさせ、その理由を記録に残す★。
+            #   （理由の中身は機械が判定しない＝それは意味の判断だから）
+            if _wording(a["before"]) != _wording(a["after"]):
+                _mw = str(a.get("meaning_why") or "").strip()
+                if len(_mw) < 15:
+                    result["problems"].append(
+                        "言い回しが変わる書き換えです。"
+                        "意味が変わらない理由を meaning_why に書いてください"
+                        "（2AIで判断して記録に残すため・15字以上）: "
+                        f"{a['before'][:24]!r} → {a['after'][:24]!r}")
+                    return result
+                result.setdefault("meaning_judged", []).append(
+                    {"before": a["before"][:60], "after": a["after"][:60],
+                     "why": _mw[:120], "by": list(dec.get("decided_by") or [])})
             if nb != na:
                 # ★★数値が変わる言い換えは、出どころを言えたときだけ受け取る★★
                 #   （2026-08-22・運営者の指摘「台帳に回すな　その場で解決しろ」）
@@ -994,7 +1040,7 @@ def _selftest() -> int:
         r3 = apply_decision(dec([{"op": "replace",
                                   "before": "A の行です。",
                                   "after": "A の行は 999G です。",
-                                  "why": "数値を足す"}]))
+                                  "why": "数値を足す", "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました"}]))
         t("★★数値が変わる言い換えは受け取らない★★（新値発明禁止）",
           bool(r3["problems"]))
 
@@ -1181,7 +1227,7 @@ def _selftest() -> int:
         base_act = {"op": "replace",
                     "before": "天井1000Gに対して6.4割のラインです。",
                     "after": "当サイトの狙い目は640G〜です。",
-                    "why": "…"}
+                    "why": "…", "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました"}
 
         rk1 = apply_decision(dec_k(dict(base_act)))
         t("★★出どころを言わない数値の変更は受け取らない★★",
@@ -1271,7 +1317,7 @@ def _selftest() -> int:
         rm1 = apply_decision(dec_m([
             {"op": "replace", "before": "スルーカウントリセット",
              "after": "周期カウントリセット",
-             "why": "この機種にスルー天井は無い（本文と揃える）"}]),
+             "why": "この機種にスルー天井は無い（本文と揃える）", "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました"}]),
             apply_it=True)
         with io.open(os.path.join(td, "m.json"), encoding="utf-8") as f:
             _m1 = json.load(f)
@@ -1285,7 +1331,7 @@ def _selftest() -> int:
         rm2 = apply_decision(dec_m([
             {"op": "replace", "before": "等価400G〜",
              "after": "等価400G〜（CZ間）",
-             "why": "本文と同じ言い方にそろえる"}]), apply_it=True)
+             "why": "本文と同じ言い方にそろえる", "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました"}]), apply_it=True)
         with io.open(os.path.join(td, "m.json"), encoding="utf-8") as f:
             _m2 = json.load(f)
         t("★要約ボックスも直せる★",
@@ -1300,7 +1346,7 @@ def _selftest() -> int:
             {"op": "replace",
              "before": "この機種は2026年4月6日導入。解析は順次更新予定。",
              "after": "この機種は2026年4月6日導入。",
-             "why": "時間で嘘になる文（順次更新予定）を落とす"}]),
+             "why": "時間で嘘になる文（順次更新予定）を落とす", "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました"}]),
             apply_it=True)
         with io.open(os.path.join(td, "m.json"), encoding="utf-8") as f:
             _m3 = json.load(f)
@@ -1373,19 +1419,19 @@ def _selftest() -> int:
         rn1 = apply_decision(dec_n([
             {"op": "replace", "before": "天井は500Gです。",
              "after": "天井は500G以下です。", "why": "わざと：意味が反転"}]))
-        t("★★意味をひっくり返す書き換えは受け取らない★★"
-          "／★直す前は数値しか見ておらず、素通りしていた★",
+        # ★この記事に「以下」は無いので、機械の検査が先に断る★
+        #   （意味の判断まで行かない＝機械に分かることは機械が止める）
+        t("★記事に無い言葉なら、意味の判断を待たずに断る★",
           bool(rn1["problems"])
-          and "並びが変わって" in "".join(rn1["problems"]))
+          and "記事に無い言葉" in "".join(rn1["problems"]))
         # ★★ひらがなだけの反転も止める★★（2026-08-27・Codexの2回目）
         #   ★内容語だけ見ていたので、これは素通りしていた★
         rn1b = apply_decision(dec_n([
             {"op": "replace", "before": "天井は500Gです。",
              "after": "天井は500Gではありません。", "why": "わざと"}]))
-        t("★★ひらがなだけの打ち消しも止める★★"
-          "／★内容語だけ見ていたので素通りしていた★",
+        t("　ひらがなだけの打ち消しも、2AIの判断を求める",
           bool(rn1b["problems"])
-          and "並びが変わって" in "".join(rn1b["problems"]))
+          and "meaning_why" in "".join(rn1b["problems"]))
         rn1c = apply_decision(dec_n([
             {"op": "replace", "before": "天井は500Gです。",
              "after": "天井は500Gのスマスロです。", "why": "わざと：新しい語"}]))
@@ -1407,13 +1453,13 @@ def _selftest() -> int:
         rn2 = apply_decision(dec_n([
             {"op": "replace", "before": "朝一は周期カウントがリセットされます。",
              "after": "朝一は周期カウントリセットです。",
-             "why": "言い換え"}]))
+             "why": "言い換え", "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました"}]))
         t("　（対照）助詞をまたぐ組み替えは通る", not rn2["problems"])
 
         # ②数値の並びを入れ替える
         rn3 = apply_decision(dec_n([
             {"op": "replace", "before": "天井は500Gです。",
-             "after": "天井は500Gです。", "why": "同じ", "where": "body"}]))
+             "after": "天井は500Gです。", "why": "同じ", "where": "body", "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました"}]))
         t("　同じ内容の書き換えは通る（並び検査の対照）", not rn3["problems"])
 
         O = {"slug": "o", "sections": [
@@ -1434,9 +1480,11 @@ def _selftest() -> int:
                           "why": "わざと：役割の入れ替え"}]},
             ensure_ascii=False))
         rn4 = apply_decision(ro)
-        t("★★数値の並びを入れ替える言い換えは受け取らない★★"
-          "／★どちらがどちらの値かを丸ごと取り違えさせられる★",
-          bool(rn4["problems"]) and "並び" in "".join(rn4["problems"]))
+        t("★★数値が付いている言葉が変わる書き換えは受け取らない★★"
+          "／★どちらがどちらの値かを丸ごと取り違えさせられる★"
+          "／★これは機械に分かる（構造の変化）ので機械が止める★",
+          bool(rn4["problems"])
+          and "付いている言葉" in "".join(rn4["problems"]))
 
         # ③単位が違えば別の数値
         #   ★専用の記事で試す★＝他所に「500G」があると、
@@ -1472,7 +1520,7 @@ def _selftest() -> int:
           bool(rn6["problems"]) and "か所" in "".join(rn6["problems"]))
         rn7 = apply_decision(dec_n([
             {"op": "replace", "before": "通常500G", "after": "通常500G",
-             "where": "fact", "why": "表を直す"}]))
+             "where": "fact", "why": "表を直す", "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました"}]))
         t("　（対照）場所を言えば通る", not rn7["problems"])
 
         # ★★同じ場所に2つあっても数える★★（2026-08-27・Codexの2回目の指摘2）
@@ -1517,10 +1565,10 @@ def _selftest() -> int:
                           "why": "わざと：ラベルの入れ替え"}]},
             ensure_ascii=False))
         rn11 = apply_decision(rw)
-        t("★★数値とラベルの対応の入れ替えを止める（骨組みが変わる）★★"
-          "／★数値の並びが同じなので、並べ替えの検査に当たらなかった★",
+        t("★★数値とラベルの対応の入れ替えを止める★★"
+          "／★これは機械に分かる（構造の変化）ので機械が止める★",
           bool(rn11["problems"])
-          and "並びが変わって" in "".join(rn11["problems"]))
+          and "付いている言葉" in "".join(rn11["problems"]))
 
         # ── 2026-08-27・Codexの3回目（骨組みで見る）────────────
         X = {"slug": "x2", "sections": [
@@ -1546,27 +1594,26 @@ def _selftest() -> int:
         rx1 = apply_decision(dec_x(
             {"op": "replace", "before": "天井は500Gではありません。",
              "after": "天井は500Gです。", "why": "わざと：打ち消しを消す"}))
-        t("★★打ち消しを『消す』反転も止める★★"
-          "／★『印が増えたら断る』では、消す方向が素通りしていた★",
+        t("　打ち消しを消す書き換えも、2AIの判断を求める",
           bool(rx1["problems"])
-          and "並びが変わって" in "".join(rx1["problems"]))
+          and "meaning_why" in "".join(rx1["problems"]))
 
         rx2 = apply_decision(dec_x(
             {"op": "replace",
              "before": "通常は500G以上、リセットは600G以下です。",
              "after": "通常は500G以下、リセットは600G以上です。",
              "why": "わざと：大小の入れ替え"}))
-        t("★★大小の対応の入れ替えも止める（顔ぶれは同じ）★★",
+        t("　大小の入れ替えも、2AIの判断を求める",
           bool(rx2["problems"])
-          and "並びが変わって" in "".join(rx2["problems"]))
+          and "meaning_why" in "".join(rx2["problems"]))
 
         rx3 = apply_decision(dec_x(
             {"op": "replace", "before": "通常500G", "after": "リセット500G",
              "where": "body", "why": "わざと：ラベルの差し替え"}))
         t("★★数値が1つでもラベルの差し替えを止める★★"
-          "／★『2つ以上のときだけ見る』では素通りしていた★",
+          "／★これは機械に分かる（構造の変化）ので機械が止める★",
           bool(rx3["problems"])
-          and "並びが変わって" in "".join(rx3["problems"]))
+          and "付いている言葉" in "".join(rx3["problems"]))
 
         # ★★本番データで実際に通っていた反転★★（2026-08-27・Codexの4回目）
         #   enen2:「650G+α以内」→「以降」／bandori:「かつ」→「または」
@@ -1596,23 +1643,23 @@ def _selftest() -> int:
             {"op": "replace", "before": "通常B以上では650G+α以内で当選します。",
              "after": "通常B以上では650G+α以降で当選します。",
              "why": "わざと：範囲の反転"}))
-        t("★★範囲の反転（以内→以降）を止める★★"
-          "／★本番の enen2 で実際に通っていた★",
+        t("★★範囲の反転（以内→以降）は、2AIの判断を求める★★"
+          "／★本番の enen2 で、何も言わずに通っていた★",
           bool(ry1["problems"])
-          and "並びが変わって" in "".join(ry1["problems"]))
+          and "meaning_why" in "".join(ry1["problems"]))
 
         ry2 = apply_decision(dec_y(
             {"op": "replace", "before": "6周期以降かつスルー3以上が狙い目です。",
              "after": "6周期以降またはスルー3以上が狙い目です。",
              "why": "わざと：かつ→または"}))
-        t("★★論理の反転（かつ→または）を止める★★"
-          "／★本番の bandori で実際に通っていた★",
+        t("★★論理の反転（かつ→または）は、2AIの判断を求める★★"
+          "／★本番の bandori で、何も言わずに通っていた★",
           bool(ry2["problems"])
-          and "並びが変わって" in "".join(ry2["problems"]))
+          and "meaning_why" in "".join(ry2["problems"]))
 
         rx4 = apply_decision(dec_x(
             {"op": "replace", "before": "リセットのときの話です。",
-             "after": "リセットのときの話。", "why": "文体をそろえる"}))
+             "after": "リセットのときの話。", "why": "文体をそろえる", "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました"}))
         t("　（対照）骨組みが変わらない言い換えは通る", not rx4["problems"])
 
         # ★★判断者は「違う名前が2つ以上」★★（同・Codexの3回目）
@@ -1644,6 +1691,48 @@ def _selftest() -> int:
         t("★★記事の指紋の無い決定ファイルは受け取らない★★"
           "／★直す前は「書いてあれば照合する」だった★",
           _stops(lambda: apply_decision(_rns), "指紋"))
+
+        # ★★言い回しが変わるなら、2AIの判断を記録させる★★
+        #   （2026-08-27・運営者から「機械的に無理なことは2AIで判断しろ」）
+        #   ★機械には意味が分からない★ので、名簿で判定するのをやめた。
+        #   代わりに「言い回しが変わった」ことだけを見つけて2AIに答えさせる。
+        Z9 = {"slug": "z9", "sections": [
+            {"title": "天井・恩恵",
+             "body": ["天井は500Gです。", "ほかの行です。"]}]}
+        with io.open(os.path.join(td, "z9.json"), "w",
+                     encoding="utf-8", newline="\n") as f:
+            json.dump(Z9, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+
+        def dec_z9(act):
+            r = os.path.join(td, "dz9.json")
+            io.open(r, "w", encoding="utf-8").write(json.dumps(
+                {"schema_version": SCHEMA, "slug": "z9",
+                 "source_sha256": _sha_of("z9"),
+                 "decided_by": ["Claude", "codex"], "actions": [act]},
+                ensure_ascii=False))
+            return r
+
+        rz1 = apply_decision(dec_z9(
+            {"op": "replace", "before": "天井は500Gです。",
+             "after": "天井は500Gとなります。", "why": "文体をそろえる"}))
+        t("★★言い回しが変わるなら、2AIの判断が要る★★"
+          "／★機械には意味が分からないので、名簿で判定しない★",
+          bool(rz1["problems"])
+          and "meaning_why" in "".join(rz1["problems"]))
+
+        rz2 = apply_decision(dec_z9(
+            {"op": "replace", "before": "天井は500Gです。",
+             "after": "天井は500Gとなります。", "why": "文体をそろえる",
+             "meaning_why": "文末をそろえただけで、天井の値も条件も同じです"}))
+        t("　2AIが理由を書けば通る（理由の中身は機械が判定しない）",
+          not rz2["problems"] and rz2.get("meaning_judged"))
+
+        rz3 = apply_decision(dec_z9(
+            {"op": "replace", "before": "天井は500Gです。",
+             "after": "天井は500Gです。", "why": "同じ内容",
+             "where": "body"}))
+        t("　言い回しが変わらなければ、今までどおり通る", not rz3["problems"])
 
         # ⑱置き場の外を指せない
         _bad_slug = os.path.join(td, "dbad.json")

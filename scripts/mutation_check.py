@@ -1403,13 +1403,6 @@ MUTATIONS = [
         "run": ["scripts/decide_now.py"],
     },
     {
-        "why": "★骨組みに打ち消し・大小を入れない（意味の反転が通る）★",
-        "file": "scripts/decide_now.py",
-        "before": '            r"[-−▲△+＋]?\\d+(?:\\.\\d+)?|" + _marks)',
-        "after": '            r"[-−▲△+＋]?\\d+(?:\\.\\d+)?")',
-        "run": ["scripts/decide_now.py"],
-    },
-    {
         "why": "★判断者を件数だけで見る（同じ名前2つでも2AI扱い）★",
         "file": "scripts/decide_now.py",
         "before": "    if not isinstance(by, list) or len({str(x).strip().lower()",
@@ -1464,6 +1457,37 @@ MUTATIONS = [
                   '("decided_by"), decided_by):',
         "after": "        if False:",
         "run": ["scripts/repair_journal.py"],
+    },
+    {
+        "why": "★言い回しが変わっても2AIに聞かない"
+               "（意味の反転が黙って通る）★",
+        "file": "scripts/decide_now.py",
+        "before": '            if _wording(a["before"]) != _wording(a["after"]):',
+        "after": "            if False:",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★理由が空でも通す（2AIが判断した記録が残らない）★",
+        "file": "scripts/decide_now.py",
+        "before": "                if len(_mw) < 15:",
+        "after": "                if False:",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★行き詰まったら、2AIに聞かずすぐ人へ回す"
+               "（人が来るまで止まったまま）★",
+        "file": "scripts/grow_machine.py",
+        "before": "            if _n < STUCK_ASK_LIMIT:",
+        "after": "            if False:",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★うまく育っても回数を0に戻さない"
+               "（昔の失敗を数え続け、すぐ人へ回す）★",
+        "file": "scripts/grow_machine.py",
+        "before": "    _stuck_clear(slug)",
+        "after": "    pass",
+        "run": ["scripts/grow_machine.py"],
     },
     {
         "why": "★2AIに基本情報表を見せない（食い違いに気づけない）★",

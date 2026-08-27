@@ -788,6 +788,58 @@ def text_kept(old_detail: dict, new_detail: dict) -> list:
     return [f"前に載っていた内容が消える/変わる更新です: {' / '.join(gone[:3])}"]
 
 
+# ★★2AIで何回まで粘るか★★（2026-08-27・運営者の指示）
+#   「2AIで結論出して。人に頼らないで。本当にどうしてもの場合だけメール」
+STUCK_ASK_LIMIT = 3
+
+
+def _stuck_state() -> dict:
+    """控えを丸ごと読む（★読めないときは空★）。"""
+    try:
+        with open(STATE_PATH, encoding="utf-8") as f:
+            got = json.load(f)
+        return got if isinstance(got, dict) else {}
+    except Exception:                     # noqa: BLE001
+        return {}
+
+
+def _stuck_save(got: dict) -> bool:
+    """控えを書く（★書けなくても処理は止めない★）。"""
+    try:
+        tmp = f"{STATE_PATH}.{os.getpid()}.stuck.tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(got, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, STATE_PATH)
+        return True
+    except Exception as e:                # noqa: BLE001
+        print(f"  行き詰まりの回数を控えられません（続けます）: {e}")
+        return False
+
+
+def _stuck_count(slug: str, add: int = 0) -> int:
+    """その機種で「決まらなかった」回数（★機種ごとに数える★）。
+
+    ★別の機種の失敗を持ち越さない★／★うまく育った日は0に戻す★。
+    置き場は「見に行った日」の控えと同じファイル。
+    ★控えを書けなかったときは1回目扱い★＝いきなり人へ報告しない。
+    """
+    got = _stuck_state()
+    book = got.setdefault("grow_stuck", {})
+    n = int(book.get(slug) or 0) + add
+    if add:
+        book[slug] = n
+        if not _stuck_save(got):
+            return min(n, 1)
+    return n
+
+
+def _stuck_clear(slug: str) -> None:
+    """うまく育ったので、その機種の回数を0に戻す。"""
+    got = _stuck_state()
+    if (got.get("grow_stuck") or {}).pop(slug, None) is not None:
+        _stuck_save(got)
+
+
 def ledger_once(slug: str, title: str, detail: str,
                 severity: str = "MATERIAL") -> None:
     """★黙って止まり続けない★（2026-08-05・Codex102回目）
@@ -1095,11 +1147,30 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
             out.setdefault("notes", []).append(
                 f"まだ導入されていないので台帳へは積みません（登場 {_rel}）")
         else:
-            ledger_once(
-                slug, "確認済みだった内容を再現できません（育てる処理を止めています）",
-                " / ".join(lost + [p for p in out["problems"] if "消えます" in p])[:900]
-                + "／出典の一時的な不調かもしれません。旧い内容は公開されたままです。"
-                "人が出典を見て、直すか消すかを決めてください。")
+            # ★★人ではなく2AIへ回す★★（2026-08-27・運営者の指示）
+            #   ★直す前は、その場で台帳へ積んでいた★＝人が来るまで止まったまま。
+            #   1〜2回目は2AIに聞く。3回目でどうしても決まらなければ報告する。
+            _why = " / ".join(
+                lost + [p for p in out["problems"] if "消えます" in p])[:900]
+            _n = _stuck_count(slug, add=1)
+            if _n < STUCK_ASK_LIMIT:
+                out.setdefault("questions", []).append({
+                    "text": ("★2AIで決めてください★ " + slug
+                             + " で、前に載せた内容を今夜の材料で再現できません: "
+                             + _why
+                             + "／出典を取り直すか、別の出典を当たるか、"
+                             "その内容を落とすかを決めてください"
+                             f"（{_n}回目・{STUCK_ASK_LIMIT}回で報告します）"),
+                    "kind": "grow_stuck", "slug": slug, "round": _n})
+                out.setdefault("notes", []).append(
+                    f"2AIに聞きます（{_n}回目・台帳へは積みません）")
+            else:
+                ledger_once(
+                    slug,
+                    "確認済みだった内容を再現できません（育てる処理を止めています）",
+                    _why + f"／★2AIで{STUCK_ASK_LIMIT}回試しても決まりませんでした★"
+                    "／出典の一時的な不調かもしれません。"
+                    "旧い内容は公開されたままです。")
     if out["problems"]:
         return out
     try:
@@ -1107,6 +1178,10 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     except _pdz.DecisionError as e:
         out["problems"].append(f"新しい判定書が壊れています: {e}")
         return out
+    # ★★うまく育ったので、行き詰まりの回数を0に戻す★★（2026-08-27）
+    #   ★昔の失敗をいつまでも数えない★（数え続けると、次に1回詰まっただけで
+    #   すぐ人への報告になってしまう）。
+    _stuck_clear(slug)
     out["machine"], out["detail"] = machine, detail
     return out
 
@@ -2123,6 +2198,28 @@ def selftest() -> int:
           "／★直す前は永久に候補から消え、全体は成功に見えた★",
           _got_broken and "zzz_broken" in _got_broken[0])
         t("　壊れていない機種は今までどおり候補になる", _tg == ["zzz_ok"])
+
+        # ── 2026-08-27・行き詰まったら人ではなく2AIへ回す ────────
+        #   ★運営者の指示★「2AIで結論出して。人に頼らないで。
+        #     本当にどうしてもの場合だけメールで報告」
+        import tempfile as _tf_s
+        _keep_sp = globals()["STATE_PATH"]
+        _dir_s = _tf_s.mkdtemp()
+        try:
+            globals()["STATE_PATH"] = os.path.join(_dir_s, "s.json")
+            t("　はじめは1回目", _stuck_count("zzz_s", add=1) == 1)
+            t("　数え続ける", _stuck_count("zzz_s", add=1) == 2)
+            t("★★3回目で人へ回す（それまでは2AIに聞く）★★",
+              _stuck_count("zzz_s", add=1) == STUCK_ASK_LIMIT)
+            t("　機種ごとに数える（よその失敗を持ち越さない）",
+              _stuck_count("zzz_other", add=1) == 1)
+            _stuck_clear("zzz_s")
+            t("★うまく育ったら0に戻す（昔の失敗を数え続けない）★",
+              _stuck_count("zzz_s") == 0)
+        finally:
+            globals()["STATE_PATH"] = _keep_sp
+            import shutil as _sh_s
+            _sh_s.rmtree(_dir_s, ignore_errors=True)
 
         t("★★登場時期が分からないときは積む（安全側）★★",
           not _not_yet(""))

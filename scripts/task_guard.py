@@ -50,12 +50,17 @@ import sys as _sys_lp               # noqa: E402
 _sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
 import local_paths as _lp           # noqa: E402
 STATE_PATH = _lp.doc("task_guard.json")
-CODEX_ROUND_LIMIT = 3
+# ★★いったん上限なし★★（2026-08-27・運営者の指示）
+#   ★理由＝「ちゃんと通ったことがないので、まず通してから回数を決める」★
+#   0 = 上限なし。★走り続ける心配は無い★＝タスクには締切があり、
+#   そちらで必ず終わる。ここは「何回相談したか」を数えるだけになる。
+#   ★通し確認ができたら、実測をもとに回数を決め直す★
+CODEX_ROUND_LIMIT = 0
 # ★2AIへの質問（やり直し）は別勘定★（2026-08-12・依頼164のP1）
 #   同じ勘定にすると「質問に3回使うと新台の突き合わせが0回」になり、
 #   **新台の公開か、質問の解決か、どちらかが必ず欠ける晩**ができる。
 #   新台の枠を先に守り、質問には質問の枠を渡す。
-CODEX_ASK_ROUND_LIMIT = 3
+CODEX_ASK_ROUND_LIMIT = 0      # ★同上・いったん上限なし★
 # ★1日に触ってよい機種の数★（2026-08-21に 1 → 3・台帳#211）
 #   ★変えた理由＝入る量と出る量が釣り合っていなかった★
 #     2026-08-21に数えたら、台帳へ入るのが1日12.9件、出るのが1日1機種。
@@ -922,7 +927,8 @@ def codex_round(task: str, path: str = STATE_PATH, lane: str = "main") -> int:
         data = _load(path)
         e = _entry(data, task)
         used = int(e.get(key) or 0)
-        if used >= limit:
+        # ★0 は上限なし★（2026-08-27）＝数えるだけで断らない
+        if limit and used >= limit:
             raise GuardError(
                 f"Codexとの相談が上限（{limit}往復・{lane}）に達しました。"
                 f"結論づかず扱いで台帳に登録して終わってください")
@@ -2254,12 +2260,23 @@ def selftest() -> int:
           "／★ここが止まると、頻度の表（導入30日以内は毎日）が守れない★",
           _many3 == ["u%d" % i for i in range(12)])
 
-        for i in (1, 2, 3):
+        # ★★いまは上限なし（0）★★（2026-08-27・運営者の指示）
+        #   ★仕組みは残す★＝あとで回数を決め直すときに、また効くように。
+        for i in (1, 2, 3, 4, 5):
             codex_round("t", fp)
-        t("★★Codexの相談は上限で止まる（4往復目を拒否）★★",
-          raises(lambda: codex_round("t", fp), "上限"))
-        t("　上限はファイルに残る（落ちて再起動しても数え直しにならない）",
-          _load(fp)["tasks"]["t"]["codex_rounds"] == 3)
+        t("★★上限なし（0）なら、何回でも相談できる★★"
+          "／★まず通ることを確かめてから回数を決める、という運営者の判断★",
+          _load(fp)["tasks"]["t"]["codex_rounds"] == 5)
+        t("　回数はファイルに残る（落ちて再起動しても数え直しにならない）",
+          _load(fp)["tasks"]["t"]["codex_rounds"] == 5)
+        # ★対照★＝上限を入れれば、ちゃんと止まる
+        _keep_lim = globals()["CODEX_ROUND_LIMIT"]
+        try:
+            globals()["CODEX_ROUND_LIMIT"] = 5   # ★既に5回使っている★
+            t("　（対照）上限を入れれば止まる",
+              raises(lambda: codex_round("t", fp), "上限"))
+        finally:
+            globals()["CODEX_ROUND_LIMIT"] = _keep_lim
 
         t("★担当していない機種は書き換えられない★",
           raises(lambda: before_write("t", "enen", fp), "今日の担当"))
