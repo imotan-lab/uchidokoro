@@ -1106,6 +1106,7 @@ def selftest() -> int:
         t = (title if title is not None
              else f"{name} スロット 新台 天井 解析 | ちょんぼりすた")
         return (f"<title>{t}</title>"
+                '<a class="rating-btn">みんなの評価 (平均0)</a>'
                 f'<div id="hyouka">星の評価</div>'
                 f'<ul class="commentlist"><li>{posts}</li></ul>'
                 f'<div id="entry">'
@@ -1196,6 +1197,7 @@ def selftest() -> int:
         t0 = (title if title is not None
               else f"{_MN} スロット 新台 天井 解析 | ちょんぼりすた")
         return (f"<title>{t0}</title>"
+                '<a class="rating-btn">みんなの評価 (平均0)</a>'
                 f'<div id="hyouka">星の評価</div>'
                 f'<ul class="commentlist"><li>読者の書き込み</li></ul>'
                 f'<div id="entry"><div>機種名 {_MN}</div>'

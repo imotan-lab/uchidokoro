@@ -1816,6 +1816,7 @@ def selftest() -> int:
         #   それを逐語引用として記録・再検証できた。
         _ua_url = "https://chonborista.com/slot/orinpia-slot/264134/"
         _ua_html = ('<title>L試験機 スロット 新台 解析 | ちょんぼりすた</title>'
+                    '<a class="rating-btn">みんなの評価 (平均0)</a>'
                     '<div id="hyouka">星の評価</div>'
                     '<ul class="commentlist"><li>読者の書き込み '
                     '天井は999G と確認できました。</li></ul>'

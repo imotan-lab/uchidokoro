@@ -3251,6 +3251,7 @@ def selftest() -> int:
         #   ★本物の略称の題を使う★（普通の題で試すと関門を通らない＝5回やった失敗）
         _MN2 = "L転生王女と天才令嬢の魔法革命"
         _NICK2 = ("<title>【ガンゲイル(スマスロ)】解析情報まとめ 天井</title>"
+                  '<a class="rating-btn">みんなの評価 (平均0)</a>'
                   '<div id="hyouka">星</div>'
                   '<ul class="commentlist"><li>投稿</li></ul>'
                   f'<div id="entry"><div>機種名 {_MN2}</div>'
