@@ -1195,6 +1195,22 @@ MUTATIONS = [
         "after": "            if False:",
         "run": ["scripts/page_decision.py", "scripts/recheck.py"],
     },
+    # ─── 2026-08-27・台帳#485 待ち行列の新台へ記録できるか ───────
+    {
+        "why": "★空のURLも当てる（DMM待ちの機種へ誤って結び付く）★",
+        "file": "scripts/pending_machines.py",
+        "before": "    if not want:\n        return None\n    for it in",
+        "after": "    for it in",
+        "run": ["scripts/pending_machines.py"],
+    },
+    {
+        "why": "★待ち行列を鍵で探す形へ戻す"
+               "（2AIが決めた値を新台へ一件も記録できない）★",
+        "file": "scripts/confirmed_values.py",
+        "before": "        _hit = _pm.find_by_url(_pm.load(), official_url)",
+        "after": "        _hit = (_pm.load().get(\"items\") or {}).get(official_url)",
+        "run": ["scripts/confirmed_values.py"],
+    },
 ]
 
 

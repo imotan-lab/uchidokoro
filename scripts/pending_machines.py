@@ -118,6 +118,29 @@ def find_by_machine_id(data: dict, source_machine_id: str) -> dict | None:
     return None
 
 
+def find_by_url(data: dict, url: str) -> dict | None:
+    """★機種ページのURLで探す★（台帳#485）
+
+    ★鍵ではなく identity_url を見る★＝待ち行列の鍵は採番したID（q_0001…）。
+    ★空のURLは絶対に当てない★＝DMMのカレンダー待ちの機種は identity_url が
+    空なので、空どうしが一致すると**別の機種の欄へ保存できてしまう**。
+    ★末尾のスラッシュは落として比べる★（既存機種を引く枝と同じ物差し）。
+    ★移行前のURL（legacy_url）は見ない★＝取りに行かない決まりと揃える。
+    """
+    want = str(url or "").rstrip("/")
+    # ★★空のURLは絶対に当てない★★（ここ1か所で見る）
+    #   DMMのカレンダー待ちの機種は identity_url が空なので、
+    #   空どうしが一致すると**別の機種の欄へ保存できてしまう**。
+    #   ★同じことを内側でも見ない★＝内側は外側に助けられて一度も効かず、
+    #   壊しても試験が緑のままになる（2026-08-27・壊し方の道具が指摘）。
+    if not want:
+        return None
+    for it in (data or {}).get("items", {}).values():
+        if str((it or {}).get("identity_url") or "").rstrip("/") == want:
+            return it
+    return None
+
+
 def find_by_core(data: dict, name: str):
     """★機種名の芯が完全一致するもの★（DMMにまだ載っていない控えとの結び付け用）
 
@@ -450,6 +473,22 @@ def selftest() -> int:
     t("　公式が名前や登場月を書き換えたら追従する",
       d["items"]["q_0001"]["name"] == "テスト機（改名）"
       and d["items"]["q_0001"]["release"] == "2026-10")
+
+    # ── 2026-08-27・台帳#485 URLで探す ──────────────────────────
+    dU = _empty()
+    add(dU, "URLのある機種", DMM + "5086", "m", "2026-10",
+        source_machine_id="5086")
+    add(dU, "DMM待ちの機種", "", "m", "2026-11", state=AWAITING_DMM_ID)
+    t("★★機種ページのURLで引ける（鍵は採番IDなので鍵では引けない）★★"
+      "／★これが無いと2AIが決めた値を新台へ記録できない★",
+      (find_by_url(dU, DMM + "5086") or {}).get("name") == "URLのある機種")
+    t("　末尾のスラッシュは無視する",
+      (find_by_url(dU, DMM + "5086/") or {}).get("name") == "URLのある機種")
+    t("★★空のURLは絶対に当てない（DMM待ちの機種へ誤って結び付く）★★",
+      find_by_url(dU, "") is None)
+    t("　知らないURLは何も返さない", find_by_url(dU, DMM + "9999") is None)
+    t("　採番IDそのものでは引けない（鍵はURLではない）",
+      find_by_url(dU, "q_0001") is None)
 
     t("★記事にできたら外す★", done(d, "q_0001") and not d["items"])
     t("　無いものを外そうとしても壊れない", done(d, "q_9999") is False)

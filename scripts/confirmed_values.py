@@ -36,8 +36,10 @@
 使い方:
   # 記録する（★2AIが一致し、逐語を機械が照合できたときだけ★）
   python scripts/confirmed_values.py --record --slug prskkm --field ceiling \\
-      --value-file <値のJSON> --source "p-world|https://…|天井は1000G+α" \\
-      --source "nana-press|https://…|通常時1000G+αで天井" \\
+      --value-file <値のJSON> --source "https://…|天井は1000G+α" \\
+      --source "https://…|通常時1000G+αで天井" \\
+  # ★出典は「URL|逐語の引用」の2つ★（発行者は名乗らせない＝
+  #   URLのホストから機械が引く。名乗らせると別ホストへ付け替えられる）
       --by claude,codex --why "同じ原文を読んで一致"
   python scripts/confirmed_values.py --list [--slug prskkm]
   python scripts/confirmed_values.py --forget --slug prskkm --field ceiling
@@ -955,15 +957,19 @@ def bind_machine(official_url: str) -> tuple:
     if not slug:
         raise ConfirmedError(f"公式URLから機種の名前を作れません: {official_url}")
     # ①待ち行列（まだ登録されていない新台）
+    #   ★★探すのは pending_machines に任せる★★（2026-08-27・台帳#485）
+    #   ★直す前は待ち行列の「鍵」を公式URLだと思って比べていた★＝
+    #   待ち行列は採番したID（q_0001…）が鍵なので永久に一致せず、
+    #   ★2AIが正しく答えても記録できない★状態が5晩続いていた
+    #   （実測：8件一致したのに1件も保存できなかった）。
+    #   ★形を知っている側に聞く★＝同じ規則を2か所に書かない。
     try:
-        pend = _sj.read_json(
-            _lp.doc("add_machine_pending.json"),
-            expect=dict)
-        for u, it in (pend.get("items") or {}).items():
-            if u.rstrip("/") == str(official_url).rstrip("/"):
-                return slug, str(it.get("name") or "")
+        import pending_machines as _pm
+        _hit = _pm.find_by_url(_pm.load(), official_url)
+        if _hit:
+            return slug, str(_hit.get("name") or "")
     except Exception:                      # noqa: BLE001
-        pass
+        pass                    # ★読めないときは②へ（最後は断るので安全側）★
     # ②すでに登録されている機種
     #   ★公式URLの完全一致で引く★（2026-08-10・依頼134 P0-3）
     #     URLの末尾だけでslugを作るので、待ち行列の機種のURL末尾が
@@ -2378,6 +2384,43 @@ def selftest() -> int:
       _src_ng(_one + [{"publisher": "chonborista",
                        "url": "https://chonborista.com/b",
                        "quote": "x"}], "bonus_prob"))
+
+    # ── 2026-08-27・台帳#485 待ち行列の新台へ記録できるか ────────
+    #   ★本番と同じ順で通す★＝待ち行列は本物の add()／save() で作る。
+    #   ★直す前は5晩連続で「1件も記録できない」状態だった★
+    #   （2AIが8件で一致したのに、入口で全部落ちていた）。
+    import pending_machines as _pm485
+    import shutil as _sh485
+    _keep485 = _pm485.STORE
+    _dir485 = tempfile.mkdtemp()
+    try:
+        _pm485.STORE = os.path.join(_dir485, "add_machine_pending.json")
+        _q485 = _pm485._empty()
+        _pm485.add(_q485, "通し試験の新台",
+                   "https://p-town.dmm.com/machines/59901", "m", "2026-12",
+                   source_machine_id="59901")
+        _pm485.add(_q485, "DMM待ちの新台", "", "m", "2026-12",
+                   state=_pm485.AWAITING_DMM_ID)
+        _pm485.save(_q485)
+        # ★例外を受け止めて❌として数える★（2026-08-27）
+        #   ★直す前は、壊すと試験そのものが死んでいた★＝
+        #   構文エラーと区別がつかず、守りの証拠にならない。
+        try:
+            _got485 = bind_machine("https://p-town.dmm.com/machines/59901")
+        except Exception:                                    # noqa: BLE001
+            _got485 = None
+        t("★★★通し：待ち行列の新台を公式URLから引ける★★★"
+          "／★これが壊れていて、2AIの結論が5晩ぶん捨てられていた★",
+          _got485 == ("dmm_59901", "通し試験の新台"))
+        _ok485 = False
+        try:
+            bind_machine("https://p-town.dmm.com/machines/59902")
+        except ConfirmedError:
+            _ok485 = True
+        t("　待ち行列に無いURLは、いままでどおり断る", _ok485)
+    finally:
+        _pm485.STORE = _keep485
+        _sh485.rmtree(_dir485, ignore_errors=True)
 
     ng = sum(1 for _, o in results if not o)
     print()

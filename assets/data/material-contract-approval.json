@@ -12,7 +12,7 @@
   "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
   "scripts/blocked_hosts.py": "553ac0a6f0f0baf563100458937efa167826c4347f815ace1a70e39769909b7d",
   "scripts/ceiling_lookup.py": "ad54309152dd7fe19c56ff574f7b468a70ef994e456b4a0a2c2f4a68fb00cf00",
-  "scripts/confirmed_values.py": "3b8304acf685cbd4b0b2aa1a38078f4773d82d6484a2af7c2e54b6952e663ac5",
+  "scripts/confirmed_values.py": "53f17b898345c7b13c2f3965ada0a5e6ba2c84a3c60cdcd89e79daef5eb06b05",
   "scripts/cz_lookup.py": "24727d5876e0a5e233ff6c913e96ae3d3fc50d7e5d5869b019e443bde374b02b",
   "scripts/directory_index.py": "a758913881d5b7b6105069e5f3dfcb3e5a64aa2054578094d517166240ad2e21",
   "scripts/dmm_calendar.py": "ad0ae2ffb3977307cf361e4a137288e9bccdd1f15fb43e560aa629c5942a6930",
@@ -98,6 +98,7 @@
    "model_code_lookup",
    "new_machine_watch",
    "page_decision",
+   "pending_machines",
    "source_lineage",
    "spec_lookup",
    "user_area"
@@ -205,5 +206,6 @@
    "ceiling_lookup",
    "new_machine_watch"
   ]
- }
+ },
+ "_deps_changed_why": "confirmed_values が pending_machines を取り込むようにしました（台帳#485・2026-08-27）。\n\n★なぜ取り込むか★\n確定値の受け口（bind_machine）は「その公式URLはどの機種か」を正本から引きます。\nまだ記事になっていない新台は、待ち行列にしか居ません。\n\n★直す前は、待ち行列の中身を自分で読んでいました★＝\n待ち行列の**鍵**を公式URLだと思って比べていたので、\n鍵が採番ID（q_0001…）に変わったあと永久に一致せず、\n★2AIが決めた値を新台へ1件も記録できない★状態が5晩続きました\n（実測：8件で一致したのに全部落ちていた）。\n\n★同じ規則を2か所に書かない★＝待ち行列の形を知っているのは\npending_machines なので、探す口をそちらに作って呼びます\n（`find_by_url`）。自前で読み直すと、次に形が変わったとき同じ事故が起きます。\n\n★契約は閉じています★\npending_machines は「新台を記事にして公開するまでの一式」として\n`build_pages_artifact.py --approve` の承認対象に入っています。\n＝呼ばれる側を黙って書き換えて、採否を変えることはできません。\n\n★採否そのものは変わりません★\nbind_machine が返すのは slug と正式名称だけで、\n「その値を採ってよいか」は今までどおり出典・逐語・判断者の検査が決めます。\nここが直っても、根拠の無い値は通りません。\n\n★空のURLは絶対に当てません★\nDMMのカレンダー待ちの機種は identity_url が空です。\n空どうしが一致すると**別の機種の欄へ保存できてしまう**ので、\n`find_by_url` は空を1か所で断ります（壊すと試験が赤くなることを確認済み）。"
 }
