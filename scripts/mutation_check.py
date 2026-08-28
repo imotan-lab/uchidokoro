@@ -1531,6 +1531,14 @@ MUTATIONS = [
         "run": ["scripts/pre_push_check.py"],
     },
     {
+        "why": "★読者に出ない項目まで「材料あり」と数える"
+               "（中身ゼロのページが黙って公開される）★",
+        "file": "scripts/add_machine_run.py",
+        "before": "           if _cv.topic_of(k)}",
+        "after": "           if k != \"model_code\"}",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
         "why": "★写している間に消えたファイルで、写しごと失敗する"
                "（同時に別の作業をしていると、試験が丸ごと落ちる）★",
         "file": "scripts/publish_new_machine.py",

@@ -2670,9 +2670,21 @@ def usable_material(mat: dict) -> dict:
     ★天井・AT・CZ・リセットの採用分も数える★（Codex57回目／依頼160のP1-6）
       基本スペック直下しか見ておらず、天井などが2媒体一致していても
       「材料なし」で記事を永久に作れなかった。
+
+    ★★読者に出る項目だけを数える★★（2026-08-29・台帳#497／自分で再現した）
+      ★直す前は「型式名」1つだけを名簿で除いていた★ので、
+      同じく読者に出ない「型」（machine_profile）が数に入っていた。
+      ＝他に何も採れていない機種で型だけを確定させると、
+        機種名と登場時期だけ・7つの箱すべて「未確認です」という
+        ★読者に届く事実がゼロのページ★が公開されていた。
+      ★名簿に足すだけにしない★＝次に読者非表示の項目が増えたら同じことが起きる。
+      「読者に出る項目か」の正本は `confirmed_values.topic_of` なので、そこを見る。
+      ★まとめて除外してはいけない★＝`ceiling_state = NONE` は
+      「この機種に天井はありません」という**読者向けの事実**。
+      一括で外すと、天井なし機種が永久に作れなくなる。
     """
     out = {k: v for k, v in (mat.get("adopted") or {}).items()
-           if k != "model_code"}
+           if _cv.topic_of(k)}
     for key in MODULE_FIELDS:
         for i, c in enumerate((mat.get(key) or {}).get("adopted") or []):
             out[f"{key}#{i}"] = c
@@ -4033,6 +4045,34 @@ def selftest() -> int:
               not usable_material(_only_model)
               and all(len(v) == 1 for v in _mods.values())
               and set(_mods["resets"]) == {"resets#0"})
+            # ★★読者に届く事実がゼロのページを作らない★★
+            #   （2026-08-29・台帳#497／自分で再現した）
+            #   ★型（machine_profile）は読者に出ない★＝ページの品質ラインを
+            #   選ぶだけの裏方。それだけで「材料あり」と数えていたので、
+            #   機種名と登場時期だけ・7つの箱すべて「未確認です」という
+            #   ページが黙って公開される入口になっていた。
+            def _only(**kw):
+                return {"adopted": dict(kw), "ceilings": {"adopted": []},
+                        "at_specs": {"adopted": []}, "czs": {"adopted": []},
+                        "resets": {"adopted": []}, "gameplays": {"adopted": []}}
+
+            _prof = {"value": {"profile": "AT_CZ"}, "sources": ["a"]}
+            t("★★型だけでは「材料あり」と数えない★★"
+              "／★読者に出ない項目なので、中身ゼロのページが公開されていた★",
+              not usable_material(_only(machine_profile=_prof)))
+            t("　型式名と型だけでも数えない",
+              not usable_material(_only(model_code={"value": "L/1"},
+                                        machine_profile=_prof)))
+            t("★★『天井はありません』は読者に出る事実なので数える★★"
+              "／★裏方をまとめて外すと、天井なし機種が永久に作れなくなる★",
+              bool(usable_material(_only(
+                  ceiling_state={"value": {"state": "NONE"},
+                                 "sources": ["a", "b"]}))))
+            t("　読者に出る値（コイン持ち）は今までどおり数える",
+              bool(usable_material(_only(
+                  games_per_50={"value": {"games": 31.0},
+                                "sources": ["a", "b"]}))))
+
             t("★★機種名の芯が変わったURLは公開へ進めない★★"
               "（使い回し検知が公開を止めていなかった・Codex41回目）",
               "_name_conflict" in inspect.getsource(fill_missing)
