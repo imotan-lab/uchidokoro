@@ -376,12 +376,16 @@ def main() -> int:
         print("   対象: " + " / ".join(_touched))
         _mf = subprocess.run(
             [sys.executable, os.path.join(BASE, "scripts", "mutation_check.py"),
-             "--files", ",".join(_touched)],
+             # ★時間のかかるものは飛ばす★（2026-08-28・push が10分で切れた）
+             #   ★飛ばした件数は必ず出る★ので「全部OK」には見えない。
+             #   飛ばした分は CI と、手元で全部回したときに見る。
+             "--fast", "--files", ",".join(_touched)],
             cwd=BASE, capture_output=True, text=True, encoding="utf-8",
             errors="replace", env=env)
         for _l in (_mf.stdout or "").splitlines():
             if _l.startswith("  ★ND") or _l.startswith("  ★NG") \
                     or "守られていません" in _l or "試したものは" in _l \
+                    or "飛ばしました" in _l \
                     or "試験はありません" in _l:
                 print("   " + _l.strip())
         if _mf.returncode != 0:
