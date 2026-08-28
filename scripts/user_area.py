@@ -1087,16 +1087,35 @@ def selftest() -> int:
           "「みんなの評価（平均◯）」がそのまま材料に入っていた★",
           _ok2 and "みんなの評価" not in visible_text(_c2))
 
-        # ★評価が付いていない機種の形★（評価の箱だけ名前を変える）
+        # ★★実際の「評価なし」ページで確かめる★★（2026-08-28・Codexの11回目）
+        #   ★作り物で代用しない★＝置き換えで作ると、
+        #   置き換えが効いていなくても試験が通る（実際、確かめていなかった）。
+        _f3 = os.path.join(_fx2, "chonborista_no_review.html")
+        if os.path.isfile(_f3):
+            _u3 = "https://chonborista.com/slot/yamasa-slot/263531/"
+            _h3 = open(_f3, encoding="utf-8").read()
+            t("　（前提）その試料には評価の箱が無い",
+              'id="hyouka"' not in _h3 and 'class="rating-btn"' in _h3)
+            _ok3 = True
+            try:
+                clean_html(_h3, _u3)
+            except Exception:                  # noqa: BLE001
+                _ok3 = False
+            t("★★評価が付いていない機種の実ページも出典に使える★★"
+              "／★これを止めていたので、新台とマイナー機種が"
+              "この名鑑を使えなかった★", _ok3)
+
+        # ★置き換えで作る形も残す★（★効いたことを必ず確かめる★）
         _h_no = _h2.replace('id="hyouka"', 'id="hyouka-none"')
-        _ok3 = True
+        t("　（前提）置き換えが実際に効いている"
+          "／★効いていなくても通る試験を書いていた★",
+          _h_no != _h2 and 'id="hyouka"' not in _h_no)
+        _ok3b = True
         try:
             clean_html(_h_no, _u2)
         except Exception:                      # noqa: BLE001
-            _ok3 = False
-        t("★★評価が付いていない機種のページも出典に使える★★"
-          "／★これを止めていたので、新台とマイナー機種が"
-          "この名鑑を使えなかった★", _ok3)
+            _ok3b = False
+        t("　評価の箱だけ消した形でも使える", _ok3b)
 
         # ★対照★＝枠の名前が変わったら気づく
         _h_bad = _h2.replace('class="rating-btn"', 'class="rating-btn-x"')
