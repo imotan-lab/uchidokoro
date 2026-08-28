@@ -1531,6 +1531,31 @@ MUTATIONS = [
         "run": ["scripts/pre_push_check.py"],
     },
     {
+        "why": "★重複として通した消し方が、同じ文を全部消せる"
+               "（数値の無い事実が記事から丸ごと消える）★",
+        "file": "scripts/decide_now.py",
+        "before": "        if _have - _n < 1:",
+        "after": "        if False:",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★合図を確かめずに「自分のサーバー」と言う"
+               "（同時に動かすと、他人の応答を自分のものと数える）★",
+        "file": "scripts/render_check.py",
+        "before": "        if nonce in _read(log_path):",
+        "after": "        if True:",
+        "run": ["scripts/render_check.py"],
+    },
+    {
+        "why": "★新しい枝を送るとき、範囲の始まりに「向こうに無い」を使う"
+               "（git が読めず、その push を一切検査できない）★",
+        "file": "scripts/pre_push_check.py",
+        "before": "            out.append(local_sha)"
+                  "          # 新しい枝＝そのコミットまで全部",
+        "after": "            out.append(f\"{remote_sha}..{local_sha}\")",
+        "run": ["scripts/pre_push_check.py"],
+    },
+    {
         "why": "★数値の並びが変わっても通す"
                "（ラベルの中の数字で係り先が空になり、入れ替えが素通りする）★",
         "file": "scripts/decide_now.py",

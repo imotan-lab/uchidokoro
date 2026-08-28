@@ -2315,6 +2315,54 @@ def _selftest() -> int:
           bool(_g8h["problems"])
           and "付き先が違います" in "".join(_g8h["problems"]))
 
+        # ── 2026-08-28・Codexの10回目 ──────────────────────────
+        #   ★重複として通した消し方で、同じ文を**全部**消せた★
+        #   1件ずつの検査は「同じ節にもう1つある」を**変更前の記事**で見るので、
+        #   同じ「消す」を並べると全部そろって許可された。
+        #   ★最後の数え直しは数値しか見ない★ので、
+        #   数値の無い文は素通り＝事実が記事から丸ごと消えた（自分で再現した）。
+        S10 = {"slug": "s10", "sections": [
+            {"title": "朝一・リセット情報",
+             "body": ["設定変更後はモードが変わります。",
+                      "設定変更後はモードが変わります。",
+                      "別の行です。"]},
+            {"title": "天井・恩恵",
+             "body": ["天井は500Gです。", "天井は500Gです。",
+                      "天井は500Gと書いてあります。"]}]}
+        with io.open(os.path.join(td, "s10.json"), "w",
+                     encoding="utf-8", newline="\n") as f:
+            json.dump(S10, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+
+        def dec_s10(acts, nm="ds10"):
+            r = os.path.join(td, nm + ".json")
+            io.open(r, "w", encoding="utf-8").write(json.dumps(
+                {"schema_version": SCHEMA, "slug": "s10",
+                 "source_sha256": _sha_of("s10"),
+                 "decided_by": ["Claude", "codex"], "actions": acts},
+                ensure_ascii=False))
+            return r
+
+        # ★狙った1件だけが効く材料★＝数値が無いので、
+        #   最後の「数値が消えていないか」の検査は当たらない（罠④よけ）
+        _d10 = {"op": "drop", "text": "設定変更後はモードが変わります。",
+                "why": "重複を消す"}
+        r101 = apply_decision(dec_s10([dict(_d10), dict(_d10)]))
+        t("★★同じ文を全部消す決定は受け取らない★★"
+          "／★数値の無い文だと最後の数え直しも素通りするので、"
+          "事実が記事から丸ごと消えた★",
+          bool(r101["problems"])
+          and "全部消そうとしています" in "".join(r101["problems"]))
+
+        _d10b = {"op": "drop", "text": "天井は500Gです。", "why": "重複を消す"}
+        r102 = apply_decision(dec_s10([dict(_d10b), dict(_d10b)], "ds10b"))
+        t("　数値がある場合も、全部消す決定は受け取らない",
+          bool(r102["problems"]))
+
+        # ★対照★＝1つだけ消すのは今までどおり通る
+        r103 = apply_decision(dec_s10([dict(_d10)], "ds10c"))
+        t("　（対照）2つのうち1つを消すのは通る", not r103["problems"])
+
         # ── 2026-08-28・Codexの9回目 ───────────────────────────
         S9 = {"slug": "s9", "sections": [
             {"title": "設定示唆まとめ",
