@@ -991,11 +991,22 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
                 #   「残っている」に見えた。
                 # ★同じ入れ物の中で2つ以上あるときだけ★（2026-08-27）
                 lost = [] if _dup_count(d, a["text"]) >= 2 else nums
-                if not lost:
+                _dw0 = str(a.get("meaning_why") or "").strip()
+                if not lost and len(_dw0) < 15:
                     # ★★機械が「重複」と認めた消し方を覚えておく★★
                     #   （2026-08-28・Codexの10回目の指摘1）
                     #   計画ができたあとに「1つ以上残るか」を確かめるため。
-                    _dup_ok.append(a["text"])
+                    # ★★1件ごとに覚える★★（2026-08-28・Codexの11回目）
+                    #   ★直す前は「文面」で覚えていた★ので、
+                    #   同じ文の2件目に2AIが理由を書いても、
+                    #   1件目と同じ文面なので機械扱いのままで、
+                    #   ★「理由を書けば通る」と案内しているのに通らなかった★。
+                    _dup_ok.append(id(a))
+                elif not lost:
+                    # ★正しい理由が付いた消し方は、2AIの側★（記録に残す）
+                    result.setdefault("meaning_judged", []).append(
+                        {"drop": a["text"][:60], "why": _dw0[:120],
+                         "by": list(dec.get("decided_by") or [])})
                 if lost:
                     # ★★機械で「重複だ」と言い切れないときは2AIへ★★
                     #   （2026-08-27・Codexの5回目の指摘2）
@@ -1112,7 +1123,7 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
     #   ★事実が記事から丸ごと消えた★（数値の無い文は最後の数え直しも素通り）。
     _plan_drop = {}
     for _k, _si, _bi, _a in plan:
-        if _k == "drop" and _a.get("text") in _dup_ok:
+        if _k == "drop" and id(_a) in _dup_ok:
             _plan_drop[(_si, _a["text"])] = \
                 _plan_drop.get((_si, _a["text"]), 0) + 1
     for (_si, _tx), _n in _plan_drop.items():
@@ -2362,6 +2373,26 @@ def _selftest() -> int:
         # ★対照★＝1つだけ消すのは今までどおり通る
         r103 = apply_decision(dec_s10([dict(_d10)], "ds10c"))
         t("　（対照）2つのうち1つを消すのは通る", not r103["problems"])
+
+        # ★★2AIが理由を書いた1件は、機械の勘定に入れない★★
+        #   （2026-08-28・Codexの11回目）
+        #   ★直す前は「文面」で覚えていた★ので、
+        #   2件目に理由を書いても1件目と同じ文面で機械扱いのままだった
+        #   ＝「理由を書けば通る」と案内しているのに通らなかった。
+        r104 = apply_decision(dec_s10(
+            [{"op": "drop", "text": "設定変更後はモードが変わります。",
+              "why": "重複を消す"},
+             {"op": "drop", "text": "設定変更後はモードが変わります。",
+              "why": "残る1件も消す",
+              "meaning_why": "同じ内容が別の節に書かれているため、"
+                             "ここには残さないと2AIで決めました"}],
+            "ds10d"))
+        t("★★最後の1件は、2AIが理由を書けば消せる★★"
+          "／★案内どおりに理由を書いても通らなかった★",
+          not r104["problems"])
+        t("　その判断が記録に残る",
+          any("設定変更後" in str(x.get("drop", ""))
+              for x in (r104.get("meaning_judged") or [])))
 
         # ── 2026-08-28・Codexの9回目 ───────────────────────────
         S9 = {"slug": "s9", "sections": [

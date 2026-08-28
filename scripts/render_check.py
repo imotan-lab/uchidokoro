@@ -83,7 +83,14 @@ def served_count(log_path: str) -> int:
         return 0
 
 
-def _start(port: int, log_path: str):
+def _spawn(port: int, log):
+    """★配信の子を起こす★（試験ではここだけ差し替える）"""
+    return subprocess.Popen(
+        [sys.executable, "-m", "http.server", str(port), "--bind", HOST],
+        cwd=BASE, stdout=subprocess.DEVNULL, stderr=log)
+
+
+def _start(port: int, log_path: str, spawn=None):
     """★そのポートで自分のサーバーを起こし、本当に自分のものか確かめる★
 
     ★空きを確かめてから bind するまでに隙間がある★
@@ -97,9 +104,7 @@ def _start(port: int, log_path: str):
     戻り値: (子プロセス, 記録ファイル) ／ 自分のものでなければ (None, None)
     """
     log = open(log_path, "w", encoding="utf-8")
-    srv = subprocess.Popen(
-        [sys.executable, "-m", "http.server", str(port), "--bind", HOST],
-        cwd=BASE, stdout=subprocess.DEVNULL, stderr=log)
+    srv = (spawn or _spawn)(port, log)
     for _ in range(50):
         if srv.poll() is not None:         # ★子が死んでいる＝bind に失敗★
             break
@@ -233,18 +238,41 @@ def selftest() -> int:
       served_count(os.path.join(BASE, ".render_check_no_such.log")) == 0)
 
     # ★★同時に動かしても、他人の応答を自分のものと数えない★★
-    #   （2026-08-28・Codexの10回目の指摘2）
-    #   ★空きを確かめてから bind するまでに隙間がある★＝
-    #   同時に2本動くと両方が同じポートを選び、片方だけが bind に成功する。
-    #   ★負けた側が勝った側の記録を見て「自分が応答した」と読む★のが、
-    #   まさに直したかった事故と同じ型。
-    _other = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    _other.bind((HOST, 0))
-    _other.listen(1)
-    _taken = _other.getsockname()[1]
+    #   （2026-08-28・Codexの10回目の指摘2／11回目で試験を決定的にした）
+    #   ★はじめの試験は狙った守りを試していなかった★＝
+    #   相手が素の口で掴んでいると子が bind に失敗して死ぬので、
+    #   ★合図の確認まで進まない★（しかもOSで結果が変わる）。
+    #   → ①応答する別のサーバーを置く ②「生きているだけの子」を渡す
+    #     ＝合図が自分の記録に出ないから断る、を確かめる。
+    # ★名乗り（Serving HTTP on … port N）は**標準出力**に出る★
+    #   （2026-08-28・ここを標準エラーから読もうとして2回固まった）
+    #   ★-u を付ける★＝パイプだと溜め込まれて流れてこない
+    _other = subprocess.Popen(
+        [sys.executable, "-u", "-m", "http.server", "0", "--bind", HOST],
+        cwd=BASE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    _taken = 0
     _lg = os.path.join(BASE, ".render_check_ctrl.log")
     try:
-        _srv, _log = _start(_taken, _lg)
+        for _ in range(80):
+            _ln = _other.stdout.readline().decode("utf-8", "replace")
+            if not _ln:
+                break
+            _m = re.search(r"port (\d+)", _ln)
+            if _m:
+                _taken = int(_m.group(1))
+                break
+        if not _taken:                     # 名乗りが読めない環境向けの代わり
+            _taken = pick_port()
+        t("　（前提）応答する別のサーバーが立っている",
+          _taken > 0 and not port_free(_taken))
+
+        def _fake(port, log):
+            """★生きているだけの子★（配信はしない）"""
+            return subprocess.Popen(
+                [sys.executable, "-c", "import time; time.sleep(30)"],
+                stdout=subprocess.DEVNULL, stderr=log)
+
+        _srv, _log = _start(_taken, _lg, spawn=_fake)
         if _srv:
             _srv.terminate()
             try:
@@ -253,11 +281,20 @@ def selftest() -> int:
                 _srv.kill()
         if _log:
             _log.close()
-        t("★★他人が掴んでいるポートを、自分のものと言わない★★"
-          "／★これを間違えると、他人が応答した検査を"
-          "「合格」と読んでしまう★", _srv is None)
+        t("★★他人が応答しても、自分のものだとは言わない★★"
+          "／★子は生きていて、ポートも応答する★のに、"
+          "合図が自分の記録に無いので断る（＝ここが唯一の見分け）",
+          _srv is None)
     finally:
-        _other.close()
+        _other.terminate()
+        try:
+            _other.wait(timeout=10)
+        except Exception:                  # noqa: BLE001
+            _other.kill()
+        try:
+            _other.stdout.close()
+        except Exception:                  # noqa: BLE001
+            pass
         try:
             os.remove(_lg)
         except OSError:
