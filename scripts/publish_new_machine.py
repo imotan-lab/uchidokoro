@@ -330,6 +330,27 @@ class _OnlyOne:
 #   「正常に完成した新台」を区別できなかった。
 #   書き始める前にこの目印を作り、全部終わってから消す。
 #   目印が残っていれば、次の実行も push も止める。
+def copy_tolerant(src, dst, *a, **k):
+    """★写している間に消えたファイルは飛ばす★（2026-08-28）
+
+    ★なぜ要るか（わざと再現して確かめた）★
+      試験は本物のリポジトリを写してから使う。
+      その最中に直下でファイルが増減すると、
+      ★写しを作る処理が例外で落ちる★:
+
+          Error: [('…/うちどころ/.probe_churn_27.tmp', …
+
+      2026-08-28 の朝、強制終了まわりの試験10件が落ちたのはこれだと考えている
+      （同じ時刻に、直下でファイルを作っては消す道具を動かしていた）。
+    ★「途中で消えた」は写しの失敗ではない★ので、飛ばしてよい。
+    """
+    import shutil as _sh0
+    try:
+        return _sh0.copy2(src, dst, *a, **k)
+    except FileNotFoundError:
+        return dst
+
+
 IN_PROGRESS = os.path.join(BASE, ".publish-in-progress.json")
 
 
@@ -3266,6 +3287,27 @@ def selftest() -> int:
     t("★★一覧と機種データを集合で突き合わせる★★（欠け・余分・重複を見つける）",
       check_counts(len(rows)) == [])
 
+    # ★★写している間に消えたファイルは飛ばす★★（2026-08-28）
+    #   ★わざと再現して確かめた★＝直下でファイルを作っては消しながら
+    #   走らせると、写しを作る処理が例外で落ちていた（10件が落ちた形と合う）。
+    _cpdir = tempfile.mkdtemp(prefix="pnm_copy_")
+    _gone = os.path.join(_cpdir, "きえた.txt")
+    _dst = os.path.join(_cpdir, "out.txt")
+    # ★例外で落ちるのを「守りの証拠」にしない★＝自分で受けて❌にする
+    try:
+        _cp_ok = copy_tolerant(_gone, _dst) == _dst
+    except Exception:                      # noqa: BLE001
+        _cp_ok = False
+    t("★★写している間に消えたファイルで、写しごと失敗しない★★"
+      "／★同時に別の作業をしていると、試験が丸ごと落ちていた★", _cp_ok)
+    _src = os.path.join(_cpdir, "ある.txt")
+    with open(_src, "w", encoding="utf-8") as _f:
+        _f.write("中身")
+    copy_tolerant(_src, _dst)
+    t("　（対照）あるファイルは、ちゃんと写される",
+      os.path.isfile(_dst)
+      and open(_dst, encoding="utf-8").read() == "中身")
+
     # ★★試験の目印は、本物の作業ツリーに作らない★★
     #   （2026-08-28・Codexの助言）
     #   ★直す前は BASE に作っていた★ので、
@@ -3561,8 +3603,18 @@ def selftest() -> int:
     #   ★.git も写す★＝掃除は git に問い合わせて「元の中身」を決めるので、
     #   除くと**その守りを写しの上では一度も確かめられない**
     #   （2026-08-24に実際そうなった。CI再現の道具でも同じ罠を踏んでいる）。
-    _sh.copytree(BASE, _work4, ignore=_sh.ignore_patterns(
-        "__pycache__", "node_modules", ".preview-site", "_site"))
+    # ★★写している最中にリポジトリが動いても壊れないこと★★
+    #   （2026-08-28・わざと再現して確かめた）
+    #   直下でファイルを作っては消しながら走らせると、
+    #   ★写しを作る処理が例外で落ちる★／紛れ込むと巻き戻しの検査が
+    #   「許していないファイルが増えた」と見なして落ちる。
+    #   ①消えたファイルは飛ばす（途中で消えたのは写しの失敗ではない）
+    #   ②誰かの作業中のファイルは最初から写さない
+    _sh.copytree(BASE, _work4, copy_function=copy_tolerant,
+                 ignore=_sh.ignore_patterns(
+                     "__pycache__", "node_modules", ".preview-site", "_site",
+                     "*.tmp", ".render_check_*", ".probe_churn_*",
+                     ".publish.lock.*"))
     _real_base = BASE
     _real_ip = IN_PROGRESS
     globals()["BASE"] = _work4

@@ -1531,6 +1531,14 @@ MUTATIONS = [
         "run": ["scripts/pre_push_check.py"],
     },
     {
+        "why": "★写している間に消えたファイルで、写しごと失敗する"
+               "（同時に別の作業をしていると、試験が丸ごと落ちる）★",
+        "file": "scripts/publish_new_machine.py",
+        "before": "    except FileNotFoundError:\n        return dst",
+        "after": "    except ZeroDivisionError:\n        return dst",
+        "run": ["scripts/publish_new_machine.py"],
+    },
+    {
         "why": "★重複として通した消し方が、同じ文を全部消せる"
                "（数値の無い事実が記事から丸ごと消える）★",
         "file": "scripts/decide_now.py",

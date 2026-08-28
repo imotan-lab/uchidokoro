@@ -30,6 +30,7 @@ import socket
 import subprocess
 import sys
 import re
+import tempfile
 import time
 import uuid
 
@@ -148,8 +149,12 @@ def _read(path: str) -> str:
 
 def run(slug: str, port: int = 0, extra=None) -> int:
     # ★記録の名前は実行ごとに一意★（同時に動いても混ざらない）
+    # ★★リポジトリの直下には作らない★★（2026-08-28・自分で作った不具合）
+    #   途中で落ちると残り、夜のタスクの「予定外の変更が無いか」に引っかかって
+    #   ★公開が止まる★。写しを作る試験の最中に増減するのも良くない。
     tag = f"{os.getpid()}_{uuid.uuid4().hex[:8]}"
-    log_path = os.path.join(BASE, f".render_check_{tag}.log")
+    log_path = os.path.join(tempfile.gettempdir(),
+                            f"render_check_{tag}.log")
     fixed = bool(port)
     srv = log = None
     for cand in ([port] if fixed else range(FIRST_PORT, FIRST_PORT + TRIES)):
@@ -223,7 +228,8 @@ def selftest() -> int:
     t("　空いているポートを選べる", isinstance(p, int) and port_free(p))
 
     # ★応答の記録の数え方★
-    tmp = os.path.join(BASE, ".render_check_selftest.log")
+    tmp = os.path.join(tempfile.gettempdir(),
+                       "render_check_selftest.log")
     with open(tmp, "w", encoding="utf-8") as fh:
         fh.write('127.0.0.1 - - [28/Aug/2026 05:00:00] "GET /x HTTP/1.1" 200 -\n')
         fh.write("何かの警告\n")
@@ -235,7 +241,8 @@ def selftest() -> int:
       "「何を検査したか分からない合格」が出る★", served_count(tmp) == 0)
     os.remove(tmp)
     t("　記録が無いときも0（例外にしない）",
-      served_count(os.path.join(BASE, ".render_check_no_such.log")) == 0)
+      served_count(os.path.join(tempfile.gettempdir(),
+                                "render_check_no_such.log")) == 0)
 
     # ★★同時に動かしても、他人の応答を自分のものと数えない★★
     #   （2026-08-28・Codexの10回目の指摘2／11回目で試験を決定的にした）
@@ -251,7 +258,7 @@ def selftest() -> int:
         [sys.executable, "-u", "-m", "http.server", "0", "--bind", HOST],
         cwd=BASE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     _taken = 0
-    _lg = os.path.join(BASE, ".render_check_ctrl.log")
+    _lg = os.path.join(tempfile.gettempdir(), "render_check_ctrl.log")
     try:
         for _ in range(80):
             _ln = _other.stdout.readline().decode("utf-8", "replace")
@@ -299,6 +306,15 @@ def selftest() -> int:
             os.remove(_lg)
         except OSError:
             pass
+
+    # ★★リポジトリを1文字も汚さない★★（2026-08-28・自分で作った不具合）
+    #   ★残ると、夜のタスクの「予定外の変更が無いか」に引っかかって
+    #   公開が止まる★
+    _dirty = [x for x in os.listdir(BASE) if x.startswith(".render_check")]
+    t("★★記録ファイルをリポジトリの直下に作らない★★"
+      "／★残ると夜の公開が止まる★"
+      + ("／残り: " + "／".join(_dirty) if _dirty else ""),
+      not _dirty)
 
     ng = sum(1 for _, o in results if not o)
     print()
