@@ -596,8 +596,8 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
     #   ・TAIL_CONFLICT     … 題の後ろの飾りを分解できない
     #     （実測＝索引が正しく当てた14ページ中3件＝ちょんぼりすたの25%）
     #   ★落ち方ごとに控えの型を分ける★（どちらでも何でも救える、にしない）
-    _RESCUE_PROFILE = {"NAME_CORE_MISMATCH": "title_name_core_mismatch",
-                       "TAIL_CONFLICT": "title_tail_conflict"}
+    # ★対応表は控えの側が正本★（2026-08-29・台帳#498）
+    _RESCUE_PROFILE = _mic.RESCUE_PROFILE_BY_REASON
     for r in looks or []:
         _prof_want = _RESCUE_PROFILE.get(str(r.get("reason") or ""))
         if r.get("identity_ok") or not _prof_want:

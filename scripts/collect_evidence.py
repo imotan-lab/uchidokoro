@@ -29,6 +29,7 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import os
 import re
@@ -39,6 +40,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import safe_json as _sj
 import source_lineage as _sl             # noqa: E402
 import user_area as _ua                  # noqa: E402
+import fetched_page as _fp               # noqa: E402
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -137,6 +139,52 @@ def quotes(text: str, topic: str, limit: int = PER_SOURCE) -> dict:
             "context_truncated": cut}
 
 
+def _material_verdict(slug: str, url: str, why: str, html: str, page):
+    """★本番と同じ渡し方で、控えの答えを引く★（2026-08-29・台帳#498）
+
+    ★渡すもの★（どれか1つでも欠けたら答えない＝fail-closed）
+      ・対象のURL
+      ・★DMMで確かめた★機種名と導入日（`--name` の自己申告は使わない）
+      ・落ち方に対応する控えの型（対応表は控えの側が正本）
+      ・期待する社と、いま読んだ本文のメーカー欄
+      ・★いま取ってきた本文そのもの★（別取得にしない）
+    """
+    try:
+        import maker_identity_cache as _mic
+        import pending_machines as _pm
+    except Exception:                      # noqa: BLE001
+        return None
+    prof = _mic.rescue_profile_for(why) or "maker_field"
+    # ★DMMで確かめた値だけを使う★（待ち行列は本番と同じ出どころ）
+    hit = None
+    try:
+        pend = _pm.load()
+        for it in (pend or {}).get("items", {}).values():
+            if str((it or {}).get("source_machine_id") or "") \
+                    and f"dmm_{it['source_machine_id']}" == slug:
+                hit = it
+                break
+    except Exception:                      # noqa: BLE001
+        return None
+    if not hit or not hit.get("name") or not hit.get("release"):
+        return None                        # ★確かめた値が無ければ救わない★
+    # ★メーカー欄は読取器のものを使う★（本番と同じ関数）
+    #   ★例外を握りつぶさない★＝握りつぶしたせいで、置き場所を
+    #   間違えていたことに気づけなかった（2026-08-29・自分で踏んだ）。
+    import model_code_lookup as _mcl
+    seen = _mcl.extract_maker_name(html) or ""
+    try:
+        v = _mic.verdict_for(slug, hit.get("maker") or "", seen,
+                             material_url=url,
+                             machine_name=hit.get("name") or "",
+                             release_date=hit.get("release") or "",
+                             want_profile=prof,
+                             runtime_page=page)
+    except Exception:                      # noqa: BLE001
+        return None                        # ★控えが読めないなら救わない★
+    return (v or {}).get("verdict") if isinstance(v, dict) else v
+
+
 def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
     """1機種ぶん集める。★取れなかった出典も理由つきで残す★
 
@@ -156,7 +204,8 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
 
         import machine_sources as _ms
 
-        def _read(where, url, got, publisher=None, html=None):
+        def _read(where, url, got, publisher=None, html=None,
+                  cleaned=False):
             try:
                 # ★何のために取りに行くかを名乗る★（2026-08-16・依頼218）
                 #   名乗らないと通信の名簿が通さない。ここが集めるのは
@@ -171,8 +220,13 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
                 #   ①名鑑に決まりごとがあれば**箱ごと落とす**（P-WORLDのAI欄）
                 #   ②無ければ行単位で切る（従来どおり・依頼175で順番を直した分）
                 #   落としきれないときは例外になり、そのページは出典に使わない。
+                # ★★掃除は1回だけ★★（2026-08-29・自分で入れた退行）
+                #   `fetched_page.fetch` が返すのは**掃除済みの本文**。
+                #   もう一度落とそうとすると「箱が見つかりません」になり、
+                #   ★全部のページが使えなくなった★（実際にそうなった）。
                 got[where] = {"url": url, "publisher": publisher,
-                              "text": _ua.clean_text(page, url)}
+                              "text": (_ua.visible_text(page) if cleaned
+                                       else _ua.clean_text(page, url))}
             except Exception as e:        # noqa: BLE001
                 got[where] = {"url": url, "publisher": publisher,
                               "error": str(e)[:80]}
@@ -212,15 +266,32 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
                 #   別機種に差し替わると、そのまま材料になっていた。
                 pub = (cats.get(dir_id) or {}).get("publisher_id")
                 try:
-                    # ★用途を名乗ってから取りに行く★（依頼218・上と同じ理由）
-                    with _nw.fetching("claim_material"):
-                        page = _nw._get(r["url"])
+                    # ★★取ってくるのは1回だけ★★（2026-08-29・台帳#498）
+                    #   ★控えを確かめる本文と、2AIに見せる本文を同じにする★
+                    #   （別々に取ると、同じURLでも中身が変わっていれば食い違う）
+                    _fp_page = _fp.fetch(r["url"], "claim_material")
+                    page = _fp_page.cleaned_html
                 except Exception as e:    # noqa: BLE001
                     got[dir_id] = {"url": r["url"], "publisher": pub,
                                    "error": str(e)[:80]}
                     continue
                 ident_ok, ident_why = _ms.directory_page_ok(
                     m.get("name") or "", page)
+                # ★★本番が「使う」と決めた控えを、ここでも見る★★
+                #   （2026-08-29・台帳#498／実機で食い違いを再現した）
+                #   ★直す前は本番より厳しく弾いていた★ので、
+                #   ★2AIは本番が使っている材料を見せてもらえなかった★。
+                _rescue = _material_verdict(slug, r["url"], ident_why,
+                                            page, _fp_page)
+                if _rescue == "REJECT_MATERIAL":
+                    # ★「使わない」は題で同定できるページにも効かせる★
+                    got[dir_id] = {"url": r["url"], "publisher": pub,
+                                   "state": "REJECTED_BY_CACHE",
+                                   "error": "この機種ではこのページを"
+                                            "使わないと決めてあります"}
+                    continue
+                if not ident_ok and _rescue == "ACCEPT_MATERIAL":
+                    ident_ok = True       # ★本番と同じ材料として読む★
                 if not ident_ok:
                     # ★捨てない＝2AIが判断できるように材料ごと残す★
                     #   （2026-08-11・運営者の指摘「機械で取れないものは2AIで取る」）
@@ -238,7 +309,7 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
                     #   **他の名鑑まで含めて材料集めが丸ごと止まる**。
                     #   危ないページを使わないことと、処理が止まることは別。
                     try:
-                        body = _ua.clean_text(page, r["url"])
+                        body = _ua.visible_text(page)
                     except Exception as _e:      # noqa: BLE001
                         got[dir_id] = {"url": r["url"], "publisher": pub,
                                        "error": str(_e)[:120]}
@@ -252,7 +323,7 @@ def collect(slug: str, topics: list, fetch=None, name: str = "") -> dict:
                                    # ★判断に要る材料（本文の頭）を付ける★
                                    "excerpt": body[:600]}
                     continue
-                _read(dir_id, r["url"], got, pub, html=page)
+                _read(dir_id, r["url"], got, pub, html=page, cleaned=True)
             seen_urls = {_ms.url_key(v["url"]) for v in got.values()
                          if v.get("url")}
             for rec in saved:
@@ -613,6 +684,29 @@ def selftest() -> int:
     finally:
         (_di.find, _ms.urls_for, _ms.recheck, _ms.report_changed,
          _nw._get, _ms.remember_changed, _ms.release_quarantine) = keep2
+
+    # ★★本番と2AI用で、使えるページが一致すること★★
+    #   （2026-08-29・台帳#498・Codexの設計助言7）
+    #   ★繋いだところだけが壊れる型★＝どちらか片方の試験では見つからない。
+    #   ★実機で起きたこと★＝本番は「控えでこのページを使うと決めてある」
+    #   として材料にしていたのに、2AI用のこの道具は同じページを
+    #   IDENTITY_UNVERIFIED で丸ごと外していた。
+    #   ＝★2AIは、本番が使っている材料を見せてもらえなかった★。
+    _src_mv = inspect.getsource(_material_verdict)
+    _src_co = inspect.getsource(collect)
+    t("★★2AI用の道具が、本番と同じ控えを見ている★★"
+      "／★見ていないと、2AIは本番と違う材料で判断する★",
+      "maker_identity_cache" in _src_mv and "runtime_page" in _src_mv)
+    t("　救済の型は控えの側の表から引く（同じ規則を2か所に書かない）",
+      "rescue_profile_for" in _src_mv)
+    t("★★機種名と導入日は、DMMで確かめた値だけを使う★★"
+      "／★--name の自己申告で控えを通してはいけない★",
+      "pending_machines" in _src_mv and "source_machine_id" in _src_mv)
+    t("★★『使わない』と決めた控えは、題で同定できるページにも効く★★",
+      "REJECT_MATERIAL" in _src_co)
+    t("★★取ってくるのは1回だけ★★"
+      "／★別々に取ると、控えを確かめた本文と2AIに見せる本文が食い違う★",
+      "_fp.fetch(" in _src_co and "cleaned=True" in _src_co)
 
     print(f"\n{ran[0]}/{ran[0]} 合格" if ok else "\n不合格あり")
     return 0 if ok else 1

@@ -448,6 +448,28 @@ def url_key(url: str) -> str:
         return t
 
 
+# ★★救済の対応表（正本）★★（2026-08-29・台帳#498・Codexの設計助言）
+#   ★同じ規則が3か所に書かれていた★＝本番・控えの再確認・読取器。
+#   1つの表に寄せ、逆引きも★手書きせず機械的に作る★。
+#   ★型ごとに落ち方を厳密に決める★＝「どの型でも何でも救える」にしない
+#   （メーカーの食い違いで作った控えを、題の不一致に流用させないため）。
+RESCUE_PROFILE_BY_REASON = {
+    "NAME_CORE_MISMATCH": "title_name_core_mismatch",
+    "TAIL_CONFLICT": "title_tail_conflict",
+}
+RESCUE_REASON_BY_PROFILE = {v: k for k, v in RESCUE_PROFILE_BY_REASON.items()}
+
+
+def rescue_profile_for(reason):
+    """★その落ち方を救える控えの型★（無ければ None＝救わない）"""
+    return RESCUE_PROFILE_BY_REASON.get(str(reason or ""))
+
+
+def rescuable_reason(reason) -> bool:
+    """★その落ち方は救いの対象か★（読取器が使う）"""
+    return str(reason or "") in RESCUE_PROFILE_BY_REASON
+
+
 def verdict_for(slug: str, expected: str = "", seen: str = "", store=None,
                 fetch=None, material_url: str = "",
                 machine_name: str = "", release_date: str = "",
@@ -832,8 +854,8 @@ def verify_evidence(evidence: list, fetch=None, expected: str = "",
             #   （2026-08-26。`title_tail_conflict` を足した）
             #   ★型ごとに落ち方を厳密に決める★＝
             #   「どれかの型なら何でも救える」にしない。
-            _RESCUE = {"title_name_core_mismatch": "NAME_CORE_MISMATCH",
-                       "title_tail_conflict": "TAIL_CONFLICT"}
+            # ★逆引きは表から機械的に作る★（2026-08-29・台帳#498）
+            _RESCUE = RESCUE_REASON_BY_PROFILE
             if not _ok_id and _prof in _RESCUE and _is_target:
                 _want_why = _RESCUE[_prof]
                 if _why_id != _want_why:

@@ -6,12 +6,13 @@
   "assets/data/directory-catalogs.json": "97df0f738e19fd1436c653c1b717f7ce7eb619d71273562aa15e3002896b14d2",
   "assets/data/maker-catalogs.json": "612fa17f5b50f509475096b51ca1f4d8c261c5805e22e337875aa478054c0b3c",
   "assets/data/source-registry.json": "2449477484e8def3fae001065de72ce208943a44487cb5dcd109a7af101f3687",
-  "scripts/add_machine_run.py": "4da54dfd938b185c51aa20e97f35c9eba3bad609322d96c814022671cdf799b5",
+  "scripts/add_machine_run.py": "11407eaef91d5a37ea261f4c9f2a197bfe6cd9d39f06e653311995ce9f807b27",
   "scripts/adoption_basis.py": "cf1b77c4e5f3fa80d3dec205880b461efcabdc0c3a511e854e2a3ea3119eb428",
   "scripts/at_spec_lookup.py": "74f11d27f804891ec42eba1568d500405469457ed95502396fff9f3627e084f2",
   "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
   "scripts/blocked_hosts.py": "553ac0a6f0f0baf563100458937efa167826c4347f815ace1a70e39769909b7d",
   "scripts/ceiling_lookup.py": "ad54309152dd7fe19c56ff574f7b468a70ef994e456b4a0a2c2f4a68fb00cf00",
+  "scripts/collect_evidence.py": "72b3ca77661ebd8c309481438b05a8caa8e438e0ebd1a233a85d19efc231725a",
   "scripts/confirmed_values.py": "186d07ce0ec9ed1e6dc0a73c49b8f74172aa18b00a71b29022a4df37764ba34e",
   "scripts/cz_lookup.py": "24727d5876e0a5e233ff6c913e96ae3d3fc50d7e5d5869b019e443bde374b02b",
   "scripts/directory_index.py": "a758913881d5b7b6105069e5f3dfcb3e5a64aa2054578094d517166240ad2e21",
@@ -22,10 +23,11 @@
   "scripts/html_tables.py": "5d0f32d7e988ce0696e07b4ac118d119ea4c4e2280b57acee89e0c6ebaa78c3e",
   "scripts/lineage_check.py": "2bbb9cfdad4cdf6edc22f1a3f4cec20f804ccceb66453a88d83d8572d86d6e98",
   "scripts/machine_sources.py": "41b3bdfdfdb4faa85c9fe0bae6630a50bcd5db6ac860699c3c5aa3ffb8c07003",
-  "scripts/maker_identity_cache.py": "2771db60031b24e727e5d28d2c0ce1aa3af1a6f1592ce67bb9e19174acea4672",
-  "scripts/model_code_lookup.py": "f45f7e3b30e39495812c765abea20c6a524129d3fbaca88091e9b9760d966eef",
+  "scripts/maker_identity_cache.py": "ad8b2621a3ea34d843977b34271568dd0d0d54ee12a21809a1adf03c934cc9e3",
+  "scripts/model_code_lookup.py": "64b4eb6d4a86af271b1af0978512b2ab36a5cc50569a2928121fe8d974b84abe",
   "scripts/new_machine_watch.py": "72319ceacf38d0a8b71bf5ec442664187224a8a8288376e49425027198acbe15",
   "scripts/page_probe.py": "25d0411b1552d018ab1e528a58be1ce1d53a4e47de68f84fc2f951ccaa1f182d",
+  "scripts/pending_machines.py": "00b3371b6372c6efd9a3e8e431eb6565c98e8cb3f1f64f1ee9855b24876d18ff",
   "scripts/slug_binding.py": "17c235c10cd7fed94d4c774bbe7b88c87349eff214bedaa22182d3fe79f26af6",
   "scripts/source_lineage.py": "706cbbd437ba491995e233e9758a73f7672e27a47021cfc1274f0c2e9d9f79ed",
   "scripts/spec_lookup.py": "8c165305e7fb540dc7c517b5d40101b0b2cf8a216255ca3099b607c3b9d58bfe",
@@ -87,6 +89,18 @@
    "model_code_lookup",
    "new_machine_watch",
    "spec_lookup",
+   "user_area"
+  ],
+  "scripts/collect_evidence.py": [
+   "ceiling_lookup",
+   "directory_index",
+   "fetched_page",
+   "machine_sources",
+   "maker_identity_cache",
+   "model_code_lookup",
+   "new_machine_watch",
+   "pending_machines",
+   "source_lineage",
    "user_area"
   ],
   "scripts/confirmed_values.py": [
@@ -183,6 +197,10 @@
   "scripts/page_probe.py": [
    "blocked_hosts",
    "new_machine_watch"
+  ],
+  "scripts/pending_machines.py": [
+   "blocked_hosts",
+   "claim_identity"
   ],
   "scripts/slug_binding.py": [
    "blocked_hosts",

@@ -690,7 +690,9 @@ def material_page_identity_ok(page, official_name: str, *,
     #   ★片方だけ直すと、材料を読む側で同じ理由でもう一度落ちる★
     #   （CLAUDE.md に前例あり。実際にまた踏んだ）
     #   ★別機種・規格違い・派生機は今までどおり救わない★
-    if why not in ("NAME_CORE_MISMATCH", "TAIL_CONFLICT"):
+    # ★救える落ち方は控えの側が正本★（2026-08-29・台帳#498）
+    import maker_identity_cache as _mic_r
+    if not _mic_r.rescuable_reason(why):
         return False, why
     if not grant:
         return False, why

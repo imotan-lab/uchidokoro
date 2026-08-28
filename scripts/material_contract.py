@@ -68,6 +68,16 @@ CONTRACT_INPUTS = frozenset({
     "scripts/dmm_calendar.py",
     "scripts/dmm_discover.py",
     "scripts/slug_binding.py",
+    # ★★2AIへ材料を渡す側と、その判断が信用している値★★
+    #   （2026-08-29・台帳#498・Codexの設計助言）
+    #   ★collect_evidence は材料の採否を行うようになった★＝
+    #     控え（maker_identity_cache）に「このページを使ってよいか」を聞き、
+    #     その答えで2AIに見せる材料を決める。
+    #   ★pending_machines は、その照会に渡す機種名と導入日の出どころ★＝
+    #     DMMで確かめた値。ここが書き換われば採否が変わる。
+    #   ★契約の外だと、書き換えても承認をやり直さずに通る★
+    "scripts/collect_evidence.py",
+    "scripts/pending_machines.py",
     # 独立した票の数え方
     "scripts/source_lineage.py",
     "assets/data/source-registry.json",
