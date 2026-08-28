@@ -121,6 +121,7 @@ def selftest() -> int:
     import new_machine_watch as _w
     C = "https://chonborista.com/slot/orinpia-slot/264134/"
     HTML = ('<title>L試験機 スロット 新台 解析 | ちょんぼりすた</title>'
+            '<a class="rating-btn">みんなの評価 (平均0)</a>'
             '<div id="hyouka">星の評価</div>'
             '<ul class="commentlist"><li>読者の書き込み メーカー サミー</li></ul>'
             '<div id="entry"><div>機種名 L試験機</div>'
@@ -182,6 +183,7 @@ def selftest() -> int:
     #   （2026-08-24・Codexの14回目＝別の箱で投稿欄を足された場合）
     #   ★決まりごとがあるサイトだけ検査を飛ばすと、ここが素通りする★
     _second = ('<title>L試験機 スロット 新台 解析 | ちょんぼりすた</title>'
+               '<a class="rating-btn">みんなの評価 (平均0)</a>'
                '<div id="hyouka">星の評価</div>'
                '<ul class="commentlist"><li>旧い書き込み</li></ul>'
                '<div id="entry"><div>機種名 L試験機</div>'
