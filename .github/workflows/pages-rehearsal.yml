@@ -158,6 +158,11 @@ jobs:
           python scripts/add_machine_run.py --selftest
           python scripts/open_issues.py --selftest
           python scripts/confirmed_values.py --selftest
+          # ★表示検査を、確かに自分のサーバーで行う道具★（台帳#493）
+          #   控えたPIDと実際にポートを掴む番号が別物で、
+          #   ★過去の残骸が検査に応答していた★（最古は5日間動きっぱなし）
+          python scripts/render_check.py --selftest
+          python scripts/pre_push_check.py --selftest
           # ★置き場が無い環境でも通ることを確かめてから足すこと★（台帳 #336）
           #   2026-08-12に「Windows専用の置き場が原因」と決めつけて外したが、
           #   本当の原因は grow_machine の samefile() だった。
