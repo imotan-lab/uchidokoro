@@ -11948,5 +11948,52 @@
    "identity_evidence_ref": "dmm:5086 型式=未掲載 メーカー=オリンピアエステート 導入=2026-10-05 確認日=2026-08-28",
    "market_release_date": "2026-10-05"
   }
+ },
+ {
+  "slug": "dmm_5090",
+  "name": "スマート沖スロ ハイハイシオサイRe",
+  "seo": {
+   "title": "スマート沖スロ ハイハイシオサイRe スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": false,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "spec",
+    "setting",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3",
+    "CATEGORIES_LT_2",
+    "NO_UNIQUE_GAMEPLAY"
+   ],
+   "claims": [],
+   "policy_mode": "normal",
+   "decided_at": "2026-08-28",
+   "input_digest": "sha256:97d326dfd018051e47b7021ff20604d76ab9cf261d6a4ed26c108b9844bf9b6b"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-11",
+  "identity": {
+   "manufacturer_id": "pioneer",
+   "official_product_url": "https://p-town.dmm.com/machines/5090",
+   "announced_name": "スマート沖スロ ハイハイシオサイRe",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5090 型式=未掲載 メーカー=パイオニア 導入=2026-11 確認日=2026-08-28",
+   "market_release_date": "2026-11"
+  }
  }
 ]
