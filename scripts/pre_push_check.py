@@ -88,12 +88,24 @@ def push_ranges(stdin_text: str) -> list:
 
 
 _COMMITS = None
+_GIT_FAILED = []          # ★gitに聞けなかったもの★（あれば push を止める）
 
 
 def _git(*a):
     r = subprocess.run(["git"] + list(a), cwd=BASE, capture_output=True,
                        text=True, encoding="utf-8", errors="replace")
-    return r.stdout if r.returncode == 0 else None
+    if r.returncode != 0:
+        # ★★聞けなかった＝「無い」ではない★★（2026-08-28・Codexの13回目）
+        #   ★直す前は None を「対象0件」と読んで続けていた★＝
+        #   照合も変更ファイルの検査も記事の監査も**全部飛ばして push できた**。
+        _GIT_FAILED.append(" ".join(a)[:80])
+        return None
+    return r.stdout
+
+
+def git_unknown() -> list:
+    """★gitに聞けなかったもの★（1つでもあれば push を止める）"""
+    return list(_GIT_FAILED)
 
 
 def push_commits() -> list:
@@ -328,6 +340,23 @@ def _selftest() -> int:
     t("　渡されなければ空（手で動かしたときは今までの見方に戻る）",
       push_ranges("") == [] and push_ranges("こわれた行") == [])
 
+    # ★★gitに聞けなかったら、pushを止める★★（2026-08-28・Codexの13回目）
+    #   ★私が今日入れた穴★＝失敗を「対象0件」と読んで、
+    #   検査を全部飛ばして push できた（安全と反対側）。
+    _keep_failed = list(_GIT_FAILED)
+    try:
+        _GIT_FAILED.clear()
+        t("　（前提）ふつうは聞けている", _git("rev-parse", "HEAD") is not None
+          and not git_unknown())
+        _GIT_FAILED.clear()
+        _bad = _git("log", "--format=%H", "0000000000000000000000000000000000000000..HEAD")
+        t("★★聞けなかったことを覚えている★★"
+          "／★覚えていないと『変更が無い』と読んで検査を全部飛ばす★",
+          _bad is None and len(git_unknown()) == 1)
+    finally:
+        _GIT_FAILED.clear()
+        _GIT_FAILED.extend(_keep_failed)
+
     # ★★新しい枝は「先端の1コミット」ではない★★
     #   （2026-08-28・Codexの12回目・実測で確かめた）
     #   `git show <指紋>` は先端しか出さないので、
@@ -411,6 +440,18 @@ def main() -> int:
         return 1
 
     changed = _changed_paths()
+    # ★★gitに聞けなかったら止める★★（2026-08-28・Codexの13回目）
+    #   ★「分からない」を「変更が無い」と読まない★＝
+    #   読み違えると、検査を全部飛ばして push できてしまう。
+    if git_unknown():
+        print()
+        print("★★gitに聞けませんでした★★（何を push するのか分かりません）")
+        for _q in git_unknown()[:4]:
+            print("   git " + _q)
+        print("   → 相手の指紋が手元に無い（fetch していない）ことがあります。"
+              "`git fetch` を試してから、もう一度 push してください")
+        print("★pushを止めました★")
+        return 1
     hit = [p for p in changed if any(p.startswith(w) or p == w for w in WATCH)]
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     ng = []
