@@ -53,14 +53,68 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WATCH = ("assets/data/machine-details/", "assets/data/machines.json")
 
 
+_CHANGED = None          # ★1回だけ確定して使い回す★
+_RANGES = None           # ★今回 push する範囲★（git が標準入力で渡す）
+
+
+def push_ranges(stdin_text: str) -> list:
+    """★git が渡してくる「今回 push する参照と指紋」を読む★
+
+    pre-push フックは1行につき
+        <こちらの参照> <こちらの指紋> <向こうの参照> <向こうの指紋>
+    を渡す。★向こうの指紋が全部ゼロ＝新しい枝★（相手にまだ無い）。
+    ★こちらの指紋が全部ゼロ＝枝を消す★（送る中身は無い）。
+
+    ★決め打ちの `origin/main..HEAD` をやめた理由★
+      （2026-08-28・Codexの10回目の指摘3）
+      ・別の枝・タグ・HEAD以外を送ると、検査の対象から外せた
+      ・`origin/main` が無い環境では `HEAD~1..HEAD` に落ち、
+        ★複数のコミットを送っても最後の1件しか見なかった★
+    """
+    zero = "0" * 40
+    out = []
+    for line in (stdin_text or "").splitlines():
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        local_sha, remote_sha = parts[1], parts[3]
+        if set(local_sha) == {"0"}:        # 枝を消す＝送る中身は無い
+            continue
+        if remote_sha.startswith(zero[:7]) and set(remote_sha) == {"0"}:
+            out.append(local_sha)          # 新しい枝＝そのコミットまで全部
+        else:
+            out.append(f"{remote_sha}..{local_sha}")
+    return out
+
+
 def _changed_paths() -> list:
-    """push対象（origin/main..HEAD）で変わったファイル。取れなければ空。"""
-    for rng in ("origin/main..HEAD", "HEAD~1..HEAD"):
-        r = subprocess.run(["git", "diff", "--name-only", rng], cwd=BASE,
-                           capture_output=True, text=True, encoding="utf-8")
+    """★今回 push するもので変わったファイル★（1回だけ数えて使い回す）"""
+    global _CHANGED
+    if _CHANGED is not None:
+        return _CHANGED
+    rngs = list(_RANGES or [])
+    if not rngs:
+        # ★標準入力が無いとき（手で動かしたとき）だけ、今までの見方★
+        for rng in ("origin/main..HEAD", "HEAD~1..HEAD"):
+            r = subprocess.run(["git", "diff", "--name-only", rng], cwd=BASE,
+                               capture_output=True, text=True,
+                               encoding="utf-8")
+            if r.returncode == 0:
+                _CHANGED = [x.strip() for x in r.stdout.splitlines()
+                            if x.strip()]
+                return _CHANGED
+        _CHANGED = []
+        return _CHANGED
+    got = []
+    for rng in rngs:
+        cmd = (["git", "diff", "--name-only", rng] if ".." in rng
+               else ["git", "show", "--name-only", "--format=", rng])
+        r = subprocess.run(cmd, cwd=BASE, capture_output=True, text=True,
+                           encoding="utf-8")
         if r.returncode == 0:
-            return [x.strip() for x in r.stdout.splitlines() if x.strip()]
-    return []
+            got += [x.strip() for x in r.stdout.splitlines() if x.strip()]
+    _CHANGED = sorted(set(got))
+    return _CHANGED
 
 
 def _warn_unreported() -> None:
@@ -117,8 +171,13 @@ def _verified_range() -> list:
       ・先に未pushのコミットが積まれていると、最新1件だけ照合しても
         それ以前が一緒に push された
 
-    ここでは「無人タスクが作ったコミット」だけを対象にする
-    （対話セッションの手作業まで止めると、鉄則4「当日中にpush」が守れない）。
+    ★★実際の範囲★★（2026-08-28・Codexの10回目の指摘4で言い直した）
+      ここは「無人タスクが作ったコミットか」を見分けていない。
+      ★その日に無人タスクが機種を触っていたら、
+        記事を書き換えた未pushのコミットは全部★照合を求める
+      （対話セッションの手作業も含む）。
+      ★安全側に倒れているのでこのままにする★＝
+      記事を触らない手作業は素通しなので、鉄則4は守れる。
 
     戻り値: 止めるべき理由の一覧（空なら通してよい）
     """
@@ -215,6 +274,26 @@ def _selftest() -> int:
     if r.returncode != 0:
         print("   " + (r.stderr or b"").decode("utf-8", "replace")
               .strip().splitlines()[-1][:120])
+    # ★★今回 push するものを、git から受け取って読む★★
+    #   （2026-08-28・Codexの10回目の指摘3）
+    #   ★決め打ちの `origin/main..HEAD` では、別の枝・タグを送ると
+    #     検査の対象から外せた／`origin/main` が無い環境では
+    #     複数コミットのうち最後の1件しか見なかった★
+    Z = "0" * 40
+    t("★★送る範囲を、渡された参照から作る★★",
+      push_ranges(f"refs/heads/main aaa refs/heads/main {Z[:39]}1")
+      == [f"{Z[:39]}1..aaa"])
+    t("★★新しい枝は、そのコミットまで全部を見る★★"
+      "／★『向こうに無い』を範囲の始まりにすると git が読めない★",
+      push_ranges(f"refs/heads/x bbb refs/heads/x {Z}") == ["bbb"])
+    t("　枝を消すときは、送る中身が無いので何も見ない",
+      push_ranges(f"(delete) {Z} refs/heads/x ccc") == [])
+    t("★★2つの参照を同時に送っても、両方を見る★★",
+      len(push_ranges(f"refs/heads/a aaa refs/heads/a {Z[:39]}1\n"
+                      f"refs/heads/b bbb refs/heads/b {Z[:39]}2")) == 2)
+    t("　渡されなければ空（手で動かしたときは今までの見方に戻る）",
+      push_ranges("") == [] and push_ranges("こわれた行") == [])
+
     # ★★照合を求める範囲★★（2026-08-28・実際に push が止まった）
     t("★★記事を書き換えたコミットには照合を求める★★",
       touches_articles(["assets/data/machine-details/dmm_5086.json"]) is True)
@@ -242,6 +321,13 @@ def main() -> int:
     ap.add_argument("--echo-check", action="store_true",
                     help="★試験が内側から呼ぶ★＝合格の記号を書けるか試すだけ")
     a = ap.parse_args()
+    if not (a.echo_check or a.selftest):
+        # ★git が渡す「今回 push する参照」を読む★（無ければ空）
+        global _RANGES
+        try:
+            _RANGES = push_ranges("" if sys.stdin.isatty() else sys.stdin.read())
+        except Exception:                  # noqa: BLE001
+            _RANGES = []
     if a.echo_check:
         # ★合格の記号を書くだけ★（書けなければ例外で終了コードが1になる）
         print("✅❌★ 監査が使う記号")
@@ -282,7 +368,7 @@ def main() -> int:
     #   道具は正しく「★NG」と出していたのに、こちらが読み違えた。
     #   ★人の注意では止まらないので、機械に止めさせる★。
     #   ★全部回すと数分かかる★ので、**触ったファイルの分だけ**回す。
-    _touched = sorted({p for p in _changed_paths()
+    _touched = sorted({p for p in changed
                        if p.startswith("scripts/") and p.endswith(".py")})
     if _touched:
         print()

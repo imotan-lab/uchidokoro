@@ -773,6 +773,7 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
     # ★サイトがこの機種について公開しているもの全部★（数値の出どころを照合する的）
     published = raw + "\n" + json.dumps(_machine_row(slug), ensure_ascii=False)
 
+    _dup_ok = []          # ★機械が「重複」と認めて通した消し方★
     for a in dec["actions"]:
         if a["op"] == "replace":
             nb, na = _numbers(a["before"]), _numbers(a["after"])
@@ -990,6 +991,11 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
                 #   「残っている」に見えた。
                 # ★同じ入れ物の中で2つ以上あるときだけ★（2026-08-27）
                 lost = [] if _dup_count(d, a["text"]) >= 2 else nums
+                if not lost:
+                    # ★★機械が「重複」と認めた消し方を覚えておく★★
+                    #   （2026-08-28・Codexの10回目の指摘1）
+                    #   計画ができたあとに「1つ以上残るか」を確かめるため。
+                    _dup_ok.append(a["text"])
                 if lost:
                     # ★★機械で「重複だ」と言い切れないときは2AIへ★★
                     #   （2026-08-27・Codexの5回目の指摘2）
@@ -1097,6 +1103,28 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
             result["problems"].append(
                 f"実データに無い行です（記事が変わった可能性）: "
                 f"{(a.get('text') or a.get('before'))[:44]!r}")
+            return result
+
+    # ★★重複として通した消し方は、同じ節に1つ以上残ること★★
+    #   （2026-08-28・Codexの10回目の指摘1／自分で再現した）
+    #   ★1件ずつの検査は変更前の記事を見ている★ので、
+    #   同じ「消す」を並べれば全部そろって許可され、
+    #   ★事実が記事から丸ごと消えた★（数値の無い文は最後の数え直しも素通り）。
+    _plan_drop = {}
+    for _k, _si, _bi, _a in plan:
+        if _k == "drop" and _a.get("text") in _dup_ok:
+            _plan_drop[(_si, _a["text"])] = \
+                _plan_drop.get((_si, _a["text"]), 0) + 1
+    for (_si, _tx), _n in _plan_drop.items():
+        _body = ((d.get("sections") or [])[_si] or {}).get("body") or []
+        _have = sum(1 for x in _body if x == _tx)
+        if _have - _n < 1:
+            result["problems"].append(
+                f"同じ文を全部消そうとしています（{_have}件のうち{_n}件）: "
+                f"{_tx[:40]!r}"
+                "（重複を1つにするだけなら通します。"
+                "本当に全部消してよいなら、なぜかを meaning_why に"
+                "書いてください）")
             return result
 
     # ★セクションが空にならないこと★

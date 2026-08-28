@@ -29,7 +29,9 @@ import os
 import socket
 import subprocess
 import sys
+import re
 import time
+import uuid
 
 for _s in (sys.stdout, sys.stderr):
     try:
@@ -81,25 +83,89 @@ def served_count(log_path: str) -> int:
         return 0
 
 
-def run(slug: str, port: int = 0, extra=None) -> int:
-    port = port or pick_port()
-    if not port_free(port):
-        print(f"★ポート {port} は誰かが使っています★"
-              "（過去の実行の残骸かもしれません）。検査しません")
-        return 2
-    log_path = os.path.join(BASE, f".render_check_{port}.log")
+def _start(port: int, log_path: str):
+    """★そのポートで自分のサーバーを起こし、本当に自分のものか確かめる★
+
+    ★空きを確かめてから bind するまでに隙間がある★
+      （2026-08-28・Codexの10回目の指摘2）＝
+      同時に2本動くと、両方が同じポートを選び、片方だけが bind に成功する。
+      ★記録の名前がポート番号だけだと、失敗した側が成功した側の記録を見て
+        「自分が応答した」と読む★＝直したかった事故と同じ型。
+
+    ★自分だけが知っている合図で確かめる★＝
+      合図つきの道を1回叩き、**自分の記録**にその合図が出れば自分のもの。
+    戻り値: (子プロセス, 記録ファイル) ／ 自分のものでなければ (None, None)
+    """
     log = open(log_path, "w", encoding="utf-8")
     srv = subprocess.Popen(
         [sys.executable, "-m", "http.server", str(port), "--bind", HOST],
         cwd=BASE, stdout=subprocess.DEVNULL, stderr=log)
+    for _ in range(50):
+        if srv.poll() is not None:         # ★子が死んでいる＝bind に失敗★
+            break
+        if not port_free(port):
+            break
+        time.sleep(0.1)
+    if srv.poll() is not None:
+        log.close()
+        return None, None
+    # ★合図つきの道を1回叩く★
+    nonce = uuid.uuid4().hex
     try:
-        for _ in range(50):                # 立ち上がるまで待つ
-            if not port_free(port):
-                break
-            time.sleep(0.1)
-        else:
-            print("★自分のサーバーが立ち上がりませんでした★")
+        with socket.create_connection((HOST, port), timeout=2) as s:
+            s.sendall(("GET /__render_check_" + nonce
+                       + " HTTP/1.0\r\nHost: x\r\n\r\n").encode())
+            s.recv(64)
+    except OSError:
+        pass
+    log.flush()
+    for _ in range(30):
+        if nonce in _read(log_path):
+            return srv, log
+        time.sleep(0.1)
+    # ★自分の記録に合図が無い＝そのポートは自分のものではない★
+    srv.terminate()
+    try:
+        srv.wait(timeout=10)
+    except Exception:                      # noqa: BLE001
+        srv.kill()
+    log.close()
+    return None, None
+
+
+def _read(path: str) -> str:
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            return fh.read()
+    except OSError:
+        return ""
+
+
+def run(slug: str, port: int = 0, extra=None) -> int:
+    # ★記録の名前は実行ごとに一意★（同時に動いても混ざらない）
+    tag = f"{os.getpid()}_{uuid.uuid4().hex[:8]}"
+    log_path = os.path.join(BASE, f".render_check_{tag}.log")
+    fixed = bool(port)
+    srv = log = None
+    for cand in ([port] if fixed else range(FIRST_PORT, FIRST_PORT + TRIES)):
+        if not port_free(cand):
+            if fixed:
+                print(f"★ポート {cand} は誰かが使っています★"
+                      "（過去の実行の残骸かもしれません）。検査しません")
+                return 2
+            continue
+        srv, log = _start(cand, log_path)
+        if srv:
+            port = cand
+            break
+        if fixed:
+            print(f"★ポート {cand} で自分のサーバーを持てませんでした★")
             return 2
+    if not srv:
+        print("★空いているポートで自分のサーバーを起こせませんでした★")
+        return 2
+    print(f"自分のサーバー: ポート {port}（記録 {os.path.basename(log_path)}）")
+    try:
         cmd = [sys.executable, os.path.join(BASE, "scripts", "audit_render.py"),
                "--base-url", f"http://{HOST}:{port}", "--slug", slug]
         cmd += list(extra or [])
@@ -112,7 +178,8 @@ def run(slug: str, port: int = 0, extra=None) -> int:
         except Exception:                  # noqa: BLE001
             srv.kill()
         log.close()
-    n = served_count(log_path)
+    # ★合図の1回は数えない★
+    n = max(0, served_count(log_path) - 1)
     print(f"自分のサーバーが応答した回数: {n}")
     if n == 0:
         # ★★別のサーバーが応答した疑い★★＝結果を信じない
@@ -164,6 +231,37 @@ def selftest() -> int:
     os.remove(tmp)
     t("　記録が無いときも0（例外にしない）",
       served_count(os.path.join(BASE, ".render_check_no_such.log")) == 0)
+
+    # ★★同時に動かしても、他人の応答を自分のものと数えない★★
+    #   （2026-08-28・Codexの10回目の指摘2）
+    #   ★空きを確かめてから bind するまでに隙間がある★＝
+    #   同時に2本動くと両方が同じポートを選び、片方だけが bind に成功する。
+    #   ★負けた側が勝った側の記録を見て「自分が応答した」と読む★のが、
+    #   まさに直したかった事故と同じ型。
+    _other = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    _other.bind((HOST, 0))
+    _other.listen(1)
+    _taken = _other.getsockname()[1]
+    _lg = os.path.join(BASE, ".render_check_ctrl.log")
+    try:
+        _srv, _log = _start(_taken, _lg)
+        if _srv:
+            _srv.terminate()
+            try:
+                _srv.wait(timeout=10)
+            except Exception:              # noqa: BLE001
+                _srv.kill()
+        if _log:
+            _log.close()
+        t("★★他人が掴んでいるポートを、自分のものと言わない★★"
+          "／★これを間違えると、他人が応答した検査を"
+          "「合格」と読んでしまう★", _srv is None)
+    finally:
+        _other.close()
+        try:
+            os.remove(_lg)
+        except OSError:
+            pass
 
     ng = sum(1 for _, o in results if not o)
     print()
