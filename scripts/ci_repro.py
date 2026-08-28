@@ -86,6 +86,30 @@ BLOCK = (
 )
 
 
+def _rmtree_hard(path) -> None:
+    """★読み取り専用でも消す★（2026-08-28・実測で15GB溜まっていた）
+
+    Windows では `.git` の中に読み取り専用のファイルがあるので、
+    ふつうの消し方は失敗する。`ignore_errors=True` だと
+    ★黙って失敗して、写しが溜まり続ける★（実測: 500件超・15GB）。
+    """
+    import os as _os_r
+    import shutil as _sh_r
+    import stat as _st_r
+
+    def _force(func, p, _exc):
+        try:
+            _os_r.chmod(p, _st_r.S_IWRITE)
+            func(p)
+        except Exception:                  # noqa: BLE001
+            pass
+
+    try:
+        _sh_r.rmtree(path, onerror=_force)
+    except Exception:                      # noqa: BLE001
+        pass
+
+
 def _commands(step: str) -> list:
     """ワークフローの指定ステップから python コマンドを読む。"""
     if not os.path.isfile(WF):
@@ -145,7 +169,7 @@ def _run(cmds: list, root: str, no_net: bool) -> list:
     finally:
         if sc:
             import shutil as _sh2
-            _sh2.rmtree(os.path.dirname(sc), ignore_errors=True)
+            _rmtree_hard(os.path.dirname(sc))
     return bad
 
 
@@ -194,7 +218,7 @@ def main() -> int:
         bad = _run(cmds, root, not a.with_net)
     finally:
         if tmp:
-            shutil.rmtree(tmp, ignore_errors=True)
+            _rmtree_hard(tmp)
 
     print()
     if not bad:

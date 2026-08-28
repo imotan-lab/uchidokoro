@@ -228,8 +228,11 @@ def selftest() -> int:
     t("　空いているポートを選べる", isinstance(p, int) and port_free(p))
 
     # ★応答の記録の数え方★
+    # ★試験の一時ファイルも一意にする★（2026-08-28・Codexの12回目）
+    #   ★固定名だと、同時に動かしたとき片方が他方を消してしまう★
+    _tag0 = f"{os.getpid()}_{uuid.uuid4().hex[:8]}"
     tmp = os.path.join(tempfile.gettempdir(),
-                       "render_check_selftest.log")
+                       f"render_check_selftest_{_tag0}.log")
     with open(tmp, "w", encoding="utf-8") as fh:
         fh.write('127.0.0.1 - - [28/Aug/2026 05:00:00] "GET /x HTTP/1.1" 200 -\n')
         fh.write("何かの警告\n")
@@ -242,7 +245,7 @@ def selftest() -> int:
     os.remove(tmp)
     t("　記録が無いときも0（例外にしない）",
       served_count(os.path.join(tempfile.gettempdir(),
-                                "render_check_no_such.log")) == 0)
+                                f"render_check_no_such_{_tag0}.log")) == 0)
 
     # ★★同時に動かしても、他人の応答を自分のものと数えない★★
     #   （2026-08-28・Codexの10回目の指摘2／11回目で試験を決定的にした）
@@ -258,7 +261,8 @@ def selftest() -> int:
         [sys.executable, "-u", "-m", "http.server", "0", "--bind", HOST],
         cwd=BASE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     _taken = 0
-    _lg = os.path.join(tempfile.gettempdir(), "render_check_ctrl.log")
+    _lg = os.path.join(tempfile.gettempdir(),
+                       f"render_check_ctrl_{_tag0}.log")
     try:
         for _ in range(80):
             _ln = _other.stdout.readline().decode("utf-8", "replace")

@@ -1759,6 +1759,30 @@ def _run_tests(root: str, scripts: list) -> tuple:
 SLOW = ("scripts/publish_new_machine.py",)
 
 
+def _rmtree_hard(path) -> None:
+    """★読み取り専用でも消す★（2026-08-28・実測で15GB溜まっていた）
+
+    Windows では `.git` の中に読み取り専用のファイルがあるので、
+    ふつうの消し方は失敗する。`ignore_errors=True` だと
+    ★黙って失敗して、写しが溜まり続ける★（実測: 500件超・15GB）。
+    """
+    import os as _os_r
+    import shutil as _sh_r
+    import stat as _st_r
+
+    def _force(func, p, _exc):
+        try:
+            _os_r.chmod(p, _st_r.S_IWRITE)
+            func(p)
+        except Exception:                  # noqa: BLE001
+            pass
+
+    try:
+        _sh_r.rmtree(path, onerror=_force)
+    except Exception:                      # noqa: BLE001
+        pass
+
+
 def check(only: str = "", fast: bool = False, only_index=None) -> int:
     tmp = tempfile.mkdtemp(prefix="mut_")
     ng, weak, skipped = [], [], []
@@ -1829,7 +1853,7 @@ def check(only: str = "", fast: bool = False, only_index=None) -> int:
             elif not caught:
                 ng.append(m["why"])
     finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+        _rmtree_hard(tmp)          # ★読み取り専用でも消す★
     print()
     if skipped:
         # ★飛ばしたことを黙らない★（「全部OK」に見せない）

@@ -330,6 +330,31 @@ class _OnlyOne:
 #   「正常に完成した新台」を区別できなかった。
 #   書き始める前にこの目印を作り、全部終わってから消す。
 #   目印が残っていれば、次の実行も push も止める。
+def rmtree_hard(path) -> bool:
+    """★読み取り専用でも消す★（2026-08-28・実測で15GB溜まっていた）
+
+    Windows では `.git` の中に読み取り専用のファイルがあるため、
+    ふつうの消し方は失敗する。`ignore_errors=True` だと
+    ★黙って失敗して、写しが溜まり続ける★（実測: 500件超・15GB）。
+    """
+    import shutil as _sh_r
+    import os as _os_r
+    import stat as _st_r
+
+    def _force(func, p, _exc):
+        try:
+            _os_r.chmod(p, _st_r.S_IWRITE)
+            func(p)
+        except Exception:                  # noqa: BLE001
+            pass
+
+    try:
+        _sh_r.rmtree(path, onerror=_force)
+    except Exception:                      # noqa: BLE001
+        pass
+    return not _os_r.path.exists(path)
+
+
 def copy_tolerant(src, dst, *a, **k):
     """★写している間に消えたファイルは飛ばす★（2026-08-28）
 
@@ -3367,10 +3392,12 @@ def selftest() -> int:
         t("　印の形が分からないときは奪わない（安全側）",
           _raises(lambda: _ou.__enter__()))
     finally:
-        for _n in os.listdir(BASE):
+        # ★後片づけは、いま使っている場所を見る★（2026-08-28・Codexの12回目）
+        #   ★一時の場所へ移したのに、BASE を掃除したままだった★
+        for _n in os.listdir(_lockdir):
             if _n.startswith(".publish.lock.dead_test"):
                 try:
-                    os.remove(os.path.join(BASE, _n))
+                    os.remove(os.path.join(_lockdir, _n))
                 except OSError:
                     pass
 
@@ -3613,7 +3640,12 @@ def selftest() -> int:
     _sh.copytree(BASE, _work4, copy_function=copy_tolerant,
                  ignore=_sh.ignore_patterns(
                      "__pycache__", "node_modules", ".preview-site", "_site",
-                     "*.tmp", ".render_check_*", ".probe_churn_*",
+                     # ★自分が作る作業ファイルの形も入れる★
+                     #   （2026-08-28・Codexの12回目）
+                     #   `*.tmp` では `.tmp.<番号>` `.new.<番号>` に
+                     #   ★当たらない★（書き込みの途中で必ず作る形）。
+                     "*.tmp", "*.tmp.*", "*.new.*", "*.recover.*",
+                     ".render_check_*", ".probe_churn_*",
                      ".publish.lock.*"))
     _real_base = BASE
     _real_ip = IN_PROGRESS
@@ -3945,7 +3977,7 @@ def selftest() -> int:
                 continue
             with open(_f4, "wb") as _fh5:
                 _fh5.write(_b4)
-        _sh.rmtree(_dir4, ignore_errors=True)
+        rmtree_hard(_dir4)          # ★読み取り専用でも消す★
 
     # ★項目23（説明書の大きさ）だけが赤なら公開は止めない★
     #   （2026-08-10・依頼133 P1。8行の変更に回帰テストが無かった）
@@ -3975,6 +4007,10 @@ def selftest() -> int:
     finally:
         _sp_mod.run = _real_run
 
+
+    # ★試験が作った一時の置き場を片づける★（2026-08-28・Codexの12回目）
+    for _td0 in (_lockdir, _cpdir):
+        rmtree_hard(_td0)          # ★読み取り専用でも消す★
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")

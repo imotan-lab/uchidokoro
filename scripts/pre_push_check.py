@@ -87,32 +87,71 @@ def push_ranges(stdin_text: str) -> list:
     return out
 
 
+_COMMITS = None
+
+
+def _git(*a):
+    r = subprocess.run(["git"] + list(a), cwd=BASE, capture_output=True,
+                       text=True, encoding="utf-8", errors="replace")
+    return r.stdout if r.returncode == 0 else None
+
+
+def push_commits() -> list:
+    """★今回 push するコミット★（(指紋, 件名) の一覧・1回だけ決める）
+
+    ★ここが唯一の出どころ★（2026-08-28・Codexの12回目）
+      ★直す前は、変更ファイルの側だけ直して、照合の検査は
+        `origin/main..HEAD` 決め打ちのままだった★＝同じ穴が残っていた。
+
+    ★新しい枝は「先端の1コミット」ではない★（同・P1-b）
+      実測＝`git show HEAD` は1件、範囲では5件。
+      新しい枝の途中で記事を変えて、最後に無関係なコミットを置くと
+      検査から外せた。→ ★どの遠隔にも無いコミットを全部★数える。
+    """
+    global _COMMITS
+    if _COMMITS is not None:
+        return _COMMITS
+    out, seen = [], set()
+
+    def _add(text):
+        for line in (text or "").splitlines():
+            sha, _, sub = line.strip().partition(" ")
+            if sha and sha not in seen:
+                seen.add(sha)
+                out.append((sha, sub))
+
+    rngs = list(_RANGES or [])
+    if rngs:
+        for rng in rngs:
+            if ".." in rng:
+                _add(_git("log", "--format=%H %s", rng))
+            else:
+                # ★新しい枝＝どの遠隔にも無いコミットを全部★
+                got = _git("log", "--format=%H %s", rng, "--not", "--remotes")
+                if got is None:
+                    got = _git("log", "--format=%H %s", rng)
+                _add(got)
+    else:
+        # ★標準入力が無いとき（手で動かしたとき）だけ、今までの見方★
+        for rng in ("origin/main..HEAD", "HEAD~1..HEAD"):
+            got = _git("log", "--format=%H %s", rng)
+            if got is not None:
+                _add(got)
+                break
+    _COMMITS = out
+    return _COMMITS
+
+
 def _changed_paths() -> list:
-    """★今回 push するもので変わったファイル★（1回だけ数えて使い回す）"""
+    """★今回 push するもので変わったファイル★（コミットの一覧から導く）"""
     global _CHANGED
     if _CHANGED is not None:
         return _CHANGED
-    rngs = list(_RANGES or [])
-    if not rngs:
-        # ★標準入力が無いとき（手で動かしたとき）だけ、今までの見方★
-        for rng in ("origin/main..HEAD", "HEAD~1..HEAD"):
-            r = subprocess.run(["git", "diff", "--name-only", rng], cwd=BASE,
-                               capture_output=True, text=True,
-                               encoding="utf-8")
-            if r.returncode == 0:
-                _CHANGED = [x.strip() for x in r.stdout.splitlines()
-                            if x.strip()]
-                return _CHANGED
-        _CHANGED = []
-        return _CHANGED
     got = []
-    for rng in rngs:
-        cmd = (["git", "diff", "--name-only", rng] if ".." in rng
-               else ["git", "show", "--name-only", "--format=", rng])
-        r = subprocess.run(cmd, cwd=BASE, capture_output=True, text=True,
-                           encoding="utf-8")
-        if r.returncode == 0:
-            got += [x.strip() for x in r.stdout.splitlines() if x.strip()]
+    for sha, _sub in push_commits():
+        got += [x.strip() for x in
+                (_git("show", "--name-only", "--format=", sha) or "").splitlines()
+                if x.strip()]
     _CHANGED = sorted(set(got))
     return _CHANGED
 
@@ -211,16 +250,11 @@ def _verified_range() -> list:
             verified.add(str(e["verified_commit"]))
     if not active:
         return []                  # 今日は無人タスクが機種を触っていない
-    # いま push しようとしているコミットのうち、無人タスクが作ったもの
-    r = subprocess.run(["git", "log", "--format=%H %s", "origin/main..HEAD"],
-                       cwd=BASE, capture_output=True)
-    if r.returncode != 0:
-        return []
+    # ★いま push しようとしているコミット★（決めるのは push_commits だけ）
+    #   ★直す前はここだけ `origin/main..HEAD` 決め打ちだった★
+    #   （2026-08-28・Codexの12回目）＝別の枝・タグで外せた。
     out = []
-    for line in r.stdout.decode("utf-8", "replace").splitlines():
-        if not line.strip():
-            continue
-        sha, _, subject = line.partition(" ")
+    for sha, subject in push_commits():
         if sha in verified:
             continue
         # ★★記事に触っていないコミットには照合を求めない★★（2026-08-28）
@@ -293,6 +327,24 @@ def _selftest() -> int:
                       f"refs/heads/b bbb refs/heads/b {Z[:39]}2")) == 2)
     t("　渡されなければ空（手で動かしたときは今までの見方に戻る）",
       push_ranges("") == [] and push_ranges("こわれた行") == [])
+
+    # ★★新しい枝は「先端の1コミット」ではない★★
+    #   （2026-08-28・Codexの12回目・実測で確かめた）
+    #   `git show <指紋>` は先端しか出さないので、
+    #   ★枝の途中で記事を変えて、最後に無関係なコミットを置くと外せた★。
+    _tip = (_git("rev-parse", "HEAD") or "").strip()
+    _prev = (_git("rev-parse", "HEAD~3") or "").strip()
+    if _tip and _prev:
+        _one = [x for x in
+                (_git("show", "--name-only", "--format=", _tip) or "").splitlines()
+                if x.strip()]
+        _all = [x for x in
+                (_git("log", "--format=%H", f"{_prev}..{_tip}") or "").splitlines()
+                if x.strip()]
+        t("　（前提）直近3コミットぶんの範囲がある", len(_all) == 3)
+        t("★★先端だけを見ると、手前のコミットの変更を見落とす★★"
+          "／★新しい枝を送るときに、これで検査から外せた★",
+          len(_all) > 1 and len(_one) >= 1)
 
     # ★★照合を求める範囲★★（2026-08-28・実際に push が止まった）
     t("★★記事を書き換えたコミットには照合を求める★★",
