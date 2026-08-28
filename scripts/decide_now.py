@@ -928,15 +928,20 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
                 # ★★数え上げで比べる★★（2026-08-28・Codexの9回目）
                 #   ★集合だと「同じ値が1件増える」変更が見えない★
                 #   （500Gが1つ→2つ）。
+                # ★ループの名前に p を使わない★（2026-08-29・台帳#500）
+                #   `p` は★記事ファイルの置き場所★と同じ名前で、
+                #   普通の for は外へ漏れるので、書き込みのときに
+                #   `tmp = p + ".tmp"` が TypeError で落ちていた。
+                #   ★見るだけでは通る★ので、空打ちでは気づけなかった。
                 _cb = _Counter(_sb)
                 _added_pairs = []
-                for p in _sa:
-                    if _cb.get(p):
-                        _cb[p] -= 1
+                for _pair in _sa:
+                    if _cb.get(_pair):
+                        _cb[_pair] -= 1
                     else:
-                        _added_pairs.append(p)
-                _miss_p = [p for p in _added_pairs
-                           if not _slot_ok(p, _src_pairs)]
+                        _added_pairs.append(_pair)
+                _miss_p = [_pair for _pair in _added_pairs
+                           if not _slot_ok(_pair, _src_pairs)]
                 if _miss_p:
                     result["problems"].append(
                         "出どころと、数値の付き先が違います: "
@@ -1209,6 +1214,13 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
     for kind, si, bi, a in plan:
         result["done"].append({"op": a["op"], "why": a["why"][:60]})
 
+    # ★★見るだけのときも「書く直前」まで通す★★（2026-08-29・台帳#500）
+    #   ★今回の不具合は、書き込みの1行目でだけ落ちた★ので、
+    #   空打ちでは「10件すべて通ります」と出ていた。
+    #   ＝置き場所の組み立てまでは、見るだけのときもやっておく。
+    #   （実際にファイルへ書くのは apply_it のときだけ）
+    tmp = p + ".tmp"
+
     if apply_it:
         for kind, si, bi, a in plan:
             if kind in OUTSIDE_KINDS:
@@ -1224,7 +1236,6 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
             body = d["sections"][si]["body"]
             d["sections"][si]["body"] = [x for i, x in enumerate(body)
                                          if i not in idxs]
-        tmp = p + ".tmp"
         with io.open(tmp, "w", encoding="utf-8", newline="\n") as f:
             json.dump(d, f, ensure_ascii=False, indent=1)
             f.write("\n")
@@ -2325,6 +2336,45 @@ def _selftest() -> int:
           "／★手前の「並びの入れ替え」検査は当たらない材料にしてある★",
           bool(_g8h["problems"])
           and "付き先が違います" in "".join(_g8h["problems"]))
+
+        # ★★数値を直す書き換えが、書く瞬間に落ちていた★★
+        #   （2026-08-29・台帳#500／自分が 2026-08-28 に入れた）
+        #   ループの名前が★記事ファイルの置き場所★と同じで、外へ漏れていた。
+        #   ★見るだけでは通る★ので空打ちでは気づけなかった。
+        S11 = {"slug": "s11", "sections": [
+            {"title": "当サイトの狙い目",
+             "body": ["等価交換：通常500G〜から狙い目。",
+                      "等価交換：通常600G〜から狙い目。",
+                      "ほかの行です。"]}]}
+        with io.open(os.path.join(td, "s11.json"), "w",
+                     encoding="utf-8", newline="\n") as f:
+            json.dump(S11, f, ensure_ascii=False, indent=1)
+            f.write("\n")
+        _r11 = os.path.join(td, "ds11.json")
+        io.open(_r11, "w", encoding="utf-8").write(json.dumps(
+            {"schema_version": SCHEMA, "slug": "s11",
+             "source_sha256": _sha_of("s11"),
+             "decided_by": ["Claude", "codex"],
+             "numbers_removed": [{"n": "500G", "why": "誤記なので正しい値へ"}],
+             "actions": [{"op": "replace",
+                          "before": "等価交換：通常500G〜から狙い目。",
+                          "after": "等価交換：通常600G〜から狙い目。",
+                          "why": "数値の誤りを直す",
+                          "numbers_from": "等価交換：通常600G〜から狙い目。"}]},
+            ensure_ascii=False))
+        # ★例外で落ちるのを「守りの証拠」にしない★＝自分で受けて❌にする
+        try:
+            _g11 = apply_decision(_r11, apply_it=True)
+            _a11 = json.load(io.open(os.path.join(td, "s11.json"),
+                                     encoding="utf-8"))
+        except Exception:                  # noqa: BLE001
+            _g11 = {"problems": ["落ちた"], "wrote": False}
+            _a11 = {"sections": [{"body": [""]}]}
+        t("★★数値を直す書き換えが、実際に書き込める★★"
+          "／★ループの名前が置き場所を上書きして、書く瞬間に必ず落ちていた★"
+          "（見るだけでは通るので空打ちで気づけなかった）",
+          not _g11["problems"] and _g11.get("wrote")
+          and _a11["sections"][0]["body"][0] == "等価交換：通常600G〜から狙い目。")
 
         # ── 2026-08-28・Codexの10回目 ──────────────────────────
         #   ★重複として通した消し方で、同じ文を**全部**消せた★
