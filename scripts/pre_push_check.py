@@ -212,6 +212,43 @@ def touches_articles(paths) -> bool:
     return False
 
 
+# ★新台の公開でも必ず変わる共通のファイル★（レーンの判定から外す）
+_SHARED = ("assets/data/machines.json", "sitemap.xml")
+
+
+def new_machine_lane(paths, lane_slugs) -> bool:
+    """★その日の新台レーンだけを触ったコミットか★（2026-08-28）
+
+    ★照合（verify-commit）は修理レーンのための関所★で、
+    新台には別の関所（`prepush_gate` と公開経路の検査）がある。
+    ★新台レーンのコミットまで止めると、押し出せなくなる★
+    （新台タスクが遅れた日や手で回した日に必ず起きる）。
+    """
+    slugs = set(lane_slugs or ())
+    if not slugs:
+        return False
+    saw = False
+    for p in paths:
+        p = str(p or "").replace("\\", "/")
+        if p in _SHARED or p.startswith("guide-"):
+            continue
+        if p.startswith("assets/data/machine-details/"):
+            s = p.split("/")[-1][:-5] if p.endswith(".json") else ""
+            if s in slugs:
+                saw = True
+                continue
+            return False
+        if p.startswith("machines/"):
+            s = p.split("/")[1] if "/" in p[9:] + "/" else ""
+            if s in slugs:
+                saw = True
+                continue
+            return False
+        if touches_articles([p]):
+            return False
+    return saw
+
+
 def _verified_range() -> list:
     """★無人タスクが直したコミットが、照合を通っているか★（2026-08-21・Codex依頼249）
 
@@ -265,6 +302,8 @@ def _verified_range() -> list:
     # ★いま push しようとしているコミット★（決めるのは push_commits だけ）
     #   ★直す前はここだけ `origin/main..HEAD` 決め打ちだった★
     #   （2026-08-28・Codexの12回目）＝別の枝・タグで外せた。
+    lane = list((_day.get("unlimited_slugs") or [])
+                if str(_day.get("date") or "") == today else [])
     out = []
     for sha, subject in push_commits():
         if sha in verified:
@@ -282,6 +321,9 @@ def _verified_range() -> list:
                       _f.stdout.decode("utf-8", "replace").splitlines()
                       if x.strip()]
             if not touches_articles(_paths):
+                continue
+            # ★新台レーンは別の関所が見ている★（2026-08-28）
+            if new_machine_lane(_paths, lane):
                 continue
         out.append(f"{sha[:12]} {subject[:60]}")
     return out
@@ -339,6 +381,22 @@ def _selftest() -> int:
                       f"refs/heads/b bbb refs/heads/b {Z[:39]}2")) == 2)
     t("　渡されなければ空（手で動かしたときは今までの見方に戻る）",
       push_ranges("") == [] and push_ranges("こわれた行") == [])
+
+    # ★★新台レーンのコミットは、修理レーンの照合を求めない★★
+    #   （2026-08-28・手動実行で実際に踏んだ＝新台の記事が push できなかった）
+    _np = ["assets/data/machine-details/dmm_5090.json",
+           "machines/dmm_5090/index.html",
+           "assets/data/machines.json", "guide-ichiran.html"]
+    t("★★新台だけを触ったコミットは、照合を求めない★★"
+      "／★求めていたので、新台タスクが遅れた日は公開できなかった★",
+      new_machine_lane(_np, ["dmm_5090"]) is True)
+    t("★★新台以外の記事が混ざっていたら、今までどおり照合を求める★★",
+      new_machine_lane(_np + ["assets/data/machine-details/hanabi.json"],
+                       ["dmm_5090"]) is False)
+    t("　その日の新台レーンが空なら、何も免除しない",
+      new_machine_lane(_np, []) is False)
+    t("　共通のファイルだけなら、新台とは言えない",
+      new_machine_lane(["assets/data/machines.json"], ["dmm_5090"]) is False)
 
     # ★★gitに聞けなかったら、pushを止める★★（2026-08-28・Codexの13回目）
     #   ★私が今日入れた穴★＝失敗を「対象0件」と読んで、
