@@ -1353,11 +1353,27 @@ MUTATIONS = [
         "run": ["scripts/decide_now.py"],
     },
     {
+        "why": "★指摘された一文を触らない決定でも合意できる"
+               "（押し切ったのに直っていない件ができ、誰も直せなくなる）★",
+        "file": "scripts/repair_journal.py",
+        "before": "        if not _touch:",
+        "after": "        if False:",
+        "run": ["scripts/repair_journal.py"],
+    },
+    {
+        "why": "★検査が落ちていなくても、押し切った件を開け直せる"
+               "（合格した直しを、あとから開け直せてしまう）★",
+        "file": "scripts/repair_journal.py",
+        "before": "    if rec.get(\"state\") in _after and _recheck_failing(rec):",
+        "after": "    if rec.get(\"state\") in _after:",
+        "run": ["scripts/repair_journal.py"],
+    },
+    {
         "why": "★判断していないのに回数を数える"
                "（封もCodexもせずに3回呼べば人へ回せる）★",
         "file": "scripts/repair_journal.py",
-        "before": '    if rec.get("state") != "CODEX_RECEIVED":',
-        "after": "    if False:",
+        "before": '    elif rec.get("state") != "CODEX_RECEIVED":',
+        "after": "    elif False:",
         "run": ["scripts/repair_journal.py"],
     },
     {

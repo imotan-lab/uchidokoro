@@ -416,6 +416,27 @@ def agree(fid: str, ops: list, recheck_name: str, decided_by: list) -> dict:
         raise JournalError(
             f"{recheck_name} は観測どまりの検査です。"
             "直したことを機械で確かめられない型なので、自動では触りません")
+
+    # ★★目印にした一文を、実際に触る決定であること★★
+    #   （2026-08-29・台帳#499の案B／自分で再現した）
+    #   ★直す前は、その件の逐語を1文字も触らない決定でも合意できた★ので、
+    #   そのまま押し切れて「押し切ったのに直っていない」状態になり、
+    #   ★前にも後ろにも進めない件ができた★（basilisk_tenzen で実際に発生）。
+    #   ★言葉の意味は見ない★（それは2AIの仕事）＝
+    #   「消す対象がその一文か」「書き換えの前がその一文か」だけを文字で見る。
+    #   ★既存の守りを全部通してから最後に見る★（順番を変えないため）
+    _q = str(rec.get("quote") or "").strip()
+    if _q:
+        _touch = any(str(o.get("text") or "").strip() == _q
+                     or str(o.get("before") or "").strip() == _q
+                     for o in ops)
+        if not _touch:
+            raise JournalError(
+                "この決定は、指摘された一文を触っていません"
+                f"（{_q[:36]}…）。"
+                "★触らない決定で合意すると、押し切ったのに直っていない件が"
+                "できて、あとから誰も直せなくなります★")
+
     return _step(rec, "AGREED", "2AIが一致した",
                  ops=ops, ops_sha256=decision_digest(_dec_raw),
                  recheck={"name": recheck_name,
@@ -487,6 +508,22 @@ def done(fid: str, closed_issues=None) -> dict:
                  closed_issues=list(closed_issues or []))
 
 
+def _recheck_failing(rec: dict) -> bool:
+    """★その件の検査が、いま落ちているか★（2026-08-29・台帳#499）
+
+    ★自分で確かめ直す★＝記録された結果を信じない
+    （偽の合格・偽の不合格を作れないようにする）。
+    ★読めないときは False★＝分からないものを「開けてよい」にしない。
+    """
+    try:
+        import recheck as _rc
+        got = _rc.run(str(rec.get("check") or ""),
+                      {"slug": rec.get("slug"), "text": rec.get("quote")})
+        return str(got.get("result")) == "FAIL"
+    except Exception:                      # noqa: BLE001
+        return False
+
+
 def attempt(fid: str, why: str) -> dict:
     """決まらなかった回を数える。★3回で人へ回す★
 
@@ -501,7 +538,20 @@ def attempt(fid: str, why: str) -> dict:
     #   ★封もCodexの受け取りもせずに3回呼べば人へ回せた★
     #   ＝「3回やっても決まらなかった」が嘘になる。
     #   （さらに APPLIED や DONE からでも呼べて、DETECTED へ戻せた）
-    if rec.get("state") != "CODEX_RECEIVED":
+    # ★★押し切ったのに直っていない件は、やり直せる★★
+    #   （2026-08-29・台帳#499／自分で再現した）
+    #   段階を進める applied / commit_verified / push_confirmed は
+    #   「その件の検査に通ったか」を見ていない（見るのは最後の1手前だけ）。
+    #   ＝「直した」と「押し切った」が別々に進むので、
+    #   ★目印の一文を直さないまま push まで行ける★。
+    #   そこから先は RECHECK_PASS しか無く、検査は FAIL なので進めず、
+    #   やり直しも断られて★誰にも直せない★状態になっていた（実際に1件できた）。
+    #   ★開けてよいのは「検査が FAIL のとき」だけ★＝
+    #   合格した件（DONE）や、まだ判断していない件は今までどおり断る。
+    _after = ("AGREED", "APPLIED", "COMMIT_VERIFIED", "PUSH_CONFIRMED")
+    if rec.get("state") in _after and _recheck_failing(rec):
+        pass                              # ★やり直しを認める★
+    elif rec.get("state") != "CODEX_RECEIVED":
         raise JournalError(
             f"まだ判断していません（いま {rec.get('state')}）。"
             "Claudeの判定に封をして、Codexの判定を受け取ってから数えます"
@@ -718,7 +768,7 @@ def _selftest() -> int:
         # 閉じられない検査では合意できない
         try:
             agree(fid, _decfile(fid, "hokuto",
-                                [{"op": "drop", "text": "x", "why": "重複"}]),
+                                [{"op": "drop", "text": "指紋なしで立てます。", "why": "重複"}]),
                   "strategy_vs_checker", ["Claude", "codex"])
             t("★★閉じられない検査では合意できない★★", False)
         except JournalError as e:
@@ -736,7 +786,7 @@ def _selftest() -> int:
         # 判断者1人
         try:
             agree(fid, _decfile(fid, "hokuto",
-                                [{"op": "drop", "text": "x", "why": "重複"}]),
+                                [{"op": "drop", "text": "指紋なしで立てます。", "why": "重複"}]),
                   "text_gone", ["Claude"])
             t("　判断者が1人では合意にしない", False)
         except JournalError:
@@ -763,6 +813,19 @@ def _selftest() -> int:
         except JournalError as e:
             t("★★pushを確かめるまで先へ進めない★★",
               "origin" in str(e) or "確かめられません" in str(e))
+
+        # ★★開け直してよいのは「検査が落ちているとき」だけ★★
+        #   （2026-08-29・台帳#499）
+        #   ★押し切ったのに直っていない件★は開け直せる（袋小路を作らない）。
+        #   ★けれど検査が通っている件まで開け直せてはいけない★
+        #   （合格した直しを、あとから開け直せてしまう）。
+        _ng_open = False
+        try:
+            attempt(fid, "検査は落ちていないのに開け直そうとする")
+        except JournalError as _e:
+            _ng_open = "まだ判断していません" in str(_e)
+        t("★★検査が落ちていない件は、開け直せない★★"
+          "／★合格した直しを、あとから開け直せてはいけない★", _ng_open)
 
         # 打ち切り
         f2 = detect("hokuto", "text_gone", "別のおかしな文です。", "x",
@@ -809,7 +872,7 @@ def _selftest() -> int:
         io.open(v7, "w", encoding="utf-8").write("あとから書き換えました。" * 3)
         try:
             agree(f7, _decfile(f7, "zzz7",
-                               [{"op": "drop", "text": "x", "why": "重複"}],
+                               [{"op": "drop", "text": "七番の文です。", "why": "重複"}],
                                sha="c" * 64, name="d7"),
                   "text_gone", ["Claude", "codex"])
             t("★★封のあと判定を書き換えたら合意できない★★", False)
@@ -817,6 +880,30 @@ def _selftest() -> int:
             t("★★封のあと判定を書き換えたら合意できない★★"
               "／★直す前は指紋を控えるだけで、取り直していなかった★",
               "書き換え" in str(e))
+
+        # ★★指摘された一文を触らない決定では合意できない★★
+        #   （2026-08-29・台帳#499の案B／実際に袋小路が1件できた）
+        #   ★触らない決定で合意すると、そのまま押し切れて
+        #   「押し切ったのに直っていない」件ができ、誰も直せなくなる★
+        r7c = detect("zzz7c", "text_gone", "七番cの文です。",
+                     source_sha256="e" * 64)
+        f7c = r7c["finding_id"]
+        v7c = os.path.join(td, "v7c.md")
+        io.open(v7c, "w", encoding="utf-8").write("私の判定です。" * 5)
+        seal_claude(f7c, v7c)
+        record_codex(f7c, "f" * 64, "Codexの判定です。" * 3)
+        _ng7c = False
+        try:
+            agree(f7c, _decfile(f7c, "zzz7c",
+                                [{"op": "drop", "text": "関係ない行です。",
+                                  "why": "重複"}],
+                                sha="e" * 64, name="d7c"),
+                  "text_gone", ["Claude", "codex"])
+        except JournalError as _e:
+            _ng7c = "触っていません" in str(_e)
+        t("★★指摘された一文を触らない決定では合意できない★★"
+          "／★触らないまま押し切れて、あとから誰も直せない件ができた★",
+          _ng7c)
 
         # ★対照★＝書き換えていなければ合意できる
         r7b = detect("zzz7b", "text_gone", "七番bの文です。",
@@ -826,7 +913,7 @@ def _selftest() -> int:
         io.open(v7b, "w", encoding="utf-8").write("私の判定です。" * 5)
         seal_claude(f7b, v7b)
         record_codex(f7b, "d" * 64, "Codexの判定です。" * 3)
-        _ops7b = [{"op": "drop", "text": "x", "why": "重複"}]
+        _ops7b = [{"op": "drop", "text": "七番bの文です。", "why": "重複"}]
         _a7 = agree(f7b, _decfile(f7b, "zzz7b", _ops7b,
                                   sha="c" * 64, name="d7b"),
                     "text_gone", ["Claude", "codex"])
@@ -856,7 +943,7 @@ def _selftest() -> int:
         io.open(v6, "w", encoding="utf-8").write("私の判定です。" * 5)
         seal_claude(f6, v6)
         record_codex(f6, "6" * 64, "Codexの判定です。" * 3)
-        _ops6 = [{"op": "drop", "text": "x", "why": "重複"}]
+        _ops6 = [{"op": "drop", "text": "六番の文です。", "why": "重複"}]
         try:
             agree(f6, _decfile("よその件", "zzz6", _ops6,
                                sha="6" * 64, name="d6a"),
@@ -902,7 +989,7 @@ def _selftest() -> int:
         io.open(_p5n, "w", encoding="utf-8").write(json.dumps(
             {"schema_version": "decide-now/v1", "slug": "zzz5n",
              "finding_id": f5n, "decided_by": ["Claude", "codex"],
-             "actions": [{"op": "drop", "text": "x", "why": "重複"}]},
+             "actions": [{"op": "drop", "text": "五番nの文です。", "why": "重複"}]},
             ensure_ascii=False))
         try:
             agree(f5n, _p5n, "text_gone", ["Claude", "codex"])
@@ -922,7 +1009,7 @@ def _selftest() -> int:
         seal_claude(f6b, v6b)
         record_codex(f6b, "8" * 64, "Codexの判定です。" * 3)
         try:
-            agree(f6b, [{"op": "drop", "text": "x", "why": "重複"}],
+            agree(f6b, [{"op": "drop", "text": "六番bの文です。", "why": "重複"}],
                   "text_gone", ["Claude", "codex"])
             t("★★打ち直した操作の配列では合意できない★★", False)
         except JournalError as e:
@@ -942,7 +1029,7 @@ def _selftest() -> int:
         seal_claude(f6d, v6d)
         record_codex(f6d, "d" * 64, "Codexの判定です。" * 3)
         _p6d = _decfile(f6d, "zzz6d",
-                        [{"op": "drop", "text": "x", "why": "重複"}],
+                        [{"op": "drop", "text": "六番dの文です。", "why": "重複"}],
                         sha="d" * 64, name="d6e")
         try:
             agree(f6d, _p6d, "text_gone", ["Claude", "だれか別の人"])
