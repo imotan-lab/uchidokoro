@@ -38,6 +38,7 @@ import hashlib
 import json
 import re
 import subprocess
+import tempfile
 import os
 import sys
 
@@ -3265,19 +3266,28 @@ def selftest() -> int:
     t("★★一覧と機種データを集合で突き合わせる★★（欠け・余分・重複を見つける）",
       check_counts(len(rows)) == [])
 
+    # ★★試験の目印は、本物の作業ツリーに作らない★★
+    #   （2026-08-28・Codexの助言）
+    #   ★直す前は BASE に作っていた★ので、
+    #   同じ試験を同時に走らせられず、CI再現と手元の作業がぶつかった。
+    _lockdir = tempfile.mkdtemp(prefix="pnm_lock_")
+
+    def _lk(name):
+        return os.path.join(_lockdir, name)
+
     # ★同時に2つ公開しない★（Codex指摘4）
-    with _OnlyOne(os.path.join(BASE, ".publish.lock.test")) as _one:
+    with _OnlyOne(_lk(".publish.lock.test")) as _one:
         t("★★ロックを持っている間は、もう一方が入れない★★",
           _raises(lambda: _OnlyOne(
-              os.path.join(BASE, ".publish.lock.test")).__enter__()))
+              _lk(".publish.lock.test")).__enter__()))
     t("　抜けたらロックは消える",
-      not os.path.exists(os.path.join(BASE, ".publish.lock.test")))
+      not os.path.exists(_lk(".publish.lock.test")))
 
     # ★★持ち主が死んでいると分かったら、30分待たずに片付ける★★
     #   （2026-08-21・実際に起きた形。対照実験つき）
     #   手元で試験を強制終了したら目印が残り、以後の実行が
     #   「2分前から動いています」と言い続けた＝原因に辿り着けない。
-    _dl = os.path.join(BASE, ".publish.lock.dead_test")
+    _dl = _lk(".publish.lock.dead_test")
     try:
         # ★★本当に終わったプロセスのPIDを使う★★（2026-08-21に直した）
         #   ★直す前は 999999 という決め打ちだった★＝
@@ -3326,7 +3336,7 @@ def selftest() -> int:
     #   ★直す前に実際に起きていたこと★＝PID 1692 の残骸が丸1日残り、
     #   「いま別の公開処理が動いています」と言い続けた。
     #   ＝★誰も動いていないのに、新台公開が永久に止まる★
-    _lt = os.path.join(BASE, ".publish.lock.stale_test")
+    _lt = _lk(".publish.lock.stale_test")
     try:
         # ★★持ち主が生きている印を書く★★（2026-08-21に直した）
         #   ★直す前は居ないPID（9999）を書いていた★ので、
@@ -3355,7 +3365,7 @@ def selftest() -> int:
         #     ①Aが動いている ②Bが残骸とみなして奪う ③Aが終わる
         #     → ★os.remove が無条件だったのでBの目印が消えた★
         #     ＝以後Cが割り込める＝同時に2つ公開しない、が破れる
-        _lt2 = os.path.join(BASE, ".publish.lock.owner_test")
+        _lt2 = _lk(".publish.lock.owner_test")
         _stale2 = []
         try:
             _a = _OnlyOne(_lt2)
@@ -3388,8 +3398,13 @@ def selftest() -> int:
             t("　その状態で3つ目は割り込めない",
               _raises(lambda: _OnlyOne(_lt2).__enter__()))
             os.utime(_lt2, (_old2, _old2))
-            t("★長い処理は touch() で『まだ動いている』と伝えられる★",
-              _b.touch() and (time.time() - os.path.getmtime(_lt2)) < 60)
+            # ★★時間で合否を決めない★★（2026-08-28・Codexの助言）
+            #   ★直す前は「いまとの差が60秒未満」★を見ていたので、
+            #   混んでいると落ちる検査だった。
+            #   ★見るのは出来事★＝わざと古くした時刻より新しくなったか。
+            t("★長い処理は touch() で『まだ動いている』と伝えられる★"
+              "／★時計ではなく、古くした時刻より進んだかで見る★",
+              _b.touch() and os.path.getmtime(_lt2) > _old2)
             _b.__exit__()
             t("　持ち主が終われば目印は消える", not os.path.exists(_lt2))
         finally:
