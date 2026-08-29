@@ -2293,6 +2293,22 @@ def _selftest():
                                 "_field": "payout_rate",
                                 "value": {"1": "97.3%", "6": "110.5%"},
                                 "sources": ["a"]}}}
+            # ★★名乗りだけの設定表は通さない★★（2026-08-29）
+            #   ★控えにも無く、値も一致しないのに
+            #     「（確認1件のみ）」が付いているだけの行★
+            #   ＝控えと違う値が並んでいても見逃す経路だった。
+            globals()["_machine"] = lambda sl: {
+                "slug": sl, "name": "試験機",
+                "page_decision": {"pending_topics": ["setting"]}}
+            globals()["_load_detail"] = lambda sl: ({"sections": [
+                {"title": "設定示唆まとめ", "body": [],
+                 "tables": [{"label": "出玉率",
+                             "rows": [["設定1", "97.0%" + _mark18]]}]}]},
+                "", "")
+            t("★★名乗りだけの設定表は、控えと照らさずには通さない★★"
+              "／★控えと違う値が並んでいても見逃す経路だった★",
+              _dv({"slug": "zzz_tbl29"})["result"] == FAIL)
+
             t("★★★通し：2AIの確定値から作った設定表も通る★★★",
               _thru(_mat_2ai, "zzz_e2e_2ai",
                     store={"payout_rate": _rec20({"1": "97.3%",

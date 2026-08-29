@@ -13,7 +13,7 @@
   "scripts/blocked_hosts.py": "553ac0a6f0f0baf563100458937efa167826c4347f815ace1a70e39769909b7d",
   "scripts/ceiling_lookup.py": "ad54309152dd7fe19c56ff574f7b468a70ef994e456b4a0a2c2f4a68fb00cf00",
   "scripts/collect_evidence.py": "72b3ca77661ebd8c309481438b05a8caa8e438e0ebd1a233a85d19efc231725a",
-  "scripts/confirmed_values.py": "50604366fe0bf435b852ff29795f9a689c674d72b2c51244f8506549472bf857",
+  "scripts/confirmed_values.py": "606fa5d2f6616a23448a8d6cd8393eea5ddbeeabacec4189d8d511880fe7bfd3",
   "scripts/cz_lookup.py": "24727d5876e0a5e233ff6c913e96ae3d3fc50d7e5d5869b019e443bde374b02b",
   "scripts/directory_index.py": "a758913881d5b7b6105069e5f3dfcb3e5a64aa2054578094d517166240ad2e21",
   "scripts/dmm_calendar.py": "ad0ae2ffb3977307cf361e4a137288e9bccdd1f15fb43e560aa629c5942a6930",

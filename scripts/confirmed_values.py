@@ -2350,6 +2350,23 @@ def selftest() -> int:
         t("★★その材料が検索の濃さに数えられる★★"
           "／★これが無いと、第2の出典を見つけても NO_BONUS_PROB のまま★",
           "bonus_prob" in _pd_cv.index_claims_from_material(_mat_cv))
+        # ★★箱（天井・AT・CZ）の行にも根拠を刻む★★（2026-08-29）
+        #   ★刻まないと、2AIで確定させても検索の濃さに届かない★
+        #   （実測：喰霊-零-Re は7項目のうち2項目しか数えられなかった）。
+        globals()["for_slug"] = lambda s: {"ceiling": {
+            "value": {"kind": "GAME", "amount": "999", "unit": "G",
+                      "benefit": "AT"},
+            "sources": _rec2["sources"],
+            "agreed_by": ["claude", "codex"]}}
+        _mat_box = {"adopted": {}, "ceilings": {"adopted": []}}
+        merge_into(_mat_box, "zzz_cv")
+        _row_box = (_mat_box["ceilings"]["adopted"] or [{}])[0]
+        t("★★箱の行にも根拠を刻む★★"
+          "／★刻まないと、天井・AT・CZは2AIで確定させても濃さに届かない★",
+          _row_box.get("basis") == "INDEPENDENT_MULTI")
+        t("　★その天井が検索の濃さに数えられる★",
+          any(str(c).startswith("ceiling:")
+              for c in _pd_cv.index_claims_from_material(_mat_box)))
         globals()["for_slug"] = lambda s: {"bonus_prob": _rec1}
         _mat_cv1 = {"adopted": {}}
         merge_into(_mat_cv1, "zzz_cv")
