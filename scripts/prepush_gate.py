@@ -575,10 +575,20 @@ def deployed_tip(timeout: int = 60) -> tuple:
     # ★★一覧の並び順を仮定しない★★（2026-08-29・Codexのレビュー21）
     #   ★追加の問い合わせは0回★＝手元で作成時刻の新しい順に並べ替える。
     #   （一覧そのものは100件を超えていて当たり前なので、そこでは断らない）
+    #   ★★壊れた要素を黙って捨てない★★（2026-08-29・Codexのレビュー22）
+    #     ★直す前は辞書でないものを外してから並べ替えていた★ので、
+    #     そのあとの「形が違います」に**永久に到達しなかった**。
+    #     ＝形の壊れた記録を、無かったことにして先へ進めた。
+    for d in got:
+        if not isinstance(d, dict):
+            return "", "配信の記録の形が違います", 0
+        if not isinstance(d.get("id"), int):
+            return "", "配信の記録に番号がありません", 0
+        if not str(d.get("created_at") or "").strip():
+            return "", "配信の記録に日時がありません", 0
     try:
-        got = sorted([d for d in got if isinstance(d, dict)],
-                     key=lambda d: (str(d.get("created_at") or ""),
-                                    int(d.get("id") or 0)), reverse=True)
+        got = sorted(got, key=lambda d: (str(d.get("created_at")),
+                                         int(d.get("id"))), reverse=True)
     except Exception:                     # noqa: BLE001
         return "", "配信の記録の形が違います", 0
     # ★新しい順に見て、いま生きている成功版を探す★
@@ -958,7 +968,8 @@ def selftest() -> int:
         _DP.clear()
         _DP.update({
             "bad": [],
-            "dep": [{"id": 9, "sha": "abc123"}],
+            "dep": [{"id": 9, "sha": "abc123",
+                     "created_at": "2026-08-29T01:00:00Z"}],
             # 配信の番号 → その状態の並び
             "st": {9: [{"id": 2, "state": "success",
                         "created_at": "2026-08-29T01:00:02Z",
@@ -1006,8 +1017,10 @@ def selftest() -> int:
         #   ★配信が一度失敗すると、次の成功まで再検査できなくなっていた★。
         for _bad_state in ("in_progress", "failure", "error"):
             _dp_reset()
-            _DP["dep"] = [{"id": 10, "sha": "def456"},
-                          {"id": 9, "sha": "abc123"}]
+            _DP["dep"] = [{"id": 10, "sha": "def456",
+                           "created_at": "2026-08-29T02:00:00Z"},
+                          {"id": 9, "sha": "abc123",
+                           "created_at": "2026-08-29T01:00:00Z"}]
             _DP["st"][10] = [{"id": 5, "state": _bad_state,
                               "created_at": "2026-08-29T02:00:00Z",
                               "target_url": _MIRROR_URL2}]
@@ -1016,8 +1029,10 @@ def selftest() -> int:
               "／★直す前は、一度失敗すると再検査できなくなっていた★",
               deployed_tip() == ("abc123", "", 9))
         _dp_reset()
-        _DP["dep"] = [{"id": 10, "sha": "def456"},
-                      {"id": 9, "sha": "abc123"}]
+        _DP["dep"] = [{"id": 10, "sha": "def456",
+                       "created_at": "2026-08-29T02:00:00Z"},
+                      {"id": 9, "sha": "abc123",
+                       "created_at": "2026-08-29T01:00:00Z"}]
         _DP["st"][10] = [{"id": 5, "state": "success",
                           "created_at": "2026-08-29T02:00:00Z",
                           "target_url": _MIRROR_URL2}]
@@ -1089,6 +1104,21 @@ def selftest() -> int:
           "／★黙って古いものを答えにしない★",
           deployed_tip()[0] == "" and str(SCAN_DEPLOYMENTS) in _why_scan)
 
+        # ★★壊れた要素を黙って捨てない★★（2026-08-29・Codexのレビュー22）
+        #   ★直す前は辞書でないものを外してから並べ替えていた★ので、
+        #   そのあとの「形が違います」に**永久に到達しなかった**
+        #   ＝形の壊れた記録を、無かったことにして先へ進めた。
+        _dp_reset()
+        _DP["dep"] = ["こわれています", {"id": 9, "sha": "abc123",
+                                        "created_at": "2026-08-29T01:00:00Z"}]
+        t("★★形の壊れた記録があれば、黙って捨てずに断る★★"
+          "／★捨てると、形の検査に永久に到達しない★",
+          deployed_tip()[0] == "")
+        _dp_reset()
+        _DP["dep"] = [{"id": 9, "sha": "abc123"}]
+        t("　★日時の無い記録があれば断る★（並べ替えの根拠が無い）",
+          deployed_tip()[0] == "")
+
         # ★★配信の一覧の並び順も仮定しない★★（レビュー21）
         #   ★手元で新しい順に並べ替える★（追加の問い合わせは0回）
         _dp_reset()
@@ -1118,10 +1148,12 @@ def selftest() -> int:
         _DP["st"] = {}
         t("　★配信の状態を読めなければ答えない★", deployed_tip()[0] == "")
         _dp_reset()
-        _DP["dep"] = [{"id": 9, "sha": "zzz"}]
+        _DP["dep"] = [{"id": 9, "sha": "zzz",
+                       "created_at": "2026-08-29T01:00:00Z"}]
         t("　★16進でないコミットは答えない★", deployed_tip()[0] == "")
         _dp_reset()
-        _DP["dep"] = [{"sha": "abc123"}]
+        _DP["dep"] = [{"sha": "abc123",
+                       "created_at": "2026-08-29T01:00:00Z"}]
         t("　★配信の記録に番号が無ければ答えない★",
           deployed_tip()[0] == "")
         _dp_reset()

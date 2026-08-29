@@ -650,23 +650,31 @@ def recheck_pass(fid: str, wait_seconds=None, sleep=None) -> dict:
     commit = str(rec.get("commit") or "")
     # ★①記録された段階を信じず、いま自分で確かめ直す★
     #   ★見るのは「出したか」ではなく「届いたか」★（レビュー18・重大）
-    # ★★問い合わせの回数に上限を置く★★（2026-08-29・Codexのレビュー21）
-    #   ★待つ処理と組み合わさると、1機種で最大60回になり得た★
-    #   （認証なしの上限が60回/時なので、そのまま止まる）。
+    # ★★問い合わせの回数の上限は、この判定ぜんぶで1つ★★
+    #   （2026-08-29・Codexのレビュー22）
+    #   ★直す前は、待つ処理のあとに一度戻し、検査のあとでもう一度与えていた★
+    #   ＝1機種で最大30回になり、「18×3＝54回」が保証されていなかった。
+    #   ★前後で同じ残りを分け合う★＝入口で使い切れば、あとは断る。
     #   ★この関数を出るときに必ず戻す★（他の使い方に影響させない）。
     try:
         import prepush_gate as _pgb
-        _pgb.api_budget(API_BUDGET)
     except Exception:                                    # noqa: BLE001
         _pgb = None
+    if _pgb is not None:
+        _pgb.api_budget(API_BUDGET)
     try:
-        # ★★入口では、配信が終わるのを少しだけ待つ★★（2026-08-29）
-        #   push の直後に呼ばれるので、待たないと必ず時期尚早で断る。
-        ok, why, mark = _delivered_wait(commit, wait_seconds=wait_seconds,
-                                        sleep=sleep)
+        return _recheck_pass_inner(rec, name, commit, wait_seconds, sleep)
     finally:
         if _pgb is not None:
             _pgb.api_budget(None)
+
+
+def _recheck_pass_inner(rec, name, commit, wait_seconds, sleep) -> dict:
+    """★合格判定の中身★（問い合わせの上限は呼び出し側が持つ）"""
+    # ★★入口では、配信が終わるのを少しだけ待つ★★（2026-08-29）
+    #   push の直後に呼ばれるので、待たないと必ず時期尚早で断る。
+    ok, why, mark = _delivered_wait(commit, wait_seconds=wait_seconds,
+                                    sleep=sleep)
     if not ok:
         raise JournalError(f"読者に届いたことを確かめられません: {why}")
     tip, dep_id = mark
@@ -694,17 +702,8 @@ def recheck_pass(fid: str, wait_seconds=None, sleep=None) -> dict:
     # ★★検査のあいだに配信が進んでいないか、もう一度見る★★
     #   （レビュー18・中③）前だけ見ていると、検査中に別の中身が
     #   届いていても、古い判断のまま「直った」と記録できる。
-    # ★検査のあとの確かめにも、残りの回数を分けておく★
-    try:
-        import prepush_gate as _pgb2
-        _pgb2.api_budget(API_BUDGET)
-    except Exception:                                    # noqa: BLE001
-        _pgb2 = None
-    try:
-        ok3, why3, mark2 = _delivered(commit)
-    finally:
-        if _pgb2 is not None:
-            _pgb2.api_budget(None)
+    # ★検査のあとの確かめは、★同じ残り★を使う（与え直さない）★
+    ok3, why3, mark2 = _delivered(commit)
     if not ok3 or mark2 != mark:
         raise JournalError(
             f"検査のあいだに配信が変わりました（{tip[:8]}/{dep_id} → "
@@ -1199,12 +1198,12 @@ def _selftest() -> int:
                 _rec5 = recheck_pass(f501, wait_seconds=0)
             finally:
                 _pg_t.api_budget = _keep_budget
-            t("★★合格判定のあいだだけ、問い合わせの回数に上限を置く★★"
+            t("★★合格判定ぜんぶで、上限は1つ★★"
+              "／★★直す前は途中で戻していたので、前後で別々に18回ずつ"
+              "使えた（1機種で最大30回）★★"
               "／★置かないと、待つ処理と重なって上限に当たり、"
               "タスクが止まる★",
-              _budgets[:2] == [API_BUDGET, None]
-              and _budgets[-1] is None
-              and _budgets.count(API_BUDGET) == 2)
+              _budgets == [API_BUDGET, None])
             t("　対照実験：届いていて、その中身で合格すれば進む",
               _rec5["state"] == "RECHECK_PASS")
             t("　★どの配信で確かめたかを番号まで記録に残す★",
