@@ -107,39 +107,85 @@ def _clean_name(raw: str) -> str:
 
 
 def parse(html_text: str) -> list:
-    """人気順のページから (順位, 機種ID, 機種名) を取り出す。"""
+    """人気順のページから (順位, 機種ID, 機種名) を取り出す。
+
+    ★★順位は自分で作らない★★（2026-08-29・Codexの指摘2）
+      ★直す前は「出てきた順＝順位」としていた★ので、
+      一覧ページへ転送された・おすすめ枠が足された場合でも、
+      ★20件のリンクさえあれば誤った順位を保存★していた。
+      いまは★ページが言う「N位」を読む★。
+    """
     p = _Parser()
     p.feed(str(html_text or ""))
     out, seen = [], set()
     for mid, raw in p.rows:
         if mid in seen:
             continue
-        name = _clean_name(raw)
+        t = re.sub(r"\s+", " ", str(raw or "")).strip()
+        m = re.match(r"^\s*(\d+)位\s*", t)
+        if not m:
+            # ★1〜10位は「機種名 N位 機種名 …」の形★（先頭に画像の alt）
+            m = re.search(r"(\d+)位", t)
+        if not m:
+            continue                            # ★順位が読めない行は使わない★
+        name = _clean_name(t)
         if not name:
-            continue                            # 画像だけのリンクは飛ばす
+            continue
         seen.add(mid)
-        out.append((len(out) + 1, mid, name))
+        out.append((int(m.group(1)), mid, name))
+    out.sort(key=lambda r: r[0])
     return out
 
 
+def check_ranks(top: list) -> None:
+    """★1位から順に、抜けも重なりもないこと★（2026-08-29・Codexの指摘2）
+
+    ★これが無いと、人気ページでなくても「20件あるから成功」になる★。
+    """
+    ranks = [r for r, _m, _n in top]
+    want = list(range(1, TOP_N + 1))
+    if ranks[:TOP_N] != want:
+        raise PopularError(
+            f"順位が1〜{TOP_N}位でそろっていません（読めた順位: "
+            f"{ranks[:TOP_N]}）。★人気順のページではないかもしれません★")
+
+
 def norm(s) -> str:
-    """★見た目の揺れだけをそろえる★（意味は変えない）"""
+    """★そろえるのは空白だけ★（2026-08-29・Codexの指摘4）
+
+    ★直す前は長音符・中黒・括弧・スラッシュまで落としていた★ので、
+    ★別の機種の名前と偶然一致し得た★（しかも控えに永続する）。
+    ★接頭辞の違い（スロット／スマスロ／Lパチスロ／L）は、
+      どのみち完全一致では埋まらない★＝そこは2AIが判断する。
+    ＝広く削る意味がなく、危ないだけだった。
+    """
     s = unicodedata.normalize("NFKC", str(s or ""))
-    return re.sub(r"[\s　・･\-ー―‐/／()（）【】\[\]]", "", s).lower()
+    return re.sub(r"\s+", "", s).lower()
 
 
 def load_store() -> dict:
-    """機種ID → うちどころのslug の控え。★読めなければ空★"""
+    """機種ID → うちどころのslug の控え。
+
+    ★★「まだ無い」と「壊れている」を分ける★★（2026-08-29・Codexの指摘1）
+      ★直す前は、読めない・形が違うを全部「初回の空」と同じ扱いにしていた★。
+      そのあと `--apply` が同じファイルを上書きするので、
+      ★一時的な破損や書き込み途中の停止で、
+        2AIが決めた対応が丸ごと消える★（人が決めたものを壊す経路）。
+      いまは★壊れていたら止まる★＝人が中身を見てから直す。
+    """
     if not os.path.isfile(STORE):
         return {"schema_version": SCHEMA, "by_dmm_id": {}}
     try:
         got = _sj.read_json(STORE, expect=dict)
-    except Exception:                                    # noqa: BLE001
-        return {"schema_version": SCHEMA, "by_dmm_id": {}}
+    except Exception as e:                               # noqa: BLE001
+        raise PopularError(
+            f"控えを読めません（{type(e).__name__}）。"
+            f"★中身を確かめてから直してください★: {STORE}")
     if str(got.get("schema_version") or "") != SCHEMA:
-        return {"schema_version": SCHEMA, "by_dmm_id": {}}
+        raise PopularError(
+            f"控えの版が違います（{got.get('schema_version')!r}）: {STORE}")
     if not isinstance(got.get("by_dmm_id"), dict):
-        got["by_dmm_id"] = {}
+        raise PopularError(f"控えの形が違います（by_dmm_id）: {STORE}")
     return got
 
 
@@ -178,7 +224,11 @@ def resolve(top: list, machines: list, store: dict) -> dict:
             if v in slugs}                    # ★消えた機種の控えは使わない★
     ranked, learned, questions = [], {}, []
     for rank, mid, name in top:
-        slug = kept.get(mid) or by_id.get(mid)
+        # ★★いまの機種ページのIDを、控えより優先する★★
+        #   （2026-08-29・Codexの指摘4）
+        #   ★直す前は控えが勝った★ので、machines.json を正しく直しても
+        #   誤った対応が残り続けた。
+        slug = by_id.get(mid) or kept.get(mid)
         if not slug:
             hit = by_name.get(norm(name))
             if hit:
@@ -252,6 +302,7 @@ def run(apply_it: bool = False, fetcher=None, machines=None) -> dict:
         # ★少なければ並べ替えない★（ページの作りが変わった合図）
         raise PopularError(
             f"人気順が {len(top)} 件しか取れません（{TOP_N} 件を期待）")
+    check_ranks(top)                    # ★1〜20位がそろっているか★
     top = top[:TOP_N]
     store = load_store()
     got = resolve(top, rows, store)
@@ -260,25 +311,111 @@ def run(apply_it: bool = False, fetcher=None, machines=None) -> dict:
         import datetime as _dt
         store["by_dmm_id"].update(got["learned"])
         store["ranked"] = got["ranked"]
-        store["checked_at"] = _dt.date.today().isoformat()
         store["source"] = URL
-        io.open(STORE, "w", encoding="utf-8", newline="\n").write(
+        # ★★決められない機種が残るなら、確認日を進めない★★
+        #   （2026-08-29・Codexの指摘3）
+        #   ★直す前は、質問を出しながら確認日を進めて成功終了していた★＝
+        #   質問を見落とすと、人気機種が欠けた順位が正式なものになり、
+        #   ★同じ日の再実行も抑えられた★。
+        #   進めなければ翌日また取りに行く（1回の問い合わせなので安い）。
+        if not got["questions"]:
+            store["checked_at"] = _dt.date.today().isoformat()
+        store["pending_questions"] = len(got["questions"])
+        # ★書き込みは一度に置き換える★（途中で止まって空にしない）
+        tmp = STORE + ".tmp"
+        io.open(tmp, "w", encoding="utf-8", newline="\n").write(
             json.dumps(store, ensure_ascii=False, indent=1) + "\n")
-        got["checked_at"] = store["checked_at"]
+        os.replace(tmp, STORE)
+        got["checked_at"] = store.get("checked_at")
     return got
 
 
-def popular_slugs() -> list:
-    """★いまの人気機種（順位順）★（控えが無ければ空＝人気枠を使わない）"""
-    store = load_store()
+def popular_slugs(machines=None) -> list:
+    """★いまの人気機種（順位順）★（控えが無ければ空＝人気枠を使わない）
+
+    ★★いま在る機種だけを返す★★（2026-08-29・Codexの指摘5）
+      ★直す前は文字かどうかしか見ていなかった★ので、
+      週の途中で記事を消した・slugを変えた場合に、
+      ★存在しない機種を毎日返し続けた★。
+    """
+    try:
+        store = load_store()
+    except PopularError:
+        return []                       # ★壊れていたら人気枠を使わない★
     got = store.get("ranked")
-    return [s for s in got if isinstance(s, str)] if isinstance(got, list) \
-        else []
+    if not isinstance(got, list):
+        return []
+    rows = machines
+    if rows is None:
+        try:
+            rows = _sj.read_json(MACHINES, expect=list)
+        except Exception:                                # noqa: BLE001
+            return []                   # ★機種一覧を読めなければ使わない★
+    alive = {m.get("slug") for m in rows if isinstance(m, dict)}
+    return [s for s in got if isinstance(s, str) and s in alive]
+
+
+def week_start(today) -> str:
+    """★その週の月曜★（人気順を取り直す日）"""
+    import datetime as _dt
+    if isinstance(today, str):
+        today = _dt.date.fromisoformat(today)
+    return (today - _dt.timedelta(days=today.weekday())).isoformat()
+
+
+def plan_today(today, budget: int, machines=None, store=None) -> dict:
+    """★今日の枠を「人気機種」と「その他」へ割り振る★
+
+    ★運営者が決めた並び（2026-08-29）★
+      月 人気6／火 人気6／水 人気6／木 人気2＋その他4／金土日 その他6
+
+    ★曜日では決めない★＝1日でも動かなかった週は舐め終わらない。
+    ★今週まだ見ていない人気機種から先に埋める★＝
+    全部動いた週は上の表と同じになり、止まった日があっても追いつく。
+    """
+    budget = max(0, int(budget))
+    wk = week_start(today)
+    if store is None:
+        try:
+            store = load_store()
+        except PopularError:
+            store = {}                  # ★壊れていたら全部「その他」★
+    rot = store.get("rotation") or {}
+    done = rot.get("done") or [] if rot.get("week") == wk else []
+    order = popular_slugs(machines)
+    todo = [s for s in order if s not in done]
+    take = todo[:budget]
+    return {"week": wk, "popular": take, "other": budget - len(take),
+            "done_this_week": len(order) - len(todo), "ranked": len(order)}
+
+
+def mark_done(slug: str, today) -> dict:
+    """★今週ぶんの人気機種を1件、見終わったと控える★
+
+    ★書けたかどうかではなく「担当して見終わった」で数える★＝
+    直すところが無い機種で枠が止まらないようにする。
+    """
+    wk = week_start(today)
+    store = load_store()                # ★壊れていたら止まる（消さない）★
+    rot = store.get("rotation") or {}
+    if rot.get("week") != wk:
+        rot = {"week": wk, "done": []}
+    if slug and slug not in rot["done"]:
+        rot["done"].append(slug)
+    store["rotation"] = rot
+    tmp = STORE + ".tmp"
+    io.open(tmp, "w", encoding="utf-8", newline="\n").write(
+        json.dumps(store, ensure_ascii=False, indent=1) + "\n")
+    os.replace(tmp, STORE)
+    return rot
 
 
 # ---------------------------------------------------------------- selftest
 
 def selftest() -> int:
+    import datetime as _dt
+    import shutil
+    import tempfile
     results = []
 
     def t(name, cond):
@@ -292,11 +429,68 @@ def selftest() -> int:
         '<a href="/machines/300">12位 知らない機種</a>'
         '<a href="/machines/100">重複するリンク</a>')
     got = parse(_PAGE)
-    t("★★順位・機種ID・機種名を取り出せる★★",
+    t("★★順位はページが言う「N位」を読む★★（自分で作らない）",
       [(r, m, n) for r, m, n in got]
-      == [(1, "100", "L 東京喰種"), (2, "200", "Lからくりサーカス2"),
-          (3, "300", "知らない機種")])
+      == [(1, "100", "L 東京喰種"), (11, "200", "Lからくりサーカス2"),
+          (12, "300", "知らない機種")])
     t("　★同じ機種が2回出ても1回だけ数える★", len(got) == 3)
+    t("　★順位の印が無いリンクは使わない★",
+      parse('<a href="/machines/900">順位の無い機種</a>') == [])
+    t("　★順位の順に並べ直す★（ページの並びに頼らない）",
+      [r for r, _m, _n in parse(
+          '<a href="/machines/1">9位 あ</a><a href="/machines/2">3位 い</a>'
+      )] == [3, 9])
+
+    # ★★指摘②：人気ページでなければ止まる★★
+    _ok = [(i, str(i), f"機種{i}") for i in range(1, TOP_N + 1)]
+    t("★★1〜20位がそろっていれば通る★★", check_ranks(_ok) is None)
+
+    def _raises(fn):
+        try:
+            fn()
+        except PopularError:
+            return True
+        return False
+
+    t("　★順位が抜けていたら止まる★",
+      _raises(lambda: check_ranks(
+          [(i, str(i), "x") for i in list(range(1, TOP_N)) + [TOP_N + 1]])))
+    t("　★1位から始まっていなければ止まる★",
+      _raises(lambda: check_ranks(
+          [(i, str(i), "x") for i in range(2, TOP_N + 2)])))
+    _dupe = [(i, str(i), "x") for i in range(1, TOP_N)]
+    _dupe.insert(0, (1, "zz", "x"))
+    t("　★同じ順位が2つあれば止まる★", _raises(lambda: check_ranks(_dupe)))
+
+    def _page_of(pairs):
+        return "".join(f'<a href="/machines/{m}">{r}位 {n}</a>'
+                       for r, m, n in pairs)
+
+    def _fake20(prefix=""):
+        return [(i, str(1000 + i), f"{prefix}機種{i}")
+                for i in range(1, TOP_N + 1)]
+
+    _ms20 = [{"slug": f"s{i}", "name": f"機種{i}"}
+             for i in range(1, TOP_N + 1)]
+    t("★★おすすめ枠が同じ順位を名乗ったら止まる★★",
+      _raises(lambda: run(
+          False,
+          fetcher=lambda _u: _page_of(_fake20()) +
+          '<a href="/machines/7777">おすすめ 3位 別の機種</a>',
+          machines=_ms20)))
+    t("　★20位より後ろの枠が増えても、上位20件は使える★"
+      "（順位が抜けていない）",
+      len(run(False,
+              fetcher=lambda _u: _page_of(_fake20()) +
+              '<a href="/machines/7777">99位 別の機種</a>',
+              machines=_ms20)["ranked"]) == TOP_N)
+    t("　★一覧ページへ転送されたら止まる★（順位の印が無い）",
+      _raises(lambda: run(
+          False,
+          fetcher=lambda _u: "".join(
+              f'<a href="/machines/{2000 + i}">機種{i}</a>'
+              for i in range(1, 31)),
+          machines=_ms20)))
 
     _MS = [{"slug": "tokyo_ghoul", "name": "L 東京喰種"},
            {"slug": "karakuri2", "name": "Lからくりサーカス2"},
@@ -371,6 +565,92 @@ def selftest() -> int:
       "／★名乗らないと名簿の関所を通らない★",
       'fetching("popularity_rank")' in _insp.getsource(fetch))
 
+    # ★★指摘③：決められない機種が残るなら確認日を進めない★★
+    global STORE
+    _keep = STORE
+    _tmpdir = tempfile.mkdtemp(prefix="popular_test_")
+    try:
+        STORE = os.path.join(_tmpdir, "popular_machines.json")
+
+        def _page20(names):
+            return "".join(
+                f'<a href="/machines/{1000 + i}">{i}位 {names(i)}</a>'
+                for i in range(1, TOP_N + 1))
+
+        # 1件だけ、うちどころに無い名前にする
+        _ms = [{"slug": f"s{i}", "name": f"機種{i}"}
+               for i in range(1, TOP_N)]
+        r3 = run(True, fetcher=lambda _u: _page20(lambda i: f"機種{i}"),
+                 machines=_ms)
+        t("★★決められない機種が残る★★", len(r3["questions"]) == 1)
+        t("　★そのとき確認日は進めない★", not r3.get("checked_at"))
+        _saved = json.loads(io.open(STORE, encoding="utf-8").read())
+        t("　★控えにも確認日を書かない★", not _saved.get("checked_at"))
+        t("　★何件残っているかは控えに残す★",
+          _saved.get("pending_questions") == 1)
+        t("　★決まった分の対応は控える★（次回の質問を減らす）",
+          len(_saved.get("by_dmm_id") or {}) == TOP_N - 1)
+
+        # 全部そろえば確認日が入る
+        _ms_all = [{"slug": f"s{i}", "name": f"機種{i}"}
+                   for i in range(1, TOP_N + 1)]
+        r4 = run(True, fetcher=lambda _u: _page20(lambda i: f"機種{i}"),
+                 machines=_ms_all)
+        t("★★全部決まれば確認日が入る★★", bool(r4.get("checked_at")))
+        t("　★次は今日もう取らない★",
+          should_run(_dt.date.fromisoformat(r4["checked_at"]),
+                     r4["checked_at"])[0] is False)
+    finally:
+        STORE = _keep
+        shutil.rmtree(_tmpdir, ignore_errors=True)
+
+    # ★★1週間の割り振り★★（2026-08-29・運営者の表のとおりになるか）
+    _keep2 = STORE
+    _tmp2 = tempfile.mkdtemp(prefix="popular_week_")
+    try:
+        STORE = os.path.join(_tmp2, "popular_machines.json")
+        _pop = [f"p{i}" for i in range(1, 21)]
+        _ms2 = [{"slug": s, "name": s} for s in _pop]
+        io.open(STORE, "w", encoding="utf-8", newline="\n").write(
+            json.dumps({"schema_version": SCHEMA, "by_dmm_id": {},
+                        "ranked": _pop}, ensure_ascii=False) + "\n")
+        t("★★月曜は今週の月曜を指す★★",
+          week_start("2026-08-31") == "2026-08-31"
+          and week_start("2026-09-06") == "2026-08-31")
+
+        # 運営者の表を1週間分たどる
+        _days = ["2026-08-31", "2026-09-01", "2026-09-02", "2026-09-03",
+                 "2026-09-04", "2026-09-05", "2026-09-06"]
+        _got = []
+        for _d in _days:
+            _p = plan_today(_d, 6, _ms2)
+            _got.append((len(_p["popular"]), _p["other"]))
+            for _s in _p["popular"]:
+                mark_done(_s, _d)
+        t("★★運営者の表どおりに割り振る★★"
+          "（月火水6／木2+4／金土日0+6）",
+          _got == [(6, 0), (6, 0), (6, 0), (2, 4),
+                   (0, 6), (0, 6), (0, 6)])
+        t("　★翌週の月曜はまた人気機種から★",
+          len(plan_today("2026-09-07", 6, _ms2)["popular"]) == 6)
+
+        # 途中で1日動かなかった週
+        io.open(STORE, "w", encoding="utf-8", newline="\n").write(
+            json.dumps({"schema_version": SCHEMA, "by_dmm_id": {},
+                        "ranked": _pop}, ensure_ascii=False) + "\n")
+        for _d in ["2026-08-31", "2026-09-01"]:
+            for _s in plan_today(_d, 6, _ms2)["popular"]:
+                mark_done(_s, _d)
+        t("★★1日止まっても、次の日が続きから拾う★★",
+          plan_today("2026-09-03", 6, _ms2)["popular"]
+          == ["p13", "p14", "p15", "p16", "p17", "p18"])
+
+        t("★★人気の一覧が空なら全部その他★★",
+          plan_today("2026-08-31", 6, [], {})["other"] == 6)
+    finally:
+        STORE = _keep2
+        shutil.rmtree(_tmp2, ignore_errors=True)
+
     ng = [n for n, ok in results if not ok]
     print(f"\n{len(results) - len(ng)}/{len(results)} 合格")
     if ng:
@@ -380,6 +660,10 @@ def selftest() -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="人気機種の順位をDMMから取る")
+    ap.add_argument("--plan", type=int, metavar="件数",
+                    help="今日の枠を人気機種とその他へ割り振って表示する")
+    ap.add_argument("--done", metavar="slug",
+                    help="その人気機種を今週ぶんとして見終わったと控える")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--weekly", action="store_true",
                     help="月曜（または前回から7日以上）のときだけ取る")
@@ -395,6 +679,20 @@ def main() -> int:
             print(f"今日は取りません（{why}）")
             return 0
         print(f"取ります（{why}）")
+    if a.plan is not None:
+        import datetime as _dt
+        p = plan_today(_dt.date.today(), a.plan)
+        print(f"今週（{p['week']}〜）の人気機種: "
+              f"{p['done_this_week']}/{p['ranked']} 件は見終わりました")
+        print(f"今日の人気機種 {len(p['popular'])} 件: "
+              + ("、".join(p["popular"]) or "なし"))
+        print(f"今日のその他 {p['other']} 件")
+        return 0
+    if a.done:
+        import datetime as _dt
+        rot = mark_done(a.done, _dt.date.today())
+        print(f"今週ぶん {len(rot['done'])} 件目として控えました: {a.done}")
+        return 0
     try:
         got = run(apply_it=a.apply)
     except PopularError as e:
@@ -410,6 +708,13 @@ def main() -> int:
         print("  ★2AIに聞くこと: " + q["text"][:170])
     if not a.apply:
         print("★下見です★（--apply で控えに書きます）")
+    if got["questions"]:
+        # ★★終了コードで知らせる★★（2026-08-29・Codexの指摘3）
+        #   ★表示だけでは見落とされる★＝「2AIへ回す」を機械の合図にする。
+        print(f"★決められない機種が {len(got['questions'])} 件あります★"
+              "（2AIで判断して控えに記録してください）"
+              "／★確認日は進めていません＝翌日も取り直します★")
+        return 3
     return 0
 
 
