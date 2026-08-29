@@ -493,8 +493,19 @@ def build_machine(slug, name, maker, official_url, release, material,
         ident["identity_binding"] = identity_binding
         if identity_evidence_ref:
             ident["identity_evidence_ref"] = str(identity_evidence_ref)[:120]
-    if release:
-        ident["market_release_date"] = release
+    # ★★導入日は必ず入れる★★（2026-08-29・運営者の指示）
+    #   > 「新台追加のときに導入日いれるようにしておいてね
+    #   >   もう今の時点でないものは諦めるけど。」
+    #   ★なぜ要るか★＝トップページの並び順（人気20位以降）が導入日順で、
+    #   ★機械が読める導入日を持たない機種は並べられない★。
+    #   実測（2026-08-29）＝旧方式120機種のうち98機種が持っていなかった。
+    #   ★これから作る新台では二度と欠けさせない★
+    #   （DMMのカレンダーは必ず年月を持っているので、無いのは異常）。
+    if not str(release or "").strip():
+        raise BuildError(
+            "★導入日が分かりません★（新台には必ず入れます）"
+            "／DMMのカレンダーか名鑑2票から取り直してください")
+    ident["market_release_date"] = release
     code = (material.get("adopted") or {}).get("model_code")
     if code:
         ident["regulatory_model_code"] = code["value"]
@@ -1618,8 +1629,24 @@ def selftest() -> int:
     t("　型式が取れていれば identity に入り、段階が上がる",
       m["identity"]["regulatory_model_code"] == "Lびん娘NY1"
       and m["identity"]["identity_tier"] == "CATALOG_CODE_MATCHED")
+    # ★★導入日は必ず入れる★★（2026-08-29・運営者の指示）
+    t("★★導入日が無ければ新台を作らない★★"
+      "（トップページの並びが導入日順なので、欠けると並べられない）",
+      raises(lambda: build_machine(
+          "x", "X", "y", "https://a.example/products/slot/x/", "",
+          {"adopted": {}})))
+    t("　★空白だけでも断る★",
+      raises(lambda: build_machine(
+          "x", "X", "y", "https://a.example/products/slot/x/", "   ",
+          {"adopted": {}})))
+    t("　★月までしか分からなくても通す★（DMMは年月しか出さない機種がある）",
+      build_machine("x", "X", "y", "https://a.example/products/slot/x/",
+                    "2026-09", {"adopted": {}})["identity"]
+      ["market_release_date"] == "2026-09")
     m2 = build_machine("x", "X", "y", "https://a.example/products/slot/x/", "2026-09",
                        {"adopted": {}})
+    t("　★機種一覧にも同じ導入日が入る★",
+      m2["release_date"] == "2026-09")
     t("　型式が無ければ CATALOG_BOUND のまま",
       m2["identity"]["identity_tier"] == "CATALOG_BOUND"
       and "regulatory_model_code" not in m2["identity"])

@@ -25,7 +25,7 @@
   "guide-rate.html": "9ab800fcd3d3a773842be3862698f74cb29539f634d2d9ac0bb1c5b0e003f5a0",
   "guide-reset.html": "79fcc06cbce7c1326f56d1b2582c77cb5ad53773a79bdad6b91c233a6866603c",
   "guide-yamedoki.html": "c942817c9ef5faac33a6bf7d09bfd2ed692ce8c5391f36101cff4620186af8b1",
-  "index.html": "32f4d7fe742cf7277946eb56cf295d5005ca60713337e2bdb5eec0b293e453b6",
+  "index.html": "5efb3a6255954da4de59143057899d0b0f9c69a08604d8cd91f84d7c1e36b861",
   "machine.html": "824ad0c9cdf3f42ea638fcc8a80a0f3274e8fad2f263db635341a1fd1b5a495b",
   "manifest.json": "23be5d18069cfeb2c331b135f8976478e36543b3213006b991ed91e53a9bb90e",
   "meta-auto.js": "d99aab6119e4f465d6ca6cddeeea3339d9b0954297513507a8b4042943370032",
@@ -33,10 +33,10 @@
   "robots.txt": "94670bb7c4d9b930985eeb08a6d4074283cafbfd3d30c00a74d7dedd46bedd2c",
   "scripts/apply_prose_dedup.py": "13c7636c1018db8c4de24d06edef76334e2bb7c1147b7a94958ffb76ca384937",
   "scripts/audit_public.py": "a87c0fd52855517ebfa5470526ab503689a2eba988699f0182420eda63f95390",
-  "scripts/build_hub_pages.py": "cee9d80fd86a03ebe000a25a5a61625f8fb81ecc97d67d46f83d42c04a700aae",
+  "scripts/build_hub_pages.py": "80798277c5e8590ded011c0bf274a65b1ee3af0e55b6f013cb4a4b0da9b2a201",
   "scripts/build_ledger.py": "c51b84e0a7a6dc9b97faf29003ab617291f9c93fe0378d2c9b19dd664f783e7d",
   "scripts/build_machine_pages.py": "3400561991a8425fae322e103e81762dcdf983a0d5105220646823b4ca872d4f",
-  "scripts/build_new_article.py": "91695671ff669bfac81e914e4bb3fce0c8aeea31a7c43381a1530805d56f6538",
+  "scripts/build_new_article.py": "f88d788c22ddeab6fce302a7db39cd764ad21d6db2aeacaba69246be7f622604",
   "scripts/build_pages_artifact.py": "0fffcd6cc7b03241c796471d04ec3685929d23337ae4596fd419d52ca2ee4f0f",
   "scripts/build_public_data.py": "20dc3d536a809e8ff5b1ffb8abdcdf577d0648708f15e92f71840c9f4ac011fd",
   "scripts/check_duplicate.py": "d5c8221444105553cca1894ff8d44eb255ad6534cafcd0e0af8a5a8e23c16c36",
@@ -61,7 +61,7 @@
   "scripts/publish_new_machine.py": "f58709d4f543e0bfc3366c15f85d4b47b4030512b3146e98205a95b8ed34497a",
   "scripts/safe_json.py": "43f61703cbe7e1ea93ee2602fe9be45662957c8929aef62d649b6fc0493e0006",
   "scripts/strip_model_code.py": "d33516022a49198a846df628298328a326b5c04a8f20d4ccc6e416daf6340c68",
-  "service-worker.js": "aea14796b048160774d248dbd117686f708ae22e4afd8cc28322930af0063382",
+  "service-worker.js": "abda91d9f1d0bad45854fc6731596e2445999cfced8047178923a151bbddb147",
   "setting.html": "6660837bd3c31f6755c4ba8e5728c5ac846d43267534b72680c1a07717601dc3"
  }
 }

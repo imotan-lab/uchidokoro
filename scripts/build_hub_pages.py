@@ -6,7 +6,7 @@ machines.json（データ）と scripts/hub_prose.json（散文）から、以�
     guide-tenjo-ranking.html  天井が浅い機種ランキング   （表 A: G数天井 昇順・1000G未満）
     guide-reset-ranking.html  朝一リセット狙いランキング   （表 C: 狙い目短縮幅 降順 TOP30）
     guide-suru-tenjo.html     スルー天井の機種一覧と狙い方 （表 D: スルー天井 全件）
-    guide-ichiran.html        全機種 狙い目・天井 早見表   （表 ALL: 全機種 稼働率順）
+    guide-ichiran.html        全機種 狙い目・天井 早見表   （表 ALL: 全機種）
 
 ★表データは machines.json から毎回機械生成するため、新台が追加されると再実行で自動的に最新化される。
 machine-details/machines.json を更新した後・本スクリプトを更新した後は必ず再実行すること。
@@ -683,7 +683,10 @@ def _build_pages(rows: list, prose_all: dict) -> tuple:
     #   増減のたびに README・運営者情報・散文の数を合わせる必要があり、
     #   実際に何度もずれた。読者にとっての価値も薄い。
     #   条件つきの件数（天井が浅い機種は何件、など）は意味があるので残す。
-    ichiran_note = ("稼働率順に並べています。機種名をタップすると各詳細ページへ移動します。")
+    # ★並びの説明は書かない★（2026-08-29）＝トップページは人気の高い順に毎週入れ替わるが、
+    #   このページは公開ゲートが開くまで作り直せないので並びが揃わない。
+    #   ★言えないことを言わない★（元は「稼働率順」と書いていた）。
+    ichiran_note = ("機種名をタップすると各詳細ページへ移動します。")
 
     pages = {
         "guide-tenjo-ranking.html": (prose_all["tenjo"], {"list": tenjo_list, "note": tenjo_note}),

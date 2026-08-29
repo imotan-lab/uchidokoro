@@ -37,9 +37,12 @@ from __future__ import annotations
 import argparse
 import html.parser
 import io
+import contextlib
+import errno
 import json
 import os
 import re
+import time
 import sys
 import unicodedata
 
@@ -249,7 +252,7 @@ def resolve(top: list, machines: list, store: dict) -> dict:
     return {"ranked": ranked, "learned": learned, "questions": questions}
 
 
-def should_run(today, checked_at: str = "") -> tuple:
+def should_run(today, checked_at: str = "", pending: int = 0) -> tuple:
     """★今日、人気順を取り直すか★（2026-08-29・運営者の指示）
 
     ★返すもの★＝(取るか, 理由)
@@ -262,6 +265,14 @@ def should_run(today, checked_at: str = "") -> tuple:
     import datetime as _dt
     if isinstance(today, str):
         today = _dt.date.fromisoformat(today)
+    if int(pending or 0) > 0:
+        # ★★決められない機種が残っている間は、必ず取り直す★★
+        #   （2026-08-29・Codexの指摘3）
+        #   ★直す前は確認日だけで決めていた★ので、
+        #   「4日前に成功 → 昨日は決められず失敗」の翌日は
+        #   「まだ7日たっていない」で取りに行かなかった＝
+        #   ★「翌日も取り直す」が成立していなかった★。
+        return True, f"決められない機種が {int(pending)} 件残っています"
     got = str(checked_at or "").strip()
     if not got:
         return True, "まだ一度も取っていません"
@@ -288,6 +299,80 @@ def fetch(fetcher=None) -> str:
         return _nw._get(URL)
 
 
+_LOCK_WAIT = 15.0        # 鍵が空くのを待つ最大の秒数
+_BUSY = {getattr(errno, n) for n in
+         ("EACCES", "EAGAIN", "EWOULDBLOCK", "EDEADLOCK", "EDEADLK")
+         if hasattr(errno, n)}
+
+
+def _hold(fh, on: bool) -> None:
+    """★OSに鍵を持たせる★（プロセスが死んだらOSが必ず外す）"""
+    fh.seek(0)
+    try:
+        import msvcrt                        # Windows
+        msvcrt.locking(fh.fileno(),
+                       msvcrt.LK_NBLCK if on else msvcrt.LK_UNLCK, 1)
+        return
+    except ImportError:
+        pass
+    import fcntl                             # それ以外
+    fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB if on else fcntl.LOCK_UN)
+
+
+@contextlib.contextmanager
+def _lock():
+    """★控えを書くあいだの鍵★（2026-08-29・Codexの2周目の指摘1）
+
+    ★読み直すだけでは足りない★＝読み直してから置き換えるまでの
+    ごく短い隙に、別の実行が書いた分を消せる。
+    消えるのは★2AIが決めた対応★なので、鍵で囲む。
+    ★やり方は machine_sources と同じ★（OSに持たせる／鍵のファイルは消さない）。
+    """
+    path = STORE + ".lock"
+    os.makedirs(os.path.dirname(STORE) or ".", exist_ok=True)
+    started = time.time()
+    with open(path, "a+b") as fh:
+        while True:
+            try:
+                _hold(fh, True)
+                break
+            except OSError as e:
+                if e.errno not in _BUSY:
+                    raise PopularError(f"控えの鍵を扱えません（{e}）")
+                if time.time() - started > _LOCK_WAIT:
+                    raise PopularError(
+                        "控えが他の実行に使われています"
+                        "（あとでやり直してください）")
+                time.sleep(0.15)
+        try:
+            yield
+        finally:
+            try:
+                _hold(fh, False)
+            except OSError:
+                pass
+
+
+def _write_store(mutate) -> dict:
+    """★鍵を取り、読み直して、足す形で書く★（2026-08-29・Codexの指摘2）
+
+    ★直す前は「全部読んで・全部置き換える」だった★ので、
+    読んでから書くまでの間に別の処理が足した対応
+    （2AIが決めた 機種ID→slug）を消しうる。
+    ★控えは人が決めたものなので、消す方向には倒さない★。
+    """
+    with _lock():
+        store = load_store()            # ★壊れていたら止まる（消さない）★
+        mutate(store)
+        # ★一時ファイルは自分専用の名前★（2026-08-29・Codexの2周目）
+        #   共通の名前だと、2つ同時に書いたとき中身が混ざる。
+        tmp = f"{STORE}.tmp{os.getpid()}"
+        io.open(tmp, "w", encoding="utf-8", newline="\n").write(
+            json.dumps(store, ensure_ascii=False, indent=1) + "\n")
+        os.replace(tmp, STORE)          # ★途中で止まっても空にしない★
+    return store
+
+
 def run(apply_it: bool = False, fetcher=None, machines=None) -> dict:
     """人気順を取って、うちどころのslugへ並べ直す。"""
     rows = machines
@@ -307,25 +392,86 @@ def run(apply_it: bool = False, fetcher=None, machines=None) -> dict:
     store = load_store()
     got = resolve(top, rows, store)
     got["checked_at"] = None                  # 書くときに入れる
+    got["report"] = []
+    got["revived"] = []
+    # ★★3回話しても決まらなかった機種は、報告して先へ進む★★
+    #   （2026-08-29・運営者の指示「それでも無理な場合報告して
+    #     その方向へ倒してもいいよ」）
+    tries = store.get("tries") or {}
+    seen_names = store.get("try_names") or {}
+
+    def _state(q) -> str:
+        """ask＝2AIへ聞く／revive＝打ち切りを解く／giveup＝外したまま"""
+        mid = str(q.get("dmm_id") or "")
+        if int(tries.get(mid) or 0) < GIVE_UP_TRIES:
+            return "ask"
+        prev = seen_names.get(mid)
+        if prev is None:
+            return "giveup"             # ★いま打ち切る回★（名前を控える）
+        # ★★DMM側の名前が変わったら、また2AIへ聞く★★
+        #   （2026-08-29・Codexの2周目の指摘2）
+        #   ★打ち切りを永久にしない★＝名前が変わったのは新しい材料なので、
+        #   同じ結論になるとは限らない。
+        return "giveup" if norm(prev) == norm(q.get("name") or "") \
+            else "revive"
+
+    _st = {id(q): _state(q) for q in got["questions"]}
+    got["give_up"] = [q for q in got["questions"] if _st[id(q)] == "giveup"]
+    got["revived"] = [q for q in got["questions"] if _st[id(q)] == "revive"]
+    got["ask_2ai"] = [q for q in got["questions"] if _st[id(q)] != "giveup"]
+    got["kept_previous"] = False
     if apply_it:
         import datetime as _dt
-        store["by_dmm_id"].update(got["learned"])
-        store["ranked"] = got["ranked"]
-        store["source"] = URL
-        # ★★決められない機種が残るなら、確認日を進めない★★
-        #   （2026-08-29・Codexの指摘3）
-        #   ★直す前は、質問を出しながら確認日を進めて成功終了していた★＝
-        #   質問を見落とすと、人気機種が欠けた順位が正式なものになり、
-        #   ★同じ日の再実行も抑えられた★。
-        #   進めなければ翌日また取りに行く（1回の問い合わせなので安い）。
-        if not got["questions"]:
-            store["checked_at"] = _dt.date.today().isoformat()
-        store["pending_questions"] = len(got["questions"])
-        # ★書き込みは一度に置き換える★（途中で止まって空にしない）
-        tmp = STORE + ".tmp"
-        io.open(tmp, "w", encoding="utf-8", newline="\n").write(
-            json.dumps(store, ensure_ascii=False, indent=1) + "\n")
-        os.replace(tmp, STORE)
+
+        def _mut(s):
+            # ★★新しく分かった対応は「空いている所」にだけ入れる★★
+            #   （2026-08-29・Codexの2周目の指摘1）
+            #   ★直す前は update() で無条件に上書きしていた★＝
+            #   人気順を取っている間に2AIが同じ機種IDへ別の判断を
+            #   記録すると、それを黙って消していた。
+            #   ★learned は「名前が完全に一致した」だけの弱い根拠★で、
+            #   2AIの判断のほうが強い。強いほうを消さない。
+            _by = s.setdefault("by_dmm_id", {})
+            for _k, _v in got["learned"].items():
+                _by.setdefault(_k, _v)
+            s["source"] = URL
+            s["pending_questions"] = len(got["ask_2ai"])
+            # ★★打ち切った機種の名前は、途中で終わる回にも控える★★
+            #   （でないと「名前が変わったら解ける」条件が永久に来ない）
+            _tn = s.setdefault("try_names", {})
+            for q in got["give_up"]:
+                _tn.setdefault(str(q.get("dmm_id")), q.get("name") or "")
+            # ★名前が変わったものは、回数も報告済みの印も0に戻す★
+            for q in got["revived"]:
+                _mid = str(q.get("dmm_id"))
+                (s.get("tries") or {}).pop(_mid, None)
+                _tn.pop(_mid, None)
+                _esc = s.get("escalated") or []
+                if _mid in _esc:
+                    _esc.remove(_mid)
+            if got["ask_2ai"]:
+                # ★★欠けた順位表を正式なものにしない★★
+                #   （2026-08-29・Codexの指摘1）
+                #   ★直す前は、決められない機種の分だけ短い一覧を保存し、
+                #     `--plan` がそれを正しいものとして使っていた★＝
+                #   20機種のうち4件が結び付かなかった週は、
+                #   その4機種が誰にも触られないまま1週間過ぎる。
+                #   ★前の週の完全な一覧をそのまま残す★（古いほうが安全）。
+                got["kept_previous"] = bool(s.get("ranked"))
+                return
+            # ★ここへ来るのは「全部決まった」か
+            #   「残りは3回話しても決まらなかった」か のどちらか★
+            s["ranked"] = got["ranked"]
+            s["checked_at"] = _dt.date.today().isoformat()
+            # ★報告は1回だけ★（同じ機種で毎週鳴らさない）
+            esc = s.setdefault("escalated", [])
+            fresh = [q for q in got["give_up"]
+                     if str(q.get("dmm_id")) not in esc]
+            for q in fresh:
+                esc.append(str(q.get("dmm_id")))
+            got["report"] = fresh
+
+        store = _write_store(_mut)
         got["checked_at"] = store.get("checked_at")
     return got
 
@@ -353,6 +499,79 @@ def popular_slugs(machines=None) -> list:
             return []                   # ★機種一覧を読めなければ使わない★
     alive = {m.get("slug") for m in rows if isinstance(m, dict)}
     return [s for s in got if isinstance(s, str) and s in alive]
+
+
+GIVE_UP_TRIES = 3        # ★これだけ話しても決まらなければ運営者へ報告する★
+
+
+def record_decision(mid: str, slug: str, by: str, why: str,
+                    machines=None) -> dict:
+    """★2AIが決めた「機種ID → うちどころのslug」を控える★
+
+    ★機械は名前の違いを埋めない★（辞書が増えるため）。
+    決めるのは2AIで、ここは**決まったことを控えるだけの口**。
+    """
+    mid = str(mid or "").strip()
+    slug = str(slug or "").strip()
+    if not mid.isdigit():
+        raise PopularError(f"機種IDは数字だけです: {mid!r}")
+    who = [w.strip() for w in str(by or "").replace("、", ",").split(",")
+           if w.strip()]
+    if len(set(who)) < 2:
+        raise PopularError(
+            f"★判断者が2つ要ります★（例 --by claude,codex）: {by!r}")
+    if len(str(why or "").strip()) < 15:
+        raise PopularError("★なぜそう決めたかを15字以上で書いてください★")
+    rows = machines
+    if rows is None:
+        rows = _sj.read_json(MACHINES, expect=list)
+    alive = {m.get("slug") for m in rows if isinstance(m, dict)}
+    if slug not in alive:
+        raise PopularError(
+            f"★うちどころに無い機種です★: {slug!r}"
+            "（machines.json に実在する slug を指してください）")
+
+    box = {}
+
+    def _mut(s):
+        cur = (s.get("by_dmm_id") or {}).get(mid)
+        # ★★消えた機種を指す古い対応は、上書きしてよい★★
+        #   （2026-08-29・Codexの2周目の指摘2）
+        #   ★直す前は、記事を消した／slugを変えた機種の古い対応が残ると
+        #     `--record` が「すでに別の機種」と断り、
+        #     控えを手で直すしか戻せなかった★＝死んだ記録が復旧を塞ぐ。
+        if cur and cur != slug and cur in alive:
+            raise PopularError(
+                f"★すでに別の機種に結び付いています★: {mid} → {cur}"
+                f"（{slug} にするなら、先に控えを直してください）")
+        s.setdefault("by_dmm_id", {})[mid] = slug
+        s.setdefault("decisions", []).append(
+            {"dmm_id": mid, "slug": slug, "by": who, "why": why.strip()})
+        # ★決まったら回数は0に戻す★
+        (s.get("tries") or {}).pop(mid, None)
+        esc = s.get("escalated") or []
+        if mid in esc:
+            esc.remove(mid)          # ★決まったら報告済みの印も外す★
+        box["slug"] = slug
+
+    _write_store(_mut)
+    return box
+
+
+def note_try(mid: str) -> int:
+    """★2AIで話しても決まらなかった回を1つ数える★（戻り値＝いま何回目か）"""
+    mid = str(mid or "").strip()
+    if not mid.isdigit():
+        raise PopularError(f"機種IDは数字だけです: {mid!r}")
+    box = {}
+
+    def _mut(s):
+        tr = s.setdefault("tries", {})
+        tr[mid] = int(tr.get(mid) or 0) + 1
+        box["n"] = tr[mid]
+
+    _write_store(_mut)
+    return box["n"]
 
 
 def week_start(today) -> str:
@@ -385,8 +604,11 @@ def plan_today(today, budget: int, machines=None, store=None) -> dict:
     order = popular_slugs(machines)
     todo = [s for s in order if s not in done]
     take = todo[:budget]
+    got_at = str(store.get("checked_at") or "")
     return {"week": wk, "popular": take, "other": budget - len(take),
-            "done_this_week": len(order) - len(todo), "ranked": len(order)}
+            "done_this_week": len(order) - len(todo), "ranked": len(order),
+            # ★今週まだ取り直せていないなら、その日付を返す★
+            "stale": got_at if (got_at and got_at < wk) else ""}
 
 
 def mark_done(slug: str, today) -> dict:
@@ -396,18 +618,19 @@ def mark_done(slug: str, today) -> dict:
     直すところが無い機種で枠が止まらないようにする。
     """
     wk = week_start(today)
-    store = load_store()                # ★壊れていたら止まる（消さない）★
-    rot = store.get("rotation") or {}
-    if rot.get("week") != wk:
-        rot = {"week": wk, "done": []}
-    if slug and slug not in rot["done"]:
-        rot["done"].append(slug)
-    store["rotation"] = rot
-    tmp = STORE + ".tmp"
-    io.open(tmp, "w", encoding="utf-8", newline="\n").write(
-        json.dumps(store, ensure_ascii=False, indent=1) + "\n")
-    os.replace(tmp, STORE)
-    return rot
+    box = {}
+
+    def _mut(s):
+        rot = s.get("rotation") or {}
+        if rot.get("week") != wk:
+            rot = {"week": wk, "done": []}
+        if slug and slug not in rot["done"]:
+            rot["done"].append(slug)
+        s["rotation"] = rot
+        box["rot"] = rot
+
+    _write_store(_mut)                  # ★書く直前に読み直す★（指摘2）
+    return box["rot"]
 
 
 # ---------------------------------------------------------------- selftest
@@ -597,6 +820,197 @@ def selftest() -> int:
         r4 = run(True, fetcher=lambda _u: _page20(lambda i: f"機種{i}"),
                  machines=_ms_all)
         t("★★全部決まれば確認日が入る★★", bool(r4.get("checked_at")))
+        t("　★決まったら順位表を保存する★",
+          len(json.loads(io.open(STORE, encoding="utf-8").read())
+              .get("ranked") or []) == TOP_N)
+
+        # ★★指摘1：欠けた順位表を正式なものにしない★★
+        _full = [f"s{i}" for i in range(1, TOP_N + 1)]
+        io.open(STORE, "w", encoding="utf-8", newline="\n").write(
+            json.dumps({"schema_version": SCHEMA,
+                        "by_dmm_id": {}, "ranked": _full,
+                        "checked_at": "2026-08-24"},
+                       ensure_ascii=False) + "\n")
+        r5 = run(True, fetcher=lambda _u: _page20(lambda i: f"機種{i}"),
+                 machines=_ms)                      # 1件足りない機種一覧
+        _s5 = json.loads(io.open(STORE, encoding="utf-8").read())
+        t("★★決められない日は、前の週の完全な順位表を残す★★"
+          "（欠けた一覧を正式にしない）", _s5.get("ranked") == _full)
+        t("　★そう報告する★", r5.get("kept_previous") is True)
+        t("　★確認日も動かさない★", _s5.get("checked_at") == "2026-08-24")
+        t("　★それでも分かった対応は足す★",
+          len(_s5.get("by_dmm_id") or {}) == TOP_N - 1)
+        t("　★その日の割り振りは、前の週の20件から出す★",
+          plan_today("2026-08-31", 6, _ms_all)["popular"]
+          == ["s1", "s2", "s3", "s4", "s5", "s6"])
+
+        # 初回から決まらないときは、人気枠を使わない
+        io.open(STORE, "w", encoding="utf-8", newline="\n").write(
+            json.dumps({"schema_version": SCHEMA, "by_dmm_id": {}},
+                       ensure_ascii=False) + "\n")
+        r6 = run(True, fetcher=lambda _u: _page20(lambda i: f"機種{i}"),
+                 machines=_ms)
+        t("★★一度も決まっていないなら人気枠を使わない★★",
+          r6.get("kept_previous") is False
+          and not (json.loads(io.open(STORE, encoding="utf-8").read())
+                   .get("ranked")))
+
+        # ★★指摘2：書く直前に読み直す★★
+        io.open(STORE, "w", encoding="utf-8", newline="\n").write(
+            json.dumps({"schema_version": SCHEMA,
+                        "by_dmm_id": {"1": "a"}}, ensure_ascii=False) + "\n")
+        _stale = load_store()                       # ★古い読み取り★
+        io.open(STORE, "w", encoding="utf-8", newline="\n").write(
+            json.dumps({"schema_version": SCHEMA,
+                        "by_dmm_id": {"1": "a", "2": "b"}},
+                       ensure_ascii=False) + "\n")  # 別の処理が足した
+        _write_store(lambda s: s.setdefault("by_dmm_id", {}).update(
+            {"3": "c"}))
+        _s7 = json.loads(io.open(STORE, encoding="utf-8").read())
+        t("★★書く直前に読み直す★★"
+          "（読んでから書くまでに足された対応を消さない）",
+          _s7["by_dmm_id"] == {"1": "a", "2": "b", "3": "c"}
+          and _stale["by_dmm_id"] == {"1": "a"})
+
+        # ★★2AIで解決する経路★★（2026-08-29・運営者の指示）
+        io.open(STORE, "w", encoding="utf-8", newline="\n").write(
+            json.dumps({"schema_version": SCHEMA, "by_dmm_id": {}},
+                       ensure_ascii=False) + "\n")
+        _WHY = "DMMの表記ゆれ。機種ページの導入日と メーカー欄が一致した。"
+
+        def _rec(**kw):
+            args = {"mid": "1020", "slug": "s20", "by": "claude,codex",
+                    "why": _WHY, "machines": _ms_all}
+            args.update(kw)
+            try:
+                record_decision(**args)
+                return None
+            except PopularError as e:
+                return str(e)
+
+        t("★★2AIが決めた対応を控えられる★★", _rec() is None)
+        t("　★控えに入る★",
+          (json.loads(io.open(STORE, encoding="utf-8").read())
+           .get("by_dmm_id") or {}).get("1020") == "s20")
+        t("　★根拠も残す★",
+          (json.loads(io.open(STORE, encoding="utf-8").read())
+           .get("decisions") or [{}])[-1].get("why") == _WHY)
+        t("　★判断者が1つなら断る★", bool(_rec(mid="1019", by="claude")))
+        t("　★理由が短ければ断る★", bool(_rec(mid="1019", why="ゆれ")))
+        t("　★うちどころに無い機種は断る★",
+          bool(_rec(mid="1019", slug="no_such_machine")))
+        t("　★機種IDが数字でなければ断る★", bool(_rec(mid="abc")))
+        t("　★すでに別の機種に結び付いていれば断る★",
+          bool(_rec(mid="1020", slug="s19")))
+
+        # ★3回話しても決まらなければ報告して先へ進む★
+        io.open(STORE, "w", encoding="utf-8", newline="\n").write(
+            json.dumps({"schema_version": SCHEMA, "by_dmm_id": {}},
+                       ensure_ascii=False) + "\n")
+        _f = lambda _u: _page20(lambda i: f"機種{i}")     # noqa: E731
+        r7 = run(True, fetcher=_f, machines=_ms)
+        t("★★1回目は2AIへ回す（報告しない）★★",
+          len(r7["ask_2ai"]) == 1 and not r7["report"])
+        t("　★1回目は順位表を確定しない★", not r7.get("checked_at"))
+        t("　★回数を数えられる★", note_try("1020") == 1)
+        note_try("1020")
+        t("　★3回目で打ち切りになる★", note_try("1020") == GIVE_UP_TRIES)
+        r8 = run(True, fetcher=_f, machines=_ms)
+        t("★★3回話しても決まらなければ報告して先へ進む★★",
+          not r8["ask_2ai"] and len(r8["report"]) == 1)
+        t("　★残りで順位表を確定する★",
+          len(json.loads(io.open(STORE, encoding="utf-8").read())
+              .get("ranked") or []) == TOP_N - 1
+          and bool(r8.get("checked_at")))
+        r9 = run(True, fetcher=_f, machines=_ms)
+        t("　★報告は1回だけ★（毎週鳴らさない）", not r9["report"])
+        t("★★あとから決まれば、また人気枠に戻る★★",
+          _rec() is None
+          and len(run(True, fetcher=_f,
+                      machines=_ms_all)["ranked"]) == TOP_N)
+
+        # ★★2周目1：取っている最中に2AIが記録した判断を消さない★★
+        #   ★本当に競り合わせる★＝run() が最初に読んだときは控えが空で、
+        #   書く直前に読み直したときには2AIの判断が入っている状態を作る。
+        #   （そうしないと resolve() が先に結び付けてしまい、
+        #     上書きする側の処理を一度も通らない＝罠④）
+        io.open(STORE, "w", encoding="utf-8", newline="\n").write(
+            json.dumps({"schema_version": SCHEMA,
+                        "by_dmm_id": {"1001": "s20"}},
+                       ensure_ascii=False) + "\n")
+        _real_load, _seen = load_store, []
+
+        def _racing_load():
+            s = _real_load()
+            _seen.append(1)
+            if len(_seen) == 1:             # ★1回目＝まだ記録されていない★
+                s = dict(s)
+                s["by_dmm_id"] = {}
+            return s
+
+        globals()["load_store"] = _racing_load
+        try:
+            run(True, fetcher=_f, machines=_ms_all)
+        finally:
+            globals()["load_store"] = _real_load
+        t("★★取っている最中に2AIが記録した判断を、名前の一致で消さない★★",
+          (json.loads(io.open(STORE, encoding="utf-8").read())
+           .get("by_dmm_id") or {}).get("1001") == "s20")
+
+        # ★★2周目2a：消えた機種を指す古い対応は上書きできる★★
+        io.open(STORE, "w", encoding="utf-8", newline="\n").write(
+            json.dumps({"schema_version": SCHEMA,
+                        "by_dmm_id": {"1020": "kieta_kishu"}},
+                       ensure_ascii=False) + "\n")
+        t("★★消えた機種を指す古い対応は、上書きして直せる★★"
+          "（控えを手で直さずに戻せる）", _rec() is None)
+        io.open(STORE, "w", encoding="utf-8", newline="\n").write(
+            json.dumps({"schema_version": SCHEMA,
+                        "by_dmm_id": {"1020": "s19"}},
+                       ensure_ascii=False) + "\n")
+        t("　★いま在る機種を指しているなら、やはり断る★", bool(_rec()))
+
+        # ★★2周目2b：DMM側の名前が変わったら、また2AIへ聞く★★
+        io.open(STORE, "w", encoding="utf-8", newline="\n").write(
+            json.dumps({"schema_version": SCHEMA, "by_dmm_id": {},
+                        "tries": {"1020": GIVE_UP_TRIES}},
+                       ensure_ascii=False) + "\n")
+        rA = run(True, fetcher=_f, machines=_ms)
+        t("★★打ち切った機種は、そのときの名前を控える★★",
+          (json.loads(io.open(STORE, encoding="utf-8").read())
+           .get("try_names") or {}).get("1020") == "機種20"
+          and len(rA["give_up"]) == 1)
+        rB = run(True, fetcher=_f, machines=_ms)
+        t("　★名前が同じうちは、打ち切ったまま★",
+          len(rB["give_up"]) == 1 and not rB["ask_2ai"])
+        _f2 = (lambda _u: _page20(                     # noqa: E731
+            lambda i: "機種20 改" if i == TOP_N else f"機種{i}"))
+        rC = run(True, fetcher=_f2, machines=_ms)
+        t("★★名前が変わったら、また2AIへ聞く★★（永久除外にしない）",
+          len(rC["revived"]) == 1 and len(rC["ask_2ai"]) == 1
+          and not rC["give_up"])
+        t("　★回数も報告済みの印も0に戻す★",
+          not (json.loads(io.open(STORE, encoding="utf-8").read())
+               .get("tries") or {}).get("1020"))
+
+        # ★★2周目3：前の週の一覧を使っていることを隠さない★★
+        io.open(STORE, "w", encoding="utf-8", newline="\n").write(
+            json.dumps({"schema_version": SCHEMA, "by_dmm_id": {},
+                        "ranked": [f"s{i}" for i in range(1, TOP_N + 1)],
+                        "checked_at": "2026-08-24"},
+                       ensure_ascii=False) + "\n")
+        t("★★前の週の一覧なら、そう言う★★",
+          plan_today("2026-08-31", 6, _ms_all)["stale"] == "2026-08-24")
+        t("　★今週取り直していれば、言わない★",
+          plan_today("2026-08-24", 6, _ms_all)["stale"] == "")
+
+        # ★★指摘3：決められない機種が残る間は必ず取り直す★★
+        t("★★決められない機種が残っていたら、翌日も取りに行く★★",
+          should_run("2026-09-02", "2026-08-29", 1)[0] is True)
+        t("　★残っていなければ、いままでどおり7日／月曜まで待つ★",
+          should_run("2026-09-02", "2026-08-29", 0)[0] is False)
+        t("　★同じ日でも、残っていれば取り直す★",
+          should_run("2026-08-29", "2026-08-29", 2)[0] is True)
         t("　★次は今日もう取らない★",
           should_run(_dt.date.fromisoformat(r4["checked_at"]),
                      r4["checked_at"])[0] is False)
@@ -660,6 +1074,15 @@ def selftest() -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="人気機種の順位をDMMから取る")
+    ap.add_argument("--record", metavar="機種ID=slug",
+                    help="2AIが決めた対応を控える"
+                         "（--by と --why-file が要ります）")
+    ap.add_argument("--by", default="",
+                    help="判断した2つ以上の名前（例 claude,codex）")
+    ap.add_argument("--why-file", dest="why_file",
+                    help="なぜそう決めたかを書いたファイル（15字以上）")
+    ap.add_argument("--tried", metavar="機種ID",
+                    help="2AIで話しても決まらなかった回を1つ数える")
     ap.add_argument("--plan", type=int, metavar="件数",
                     help="今日の枠を人気機種とその他へ割り振って表示する")
     ap.add_argument("--done", metavar="slug",
@@ -673,17 +1096,57 @@ def main() -> int:
         return selftest()
     if a.weekly:
         import datetime as _dt
+        _st = load_store()
         ok, why = should_run(_dt.date.today(),
-                             str(load_store().get("checked_at") or ""))
+                             str(_st.get("checked_at") or ""),
+                             int(_st.get("pending_questions") or 0))
         if not ok:
             print(f"今日は取りません（{why}）")
             return 0
         print(f"取ります（{why}）")
+    if a.record:
+        if "=" not in a.record:
+            print("★書き方★ --record 機種ID=slug")
+            return 1
+        mid, _sep, slug = a.record.partition("=")
+        if not a.why_file:
+            print("★--why-file が要ります★（なぜそう決めたか）")
+            return 1
+        # ★自由文はシェルに書かせない★（プロジェクトの決まり）
+        #   置き場の検査つきの共通の口を使う（認証情報の巻き込み防止）
+        import open_issues as _oi
+        why = _oi._read_text_arg("", a.why_file, "why")
+        try:
+            record_decision(mid, slug, a.by, why)
+        except PopularError as e:
+            print(f"★{e}★")
+            return 1
+        print(f"控えました: {mid} → {slug}")
+        return 0
+    if a.tried:
+        try:
+            n = note_try(a.tried)
+        except PopularError as e:
+            print(f"★{e}★")
+            return 1
+        left = GIVE_UP_TRIES - n
+        print(f"{a.tried}: {n}回目"
+              + (f"（あと{left}回で運営者へ報告します）" if left > 0
+                 else "（★次から運営者へ報告して先へ進みます★）"))
+        return 0
     if a.plan is not None:
         import datetime as _dt
         p = plan_today(_dt.date.today(), a.plan)
         print(f"今週（{p['week']}〜）の人気機種: "
               f"{p['done_this_week']}/{p['ranked']} 件は見終わりました")
+        if p.get("stale"):
+            # ★★前の週の一覧を使っていることを隠さない★★
+            #   （2026-08-29・Codexの2周目の指摘3）
+            #   ★一覧が完全でも「いまの順番」とは限らない★＝
+            #   今週の新しい人気機種が抜け、圏外になった機種が残っている。
+            print(f"★これは {p['stale']} に取った一覧です★"
+                  "（今週まだ取り直せていません＝"
+                  "決められない機種を2AIで片づけてください）")
         print(f"今日の人気機種 {len(p['popular'])} 件: "
               + ("、".join(p["popular"]) or "なし"))
         print(f"今日のその他 {p['other']} 件")
@@ -704,16 +1167,39 @@ def main() -> int:
         print(f"  {n:>2}  {s}")
     if got["learned"]:
         print(f"新しく結び付けました: {got['learned']}")
-    for q in got["questions"]:
+    for q in got["ask_2ai"]:
         print("  ★2AIに聞くこと: " + q["text"][:170])
     if not a.apply:
         print("★下見です★（--apply で控えに書きます）")
-    if got["questions"]:
+    if got.get("give_up"):
+        # ★★打ち切った機種は毎回かならず出す★★
+        #   （2026-08-29・Codexの2周目の指摘2）
+        #   ★報告を1回だけにすると、取りこぼした後は
+        #     「正常終了しながら黙って除外し続ける」★
+        print(f"★いま人気枠から外している機種が {len(got['give_up'])} 件"
+              "あります★（3回話しても決まらなかったもの）")
+        for q in got["give_up"]:
+            print(f"  ・{q.get('dmm_id')} {q.get('name')}"
+                  "（--record で控えれば、また人気枠に戻ります）")
+    if got.get("report"):
+        # ★★3回話しても決まらなかった★★（2026-08-29・運営者の指示）
+        print(f"★{len(got['report'])} 件は3回話しても決まりませんでした★"
+              "（運営者へ報告して、この週は人気枠から外します）")
+        for q in got["report"]:
+            print("  ★報告: " + q["text"][:170])
+        return 4
+    if got["ask_2ai"]:
         # ★★終了コードで知らせる★★（2026-08-29・Codexの指摘3）
         #   ★表示だけでは見落とされる★＝「2AIへ回す」を機械の合図にする。
-        print(f"★決められない機種が {len(got['questions'])} 件あります★"
+        print(f"★決められない機種が {len(got['ask_2ai'])} 件あります★"
               "（2AIで判断して控えに記録してください）"
               "／★確認日は進めていません＝翌日も取り直します★")
+        if got.get("kept_previous"):
+            print("★順位表は前の週のものを残しました★"
+                  "（欠けた一覧を正式なものにしないため）")
+        else:
+            print("★順位表はまだありません★"
+                  "（決まるまで人気枠は使わず、全部その他へ回します）")
         return 3
     return 0
 

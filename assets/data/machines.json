@@ -1,577 +1,5 @@
 [
  {
-  "slug": "milliongod_kiseki",
-  "name": "スマスロ ミリオンゴッド-神々の軌跡-",
-  "seo": {
-   "title": "スマスロ ミリオンゴッド-神々の軌跡- 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "等価670G〜 / 5.6枚680G〜 / 現金830G〜",
-  "aliases": [
-   "ミリオンゴッド",
-   "神々の軌跡",
-   "みりおんごっど",
-   "ゴッド",
-   "god",
-   "milliongod"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 1480,
-    "good": 1000,
-    "caution": 670,
-    "note": "GG間天井1480G。等価670G〜・5.6枚680G〜・現金830G〜が狙い目。"
-   },
-   "reset": {
-    "excellent": 1480,
-    "good": 900,
-    "caution": 380,
-    "note": "設定変更後は510G / 1000G / 1480G から抽選（15.2% / 20.3% / 64.5%）。等価380G〜が狙い目。"
-   }
-  },
-  "limit": 1480,
-  "original": {
-   "title": "ミリオンゴッド",
-   "kind": "シリーズ",
-   "search": "ミリオンゴッド"
-  }
- },
- {
-  "slug": "gundam_uc2",
-  "name": "Lパチスロ 機動戦士ガンダムユニコーン 覚醒DRIVE",
-  "seo": {
-   "title": "ガンダムユニコーン 覚醒DRIVE 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "CZ間等価580G〜 / AT間等価950G〜 / スルー4回〜",
-  "aliases": [
-   "ガンダムユニコーン",
-   "ガンダムUC",
-   "UC2",
-   "覚醒DRIVE",
-   "ユニコーン",
-   "gundam_uc",
-   "ガンダム"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "CZ間"
-    },
-    {
-     "key": "at",
-     "label": "AT間"
-    }
-   ],
-   "normal": {
-    "excellent": 800,
-    "good": 700,
-    "caution": 580,
-    "note": "CZ間天井800G（リセット後400G）。等価580G〜・5.6枚590G〜・現金650G〜が狙い目。"
-   },
-   "at": {
-    "excellent": 1400,
-    "good": 1100,
-    "caution": 950,
-    "note": "AT間天井1400G（液晶G数・リセット後1000G）。等価950G〜・5.6枚960G〜・現金1050G〜が狙い目。"
-   },
-   "suru": {
-    "excellent": 6,
-    "good": 5,
-    "caution": 4,
-    "note": "CZ6スルーで7回目確定（ボーナス当選）。等価4スルー以上から狙い目。",
-    "suruMax": 6,
-    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
-   }
-  },
-  "limit": 1400,
-  "original": {
-   "title": "機動戦士ガンダムUC",
-   "kind": "小説",
-   "search": "機動戦士ガンダムUC 小説"
-  }
- },
- {
-  "slug": "kabaneri",
-  "name": "スマスロ 甲鉄城のカバネリ 海門(うなと)決戦",
-  "seo": {
-   "title": "スマスロ 甲鉄城のカバネリ 海門(うなと)決戦 狙い目"
-  },
-  "info": "スマスロAT",
-  "strategy": "ST間580G〜 / リセット100G〜",
-  "strategyByRate": {
-   "eq56": "5.6枚590G〜 / リセット100G〜",
-   "rate55": "6.0枚630G〜 / リセット130G〜",
-   "rate50": "6.5枚670G〜 / リセット170G〜",
-   "rate45": "7.0枚720G〜 / リセット210G〜"
-  },
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "ST間"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 700,
-    "good": 580,
-    "caution": 430,
-    "byRate": {
-     "eq56": {
-      "excellent": 700,
-      "good": 590,
-      "caution": 440,
-      "note": "5.6枚交換ならST間590Gから狙い目、440Gから候補です。ST後の前兆と引き戻しを見ながら、通常台として見てよいかを先に整理してください。"
-     },
-     "rate55": {
-      "excellent": 750,
-      "good": 630,
-      "caution": 470,
-      "note": "6.0枚交換はST間630G基準です。リセット130G基準と混ぜず、今の台がどちらの前提かを固定した方が使いやすいです。"
-     },
-     "rate50": {
-      "excellent": 810,
-      "good": 670,
-      "caution": 510,
-      "note": "6.5枚交換ではST間670Gからが本線です。浅い通常台に広げず、ST間G数をしっかり確認して深め優先にしてください。"
-     },
-     "rate45": {
-      "excellent": 860,
-      "good": 720,
-      "caution": 550,
-      "note": "7.0枚交換はST間720G基準です。深い通常台だけに絞り、リセットの浅いラインとは切り分けて使う方が安全です。"
-     }
-    },
-    "note": "ST間天井996G+α。ST間G数はメニュー画面で確認。"
-   },
-   "reset": {
-    "excellent": 300,
-    "good": 100,
-    "caution": 0,
-    "byRate": {
-     "eq56": {
-      "excellent": 300,
-      "good": 100,
-      "caution": 0,
-      "note": "5.6枚交換のリセット台は100Gから候補です。朝一や設定変更確定台は積極的に狙えます。"
-     },
-     "rate55": {
-      "excellent": 350,
-      "good": 130,
-      "caution": 30,
-      "note": "6.0枚交換はリセット130G基準です。通常ST後の流れと混ぜず、朝一台として別で見る方が使いやすいです。"
-     },
-     "rate50": {
-      "excellent": 400,
-      "good": 170,
-      "caution": 70,
-      "note": "6.5枚交換ではリセット170Gからが本線です。浅い朝一台に広げすぎず、前兆や履歴も含めて判断してください。"
-     },
-     "rate45": {
-      "excellent": 450,
-      "good": 210,
-      "caution": 100,
-      "note": "7.0枚交換のリセット台は210G基準です。通常720Gラインとの差を意識して、朝一の根拠がある台に絞る方が安全です。"
-     }
-    },
-    "note": "設定変更後は天井596G+αに短縮。0G〜100Gから狙える。"
-   }
-  },
-  "limit": 996,
-  "aliases": [
-   "カバネリ",
-   "かばねり",
-   "甲鉄城",
-   "海門決戦"
-  ],
-  "original": {
-   "title": "甲鉄城のカバネリ",
-   "kind": "アニメ",
-   "search": "甲鉄城のカバネリ Blu-ray"
-  }
- },
- {
-  "slug": "shinuchi_yoshimune",
-  "name": "真打 吉宗",
-  "seo": {
-   "title": "真打 吉宗 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "等価400G〜 / 5.6枚410G〜（CZ間） / AT間460G〜",
-  "aliases": [
-   "真打吉宗",
-   "しんうちよしむね",
-   "吉宗真打",
-   "しんうち"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "CZ間"
-    },
-    {
-     "key": "at",
-     "label": "AT間"
-    }
-   ],
-   "normal": {
-    "excellent": 700,
-    "good": 400,
-    "caution": 290,
-    "note": "CZ間天井1000G+α（6周期）でCZ当選。液晶のゲーム数カウンターで確認。",
-    "byRate": {
-     "eq56": {
-      "caution": 290,
-      "good": 400,
-      "target": 400,
-      "excellent": 700,
-      "note": "5.6枚なら400G〜から狙い目に入ります。"
-     },
-     "rate55": {
-      "caution": 310,
-      "good": 430,
-      "target": 430,
-      "excellent": 730,
-      "note": "6.0枚では430G〜が目安です。"
-     },
-     "rate50": {
-      "caution": 360,
-      "good": 480,
-      "target": 480,
-      "excellent": 780,
-      "note": "6.5枚では480G〜から見ます。"
-     },
-     "rate45": {
-      "caution": 420,
-      "good": 540,
-      "target": 540,
-      "excellent": 830,
-      "note": "7.0枚では540G〜が狙い目ラインです。"
-     }
-    }
-   },
-   "at": {
-    "excellent": 900,
-    "good": 460,
-    "caution": 360,
-    "note": "AT間天井1500G+αでAT当選。CZ間とAT間、どちらの前提で見るかを明確にしてから狙い目を判断してください。",
-    "byRate": {
-     "eq56": {
-      "caution": 360,
-      "good": 460,
-      "target": 460,
-      "excellent": 900,
-      "note": "5.6枚ならAT間460G〜から狙い目に入ります。"
-     },
-     "rate55": {
-      "caution": 390,
-      "good": 490,
-      "target": 490,
-      "excellent": 930,
-      "note": "6.0枚ではAT間490G〜が目安です。"
-     },
-     "rate50": {
-      "caution": 440,
-      "good": 550,
-      "target": 550,
-      "excellent": 980,
-      "note": "6.5枚ではAT間550G〜から見ます。"
-     },
-     "rate45": {
-      "caution": 510,
-      "good": 620,
-      "target": 620,
-      "excellent": 1050,
-      "note": "7.0枚ではAT間620G〜が狙い目ラインです。"
-     }
-    }
-   },
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ]
-  },
-  "limit": 1500
- },
- {
-  "slug": "kyokousuiri",
-  "name": "L虚構推理",
-  "seo": {
-   "title": "L虚構推理 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "等価500G~ / 5.6枚600G~ / 現金690G~（虚構真偽間1000G）",
-  "aliases": [
-   "虚構推理",
-   "きょこうすいり",
-   "きょこす",
-   "虚構"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 1000,
-    "good": 600,
-    "caution": 500,
-    "note": "天井虚構真偽間1000G。等価500G~・5.6枚600G~・現金690G~から狙い目。恩恵はボーナス+雪女ストック1個以上。"
-   },
-   "reset": {
-    "excellent": 700,
-    "good": 500,
-    "caution": 300,
-    "note": "設定変更後は天井が最大700G（または300G）に短縮。"
-   }
-  },
-  "limit": 1000,
-  "original": {
-   "title": "虚構推理",
-   "kind": "漫画",
-   "search": "虚構推理 漫画"
-  }
- },
- {
-  "slug": "umineko2",
-  "name": "Lパチスロうみねこのなく頃に2",
-  "seo": {
-   "title": "うみねこのなく頃に2 狙い目・天井・期待値まとめ"
-  },
-  "info": "A+完走型ART",
-  "strategy": "等価CZ間100G〜 / 完全攻略で設定1機械割103%",
-  "strategyByRate": {
-   "eq56": "5.6枚CZ間100G〜",
-   "rate55": "6.0枚CZ間110G〜",
-   "rate50": "6.5枚CZ間130G〜",
-   "rate45": "7.0枚CZ間150G〜"
-  },
-  "aliases": [
-   "うみねこ",
-   "ウミネコ"
-  ],
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {
-    "excellent": 180,
-    "good": 100,
-    "caution": 50,
-    "byRate": {
-     "eq56": {
-      "excellent": 180,
-      "good": 100,
-      "caution": 50,
-      "note": "5.6枚交換ならCZ間100Gから狙い目。200G周期でCZ確定。完全攻略なら設定1でも機械割103%。"
-     },
-     "rate55": {
-      "excellent": 180,
-      "good": 110,
-      "caution": 60,
-      "note": "6.0枚交換なら110Gから。"
-     },
-     "rate50": {
-      "excellent": 180,
-      "good": 130,
-      "caution": 80,
-      "note": "6.5枚交換なら130Gから。"
-     },
-     "rate45": {
-      "excellent": 180,
-      "good": 150,
-      "caution": 100,
-      "note": "7.0枚交換なら150Gから。"
-     }
-    },
-    "note": "CZ間200G周期で運命分岐モード確定。完全攻略で設定1でも機械割103%。"
-   }
-  },
-  "limit": 200,
-  "original": {
-   "title": "うみねこのなく頃に",
-   "kind": "ゲーム",
-   "search": "うみねこのなく頃に"
-  }
- },
- {
-  "slug": "animal_dotch",
-  "name": "Lアニマルスロット ドッチ",
-  "seo": {
-   "title": "アニマルスロット ドッチ 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "BIG後等価680G〜 / REG後等価180G〜",
-  "aliases": [
-   "アニマルスロットドッチ",
-   "アニマルドッチ",
-   "ドッチ",
-   "どっち",
-   "animal",
-   "dotch"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "BIG後"
-    },
-    {
-     "key": "reset",
-     "label": "REG後/リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 999,
-    "good": 850,
-    "caution": 680,
-    "note": "BIG/ST後天井999G。等価680G〜・5.6枚690G〜・現金720G〜が狙い目。"
-   },
-   "reset": {
-    "excellent": 499,
-    "good": 350,
-    "caution": 180,
-    "note": "REG後/リセット後は天井499Gに短縮。等価180G〜・5.6枚190G〜・現金220G〜が狙い目。"
-   }
-  },
-  "limit": 999
- },
- {
-  "slug": "my_juggler_v",
-  "name": "マイジャグラーV",
-  "seo": {
-   "title": "マイジャグラーV 設定判別"
-  },
-  "info": "Aタイプ",
-  "strategy": "設定狙い主体・天井なし",
-  "aliases": [
-   "マイジャグ",
-   "マイジャグ5"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
-   }
-  },
-  "limit": null
- },
- {
-  "slug": "isekai_quattro_bt",
-  "name": "A-SLOT+ 異世界かるてっとBT",
-  "seo": {
-   "title": "A-SLOT+ 異世界かるてっとBT スペックまとめ"
-  },
-  "info": "スマスロBT",
-  "strategy": "設定狙い主体・天井なし（BT合算約1/99）",
-  "aliases": [
-   "異世界かるてっと",
-   "いせかい",
-   "いせかる",
-   "かるてっと",
-   "異世界カルテット"
-  ],
-  "original": {
-   "title": "異世界かるてっと",
-   "kind": "アニメ",
-   "search": "異世界かるてっと Blu-ray"
-  }
- },
- {
   "slug": "tokyo_ghoul",
   "name": "L 東京喰種",
   "seo": {
@@ -828,51 +256,328 @@
   }
  },
  {
-  "slug": "new_king_hanahana_v",
-  "name": "SBニューキングハナハナV-30",
+  "slug": "toaru_index2",
+  "name": "スマスロ とある魔術の禁書目録2",
+  "release_date": "2026-08-03",
   "seo": {
-   "title": "ニューキングハナハナV 狙い目・設定差まとめ"
+   "title": "スマスロ とある魔術の禁書目録2 狙い目・天井・解析まとめ"
   },
-  "info": "A+BT（設定1/2/3/4/V）",
-  "strategy": "設定狙い主体・天井なし",
+  "info": "スマスロAT",
+  "strategy": "算定中（AT間1200G／CZ間800G+α）",
   "aliases": [
-   "ニューキングハナハナ",
-   "キンハナ",
-   "キンハナV",
-   "ハナハナV",
-   "きんはな",
-   "にゅーきんぐ"
+   "禁書目録2",
+   "とある魔術の禁書目録2",
+   "インデックス2",
+   "きんしょもくろく2",
+   "とある2",
+   "とあるまじゅつのきんしょもくろく2"
+  ],
+  "limit": null,
+  "original": {
+   "title": "とある魔術の禁書目録",
+   "kind": "ライトノベル",
+   "search": "とある魔術の禁書目録 小説"
+  },
+  "identity": {
+   "manufacturer_id": "fujishoji",
+   "regulatory_model_code": "Lとある魔術の禁書目録2FA",
+   "market_release_date": "2026-08-03"
+  }
+ },
+ {
+  "slug": "sao2",
+  "name": "スマスロ ソードアート・オンラインⅡ",
+  "release_date": "2026-06-08",
+  "seo": {
+   "title": "スマスロ ソードアート・オンラインⅡ 狙い目・天井・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "等価CZ間320G〜 / 5.6枚CZ間330G〜 / 現金CZ間350G〜 / リセCZ間120G〜",
+  "aliases": [
+   "SAO2",
+   "ソードアート・オンラインⅡ",
+   "ソードアートオンライン2",
+   "ソードアート・オンライン2",
+   "sao2",
+   "ソードアート2",
+   "そーどあーとおんらいん2"
+  ],
+  "checker": {
+   "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常（CZ間）"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 410,
+    "good": 330,
+    "caution": 250,
+    "byRate": {
+     "eq56": {
+      "excellent": 410,
+      "good": 330,
+      "caution": 250,
+      "note": "CZ間天井499G+α・AT間天井1200G。5.6枚持ちはCZ間330G〜が狙い目。"
+     },
+     "rate55": {
+      "excellent": 420,
+      "good": 340,
+      "caution": 260,
+      "note": "6.0枚はCZ間340G〜。"
+     },
+     "rate50": {
+      "excellent": 430,
+      "good": 350,
+      "caution": 270,
+      "note": "6.5枚はCZ間350G〜。"
+     },
+     "rate45": {
+      "excellent": 440,
+      "good": 360,
+      "caution": 280,
+      "note": "7.0枚・現金はCZ間350〜360G〜。"
+     }
+    },
+    "note": "CZ間天井499G+α(実ゲーム)・AT間天井1200G。CZ間のゲーム数で判断。"
+   },
+   "reset": {
+    "excellent": 180,
+    "good": 120,
+    "caution": 60,
+    "note": "設定変更時CZ間天井256G+αに短縮。CZ間120G〜が狙い目。"
+   }
+  },
+  "limit": 1200,
+  "original": {
+   "title": "ソードアート・オンラインII",
+   "kind": "ライトノベル",
+   "search": "ソードアートオンライン ライトノベル"
+  }
+ },
+ {
+  "slug": "sengoku_otome5",
+  "name": "L戦国乙女5 業火を穿つ宿焔の双刃",
+  "release_date": "2026-06-08",
+  "seo": {
+   "title": "L戦国乙女5 業火を穿つ宿焔の双刃 狙い目・天井・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "5.6枚580G〜 / 6.5枚650G〜 / 7.0枚710G〜 / リセット（持ちメダル）300G前後",
+  "aliases": [
+   "戦国乙女5",
+   "乙女5",
+   "せんごくおとめ5",
+   "戦国乙女業火",
+   "L戦国乙女5",
+   "戦国乙女5 業火を穿つ宿焔の双刃",
+   "宿焔の双刃"
+  ],
+  "checker": {
+   "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 780,
+    "good": 580,
+    "caution": 400,
+    "byRate": {
+     "eq56": {
+      "excellent": 780,
+      "good": 580,
+      "caution": 400,
+      "note": "5.6枚以下なら580G〜が狙い目。G数天井999G+α。"
+     },
+     "rate55": {
+      "excellent": 790,
+      "good": 600,
+      "caution": 420,
+      "note": "6.0枚なら600G〜。"
+     },
+     "rate50": {
+      "excellent": 840,
+      "good": 650,
+      "caution": 470,
+      "note": "6.5枚なら650G〜。"
+     },
+     "rate45": {
+      "excellent": 900,
+      "good": 710,
+      "caution": 530,
+      "note": "7.0枚なら710G〜。"
+     }
+    },
+    "note": "G数天井999G+α。周期天井は最大6周期（1周期最大500G+α）。1周期目引き戻し（200G+α・期待度約40%）を確認してヤメ。"
+   },
+   "reset": {
+    "excellent": 480,
+    "good": 300,
+    "caution": 200,
+    "byRate": {
+     "eq56": {
+      "excellent": 480,
+      "good": 300,
+      "caution": 200,
+      "note": "リセット時はG数天井650G+α・周期最大4周期に短縮。"
+     },
+     "rate55": {
+      "excellent": 490,
+      "good": 360,
+      "caution": 210,
+      "note": "リセット時650G+α短縮。"
+     },
+     "rate50": {
+      "excellent": 520,
+      "good": 400,
+      "caution": 250,
+      "note": "リセット時650G+α短縮。"
+     },
+     "rate45": {
+      "excellent": 560,
+      "good": 440,
+      "caution": 290,
+      "note": "リセット時650G+α短縮。"
+     }
+    },
+    "note": "設定変更時はG数天井650G+α・周期天井最大4周期に短縮。巫女ポイントもランダム加算で優遇。"
+   },
+   "cycle": {
+    "note": "周期天井は最大6周期（リセット時は最大4周期）。1周期最大500G+α。CZ「乙女アタック」突入時の周期数を確認。",
+    "_disabled": "2026-07-27 軸契約: 判定材料（閾値も回数ごとの行）が無いのに周期タブが出ていたため非表示。周期天井の解析値が揃い次第 #96 で再設計する"
+   }
+  },
+  "limit": 999,
+  "strategyByRate": {
+   "eq56": "5.6枚580G〜",
+   "rate55": "6.0枚600G〜",
+   "rate50": "6.5枚650G〜",
+   "rate45": "7.0枚710G〜"
+  }
+ },
+ {
+  "slug": "yajikita_mairu",
+  "name": "スマスロ やじきた道中記参る！",
+  "release_date": "2026-08-03",
+  "seo": {
+   "title": "スマスロ やじきた道中記参る！ 狙い目・天井・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "算定中（天井は999まいる／6スルー）",
+  "aliases": [
+   "やじきた道中記参る",
+   "やじきた",
+   "やじきた道中記",
+   "やじきた参る",
+   "やじきたどうちゅうき",
+   "参る"
+  ],
+  "limit": null
+ },
+ {
+  "slug": "karakuri2",
+  "name": "Lからくりサーカス2",
+  "release_date": "2026-07-06",
+  "seo": {
+   "title": "Lからくりサーカス2 狙い目・天井・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "等価 液晶800G〜（当サイト目安）/ 5.6枚・現金は交換条件が悪いほど深く（個別ライン未確定）",
+  "aliases": [
+   "からくりサーカス2",
+   "カラサー2",
+   "カラクリサーカス2",
+   "からくり2",
+   "karakuri2",
+   "からくりサーカス2スマスロ"
   ],
   "checker": {
    "unit": "G",
    "modes": [
     {
      "key": "normal",
-     "label": "設定狙い"
+     "label": "通常（液晶G数・等価基準）"
     }
    ],
    "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。ベル確率・BIG中スイカ・サイドランプで設定推測。"
-   }
+    "excellent": 1101,
+    "good": 800,
+    "caution": 800,
+    "note": "CZ間天井は液晶（モード別最深1200/800/100G）または実890Gの消化で天井到達（前兆経由）・AT間2500G。判定は液晶ゲーム数・等価交換の当サイト目安（暫定。5.6枚持ち・現金投資は交換条件が悪いほど深くなります）。天井到達時の当選先は滞在モードで異なり上位ATは非保証。リセット後は液晶天井が最深500Gに短縮（リセット狙い目は解析待ち）。"
+   },
+   "equivOnly": true
   },
-  "limit": null
+  "limit": 1200,
+  "original": {
+   "title": "からくりサーカス",
+   "kind": "漫画",
+   "search": "からくりサーカス 漫画"
+  },
+  "tenjo_display": "液晶1200G/実890G"
  },
  {
-  "slug": "koukaku",
-  "name": "スマスロ 攻殻機動隊",
+  "slug": "kabaneri",
+  "name": "スマスロ 甲鉄城のカバネリ 海門(うなと)決戦",
   "seo": {
-   "title": "スマスロ 攻殻機動隊 狙い目"
+   "title": "スマスロ 甲鉄城のカバネリ 海門(うなと)決戦 狙い目"
   },
   "info": "スマスロAT",
-  "strategy": "CZ間300G〜 / AT間650G〜",
+  "strategy": "ST間580G〜 / リセット100G〜",
   "strategyByRate": {
-   "eq56": "5.6枚CZ310G〜 / AT間660G〜",
-   "rate55": "6.0枚CZ400G〜 / AT間700G〜",
-   "rate50": "6.5枚CZ450G〜 / AT間750G〜",
-   "rate45": "7.0枚CZ500G〜 / AT間800G〜"
+   "eq56": "5.6枚590G〜 / リセット100G〜",
+   "rate55": "6.0枚630G〜 / リセット130G〜",
+   "rate50": "6.5枚670G〜 / リセット170G〜",
+   "rate45": "7.0枚720G〜 / リセット210G〜"
   },
   "checker": {
    "unit": "G",
@@ -897,154 +602,8 @@
    ],
    "modes": [
     {
-     "key": "cz",
-     "label": "CZ間"
-    },
-    {
-     "key": "at",
-     "label": "AT間"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "cz": {
-    "excellent": 550,
-    "good": 300,
-    "caution": 200,
-    "byRate": {
-     "eq56": {
-      "excellent": 500,
-      "good": 310,
-      "caution": 250,
-      "note": "5.6枚交換ならCZ間310Gから狙い目、250Gから候補です。AT間と混ぜず、CZ間台として見る前提を先に固めてください。"
-     },
-     "rate55": {
-      "excellent": 550,
-      "good": 400,
-      "caution": 300,
-      "note": "6.0枚交換はCZ間400G基準です。AT間700G基準との差が大きいので、入口を固定した方が使いやすいです。"
-     },
-     "rate50": {
-      "excellent": 600,
-      "good": 450,
-      "caution": 350,
-      "note": "6.5枚交換ではCZ間450Gからが本線です。浅いCZ間台に広げず、液晶G数を確認して深め優先にしてください。"
-     },
-     "rate45": {
-      "excellent": 650,
-      "good": 500,
-      "caution": 400,
-      "note": "7.0枚交換はCZ間500G基準です。AT間やリセットの浅いラインと混ぜずに使う方が安全です。"
-     }
-    },
-    "note": "CZ間天井550G+α。液晶のCZ間G数で確認。"
-   },
-   "at": {
-    "excellent": 900,
-    "good": 650,
-    "caution": 500,
-    "byRate": {
-     "eq56": {
-      "excellent": 850,
-      "good": 660,
-      "caution": 450,
-      "note": "5.6枚交換ならAT間660Gから狙い目、450Gから候補です。CZ間より深いラインなので、AT間台として見てよいかを先に分けてください。"
-     },
-     "rate55": {
-      "excellent": 900,
-      "good": 700,
-      "caution": 500,
-      "note": "6.0枚交換はAT間700G基準です。CZ間400Gラインと混ぜず、メニュー画面でAT間G数を確認してから使う方が安全です。"
-     },
-     "rate50": {
-      "excellent": 950,
-      "good": 750,
-      "caution": 550,
-      "note": "6.5枚交換ではAT間750Gからが本線です。CZ間よりひと回り深く、同じ感覚で見ないことが重要です。"
-     },
-     "rate45": {
-      "excellent": 1000,
-      "good": 800,
-      "caution": 600,
-      "note": "7.0枚交換はAT間800G基準です。入口差が大きい機種なので、AT間台として見る根拠を固めてから使ってください。"
-     }
-    },
-    "note": "AT間天井999G。メニュー画面でAT間G数を確認。"
-   },
-   "reset": {
-    "excellent": 300,
-    "good": 150,
-    "caution": 80,
-    "byRate": {
-     "eq56": {
-      "excellent": 260,
-      "good": 120,
-      "caution": 50,
-      "note": "5.6枚交換のリセット台は50Gから候補、120Gから狙い目です。CZ天井短縮とAT間699G短縮の前提が見える台に絞る方が安全です。"
-     },
-     "rate55": {
-      "excellent": 300,
-      "good": 150,
-      "caution": 80,
-      "note": "6.0枚交換はリセット150G基準です。CZ間とAT間の通常ラインとは別で整理してください。"
-     },
-     "rate50": {
-      "excellent": 350,
-      "good": 200,
-      "caution": 100,
-      "note": "6.5枚交換ではリセット200Gからが本線です。浅い朝一台に広げすぎず、前提確認を先にやる方がブレにくいです。"
-     },
-     "rate45": {
-      "excellent": 400,
-      "good": 250,
-      "caution": 120,
-      "note": "7.0枚交換のリセット台は250G基準です。通常時の複数入口と混ざりやすいので、朝一台として見る根拠を固めてから使う方が安全です。"
-     }
-    },
-    "note": "設定変更後はCZ天井350G+αに短縮。AT間天井も699Gに短縮。"
-   }
-  },
-  "limit": 999,
-  "aliases": [
-   "攻殻機動隊",
-   "攻殻",
-   "こうかく",
-   "コウカク",
-   "攻殻機動隊SAC"
-  ],
-  "original": {
-   "title": "攻殻機動隊",
-   "kind": "漫画",
-   "search": "攻殻機動隊 士郎正宗"
-  }
- },
- {
-  "slug": "yorumungando",
-  "name": "スマスロヨルムンガンド",
-  "seo": {
-   "title": "スマスロヨルムンガンド 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "等価760G〜 / 5.6枚770G〜 / 現金840G〜（通常）/ リセット後180G〜",
-  "aliases": [
-   "ヨルムンガンド",
-   "よるむんがんど",
-   "ヨルムン",
-   "jormungand"
-  ],
-  "original": {
-   "title": "ヨルムンガンド",
-   "kind": "漫画",
-   "search": "ヨルムンガンド 漫画"
-  },
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
      "key": "normal",
-     "label": "通常"
+     "label": "ST間"
     },
     {
      "key": "reset",
@@ -1052,20 +611,105 @@
     }
    ],
    "normal": {
-    "excellent": 999,
-    "good": 840,
-    "caution": 760,
-    "note": "天井AT間999G+α。等価760G〜・5.6枚770G〜・現金840G〜から狙い目。"
+    "excellent": 700,
+    "good": 580,
+    "caution": 430,
+    "byRate": {
+     "eq56": {
+      "excellent": 700,
+      "good": 590,
+      "caution": 440,
+      "note": "5.6枚交換ならST間590Gから狙い目、440Gから候補です。ST後の前兆と引き戻しを見ながら、通常台として見てよいかを先に整理してください。"
+     },
+     "rate55": {
+      "excellent": 750,
+      "good": 630,
+      "caution": 470,
+      "note": "6.0枚交換はST間630G基準です。リセット130G基準と混ぜず、今の台がどちらの前提かを固定した方が使いやすいです。"
+     },
+     "rate50": {
+      "excellent": 810,
+      "good": 670,
+      "caution": 510,
+      "note": "6.5枚交換ではST間670Gからが本線です。浅い通常台に広げず、ST間G数をしっかり確認して深め優先にしてください。"
+     },
+     "rate45": {
+      "excellent": 860,
+      "good": 720,
+      "caution": 550,
+      "note": "7.0枚交換はST間720G基準です。深い通常台だけに絞り、リセットの浅いラインとは切り分けて使う方が安全です。"
+     }
+    },
+    "note": "ST間天井996G+α。ST間G数はメニュー画面で確認。"
    },
    "reset": {
-    "excellent": 370,
-    "good": 180,
-    "caution": 100,
-    "note": "設定変更後は天井450G+αに短縮。リセット台なら浅いラインから候補です。"
-   },
-   "limit": 999
+    "excellent": 300,
+    "good": 100,
+    "caution": 0,
+    "byRate": {
+     "eq56": {
+      "excellent": 300,
+      "good": 100,
+      "caution": 0,
+      "note": "5.6枚交換のリセット台は100Gから候補です。朝一や設定変更確定台は積極的に狙えます。"
+     },
+     "rate55": {
+      "excellent": 350,
+      "good": 130,
+      "caution": 30,
+      "note": "6.0枚交換はリセット130G基準です。通常ST後の流れと混ぜず、朝一台として別で見る方が使いやすいです。"
+     },
+     "rate50": {
+      "excellent": 400,
+      "good": 170,
+      "caution": 70,
+      "note": "6.5枚交換ではリセット170Gからが本線です。浅い朝一台に広げすぎず、前兆や履歴も含めて判断してください。"
+     },
+     "rate45": {
+      "excellent": 450,
+      "good": 210,
+      "caution": 100,
+      "note": "7.0枚交換のリセット台は210G基準です。通常720Gラインとの差を意識して、朝一の根拠がある台に絞る方が安全です。"
+     }
+    },
+    "note": "設定変更後は天井596G+αに短縮。0G〜100Gから狙える。"
+   }
   },
-  "limit": 999
+  "limit": 996,
+  "aliases": [
+   "カバネリ",
+   "かばねり",
+   "甲鉄城",
+   "海門決戦"
+  ],
+  "original": {
+   "title": "甲鉄城のカバネリ",
+   "kind": "アニメ",
+   "search": "甲鉄城のカバネリ Blu-ray"
+  }
+ },
+ {
+  "slug": "jashinchan",
+  "name": "L邪神ちゃんドロップキック",
+  "release_date": "2026-08-03",
+  "seo": {
+   "title": "L邪神ちゃんドロップキック 狙い目・天井・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "算定中（天井は通常時799G+α／5周期）",
+  "aliases": [
+   "邪神ちゃんドロップキック",
+   "邪神ちゃん",
+   "じゃしんちゃん",
+   "ドロップキック",
+   "じゃしんちゃんどろっぷきっく"
+  ],
+  "limit": null,
+  "original": {
+   "title": "邪神ちゃんドロップキック",
+   "kind": "漫画",
+   "search": "邪神ちゃんドロップキック 漫画"
+  }
  },
  {
   "slug": "enen2",
@@ -1116,25 +760,129 @@
   }
  },
  {
-  "slug": "okidoki_gorgeous",
-  "name": "S沖ドキ！ゴージャス-30",
+  "slug": "world_dai_star",
+  "name": "スマスロ ワールドダイスター",
+  "release_date": "2026-08-03",
   "seo": {
-   "title": "沖ドキ！ゴージャス 狙い目・天井・期待値まとめ"
+   "title": "スマスロ ワールドダイスター 狙い目・天井・解析まとめ"
   },
-  "info": "6.6号機 AT",
-  "strategy": "等価600G〜 / 天国後32Gヤメ",
-  "strategyByRate": {
-   "eq56": "5.6枚650G〜",
-   "rate55": "6.0枚670G〜",
-   "rate50": "6.5枚700G〜",
-   "rate45": "7.0枚750G〜"
-  },
+  "info": "スマスロAT",
+  "strategy": "算定中（天井は通常時999G+α）",
   "aliases": [
-   "沖ドキゴージャス",
-   "ゴージャス",
-   "沖ゴジャ",
-   "おきどきごーじゃす"
+   "ワールドダイスター",
+   "ワルスタ",
+   "わーるどだいすたー",
+   "ワールドダイスタァ"
   ],
+  "limit": null,
+  "original": {
+   "title": "ワールドダイスター",
+   "kind": "アニメ",
+   "search": "ワールドダイスター"
+  }
+ },
+ {
+  "slug": "garei_zero_re",
+  "name": "Lパチスロ 喰霊-零-Re",
+  "seo": {
+   "title": "Lパチスロ 喰霊-零-Re スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v1",
+  "page_decision": {
+   "schema_version": "page-decision/v1",
+   "indexable": false,
+   "confirmed_topics": [],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "spec",
+    "setting",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3",
+    "CATEGORIES_LT_2",
+    "NO_UNIQUE_GAMEPLAY"
+   ],
+   "claims": [],
+   "policy_mode": "normal",
+   "decided_at": "2026-08-23",
+   "input_digest": "sha256:bc6afcc73e2d1ee3c2ad7aff9d94202e38b0941e0611da7976e64ac835bd1e62"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-08-17",
+  "identity": {
+   "manufacturer_id": "oizumi",
+   "official_product_url": "https://p-town.dmm.com/machines/5028",
+   "announced_name": "Lパチスロ 喰霊-零-Re",
+   "identity_tier": "CATALOG_CODE_MATCHED",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5028 型式=Lパチスロ喰霊零Re/L3 メーカー=オーイズミ 導入=2026-08-17 確認日=2026-08-16",
+   "market_release_date": "2026-08-17",
+   "_legacy_evidence_ref": "identity_evidence/13674f64333e5765e7fd009beb11fe73c52ed2f5c2b4498532d06218adf767fb.html #card0",
+   "_legacy_official_product_url": "https://www.oizumi.co.jp/machine/garei-zero-re/",
+   "regulatory_model_code": "Lパチスロ喰霊零Re/L3",
+   "_model_code_sources": [
+    "p-town.dmm.com",
+    "p-world.co.jp"
+   ]
+  },
+  "checker": {
+   "coinRate": 36.1,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "ceiling": 999
+   }
+  }
+ },
+ {
+  "slug": "sf6",
+  "name": "スマスロ ストリートファイター6",
+  "release_date": "2026-08-03",
+  "seo": {
+   "title": "スマスロ ストリートファイター6 狙い目・天井・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "算定中（天井は通常時1000G+α）",
+  "aliases": [
+   "ストリートファイター6",
+   "スト6",
+   "SF6",
+   "ストリートファイターシックス",
+   "すとりーとふぁいたー6"
+  ],
+  "limit": null,
+  "original": {
+   "title": "ストリートファイター6",
+   "kind": "ゲーム",
+   "search": "ストリートファイター6"
+  }
+ },
+ {
+  "slug": "monkeyv",
+  "name": "スマスロモンキーターンV",
+  "seo": {
+   "title": "スマスロモンキーターンV 狙い目"
+  },
+  "info": "スマスロAT",
+  "strategy": "G数410G〜 / 5周期目〜",
+  "strategyByRate": {
+   "eq56": "5.6枚G数420G〜 / 5周期目〜",
+   "rate55": "6.0枚G数400G〜 / 5周期目〜",
+   "rate50": "6.5枚G数450G〜 / 5周期目〜",
+   "rate45": "7.0枚G数500G〜 / 5周期目〜"
+  },
   "checker": {
    "unit": "G",
    "defaultRate": "eq56",
@@ -1164,85 +912,476 @@
     {
      "key": "reset",
      "label": "リセット"
+    },
+    {
+     "key": "cycle",
+     "label": "周期",
+     "hasCycle": true
     }
    ],
    "normal": {
-    "excellent": 850,
-    "good": 600,
-    "caution": 450,
+    "excellent": 600,
+    "good": 410,
+    "caution": 310,
     "byRate": {
      "eq56": {
-      "excellent": 850,
-      "good": 650,
-      "caution": 470,
-      "note": "5.6枚交換なら650Gから狙い目。天井999G。ボーナス後32G天国フォロー必須。"
+      "excellent": 550,
+      "good": 420,
+      "caution": 250,
+      "note": "5.6枚交換ならG数420Gから狙い目、250Gから候補です。4周期目以降の価値も高いので、G数だけで切らず周期も並行して確認してください。"
      },
      "rate55": {
-      "excellent": 850,
-      "good": 670,
-      "caution": 490,
-      "note": "6.0枚交換なら670Gから。"
+      "excellent": 600,
+      "good": 400,
+      "caution": 300,
+      "note": "6.0枚交換はG数400G基準です。周期4周期目以降の価値と重なる台を優先すると使いやすいです。"
      },
      "rate50": {
-      "excellent": 900,
-      "good": 700,
-      "caution": 520,
-      "note": "6.5枚交換なら700Gから。"
+      "excellent": 650,
+      "good": 450,
+      "caution": 350,
+      "note": "6.5枚交換ではG数450Gからが本線です。周期が見えない台は少し安全側で見た方が収まりやすいです。"
      },
      "rate45": {
-      "excellent": 900,
-      "good": 750,
-      "caution": 560,
-      "note": "7.0枚交換なら750Gから。"
+      "excellent": 700,
+      "good": 500,
+      "caution": 400,
+      "note": "7.0枚交換はG数500G基準です。G数だけでなく4周期目以降かどうかを重ねて、深め優先で使う方が安全です。"
      }
     },
-    "note": "天井999G。ボーナス後32G回して天国否定でヤメ。リセット後は25%で天井399Gに短縮。"
+    "note": "G数天井795G+α。周期天井（6周期目でAT確定）も並行して確認推奨。4周期目以降が本命ゾーン。"
    },
    "reset": {
-    "excellent": 350,
+    "excellent": 100,
     "good": 0,
     "caution": 0,
     "byRate": {
      "eq56": {
-      "excellent": 350,
+      "excellent": 100,
       "good": 0,
       "caution": 0,
-      "note": "リセット後は25%で天井399Gに短縮。380G付近まで回して当たらなければヤメ。"
+      "note": "5.6枚交換のリセット台は0Gから候補です。周期天井が最大4周期に短縮される前提なので、周期優遇が見える台だけを狙う方が安全です。"
      },
      "rate55": {
-      "excellent": 350,
-      "good": 0,
-      "caution": 0,
-      "note": "リセット後は25%で天井399Gに短縮。"
-     },
-     "rate50": {
-      "excellent": 380,
-      "good": 0,
-      "caution": 0,
-      "note": "リセット後は25%で天井399Gに短縮。"
-     },
-     "rate45": {
-      "excellent": 380,
+      "excellent": 150,
       "good": 50,
       "caution": 0,
-      "note": "現金投資でも50Gから。"
+      "note": "6.0枚交換は0Gから候補ですが、実戦では50G前後まで様子を見る方が使いやすいです。通常台とは別前提で扱ってください。"
+     },
+     "rate50": {
+      "excellent": 200,
+      "good": 100,
+      "caution": 30,
+      "note": "6.5枚交換では100Gからが本線です。浅いG数に引っ張られすぎず、周期優遇と合わせて判断してください。"
+     },
+     "rate45": {
+      "excellent": 250,
+      "good": 150,
+      "caution": 50,
+      "note": "7.0枚交換のリセット台は150G基準です。周期が見えない台は安全側に寄せて、通常台と混ぜない方が安定します。"
      }
     },
-    "note": "設定変更後は25%で天井が399Gに短縮。0Gから打てる。"
-   }
+    "note": "設定変更後は天井495G+α・周期天井が最大4周期に短縮。周期状態を確認してから着席。"
+   },
+   "cycle": {
+    "cycle": [
+     {
+      "count": 1,
+      "excellent": 700,
+      "good": 600,
+      "caution": 500,
+      "note": "1周期目。G数ベースの基本狙いです。周期が浅いぶん、G数500G以上を目安に。",
+      "byRate": {
+       "eq56": {
+        "excellent": 650,
+        "good": 550,
+        "caution": 450,
+        "note": "5.6枚交換の1周期目は550G〜が基準です。"
+       },
+       "rate55": {
+        "excellent": 700,
+        "good": 600,
+        "caution": 500,
+        "note": "6.0枚交換の1周期目は600G基準です。"
+       },
+       "rate50": {
+        "excellent": 750,
+        "good": 650,
+        "caution": 550,
+        "note": "6.5枚交換の1周期目は650G〜を目安にしてください。"
+       },
+       "rate45": {
+        "excellent": 800,
+        "good": 700,
+        "caution": 600,
+        "note": "7.0枚交換の1周期目は700G〜からが実戦ラインです。"
+       }
+      }
+     },
+     {
+      "count": 2,
+      "excellent": 650,
+      "good": 550,
+      "caution": 450,
+      "note": "2周期目。1周期目より少し浅めに狙えます。G数450G以上を目安に。",
+      "byRate": {
+       "eq56": {
+        "excellent": 600,
+        "good": 500,
+        "caution": 400,
+        "note": "5.6枚交換の2周期目は500G〜が基準です。"
+       },
+       "rate55": {
+        "excellent": 650,
+        "good": 550,
+        "caution": 450,
+        "note": "6.0枚交換の2周期目は550G基準です。"
+       },
+       "rate50": {
+        "excellent": 700,
+        "good": 600,
+        "caution": 500,
+        "note": "6.5枚交換の2周期目は600G〜を目安にしてください。"
+       },
+       "rate45": {
+        "excellent": 750,
+        "good": 650,
+        "caution": 550,
+        "note": "7.0枚交換の2周期目は650G〜からが実戦ラインです。"
+       }
+      }
+     },
+     {
+      "count": 3,
+      "excellent": 550,
+      "good": 450,
+      "caution": 380,
+      "note": "3周期目。次の4周期目が本命なので、G数380G〜を目安に拾えます。",
+      "byRate": {
+       "eq56": {
+        "excellent": 500,
+        "good": 400,
+        "caution": 320,
+        "note": "5.6枚交換の3周期目は400G〜が基準です。"
+       },
+       "rate55": {
+        "excellent": 550,
+        "good": 450,
+        "caution": 380,
+        "note": "6.0枚交換の3周期目は450G基準です。"
+       },
+       "rate50": {
+        "excellent": 600,
+        "good": 500,
+        "caution": 420,
+        "note": "6.5枚交換の3周期目は500G〜を目安にしてください。"
+       },
+       "rate45": {
+        "excellent": 650,
+        "good": 550,
+        "caution": 460,
+        "note": "7.0枚交換の3周期目は550G〜からが実戦ラインです。"
+       }
+      }
+     },
+     {
+      "count": 4,
+      "excellent": 500,
+      "good": 400,
+      "caution": 300,
+      "note": "4周期目。本命ゾーン。G数と周期が重なる台を最優先。",
+      "byRate": {
+       "eq56": {
+        "excellent": 450,
+        "good": 350,
+        "caution": 250,
+        "note": "5.6枚交換の4周期目は350G〜から積極的に狙えます。"
+       },
+       "rate55": {
+        "excellent": 500,
+        "good": 400,
+        "caution": 300,
+        "note": "6.0枚交換の4周期目は400G基準です。周期とG数が重なる台を優先してください。"
+       },
+       "rate50": {
+        "excellent": 550,
+        "good": 450,
+        "caution": 350,
+        "note": "6.5枚交換の4周期目は450G〜を目安にしてください。"
+       },
+       "rate45": {
+        "excellent": 600,
+        "good": 500,
+        "caution": 400,
+        "note": "7.0枚交換の4周期目は500G〜からが実戦ラインです。"
+       }
+      }
+     },
+     {
+      "count": 5,
+      "excellent": 200,
+      "good": 100,
+      "caution": 0,
+      "note": "5周期目。確実な利益ゾーン。0G〜から着席検討OK。G数が浅くてもプラスで完結しやすい。",
+      "byRate": {
+       "eq56": {
+        "excellent": 150,
+        "good": 50,
+        "caution": 0,
+        "note": "5.6枚交換の5周期目は0Gから着席OKです。"
+       },
+       "rate55": {
+        "excellent": 200,
+        "good": 100,
+        "caution": 0,
+        "note": "6.0枚交換の5周期目は100G基準ですが、0Gから候補です。"
+       },
+       "rate50": {
+        "excellent": 250,
+        "good": 150,
+        "caution": 0,
+        "note": "6.5枚交換の5周期目は150G〜から本線です。0Gから候補でもあります。"
+       },
+       "rate45": {
+        "excellent": 300,
+        "good": 200,
+        "caution": 50,
+        "note": "7.0枚交換の5周期目は200G〜からが実戦ラインです。"
+       }
+      }
+     },
+     {
+      "count": 6,
+      "excellent": 0,
+      "good": 0,
+      "caution": 0,
+      "note": "6周期目。AT確定。G数不問で着席OK。即着席を推奨します。",
+      "byRate": {
+       "eq56": {
+        "excellent": 0,
+        "good": 0,
+        "caution": 0,
+        "note": "6周期目は交換率不問でAT確定。即着席OK。"
+       },
+       "rate55": {
+        "excellent": 0,
+        "good": 0,
+        "caution": 0,
+        "note": "6周期目は交換率不問でAT確定。即着席OK。"
+       },
+       "rate50": {
+        "excellent": 0,
+        "good": 0,
+        "caution": 0,
+        "note": "6周期目は交換率不問でAT確定。即着席OK。"
+       },
+       "rate45": {
+        "excellent": 0,
+        "good": 0,
+        "caution": 0,
+        "note": "6周期目は交換率不問でAT確定。即着席OK。"
+       }
+      }
+     }
+    ]
+   },
+   "limit": 795
   },
-  "limit": 999
+  "limit": 800,
+  "aliases": [
+   "モンキーターン",
+   "モンキー",
+   "もんきー",
+   "モンキーV"
+  ],
+  "original": {
+   "title": "モンキーターン",
+   "kind": "漫画",
+   "search": "モンキーターン 漫画"
+  }
  },
  {
-  "slug": "hokuto_tensei2",
-  "name": "スマスロ 北斗の拳 転生の章2",
+  "slug": "shinuchi_yoshimune",
+  "name": "真打 吉宗",
   "seo": {
-   "title": "スマスロ 北斗の拳 転生の章2 狙い目"
+   "title": "真打 吉宗 狙い目・天井・期待値まとめ"
   },
   "info": "スマスロAT",
-  "strategy": "あべし間780〜 / リセット短縮あり",
+  "strategy": "等価400G〜 / 5.6枚410G〜（CZ間） / AT間460G〜",
+  "aliases": [
+   "真打吉宗",
+   "しんうちよしむね",
+   "吉宗真打",
+   "しんうち"
+  ],
   "checker": {
-   "unit": "あべし",
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "CZ間"
+    },
+    {
+     "key": "at",
+     "label": "AT間"
+    }
+   ],
+   "normal": {
+    "excellent": 700,
+    "good": 400,
+    "caution": 290,
+    "note": "CZ間天井1000G+α（6周期）でCZ当選。液晶のゲーム数カウンターで確認。",
+    "byRate": {
+     "eq56": {
+      "caution": 290,
+      "good": 400,
+      "target": 400,
+      "excellent": 700,
+      "note": "5.6枚なら400G〜から狙い目に入ります。"
+     },
+     "rate55": {
+      "caution": 310,
+      "good": 430,
+      "target": 430,
+      "excellent": 730,
+      "note": "6.0枚では430G〜が目安です。"
+     },
+     "rate50": {
+      "caution": 360,
+      "good": 480,
+      "target": 480,
+      "excellent": 780,
+      "note": "6.5枚では480G〜から見ます。"
+     },
+     "rate45": {
+      "caution": 420,
+      "good": 540,
+      "target": 540,
+      "excellent": 830,
+      "note": "7.0枚では540G〜が狙い目ラインです。"
+     }
+    }
+   },
+   "at": {
+    "excellent": 900,
+    "good": 460,
+    "caution": 360,
+    "note": "AT間天井1500G+αでAT当選。CZ間とAT間、どちらの前提で見るかを明確にしてから狙い目を判断してください。",
+    "byRate": {
+     "eq56": {
+      "caution": 360,
+      "good": 460,
+      "target": 460,
+      "excellent": 900,
+      "note": "5.6枚ならAT間460G〜から狙い目に入ります。"
+     },
+     "rate55": {
+      "caution": 390,
+      "good": 490,
+      "target": 490,
+      "excellent": 930,
+      "note": "6.0枚ではAT間490G〜が目安です。"
+     },
+     "rate50": {
+      "caution": 440,
+      "good": 550,
+      "target": 550,
+      "excellent": 980,
+      "note": "6.5枚ではAT間550G〜から見ます。"
+     },
+     "rate45": {
+      "caution": 510,
+      "good": 620,
+      "target": 620,
+      "excellent": 1050,
+      "note": "7.0枚ではAT間620G〜が狙い目ラインです。"
+     }
+    }
+   },
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ]
+  },
+  "limit": 1500
+ },
+ {
+  "slug": "sengoku_collection6",
+  "name": "L戦国コレクション6",
+  "release_date": "2026-07-06",
+  "seo": {
+   "title": "L戦国コレクション6 天井・狙い目・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "等価580G〜 / 5.6枚590G〜 / 現金720G〜",
+  "aliases": [
+   "戦国コレクション6",
+   "戦コレ6",
+   "せんごくコレクション6",
+   "せんこれ6",
+   "sengoku_collection6",
+   "sencolle6",
+   "L戦国コレクション6",
+   "戦国コレクション6スマスロ"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "excellent": 850,
+    "good": 720,
+    "caution": 580,
+    "note": "G数天井999G+αと周期天井最大6周期の複合型。等価580G〜・5.6枚590G〜・現金720G〜が狙い目。リセット後は周期天井が最大3周期に短縮（リセット狙い目ラインは解析待ち）。"
+   }
+  },
+  "limit": 999,
+  "original": {
+   "title": "戦国コレクション",
+   "kind": "ゲーム",
+   "search": "戦国コレクション ゲーム"
+  }
+ },
+ {
+  "slug": "magireco",
+  "name": "Lスマスロマギアレコード",
+  "seo": {
+   "title": "マギアレコード 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "等価360G(540pt)〜 / リセット150G〜",
+  "strategyByRate": {
+   "eq56": "5.6枚360G〜",
+   "rate55": "6.0枚370G〜",
+   "rate50": "6.5枚400G〜",
+   "rate45": "7.0枚450G〜"
+  },
+  "aliases": [
+   "マギレコ",
+   "マギアレコード",
+   "まどマギ外伝"
+  ],
+  "checker": {
+   "unit": "G",
    "defaultRate": "eq56",
    "exchangeRates": [
     {
@@ -1265,7 +1404,7 @@
    "modes": [
     {
      "key": "normal",
-     "label": "あべし間"
+     "label": "通常"
     },
     {
      "key": "reset",
@@ -1273,287 +1412,77 @@
     }
    ],
    "normal": {
-    "excellent": 1050,
-    "good": 780,
-    "caution": 700,
+    "excellent": 580,
+    "good": 360,
+    "caution": 280,
     "byRate": {
      "eq56": {
-      "excellent": 1050,
-      "good": 780,
-      "caution": 640,
-      "note": "5.6枚等価は780あべし〜が狙い目、640あべし台から候補です。"
+      "excellent": 580,
+      "good": 360,
+      "caution": 280,
+      "note": "5.6枚交換なら360G(540pt)から狙い目。天井950pt+α(約633G)。"
      },
      "rate55": {
-      "excellent": 1100,
-      "good": 840,
-      "caution": 700,
-      "note": "6.0枚交換は840あべし基準です。700あべし台は候補止まりにしてください。"
+      "excellent": 580,
+      "good": 370,
+      "caution": 290,
+      "note": "6.0枚交換なら370Gから。"
      },
      "rate50": {
-      "excellent": 1150,
-      "good": 950,
-      "caution": 750,
-      "note": "6.5枚交換は950あべし基準です。750あべし以深に絞るのが安全です。"
+      "excellent": 600,
+      "good": 400,
+      "caution": 320,
+      "note": "6.5枚交換なら400Gから。"
      },
      "rate45": {
-      "excellent": 1200,
-      "good": 1000,
-      "caution": 800,
-      "note": "7.0枚交換は1000あべし基準です。800あべし超えの深め台だけに絞ってください。"
+      "excellent": 600,
+      "good": 450,
+      "caution": 360,
+      "note": "7.0枚交換なら450Gから。"
      }
     },
-    "note": "あべし間天井1536で恩恵AT直撃。780あべし〜が狙い目ライン（等価）。"
+    "note": "pt管理天井950pt+α（約633G相当）。"
    },
    "reset": {
-    "excellent": 1280,
-    "good": 625,
-    "caution": 400,
-    "note": "設定変更後は天井1280あべしに短縮。625あべし〜が狙い目（交換率別の細かい基準は当サイトで確認できていないため出していません）。"
+    "excellent": 400,
+    "good": 150,
+    "caution": 80,
+    "byRate": {
+     "eq56": {
+      "excellent": 400,
+      "good": 150,
+      "caution": 80,
+      "note": "リセット時は天井600〜699pt+αに短縮。150Gから狙い目。"
+     },
+     "rate55": {
+      "excellent": 400,
+      "good": 200,
+      "caution": 100,
+      "note": "リセット時は600pt台に短縮。"
+     },
+     "rate50": {
+      "excellent": 400,
+      "good": 230,
+      "caution": 120,
+      "note": "リセット時は600pt台に短縮。"
+     },
+     "rate45": {
+      "excellent": 400,
+      "good": 260,
+      "caution": 150,
+      "note": "リセット時は600pt台に短縮。"
+     }
+    },
+    "note": "リセット時は天井600〜699pt+αに短縮。"
    },
-   "limit": 1536
+   "limit": 700
   },
-  "limit": 1536,
-  "aliases": [
-   "北斗転生",
-   "転生の章",
-   "てんせい",
-   "北斗転生2",
-   "転生2"
-  ],
+  "limit": 633,
   "original": {
-   "title": "北斗の拳",
-   "kind": "漫画",
-   "search": "北斗の拳 漫画"
+   "title": "マギアレコード",
+   "kind": "ゲーム",
+   "search": "マギアレコード"
   }
- },
- {
-  "slug": "akudama",
-  "name": "Lアクダマドライブ",
-  "seo": {
-   "title": "Lアクダマドライブ 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "等価530G~ / 5.6枚540G~ / 現金600G~（AT間967G+α / 6スルー〜）",
-  "aliases": [
-   "アクダマ",
-   "アクダマドライブ",
-   "あくだま",
-   "AKUDAMA"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {
-    "excellent": 967,
-    "good": 530,
-    "caution": 500,
-    "note": "天井AT間967G+α。等価530G~・5.6枚540G~・現金600G~から狙い目。745G以降はAT当選まで589G+αに短縮。"
-   },
-   "suru": {
-    "suruMax": 6,
-    "excellent": 6,
-    "good": 4,
-    "caution": 2,
-    "note": "ボーナス6スルーで7回目AT確定。スルー回数天井あり。",
-    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
-   }
-  },
-  "limit": 967,
-  "original": {
-   "title": "アクダマドライブ",
-   "kind": "アニメ",
-   "search": "アクダマドライブ Blu-ray"
-  }
- },
- {
-  "slug": "thunder_v",
-  "name": "スマスロ サンダーV",
-  "seo": {
-   "title": "サンダーV 設定判別・狙い目まとめ"
-  },
-  "info": "スマスロノーマル",
-  "strategy": "設定狙い主体・天井なし",
-  "aliases": [
-   "サンダー",
-   "サンダーV"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "ノーマルタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBB・RB・ベルをカウントしてください。"
-   }
-  },
-  "limit": null
- },
- {
-  "slug": "gogo_juggler3",
-  "name": "ゴーゴージャグラー3",
-  "seo": {
-   "title": "ゴーゴージャグラー3 設定判別"
-  },
-  "info": "Aタイプ",
-  "strategy": "設定狙い主体・天井なし",
-  "aliases": [
-   "ゴージャグ",
-   "ゴーゴー3"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
-   }
-  },
-  "limit": null,
-  "identity": {
-   "manufacturer_id": "kitadenshi",
-   "regulatory_model_code": "Sゴーゴージャグラー3KA",
-   "market_release_date": "2023-07-03"
-  }
- },
- {
-  "slug": "neo_aim_juggler",
-  "name": "ネオアイムジャグラーEX",
-  "seo": {
-   "title": "ネオアイムジャグラーEX 設定判別"
-  },
-  "info": "Aタイプ",
-  "strategy": "設定狙い主体・天井なし",
-  "aliases": [
-   "アイム",
-   "ネオアイム"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
-   }
-  },
-  "limit": null
- },
- {
-  "slug": "king_hanahana",
-  "name": "Sキングハナハナ-30",
-  "seo": {
-   "title": "キングハナハナ 狙い目・設定差まとめ"
-  },
-  "info": "Aタイプ（設定1〜6）",
-  "strategy": "設定狙い主体・天井なし",
-  "aliases": [
-   "キングハナハナ",
-   "キンハナ",
-   "きんぐはなはな",
-   "キンハナ30"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。ベル確率・BIG中スイカ・REG中サイドランプ・フェザーランプで設定推測。"
-   }
-  },
-  "limit": null
- },
- {
-  "slug": "dragon_hanahana_senko",
-  "name": "ドラゴンハナハナ～閃光～-30",
-  "seo": {
-   "title": "ドラゴンハナハナ閃光 狙い目・設定差まとめ"
-  },
-  "info": "Aタイプ（設定1〜6）",
-  "strategy": "設定狙い主体・天井なし",
-  "aliases": [
-   "ドラハナ",
-   "ドラゴンハナハナ",
-   "閃光",
-   "どらはな",
-   "ドラハナ閃光"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。ベル確率・BIG中スイカ・REG中サイドランプ・フェザーランプで設定推測。"
-   }
-  },
-  "limit": null
- },
- {
-  "slug": "hanabi",
-  "name": "Lハナビ",
-  "seo": {
-   "title": "スマスロハナビ 設定判別・スペックまとめ"
-  },
-  "info": "スマスロノーマル",
-  "strategy": "設定狙い主体・天井なし",
-  "aliases": [
-   "ハナビ",
-   "HANABI",
-   "花火"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "ノーマルタイプのため天井非搭載。設定狙い主体の機種です。完全攻略で設定1から機械割100.2%。高設定が見込める環境での使用を推奨。"
-   }
-  },
-  "limit": null
  },
  {
   "slug": "valvrave2",
@@ -2093,19 +2022,1303 @@
   }
  },
  {
-  "slug": "monkeyv",
-  "name": "スマスロモンキーターンV",
+  "slug": "milliongod_kiseki",
+  "name": "スマスロ ミリオンゴッド-神々の軌跡-",
   "seo": {
-   "title": "スマスロモンキーターンV 狙い目"
+   "title": "スマスロ ミリオンゴッド-神々の軌跡- 狙い目・天井・期待値まとめ"
   },
   "info": "スマスロAT",
-  "strategy": "G数410G〜 / 5周期目〜",
-  "strategyByRate": {
-   "eq56": "5.6枚G数420G〜 / 5周期目〜",
-   "rate55": "6.0枚G数400G〜 / 5周期目〜",
-   "rate50": "6.5枚G数450G〜 / 5周期目〜",
-   "rate45": "7.0枚G数500G〜 / 5周期目〜"
+  "strategy": "等価670G〜 / 5.6枚680G〜 / 現金830G〜",
+  "aliases": [
+   "ミリオンゴッド",
+   "神々の軌跡",
+   "みりおんごっど",
+   "ゴッド",
+   "god",
+   "milliongod"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 1480,
+    "good": 1000,
+    "caution": 670,
+    "note": "GG間天井1480G。等価670G〜・5.6枚680G〜・現金830G〜が狙い目。"
+   },
+   "reset": {
+    "excellent": 1480,
+    "good": 900,
+    "caution": 380,
+    "note": "設定変更後は510G / 1000G / 1480G から抽選（15.2% / 20.3% / 64.5%）。等価380G〜が狙い目。"
+   }
   },
+  "limit": 1480,
+  "original": {
+   "title": "ミリオンゴッド",
+   "kind": "シリーズ",
+   "search": "ミリオンゴッド"
+  }
+ },
+ {
+  "slug": "hokuto_tensei2",
+  "name": "スマスロ 北斗の拳 転生の章2",
+  "seo": {
+   "title": "スマスロ 北斗の拳 転生の章2 狙い目"
+  },
+  "info": "スマスロAT",
+  "strategy": "あべし間780〜 / リセット短縮あり",
+  "checker": {
+   "unit": "あべし",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "normal",
+     "label": "あべし間"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 1050,
+    "good": 780,
+    "caution": 700,
+    "byRate": {
+     "eq56": {
+      "excellent": 1050,
+      "good": 780,
+      "caution": 640,
+      "note": "5.6枚等価は780あべし〜が狙い目、640あべし台から候補です。"
+     },
+     "rate55": {
+      "excellent": 1100,
+      "good": 840,
+      "caution": 700,
+      "note": "6.0枚交換は840あべし基準です。700あべし台は候補止まりにしてください。"
+     },
+     "rate50": {
+      "excellent": 1150,
+      "good": 950,
+      "caution": 750,
+      "note": "6.5枚交換は950あべし基準です。750あべし以深に絞るのが安全です。"
+     },
+     "rate45": {
+      "excellent": 1200,
+      "good": 1000,
+      "caution": 800,
+      "note": "7.0枚交換は1000あべし基準です。800あべし超えの深め台だけに絞ってください。"
+     }
+    },
+    "note": "あべし間天井1536で恩恵AT直撃。780あべし〜が狙い目ライン（等価）。"
+   },
+   "reset": {
+    "excellent": 1280,
+    "good": 625,
+    "caution": 400,
+    "note": "設定変更後は天井1280あべしに短縮。625あべし〜が狙い目（交換率別の細かい基準は当サイトで確認できていないため出していません）。"
+   },
+   "limit": 1536
+  },
+  "limit": 1536,
+  "aliases": [
+   "北斗転生",
+   "転生の章",
+   "てんせい",
+   "北斗転生2",
+   "転生2"
+  ],
+  "original": {
+   "title": "北斗の拳",
+   "kind": "漫画",
+   "search": "北斗の拳 漫画"
+  }
+ },
+ {
+  "slug": "koukaku",
+  "name": "スマスロ 攻殻機動隊",
+  "seo": {
+   "title": "スマスロ 攻殻機動隊 狙い目"
+  },
+  "info": "スマスロAT",
+  "strategy": "CZ間300G〜 / AT間650G〜",
+  "strategyByRate": {
+   "eq56": "5.6枚CZ310G〜 / AT間660G〜",
+   "rate55": "6.0枚CZ400G〜 / AT間700G〜",
+   "rate50": "6.5枚CZ450G〜 / AT間750G〜",
+   "rate45": "7.0枚CZ500G〜 / AT間800G〜"
+  },
+  "checker": {
+   "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "cz",
+     "label": "CZ間"
+    },
+    {
+     "key": "at",
+     "label": "AT間"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "cz": {
+    "excellent": 550,
+    "good": 300,
+    "caution": 200,
+    "byRate": {
+     "eq56": {
+      "excellent": 500,
+      "good": 310,
+      "caution": 250,
+      "note": "5.6枚交換ならCZ間310Gから狙い目、250Gから候補です。AT間と混ぜず、CZ間台として見る前提を先に固めてください。"
+     },
+     "rate55": {
+      "excellent": 550,
+      "good": 400,
+      "caution": 300,
+      "note": "6.0枚交換はCZ間400G基準です。AT間700G基準との差が大きいので、入口を固定した方が使いやすいです。"
+     },
+     "rate50": {
+      "excellent": 600,
+      "good": 450,
+      "caution": 350,
+      "note": "6.5枚交換ではCZ間450Gからが本線です。浅いCZ間台に広げず、液晶G数を確認して深め優先にしてください。"
+     },
+     "rate45": {
+      "excellent": 650,
+      "good": 500,
+      "caution": 400,
+      "note": "7.0枚交換はCZ間500G基準です。AT間やリセットの浅いラインと混ぜずに使う方が安全です。"
+     }
+    },
+    "note": "CZ間天井550G+α。液晶のCZ間G数で確認。"
+   },
+   "at": {
+    "excellent": 900,
+    "good": 650,
+    "caution": 500,
+    "byRate": {
+     "eq56": {
+      "excellent": 850,
+      "good": 660,
+      "caution": 450,
+      "note": "5.6枚交換ならAT間660Gから狙い目、450Gから候補です。CZ間より深いラインなので、AT間台として見てよいかを先に分けてください。"
+     },
+     "rate55": {
+      "excellent": 900,
+      "good": 700,
+      "caution": 500,
+      "note": "6.0枚交換はAT間700G基準です。CZ間400Gラインと混ぜず、メニュー画面でAT間G数を確認してから使う方が安全です。"
+     },
+     "rate50": {
+      "excellent": 950,
+      "good": 750,
+      "caution": 550,
+      "note": "6.5枚交換ではAT間750Gからが本線です。CZ間よりひと回り深く、同じ感覚で見ないことが重要です。"
+     },
+     "rate45": {
+      "excellent": 1000,
+      "good": 800,
+      "caution": 600,
+      "note": "7.0枚交換はAT間800G基準です。入口差が大きい機種なので、AT間台として見る根拠を固めてから使ってください。"
+     }
+    },
+    "note": "AT間天井999G。メニュー画面でAT間G数を確認。"
+   },
+   "reset": {
+    "excellent": 300,
+    "good": 150,
+    "caution": 80,
+    "byRate": {
+     "eq56": {
+      "excellent": 260,
+      "good": 120,
+      "caution": 50,
+      "note": "5.6枚交換のリセット台は50Gから候補、120Gから狙い目です。CZ天井短縮とAT間699G短縮の前提が見える台に絞る方が安全です。"
+     },
+     "rate55": {
+      "excellent": 300,
+      "good": 150,
+      "caution": 80,
+      "note": "6.0枚交換はリセット150G基準です。CZ間とAT間の通常ラインとは別で整理してください。"
+     },
+     "rate50": {
+      "excellent": 350,
+      "good": 200,
+      "caution": 100,
+      "note": "6.5枚交換ではリセット200Gからが本線です。浅い朝一台に広げすぎず、前提確認を先にやる方がブレにくいです。"
+     },
+     "rate45": {
+      "excellent": 400,
+      "good": 250,
+      "caution": 120,
+      "note": "7.0枚交換のリセット台は250G基準です。通常時の複数入口と混ざりやすいので、朝一台として見る根拠を固めてから使う方が安全です。"
+     }
+    },
+    "note": "設定変更後はCZ天井350G+αに短縮。AT間天井も699Gに短縮。"
+   }
+  },
+  "limit": 999,
+  "aliases": [
+   "攻殻機動隊",
+   "攻殻",
+   "こうかく",
+   "コウカク",
+   "攻殻機動隊SAC"
+  ],
+  "original": {
+   "title": "攻殻機動隊",
+   "kind": "漫画",
+   "search": "攻殻機動隊 士郎正宗"
+  }
+ },
+ {
+  "slug": "tonsuki",
+  "name": "スマスロ とんでもスキルで異世界放浪メシ",
+  "release_date": "2026-08-03",
+  "seo": {
+   "title": "スマスロ とんでもスキルで異世界放浪メシ 狙い目・天井・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "算定中（天井は通常時1000G+α）",
+  "aliases": [
+   "とんスキ",
+   "とんでもスキル",
+   "とんでもスキルで異世界放浪メシ",
+   "異世界放浪メシ",
+   "放浪メシ",
+   "とんすき",
+   "TonsukiAnime",
+   "スマスロとんスキ"
+  ],
+  "limit": null,
+  "original": {
+   "title": "とんでもスキルで異世界放浪メシ",
+   "kind": "ライトノベル",
+   "search": "とんでもスキルで異世界放浪メシ ライトノベル"
+  },
+  "identity": {
+   "manufacturer_id": "kpe",
+   "regulatory_model_code": "LとんでもスキルKM",
+   "market_release_date": "2026-08-03"
+  }
+ },
+ {
+  "slug": "super_binmusume",
+  "name": "Lすーぱぁびん娘",
+  "release_date": "2026-08-03",
+  "seo": {
+   "title": "Lすーぱぁびん娘 狙い目・天井・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "算定中（天井は通常時1200G／娘ポイント10周期）",
+  "aliases": [
+   "すーぱぁびん娘",
+   "びん娘",
+   "すーぱあびん娘",
+   "スーパービン娘",
+   "すーぱーびんむすめ",
+   "びんむすめ"
+  ],
+  "limit": null
+ },
+ {
+  "slug": "dmm_5089",
+  "name": "LBトリプルクラウンX-300",
+  "seo": {
+   "title": "LBトリプルクラウンX-300 スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v1",
+  "page_decision": {
+   "schema_version": "page-decision/v1",
+   "indexable": false,
+   "confirmed_topics": [],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "spec",
+    "setting",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3",
+    "CATEGORIES_LT_2",
+    "NO_UNIQUE_GAMEPLAY"
+   ],
+   "claims": [],
+   "policy_mode": "normal",
+   "decided_at": "2026-08-25",
+   "input_digest": "sha256:bc6afcc73e2d1ee3c2ad7aff9d94202e38b0941e0611da7976e64ac835bd1e62"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-08-03",
+  "identity": {
+   "manufacturer_id": "seiryu_japan",
+   "official_product_url": "https://p-town.dmm.com/machines/5089",
+   "announced_name": "LBトリプルクラウンX-300",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5089 型式=未掲載 メーカー=清龍ジャパン 導入=2026-08-03 確認日=2026-08-25",
+   "market_release_date": "2026-08-03"
+  }
+ },
+ {
+  "slug": "ultraman_final",
+  "name": "L ULTRAMAN 最終決戦",
+  "release_date": "2026-07-06",
+  "seo": {
+   "title": "L ULTRAMAN 最終決戦 狙い目・天井・噂まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "CZ間 等価390G〜 / AT間 等価840G〜",
+  "aliases": [
+   "ULTRAMAN",
+   "ウルトラマン",
+   "ウルトラマン最終決戦",
+   "うるとらまん",
+   "ultraman",
+   "Lウルトラマン最終決戦",
+   "ウルトラマンスマスロ",
+   "最終決戦",
+   "うるとらまんさいしゅうけっせん"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "CZ間"
+    },
+    {
+     "key": "at",
+     "label": "AT間"
+    }
+   ],
+   "normal": {
+    "excellent": 700,
+    "good": 450,
+    "caution": 390,
+    "note": "CZ間天井700G+α。等価390G〜・5.6枚400G〜・現金450G〜が狙い目。リセット後は500G+αに短縮。"
+   },
+   "at": {
+    "excellent": 1500,
+    "good": 920,
+    "caution": 840,
+    "note": "AT間天井1500G+α。等価840G〜・5.6枚850G〜・現金920G〜が狙い目。リセット後は1000G+αに短縮。CZ間と混同しないよう、どちらの基準で見るかを先に固定してください。"
+   }
+  },
+  "limit": 1500,
+  "original": {
+   "title": "ウルトラマン",
+   "kind": "特撮",
+   "search": "ウルトラマン"
+  }
+ },
+ {
+  "slug": "kerot5bt",
+  "name": "スマスロケロット5BT",
+  "release_date": "2026-07-06",
+  "seo": {
+   "title": "スマスロケロット5BT 天井・狙い目・噂まとめ"
+  },
+  "info": "スマスロノーマル",
+  "strategy": "設定狙い主体・天井なし",
+  "aliases": [
+   "ケロット5BT",
+   "ケロット5",
+   "けろっと5BT",
+   "ケロット",
+   "kerot5bt",
+   "ケロット5BTスマスロ"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "ノーマルタイプのため天井はありません。設定狙い主体の機種です。ボーナス合算とRB確率で設定を判断してください。"
+   }
+  },
+  "limit": null
+ },
+ {
+  "slug": "nangoku_special",
+  "name": "L南国育ちSPECIAL",
+  "release_date": "2026-07-06",
+  "seo": {
+   "title": "L南国育ちSPECIAL 天井・狙い目・噂まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "等価470G〜 / 5.6枚480G〜 / 現金550G〜 / リセット台0G〜",
+  "aliases": [
+   "南国育ちSPECIAL",
+   "南国育ちスペシャル",
+   "南国SP",
+   "なんごくそだちすぺしゃる",
+   "ナンゴクソダチ",
+   "nangoku_special",
+   "L南国育ちSPECIALスマスロ"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 799,
+    "good": 550,
+    "caution": 470,
+    "note": "天井最大799G+α＋ボーナス間スイカ9回。等価470G〜・5.6枚480G〜・現金550G〜が狙い目。"
+   },
+   "reset": {
+    "excellent": 500,
+    "good": 0,
+    "caution": 0,
+    "note": "設定変更後は天井最大500G+αに短縮＋約70%でチャンスモード以上。リセット濃厚台は0G〜から狙えます。"
+   }
+  },
+  "limit": 799
+ },
+ {
+  "slug": "yabachiba",
+  "name": "Lヤバチバ",
+  "release_date": "2026-07-06",
+  "seo": {
+   "title": "Lヤバチバ 狙い目・天井・スペックまとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "等価700G〜 / 5.6枚710G〜 / 現金790G〜",
+  "aliases": [
+   "ヤバチバ",
+   "やばちば",
+   "ヤバチバスマスロ",
+   "Lヤバチバ",
+   "yabachiba",
+   "ヤバチバループ",
+   "虹7ボーナス"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "excellent": 999,
+    "good": 790,
+    "caution": 700,
+    "note": "天井999G+α or ボーナス間チェリー40回。等価700G〜・5.6枚710G〜・現金790G〜が狙い目。リセット後はチェリー規定回数が30回に短縮（G数のリセット狙い目は解析待ち）。"
+   }
+  },
+  "limit": 999
+ },
+ {
+  "slug": "rotis",
+  "name": "スマスロ ローティス",
+  "release_date": "2026-07-06",
+  "seo": {
+   "title": "スマスロ ローティス 狙い目・天井・スペックまとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "等価580G〜 / 5.6枚590G〜 / 現金650G〜",
+  "aliases": [
+   "ローティス",
+   "ろーてぃす",
+   "ローティススマスロ",
+   "Lローティス",
+   "rotis",
+   "SBB",
+   "SBBストックシステム"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "excellent": 900,
+    "good": 650,
+    "caution": 580,
+    "note": "天井最大900G（モードにより短縮あり）。等価580G〜・5.6枚590G〜・現金650G〜が狙い目。リセット後は約25%で天井200Gの朝一モードへ。"
+   }
+  },
+  "limit": 900
+ },
+ {
+  "slug": "birdie_wing",
+  "name": "スマスロ BIRDIE WING -Golf Girls' Story-",
+  "release_date": "2026-06-08",
+  "seo": {
+   "title": "スマスロ BIRDIE WING -Golf Girls' Story- 狙い目・天井・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "等価8周期〜 / 5.6枚8周期〜 / 現金9周期〜 / リセ4周期〜",
+  "aliases": [
+   "BIRDIE WING",
+   "バーディーウイング",
+   "バーディウィング",
+   "バーディーウィング",
+   "バディゴル",
+   "ばーでぃーういんぐ",
+   "ゴルフガールズストーリー",
+   "Golf Girls Story"
+  ],
+  "checker": {
+   "unit": "周期",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 9,
+    "good": 8,
+    "caution": 6,
+    "byRate": {
+     "eq56": {
+      "excellent": 9,
+      "good": 8,
+      "caution": 6,
+      "note": "10周期天井。5.6枚持ちは8周期〜が狙い目。"
+     },
+     "rate55": {
+      "excellent": 9,
+      "good": 8,
+      "caution": 6,
+      "note": "6.0枚は8周期〜。"
+     },
+     "rate50": {
+      "excellent": 10,
+      "good": 9,
+      "caution": 7,
+      "note": "6.5枚は9周期〜。"
+     },
+     "rate45": {
+      "excellent": 10,
+      "good": 9,
+      "caution": 7,
+      "note": "現金は9周期〜。"
+     }
+    },
+    "note": "通常時10周期消化でバーディーボーナス当選。9周期目以降が狙い目。"
+   },
+   "reset": {
+    "excellent": 7,
+    "good": 4,
+    "caution": 4,
+    "note": "設定変更時は天井7周期に短縮。4周期目以降が狙い目。"
+   }
+  },
+  "limit": 10,
+  "original": {
+   "title": "BIRDIE WING -Golf Girls' Story-",
+   "kind": "アニメ",
+   "search": "BIRDIE WING バーディーウイング アニメ"
+  }
+ },
+ {
+  "slug": "galfy",
+  "name": "LBスロットGALFY",
+  "release_date": "2026-05-25",
+  "seo": {
+   "title": "LBスロットGALFY 設定狙い・スペックまとめ"
+  },
+  "info": "スマスロBT",
+  "strategy": "設定狙い主体・天井なし",
+  "aliases": [
+   "GALFY",
+   "ガルフィー",
+   "ガルフィ",
+   "LBガルフィー",
+   "スマスロガルフィー",
+   "スマスロガルフィ"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "BTタイプのため天井非搭載。設定狙い主体の機種です。完全攻略時の機械割は設定1で100.3%、設定6で108.7%。高設定が見込める環境での使用を推奨。"
+   }
+  },
+  "limit": null
+ },
+ {
+  "slug": "biohazard_re3",
+  "name": "スマスロ バイオハザードRE:3",
+  "release_date": "2026-05-11",
+  "seo": {
+   "title": "スマスロ バイオハザードRE:3 狙い目・天井・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "等価400G〜 / 5.6枚500G〜 / リセット時150G〜 / CZ4スルー〜",
+  "aliases": [
+   "バイオハザードRE3",
+   "バイオRE3",
+   "バイオRE:3",
+   "RE3",
+   "re3",
+   "バイオre3",
+   "biohazard_re3"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 800,
+    "good": 500,
+    "caution": 400,
+    "note": "AT間1000G+α天井。等価400G〜・5.6枚500G〜が狙い目。"
+   },
+   "reset": {
+    "excellent": 500,
+    "good": 250,
+    "caution": 150,
+    "note": "設定変更時は650G+αに短縮。等価150G〜・5.6枚250G〜が狙い目。"
+   },
+   "suru": {
+    "excellent": 6,
+    "good": 5,
+    "caution": 4,
+    "note": "CZ最大6スルーで7回目成功濃厚。4スルー以降から狙い目（暫定）。",
+    "suruMax": 6,
+    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
+   }
+  },
+  "limit": 1100,
+  "original": {
+   "title": "バイオハザード RE:3",
+   "kind": "ゲーム",
+   "search": "バイオハザード RE:3"
+  }
+ },
+ {
+  "slug": "bigdream_pusher",
+  "name": "スマスロ ビッグドリーム THE GOLDEN PUSHER",
+  "release_date": "2026-05-11",
+  "seo": {
+   "title": "スマスロ ビッグドリーム THE GOLDEN PUSHER 狙い目・天井・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "等価280G〜 / 5.6枚290G〜 / 現金450G〜",
+  "aliases": [
+   "ビッグドリーム",
+   "ビッグドリームプッシャー",
+   "ゴールデンプッシャー",
+   "bigdream",
+   "goldenpusher"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 999,
+    "good": 450,
+    "caution": 280,
+    "note": "天井は最大1499G（333/555/999/1499のいずれか抽選）。等価280G〜・5.6枚290G〜・現金450G〜から狙い目。",
+    "ceiling": 1499
+   },
+   "reset": {
+    "excellent": 500,
+    "good": 200,
+    "caution": 100,
+    "note": "設定変更後・上位AT終了後は天井最大999Gに短縮。リセット台は早めから狙い目になります。",
+    "ceiling": 999
+   },
+   "limit": 1499,
+   "coinRate": 30.7
+  },
+  "limit": 1499
+ },
+ {
+  "slug": "super_rio_ace2",
+  "name": "スマスロスーパーリオエース2",
+  "release_date": "2026-05-11",
+  "seo": {
+   "title": "スマスロスーパーリオエース2 狙い目・天井・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "等価450G〜 / 5.6枚500G〜 / 7スルー〜",
+  "aliases": [
+   "スーパーリオエース2",
+   "リオエース2",
+   "スーパーリオ",
+   "rioace2",
+   "superrioace2"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "ボーナス間"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 600,
+    "good": 500,
+    "caution": 450,
+    "note": "ボーナス間天井750G+α。等価450G〜・5.6枚500G〜が狙い目。"
+   },
+   "reset": {
+    "excellent": 400,
+    "good": 300,
+    "caution": 200,
+    "note": "設定変更時はボーナス間天井500G+αに短縮、スルー天井も4スルー後5回目に短縮。"
+   },
+   "suru": {
+    "excellent": 7,
+    "good": 7,
+    "caution": 6,
+    "note": "ボーナス7回スルー後の8回目でAT当選。設定変更後は4スルー後5回目に短縮。",
+    "suruMax": 7,
+    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
+   }
+  },
+  "limit": 800
+ },
+ {
+  "slug": "gogo_juggler3",
+  "name": "ゴーゴージャグラー3",
+  "seo": {
+   "title": "ゴーゴージャグラー3 設定判別"
+  },
+  "info": "Aタイプ",
+  "strategy": "設定狙い主体・天井なし",
+  "aliases": [
+   "ゴージャグ",
+   "ゴーゴー3"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
+   }
+  },
+  "limit": null,
+  "identity": {
+   "manufacturer_id": "kitadenshi",
+   "regulatory_model_code": "Sゴーゴージャグラー3KA",
+   "market_release_date": "2023-07-03"
+  }
+ },
+ {
+  "slug": "gundam_uc2",
+  "name": "Lパチスロ 機動戦士ガンダムユニコーン 覚醒DRIVE",
+  "seo": {
+   "title": "ガンダムユニコーン 覚醒DRIVE 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "CZ間等価580G〜 / AT間等価950G〜 / スルー4回〜",
+  "aliases": [
+   "ガンダムユニコーン",
+   "ガンダムUC",
+   "UC2",
+   "覚醒DRIVE",
+   "ユニコーン",
+   "gundam_uc",
+   "ガンダム"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "CZ間"
+    },
+    {
+     "key": "at",
+     "label": "AT間"
+    }
+   ],
+   "normal": {
+    "excellent": 800,
+    "good": 700,
+    "caution": 580,
+    "note": "CZ間天井800G（リセット後400G）。等価580G〜・5.6枚590G〜・現金650G〜が狙い目。"
+   },
+   "at": {
+    "excellent": 1400,
+    "good": 1100,
+    "caution": 950,
+    "note": "AT間天井1400G（液晶G数・リセット後1000G）。等価950G〜・5.6枚960G〜・現金1050G〜が狙い目。"
+   },
+   "suru": {
+    "excellent": 6,
+    "good": 5,
+    "caution": 4,
+    "note": "CZ6スルーで7回目確定（ボーナス当選）。等価4スルー以上から狙い目。",
+    "suruMax": 6,
+    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
+   }
+  },
+  "limit": 1400,
+  "original": {
+   "title": "機動戦士ガンダムUC",
+   "kind": "小説",
+   "search": "機動戦士ガンダムUC 小説"
+  }
+ },
+ {
+  "slug": "kyokousuiri",
+  "name": "L虚構推理",
+  "seo": {
+   "title": "L虚構推理 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "等価500G~ / 5.6枚600G~ / 現金690G~（虚構真偽間1000G）",
+  "aliases": [
+   "虚構推理",
+   "きょこうすいり",
+   "きょこす",
+   "虚構"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 1000,
+    "good": 600,
+    "caution": 500,
+    "note": "天井虚構真偽間1000G。等価500G~・5.6枚600G~・現金690G~から狙い目。恩恵はボーナス+雪女ストック1個以上。"
+   },
+   "reset": {
+    "excellent": 700,
+    "good": 500,
+    "caution": 300,
+    "note": "設定変更後は天井が最大700G（または300G）に短縮。"
+   }
+  },
+  "limit": 1000,
+  "original": {
+   "title": "虚構推理",
+   "kind": "漫画",
+   "search": "虚構推理 漫画"
+  }
+ },
+ {
+  "slug": "umineko2",
+  "name": "Lパチスロうみねこのなく頃に2",
+  "seo": {
+   "title": "うみねこのなく頃に2 狙い目・天井・期待値まとめ"
+  },
+  "info": "A+完走型ART",
+  "strategy": "等価CZ間100G〜 / 完全攻略で設定1機械割103%",
+  "strategyByRate": {
+   "eq56": "5.6枚CZ間100G〜",
+   "rate55": "6.0枚CZ間110G〜",
+   "rate50": "6.5枚CZ間130G〜",
+   "rate45": "7.0枚CZ間150G〜"
+  },
+  "aliases": [
+   "うみねこ",
+   "ウミネコ"
+  ],
+  "checker": {
+   "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "excellent": 180,
+    "good": 100,
+    "caution": 50,
+    "byRate": {
+     "eq56": {
+      "excellent": 180,
+      "good": 100,
+      "caution": 50,
+      "note": "5.6枚交換ならCZ間100Gから狙い目。200G周期でCZ確定。完全攻略なら設定1でも機械割103%。"
+     },
+     "rate55": {
+      "excellent": 180,
+      "good": 110,
+      "caution": 60,
+      "note": "6.0枚交換なら110Gから。"
+     },
+     "rate50": {
+      "excellent": 180,
+      "good": 130,
+      "caution": 80,
+      "note": "6.5枚交換なら130Gから。"
+     },
+     "rate45": {
+      "excellent": 180,
+      "good": 150,
+      "caution": 100,
+      "note": "7.0枚交換なら150Gから。"
+     }
+    },
+    "note": "CZ間200G周期で運命分岐モード確定。完全攻略で設定1でも機械割103%。"
+   }
+  },
+  "limit": 200,
+  "original": {
+   "title": "うみねこのなく頃に",
+   "kind": "ゲーム",
+   "search": "うみねこのなく頃に"
+  }
+ },
+ {
+  "slug": "animal_dotch",
+  "name": "Lアニマルスロット ドッチ",
+  "seo": {
+   "title": "アニマルスロット ドッチ 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "BIG後等価680G〜 / REG後等価180G〜",
+  "aliases": [
+   "アニマルスロットドッチ",
+   "アニマルドッチ",
+   "ドッチ",
+   "どっち",
+   "animal",
+   "dotch"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "BIG後"
+    },
+    {
+     "key": "reset",
+     "label": "REG後/リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 999,
+    "good": 850,
+    "caution": 680,
+    "note": "BIG/ST後天井999G。等価680G〜・5.6枚690G〜・現金720G〜が狙い目。"
+   },
+   "reset": {
+    "excellent": 499,
+    "good": 350,
+    "caution": 180,
+    "note": "REG後/リセット後は天井499Gに短縮。等価180G〜・5.6枚190G〜・現金220G〜が狙い目。"
+   }
+  },
+  "limit": 999
+ },
+ {
+  "slug": "my_juggler_v",
+  "name": "マイジャグラーV",
+  "seo": {
+   "title": "マイジャグラーV 設定判別"
+  },
+  "info": "Aタイプ",
+  "strategy": "設定狙い主体・天井なし",
+  "aliases": [
+   "マイジャグ",
+   "マイジャグ5"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
+   }
+  },
+  "limit": null
+ },
+ {
+  "slug": "isekai_quattro_bt",
+  "name": "A-SLOT+ 異世界かるてっとBT",
+  "seo": {
+   "title": "A-SLOT+ 異世界かるてっとBT スペックまとめ"
+  },
+  "info": "スマスロBT",
+  "strategy": "設定狙い主体・天井なし（BT合算約1/99）",
+  "aliases": [
+   "異世界かるてっと",
+   "いせかい",
+   "いせかる",
+   "かるてっと",
+   "異世界カルテット"
+  ],
+  "original": {
+   "title": "異世界かるてっと",
+   "kind": "アニメ",
+   "search": "異世界かるてっと Blu-ray"
+  }
+ },
+ {
+  "slug": "new_king_hanahana_v",
+  "name": "SBニューキングハナハナV-30",
+  "seo": {
+   "title": "ニューキングハナハナV 狙い目・設定差まとめ"
+  },
+  "info": "A+BT（設定1/2/3/4/V）",
+  "strategy": "設定狙い主体・天井なし",
+  "aliases": [
+   "ニューキングハナハナ",
+   "キンハナ",
+   "キンハナV",
+   "ハナハナV",
+   "きんはな",
+   "にゅーきんぐ"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。ベル確率・BIG中スイカ・サイドランプで設定推測。"
+   }
+  },
+  "limit": null
+ },
+ {
+  "slug": "yorumungando",
+  "name": "スマスロヨルムンガンド",
+  "seo": {
+   "title": "スマスロヨルムンガンド 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "等価760G〜 / 5.6枚770G〜 / 現金840G〜（通常）/ リセット後180G〜",
+  "aliases": [
+   "ヨルムンガンド",
+   "よるむんがんど",
+   "ヨルムン",
+   "jormungand"
+  ],
+  "original": {
+   "title": "ヨルムンガンド",
+   "kind": "漫画",
+   "search": "ヨルムンガンド 漫画"
+  },
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 999,
+    "good": 840,
+    "caution": 760,
+    "note": "天井AT間999G+α。等価760G〜・5.6枚770G〜・現金840G〜から狙い目。"
+   },
+   "reset": {
+    "excellent": 370,
+    "good": 180,
+    "caution": 100,
+    "note": "設定変更後は天井450G+αに短縮。リセット台なら浅いラインから候補です。"
+   },
+   "limit": 999
+  },
+  "limit": 999
+ },
+ {
+  "slug": "okidoki_gorgeous",
+  "name": "S沖ドキ！ゴージャス-30",
+  "seo": {
+   "title": "沖ドキ！ゴージャス 狙い目・天井・期待値まとめ"
+  },
+  "info": "6.6号機 AT",
+  "strategy": "等価600G〜 / 天国後32Gヤメ",
+  "strategyByRate": {
+   "eq56": "5.6枚650G〜",
+   "rate55": "6.0枚670G〜",
+   "rate50": "6.5枚700G〜",
+   "rate45": "7.0枚750G〜"
+  },
+  "aliases": [
+   "沖ドキゴージャス",
+   "ゴージャス",
+   "沖ゴジャ",
+   "おきどきごーじゃす"
+  ],
   "checker": {
    "unit": "G",
    "defaultRate": "eq56",
@@ -2135,293 +3348,269 @@
     {
      "key": "reset",
      "label": "リセット"
-    },
-    {
-     "key": "cycle",
-     "label": "周期",
-     "hasCycle": true
     }
    ],
    "normal": {
-    "excellent": 600,
-    "good": 410,
-    "caution": 310,
+    "excellent": 850,
+    "good": 600,
+    "caution": 450,
     "byRate": {
      "eq56": {
-      "excellent": 550,
-      "good": 420,
-      "caution": 250,
-      "note": "5.6枚交換ならG数420Gから狙い目、250Gから候補です。4周期目以降の価値も高いので、G数だけで切らず周期も並行して確認してください。"
+      "excellent": 850,
+      "good": 650,
+      "caution": 470,
+      "note": "5.6枚交換なら650Gから狙い目。天井999G。ボーナス後32G天国フォロー必須。"
      },
      "rate55": {
-      "excellent": 600,
-      "good": 400,
-      "caution": 300,
-      "note": "6.0枚交換はG数400G基準です。周期4周期目以降の価値と重なる台を優先すると使いやすいです。"
+      "excellent": 850,
+      "good": 670,
+      "caution": 490,
+      "note": "6.0枚交換なら670Gから。"
      },
      "rate50": {
-      "excellent": 650,
-      "good": 450,
-      "caution": 350,
-      "note": "6.5枚交換ではG数450Gからが本線です。周期が見えない台は少し安全側で見た方が収まりやすいです。"
+      "excellent": 900,
+      "good": 700,
+      "caution": 520,
+      "note": "6.5枚交換なら700Gから。"
      },
      "rate45": {
-      "excellent": 700,
-      "good": 500,
-      "caution": 400,
-      "note": "7.0枚交換はG数500G基準です。G数だけでなく4周期目以降かどうかを重ねて、深め優先で使う方が安全です。"
+      "excellent": 900,
+      "good": 750,
+      "caution": 560,
+      "note": "7.0枚交換なら750Gから。"
      }
     },
-    "note": "G数天井795G+α。周期天井（6周期目でAT確定）も並行して確認推奨。4周期目以降が本命ゾーン。"
+    "note": "天井999G。ボーナス後32G回して天国否定でヤメ。リセット後は25%で天井399Gに短縮。"
    },
    "reset": {
-    "excellent": 100,
+    "excellent": 350,
     "good": 0,
     "caution": 0,
     "byRate": {
      "eq56": {
-      "excellent": 100,
+      "excellent": 350,
       "good": 0,
       "caution": 0,
-      "note": "5.6枚交換のリセット台は0Gから候補です。周期天井が最大4周期に短縮される前提なので、周期優遇が見える台だけを狙う方が安全です。"
+      "note": "リセット後は25%で天井399Gに短縮。380G付近まで回して当たらなければヤメ。"
      },
      "rate55": {
-      "excellent": 150,
-      "good": 50,
-      "caution": 0,
-      "note": "6.0枚交換は0Gから候補ですが、実戦では50G前後まで様子を見る方が使いやすいです。通常台とは別前提で扱ってください。"
-     },
-     "rate50": {
-      "excellent": 200,
-      "good": 100,
-      "caution": 30,
-      "note": "6.5枚交換では100Gからが本線です。浅いG数に引っ張られすぎず、周期優遇と合わせて判断してください。"
-     },
-     "rate45": {
-      "excellent": 250,
-      "good": 150,
-      "caution": 50,
-      "note": "7.0枚交換のリセット台は150G基準です。周期が見えない台は安全側に寄せて、通常台と混ぜない方が安定します。"
-     }
-    },
-    "note": "設定変更後は天井495G+α・周期天井が最大4周期に短縮。周期状態を確認してから着席。"
-   },
-   "cycle": {
-    "cycle": [
-     {
-      "count": 1,
-      "excellent": 700,
-      "good": 600,
-      "caution": 500,
-      "note": "1周期目。G数ベースの基本狙いです。周期が浅いぶん、G数500G以上を目安に。",
-      "byRate": {
-       "eq56": {
-        "excellent": 650,
-        "good": 550,
-        "caution": 450,
-        "note": "5.6枚交換の1周期目は550G〜が基準です。"
-       },
-       "rate55": {
-        "excellent": 700,
-        "good": 600,
-        "caution": 500,
-        "note": "6.0枚交換の1周期目は600G基準です。"
-       },
-       "rate50": {
-        "excellent": 750,
-        "good": 650,
-        "caution": 550,
-        "note": "6.5枚交換の1周期目は650G〜を目安にしてください。"
-       },
-       "rate45": {
-        "excellent": 800,
-        "good": 700,
-        "caution": 600,
-        "note": "7.0枚交換の1周期目は700G〜からが実戦ラインです。"
-       }
-      }
-     },
-     {
-      "count": 2,
-      "excellent": 650,
-      "good": 550,
-      "caution": 450,
-      "note": "2周期目。1周期目より少し浅めに狙えます。G数450G以上を目安に。",
-      "byRate": {
-       "eq56": {
-        "excellent": 600,
-        "good": 500,
-        "caution": 400,
-        "note": "5.6枚交換の2周期目は500G〜が基準です。"
-       },
-       "rate55": {
-        "excellent": 650,
-        "good": 550,
-        "caution": 450,
-        "note": "6.0枚交換の2周期目は550G基準です。"
-       },
-       "rate50": {
-        "excellent": 700,
-        "good": 600,
-        "caution": 500,
-        "note": "6.5枚交換の2周期目は600G〜を目安にしてください。"
-       },
-       "rate45": {
-        "excellent": 750,
-        "good": 650,
-        "caution": 550,
-        "note": "7.0枚交換の2周期目は650G〜からが実戦ラインです。"
-       }
-      }
-     },
-     {
-      "count": 3,
-      "excellent": 550,
-      "good": 450,
-      "caution": 380,
-      "note": "3周期目。次の4周期目が本命なので、G数380G〜を目安に拾えます。",
-      "byRate": {
-       "eq56": {
-        "excellent": 500,
-        "good": 400,
-        "caution": 320,
-        "note": "5.6枚交換の3周期目は400G〜が基準です。"
-       },
-       "rate55": {
-        "excellent": 550,
-        "good": 450,
-        "caution": 380,
-        "note": "6.0枚交換の3周期目は450G基準です。"
-       },
-       "rate50": {
-        "excellent": 600,
-        "good": 500,
-        "caution": 420,
-        "note": "6.5枚交換の3周期目は500G〜を目安にしてください。"
-       },
-       "rate45": {
-        "excellent": 650,
-        "good": 550,
-        "caution": 460,
-        "note": "7.0枚交換の3周期目は550G〜からが実戦ラインです。"
-       }
-      }
-     },
-     {
-      "count": 4,
-      "excellent": 500,
-      "good": 400,
-      "caution": 300,
-      "note": "4周期目。本命ゾーン。G数と周期が重なる台を最優先。",
-      "byRate": {
-       "eq56": {
-        "excellent": 450,
-        "good": 350,
-        "caution": 250,
-        "note": "5.6枚交換の4周期目は350G〜から積極的に狙えます。"
-       },
-       "rate55": {
-        "excellent": 500,
-        "good": 400,
-        "caution": 300,
-        "note": "6.0枚交換の4周期目は400G基準です。周期とG数が重なる台を優先してください。"
-       },
-       "rate50": {
-        "excellent": 550,
-        "good": 450,
-        "caution": 350,
-        "note": "6.5枚交換の4周期目は450G〜を目安にしてください。"
-       },
-       "rate45": {
-        "excellent": 600,
-        "good": 500,
-        "caution": 400,
-        "note": "7.0枚交換の4周期目は500G〜からが実戦ラインです。"
-       }
-      }
-     },
-     {
-      "count": 5,
-      "excellent": 200,
-      "good": 100,
-      "caution": 0,
-      "note": "5周期目。確実な利益ゾーン。0G〜から着席検討OK。G数が浅くてもプラスで完結しやすい。",
-      "byRate": {
-       "eq56": {
-        "excellent": 150,
-        "good": 50,
-        "caution": 0,
-        "note": "5.6枚交換の5周期目は0Gから着席OKです。"
-       },
-       "rate55": {
-        "excellent": 200,
-        "good": 100,
-        "caution": 0,
-        "note": "6.0枚交換の5周期目は100G基準ですが、0Gから候補です。"
-       },
-       "rate50": {
-        "excellent": 250,
-        "good": 150,
-        "caution": 0,
-        "note": "6.5枚交換の5周期目は150G〜から本線です。0Gから候補でもあります。"
-       },
-       "rate45": {
-        "excellent": 300,
-        "good": 200,
-        "caution": 50,
-        "note": "7.0枚交換の5周期目は200G〜からが実戦ラインです。"
-       }
-      }
-     },
-     {
-      "count": 6,
-      "excellent": 0,
+      "excellent": 350,
       "good": 0,
       "caution": 0,
-      "note": "6周期目。AT確定。G数不問で着席OK。即着席を推奨します。",
-      "byRate": {
-       "eq56": {
-        "excellent": 0,
-        "good": 0,
-        "caution": 0,
-        "note": "6周期目は交換率不問でAT確定。即着席OK。"
-       },
-       "rate55": {
-        "excellent": 0,
-        "good": 0,
-        "caution": 0,
-        "note": "6周期目は交換率不問でAT確定。即着席OK。"
-       },
-       "rate50": {
-        "excellent": 0,
-        "good": 0,
-        "caution": 0,
-        "note": "6周期目は交換率不問でAT確定。即着席OK。"
-       },
-       "rate45": {
-        "excellent": 0,
-        "good": 0,
-        "caution": 0,
-        "note": "6周期目は交換率不問でAT確定。即着席OK。"
-       }
-      }
+      "note": "リセット後は25%で天井399Gに短縮。"
+     },
+     "rate50": {
+      "excellent": 380,
+      "good": 0,
+      "caution": 0,
+      "note": "リセット後は25%で天井399Gに短縮。"
+     },
+     "rate45": {
+      "excellent": 380,
+      "good": 50,
+      "caution": 0,
+      "note": "現金投資でも50Gから。"
      }
-    ]
-   },
-   "limit": 795
+    },
+    "note": "設定変更後は25%で天井が399Gに短縮。0Gから打てる。"
+   }
   },
-  "limit": 800,
+  "limit": 999
+ },
+ {
+  "slug": "akudama",
+  "name": "Lアクダマドライブ",
+  "seo": {
+   "title": "Lアクダマドライブ 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "等価530G~ / 5.6枚540G~ / 現金600G~（AT間967G+α / 6スルー〜）",
   "aliases": [
-   "モンキーターン",
-   "モンキー",
-   "もんきー",
-   "モンキーV"
+   "アクダマ",
+   "アクダマドライブ",
+   "あくだま",
+   "AKUDAMA"
   ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "excellent": 967,
+    "good": 530,
+    "caution": 500,
+    "note": "天井AT間967G+α。等価530G~・5.6枚540G~・現金600G~から狙い目。745G以降はAT当選まで589G+αに短縮。"
+   },
+   "suru": {
+    "suruMax": 6,
+    "excellent": 6,
+    "good": 4,
+    "caution": 2,
+    "note": "ボーナス6スルーで7回目AT確定。スルー回数天井あり。",
+    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
+   }
+  },
+  "limit": 967,
   "original": {
-   "title": "モンキーターン",
-   "kind": "漫画",
-   "search": "モンキーターン 漫画"
+   "title": "アクダマドライブ",
+   "kind": "アニメ",
+   "search": "アクダマドライブ Blu-ray"
   }
+ },
+ {
+  "slug": "thunder_v",
+  "name": "スマスロ サンダーV",
+  "seo": {
+   "title": "サンダーV 設定判別・狙い目まとめ"
+  },
+  "info": "スマスロノーマル",
+  "strategy": "設定狙い主体・天井なし",
+  "aliases": [
+   "サンダー",
+   "サンダーV"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "ノーマルタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBB・RB・ベルをカウントしてください。"
+   }
+  },
+  "limit": null
+ },
+ {
+  "slug": "neo_aim_juggler",
+  "name": "ネオアイムジャグラーEX",
+  "seo": {
+   "title": "ネオアイムジャグラーEX 設定判別"
+  },
+  "info": "Aタイプ",
+  "strategy": "設定狙い主体・天井なし",
+  "aliases": [
+   "アイム",
+   "ネオアイム"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "Aタイプのため天井はありません。設定狙い主体の機種です。ポチポチくんでBIG・REG・ぶどうをカウントしてください。"
+   }
+  },
+  "limit": null
+ },
+ {
+  "slug": "king_hanahana",
+  "name": "Sキングハナハナ-30",
+  "seo": {
+   "title": "キングハナハナ 狙い目・設定差まとめ"
+  },
+  "info": "Aタイプ（設定1〜6）",
+  "strategy": "設定狙い主体・天井なし",
+  "aliases": [
+   "キングハナハナ",
+   "キンハナ",
+   "きんぐはなはな",
+   "キンハナ30"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。ベル確率・BIG中スイカ・REG中サイドランプ・フェザーランプで設定推測。"
+   }
+  },
+  "limit": null
+ },
+ {
+  "slug": "dragon_hanahana_senko",
+  "name": "ドラゴンハナハナ～閃光～-30",
+  "seo": {
+   "title": "ドラゴンハナハナ閃光 狙い目・設定差まとめ"
+  },
+  "info": "Aタイプ（設定1〜6）",
+  "strategy": "設定狙い主体・天井なし",
+  "aliases": [
+   "ドラハナ",
+   "ドラゴンハナハナ",
+   "閃光",
+   "どらはな",
+   "ドラハナ閃光"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "この機種は天井非搭載のため、ハイエナ狙いには向きません。設定狙い主体の機種です。ベル確率・BIG中スイカ・REG中サイドランプ・フェザーランプで設定推測。"
+   }
+  },
+  "limit": null
+ },
+ {
+  "slug": "hanabi",
+  "name": "Lハナビ",
+  "seo": {
+   "title": "スマスロハナビ 設定判別・スペックまとめ"
+  },
+  "info": "スマスロノーマル",
+  "strategy": "設定狙い主体・天井なし",
+  "aliases": [
+   "ハナビ",
+   "HANABI",
+   "花火"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "設定狙い"
+    }
+   ],
+   "normal": {
+    "excellent": 99999,
+    "good": 99999,
+    "caution": 99999,
+    "note": "ノーマルタイプのため天井非搭載。設定狙い主体の機種です。完全攻略で設定1から機械割100.2%。高設定が見込める環境での使用を推奨。"
+   }
+  },
+  "limit": null
  },
  {
   "slug": "tekken6",
@@ -3629,129 +4818,6 @@
    "title": "GOD EATER",
    "kind": "ゲーム",
    "search": "ゴッドイーター ゲーム"
-  }
- },
- {
-  "slug": "magireco",
-  "name": "Lスマスロマギアレコード",
-  "seo": {
-   "title": "マギアレコード 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "等価360G(540pt)〜 / リセット150G〜",
-  "strategyByRate": {
-   "eq56": "5.6枚360G〜",
-   "rate55": "6.0枚370G〜",
-   "rate50": "6.5枚400G〜",
-   "rate45": "7.0枚450G〜"
-  },
-  "aliases": [
-   "マギレコ",
-   "マギアレコード",
-   "まどマギ外伝"
-  ],
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 580,
-    "good": 360,
-    "caution": 280,
-    "byRate": {
-     "eq56": {
-      "excellent": 580,
-      "good": 360,
-      "caution": 280,
-      "note": "5.6枚交換なら360G(540pt)から狙い目。天井950pt+α(約633G)。"
-     },
-     "rate55": {
-      "excellent": 580,
-      "good": 370,
-      "caution": 290,
-      "note": "6.0枚交換なら370Gから。"
-     },
-     "rate50": {
-      "excellent": 600,
-      "good": 400,
-      "caution": 320,
-      "note": "6.5枚交換なら400Gから。"
-     },
-     "rate45": {
-      "excellent": 600,
-      "good": 450,
-      "caution": 360,
-      "note": "7.0枚交換なら450Gから。"
-     }
-    },
-    "note": "pt管理天井950pt+α（約633G相当）。"
-   },
-   "reset": {
-    "excellent": 400,
-    "good": 150,
-    "caution": 80,
-    "byRate": {
-     "eq56": {
-      "excellent": 400,
-      "good": 150,
-      "caution": 80,
-      "note": "リセット時は天井600〜699pt+αに短縮。150Gから狙い目。"
-     },
-     "rate55": {
-      "excellent": 400,
-      "good": 200,
-      "caution": 100,
-      "note": "リセット時は600pt台に短縮。"
-     },
-     "rate50": {
-      "excellent": 400,
-      "good": 230,
-      "caution": 120,
-      "note": "リセット時は600pt台に短縮。"
-     },
-     "rate45": {
-      "excellent": 400,
-      "good": 260,
-      "caution": 150,
-      "note": "リセット時は600pt台に短縮。"
-     }
-    },
-    "note": "リセット時は天井600〜699pt+αに短縮。"
-   },
-   "limit": 700
-  },
-  "limit": 633,
-  "original": {
-   "title": "マギアレコード",
-   "kind": "ゲーム",
-   "search": "マギアレコード"
   }
  },
  {
@@ -10213,64 +11279,6 @@
   "limit": 1280
  },
  {
-  "slug": "biohazard_re3",
-  "name": "スマスロ バイオハザードRE:3",
-  "release_date": "2026-05-11",
-  "seo": {
-   "title": "スマスロ バイオハザードRE:3 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "等価400G〜 / 5.6枚500G〜 / リセット時150G〜 / CZ4スルー〜",
-  "aliases": [
-   "バイオハザードRE3",
-   "バイオRE3",
-   "バイオRE:3",
-   "RE3",
-   "re3",
-   "バイオre3",
-   "biohazard_re3"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 800,
-    "good": 500,
-    "caution": 400,
-    "note": "AT間1000G+α天井。等価400G〜・5.6枚500G〜が狙い目。"
-   },
-   "reset": {
-    "excellent": 500,
-    "good": 250,
-    "caution": 150,
-    "note": "設定変更時は650G+αに短縮。等価150G〜・5.6枚250G〜が狙い目。"
-   },
-   "suru": {
-    "excellent": 6,
-    "good": 5,
-    "caution": 4,
-    "note": "CZ最大6スルーで7回目成功濃厚。4スルー以降から狙い目（暫定）。",
-    "suruMax": 6,
-    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
-   }
-  },
-  "limit": 1100,
-  "original": {
-   "title": "バイオハザード RE:3",
-   "kind": "ゲーム",
-   "search": "バイオハザード RE:3"
-  }
- },
- {
   "slug": "takt_opus",
   "name": "Lタクトオーパス デスティニー",
   "seo": {
@@ -10318,486 +11326,6 @@
   }
  },
  {
-  "slug": "bigdream_pusher",
-  "name": "スマスロ ビッグドリーム THE GOLDEN PUSHER",
-  "release_date": "2026-05-11",
-  "seo": {
-   "title": "スマスロ ビッグドリーム THE GOLDEN PUSHER 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "等価280G〜 / 5.6枚290G〜 / 現金450G〜",
-  "aliases": [
-   "ビッグドリーム",
-   "ビッグドリームプッシャー",
-   "ゴールデンプッシャー",
-   "bigdream",
-   "goldenpusher"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 999,
-    "good": 450,
-    "caution": 280,
-    "note": "天井は最大1499G（333/555/999/1499のいずれか抽選）。等価280G〜・5.6枚290G〜・現金450G〜から狙い目。",
-    "ceiling": 1499
-   },
-   "reset": {
-    "excellent": 500,
-    "good": 200,
-    "caution": 100,
-    "note": "設定変更後・上位AT終了後は天井最大999Gに短縮。リセット台は早めから狙い目になります。",
-    "ceiling": 999
-   },
-   "limit": 1499,
-   "coinRate": 30.7
-  },
-  "limit": 1499
- },
- {
-  "slug": "super_rio_ace2",
-  "name": "スマスロスーパーリオエース2",
-  "release_date": "2026-05-11",
-  "seo": {
-   "title": "スマスロスーパーリオエース2 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "等価450G〜 / 5.6枚500G〜 / 7スルー〜",
-  "aliases": [
-   "スーパーリオエース2",
-   "リオエース2",
-   "スーパーリオ",
-   "rioace2",
-   "superrioace2"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "ボーナス間"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 600,
-    "good": 500,
-    "caution": 450,
-    "note": "ボーナス間天井750G+α。等価450G〜・5.6枚500G〜が狙い目。"
-   },
-   "reset": {
-    "excellent": 400,
-    "good": 300,
-    "caution": 200,
-    "note": "設定変更時はボーナス間天井500G+αに短縮、スルー天井も4スルー後5回目に短縮。"
-   },
-   "suru": {
-    "excellent": 7,
-    "good": 7,
-    "caution": 6,
-    "note": "ボーナス7回スルー後の8回目でAT当選。設定変更後は4スルー後5回目に短縮。",
-    "suruMax": 7,
-    "_disabled": "2026-07-24 Phase0: 回数入力なのにG数判定だったため非表示。二軸化(#96)で再設計する"
-   }
-  },
-  "limit": 800
- },
- {
-  "slug": "galfy",
-  "name": "LBスロットGALFY",
-  "release_date": "2026-05-25",
-  "seo": {
-   "title": "LBスロットGALFY 設定狙い・スペックまとめ"
-  },
-  "info": "スマスロBT",
-  "strategy": "設定狙い主体・天井なし",
-  "aliases": [
-   "GALFY",
-   "ガルフィー",
-   "ガルフィ",
-   "LBガルフィー",
-   "スマスロガルフィー",
-   "スマスロガルフィ"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "BTタイプのため天井非搭載。設定狙い主体の機種です。完全攻略時の機械割は設定1で100.3%、設定6で108.7%。高設定が見込める環境での使用を推奨。"
-   }
-  },
-  "limit": null
- },
- {
-  "slug": "sao2",
-  "name": "スマスロ ソードアート・オンラインⅡ",
-  "release_date": "2026-06-08",
-  "seo": {
-   "title": "スマスロ ソードアート・オンラインⅡ 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "等価CZ間320G〜 / 5.6枚CZ間330G〜 / 現金CZ間350G〜 / リセCZ間120G〜",
-  "aliases": [
-   "SAO2",
-   "ソードアート・オンラインⅡ",
-   "ソードアートオンライン2",
-   "ソードアート・オンライン2",
-   "sao2",
-   "ソードアート2",
-   "そーどあーとおんらいん2"
-  ],
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常（CZ間）"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 410,
-    "good": 330,
-    "caution": 250,
-    "byRate": {
-     "eq56": {
-      "excellent": 410,
-      "good": 330,
-      "caution": 250,
-      "note": "CZ間天井499G+α・AT間天井1200G。5.6枚持ちはCZ間330G〜が狙い目。"
-     },
-     "rate55": {
-      "excellent": 420,
-      "good": 340,
-      "caution": 260,
-      "note": "6.0枚はCZ間340G〜。"
-     },
-     "rate50": {
-      "excellent": 430,
-      "good": 350,
-      "caution": 270,
-      "note": "6.5枚はCZ間350G〜。"
-     },
-     "rate45": {
-      "excellent": 440,
-      "good": 360,
-      "caution": 280,
-      "note": "7.0枚・現金はCZ間350〜360G〜。"
-     }
-    },
-    "note": "CZ間天井499G+α(実ゲーム)・AT間天井1200G。CZ間のゲーム数で判断。"
-   },
-   "reset": {
-    "excellent": 180,
-    "good": 120,
-    "caution": 60,
-    "note": "設定変更時CZ間天井256G+αに短縮。CZ間120G〜が狙い目。"
-   }
-  },
-  "limit": 1200,
-  "original": {
-   "title": "ソードアート・オンラインII",
-   "kind": "ライトノベル",
-   "search": "ソードアートオンライン ライトノベル"
-  }
- },
- {
-  "slug": "sengoku_otome5",
-  "name": "L戦国乙女5 業火を穿つ宿焔の双刃",
-  "release_date": "2026-06-08",
-  "seo": {
-   "title": "L戦国乙女5 業火を穿つ宿焔の双刃 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "5.6枚580G〜 / 6.5枚650G〜 / 7.0枚710G〜 / リセット（持ちメダル）300G前後",
-  "aliases": [
-   "戦国乙女5",
-   "乙女5",
-   "せんごくおとめ5",
-   "戦国乙女業火",
-   "L戦国乙女5",
-   "戦国乙女5 業火を穿つ宿焔の双刃",
-   "宿焔の双刃"
-  ],
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 780,
-    "good": 580,
-    "caution": 400,
-    "byRate": {
-     "eq56": {
-      "excellent": 780,
-      "good": 580,
-      "caution": 400,
-      "note": "5.6枚以下なら580G〜が狙い目。G数天井999G+α。"
-     },
-     "rate55": {
-      "excellent": 790,
-      "good": 600,
-      "caution": 420,
-      "note": "6.0枚なら600G〜。"
-     },
-     "rate50": {
-      "excellent": 840,
-      "good": 650,
-      "caution": 470,
-      "note": "6.5枚なら650G〜。"
-     },
-     "rate45": {
-      "excellent": 900,
-      "good": 710,
-      "caution": 530,
-      "note": "7.0枚なら710G〜。"
-     }
-    },
-    "note": "G数天井999G+α。周期天井は最大6周期（1周期最大500G+α）。1周期目引き戻し（200G+α・期待度約40%）を確認してヤメ。"
-   },
-   "reset": {
-    "excellent": 480,
-    "good": 300,
-    "caution": 200,
-    "byRate": {
-     "eq56": {
-      "excellent": 480,
-      "good": 300,
-      "caution": 200,
-      "note": "リセット時はG数天井650G+α・周期最大4周期に短縮。"
-     },
-     "rate55": {
-      "excellent": 490,
-      "good": 360,
-      "caution": 210,
-      "note": "リセット時650G+α短縮。"
-     },
-     "rate50": {
-      "excellent": 520,
-      "good": 400,
-      "caution": 250,
-      "note": "リセット時650G+α短縮。"
-     },
-     "rate45": {
-      "excellent": 560,
-      "good": 440,
-      "caution": 290,
-      "note": "リセット時650G+α短縮。"
-     }
-    },
-    "note": "設定変更時はG数天井650G+α・周期天井最大4周期に短縮。巫女ポイントもランダム加算で優遇。"
-   },
-   "cycle": {
-    "note": "周期天井は最大6周期（リセット時は最大4周期）。1周期最大500G+α。CZ「乙女アタック」突入時の周期数を確認。",
-    "_disabled": "2026-07-27 軸契約: 判定材料（閾値も回数ごとの行）が無いのに周期タブが出ていたため非表示。周期天井の解析値が揃い次第 #96 で再設計する"
-   }
-  },
-  "limit": 999,
-  "strategyByRate": {
-   "eq56": "5.6枚580G〜",
-   "rate55": "6.0枚600G〜",
-   "rate50": "6.5枚650G〜",
-   "rate45": "7.0枚710G〜"
-  }
- },
- {
-  "slug": "birdie_wing",
-  "name": "スマスロ BIRDIE WING -Golf Girls' Story-",
-  "release_date": "2026-06-08",
-  "seo": {
-   "title": "スマスロ BIRDIE WING -Golf Girls' Story- 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "等価8周期〜 / 5.6枚8周期〜 / 現金9周期〜 / リセ4周期〜",
-  "aliases": [
-   "BIRDIE WING",
-   "バーディーウイング",
-   "バーディウィング",
-   "バーディーウィング",
-   "バディゴル",
-   "ばーでぃーういんぐ",
-   "ゴルフガールズストーリー",
-   "Golf Girls Story"
-  ],
-  "checker": {
-   "unit": "周期",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 9,
-    "good": 8,
-    "caution": 6,
-    "byRate": {
-     "eq56": {
-      "excellent": 9,
-      "good": 8,
-      "caution": 6,
-      "note": "10周期天井。5.6枚持ちは8周期〜が狙い目。"
-     },
-     "rate55": {
-      "excellent": 9,
-      "good": 8,
-      "caution": 6,
-      "note": "6.0枚は8周期〜。"
-     },
-     "rate50": {
-      "excellent": 10,
-      "good": 9,
-      "caution": 7,
-      "note": "6.5枚は9周期〜。"
-     },
-     "rate45": {
-      "excellent": 10,
-      "good": 9,
-      "caution": 7,
-      "note": "現金は9周期〜。"
-     }
-    },
-    "note": "通常時10周期消化でバーディーボーナス当選。9周期目以降が狙い目。"
-   },
-   "reset": {
-    "excellent": 7,
-    "good": 4,
-    "caution": 4,
-    "note": "設定変更時は天井7周期に短縮。4周期目以降が狙い目。"
-   }
-  },
-  "limit": 10,
-  "original": {
-   "title": "BIRDIE WING -Golf Girls' Story-",
-   "kind": "アニメ",
-   "search": "BIRDIE WING バーディーウイング アニメ"
-  }
- },
- {
-  "slug": "tonsuki",
-  "name": "スマスロ とんでもスキルで異世界放浪メシ",
-  "release_date": "2026-08-03",
-  "seo": {
-   "title": "スマスロ とんでもスキルで異世界放浪メシ 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "算定中（天井は通常時1000G+α）",
-  "aliases": [
-   "とんスキ",
-   "とんでもスキル",
-   "とんでもスキルで異世界放浪メシ",
-   "異世界放浪メシ",
-   "放浪メシ",
-   "とんすき",
-   "TonsukiAnime",
-   "スマスロとんスキ"
-  ],
-  "limit": null,
-  "original": {
-   "title": "とんでもスキルで異世界放浪メシ",
-   "kind": "ライトノベル",
-   "search": "とんでもスキルで異世界放浪メシ ライトノベル"
-  },
-  "identity": {
-   "manufacturer_id": "kpe",
-   "regulatory_model_code": "LとんでもスキルKM",
-   "market_release_date": "2026-08-03"
-  }
- },
- {
   "slug": "dark_haibi",
   "name": "スマート沖スロ ダークハイビ",
   "seo": {
@@ -10829,593 +11357,6 @@
    }
   },
   "limit": null
- },
- {
-  "slug": "ultraman_final",
-  "name": "L ULTRAMAN 最終決戦",
-  "release_date": "2026-07-06",
-  "seo": {
-   "title": "L ULTRAMAN 最終決戦 狙い目・天井・噂まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "CZ間 等価390G〜 / AT間 等価840G〜",
-  "aliases": [
-   "ULTRAMAN",
-   "ウルトラマン",
-   "ウルトラマン最終決戦",
-   "うるとらまん",
-   "ultraman",
-   "Lウルトラマン最終決戦",
-   "ウルトラマンスマスロ",
-   "最終決戦",
-   "うるとらまんさいしゅうけっせん"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "CZ間"
-    },
-    {
-     "key": "at",
-     "label": "AT間"
-    }
-   ],
-   "normal": {
-    "excellent": 700,
-    "good": 450,
-    "caution": 390,
-    "note": "CZ間天井700G+α。等価390G〜・5.6枚400G〜・現金450G〜が狙い目。リセット後は500G+αに短縮。"
-   },
-   "at": {
-    "excellent": 1500,
-    "good": 920,
-    "caution": 840,
-    "note": "AT間天井1500G+α。等価840G〜・5.6枚850G〜・現金920G〜が狙い目。リセット後は1000G+αに短縮。CZ間と混同しないよう、どちらの基準で見るかを先に固定してください。"
-   }
-  },
-  "limit": 1500,
-  "original": {
-   "title": "ウルトラマン",
-   "kind": "特撮",
-   "search": "ウルトラマン"
-  }
- },
- {
-  "slug": "karakuri2",
-  "name": "Lからくりサーカス2",
-  "release_date": "2026-07-06",
-  "seo": {
-   "title": "Lからくりサーカス2 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "等価 液晶800G〜（当サイト目安）/ 5.6枚・現金は交換条件が悪いほど深く（個別ライン未確定）",
-  "aliases": [
-   "からくりサーカス2",
-   "カラサー2",
-   "カラクリサーカス2",
-   "からくり2",
-   "karakuri2",
-   "からくりサーカス2スマスロ"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常（液晶G数・等価基準）"
-    }
-   ],
-   "normal": {
-    "excellent": 1101,
-    "good": 800,
-    "caution": 800,
-    "note": "CZ間天井は液晶（モード別最深1200/800/100G）または実890Gの消化で天井到達（前兆経由）・AT間2500G。判定は液晶ゲーム数・等価交換の当サイト目安（暫定。5.6枚持ち・現金投資は交換条件が悪いほど深くなります）。天井到達時の当選先は滞在モードで異なり上位ATは非保証。リセット後は液晶天井が最深500Gに短縮（リセット狙い目は解析待ち）。"
-   },
-   "equivOnly": true
-  },
-  "limit": 1200,
-  "original": {
-   "title": "からくりサーカス",
-   "kind": "漫画",
-   "search": "からくりサーカス 漫画"
-  },
-  "tenjo_display": "液晶1200G/実890G"
- },
- {
-  "slug": "sengoku_collection6",
-  "name": "L戦国コレクション6",
-  "release_date": "2026-07-06",
-  "seo": {
-   "title": "L戦国コレクション6 天井・狙い目・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "等価580G〜 / 5.6枚590G〜 / 現金720G〜",
-  "aliases": [
-   "戦国コレクション6",
-   "戦コレ6",
-   "せんごくコレクション6",
-   "せんこれ6",
-   "sengoku_collection6",
-   "sencolle6",
-   "L戦国コレクション6",
-   "戦国コレクション6スマスロ"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {
-    "excellent": 850,
-    "good": 720,
-    "caution": 580,
-    "note": "G数天井999G+αと周期天井最大6周期の複合型。等価580G〜・5.6枚590G〜・現金720G〜が狙い目。リセット後は周期天井が最大3周期に短縮（リセット狙い目ラインは解析待ち）。"
-   }
-  },
-  "limit": 999,
-  "original": {
-   "title": "戦国コレクション",
-   "kind": "ゲーム",
-   "search": "戦国コレクション ゲーム"
-  }
- },
- {
-  "slug": "kerot5bt",
-  "name": "スマスロケロット5BT",
-  "release_date": "2026-07-06",
-  "seo": {
-   "title": "スマスロケロット5BT 天井・狙い目・噂まとめ"
-  },
-  "info": "スマスロノーマル",
-  "strategy": "設定狙い主体・天井なし",
-  "aliases": [
-   "ケロット5BT",
-   "ケロット5",
-   "けろっと5BT",
-   "ケロット",
-   "kerot5bt",
-   "ケロット5BTスマスロ"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "設定狙い"
-    }
-   ],
-   "normal": {
-    "excellent": 99999,
-    "good": 99999,
-    "caution": 99999,
-    "note": "ノーマルタイプのため天井はありません。設定狙い主体の機種です。ボーナス合算とRB確率で設定を判断してください。"
-   }
-  },
-  "limit": null
- },
- {
-  "slug": "nangoku_special",
-  "name": "L南国育ちSPECIAL",
-  "release_date": "2026-07-06",
-  "seo": {
-   "title": "L南国育ちSPECIAL 天井・狙い目・噂まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "等価470G〜 / 5.6枚480G〜 / 現金550G〜 / リセット台0G〜",
-  "aliases": [
-   "南国育ちSPECIAL",
-   "南国育ちスペシャル",
-   "南国SP",
-   "なんごくそだちすぺしゃる",
-   "ナンゴクソダチ",
-   "nangoku_special",
-   "L南国育ちSPECIALスマスロ"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 799,
-    "good": 550,
-    "caution": 470,
-    "note": "天井最大799G+α＋ボーナス間スイカ9回。等価470G〜・5.6枚480G〜・現金550G〜が狙い目。"
-   },
-   "reset": {
-    "excellent": 500,
-    "good": 0,
-    "caution": 0,
-    "note": "設定変更後は天井最大500G+αに短縮＋約70%でチャンスモード以上。リセット濃厚台は0G〜から狙えます。"
-   }
-  },
-  "limit": 799
- },
- {
-  "slug": "yabachiba",
-  "name": "Lヤバチバ",
-  "release_date": "2026-07-06",
-  "seo": {
-   "title": "Lヤバチバ 狙い目・天井・スペックまとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "等価700G〜 / 5.6枚710G〜 / 現金790G〜",
-  "aliases": [
-   "ヤバチバ",
-   "やばちば",
-   "ヤバチバスマスロ",
-   "Lヤバチバ",
-   "yabachiba",
-   "ヤバチバループ",
-   "虹7ボーナス"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {
-    "excellent": 999,
-    "good": 790,
-    "caution": 700,
-    "note": "天井999G+α or ボーナス間チェリー40回。等価700G〜・5.6枚710G〜・現金790G〜が狙い目。リセット後はチェリー規定回数が30回に短縮（G数のリセット狙い目は解析待ち）。"
-   }
-  },
-  "limit": 999
- },
- {
-  "slug": "rotis",
-  "name": "スマスロ ローティス",
-  "release_date": "2026-07-06",
-  "seo": {
-   "title": "スマスロ ローティス 狙い目・天井・スペックまとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "等価580G〜 / 5.6枚590G〜 / 現金650G〜",
-  "aliases": [
-   "ローティス",
-   "ろーてぃす",
-   "ローティススマスロ",
-   "Lローティス",
-   "rotis",
-   "SBB",
-   "SBBストックシステム"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {
-    "excellent": 900,
-    "good": 650,
-    "caution": 580,
-    "note": "天井最大900G（モードにより短縮あり）。等価580G〜・5.6枚590G〜・現金650G〜が狙い目。リセット後は約25%で天井200Gの朝一モードへ。"
-   }
-  },
-  "limit": 900
- },
- {
-  "slug": "toaru_index2",
-  "name": "スマスロ とある魔術の禁書目録2",
-  "release_date": "2026-08-03",
-  "seo": {
-   "title": "スマスロ とある魔術の禁書目録2 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "算定中（AT間1200G／CZ間800G+α）",
-  "aliases": [
-   "禁書目録2",
-   "とある魔術の禁書目録2",
-   "インデックス2",
-   "きんしょもくろく2",
-   "とある2",
-   "とあるまじゅつのきんしょもくろく2"
-  ],
-  "limit": null,
-  "original": {
-   "title": "とある魔術の禁書目録",
-   "kind": "ライトノベル",
-   "search": "とある魔術の禁書目録 小説"
-  },
-  "identity": {
-   "manufacturer_id": "fujishoji",
-   "regulatory_model_code": "Lとある魔術の禁書目録2FA",
-   "market_release_date": "2026-08-03"
-  }
- },
- {
-  "slug": "yajikita_mairu",
-  "name": "スマスロ やじきた道中記参る！",
-  "release_date": "2026-08-03",
-  "seo": {
-   "title": "スマスロ やじきた道中記参る！ 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "算定中（天井は999まいる／6スルー）",
-  "aliases": [
-   "やじきた道中記参る",
-   "やじきた",
-   "やじきた道中記",
-   "やじきた参る",
-   "やじきたどうちゅうき",
-   "参る"
-  ],
-  "limit": null
- },
- {
-  "slug": "sf6",
-  "name": "スマスロ ストリートファイター6",
-  "release_date": "2026-08-03",
-  "seo": {
-   "title": "スマスロ ストリートファイター6 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "算定中（天井は通常時1000G+α）",
-  "aliases": [
-   "ストリートファイター6",
-   "スト6",
-   "SF6",
-   "ストリートファイターシックス",
-   "すとりーとふぁいたー6"
-  ],
-  "limit": null,
-  "original": {
-   "title": "ストリートファイター6",
-   "kind": "ゲーム",
-   "search": "ストリートファイター6"
-  }
- },
- {
-  "slug": "world_dai_star",
-  "name": "スマスロ ワールドダイスター",
-  "release_date": "2026-08-03",
-  "seo": {
-   "title": "スマスロ ワールドダイスター 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "算定中（天井は通常時999G+α）",
-  "aliases": [
-   "ワールドダイスター",
-   "ワルスタ",
-   "わーるどだいすたー",
-   "ワールドダイスタァ"
-  ],
-  "limit": null,
-  "original": {
-   "title": "ワールドダイスター",
-   "kind": "アニメ",
-   "search": "ワールドダイスター"
-  }
- },
- {
-  "slug": "jashinchan",
-  "name": "L邪神ちゃんドロップキック",
-  "release_date": "2026-08-03",
-  "seo": {
-   "title": "L邪神ちゃんドロップキック 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "算定中（天井は通常時799G+α／5周期）",
-  "aliases": [
-   "邪神ちゃんドロップキック",
-   "邪神ちゃん",
-   "じゃしんちゃん",
-   "ドロップキック",
-   "じゃしんちゃんどろっぷきっく"
-  ],
-  "limit": null,
-  "original": {
-   "title": "邪神ちゃんドロップキック",
-   "kind": "漫画",
-   "search": "邪神ちゃんドロップキック 漫画"
-  }
- },
- {
-  "slug": "super_binmusume",
-  "name": "Lすーぱぁびん娘",
-  "release_date": "2026-08-03",
-  "seo": {
-   "title": "Lすーぱぁびん娘 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "算定中（天井は通常時1200G／娘ポイント10周期）",
-  "aliases": [
-   "すーぱぁびん娘",
-   "びん娘",
-   "すーぱあびん娘",
-   "スーパービン娘",
-   "すーぱーびんむすめ",
-   "びんむすめ"
-  ],
-  "limit": null
- },
- {
-  "slug": "garei_zero_re",
-  "name": "Lパチスロ 喰霊-零-Re",
-  "seo": {
-   "title": "Lパチスロ 喰霊-零-Re スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v1",
-  "page_decision": {
-   "schema_version": "page-decision/v1",
-   "indexable": false,
-   "confirmed_topics": [],
-   "pending_topics": [
-    "gameplay",
-    "cz",
-    "ceiling",
-    "spec",
-    "setting",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
-    "NO_UNIQUE_GAMEPLAY"
-   ],
-   "claims": [],
-   "policy_mode": "normal",
-   "decided_at": "2026-08-23",
-   "input_digest": "sha256:bc6afcc73e2d1ee3c2ad7aff9d94202e38b0941e0611da7976e64ac835bd1e62"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-08-17",
-  "identity": {
-   "manufacturer_id": "oizumi",
-   "official_product_url": "https://p-town.dmm.com/machines/5028",
-   "announced_name": "Lパチスロ 喰霊-零-Re",
-   "identity_tier": "CATALOG_CODE_MATCHED",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5028 型式=Lパチスロ喰霊零Re/L3 メーカー=オーイズミ 導入=2026-08-17 確認日=2026-08-16",
-   "market_release_date": "2026-08-17",
-   "_legacy_evidence_ref": "identity_evidence/13674f64333e5765e7fd009beb11fe73c52ed2f5c2b4498532d06218adf767fb.html #card0",
-   "_legacy_official_product_url": "https://www.oizumi.co.jp/machine/garei-zero-re/",
-   "regulatory_model_code": "Lパチスロ喰霊零Re/L3",
-   "_model_code_sources": [
-    "p-town.dmm.com",
-    "p-world.co.jp"
-   ]
-  },
-  "checker": {
-   "coinRate": 36.1,
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {
-    "ceiling": 999
-   }
-  }
- },
- {
-  "slug": "prskkm",
-  "name": "スマスロパリピ孔明",
-  "seo": {
-   "title": "スマスロパリピ孔明 スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v1",
-  "page_decision": {
-   "schema_version": "page-decision/v1",
-   "indexable": false,
-   "confirmed_topics": [],
-   "pending_topics": [
-    "gameplay",
-    "cz",
-    "ceiling",
-    "spec",
-    "setting",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
-    "NO_UNIQUE_GAMEPLAY"
-   ],
-   "claims": [],
-   "policy_mode": "normal",
-   "decided_at": "2026-08-10",
-   "input_digest": "sha256:bc6afcc73e2d1ee3c2ad7aff9d94202e38b0941e0611da7976e64ac835bd1e62"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-10",
-  "identity": {
-   "manufacturer_id": "yamasa_next",
-   "official_product_url": "https://p-town.dmm.com/machines/5057",
-   "announced_name": "スマスロパリピ孔明",
-   "identity_tier": "CATALOG_BOUND",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "market_release_date": "2026-10",
-   "observed_model_code": "Lパチスロパリピ孔明YE05H",
-   "_observed_model_code_sources": [
-    "p-world.co.jp"
-   ],
-   "_legacy_official_product_url": "https://yamasa-next.co.jp/slot/prskkm/",
-   "identity_evidence_ref": "dmm:5057 型式=未掲載 メーカー=山佐 導入=2026-10-05 確認日=2026-08-16"
-  }
- },
- {
-  "slug": "ssb1",
-  "name": "L青春ブタ野郎はバニーガール先輩の夢を見ない",
-  "seo": {
-   "title": "L青春ブタ野郎はバニーガール先輩の夢を見ない スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v1",
-  "page_decision": {
-   "schema_version": "page-decision/v1",
-   "indexable": false,
-   "confirmed_topics": [
-    "spec"
-   ],
-   "pending_topics": [
-    "gameplay",
-    "cz",
-    "ceiling",
-    "setting",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
-    "NO_UNIQUE_GAMEPLAY"
-   ],
-   "claims": [
-    "model_code"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-08-11",
-   "input_digest": "sha256:0fcf939da4ba90aed483c6b49d327279a439ef1250cf90076f456d8bbd65741d"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-09",
-  "identity": {
-   "manufacturer_id": "heiwa",
-   "official_product_url": "https://p-town.dmm.com/machines/5064",
-   "announced_name": "L青春ブタ野郎はバニーガール先輩の夢を見ない",
-   "identity_tier": "CATALOG_CODE_MATCHED",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "market_release_date": "2026-09",
-   "regulatory_model_code": "L青春ブタ野郎L1",
-   "_model_code_sources": [
-    "p-town.dmm.com",
-    "p-world.co.jp"
-   ],
-   "_legacy_official_product_url": "https://www.heiwanet.co.jp/products/pachislot/ssb1/",
-   "identity_evidence_ref": "dmm:5064 型式=L青春ブタ野郎L1 メーカー=オリンピア 導入=2026-09-07 確認日=2026-08-16"
-  }
  },
  {
   "slug": "pw_10501",
@@ -11527,129 +11468,6 @@
    "regulatory_model_code": "L スマスロ リコリス・リコイル KX",
    "_model_code_sources": [
     "p-town.dmm.com",
-    "p-world.co.jp"
-   ]
-  },
-  "checker": {
-   "coinRate": 31.8,
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {}
-  }
- },
- {
-  "slug": "pw_10513",
-  "name": "マイジャグラーVI",
-  "seo": {
-   "title": "マイジャグラーVI スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": false,
-   "machine_profile": "BONUS",
-   "ceiling_state": "UNKNOWN",
-   "confirmed_topics": [
-    "setting",
-    "spec"
-   ],
-   "pending_topics": [
-    "gameplay",
-    "cz",
-    "ceiling",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [
-    "CLAIMS_LT_3"
-   ],
-   "claims": [
-    "bonus_prob",
-    "payout_rate"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-08-27",
-   "input_digest": "sha256:7145ca9e7a0372c57252ddc514d5231da4700f874bc6efb3d30ae59953bafa51"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-10-05",
-  "identity": {
-   "manufacturer_id": "kitadenshi",
-   "official_product_url": "https://p-town.dmm.com/machines/5054",
-   "announced_name": "マイジャグラーVI",
-   "identity_tier": "CATALOG_BOUND",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5054 型式=未掲載 メーカー=北電子 導入=2026-10-05 確認日=2026-08-16",
-   "market_release_date": "2026-10-05",
-   "_legacy_evidence_ref": "pworld:10513 型式=SマイジャグラーVI KK 検定=5S0437 確認日=2026-08-13",
-   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10513",
-   "observed_model_code": "SマイジャグラーVI KK",
-   "_observed_model_code_sources": [
-    "p-world.co.jp"
-   ]
-  }
- },
- {
-  "slug": "pw_10521",
-  "name": "スマスロ 獣王",
-  "seo": {
-   "title": "スマスロ 獣王 スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": false,
-   "machine_profile": "UNKNOWN",
-   "ceiling_state": "UNKNOWN",
-   "confirmed_topics": [
-    "setting",
-    "spec"
-   ],
-   "pending_topics": [
-    "gameplay",
-    "cz",
-    "ceiling",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
-    "MACHINE_PROFILE_UNKNOWN"
-   ],
-   "claims": [
-    "games_per_50",
-    "payout_rate"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-08-27",
-   "input_digest": "sha256:12e66452b1188cbd27065af889db8acdc9707c417026d0f86339812606d6465d"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-10-05",
-  "identity": {
-   "manufacturer_id": "sammy",
-   "official_product_url": "https://p-town.dmm.com/machines/5061",
-   "announced_name": "スマスロ 獣王",
-   "identity_tier": "CATALOG_BOUND",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5061 型式=未掲載 メーカー=サミー 導入=2026-10-05 確認日=2026-08-16",
-   "market_release_date": "2026-10-05",
-   "_legacy_evidence_ref": "pworld:10521 型式=L 獣王 XZ 検定=6S0560 確認日=2026-08-13",
-   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10521",
-   "observed_model_code": "L 獣王 XZ",
-   "_observed_model_code_sources": [
     "p-world.co.jp"
    ]
   },
@@ -11858,10 +11676,10 @@
   }
  },
  {
-  "slug": "dmm_5089",
-  "name": "LBトリプルクラウンX-300",
+  "slug": "ssb1",
+  "name": "L青春ブタ野郎はバニーガール先輩の夢を見ない",
   "seo": {
-   "title": "LBトリプルクラウンX-300 スペック・基本情報"
+   "title": "L青春ブタ野郎はバニーガール先輩の夢を見ない スペック・基本情報"
   },
   "info": "",
   "strategy": "",
@@ -11870,12 +11688,13 @@
   "page_decision": {
    "schema_version": "page-decision/v1",
    "indexable": false,
-   "confirmed_topics": [],
+   "confirmed_topics": [
+    "spec"
+   ],
    "pending_topics": [
     "gameplay",
     "cz",
     "ceiling",
-    "spec",
     "setting",
     "strategy",
     "reset"
@@ -11885,21 +11704,152 @@
     "CATEGORIES_LT_2",
     "NO_UNIQUE_GAMEPLAY"
    ],
-   "claims": [],
+   "claims": [
+    "model_code"
+   ],
    "policy_mode": "normal",
-   "decided_at": "2026-08-25",
-   "input_digest": "sha256:bc6afcc73e2d1ee3c2ad7aff9d94202e38b0941e0611da7976e64ac835bd1e62"
+   "decided_at": "2026-08-11",
+   "input_digest": "sha256:0fcf939da4ba90aed483c6b49d327279a439ef1250cf90076f456d8bbd65741d"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-08-03",
+  "release_date": "2026-09",
   "identity": {
-   "manufacturer_id": "seiryu_japan",
-   "official_product_url": "https://p-town.dmm.com/machines/5089",
-   "announced_name": "LBトリプルクラウンX-300",
+   "manufacturer_id": "heiwa",
+   "official_product_url": "https://p-town.dmm.com/machines/5064",
+   "announced_name": "L青春ブタ野郎はバニーガール先輩の夢を見ない",
+   "identity_tier": "CATALOG_CODE_MATCHED",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "market_release_date": "2026-09",
+   "regulatory_model_code": "L青春ブタ野郎L1",
+   "_model_code_sources": [
+    "p-town.dmm.com",
+    "p-world.co.jp"
+   ],
+   "_legacy_official_product_url": "https://www.heiwanet.co.jp/products/pachislot/ssb1/",
+   "identity_evidence_ref": "dmm:5064 型式=L青春ブタ野郎L1 メーカー=オリンピア 導入=2026-09-07 確認日=2026-08-16"
+  }
+ },
+ {
+  "slug": "pw_10513",
+  "name": "マイジャグラーVI",
+  "seo": {
+   "title": "マイジャグラーVI スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": false,
+   "machine_profile": "BONUS",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [
+    "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3"
+   ],
+   "claims": [
+    "bonus_prob",
+    "payout_rate"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-08-27",
+   "input_digest": "sha256:7145ca9e7a0372c57252ddc514d5231da4700f874bc6efb3d30ae59953bafa51"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-10-05",
+  "identity": {
+   "manufacturer_id": "kitadenshi",
+   "official_product_url": "https://p-town.dmm.com/machines/5054",
+   "announced_name": "マイジャグラーVI",
    "identity_tier": "CATALOG_BOUND",
    "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5089 型式=未掲載 メーカー=清龍ジャパン 導入=2026-08-03 確認日=2026-08-25",
-   "market_release_date": "2026-08-03"
+   "identity_evidence_ref": "dmm:5054 型式=未掲載 メーカー=北電子 導入=2026-10-05 確認日=2026-08-16",
+   "market_release_date": "2026-10-05",
+   "_legacy_evidence_ref": "pworld:10513 型式=SマイジャグラーVI KK 検定=5S0437 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10513",
+   "observed_model_code": "SマイジャグラーVI KK",
+   "_observed_model_code_sources": [
+    "p-world.co.jp"
+   ]
+  }
+ },
+ {
+  "slug": "pw_10521",
+  "name": "スマスロ 獣王",
+  "seo": {
+   "title": "スマスロ 獣王 スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": false,
+   "machine_profile": "UNKNOWN",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [
+    "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3",
+    "CATEGORIES_LT_2",
+    "MACHINE_PROFILE_UNKNOWN"
+   ],
+   "claims": [
+    "games_per_50",
+    "payout_rate"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-08-27",
+   "input_digest": "sha256:12e66452b1188cbd27065af889db8acdc9707c417026d0f86339812606d6465d"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-10-05",
+  "identity": {
+   "manufacturer_id": "sammy",
+   "official_product_url": "https://p-town.dmm.com/machines/5061",
+   "announced_name": "スマスロ 獣王",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5061 型式=未掲載 メーカー=サミー 導入=2026-10-05 確認日=2026-08-16",
+   "market_release_date": "2026-10-05",
+   "_legacy_evidence_ref": "pworld:10521 型式=L 獣王 XZ 検定=6S0560 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10521",
+   "observed_model_code": "L 獣王 XZ",
+   "_observed_model_code_sources": [
+    "p-world.co.jp"
+   ]
+  },
+  "checker": {
+   "coinRate": 31.8,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {}
   }
  },
  {
@@ -11947,6 +11897,56 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5086 型式=未掲載 メーカー=オリンピアエステート 導入=2026-10-05 確認日=2026-08-28",
    "market_release_date": "2026-10-05"
+  }
+ },
+ {
+  "slug": "prskkm",
+  "name": "スマスロパリピ孔明",
+  "seo": {
+   "title": "スマスロパリピ孔明 スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v1",
+  "page_decision": {
+   "schema_version": "page-decision/v1",
+   "indexable": false,
+   "confirmed_topics": [],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "spec",
+    "setting",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3",
+    "CATEGORIES_LT_2",
+    "NO_UNIQUE_GAMEPLAY"
+   ],
+   "claims": [],
+   "policy_mode": "normal",
+   "decided_at": "2026-08-10",
+   "input_digest": "sha256:bc6afcc73e2d1ee3c2ad7aff9d94202e38b0941e0611da7976e64ac835bd1e62"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-10",
+  "identity": {
+   "manufacturer_id": "yamasa_next",
+   "official_product_url": "https://p-town.dmm.com/machines/5057",
+   "announced_name": "スマスロパリピ孔明",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "market_release_date": "2026-10",
+   "observed_model_code": "Lパチスロパリピ孔明YE05H",
+   "_observed_model_code_sources": [
+    "p-world.co.jp"
+   ],
+   "_legacy_official_product_url": "https://yamasa-next.co.jp/slot/prskkm/",
+   "identity_evidence_ref": "dmm:5057 型式=未掲載 メーカー=山佐 導入=2026-10-05 確認日=2026-08-16"
   }
  },
  {
