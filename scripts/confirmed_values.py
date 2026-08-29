@@ -1292,11 +1292,18 @@ def for_slug(slug: str, data: dict | None = None) -> dict:
     return for_slug_checked(slug)
 
 
-# ★★検索の濃さにも数えてよい項目★★（2026-08-26・Codex35回目の穴2）
-#   ★機械では絶対に2出典に届かない項目だけ★＝実測で確かめたものに限る。
-#   ボーナス確率＝BIG/REGの設定表を持つ出典が1社しかない（5機種で実測）。
-#   ★他の項目へ広げない★＝「2AIの確定値は数えない」は他では意味のある線。
-INDEX_COUNTABLE_FIELDS = ("bonus_prob",)
+# ★★2AIの確定値は、全項目とも検索の濃さに数える★★
+#   （2026-08-29・運営者の指示「全部やろう」）
+#   ★直す前は ("bonus_prob",) の1項目だけだった★＝
+#   2026-08-26に「ボーナス確率だけ載らない」を直したときの名残で、
+#   そこだけ穴を開けた形になっていた。
+#   実測（喰霊-零-Re・導入12日目）＝2AIで7項目を確定させ、
+#   ★それぞれ独立2社の出典つき★なのに、検索の判定は0件だった。
+#   ★確からしさは機械抽出と同等★＝記録の作法（独立2出典・判断者2名・
+#   逐語引用の照合）は機械が強制しているので、根拠のない値は記録できない。
+#   ★数えるかどうかは、項目ではなく「出典が何系列か」で決まる★
+#   （`_independent_basis` が数え直す）。
+INDEX_COUNTABLE_FIELDS = None       # None＝全項目
 
 
 def _independent_basis(rec: dict) -> str:
@@ -1356,7 +1363,8 @@ def merge_into(material: dict, slug: str) -> list:
         #   第2の出典を見つけて正しく記録しても、
         #   **claim にならず `NO_BONUS_PROB` のまま検索へ載らない**。
         #   ★系列は数え直す★（保存された系列を信じない）。
-        if base_field(field) in INDEX_COUNTABLE_FIELDS:
+        if (INDEX_COUNTABLE_FIELDS is None
+                or base_field(field) in INDEX_COUNTABLE_FIELDS):
             _b = _independent_basis(rec)
             if _b:
                 stamped["basis"] = _b
@@ -1381,6 +1389,12 @@ def merge_into(material: dict, slug: str) -> list:
             row["_from"] = "confirmed_values"
             row["_field"] = field          # ★どの項目の控えか★（上と同じ理由）
             row["sources"] = stamped["sources"]
+            # ★★天井・AT・CZにも根拠を名乗る★★（2026-08-29・運営者の指示）
+            #   ★直す前は基本スペック側にしか付けていなかった★ので、
+            #   天井やCZを2AIで確定させても検索の濃さに数えられなかった
+            #   （実測：喰霊-零-Re は7項目のうち2項目しか数えられなかった）。
+            if "basis" in stamped:
+                row["basis"] = stamped["basis"]
             rows.append(row)
         added.append(field)
     return added
@@ -2341,15 +2355,22 @@ def selftest() -> int:
         merge_into(_mat_cv1, "zzz_cv")
         t("★（対照）1系列だけなら濃さに数えない★",
           "bonus_prob" not in _pd_cv.index_claims_from_material(_mat_cv1))
-        # ★他の項目には広げない★
+        # ★★全項目に広げた★★（2026-08-29・運営者の指示「全部やろう」）
+        #   ★数えるかどうかは項目ではなく「出典が何系列か」で決まる★。
+        #   ★型（machine_profile）は claim として数えない★ので、
+        #   根拠が刻まれても検索の判定には影響しない（_SPEC_CLAIMS に無い）。
         globals()["for_slug"] = lambda s: {
             "machine_profile": {"value": {"profile": "BONUS"},
                                 "sources": _rec2["sources"],
                                 "agreed_by": ["claude", "codex"]}}
         _mat_cv2 = {"adopted": {}}
         merge_into(_mat_cv2, "zzz_cv")
-        t("★★他の項目には根拠を刻まない（線を広げない）★★",
-          "basis" not in _mat_cv2["adopted"]["machine_profile"])
+        t("★★2系列あれば、どの項目にも根拠を刻む★★"
+          "（2026-08-29・運営者の指示）",
+          _mat_cv2["adopted"]["machine_profile"].get("basis")
+          == "INDEPENDENT_MULTI")
+        t("　★型は claim として数えないので、検索の判定は変わらない★",
+          "machine_profile" not in _pd_cv.index_claims_from_material(_mat_cv2))
     finally:
         globals()["for_slug"] = _keep_for
 

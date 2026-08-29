@@ -26,9 +26,9 @@
   DMM_SINGLE_NEAR_RELEASE    … DMM単独。導入7日前以降の例外
   （それ以外は採用しない）
 
-★検索の品質点には数えない★
-  DMM単独の値は `index_countable=False`。
-  ＝記事には載せるが、検索に載せてよい濃さには数えない
+★検索の品質点にも数える★（2026-08-29）
+  DMM単独の値も `index_countable=True`。
+  ＝運営者の判断「マイナー機種は仕方がない」（2026-08-29）。★実際に数えるかは page_decision.INDEX_COUNTABLE_BASIS が正本★
   （2AIの確定値と同じ二層化）。★件数に期待して安全だと思わない★＝
   DMMだけで機械割・天井・AT・CZが採れると claim 5件・カテゴリ4種になり、
   何もしなければ AUTO_INDEXABLE になり得る（Codexの指摘で気づいた）。
@@ -237,8 +237,14 @@ def classify_support(vote_keys, ctx: dict | None = None,
                 "why": "／".join(reasons)}
     return {"accepted": True, "independent_votes": 1,
             "basis": DMM_SINGLE_NEAR_RELEASE,
-            # ★検索の濃さには数えない★（記事には載せる）
-            "index_countable": False,
+            # ★★検索の濃さにも数える★★（2026-08-29・運営者の判断）
+            #   ★運営者の言葉★＝「全部やろう　マイナー機種は仕方がない」
+            #   1社しか扱わない機種を検索から締め出すより、載せる方を選んだ。
+            #   ★正本は page_decision.INDEX_COUNTABLE_BASIS★＝
+            #   実際に数えるかどうかはあちらが決める。ここは名乗りをそろえるだけ
+            #   （食い違ったまま残すと、あとで読み違える）。
+            #   ★読者には「（確認1件のみ）」の名乗りが記事に残る★。
+            "index_countable": True,
             "why": "DMMぱちタウン単独確認（導入7日前以降の例外）"}
 
 
@@ -289,9 +295,9 @@ def selftest() -> int:
       classify_support([D], OK_CTX, DAY)["accepted"]
       and classify_support([D], OK_CTX, DAY)["basis"]
       == DMM_SINGLE_NEAR_RELEASE)
-    t("★★DMM単独の値は検索の濃さに数えない★★"
+    t("★★DMM単独の値も検索の濃さに数える★★"
       "／★件数に期待して安全だと思わない★（Codexの指摘）",
-      classify_support([D], OK_CTX, DAY)["index_countable"] is False)
+      classify_support([D], OK_CTX, DAY)["index_countable"] is True)
     # ★★ここが「1票でよい」にしなかった理由★★
     t("★★ちょんぼりすた単独は通さない★★（例外はDMMだけ）",
       not classify_support([C], OK_CTX, DAY)["accepted"])
@@ -451,10 +457,10 @@ def _end_to_end_tests(t) -> None:
     solo = classify_support([D], CTX, DAY)
     m_solo = _mat(solo)
     d_solo = _ba.build_detail("zzz", "試験機", "2026-08-20", m_solo)
-    t("★★通し：DMM単独→採用され、記事に名乗りが付き、検索には数えない★★",
+    t("★★通し：DMM単独→採用され、記事に名乗りが付き、検索にも数える★★",
       solo["accepted"]
       and any(_MARK_ART in x for x in _texts(d_solo))
-      and _pd.index_claims_from_material(m_solo) == []
+      and len(_pd.index_claims_from_material(m_solo)) == 3
       and len(_pd.regression_claims_from_material(m_solo)) == 3)
 
     # ②独立2出典のとき
@@ -469,8 +475,8 @@ def _end_to_end_tests(t) -> None:
     # ③★採否と表示と検索がそろっているか★（片方だけ直したら落ちる）
     t("★★採否・名乗り・検索の3つが同じ根拠を見ている★★"
       "／★今日5回踏んだ「片方だけ直した」をここで捕まえる★",
-      (solo["index_countable"] is False
-       and _pd.index_claims_from_material(m_solo) == [])
+      (solo["index_countable"] is True
+       and _pd.index_claims_from_material(m_solo) != [])
       and (multi["index_countable"] is True
            and _pd.index_claims_from_material(m_multi) != []))
 
@@ -502,7 +508,7 @@ def _end_to_end_tests(t) -> None:
     #
     #   見るもの（家族ごとに同じ6つ）
     #     ①本物の抽出器が根拠を保存している
-    #     ②その戻り値は検索の濃さに数えない（単独確認だから）
+    #     ②その戻り値は検索の濃さにも数える（2026-08-29）
     #     ③けれど「知っているか」には数える（回帰の判定用）
     #     ④記事にすると単独確認の名乗りが付く
     #     ⑤根拠を落とすと**公開そのものを断る**
@@ -572,8 +578,8 @@ def _end_to_end_tests(t) -> None:
               bool(_rows) and all(
                   r.get("basis") == DMM_SINGLE_NEAR_RELEASE for r in _rows))
             _mat_real = _mat_of(_res, _box)
-            t(f"　{_name}：単独確認は検索の濃さに数えない",
-              _pd.index_claims_from_material(_mat_real) == [])
+            t(f"　{_name}：単独確認も検索の濃さに数える",
+              _pd.index_claims_from_material(_mat_real) != [])
             t(f"　{_name}：それでも「知っている」には数える",
               _pd.regression_claims_from_material(_mat_real) != [])
             _txt = str(_ba_mod.build_detail("zzz", "試験機", "2026-08-24",

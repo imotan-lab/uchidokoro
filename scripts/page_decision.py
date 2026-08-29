@@ -209,25 +209,32 @@ def _bad_value_deep(v) -> bool:
 
 
 def _from_2ai(v) -> bool:
-    """2AIが確定させた値か（機械の裏取りをまだ通っていない）。"""
+    """2AIが確定させた値か（★印だけ。根拠は basis で見る★）。"""
     return isinstance(v, dict) and v.get("_from") == "confirmed_values"
 
 
 def _single_source(v) -> bool:
     """★DMM単独で採った値か★（2026-08-23・運営者決定の例外）
 
-    ★検索の濃さには数えない★＝記事には載せるが、
-    「検索に載せてよい濃さ」の点にはしない（2AIの確定値と同じ二層化）。
+    ★検索の濃さにも数える★（2026-08-29・運営者の判断
+    「全部やろう　マイナー機種は仕方がない」）＝
+    1社しか扱わない機種を検索から締め出すより、載せる方を選んだ。
+    ★読者には「（確認1件のみ）」の名乗りが記事に残る★。
 
     ★★件数に期待して安全だと思わないこと★★（Codexの指摘で気づいた）
-      私は「DMM単独なら claim 2件以下だから、どうせ noindex になる」と
-      考えていたが、**運営者決定は「DMMページにあるものは全部採用」**なので、
+      **運営者決定は「DMMページにあるものは全部採用」**なので、
       DMMだけで 機械割・天井・AT・CZ が採れると
       claim 5件・カテゴリ4種・固有ゲーム性ありになり
-      ★AUTO_INDEXABLE になり得る★。だから明示的に外す。
+      ★AUTO_INDEXABLE になり得る★。
+      ★2026-08-29から、それでよいことにした★（運営者の判断）。
     """
     return (isinstance(v, dict)
             and str(v.get("basis") or "") == "DMM_SINGLE_NEAR_RELEASE")
+
+
+# ★★検索の濃さに数えてよい根拠★★（2026-08-29・運営者の指示）
+#   ★白名簿★＝ここに無い根拠（保存し忘れ・空）は数えない（安全側）。
+INDEX_COUNTABLE_BASIS = ("INDEPENDENT_MULTI", "DMM_SINGLE_NEAR_RELEASE")
 
 
 def _skip_for_index(v, count_confirmed: bool) -> bool:
@@ -247,9 +254,17 @@ def _skip_for_index(v, count_confirmed: bool) -> bool:
     """
     if count_confirmed:
         return False                      # 回帰検査＝知っているかを見る側
-    # ★数えてよいのは「独立2出典で採った」と明示されたものだけ★
-    return not (isinstance(v, dict)
-                and str(v.get("basis") or "") == "INDEPENDENT_MULTI")
+    # ★★数えてよい根拠★★（2026-08-29・運営者の指示）
+    #   ★白名簿のまま★＝保存し忘れは「数えない」側に倒れる。
+    #   ★DMM単独確認も数える★（運営者の言葉「マイナー機種は仕方がない」）＝
+    #   1社しか扱わない機種を検索から締め出すより、載せる方を選ぶ。
+    #   ★単独で採ってよい条件は `adoption_basis` が6つとも見ている★
+    #   （支持がDMMだけ／導入7日前以降／導入日が日まで確定／
+    #     導入日の出どころがDMM／機種ページで本人性確認済み／
+    #     別の値を出す出典が無い）。
+    #   ★読者には根拠が伝わる★＝記事に「（確認1件のみ）」の名乗りが残る。
+    return str((v or {}).get("basis") or "") not in INDEX_COUNTABLE_BASIS \
+        if isinstance(v, dict) else True
 
 
 _RATE_PCT = re.compile(r"\s*([0-9]+(?:\.[0-9]+)?)\s*%\s*")
@@ -301,12 +316,14 @@ def _claims(material: dict, *, count_confirmed: bool) -> list:
       数えてしまう。材料が壊れているなら止める＝fail-closed）
 
     ★★2つの意味を分けた（2026-08-23・台帳#461）★★
-      count_confirmed=False … 「検索に載せてよい濃さ」（今までどおり）
+      count_confirmed=False … 「検索に載せてよい濃さ」
       count_confirmed=True  … 「今夜そのことを知っているか」（消失の判定用）
+      ★2026-08-29から、確定値も単独確認も濃さに数える★ので、
+      分かれるのは `derived_payout_range` など**回帰にだけ入れる分**だけ。
       ★分けた理由★＝同じ一覧を `grow_machine.claims_grew` が
-      「事実が消えたか」の判定に使っていた。濃さの一覧は2AIの確定値を
-      **意図的に外す**ので、★2AIで確定させるほど「消えた」と判定された★
-      （実測: 喰霊-零-Re は6件確定させた晩に「3件消えた」で止まった）。
+      「事実が消えたか」の判定に使っていた。濃さの一覧には
+      **根拠の無い値が入らない**ので、そのままでは
+      ★根拠を刻めなかった値を「消えた」と判定してしまう★。
       ★「知っていること全部」ではない★（Codexの指摘）＝
       gameplay・reset などは同じ体系のIDを持たない。**回帰検査用の射影**。
     """
@@ -321,11 +338,11 @@ def _claims(material: dict, *, count_confirmed: bool) -> list:
             raise DecisionError(f"{key} の形が違います: {v!r}")
         if isinstance(v, dict) and "value" in v and _bad_value_deep(v["value"]):
             raise DecisionError(f"{key} の値がありません: {v!r}")
-        # ★2AIが確定した値は「検索に載せてよい濃さ」に数えない★
-        #   （2026-08-09・依頼130 P1-3）
-        #   記事に載せる材料としては使うが、claim の裏取り（verify_claims）を
-        #   まだ通っていない。数えると、機械が確かめていない値で
-        #   検索に載る判定が出てしまう。★載せるのは裏取り後★
+        # ★根拠（basis）が名簿にあるものだけ数える★（白名簿）
+        #   ★2026-08-29・運営者の指示★＝2AIの確定値も単独確認も数える。
+        #   ★数えるかは項目ではなく根拠で決まる★＝
+        #   ★根拠が名簿（INDEX_COUNTABLE_BASIS）にあるものだけ数える★
+        #   ＝保存し忘れ・空の根拠は数えない（白名簿・安全側）。
         if v and not _skip_for_index(v, count_confirmed):
             got.add(key)
     # ★★消失の判定にだけ、作れる範囲を入れる★★（2026-08-27）
@@ -398,7 +415,8 @@ def _bonus_claim(material: dict, count_confirmed: bool) -> list:
 def index_claims_from_material(material: dict) -> list:
     """★検索に載せてよい濃さ★（品質ライン MIN_CLAIMS/MIN_CATEGORIES 用）。
 
-    2AIが確定させただけの値は数えない（機械の裏取り前）。
+    ★根拠が名簿にあるものだけ数える★（白名簿・INDEX_COUNTABLE_BASIS）。
+    2026-08-29から、2AIの確定値も単独確認も数える（運営者の指示）。
     """
     return _claims(material, count_confirmed=False)
 
@@ -1006,14 +1024,15 @@ def selftest() -> int:
       _category("model_code") == "spec"
       and decide_from_claims(["model_code", "payout_range", "at:MAIN_AT"],
                              "normal", "2026-08-04")["indexable"])
-    # ★★2AIの確定値は「濃さ」には数えず「知っている」には数える★★
+    # ★★根拠を刻めていない値は「濃さ」に数えず「知っている」には数える★★
     CV = {"_from": "confirmed_values"}
     MAT_CV = {"adopted": {"games_per_50": {**CV, "value": {"games": 36.1}}},
               "ceilings": {"adopted": [{**CV, "kind": "GAME", "amount": 999,
                                         "counted": "通常時"}]},
               "at_specs": {"adopted": [{**CV, "mode": "MAIN_AT", "net": 1.0}]},
               "czs": {"adopted": [{**CV, "name": "解放の刻"}]}}
-    t("★★2AIの確定値は検索の濃さに数えない（今までどおり）★★",
+    t("★★根拠が刻まれていない値は数えない★★（白名簿）"
+      "／★2AIの印だけでは通さない＝本物の登録が basis を刻む★",
       index_claims_from_material(MAT_CV) == [])
     t("★★2AIの確定値も「知っている」には数える（消失の判定用）★★",
       regression_claims_from_material(MAT_CV)
@@ -1021,10 +1040,12 @@ def selftest() -> int:
     t("　機械が裏取りした値は、どちらの数え方でも同じ",
       index_claims_from_material(MAT_OK)
       == regression_claims_from_material(MAT_OK))
-    # ★★DMM単独で採った値も検索の濃さに数えない★★（2026-08-23・運営者決定）
-    #   ★私が間違えた点★＝「DMM単独なら claim 2件以下だから、どうせ
-    #   noindex になる」と考えたが、運営者決定は「DMMページにあるものは
-    #   全部採用」なので、DMMだけで5claim・4カテゴリになり得る。
+    # ★★DMM単独で採った値も検索の濃さに数える★★（2026-08-29・運営者の判断）
+    #   ★運営者の言葉★＝「全部やろう　マイナー機種は仕方がない」
+    #   ★以前は数えていなかった★（2026-08-23の決定）が、
+    #   1社しか扱わない機種を検索から締め出すより、載せる方を選んだ。
+    #   ★単独で採ってよい条件は `adoption_basis` が6つとも見ている★／
+    #   ★読者には「（確認1件のみ）」の名乗りが記事に残る★。
     SS = {"basis": "DMM_SINGLE_NEAR_RELEASE"}
     MAT_SS = {"adopted": {"payout_range": {**SS, "value": {"low": 97,
                                                            "high": 110}},
@@ -1033,9 +1054,9 @@ def selftest() -> int:
                                         "counted": "通常時"}]},
               "at_specs": {"adopted": [{**SS, "mode": "MAIN_AT", "net": 1.0}]},
               "czs": {"adopted": [{**SS, "name": "解放の刻"}]}}
-    t("★★DMM単独の値は検索の濃さに数えない★★"
-      "／★これが無いと1出典だけの内容が検索に出る★",
-      index_claims_from_material(MAT_SS) == [])
+    t("★★DMM単独の値も検索の濃さに数える★★"
+      "（2026-08-29・運営者の判断「マイナー機種は仕方がない」）",
+      len(index_claims_from_material(MAT_SS)) >= 4)
     # ★★根拠を保存し忘れた値も数えない★★（2026-08-23・Codexの敵対的レビューP0）
     #   ★実際に起きていた★＝spec_lookup と ceiling_lookup が basis を
     #   保存しておらず、DMM単独の機械割・コイン持ち・天井が
@@ -1085,11 +1106,13 @@ def selftest() -> int:
     t("　（対照）実在しない箱を名簿に入れたら気づく",
       not all(f'"{b}"' in _src_claims
               for b in tuple(CLAIM_BOXES) + ("zzz_no_such_box",)))
-    t("★★対照：外していなければ5claim・4カテゴリで検索に載ってしまう★★"
-      "／件数に期待して安全だと思わない",
+    t("　DMM単独だけでも 5claim・4カテゴリになり得る"
+      "（件数に期待して安全だと思わない、は変わらない）",
       len(regression_claims_from_material(MAT_SS)) == 5)
-    t("★★DMM単独だけの機種は indexable にならない★★",
-      not decide(MAT_SS, NORMAL, "2026-08-23")["indexable"])
+    t("★★DMM単独だけの機種も検索に載る★★"
+      "（2026-08-29・運営者の判断「マイナー機種は仕方がない」）"
+      "／★1社しか扱わない機種を検索から締め出さない★",
+      decide(MAT_SS, NORMAL, "2026-08-23")["indexable"])
     t("　DMM単独の値も「知っている」には数える（消失の判定用）",
       regression_claims_from_material(MAT_SS)
       == ["at:MAIN_AT", "ceiling:GAME:通常時", "cz:解放の刻",
@@ -1129,7 +1152,7 @@ def selftest() -> int:
     t("　ボーナス確率は spec とは別の種類（種類2つの条件を満たせる）",
       _category("bonus_prob") != _category("payout_range"))
     # ★★形の検査は「根拠による除外」より先★★（2026-08-26・Codex31回目）
-    #   ★単独確認（＝検索の濃さには数えない）で、しかも形が壊れた値★を渡す。
+    #   ★単独確認で、しかも形が壊れた値★を渡す。
     #   検査が後ろにあると、先に除外されて**誰も形を見ないまま素通り**する。
     #   ★記事づくりにも同じ検査があるので、そちらに助けられない形で試す★
     #   ＝claim を数える関数を直接呼ぶ。
@@ -1145,11 +1168,11 @@ def selftest() -> int:
     t("★★壊れたボーナス確率は、単独確認でも見逃さない★★"
       "／★検査が除外より後ろだと、形を誰も見ないまま素通りする★",
       _bp_stopped)
-    t("　正しい形なら、単独確認は今までどおり濃さに数えない",
+    t("　正しい形の単独確認は、いまは濃さに数える（2026-08-29）",
       _bonus_claim({"adopted": {"bonus_prob": {
           "value": {"1": {"big": "1/300", "reg": "1/450"}},
           "basis": "DMM_SINGLE_NEAR_RELEASE", "sources": ["a"]}}},
-          False) == [])
+          False) == ["bonus_prob"])
     t("　正しい形で2出典なら数える",
       _bonus_claim({"adopted": {"bonus_prob": {
           "value": {"1": {"big": "1/300", "reg": "1/450"}},

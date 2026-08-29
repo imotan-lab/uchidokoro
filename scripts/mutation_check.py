@@ -60,7 +60,9 @@ MUTATIONS = [
     {
         "why": "★確定値に根拠を刻まない（第2出典を見つけても検索へ載らない）★",
         "file": "scripts/confirmed_values.py",
-        "before": "        if base_field(field) in INDEX_COUNTABLE_FIELDS:",
+        "before": "        if (INDEX_COUNTABLE_FIELDS is None\n"
+                  "                or base_field(field) in "
+                  "INDEX_COUNTABLE_FIELDS):",
         "after": "        if False:",
         "run": ["scripts/confirmed_values.py"],
     },
@@ -82,10 +84,29 @@ MUTATIONS = [
         "run": ["scripts/confirmed_values.py"],
     },
     {
-        "why": "★確定値の根拠を全項目へ広げる（線が消える）★",
+        # ★2026-08-29に方針が変わった★＝確定値もDMM単独も濃さに数える。
+        #   ★壊し方は「数えなくする」側★（運営者の判断を戻す形）。
+        "why": "★確定値と単独確認を、検索の濃さに数えなくする★",
+        "file": "scripts/page_decision.py",
+        "before": 'INDEX_COUNTABLE_BASIS = ("INDEPENDENT_MULTI", '
+                  '"DMM_SINGLE_NEAR_RELEASE")',
+        "after": 'INDEX_COUNTABLE_BASIS = ()',
+        "run": ["scripts/page_decision.py", "scripts/adoption_basis.py"],
+    },
+    {
+        "why": "★2AIの印を名乗る行を、控えの照合なしで通す★",
+        "file": "scripts/build_new_article.py",
+        "before": '            if slug and c.get("_from") == "confirmed_values":',
+        "after": '            if False:',
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "★箱の行に根拠を刻まない（天井・AT・CZが濃さに届かない）★",
         "file": "scripts/confirmed_values.py",
-        "before": 'INDEX_COUNTABLE_FIELDS = ("bonus_prob",)',
-        "after": 'INDEX_COUNTABLE_FIELDS = tuple(FIELD_TOPICS)',
+        "before": '            if "basis" in stamped:\n'
+                  '                row["basis"] = stamped["basis"]',
+        "after": '            if False:\n'
+                 '                row["basis"] = stamped["basis"]',
         "run": ["scripts/confirmed_values.py"],
     },
     # ─── 2026-08-26・題の行つきの表（Codex33回目）────────────
@@ -385,8 +406,9 @@ MUTATIONS = [
     {
         "why": "検索の数え方を白名簿から黒名簿へ戻す",
         "file": "scripts/page_decision.py",
-        "before": '    return not (isinstance(v, dict)\n'
-                  '                and str(v.get("basis") or "") == "INDEPENDENT_MULTI")',
+        "before": '    return str((v or {}).get("basis") or "") '
+                  'not in INDEX_COUNTABLE_BASIS \\\n'
+                  '        if isinstance(v, dict) else True',
         "after": "    return _from_2ai(v) or _single_source(v)",
         "run": ["scripts/adoption_basis.py"],
     },
@@ -872,10 +894,14 @@ MUTATIONS = [
         "run": ["scripts/add_machine_run.py"],
     },
     {
-        "why": "DMM単独の名乗りを表の根拠と認めない（運営者が決めた書き方の記事が作れない・Codex24回目）",
+        # ★2026-08-29に方針が変わった★＝名乗りだけの免除は消した。
+        #   ★壊し方は逆向き★＝「名乗りだけで通す」に戻す形で試す。
+        "why": "設定表を、名乗りだけで根拠ありと認める（控えと違う値が通る）",
         "file": "scripts/recheck.py",
-        "before": "            for _bs in _BASIS_MARKS:\n                if _v.endswith(_bs):\n                    return True",
-        "after": "            if False:\n                return True",
+        "before": "            _field = _TBL_FIELD.get(",
+        "after": ("            if any(_v.endswith(_b) for _b in _BASIS_MARKS):"
+                  "\n                return True"
+                  "\n            _field = _TBL_FIELD.get("),
         "run": ["scripts/recheck.py"],
     },
     {
@@ -1131,11 +1157,15 @@ MUTATIONS = [
         "run": ["scripts/publish_new_machine.py"],
     },
     {
-        "why": "DMM単独の名乗りを根拠と認めない"
-               "（運営者が決めた書き方の記事を毎日『直せ』にする・Codex18回目）",
+        # ★2026-08-29に方針が変わった★＝DMMの名乗りだけの免除は消した。
+        #   ★いまの免除は「この話題の確定値の語が全部そろう行」だけ★なので、
+        #   そこを「どれか1つでも当たれば免除」に緩める形で壊す。
+        "why": "確定値の語が1つ当たれば免除する（根拠のない断定が通る）",
         "file": "scripts/recheck.py",
-        "before": "            if _mark and _mark in line:",
-        "after": "            if False:",
+        "before": "        return any(all(_cv_rc.token_in_quote(tk, line) "
+                  "for tk in _tk)",
+        "after": "        return any(any(_cv_rc.token_in_quote(tk, line) "
+                 "for tk in _tk)",
         "run": ["scripts/recheck.py"],
     },
     {

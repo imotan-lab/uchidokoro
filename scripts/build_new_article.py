@@ -159,6 +159,16 @@ def require_basis(material: dict, slug: str = "") -> None:
                 continue
             if _confirmed_by_2ai(c, slug, recs):
                 continue                 # ★2AIの確定値は別の道で根拠が残る★
+            # ★★2AIの印がある行は、控えの照合だけが証明★★（2026-08-29）
+            #   ★2026-08-29に確定値へも basis を刻むようにした★ので、
+            #   ここで下の検査へ落とすと、★控えから消えた値でも
+            #   根拠の印だけで通ってしまう★（実際に弱めてしまい、
+            #   対照実験の3件が落ちて気づいた）。
+            #   ＝印を名乗るなら、控えに実在することを求める。
+            if slug and c.get("_from") == "confirmed_values":
+                raise BuildError(
+                    f"2AIの確定値と名乗っていますが、控えに実在しません"
+                    f"（{c.get('_field') or name or box}）")
             for k in keys:
                 # ★G数・期待度は、値があるときだけ根拠を求める★
                 #   （値が無いのに根拠だけ要求すると正しい材料まで弾く）
@@ -184,11 +194,21 @@ def _2ai_records(slug: str) -> dict:
 
 
 def _core(d):
-    """出所や出典URLを除いた「値そのもの」（控えとの照合に使う）。"""
+    """出所や出典URLを除いた「値そのもの」（控えとの照合に使う）。
+
+    ★★basis も除く★★（2026-08-29）
+      2AIの確定値にも根拠を刻むようにしたので（＝検索の濃さに数えるため）、
+      除かないと★正しい確定値が控えと一致しなくなる★。
+      basis は「どんな根拠で採ったか」であって値の一部ではない。
+      ★除いても関所は緩まない★＝
+      控えに実在するかの照合（_confirmed_by_2ai）はそのまま働き、
+      根拠の有無を見る検査（require_basis）は basis を別に見ている。
+    """
     if not isinstance(d, dict):
         return d
     return {k: v for k, v in d.items()
-            if not str(k).startswith("_") and k != "sources"}
+            if not str(k).startswith("_")
+            and k not in ("sources", "basis")}
 
 
 def _confirmed_by_2ai(row, slug: str = "", records=None) -> bool:
@@ -2067,8 +2087,10 @@ def selftest() -> int:
             "value": {"1": "1/320.0", "2": "1/314.7", "3": "1/294.2",
                       "4": "1/276.9", "5": "1/260.0", "6": "1/246.4"},
             "sources": ["https://a.example/x", "https://b.example/y"],
-            "basis": "INDEPENDENT_MULTI",
-            "_from": "confirmed_values", "_field": "at_prob"}}}
+            # ★2AIの印は手書きしない★（2026-08-29）
+            #   ★印を名乗る行は、控えに実在することを求める守りを足した★ので、
+            #   手書きの印は正しく断られる。ここは普通の採用値でよい。
+            "basis": "INDEPENDENT_MULTI"}}}
     _d_un = build_detail("zzz_un", "試験U", "2026-10-05", _MAT_UN)
     _note_un = [tb["note"] for s in _d_un["sections"]
                 if s.get("type") == "settei" and s["title"] == "設定示唆まとめ"

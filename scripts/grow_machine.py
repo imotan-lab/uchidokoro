@@ -1500,7 +1500,7 @@ def selftest() -> int:
                                             "_from": "confirmed_values"}}}
     t("★★2AIの確定値しか無くても「消えた」とは言わない★★",
       not claims_grew({"claims": ["payout_range"]}, _MAT_CV))
-    t("　それでも検索の濃さには数えない（公開判定は変えていない）",
+    t("　★根拠が刻まれていなければ数えない★（白名簿・印だけでは通さない）",
       _pdz.index_claims_from_material(_MAT_CV) == [])
     # ★★書けるものは「消えた」ことにしない★★（2026-08-27・運営者の判断）
     #   確認済みの設定別の値から範囲を書けるなら、その事実は失われていない。
