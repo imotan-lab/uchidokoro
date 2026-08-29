@@ -34,6 +34,7 @@ from __future__ import annotations
 import argparse
 import datetime as _dt
 import io
+import inspect
 import json
 import re
 import os
@@ -1065,6 +1066,15 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
                 f"登場年月が変わっています（{old_release} → {vo['release']}）"
                 "／自動では直しません")
             return out
+        # ★★日が分かったことを「予定」として返す（★ここでは書かない★）★★
+        #   （2026-08-29・運営者の指示／Codexの指摘を受けて作り直した）
+        #   ★ここで書いてはいけない理由★
+        #     ①このあと指紋を取るので、書くと `apply_one` が
+        #       「計画後に変わった」で必ず止まる
+        #     ②下見（--apply なし）でも書いてしまう
+        #     ③鍵の外なので、同時に走る処理の更新を消しうる
+        #   ★書くのは呼び出し側（--apply のとき・鍵の中・計画の前）★
+        out["release_refine"] = {"old": old_release, "new": vo["release"]}
     # ② 材料を集め直す
     gather = gather or _amr.gather
     # ★★機種を名乗って材料を集める★★（2026-08-20・Codex依頼239）
@@ -1235,6 +1245,65 @@ def _file_sha(path: str) -> str:
     import hashlib
     with open(path, "rb") as f:
         return hashlib.sha256(f.read()).hexdigest()
+
+
+def refine_release_date(slug: str, old: str, new: str,
+                        machines_path: str = None) -> tuple:
+    """★導入日が「月だけ」→「日まで」になったら、登録も直す★
+       （2026-08-29・運営者の指示）
+
+    ★返すもの★＝(直したか, 理由)
+
+    ★値を作らない★＝DMMが持っている値をそのまま写すだけ。
+    ★同じ月の中で細かくなるときだけ★（`release_refined` が形を見る）。
+    ★逆（日まで→月だけ）は通さない★＝分かっていたことが分からなくなる。
+
+    ★★呼ぶ側の約束★★（Codexの指摘・2026-08-29）
+      ・`--apply` のときだけ呼ぶ（★下見では呼ばない★）
+      ・`apply_one` と同じ鍵の中で呼ぶ（同時に走る処理の更新を消さない）
+      ・★計画（plan_one）より前に呼ぶ★＝あとで呼ぶと、
+        計画時の指紋と食い違って `apply_one` が必ず止まる
+
+    ★★なぜ育成とは別にやるのか★★
+      育成の中にも日を細かくする経路はあるが、
+      ★育成が最後まで成功したときしか通らない★。
+      実測（2026-08-29）＝ssb1 は「名鑑の個別ページが1件しか無い」で
+      手前で止まるため、★何日経っても日付が入らない★。
+      その間ずっと「3日おき」で、
+      ★いちばん解析が出る時期に確認が3分の1になっていた★。
+    """
+    if not release_refined(old, new):
+        return False, ""
+    path = machines_path or MACHINES
+    try:
+        rows = _sj.read_json(path, expect=list)
+    except Exception as e:                          # noqa: BLE001
+        return False, f"機種一覧を読めません: {type(e).__name__}"
+    hit = [m for m in rows
+           if isinstance(m, dict) and m.get("slug") == slug]
+    if len(hit) != 1:
+        return False, f"機種一覧に {slug} が1件だけありません（{len(hit)}件）"
+    if str(hit[0].get("release_date") or "") != old:
+        # ★読んだあとに変わっていたら触らない★
+        return False, "確かめたときと登録が違います"
+    # ★★導入日は2か所ある。両方そろえる★★（2026-08-29・Codexの2回目の指摘）
+    #   ★片方だけ書くと、次の計画が
+    #     「登録済みの登場年月が食い違っています」で★必ず止まる★★
+    #   （実際にそうしてしまい、ssb1 が止まる状態になった）。
+    ident = hit[0].get("identity")
+    if not isinstance(ident, dict):
+        return False, "身元の記録がありません"
+    if str(ident.get("market_release_date") or "") != old:
+        return False, (f"身元の記録の登場年月が違います"
+                       f"（{ident.get('market_release_date')!r}）")
+    hit[0]["release_date"] = new
+    ident["market_release_date"] = new
+    try:
+        _pub.write_atomic(path, json.dumps(rows, ensure_ascii=False,
+                                           indent=1) + "\n")
+    except Exception as e:                          # noqa: BLE001
+        return False, f"機種一覧を書けません: {type(e).__name__}"
+    return True, f"導入日を細かくしました（{old} → {new}）"
 
 
 def apply_one(got: dict) -> dict:
@@ -1492,6 +1561,81 @@ def selftest() -> int:
       release_refined("2026-08", "2026-08-17")
       and not release_refined("2026-08", "2026-09-01")
       and not release_refined("2026-08-17", "2026-08"))
+    # ★★導入日が「月だけ」→「日まで」になったら、登録も直す★★
+    #   （2026-08-29・運営者の指示）
+    #   ★これが無くて、いちばん解析が出る時期に確認が3分の1になっていた★
+    #   （月精度は3日おき／日が入れば毎日）。
+    import tempfile as _tf_rr
+    _d_rr = _tf_rr.mkdtemp()
+    _p_rr = os.path.join(_d_rr, "machines.json")
+
+    def _mk_rr(rel, ident_rel=None):
+        io.open(_p_rr, "w", encoding="utf-8").write(json.dumps(
+            [{"slug": "a", "release_date": rel,
+              "identity": {"market_release_date":
+                           rel if ident_rel is None else ident_rel}},
+             {"slug": "b", "release_date": "2026-07-01",
+              "identity": {"market_release_date": "2026-07-01"}}],
+            ensure_ascii=False))
+
+    def _rel_rr(slug="a"):
+        rows = json.load(io.open(_p_rr, encoding="utf-8"))
+        return [r for r in rows if r["slug"] == slug][0].get("release_date")
+
+    def _idt_rr(slug="a"):
+        rows = json.load(io.open(_p_rr, encoding="utf-8"))
+        r = [r for r in rows if r["slug"] == slug][0]
+        return (r.get("identity") or {}).get("market_release_date")
+
+    _mk_rr("2026-09")
+    _ok_rr, _ = refine_release_date("a", "2026-09", "2026-09-07", _p_rr)
+    t("★★日が分かったら、登録も日まで直す★★"
+      "／★直らないと『新台期間は毎日確認』が効かない★",
+      _ok_rr and _rel_rr() == "2026-09-07")
+    t("★★導入日は2か所ある。両方そろえる★★"
+      "／★片方だけ書くと、次の計画が食い違いで必ず止まる★"
+      "（実際にそうしてしまった）",
+      _idt_rr() == "2026-09-07")
+    t("　★他の機種は触らない★",
+      _rel_rr("b") == "2026-07-01" and _idt_rr("b") == "2026-07-01")
+    _mk_rr("2026-09", ident_rel="2026-08")
+    _o_mis, _w_mis = refine_release_date("a", "2026-09", "2026-09-07", _p_rr)
+    t("★★2か所が食い違っていたら、1文字も書かない★★",
+      _o_mis is False and "身元の記録の登場年月が違います" in _w_mis
+      and _rel_rr() == "2026-09" and _idt_rr() == "2026-08")
+    _mk_rr("2026-09-07")
+    t("★★日まで→月だけ、は通さない★★（分かっていたことが分からなくなる）",
+      refine_release_date("a", "2026-09-07", "2026-09", _p_rr)[0] is False
+      and _rel_rr() == "2026-09-07")
+    _mk_rr("2026-09")
+    t("★★月が変わる書き換えは通さない★★（別の日付を作らない）",
+      refine_release_date("a", "2026-09", "2026-10-07", _p_rr)[0] is False
+      and _rel_rr() == "2026-09")
+    _mk_rr("2026-09")
+    _o6, _w6 = refine_release_date("a", "2026-08", "2026-08-17", _p_rr)
+    t("★★確かめたときと登録が違えば、触らない★★"
+      "（読んだあとに変わっていた場合）",
+      _o6 is False and "登録が違います" in _w6 and _rel_rr() == "2026-09")
+    _o7, _w7 = refine_release_date("zzz", "2026-09", "2026-09-07", _p_rr)
+    t("　★一覧に無い機種は触らない★",
+      _o7 is False and "1件だけありません" in _w7)
+
+    # ★★Codexの指摘3件を塞いだことを、形で確かめる★★（2026-08-29）
+    #   ★1回目の作りは、下見で本番データを書き換えた★（実際にやった）
+    _src_plan = inspect.getsource(plan_one)
+    _src_main = inspect.getsource(_main)
+    _before = _src_main.split("refine_release_date")[0][-500:]
+    t("★★計画は書かない（予定を返すだけ）★★"
+      "／★書くと計画時の指紋と食い違い、育成が必ず止まる★",
+      "release_refine" in _src_plan
+      and "refine_release_date" not in _src_plan)
+    t("★★下見では書かない★★／★1回目の作りは本番データを書き換えた★",
+      "a.apply" in _before)
+    t("★★書くのは鍵の中★★（同時に走る処理の更新を消さない）",
+      "_OnlyOne" in _before)
+    import shutil as _sh_rr
+    _sh_rr.rmtree(_d_rr, ignore_errors=True)
+
     t("★★項目ごとの「未確認」を埋める更新は通す★★（Codex103回目・正しい更新を拒んでいた）",
       not text_kept(OLD, _mod(lambda d: d["sections"][0]["body"].__setitem__(
           1, "**50枚あたりのゲーム数**：約32G"))))
@@ -2357,6 +2501,28 @@ def _main() -> int:
         print("  ★2AIに聞くこと: " + str(_q.get("text") or _q)[:200])
     for _n in got.get("notes") or []:
         print("  （お知らせ）" + _n)
+    # ★★導入日が「月だけ」→「日まで」分かったら、登録も直す★★
+    #   （2026-08-29・運営者の指示／Codexの指摘を受けて作り直した）
+    #   ★下見では書かない★／★鍵の中で書く★／
+    #   ★書いた回はそこで終わる★＝計画の指紋と食い違うため。
+    #   次の実行が新しい日付で計画し直し、そこから新しい間隔で回る。
+    _rr = got.get("release_refine") or {}
+    if _rr and a.apply:
+        with _pub._OnlyOne():              # ★書き込みは同時に2つ走らせない★
+            _ok_rr, _why_rr = refine_release_date(
+                a.slug, _rr.get("old") or "", _rr.get("new") or "")
+        if _ok_rr:
+            print("  " + _why_rr + "／次の実行から新しい間隔で見ます")
+            _log(f"{a.slug}: {_why_rr}")
+            return 0
+        if _why_rr:
+            print("  ★導入日を細かくできません★: " + _why_rr)
+            _log(f"{a.slug}: 導入日を細かくできません: {_why_rr}")
+            return 1
+    elif _rr:
+        print(f"  （下見）導入日が細かく分かっています"
+              f"（{_rr.get('old')} → {_rr.get('new')}）"
+              "／--apply で登録を直します")
     if got.get("checked") and got.get("source_urls"):
         remember_sources(a.slug, got["source_urls"])
 
