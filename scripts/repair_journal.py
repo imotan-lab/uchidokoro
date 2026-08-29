@@ -458,6 +458,35 @@ def commit_verified(fid: str, commit: str) -> dict:
                  commit=commit)
 
 
+def _pushed(commit: str) -> tuple:
+    """★そのコミットが、もう出してあるか★（2026-08-29・台帳#501）
+
+    ★1か所にまとめる理由★＝`push_confirmed` と `recheck_pass` の両方が
+    同じことを確かめる。2か所に書くと、片方だけ緩めても
+    ★もう片方が拾って試験は緑★になる（罠③）。
+    ★返すもの★＝(出してある?, 理由)
+    """
+    if not commit:
+        return False, "コミットが結び付いていません"
+    import subprocess
+    try:
+        out = subprocess.run(
+            ["git", "branch", "-r", "--contains", commit],
+            cwd=BASE, capture_output=True, text=True, timeout=60)
+    except Exception as e:                                   # noqa: BLE001
+        return False, f"pushを確かめられません: {type(e).__name__}"
+    if "origin/" not in (out.stdout or ""):
+        return False, (f"{commit[:8]} はまだ origin にありません"
+                       "（pushしてから進めてください）")
+    return True, ""
+
+
+def _recheck_mod():
+    """★検査の道具を差し替えられるようにする入口★（試験用の継ぎ目）"""
+    import recheck
+    return recheck
+
+
 def push_confirmed(fid: str) -> dict:
     """★push できたことを確かめてから★（Codexの設計レビュー）
 
@@ -465,19 +494,9 @@ def push_confirmed(fid: str) -> dict:
     > ローカルコミット直後ではありません。
     """
     rec = load(fid)
-    commit = rec.get("commit")
-    if not commit:
-        raise JournalError("先にコミットを結び付けてください")
-    import subprocess
-    try:
-        out = subprocess.run(
-            ["git", "branch", "-r", "--contains", commit],
-            cwd=BASE, capture_output=True, text=True, timeout=60)
-    except Exception as e:                                   # noqa: BLE001
-        raise JournalError(f"pushを確かめられません: {type(e).__name__}")
-    if "origin/" not in (out.stdout or ""):
-        raise JournalError(
-            f"{commit[:8]} はまだ origin にありません（pushしてから進めてください）")
+    ok, why = _pushed(rec.get("commit"))
+    if not ok:
+        raise JournalError(why)
     return _step(rec, "PUSH_CONFIRMED", "pushを確かめた")
 
 
@@ -485,19 +504,53 @@ def recheck_pass(fid: str) -> dict:
     """★機械が自分で検査をやり直して合格したときだけ進む★
 
     結果の辞書を受け取らない（＝偽の合格を作れない）。
+
+    ★★合格は「実際に出したもの」で決める★★（2026-08-29・台帳#501）
+      ★直す前は、いまの作業ツリーで検査をやり直すだけだった★ので、
+      ・未コミットの変更が残ったまま
+      ・あとから積んだ別のコミットの中身
+      でも「合格」と記録できた（＝出したものとは別の中身）。
+      いまは3つを確かめる。どれも★記録を信じず、その場でやり直す★。
+        ①そのコミットが本当に出してあるか（`_pushed`）
+        ②記録されたコミットが、いまの先端であること
+        ③未コミットの変更が無いこと＋検査のやり直しが合格すること
+      ②③は `recheck.closeable()` が既に持っている規則なので、
+      ★ここで書き直さずに、それを通す★（同じ規則を2か所に書かない）。
     """
     rec = load(fid)
     name = (rec.get("recheck") or {}).get("name")
     if not name:
         raise JournalError("通すべき検査が決まっていません")
-    import recheck as _r
+    commit = str(rec.get("commit") or "")
+    # ★①記録された段階を信じず、いま自分で確かめ直す★
+    ok, why = _pushed(commit)
+    if not ok:
+        raise JournalError(f"出したことを確かめられません: {why}")
+    _r = _recheck_mod()
+    meta = (_r.CHECKS or {}).get(name)
+    if not meta:
+        raise JournalError(f"知らない検査です: {name}")
     args = {"slug": rec["slug"]}
-    if "text" in (_r.CHECKS[name].get("args_spec") or {}):
+    if "text" in (meta.get("args_spec") or {}):
         args["text"] = rec["quote"]
-    got = _r.run(name, args)
-    if got["result"] != "PASS":
-        raise JournalError(
-            f"{name} が {got['result']} です: {got['detail']}")
+    # ★短い形で記録されていても、40桁に伸ばしてから渡す★
+    full = commit
+    if len(full) != 40:
+        import subprocess
+        try:
+            rp = subprocess.run(["git", "rev-parse", commit], cwd=BASE,
+                                capture_output=True, text=True, timeout=60)
+            full = (rp.stdout or "").strip() if rp.returncode == 0 else ""
+        except Exception:                                # noqa: BLE001
+            full = ""
+    if not full:
+        raise JournalError(f"コミットを特定できません: {commit[:12]}")
+    ok2, why2, got = _r.closeable({"check": name,
+                                   "version": meta.get("version"),
+                                   "args": args,
+                                   "expected_commit": full})
+    if not ok2:
+        raise JournalError(f"{name} を合格にできません: {why2}")
     return _step(rec, "RECHECK_PASS", f"{name} が合格した",
                  recheck_result=got)
 
@@ -827,6 +880,107 @@ def _selftest() -> int:
         t("★★検査が落ちていない件は、開け直せない★★"
           "／★合格した直しを、あとから開け直せてはいけない★", _ng_open)
 
+        # ★★直しの「合格」は、実際に出したもので決める★★
+        #   （2026-08-29・台帳#501・Codexの指摘1）
+        #   ★直す前は、いまの作業ツリーで検査をやり直すだけだった★ので、
+        #   ・未コミットの変更が残ったまま
+        #   ・あとから積んだ別のコミットの中身
+        #   でも「合格」と記録できた（＝出したものとは別の中身）。
+        #   ★recheck_pass には試験が1つも無かった★＝
+        #   手前の push_confirmed が本物の git で必ず落ちるので、
+        #   ここまで一度も到達していなかった（罠④）。
+        f501 = detect("hokuto", "text_gone", "出したものと結び付けます。",
+                      "sections[0].body[9]",
+                      source_sha256="a" * 64)["finding_id"]
+        vp5 = os.path.join(td, "verdict501.md")
+        io.open(vp5, "w", encoding="utf-8").write(
+            "私の判定: この文は前の段落と同じ内容なので消してよいと考えます。")
+        seal_claude(f501, vp5)
+        record_codex(f501, "b" * 64,
+                     "Codexの判定です。同じく消してよいと考えます。")
+        agree(f501, _decfile(f501, "hokuto",
+                             [{"op": "drop",
+                               "text": "出したものと結び付けます。",
+                               "why": "前の段落と同じ内容"}],
+                             name="dec501"),
+              "text_gone", ["Claude", "codex"])
+        applied(f501, "c" * 64)
+        commit_verified(f501, "1" * 40)
+
+        class _FakeRecheck:
+            CHECKS = {"text_gone": {"version": 1, "closeable": True,
+                                    "args_spec": {"slug": (str, True, ()),
+                                                  "text": (str, True, ())}}}
+            asked = []
+            verdict = (False, "作業ツリーに未コミットの変更があります", None)
+
+            @classmethod
+            def closeable(cls, cond):
+                cls.asked.append(cond)
+                return cls.verdict
+
+            @staticmethod
+            def run(name, args):
+                # ★★これを見て合格にしてはいけない★★
+                #   直す前の実装はこちらを見ていたので、
+                #   偽の合格でも RECHECK_PASS へ進めた。
+                return {"result": "PASS", "detail": "偽の合格"}
+
+        _keep_pushed = globals()["_pushed"]
+        _keep_mod = globals()["_recheck_mod"]
+        try:
+            globals()["_pushed"] = lambda c: (False,
+                                              "まだ origin にありません")
+            globals()["_recheck_mod"] = lambda: _FakeRecheck
+            _ng1 = ""
+            try:
+                push_confirmed(f501)
+            except JournalError as e:
+                _ng1 = str(e)
+            t("★★出していないコミットでは、pushを確かめたことにしない★★",
+              "origin" in _ng1)
+
+            globals()["_pushed"] = lambda c: (True, "")
+            push_confirmed(f501)
+            _ng2 = ""
+            try:
+                recheck_pass(f501)
+            except JournalError as e:
+                _ng2 = str(e)
+            t("★★手元の状態だけで合格にしない★★"
+              "／★未コミットの変更や別のコミットの中身で「直した」に"
+              "できてはいけない★",
+              "未コミット" in _ng2
+              and load(f501)["state"] == "PUSH_CONFIRMED")
+            t("　★確かめるのは、記録されたコミットそのもの★",
+              bool(_FakeRecheck.asked)
+              and _FakeRecheck.asked[-1].get("expected_commit") == "1" * 40)
+            t("　★検査の名前と引数も、記録から組み立てる★",
+              _FakeRecheck.asked[-1].get("check") == "text_gone"
+              and (_FakeRecheck.asked[-1].get("args") or {}).get("text")
+              == "出したものと結び付けます。")
+
+            globals()["_pushed"] = lambda c: (False,
+                                              "まだ origin にありません")
+            _ng3 = ""
+            try:
+                recheck_pass(f501)
+            except JournalError as e:
+                _ng3 = str(e)
+            t("★★出したことを確かめられなければ合格にしない★★"
+              "／★段階が進んでいることを根拠にしない★",
+              "出したこと" in _ng3)
+
+            globals()["_pushed"] = lambda c: (True, "")
+            _FakeRecheck.verdict = (True, "再検査が合格しました",
+                                    {"result": "PASS"})
+            _rec5 = recheck_pass(f501)
+            t("　対照実験：出してあり、その中身で合格すれば進む",
+              _rec5["state"] == "RECHECK_PASS")
+        finally:
+            globals()["_pushed"] = _keep_pushed
+            globals()["_recheck_mod"] = _keep_mod
+
         # 打ち切り
         f2 = detect("hokuto", "text_gone", "別のおかしな文です。", "x",
                     source_sha256="9" * 64)["finding_id"]
@@ -857,7 +1011,10 @@ def _selftest() -> int:
         t("★★仕組みの都合は回数に数えない★★",
           load(f3)["attempts"] == 0 and load(f3)["state"] == "DETECTED")
 
-        t("　一覧が引ける", len(listing()) == 3)
+        # ★番号で見る（件数の決め打ちにしない）★
+        #   ★件数だけだと、試験を足しただけで落ちる★（罠⑪）
+        t("　一覧が引ける",
+          {x["finding_id"] for x in listing()} == {fid, f2, f3, f501})
         t("　段階でしぼれる", len(listing(ESCALATED)) == 1)
 
         # ── 2026-08-27・Codexのレビューで塞いだ穴 ───────────────

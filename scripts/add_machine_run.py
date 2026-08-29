@@ -2168,10 +2168,18 @@ def lock_still_mine(where: str) -> list:
     #   そのため「期限切れ寸前に確認が通り、直後に別の実行が奪う」窓が残る。
     #   heartbeat は所有者の確認と延長を一度に行うので、通った時点から
     #   30分の猶予が付き、この窓が閉じる。
-    c = _run_capped(
-        [sys.executable, os.path.join(BASE, "scripts", "task_lock.py"),
-         "heartbeat", "--ctx", ctx], capture_output=True, text=True,
-        encoding="utf-8", errors="replace")
+    # ★★例外で落ちない★★（2026-08-29・Codexのレビュー16・中①）
+    #   ここで投げると、理由の配列を返さずタスク全体が traceback で終わり、
+    #   ★その晩の新台公開が0件になる★（黙って止まる型）。
+    #   ★止める側に倒す★＝分からないときは持っていないものとして扱う。
+    try:
+        c = _run_capped(
+            [sys.executable, os.path.join(BASE, "scripts", "task_lock.py"),
+             "heartbeat", "--ctx", ctx], capture_output=True, text=True,
+            encoding="utf-8", errors="replace")
+    except Exception as e:                # noqa: BLE001
+        _LOCK_LOST.append(f"{where} で heartbeat を呼べません")
+        return [f"{where}: ロックを確かめられません（{str(e)[:60]}）"]
     if c.returncode != 0:
         _LOCK_LOST.append(f"{where} で heartbeat が非0")
         return [f"{where}: いまロックを持っていません"]
@@ -2259,14 +2267,26 @@ def _already_published(sha: str) -> tuple:
         return False, (f"手元の基準（{base_sha[:12]}）とリモートの先端"
                        f"（{remote_sha[:12]}）が違います")
     # ★④HEAD がその先端と同じか★（古いところから次を作らせない）
-    head = _head()
+    try:
+        head = _head()
+    except Exception as e:                # noqa: BLE001
+        # ★例外にせず理由を返す★（Codexのレビュー16・中①）
+        #   ここで投げると、理由の配列を返さずタスク全体が落ち、
+        #   ★その晩の新台公開が0件になる★（黙って止まる型）。
+        return False, f"手元の先端を調べられません（{str(e)[:60]}）"
     if not head or head != base_sha:
         return False, (f"手元の先端（{str(head)[:12]}）が公開先の先端"
                        f"（{base_sha[:12]}）と違います")
     # ★⑤記録した sha が、その先端の祖先か★
     rc, _out = _g(["merge-base", "--is-ancestor", sha, base_sha])
-    if rc != 0:
+    if rc == 1:
         return False, f"記録した {sha[:12]} はまだ出ていません"
+    if rc != 0:
+        # ★確かめられなかっただけのものを「出ていない」と断定しない★
+        #   （Codexのレビュー16・軽微②）止めるのは同じだが、
+        #   ★台帳や報告に嘘の理由が残る★のを防ぐ。
+        return False, (f"記録した {sha[:12]} が出ているか確かめられません"
+                       f"（終了値 {rc}）")
     return True, ""
 
 
@@ -4592,12 +4612,18 @@ def selftest() -> int:
                         # ★★重大①：確認先が本来の公開先に固定されているか★★
                         #   ★直す前は、別の枝にいるとその枝の先端で
                         #     「出してある」と言えた★（公開先は main なのに）
+                        #   ★1つずつ変える★（Codexのレビュー16・軽微③）
+                        #   ★2つ同時に変えると、実装から片方の検査を
+                        #     削っても試験が緑のまま★（罠④）
                         _reset()
-                        _FK["scope"] = dict(_FK["scope"], branch="side",
-                                            dest="side",
-                                            upstream="origin/side")
-                        t("★★main 以外の枝にいるときは「出してある」と"
+                        _FK["scope"] = dict(_FK["scope"], branch="side")
+                        t("★★手元の枝が main でなければ「出してある」と"
                           "言わない★★（別の枝の先端で判断させない）",
+                          _already_published("furuisha")[0] is False)
+                        _reset()
+                        _FK["scope"] = dict(_FK["scope"], dest="side",
+                                            upstream="origin/side")
+                        t("★★出す先が main でなければ言わない★★",
                           _already_published("furuisha")[0] is False)
                         _reset()
                         _FK["scope"] = dict(_FK["scope"],
@@ -4664,6 +4690,30 @@ def selftest() -> int:
                         t("　★外部プロセスが落ちても、例外にせず"
                           "理由を返す★",
                           isinstance(_r_boom, tuple) and _r_boom[0] is False)
+                        # ★★後半の呼び出しでも同じこと★★
+                        #   （Codexのレビュー16・中①）
+                        #   ★はじめの ls-remote で落として即returnする試験は、
+                        #     後半の `_head()` を一度も通していなかった★（罠④）
+                        _reset()
+                        globals()["_run_capped"] = _fake_run
+
+                        def _boom_head():
+                            raise OSError("ためしの時間切れ")
+                        globals()["_head"] = _boom_head
+                        _r_bh = _already_published("furuisha")
+                        t("★★手元の先端を調べられなくても、例外にせず"
+                          "理由を返す★★"
+                          "（ここで落ちると、その晩の公開が0件になる）",
+                          isinstance(_r_bh, tuple) and _r_bh[0] is False)
+                        globals()["_head"] = lambda: _FK["head"]
+                        # ★祖先を確かめられなかっただけのものを、
+                        #   「出ていない」と断定しない★（軽微②）
+                        _reset()
+                        _FK["anc_rc"] = 128
+                        _why_anc = _already_published("furuisha")[1]
+                        t("　★祖先を確かめられない異常を「まだ出ていません」"
+                          "と断定しない★",
+                          "確かめられません" in _why_anc)
                     finally:
                         globals()["_run_capped"] = _keep_run
                         globals()["_head"] = _keep_head2
@@ -4679,31 +4729,41 @@ def selftest() -> int:
                     try:
                         globals()["_head"] = lambda: "atarasii"
 
-                        def _swap(sha):
-                            # ★戻る直前に、別の実行が新しい目印を書く★
+                        #   ★1項目ずつ変える★（Codexのレビュー16・軽微③）
+                        #   ★まとめて変えると、実装が slug しか見ていなくても
+                        #     試験が緑のまま★（罠④）
+                        for _key, _val, _jp in (
+                                ("slug", "betsu_kishu", "機種"),
+                                ("sha", "atarasiisha", "コミット"),
+                                ("stage", "WRITTEN", "段階")):
+                            def _swap(sha, _k=_key, _v=_val):
+                                # ★戻る直前に、別の実行が新しい目印を書く★
+                                _d = {"slug": "t_resume", "sha": "furuisha",
+                                      "stage": "COMMITTED", "parent": "",
+                                      "at": "2026/08/29 01:00:00"}
+                                _d[_k] = _v
+                                io.open(PUSH_PENDING, "w",
+                                        encoding="utf-8").write(
+                                            json.dumps(_d))
+                                return True, ""
+                            globals()["_already_published"] = _swap
                             io.open(PUSH_PENDING, "w",
                                     encoding="utf-8").write(json.dumps(
-                                        {"slug": "betsu_kishu",
-                                         "sha": "atarasiisha",
+                                        {"slug": "t_resume",
+                                         "sha": "furuisha",
                                          "stage": "COMMITTED", "parent": "",
-                                         "at": "2026/08/29 01:00:00"}))
-                            return True, ""
-                        globals()["_already_published"] = _swap
-                        io.open(PUSH_PENDING, "w", encoding="utf-8").write(
-                            json.dumps({"slug": "t_resume", "sha": "furuisha",
-                                        "stage": "COMMITTED", "parent": "",
-                                        "at": "2026/08/29 00:00:00"}))
-                        out = retry_push_first()
-                        nokotta = os.path.isfile(PUSH_PENDING)
-                        t("★★確かめている間に目印が書き換わったら"
-                          "消さない★★"
-                          "（別の実行が出す予定のものを消してしまう）",
-                          bool(out) and nokotta
-                          and any("書き換わりました" in x for x in out))
-                        try:
-                            os.remove(PUSH_PENDING)
-                        except OSError:
-                            pass
+                                         "at": "2026/08/29 00:00:00"}))
+                            out = retry_push_first()
+                            nokotta = os.path.isfile(PUSH_PENDING)
+                            t(f"★★確かめている間に目印の{_jp}が"
+                              "書き換わったら消さない★★"
+                              "（別の実行が出す予定のものを消してしまう）",
+                              bool(out) and nokotta
+                              and any("書き換わりました" in x for x in out))
+                            try:
+                                os.remove(PUSH_PENDING)
+                            except OSError:
+                                pass
                     finally:
                         globals()["_head"] = _keep_head3
                         globals()["_already_published"] = _keep_pub3
