@@ -459,61 +459,36 @@ def commit_verified(fid: str, commit: str) -> dict:
 
 
 def _pushed(commit: str) -> tuple:
-    """★そのコミットが、GitHubのmainへ出してあるか★
+    """★そのコミットが、公開用の枝（GitHubのmain）に入っているか★
 
-    ★これは「読者に届いた」ではない★（2026-08-29・Codexのレビュー18）
-      配信は GitHub Actions が非同期でやるので、
-      出してあることと届いていることは別。届いたかは `_delivered`。
+    ★返すもの★＝(入っている?, 理由, その枝の先端)
 
-    ★返すもの★＝(出してある?, 理由)
+    ★★配信が終わったかは見ない★★（2026-08-29・運営者の判断＝案A）
+      ★守っているのは帳簿の正確さであって、読者ではない★＝
+      誤情報の公開を止めているのは別の関所（公開前の監査・押し出しの検査）。
+      配信は十数秒で終わり、直した記事はリポジトリに入っているので、
+      ★ずれるのは「直りました」と記録するタイミングだけ★。
+      それを詰めるために外部への問い合わせ（回数制限つき）を
+      毎晩の処理へ持ち込むのは割に合わない、と判断した。
+
+    ★★祖先でよい★★（Codexのレビュー18・中②の指摘は活かす）
+      「記録したコミットそのものが先端」を求めると、
+      直したあとに**無関係な正常コミット**が乗るだけで永久に進めなくなる。
+      ★検査は「いまの枝の中身」でやる★ので、
+      そのあと再発していれば検査が落ちる。
     """
     full = _full_sha(commit)
     if not full:
-        return False, f"コミットを特定できません: {str(commit)[:12]}"
+        return False, f"コミットを特定できません: {str(commit)[:12]}", ""
     try:
         import prepush_gate as _pg
         tip, why = _pg.remote_main_tip()
     except Exception as e:                                   # noqa: BLE001
-        return False, f"公開先の先端を調べられません: {type(e).__name__}"
+        return False, f"公開先の先端を調べられません: {type(e).__name__}", ""
     if not tip:
-        return False, why
-    return _is_ancestor(full, tip, "はまだ出ていません")
-
-
-def _delivered(commit: str) -> tuple:
-    """★そのコミットが、いま読者に届いている中身に含まれているか★
-       （2026-08-29・Codexのレビュー18・重大）
-
-    ★返すもの★＝(届いている?, 理由, (いま届いているコミット, 配信の番号))
-
-    ★★配信の番号まで見る★★（2026-08-29・Codexのレビュー19）
-      ★同じコミットでも、出す中身は別のことがある★
-      （リポジトリをそのまま出す配信と、組み立てた中身を出す配信）。
-      コミットだけを見ていると、同じコミットの別の配信に切り替わっても
-      気づけない。番号まで揃って初めて「同じ配信を検査した」と言える。
-
-    ★★祖先でよい／ただし検査はいま届いている中身でやる★★（レビュー18・中②）
-      「記録したコミットそのものが先端」を求めるのは★厳しすぎた★＝
-      直したあとに**無関係な正常コミットD**が乗るだけで、
-      直っていても永久に進めなくなる（コミットを結び直す口も無い）。
-      正しい条件は
-        ・直しのコミットCが、いま届いているPの★祖先★であること
-        ・★Pの中身で★検査が合格すること
-      これなら、Dで再発していれば検査が落ち、
-      無関係なDならふつうに閉じられる。
-    """
-    full = _full_sha(commit)
-    if not full:
-        return False, f"コミットを特定できません: {str(commit)[:12]}", ("", 0)
-    try:
-        import prepush_gate as _pg
-        tip, why, dep_id = _pg.deployed_tip()
-    except Exception as e:                                   # noqa: BLE001
-        return False, f"配信の記録を読めません: {type(e).__name__}", ("", 0)
-    if not tip:
-        return False, why, ("", 0)
-    ok, why2 = _is_ancestor(full, tip, "はまだ読者に届いていません")
-    return ok, why2, ((tip, dep_id) if ok else ("", 0))
+        return False, why, ""
+    ok, why2 = _is_ancestor(full, tip, "はまだ出ていません")
+    return ok, why2, (tip if ok else "")
 
 
 def _is_ancestor(full: str, tip: str, ng_word: str) -> tuple:
@@ -558,48 +533,6 @@ def _full_sha(commit: str) -> str:
         r"[0-9a-f]{40}", out) else ""
 
 
-# ★配信が終わるのを待つ長さ★（2026-08-29）
-#   ★実測13〜17秒★だが、混んでいれば延びる。
-#   ★問い合わせの回数に上限がある★（認証なしで60回/時）ので、
-#   間隔は広めにして回数を抑える（1件あたり最大4回＝約12問い合わせ）。
-DELIVER_WAIT_SECONDS = 120
-DELIVER_POLL_SECONDS = 40
-
-# ★1回の合格判定で、配信の記録に問い合わせてよい回数★
-#   （2026-08-29・Codexのレビュー21）
-#   ★認証なしの上限は60回/時★（送信元ごと）。
-#   ふつうの流れは10回ほど（待って1回・届いて1回・検査のあとに1回）。
-#   1日3機種なので、18×3＝54回で上限に収まる。
-#   使い切ったら理由を返して断る（fail-closed）。
-API_BUDGET = 18
-
-
-def _delivered_wait(commit: str, wait_seconds=None, sleep=None) -> tuple:
-    """★届くまで少しだけ待ってから答える★（2026-08-29）
-
-    ★なぜ待つのか★＝更新タスクは `git push` の直後にここを呼ぶ。
-    配信は非同期なので、その瞬間はまだ進行中で、
-    読者はひとつ前の版を見ている。
-    ★待たないと、どの直しも最後の一歩へ届かず、記録が置き去りになる★
-    （手順書に「途中から再開する」段取りは無い）。
-
-    ★待つのは有限★＝時間切れになったら、いままでどおり理由を返して断る。
-    ★待っても駄目な理由（配信が失敗した・組み立てた中身が出ている）は
-      待っても変わらないが、区別せずに待つ★＝
-      **理由の文で分岐すると、文言を変えるたびに壊れる**（既存の決まり）。
-    """
-    import time as _t
-    budget = (DELIVER_WAIT_SECONDS if wait_seconds is None
-              else int(wait_seconds))
-    slp = sleep or _t.sleep
-    while True:
-        ok, why, mark = _delivered(commit)
-        if ok or budget <= 0:
-            return ok, why, mark
-        budget -= DELIVER_POLL_SECONDS
-        slp(DELIVER_POLL_SECONDS)
-
-
 def _recheck_mod():
     """★検査の道具を差し替えられるようにする入口★（試験用の継ぎ目）"""
     import recheck
@@ -613,35 +546,38 @@ def push_confirmed(fid: str) -> dict:
     > ローカルコミット直後ではありません。
     """
     rec = load(fid)
-    ok, why = _pushed(rec.get("commit"))
+    ok, why, _tip = _pushed(rec.get("commit"))
     if not ok:
         raise JournalError(why)
     return _step(rec, "PUSH_CONFIRMED", "pushを確かめた")
 
 
-def recheck_pass(fid: str, wait_seconds=None, sleep=None) -> dict:
+def recheck_pass(fid: str) -> dict:
     """★機械が自分で検査をやり直して合格したときだけ進む★
 
     結果の辞書を受け取らない（＝偽の合格を作れない）。
 
-    ★★合格は「実際に出したもの」で決める★★（2026-08-29・台帳#501）
+    ★★合格は「公開用の枝に入っている中身」で決める★★
+      （2026-08-29・台帳#501／案Aで簡素化）
       ★直す前は、いまの作業ツリーで検査をやり直すだけだった★ので、
       ・未コミットの変更が残ったまま
       ・あとから積んだ別のコミットの中身
       でも「合格」と記録できた（＝出したものとは別の中身）。
       いまは3つを確かめる。どれも★記録を信じず、その場でやり直す★。
-        ①そのコミットが本当に出してあるか（`_pushed`）
-        ②記録されたコミットが、いまの先端であること
+        ①直しのコミットが公開用の枝に入っているか（`_pushed`）
+        ②その枝の先端が、いまの手元と同じであること
         ③未コミットの変更が無いこと＋検査のやり直しが合格すること
       ②③は `recheck.closeable()` が既に持っている規則なので、
       ★ここで書き直さずに、それを通す★（同じ規則を2か所に書かない）。
 
-    ★★分かっている限界★★（2026-08-29・Codexのレビュー17）
-      `closeable()` が見るのは**検査の前と後**なので、
-      ★検査の最中だけ中身を差し替えて、終わる前に戻す形は捕まえない★。
-      「検査中に動いていないことを見ている」は言い過ぎだった。
-      本当に塞ぐなら、記録したコミットから作った隔離された写しの上で
-      検査する必要がある（★別の設計の話なので、ここではやらない★）。
+    ★★分かっている限界★★
+      ・`closeable()` が見るのは**検査の前と後**なので、
+        ★検査の最中だけ中身を差し替えて戻す形は捕まえない★
+        （2026-08-29・Codexのレビュー17）。
+      ・★配信が終わったかは見ない★＝記録した瞬間、
+        読者はまだ前の中身を見ていることがある（十数秒）。
+        ★運営者の判断で、このずれは許容する★
+        （守っているのは帳簿の正確さで、読者を守る関所は別にある）。
     """
     rec = load(fid)
     name = (rec.get("recheck") or {}).get("name")
@@ -649,35 +585,10 @@ def recheck_pass(fid: str, wait_seconds=None, sleep=None) -> dict:
         raise JournalError("通すべき検査が決まっていません")
     commit = str(rec.get("commit") or "")
     # ★①記録された段階を信じず、いま自分で確かめ直す★
-    #   ★見るのは「出したか」ではなく「届いたか」★（レビュー18・重大）
-    # ★★問い合わせの回数の上限は、この判定ぜんぶで1つ★★
-    #   （2026-08-29・Codexのレビュー22）
-    #   ★直す前は、待つ処理のあとに一度戻し、検査のあとでもう一度与えていた★
-    #   ＝1機種で最大30回になり、「18×3＝54回」が保証されていなかった。
-    #   ★前後で同じ残りを分け合う★＝入口で使い切れば、あとは断る。
-    #   ★この関数を出るときに必ず戻す★（他の使い方に影響させない）。
-    try:
-        import prepush_gate as _pgb
-    except Exception:                                    # noqa: BLE001
-        _pgb = None
-    if _pgb is not None:
-        _pgb.api_budget(API_BUDGET)
-    try:
-        return _recheck_pass_inner(rec, name, commit, wait_seconds, sleep)
-    finally:
-        if _pgb is not None:
-            _pgb.api_budget(None)
-
-
-def _recheck_pass_inner(rec, name, commit, wait_seconds, sleep) -> dict:
-    """★合格判定の中身★（問い合わせの上限は呼び出し側が持つ）"""
-    # ★★入口では、配信が終わるのを少しだけ待つ★★（2026-08-29）
-    #   push の直後に呼ばれるので、待たないと必ず時期尚早で断る。
-    ok, why, mark = _delivered_wait(commit, wait_seconds=wait_seconds,
-                                    sleep=sleep)
+    ok, why, tip = _pushed(commit)
     if not ok:
-        raise JournalError(f"読者に届いたことを確かめられません: {why}")
-    tip, dep_id = mark
+        raise JournalError(
+            f"公開用の枝に入っていることを確かめられません: {why}")
     _r = _recheck_mod()
     meta = (_r.CHECKS or {}).get(name)
     if not meta:
@@ -690,8 +601,8 @@ def _recheck_pass_inner(rec, name, commit, wait_seconds, sleep) -> dict:
     #   `closeable()` の「合意後に検査が変わったら閉じない」が
     #   ★常に自己一致になり、まったく効いていなかった★。
     want_ver = (rec.get("recheck") or {}).get("version")
-    # ★★検査するのは「いま届いている中身」★★（レビュー18・中②）
-    #   直しのコミットではなく、配信されているコミットで見る。
+    # ★★検査するのは「公開用の枝の中身」★★（Codexのレビュー18・中②）
+    #   直しのコミットではなく、いまの枝の先端で見る。
     #   ＝そのあと別のコミットで再発していれば、ここで落ちる。
     ok2, why2, got = _r.closeable({"check": name,
                                    "version": want_ver,
@@ -699,23 +610,16 @@ def _recheck_pass_inner(rec, name, commit, wait_seconds, sleep) -> dict:
                                    "expected_commit": tip})
     if not ok2:
         raise JournalError(f"{name} を合格にできません: {why2}")
-    # ★★検査のあいだに配信が進んでいないか、もう一度見る★★
-    #   （レビュー18・中③）前だけ見ていると、検査中に別の中身が
-    #   届いていても、古い判断のまま「直った」と記録できる。
-    # ★検査のあとの確かめは、★同じ残り★を使う（与え直さない）★
-    ok3, why3, mark2 = _delivered(commit)
-    if not ok3 or mark2 != mark:
+    # ★★検査のあいだに枝が進んでいないか、もう一度見る★★
+    #   （Codexのレビュー18・中③）前だけ見ていると、
+    #   検査中に別の中身が入っていても古い判断のまま記録できる。
+    ok3, why3, tip2 = _pushed(commit)
+    if not ok3 or tip2 != tip:
         raise JournalError(
-            f"検査のあいだに配信が変わりました（{tip[:8]}/{dep_id} → "
-            f"{(mark2[0] or '不明')[:8]}/{mark2[1]}）: {why3}")
-    # ★★この記録の意味★★（2026-08-29・Codexのレビュー19・軽微）
-    #   「★この配信（番号つき）を検査して合格した★」まで。
-    #   保存したあとに別の配信が成功して再発する余地は残るが、
-    #   それは**あとの配信で再発した**のであって、
-    #   この配信についての偽りではない。
+            f"検査のあいだに公開用の枝が変わりました（{tip[:8]} → "
+            f"{(tip2 or '不明')[:8]}）: {why3}")
     return _step(rec, "RECHECK_PASS", f"{name} が合格した",
-                 recheck_result=got,
-                 verified_deploy={"sha": tip, "deployment_id": dep_id})
+                 recheck_result=got, verified_commit=tip)
 
 
 def done(fid: str, closed_issues=None) -> dict:
@@ -1092,11 +996,10 @@ def _selftest() -> int:
                 return {"result": "PASS", "detail": "偽の合格"}
 
         _keep_pushed = globals()["_pushed"]
-        _keep_deliv = globals()["_delivered"]
         _keep_mod = globals()["_recheck_mod"]
         try:
             globals()["_pushed"] = lambda c: (False,
-                                              "まだ origin にありません")
+                                              "まだ origin にありません", "")
             globals()["_recheck_mod"] = lambda: _FakeRecheck
             _ng1 = ""
             try:
@@ -1106,37 +1009,29 @@ def _selftest() -> int:
             t("★★出していないコミットでは、pushを確かめたことにしない★★",
               "origin" in _ng1)
 
-            globals()["_pushed"] = lambda c: (True, "")
+            globals()["_pushed"] = lambda c: (True, "", "d" * 40)
             push_confirmed(f501)
 
-            # ★★出しただけでは足りない。届いたかを見る★★
-            #   （2026-08-29・Codexのレビュー18・重大）
-            #   ★このサイトは GitHub Actions が配信する★ので、
-            #   mainへ出した直後でも読者はまだ古い中身を見ている。
-            #   それを「公開済み」と数えると、
-            #   ★直っていないものを「直った」と記録できる★。
-            globals()["_delivered"] = lambda c: (
-                False, "いま生きている成功した配信が見つかりません",
-                ("", 0))
+            # ★★出していないうちは合格にしない★★
+            globals()["_pushed"] = lambda c: (False, "まだ出ていません", "")
             _ngd = ""
             try:
-                # ★ここは「待っても駄目」を見る試験なので待たせない★
-                recheck_pass(f501, wait_seconds=0)
+                recheck_pass(f501)
             except JournalError as e:
                 _ngd = str(e)
-            t("★★出しただけで、まだ届いていなければ合格にしない★★"
-              "／★mainへ出した＝読者に届いた、ではない★",
-              "届いたこと" in _ngd
+            t("★★公開用の枝に入っていなければ合格にしない★★"
+              "／★段階が進んでいることを根拠にしない★",
+              "確かめられません" in _ngd
               and load(f501)["state"] == "PUSH_CONFIRMED")
 
-            # ★★検査するのは「いま届いている中身」★★（レビュー18・中②）
+            # ★★検査するのは「公開用の枝の中身」★★
             #   ★直しのコミットそのものを求めると、無関係な正常コミットが
             #     後から乗るだけで永久に進めなくなる★（実際そうしていた）。
             _TIP = "d" * 40
-            globals()["_delivered"] = lambda c: (True, "", (_TIP, 9))
+            globals()["_pushed"] = lambda c: (True, "", _TIP)
             _ng2 = ""
             try:
-                recheck_pass(f501, wait_seconds=0)
+                recheck_pass(f501)
             except JournalError as e:
                 _ng2 = str(e)
             t("★★手元の状態だけで合格にしない★★"
@@ -1144,7 +1039,7 @@ def _selftest() -> int:
               "できてはいけない★",
               "未コミット" in _ng2
               and load(f501)["state"] == "PUSH_CONFIRMED")
-            t("★★検査するのは、いま届いているコミットの中身★★"
+            t("★★検査するのは、いま公開用の枝にある中身★★"
               "／★直しのコミットで見ると、そのあと再発していても"
               "気づけない★",
               bool(_FakeRecheck.asked)
@@ -1166,95 +1061,31 @@ def _selftest() -> int:
               _FakeRecheck.asked[-1].get("version") == _rec_ver
               and _FakeRecheck.asked[-1].get("version") != 999)
 
-            # ★★検査のあいだに配信が変わったら合格にしない★★
-            #   （2026-08-29・Codexのレビュー18・中③）
+            # ★★検査のあいだに枝が変わったら合格にしない★★
             _FakeRecheck.verdict = (True, "再検査が合格しました",
                                     {"result": "PASS"})
-            _seq = [(True, "", (_TIP, 9)), (True, "", (_TIP, 10))]
-            globals()["_delivered"] = (
-                lambda c, _s=_seq: _s.pop(0) if _s
-                else (True, "", (_TIP, 10)))
+            _seq = [(True, "", _TIP), (True, "", "e" * 40)]
+            globals()["_pushed"] = (
+                lambda c, _s=_seq: _s.pop(0) if _s else (True, "", "e" * 40))
             _ng4 = ""
             try:
-                recheck_pass(f501, wait_seconds=0)
+                recheck_pass(f501)
             except JournalError as e:
                 _ng4 = str(e)
-            t("★★同じコミットでも、検査のあいだに別の配信へ切り替わったら合格にしない★★"
-              "／★同じコミットでも出す中身は別のことがある★",
-              "配信が変わりました" in _ng4
+            t("★★検査のあいだに公開用の枝が変わったら合格にしない★★"
+              "／★前だけ見ていると、古い判断のまま「直った」と記録できる★",
+              "枝が変わりました" in _ng4
               and load(f501)["state"] == "PUSH_CONFIRMED")
 
-            # ★対照実験：届いていて、その中身で合格すれば進む★
-            #   ★★この1回で、上限の置き方も一緒に観察する★★
-            #   （2026-08-29・Codexのレビュー21）
-            #   ★合格判定は段階を進めるので2回呼べない★＝
-            #   別に呼ぶ試験を足すと、あとの試験が段階を失う（罠⑱）。
-            import prepush_gate as _pg_t
-            _budgets = []
-            _keep_budget = _pg_t.api_budget
-            globals()["_delivered"] = lambda c: (True, "", (_TIP, 9))
-            try:
-                _pg_t.api_budget = lambda n, _b=_budgets: _b.append(n)
-                _rec5 = recheck_pass(f501, wait_seconds=0)
-            finally:
-                _pg_t.api_budget = _keep_budget
-            t("★★合格判定ぜんぶで、上限は1つ★★"
-              "／★★直す前は途中で戻していたので、前後で別々に18回ずつ"
-              "使えた（1機種で最大30回）★★"
-              "／★置かないと、待つ処理と重なって上限に当たり、"
-              "タスクが止まる★",
-              _budgets == [API_BUDGET, None])
-            t("　対照実験：届いていて、その中身で合格すれば進む",
+            # ★対照実験：枝に入っていて、その中身で合格すれば進む★
+            globals()["_pushed"] = lambda c: (True, "", _TIP)
+            _rec5 = recheck_pass(f501)
+            t("　対照実験：枝に入っていて、その中身で合格すれば進む",
               _rec5["state"] == "RECHECK_PASS")
-            t("　★どの配信で確かめたかを番号まで記録に残す★",
-              _rec5.get("verified_deploy")
-              == {"sha": _TIP, "deployment_id": 9})
-            # ★★配信が終わるのを少しだけ待つ★★（2026-08-29・自分で気づいた）
-            #   ★このタスクは push の直後にここを呼ぶ★ので、
-            #   待たないと配信は必ず進行中で、
-            #   ★どの直しも最後の一歩へ届かず記録が置き去りになる★
-            #   （手順書に「途中から再開する」段取りは無い）。
-            #   ★時間では判定しない★＝何回呼んだか・何回眠ったかで見る。
-            _calls, _naps = [0], []
-            _late = [(False, "まだ配信中です", ("", 0)),
-                     (False, "まだ配信中です", ("", 0)),
-                     (True, "", (_TIP, 9))]
-
-            def _deliv_late(c, _s=_late, _n=_calls):
-                _n[0] += 1
-                return _s[min(_n[0] - 1, len(_s) - 1)]
-            globals()["_delivered"] = _deliv_late
-            _ok_wait, _why_wait, _mark_wait = _delivered_wait(
-                "0" * 40, wait_seconds=120, sleep=lambda s: _naps.append(s))
-            t("★★配信が終わるまで少しだけ待つ★★"
-              "／★待たないと、どの直しも最後の一歩へ届かない★",
-              _ok_wait and _mark_wait == (_TIP, 9)
-              and _calls[0] == 3 and _naps == [40, 40])
-
-            _calls[0] = 0
-            _naps.clear()
-            # ★差し替えた偽物も回数を数える★
-            #   （数えないと、何回聞いたかを見る試験が意味をなさない）
-            globals()["_delivered"] = (
-                lambda c, _n=_calls: (_n.__setitem__(0, _n[0] + 1)
-                                      or (False, "まだ配信中です",
-                                          ("", 0))))
-            _ok_to, _why_to, _ = _delivered_wait(
-                "0" * 40, wait_seconds=120, sleep=lambda s: _naps.append(s))
-            t("★★待ちきれなければ、理由を返して断る★★"
-              "／★いつまでも待たない★",
-              _ok_to is False and "配信中" in _why_to
-              and _calls[0] == 4 and _naps == [40, 40, 40])
-
-            _calls[0] = 0
-            _naps.clear()
-            _delivered_wait("0" * 40, wait_seconds=0,
-                            sleep=lambda s: _naps.append(s))
-            t("　★待たない指定なら、一度だけ聞いて眠らない★",
-              _calls[0] == 1 and _naps == [])
+            t("　★どのコミットで確かめたかを記録に残す★",
+              _rec5.get("verified_commit") == _TIP)
         finally:
             globals()["_pushed"] = _keep_pushed
-            globals()["_delivered"] = _keep_deliv
             globals()["_recheck_mod"] = _keep_mod
 
         # ★★短い形の伸ばし方を、本物の git で試す★★
