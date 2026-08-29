@@ -2178,6 +2178,67 @@ def lock_still_mine(where: str) -> list:
     return []
 
 
+def _already_published(sha: str) -> tuple:
+    """★記録したコミットが、もう出してあるか★（2026-08-29・台帳#495）
+
+    ★返すもの★＝(出してある?, 出してあると言えない理由)
+    ★3つとも確かめられたときだけ True★（fail-closed は変えない）
+      ①実際のリモートの先端が、手元の基準と同じ
+        （手元の基準が古いと、②の判定が当てにならない）
+      ②記録した sha が、その先端の祖先である＝もう出ている
+      ③出していないコミットが1つも無い
+    どれか1つでも確かめられなければ、いままでどおり人が確かめる。
+    """
+    if not sha:
+        return False, "記録に sha がありません"
+    try:
+        sc = _pg.push_scope()
+    except Exception as e:                # noqa: BLE001
+        return False, f"push先を調べられません（{str(e)[:60]}）"
+    base = sc.get("base") or ""
+    remote = sc.get("remote") or ""
+    dest = sc.get("dest") or ""
+    if not (base and remote and dest):
+        return False, "push先が分かりません"
+    # ①実際のリモートの先端が、手元の基準と同じか
+    try:
+        lr = _run_capped(["git", "ls-remote", remote, f"refs/heads/{dest}"],
+                         cwd=BASE, capture_output=True, text=True,
+                         encoding="utf-8", errors="replace",
+                         timeout=NET_TIMEOUT)
+    except Exception as e:                # noqa: BLE001
+        return False, f"リモートの先端を確かめられません（{str(e)[:60]}）"
+    out = (lr.stdout or "").split()
+    remote_sha = out[0] if out else ""
+    if lr.returncode != 0 or not remote_sha:
+        return False, "リモートの先端を確かめられません"
+    b = _run_capped(["git", "rev-parse", base], cwd=BASE,
+                    capture_output=True, text=True,
+                    encoding="utf-8", errors="replace")
+    base_sha = (b.stdout or "").strip()
+    if b.returncode != 0 or not base_sha:
+        return False, "手元の基準を調べられません"
+    if base_sha != remote_sha:
+        return False, (f"手元の基準（{base_sha[:12]}）とリモートの先端"
+                       f"（{remote_sha[:12]}）が違います")
+    # ②記録した sha が、その先端の祖先か
+    anc = _run_capped(["git", "merge-base", "--is-ancestor", sha, base_sha],
+                      cwd=BASE, capture_output=True, text=True,
+                      encoding="utf-8", errors="replace")
+    if anc.returncode != 0:
+        return False, f"記録した {sha[:12]} はまだ出ていません"
+    # ③出していないコミットが1つも無いか
+    rl = _run_capped(["git", "rev-list", "--count", f"{base_sha}..HEAD"],
+                     cwd=BASE, capture_output=True, text=True,
+                     encoding="utf-8", errors="replace")
+    if rl.returncode != 0:
+        return False, "出していないコミットを数えられません"
+    n = (rl.stdout or "").strip()
+    if n != "0":
+        return False, f"出していないコミットが {n} 件あります"
+    return True, ""
+
+
 def retry_push_first() -> list:
     """★前回コミットしたのに出せていないものを、先に出す★
 
@@ -2214,10 +2275,27 @@ def retry_push_first() -> list:
         return []
     now = _head()
     if sha and now != sha:
-        # ★あのときのコミットが先端でない★
-        #   あとから別のコミットが乗っている。機械では正否を決められない。
+        # ★★あのときのコミットが先端でない★★
+        #   ★実際に起きたこと★（2026-08-29・台帳#495）
+        #     出し忘れの目印が1つ残っていたせいで、
+        #     ★夜の新台タスクが毎晩なにも公開せずに終わっていた★。
+        #     エラーも出ないので誰にも届かない（黙って0件が続く型）。
+        #     しかも実際には、そのコミットはもう出してあった。
+        #     （あとから別の作業のpushが通り、目印だけ消し忘れていた）
+        #   ★機械で確かめられたときだけ、目印を消して先へ進む★
+        #     確かめられなければ、いままでどおり人が確かめる（fail-closed）。
+        ok_pub, why_pub = _already_published(sha)
+        if ok_pub:
+            _log(f"★{slug} はもう出してありました★（記録={sha[:12]}）"
+                 " 目印を消して続けます")
+            try:
+                os.remove(PUSH_PENDING)
+            except OSError as e:
+                return [f"出せていない公開の目印を消せませんでした: {e}"]
+            return []
         return [f"出せていない公開（{slug}）のあとに別のコミットがあります"
-                f"（記録={sha[:12]} / いま={now[:12]}）。人が確かめてください"]
+                f"（記録={sha[:12]} / いま={now[:12]}）。人が確かめてください"
+                f"／{why_pub}"]
     _log(f"★前回コミットしたのに出せていないものがあります: {slug}★ 先に出します")
     # ★コミットはやり直さない★（変更が無いので必ず失敗していた・Codex20回目）
     ng = push_after_publish(slug, already_committed=True)
@@ -4342,6 +4420,100 @@ def selftest() -> int:
                             t(f"　未完了公開（{stage}/コミット済み={committed}）の再開も、"
                               "出す経路を必ず通る",
                               bool(out) and called == [("t_resume", committed)])
+                    # ★★もう出してあるなら、人を待たずに先へ進む★★
+                    #   （2026-08-29・台帳#495）
+                    #   ★直す前はここで必ず人待ちになり、
+                    #     夜の公開が丸ごと止まっていた★
+                    for pub_ok in (True, False):
+                        called = []
+                        globals()["push_after_publish"] = (
+                            lambda slug, already_committed=False, _c=called:
+                            _c.append((slug, already_committed))
+                            or ["入口で止めました"])
+                        io.open(PUSH_PENDING, "w", encoding="utf-8").write(
+                            json.dumps({"slug": "t_resume", "sha": "furuisha",
+                                        "stage": "COMMITTED", "parent": "",
+                                        "at": "2026/08/29 00:00:00"}))
+                        _keep_head = globals()["_head"]
+                        _keep_pub = globals()["_already_published"]
+                        try:
+                            globals()["_head"] = lambda: "atarasii"
+                            globals()["_already_published"] = (
+                                lambda sha, _v=pub_ok:
+                                (_v, "" if _v else "ためしの理由"))
+                            out = retry_push_first()
+                        finally:
+                            globals()["_head"] = _keep_head
+                            globals()["_already_published"] = _keep_pub
+                        gone = not os.path.isfile(PUSH_PENDING)
+                        if pub_ok:
+                            t("★★もう出してあると確かめられたら、"
+                              "目印を消して先へ進む★★"
+                              "（直す前はここで毎晩止まり、公開0件が続いた）",
+                              out == [] and gone and called == [])
+                        else:
+                            t("　対照実験：出してあると確かめられなければ、"
+                              "いままでどおり止まる",
+                              bool(out) and not gone and called == []
+                              and any("別のコミット" in x for x in out))
+                        try:
+                            os.remove(PUSH_PENDING)
+                        except OSError:
+                            pass
+
+                    # ★★「もう出してある」の3条件を1つずつ試す★★
+                    #   ★どれか1つでも欠けたら True を返さないこと★
+                    def _fake_run(args, **kw):
+                        class R:
+                            returncode = 0
+                            stdout = ""
+                            stderr = ""
+                        r = R()
+                        a = list(args)
+                        if "ls-remote" in a:
+                            r.stdout = _FK["remote"] + "\trefs/heads/main"
+                            r.returncode = _FK["ls_rc"]
+                        elif "rev-parse" in a:
+                            r.stdout = _FK["base"]
+                        elif "merge-base" in a:
+                            r.returncode = _FK["anc_rc"]
+                        elif "rev-list" in a:
+                            r.stdout = _FK["count"]
+                        return r
+
+                    _FK = {"remote": "aaa", "base": "aaa", "ls_rc": 0,
+                           "anc_rc": 0, "count": "0"}
+                    _keep_run = globals()["_run_capped"]
+                    _keep_pg = _pg.push_scope
+                    try:
+                        globals()["_run_capped"] = _fake_run
+                        _pg.push_scope = (lambda: {"base": "origin/main",
+                                                   "remote": "origin",
+                                                   "dest": "main"})
+                        t("　★3つとも確かめられたら「出してある」★",
+                          _already_published("furuisha") == (True, ""))
+                        _FK["remote"] = "bbb"
+                        t("　★リモートの先端が手元の基準と違えば"
+                          "「出してある」と言わない★",
+                          _already_published("furuisha")[0] is False)
+                        _FK["remote"] = "aaa"
+                        _FK["anc_rc"] = 1
+                        t("　★記録した sha が先端の祖先でなければ"
+                          "「出してある」と言わない★",
+                          _already_published("furuisha")[0] is False)
+                        _FK["anc_rc"] = 0
+                        _FK["count"] = "2"
+                        t("　★出していないコミットが残っていれば"
+                          "「出してある」と言わない★",
+                          _already_published("furuisha")[0] is False)
+                        _FK["count"] = "0"
+                        _FK["ls_rc"] = 1
+                        t("　★リモートを見に行けなければ"
+                          "「出してある」と言わない★",
+                          _already_published("furuisha")[0] is False)
+                    finally:
+                        globals()["_run_capped"] = _keep_run
+                        _pg.push_scope = _keep_pg
                 finally:
                     globals()["push_after_publish"] = _keep_pap
                     try:
