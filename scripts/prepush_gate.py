@@ -443,6 +443,13 @@ def _api(path: str, timeout: int = 60):
 #   当面は mirror だけ受け取り、それ以外は断る（fail-closed）。
 MIRROR_WORKFLOW = ".github/workflows/publish-pages.yml"
 
+# ★さかのぼって見る配信の数★（2026-08-29・Codexのレビュー20）
+#   配信1件ごとに1回問い合わせるので、
+#   ★問い合わせの回数の上限（認証なしで60回/時）に当たる★。
+#   ここまで見て見つからなければ理由を返して断る。
+#   ＝この数だけ続けて配信が失敗しているなら、サイト自体が壊れている。
+SCAN_DEPLOYMENTS = 10
+
 
 def _latest_status(statuses: list):
     """★いちばん新しい状態を選ぶ★（並び順を仮定しない）
@@ -457,8 +464,16 @@ def _latest_status(statuses: list):
                                   int(s.get("id") or 0)))
 
 
-def _deploy_workflow(status: dict, timeout: int) -> tuple:
-    """★その配信を出したワークフローの道筋★（分からなければ空＝fail-closed）"""
+def _deploy_workflow(status: dict, sha: str, timeout: int) -> tuple:
+    """★その配信を出したワークフローの道筋★（分からなければ空＝fail-closed）
+
+    ★★道筋は `…yml@ref` の形になり得る★★（2026-08-29・Codexのレビュー20）
+      ★実測ではこのリポジトリは素の形★だが、公式の例には @ref 形式がある。
+      ★正しい配信で止まる方が困る★ので、@以降を落としてから比べる。
+
+    ★★その実行が、本当にその配信のものか確かめる★★
+      直す前は、URLが別の実行を指していてもコミットの対応を見ていなかった。
+    """
     url = str(status.get("target_url") or status.get("log_url") or "")
     m = re.search(r"/actions/runs/(\d+)", url)
     if not m:
@@ -468,7 +483,11 @@ def _deploy_workflow(status: dict, timeout: int) -> tuple:
         return "", why
     if not isinstance(run, dict):
         return "", "配信を出した仕組みの記録の形が違います"
-    path = str(run.get("path") or "")
+    head = str(run.get("head_sha") or "")
+    if not head or head != sha:
+        return "", (f"配信のコミット（{sha[:12]}）と、それを出した実行の"
+                    f"コミット（{head[:12] or '不明'}）が違います")
+    path = str(run.get("path") or "").split("@", 1)[0].strip()
     if not path:
         return "", "配信を出した仕組みの道筋がありません"
     return path, ""
@@ -505,20 +524,24 @@ def deployed_tip(timeout: int = 60) -> tuple:
         return "", f"push先のURLを確かめられません（{str(e)[:60]}）", 0
     if bad:
         return "", "push先のURLが想定と違います: " + str(bad[0])[:80], 0
-    got, why = _api("/deployments?environment=github-pages&per_page=10",
+    got, why = _api("/deployments?environment=github-pages&per_page=100",
                     timeout=timeout)
     if got is None:
         return "", why, 0
     if not isinstance(got, list) or not got:
         return "", "配信の記録がありません", 0
     # ★新しい順に見て、いま生きている成功版を探す★
-    for dep in got:
+    #   ★見る数に上限を置く★（2026-08-29・Codexのレビュー20）
+    #     配信1件ごとに1回問い合わせるので、
+    #     ★問い合わせの回数の上限（認証なしで60回/時）に当たる★。
+    #     使い切ったら理由を返して断る（黙って古いものを答えにしない）。
+    for dep in got[:SCAN_DEPLOYMENTS]:
         if not isinstance(dep, dict):
             return "", "配信の記録の形が違います", 0
         dep_id = dep.get("id")
         if not isinstance(dep_id, int):
             return "", "配信の記録に番号がありません", 0
-        st, why2 = _api(f"/deployments/{dep_id}/statuses?per_page=20",
+        st, why2 = _api(f"/deployments/{dep_id}/statuses?per_page=100",
                         timeout=timeout)
         if st is None:
             return "", why2, 0
@@ -535,7 +558,7 @@ def deployed_tip(timeout: int = 60) -> tuple:
         sha = str(dep.get("sha") or "")
         if not sha or any(c not in "0123456789abcdef" for c in sha.lower()):
             return "", "配信されたコミットが16進表記ではありません", 0
-        wf, why3 = _deploy_workflow(cur, timeout)
+        wf, why3 = _deploy_workflow(cur, sha, timeout)
         if not wf:
             return "", why3, 0
         if wf != MIRROR_WORKFLOW:
@@ -545,7 +568,8 @@ def deployed_tip(timeout: int = 60) -> tuple:
                         "手元のデータを検査しても読者の見ているものとは"
                         "限りません）"), 0
         return sha, "", dep_id
-    return "", "いま生きている成功した配信が見つかりません", 0
+    return "", (f"直近 {SCAN_DEPLOYMENTS} 件の配信に、"
+                "いま生きている成功したものが見つかりません"), 0
 
 
 def main() -> int:
@@ -876,6 +900,7 @@ def selftest() -> int:
     #   出した直後でも読者はまだ古い中身を見ている。
     _DP = {}
     _MIRROR_URL = ("https://github.com/x/y/actions/runs/111/job/9")
+    _MIRROR_URL2 = ("https://github.com/x/y/actions/runs/333/job/9")
     _VERIF_URL = ("https://github.com/x/y/actions/runs/222/job/9")
 
     def _dp_reset():
@@ -890,8 +915,13 @@ def selftest() -> int:
                        {"id": 1, "state": "in_progress",
                         "created_at": "2026-08-29T01:00:01Z",
                         "target_url": _MIRROR_URL}]},
-            "runs": {"111": {"path": MIRROR_WORKFLOW},
-                     "222": {"path": ".github/workflows/pages-rehearsal.yml"}},
+            # ★実行のコミットが、その配信のものと一致すること★
+            "runs": {"111": {"path": MIRROR_WORKFLOW,
+                             "head_sha": "abc123"},
+                     "333": {"path": MIRROR_WORKFLOW,
+                             "head_sha": "def456"},
+                     "222": {"path": ".github/workflows/pages-rehearsal.yml",
+                             "head_sha": "abc123"}},
         })
 
     def _dp_api(path, timeout=60):
@@ -929,7 +959,7 @@ def selftest() -> int:
                           {"id": 9, "sha": "abc123"}]
             _DP["st"][10] = [{"id": 5, "state": _bad_state,
                               "created_at": "2026-08-29T02:00:00Z",
-                              "target_url": _MIRROR_URL}]
+                              "target_url": _MIRROR_URL2}]
             t(f"★★いちばん新しい配信が {_bad_state} でも、"
               "いま生きている成功版を返す★★"
               "／★直す前は、一度失敗すると再検査できなくなっていた★",
@@ -939,7 +969,7 @@ def selftest() -> int:
                       {"id": 9, "sha": "abc123"}]
         _DP["st"][10] = [{"id": 5, "state": "success",
                           "created_at": "2026-08-29T02:00:00Z",
-                          "target_url": _MIRROR_URL}]
+                          "target_url": _MIRROR_URL2}]
         _DP["st"][9] = [{"id": 6, "state": "inactive",
                          "created_at": "2026-08-29T02:00:01Z",
                          "target_url": _MIRROR_URL},
@@ -963,6 +993,47 @@ def selftest() -> int:
         _DP["runs"] = {}
         t("　★配信を出した仕組みの記録を読めなければ答えない★",
           deployed_tip()[0] == "")
+
+        # ★★道筋は `…yml@ref` の形になり得る★★（レビュー20・中）
+        #   ★実測ではこのリポジトリは素の形★だが、公式の例には @ref 形式がある。
+        #   ★正しい配信で止まる方が困る★ので、@以降を落として比べる。
+        _dp_reset()
+        _DP["runs"]["111"] = {"path": MIRROR_WORKFLOW + "@main",
+                              "head_sha": "abc123"}
+        t("★★道筋に @ref が付いていても、正しい配信なら通す★★"
+          "／★付いた日に、正しい配信が全部止まる★",
+          deployed_tip() == ("abc123", "", 9))
+
+        # ★★その実行が、本当にその配信のものか★★（レビュー20・中）
+        _dp_reset()
+        _DP["runs"]["111"] = {"path": MIRROR_WORKFLOW,
+                              "head_sha": "999999"}
+        t("★★実行のコミットが配信のものと違えば答えない★★"
+          "／★URLが別の実行を指していても気づけなかった★",
+          deployed_tip()[0] == "")
+        _dp_reset()
+        _DP["runs"]["111"] = {"path": MIRROR_WORKFLOW}
+        t("　★実行のコミットが分からなければ答えない★",
+          deployed_tip()[0] == "")
+
+        # ★★さかのぼる数には上限がある★★（レビュー20・中）
+        #   ★問い合わせの回数に上限がある★ので、無制限に遡らない。
+        #   使い切ったら理由を返して断る（黙って古いものを答えにしない）。
+        _dp_reset()
+        _DP["dep"] = [{"id": 100 + n, "sha": "abc123"}
+                      for n in range(SCAN_DEPLOYMENTS + 2)]
+        for n in range(SCAN_DEPLOYMENTS + 1):
+            _DP["st"][100 + n] = [{"id": 1, "state": "failure",
+                                   "created_at": "2026-08-29T02:00:00Z",
+                                   "target_url": _MIRROR_URL}]
+        _DP["st"][100 + SCAN_DEPLOYMENTS + 1] = [
+            {"id": 1, "state": "success",
+             "created_at": "2026-08-29T01:00:00Z",
+             "target_url": _MIRROR_URL}]
+        _why_scan = deployed_tip()[1]
+        t("★★上限まで見て見つからなければ、理由を返して断る★★"
+          "／★黙って古いものを答えにしない★",
+          deployed_tip()[0] == "" and str(SCAN_DEPLOYMENTS) in _why_scan)
 
         # ★★状態の並び順を仮定しない★★（レビュー19・軽微）
         _dp_reset()
