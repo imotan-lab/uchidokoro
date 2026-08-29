@@ -484,7 +484,13 @@ def _delivered(commit: str) -> tuple:
     """★そのコミットが、いま読者に届いている中身に含まれているか★
        （2026-08-29・Codexのレビュー18・重大）
 
-    ★返すもの★＝(届いている?, 理由, いま届いているコミット)
+    ★返すもの★＝(届いている?, 理由, (いま届いているコミット, 配信の番号))
+
+    ★★配信の番号まで見る★★（2026-08-29・Codexのレビュー19）
+      ★同じコミットでも、出す中身は別のことがある★
+      （リポジトリをそのまま出す配信と、組み立てた中身を出す配信）。
+      コミットだけを見ていると、同じコミットの別の配信に切り替わっても
+      気づけない。番号まで揃って初めて「同じ配信を検査した」と言える。
 
     ★★祖先でよい／ただし検査はいま届いている中身でやる★★（レビュー18・中②）
       「記録したコミットそのものが先端」を求めるのは★厳しすぎた★＝
@@ -498,16 +504,16 @@ def _delivered(commit: str) -> tuple:
     """
     full = _full_sha(commit)
     if not full:
-        return False, f"コミットを特定できません: {str(commit)[:12]}", ""
+        return False, f"コミットを特定できません: {str(commit)[:12]}", ("", 0)
     try:
         import prepush_gate as _pg
-        tip, why = _pg.deployed_tip()
+        tip, why, dep_id = _pg.deployed_tip()
     except Exception as e:                                   # noqa: BLE001
-        return False, f"配信の記録を読めません: {type(e).__name__}", ""
+        return False, f"配信の記録を読めません: {type(e).__name__}", ("", 0)
     if not tip:
-        return False, why, ""
+        return False, why, ("", 0)
     ok, why2 = _is_ancestor(full, tip, "はまだ読者に届いていません")
-    return ok, why2, (tip if ok else "")
+    return ok, why2, ((tip, dep_id) if ok else ("", 0))
 
 
 def _is_ancestor(full: str, tip: str, ng_word: str) -> tuple:
@@ -602,9 +608,10 @@ def recheck_pass(fid: str) -> dict:
     commit = str(rec.get("commit") or "")
     # ★①記録された段階を信じず、いま自分で確かめ直す★
     #   ★見るのは「出したか」ではなく「届いたか」★（レビュー18・重大）
-    ok, why, tip = _delivered(commit)
+    ok, why, mark = _delivered(commit)
     if not ok:
         raise JournalError(f"読者に届いたことを確かめられません: {why}")
+    tip, dep_id = mark
     _r = _recheck_mod()
     meta = (_r.CHECKS or {}).get(name)
     if not meta:
@@ -629,13 +636,19 @@ def recheck_pass(fid: str) -> dict:
     # ★★検査のあいだに配信が進んでいないか、もう一度見る★★
     #   （レビュー18・中③）前だけ見ていると、検査中に別の中身が
     #   届いていても、古い判断のまま「直った」と記録できる。
-    ok3, why3, tip2 = _delivered(commit)
-    if not ok3 or tip2 != tip:
+    ok3, why3, mark2 = _delivered(commit)
+    if not ok3 or mark2 != mark:
         raise JournalError(
-            f"検査のあいだに配信が変わりました（{tip[:8]} → "
-            f"{(tip2 or '不明')[:8]}）: {why3}")
+            f"検査のあいだに配信が変わりました（{tip[:8]}/{dep_id} → "
+            f"{(mark2[0] or '不明')[:8]}/{mark2[1]}）: {why3}")
+    # ★★この記録の意味★★（2026-08-29・Codexのレビュー19・軽微）
+    #   「★この配信（番号つき）を検査して合格した★」まで。
+    #   保存したあとに別の配信が成功して再発する余地は残るが、
+    #   それは**あとの配信で再発した**のであって、
+    #   この配信についての偽りではない。
     return _step(rec, "RECHECK_PASS", f"{name} が合格した",
-                 recheck_result=got, verified_deploy=tip)
+                 recheck_result=got,
+                 verified_deploy={"sha": tip, "deployment_id": dep_id})
 
 
 def done(fid: str, closed_issues=None) -> dict:
@@ -1036,8 +1049,8 @@ def _selftest() -> int:
             #   それを「公開済み」と数えると、
             #   ★直っていないものを「直った」と記録できる★。
             globals()["_delivered"] = lambda c: (
-                False, "いちばん新しい配信がまだ終わっていません（queued）",
-                "")
+                False, "いま生きている成功した配信が見つかりません",
+                ("", 0))
             _ngd = ""
             try:
                 recheck_pass(f501)
@@ -1052,7 +1065,7 @@ def _selftest() -> int:
             #   ★直しのコミットそのものを求めると、無関係な正常コミットが
             #     後から乗るだけで永久に進めなくなる★（実際そうしていた）。
             _TIP = "d" * 40
-            globals()["_delivered"] = lambda c: (True, "", _TIP)
+            globals()["_delivered"] = lambda c: (True, "", (_TIP, 9))
             _ng2 = ""
             try:
                 recheck_pass(f501)
@@ -1089,26 +1102,28 @@ def _selftest() -> int:
             #   （2026-08-29・Codexのレビュー18・中③）
             _FakeRecheck.verdict = (True, "再検査が合格しました",
                                     {"result": "PASS"})
-            _seq = [(True, "", _TIP), (True, "", "e" * 40)]
+            _seq = [(True, "", (_TIP, 9)), (True, "", (_TIP, 10))]
             globals()["_delivered"] = (
-                lambda c, _s=_seq: _s.pop(0) if _s else (True, "", "e" * 40))
+                lambda c, _s=_seq: _s.pop(0) if _s
+                else (True, "", (_TIP, 10)))
             _ng4 = ""
             try:
                 recheck_pass(f501)
             except JournalError as e:
                 _ng4 = str(e)
-            t("★★検査のあいだに配信が変わったら合格にしない★★"
-              "／★前だけ見ていると、古い判断のまま「直った」と記録できる★",
+            t("★★同じコミットでも、検査のあいだに別の配信へ切り替わったら合格にしない★★"
+              "／★同じコミットでも出す中身は別のことがある★",
               "配信が変わりました" in _ng4
               and load(f501)["state"] == "PUSH_CONFIRMED")
 
             # ★対照実験：届いていて、その中身で合格すれば進む★
-            globals()["_delivered"] = lambda c: (True, "", _TIP)
+            globals()["_delivered"] = lambda c: (True, "", (_TIP, 9))
             _rec5 = recheck_pass(f501)
             t("　対照実験：届いていて、その中身で合格すれば進む",
               _rec5["state"] == "RECHECK_PASS")
-            t("　★どの配信で確かめたかを記録に残す★",
-              _rec5.get("verified_deploy") == _TIP)
+            t("　★どの配信で確かめたかを番号まで記録に残す★",
+              _rec5.get("verified_deploy")
+              == {"sha": _TIP, "deployment_id": 9})
         finally:
             globals()["_pushed"] = _keep_pushed
             globals()["_delivered"] = _keep_deliv

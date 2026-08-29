@@ -434,56 +434,118 @@ def _api(path: str, timeout: int = 60):
         return None, f"配信の記録を読めません（{type(e).__name__}）"
 
 
+# ★配信してよいワークフロー★（2026-08-29・Codexのレビュー19）
+#   ★同じコミットでも、出す中身は別★＝
+#     publish-pages.yml  … リポジトリ直下をそのまま出す（mirror）
+#     pages-rehearsal.yml … 組み立てた `_site` を出す（verified）
+#   いまの検査はリポジトリの編集用データを読むので、
+#   ★verified で配信されていたら、読者が見ていないものを検査している★。
+#   当面は mirror だけ受け取り、それ以外は断る（fail-closed）。
+MIRROR_WORKFLOW = ".github/workflows/publish-pages.yml"
+
+
+def _latest_status(statuses: list):
+    """★いちばん新しい状態を選ぶ★（並び順を仮定しない）
+
+    （2026-08-29・Codexのレビュー19・軽微）実測では新しい順だが、
+    仕様に明記が見つからないので、番号と時刻で選ぶ。
+    """
+    ok = [s for s in statuses if isinstance(s, dict)]
+    if not ok:
+        return None
+    return max(ok, key=lambda s: (str(s.get("created_at") or ""),
+                                  int(s.get("id") or 0)))
+
+
+def _deploy_workflow(status: dict, timeout: int) -> tuple:
+    """★その配信を出したワークフローの道筋★（分からなければ空＝fail-closed）"""
+    url = str(status.get("target_url") or status.get("log_url") or "")
+    m = re.search(r"/actions/runs/(\d+)", url)
+    if not m:
+        return "", "配信を出した仕組みが分かりません"
+    run, why = _api(f"/actions/runs/{m.group(1)}", timeout=timeout)
+    if run is None:
+        return "", why
+    if not isinstance(run, dict):
+        return "", "配信を出した仕組みの記録の形が違います"
+    path = str(run.get("path") or "")
+    if not path:
+        return "", "配信を出した仕組みの道筋がありません"
+    return path, ""
+
+
 def deployed_tip(timeout: int = 60) -> tuple:
     """★いま読者に届いているのはどのコミットか★
-       （2026-08-29・Codexのレビュー18・重大）
+       （2026-08-29・Codexのレビュー18〜19）
 
-    ★返すもの★＝(配信されたSHA, 届いていると言えない理由)
+    ★返すもの★＝(配信されたSHA, 届いていると言えない理由, 配信の番号)
 
     ★★なぜ main の先端では駄目か★★
-      このサイトは `publish-pages.yml`（GitHub Actions）で配信される。
+      このサイトは GitHub Actions で配信される。
       ・pushのあと★非同期で★動く
       ・配信の切替（PAGES_DEPLOY_MODE）が mirror でなければ**動かない**
       ・中の検査で落ちることがある
-      ＝main が C になった直後でも、★読者はまだ B を見ている★。
-      それを「公開済み」と数えると、
-      ★直っていないものを「直った」と記録できる★。
+      ＝main が新しくなった直後でも、★読者はまだ前の中身を見ている★。
 
-    ★いちばん新しい配信が成功していなければ、答えない★（fail-closed）
-      成功した古い配信を答えにすると、
-      切替の最中に「新しい中身が届いている」と誤って言うことになる。
+    ★★「いちばん新しい試み」ではなく「いま生きている成功版」★★
+      （レビュー19・中）新しい配信が成功すると、前の配信は `inactive` になる。
+      ＝いちばん新しい配信が失敗・進行中でも、
+      ★読者はひとつ前の成功版を見ている★。
+      直す前は「いちばん新しいのが成功でなければ答えない」だったので、
+      ★配信が一度失敗すると、次の成功まで再検査できなくなる★。
+
+    ★★同じコミットでも、出す中身は別★★（レビュー19・重大）
+      配信の記録に入っているのはコミットであって中身の指紋ではない。
+      いまの検査はリポジトリの編集用データを読むので、
+      ★mirror で配信されたものだけ★受け取る。
     """
     try:
         bad = remote_ok()
     except Exception as e:                # noqa: BLE001
-        return "", f"push先のURLを確かめられません（{str(e)[:60]}）"
+        return "", f"push先のURLを確かめられません（{str(e)[:60]}）", 0
     if bad:
-        return "", "push先のURLが想定と違います: " + str(bad[0])[:80]
-    got, why = _api("/deployments?environment=github-pages&per_page=1",
+        return "", "push先のURLが想定と違います: " + str(bad[0])[:80], 0
+    got, why = _api("/deployments?environment=github-pages&per_page=10",
                     timeout=timeout)
     if got is None:
-        return "", why
+        return "", why, 0
     if not isinstance(got, list) or not got:
-        return "", "配信の記録がありません"
-    dep = got[0]
-    if not isinstance(dep, dict):
-        return "", "配信の記録の形が違います"
-    sha = str(dep.get("sha") or "")
-    if not sha or any(c not in "0123456789abcdef" for c in sha.lower()):
-        return "", "配信されたコミットが16進表記ではありません"
-    dep_id = dep.get("id")
-    if not isinstance(dep_id, int):
-        return "", "配信の記録に番号がありません"
-    st, why2 = _api(f"/deployments/{dep_id}/statuses?per_page=1",
-                    timeout=timeout)
-    if st is None:
-        return "", why2
-    if not isinstance(st, list) or not st or not isinstance(st[0], dict):
-        return "", "配信の状態が分かりません"
-    state = str(st[0].get("state") or "")
-    if state != "success":
-        return "", f"いちばん新しい配信がまだ終わっていません（{state}）"
-    return sha, ""
+        return "", "配信の記録がありません", 0
+    # ★新しい順に見て、いま生きている成功版を探す★
+    for dep in got:
+        if not isinstance(dep, dict):
+            return "", "配信の記録の形が違います", 0
+        dep_id = dep.get("id")
+        if not isinstance(dep_id, int):
+            return "", "配信の記録に番号がありません", 0
+        st, why2 = _api(f"/deployments/{dep_id}/statuses?per_page=20",
+                        timeout=timeout)
+        if st is None:
+            return "", why2, 0
+        if not isinstance(st, list):
+            return "", "配信の状態が分かりません", 0
+        cur = _latest_status(st)
+        if cur is None:
+            return "", "配信の状態が分かりません", 0
+        state = str(cur.get("state") or "")
+        if state in ("queued", "waiting", "pending", "in_progress"):
+            continue          # ★まだ切り替わっていない＝前の版を見ている★
+        if state != "success":
+            continue          # ★失敗・inactive は、いま出ているものではない★
+        sha = str(dep.get("sha") or "")
+        if not sha or any(c not in "0123456789abcdef" for c in sha.lower()):
+            return "", "配信されたコミットが16進表記ではありません", 0
+        wf, why3 = _deploy_workflow(cur, timeout)
+        if not wf:
+            return "", why3, 0
+        if wf != MIRROR_WORKFLOW:
+            # ★同じコミットでも中身が違う★＝検査するものが読者の見ているものと違う
+            return "", (f"いまの配信は {wf} が出したものです"
+                        "（リポジトリの中身をそのまま出す配信ではないので、"
+                        "手元のデータを検査しても読者の見ているものとは"
+                        "限りません）"), 0
+        return sha, "", dep_id
+    return "", "いま生きている成功した配信が見つかりません", 0
 
 
 def main() -> int:
@@ -808,22 +870,43 @@ def selftest() -> int:
         globals()["remote_ok"] = _keep_rok
 
     # ★★「読者に届いたか」の条件を1つずつ試す★★
-    #   （2026-08-29・Codexのレビュー18・重大）
+    #   （2026-08-29・Codexのレビュー18〜19）
     #   ★mainへ出した＝読者に届いた、ではない★＝
     #   このサイトは GitHub Actions が非同期で配信するので、
     #   出した直後でも読者はまだ古い中身を見ている。
     _DP = {}
+    _MIRROR_URL = ("https://github.com/x/y/actions/runs/111/job/9")
+    _VERIF_URL = ("https://github.com/x/y/actions/runs/222/job/9")
 
     def _dp_reset():
         _DP.clear()
-        _DP.update({"bad": [],
-                    "dep": [{"id": 1, "sha": "abc123"}],
-                    "st": [{"state": "success"}]})
+        _DP.update({
+            "bad": [],
+            "dep": [{"id": 9, "sha": "abc123"}],
+            # 配信の番号 → その状態の並び
+            "st": {9: [{"id": 2, "state": "success",
+                        "created_at": "2026-08-29T01:00:02Z",
+                        "target_url": _MIRROR_URL},
+                       {"id": 1, "state": "in_progress",
+                        "created_at": "2026-08-29T01:00:01Z",
+                        "target_url": _MIRROR_URL}]},
+            "runs": {"111": {"path": MIRROR_WORKFLOW},
+                     "222": {"path": ".github/workflows/pages-rehearsal.yml"}},
+        })
 
     def _dp_api(path, timeout=60):
-        if "deployments?" in path:
-            return _DP["dep"], "" if _DP["dep"] is not None else "読めません"
-        return _DP["st"], "" if _DP["st"] is not None else "読めません"
+        if path.startswith("/deployments?"):
+            return (_DP["dep"], "") if _DP["dep"] is not None \
+                else (None, "読めません")
+        if path.startswith("/deployments/"):
+            did = int(path.split("/")[2].split("?")[0])
+            got = _DP["st"].get(did)
+            return (got, "") if got is not None else (None, "読めません")
+        if path.startswith("/actions/runs/"):
+            rid = path.rsplit("/", 1)[-1]
+            got = _DP["runs"].get(rid)
+            return (got, "") if got is not None else (None, "読めません")
+        return None, "知らない問い合わせ"
 
     _dp_reset()
     _keep_api = globals()["_api"]
@@ -831,34 +914,77 @@ def selftest() -> int:
     try:
         globals()["_api"] = _dp_api
         globals()["remote_ok"] = lambda: _DP["bad"]
-        t("　★成功した配信があれば、そのコミットを返す★",
-          deployed_tip() == ("abc123", ""))
+        t("　★生きている成功した配信があれば、そのコミットと番号を返す★",
+          deployed_tip() == ("abc123", "", 9))
+
+        # ★★いちばん新しい試みではなく、いま生きている成功版★★
+        #   （レビュー19・中）新しい配信が成功すると前は inactive になる。
+        #   ★いちばん新しいのが失敗・進行中でも、
+        #     読者はひとつ前の成功版を見ている★。
+        #   直す前は「いちばん新しいのが成功でなければ答えない」だったので、
+        #   ★配信が一度失敗すると、次の成功まで再検査できなくなっていた★。
+        for _bad_state in ("in_progress", "failure", "error"):
+            _dp_reset()
+            _DP["dep"] = [{"id": 10, "sha": "def456"},
+                          {"id": 9, "sha": "abc123"}]
+            _DP["st"][10] = [{"id": 5, "state": _bad_state,
+                              "created_at": "2026-08-29T02:00:00Z",
+                              "target_url": _MIRROR_URL}]
+            t(f"★★いちばん新しい配信が {_bad_state} でも、"
+              "いま生きている成功版を返す★★"
+              "／★直す前は、一度失敗すると再検査できなくなっていた★",
+              deployed_tip() == ("abc123", "", 9))
         _dp_reset()
-        _DP["st"] = [{"state": "in_progress"}]
-        t("★★いちばん新しい配信が終わっていなければ返さない★★"
-          "／★出した直後を「届いた」と数えると、直っていないものを"
-          "「直った」と記録できる★",
+        _DP["dep"] = [{"id": 10, "sha": "def456"},
+                      {"id": 9, "sha": "abc123"}]
+        _DP["st"][10] = [{"id": 5, "state": "success",
+                          "created_at": "2026-08-29T02:00:00Z",
+                          "target_url": _MIRROR_URL}]
+        _DP["st"][9] = [{"id": 6, "state": "inactive",
+                         "created_at": "2026-08-29T02:00:01Z",
+                         "target_url": _MIRROR_URL},
+                        {"id": 2, "state": "success",
+                         "created_at": "2026-08-29T01:00:02Z",
+                         "target_url": _MIRROR_URL}]
+        t("★★古い成功版が inactive になったら、そちらは答えにしない★★",
+          deployed_tip() == ("def456", "", 10))
+
+        # ★★同じコミットでも、出す中身は別★★（レビュー19・重大）
+        _dp_reset()
+        _DP["st"][9][0]["target_url"] = _VERIF_URL
+        t("★★組み立てた中身を出す配信なら、答えない★★"
+          "／★手元のデータを検査しても、読者が見ているものとは限らない★",
           deployed_tip()[0] == "")
         _dp_reset()
-        _DP["st"] = [{"state": "failure"}]
-        t("★★配信が失敗していたら返さない★★"
-          "（読者には古い中身が出たまま）",
+        _DP["st"][9][0].pop("target_url")
+        t("★★配信を出した仕組みが分からなければ答えない★★",
           deployed_tip()[0] == "")
+        _dp_reset()
+        _DP["runs"] = {}
+        t("　★配信を出した仕組みの記録を読めなければ答えない★",
+          deployed_tip()[0] == "")
+
+        # ★★状態の並び順を仮定しない★★（レビュー19・軽微）
+        _dp_reset()
+        _DP["st"][9] = list(reversed(_DP["st"][9]))
+        t("　★状態が古い順に並んでいても、いちばん新しいものを見る★",
+          deployed_tip() == ("abc123", "", 9))
+
         _dp_reset()
         _DP["dep"] = []
-        t("　★配信の記録が無ければ返さない★", deployed_tip()[0] == "")
+        t("　★配信の記録が無ければ答えない★", deployed_tip()[0] == "")
         _dp_reset()
         _DP["dep"] = None
-        t("　★配信の記録を読めなければ返さない★", deployed_tip()[0] == "")
+        t("　★配信の記録を読めなければ答えない★", deployed_tip()[0] == "")
         _dp_reset()
-        _DP["st"] = None
-        t("　★配信の状態を読めなければ返さない★", deployed_tip()[0] == "")
+        _DP["st"] = {}
+        t("　★配信の状態を読めなければ答えない★", deployed_tip()[0] == "")
         _dp_reset()
-        _DP["dep"] = [{"id": 1, "sha": "zzz"}]
-        t("　★16進でないコミットは返さない★", deployed_tip()[0] == "")
+        _DP["dep"] = [{"id": 9, "sha": "zzz"}]
+        t("　★16進でないコミットは答えない★", deployed_tip()[0] == "")
         _dp_reset()
         _DP["dep"] = [{"sha": "abc123"}]
-        t("　★配信の記録に番号が無ければ返さない★",
+        t("　★配信の記録に番号が無ければ答えない★",
           deployed_tip()[0] == "")
         _dp_reset()
         _DP["bad"] = ["push先が想定と違います"]
