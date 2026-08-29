@@ -91,6 +91,42 @@ def check_log(day: str) -> list:
     return ng
 
 
+# ★★導入がまだ先で、世の中に情報が無いだけの止まり方★★（2026-08-30・台帳#507）
+#   ★うちの都合ではないので、導入が近づくまで知らせない★
+#   ここに無い符丁（サイト監査・公開の関所・取得の失敗・控えが読めない）は
+#   **うちの都合**なので、導入がどれだけ先でも知らせる。
+PRE_RELEASE_QUIET = ("NO_MATERIAL", "NOT_ENOUGH_DIRECTORIES",
+                     "MODEL_CODE_MISSING")
+
+
+def far_from_release(release: str, today=None) -> bool:
+    """★導入まで、まだ十分に先か★（2026-08-30・台帳#507）
+
+    ★読めない日付では黙らない★（fail-loud）＝
+    silence する側の判断なので、分からないときは知らせるほうへ倒す。
+    ★月までしか分からない導入日は、その月の1日で見る★＝
+    いちばん早い可能性で判断する（黙る期間を短いほうへ倒す）。
+    """
+    import datetime as _dt
+    t = str(release or "").strip()
+    if len(t) == 7:
+        t += "-01"                      # ★いちばん早い日で見る★
+    if len(t) != 10:
+        return False
+    try:
+        d = _dt.date.fromisoformat(t)
+    except ValueError:
+        return False
+    now = today or _dt.date.today()
+    if isinstance(now, str):
+        try:
+            now = _dt.date.fromisoformat(now)
+        except ValueError:
+            return False
+    import adoption_basis as _ab
+    return now < d - _dt.timedelta(days=_ab.NEAR_RELEASE_DAYS)
+
+
 def check_pending() -> list:
     """待ち行列が長引いていないか。"""
     import pending_machines as _pend
@@ -107,7 +143,7 @@ def check_pending() -> list:
     return ng
 
 
-def check_stuck() -> list:
+def check_stuck(today=None) -> list:
     """★★何度やっても記事にできていない機種がないか★★（2026-08-22新設）
 
     ★なぜ要るか（実際に5日間気づかなかった）★
@@ -153,6 +189,13 @@ def check_stuck() -> list:
         #   3回だと夜間タスク3回ぶんを失って遅い（Codexの助言）。
         streak = int(it.get("blocker_streak") or 0)
         code = str(it.get("last_blocker") or "")
+        # ★★導入がまだ先で、情報が世に出ていないだけなら知らせない★★
+        #   （2026-08-30・台帳#507）
+        #   ★実測＝導入65日前の2機種が10回続けて出ていた★。
+        #   このままだと導入日まで毎朝出続けて、本物の警告が埋もれる。
+        if code in PRE_RELEASE_QUIET \
+                and far_from_release(it.get("release"), today):
+            continue
         if code and streak >= BLOCKER_STREAK:
             ng.append(
                 f"{it.get('name')} が同じ理由で {streak} 回続けて止まっています"
@@ -266,6 +309,43 @@ def selftest() -> int:
         _fake({"q_1": {"name": "あと1回", "state": "READY",
                        "tries": STUCK_TRIES - 1}})
         t("　しきい値の手前では知らせない", check_stuck() == [])
+
+        # ★★#507：導入がまだ先なら、材料が無いことを知らせない★★
+        #   （2026-08-30。実測＝導入65日前の2機種が10回続けて出ていた）
+        _T7 = "2026-08-30"
+        t("★★導入まで十分に先か★★（境目は導入7日前）",
+          far_from_release("2026-11-02", _T7) is True
+          and far_from_release("2026-09-05", _T7) is False)
+        t("　★月までしか分からない導入日は、その月の1日で見る★"
+          "（黙る期間を短いほうへ倒す）",
+          far_from_release("2026-09", _T7) is False
+          and far_from_release("2026-11", _T7) is True)
+        t("　★読めない日付では黙らない★（分からないときは知らせる側へ）",
+          far_from_release("", _T7) is False
+          and far_from_release("いつか", _T7) is False
+          and far_from_release("2026-13-45", _T7) is False)
+
+        _far = {"q_1": {"name": "導入がまだ先の機種", "state": "READY",
+                        "release": "2026-11-02", "tries": 27,
+                        "last_blocker": "NO_MATERIAL",
+                        "blocker_streak": 10,
+                        "identity_url": "https://p-town.dmm.com/machines/1"}}
+        _fake(_far)
+        t("★★導入がまだ先で材料が無いだけなら、知らせない★★"
+          "（このままだと導入日まで毎朝出て、本物の警告が埋もれる）",
+          check_stuck(_T7) == [])
+        t("　★回数のほうでも知らせない★（27回試していても）",
+          not any("作れていません" in x for x in check_stuck(_T7)))
+        t("★★導入7日前まで来たら、ちゃんと知らせる★★",
+          len(check_stuck("2026-10-27")) == 1)
+
+        #   ★うちの都合で止まっているものは、導入がどれだけ先でも知らせる★
+        _ours = {"q_1": dict(_far["q_1"],
+                             last_blocker="BLOCKED_BY_SITE_AUDIT")}
+        _fake(_ours)
+        t("★★うちの都合で止まっているなら、導入が先でも知らせる★★"
+          "（サイト監査・公開の関所・取得の失敗・控えが読めない）",
+          len(check_stuck(_T7)) == 1)
 
         # ★★主監視：同じ理由で続けて止まっている機種★★（2026-08-22）
         #   ★これが要る理由★＝全体の「公開0件」だけを見ていると、
