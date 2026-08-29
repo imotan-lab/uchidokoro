@@ -2182,12 +2182,19 @@ def _already_published(sha: str) -> tuple:
     """★記録したコミットが、もう出してあるか★（2026-08-29・台帳#495）
 
     ★返すもの★＝(出してある?, 出してあると言えない理由)
-    ★3つとも確かめられたときだけ True★（fail-closed は変えない）
-      ①実際のリモートの先端が、手元の基準と同じ
-        （手元の基準が古いと、②の判定が当てにならない）
-      ②記録した sha が、その先端の祖先である＝もう出ている
-      ③出していないコミットが1つも無い
-    どれか1つでも確かめられなければ、いままでどおり人が確かめる。
+    ★全部そろったときだけ True★（fail-closed は変えない）
+
+    ★★確認先を「本来の公開先」に固定する★★（Codexのレビュー15・重大①）
+      直す前は**実行時の枝**の先端を見ていたので、
+      別の枝（origin/side）にいると、その枝に載っているだけで
+      「出してある」と言えた。公開先は main であって side ではない。
+      ★読み取り用と書き込み用のURLが別々に設定できる★のも同じ型で、
+      読み取り側にだけ載っていれば目印を消せてしまう。
+
+    ★★「出していないコミットが0」は HEAD が最新である保証にならない★★
+      （Codexのレビュー15・中③）HEAD がリモートより**古い**ときも0件になる。
+      古いところから新台のコミットを作ると、後段の早送り確認で止まり、
+      ★その晩の公開がまた0件になる★。だから HEAD == 先端 を要る条件にする。
     """
     if not sha:
         return False, "記録に sha がありません"
@@ -2198,44 +2205,68 @@ def _already_published(sha: str) -> tuple:
     base = sc.get("base") or ""
     remote = sc.get("remote") or ""
     dest = sc.get("dest") or ""
+    branch = sc.get("branch") or ""
     if not (base and remote and dest):
         return False, "push先が分かりません"
-    # ①実際のリモートの先端が、手元の基準と同じか
+    # ★①公開先が main であること★（別の枝の先端で判断させない）
+    if branch != "main" or dest != "main":
+        return False, (f"公開先が main ではありません"
+                       f"（{branch} → {remote}/{dest}）")
+    # ★追跡先とpush先がずれていないこと★（公開の関所と同じ条件）
+    up = sc.get("upstream") or ""
+    if up and up != f"{remote}/{dest}":
+        return False, f"追跡先（{up}）とpush先（{remote}/{dest}）が違います"
+    # ★②読み取り用と書き込み用のURLが、どちらも想定の置き場であること★
     try:
-        lr = _run_capped(["git", "ls-remote", remote, f"refs/heads/{dest}"],
-                         cwd=BASE, capture_output=True, text=True,
-                         encoding="utf-8", errors="replace",
-                         timeout=NET_TIMEOUT)
+        bad = _pg.remote_ok()
     except Exception as e:                # noqa: BLE001
-        return False, f"リモートの先端を確かめられません（{str(e)[:60]}）"
-    out = (lr.stdout or "").split()
-    remote_sha = out[0] if out else ""
-    if lr.returncode != 0 or not remote_sha:
+        return False, f"push先のURLを確かめられません（{str(e)[:60]}）"
+    if bad:
+        return False, "push先のURLが想定と違います: " + str(bad[0])[:80]
+
+    def _g(args, **kw):
+        """★外部プロセスの例外を捨てない★（Codexのレビュー15・軽微④）"""
+        try:
+            r = _run_capped(["git", *args], cwd=BASE, capture_output=True,
+                            text=True, encoding="utf-8", errors="replace",
+                            **kw)
+        except Exception:                 # noqa: BLE001
+            return None, ""
+        return r.returncode, (r.stdout or "")
+
+    # ★③実際のリモートの先端が、手元の基準と同じか★
+    want = f"refs/heads/{dest}"
+    rc, out = _g(["ls-remote", "--refs", "--exit-code", remote, want],
+                 timeout=NET_TIMEOUT)
+    if rc != 0:
         return False, "リモートの先端を確かめられません"
-    b = _run_capped(["git", "rev-parse", base], cwd=BASE,
-                    capture_output=True, text=True,
-                    encoding="utf-8", errors="replace")
-    base_sha = (b.stdout or "").strip()
-    if b.returncode != 0 or not base_sha:
+    lines = [x for x in out.splitlines() if x.strip()]
+    if len(lines) != 1:
+        return False, f"リモートの答えが1行ではありません（{len(lines)}行）"
+    cols = lines[0].split()
+    if len(cols) != 2 or cols[1] != want:
+        return False, "リモートの答えの形が違います"
+    remote_sha = cols[0]
+    # ★16進であること★（長さは決め打ちにしない＝Gitのハッシュ方式は変わり得る）
+    if not remote_sha or any(c not in "0123456789abcdef"
+                             for c in remote_sha.lower()):
+        return False, "リモートの先端が16進表記ではありません"
+    rc, out = _g(["rev-parse", base])
+    base_sha = out.strip()
+    if rc != 0 or not base_sha:
         return False, "手元の基準を調べられません"
     if base_sha != remote_sha:
         return False, (f"手元の基準（{base_sha[:12]}）とリモートの先端"
                        f"（{remote_sha[:12]}）が違います")
-    # ②記録した sha が、その先端の祖先か
-    anc = _run_capped(["git", "merge-base", "--is-ancestor", sha, base_sha],
-                      cwd=BASE, capture_output=True, text=True,
-                      encoding="utf-8", errors="replace")
-    if anc.returncode != 0:
+    # ★④HEAD がその先端と同じか★（古いところから次を作らせない）
+    head = _head()
+    if not head or head != base_sha:
+        return False, (f"手元の先端（{str(head)[:12]}）が公開先の先端"
+                       f"（{base_sha[:12]}）と違います")
+    # ★⑤記録した sha が、その先端の祖先か★
+    rc, _out = _g(["merge-base", "--is-ancestor", sha, base_sha])
+    if rc != 0:
         return False, f"記録した {sha[:12]} はまだ出ていません"
-    # ③出していないコミットが1つも無いか
-    rl = _run_capped(["git", "rev-list", "--count", f"{base_sha}..HEAD"],
-                     cwd=BASE, capture_output=True, text=True,
-                     encoding="utf-8", errors="replace")
-    if rl.returncode != 0:
-        return False, "出していないコミットを数えられません"
-    n = (rl.stdout or "").strip()
-    if n != "0":
-        return False, f"出していないコミットが {n} 件あります"
     return True, ""
 
 
@@ -2286,6 +2317,24 @@ def retry_push_first() -> list:
         #     確かめられなければ、いままでどおり人が確かめる（fail-closed）。
         ok_pub, why_pub = _already_published(sha)
         if ok_pub:
+            # ★★消す直前に、いまもロックを持っているか確かめる★★
+            #   （Codexのレビュー15・重大②）ロックは★貸出★なので、
+            #   30分止まっている間に別の実行へ移り、その実行が
+            #   ★新しい目印を書いている★ことがある。
+            #   確かめずに消すと、★別の実行が出す予定のものを消す★。
+            ng = lock_still_mine("出してある目印を消す直前")
+            if ng:
+                return ng
+            # ★★読んだときと同じ目印かを、もう一度読んで確かめる★★
+            try:
+                again = _sj.read_json(PUSH_PENDING, expect=dict)
+            except Exception as e:        # noqa: BLE001
+                return [f"出せていない公開の目印を読み直せませんでした: {e}"]
+            if (again.get("slug") != got.get("slug")
+                    or again.get("sha") != got.get("sha")
+                    or (again.get("stage") or "") != (got.get("stage") or "")):
+                return ["出せていない公開の目印が、確かめている間に"
+                        "書き換わりました（消していません）"]
             _log(f"★{slug} はもう出してありました★（記録={sha[:12]}）"
                  " 目印を消して続けます")
             try:
@@ -4424,6 +4473,9 @@ def selftest() -> int:
                     #   （2026-08-29・台帳#495）
                     #   ★直す前はここで必ず人待ちになり、
                     #     夜の公開が丸ごと止まっていた★
+                    _keep_lost2 = list(_LOCK_LOST)
+                    _keep_ctx2 = os.environ.pop("UCHIDOKORO_LOCK_CTX", None)
+                    _LOCK_LOST.clear()          # ★手前の試験の後片づけ★
                     for pub_ok in (True, False):
                         called = []
                         globals()["push_after_publish"] = (
@@ -4461,8 +4513,40 @@ def selftest() -> int:
                         except OSError:
                             pass
 
-                    # ★★「もう出してある」の3条件を1つずつ試す★★
+                    # ★★ロックを失っていたら、出してあっても消さない★★
+                    #   （Codexのレビュー15・重大②）
+                    #   ★ロックは貸出★なので、止まっている間に別の実行へ移り、
+                    #   その実行が新しい目印を書いていることがある。
+                    _LOCK_LOST.append("ためしに失った")
+                    try:
+                        io.open(PUSH_PENDING, "w", encoding="utf-8").write(
+                            json.dumps({"slug": "t_resume", "sha": "furuisha",
+                                        "stage": "COMMITTED", "parent": "",
+                                        "at": "2026/08/29 00:00:00"}))
+                        _keep_head4 = globals()["_head"]
+                        _keep_pub4 = globals()["_already_published"]
+                        try:
+                            globals()["_head"] = lambda: "atarasii"
+                            globals()["_already_published"] = (
+                                lambda sha: (True, ""))
+                            out = retry_push_first()
+                        finally:
+                            globals()["_head"] = _keep_head4
+                            globals()["_already_published"] = _keep_pub4
+                        t("★★ロックを失っていたら、出してあっても"
+                          "目印を消さない★★"
+                          "（別の実行が書いた目印を消してしまう）",
+                          bool(out) and os.path.isfile(PUSH_PENDING))
+                    finally:
+                        _LOCK_LOST.clear()
+                        try:
+                            os.remove(PUSH_PENDING)
+                        except OSError:
+                            pass
+
+                    # ★★「もう出してある」の条件を1つずつ試す★★
                     #   ★どれか1つでも欠けたら True を返さないこと★
+                    #   （2026-08-29・Codexのレビュー15で穴が2件見つかった）
                     def _fake_run(args, **kw):
                         class R:
                             returncode = 0
@@ -4471,49 +4555,162 @@ def selftest() -> int:
                         r = R()
                         a = list(args)
                         if "ls-remote" in a:
-                            r.stdout = _FK["remote"] + "\trefs/heads/main"
+                            r.stdout = _FK["lsout"]
                             r.returncode = _FK["ls_rc"]
                         elif "rev-parse" in a:
                             r.stdout = _FK["base"]
                         elif "merge-base" in a:
                             r.returncode = _FK["anc_rc"]
-                        elif "rev-list" in a:
-                            r.stdout = _FK["count"]
                         return r
 
-                    _FK = {"remote": "aaa", "base": "aaa", "ls_rc": 0,
-                           "anc_rc": 0, "count": "0"}
+                    def _reset():
+                        _FK.clear()
+                        _FK.update({"lsout": "aaa\trefs/heads/main",
+                                    "base": "aaa", "head": "aaa",
+                                    "ls_rc": 0, "anc_rc": 0,
+                                    "scope": {"base": "origin/main",
+                                              "remote": "origin",
+                                              "dest": "main",
+                                              "branch": "main",
+                                              "upstream": "origin/main"},
+                                    "bad": []})
+
+                    _FK = {}
+                    _reset()
                     _keep_run = globals()["_run_capped"]
+                    _keep_head2 = globals()["_head"]
                     _keep_pg = _pg.push_scope
+                    _keep_ro = _pg.remote_ok
                     try:
                         globals()["_run_capped"] = _fake_run
-                        _pg.push_scope = (lambda: {"base": "origin/main",
-                                                   "remote": "origin",
-                                                   "dest": "main"})
-                        t("　★3つとも確かめられたら「出してある」★",
+                        globals()["_head"] = lambda: _FK["head"]
+                        _pg.push_scope = lambda: _FK["scope"]
+                        _pg.remote_ok = lambda: _FK["bad"]
+                        t("　★全部そろったら「出してある」★",
                           _already_published("furuisha") == (True, ""))
-                        _FK["remote"] = "bbb"
-                        t("　★リモートの先端が手元の基準と違えば"
-                          "「出してある」と言わない★",
+
+                        # ★★重大①：確認先が本来の公開先に固定されているか★★
+                        #   ★直す前は、別の枝にいるとその枝の先端で
+                        #     「出してある」と言えた★（公開先は main なのに）
+                        _reset()
+                        _FK["scope"] = dict(_FK["scope"], branch="side",
+                                            dest="side",
+                                            upstream="origin/side")
+                        t("★★main 以外の枝にいるときは「出してある」と"
+                          "言わない★★（別の枝の先端で判断させない）",
                           _already_published("furuisha")[0] is False)
-                        _FK["remote"] = "aaa"
+                        _reset()
+                        _FK["scope"] = dict(_FK["scope"],
+                                            upstream="origin/betsu")
+                        t("　★追跡先とpush先がずれていたら言わない★",
+                          _already_published("furuisha")[0] is False)
+                        _reset()
+                        _FK["bad"] = ["push先が想定と違います"]
+                        t("★★読み取り用と書き込み用のURLが想定と違えば"
+                          "言わない★★"
+                          "（読み取り側にだけ載っていても消せてしまう）",
+                          _already_published("furuisha")[0] is False)
+
+                        # ★★中③：HEAD が公開先の先端と同じか★★
+                        #   ★「出していないコミットが0」では足りない★＝
+                        #   HEAD が古くても0件になる。古いところから
+                        #   次の新台を作ると、後段で止まって公開0件が続く。
+                        _reset()
+                        _FK["head"] = "furui"
+                        t("★★手元の先端が公開先の先端より古ければ"
+                          "言わない★★"
+                          "（出していないコミットが0でも古いことはある）",
+                          _already_published("furuisha")[0] is False)
+
+                        # 先端の一致・祖先・リモートの答えの形
+                        _reset()
+                        _FK["lsout"] = "bbb\trefs/heads/main"
+                        _FK["head"] = "aaa"
+                        t("　★リモートの先端が手元の基準と違えば"
+                          "言わない★",
+                          _already_published("furuisha")[0] is False)
+                        _reset()
                         _FK["anc_rc"] = 1
                         t("　★記録した sha が先端の祖先でなければ"
-                          "「出してある」と言わない★",
+                          "言わない★",
                           _already_published("furuisha")[0] is False)
-                        _FK["anc_rc"] = 0
-                        _FK["count"] = "2"
-                        t("　★出していないコミットが残っていれば"
-                          "「出してある」と言わない★",
+                        _reset()
+                        _FK["ls_rc"] = 2
+                        t("　★リモートを見に行けなければ言わない★",
                           _already_published("furuisha")[0] is False)
-                        _FK["count"] = "0"
-                        _FK["ls_rc"] = 1
-                        t("　★リモートを見に行けなければ"
-                          "「出してある」と言わない★",
+                        _reset()
+                        _FK["lsout"] = ("aaa\trefs/heads/main\n"
+                                        "bbb\trefs/heads/main")
+                        t("　★リモートの答えが1行でなければ言わない★",
                           _already_published("furuisha")[0] is False)
+                        _reset()
+                        _FK["lsout"] = "aaa\trefs/heads/betsu"
+                        t("　★聞いた枝と違う答えなら言わない★",
+                          _already_published("furuisha")[0] is False)
+                        _reset()
+                        _FK["lsout"] = "zzz\trefs/heads/main"
+                        _FK["base"] = "zzz"
+                        _FK["head"] = "zzz"
+                        t("　★16進でない先端は言わない★",
+                          _already_published("furuisha")[0] is False)
+
+                        # ★外部プロセスが例外で落ちても、理由を返して終わる★
+                        _reset()
+
+                        def _boom(args, **kw):
+                            raise OSError("ためしの時間切れ")
+                        globals()["_run_capped"] = _boom
+                        _r_boom = _already_published("furuisha")
+                        t("　★外部プロセスが落ちても、例外にせず"
+                          "理由を返す★",
+                          isinstance(_r_boom, tuple) and _r_boom[0] is False)
                     finally:
                         globals()["_run_capped"] = _keep_run
+                        globals()["_head"] = _keep_head2
                         _pg.push_scope = _keep_pg
+                        _pg.remote_ok = _keep_ro
+
+                    # ★★重大②：消す直前に、目印が書き換わっていないか★★
+                    #   ★ロックは貸出なので、止まっている間に別の実行へ移り、
+                    #     その実行が新しい目印を書いていることがある★
+                    #   確かめずに消すと、別の実行が出す予定のものを消す。
+                    _keep_head3 = globals()["_head"]
+                    _keep_pub3 = globals()["_already_published"]
+                    try:
+                        globals()["_head"] = lambda: "atarasii"
+
+                        def _swap(sha):
+                            # ★戻る直前に、別の実行が新しい目印を書く★
+                            io.open(PUSH_PENDING, "w",
+                                    encoding="utf-8").write(json.dumps(
+                                        {"slug": "betsu_kishu",
+                                         "sha": "atarasiisha",
+                                         "stage": "COMMITTED", "parent": "",
+                                         "at": "2026/08/29 01:00:00"}))
+                            return True, ""
+                        globals()["_already_published"] = _swap
+                        io.open(PUSH_PENDING, "w", encoding="utf-8").write(
+                            json.dumps({"slug": "t_resume", "sha": "furuisha",
+                                        "stage": "COMMITTED", "parent": "",
+                                        "at": "2026/08/29 00:00:00"}))
+                        out = retry_push_first()
+                        nokotta = os.path.isfile(PUSH_PENDING)
+                        t("★★確かめている間に目印が書き換わったら"
+                          "消さない★★"
+                          "（別の実行が出す予定のものを消してしまう）",
+                          bool(out) and nokotta
+                          and any("書き換わりました" in x for x in out))
+                        try:
+                            os.remove(PUSH_PENDING)
+                        except OSError:
+                            pass
+                    finally:
+                        globals()["_head"] = _keep_head3
+                        globals()["_already_published"] = _keep_pub3
+                    _LOCK_LOST.clear()          # ★手前の試験の状態へ戻す★
+                    _LOCK_LOST.extend(_keep_lost2)
+                    if _keep_ctx2 is not None:
+                        os.environ["UCHIDOKORO_LOCK_CTX"] = _keep_ctx2
                 finally:
                     globals()["push_after_publish"] = _keep_pap
                     try:
