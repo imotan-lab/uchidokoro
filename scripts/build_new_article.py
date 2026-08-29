@@ -1442,9 +1442,15 @@ def selftest() -> int:
 
     try:
         globals()["apply"] = _spy8
+        #   ★★導入日を必ず渡す★★（2026-08-29・自分で踏んだ罠⑫）
+        #     ★手前に「導入日が無ければ作らない」を足したので、
+        #       渡さないと build_machine がそこで例外になり、
+        #       **この試験が見たい奥の守りを一度も通らなくなった**★
+        #       ＝壊し方の道具が「守られていません」と正しく赤くした。
         sys.argv = ["build_new_article.py", "--apply",
                     "--name", "L試験機",
                     "--maker", "bellco",
+                    "--release", "2026-09-07",
                     "--official-url",
                     f"https://m.example/products/slot/{_slug8}/"]
         with _ctx8.redirect_stdout(_io8.StringIO()):

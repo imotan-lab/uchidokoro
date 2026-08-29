@@ -604,6 +604,15 @@ MUTATIONS = [
         "run": ["scripts/confirmed_values.py"],
     },
     {
+        "why": ("★新台を導入日なしで作れる"
+                "（トップページの並びに入れられなくなる"
+                "・2026-08-29の運営者の指示）★"),
+        "file": "scripts/build_new_article.py",
+        "before": '    if not str(release or "").strip():',
+        "after": "    if False:",
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
         "why": "手作業の口から公開できる（控えを通らない・Codex8回目）",
         "file": "scripts/build_new_article.py",
         "before": "        return 1\n    return 0",
