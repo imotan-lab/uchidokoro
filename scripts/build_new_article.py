@@ -1397,9 +1397,12 @@ def selftest() -> int:
     #   照合は内側だけを見て通り、記事は外側を出す（読者への誤情報経路）。
     _mat_extra = json.loads(json.dumps(_mat_signed))
     for _r in _mat_extra["gameplays"]["adopted"]:
-        # ★控えとまったく同じ形を内側に置く★（出典欄は控えに無いので外す）
-        _r["value"] = {k: v for k, v in _r.items()
-                       if not k.startswith("_") and k != "sources"}
+        # ★控えとまったく同じ形を内側に置く★
+        #   ★除外は _core と同じにする★（2026-08-29）＝
+        #   basis を含めると控えと一致しなくなり、
+        #   ★この試験が「外側に足した」ではなく「形が違う」で通ってしまう★
+        #   （壊し方の道具に「守られていません」と名指しされて気づいた）。
+        _r["value"] = _core(_r)
         _r["leads_to"] = "嘘の行き先"
     t("★★内側が控えと一致していても、外側に別の値があれば断る★★"
       "／★控えは正しいまま、記事だけ嘘になる経路★",
