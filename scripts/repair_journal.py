@@ -459,48 +459,87 @@ def commit_verified(fid: str, commit: str) -> dict:
 
 
 def _pushed(commit: str) -> tuple:
-    """★そのコミットが、いま読者に出ている先端そのものか★
-       （2026-08-29・台帳#501／Codexのレビュー17で作り直した）
+    """★そのコミットが、GitHubのmainへ出してあるか★
 
-    ★直す前★＝`git branch -r --contains` で「どこかの origin/… に
-    含まれるか」を見ていた。これは★手元の写し★なので、
-      ・`origin/side` にしかないコミット
-      ・手元の `origin/main` が古い（実リモートからは消えている）
-      ・記録コミットは祖先だが、いまの先端では問題が再発している
-    が全部通り、★読者が見ていない中身で「合格」にできた★。
-
-    ★いまの決まり★＝`prepush_gate.published_tip()` に
-    「いま読者に出ている先端」を聞き、★それと同じコミットのときだけ★通す。
-    先端の求め方（公開先の確定・URLの検証・リモートへの問い合わせ・形の検査）は
-    ★あちらが正本★＝同じ規則を2か所に書かない。
+    ★これは「読者に届いた」ではない★（2026-08-29・Codexのレビュー18）
+      配信は GitHub Actions が非同期でやるので、
+      出してあることと届いていることは別。届いたかは `_delivered`。
 
     ★返すもの★＝(出してある?, 理由)
     """
-    if not commit:
-        return False, "コミットが結び付いていません"
     full = _full_sha(commit)
     if not full:
         return False, f"コミットを特定できません: {str(commit)[:12]}"
     try:
         import prepush_gate as _pg
-        tip, why = _pg.published_tip()
+        tip, why = _pg.remote_main_tip()
     except Exception as e:                                   # noqa: BLE001
         return False, f"公開先の先端を調べられません: {type(e).__name__}"
     if not tip:
         return False, why
-    if tip != full:
-        return False, (f"{full[:8]} は、いま読者に出ている先端"
-                       f"（{tip[:8]}）ではありません")
+    return _is_ancestor(full, tip, "はまだ出ていません")
+
+
+def _delivered(commit: str) -> tuple:
+    """★そのコミットが、いま読者に届いている中身に含まれているか★
+       （2026-08-29・Codexのレビュー18・重大）
+
+    ★返すもの★＝(届いている?, 理由, いま届いているコミット)
+
+    ★★祖先でよい／ただし検査はいま届いている中身でやる★★（レビュー18・中②）
+      「記録したコミットそのものが先端」を求めるのは★厳しすぎた★＝
+      直したあとに**無関係な正常コミットD**が乗るだけで、
+      直っていても永久に進めなくなる（コミットを結び直す口も無い）。
+      正しい条件は
+        ・直しのコミットCが、いま届いているPの★祖先★であること
+        ・★Pの中身で★検査が合格すること
+      これなら、Dで再発していれば検査が落ち、
+      無関係なDならふつうに閉じられる。
+    """
+    full = _full_sha(commit)
+    if not full:
+        return False, f"コミットを特定できません: {str(commit)[:12]}", ""
+    try:
+        import prepush_gate as _pg
+        tip, why = _pg.deployed_tip()
+    except Exception as e:                                   # noqa: BLE001
+        return False, f"配信の記録を読めません: {type(e).__name__}", ""
+    if not tip:
+        return False, why, ""
+    ok, why2 = _is_ancestor(full, tip, "はまだ読者に届いていません")
+    return ok, why2, (tip if ok else "")
+
+
+def _is_ancestor(full: str, tip: str, ng_word: str) -> tuple:
+    """★その先端に、このコミットが含まれているか★（確かめられなければ止める）"""
+    import subprocess
+    try:
+        r = subprocess.run(["git", "merge-base", "--is-ancestor", full, tip],
+                           cwd=BASE, capture_output=True, text=True,
+                           timeout=60)
+        rc = r.returncode
+    except Exception as e:                                   # noqa: BLE001
+        return False, f"含まれているか確かめられません: {type(e).__name__}"
+    if rc == 1:
+        return False, f"{full[:8]} {ng_word}（いま {tip[:8]}）"
+    if rc != 0:
+        # ★確かめられなかっただけのものを「出ていない」と断定しない★
+        return False, (f"{full[:8]} が {tip[:8]} に含まれるか"
+                       f"確かめられません（終了値 {rc}）")
     return True, ""
 
 
 def _full_sha(commit: str) -> str:
-    """★短い形を40桁へ伸ばす★（曖昧・不正なら空を返す＝fail-closed）"""
+    """★40桁へそろえる★（曖昧・不正・実在しないなら空＝fail-closed）
+
+    ★★40桁でも存在を確かめる★★（2026-08-29・Codexのレビュー18・軽微④）
+      ★直す前は40桁ならそのまま返していた★ので、
+      実在しない "0"*40 も有効な答えになっていた
+      （「無いコミットは空を返す」という説明と食い違っていた）。
+    """
     c = str(commit or "")
     if not re.fullmatch(r"[0-9a-f]{7,40}", c):
         return ""
-    if len(c) == 40:
-        return c
     import subprocess
     try:
         rp = subprocess.run(["git", "rev-parse", "--verify", "--quiet",
@@ -562,9 +601,10 @@ def recheck_pass(fid: str) -> dict:
         raise JournalError("通すべき検査が決まっていません")
     commit = str(rec.get("commit") or "")
     # ★①記録された段階を信じず、いま自分で確かめ直す★
-    ok, why = _pushed(commit)
+    #   ★見るのは「出したか」ではなく「届いたか」★（レビュー18・重大）
+    ok, why, tip = _delivered(commit)
     if not ok:
-        raise JournalError(f"出したことを確かめられません: {why}")
+        raise JournalError(f"読者に届いたことを確かめられません: {why}")
     _r = _recheck_mod()
     meta = (_r.CHECKS or {}).get(name)
     if not meta:
@@ -572,22 +612,30 @@ def recheck_pass(fid: str) -> dict:
     args = {"slug": rec["slug"]}
     if "text" in (meta.get("args_spec") or {}):
         args["text"] = rec["quote"]
-    full = _full_sha(commit)
-    if not full:
-        raise JournalError(f"コミットを特定できません: {str(commit)[:12]}")
     # ★★合意したときの検査の版を渡す★★（Codexのレビュー17・中）
     #   ★直す前はいまの版を渡していた★ので、
     #   `closeable()` の「合意後に検査が変わったら閉じない」が
     #   ★常に自己一致になり、まったく効いていなかった★。
     want_ver = (rec.get("recheck") or {}).get("version")
+    # ★★検査するのは「いま届いている中身」★★（レビュー18・中②）
+    #   直しのコミットではなく、配信されているコミットで見る。
+    #   ＝そのあと別のコミットで再発していれば、ここで落ちる。
     ok2, why2, got = _r.closeable({"check": name,
                                    "version": want_ver,
                                    "args": args,
-                                   "expected_commit": full})
+                                   "expected_commit": tip})
     if not ok2:
         raise JournalError(f"{name} を合格にできません: {why2}")
+    # ★★検査のあいだに配信が進んでいないか、もう一度見る★★
+    #   （レビュー18・中③）前だけ見ていると、検査中に別の中身が
+    #   届いていても、古い判断のまま「直った」と記録できる。
+    ok3, why3, tip2 = _delivered(commit)
+    if not ok3 or tip2 != tip:
+        raise JournalError(
+            f"検査のあいだに配信が変わりました（{tip[:8]} → "
+            f"{(tip2 or '不明')[:8]}）: {why3}")
     return _step(rec, "RECHECK_PASS", f"{name} が合格した",
-                 recheck_result=got)
+                 recheck_result=got, verified_deploy=tip)
 
 
 def done(fid: str, closed_issues=None) -> dict:
@@ -964,6 +1012,7 @@ def _selftest() -> int:
                 return {"result": "PASS", "detail": "偽の合格"}
 
         _keep_pushed = globals()["_pushed"]
+        _keep_deliv = globals()["_delivered"]
         _keep_mod = globals()["_recheck_mod"]
         try:
             globals()["_pushed"] = lambda c: (False,
@@ -979,6 +1028,31 @@ def _selftest() -> int:
 
             globals()["_pushed"] = lambda c: (True, "")
             push_confirmed(f501)
+
+            # ★★出しただけでは足りない。届いたかを見る★★
+            #   （2026-08-29・Codexのレビュー18・重大）
+            #   ★このサイトは GitHub Actions が配信する★ので、
+            #   mainへ出した直後でも読者はまだ古い中身を見ている。
+            #   それを「公開済み」と数えると、
+            #   ★直っていないものを「直った」と記録できる★。
+            globals()["_delivered"] = lambda c: (
+                False, "いちばん新しい配信がまだ終わっていません（queued）",
+                "")
+            _ngd = ""
+            try:
+                recheck_pass(f501)
+            except JournalError as e:
+                _ngd = str(e)
+            t("★★出しただけで、まだ届いていなければ合格にしない★★"
+              "／★mainへ出した＝読者に届いた、ではない★",
+              "届いたこと" in _ngd
+              and load(f501)["state"] == "PUSH_CONFIRMED")
+
+            # ★★検査するのは「いま届いている中身」★★（レビュー18・中②）
+            #   ★直しのコミットそのものを求めると、無関係な正常コミットが
+            #     後から乗るだけで永久に進めなくなる★（実際そうしていた）。
+            _TIP = "d" * 40
+            globals()["_delivered"] = lambda c: (True, "", _TIP)
             _ng2 = ""
             try:
                 recheck_pass(f501)
@@ -989,10 +1063,13 @@ def _selftest() -> int:
               "できてはいけない★",
               "未コミット" in _ng2
               and load(f501)["state"] == "PUSH_CONFIRMED")
-            t("　★確かめるのは、記録されたコミットそのもの★",
+            t("★★検査するのは、いま届いているコミットの中身★★"
+              "／★直しのコミットで見ると、そのあと再発していても"
+              "気づけない★",
               bool(_FakeRecheck.asked)
-              and _FakeRecheck.asked[-1].get("expected_commit") == "1" * 40)
-            t("　★検査の名前と引数も、記録から組み立てる★",
+              and _FakeRecheck.asked[-1].get("expected_commit") == _TIP
+              and _FakeRecheck.asked[-1].get("expected_commit") != "1" * 40)
+            t("　★検査の名前と引数は、記録から組み立てる★",
               _FakeRecheck.asked[-1].get("check") == "text_gone"
               and (_FakeRecheck.asked[-1].get("args") or {}).get("text")
               == "出したものと結び付けます。")
@@ -1008,25 +1085,33 @@ def _selftest() -> int:
               _FakeRecheck.asked[-1].get("version") == _rec_ver
               and _FakeRecheck.asked[-1].get("version") != 999)
 
-            globals()["_pushed"] = lambda c: (False,
-                                              "まだ origin にありません")
-            _ng3 = ""
+            # ★★検査のあいだに配信が変わったら合格にしない★★
+            #   （2026-08-29・Codexのレビュー18・中③）
+            _FakeRecheck.verdict = (True, "再検査が合格しました",
+                                    {"result": "PASS"})
+            _seq = [(True, "", _TIP), (True, "", "e" * 40)]
+            globals()["_delivered"] = (
+                lambda c, _s=_seq: _s.pop(0) if _s else (True, "", "e" * 40))
+            _ng4 = ""
             try:
                 recheck_pass(f501)
             except JournalError as e:
-                _ng3 = str(e)
-            t("★★出したことを確かめられなければ合格にしない★★"
-              "／★段階が進んでいることを根拠にしない★",
-              "出したこと" in _ng3)
+                _ng4 = str(e)
+            t("★★検査のあいだに配信が変わったら合格にしない★★"
+              "／★前だけ見ていると、古い判断のまま「直った」と記録できる★",
+              "配信が変わりました" in _ng4
+              and load(f501)["state"] == "PUSH_CONFIRMED")
 
-            globals()["_pushed"] = lambda c: (True, "")
-            _FakeRecheck.verdict = (True, "再検査が合格しました",
-                                    {"result": "PASS"})
+            # ★対照実験：届いていて、その中身で合格すれば進む★
+            globals()["_delivered"] = lambda c: (True, "", _TIP)
             _rec5 = recheck_pass(f501)
-            t("　対照実験：出してあり、その中身で合格すれば進む",
+            t("　対照実験：届いていて、その中身で合格すれば進む",
               _rec5["state"] == "RECHECK_PASS")
+            t("　★どの配信で確かめたかを記録に残す★",
+              _rec5.get("verified_deploy") == _TIP)
         finally:
             globals()["_pushed"] = _keep_pushed
+            globals()["_delivered"] = _keep_deliv
             globals()["_recheck_mod"] = _keep_mod
 
         # ★★短い形の伸ばし方を、本物の git で試す★★
@@ -1061,6 +1146,13 @@ def _selftest() -> int:
               "／★分からないものを通さない★",
               _full_sha("zzzzzzz") == "" and _full_sha("") == ""
               and _full_sha("1234567") == "")
+            # ★★40桁でも存在を確かめる★★
+            #   （2026-08-29・Codexのレビュー18・軽微④）
+            #   ★直す前は40桁ならそのまま返していた★ので、
+            #   実在しない 0 だけの40桁も有効な答えになっていた。
+            t("★★本物のgit：40桁でも、実在しなければ空を返す★★"
+              "／★説明は「無いコミットは空」なのに食い違っていた★",
+              _full_sha("0" * 40) == "")
         finally:
             globals()["BASE"] = _keep_base4
             _sh4.rmtree(_g4, ignore_errors=True)

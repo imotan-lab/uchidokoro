@@ -334,8 +334,15 @@ def remote_ok() -> list:
     return ng
 
 
-def published_tip(timeout: int = 120) -> tuple:
-    """★いま読者に出ている先端はどれか★（2026-08-29・Codexのレビュー17）
+def remote_main_tip(timeout: int = 120) -> tuple:
+    """★GitHubのmainの先端はどれか★（2026-08-29・Codexのレビュー17〜18）
+
+    ★★これは「読者が見ているもの」ではない★★（レビュー18・重大）
+      このサイトは GitHub Actions で配信されるので、
+      ★mainへ出した＝読者に届いた、ではない★
+      （非同期・配信の切替が mirror でなければ動かない・途中で落ちうる）。
+      読者が見ているものは `deployed_tip()` で聞く。
+      ここが答えるのは「★出したか★」まで。
 
     ★返すもの★＝(先端のSHA, 出せない理由)。
       先端が返るのは、次が全部そろったときだけ（fail-closed）。
@@ -404,6 +411,79 @@ def published_tip(timeout: int = 120) -> tuple:
         return "", (f"手元の基準（{base_sha[:12]}）とリモートの先端"
                     f"（{tip[:12]}）が違います")
     return tip, ""
+
+
+def _api(path: str, timeout: int = 60):
+    """★GitHubに問い合わせる（読み取りだけ・認証なし）★
+
+    ★返すもの★＝(中身, 理由)。読めなければ中身は None（fail-closed）。
+    """
+    import json as _json
+    import urllib.error
+    import urllib.request
+    url = f"https://api.github.com/repos/{WANT_PATH}{path}"
+    req = urllib.request.Request(url, headers={
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "uchidokoro-deploy-check"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as f:
+            if f.status != 200:
+                return None, f"配信の記録を読めません（{f.status}）"
+            return _json.loads(f.read().decode("utf-8")), ""
+    except Exception as e:                # noqa: BLE001
+        return None, f"配信の記録を読めません（{type(e).__name__}）"
+
+
+def deployed_tip(timeout: int = 60) -> tuple:
+    """★いま読者に届いているのはどのコミットか★
+       （2026-08-29・Codexのレビュー18・重大）
+
+    ★返すもの★＝(配信されたSHA, 届いていると言えない理由)
+
+    ★★なぜ main の先端では駄目か★★
+      このサイトは `publish-pages.yml`（GitHub Actions）で配信される。
+      ・pushのあと★非同期で★動く
+      ・配信の切替（PAGES_DEPLOY_MODE）が mirror でなければ**動かない**
+      ・中の検査で落ちることがある
+      ＝main が C になった直後でも、★読者はまだ B を見ている★。
+      それを「公開済み」と数えると、
+      ★直っていないものを「直った」と記録できる★。
+
+    ★いちばん新しい配信が成功していなければ、答えない★（fail-closed）
+      成功した古い配信を答えにすると、
+      切替の最中に「新しい中身が届いている」と誤って言うことになる。
+    """
+    try:
+        bad = remote_ok()
+    except Exception as e:                # noqa: BLE001
+        return "", f"push先のURLを確かめられません（{str(e)[:60]}）"
+    if bad:
+        return "", "push先のURLが想定と違います: " + str(bad[0])[:80]
+    got, why = _api("/deployments?environment=github-pages&per_page=1",
+                    timeout=timeout)
+    if got is None:
+        return "", why
+    if not isinstance(got, list) or not got:
+        return "", "配信の記録がありません"
+    dep = got[0]
+    if not isinstance(dep, dict):
+        return "", "配信の記録の形が違います"
+    sha = str(dep.get("sha") or "")
+    if not sha or any(c not in "0123456789abcdef" for c in sha.lower()):
+        return "", "配信されたコミットが16進表記ではありません"
+    dep_id = dep.get("id")
+    if not isinstance(dep_id, int):
+        return "", "配信の記録に番号がありません"
+    st, why2 = _api(f"/deployments/{dep_id}/statuses?per_page=1",
+                    timeout=timeout)
+    if st is None:
+        return "", why2
+    if not isinstance(st, list) or not st or not isinstance(st[0], dict):
+        return "", "配信の状態が分かりません"
+    state = str(st[0].get("state") or "")
+    if state != "success":
+        return "", f"いちばん新しい配信がまだ終わっていません（{state}）"
+    return sha, ""
 
 
 def main() -> int:
@@ -676,56 +756,118 @@ def selftest() -> int:
         globals()["_run_capped"] = _pt_run
         globals()["push_scope"] = lambda: _PT["scope"]
         globals()["remote_ok"] = lambda: _PT["bad"]
-        t("　★全部そろえば先端を返す★", published_tip() == ("aaa", ""))
+        t("　★全部そろえば先端を返す★", remote_main_tip() == ("aaa", ""))
         _pt_reset()
         _PT["scope"] = dict(_PT["scope"], branch="side")
         t("★★手元の枝が main でなければ先端を返さない★★"
           "／★別の枝の先端を公開先と取り違えない★",
-          published_tip()[0] == "")
+          remote_main_tip()[0] == "")
         _pt_reset()
         _PT["scope"] = dict(_PT["scope"], dest="side",
                             upstream="origin/side")
         t("★★出す先が main でなければ先端を返さない★★",
-          published_tip()[0] == "")
+          remote_main_tip()[0] == "")
         _pt_reset()
         _PT["scope"] = dict(_PT["scope"], upstream="origin/betsu")
         t("　★追跡先とpush先がずれていたら返さない★",
-          published_tip()[0] == "")
+          remote_main_tip()[0] == "")
         _pt_reset()
         _PT["bad"] = ["push先が想定と違います"]
         t("★★読み書きのURLが想定と違えば返さない★★"
           "／★読み取り側にだけ載っていても通ってしまう★",
-          published_tip()[0] == "")
+          remote_main_tip()[0] == "")
         _pt_reset()
         _PT["ls_rc"] = 2
         t("　★リモートを見に行けなければ返さない★",
-          published_tip()[0] == "")
+          remote_main_tip()[0] == "")
         _pt_reset()
         _PT["lsout"] = "aaa\trefs/heads/main\nbbb\trefs/heads/main"
-        t("　★答えが1行でなければ返さない★", published_tip()[0] == "")
+        t("　★答えが1行でなければ返さない★", remote_main_tip()[0] == "")
         _pt_reset()
         _PT["lsout"] = "aaa\trefs/heads/betsu"
-        t("　★聞いた枝と違う答えなら返さない★", published_tip()[0] == "")
+        t("　★聞いた枝と違う答えなら返さない★", remote_main_tip()[0] == "")
         _pt_reset()
         _PT["lsout"] = "zzz\trefs/heads/main"
         _PT["base"] = "zzz"
-        t("　★16進でない先端は返さない★", published_tip()[0] == "")
+        t("　★16進でない先端は返さない★", remote_main_tip()[0] == "")
         _pt_reset()
         _PT["base"] = "bbb"
         t("★★手元の基準が実リモートの先端と違えば返さない★★"
           "／★手元の写しが古いまま判断させない★",
-          published_tip()[0] == "")
+          remote_main_tip()[0] == "")
         _pt_reset()
 
         def _pt_boom(args, **kw):
             raise OSError("ためしの時間切れ")
         globals()["_run_capped"] = _pt_boom
         t("　★外部プロセスが落ちても、例外にせず理由を返す★",
-          published_tip()[0] == "")
+          remote_main_tip()[0] == "")
     finally:
         globals()["_run_capped"] = _keep_run_pt
         globals()["push_scope"] = _keep_scope
         globals()["remote_ok"] = _keep_rok
+
+    # ★★「読者に届いたか」の条件を1つずつ試す★★
+    #   （2026-08-29・Codexのレビュー18・重大）
+    #   ★mainへ出した＝読者に届いた、ではない★＝
+    #   このサイトは GitHub Actions が非同期で配信するので、
+    #   出した直後でも読者はまだ古い中身を見ている。
+    _DP = {}
+
+    def _dp_reset():
+        _DP.clear()
+        _DP.update({"bad": [],
+                    "dep": [{"id": 1, "sha": "abc123"}],
+                    "st": [{"state": "success"}]})
+
+    def _dp_api(path, timeout=60):
+        if "deployments?" in path:
+            return _DP["dep"], "" if _DP["dep"] is not None else "読めません"
+        return _DP["st"], "" if _DP["st"] is not None else "読めません"
+
+    _dp_reset()
+    _keep_api = globals()["_api"]
+    _keep_rok_dp = globals()["remote_ok"]
+    try:
+        globals()["_api"] = _dp_api
+        globals()["remote_ok"] = lambda: _DP["bad"]
+        t("　★成功した配信があれば、そのコミットを返す★",
+          deployed_tip() == ("abc123", ""))
+        _dp_reset()
+        _DP["st"] = [{"state": "in_progress"}]
+        t("★★いちばん新しい配信が終わっていなければ返さない★★"
+          "／★出した直後を「届いた」と数えると、直っていないものを"
+          "「直った」と記録できる★",
+          deployed_tip()[0] == "")
+        _dp_reset()
+        _DP["st"] = [{"state": "failure"}]
+        t("★★配信が失敗していたら返さない★★"
+          "（読者には古い中身が出たまま）",
+          deployed_tip()[0] == "")
+        _dp_reset()
+        _DP["dep"] = []
+        t("　★配信の記録が無ければ返さない★", deployed_tip()[0] == "")
+        _dp_reset()
+        _DP["dep"] = None
+        t("　★配信の記録を読めなければ返さない★", deployed_tip()[0] == "")
+        _dp_reset()
+        _DP["st"] = None
+        t("　★配信の状態を読めなければ返さない★", deployed_tip()[0] == "")
+        _dp_reset()
+        _DP["dep"] = [{"id": 1, "sha": "zzz"}]
+        t("　★16進でないコミットは返さない★", deployed_tip()[0] == "")
+        _dp_reset()
+        _DP["dep"] = [{"sha": "abc123"}]
+        t("　★配信の記録に番号が無ければ返さない★",
+          deployed_tip()[0] == "")
+        _dp_reset()
+        _DP["bad"] = ["push先が想定と違います"]
+        t("★★置き場が想定と違えば、配信も聞きに行かない★★"
+          "（別の置き場の配信を答えにしない）",
+          deployed_tip()[0] == "")
+    finally:
+        globals()["_api"] = _keep_api
+        globals()["remote_ok"] = _keep_rok_dp
 
     # ★★本物の git で試す★★（2026-08-29・Codexのレビュー17）
     #   ★偽物だけで固めると、実際の ref の扱いを一度も試していない★
@@ -762,7 +904,7 @@ def selftest() -> int:
         globals()["remote_ok"] = lambda: []
         _tip1 = _rgit("rev-parse", "HEAD").stdout.strip()
         t("★★本物のgit：ふつうに出した直後は、その先端を返す★★",
-          published_tip() == (_tip1, ""))
+          remote_main_tip() == (_tip1, ""))
 
         # ★別の枝に切り替えると返さない★
         _rgit("checkout", "-b", "side")
@@ -773,7 +915,7 @@ def selftest() -> int:
         _rgit("push", "-u", "origin", "side")
         t("★★本物のgit：別の枝にいるときは先端を返さない★★"
           "／★その枝に載っているだけで「公開した」ことにしない★",
-          published_tip()[0] == "")
+          remote_main_tip()[0] == "")
         _rgit("checkout", "main")
 
         # ★手元の写しが古いと返さない★
@@ -790,12 +932,12 @@ def selftest() -> int:
         _rgit("push", "origin", "main", cwd=_work2)
         t("★★本物のgit：手元の写しが古ければ先端を返さない★★"
           "／★古い中身を「いま読者が見ているもの」と取り違えない★",
-          published_tip()[0] == "")
+          remote_main_tip()[0] == "")
         _rgit("fetch", "origin")
         _rgit("reset", "--hard", "origin/main")
         _tip3 = _rgit("rev-parse", "HEAD").stdout.strip()
         t("　本物のgit：取り直せば、また先端を返す",
-          published_tip() == (_tip3, "") and _tip3 != _tip1)
+          remote_main_tip() == (_tip3, "") and _tip3 != _tip1)
     finally:
         globals()["BASE"] = _keep_base_rg
         globals()["remote_ok"] = _keep_rok_rg

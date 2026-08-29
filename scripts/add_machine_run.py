@@ -2194,7 +2194,10 @@ def _already_published(sha: str) -> tuple:
     ★★「いま読者に出ている先端」の求め方は1か所★★
       （2026-08-29・Codexのレビュー17）
       公開先の確定・URLの検証・リモートへの問い合わせ・形の検査は
-      `prepush_gate.published_tip()` が正本。
+      `prepush_gate.remote_main_tip()` が正本。
+      ★ここが聞くのは「GitHubのmainへ出したか」まででよい★＝
+      この目印は「コミットしたが出せていない」を表すものなので、
+      片付けてよいかは**出せたかどうか**で決まる（配信の完了ではない）。
       ★同じ規則を2か所に書くと、片方だけ緩めても
         もう片方が拾って試験は緑になる★（罠③）。
 
@@ -2206,7 +2209,7 @@ def _already_published(sha: str) -> tuple:
     if not sha:
         return False, "記録に sha がありません"
     try:
-        tip, why = _pg.published_tip(timeout=NET_TIMEOUT)
+        tip, why = _pg.remote_main_tip(timeout=NET_TIMEOUT)
     except Exception as e:                # noqa: BLE001
         return False, f"公開先の先端を調べられません（{str(e)[:60]}）"
     if not tip:
@@ -4529,11 +4532,11 @@ def selftest() -> int:
 
                     _keep_run = globals()["_run_capped"]
                     _keep_head2 = globals()["_head"]
-                    _keep_tip = _pg.published_tip
+                    _keep_tip = _pg.remote_main_tip
                     try:
                         globals()["_run_capped"] = _fake_anc
                         globals()["_head"] = lambda: _FK["head"]
-                        _pg.published_tip = (
+                        _pg.remote_main_tip = (
                             lambda timeout=0: _FK["tip"])
                         t("　★全部そろったら「出してある」★",
                           _already_published("furuisha") == (True, ""))
@@ -4570,7 +4573,7 @@ def selftest() -> int:
                     finally:
                         globals()["_run_capped"] = _keep_run
                         globals()["_head"] = _keep_head2
-                        _pg.published_tip = _keep_tip
+                        _pg.remote_main_tip = _keep_tip
 
                     # ★★重大②：消す直前に、目印が書き換わっていないか★★
                     #   ★ロックは貸出なので、止まっている間に別の実行へ移り、
