@@ -558,6 +558,40 @@ def _full_sha(commit: str) -> str:
         r"[0-9a-f]{40}", out) else ""
 
 
+# ★配信が終わるのを待つ長さ★（2026-08-29）
+#   ★実測13〜17秒★だが、混んでいれば延びる。
+#   ★問い合わせの回数に上限がある★（認証なしで60回/時）ので、
+#   間隔は広めにして回数を抑える（1件あたり最大4回＝約12問い合わせ）。
+DELIVER_WAIT_SECONDS = 120
+DELIVER_POLL_SECONDS = 40
+
+
+def _delivered_wait(commit: str, wait_seconds=None, sleep=None) -> tuple:
+    """★届くまで少しだけ待ってから答える★（2026-08-29）
+
+    ★なぜ待つのか★＝更新タスクは `git push` の直後にここを呼ぶ。
+    配信は非同期なので、その瞬間はまだ進行中で、
+    読者はひとつ前の版を見ている。
+    ★待たないと、どの直しも最後の一歩へ届かず、記録が置き去りになる★
+    （手順書に「途中から再開する」段取りは無い）。
+
+    ★待つのは有限★＝時間切れになったら、いままでどおり理由を返して断る。
+    ★待っても駄目な理由（配信が失敗した・組み立てた中身が出ている）は
+      待っても変わらないが、区別せずに待つ★＝
+      **理由の文で分岐すると、文言を変えるたびに壊れる**（既存の決まり）。
+    """
+    import time as _t
+    budget = (DELIVER_WAIT_SECONDS if wait_seconds is None
+              else int(wait_seconds))
+    slp = sleep or _t.sleep
+    while True:
+        ok, why, mark = _delivered(commit)
+        if ok or budget <= 0:
+            return ok, why, mark
+        budget -= DELIVER_POLL_SECONDS
+        slp(DELIVER_POLL_SECONDS)
+
+
 def _recheck_mod():
     """★検査の道具を差し替えられるようにする入口★（試験用の継ぎ目）"""
     import recheck
@@ -577,7 +611,7 @@ def push_confirmed(fid: str) -> dict:
     return _step(rec, "PUSH_CONFIRMED", "pushを確かめた")
 
 
-def recheck_pass(fid: str) -> dict:
+def recheck_pass(fid: str, wait_seconds=None, sleep=None) -> dict:
     """★機械が自分で検査をやり直して合格したときだけ進む★
 
     結果の辞書を受け取らない（＝偽の合格を作れない）。
@@ -608,7 +642,10 @@ def recheck_pass(fid: str) -> dict:
     commit = str(rec.get("commit") or "")
     # ★①記録された段階を信じず、いま自分で確かめ直す★
     #   ★見るのは「出したか」ではなく「届いたか」★（レビュー18・重大）
-    ok, why, mark = _delivered(commit)
+    # ★★入口では、配信が終わるのを少しだけ待つ★★（2026-08-29）
+    #   push の直後に呼ばれるので、待たないと必ず時期尚早で断る。
+    ok, why, mark = _delivered_wait(commit, wait_seconds=wait_seconds,
+                                    sleep=sleep)
     if not ok:
         raise JournalError(f"読者に届いたことを確かめられません: {why}")
     tip, dep_id = mark
@@ -1053,7 +1090,8 @@ def _selftest() -> int:
                 ("", 0))
             _ngd = ""
             try:
-                recheck_pass(f501)
+                # ★ここは「待っても駄目」を見る試験なので待たせない★
+                recheck_pass(f501, wait_seconds=0)
             except JournalError as e:
                 _ngd = str(e)
             t("★★出しただけで、まだ届いていなければ合格にしない★★"
@@ -1068,7 +1106,7 @@ def _selftest() -> int:
             globals()["_delivered"] = lambda c: (True, "", (_TIP, 9))
             _ng2 = ""
             try:
-                recheck_pass(f501)
+                recheck_pass(f501, wait_seconds=0)
             except JournalError as e:
                 _ng2 = str(e)
             t("★★手元の状態だけで合格にしない★★"
@@ -1108,7 +1146,7 @@ def _selftest() -> int:
                 else (True, "", (_TIP, 10)))
             _ng4 = ""
             try:
-                recheck_pass(f501)
+                recheck_pass(f501, wait_seconds=0)
             except JournalError as e:
                 _ng4 = str(e)
             t("★★同じコミットでも、検査のあいだに別の配信へ切り替わったら合格にしない★★"
@@ -1118,12 +1156,55 @@ def _selftest() -> int:
 
             # ★対照実験：届いていて、その中身で合格すれば進む★
             globals()["_delivered"] = lambda c: (True, "", (_TIP, 9))
-            _rec5 = recheck_pass(f501)
+            _rec5 = recheck_pass(f501, wait_seconds=0)
             t("　対照実験：届いていて、その中身で合格すれば進む",
               _rec5["state"] == "RECHECK_PASS")
             t("　★どの配信で確かめたかを番号まで記録に残す★",
               _rec5.get("verified_deploy")
               == {"sha": _TIP, "deployment_id": 9})
+            # ★★配信が終わるのを少しだけ待つ★★（2026-08-29・自分で気づいた）
+            #   ★このタスクは push の直後にここを呼ぶ★ので、
+            #   待たないと配信は必ず進行中で、
+            #   ★どの直しも最後の一歩へ届かず記録が置き去りになる★
+            #   （手順書に「途中から再開する」段取りは無い）。
+            #   ★時間では判定しない★＝何回呼んだか・何回眠ったかで見る。
+            _calls, _naps = [0], []
+            _late = [(False, "まだ配信中です", ("", 0)),
+                     (False, "まだ配信中です", ("", 0)),
+                     (True, "", (_TIP, 9))]
+
+            def _deliv_late(c, _s=_late, _n=_calls):
+                _n[0] += 1
+                return _s[min(_n[0] - 1, len(_s) - 1)]
+            globals()["_delivered"] = _deliv_late
+            _ok_wait, _why_wait, _mark_wait = _delivered_wait(
+                "0" * 40, wait_seconds=120, sleep=lambda s: _naps.append(s))
+            t("★★配信が終わるまで少しだけ待つ★★"
+              "／★待たないと、どの直しも最後の一歩へ届かない★",
+              _ok_wait and _mark_wait == (_TIP, 9)
+              and _calls[0] == 3 and _naps == [40, 40])
+
+            _calls[0] = 0
+            _naps.clear()
+            # ★差し替えた偽物も回数を数える★
+            #   （数えないと、何回聞いたかを見る試験が意味をなさない）
+            globals()["_delivered"] = (
+                lambda c, _n=_calls: (_n.__setitem__(0, _n[0] + 1)
+                                      or (False, "まだ配信中です",
+                                          ("", 0))))
+            _ok_to, _why_to, _ = _delivered_wait(
+                "0" * 40, wait_seconds=120, sleep=lambda s: _naps.append(s))
+            t("★★待ちきれなければ、理由を返して断る★★"
+              "／★いつまでも待たない★",
+              _ok_to is False and "配信中" in _why_to
+              and _calls[0] == 4 and _naps == [40, 40, 40])
+
+            _calls[0] = 0
+            _naps.clear()
+            _delivered_wait("0" * 40, wait_seconds=0,
+                            sleep=lambda s: _naps.append(s))
+            t("　★待たない指定なら、一度だけ聞いて眠らない★",
+              _calls[0] == 1 and _naps == [])
         finally:
             globals()["_pushed"] = _keep_pushed
             globals()["_delivered"] = _keep_deliv
