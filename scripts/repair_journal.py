@@ -459,26 +459,58 @@ def commit_verified(fid: str, commit: str) -> dict:
 
 
 def _pushed(commit: str) -> tuple:
-    """★そのコミットが、もう出してあるか★（2026-08-29・台帳#501）
+    """★そのコミットが、いま読者に出ている先端そのものか★
+       （2026-08-29・台帳#501／Codexのレビュー17で作り直した）
 
-    ★1か所にまとめる理由★＝`push_confirmed` と `recheck_pass` の両方が
-    同じことを確かめる。2か所に書くと、片方だけ緩めても
-    ★もう片方が拾って試験は緑★になる（罠③）。
+    ★直す前★＝`git branch -r --contains` で「どこかの origin/… に
+    含まれるか」を見ていた。これは★手元の写し★なので、
+      ・`origin/side` にしかないコミット
+      ・手元の `origin/main` が古い（実リモートからは消えている）
+      ・記録コミットは祖先だが、いまの先端では問題が再発している
+    が全部通り、★読者が見ていない中身で「合格」にできた★。
+
+    ★いまの決まり★＝`prepush_gate.published_tip()` に
+    「いま読者に出ている先端」を聞き、★それと同じコミットのときだけ★通す。
+    先端の求め方（公開先の確定・URLの検証・リモートへの問い合わせ・形の検査）は
+    ★あちらが正本★＝同じ規則を2か所に書かない。
+
     ★返すもの★＝(出してある?, 理由)
     """
     if not commit:
         return False, "コミットが結び付いていません"
+    full = _full_sha(commit)
+    if not full:
+        return False, f"コミットを特定できません: {str(commit)[:12]}"
+    try:
+        import prepush_gate as _pg
+        tip, why = _pg.published_tip()
+    except Exception as e:                                   # noqa: BLE001
+        return False, f"公開先の先端を調べられません: {type(e).__name__}"
+    if not tip:
+        return False, why
+    if tip != full:
+        return False, (f"{full[:8]} は、いま読者に出ている先端"
+                       f"（{tip[:8]}）ではありません")
+    return True, ""
+
+
+def _full_sha(commit: str) -> str:
+    """★短い形を40桁へ伸ばす★（曖昧・不正なら空を返す＝fail-closed）"""
+    c = str(commit or "")
+    if not re.fullmatch(r"[0-9a-f]{7,40}", c):
+        return ""
+    if len(c) == 40:
+        return c
     import subprocess
     try:
-        out = subprocess.run(
-            ["git", "branch", "-r", "--contains", commit],
-            cwd=BASE, capture_output=True, text=True, timeout=60)
-    except Exception as e:                                   # noqa: BLE001
-        return False, f"pushを確かめられません: {type(e).__name__}"
-    if "origin/" not in (out.stdout or ""):
-        return False, (f"{commit[:8]} はまだ origin にありません"
-                       "（pushしてから進めてください）")
-    return True, ""
+        rp = subprocess.run(["git", "rev-parse", "--verify", "--quiet",
+                             c + "^{commit}"], cwd=BASE,
+                            capture_output=True, text=True, timeout=60)
+    except Exception:                                        # noqa: BLE001
+        return ""
+    out = (rp.stdout or "").strip()
+    return out if rp.returncode == 0 and re.fullmatch(
+        r"[0-9a-f]{40}", out) else ""
 
 
 def _recheck_mod():
@@ -516,6 +548,13 @@ def recheck_pass(fid: str) -> dict:
         ③未コミットの変更が無いこと＋検査のやり直しが合格すること
       ②③は `recheck.closeable()` が既に持っている規則なので、
       ★ここで書き直さずに、それを通す★（同じ規則を2か所に書かない）。
+
+    ★★分かっている限界★★（2026-08-29・Codexのレビュー17）
+      `closeable()` が見るのは**検査の前と後**なので、
+      ★検査の最中だけ中身を差し替えて、終わる前に戻す形は捕まえない★。
+      「検査中に動いていないことを見ている」は言い過ぎだった。
+      本当に塞ぐなら、記録したコミットから作った隔離された写しの上で
+      検査する必要がある（★別の設計の話なので、ここではやらない★）。
     """
     rec = load(fid)
     name = (rec.get("recheck") or {}).get("name")
@@ -533,20 +572,16 @@ def recheck_pass(fid: str) -> dict:
     args = {"slug": rec["slug"]}
     if "text" in (meta.get("args_spec") or {}):
         args["text"] = rec["quote"]
-    # ★短い形で記録されていても、40桁に伸ばしてから渡す★
-    full = commit
-    if len(full) != 40:
-        import subprocess
-        try:
-            rp = subprocess.run(["git", "rev-parse", commit], cwd=BASE,
-                                capture_output=True, text=True, timeout=60)
-            full = (rp.stdout or "").strip() if rp.returncode == 0 else ""
-        except Exception:                                # noqa: BLE001
-            full = ""
+    full = _full_sha(commit)
     if not full:
-        raise JournalError(f"コミットを特定できません: {commit[:12]}")
+        raise JournalError(f"コミットを特定できません: {str(commit)[:12]}")
+    # ★★合意したときの検査の版を渡す★★（Codexのレビュー17・中）
+    #   ★直す前はいまの版を渡していた★ので、
+    #   `closeable()` の「合意後に検査が変わったら閉じない」が
+    #   ★常に自己一致になり、まったく効いていなかった★。
+    want_ver = (rec.get("recheck") or {}).get("version")
     ok2, why2, got = _r.closeable({"check": name,
-                                   "version": meta.get("version"),
+                                   "version": want_ver,
                                    "args": args,
                                    "expected_commit": full})
     if not ok2:
@@ -864,8 +899,9 @@ def _selftest() -> int:
             push_confirmed(fid)
             t("★★pushを確かめるまで先へ進めない★★", False)
         except JournalError as e:
+            # ★理由の言い回しは変わり得るので、進んでいないことも見る★
             t("★★pushを確かめるまで先へ進めない★★",
-              "origin" in str(e) or "確かめられません" in str(e))
+              load(fid)["state"] == "COMMIT_VERIFIED" and bool(str(e)))
 
         # ★★開け直してよいのは「検査が落ちているとき」だけ★★
         #   （2026-08-29・台帳#499）
@@ -908,7 +944,8 @@ def _selftest() -> int:
         commit_verified(f501, "1" * 40)
 
         class _FakeRecheck:
-            CHECKS = {"text_gone": {"version": 1, "closeable": True,
+            # ★記録された版と見分けるために、わざと違う値にする★
+            CHECKS = {"text_gone": {"version": 999, "closeable": True,
                                     "args_spec": {"slug": (str, True, ()),
                                                   "text": (str, True, ())}}}
             asked = []
@@ -959,6 +996,17 @@ def _selftest() -> int:
               _FakeRecheck.asked[-1].get("check") == "text_gone"
               and (_FakeRecheck.asked[-1].get("args") or {}).get("text")
               == "出したものと結び付けます。")
+            # ★★合意したときの検査の版を渡す★★
+            #   （2026-08-29・Codexのレビュー17・中）
+            #   ★直す前はいまの版を渡していた★ので、
+            #   「合意後に検査が変わったら閉じない」が
+            #   ★常に自己一致になり、まったく効いていなかった★。
+            _rec_ver = (load(f501).get("recheck") or {}).get("version")
+            t("★★合意したときの検査の版を渡す★★"
+              "／★いまの版を渡すと「検査が変わったら閉じない」が"
+              "効かなくなる★",
+              _FakeRecheck.asked[-1].get("version") == _rec_ver
+              and _FakeRecheck.asked[-1].get("version") != 999)
 
             globals()["_pushed"] = lambda c: (False,
                                               "まだ origin にありません")
@@ -980,6 +1028,42 @@ def _selftest() -> int:
         finally:
             globals()["_pushed"] = _keep_pushed
             globals()["_recheck_mod"] = _keep_mod
+
+        # ★★短い形の伸ばし方を、本物の git で試す★★
+        #   （2026-08-29・Codexのレビュー17）
+        #   ★偽物だけで固めると、実際の git の答え方を試していない★
+        import shutil as _sh4
+        import subprocess as _sp4
+        import tempfile as _tf4
+        _g4 = _tf4.mkdtemp()
+        _keep_base4 = globals()["BASE"]
+        try:
+            _sp4.run(["git", "init", "-b", "main", _g4],
+                     capture_output=True, timeout=60)
+            for _a in (("config", "user.email", "t@example.invalid"),
+                       ("config", "user.name", "t")):
+                _sp4.run(["git", *_a], cwd=_g4, capture_output=True,
+                         timeout=60)
+            io.open(os.path.join(_g4, "a.txt"), "w",
+                    encoding="utf-8").write("1")
+            _sp4.run(["git", "add", "a.txt"], cwd=_g4,
+                     capture_output=True, timeout=60)
+            _sp4.run(["git", "commit", "-m", "one"], cwd=_g4,
+                     capture_output=True, timeout=60)
+            globals()["BASE"] = _g4
+            _sha4 = _sp4.run(["git", "rev-parse", "HEAD"], cwd=_g4,
+                             capture_output=True, text=True,
+                             timeout=60).stdout.strip()
+            t("　本物のgit：短い形を40桁へ伸ばせる",
+              _full_sha(_sha4[:8]) == _sha4)
+            t("　本物のgit：40桁はそのまま", _full_sha(_sha4) == _sha4)
+            t("★★本物のgit：無い形・無いコミットは空を返す★★"
+              "／★分からないものを通さない★",
+              _full_sha("zzzzzzz") == "" and _full_sha("") == ""
+              and _full_sha("1234567") == "")
+        finally:
+            globals()["BASE"] = _keep_base4
+            _sh4.rmtree(_g4, ignore_errors=True)
 
         # 打ち切り
         f2 = detect("hokuto", "text_gone", "別のおかしな文です。", "x",

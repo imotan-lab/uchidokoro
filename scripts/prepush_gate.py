@@ -334,6 +334,78 @@ def remote_ok() -> list:
     return ng
 
 
+def published_tip(timeout: int = 120) -> tuple:
+    """★いま読者に出ている先端はどれか★（2026-08-29・Codexのレビュー17）
+
+    ★返すもの★＝(先端のSHA, 出せない理由)。
+      先端が返るのは、次が全部そろったときだけ（fail-closed）。
+        ①公開先が main（枝も出す先も）
+        ②追跡先とpush先がずれていない
+        ③読み取り用・書き込み用のURLが、どちらも想定の置き場
+        ④実際のリモートに聞いた先端が、1行・2列・聞いた枝・16進
+        ⑤手元の基準（origin/main）が、その先端と同じ
+
+    ★★手元にあるものを公開先と取り違えない★★
+      `git branch -r --contains` も `origin/<いまの枝>` も、
+      ★手元の写しでしかない★（古いことも、別の枝であることもある）。
+      同じ取り違えを新台と更新で1回ずつやったので、ここに集約する。
+    """
+    try:
+        sc = push_scope()
+    except Exception as e:                # noqa: BLE001
+        return "", f"push先を調べられません（{str(e)[:60]}）"
+    base = sc.get("base") or ""
+    remote = sc.get("remote") or ""
+    dest = sc.get("dest") or ""
+    branch = sc.get("branch") or ""
+    if not (base and remote and dest):
+        return "", "push先が分かりません"
+    if branch != "main" or dest != "main":
+        return "", f"公開先が main ではありません（{branch} → {remote}/{dest}）"
+    up = sc.get("upstream") or ""
+    if up and up != f"{remote}/{dest}":
+        return "", f"追跡先（{up}）とpush先（{remote}/{dest}）が違います"
+    try:
+        bad = remote_ok()
+    except Exception as e:                # noqa: BLE001
+        return "", f"push先のURLを確かめられません（{str(e)[:60]}）"
+    if bad:
+        return "", "push先のURLが想定と違います: " + str(bad[0])[:80]
+    want = f"refs/heads/{dest}"
+    try:
+        lr = _run_capped(["git", "ls-remote", "--refs", "--exit-code",
+                          remote, want], cwd=BASE, capture_output=True,
+                         text=True, encoding="utf-8", errors="replace",
+                         timeout=timeout)
+    except Exception as e:                # noqa: BLE001
+        return "", f"リモートの先端を確かめられません（{str(e)[:60]}）"
+    if lr.returncode != 0:
+        return "", "リモートの先端を確かめられません"
+    lines = [x for x in (lr.stdout or "").splitlines() if x.strip()]
+    if len(lines) != 1:
+        return "", f"リモートの答えが1行ではありません（{len(lines)}行）"
+    cols = lines[0].split()
+    if len(cols) != 2 or cols[1] != want:
+        return "", "リモートの答えの形が違います"
+    tip = cols[0]
+    # ★16進であること★（長さは決め打ちにしない＝Gitのハッシュ方式は変わり得る）
+    if not tip or any(c not in "0123456789abcdef" for c in tip.lower()):
+        return "", "リモートの先端が16進表記ではありません"
+    try:
+        b = _run_capped(["git", "rev-parse", base], cwd=BASE,
+                        capture_output=True, text=True,
+                        encoding="utf-8", errors="replace")
+    except Exception as e:                # noqa: BLE001
+        return "", f"手元の基準を調べられません（{str(e)[:60]}）"
+    base_sha = (b.stdout or "").strip()
+    if b.returncode != 0 or not base_sha:
+        return "", "手元の基準を調べられません"
+    if base_sha != tip:
+        return "", (f"手元の基準（{base_sha[:12]}）とリモートの先端"
+                    f"（{tip[:12]}）が違います")
+    return tip, ""
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--slug", help="公開した機種")
@@ -567,6 +639,168 @@ def selftest() -> int:
     t("★★service-worker.js は許可しない★★"
       "／★新台経路は1文字も書かないのに、丸ごと許可されていた★",
       "service-worker.js" not in allowed_for("dmm_9999"))
+    # ★★「いま読者に出ている先端」の求め方★★
+    #   （2026-08-29・Codexのレビュー17）
+    #   ★同じ取り違えを2回やった★＝新台は実行時の枝、
+    #   更新は手元の追跡ref を「公開先」と取り違えていた。
+    #   ★条件は1つずつ壊す★（2つ同時に変えると、片方の検査を削っても緑）
+    _PT = {}
+
+    def _pt_reset():
+        _PT.clear()
+        _PT.update({"scope": {"base": "origin/main", "remote": "origin",
+                              "dest": "main", "branch": "main",
+                              "upstream": "origin/main"},
+                    "bad": [], "ls_rc": 0,
+                    "lsout": "aaa\trefs/heads/main", "base": "aaa"})
+
+    def _pt_run(args, **kw):
+        class R:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+        r = R()
+        a = list(args)
+        if "ls-remote" in a:
+            r.stdout = _PT["lsout"]
+            r.returncode = _PT["ls_rc"]
+        elif "rev-parse" in a:
+            r.stdout = _PT["base"]
+        return r
+
+    _pt_reset()
+    _keep_run_pt = globals()["_run_capped"]
+    _keep_scope = globals()["push_scope"]
+    _keep_rok = globals()["remote_ok"]
+    try:
+        globals()["_run_capped"] = _pt_run
+        globals()["push_scope"] = lambda: _PT["scope"]
+        globals()["remote_ok"] = lambda: _PT["bad"]
+        t("　★全部そろえば先端を返す★", published_tip() == ("aaa", ""))
+        _pt_reset()
+        _PT["scope"] = dict(_PT["scope"], branch="side")
+        t("★★手元の枝が main でなければ先端を返さない★★"
+          "／★別の枝の先端を公開先と取り違えない★",
+          published_tip()[0] == "")
+        _pt_reset()
+        _PT["scope"] = dict(_PT["scope"], dest="side",
+                            upstream="origin/side")
+        t("★★出す先が main でなければ先端を返さない★★",
+          published_tip()[0] == "")
+        _pt_reset()
+        _PT["scope"] = dict(_PT["scope"], upstream="origin/betsu")
+        t("　★追跡先とpush先がずれていたら返さない★",
+          published_tip()[0] == "")
+        _pt_reset()
+        _PT["bad"] = ["push先が想定と違います"]
+        t("★★読み書きのURLが想定と違えば返さない★★"
+          "／★読み取り側にだけ載っていても通ってしまう★",
+          published_tip()[0] == "")
+        _pt_reset()
+        _PT["ls_rc"] = 2
+        t("　★リモートを見に行けなければ返さない★",
+          published_tip()[0] == "")
+        _pt_reset()
+        _PT["lsout"] = "aaa\trefs/heads/main\nbbb\trefs/heads/main"
+        t("　★答えが1行でなければ返さない★", published_tip()[0] == "")
+        _pt_reset()
+        _PT["lsout"] = "aaa\trefs/heads/betsu"
+        t("　★聞いた枝と違う答えなら返さない★", published_tip()[0] == "")
+        _pt_reset()
+        _PT["lsout"] = "zzz\trefs/heads/main"
+        _PT["base"] = "zzz"
+        t("　★16進でない先端は返さない★", published_tip()[0] == "")
+        _pt_reset()
+        _PT["base"] = "bbb"
+        t("★★手元の基準が実リモートの先端と違えば返さない★★"
+          "／★手元の写しが古いまま判断させない★",
+          published_tip()[0] == "")
+        _pt_reset()
+
+        def _pt_boom(args, **kw):
+            raise OSError("ためしの時間切れ")
+        globals()["_run_capped"] = _pt_boom
+        t("　★外部プロセスが落ちても、例外にせず理由を返す★",
+          published_tip()[0] == "")
+    finally:
+        globals()["_run_capped"] = _keep_run_pt
+        globals()["push_scope"] = _keep_scope
+        globals()["remote_ok"] = _keep_rok
+
+    # ★★本物の git で試す★★（2026-08-29・Codexのレビュー17）
+    #   ★偽物だけで固めると、実際の ref の扱いを一度も試していない★
+    #   ここでは一時の置き場（bare）と作業用の写しを本当に作って動かす。
+    #   ★URLの検査だけは外す★＝一時リポジトリはうちどころの置き場ではないので、
+    #   そこで落ちると他の条件を一度も試せない（罠④）。
+    import io as _io
+    import shutil as _sh
+    import subprocess as _sp
+    import tempfile as _tf
+    _rg = _tf.mkdtemp()
+    _keep_base_rg = globals()["BASE"]
+    _keep_rok_rg = globals()["remote_ok"]
+
+    def _rgit(*a, cwd=None):
+        return _sp.run(["git", *a], cwd=cwd or _work, capture_output=True,
+                       text=True, encoding="utf-8", errors="replace",
+                       timeout=60)
+    try:
+        _bare = os.path.join(_rg, "okiba.git")
+        _work = os.path.join(_rg, "tesaki")
+        _sp.run(["git", "init", "--bare", "-b", "main", _bare],
+                capture_output=True, timeout=60)
+        _sp.run(["git", "clone", _bare, _work], capture_output=True,
+                timeout=60)
+        _rgit("config", "user.email", "t@example.invalid")
+        _rgit("config", "user.name", "t")
+        _io.open(os.path.join(_work, "a.txt"), "w",
+                encoding="utf-8").write("1")
+        _rgit("add", "a.txt")
+        _rgit("commit", "-m", "one")
+        _rgit("push", "-u", "origin", "main")
+        globals()["BASE"] = _work
+        globals()["remote_ok"] = lambda: []
+        _tip1 = _rgit("rev-parse", "HEAD").stdout.strip()
+        t("★★本物のgit：ふつうに出した直後は、その先端を返す★★",
+          published_tip() == (_tip1, ""))
+
+        # ★別の枝に切り替えると返さない★
+        _rgit("checkout", "-b", "side")
+        _io.open(os.path.join(_work, "b.txt"), "w",
+                encoding="utf-8").write("2")
+        _rgit("add", "b.txt")
+        _rgit("commit", "-m", "two")
+        _rgit("push", "-u", "origin", "side")
+        t("★★本物のgit：別の枝にいるときは先端を返さない★★"
+          "／★その枝に載っているだけで「公開した」ことにしない★",
+          published_tip()[0] == "")
+        _rgit("checkout", "main")
+
+        # ★手元の写しが古いと返さない★
+        #   （別の作業から置き場を進め、手元は取り直さない）
+        _work2 = os.path.join(_rg, "betsu")
+        _sp.run(["git", "clone", _bare, _work2], capture_output=True,
+                timeout=60)
+        _rgit("config", "user.email", "t@example.invalid", cwd=_work2)
+        _rgit("config", "user.name", "t", cwd=_work2)
+        _io.open(os.path.join(_work2, "c.txt"), "w",
+                encoding="utf-8").write("3")
+        _rgit("add", "c.txt", cwd=_work2)
+        _rgit("commit", "-m", "three", cwd=_work2)
+        _rgit("push", "origin", "main", cwd=_work2)
+        t("★★本物のgit：手元の写しが古ければ先端を返さない★★"
+          "／★古い中身を「いま読者が見ているもの」と取り違えない★",
+          published_tip()[0] == "")
+        _rgit("fetch", "origin")
+        _rgit("reset", "--hard", "origin/main")
+        _tip3 = _rgit("rev-parse", "HEAD").stdout.strip()
+        t("　本物のgit：取り直せば、また先端を返す",
+          published_tip() == (_tip3, "") and _tip3 != _tip1)
+    finally:
+        globals()["BASE"] = _keep_base_rg
+        globals()["remote_ok"] = _keep_rok_rg
+        _sh.rmtree(_rg, ignore_errors=True)
+
     # ★★集計は、すべての試験の後ろに置く★★（2026-08-25・監査51が検知）
     #   ★足した5件が集計より前に無かった★ので、
     #   その分は数えられず、**落ちても合格と出る**状態だった。
