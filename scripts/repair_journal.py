@@ -565,6 +565,14 @@ def _full_sha(commit: str) -> str:
 DELIVER_WAIT_SECONDS = 120
 DELIVER_POLL_SECONDS = 40
 
+# ★1回の合格判定で、配信の記録に問い合わせてよい回数★
+#   （2026-08-29・Codexのレビュー21）
+#   ★認証なしの上限は60回/時★（送信元ごと）。
+#   ふつうの流れは10回ほど（待って1回・届いて1回・検査のあとに1回）。
+#   1日3機種なので、18×3＝54回で上限に収まる。
+#   使い切ったら理由を返して断る（fail-closed）。
+API_BUDGET = 18
+
 
 def _delivered_wait(commit: str, wait_seconds=None, sleep=None) -> tuple:
     """★届くまで少しだけ待ってから答える★（2026-08-29）
@@ -642,10 +650,23 @@ def recheck_pass(fid: str, wait_seconds=None, sleep=None) -> dict:
     commit = str(rec.get("commit") or "")
     # ★①記録された段階を信じず、いま自分で確かめ直す★
     #   ★見るのは「出したか」ではなく「届いたか」★（レビュー18・重大）
-    # ★★入口では、配信が終わるのを少しだけ待つ★★（2026-08-29）
-    #   push の直後に呼ばれるので、待たないと必ず時期尚早で断る。
-    ok, why, mark = _delivered_wait(commit, wait_seconds=wait_seconds,
-                                    sleep=sleep)
+    # ★★問い合わせの回数に上限を置く★★（2026-08-29・Codexのレビュー21）
+    #   ★待つ処理と組み合わさると、1機種で最大60回になり得た★
+    #   （認証なしの上限が60回/時なので、そのまま止まる）。
+    #   ★この関数を出るときに必ず戻す★（他の使い方に影響させない）。
+    try:
+        import prepush_gate as _pgb
+        _pgb.api_budget(API_BUDGET)
+    except Exception:                                    # noqa: BLE001
+        _pgb = None
+    try:
+        # ★★入口では、配信が終わるのを少しだけ待つ★★（2026-08-29）
+        #   push の直後に呼ばれるので、待たないと必ず時期尚早で断る。
+        ok, why, mark = _delivered_wait(commit, wait_seconds=wait_seconds,
+                                        sleep=sleep)
+    finally:
+        if _pgb is not None:
+            _pgb.api_budget(None)
     if not ok:
         raise JournalError(f"読者に届いたことを確かめられません: {why}")
     tip, dep_id = mark
@@ -673,7 +694,17 @@ def recheck_pass(fid: str, wait_seconds=None, sleep=None) -> dict:
     # ★★検査のあいだに配信が進んでいないか、もう一度見る★★
     #   （レビュー18・中③）前だけ見ていると、検査中に別の中身が
     #   届いていても、古い判断のまま「直った」と記録できる。
-    ok3, why3, mark2 = _delivered(commit)
+    # ★検査のあとの確かめにも、残りの回数を分けておく★
+    try:
+        import prepush_gate as _pgb2
+        _pgb2.api_budget(API_BUDGET)
+    except Exception:                                    # noqa: BLE001
+        _pgb2 = None
+    try:
+        ok3, why3, mark2 = _delivered(commit)
+    finally:
+        if _pgb2 is not None:
+            _pgb2.api_budget(None)
     if not ok3 or mark2 != mark:
         raise JournalError(
             f"検査のあいだに配信が変わりました（{tip[:8]}/{dep_id} → "
@@ -1155,8 +1186,25 @@ def _selftest() -> int:
               and load(f501)["state"] == "PUSH_CONFIRMED")
 
             # ★対照実験：届いていて、その中身で合格すれば進む★
+            #   ★★この1回で、上限の置き方も一緒に観察する★★
+            #   （2026-08-29・Codexのレビュー21）
+            #   ★合格判定は段階を進めるので2回呼べない★＝
+            #   別に呼ぶ試験を足すと、あとの試験が段階を失う（罠⑱）。
+            import prepush_gate as _pg_t
+            _budgets = []
+            _keep_budget = _pg_t.api_budget
             globals()["_delivered"] = lambda c: (True, "", (_TIP, 9))
-            _rec5 = recheck_pass(f501, wait_seconds=0)
+            try:
+                _pg_t.api_budget = lambda n, _b=_budgets: _b.append(n)
+                _rec5 = recheck_pass(f501, wait_seconds=0)
+            finally:
+                _pg_t.api_budget = _keep_budget
+            t("★★合格判定のあいだだけ、問い合わせの回数に上限を置く★★"
+              "／★置かないと、待つ処理と重なって上限に当たり、"
+              "タスクが止まる★",
+              _budgets[:2] == [API_BUDGET, None]
+              and _budgets[-1] is None
+              and _budgets.count(API_BUDGET) == 2)
             t("　対照実験：届いていて、その中身で合格すれば進む",
               _rec5["state"] == "RECHECK_PASS")
             t("　★どの配信で確かめたかを番号まで記録に残す★",

@@ -413,14 +413,51 @@ def remote_main_tip(timeout: int = 120) -> tuple:
     return tip, ""
 
 
-def _api(path: str, timeout: int = 60):
+# ★1回の作業で問い合わせてよい回数★（2026-08-29・Codexのレビュー21）
+#   ★認証なしの上限は60回/時★（送信元ごと）。
+#   ここを決めておかないと、待つ処理と組み合わさって
+#   ★1機種で最大60回★になり得た（実際そうなっていた）。
+#   None＝上限なし（手で確かめるとき用）。
+_API_LEFT = [None]
+
+
+def api_budget(n) -> None:
+    """★これから使ってよい問い合わせの回数を決める★（None＝上限なし）"""
+    _API_LEFT[0] = None if n is None else int(n)
+
+
+def api_left():
+    """★あと何回使えるか★（None＝上限なし）"""
+    return _API_LEFT[0]
+
+
+def _api(path: str, timeout: int = 60, strict_page: bool = False):
     """★GitHubに問い合わせる（読み取りだけ・認証なし）★
 
     ★返すもの★＝(中身, 理由)。読めなければ中身は None（fail-closed）。
+
+    ★★1ページに収まらなければ断る（strict_page のときだけ）★★
+      （2026-08-29・Codexのレビュー21）
+      100件は「最大のページの大きさ」であって全件ではない。
+      並び順の保証も見つからないので、
+      ★範囲の外に新しいものがあれば、古いものを今のものだと誤認しうる★。
+      ★たどらずに断る★＝たどると問い合わせの回数の上限と正面から衝突する。
+      次のページがあることは、返事の見出し（Link）から★追加の問い合わせ0回★で分かる。
+
+    ★★どこに効かせるかを間違えると、本番が丸ごと止まる★★
+      （2026-08-29・実機で試して発覚）
+      ★配信の一覧は100件を超えていて当たり前★（pushのたびに増える）ので、
+      そこで断ると**毎回必ず断る**＝更新タスクが動かない。
+      効かせるのは★配信ひとつの状態の一覧★だけ
+      （そちらが101件あるのは異常なので、断ってよい）。
     """
     import json as _json
     import urllib.error
     import urllib.request
+    if _API_LEFT[0] is not None:
+        if _API_LEFT[0] <= 0:
+            return None, "問い合わせの回数を使い切りました（一度に使える上限）"
+        _API_LEFT[0] -= 1
     url = f"https://api.github.com/repos/{WANT_PATH}{path}"
     req = urllib.request.Request(url, headers={
         "Accept": "application/vnd.github+json",
@@ -429,6 +466,11 @@ def _api(path: str, timeout: int = 60):
         with urllib.request.urlopen(req, timeout=timeout) as f:
             if f.status != 200:
                 return None, f"配信の記録を読めません（{f.status}）"
+            link = str(f.headers.get("Link") or "")
+            if strict_page and 'rel="next"' in link:
+                return None, ("配信の記録が1ページに収まっていません"
+                              "（範囲の外に新しいものがあるかもしれないので"
+                              "判断しません）")
             return _json.loads(f.read().decode("utf-8")), ""
     except Exception as e:                # noqa: BLE001
         return None, f"配信の記録を読めません（{type(e).__name__}）"
@@ -530,6 +572,15 @@ def deployed_tip(timeout: int = 60) -> tuple:
         return "", why, 0
     if not isinstance(got, list) or not got:
         return "", "配信の記録がありません", 0
+    # ★★一覧の並び順を仮定しない★★（2026-08-29・Codexのレビュー21）
+    #   ★追加の問い合わせは0回★＝手元で作成時刻の新しい順に並べ替える。
+    #   （一覧そのものは100件を超えていて当たり前なので、そこでは断らない）
+    try:
+        got = sorted([d for d in got if isinstance(d, dict)],
+                     key=lambda d: (str(d.get("created_at") or ""),
+                                    int(d.get("id") or 0)), reverse=True)
+    except Exception:                     # noqa: BLE001
+        return "", "配信の記録の形が違います", 0
     # ★新しい順に見て、いま生きている成功版を探す★
     #   ★見る数に上限を置く★（2026-08-29・Codexのレビュー20）
     #     配信1件ごとに1回問い合わせるので、
@@ -542,7 +593,7 @@ def deployed_tip(timeout: int = 60) -> tuple:
         if not isinstance(dep_id, int):
             return "", "配信の記録に番号がありません", 0
         st, why2 = _api(f"/deployments/{dep_id}/statuses?per_page=100",
-                        timeout=timeout)
+                        timeout=timeout, strict_page=True)
         if st is None:
             return "", why2, 0
         if not isinstance(st, list):
@@ -924,7 +975,7 @@ def selftest() -> int:
                              "head_sha": "abc123"}},
         })
 
-    def _dp_api(path, timeout=60):
+    def _dp_api(path, timeout=60, strict_page=False):
         if path.startswith("/deployments?"):
             return (_DP["dep"], "") if _DP["dep"] is not None \
                 else (None, "読めません")
@@ -1020,7 +1071,10 @@ def selftest() -> int:
         #   ★問い合わせの回数に上限がある★ので、無制限に遡らない。
         #   使い切ったら理由を返して断る（黙って古いものを答えにしない）。
         _dp_reset()
-        _DP["dep"] = [{"id": 100 + n, "sha": "abc123"}
+        # ★新しい順に並べ替えるので、時刻を明示する★
+        #   （成功したものがいちばん古い＝上限の向こう側）
+        _DP["dep"] = [{"id": 100 + n, "sha": "abc123",
+                       "created_at": f"2026-08-29T{20 - n:02d}:00:00Z"}
                       for n in range(SCAN_DEPLOYMENTS + 2)]
         for n in range(SCAN_DEPLOYMENTS + 1):
             _DP["st"][100 + n] = [{"id": 1, "state": "failure",
@@ -1034,6 +1088,19 @@ def selftest() -> int:
         t("★★上限まで見て見つからなければ、理由を返して断る★★"
           "／★黙って古いものを答えにしない★",
           deployed_tip()[0] == "" and str(SCAN_DEPLOYMENTS) in _why_scan)
+
+        # ★★配信の一覧の並び順も仮定しない★★（レビュー21）
+        #   ★手元で新しい順に並べ替える★（追加の問い合わせは0回）
+        _dp_reset()
+        _DP["dep"] = [{"id": 9, "sha": "abc123",
+                       "created_at": "2026-08-29T01:00:00Z"},
+                      {"id": 10, "sha": "def456",
+                       "created_at": "2026-08-29T02:00:00Z"}]
+        _DP["st"][10] = [{"id": 5, "state": "success",
+                          "created_at": "2026-08-29T02:00:00Z",
+                          "target_url": _MIRROR_URL2}]
+        t("★★一覧が古い順で返ってきても、新しい配信を選ぶ★★",
+          deployed_tip() == ("def456", "", 10))
 
         # ★★状態の並び順を仮定しない★★（レビュー19・軽微）
         _dp_reset()
@@ -1062,9 +1129,103 @@ def selftest() -> int:
         t("★★置き場が想定と違えば、配信も聞きに行かない★★"
           "（別の置き場の配信を答えにしない）",
           deployed_tip()[0] == "")
+        # ★★問い合わせの回数を、外側ではなく中で数える★★
+        #   （2026-08-29・Codexのレビュー21）
+        #   ★直す前の試験は外側の呼び出し回数しか見ていなかった★ので、
+        #   中で最大60回まで膨らむことに気づけなかった（罠⑧）。
+        _dp_reset()
+        _cnt = [0]
+        _real_api = _dp_api
+
+        def _count_api(path, timeout=60, strict_page=False):
+            _cnt[0] += 1
+            return _real_api(path, timeout, strict_page)
+        globals()["_api"] = _count_api
+        deployed_tip()
+        t("　★ふつうの場合は3回で済む★（一覧・状態・実行）", _cnt[0] == 3)
+
+        _dp_reset()
+        _cnt[0] = 0
+        _DP["dep"] = [{"id": 100 + n, "sha": "abc123",
+                       "created_at": f"2026-08-29T{20 - n:02d}:00:00Z"}
+                      for n in range(SCAN_DEPLOYMENTS + 2)]
+        for n in range(SCAN_DEPLOYMENTS + 2):
+            _DP["st"][100 + n] = [{"id": 1, "state": "failure",
+                                   "created_at": "2026-08-29T02:00:00Z",
+                                   "target_url": _MIRROR_URL}]
+        deployed_tip()
+        t("★★いちばん多いときでも、上限の回数で収まる★★"
+          "／★中の回数を数えないと、待つ処理と重なって膨らむ★",
+          _cnt[0] <= SCAN_DEPLOYMENTS + 2)
+        globals()["_api"] = _dp_api
+
+        # ★★使ってよい回数を決められる★★
+        #   ★偽物へ差し替えた入口では上限を通らない★ので、
+        #   ここは★本物の入口★でだけ試す（差し替えたまま試すと何も試していない）。
+        globals()["_api"] = _keep_api
+        try:
+            api_budget(0)
+            _r_budget = _api("/deployments?per_page=1")
+            t("★★回数を使い切ったら、問い合わせに行かずに断る★★"
+              "／★中の回数に上限が無いと、待つ処理と重なって"
+              "上限に当たり、タスクが止まる★",
+              _r_budget[0] is None and "使い切りました" in _r_budget[1])
+            api_budget(1)
+            _left_before = api_left()
+            t("　★残りの回数が分かる★", _left_before == 1)
+        finally:
+            api_budget(None)
+            globals()["_api"] = _dp_api
     finally:
         globals()["_api"] = _keep_api
         globals()["remote_ok"] = _keep_rok_dp
+
+    # ★★1ページに収まらなければ断る★★（2026-08-29・Codexのレビュー21）
+    #   ★100件は「最大のページの大きさ」であって全件ではない★。
+    #   ★たどらずに断る★＝たどると回数の上限と正面から衝突する。
+    import urllib.request as _ur
+    _keep_open = _ur.urlopen
+
+    class _FakeResp:
+        status = 200
+
+        def __init__(self, link):
+            self.headers = {"Link": link}
+
+        def read(self):
+            return b"[]"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    try:
+        _ur.urlopen = lambda req, timeout=60: _FakeResp(
+            '<https://api.github.com/x?page=2>; rel="next"')
+        _r_next = _api("/deployments/1/statuses?per_page=100",
+                       strict_page=True)
+        t("★★状態が1ページに収まらなければ、その場で断る★★"
+          "／★範囲の外に新しいものがあれば、古いものを"
+          "いまのものだと誤認しうる★",
+          _r_next[0] is None and "1ページに収まって" in _r_next[1])
+        # ★★どこに効かせるかを間違えると、本番が丸ごと止まる★★
+        #   （2026-08-29・★実機で試して発覚★）
+        #   ★配信の一覧は100件を超えていて当たり前★（pushのたびに増える）。
+        #   そこで断る作りにしたら、実機が毎回断って
+        #   ★更新タスクが丸ごと止まった★。
+        _r_list = _api("/deployments?per_page=100")
+        t("★★配信の一覧は、次のページがあっても断らない★★"
+          "／★断ると毎回必ず断る＝更新タスクが丸ごと止まる★",
+          _r_list[0] == [] and _r_list[1] == "")
+        _ur.urlopen = lambda req, timeout=60: _FakeResp("")
+        _r_one = _api("/deployments/1/statuses?per_page=100",
+                      strict_page=True)
+        t("　対照：1ページに収まっていれば読む",
+          _r_one[0] == [] and _r_one[1] == "")
+    finally:
+        _ur.urlopen = _keep_open
 
     # ★★本物の git で試す★★（2026-08-29・Codexのレビュー17）
     #   ★偽物だけで固めると、実際の ref の扱いを一度も試していない★
