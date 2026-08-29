@@ -13,7 +13,8 @@
    "purpose": [
     "new_machine_discovery",
     "machine_identity",
-    "claim_material"
+    "claim_material",
+    "popularity_rank"
    ],
    "path_prefixes": [
     "/machines",
@@ -23,7 +24,7 @@
    "terms_url": "https://p-town.dmm.com/utilization",
    "checked_at": "2026-08-16",
    "checked_by": "運営者",
-   "why": "利用規約に、プログラムを用いたアクセスやデータ収集を一律に禁じる条項が見当たらない。新台カレンダーと機種ページを、1機種あたり1回の取得で参照する。",
+   "why": "利用規約に、プログラムを用いたアクセスやデータ収集を一律に禁じる条項が見当たらない。新台カレンダーと機種ページを、1機種あたり1回の取得で参照する。 ★2026-08-29に用途を1つ足した★＝人気順のページ（/machines/popularity/slot）を週1回だけ読み、更新タスクが「いま人気の機種」を優先できるようにする（並び順は手で並べ替えるしかなく、約4か月古くなっていた）。",
    "evidence_ref": "docs/tos_review_2026-08-16.md",
    "recheck_by": "2027-02-16",
    "status": "APPROVED"
