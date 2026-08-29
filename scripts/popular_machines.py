@@ -373,6 +373,52 @@ def _write_store(mutate) -> dict:
     return store
 
 
+def _decide(top: list, rows: list, store: dict) -> dict:
+    """いまの控えを見て「どれを2AIへ聞くか・どれを打ち切るか」を決める。
+
+    ★★鍵の中でもう一度呼ぶ★★（2026-08-30・Codexの3周目の指摘2）
+      ★直す前は、鍵を取る前の古い控えから作った `ranked` を
+        そのまま保存していた★＝名前の一致で 1001→A と決めたあと、
+        鍵を取るまでの間に2AIが 1001→B を記録すると、
+        `by_dmm_id` は B（setdefault で守られる）なのに
+        `ranked` は A のまま確定し、★サイトには A が出た★。
+      ＝取ってくるのは鍵の外でよいが、**決めるのは鍵の中**。
+    """
+    got = resolve(top, rows, store)
+    got["checked_at"] = None                  # 書くときに入れる
+    got["report"] = []
+    # ★★3回話しても決まらなかった機種は、報告して先へ進む★★
+    #   （2026-08-29・運営者の指示「それでも無理な場合報告して
+    #     その方向へ倒してもいいよ」）
+    tries = store.get("tries") or {}
+    seen = store.get("tried_names") or {}
+
+    def _state(q) -> str:
+        """ask＝2AIへ聞く／revive＝打ち切りを解く／giveup＝外したまま"""
+        mid = str(q.get("dmm_id") or "")
+        if int(tries.get(mid) or 0) < GIVE_UP_TRIES:
+            return "ask"
+        names = seen.get(mid) or []
+        if not names:
+            return "giveup"             # ★いま打ち切る回★（名前を控える）
+        # ★★DMM側の名前が変わったら、また2AIへ聞く★★
+        #   （2026-08-29・Codexの2周目の指摘2）
+        #   ★打ち切りを永久にしない★＝名前が変わったのは新しい材料なので、
+        #   同じ結論になるとは限らない。
+        # ★★ただし、前に試した名前へ戻っただけなら聞き直さない★★
+        #   （2026-08-30・Codexの3周目の指摘4）
+        #   ★直す前は「直前の名前」としか比べていなかった★ので、
+        #   A→B→A→B と往復すると**無期限に聞き続けた**。
+        return "giveup" if norm(q.get("name") or "") in names else "revive"
+
+    _st = {id(q): _state(q) for q in got["questions"]}
+    got["give_up"] = [q for q in got["questions"] if _st[id(q)] == "giveup"]
+    got["revived"] = [q for q in got["questions"] if _st[id(q)] == "revive"]
+    got["ask_2ai"] = [q for q in got["questions"] if _st[id(q)] != "giveup"]
+    got["kept_previous"] = False
+    return got
+
+
 def run(apply_it: bool = False, fetcher=None, machines=None) -> dict:
     """人気順を取って、うちどころのslugへ並べ直す。"""
     rows = machines
@@ -390,40 +436,14 @@ def run(apply_it: bool = False, fetcher=None, machines=None) -> dict:
     check_ranks(top)                    # ★1〜20位がそろっているか★
     top = top[:TOP_N]
     store = load_store()
-    got = resolve(top, rows, store)
-    got["checked_at"] = None                  # 書くときに入れる
-    got["report"] = []
-    got["revived"] = []
-    # ★★3回話しても決まらなかった機種は、報告して先へ進む★★
-    #   （2026-08-29・運営者の指示「それでも無理な場合報告して
-    #     その方向へ倒してもいいよ」）
-    tries = store.get("tries") or {}
-    seen_names = store.get("try_names") or {}
-
-    def _state(q) -> str:
-        """ask＝2AIへ聞く／revive＝打ち切りを解く／giveup＝外したまま"""
-        mid = str(q.get("dmm_id") or "")
-        if int(tries.get(mid) or 0) < GIVE_UP_TRIES:
-            return "ask"
-        prev = seen_names.get(mid)
-        if prev is None:
-            return "giveup"             # ★いま打ち切る回★（名前を控える）
-        # ★★DMM側の名前が変わったら、また2AIへ聞く★★
-        #   （2026-08-29・Codexの2周目の指摘2）
-        #   ★打ち切りを永久にしない★＝名前が変わったのは新しい材料なので、
-        #   同じ結論になるとは限らない。
-        return "giveup" if norm(prev) == norm(q.get("name") or "") \
-            else "revive"
-
-    _st = {id(q): _state(q) for q in got["questions"]}
-    got["give_up"] = [q for q in got["questions"] if _st[id(q)] == "giveup"]
-    got["revived"] = [q for q in got["questions"] if _st[id(q)] == "revive"]
-    got["ask_2ai"] = [q for q in got["questions"] if _st[id(q)] != "giveup"]
-    got["kept_previous"] = False
+    got = _decide(top, rows, store)
     if apply_it:
         import datetime as _dt
 
         def _mut(s):
+            # ★★鍵の中で決め直す★★（2026-08-30・Codexの3周目の指摘2）
+            got.clear()
+            got.update(_decide(top, rows, s))
             # ★★新しく分かった対応は「空いている所」にだけ入れる★★
             #   （2026-08-29・Codexの2周目の指摘1）
             #   ★直す前は update() で無条件に上書きしていた★＝
@@ -438,14 +458,20 @@ def run(apply_it: bool = False, fetcher=None, machines=None) -> dict:
             s["pending_questions"] = len(got["ask_2ai"])
             # ★★打ち切った機種の名前は、途中で終わる回にも控える★★
             #   （でないと「名前が変わったら解ける」条件が永久に来ない）
-            _tn = s.setdefault("try_names", {})
+            # ★★試した名前は全部覚える★★（2026-08-30・Codexの3周目の指摘4）
+            #   ★直前の1つだけだと、A→B→A の往復で無期限に聞き直す★
+            _tn = s.setdefault("tried_names", {})
             for q in got["give_up"]:
-                _tn.setdefault(str(q.get("dmm_id")), q.get("name") or "")
-            # ★名前が変わったものは、回数も報告済みの印も0に戻す★
+                _k = str(q.get("dmm_id"))
+                _lst = _tn.setdefault(_k, [])
+                _nm = norm(q.get("name") or "")
+                if _nm not in _lst:
+                    _lst.append(_nm)
+            # ★名前が変わったものは、回数と報告済みの印だけ0に戻す★
+            #   （★試した名前は消さない★＝戻ってきたときに気づくため）
             for q in got["revived"]:
                 _mid = str(q.get("dmm_id"))
                 (s.get("tries") or {}).pop(_mid, None)
-                _tn.pop(_mid, None)
                 _esc = s.get("escalated") or []
                 if _mid in _esc:
                     _esc.remove(_mid)
@@ -976,9 +1002,9 @@ def selftest() -> int:
                         "tries": {"1020": GIVE_UP_TRIES}},
                        ensure_ascii=False) + "\n")
         rA = run(True, fetcher=_f, machines=_ms)
-        t("★★打ち切った機種は、そのときの名前を控える★★",
+        t("★★打ち切った機種は、試した名前を控える★★",
           (json.loads(io.open(STORE, encoding="utf-8").read())
-           .get("try_names") or {}).get("1020") == "機種20"
+           .get("tried_names") or {}).get("1020") == [norm("機種20")]
           and len(rA["give_up"]) == 1)
         rB = run(True, fetcher=_f, machines=_ms)
         t("　★名前が同じうちは、打ち切ったまま★",
@@ -992,6 +1018,64 @@ def selftest() -> int:
         t("　★回数も報告済みの印も0に戻す★",
           not (json.loads(io.open(STORE, encoding="utf-8").read())
                .get("tries") or {}).get("1020"))
+
+        # ★★3周目2：決めるのは鍵の中★★
+        #   ★競り合い★＝run() が最初に読んだときは控えが空で、
+        #   書く直前に読み直したときには2AIの判断（1001→s20）が入っている。
+        #   ★ranked も鍵の中で決め直していないと、名前の一致で決めた
+        #     s1 のほうが保存され、サイトに出てしまう★
+        io.open(STORE, "w", encoding="utf-8", newline="\n").write(
+            json.dumps({"schema_version": SCHEMA,
+                        "by_dmm_id": {"1001": "s20"}},
+                       ensure_ascii=False) + "\n")
+        _real2, _seen2 = load_store, []
+
+        def _racing2():
+            s = _real2()
+            _seen2.append(1)
+            if len(_seen2) == 1:
+                s = dict(s)
+                s["by_dmm_id"] = {}
+            return s
+
+        globals()["load_store"] = _racing2
+        try:
+            run(True, fetcher=_f, machines=_ms_all)
+        finally:
+            globals()["load_store"] = _real2
+        _s8 = json.loads(io.open(STORE, encoding="utf-8").read())
+        t("★★決めるのは鍵の中★★"
+          "（取っている最中に2AIが決めた対応が、順位表にも効く）",
+          (_s8.get("ranked") or [""])[0] == "s20")
+
+        # ★★3周目4：前に試した名前へ戻っただけなら聞き直さない★★
+        io.open(STORE, "w", encoding="utf-8", newline="\n").write(
+            json.dumps({"schema_version": SCHEMA, "by_dmm_id": {},
+                        "tries": {"1020": GIVE_UP_TRIES}},
+                       ensure_ascii=False) + "\n")
+        run(True, fetcher=_f, machines=_ms)          # 名前A で打ち切る
+        _fB = (lambda _u: _page20(                     # noqa: E731
+            lambda i: "機種20 改" if i == TOP_N else f"機種{i}"))
+        rB1 = run(True, fetcher=_fB, machines=_ms)   # 名前B → 聞き直す
+        t("★★名前が変わったら聞き直す★★", len(rB1["revived"]) == 1)
+        t("　★聞き直すときも、前に試した名前は消さない★"
+          "（消すと A→B→A の往復に気づけない）",
+          norm("機種20") in
+          ((json.loads(io.open(STORE, encoding="utf-8").read())
+            .get("tried_names") or {}).get("1020") or []))
+        io.open(STORE, "w", encoding="utf-8", newline="\n").write(
+            json.dumps({"schema_version": SCHEMA, "by_dmm_id": {},
+                        "tries": {"1020": GIVE_UP_TRIES},
+                        "tried_names": {"1020": [norm("機種20"),
+                                                 norm("機種20 改")]}},
+                       ensure_ascii=False) + "\n")
+        rB2 = run(True, fetcher=_f, machines=_ms)    # 名前A へ戻った
+        t("★★前に試した名前へ戻っただけなら、聞き直さない★★"
+          "（A→B→A の往復で無期限に聞き続けない）",
+          not rB2["revived"] and len(rB2["give_up"]) == 1)
+        t("　★試した名前は消さない★",
+          len((json.loads(io.open(STORE, encoding="utf-8").read())
+               .get("tried_names") or {}).get("1020") or []) == 2)
 
         # ★★2周目3：前の週の一覧を使っていることを隠さない★★
         io.open(STORE, "w", encoding="utf-8", newline="\n").write(
