@@ -551,6 +551,60 @@ def _record_howto(field: str, example: str) -> str:
             "（★公式URL・判断者2人・**発行元の違う2つの出典**が要ります★）")
 
 
+# ★機械が読めなかったことを表す言い回し★（2026-08-29）
+#   ★文言で分岐するのは本意ではない★が、いまはこれらが
+#   `problems` の文字列としてしか残っていない。
+#   ★ここを増やすときは、必ず試験も足すこと★
+UNRESOLVED_MARKS = (
+    ("記述はあるが採れませんでした",
+     "★出典に書いてあるのに、機械が値を取り出せませんでした★"),
+    ("2票に届きません",
+     "★1つの出典にしか書かれていません★"),
+    ("かもしれないが採れなかった語",
+     "★機能の名前らしき語が見つかりましたが、中身を取り出せませんでした★"),
+)
+
+
+def unresolved_questions(problems, urls=None, limit: int = 12) -> list:
+    """★機械が読めなかったものを、2AIへの質問として出す★（2026-08-29）
+
+    ★なぜ要るのか★＝実測（2026-08-29の新台タスク）で、
+    出典は取れているのに★毎回「採用=0項目」★で終わっていた。
+    理由の大半は「文章はあるのに値を取り出せない」で、
+    ★それが誰にも聞かれずに捨てられていた★。
+    16日間・25回試して、2機種とも1文字も記事にならなかった。
+
+    ★機械はここで値を決めない★＝
+    「何が読めなかったか」と「どこを読めばよいか」を並べるだけ。
+    読んで決めるのは2AI（決めた値は confirmed_values へ記録する）。
+
+    ★返すもの★＝質問の一覧（無ければ空）
+    """
+    out, seen = [], set()
+    for p in (problems or []):
+        line = str(p or "").strip()
+        if not line:
+            continue
+        for mark, jp in UNRESOLVED_MARKS:
+            if mark not in line or line in seen:
+                continue
+            seen.add(line)
+            out.append(f"{jp} → {line}")
+            break
+        if len(out) >= limit:
+            break
+    if not out:
+        return []
+    where = [str(u) for u in (urls or []) if str(u or "").strip()]
+    head = ("★機械が読めなかったものがあります。"
+            "出典を読んで値を決めてください★"
+            "／★決められないものは無理に決めないでください★"
+            "（1つの出典にしか無い値は、原則として載せません）")
+    if where:
+        head += "／読む先: " + " / ".join(where[:6])
+    return [head] + out
+
+
 def checker_questions(material) -> list:
     """★機械が決められないことを、2AIへの質問として出す★（2026-08-12）
 
@@ -1848,6 +1902,28 @@ def selftest() -> int:
     t("★★①収集：本物の抽出器が表を読める★★", _got_a and _got_a == _got_b)
     # ★★ボーナス確率が採れないなら、2AIへ質問を出す★★（2026-08-26・実測）
     #   ★表を持っている出典が1社しかない★ので、機械だけでは永久に採れない。
+    # ★★機械が読めなかったものを、質問にする★★（2026-08-29・本筋）
+    #   ★これが無かったので、毎晩「採用=0項目」で終わっていた★
+    #   （実測：16日間・25回試して2機種とも1文字も記事にならなかった）
+    _pr = ["天井: p-town.dmm.com を使えませんでした"
+           "（天井の記述はあるが採れませんでした（要確認））",
+           "CZ「石兵八陣」: 独立した出典が2票に届きません（出典1件・1票）",
+           "CZかもしれないが採れなかった語: 7連はチャンス・のチャンス",
+           "型式名: 型式名がまだどの名鑑にも載っていません"]
+    _uq = unresolved_questions(_pr, ["https://example.invalid/a"])
+    t("★★読めなかったものが質問になる★★"
+      "／★これが無くて、出典はあるのに毎晩0項目で終わっていた★",
+      len(_uq) == 4 and any("読む先" in x for x in _uq)
+      and any("取り出せませんでした" in x for x in _uq)
+      and any("1つの出典にしか" in x for x in _uq))
+    t("　★機械が読めた話（型式名が無い等）は混ぜない★",
+      not any("型式名がまだ" in x for x in _uq))
+    t("　★読めなかったものが無ければ、質問も出さない★",
+      unresolved_questions(["型式名: 型式名がまだ載っていません"]) == []
+      and unresolved_questions([]) == [])
+    t("　★同じ理由を二重に出さない★",
+      len(unresolved_questions([_pr[0], _pr[0]])) == 2)
+
     _q_no_bp = checker_questions({"adopted": {
         "machine_profile": {**IM, "value": {"profile": "BONUS"},
                             "sources": ["a", "b"]}}})

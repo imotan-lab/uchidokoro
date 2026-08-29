@@ -3037,6 +3037,13 @@ def run_one(name, official_url, maker, release, apply_it=False,
     #   ①ここで質問を出す ②2AIが答えて confirmed_values へ記録する
     #   ③公開まで答えが出なければ台帳へ＝翌朝のまとめメールで知らせる
     out["ask_2ai"] = _ba.checker_questions(mat)
+    # ★★機械が読めなかったものも、必ず質問にする★★（2026-08-29・本筋）
+    #   ★これが無かったので、出典は取れているのに毎晩「採用=0項目」で
+    #     終わっていた★（実測：16日間・25回試して2機種とも記事にならず）。
+    #   ★足す順に意味がある★＝`checker_questions` は配列を丸ごと返すので、
+    #   先に足すと消える（2026-08-14・依頼190のP1と同じ穴）。
+    out["ask_2ai"] += _ba.unresolved_questions(
+        out["problems"], got.get("urls") or [])
     for q in out["ask_2ai"]:
         _log(f"  ★2AIに聞くこと: {q[:160]}")
     usable_mat = usable_material(mat)
