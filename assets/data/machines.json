@@ -790,29 +790,37 @@
   "info": "",
   "strategy": "",
   "aliases": [],
-  "publication_policy": "page-decision/v1",
+  "publication_policy": "page-decision/v2",
   "page_decision": {
-   "schema_version": "page-decision/v1",
+   "schema_version": "page-decision/v2",
    "indexable": false,
-   "confirmed_topics": [],
-   "pending_topics": [
-    "gameplay",
-    "cz",
+   "machine_profile": "UNKNOWN",
+   "ceiling_state": "PRESENT",
+   "confirmed_topics": [
     "ceiling",
-    "spec",
+    "cz",
+    "gameplay",
+    "spec"
+   ],
+   "pending_topics": [
     "setting",
     "strategy",
     "reset"
    ],
    "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
-    "NO_UNIQUE_GAMEPLAY"
+    "MACHINE_PROFILE_UNKNOWN"
    ],
-   "claims": [],
+   "claims": [
+    "at:MAIN_AT",
+    "ceiling:GAME:",
+    "cz:解放の刻",
+    "cz:超自然災害モード",
+    "games_per_50",
+    "payout_range"
+   ],
    "policy_mode": "normal",
-   "decided_at": "2026-08-23",
-   "input_digest": "sha256:bc6afcc73e2d1ee3c2ad7aff9d94202e38b0941e0611da7976e64ac835bd1e62"
+   "decided_at": "2026-08-30",
+   "input_digest": "sha256:3f4f5892224c6459782bc4577352c6167fe65c9f515005ad23e7edca6d768c85"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-08-17",
@@ -2381,16 +2389,19 @@
   "info": "",
   "strategy": "",
   "aliases": [],
-  "publication_policy": "page-decision/v1",
+  "publication_policy": "page-decision/v2",
   "page_decision": {
-   "schema_version": "page-decision/v1",
+   "schema_version": "page-decision/v2",
    "indexable": false,
-   "confirmed_topics": [],
+   "machine_profile": "UNKNOWN",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [
+    "spec"
+   ],
    "pending_topics": [
     "gameplay",
     "cz",
     "ceiling",
-    "spec",
     "setting",
     "strategy",
     "reset"
@@ -2398,12 +2409,14 @@
    "reason_codes": [
     "CLAIMS_LT_3",
     "CATEGORIES_LT_2",
-    "NO_UNIQUE_GAMEPLAY"
+    "MACHINE_PROFILE_UNKNOWN"
    ],
-   "claims": [],
+   "claims": [
+    "payout_range"
+   ],
    "policy_mode": "normal",
-   "decided_at": "2026-08-25",
-   "input_digest": "sha256:bc6afcc73e2d1ee3c2ad7aff9d94202e38b0941e0611da7976e64ac835bd1e62"
+   "decided_at": "2026-08-30",
+   "input_digest": "sha256:30e99f7519a9860faa804dc25ca4b98423ee110c814c4e9a42851407927bbd8e"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-08-03",
@@ -11712,14 +11725,14 @@
    "input_digest": "sha256:0fcf939da4ba90aed483c6b49d327279a439ef1250cf90076f456d8bbd65741d"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-09",
+  "release_date": "2026-09-07",
   "identity": {
    "manufacturer_id": "heiwa",
    "official_product_url": "https://p-town.dmm.com/machines/5064",
    "announced_name": "L青春ブタ野郎はバニーガール先輩の夢を見ない",
    "identity_tier": "CATALOG_CODE_MATCHED",
    "identity_binding": "DMM_MACHINE_PAGE",
-   "market_release_date": "2026-09",
+   "market_release_date": "2026-09-07",
    "regulatory_model_code": "L青春ブタ野郎L1",
    "_model_code_sources": [
     "p-town.dmm.com",
@@ -11933,14 +11946,14 @@
    "input_digest": "sha256:bc6afcc73e2d1ee3c2ad7aff9d94202e38b0941e0611da7976e64ac835bd1e62"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-10",
+  "release_date": "2026-10-05",
   "identity": {
    "manufacturer_id": "yamasa_next",
    "official_product_url": "https://p-town.dmm.com/machines/5057",
    "announced_name": "スマスロパリピ孔明",
    "identity_tier": "CATALOG_BOUND",
    "identity_binding": "DMM_MACHINE_PAGE",
-   "market_release_date": "2026-10",
+   "market_release_date": "2026-10-05",
    "observed_model_code": "Lパチスロパリピ孔明YE05H",
    "_observed_model_code_sources": [
     "p-world.co.jp"

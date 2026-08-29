@@ -289,11 +289,11 @@ function resolveMachineSlug() {
     }
   }
 
-  // ★新台経路(page-decision/v1)はページ全体の断り書きを出さない★
+  // ★新台経路(page-decision/*)はページ全体の断り書きを出さない★
   //   （2026-08-04・運営者判断。未確認の項目は、その項目の場所に「未確認」と
   //     書いてあるので、ページ冒頭で繰り返す必要がない）
   //   旧preview（既存7機種）は従来どおりバナーを出す。
-  const _isAuto = machine.publication_policy === "page-decision/v1";
+  const _isAuto = (machine.publication_policy !== undefined);
   if (machine.status === "preview" || _isAuto) {
     if (!_isAuto) {
       const banner = document.getElementById("previewBanner");
@@ -324,7 +324,7 @@ function resolveMachineSlug() {
   // ポチポチくん対応状況（ポチポチくんに飛んでも機能しない機種は無効化して理由を表示）
   const pochipochiStatus = (function() {
     // 解析待ち（preview / 新台経路）
-    if (machine.status === "preview" || machine.publication_policy === "page-decision/v1") return { available: false, reason: "解析データ判明後に対応" };
+    if (machine.status === "preview" || (machine.publication_policy !== undefined)) return { available: false, reason: "解析データ判明後に対応" };
     // 小役による設定差が元々ない機種（ジャグラー系・ノーマル系・一部AT）
     const noSettingDiff = ['enen2','karakuri','kaguya','valvrave2','sf5','chibaryo2','tekken6','tokyo_ghoul','koukaku','biohazard','tensura','dumbbell','mhrise','sengoku_otome4','sao','bandori','hanma_baki','yorumungando','tolove_darkness','zenigata5','enen','madomagi_forte','burning_express','akudama','neoplanet','lupin_daikokaisha','zettai_shougeki4','babel','milliongod_kiseki','animal_dotch'];
     if (noSettingDiff.includes(slug)) return { available: false, reason: "小役による設定差なし" };
