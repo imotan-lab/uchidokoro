@@ -231,6 +231,27 @@ def precheck_close(issue_id, slug: str) -> tuple:
     return True, f"#{issue_id} は {slug} の開いている案件です"
 
 
+def texts_from_issue(row, texts) -> tuple:
+    """★逐語はその案件の本文から出ていること★ → (ok, 理由)
+
+    （2026-08-30・Codexの指摘2の3点目）
+    ★何が起きるか★＝機種が合っていても、案件と無関係な
+    「記事に無い文字列」を渡せば text_gone は必ず通る。
+    ＝東京喰種の #155 を、でたらめな文字列で閉じられた。
+    ★見るのは案件の題と詳細だけ★（意味は判定しない＝そこに書いてあるか）。
+    """
+    texts = list(texts or [])
+    if not texts:
+        return True, "逐語の指定はありません"
+    body = (str((row or {}).get("title") or "") + "\n"
+            + str((row or {}).get("detail") or ""))
+    bad = [t for t in texts if t not in body]
+    if bad:
+        return False, ("案件に書かれていない逐語です: "
+                       + " / ".join(t[:40] for t in bad))
+    return True, f"逐語 {len(texts)} 件はすべて案件の本文にあります"
+
+
 def close_issue(issue_id: int, slug: str, checks, texts, why_extra="") -> int:
     """★案件を閉じる唯一の入口★ 0=閉じた / それ以外=閉じなかった
 
@@ -242,6 +263,11 @@ def close_issue(issue_id: int, slug: str, checks, texts, why_extra="") -> int:
       「いまの記事で確かめた」と言えなくなる。
     """
     ok, why = precheck_close(issue_id, slug)
+    print("  " + why)
+    if not ok:
+        print("★閉じません★")
+        return 1
+    ok, why = texts_from_issue(find_issue(issue_id), texts)
     print("  " + why)
     if not ok:
         print("★閉じません★")
@@ -401,6 +427,12 @@ def selftest() -> int:
       _ok is False and "と違います" in _w)
     t("　★正しい機種なら前さばきは通る★",
       precheck_close(155, "tokyo_ghoul")[0] is True)
+    t("★★案件に書かれていない逐語では閉じない★★"
+      "（＝機種が合っていても、でたらめな文字列で閉じられた穴）",
+      texts_from_issue(find_issue(155), [gone])[0] is False)
+    t("　★案件の本文にある逐語なら通る★",
+      texts_from_issue({"detail": "『CZまたはAT当選』が矛盾"},
+                       ["CZまたはAT当選"])[0] is True)
     _row = find_issue(155)
     t("　★試したあとも #155 は開いたまま★",
       _row is not None and str(_row.get("status") or "") != "closed")

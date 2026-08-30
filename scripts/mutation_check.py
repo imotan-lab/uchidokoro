@@ -1826,6 +1826,14 @@ MUTATIONS = [
         "after": "        if False:",
         "run": ["scripts/ledger_sweep.py"],
     },
+    {
+        "why": "★案件に書かれていない逐語でも閉じる"
+               "（でたらめな文字列でどの案件でも閉じられる）★",
+        "file": "scripts/ledger_sweep.py",
+        "before": "    bad = [t for t in texts if t not in body]",
+        "after": "    bad = []",
+        "run": ["scripts/ledger_sweep.py"],
+    },
 ]
 
 
