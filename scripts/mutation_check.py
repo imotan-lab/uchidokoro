@@ -1261,10 +1261,34 @@ MUTATIONS = [
         "run": ["scripts/decide_now.py"],
     },
     {
+        "why": ("★部分置換の検査を、指定した範囲だけで済ませる"
+                "（数値を含まない書き換えで係り先を黙って変えられる）★"),
+        "file": "scripts/decide_now.py",
+        "before": "    s, t = _unit_of(e, i, j)",
+        "after": "    s, t = (i, j)",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★部分置換で、同じ文字が2か所にあっても直す★",
+        "file": "scripts/decide_now.py",
+        "before": "    if len(hit) > 1:",
+        "after": "    if False:",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★部分置換で、一文をまたぐ指定を許す★",
+        "file": "scripts/decide_now.py",
+        "before": '    if any(ch in _UNIT_END for ch in b[:-1]):',
+        "after": "    if False:",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
         "why": "★書き戻す欄を取り違える（隣の欄を壊す）★",
         "file": "scripts/decide_now.py",
-        "before": "        d[\"factTable\"][i1][i2] = after",
-        "after": "        d[\"factTable\"][i1][0] = after",
+        "before": ("        d[\"factTable\"][i1][i2] = "
+                   "_put(d[\"factTable\"][i1][i2])"),
+        "after": ("        d[\"factTable\"][i1][0] = "
+                  "_put(d[\"factTable\"][i1][i2])"),
         "run": ["scripts/decide_now.py"],
     },
     # ─── 2026-08-27・Codexのレビュー（更新タスク）で塞いだ穴 ────
