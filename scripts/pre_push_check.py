@@ -249,6 +249,44 @@ def new_machine_lane(paths, lane_slugs) -> bool:
     return saw
 
 
+def gate_active(data: dict, today: str) -> tuple:
+    """★今日、照合を求めるか★ → (求めるか, 照合済みコミットの集合)
+
+    ★切り出した理由★＝対照実験が空振りだった（罠④）。
+      `_verified_range()` は、この判断のあとに
+      ★記事を触った未pushのコミットが実際にあるか★も見るので、
+      手元にそれが無い日は**どの場合も「通す」**になり、
+      狙った判断を一度も通らずに緑になっていた。
+
+    ★★その日に一度でも無人がいたか★★（2026-08-30・Codexの指摘1）
+      ★タスクごとの `unattended` を見てはいけない★＝
+      あれは担当のたびに上書きされるので、
+      ★無人 → 手動の順に動かすと、無人だった記録が消える★
+      （自分で再現した：無人が作った未照合コミットまで通った）。
+      `day.had_unattended` は**増える方向にしか動かない**。
+    ★目印が無い古い記録は「無人だった」とみなす★（fail-closed）
+    """
+    verified, active = set(), False
+    _day = (data.get("day") or {})
+    same_day = str(_day.get("date") or "") == today
+    if same_day:
+        for c in (_day.get("verified_commits") or []):
+            verified.add(str(c))
+    had = _day.get("had_unattended") if same_day else None
+    for _name, e in (data.get("tasks") or {}).items():
+        if not isinstance(e, dict) or e.get("run_date") != today:
+            continue
+        if not e.get("guard_slug"):
+            continue
+        if had is None:
+            active = True
+        if e.get("verified_commit"):
+            verified.add(str(e["verified_commit"]))
+    if had is True:
+        active = True
+    return active, verified
+
+
 def _verified_range() -> list:
     """★無人タスクが直したコミットが、照合を通っているか★（2026-08-21・Codex依頼249）
 
@@ -278,42 +316,28 @@ def _verified_range() -> list:
     戻り値: 止めるべき理由の一覧（空なら通してよい）
     """
     state = _lp.doc("task_guard.json")
+    if not os.path.exists(state):
+        return []                          # 記録が無い＝無人タスクは動いていない
     try:
         with open(state, encoding="utf-8") as fh:
             data = json.load(fh)
-    except Exception:                      # noqa: BLE001
-        return []                          # 記録が無い＝無人タスクは動いていない
+    except Exception as e:                 # noqa: BLE001
+        # ★★読めない・壊れているときは止める★★（2026-08-30・Codexの指摘4）
+        #   直す前は「記録が無い」と同じ扱いで**素通し**だった。
+        #   ＝ロックの判定をどれだけ厳しくしても、
+        #     ★最後の関所が状態を読めないだけで全部通ってしまう★。
+        return [f"担当の記録が読めません（{type(e).__name__}）: "
+                "壊れていないか確かめてください"]
     # ★対象はその日の無人タスクだけ★（2026-08-21）
     #   全期間の記録を見ると、対話セッションが手で作ったコミットまで
     #   「照合していない」と止めてしまい、鉄則4（当日中にpush）が守れない。
     today = datetime.now().strftime("%Y-%m-%d")
-    verified, active = set(), False
     # ★★その日ぶんの照合済みは、機種を替えても消えない★★
     #   （2026-08-21・Codexの指摘3）
     #   タスクごとの verified_commit は機種を替えると捨てられるので、
     #   ★3機種ぶんをためて最後にまとめて push すると、
     #     1・2機種目が「照合していない」ことになって止まった★。
-    _day = (data.get("day") or {})
-    if str(_day.get("date") or "") == today:
-        for c in (_day.get("verified_commits") or []):
-            verified.add(str(c))
-    for name, e in (data.get("tasks") or {}).items():
-        if not isinstance(e, dict) or e.get("run_date") != today:
-            continue
-        if not e.get("guard_slug"):
-            continue
-        # ★★人が手で動かした担当は数えない★★（2026-08-30・運営者の指摘）
-        #   「手動実行は例外としないとテストできないじゃん」
-        #   ★直す前は無人か手動かを見ていなかった★ので、
-        #   タスクを手で試した日は、対話セッションが記事データを触った
-        #   コミットを一切 push できなかった
-        #   ＝**タスクを手で試すと、その日は仕事が出せない**。
-        #   ★目印が無い古い記録は「無人だった」とみなす★（fail-closed）
-        if e.get("unattended") is False:
-            continue
-        active = True              # 今日、無人タスクが関所を通った機種がある
-        if e.get("verified_commit"):
-            verified.add(str(e["verified_commit"]))
+    active, verified = gate_active(data, today)
     if not active:
         return []                  # 今日は無人タスクが機種を触っていない
     # ★いま push しようとしているコミット★（決めるのは push_commits だけ）

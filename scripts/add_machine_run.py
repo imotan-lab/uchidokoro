@@ -2010,7 +2010,10 @@ def _claim_today(official_url: str) -> bool:
     slug = _ba.slug_from_url(official_url)
     g = _run_capped(
         [sys.executable, os.path.join(BASE, "scripts", "task_guard.py"),
-         "claim", "--task", "add-machine", "--slug", slug],
+         # ★無人で動いていることを申告する★（2026-08-30）
+         #   ここはロックを持っている前提の経路なので二重になるが、
+         #   ★ロックを取り忘れた実行が「手動」に見えて関所が緩む★のを防ぐ。
+         "claim", "--task", "add-machine", "--slug", slug, "--scheduled"],
         cwd=BASE, capture_output=True, text=True,
         encoding="utf-8", errors="replace",
         env={**os.environ, "PYTHONIOENCODING": "utf-8"})

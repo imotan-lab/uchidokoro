@@ -61,22 +61,25 @@ MUTATIONS = [
         "why": "★ロックが読めないとき「手動」に倒す"
                "（分からないのに関所を素通りさせる）★",
         "file": "scripts/task_guard.py",
-        "before": "    except Exception:                                "
-                  "        # noqa: BLE001\n        return True\n\n\n"
-                  "def mark_manual",
-        "after": "    except Exception:                                "
-                 "        # noqa: BLE001\n        return False\n\n\n"
-                 "def mark_manual",
+        "before": "    except Exception:                                        # noqa: BLE001\n        return True\n\n\ndef unattended_dirty_code",
+        "after": "    except Exception:                                        # noqa: BLE001\n        return False\n\n\ndef unattended_dirty_code",
         "run": ["scripts/task_guard.py"],
     },
     {
-        "why": "★無人タスクの実行中でも手動の印を付けられる"
-               "（タスクが自分で自分を例外にできる）★",
+        "why": "★その日に無人がいた印を、あとの手動の担当で消せる"
+               "（無人が作った未照合コミットまで push できる）★",
         "file": "scripts/task_guard.py",
-        "before": "    if lock_is_live():\n        raise GuardError(\n"
-                  "            \"無人タスクのロックが生きているので、"
-                  "手動の印は付けられません\")",
-        "after": "    if False:\n        pass",
+        "before": '        _d0["had_unattended"] = '
+                  'bool(_d0.get("had_unattended")) or _un',
+        "after": '        _d0["had_unattended"] = _un',
+        "run": ["scripts/task_guard.py"],
+    },
+    {
+        "why": "★無人だと申告されても、ロックが無ければ手動扱いにする"
+               "（ロックを取り忘れた無人タスクが素通りする）★",
+        "file": "scripts/task_guard.py",
+        "before": "        _un = bool(scheduled) or lock_is_live()",
+        "after": "        _un = lock_is_live()",
         "run": ["scripts/task_guard.py"],
     },
     # ─── 2026-08-26・確定値が検索の濃さに届くか（Codex35回目）────

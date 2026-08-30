@@ -694,7 +694,8 @@ def _issue_ids(rows) -> set:
 
 
 def claim(task: str, slug: str, path: str = STATE_PATH,
-          repairing: bool = False, issues=None, finding=None) -> dict:
+          repairing: bool = False, issues=None, finding=None,
+          scheduled: bool = False) -> dict:
     """今日この機種を担当してよいか。★同じ日の2機種目は拒否★
 
     repairing=True ＝「台帳の案件を直すために担当する」（2026-08-21・台帳#211）。
@@ -869,7 +870,15 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
         #   タスクを手で試した日は、対話セッションが記事データを触った
         #   コミットを一切 push できなかった
         #   ＝**タスクを手で試すと、その日は仕事が出せない**。
-        _e0["unattended"] = lock_is_live()
+        # ★★その日に一度でも無人で担当したら、もう戻さない★★
+        #   （2026-08-30・Codexの指摘1。★自分で再現した★）
+        #   直す前はタスクごとに1つだけ持って上書きしていたので、
+        #   ★無人 → 手動の順に担当すると、無人だった記録が消えた★
+        #   ＝無人が作った未照合のコミットまで push できた。
+        _un = bool(scheduled) or lock_is_live()
+        _e0["unattended"] = _un
+        _d0 = _day(data)
+        _d0["had_unattended"] = bool(_d0.get("had_unattended")) or _un
 
 
         # ★数を数える★（2026-08-21・MACHINES_PER_DAY を 1 → 3 にしたときに直した）
@@ -1297,40 +1306,6 @@ def lock_is_live() -> bool:
         return age < _tl.STALE_MINUTES
     except Exception:                                        # noqa: BLE001
         return True
-
-
-def mark_manual(task: str, why: str, path: str = STATE_PATH) -> dict:
-    """★今日のその担当は「人が手で動かした」ものだと記録する★（2026-08-30）
-
-    ★無人タスク自身には使えない★＝ロックが生きている間は断る。
-      （タスクが自分で自分を例外にする経路を塞ぐ）
-    ★今日の記録にしか付けられない★／★理由が要る★
-    """
-    if lock_is_live():
-        raise GuardError(
-            "無人タスクのロックが生きているので、手動の印は付けられません")
-    if len(str(why or "").strip()) < 10:
-        raise GuardError("なぜ手動なのか、理由を10字以上で書いてください")
-    with _Exclusive(path):
-        data = _load(path)
-        # ★_entry を呼ばない★（2026-08-30・対照実験で見つけた）＝
-        #   あれは「今日の記録」を**その場で作ってしまう**ので、
-        #   ★日付の検査が、自分で作った値を見て自分に合格を出す★（罠㉕）。
-        #   実際、一度も動いていないタスクにも印を付けられた。
-        e = (data.get("tasks") or {}).get(task)
-        if not isinstance(e, dict) or e.get("run_date") != _today():
-            raise GuardError(
-                f"{task} の今日の記録がありません"
-                f"（記録は {(e or {}).get('run_date')!r}）")
-        if not e.get("guard_slug"):
-            raise GuardError(
-                f"{task} は今日どの機種も担当していません"
-                "（印を付ける相手がいません）")
-        e["unattended"] = False
-        e["manual_why"] = str(why).strip()[:300]
-        e["manual_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        _save(path, data)
-        return e
 
 
 def unattended_dirty_code(task: str) -> list:
@@ -2211,42 +2186,45 @@ def selftest() -> int:
     try:
         # ★★手で動かした日に、対話セッションが仕事を出せなくなる欠陥★★
         #   （2026-08-30・運営者「手動実行は例外としないとテストできないじゃん」）
-        #   ★本番の記録は触らない★＝一時ファイルの上で試す。
+        # ★★そして、その直しに私が作った抜け穴★★（Codexの指摘1・自分で再現した）
+        #   直す前はタスクごとに1つだけ持って上書きしていたので、
+        #   ★無人 → 手動の順に担当すると、無人だった記録が消えた★。
         fpm = os.path.join(tmpdir, "manual.json")
         _keep_lock = globals()["lock_is_live"]
         try:
             globals()["lock_is_live"] = lambda: False
             claim("update-machine", "hokuto", path=fpm)
-            _e = _load(fpm)["tasks"]["update-machine"]
-            t("★★手で動かした担当は「無人ではない」と記録する★★"
+            _d = _load(fpm)
+            t("★★手だけで動かした日は「無人はいなかった」と記録する★★"
               "（＝この日は関所が照合を求めない）",
-              _e.get("unattended") is False)
+              _d["tasks"]["update-machine"].get("unattended") is False
+              and _d.get("day", {}).get("had_unattended") is False)
 
             globals()["lock_is_live"] = lambda: True
-            _d2 = _load(fpm)
-            _d2["tasks"]["update-machine"]["guard_slug"] = None
-            _save(fpm, _d2)
-            claim("update-machine", "hokuto", path=fpm)
+            _d = _load(fpm)
+            _d["tasks"]["update-machine"]["guard_slug"] = None
+            _save(fpm, _d)
+            claim("update-machine", "sao2", path=fpm)
             t("　★ロックが生きていれば「無人」と記録する★",
               _load(fpm)["tasks"]["update-machine"].get("unattended") is True)
 
-            t("★★無人タスクの実行中は、手動の印を付けられない★★"
-              "（＝タスクが自分で自分を例外にできない）",
-              raises(lambda: mark_manual("update-machine",
-                                         "十分な長さの理由です", path=fpm),
-                     "ロックが生きている"))
             globals()["lock_is_live"] = lambda: False
-            t("　★理由が短ければ断る★",
-              raises(lambda: mark_manual("update-machine", "短い", path=fpm),
-                     "10字以上"))
-            t("★★今日どの機種も担当していないタスクには印を付けられない★★"
-              "（＝記録をその場で作って自分に合格を出す穴）",
-              raises(lambda: mark_manual("zzz-not-a-task",
-                                         "十分な長さの理由です", path=fpm),
-                     "今日"))
-            t("　★条件がそろえば印が付く★",
-              mark_manual("update-machine", "十分な長さの理由です",
-                          path=fpm).get("unattended") is False)
+            _d = _load(fpm)
+            _d["tasks"]["update-machine"]["guard_slug"] = None
+            _save(fpm, _d)
+            claim("update-machine", "enen2", path=fpm)
+            _d = _load(fpm)
+            t("★★一度でも無人で担当したら、あとから手動で消せない★★"
+              "（＝無人の未照合コミットまで push できた穴・Codexの指摘1）",
+              _d["tasks"]["update-machine"].get("unattended") is False
+              and _d.get("day", {}).get("had_unattended") is True)
+
+            fps = os.path.join(tmpdir, "sched.json")
+            t("★★ロックが無くても、申告があれば無人扱い★★"
+              "（＝ロックを取り忘れた無人タスクが手動に見える穴）",
+              claim("update-machine", "hokuto", path=fps,
+                    scheduled=True).get("ok") is not False
+              and _load(fps).get("day", {}).get("had_unattended") is True)
         finally:
             globals()["lock_is_live"] = _keep_lock
 
@@ -3110,6 +3088,14 @@ def main() -> int:
         p = sub.add_parser(name)
         p.add_argument("--task", required=True)
         p.add_argument("--slug", required=True)
+        if name == "claim":
+            # ★★無人で動いていると呼ぶ側が申告する★★（2026-08-30）
+            #   ロックだけを見ると「取り忘れた無人タスク」が手動に見える。
+            #   ★申告とロックのどちらかが立てば無人扱い★（fail-closed）。
+            #   ★これは無人であることの証明ではない★（同じ権限からは偽装できる）
+            #   ＝事故を止める綱であって、悪意への境界ではない。
+            p.add_argument("--scheduled", action="store_true",
+                           help="無人（スケジューラ）から動かしている")
         if name in ("claim", "before-write"):
             # ★台帳の案件を直すために触る★（2026-08-21・台帳#211／Codex依頼246の指摘1）
             #   ここが無いと、関数には経路があるのに**コマンドから使えず**、
@@ -3165,13 +3151,6 @@ def main() -> int:
     p.add_argument("--slug", required=True)
     p.add_argument("--commit", required=True,
                    help="いま作ったコミット（git rev-parse HEAD の値）")
-    # ★今日のその担当は人が手で動かしたものだ、と記録する★（2026-08-30）
-    #   ★無人タスク自身には使えない★（ロックが生きている間は断る）
-    p = sub.add_parser("mark-manual",
-                       help="今日の担当を「人が手で動かした」と記録する")
-    p.add_argument("--task", required=True)
-    p.add_argument("--why-file", required=True,
-                   help="なぜ手動なのかを書いたファイル（自由文はファイル渡し）")
 
     args = ap.parse_args()
     if args.selftest:
@@ -3180,7 +3159,8 @@ def main() -> int:
         print(json.dumps(claim(args.task, args.slug,
                                repairing=bool(getattr(args, "repairing", False)),
                                issues=getattr(args, "issue", []) or [],
-                               finding=getattr(args, "decision", None)),
+                               finding=getattr(args, "decision", None),
+                               scheduled=bool(getattr(args, "scheduled", False))),
                          ensure_ascii=False, indent=1))
     elif args.cmd == "reserve":
         print(json.dumps(
@@ -3208,11 +3188,6 @@ def main() -> int:
         print(json.dumps(before_commit(args.task, args.slug), ensure_ascii=False, indent=1))
     elif args.cmd == "done":
         print(json.dumps(done(args.task, args.slug, args.stage), ensure_ascii=False, indent=1))
-    elif args.cmd == "mark-manual":
-        with open(args.why_file, encoding="utf-8") as _fh:
-            _why = _fh.read()
-        print(json.dumps(mark_manual(args.task, _why),
-                         ensure_ascii=False, indent=1))
     elif args.cmd == "verify-commit":
         print(json.dumps(verify_commit(args.task, args.slug, args.commit),
                          ensure_ascii=False, indent=1))
