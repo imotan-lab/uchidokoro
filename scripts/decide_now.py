@@ -289,7 +289,9 @@ def gather(slug: str) -> dict:
 #   ★言い換え（replace）だけ★＝行ごと消す・リード文を空にするは受け取らない。
 #   節の本文と違い、同じ事実が他所に残っている保証が弱いので、
 #   消すと「どちらが正解か」を選んだことになりやすい。
-OUTSIDE_KINDS = ("fact", "summary", "lead")
+OUTSIDE_KINDS = ("fact", "summary", "lead",
+                 # ★要素の一部だけを直す種類★（2026-08-30・台帳#512）
+                 "fact_in", "summary_in", "lead_in")
 
 
 def _slot_key(a: str) -> str:
@@ -366,6 +368,117 @@ def _dup_count(d: dict, text: str) -> int:
     return sum(1 for x in body if x == text)
 
 
+_UNIT_END = "。\n"
+
+
+def _unit_of(text: str, i: int, j: int) -> tuple:
+    """★検査する「意味のまとまり」★＝変更を含む一文（2026-08-30）
+
+    ★なぜ要るか（Codexの1回目の指摘）★＝
+      部分文字列そのものだけを検査すると、
+      ★数値を含まない部分の書き換えで、係り先だけを黙って変えられる★。
+        元:「等価交換ではCZ間330G〜、現金投資ではCZ間350G〜。」
+        「等価交換では」→「現金投資では」で 330G の意味が変わるのに、
+        span に数値が無いので検査が1つも走らなかった。
+    ＝★部分文字列は「場所の特定」にだけ使い、検査は一文で行う★。
+    """
+    s = 0
+    for k in range(i - 1, -1, -1):
+        if text[k] in _UNIT_END:
+            s = k + 1
+            break
+    # ★変更が すでに文の切れ目で終わっているなら、次の文まで広げない★
+    #   （2026-08-30・自分で踏んだ＝一文だけ直したいのに次の文を巻き込んだ）
+    if j > 0 and text[j - 1] in _UNIT_END:
+        return s, j
+    e = len(text)
+    for k in range(j, len(text)):
+        if text[k] in _UNIT_END:
+            e = k + 1
+            break
+    return s, e
+
+
+def _elems(d: dict, where: str) -> list:
+    """`where` で指す置き換え先の文字列を全部集める（★場所の特定用★）。"""
+    out = []
+    w = str(where or "")
+    if w in ("", "body", "table_note"):
+        for sec in (d.get("sections") or []):
+            if not isinstance(sec, dict):
+                continue
+            if w in ("", "body"):
+                out += [x for x in (sec.get("body") or [])
+                        if isinstance(x, str)]
+            if w in ("", "table_note"):
+                out += [t.get("note") for t in (sec.get("tables") or [])
+                        if isinstance(t, dict)
+                        and isinstance(t.get("note"), str)]
+    if w in ("", "fact"):
+        for row in (d.get("factTable") or []):
+            if isinstance(row, (list, tuple)):
+                out += [c for c in row if isinstance(c, str)]
+    if w in ("", "summary"):
+        for box in (d.get("summaryBoxes") or []):
+            if isinstance(box, dict):
+                out += [box[k] for k in ("label", "value")
+                        if isinstance(box.get(k), str)]
+    if w in ("", "lead") and isinstance(d.get("lead"), str):
+        out.append(d["lead"])
+    return out
+
+
+def check_range(d: dict, a: dict) -> tuple:
+    """★検査に使う before / after を決める★（2026-08-30・台帳#512）
+
+    返すもの: (検査用のbefore, 検査用のafter, 断る理由 or None)
+
+    ・`before` が要素まるごと … いままでどおり、そのまま検査する
+    ・`before` が要素の一部   … ★変更を含む一文まで広げて検査する★
+      条件＝`where` の指定があり、候補要素が記事全体でちょうど1つ、
+            その要素の中に `before` がちょうど1回
+    ・一文をまたぐ変更は断る（どこまでが1つの主張か決められないため）
+    """
+    b = str(a.get("before") or "")
+    af = str(a.get("after") or "")
+    where = str(a.get("where") or "")
+    if not b:
+        return b, af, None
+    elems = _elems(d, where)
+    if any(e == b for e in elems):
+        return b, af, None                  # 要素まるごと（従来どおり）
+    if not where:
+        return b, af, ("段落の一部だけを直すときは where で場所を"
+                       "指定してください（body / table_note / fact / "
+                       "summary / lead）")
+    hit = [e for e in elems if b in e]
+    if not hit:
+        return b, af, None                  # 見つからない → 後段が知らせる
+    if len(hit) > 1:
+        return b, af, (f"この文字は {where} の中に {len(hit)} か所あります。"
+                       "どれを直すか決められません（もっと長く指定してください）")
+    e = hit[0]
+    if e.count(b) != 1:
+        return b, af, (f"この文字は同じ段落の中に {e.count(b)} 回あります。"
+                       "どれを直すか決められません（もっと長く指定してください）")
+    i = e.index(b)
+    j = i + len(b)
+    # ★指定そのものが一文をまたいでいたら断る★（2026-08-30・自分で踏んだ）
+    #   ★またぐと「どこまでが1つの主張か」を機械が決められない★
+    if any(ch in _UNIT_END for ch in b[:-1]):
+        return b, af, ("指定が一文をまたいでいます。"
+                       "一文ずつに分けて指定してください")
+    s, t = _unit_of(e, i, j)
+    if s > i or t < j:
+        return b, af, ("変更が一文をまたいでいます。"
+                       "一文ずつに分けて指定してください")
+    ne = e[:i] + af + e[j:]
+    if not "".join(ne.split()).strip("。、・／|-*＊＿_ 　"):
+        return b, af, "この直し方だと、段落が記号だけになります"
+    s2, t2 = _unit_of(ne, i, i + len(af))
+    return e[s:t], ne[s2:t2], None
+
+
 def _where_hits(d: dict, before) -> list:
     """その文字が記事のどこに何か所あるかを数える（2026-08-27・指摘4）。"""
     # ★★「何か所あるか」を数える★★（2026-08-27・Codexの2回目の指摘2）
@@ -402,36 +515,61 @@ def _outside_plan(d: dict, a: dict, where: str = "") -> tuple | None:
     before = a.get("before")
     if where and where not in ("fact", "summary", "lead"):
         return None
-    for ri, row in enumerate(d.get("factTable") or []):
-        if where and where != "fact":
-            break
-        if not isinstance(row, (list, tuple)):
-            continue
-        for ci, cell in enumerate(row):
-            if isinstance(cell, str) and cell == before:
-                return ("fact", ri, ci, a)
-    for bi, box in enumerate(d.get("summaryBoxes") or []):
-        if where and where != "summary":
-            break
-        if not isinstance(box, dict):
-            continue
-        for key in ("value", "label"):
-            if isinstance(box.get(key), str) and box[key] == before:
-                return ("summary", bi, key, a)
-    if (not where or where == "lead") \
-            and isinstance(d.get("lead"), str) and d["lead"] == before:
-        return ("lead", 0, 0, a)
+    # ★★丸ごと一致を先に見る★★（部分一致より優先＝いままでの動きを変えない）
+    #   ★_in が付く種類は「その要素の一部だけを直す」★（2026-08-30・台帳#512）
+    for exact in (True, False):
+        for ri, row in enumerate(d.get("factTable") or []):
+            if where and where != "fact":
+                break
+            if not isinstance(row, (list, tuple)):
+                continue
+            for ci, cell in enumerate(row):
+                if not isinstance(cell, str):
+                    continue
+                if exact and cell == before:
+                    return ("fact", ri, ci, a)
+                if not exact and where and before \
+                        and cell.count(before) == 1:
+                    return ("fact_in", ri, ci, a)
+        for bi, box in enumerate(d.get("summaryBoxes") or []):
+            if where and where != "summary":
+                break
+            if not isinstance(box, dict):
+                continue
+            for key in ("value", "label"):
+                v = box.get(key)
+                if not isinstance(v, str):
+                    continue
+                if exact and v == before:
+                    return ("summary", bi, key, a)
+                if not exact and where and before and v.count(before) == 1:
+                    return ("summary_in", bi, key, a)
+        if (not where or where == "lead") and isinstance(d.get("lead"), str):
+            if exact and d["lead"] == before:
+                return ("lead", 0, 0, a)
+            if not exact and where and before \
+                    and d["lead"].count(before) == 1:
+                return ("lead_in", 0, 0, a)
     return None
 
 
-def _write_outside(d: dict, kind: str, i1, i2, after: str) -> None:
-    """節の外へ書き戻す（★探す側と書く側で同じ場所の指し方を使う★）。"""
-    if kind == "fact":
-        d["factTable"][i1][i2] = after
-    elif kind == "summary":
-        d["summaryBoxes"][i1][i2] = after
-    elif kind == "lead":
-        d["lead"] = after
+def _write_outside(d: dict, kind: str, i1, i2, after: str,
+                   before: str = "") -> None:
+    """節の外へ書き戻す（★探す側と書く側で同じ場所の指し方を使う★）。
+
+    ★`_in` が付く種類は、その要素の中の `before` を1回だけ置き換える★
+    （2026-08-30・台帳#512）。
+    """
+    def _put(cur: str) -> str:
+        if kind.endswith("_in"):
+            return cur.replace(before, after, 1)
+        return after
+    if kind in ("fact", "fact_in"):
+        d["factTable"][i1][i2] = _put(d["factTable"][i1][i2])
+    elif kind in ("summary", "summary_in"):
+        d["summaryBoxes"][i1][i2] = _put(d["summaryBoxes"][i1][i2])
+    elif kind in ("lead", "lead_in"):
+        d["lead"] = _put(d["lead"])
 
 
 def _load_decision(path: str) -> dict:
@@ -667,12 +805,22 @@ def _simulate(detail: dict, plan: list) -> str:
     for kind, si, bi, a in plan:
         if kind == "replace":
             d["sections"][si]["body"][bi] = a["after"]
+        elif kind == "replace_in":
+            # ★段落の一部だけを直す★（2026-08-30・台帳#512）
+            _ln = d["sections"][si]["body"][bi]
+            d["sections"][si]["body"][bi] = _ln.replace(
+                a["before"], a["after"], 1)
         elif kind == "table_note":
             d["sections"][si]["tables"][bi]["note"] = a["after"]
+        elif kind == "table_note_in":
+            _nt = d["sections"][si]["tables"][bi]["note"]
+            d["sections"][si]["tables"][bi]["note"] = _nt.replace(
+                a["before"], a["after"], 1)
         elif kind in OUTSIDE_KINDS:
             # ★節の外も数え直しに入れる★（2026-08-27・台帳#487）
             #   ★入れないと★＝表の数値を書き換えても「消えた」と気づけない。
-            _write_outside(d, kind, si, bi, a["after"])
+            _write_outside(d, kind, si, bi, a["after"],
+                           a.get("before") or "")
         elif kind == "drop":
             dropping.setdefault(si, set()).add(bi)
     for si, idxs in dropping.items():
@@ -776,6 +924,16 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
     _dup_ok = []          # ★機械が「重複」と認めて通した消し方★
     for a in dec["actions"]:
         if a["op"] == "replace":
+            # ★★検査するのは「変更を含む一文」★★（2026-08-30・台帳#512）
+            #   部分文字列は「場所の特定」にだけ使う。
+            #   ★span だけを見ると、数値を含まない書き換えで
+            #     係り先を黙って変えられる★（Codexが実例で示した）。
+            _cb, _ca, _why = check_range(d, a)
+            if _why:
+                result["problems"].append(_why + f": {a['before'][:34]!r}")
+                return result
+            a = dict(a)                 # ★元の決定は書き換えない★
+            a["before"], a["after"] = _cb, _ca
             nb, na = _numbers(a["before"]), _numbers(a["after"])
             # ★数値の並べ替えは、下の「骨組み」の検査が拾う★（2026-08-27）
             #   ★同じことを2か所で見ない★＝骨組みは順番つきなので、
@@ -1096,6 +1254,13 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
                     plan.append(("replace", si, bi, a))
                     hit = True
                     break
+                # ★段落の一部だけを直す★（2026-08-30・台帳#512）
+                #   ★検査は check_range が一文に広げて済ませてある★
+                if a["op"] == "replace" and where == "body" \
+                        and a["before"] and line.count(a["before"]) == 1:
+                    plan.append(("replace_in", si, bi, a))
+                    hit = True
+                    break
             if hit:
                 break
             # 表の注記も見る
@@ -1104,6 +1269,13 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
             for ti, tbl in enumerate(sec.get("tables") or []):
                 if a["op"] == "replace" and tbl.get("note") == a["before"]:
                     plan.append(("table_note", si, ti, a))
+                    hit = True
+                    break
+                # ★注記の一部だけを直す★（2026-08-30・台帳#512）
+                if a["op"] == "replace" and where == "table_note" \
+                        and a["before"] and isinstance(tbl.get("note"), str) \
+                        and tbl["note"].count(a["before"]) == 1:
+                    plan.append(("table_note_in", si, ti, a))
                     hit = True
                     break
             if hit:
@@ -1225,13 +1397,22 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
         for kind, si, bi, a in plan:
             if kind in OUTSIDE_KINDS:
                 # ★節の外は sections を触らない★（場所の指し方が違う）
-                _write_outside(d, kind, si, bi, a["after"])
+                _write_outside(d, kind, si, bi, a["after"],
+                           a.get("before") or "")
                 continue
             sec = d["sections"][si]
             if kind == "replace":
                 sec["body"][bi] = a["after"]
+            elif kind == "replace_in":
+                # ★段落の一部だけを直す★（2026-08-30・台帳#512）
+                _ln = sec["body"][bi]
+                sec["body"][bi] = _ln.replace(a["before"], a["after"], 1)
             elif kind == "table_note":
                 sec["tables"][bi]["note"] = a["after"]
+            elif kind == "table_note_in":
+                _nt = sec["tables"][bi]["note"]
+                sec["tables"][bi]["note"] = _nt.replace(
+                    a["before"], a["after"], 1)
         for si, idxs in dropping.items():
             body = d["sections"][si]["body"]
             d["sections"][si]["body"] = [x for i, x in enumerate(body)
@@ -2603,6 +2784,49 @@ def _selftest() -> int:
         globals()["DETAILS"] = _keep
 
     print()
+    # ★★段落の一部だけを直せる★★（2026-08-30・台帳#512）
+    #   ★2026-08-30に、人気6機種で決めた55件のうち20件が
+    #     「段落まるごとしか指定できない」ために入らなかった★
+    t("★★変更を含む一文まで広げて検査する★★"
+      "（部分文字列は場所の特定にだけ使う）",
+      check_range({"sections": [{"body": ["あああ。CZ間320G〜が狙い目です。"
+                                          "AT間1200Gも。"]}]},
+                  {"before": "CZ間320G", "after": "CZ間330G",
+                   "where": "body"})[0]
+      == "CZ間320G〜が狙い目です。")
+    t("　★隣の文は巻き込まない★（1200Gを検査に入れない）",
+      "1200G" not in check_range(
+          {"sections": [{"body": ["あああ。CZ間320G〜が狙い目です。"
+                                  "AT間1200Gも。"]}]},
+          {"before": "CZ間320G", "after": "CZ間330G",
+           "where": "body"})[1])
+    t("　★指定が一文をまたいだら断る★",
+      "またいで" in (check_range(
+          {"sections": [{"body": ["あああ。CZ間320Gです。"]}]},
+          {"before": "あああ。CZ間320G", "after": "X",
+           "where": "body"})[2] or ""))
+    t("　★場所の指定が無ければ断る★",
+      "where" in (check_range(
+          {"sections": [{"body": ["あああ。CZ間320Gです。"]}]},
+          {"before": "CZ間320G", "after": "CZ間330G"})[2] or ""))
+    t("　★同じ文字が2か所にあれば断る★",
+      "決められません" in (check_range(
+          {"sections": [{"body": ["CZ間320Gです。", "CZ間320Gでした。"]}]},
+          {"before": "CZ間320G", "after": "CZ間330G",
+           "where": "body"})[2] or ""))
+    t("　★段落まるごとの指定は、いままでどおり★",
+      check_range({"sections": [{"body": ["あああ。"]}]},
+                  {"before": "あああ。", "after": "いいい。",
+                   "where": "body"})[0] == "あああ。")
+    t("　★変更が文末で終わるとき、次の文まで広げない★",
+      check_range({"sections": [{"body": ["あああ。いいい。ううう。"]}]},
+                  {"before": "いいい。", "after": "えええ。",
+                   "where": "body"})[0] == "いいい。")
+    t("　★記号だけになる直し方は断る★",
+      "記号だけ" in (check_range(
+          {"sections": [{"body": ["あああ。"]}]},
+          {"before": "あああ", "after": "", "where": "body"})[2] or ""))
+
     print(f"{ran[0] - len(ng)}/{ran[0]} " + ("合格" if not ng else "不合格"))
     return 1 if ng else 0
 
