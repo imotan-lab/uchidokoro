@@ -86,7 +86,12 @@ MAX_ATTEMPTS = 3          # ★その晩のうちに3回まで★（CLAUDE.md �
 
 # ★2AIが選べる操作★（自由文のパッチは作らせない）
 #   Codexの設計レビュー: 「AIは自由文パッチを作らず、許可済み操作を選ぶだけ」
-ALLOWED_OPS = ("drop", "replace")
+#   ★drop_line＝誤りだと2AIが判断した段落を消す★（2026-08-30・運営者の指示）
+#     drop は「同じ節に丸ごと同じ行がもう1つある」ときだけ＝重複を1つにする用。
+#     言い換えでは直せない誤り（別機能の説明・条件を落とした数値）のために足した。
+#     消す条件は decide_now 側が見る（理由・数値の名指し・節が空にならない・
+#     場所が一つに定まる・消した中身を控えに残す）。
+ALLOWED_OPS = ("drop", "replace", "drop_line")
 
 
 class JournalError(Exception):
