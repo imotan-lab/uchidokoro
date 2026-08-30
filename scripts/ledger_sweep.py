@@ -252,6 +252,25 @@ def texts_from_issue(row, texts) -> tuple:
     return True, f"逐語 {len(texts)} 件はすべて案件の本文にあります"
 
 
+# ★★逐語が消えただけでは閉じられない型★★（2026-08-30・実際にやらかした）
+#   台帳の kind は「external_value = 外部数値の疑義（裏取り待ち）」を持つ。
+#   ★この型は「値が確かめられていない」ことが中身★なので、
+#   文が記事から消えたのは「直った」ではなく「載せるのをやめた」かもしれない。
+#   ＝ text_gone は直った証拠にならない。ほかの検査を必ず組にする。
+TEXT_GONE_NOT_ENOUGH = ("external_value",)
+
+
+def kind_allows(row, checks, texts) -> tuple:
+    """★その案件の型で、この検査の組み合わせで閉じてよいか★ → (ok, 理由)"""
+    kind = str((row or {}).get("kind") or "")
+    if kind in TEXT_GONE_NOT_ENOUGH and texts and not checks:
+        return False, (f"{kind} は裏取り待ちの型です。"
+                       "文が消えたのは「直った」ではなく"
+                       "「載せるのをやめた」かもしれません"
+                       "（ほかの検査と組にしてください）")
+    return True, f"型 {kind or '(なし)'} でこの組み合わせは使えます"
+
+
 def close_issue(issue_id: int, slug: str, checks, texts, why_extra="") -> int:
     """★案件を閉じる唯一の入口★ 0=閉じた / それ以外=閉じなかった
 
@@ -267,7 +286,13 @@ def close_issue(issue_id: int, slug: str, checks, texts, why_extra="") -> int:
     if not ok:
         print("★閉じません★")
         return 1
-    ok, why = texts_from_issue(find_issue(issue_id), texts)
+    row = find_issue(issue_id)
+    ok, why = texts_from_issue(row, texts)
+    print("  " + why)
+    if not ok:
+        print("★閉じません★")
+        return 1
+    ok, why = kind_allows(row, checks, texts)
     print("  " + why)
     if not ok:
         print("★閉じません★")
@@ -421,21 +446,38 @@ def selftest() -> int:
     t("★★存在しない番号では閉じない★★",
       precheck_close(99999999, "tokyo_ghoul")
       == (False, "#99999999 という案件がありません"))
-    _ok, _w = precheck_close(155, "yajikita_mairu")
-    t("★★案件の機種と指定の機種が違えば閉じない★★"
-      "（＝別機種の「存在しない文」でどの案件でも閉じられた穴）",
-      _ok is False and "と違います" in _w)
-    t("　★正しい機種なら前さばきは通る★",
-      precheck_close(155, "tokyo_ghoul")[0] is True)
-    t("★★案件に書かれていない逐語では閉じない★★"
-      "（＝機種が合っていても、でたらめな文字列で閉じられた穴）",
-      texts_from_issue(find_issue(155), [gone])[0] is False)
+    # ★番号を決め打ちにしない★＝案件が閉じた日に試験だけが落ちる
+    #   （2026-08-30に実際に起きた）。その機種の開いている案件を自分で探す。
+    _live = next((r for r in _rows()
+                  if r.get("slug") == "tokyo_ghoul"
+                  and r.get("status") != "closed"), None)
+    _lid = (_live or {}).get("id")
+    t("★★試験に使える開いた案件がある★★", _lid is not None)
+    if _lid is not None:
+        _ok, _w = precheck_close(_lid, "yajikita_mairu")
+        t("★★案件の機種と指定の機種が違えば閉じない★★"
+          "（＝別機種の「存在しない文」でどの案件でも閉じられた穴）",
+          _ok is False and "と違います" in _w)
+        t("　★正しい機種なら前さばきは通る★",
+          precheck_close(_lid, "tokyo_ghoul")[0] is True)
+        t("★★案件に書かれていない逐語では閉じない★★"
+          "（＝機種が合っていても、でたらめな文字列で閉じられた穴）",
+          texts_from_issue(_live, [gone])[0] is False)
     t("　★案件の本文にある逐語なら通る★",
       texts_from_issue({"detail": "『CZまたはAT当選』が矛盾"},
                        ["CZまたはAT当選"])[0] is True)
-    _row = find_issue(155)
-    t("　★試したあとも #155 は開いたまま★",
-      _row is not None and str(_row.get("status") or "") != "closed")
+    t("★★裏取り待ちの案件は、逐語が消えただけでは閉じない★★"
+      "（＝2026-08-30に #155 を誤って閉じた型）",
+      kind_allows({"kind": "external_value"}, [], ["消えた文"])[0] is False)
+    t("　★ほかの検査と組なら通る★",
+      kind_allows({"kind": "external_value"}, ["text_gone"],
+                  ["消えた文"])[0] is True)
+    t("　★ほかの型なら逐語だけでも通る★",
+      kind_allows({"kind": "quality"}, [], ["消えた文"])[0] is True)
+    if _lid is not None:
+        _row = find_issue(_lid)
+        t("　★試したあとも、その案件は開いたまま★",
+          _row is not None and str(_row.get("status") or "") != "closed")
 
     if _dirty():
         t("★★未コミットの木では、消えている逐語でも閉じない★★",

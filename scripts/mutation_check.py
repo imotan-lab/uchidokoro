@@ -1834,6 +1834,14 @@ MUTATIONS = [
         "after": "    bad = []",
         "run": ["scripts/ledger_sweep.py"],
     },
+    {
+        "why": "★裏取り待ちの案件を、文が消えただけで閉じる"
+               "（載せるのをやめただけかもしれないのに）★",
+        "file": "scripts/ledger_sweep.py",
+        "before": 'TEXT_GONE_NOT_ENOUGH = ("external_value",)',
+        "after": "TEXT_GONE_NOT_ENOUGH = ()",
+        "run": ["scripts/ledger_sweep.py"],
+    },
 ]
 
 
