@@ -506,66 +506,6 @@
   }
  },
  {
-  "slug": "yajikita_mairu",
-  "name": "スマスロ やじきた道中記参る！",
-  "release_date": "2026-08-03",
-  "seo": {
-   "title": "スマスロ やじきた道中記参る！ 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "算定中（天井は999まいる／6スルー）",
-  "aliases": [
-   "やじきた道中記参る",
-   "やじきた",
-   "やじきた道中記",
-   "やじきた参る",
-   "やじきたどうちゅうき",
-   "参る"
-  ],
-  "limit": null
- },
- {
-  "slug": "karakuri2",
-  "name": "Lからくりサーカス2",
-  "release_date": "2026-07-06",
-  "seo": {
-   "title": "Lからくりサーカス2 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "等価 液晶800G〜（当サイト目安）/ 5.6枚・現金は交換条件が悪いほど深く（個別ライン未確定）",
-  "aliases": [
-   "からくりサーカス2",
-   "カラサー2",
-   "カラクリサーカス2",
-   "からくり2",
-   "karakuri2",
-   "からくりサーカス2スマスロ"
-  ],
-  "checker": {
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常（液晶G数・等価基準）"
-    }
-   ],
-   "normal": {
-    "excellent": 1101,
-    "good": 800,
-    "caution": 800,
-    "note": "CZ間天井は液晶（モード別最深1200/800/100G）または実890Gの消化で天井到達（前兆経由）・AT間2500G。判定は液晶ゲーム数・等価交換の当サイト目安（暫定。5.6枚持ち・現金投資は交換条件が悪いほど深くなります）。天井到達時の当選先は滞在モードで異なり上位ATは非保証。リセット後は液晶天井が最深500Gに短縮（リセット狙い目は解析待ち）。"
-   },
-   "equivOnly": true
-  },
-  "limit": 1200,
-  "original": {
-   "title": "からくりサーカス",
-   "kind": "漫画",
-   "search": "からくりサーカス 漫画"
-  },
-  "tenjo_display": "液晶1200G/実890G"
- },
- {
   "slug": "kabaneri",
   "name": "スマスロ 甲鉄城のカバネリ 海門(うなと)決戦",
   "seo": {
@@ -689,6 +629,66 @@
   }
  },
  {
+  "slug": "yajikita_mairu",
+  "name": "スマスロ やじきた道中記参る！",
+  "release_date": "2026-08-03",
+  "seo": {
+   "title": "スマスロ やじきた道中記参る！ 狙い目・天井・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "算定中（天井は999まいる／6スルー）",
+  "aliases": [
+   "やじきた道中記参る",
+   "やじきた",
+   "やじきた道中記",
+   "やじきた参る",
+   "やじきたどうちゅうき",
+   "参る"
+  ],
+  "limit": null
+ },
+ {
+  "slug": "karakuri2",
+  "name": "Lからくりサーカス2",
+  "release_date": "2026-07-06",
+  "seo": {
+   "title": "Lからくりサーカス2 狙い目・天井・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "等価 液晶800G〜（当サイト目安）/ 5.6枚・現金は交換条件が悪いほど深く（個別ライン未確定）",
+  "aliases": [
+   "からくりサーカス2",
+   "カラサー2",
+   "カラクリサーカス2",
+   "からくり2",
+   "karakuri2",
+   "からくりサーカス2スマスロ"
+  ],
+  "checker": {
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常（液晶G数・等価基準）"
+    }
+   ],
+   "normal": {
+    "excellent": 1101,
+    "good": 800,
+    "caution": 800,
+    "note": "CZ間天井は液晶（モード別最深1200/800/100G）または実890Gの消化で天井到達（前兆経由）・AT間2500G。判定は液晶ゲーム数・等価交換の当サイト目安（暫定。5.6枚持ち・現金投資は交換条件が悪いほど深くなります）。天井到達時の当選先は滞在モードで異なり上位ATは非保証。リセット後は液晶天井が最深500Gに短縮（リセット狙い目は解析待ち）。"
+   },
+   "equivOnly": true
+  },
+  "limit": 1200,
+  "original": {
+   "title": "からくりサーカス",
+   "kind": "漫画",
+   "search": "からくりサーカス 漫画"
+  },
+  "tenjo_display": "液晶1200G/実890G"
+ },
+ {
   "slug": "jashinchan",
   "name": "L邪神ちゃんドロップキック",
   "release_date": "2026-08-03",
@@ -779,102 +779,6 @@
    "title": "ワールドダイスター",
    "kind": "アニメ",
    "search": "ワールドダイスター"
-  }
- },
- {
-  "slug": "garei_zero_re",
-  "name": "Lパチスロ 喰霊-零-Re",
-  "seo": {
-   "title": "Lパチスロ 喰霊-零-Re スペック・基本情報"
-  },
-  "info": "",
-  "strategy": "",
-  "aliases": [],
-  "publication_policy": "page-decision/v2",
-  "page_decision": {
-   "schema_version": "page-decision/v2",
-   "indexable": false,
-   "machine_profile": "UNKNOWN",
-   "ceiling_state": "PRESENT",
-   "confirmed_topics": [
-    "ceiling",
-    "cz",
-    "gameplay",
-    "spec"
-   ],
-   "pending_topics": [
-    "setting",
-    "strategy",
-    "reset"
-   ],
-   "reason_codes": [
-    "MACHINE_PROFILE_UNKNOWN"
-   ],
-   "claims": [
-    "at:MAIN_AT",
-    "ceiling:GAME:",
-    "cz:解放の刻",
-    "cz:超自然災害モード",
-    "games_per_50",
-    "payout_range"
-   ],
-   "policy_mode": "normal",
-   "decided_at": "2026-08-30",
-   "input_digest": "sha256:3f4f5892224c6459782bc4577352c6167fe65c9f515005ad23e7edca6d768c85"
-  },
-  "publish_state": "PREVIEW_VERIFIED_SUBSET",
-  "release_date": "2026-08-17",
-  "identity": {
-   "manufacturer_id": "oizumi",
-   "official_product_url": "https://p-town.dmm.com/machines/5028",
-   "announced_name": "Lパチスロ 喰霊-零-Re",
-   "identity_tier": "CATALOG_CODE_MATCHED",
-   "identity_binding": "DMM_MACHINE_PAGE",
-   "identity_evidence_ref": "dmm:5028 型式=Lパチスロ喰霊零Re/L3 メーカー=オーイズミ 導入=2026-08-17 確認日=2026-08-16",
-   "market_release_date": "2026-08-17",
-   "_legacy_evidence_ref": "identity_evidence/13674f64333e5765e7fd009beb11fe73c52ed2f5c2b4498532d06218adf767fb.html #card0",
-   "_legacy_official_product_url": "https://www.oizumi.co.jp/machine/garei-zero-re/",
-   "regulatory_model_code": "Lパチスロ喰霊零Re/L3",
-   "_model_code_sources": [
-    "p-town.dmm.com",
-    "p-world.co.jp"
-   ]
-  },
-  "checker": {
-   "coinRate": 36.1,
-   "unit": "G",
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    }
-   ],
-   "normal": {
-    "ceiling": 999
-   }
-  }
- },
- {
-  "slug": "sf6",
-  "name": "スマスロ ストリートファイター6",
-  "release_date": "2026-08-03",
-  "seo": {
-   "title": "スマスロ ストリートファイター6 狙い目・天井・解析まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "算定中（天井は通常時1000G+α）",
-  "aliases": [
-   "ストリートファイター6",
-   "スト6",
-   "SF6",
-   "ストリートファイターシックス",
-   "すとりーとふぁいたー6"
-  ],
-  "limit": null,
-  "original": {
-   "title": "ストリートファイター6",
-   "kind": "ゲーム",
-   "search": "ストリートファイター6"
   }
  },
  {
@@ -1209,6 +1113,225 @@
   }
  },
  {
+  "slug": "sf6",
+  "name": "スマスロ ストリートファイター6",
+  "release_date": "2026-08-03",
+  "seo": {
+   "title": "スマスロ ストリートファイター6 狙い目・天井・解析まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "算定中（天井は通常時1000G+α）",
+  "aliases": [
+   "ストリートファイター6",
+   "スト6",
+   "SF6",
+   "ストリートファイターシックス",
+   "すとりーとふぁいたー6"
+  ],
+  "limit": null,
+  "original": {
+   "title": "ストリートファイター6",
+   "kind": "ゲーム",
+   "search": "ストリートファイター6"
+  }
+ },
+ {
+  "slug": "garei_zero_re",
+  "name": "Lパチスロ 喰霊-零-Re",
+  "seo": {
+   "title": "Lパチスロ 喰霊-零-Re スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": false,
+   "machine_profile": "UNKNOWN",
+   "ceiling_state": "PRESENT",
+   "confirmed_topics": [
+    "ceiling",
+    "cz",
+    "gameplay",
+    "spec"
+   ],
+   "pending_topics": [
+    "setting",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "MACHINE_PROFILE_UNKNOWN"
+   ],
+   "claims": [
+    "at:MAIN_AT",
+    "ceiling:GAME:",
+    "cz:解放の刻",
+    "cz:超自然災害モード",
+    "games_per_50",
+    "payout_range"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-08-30",
+   "input_digest": "sha256:3f4f5892224c6459782bc4577352c6167fe65c9f515005ad23e7edca6d768c85"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-08-17",
+  "identity": {
+   "manufacturer_id": "oizumi",
+   "official_product_url": "https://p-town.dmm.com/machines/5028",
+   "announced_name": "Lパチスロ 喰霊-零-Re",
+   "identity_tier": "CATALOG_CODE_MATCHED",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5028 型式=Lパチスロ喰霊零Re/L3 メーカー=オーイズミ 導入=2026-08-17 確認日=2026-08-16",
+   "market_release_date": "2026-08-17",
+   "_legacy_evidence_ref": "identity_evidence/13674f64333e5765e7fd009beb11fe73c52ed2f5c2b4498532d06218adf767fb.html #card0",
+   "_legacy_official_product_url": "https://www.oizumi.co.jp/machine/garei-zero-re/",
+   "regulatory_model_code": "Lパチスロ喰霊零Re/L3",
+   "_model_code_sources": [
+    "p-town.dmm.com",
+    "p-world.co.jp"
+   ]
+  },
+  "checker": {
+   "coinRate": 36.1,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {
+    "ceiling": 999
+   }
+  }
+ },
+ {
+  "slug": "magireco",
+  "name": "Lスマスロマギアレコード",
+  "seo": {
+   "title": "マギアレコード 狙い目・天井・期待値まとめ"
+  },
+  "info": "スマスロAT",
+  "strategy": "等価360G(540pt)〜 / リセット150G〜",
+  "strategyByRate": {
+   "eq56": "5.6枚360G〜",
+   "rate55": "6.0枚370G〜",
+   "rate50": "6.5枚400G〜",
+   "rate45": "7.0枚450G〜"
+  },
+  "aliases": [
+   "マギレコ",
+   "マギアレコード",
+   "まどマギ外伝"
+  ],
+  "checker": {
+   "unit": "G",
+   "defaultRate": "eq56",
+   "exchangeRates": [
+    {
+     "key": "eq56",
+     "label": "5.6枚"
+    },
+    {
+     "key": "rate55",
+     "label": "6.0枚"
+    },
+    {
+     "key": "rate50",
+     "label": "6.5枚"
+    },
+    {
+     "key": "rate45",
+     "label": "7.0枚"
+    }
+   ],
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    },
+    {
+     "key": "reset",
+     "label": "リセット"
+    }
+   ],
+   "normal": {
+    "excellent": 580,
+    "good": 360,
+    "caution": 280,
+    "byRate": {
+     "eq56": {
+      "excellent": 580,
+      "good": 360,
+      "caution": 280,
+      "note": "5.6枚交換なら360G(540pt)から狙い目。天井950pt+α(約633G)。"
+     },
+     "rate55": {
+      "excellent": 580,
+      "good": 370,
+      "caution": 290,
+      "note": "6.0枚交換なら370Gから。"
+     },
+     "rate50": {
+      "excellent": 600,
+      "good": 400,
+      "caution": 320,
+      "note": "6.5枚交換なら400Gから。"
+     },
+     "rate45": {
+      "excellent": 600,
+      "good": 450,
+      "caution": 360,
+      "note": "7.0枚交換なら450Gから。"
+     }
+    },
+    "note": "pt管理天井950pt+α（約633G相当）。"
+   },
+   "reset": {
+    "excellent": 400,
+    "good": 150,
+    "caution": 80,
+    "byRate": {
+     "eq56": {
+      "excellent": 400,
+      "good": 150,
+      "caution": 80,
+      "note": "リセット時は天井600〜699pt+αに短縮。150Gから狙い目。"
+     },
+     "rate55": {
+      "excellent": 400,
+      "good": 200,
+      "caution": 100,
+      "note": "リセット時は600pt台に短縮。"
+     },
+     "rate50": {
+      "excellent": 400,
+      "good": 230,
+      "caution": 120,
+      "note": "リセット時は600pt台に短縮。"
+     },
+     "rate45": {
+      "excellent": 400,
+      "good": 260,
+      "caution": 150,
+      "note": "リセット時は600pt台に短縮。"
+     }
+    },
+    "note": "リセット時は天井600〜699pt+αに短縮。"
+   },
+   "limit": 700
+  },
+  "limit": 633,
+  "original": {
+   "title": "マギアレコード",
+   "kind": "ゲーム",
+   "search": "マギアレコード"
+  }
+ },
+ {
   "slug": "shinuchi_yoshimune",
   "name": "真打 吉宗",
   "seo": {
@@ -1367,129 +1490,6 @@
    "title": "戦国コレクション",
    "kind": "ゲーム",
    "search": "戦国コレクション ゲーム"
-  }
- },
- {
-  "slug": "magireco",
-  "name": "Lスマスロマギアレコード",
-  "seo": {
-   "title": "マギアレコード 狙い目・天井・期待値まとめ"
-  },
-  "info": "スマスロAT",
-  "strategy": "等価360G(540pt)〜 / リセット150G〜",
-  "strategyByRate": {
-   "eq56": "5.6枚360G〜",
-   "rate55": "6.0枚370G〜",
-   "rate50": "6.5枚400G〜",
-   "rate45": "7.0枚450G〜"
-  },
-  "aliases": [
-   "マギレコ",
-   "マギアレコード",
-   "まどマギ外伝"
-  ],
-  "checker": {
-   "unit": "G",
-   "defaultRate": "eq56",
-   "exchangeRates": [
-    {
-     "key": "eq56",
-     "label": "5.6枚"
-    },
-    {
-     "key": "rate55",
-     "label": "6.0枚"
-    },
-    {
-     "key": "rate50",
-     "label": "6.5枚"
-    },
-    {
-     "key": "rate45",
-     "label": "7.0枚"
-    }
-   ],
-   "modes": [
-    {
-     "key": "normal",
-     "label": "通常"
-    },
-    {
-     "key": "reset",
-     "label": "リセット"
-    }
-   ],
-   "normal": {
-    "excellent": 580,
-    "good": 360,
-    "caution": 280,
-    "byRate": {
-     "eq56": {
-      "excellent": 580,
-      "good": 360,
-      "caution": 280,
-      "note": "5.6枚交換なら360G(540pt)から狙い目。天井950pt+α(約633G)。"
-     },
-     "rate55": {
-      "excellent": 580,
-      "good": 370,
-      "caution": 290,
-      "note": "6.0枚交換なら370Gから。"
-     },
-     "rate50": {
-      "excellent": 600,
-      "good": 400,
-      "caution": 320,
-      "note": "6.5枚交換なら400Gから。"
-     },
-     "rate45": {
-      "excellent": 600,
-      "good": 450,
-      "caution": 360,
-      "note": "7.0枚交換なら450Gから。"
-     }
-    },
-    "note": "pt管理天井950pt+α（約633G相当）。"
-   },
-   "reset": {
-    "excellent": 400,
-    "good": 150,
-    "caution": 80,
-    "byRate": {
-     "eq56": {
-      "excellent": 400,
-      "good": 150,
-      "caution": 80,
-      "note": "リセット時は天井600〜699pt+αに短縮。150Gから狙い目。"
-     },
-     "rate55": {
-      "excellent": 400,
-      "good": 200,
-      "caution": 100,
-      "note": "リセット時は600pt台に短縮。"
-     },
-     "rate50": {
-      "excellent": 400,
-      "good": 230,
-      "caution": 120,
-      "note": "リセット時は600pt台に短縮。"
-     },
-     "rate45": {
-      "excellent": 400,
-      "good": 260,
-      "caution": 150,
-      "note": "リセット時は600pt台に短縮。"
-     }
-    },
-    "note": "リセット時は天井600〜699pt+αに短縮。"
-   },
-   "limit": 700
-  },
-  "limit": 633,
-  "original": {
-   "title": "マギアレコード",
-   "kind": "ゲーム",
-   "search": "マギアレコード"
   }
  },
  {
