@@ -343,8 +343,9 @@ def _verified_range() -> list:
     # ★いま push しようとしているコミット★（決めるのは push_commits だけ）
     #   ★直す前はここだけ `origin/main..HEAD` 決め打ちだった★
     #   （2026-08-28・Codexの12回目）＝別の枝・タグで外せた。
-    lane = list((_day.get("unlimited_slugs") or [])
-                if str(_day.get("date") or "") == today else [])
+    _d = (data.get("day") or {})
+    lane = list((_d.get("unlimited_slugs") or [])
+                if str(_d.get("date") or "") == today else [])
     out = []
     for sha, subject in push_commits():
         if sha in verified:
@@ -368,6 +369,9 @@ def _verified_range() -> list:
                 continue
         out.append(f"{sha[:12]} {subject[:60]}")
     return out
+
+
+_TODAY = datetime.now().strftime("%Y-%m-%d")
 
 
 def _selftest() -> int:
@@ -488,6 +492,31 @@ def _selftest() -> int:
     t("　似た名前でも、記事の置き場でなければ求めない",
       touches_articles(["assets/data/machines-backup.json",
                         "assets/css/practical.css"]) is False)
+    # ★★この関数を実際に呼ぶ★★（2026-08-30・Codexの指摘＋自分で踏んだ）
+    #   判断を gate_active() へ切り出したとき、消し忘れた局所変数のせいで
+    #   ★push しようとした瞬間に例外★になった。
+    #   ここが試験で一度も通っていなかったので、誰も気づかなかった。
+    try:
+        _verified_range()
+        t("★★push前の照合の判断が、例外なく最後まで動く★★"
+          "（＝切り出しの消し残しで push が落ちた）", True)
+    except Exception as e:                                   # noqa: BLE001
+        t(f"★★push前の照合の判断が動く★★（{type(e).__name__}: {e}）", False)
+
+    # ★判断そのものも直接たたく★（記事コミットの有無に左右されない）
+    t("★手だけの日は照合を求めない★",
+      gate_active({"day": {"date": _TODAY, "had_unattended": False},
+                   "tasks": {"u": {"run_date": _TODAY,
+                                   "guard_slug": "x"}}}, _TODAY)[0] is False)
+    t("★無人がいた日は照合を求める★",
+      gate_active({"day": {"date": _TODAY, "had_unattended": True},
+                   "tasks": {"u": {"run_date": _TODAY,
+                                   "guard_slug": "x"}}}, _TODAY)[0] is True)
+    t("★目印が無い古い記録は照合を求める★（fail-closed）",
+      gate_active({"day": {"date": _TODAY},
+                   "tasks": {"u": {"run_date": _TODAY,
+                                   "guard_slug": "x"}}}, _TODAY)[0] is True)
+
     ng = ok.count(False)
     print(f"{len(ok) - ng}/{len(ok)} 合格")
     return 1 if ng else 0
