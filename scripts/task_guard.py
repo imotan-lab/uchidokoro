@@ -863,6 +863,13 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
                        "approved_files", "verified_commit"):
                 _e0.pop(_k, None)
         _e0["guard_slug"] = slug
+        # ★★無人で動いているのか、人が手で動かしたのか★★（2026-08-30）
+        #   push前の関所は「無人だった担当がある日」だけ照合を求める。
+        #   ★直す前は見分けていなかった★ので、
+        #   タスクを手で試した日は、対話セッションが記事データを触った
+        #   コミットを一切 push できなかった
+        #   ＝**タスクを手で試すと、その日は仕事が出せない**。
+        _e0["unattended"] = lock_is_live()
 
 
         # ★数を数える★（2026-08-21・MACHINES_PER_DAY を 1 → 3 にしたときに直した）
@@ -1269,6 +1276,61 @@ def _changed_files() -> tuple[list, str]:
 UNATTENDED_TASKS = ("add-machine", "update-machine", "quality-review",
                     "uchidokoro-add-machine", "uchidokoro-update-machine",
                     "uchidokoro-quality-review")
+
+
+def lock_is_live() -> bool:
+    """★いま無人タスクのロックが生きているか★（2026-08-30）
+
+    手順書は無人タスクに `task_lock.py acquire` を必須にしている。
+    ＝ロックが生きていれば「無人で動いている」、無ければ「人が手で動かした」。
+    ★読めないときは「生きている」と答える★（fail-closed）＝
+      分からないのに「手動だ」と言うと、関所を素通りさせてしまう。
+    """
+    try:
+        import task_lock as _tl
+        data = _tl._read_lock(_tl.LOCK_PATH)
+        if not data:
+            return False
+        age = _tl._age_minutes(data)
+        if age is None:
+            return True
+        return age < _tl.STALE_MINUTES
+    except Exception:                                        # noqa: BLE001
+        return True
+
+
+def mark_manual(task: str, why: str, path: str = STATE_PATH) -> dict:
+    """★今日のその担当は「人が手で動かした」ものだと記録する★（2026-08-30）
+
+    ★無人タスク自身には使えない★＝ロックが生きている間は断る。
+      （タスクが自分で自分を例外にする経路を塞ぐ）
+    ★今日の記録にしか付けられない★／★理由が要る★
+    """
+    if lock_is_live():
+        raise GuardError(
+            "無人タスクのロックが生きているので、手動の印は付けられません")
+    if len(str(why or "").strip()) < 10:
+        raise GuardError("なぜ手動なのか、理由を10字以上で書いてください")
+    with _Exclusive(path):
+        data = _load(path)
+        # ★_entry を呼ばない★（2026-08-30・対照実験で見つけた）＝
+        #   あれは「今日の記録」を**その場で作ってしまう**ので、
+        #   ★日付の検査が、自分で作った値を見て自分に合格を出す★（罠㉕）。
+        #   実際、一度も動いていないタスクにも印を付けられた。
+        e = (data.get("tasks") or {}).get(task)
+        if not isinstance(e, dict) or e.get("run_date") != _today():
+            raise GuardError(
+                f"{task} の今日の記録がありません"
+                f"（記録は {(e or {}).get('run_date')!r}）")
+        if not e.get("guard_slug"):
+            raise GuardError(
+                f"{task} は今日どの機種も担当していません"
+                "（印を付ける相手がいません）")
+        e["unattended"] = False
+        e["manual_why"] = str(why).strip()[:300]
+        e["manual_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        _save(path, data)
+        return e
 
 
 def unattended_dirty_code(task: str) -> list:
@@ -3047,6 +3109,13 @@ def main() -> int:
     p.add_argument("--slug", required=True)
     p.add_argument("--commit", required=True,
                    help="いま作ったコミット（git rev-parse HEAD の値）")
+    # ★今日のその担当は人が手で動かしたものだ、と記録する★（2026-08-30）
+    #   ★無人タスク自身には使えない★（ロックが生きている間は断る）
+    p = sub.add_parser("mark-manual",
+                       help="今日の担当を「人が手で動かした」と記録する")
+    p.add_argument("--task", required=True)
+    p.add_argument("--why-file", required=True,
+                   help="なぜ手動なのかを書いたファイル（自由文はファイル渡し）")
 
     args = ap.parse_args()
     if args.selftest:
@@ -3083,6 +3152,11 @@ def main() -> int:
         print(json.dumps(before_commit(args.task, args.slug), ensure_ascii=False, indent=1))
     elif args.cmd == "done":
         print(json.dumps(done(args.task, args.slug, args.stage), ensure_ascii=False, indent=1))
+    elif args.cmd == "mark-manual":
+        with open(args.why_file, encoding="utf-8") as _fh:
+            _why = _fh.read()
+        print(json.dumps(mark_manual(args.task, _why),
+                         ensure_ascii=False, indent=1))
     elif args.cmd == "verify-commit":
         print(json.dumps(verify_commit(args.task, args.slug, args.commit),
                          ensure_ascii=False, indent=1))

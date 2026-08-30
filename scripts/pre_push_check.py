@@ -294,7 +294,16 @@ def _verified_range() -> list:
             continue
         if not e.get("guard_slug"):
             continue
-        active = True              # 今日、関所を通った機種がある
+        # ★★人が手で動かした担当は数えない★★（2026-08-30・運営者の指摘）
+        #   「手動実行は例外としないとテストできないじゃん」
+        #   ★直す前は無人か手動かを見ていなかった★ので、
+        #   タスクを手で試した日は、対話セッションが記事データを触った
+        #   コミットを一切 push できなかった
+        #   ＝**タスクを手で試すと、その日は仕事が出せない**。
+        #   ★目印が無い古い記録は「無人だった」とみなす★（fail-closed）
+        if e.get("unattended") is False:
+            continue
+        active = True              # 今日、無人タスクが関所を通った機種がある
         if e.get("verified_commit"):
             verified.add(str(e["verified_commit"]))
     if not active:
