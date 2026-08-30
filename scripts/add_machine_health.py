@@ -27,6 +27,19 @@ import re
 import sys
 from datetime import date, timedelta
 
+# ★★自分の出力の文字の扱いを固定する★★（2026-08-31・Codexの指摘P1）
+#   ★Codexは「番人のSTEP 2.4が落ちる」と言ったが、再現しなかった★＝
+#   `check_stuck()` が `publish_new_machine` を取り込み、
+#   その**取り込みの副作用**で stdout が utf-8 になっていたから。
+#   ＝★他人の取り込みに寄りかかっていた★ので、
+#     取り込む順番が変わった日に黙って落ちる。
+#   実際 `--selftest` は先に印を出すので、直す前は落ちていた。
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:              # noqa: BLE001
+        pass                       # ★書けなくても点検は続ける★
+
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
 
@@ -225,6 +238,15 @@ def check_now() -> list:
 
 # ---------------------------------------------------------------- selftest
 
+# ★試験のためだけの入口★（2026-08-31）
+#   ★取り込みより先に印だけ出す★＝`--date` を渡す道では
+#   `check_stuck()` が `publish_new_machine` を取り込み、
+#   その副作用で utf-8 になってしまうので、守りを外しても通ってしまう。
+def _render_check() -> int:
+    print("✅ ✗ ★")
+    return 0
+
+
 def selftest() -> int:
     results = []
     nl = chr(10)
@@ -233,6 +255,30 @@ def selftest() -> int:
     def t(name, cond):
         results.append((name, bool(cond)))
         print(("✅" if cond else "❌") + " " + name)
+
+    # ★★自分の出力を utf-8 に固定しているか★★（2026-08-31・Codexの指摘P1）
+    #   ★子を cp932 で起こして確かめる★＝`sys.stdout.encoding` を見るだけでは
+    #   試験にならない（呼び出し側が PYTHONIOENCODING=utf-8 を渡していれば、
+    #   守りを外しても通ってしまう＝罠④）。
+    import subprocess as _sp0
+    _env0 = dict(os.environ, PYTHONIOENCODING="cp932")
+    _env0.pop("PYTHONUTF8", None)
+    _r0 = _sp0.run([sys.executable, os.path.abspath(__file__),
+                    "--render-check"],
+                   capture_output=True, env=_env0)
+
+    def _utf8_ok(b):
+        try:
+            txt = (b or b"").decode("utf-8")
+        except Exception:                  # noqa: BLE001
+            return False
+        return any(ord(c) > 127 for c in txt)
+
+    t("★★自分の出力を utf-8 に固定している★★"
+      "（Windowsの既定のままだと印が書けず、番人には"
+      "「見に行けなかった」としか分からない）",
+      b"UnicodeEncodeError" not in (_r0.stderr or b"")
+      and _utf8_ok(_r0.stdout))
 
     global LOG_DIR
     real = LOG_DIR
@@ -410,7 +456,11 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--date", help="見る日（既定は昨日）")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--render-check", action="store_true",
+                    help=argparse.SUPPRESS)   # ★試験専用★
     args = ap.parse_args()
+    if args.render_check:
+        return _render_check()
     if args.selftest:
         return selftest()
     day = args.date or (date.today() - timedelta(days=1)).isoformat()

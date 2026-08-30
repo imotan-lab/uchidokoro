@@ -135,22 +135,22 @@ def _commands(step: str) -> list:
 #   ＝argparse の緩いスクリプトは落ちないが、ゴミの引数つきで走っていた。
 #   ★CIの再現なのに、CIと違うものを動かしていた★ので、
 #   この道具の答えそのものが信用できなかった。
-_SHELL_HEAD = (">", "<", "|", "&", ";", "2>", "1>", "&>")
+_STOP = (">", ">>", "<", "<<", "|", "||", "&&", ";", "&",
+         "2>", "1>", "&>", "2>&1", "1>&2")
+# ★引数の中に混ざっていたら、この道具では再現できない★
+#   （`python a.py|b` のように空白が無いと、切れ目として現れない）
+_META = "|&;<>"
 
 
 def argv_of(cmd: str) -> list:
-    """シェルの文から、実際に動かす argv だけを取り出す。
+    """シェルの文から argv を取り出す（作れないときは空）。
 
-    ★最初のシェル記号で切る★（リダイレクト・パイプ・条件つなぎ）。
-    ★記号を無視して読み飛ばさない★＝そこから先はシェルの仕事で、
-    このコマンドの引数ではない。
+    ★引用符は shlex に任せる★（2026-08-31・Codexの指摘）＝
+    直す前は空白で切っていたので、
+      python scripts/check_duplicate.py --name "存在しない機種テスト用XYZ"
+    が **引用符ごと** 引数に渡っていた＝★すでにCIと違うものを動かしていた★。
     """
-    args = []
-    for tok in str(cmd or "").split():
-        if tok.startswith(_SHELL_HEAD):
-            break
-        args.append(tok)
-    return args
+    return _parse(cmd)[0]
 
 
 def argv_problem(cmd: str, args: list) -> str:
@@ -158,10 +158,58 @@ def argv_problem(cmd: str, args: list) -> str:
 
     ★読み取れない行を黙って飛ばさない★＝飛ばした検査は
     「守っている」ことにならない（CLAUDE.md「無ければ飛ばすで逃げない」）。
+    ★再現できない書き方は、通さずに赤にする★＝
+    パイプ・入力のリダイレクト・複数コマンド・変数の前置き・置換・行の継続。
     """
+    why = _parse(cmd)[1]
+    if why:
+        return why
     if len(args) < 2 or args[0] != "python":
         return f"ワークフローの行から argv を作れません: {str(cmd)[:70]}"
     return ""
+
+
+def _tail_ok(rest: list) -> bool:
+    """コマンドのあとに許すのは「出力のリダイレクト」と `|| rc=1` だけ。"""
+    r = list(rest)
+    if r[:1] and r[0] in (">", ">>"):
+        if len(r) < 2 or r[1] in _STOP:
+            return False
+        r = r[2:]
+    if r[:1] == ["2>&1"]:
+        r = r[1:]
+    if r[:2] == ["||", "rc=1"]:
+        r = r[2:]
+    return not r
+
+
+def _parse(cmd: str) -> tuple:
+    """(argv, 理由) を返す。理由が空文字なら argv を使ってよい。"""
+    import shlex
+    raw = str(cmd or "").strip()
+    for ng, why in ((chr(96), "バッククォート"), ("$(", "コマンド置換"),
+                    ("${", "変数の展開"), (" #", "コメント")):
+        if ng in raw:
+            return [], f"シェルの{why}があるので再現できません: {raw[:60]}"
+    if raw.endswith(chr(92)):
+        return [], f"行が次へ続いているので再現できません: {raw[:60]}"
+    try:
+        toks = shlex.split(raw, posix=True)
+    except ValueError as e:                # noqa: BLE001
+        return [], f"引用符が閉じていません: {e}"
+    args, rest = [], []
+    for i, t in enumerate(toks):
+        if t in _STOP:
+            rest = toks[i:]
+            break
+        args.append(t)
+    for a in args:
+        if any(ch in a for ch in _META):
+            return [], f"引数にシェルの記号が混ざっています: {a[:40]}"
+    if not _tail_ok(rest):
+        return [], ("この道具では再現できないシェルの書き方です: "
+                    + " ".join(rest)[:50])
+    return args, ""
 
 
 def _run(cmds: list, root: str, no_net: bool) -> list:
@@ -224,23 +272,52 @@ def selftest() -> int:
         ok_all = ok_all and bool(cond)
         print(("✅" if cond else "❌") + " " + name)
 
+    def _ok(c):
+        return argv_problem(c, argv_of(c)) == ""
+
     t("★★リダイレクトと条件つなぎを引数にしない★★"
       "（毎回1本、嘘の赤が出ていた）",
       argv_of("python scripts/crosscheck_gates.py > cc.log 2>&1 || rc=1")
-      == ["python", "scripts/crosscheck_gates.py"])
+      == ["python", "scripts/crosscheck_gates.py"]
+      and _ok("python scripts/crosscheck_gates.py > cc.log 2>&1 || rc=1"))
     t("　ふつうの引数はそのまま残す",
       argv_of("python scripts/x.py --check --slug abc")
       == ["python", "scripts/x.py", "--check", "--slug", "abc"])
-    t("　パイプでも切る",
-      argv_of("python a.py --fast | tail -n 5") == ["python", "a.py", "--fast"])
-    t("　追記のリダイレクトでも切る",
-      argv_of("python a.py >> log.txt") == ["python", "a.py"])
+    t("★★引用符を外して渡す★★（本物のワークフローの行・Codexの指摘）",
+      argv_of('python scripts/check_duplicate.py '
+              '--name "存在しない機種テスト用XYZ"')
+      == ["python", "scripts/check_duplicate.py", "--name",
+          "存在しない機種テスト用XYZ"])
+    t("　引用符の中の空白は1つの引数のまま",
+      argv_of('python a.py --name "あ い"')
+      == ["python", "a.py", "--name", "あ い"])
+    t("★★再現できない書き方は赤にする（黙って切らない）★★",
+      not _ok("python a.py --fast | tail -n 5")
+      and not _ok("python a.py < in.txt")
+      and not _ok("cd x && python a.py")
+      and not _ok("VAR=x python a.py")
+      and not _ok("python a.py; python b.py"))
+    t("　空白の無い記号でも赤にする（切れ目として現れない）",
+      not _ok("python a.py|b") and not _ok("python a.py>log"))
+    t("　置換・変数・行の継続も赤にする",
+      not _ok("python a.py $(date)")
+      and not _ok("python a.py ${X}")
+      and not _ok("python a.py " + chr(92)))
+    t("　追記のリダイレクトは通す",
+      argv_of("python a.py >> log.txt") == ["python", "a.py"]
+      and _ok("python a.py >> log.txt"))
     t("★★読み取れない行は黙って飛ばさない★★",
       argv_problem("> x", argv_of("> x")) != "")
     t("　python 以外の行も断る",
       argv_problem("bash a.sh", argv_of("bash a.sh")) != "")
     t("　まっとうな行は断らない",
       argv_problem("python a.py --x", argv_of("python a.py --x")) == "")
+    # ★★本物のワークフローの全部の行が通ること★★
+    #   （手作りの例だけで採点しない・罠①）
+    _lines = _commands("Self-tests") + _commands("Repository audits")
+    _ng = [c for c in _lines if argv_problem(c, argv_of(c))]
+    t(f"★★いまのワークフローの {len(_lines)} 行が全部読める★★",
+      bool(_lines) and not _ng)
     print(f"{ran[0]}/{ran[0]} 合格" if ok_all else "不合格あり")
     return 0 if ok_all else 1
 

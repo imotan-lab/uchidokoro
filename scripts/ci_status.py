@@ -170,10 +170,15 @@ def selftest() -> int:
     _env.pop("PYTHONUTF8", None)
     _r = _sp.run([sys.executable, os.path.abspath(__file__), "--render-check"],
                  capture_output=True, env=_env)
+    # ★★終了コードだけでは足りない★★（2026-08-31・Codexの指摘）
+    #   `cp932 + errors="replace"` に変えても例外は出ず終了コードは0になる
+    #   （記号が「?」になるだけ）＝試験の名前どおりの保証になっていない。
+    #   → ★出てきた生バイトが utf-8 そのものであること★まで見る。
     t("★★自分の出力を utf-8 に固定している★★"
       "（Windowsの既定のままだと合格の記号が書けず、"
       "緑でも赤でも毎回「見に行けなかった」になる）",
-      _r.returncode == 0)
+      _r.returncode == 0
+      and _r.stdout.replace(b"\r\n", b"\n") == "✅ 🔴 🟠 ❌\n".encode("utf-8"))
     t("★全部成功なら緑★",
       check(fake([run("publish-pages", "a" * 40, "completed", "success"),
                   run("pages-rehearsal", "a" * 40, "completed",
@@ -200,6 +205,11 @@ def selftest() -> int:
 
     print(f"\n{ran[0] - len(ng)}/{ran[0]} " + ("合格" if not ng else "不合格"))
     if ng:
+        # ★ASCIIだけの目印も出す★（2026-08-31）＝
+        #   文字の扱いを壊す試験では、子の出力が cp932 になって
+        #   日本語が化ける。化けても残る目印が無いと、
+        #   壊し方の道具が「ただ落ちただけ」と読み違える。
+        print("NG " + str(len(ng)))
         print("失敗:", ng)
     return 1 if ng else 0
 

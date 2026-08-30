@@ -2042,11 +2042,27 @@ MUTATIONS = [
     },
     # ─── 2026-08-31・CI再現の道具が「嘘の赤」を出さないこと ──────
     {
-        "why": "★シェルの記号を引数として渡す"
-               "（毎回1本、嘘の赤が出て、道具の答えが信用できなくなる）★",
+        "why": "★引用符を自分で切る（本物のワークフローの行で、"
+               "引用符ごと引数に渡る＝すでにCIと違うものを動かす）★",
         "file": "scripts/ci_repro.py",
-        "before": "        if tok.startswith(_SHELL_HEAD):\n            break",
-        "after": "        if False:\n            break",
+        "before": "        toks = shlex.split(raw, posix=True)",
+        "after": "        toks = raw.split()",
+        "run": ["scripts/ci_repro.py"],
+    },
+    {
+        "why": "★再現できないシェルの書き方を、黙って切って通す"
+               "（パイプ・入力のリダイレクト・複数コマンド）★",
+        "file": "scripts/ci_repro.py",
+        "before": "    return not r\n\n\ndef _parse",
+        "after": "    return True\n\n\ndef _parse",
+        "run": ["scripts/ci_repro.py"],
+    },
+    {
+        "why": "★引数に混ざったシェルの記号を見ない"
+               "（`python a.py|b` のように空白が無い形が素通りする）★",
+        "file": "scripts/ci_repro.py",
+        "before": "        if any(ch in a for ch in _META):",
+        "after": "        if False:",
         "run": ["scripts/ci_repro.py"],
     },
     {
@@ -2065,6 +2081,22 @@ MUTATIONS = [
         "before": '        _s.reconfigure(encoding="utf-8", errors="replace")',
         "after": "        pass",
         "run": ["scripts/ci_status.py"],
+    },
+    {
+        "why": "★utf-8 ではなく cp932 に固定する"
+               "（例外は出ないが印が ? になる＝名前どおりの保証にならない）★",
+        "file": "scripts/ci_status.py",
+        "before": '        _s.reconfigure(encoding="utf-8", errors="replace")',
+        "after": '        _s.reconfigure(encoding="cp932", errors="replace")',
+        "run": ["scripts/ci_status.py"],
+    },
+    {
+        "why": "★番人が毎朝呼ぶ点検が、自分の出力の文字の扱いを固定しない"
+               "（他人の取り込みの副作用に寄りかかった状態へ戻る）★",
+        "file": "scripts/add_machine_health.py",
+        "before": '        _s.reconfigure(encoding="utf-8", errors="replace")',
+        "after": "        pass",
+        "run": ["scripts/add_machine_health.py"],
     },
 ]
 
