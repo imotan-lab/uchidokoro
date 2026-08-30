@@ -2004,6 +2004,42 @@ MUTATIONS = [
         "after": 'GNUM = re.compile(r"(?<!\\d)(\\d{1,4})(?!\\d)")',
         "run": ["scripts/align_strategy.py"],
     },
+    # ─── 2026-08-31・目次表（台帳#523）────────────────────────────
+    {
+        "why": "★新台・preview でも道具が目次に並ぶことにする"
+               "（隠れている箱への行が出て、押しても飛べない）★",
+        "file": "scripts/audit_render.py",
+        "before": '    hide_tools = cls in ("AUTO_INDEXABLE", "AUTO_PENDING",'
+                  ' "LEGACY_PREVIEW")',
+        "after": "    hide_tools = False",
+        "run": ["scripts/audit_render.py"],
+    },
+    {
+        "why": "★目次の並びを見ない"
+               "（節が落ちても、目次と本文が同じように壊れれば通る）★",
+        "file": "scripts/audit_render.py",
+        "before": "    if got != want:\n"
+                  '        return [f"R14: 目次の中身が違います',
+        "after": "    if False:\n"
+                 '        return [f"R14: 目次の中身が違います',
+        "run": ["scripts/audit_render.py"],
+    },
+    {
+        "why": "★飛び先が実在するかを見ない（押しても動かない行が出る）★",
+        "file": "scripts/audit_render.py",
+        "before": '        if not it.get("exists"):',
+        "after": "        if False:",
+        "run": ["scripts/audit_render.py"],
+    },
+    {
+        "why": "★目次そのものが見えていなくても通す（opacity:0 等）★",
+        "file": "scripts/audit_render.py",
+        "before": '    if not toc.get("block_shown"):\n'
+                  '        return [f"R14: 目次が読者に見えていません',
+        "after": '    if False:\n'
+                 '        return [f"R14: 目次が読者に見えていません',
+        "run": ["scripts/audit_render.py"],
+    },
 ]
 
 

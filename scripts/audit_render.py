@@ -200,6 +200,105 @@ def judge_boxes(boxes: list, detail) -> list[str]:
     return ngs
 
 
+# ★最終DOMから目次表を取り出すJS★（2026-08-31・台帳#523）
+#   ★見え方の判定は BOX_JS と同じ厳しさにする★＝display だけを見ると
+#   opacity:0 / visibility:hidden / clip-path で消したものを見逃す。
+TOC_JS = r"""() => {
+        const noopClip = (v) => !v || v === 'none'
+            || /^inset\(\s*0(px|%)?(\s+0(px|%)?){0,3}\s*\)$/.test(v);
+        const hiddenSelf = (n) => {
+            const st = getComputedStyle(n);
+            return st.display === 'none' || st.visibility === 'hidden'
+                || parseFloat(st.opacity || '1') < 0.05
+                || !noopClip(st.clipPath)
+                || (st.clip && st.clip !== 'auto');
+        };
+        const visible = (el) => {
+            for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
+                if (hiddenSelf(n)) return false;
+            }
+            const r = el.getBoundingClientRect();
+            return el.offsetParent !== null && r.width >= 1 && r.height >= 1;
+        };
+        const block = document.getElementById('tocBlock');
+        const items = Array.from(document.querySelectorAll('#tocList .toc-item'));
+        return {
+            block_shown: block ? visible(block) : false,
+            items: items.map(a => {
+                const href = a.getAttribute('href') || '';
+                const id = href.slice(0, 1) === '#' ? href.slice(1) : '';
+                const t = id ? document.getElementById(id) : null;
+                return {label: (a.textContent || '').trim(), id: id,
+                        exists: !!t, shown: t ? visible(t) : false};
+            }),
+        };
+    }"""
+
+
+def expected_toc(machine: dict, detail, pochi_reasons: dict) -> list:
+    """★目次に並ぶはずのラベル★（ページのDOMを一切見ずに決める）
+
+    （2026-08-31・Codexの指摘P2。★罠⑦＝期待値を検査対象そのものから作る★）
+      直す前の通し確認は、節の期待値を `#articleSections` から取っていたので、
+      **目次と本文が同じように壊れたら合格**した
+      （JSが1節落とせば、目次からも消えて一致してしまう）。
+
+    ここで見るもの:
+      節         … `machine-details/{slug}.json` の sections[].title
+      道具の有無 … 機種の区分（新台経路・preview は道具が隠れる）
+      ポチポチくん … ひな型の名簿（`extract_pochipochi_reasons`）
+    """
+    cls = _pd.machine_class(machine)          # ★壊れた判定書は例外で止まる★
+    hide_tools = cls in ("AUTO_INDEXABLE", "AUTO_PENDING", "LEGACY_PREVIEW")
+    out = []
+    if not hide_tools:
+        out += ["狙い目チェッカー", "狙い目早見表"]
+    out.append("基本情報")
+    for sec in ((detail or {}).get("sections") or []):
+        if not isinstance(sec, dict):
+            continue
+        title = str(sec.get("title") or "").strip()
+        if title:
+            out.append(title)
+    if not hide_tools and machine.get("slug") not in pochi_reasons:
+        out.append("ポチポチくん")
+    return out
+
+
+def _raises(fn) -> bool:
+    """★例外で止まることを試験する小道具★（黙って通していないか）。"""
+    try:
+        fn()
+    except Exception:                     # noqa: BLE001
+        return True
+    return False
+
+
+def judge_toc(toc: dict, want: list) -> list[str]:
+    """目次表が契約どおりか（★ブラウザ無しで試験できる純関数★）。"""
+    ngs: list[str] = []
+    if not isinstance(toc, dict):
+        return ["R14: 目次を読み取れません"]
+    items = toc.get("items") or []
+    got = [x.get("label") for x in items]
+    if len(want) < 2:
+        # ★1つ以下なら目次にならないので出さない★（ひな型の決まりと対）
+        if toc.get("block_shown"):
+            ngs.append(f"R14: 目次に出すものが{len(want)}件なのに目次が出ています")
+        return ngs
+    if not toc.get("block_shown"):
+        return [f"R14: 目次が読者に見えていません（{want} が出るはず）"]
+    if got != want:
+        return [f"R14: 目次の中身が違います（{got} / {want} のはず）"]
+    for it in items:
+        if not it.get("exists"):
+            ngs.append(f"R14: 飛び先がありません: {it.get('label')}"
+                       f" -> #{it.get('id')}")
+        elif not it.get("shown"):
+            ngs.append(f"R14: 飛び先が読者に見えていません: {it.get('label')}")
+    return ngs
+
+
 def check_one(page, machine: dict) -> list[str]:
     """1機種のレンダリング検査。NGメッセージのリストを返す。"""
     slug = machine["slug"]
@@ -339,6 +438,18 @@ def check_one(page, machine: dict) -> list[str]:
         _is_auto = False
     if _is_auto:
         ngs += judge_boxes(boxes, detail)
+
+    # R14: 目次表が、独立に決めた期待値と一致するか（2026-08-31・台帳#523）
+    #   ★期待値はページのDOMから作らない★（Codexの指摘P2・罠⑦）
+    try:
+        import build_machine_pages as _bmp14
+        with open(BASE / "machine.html", encoding="utf-8") as _f14:
+            _pochi14 = _bmp14.extract_pochipochi_reasons(_f14.read())
+        _want14 = expected_toc(machine, detail, _pochi14)
+    except Exception as e:                # noqa: BLE001
+        ngs.append(f"R14: 目次の期待値を作れません: {type(e).__name__}: {e}")
+    else:
+        ngs += judge_toc(page.evaluate(TOC_JS), _want14)
 
 
     # R12: チェッカーと早見表のmode選択が同期しているか
@@ -557,6 +668,66 @@ def selftest() -> int:
     t("　未確認の箱の目印が無ければ止める",
       any("目印がありません" in x for x in judge_boxes(
           [{**b, "pending": None} if b["pending"] else b for b in good], det)))
+    # ---- R14: 目次表（2026-08-31・台帳#523）
+    #   ★材料は手で組み立てる★（本番のデータに貼り付けない・罠㉙）
+    _legacy = {"slug": "zzz_legacy", "name": "試験機"}
+    _dec14 = _pd.decide_from_claims([], "normal")
+    _auto = {"slug": "zzz_auto", "name": "試験機2",
+             # ★版は判定書が名乗るものに合わせる★（食い違いは別の検査の担当）
+             "publication_policy": _dec14["schema_version"],
+             "page_decision": _dec14}
+    _prev = {"slug": "zzz_prev", "name": "試験機3", "status": "preview"}
+    _det14 = {"sections": [{"title": "天井・恩恵", "body": ["x"]},
+                           {"title": "基本スペック", "body": ["x"]}]}
+    _want_legacy = expected_toc(_legacy, _det14, {})
+    t("★旧形式は道具も節も並ぶ★",
+      _want_legacy == ["狙い目チェッカー", "狙い目早見表", "基本情報",
+                       "天井・恩恵", "基本スペック", "ポチポチくん"])
+    t("★ポチポチくんが使えない機種は出さない★",
+      "ポチポチくん" not in expected_toc(_legacy, _det14,
+                                        {"zzz_legacy": "設定差なし"}))
+    t("★★新台経路は道具を1つも出さない★★"
+      "（ひな型がチェッカー・早見表を隠し、ポチポチくんも使えないため）",
+      expected_toc(_auto, _det14, {})
+      == ["基本情報", "天井・恩恵", "基本スペック"])
+    t("　preview も同じ（道具が隠れている）",
+      expected_toc(_prev, _det14, {})
+      == ["基本情報", "天井・恩恵", "基本スペック"])
+    t("★★判定書が壊れていたら黙って旧形式にせず止める★★",
+      _raises(lambda: expected_toc(
+          {**_auto, "page_decision": {"schema_version": "こわれ"}},
+          _det14, {})))
+
+    def _toc_of(labels, shown=True, exists=True, target_shown=True):
+        return {"block_shown": shown,
+                "items": [{"label": x, "id": "i%d" % i,
+                           "exists": exists, "shown": target_shown}
+                          for i, x in enumerate(labels)]}
+    t("★期待どおりなら通る★", judge_toc(_toc_of(_want_legacy),
+                                        _want_legacy) == [])
+    t("★★節が1つ落ちたら止める★★（目次と本文が同じように壊れても気づく）",
+      any("目次の中身が違います" in x for x in
+          judge_toc(_toc_of([x for x in _want_legacy if x != "基本スペック"]),
+                    _want_legacy)))
+    t("★★新台なのにチェッカーが目次に出ていたら止める★★",
+      any("目次の中身が違います" in x for x in
+          judge_toc(_toc_of(["狙い目チェッカー"] + _want_legacy),
+                    _want_legacy)))
+    t("★★飛び先が無ければ止める★★",
+      any("飛び先がありません" in x for x in
+          judge_toc(_toc_of(_want_legacy, exists=False), _want_legacy)))
+    t("★★飛び先が見えていなければ止める★★",
+      any("飛び先が読者に見えていません" in x for x in
+          judge_toc(_toc_of(_want_legacy, target_shown=False), _want_legacy)))
+    t("★★目次そのものが見えていなければ止める★★（opacity:0 等）",
+      any("見えていません" in x for x in
+          judge_toc(_toc_of(_want_legacy, shown=False), _want_legacy)))
+    t("　並ぶものが1つなら目次を出さないのが正しい",
+      judge_toc({"block_shown": False, "items": []}, ["基本情報"]) == [])
+    t("　並ぶものが1つなのに目次が出ていたら止める",
+      any("なのに目次が出ています" in x for x in
+          judge_toc({"block_shown": True, "items": []}, ["基本情報"])))
+
     t("　中身がある箱に未確認の目印が付いていたら止める",
       any("未確認の目印が付いています" in x for x in judge_boxes(
           [{**b, "pending": b["title"]} if not b["pending"] else b
