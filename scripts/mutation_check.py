@@ -2042,6 +2042,14 @@ MUTATIONS = [
     },
     # ─── 2026-08-31・CI再現の道具が「嘘の赤」を出さないこと ──────
     {
+        "why": "★python を動かしている行を読み飛ばす"
+               "（その検査を飛ばしたまま『全部通りました』と言う）★",
+        "file": "scripts/ci_repro.py",
+        "before": "        if _RUNS_PY.search(head):",
+        "after": "        if False:",
+        "run": ["scripts/ci_repro.py"],
+    },
+    {
         "why": "★引用符を自分で切る（本物のワークフローの行で、"
                "引用符ごと引数に渡る＝すでにCIと違うものを動かす）★",
         "file": "scripts/ci_repro.py",

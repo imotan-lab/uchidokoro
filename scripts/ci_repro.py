@@ -110,22 +110,52 @@ def _rmtree_hard(path) -> None:
         pass
 
 
-def _commands(step: str) -> list:
-    """ワークフローの指定ステップから python コマンドを読む。"""
-    if not os.path.isfile(WF):
-        return []
-    out, inside = [], False
-    for ln in open(WF, encoding="utf-8").read().splitlines():
+# ★「この行は python を動かしているか」を単語で見る★（2026-08-31）
+#   `PYTHONUTF8=1 python a.py` / `timeout 30 python a.py` /
+#   `cd x && python a.py` を見つけるため。
+#   ★`python` を含む語（pythonpath 等）に当たらないように前後を切る★
+_RUNS_PY = re.compile(r"(?<![\w./-])python[0-9.]*(?![\w])")
+
+
+def _scan_block(lines: list, step: str) -> tuple:
+    """ステップの中の行を分類する。返すもの: (実行する行, 読めない行)
+
+    ★読めない行を黙って飛ばさない★（2026-08-31・Codexの3回目のP2）＝
+    直す前は `python ` で始まる行だけを拾っていたので、
+    前置きのある呼び出しは**そもそも届かず**、赤にもならなかった
+    ＝★その検査を飛ばしたまま「全部通りました」と言っていた★。
+    """
+    out, bad, inside = [], [], False
+    for ln in lines:
         if re.match(r"\s*- name: " + re.escape(step) + r"\s*$", ln):
             inside = True
             continue
-        if inside:
-            if re.match(r"\s*- name: ", ln):
-                break
-            s = ln.strip()
-            if s.startswith("python "):
-                out.append(s)
-    return out
+        if not inside:
+            continue
+        if re.match(r"\s*- name: ", ln):
+            break
+        s = ln.strip()
+        if not s or s.startswith("#"):
+            continue                      # 空行とコメントは読み飛ばす
+        if s.startswith("python "):
+            out.append(s)
+            continue
+        # ★コメントの中で python の話をしているだけの行は数えない★
+        head = s.split(" #")[0]
+        if _RUNS_PY.search(head):
+            bad.append(s)
+    return out, bad
+
+
+def _commands(step: str) -> tuple:
+    """ワークフローの指定ステップから python コマンドを読む。
+
+    返すもの: (実行する行, 読めない行)
+    """
+    if not os.path.isfile(WF):
+        return [], []
+    return _scan_block(
+        open(WF, encoding="utf-8").read().splitlines(), step)
 
 
 # ★ワークフローの行は「シェルの文」★（2026-08-31・自分で踏んだ）
@@ -314,10 +344,33 @@ def selftest() -> int:
       argv_problem("python a.py --x", argv_of("python a.py --x")) == "")
     # ★★本物のワークフローの全部の行が通ること★★
     #   （手作りの例だけで採点しない・罠①）
-    _lines = _commands("Self-tests") + _commands("Repository audits")
+    _c1, _b1 = _commands("Self-tests")
+    _c2, _b2 = _commands("Repository audits")
+    _lines = _c1 + _c2
     _ng = [c for c in _lines if argv_problem(c, argv_of(c))]
     t(f"★★いまのワークフローの {len(_lines)} 行が全部読める★★",
       bool(_lines) and not _ng)
+    t("★★いまのワークフローに、読み取れない呼び出しが無い★★",
+      not (_b1 + _b2))
+    # ★★前置きのある呼び出しを「読み飛ばさない」★★（Codexの3回目のP2）
+    #   ★直す前は `python ` で始まる行だけを拾っていたので、
+    #     この形は _parse に届きもせず、黙って検査を飛ばしていた★
+    _fake = ["    - name: Self-tests",
+             "      run: |",
+             "        # python の話をしているだけのコメント",
+             "        set -euo pipefail",
+             "        python scripts/ok.py",
+             "        PYTHONUTF8=1 python scripts/a.py",
+             "        timeout 30 python scripts/b.py",
+             "        cd sub && python scripts/c.py",
+             "    - name: 次"]
+    _fc, _fb = _scan_block(_fake, "Self-tests")
+    t("★★前置きのある python 呼び出しを見つける★★"
+      "（読み飛ばすと、その検査を飛ばしたまま緑になる）",
+      _fc == ["python scripts/ok.py"] and len(_fb) == 3)
+    t("　コメントや入れ物の行は読み飛ばす",
+      not any("set -euo" in x for x in _fb)
+      and not any("コメント" in x for x in _fb))
     print(f"{ran[0]}/{ran[0]} 合格" if ok_all else "不合格あり")
     return 0 if ok_all else 1
 
@@ -340,11 +393,21 @@ def main() -> int:
     if a.empty_docs:
         os.environ["UCHI_EMPTY_DOCS"] = "1"
 
-    cmds = _commands("Self-tests")
+    cmds, unread = _commands("Self-tests")
     if a.audits:
-        cmds += _commands("Repository audits")
+        _c2, _b2 = _commands("Repository audits")
+        cmds += _c2
+        unread += _b2
     if not cmds:
         print("★ワークフローからコマンドを読めませんでした★")
+        return 2
+    if unread:
+        # ★読めない行があるなら「全部通りました」と言わない★
+        print(f"★python を動かしているのに読み取れない行が {len(unread)} 本あります★")
+        for x in unread:
+            print("   " + x[:90])
+        print("  （この形はこの道具では再現できません。"
+              "ワークフローの書き方を戻すか、この道具を直してください）")
         return 2
     print(f"CIが流す検査: {len(cmds)} 本"
           + ("（通信あり）" if a.with_net else "（★通信なし★）"))
