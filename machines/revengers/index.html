@@ -75,6 +75,16 @@
 
   <section class="article-section-wrap">
 
+    <!-- ★目次表★（2026-08-31・運営者の要望・台帳#523）
+         ページの上で「どこに何があるか」を一目で分かるようにする。
+         ★中身はJSが作る★＝飛び先（各項目のid）もJSが付けるので、
+         静的な行を先に置くと「押しても飛べないリンク」になる。
+         ★その機種に**ある**項目だけを並べる★（無い項目・使えない道具は出さない）。 -->
+    <nav class="article-block toc-block is-hidden" id="tocBlock" aria-labelledby="tocLabel">
+      <h2 class="block-label" id="tocLabel">▶ このページの目次</h2>
+      <div id="tocList" class="toc-list"></div>
+    </nav>
+
     <div id="rateToggle" class="mode-toggle rate-toggle-shared is-hidden"></div>
 
     <div class="article-block" id="evTableBlock">
@@ -84,7 +94,7 @@
       <p class="hint-text" id="evTableNote"></p>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="checkerBlock">
       <h2 class="block-label">▶ 狙い目チェッカー</h2>
       <div class="checker-card">
         <div id="modeToggle" class="mode-toggle"></div>
@@ -113,12 +123,12 @@
       </div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="summaryBlock">
       <h2 class="block-label">▶ 狙い目早見表</h2>
       <table id="summaryGrid" class="summary-grid"><tr><td><span class="s-label">基本方針</span><span class="s-value">天井狙い＋スルー狙い</span></td><td><span class="s-label">AT間天井</span><span class="s-value">1190G+α</span></td></tr><tr><td><span class="s-label">スルー天井</span><span class="s-value">東卍チャンス4スルー</span></td><td><span class="s-label">狙い目</span><span class="s-value">等価450G〜 / 3スルー〜</span></td></tr></table>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="infoBlock">
       <h2 class="block-label">▶ 基本情報</h2>
       <table class="info-table">
         <tbody id="infoTableBody"><tr><th>機械割（設定1）</th><td>97.8%</td></tr><tr><th>機械割（設定6）</th><td>114.9%</td></tr><tr><th>天井</th><td>AT間1190G+α</td></tr><tr><th>リセット天井</th><td>900G+α</td></tr><tr><th>純増</th><td>通常AT約3.2枚/G / 上位AT約8.0枚/G</td></tr><tr><th>やめどき</th><td>AT/ボーナス後サブ液晶タッチでセリフ確認後即やめ</td></tr></tbody>
@@ -130,7 +140,7 @@
       <div id="articleSections"><div class="article-item" data-section="天井・恩恵"><h3 class="article-title">天井・恩恵</h3><p class="article-body">天井：最大1190G（AT間）</p><p class="article-body">恩恵：AT確定</p><p class="article-body">リセット短縮：あり</p><p class="article-body">※周期天井（最大6周期）・スルー天井4スルーあり</p><p class="article-body">AT間天井は1190G+α。東卍チャンス4スルー（5回目）でAT当選確定。周期天井は最大6周期（モード依存）。</p><p class="article-body">リセット時はAT間天井が900G+αに短縮され、初回周期は最大200ptに短縮されます。</p></div><div class="article-item" data-section="基本スペック"><h3 class="article-title">基本スペック</h3><p class="article-body"><strong>機種名</strong>：Lスマスロ東京リベンジャーズ</p><p class="article-body"><strong>メーカー</strong>：サミー</p><p class="article-body"><strong>タイプ</strong>：スマスロAT（通常AT純増約3.2枚/G・上位AT約8.0枚/G）</p><p class="article-body"><strong>機械割</strong>：設1：97.8% / 設2：98.7% / 設3：100.0% / 設4：105.0% / 設5：110.0% / 設6：114.9%</p><p class="article-body"><strong>設定段階</strong>：6段階（設定1〜6）</p><p class="article-body"><strong>天井</strong>：通常1190G+α（AT間）/ リセット時900G+α / 東卍チャンス4スルー（5回目AT確定）</p><p class="article-body"><strong>周期天井</strong>：最大6周期（モード依存）</p><p class="article-body">東京リベンジャーズのスマスロ版。AT・スルー・周期の3段階天井搭載で立ち回りの幅が広く、設定6機械割114.9%とポテンシャルが高いです。</p></div><div class="article-item" data-section="当サイトの狙い目"><h3 class="article-title">当サイトの狙い目</h3><p class="article-body"><strong>等価交換</strong>：通常450G〜 / リセット時100G〜 / 東卍チャンス3スルー時100G〜</p><p class="article-body"><strong>5.6枚交換</strong>：通常470G〜 / リセット時130G〜</p><p class="article-body"><strong>現金投資（6.5枚交換）</strong>：通常520G〜 / リセット時170G〜</p><p class="article-body">AT間1190G+α天井（AT確定）と東卍チャンス4スルー天井の複合機種。450G以降が当サイトの狙い目で、3スルー以上ならG数100以上から狙えるなどスルー狙いとの合わせ技で浅い条件でも狙えます。</p></div><div class="article-item" data-section="朝一・リセット情報"><h3 class="article-title">朝一・リセット情報</h3><p class="article-body"><strong>リセット判別方法</strong>：朝一のG数表示が0スタートかどうかと、東卍チャンスのスルー回数が0回にリセットされているかを確認。前任者のスルー数がリセットされていれば設定変更濃厚です。</p><p class="article-body"><strong>リセット恩恵</strong>：AT間天井が1190G+α→900G+αに短縮、初回周期も最大200ptに圧縮されます。</p><p class="article-body"><strong>朝一の狙い目</strong>：リセット確認後は等価100G〜から狙えます。リセットなしの据え置き台では、東卍チャンスのスルー数が引き継がれているため、深いスルー数の台も優秀な狙い目です。</p></div><div class="article-item" data-section="狙い目の根拠"><h3 class="article-title">狙い目の根拠</h3><p class="article-body">スマスロ東京リベンジャーズはAT間1190G+αが天井でAT確定。等価450G〜が狙い目ラインで、5.6枚交換なら470G、現金投資なら520G〜が目安です。機械割97.8%（設定1）で、450G時点で残り天井距離は約740Gに圧縮されます。</p><p class="article-body">東卍チャンス（CZ）4スルーでAT確定という強力な天井があり、スルーが積み重なるほど狙い目ラインが浅くなります。3スルー以上の台は特に積極的に狙いましょう。3スルー時はG数100以上、2スルー時はG数250以上、1スルー時はG数350以上が目安となり、スルーが進むほど0Gスタートに近い感覚で取れます。</p><p class="article-body">リセット時は天井が900G+αに短縮され、初回周期も最大200ptに圧縮されます。設定変更恩恵が強いため、朝一の据え置き判別が取れる店舗ではリセット濃厚台を100Gほどから狙うことも有効です。</p></div><div class="article-item" data-section="ヤメ時の判断"><h3 class="article-title">ヤメ時の判断</h3><p class="article-body">AT/ボーナス後はサブ液晶タッチでセリフを確認して即やめ。ノイズ演出中（約50G）はリベンジ発生の可能性があるため消えるまでフォロー。赤セリフなら周期当選まで続行。</p><p class="article-body">AT/ボーナス終了後はサブ液晶タッチでセリフを確認して即やめが基本です。引き戻しのノイズ演出（約50G）が見えた場合は消えるまでフォローし、赤セリフが出たら次周期当選まで続行してください。引き戻しゾーン（特殊ステージ）滞在中は継続必須で、ここでヤメてしまうと一番おいしい部分を逃します。</p><p class="article-body">スルー回数はヤメた後も台に引き継がれます。スルー数が多い台を離席すると他のプレイヤーに有利な状態を渡すことになる点も考慮してください。3スルー以上をすでに溜めた台で「あと1スルー進めば天井確定」という状況なら、サブ液晶の引き戻し示唆を待たずにそのまま継続する選択肢もあります。</p></div><div class="article-item" data-section="立ち回りのコツ"><h3 class="article-title">立ち回りのコツ</h3><p class="article-body">天井狙い・スルー狙い・リセット狙いの3本柱。スルー3回以上の台は積極的に打てます。周期5周期目以降も狙い目です。</p><p class="article-body">スルー回数の確認が最優先事項です。データカウンターでスルー数が確認できる場合は必ずチェックしてから着席を判断しましょう。スルーは通常AT間天井1190G+αとは別系統で蓄積するため、AT間が浅くてもスルー回数が進んでいれば期待値が成立します。</p><p class="article-body">純増は通常AT約3.2枚・上位AT約8.0枚/Gと、上位ATに入った際のリターンが大きい機種です。4スルー以上はG数に関わらず最優先で確保してください。共通ベル（15枚役）に設定差があり、設定1で1/99.3、設定6で1/77.1なので、高設定示唆が出た台はそのままポチポチくんで設定推測に切り替えると無駄打ちが減ります。</p></div><div class="article-item" data-section="設定判別のポイント"><h3 class="article-title">設定判別のポイント</h3><p class="article-body">共通ベル（15枚役）に設定差があり、設定1で1/99.3、設定6で1/77.1です。通常時のみカウント推奨。ポチポチくんで追跡できます。</p></div></div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="pochipochiBlock">
       <h2 class="block-label">▶ 小役カウンター</h2>
       <a id="settingToolLink" href="setting.html" class="btn-show-all btn-show-all--center">小役カウンター ポチポチくん →</a>
     </div>
@@ -288,11 +298,11 @@ function resolveMachineSlug() {
     }
   }
 
-  // ★新台経路(page-decision/v1)はページ全体の断り書きを出さない★
+  // ★新台経路(page-decision/*)はページ全体の断り書きを出さない★
   //   （2026-08-04・運営者判断。未確認の項目は、その項目の場所に「未確認」と
   //     書いてあるので、ページ冒頭で繰り返す必要がない）
   //   旧preview（既存7機種）は従来どおりバナーを出す。
-  const _isAuto = machine.publication_policy === "page-decision/v1";
+  const _isAuto = (machine.publication_policy !== undefined);
   if (machine.status === "preview" || _isAuto) {
     if (!_isAuto) {
       const banner = document.getElementById("previewBanner");
@@ -323,7 +333,7 @@ function resolveMachineSlug() {
   // ポチポチくん対応状況（ポチポチくんに飛んでも機能しない機種は無効化して理由を表示）
   const pochipochiStatus = (function() {
     // 解析待ち（preview / 新台経路）
-    if (machine.status === "preview" || machine.publication_policy === "page-decision/v1") return { available: false, reason: "解析データ判明後に対応" };
+    if (machine.status === "preview" || (machine.publication_policy !== undefined)) return { available: false, reason: "解析データ判明後に対応" };
     // 小役による設定差が元々ない機種（ジャグラー系・ノーマル系・一部AT）
     const noSettingDiff = ['enen2','karakuri','kaguya','valvrave2','sf5','chibaryo2','tekken6','tokyo_ghoul','koukaku','biohazard','tensura','dumbbell','mhrise','sengoku_otome4','sao','bandori','hanma_baki','yorumungando','tolove_darkness','zenigata5','enen','madomagi_forte','burning_express','akudama','neoplanet','lupin_daikokaisha','zettai_shougeki4','babel','milliongod_kiseki','animal_dotch'];
     if (noSettingDiff.includes(slug)) return { available: false, reason: "小役による設定差なし" };
@@ -1072,6 +1082,45 @@ function resolveMachineSlug() {
   });
 
   renderSummaryGrid();
+
+  // ★目次表★（2026-08-31・運営者の要望・台帳#523）
+  //   ★飛び先が実際にある項目だけ並べる★（押しても飛べない行を出さない）。
+  //   ★節から自動で作る★＝記事の箱が増減しても、ここを直す必要はない。
+  //   ★期待値早見表は入れない★＝モードの切り替えで出たり消えたりするので、
+  //     一度だけ作る目次に載せると「押しても飛べない行」になり得る。
+  (function renderToc(){
+    const tocBlock = document.getElementById("tocBlock");
+    const tocList = document.getElementById("tocList");
+    if (!tocBlock || !tocList) return;
+    tocList.innerHTML = "";
+    const entries = [];
+    const addBlock = (id, label) => {
+      const el = document.getElementById(id);
+      if (!el || el.classList.contains("is-hidden")) return;
+      entries.push([id, label]);
+    };
+    addBlock("checkerBlock", "狙い目チェッカー");
+    addBlock("summaryBlock", "狙い目早見表");
+    addBlock("infoBlock", "基本情報");
+    document.querySelectorAll("#articleSections .article-item").forEach((el, i) => {
+      const title = (el.getAttribute("data-section") || "").trim();
+      if (!title) return;
+      const id = "sec" + (i + 1);
+      el.id = id;
+      entries.push([id, title]);
+    });
+    // ★飛んでも使えないポチポチくんは出さない★（無効化の判定は上の1か所だけ）
+    if (pochipochiStatus.available) addBlock("pochipochiBlock", "ポチポチくん");
+    if (entries.length < 2) return;
+    entries.forEach(([id, label]) => {
+      const a = document.createElement("a");
+      a.className = "toc-item";
+      a.href = "#" + id;
+      a.textContent = label;
+      tocList.appendChild(a);
+    });
+    tocBlock.classList.remove("is-hidden");
+  })();
 
   // 関連機種リンク（内部リンク強化・SEO/回遊向上）
   // 関連の判定：①同じ原作（original.search/title が一致） ②同じシリーズ系（名前のキーワード一致）

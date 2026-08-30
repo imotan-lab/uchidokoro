@@ -76,6 +76,16 @@
 
   <section class="article-section-wrap">
 
+    <!-- ★目次表★（2026-08-31・運営者の要望・台帳#523）
+         ページの上で「どこに何があるか」を一目で分かるようにする。
+         ★中身はJSが作る★＝飛び先（各項目のid）もJSが付けるので、
+         静的な行を先に置くと「押しても飛べないリンク」になる。
+         ★その機種に**ある**項目だけを並べる★（無い項目・使えない道具は出さない）。 -->
+    <nav class="article-block toc-block is-hidden" id="tocBlock" aria-labelledby="tocLabel">
+      <h2 class="block-label" id="tocLabel">▶ このページの目次</h2>
+      <div id="tocList" class="toc-list"></div>
+    </nav>
+
     <div id="rateToggle" class="mode-toggle rate-toggle-shared is-hidden"></div>
 
     <div class="article-block" id="evTableBlock">
@@ -85,7 +95,7 @@
       <p class="hint-text" id="evTableNote"></p>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="checkerBlock">
       <h2 class="block-label">▶ 狙い目チェッカー</h2>
       <div class="checker-card">
         <div id="modeToggle" class="mode-toggle"></div>
@@ -114,12 +124,12 @@
       </div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="summaryBlock">
       <h2 class="block-label">▶ 狙い目早見表</h2>
       <table id="summaryGrid" class="summary-grid"><tr><td><span class="s-label">天井</span><span class="s-value">-</span></td><td><span class="s-label">ヤメ時</span><span class="s-value">-</span></td></tr></table>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="infoBlock">
       <h2 class="block-label">▶ 基本情報</h2>
       <table class="info-table">
         <tbody id="infoTableBody"><tr><th>機種名</th><td>スマート沖スロ ハイハイシオサイRe</td></tr></tbody>
@@ -131,7 +141,7 @@
       <div id="articleSections"><div class="article-item" data-section="天井・恩恵" data-pending-section="天井・恩恵"><h3 class="article-title">天井・恩恵</h3><p class="article-body">未確認（確認でき次第掲載します）</p></div><div class="article-item" data-section="基本スペック"><h3 class="article-title">基本スペック</h3><p class="article-body"><strong>機種名</strong>：スマート沖スロ ハイハイシオサイRe</p><p class="article-body"><strong>登場時期</strong>：2026年11月頃</p><p class="article-body"><strong>機械割</strong>：未確認（確認でき次第掲載します）</p><p class="article-body"><strong>50枚あたりのゲーム数</strong>：未確認（確認でき次第掲載します）</p></div><div class="article-item" data-section="当サイトの狙い目" data-pending-section="当サイトの狙い目"><h3 class="article-title">当サイトの狙い目</h3><p class="article-body">未確認（確認でき次第掲載します）</p></div><div class="article-item" data-section="朝一・リセット情報" data-pending-section="朝一・リセット情報"><h3 class="article-title">朝一・リセット情報</h3><p class="article-body">未確認（確認でき次第掲載します）</p></div><div class="article-item" data-section="ゲーム性"><h3 class="article-title">ゲーム性</h3><p class="article-body"><strong>BIG当選時</strong>から<strong>天国</strong>へ進みます</p></div><div class="article-item" data-section="確認できたCZ" data-pending-section="確認できたCZ"><h3 class="article-title">確認できたCZ</h3><p class="article-body">未確認（確認でき次第掲載します）</p></div><div class="article-item" data-section="設定示唆まとめ" data-pending-section="設定示唆まとめ"><h3 class="article-title">設定示唆まとめ</h3><p class="article-body">未確認（確認でき次第掲載します）</p></div></div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="pochipochiBlock">
       <h2 class="block-label">▶ 小役カウンター</h2>
       <a id="settingToolLink" class="btn-show-all btn-show-all--center is-disabled" aria-disabled="true" title="解析データ判明後に対応">小役カウンター ポチポチくん（解析データ判明後に対応）</a>
     </div>
@@ -1073,6 +1083,45 @@ function resolveMachineSlug() {
   });
 
   renderSummaryGrid();
+
+  // ★目次表★（2026-08-31・運営者の要望・台帳#523）
+  //   ★飛び先が実際にある項目だけ並べる★（押しても飛べない行を出さない）。
+  //   ★節から自動で作る★＝記事の箱が増減しても、ここを直す必要はない。
+  //   ★期待値早見表は入れない★＝モードの切り替えで出たり消えたりするので、
+  //     一度だけ作る目次に載せると「押しても飛べない行」になり得る。
+  (function renderToc(){
+    const tocBlock = document.getElementById("tocBlock");
+    const tocList = document.getElementById("tocList");
+    if (!tocBlock || !tocList) return;
+    tocList.innerHTML = "";
+    const entries = [];
+    const addBlock = (id, label) => {
+      const el = document.getElementById(id);
+      if (!el || el.classList.contains("is-hidden")) return;
+      entries.push([id, label]);
+    };
+    addBlock("checkerBlock", "狙い目チェッカー");
+    addBlock("summaryBlock", "狙い目早見表");
+    addBlock("infoBlock", "基本情報");
+    document.querySelectorAll("#articleSections .article-item").forEach((el, i) => {
+      const title = (el.getAttribute("data-section") || "").trim();
+      if (!title) return;
+      const id = "sec" + (i + 1);
+      el.id = id;
+      entries.push([id, title]);
+    });
+    // ★飛んでも使えないポチポチくんは出さない★（無効化の判定は上の1か所だけ）
+    if (pochipochiStatus.available) addBlock("pochipochiBlock", "ポチポチくん");
+    if (entries.length < 2) return;
+    entries.forEach(([id, label]) => {
+      const a = document.createElement("a");
+      a.className = "toc-item";
+      a.href = "#" + id;
+      a.textContent = label;
+      tocList.appendChild(a);
+    });
+    tocBlock.classList.remove("is-hidden");
+  })();
 
   // 関連機種リンク（内部リンク強化・SEO/回遊向上）
   // 関連の判定：①同じ原作（original.search/title が一致） ②同じシリーズ系（名前のキーワード一致）

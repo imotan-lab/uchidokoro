@@ -75,6 +75,16 @@
 
   <section class="article-section-wrap">
 
+    <!-- ★目次表★（2026-08-31・運営者の要望・台帳#523）
+         ページの上で「どこに何があるか」を一目で分かるようにする。
+         ★中身はJSが作る★＝飛び先（各項目のid）もJSが付けるので、
+         静的な行を先に置くと「押しても飛べないリンク」になる。
+         ★その機種に**ある**項目だけを並べる★（無い項目・使えない道具は出さない）。 -->
+    <nav class="article-block toc-block is-hidden" id="tocBlock" aria-labelledby="tocLabel">
+      <h2 class="block-label" id="tocLabel">▶ このページの目次</h2>
+      <div id="tocList" class="toc-list"></div>
+    </nav>
+
     <div id="rateToggle" class="mode-toggle rate-toggle-shared is-hidden"></div>
 
     <div class="article-block" id="evTableBlock">
@@ -84,7 +94,7 @@
       <p class="hint-text" id="evTableNote"></p>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="checkerBlock">
       <h2 class="block-label">▶ 狙い目チェッカー</h2>
       <div class="checker-card">
         <div id="modeToggle" class="mode-toggle"></div>
@@ -113,12 +123,12 @@
       </div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="summaryBlock">
       <h2 class="block-label">▶ 狙い目早見表</h2>
       <table id="summaryGrid" class="summary-grid"><tr><td><span class="s-label">基本方針</span><span class="s-value">天井狙い＋周期狙い</span></td><td><span class="s-label">G数天井</span><span class="s-value">1000G+α</span></td></tr><tr><td><span class="s-label">周期天井</span><span class="s-value">最大6周期</span></td><td><span class="s-label">狙い目</span><span class="s-value">等価550G〜 / 5周期目〜</span></td></tr></table>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="infoBlock">
       <h2 class="block-label">▶ 基本情報</h2>
       <table class="info-table">
         <tbody id="infoTableBody"><tr><th>機械割（設定1）</th><td>97.5%</td></tr><tr><th>機械割（設定6）</th><td>113.0%</td></tr><tr><th>天井</th><td>G数1000G+α / 周期6周期</td></tr><tr><th>リセット天井</th><td>周期最大4周期に短縮</td></tr><tr><th>純増</th><td>通常AT: 約2.5枚/G / 上位AT: 約5.5枚/G</td></tr><tr><th>やめどき</th><td>AT終了後1周期目フォロー（222BP以内）後やめ</td></tr></tbody>
@@ -130,7 +140,7 @@
       <div id="articleSections"><div class="article-item" data-section="天井・恩恵"><h3 class="article-title">天井・恩恵</h3><p class="article-body">天井：1000G（AT間）</p><p class="article-body">恩恵：AT確定</p><p class="article-body">リセット短縮：あり</p><p class="article-body">※周期天井（最大6周期到達でAT確定）もあり</p><p class="article-body">G数天井は1000G+α。周期天井は最大6周期。リセット時は周期天井が最大4周期に短縮され、1周期目は222BP以内で周期到達。</p></div><div class="article-item" data-section="基本スペック"><h3 class="article-title">基本スペック</h3><p class="article-body"><strong>機種名</strong>：L新鬼武者3</p><p class="article-body"><strong>メーカー</strong>：エンターライズ</p><p class="article-body"><strong>タイプ</strong>：スマスロAT（周期＋G数複合天井）</p><p class="article-body"><strong>機械割</strong>：設1：97.5% / 設2：98.9% / 設4：105.2% / 設5：109.5% / 設6：113.0%（5段階設定）</p><p class="article-body"><strong>天井</strong>：通常時1000G+α または 6周期到達（最大）</p><p class="article-body"><strong>リセット時天井</strong>：最大4周期に短縮（1周期目は222pt以内でCZ確定）</p><p class="article-body"><strong>AT純増</strong>：通常時AT「蒼剣RUSH」約2.5枚/G・上位AT「真蒼剣RUSH」約5.5枚/G</p><p class="article-body"><strong>ベース</strong>：約32G/50枚</p><p class="article-body"><strong>導入日</strong>：2025年12月22日</p><p class="article-body">通常時はカードを引いて規定ポイント（最大666pt）到達で周期CZへ突入し、CZ成功でAT「鬼武者BONUS」を目指すゲーム性です。</p></div><div class="article-item" data-section="当サイトの狙い目"><h3 class="article-title">当サイトの狙い目</h3><p class="article-body">CZが連続スルーしている台は周期5以降から積極的に狙えます。</p><p class="article-body">5.6枚交換時は560G〜、現金投資時は600G〜。リセット確定台は1周期目が最大222BPと浅いため朝一から狙えます（リセット不明の台は3周期目〜/400G〜が基準）。</p><p class="article-body">通常時のG数天井は1000G+αですが、周期天井（最大6周期）の方が先に到達するケースが多いため、CZ突入回数のカウントが期待値判断のカギとなります。</p></div><div class="article-item" data-section="朝一・リセット情報"><h3 class="article-title">朝一・リセット情報</h3><p class="article-body">設定変更後は天井が最大4周期に短縮され、1周期目は最大222BPで周期到達する優遇仕様です。リセット根拠があれば朝一から積極的に狙えます（不明なら3周期目〜/400G〜基準）。</p><p class="article-body">リセット判別は有利区間ランプの消灯確認・打ち感・前日履歴（ラスト深ハマり後の電源OFF→ON）でチェックします。スマスロ仕様のためランプ確認は基本動作です。</p><p class="article-body">朝一の1周期目はCZ突入率が大幅に優遇されているため、リセット濃厚台は222pt到達までは必ず回す価値があります。1周期目をスルーした場合でも2周期目以降の継続判断は次のCZ結果次第です。</p></div><div class="article-item" data-section="狙い目の根拠"><h3 class="article-title">狙い目の根拠</h3><p class="article-body">新鬼武者3はG数天井1000G+αと周期天井（最大6周期）の複合天井機種。等価550G〜が狙い目ラインです。機械割97.5%（設定1）で天井狙いの期待値は十分あります。通常AT純増約2.5枚/Gに対し、上位AT「真蒼剣RUSH」は約5.5枚/Gと2倍以上に跳ね上がるため、深い天井からの上位AT直撃を引いた時のリターンが大きい点も狙う動機になります。</p><p class="article-body">リセット後は周期天井が最大4周期に短縮されるため、朝一のリセット台は浅いG数から狙い目に入ります。真蒼剣RUSH（上位AT）純増約5.5枚/Gで上振れ時のリターンが大きい機種です。</p></div><div class="article-item" data-section="ヤメ時の判断"><h3 class="article-title">ヤメ時の判断</h3><p class="article-body">AT終了後は1周期目をフォロー（222BP以内）してからやめ。上位AT後や秀吉最終決戦失敗後は天国濃厚のため、1周期天井まで必ず打ち切ってください。</p><p class="article-body">設定示唆演出（終了画面）は必ず確認してから席を離れましょう。高設定示唆が複数重なる場合は設定狙い継続も検討してください。1000G+α天井という深さに対し、機械割97.5%（設定1）はやや厳しい水準なので、低設定挙動を確信した段階での見切りも収支安定には欠かせません。</p></div><div class="article-item" data-section="立ち回りのコツ"><h3 class="article-title">立ち回りのコツ</h3><p class="article-body">天井狙いと周期狙いの2本柱。5周期目以降は積極的に。リセット確定台は1周期目（最大222BP）から、不明な台は3周期目からが目安です。上位AT「真蒼剣RUSH」は純増5.5枚・継続率89%と破壊力抜群。</p><p class="article-body">G数天井と周期天井の両方を管理する必要があります。データカウンターでG数を確認するとともに、周期が何周目かも把握してから着席判断しましょう。5周期目以降は0Gスタートでも0G狙いに近い扱いができ、リセット時は最大4周期に短縮され、1周期目も最大222BPと浅くなるのが朝一台の強みです（リセット不明なら3周期目〜が目安）。</p><p class="article-body">通常AT純増約2.5枚・真蒼剣RUSH約5.5枚/Gと上位AT突入時のリターンが大きく、天井到達時に真蒼剣RUSHに入れると高い収益が期待できます。真蒼剣RUSHは継続率89%と非常に強力で、引き戻し含めて1500枚オーバーも狙えるため、深い天井狙いの期待値を底上げする要素となります。設定6機械割は113.0%と高水準で、1日打ち切りなら設定狙いの旨味も大きい機種です。</p></div><div class="article-item" data-section="設定判別のポイント"><h3 class="article-title">設定判別のポイント</h3><p class="article-body">共通ベル（3枚役・上段揃い）に設定差があります。設定1で約1/32〜1/35、設定6で約1/26〜1/28（実戦値）。正式解析値は未公開のため参考程度に。2000G以上回してから判断推奨。</p></div><div class="article-item" data-section="噂・未確定情報"><h3 class="article-title">噂・未確定情報</h3><div class="rumor-box"><p class="rumor-label">⚠ 噂・未確定情報</p><p class="rumor-body">※以下は公式未発表・未確認の情報です。実際の挙動と異なる可能性があります。</p><p class="rumor-body">周期ごとの天井到達確率の詳細な振り分けは公式未発表です。上位AT「真蒼剣RUSH」の継続率89%は実戦値を元に算出されています。</p></div></div></div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="pochipochiBlock">
       <h2 class="block-label">▶ 小役カウンター</h2>
       <a id="settingToolLink" href="setting.html" class="btn-show-all btn-show-all--center">小役カウンター ポチポチくん →</a>
     </div>
@@ -288,11 +298,11 @@ function resolveMachineSlug() {
     }
   }
 
-  // ★新台経路(page-decision/v1)はページ全体の断り書きを出さない★
+  // ★新台経路(page-decision/*)はページ全体の断り書きを出さない★
   //   （2026-08-04・運営者判断。未確認の項目は、その項目の場所に「未確認」と
   //     書いてあるので、ページ冒頭で繰り返す必要がない）
   //   旧preview（既存7機種）は従来どおりバナーを出す。
-  const _isAuto = machine.publication_policy === "page-decision/v1";
+  const _isAuto = (machine.publication_policy !== undefined);
   if (machine.status === "preview" || _isAuto) {
     if (!_isAuto) {
       const banner = document.getElementById("previewBanner");
@@ -323,7 +333,7 @@ function resolveMachineSlug() {
   // ポチポチくん対応状況（ポチポチくんに飛んでも機能しない機種は無効化して理由を表示）
   const pochipochiStatus = (function() {
     // 解析待ち（preview / 新台経路）
-    if (machine.status === "preview" || machine.publication_policy === "page-decision/v1") return { available: false, reason: "解析データ判明後に対応" };
+    if (machine.status === "preview" || (machine.publication_policy !== undefined)) return { available: false, reason: "解析データ判明後に対応" };
     // 小役による設定差が元々ない機種（ジャグラー系・ノーマル系・一部AT）
     const noSettingDiff = ['enen2','karakuri','kaguya','valvrave2','sf5','chibaryo2','tekken6','tokyo_ghoul','koukaku','biohazard','tensura','dumbbell','mhrise','sengoku_otome4','sao','bandori','hanma_baki','yorumungando','tolove_darkness','zenigata5','enen','madomagi_forte','burning_express','akudama','neoplanet','lupin_daikokaisha','zettai_shougeki4','babel','milliongod_kiseki','animal_dotch'];
     if (noSettingDiff.includes(slug)) return { available: false, reason: "小役による設定差なし" };
@@ -1072,6 +1082,45 @@ function resolveMachineSlug() {
   });
 
   renderSummaryGrid();
+
+  // ★目次表★（2026-08-31・運営者の要望・台帳#523）
+  //   ★飛び先が実際にある項目だけ並べる★（押しても飛べない行を出さない）。
+  //   ★節から自動で作る★＝記事の箱が増減しても、ここを直す必要はない。
+  //   ★期待値早見表は入れない★＝モードの切り替えで出たり消えたりするので、
+  //     一度だけ作る目次に載せると「押しても飛べない行」になり得る。
+  (function renderToc(){
+    const tocBlock = document.getElementById("tocBlock");
+    const tocList = document.getElementById("tocList");
+    if (!tocBlock || !tocList) return;
+    tocList.innerHTML = "";
+    const entries = [];
+    const addBlock = (id, label) => {
+      const el = document.getElementById(id);
+      if (!el || el.classList.contains("is-hidden")) return;
+      entries.push([id, label]);
+    };
+    addBlock("checkerBlock", "狙い目チェッカー");
+    addBlock("summaryBlock", "狙い目早見表");
+    addBlock("infoBlock", "基本情報");
+    document.querySelectorAll("#articleSections .article-item").forEach((el, i) => {
+      const title = (el.getAttribute("data-section") || "").trim();
+      if (!title) return;
+      const id = "sec" + (i + 1);
+      el.id = id;
+      entries.push([id, title]);
+    });
+    // ★飛んでも使えないポチポチくんは出さない★（無効化の判定は上の1か所だけ）
+    if (pochipochiStatus.available) addBlock("pochipochiBlock", "ポチポチくん");
+    if (entries.length < 2) return;
+    entries.forEach(([id, label]) => {
+      const a = document.createElement("a");
+      a.className = "toc-item";
+      a.href = "#" + id;
+      a.textContent = label;
+      tocList.appendChild(a);
+    });
+    tocBlock.classList.remove("is-hidden");
+  })();
 
   // 関連機種リンク（内部リンク強化・SEO/回遊向上）
   // 関連の判定：①同じ原作（original.search/title が一致） ②同じシリーズ系（名前のキーワード一致）

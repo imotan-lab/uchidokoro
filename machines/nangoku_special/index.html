@@ -75,6 +75,16 @@
 
   <section class="article-section-wrap">
 
+    <!-- ★目次表★（2026-08-31・運営者の要望・台帳#523）
+         ページの上で「どこに何があるか」を一目で分かるようにする。
+         ★中身はJSが作る★＝飛び先（各項目のid）もJSが付けるので、
+         静的な行を先に置くと「押しても飛べないリンク」になる。
+         ★その機種に**ある**項目だけを並べる★（無い項目・使えない道具は出さない）。 -->
+    <nav class="article-block toc-block is-hidden" id="tocBlock" aria-labelledby="tocLabel">
+      <h2 class="block-label" id="tocLabel">▶ このページの目次</h2>
+      <div id="tocList" class="toc-list"></div>
+    </nav>
+
     <div id="rateToggle" class="mode-toggle rate-toggle-shared is-hidden"></div>
 
     <div class="article-block" id="evTableBlock">
@@ -84,7 +94,7 @@
       <p class="hint-text" id="evTableNote"></p>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="checkerBlock">
       <h2 class="block-label">▶ 狙い目チェッカー</h2>
       <div class="checker-card">
         <div id="modeToggle" class="mode-toggle"></div>
@@ -113,12 +123,12 @@
       </div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="summaryBlock">
       <h2 class="block-label">▶ 狙い目早見表</h2>
       <table id="summaryGrid" class="summary-grid"><tr><td><span class="s-label">基本方針</span><span class="s-value">天井狙い＋朝一リセット狙い</span></td><td><span class="s-label">天井</span><span class="s-value">最大799G+α / ボーナス間スイカ9回</span></td></tr><tr><td><span class="s-label">リセット恩恵</span><span class="s-value">天井500G+α短縮・70%でチャンス以上</span></td><td><span class="s-label">狙い目</span><span class="s-value">等価470G〜 / リセット台0G〜</span></td></tr></table>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="infoBlock">
       <h2 class="block-label">▶ 基本情報</h2>
       <table class="info-table">
         <tbody id="infoTableBody"><tr><th>機種名</th><td>L南国育ちSPECIAL</td></tr><tr><th>メーカー</th><td>アムテックス</td></tr><tr><th>タイプ</th><td>スマスロAT機</td></tr><tr><th>機械割（設定1）</th><td>97.5%</td></tr><tr><th>機械割（設定6）</th><td>110.4%</td></tr><tr><th>天井</th><td>最大799G+α / スイカ9回</td></tr><tr><th>純増</th><td>約3.0枚/G（超飛翔中 約6.0枚/G）</td></tr><tr><th>コイン持ち</th><td>約33.0G/50枚</td></tr><tr><th>導入日</th><td>2026年7月6日</td></tr></tbody>
@@ -130,7 +140,7 @@
       <div id="articleSections"><div class="article-item" data-section="天井・恩恵"><h3 class="article-title">天井・恩恵</h3><p class="article-body">L南国育ちSPECIALの天井は<strong>ゲーム数とスイカ回数のダブル天井</strong>です。ゲーム数天井は<strong>最大799G+α</strong>、スイカ回数天井は<strong>ボーナス間スイカ9回</strong>で、恩恵はいずれも<strong>ボーナス当選</strong>です。</p><p class="article-body">内部モードは通常A・通常B・チャンス・飛翔準備A・飛翔準備B・超飛翔準備の6種類で、滞在モードによって実際の天井ゲーム数が変わります（最大799G+αは通常A/B滞在時）。</p><p class="article-body">設定変更（リセット）後は<strong>天井が最大500G+αに短縮</strong>されます。なお、飛翔モードが確定するような天井は搭載されていません。</p></div><div class="article-item" data-section="基本スペック"><h3 class="article-title">基本スペック</h3><p class="article-body"><strong>機種名</strong>：L南国育ちSPECIAL</p><p class="article-body"><strong>メーカー</strong>：アムテックス</p><p class="article-body"><strong>タイプ</strong>：スマスロAT機</p><p class="article-body"><strong>機械割</strong>：設1：97.5% / 設2：98.6% / 設3：調査中 / 設4：102.6% / 設5：105.0% / 設6：110.4%</p><p class="article-body"><strong>ボーナス初当り</strong>：設1：1/299.7 → 設6：1/262.4（設3は調査中）</p><p class="article-body"><strong>純増</strong>：飛翔モード約3.0枚/G / 超飛翔モード約6.0枚/G</p><p class="article-body"><strong>コイン持ち</strong>：約33.0G/50枚</p><p class="article-body"><strong>導入日</strong>：2026年7月6日</p><p class="article-body">パトランプ点灯でボーナス告知のシンプルなゲーム性に、スイカのヒット回数によるボーナス抽選が加わった南国シリーズらしい構成です。</p></div><div class="article-item" data-section="当サイトの狙い目"><h3 class="article-title">当サイトの狙い目</h3><p class="article-body">5.6枚持ちメダル：<strong>480G〜</strong></p><p class="article-body">5.6枚現金投資：<strong>550G〜</strong></p><p class="article-body">天井最大799G+αと浅めなので、通常時でも狙い目ラインから天井までの投資は比較的軽く済みます。ボーナス間スイカ回数も並行して確認しましょう</p></div><div class="article-item" data-section="朝一・リセット情報"><h3 class="article-title">朝一・リセット情報</h3><p class="article-body">設定変更（リセット）後は<strong>天井が最大500G+αに短縮</strong>され、さらに<strong>約70%でチャンスモード以上が選択</strong>されます。このため<strong>リセット濃厚台は0G〜から狙えます</strong>。</p><p class="article-body">（超）飛翔モード終了後も天井が500G+αに短縮され、チャンスモード以上が55%以上で選択されるため、飛翔後の台も浅めから追いかける価値があります。</p><p class="article-body">朝一はリセットの有無を見極めることが最重要です。リセット状況が分からない場合は通常の狙い目ライン（等価470G〜）で判断してください。</p></div><div class="article-item" data-section="狙い目の根拠"><h3 class="article-title">狙い目の根拠</h3><p class="article-body">L南国育ちSPECIALの狙い目は、当サイト基準で<strong>等価470G〜／5.6枚持ちメダル480G〜／5.6枚現金550G〜、リセット濃厚台は0G〜</strong>です。</p><p class="article-body">リセット台0G〜が成立するのは「天井500G+α短縮×約70%でチャンスモード以上」という2つの恩恵が重なるためで、朝一の設定変更が読めるホールでは特に強い機種です。</p><p class="article-body">通常時はゲーム数に加えてボーナス間のスイカ回数（9回で天井）もカウントされているため、スイカを多くこなしている台はゲーム数以上の価値があります。</p></div><div class="article-item" data-section="ヤメ時の判断"><h3 class="article-title">ヤメ時の判断</h3><p class="article-body">ボーナス終了後は<strong>ときめきゾーンが終了する32Gまで回してからヤメ</strong>が基本です。</p><p class="article-body">（超）飛翔モード終了後は天井短縮＋チャンスモード以上の優遇があるため、即ヤメせず状況を見て続行を検討してください。</p></div><div class="article-item" data-section="立ち回りのコツ"><h3 class="article-title">立ち回りのコツ</h3><p class="article-body">ゲーム数とボーナス間スイカ回数の両方を確認してから着席するのが基本です。スイカ回数はダブル天井のもう1本の軸になります。</p><p class="article-body">朝一はリセット濃厚台（0G〜OK）を最優先に、日中は等価470G〜のゲーム数狙いへ切り替える立ち回りが効率的です。</p></div><div class="article-item" data-section="設定示唆まとめ"><h3 class="article-title">設定示唆まとめ</h3><div class="settei-legend"><span class="settei-legend-item"><span class="settei-legend-badge settei-weak">弱</span>弱示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-mid">中</span>中示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-strong">強</span>強示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-ok">確</span>高設定確定/有力</span></div><table class="settei-table"><tr><th>要素</th><th>示唆</th></tr><tr><td>ボーナス初当り確率</td><td>設1：1/299.7 → 設6：1/262.4</td></tr><tr><td>スイカ規定回数での当選</td><td>3・5・7・9回目以外での当選は設定4以上の期待度アップ</td></tr><tr><td>ボーナス終了時ボイス</td><td>段階的に高設定を示唆（詳細は解析中）</td></tr></table></div><div class="article-item" data-section="L南国育ちSPECIALとは"><h3 class="article-title">L南国育ちSPECIALとは</h3><p class="article-body"><strong>L南国育ちSPECIAL</strong>は、アムテックスが開発したスマスロAT機で、2026年7月6日にホール導入されました。パトランプ告知でおなじみの「南国育ち」シリーズの最新作です。</p><p class="article-body">蝶が舞い、パトランプが光ればボーナスというシリーズ伝統のシンプルさを継承しつつ、スイカ回数によるボーナス抽選と超飛翔モード（純増約6.0枚/G）による出玉の伸びが加わっています。</p></div><div class="article-item" data-section="噂・未確定情報"><h3 class="article-title">噂・未確定情報</h3><div class="rumor-box"><p class="rumor-label">⚠ 噂・未確定情報</p><p class="rumor-body">※以下は公式未発表・未確認の情報です。実際の挙動と異なる可能性があります。</p><p class="rumor-body">設定3の機械割・初当り確率は公表されていません（判明次第更新します）。</p><p class="rumor-body">ゾーン実戦値や有利区間仕様の詳細は解析中で、今後の情報で狙い目が変わる可能性があります。</p></div></div></div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="pochipochiBlock">
       <h2 class="block-label">▶ 小役カウンター</h2>
       <a id="settingToolLink" class="btn-show-all btn-show-all--center is-disabled" aria-disabled="true" title="設定差のあるカウント対象小役が未判明のため非対応">小役カウンター ポチポチくん（設定差のあるカウント対象小役が未判明のため非対応）</a>
     </div>
@@ -288,11 +298,11 @@ function resolveMachineSlug() {
     }
   }
 
-  // ★新台経路(page-decision/v1)はページ全体の断り書きを出さない★
+  // ★新台経路(page-decision/*)はページ全体の断り書きを出さない★
   //   （2026-08-04・運営者判断。未確認の項目は、その項目の場所に「未確認」と
   //     書いてあるので、ページ冒頭で繰り返す必要がない）
   //   旧preview（既存7機種）は従来どおりバナーを出す。
-  const _isAuto = machine.publication_policy === "page-decision/v1";
+  const _isAuto = (machine.publication_policy !== undefined);
   if (machine.status === "preview" || _isAuto) {
     if (!_isAuto) {
       const banner = document.getElementById("previewBanner");
@@ -323,7 +333,7 @@ function resolveMachineSlug() {
   // ポチポチくん対応状況（ポチポチくんに飛んでも機能しない機種は無効化して理由を表示）
   const pochipochiStatus = (function() {
     // 解析待ち（preview / 新台経路）
-    if (machine.status === "preview" || machine.publication_policy === "page-decision/v1") return { available: false, reason: "解析データ判明後に対応" };
+    if (machine.status === "preview" || (machine.publication_policy !== undefined)) return { available: false, reason: "解析データ判明後に対応" };
     // 小役による設定差が元々ない機種（ジャグラー系・ノーマル系・一部AT）
     const noSettingDiff = ['enen2','karakuri','kaguya','valvrave2','sf5','chibaryo2','tekken6','tokyo_ghoul','koukaku','biohazard','tensura','dumbbell','mhrise','sengoku_otome4','sao','bandori','hanma_baki','yorumungando','tolove_darkness','zenigata5','enen','madomagi_forte','burning_express','akudama','neoplanet','lupin_daikokaisha','zettai_shougeki4','babel','milliongod_kiseki','animal_dotch'];
     if (noSettingDiff.includes(slug)) return { available: false, reason: "小役による設定差なし" };
@@ -1072,6 +1082,45 @@ function resolveMachineSlug() {
   });
 
   renderSummaryGrid();
+
+  // ★目次表★（2026-08-31・運営者の要望・台帳#523）
+  //   ★飛び先が実際にある項目だけ並べる★（押しても飛べない行を出さない）。
+  //   ★節から自動で作る★＝記事の箱が増減しても、ここを直す必要はない。
+  //   ★期待値早見表は入れない★＝モードの切り替えで出たり消えたりするので、
+  //     一度だけ作る目次に載せると「押しても飛べない行」になり得る。
+  (function renderToc(){
+    const tocBlock = document.getElementById("tocBlock");
+    const tocList = document.getElementById("tocList");
+    if (!tocBlock || !tocList) return;
+    tocList.innerHTML = "";
+    const entries = [];
+    const addBlock = (id, label) => {
+      const el = document.getElementById(id);
+      if (!el || el.classList.contains("is-hidden")) return;
+      entries.push([id, label]);
+    };
+    addBlock("checkerBlock", "狙い目チェッカー");
+    addBlock("summaryBlock", "狙い目早見表");
+    addBlock("infoBlock", "基本情報");
+    document.querySelectorAll("#articleSections .article-item").forEach((el, i) => {
+      const title = (el.getAttribute("data-section") || "").trim();
+      if (!title) return;
+      const id = "sec" + (i + 1);
+      el.id = id;
+      entries.push([id, title]);
+    });
+    // ★飛んでも使えないポチポチくんは出さない★（無効化の判定は上の1か所だけ）
+    if (pochipochiStatus.available) addBlock("pochipochiBlock", "ポチポチくん");
+    if (entries.length < 2) return;
+    entries.forEach(([id, label]) => {
+      const a = document.createElement("a");
+      a.className = "toc-item";
+      a.href = "#" + id;
+      a.textContent = label;
+      tocList.appendChild(a);
+    });
+    tocBlock.classList.remove("is-hidden");
+  })();
 
   // 関連機種リンク（内部リンク強化・SEO/回遊向上）
   // 関連の判定：①同じ原作（original.search/title が一致） ②同じシリーズ系（名前のキーワード一致）

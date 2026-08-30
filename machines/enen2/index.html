@@ -75,6 +75,16 @@
 
   <section class="article-section-wrap">
 
+    <!-- ★目次表★（2026-08-31・運営者の要望・台帳#523）
+         ページの上で「どこに何があるか」を一目で分かるようにする。
+         ★中身はJSが作る★＝飛び先（各項目のid）もJSが付けるので、
+         静的な行を先に置くと「押しても飛べないリンク」になる。
+         ★その機種に**ある**項目だけを並べる★（無い項目・使えない道具は出さない）。 -->
+    <nav class="article-block toc-block is-hidden" id="tocBlock" aria-labelledby="tocLabel">
+      <h2 class="block-label" id="tocLabel">▶ このページの目次</h2>
+      <div id="tocList" class="toc-list"></div>
+    </nav>
+
     <div id="rateToggle" class="mode-toggle rate-toggle-shared is-hidden"></div>
 
     <div class="article-block" id="evTableBlock">
@@ -84,7 +94,7 @@
       <p class="hint-text" id="evTableNote"></p>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="checkerBlock">
       <h2 class="block-label">▶ 狙い目チェッカー</h2>
       <div class="checker-card">
         <div id="modeToggle" class="mode-toggle"></div>
@@ -113,12 +123,12 @@
       </div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="summaryBlock">
       <h2 class="block-label">▶ 狙い目早見表</h2>
       <table id="summaryGrid" class="summary-grid"><tr><td><span class="s-label">基本方針</span><span class="s-value">天井狙い＋リセット狙い</span></td><td><span class="s-label">通常天井</span><span class="s-value">850G+α（通常A）</span></td></tr><tr><td><span class="s-label">リセット天井</span><span class="s-value">650G+α</span></td><td><span class="s-label">狙い目</span><span class="s-value">5.6枚630G〜 / リセット88G〜（45G〜条件次第）</span></td></tr></table>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="infoBlock">
       <h2 class="block-label">▶ 基本情報</h2>
       <table class="info-table">
         <tbody id="infoTableBody"><tr><th>機械割（設定1）</th><td>97.7%</td></tr><tr><th>機械割（設定6）</th><td>114.9%</td></tr><tr><th>天井</th><td>通常A: 850G+α</td></tr><tr><th>リセット天井</th><td>650G+α</td></tr><tr><th>純増</th><td>約5.8枚/G</td></tr><tr><th>やめどき</th><td>REG後は伝導者の罠終了＋前兆なしでヤメ / 炎炎激闘後は潜伏・前兆確認</td></tr></tbody>
@@ -130,7 +140,7 @@
       <div id="articleSections"><div class="article-item" data-section="天井・恩恵"><h3 class="article-title">天井・恩恵</h3><p class="article-body">天井：850G+α（ボーナス間）</p><p class="article-body">恩恵：ボーナス確定</p><p class="article-body">リセット短縮：あり</p><p class="article-body">通常Aモードの天井は850G+α。通常B以上では650G+α以内で当選するため、650G+αの前兆・当否を抜けて非当選なら通常A濃厚で天井狙い向きです。</p><p class="article-body">伝導者の罠のスルー天井があり、5スルー後の次回ボーナスがSPエピソードボーナス濃厚とされます（狙い目はスルー回数だけでなくゲーム数も併用）。炎炎ループ間天井は2000G+α（リセット時1500G+α）。</p></div><div class="article-item" data-section="基本スペック"><h3 class="article-title">基本スペック</h3><p class="article-body"><strong>機種名</strong>：L炎炎ノ消防隊2</p><p class="article-body"><strong>メーカー</strong>：SANKYO</p><p class="article-body"><strong>タイプ</strong>：スマスロST（ゾーン豊富）</p><p class="article-body"><strong>機械割</strong>：設1：97.7% / 設6：114.9%</p><p class="article-body"><strong>設定段階</strong>：6段階</p><p class="article-body"><strong>天井</strong>：通常A 850G+α・リセット時650G+α・伝導者の罠5スルー・炎炎ループ間2000G+α</p><p class="article-body"><strong>AT純増</strong>：約5.8枚/G</p><p class="article-body"><strong>規定ゲーム数（前兆発生ポイント）</strong>：88G・250G前後（リセット後。45G/155Gは打ち始め目安）</p><p class="article-body">コンプリート機能搭載（差枚最大マイナスを基点に1日19,000枚で打ち止め）</p></div><div class="article-item" data-section="当サイトの狙い目"><h3 class="article-title">当サイトの狙い目</h3><p class="article-body">5.6枚交換：630G〜から狙い目。リセット後は88G〜が狙い目で、45G〜は条件次第で狙えます。</p><p class="article-body">630G〜は当サイト基準（5.6枚交換）での狙い目の目安です。実際のラインは交換率・持ちメダル/現金投資・目標期待値などで異なります。純増約5.8枚/Gと出玉性能が高く、通常A天井850G+αまでの残りゲーム数が短い深いハマリ台ほど狙いやすい機種です。</p><p class="article-body">伝導者の罠のスルー回数が多い台はSPエピソードボーナス濃厚のスルー天井が近づきますが、狙い目はスルー回数だけでなく現在のゲーム数も併せて判断します。</p></div><div class="article-item" data-section="朝一・リセット情報"><h3 class="article-title">朝一・リセット情報</h3><p class="article-body">リセット時は天井が650G+αに短縮。さらに88G・250G前後に前兆が発生しやすい規定ゲーム数があり、45G/155Gから打ち始めるリセット狙いが有効です。</p></div><div class="article-item" data-section="狙い目の根拠"><h3 class="article-title">狙い目の根拠</h3><p class="article-body">炎炎ノ消防隊2はST機でゾーンが豊富な機種です。通常時850G+αが天井で、リセット後は650G+αに短縮。5.6枚交換で630G〜が狙い目ラインです。機械割は設定1で97.7%です。</p><p class="article-body">規定ゲーム数の攻略も重要で、88G・250G前後に前兆が発生しやすいため、45G/155Gから打ち始めるリセット狙いと天井狙いを組み合わせた立ち回りが可能です。</p><p class="article-body">650G+αの前兆・当否を抜けて非当選なら通常Aモード濃厚と判別できます。850Gの通常A天井を意識して、650G+α以降の台は積極的に着席する判断ができます。伝導者の罠のスルー天井（5スルー後の次回でSPエピソードボーナス濃厚）と炎炎ループ間天井（2000G+α、リセット1500G+α）も搭載されており、天井システムが多層化しています。</p><p class="article-body">純増約5.8枚/Gと高水準のAT機で、機械割は設定6で114.9%です。設定狙いは高設定を掴める環境（イベント・特定日など）が前提になります。</p></div><div class="article-item" data-section="ヤメ時の判断"><h3 class="article-title">ヤメ時の判断</h3><p class="article-body">REG後は伝導者の罠終了後、ボーナス非当選かつ前兆なしでヤメが基本。88Gが近い場合や天国モード示唆がある場合は88G+αを確認してからヤメましょう。炎炎激闘（ST）終了後は最大28Gの潜伏を消化し、潜伏・前兆の終了を確認してからヤメを推奨します。</p><p class="article-body">アドラバースト終了後は5Gのアドラチャレンジ（引き戻し区間）を消化してからヤメを推奨します。</p><p class="article-body">次の規定ゲーム数（88G）までの距離が短い場合はフォローを検討しましょう。設定示唆が出る演出は必ず確認してからヤメてください。</p><p class="article-body">通常Aモード判定の650G+α以降は天井狙い継続が基本。ヤメ判断の際は伝導者の罠スルー回数も参考にしますが、狙い目はゲーム数も併せて判断します。</p></div><div class="article-item" data-section="立ち回りのコツ"><h3 class="article-title">立ち回りのコツ</h3><p class="article-body">小役確率に設定差がないため、設定判別はボーナス確率や炎炎ループ確率で行います。ゲーム数狙い主体の立ち回りが基本です。</p><p class="article-body">規定ゲーム数狙いと天井狙いを併用できるのが強み。リセット後は45Gから打ち始め、88G前後の前兆を逃さないよう早めに着席しましょう。</p><p class="article-body">純増約5.8枚/Gと高水準で、AT突入時の出玉性能は高め。深いハマリ台を拾えた時のリターンが大きい機種です。</p><p class="article-body">リセット後は45Gから88G+α、または155Gから250G+αまでを狙えるため、朝一は45Gスタートで前兆を抜けるまで打ち切るのも有効な選択肢の一つです（88G・250Gは規定ゲーム数、45G・155Gは打ち始め目安）。通常時は850Gの通常A天井を軸に、5.6枚交換で630G〜から拾うのが基本です。</p></div></div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="pochipochiBlock">
       <h2 class="block-label">▶ 小役カウンター</h2>
       <a id="settingToolLink" class="btn-show-all btn-show-all--center is-disabled" aria-disabled="true" title="小役による設定差なし">小役カウンター ポチポチくん（小役による設定差なし）</a>
     </div>
@@ -288,11 +298,11 @@ function resolveMachineSlug() {
     }
   }
 
-  // ★新台経路(page-decision/v1)はページ全体の断り書きを出さない★
+  // ★新台経路(page-decision/*)はページ全体の断り書きを出さない★
   //   （2026-08-04・運営者判断。未確認の項目は、その項目の場所に「未確認」と
   //     書いてあるので、ページ冒頭で繰り返す必要がない）
   //   旧preview（既存7機種）は従来どおりバナーを出す。
-  const _isAuto = machine.publication_policy === "page-decision/v1";
+  const _isAuto = (machine.publication_policy !== undefined);
   if (machine.status === "preview" || _isAuto) {
     if (!_isAuto) {
       const banner = document.getElementById("previewBanner");
@@ -323,7 +333,7 @@ function resolveMachineSlug() {
   // ポチポチくん対応状況（ポチポチくんに飛んでも機能しない機種は無効化して理由を表示）
   const pochipochiStatus = (function() {
     // 解析待ち（preview / 新台経路）
-    if (machine.status === "preview" || machine.publication_policy === "page-decision/v1") return { available: false, reason: "解析データ判明後に対応" };
+    if (machine.status === "preview" || (machine.publication_policy !== undefined)) return { available: false, reason: "解析データ判明後に対応" };
     // 小役による設定差が元々ない機種（ジャグラー系・ノーマル系・一部AT）
     const noSettingDiff = ['enen2','karakuri','kaguya','valvrave2','sf5','chibaryo2','tekken6','tokyo_ghoul','koukaku','biohazard','tensura','dumbbell','mhrise','sengoku_otome4','sao','bandori','hanma_baki','yorumungando','tolove_darkness','zenigata5','enen','madomagi_forte','burning_express','akudama','neoplanet','lupin_daikokaisha','zettai_shougeki4','babel','milliongod_kiseki','animal_dotch'];
     if (noSettingDiff.includes(slug)) return { available: false, reason: "小役による設定差なし" };
@@ -1072,6 +1082,45 @@ function resolveMachineSlug() {
   });
 
   renderSummaryGrid();
+
+  // ★目次表★（2026-08-31・運営者の要望・台帳#523）
+  //   ★飛び先が実際にある項目だけ並べる★（押しても飛べない行を出さない）。
+  //   ★節から自動で作る★＝記事の箱が増減しても、ここを直す必要はない。
+  //   ★期待値早見表は入れない★＝モードの切り替えで出たり消えたりするので、
+  //     一度だけ作る目次に載せると「押しても飛べない行」になり得る。
+  (function renderToc(){
+    const tocBlock = document.getElementById("tocBlock");
+    const tocList = document.getElementById("tocList");
+    if (!tocBlock || !tocList) return;
+    tocList.innerHTML = "";
+    const entries = [];
+    const addBlock = (id, label) => {
+      const el = document.getElementById(id);
+      if (!el || el.classList.contains("is-hidden")) return;
+      entries.push([id, label]);
+    };
+    addBlock("checkerBlock", "狙い目チェッカー");
+    addBlock("summaryBlock", "狙い目早見表");
+    addBlock("infoBlock", "基本情報");
+    document.querySelectorAll("#articleSections .article-item").forEach((el, i) => {
+      const title = (el.getAttribute("data-section") || "").trim();
+      if (!title) return;
+      const id = "sec" + (i + 1);
+      el.id = id;
+      entries.push([id, title]);
+    });
+    // ★飛んでも使えないポチポチくんは出さない★（無効化の判定は上の1か所だけ）
+    if (pochipochiStatus.available) addBlock("pochipochiBlock", "ポチポチくん");
+    if (entries.length < 2) return;
+    entries.forEach(([id, label]) => {
+      const a = document.createElement("a");
+      a.className = "toc-item";
+      a.href = "#" + id;
+      a.textContent = label;
+      tocList.appendChild(a);
+    });
+    tocBlock.classList.remove("is-hidden");
+  })();
 
   // 関連機種リンク（内部リンク強化・SEO/回遊向上）
   // 関連の判定：①同じ原作（original.search/title が一致） ②同じシリーズ系（名前のキーワード一致）

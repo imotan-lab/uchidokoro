@@ -707,3 +707,40 @@ button, input, select { font: inherit; }
 .site-guide { margin-top: 36px; }
 .guide-list { margin: 0; padding-left: 18px; color: var(--soft); font-size: 13px; line-height: 1.9; }
 .guide-list a { color: var(--gold); }
+
+/* 目次表（2026-08-31・台帳#523）
+   ページの上で「どこに何があるか」を一目で分かるようにする。
+   中身はJSが作るので、既定では is-hidden で隠れている。
+   罫線は「内側だけ」に引く（外枠と二重にならないように）。 */
+.toc-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--panel);
+}
+.toc-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--soft);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  padding: 11px 10px;
+  min-height: 44px;
+  border-top: 1px solid var(--line2);
+  border-left: 1px solid var(--line2);
+}
+.toc-item:nth-child(1), .toc-item:nth-child(2) { border-top: none; }
+.toc-item:nth-child(odd) { border-left: none; }
+/* 行があまったときは、最後の1つを横いっぱいに（空セルを出さない） */
+.toc-item:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.toc-item::before { content: "\25B8"; color: var(--gold); font-size: 10px; flex-shrink: 0; }
+.toc-item:active { background: var(--panel2); color: var(--text); }
+@media (hover: hover) {
+  .toc-item:hover { background: var(--panel2); color: var(--text); }
+}
+/* 飛んだ先が、上に貼り付いたヘッダーの下へ潜り込まないようにする */
+.article-block, .article-item { scroll-margin-top: 72px; }

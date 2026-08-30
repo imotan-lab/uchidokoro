@@ -75,6 +75,16 @@
 
   <section class="article-section-wrap">
 
+    <!-- ★目次表★（2026-08-31・運営者の要望・台帳#523）
+         ページの上で「どこに何があるか」を一目で分かるようにする。
+         ★中身はJSが作る★＝飛び先（各項目のid）もJSが付けるので、
+         静的な行を先に置くと「押しても飛べないリンク」になる。
+         ★その機種に**ある**項目だけを並べる★（無い項目・使えない道具は出さない）。 -->
+    <nav class="article-block toc-block is-hidden" id="tocBlock" aria-labelledby="tocLabel">
+      <h2 class="block-label" id="tocLabel">▶ このページの目次</h2>
+      <div id="tocList" class="toc-list"></div>
+    </nav>
+
     <div id="rateToggle" class="mode-toggle rate-toggle-shared is-hidden"></div>
 
     <div class="article-block" id="evTableBlock">
@@ -84,7 +94,7 @@
       <p class="hint-text" id="evTableNote"></p>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="checkerBlock">
       <h2 class="block-label">▶ 狙い目チェッカー</h2>
       <div class="checker-card">
         <div id="modeToggle" class="mode-toggle"></div>
@@ -113,12 +123,12 @@
       </div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="summaryBlock">
       <h2 class="block-label">▶ 狙い目早見表</h2>
       <table id="summaryGrid" class="summary-grid"><tr><td><span class="s-label">通常時</span><span class="s-value">400Gから様子見&lt;br&gt;520Gから狙い目</span></td><td><span class="s-label">通常時 強め</span><span class="s-value">750G以上</span></td></tr><tr><td><span class="s-label">駆け抜け後</span><span class="s-value">150Gから様子見&lt;br&gt;280Gから狙い目</span></td><td><span class="s-label">リセット</span><span class="s-value">100Gから様子見&lt;br&gt;180Gから狙い目</span></td></tr><tr><td><span class="s-label">ヤメ時</span><span class="s-value">駆け抜け後か通常かを確認。ボイスを取ってから離れる</span></td><td><span class="s-label">天井</span><span class="s-value">1000G+α&lt;br&gt;リセット後は600G+αに短縮</span></td></tr></table>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="infoBlock">
       <h2 class="block-label">▶ 基本情報</h2>
       <table class="info-table">
         <tbody id="infoTableBody"><tr><th>機械割（設定1）</th><td>97.9%</td></tr><tr><th>AT純増</th><td>約9.0枚/G</td></tr><tr><th>主な狙い方</th><td>通常520G〜 駆け抜け後280G〜</td></tr><tr><th>補足</th><td>駆け抜け後は天井600G+αに短縮</td></tr></tbody>
@@ -130,7 +140,7 @@
       <div id="articleSections"><div class="article-item" data-section="天井・恩恵"><h3 class="article-title">天井・恩恵</h3><p class="article-body">天井：1000G+α（AT間）</p><p class="article-body">恩恵：AT確定</p><p class="article-body">リセット短縮：駆け抜け後600G+α / 設定変更後600G+αに短縮</p></div><div class="article-item" data-section="基本スペック"><h3 class="article-title">基本スペック</h3><p class="article-body"><strong>機種名</strong>：スマスロ ゴッドイーター リザレクション</p><p class="article-body"><strong>メーカー</strong>：山佐（ヤマサ）</p><p class="article-body"><strong>タイプ</strong>：スマスロAT（AT純増約9.0枚/G）</p><p class="article-body"><strong>機械割</strong>：設1：97.9% / 設2：98.9% / 設4：105.6% / 設5：110.0% / 設6：114.9%</p><p class="article-body"><strong>設定段階</strong>：5段階（設定1・2・4・5・6）</p><p class="article-body"><strong>天井</strong>：通常1000G+α（AT間）/ AT駆け抜け後・リセット時600G+α</p><p class="article-body"><strong>純増</strong>：AT中約9.0枚/G</p><p class="article-body">ゴッドイーターシリーズのスマスロ版。AT純増約9.0枚/Gの高出玉性能と、駆け抜け後の天井短縮で立ち回りの幅が広い機種です。</p></div><div class="article-item" data-section="当サイトの狙い目"><h3 class="article-title">当サイトの狙い目</h3><p class="article-body">通常時は等価400Gから様子見、520Gから狙い目、750G以上でかなり強めです。6.0枚交換なら590Gがひとつの実戦ラインになります。</p><p class="article-body">駆け抜け後は等価150G様子見・280G狙い目（6.0枚なら170G〜）の専用ラインです。通常時よりかなり浅いので、前提確認の価値が高いです。</p><p class="article-body">通常520G基準と駆け抜け後280G基準では入口が大きく違うため、今の台をどのラインで扱うかを曖昧にしないことが最優先です。</p></div><div class="article-item" data-section="朝一・リセット情報"><h3 class="article-title">朝一・リセット情報</h3><p class="article-body">リセット時は100G、180G、300Gの順でラインが上がります。駆け抜け後と近いですが、同じではありません。</p><p class="article-body">通常、駆け抜け後、リセットの3本を混ぜるとズレやすいので、まずどのラインで見る台かを固定してください。</p><p class="article-body">朝一は浅い基準に寄せすぎやすいので、リセット根拠が弱い台なら通常や駆け抜け後基準に寄せて保守的に見る方が安全です。</p></div><div class="article-item" data-section="狙い目の根拠"><h3 class="article-title">狙い目の根拠</h3><p class="article-body">ゴッドイーターリザレクションは通常時とAT駆け抜け後でそれぞれ狙い目が変わる機種です。等価での狙い目ラインは通常時520G〜、AT駆け抜け後は280G〜が基準です。6.0枚交換では通常590G〜、駆け抜け後170G〜が目安となります。</p><p class="article-body">機械割97.9%（設定1）で天井狙いの価値があります。AT純増約9.0枚/Gと高水準で、天井到達時の出玉期待値は大きい機種です。</p></div><div class="article-item" data-section="ヤメ時の判断"><h3 class="article-title">ヤメ時の判断</h3><p class="article-body">AT後は、駆け抜けたかどうかを確認してから区切るのが基本です。ここを曖昧にすると、次の台を通常で見るのか駆け抜け後で見るのかがぶれやすくなります。</p><p class="article-body">AT終了画面のキャラ示唆とケロットトロフィーを確認してから離れてください。シオ赤背景は設定4以上、全員集合は設定5以上、デフォルメ集合は設定6の目安です。</p><p class="article-body">駆け抜け後を拾う機会が多い機種ほど、離れる時点の状態確認まで含めて整理できるかで次の台の精度が変わります。</p><p class="article-body">AT終了後は有利区間ランプを確認してヤメましょう。ランプ点灯中は継続状態のため即ヤメは損です。特殊ステージや前兆演出がある場合は50G程度フォローしてから判断してください。</p><p class="article-body">設定示唆演出が出た場合は内容を確認してからヤメてください。高設定示唆が重なる場合は設定狙い継続も検討しましょう。</p></div><div class="article-item" data-section="立ち回りのコツ"><h3 class="article-title">立ち回りのコツ</h3><p class="article-body">この機種は通常時だけでなく、駆け抜け後の浅いラインを拾えると効率が上がります。ただし前提が曖昧な台には、浅い数値を当てすぎない方が安全です。</p><p class="article-body">ストーリーパート終了時にサブ液晶をタッチするとボイスが出現します。シオボイスが出れば設定5以上濃厚です。AT消化のたびに確認できるので設定判別の柱として使えます。</p><p class="article-body">通常、駆け抜け後、リセットの3本を別々に扱えると実戦精度が上がるので、座る前に前提を言語化しておくと使いやすいです。</p><p class="article-body">通常台とAT駆け抜け台を明確に切り分けることが重要です。着席前にメニュー画面で状態を確認する癖をつけましょう。</p><p class="article-body">純増約9.0枚/Gと非常に高く、天井到達時のリターンは大きいです。深めのハマリ台（590G以上）は積極的に狙う価値があります。</p></div><div class="article-item" data-section="設定示唆まとめ"><h3 class="article-title">設定示唆まとめ</h3><div class="settei-legend"><span class="settei-legend-item"><span class="settei-legend-badge settei-weak">弱</span>弱示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-mid">中</span>中示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-strong">強</span>強示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-ok">確</span>高設定確定/有力</span></div><p class="settei-sub-label">ストーリーパート終了 サブ液晶ボイス</p><table class="settei-table"><tr><th>ボイス</th><th>示唆</th></tr><tr><td>通常ボイス</td><td><span class="settei-badge settei-hint">基本パターン</span></td></tr><tr><td>シオボイス</td><td><span class="settei-badge settei-ok">設定5以上濃厚</span></td></tr></table><p class="settei-note">AT消化のたびに確認できます。エンディング中のレア役成立時にタッチすると同様のボイスが出現します</p><p class="settei-sub-label">AT終了画面</p><table class="settei-table"><tr><th>画面</th><th>示唆</th></tr><tr><td>シオ（赤背景）</td><td><span class="settei-badge settei-ok">設定4以上濃厚</span></td></tr><tr><td>キャラ全員集合</td><td><span class="settei-badge settei-ok">設定5以上濃厚</span></td></tr><tr><td>デフォルメキャラ集合</td><td><span class="settei-badge settei-ok">設定6濃厚</span></td></tr></table><p class="settei-sub-label">ケロットトロフィーと特殊演出</p><table class="settei-table"><tr><th>要素</th><th>示唆</th></tr><tr><td>ケロットトロフィー 金以上</td><td><span class="settei-badge settei-ok">高設定期待大</span></td></tr><tr><td>ゾロ目枚数 +44 +55 +66</td><td><span class="settei-badge settei-strong">特定設定濃厚</span></td></tr><tr><td>ユウタイマー 6カウント</td><td><span class="settei-badge settei-ok">設定6濃厚</span></td></tr></table><p class="settei-note">ユウタイマーは作戦区域中に左リール横に出現。フェイク前兆であれば設定6濃厚の激レア演出です</p></div><div class="article-item" data-section="通常時と駆け抜け後の違い"><h3 class="article-title">通常時と駆け抜け後の違い</h3><p class="article-body">通常時の天井は1000G+αです。液晶右下のG数で現在地を確認しながら、まずは590Gを超えているかを見ます。</p><p class="article-body">AT駆け抜け後は天井600G+αに短縮されます。いまの台を駆け抜け後として見てよいかが弱いなら、通常ラインで保守的に見る方が安全です。</p><p class="article-body">通常側で入る時は590Gを超えてから、駆け抜け後で入る時は170G前後からと、入口をはっきり分けるだけで判断のズレがかなり減ります。</p></div></div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="pochipochiBlock">
       <h2 class="block-label">▶ 小役カウンター</h2>
       <a id="settingToolLink" href="setting.html" class="btn-show-all btn-show-all--center">小役カウンター ポチポチくん →</a>
     </div>
@@ -1072,6 +1082,45 @@ function resolveMachineSlug() {
   });
 
   renderSummaryGrid();
+
+  // ★目次表★（2026-08-31・運営者の要望・台帳#523）
+  //   ★飛び先が実際にある項目だけ並べる★（押しても飛べない行を出さない）。
+  //   ★節から自動で作る★＝記事の箱が増減しても、ここを直す必要はない。
+  //   ★期待値早見表は入れない★＝モードの切り替えで出たり消えたりするので、
+  //     一度だけ作る目次に載せると「押しても飛べない行」になり得る。
+  (function renderToc(){
+    const tocBlock = document.getElementById("tocBlock");
+    const tocList = document.getElementById("tocList");
+    if (!tocBlock || !tocList) return;
+    tocList.innerHTML = "";
+    const entries = [];
+    const addBlock = (id, label) => {
+      const el = document.getElementById(id);
+      if (!el || el.classList.contains("is-hidden")) return;
+      entries.push([id, label]);
+    };
+    addBlock("checkerBlock", "狙い目チェッカー");
+    addBlock("summaryBlock", "狙い目早見表");
+    addBlock("infoBlock", "基本情報");
+    document.querySelectorAll("#articleSections .article-item").forEach((el, i) => {
+      const title = (el.getAttribute("data-section") || "").trim();
+      if (!title) return;
+      const id = "sec" + (i + 1);
+      el.id = id;
+      entries.push([id, title]);
+    });
+    // ★飛んでも使えないポチポチくんは出さない★（無効化の判定は上の1か所だけ）
+    if (pochipochiStatus.available) addBlock("pochipochiBlock", "ポチポチくん");
+    if (entries.length < 2) return;
+    entries.forEach(([id, label]) => {
+      const a = document.createElement("a");
+      a.className = "toc-item";
+      a.href = "#" + id;
+      a.textContent = label;
+      tocList.appendChild(a);
+    });
+    tocBlock.classList.remove("is-hidden");
+  })();
 
   // 関連機種リンク（内部リンク強化・SEO/回遊向上）
   // 関連の判定：①同じ原作（original.search/title が一致） ②同じシリーズ系（名前のキーワード一致）

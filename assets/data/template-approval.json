@@ -6,7 +6,7 @@
   "CNAME": "327a46d0a9fe00ef4a85721fec20aa84af66049b4a2e27029773bc1927b502fa",
   "about.html": "94271a2609aab8f91aa8cd4a6a7917467a8ffbc146fcc666035cfa8649ca7132",
   "ads.txt": "e652db9bd62edb46d3cb65ec2822cd510b7c1e76becce15c7e60575ddb693a52",
-  "assets/css/practical.css": "0b082e128ec667d854e8b14428d70e5a3ac985838d0702ff5599c42e40dc1c8f",
+  "assets/css/practical.css": "83c69fb80491519c67921a292981d94872b002929551d4d4e6580d0a8cfc5155",
   "assets/data/claim-allowlist.json": "a9aa01b940b4f61925d176072290772e76911ae43b1cb7f39b112bdda65a8a01",
   "assets/data/ledger.json": "1d496682cc43b0c44b98b4a314f9286d50093c425568cec21d1bbf8d7dc6b886",
   "assets/data/source-registry.json": "2449477484e8def3fae001065de72ce208943a44487cb5dcd109a7af101f3687",
@@ -26,7 +26,7 @@
   "guide-reset.html": "79fcc06cbce7c1326f56d1b2582c77cb5ad53773a79bdad6b91c233a6866603c",
   "guide-yamedoki.html": "c942817c9ef5faac33a6bf7d09bfd2ed692ce8c5391f36101cff4620186af8b1",
   "index.html": "5efb3a6255954da4de59143057899d0b0f9c69a08604d8cd91f84d7c1e36b861",
-  "machine.html": "824ad0c9cdf3f42ea638fcc8a80a0f3274e8fad2f263db635341a1fd1b5a495b",
+  "machine.html": "027ff560cc2a8c4e745c540fa1b03fade7ed3d3607a98611541396488271e1c0",
   "manifest.json": "23be5d18069cfeb2c331b135f8976478e36543b3213006b991ed91e53a9bb90e",
   "meta-auto.js": "d99aab6119e4f465d6ca6cddeeea3339d9b0954297513507a8b4042943370032",
   "privacy.html": "5c53483dfaf0f543aa641561a711503153e224216dadba3971fd89bc05e4908d",
@@ -61,7 +61,7 @@
   "scripts/publish_new_machine.py": "f58709d4f543e0bfc3366c15f85d4b47b4030512b3146e98205a95b8ed34497a",
   "scripts/safe_json.py": "43f61703cbe7e1ea93ee2602fe9be45662957c8929aef62d649b6fc0493e0006",
   "scripts/strip_model_code.py": "d33516022a49198a846df628298328a326b5c04a8f20d4ccc6e416daf6340c68",
-  "service-worker.js": "546163e6518e40f191367dc4740b393d49b4bdde64ee86f047b04c49f5bfdf2a",
+  "service-worker.js": "19e9569aa49f91f978dd3cdd034b2e9e44c53cb89c0a547826acb159af81370b",
   "setting.html": "6660837bd3c31f6755c4ba8e5728c5ac846d43267534b72680c1a07717601dc3"
  }
 }

@@ -75,6 +75,16 @@
 
   <section class="article-section-wrap">
 
+    <!-- ★目次表★（2026-08-31・運営者の要望・台帳#523）
+         ページの上で「どこに何があるか」を一目で分かるようにする。
+         ★中身はJSが作る★＝飛び先（各項目のid）もJSが付けるので、
+         静的な行を先に置くと「押しても飛べないリンク」になる。
+         ★その機種に**ある**項目だけを並べる★（無い項目・使えない道具は出さない）。 -->
+    <nav class="article-block toc-block is-hidden" id="tocBlock" aria-labelledby="tocLabel">
+      <h2 class="block-label" id="tocLabel">▶ このページの目次</h2>
+      <div id="tocList" class="toc-list"></div>
+    </nav>
+
     <div id="rateToggle" class="mode-toggle rate-toggle-shared is-hidden"></div>
 
     <div class="article-block" id="evTableBlock">
@@ -84,7 +94,7 @@
       <p class="hint-text" id="evTableNote"></p>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="checkerBlock">
       <h2 class="block-label">▶ 狙い目チェッカー</h2>
       <div class="checker-card">
         <div id="modeToggle" class="mode-toggle"></div>
@@ -113,12 +123,12 @@
       </div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="summaryBlock">
       <h2 class="block-label">▶ 狙い目早見表</h2>
       <table id="summaryGrid" class="summary-grid"><tr><td><span class="s-label">天井</span><span class="s-value">AT間1200G／CZ間800G+α</span></td><td><span class="s-label">狙い目</span><span class="s-value">算定中</span></td></tr></table>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="infoBlock">
       <h2 class="block-label">▶ 基本情報</h2>
       <table class="info-table">
         <tbody id="infoTableBody"><tr><th>天井</th><td>AT間1200G／CZ間800G+α</td></tr><tr><th>機械割</th><td>97.9%〜113.3%</td></tr><tr><th>50枚あたりのゲーム数</th><td>約30.8G</td></tr></tbody>
@@ -130,7 +140,7 @@
       <div id="articleSections"><div class="article-item" data-section="天井・恩恵"><h3 class="article-title">天井・恩恵</h3><p class="article-body"><strong>AT間天井</strong>：<strong>1200G</strong>（実ゲーム数・液晶左上の数字） → AT当選</p><p class="article-body"><strong>CZ間天井</strong>：<strong>800G+α</strong>（液晶ゲーム数・液晶右下の数字）</p><p class="article-body">★この機種は<strong>数える数字が2つ</strong>あります★。AT間は液晶左上の実ゲーム数、CZ間は液晶右下の液晶ゲーム数で、<strong>別々に数えます</strong>。</p><p class="article-body"><strong>内部モード別のCZ天井（液晶ゲーム数）</strong></p><p class="article-body">・朝一：<strong>200G</strong> ／ 通常A：<strong>800G</strong> ／ 通常B：<strong>700G</strong> ／ 天国準備：<strong>800G</strong> ／ 天国：<strong>100G</strong></p><p class="article-body">・通常Aは100Gと100の位が偶数、通常Bは100の位が奇数のゾーンが期待できます</p><p class="article-body">・<strong>通常時は100G消化ごとにCZ当選のチャンス</strong>があります</p></div><div class="article-item" data-section="基本スペック"><h3 class="article-title">基本スペック</h3><p class="article-body"><strong>機械割</strong>：97.9%〜113.3%</p><p class="article-body"><strong>50枚あたりのゲーム数</strong>：約30.8G</p><p class="article-body"><strong>機種タイプ</strong>：スマスロAT</p><p class="article-body"><strong>導入日</strong>：2026年8月3日（月）</p><p class="article-body"><strong>コイン単価・設定段階</strong>：当サイトでは未確認です。確認でき次第、この欄に掲載します。</p></div><div class="article-item" data-section="当サイトの狙い目"><h3 class="article-title">当サイトの狙い目</h3><p class="article-body">当サイトでは未確認です。確認でき次第、この欄に掲載します。</p><p class="article-body">天井は判明していますが、<strong>天井到達までの平均投資と当選時の期待枚数</strong>が確認できていないため、当サイトの目安として出せる狙い目ラインがまだありません。</p></div><div class="article-item" data-section="朝一・リセット情報"><h3 class="article-title">朝一・リセット情報</h3><p class="article-body"><strong>設定変更後</strong>：AT間天井が<strong>777G（実ゲーム数）</strong>、CZ間天井が<strong>200G+α（液晶ゲーム数）</strong>に短縮</p><p class="article-body"><strong>設定変更時は「朝一」モード</strong>（CZ天井200G）からスタートします</p></div><div class="article-item" data-section="ヤメ時の判断"><h3 class="article-title">ヤメ時の判断</h3><p class="article-body">AT終了後の引き戻し仕様・有利区間切れの挙動が解析待ちのため、具体的なヤメ時G数の目安をお伝えすることができません。</p><p class="article-body">詳細はデータ公開後に更新します。</p></div><div class="article-item" data-section="立ち回りのコツ"><h3 class="article-title">立ち回りのコツ</h3><p class="article-body">AT「幻想殺しRUSH」の突入率と、最上位ゾーン「自動書記」への到達率が本機の期待値を左右します。これらは解析データを見ながら期待値計算をする必要があるため、判明までは無理に狙わないのが安全です。</p><p class="article-body">確実な狙い目ラインが見えてからの参戦が安全です。</p></div><div class="article-item" data-section="設定示唆まとめ"><h3 class="article-title">設定示唆まとめ</h3><div class="settei-legend"><span class="settei-legend-item"><span class="settei-legend-badge settei-weak">弱</span>弱示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-mid">中</span>中示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-strong">強</span>強示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-ok">確</span>高設定確定/有力</span></div><p class="settei-sub-label">設定別の数値</p><table class="settei-table"><tr><th>設定</th><th>出玉率</th><th>AT初当り</th></tr><tr><td>1</td><td>97.9%</td><td>1/398.8</td></tr><tr><td>2</td><td>98.7%</td><td>1/394.5</td></tr><tr><td>3</td><td>100.0%</td><td>1/389.6</td></tr><tr><td>4</td><td>104.5%</td><td>1/369.5</td></tr><tr><td>5</td><td>108.2%</td><td>1/358.0</td></tr><tr><td>6</td><td>113.3%</td><td>1/338.4</td></tr></table><p class="settei-sub-label">設定別の数値</p><table class="settei-table"><tr><th>設定</th><th>CZ確率</th><th>AT初当り</th></tr><tr><td>1</td><td>1/235.6</td><td>1/398.8</td></tr><tr><td>2</td><td>1/233.4</td><td>1/394.5</td></tr><tr><td>3</td><td>1/230.8</td><td>1/389.6</td></tr></table></div><div class="article-item" data-section="ゲーム性"><h3 class="article-title">ゲーム性</h3><p class="article-body"><strong>スマスロ とある魔術の禁書目録2</strong>は、藤商事が開発したスマスロAT機で、2026年8月3日にホール導入されました。原作は鎌池和馬によるライトノベル『とある魔術の禁書目録』（電撃文庫刊）。累計発行部数3100万部を超える人気シリーズで、パチスロ化第2弾として続編ストーリー・キャラクターを収録しています。</p><p class="article-body">公表されているゲーム性では、通常時にレア小役からゲーム数を上乗せしてCZ当選を狙い、AT「幻想殺し（イマジンブレイカー）RUSH」で出玉を伸ばします。最上位の上乗せ特化ゾーン「自動書記（ヨハネのペン）」に到達すればまとまった上乗せが期待できるとされています。</p><p class="article-body"><strong>メインAT「幻想殺し（イマジンブレイカー）RUSH」</strong>：初期40G+α・純増 約4.0枚/G</p><p class="article-body">ゲーム数管理型のATで、上乗せで伸ばしていくタイプです。</p></div><div class="article-item" data-section="確認できたCZ"><h3 class="article-title">確認できたCZ</h3><p class="article-body"><strong>超電磁砲（レールガン）CHANCE</strong>：10G・純増 約2.2枚/G・AT期待度 約52%</p><p class="article-body"><strong>一方通行（アクセラレータ）CHANCE</strong>：10G・純増 約2.2枚/G・AT期待度 約80%</p><p class="article-body">★同じ10Gでも<strong>AT期待度が約1.5倍違う</strong>ので、どちらに入ったかは重要です★</p></div><div class="article-item" data-section="解析待ちの項目"><h3 class="article-title">解析待ちの項目</h3><p class="article-body">当サイトでは未確認です。確認でき次第、この欄に掲載します。</p><p class="article-body">・狙い目ライン（5.6枚）</p><p class="article-body">・小役確率・小役による設定差</p><p class="article-body">・AT突入率</p><p class="article-body">・設定示唆演出・終了画面</p><p class="article-body">・ヤメ時のG数目安</p></div><div class="article-item" data-section="噂・未確定情報"><h3 class="article-title">噂・未確定情報</h3><div class="rumor-box"><p class="rumor-label">⚠ 噂・未確定情報</p><p class="rumor-body"><strong>【公式未確認】</strong></p><p class="rumor-body">・前作同様、キャラクターボイスや原作名シーンを使った設定示唆演出が搭載されるのではないかとファンの間で噂されています（噂・公式未確認）。</p><p class="rumor-body">・「自動書記」などの上位ゾーンの性能に期待する声が多く聞かれます（噂・公式未確認）。</p><p class="rumor-body">※このセクションの情報は公式未確認のものを含みます。実戦データが揃い次第、通常の解析情報に移行します。</p></div></div></div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="pochipochiBlock">
       <h2 class="block-label">▶ 小役カウンター</h2>
       <a id="settingToolLink" class="btn-show-all btn-show-all--center is-disabled" aria-disabled="true" title="設定差のあるカウント対象小役が未判明のため非対応">小役カウンター ポチポチくん（設定差のあるカウント対象小役が未判明のため非対応）</a>
     </div>
@@ -1072,6 +1082,45 @@ function resolveMachineSlug() {
   });
 
   renderSummaryGrid();
+
+  // ★目次表★（2026-08-31・運営者の要望・台帳#523）
+  //   ★飛び先が実際にある項目だけ並べる★（押しても飛べない行を出さない）。
+  //   ★節から自動で作る★＝記事の箱が増減しても、ここを直す必要はない。
+  //   ★期待値早見表は入れない★＝モードの切り替えで出たり消えたりするので、
+  //     一度だけ作る目次に載せると「押しても飛べない行」になり得る。
+  (function renderToc(){
+    const tocBlock = document.getElementById("tocBlock");
+    const tocList = document.getElementById("tocList");
+    if (!tocBlock || !tocList) return;
+    tocList.innerHTML = "";
+    const entries = [];
+    const addBlock = (id, label) => {
+      const el = document.getElementById(id);
+      if (!el || el.classList.contains("is-hidden")) return;
+      entries.push([id, label]);
+    };
+    addBlock("checkerBlock", "狙い目チェッカー");
+    addBlock("summaryBlock", "狙い目早見表");
+    addBlock("infoBlock", "基本情報");
+    document.querySelectorAll("#articleSections .article-item").forEach((el, i) => {
+      const title = (el.getAttribute("data-section") || "").trim();
+      if (!title) return;
+      const id = "sec" + (i + 1);
+      el.id = id;
+      entries.push([id, title]);
+    });
+    // ★飛んでも使えないポチポチくんは出さない★（無効化の判定は上の1か所だけ）
+    if (pochipochiStatus.available) addBlock("pochipochiBlock", "ポチポチくん");
+    if (entries.length < 2) return;
+    entries.forEach(([id, label]) => {
+      const a = document.createElement("a");
+      a.className = "toc-item";
+      a.href = "#" + id;
+      a.textContent = label;
+      tocList.appendChild(a);
+    });
+    tocBlock.classList.remove("is-hidden");
+  })();
 
   // 関連機種リンク（内部リンク強化・SEO/回遊向上）
   // 関連の判定：①同じ原作（original.search/title が一致） ②同じシリーズ系（名前のキーワード一致）

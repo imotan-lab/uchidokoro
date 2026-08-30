@@ -75,6 +75,16 @@
 
   <section class="article-section-wrap">
 
+    <!-- ★目次表★（2026-08-31・運営者の要望・台帳#523）
+         ページの上で「どこに何があるか」を一目で分かるようにする。
+         ★中身はJSが作る★＝飛び先（各項目のid）もJSが付けるので、
+         静的な行を先に置くと「押しても飛べないリンク」になる。
+         ★その機種に**ある**項目だけを並べる★（無い項目・使えない道具は出さない）。 -->
+    <nav class="article-block toc-block is-hidden" id="tocBlock" aria-labelledby="tocLabel">
+      <h2 class="block-label" id="tocLabel">▶ このページの目次</h2>
+      <div id="tocList" class="toc-list"></div>
+    </nav>
+
     <div id="rateToggle" class="mode-toggle rate-toggle-shared is-hidden"></div>
 
     <div class="article-block" id="evTableBlock">
@@ -84,7 +94,7 @@
       <p class="hint-text" id="evTableNote"></p>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="checkerBlock">
       <h2 class="block-label">▶ 狙い目チェッカー</h2>
       <div class="checker-card">
         <div id="modeToggle" class="mode-toggle"></div>
@@ -113,12 +123,12 @@
       </div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="summaryBlock">
       <h2 class="block-label">▶ 狙い目早見表</h2>
       <table id="summaryGrid" class="summary-grid"><tr><td><span class="s-label">基本方針</span><span class="s-value">天井狙い＋スルー狙い</span></td><td><span class="s-label">CZ間天井</span><span class="s-value">液晶1200G+α</span></td></tr><tr><td><span class="s-label">スルー天井</span><span class="s-value">CZ4スルー（5回目）</span></td><td><span class="s-label">狙い目</span><span class="s-value">等価CZ間590G〜 / 3スルー〜</span></td></tr></table>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="infoBlock">
       <h2 class="block-label">▶ 基本情報</h2>
       <table class="info-table">
         <tbody id="infoTableBody"><tr><th>機械割（設定1）</th><td>97.5%</td></tr><tr><th>機械割（設定6）</th><td>114.9%</td></tr><tr><th>CZ間天井</th><td>液晶1200G+α</td></tr><tr><th>スルー天井</th><td>CZ4スルーでAT直撃</td></tr><tr><th>AT間天井</th><td>2500G+α</td></tr><tr><th>やめどき</th><td>幕間チャンス後 / 上位AT後は天国フォロー</td></tr></tbody>
@@ -130,7 +140,7 @@
       <div id="articleSections"><div class="article-item" data-section="天井・恩恵"><h3 class="article-title">天井・恩恵</h3><p class="article-body">天井：液晶CZ間1200G+α</p><p class="article-body">恩恵：CZ確定（1400G以上でAT直撃確定）</p><p class="article-body">リセット短縮：あり</p><p class="article-body">※スルー天井4スルー（5回目AT直撃）</p><p class="article-body">CZ間天井は液晶1200G+α（実質平均約730G）。1100G以上でAT直撃抽選が行われ、1400G以上到達でAT直撃確定＋次回天井300G+αに短縮される強力な恩恵があります。</p><p class="article-body">CZスルー天井は4スルー（5回目）でAT直撃。3スルーからが狙い目です。</p></div><div class="article-item" data-section="基本スペック"><h3 class="article-title">基本スペック</h3><p class="article-body"><strong>機種名</strong>：LからくりサーカスG</p><p class="article-body"><strong>メーカー</strong>：SANKYO</p><p class="article-body"><strong>タイプ</strong>：スマスロAT</p><p class="article-body"><strong>機械割</strong>：設定1：97.5% / 設定6：114.9%</p><p class="article-body"><strong>CZ間天井</strong>：液晶1200G+α（実質平均約730G）</p><p class="article-body"><strong>CZスルー天井</strong>：4スルー（5回目AT直撃）</p><p class="article-body"><strong>AT間天井</strong>：2500G+α</p><p class="article-body"><strong>特殊恩恵</strong>：1100G以上でAT直撃抽選 / 1400G以上でAT直撃確定＋次回天井300G+α短縮</p><p class="article-body"><strong>AT純増</strong>：基本AT「からくりサーカス」約2.8枚/G / 上位AT「超からくりサーカス」約7.6枚/G</p><p class="article-body"><strong>設定段階</strong>：6段階（1〜6）</p></div><div class="article-item" data-section="当サイトの狙い目"><h3 class="article-title">当サイトの狙い目</h3><p class="article-body">等価交換であればCZ間590G〜、3スルー〜が狙い目ラインです。</p><p class="article-body">1100G以上でAT直撃抽選、1400G以上でAT直撃確定＋次回天井短縮の二重恩恵があるため、深い台ほど期待値が一気に跳ね上がります。1400G台はノータイムで確保したい局面です。</p><p class="article-body">上位AT「超からくりサーカス」突入時は純増約7.6枚/Gと基本ATの約2.7倍の出玉スピードです。設定6機械割114.9%は現行スマスロ屈指で、天井狙いと設定狙いを併用できる強力な機種です。</p></div><div class="article-item" data-section="朝一・リセット情報"><h3 class="article-title">朝一・リセット情報</h3><p class="article-body">設定変更後はCZ間ゲーム数が0スタートになります。スルーカウントもリセットされるため、朝一は通常天井狙いの対象外です。</p><p class="article-body">据え置き台はCZスルー回数を引き継ぐため、前日のスルー数が多い台はリセット判別不能でも狙い候補になります。データカウンターと前日履歴から推測しましょう。</p><p class="article-body">スルー回数は液晶やサブ画面で確認できる場合があるため、朝一着席前に確認しておくと立ち回りの精度が上がります。3スルー以上の据え置き台は朝一の優先候補です。</p></div><div class="article-item" data-section="狙い目の根拠"><h3 class="article-title">狙い目の根拠</h3><p class="article-body">からくりサーカスはCZ（スマートチャンス）間天井1200G+α、CZスルー天井（4スルーで5回目AT直撃）、AT間天井2500G+αの3種類の天井を搭載します。等価狙い目はCZ間590G〜、スルー3回〜。</p><p class="article-body">1400G以上でAT直撃確定という強力な恩恵があります。基本AT「からくりサーカス」（純増約2.8枚/G）から上位AT「超からくりサーカス」（純増約7.6枚/G）に発展すると一気に出玉を伸ばせます。機械割は設定1が97.5%、設定6が114.9%と設定差も大きい機種です。</p></div><div class="article-item" data-section="ヤメ時の判断"><h3 class="article-title">ヤメ時の判断</h3><p class="article-body">通常AT後は幕間チャンス消化後、1G回してワイプ演出を確認してからやめ。上位AT後は天国フォロー（天国抜けまで）。カウンター紫色の場合は次回CZ/ATまで続行推奨。</p><p class="article-body">幕間チャンス（AT後の引き戻しゾーン）を消化してからヤメ。幕間チャンス中は前兆演出を確認し、当選示唆がなければ50G程度でヤメOKです。CZスルー回数はAT終了でリセットされない仕様のため、3スルー以上の状態で席を立つと次の打ち手に高期待値の台を渡してしまう点には注意が必要です。</p><p class="article-body">上位ATの「超からくりサーカス」終了後は天国モード以上濃厚なため、次のCZまでフォローするのが推奨です。AT終了後のスルーカウントを確認し、カウントが多い状態ならより浅いゲーム数から再度狙う価値があります。CZ間天井1200G+α・実質平均約730Gという深さを踏まえると、低設定挙動が続く台でも天井までの距離次第ではフォロー継続が正解になる場面もあります。</p></div><div class="article-item" data-section="立ち回りのコツ"><h3 class="article-title">立ち回りのコツ</h3><p class="article-body">小役確率は全設定共通。設定差があるのはAT初当り確率とCZ確率のため、設定狙いよりもゲーム数・スルー回数狙いが主な立ち回りです。</p><p class="article-body">前回800G以上当選の台は300Gまでゾーン狙いが可能。超からくり後は天国抜けまで打ち切り推奨です。</p><p class="article-body">CZ間ゲーム数はデータカウンターのゲーム数を参照します。CZスルー回数はサブ液晶または演出の雰囲気から推察できます。3スルー以上の台は浅いゲーム数でも狙い目になるため、入場前にデータを確認して狙い台を絞り込んでおくのが効果的な立ち回りです。1100G以上はAT直撃抽選圏、1400G以上はAT直撃確定＋次回天井300G+αに短縮という二重恩恵があるため、深い台を見つけたら多少の入りでも見送らずに確保したい場面です。基本AT純増2.8枚/Gと地味ですが、上位AT「超からくりサーカス」突入で純増7.6枚/G帯に切り替わり、機械割の前提が一気に上がります。設定6機械割114.9%は現行スマスロでも屈指の高水準なので、設定狙いと天井狙いを併用できる強力な機種という位置づけです。</p></div><div class="article-item" data-section="噂・未確定情報"><h3 class="article-title">噂・未確定情報</h3><div class="rumor-box"><p class="rumor-label">⚠ 噂・未確定情報</p><p class="rumor-body">スルー天井の詳細なモード振り分けや天国モードの天井短縮に関する口コミが見られます。ただし公式解析では未確定の部分があるため、あくまで噂として立ち回りの参考程度にとどめてください。</p><p class="rumor-body">ポチポチくん（小役カウンター）については小役確率が全設定共通のため非対応です。設定判別はAT初当たり回数や幕間チャンス実績で行います。</p></div></div></div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="pochipochiBlock">
       <h2 class="block-label">▶ 小役カウンター</h2>
       <a id="settingToolLink" class="btn-show-all btn-show-all--center is-disabled" aria-disabled="true" title="小役による設定差なし">小役カウンター ポチポチくん（小役による設定差なし）</a>
     </div>
@@ -288,11 +298,11 @@ function resolveMachineSlug() {
     }
   }
 
-  // ★新台経路(page-decision/v1)はページ全体の断り書きを出さない★
+  // ★新台経路(page-decision/*)はページ全体の断り書きを出さない★
   //   （2026-08-04・運営者判断。未確認の項目は、その項目の場所に「未確認」と
   //     書いてあるので、ページ冒頭で繰り返す必要がない）
   //   旧preview（既存7機種）は従来どおりバナーを出す。
-  const _isAuto = machine.publication_policy === "page-decision/v1";
+  const _isAuto = (machine.publication_policy !== undefined);
   if (machine.status === "preview" || _isAuto) {
     if (!_isAuto) {
       const banner = document.getElementById("previewBanner");
@@ -323,7 +333,7 @@ function resolveMachineSlug() {
   // ポチポチくん対応状況（ポチポチくんに飛んでも機能しない機種は無効化して理由を表示）
   const pochipochiStatus = (function() {
     // 解析待ち（preview / 新台経路）
-    if (machine.status === "preview" || machine.publication_policy === "page-decision/v1") return { available: false, reason: "解析データ判明後に対応" };
+    if (machine.status === "preview" || (machine.publication_policy !== undefined)) return { available: false, reason: "解析データ判明後に対応" };
     // 小役による設定差が元々ない機種（ジャグラー系・ノーマル系・一部AT）
     const noSettingDiff = ['enen2','karakuri','kaguya','valvrave2','sf5','chibaryo2','tekken6','tokyo_ghoul','koukaku','biohazard','tensura','dumbbell','mhrise','sengoku_otome4','sao','bandori','hanma_baki','yorumungando','tolove_darkness','zenigata5','enen','madomagi_forte','burning_express','akudama','neoplanet','lupin_daikokaisha','zettai_shougeki4','babel','milliongod_kiseki','animal_dotch'];
     if (noSettingDiff.includes(slug)) return { available: false, reason: "小役による設定差なし" };
@@ -1072,6 +1082,45 @@ function resolveMachineSlug() {
   });
 
   renderSummaryGrid();
+
+  // ★目次表★（2026-08-31・運営者の要望・台帳#523）
+  //   ★飛び先が実際にある項目だけ並べる★（押しても飛べない行を出さない）。
+  //   ★節から自動で作る★＝記事の箱が増減しても、ここを直す必要はない。
+  //   ★期待値早見表は入れない★＝モードの切り替えで出たり消えたりするので、
+  //     一度だけ作る目次に載せると「押しても飛べない行」になり得る。
+  (function renderToc(){
+    const tocBlock = document.getElementById("tocBlock");
+    const tocList = document.getElementById("tocList");
+    if (!tocBlock || !tocList) return;
+    tocList.innerHTML = "";
+    const entries = [];
+    const addBlock = (id, label) => {
+      const el = document.getElementById(id);
+      if (!el || el.classList.contains("is-hidden")) return;
+      entries.push([id, label]);
+    };
+    addBlock("checkerBlock", "狙い目チェッカー");
+    addBlock("summaryBlock", "狙い目早見表");
+    addBlock("infoBlock", "基本情報");
+    document.querySelectorAll("#articleSections .article-item").forEach((el, i) => {
+      const title = (el.getAttribute("data-section") || "").trim();
+      if (!title) return;
+      const id = "sec" + (i + 1);
+      el.id = id;
+      entries.push([id, title]);
+    });
+    // ★飛んでも使えないポチポチくんは出さない★（無効化の判定は上の1か所だけ）
+    if (pochipochiStatus.available) addBlock("pochipochiBlock", "ポチポチくん");
+    if (entries.length < 2) return;
+    entries.forEach(([id, label]) => {
+      const a = document.createElement("a");
+      a.className = "toc-item";
+      a.href = "#" + id;
+      a.textContent = label;
+      tocList.appendChild(a);
+    });
+    tocBlock.classList.remove("is-hidden");
+  })();
 
   // 関連機種リンク（内部リンク強化・SEO/回遊向上）
   // 関連の判定：①同じ原作（original.search/title が一致） ②同じシリーズ系（名前のキーワード一致）

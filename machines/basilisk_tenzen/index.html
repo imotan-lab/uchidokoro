@@ -75,6 +75,16 @@
 
   <section class="article-section-wrap">
 
+    <!-- ★目次表★（2026-08-31・運営者の要望・台帳#523）
+         ページの上で「どこに何があるか」を一目で分かるようにする。
+         ★中身はJSが作る★＝飛び先（各項目のid）もJSが付けるので、
+         静的な行を先に置くと「押しても飛べないリンク」になる。
+         ★その機種に**ある**項目だけを並べる★（無い項目・使えない道具は出さない）。 -->
+    <nav class="article-block toc-block is-hidden" id="tocBlock" aria-labelledby="tocLabel">
+      <h2 class="block-label" id="tocLabel">▶ このページの目次</h2>
+      <div id="tocList" class="toc-list"></div>
+    </nav>
+
     <div id="rateToggle" class="mode-toggle rate-toggle-shared is-hidden"></div>
 
     <div class="article-block" id="evTableBlock">
@@ -84,7 +94,7 @@
       <p class="hint-text" id="evTableNote"></p>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="checkerBlock">
       <h2 class="block-label">▶ 狙い目チェッカー</h2>
       <div class="checker-card">
         <div id="modeToggle" class="mode-toggle"></div>
@@ -113,12 +123,12 @@
       </div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="summaryBlock">
       <h2 class="block-label">▶ 狙い目早見表</h2>
       <table id="summaryGrid" class="summary-grid"><tr><td><span class="s-label">天井</span><span class="s-value">BC間333G+α&lt;br&gt;BC7スルー（8回目BT確定）</span></td><td><span class="s-label">等価狙い目</span><span class="s-value">0スルー：230G〜&lt;br&gt;3スルー以上：G数不問</span></td></tr><tr><td><span class="s-label">天井恩恵</span><span class="s-value">G数天井:BC当選&lt;br&gt;スルー天井:天膳BT確定</span></td><td><span class="s-label">ヤメ時</span><span class="s-value">BT終了後・BC非当選後に即ヤメ可（駿府城滞在時は注意）</span></td></tr><tr><td><span class="s-label">純増</span><span class="s-value">約2.9枚/G</span></td><td></td></tr></table>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="infoBlock">
       <h2 class="block-label">▶ 基本情報</h2>
       <table class="info-table">
         <tbody id="infoTableBody"><tr><th>機械割（設定1）</th><td>97.4%</td></tr><tr><th>BC間天井</th><td>333G+α</td></tr><tr><th>BCスルー天井</th><td>BC7スルー（8回目でBT当選確定）</td></tr><tr><th>天井恩恵（G数天井）</th><td>BC当選</td></tr><tr><th>天井恩恵（スルー天井）</th><td>天膳BT＋争忍の刻10人状態確定</td></tr><tr><th>設定</th><td>6段階（1〜6）</td></tr><tr><th>純増（BT）</th><td>約2.9枚/G</td></tr><tr><th>コイン持ち</th><td>約31.7G/50枚（設定1）</td></tr><tr><th>ヤメ時</th><td>BT後・BC非当選後に即ヤメ可（駿府城滞在時は続行）</td></tr></tbody>
@@ -130,7 +140,7 @@
       <div id="articleSections"><div class="article-item" data-section="天井・恩恵"><h3 class="article-title">天井・恩恵</h3><p class="article-body">天井①：BC（バジリスクチャンス）間最大333G+αでBC当選</p><p class="article-body">天井②：BC7スルー後、8回目のBC当選でBT（バジリスクタイム）確定</p><p class="article-body">恩恵①：BC当選（G数天井）</p><p class="article-body">恩恵②：天膳BT+争忍の刻10人状態確定（スルー天井）</p><p class="article-body">リセット後：BC規定回数が優遇される模様（詳細解析待ち）</p><p class="article-body">※天井カウントはBC間で管理。BCに当選してもATに繋がらない（スルー）場合にスルーカウントが加算</p></div><div class="article-item" data-section="基本スペック"><h3 class="article-title">基本スペック</h3><p class="article-body">機種名：スマスロバジリスク～甲賀忍法帖～絆2 天膳 BLACK EDITION</p><p class="article-body">メーカー：瑞穂（ミズホ）</p><p class="article-body">タイプ：スマスロAT（BT：バジリスクタイム）</p><p class="article-body">BT純増：約2.9枚/G</p><p class="article-body">機械割：設1：97.4% / 設2：98.5% / 設3：102.0% / 設4：106.2% / 設5：110.5% / 設6：114.9%</p><p class="article-body">設定段階：6段階</p><p class="article-body">導入日：2023年12月18日</p><p class="article-body">バジリスク絆2のリメイク版。宿怨チャレンジ搭載でBTへの突入口が増加</p></div><div class="article-item" data-section="当サイトの狙い目"><h3 class="article-title">当サイトの狙い目</h3><p class="article-body">等価交換であればBC0スルーで<strong>230G〜</strong>、5.6枚持ちメダルで<strong>240G〜</strong>、現金投資で<strong>250G〜</strong>が狙い目の目安です。</p><p class="article-body">BCスルー回数が多い台はさらに期待値が高く、<strong>BC3スルー以上はG数不問</strong>で狙えます。BC7スルー（次回8回目BT確定）の台は天膳BT＋争忍の刻10人状態確定という強力な恩恵があるため、ゲーム数に関係なく即着席推奨です。</p><p class="article-body">BT純増は約2.9枚/Gで、機械割は設定1で97.4%と低めのため、天井狙いの期待値が安定して取れます。設定示唆の種類が豊富なため、設定狙いとの併用も可能です。</p></div><div class="article-item" data-section="朝一・リセット情報"><h3 class="article-title">朝一・リセット情報</h3><p class="article-body">リセット判別は有利区間ランプとBT終了画面を確認して行います。設定変更後はスルー回数天井の浅いモードテーブルが選ばれやすくなり、通常より早めにBT当選するケースが報告されています。</p><p class="article-body">BC間天井333G+αは据え置き・リセットを問わず適用されるため、朝一台でもBC間ゲーム数が深い台は浅いラインから狙えます。リセット時の規定回数優遇の具体的な数値は現在も解析待ちのため、判明し次第更新します。</p><p class="article-body">朝一はBC間ゲーム数とスルー回数の両方をデータカウンターとサブ液晶のPUSHボタンで確認し、深めの台を優先して確保する立ち回りが有効です。</p></div><div class="article-item" data-section="狙い目の根拠"><h3 class="article-title">狙い目の根拠</h3><p class="article-body">【等価交換】BC0スルー：230G〜、BC3スルー以上：G数不問</p><p class="article-body">【5.6枚持ちメダル】BC0スルー：240G〜、BC3スルー以上：G数不問</p><p class="article-body">【5.6枚現金】BC0スルー：250G〜、BC4スルー以上：G数不問</p><p class="article-body">機械割97.4%（設定1）と低めで天井狙いの期待値が安定。スルー7回目（8回目BT確定）時は純増約2.9枚/G＋争忍の刻10人状態確定という強力な恩恵があります。設定示唆の種類が豊富なため設定狙いとの組み合わせも可能です。</p></div><div class="article-item" data-section="ヤメ時の判断"><h3 class="article-title">ヤメ時の判断</h3><p class="article-body">BT終了後：有利区間ランプ消灯で即ヤメ可</p><p class="article-body">駿府城ステージ滞在中は即ヤメ厳禁（天国モード・高確状態）</p><p class="article-body">BC後BT非当選：基本即ヤメ可。ただし宿怨ポイントが貯まっている場合は宿怨チャレンジまで続行を推奨</p><p class="article-body">朝一リセット後：規定回数優遇の可能性あり（詳細解析待ち）</p><p class="article-body">BC後にBT非当選（スルー）となった場合は基本即ヤメ可。ただし宿怨ポイントが蓄積されている場合は宿怨チャレンジまで続行することで期待値が取れます。スルー回数が溜まっている台は次のBC当選まで粘る価値があります。</p></div><div class="article-item" data-section="立ち回りのコツ"><h3 class="article-title">立ち回りのコツ</h3><p class="article-body">スルー回数はサブ液晶のPUSHボタンで確認できます。3スルー以上の台はG数不問で即打ちOKなため、データ確認時にスルー回数を最優先でチェックしてください。BC間ゲーム数はデータカウンターで管理できます。333G+αという浅い天井なので、稼働率の高いホールでは素早く見回って深めの台を確保するのが重要です。</p></div><div class="article-item" data-section="設定示唆まとめ"><h3 class="article-title">設定示唆まとめ</h3><div class="settei-legend"><span class="settei-legend-item"><span class="settei-legend-badge settei-weak">弱</span>弱示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-mid">中</span>中示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-strong">強</span>強示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-ok">確</span>高設定確定/有力</span></div><p class="settei-sub-label">ユニバプレート色（BT終了画面）</p><table class="settei-table"><tr><th>プレート色</th><th>示唆</th></tr><tr><td>銅</td><td><span class="settei-badge settei-ok">設定2以上確定</span></td></tr><tr><td>銀</td><td><span class="settei-badge settei-ok">設定3以上確定</span></td></tr><tr><td>金</td><td><span class="settei-badge settei-ok">設定4以上確定</span></td></tr><tr><td>花火柄</td><td><span class="settei-badge settei-strong">設定5以上確定</span></td></tr><tr><td>虹</td><td><span class="settei-badge settei-strong">設定6確定</span></td></tr></table><p class="settei-sub-label">争忍の刻 開始画面</p><table class="settei-table"><tr><th>画面内容</th><th>示唆</th></tr><tr><td>女性キャラ集合</td><td><span class="settei-badge settei-ok">設定4以上確定</span></td></tr><tr><td>弦之介&amp;朧（紫）</td><td><span class="settei-badge settei-strong">設定5以上確定</span></td></tr><tr><td>弦之介&amp;朧（虹）</td><td><span class="settei-badge settei-strong">設定6確定</span></td></tr></table><p class="settei-sub-label">弦之助BC 撃破人数示唆</p><table class="settei-table"><tr><th>撃破人数</th><th>示唆</th></tr><tr><td>222人</td><td><span class="settei-badge settei-ok">設定2以上確定</span></td></tr><tr><td>333人</td><td><span class="settei-badge settei-ok">設定3以上確定</span></td></tr><tr><td>246人</td><td><span class="settei-badge settei-weak">偶数設定確定</span></td></tr><tr><td>666人</td><td><span class="settei-badge settei-strong">設定6確定</span></td></tr></table><p class="settei-sub-label">BC当選時LEDランプ（BT非当選時）</p><table class="settei-table"><tr><th>ランプ色</th><th>示唆</th></tr><tr><td>赤LED 点灯</td><td><span class="settei-badge settei-ok">設定4以上濃厚</span></td></tr><tr><td>虹LED 点灯</td><td><span class="settei-badge settei-strong">設定6濃厚</span></td></tr></table></div><div class="article-item" data-section="噂・未確定情報"><h3 class="article-title">噂・未確定情報</h3><div class="rumor-box"><p class="rumor-label">⚠ 噂・未確定情報</p><p class="rumor-body">※以下は公式未発表・未確認の情報です。実際の挙動と異なる可能性があります。</p><p class="rumor-body">リセット後の規定スルー数優遇について詳細データが判明していないため、解析情報の更新待ちです。設定変更後は通常より早めにBT当選するケースが報告されています。</p><p class="rumor-body">有利区間の引き継ぎ仕様の詳細（宿怨ポイントのリセット条件等）も実戦データを収集中です。</p></div></div></div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="pochipochiBlock">
       <h2 class="block-label">▶ 小役カウンター</h2>
       <a id="settingToolLink" class="btn-show-all btn-show-all--center is-disabled" aria-disabled="true" title="設定差のあるカウント対象小役が未判明のため非対応">小役カウンター ポチポチくん（設定差のあるカウント対象小役が未判明のため非対応）</a>
     </div>
@@ -288,11 +298,11 @@ function resolveMachineSlug() {
     }
   }
 
-  // ★新台経路(page-decision/v1)はページ全体の断り書きを出さない★
+  // ★新台経路(page-decision/*)はページ全体の断り書きを出さない★
   //   （2026-08-04・運営者判断。未確認の項目は、その項目の場所に「未確認」と
   //     書いてあるので、ページ冒頭で繰り返す必要がない）
   //   旧preview（既存7機種）は従来どおりバナーを出す。
-  const _isAuto = machine.publication_policy === "page-decision/v1";
+  const _isAuto = (machine.publication_policy !== undefined);
   if (machine.status === "preview" || _isAuto) {
     if (!_isAuto) {
       const banner = document.getElementById("previewBanner");
@@ -323,7 +333,7 @@ function resolveMachineSlug() {
   // ポチポチくん対応状況（ポチポチくんに飛んでも機能しない機種は無効化して理由を表示）
   const pochipochiStatus = (function() {
     // 解析待ち（preview / 新台経路）
-    if (machine.status === "preview" || machine.publication_policy === "page-decision/v1") return { available: false, reason: "解析データ判明後に対応" };
+    if (machine.status === "preview" || (machine.publication_policy !== undefined)) return { available: false, reason: "解析データ判明後に対応" };
     // 小役による設定差が元々ない機種（ジャグラー系・ノーマル系・一部AT）
     const noSettingDiff = ['enen2','karakuri','kaguya','valvrave2','sf5','chibaryo2','tekken6','tokyo_ghoul','koukaku','biohazard','tensura','dumbbell','mhrise','sengoku_otome4','sao','bandori','hanma_baki','yorumungando','tolove_darkness','zenigata5','enen','madomagi_forte','burning_express','akudama','neoplanet','lupin_daikokaisha','zettai_shougeki4','babel','milliongod_kiseki','animal_dotch'];
     if (noSettingDiff.includes(slug)) return { available: false, reason: "小役による設定差なし" };
@@ -1072,6 +1082,45 @@ function resolveMachineSlug() {
   });
 
   renderSummaryGrid();
+
+  // ★目次表★（2026-08-31・運営者の要望・台帳#523）
+  //   ★飛び先が実際にある項目だけ並べる★（押しても飛べない行を出さない）。
+  //   ★節から自動で作る★＝記事の箱が増減しても、ここを直す必要はない。
+  //   ★期待値早見表は入れない★＝モードの切り替えで出たり消えたりするので、
+  //     一度だけ作る目次に載せると「押しても飛べない行」になり得る。
+  (function renderToc(){
+    const tocBlock = document.getElementById("tocBlock");
+    const tocList = document.getElementById("tocList");
+    if (!tocBlock || !tocList) return;
+    tocList.innerHTML = "";
+    const entries = [];
+    const addBlock = (id, label) => {
+      const el = document.getElementById(id);
+      if (!el || el.classList.contains("is-hidden")) return;
+      entries.push([id, label]);
+    };
+    addBlock("checkerBlock", "狙い目チェッカー");
+    addBlock("summaryBlock", "狙い目早見表");
+    addBlock("infoBlock", "基本情報");
+    document.querySelectorAll("#articleSections .article-item").forEach((el, i) => {
+      const title = (el.getAttribute("data-section") || "").trim();
+      if (!title) return;
+      const id = "sec" + (i + 1);
+      el.id = id;
+      entries.push([id, title]);
+    });
+    // ★飛んでも使えないポチポチくんは出さない★（無効化の判定は上の1か所だけ）
+    if (pochipochiStatus.available) addBlock("pochipochiBlock", "ポチポチくん");
+    if (entries.length < 2) return;
+    entries.forEach(([id, label]) => {
+      const a = document.createElement("a");
+      a.className = "toc-item";
+      a.href = "#" + id;
+      a.textContent = label;
+      tocList.appendChild(a);
+    });
+    tocBlock.classList.remove("is-hidden");
+  })();
 
   // 関連機種リンク（内部リンク強化・SEO/回遊向上）
   // 関連の判定：①同じ原作（original.search/title が一致） ②同じシリーズ系（名前のキーワード一致）

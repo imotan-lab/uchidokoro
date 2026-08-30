@@ -75,6 +75,16 @@
 
   <section class="article-section-wrap">
 
+    <!-- ★目次表★（2026-08-31・運営者の要望・台帳#523）
+         ページの上で「どこに何があるか」を一目で分かるようにする。
+         ★中身はJSが作る★＝飛び先（各項目のid）もJSが付けるので、
+         静的な行を先に置くと「押しても飛べないリンク」になる。
+         ★その機種に**ある**項目だけを並べる★（無い項目・使えない道具は出さない）。 -->
+    <nav class="article-block toc-block is-hidden" id="tocBlock" aria-labelledby="tocLabel">
+      <h2 class="block-label" id="tocLabel">▶ このページの目次</h2>
+      <div id="tocList" class="toc-list"></div>
+    </nav>
+
     <div id="rateToggle" class="mode-toggle rate-toggle-shared is-hidden"></div>
 
     <div class="article-block" id="evTableBlock">
@@ -84,7 +94,7 @@
       <p class="hint-text" id="evTableNote"></p>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="checkerBlock">
       <h2 class="block-label">▶ 狙い目チェッカー</h2>
       <div class="checker-card">
         <div id="modeToggle" class="mode-toggle"></div>
@@ -113,12 +123,12 @@
       </div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="summaryBlock">
       <h2 class="block-label">▶ 狙い目早見表</h2>
       <table id="summaryGrid" class="summary-grid"><tr><td><span class="s-label">天井</span><span class="s-value">等価530G〜 / 6.0枚610G〜 / リセット後160G〜</span></td><td><span class="s-label">ヤメ時</span><span class="s-value">-</span></td></tr></table>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="infoBlock">
       <h2 class="block-label">▶ 基本情報</h2>
       <table class="info-table">
         <tbody id="infoTableBody"><tr><th>機種名</th><td>パチスロ 転生したら剣でした</td></tr></tbody>
@@ -130,7 +140,7 @@
       <div id="articleSections"><div class="article-item" data-section="天井・恩恵"><h3 class="article-title">天井・恩恵</h3><p class="article-body">天井は&lt;strong&gt;AT間970G+α&lt;/strong&gt;と&lt;strong&gt;ボーナス間1280G+α&lt;/strong&gt;の複合天井。</p><p class="article-body">AT間天井到達でAT濃厚のCZ「デーモンバトル」に当選。ボーナス間天井は通常ボーナスが当選してATに入れていない台に適用されます。</p><p class="article-body">AT間天井とボーナス間天井は&lt;strong&gt;独立してカウント&lt;/strong&gt;されます。ボーナスが当選してもAT間カウントはリセットされません。</p><p class="article-body">設定変更（リセット）後は&lt;strong&gt;AT間天井600G+α&lt;/strong&gt;、&lt;strong&gt;ボーナス間天井980G+α&lt;/strong&gt;に短縮。リセット台は浅いゲーム数から狙い目になります。</p><p class="article-body">天井カウントは&lt;strong&gt;AT間&lt;/strong&gt;のゲーム数（ATやCZ中はカウント対象外）。</p></div><div class="article-item" data-section="基本スペック"><h3 class="article-title">基本スペック</h3><p class="article-body"><strong>機種名</strong>：パチスロ 転生したら剣でした</p><p class="article-body"><strong>タイプ</strong>：スマスロAT</p><p class="article-body"><strong>天井</strong>：AT間970G+α / ボーナス間1280G+α（複合天井・独立カウント）</p><p class="article-body"><strong>リセット時天井</strong>：AT間600G+α / ボーナス間980G+αに短縮</p><p class="article-body"><strong>天井恩恵</strong>：AT濃厚のCZ「デーモンバトル」当選</p><p class="article-body"><strong>等価狙い目</strong>：AT間530G〜 / ボーナス間1000G〜（ATなし台）</p><p class="article-body"><strong>設定段階</strong>：6段階設定（弱チャンス目→ボーナスが設定1約3%→設定6約11%）</p></div><div class="article-item" data-section="当サイトの狙い目"><h3 class="article-title">当サイトの狙い目</h3><p class="article-body">【等価・5.6枚】AT間530G〜が狙い目です。AT間天井は970G+αで、750G以上なら強めに狙えます。</p><p class="article-body">【6.0枚】610G〜 / 【6.5枚】650G〜 / 【7.0枚】700G〜が基準です。</p><p class="article-body">ボーナスは引いているがATに入れていない台は、ボーナス間天井1280G+αが別カウントで進行しています。ボーナス間1000G〜が追加の狙い目です。リセット後はAT間600G+αに短縮され、160G〜から狙えます。</p></div><div class="article-item" data-section="朝一・リセット情報"><h3 class="article-title">朝一・リセット情報</h3><p class="article-body">リセット後の天井：AT間600G+α・ボーナス間980G+αに短縮されます（通常時はAT間970G+α・ボーナス間1280G+α）。</p><p class="article-body">リセット時の狙い目：等価・5.6枚はAT間160G〜、6.0枚は200G〜が基準です。</p><p class="article-body">AT間とボーナス間は独立してカウントされるため、朝一台でもどちらの基準で見るかを先に固定してください。</p></div><div class="article-item" data-section="狙い目の根拠"><h3 class="article-title">狙い目の根拠</h3><p class="article-body">&lt;strong&gt;AT間天井狙い（通常）: 等価530G〜 / 5.6枚540G〜 / 6.0枚610G〜&lt;/strong&gt;</p><p class="article-body">&lt;strong&gt;ボーナス間天井狙い（ATなし台）: 1000G〜&lt;/strong&gt;（金種問わず）</p><p class="article-body">リセット後: &lt;strong&gt;等価160G〜&lt;/strong&gt;（AT間600G+αに短縮）</p><p class="article-body">金種別の目安（AT間通常）：</p><p class="article-body">・等価 / 5.6枚: &lt;strong&gt;530G〜&lt;/strong&gt;</p><p class="article-body">・6.0枚: &lt;strong&gt;610G〜&lt;/strong&gt;</p><p class="article-body">・6.5枚: &lt;strong&gt;650G〜&lt;/strong&gt;</p><p class="article-body">・7.0枚: &lt;strong&gt;700G〜&lt;/strong&gt;</p><p class="article-body">ATに入らずボーナスのみ当選している台はボーナス間カウントも確認し、1000G超えていれば追加で狙い目になります。</p><p class="article-body">転生したら剣でしたはAT間970G+αとボーナス間1280G+αの複合天井機種。等価狙い目はAT間530G〜で、ボーナスは引いているがATに入れていない台はボーナス間1000G〜も別途狙い目になります。AT間とボーナス間は独立してカウントされる点が特徴です。</p><p class="article-body">設定変更後はAT間天井600G+αに短縮されるためリセット台は160G〜から狙えます。天井深度が1000G超えと深い機種ですが等価530G〜からしっかりプラスになる期待値設計です。</p></div><div class="article-item" data-section="ヤメ時の判断"><h3 class="article-title">ヤメ時の判断</h3><p class="article-body">リセット後はAT間天井が600G+αに短縮。等価/5.6枚は&lt;strong&gt;160G〜&lt;/strong&gt;から狙い目。</p><p class="article-body">ヤメ時はAT終了後、&lt;strong&gt;フランおやすみ&lt;/strong&gt;演出（100G+α）を消化してアイキャッチ確認後にヤメ。おやすみ中にCZや次のATが継続する場合は続行。</p><p class="article-body">ボーナス間カウントはATが当選してもリセットされないため、AT後も台を離れる前に液晶のゲーム数表示を確認すること。</p><p class="article-body">複合天井機種のためまずAT間を優先して把握し、ATに入らずボーナスのみ引いている台はボーナス間も追加で確認するのが基本。</p></div><div class="article-item" data-section="立ち回りのコツ"><h3 class="article-title">立ち回りのコツ</h3><p class="article-body">AT間とボーナス間が別カウントのため、同時に深い台（AT間900G以上かつボーナス間1200G以上）は複合旨みがある可能性があります。液晶ゲーム数でAT間を確認し長らくATに入っていない台はボーナス間も確認する二段構えの立ち回りが有効。設定変更後はAT間160G〜から狙えるため朝一台も要チェック。</p></div><div class="article-item" data-section="設定示唆まとめ"><h3 class="article-title">設定示唆まとめ</h3><div class="settei-legend"><span class="settei-legend-item"><span class="settei-legend-badge settei-weak">弱</span>弱示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-mid">中</span>中示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-strong">強</span>強示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-ok">確</span>高設定確定/有力</span></div><table class="settei-table"><tr><th>要素</th><th>示唆</th></tr><tr><td>フランボーナス中のキャラ紹介</td><td>演出の種類で設定示唆</td></tr><tr><td>X転剣ボーナス中のストーリー話数</td><td>高話数ほど高設定期待</td></tr><tr><td>ゴブリン大群中の設定示唆ランプ</td><td>色で設定を示唆</td></tr><tr><td>AT中「スンドウカレー」演出</td><td>発生で高設定期待</td></tr><tr><td>弱チャンス目からのボーナス当選</td><td>設定1:約3% → 設定6:約11%（大きな差）</td></tr></table></div><div class="article-item" data-section="噂・未確定情報"><h3 class="article-title">噂・未確定情報</h3><div class="rumor-box"><p class="rumor-label">⚠ 噂・未確定情報</p><p class="rumor-body">⚠ 以下は噂・未確定情報です。公式発表ではありません。</p><p class="rumor-body">AT間天井とボーナス間天井が同時に深い台（例: AT間900G以上かつボーナス間1200G以上）は実質的な複合旨みがあるとする情報があります。検証データが少ないため参考程度に。</p><p class="rumor-body">2回目のAT初当り時にX転剣ボーナス未当選なら高設定ほどモード2移行率が高いという情報があるが、数値の公式確認は未完了。</p></div></div></div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="pochipochiBlock">
       <h2 class="block-label">▶ 小役カウンター</h2>
       <a id="settingToolLink" class="btn-show-all btn-show-all--center is-disabled" aria-disabled="true" title="設定差のあるカウント対象小役が未判明のため非対応">小役カウンター ポチポチくん（設定差のあるカウント対象小役が未判明のため非対応）</a>
     </div>
@@ -288,11 +298,11 @@ function resolveMachineSlug() {
     }
   }
 
-  // ★新台経路(page-decision/v1)はページ全体の断り書きを出さない★
+  // ★新台経路(page-decision/*)はページ全体の断り書きを出さない★
   //   （2026-08-04・運営者判断。未確認の項目は、その項目の場所に「未確認」と
   //     書いてあるので、ページ冒頭で繰り返す必要がない）
   //   旧preview（既存7機種）は従来どおりバナーを出す。
-  const _isAuto = machine.publication_policy === "page-decision/v1";
+  const _isAuto = (machine.publication_policy !== undefined);
   if (machine.status === "preview" || _isAuto) {
     if (!_isAuto) {
       const banner = document.getElementById("previewBanner");
@@ -323,7 +333,7 @@ function resolveMachineSlug() {
   // ポチポチくん対応状況（ポチポチくんに飛んでも機能しない機種は無効化して理由を表示）
   const pochipochiStatus = (function() {
     // 解析待ち（preview / 新台経路）
-    if (machine.status === "preview" || machine.publication_policy === "page-decision/v1") return { available: false, reason: "解析データ判明後に対応" };
+    if (machine.status === "preview" || (machine.publication_policy !== undefined)) return { available: false, reason: "解析データ判明後に対応" };
     // 小役による設定差が元々ない機種（ジャグラー系・ノーマル系・一部AT）
     const noSettingDiff = ['enen2','karakuri','kaguya','valvrave2','sf5','chibaryo2','tekken6','tokyo_ghoul','koukaku','biohazard','tensura','dumbbell','mhrise','sengoku_otome4','sao','bandori','hanma_baki','yorumungando','tolove_darkness','zenigata5','enen','madomagi_forte','burning_express','akudama','neoplanet','lupin_daikokaisha','zettai_shougeki4','babel','milliongod_kiseki','animal_dotch'];
     if (noSettingDiff.includes(slug)) return { available: false, reason: "小役による設定差なし" };
@@ -1072,6 +1082,45 @@ function resolveMachineSlug() {
   });
 
   renderSummaryGrid();
+
+  // ★目次表★（2026-08-31・運営者の要望・台帳#523）
+  //   ★飛び先が実際にある項目だけ並べる★（押しても飛べない行を出さない）。
+  //   ★節から自動で作る★＝記事の箱が増減しても、ここを直す必要はない。
+  //   ★期待値早見表は入れない★＝モードの切り替えで出たり消えたりするので、
+  //     一度だけ作る目次に載せると「押しても飛べない行」になり得る。
+  (function renderToc(){
+    const tocBlock = document.getElementById("tocBlock");
+    const tocList = document.getElementById("tocList");
+    if (!tocBlock || !tocList) return;
+    tocList.innerHTML = "";
+    const entries = [];
+    const addBlock = (id, label) => {
+      const el = document.getElementById(id);
+      if (!el || el.classList.contains("is-hidden")) return;
+      entries.push([id, label]);
+    };
+    addBlock("checkerBlock", "狙い目チェッカー");
+    addBlock("summaryBlock", "狙い目早見表");
+    addBlock("infoBlock", "基本情報");
+    document.querySelectorAll("#articleSections .article-item").forEach((el, i) => {
+      const title = (el.getAttribute("data-section") || "").trim();
+      if (!title) return;
+      const id = "sec" + (i + 1);
+      el.id = id;
+      entries.push([id, title]);
+    });
+    // ★飛んでも使えないポチポチくんは出さない★（無効化の判定は上の1か所だけ）
+    if (pochipochiStatus.available) addBlock("pochipochiBlock", "ポチポチくん");
+    if (entries.length < 2) return;
+    entries.forEach(([id, label]) => {
+      const a = document.createElement("a");
+      a.className = "toc-item";
+      a.href = "#" + id;
+      a.textContent = label;
+      tocList.appendChild(a);
+    });
+    tocBlock.classList.remove("is-hidden");
+  })();
 
   // 関連機種リンク（内部リンク強化・SEO/回遊向上）
   // 関連の判定：①同じ原作（original.search/title が一致） ②同じシリーズ系（名前のキーワード一致）

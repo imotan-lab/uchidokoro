@@ -75,6 +75,16 @@
 
   <section class="article-section-wrap">
 
+    <!-- ★目次表★（2026-08-31・運営者の要望・台帳#523）
+         ページの上で「どこに何があるか」を一目で分かるようにする。
+         ★中身はJSが作る★＝飛び先（各項目のid）もJSが付けるので、
+         静的な行を先に置くと「押しても飛べないリンク」になる。
+         ★その機種に**ある**項目だけを並べる★（無い項目・使えない道具は出さない）。 -->
+    <nav class="article-block toc-block is-hidden" id="tocBlock" aria-labelledby="tocLabel">
+      <h2 class="block-label" id="tocLabel">▶ このページの目次</h2>
+      <div id="tocList" class="toc-list"></div>
+    </nav>
+
     <div id="rateToggle" class="mode-toggle rate-toggle-shared is-hidden"></div>
 
     <div class="article-block" id="evTableBlock">
@@ -84,7 +94,7 @@
       <p class="hint-text" id="evTableNote"></p>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="checkerBlock">
       <h2 class="block-label">▶ 狙い目チェッカー</h2>
       <div class="checker-card">
         <div id="modeToggle" class="mode-toggle"></div>
@@ -113,12 +123,12 @@
       </div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="summaryBlock">
       <h2 class="block-label">▶ 狙い目早見表</h2>
       <table id="summaryGrid" class="summary-grid"><tr><td><span class="s-label">基本方針</span><span class="s-value">設定狙い主体</span></td><td><span class="s-label">天井</span><span class="s-value">非搭載</span></td></tr><tr><td><span class="s-label">いせかる目確率</span><span class="s-value">設1:1/107.6〜設6:1/89.2</span></td><td><span class="s-label">機械割</span><span class="s-value">設1:97.9%〜設6:109.0%</span></td></tr></table>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="infoBlock">
       <h2 class="block-label">▶ 基本情報</h2>
       <table class="info-table">
         <tbody id="infoTableBody"><tr><th>機械割（設定1）</th><td>97.9%（完全攻略99.0%）</td></tr><tr><th>機械割（設定2）</th><td>99.9%（完全攻略101.1%）</td></tr><tr><th>機械割（設定5）</th><td>104.4%（完全攻略105.7%）</td></tr><tr><th>機械割（設定6）</th><td>109.0%（完全攻略110.6%）</td></tr><tr><th>設定段階</th><td>4段階（設定1・2・5・6）</td></tr><tr><th>天井</th><td>非搭載</td></tr><tr><th>いせかる目（突BT）確率（設定1）</th><td>1/107.6</td></tr><tr><th>いせかる目（突BT）確率（設定6）</th><td>1/89.2</td></tr><tr><th>ボーナス初当り確率（設定1）</th><td>1/197.6</td></tr><tr><th>BT中ボーナス期待度</th><td>約50%以上</td></tr><tr><th>ボーナス純増</th><td>約3.0枚/G（目安）</td></tr></tbody>
@@ -130,7 +140,7 @@
       <div id="articleSections"><div class="article-item" data-section="天井・恩恵"><h3 class="article-title">天井・恩恵</h3><p class="article-body"><strong>天井は非搭載</strong>です。ゲーム数天井による狙い目はありません。</p><p class="article-body">通常時の初当たりは「いせかる目」成立によるボーナストリガー（BT）突入（突BT）がメイン契機です。</p><p class="article-body">BT中は毎ゲームボーナス抽選が行われ、ボーナス期待度は<strong>約50%以上</strong>です。BTはボーナス当選または転落まで継続し、判定が発生した際は約20%でボーナス当選・約80%でBT終了（通常ステージへ転落）となります。</p><p class="article-body"><strong>すべてのボーナス当選後は必ずBTへ移行します</strong>。BIGはBAR揃い・赤7揃い・青7揃いの3種類があり、いずれも消化後はBTへ移行します。</p><p class="article-body">BTには「いせかるチャンス」「うわのせチャンス」「えくすとらチャンス」の3つの名称があります。</p></div><div class="article-item" data-section="基本スペック"><h3 class="article-title">基本スペック</h3><p class="article-body"><strong>機種名</strong>：A-SLOT+ 異世界かるてっとBT</p><p class="article-body"><strong>メーカー</strong>：サミー</p><p class="article-body"><strong>タイプ</strong>：スマスロBT（ボーナストリガー）</p><p class="article-body"><strong>機械割</strong>：設1：97.9% / 設2：99.9% / 設5：104.4% / 設6：109.0%（完全攻略時それぞれ+1〜1.6%）</p><p class="article-body"><strong>設定段階</strong>：4段階（設定1・2・5・6）</p><p class="article-body"><strong>いせかる目（BT当選）確率</strong>：設1：1/107.6 / 設2：1/106.2 / 設5：1/97.1 / 設6：1/89.2</p><p class="article-body"><strong>ボーナス初当り確率</strong>：設定1：1/197.6</p><p class="article-body"><strong>チェリー確率</strong>：設1・2：1/179.1 / 設5：1/176.6 / 設6：1/174.3（高設定ほど優遇）</p><p class="article-body"><strong>特殊15枚役確率</strong>：設1：1/21845 / 設2：1/2048 / 設5：1/1024 / 設6：1/512（特大の設定差！設2で約10倍、設6で約43倍発生）</p><p class="article-body"><strong>導入日</strong>：2026年4月6日</p><p class="article-body">コンプリート機能搭載（差枚最大マイナスを基点に1日19,000枚で打ち止め）</p></div><div class="article-item" data-section="当サイトの狙い目"><h3 class="article-title">当サイトの狙い目</h3><p class="article-body">本機は<strong>天井非搭載</strong>のため、ゲーム数による狙い目はありません。設定狙い専用の機種です。</p><p class="article-body">機械割は設定1：97.9%（完全攻略99.0%）／設定6：109.0%（完全攻略110.6%）と<strong>4段階設定（1・2・5・6）</strong>で構成され、設定6まで掴めれば高い期待値が見込めます。BT初当たり（いせかる目）の確率は設1：1/107.6 → 設6：1/89.2と、約1.2倍の設定差があります。</p></div><div class="article-item" data-section="朝一・リセット情報"><h3 class="article-title">朝一・リセット情報</h3><p class="article-body">天井非搭載のため、朝一はリセット狙いとしての価値はなく、設定変更後の天井短縮恩恵もありません。</p><p class="article-body">朝一の判断材料は前日の高設定示唆履歴とホールの設定運用傾向です。前日に高設定示唆（虹トロフィー・キリン柄トロフィー・終了画面の高設定示唆など）が出ていた台は据え置きを期待して継続調査する価値があります。</p><p class="article-body">リセット狙いではなく、データ機の挙動と打ち感（BT初当たりペースが設定1の1/107.6を上回っているか）を見ながら設定を見極めて長時間粘る立ち回りが基本になります。</p></div><div class="article-item" data-section="狙い目の根拠"><h3 class="article-title">狙い目の根拠</h3><p class="article-body">天井非搭載のため、ゲーム数による天井狙いは不可。<strong>設定狙い主体</strong>の機種です。</p><p class="article-body">小役ごとの「いせかる目」重複率（設定1）はベル3.3% / スイカ8.9% / チェリー28.7%で、チェリーからはBIGとの重複も10.4%あります（スイカのトータルは9.1%）。レア役を引けているのに「いせかる目」が続かない場合は、その時点の引きの偏りとして見てください。</p><p class="article-body">BT初当たり（いせかる目）確率は設定1で1/107.6、設定6で1/89.2と約1.2倍の設定差。さらに<strong>ボーナス中ハズレ目（特殊15枚役）は設1：1/21845 → 設6：1/512</strong>と約43倍もの差があり、これが最大の設定判別ポイントです。</p><p class="article-body">サミー製BT機種としては設定6の機械割109.0%（完全攻略110.6%）は標準的な水準です。</p></div><div class="article-item" data-section="ヤメ時の判断"><h3 class="article-title">ヤメ時の判断</h3><p class="article-body">天井非搭載のため、G数管理ではなくBT終了時・ボーナス終了時をやめ時の基準にします。BTはボーナス当選または転落までが1セットで、判定発生時は約80%でBT終了（通常ステージへ転落）となります。</p><p class="article-body">BT・ボーナス終了後は設定示唆演出（サミートロフィー等）を必ず確認してからヤメてください。高設定示唆が継続する場合は粘る価値があります。特別なゾーンや引き戻し特典はないため、示唆がなければ即ヤメでOKです。</p><p class="article-body">BT間のゲーム数や、ボーナス中の特殊15枚役（ハズレ目）の出現回数を記録しておくと設定推測の精度が上がります。複数回のBT当選データから設定を見極めて、低設定濃厚と判断した時点で離席を判断しましょう。</p></div><div class="article-item" data-section="立ち回りのコツ"><h3 class="article-title">立ち回りのコツ</h3><p class="article-body">設定狙いがメインの機種です。高設定が入りやすいホールでの高設定確定演出を狙いましょう。BT初当たり確率に大きな設定差があるため、複数回当選後に高設定判断ができれば粘る価値があります。</p><p class="article-body">天井ハイエナは期待値が低い機種のため、設定狙い以外での着席は基本的には推奨しません。</p></div><div class="article-item" data-section="設定示唆まとめ"><h3 class="article-title">設定示唆まとめ</h3><div class="settei-legend"><span class="settei-legend-item"><span class="settei-legend-badge settei-weak">弱</span>弱示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-mid">中</span>中示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-strong">強</span>強示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-ok">確</span>高設定確定/有力</span></div><table class="settei-table"><tr><th>要素</th><th>示唆</th></tr><tr><td>ボーナス終了画面：サミートロフィー（銅）</td><td>設定2以上濃厚</td></tr><tr><td>ボーナス終了画面：サミートロフィー（キリン柄）</td><td>設定5以上濃厚</td></tr><tr><td>ボーナス終了画面：サミートロフィー（虹）</td><td>設定6濃厚</td></tr><tr><td>ボーナス中ハズレ目（リールフラッシュなし15枚役）</td><td>設1:1/21845→設2:1/2048→設5:1/1024→設6:1/512（特大の設定差）</td></tr><tr><td>BT中特殊7枚役</td><td>設定2以上で出現頻度が上昇（設定差あり）</td></tr><tr><td>その他演出（詳細）</td><td>順次解析中 — 判明次第更新</td></tr></table></div></div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="pochipochiBlock">
       <h2 class="block-label">▶ 小役カウンター</h2>
       <a id="settingToolLink" class="btn-show-all btn-show-all--center is-disabled" aria-disabled="true" title="設定差のあるカウント対象小役が未判明のため非対応">小役カウンター ポチポチくん（設定差のあるカウント対象小役が未判明のため非対応）</a>
     </div>
@@ -288,11 +298,11 @@ function resolveMachineSlug() {
     }
   }
 
-  // ★新台経路(page-decision/v1)はページ全体の断り書きを出さない★
+  // ★新台経路(page-decision/*)はページ全体の断り書きを出さない★
   //   （2026-08-04・運営者判断。未確認の項目は、その項目の場所に「未確認」と
   //     書いてあるので、ページ冒頭で繰り返す必要がない）
   //   旧preview（既存7機種）は従来どおりバナーを出す。
-  const _isAuto = machine.publication_policy === "page-decision/v1";
+  const _isAuto = (machine.publication_policy !== undefined);
   if (machine.status === "preview" || _isAuto) {
     if (!_isAuto) {
       const banner = document.getElementById("previewBanner");
@@ -323,7 +333,7 @@ function resolveMachineSlug() {
   // ポチポチくん対応状況（ポチポチくんに飛んでも機能しない機種は無効化して理由を表示）
   const pochipochiStatus = (function() {
     // 解析待ち（preview / 新台経路）
-    if (machine.status === "preview" || machine.publication_policy === "page-decision/v1") return { available: false, reason: "解析データ判明後に対応" };
+    if (machine.status === "preview" || (machine.publication_policy !== undefined)) return { available: false, reason: "解析データ判明後に対応" };
     // 小役による設定差が元々ない機種（ジャグラー系・ノーマル系・一部AT）
     const noSettingDiff = ['enen2','karakuri','kaguya','valvrave2','sf5','chibaryo2','tekken6','tokyo_ghoul','koukaku','biohazard','tensura','dumbbell','mhrise','sengoku_otome4','sao','bandori','hanma_baki','yorumungando','tolove_darkness','zenigata5','enen','madomagi_forte','burning_express','akudama','neoplanet','lupin_daikokaisha','zettai_shougeki4','babel','milliongod_kiseki','animal_dotch'];
     if (noSettingDiff.includes(slug)) return { available: false, reason: "小役による設定差なし" };
@@ -1072,6 +1082,45 @@ function resolveMachineSlug() {
   });
 
   renderSummaryGrid();
+
+  // ★目次表★（2026-08-31・運営者の要望・台帳#523）
+  //   ★飛び先が実際にある項目だけ並べる★（押しても飛べない行を出さない）。
+  //   ★節から自動で作る★＝記事の箱が増減しても、ここを直す必要はない。
+  //   ★期待値早見表は入れない★＝モードの切り替えで出たり消えたりするので、
+  //     一度だけ作る目次に載せると「押しても飛べない行」になり得る。
+  (function renderToc(){
+    const tocBlock = document.getElementById("tocBlock");
+    const tocList = document.getElementById("tocList");
+    if (!tocBlock || !tocList) return;
+    tocList.innerHTML = "";
+    const entries = [];
+    const addBlock = (id, label) => {
+      const el = document.getElementById(id);
+      if (!el || el.classList.contains("is-hidden")) return;
+      entries.push([id, label]);
+    };
+    addBlock("checkerBlock", "狙い目チェッカー");
+    addBlock("summaryBlock", "狙い目早見表");
+    addBlock("infoBlock", "基本情報");
+    document.querySelectorAll("#articleSections .article-item").forEach((el, i) => {
+      const title = (el.getAttribute("data-section") || "").trim();
+      if (!title) return;
+      const id = "sec" + (i + 1);
+      el.id = id;
+      entries.push([id, title]);
+    });
+    // ★飛んでも使えないポチポチくんは出さない★（無効化の判定は上の1か所だけ）
+    if (pochipochiStatus.available) addBlock("pochipochiBlock", "ポチポチくん");
+    if (entries.length < 2) return;
+    entries.forEach(([id, label]) => {
+      const a = document.createElement("a");
+      a.className = "toc-item";
+      a.href = "#" + id;
+      a.textContent = label;
+      tocList.appendChild(a);
+    });
+    tocBlock.classList.remove("is-hidden");
+  })();
 
   // 関連機種リンク（内部リンク強化・SEO/回遊向上）
   // 関連の判定：①同じ原作（original.search/title が一致） ②同じシリーズ系（名前のキーワード一致）

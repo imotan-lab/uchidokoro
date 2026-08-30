@@ -75,6 +75,16 @@
 
   <section class="article-section-wrap">
 
+    <!-- ★目次表★（2026-08-31・運営者の要望・台帳#523）
+         ページの上で「どこに何があるか」を一目で分かるようにする。
+         ★中身はJSが作る★＝飛び先（各項目のid）もJSが付けるので、
+         静的な行を先に置くと「押しても飛べないリンク」になる。
+         ★その機種に**ある**項目だけを並べる★（無い項目・使えない道具は出さない）。 -->
+    <nav class="article-block toc-block is-hidden" id="tocBlock" aria-labelledby="tocLabel">
+      <h2 class="block-label" id="tocLabel">▶ このページの目次</h2>
+      <div id="tocList" class="toc-list"></div>
+    </nav>
+
     <div id="rateToggle" class="mode-toggle rate-toggle-shared is-hidden"></div>
 
     <div class="article-block" id="evTableBlock">
@@ -84,7 +94,7 @@
       <p class="hint-text" id="evTableNote"></p>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="checkerBlock">
       <h2 class="block-label">▶ 狙い目チェッカー</h2>
       <div class="checker-card">
         <div id="modeToggle" class="mode-toggle"></div>
@@ -113,12 +123,12 @@
       </div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="summaryBlock">
       <h2 class="block-label">▶ 狙い目早見表</h2>
       <table id="summaryGrid" class="summary-grid"><tr><td><span class="s-label">天井</span><span class="s-value">777G+α（AT間）</span></td><td><span class="s-label">設定変更後天井</span><span class="s-value">500G+α</span></td></tr><tr><td><span class="s-label">純増</span><span class="s-value">約8.8枚/G</span></td><td><span class="s-label">機械割（設定6）</span><span class="s-value">114.2%</span></td></tr></table>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="infoBlock">
       <h2 class="block-label">▶ 基本情報</h2>
       <table class="info-table">
         <tbody id="infoTableBody"><tr><th>機械割（設定1）</th><td>97.7%</td></tr><tr><th>機械割（設定2）</th><td>99.0%</td></tr><tr><th>機械割（設定3）</th><td>未公開（調査中）</td></tr><tr><th>機械割（設定4）</th><td>104.2%</td></tr><tr><th>機械割（設定5）</th><td>107.9%</td></tr><tr><th>機械割（設定6）</th><td>114.2%</td></tr><tr><th>設定段階</th><td>6段階</td></tr><tr><th>天井</th><td>777G+α（AT間）</td></tr><tr><th>設定変更後天井</th><td>500G+α</td></tr><tr><th>純増</th><td>約8.8枚/G</td></tr><tr><th>メーカー</th><td>ヤマサ</td></tr><tr><th>タイプ</th><td>スマスロAT</td></tr><tr><th>導入日</th><td>2025年11月17日</td></tr></tbody>
@@ -130,7 +140,7 @@
       <div id="articleSections"><div class="article-item" data-section="天井・恩恵"><h3 class="article-title">天井・恩恵</h3><p class="article-body">天井はAT（ネオプラネットATRON）間で777G+α。天井到達でAT当選。</p><p class="article-body"><strong>設定変更（朝一リセット）後：天井が500G+αに短縮</strong>。前日の残りゲーム数が引き継がれないため、朝一の設定変更確認が狙い目の精度を高めます。</p><p class="article-body">AT中は純増約8.8枚/Gで一気に出玉を増やせます。AT継続にはバトル要素があり、高設定ほど有利。</p></div><div class="article-item" data-section="基本スペック"><h3 class="article-title">基本スペック</h3><p class="article-body"><strong>機種名</strong>：スマスロネオプラネット</p><p class="article-body"><strong>メーカー</strong>：ヤマサ</p><p class="article-body"><strong>タイプ</strong>：スマスロAT</p><p class="article-body"><strong>機械割</strong>：設1：97.7% / 設2：99.0% / 設3：未公開 / 設4：104.2% / 設5：107.9% / 設6：114.2%</p><p class="article-body"><strong>純増</strong>：約8.8枚/G</p><p class="article-body"><strong>導入日</strong>：2025年11月17日</p></div><div class="article-item" data-section="当サイトの狙い目"><h3 class="article-title">当サイトの狙い目</h3><p class="article-body">【5.6枚】520G〜が本線で、470G台から候補です。天井は777G+αなので600G以上なら強めに狙えます。</p><p class="article-body">【6.0枚】550G〜 / 【6.5枚】580G〜 / 【7.0枚】620G〜が基準です。交換条件が悪いほど深めに絞ってください。</p><p class="article-body">リセット後は天井が500G+αに短縮されるため、350G台から候補、400G以上で本線になります。</p></div><div class="article-item" data-section="朝一・リセット情報"><h3 class="article-title">朝一・リセット情報</h3><p class="article-body">リセット後の天井：500G+αに短縮されます（通常時は777G+α）。</p><p class="article-body">リセット時の狙い目：5.6枚なら350G〜候補・400G〜本線・450G以上で強めです。6.0枚は420G、6.5枚は440G、7.0枚は460Gが基準です。</p><p class="article-body">朝一リセットの確認が取れた台は300G台後半から狙えますが、根拠が弱い台は通常モードと混ぜず別管理してください。</p></div><div class="article-item" data-section="狙い目の根拠"><h3 class="article-title">狙い目の根拠</h3><p class="article-body"><strong>通常台（非リセット）の目安：等価520G〜 / 5.6枚530G〜 / 現金590G〜</strong>（基準。天井777G+α）</p><p class="article-body"><strong>設定変更台（朝一リセット）の目安：5.6枚で350G〜候補・400G〜本線・450G以上で強め</strong>（6.0枚420G / 6.5枚440G / 7.0枚460G基準・調査中のため目安値）</p><p class="article-body">ゾーン狙い：モードD・E移行時は100G以内の当選期待度が約90%。101G・301GにサブLCDタッチ示唆あり。</p><p class="article-body">ヤメ時：AT終了後は基本即ヤメOK。ただし<strong>101G目にサブ液晶をタッチ</strong>して示唆演出（モード・設定示唆）を確認してからやめましょう。301G目にも同様のタッチ示唆あり。</p><p class="article-body">スマスロネオプラネットはAT間777G+α天井（設定変更後500G+α短縮）を搭載します。等価狙い目は520G〜。純増約8.8枚/Gという現行スマスロ最高クラスの出玉性能を誇り、天井到達時の一撃出玉への期待値が高いです。</p><p class="article-body">機械割97.7%（設定1）で天井狙い向きの機種です。設定変更後は500G+αに短縮されるため、5.6枚なら350G〜候補・400G〜本線が当サイトの狙い目です。リセット確認できる台は積極的に狙えます。ゾーン（モードD・E）に移行していれば100G以内での当選期待度が約90%と高く、短期で結果が出やすいです。</p></div><div class="article-item" data-section="ヤメ時の判断"><h3 class="article-title">ヤメ時の判断</h3><p class="article-body">AT終了後は基本的に即ヤメでOKです。</p><p class="article-body"><strong>101G目</strong>にサブ液晶（右上のサブモニター）をタッチして示唆演出を確認。モードD・E示唆が出たら継続候補。</p><p class="article-body"><strong>301G目</strong>にも同様のタッチ示唆あり。サブ液晶の星座表示が「リノ座」なら設定4以上濃厚、「ケロット＆ケロルン座」なら設定6濃厚。</p><p class="article-body">モードD・E示唆が出た場合は100G以内の当選期待度が高いため続行推奨です。特に示唆がなければAT終了後即ヤメでOKです。</p></div><div class="article-item" data-section="立ち回りのコツ"><h3 class="article-title">立ち回りのコツ</h3><p class="article-body">101G目・301G目のサブ液晶タッチ示唆がこの機種の重要な立ち回りポイントです。ヤメる前に必ずタッチして示唆を確認してください。朝一はリセット確認（データカウンターのゲーム数が0スタートかどうか）を優先し、設定変更台なら500G+α天井の350G〜から積極的に狙いましょう。</p></div><div class="article-item" data-section="設定示唆まとめ"><h3 class="article-title">設定示唆まとめ</h3><div class="settei-legend"><span class="settei-legend-item"><span class="settei-legend-badge settei-weak">弱</span>弱示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-mid">中</span>中示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-strong">強</span>強示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-ok">確</span>高設定確定/有力</span></div><table class="settei-table"><tr><th>要素</th><th>示唆</th></tr><tr><td>ボーナス終了画面：宇宙飛行士</td><td>設定2以上濃厚</td></tr><tr><td>ボーナス終了画面：ウィンちゃん</td><td>設定6濃厚</td></tr><tr><td>サブ液晶タッチ（101G・301G）：リノ座</td><td>設定4以上濃厚</td></tr><tr><td>サブ液晶タッチ（101G・301G）：ケロット＆ケロルン座</td><td>設定6濃厚</td></tr><tr><td>ケロットトロフィー：銅</td><td>設定2以上濃厚</td></tr><tr><td>ケロットトロフィー：金</td><td>設定4以上濃厚</td></tr><tr><td>ケロットトロフィー：虹</td><td>設定6濃厚</td></tr><tr><td>獲得枚数表示：456枚</td><td>設定4以上濃厚</td></tr><tr><td>獲得枚数表示：666枚</td><td>設定6濃厚</td></tr></table></div><div class="article-item" data-section="噂・未確定情報"><h3 class="article-title">噂・未確定情報</h3><div class="rumor-box"><p class="rumor-label">⚠ 噂・未確定情報</p><p class="rumor-body">※以下は公式未発表・未確認の噂情報です。実際の挙動と異なる可能性があります。</p><p class="rumor-body">一部では「設定3が実質存在しない（5段階設定）」との声もありますが、メーカー公式・ホール告知では6段階設定と表記されています。設定3の機械割データは2026年4月時点で未公開のため、判明次第更新予定です。</p><p class="rumor-body">また「モードEはほぼ高設定専用で、低設定では移行しにくい」との実戦データが蓄積されつつありますが、公式解析ではまだ確認されていません。</p></div></div></div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="pochipochiBlock">
       <h2 class="block-label">▶ 小役カウンター</h2>
       <a id="settingToolLink" class="btn-show-all btn-show-all--center is-disabled" aria-disabled="true" title="小役による設定差なし">小役カウンター ポチポチくん（小役による設定差なし）</a>
     </div>
@@ -288,11 +298,11 @@ function resolveMachineSlug() {
     }
   }
 
-  // ★新台経路(page-decision/v1)はページ全体の断り書きを出さない★
+  // ★新台経路(page-decision/*)はページ全体の断り書きを出さない★
   //   （2026-08-04・運営者判断。未確認の項目は、その項目の場所に「未確認」と
   //     書いてあるので、ページ冒頭で繰り返す必要がない）
   //   旧preview（既存7機種）は従来どおりバナーを出す。
-  const _isAuto = machine.publication_policy === "page-decision/v1";
+  const _isAuto = (machine.publication_policy !== undefined);
   if (machine.status === "preview" || _isAuto) {
     if (!_isAuto) {
       const banner = document.getElementById("previewBanner");
@@ -323,7 +333,7 @@ function resolveMachineSlug() {
   // ポチポチくん対応状況（ポチポチくんに飛んでも機能しない機種は無効化して理由を表示）
   const pochipochiStatus = (function() {
     // 解析待ち（preview / 新台経路）
-    if (machine.status === "preview" || machine.publication_policy === "page-decision/v1") return { available: false, reason: "解析データ判明後に対応" };
+    if (machine.status === "preview" || (machine.publication_policy !== undefined)) return { available: false, reason: "解析データ判明後に対応" };
     // 小役による設定差が元々ない機種（ジャグラー系・ノーマル系・一部AT）
     const noSettingDiff = ['enen2','karakuri','kaguya','valvrave2','sf5','chibaryo2','tekken6','tokyo_ghoul','koukaku','biohazard','tensura','dumbbell','mhrise','sengoku_otome4','sao','bandori','hanma_baki','yorumungando','tolove_darkness','zenigata5','enen','madomagi_forte','burning_express','akudama','neoplanet','lupin_daikokaisha','zettai_shougeki4','babel','milliongod_kiseki','animal_dotch'];
     if (noSettingDiff.includes(slug)) return { available: false, reason: "小役による設定差なし" };
@@ -1072,6 +1082,45 @@ function resolveMachineSlug() {
   });
 
   renderSummaryGrid();
+
+  // ★目次表★（2026-08-31・運営者の要望・台帳#523）
+  //   ★飛び先が実際にある項目だけ並べる★（押しても飛べない行を出さない）。
+  //   ★節から自動で作る★＝記事の箱が増減しても、ここを直す必要はない。
+  //   ★期待値早見表は入れない★＝モードの切り替えで出たり消えたりするので、
+  //     一度だけ作る目次に載せると「押しても飛べない行」になり得る。
+  (function renderToc(){
+    const tocBlock = document.getElementById("tocBlock");
+    const tocList = document.getElementById("tocList");
+    if (!tocBlock || !tocList) return;
+    tocList.innerHTML = "";
+    const entries = [];
+    const addBlock = (id, label) => {
+      const el = document.getElementById(id);
+      if (!el || el.classList.contains("is-hidden")) return;
+      entries.push([id, label]);
+    };
+    addBlock("checkerBlock", "狙い目チェッカー");
+    addBlock("summaryBlock", "狙い目早見表");
+    addBlock("infoBlock", "基本情報");
+    document.querySelectorAll("#articleSections .article-item").forEach((el, i) => {
+      const title = (el.getAttribute("data-section") || "").trim();
+      if (!title) return;
+      const id = "sec" + (i + 1);
+      el.id = id;
+      entries.push([id, title]);
+    });
+    // ★飛んでも使えないポチポチくんは出さない★（無効化の判定は上の1か所だけ）
+    if (pochipochiStatus.available) addBlock("pochipochiBlock", "ポチポチくん");
+    if (entries.length < 2) return;
+    entries.forEach(([id, label]) => {
+      const a = document.createElement("a");
+      a.className = "toc-item";
+      a.href = "#" + id;
+      a.textContent = label;
+      tocList.appendChild(a);
+    });
+    tocBlock.classList.remove("is-hidden");
+  })();
 
   // 関連機種リンク（内部リンク強化・SEO/回遊向上）
   // 関連の判定：①同じ原作（original.search/title が一致） ②同じシリーズ系（名前のキーワード一致）

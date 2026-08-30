@@ -75,6 +75,16 @@
 
   <section class="article-section-wrap">
 
+    <!-- ★目次表★（2026-08-31・運営者の要望・台帳#523）
+         ページの上で「どこに何があるか」を一目で分かるようにする。
+         ★中身はJSが作る★＝飛び先（各項目のid）もJSが付けるので、
+         静的な行を先に置くと「押しても飛べないリンク」になる。
+         ★その機種に**ある**項目だけを並べる★（無い項目・使えない道具は出さない）。 -->
+    <nav class="article-block toc-block is-hidden" id="tocBlock" aria-labelledby="tocLabel">
+      <h2 class="block-label" id="tocLabel">▶ このページの目次</h2>
+      <div id="tocList" class="toc-list"></div>
+    </nav>
+
     <div id="rateToggle" class="mode-toggle rate-toggle-shared is-hidden"></div>
 
     <div class="article-block" id="evTableBlock">
@@ -84,7 +94,7 @@
       <p class="hint-text" id="evTableNote"></p>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="checkerBlock">
       <h2 class="block-label">▶ 狙い目チェッカー</h2>
       <div class="checker-card">
         <div id="modeToggle" class="mode-toggle"></div>
@@ -113,12 +123,12 @@
       </div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="summaryBlock">
       <h2 class="block-label">▶ 狙い目早見表</h2>
       <table id="summaryGrid" class="summary-grid"><tr><td><span class="s-label">天井</span><span class="s-value">CZ間400G&lt;br&gt;CZ7スルー（8回目AT）</span></td><td><span class="s-label">等価狙い目</span><span class="s-value">CZ間270G〜</span></td></tr><tr><td><span class="s-label">スルー狙い目</span><span class="s-value">CZスルー4回〜</span></td><td><span class="s-label">ヤメ時</span><span class="s-value">AT終了後、CZ前兆なし確認でヤメ</span></td></tr><tr><td><span class="s-label">確認ポイント</span><span class="s-value">CZスルー回数&lt;br&gt;データカウンター&lt;br&gt;設定示唆演出</span></td><td></td></tr></table>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="infoBlock">
       <h2 class="block-label">▶ 基本情報</h2>
       <table class="info-table">
         <tbody id="infoTableBody"><tr><th>機械割（設定1）</th><td>97.8%</td></tr><tr><th>天井（CZ間）</th><td>400G</td></tr><tr><th>天井（スルー）</th><td>CZ7スルー（8回目のCZでAT当選）</td></tr><tr><th>天井恩恵（CZ間）</th><td>CZ当選</td></tr><tr><th>天井恩恵（スルー）</th><td>AT当選</td></tr><tr><th>設定</th><td>6段階（1〜6）</td></tr><tr><th>純増</th><td>約2.5枚/G or 5.0枚/G</td></tr><tr><th>コイン持ち</th><td>約35.5G/50枚（設定1）</td></tr><tr><th>ヤメ時</th><td>AT終了後、CZ前兆なし確認でヤメ</td></tr></tbody>
@@ -130,7 +140,7 @@
       <div id="articleSections"><div class="article-item" data-section="天井・恩恵"><h3 class="article-title">天井・恩恵</h3><p class="article-body">CZ間天井は400Gで到達し、CZ当選の恩恵があります。CZからATに繋げられるかは抽選次第ですが、天井CZは若干優遇されている可能性があります。</p><p class="article-body">もう1つの天井として、CZ7スルー天井があります。CZに7回当選してすべてスルーした場合、8回目のCZでAT当選が確定します。スルー回数が溜まっている台は非常に狙い目です。</p><p class="article-body">2つの天井を搭載しているため、ゲーム数とスルー回数の両方を確認してから着席するのが大切です。どちらか一方でも条件を満たしていれば狙い目になります。</p></div><div class="article-item" data-section="基本スペック"><h3 class="article-title">基本スペック</h3><p class="article-body"><strong>機種名</strong>：パチスロ ケンガンアシュラ</p><p class="article-body"><strong>タイプ</strong>：スマスロAT</p><p class="article-body"><strong>機械割（設定1）</strong>：97.8%</p><p class="article-body"><strong>天井（CZ間）</strong>：400G</p><p class="article-body"><strong>天井（スルー）</strong>：CZ7スルー（8回目のCZでAT当選）</p><p class="article-body"><strong>天井恩恵（CZ間）</strong>：CZ当選</p><p class="article-body"><strong>天井恩恵（スルー）</strong>：AT当選</p><p class="article-body"><strong>設定</strong>：6段階（1〜6）</p><p class="article-body"><strong>純増</strong>：約2.5枚/G or 5.0枚/G</p><p class="article-body"><strong>コイン持ち</strong>：約35.5G/50枚（設定1）</p></div><div class="article-item" data-section="当サイトの狙い目"><h3 class="article-title">当サイトの狙い目</h3><p class="article-body">CZ間のゲーム数狙いは等価で270G〜が基準です。</p><p class="article-body">スルー狙いはCZスルー4回以上が目安です。スルー回数が進むほどAT確定（8回目のCZ）までの残り回数が減るため、期待値は高くなります。</p><p class="article-body">ゲーム数とスルー回数を組み合わせて判断できると、さらに効率が上がります。たとえばスルー4回で200Gハマリの台なら、単独では微妙でも合わせ技で狙い目になることがあります。</p></div><div class="article-item" data-section="朝一・リセット情報"><h3 class="article-title">朝一・リセット情報</h3><p class="article-body">設定変更後のスルー回数リセットの有無は要確認です。リセットされる場合、スルー狙いは据え置き台でのみ有効になります。</p><p class="article-body">朝一はCZ間のゲーム数が0からスタートするため、基本的にはCZ間270G〜を基準に立ち回るのが無難です。</p><p class="article-body">前日のデータカウンターでスルー回数を推測できる場合は、据え置き狙いも有効です。</p></div><div class="article-item" data-section="狙い目の根拠"><h3 class="article-title">狙い目の根拠</h3><p class="article-body">ケンガンアシュラはCZ間400Gという浅い天井とCZ7スルー（8回目のCZでAT確定）の2種類の天井を搭載します。等価狙い目はCZ間270G〜。スルー狙いは4スルーなら50G〜、5スルー以上は0Gからが目安です。</p><p class="article-body">機械割は設定1で97.8%と低めで、天井狙い向きの機種です。CZ間とスルー回数の組み合わせ狙いができるため、合わせ技で浅い条件でも狙える場面があります。</p></div><div class="article-item" data-section="ヤメ時の判断"><h3 class="article-title">ヤメ時の判断</h3><p class="article-body">AT終了後、CZの前兆がないことを確認してヤメるのが基本です。</p><p class="article-body">スルー回数が溜まっている状態（3回以上）でATが終了した場合は、据え置きならスルー回数が継続しているため続行の価値があります。</p><p class="article-body">設定示唆が出る演出があれば必ず確認してからヤメましょう。</p><p class="article-body">設定示唆演出（AT終了画面のキャラクター）を必ず確認してからヤメましょう。高設定示唆が複数重なった場合は設定狙いへの切り替えを検討してください。</p></div><div class="article-item" data-section="立ち回りのコツ"><h3 class="article-title">立ち回りのコツ</h3><p class="article-body">6段階設定（1〜6）です。設定1の機械割が97.8%と低めなので、天井狙いの価値は十分にあります。</p><p class="article-body">純増は通常時約2.5枚/G、上位AT中は約5.0枚/Gと差があります。上位ATに突入できるかで出玉に大きな差が出ます。</p><p class="article-body">CZ間天井が400Gと浅いため、回転率の高いホールでは拾いやすい機種です。データカウンターをこまめにチェックしましょう。</p><p class="article-body">CZ間ゲーム数はデータカウンターで確認、スルー回数は台のサブ液晶またはホールのデータ機から調べましょう。2つの天井を同時に確認してから着席するのが必須です。天井が400Gと浅いため、稼働率の高いホールではすでに台に座っている人が多く、タイミング次第では見つけにくいこともあります。閉店付近の空き台狙いが有効です。</p></div><div class="article-item" data-section="設定示唆まとめ"><h3 class="article-title">設定示唆まとめ</h3><div class="settei-legend"><span class="settei-legend-item"><span class="settei-legend-badge settei-weak">弱</span>弱示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-mid">中</span>中示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-strong">強</span>強示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-ok">確</span>高設定確定/有力</span></div><p class="settei-sub-label">AT終了画面</p><table class="settei-table"><tr><th>画面</th><th>示唆</th></tr><tr><td>デフォルト画面</td><td><span class="settei-badge settei-hint">基本パターン</span></td></tr><tr><td>十鬼蛇王馬</td><td><span class="settei-badge settei-weak">高設定示唆弱</span></td></tr><tr><td>滅堂の牙集合</td><td><span class="settei-badge settei-mid">高設定示唆中</span></td></tr><tr><td>王馬＆二虎</td><td><span class="settei-badge settei-strong">高設定示唆強</span></td></tr><tr><td>全キャラ集合</td><td><span class="settei-badge settei-ok">設定4以上期待大</span></td></tr></table><p class="settei-note">※解析待ちのため暫定情報です。確定次第更新します。</p></div></div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="pochipochiBlock">
       <h2 class="block-label">▶ 小役カウンター</h2>
       <a id="settingToolLink" class="btn-show-all btn-show-all--center is-disabled" aria-disabled="true" title="設定差のあるカウント対象小役が未判明のため非対応">小役カウンター ポチポチくん（設定差のあるカウント対象小役が未判明のため非対応）</a>
     </div>
@@ -288,11 +298,11 @@ function resolveMachineSlug() {
     }
   }
 
-  // ★新台経路(page-decision/v1)はページ全体の断り書きを出さない★
+  // ★新台経路(page-decision/*)はページ全体の断り書きを出さない★
   //   （2026-08-04・運営者判断。未確認の項目は、その項目の場所に「未確認」と
   //     書いてあるので、ページ冒頭で繰り返す必要がない）
   //   旧preview（既存7機種）は従来どおりバナーを出す。
-  const _isAuto = machine.publication_policy === "page-decision/v1";
+  const _isAuto = (machine.publication_policy !== undefined);
   if (machine.status === "preview" || _isAuto) {
     if (!_isAuto) {
       const banner = document.getElementById("previewBanner");
@@ -323,7 +333,7 @@ function resolveMachineSlug() {
   // ポチポチくん対応状況（ポチポチくんに飛んでも機能しない機種は無効化して理由を表示）
   const pochipochiStatus = (function() {
     // 解析待ち（preview / 新台経路）
-    if (machine.status === "preview" || machine.publication_policy === "page-decision/v1") return { available: false, reason: "解析データ判明後に対応" };
+    if (machine.status === "preview" || (machine.publication_policy !== undefined)) return { available: false, reason: "解析データ判明後に対応" };
     // 小役による設定差が元々ない機種（ジャグラー系・ノーマル系・一部AT）
     const noSettingDiff = ['enen2','karakuri','kaguya','valvrave2','sf5','chibaryo2','tekken6','tokyo_ghoul','koukaku','biohazard','tensura','dumbbell','mhrise','sengoku_otome4','sao','bandori','hanma_baki','yorumungando','tolove_darkness','zenigata5','enen','madomagi_forte','burning_express','akudama','neoplanet','lupin_daikokaisha','zettai_shougeki4','babel','milliongod_kiseki','animal_dotch'];
     if (noSettingDiff.includes(slug)) return { available: false, reason: "小役による設定差なし" };
@@ -1072,6 +1082,45 @@ function resolveMachineSlug() {
   });
 
   renderSummaryGrid();
+
+  // ★目次表★（2026-08-31・運営者の要望・台帳#523）
+  //   ★飛び先が実際にある項目だけ並べる★（押しても飛べない行を出さない）。
+  //   ★節から自動で作る★＝記事の箱が増減しても、ここを直す必要はない。
+  //   ★期待値早見表は入れない★＝モードの切り替えで出たり消えたりするので、
+  //     一度だけ作る目次に載せると「押しても飛べない行」になり得る。
+  (function renderToc(){
+    const tocBlock = document.getElementById("tocBlock");
+    const tocList = document.getElementById("tocList");
+    if (!tocBlock || !tocList) return;
+    tocList.innerHTML = "";
+    const entries = [];
+    const addBlock = (id, label) => {
+      const el = document.getElementById(id);
+      if (!el || el.classList.contains("is-hidden")) return;
+      entries.push([id, label]);
+    };
+    addBlock("checkerBlock", "狙い目チェッカー");
+    addBlock("summaryBlock", "狙い目早見表");
+    addBlock("infoBlock", "基本情報");
+    document.querySelectorAll("#articleSections .article-item").forEach((el, i) => {
+      const title = (el.getAttribute("data-section") || "").trim();
+      if (!title) return;
+      const id = "sec" + (i + 1);
+      el.id = id;
+      entries.push([id, title]);
+    });
+    // ★飛んでも使えないポチポチくんは出さない★（無効化の判定は上の1か所だけ）
+    if (pochipochiStatus.available) addBlock("pochipochiBlock", "ポチポチくん");
+    if (entries.length < 2) return;
+    entries.forEach(([id, label]) => {
+      const a = document.createElement("a");
+      a.className = "toc-item";
+      a.href = "#" + id;
+      a.textContent = label;
+      tocList.appendChild(a);
+    });
+    tocBlock.classList.remove("is-hidden");
+  })();
 
   // 関連機種リンク（内部リンク強化・SEO/回遊向上）
   // 関連の判定：①同じ原作（original.search/title が一致） ②同じシリーズ系（名前のキーワード一致）

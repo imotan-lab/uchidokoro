@@ -75,6 +75,16 @@
 
   <section class="article-section-wrap">
 
+    <!-- ★目次表★（2026-08-31・運営者の要望・台帳#523）
+         ページの上で「どこに何があるか」を一目で分かるようにする。
+         ★中身はJSが作る★＝飛び先（各項目のid）もJSが付けるので、
+         静的な行を先に置くと「押しても飛べないリンク」になる。
+         ★その機種に**ある**項目だけを並べる★（無い項目・使えない道具は出さない）。 -->
+    <nav class="article-block toc-block is-hidden" id="tocBlock" aria-labelledby="tocLabel">
+      <h2 class="block-label" id="tocLabel">▶ このページの目次</h2>
+      <div id="tocList" class="toc-list"></div>
+    </nav>
+
     <div id="rateToggle" class="mode-toggle rate-toggle-shared is-hidden"></div>
 
     <div class="article-block" id="evTableBlock">
@@ -84,7 +94,7 @@
       <p class="hint-text" id="evTableNote"></p>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="checkerBlock">
       <h2 class="block-label">▶ 狙い目チェッカー</h2>
       <div class="checker-card">
         <div id="modeToggle" class="mode-toggle"></div>
@@ -113,12 +123,12 @@
       </div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="summaryBlock">
       <h2 class="block-label">▶ 狙い目早見表</h2>
       <table id="summaryGrid" class="summary-grid"><tr><td><span class="s-label">天井</span><span class="s-value">999G+α</span></td><td><span class="s-label">狙い目</span><span class="s-value">等価580G〜</span></td></tr><tr><td><span class="s-label">ヤメ時</span><span class="s-value">ボーナス後193G</span></td><td><span class="s-label">見るポイント</span><span class="s-value">共通俵  花札</span></td></tr></table>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="infoBlock">
       <h2 class="block-label">▶ 基本情報</h2>
       <table class="info-table">
         <tbody id="infoTableBody"><tr><th>天井</th><td>999G+α</td></tr><tr><th>天国フォロー</th><td>ボーナス後193Gまで必須</td></tr><tr><th>狙い目（等価）</th><td>580G〜</td></tr><tr><th>機械割（設定1）</th><td>97.8%</td></tr><tr><th>機械割（設定6）</th><td>112.0%</td></tr><tr><th>AT純増</th><td>約7.1枚/G</td></tr></tbody>
@@ -130,7 +140,7 @@
       <div id="articleSections"><div class="article-item" data-section="天井・恩恵"><h3 class="article-title">天井・恩恵</h3><p class="article-body">天井：999G+α（ボーナス間）</p><p class="article-body">恩恵：ボーナス確定</p><p class="article-body">リセット短縮：なし（天井リセットのみ）</p><p class="article-body">※モード別天井あり（通常B:465G、天国:193G）。ボーナス後193Gまで天国フォロー必須</p></div><div class="article-item" data-section="基本スペック"><h3 class="article-title">基本スペック</h3><p class="article-body"><strong>機種名</strong>：L吉宗</p><p class="article-body"><strong>メーカー</strong>：サボハニ（大都技研グループ）</p><p class="article-body"><strong>タイプ</strong>：スマスロAT（差枚数管理型）</p><p class="article-body"><strong>ボーナス間天井</strong>：<strong>999G+α</strong>でボーナス確定</p><p class="article-body"><strong>モード別天井</strong>：通常B 465G・天国モード 193G</p><p class="article-body"><strong>機械割</strong>：設1：<strong>97.8%</strong> / 設6：<strong>112.0%</strong></p><p class="article-body"><strong>設定段階</strong>：6段階</p><p class="article-body"><strong>AT純増</strong>：約<strong>7.1枚/G</strong>（現行スマスロ屈指の高純増）</p><p class="article-body"><strong>主要設定差</strong>：共通俵（設1：1/819.2 vs 設6：1/455.1）・花札枠色</p><p class="article-body">コンプリート機能搭載（差枚最大マイナスを基点に1日19,000枚で打ち止め）</p></div><div class="article-item" data-section="当サイトの狙い目"><h3 class="article-title">当サイトの狙い目</h3><p class="article-body">等価交換：<strong>580G〜</strong>から狙い目。5.6枚交換：<strong>590G〜</strong>・現金投資：<strong>650G〜</strong>が目安です。</p><p class="article-body">天井999G+αに対して580G〜が当サイトの狙い目です。AT純増は約<strong>7.1枚/G</strong>の高純増スペックです。機械割は<strong>97.8%</strong>（設定1）です。</p><p class="article-body">通常Bモード（465G天井）に滞在している台は実質的にもっと浅い段階で当たる可能性があり、過去のボーナス間隔が500G前後で連続している台は通常B濃厚として浅めから狙える場面もあります。</p></div><div class="article-item" data-section="朝一・リセット情報"><h3 class="article-title">朝一・リセット情報</h3><p class="article-body">本機はリセットによる天井短縮恩恵はありません。設定変更後も天井999G+α自体は変わらず、モード再抽選のみ行われます。</p><p class="article-body">朝一の判別は前日からの設定据え置き示唆・変更示唆の有無で判断します。ガックンチェック対象機種ではないため、共通俵確率の朝一挙動と花札枠色などの示唆をチェックすることになります。</p><p class="article-body">前日の最終G数が浅い台は朝一から580G〜のラインに乗せやすく、リセット短縮こそないものの素直に天井狙いラインで狙えます。</p></div><div class="article-item" data-section="狙い目の根拠"><h3 class="article-title">狙い目の根拠</h3><p class="article-body">等価なら580G〜が狙い目ラインです。</p><p class="article-body">吉宗の天井はボーナス間999G+αで、等価なら580G〜が当サイトの狙い目です。純増約7.1枚/Gと高純増ATのため、天井到達時のリターンが大きく、深い台ほど狙う価値が高くなります。機械割（設定1）は97.8%と比較的高水準で、天井狙い向きの機種です。</p><p class="article-body">通常Bモード時は465G天井に短縮されるため、実際の入口はさらに浅くなる可能性があります。リセット短縮はありませんが、天国モードのボーナス後193G以内の当選確率が高く、この恩恵を逃さないことが収支向上の鍵になります。設定6機械割は112.0%と高水準で、共通俵の差が大きいため設定狙いとの相性も良好な機種です。</p></div><div class="article-item" data-section="ヤメ時の判断"><h3 class="article-title">ヤメ時の判断</h3><p class="article-body">ボーナス後は193Gまで天国フォローが必須です。193G以内に当たれば天国の可能性があるため続行してください。193G消化後にヤメ。</p><p class="article-body">純増7.1枚/Gと高純増のため、天国の1回でも取りこぼすと大きなロスになります。ボーナス後の天国フォローを徹底するだけで収支の安定度が大幅に上がります。共通俵やレア役からの内部抽選でモード昇格や直撃のチャンスもあるため、フォロー中に強小役を引いた場合は前兆を必ず最後まで確認することも大事です。天国フォローを徹底できる人とできない人で月単位の収支に大きな差がつく機種なので、規律ある立ち回りを心がけましょう。</p></div><div class="article-item" data-section="立ち回りのコツ"><h3 class="article-title">立ち回りのコツ</h3><p class="article-body">580G以上の深い台を優先して拾いましょう。ポチポチくんで共通俵確率を記録すると設定推測に使えます（設定1: 1/819.2 vs 設定6: 1/455.1の大差）。天国フォロー（ボーナス後193G）を必ず実施することが最重要の注意点で、これを怠ると取りこぼしが大きくなります。通常Bモードは465G天井に短縮されるため、データから過去のボーナス間隔を見て500G前後で当たりが連続している台は通常B濃厚として浅めから狙える場面もあります。純増約7.1枚/Gは現行スマスロ屈指の高純増で、999G+α天井に到達できれば大きな出玉が見込めるため、深い台ほど狙う価値が高くなります。リセット短縮は無いものの、朝一台でも天井999G+αが残っていれば等価580G〜のラインで素直に狙える点が魅力です。</p></div><div class="article-item" data-section="設定示唆まとめ"><h3 class="article-title">設定示唆まとめ</h3><div class="settei-legend"><span class="settei-legend-item"><span class="settei-legend-badge settei-weak">弱</span>弱示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-mid">中</span>中示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-strong">強</span>強示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-ok">確</span>高設定確定/有力</span></div><table class="settei-table"><tr><th>要素</th><th>示唆</th></tr><tr><td>花札 銅枠</td><td>設定2以上</td></tr><tr><td>花札 銀枠</td><td>設定3以上</td></tr><tr><td>花札 金枠</td><td>設定4以上</td></tr><tr><td>花札 ピンク枠</td><td>設定5以上</td></tr><tr><td>花札 虹枠</td><td>設定6濃厚</td></tr></table></div><div class="article-item" data-section="設定判別のポイント"><h3 class="article-title">設定判別のポイント</h3><p class="article-body">共通俵確率に大きな設定差あり。設定1で1/819.2、設定6で1/455.1。約1.8倍の差があります。</p><p class="article-body">AT初当たり確率は設定1で1/378.9、設定6で1/292.4。</p></div><div class="article-item" data-section="噂・未確定情報"><h3 class="article-title">噂・未確定情報</h3><div class="rumor-box"><p class="rumor-label">⚠ 噂・未確定情報</p><p class="rumor-body">※以下は公式未発表・未確認の情報です。実際の挙動と異なる可能性があります。</p><p class="rumor-body">共通俵確率の設定別詳細（設定1〜6）は一部が実戦値ベースの推定です。公式解析値が公開され次第更新します。</p></div></div></div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="pochipochiBlock">
       <h2 class="block-label">▶ 小役カウンター</h2>
       <a id="settingToolLink" href="setting.html" class="btn-show-all btn-show-all--center">小役カウンター ポチポチくん →</a>
     </div>
@@ -288,11 +298,11 @@ function resolveMachineSlug() {
     }
   }
 
-  // ★新台経路(page-decision/v1)はページ全体の断り書きを出さない★
+  // ★新台経路(page-decision/*)はページ全体の断り書きを出さない★
   //   （2026-08-04・運営者判断。未確認の項目は、その項目の場所に「未確認」と
   //     書いてあるので、ページ冒頭で繰り返す必要がない）
   //   旧preview（既存7機種）は従来どおりバナーを出す。
-  const _isAuto = machine.publication_policy === "page-decision/v1";
+  const _isAuto = (machine.publication_policy !== undefined);
   if (machine.status === "preview" || _isAuto) {
     if (!_isAuto) {
       const banner = document.getElementById("previewBanner");
@@ -323,7 +333,7 @@ function resolveMachineSlug() {
   // ポチポチくん対応状況（ポチポチくんに飛んでも機能しない機種は無効化して理由を表示）
   const pochipochiStatus = (function() {
     // 解析待ち（preview / 新台経路）
-    if (machine.status === "preview" || machine.publication_policy === "page-decision/v1") return { available: false, reason: "解析データ判明後に対応" };
+    if (machine.status === "preview" || (machine.publication_policy !== undefined)) return { available: false, reason: "解析データ判明後に対応" };
     // 小役による設定差が元々ない機種（ジャグラー系・ノーマル系・一部AT）
     const noSettingDiff = ['enen2','karakuri','kaguya','valvrave2','sf5','chibaryo2','tekken6','tokyo_ghoul','koukaku','biohazard','tensura','dumbbell','mhrise','sengoku_otome4','sao','bandori','hanma_baki','yorumungando','tolove_darkness','zenigata5','enen','madomagi_forte','burning_express','akudama','neoplanet','lupin_daikokaisha','zettai_shougeki4','babel','milliongod_kiseki','animal_dotch'];
     if (noSettingDiff.includes(slug)) return { available: false, reason: "小役による設定差なし" };
@@ -1072,6 +1082,45 @@ function resolveMachineSlug() {
   });
 
   renderSummaryGrid();
+
+  // ★目次表★（2026-08-31・運営者の要望・台帳#523）
+  //   ★飛び先が実際にある項目だけ並べる★（押しても飛べない行を出さない）。
+  //   ★節から自動で作る★＝記事の箱が増減しても、ここを直す必要はない。
+  //   ★期待値早見表は入れない★＝モードの切り替えで出たり消えたりするので、
+  //     一度だけ作る目次に載せると「押しても飛べない行」になり得る。
+  (function renderToc(){
+    const tocBlock = document.getElementById("tocBlock");
+    const tocList = document.getElementById("tocList");
+    if (!tocBlock || !tocList) return;
+    tocList.innerHTML = "";
+    const entries = [];
+    const addBlock = (id, label) => {
+      const el = document.getElementById(id);
+      if (!el || el.classList.contains("is-hidden")) return;
+      entries.push([id, label]);
+    };
+    addBlock("checkerBlock", "狙い目チェッカー");
+    addBlock("summaryBlock", "狙い目早見表");
+    addBlock("infoBlock", "基本情報");
+    document.querySelectorAll("#articleSections .article-item").forEach((el, i) => {
+      const title = (el.getAttribute("data-section") || "").trim();
+      if (!title) return;
+      const id = "sec" + (i + 1);
+      el.id = id;
+      entries.push([id, title]);
+    });
+    // ★飛んでも使えないポチポチくんは出さない★（無効化の判定は上の1か所だけ）
+    if (pochipochiStatus.available) addBlock("pochipochiBlock", "ポチポチくん");
+    if (entries.length < 2) return;
+    entries.forEach(([id, label]) => {
+      const a = document.createElement("a");
+      a.className = "toc-item";
+      a.href = "#" + id;
+      a.textContent = label;
+      tocList.appendChild(a);
+    });
+    tocBlock.classList.remove("is-hidden");
+  })();
 
   // 関連機種リンク（内部リンク強化・SEO/回遊向上）
   // 関連の判定：①同じ原作（original.search/title が一致） ②同じシリーズ系（名前のキーワード一致）

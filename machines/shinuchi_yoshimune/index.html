@@ -75,6 +75,16 @@
 
   <section class="article-section-wrap">
 
+    <!-- ★目次表★（2026-08-31・運営者の要望・台帳#523）
+         ページの上で「どこに何があるか」を一目で分かるようにする。
+         ★中身はJSが作る★＝飛び先（各項目のid）もJSが付けるので、
+         静的な行を先に置くと「押しても飛べないリンク」になる。
+         ★その機種に**ある**項目だけを並べる★（無い項目・使えない道具は出さない）。 -->
+    <nav class="article-block toc-block is-hidden" id="tocBlock" aria-labelledby="tocLabel">
+      <h2 class="block-label" id="tocLabel">▶ このページの目次</h2>
+      <div id="tocList" class="toc-list"></div>
+    </nav>
+
     <div id="rateToggle" class="mode-toggle rate-toggle-shared is-hidden"></div>
 
     <div class="article-block" id="evTableBlock">
@@ -84,7 +94,7 @@
       <p class="hint-text" id="evTableNote"></p>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="checkerBlock">
       <h2 class="block-label">▶ 狙い目チェッカー</h2>
       <div class="checker-card">
         <div id="modeToggle" class="mode-toggle"></div>
@@ -113,12 +123,12 @@
       </div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="summaryBlock">
       <h2 class="block-label">▶ 狙い目早見表</h2>
       <table id="summaryGrid" class="summary-grid"><tr><td><span class="s-label">基本方針</span><span class="s-value">天井狙い（CZ間/AT間）</span></td><td><span class="s-label">CZ間天井</span><span class="s-value">1000G+α / 6周期</span></td></tr><tr><td><span class="s-label">AT間天井</span><span class="s-value">1500G+α</span></td><td><span class="s-label">狙い目</span><span class="s-value">CZ間等価400G〜 / AT間等価460G〜</span></td></tr></table>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="infoBlock">
       <h2 class="block-label">▶ 基本情報</h2>
       <table class="info-table">
         <tbody id="infoTableBody"><tr><th>機械割（設定1）</th><td>97.8%</td></tr><tr><th>機械割（設定6）</th><td>114.0%</td></tr><tr><th>CZ間天井</th><td>1000G+α（6周期）でCZ当選</td></tr><tr><th>AT間天井</th><td>1500G+αでAT当選</td></tr><tr><th>朝一リセット</th><td>天井G数・モード・周期ポイント・スルーカウントリセット（AT間天井1000G+αに短縮）</td></tr><tr><th>AT純増（通常RUSH）</th><td>約2.7枚/G</td></tr><tr><th>AT純増（真BIG BONUS）</th><td>約9.0枚/G</td></tr><tr><th>等価狙い目</th><td>CZ間400G〜 / AT間460G〜</td></tr></tbody>
@@ -130,7 +140,7 @@
       <div id="articleSections"><div class="article-item" data-section="天井・恩恵"><h3 class="article-title">天井・恩恵</h3><p class="article-body">天井①：<strong>CZ間1000G+α</strong>（6周期）でCZ当選</p><p class="article-body">天井②：<strong>AT間1500G+α</strong>でAT当選</p><p class="article-body">恩恵①：CZ当選（天井①）</p><p class="article-body">恩恵②：AT当選（天井②）</p><p class="article-body">朝一リセット（設定変更）後：天井G数・モード・夜回りポイント・周期カウントがリセット</p><p class="article-body">朝一リセット（設定変更）後：AT間天井が<strong>1000G+α</strong>に短縮（通常1500G+αから短縮）</p><p class="article-body">真BIG BONUS終了後：AT間天井が<strong>700G+α</strong>に短縮</p></div><div class="article-item" data-section="基本スペック"><h3 class="article-title">基本スペック</h3><p class="article-body"><strong>機種名</strong>：真打 吉宗</p><p class="article-body"><strong>メーカー</strong>：大都技研</p><p class="article-body"><strong>タイプ</strong>：スマスロAT（通常AT約2.7枚/G / 真BIG BONUS約9.0枚/G）</p><p class="article-body"><strong>機械割</strong>：設1：97.8% / 設2：98.6% / 設3：101.0% / 設4：104.5% / 設5：108.0% / 設6：114.0%</p><p class="article-body"><strong>導入日</strong>：2026年4月6日</p><p class="article-body">※既存機種「L吉宗」とは別機種で、真BIG BONUSの純増は約9.0枚/Gと高く、爆発力に期待できるスペックです。</p></div><div class="article-item" data-section="当サイトの狙い目"><h3 class="article-title">当サイトの狙い目</h3><p class="article-body">CZ間天井狙い：等価400G〜・5.6枚410G〜・現金470G〜（CZ間1000G+α・6周期）。</p><p class="article-body">AT間天井狙い：等価460G〜・5.6枚470G〜・現金540G〜（AT間1500G+α）。</p><p class="article-body">真BIG BONUS純増約9.0枚/Gと一撃性が高く、天井到達時のリターンも大きい機種です。CZ間天井とAT間天井の両方を意識することで期待値の精度が上がります。設定1機械割97.8%で天井狙いの旨味は十分です。</p></div><div class="article-item" data-section="朝一・リセット情報"><h3 class="article-title">朝一・リセット情報</h3><p class="article-body">設定変更後は天井G数・モード・夜回りポイント・周期カウントの全てがリセットされます。AT間天井も1500G+αから1000G+αに短縮されるため、朝一リセット台は等価300G前後から狙えます。</p><p class="article-body">真BIG BONUS（純増9.0枚/G）終了後はAT間天井が700G+αに大幅短縮されます。直前が真BIG終了の台はリセット相当の恩恵があるため、データ機で履歴を確認して狙い目を判断します。</p></div><div class="article-item" data-section="狙い目の根拠"><h3 class="article-title">狙い目の根拠</h3><p class="article-body">CZ間天井狙い（等価400G〜）とAT間天井狙い（等価460G〜）は別の狙い方です。台を見るときは、CZ間とAT間のどちらの前提かを区別します。</p><p class="article-body">ヤメ時：CZ・AT終了後はフォロー区間（引き戻し判定）の有無を確認します。CZ失敗後でもAT間カウンターが積み上がっている場合は、続行するかを判断します。</p><p class="article-body">機械割97.8%（設定1）と低めで天井狙いの旨味が大きい機種です。CZ間天井は1000G+α（6周期目でCZ確定）、AT間天井は1500G+αでAT確定です。リセット後はAT間天井が1000G+αに短縮されるため、朝一・据え置き判断が収支に直結します。</p></div><div class="article-item" data-section="ヤメ時の判断"><h3 class="article-title">ヤメ時の判断</h3><p class="article-body">AT終了後は御白洲ビジョン（PUSHボタン押下で発生する設定示唆演出）を確認します。CZ・AT非フォロー条件は完全前兆型のため、AT終了後すぐにヤメない方が取りこぼしを減らせます。</p><p class="article-body">AT終了後は前兆演出を確認してからヤメ時を判断します。特殊ステージや前兆がなければヤメて問題ありません。</p><p class="article-body">真BIG BONUS（純増9.0枚/G）終了後は引き戻しゾーンを確認してからヤメ時を判断します。有利区間ランプが消灯していればヤメられます。設定示唆演出も確認します。</p></div><div class="article-item" data-section="立ち回りのコツ"><h3 class="article-title">立ち回りのコツ</h3><p class="article-body">CZ間とAT間の2つの天井を同時に管理する必要がある機種です。データカウンターでどちらの前提の台かを確認してから着席するのが基本です。</p><p class="article-body">リセット確信台（朝一や設定変更後）はAT間天井が1000G+αに短縮されるため、等価300G前後が狙い目の目安です。</p></div><div class="article-item" data-section="設定示唆まとめ"><h3 class="article-title">設定示唆まとめ</h3><div class="settei-legend"><span class="settei-legend-item"><span class="settei-legend-badge settei-weak">弱</span>弱示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-mid">中</span>中示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-strong">強</span>強示唆</span><span class="settei-legend-item"><span class="settei-legend-badge settei-ok">確</span>高設定確定/有力</span></div><table class="settei-table"><tr><th>要素</th><th>示唆</th></tr><tr><td>AT「勧善懲悪ラッシュ」中 獲得456枚突破</td><td>設定4以上濃厚</td></tr><tr><td>AT「勧善懲悪ラッシュ」中 獲得555枚突破</td><td>設定5以上濃厚</td></tr><tr><td>AT「勧善懲悪ラッシュ」中 獲得666枚突破</td><td>設定6濃厚</td></tr><tr><td>御白洲ビジョン（CZ・AT終了後PUSHボタン）：天英院</td><td>高設定期待度UP（最上位）</td></tr><tr><td>御白洲ビジョン：大岡越前</td><td>偶数設定期待度UP</td></tr><tr><td>御白洲ビジョン：吉宗</td><td>デフォルト（設定示唆弱め）</td></tr><tr><td>AT終了画面：吉宗・大奥・柳生・大岡越前・満月・三日月・月なし（7パターン）</td><td>示唆内容は順次解析中（公式未確認の情報含む）</td></tr><tr><td>真BB・エンディング中ボイス（PUSHボタン）</td><td>示唆内容は順次解析中（公式未確認の情報含む）</td></tr><tr><td>※花札による設定示唆について</td><td>花札示唆はL吉宗の要素。真打吉宗には存在しません</td></tr></table></div><div class="article-item" data-section="噂・未確定情報"><h3 class="article-title">噂・未確定情報</h3><div class="rumor-box"><p class="rumor-label">⚠ 噂・未確定情報</p><p class="rumor-body">※以下は公式未発表・未確認の噂情報です。実際の挙動と異なる可能性があります。</p><p class="rumor-body">2026年4月6日に導入された機種です。「BIGに出玉全振りで爆死量産の懸念」「CZ確率の信頼性が不透明」との声もありますが、いずれも公式未確認の情報です。</p></div></div></div>
     </div>
 
-    <div class="article-block">
+    <div class="article-block" id="pochipochiBlock">
       <h2 class="block-label">▶ 小役カウンター</h2>
       <a id="settingToolLink" class="btn-show-all btn-show-all--center is-disabled" aria-disabled="true" title="設定差のあるカウント対象小役が未判明のため非対応">小役カウンター ポチポチくん（設定差のあるカウント対象小役が未判明のため非対応）</a>
     </div>
@@ -1072,6 +1082,45 @@ function resolveMachineSlug() {
   });
 
   renderSummaryGrid();
+
+  // ★目次表★（2026-08-31・運営者の要望・台帳#523）
+  //   ★飛び先が実際にある項目だけ並べる★（押しても飛べない行を出さない）。
+  //   ★節から自動で作る★＝記事の箱が増減しても、ここを直す必要はない。
+  //   ★期待値早見表は入れない★＝モードの切り替えで出たり消えたりするので、
+  //     一度だけ作る目次に載せると「押しても飛べない行」になり得る。
+  (function renderToc(){
+    const tocBlock = document.getElementById("tocBlock");
+    const tocList = document.getElementById("tocList");
+    if (!tocBlock || !tocList) return;
+    tocList.innerHTML = "";
+    const entries = [];
+    const addBlock = (id, label) => {
+      const el = document.getElementById(id);
+      if (!el || el.classList.contains("is-hidden")) return;
+      entries.push([id, label]);
+    };
+    addBlock("checkerBlock", "狙い目チェッカー");
+    addBlock("summaryBlock", "狙い目早見表");
+    addBlock("infoBlock", "基本情報");
+    document.querySelectorAll("#articleSections .article-item").forEach((el, i) => {
+      const title = (el.getAttribute("data-section") || "").trim();
+      if (!title) return;
+      const id = "sec" + (i + 1);
+      el.id = id;
+      entries.push([id, title]);
+    });
+    // ★飛んでも使えないポチポチくんは出さない★（無効化の判定は上の1か所だけ）
+    if (pochipochiStatus.available) addBlock("pochipochiBlock", "ポチポチくん");
+    if (entries.length < 2) return;
+    entries.forEach(([id, label]) => {
+      const a = document.createElement("a");
+      a.className = "toc-item";
+      a.href = "#" + id;
+      a.textContent = label;
+      tocList.appendChild(a);
+    });
+    tocBlock.classList.remove("is-hidden");
+  })();
 
   // 関連機種リンク（内部リンク強化・SEO/回遊向上）
   // 関連の判定：①同じ原作（original.search/title が一致） ②同じシリーズ系（名前のキーワード一致）
