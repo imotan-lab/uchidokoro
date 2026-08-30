@@ -695,7 +695,7 @@ def _issue_ids(rows) -> set:
 
 def claim(task: str, slug: str, path: str = STATE_PATH,
           repairing: bool = False, issues=None, finding=None,
-          scheduled: bool = False) -> dict:
+          scheduled=None) -> dict:
     """今日この機種を担当してよいか。★同じ日の2機種目は拒否★
 
     repairing=True ＝「台帳の案件を直すために担当する」（2026-08-21・台帳#211）。
@@ -738,7 +738,13 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
         #   ★新台の担当は下の分岐で先に return する★ので、
         #   後ろに置いていた間は**新台では一度も保存されていなかった**
         #   （実測で確認）。＝--scheduled を渡しても効いていなかった。
-        _un = bool(scheduled) or lock_is_live()
+        # ★★三値★★（2026-08-30・Codexの指摘1）
+        #   True … 無人だと申告された
+        #   False … ★手動だと明示された★
+        #   None … 申告が無い（古い呼び出し）→ ロックで推測する
+        #   ★ロックでは区別できない★＝手動の add_machine_run も
+        #   ロックの取得が必須なので、ロックを見るだけでは無人に見える。
+        _un = lock_is_live() if scheduled is None else bool(scheduled)
         _entry(data, task)["unattended"] = _un
         _d0 = _day(data)
         _d0["had_unattended"] = bool(_d0.get("had_unattended")) or _un
@@ -2230,6 +2236,24 @@ def selftest() -> int:
                     scheduled=True).get("ok") is not False
               and _load(fps).get("day", {}).get("had_unattended") is True)
 
+            # ★★ロックが生きていても、手動だと明示すれば手動★★
+            #   （2026-08-30・Codexの指摘1。★これが本題だった★）
+            #   手動で本番手順を安全に動かすときも**ロックの取得は必須**なので、
+            #   ロックを見るだけでは無人に見える。
+            #   ＝手動の add_machine_run --apply --ctx が踏む形。
+            globals()["lock_is_live"] = lambda: True
+            fpx = os.path.join(tmpdir, "manual_with_lock.json")
+            claim("add-machine", "dmm_99998", path=fpx, scheduled=False)
+            t("★★ロックが生きていても、手動だと明示すれば手動★★"
+              "（＝手で試した日に仕事が出せなくなる欠陥の本体）",
+              _load(fpx).get("day", {}).get("had_unattended") is False)
+
+            fpy = os.path.join(tmpdir, "silent_with_lock.json")
+            claim("add-machine", "dmm_99997", path=fpy)
+            t("　★申告が無ければロックで推測する★（古い呼び出し・fail-closed）",
+              _load(fpy).get("day", {}).get("had_unattended") is True)
+            globals()["lock_is_live"] = lambda: False
+
             # ★★新台の担当でも印が保存されること★★（Codexの指摘1）
             #   ★新台の分岐は先に return する★ので、記録を後ろに置いていた間は
             #   **新台では一度も保存されていなかった**（実測で確認）。
@@ -3104,13 +3128,19 @@ def main() -> int:
         p.add_argument("--task", required=True)
         p.add_argument("--slug", required=True)
         if name == "claim":
-            # ★★無人で動いていると呼ぶ側が申告する★★（2026-08-30）
-            #   ロックだけを見ると「取り忘れた無人タスク」が手動に見える。
-            #   ★申告とロックのどちらかが立てば無人扱い★（fail-closed）。
+            # ★★無人か手動かを呼ぶ側が申告する★★（2026-08-30）
+            #   ★ロックでは区別できない★＝手動で本番手順を安全に動かすときも
+            #   ロックの取得は必須なので、ロックを見るだけでは無人に見える。
+            #   ★申告が無ければロックで推測する★（移行中の古い呼び出し向け）。
             #   ★これは無人であることの証明ではない★（同じ権限からは偽装できる）
             #   ＝事故を止める綱であって、悪意への境界ではない。
-            p.add_argument("--scheduled", action="store_true",
+            g = p.add_mutually_exclusive_group()
+            g.add_argument("--scheduled", dest="sched_flag",
+                           action="store_true", default=None,
                            help="無人（スケジューラ）から動かしている")
+            g.add_argument("--manual", dest="sched_flag",
+                           action="store_false",
+                           help="人が手で動かしている（試しているとき）")
         if name in ("claim", "before-write"):
             # ★台帳の案件を直すために触る★（2026-08-21・台帳#211／Codex依頼246の指摘1）
             #   ここが無いと、関数には経路があるのに**コマンドから使えず**、
@@ -3175,7 +3205,7 @@ def main() -> int:
                                repairing=bool(getattr(args, "repairing", False)),
                                issues=getattr(args, "issue", []) or [],
                                finding=getattr(args, "decision", None),
-                               scheduled=bool(getattr(args, "scheduled", False))),
+                               scheduled=getattr(args, "sched_flag", None)),
                          ensure_ascii=False, indent=1))
     elif args.cmd == "reserve":
         print(json.dumps(

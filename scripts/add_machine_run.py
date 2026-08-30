@@ -2016,8 +2016,12 @@ def _claim_today(official_url: str, scheduled: bool = False) -> bool:
          # ★★外側の申告をそのまま渡す★★（Codexの指摘）＝
          #   常に付けていたので、★手で動かした実行まで無人扱い★になり、
          #   その日は対話セッションが仕事を出せなくなる（今日直した欠陥の再発）。
-         "claim", "--task", "add-machine", "--slug", slug]
-        + (["--scheduled"] if scheduled else []),
+         # ★★手動なら手動だと言う★★（2026-08-30・Codexの指摘1）
+         #   ★黙っているとロックで推測され、無人に見える★＝
+         #   この経路はロックの取得が必須なので、手で動かしても無人扱いになり、
+         #   ★その日は対話セッションが仕事を出せなくなる★。
+         "claim", "--task", "add-machine", "--slug", slug,
+         "--scheduled" if scheduled else "--manual"],
         cwd=BASE, capture_output=True, text=True,
         encoding="utf-8", errors="replace",
         env={**os.environ, "PYTHONIOENCODING": "utf-8"})

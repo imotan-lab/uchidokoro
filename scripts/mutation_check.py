@@ -75,8 +75,8 @@ MUTATIONS = [
         "run": ["scripts/task_guard.py"],
     },
     {
-        "why": "★無人かどうかの記録を、新台の分岐より後ろへ戻す"
-               "（新台では一度も保存されず、関所が緩む）★",
+        "why": "★無人かどうかを、担当ごとの記録にしか残さない"
+               "（その日に無人がいたかを誰も見なくなる）★",
         "file": "scripts/task_guard.py",
         "before": '        _entry(data, task)["unattended"] = _un\n'
                   '        _d0 = _day(data)',
@@ -84,11 +84,21 @@ MUTATIONS = [
         "run": ["scripts/task_guard.py"],
     },
     {
-        "why": "★無人だと申告されても、ロックが無ければ手動扱いにする"
-               "（ロックを取り忘れた無人タスクが素通りする）★",
+        "why": "★手動だと明示されてもロックを優先する"
+               "（手で試した日に仕事が出せなくなる＝本題の欠陥）★",
         "file": "scripts/task_guard.py",
-        "before": "        _un = bool(scheduled) or lock_is_live()",
-        "after": "        _un = lock_is_live()",
+        "before": "        _un = lock_is_live() if scheduled is None "
+                  "else bool(scheduled)",
+        "after": "        _un = bool(scheduled) or lock_is_live()",
+        "run": ["scripts/task_guard.py"],
+    },
+    {
+        "why": "★申告が無いときに手動へ倒す"
+               "（古い呼び出しが素通りする・fail-open）★",
+        "file": "scripts/task_guard.py",
+        "before": "        _un = lock_is_live() if scheduled is None "
+                  "else bool(scheduled)",
+        "after": "        _un = bool(scheduled)",
         "run": ["scripts/task_guard.py"],
     },
     # ─── 2026-08-26・確定値が検索の濃さに届くか（Codex35回目）────
