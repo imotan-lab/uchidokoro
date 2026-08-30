@@ -1583,6 +1583,11 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
             json.dump(d, f, ensure_ascii=False, indent=1)
             f.write("\n")
         os.replace(tmp, p)
+        # ★消した段落は控えに残す★（2026-08-30・あとから戻せるように）
+        #   ★書けたときだけ残す★（書かずに終わった回の記録を作らない）
+        if result.get("removed_lines"):
+            result["removed_log"] = _record_removed(
+                slug, [x["text"] for x in result["removed_lines"]], dec)
         result["wrote"] = True
     return result
 
