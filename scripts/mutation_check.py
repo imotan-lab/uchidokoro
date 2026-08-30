@@ -56,6 +56,14 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #   ★同じ壊し方を戻さないこと★＝いまの取り決めでは必ず「捕まえられない」
 #   と出て、本物の見落としが埋もれる。
 MUTATIONS = [
+    {
+        "why": "★見せた日の控えを共有の state.json に戻す"
+               "（別の処理の更新を、古い内容で上書きする）★",
+        "file": "scripts/ledger_sweep.py",
+        "before": '    return _lp.doc("ledger_site_state.json")',
+        "after": '    return _lp.doc("state.json")',
+        "run": ["scripts/ledger_sweep.py"],
+    },
     # ─── 2026-08-30・git が読めなかったことを残す ────────────────
     {
         "why": "★git が読めなかったことを記録しない"

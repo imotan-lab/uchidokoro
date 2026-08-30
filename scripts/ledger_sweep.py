@@ -192,13 +192,36 @@ def for_site(limit: int = 2, today: str = "") -> list:
             if r.get("status") != "closed"
             and str(r.get("slug") or "") not in known]
     seen = _seen_map()
-    mine.sort(key=lambda r: (seen.get(str(r.get("id")), ""),
-                             str(r.get("id"))))
+
+    def _num(r):
+        try:
+            return int(r.get("id"))
+        except (TypeError, ValueError):
+            return 10 ** 9        # 番号が読めないものは後ろへ
+
+    # ★並び順は「見せた日の古い順 → 番号の小さい順」★
+    #   ★番号は数として見る★（文字で並べると 1, 10, 100, 2 … になる）
+    mine.sort(key=lambda r: (seen.get(str(r.get("id")), ""), _num(r)))
+
+    # ★同じ日に2回動かしても、同じものを出す★（2026-08-30・Codexの後回し指摘）
+    #   ★直す前は `today` を使っておらず、番人が朝に再試行すると
+    #     2件ずつ先へ進んでいた★＝読まれないまま飛ばされる案件ができる。
+    if today:
+        already = [r for r in mine if seen.get(str(r.get("id"))) == today]
+        if already:
+            return already[:max(0, int(limit))]
     return mine[:max(0, int(limit))]
 
 
 def _state_path() -> str:
-    return _lp.doc("state.json")
+    """★見せた日の控えの置き場★
+
+    ★共有の state.json とは別に持つ★（2026-08-30・Codexの指摘4）＝
+      共有ファイルを丸ごと読んで丸ごと書き戻すと、
+      ★その間に別の処理が入れた更新を、古い内容で上書きしてしまう★。
+      `grow_machine.py` が同じ理由で既に分けているので、それにそろえる。
+    """
+    return _lp.doc("ledger_site_state.json")
 
 
 def _seen_map() -> dict:
@@ -589,6 +612,15 @@ def selftest() -> int:
     finally:
         globals()["LEDGER"] = _keep_ledger
         shutil.rmtree(_tmpdir, ignore_errors=True)
+
+    # ★★見せた日の控えは、共有の state.json に置かない★★
+    #   （2026-08-30・Codexの指摘4）＝共有ファイルを丸ごと書き戻すと、
+    #   ★その間に別の処理が入れた更新を、古い内容で上書きする★。
+    t("★★見せた日の控えを、共有の state.json に置かない★★"
+      "（別の処理の更新を消してしまう）",
+      os.path.basename(_state_path()) != "state.json")
+    t("　★専用の置き場を使う★",
+      os.path.basename(_state_path()) == "ledger_site_state.json")
 
     t("★★裏取り待ちの案件は、逐語が消えただけでは閉じない★★"
       "（＝2026-08-30に #155 を誤って閉じた型）",
