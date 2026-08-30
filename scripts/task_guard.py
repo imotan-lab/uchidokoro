@@ -2209,6 +2209,62 @@ def selftest() -> int:
     tmpdir = tempfile.mkdtemp()
     fp = os.path.join(tmpdir, "guard.json")
     try:
+        # ★★手で動かした日に、対話セッションが仕事を出せなくなる欠陥★★
+        #   （2026-08-30・運営者「手動実行は例外としないとテストできないじゃん」）
+        #   ★本番の記録は触らない★＝一時ファイルの上で試す。
+        fpm = os.path.join(tmpdir, "manual.json")
+        _keep_lock = globals()["lock_is_live"]
+        try:
+            globals()["lock_is_live"] = lambda: False
+            claim("update-machine", "hokuto", path=fpm)
+            _e = _load(fpm)["tasks"]["update-machine"]
+            t("★★手で動かした担当は「無人ではない」と記録する★★"
+              "（＝この日は関所が照合を求めない）",
+              _e.get("unattended") is False)
+
+            globals()["lock_is_live"] = lambda: True
+            _d2 = _load(fpm)
+            _d2["tasks"]["update-machine"]["guard_slug"] = None
+            _save(fpm, _d2)
+            claim("update-machine", "hokuto", path=fpm)
+            t("　★ロックが生きていれば「無人」と記録する★",
+              _load(fpm)["tasks"]["update-machine"].get("unattended") is True)
+
+            t("★★無人タスクの実行中は、手動の印を付けられない★★"
+              "（＝タスクが自分で自分を例外にできない）",
+              raises(lambda: mark_manual("update-machine",
+                                         "十分な長さの理由です", path=fpm),
+                     "ロックが生きている"))
+            globals()["lock_is_live"] = lambda: False
+            t("　★理由が短ければ断る★",
+              raises(lambda: mark_manual("update-machine", "短い", path=fpm),
+                     "10字以上"))
+            t("★★今日どの機種も担当していないタスクには印を付けられない★★"
+              "（＝記録をその場で作って自分に合格を出す穴）",
+              raises(lambda: mark_manual("zzz-not-a-task",
+                                         "十分な長さの理由です", path=fpm),
+                     "今日"))
+            t("　★条件がそろえば印が付く★",
+              mark_manual("update-machine", "十分な長さの理由です",
+                          path=fpm).get("unattended") is False)
+        finally:
+            globals()["lock_is_live"] = _keep_lock
+
+        # ★★ロックが読めないときは「無人」に倒す★★（fail-closed）
+        #   ★分からないのに「手動だ」と答えると、関所を素通りさせてしまう★
+        import task_lock as _tl9
+        _keep_read = _tl9._read_lock
+
+        def _boom(_p):
+            raise OSError("読めません")
+
+        try:
+            _tl9._read_lock = _boom
+            t("★★ロックが読めないときは「無人」に倒す★★"
+              "（分からないのに関所を素通りさせない）", lock_is_live() is True)
+        finally:
+            _tl9._read_lock = _keep_read
+
         # ★触れない機種を選んでも枠を減らさない★（2026-08-08・台帳#272）
         #   以前は claim が段階を見ておらず、blocking の機種を担当に確保した
         #   時点でその日の枠が消え、before_write に拒否されても戻らなかった。

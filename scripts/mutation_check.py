@@ -56,6 +56,29 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #   ★同じ壊し方を戻さないこと★＝いまの取り決めでは必ず「捕まえられない」
 #   と出て、本物の見落としが埋もれる。
 MUTATIONS = [
+    # ─── 2026-08-30・手で動かした日に仕事が出せなくなる欠陥 ─────────
+    {
+        "why": "★ロックが読めないとき「手動」に倒す"
+               "（分からないのに関所を素通りさせる）★",
+        "file": "scripts/task_guard.py",
+        "before": "    except Exception:                                "
+                  "        # noqa: BLE001\n        return True\n\n\n"
+                  "def mark_manual",
+        "after": "    except Exception:                                "
+                 "        # noqa: BLE001\n        return False\n\n\n"
+                 "def mark_manual",
+        "run": ["scripts/task_guard.py"],
+    },
+    {
+        "why": "★無人タスクの実行中でも手動の印を付けられる"
+               "（タスクが自分で自分を例外にできる）★",
+        "file": "scripts/task_guard.py",
+        "before": "    if lock_is_live():\n        raise GuardError(\n"
+                  "            \"無人タスクのロックが生きているので、"
+                  "手動の印は付けられません\")",
+        "after": "    if False:\n        pass",
+        "run": ["scripts/task_guard.py"],
+    },
     # ─── 2026-08-26・確定値が検索の濃さに届くか（Codex35回目）────
     {
         "why": "★確定値に根拠を刻まない（第2出典を見つけても検索へ載らない）★",
