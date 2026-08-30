@@ -6,7 +6,7 @@
    "title": "L 東京喰種 狙い目"
   },
   "info": "スマスロAT",
-  "strategy": "CZ間250G〜 / AT間450G〜",
+  "strategy": "CZ間300G〜 / AT間350G〜",
   "checker": {
    "unit": "G",
    "modes": [
@@ -572,7 +572,7 @@
    "title": "スマスロ 甲鉄城のカバネリ 海門(うなと)決戦 狙い目"
   },
   "info": "スマスロAT",
-  "strategy": "ST間580G〜 / リセット100G〜",
+  "strategy": "ST間590G〜 / リセット100G〜",
   "strategyByRate": {
    "eq56": "5.6枚590G〜 / リセット100G〜",
    "rate55": "6.0枚630G〜 / リセット130G〜",
@@ -884,7 +884,7 @@
    "title": "スマスロモンキーターンV 狙い目"
   },
   "info": "スマスロAT",
-  "strategy": "G数410G〜 / 5周期目〜",
+  "strategy": "G数420G〜 / 5周期目〜",
   "strategyByRate": {
    "eq56": "5.6枚G数420G〜 / 5周期目〜",
    "rate55": "6.0枚G数400G〜 / 5周期目〜",
@@ -1499,7 +1499,7 @@
    "title": "Lパチスロ 革命機ヴァルヴレイヴ2 狙い目"
   },
   "info": "スマスロAT",
-  "strategy": "CZ間600G〜 / 決戦2スルー〜 / 5周期目〜",
+  "strategy": "CZ間550G〜 / 決戦2スルー〜 / 5周期目〜",
   "checker": {
    "unit": "G",
    "modes": [
@@ -2177,7 +2177,7 @@
    "title": "スマスロ 攻殻機動隊 狙い目"
   },
   "info": "スマスロAT",
-  "strategy": "CZ間300G〜 / AT間650G〜",
+  "strategy": "CZ間310G〜 / AT間660G〜",
   "strategyByRate": {
    "eq56": "5.6枚CZ310G〜 / AT間660G〜",
    "rate55": "6.0枚CZ400G〜 / AT間700G〜",
@@ -3921,7 +3921,7 @@
    "title": "パチスロ かぐや様は告らせたい 狙い目"
   },
   "info": "スマスロ疑似ボーナス",
-  "strategy": "BIG間620G〜 / 5スルー〜",
+  "strategy": "BIG間600G〜 / 5スルー〜",
   "checker": {
    "unit": "G",
    "modes": [
@@ -4680,7 +4680,7 @@
    "title": "スマスロ ゴッドイーター リザレクション 狙い目"
   },
   "info": "スマスロAT",
-  "strategy": "通常520G〜 / 駆け抜け後280G〜",
+  "strategy": "通常550G〜 / 駆け抜け後150G〜",
   "strategyByRate": {
    "eq56": "5.6枚550G〜 / 駆け抜け後150G〜",
    "rate55": "6.0枚590G〜 / 駆け抜け後170G〜",
@@ -6604,7 +6604,7 @@
    "title": "スマスロ バイオハザード5 狙い目"
   },
   "info": "スマスロAT",
-  "strategy": "通常400G〜 / リセット300G〜",
+  "strategy": "通常350G〜 / リセット250G〜",
   "strategyByRate": {
    "eq56": "5.6枚350G〜 / リセット250G〜",
    "rate55": "6.0枚400G〜 / リセット300G〜",
@@ -7148,7 +7148,7 @@
    "title": "Lパチスロ ダンベル何キロ持てる? 狙い目"
   },
   "info": "スマスロAT",
-  "strategy": "CZ間400G〜 / 1スルー以上200G〜",
+  "strategy": "CZ間350G〜 / 1スルー以上150G〜",
   "strategyByRate": {
    "eq56": "5.6枚CZ350G〜 / 1スルー150G〜",
    "rate55": "6.0枚CZ400G〜 / 1スルー200G〜",
@@ -7532,7 +7532,7 @@
    "title": "スマスロ転生したらスライムだった件 狙い目"
   },
   "info": "スマスロAT",
-  "strategy": "通常450G〜 / リセット0G〜",
+  "strategy": "通常400G〜 / リセット0G〜",
   "checker": {
    "unit": "G",
    "modes": [
@@ -7949,7 +7949,7 @@
    "title": "Lバキ 強くなりたくば喰らえ!!! 狙い目"
   },
   "info": "スマスロAT",
-  "strategy": "CZ間340G〜 / 2スルー〜",
+  "strategy": "CZ間300G〜 / 2スルー〜",
   "checker": {
    "unit": "G",
    "modes": [

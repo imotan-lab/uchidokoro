@@ -1842,6 +1842,47 @@ MUTATIONS = [
         "after": "TEXT_GONE_NOT_ENOUGH = ()",
         "run": ["scripts/ledger_sweep.py"],
     },
+
+    # ─── 2026-08-30・一覧の狙い目を既定表示にそろえる（align_strategy）───
+    {
+        "why": "★一覧が交換率を名乗っていても数値を替える"
+               "（呼び名と中身が食い違う・実測8機種）★",
+        "file": "scripts/align_strategy.py",
+        "before": "    named = rate_words(ck, strat)\n"
+                  "    if named:",
+        "after": "    named = rate_words(ck, strat)\n    if False:",
+        "run": ["scripts/align_strategy.py"],
+    },
+    {
+        "why": "★当たる枠が複数で値が割れていても、どれかを選んで書く★",
+        "file": "scripts/align_strategy.py",
+        "before": "        if len(vals) != 1:",
+        "after": "        if False:",
+        "run": ["scripts/align_strategy.py"],
+    },
+    {
+        "why": "★もう既定の値になっている数値も書き換える"
+               "（＝2回目に走らせると値が壊れる・2026-08-30に実測3機種）★",
+        "file": "scripts/align_strategy.py",
+        "before": '        if cur in {s["rate"] for s in here}:',
+        "after": "        if False:",
+        "run": ["scripts/align_strategy.py"],
+    },
+    {
+        "why": "★区切りのモードを見ずに、全部の枠から値だけで探す"
+               "（別のモードの枠に引き寄せられる）★",
+        "file": "scripts/align_strategy.py",
+        "before": '        here = [s for s in sl if s["mode"] and s["mode"] in seg]',
+        "after": "        here = list(sl)",
+        "run": ["scripts/align_strategy.py"],
+    },
+    {
+        "why": "★G が付いていない数値まで書き換える（周期・スルー回数）★",
+        "file": "scripts/align_strategy.py",
+        "before": 'GNUM = re.compile(r"(\\d{1,4})\\s*G")',
+        "after": 'GNUM = re.compile(r"(\\d{1,4})")',
+        "run": ["scripts/align_strategy.py"],
+    },
 ]
 
 

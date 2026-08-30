@@ -730,7 +730,57 @@ def render_all(source_root: "Path") -> dict:
     return built
 
 
-def main(preview: bool = False):
+def _build_legacy() -> int:
+    """★いま公開中のハブ4ページを作り直す★（2026-08-30）
+
+    ★機種ページの `--legacy` と同じ守り★
+      1. 裏取りゲートが**有効なら実行しない**（有効なら artifact 経路が正しい）
+      2. 設定が読めなければ**何も書かない**（fail-closed）
+      3. 4ページ全部を描けたときだけ書く（1枚でも欠けたら1枚も書かない）
+
+    ★中身は publish_new_machine.build_hubs() と同じ関数から作る★＝
+      あちらは「いまのデータから作った内容と repo が一致するか」を見張るので、
+      ★別の作り方をすると、その晩の新台公開が丸ごと止まる★。
+    """
+    import sys as _sys
+    _sys.path.insert(0, str(BASE / "scripts"))
+    import build_public_data as _bpd
+    import safe_json as _sj2
+
+    try:
+        if _bpd.claim_gate_enabled():
+            print("★裏取りゲートが有効なので、旧形式の作り直しはできません★")
+            print("  公開物は build_pages_artifact.py が組み立てます。")
+            return 1
+    except Exception as e:                                   # noqa: BLE001
+        print(f"★裏取りゲートの設定が読めません: {e} → 何も書きません")
+        return 1
+
+    try:
+        rows = load_rows()
+        prose = _sj2.read_json(PROSE, expect=dict)
+        built, _data_html, _allowed = _build_pages(rows, prose)
+    except Exception as e:                                   # noqa: BLE001
+        print(f"★描けませんでした: {type(e).__name__}: {e} → 何も書きません")
+        return 1
+
+    if len(built) != 4:
+        print(f"★4ページそろっていません（{sorted(built)}）→ 何も書きません★")
+        return 1
+
+    n = 0
+    for rel, html in built.items():
+        p = BASE / rel
+        if p.is_file() and p.read_text(encoding="utf-8") == html:
+            continue
+        p.write_text(html, encoding="utf-8", newline="\n")
+        print(f"  書きました: {rel}")
+        n += 1
+    print(f"★ハブ4ページを作り直しました★（変わったのは {n} ページ）")
+    return 0
+
+
+def main(preview: bool = False, legacy: bool = False):
     """preview=True のときは .preview-site/ にだけ書く（公開されない写し）。
 
     ★2026-07-30・移行手順2で --allow-ungated を廃止した★（理由は build_machine_pages.py 参照）
@@ -748,11 +798,14 @@ def main(preview: bool = False):
     #   「公開物の書込み経路は artifact 1本」と言えない（ブランチ直配信が生きている間は特に）。
     #   公開用の書き出しは build_pages_artifact.py が --out で置き場所を渡す時だけ許す。
     # ★公開物を書けるのは build_pages_artifact.py だけ★（Codex 23巡目 条件7）
-    if not preview:
+    if not preview and not legacy:
         print("★公開用のハブ4ページはここからは作れません★")
         print("  公開物は build_pages_artifact.py が組み立てます。")
         print("  裏取り前の内容を見たいだけなら --preview を付けてください。")
+        print("  いま公開中の旧形式ページを作り直すなら --legacy です。")
         return 1
+    if legacy:
+        return _build_legacy()
     out_root = _pv.PREVIEW_DIR
     try:
         gate_on = _bpd.claim_gate_enabled()
@@ -993,8 +1046,14 @@ if __name__ == "__main__":
     _p = _ap.ArgumentParser()
     _p.add_argument("--preview", action="store_true",
                     help="公開されない写し（.preview-site/）にだけ書き出す")
+    _p.add_argument("--legacy", action="store_true",
+                    help="いま公開中のハブ4ページを作り直す"
+                         "（裏取りゲートが有効なら実行しない）")
     _p.add_argument("--selftest", action="store_true")
     _a = _p.parse_args()
+    if _a.preview and _a.legacy:
+        print("★--preview と --legacy は同時に使えません★")
+        raise SystemExit(1)
     if _a.selftest:
         raise SystemExit(selftest())
     # ★どんな壊れた入力でも traceback にしない★（Codex 閉鎖条件5・27巡目）
@@ -1002,7 +1061,7 @@ if __name__ == "__main__":
     _s9.path.insert(0, str(BASE / "scripts"))
     import safe_json as _sj9
     try:
-        raise SystemExit(main(_a.preview) or 0)
+        raise SystemExit(main(_a.preview, _a.legacy) or 0)
     except SystemExit:
         raise
     except _sj9.SafeJsonError as _e:
