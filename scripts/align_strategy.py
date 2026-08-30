@@ -63,7 +63,11 @@ import safe_json as _sj                                  # noqa: E402
 MACHINES = os.path.join(BASE, "assets", "data", "machines.json")
 
 # ★G が付いた数値だけ★（pt・周期・スルー回数は狙い目のG数ではない）
-GNUM = re.compile(r"(\d{1,4})\s*G")
+#   ★前後に数字が続いていないこと★（2026-08-30・Codexの指摘4）＝
+#   境目が無いと「12345G」の後ろ4桁だけに食いつく。
+#   （いまは「数字以外を変えていないか」の網が受け止めて断っていたが、
+#     ★断る理由が意味不明になる★ので、切り出しの側を正しくする）
+GNUM = re.compile(r"(?<!\d)(\d{1,4})(?!\d)\s*G")
 
 
 def mode_conf(ck: dict, key):
@@ -91,7 +95,13 @@ def default_rate(ck: dict) -> str:
 
 
 def _num(v):
-    return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+    """★整数だけ受け取る★（2026-08-30・Codexの指摘4）
+
+    小数を許すと `int()` で黙って切り捨てる（350.5 → 350G）。
+    G数は整数で持っている前提なので、小数は**読めない値**として扱い、
+    その機種は丸ごと2AIへ回す。
+    """
+    return v if type(v) is int else None
 
 
 def _base_value(conf: dict):
@@ -133,7 +143,8 @@ def slots(ck: dict) -> list:
         label = str(md.get("label") or key or "")
         b, r = _base_value(conf), _rate_value(conf, rk)
         if b is not None and r is not None:
-            out.append({"mode": label, "name": label, "base": b, "rate": r})
+            out.append({"mode": label, "key": str(key or label),
+                        "name": label, "base": b, "rate": r})
         suru = conf.get("suru")
         if isinstance(suru, list):
             for s in suru:
@@ -141,7 +152,7 @@ def slots(ck: dict) -> list:
                     continue
                 b2, r2 = _base_value(s), _rate_value(s, rk)
                 if b2 is not None and r2 is not None:
-                    out.append({"mode": label,
+                    out.append({"mode": label, "key": str(key or label),
                                 "name": f"{label}{s.get('count')}スルー",
                                 "base": b2, "rate": r2})
     return out
@@ -217,19 +228,35 @@ def plan(machine: dict) -> dict:
         cur = int(m.group(1))
         seg = _segment(strat, m.start(1))
         here = [s for s in sl if s["mode"] and s["mode"] in seg]
-        if not here:
+        # ★★区切りから決まるモードは1つだけ★★（2026-08-30・Codexの指摘2）
+        #   直す前は当たったモードを**全部混ぜて**いたので、
+        #   「CZまたはAT当選250G〜」のような区切りで
+        #   ★別のモードの枠から書き換えられた★（実際に再現した）。
+        keys = {s["key"] for s in here}
+        if len(keys) != 1:
             out["why"] = (f"「{seg.strip()[:24]}」がどのモードの話か"
-                          "分かりません（2AIが読んでください）")
+                          + ("決まりません" if keys else "分かりません")
+                          + "（2AIが読んでください）")
             out["moves"] = []
             return out
-        # ①もう既定の値になっている＝触らない（★2回目に壊さない★）
-        if cur in {s["rate"] for s in here}:
+        # ★★「もう揃っている」と「まだずれている」が両方成り立つなら触らない★★
+        #   （2026-08-30・Codexの指摘1）＝同じモードの中でも値は交差しうる。
+        #     0スルー: 交換率なし=100 / 既定=200
+        #     1スルー: 交換率なし=200 / 既定=300
+        #   一覧の 200 は「1スルーのずれ」でも「0スルーの揃い」でも読める。
+        #   ★直す前は「揃っている」を先に見ていたので、古い数値が残った★。
+        cand = [s for s in here if s["base"] == cur]
+        aligned = cur in {s["rate"] for s in here}
+        if cand and aligned:
+            out["why"] = (f"{cur}G は「もう揃っている」とも「まだずれている」とも"
+                          "読めます（2AIが読んでください）")
+            out["moves"] = []
+            return out
+        if aligned:
             pieces.append(strat[last:m.start(1)])
             pieces.append(str(cur))
             last = m.end(1)
             continue
-        # ②そのモードの中で「交換率なしの値」が一致する枠を探す
-        cand = [s for s in here if s["base"] == cur]
         if not cand:
             out["why"] = (f"{cur}G と一致する枠がこのモードにありません"
                           "（2AIが読んでください）")
@@ -260,6 +287,13 @@ def plan(machine: dict) -> dict:
     return out
 
 
+def _digest() -> str:
+    """★機種データの中身の指紋★（読んでから書くまでに変わっていないか）"""
+    import hashlib
+    with io.open(MACHINES, "rb") as f:
+        return hashlib.sha256(f.read().replace(b"\r\n", b"\n")).hexdigest()
+
+
 def _load():
     data = _sj.read_json(MACHINES, expect=(dict, list))
     rows = data if isinstance(data, list) else (data.get("machines") or [])
@@ -280,6 +314,12 @@ def main() -> int:
         print("--slug か --all が要ります")
         return 1
 
+    if a.slug and a.all:
+        # ★同時に渡すと --all が勝って全機種を書いていた★（Codexの指摘3）
+        print("--slug と --all は同時に使えません")
+        return 1
+
+    before = _digest()
     data, rows = _load()
     targets = [m for m in rows
                if a.all or str(m.get("slug") or "") == a.slug]
@@ -313,12 +353,50 @@ def main() -> int:
         print("\n書くものはありません")
         return 0
 
+    # ★★読んでから書くまでに、誰かが機種データを変えていないか★★
+    #   （2026-08-30・Codexの指摘3）＝変わっていたら、
+    #   こちらの全文保存でその変更を消してしまう。
+    if _digest() != before:
+        print("\n★書きません★ 読んでいる間に機種データが変わりました"
+              "（もう一度やり直してください）")
+        return 1
+
     for m, p in changed:
         m["strategy"] = p["after"]
-    raw = json.dumps(data, ensure_ascii=False, indent=1)
-    io.open(MACHINES, "w", encoding="utf-8", newline="\n").write(raw + "\n")
+
+    # ★★途中で止まっても壊れないように書く★★（同・指摘3）
+    #   直す前は本体を直接開いて上書きしていたので、
+    #   書込み中に止まると**途中までのJSON**が残った。
+    body = json.dumps(data, ensure_ascii=False, indent=1) + "\n"
+    tmp = MACHINES + ".align.tmp"
+    with io.open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        f.write(body)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, MACHINES)
     print(f"\n★書きました★ {len(changed)} 機種")
-    print("★このあと build_hub_pages.py と build_machine_pages.py を回すこと★")
+    if skipped:
+        print(f"★2AIへ回す機種が {len(skipped)} 件あります★"
+              "（機械では決められないもの・上に理由を出しました）")
+
+    # ★★ページを作り直すまで「成功」と言わない★★（同・指摘6）
+    #   データだけ書いてハブが古いままだと、
+    #   その晩の新台公開が丸ごと止まる（4ページの一致を求めるため）。
+    try:
+        import publish_new_machine as _pnm
+        ng = _pnm.check_hubs_untouched()
+    except Exception as e:                                   # noqa: BLE001
+        print(f"★ハブ4ページを確かめられません: {type(e).__name__}: {e}★")
+        return 1
+    if ng:
+        print("\n★まだ終わっていません★ 一覧・ランキングが古いままです:")
+        for x in ng[:4]:
+            print("  - " + str(x)[:110])
+        print("  python scripts/build_hub_pages.py --legacy")
+        print("  python scripts/build_machine_pages.py --legacy --slug <slug>")
+        return 3
+    print("★一覧・ランキングは、いまのデータと一致しています★")
+    print("★機種ページは build_machine_pages.py --legacy --slug で作り直すこと★")
     return 0
 
 
@@ -346,10 +424,13 @@ def selftest() -> int:
               "strategy": "CZ間250G〜 / AT間450G〜"})
     t("★★既定の交換率の値にそろえる★★",
       p["after"] == "CZ間300G〜 / AT間350G〜")
-    t("★★もう既定の値になっている数値は触らない★★"
+    #   ★「何も書かない」ではなく「そのまま通る」ことを見る★＝
+    #     moves が空なだけなら、別の守りが断っただけでも合格になる（罠④）。
+    _a = plan({"slug": "x", "checker": ck,
+               "strategy": "CZ間300G〜 / AT間350G〜"})
+    t("★★もう既定の値になっている数値は、そのまま通る★★"
       "（＝2回目に走らせても壊さない）",
-      plan({"slug": "x", "checker": ck,
-            "strategy": "CZ間300G〜 / AT間350G〜"})["moves"] == [])
+      _a["moves"] == [] and _a["after"] == "CZ間300G〜 / AT間350G〜")
     t("★★数字以外は1文字も変えない★★",
       p["after"].replace("300", "250").replace("350", "450")
       == "CZ間250G〜 / AT間450G〜")
@@ -370,12 +451,61 @@ def selftest() -> int:
       plan({"slug": "x", "checker": ck,
             "strategy": "なんとか450G〜"})["moves"] == [])
 
+    # ★同じモードに枠が2つあっても、既定の値が同じなら通る★
     ck3 = json.loads(json.dumps(ck))
-    ck3["at"]["suru"][0]["byRate"]["eq56"]["target"] = 250
-    ck3["at"]["suru"][0]["good"] = 250
-    ck3["cz"]["byRate"]["eq56"]["target"] = 250
-    s = plan({"slug": "x", "checker": ck3, "strategy": "CZ間250G〜"})
-    t("　★枠が複数でも既定の値が同じなら通る★", s["after"] == "CZ間250G〜")
+    ck3["at"]["suru"].append({"count": 1, "good": 450,
+                              "byRate": {"eq56": {"target": 350}}})
+    s = plan({"slug": "x", "checker": ck3, "strategy": "AT間450G〜"})
+    t("　★枠が複数でも既定の値が同じなら通る★", s["after"] == "AT間350G〜")
+
+    # ★★同じモードの中で値が交差していたら触らない★★
+    #   （2026-08-30・Codexの指摘1。★実際に再現してから直した★）
+    #     0スルー: 交換率なし=100 / 既定=200
+    #     1スルー: 交換率なし=200 / 既定=300
+    #   一覧の 200 は「1スルーのずれ」とも「0スルーの揃い」とも読める。
+    ck5 = {"exchangeRates": [{"key": "eq56", "label": "5.6枚"}],
+           "defaultRate": "eq56",
+           "modes": [{"key": "at", "label": "AT間", "hasSuru": True}],
+           "at": {"suru": [
+               {"count": 0, "good": 100, "byRate": {"eq56": {"target": 200}}},
+               {"count": 1, "good": 200,
+                "byRate": {"eq56": {"target": 300}}}]}}
+    c = plan({"slug": "x", "checker": ck5, "strategy": "AT間200G〜"})
+    t("★★「もう揃っている」とも「まだずれている」とも読めたら触らない★★"
+      "（＝古い数値をそのまま残す穴）",
+      c["moves"] == [] and "とも" in c["why"])
+
+    # ★★区切りから決まるモードが1つでなければ触らない★★（同・指摘2）
+    ck6 = {"exchangeRates": [{"key": "eq56", "label": "5.6枚"}],
+           "defaultRate": "eq56",
+           "modes": [{"key": "cz", "label": "CZ"}, {"key": "at", "label": "AT"}],
+           "cz": {"good": 250, "byRate": {"eq56": {"target": 300}}},
+           "at": {"good": 900, "byRate": {"eq56": {"target": 111}}}}
+    d = plan({"slug": "x", "checker": ck6,
+              "strategy": "CZまたはAT当選250G〜"})
+    t("★★モード名が2つ出ている区切りは触らない★★"
+      "（＝別のモードの枠から書き換えられた穴）", d["moves"] == [])
+
+    # ★★小数は読めない値として扱う★★（同・指摘4）
+    ck7 = {"exchangeRates": [{"key": "eq56", "label": "5.6枚"}],
+           "defaultRate": "eq56",
+           "modes": [{"key": "cz", "label": "CZ間"}],
+           "cz": {"good": 250, "byRate": {"eq56": {"target": 350.5}}}}
+    t("★★小数を黙って切り捨てない★★（350.5 → 350G にしない）",
+      plan({"slug": "x", "checker": ck7,
+            "strategy": "CZ間250G〜"})["moves"] == [])
+
+    # ★★数字の途中に食いつかない★★（同・指摘4）
+    ck8 = {"exchangeRates": [{"key": "eq56", "label": "5.6枚"}],
+           "defaultRate": "eq56",
+           "modes": [{"key": "cz", "label": "CZ間"}],
+           "cz": {"good": 2345, "byRate": {"eq56": {"target": 999}}}}
+    #   ★理由まで見る★＝真偽だけだと「数字以外を変えていないか」の網が
+    #     先に受け止めてしまい、境目の守りを一度も通らない（罠④）。
+    _b = plan({"slug": "x", "checker": ck8, "strategy": "CZ間12345G〜"})
+    t("★★12345G の後ろ4桁に食いつかない★★"
+      f"（理由: {_b['why'][:28]}）",
+      _b["moves"] == [] and "G数がありません" in _b["why"])
 
     t("★★G が付いていない数値は触らない★★（周期・スルー回数）",
       plan({"slug": "x", "checker": ck,
@@ -439,21 +569,36 @@ def selftest() -> int:
 
     # ★そろえたあとは、もう動かない★（同じ処理を2度かけても変わらない）
     still = [m.get("slug") for m in rows if plan(m)["moves"]]
-    t("★★いまのデータには、そろえ残しが無い★★"
+    t("★★機械が決められるそろえ残しは無い★★"
+      "（★2AIへ回す機種は別にある＝これは「全部正しい」の意味ではない★）"
       f"（残り: {still[:3]}）", not still)
 
     # ★★2回かけても値が動かないこと★★（2026-08-30に踏んだ欠陥そのもの）
     #   直す前は「そろえた後の数値が別のモードの枠に一致」して、
     #   2回目で違う値へ引き寄せられた（実測3機種）。
+    #   ★いまのデータはもう揃っているので、そのまま回しても何も試せない★
+    #     （Codexの指摘5）→ 全機種について、枠の「交換率なしの値」から
+    #     ★ずれた一覧を組み立てて★、1回目の結果を2回目へ渡す。
     twice_ng = []
     for m in rows:
-        p1 = plan(m)
+        ck9 = m.get("checker")
+        if not isinstance(ck9, dict):
+            continue
+        sl9 = slots(ck9)
+        seen9 = {}
+        for s in sl9:
+            seen9[s["mode"]] = seen9.get(s["mode"], 0) + 1
+        use = [s for s in sl9 if seen9[s["mode"]] == 1 and s["name"]]
+        if not use:
+            continue
+        made = " / ".join(f"{s['name']}{s['base']}G〜" for s in use)
+        p1 = plan({"slug": m.get("slug"), "checker": ck9, "strategy": made})
         if not p1["after"]:
             continue
-        p2 = plan({"slug": p1["slug"], "checker": m.get("checker"),
+        p2 = plan({"slug": m.get("slug"), "checker": ck9,
                    "strategy": p1["after"]})
         if p2["moves"]:
-            twice_ng.append(f"{p1['slug']}: {p1['after']} → {p2['after']}")
+            twice_ng.append(f"{m.get('slug')}: {p1['after']} → {p2['after']}")
     t("★★2回かけても値が動かない★★" + ("" if not twice_ng
                                        else f"（{twice_ng[:2]}）"),
       not twice_ng)

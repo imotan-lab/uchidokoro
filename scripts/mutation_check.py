@@ -1864,7 +1864,7 @@ MUTATIONS = [
         "why": "★もう既定の値になっている数値も書き換える"
                "（＝2回目に走らせると値が壊れる・2026-08-30に実測3機種）★",
         "file": "scripts/align_strategy.py",
-        "before": '        if cur in {s["rate"] for s in here}:',
+        "before": "        if aligned:",
         "after": "        if False:",
         "run": ["scripts/align_strategy.py"],
     },
@@ -1877,10 +1877,40 @@ MUTATIONS = [
         "run": ["scripts/align_strategy.py"],
     },
     {
+        "why": "★「もう揃っている」と「まだずれている」が両方成り立っても書く"
+               "（同じモードの中で値が交差していると古い数値が残る）★",
+        "file": "scripts/align_strategy.py",
+        "before": "        if cand and aligned:",
+        "after": "        if False:",
+        "run": ["scripts/align_strategy.py"],
+    },
+    {
+        "why": "★区切りから決まるモードが1つでなくても書く"
+               "（別のモードの枠から書き換えられる）★",
+        "file": "scripts/align_strategy.py",
+        "before": "        if len(keys) != 1:",
+        "after": "        if not keys:",
+        "run": ["scripts/align_strategy.py"],
+    },
+    {
+        "why": "★小数も受け取る（350.5 を黙って 350G に切り捨てる）★",
+        "file": "scripts/align_strategy.py",
+        "before": "    return v if type(v) is int else None",
+        "after": "    return v if isinstance(v, (int, float)) else None",
+        "run": ["scripts/align_strategy.py"],
+    },
+    {
+        "why": "★数字の境目を見ない（12345G の後ろ4桁に食いつく）★",
+        "file": "scripts/align_strategy.py",
+        "before": 'GNUM = re.compile(r"(?<!\\d)(\\d{1,4})(?!\\d)\\s*G")',
+        "after": 'GNUM = re.compile(r"(\\d{1,4})\\s*G")',
+        "run": ["scripts/align_strategy.py"],
+    },
+    {
         "why": "★G が付いていない数値まで書き換える（周期・スルー回数）★",
         "file": "scripts/align_strategy.py",
-        "before": 'GNUM = re.compile(r"(\\d{1,4})\\s*G")',
-        "after": 'GNUM = re.compile(r"(\\d{1,4})")',
+        "before": 'GNUM = re.compile(r"(?<!\\d)(\\d{1,4})(?!\\d)\\s*G")',
+        "after": 'GNUM = re.compile(r"(?<!\\d)(\\d{1,4})(?!\\d)")',
         "run": ["scripts/align_strategy.py"],
     },
 ]
