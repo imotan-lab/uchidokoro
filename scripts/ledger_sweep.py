@@ -112,8 +112,19 @@ def _dirty() -> bool:
 
 
 def _rows() -> list:
-    data = _sj.read_json(LEDGER, expect=(dict, list))
-    return data if isinstance(data, list) else (data.get("issues") or [])
+    """台帳の案件を読む。
+
+    ★台帳が無い場所でも落ちない★（2026-08-30・実際にCIを赤くした）
+      台帳は書類フォルダ（リポジトリの外）にあり、★CIの機械には無い★。
+      無いときは「案件0件」として読む。
+    ★これは緩めではない★＝閉じる側は `find_issue` が None を返すので、
+      案件が引けなければ**断る**（fail-closed のまま）。
+    """
+    data = _sj.read_json(LEDGER, expect=(dict, list),
+                         allow_missing=True, default=[])
+    if isinstance(data, list):
+        return data
+    return (data.get("issues") or []) if isinstance(data, dict) else []
 
 
 def find_issue(issue_id: int):
@@ -452,7 +463,14 @@ def selftest() -> int:
                   if r.get("slug") == "tokyo_ghoul"
                   and r.get("status") != "closed"), None)
     _lid = (_live or {}).get("id")
-    t("★★試験に使える開いた案件がある★★", _lid is not None)
+    have_ledger = os.path.isfile(LEDGER)
+    t("★★台帳が無くても落ちない★★（CIの機械には台帳が無い）",
+      isinstance(_rows(), list))
+    if have_ledger:
+        t("★★試験に使える開いた案件がある★★", _lid is not None)
+    else:
+        print("⏭ 台帳がこの環境に無いので、台帳を読む試験は飛ばしました"
+              "（CIの機械には書類フォルダがありません）")
     if _lid is not None:
         _ok, _w = precheck_close(_lid, "yajikita_mairu")
         t("★★案件の機種と指定の機種が違えば閉じない★★"
