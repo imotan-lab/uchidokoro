@@ -586,39 +586,66 @@ def check_strategy_vs_checker(args: dict) -> dict:
     if not nums:
         return _result(NOT_APPLICABLE, "一覧の狙い目にG数がありません", args)
 
-    md = checker.get("modeData") or {}
-    base = md.get("normal") if isinstance(md.get("normal"), dict) \
-        else checker.get("normal")
-    if not isinstance(base, dict):
-        return _result(NOT_APPLICABLE, "通常時の設定がありません", args)
-    top = base.get("good")
-    dflt = checker.get("defaultRate")
-    if not dflt:
-        return _result(NOT_APPLICABLE, "既定の交換率が決まっていません", args)
-    br = (base.get("byRate") or {}).get(dflt)
-    if not isinstance(br, dict) or "good" not in br:
-        return _result(NOT_APPLICABLE, "既定の交換率の狙い目がありません", args)
-    shown = br.get("good")
-    if not _is_int(top) or not _is_int(shown):
-        return _result(NOT_APPLICABLE, "狙い目が数ではありません", args)
+    # ★★全部のモードを見る★★（2026-08-30・運営者「2AIの出番だよ」）
+    #   ★直す前は「通常時」のモードしか見ていなかった★ので、
+    #   CZ間・AT間・ST間だけの機種を丸ごと飛ばしていた（133機種中94機種）。
+    #   ＝トップページと記事で数字が違っても、誰も気づかなかった（実測45機種）。
+    import align_strategy as _al
+    # ★交換率を選べない機種も見る★（2026-08-30）＝
+    #   ★直す前は「既定の交換率が無い」で39機種を飛ばしていた★。
+    #   選べないなら、チェッカーが出すのは基準の値そのものなので比べられる。
+    dflt = _al.default_rate(checker)
+    slots = _al.slots(checker)
+    if not slots:
+        return _result(NOT_APPLICABLE, "狙い目の枠が読めません", args)
 
-    observed = {"strategy": strategy[:60], "strategy_numbers": sorted(nums),
-                "default_rate": dflt, "checker_shows": shown,
-                "fallback": top}
-    if shown in nums:
-        return _result(PASS,
-                       f"一覧の狙い目に、チェッカーが出す値（{shown}G）が入っています",
-                       args, observed=observed)
-    if top in nums and top != shown:
+    # 既定の交換率で読者が見る値／どの交換率でも出しうる値
+    shown_default = {s["rate"] for s in slots}
+    shown_any = set(shown_default) | {s["base"] for s in slots}
+    for md2 in (checker.get("exchangeRates") or []):
+        rk = (md2 or {}).get("key")
+        if not rk:
+            continue
+        shown_any |= {v for v in
+                      (_al._rate_value(_al.mode_conf(checker, m.get("key")), rk)
+                       for m in (checker.get("modes") or [])
+                       if isinstance(m, dict))
+                      if v is not None}
+
+    named = _al.rate_words(checker, strategy)
+    observed = {"strategy": strategy[:70], "strategy_numbers": sorted(nums),
+                "default_rate": dflt or "（交換率を選べない機種）",
+                "checker_shows": sorted(shown_default)[:10],
+                "names_rates": named}
+
+    if named:
+        # ★交換率ごとに書き分けている一覧★＝既定だけと比べても意味がない。
+        #   ★どの交換率の値にも無い数字があるときだけ★知らせる。
+        stray = sorted(n for n in nums if n not in shown_any)
+        if not stray:
+            return _result(PASS,
+                           "一覧の数字は、どれかの交換率でチェッカーが出す値です",
+                           args, observed=observed)
+        observed["stray"] = stray
         return _result(
             FAIL,
-            f"一覧は {top}G と書いていますが、チェッカーは既定の交換率"
-            f"（{dflt}）で {shown}G を出します",
+            f"一覧の {stray} が、チェッカーのどの交換率にもありません"
+            f"（一覧は {'/'.join(named)} で書き分けています・2AIが読んでください）",
             args, observed=observed)
+
+    stray = sorted(n for n in nums if n not in shown_default)
+    if not stray:
+        return _result(PASS,
+                       "一覧の狙い目は、チェッカーが既定で出す値と同じです",
+                       args, observed=observed)
+    observed["stray"] = stray
     return _result(
         FAIL,
-        f"一覧の狙い目 {sorted(nums)} に、チェッカーが出す値（{shown}G）が"
-        "ありません", args, observed=observed)
+        f"一覧の {stray} が、チェッカーが既定"
+        f"（{dflt or '交換率なし'}）で出す値"
+        f"{sorted(shown_default)[:6]} にありません"
+        "（★どちらが正しいかは2AIが読んで決めてください★）",
+        args, observed=observed)
 
 
 # 記事の書き方 → チェッカーの交換率のキー
@@ -1868,10 +1895,47 @@ def _selftest():
 
     # --- ★一覧の狙い目とチェッカーの突き合わせ★（2026-08-21・台帳#152）
     _sv = check_strategy_vs_checker
-    t("★一覧の数字が、チェッカーの出す値と違えば不合格★",
-      _sv({"slug": "iza_bancho"})["result"] == FAIL)
+
+    # ★★自前の材料で回す★★（2026-08-30・罠㉙）
+    #   ★直す前は本物の機種を名指ししていた★ので、検査の見る範囲を広げたら
+    #   その機種の判定が入れ替わり、★試験だけが落ちた★。
+    _ck_fake = {
+        "exchangeRates": [{"key": "eq56", "label": "5.6枚"},
+                          {"key": "rate55", "label": "6.0枚"}],
+        "defaultRate": "eq56",
+        "modes": [{"key": "cz", "label": "CZ間"}],
+        "cz": {"good": 250,
+               "byRate": {"eq56": {"target": 300},
+                          "rate55": {"target": 350}}},
+    }
+
+    def _sv_fake(strategy, checker=None):
+        keep = globals()["_machine"]
+        globals()["_machine"] = lambda s: {
+            "slug": "zzz_fake", "strategy": strategy,
+            "checker": checker if checker is not None else _ck_fake}
+        keep_valid = globals()["valid_slug"]
+        globals()["valid_slug"] = lambda s: True
+        try:
+            return _sv({"slug": "zzz_fake"})["result"]
+        finally:
+            globals()["_machine"] = keep
+            globals()["valid_slug"] = keep_valid
+
+    t("★一覧の数字が、チェッカーが既定で出す値と違えば不合格★",
+      _sv_fake("CZ間250G〜") == FAIL)
     t("　一覧にチェッカーの値が入っていれば合格",
-      _sv({"slug": "hokuto"})["result"] in (PASS, NOT_APPLICABLE))
+      _sv_fake("CZ間300G〜") == PASS)
+    t("★★通常時が無い機種も見る★★"
+      "（＝CZ間・AT間だけの機種を94件も飛ばしていた）",
+      _sv_fake("CZ間250G〜") == FAIL)
+    t("★★交換率を選べない機種も見る★★（39件を飛ばしていた）",
+      _sv_fake("通常250G〜",
+               {"modes": [{"key": "normal", "label": "通常"}],
+                "normal": {"good": 300}}) == FAIL)
+    t("★★交換率ごとに書き分けた一覧は、どの交換率にも無い数字だけを言う★★",
+      _sv_fake("5.6枚300G〜 / 6.0枚350G〜") == PASS
+      and _sv_fake("5.6枚300G〜 / 6.0枚999G〜") == FAIL)
     t("　機種が無ければ判定しない",
       _sv({"slug": "zzz_test"})["result"] == NOT_APPLICABLE)
     t("★★どちらが正しいかは決めない（観測どまり）★★",

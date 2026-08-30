@@ -56,6 +56,27 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #   ★同じ壊し方を戻さないこと★＝いまの取り決めでは必ず「捕まえられない」
 #   と出て、本物の見落としが埋もれる。
 MUTATIONS = [
+    # ─── 2026-08-30・一覧とチェッカーの食い違いを全機種で見る ────────
+    {
+        "why": "★通常時のモードしか見ない"
+               "（CZ間・AT間だけの機種を94件飛ばす・実測42件の食い違いが隠れる）★",
+        "file": "scripts/recheck.py",
+        "before": "    slots = _al.slots(checker)",
+        "after": "    slots = [s for s in _al.slots(checker) "
+                 "if s[\"mode\"] == \"通常\"]",
+        "run": ["scripts/recheck.py"],
+    },
+    {
+        "why": "★交換率を選べない機種を飛ばす（39件が対象外に戻る）★",
+        "file": "scripts/recheck.py",
+        "before": "    dflt = _al.default_rate(checker)\n"
+                  "    slots = _al.slots(checker)",
+        "after": "    dflt = _al.default_rate(checker)\n"
+                 "    if not dflt:\n"
+                 "        return _result(NOT_APPLICABLE, \"x\", args)\n"
+                 "    slots = _al.slots(checker)",
+        "run": ["scripts/recheck.py"],
+    },
     # ─── 2026-08-30・手で動かした日に仕事が出せなくなる欠陥 ─────────
     {
         "why": "★ロックが読めないとき「手動」に倒す"

@@ -52,6 +52,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from datetime import datetime
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _S = os.path.join(BASE, "scripts")
@@ -165,6 +166,64 @@ def for_slug(slug: str) -> dict:
                                    "why": str(why)[:120]})
         out["open"].append(row)
     return out
+
+
+def _machine_slugs() -> set:
+    """いま一覧にある機種（＝毎朝のタスクが担当しうる機種）。"""
+    data = _sj.read_json(os.path.join(BASE, "assets", "data", "machines.json"),
+                         expect=(dict, list))
+    rows = data if isinstance(data, list) else (data.get("machines") or [])
+    return {str(r.get("slug") or "") for r in rows if isinstance(r, dict)}
+
+
+def for_site(limit: int = 2, today: str = "") -> list:
+    """★機種に紐づかない案件を、古い順に少しだけ出す★（2026-08-30）
+
+    ★なぜ要るか★＝毎朝のタスクは「担当した機種の案件」しか見ないので、
+      `site` や `_global` の案件は**誰の目にも永久に触れない**
+      （実測：開いている 144 件のうち 63 件・うち重要 26 件）。
+
+    ★順番は「見せた日の古い順」★＝1周したらまた回ってくる。
+    ★機種の担当順には割り込まない★（運営者が決めた順番は変えない）。
+    ★ここでは閉じない★＝閉じるのは今までどおり `--close`（機械が確かめる）。
+    """
+    known = _machine_slugs()
+    mine = [r for r in _rows()
+            if r.get("status") != "closed"
+            and str(r.get("slug") or "") not in known]
+    seen = _seen_map()
+    mine.sort(key=lambda r: (seen.get(str(r.get("id")), ""),
+                             str(r.get("id"))))
+    return mine[:max(0, int(limit))]
+
+
+def _state_path() -> str:
+    return _lp.doc("state.json")
+
+
+def _seen_map() -> dict:
+    """どの案件を、いつ材料として出したか。"""
+    st = _sj.read_json(_state_path(), expect=dict,
+                       allow_missing=True, default={})
+    got = ((st or {}).get("ledger_site") or {}).get("last_shown") or {}
+    return {str(k): str(v) for k, v in got.items()} if isinstance(got, dict) \
+        else {}
+
+
+def mark_shown(ids, today: str) -> None:
+    """出した案件に日付を付ける（次は後ろへ回る）。"""
+    p = _state_path()
+    st = _sj.read_json(p, expect=dict, allow_missing=True, default={})
+    st = st if isinstance(st, dict) else {}
+    box = st.setdefault("ledger_site", {}).setdefault("last_shown", {})
+    for i in ids:
+        box[str(i)] = today
+    tmp = p + ".sweep.tmp"
+    with io.open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps(st, ensure_ascii=False, indent=1))
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, p)
 
 
 def _html_ready(slug: str) -> bool:
@@ -370,10 +429,33 @@ def main() -> int:
                     help="消えているはずの逐語（1件につき text_gone を1回・複数可）")
     ap.add_argument("--why", default="",
                     help="2AIがそう決めた理由（記録に残す）")
+    ap.add_argument("--site", action="store_true",
+                    help="機種に紐づかない案件を、古い順に少しだけ出す")
+    ap.add_argument("--limit", type=int, default=2,
+                    help="--site で出す件数（既定 2）")
+    ap.add_argument("--record", action="store_true",
+                    help="--site で出したものに日付を付ける（次は後ろへ回る）")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
+    if a.site:
+        today = datetime.now().strftime("%Y-%m-%d")
+        got = for_site(a.limit, today)
+        print(f"機種に紐づかない案件から {len(got)} 件（古い順）")
+        for r in got:
+            print(f"\n  #{r.get('id')} [{r.get('severity') or '-'}] "
+                  f"{str(r.get('title'))[:110]}")
+            print(f"    {str(r.get('detail') or '')[:400]}")
+        if got:
+            print("\n★これは「読む材料」です★"
+                  "（機種の担当順には割り込みません）")
+            print("★閉じるのは今までどおり★＝"
+                  "python scripts/ledger_sweep.py --slug <機種> --close <番号> …")
+        if a.record and got:
+            mark_shown([r.get("id") for r in got], today)
+            print(f"次は後ろへ回します: {[r.get('id') for r in got]}")
+        return 0
     if not a.slug:
         print("--slug が要ります")
         return 1
