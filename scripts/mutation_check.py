@@ -2056,6 +2056,16 @@ MUTATIONS = [
         "after": "    if False:",
         "run": ["scripts/ci_repro.py"],
     },
+    # ─── 2026-08-31・GitHubの検査を見る道具（番人が毎朝使う）──────
+    {
+        "why": "★自分の出力の文字の扱いを固定しない"
+               "（Windowsの既定では合格の記号が書けず、"
+               "緑でも赤でも毎回「見に行けなかった」になる）★",
+        "file": "scripts/ci_status.py",
+        "before": '        _s.reconfigure(encoding="utf-8", errors="replace")',
+        "after": "        pass",
+        "run": ["scripts/ci_status.py"],
+    },
 ]
 
 

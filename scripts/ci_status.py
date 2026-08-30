@@ -32,6 +32,18 @@ import os
 import sys
 import urllib.request
 
+# ★★自分の出力の文字の扱いを固定する★★（2026-08-31・自分で踏んだ）
+#   Windowsの既定（cp932）では結果の行に含まれる ✅ が書けず、
+#   **UnicodeEncodeError で落ちて終了コードが 1 になる**
+#   ＝番人から見ると「見に行けなかった」。
+#   ★緑でも赤でも毎回そうなる★ので、この見張りは一度も働かない。
+#   ★罠⑪と同じ型★（ci_repro / mutation_check / pre_push_check は対策済み）。
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:              # noqa: BLE001
+        pass                       # ★書けなくても見に行くことは続ける★
+
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 API = ("https://api.github.com/repos/imotan-lab/uchidokoro"
@@ -99,7 +111,11 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="GitHub の検査が赤くないか")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--render-check", action="store_true",
+                    help=argparse.SUPPRESS)   # ★試験専用★
     a = ap.parse_args()
+    if a.render_check:
+        return _render_check()
     if a.selftest:
         return selftest()
 
@@ -120,6 +136,13 @@ def main() -> int:
     return 3 if got["red"] else 0
 
 
+# ★試験のためだけの入口★（通信しない・記号を書いて終わるだけ）
+#   ★これがあるおかげで、子を cp932 で起こして本当に試せる★
+def _render_check() -> int:
+    print("✅ 🔴 🟠 ❌")
+    return 0
+
+
 def selftest() -> int:
     ng, ran = [], [0]
 
@@ -138,6 +161,19 @@ def selftest() -> int:
                 "html_url": "https://example.invalid",
                 "head_commit": {"message": "x"}}
 
+    # ★★子を cp932 で起こして、記号を書けるか見る★★（2026-08-31）
+    #   ★`sys.stdout.encoding` を見るだけでは試験にならない★＝
+    #   呼び出し側が PYTHONIOENCODING=utf-8 を渡していれば、
+    #   守りを外しても通ってしまう（実際に外して通った）。
+    import subprocess as _sp
+    _env = dict(os.environ, PYTHONIOENCODING="cp932")
+    _env.pop("PYTHONUTF8", None)
+    _r = _sp.run([sys.executable, os.path.abspath(__file__), "--render-check"],
+                 capture_output=True, env=_env)
+    t("★★自分の出力を utf-8 に固定している★★"
+      "（Windowsの既定のままだと合格の記号が書けず、"
+      "緑でも赤でも毎回「見に行けなかった」になる）",
+      _r.returncode == 0)
     t("★全部成功なら緑★",
       check(fake([run("publish-pages", "a" * 40, "completed", "success"),
                   run("pages-rehearsal", "a" * 40, "completed",
