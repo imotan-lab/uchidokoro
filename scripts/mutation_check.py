@@ -56,6 +56,25 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #   ★同じ壊し方を戻さないこと★＝いまの取り決めでは必ず「捕まえられない」
 #   と出て、本物の見落としが埋もれる。
 MUTATIONS = [
+    # ─── 2026-08-30・git が読めなかったことを残す ────────────────
+    {
+        "why": "★git が読めなかったことを記録しない"
+               "（レビュー前のコードで公開処理が走っても誰も気づけない）★",
+        "file": "scripts/task_guard.py",
+        "before": "        _gw = git_read_problem(task)",
+        "after": "        _gw = \"\"",
+        "run": ["scripts/task_guard.py"],
+    },
+    {
+        "why": "★git が読めないときに担当を断る"
+               "（運営者の決定に反して、夜の公開が丸ごと飛ぶ）★",
+        "file": "scripts/task_guard.py",
+        "before": "        if _gw:\n"
+                  "            _log_git_unreadable(task, _gw)",
+        "after": "        if _gw:\n"
+                 "            raise GuardError(\"git\")",
+        "run": ["scripts/task_guard.py"],
+    },
     # ─── 2026-08-30・一覧とチェッカーの食い違いを全機種で見る ────────
     {
         "why": "★通常時のモードしか見ない"
@@ -82,8 +101,8 @@ MUTATIONS = [
         "why": "★ロックが読めないとき「手動」に倒す"
                "（分からないのに関所を素通りさせる）★",
         "file": "scripts/task_guard.py",
-        "before": "    except Exception:                                        # noqa: BLE001\n        return True\n\n\ndef unattended_dirty_code",
-        "after": "    except Exception:                                        # noqa: BLE001\n        return False\n\n\ndef unattended_dirty_code",
+        "before": "    except Exception:                                        # noqa: BLE001\n        return True\n\n\ndef git_read_problem",
+        "after": "    except Exception:                                        # noqa: BLE001\n        return False\n\n\ndef git_read_problem",
         "run": ["scripts/task_guard.py"],
     },
     {

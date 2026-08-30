@@ -729,6 +729,16 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
                 "コミットされていないスクリプトがあります: "
                 + " / ".join(_dirty0[:3])
                 + "（レビューされていないコードで公開処理は走らせません）")
+        # ★★git が読めなかったときは、止めないが必ず残す★★
+        #   （2026-08-30・運営者の判断）
+        #   ★直す前は「問題なし」と同じ扱いで、何も残らなかった★＝
+        #   レビューしていないコードで公開処理が走った可能性に誰も気づけない。
+        _gw = git_read_problem(task)
+        if _gw:
+            _log_git_unreadable(task, _gw)
+            _day(data)["git_unreadable"] = {
+                "task": task, "why": _gw[:200],
+                "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
         # ★★その日に一度でも無人で担当したら、もう戻さない★★
         #   （2026-08-30・Codexの指摘1。★自分で再現した★）
         #   直す前はタスクごとに1つだけ持って上書きしていたので、
@@ -1316,6 +1326,35 @@ def lock_is_live() -> bool:
         return age < _tl.STALE_MINUTES
     except Exception:                                        # noqa: BLE001
         return True
+
+
+def git_read_problem(task: str) -> str:
+    """★無人タスクで、git への問い合わせ自体が失敗したか★（2026-08-30）
+
+    ★止めるためのものではない★＝運営者の決定で、読めなくても公開は止めない
+    （未pushで残すと夜の公開が止まるため）。
+    ★けれど起きたことは残す★＝直す前は何も残らず、
+      「レビューしていないコードで公開処理が走った」可能性に誰も気づけなかった。
+    """
+    if not any(str(task).endswith(t) or str(task) == t
+               for t in UNATTENDED_TASKS):
+        return ""
+    _names, why = _changed_files()
+    return str(why or "")
+
+
+def _log_git_unreadable(task: str, why: str) -> None:
+    """★記録に残す★（メールは呼ぶ側＝手順書の担当）"""
+    try:
+        d = _lp.doc("logs")
+        os.makedirs(d, exist_ok=True)
+        stamp = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+        with open(os.path.join(d, "task_guard_git.log"), "a",
+                  encoding="utf-8") as fh:
+            fh.write(f"[{stamp}] {task}: git に問い合わせできませんでした"
+                     f"（{why[:200]}）→ ★止めずに進みます★\n")
+    except Exception:                                        # noqa: BLE001
+        pass                                   # 記録に失敗しても本処理は止めない
 
 
 def unattended_dirty_code(task: str) -> list:
@@ -2266,6 +2305,44 @@ def selftest() -> int:
               _load(fpa).get("day", {}).get("had_unattended") is True)
         finally:
             globals()["lock_is_live"] = _keep_lock
+
+        # ★★git が読めなかったときは、止めないが必ず残す★★
+        #   （2026-08-30・運営者の判断。Codexが2回指摘していた件の折衷）
+        #   ★止めない★＝未pushで残すと夜の公開が止まる
+        #   ★けれど残す★＝直す前は何も残らず、
+        #     レビューしていないコードで公開処理が走った可能性に気づけない。
+        fpg = os.path.join(tmpdir, "gitread.json")
+        _keep_changed = globals()["_changed_files"]
+        _keep_lock2 = globals()["lock_is_live"]
+        try:
+            globals()["_changed_files"] = lambda: ([], "git が動きません")
+            globals()["lock_is_live"] = lambda: True
+            # ★例外を受け止めて❌にする★＝そのまま投げさせると
+            #   「ただ落ちただけ」になり、守りの証拠にならない。
+            _took = False
+            try:
+                claim("update-machine", "hokuto", path=fpg)
+                _took = (_load(fpg)["tasks"]["update-machine"]
+                         .get("guard_slug") == "hokuto")
+            except Exception as _e:                          # noqa: BLE001
+                _took = False
+            _g = (_load(fpg).get("day", {}).get("git_unreadable") or {}) \
+                if os.path.exists(fpg) else {}
+            t("★★git が読めなくても担当は取れる★★"
+              "（＝止めると夜の公開が丸ごと飛ぶ）", _took)
+            t("★★読めなかったことが記録に残る★★"
+              "（＝直す前は何も残らず、誰も気づけなかった）",
+              _g.get("task") == "update-machine"
+              and "git が動きません" in str(_g.get("why")))
+
+            globals()["_changed_files"] = lambda: ([], "")
+            fpg2 = os.path.join(tmpdir, "gitok.json")
+            claim("update-machine", "hokuto", path=fpg2)
+            t("　★読めたときは印を付けない★",
+              _load(fpg2).get("day", {}).get("git_unreadable") is None)
+        finally:
+            globals()["_changed_files"] = _keep_changed
+            globals()["lock_is_live"] = _keep_lock2
 
         # ★★ロックが読めないときは「無人」に倒す★★（fail-closed）
         #   ★分からないのに「手動だ」と答えると、関所を素通りさせてしまう★
