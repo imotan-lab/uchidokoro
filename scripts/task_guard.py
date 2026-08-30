@@ -723,7 +723,8 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
         #   ＝鉄則4「レビューされていないコードで公開処理を走らせない」が
         #     いちばん危ない経路（公開してpushする側）で破れていた。
         #   実際、2026-08-25の夜は別の理由（契約のズレ）で偶然止まっただけ。
-        _dirty0 = unattended_dirty_code(task)
+        # ★★gitには1回だけ聞く★★（2026-08-30・Codexの指摘1）
+        _dirty0, _gw = unattended_code_state(task)
         if _dirty0:
             raise GuardError(
                 "コミットされていないスクリプトがあります: "
@@ -733,9 +734,7 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
         #   （2026-08-30・運営者の判断）
         #   ★直す前は「問題なし」と同じ扱いで、何も残らなかった★＝
         #   レビューしていないコードで公開処理が走った可能性に誰も気づけない。
-        _gw = git_read_problem(task)
         if _gw:
-            _log_git_unreadable(task, _gw)
             _day(data)["git_unreadable"] = {
                 "task": task, "why": _gw[:200],
                 "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
@@ -1328,19 +1327,28 @@ def lock_is_live() -> bool:
         return True
 
 
-def git_read_problem(task: str) -> str:
-    """★無人タスクで、git への問い合わせ自体が失敗したか★（2026-08-30）
+def unattended_code_state(task: str) -> tuple:
+    """★無人タスクのコードの状態を、gitに1回だけ聞く★
+    → (未コミットの scripts/*.py, 読めなかった理由)
 
-    ★止めるためのものではない★＝運営者の決定で、読めなくても公開は止めない
-    （未pushで残すと夜の公開が止まるため）。
-    ★けれど起きたことは残す★＝直す前は何も残らず、
-      「レビューしていないコードで公開処理が走った」可能性に誰も気づけなかった。
+    ★1回にした理由★（2026-08-30・Codexの指摘1）＝
+      直す前は「未コミットか」と「読めたか」を**別々に**聞いていたので、
+        1回目：失敗 → 未コミットは無いとして進む
+        2回目：成功 → 「読めなかった」の記録が残らない
+      ＝★「止めない。ただし必ず残す」の後半が破れていた★。
+
+    ★どの入口から呼ばれても記録は残す★＝ここで記録するので、
+      呼ぶ側が忘れても残る（記録は止めない・失敗しても本処理は続ける）。
     """
     if not any(str(task).endswith(t) or str(task) == t
                for t in UNATTENDED_TASKS):
-        return ""
-    _names, why = _changed_files()
-    return str(why or "")
+        return [], ""
+    names, why = _changed_files()
+    if why:
+        _log_git_unreadable(task, str(why))
+        return [], str(why)
+    return sorted(n for n in names
+                  if n.startswith("scripts/") and n.endswith(".py")), ""
 
 
 def _log_git_unreadable(task: str, why: str) -> None:
@@ -1364,14 +1372,7 @@ def unattended_dirty_code(task: str) -> list:
       無人タスク自身が書くものなので対象にしない。
     ★読めないときは空を返す★＝git が無い環境で止めない（呼ぶ側が判断）。
     """
-    if not any(str(task).endswith(t) or str(task) == t
-               for t in UNATTENDED_TASKS):
-        return []
-    names, why = _changed_files()
-    if why:
-        return []
-    return sorted(n for n in names
-                  if n.startswith("scripts/") and n.endswith(".py"))
+    return unattended_code_state(task)[0]
 
 
 def _file_digest(rel: str) -> str:
@@ -2216,6 +2217,13 @@ def selftest() -> int:
     #   ★歯止めそのものは、専用の試験で確かめる★（下の _dirty_guard_tests）。
     _keep_dirty = globals()["unattended_dirty_code"]
     globals()["unattended_dirty_code"] = lambda task: []
+    # ★claim が呼ぶのはこちら★（2026-08-30・gitへの問い合わせを1回にした）
+    _keep_state = globals()["unattended_code_state"]
+
+    def _state_stub(task):
+        return [], ""
+
+    globals()["unattended_code_state"] = _state_stub
 
     def t(name, cond):
         results.append((name, bool(cond)))
@@ -2317,6 +2325,9 @@ def selftest() -> int:
         try:
             globals()["_changed_files"] = lambda: ([], "git が動きません")
             globals()["lock_is_live"] = lambda: True
+            # ★ここは本物を使う★＝claim が呼ぶのはこちらなので、
+            #   先頭の差し替えのままだと `_changed_files` が効かない。
+            globals()["unattended_code_state"] = _keep_state
             # ★例外を受け止めて❌にする★＝そのまま投げさせると
             #   「ただ落ちただけ」になり、守りの証拠にならない。
             _took = False
@@ -2343,6 +2354,7 @@ def selftest() -> int:
         finally:
             globals()["_changed_files"] = _keep_changed
             globals()["lock_is_live"] = _keep_lock2
+            globals()["unattended_code_state"] = _state_stub
 
         # ★★ロックが読めないときは「無人」に倒す★★（fail-closed）
         #   ★分からないのに「手動だ」と答えると、関所を素通りさせてしまう★
@@ -2399,6 +2411,7 @@ def selftest() -> int:
             # ★ここだけ本物に戻す★＝この試験は歯止めそのものを確かめるもの
             #   （selftest の先頭で、他の試験のために迂回させている）
             globals()["unattended_dirty_code"] = _keep_dirty
+            globals()["unattended_code_state"] = _keep_state
             globals()["_changed_files"] = lambda: (
                 ["scripts/task_guard.py", "assets/data/machines.json"], "")
             # ★★新台タスクでも効くこと★★（2026-08-26・台帳#478）
@@ -2429,6 +2442,9 @@ def selftest() -> int:
         finally:
             globals()["_changed_files"] = _keep_ch
             globals()["unattended_dirty_code"] = _keep_udc
+            # ★★差し替えに戻す★★＝戻さないと、後ろの試験が全部落ちる
+            #   （2026-08-30に実際に落ちた）
+            globals()["unattended_code_state"] = _state_stub
 
         # ★★上限を撤廃しても、迂回防止の仕組みは残す★★
         #   （2026-08-25・運営者の指示で本番の上限は 0＝なしにした）
@@ -3188,7 +3204,8 @@ def selftest() -> int:
     finally:
         _sh.rmtree(_d, ignore_errors=True)
 
-    globals()["unattended_dirty_code"] = _keep_dirty   # ★必ず戻す★
+    globals()["unattended_dirty_code"] = _keep_dirty
+    globals()["unattended_code_state"] = _keep_state   # ★必ず戻す★
     ng = [n for n, ok in results if not ok]
     print(f"\n{len(results) - len(ng)}/{len(results)} 合格")
     if ng:

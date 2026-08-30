@@ -61,18 +61,16 @@ MUTATIONS = [
         "why": "★git が読めなかったことを記録しない"
                "（レビュー前のコードで公開処理が走っても誰も気づけない）★",
         "file": "scripts/task_guard.py",
-        "before": "        _gw = git_read_problem(task)",
-        "after": "        _gw = \"\"",
+        "before": "        if _gw:\n            _day(data)[\"git_unreadable\"] = {",
+        "after": "        if False:\n            _day(data)[\"git_unreadable\"] = {",
         "run": ["scripts/task_guard.py"],
     },
     {
         "why": "★git が読めないときに担当を断る"
                "（運営者の決定に反して、夜の公開が丸ごと飛ぶ）★",
         "file": "scripts/task_guard.py",
-        "before": "        if _gw:\n"
-                  "            _log_git_unreadable(task, _gw)",
-        "after": "        if _gw:\n"
-                 "            raise GuardError(\"git\")",
+        "before": "        if _gw:",
+        "after": "        if _gw:\n            raise GuardError(\"git\")\n        if _gw:",
         "run": ["scripts/task_guard.py"],
     },
     # ─── 2026-08-30・一覧とチェッカーの食い違いを全機種で見る ────────
@@ -101,8 +99,8 @@ MUTATIONS = [
         "why": "★ロックが読めないとき「手動」に倒す"
                "（分からないのに関所を素通りさせる）★",
         "file": "scripts/task_guard.py",
-        "before": "    except Exception:                                        # noqa: BLE001\n        return True\n\n\ndef git_read_problem",
-        "after": "    except Exception:                                        # noqa: BLE001\n        return False\n\n\ndef git_read_problem",
+        "before": "    except Exception:                                        # noqa: BLE001\n        return True\n\n\ndef unattended_code_state",
+        "after": "    except Exception:                                        # noqa: BLE001\n        return False\n\n\ndef unattended_code_state",
         "run": ["scripts/task_guard.py"],
     },
     {
@@ -948,8 +946,8 @@ MUTATIONS = [
     {
         "why": "新台タスクだけ未コミットの歯止めを飛ばす（レビュー前のコードで公開してpushする・台帳#478）",
         "file": "scripts/task_guard.py",
-        "before": "        _dirty0 = unattended_dirty_code(task)",
-        "after": "        _dirty0 = []",
+        "before": "        _dirty0, _gw = unattended_code_state(task)",
+        "after": "        _dirty0, _gw = [], \"\"",
         "run": ["scripts/task_guard.py"],
     },
     {
