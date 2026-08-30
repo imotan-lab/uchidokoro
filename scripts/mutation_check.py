@@ -75,6 +75,15 @@ MUTATIONS = [
         "run": ["scripts/task_guard.py"],
     },
     {
+        "why": "★無人かどうかの記録を、新台の分岐より後ろへ戻す"
+               "（新台では一度も保存されず、関所が緩む）★",
+        "file": "scripts/task_guard.py",
+        "before": '        _entry(data, task)["unattended"] = _un\n'
+                  '        _d0 = _day(data)',
+        "after": '        _d0 = _day(data)',
+        "run": ["scripts/task_guard.py"],
+    },
+    {
         "why": "★無人だと申告されても、ロックが無ければ手動扱いにする"
                "（ロックを取り忘れた無人タスクが素通りする）★",
         "file": "scripts/task_guard.py",

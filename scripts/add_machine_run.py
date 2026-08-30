@@ -1985,7 +1985,7 @@ def _remember(name, official_url, maker, release, problems) -> None:
 _LOCK_LOST: list = []
 
 
-def _claim_today(official_url: str) -> bool:
+def _claim_today(official_url: str, scheduled: bool = False) -> bool:
     """★1日1機種の上限をコードに守らせる★（人の判断に任せない）"""
     # ★★書く直前に、実際にロックを持っているか自分で確かめる★★
     #   （2026-08-11・依頼152の指摘②）
@@ -2013,7 +2013,11 @@ def _claim_today(official_url: str) -> bool:
          # ★無人で動いていることを申告する★（2026-08-30）
          #   ここはロックを持っている前提の経路なので二重になるが、
          #   ★ロックを取り忘れた実行が「手動」に見えて関所が緩む★のを防ぐ。
-         "claim", "--task", "add-machine", "--slug", slug, "--scheduled"],
+         # ★★外側の申告をそのまま渡す★★（Codexの指摘）＝
+         #   常に付けていたので、★手で動かした実行まで無人扱い★になり、
+         #   その日は対話セッションが仕事を出せなくなる（今日直した欠陥の再発）。
+         "claim", "--task", "add-machine", "--slug", slug]
+        + (["--scheduled"] if scheduled else []),
         cwd=BASE, capture_output=True, text=True,
         encoding="utf-8", errors="replace",
         env={**os.environ, "PYTHONIOENCODING": "utf-8"})
@@ -5078,7 +5082,8 @@ def _main() -> int:
             return 1
         res = run_one(args.name, args.official_url, args.maker, args.release,
                       args.apply,
-                      before_write=lambda: _claim_today(args.official_url),
+                      before_write=lambda: _claim_today(args.official_url,
+                                                 args.scheduled),
                       expect_maker=args.expect_maker)
         # ★1機種だけ試す経路でも、公開したら最後まで通す★（Codex17回目）
         #   ここだけ push を呼んでいなかったので、手元に変更が残り、
@@ -5266,7 +5271,8 @@ def _main() -> int:
         res = run_one(work["name"], work["identity_url"], work["maker"],
                       work["release"], apply_it,
                       release_is_cache=True,       # ★待ち行列の年月は控え★
-                      before_write=lambda u=work["identity_url"]: _claim_today(u),
+                      before_write=lambda u=work["identity_url"]: _claim_today(
+                          u, args.scheduled),
                       # ★最初に確かめたメーカーの表示名★（台帳#335の項目5）
                       #   ★出典に合わせて選ぶ★（2026-08-16・依頼213の指摘5）
                       #   DMMの控えにP-WORLD時代の表示名をぶつけると、

@@ -729,6 +729,19 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
                 "コミットされていないスクリプトがあります: "
                 + " / ".join(_dirty0[:3])
                 + "（レビューされていないコードで公開処理は走らせません）")
+        # ★★その日に一度でも無人で担当したら、もう戻さない★★
+        #   （2026-08-30・Codexの指摘1。★自分で再現した★）
+        #   直す前はタスクごとに1つだけ持って上書きしていたので、
+        #   ★無人 → 手動の順に担当すると、無人だった記録が消えた★
+        #   ＝無人が作った未照合のコミットまで push できた。
+        # ★★分岐より手前で記録する★★（2026-08-30・Codexの指摘1の後半）
+        #   ★新台の担当は下の分岐で先に return する★ので、
+        #   後ろに置いていた間は**新台では一度も保存されていなかった**
+        #   （実測で確認）。＝--scheduled を渡しても効いていなかった。
+        _un = bool(scheduled) or lock_is_live()
+        _entry(data, task)["unattended"] = _un
+        _d0 = _day(data)
+        _d0["had_unattended"] = bool(_d0.get("had_unattended")) or _un
         if task in UNLIMITED_MACHINE_TASKS:
             # ★★名乗りだけで無制限にしない★★（2026-08-11・台帳#294）
             #   以前は「タスク名が add-machine なら無制限」だったので、
@@ -870,15 +883,6 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
         #   タスクを手で試した日は、対話セッションが記事データを触った
         #   コミットを一切 push できなかった
         #   ＝**タスクを手で試すと、その日は仕事が出せない**。
-        # ★★その日に一度でも無人で担当したら、もう戻さない★★
-        #   （2026-08-30・Codexの指摘1。★自分で再現した★）
-        #   直す前はタスクごとに1つだけ持って上書きしていたので、
-        #   ★無人 → 手動の順に担当すると、無人だった記録が消えた★
-        #   ＝無人が作った未照合のコミットまで push できた。
-        _un = bool(scheduled) or lock_is_live()
-        _e0["unattended"] = _un
-        _d0 = _day(data)
-        _d0["had_unattended"] = bool(_d0.get("had_unattended")) or _un
 
 
         # ★数を数える★（2026-08-21・MACHINES_PER_DAY を 1 → 3 にしたときに直した）
@@ -2225,6 +2229,17 @@ def selftest() -> int:
               claim("update-machine", "hokuto", path=fps,
                     scheduled=True).get("ok") is not False
               and _load(fps).get("day", {}).get("had_unattended") is True)
+
+            # ★★新台の担当でも印が保存されること★★（Codexの指摘1）
+            #   ★新台の分岐は先に return する★ので、記録を後ろに置いていた間は
+            #   **新台では一度も保存されていなかった**（実測で確認）。
+            #   ★試験用の名前（zzz_ など）を使うと、いちばん手前から返って
+            #     新台分岐を一度も通らない★ので、実在しない DMM の形を使う。
+            fpa = os.path.join(tmpdir, "add.json")
+            claim("add-machine", "dmm_99999", path=fpa, scheduled=True)
+            t("★★新台の担当でも「無人」の印が保存される★★"
+              "（＝分岐が先に return して記録されない穴）",
+              _load(fpa).get("day", {}).get("had_unattended") is True)
         finally:
             globals()["lock_is_live"] = _keep_lock
 
