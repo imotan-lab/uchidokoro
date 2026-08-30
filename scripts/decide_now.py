@@ -71,6 +71,7 @@ import sys
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "scripts"))
 
+import local_paths as _lp            # noqa: E402
 import safe_json as _sj              # noqa: E402
 import find_duplicate_prose as _fdp  # noqa: E402
 import fix_plain_style as _fps       # noqa: E402
@@ -294,6 +295,25 @@ OUTSIDE_KINDS = ("fact", "summary", "lead",
                  "fact_in", "summary_in", "lead_in")
 
 
+def _record_removed(slug: str, lines: list, dec: dict) -> str:
+    """★消した段落を控えに残す★（2026-08-30・あとから戻せるように）
+
+    置き場＝Documents/uchidokoro/removed_lines.jsonl（リポジトリ外）。
+    ★消す判断そのものは2AIがする★。ここは記録だけ。
+    """
+    import datetime as _dt
+    p = _lp.doc("removed_lines.jsonl")
+    os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
+    rec = {"at": _dt.datetime.now().isoformat(timespec="seconds"),
+           "slug": slug,
+           "finding_id": str(dec.get("finding_id") or ""),
+           "decided_by": list(dec.get("decided_by") or []),
+           "lines": list(lines)}
+    with io.open(p, "a", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    return p
+
+
 def _slot_key(a: str) -> str:
     """係り先（★空白を詰めただけ★＝そのままの文字で比べる）。
 
@@ -309,6 +329,87 @@ def _slot_key(a: str) -> str:
       一致しなければ★断る★（安全側）。
     """
     return "".join(str(a or "").split())
+
+
+_BOUNDARY = "、。，．・／：；｜|（）()「」『』【】〈〉[]{}＊*_＿ \t\n　-—〜~＋+"
+
+
+def _at_boundary(text: str, word: str) -> bool:
+    """★その言葉が「区切りの後ろ」から始まっているか★（2026-08-30・台帳#513）
+
+    ★なぜ要るか（Codexの指摘）★＝
+      ただの「含む」で見ると、★「非リセット時」の中の「リセット時」★を
+      条件が残っていると数えてしまう。意味は反転しているのに通る。
+    """
+    i = text.find(word)
+    while i >= 0:
+        if i == 0 or text[i - 1] in _BOUNDARY:
+            return True
+        i = text.find(word, i + 1)
+    return False
+
+
+def _claim_ok(pair, claims, after_text: str = "") -> bool:
+    """出どころ（主張の形）と、書き換え後の係り先が合っているか。
+
+    ★条件を落とさせない★＝出どころに条件があるなら、
+    書き換え後の係り先にもその条件が（区切りの後ろで）出ていること。
+
+    ★条件そのものに数値が入っている場合★（例「5.6枚持ちメダル」）＝
+    その数値は係り先を持たないことがあるので、
+    ★条件が書き換え後に丸ごと（区切りの後ろで）出ていること★で見る。
+    """
+    slot, val = pair
+    for c in claims:
+        cond = str(c.get("condition") or "")
+        if cond and val in cond and after_text:
+            # ★条件の中の数値★（5.6枚持ちメダル の 5.6枚 など）
+            if _at_boundary(after_text, cond):
+                return True
+            continue
+        if str(c.get("value") or "") != val:
+            continue
+        metric = str(c.get("metric") or "")
+        if metric and metric not in slot:
+            continue
+        if cond and not _at_boundary(slot, cond):
+            # ★条件が数値の区切りをまたぐことがある★（2026-08-30）
+            #   例「5.6枚持ちメダルでCZ間330G」では、330Gの係り先は
+            #   「持ちメダルでCZ間」で、条件の前半が前の数値の側に入る。
+            #   ★同じ一文の中に、条件が区切りの後ろで丸ごとあること★で見る。
+            #   （条件を落とす書き換えは、これでも止まる＝
+            #     「天井は500G」に「リセット時」はどこにも出てこない）
+            if not (after_text and _at_boundary(after_text, cond)):
+                continue
+        return True
+    return False
+
+
+def check_claims(claims, published: str):
+    """出どころの形が正しいか（★2AIが勝手な条件を名乗れないように★）。"""
+    if not isinstance(claims, list) or not claims:
+        return "claims_from は1件以上の一覧で書いてください"
+    for c in claims:
+        if not isinstance(c, dict):
+            return "claims_from の中身は辞書で書いてください"
+        src = str(c.get("source") or "")
+        if not src:
+            return "claims_from には source（出どころの逐語）が要ります"
+        if src not in published:
+            return ("出どころの逐語が、この機種の公開データに"
+                    f"見つかりません: {src[:44]!r}")
+        for key in ("metric", "value"):
+            v = str(c.get(key) or "")
+            if not v:
+                return f"claims_from には {key} が要ります: {src[:30]!r}"
+            if v not in src:
+                return (f"{key}（{v!r}）が出どころの中にありません: "
+                        f"{src[:40]!r}")
+        cond = str(c.get("condition") or "")
+        if cond and cond not in src:
+            return (f"condition（{cond!r}）が出どころの中にありません: "
+                    f"{src[:40]!r}")
+    return None
 
 
 def _slot_ok(p, src_pairs) -> bool:
@@ -598,11 +699,11 @@ def _load_decision(path: str) -> dict:
     if not isinstance(acts, list) or not acts:
         raise ValueError("actions がありません")
     for a in acts:
-        if a.get("op") not in ("drop", "replace"):
+        if a.get("op") not in ("drop", "replace", "drop_line"):
             raise ValueError(f"知らない操作です: {a.get('op')!r}")
         if not a.get("why"):
             raise ValueError("理由の無い操作は受け取りません")
-        if a["op"] == "drop" and not a.get("text"):
+        if a["op"] in ("drop", "drop_line") and not a.get("text"):
             raise ValueError("drop には消す行の逐語が要ります")
         if a["op"] == "replace" and not (a.get("before") and a.get("after")):
             raise ValueError("replace には before と after が要ります")
@@ -1064,12 +1165,23 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
                 #     ②足す数値が、その逐語の中に全部あること
                 #   ＝★機械は「どこから来た数値か」だけを確かめる★。
                 #     どれを載せるかは2AIが決める（機械は判断しない）。
+                # ★★出どころは「主張の形」でも渡せる★★（2026-08-30・台帳#513）
+                #   ★短く切った逐語では条件落ちを止められない★ため。
+                _claims = a.get("claims_from")
+                if _claims:
+                    _cw = check_claims(_claims, published)
+                    if _cw:
+                        result["problems"].append(_cw)
+                        return result
                 src = a.get("numbers_from")
-                if not src:
+                if not src and not _claims:
                     result["problems"].append(
                         f"数値が変わる言い換えには出どころが要ります"
-                        f"（numbers_from に逐語で）: {a['before'][:34]!r}")
+                        f"（numbers_from の逐語か claims_from の主張で）"
+                        f": {a['before'][:34]!r}")
                     return result
+                if _claims and not src:
+                    src = _claims[0]["source"]
                 if src not in published:
                     result["problems"].append(
                         f"出どころの逐語が、この機種の公開データに見つかりません: "
@@ -1099,7 +1211,10 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
                     else:
                         _added_pairs.append(_pair)
                 _miss_p = [_pair for _pair in _added_pairs
-                           if not _slot_ok(_pair, _src_pairs)]
+                           if not _slot_ok(_pair, _src_pairs)
+                           and not (_claims
+                                    and _claim_ok(_pair, _claims,
+                                                  a["after"]))]
                 if _miss_p:
                     result["problems"].append(
                         "出どころと、数値の付き先が違います: "
@@ -1121,6 +1236,43 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
                         "出どころに無い数値を足そうとしています: "
                         + " / ".join(missing[:4]))
                     return result
+        if a["op"] == "drop_line":
+            # ★★誤りだと2AIが判断した段落を消す★★（2026-08-30・運営者の指示）
+            #   ★`drop` との違い★＝重複でなくてよい。そのぶん条件を厳しくする。
+            _t = str(a.get("text") or "")
+            _mw = str(a.get("meaning_why") or "").strip()
+            if len(_mw) < 15:
+                result["problems"].append(
+                    "段落を消すときは、なぜ消してよいかを meaning_why に"
+                    f"書いてください（15字以上）: {_t[:34]!r}")
+                return result
+            # ★消す行の数値は、すべて名指しで理由を書くこと★
+            #   （「同じ数値が他所にある」だけでは免除しない＝Codexの助言）
+            _named = {str(x.get("n")) for x in (dec.get("numbers_removed") or [])
+                      if isinstance(x, dict)}
+            _miss_n = [n for n in _numbers(_t) if n not in _named]
+            if _miss_n:
+                result["problems"].append(
+                    "消す段落の数値は、すべて numbers_removed に理由つきで"
+                    "名指ししてください: " + " / ".join(sorted(set(_miss_n))[:6]))
+                return result
+            _hits = [ln for sec in (d.get("sections") or [])
+                     for ln in (sec.get("body") or []) if ln == _t]
+            if len(_hits) != 1:
+                result["problems"].append(
+                    f"消す段落が {len(_hits)} か所です。1つに定まりません: "
+                    f"{_t[:34]!r}")
+                return result
+            for sec in (d.get("sections") or []):
+                body = sec.get("body") or []
+                if _t in body and len([x for x in body if x != _t]) == 0:
+                    result["problems"].append(
+                        f"その節が空になります: {sec.get('title')!r}")
+                    return result
+            result.setdefault("removed_lines", []).append(
+                {"text": _t, "why": str(a.get("why") or "")[:200],
+                 "meaning_why": _mw[:200]})
+            continue
         if a["op"] == "drop":
             # ★★消すことで「どちらが正解か」を選んでしまう場合は受け取らない★★
             #   （2026-08-21・Codexの設計レビュー）
@@ -1235,6 +1387,16 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
         #   ★直す前は毎回もとの記事から探していた★ので、
         #   同じ「消す」を2件並べると両方が同じ行を指し、
         #   ★2件やったと報告して1件しか消さなかった★（自分で再現した）。
+        if a["op"] == "drop_line" and (not where or where == "body"):
+            for si, sec in enumerate(d.get("sections") or []):
+                body = sec.get("body") or []
+                for bi, line in enumerate(body):
+                    if line == a["text"]:
+                        plan.append(("drop", si, bi, a))
+                        hit = True
+                        break
+                if hit:
+                    break
         if a["op"] == "drop" and (not where or where == "body"):
             _sp = drop_spot(d, a["text"], used=_used_drop)
             if _sp:
