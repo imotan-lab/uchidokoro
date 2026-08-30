@@ -1769,6 +1769,63 @@ MUTATIONS = [
         "after": "        \"factTable\": [],",
         "run": ["scripts/decide_now.py"],
     },
+
+    # ─── 2026-08-30・台帳を毎朝のタスクへ戻す（ledger_sweep）────────
+    #   ★Codexの指摘で作り直した★＝語の名簿で自動的に閉じるのをやめ、
+    #     2AIが名指しした検査を機械が全部やり直す形にした。
+    {
+        "why": "★検査を1つも渡されなくても通す（空で閉じられる）★",
+        "file": "scripts/ledger_sweep.py",
+        "before": "    if not checks and not texts:\n"
+                  "        return False, [\"確かめる検査が1件もありません\"]",
+        "after": "    if not checks and not texts:\n        return True, []",
+        "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★1件でも通らなければ閉じない、をやめる"
+               "（片方だけ確かめて閉じる＝#284の型）★",
+        "file": "scripts/ledger_sweep.py",
+        "before": "        whys.append(f\"{'○' if ok else '×'} "
+                  "text_gone[{t[:30]}] ／ {why}\")\n"
+                  "        if not ok:\n"
+                  "            return False, whys",
+        "after": "        whys.append(f\"{'○' if ok else '×'} "
+                 "text_gone[{t[:30]}] ／ {why}\")\n"
+                 "        if not ok:\n            pass",
+        "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★案件の機種を見ない"
+               "（別機種の存在しない文で、どの案件でも閉じられる）★",
+        "file": "scripts/ledger_sweep.py",
+        "before": "    if str(row.get(\"slug\") or \"\") != slug:",
+        "after": "    if False:",
+        "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★閉じている案件をもう一度閉じられる／"
+               "存在しない番号でも進む★",
+        "file": "scripts/ledger_sweep.py",
+        "before": "    if row is None:\n"
+                  "        return False, f\"#{issue_id} という案件がありません\"",
+        "after": "    if row is None:\n        return True, \"\"",
+        "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★文体の検査だけで閉じる"
+               "（19通りの文末しか見ていないのに「直った」にする）★",
+        "file": "scripts/ledger_sweep.py",
+        "before": "NEED_COMPANION = (\"plain_style_gone\",)",
+        "after": "NEED_COMPANION = ()",
+        "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★観測どまりの検査でも閉じる★",
+        "file": "scripts/ledger_sweep.py",
+        "before": "        if not meta.get(\"closeable\"):",
+        "after": "        if False:",
+        "run": ["scripts/ledger_sweep.py"],
+    },
 ]
 
 

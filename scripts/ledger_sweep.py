@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""担当した機種の台帳を、その場で機械が確かめ直す。
+"""担当した機種の台帳を、その場で読み直して、直っていれば機械が確かめて閉じる。
 
 ★★運営者の指示（2026-08-30）★★
 > 台帳って以前にあったタスクがどんどん詰んでいったものだよね
@@ -18,21 +18,34 @@
     （実測：58機種に68件が、いまも記事に残ったまま）
 
 ★★この道具がやること★★
-  ①その機種の開いている案件に、機械の検査を当てる
-    → ★合格したものだけ閉じる★（AIの宣言では閉じない）
-  ②検査を当てられないものは「2AIに読ませる手がかり」として返す
+  ①その機種の開いている案件を出し、「当てられそうな検査」を**参考として**添える
     → ★順番は決めない★（運営者の決めた 新台→人気→その他 は変えない）
+  ②2AIが記事を読んで「この検査が全部通れば直っている」と決める
+  ③機械がその検査を**全部**やり直し、通ったときだけ閉じる
 
-★★閉じてよいのは、機械がその型の検査を持っているときだけ★★
-  ★「問題の文が消えた＝直った」とはしない★（2026-08-30に実測）＝
+★★語の名簿で自動的に閉じるのはやめた★★（2026-08-30・Codexの指摘1）
+  はじめ「案件の題に出てくる語 → 当てる検査」を作り、当たったものを
+  そのまま閉じていた。★これは例外リストで意味を判定する型★で、
+  実際に誤って閉じる道が4つあった。
+
+    ・「常体」→ plain_style_gone は、★検査自身が「これだけを根拠に
+      文体混在を閉じてはいけない」と書いている★（19通りの文末しか見ない）
+    ・「噂の箱が空」→ rumor_not_declared_empty は空箱を見ておらず、
+      「噂はありません」という定型文を探す検査。★中身が違う★
+    ・「ポチポチくん」を含む案件が全部「リンクが開けるか」になる
+      （表示や設定値の誤りでも、リンクさえ開ければ閉じる）
+    ・語が2つ当たっても最初の1つしか返さないので、
+      「他サイト名＋型式名」の案件は片方だけ直せば閉じられる
+
+  → 名簿は★参考の表示だけ★にした。閉じる検査を決めるのは2AI。
+
+★★「問題の文が消えた＝直った」とはしない★★（2026-08-30に実測）
   東京喰種の #155 は「CZまたはAT当選」という文が消えていたが、
   それは直ったのではなく★恩恵が未確定で載せていない★からだった。
-  文の有無だけで閉じると、直っていないものを閉じてしまう。
 """
 from __future__ import annotations
 import argparse
 import io
-import json
 import os
 import subprocess
 import sys
@@ -49,31 +62,40 @@ import safe_json as _sj                                  # noqa: E402
 
 LEDGER = _lp.doc("open_issues.json")
 
-# ★題や詳細に出てくる言葉から、当てる検査を選ぶ★
-#   ★ここに無い型は閉じない★（2AIへ手がかりとして渡すだけ）
-#   ★語は「その検査が見ているもの」に限る★＝
-#     広く取ると、関係のない案件に検査を当てて誤って閉じる。
-WORD_TO_CHECK = (
+# ★題や詳細に出てくる言葉から「当てられそうな検査」を挙げる★
+#   ★★これは参考の表示だけ。閉じる判断には使わない★★（2026-08-30・Codex指摘1）
+#     語の一致は意味の一致ではない。決めるのは記事を読んだ2AI。
+#   ★当たった検査は全部挙げる★（最初の1つで打ち切らない）
+SUGGEST_CHECK = (
     (("他サイト名", "サイト名の露出", "競合サイト"), "competitor_names_gone"),
     (("型式名", "検定番号"), "model_code_gone"),
     (("常体", "文体混在", "だ・である"), "plain_style_gone"),
     (("設定示唆まとめが空", "設定示唆が空", "settei が空"), "settei_filled"),
-    (("噂の箱が空", "噂・未確定情報が空"), "rumor_not_declared_empty"),
+    (("噂はありません", "噂・未確定情報はありません"),
+     "rumor_not_declared_empty"),
     (("交換率別しきい値が逆転", "交換率が良いほど深い", "しきい値が逆転"),
      "rate_monotonic"),
-    (("ポチポチくん",), "pochipochi_reachable"),
+    (("ポチポチくんへ行けない", "ポチポチくんのリンク"),
+     "pochipochi_reachable"),
     (("同じ判断を2度", "重複行", "同一事実の重複"), "duplicate_prose_gone"),
 )
 
+# ★★これだけを根拠に閉じてはいけない検査★★
+#   `recheck.check_plain_style_gone` の説明にそう書いてある＝
+#   見ているのは19通りの文末だけで、「常体が無い」ことの証明ではない。
+#   ★同じ規則を2か所に書かない★ので、ここでは「単独では通さない」だけを持つ。
+NEED_COMPANION = ("plain_style_gone",)
 
-def pick_check(issue: dict):
-    """その案件に当てられる検査を選ぶ（無ければ None）。"""
+
+def suggest_checks(issue: dict) -> list:
+    """その案件に当てられそうな検査を**全部**挙げる（参考）。"""
     text = (str(issue.get("title") or "") + " "
             + str(issue.get("detail") or ""))
-    for words, check in WORD_TO_CHECK:
-        if any(w in text for w in words):
-            return check
-    return None
+    out = []
+    for words, check in SUGGEST_CHECK:
+        if any(w in text for w in words) and check not in out:
+            out.append(check)
+    return out
 
 
 def _head() -> str:
@@ -89,156 +111,227 @@ def _dirty() -> bool:
     return bool((r.stdout or "").strip())
 
 
-def for_slug(slug: str) -> dict:
-    """その機種の案件を、閉じてよいもの／手がかり に分ける。★書かない★"""
+def _rows() -> list:
     data = _sj.read_json(LEDGER, expect=(dict, list))
-    rows = data if isinstance(data, list) else (data.get("issues") or [])
-    mine = [r for r in rows
+    return data if isinstance(data, list) else (data.get("issues") or [])
+
+
+def find_issue(issue_id: int):
+    """番号で案件を引く（無ければ None）。★閉じる前に必ず引く★"""
+    for r in _rows():
+        try:
+            if int(r.get("id")) == int(issue_id):
+                return r
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def for_slug(slug: str) -> dict:
+    """その機種の開いている案件を出す。★書かない★
+
+    ★閉じてよいかは決めない★＝当てられそうな検査と、その今の結果を
+    添えるだけ。決めるのは記事を読んだ2AI。
+    """
+    mine = [r for r in _rows()
             if r.get("slug") == slug and r.get("status") != "closed"]
-    out = {"slug": slug, "closeable": [], "hints": [], "checked": len(mine)}
+    out = {"slug": slug, "open": [], "checked": len(mine)}
     head = _head()
     for r in mine:
-        check = pick_check(r)
-        if not check:
-            out["hints"].append({"id": r.get("id"),
-                                 "title": str(r.get("title") or "")[:120],
-                                 "why": "当てられる検査がありません"})
-            continue
-        meta = _rc.CHECKS.get(check) or {}
-        ok, why, got = _rc.closeable(
-            {"check": check, "version": meta.get("version"),
-             "args": {"slug": slug}, "expected_commit": head})
-        if ok:
-            out["closeable"].append({"id": r.get("id"), "check": check,
-                                     "title": str(r.get("title") or "")[:120],
-                                     "why": why})
-        else:
-            out["hints"].append({"id": r.get("id"), "check": check,
-                                 "title": str(r.get("title") or "")[:120],
-                                 "why": why})
+        row = {"id": r.get("id"),
+               "title": str(r.get("title") or "")[:160],
+               "detail": str(r.get("detail") or "")[:600],
+               "suggest": []}
+        for check in suggest_checks(r):
+            meta = _rc.CHECKS.get(check) or {}
+            ok, why, _got = _rc.closeable(
+                {"check": check, "version": meta.get("version"),
+                 "args": {"slug": slug}, "expected_commit": head})
+            row["suggest"].append({"check": check, "pass": bool(ok),
+                                   "why": str(why)[:120]})
+        out["open"].append(row)
     return out
 
 
-def close_them(slug: str, got: dict) -> list:
-    """機械が合格と言ったものだけ閉じる。★理由をファイルで渡す★"""
-    done = []
-    ops = _lp.doc("ops")
-    os.makedirs(ops, exist_ok=True)
-    for c in got["closeable"]:
-        p = os.path.join(ops, f"close_{c['id']}.txt")
-        io.open(p, "w", encoding="utf-8", newline="\n").write(
-            "この機種を担当したときに、機械が検査をやり直して合格しました。\n"
-            f"検査: {c['check']}\n"
-            f"確かめた内容: {c['why']}\n"
-            "★AIの宣言ではなく、機械が記事を見て確かめた結果です★\n")
-        r = subprocess.run(
-            [sys.executable, os.path.join(_S, "open_issues.py"), "close",
-             "--id", str(c["id"]), "--reason-file", p],
-            cwd=BASE, capture_output=True, text=True, encoding="utf-8",
-            errors="replace")
-        if r.returncode == 0:
-            done.append(c["id"])
-    return done
+def _html_ready(slug: str) -> bool:
+    """★公開HTMLが実在するか★（2026-08-30・Codexの指摘4）
+
+    `text_gone` は公開HTMLが**無い**とき「HTMLにも無い」と読んでPASSする。
+    ＝「記事データと公開HTMLを見た」という閉じ方の理由と食い違う。
+    ★無いなら閉じない側へ倒す★
+    """
+    return os.path.exists(os.path.join(BASE, "machines", slug, "index.html"))
 
 
-def all_gone(slug: str, texts, head: str = "") -> tuple:
-    """★指定された逐語が「全部」消えているか★ → (ok, 一件ずつの記録)
+def run_checks(slug: str, checks, texts, head: str = "") -> tuple:
+    """2AIが名指しした検査を**全部**やり直す → (ok, 一件ずつの記録)
 
-    ★★1件でも残っていたら閉じない★★（罠⑮＝免除の条件をゆるくしない）
+    ★★1件でも通らなければ閉じない★★（罠⑮＝免除の条件をゆるくしない）
       1つの案件に問題が2つ書いてあることがある（実例 #284＝
       「狙い目の逆転」と「句点後の半角スペース」）。
       片方だけ確かめて閉じると、もう片方が直っていないまま消える。
-    ★逐語を1つも渡されなければ「全部消えた」にしない★（空で通さない）
+    ★検査を1つも渡されなければ通さない★（空で閉じない）
     """
-    if not texts:
-        return False, ["確かめる逐語が1件もありません"]
-    meta = _rc.CHECKS["text_gone"]
+    checks = list(checks or [])
+    texts = list(texts or [])
+    if not checks and not texts:
+        return False, ["確かめる検査が1件もありません"]
+
+    # ★これだけでは閉じられない検査★は、逐語の確認と組でなければ通さない
+    lone = [c for c in checks if c in NEED_COMPANION]
+    if lone and not texts:
+        return False, [f"{'/'.join(lone)} は単独では閉じられません"
+                       "（消えた逐語も一緒に確かめてください）"]
+
     head = head or _head()
-    ok_all, whys = True, []
+    whys = []
+    for check in checks:
+        meta = _rc.CHECKS.get(check)
+        if not meta:
+            return False, whys + [f"知らない検査です: {check}"]
+        if not meta.get("closeable"):
+            return False, whys + [f"観測どまりの検査です: {check}"]
+        ok, why, _got = _rc.closeable(
+            {"check": check, "version": meta.get("version"),
+             "args": {"slug": slug}, "expected_commit": head})
+        whys.append(f"{'○' if ok else '×'} {check} ／ {why}")
+        if not ok:
+            return False, whys
+    if texts and not _html_ready(slug):
+        return False, whys + ["公開HTMLがありません"
+                              "（記事データだけでは閉じません）"]
+    meta = _rc.CHECKS["text_gone"]
     for t in texts:
         ok, why, _got = _rc.closeable(
             {"check": "text_gone", "version": meta["version"],
-             "args": {"slug": slug, "text": t},
-             "expected_commit": head})
-        whys.append(f"{'消' if ok else '残'}: {t} ／ {why}")
+             "args": {"slug": slug, "text": t}, "expected_commit": head})
+        whys.append(f"{'○' if ok else '×'} text_gone[{t[:30]}] ／ {why}")
         if not ok:
-            ok_all = False
-            break
-    return ok_all, whys
+            return False, whys
+    return True, whys
+
+
+def precheck_close(issue_id, slug: str) -> tuple:
+    """★番号・状態・機種が結び付いているか★ → (ok, 理由)
+
+    ★★close_issue から切り出してある★★（2026-08-30）
+      理由＝ここを本体の中に埋めていたら、
+      ★「木が汚れている」という別の守りに先に当たって★、
+      壊し方の道具が4件とも「捕まえられない」になった（罠④）。
+      切り出して直接呼べる形にすると、狙った1件だけを試せる。
+    """
+    row = find_issue(issue_id)
+    if row is None:
+        return False, f"#{issue_id} という案件がありません"
+    if str(row.get("status") or "") == "closed":
+        return False, f"#{issue_id} はすでに閉じています"
+    if str(row.get("slug") or "") != slug:
+        return False, (f"#{issue_id} の機種は {row.get('slug')!r} で、"
+                       f"指定の {slug!r} と違います")
+    return True, f"#{issue_id} は {slug} の開いている案件です"
+
+
+def close_issue(issue_id: int, slug: str, checks, texts, why_extra="") -> int:
+    """★案件を閉じる唯一の入口★ 0=閉じた / それ以外=閉じなかった
+
+    ★★番号・機種・検査を結び付ける★★（2026-08-30・Codexの指摘2）
+      直す前は番号を見ずに逐語だけ確かめていたので、
+      ★別の機種で「存在しない文」を指定すれば、どの案件でも閉じられた★。
+    ★★書き込む直前にもう一度確かめる★★（同・指摘3）
+      検査と台帳の書き換えの間に別のコミットが入ると、
+      「いまの記事で確かめた」と言えなくなる。
+    """
+    ok, why = precheck_close(issue_id, slug)
+    print("  " + why)
+    if not ok:
+        print("★閉じません★")
+        return 1
+    if _dirty():
+        print("★閉じません★ 未コミットの変更があります"
+              "（いまの記事で確かめたと言えないため）")
+        return 1
+
+    head0 = _head()
+    ok, whys = run_checks(slug, checks, texts, head0)
+    for w in whys:
+        print("  " + w[:130])
+    if not ok:
+        print("★閉じません★（1件でも通らなければ閉じない）")
+        return 1
+
+    # ★書き込む直前に、検査したときと同じ状態のままかを見る★
+    if _head() != head0 or _dirty():
+        print("★閉じません★ 確かめている間にリポジトリが動きました")
+        return 1
+
+    ops = _lp.doc("ops")
+    os.makedirs(ops, exist_ok=True)
+    p = os.path.join(ops, f"close_{issue_id}.txt")
+    lines = ["2AIがこの案件を読み、直っていれば通るはずの検査を決めました。",
+             "機械がその検査を全部やり直し、通ったので閉じます。",
+             f"機種: {slug} ／ コミット: {head0[:12]}"]
+    lines += ["  " + w for w in whys]
+    if why_extra:
+        lines.append("2AIの理由: " + why_extra)
+    lines.append("★AIの宣言ではなく、機械が確かめた結果です★")
+    io.open(p, "w", encoding="utf-8", newline="\n").write(
+        "\n".join(lines) + "\n")
+
+    r = subprocess.run(
+        [sys.executable, os.path.join(_S, "open_issues.py"), "close",
+         "--id", str(issue_id), "--reason-file", p],
+        cwd=BASE, capture_output=True, text=True, encoding="utf-8",
+        errors="replace")
+    out = (r.stdout or "").strip() or (r.stderr or "").strip()
+    print(out[-200:])
+    if r.returncode != 0:
+        print(f"★閉じられませんでした★（終了コード {r.returncode}）")
+        return r.returncode or 1
+    print(f"★閉じました★ #{issue_id}")
+    return 0
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        description="担当した機種の台帳を、機械が確かめ直す")
-    ap.add_argument("--slug")
-    ap.add_argument("--apply", action="store_true",
-                    help="合格したものを実際に閉じる")
-    ap.add_argument("--close-if-gone", dest="close_if_gone", metavar="番号",
-                    help="2AIが「この文が消えていれば直り」と決めた案件を、"
-                         "機械が確かめてから閉じる（--text と一緒に使う）")
+        description="担当した機種の台帳を読み直し、機械が確かめて閉じる")
+    # ★必須にしない★＝--selftest が起動できなくなり、
+    #   壊し方の道具が「壊す前から赤い」になって守りを一度も確かめられない。
+    ap.add_argument("--slug", default="")
+    ap.add_argument("--close", type=int, metavar="番号",
+                    help="この案件を閉じる（--check / --text で検査を名指し）")
+    ap.add_argument("--check", action="append", default=[],
+                    help="やり直す検査の名前（2AIが決める・複数可）")
     ap.add_argument("--text", action="append", default=[],
-                    help="消えているはずの逐語（★1件の案件に問題が複数あるなら、"
-                         "その数だけ並べる★＝1つだけ確かめて閉じない）")
+                    help="消えているはずの逐語（1件につき text_gone を1回・複数可）")
+    ap.add_argument("--why", default="",
+                    help="2AIがそう決めた理由（記録に残す）")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
-    if a.close_if_gone:
-        # ★★2AIが「どの文が消えれば直りか」を決め、機械が確かめる★★
-        #   ★文の有無だけで機械が勝手に判断しない★（2026-08-30の実測）＝
-        #   東京喰種 #155 は「CZまたはAT当選」が消えていたが、
-        #   それは直ったのではなく恩恵が未確定で載せていないからだった。
-        if not (a.slug and a.text):
-            print("--slug と --text が要ります")
-            return 1
-        if _dirty():
-            print("★未コミットの変更があるので閉じません★")
-            return 1
-        ok_all, whys = all_gone(a.slug, a.text)
-        for w in whys:
-            print("  " + w[:110])
-        if not ok_all:
-            print("★閉じません★（1件でも残っていたら閉じない）")
-            return 1
-        ops = _lp.doc("ops")
-        os.makedirs(ops, exist_ok=True)
-        p = os.path.join(ops, f"close_{a.close_if_gone}.txt")
-        lines = [
-            "2AIがこの案件を読み、直っていれば消えているはずの文を決めました。",
-            "機械がいまの記事と公開HTMLを見て、その文が無いことを確かめました。",
-            f"確かめた文: {len(a.text)} 件",
-        ] + [f"  - {w}" for w in whys] + [
-            "検査: text_gone（★1件でも残っていたら閉じない★）",
-            "★AIの宣言ではなく、機械が確かめた結果です★",
-        ]
-        io.open(p, "w", encoding="utf-8", newline="\n").write(
-            "\n".join(lines) + "\n")
-        r = subprocess.run(
-            [sys.executable, os.path.join(_S, "open_issues.py"), "close",
-             "--id", str(a.close_if_gone), "--reason-file", p],
-            cwd=BASE, capture_output=True, text=True, encoding="utf-8",
-            errors="replace")
-        print((r.stdout or "").strip()[-160:] or (r.stderr or "")[-160:])
-        return r.returncode
     if not a.slug:
         print("--slug が要ります")
         return 1
+
+    if a.close is not None:
+        return close_issue(a.close, a.slug, a.check, a.text, a.why)
+
     got = for_slug(a.slug)
     print(f"{a.slug}: 開いている案件 {got['checked']} 件")
-    for c in got["closeable"]:
-        print(f"  ★閉じてよい★ #{c['id']} [{c['check']}] {c['title'][:60]}")
-    for h in got["hints"]:
-        print(f"  手がかり       #{h['id']} {h['title'][:60]}")
-        print(f"                 （{h['why'][:70]}）")
-    if a.apply:
-        if _dirty():
-            print("★未コミットの変更があるので閉じません★"
-                  "（いまの記事で確かめた結果だと言えないため）")
-            return 1
-        done = close_them(a.slug, got)
-        print(f"閉じました: {len(done)} 件 {done}")
-    elif got["closeable"]:
-        print("★下見です★（--apply で閉じます）")
+    for r in got["open"]:
+        print(f"\n  #{r['id']} {r['title']}")
+        print(f"    {r['detail'][:300]}")
+        if r["suggest"]:
+            print("    ★参考★ 当てられそうな検査（★これで閉じる判断はしない★）")
+            for s in r["suggest"]:
+                print(f"      {'○' if s['pass'] else '×'} {s['check']}"
+                      f" ／ {s['why'][:70]}")
+        else:
+            print("    ★参考★ 当てられそうな検査はありません")
+    if got["checked"]:
+        print("\n★記事を読んで、直っているなら閉じる検査を名指ししてください★")
+        print(f"  python scripts/ledger_sweep.py --slug {a.slug} "
+              "--close <番号> --check <検査名> --text \"<消えた逐語>\"")
     return 0
 
 
@@ -252,33 +345,22 @@ def selftest() -> int:
         if not cond:
             ng.append(name)
 
-    t("★★題の言葉から検査を選ぶ★★",
-      pick_check({"title": "C評価: 他サイト名が本文に出ている"})
-      == "competitor_names_gone")
-    t("　★型式名★", pick_check({"title": "型式名が残っている"})
-      == "model_code_gone")
-    t("　★交換率の逆転★",
-      pick_check({"title": "交換率別しきい値が逆転（5.6枚700G>5.5枚550G）"})
-      == "rate_monotonic")
-    t("★★当てられる検査が無ければ None★★"
-      "（＝勝手に閉じず、2AIへ手がかりとして渡す）",
-      pick_check({"title": "天井の恩恵が未確定"}) is None)
-    t("　★詳細のほうに書いてあっても拾う★",
-      pick_check({"title": "C評価", "detail": "常体が混ざっています"})
-      == "plain_style_gone")
-
-    # ★観測どまりの検査は選ばない★（閉じられないものを選ばない）
-    for _w, c in WORD_TO_CHECK:
+    t("★★題の言葉から検査を挙げる（参考）★★",
+      "competitor_names_gone"
+      in suggest_checks({"title": "C評価: 他サイト名が本文に出ている"}))
+    t("★★当たった検査は全部挙げる★★（最初の1つで打ち切らない）",
+      set(suggest_checks({"title": "他サイト名と型式名が残っている"}))
+      == {"competitor_names_gone", "model_code_gone"})
+    t("★★当てられそうな検査が無ければ空★★",
+      suggest_checks({"title": "天井の恩恵が未確定"}) == [])
+    for _w, c in SUGGEST_CHECK:
         m = _rc.CHECKS.get(c) or {}
         if not m.get("closeable"):
-            ng.append(f"観測どまりの検査を選んでいます: {c}")
-    t("★★選ぶのは「閉じられる検査」だけ★★", not [x for x in ng if "観測" in x])
+            ng.append(f"観測どまりの検査を挙げています: {c}")
+    t("★★挙げるのは「閉じられる検査」だけ★★",
+      not [x for x in ng if "観測" in x])
 
-    t("★★実データで動く★★（東京喰種の案件を分けられる）",
-      isinstance(for_slug("tokyo_ghoul").get("hints"), list))
-
-    # --- ★2AIが逐語を決めて閉じる道★（本物の記事で確かめる） -------------
-    #   ★偽の記事を作らない★＝本番と同じ入口（recheck）を通す。
+    # --- ★検査のやり直し★ ------------------------------------------------
     real = ""
     _p = os.path.join(BASE, "assets", "data", "machine-details",
                       "tokyo_ghoul.json")
@@ -291,31 +373,55 @@ def selftest() -> int:
                     break
             if real:
                 break
-    gone_txt = "この文はうちどころのどの記事にも存在しません2026"
-    t("★★逐語を1件も渡されなければ閉じない★★（空で通さない）",
-      all_gone("tokyo_ghoul", [])[0] is False)
+    gone = "この文はうちどころのどの記事にも存在しません2026"
 
-    # ★★未コミットの木では closeable が必ず断る★★（既存の正しい守り）
-    #   ＝汚れた木で「残っていたら閉じない」を試しても、
-    #     ★汚れているから断られただけ★で、狙った守りを一度も通らない（罠④）。
-    #   → 汚れているときは**飛ばしたと明示する**（合格に数えない）。
-    #     CI と mutation_check は綺麗な写しで回すので、そちらで必ず動く。
+    # ★★断る理由まで見る★★（2026-08-30・壊し方の道具が4件見逃した）
+    #   真偽だけを見ると、木が汚れているだけでも False になるので、
+    #   ★狙った守りを一度も通らずに緑になる★（罠④）。
+    def why1(*a):
+        return (run_checks(*a)[1] or [""])[0]
+
+    t("★★検査を1つも渡されなければ通さない★★",
+      "検査が1件もありません" in why1("tokyo_ghoul", [], []))
+    t("★★知らない検査の名前は通さない★★",
+      "知らない検査です" in why1("tokyo_ghoul", ["そんな検査は無い"], []))
+    t("★★観測どまりの検査では閉じられない★★",
+      "観測どまりの検査です" in why1("tokyo_ghoul", ["strategy_vs_checker"], []))
+    t("★★文体の検査は単独では通さない★★"
+      "（recheck 自身が「これだけを根拠に閉じるな」と書いている）",
+      "単独では閉じられません" in why1("tokyo_ghoul", ["plain_style_gone"], []))
+
+    # --- ★閉じる入口の前さばき★（★台帳は一切書かない★） -----------------
+    t("★★存在しない番号では閉じない★★",
+      precheck_close(99999999, "tokyo_ghoul")
+      == (False, "#99999999 という案件がありません"))
+    _ok, _w = precheck_close(155, "yajikita_mairu")
+    t("★★案件の機種と指定の機種が違えば閉じない★★"
+      "（＝別機種の「存在しない文」でどの案件でも閉じられた穴）",
+      _ok is False and "と違います" in _w)
+    t("　★正しい機種なら前さばきは通る★",
+      precheck_close(155, "tokyo_ghoul")[0] is True)
+    _row = find_issue(155)
+    t("　★試したあとも #155 は開いたまま★",
+      _row is not None and str(_row.get("status") or "") != "closed")
+
     if _dirty():
-        _ok, _why = all_gone("tokyo_ghoul", [gone_txt])
         t("★★未コミットの木では、消えている逐語でも閉じない★★",
-          _ok is False and "未コミット" in _why[0])
+          run_checks("tokyo_ghoul", [], [gone])[0] is False)
         print("⏭ 木が汚れているので「逐語が消えたか」の4件は飛ばしました"
               "（CI・mutation_check の綺麗な写しで動きます）")
     else:
-        t("★★消えている逐語なら閉じてよいと言う★★",
-          all_gone("tokyo_ghoul", [gone_txt])[0] is True)
-        t("★★まだ記事に残っている逐語なら閉じない★★",
-          bool(real) and all_gone("tokyo_ghoul", [real])[0] is False)
-        t("★★2件のうち1件でも残っていたら閉じない★★"
+        t("★★消えている逐語なら通す★★",
+          run_checks("tokyo_ghoul", [], [gone])[0] is True)
+        t("★★まだ記事に残っている逐語なら通さない★★",
+          bool(real) and run_checks("tokyo_ghoul", [], [real])[0] is False)
+        t("★★2件のうち1件でも残っていたら通さない★★"
           "（＝片方だけ確かめて閉じる罠を塞ぐ）",
-          bool(real) and all_gone("tokyo_ghoul", [gone_txt, real])[0] is False)
+          bool(real)
+          and run_checks("tokyo_ghoul", [], [gone, real])[0] is False)
         t("　★順番を入れ替えても同じ★",
-          bool(real) and all_gone("tokyo_ghoul", [real, gone_txt])[0] is False)
+          bool(real)
+          and run_checks("tokyo_ghoul", [], [real, gone])[0] is False)
 
     print(f"\n{ran[0] - len(ng)}/{ran[0]} " + ("合格" if not ng else "不合格"))
     if ng:
