@@ -2040,6 +2040,22 @@ MUTATIONS = [
                  '        return [f"R14: 目次が読者に見えていません',
         "run": ["scripts/audit_render.py"],
     },
+    # ─── 2026-08-31・CI再現の道具が「嘘の赤」を出さないこと ──────
+    {
+        "why": "★シェルの記号を引数として渡す"
+               "（毎回1本、嘘の赤が出て、道具の答えが信用できなくなる）★",
+        "file": "scripts/ci_repro.py",
+        "before": "        if tok.startswith(_SHELL_HEAD):\n            break",
+        "after": "        if False:\n            break",
+        "run": ["scripts/ci_repro.py"],
+    },
+    {
+        "why": "★argv を作れない行を黙って通す（検査を飛ばしたのに緑になる）★",
+        "file": "scripts/ci_repro.py",
+        "before": '    if len(args) < 2 or args[0] != "python":',
+        "after": "    if False:",
+        "run": ["scripts/ci_repro.py"],
+    },
 ]
 
 

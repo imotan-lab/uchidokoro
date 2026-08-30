@@ -128,6 +128,42 @@ def _commands(step: str) -> list:
     return out
 
 
+# ★ワークフローの行は「シェルの文」★（2026-08-31・自分で踏んだ）
+#   `python x.py > cc.log 2>&1 || rc=1` をそのまま argv にしていたので、
+#   `>` `2>&1` `||` `rc=1` が**引数として**渡っていた。
+#   ＝argparse の厳しいスクリプトは必ず落ち、★毎回1本、嘘の赤が出ていた★。
+#   ＝argparse の緩いスクリプトは落ちないが、ゴミの引数つきで走っていた。
+#   ★CIの再現なのに、CIと違うものを動かしていた★ので、
+#   この道具の答えそのものが信用できなかった。
+_SHELL_HEAD = (">", "<", "|", "&", ";", "2>", "1>", "&>")
+
+
+def argv_of(cmd: str) -> list:
+    """シェルの文から、実際に動かす argv だけを取り出す。
+
+    ★最初のシェル記号で切る★（リダイレクト・パイプ・条件つなぎ）。
+    ★記号を無視して読み飛ばさない★＝そこから先はシェルの仕事で、
+    このコマンドの引数ではない。
+    """
+    args = []
+    for tok in str(cmd or "").split():
+        if tok.startswith(_SHELL_HEAD):
+            break
+        args.append(tok)
+    return args
+
+
+def argv_problem(cmd: str, args: list) -> str:
+    """argv として使えないなら理由を返す（使えるなら空文字）。
+
+    ★読み取れない行を黙って飛ばさない★＝飛ばした検査は
+    「守っている」ことにならない（CLAUDE.md「無ければ飛ばすで逃げない」）。
+    """
+    if len(args) < 2 or args[0] != "python":
+        return f"ワークフローの行から argv を作れません: {str(cmd)[:70]}"
+    return ""
+
+
 def _run(cmds: list, root: str, no_net: bool) -> list:
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     # ★★控えの有無という食い違い★★（2026-08-24・実際にCIが2回赤くなった）
@@ -154,7 +190,12 @@ def _run(cmds: list, root: str, no_net: bool) -> list:
     bad = []
     try:
         for c in cmds:
-            args = c.split()
+            args = argv_of(c)
+            why = argv_problem(c, args)
+            if why:
+                print(f"  ★NG {str(c)[:66]}  ({why})")
+                bad.append((c, "", "★" + why + "★"))
+                continue
             try:
                 r = subprocess.run([sys.executable] + args[1:], cwd=root, env=env,
                                    capture_output=True, text=True, encoding="utf-8",
@@ -173,6 +214,37 @@ def _run(cmds: list, root: str, no_net: bool) -> list:
     return bad
 
 
+def selftest() -> int:
+    """★この道具自身の試験★（2026-08-31）。"""
+    ok_all, ran = True, [0]
+
+    def t(name, cond):
+        nonlocal ok_all
+        ran[0] += 1
+        ok_all = ok_all and bool(cond)
+        print(("✅" if cond else "❌") + " " + name)
+
+    t("★★リダイレクトと条件つなぎを引数にしない★★"
+      "（毎回1本、嘘の赤が出ていた）",
+      argv_of("python scripts/crosscheck_gates.py > cc.log 2>&1 || rc=1")
+      == ["python", "scripts/crosscheck_gates.py"])
+    t("　ふつうの引数はそのまま残す",
+      argv_of("python scripts/x.py --check --slug abc")
+      == ["python", "scripts/x.py", "--check", "--slug", "abc"])
+    t("　パイプでも切る",
+      argv_of("python a.py --fast | tail -n 5") == ["python", "a.py", "--fast"])
+    t("　追記のリダイレクトでも切る",
+      argv_of("python a.py >> log.txt") == ["python", "a.py"])
+    t("★★読み取れない行は黙って飛ばさない★★",
+      argv_problem("> x", argv_of("> x")) != "")
+    t("　python 以外の行も断る",
+      argv_problem("bash a.sh", argv_of("bash a.sh")) != "")
+    t("　まっとうな行は断らない",
+      argv_problem("python a.py --x", argv_of("python a.py --x")) == "")
+    print(f"{ran[0]}/{ran[0]} 合格" if ok_all else "不合格あり")
+    return 0 if ok_all else 1
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="CIの検査を手元で再現する")
     ap.add_argument("--empty-docs", action="store_true",
@@ -183,7 +255,11 @@ def main() -> int:
                     help="Repository audits も流す")
     ap.add_argument("--with-net", action="store_true",
                     help="通信を断たない（ふだんは断つ）")
+    ap.add_argument("--selftest", action="store_true",
+                    help="この道具自身の試験")
     a = ap.parse_args()
+    if a.selftest:
+        return selftest()
     if a.empty_docs:
         os.environ["UCHI_EMPTY_DOCS"] = "1"
 
