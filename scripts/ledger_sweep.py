@@ -66,6 +66,12 @@ import safe_json as _sj                                  # noqa: E402
 
 LEDGER = _lp.doc("open_issues.json")
 
+# ★見せた日の控えの置き場★（2026-08-30・Codexの指摘4）
+#   ★共有の state.json とは別に持つ★＝共有ファイルを丸ごと書き戻すと、
+#   その間に別の処理が入れた更新を、古い内容で上書きしてしまう。
+#   `grow_machine.py` が同じ理由で既に分けている。
+SITE_STATE_NAME = "ledger_site_state.json"
+
 # ★題や詳細に出てくる言葉から「当てられそうな検査」を挙げる★
 #   ★★これは参考の表示だけ。閉じる判断には使わない★★（2026-08-30・Codex指摘1）
 #     語の一致は意味の一致ではない。決めるのは記事を読んだ2AI。
@@ -221,7 +227,7 @@ def _state_path() -> str:
       ★その間に別の処理が入れた更新を、古い内容で上書きしてしまう★。
       `grow_machine.py` が同じ理由で既に分けているので、それにそろえる。
     """
-    return _lp.doc("ledger_site_state.json")
+    return _lp.doc(SITE_STATE_NAME)
 
 
 def _seen_map() -> dict:

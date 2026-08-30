@@ -60,8 +60,8 @@ MUTATIONS = [
         "why": "★見せた日の控えを共有の state.json に戻す"
                "（別の処理の更新を、古い内容で上書きする）★",
         "file": "scripts/ledger_sweep.py",
-        "before": '    return _lp.doc("ledger_site_state.json")',
-        "after": '    return _lp.doc("state.json")',
+        "before": 'SITE_STATE_NAME = "ledger_site_state.json"',
+        "after": 'SITE_STATE_NAME = "state.json"',
         "run": ["scripts/ledger_sweep.py"],
     },
     # ─── 2026-08-30・git が読めなかったことを残す ────────────────
