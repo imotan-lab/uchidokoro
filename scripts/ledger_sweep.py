@@ -46,9 +46,12 @@
 from __future__ import annotations
 import argparse
 import io
+import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _S = os.path.join(BASE, "scripts")
@@ -453,37 +456,58 @@ def selftest() -> int:
       "（recheck 自身が「これだけを根拠に閉じるな」と書いている）",
       "単独では閉じられません" in why1("tokyo_ghoul", ["plain_style_gone"], []))
 
-    # --- ★閉じる入口の前さばき★（★台帳は一切書かない★） -----------------
-    t("★★存在しない番号では閉じない★★",
-      precheck_close(99999999, "tokyo_ghoul")
-      == (False, "#99999999 という案件がありません"))
-    # ★番号を決め打ちにしない★＝案件が閉じた日に試験だけが落ちる
-    #   （2026-08-30に実際に起きた）。その機種の開いている案件を自分で探す。
-    _live = next((r for r in _rows()
-                  if r.get("slug") == "tokyo_ghoul"
-                  and r.get("status") != "closed"), None)
-    _lid = (_live or {}).get("id")
-    have_ledger = os.path.isfile(LEDGER)
-    t("★★台帳が無くても落ちない★★（CIの機械には台帳が無い）",
-      isinstance(_rows(), list))
-    if have_ledger:
-        t("★★試験に使える開いた案件がある★★", _lid is not None)
-    else:
-        print("⏭ 台帳がこの環境に無いので、台帳を読む試験は飛ばしました"
-              "（CIの機械には書類フォルダがありません）")
-    if _lid is not None:
-        _ok, _w = precheck_close(_lid, "yajikita_mairu")
+    # --- ★閉じる入口の前さばき★（★試験用の台帳を自分で作る★） ----------
+    #   ★本番の台帳を読まない★（2026-08-30・CIが赤くなった件の本直し）
+    #     台帳は書類フォルダ（リポジトリの外）にあり、★CIの機械には無い★。
+    #     「無ければ飛ばす」にしたら、CIでは守りを一度も通らず、
+    #     壊し方の道具が「守られていません」と言って落ちた（罠④）。
+    #   ★本番を読まない利点★＝どこでも同じに動く／台帳の中身が変わっても
+    #     試験が落ちない／★本番の台帳を絶対に書き換えない★
+    #     （今日、対照実験のつもりで本番の案件を1件消してしまった）。
+    _keep_ledger = globals()["LEDGER"]
+    _tmpdir = tempfile.mkdtemp(prefix="ledger_sweep_test_")
+    try:
+        _fake = os.path.join(_tmpdir, "open_issues.json")
+        io.open(_fake, "w", encoding="utf-8", newline="\n").write(
+            json.dumps({"issues": [
+                {"id": 9001, "slug": "tokyo_ghoul", "status": "open",
+                 "kind": "quality",
+                 "title": "試験用: 記事に『試験用の逐語です』が残っている",
+                 "detail": "『試験用の逐語です』という文が本文にあります"},
+                {"id": 9002, "slug": "tokyo_ghoul", "status": "closed",
+                 "kind": "quality", "title": "試験用: もう閉じた案件",
+                 "detail": "閉じています"},
+                {"id": 9003, "slug": "tokyo_ghoul", "status": "open",
+                 "kind": "external_value", "title": "試験用: 裏取り待ち",
+                 "detail": "『裏取り待ちの逐語』が未確定です"},
+            ]}, ensure_ascii=False))
+        globals()["LEDGER"] = _fake
+
+        t("★★存在しない番号では閉じない★★",
+          precheck_close(99999999, "tokyo_ghoul")
+          == (False, "#99999999 という案件がありません"))
+        t("★★すでに閉じている案件は閉じない★★",
+          precheck_close(9002, "tokyo_ghoul")[0] is False)
+        _ok, _w = precheck_close(9001, "yajikita_mairu")
         t("★★案件の機種と指定の機種が違えば閉じない★★"
           "（＝別機種の「存在しない文」でどの案件でも閉じられた穴）",
           _ok is False and "と違います" in _w)
         t("　★正しい機種なら前さばきは通る★",
-          precheck_close(_lid, "tokyo_ghoul")[0] is True)
+          precheck_close(9001, "tokyo_ghoul")[0] is True)
         t("★★案件に書かれていない逐語では閉じない★★"
           "（＝機種が合っていても、でたらめな文字列で閉じられた穴）",
-          texts_from_issue(_live, [gone])[0] is False)
-    t("　★案件の本文にある逐語なら通る★",
-      texts_from_issue({"detail": "『CZまたはAT当選』が矛盾"},
-                       ["CZまたはAT当選"])[0] is True)
+          texts_from_issue(find_issue(9001), [gone])[0] is False)
+        t("　★案件の本文にある逐語なら通る★",
+          texts_from_issue(find_issue(9001), ["試験用の逐語です"])[0] is True)
+        t("★★台帳が無い場所でも同じように動く★★"
+          "（CIの機械には書類フォルダがありません）",
+          isinstance(_rows(), list))
+        t("　★その機種の開いている案件だけを出す★",
+          [r["id"] for r in for_slug("tokyo_ghoul")["open"]] == [9001, 9003])
+    finally:
+        globals()["LEDGER"] = _keep_ledger
+        shutil.rmtree(_tmpdir, ignore_errors=True)
+
     t("★★裏取り待ちの案件は、逐語が消えただけでは閉じない★★"
       "（＝2026-08-30に #155 を誤って閉じた型）",
       kind_allows({"kind": "external_value"}, [], ["消えた文"])[0] is False)
@@ -492,10 +516,6 @@ def selftest() -> int:
                   ["消えた文"])[0] is True)
     t("　★ほかの型なら逐語だけでも通る★",
       kind_allows({"kind": "quality"}, [], ["消えた文"])[0] is True)
-    if _lid is not None:
-        _row = find_issue(_lid)
-        t("　★試したあとも、その案件は開いたまま★",
-          _row is not None and str(_row.get("status") or "") != "closed")
 
     if _dirty():
         t("★★未コミットの木では、消えている逐語でも閉じない★★",
