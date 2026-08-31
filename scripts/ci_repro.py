@@ -249,6 +249,17 @@ def _parse(cmd: str) -> tuple:
     return args, ""
 
 
+# ★1つのコマンドに許す時間★（2026-08-31・台帳#530）
+#   ★600秒では足りない★＝壊し方が250通りに増え、
+#   壊し方の道具（--fast）が手元（Windows）で600秒に届くようになった。
+#   ＝★1本が必ず赤くなる★＝今朝直したばかりの
+#   「嘘の赤で本物の赤が埋もれる」状態に戻ってしまう。
+#   ★実測★＝GitHub（Linux）の「Self-tests」の工程全体が851秒。
+#   ハングを捕まえる役目は残る（通信を塞いでいるので、
+#   本当に待つ処理は永久に終わらない）。
+_LIMIT = 1800
+
+
 def _run(cmds: list, root: str, no_net: bool) -> list:
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     # ★★控えの有無という食い違い★★（2026-08-24・実際にCIが2回赤くなった）
@@ -284,7 +295,7 @@ def _run(cmds: list, root: str, no_net: bool) -> list:
             try:
                 r = subprocess.run([sys.executable] + args[1:], cwd=root, env=env,
                                    capture_output=True, text=True, encoding="utf-8",
-                                   errors="replace", timeout=600)
+                                   errors="replace", timeout=_LIMIT)
                 code, out, err = r.returncode, r.stdout or "", r.stderr or ""
             except subprocess.TimeoutExpired:
                 code, out, err = 124, "", "★時間切れ（通信待ちの疑い）★"
