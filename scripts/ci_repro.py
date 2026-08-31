@@ -114,7 +114,14 @@ def _rmtree_hard(path) -> None:
 #   `PYTHONUTF8=1 python a.py` / `timeout 30 python a.py` /
 #   `cd x && python a.py` を見つけるため。
 #   ★`python` を含む語（pythonpath 等）に当たらないように前後を切る★
-_RUNS_PY = re.compile(r"(?<![\w./-])python[0-9.]*(?![\w])")
+# ★★道つきの呼び出しも見つける★★（2026-08-31・Codexの4回目のP2）
+#   ★直す前は / の直後を対象外にしていた★ので、
+#     /usr/bin/python scripts/a.py
+#     ./venv/bin/python scripts/a.py
+#   が検出できず、また黙って飛んでいた
+#   （前回と同じ型の穴を残していた）。
+#   ★python_helper.py のような語には当たらない★（後ろが文字なら外す）。
+_RUNS_PY = re.compile(r"(?<![\w.-])python[0-9.]*(?![\w])")
 
 
 def _scan_block(lines: list, step: str) -> tuple:
@@ -363,11 +370,13 @@ def selftest() -> int:
              "        PYTHONUTF8=1 python scripts/a.py",
              "        timeout 30 python scripts/b.py",
              "        cd sub && python scripts/c.py",
+             "        /usr/bin/python scripts/d.py",
+             "        ./venv/bin/python scripts/e.py",
              "    - name: 次"]
     _fc, _fb = _scan_block(_fake, "Self-tests")
     t("★★前置きのある python 呼び出しを見つける★★"
       "（読み飛ばすと、その検査を飛ばしたまま緑になる）",
-      _fc == ["python scripts/ok.py"] and len(_fb) == 3)
+      _fc == ["python scripts/ok.py"] and len(_fb) == 5)
     t("　コメントや入れ物の行は読み飛ばす",
       not any("set -euo" in x for x in _fb)
       and not any("コメント" in x for x in _fb))
