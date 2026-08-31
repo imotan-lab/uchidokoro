@@ -1577,6 +1577,14 @@ def _project_sections(sections, ctx: _Ctx) -> list | None:
                 new["body"] = kept
 
         if new.get("type") == "table":
+            # ★★表の節に本文は置かない★★（2026-08-31・Codexの10回目）
+            #   直す前は同居でき、**表のあとに本文が出る**契約がどこにも無かった。
+            #   ★表に添える文は表の note を使う★（同じ表に結び付く）。
+            # ★★存在で見る★★（2026-08-31・Codexの11回目）＝
+            #   `sec.get("body")` だと [] / "" / null が素通りした。
+            if "body" in sec:
+                ctx.reject(p, "表の種別に本文は置けません（表の note を使います）")
+                continue
             # ★★ふつうの表を射影に残す★★（2026-08-31・Codexの指摘）
             #   ★直す前は settei だけを射影していた★ので、
             #   ふつうの表は `tables` が公開データに入らず、
@@ -1669,6 +1677,11 @@ def _project_plain_table(tbl, ctx: _Ctx, path: str,
                                       "rows": list, "note": str,
                                       "wide": bool}):
         return None
+    # ★★wide は settei 専用★★（2026-08-31・Codexの10回目）
+    #   ふつうの表では Python も JS も見ていないので、書いても黙って落ちる。
+    if "wide" in tbl:
+        ctx.reject(f"{path}.wide", "wide は設定示唆の表だけで使えます")
+        return None
     headers = tbl.get("headers")
     if not isinstance(headers, list) or not headers:
         ctx.reject(f"{path}.headers", "表の列見出しが無い（描画が止まる）")
@@ -1676,13 +1689,17 @@ def _project_plain_table(tbl, ctx: _Ctx, path: str,
     if not all(_is_str(h) for h in headers):
         ctx.reject(f"{path}.headers", "見出しに非文字列が含まれる")
         return None
-    if not ctx.atom([section_title, *headers], f"{path}.headers"):
+    label = tbl.get("label")
+    has_label = _is_str(label) and bool(label.strip())
+    # ★★その表を指す文脈★★（2026-08-31・Codexの10回目）
+    #   ★直す前は「節の題＋セル」だけ★だったので、
+    #   表の小見出しや列見出しが文脈に入らず、
+    #   ★同じ文字が別の表にあると承認が伝播した★（台帳ALLOWの伝播と同じ型）。
+    where = [section_title] + ([label] if has_label else []) + list(headers)
+    if not ctx.atom(where, f"{path}.headers"):
         return None
     out: dict = {"headers": list(headers)}
-    label = tbl.get("label")
-    if _is_str(label) and label.strip():
-        if not ctx.atom([section_title, label], f"{path}.label"):
-            return None
+    if has_label:
         out["label"] = label
     kept = []
     for ri, row in enumerate(tbl.get("rows") or []):
@@ -1693,7 +1710,7 @@ def _project_plain_table(tbl, ctx: _Ctx, path: str,
         if len(cells) != len(headers):
             ctx.reject(f"{path}.rows[{ri}]", "行の列数が見出しと違う")
             return None
-        if not ctx.atom([section_title, *cells], f"{path}.rows[{ri}]"):
+        if not ctx.atom([*where, *cells], f"{path}.rows[{ri}]"):
             return None                    # ★1行でも落ちたら表ごと落とす★
         kept.append(list(cells))
     if not kept:
@@ -1702,7 +1719,7 @@ def _project_plain_table(tbl, ctx: _Ctx, path: str,
     out["rows"] = kept
     note = tbl.get("note")
     if _is_str(note) and note.strip():
-        if not ctx.atom([section_title, note], f"{path}.note"):
+        if not ctx.atom([*where, note], f"{path}.note"):
             return None
         out["note"] = note
     return out
@@ -2357,6 +2374,51 @@ def selftest() -> int:
                               "rows": [["a"]]}]}))
     t("　表が無ければ止める",
       _tbl_stops({"title": "x", "type": "table", "body": ["a"]}))
+    t("★★表の節に本文があれば止める★★"
+      "（表のあとに本文が出るのに、その順番の契約がどこにも無かった）",
+      _tbl_stops({"title": "x", "type": "table", "body": ["補足です"],
+                  "tables": [{"headers": ["項目", "内容"],
+                              "rows": [["a", "b"]]}]}))
+    for _empty in ([], "", None, 0):
+        t(f"　本文が {_empty!r} でも置かせない（存在で見る・Codexの11回目）",
+          _tbl_stops({"title": "x", "type": "table", "body": _empty,
+                      "tables": [{"headers": ["項目", "内容"],
+                                  "rows": [["a", "b"]]}]}))
+    t("★wide は設定示唆の表だけ★（ふつうの表では黙って落ちていた）",
+      _tbl_stops({"title": "x", "type": "table",
+                  "tables": [{"headers": ["項目", "内容"], "wide": True,
+                              "rows": [["a", "b"]]}]}))
+
+    # ★★危ない表現の判定に、その行の文脈が入っているか★★
+    #   ★直す前は「節の題＋セル」だけ★＝同じ文字が別の表にもあると
+    #   承認が伝播した（台帳ALLOWの伝播と同じ型）。
+    _seen = []
+
+    class _SpyCtx:
+        def __init__(self):
+            self.rejected = []
+
+        def atom(self, parts, path):
+            _seen.append(list(parts))
+            return True
+
+        def reject(self, path, why):
+            self.rejected.append((path, why))
+
+    _spy = _SpyCtx()
+    _project_plain_table(
+        {"label": "設定別", "headers": ["設定", "値"],
+         "rows": [["1", "97.0%"]], "note": "確認が1件のみです"},
+        _spy, "p", "基本スペック")
+    # ★★呼び出し全体を固定の期待値と比べる★★（2026-08-31・Codexの11回目）
+    #   ★any(...) では「正しい呼び出しが1回ある」ことしか言えない★＝
+    #   文脈なしの余分な呼び出しが混ざっていても気づけない。
+    _want = [["基本スペック", "設定別", "設定", "値"],
+             ["基本スペック", "設定別", "設定", "値", "1", "97.0%"],
+             ["基本スペック", "設定別", "設定", "値", "確認が1件のみです"]]
+    t("★★見出し・行・注記のすべてに、同じ文脈が入る★★"
+      "（入っていないと、別の表の同じ文字にも承認が伝播する）",
+      _seen == _want)
 
     # ===== fail-closed =====
     t("lifecycle未指定 → 全OFF", compute_gates({"slug": "x"}) == CLOSED_GATES)

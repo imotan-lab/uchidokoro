@@ -956,9 +956,17 @@ def _table_body_problems(slug: str, i: int, sec: dict) -> list:
         return out
     if "rows" in sec:
         out.append(f"{slug}: sections[{i}] は表の種別なので rows は使いません")
+    # ★表の節に本文は置かない★（2026-08-31・Codexの10回目）
+    # ★存在で見る★（[] / "" / null も置かせない・Codexの11回目）
+    if "body" in sec:
+        out.append(f"{slug}: sections[{i}] は表の種別なので本文は置けません"
+                   "（表の note を使います）")
     for ti, tb in enumerate(tbls):
         if not isinstance(tb, dict):
             continue                       # 形の検査は呼び出し側が済ませている
+        if "wide" in tb:
+            out.append(f"{slug}: sections[{i}].tables[{ti}] の wide は"
+                       "設定示唆の表だけで使えます")
         heads = tb.get("headers")
         if not isinstance(heads, list) or not heads:
             out.append(f"{slug}: sections[{i}].tables[{ti}] に見出しがありません")
@@ -1187,8 +1195,7 @@ def selftest() -> int:
     _good_tbl = {"title": "基本スペック", "type": "table",
                  "tables": [{"label": "", "headers": ["項目", "内容"],
                              "rows": [["機種名", "北斗"],
-                                      ["メーカー", "サミー"]]}],
-                 "body": []}
+                                      ["メーカー", "サミー"]]}]}
     t("★ふつうの表は通る★", _tbl(_good_tbl) == [])
     t("★★セルにバッジの辞書を入れたら止める★★（描く側は文字として出す）",
       any("文字だけ" in x for x in _tbl(
@@ -1206,6 +1213,22 @@ def selftest() -> int:
     t("　表が無ければ止める",
       any("表がありません" in x for x in _tbl(
           {"title": "x", "type": "table", "body": ["a"]})))
+    t("★★表の節に本文があれば止める★★（表のあとに本文が出る順番は未契約）",
+      any("本文は置けません" in x for x in _tbl(
+          {"title": "x", "type": "table", "body": ["補足です"],
+           "tables": [{"headers": ["項目", "内容"],
+                       "rows": [["a", "b"]]}]})))
+    for _empty in ([], "", None, 0):
+        t(f"　本文が {_empty!r} でも置かせない（存在で見る・Codexの11回目）",
+          any("本文は置けません" in x for x in _tbl(
+              {"title": "x", "type": "table", "body": _empty,
+               "tables": [{"headers": ["項目", "内容"],
+                           "rows": [["a", "b"]]}]})))
+    t("★wide は設定示唆の表だけ★",
+      any("wide" in x for x in _tbl(
+          {"title": "x", "type": "table",
+           "tables": [{"headers": ["項目", "内容"], "wide": True,
+                       "rows": [["a", "b"]]}]})))
     t("　知らない種別は今までどおり止める",
       any("未知の値" in x for x in _tbl(
           {"title": "x", "type": "chart", "body": ["a"]})))

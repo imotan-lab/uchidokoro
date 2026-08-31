@@ -98,8 +98,91 @@ def _sig_of(html: str) -> list:
     return [t for t in _re.findall(r"<([a-z0-9]+)", html) if t != "tbody"]
 
 
+# ★★DOMを木にするJS★★（2026-08-31・Codexの11回目）
+#   ★実物の箱と、Pythonが描いた期待のHTMLを**同じ関数**で木にする★。
+#   期待側もブラウザに読ませるので、tbody の自動挿入・実体参照・
+#   属性の正規化が両側で同じになる。
+#   ★見るもの★＝タグ名／class／href・colspan・rowspan・scope／
+#     **その要素に直接ぶら下がる文字**／子の並び順。
+#   ★空白だけの文字は落とす★（タグの間の改行や字下げは意味を持たない）。
+#   ★空白の連なりは1つに詰めるだけ★（全部消すと「設定 1」と「設定1」が同じになる）。
+TREE_FN = r"""
+        const ATTRS = ['href', 'colspan', 'rowspan', 'scope'];
+        const nodeTree = (el) => {
+            const kids = [];
+            el.childNodes.forEach(c => {
+                if (c.nodeType === 3) {
+                    const v = (c.nodeValue || '').replace(/\s+/g, ' ');
+                    if (v.trim() !== '') kids.push(v);
+                    return;
+                }
+                if (c.nodeType !== 1) return;
+                kids.push(nodeTree(c));
+            });
+            const at = {};
+            ATTRS.forEach(a => {
+                if (el.hasAttribute(a)) at[a] = el.getAttribute(a);
+            });
+            return {
+                tag: el.tagName.toLowerCase(),
+                cls: el.getAttribute('class'),
+                at: at,
+                kids: kids,
+            };
+        };
+"""
+
+# ★期待するHTMLを、同じブラウザで木にするJS★
+EXPECT_JS = r"""(htmls) => {""" + TREE_FN + r"""
+        return htmls.map(h => {
+            const d = document.createElement('div');
+            d.innerHTML = h;
+            if (d.children.length !== 1) return null;
+            return nodeTree(d.firstElementChild);
+        });
+    }"""
+
+
+def _bmp_for_test():
+    """試験から本物の描画を呼ぶための入口（手作りの期待値を使わないため）。"""
+    import build_machine_pages as _b
+    return _b
+
+
+def tree_problems(where: str, got, want) -> list:
+    """2つの木を比べて、違うところを名指しする（同じなら空）。
+
+    ★純関数★＝ブラウザ無しで試験できる（罠①を避ける）。
+    """
+    if got is None or want is None:
+        return [f"{where}: 木を作れませんでした"]
+    if not isinstance(got, dict) or not isinstance(want, dict):
+        if got != want:
+            return [f"{where}: 文字が違います（{got!r} / {want!r} のはず）"]
+        return []
+    out = []
+    if got.get("tag") != want.get("tag"):
+        return [f"{where}: タグが違います"
+                f"（{got.get('tag')!r} / {want.get('tag')!r} のはず）"]
+    if got.get("cls") != want.get("cls"):
+        out.append(f"{where}<{got.get('tag')}>: class が違います"
+                   f"（{got.get('cls')!r} / {want.get('cls')!r} のはず）")
+    if (got.get("at") or {}) != (want.get("at") or {}):
+        out.append(f"{where}<{got.get('tag')}>: 属性が違います"
+                   f"（{got.get('at')!r} / {want.get('at')!r} のはず）")
+    gk = got.get("kids") or []
+    wk = want.get("kids") or []
+    if len(gk) != len(wk):
+        out.append(f"{where}<{got.get('tag')}>: 中身の数が違います"
+                   f"（{len(gk)} / {len(wk)} のはず）")
+        return out
+    for i, (a, b) in enumerate(zip(gk, wk)):
+        out += tree_problems(f"{where}<{got.get('tag')}>[{i}]", a, b)
+    return out
+
+
 # ★最終DOMから箱の情報を取り出すJS★（統合試験からも同じものを使う）
-BOX_JS = r"""() => {
+BOX_JS = r"""() => {""" + TREE_FN + r"""
         // ★隠し方は display だけではない★（2026-08-04・Codex81〜82回目）
         //   自分・祖先・**子孫**のどれで隠されても「見えていない」と扱う。
         //   clip-path は「何も切り取らない指定」を隠しと数えない（誤検知防止）。
@@ -150,10 +233,64 @@ BOX_JS = r"""() => {
                 heading: head ? (head.textContent || '') : null,
                 sig: sig,
                 text: shownText(el).replace(/\s+/g, ''),
+                // ★木で比べるための情報★（2026-08-31・Codexの11回目）
+                tree: nodeTree(el),
             });
         });
         return out;
     }"""
+
+
+def judge_render(boxes: list, detail, expected: list | None = None) -> list[str]:
+    """★記事データと最終DOMが同じか★（全機種・2026-08-31）
+
+    （Codexの10回目の指摘2）
+    ★これまで R13 は新台経路だけを見ていた★ので、旧形式120機種では
+    「表が段落になる」「本文が欠ける」「表と本文の順番が変わる」といった
+    **PythonとJSの食い違いを誰も比べていなかった**。
+    ★要望③で旧形式にも表を入れる前に、ここを埋める。★
+
+    ★新台固有の契約は見ない★（箱の並び・未確認の目印は R13 の担当）。
+    """
+    import build_machine_pages as _bmp
+    if not isinstance(detail, dict):
+        return []                          # 記事データが無い機種は対象外
+    secs = [x for x in (detail.get("sections") or []) if isinstance(x, dict)]
+    if not secs:
+        return []
+    got = [b.get("title") for b in boxes]
+    want = [x.get("title") for x in secs]
+    if got != want:
+        return [f"R15: 最終DOMの箱が記事データと違います（{got} / {want} のはず）"]
+    ngs = []
+    for sec, b in zip(secs, boxes):
+        title = sec.get("title")
+        if not b.get("shown"):
+            ngs.append(f"R15: 箱が読者に見えていません: {title}")
+        if b.get("tag") != "div" or not b.get("has_cls"):
+            ngs.append(f"R15: 箱の作りが違います: {title} <{b.get('tag')}>")
+        if (b.get("heading") or "").strip() != title:
+            ngs.append(f"R15: 箱の見出しが違います: {title}")
+        rendered = _bmp.render_section(sec)
+        if [x for x in (b.get("sig") or []) if x != "tbody"] != _sig_of(rendered):
+            ngs.append(f"R15: 箱の中の作りが違います（表や段落が壊れています）: {title}")
+        want_text = "".join(_hc.visible_text("<body>" + rendered + "</body>").split())
+        if (b.get("text") or "") != want_text:
+            ngs.append(f"R15: 箱の中身がデータと違います: {title}")
+    # ★★木で比べる★★（2026-08-31・Codexの11回目）
+    #   ★タグの並びと連結した文字だけでは足りない★＝
+    #   `<th>A</th><td>B</td>` と `<th>AB</th><td></td>` が同じ判定になり、
+    #   class・href・colspan の違いも見えない。
+    #   期待するHTMLも同じブラウザで木にしてから比べる。
+    if expected is not None:
+        if len(expected) != len(secs):
+            ngs.append("R15: 期待する木の数が節の数と違います")
+        else:
+            for sec, b, want in zip(secs, boxes, expected):
+                for x in tree_problems("R15 " + str(sec.get("title")),
+                                       b.get("tree"), want):
+                    ngs.append(x)
+    return ngs
 
 
 def judge_boxes(boxes: list, detail) -> list[str]:
@@ -452,6 +589,18 @@ def check_one(page, machine: dict) -> list[str]:
     except Exception as e:                # noqa: BLE001
         ngs.append(f"R13: 機種の区分を判定できません: {e}")
         _is_auto = False
+    # R15: 記事データと最終DOMが同じか（★全機種★・2026-08-31）
+    #   ★旧形式では誰も比べていなかった★（R13は新台経路だけ）
+    # ★期待するHTMLも同じブラウザに読ませて木にする★（Codexの11回目）
+    _want_trees = None
+    if isinstance(detail, dict):
+        import build_machine_pages as _bmp2
+        _secs = [x for x in (detail.get("sections") or [])
+                 if isinstance(x, dict)]
+        if _secs:
+            _want_trees = page.evaluate(
+                EXPECT_JS, [_bmp2.render_section(x) for x in _secs])
+    ngs += judge_render(boxes, detail, _want_trees)
     if _is_auto:
         ngs += judge_boxes(boxes, detail)
 
@@ -569,6 +718,81 @@ def selftest_dom() -> int:
               judge_boxes(good, det) == [])
             t("　ブラウザは実際に tbody を足している（誤検知の元）",
               any("tbody" in (x.get("sig") or []) for x in good))
+
+            # ★★木の比較（R15）を、実ブラウザで確かめる★★
+            #   （2026-08-31・Codexの11回目。★対照実験をコードに残す★）
+            _htmls = [_bmp.render_section(x) for x in det["sections"]]
+            _exp = pg.evaluate(EXPECT_JS, _htmls)
+            t("★★正しいページなら木も一致する★★（誤検知が無い）",
+              judge_render(good, det, _exp) == [])
+            _sw = pg.evaluate(EXPECT_JS, [
+                h.replace('class="article-title"', 'class="別の名前"', 1)
+                for h in _htmls])
+            t("★★class の名前が違えば止める★★"
+              "（直す前は「class があるか」しか見ていなかった）",
+              any("class が違います" in x
+                  for x in judge_render(good, det, _sw)))
+            # ★文字の所属を動かす★＝タグの並びも連結した文字も変わらない
+            #   ＝直す前の比べ方では**絶対に見つからない**（Codexの実例）
+            _re2 = __import__("re")
+            _fired = [0]
+
+            def _merge(h):
+                def rep(m):
+                    _fired[0] += 1
+                    return f"<th>{m.group(1)}{m.group(2)}</th><th></th>"
+                return _re2.sub(r"<th>([^<]*)</th><th>([^<]*)</th>", rep, h, 1)
+
+            _mg = pg.evaluate(EXPECT_JS, [_merge(h) for h in _htmls])
+            t("★★文字がどの要素に属するかを見る★★"
+              "（<th>A</th><th>B</th> と <th>AB</th><th></th> が同じ判定だった）",
+              _fired[0] > 0
+              and any("文字が違います" in x or "中身の数が違います" in x
+                      for x in judge_render(good, det, _mg)))
+            # ★★手書きの期待DOM★★（2026-08-31・Codexの12回目）
+            #   ★R15は「実ページ と render_section が一致する」までしか
+            #     言えない★＝両方が同じ誤りを持てば素通りする。
+            #   ★これから移す形（ふつうの表）について、
+            #     どちらでもない基準を1件、人が書いて置く★
+            _tbl_sec = {"title": "基本スペック", "type": "table",
+                        "tables": [{"headers": ["項目", "内容"],
+                                    "rows": [["機種名", "試験機"],
+                                             ["メーカー", "サミー"]]}]}
+            _want_hand = {
+                "tag": "div", "cls": "article-item",
+                "at": {},
+                "kids": [
+                    {"tag": "h3", "cls": "article-title", "at": {},
+                     "kids": ["基本スペック"]},
+                    {"tag": "table", "cls": "data-table", "at": {}, "kids": [
+                        {"tag": "tbody", "cls": None, "at": {}, "kids": [
+                            {"tag": "tr", "cls": None, "at": {}, "kids": [
+                                {"tag": "th", "cls": None, "at": {},
+                                 "kids": ["項目"]},
+                                {"tag": "th", "cls": None, "at": {},
+                                 "kids": ["内容"]}]},
+                            {"tag": "tr", "cls": None, "at": {}, "kids": [
+                                {"tag": "td", "cls": None, "at": {},
+                                 "kids": ["機種名"]},
+                                {"tag": "td", "cls": None, "at": {},
+                                 "kids": ["試験機"]}]},
+                            {"tag": "tr", "cls": None, "at": {}, "kids": [
+                                {"tag": "td", "cls": None, "at": {},
+                                 "kids": ["メーカー"]},
+                                {"tag": "td", "cls": None, "at": {},
+                                 "kids": ["サミー"]}]}]}]}]}
+            _got_hand = pg.evaluate(
+                EXPECT_JS, [_bmp.render_section(_tbl_sec)])[0]
+            _why = tree_problems("表", _got_hand, _want_hand)
+            t("★★ふつうの表の形が、人が書いた基準と一致する★★"
+              "（実ページと描き直しが同じ誤りを持っても、これは気づく）",
+              _why == [])
+            for _x in _why[:3]:
+                print("    " + _x)
+            t("　基準を1文字変えれば止める（この試験が効いている証拠）",
+              tree_problems("表", _got_hand,
+                            {**_want_hand, "cls": "別の名前"}) != [])
+
             # 子（本文）だけ隠す
             pg.set_content(page_of().replace('<p class="article-body">',
                                              '<p class="article-body" hidden>'))
@@ -765,6 +989,54 @@ def selftest() -> int:
           + [{"title": _ba.RUMOR_SECTION["title"], "body": []}]})))
     t("★★記事データを読めない（None）場合も不合格★★",
       any("読めません" in x for x in judge_boxes([], None)))
+    # ★★木で比べる★★（2026-08-31・Codexの11回目）
+    #   ★どれも「タグの並び＋連結した文字」では見つからない★
+    def _n(tag, cls=None, at=None, kids=None):
+        return {"tag": tag, "cls": cls, "at": at or {}, "kids": kids or []}
+
+    _tr_ok = _n("tr", kids=[_n("th", kids=["A"]), _n("td", kids=["B"])])
+    t("　同じ木なら何も言わない", tree_problems("x", _tr_ok, _tr_ok) == [])
+    _tr_ng = _n("tr", kids=[_n("th", kids=["AB"]), _n("td", kids=[])])
+    t("★★文字がどの要素に属するかを見る★★"
+      "（<th>A</th><td>B</td> と <th>AB</th><td></td> が同じ判定だった）",
+      tree_problems("x", _tr_ng, _tr_ok) != [])
+    t("★★空白の有無を見る★★（「設定 1」と「設定1」が同じ判定だった）",
+      tree_problems("x", _n("td", kids=["設定 1"]),
+                    _n("td", kids=["設定1"])) != [])
+    t("★★class の名前を見る★★（あるかどうかだけを見ていた）",
+      tree_problems("x", _n("table", cls="settei-table"),
+                    _n("table", cls="data-table")) != [])
+    t("★★リンク先を見る★★",
+      tree_problems("x", _n("a", at={"href": "https://a/"}, kids=["公式"]),
+                    _n("a", at={"href": "https://b/"}, kids=["公式"])) != [])
+    t("　列の結合（colspan）を見る",
+      tree_problems("x", _n("td", at={"colspan": "2"}),
+                    _n("td")) != [])
+    t("　タグが違えば言う",
+      tree_problems("x", _n("p", kids=["a"]), _n("div", kids=["a"])) != [])
+    t("　中身の数が違えば言う",
+      tree_problems("x", _n("tr", kids=[_n("td")]),
+                    _n("tr", kids=[_n("td"), _n("td")])) != [])
+    t("　木が作れなかったら言う（期待のHTMLが1つの箱にならない）",
+      tree_problems("x", None, _tr_ok) != []
+      and tree_problems("x", _tr_ok, None) != [])
+    # ★★木の比較が judge_render に繋がっているか★★（罠⑤＝配線漏れ）
+    _det_tree = {"sections": [{"title": "基本スペック",
+                               "body": ["天井は1200Gです"]}]}
+    _rend = _bmp_for_test().render_section(_det_tree["sections"][0])
+    _box_tree = {"title": "基本スペック", "pending": None, "tag": "div",
+                 "has_cls": True, "shown": True, "heading": "基本スペック",
+                 "sig": _sig_of(_rend),
+                 "text": "".join(_hc.visible_text(
+                     "<body>" + _rend + "</body>").split()),
+                 "tree": _n("div", cls="article-item")}
+    t("★★木が違えば judge_render が言う★★（配線漏れなら黙る）",
+      any("class が違います" in x or "中身の数が違います" in x
+          for x in judge_render([_box_tree], _det_tree,
+                                [_n("div", cls="別の名前")])))
+    t("　期待の木を渡さなければ、木の比較はしない（従来どおり）",
+      judge_render([_box_tree], _det_tree) == [])
+
     t("　ブラウザが足す tbody は作りの違いに数えない",
       judge_boxes([{**b, "sig": (b["sig"][:1] + ["tbody"] + b["sig"][1:])}
                    for b in good], det) == [])

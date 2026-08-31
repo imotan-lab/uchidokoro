@@ -882,6 +882,20 @@ def check_detail(slug: str, detail: dict) -> list:
             ng.append(f"節『{sec.get('title')}』の本文が文字の配列ではありません")
         if "rows" in sec and not _rows_ok(sec["rows"]):
             ng.append(f"節『{sec.get('title')}』の rows が文字の並びではありません")
+        # ★★表の節の契約★★（2026-08-31・Codexの10回目）
+        #   本文と表が同居すると**表のあとに本文が出る**が、
+        #   その順番はどこにも書かれていない。表に添える文は note を使う。
+        if sec.get("type") == "table":
+            # ★存在で見る★（[] / "" / null も置かせない・Codexの11回目）
+            if "body" in sec:
+                ng.append(f"節『{sec.get('title')}』は表なので本文は置けません"
+                          "（表の note を使います）")
+            if "rows" in sec:
+                ng.append(f"節『{sec.get('title')}』は表なので rows は使いません")
+            if not sec.get("tables"):
+                ng.append(f"節『{sec.get('title')}』は表なのに表がありません")
+            # ★wide はここでは見ない★＝_TABLE_KEYS が「知らない項目」で
+            #   既に断っている。2か所で見ると、片方を壊しても気づけない
         if "tables" in sec and not isinstance(sec["tables"], list):
             ng.append(f"節『{sec.get('title')}』の tables が配列ではありません")
         for tb in (sec.get("tables") or []):
@@ -2995,6 +3009,38 @@ def selftest() -> int:
                        "sections": [{"title": "x",
                                      "tables": [{"headers": ["A", "B", "C"],
                                                  "rows": [["1", "2"]]}]}]})))
+
+    # ★★表の節の契約★★（2026-08-31・Codexの10回目）
+    def _tsec(sec):
+        return check_detail("zzz_test", {"slug": "zzz_test",
+                                         "sections": [sec]})
+
+    _tok = {"title": "基本スペック", "type": "table",
+            "tables": [{"headers": ["項目", "内容"],
+                        "rows": [["機種名", "テスト機"]]}]}
+    t("　表だけの節は通る", _tsec(_tok) == [])
+    t("★★表の節に本文があれば止める★★"
+      "（表のあとに本文が出るのに、その順番の契約がどこにも無かった）",
+      any("本文は置けません" in x
+          for x in _tsec({**_tok, "body": ["補足です"]})))
+    for _empty in ([], "", None, 0):
+        t(f"　本文が {_empty!r} でも置かせない（存在で見る・Codexの11回目）",
+          any("本文は置けません" in x
+              for x in _tsec({**_tok, "body": _empty})))
+    # ★wide を含むふつうの表は新台経路で必ず落ちる★（Codexの11回目・確認用）
+    #   ★ここでは _TABLE_KEYS（知らない項目）が断る★＝
+    #   同じことを2か所で見ないための確認
+    t("★wide を含む表は新台経路で落ちる★（知らない項目として断られる）",
+      any("知らない項目" in x for x in _tsec(
+          {"title": "x", "type": "table",
+           "tables": [{"headers": ["項目", "内容"], "wide": True,
+                       "rows": [["a", "b"]]}]})))
+    t("　表の節に rows は使わせない",
+      any("rows は使いません" in x
+          for x in _tsec({**_tok, "rows": [["a", "b"]]})))
+    t("　表の節なのに表が無ければ止める",
+      any("表がありません" in x
+          for x in _tsec({"title": "x", "type": "table"})))
 
     # ★機種データそのものを確かめる★（Codex指摘2）
     _ok_machine = {"slug": "zzz_test", "name": "テスト", "seo": {"title": "x"},

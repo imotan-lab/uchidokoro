@@ -10,9 +10,9 @@
   ＝「変えていない」を言葉ではなく機械で示す。
 
 ★★全行がラベルと値の機種だけ移す★★
-  実測（2026-08-31・133機種）＝
-    そのまま移せる   55機種
-    移せない         78機種（説明文が混ざっている 48／形が違う 30）
+  ★太字の「**見出し**：値」だけを自動で移す★（Codexの助言）＝
+  太字でない行は、文章の途中と区別できない
+  （「設定6はBIG：REG比率が…」は短く句読点も無いが文章）。
   ★説明文を無理に表へ入れない★（2AIが読んで判断する仕事）。
 
 ★★factTable との重複はここでは消さない★★
@@ -33,6 +33,7 @@ import glob
 import json
 import os
 import re
+import shutil
 import sys
 
 for _s in (sys.stdout, sys.stderr):
@@ -46,47 +47,46 @@ DETAILS = os.path.join(BASE, "assets", "data", "machine-details")
 TITLE = "基本スペック"
 HEADERS = ["項目", "内容"]
 
-# 「**項目**：値」または「項目：値」
-#   ★区切りは最初の「：」だけ★（値の中に「：」があってもよい）
-_BOLD = re.compile(r"^\*\*(?P<label>[^*]+)\*\*(?P<sep>[：:])(?P<value>.*)$")
-_PLAIN = re.compile(r"^(?P<label>[^：:]+)(?P<sep>[：:])(?P<value>.*)$")
+# ★★太字の「**項目**：値」だけを自動で移す★★（2026-08-31・Codexの10回目）
+#   ★太字でない行は自動判定しない★＝
+#   「設定6はBIG：REG比率が約1対1です」のような**文章の途中**は、
+#   記号も字数も手がかりにならない（例外リストが増える型になる）。
+#   ★件数を最大にしない★＝迷う機種は移さず、2AIが読む側へ回す。
+#   区切りは全角の「：」だけ（半角だと組み立て直しが一意に決まらない）。
+_BOLD = re.compile(r"^\*\*(?P<label>[^*]+)\*\*：(?P<value>.*)$")
 
 
 def parse_line(line: str):
-    """1行を (太字か, 見出し, 区切り, 値) にする。形が違えば None。
+    """1行を (見出し, 値) にする。形が違えば None。
 
-    ★空白を触らない★＝行の前後だけ落とし、中身はそのまま。
+    ★空白を1文字も触らない★＝`strip()` もしない。
+    行そのものが `**見出し**：値` の形でなければ移さない。
     """
     t = str(line or "")
-    if t != t.strip():
-        t = t.strip()
     m = _BOLD.match(t)
-    bold = bool(m)
-    if not m:
-        m = _PLAIN.match(t)
     if not m:
         return None
-    label = m.group("label")
-    value = m.group("value")
+    label, value = m.group("label"), m.group("value")
     if not label.strip() or not value.strip():
         return None
-    # ★★見出しに文の記号が入っていたら、それは文章★★（2026-08-31・実データで発見）
-    #   my_juggler_v の「…最新作。設定6はBIG：REG比率が…」は、
-    #   文中の「：」で切られて**文章が見出しになっていた**。
-    #   ★組み立て直しの照合では捕まらない★（元の行は復元できるため）。
+    # ★見出しに文の記号が入っていたら文章★（実データで発見・my_juggler_v）
     if any(c in label for c in "。、！？!?"):
         return None
-    # ★長すぎる見出しは文章とみなす★（いちばん長い実物は13字）
-    #   ★文字数だけでは区別できない★ので、上の記号の検査と**両方**使う。
-    #   ★迷ったら移さない★＝その機種は2AIが読む側へ回る。
     if len(label.strip()) > 20:
         return None
-    return bold, label, m.group("sep"), value
+    return label, value
 
 
-def rebuild(bold: bool, label: str, sep: str, value: str) -> str:
-    """移す前の行を組み立て直す（照合用）。"""
-    return (f"**{label}**{sep}{value}") if bold else f"{label}{sep}{value}"
+def rebuild(label: str, value: str) -> str:
+    """移す前の行を組み立て直す（照合用）。★形は1つだけ★なので一意に決まる。"""
+    return f"**{label}**：{value}"
+
+
+# ★★移した節の「あるべき姿」は1か所で決める★★（2026-08-31・Codexの11回目）
+#   ★書く側と照合する側が同じものを見ると、照合にならない★ので、
+#   ここは**形だけ**を決める。照合は `verify()` が
+#   「変換前 + この形」で全体を組み立て直して深く比べる。
+_SECTION_KEYS_BEFORE = {"title", "body"}
 
 
 def plan(detail) -> dict:
@@ -106,21 +106,29 @@ def plan(detail) -> dict:
     i, sec = hit[0]
     if sec.get("type"):
         return {"ok": False, "why": f"もう別の種別です（{sec['type']}）"}
-    body = [x for x in (sec.get("body") or []) if isinstance(x, str)]
-    if not body:
+    # ★★節に余計な項目があれば移さない★★（2026-08-31）
+    #   移したあとの節は title / type / tables だけになるので、
+    #   ★ほかの項目は黙って消える★。ここで「移せない」に分けて、
+    #   その機種だけ2AIが読む側へ回す（ほかの機種は進める）。
+    if set(sec.keys()) != _SECTION_KEYS_BEFORE:
+        return {"ok": False,
+                "why": f"節に余計な項目があります（{sorted(sec.keys())}）"}
+    body = sec.get("body")
+    if not isinstance(body, list) or not body:
         return {"ok": False, "why": "本文がありません"}
+    # ★★文字列でない要素は黙って捨てない★★（2026-08-31・Codexの10回目）
+    if not all(isinstance(x, str) for x in body):
+        return {"ok": False, "why": "本文に文字列でない要素があります"}
     rows = []
     for line in body:
-        if not line.strip():
-            return {"ok": False, "why": "空の行があります"}
         got = parse_line(line)
         if got is None:
-            return {"ok": False, "why": "ラベルと値の形でない行があります",
-                    "line": line[:50]}
-        bold, label, sep, value = got
+            return {"ok": False, "why": "太字のラベル行ではありません",
+                    "line": str(line)[:50]}
+        label, value = got
         # ★★組み立て直して元と一致することを確かめる★★
-        #   （前後の空白だけは落とすので、そこも同じ形で比べる）
-        if rebuild(bold, label, sep, value) != line.strip():
+        #   ★前後の空白も含めて完全一致★（strip しない）
+        if rebuild(label, value) != line:
             return {"ok": False, "why": "組み立て直すと元と違います",
                     "line": line[:50]}
         rows.append([label, value])
@@ -130,11 +138,76 @@ def plan(detail) -> dict:
 def apply_to(detail: dict, got: dict) -> dict:
     """下見の結果どおりに、その機種の記事データを書き換えて返す。"""
     sec = detail["sections"][got["index"]]
-    sec.pop("body", None)
-    sec["type"] = "table"
-    sec["tables"] = [{"label": "", "headers": list(HEADERS),
-                      "rows": [list(r) for r in got["rows"]]}]
+    detail["sections"][got["index"]] = expected_section(sec, got)
     return detail
+
+
+def expected_section(before_sec: dict, got: dict) -> dict:
+    """移したあとの節（★これ以外の項目は残さない★）。"""
+    return {"title": before_sec["title"],
+            "type": "table",
+            "tables": [{"headers": list(HEADERS),
+                        "rows": [list(r) for r in got["rows"]]}]}
+
+
+def verify(before: dict, after: dict, got: dict) -> str:
+    """★変えてよい所しか変えていないか★（良ければ空文字）。
+
+    （2026-08-31・Codexの10回目。★直す前は照合になっていなかった★＝
+      正規表現で切った直後に同じ部品を連結していただけで、
+      **変換後のデータを一度も見ていなかった**）
+
+    ★★直し（2026-08-31・Codexの11回目）★★＝
+    直す前は「対象の節を元に戻したら一致するか」だけだったので、
+    ★対象の節の中は何をしても通った★（題を書き換える／表に余計な項目を足す）。
+    いまは**期待する変換後の全体を独立に組み立てて、深い比較を1回**する。
+
+    見ること:
+      ①移す位置が整数で、範囲の中にあること
+      ②変換前のその節が「題と本文だけ」の形だったこと
+      ③表の中身を、変換前の本文から**もう一度読み直して**一致すること
+        （下見の結果をそのまま信じない）
+      ④変換前 + 期待する節 == 変換後（丸ごと深い比較）
+    """
+    import copy
+    i = got.get("index")
+    if not isinstance(i, int) or isinstance(i, bool):
+        return "移す位置が整数ではありません"
+    if not isinstance(before.get("sections"), list):
+        return "変換前の sections が配列ではありません"
+    if not (0 <= i < len(before["sections"])):
+        return "移す位置が範囲の外です"
+    src = before["sections"][i]
+    if not isinstance(src, dict):
+        return "変換前の節が辞書ではありません"
+    if set(src.keys()) != _SECTION_KEYS_BEFORE:
+        return f"変換前の節の形が違います（{sorted(src.keys())}）"
+    # ★★空の本文を受け取らない★★（2026-08-31・Codexの12回目）
+    #   ★`src.get("body") or []` だと None / "" / 0 / [] が
+    #     すべて「空の並び」になり、**空の表への変換**が最終確認を通った★
+    body = src["body"]
+    if not isinstance(body, list) or not body:
+        return "変換前の本文が、空でない配列ではありません"
+    rows_in = got.get("rows")
+    if not isinstance(rows_in, list) or not rows_in:
+        return "表の中身が、空でない並びではありません"
+    if not all(isinstance(r, (list, tuple)) and len(r) == 2
+               and all(isinstance(c, str) for c in r) for r in rows_in):
+        return "表の行が「見出しと値」の2つではありません"
+    # ★★下見を信じず、変換前の本文からもう一度読み直す★★
+    again = []
+    for line in body:
+        one = parse_line(line) if isinstance(line, str) else None
+        if one is None or rebuild(one[0], one[1]) != line:
+            return "変換前の本文を読み直せません"
+        again.append([one[0], one[1]])
+    if again != [list(r) for r in rows_in]:
+        return "表の中身が、変換前の本文と違います"
+    expected = copy.deepcopy(before)
+    expected["sections"][i] = expected_section(src, got)
+    if after != expected:
+        return "期待した変換以外が行われました"
+    return ""
 
 
 def _load(p):
@@ -142,10 +215,18 @@ def _load(p):
         return json.load(f)
 
 
-def _save(p, d):
-    with open(p, "w", encoding="utf-8", newline="\n") as f:
+def _stage(p, d) -> str:
+    """一時ファイルへ書くだけ（まだ本物は差し替えない）。置き場を返す。"""
+    tmp = p + ".tmp"
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         json.dump(d, f, ensure_ascii=False, indent=1)
         f.write("\n")
+    return tmp
+
+
+def _save(p, d):
+    """★一時ファイルへ書いてから置き換える★（途中で止まっても壊れない）。"""
+    os.replace(_stage(p, d), p)
 
 
 def selftest() -> int:
@@ -162,13 +243,15 @@ def selftest() -> int:
     t("★太字のラベル行を移せる★",
       g["ok"] and g["rows"] == [["機種名", "スマスロ北斗の拳"],
                                 ["メーカー", "サミー"]])
-    g2 = plan(det(["天井：1200G+α"]))
-    t("　太字でないラベル行も移せる", g2["ok"] and g2["rows"] == [["天井", "1200G+α"]])
+    t("★★太字でない行は自動で移さない★★（文章と区別できないため・Codexの助言）",
+      not plan(det(["天井：1200G+α"]))["ok"])
     t("★★説明文が混ざっていたら、その機種は移さない★★",
       not plan(det(["**天井**：1200G", "この機種は初当りが軽いです"]))["ok"])
     t("★★値の中に「：」があっても、最初の1つで切る★★",
       plan(det(["**備考**：朝一：リセット恩恵あり"]))["rows"]
       == [["備考", "朝一：リセット恩恵あり"]])
+    t("★本文に文字列でない要素があれば移さない★（黙って捨てない）",
+      not plan({"sections": [{"title": TITLE, "body": ["**天井**：1200G", 5]}]})["ok"])
     t("　値が空なら移さない", not plan(det(["**天井**："])) ["ok"])
     t("　見出しが空なら移さない", not plan(det(["**　**：1200G"]))["ok"])
     t("　もう表になっているなら触らない",
@@ -179,7 +262,7 @@ def selftest() -> int:
     src = ["**機種名**：スマスロ とある魔術の禁書目録2",
            "**コイン持ち**：約30.8G/50枚（設定1）"]
     g3 = plan(det(src))
-    back = [rebuild(True, r[0], "：", r[1]) for r in g3["rows"]]
+    back = [rebuild(r[0], r[1]) for r in g3["rows"]]
     t("★★移したあとから元の行を組み立て直すと、元と一致する★★", back == src)
 
     # ★★2回かけても2回目は何も動かない★★
@@ -199,9 +282,248 @@ def selftest() -> int:
     t("★★機種名に「。」が入っていても移せる★★（bofuri）",
       g5["ok"] and g5["rows"][0][1].endswith("思います。"))
 
+    # ★★照合そのものを試す★★（2026-08-31・Codexの10回目）
+    #   ★直す前の照合は、切った直後に同じ部品を連結していただけ★＝
+    #   変換後のデータを一度も見ていなかった。
+    import copy as _cp
+    _b = {"slug": "zzz", "lead": "説明です",
+          "sections": [{"title": "天井・恩恵", "body": ["天井は1200Gです"]},
+                       {"title": TITLE,
+                        "body": ["**機種名**：テスト機", "**メーカー**：サミー"]}]}
+    _g = plan(_b)
+    _a = apply_to(_cp.deepcopy(_b), _g)
+    t("★正しい移し方なら照合を通る★", verify(_b, _a, _g) == "")
+    _a2 = _cp.deepcopy(_a); _a2["lead"] = "書き換えた"
+    t("★★対象の節以外を触ったら止める★★", verify(_b, _a2, _g) != "")
+    _a3 = _cp.deepcopy(_a)
+    _a3["sections"][0]["body"] = ["天井は1200Gです。"]
+    t("★★別の節の本文を変えたら止める★★", verify(_b, _a3, _g) != "")
+    _a4 = _cp.deepcopy(_a)
+    _a4["sections"][1]["tables"][0]["rows"][0][1] = "テスト機 "
+    t("★★セルの文字が1つでも違えば止める★★（末尾の空白も）",
+      verify(_b, _a4, _g) != "")
+    _a5 = _cp.deepcopy(_a); _a5["sections"][1]["body"] = ["残した"]
+    t("★★節に余計な項目が残っていたら止める★★", verify(_b, _a5, _g) != "")
+    _a6 = _cp.deepcopy(_a); _a6["sections"].append({"title": "増やした"})
+    t("　節の数が変わったら止める", verify(_b, _a6, _g) != "")
+
+    # ★★対象の節の「中」も見る★★（2026-08-31・Codexの11回目）
+    #   ★直す前は、対象の節を元に戻して比べるだけ★だったので、
+    #   **その節の中は何をしても通った**。
+    _a7 = _cp.deepcopy(_a); _a7["sections"][1]["title"] = "別の題"
+    t("★★対象の節の題を書き換えたら止める★★（節の中は素通りだった）",
+      verify(_b, _a7, _g) != "")
+    _a8 = _cp.deepcopy(_a)
+    _a8["sections"][1]["tables"][0]["label"] = "勝手な見出し"
+    t("★★表に余計な項目を足したら止める★★", verify(_b, _a8, _g) != "")
+    _a9 = _cp.deepcopy(_a)
+    _a9["sections"][1]["tables"].append({"headers": list(HEADERS),
+                                         "rows": [["x", "y"]]})
+    t("　表が増えたら止める", verify(_b, _a9, _g) != "")
+    _a10 = _cp.deepcopy(_a)
+    _a10["sections"][1]["tables"][0]["headers"] = ["A", "B"]
+    t("　見出しが違えば止める", verify(_b, _a10, _g) != "")
+    # ★★下見の結果を信じない★★＝変換前の本文から読み直して照合する
+    _gx = dict(_g); _gx["rows"] = [["機種名", "ウソの値"], ["メーカー", "サミー"]]
+    _ax = apply_to(_cp.deepcopy(_b), _gx)
+    t("★★下見の中身が変換前の本文と違えば止める★★"
+      "（下見をそのまま信じると、偽の値を書けた）",
+      verify(_b, _ax, _gx) != "")
+    for _bad in (None, "1", True, -1, 99):
+        t(f"　移す位置が {_bad!r} なら止める",
+          verify(_b, _a, {**_g, "index": _bad}) != "")
+
+    # ★★空の本文を受け取らない★★（2026-08-31・Codexの12回目）
+    # ★★どの守りが働いたかまで見る★★（2026-08-31・壊し方の確認で判明）
+    #   ★理由まで見ないと、隣の守りが断っているだけでも試験が通る★＝
+    #   その守りを消しても赤くならない（＝一度も試していない）。
+    for _empty in ([], "", None, 0):
+        _be = _cp.deepcopy(_b)
+        _be["sections"][1]["body"] = _empty
+        _ae = _cp.deepcopy(_be)
+        _ae["sections"][1] = {"title": TITLE, "type": "table",
+                              "tables": [{"headers": list(HEADERS),
+                                          "rows": []}]}
+        t(f"　変換前の本文が {_empty!r} なら止める（空の表を作らせない）",
+          "変換前の本文が、空でない配列ではありません"
+          == verify(_be, _ae, {"index": 1, "rows": []}))
+    t("　表の行が2つ組でなければ止める",
+      "表の行が「見出しと値」の2つではありません"
+      == verify(_b, _a, {**_g, "rows": [["機種名"]]}))
+    # ★★変換前の節に余計な項目があったら止める★★（★本物の穴だった★）
+    #   ★これが無いと、その項目が**黙って消える**★＝
+    #   移したあとの節は title/type/tables だけになるので、
+    #   note などを持っていた機種は中身を失う。
+    #   ★下見は先に断るので、ここは照合を直接たたく★
+    #     （手前の守りに助けられて、狙った守りを一度も試さないのを避ける）
+    _bk = _cp.deepcopy(_b)
+    _bk["sections"][1]["note"] = "消えては困る注記"
+    _gk = {"ok": True, "why": "", "index": 1,
+           "rows": [["機種名", "テスト機"], ["メーカー", "サミー"]]}
+    _ak = apply_to(_cp.deepcopy(_bk), _gk)
+    t("★★変換前の節に余計な項目があれば止める★★"
+      "（そのまま移すと、その項目が黙って消える）",
+      verify(_bk, _ak, _gk).startswith("変換前の節の形が違います"))
+    t("　節に余計な項目があれば、その機種だけ移さない（全体は止めない）",
+      plan({"sections": [{"title": TITLE, "body": ["**a**：b"],
+                          "note": "x"}]})["why"].startswith(
+          "節に余計な項目があります"))
+    t("　本文に文字列でない要素があれば移さない",
+      plan({"sections": [{"title": TITLE,
+                          "body": ["**a**：b", 1]}]})["why"]
+      == "本文に文字列でない要素があります")
+
+    # ★★書き込みのまとまり★★（2026-08-31・Codexの12回目）
+    #   ★1件でも失敗したら、置き換えた分を全部戻す★
+    import shutil as _sh
+    import tempfile as _tf
+    _dir = _tf.mkdtemp(prefix="tableize_tx_")
+    _paths, _befores, _ready = [], [], []
+    for _i in range(3):
+        _p = os.path.join(_dir, f"m{_i}.json")
+        _d = {"slug": f"m{_i}",
+              "sections": [{"title": TITLE,
+                            "body": [f"**機種名**：機種{_i}"]}]}
+        with open(_p, "w", encoding="utf-8", newline="\n") as _f:
+            json.dump(_d, _f, ensure_ascii=False, indent=1)
+            _f.write("\n")
+        _befores.append(open(_p, encoding="utf-8").read())
+        _paths.append(_p)
+        _gg = plan(_d)
+        _ready.append((_p, f"m{_i}", apply_to(_cp.deepcopy(_d), _gg), _gg))
+
+    _done, _rc = write_all(_ready)
+    _after_ok = [open(_p, encoding="utf-8").read() for _p in _paths]
+    t("　ふつうに書ければ3件とも変わる",
+      _rc == 0 and len(_done) == 3
+      and all(a != b for a, b in zip(_after_ok, _befores)))
+    t("　一時ファイルも退避も残らない",
+      not [x for x in os.listdir(_dir) if x.endswith((".tmp", ".bak"))])
+
+    # ★戻して、3件目の読み直しだけ失敗させる★
+    for _p, _src in zip(_paths, _befores):
+        with open(_p, "w", encoding="utf-8", newline="\n") as _f:
+            _f.write(_src)
+    _real_load = _load
+    _seen2 = [0]
+
+    def _flaky(p):
+        got = _real_load(p)
+        if p == _paths[2]:
+            # ★write_all の中で _load が呼ばれるのは読み直しの1回だけ★
+            #   （下見では本物を直に呼んでいる）
+            _seen2[0] += 1
+            return {"わざと": "違う中身"}
+        return got
+
+    globals()["_load"] = _flaky
+    try:
+        _ready2 = []
+        for _p in _paths:
+            _d = _real_load(_p)
+            _gg = plan(_d)
+            _ready2.append((_p, os.path.basename(_p)[:-5],
+                            apply_to(_cp.deepcopy(_d), _gg), _gg))
+        _done2, _rc2 = write_all(_ready2)
+    finally:
+        globals()["_load"] = _real_load
+    _now = [open(_p, encoding="utf-8").read() for _p in _paths]
+    t("★★1件でも失敗したら、置き換えた分を全部戻す★★"
+      "（直す前は、そこまでのファイルだけが変わったまま残った）",
+      _seen2[0] > 0                       # ★狂わせが実際に効いたこと★
+      and _rc2 == 1 and _done2 == [] and _now == _befores)
+    t("　失敗しても一時ファイル・退避を残さない",
+      not [x for x in os.listdir(_dir) if x.endswith((".tmp", ".bak"))])
+    _sh.rmtree(_dir, ignore_errors=True)
+
     ng = ok.count(False)
     print(f"{len(ok) - ng}/{len(ok)} 合格")
     return 1 if ng else 0
+
+
+def write_all(ready: list) -> tuple[list, int]:
+    """★下書き→退避→置き換え→読み直し→（失敗なら全件戻す）★
+
+    返すもの: (書けた機種の並び, 終了コード)
+
+    ★関数に切り出した理由★（2026-08-31・Codexの12回目）＝
+    処理の中に埋まっていると**巻き戻しの道を試験で通せない**ので、
+    「守りがあるのに一度も確かめていない」状態になる。
+    """
+    done = []
+    # ★★全部の一時ファイルを先に書き、そろってから置き換える★★
+    #   （Codexの11回目）★直す前は1件ずつ本物を差し替えて★いたので、
+    #   11件目で書き込みに失敗すると**部分適用**になった。
+    #   置き換え（rename）は書き込みより失敗しにくいので、
+    #   危ない工程を全部前に寄せる。
+    staged = []
+    try:
+        for p, slug, after, got in ready:
+            staged.append((p, slug, after, _stage(p, after)))
+    except Exception as e:                          # noqa: BLE001
+        for _p, _s, _a, tmp in staged:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        print(f"★下書きの途中で失敗しました（{e}）。何も書いていません★")
+        return done, 1
+
+    # ★★元を全件退避してから置き換える★★（Codexの12回目）
+    #   ★直す前は、置き換えの途中で失敗すると
+    #     そこまでのファイルだけが変わったまま残った★
+    #   （しかも例外を受け止めていないので、読み直しにも進まない）
+    #   ★「git で戻せる」は回復手順であって、まとまりの代わりにならない★
+    keep = []
+    try:
+        for p, slug, after, tmp in staged:
+            bak = p + ".bak"
+            shutil.copy2(p, bak)
+            keep.append((p, bak))
+    except Exception as e:                          # noqa: BLE001
+        for _p, bak in keep:
+            if os.path.exists(bak):
+                os.remove(bak)
+        for _p, _s, _a, tmp in staged:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        print(f"★退避に失敗しました（{e}）。何も書いていません★")
+        return done, 1
+
+    try:
+        for p, slug, after, tmp in staged:
+            os.replace(tmp, p)
+        # ★★書いたあと、全件を読み直して確かめる★★
+        #   （書いた内容と、ファイルに残った内容は別物）
+        bad = [slug for p, slug, after, tmp in staged if _load(p) != after]
+        if bad:
+            raise RuntimeError(f"保存した中身が違います: {bad}")
+    except Exception as e:                          # noqa: BLE001
+        # ★1件でも失敗したら、置き換えた分を全部戻す★
+        failed = []
+        for p, bak in keep:
+            try:
+                shutil.copy2(bak, p)
+            except Exception:                       # noqa: BLE001
+                failed.append(p)
+        print(f"★書き込みに失敗しました（{e}）★")
+        if failed:
+            print("★★戻せなかったファイルがあります★★（手で直してください）:")
+            for x in failed:
+                print("  " + x)
+        else:
+            print("  ★全部、元に戻しました★")
+        for _p, bak in keep:
+            if os.path.exists(bak) and _p not in failed:
+                os.remove(bak)
+        for _p, _s, _a, tmp in staged:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        return done, 1
+
+    done = [slug for _p, slug, _a, _t in staged]
+    for _p, bak in keep:
+        if os.path.exists(bak):
+            os.remove(bak)
+    return done, 0
 
 
 def main() -> int:
@@ -214,9 +536,11 @@ def main() -> int:
     if a.selftest:
         return selftest()
 
+    import copy
     paths = ([os.path.join(DETAILS, a.slug + ".json")] if a.slug
              else sorted(glob.glob(os.path.join(DETAILS, "*.json"))))
     movable, stuck, done = [], [], []
+    ready = []
     for p in paths:
         slug = os.path.basename(p)[:-5]
         if not os.path.isfile(p):
@@ -228,9 +552,20 @@ def main() -> int:
             stuck.append((slug, got["why"], got.get("line", "")))
             continue
         movable.append((slug, got))
-        if a.apply:
-            _save(p, apply_to(d, got))
-            done.append(slug)
+        # ★★書く前に、全部の機種で照合を通す★★（2026-08-31・Codexの10回目）
+        #   ★直す前はループの中で1ファイルずつ上書きしていた★ので、
+        #   途中で止まると**部分適用**になった。
+        after = apply_to(copy.deepcopy(d), got)
+        why = verify(d, after, got)
+        if why:
+            print(f"★{slug}: 照合に通りませんでした（{why}）★")
+            return 1
+        ready.append((p, slug, after, got))
+
+    if a.apply:
+        done, rc = write_all(ready)
+        if rc:
+            return rc
 
     if a.slug:
         slug = os.path.basename(paths[0])[:-5]

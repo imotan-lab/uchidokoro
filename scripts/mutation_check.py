@@ -2148,6 +2148,149 @@ MUTATIONS = [
         "after": "        if False:",
         "run": ["scripts/gates.py"],
     },
+    # ─── 2026-08-31・Codexの11〜12回目で入れた守り ──────────────
+    {
+        "why": "★書いたあと読み直して確かめない"
+               "（書いた内容とファイルに残った内容は別物）★",
+        "file": "scripts/tableize_spec.py",
+        "before": "        bad = [slug for p, slug, after, tmp in staged if _load(p) != after]",
+        "after": "        bad = []",
+        "run": ["scripts/tableize_spec.py"],
+    },
+    {
+        "why": "★失敗しても元に戻さない"
+               "（置き換えた分だけが変わったまま残る）★",
+        "file": "scripts/tableize_spec.py",
+        "before": "                shutil.copy2(bak, p)",
+        "after": "                pass",
+        "run": ["scripts/tableize_spec.py"],
+    },
+    {
+        "why": "★変換前の本文が空でも通す（空の表を作れる）★",
+        "file": "scripts/tableize_spec.py",
+        "before": """    if not isinstance(body, list) or not body:
+        return "変換前の本文が、空でない配列ではありません\"""",
+        "after": """    if False:
+        return "変換前の本文が、空でない配列ではありません\"""",
+        "run": ["scripts/tableize_spec.py"],
+    },
+    {
+        "why": "★変換後の全体を期待値と比べない"
+               "（対象の節の中は何をしても通る）★",
+        "file": "scripts/tableize_spec.py",
+        "before": "    if after != expected:",
+        "after": "    if False:",
+        "run": ["scripts/tableize_spec.py"],
+    },
+    {
+        "why": "★旧基準値の重複を見ない"
+               "（[A,B,B] と [A,B] が一致して乗り換えが通る）★",
+        "file": "scripts/style_check.py",
+        "before": "            if len(was) != len(items):",
+        "after": "            if False:",
+        "run": ["scripts/style_check.py"],
+    },
+    {
+        "why": "★乗り換えで、材料が基準値と同じかを見ない"
+               "（丸ごと入れ替わっても通る）★",
+        "file": "scripts/style_check.py",
+        "before": "            if mine != was:",
+        "after": "            if False:",
+        "run": ["scripts/style_check.py"],
+    },
+    {
+        "why": "★木の比較で class を見ない"
+               "（settei-table と data-table を取り違えても通る）★",
+        "file": "scripts/audit_render.py",
+        "before": '    if got.get("cls") != want.get("cls"):',
+        "after": "    if False:",
+        "run": ["scripts/audit_render.py"],
+    },
+    {
+        "why": "★木の比較で文字を見ない"
+               "（<th>A</th><td>B</td> と <th>AB</th><td></td> が同じになる）★",
+        "file": "scripts/audit_render.py",
+        "before": "        if got != want:",
+        "after": "        if False:",
+        "run": ["scripts/audit_render.py"],
+    },
+    {
+        "why": "★木の比較で属性（href/colspan）を見ない★",
+        "file": "scripts/audit_render.py",
+        "before": '    if (got.get("at") or {}) != (want.get("at") or {}):',
+        "after": "    if False:",
+        "run": ["scripts/audit_render.py"],
+    },
+    # ─── 2026-08-31・文体の印（強調の記号を外す）────────────────
+    {
+        "why": "★印から強調の記号を外さない"
+               "（<strong> を ** へ直すたびに違反が湧いて赤くなる）★",
+        "file": "scripts/style_check.py",
+        "before": '    t = _STRONG.sub("**", str(text or ""))',
+        "after": '    t = str(text or "")',
+        "run": ["scripts/style_check.py"],
+    },
+    {
+        "why": "★印から文そのものを外す（どの文も同じ印＝違反の入れ替えが通る）★",
+        "file": "scripts/style_check.py",
+        "before": '    return _SPACES.sub(" ", t).strip()',
+        "after": '    return ""',
+        "run": ["scripts/style_check.py"],
+    },
+    {
+        "why": "★乗り換えで、材料と基準値の件数が合うかを見ない★",
+        "file": "scripts/style_check.py",
+        "before": "            if len(items) != len(rows):",
+        "after": "            if False:",
+        "run": ["scripts/style_check.py"],
+    },
+    # ─── 2026-08-31・移す道具と、足りていなかった壊し方 ──────────
+    {
+        "why": "★gates が行の列数を見ない"
+               "（見出しとずれた表が公開データに入る）★",
+        "file": "scripts/gates.py",
+        "before": "        if len(cells) != len(headers):",
+        "after": "        if False:",
+        "run": ["scripts/gates.py"],
+    },
+    {
+        "why": "★新台の関所が表の行の列数を見ない"
+               "（入口の層が抜ける・3層のうち1層）★",
+        "file": "scripts/publish_new_machine.py",
+        "before": "                bad_rows = [i for i, r in enumerate(tb[\"rows\"]) if len(r) != w]",
+        "after": "                bad_rows = []",
+        "run": ["scripts/publish_new_machine.py"],
+    },
+    {
+        "why": "★変換前の節の形（題と本文だけ）を確かめない★",
+        "file": "scripts/tableize_spec.py",
+        "before": "    if set(src.keys()) != _SECTION_KEYS_BEFORE:",
+        "after": "    if False:",
+        "run": ["scripts/tableize_spec.py"],
+    },
+    {
+        "why": "★下見の中身を、変換前の本文と突き合わせない"
+               "（下見を偽れば、偽の値を書ける）★",
+        "file": "scripts/tableize_spec.py",
+        "before": "    if again != [list(r) for r in rows_in]:",
+        "after": "    if False:",
+        "run": ["scripts/tableize_spec.py"],
+    },
+    {
+        "why": "★太字でない行まで自動で移す"
+               "（文章の途中の「：」で切って、文章を表にする）★",
+        "file": "scripts/tableize_spec.py",
+        "before": '_BOLD = re.compile(r"^\\*\\*(?P<label>[^*]+)\\*\\*：(?P<value>.*)$")',
+        "after": '_BOLD = re.compile(r"^\\*?\\*?(?P<label>[^：]+)\\*?\\*?：(?P<value>.*)$")',
+        "run": ["scripts/tableize_spec.py"],
+    },
+    {
+        "why": "★本文に文字列でない要素があっても黙って進む（中身が消える）★",
+        "file": "scripts/tableize_spec.py",
+        "before": "    if not all(isinstance(x, str) for x in body):",
+        "after": "    if False:",
+        "run": ["scripts/tableize_spec.py"],
+    },
     # ─── 2026-08-31・ふつうの表（要望③の土台）────────────────────
     {
         "why": "★ふつうの表の中身を見ない"
@@ -2193,16 +2336,18 @@ MUTATIONS = [
         "why": "★同じ節に同じ文が2回あっても1つに畳む"
                "（2件目を足しても、片方を直しても集合が変わらない）★",
         "file": "scripts/style_check.py",
-        "before": '                      str(row.get("nth") or 1)])',
-        "after": '                      ""])',
+        "before": """                      # ★同じ文が同じ節に何度も出るときの通し番号★
+                      str(row.get("nth") or 1)])""",
+        "after": """                      # ★同じ文が同じ節に何度も出るときの通し番号★
+                      ""])""",
         "run": ["scripts/style_check.py"],
     },
     {
         "why": "★基準値が無いときに黙って作る"
                "（消してから実行すると、新しい違反を丸ごと取り込める）★",
         "file": "scripts/style_check.py",
-        "before": "    elif not init:",
-        "after": "    elif False:",
+        "before": "    if not os.path.isfile(path) and not init:",
+        "after": "    if False:",
         "run": ["scripts/style_check.py"],
     },
     {
