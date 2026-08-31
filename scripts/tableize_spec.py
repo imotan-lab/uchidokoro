@@ -434,7 +434,103 @@ def selftest() -> int:
       and _rc2 == 1 and _done2 == [] and _now == _befores)
     t("　失敗しても一時ファイル・退避を残さない",
       not [x for x in os.listdir(_dir) if x.endswith((".tmp", ".bak"))])
+
+    # ★★置き換えの「途中」で失敗する場合★★（2026-08-31・Codexの13回目）
+    #   ★前の試験は「全件置き換えたあとの読み直し」で失敗させていた★＝
+    #   同じ受け止めと巻き戻しには入るが、
+    #   **置き換え途中では残りの `.tmp` がまだ在る**状態を試していない。
+    for _p, _src in zip(_paths, _befores):
+        with open(_p, "w", encoding="utf-8", newline="\n") as _f:
+            _f.write(_src)
+    _ready3 = []
+    for _p in _paths:
+        _d = _load(_p)
+        _gg = plan(_d)
+        _ready3.append((_p, os.path.basename(_p)[:-5],
+                        apply_to(_cp.deepcopy(_d), _gg), _gg))
+    _real_replace = os.replace
+    _count3 = [0]
+
+    def _boom(src, dst):
+        _count3[0] += 1
+        if _count3[0] == 3:
+            raise OSError("わざと置き換えを失敗させます")
+        return _real_replace(src, dst)
+
+    os.replace = _boom
+    try:
+        _done3, _rc3 = write_all(_ready3)
+    finally:
+        os.replace = _real_replace
+    _now3 = [open(_p, encoding="utf-8").read() for _p in _paths]
+    _left = [x for x in os.listdir(_dir) if x.endswith((".tmp", ".bak"))]
+    t("★★置き換えの3件目で失敗しても、全件が元のまま★★"
+      "（1・2件目は既に置き換わっている状態からの巻き戻し）",
+      _count3[0] == 3 and _rc3 == 1 and _done3 == []
+      and _now3 == _befores)
+    t("　途中で失敗しても、一時ファイルも退避も残らない", _left == [])
+
+    # ★★前の失敗が残した退避があれば断る★★
+    with open(_paths[0] + ".bak", "w", encoding="utf-8") as _f:
+        _f.write("前の残り")
+    _ready4 = []
+    for _p in _paths:
+        _d = _load(_p)
+        _gg = plan(_d)
+        _ready4.append((_p, os.path.basename(_p)[:-5],
+                        apply_to(_cp.deepcopy(_d), _gg), _gg))
+    _done4, _rc4 = write_all(_ready4)
+    _now4 = [open(_p, encoding="utf-8").read() for _p in _paths]
+    t("★前の退避が残っていたら書かない（戻すための控えを自分で壊さない）★",
+      _rc4 == 1 and _done4 == [] and _now4 == _befores)
+    os.remove(_paths[0] + ".bak")
+    for _x in os.listdir(_dir):
+        if _x.endswith(".tmp"):
+            os.remove(os.path.join(_dir, _x))
+
     _sh.rmtree(_dir, ignore_errors=True)
+
+    # ★★対象の指定★★（2026-08-31・Codexの13回目）
+    #   ★直す前は `--apply` だけで60機種すべてを書き換えた★
+    t("★★--apply だけでは書かない★★（60機種すべてが書き換わっていた）",
+      "--slug か --all" in target_problem(None, False, True))
+    t("　--slug と --all の同時指定は断る",
+      target_problem(["a"], True, True) != "")
+    t("　--slug を並べれば通る", target_problem(["a", "b"], False, True) == "")
+    t("　--all を明示すれば通る", target_problem(None, True, True) == "")
+    t("　書かない実行（下見）は指定なしでも通る",
+      target_problem(None, False, False) == "")
+    t("　同じ機種を2回書いたら断る",
+      target_problem(["a", "a"], False, True) != "")
+    for _bad in ("../x", "A", "a b", "", "a/b"):
+        t(f"　機種の書き方が {_bad!r} なら断る（置き場の外へ書かせない）",
+          target_problem([_bad], False, True) != "")
+
+    # ★★指定した機種以外は変わらない★★
+    _dir2 = _tf.mkdtemp(prefix="tableize_pick_")
+    _all_paths, _all_src = [], []
+    for _i in range(4):
+        _p = os.path.join(_dir2, f"n{_i}.json")
+        _d = {"slug": f"n{_i}",
+              "sections": [{"title": TITLE, "body": [f"**機種名**：機種{_i}"]}]}
+        with open(_p, "w", encoding="utf-8", newline="\n") as _f:
+            json.dump(_d, _f, ensure_ascii=False, indent=1)
+            _f.write("\n")
+        _all_paths.append(_p)
+        _all_src.append(open(_p, encoding="utf-8").read())
+    _pick = []
+    for _p in (_all_paths[1], _all_paths[3]):
+        _d = _load(_p)
+        _gg = plan(_d)
+        _pick.append((_p, os.path.basename(_p)[:-5],
+                      apply_to(_cp.deepcopy(_d), _gg), _gg))
+    _done5, _rc5 = write_all(_pick)
+    _now5 = [open(_p, encoding="utf-8").read() for _p in _all_paths]
+    t("★★指定した機種だけが変わる★★（ほかは1文字も動かない）",
+      _rc5 == 0 and sorted(_done5) == ["n1", "n3"]
+      and _now5[0] == _all_src[0] and _now5[2] == _all_src[2]
+      and _now5[1] != _all_src[1] and _now5[3] != _all_src[3])
+    _sh.rmtree(_dir2, ignore_errors=True)
 
     ng = ok.count(False)
     print(f"{len(ok) - ng}/{len(ok)} 合格")
@@ -457,11 +553,16 @@ def write_all(ready: list) -> tuple[list, int]:
     #   置き換え（rename）は書き込みより失敗しにくいので、
     #   危ない工程を全部前に寄せる。
     staged = []
+    tmps = []
     try:
         for p, slug, after, got in ready:
+            # ★★書く前に置き場を控える★★（2026-08-31・Codexの13回目）
+            #   ★直す前は `staged` に足す前に例外が出ると、
+            #     いま書いていた1件の `.tmp` が残り得た★
+            tmps.append(p + ".tmp")
             staged.append((p, slug, after, _stage(p, after)))
     except Exception as e:                          # noqa: BLE001
-        for _p, _s, _a, tmp in staged:
+        for tmp in tmps:
             if os.path.exists(tmp):
                 os.remove(tmp)
         print(f"★下書きの途中で失敗しました（{e}）。何も書いていません★")
@@ -476,6 +577,12 @@ def write_all(ready: list) -> tuple[list, int]:
     try:
         for p, slug, after, tmp in staged:
             bak = p + ".bak"
+            # ★★前の失敗が残した退避があれば断る★★（Codexの13回目）
+            #   ★上書きすると、戻すための控えを自分で壊す★
+            if os.path.exists(bak):
+                raise RuntimeError(
+                    f"前回の退避が残っています: {bak}"
+                    "（中身を確かめてから消してください）")
             shutil.copy2(p, bak)
             keep.append((p, bak))
     except Exception as e:                          # noqa: BLE001
@@ -526,18 +633,48 @@ def write_all(ready: list) -> tuple[list, int]:
     return done, 0
 
 
+def target_problem(slugs, want_all: bool, apply: bool) -> str:
+    """対象の指定が正しいか（良ければ空文字）。
+
+    ★★書くときは、どこに書くかを必ず言わせる★★
+    （2026-08-31・Codexの13回目。★直す前は `--apply` だけで
+      60機種すべてを書き換えた★＝`--all` を受け取っていたのに見ていなかった）
+    """
+    if slugs and want_all:
+        return "★--slug と --all は同時に指定できません★"
+    if apply and not slugs and not want_all:
+        return ("★--apply には --slug か --all の指定が要ります★\n"
+                "  何機種か試すとき: --slug a --slug b --apply\n"
+                "  全機種に当てるとき: --all --apply")
+    if slugs:
+        bad = [x for x in slugs
+               if not x or not re.fullmatch(r"[a-z0-9_]+", x)]
+        if bad:
+            return f"★機種の書き方が違います: {bad}★"
+        if len(set(slugs)) != len(slugs):
+            return "★同じ機種を2回指定しています★"
+    return ""
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="基本スペックのラベル行を表へ移す")
-    ap.add_argument("--slug")
-    ap.add_argument("--all", action="store_true")
+    ap.add_argument("--slug", action="append",
+                    help="対象の機種（何度でも書けます）")
+    ap.add_argument("--all", action="store_true",
+                    help="全機種を対象にする（--apply のときは明示が必要）")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
 
+    why = target_problem(a.slug, a.all, a.apply)
+    if why:
+        print(why)
+        return 1
+
     import copy
-    paths = ([os.path.join(DETAILS, a.slug + ".json")] if a.slug
+    paths = ([os.path.join(DETAILS, x + ".json") for x in a.slug] if a.slug
              else sorted(glob.glob(os.path.join(DETAILS, "*.json"))))
     movable, stuck, done = [], [], []
     ready = []
@@ -567,7 +704,7 @@ def main() -> int:
         if rc:
             return rc
 
-    if a.slug:
+    if a.slug and len(a.slug) == 1:
         slug = os.path.basename(paths[0])[:-5]
         if movable:
             print(f"{slug}: 移せます（{len(movable[0][1]['rows'])} 行）")

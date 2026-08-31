@@ -2148,6 +2148,30 @@ MUTATIONS = [
         "after": "        if False:",
         "run": ["scripts/gates.py"],
     },
+    # ─── 2026-08-31・Codexの13回目で入れた守り ──────────────────
+    {
+        "why": "★書くのに、どこへ書くかを言わせない"
+               "（--apply だけで60機種すべてが書き換わる）★",
+        "file": "scripts/tableize_spec.py",
+        "before": "    if apply and not slugs and not want_all:",
+        "after": "    if False:",
+        "run": ["scripts/tableize_spec.py"],
+    },
+    {
+        "why": "★機種の書き方を見ない（置き場の外のファイルを書ける）★",
+        "file": "scripts/tableize_spec.py",
+        "before": "        if bad:\n            return f\"★機種の書き方が違います: {bad}★\"",
+        "after": "        if False:\n            return f\"★機種の書き方が違います: {bad}★\"",
+        "run": ["scripts/tableize_spec.py"],
+    },
+    {
+        "why": "★前の失敗が残した退避を上書きする"
+               "（戻すための控えを自分で壊す）★",
+        "file": "scripts/tableize_spec.py",
+        "before": "            if os.path.exists(bak):\n                raise RuntimeError(",
+        "after": "            if False:\n                raise RuntimeError(",
+        "run": ["scripts/tableize_spec.py"],
+    },
     # ─── 2026-08-31・Codexの11〜12回目で入れた守り ──────────────
     {
         "why": "★書いたあと読み直して確かめない"
