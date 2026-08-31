@@ -2123,6 +2123,31 @@ MUTATIONS = [
         "after": "    for r in []:",
         "run": ["scripts/pre_push_check.py"],
     },
+    # ─── 2026-08-31・文体（です・ます）の検査 ────────────────────
+    {
+        "why": "★名簿に無い常体を見逃す形へ戻す"
+               "（「…となる。」のような言い方が素通りする）★",
+        "file": "scripts/style_check.py",
+        "before": "    return bool(_OK_TAIL.search(t))",
+        "after": "    return True",
+        "run": ["scripts/style_check.py"],
+    },
+    {
+        "why": "★括弧の中の「。」でも切る"
+               "（文でない断片が『体言止め』に見え、数が水増しされる）★",
+        "file": "scripts/style_check.py",
+        "before": "        if ch == \"。\" and depth == 0:",
+        "after": "        if ch == \"。\":",
+        "run": ["scripts/style_check.py"],
+    },
+    {
+        "why": "★ラベルと値の行まで文体を求める"
+               "（表へ移すべき行が毎日「直せ」と出続ける）★",
+        "file": "scripts/style_check.py",
+        "before": "    return bool(_LABEL.match(t))",
+        "after": "    return False",
+        "run": ["scripts/style_check.py"],
+    },
 ]
 
 

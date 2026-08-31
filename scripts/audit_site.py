@@ -1429,6 +1429,49 @@ def check_35_risky_atoms(machines: list) -> list[str]:
     return []
 
 
+def check_55_plain_style(machines: list) -> list[str]:
+    """★記事の文体（です・ます）から外れた文が増えていないか★
+    （2026-08-31・運営者の指示）
+
+    ★運営者の言葉★
+      > 文体は統一したいね　今後も。
+      > タスクが走るたびに表記変わるのは避けたい
+
+    ★★負の検査をやめた★★＝
+    いままで文体を見ていたのは `recheck.plain_style_gone` の
+    「常体の文末**19通り**」という名簿で、名簿に無い言い方は素通りした
+    （対照実験で「…となる。」が通ることを確認済み）。
+    ここは**正の検査**（`style_check.py`）＝
+    「です・ます で終わっていること」を求め、外れたものを全部挙げる。
+
+    ★0件を条件にしない★＝実測885件あり、直すのは毎朝のタスクの仕事。
+    項目35（危ない表現）と同じく**基準値を置いて、増える方向を止める**。
+    ＝★直すのは2AI、増やさないのは機械★。
+    """
+    sys.path.insert(0, str(BASE / "scripts"))
+    try:
+        import style_check as _sc
+        rows = _sc.scan_all()
+    except Exception as e:                # noqa: BLE001
+        return [f"文体を数えられません: {type(e).__name__}: {e}"]
+    base_p = BASE / "assets" / "data" / "style-baseline.json"
+    try:
+        limit = int(load_json(base_p)["max_lines"])
+    except Exception as e:                # noqa: BLE001
+        return [f"文体の基準値を読めません（{base_p.name}）: {e}"]
+    now = len(rows)
+    if now > limit:
+        slugs = sorted({r["slug"] for r in rows})[:6]
+        return [f"文体がそろっていない文が増えています: {now}件（基準 {limit}件）"
+                f" 例: {', '.join(slugs)}"
+                "（python scripts/style_check.py --slug <機種> で場所を確認）"]
+    if now < limit:
+        return [f"文体がそろっていない文が {limit} → {now} 件に減りました。"
+                "assets/data/style-baseline.json の max_lines を下げてください"
+                "（減った分を基準に戻さないため）"]
+    return []
+
+
 def _skill_contract(base: str) -> dict:
     """★どのタスクが動いていて、どれを止めたか★を外の設定から読む。
 
@@ -3278,6 +3321,7 @@ CHECKS = [
     ("52_試験用の残骸", check_52_test_residue),
     ("53_出典の投稿欄", check_53_source_user_area),
     ("54_どこから採ったかの言い回し", check_54_source_wording),
+    ("55_文体（です・ます）の残り", check_55_plain_style),
 ]
 
 
