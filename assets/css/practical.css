@@ -744,3 +744,10 @@ button, input, select { font: inherit; }
 }
 /* 飛んだ先が、上に貼り付いたヘッダーの下へ潜り込まないようにする */
 .article-block, .article-item { scroll-margin-top: 72px; }
+
+/* ふつうの表（2026-08-31・要望③）
+   設定示唆の表と違って、バッジも凡例も無い。項目と値を並べるだけ。 */
+.data-table { width: 100%; border-collapse: collapse; border: 1px solid var(--line2); margin-bottom: 4px; }
+.data-table th { background: var(--panel); color: var(--muted); font-size: 10px; font-weight: 700; padding: 7px 8px; border: 1px solid var(--line2); text-align: left; }
+.data-table td { color: var(--text); font-size: 12px; font-weight: 700; padding: 6px 8px; border: 1px solid var(--line2); line-height: 1.5; vertical-align: top; }
+.data-table td:first-child { color: var(--soft); width: 38%; }

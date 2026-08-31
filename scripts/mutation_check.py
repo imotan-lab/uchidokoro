@@ -2133,6 +2133,30 @@ MUTATIONS = [
         "after": "    if False:",
         "run": ["scripts/html_check.py"],
     },
+    # ─── 2026-08-31・ふつうの表（要望③の土台）────────────────────
+    {
+        "why": "★ふつうの表の中身を見ない"
+               "（セルの辞書・列数のずれが素通りし、読者が列を取り違える）★",
+        "file": "scripts/audit_public.py",
+        "before": '        if s.get("type") == "table":\n'
+                  "            problems += _table_body_problems(slug, i, s)",
+        "after": "        if False:\n            pass",
+        "run": ["scripts/audit_public.py"],
+    },
+    {
+        "why": "★表のセルが文字かを見ない（辞書がそのまま画面に出る）★",
+        "file": "scripts/audit_public.py",
+        "before": "            if not all(isinstance(c, str) for c in cells):",
+        "after": "            if False:",
+        "run": ["scripts/audit_public.py"],
+    },
+    {
+        "why": "★列の数を見ない（見出しと行がずれた表を公開する）★",
+        "file": "scripts/audit_public.py",
+        "before": "            if len(cells) != len(heads):",
+        "after": "            if False:",
+        "run": ["scripts/audit_public.py"],
+    },
     # ─── 2026-08-31・文体（です・ます）の検査 ────────────────────
     {
         "why": "★名簿に無い常体を見逃す形へ戻す"

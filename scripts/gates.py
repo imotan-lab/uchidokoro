@@ -550,6 +550,11 @@ class _Ctx:
         self.dropped.append({"atom_id": None, "path": path, "reason": reason})
 
 
+# ★節の種別★（2026-08-31・要望③で "table" を足した）
+#   ★"table" は バッジも凡例も持たない、ふつうの表★
+_SEC_TYPES = ("rumor", "settei", "table")
+
+
 def _only_keys(d: dict, allowed: set) -> bool:
     """原子の中に未知フィールドが無いこと（あれば原子ごと拒否する）。"""
     return isinstance(d, dict) and set(d.keys()) <= allowed
@@ -1521,7 +1526,7 @@ def _project_sections(sections, ctx: _Ctx) -> list | None:
             ctx.reject(p, "未知フィールドを含むためセクションごと拒否")
             continue
         # type は enum。誤型なら tables/rows が黙って消えるので構造エラーにする
-        if "type" in sec and sec["type"] not in ("rumor", "settei"):
+        if "type" in sec and sec["type"] not in _SEC_TYPES:
             ctx.reject(f"{p}.type", "セクション種別が未知の値")
             continue
         title = sec.get("title")
@@ -1530,13 +1535,14 @@ def _project_sections(sections, ctx: _Ctx) -> list | None:
             ctx.reject(f"{p}.title", "セクション見出しが無い/空")
             continue
         # settei 以外に表データが置かれているのは構造の取り違え
-        if sec.get("type") != "settei" and ("tables" in sec or "rows" in sec):
-            ctx.reject(p, "設定示唆以外のセクションに表データがある")
+        if sec.get("type") not in ("settei", "table") \
+                and ("tables" in sec or "rows" in sec):
+            ctx.reject(p, "表を持てない種別のセクションに表データがある")
             continue
         if not ctx.atom([title], f"{p}.title"):
             continue                                  # 見出しが落ちたらセクションごと落とす
         new: dict = {"title": title}
-        if sec.get("type") in ("rumor", "settei"):
+        if sec.get("type") in _SEC_TYPES:
             new["type"] = sec["type"]
 
         # ★UIが描かない組み合わせを公開しない★（Codex 23巡目 #2）

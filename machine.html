@@ -1030,6 +1030,23 @@ function resolveMachineSlug() {
 
     if (section.type === "rumor") {
       div.innerHTML = `<h3 class="article-title">${section.title}</h3><div class="rumor-box"><p class="rumor-label">⚠ 噂・未確定情報</p>${(section.body || []).map(t => `<p class="rumor-body">${md(t)}</p>`).join("")}</div>`;
+    } else if (section.type === "table") {
+      // ★★ふつうの表★★（2026-08-31・運営者の要望③の土台）
+      //   ★Python側（build_machine_pages.render_section）と同じ作りにする★
+      //   （食い違うとレンダリング監査のR13が落ちる＝そこで気づける）
+      let html = `<h3 class="article-title">${section.title}</h3>`;
+      (section.tables || []).forEach(tbl => {
+        if (tbl.label) html += `<p class="settei-sub-label">${tbl.label}</p>`;
+        html += `<table class="data-table"><tr>${(tbl.headers || []).map(h => `<th>${h}</th>`).join("")}</tr>`;
+        (tbl.rows || []).forEach(row => {
+          const cells = Array.isArray(row) ? row : [row];
+          html += `<tr>` + cells.map(c => `<td>${md(c)}</td>`).join("") + `</tr>`;
+        });
+        html += `</table>`;
+        if (tbl.note) html += `<p class="settei-note">${tbl.note}</p>`;
+      });
+      (section.body || []).forEach(t => { html += `<p class="article-body">${md(t)}</p>`; });
+      div.innerHTML = html;
     } else if (section.type === "settei") {
       const badgeClass = { hint: "settei-hint", weak: "settei-weak", mid: "settei-mid", strong: "settei-strong", ok: "settei-ok" };
       const sectionWide = (section.tables || []).some(tbl => tbl.wide);

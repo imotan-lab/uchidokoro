@@ -163,6 +163,27 @@ def render_section(section: dict) -> str:
                  f'<div class="rumor-box"><p class="rumor-label">⚠ 噂・未確定情報</p>{paras}</div>')
         return f'<div class="article-item"{section_attrs(section)}>{inner}</div>'
 
+    if stype == "table":
+        # ★★ふつうの表★★（2026-08-31・運営者の要望③の土台）
+        #   `settei` と違って、バッジも凡例も持たない。
+        #   ★セルは文字列だけ★（受け取る側でも同じ線を引く）。
+        h = f'<h3 class="article-title">{esc(title)}</h3>'
+        for tbl in (section.get("tables") or []):
+            if tbl.get("label"):
+                h += f'<p class="settei-sub-label">{esc(tbl["label"])}</p>'
+            heads = "".join(f"<th>{esc(x)}</th>"
+                            for x in tbl.get("headers", []))
+            h += f'<table class="data-table"><tr>{heads}</tr>'
+            for row in tbl.get("rows", []):
+                cells = row if isinstance(row, list) else [row]
+                h += "<tr>" + "".join(f"<td>{md(c)}</td>"
+                                      for c in cells) + "</tr>"
+            h += "</table>"
+            if tbl.get("note"):
+                h += f'<p class="settei-note">{esc(tbl["note"])}</p>'
+        h += "".join(f'<p class="article-body">{md(t)}</p>' for t in body)
+        return f'<div class="article-item"{section_attrs(section)}>{h}</div>'
+
     if stype == "settei":
         tables = section.get("tables")
         legend = ('<div class="settei-legend">'

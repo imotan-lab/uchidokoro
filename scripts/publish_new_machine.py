@@ -820,7 +820,8 @@ _FORBIDDEN = ("need_third", "unresolved", "candidates", "thin", "disputed")
 
 
 _TABLE_KEYS = {"label", "headers", "rows", "note"}
-_SECTION_TYPES = {"settei", "rumor"}
+# ★"table" は 2026-08-31 に足した（運営者の要望③の土台）★
+_SECTION_TYPES = {"settei", "rumor", "table"}
 # 機種データに入ってよい鍵（★新台が作るものだけ★）
 _MACHINE_KEYS = {"slug", "name", "seo", "info", "strategy", "aliases",
                  "status", "release_date", "identity", "publish_state",

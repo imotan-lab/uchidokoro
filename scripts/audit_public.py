@@ -943,6 +943,39 @@ def audit_machine(pub: dict, seen_slugs: set | None = None) -> list[str]:
 ALLOWED_DETAIL_KEYS = {"lead", "summaryBoxes", "factTable", "sections"}
 
 
+def _table_body_problems(slug: str, i: int, sec: dict) -> list:
+    """ふつうの表（type:"table"）の中身が描ける形か。
+
+    ★見出しが要る／セルは文字だけ／行の長さは見出しと同じ★
+    （2026-08-31・要望③。列がずれた表は読者に誤って読まれる）
+    """
+    out = []
+    tbls = sec.get("tables")
+    if not isinstance(tbls, list) or not tbls:
+        out.append(f"{slug}: sections[{i}] は表の種別なのに表がありません")
+        return out
+    if "rows" in sec:
+        out.append(f"{slug}: sections[{i}] は表の種別なので rows は使いません")
+    for ti, tb in enumerate(tbls):
+        if not isinstance(tb, dict):
+            continue                       # 形の検査は呼び出し側が済ませている
+        heads = tb.get("headers")
+        if not isinstance(heads, list) or not heads:
+            out.append(f"{slug}: sections[{i}].tables[{ti}] に見出しがありません")
+            continue
+        for ri, row in enumerate(tb.get("rows") or []):
+            cells = row if isinstance(row, list) else [row]
+            if not all(isinstance(c, str) for c in cells):
+                out.append(f"{slug}: sections[{i}].tables[{ti}].rows[{ri}] "
+                           "のセルは文字だけにしてください")
+                continue
+            if len(cells) != len(heads):
+                out.append(f"{slug}: sections[{i}].tables[{ti}].rows[{ri}] "
+                           f"の列数が見出しと違います（{len(cells)} / "
+                           f"{len(heads)} のはず）")
+    return out
+
+
 def audit_detail(slug: str, detail: dict, has_disclaimer: bool,
                  surfaces: list | None = None) -> list[str]:
     """公開射影された記事データを検査する（機種データとは契約が違う）。"""
@@ -980,15 +1013,23 @@ def audit_detail(slug: str, detail: dict, has_disclaimer: bool,
                         problems.append(f"{slug}: sections[{i}].rows[{ri}] のセルが不正")
                 elif not isinstance(c, str):
                     problems.append(f"{slug}: sections[{i}].rows[{ri}] のセル型が不正")
-        if "type" in s and s["type"] not in ("rumor", "settei"):
+        if "type" in s and s["type"] not in ("rumor", "settei", "table"):
             problems.append(f"{slug}: sections[{i}].type が未知の値")
         if set(s.keys()) - {"title", "type", "body", "tables", "rows"}:
             problems.append(f"{slug}: sections[{i}] に未知フィールド")
-        if s.get("type") != "settei" and ("tables" in s or "rows" in s):
-            problems.append(f"{slug}: sections[{i}] は設定示唆でないのに表データを持つ")
+        if s.get("type") not in ("settei", "table") \
+                and ("tables" in s or "rows" in s):
+            problems.append(f"{slug}: sections[{i}] は表を持てない種別なのに表データを持つ")
         for f2, t2 in (("body", list), ("tables", list), ("rows", list)):
             if f2 in s and not isinstance(s[f2], t2):
                 problems.append(f"{slug}: sections[{i}].{f2} の型が不正")
+        # ★★ふつうの表（type:"table"）の中身★★（2026-08-31・要望③）
+        #   ★対照実験を正しく書いたら1件も止まっていなかった★＝
+        #   セルにバッジの辞書を入れても、列の数が合わなくても通っていた。
+        #   ★settei と違って、ふつうの表はセルが文字だけ★
+        #   （描く側は md(c) をかけるので、辞書だと中身がそのまま出る）。
+        if s.get("type") == "table":
+            problems += _table_body_problems(slug, i, s)
         for ti, tb in enumerate(s.get("tables") or []):
             if not isinstance(tb, dict):
                 problems.append(f"{slug}: sections[{i}].tables[{ti}] が辞書でない")
@@ -1135,6 +1176,39 @@ def selftest() -> int:
           "display_requirements": {"disclaimer": EXPECTED_DISCLAIMER,
                                    "surfaces": ["strategy"]}}
     t("正常な公開データは合格", audit_machine(ok) == [])
+
+    # ★★ふつうの表（type:"table"）★★（2026-08-31・要望③）
+    #   ★ここを足す前は、壊れた表が1件も止まらなかった★
+    #   （最初の対照実験は「slug が許可されていないフィールド」という
+    #     無関係な理由で止まっていて、表の検査を一度も通っていなかった）
+    def _tbl(sec):
+        return audit_detail("zzz", {"sections": [sec]}, has_disclaimer=True)
+
+    _good_tbl = {"title": "基本スペック", "type": "table",
+                 "tables": [{"label": "", "headers": ["項目", "内容"],
+                             "rows": [["機種名", "北斗"],
+                                      ["メーカー", "サミー"]]}],
+                 "body": []}
+    t("★ふつうの表は通る★", _tbl(_good_tbl) == [])
+    t("★★セルにバッジの辞書を入れたら止める★★（描く側は文字として出す）",
+      any("文字だけ" in x for x in _tbl(
+          {"title": "x", "type": "table",
+           "tables": [{"headers": ["項目", "内容"],
+                       "rows": [["機種名", {"text": "x", "badge": "ok"}]]}]})))
+    t("★★列の数が見出しと違えば止める★★（読者が列を取り違える）",
+      any("列数" in x for x in _tbl(
+          {"title": "x", "type": "table",
+           "tables": [{"headers": ["項目", "内容"], "rows": [["機種名"]]}]})))
+    t("　見出しが無ければ止める",
+      any("見出しがありません" in x for x in _tbl(
+          {"title": "x", "type": "table",
+           "tables": [{"headers": [], "rows": [["a"]]}]})))
+    t("　表が無ければ止める",
+      any("表がありません" in x for x in _tbl(
+          {"title": "x", "type": "table", "body": ["a"]})))
+    t("　知らない種別は今までどおり止める",
+      any("未知の値" in x for x in _tbl(
+          {"title": "x", "type": "chart", "body": ["a"]})))
     t("数値があるのに目安ラベルが無ければ違反",
       any("目安ラベル" in p for p in audit_machine({k: v for k, v in ok.items() if k != "disclaimer"})))
     t("★目安ラベルが固定文言と違えば違反（truthyだけでは通さない）",
