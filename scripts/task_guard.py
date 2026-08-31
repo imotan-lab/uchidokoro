@@ -1550,8 +1550,18 @@ def manual_commit(commit: str, why: str, path: str = STATE_PATH) -> dict:
     rc, _out = _git("merge-base", "--is-ancestor", full, "HEAD")
     if rc != 0:
         raise GuardError("そのコミットは、いまの HEAD から辿れません")
-    rc, out = _git("branch", "-r", "--contains", full)
-    if rc == 0 and out.strip():
+    # ★★公開先に実際に聞く★★（2026-08-31・Codexの5回目の指摘P2）
+    #   ★直す前は `git branch -r --contains` だった★＝
+    #   ローカルの**追跡ref**しか見ないので、別のPCから既に push されていて
+    #   こちらが取り直していなければ「まだ出ていない」と判定した。
+    #   しかも git の呼び出しが失敗しても、そのまま先へ進んでいた。
+    #   ★聞けなければ断る★（fail-closed）。
+    import prepush_gate as _pg
+    _tip, _why = _pg.remote_main_tip()
+    if not _tip:
+        raise GuardError("公開先の先端を確かめられません: " + str(_why))
+    rc, _o = _git("merge-base", "--is-ancestor", full, _tip)
+    if rc == 0:
         raise GuardError("そのコミットは、もう公開先に出ています")
     rc, out = _git("diff-tree", "--no-commit-id", "--name-only", "-r", full)
     if rc != 0:
