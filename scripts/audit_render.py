@@ -224,11 +224,19 @@ TOC_JS = r"""() => {
         const items = Array.from(document.querySelectorAll('#tocList .toc-item'));
         return {
             block_shown: block ? visible(block) : false,
+            here: location.href.split('#')[0],
             items: items.map(a => {
-                const href = a.getAttribute('href') || '';
-                const id = href.slice(0, 1) === '#' ? href.slice(1) : '';
+                // ★★属性ではなく「解決後のURL」を見る★★（2026-08-31）
+                //   このページには <base href="/"> があるので、
+                //   `#sec1` だけだと **サイトのトップ**へ解決される。
+                //   ★属性だけ見ていたので、トップへ飛ぶ目次を合格にしていた★。
+                const abs = a.href || '';
+                const cut = abs.indexOf('#');
+                const doc = cut < 0 ? abs : abs.slice(0, cut);
+                const id = cut < 0 ? '' : abs.slice(cut + 1);
                 const t = id ? document.getElementById(id) : null;
                 return {label: (a.textContent || '').trim(), id: id,
+                        doc: doc,
                         exists: !!t, shown: t ? visible(t) : false};
             }),
         };
@@ -290,7 +298,15 @@ def judge_toc(toc: dict, want: list) -> list[str]:
         return [f"R14: 目次が読者に見えていません（{want} が出るはず）"]
     if got != want:
         return [f"R14: 目次の中身が違います（{got} / {want} のはず）"]
+    here = str(toc.get("here") or "")
     for it in items:
+        # ★★同じページの中へ飛ぶか★★（2026-08-31・運営者が見つけた不具合）
+        #   `<base href="/">` があると `#id` だけのリンクは
+        #   ★サイトのトップへ解決される★。属性だけ見ていたので通っていた。
+        if here and str(it.get("doc") or "") != here:
+            ngs.append(f"R14: 目次を押すと別のページへ行きます: "
+                       f"{it.get('label')} -> {it.get('doc')}")
+            continue
         if not it.get("exists"):
             ngs.append(f"R14: 飛び先がありません: {it.get('label')}"
                        f" -> #{it.get('id')}")
@@ -698,9 +714,10 @@ def selftest() -> int:
           {**_auto, "page_decision": {"schema_version": "こわれ"}},
           _det14, {})))
 
-    def _toc_of(labels, shown=True, exists=True, target_shown=True):
-        return {"block_shown": shown,
-                "items": [{"label": x, "id": "i%d" % i,
+    def _toc_of(labels, shown=True, exists=True, target_shown=True,
+                doc="https://x/machines/zzz/"):
+        return {"block_shown": shown, "here": "https://x/machines/zzz/",
+                "items": [{"label": x, "id": "i%d" % i, "doc": doc,
                            "exists": exists, "shown": target_shown}
                           for i, x in enumerate(labels)]}
     t("★期待どおりなら通る★", judge_toc(_toc_of(_want_legacy),
@@ -713,6 +730,10 @@ def selftest() -> int:
       any("目次の中身が違います" in x for x in
           judge_toc(_toc_of(["狙い目チェッカー"] + _want_legacy),
                     _want_legacy)))
+    t("★★押すと別のページへ行くなら止める★★"
+      "（<base href=\"/\"> があると `#id` だけのリンクはトップへ飛ぶ）",
+      any("別のページへ行きます" in x for x in
+          judge_toc(_toc_of(_want_legacy, doc="https://x/"), _want_legacy)))
     t("★★飛び先が無ければ止める★★",
       any("飛び先がありません" in x for x in
           judge_toc(_toc_of(_want_legacy, exists=False), _want_legacy)))

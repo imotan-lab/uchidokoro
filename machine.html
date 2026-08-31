@@ -1110,7 +1110,12 @@ function resolveMachineSlug() {
     entries.forEach(([id, label]) => {
       const a = document.createElement("a");
       a.className = "toc-item";
-      a.href = "#" + id;
+      // ★★「#id」だけにしない★★（2026-08-31・運営者が見つけた）
+      //   このページには base タグ（ルート指定）が入っている（鉄則9）。
+      //   ★<base> があると、断片だけのリンクは「いまのページ」ではなく
+      //     <base> を基準に解決される★＝押すとサイトのトップへ飛ぶ。
+      //   いまのページの道筋を頭に付けて、同じページの中で飛ばす。
+      a.href = location.pathname + "#" + id;
       a.textContent = label;
       tocList.appendChild(a);
     });
