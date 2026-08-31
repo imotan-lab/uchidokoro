@@ -777,9 +777,16 @@ def check_18_subdir_base_href(machines: list) -> list[str]:
         # <head>タグが無いHTMLは単純なリダイレクト等として対象外（checker.html等）
         if "<head" not in text.lower():
             continue
-        if not re.search(r'<base\s+href\s*=\s*["\']/["\']', text, re.IGNORECASE):
+        import html_check as _hc18
+        # ★★字面ではなく構造で見る★★（2026-08-31・実際に事故を起こした）
+        #   直す前は正規表現だったので、★JSのコメントの中の文字列でも合格★した。
+        #   実際、コメントに書いた文字列を生成器が実タグと誤認して、
+        #   120ページから base が消えたのに、この監査は気づかなかった。
+        _bp18 = _hc18.base_problem(text)
+        if _bp18:
             rel = f.relative_to(BASE).as_posix()
-            ngs.append(f"{rel}: <base href=\"/\"> が無い（サブディレクトリ配下のHTMLには必須）")
+            ngs.append(f"{rel}: {_bp18}"
+                       "（サブディレクトリ配下のHTMLには必須）")
     return ngs
 
 

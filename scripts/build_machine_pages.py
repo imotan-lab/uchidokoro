@@ -304,9 +304,22 @@ def replace_once(text: str, needle: str, repl: str) -> str:
 
 
 def prepare_template(template: str) -> str:
-    """テンプレートを機種ページ用に整える（1回だけ行う前処理）。"""
-    if "<base " not in template:
+    """テンプレートを機種ページ用に整える（1回だけ行う前処理）。
+
+    ★★base タグは「字面」ではなく「構造」で見る★★
+    （2026-08-31・実際に事故を起こした）＝
+    直す前は `"<base " not in template` だったので、
+    ★JSのコメントに `<base href="/">` と書いただけで「もう入っている」と
+    誤認し、120ページから実タグが消えた★
+    （ロゴ・ナビ・記事データの取得が全部404になる状態）。
+    """
+    import html_check as _hcb
+    if not _hcb.parse(template).bases:
         template = re.sub(r"(<head[^>]*>)", r'\1\n<base href="/">', template, count=1)
+    # ★入れたあとに、構造で確かめる★（1つだけ・行き先は "/"）
+    _bp = _hcb.base_problem(template)
+    if _bp:
+        raise TemplateError("ひな型の base タグがおかしいです: " + _bp)
     # テンプレ由来の robots meta（machine.html自体のnoindex）を除去。
     # complete機種はnoindex無し(index)、preview機種は下で noindex,follow を再付与する
     return re.sub(r'<meta name="robots"[^>]*>(<!--.*?-->)?\n?', "", template)

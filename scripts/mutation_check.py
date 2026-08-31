@@ -2123,6 +2123,16 @@ MUTATIONS = [
         "after": "    for r in []:",
         "run": ["scripts/pre_push_check.py"],
     },
+    # ─── 2026-08-31・base タグを構造で見る（実際に事故を起こした）──
+    {
+        "why": "★base タグを構造で見ない"
+               "（コメントの中の文字列を実タグと誤認し、"
+               "120ページから base が消える／2個でも通る）★",
+        "file": "scripts/html_check.py",
+        "before": '    if bases != ["/"]:',
+        "after": "    if False:",
+        "run": ["scripts/html_check.py"],
+    },
     # ─── 2026-08-31・文体（です・ます）の検査 ────────────────────
     {
         "why": "★名簿に無い常体を見逃す形へ戻す"

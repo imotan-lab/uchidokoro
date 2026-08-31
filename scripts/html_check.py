@@ -191,6 +191,26 @@ def parse(source: str, hidden_classes: set | None = None) -> _Doc:
     return doc
 
 
+def base_problem(html: str) -> str:
+    """★実タグの <base> がちょうど1つ、行き先が "/" か★（良ければ空文字）。
+
+    ★字面で見ない★（2026-08-31・実際に事故を起こした）＝
+    JSのコメントに `<base href="/">` と書いただけで、生成器が
+    「もう入っている」と誤認し、★120ページから実タグが消えた★
+    （ロゴ・ナビ・記事データの取得が全部404になる状態）。
+    ★コメントの中の文字列は、解析すればタグではない★。
+    """
+    try:
+        bases = parse(str(html or "")).bases
+    except Exception as e:                 # noqa: BLE001
+        return f"HTMLを解析できません: {type(e).__name__}"
+    # ★判定は1本にする★＝二重にすると、片方を消しても
+    #   もう片方が拾って「守られている」ように見える（罠③）。
+    if bases != ["/"]:
+        return f"<base> が {bases!r} です（1個で '/' であるべき）"
+    return ""
+
+
 def meta_values(doc: _Doc, name: str) -> list:
     """同じ name の meta の中身を、区切りでほどいて返す（★個数も分かる★）。"""
     out = []
@@ -236,6 +256,22 @@ def selftest() -> int:
     t("★canonical を読める★",
       link_hrefs(d, "canonical") == ["https://uchidokoro.com/machines/x/"])
     t("　base を読める", d.bases == ["/"])
+    # ★★コメントの中の文字列をタグと数えない★★（2026-08-31・実際の事故）
+    _CM = ("<html><head><script>// <base href=\"/\"> と書いただけ</script>"
+           "</head><body>x</body></html>")
+    t("★★JSのコメントの中の base はタグではない★★"
+      "（これを字面で見て、120ページから実タグが消えた）",
+      base_problem(_CM) != "")
+    t("　実タグが1つで行き先が / なら通す",
+      base_problem('<html><head><base href="/"></head><body>x</body></html>')
+      == "")
+    t("★実タグが2つあれば止める★",
+      base_problem('<html><head><base href="/"><base href="/">'
+                   "</head><body>x</body></html>") != "")
+    t("★★行き先が違えば止める（コメントに正しい文字列があっても）★★",
+      base_problem('<html><head><base href="/wrong/">'
+                   '<script>// <base href="/"></script>'
+                   "</head><body>x</body></html>") != "")
     t("★読者に見える文字だけを返す★",
       "先行記事" in visible_text(H) and "var s" not in visible_text(H))
 
