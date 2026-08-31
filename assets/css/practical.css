@@ -166,6 +166,8 @@ button, input, select { font: inherit; }
 .btn-show-all--center { display: block; text-align: center; }
 .btn-show-all--muted { color: var(--muted); }
 .btn-settei.is-disabled, .btn-show-all.is-disabled { opacity: .5; cursor: default; pointer-events: none; }
+/* 非対応の理由は長いので折り返す（nowrap のままだと 55機種でスマホ幅の横スクロールが出ていた・2026-08-31） */
+.btn-settei.is-disabled { white-space: normal; text-align: center; padding: 8px 12px; }
 .compact-note { margin-bottom: 12px; }
 .landscape-hint-box {
   background: var(--gold-bg);
