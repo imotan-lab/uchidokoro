@@ -267,6 +267,12 @@ def gate_active(data: dict, today: str) -> tuple:
     ★目印が無い古い記録は「無人だった」とみなす★（fail-closed）
     """
     verified, active = set(), False
+    # ★★手作業の記録は日をまたいでも生きる★★（2026-08-31・台帳#527）
+    #   `--no-verify` の置き換え。由来だけを人の記録で埋め、
+    #   他の検査は全部通す（Codexの4回目の指摘）。
+    for r in (data.get("manual_commits") or []):
+        if isinstance(r, dict) and r.get("commit"):
+            verified.add(str(r["commit"]))
     _day = (data.get("day") or {})
     same_day = str(_day.get("date") or "") == today
     if same_day:
@@ -512,6 +518,25 @@ def _selftest() -> int:
       gate_active({"day": {"date": _TODAY, "had_unattended": True},
                    "tasks": {"u": {"run_date": _TODAY,
                                    "guard_slug": "x"}}}, _TODAY)[0] is True)
+    # ★★手作業の記録は日をまたいでも生きる★★（2026-08-31・台帳#527）
+    t("★★手作業の記録があれば、そのコミットは照合済みとして通す★★"
+      "（--no-verify の置き換え）",
+      "abc1234" in gate_active(
+          {"day": {"date": _TODAY, "had_unattended": True},
+           "manual_commits": [{"commit": "abc1234", "why": "運営者の指示"}],
+           "tasks": {"u": {"run_date": _TODAY, "guard_slug": "x"}}},
+          _TODAY)[1])
+    t("　昨日の手作業の記録も生きている（日で消えない）",
+      "abc1234" in gate_active(
+          {"day": {"date": "1999-01-01"},
+           "manual_commits": [{"commit": "abc1234", "why": "運営者の指示"}]},
+          _TODAY)[1])
+    t("　記録に無いコミットは照合済みにしない",
+      "zzz9999" not in gate_active(
+          {"day": {"date": _TODAY, "had_unattended": True},
+           "manual_commits": [{"commit": "abc1234", "why": "運営者の指示"}],
+           "tasks": {"u": {"run_date": _TODAY, "guard_slug": "x"}}},
+          _TODAY)[1])
     t("★目印が無い古い記録は照合を求める★（fail-closed）",
       gate_active({"day": {"date": _TODAY},
                    "tasks": {"u": {"run_date": _TODAY,
@@ -561,8 +586,11 @@ def main() -> int:
         print("★★関所の照合を通っていないコミットがあります★★")
         for x in unverified[:5]:
             print("   " + x)
-        print("   → python scripts/task_guard.py verify-commit "
+        print("   → 無人タスクなら: python scripts/task_guard.py verify-commit "
               "--task <タスク> --slug <機種> --commit <コミット>")
+        print("   → 手作業なら: python scripts/task_guard.py manual-commit "
+              "--commit <コミット> --why-file <理由を書いたファイル>")
+        print("   （★--no-verify で迂回しないこと★＝あれは後段の監査まで外します）")
         print("   （関所が見た内容と、実際にpushする内容が同じかを確かめてください）")
         print()
         return 1

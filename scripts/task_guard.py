@@ -1501,6 +1501,77 @@ def verify_commit(task: str, slug: str, commit: str,
                 "ok": True, "verified_today": len(_dv)}
 
 
+def manual_reason_problem(why) -> str:
+    """★理由が記録として使えるか★（使えるなら空文字）。
+
+    ★単独で試せるように切り出した★（2026-08-31）＝
+    manual_commit の中に置いたままだと、試験で使う「実在しないコミット」を
+    **別の守り（コミットの実在検査）が先に断って**しまい、
+    ★この検査を一度も通らずに緑になっていた★（罠④）。
+    """
+    if len(str(why or "").strip()) < 10:
+        return "理由を書いてください（10字以上）"
+    return ""
+
+
+def manual_commit(commit: str, why: str, path: str = STATE_PATH) -> dict:
+    """★運営者が指示した手作業のコミットを、記録を残して通す★（台帳#527）
+
+    ★なぜ要るか★＝push前の関所は
+    「その日に無人が動いたら、記事を触った未pushのコミットは全部照合を求める」
+    作りで、手作業には照合を通す道が無い（照合は claim → before-write →
+    before-commit の記録が要る）。更新タスクは毎朝動くので、
+    ★対話セッションは記事データを一切 push できなかった★（鉄則4と衝突）。
+
+    ★`--no-verify` の置き換え★（Codexの4回目の指摘）＝
+    あれは由来の検査だけでなく**後段の監査まで全部外す**。
+    ここは**由来だけ**を人の記録で埋め、他の検査は全部通す。
+
+    ★これは認可ではなく記録★＝同じ権限からは誰でも呼べる。
+    事故を止める綱であって、悪意への境界ではない。
+    ★記録は日をまたいでも消さない★（当日中に push できなかった日でも通る）。
+
+    確かめること:
+      ①コミットの指定が形として正しい
+      ②そのコミットが実在し、いまの HEAD から辿れる
+      ③まだ公開先に出ていない（出ているなら記録する意味が無い）
+      ④理由が書いてある（10字以上）
+    """
+    if not re.fullmatch(r"[0-9a-f]{7,40}", str(commit or "")):
+        raise GuardError(f"コミットの指定が不正です: {commit!r}")
+    why = str(why or "").strip()
+    _why_ng = manual_reason_problem(why)
+    if _why_ng:
+        raise GuardError(_why_ng)
+    rc, full = _git("rev-parse", "--verify", str(commit) + "^{commit}")
+    if rc != 0:
+        raise GuardError(f"そのコミットがありません: {commit}")
+    full = full.strip()
+    rc, _out = _git("merge-base", "--is-ancestor", full, "HEAD")
+    if rc != 0:
+        raise GuardError("そのコミットは、いまの HEAD から辿れません")
+    rc, out = _git("branch", "-r", "--contains", full)
+    if rc == 0 and out.strip():
+        raise GuardError("そのコミットは、もう公開先に出ています")
+    rc, out = _git("diff-tree", "--no-commit-id", "--name-only", "-r", full)
+    if rc != 0:
+        raise GuardError("コミットの中身を読めません")
+    files = sorted({x.strip() for x in out.splitlines() if x.strip()})
+    with _Exclusive(path):
+        data = _load(path)
+        # ★日をまたいでも消さない一覧★（_day は日付で消える）
+        rec = data.setdefault("manual_commits", [])
+        if not any(r.get("commit") == full for r in rec):
+            rec.append({"commit": full, "why": why, "files": files,
+                        "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+        # ★その日ぶんにも入れる★（既存の読み手と食い違わせない）
+        _dv = _day(data).setdefault("verified_commits", [])
+        if full not in _dv:
+            _dv.append(full)
+        _save(path, data)
+    return {"commit": full, "files": len(files), "ok": True}
+
+
 def before_write(task: str, slug: str, path: str = STATE_PATH,
                  repairing: bool = False, finding=None) -> dict:
     """記事を書き換える前の確認。★触ってよい段階か毎回聞き直す★
@@ -3206,7 +3277,29 @@ def selftest() -> int:
 
     globals()["unattended_dirty_code"] = _keep_dirty
     globals()["unattended_code_state"] = _keep_state   # ★必ず戻す★
+    # ★★手作業の記録（台帳#527）★★
+    #   ★gitを呼ぶ前に断る所だけを試す★＝本番のリポジトリの状態に
+    #   貼り付かないようにするため（罠㉙）。
+    def _raises_guard(fn):
+        try:
+            fn()
+        except GuardError:
+            return True
+        except Exception:                                    # noqa: BLE001
+            return False
+        return False
+
+    t("★★コミットの指定が形として不正なら断る★★",
+      _raises_guard(lambda: manual_commit("ぜんぜん違う", "運営者の指示で直した")))
+    t("★★理由が書いていなければ断る★★（記録が目的なので理由は必須）",
+      manual_reason_problem("短い") != ""
+      and manual_reason_problem("") != ""
+      and manual_reason_problem("   ") != "")
+    t("　まっとうな理由は断らない",
+      manual_reason_problem("運営者の指示で手で直した") == "")
+
     ng = [n for n, ok in results if not ok]
+
     print(f"\n{len(results) - len(ng)}/{len(results)} 合格")
     if ng:
         print("失敗:", ng)
@@ -3291,6 +3384,12 @@ def main() -> int:
     p.add_argument("--commit", required=True,
                    help="いま作ったコミット（git rev-parse HEAD の値）")
 
+    p = sub.add_parser("manual-commit",
+                       help="★運営者が指示した手作業のコミットを記録して通す★")
+    p.add_argument("--commit", required=True)
+    p.add_argument("--why-file", required=True,
+                   help="なぜ手で直したかを書いたファイル（★自由文はファイルで渡す★）")
+
     args = ap.parse_args()
     if args.selftest:
         return selftest()
@@ -3327,6 +3426,11 @@ def main() -> int:
         print(json.dumps(before_commit(args.task, args.slug), ensure_ascii=False, indent=1))
     elif args.cmd == "done":
         print(json.dumps(done(args.task, args.slug, args.stage), ensure_ascii=False, indent=1))
+    elif args.cmd == "manual-commit":
+        with open(args.why_file, encoding="utf-8") as _wf:
+            _why = _wf.read().strip()
+        print(json.dumps(manual_commit(args.commit, _why),
+                         ensure_ascii=False, indent=1))
     elif args.cmd == "verify-commit":
         print(json.dumps(verify_commit(args.task, args.slug, args.commit),
                          ensure_ascii=False, indent=1))
