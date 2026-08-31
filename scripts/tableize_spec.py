@@ -89,6 +89,25 @@ def rebuild(label: str, value: str) -> str:
 _SECTION_KEYS_BEFORE = {"title", "body"}
 
 
+def auto_slugs() -> set:
+    """★新台経路の機種★（この道具では移さない）。
+
+    （2026-08-31・実際に13機種を書いてから気づいた）
+    ★理由★＝新台経路の記事は**毎晩タスクが材料から作り直す**ので、
+    手で表にしても次の実行で段落へ戻る。さらに記事の形は
+    `build_new_article` の契約に縛られているので、★夜の公開を止めうる★。
+    表にするなら、作る側を変えるのが筋。
+    """
+    import page_decision as _pd
+    p = os.path.join(BASE, "assets", "data", "machines.json")
+    with open(p, encoding="utf-8") as f:
+        ms = json.load(f)
+    if isinstance(ms, dict):
+        ms = ms.get("machines") or []
+    return {m.get("slug") for m in ms
+            if isinstance(m, dict) and _pd.is_auto(m)}
+
+
 def plan(detail) -> dict:
     """1機種ぶんの下見。
 
@@ -532,6 +551,92 @@ def selftest() -> int:
       and _now5[1] != _all_src[1] and _now5[3] != _all_src[3])
     _sh.rmtree(_dir2, ignore_errors=True)
 
+    # ★★コマンドから通しで試す★★（2026-08-31・Codexの14回目）
+    #   ★これまでは write_all() を直接呼んでいた★ので、
+    #   **引数から対象のファイルを決める所**を一度も通っていなかった。
+    _dir3 = _tf.mkdtemp(prefix="tableize_cli_")
+    _cli_paths, _cli_src = [], []
+    for _i in range(4):
+        _p = os.path.join(_dir3, f"c{_i}.json")
+        _d = {"slug": f"c{_i}",
+              "sections": [{"title": TITLE, "body": [f"**機種名**：機種{_i}"]}]}
+        with open(_p, "w", encoding="utf-8", newline="\n") as _f:
+            json.dump(_d, _f, ensure_ascii=False, indent=1)
+            _f.write("\n")
+        _cli_paths.append(_p)
+        _cli_src.append(open(_p, encoding="utf-8").read())
+
+    _real_details, _real_argv = DETAILS, sys.argv
+    globals()["DETAILS"] = _dir3
+    try:
+        sys.argv = ["tableize_spec.py", "--apply"]
+        _rc6 = main()
+        _now6 = [open(_p, encoding="utf-8").read() for _p in _cli_paths]
+        t("★★コマンドで --apply だけなら、1件も書かない★★"
+          "（直す前は60機種すべてが書き換わった）",
+          _rc6 == 1 and _now6 == _cli_src)
+
+        sys.argv = ["tableize_spec.py", "--slug", "c1", "--slug", "c3",
+                    "--apply"]
+        _rc7 = main()
+        _now7 = [open(_p, encoding="utf-8").read() for _p in _cli_paths]
+        t("★★コマンドで指定した機種だけが変わる★★（ほかは1文字も動かない）",
+          _rc7 == 0
+          and _now7[0] == _cli_src[0] and _now7[2] == _cli_src[2]
+          and _now7[1] != _cli_src[1] and _now7[3] != _cli_src[3])
+        t("　残骸（.tmp/.bak）を残さない",
+          not [x for x in os.listdir(_dir3) if x.endswith((".tmp", ".bak"))])
+
+        sys.argv = ["tableize_spec.py", "--slug", "c0", "--all", "--apply"]
+        _rc8 = main()
+        t("　--slug と --all の同時指定はコマンドでも断る",
+          _rc8 == 1 and open(_cli_paths[0], encoding="utf-8").read()
+          == _cli_src[0])
+
+        sys.argv = ["tableize_spec.py", "--all", "--apply"]
+        _rc9 = main()
+        _now9 = [open(_p, encoding="utf-8").read() for _p in _cli_paths]
+        t("　--all を明示すれば残りも書ける",
+          _rc9 == 0 and all(a != b for a, b in zip(_now9, _cli_src)))
+    finally:
+        globals()["DETAILS"] = _real_details
+        sys.argv = _real_argv
+    _sh.rmtree(_dir3, ignore_errors=True)
+
+    # ★★新台経路の機種は移さない★★（2026-08-31・実際に13機種を書いて気づいた）
+    #   ★本番の machines.json には寄りかからない★（罠㉙＝生きたデータに
+    #   貼り付くと、機種が入れ替わった日に試験だけが落ちる）
+    _dir4 = _tf.mkdtemp(prefix="tableize_auto_")
+    _ap, _asrc = [], []
+    for _i in range(3):
+        _p = os.path.join(_dir4, f"a{_i}.json")
+        _d = {"slug": f"a{_i}",
+              "sections": [{"title": TITLE, "body": [f"**機種名**：機種{_i}"]}]}
+        with open(_p, "w", encoding="utf-8", newline="\n") as _f:
+            json.dump(_d, _f, ensure_ascii=False, indent=1)
+            _f.write("\n")
+        _ap.append(_p)
+        _asrc.append(open(_p, encoding="utf-8").read())
+    _real_auto = auto_slugs
+    globals()["auto_slugs"] = lambda: {"a1"}
+    globals()["DETAILS"] = _dir4
+    _real_argv2 = sys.argv
+    try:
+        sys.argv = ["tableize_spec.py", "--all", "--apply"]
+        _rc10 = main()
+        _now10 = [open(_p, encoding="utf-8").read() for _p in _ap]
+        t("★★新台経路の機種は移さない★★"
+          "（毎晩タスクが作り直すので戻る／夜の公開を止めうる）",
+          _rc10 == 0 and _now10[1] == _asrc[1]
+          and _now10[0] != _asrc[0] and _now10[2] != _asrc[2])
+    finally:
+        globals()["auto_slugs"] = _real_auto
+        globals()["DETAILS"] = _real_details
+        sys.argv = _real_argv2
+    _sh.rmtree(_dir4, ignore_errors=True)
+    t("　本番の名簿から新台経路を実際に拾える（数えるだけ）",
+      len(_real_auto()) > 0)
+
     ng = ok.count(False)
     print(f"{len(ok) - ng}/{len(ok)} 合格")
     return 1 if ng else 0
@@ -678,11 +783,18 @@ def main() -> int:
              else sorted(glob.glob(os.path.join(DETAILS, "*.json"))))
     movable, stuck, done = [], [], []
     ready = []
+    auto = auto_slugs()
     for p in paths:
         slug = os.path.basename(p)[:-5]
         if not os.path.isfile(p):
             print(f"★{slug} の記事データがありません★")
             return 1
+        # ★★新台経路は移さない★★（2026-08-31・実際に13機種を書いてから気づいた）
+        #   毎晩タスクが作り直すので戻るし、記事の形の契約に触れて
+        #   夜の公開を止めうる。表にするなら作る側を変える。
+        if slug in auto:
+            stuck.append((slug, "新台経路の機種です（作る側を変えます）", ""))
+            continue
         d = _load(p)
         got = plan(d)
         if not got["ok"]:

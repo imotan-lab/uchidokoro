@@ -1,7 +1,7 @@
 {
   "schema_version": "risky-baseline/v1",
   "_why": "公開記事に残る危ない表現の数。★増やさない★（audit項目35）。人が直して減ったら、この値も下げる。",
-  "max_atoms": 60,
+  "max_atoms": 58,
   "measured_at": "2026-08-05",
   "by_kind": {
     "利益・行動の断定": 14,

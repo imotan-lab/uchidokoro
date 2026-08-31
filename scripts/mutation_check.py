@@ -2148,6 +2148,14 @@ MUTATIONS = [
         "after": "        if False:",
         "run": ["scripts/gates.py"],
     },
+    {
+        "why": "★新台経路の機種まで表へ移す"
+               "（毎晩のタスクが作り直すので戻る／夜の公開を止めうる）★",
+        "file": "scripts/tableize_spec.py",
+        "before": "        if slug in auto:",
+        "after": "        if False:",
+        "run": ["scripts/tableize_spec.py"],
+    },
     # ─── 2026-08-31・Codexの13回目で入れた守り ──────────────────
     {
         "why": "★書くのに、どこへ書くかを言わせない"
