@@ -1250,6 +1250,11 @@ def _unrelated_changes(slug: str) -> list:
     return out
 
 
+# ★gitが答えなかったことを表す番号★（2026-08-31・Codexの7回目のP2）
+#   ★1（＝gitが「違う」と答えた）と混ぜない★
+GIT_UNKNOWN = -1
+
+
 def _git(*args) -> tuple[int, str]:
     """★固定の引数配列でgitを呼ぶ★（シェルを通さない）。戻り値 (終了コード, 標準出力)
 
@@ -1263,12 +1268,17 @@ def _git(*args) -> tuple[int, str]:
         p = subprocess.run(["git", "-C", str(BASE), *args],
                            capture_output=True, timeout=60)
     except Exception as e:                                   # noqa: BLE001
-        return 1, f"{type(e).__name__}: {e}"
+        # ★★「答えが1」と「答えが返ってこなかった」を分ける★★
+        #   （2026-08-31・Codexの7回目のP2）
+        #   ★直す前は例外も時間切れも 1 に潰していた★ので、
+        #   `merge-base --is-ancestor` の呼び出し側が
+        #   「祖先ではない」と読んで**素通り**した（fail-open）。
+        return GIT_UNKNOWN, f"{type(e).__name__}: {e}"
     try:
         out = p.stdout.decode("utf-8")
     except UnicodeDecodeError:
         # ★読めない中身は「読めない」と返す★（勝手に化けさせない）
-        return 1, ""
+        return GIT_UNKNOWN, ""
     return p.returncode, out
 
 
@@ -3345,6 +3355,25 @@ def selftest() -> int:
           _is_ancestor("a", "b") is None)
     finally:
         globals()["_git"] = _keep_git       # ★必ず戻す★
+
+    # ★★本物の経路（_git そのもの）を通して試す★★
+    #   （2026-08-31・Codexの7回目のP2）
+    #   ★直す前の試験は `_git` を丸ごと差し替えていた★ので、
+    #   「例外→1」という**変換の欠陥を一度も通っていなかった**（罠①）。
+    #   ここでは `subprocess.run` の側を壊す。
+    import subprocess as _sp7
+    _keep_run = _sp7.run
+    try:
+        def _boom(*a, **k):
+            raise TimeoutError("時間切れ")
+        _sp7.run = _boom
+        _rc7, _o7 = _git("merge-base", "--is-ancestor", "a", "b")
+        t("★★時間切れは『分からない』として返す★★"
+          "（1に潰すと、呼び出し側が『祖先ではない』と読んで素通りする）",
+          _rc7 == GIT_UNKNOWN)
+        t("　その値は『祖先ではない』と区別できる", _is_ancestor("a", "b") is None)
+    finally:
+        _sp7.run = _keep_run                # ★必ず戻す★
 
     ng = [n for n, ok in results if not ok]
 

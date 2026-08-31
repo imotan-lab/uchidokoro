@@ -2151,6 +2151,39 @@ MUTATIONS = [
         "run": ["scripts/style_check.py"],
     },
     {
+        "why": "★同じ節に同じ文が2回あっても1つに畳む"
+               "（2件目を足しても、片方を直しても集合が変わらない）★",
+        "file": "scripts/style_check.py",
+        "before": '                      str(row.get("nth") or 1)])',
+        "after": '                      ""])',
+        "run": ["scripts/style_check.py"],
+    },
+    {
+        "why": "★基準値が無いときに黙って作る"
+               "（消してから実行すると、新しい違反を丸ごと取り込める）★",
+        "file": "scripts/style_check.py",
+        "before": "    elif not init:",
+        "after": "    elif False:",
+        "run": ["scripts/style_check.py"],
+    },
+    {
+        "why": "★base の置き場所を見ない"
+               "（template の中や body の base を『入っている』と数え、"
+               "実タグが入らなくなる）★",
+        "file": "scripts/html_check.py",
+        "before": '            if _names[-1:] == ["head"] and "template" not in _names:',
+        "after": "            if True:",
+        "run": ["scripts/html_check.py"],
+    },
+    {
+        "why": "★gitが答えなかったことを『違う』に潰す"
+               "（時間切れでも『祖先ではない』と読んで素通りする）★",
+        "file": "scripts/task_guard.py",
+        "before": "        return GIT_UNKNOWN, f\"{type(e).__name__}: {e}\"",
+        "after": "        return 1, f\"{type(e).__name__}: {e}\"",
+        "run": ["scripts/task_guard.py"],
+    },
+    {
         "why": "★lead と表の注記を見ない（読者に出る文章の一部が対象外）★",
         "file": "scripts/style_check.py",
         "before": '    _check_text(out, slug, "lead", detail.get("lead"))',

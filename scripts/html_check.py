@@ -93,7 +93,16 @@ class _Doc(HTMLParser):
         if tag == "link" and a.get("rel"):
             self.links.append({"rel": a["rel"].lower(), "href": a.get("href", "")})
         if tag == "base":
-            self.bases.append(a.get("href", ""))
+            # ★★head の直下にある、生きた base だけ数える★★
+            #   （2026-08-31・Codexの7回目のP1）
+            #   ★直す前は場所を見ていなかった★ので、
+            #     <template><base href="/"></template> や body の中の base を
+            #     「入っている」と数え、生成器が実タグを入れなくなった
+            #     ＝相対パスが全部ずれる（今日の120ページ事故と同じ結末）。
+            #   `template` の中は動かないので、あっても効かない。
+            _names = [x[0] for x in self._stack]
+            if _names[-1:] == ["head"] and "template" not in _names:
+                self.bases.append(a.get("href", ""))
         # ★専用の目印がある断り書き★（文面が本文のどこかにあるだけでは認めない）
         if a.get("data-preview-notice"):
             self.notices.append({"kind": a["data-preview-notice"],
@@ -263,6 +272,16 @@ def selftest() -> int:
       "（これを字面で見て、120ページから実タグが消えた）",
       base_problem(_CM) != "")
     t("　実タグが1つで行き先が / なら通す",
+      base_problem('<html><head><base href="/"></head><body>x</body></html>')
+      == "")
+    # ★★置き場所を見る★★（2026-08-31・Codexの7回目のP1）
+    t("★★template の中の base は効かないので不合格★★",
+      base_problem("<html><head><template><base href=\"/\"></template>"
+                   "</head><body>x</body></html>") != "")
+    t("★★body の中の base も不合格★★",
+      base_problem("<html><head></head><body><base href=\"/\">x</body></html>")
+      != "")
+    t("　head の直下に1つなら合格",
       base_problem('<html><head><base href="/"></head><body>x</body></html>')
       == "")
     t("★実タグが2つあれば止める★",

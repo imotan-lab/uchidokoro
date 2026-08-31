@@ -185,6 +185,15 @@ def problems(slug: str, detail) -> list:
             if isinstance(tbl, dict):
                 _check_text(out, slug, title + "（表の注記）",
                             tbl.get("note"), ti)
+    # ★★同じ節に同じ文が2回あっても、別々に数える★★
+    #   （2026-08-31・Codexの7回目のP2）
+    #   ★直す前は印が同じ★だったので、
+    #   2件目を新しく足しても、片方だけ直しても集合が変わらなかった。
+    _seen = {}
+    for r in out:
+        k = (r["slug"], r["section"], "".join(str(r["sentence"]).split()))
+        _seen[k] = _seen.get(k, 0) + 1
+        r["nth"] = _seen[k]
     return out
 
 
@@ -198,7 +207,9 @@ def fingerprint(row: dict) -> str:
     import hashlib
     key = "\n".join([str(row.get("slug") or ""),
                       str(row.get("section") or ""),
-                      "".join(str(row.get("sentence") or "").split())])
+                      "".join(str(row.get("sentence") or "").split()),
+                      # ★同じ文が同じ節に何度も出るときの通し番号★
+                      str(row.get("nth") or 1)])
     return hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
 
 
@@ -238,7 +249,7 @@ def compare(rows: list, base: dict) -> dict:
             "now": len(now), "base": len(want)}
 
 
-def write_baseline(rows: list, path: str = None) -> dict:
+def write_baseline(rows: list, path: str = None, init: bool = False) -> dict:
     """基準値を書き直す。★減った時だけ★（増やす方向には書けない）。
 
     ★増やせないようにする理由★＝
@@ -249,13 +260,29 @@ def write_baseline(rows: list, path: str = None) -> dict:
     now = {fingerprint(r) for r in rows}
     old = None
     if os.path.isfile(path):
+        if init:
+            raise SystemExit("★基準値は既にあります（初回の作成はできません）★")
         old = _load(path)
+        if old.get("schema_version") != "style-baseline/v2":
+            raise SystemExit(
+                f"★基準値の版が違います（{old.get('schema_version')!r}）★")
         want = set(str(x) for x in (old.get("items") or []))
         extra = now - want
         if extra:
             raise SystemExit(
                 f"★増えているので書き直せません（新しい違反 {len(extra)} 件）★\n"
                 "  先に直してください（python scripts/style_check.py --slug <機種>）")
+        if now == want:
+            raise SystemExit("★減っていないので書き直す必要がありません★")
+    elif not init:
+        # ★★基準値が無いときは黙って作らない★★
+        #   （2026-08-31・Codexの7回目のP2）
+        #   ★直す前は、消してから実行すると
+        #     「いまの違反」をそのまま基準値にできた★
+        #   ＝新しい違反を丸ごと取り込んで監査55が緑になる。
+        raise SystemExit(
+            "★基準値がありません★（消してしまった場合は git から戻してください）\n"
+            "  本当に初めて作るときだけ --init-baseline を使います")
     import datetime as _dt
     doc = {
         "schema_version": "style-baseline/v2",
@@ -347,6 +374,42 @@ def selftest() -> int:
       fingerprint(r1) != fingerprint({**r1, "slug": "b"})
       and fingerprint(r1) == fingerprint({**r1, "line": 99}))
 
+    # ★★同じ節に同じ文が2回あっても、別々に数える★★
+    dup = {"sections": [{"title": "x",
+                         "body": ["天井は1200Gに短縮", "天井は1200Gに短縮"]}]}
+    got_d = problems("a", dup)
+    t("★★同じ文が2回あれば2件として数える★★"
+      "（印が同じだと、片方を直しても集合が変わらない）",
+      len(got_d) == 2
+      and fingerprint(got_d[0]) != fingerprint(got_d[1]))
+
+    # ★★基準値が無いときは黙って作らない★★
+    import tempfile as _tf7
+    _d7 = _tf7.mkdtemp(prefix="style_base_")
+    _p7 = os.path.join(_d7, "b.json")
+    _rows7 = [{"slug": "a", "section": "x", "sentence": "短縮", "nth": 1}]
+    _made = True
+    try:
+        write_baseline(_rows7, _p7)
+    except SystemExit:
+        _made = False
+    t("★★基準値が無いのに書き直そうとしたら断る★★"
+      "（消してから実行すると、新しい違反を丸ごと取り込めた）", not _made)
+    write_baseline(_rows7, _p7, init=True)
+    t("　初回だけは作れる", os.path.isfile(_p7))
+    _again = True
+    try:
+        write_baseline(_rows7, _p7, init=True)
+    except SystemExit:
+        _again = False
+    t("　もうあるのに初回として作ろうとしたら断る", not _again)
+    _same = True
+    try:
+        write_baseline(_rows7, _p7)
+    except SystemExit:
+        _same = False
+    t("　減っていないなら書き直さない", not _same)
+
     ng = ok.count(False)
     print(f"{len(ok) - ng}/{len(ok)} 合格")
     return 1 if ng else 0
@@ -360,12 +423,14 @@ def main() -> int:
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--update-baseline", action="store_true",
                     help="★直したあと★基準値を書き直す（減った時だけ通る）")
+    ap.add_argument("--init-baseline", action="store_true",
+                    help="★初めて作るときだけ★（既にあるときは断る）")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
 
-    if a.update_baseline:
-        got = write_baseline(scan_all())
+    if a.update_baseline or a.init_baseline:
+        got = write_baseline(scan_all(), init=a.init_baseline)
         print(f"基準値を書き直しました: {got['before']} → {got['count']} 件")
         return 0
 
