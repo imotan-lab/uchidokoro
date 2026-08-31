@@ -2143,6 +2143,21 @@ MUTATIONS = [
         "run": ["scripts/style_check.py"],
     },
     {
+        "why": "★入れ替えを見つけない（古い違反を直して別に入れれば"
+               "件数が同じまま通る＝走るたびに表記が変わる）★",
+        "file": "scripts/style_check.py",
+        "before": "    new = sorted(set(now) - want)",
+        "after": "    new = []",
+        "run": ["scripts/style_check.py"],
+    },
+    {
+        "why": "★lead と表の注記を見ない（読者に出る文章の一部が対象外）★",
+        "file": "scripts/style_check.py",
+        "before": '    _check_text(out, slug, "lead", detail.get("lead"))',
+        "after": "    pass",
+        "run": ["scripts/style_check.py"],
+    },
+    {
         "why": "★括弧の中の「。」でも切る"
                "（文でない断片が『体言止め』に見え、数が水増しされる）★",
         "file": "scripts/style_check.py",

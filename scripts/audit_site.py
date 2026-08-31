@@ -1463,19 +1463,24 @@ def check_55_plain_style(machines: list) -> list[str]:
         return [f"文体を数えられません: {type(e).__name__}: {e}"]
     base_p = BASE / "assets" / "data" / "style-baseline.json"
     try:
-        limit = int(load_json(base_p)["max_lines"])
+        base = load_json(base_p)
     except Exception as e:                # noqa: BLE001
         return [f"文体の基準値を読めません（{base_p.name}）: {e}"]
-    now = len(rows)
-    if now > limit:
-        slugs = sorted({r["slug"] for r in rows})[:6]
-        return [f"文体がそろっていない文が増えています: {now}件（基準 {limit}件）"
-                f" 例: {', '.join(slugs)}"
+    # ★★件数ではなく集合で比べる★★（2026-08-31・Codexの6回目の指摘）
+    #   ★件数だけだと入れ替えを許す★＝古い違反を1件直して
+    #   別の文に1件入れると、同じ数のまま通る。
+    #   ＝運営者の要望「走るたびに表記が変わるのを避けたい」を満たせない。
+    d = _sc.compare(rows, base)
+    if d["new"]:
+        ex = [f"{r['slug']}／{r['sentence'][-24:]}" for r in d["new"][:3]]
+        return [f"文体の新しい違反が {len(d['new'])} 件あります"
+                f"（いま {d['now']}件／基準 {d['base']}件）"
+                f" 例: {' / '.join(ex)}"
                 "（python scripts/style_check.py --slug <機種> で場所を確認）"]
-    if now < limit:
-        return [f"文体がそろっていない文が {limit} → {now} 件に減りました。"
-                "assets/data/style-baseline.json の max_lines を下げてください"
-                "（減った分を基準に戻さないため）"]
+    if d["gone"]:
+        return [f"文体の違反が {d['base']} → {d['now']} 件に減りました。"
+                "python scripts/style_check.py --update-baseline "
+                "で基準値を書き直してください（減った分を基準に戻さないため）"]
     return []
 
 

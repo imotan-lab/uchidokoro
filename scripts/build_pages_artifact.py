@@ -109,6 +109,12 @@ TAG = re.compile(r"<[^>]+>")
 # 写しの目印を探す対象（HTMLだけ見ていると .js / .svg / .htm を見落とす）
 MARKER_SCAN_SUFFIXES = {".html", ".htm", ".js", ".json", ".svg", ".css", ".xml", ".txt"}
 
+def _hc_base(html: str) -> str:
+    """★base タグを構造で見る★（判定は html_check の1か所）。"""
+    import html_check as _hcb
+    return _hcb.base_problem(html)
+
+
 APPROVAL_SCHEMA = "template-approval/v2"
 
 # ★全機種に一斉に効く入力★（1箇所直すと全ページに載るもの）
@@ -652,11 +658,14 @@ def audit(stage: Path, expected: set[str]) -> None:
     for slug in sorted(expected):
         page = (stage / "machines" / slug / "index.html").read_text(encoding="utf-8")
         # ★コメントを外してから見る／head内に1つだけ★（Codex 14巡目 (b)-3）
-        head = HTML_COMMENT.sub("", page).split("</head>", 1)[0]
-        bases = re.findall(r'<base\s+href\s*=\s*["\']([^"\']*)["\']', head, re.IGNORECASE)
-        if bases != ["/"]:
-            raise BuildError(
-                f'machines/{slug}/index.html: <base href="/"> が head に1つだけ必要（実際: {bases}）')
+        # ★★字面ではなく構造で見る★★（2026-08-31・Codexの6回目のP1）
+        #   ★直す前はHTMLのコメントだけを外して正規表現で探していた★ので、
+        #   **JSのコメント**（// <base href="/">）は残り、
+        #   実タグが1つも無いページを合格にした。
+        #   ＝今日 120ページから base を消した事故と、同じ入力で破れる。
+        _bp = _hc_base(page)
+        if _bp:
+            raise BuildError(f"machines/{slug}/index.html: {_bp}")
         # ★「目安です」が必要な面すべてに、必要な回数だけ出ているか★（同 (a)-8）
         machine = by_slug.get(slug) or {}
         text, _sf = _bmp.disclaimer_of(machine)
@@ -2037,6 +2046,15 @@ def selftest() -> int:
         lambda r: (r / "machines/aaa/index.html").write_text(
             '<html><head></head><body><h1 id="machineTitle" class="page-title">機種aaa</h1>'
             '<p id="heroSub" class="hero-sub">aaaの説明</p></body></html>', encoding="utf-8")))
+    # ★★JSのコメントだけでは通さない★★（2026-08-31・Codexの6回目のP1）
+    #   ★直す前はHTMLのコメントだけを外して正規表現で探していた★ので、
+    #   実タグが1つも無いのに合格した（今日の120ページ事故と同じ入力）。
+    case("★JSのコメントに base の文字列があるだけなら止める★", denies(
+        lambda r: (r / "machines/aaa/index.html").write_text(
+            "<html><head><script>// <base href=\"/\"> と説明する</script>"
+            "</head><body><h1 id=\"machineTitle\" class=\"page-title\">機種aaa</h1>"
+            "<p id=\"heroSub\" class=\"hero-sub\">aaaの説明</p></body></html>",
+            encoding="utf-8")))
     case("(b)-4 必須の併記が画面に無ければ止める", denies(
         lambda r: (r / "assets/data/machines.json").write_text(json.dumps(
             [{"slug": "aaa", "name": "機種aaa",

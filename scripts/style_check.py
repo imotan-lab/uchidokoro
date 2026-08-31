@@ -147,26 +147,59 @@ def ok_ending(sentence: str) -> bool:
     return bool(_OK_TAIL.search(t))
 
 
+def _check_text(out: list, slug: str, where: str, line, li=0) -> None:
+    """1行ぶん見て、外れている文を out へ足す。"""
+    if not isinstance(line, str) or not line.strip():
+        return
+    if line.strip() in _STOCK or is_label_line(line):
+        return
+    for x in sentences(line):
+        if ok_ending(x):
+            continue
+        out.append({"slug": slug, "section": where, "line": li,
+                    "sentence": x})
+
+
 def problems(slug: str, detail) -> list:
-    """1機種ぶんの「です・ます で終わっていない文」を挙げる。"""
+    """1機種ぶんの「です・ます で終わっていない文」を挙げる。
+
+    ★読者の画面に文章として出るものを全部見る★
+    （2026-08-31・Codexの6回目の指摘）＝
+    直す前は `sections[].body` だけで、
+    ★`lead`（ページ上部の説明）と 表の `note` を見ていなかった★。
+    実データに常体の lead がある。
+    """
     out = []
     if not isinstance(detail, dict):
         return out
+    # ★ページ上部の説明（lead）★
+    _check_text(out, slug, "lead", detail.get("lead"))
     for si, sec in enumerate(detail.get("sections") or []):
         if not isinstance(sec, dict):
             continue
         title = str(sec.get("title") or "")
         for li, line in enumerate(sec.get("body") or []):
-            if not isinstance(line, str) or not line.strip():
-                continue
-            if line.strip() in _STOCK or is_label_line(line):
-                continue
-            for s in sentences(line):
-                if ok_ending(s):
-                    continue
-                out.append({"slug": slug, "section": title,
-                            "line": li, "sentence": s})
+            _check_text(out, slug, title, line, li)
+        # ★表の注記も文章として画面に出る★
+        for ti, tbl in enumerate(sec.get("tables") or []):
+            if isinstance(tbl, dict):
+                _check_text(out, slug, title + "（表の注記）",
+                            tbl.get("note"), ti)
     return out
+
+
+def fingerprint(row: dict) -> str:
+    """★その違反を一意に指す印★（機種・場所・文）。
+
+    ★件数ではなく集合で持つため★（2026-08-31・Codexの6回目の指摘）＝
+    件数だけだと、古い違反を1件直して別の文に1件入れれば
+    同じ数のまま通る＝★入れ替えを許す★。
+    """
+    import hashlib
+    key = "\n".join([str(row.get("slug") or ""),
+                      str(row.get("section") or ""),
+                      "".join(str(row.get("sentence") or "").split())])
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
 
 
 def _load(path):
@@ -185,6 +218,62 @@ def scan_all() -> list:
             continue
         out += problems(slug, d)
     return out
+
+
+def compare(rows: list, base: dict) -> dict:
+    """いまの違反と基準値を**集合で**比べる。
+
+    ★件数では足りない★（2026-08-31・Codexの6回目の指摘）＝
+    古い違反を1件直して別の文に1件入れると、件数は同じままで通る
+    ＝★入れ替えを許す★。運営者の要望
+    「タスクが走るたびに表記変わるのは避けたい」を満たせない。
+
+    返すもの: {"new": [...], "gone": [...], "now": N, "base": M}
+    """
+    now = {fingerprint(r): r for r in rows}
+    want = set(str(x) for x in (base or {}).get("items") or [])
+    new = sorted(set(now) - want)
+    gone = sorted(want - set(now))
+    return {"new": [now[h] for h in new], "gone": gone,
+            "now": len(now), "base": len(want)}
+
+
+def write_baseline(rows: list, path: str = None) -> dict:
+    """基準値を書き直す。★減った時だけ★（増やす方向には書けない）。
+
+    ★増やせないようにする理由★＝
+    「直したら基準値を下げる」運用は、下げ忘れると後戻りが許される。
+    逆に「増やせる」と、違反を足してから基準値を上げれば何でも通る。
+    """
+    path = path or BASELINE
+    now = {fingerprint(r) for r in rows}
+    old = None
+    if os.path.isfile(path):
+        old = _load(path)
+        want = set(str(x) for x in (old.get("items") or []))
+        extra = now - want
+        if extra:
+            raise SystemExit(
+                f"★増えているので書き直せません（新しい違反 {len(extra)} 件）★\n"
+                "  先に直してください（python scripts/style_check.py --slug <機種>）")
+    import datetime as _dt
+    doc = {
+        "schema_version": "style-baseline/v2",
+        "_why": ("記事の文章で「です・ます」から外れている文の**集合**。"
+                 "★増やさない★（audit項目55）。件数ではなく集合で持つのは、"
+                 "古いのを直して別に入れる**入れ替え**を許さないため。"),
+        "_how": ("python scripts/style_check.py --all で見る／"
+                 "直したら --update-baseline で書き直す（減った時だけ通る）。"),
+        "count": len(now),
+        "machines": len({r["slug"] for r in rows}),
+        "measured_at": _dt.date.today().isoformat(),
+        "items": sorted(now),
+    }
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(doc, f, ensure_ascii=False, indent=1)
+        f.write("\n")
+    return {"count": doc["count"],
+            "before": (len(old.get("items") or []) if old else None)}
 
 
 def selftest() -> int:
@@ -227,9 +316,36 @@ def selftest() -> int:
     got = problems("zzz", det)
     t("★★記事から、直すべき文だけを挙げる★★",
       len(got) == 1 and got[0]["sentence"].endswith("短縮"))
+    # ★★読者に出る文章を全部見る★★（2026-08-31・Codexの6回目の指摘）
+    det2 = {"lead": "新台のAT機。天井は1200G",
+            "sections": [{"title": "設定示唆まとめ", "type": "settei",
+                          "body": [],
+                          "tables": [{"label": "x", "headers": [], "rows": [],
+                                      "note": "設定6は出現率が低い"}]}]}
+    got2 = problems("zzz", det2)
+    t("★★ページ上部の説明（lead）も見る★★"
+      "（実データに常体の lead がある）",
+      any(r["section"] == "lead" for r in got2))
+    t("★表の注記も見る★",
+      any("表の注記" in r["section"] for r in got2))
     t("　決まり文句は挙げない",
       problems("zzz", {"sections": [{"title": "x",
                                      "body": [_STOCK[0]]}]}) == [])
+
+    # ★★入れ替えを見つける★★（2026-08-31・Codexの6回目の指摘）
+    r1 = {"slug": "a", "section": "x", "sentence": "天井は1200Gに短縮"}
+    r2 = {"slug": "a", "section": "x", "sentence": "狙い目は600Gから"}
+    base1 = {"items": [fingerprint(r1)]}
+    t("★同じものなら差は無い★", compare([r1], base1)["new"] == [])
+    got = compare([r2], base1)
+    t("★★件数が同じでも、入れ替わったら見つける★★"
+      "（古いのを直して別に入れる、が通っていた）",
+      len(got["new"]) == 1 and len(got["gone"]) == 1
+      and got["now"] == got["base"])
+    t("　減ったことも分かる", compare([], base1)["gone"] == [fingerprint(r1)])
+    t("　印は機種・場所・文で決まる",
+      fingerprint(r1) != fingerprint({**r1, "slug": "b"})
+      and fingerprint(r1) == fingerprint({**r1, "line": 99}))
 
     ng = ok.count(False)
     print(f"{len(ok) - ng}/{len(ok)} 合格")
@@ -242,9 +358,16 @@ def main() -> int:
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--update-baseline", action="store_true",
+                    help="★直したあと★基準値を書き直す（減った時だけ通る）")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
+
+    if a.update_baseline:
+        got = write_baseline(scan_all())
+        print(f"基準値を書き直しました: {got['before']} → {got['count']} 件")
+        return 0
 
     if a.slug:
         p = os.path.join(DETAILS, a.slug + ".json")
@@ -272,16 +395,21 @@ def main() -> int:
     for sl, n in sorted(by_slug.items(), key=lambda x: -x[1])[:12]:
         print(f"  {n:4d}  {sl}")
     try:
-        limit = int(_load(BASELINE)["max_lines"])
+        base = _load(BASELINE)
     except Exception as e:                 # noqa: BLE001
         print(f"★基準値を読めません: {e}★")
         return 1
-    if len(rows) > limit:
-        print(f"★増えています: {len(rows)} 件（基準 {limit} 件）★")
+    d = compare(rows, base)
+    if d["new"]:
+        print(f"★新しい違反が {len(d['new'])} 件あります★"
+              f"（いま {d['now']} 件／基準 {d['base']} 件）")
+        for r in d["new"][:8]:
+            print(f"  [{r['slug']}／{r['section']}] {r['sentence'][-40:]}")
         return 3
-    if len(rows) < limit:
-        print(f"減りました（{limit} → {len(rows)}）。"
-              "assets/data/style-baseline.json の max_lines を下げてください")
+    if d["gone"]:
+        print(f"直りました（{d['base']} → {d['now']}）。"
+              "python scripts/style_check.py --update-baseline "
+              "で基準値を書き直してください")
     return 0
 
 

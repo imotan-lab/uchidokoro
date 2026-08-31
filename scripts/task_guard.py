@@ -1501,6 +1501,21 @@ def verify_commit(task: str, slug: str, commit: str,
                 "ok": True, "verified_today": len(_dv)}
 
 
+def _is_ancestor(a: str, b: str):
+    """a が b の祖先か。★分からないときは None★（2026-08-31）
+
+    ★三値にする理由★＝`merge-base --is-ancestor` は
+    0=祖先 / 1=祖先でない / それ以外=判定できなかった、を返す。
+    ★2つをまとめると、判定できなかった時に素通りする★（fail-open）。
+    """
+    rc, _o = _git("merge-base", "--is-ancestor", str(a), str(b))
+    if rc == 0:
+        return True
+    if rc == 1:
+        return False
+    return None
+
+
 def manual_reason_problem(why) -> str:
     """★理由が記録として使えるか★（使えるなら空文字）。
 
@@ -1560,8 +1575,16 @@ def manual_commit(commit: str, why: str, path: str = STATE_PATH) -> dict:
     _tip, _why = _pg.remote_main_tip()
     if not _tip:
         raise GuardError("公開先の先端を確かめられません: " + str(_why))
-    rc, _o = _git("merge-base", "--is-ancestor", full, _tip)
-    if rc == 0:
+    # ★★「祖先ではない」と「判定できなかった」を分ける★★
+    #   （2026-08-31・Codexの6回目のP2）
+    #   `merge-base --is-ancestor` は 0=祖先 / 1=祖先でない / それ以外=失敗。
+    #   ★直す前は 0以外を全部「まだ出ていない」と読んでいた★＝
+    #   しかも `_git()` は例外や時間切れも 1 に潰すので、
+    #   ★判定できなかった時に素通りしていた★（fail-open）。
+    _anc = _is_ancestor(full, _tip)
+    if _anc is None:
+        raise GuardError("公開先に出ているかを判定できません（gitが答えません）")
+    if _anc:
         raise GuardError("そのコミットは、もう公開先に出ています")
     rc, out = _git("diff-tree", "--no-commit-id", "--name-only", "-r", full)
     if rc != 0:
@@ -3307,6 +3330,21 @@ def selftest() -> int:
       and manual_reason_problem("   ") != "")
     t("　まっとうな理由は断らない",
       manual_reason_problem("運営者の指示で手で直した") == "")
+    # ★★「祖先でない」と「判定できなかった」を分ける★★
+    #   （2026-08-31・Codexの6回目のP2）
+    #   ★gitは呼ばずに、問い合わせだけ差し替えて試す★
+    _keep_git = globals()["_git"]
+    try:
+        globals()["_git"] = lambda *a: (0, "")
+        t("★gitが0を返したら『祖先』★", _is_ancestor("a", "b") is True)
+        globals()["_git"] = lambda *a: (1, "")
+        t("★gitが1を返したら『祖先ではない』★", _is_ancestor("a", "b") is False)
+        globals()["_git"] = lambda *a: (128, "fatal: bad object")
+        t("★★それ以外は『分からない』★★"
+          "（まとめると、判定できなかった時に素通りする）",
+          _is_ancestor("a", "b") is None)
+    finally:
+        globals()["_git"] = _keep_git       # ★必ず戻す★
 
     ng = [n for n, ok in results if not ok]
 
