@@ -2133,6 +2133,21 @@ MUTATIONS = [
         "after": "    if False:",
         "run": ["scripts/html_check.py"],
     },
+    {
+        "why": "★ふつうの表を公開データに残さない"
+               "（許可値には通るのに、表が消えて節ごと落ちる）★",
+        "file": "scripts/gates.py",
+        "before": '        if new.get("type") == "table":',
+        "after": "        if False:",
+        "run": ["scripts/gates.py"],
+    },
+    {
+        "why": "★ふつうの表のセルが文字かを見ない（辞書が公開データに入る）★",
+        "file": "scripts/gates.py",
+        "before": "        if not all(_is_str(c) for c in cells):",
+        "after": "        if False:",
+        "run": ["scripts/gates.py"],
+    },
     # ─── 2026-08-31・ふつうの表（要望③の土台）────────────────────
     {
         "why": "★ふつうの表の中身を見ない"

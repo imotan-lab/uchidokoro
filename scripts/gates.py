@@ -1576,6 +1576,25 @@ def _project_sections(sections, ctx: _Ctx) -> list | None:
             if kept:
                 new["body"] = kept
 
+        if new.get("type") == "table":
+            # ★★ふつうの表を射影に残す★★（2026-08-31・Codexの指摘）
+            #   ★直す前は settei だけを射影していた★ので、
+            #   ふつうの表は `tables` が公開データに入らず、
+            #   最後の「中身がある節だけ出す」判定で**節ごと消えた**。
+            #   ＝契約は通るのに読者には表が出ない。
+            tables = sec.get("tables")
+            if not isinstance(tables, list) or not tables:
+                ctx.reject(p, "表の種別なのに表がない")
+                continue
+            kt = [t for t in (_project_plain_table(tb, ctx,
+                                                   f"{p}.tables[{ti}]", title)
+                              for ti, tb in enumerate(tables)) if t]
+            if len(kt) != len(tables):
+                # ★1つでも落ちたら節ごと落とす★（表が虫食いで出ない）
+                ctx.content_drop(p, "公開できない表があるため節ごと除去")
+                continue
+            new["tables"] = kt
+
         if new.get("type") == "settei":
             tables = sec.get("tables")
             if isinstance(tables, list):
@@ -1627,6 +1646,66 @@ def _cell_text(c, ctx: _Ctx, path: str):
         return normalize_atom([c.get("badge"), txt]), cell
     ctx.reject(path, "セルが文字列でも辞書でもない")
     return None, None
+
+
+def _project_plain_table(tbl, ctx: _Ctx, path: str,
+                         section_title: str) -> dict | None:
+    """★ふつうの表★を公開射影へ写す（2026-08-31・要望③）。
+
+    ★settei と違うところ★
+      ・セルは**文字だけ**（バッジの辞書は受け取らない）
+      ・`label` は無くてもよい（項目と値だけの表に見出しは要らない）
+      ・行の長さは見出しと同じでなければならない
+    ★危ない表現の判定（atom）は settei と同じように通す★
+      ＝1つでも落ちたら表ごと落とす（虫食いの表を出さない）。
+    """
+    if not isinstance(tbl, dict):
+        ctx.reject(path, "表が辞書でない")
+        return None
+    if not _only_keys(tbl, _TABLE_ALLOWED):
+        ctx.reject(path, "未知フィールドを含むため表ごと拒否")
+        return None
+    if not _types_ok(ctx, tbl, path, {"label": str, "headers": list,
+                                      "rows": list, "note": str,
+                                      "wide": bool}):
+        return None
+    headers = tbl.get("headers")
+    if not isinstance(headers, list) or not headers:
+        ctx.reject(f"{path}.headers", "表の列見出しが無い（描画が止まる）")
+        return None
+    if not all(_is_str(h) for h in headers):
+        ctx.reject(f"{path}.headers", "見出しに非文字列が含まれる")
+        return None
+    if not ctx.atom([section_title, *headers], f"{path}.headers"):
+        return None
+    out: dict = {"headers": list(headers)}
+    label = tbl.get("label")
+    if _is_str(label) and label.strip():
+        if not ctx.atom([section_title, label], f"{path}.label"):
+            return None
+        out["label"] = label
+    kept = []
+    for ri, row in enumerate(tbl.get("rows") or []):
+        cells = row if isinstance(row, list) else [row]
+        if not all(_is_str(c) for c in cells):
+            ctx.reject(f"{path}.rows[{ri}]", "ふつうの表のセルは文字だけ")
+            return None
+        if len(cells) != len(headers):
+            ctx.reject(f"{path}.rows[{ri}]", "行の列数が見出しと違う")
+            return None
+        if not ctx.atom([section_title, *cells], f"{path}.rows[{ri}]"):
+            return None                    # ★1行でも落ちたら表ごと落とす★
+        kept.append(list(cells))
+    if not kept:
+        ctx.reject(f"{path}.rows", "表に行が無い")
+        return None
+    out["rows"] = kept
+    note = tbl.get("note")
+    if _is_str(note) and note.strip():
+        if not ctx.atom([section_title, note], f"{path}.note"):
+            return None
+        out["note"] = note
+    return out
 
 
 def _project_settei_table(tbl, ctx: _Ctx, path: str, section_title: str) -> dict | None:
@@ -2240,6 +2319,44 @@ def selftest() -> int:
 
     LEG = "LEGACY_SEARCH"
     base = {"slug": "x", "lifecycle": LEG, "name": "テスト機"}
+
+    # ===== ふつうの表（2026-08-31・要望③）=====
+    #   ★★許可値に足すだけでは、表が公開データから消える★★
+    #     （射影の分岐が settei だけだったので、節ごと落ちていた。
+    #       Codexの指摘を自分で再現して直した）
+    def _tbl_sections(sec):
+        ledg = {"x": {"ALLOW": True}}
+        v = publish_view({**base}, {"sections": [sec]},
+                         {"allow_all": True})
+        return (v["detail"] or {}).get("sections")
+
+    _plain = {"title": "基本スペック", "type": "table",
+              "tables": [{"label": "", "headers": ["項目", "内容"],
+                          "rows": [["機種名", "テスト機"],
+                                   ["メーカー", "サミー"]]}]}
+    _got = _tbl_sections(_plain)
+    t("★★ふつうの表が公開データに残る★★（許可値だけ足すと節ごと消えていた）",
+      bool(_got) and _got[0].get("tables")
+      and _got[0]["tables"][0]["rows"] == [["機種名", "テスト機"],
+                                          ["メーカー", "サミー"]])
+    def _tbl_stops(sec):
+        """その表が公開を止めるか（構造エラーは例外で来る）。"""
+        try:
+            return not (_tbl_sections(sec) or [])
+        except GateError:
+            return True
+
+    t("★ふつうの表のセルにバッジの辞書を入れたら止める★",
+      _tbl_stops({"title": "x", "type": "table",
+                  "tables": [{"headers": ["項目", "内容"],
+                              "rows": [["a", {"text": "b",
+                                             "badge": "ok"}]]}]}))
+    t("★行の列数が見出しと違えば止める★",
+      _tbl_stops({"title": "x", "type": "table",
+                  "tables": [{"headers": ["項目", "内容"],
+                              "rows": [["a"]]}]}))
+    t("　表が無ければ止める",
+      _tbl_stops({"title": "x", "type": "table", "body": ["a"]}))
 
     # ===== fail-closed =====
     t("lifecycle未指定 → 全OFF", compute_gates({"slug": "x"}) == CLOSED_GATES)
