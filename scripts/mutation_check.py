@@ -2156,6 +2156,14 @@ MUTATIONS = [
         "after": "        if False:",
         "run": ["scripts/tableize_spec.py"],
     },
+    {
+        "why": "★「出典が読めなかった」を「材料が無い」より後に見る"
+               "（読めない晩まで黙って、29回失敗しても無音になる）★",
+        "file": "scripts/add_machine_run.py",
+        "before": '    ("材料のページを取れません", "SOURCE_FETCH_FAILED"),',
+        "after": '    ("__使わない__", "SOURCE_FETCH_FAILED"),',
+        "run": ["scripts/add_machine_health.py"],
+    },
     # ─── 2026-08-31・Codexの13回目で入れた守り ──────────────────
     {
         "why": "★書くのに、どこへ書くかを言わせない"

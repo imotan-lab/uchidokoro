@@ -60,7 +60,8 @@
    ],
    "_why_maker_identity": "★メーカー欄の表記を確かめる用途★（2026-08-17・依頼228）。名鑑のメーカー欄がDMMと違うとき、その名鑑の機種ページを材料に使ってよいかを2AIで決め、使う直前に逐語引用が実在するか取り直す（maker_identity_cache）。★machine_identity とは別物★＝あちらは「そのページがどの機種か」を決める用途でDMMだけに許している。こちらは名鑑のメーカー欄を見る用途で、根拠の種類 directory_observation は定義上その名鑑からしか採れない。道筋・取得方法・頻度は claim_material と同じ（機種ページを1回）。",
    "path_prefixes": [
-    "/slot"
+    "/slot",
+    "/slot-list"
    ],
    "method": "http_get",
    "terms_url": "https://chonborista.com/privacy/",
@@ -116,7 +117,8 @@
    ],
    "_why_maker_identity": "★メーカー欄の表記を確かめる用途★（2026-08-17・依頼228）。名鑑のメーカー欄がDMMと違うとき、その名鑑の機種ページを材料に使ってよいかを2AIで決め、使う直前に逐語引用が実在するか取り直す（maker_identity_cache）。★machine_identity とは別物★＝あちらは「そのページがどの機種か」を決める用途でDMMだけに許している。こちらは名鑑のメーカー欄を見る用途で、根拠の種類 directory_observation は定義上その名鑑からしか採れない。道筋・取得方法・頻度は claim_material と同じ（機種ページを1回）。",
    "path_prefixes": [
-    "/slot"
+    "/slot",
+    "/slot-list"
    ],
    "method": "http_get",
    "terms_url": "https://chonborista.com/privacy/",

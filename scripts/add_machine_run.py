@@ -1446,6 +1446,23 @@ _BLOCKER_CODES = (
     #   ＝★いちばん深くまで進んだ機種について、いちばん無害な理由を報告する★
     ("サイト監査", "BLOCKED_BY_SITE_AUDIT"),
     ("公開の関所", "BLOCKED_BY_PREPUSH_GATE"),
+    # ★★「読めなかった」をいちばん先に見る★★
+    #   （2026-08-31・台帳#537／Codexの指摘で置き場所を直した）
+    #   ★これが後ろにあると黙る★＝
+    #   ページを取れなかった晩は「材料のページを取れません」と
+    #   「名鑑の個別ページが0件しか残りません」が**同時に**足される。
+    #   NOT_ENOUGH_DIRECTORIES も NO_MATERIAL も
+    #   「導入がまだ先なら黙る」の対象なので、
+    #   ★こちらが壊れている晩まで黙った★（29回失敗しても無音）。
+    #   ★NOT_ENOUGH_DIRECTORIES は2つの意味を混ぜている★＝
+    #     (a) まだ世に記事が無い（黙ってよい）
+    #     (b) 見つけたページを取得失敗で失った（すぐ知らせる）
+    #   読めなかったことが1件でも分かっているなら、そちらを先に採る。
+    ("投稿欄を落としきれません", "SOURCE_SANITIZE_FAILED"),
+    ("掃除のあとにも投稿欄", "SOURCE_SANITIZE_FAILED"),
+    ("到達先が分かりません", "SOURCE_REDIRECTED"),
+    ("材料のページを取れません", "SOURCE_FETCH_FAILED"),
+    ("取得できません", "SOURCE_FETCH_FAILED"),
     ("名鑑の個別ページが", "NOT_ENOUGH_DIRECTORIES"),
     ("メーカー照合の控えを読めません", "MAKER_CACHE_UNREADABLE"),
     ("メーカー", "MAKER_UNRESOLVED"),

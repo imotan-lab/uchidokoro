@@ -443,6 +443,57 @@ def selftest() -> int:
         _pend_t.load = _keep_load
 
     t("　いまのサイトの状態も見られる", isinstance(check_now(), list))
+    # ★★「読めなかった」は黙らない★★（2026-08-31・台帳#537）
+    #   ★これが無いと★＝出典が1枚も読めない晩も「材料が無い」と同じ符丁になり、
+    #   「導入がまだ先なら黙る」に当たって**29回失敗しても無音**だった。
+    import add_machine_run as _amr
+    # ★★本番が実際に出す文の**組み合わせ**で試す★★（Codexの指摘）
+    #   ★私の最初の試験は「投稿欄の失敗」だけを渡していた★ので、
+    #   本番では同時に足される「名鑑の個別ページが0件」を通っていなかった。
+    #   ＝実装は直したつもりで、本番の形では**また黙っていた**。
+    _NOT_ENOUGH = ("名鑑の個別ページが 0 件しか残りません"
+                   "（取れない・転送されるページを除いた結果）")
+    _NO_MAT = "採用できた材料が0件です"
+    _cases = {
+        "投稿欄を落とせない": [
+            "材料のページを取れません: 投稿欄を落としきれません"
+            "（https://p-town.dmm.com/machines/5079）: "
+            "落とすはずの箱が見つかりません",
+            _NOT_ENOUGH, _NO_MAT],
+        "取得そのものが失敗": [
+            "材料のページを取れません: 取得できません"
+            "（https://p-town.dmm.com/machines/5079）: HTTP 503",
+            _NOT_ENOUGH, _NO_MAT],
+        "転送された": [
+            "材料のページを取れません: 到達先が分かりません"
+            "（https://p-town.dmm.com/machines/5079）",
+            _NOT_ENOUGH, _NO_MAT],
+        # ★★包みの文だけが手がかりの晩★★（2026-09-01・壊し方の確認で判明）
+        #   `new_machine_watch` は「ページが大きすぎます」「HTTP 503」のような
+        #   **中の語に当たらない文**も投げる（289・295・301行）。
+        #   ★この形が無いと、包みの語を消しても試験が赤くならなかった★
+        #   （中の語が先に助けていた＝罠③）。
+        "ページが大きすぎる": [
+            "材料のページを取れません: ページが大きすぎます: "
+            "https://p-town.dmm.com/machines/5079",
+            _NOT_ENOUGH, _NO_MAT],
+        "相手が落ちている": [
+            "材料のページを取れません: HTTP 503: "
+            "https://p-town.dmm.com/machines/5079",
+            _NOT_ENOUGH, _NO_MAT],
+    }
+    for _name, _probs in _cases.items():
+        _c = _amr._blocker_code({"blocked": [], "problems": _probs})
+        t(f"★★{_name}晩は黙らない★★"
+          "（本番では『名鑑の個別ページが0件』も同時に出る）",
+          bool(_c) and _c not in PRE_RELEASE_QUIET)
+    _c2 = _amr._blocker_code({"blocked": [], "problems": [_NO_MAT]})
+    t("　本当に材料が無いだけの晩は、今までどおり黙る対象",
+      _c2 in PRE_RELEASE_QUIET)
+    _c3 = _amr._blocker_code({"blocked": [], "problems": [_NOT_ENOUGH]})
+    t("　世にまだ記事が無いだけの晩も、今までどおり黙る対象",
+      _c3 in PRE_RELEASE_QUIET)
+
     t("　待ち行列も見られる", isinstance(check_pending(), list))
 
     ng = [n for n, ok in results if not ok]
