@@ -62,7 +62,17 @@ _SLUGLIKE = re.compile(r"^[a-z0-9][a-z0-9_\-]{1,60}$")
 
 
 class WatchError(RuntimeError):
-    pass
+    """取ってこられなかった。
+
+    ★status★＝HTTPの状態番号（分かるときだけ・2026-09-02）
+      ★404 は「そもそも無い」★＝読まなくても証拠は欠けていない。
+      それ以外は「こちらが読めていない」＝欠けている。
+      ★文字の照合で見分けない★（メッセージの書き方が変わると壊れる）。
+    """
+
+    def __init__(self, *a, status=None):
+        super().__init__(*a)
+        self.status = status
 
 
 # ★最後にどのURLへ着いたか★（転送でトップや別サイトへ飛ばされた事故を見つける）
@@ -286,13 +296,17 @@ def _get(url: str, timeout: int = 20) -> str:
     try:
         with guarded_open(req, timeout=timeout) as r:
             if r.status != 200:
-                raise WatchError(f"HTTP {r.status}: {url}")
+                raise WatchError(f"HTTP {r.status}: {url}", status=r.status)
             LAST_FINAL_URL["url"] = r.geturl()
             body = r.read(MAX_BYTES + 1)
             hdr_charset = r.headers.get_content_charset()
             charset = hdr_charset or "utf-8"
     except urllib.error.HTTPError as e:
-        raise WatchError(f"取得できません（HTTP {e.code}）: {url}")
+        # ★番号を持たせる★（2026-09-02）＝
+        #   「そもそも無い（404）」と「こちらが読めていない」を、
+        #   ★メッセージの文字ではなく構造で★見分けるため。
+        raise WatchError(f"取得できません（HTTP {e.code}）: {url}",
+                         status=e.code)
     except WatchError:
         raise
     except Exception as e:

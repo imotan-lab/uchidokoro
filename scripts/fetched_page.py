@@ -38,7 +38,16 @@ sys.path.insert(0, os.path.join(BASE, "scripts"))
 
 
 class PageError(Exception):
-    """取ってこられなかった／落としきれなかった（★迷ったら使わない★）。"""
+    """取ってこられなかった／落としきれなかった（★迷ったら使わない★）。
+
+    ★status★＝HTTPの状態番号（分かるときだけ・2026-09-02）
+      ★404 は「そもそも無い」★＝読まなくても証拠は欠けていない。
+      それ以外は「こちらが読めていない」＝欠けている。
+    """
+
+    def __init__(self, *a, status=None):
+        super().__init__(*a)
+        self.status = status
 
 
 class FetchedPage:
@@ -83,7 +92,8 @@ def fetch(url: str, purpose: str = "claim_material", get=None) -> FetchedPage:
         with _w.fetching(purpose):
             raw = (get or _w._get)(url)
     except Exception as e:                 # noqa: BLE001
-        raise PageError(f"取得できません（{url}）: {str(e)[:120]}")
+        raise PageError(f"取得できません（{url}）: {str(e)[:120]}",
+                        status=getattr(e, "status", None))
     fin = str((getattr(_w, "LAST_FINAL_URL", {}) or {}).get("url") or "")
     if not fin:
         raise PageError(

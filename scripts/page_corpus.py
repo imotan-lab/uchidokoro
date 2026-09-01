@@ -104,23 +104,97 @@ def sub_urls(catalog: dict, machine_url: str, html: str,
     return out, ""
 
 
-def manifest(pages: dict, complete: bool) -> dict:
+def is_missing(exc) -> bool:
+    """★そもそも相手のサイトに無いページか★（2026-09-02）
+
+    ★文字の照合で見分けない★＝例外が持つ状態番号で決める
+    （メッセージの書き方が変わると壊れるため）。
+    """
+    return getattr(exc, "status", None) == 404
+
+
+def collect(catalog: dict, machine_url: str, fetch, text_of,
+            max_sub: int = DEFAULT_MAX_SUB, missing=None) -> dict:
+    """★1機種ぶんの証拠の集合を組み立てる★（2026-09-02・台帳#542）
+
+    fetch(url)   … ページを取る（例外を投げてよい）
+    text_of(pg)  … 取れたページから「見える文字」を出す
+
+    返り: {"pages": {URL: 文字}, "manifest": {...}, "why": 断る理由}
+
+    ★★本文は返すだけで、保存しない★★（CLAUDE.mdの決まり・台帳#378）
+      このリポジトリは公開なので他サイトの本文は置けない。
+      なな徹の規約にも複製の条項がある。
+      ★残すのは指紋だけ★＝それで「集合が変わったか」は分かる。
+
+    ★★1本でも取れなければ complete=False★★（Codexのレビュー34）
+      ★既存の材料経路は「取れたページだけ残して続行」する★が、
+      ここでは**流用しない**。欠けた証拠束で2AIに
+      「モードはありません」と判断させるのは危険なため。
+    """
+    pages, why = {}, ""
+    try:
+        root = fetch(machine_url)
+    except Exception as e:                                   # noqa: BLE001
+        return {"pages": {}, "manifest": manifest({}, False),
+                "why": f"機種ページを取れません（{str(e)[:80]}）"}
+    pages[machine_url] = text_of(root)
+
+    subs, why = sub_urls(catalog, machine_url, getattr(root, "cleaned_html", ""),
+                         max_sub=max_sub)
+    if why:
+        # ★上限超過など★＝ここで止める（部分的な束を作らない）
+        return {"pages": {}, "manifest": manifest({}, False), "why": why}
+
+    _missing = missing or is_missing
+    gone = []
+    for u in subs:
+        try:
+            pg = fetch(u)
+        except Exception as e:                               # noqa: BLE001
+            if _missing(e):
+                # ★★そもそも相手のサイトに無い★★（2026-09-02・本物で踏んだ）
+                #   ★読まなくても証拠は欠けていない★＝
+                #   リンクは在るがページが無い、は相手側の事情。
+                #   ★黙って無かったことにしない★＝記録に残すので、
+                #   相手が復活させたら指紋が変わって聞き直しになる。
+                gone.append(u)
+                continue
+            # ★1本でも「読めなかった」なら、その機種は「読めていない」★
+            return {"pages": {}, "manifest": manifest({}, False),
+                    "why": f"下位ページを取れません（{u} … {str(e)[:60]}）"}
+        pages[u] = text_of(pg)
+
+    return {"pages": pages, "manifest": manifest(pages, True, gone), "why": ""}
+
+
+def manifest(pages: dict, complete: bool, gone=None) -> dict:
     """★読んだページの集合★を、あとで突き合わせられる形にする。
 
     pages … {URL: 見える文字}
+    gone  … ★相手のサイトに無かったURL（404）★（2026-09-02）
+
     ★指紋はURLの集合と各本文から作る★＝
       URLが1本増えても、本文が書き換わっても、指紋が変わる。
+    ★無かったURLも指紋に入れる★＝相手が復活させたら聞き直しになる。
+      ★黙って無かったことにしない★
     """
     items = sorted((_norm(u), _fp(t)) for u, t in (pages or {}).items())
+    lost = sorted({_norm(u) for u in (gone or [])})
     h = hashlib.sha256()
     for u, f in items:
         h.update(u.encode("utf-8"))
         h.update(b"\0")
         h.update(f.encode("utf-8"))
         h.update(b"\n")
+    h.update(b"--gone--\n")
+    for u in lost:
+        h.update(u.encode("utf-8"))
+        h.update(b"\n")
     return {
         "urls": [u for u, _ in items],
         "page_fp": {u: f for u, f in items},
+        "gone": lost,
         "complete": bool(complete),
         "fp": "sha256:" + h.hexdigest(),
     }
@@ -203,6 +277,96 @@ def selftest() -> int:
     t("　末尾スラッシュの違いは同じ扱い",
       manifest({ROOT: "あ"}, True)["fp"]
       == manifest({ROOT.rstrip("/"): "あ"}, True)["fp"])
+
+    # ★★組み立て（collect）★★（2026-09-02・台帳#542の2段目）
+    class _P:
+        def __init__(self, html):
+            self.cleaned_html = html
+
+    _HTML2 = (
+        '<a href="https://nana-press.com/kaiseki/machine/644/18017/">A</a>'
+        '<a href="https://nana-press.com/kaiseki/machine/644/18039/">B</a>')
+
+    def _ok_fetch(u):
+        return _P(_HTML2 if u == ROOT else "")
+
+    def _text(pg):
+        return "本文:" + pg.cleaned_html[:20]
+
+    got = collect(NANA, ROOT, _ok_fetch, _text)
+    t("★集合を組み立てる（本体＋下位）★",
+      len(got["pages"]) == 3 and got["why"] == ""
+      and got["manifest"]["complete"] is True)
+
+    def _bad_sub(u):
+        if u.endswith("18039/"):
+            raise RuntimeError("404")
+        return _P(_HTML2 if u == ROOT else "")
+
+    b = collect(NANA, ROOT, _bad_sub, _text)
+    t("★下位が1本でも取れなければ「読めていない」★"
+      "／★取れた分だけで判断させない★",
+      b["pages"] == {} and b["manifest"]["complete"] is False
+      and b["why"] != "")
+
+    class _Gone(RuntimeError):
+        status = 404
+
+    def _one_gone(u):
+        if u.endswith("18039/"):
+            raise _Gone("404")
+        return _P(_HTML2 if u == ROOT else "")
+
+    g = collect(NANA, ROOT, _one_gone, _text)
+    t("★そもそも無いページ（404）は、証拠の欠けにしない★"
+      "／★これが無いと、リンク切れが1本あるだけで機種が永久に読めない★",
+      g["manifest"]["complete"] is True and g["why"] == ""
+      and len(g["pages"]) == 2)
+    t("★無かったURLは記録に残す★（黙って無かったことにしない）",
+      g["manifest"]["gone"] == ["https://nana-press.com/kaiseki/machine/644/18039"])
+    t("★無かったページが復活したら指紋が変わる★（聞き直しになる）",
+      g["manifest"]["fp"] != collect(NANA, ROOT, _ok_fetch, _text)["manifest"]["fp"])
+
+    class _Busy(RuntimeError):
+        status = 503
+
+    def _one_busy(u):
+        if u.endswith("18039/"):
+            raise _Busy("503")
+        return _P(_HTML2 if u == ROOT else "")
+
+    t("★読めなかった（503）は、いままでどおり「読めていない」★",
+      collect(NANA, ROOT, _one_busy, _text)["manifest"]["complete"] is False)
+    t("　番号が分からない失敗も「読めていない」側に倒れる",
+      collect(NANA, ROOT, _bad_sub, _text)["manifest"]["complete"] is False)
+
+    def _bad_root(u):
+        raise RuntimeError("503")
+
+    r = collect(NANA, ROOT, _bad_root, _text)
+    t("　機種ページが取れなければ「読めていない」",
+      r["manifest"]["complete"] is False and r["why"] != "")
+
+    _many_html = "".join(
+        f'<a href="https://nana-press.com/kaiseki/machine/644/{i}/">x</a>'
+        for i in range(1, 12))
+    o = collect(NANA, ROOT, lambda u: _P(_many_html if u == ROOT else ""),
+                _text, max_sub=5)
+    t("★上限を超えたら、取りに行かずに断る★",
+      o["pages"] == {} and o["manifest"]["complete"] is False)
+
+    _calls = []
+
+    def _count_fetch(u):
+        _calls.append(u)
+        return _P(_many_html if u == ROOT else "")
+
+    collect(NANA, ROOT, _count_fetch, _text, max_sub=5)
+    t("　上限超過のときは下位を1本も取りに行かない", _calls == [ROOT])
+
+    t("　下位ページの決まりが無い名鑑は、本体だけで成立する",
+      collect({"machine_id_pattern": NANA["machine_id_pattern"]},
+              ROOT, _ok_fetch, _text)["manifest"]["complete"] is True)
 
     t("　同じ集合なら以前の判定を使える", same_corpus(m1, m2) is True)
     t("★集合が変われば以前の判定を使わない★", same_corpus(m1, m4) is False)
