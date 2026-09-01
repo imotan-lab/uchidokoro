@@ -2225,6 +2225,21 @@ MUTATIONS = [
         "after": "    m = _ROW_AT.match(\"sections[0].tables[0].rows[0]\")",
         "run": ["scripts/decide_now.py"],
     },
+    {
+        "why": "★基本スペックの本文と表を、別のものとして数える"
+               "（表へ移した瞬間に13機種が永久に育たなくなる）★",
+        "file": "scripts/grow_machine.py",
+        "before": "            _sr = spec_row(t) if title == SPEC_TITLE else None",
+        "after": "            _sr = None",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★表の基本スペックだけ別の形で数える（同上・表側）★",
+        "file": "scripts/grow_machine.py",
+        "before": "                if title == SPEC_TITLE and len(cells) == 2 \\",
+        "after": "                if False and len(cells) == 2 \\",
+        "run": ["scripts/grow_machine.py"],
+    },
     # ─── 2026-08-31・Codexの13回目で入れた守り ──────────────────
     {
         "why": "★書くのに、どこへ書くかを言わせない"

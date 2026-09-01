@@ -317,7 +317,7 @@ RUMOR_SECTION = {
 
 
 # 表で中身を出す箱（本文が空でも表があればよい）
-TABLE_SECTIONS = ("確認できたCZ", "設定示唆まとめ")
+TABLE_SECTIONS = ("確認できたCZ", "設定示唆まとめ", "基本スペック")
 
 
 def expected_titles(detail) -> list:
@@ -1014,20 +1014,26 @@ def build_detail(slug, name, release, material) -> dict:
     #     読者が区別できなかった）
     #   ★存在するかどうか分からない項目（上位AT・CZ等）はここに並べない★
     #     （並べると「あるのに未確認」と読めてしまう）
-    spec_body = [f"**機種名**：{name}"]
-    spec_body.append(f"**登場時期**：{_fmt_release(release)}"
-                     if release else f"**登場時期**：{PENDING_ITEM}")
+    # ★★基本スペックは表で出す★★（2026-09-01・運営者の指示）
+    #   ★値は1文字も変えない★＝いままで本文に書いていた文字を
+    #   そのままセルへ移すだけ。
+    #   ★育成と再検査は、本文でも表でも同じに数える★ようにしてある
+    #   （grow_machine._units / recheck.check_decision_vs_body）。
+    spec_rows = [["機種名", name]]
+    spec_rows.append(["登場時期", _fmt_release(release) if release
+                      else PENDING_ITEM])
     # ★型式名は書かない★（2026-08-09・運営者決定。同定専用にした）
     _pr2 = payout_range_view(adopted)
-    spec_body.append(
-        f"**機械割**：{_pr2[0]}%〜{_pr2[1]}%{_t(_pr2[2])}" if _pr2
-        else f"**機械割**：{PENDING_ITEM}")
+    spec_rows.append(["機械割",
+                      f"{_pr2[0]}%〜{_pr2[1]}%{_t(_pr2[2])}" if _pr2
+                      else PENDING_ITEM])
     g50 = adopted.get("games_per_50")
-    spec_body.append(
-        f"**50枚あたりのゲーム数**：約{g50['value']['games']:g}G"
-        f"{_t(g50)}" if g50
-        else f"**50枚あたりのゲーム数**：{PENDING_ITEM}")
-    boxes["基本スペック"] = {"title": "基本スペック", "body": spec_body}
+    spec_rows.append(["50枚あたりのゲーム数",
+                      f"約{g50['value']['games']:g}G{_t(g50)}" if g50
+                      else PENDING_ITEM])
+    boxes["基本スペック"] = {
+        "title": "基本スペック", "type": "table",
+        "tables": [{"headers": ["項目", "内容"], "rows": spec_rows}]}
 
     # 設定別の表（★集まった設定だけ★＝1〜6の連番だと決めつけない）
     tables = []
@@ -2098,18 +2104,31 @@ def selftest() -> int:
     _mat_rate = {"adopted": {k: v for k, v in _mat_e2e["adopted"].items()
                              if k != "payout_range"}}
     _mat_rate["adopted"]["payout_rate"] = _rate6
+    def _spec_rows(det):
+        """基本スペックの表の行（★2026-09-01に本文から表へ変えた★）。"""
+        sec = [s for s in det["sections"] if s["title"] == "基本スペック"][0]
+        assert sec.get("type") == "table", "基本スペックが表になっていません"
+        return sec["tables"][0]["rows"]
+
     _det_rate = build_detail("zzz_rate", "試験R", "2026-09-01", _mat_rate)
-    _spec_rate = [s for s in _det_rate["sections"]
-                  if s["title"] == "基本スペック"][0]["body"]
-    t("★★記事の本文に「97.0%〜109.4%」と出る★★",
-      any("97.0%〜109.4%" in b for b in _spec_rate))
+    _rows_rate = _spec_rows(_det_rate)
+    t("★★記事の表に「97.0%〜109.4%」と出る★★",
+      any(r[0] == "機械割" and "97.0%〜109.4%" in r[1] for r in _rows_rate))
     t("　範囲も設定別の値も無ければ『未確認』のまま",
-      any(PENDING_ITEM in b and "機械割" in b for b in
-          [s for s in build_detail(
-              "zzz_norate", "試験N", "2026-09-01",
-              {"adopted": {k: v for k, v in _mat_e2e["adopted"].items()
-                           if k != "payout_range"}})["sections"]
-           if s["title"] == "基本スペック"][0]["body"]))
+      any(r[0] == "機械割" and PENDING_ITEM in r[1] for r in _spec_rows(
+          build_detail("zzz_norate", "試験N", "2026-09-01",
+                       {"adopted": {k: v for k, v in
+                                    _mat_e2e["adopted"].items()
+                                    if k != "payout_range"}}))))
+    t("★★基本スペックは表で出る（本文は持たない）★★",
+      [s for s in _det_rate["sections"]
+       if s["title"] == "基本スペック"][0].get("body") is None)
+    t("　表の見出しは「項目｜内容」",
+      [s for s in _det_rate["sections"]
+       if s["title"] == "基本スペック"][0]["tables"][0]["headers"]
+      == ["項目", "内容"])
+    t("　機種名と登場時期も表の行として出る",
+      [r[0] for r in _rows_rate][:2] == ["機種名", "登場時期"])
 
     # ★★載せているものを「載せていない」と書かない★★
     #   （2026-08-28・本番で発生／L転生王女と天才令嬢の魔法革命）

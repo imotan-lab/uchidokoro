@@ -183,6 +183,10 @@ APPROVED_INPUTS = frozenset({
     "scripts/apply_prose_dedup.py",
     "scripts/fix_plain_style.py",
     "scripts/strip_model_code.py",
+    # ★2026-09-01に足した★（Codexの指摘）＝記事データを直接書けるのに
+    #   承認の集合へ入れ忘れていた（decide_now / apply_prose_dedup と同じ役）。
+    #   実際に47機種の記事を書き換えている。
+    "scripts/tableize_spec.py",
     # ★★新台を記事にして公開するまでの一式★★（2026-08-21・台帳#420）
     #   ★契約が「直接依存に閉じていなかった」★＝
     #   契約に入っている側が中で呼んでいるのに、呼ばれる側は指紋の対象外だった。

@@ -938,6 +938,24 @@ def check_decision_vs_body(args: dict) -> dict:
                 return str(x.get("text") or "")
             return str(x or "")
 
+        # ★★基本スペックが表でも、本文と同じに見る★★（2026-09-01・Codexの指摘）
+        #   ★表の判定は「AT初当たり確率」「出玉率」しか知らない★ので、
+        #   基本スペックを表にすると、機種名・登場時期・未確認のセルまで
+        #   「根拠がない」と誤検知する。
+        #   ＝本文と同じ形の行に直してから、今までの本文の判定へ渡す。
+        _SPEC_HEAD = ["項目", "内容"]
+        _spec_tbls = set()
+        if title == "基本スペック":
+            for _i_tb, _tb0 in enumerate(sec.get("tables") or []):
+                if [str(x) for x in (_tb0.get("headers") or [])] != _SPEC_HEAD:
+                    continue
+                _spec_tbls.add(_i_tb)
+                for _r0 in (_tb0.get("rows") or []):
+                    _c0 = _r0 if isinstance(_r0, (list, tuple)) else [_r0]
+                    if len(_c0) == 2:
+                        body.append(
+                            f"**{_cell(_c0[0])}**：{_cell(_c0[1])}")
+
         # ★表の見出し → 控えの項目名★（記事を作る側と同じ言い方）
         _TBL_FIELD = {"AT初当たり確率": "at_prob", "出玉率": "payout_rate"}
         # ★決まった名乗りの一覧★（記事を作る側の正本から取る）
@@ -982,7 +1000,9 @@ def check_decision_vs_body(args: dict) -> dict:
                 return True
             return any(_v == want + _bs for _bs in _BASIS_MARKS)
 
-        for _tb in (sec.get("tables") or []):
+        for _i_tb2, _tb in enumerate(sec.get("tables") or []):
+            if _i_tb2 in _spec_tbls:
+                continue          # ★上で本文の形に直して渡した★（二重に見ない）
             for _row in (_tb.get("rows") or []):
                 if not isinstance(_row, (list, tuple)):
                     continue

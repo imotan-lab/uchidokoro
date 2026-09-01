@@ -687,6 +687,43 @@ def retired_boilerplate_problems(phrases=None) -> list:
     return out
 
 
+SPEC_TITLE = "基本スペック"
+_SPEC_LINE = None
+
+
+def spec_row(text: str):
+    """基本スペックの本文 `**項目**：値` を (項目, 値) にする。形が違えば None。
+
+    ★表にしても止まらないようにするため★（2026-09-01・Codexの指摘）＝
+    本文と表を**同じ形**にしてから比べる。
+    ★太字の形だけ★＝太字でない行は文章と区別できない
+    （`tableize_spec` と同じ線。my_juggler_v で実際に踏んだ）。
+    """
+    global _SPEC_LINE
+    if _SPEC_LINE is None:
+        import re as _re5
+        _SPEC_LINE = _re5.compile(r"\A\*\*([^*]+)\*\*：(.*)\Z", _re5.S)
+    m = _SPEC_LINE.match(str(text or ""))
+    if not m:
+        return None
+    lab, val = m.group(1), m.group(2)
+    if not lab.strip() or not val.strip():
+        return None
+    return lab, val
+
+
+def _cell_plain(c):
+    """比べる用に包んだセルから、素の文字を取り出す（未確定を含めば None）。"""
+    if isinstance(c, tuple) and c and c[0] == CELL:
+        parts = c[1:]
+        if any(p == ANY for p in parts):
+            return None
+        return "".join(str(p) for p in parts)
+    if c == ANY:
+        return None
+    return str(c)
+
+
 def _units(detail: dict) -> list:
     """読者に出ている中身を、比べられる単位に分ける。
 
@@ -746,6 +783,16 @@ def _units(detail: dict) -> list:
                 #    「2026年8月17日 導入」）**再現できない文**になり、
                 #   ★中身は前より正確なのに更新が永久に止まった★（実測）。
                 continue
+            # ★★基本スペックは、本文でも表でも同じ形で数える★★
+            #   （2026-09-01・Codexの指摘）＝形式を変えただけで
+            #   「内容が消えた」と判定されると、その機種は永久に育たない。
+            _sr = spec_row(t) if title == SPEC_TITLE else None
+            if _sr:
+                if _sr[0].strip() == "登場時期":
+                    continue          # ★登場時期はここで比べない★（上と同じ理由）
+                if not _pending(_sr[1]):
+                    out.append(("spec-row", _sr[0].strip(), _sr[1].strip()))
+                continue
             if t and not _pending(t):
                 out.append(("body", title, t))
         for tb in (s.get("tables") or []):
@@ -758,6 +805,23 @@ def _units(detail: dict) -> list:
                 #   （2026-08-05・Codex104回目の指摘3。行ごと捨てていたので、
                 #     同じ行の**確定済みの欄**まで比べられなくなっていた）
                 cells = tuple(_cell(x, _pending) for x in (row or []))
+                # ★★基本スペックの2列表は、本文と同じ形にそろえる★★
+                #   （2026-09-01・Codexの指摘）
+                if title == SPEC_TITLE and len(cells) == 2 \
+                        and headers == ("項目", "内容"):
+                    _lab = _cell_plain(cells[0])
+                    _val = _cell_plain(cells[1])
+                    if _lab is None:
+                        continue      # 項目名が未確定なら比べない
+                    if _lab.strip() == "登場時期":
+                        continue      # ★登場時期はここで比べない★
+                    if _val is not None:
+                        out.append(("spec-row", _lab.strip(), _val.strip()))
+                    continue      # ★登場時期はここで比べない★
+                    if cells[1] != ANY:
+                        out.append(("spec-row", _lab,
+                                    str(cells[1]).strip()))
+                    continue
                 out.append(("table", title, label, headers, cells))
             note = str((tb or {}).get("note") or "").strip()
             if note and not _pending(note):
@@ -1727,9 +1791,18 @@ def selftest() -> int:
          "at_specs": {"adopted": []}, "czs": {"adopted": []},
          "setting_hints": {"adopted": []}}).get("sections", [])
         if s.get("title") == "基本スペック"]
-    t("★★登場時期の行の頭が、実際の生成物と一致している★★",
-      bool(_spec) and any(str(b).startswith(RELEASE_LINE_PREFIX)
-                          for b in (_spec[0].get("body") or [])))
+    # ★2026-09-01に基本スペックを表へ変えた★ので、表の行で見る
+    def _spec_rows_of(sec):
+        out = []
+        for tb in (sec.get("tables") or []):
+            if [str(x) for x in (tb.get("headers") or [])] == ["項目", "内容"]:
+                out += [r for r in (tb.get("rows") or [])
+                        if isinstance(r, (list, tuple)) and len(r) == 2]
+        return out
+
+    t("★★登場時期の行が、実際の生成物にある★★",
+      bool(_spec) and any(str(r[0]).strip() == "登場時期"
+                          for r in _spec_rows_of(_spec[0])))
     # ★★比べない、と決めた前提そのものを固定する★★（2026-08-23・Codexの指摘）
     #   ★なぜ要るか★＝登場時期の行と導入文を比較から外した根拠は
     #   「どちらも機種名と登場時期しか入っていない定型文だから」。
@@ -1744,10 +1817,16 @@ def selftest() -> int:
              "setting_hints": {"adopted": []}})
 
     def _rel_lines(d):
+        """登場時期の行（★表になったので、本文と同じ形に直して返す★）。"""
         for s in (d.get("sections") or []):
-            if s.get("title") == "基本スペック":
-                return [str(b) for b in (s.get("body") or [])
-                        if str(b).startswith(RELEASE_LINE_PREFIX)]
+            if s.get("title") != "基本スペック":
+                continue
+            out = [str(b) for b in (s.get("body") or [])
+                   if str(b).startswith(RELEASE_LINE_PREFIX)]
+            for r in _spec_rows_of(s):
+                if str(r[0]).strip() == "登場時期":
+                    out.append(f"{RELEASE_LINE_PREFIX}{r[1]}")
+            return out
         return []
 
     # ★★期待する文は、生成する側の定数から作らない★★（2026-08-23）
@@ -2490,6 +2569,47 @@ def selftest() -> int:
       all(_pending_check(x) for x in RETIRED_BOILERPLATE))
     t("　ふつうの本文は今までどおり数える（箱ごと免除していない）",
       not _pending_check("天井は1200Gです"))
+    # ★★基本スペックは、本文でも表でも同じに数える★★（2026-09-01・台帳）
+    #   ★これが無いと★＝新台13機種を表へ移した瞬間に
+    #   「前に載っていた内容が消えた」と判定され、**全部が永久に育たなくなる**
+    #   （今日直した prskkm / ssb1 とまったく同じ事故）。
+    _SB = {"sections": [{"title": "基本スペック", "body": [
+        "**機種名**：テスト機", "**機械割**：97.9%〜112.1%",
+        "**登場時期**：2026年8月3日 導入",
+        "**50枚あたりのゲーム数**：未確認（確認でき次第掲載します）"]}]}
+    _ST = {"sections": [{"title": "基本スペック", "type": "table",
+                         "tables": [{"headers": ["項目", "内容"], "rows": [
+                             ["機種名", "テスト機"],
+                             ["機械割", "97.9%〜112.1%"],
+                             ["登場時期", "2026年8月3日 導入"],
+                             ["50枚あたりのゲーム数",
+                              "未確認（確認でき次第掲載します）"]]}]}]}
+    t("★★本文を表へ移しても、比べる単位は同じ★★"
+      "（違うと13機種が永久に育たなくなる）",
+      _units(_SB) == _units(_ST))
+    t("　確定して載っている数も同じ",
+      confirmed_count(_SB) == confirmed_count(_ST))
+    t("　未確認の行は、本文でも表でも数えない",
+      not any("未確認" in str(u) for u in _units(_ST)))
+    t("　登場時期は、本文でも表でも比べない"
+      "（identity_same と release_refined が守っている）",
+      not any("登場時期" in str(u) for u in _units(_ST)))
+    _ST2 = {"sections": [{"title": "基本スペック", "type": "table",
+                          "tables": [{"headers": ["項目", "内容"], "rows": [
+                              ["機種名", "テスト機"],
+                              ["機械割", "99.9%〜112.1%"]]}]}]}
+    t("★★値を1つ変えたら、今までどおり違うものとして扱う★★",
+      _units(_SB) != _units(_ST2))
+    t("　基本スペック以外の表は、いままでどおりの形で数える",
+      any(u[0] == "table" for u in _units(
+          {"sections": [{"title": "設定示唆まとめ", "type": "settei",
+                         "tables": [{"label": "x", "headers": ["a", "b"],
+                                     "rows": [["1", "2"]]}]}]})))
+    t("　太字でない行は、基本スペックでも今までどおり本文として数える",
+      any(u[0] == "body" for u in _units(
+          {"sections": [{"title": "基本スペック",
+                         "body": ["これは文章です。"]}]})))
+
     t("★まだ作っている文を免除していないか（機械が探す）★",
       retired_boilerplate_problems() == [])
     # ★★見つける側の道も通す★★（2026-09-01・壊し方の確認で判明）
