@@ -168,6 +168,53 @@ def collect(catalog: dict, machine_url: str, fetch, text_of,
     return {"pages": pages, "manifest": manifest(pages, True, gone), "why": ""}
 
 
+def quick_check(catalog: dict, machine_url: str, fetch, text_of,
+                saved: dict, max_sub: int = DEFAULT_MAX_SUB) -> tuple:
+    """★1ページだけ見て、前の判断をそのまま使えるかを決める★
+
+    （2026-09-02・運営者の判断「それでいいよ」）
+
+    返り: (答え, 理由)
+      "SAME"       … 前の判断をそのまま使ってよい
+      "CHANGED"    … 集合が変わった＝集め直して聞き直す
+      "UNREADABLE" … 本体すら読めない＝判断しない
+
+    ★★正直な限界★★＝分かるのは
+      ・下位ページが増えた／減った
+      ・本体ページの中身が変わった
+    ★既にある下位ページの中身が書き換えられても分からない★
+      （全部読み直さないと分からない）。
+      ★これを承知で採る★＝毎日6000ページ読み直すほうが害が大きい。
+
+    ★取りに行くのは本体1ページだけ★
+    """
+    if not isinstance(saved, dict) or not saved.get("complete"):
+        return "CHANGED", "前の記録がない（または読めていない記録）"
+    try:
+        root = fetch(machine_url)
+    except Exception as e:                                   # noqa: BLE001
+        return "UNREADABLE", f"機種ページを取れません（{str(e)[:80]}）"
+
+    subs, why = sub_urls(catalog, machine_url,
+                         getattr(root, "cleaned_html", ""), max_sub=max_sub)
+    if why:
+        return "UNREADABLE", why
+
+    # ★見るのは「URLの顔ぶれ」と「本体の中身」だけ★
+    now_urls = {_norm(machine_url)} | {_norm(u) for u in subs}
+    was_urls = set(saved.get("urls") or []) | set(saved.get("gone") or [])
+    if now_urls != was_urls:
+        added = sorted(now_urls - was_urls)
+        lost = sorted(was_urls - now_urls)
+        return "CHANGED", (f"下位ページの顔ぶれが変わりました"
+                           f"（増えた {len(added)} / 減った {len(lost)}）")
+
+    was_fp = (saved.get("page_fp") or {}).get(_norm(machine_url))
+    if was_fp and _fp(text_of(root)) != was_fp:
+        return "CHANGED", "機種ページの中身が変わりました"
+    return "SAME", ""
+
+
 def manifest(pages: dict, complete: bool, gone=None) -> dict:
     """★読んだページの集合★を、あとで突き合わせられる形にする。
 
@@ -367,6 +414,48 @@ def selftest() -> int:
     t("　下位ページの決まりが無い名鑑は、本体だけで成立する",
       collect({"machine_id_pattern": NANA["machine_id_pattern"]},
               ROOT, _ok_fetch, _text)["manifest"]["complete"] is True)
+
+    # ★★2回目以降は1ページだけ★★（2026-09-02・運営者の判断）
+    _saved = collect(NANA, ROOT, _ok_fetch, _text)["manifest"]
+    _hit = []
+
+    def _one_page(u):
+        _hit.append(u)
+        return _P(_HTML2 if u == ROOT else "")
+
+    t("★変わっていなければ、前の判断をそのまま使う★",
+      quick_check(NANA, ROOT, _one_page, _text, _saved)[0] == "SAME")
+    t("★★取りに行くのは本体1ページだけ★★"
+      "／★これが無いと毎日6000ページ読み直すことになる★",
+      _hit == [ROOT])
+
+    _HTML3 = _HTML2 + \
+        '<a href="https://nana-press.com/kaiseki/machine/644/99999/">C</a>'
+    t("★下位ページが増えたら聞き直す★（Codexが挙げた危険）",
+      quick_check(NANA, ROOT, lambda u: _P(_HTML3 if u == ROOT else ""),
+                  _text, _saved)[0] == "CHANGED")
+    t("　下位ページが減っても聞き直す",
+      quick_check(NANA, ROOT,
+                  lambda u: _P('<a href="https://nana-press.com/kaiseki/'
+                               'machine/644/18017/">A</a>' if u == ROOT
+                               else ""),
+                  _text, _saved)[0] == "CHANGED")
+    t("★本体の中身が変わったら聞き直す★",
+      quick_check(NANA, ROOT, _one_page,
+                  lambda pg: "★別の本文★", _saved)[0] == "CHANGED")
+    t("　本体が読めなければ判断しない",
+      quick_check(NANA, ROOT, _bad_root, _text, _saved)[0] == "UNREADABLE")
+    t("　前の記録が無ければ集め直す",
+      quick_check(NANA, ROOT, _one_page, _text, {})[0] == "CHANGED")
+    t("　前の記録が「読めていない」なら集め直す",
+      quick_check(NANA, ROOT, _one_page, _text,
+                  manifest({}, False))[0] == "CHANGED")
+    # ★404で読めなかったURLも「顔ぶれ」に数える★＝
+    #   数えないと、毎回「減った」と見なして永久に聞き直しになる。
+    t("　無かったページ（404）は顔ぶれに数える（毎回聞き直しにならない）",
+      quick_check(NANA, ROOT, _one_page, _text,
+                  collect(NANA, ROOT, _one_gone, _text)["manifest"])[0]
+      == "SAME")
 
     t("　同じ集合なら以前の判定を使える", same_corpus(m1, m2) is True)
     t("★集合が変われば以前の判定を使わない★", same_corpus(m1, m4) is False)
