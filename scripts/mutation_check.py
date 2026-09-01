@@ -2164,6 +2164,22 @@ MUTATIONS = [
         "after": '    ("__使わない__", "SOURCE_FETCH_FAILED"),',
         "run": ["scripts/add_machine_health.py"],
     },
+    {
+        "why": "★廃止した決まり文句を比べる単位に数える"
+               "（その文を持つ既存記事が永久に育たなくなる・実害2機種）★",
+        "file": "scripts/grow_machine.py",
+        "before": "        if t in RETIRED_BOILERPLATE:",
+        "after": "        if False:",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★まだ作っている文を免除していないかを見ない"
+               "（本物の情報が消えても気づかない）★",
+        "file": "scripts/grow_machine.py",
+        "before": "        if t in src:",
+        "after": "        if False:",
+        "run": ["scripts/grow_machine.py"],
+    },
     # ─── 2026-08-31・Codexの13回目で入れた守り ──────────────────
     {
         "why": "★書くのに、どこへ書くかを言わせない"

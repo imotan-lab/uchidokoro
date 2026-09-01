@@ -630,10 +630,61 @@ RENAMED_TABLE_LABELS = {
     "出典2件で確認できたCZ": "確認できたCZ",
 }
 
+# ★★もう出さないことにした決まり文句★★（2026-09-01・台帳#538）
+#   ★1か所にまとめる理由★＝言い換えるたびに書き忘れて、
+#   その文を持つ既存記事が**永久に育たなくなる**。
+#   実害＝2026-08-26の言い換えで新しい方を足し忘れ、
+#   prskkm と ssb1 が毎朝「内容が消えた」と判定されて止まっていた。
+#   ★完全一致だけ★＝箱ごと免除しない（本物の本文は今までどおり守る）。
+#   ★足すのは「いまの生成処理が二度と作らない文」だけ★
+#   （読者に情報を与える文は入れない）。
+RETIRED_BOILERPLATE = (
+    # 2026-08-12・運営者決定で廃止
+    "出典2件で一致した内容だけを載せています。",
+    # 2026-08-26・「どこから採ったかを書かない」に伴う言い換えで廃止
+    #   （言い換え先も、その後まもなく生成をやめた）
+    "確認が取れた内容だけを載せています。",
+)
+
 # ★登場時期の行の頭★（2026-08-23・台帳#461）
 #   `build_new_article` が書く形と揃える。★ズレたら試験が落ちる★
 #   （_release_line_tests が実際に生成させて頭を確かめる）。
 RELEASE_LINE_PREFIX = "**登場時期**："
+
+
+def _pending_check(t: str) -> bool:
+    """その文が「あとで埋まってよい欄」として扱われるか。
+
+    ★試験から本物の判定を通すための入口★（手作りの写しで採点しない）。
+    """
+    d = {"sections": [{"title": "ゲーム性", "body": [t]}]}
+    return not [x for x in _units(d) if x[2] == t]
+
+
+def retired_boilerplate_problems(phrases=None) -> list:
+    """★廃止した決まり文句が、いま本当に作られていないか★（台帳#538）
+
+    ★これが要る理由★＝免除に足すのは「生成処理が二度と作らない文」だけ。
+    まだ作っている文を免除すると、★本物の情報が消えても気づかない★。
+    ★逆に、作らなくなった文を免除し忘れると、その文を持つ既存記事が
+      永久に育たない★（実害2件: prskkm / ssb1）。
+    """
+    import glob as _g
+    out, src = [], ""
+    here = os.path.dirname(os.path.abspath(__file__))
+    mine = os.path.basename(os.path.abspath(__file__))
+    for p in sorted(_g.glob(os.path.join(here, "*.py"))):
+        if os.path.basename(p) == mine:
+            continue
+        try:
+            with open(p, encoding="utf-8") as f:
+                src += f.read()
+        except OSError:
+            continue
+    for t in (RETIRED_BOILERPLATE if phrases is None else phrases):
+        if t in src:
+            out.append(f"★まだ作っている文を免除しています★: {t}")
+    return out
 
 
 def _units(detail: dict) -> list:
@@ -662,10 +713,10 @@ def _units(detail: dict) -> list:
           これらを「確定した内容」として数えると、
           **後から埋まった正しい更新を「消えた」と誤判定**してしまう。
         """
-        # ★もう出さないことにした決まり文句★（2026-08-12・運営者決定）
+        # ★もう出さないことにした決まり文句★（名簿は RETIRED_BOILERPLATE）
         #   既に公開した記事には入っているので、消えても「内容が減った」と
         #   判定しない（読者に情報を与える文ではない）。
-        if t == "出典2件で一致した内容だけを載せています。":
+        if t in RETIRED_BOILERPLATE:
             return True
         # ★同じ日に廃止したもう1つ＝空の噂の箱★（2026-08-23・台帳#461）
         #   「噂の箱は中身があるときだけ出す」と決めた（2026-08-12・運営者判断）
@@ -2430,6 +2481,24 @@ def selftest() -> int:
         globals()["_log"] = _keep_log
         globals()["_main"] = _keep_inner
         sys.argv = _keep_argv
+
+    # ★★廃止した決まり文句の免除★★（2026-09-01・台帳#538）
+    #   ★実害★＝2026-08-26に言い換えたとき新しい方を足し忘れ、
+    #   その文を持つ既存記事（prskkm / ssb1）が**永久に育たなかった**。
+    t("★★廃止した決まり文句は、比べる単位に数えない★★"
+      "（数えると『内容が消えた』と判定され、永久に育たなくなる）",
+      all(_pending_check(x) for x in RETIRED_BOILERPLATE))
+    t("　ふつうの本文は今までどおり数える（箱ごと免除していない）",
+      not _pending_check("天井は1200Gです"))
+    t("★まだ作っている文を免除していないか（機械が探す）★",
+      retired_boilerplate_problems() == [])
+    # ★★見つける側の道も通す★★（2026-09-01・壊し方の確認で判明）
+    #   ★「1件も見つからない」だけを見ていると、探す処理を消しても緑★
+    t("★★まだ使われている文を免除に入れたら、機械が見つける★★"
+      "（見つからない側だけ試すと、探す処理を消しても緑だった）",
+      retired_boilerplate_problems(["def build_detail("]) != [])
+    t("　どこにも無い文なら何も言わない",
+      retired_boilerplate_problems(["この文はどこにもありませんZZZ"]) == [])
 
     print(f"\n{ran[0]}/{ran[0]} 合格" if ok else "\n不合格あり")
     return 0 if ok else 1
