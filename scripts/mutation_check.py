@@ -1063,8 +1063,8 @@ MUTATIONS = [
     {
         "why": "表の行を見ない（設定別の値が一度も検査されない・Codex22回目）",
         "file": "scripts/recheck.py",
-        "before": "        for _tb in (sec.get(\"tables\") or []):",
-        "after": "        for _tb in []:",
+        "before": "        for _i_tb2, _tb in enumerate(sec.get(\"tables\") or []):",
+        "after": "        for _i_tb2, _tb in enumerate([]):",
         "run": ["scripts/recheck.py"],
     },
     {
@@ -2239,6 +2239,21 @@ MUTATIONS = [
         "before": "                if title == SPEC_TITLE and len(cells) == 2 \\",
         "after": "                if False and len(cells) == 2 \\",
         "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★再検査で、基本スペックの表を本文と同じに見ない"
+               "（機種名や未確認セルまで『根拠がない』と誤検知する）★",
+        "file": "scripts/recheck.py",
+        "before": '        if title == "基本スペック":',
+        "after": "        if False:",
+        "run": ["scripts/recheck.py"],
+    },
+    {
+        "why": "★新台の基本スペックを表で作らない（要望どおりにならない）★",
+        "file": "scripts/build_new_article.py",
+        "before": '        "title": "基本スペック", "type": "table",',
+        "after": '        "title": "基本スペック", "type": "settei",',
+        "run": ["scripts/build_new_article.py"],
     },
     # ─── 2026-08-31・Codexの13回目で入れた守り ──────────────────
     {

@@ -2106,9 +2106,10 @@ def selftest() -> int:
     _mat_rate["adopted"]["payout_rate"] = _rate6
     def _spec_rows(det):
         """基本スペックの表の行（★2026-09-01に本文から表へ変えた★）。"""
+        # ★例外で落とさない★（2026-09-01・壊し方の確認で判明＝
+        #   落ちただけでは「守りがある証拠」にならない）
         sec = [s for s in det["sections"] if s["title"] == "基本スペック"][0]
-        assert sec.get("type") == "table", "基本スペックが表になっていません"
-        return sec["tables"][0]["rows"]
+        return ((sec.get("tables") or [{}])[0] or {}).get("rows") or []
 
     _det_rate = build_detail("zzz_rate", "試験R", "2026-09-01", _mat_rate)
     _rows_rate = _spec_rows(_det_rate)
@@ -2120,6 +2121,10 @@ def selftest() -> int:
                        {"adopted": {k: v for k, v in
                                     _mat_e2e["adopted"].items()
                                     if k != "payout_range"}}))))
+    t("★★基本スペックの種別は table★★"
+      "（settei にすると、バッジ付きの表として描かれてしまう）",
+      [s for s in _det_rate["sections"]
+       if s["title"] == "基本スペック"][0].get("type") == "table")
     t("★★基本スペックは表で出る（本文は持たない）★★",
       [s for s in _det_rate["sections"]
        if s["title"] == "基本スペック"][0].get("body") is None)
