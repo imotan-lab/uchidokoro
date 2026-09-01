@@ -2713,15 +2713,32 @@ def check(only: str = "", fast: bool = False, only_index=None) -> int:
     #   **壊す前から赤い**状態になり、その守りを一切確かめられなかった。
     #   ＝★写しが本物と違うと、道具そのものが役に立たなくなる★。
     #   22MB ほどなので、写す方を選ぶ。
-    # ★★cloneに無いものは写さない★★（2026-09-01・Codexのレビュー30の指摘4）
-    #   ★直す前は `.claude/` `_design/` `CLAUDE.md` も写していた★ので、
-    #   ★gitignore されたものを読む守り★を壊しても写しでは平気で通り、
-    #   「cloneでだけ落ちる」型（同日に実際に踏んだ）を一度も試せなかった。
-    #   ★`.git` は今までどおり含める★＝gitに問い合わせる検査が
-    #   「壊す前から赤い」になるため。
-    shutil.copytree(BASE, root, ignore=shutil.ignore_patterns(
-        "__pycache__", "node_modules", ".preview-site", "_site",
-        ".claude", "_design", "CLAUDE.md", "CLAUDE_history.md"))
+    # ★★追跡ファイルだけを写す★★（2026-09-01・Codexのレビュー31の指摘3）
+    #   ★はじめは「除外の名簿」にしたが、それは `.gitignore` と一致しない★＝
+    #   claim-evidence/raw ／ machines_prev.json ／ x_post_result.json ／
+    #   cc.log・as.log ／ ロック類 が、いまだに写しへ入っていた。
+    #   ＝★手元にだけある物で壊し方が通る★型を、完全には塞げていなかった。
+    #   ★`git ls-files` は index を読むだけで、本体の index を変えない★。
+    #   ★`.git` は別に丸ごと写す★＝gitに問い合わせる検査が
+    #   「壊す前から赤い」にならないため。
+    _ls = subprocess.run(["git", "-C", BASE, "ls-files", "-z"],
+                         capture_output=True)
+    if _ls.returncode != 0:
+        raise SystemExit("★写しを作れません（git ls-files が失敗）★")
+    _rels = [x for x in _ls.stdout.decode("utf-8").split("\0") if x]
+    if len(_rels) < 100:
+        # ★少なすぎるのは、写しが本物と違う状態★（fail-closed）
+        raise SystemExit(f"★追跡ファイルが {len(_rels)} 件しかありません★")
+    os.makedirs(root, exist_ok=True)
+    for _rel in _rels:
+        _src = os.path.join(BASE, _rel)
+        if not os.path.isfile(_src):
+            continue               # index にあるが手元に無い（消した直後など）
+        _dst = os.path.join(root, _rel)
+        os.makedirs(os.path.dirname(_dst), exist_ok=True)
+        shutil.copy2(_src, _dst)
+    shutil.copytree(os.path.join(BASE, ".git"), os.path.join(root, ".git"),
+                    ignore=shutil.ignore_patterns("__pycache__"))
     try:
         _want = [x.strip() for x in str(only or "").split(",") if x.strip()]
         tried = 0

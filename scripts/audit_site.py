@@ -1526,12 +1526,24 @@ def _skill_contract(base: str):
     missing = [k for k in _CONTRACT_KEYS if k not in got]
     if missing:
         return {}, f"★タスクの契約に鍵がありません★（{missing}）"
+    # ★前後の空白も許さない★（2026-09-01・Codexのレビュー31の指摘4）
+    #   ★`" old-task "` は形としては通るが、照合は空白ごと探す★ので
+    #   `old-task を実行` を捕まえられない＝黙って見張りが外れる。
     bad = [k for k in _CONTRACT_KEYS
            if not isinstance(got[k], list)
-           or any(not isinstance(x, str) or not x.strip() for x in got[k])]
+           or any(not isinstance(x, str) or not x.strip() or x != x.strip()
+                  for x in got[k])]
     if bad:
         return {}, (f"★タスクの契約の中身の形が違います★（{bad} は"
-                    "中身のある文字列の並びでなければいけません）")
+                    "前後に空白のない、中身のある文字列の並びで）")
+    # ★知らない鍵も止める★（同・閉じた契約にする）
+    #   ★`skils` のような書き間違いが黙って無視される★＝
+    #   その分の監査が消えるのに、誰にも分からない。
+    #   `_` で始まるものは覚え書き（`_why`）なので許す。
+    extra = [k for k in got if k not in _CONTRACT_KEYS and not k.startswith("_")]
+    if extra:
+        return {}, (f"★タスクの契約に知らない鍵があります★（{extra}）"
+                    "＝書き間違いだと、その分の監査が黙って消えます")
     return got, ""
 
 
@@ -1642,6 +1654,80 @@ _SKILL_MUST_PASS = {
     "★Codexを素で呼ぶのは対話セッションでは正しい★":
         "bash codex_review.sh ask.md out.txt 900 3 high\n",
 }
+
+
+def _check_37_wiring() -> list:
+    """★live とスキルの「配線」を実経路で試す★（2026-09-01・Codexの指摘2）
+
+    ★共通関数の単体試験だけでは足りない★＝
+      `check_37_skill_vs_code()` の中の**呼び出し行**を消しても、
+      共通関数を直接試す試験は緑のまま（罠③）。
+
+    ★一時の置き場を作って本物の経路を通す★（実物の手順書には触らない）。
+    """
+    import json as _js
+    import shutil as _sh
+    import tempfile as _tf
+
+    bad = []
+    d = _tf.mkdtemp(prefix="wiring_")
+    try:
+        # ── live 側 ──
+        os.makedirs(os.path.join(d, "test-live"), exist_ok=True)
+        with open(os.path.join(d, "test-live", "SKILL.md"), "w",
+                  encoding="utf-8") as f:
+            f.write("test-stopped を実行すること。\n"
+                    "```bash\npython scripts/no_such_tool_xyz.py\n```\n")
+        with open(os.path.join(d, "tasks-contract.json"), "w",
+                  encoding="utf-8") as f:
+            _js.dump({"live": ["test-live"], "stopped": ["test-stopped"],
+                      "skills": []}, f)
+        # ★スキル側も同じ置き場の隣に作る★（実装は base の親から組み立てる）
+        sk = os.path.join(os.path.dirname(d), "skills", "test-skill")
+        os.makedirs(sk, exist_ok=True)
+        with open(os.path.join(sk, "SKILL.md"), "w", encoding="utf-8") as f:
+            f.write("```bash\npython scripts/no_such_tool_xyz.py\n```\n")
+
+        keep = os.environ.get("UCHIDOKORO_TASKS_DIR")
+        os.environ["UCHIDOKORO_TASKS_DIR"] = d
+        try:
+            got = check_37_skill_vs_code([], required=True)
+            if not any("test-live" in x and "test-stopped" in x for x in got):
+                bad.append("live 側の手順書が検査されていません"
+                           f"（返り: {got[:3]}）")
+            if not any("test-live" in x and "no_such_tool_xyz" in x
+                       for x in got):
+                bad.append("live 側の実在検査が働いていません")
+            # ── スキル側 ──
+            with open(os.path.join(d, "tasks-contract.json"), "w",
+                      encoding="utf-8") as f:
+                _js.dump({"live": [], "stopped": [],
+                          "skills": ["test-skill"]}, f)
+            got2 = check_37_skill_vs_code([], required=True)
+            if not any("test-skill" in x and "no_such_tool_xyz" in x
+                       for x in got2):
+                bad.append("スキル側の手順書が検査されていません"
+                           f"（返り: {got2[:3]}）")
+            # ── 契約に載っているのに手順書が無い ──
+            with open(os.path.join(d, "tasks-contract.json"), "w",
+                      encoding="utf-8") as f:
+                _js.dump({"live": ["no-such-task"], "stopped": [],
+                          "skills": ["no-such-skill"]}, f)
+            got3 = check_37_skill_vs_code([], required=True)
+            if not any("no-such-task" in x for x in got3):
+                bad.append("live の手順書が消えても気づきません")
+            if not any("no-such-skill" in x for x in got3):
+                bad.append("スキルの手順書が消えても気づきません")
+        finally:
+            if keep is None:
+                os.environ.pop("UCHIDOKORO_TASKS_DIR", None)
+            else:
+                os.environ["UCHIDOKORO_TASKS_DIR"] = keep
+        _sh.rmtree(os.path.join(os.path.dirname(d), "skills"),
+                   ignore_errors=True)
+    finally:
+        _sh.rmtree(d, ignore_errors=True)
+    return bad
 
 
 def _no_dir_ok(fake_base: str, required: bool) -> bool:
@@ -3680,6 +3766,22 @@ def selftest() -> int:
         _f37.write("{}")
     t("★空の辞書は「正しい契約」ではない★（鍵がそろっていない）",
       _skill_contract(_d37)[1] != "")
+    # ★★前後の空白と、知らない鍵★★（2026-09-01・Codexのレビュー31の指摘4）
+    with open(_p37, "w", encoding="utf-8") as _f37:
+        _js37.dump({"live": [], "stopped": [" old-task "], "skills": []}, _f37)
+    t("★契約の中身に前後の空白があれば止める★"
+      "／★通すと、照合が空白ごと探して見張りが黙って外れる★",
+      _skill_contract(_d37)[1] != "")
+    with open(_p37, "w", encoding="utf-8") as _f37:
+        _js37.dump({"live": [], "stopped": [], "skills": [], "skils": []},
+                   _f37)
+    t("★契約に知らない鍵があれば止める★（書き間違いが黙って無視される）",
+      _skill_contract(_d37)[1] != "")
+    with open(_p37, "w", encoding="utf-8") as _f37:
+        _js37.dump({"_why": "覚え書き", "live": [], "stopped": [],
+                    "skills": []}, _f37)
+    t("　覚え書き（_ で始まる鍵）は許す",
+      _skill_contract(_d37)[1] == "")
     # ★★置き場ごと消えたときに黙らない★★（Codexのレビュー30の指摘3）
     import tempfile as _tf38
     _gone37 = os.path.join(_tf38.mkdtemp(prefix="gone_"), "no_such_dir")
@@ -3699,6 +3801,12 @@ def selftest() -> int:
     # ★★2026-09-01：37をここに足す★★
     #   ★足し忘れると、監査本体にだけ対照実験があっても
     #     `--selftest` からは一度も動かない★（54で同じことをした）。
+    # ★★配線の経路試験★★（2026-09-01・Codexのレビュー31の指摘2）
+    #   ★共通関数の単体試験だけでは、呼び出し行を消しても緑★（罠③）。
+    for x in _check_37_wiring():
+        t("★見張り37の配線★ " + x, False)
+    t("★★見張り37が、live とスキルの両方に本当に繋がっている★★",
+      not _check_37_wiring())
     for x in _check_37_selftest():
         t("★見張り37★ " + x, False)
     t("★★見張り37（スキルの手順書が古くなっていないか）が働いている★★",

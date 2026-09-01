@@ -249,6 +249,83 @@ def hub_check_problem(changed, run) -> str:
     return "早見表が古いまま" if code != 0 else ""
 
 
+def _check_hub_wiring() -> list:
+    """★早見表の点検が「本当に呼ばれ、失敗が関所へ伝わる」か★
+
+    （2026-09-01・Codexのレビュー31の指摘1）
+    ★構文木で順序を見るだけでは足りない★＝
+      `if False:` で囲む／入れ子の関数に囮を置く／結果を `ng` に入れない、
+      はどれも順序の検査では捕まらない。
+    ★本物の `main()` を1回通す★＝外に出る所（git・別プロセス）は
+      全部差し替えるので、実の git には触らない。
+    """
+    import contextlib as _cl
+    import io as _io
+
+    calls = []
+
+    class _R:
+        def __init__(self, code, out):
+            self.returncode = code
+            self.stdout = out
+            self.stderr = ""
+
+    def fake_run(cmd, *a, **k):
+        joined = " ".join(str(x) for x in list(cmd))
+        calls.append(joined)
+        if "build_hub_pages.py" in joined and "--check" in joined:
+            return _R(1, "★早見表が古いままです★（試験の偽物）")
+        return _R(0, "")
+
+    g = globals()
+    fakes = {
+        "_warn_unreported": lambda: None,
+        "_verified_range": lambda: [],
+        # ★作る側だけを変えた push★＝記事データは1件も変わっていない
+        "_changed_paths": lambda: ["scripts/build_hub_pages.py"],
+        "git_unknown": lambda: [],
+        "push_ranges": lambda *_a, **_k: [],
+    }
+    real = {n: g[n] for n in fakes}
+    real_run = subprocess.run
+    keep_argv = sys.argv
+    # ★★標準入力も差し替える★★（2026-09-02・実際に固まった）
+    #   `main()` は
+    #     push_ranges("" if sys.stdin.isatty() else sys.stdin.read())
+    #   と書いてあり、★`push_ranges` を差し替えても
+    #   `sys.stdin.read()` は先に評価される★。
+    #   親から開いたままのパイプを受け継ぐと**永久に待つ**。
+    #   ★CIの一覧にこの自己試験があるので、CIを固めるところだった★。
+    _keep_stdin = sys.stdin
+    for n, f in fakes.items():
+        g[n] = f
+    subprocess.run = fake_run
+    sys.argv = ["pre_push_check.py"]
+    sys.stdin = _io.StringIO("")
+    try:
+        buf = _io.StringIO()
+        with _cl.redirect_stdout(buf):
+            code = main()
+    except Exception as e:                                   # noqa: BLE001
+        return [f"関所の本体が例外で終わりました（{type(e).__name__}: {e}）"]
+    finally:
+        for n in real:
+            g[n] = real[n]
+        subprocess.run = real_run
+        sys.argv = keep_argv
+        sys.stdin = _keep_stdin
+
+    bad = []
+    if not any("build_hub_pages.py" in c and "--check" in c for c in calls):
+        bad.append("早見表の点検が呼ばれていません"
+                   "（作る側だけを変えた push で届いていない）")
+    if code != 1:
+        bad.append(f"早見表の点検が赤なのに push を止めません（返り {code}）")
+    if not any("audit_site.py" in c and "--skill-audit" in c for c in calls):
+        bad.append("手順書の監査が呼ばれていません")
+    return bad
+
+
 def hub_check_reachable() -> str:
     """★早見表の点検が、記事用の早期returnより前にあるか★（2026-09-01）
 
@@ -625,6 +702,13 @@ def _selftest() -> int:
     t("★早見表：点検が記事の早期returnより前にある★"
       "／★後ろだと、作る側だけを変えた push で一度も流れない★",
       hub_check_reachable() == "")
+    # ★★本体を1回通して、呼ばれることと失敗が伝わることを見る★★
+    #   （2026-09-01・Codexのレビュー31の指摘1）＝
+    #   順序の検査だけでは `if False:` で囲む壊し方などを捕まえられない。
+    for _x in _check_hub_wiring():
+        t("★関所の配線★ " + _x, False)
+    t("★★関所の本体を1回通すと、早見表の点検が呼ばれ、失敗が伝わる★★",
+      not _check_hub_wiring())
     t("　点検が要らない変更では流さない（流したら失敗にする）",
       hub_check_problem(["README.md"],
                         lambda a: (1, "★呼ばれてはいけません★")) == "")
@@ -827,9 +911,12 @@ def main() -> int:
          "--skill-audit", "--required"],
         cwd=BASE, capture_output=True, text=True, encoding="utf-8",
         errors="replace", env=env)
+    # ★流れたことを必ず見せる★（2026-09-01）＝
+    #   直す前は失敗したときしか何も出さなかったので、
+    #   ★呼び出しが消えても、届かない位置にあっても画面は同じ★だった。
+    for _l in (_sk.stdout or "").strip().splitlines():
+        print("   " + _l)
     if _sk.returncode != 0:
-        for _l in (_sk.stdout or "").strip().splitlines():
-            print("   " + _l)
         ng.append("手順書の監査")
     if ng:
         print()
