@@ -605,6 +605,120 @@ def _where_hits(d: dict, before) -> list:
     return got
 
 
+_ROW_AT = None
+
+
+def row_target(where: str):
+    """`where` から (節の番号, 表の番号, 行の番号) を取り出す。
+
+    ★汎用の指し方にしない★（Codexの助言）＝この形だけを受ける。
+      例: "sections[6].tables[0].rows[5]"
+    """
+    global _ROW_AT
+    if _ROW_AT is None:
+        import re as _re4
+        _ROW_AT = _re4.compile(
+            r"\Asections\[(\d+)\]\.tables\[(\d+)\]\.rows\[(\d+)\]\Z")
+    m = _ROW_AT.match(str(where or ""))
+    if not m:
+        return None
+    return tuple(int(x) for x in m.groups())
+
+
+def _cell_text(c):
+    """セルの表示文字列（文字ならそのまま／辞書なら text）。"""
+    if isinstance(c, str):
+        return c
+    if isinstance(c, dict) and isinstance(c.get("text"), str):
+        return c["text"]
+    return None
+
+
+def split_row_plan(row, after, sep: str):
+    """★潰れた行を分ける★（2026-09-01）
+
+    返すもの: (分けたあとの行の並び, 問題があれば説明)
+
+    ★機械が守る線★
+      ・区切りは空文字にできない
+      ・分けたあとは2行以上／列の数はどの行も元と同じ
+      ・空のセルを作らない
+      ・★どの列も「元のセル == 分けたセルを区切りでつないだもの」★
+        ＝1文字も足していない・減らしていない
+      ・元が文字なら文字のまま／元が辞書ならその辞書を写して text だけ差し替える
+        （バッジなどの飾りは元のまま引き継ぐ＝強さを付け直さない）
+    """
+    if not isinstance(row, (list, tuple)) or not row:
+        return None, "元の行が並びではありません"
+    if not isinstance(sep, str) or sep == "":
+        return None, "区切り（sep）が要ります"
+    if not isinstance(after, (list, tuple)) or len(after) < 2:
+        return None, "分けたあとは2行以上にしてください"
+    ncol = len(row)
+    for r in after:
+        if not isinstance(r, (list, tuple)) or len(r) != ncol:
+            return None, f"分けたあとの行は {ncol} 列にしてください"
+        for c in r:
+            if not isinstance(c, str) or not c.strip():
+                return None, "分けたあとのセルは、空でない文字にしてください"
+    for ci in range(ncol):
+        src = _cell_text(row[ci])
+        if src is None:
+            return None, f"{ci + 1}列目のセルの形が分かりません"
+        # ★守りを消したときに「例外で落ちる」のではなく「答えが変わる」ように★
+        #   （2026-09-01・壊し方の確認で判明＝落ちただけでは証拠にならない）
+        joined = sep.join(str(r[ci]) if ci < len(r) else "" for r in after)
+        if joined != src:
+            return None, (f"{ci + 1}列目が、元のセルと一致しません"
+                          f"（{joined[:30]!r} / {src[:30]!r} のはず）")
+    out = []
+    for r in after:
+        line = []
+        for ci in range(ncol):
+            base = row[ci]
+            if ci >= len(r):
+                return None, "分けたあとの行の列が足りません"
+            if isinstance(base, dict):
+                line.append({**base, "text": str(r[ci])})
+            else:
+                line.append(str(r[ci]))
+        out.append(line)
+    return out, ""
+
+
+def drop_sentence_from(text: str, sentence: str):
+    """★要素から一文だけを落とす★（2026-09-01）
+
+    返すもの: (落とした後の文字列, 問題があれば説明)
+
+    ★落とす以外を1文字も変えない★＝
+    文の範囲（`style_check.sentence_spans`）で切り出して確かめる。
+    ★完全な一文として1回だけ在ること★＝
+    部分一致で落とすと、文の途中を切って意味を壊す。
+    """
+    import style_check as _sc
+    t = str(text or "")
+    want = str(sentence or "")
+    if not want:
+        return t, "落とす文が空です"
+    spans = [(a2, b2) for a2, b2 in _sc.sentence_spans(t)
+             if t[a2:b2].strip() == want.strip()]
+    # ★守りを消したときに「例外で落ちる」のではなく「答えが変わる」ようにする★
+    #   （2026-09-01・壊し方の確認で判明＝落ちただけでは守りの証拠にならない）
+    a2, b2 = spans[0] if spans else (0, 0)
+    if len(spans) != 1:
+        return t, (f"その文は、この要素の中に完全な一文として "
+                   f"{len(spans)} か所あります（1つに定まりません）")
+    out = t[:a2] + t[b2:]
+    # ★落とした以外を1文字も変えていないことを確かめる★
+    if len(out) + (b2 - a2) != len(t) or t[:a2] != out[:a2] \
+            or t[b2:] != out[a2:]:
+        return t, "落とした以外の文字が変わっています"
+    if not out.strip():
+        return t, "落とすと、その要素が空になります"
+    return out, ""
+
+
 def _outside_plan(d: dict, a: dict, where: str = "") -> tuple | None:
     """節の外（基本情報表・要約ボックス・リード文）で当たる場所を探す。
 
@@ -699,11 +813,16 @@ def _load_decision(path: str) -> dict:
     if not isinstance(acts, list) or not acts:
         raise ValueError("actions がありません")
     for a in acts:
-        if a.get("op") not in ("drop", "replace", "drop_line"):
+        if a.get("op") not in ("drop", "replace", "drop_line",
+                               "drop_sentence", "split_row"):
             raise ValueError(f"知らない操作です: {a.get('op')!r}")
         if not a.get("why"):
             raise ValueError("理由の無い操作は受け取りません")
-        if a["op"] in ("drop", "drop_line") and not a.get("text"):
+        if a["op"] == "split_row" and not (
+                a.get("where") and a.get("before") and a.get("after")):
+            return None, ("行を分けるときは where / before / after が要ります")
+        if a["op"] in ("drop", "drop_line", "drop_sentence") \
+                and not a.get("text"):
             raise ValueError("drop には消す行の逐語が要ります")
         if a["op"] == "replace" and not (a.get("before") and a.get("after")):
             raise ValueError("replace には before と after が要ります")
@@ -1236,6 +1355,70 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
                         "出どころに無い数値を足そうとしています: "
                         + " / ".join(missing[:4]))
                     return result
+        if a["op"] == "split_row":
+            # ★★潰れた行を分ける★★（2026-09-01・Codexの助言）
+            #   ★文字は1つも増やさない★＝元のセル == 分けたセルをつないだもの。
+            #   ★ただし対応（どの札がどの示唆か）は新しく決めている★ので、
+            #   2AIの理由（meaning_why）は必須。
+            _mw = str(a.get("meaning_why") or "").strip()
+            if len(_mw) < 15:
+                result["problems"].append(
+                    "行を分けるときは、なぜ分けてよいかを meaning_why に"
+                    "書いてください（15字以上）")
+                return result
+            _at = row_target(str(a.get("where") or ""))
+            if not _at:
+                result["problems"].append(
+                    "行の場所は sections[i].tables[j].rows[k] の形で"
+                    f"書いてください: {a.get('where')!r}")
+                return result
+            _si2, _ti2, _ri2 = _at
+            try:
+                _row = d["sections"][_si2]["tables"][_ti2]["rows"][_ri2]
+            except (IndexError, KeyError, TypeError):
+                result["problems"].append(
+                    f"その場所に行がありません: {a.get('where')!r}")
+                return result
+            if _row != a["before"]:
+                result["problems"].append(
+                    "その場所の行が、決定の before と違います"
+                    "（記事が変わった可能性）")
+                return result
+            _new_rows, _why3 = split_row_plan(_row, a["after"],
+                                              str(a.get("sep") or ""))
+            if _why3:
+                result["problems"].append(_why3)
+                return result
+            continue
+        if a["op"] == "drop_sentence":
+            # ★★要素の中の一文だけを落とす★★（2026-09-01・Codexの助言）
+            #   ★`_shape()` を全体的に緩めない★ための専用の操作。
+            #   完全な一文を落とすので、★残る文の中の係り先は動かない★。
+            _t = str(a.get("text") or "")
+            _mw = str(a.get("meaning_why") or "").strip()
+            if len(_mw) < 15:
+                result["problems"].append(
+                    "文を落とすときは、なぜ落としてよいかを meaning_why に"
+                    f"書いてください（15字以上）: {_t[:34]!r}")
+                return result
+            _named = {str(x.get("n")) for x in (dec.get("numbers_removed") or [])
+                      if isinstance(x, dict)}
+            _miss_n = [n for n in _numbers(_t) if n not in _named]
+            if _miss_n:
+                result["problems"].append(
+                    "落とす文の数値は、すべて numbers_removed に理由つきで"
+                    "名指ししてください: " + " / ".join(sorted(set(_miss_n))[:6]))
+                return result
+            _where = str(a.get("where") or "")
+            _cands = [x for x in _elems(d, _where)
+                      if isinstance(x, str)
+                      and not drop_sentence_from(x, _t)[1]]
+            if len(_cands) != 1:
+                result["problems"].append(
+                    f"落とせる場所が {len(_cands)} か所です"
+                    f"（where で絞ってください）: {_t[:34]!r}")
+                return result
+            continue
         if a["op"] == "drop_line":
             # ★★誤りだと2AIが判断した段落を消す★★（2026-08-30・運営者の指示）
             #   ★`drop` との違い★＝重複でなくてよい。そのぶん条件を厳しくする。
@@ -1362,8 +1545,12 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
         #   「表を直したい」決定が**本文のほうを書き換えて**いた
         #   ＝誤った表が残り、正しい本文が変えられる（実際に再現した）。
         where = str(a.get("where") or "")
-        if where and where not in ("body", "table_note",
-                                   "fact", "summary", "lead"):
+        # ★行を分けるときは、行そのものを指す形を使う★（2026-09-01）
+        #   例: sections[6].tables[0].rows[5]
+        if a["op"] == "split_row" and row_target(where):
+            pass
+        elif where and where not in ("body", "table_note",
+                                     "fact", "summary", "lead"):
             result["problems"].append(f"直す場所の指定が不明です: {where!r}")
             return result
         if a.get("op") == "replace":
@@ -1387,6 +1574,35 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
         #   ★直す前は毎回もとの記事から探していた★ので、
         #   同じ「消す」を2件並べると両方が同じ行を指し、
         #   ★2件やったと報告して1件しか消さなかった★（自分で再現した）。
+        if a["op"] == "split_row":
+            _at2 = row_target(str(a.get("where") or ""))
+            plan.append(("split_row", _at2[0], _at2[1], dict(a, _ri=_at2[2])))
+            hit = True
+        if a["op"] == "drop_sentence":
+            # ★落とせる要素はさっきの検査で1つに定まっている★
+            _tgt = [x for x in _elems(d, where)
+                    if isinstance(x, str)
+                    and not drop_sentence_from(x, a["text"])[1]]
+            _new, _why2 = drop_sentence_from(_tgt[0], a["text"])
+            if _why2:
+                result["problems"].append(_why2)
+                return result
+            # ★言い換えとして扱う★＝書き込みの経路は既にあるものを使う
+            _syn = dict(a, op="replace", before=_tgt[0], after=_new)
+            got = _outside_plan(d, _syn, where)
+            if got:
+                plan.append(got)
+                hit = True
+            else:
+                for si, sec in enumerate(d.get("sections") or []):
+                    body = sec.get("body") or []
+                    for bi, line in enumerate(body):
+                        if line == _tgt[0]:
+                            plan.append(("replace", si, bi, _syn))
+                            hit = True
+                            break
+                    if hit:
+                        break
         if a["op"] == "drop_line" and (not where or where == "body"):
             for si, sec in enumerate(d.get("sections") or []):
                 body = sec.get("body") or []
@@ -1563,6 +1779,15 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
                            a.get("before") or "")
                 continue
             sec = d["sections"][si]
+            if kind == "split_row":
+                # ★分けた行に差し替える★（bi は表の番号・_ri は行の番号）
+                _rows = sec["tables"][bi]["rows"]
+                _made, _w4 = split_row_plan(_rows[a["_ri"]], a["after"],
+                                            str(a.get("sep") or ""))
+                if _w4:
+                    raise ValueError(_w4)
+                _rows[a["_ri"]:a["_ri"] + 1] = _made
+                continue
             if kind == "replace":
                 sec["body"][bi] = a["after"]
             elif kind == "replace_in":
@@ -1642,6 +1867,54 @@ def _selftest() -> int:
                  **({"source_sha256": sha} if sha else {})},
                 ensure_ascii=False))
             return q
+
+        # ★★潰れた行を分ける★★（2026-09-01・Codexの助言）
+        #   ★文字を1つも増やさない★＝元のセル == 分けたセルをつないだもの
+        _R = ["ケロット柄 虹", {"text": "設定5以上 設定6", "badge": "ok"}]
+        _made, _w = split_row_plan(_R, [["ケロット柄", "設定5以上"],
+                                        ["虹", "設定6"]], " ")
+        t("★★潰れた行を分けられる★★（バッジは元のまま両方へ引き継ぐ）",
+          not _w and _made == [
+              ["ケロット柄", {"text": "設定5以上", "badge": "ok"}],
+              ["虹", {"text": "設定6", "badge": "ok"}]])
+        t("★★文字が1つでも変われば断る★★（分けるだけ、が守れていない）",
+          split_row_plan(_R, [["ケロット柄", "設定5以上"],
+                              ["虹", "設定6以上"]], " ")[1] != "")
+        # ★理由の文まで見る★（隣の守りが断っているだけでは、その守りを
+        #   消しても試験が赤くならない＝一度も試していないのと同じ）
+        t("　列の数が変われば断る",
+          "列にしてください" in split_row_plan(
+              _R, [["ケロット柄"], ["虹"]], " ")[1])
+        t("　分けたあとの行が並びでなければ断る",
+          "列にしてください" in split_row_plan(_R, ["あ", "い"], " ")[1])
+        t("　空のセルは作らせない",
+          split_row_plan(["あ い", "x y"], [["あ", "x"], ["い", ""]], " ")[1]
+          != "")
+        t("　区切りが空なら断る", split_row_plan(_R, [["a", "b"]], "")[1] != "")
+        t("　分けたあとが1行なら断る",
+          split_row_plan(_R, [["ケロット柄 虹", "設定5以上 設定6"]], " ")[1]
+          != "")
+        t("　行の場所は決まった形でしか受け取らない",
+          row_target("sections[6].tables[0].rows[5]") == (6, 0, 5)
+          and row_target("sections[6].tables[0]") is None
+          and row_target("../../x") is None)
+
+        # ★★文を丸ごと落とす★★（2026-09-01・Codexの助言）
+        #   ★これが要る理由★＝一文を消す言い換えは、
+        #   **後ろに残る数値の係り先が動く**ので `_shape()` が断る（正しい守り）。
+        #   ★`_shape()` を緩めるのではなく、専用の操作を足した★
+        _L = "あああです。天井は999Gで、600Gに短縮されます。機械割は97.8%です。"
+        _out, _why = drop_sentence_from(_L, "天井は999Gで、600Gに短縮されます。")
+        t("★★文を落とすと、それ以外は1文字も変わらない★★",
+          not _why and _out == "あああです。機械割は97.8%です。")
+        t("　完全な一文でなければ落とさない（文の途中では切らない）",
+          drop_sentence_from(_L, "600Gに短縮されます")[1] != "")
+        t("　落とすとその要素が空になるなら断る",
+          drop_sentence_from("これだけです。", "これだけです。")[1] != "")
+        t("　同じ文が2つあるなら、どちらか決められないので断る",
+          drop_sentence_from("あ。あ。い。", "あ。")[1] != "")
+        t("　どこにも無い文なら断る",
+          drop_sentence_from(_L, "存在しない文です。")[1] != "")
 
         r = apply_decision(dec([{"op": "drop", "text": "B の行です。",
                                  "why": "言い換え", "meaning_why": "2AIで読み比べ、同じ内容だと判断しました"}]))

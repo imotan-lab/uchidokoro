@@ -2180,6 +2180,51 @@ MUTATIONS = [
         "after": "        if False:",
         "run": ["scripts/grow_machine.py"],
     },
+    {
+        "why": "★文を落とすとき、完全な一文かを見ない"
+               "（文の途中で切って意味を壊す）★",
+        "file": "scripts/decide_now.py",
+        "before": "    if len(spans) != 1:",
+        "after": "    if False:",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★文を落としたあと、要素が空になっても通す★",
+        "file": "scripts/decide_now.py",
+        "before": "    if not out.strip():",
+        "after": "    if False:",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★文の範囲が、元の文字を丸ごと切り出せるかを見ない"
+               "（1文字も変えていないことの証明にならない）★",
+        "file": "scripts/style_check.py",
+        "before": "            if t[start:i + 1].strip():",
+        "after": "            if t[start:i + 1].strip() and False:",
+        "run": ["scripts/style_check.py"],
+    },
+    {
+        "why": "★行を分けるとき、元のセルと一致するかを見ない"
+               "（分けるついでに文字を書き換えられる）★",
+        "file": "scripts/decide_now.py",
+        "before": "        if joined != src:",
+        "after": "        if False:",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★分けたあとの列の数を見ない（表が崩れる）★",
+        "file": "scripts/decide_now.py",
+        "before": "        if not isinstance(r, (list, tuple)) or len(r) != ncol:",
+        "after": "        if False:",
+        "run": ["scripts/decide_now.py"],
+    },
+    {
+        "why": "★行の場所の書き方を確かめない（別の場所を書き換えられる）★",
+        "file": "scripts/decide_now.py",
+        "before": "    m = _ROW_AT.match(str(where or \"\"))",
+        "after": "    m = _ROW_AT.match(\"sections[0].tables[0].rows[0]\")",
+        "run": ["scripts/decide_now.py"],
+    },
     # ─── 2026-08-31・Codexの13回目で入れた守り ──────────────────
     {
         "why": "★書くのに、どこへ書くかを言わせない"

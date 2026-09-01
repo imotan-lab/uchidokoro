@@ -78,6 +78,37 @@ _OPEN = "（(「『【［〈"
 _CLOSE = "）)」』】］〉"
 
 
+def sentence_spans(text: str) -> list:
+    """★文の切れ目を「元の文字列の範囲」で返す★（2026-09-01・Codexの助言）
+
+    返すもの: [(始まり, 終わり), ...]（終わりは「。」や改行を**含む**）
+
+    ★なぜ範囲で返すか★＝`sentences()` は「。」を落とし、改行を消し、
+    前後を strip するので**元の文字列を復元できない**。
+    「落とした以外を1文字も変えていない」を機械で示すには、
+    ★元の文字列をそのまま切り出せる形★が要る。
+
+    ★切れ目は「。」と改行だけ★＝「！」「？」は機種名や引用の中に
+    実例があるので境界にしない（安全側）。
+    ★括弧の中の「。」では切らない★（`sentences()` と同じ）。
+    ★空白だけの範囲は返さない★
+    """
+    t = str(text or "")
+    out, start, depth = [], 0, 0
+    for i, ch in enumerate(t):
+        if ch in _OPEN:
+            depth += 1
+        elif ch in _CLOSE:
+            depth = max(0, depth - 1)
+        if depth == 0 and (ch == "。" or ch == "\n"):
+            if t[start:i + 1].strip():
+                out.append((start, i + 1))
+            start = i + 1
+    if t[start:].strip():
+        out.append((start, len(t)))
+    return out
+
+
 def sentences(line: str) -> list:
     """段落を文へ切る。★「。」が無い段落は、それ全体を1文として見る★
     （体言止めを見つけるため）。
@@ -496,6 +527,26 @@ def selftest() -> int:
     _s4 = {"slug": "a", "section": "y",
            "sentence": "ボーナス後は**即ヤメ**が基本"}
     t("　場所が違えば別の印", fingerprint(_s4) != fingerprint(_s2))
+    # ★★文の範囲（sentence_spans）★★（2026-09-01・Codexの助言）
+    #   ★落とした以外を1文字も変えていないことを示すために要る★
+    _sp = "あああ。いいい。ううう"
+    _got = [_sp[a:b] for a, b in sentence_spans(_sp)]
+    t("★★文の範囲は、元の文字を丸ごと切り出せる★★"
+      "（「。」を落とす sentences() では証明に使えない）",
+      _got == ["あああ。", "いいい。", "ううう"]
+      and "".join(_got) == _sp)
+    _sp2 = "天井は950G（基準。浅い）です。次の文です。"
+    t("　括弧の中の「。」では切らない",
+      [_sp2[a:b] for a, b in sentence_spans(_sp2)]
+      == ["天井は950G（基準。浅い）です。", "次の文です。"])
+    _sp3 = "一行目\n二行目。"
+    t("　改行でも切る（元の改行は残る）",
+      [_sp3[a:b] for a, b in sentence_spans(_sp3)] == ["一行目\n", "二行目。"])
+    t("　空白だけの範囲は返さない", sentence_spans("　\n  ") == [])
+    t("　どの範囲も、つなげると元に戻る（1文字も足さない・落とさない）",
+      all("".join(x[a:b] for a, b in sentence_spans(x)) == x
+          for x in ("あ。い。", "あ", "あ。", "あ\nい")))
+
     t("　bare は strong を ** に置き換えるだけ",
       bare("天井は<strong>800G</strong>+α") == "天井は**800G**+α")
     t("　bare は他のタグを残す", "<span>" in bare("<span>x</span>"))
