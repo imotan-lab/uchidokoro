@@ -78,6 +78,13 @@ CONTRACT_INPUTS = frozenset({
     #   ★契約の外だと、書き換えても承認をやり直さずに通る★
     "scripts/collect_evidence.py",
     "scripts/pending_machines.py",
+    # ★★どのページを読むか・全部読めたかを決める側★★
+    #   （2026-09-02・台帳#542・Codexのレビュー34）
+    #   ★Codexの指摘★＝「新しいモジュールや設定が『対象URL・完全性・
+    #     AIに渡す本文』を決めるなら、材料契約の対象に含める必要がある」
+    #   ここが書き換わると、2AIが読む本文の範囲そのものが変わる。
+    #   ＝「モードはありません」の結論が、静かに別のものになる。
+    "scripts/page_corpus.py",
     # 独立した票の数え方
     "scripts/source_lineage.py",
     "assets/data/source-registry.json",

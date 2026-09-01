@@ -1,657 +1,660 @@
 {
- "schema_version": "directory-catalogs/v1",
- "_note": "★名鑑の『機種の入口』★ メーカー公式から取った正式名称で、ここを引いて個別ページURLを見つける。★検索エンジンは使わない★（順位や要約に引きずられ、実在しない名前を拾った事故がある）。1つの名鑑に入口が複数あるので**和集合**で見る（実証：ちょんぼりすたは全機種一覧に無くてもメーカー別一覧にはある）。",
- "_verified": "2026-07-31 Claudeが実データで確認。ちょんぼりすた: /slot/ には Lすーぱぁびん娘 が無く、/slot/belko-slot/ にはある。P-WORLD: /database/machine.html と導入カレンダーの両方から /machine/database/10496 へ辿れる。",
- "directories": {
-  "chonborista": {
-   "name": "ちょんぼりすた",
-   "publisher_id": "chonborista",
-   "_why_publisher_id": "★票の単位はここから引く★（2026-08-09・依頼125）名鑑IDから仮の系列名を作ると、同じ発行者の控えと二重に数えられる。source-registry.json の発行者IDを明示する",
-   "surfaces": [
-    {
-     "url": "https://chonborista.com/slot-list/",
-     "kind": "全機種一覧（サイト自身の列挙）",
-     "_why": "2026-09-01・運営者の判断。★/slot/ は記事一覧の1頁目★で、2頁目は404を返す飾りなので、載っているのに見つけられない機種があった（2026-08-23から記録あり＝タコスロ・青ブタ・ラグナドール）。ラグナドールは1頁目に無いだけで、記事も値も実在し、なな徹と一致していた。そのため★新台が12晩止まっていた★。実測（2026-09-01）＝この一覧に機種ページ815本、上の3件とも含む。★検索エンジンではなく出典サイト自身の列挙★なので「検索順位に依存しない」方針と両立する。"
-    },
-    {
-     "url": "https://chonborista.com/slot/",
-     "kind": "記事一覧（1頁目）"
-    },
-    {
-     "url": "https://chonborista.com/slot/belko-slot/",
-     "kind": "メーカー別（ベルコ）"
-    },
-    {
-     "url": "https://chonborista.com/slot/acros-slot/",
-     "kind": "メーカー別（acros-slot）"
-    },
-    {
-     "url": "https://chonborista.com/slot/aidenshi/",
-     "kind": "メーカー別（aidenshi）"
-    },
-    {
-     "url": "https://chonborista.com/slot/amute/",
-     "kind": "メーカー別（amute）"
-    },
-    {
-     "url": "https://chonborista.com/slot/baltec/",
-     "kind": "メーカー別（baltec）"
-    },
-    {
-     "url": "https://chonborista.com/slot/bisty-slot/",
-     "kind": "メーカー別（bisty-slot）"
-    },
-    {
-     "url": "https://chonborista.com/slot/border/",
-     "kind": "メーカー別（border）"
-    },
-    {
-     "url": "https://chonborista.com/slot/carmina/",
-     "kind": "メーカー別（carmina）"
-    },
-    {
-     "url": "https://chonborista.com/slot/d-light/",
-     "kind": "メーカー別（d-light）"
-    },
-    {
-     "url": "https://chonborista.com/slot/daito-slot/",
-     "kind": "メーカー別（daito-slot）"
-    },
-    {
-     "url": "https://chonborista.com/slot/daxel-slot/",
-     "kind": "メーカー別（daxel-slot）"
-    },
-    {
-     "url": "https://chonborista.com/slot/denken/",
-     "kind": "メーカー別（denken）"
-    },
-    {
-     "url": "https://chonborista.com/slot/ema/",
-     "kind": "メーカー別（ema）"
-    },
-    {
-     "url": "https://chonborista.com/slot/enta-slot/",
-     "kind": "メーカー別（enta-slot）"
-    },
-    {
-     "url": "https://chonborista.com/slot/excite/",
-     "kind": "メーカー別（excite）"
-    },
-    {
-     "url": "https://chonborista.com/slot/f/",
-     "kind": "メーカー別（f）"
-    },
-    {
-     "url": "https://chonborista.com/slot/fuji-slot/",
-     "kind": "メーカー別（fuji-slot）"
-    },
-    {
-     "url": "https://chonborista.com/slot/high-enter/",
-     "kind": "メーカー別（high-enter）"
-    },
-    {
-     "url": "https://chonborista.com/slot/idol/",
-     "kind": "メーカー別（idol）"
-    },
-    {
-     "url": "https://chonborista.com/slot/jps-slot/",
-     "kind": "メーカー別（jps-slot）"
-    },
-    {
-     "url": "https://chonborista.com/slot/jubi/",
-     "kind": "メーカー別（jubi）"
-    },
-    {
-     "url": "https://chonborista.com/slot/kitadenshi/",
-     "kind": "メーカー別（kitadenshi）"
-    },
-    {
-     "url": "https://chonborista.com/slot/konami-slot/",
-     "kind": "メーカー別（konami-slot）"
-    },
-    {
-     "url": "https://chonborista.com/slot/kpe-slot/",
-     "kind": "メーカー別（kpe-slot）"
-    },
-    {
-     "url": "https://chonborista.com/slot/kyoraku-slot/",
-     "kind": "メーカー別（kyoraku-slot）"
-    },
-    {
-     "url": "https://chonborista.com/slot/nanashow/",
-     "kind": "メーカー別（nanashow）"
-    },
-    {
-     "url": "https://chonborista.com/slot/net-slot/",
-     "kind": "メーカー別（net-slot）"
-    },
-    {
-     "url": "https://chonborista.com/slot/newgin-slot/",
-     "kind": "メーカー別（newgin-slot）"
-    },
-    {
-     "url": "https://chonborista.com/slot/nishijin-slot/",
-     "kind": "メーカー別（nishijin-slot）"
-    },
-    {
-     "url": "https://chonborista.com/slot/oizumi-slot/",
-     "kind": "メーカー別（oizumi-slot）"
-    },
-    {
-     "url": "https://chonborista.com/slot/okazaki-slot/",
-     "kind": "メーカー別（okazaki-slot）"
-    },
-    {
-     "url": "https://chonborista.com/slot/orinpia-slot/",
-     "kind": "メーカー別（orinpia-slot）"
-    },
-    {
-     "url": "https://chonborista.com/slot/oz/",
-     "kind": "メーカー別（oz）"
-    },
-    {
-     "url": "https://chonborista.com/slot/pionia-slot/",
-     "kind": "メーカー別（pionia-slot）"
-    },
-    {
-     "url": "https://chonborista.com/slot/rodeo/",
-     "kind": "メーカー別（rodeo）"
-    },
-    {
-     "url": "https://chonborista.com/slot/sammy-slot/",
-     "kind": "メーカー別（sammy-slot）"
-    },
-    {
-     "url": "https://chonborista.com/slot/sankyo-slot/",
-     "kind": "メーカー別（sankyo-slot）"
-    },
-    {
-     "url": "https://chonborista.com/slot/sansei-slot/",
-     "kind": "メーカー別（sansei-slot）"
-    },
-    {
-     "url": "https://chonborista.com/slot/sanyo-slot/",
-     "kind": "メーカー別（sanyo-slot）"
-    },
-    {
-     "url": "https://chonborista.com/slot/snk/",
-     "kind": "メーカー別（snk）"
-    },
-    {
-     "url": "https://chonborista.com/slot/spiky/",
-     "kind": "メーカー別（spiky）"
-    },
-    {
-     "url": "https://chonborista.com/slot/taiyo/",
-     "kind": "メーカー別（taiyo）"
-    },
-    {
-     "url": "https://chonborista.com/slot/taiyo-slot/",
-     "kind": "メーカー別（taiyo-slot）"
-    },
-    {
-     "url": "https://chonborista.com/slot/takasago-slot/",
-     "kind": "メーカー別（takasago-slot）"
-    },
-    {
-     "url": "https://chonborista.com/slot/universal-slot/",
-     "kind": "メーカー別（universal-slot）"
-    },
-    {
-     "url": "https://chonborista.com/slot/world/",
-     "kind": "メーカー別（world）"
-    },
-    {
-     "url": "https://chonborista.com/slot/ya-ma/",
-     "kind": "メーカー別（ya-ma）"
-    },
-    {
-     "url": "https://chonborista.com/slot/yamasa-slot/",
-     "kind": "メーカー別（yamasa-slot）"
-    }
-   ],
-   "link_pattern": "/slot/[a-z\\-]+/\\d+",
-   "machine_page_pattern": "^https://chonborista\\.com/slot/[a-z0-9\\-]+/\\d+/?$",
-   "_why_machine_page_pattern": "★メーカー照合の根拠は「その名鑑の機種ページ」だけから採る★（2026-08-17・依頼228／Codexの指摘4）。以前はホスト名しか見ていなかったので、同じ名鑑の一覧ページ・特集記事・別機種のページでも根拠として通った。ここに合わない根拠は maker_identity_cache が受け取らない（fail-closed）。",
-   "min_expected": 20,
-   "status": "ACTIVE",
-   "_why_surfaces": "メーカー別の入口を全部登録する（2026-08-06）。2つしか登録しておらず、ユニバーサル等の新台が『一覧に載っていない』扱いになっていた",
-   "surface_pattern": "^https://chonborista\\.com/slot/(?![0-9]+/)[a-z0-9\\-]+/$",
-   "_why_surface_pattern": "入口の登録漏れを毎回機械が数えるため（2026-08-06・scripts/directory_coverage.py）",
-   "max_pages": 1,
-   "_why_max_pages": "番号のページ送りは実際には404を返す飾りだった（2026-08-07に実機確認）。深いページはたどれないので1頁のみ。★2026-08-23訂正★＝以前ここには「古い機種は machine_sources.py の控えで補う」と書いていたが、★それが本当なのは collect_evidence の経路だけ★。add_machine_run.gather と grow_machine.find_sources は索引しか見ない（machine_sources を import すらしていない）。＝新台タスク・育成タスクの材料集めでは補完が効かない。実測（2026-08-23）＝ちょんぼりすたに記事があるのに索引で拾えない機種が少なくとも3件（タコスロ・青ブタ・ラグナドール）。原因は3つとも別＝①飾り語の名簿に無い語で剥がしが止まる（技術介入）②題の中の通称が芯に残る（青ブタ）③そもそも1頁目に無い（ラグナドール）",
-   "user_area": {
-    "hosts": [
-     "chonborista.com"
-    ],
-    "drop": [
-     {
-      "class": "rating-btn"
-     },
-     {
-      "id": "hyouka"
-     },
-     {
-      "class": "commentlist"
-     },
-     {
-      "id": "commentform"
-     },
-     {
-      "id": "comments-title"
-     },
-     {
-      "id": "comment-area"
-     },
-     {
-      "id": "respond"
-     }
-    ],
-    "require_before": [
-     {
-      "class": "rating-btn"
-     },
-     {
-      "class": "commentlist"
-     }
-    ],
-    "require_after": [
-     {
-      "id": "entry"
-     }
-    ],
-    "markers": [
-     "COMMENTS & REVIEW",
-     "共感した"
-    ],
-    "_why": "★読者のコメントと評価を出典に数えない★（2026-08-14・台帳#348）。実ページ（206971・252081・207921・226056）を取ってきて構造を確かめた＝hyouka（星の評価・WP Customer Reviews）／commentlist（コメントの一覧）／commentform（投稿フォーム）／comments-title（COMMENTS & REVIEW の見出し）。★commentform はコメントを閉じたページには無い★ので、必須には入れない。落とした後に残ることを求めるのは entry（記事本体）＝4ページすべてに実在する。／★2026-08-28（台帳#492）★＝hyouka（評価の箱）を必須にしていたため、★評価が付いていない機種のページを丸ごと出典から外していた★（実測: パリピ孔明 263531 は hyouka が無い）。実ページ7件を数えたところ hyouka は 0/1/2個とばらつき、★rating-btn は全7件に2個ずつ・commentlist は全7件に1個ずつ★あった。そこで **rating-btn を必須の枠にし、hyouka は必須から外した**（落とす対象には残す）。★同時に rating-btn を落とす対象に足した★＝この箱の中身は「みんなの評価（平均1.6）」＝**読者が付けた平均点**で、★いままで落としておらず、材料に混ざっていた★。★対照実験★＝rating-btn の名前を変えたページを作ると、評価あり・評価なしの両方で止まることを確認した（＝作りが変わったときの見張りは残っている）。",
-    "page_pattern": "^https://chonborista\\.com/slot/[^/]+/\\d+/?$",
-    "_why_page_pattern": "★必須アンカーは機種ページにだけ求める★（2026-08-15）。一覧ページ・カレンダーには口コミ欄も掲示板も無いのが当たり前なので、「無い＝作りが変わった」と判定して**そのページを丸ごと使わなくなる**。実際に P-WORLDの導入カレンダー・ちょんぼりすたの一覧・DMMの一覧がすべて止まることを確認した（新台を見つける入口が全滅する）。",
-    "_why_form": "★投稿フォームも落とす★（2026-08-24・Codexの14回目で実ページを見て判明）。一覧（commentlist）だけ落として、**書き込む欄（comment-area / respond）が残っていた**。読者が書いた文は無くても、返信の見出しなどが本文に混ざる。"
-   }
-  },
-  "p-world": {
-   "name": "P-WORLD",
-   "publisher_id": "p-world",
-   "_why_publisher_id": "★票の単位はここから引く★（2026-08-09・依頼125）名鑑IDから仮の系列名を作ると、同じ発行者の控えと二重に数えられる。source-registry.json の発行者IDを明示する",
-   "surfaces": [
-    {
-     "url": "https://www.p-world.co.jp/database/machine.html",
-     "kind": "機種一覧"
-    },
-    {
-     "url": "https://www.p-world.co.jp/database/machine/introduce_calendar.cgi",
-     "kind": "導入カレンダー"
-    },
-    {
-     "url": "https://www.p-world.co.jp/_machine/t_machine.cgi?mode=slot_type&key=NORMAL&start=0",
-     "kind": "ノーマルタイプ一覧"
-    },
-    {
-     "url": "https://www.p-world.co.jp/_machine/t_machine.cgi?mode=slot_type&key=AT&start=0",
-     "kind": "ATタイプ一覧"
-    },
-    {
-     "url": "https://www.p-world.co.jp/_machine/t_machine.cgi?mode=slot_type&key=RT&start=0",
-     "kind": "RTタイプ一覧"
-    },
-    {
-     "url": "https://www.p-world.co.jp/_machine/t_machine.cgi?mode=slot_type&key=aRT&start=0",
-     "kind": "ARTタイプ一覧"
-    },
-    {
-     "url": "https://www.p-world.co.jp/_machine/t_machine.cgi?mode=slot_type&key=over_6.5number&start=0",
-     "kind": "6.5号機以降一覧"
-    }
-   ],
-   "link_pattern": "/machine/database/\\d+",
-   "min_expected": 15,
-   "status": "OFF_TOS",
-   "surface_pattern": "^https://www\\.p-world\\.co\\.jp/(database/machine[a-z0-9_/\\.\\-]*|_machine/t_machine\\.cgi\\?mode=slot_type&key=[A-Za-z0-9_\\.]+&start=0)$",
-   "_why_surface_pattern": "入口の登録漏れを毎回機械が数えるため（2026-08-06・scripts/directory_coverage.py）",
-   "max_pages": 40,
-   "_why_max_pages": "一覧が数ページに分かれており、1頁目だけでは古い機種が索引に入らないため（2026-08-07・台帳#264）。上限は毎晩の取得回数とのつり合いで決める",
-   "user_area": {
-    "hosts": [
-     "p-world.co.jp"
-    ],
-    "drop": [
-     {
-      "id": "bbs"
-     },
-     {
-      "id": "hyoka"
-     },
-     {
-      "id": "gNavi"
-     },
-     {
-      "id": "header"
-     },
-     {
-      "id": "footer"
-     },
-     {
-      "id": "copyright"
-     },
-     {
-      "id": "copyrightMemo"
-     },
-     {
-      "id": "gHallSearch"
-     },
-     {
-      "id": "city_list"
-     },
-     {
-      "id": "pref_dir"
-     },
-     {
-      "class": "bbsAiMatome"
-     },
-     {
-      "class": "bbsThreadBox"
-     },
-     {
-      "class": "bbsPostImages"
-     }
-    ],
-    "markers": [
-     "AIがまとめた内容",
-     "AI投稿まとめ",
-     "活発なトピック"
-    ],
-    "_why": "★AIが要約した欄と読者の投稿を出典に数えない★（2026-08-13・台帳#345）。2026-08-14に実際のページ（機種10510）を取ってきて構造を確かめた＝掲示板ぜんぶが <div id=\"bbs\"> の中にあり、その中に bbsAiMatome（AIのまとめ）と bbsThreadBox（投稿の一覧）が入っている。★行では切れない★＝断り書き「最近の投稿をもとにAIがまとめた内容を…」は要約本文より後ろにあるので、そこから切っても要約が残る。markers は落とし損ねの見張り＝落としたあとにこの語が本文に残っていたらそのページを出典に使わない（fail-closed）。★2026-08-14に実際のページ（機種10510）のid一覧を数えて決めた★＝bbs（掲示板とAIのまとめ）／hyoka（読者の人気投票）／gNavi・header・footer・copyright（サイトの飾り）／gHallSearch・city_list・pref_dir（設置店検索＝店名が大量に混ざる）。残るのは spec・how_to・analysis・peak・update＝サイト自身が書いた機種データ。",
-    "require_before": [
-     {
-      "id": "bbs"
-     }
-    ],
-    "require_after": [
-     {
-      "id": "spec"
-     }
-    ],
-    "_why_require": "★構造と文言が同時に変わったら気づけるようにする★（2026-08-14・依頼196のP1）。落とす前に掲示板の箱（id=bbs）があること／落とした後に機種データの箱（id=spec）が残っていることを確かめる。id と 印（markers）が同時に変わると、箱を1つも落とせないまま正常終了してしまうため。2026-08-14に3ページ（10510・10521・10550）で両方が実在することを確認した。",
-    "page_pattern": "^https://www\\.p-world\\.co\\.jp/machine/database/\\d+/?$",
-    "_why_page_pattern": "★必須アンカーは機種ページにだけ求める★（2026-08-15）。一覧ページ・カレンダーには口コミ欄も掲示板も無いのが当たり前なので、「無い＝作りが変わった」と判定して**そのページを丸ごと使わなくなる**。実際に P-WORLDの導入カレンダー・ちょんぼりすたの一覧・DMMの一覧がすべて止まることを確認した（新台を見つける入口が全滅する）。"
-   },
-   "_why_off": "★規約で自動取得が禁止されている★（2026-08-16・台帳#376）。P-WORLD 総合利用規約 第8条「プログラムを用いたアクセスなど、通常のブラウザアクセス以外の方法で本サービスを利用する行為」／一撃 利用規約 第3条「自動化ツール・ボット・スクレイピング等により本サイトの情報を大量取得・再配布する行為」。★人がブラウザで見るのは自由／機械では取りに行かない★。通信そのものは scripts/blocked_hosts.py が止める（最後の砦）。★許諾が取れたら運営者の判断で戻す★"
-  },
-  "dmm-ptown": {
-   "name": "DMMぱちタウン",
-   "publisher_id": "dmm-ptown",
-   "_why_publisher_id": "★票の単位はここから引く★（2026-08-09・依頼125）名鑑IDから仮の系列名を作ると、同じ発行者の控えと二重に数えられる。source-registry.json の発行者IDを明示する",
-   "surfaces": [
-    {
-     "url": "https://p-town.dmm.com/machines",
-     "kind": "機種一覧"
-    },
-    {
-     "url": "https://p-town.dmm.com/machines/slot",
-     "kind": "スロット一覧"
-    },
-    {
-     "url": "https://p-town.dmm.com/machines/smart_slot",
-     "kind": "新台スマスロ"
-    },
-    {
-     "url": "https://p-town.dmm.com/makers/44",
-     "kind": "メーカー別（ベルコ）"
-    },
-    {
-     "url": "https://p-town.dmm.com/machines/alert/",
-     "kind": "タイプ別"
-    },
-    {
-     "url": "https://p-town.dmm.com/machines/art/",
-     "kind": "タイプ別"
-    },
-    {
-     "url": "https://p-town.dmm.com/machines/at/",
-     "kind": "タイプ別"
-    },
-    {
-     "url": "https://p-town.dmm.com/machines/bonus/",
-     "kind": "タイプ別"
-    },
-    {
-     "url": "https://p-town.dmm.com/machines/bonus_trigger_flg/",
-     "kind": "タイプ別"
-    },
-    {
-     "url": "https://p-town.dmm.com/machines/change/",
-     "kind": "タイプ別"
-    },
-    {
-     "url": "https://p-town.dmm.com/machines/digital/",
-     "kind": "タイプ別"
-    },
-    {
-     "url": "https://p-town.dmm.com/machines/feather/",
-     "kind": "タイプ別"
-    },
-    {
-     "url": "https://p-town.dmm.com/machines/informations/",
-     "kind": "タイプ別"
-    },
-    {
-     "url": "https://p-town.dmm.com/machines/kainyu/",
-     "kind": "タイプ別"
-    },
-    {
-     "url": "https://p-town.dmm.com/machines/limit/",
-     "kind": "タイプ別"
-    },
-    {
-     "url": "https://p-town.dmm.com/machines/lucky_trigger_flg/",
-     "kind": "タイプ別"
-    },
-    {
-     "url": "https://p-town.dmm.com/machines/middle_type/",
-     "kind": "タイプ別"
-    },
-    {
-     "url": "https://p-town.dmm.com/machines/new_calendar/",
-     "kind": "タイプ別"
-    },
-    {
-     "url": "https://p-town.dmm.com/machines/pachinko/",
-     "kind": "タイプ別"
-    },
-    {
-     "url": "https://p-town.dmm.com/machines/pinball_ceiling/",
-     "kind": "タイプ別"
-    },
-    {
-     "url": "https://p-town.dmm.com/machines/rt/",
-     "kind": "タイプ別"
-    },
-    {
-     "url": "https://p-town.dmm.com/machines/search/",
-     "kind": "タイプ別"
-    },
-    {
-     "url": "https://p-town.dmm.com/machines/smart_pinball/",
-     "kind": "タイプ別"
-    },
-    {
-     "url": "https://p-town.dmm.com/machines/timing/",
-     "kind": "タイプ別"
-    },
-    {
-     "url": "https://p-town.dmm.com/machines/with_setting/",
-     "kind": "タイプ別"
-    }
-   ],
-   "link_pattern": "/machines/\\d+",
-   "machine_page_pattern": "^https://p-town\\.dmm\\.com/machines/\\d+/?$",
-   "_why_machine_page_pattern": "★メーカー照合の根拠は「その名鑑の機種ページ」だけから採る★（2026-08-17・依頼228／Codexの指摘4）。以前はホスト名しか見ていなかったので、同じ名鑑の一覧ページ・特集記事・別機種のページでも根拠として通った。ここに合わない根拠は maker_identity_cache が受け取らない（fail-closed）。",
-   "min_expected": 10,
-   "status": "ACTIVE",
-   "_verified": "2026-07-31 Claudeが確認。/machines(31件)・/machines/slot(20件)・/makers/44(20件) のいずれにも Lすーぱぁびん娘(5038) が含まれる。/machines/smart_slot だけだと入らなかった。★1つの入口では足りないことの実例★",
-   "title_class": "title",
-   "_why_title_class": "1つのリンクに機種名・メーカー・機械割・紹介文が同居しており、全部つなげると芯が一致しない（台帳#189）。題は <p class=\"title\"> にある（2026-08-06に実データで確認）",
-   "surface_pattern": "^https://p-town\\.dmm\\.com/(?:machines/[a-z_]+|makers/\\d+)/?$",
-   "_why_surface_pattern": "入口の登録漏れを毎回機械が数えるため（2026-08-06・scripts/directory_coverage.py）",
-   "max_pages": 6,
-   "_why_max_pages": "一覧が数ページに分かれており、1頁目だけでは古い機種が索引に入らないため（2026-08-07・台帳#264）。上限は毎晩の取得回数とのつり合いで決める",
-   "user_area": {
-    "hosts": [
-     "p-town.dmm.com"
-    ],
-    "drop": [
-     {
-      "class": "machine-userreview"
-     },
-     {
-      "class": "list-machinesreviews"
-     },
-     {
-      "class": "machine-shop-by-prefecture"
-     }
-    ],
-    "require_before": [
-     {
-      "class": "machine-userreview"
-     },
-     {
-      "class": "list-machinesreviews",
-      "only_if_count_in": {
-       "class": "machine-userreview",
-       "count_in": {
-        "class": "count"
-       }
+  "schema_version": "directory-catalogs/v1",
+  "_note": "★名鑑の『機種の入口』★ メーカー公式から取った正式名称で、ここを引いて個別ページURLを見つける。★検索エンジンは使わない★（順位や要約に引きずられ、実在しない名前を拾った事故がある）。1つの名鑑に入口が複数あるので**和集合**で見る（実証：ちょんぼりすたは全機種一覧に無くてもメーカー別一覧にはある）。",
+  "_verified": "2026-07-31 Claudeが実データで確認。ちょんぼりすた: /slot/ には Lすーぱぁびん娘 が無く、/slot/belko-slot/ にはある。P-WORLD: /database/machine.html と導入カレンダーの両方から /machine/database/10496 へ辿れる。",
+  "directories": {
+    "chonborista": {
+      "name": "ちょんぼりすた",
+      "publisher_id": "chonborista",
+      "_why_publisher_id": "★票の単位はここから引く★（2026-08-09・依頼125）名鑑IDから仮の系列名を作ると、同じ発行者の控えと二重に数えられる。source-registry.json の発行者IDを明示する",
+      "surfaces": [
+        {
+          "url": "https://chonborista.com/slot-list/",
+          "kind": "全機種一覧（サイト自身の列挙）",
+          "_why": "2026-09-01・運営者の判断。★/slot/ は記事一覧の1頁目★で、2頁目は404を返す飾りなので、載っているのに見つけられない機種があった（2026-08-23から記録あり＝タコスロ・青ブタ・ラグナドール）。ラグナドールは1頁目に無いだけで、記事も値も実在し、なな徹と一致していた。そのため★新台が12晩止まっていた★。実測（2026-09-01）＝この一覧に機種ページ815本、上の3件とも含む。★検索エンジンではなく出典サイト自身の列挙★なので「検索順位に依存しない」方針と両立する。"
+        },
+        {
+          "url": "https://chonborista.com/slot/",
+          "kind": "記事一覧（1頁目）"
+        },
+        {
+          "url": "https://chonborista.com/slot/belko-slot/",
+          "kind": "メーカー別（ベルコ）"
+        },
+        {
+          "url": "https://chonborista.com/slot/acros-slot/",
+          "kind": "メーカー別（acros-slot）"
+        },
+        {
+          "url": "https://chonborista.com/slot/aidenshi/",
+          "kind": "メーカー別（aidenshi）"
+        },
+        {
+          "url": "https://chonborista.com/slot/amute/",
+          "kind": "メーカー別（amute）"
+        },
+        {
+          "url": "https://chonborista.com/slot/baltec/",
+          "kind": "メーカー別（baltec）"
+        },
+        {
+          "url": "https://chonborista.com/slot/bisty-slot/",
+          "kind": "メーカー別（bisty-slot）"
+        },
+        {
+          "url": "https://chonborista.com/slot/border/",
+          "kind": "メーカー別（border）"
+        },
+        {
+          "url": "https://chonborista.com/slot/carmina/",
+          "kind": "メーカー別（carmina）"
+        },
+        {
+          "url": "https://chonborista.com/slot/d-light/",
+          "kind": "メーカー別（d-light）"
+        },
+        {
+          "url": "https://chonborista.com/slot/daito-slot/",
+          "kind": "メーカー別（daito-slot）"
+        },
+        {
+          "url": "https://chonborista.com/slot/daxel-slot/",
+          "kind": "メーカー別（daxel-slot）"
+        },
+        {
+          "url": "https://chonborista.com/slot/denken/",
+          "kind": "メーカー別（denken）"
+        },
+        {
+          "url": "https://chonborista.com/slot/ema/",
+          "kind": "メーカー別（ema）"
+        },
+        {
+          "url": "https://chonborista.com/slot/enta-slot/",
+          "kind": "メーカー別（enta-slot）"
+        },
+        {
+          "url": "https://chonborista.com/slot/excite/",
+          "kind": "メーカー別（excite）"
+        },
+        {
+          "url": "https://chonborista.com/slot/f/",
+          "kind": "メーカー別（f）"
+        },
+        {
+          "url": "https://chonborista.com/slot/fuji-slot/",
+          "kind": "メーカー別（fuji-slot）"
+        },
+        {
+          "url": "https://chonborista.com/slot/high-enter/",
+          "kind": "メーカー別（high-enter）"
+        },
+        {
+          "url": "https://chonborista.com/slot/idol/",
+          "kind": "メーカー別（idol）"
+        },
+        {
+          "url": "https://chonborista.com/slot/jps-slot/",
+          "kind": "メーカー別（jps-slot）"
+        },
+        {
+          "url": "https://chonborista.com/slot/jubi/",
+          "kind": "メーカー別（jubi）"
+        },
+        {
+          "url": "https://chonborista.com/slot/kitadenshi/",
+          "kind": "メーカー別（kitadenshi）"
+        },
+        {
+          "url": "https://chonborista.com/slot/konami-slot/",
+          "kind": "メーカー別（konami-slot）"
+        },
+        {
+          "url": "https://chonborista.com/slot/kpe-slot/",
+          "kind": "メーカー別（kpe-slot）"
+        },
+        {
+          "url": "https://chonborista.com/slot/kyoraku-slot/",
+          "kind": "メーカー別（kyoraku-slot）"
+        },
+        {
+          "url": "https://chonborista.com/slot/nanashow/",
+          "kind": "メーカー別（nanashow）"
+        },
+        {
+          "url": "https://chonborista.com/slot/net-slot/",
+          "kind": "メーカー別（net-slot）"
+        },
+        {
+          "url": "https://chonborista.com/slot/newgin-slot/",
+          "kind": "メーカー別（newgin-slot）"
+        },
+        {
+          "url": "https://chonborista.com/slot/nishijin-slot/",
+          "kind": "メーカー別（nishijin-slot）"
+        },
+        {
+          "url": "https://chonborista.com/slot/oizumi-slot/",
+          "kind": "メーカー別（oizumi-slot）"
+        },
+        {
+          "url": "https://chonborista.com/slot/okazaki-slot/",
+          "kind": "メーカー別（okazaki-slot）"
+        },
+        {
+          "url": "https://chonborista.com/slot/orinpia-slot/",
+          "kind": "メーカー別（orinpia-slot）"
+        },
+        {
+          "url": "https://chonborista.com/slot/oz/",
+          "kind": "メーカー別（oz）"
+        },
+        {
+          "url": "https://chonborista.com/slot/pionia-slot/",
+          "kind": "メーカー別（pionia-slot）"
+        },
+        {
+          "url": "https://chonborista.com/slot/rodeo/",
+          "kind": "メーカー別（rodeo）"
+        },
+        {
+          "url": "https://chonborista.com/slot/sammy-slot/",
+          "kind": "メーカー別（sammy-slot）"
+        },
+        {
+          "url": "https://chonborista.com/slot/sankyo-slot/",
+          "kind": "メーカー別（sankyo-slot）"
+        },
+        {
+          "url": "https://chonborista.com/slot/sansei-slot/",
+          "kind": "メーカー別（sansei-slot）"
+        },
+        {
+          "url": "https://chonborista.com/slot/sanyo-slot/",
+          "kind": "メーカー別（sanyo-slot）"
+        },
+        {
+          "url": "https://chonborista.com/slot/snk/",
+          "kind": "メーカー別（snk）"
+        },
+        {
+          "url": "https://chonborista.com/slot/spiky/",
+          "kind": "メーカー別（spiky）"
+        },
+        {
+          "url": "https://chonborista.com/slot/taiyo/",
+          "kind": "メーカー別（taiyo）"
+        },
+        {
+          "url": "https://chonborista.com/slot/taiyo-slot/",
+          "kind": "メーカー別（taiyo-slot）"
+        },
+        {
+          "url": "https://chonborista.com/slot/takasago-slot/",
+          "kind": "メーカー別（takasago-slot）"
+        },
+        {
+          "url": "https://chonborista.com/slot/universal-slot/",
+          "kind": "メーカー別（universal-slot）"
+        },
+        {
+          "url": "https://chonborista.com/slot/world/",
+          "kind": "メーカー別（world）"
+        },
+        {
+          "url": "https://chonborista.com/slot/ya-ma/",
+          "kind": "メーカー別（ya-ma）"
+        },
+        {
+          "url": "https://chonborista.com/slot/yamasa-slot/",
+          "kind": "メーカー別（yamasa-slot）"
+        }
+      ],
+      "link_pattern": "/slot/[a-z\\-]+/\\d+",
+      "machine_page_pattern": "^https://chonborista\\.com/slot/[a-z0-9\\-]+/\\d+/?$",
+      "_why_machine_page_pattern": "★メーカー照合の根拠は「その名鑑の機種ページ」だけから採る★（2026-08-17・依頼228／Codexの指摘4）。以前はホスト名しか見ていなかったので、同じ名鑑の一覧ページ・特集記事・別機種のページでも根拠として通った。ここに合わない根拠は maker_identity_cache が受け取らない（fail-closed）。",
+      "min_expected": 20,
+      "status": "ACTIVE",
+      "_why_surfaces": "メーカー別の入口を全部登録する（2026-08-06）。2つしか登録しておらず、ユニバーサル等の新台が『一覧に載っていない』扱いになっていた",
+      "surface_pattern": "^https://chonborista\\.com/slot/(?![0-9]+/)[a-z0-9\\-]+/$",
+      "_why_surface_pattern": "入口の登録漏れを毎回機械が数えるため（2026-08-06・scripts/directory_coverage.py）",
+      "max_pages": 1,
+      "_why_max_pages": "番号のページ送りは実際には404を返す飾りだった（2026-08-07に実機確認）。深いページはたどれないので1頁のみ。★2026-08-23訂正★＝以前ここには「古い機種は machine_sources.py の控えで補う」と書いていたが、★それが本当なのは collect_evidence の経路だけ★。add_machine_run.gather と grow_machine.find_sources は索引しか見ない（machine_sources を import すらしていない）。＝新台タスク・育成タスクの材料集めでは補完が効かない。実測（2026-08-23）＝ちょんぼりすたに記事があるのに索引で拾えない機種が少なくとも3件（タコスロ・青ブタ・ラグナドール）。原因は3つとも別＝①飾り語の名簿に無い語で剥がしが止まる（技術介入）②題の中の通称が芯に残る（青ブタ）③そもそも1頁目に無い（ラグナドール）",
+      "user_area": {
+        "hosts": [
+          "chonborista.com"
+        ],
+        "drop": [
+          {
+            "class": "rating-btn"
+          },
+          {
+            "id": "hyouka"
+          },
+          {
+            "class": "commentlist"
+          },
+          {
+            "id": "commentform"
+          },
+          {
+            "id": "comments-title"
+          },
+          {
+            "id": "comment-area"
+          },
+          {
+            "id": "respond"
+          }
+        ],
+        "require_before": [
+          {
+            "class": "rating-btn"
+          },
+          {
+            "class": "commentlist"
+          }
+        ],
+        "require_after": [
+          {
+            "id": "entry"
+          }
+        ],
+        "markers": [
+          "COMMENTS & REVIEW",
+          "共感した"
+        ],
+        "_why": "★読者のコメントと評価を出典に数えない★（2026-08-14・台帳#348）。実ページ（206971・252081・207921・226056）を取ってきて構造を確かめた＝hyouka（星の評価・WP Customer Reviews）／commentlist（コメントの一覧）／commentform（投稿フォーム）／comments-title（COMMENTS & REVIEW の見出し）。★commentform はコメントを閉じたページには無い★ので、必須には入れない。落とした後に残ることを求めるのは entry（記事本体）＝4ページすべてに実在する。／★2026-08-28（台帳#492）★＝hyouka（評価の箱）を必須にしていたため、★評価が付いていない機種のページを丸ごと出典から外していた★（実測: パリピ孔明 263531 は hyouka が無い）。実ページ7件を数えたところ hyouka は 0/1/2個とばらつき、★rating-btn は全7件に2個ずつ・commentlist は全7件に1個ずつ★あった。そこで **rating-btn を必須の枠にし、hyouka は必須から外した**（落とす対象には残す）。★同時に rating-btn を落とす対象に足した★＝この箱の中身は「みんなの評価（平均1.6）」＝**読者が付けた平均点**で、★いままで落としておらず、材料に混ざっていた★。★対照実験★＝rating-btn の名前を変えたページを作ると、評価あり・評価なしの両方で止まることを確認した（＝作りが変わったときの見張りは残っている）。",
+        "page_pattern": "^https://chonborista\\.com/slot/[^/]+/\\d+/?$",
+        "_why_page_pattern": "★必須アンカーは機種ページにだけ求める★（2026-08-15）。一覧ページ・カレンダーには口コミ欄も掲示板も無いのが当たり前なので、「無い＝作りが変わった」と判定して**そのページを丸ごと使わなくなる**。実際に P-WORLDの導入カレンダー・ちょんぼりすたの一覧・DMMの一覧がすべて止まることを確認した（新台を見つける入口が全滅する）。",
+        "_why_form": "★投稿フォームも落とす★（2026-08-24・Codexの14回目で実ページを見て判明）。一覧（commentlist）だけ落として、**書き込む欄（comment-area / respond）が残っていた**。読者が書いた文は無くても、返信の見出しなどが本文に混ざる。"
       }
-     }
-    ],
-    "require_after": [
-     {
-      "class": "list-machineinformation"
-     },
-     {
-      "class": "wysiwyg-box"
-     }
-    ],
-    "markers": [
-     "ユーザー評価"
-    ],
-    "_why": "★読者の口コミと評価点を出典に数えない★（2026-08-14・台帳#348）。実ページ（機種4709・4912・4992）を取ってきて構造を確かめた＝machine-userreview（ユーザー評価の点数）と list-machinesreviews（口コミの一覧・1件ごとに点数つき）に入っている。machine-shop-by-prefecture は設置店の一覧で、店名が大量に混ざるので併せて落とす。★見出し「ユーザー口コミ・評価詳細」は残るが、中身は空になる★（見出しは節の外にあり、そこに読者の書き込みは無い）。落とした後に残ることを求めるのは list-machineinformation（機種の基本情報）と wysiwyg-box（解析の本文）＝3ページすべてに実在することを確認した。／★2026-08-23（台帳#460）★＝list-machinesreviews は**レビューが1件もない機種には描画されない**（実測: 機種5089は「ユーザー評価（0件）」で一覧の箱が無い／機種5028は「（44件）」で有る）。「必ずある」と求めていたため、レビューが付かないマイナー機種は★永久に出典に使えなかった★。そこで一覧の箱には only_if_count_in を付け、**枠（machine-userreview）は今までどおり必ず求める／一覧は件数が1件以上のときだけ求める**形にした。★件数が読めないときは求める★（相手が書き方を変えた可能性を安全側に扱う）。★枠と一覧は入れ子ではない★（実測で15万字離れている）ので、落とす対象からは外していない。",
-    "page_pattern": "^https://p-town\\.dmm\\.com/machines/\\d+/?$",
-    "_why_page_pattern": "★必須アンカーは機種ページにだけ求める★（2026-08-15）。一覧ページ・カレンダーには口コミ欄も掲示板も無いのが当たり前なので、「無い＝作りが変わった」と判定して**そのページを丸ごと使わなくなる**。実際に P-WORLDの導入カレンダー・ちょんぼりすたの一覧・DMMの一覧がすべて止まることを確認した（新台を見つける入口が全滅する）。"
-   }
-  },
-  "nana-press": {
-   "name": "なな徹",
-   "publisher_id": "nana-press",
-   "_why_publisher_id": "★票の単位はここから引く★（2026-08-09・依頼125）名鑑IDから仮の系列名を作ると、同じ発行者の控えと二重に数えられる。source-registry.json の発行者IDを明示する",
-   "surfaces": [
-    {
-     "url": "https://nana-press.com/kaiseki/index/machine/s/a/",
-     "kind": "機種名で探す（a行）"
     },
-    {
-     "url": "https://nana-press.com/kaiseki/index/machine/s/ka/",
-     "kind": "機種名で探す（ka行）"
+    "p-world": {
+      "name": "P-WORLD",
+      "publisher_id": "p-world",
+      "_why_publisher_id": "★票の単位はここから引く★（2026-08-09・依頼125）名鑑IDから仮の系列名を作ると、同じ発行者の控えと二重に数えられる。source-registry.json の発行者IDを明示する",
+      "surfaces": [
+        {
+          "url": "https://www.p-world.co.jp/database/machine.html",
+          "kind": "機種一覧"
+        },
+        {
+          "url": "https://www.p-world.co.jp/database/machine/introduce_calendar.cgi",
+          "kind": "導入カレンダー"
+        },
+        {
+          "url": "https://www.p-world.co.jp/_machine/t_machine.cgi?mode=slot_type&key=NORMAL&start=0",
+          "kind": "ノーマルタイプ一覧"
+        },
+        {
+          "url": "https://www.p-world.co.jp/_machine/t_machine.cgi?mode=slot_type&key=AT&start=0",
+          "kind": "ATタイプ一覧"
+        },
+        {
+          "url": "https://www.p-world.co.jp/_machine/t_machine.cgi?mode=slot_type&key=RT&start=0",
+          "kind": "RTタイプ一覧"
+        },
+        {
+          "url": "https://www.p-world.co.jp/_machine/t_machine.cgi?mode=slot_type&key=aRT&start=0",
+          "kind": "ARTタイプ一覧"
+        },
+        {
+          "url": "https://www.p-world.co.jp/_machine/t_machine.cgi?mode=slot_type&key=over_6.5number&start=0",
+          "kind": "6.5号機以降一覧"
+        }
+      ],
+      "link_pattern": "/machine/database/\\d+",
+      "min_expected": 15,
+      "status": "OFF_TOS",
+      "surface_pattern": "^https://www\\.p-world\\.co\\.jp/(database/machine[a-z0-9_/\\.\\-]*|_machine/t_machine\\.cgi\\?mode=slot_type&key=[A-Za-z0-9_\\.]+&start=0)$",
+      "_why_surface_pattern": "入口の登録漏れを毎回機械が数えるため（2026-08-06・scripts/directory_coverage.py）",
+      "max_pages": 40,
+      "_why_max_pages": "一覧が数ページに分かれており、1頁目だけでは古い機種が索引に入らないため（2026-08-07・台帳#264）。上限は毎晩の取得回数とのつり合いで決める",
+      "user_area": {
+        "hosts": [
+          "p-world.co.jp"
+        ],
+        "drop": [
+          {
+            "id": "bbs"
+          },
+          {
+            "id": "hyoka"
+          },
+          {
+            "id": "gNavi"
+          },
+          {
+            "id": "header"
+          },
+          {
+            "id": "footer"
+          },
+          {
+            "id": "copyright"
+          },
+          {
+            "id": "copyrightMemo"
+          },
+          {
+            "id": "gHallSearch"
+          },
+          {
+            "id": "city_list"
+          },
+          {
+            "id": "pref_dir"
+          },
+          {
+            "class": "bbsAiMatome"
+          },
+          {
+            "class": "bbsThreadBox"
+          },
+          {
+            "class": "bbsPostImages"
+          }
+        ],
+        "markers": [
+          "AIがまとめた内容",
+          "AI投稿まとめ",
+          "活発なトピック"
+        ],
+        "_why": "★AIが要約した欄と読者の投稿を出典に数えない★（2026-08-13・台帳#345）。2026-08-14に実際のページ（機種10510）を取ってきて構造を確かめた＝掲示板ぜんぶが <div id=\"bbs\"> の中にあり、その中に bbsAiMatome（AIのまとめ）と bbsThreadBox（投稿の一覧）が入っている。★行では切れない★＝断り書き「最近の投稿をもとにAIがまとめた内容を…」は要約本文より後ろにあるので、そこから切っても要約が残る。markers は落とし損ねの見張り＝落としたあとにこの語が本文に残っていたらそのページを出典に使わない（fail-closed）。★2026-08-14に実際のページ（機種10510）のid一覧を数えて決めた★＝bbs（掲示板とAIのまとめ）／hyoka（読者の人気投票）／gNavi・header・footer・copyright（サイトの飾り）／gHallSearch・city_list・pref_dir（設置店検索＝店名が大量に混ざる）。残るのは spec・how_to・analysis・peak・update＝サイト自身が書いた機種データ。",
+        "require_before": [
+          {
+            "id": "bbs"
+          }
+        ],
+        "require_after": [
+          {
+            "id": "spec"
+          }
+        ],
+        "_why_require": "★構造と文言が同時に変わったら気づけるようにする★（2026-08-14・依頼196のP1）。落とす前に掲示板の箱（id=bbs）があること／落とした後に機種データの箱（id=spec）が残っていることを確かめる。id と 印（markers）が同時に変わると、箱を1つも落とせないまま正常終了してしまうため。2026-08-14に3ページ（10510・10521・10550）で両方が実在することを確認した。",
+        "page_pattern": "^https://www\\.p-world\\.co\\.jp/machine/database/\\d+/?$",
+        "_why_page_pattern": "★必須アンカーは機種ページにだけ求める★（2026-08-15）。一覧ページ・カレンダーには口コミ欄も掲示板も無いのが当たり前なので、「無い＝作りが変わった」と判定して**そのページを丸ごと使わなくなる**。実際に P-WORLDの導入カレンダー・ちょんぼりすたの一覧・DMMの一覧がすべて止まることを確認した（新台を見つける入口が全滅する）。"
+      },
+      "_why_off": "★規約で自動取得が禁止されている★（2026-08-16・台帳#376）。P-WORLD 総合利用規約 第8条「プログラムを用いたアクセスなど、通常のブラウザアクセス以外の方法で本サービスを利用する行為」／一撃 利用規約 第3条「自動化ツール・ボット・スクレイピング等により本サイトの情報を大量取得・再配布する行為」。★人がブラウザで見るのは自由／機械では取りに行かない★。通信そのものは scripts/blocked_hosts.py が止める（最後の砦）。★許諾が取れたら運営者の判断で戻す★"
     },
-    {
-     "url": "https://nana-press.com/kaiseki/index/machine/s/sa/",
-     "kind": "機種名で探す（sa行）"
+    "dmm-ptown": {
+      "name": "DMMぱちタウン",
+      "publisher_id": "dmm-ptown",
+      "_why_publisher_id": "★票の単位はここから引く★（2026-08-09・依頼125）名鑑IDから仮の系列名を作ると、同じ発行者の控えと二重に数えられる。source-registry.json の発行者IDを明示する",
+      "surfaces": [
+        {
+          "url": "https://p-town.dmm.com/machines",
+          "kind": "機種一覧"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/slot",
+          "kind": "スロット一覧"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/smart_slot",
+          "kind": "新台スマスロ"
+        },
+        {
+          "url": "https://p-town.dmm.com/makers/44",
+          "kind": "メーカー別（ベルコ）"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/alert/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/art/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/at/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/bonus/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/bonus_trigger_flg/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/change/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/digital/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/feather/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/informations/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/kainyu/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/limit/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/lucky_trigger_flg/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/middle_type/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/new_calendar/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/pachinko/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/pinball_ceiling/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/rt/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/search/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/smart_pinball/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/timing/",
+          "kind": "タイプ別"
+        },
+        {
+          "url": "https://p-town.dmm.com/machines/with_setting/",
+          "kind": "タイプ別"
+        }
+      ],
+      "link_pattern": "/machines/\\d+",
+      "machine_page_pattern": "^https://p-town\\.dmm\\.com/machines/\\d+/?$",
+      "_why_machine_page_pattern": "★メーカー照合の根拠は「その名鑑の機種ページ」だけから採る★（2026-08-17・依頼228／Codexの指摘4）。以前はホスト名しか見ていなかったので、同じ名鑑の一覧ページ・特集記事・別機種のページでも根拠として通った。ここに合わない根拠は maker_identity_cache が受け取らない（fail-closed）。",
+      "min_expected": 10,
+      "status": "ACTIVE",
+      "_verified": "2026-07-31 Claudeが確認。/machines(31件)・/machines/slot(20件)・/makers/44(20件) のいずれにも Lすーぱぁびん娘(5038) が含まれる。/machines/smart_slot だけだと入らなかった。★1つの入口では足りないことの実例★",
+      "title_class": "title",
+      "_why_title_class": "1つのリンクに機種名・メーカー・機械割・紹介文が同居しており、全部つなげると芯が一致しない（台帳#189）。題は <p class=\"title\"> にある（2026-08-06に実データで確認）",
+      "surface_pattern": "^https://p-town\\.dmm\\.com/(?:machines/[a-z_]+|makers/\\d+)/?$",
+      "_why_surface_pattern": "入口の登録漏れを毎回機械が数えるため（2026-08-06・scripts/directory_coverage.py）",
+      "max_pages": 6,
+      "_why_max_pages": "一覧が数ページに分かれており、1頁目だけでは古い機種が索引に入らないため（2026-08-07・台帳#264）。上限は毎晩の取得回数とのつり合いで決める",
+      "user_area": {
+        "hosts": [
+          "p-town.dmm.com"
+        ],
+        "drop": [
+          {
+            "class": "machine-userreview"
+          },
+          {
+            "class": "list-machinesreviews"
+          },
+          {
+            "class": "machine-shop-by-prefecture"
+          }
+        ],
+        "require_before": [
+          {
+            "class": "machine-userreview"
+          },
+          {
+            "class": "list-machinesreviews",
+            "only_if_count_in": {
+              "class": "machine-userreview",
+              "count_in": {
+                "class": "count"
+              }
+            }
+          }
+        ],
+        "require_after": [
+          {
+            "class": "list-machineinformation"
+          },
+          {
+            "class": "wysiwyg-box"
+          }
+        ],
+        "markers": [
+          "ユーザー評価"
+        ],
+        "_why": "★読者の口コミと評価点を出典に数えない★（2026-08-14・台帳#348）。実ページ（機種4709・4912・4992）を取ってきて構造を確かめた＝machine-userreview（ユーザー評価の点数）と list-machinesreviews（口コミの一覧・1件ごとに点数つき）に入っている。machine-shop-by-prefecture は設置店の一覧で、店名が大量に混ざるので併せて落とす。★見出し「ユーザー口コミ・評価詳細」は残るが、中身は空になる★（見出しは節の外にあり、そこに読者の書き込みは無い）。落とした後に残ることを求めるのは list-machineinformation（機種の基本情報）と wysiwyg-box（解析の本文）＝3ページすべてに実在することを確認した。／★2026-08-23（台帳#460）★＝list-machinesreviews は**レビューが1件もない機種には描画されない**（実測: 機種5089は「ユーザー評価（0件）」で一覧の箱が無い／機種5028は「（44件）」で有る）。「必ずある」と求めていたため、レビューが付かないマイナー機種は★永久に出典に使えなかった★。そこで一覧の箱には only_if_count_in を付け、**枠（machine-userreview）は今までどおり必ず求める／一覧は件数が1件以上のときだけ求める**形にした。★件数が読めないときは求める★（相手が書き方を変えた可能性を安全側に扱う）。★枠と一覧は入れ子ではない★（実測で15万字離れている）ので、落とす対象からは外していない。",
+        "page_pattern": "^https://p-town\\.dmm\\.com/machines/\\d+/?$",
+        "_why_page_pattern": "★必須アンカーは機種ページにだけ求める★（2026-08-15）。一覧ページ・カレンダーには口コミ欄も掲示板も無いのが当たり前なので、「無い＝作りが変わった」と判定して**そのページを丸ごと使わなくなる**。実際に P-WORLDの導入カレンダー・ちょんぼりすたの一覧・DMMの一覧がすべて止まることを確認した（新台を見つける入口が全滅する）。"
+      }
     },
-    {
-     "url": "https://nana-press.com/kaiseki/index/machine/s/ta/",
-     "kind": "機種名で探す（ta行）"
+    "nana-press": {
+      "name": "なな徹",
+      "publisher_id": "nana-press",
+      "_why_publisher_id": "★票の単位はここから引く★（2026-08-09・依頼125）名鑑IDから仮の系列名を作ると、同じ発行者の控えと二重に数えられる。source-registry.json の発行者IDを明示する",
+      "surfaces": [
+        {
+          "url": "https://nana-press.com/kaiseki/index/machine/s/a/",
+          "kind": "機種名で探す（a行）"
+        },
+        {
+          "url": "https://nana-press.com/kaiseki/index/machine/s/ka/",
+          "kind": "機種名で探す（ka行）"
+        },
+        {
+          "url": "https://nana-press.com/kaiseki/index/machine/s/sa/",
+          "kind": "機種名で探す（sa行）"
+        },
+        {
+          "url": "https://nana-press.com/kaiseki/index/machine/s/ta/",
+          "kind": "機種名で探す（ta行）"
+        },
+        {
+          "url": "https://nana-press.com/kaiseki/index/machine/s/na/",
+          "kind": "機種名で探す（na行）"
+        },
+        {
+          "url": "https://nana-press.com/kaiseki/index/machine/s/ha/",
+          "kind": "機種名で探す（ha行）"
+        },
+        {
+          "url": "https://nana-press.com/kaiseki/index/machine/s/ma/",
+          "kind": "機種名で探す（ma行）"
+        },
+        {
+          "url": "https://nana-press.com/kaiseki/index/machine/s/ya/",
+          "kind": "機種名で探す（ya行）"
+        },
+        {
+          "url": "https://nana-press.com/kaiseki/index/machine/s/ra/",
+          "kind": "機種名で探す（ra行）"
+        },
+        {
+          "url": "https://nana-press.com/kaiseki/index/machine/s/wa/",
+          "kind": "機種名で探す（wa行）"
+        }
+      ],
+      "link_pattern": "/kaiseki/machine/\\d+",
+      "machine_page_pattern": "^https://nana-press\\.com/kaiseki/machine/\\d+/?$",
+      "_why_machine_page_pattern": "★メーカー照合の根拠は「その名鑑の機種ページ」だけから採る★（2026-08-17・依頼228／Codexの指摘4）。以前はホスト名しか見ていなかったので、同じ名鑑の一覧ページ・特集記事・別機種のページでも根拠として通った。ここに合わない根拠は maker_identity_cache が受け取らない（fail-closed）。",
+      "min_expected": 50,
+      "max_pages": 1,
+      "status": "ACTIVE",
+      "surface_pattern": "^https://nana-press\\.com/kaiseki/index/machine/s/[a-z]+/$",
+      "_why": "★スロット専用の索引★（2026-08-08）パチンコが混ざらず、題に導入日が入っていて未来の機種も載る。P-WORLDしか型式を持っていない新台が3件連続で止まったため追加",
+      "_why_max_pages": "1つの行のページに全機種が載る（ページ送りが無い）",
+      "user_area": {
+        "_no_user_area_why": "★2026-08-24に実物で確かめた★＝機種ページ（/kaiseki/machine/1214/）のHTMLに、投稿欄・口コミ欄・レビュー欄が無い（「コメント」「口コミ」「レビュー」「投稿」「評価」「書き込」の語が0件、入力欄も0件）。読者の書き込みが本文に混ざる作りではない。★これは『いま無い』という観測であって、永久の保証ではない★。作りが変わって投稿欄ができたら、drop の決まりごとを登録すること（Codexの11回目の指摘＝同じ誤った値が2サイトの投稿欄にあると、独立2出典として記録できてしまう）。",
+        "_checked_at": "2026-08-24",
+        "_checked_by": "Claude（実ページを取得して数えた）",
+        "_recheck_by": "2027-02-16"
+      },
+      "machine_id_pattern": "^https://nana-press\\.com/kaiseki/machine/(\\d+)/?$",
+      "sub_page_pattern": "^https://nana-press\\.com/kaiseki/machine/{id}/\\d+/?$",
+      "_why_sub_page_pattern": "★機種ページの下に記事ページが分かれている★（2026-09-01に実測）＝スマスロ モンキーターンV（機種644）は下位49本。本体の「モード」127回に対し、下位は先頭12本だけで324回。★材料集めは本体しか取っていなかった★ので、モード・ゾーンのように下位へ詳しく書かれるものは一度も読まれなかった。★同じ機種IDの下位だけ★を集める（別機種へ広がらせない）。★票には数えない★＝同じ名鑑の下位は何本あっても1系列。"
     },
-    {
-     "url": "https://nana-press.com/kaiseki/index/machine/s/na/",
-     "kind": "機種名で探す（na行）"
-    },
-    {
-     "url": "https://nana-press.com/kaiseki/index/machine/s/ha/",
-     "kind": "機種名で探す（ha行）"
-    },
-    {
-     "url": "https://nana-press.com/kaiseki/index/machine/s/ma/",
-     "kind": "機種名で探す（ma行）"
-    },
-    {
-     "url": "https://nana-press.com/kaiseki/index/machine/s/ya/",
-     "kind": "機種名で探す（ya行）"
-    },
-    {
-     "url": "https://nana-press.com/kaiseki/index/machine/s/ra/",
-     "kind": "機種名で探す（ra行）"
-    },
-    {
-     "url": "https://nana-press.com/kaiseki/index/machine/s/wa/",
-     "kind": "機種名で探す（wa行）"
+    "1geki": {
+      "name": "一撃",
+      "publisher_id": "1geki",
+      "_why_publisher_id": "★票の単位はここから引く★（2026-08-09・依頼125）source-registry.json の発行者IDを明示する",
+      "link_pattern": "/slot/[a-z0-9_\\-]+/$",
+      "min_expected": 30,
+      "max_pages": 1,
+      "status": "OFF_TOS",
+      "surface_pattern": "^https://1geki\\.jp/slot/syllabary/[0-9]+/$",
+      "_why": "★5社目の独立した出典★（2026-08-14・運営者の指示で追加）。運営は株式会社一撃（東京都中央区・代表取締役 原知生）で、既存4社（ウィーバー／ピーワールド／DMM.com／三協エージェンシー）とは別法人であることをCodexと確認した。50音の索引が静的に辿れ、8ページで686機種を数えた（実測）。",
+      "_why_surfaces": "メーカー一覧（/maker/）は機種ページへ直接リンクしないため使わない。トップの /slot/ は新着40件しか出さない。50音（syllabary/1〜8）が全機種を静的に載せている（9以降は404）。",
+      "_caution": "★DMMぱちタウンとの共同取材企画がある★（「双龍玉」）。★この注意は説明ではなく機械で効かせている★＝source-registry.json の joint_production に登録済みで、一撃とDMMが揃ったときは source_lineage.merge_joint() が1票にまとめる（2026-08-14・依頼190のP1）。",
+      "surfaces": [
+        {
+          "url": "https://1geki.jp/slot/syllabary/1/",
+          "kind": "機種名で探す（ア行）"
+        },
+        {
+          "url": "https://1geki.jp/slot/syllabary/2/",
+          "kind": "機種名で探す（カ行）"
+        },
+        {
+          "url": "https://1geki.jp/slot/syllabary/3/",
+          "kind": "機種名で探す（サ行）"
+        },
+        {
+          "url": "https://1geki.jp/slot/syllabary/4/",
+          "kind": "機種名で探す（タ行）"
+        },
+        {
+          "url": "https://1geki.jp/slot/syllabary/5/",
+          "kind": "機種名で探す（ナ行）"
+        },
+        {
+          "url": "https://1geki.jp/slot/syllabary/6/",
+          "kind": "機種名で探す（ハ行）"
+        },
+        {
+          "url": "https://1geki.jp/slot/syllabary/7/",
+          "kind": "機種名で探す（マ行）"
+        },
+        {
+          "url": "https://1geki.jp/slot/syllabary/8/",
+          "kind": "機種名で探す（ヤ・ラ・ワ行）"
+        }
+      ],
+      "title_tag": "h4",
+      "_why_title_tag": "★機種名は h4 に入っている★（2026-08-14・実物で確認）。一撃のリンクには機種名・メーカー・タイプ・導入日が全部入るので、そのまま読むと芯が「東京喰種crossalphaクロスアルファatタイプ天井導入開始日…」になり一致しない。クラス名が付いていないのでタグで指す。",
+      "_why_off": "★規約で自動取得が禁止されている★（2026-08-16・台帳#376）。P-WORLD 総合利用規約 第8条「プログラムを用いたアクセスなど、通常のブラウザアクセス以外の方法で本サービスを利用する行為」／一撃 利用規約 第3条「自動化ツール・ボット・スクレイピング等により本サイトの情報を大量取得・再配布する行為」。★人がブラウザで見るのは自由／機械では取りに行かない★。通信そのものは scripts/blocked_hosts.py が止める（最後の砦）。★許諾が取れたら運営者の判断で戻す★"
     }
-   ],
-   "link_pattern": "/kaiseki/machine/\\d+",
-   "machine_page_pattern": "^https://nana-press\\.com/kaiseki/machine/\\d+/?$",
-   "_why_machine_page_pattern": "★メーカー照合の根拠は「その名鑑の機種ページ」だけから採る★（2026-08-17・依頼228／Codexの指摘4）。以前はホスト名しか見ていなかったので、同じ名鑑の一覧ページ・特集記事・別機種のページでも根拠として通った。ここに合わない根拠は maker_identity_cache が受け取らない（fail-closed）。",
-   "min_expected": 50,
-   "max_pages": 1,
-   "status": "ACTIVE",
-   "surface_pattern": "^https://nana-press\\.com/kaiseki/index/machine/s/[a-z]+/$",
-   "_why": "★スロット専用の索引★（2026-08-08）パチンコが混ざらず、題に導入日が入っていて未来の機種も載る。P-WORLDしか型式を持っていない新台が3件連続で止まったため追加",
-   "_why_max_pages": "1つの行のページに全機種が載る（ページ送りが無い）",
-   "user_area": {
-    "_no_user_area_why": "★2026-08-24に実物で確かめた★＝機種ページ（/kaiseki/machine/1214/）のHTMLに、投稿欄・口コミ欄・レビュー欄が無い（「コメント」「口コミ」「レビュー」「投稿」「評価」「書き込」の語が0件、入力欄も0件）。読者の書き込みが本文に混ざる作りではない。★これは『いま無い』という観測であって、永久の保証ではない★。作りが変わって投稿欄ができたら、drop の決まりごとを登録すること（Codexの11回目の指摘＝同じ誤った値が2サイトの投稿欄にあると、独立2出典として記録できてしまう）。",
-    "_checked_at": "2026-08-24",
-    "_checked_by": "Claude（実ページを取得して数えた）",
-    "_recheck_by": "2027-02-16"
-   }
-  },
-  "1geki": {
-   "name": "一撃",
-   "publisher_id": "1geki",
-   "_why_publisher_id": "★票の単位はここから引く★（2026-08-09・依頼125）source-registry.json の発行者IDを明示する",
-   "link_pattern": "/slot/[a-z0-9_\\-]+/$",
-   "min_expected": 30,
-   "max_pages": 1,
-   "status": "OFF_TOS",
-   "surface_pattern": "^https://1geki\\.jp/slot/syllabary/[0-9]+/$",
-   "_why": "★5社目の独立した出典★（2026-08-14・運営者の指示で追加）。運営は株式会社一撃（東京都中央区・代表取締役 原知生）で、既存4社（ウィーバー／ピーワールド／DMM.com／三協エージェンシー）とは別法人であることをCodexと確認した。50音の索引が静的に辿れ、8ページで686機種を数えた（実測）。",
-   "_why_surfaces": "メーカー一覧（/maker/）は機種ページへ直接リンクしないため使わない。トップの /slot/ は新着40件しか出さない。50音（syllabary/1〜8）が全機種を静的に載せている（9以降は404）。",
-   "_caution": "★DMMぱちタウンとの共同取材企画がある★（「双龍玉」）。★この注意は説明ではなく機械で効かせている★＝source-registry.json の joint_production に登録済みで、一撃とDMMが揃ったときは source_lineage.merge_joint() が1票にまとめる（2026-08-14・依頼190のP1）。",
-   "surfaces": [
-    {
-     "url": "https://1geki.jp/slot/syllabary/1/",
-     "kind": "機種名で探す（ア行）"
-    },
-    {
-     "url": "https://1geki.jp/slot/syllabary/2/",
-     "kind": "機種名で探す（カ行）"
-    },
-    {
-     "url": "https://1geki.jp/slot/syllabary/3/",
-     "kind": "機種名で探す（サ行）"
-    },
-    {
-     "url": "https://1geki.jp/slot/syllabary/4/",
-     "kind": "機種名で探す（タ行）"
-    },
-    {
-     "url": "https://1geki.jp/slot/syllabary/5/",
-     "kind": "機種名で探す（ナ行）"
-    },
-    {
-     "url": "https://1geki.jp/slot/syllabary/6/",
-     "kind": "機種名で探す（ハ行）"
-    },
-    {
-     "url": "https://1geki.jp/slot/syllabary/7/",
-     "kind": "機種名で探す（マ行）"
-    },
-    {
-     "url": "https://1geki.jp/slot/syllabary/8/",
-     "kind": "機種名で探す（ヤ・ラ・ワ行）"
-    }
-   ],
-   "title_tag": "h4",
-   "_why_title_tag": "★機種名は h4 に入っている★（2026-08-14・実物で確認）。一撃のリンクには機種名・メーカー・タイプ・導入日が全部入るので、そのまま読むと芯が「東京喰種crossalphaクロスアルファatタイプ天井導入開始日…」になり一致しない。クラス名が付いていないのでタグで指す。",
-   "_why_off": "★規約で自動取得が禁止されている★（2026-08-16・台帳#376）。P-WORLD 総合利用規約 第8条「プログラムを用いたアクセスなど、通常のブラウザアクセス以外の方法で本サービスを利用する行為」／一撃 利用規約 第3条「自動化ツール・ボット・スクレイピング等により本サイトの情報を大量取得・再配布する行為」。★人がブラウザで見るのは自由／機械では取りに行かない★。通信そのものは scripts/blocked_hosts.py が止める（最後の砦）。★許諾が取れたら運営者の判断で戻す★"
   }
- }
 }

@@ -3,7 +3,7 @@
  "_why": "★どの出典を材料に採るかを決める側の指紋★（台帳#389）。ここと実ファイルが一致する時だけ公開物を作れる。中身を直したらこのファイルも更新すること（python scripts/material_contract.py --approve）＝レビューに載せるための仕組み。",
  "files": {
   "assets/data/automation-policy.json": "fedec6d762c065355134f54e656d7b11520a4d6a1d51cb4433771cb7c4d0063f",
-  "assets/data/directory-catalogs.json": "27ad9299bdb255b9205d3f85af705323e71bfeec32b0e048b4b6589b064b3b75",
+  "assets/data/directory-catalogs.json": "c700e7e9bb3ae6f0072d138f493525b0cac60792d563e577fbfd1c48cddffcbe",
   "assets/data/maker-catalogs.json": "612fa17f5b50f509475096b51ca1f4d8c261c5805e22e337875aa478054c0b3c",
   "assets/data/source-registry.json": "2449477484e8def3fae001065de72ce208943a44487cb5dcd109a7af101f3687",
   "scripts/add_machine_run.py": "4d830c5052caf9fc032fd130f45f6464bbb78ce9b5e47838492243f8a10f154a",
@@ -26,6 +26,7 @@
   "scripts/maker_identity_cache.py": "ad8b2621a3ea34d843977b34271568dd0d0d54ee12a21809a1adf03c934cc9e3",
   "scripts/model_code_lookup.py": "64b4eb6d4a86af271b1af0978512b2ab36a5cc50569a2928121fe8d974b84abe",
   "scripts/new_machine_watch.py": "72319ceacf38d0a8b71bf5ec442664187224a8a8288376e49425027198acbe15",
+  "scripts/page_corpus.py": "9acd5455d063c7bc8f3eff207b4a56acef811edd085a09541e52ffd072ac5974",
   "scripts/page_probe.py": "25d0411b1552d018ab1e528a58be1ce1d53a4e47de68f84fc2f951ccaa1f182d",
   "scripts/pending_machines.py": "00b3371b6372c6efd9a3e8e431eb6565c98e8cb3f1f64f1ee9855b24876d18ff",
   "scripts/slug_binding.py": "17c235c10cd7fed94d4c774bbe7b88c87349eff214bedaa22182d3fe79f26af6",
@@ -194,6 +195,7 @@
    "blocked_hosts",
    "page_probe"
   ],
+  "scripts/page_corpus.py": [],
   "scripts/page_probe.py": [
    "blocked_hosts",
    "new_machine_watch"
