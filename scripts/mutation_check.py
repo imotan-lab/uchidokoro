@@ -56,6 +56,40 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #   ★同じ壊し方を戻さないこと★＝いまの取り決めでは必ず「捕まえられない」
 #   と出て、本物の見落としが埋もれる。
 MUTATIONS = [
+    # ─── 2026-09-01・Codexのレビュー29で塞いだ穴 ─────────────
+    {
+        "why": "★票の数え方の見張りを黙らせる"
+               "（独立2出典の 2 を自前で数える場所が見逃され、土台が崩れる）★",
+        "file": "scripts/audit_site.py",
+        "before": "    import ast\n    out = []\n    try:\n        tree = ast.parse(src)",
+        "after": "    import ast\n    return []\n    try:\n        tree = ast.parse(src)",
+        "run": ["scripts/audit_site.py"],
+    },
+    {
+        "why": "★タスクの契約が消えても黙って通す"
+               "（見張りが静かに消え、止めたタスクの手順が生き返る）★",
+        "file": "scripts/audit_site.py",
+        "before": '        return {}, ("★タスクの契約がありません★"\n'
+                  '                    "（置き場はあるのに契約が無い＝見張りが効きません）")',
+        "after": '        return {}, ""',
+        "run": ["scripts/audit_site.py"],
+    },
+    {
+        "why": "★道筋の無い裸のファイル名まで実在検査する"
+               "（どこにあるか分からないものを探して、誤って手順書を止める）★",
+        "file": "scripts/audit_site.py",
+        "before": '                if "/" in tok or "\\\\" in tok:',
+        "after": "                if True:",
+        "run": ["scripts/audit_site.py"],
+    },
+    {
+        "why": "★関所の本体から早見表の点検を外す"
+               "（引き金の試験だけでは捕まらず、昨日と同じことが起きる）★",
+        "file": "scripts/pre_push_check.py",
+        "before": "    _hub_ng = hub_check_problem(changed, _hub_run)",
+        "after": '    _hub_ng = ""',
+        "run": ["scripts/pre_push_check.py"],
+    },
     # ─── 2026-09-01・早見表が古いままかを見る関所 ─────────────
     {
         "why": "★早見表が古いことを見つけない"

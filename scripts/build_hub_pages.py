@@ -780,6 +780,12 @@ def _build_legacy() -> int:
     return 0
 
 
+# ★このスクリプトが作り直す4ページ★（2026-09-01）
+#   ★件数ではなく名前で持つ★＝「1件欠落＋別名1件」を件数だけでは見抜けない。
+LEGACY_PAGES = ("guide-tenjo-ranking.html", "guide-reset-ranking.html",
+                "guide-suru-tenjo.html", "guide-ichiran.html")
+
+
 def stale_pages(built: dict, read) -> list:
     """★どのページが古いか★だけを返す（読み書きしない・2026-09-01）。
 
@@ -830,8 +836,12 @@ def _check_legacy() -> int:
         print(f"★早見表を描けません: {type(e).__name__}: {e}★")
         return 1
 
-    if len(built) != 4:
-        print(f"★4ページそろっていません（{sorted(built)}）★")
+    # ★★件数ではなく、期待する4ファイルの集合で見る★★
+    #   （2026-09-01・Codexの助言）＝件数だけだと
+    #   「1件欠落＋別名1件」でも4件になり、そのまま通る。
+    if set(built) != set(LEGACY_PAGES):
+        print(f"★作れたページが想定と違います★ 期待={sorted(LEGACY_PAGES)} "
+              f"／ 実際={sorted(built)}")
         return 1
 
     def _read(rel):

@@ -1484,24 +1484,82 @@ def check_55_plain_style(machines: list) -> list[str]:
     return []
 
 
-def _skill_contract(base: str) -> dict:
+def _skill_contract(base: str):
     """★どのタスクが動いていて、どれを止めたか★を外の設定から読む。
 
     ★公開されるこのファイルにタスク名を書かない★（2026-08-13・依頼177）
       手順書をリポジトリへ置かない理由（内部構成が読まれる）と同じ。
       置き場に `tasks-contract.json` を置き、そこから読む。
-      無ければこの検査は行わない（黙って通す＝別PCと同じ扱い）。
+
+    ★★返すのは (契約, 問題) の組★★（2026-09-01・Codexの指摘3）
+      ★直す前は「無い／壊れている／辞書でない」を全部 {} にまとめていた★ので、
+      呼び手の `if not conf: return` が★契約が消えても壊れても黙って通した★
+      ＝見張りが静かに消える。
+      ★呼び手はこの置き場が在ることを既に確かめている★（別PCは手前で返る）ので、
+      ここから先の「無い」は事故。
+      ★正しい契約で中身が0件なのは正常★（問題は空文字で返す）。
     """
     import json
     p = os.path.join(base, "tasks-contract.json")
     if not os.path.isfile(p):
-        return {}
+        return {}, ("★タスクの契約がありません★"
+                    "（置き場はあるのに契約が無い＝見張りが効きません）")
     try:
         with open(p, encoding="utf-8") as f:
             got = json.load(f)
-    except Exception:                     # noqa: BLE001
-        return {}
-    return got if isinstance(got, dict) else {}
+    except Exception as e:                # noqa: BLE001
+        return {}, f"★タスクの契約を読めません★（{type(e).__name__}）"
+    if not isinstance(got, dict):
+        return {}, ("★タスクの契約の形が違います★"
+                    "（いちばん外側が辞書ではありません）")
+    return got, ""
+
+
+# ★コマンドの形をした行の先頭語★（2026-09-01）
+#   ★意味は見ない★＝何をするコマンドかは判定しない。
+#   「その行はコマンドか」という**形**だけで決める。
+_CMD_HEADS = ("python", "python3", "py", "bash", "sh")
+
+
+def _doc_paths(text: str) -> list:
+    """★手順書が実際に叩いているファイル★を返す（2026-09-01）。
+
+    ★構造で決める★＝コマンドの形をした行の中の、`.py` / `.sh` で終わる語。
+    ★道筋を含む語だけ★＝`codex_review.sh` のような裸の名前は、
+      どこにあるか分からないので見ない（ありもしない場所を探して誤検知する）。
+    ★直す前は `python scripts/*.py` の形だけ★だったので、
+      スキルの中心である `codex_review.sh`（絶対パス）が対象外だった。
+    """
+    import re as _re
+    out = []
+    for line in text.splitlines():
+        # ★候補は「行そのもの」と「バッククォートで囲んだ範囲」★
+        #   （2026-09-01・対照実験が捕まえた）＝
+        #   手順書では「実行は `python scripts/x.py` です。」のように
+        #   文の途中へ埋め込むことが多く、行の前後を外すだけでは届かない。
+        #   ★これも構造★＝囲みは Markdown のコードであって、意味ではない。
+        cands = [line.strip().strip("`")]
+        cands += _re.findall(r"`([^`]+)`", line)
+        for cand in cands:
+            bare = cand.strip().lstrip("$").strip()
+            head = bare.split(" ", 1)[0] if bare else ""
+            if head not in _CMD_HEADS:
+                continue
+            for tok in _re.findall(r'[^\s"\']+\.(?:py|sh)', bare):
+                tok = tok.strip('"\'')
+                if "/" in tok or "\\" in tok:
+                    out.append(tok)
+    # ★同じ道筋は1度だけ★＝行そのものと囲みの両方に当たると二重になる
+    return list(dict.fromkeys(out))
+
+
+def _doc_file_exists(rel: str) -> bool:
+    """その道筋にファイルが在るか（絶対でもリポジトリ相対でも見る）。"""
+    import re as _re
+    p = str(rel or "").replace("\\", "/")
+    if _re.match(r"^[A-Za-z]:/", p) or p.startswith("/"):
+        return os.path.isfile(p)
+    return os.path.isfile(os.path.join(BASE, p.lstrip("./")))
 
 
 def skill_doc_problems(name: str, text: str, stopped, exists) -> list:
@@ -1518,19 +1576,17 @@ def skill_doc_problems(name: str, text: str, stopped, exists) -> list:
       **無人タスクだけ**の決まり（ロックを失うと黙って死ぬため）。
       対話セッションはロックを持たないので、素で呼ぶのが正しい。
     """
-    import re as _re
     out = []
-    for m in _re.finditer(r"python\s+(scripts/[A-Za-z0-9_]+\.py)", text):
-        rel = m.group(1)
+    for rel in _doc_paths(text):
         if not exists(rel):
-            out.append(f"スキル {name}: 手順書が無いスクリプトを指しています → {rel}")
+            out.append(f"{name}: 手順書が無いスクリプトを指しています → {rel}")
     for line in text.splitlines():
         if line.lstrip().startswith("#"):
             continue
         for st in stopped:
             if st in line and "を実行" in line:
                 out.append(
-                    f"スキル {name}: 止めたタスク {st} を実行するよう書いています")
+                    f"{name}: 止めたタスク {st} を実行するよう書いています")
     return out
 
 
@@ -1542,10 +1598,23 @@ _SKILL_MUST_CATCH = {
         "uchidokoro-fact-check を実行すること。\n",
     "文の途中に混ざっていても見つける":
         "まず uchidokoro-fact-check を実行してから次へ進む。\n",
+    # ★2026-09-01・Codexの指摘4★＝スキルの中心は .sh（絶対パス）なのに
+    #   `python scripts/*.py` の形しか見ていなかった。
+    "実在しない .sh を絶対パスで叩く":
+        'bash "D:/no_such_dir_xyz/codex_review.sh" a b\n',
+    "バッククォートで囲んだコマンドの中":
+        "実行は `python scripts/no_such_tool_xyz.py --selftest` です。\n",
+    "先頭が $ のコマンド":
+        "$ python scripts/no_such_tool_xyz.py\n",
 }
 # ★止めてはいけない形★
 _SKILL_MUST_PASS = {
     "実在するスクリプト": "```bash\npython scripts/audit_site.py\n```\n",
+    # ★道筋を含まない裸の名前は見ない★（どこにあるか分からないため）
+    "裸のファイル名（道筋なし）": "bash codex_review.sh ask.md out.txt\n",
+    # ★コマンドの形をしていない行は見ない★（文章の中の名前）
+    "文章の中でファイル名を挙げるだけ":
+        "むかしは no_such_tool_xyz.py を使っていた。\n",
     "止めたタスクの名前を「実行」以外で挙げるだけ":
         "uchidokoro-fact-check は2026-08-22に削除した。\n",
     "コメント行の中":
@@ -1629,18 +1698,29 @@ def check_37_skill_vs_code(machines: list) -> list[str]:
         ng.append("★この見張り自身の試験が落ちています★: "
                   + " / ".join(x.strip() for x in _b37.getvalue().split(chr(10))
                                if x.strip().startswith("★NG")))
-    conf = _skill_contract(base)
-    if not conf:
-        return ng                      # 契約が無ければ検査対象外（黙って通す）
+    conf, _conf_ng = _skill_contract(base)
+    if _conf_ng:
+        # ★黙って通さない★（2026-09-01・Codexの指摘3）＝
+        #   契約が消えた・壊れた状態は、見張りが効いていない状態そのもの。
+        ng.append(_conf_ng)
+        return ng
     stopped = tuple(conf.get("stopped") or ())
     live = tuple(conf.get("live") or ())
     # ★★対話セッション用の手順書（スキル）も見る★★（2026-09-01）
     #   ★スケジュールタスクとは置き場も決まりも違う★ので別に数える。
-    #   ・置き場はリポジトリの中（.claude/ は gitignore 済み＝公開されない）
+    #   ・置き場はリポジトリの**外**（無人タスクの手順書の隣）
+    #     ★中に置くと clone や写しで必ず落ちる★（2026-09-01に実際にそうなった）
     #   ・★Codexの呼び方の検査は当てない★＝無人タスクだけの決まり
     #     （ロックを失うと黙って死ぬ）。対話セッションはロックを持たない。
+    # ★置き場は無人タスクの手順書の隣★（2026-09-01）
+    #   ★リポジトリの中に置いてはいけない★＝
+    #   clone や障害注入の写しには `.claude/` が無い（gitignore済み）ので、
+    #   ★監査が写しの中を見ると必ず落ちる★（実際に ci_repro が赤くなった）。
+    #   ここは `base`（= ~/.claude/scheduled-tasks）から組み立てるので、
+    #   公開されるこのファイルに置き場を書かない決まりも保たれる。
+    _skills_dir = os.path.join(os.path.dirname(base), "skills")
     for skill in tuple(conf.get("skills") or ()):
-        f = os.path.join(BASE, ".claude", "skills", skill, "SKILL.md")
+        f = os.path.join(_skills_dir, skill, "SKILL.md")
         if not os.path.isfile(f):
             ng.append(f"スキル {skill}: 契約に載っているのに手順書がありません")
             continue
@@ -1651,8 +1731,7 @@ def check_37_skill_vs_code(machines: list) -> list[str]:
             ng.append(f"スキル {skill}: 手順書を読めません（{e}）")
             continue
         ng.extend(skill_doc_problems(
-            skill, text, stopped,
-            lambda rel: os.path.isfile(os.path.join(BASE, rel))))
+            f"スキル {skill}", text, stopped, _doc_file_exists))
     for task in live:
         f = os.path.join(base, task, "SKILL.md")
         if not os.path.isfile(f):
@@ -1666,16 +1745,10 @@ def check_37_skill_vs_code(machines: list) -> list[str]:
         except Exception as e:                    # noqa: BLE001
             ng.append(f"{task}: 手順書を読めません（{e}）")
             continue
-        for m in re.finditer(r"python\s+(scripts/[A-Za-z0-9_]+\.py)", text):
-            rel = m.group(1)
-            if not os.path.isfile(os.path.join(BASE, rel)):
-                ng.append(f"{task}: 手順書が無いスクリプトを指しています → {rel}")
-        for line in text.splitlines():
-            if line.lstrip().startswith("#"):
-                continue
-            for st in stopped:
-                if st in line and "を実行" in line:
-                    ng.append(f"{task}: 止めたタスク {st} を実行するよう書いています")
+        # ★★スキルと同じ判定関数を通す★★（2026-09-01・Codexの指摘4）
+        #   ★直す前は別実装だった★ので、対照実験がこちらを一度も試さず、
+        #   live 側の判定を壊しても緑のままだった（罠③）。
+        ng.extend(skill_doc_problems(task, text, stopped, _doc_file_exists))
         # ★★Codexを素で呼んでいないか★★（2026-08-21・Codexの設計レビュー）
         #   ★実際に起きていたこと★＝更新タスクの手順書は、上のほうで
         #   「必ず codex_with_lock.sh 経由」と決めておきながら、
@@ -2006,6 +2079,24 @@ def _raw_vote_counts(src: str, fname: str) -> list:
     return sorted(set(out))
 
 
+def _check_39_selftest() -> list:
+    """★見張り39（票の数え方）自身の対照実験★＝失敗した項目を返す。
+
+    ★2026-09-01：`selftest()` へ繋いだ★（Codexの指摘5・罠㉞）＝
+      それまでは `check_39` の中でだけ動いていた。
+      ★壊し方の道具は対象を `--selftest` で呼ぶ★ので、
+      監査39を黙らせる壊し方を足しても**一度も捕まえられなかった**。
+    """
+    bad = []
+    for _name, _code in _WATCHDOG_MUST_FIND.items():
+        if not _raw_vote_counts(_code, "（見張りの試験）"):
+            bad.append(f"見つけられない: {_name}")
+    for _name, _code in _WATCHDOG_MUST_PASS.items():
+        if _raw_vote_counts(_code, "（見張りの試験）"):
+            bad.append(f"誤って止める: {_name}")
+    return bad
+
+
 def check_39_vote_counting(machines: list) -> list[str]:
     """★独立した票の数え方が、正本を通っているか★（2026-08-14）
 
@@ -2030,14 +2121,8 @@ def check_39_vote_counting(machines: list) -> list[str]:
     # ★見張り自身が働いているか、1つずつ確かめる★（2026-08-14・依頼200のP3）
     #   件数だけを見ると、1つを二重に数えて1つを見逃しても合格してしまう。
     #   ★見つけるべき形★と★見つけてはいけない形★の両方を並べる。
-    for _name, _code in _WATCHDOG_MUST_FIND.items():
-        if not _raw_vote_counts(_code, "（見張りの試験）"):
-            ngs.append(f"★票の数え方の見張りが働いていません★（{_name} を"
-                       "見つけられません）")
-    for _name, _code in _WATCHDOG_MUST_PASS.items():
-        if _raw_vote_counts(_code, "（見張りの試験）"):
-            ngs.append(f"★票の数え方の見張りが行き過ぎています★（{_name} を"
-                       "誤って止めます）")
+    for b in _check_39_selftest():
+        ngs.append("★票の数え方の見張り★ " + b)
     return ngs
 
 
@@ -3503,6 +3588,39 @@ def selftest() -> int:
     t("★★見張り54が、読者に届くものを実際に読めている★★"
       "／★文を直接渡す試験だけでは、読み取りを外しても緑になる★",
       not _check_54_scan_selftest())
+    # ★★契約の状態を見分けられるか★★（2026-09-01・Codexの指摘3）
+    #   ★直す前は「無い／壊れている／辞書でない」を全部まとめていた★ので、
+    #   契約が消えても壊れても監査37が黙って通った＝見張りが静かに消える。
+    #   ★一時の置き場で試す★（本番の契約は触らない・罠㉗）。
+    import json as _js37, tempfile as _tf37
+    _d37 = _tf37.mkdtemp(prefix="contract_")
+    _p37 = os.path.join(_d37, "tasks-contract.json")
+    t("★契約が無ければ止める★（置き場はあるのに契約が無い）",
+      _skill_contract(_d37)[1] != "")
+    with open(_p37, "w", encoding="utf-8") as _f37:
+        _f37.write("{壊れた")
+    t("★契約が読めなければ止める★", _skill_contract(_d37)[1] != "")
+    with open(_p37, "w", encoding="utf-8") as _f37:
+        _f37.write("[]")
+    t("★契約の形が違えば止める★（いちばん外側が辞書でない）",
+      _skill_contract(_d37)[1] != "")
+    with open(_p37, "w", encoding="utf-8") as _f37:
+        _js37.dump({"live": [], "stopped": [], "skills": []}, _f37)
+    t("　正しい契約なら通す（中身が0件でも正常）",
+      _skill_contract(_d37) == ({"live": [], "stopped": [], "skills": []}, ""))
+    with open(_p37, "w", encoding="utf-8") as _f37:
+        _js37.dump({"live": ["a"]}, _f37)
+    t("　中身のある契約もそのまま返す",
+      _skill_contract(_d37)[0].get("live") == ["a"]
+      and _skill_contract(_d37)[1] == "")
+    import shutil as _sh37
+    _sh37.rmtree(_d37, ignore_errors=True)
+
+    # ★★2026-09-01：39をここに足す★★（Codexの指摘5）
+    #   ★票の数え方は「独立2出典」の土台★＝読者に届く情報側の穴。
+    for x in _check_39_selftest():
+        t("★見張り39★ " + x, False)
+    t("★★見張り39（票の数え方）が働いている★★", not _check_39_selftest())
     # ★★2026-09-01：37をここに足す★★
     #   ★足し忘れると、監査本体にだけ対照実験があっても
     #     `--selftest` からは一度も動かない★（54で同じことをした）。

@@ -197,13 +197,23 @@ def _warn_unreported() -> None:
     print()
 
 
-# ★早見表（ハブ4ページ）の材料★（2026-09-01）
-#   machines.json … 並び順と各機種の値
-#   machine-details/ … 記事側の値を拾う
-#   hub_prose.json … ページの説明文
-#   guide-* … 手で書き換えたのを捕まえる
-_HUB_SRC = ("assets/data/machines.json", "assets/data/machine-details/",
-            "scripts/hub_prose.json", "guide-")
+# ★早見表（ハブ4ページ）が古くなり得る変更★（2026-09-01）
+#   ★★中身だけでなく、作る側も入れる★★（Codexの指摘1）＝
+#   直す前は材料のJSONだけ見ていたので、★ひな型・並べ方・区分の判定を
+#   変えてページを作り直さなくても、点検が呼ばれなかった★。
+#
+#   machines.json      … 材料（load_rows が読む唯一のデータ）
+#   scripts/hub_prose.json … 材料（ページの説明文）
+#   build_hub_pages.py … 作る側そのもの
+#   page_decision.py   … machine_class() を使うので出力が変わる
+#   safe_json.py       … 材料の読み取り
+#   guide-*            … 手で書き換えたのを捕まえる
+#
+#   ★machine-details/ は入れない★＝この生成器は読んでいない
+#   （直す前のコメントは事実と違っていた）。
+_HUB_SRC = ("assets/data/machines.json", "scripts/hub_prose.json",
+            "scripts/build_hub_pages.py", "scripts/page_decision.py",
+            "scripts/safe_json.py", "guide-")
 
 
 def touches_hub(paths) -> bool:
@@ -219,6 +229,24 @@ def touches_hub(paths) -> bool:
             if p == w or p.startswith(w):
                 return True
     return False
+
+
+def hub_check_problem(changed, run) -> str:
+    """★早見表の点検が要るなら流して、駄目なら理由を返す★（2026-09-01）
+
+    run(引数の並び) -> (終了コード, 出力)  … 試験では差し替える
+
+    ★切り出した理由★（Codexの指摘2）＝
+      直す前は引き金（`touches_hub`）の試験しか無かったので、
+      ★関所の本体から呼び出しを丸ごと外しても、試験は緑のまま★だった。
+      いまは `selftest` が「本体がこれを呼んでいるか」も見る。
+    """
+    if not touches_hub(changed):
+        return ""
+    code, out = run(["build_hub_pages.py", "--check"])
+    for line in str(out or "").strip().splitlines():
+        print("   " + line)
+    return "早見表が古いまま" if code != 0 else ""
 
 
 def touches_articles(paths) -> bool:
@@ -514,10 +542,20 @@ def _selftest() -> int:
     #   audit_site / crosscheck_gates とも素通り）。
     t("★早見表：並べ替えたら見る★",
       touches_hub(["assets/data/machines.json"]) is True)
-    t("　記事データを触ったときも見る",
-      touches_hub(["assets/data/machine-details/hokuto.json"]) is True)
     t("　説明文を触ったときも見る",
       touches_hub(["scripts/hub_prose.json"]) is True)
+    # ★★作る側の変更でも見る★★（2026-09-01・Codexの指摘1）＝
+    #   直す前は材料のJSONだけ見ていたので、ひな型・並べ方・区分の判定を
+    #   変えてページを作り直さなくても、点検が呼ばれなかった。
+    t("★早見表：作る側そのものを変えたら見る★",
+      touches_hub(["scripts/build_hub_pages.py"]) is True)
+    t("★早見表：区分の判定を変えたら見る★",
+      touches_hub(["scripts/page_decision.py"]) is True)
+    t("　材料の読み取りを変えたときも見る",
+      touches_hub(["scripts/safe_json.py"]) is True)
+    # ★この生成器は機種の記事データを読んでいない★（実装で確認）
+    t("★早見表：記事データは材料ではないので見ない★",
+      touches_hub(["assets/data/machine-details/hokuto.json"]) is False)
     t("　早見表そのものを手で書き換えたときも見る",
       touches_hub(["guide-ichiran.html"]) is True)
     t("★早見表：関係ない変更では見ない★",
@@ -529,6 +567,23 @@ def _selftest() -> int:
       touches_hub(["assets\\data\\machines.json"]) is True)
     t("　空やNoneが混ざっても落ちない",
       touches_hub([None, "", "guide-ichiran.html"]) is True)
+
+    # ★★関所の本体が、点検を本当に呼んでいるか★★（2026-09-01・Codexの指摘2）
+    #   ★引き金の試験だけでは、呼び出しを外したことに気づけない★
+    import inspect as _insp37
+    _msrc = _insp37.getsource(main)
+    t("★早見表：関所の本体が点検を呼んでいる★"
+      "／★呼び出しを外しても引き金の試験だけでは捕まらない★",
+      "hub_check_problem(" in _msrc)
+    t("　点検が要らない変更では流さない（流したら失敗にする）",
+      hub_check_problem(["README.md"],
+                        lambda a: (1, "★呼ばれてはいけません★")) == "")
+    t("★早見表：点検が赤なら push を止める★",
+      hub_check_problem(["assets/data/machines.json"],
+                        lambda a: (1, "古い")) != "")
+    t("　点検が緑なら止めない",
+      hub_check_problem(["assets/data/machines.json"],
+                        lambda a: (0, "一致")) == "")
 
     # ★★照合を求める範囲★★（2026-08-28・実際に push が止まった）
     t("★★記事を書き換えたコミットには照合を求める★★",
@@ -717,16 +772,17 @@ def main() -> int:
     #
     #   ★「どの自己試験が拾うか」に頼らない★＝作り直したら中身が変わる、
     #   を直接見る（0.3秒）。実測で、既存の自己試験3本はこれを素通りした。
-    if touches_hub(changed):
-        _hb = subprocess.run(
-            [sys.executable, os.path.join(BASE, "scripts",
-                                          "build_hub_pages.py"), "--check"],
+    def _hub_run(args):
+        r = subprocess.run(
+            [sys.executable, os.path.join(BASE, "scripts", args[0])]
+            + list(args[1:]),
             cwd=BASE, capture_output=True, text=True, encoding="utf-8",
             errors="replace", env=env)
-        for _l in (_hb.stdout or "").strip().splitlines():
-            print("   " + _l)
-        if _hb.returncode != 0:
-            ng.append("早見表が古いまま")
+        return r.returncode, (r.stdout or "")
+
+    _hub_ng = hub_check_problem(changed, _hub_run)
+    if _hub_ng:
+        ng.append(_hub_ng)
     for name, cmd in (("crosscheck_gates", ["crosscheck_gates.py"]),
                       ("audit_site", ["audit_site.py"])):
         r = subprocess.run([sys.executable, os.path.join(BASE, "scripts", *cmd)],
