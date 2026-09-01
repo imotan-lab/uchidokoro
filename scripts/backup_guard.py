@@ -75,6 +75,10 @@ ALLOW_BASENAMES = {
     #   （どの機種を見たかの記憶がなくなり、二度と出てこない）。
     #   中身は機種名・公開ページのURL・待った日数だけで、認証情報を含まない。
     "uchidokoro_add_machine_pending.json",
+    # ★どのタスクが動いていて、どれを止めたかの契約★（2026-09-01追加）
+    #   ★これが失われると監査37が「契約が無い」として黙って通る★
+    #   ＝見張りが静かに消える。中身はタスク名とスキル名だけ。
+    "tasks-contract.json",
     # 自動タスクの手順書（{taskId}_SKILL.md の形で保存する）
     "uchidokoro-fact-check_SKILL.md",
     "SKILL.md",

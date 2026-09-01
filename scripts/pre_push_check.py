@@ -197,6 +197,30 @@ def _warn_unreported() -> None:
     print()
 
 
+# ★早見表（ハブ4ページ）の材料★（2026-09-01）
+#   machines.json … 並び順と各機種の値
+#   machine-details/ … 記事側の値を拾う
+#   hub_prose.json … ページの説明文
+#   guide-* … 手で書き換えたのを捕まえる
+_HUB_SRC = ("assets/data/machines.json", "assets/data/machine-details/",
+            "scripts/hub_prose.json", "guide-")
+
+
+def touches_hub(paths) -> bool:
+    """★早見表が古くなり得る変更か★（2026-09-01）
+
+    ★実際に起きたこと★＝並べ替えたのに `--legacy` を流さず、
+    早見表が古いまま残り、CIが3回続けて赤くなった。
+    ★手元では何も止まらなかった★ので、ここで見る。
+    """
+    for p in paths:
+        p = str(p or "").replace("\\", "/")
+        for w in _HUB_SRC:
+            if p == w or p.startswith(w):
+                return True
+    return False
+
+
 def touches_articles(paths) -> bool:
     """★読者に出る記事を書き換えているか★（照合を求める範囲）
 
@@ -484,6 +508,28 @@ def _selftest() -> int:
           "／★新しい枝を送るときに、これで検査から外せた★",
           len(_all) > 1 and len(_one) >= 1)
 
+    # ★★早見表が古くなり得る変更か★★（2026-09-01新設）
+    #   ★実際に起きたこと★＝並べ替えたのに作り直さず、CIが3回赤くなった。
+    #   ★手元では1本も止めていなかった★（実測：build_hub_pages --selftest /
+    #   audit_site / crosscheck_gates とも素通り）。
+    t("★早見表：並べ替えたら見る★",
+      touches_hub(["assets/data/machines.json"]) is True)
+    t("　記事データを触ったときも見る",
+      touches_hub(["assets/data/machine-details/hokuto.json"]) is True)
+    t("　説明文を触ったときも見る",
+      touches_hub(["scripts/hub_prose.json"]) is True)
+    t("　早見表そのものを手で書き換えたときも見る",
+      touches_hub(["guide-ichiran.html"]) is True)
+    t("★早見表：関係ない変更では見ない★",
+      touches_hub(["scripts/pre_push_check.py", "README.md"]) is False)
+    t("★早見表：似た名前に釣られない★",
+      touches_hub(["assets/data/machines-old.json",
+                   "guides/x.html", "myhub_prose.json"]) is False)
+    t("　Windowsの区切りでも見る",
+      touches_hub(["assets\\data\\machines.json"]) is True)
+    t("　空やNoneが混ざっても落ちない",
+      touches_hub([None, "", "guide-ichiran.html"]) is True)
+
     # ★★照合を求める範囲★★（2026-08-28・実際に push が止まった）
     t("★★記事を書き換えたコミットには照合を求める★★",
       touches_articles(["assets/data/machine-details/dmm_5086.json"]) is True)
@@ -663,6 +709,24 @@ def main() -> int:
             os.utime(_f, None)
         except OSError:
             pass                       # ★触れなくても検査は続ける★
+    # ★★早見表（ハブ4ページ）が古いままでないか★★（2026-09-01新設）
+    #   ★実際に起きたこと★＝machines.json を並べ替えたのに
+    #   `build_hub_pages.py --legacy` を流さず、早見表が古いまま残り、
+    #   ★CIが3回続けて赤くなった★（運営者にだけエラーメールが届く）。
+    #   ★手元では気づけなかった★＝この関所が見ていなかった。
+    #
+    #   ★「どの自己試験が拾うか」に頼らない★＝作り直したら中身が変わる、
+    #   を直接見る（0.3秒）。実測で、既存の自己試験3本はこれを素通りした。
+    if touches_hub(changed):
+        _hb = subprocess.run(
+            [sys.executable, os.path.join(BASE, "scripts",
+                                          "build_hub_pages.py"), "--check"],
+            cwd=BASE, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", env=env)
+        for _l in (_hb.stdout or "").strip().splitlines():
+            print("   " + _l)
+        if _hb.returncode != 0:
+            ng.append("早見表が古いまま")
     for name, cmd in (("crosscheck_gates", ["crosscheck_gates.py"]),
                       ("audit_site", ["audit_site.py"])):
         r = subprocess.run([sys.executable, os.path.join(BASE, "scripts", *cmd)],

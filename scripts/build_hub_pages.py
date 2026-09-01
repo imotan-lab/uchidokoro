@@ -780,6 +780,73 @@ def _build_legacy() -> int:
     return 0
 
 
+def stale_pages(built: dict, read) -> list:
+    """★どのページが古いか★だけを返す（読み書きしない・2026-09-01）。
+
+    built = {置き場: いまのデータから作った中身}
+    read(置き場) = repo にある中身（無ければ None）
+
+    ★無いページも「古い」に数える★＝
+      「作り直したら生まれる」＝いまの repo には無い、なので直す必要がある。
+      ★ここを「無ければ飛ばす」にすると、ページが消えた事故が素通りする★。
+    """
+    out = []
+    for rel in sorted(built):
+        got = read(rel)
+        if got is None:
+            out.append(f"{rel}（ありません）")
+        elif got != built[rel]:
+            out.append(rel)
+    return out
+
+
+def _check_legacy() -> int:
+    """★書かずに★、いまの早見表が古くなっていないかだけを見る（2026-09-01）。
+
+    ★`--legacy` と同じ材料・同じ関数で作って、repo の中身と比べるだけ★
+      ＝「作り直したら変わる」なら古い。
+    ★1ページでも描けなければ「分からない」ではなく止める★（fail-closed）＝
+      描けない状態で push すると、その晩の新台公開が丸ごと止まる。
+    """
+    import sys as _sys
+    _sys.path.insert(0, str(BASE / "scripts"))
+    import build_public_data as _bpd
+    import safe_json as _sj2
+
+    try:
+        if _bpd.claim_gate_enabled():
+            # ★ゲートが有効なら公開物は artifact 経路が作る★＝ここは見ない
+            print("裏取りゲートが有効なので、早見表の点検は行いません")
+            return 0
+    except Exception as e:                                   # noqa: BLE001
+        print(f"★裏取りゲートの設定が読めません: {e}★")
+        return 1
+
+    try:
+        rows = load_rows()
+        prose = _sj2.read_json(PROSE, expect=dict)
+        built, _d, _a = _build_pages(rows, prose)
+    except Exception as e:                                   # noqa: BLE001
+        print(f"★早見表を描けません: {type(e).__name__}: {e}★")
+        return 1
+
+    if len(built) != 4:
+        print(f"★4ページそろっていません（{sorted(built)}）★")
+        return 1
+
+    def _read(rel):
+        p = BASE / rel
+        return p.read_text(encoding="utf-8") if p.is_file() else None
+
+    stale = stale_pages(built, _read)
+    if stale:
+        print("★早見表が古いままです★ → " + " / ".join(stale))
+        print("  直し方: python scripts/build_hub_pages.py --legacy")
+        return 1
+    print("早見表4ページ: いまのデータと一致しています")
+    return 0
+
+
 def main(preview: bool = False, legacy: bool = False):
     """preview=True のときは .preview-site/ にだけ書く（公開されない写し）。
 
@@ -1037,6 +1104,26 @@ def selftest() -> int:
     t("シングルクォート属性の中も見る",
       hub_content_problems({"a.html": "<input placeholder='必ず勝てる'>"}, {}, *deny) != [])
 
+    # --- ★早見表が古いままかを見る（2026-09-01新設）★ ---
+    #   ★実際に起きたこと★＝並べ替えたのに作り直さず、CIが3回赤くなった。
+    #   実測で、既存の自己試験3本はこれを1本も見ていなかった。
+    _built = {"guide-a.html": "AAA", "guide-b.html": "BBB"}
+    t("早見表：そろっていれば何も言わない",
+      stale_pages(_built, lambda r: _built[r]) == [])
+    t("早見表：中身が違えば古いと言う",
+      stale_pages(_built, lambda r: "AAA" if r == "guide-a.html" else "ZZZ")
+      == ["guide-b.html"])
+    t("★早見表：ページが無いのも古いに数える★",
+      stale_pages(_built, lambda r: None if r == "guide-a.html" else "BBB")
+      == ["guide-a.html（ありません）"])
+    t("早見表：2ページとも違えば2件とも挙げる",
+      stale_pages(_built, lambda r: "ZZZ") == ["guide-a.html", "guide-b.html"])
+    t("★早見表：空文字と「無い」を混同しない★",
+      stale_pages({"guide-a.html": ""}, lambda r: None)
+      == ["guide-a.html（ありません）"])
+    t("早見表：中身が空同士なら古くない",
+      stale_pages({"guide-a.html": ""}, lambda r: "") == [])
+
     print(f"\n{ok}/{len(cases)} 合格")
     return 0 if ok == len(cases) else 1
 
@@ -1049,8 +1136,16 @@ if __name__ == "__main__":
     _p.add_argument("--legacy", action="store_true",
                     help="いま公開中のハブ4ページを作り直す"
                          "（裏取りゲートが有効なら実行しない）")
+    _p.add_argument("--check", action="store_true",
+                    help="★書かずに★早見表が古くなっていないかだけを見る"
+                         "（push前の関所が使う）")
     _p.add_argument("--selftest", action="store_true")
     _a = _p.parse_args()
+    if _a.check and (_a.preview or _a.legacy):
+        print("★--check は単独で使ってください★")
+        raise SystemExit(1)
+    if _a.check:
+        raise SystemExit(_check_legacy())
     if _a.preview and _a.legacy:
         print("★--preview と --legacy は同時に使えません★")
         raise SystemExit(1)

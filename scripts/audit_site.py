@@ -1504,6 +1504,91 @@ def _skill_contract(base: str) -> dict:
     return got if isinstance(got, dict) else {}
 
 
+def skill_doc_problems(name: str, text: str, stopped, exists) -> list:
+    """★対話セッション用の手順書（スキル）の食い違い★だけを返す。
+
+    読み書きしない（2026-09-01）＝
+      exists(rel) … そのスクリプトが在るか
+
+    ★見るのは2つ★
+      ①実在しないスクリプトを叩けと書いていないか
+      ②止めた（消した）タスクを実行しろと書いていないか
+
+    ★Codexの呼び方は見ない★＝`codex_with_lock.sh` 経由は
+      **無人タスクだけ**の決まり（ロックを失うと黙って死ぬため）。
+      対話セッションはロックを持たないので、素で呼ぶのが正しい。
+    """
+    import re as _re
+    out = []
+    for m in _re.finditer(r"python\s+(scripts/[A-Za-z0-9_]+\.py)", text):
+        rel = m.group(1)
+        if not exists(rel):
+            out.append(f"スキル {name}: 手順書が無いスクリプトを指しています → {rel}")
+    for line in text.splitlines():
+        if line.lstrip().startswith("#"):
+            continue
+        for st in stopped:
+            if st in line and "を実行" in line:
+                out.append(
+                    f"スキル {name}: 止めたタスク {st} を実行するよう書いています")
+    return out
+
+
+# ★スキルの手順書で「止めなければいけない」形★（2026-09-01）
+_SKILL_MUST_CATCH = {
+    "実在しないスクリプトを叩けと書いている":
+        "```bash\npython scripts/no_such_tool_xyz.py --selftest\n```\n",
+    "止めたタスクを実行しろと書いている":
+        "uchidokoro-fact-check を実行すること。\n",
+    "文の途中に混ざっていても見つける":
+        "まず uchidokoro-fact-check を実行してから次へ進む。\n",
+}
+# ★止めてはいけない形★
+_SKILL_MUST_PASS = {
+    "実在するスクリプト": "```bash\npython scripts/audit_site.py\n```\n",
+    "止めたタスクの名前を「実行」以外で挙げるだけ":
+        "uchidokoro-fact-check は2026-08-22に削除した。\n",
+    "コメント行の中":
+        "# uchidokoro-fact-check を実行すること（昔の書き方）\n",
+    "★Codexを素で呼ぶのは対話セッションでは正しい★":
+        "bash codex_review.sh ask.md out.txt 900 3 high\n",
+}
+
+
+def _check_37_selftest() -> list:
+    """★見張り37（スキルの手順書）自身の対照実験★＝失敗した項目を返す。
+
+    ★52・53・54と同じ形にしてある★＝
+      `selftest()` と監査本体の両方が、**同じ関数**を呼ぶ。
+    ★2026-09-01：はじめ監査本体にだけ置いて、`--selftest` に足し忘れた★
+      （壊し方の道具が「守られていません」と正しく報告した。
+        同じ足し忘れを 2026-08-26 に項目54でもやっている）。
+    """
+    stopped = ("uchidokoro-fact-check",)
+
+    def exists(rel):
+        return rel == "scripts/audit_site.py"
+
+    bad = []
+    for name, text in _SKILL_MUST_CATCH.items():
+        if not skill_doc_problems("x", text, stopped, exists):
+            bad.append(f"止められない: {name}")
+    for name, text in _SKILL_MUST_PASS.items():
+        if skill_doc_problems("x", text, stopped, exists):
+            bad.append(f"止めてはいけないのに止めた: {name}")
+    return bad
+
+
+def selftest_37() -> int:
+    """スキルの検査が、見逃すと言われた形を全部捕まえるか（表示つき）。"""
+    bad = _check_37_selftest()
+    n = len(_SKILL_MUST_CATCH) + len(_SKILL_MUST_PASS)
+    for b in bad:
+        print("  ★NG " + b)
+    print(f"{n - len(bad)}/{n} 合格")
+    return 1 if bad else 0
+
+
 def check_37_skill_vs_code(machines: list) -> list[str]:
     """★手順書が、いま無いものを指していないか★（2026-08-13新設）
 
@@ -1533,11 +1618,41 @@ def check_37_skill_vs_code(machines: list) -> list[str]:
     if not os.path.isdir(base):
         return []                      # 別PCなど。手順書が無いだけで止めない
     ng = []
+    # ★★見張り自身が働いているかを、毎回いっしょに確かめる★★（2026-09-01）
+    #   ★項目51・52・53と同じ理由★＝別コマンドにすると走らせ忘れる。
+    #   ★契約より前に置く★＝契約が無いPCでも、見張りの試験だけは通す。
+    import io as _io37, contextlib as _cl37
+    _b37 = _io37.StringIO()
+    with _cl37.redirect_stdout(_b37):
+        _sn37 = selftest_37()
+    if _sn37:
+        ng.append("★この見張り自身の試験が落ちています★: "
+                  + " / ".join(x.strip() for x in _b37.getvalue().split(chr(10))
+                               if x.strip().startswith("★NG")))
     conf = _skill_contract(base)
     if not conf:
-        return []                      # 契約が無ければ検査対象外（黙って通す）
+        return ng                      # 契約が無ければ検査対象外（黙って通す）
     stopped = tuple(conf.get("stopped") or ())
     live = tuple(conf.get("live") or ())
+    # ★★対話セッション用の手順書（スキル）も見る★★（2026-09-01）
+    #   ★スケジュールタスクとは置き場も決まりも違う★ので別に数える。
+    #   ・置き場はリポジトリの中（.claude/ は gitignore 済み＝公開されない）
+    #   ・★Codexの呼び方の検査は当てない★＝無人タスクだけの決まり
+    #     （ロックを失うと黙って死ぬ）。対話セッションはロックを持たない。
+    for skill in tuple(conf.get("skills") or ()):
+        f = os.path.join(BASE, ".claude", "skills", skill, "SKILL.md")
+        if not os.path.isfile(f):
+            ng.append(f"スキル {skill}: 契約に載っているのに手順書がありません")
+            continue
+        try:
+            with open(f, encoding="utf-8") as _fh:
+                text = _fh.read()
+        except Exception as e:                    # noqa: BLE001
+            ng.append(f"スキル {skill}: 手順書を読めません（{e}）")
+            continue
+        ng.extend(skill_doc_problems(
+            skill, text, stopped,
+            lambda rel: os.path.isfile(os.path.join(BASE, rel))))
     for task in live:
         f = os.path.join(base, task, "SKILL.md")
         if not os.path.isfile(f):
@@ -3388,6 +3503,13 @@ def selftest() -> int:
     t("★★見張り54が、読者に届くものを実際に読めている★★"
       "／★文を直接渡す試験だけでは、読み取りを外しても緑になる★",
       not _check_54_scan_selftest())
+    # ★★2026-09-01：37をここに足す★★
+    #   ★足し忘れると、監査本体にだけ対照実験があっても
+    #     `--selftest` からは一度も動かない★（54で同じことをした）。
+    for x in _check_37_selftest():
+        t("★見張り37★ " + x, False)
+    t("★★見張り37（スキルの手順書が古くなっていないか）が働いている★★",
+      not _check_37_selftest())
     t("★★試験の数え方の見張りが働いている★★（項目51）",
       not check_51_selftest_tally([]))
     ng = [n for n, ok in results if not ok]

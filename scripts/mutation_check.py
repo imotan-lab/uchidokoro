@@ -56,6 +56,48 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #   ★同じ壊し方を戻さないこと★＝いまの取り決めでは必ず「捕まえられない」
 #   と出て、本物の見落としが埋もれる。
 MUTATIONS = [
+    # ─── 2026-09-01・早見表が古いままかを見る関所 ─────────────
+    {
+        "why": "★早見表が古いことを見つけない"
+               "（並べ替えたのに作り直さず、CIが赤いまま公開される）★",
+        "file": "scripts/build_hub_pages.py",
+        "before": "        elif got != built[rel]:",
+        "after": "        elif False:",
+        "run": ["scripts/build_hub_pages.py"],
+    },
+    {
+        "why": "★早見表のページが消えたのを見逃す"
+               "（作り直したら生まれるページを『無いだけ』で通す）★",
+        "file": "scripts/build_hub_pages.py",
+        "before": '            out.append(f"{rel}（ありません）")',
+        "after": "            pass",
+        "run": ["scripts/build_hub_pages.py"],
+    },
+    {
+        "why": "★並べ替えても早見表を見に行かない"
+               "（関所が引き金を引かず、昨日と同じことが起きる）★",
+        "file": "scripts/pre_push_check.py",
+        "before": "            if p == w or p.startswith(w):",
+        "after": "            if False:",
+        "run": ["scripts/pre_push_check.py"],
+    },
+    # ─── 2026-09-01・対話セッション用スキルの見張り ────────────
+    {
+        "why": "★スキルが止めたタスクを実行しろと書いていても通す"
+               "（消したタスクの手順が生き返る）★",
+        "file": "scripts/audit_site.py",
+        "before": '\n            if st in line and "を実行" in line:',
+        "after": "\n            if False:",
+        "run": ["scripts/audit_site.py"],
+    },
+    {
+        "why": "★スキルが実在しないスクリプトを指していても通す"
+               "（手順書が静かに古くなる）★",
+        "file": "scripts/audit_site.py",
+        "before": "        if not exists(rel):",
+        "after": "        if False:",
+        "run": ["scripts/audit_site.py"],
+    },
     {
         "why": "★見せた日の控えを共有の state.json に戻す"
                "（別の処理の更新を、古い内容で上書きする）★",
