@@ -705,10 +705,13 @@ def _selftest() -> int:
     # ★★本体を1回通して、呼ばれることと失敗が伝わることを見る★★
     #   （2026-09-01・Codexのレビュー31の指摘1）＝
     #   順序の検査だけでは `if False:` で囲む壊し方などを捕まえられない。
-    for _x in _check_hub_wiring():
+    # ★1度だけ呼ぶ★（2026-09-02・Codexの指摘）＝
+    #   本体を通す処理なので、2回呼ぶと副作用も2回。
+    _hw = _check_hub_wiring()
+    for _x in _hw:
         t("★関所の配線★ " + _x, False)
     t("★★関所の本体を1回通すと、早見表の点検が呼ばれ、失敗が伝わる★★",
-      not _check_hub_wiring())
+      not _hw)
     t("　点検が要らない変更では流さない（流したら失敗にする）",
       hub_check_problem(["README.md"],
                         lambda a: (1, "★呼ばれてはいけません★")) == "")

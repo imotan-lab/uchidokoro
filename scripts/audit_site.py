@@ -1670,7 +1670,14 @@ def _check_37_wiring() -> list:
     import tempfile as _tf
 
     bad = []
-    d = _tf.mkdtemp(prefix="wiring_")
+    # ★★自分の一時フォルダの「中」に置き場を作る★★（2026-09-02・Codexの指摘）
+    #   ★直す前は一時領域の直下に `skills` を作って消していた★＝
+    #   共通の名前なので、同名のものがあれば巻き込む（しかも復元できない）。
+    #   本体は `base` の**隣**を見るので、`base` を自分の中に作れば
+    #   隣も自分の中になる。
+    _root39 = _tf.mkdtemp(prefix="wiring_")
+    d = os.path.join(_root39, "scheduled-tasks")
+    os.makedirs(d, exist_ok=True)
     try:
         # ── live 側 ──
         os.makedirs(os.path.join(d, "test-live"), exist_ok=True)
@@ -1723,10 +1730,9 @@ def _check_37_wiring() -> list:
                 os.environ.pop("UCHIDOKORO_TASKS_DIR", None)
             else:
                 os.environ["UCHIDOKORO_TASKS_DIR"] = keep
-        _sh.rmtree(os.path.join(os.path.dirname(d), "skills"),
-                   ignore_errors=True)
     finally:
-        _sh.rmtree(d, ignore_errors=True)
+        # ★消すのは自分が作った一時フォルダだけ★
+        _sh.rmtree(_root39, ignore_errors=True)
     return bad
 
 
@@ -3784,33 +3790,41 @@ def selftest() -> int:
       _skill_contract(_d37)[1] == "")
     # ★★置き場ごと消えたときに黙らない★★（Codexのレビュー30の指摘3）
     import tempfile as _tf38
-    _gone37 = os.path.join(_tf38.mkdtemp(prefix="gone_"), "no_such_dir")
+    # ★親も消す★（2026-09-02・Codexの指摘）＝空フォルダが残っていた
+    _gone_root = _tf38.mkdtemp(prefix="gone_")
+    _gone37 = os.path.join(_gone_root, "no_such_dir")
     t("　置き場が無いときは、ふだんは止めない（別PC・CI）",
       check_37_skill_vs_code([], required=False) is not None
       and _no_dir_ok(_gone37, False))
     t("★置き場が無いのを必須モードでは止める★（運用PCで消えたら黙らない）",
       _no_dir_ok(_gone37, True) is False)
+    import shutil as _sh38
+    _sh38.rmtree(_gone_root, ignore_errors=True)
     import shutil as _sh37
     _sh37.rmtree(_d37, ignore_errors=True)
 
     # ★★2026-09-01：39をここに足す★★（Codexの指摘5）
     #   ★票の数え方は「独立2出典」の土台★＝読者に届く情報側の穴。
-    for x in _check_39_selftest():
+    _w39 = _check_39_selftest()
+    for x in _w39:
         t("★見張り39★ " + x, False)
-    t("★★見張り39（票の数え方）が働いている★★", not _check_39_selftest())
+    t("★★見張り39（票の数え方）が働いている★★", not _w39)
     # ★★2026-09-01：37をここに足す★★
     #   ★足し忘れると、監査本体にだけ対照実験があっても
     #     `--selftest` からは一度も動かない★（54で同じことをした）。
     # ★★配線の経路試験★★（2026-09-01・Codexのレビュー31の指摘2）
     #   ★共通関数の単体試験だけでは、呼び出し行を消しても緑★（罠③）。
-    for x in _check_37_wiring():
+    # ★1度だけ呼ぶ★（2026-09-02・Codexの指摘）＝
+    #   一時フォルダを作って消す処理なので、2回呼ぶと副作用も2回。
+    _w37 = _check_37_wiring()
+    for x in _w37:
         t("★見張り37の配線★ " + x, False)
-    t("★★見張り37が、live とスキルの両方に本当に繋がっている★★",
-      not _check_37_wiring())
-    for x in _check_37_selftest():
+    t("★★見張り37が、live とスキルの両方に本当に繋がっている★★", not _w37)
+    _s37 = _check_37_selftest()
+    for x in _s37:
         t("★見張り37★ " + x, False)
     t("★★見張り37（スキルの手順書が古くなっていないか）が働いている★★",
-      not _check_37_selftest())
+      not _s37)
     t("★★試験の数え方の見張りが働いている★★（項目51）",
       not check_51_selftest_tally([]))
     ng = [n for n, ok in results if not ok]
