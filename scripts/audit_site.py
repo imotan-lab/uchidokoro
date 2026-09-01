@@ -1484,6 +1484,11 @@ def check_55_plain_style(machines: list) -> list[str]:
     return []
 
 
+# ★タスクの契約に必ず要る鍵★（2026-09-01・Codexのレビュー30の指摘2）
+#   ★1つでも欠けたら、その分の監査が黙って消える★
+_CONTRACT_KEYS = ("live", "stopped", "skills")
+
+
 def _skill_contract(base: str):
     """★どのタスクが動いていて、どれを止めたか★を外の設定から読む。
 
@@ -1512,6 +1517,21 @@ def _skill_contract(base: str):
     if not isinstance(got, dict):
         return {}, ("★タスクの契約の形が違います★"
                     "（いちばん外側が辞書ではありません）")
+    # ★★3つの鍵がそろっていること★★（2026-09-01・Codexのレビュー30の指摘2）
+    #   ★直す前は「いちばん外側が辞書か」しか見ていなかった★ので、
+    #   `skills` の鍵を1つ消すだけで**スキルの監査が丸ごと黙った**
+    #   （呼び手が `conf.get("skills") or ()` で空として扱うため）。
+    #   ★空の正しい契約は `{}` ではなく
+    #     `{"live": [], "stopped": [], "skills": []}`★
+    missing = [k for k in _CONTRACT_KEYS if k not in got]
+    if missing:
+        return {}, f"★タスクの契約に鍵がありません★（{missing}）"
+    bad = [k for k in _CONTRACT_KEYS
+           if not isinstance(got[k], list)
+           or any(not isinstance(x, str) or not x.strip() for x in got[k])]
+    if bad:
+        return {}, (f"★タスクの契約の中身の形が違います★（{bad} は"
+                    "中身のある文字列の並びでなければいけません）")
     return got, ""
 
 
@@ -1624,6 +1644,23 @@ _SKILL_MUST_PASS = {
 }
 
 
+def _no_dir_ok(fake_base: str, required: bool) -> bool:
+    """★置き場が無いときの振る舞いだけを試す★（2026-09-01）
+
+    返り値 True＝止めない ／ False＝止める
+    ★環境変数で置き場を差し替えて、本物の置き場には触らない★
+    """
+    keep = os.environ.get("UCHIDOKORO_TASKS_DIR")
+    os.environ["UCHIDOKORO_TASKS_DIR"] = fake_base
+    try:
+        return check_37_skill_vs_code([], required=required) == []
+    finally:
+        if keep is None:
+            os.environ.pop("UCHIDOKORO_TASKS_DIR", None)
+        else:
+            os.environ["UCHIDOKORO_TASKS_DIR"] = keep
+
+
 def _check_37_selftest() -> list:
     """★見張り37（スキルの手順書）自身の対照実験★＝失敗した項目を返す。
 
@@ -1658,7 +1695,7 @@ def selftest_37() -> int:
     return 1 if bad else 0
 
 
-def check_37_skill_vs_code(machines: list) -> list[str]:
+def check_37_skill_vs_code(machines: list, required: bool = False) -> list[str]:
     """★手順書が、いま無いものを指していないか★（2026-08-13新設）
 
     ★なぜ要るか★（実際に起きたこと）
@@ -1685,7 +1722,14 @@ def check_37_skill_vs_code(machines: list) -> list[str]:
     base = os.environ.get("UCHIDOKORO_TASKS_DIR") or os.path.join(
         os.path.expanduser("~"), ".claude", "scheduled-tasks")
     if not os.path.isdir(base):
-        return []                      # 別PCなど。手順書が無いだけで止めない
+        # ★★別PCと運用PCを区別する★★（2026-09-01・Codexのレビュー30の指摘3）
+        #   ふだんは「手順書が無いだけ」で止めない（別PC・CI）。
+        #   ★ローカルの関所からは required=True で呼ぶ★＝
+        #   運用PCで置き場ごと消えたときに黙らないため。
+        if required:
+            return ["★タスクの手順書の置き場がありません★"
+                    "（この機械では在るはずです＝見張りが効いていません）"]
+        return []
     ng = []
     # ★★見張り自身が働いているかを、毎回いっしょに確かめる★★（2026-09-01）
     #   ★項目51・52・53と同じ理由★＝別コマンドにすると走らせ忘れる。
@@ -3609,10 +3653,41 @@ def selftest() -> int:
     t("　正しい契約なら通す（中身が0件でも正常）",
       _skill_contract(_d37) == ({"live": [], "stopped": [], "skills": []}, ""))
     with open(_p37, "w", encoding="utf-8") as _f37:
-        _js37.dump({"live": ["a"]}, _f37)
+        _js37.dump({"live": ["a"], "stopped": [], "skills": []}, _f37)
     t("　中身のある契約もそのまま返す",
       _skill_contract(_d37)[0].get("live") == ["a"]
       and _skill_contract(_d37)[1] == "")
+    # ★★鍵が欠けたら止める★★（2026-09-01・Codexのレビュー30の指摘2）
+    #   ★直す前は外側が辞書かしか見ていなかった★ので、
+    #   `skills` の鍵を1つ消すだけでスキルの監査が丸ごと黙った。
+    for _k37 in _CONTRACT_KEYS:
+        _c37 = {"live": [], "stopped": [], "skills": []}
+        del _c37[_k37]
+        with open(_p37, "w", encoding="utf-8") as _f37:
+            _js37.dump(_c37, _f37)
+        t(f"★契約の鍵が1つ欠けたら止める★（{_k37}）",
+          _skill_contract(_d37)[1] != "")
+    with open(_p37, "w", encoding="utf-8") as _f37:
+        _js37.dump({"live": "a", "stopped": [], "skills": []}, _f37)
+    t("★契約の値が並びでなければ止める★", _skill_contract(_d37)[1] != "")
+    with open(_p37, "w", encoding="utf-8") as _f37:
+        _js37.dump({"live": [1], "stopped": [], "skills": []}, _f37)
+    t("★契約の中身が文字列でなければ止める★", _skill_contract(_d37)[1] != "")
+    with open(_p37, "w", encoding="utf-8") as _f37:
+        _js37.dump({"live": ["  "], "stopped": [], "skills": []}, _f37)
+    t("★契約の中身が空白だけでも止める★", _skill_contract(_d37)[1] != "")
+    with open(_p37, "w", encoding="utf-8") as _f37:
+        _f37.write("{}")
+    t("★空の辞書は「正しい契約」ではない★（鍵がそろっていない）",
+      _skill_contract(_d37)[1] != "")
+    # ★★置き場ごと消えたときに黙らない★★（Codexのレビュー30の指摘3）
+    import tempfile as _tf38
+    _gone37 = os.path.join(_tf38.mkdtemp(prefix="gone_"), "no_such_dir")
+    t("　置き場が無いときは、ふだんは止めない（別PC・CI）",
+      check_37_skill_vs_code([], required=False) is not None
+      and _no_dir_ok(_gone37, False))
+    t("★置き場が無いのを必須モードでは止める★（運用PCで消えたら黙らない）",
+      _no_dir_ok(_gone37, True) is False)
     import shutil as _sh37
     _sh37.rmtree(_d37, ignore_errors=True)
 
@@ -3637,6 +3712,19 @@ def selftest() -> int:
     return 1 if ng else 0
 
 def main():
+    # ★★スキル・手順書の監査だけを回す入口★★
+    #   （2026-09-01・Codexのレビュー30の指摘3）
+    #   ★ローカルの関所は記事の変更が無くてもこれを流す★＝
+    #   サイト監査は重いので全部は流せないが、ここは一瞬で終わる。
+    #   `--required` を付けると「置き場が無い」も赤になる（運用PC用）。
+    if "--skill-audit" in sys.argv:
+        _req = "--required" in sys.argv
+        _ngs = check_37_skill_vs_code([], required=_req)
+        for _x in _ngs:
+            print("❌ " + _x)
+        if not _ngs:
+            print("手順書の監査: 問題ありません")
+        sys.exit(1 if _ngs else 0)
     # ★見張り自身の対照実験だけを回す★（2026-08-24）
     if "--selftest" in sys.argv:
         # ★戻り値ではなく終了コードで返す★（2026-08-24・自分で踏んだ）

@@ -2713,8 +2713,15 @@ def check(only: str = "", fast: bool = False, only_index=None) -> int:
     #   **壊す前から赤い**状態になり、その守りを一切確かめられなかった。
     #   ＝★写しが本物と違うと、道具そのものが役に立たなくなる★。
     #   22MB ほどなので、写す方を選ぶ。
+    # ★★cloneに無いものは写さない★★（2026-09-01・Codexのレビュー30の指摘4）
+    #   ★直す前は `.claude/` `_design/` `CLAUDE.md` も写していた★ので、
+    #   ★gitignore されたものを読む守り★を壊しても写しでは平気で通り、
+    #   「cloneでだけ落ちる」型（同日に実際に踏んだ）を一度も試せなかった。
+    #   ★`.git` は今までどおり含める★＝gitに問い合わせる検査が
+    #   「壊す前から赤い」になるため。
     shutil.copytree(BASE, root, ignore=shutil.ignore_patterns(
-        "__pycache__", "node_modules", ".preview-site", "_site"))
+        "__pycache__", "node_modules", ".preview-site", "_site",
+        ".claude", "_design", "CLAUDE.md", "CLAUDE_history.md"))
     try:
         _want = [x.strip() for x in str(only or "").split(",") if x.strip()]
         tried = 0

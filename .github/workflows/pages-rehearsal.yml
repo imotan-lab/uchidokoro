@@ -113,6 +113,10 @@ jobs:
           python scripts/audit_public.py --selftest
           python scripts/build_pages_artifact.py --selftest
           python scripts/build_hub_pages.py --selftest
+          # ★監査そのものの対照実験★（2026-09-01・Codexのレビュー30）
+          #   ★これが無いと、監査に足した見張り（37・39・51〜54）が
+          #   CIで一度も試されない★
+          python scripts/audit_site.py --selftest
           # ★★控えを初回として作る★★（2026-08-24）
           #   ★CIの機械には確定値の控えが無い★＝
           #   「無ければ止まる」に変えた日に、CIが2回続けて赤くなった。

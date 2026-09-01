@@ -249,6 +249,49 @@ def hub_check_problem(changed, run) -> str:
     return "早見表が古いまま" if code != 0 else ""
 
 
+def hub_check_reachable() -> str:
+    """★早見表の点検が、記事用の早期returnより前にあるか★（2026-09-01）
+
+    ★文字が在るかだけでは足りない★（Codexのレビュー30の指摘1）＝
+      呼び出しが早期returnの後ろにあると、`build_hub_pages.py` だけを
+      変えた push では**一度も到達しない**（実際にそうなっていた）。
+    ★構文木で位置を比べる★＝並べ替えたら赤くなる。
+    """
+    import ast as _ast
+    import inspect as _insp
+    try:
+        src = _insp.getsource(main)
+        tree = _ast.parse(src)
+    except Exception as e:                                   # noqa: BLE001
+        return f"関所の本体を読めません（{type(e).__name__}）"
+
+    call_line = None
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.Call) and isinstance(node.func, _ast.Name) \
+                and node.func.id == "hub_check_problem":
+            call_line = (node.lineno if call_line is None
+                         else min(call_line, node.lineno))
+    if call_line is None:
+        return "関所の本体が早見表の点検を呼んでいません"
+
+    ret_line = None
+    for node in _ast.walk(tree):
+        if not isinstance(node, _ast.If):
+            continue
+        cond = _ast.get_source_segment(src, node.test) or ""
+        if "not a.always" in cond and "not hit" in cond:
+            ret_line = (node.lineno if ret_line is None
+                        else min(ret_line, node.lineno))
+    if ret_line is None:
+        return ("記事データの早期returnが見つかりません"
+                "（この検査の前提が変わっています）")
+    if call_line > ret_line:
+        return ("★早見表の点検が、記事データの早期returnより後ろにあります★"
+                f"（点検 {call_line}行目 ／ 早期return {ret_line}行目）"
+                "＝作る側だけを変えた push で一度も流れません")
+    return ""
+
+
 def touches_articles(paths) -> bool:
     """★読者に出る記事を書き換えているか★（照合を求める範囲）
 
@@ -575,6 +618,13 @@ def _selftest() -> int:
     t("★早見表：関所の本体が点検を呼んでいる★"
       "／★呼び出しを外しても引き金の試験だけでは捕まらない★",
       "hub_check_problem(" in _msrc)
+    # ★★呼んでいるだけでは足りない。届く位置にあるか★★
+    #   （2026-09-01・Codexのレビュー30の指摘1）＝
+    #   直す前は記事用の早期returnの後ろにあり、
+    #   `build_hub_pages.py` だけの push では一度も流れなかった。
+    t("★早見表：点検が記事の早期returnより前にある★"
+      "／★後ろだと、作る側だけを変えた push で一度も流れない★",
+      hub_check_reachable() == "")
     t("　点検が要らない変更では流さない（流したら失敗にする）",
       hub_check_problem(["README.md"],
                         lambda a: (1, "★呼ばれてはいけません★")) == "")
@@ -744,6 +794,43 @@ def main() -> int:
             print("   → 手前に別の守りを足したせいで、"
                   "奥の守りを一度も試さなくなっていないか確かめてください")
             ng.append("壊し方（触った分）")
+    # ★★早見表（ハブ4ページ）が古いままでないか★★（2026-09-01新設）
+    #   ★実際に起きたこと★＝machines.json を並べ替えたのに
+    #   `build_hub_pages.py --legacy` を流さず、早見表が古いまま残り、
+    #   ★CIが3回続けて赤くなった★（運営者にだけエラーメールが届く）。
+    #   ★手元では気づけなかった★＝この関所が見ていなかった。
+    #
+    #   ★★記事の検査より前に流す★★（2026-09-01・Codexのレビュー30の指摘1）
+    #   ★直す前は下の「記事データの変更なし → return 0」より後ろに置いていた★ので、
+    #   `build_hub_pages.py` だけを変えた push では**一度も到達しなかった**
+    #   ＝「作る側の変更でも見る」と書いた引き金が、実際には効いていなかった。
+    def _hub_run(args):
+        r = subprocess.run(
+            [sys.executable, os.path.join(BASE, "scripts", args[0])]
+            + list(args[1:]),
+            cwd=BASE, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", env=env)
+        return r.returncode, (r.stdout or "")
+
+    _hub_ng = hub_check_problem(changed, _hub_run)
+    if _hub_ng:
+        ng.append(_hub_ng)
+
+    # ★★手順書（スキル・無人タスク）の監査は毎回流す★★
+    #   （2026-09-01・Codexのレビュー30の指摘3）
+    #   ★記事の変更が無くても流す★＝手順書はスクリプトだけの変更でも古くなる。
+    #   ★`--required` を付ける★＝この機械では置き場が在るはずなので、
+    #   置き場ごと消えたときに「別PC」と読み違えて黙らないため。
+    #   ★一瞬で終わる★ので、関所が重くなる心配はない（罠㉓）。
+    _sk = subprocess.run(
+        [sys.executable, os.path.join(BASE, "scripts", "audit_site.py"),
+         "--skill-audit", "--required"],
+        cwd=BASE, capture_output=True, text=True, encoding="utf-8",
+        errors="replace", env=env)
+    if _sk.returncode != 0:
+        for _l in (_sk.stdout or "").strip().splitlines():
+            print("   " + _l)
+        ng.append("手順書の監査")
     if ng:
         print()
         print("★pushを止めました★ 失敗: " + " / ".join(ng))
@@ -764,25 +851,6 @@ def main() -> int:
             os.utime(_f, None)
         except OSError:
             pass                       # ★触れなくても検査は続ける★
-    # ★★早見表（ハブ4ページ）が古いままでないか★★（2026-09-01新設）
-    #   ★実際に起きたこと★＝machines.json を並べ替えたのに
-    #   `build_hub_pages.py --legacy` を流さず、早見表が古いまま残り、
-    #   ★CIが3回続けて赤くなった★（運営者にだけエラーメールが届く）。
-    #   ★手元では気づけなかった★＝この関所が見ていなかった。
-    #
-    #   ★「どの自己試験が拾うか」に頼らない★＝作り直したら中身が変わる、
-    #   を直接見る（0.3秒）。実測で、既存の自己試験3本はこれを素通りした。
-    def _hub_run(args):
-        r = subprocess.run(
-            [sys.executable, os.path.join(BASE, "scripts", args[0])]
-            + list(args[1:]),
-            cwd=BASE, capture_output=True, text=True, encoding="utf-8",
-            errors="replace", env=env)
-        return r.returncode, (r.stdout or "")
-
-    _hub_ng = hub_check_problem(changed, _hub_run)
-    if _hub_ng:
-        ng.append(_hub_ng)
     for name, cmd in (("crosscheck_gates", ["crosscheck_gates.py"]),
                       ("audit_site", ["audit_site.py"])):
         r = subprocess.run([sys.executable, os.path.join(BASE, "scripts", *cmd)],
