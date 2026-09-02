@@ -52,17 +52,27 @@ WORK = _lp.doc("mode_ask")
 
 # ★区切りの印★（★本文の行と紛れない形にする★）
 MARK = "===== うちどころ・出典 ====="
+# ★★本文の行には必ず頭に印を付ける★★（2026-09-02・Codexのレビュー36）
+#   ★直す前は、本文に区切りそのものが出てくると、その先が
+#     別のページの本文として読まれた★（実際に試験で再現した）。
+#   ＝引用の照合が別ページを見ることになる。
+#   ★逃がすのではなく、全部の行に印を付ける★＝
+#   「どの行が本文か」が形だけで決まり、本文の中身に左右されない。
+BODY_MARK = "| "
 
 
 def dump_pages(pages: dict) -> str:
     """★2AIが読む形に書き出す★（★往復して元に戻ること★）
 
-    ★通し確認で踏んだ★＝以前は「\n\n で連結」していたので、
+    ★通し確認で踏んだ★＝以前は「改行2つで連結」していたので、
     読み直すと本文の末尾に改行が余り、★指紋が合わなくなった★。
+    ★本文の行には頭に印を付ける★＝本文に区切りが出てきても化けない。
     """
     out = []
     for u, t in sorted((pages or {}).items()):
-        out.append(f"{MARK}\n{u}\n{MARK}\n{t}")
+        out.append(f"{MARK}\n{BODY_MARK}{u}\n{MARK}")
+        for line in str(t).split("\n"):
+            out.append(BODY_MARK + line)
     return "\n".join(out)
 
 
@@ -70,22 +80,21 @@ def load_pages(raw: str) -> dict:
     """★書き出したものを元に戻す★（`dump_pages` の逆）。"""
     pages = {}
     lines = str(raw or "").split("\n")
-    i = 0
+    i, url, body = 0, None, []
     while i < len(lines):
-        if lines[i] == MARK and i + 2 < len(lines) and lines[i + 2] == MARK:
-            url = lines[i + 1]
-            j = i + 3
-            body = []
-            while j < len(lines):
-                if (lines[j] == MARK and j + 2 < len(lines)
-                        and lines[j + 2] == MARK):
-                    break
-                body.append(lines[j])
-                j += 1
-            pages[url] = "\n".join(body)
-            i = j
+        if (lines[i] == MARK and i + 2 < len(lines)
+                and lines[i + 2] == MARK
+                and lines[i + 1].startswith(BODY_MARK)):
+            if url is not None:
+                pages[url] = "\n".join(body)
+            url, body = lines[i + 1][len(BODY_MARK):], []
+            i += 3
             continue
+        if url is not None and lines[i].startswith(BODY_MARK):
+            body.append(lines[i][len(BODY_MARK):])
         i += 1
+    if url is not None:
+        pages[url] = "\n".join(body)
     return pages
 
 
@@ -330,6 +339,11 @@ def selftest() -> int:
             ("本文が空", {"https://a/": ""}),
             ("区切りに似た行を含む",
              {"https://a/": "=====\n=== うちどころ ===\n本文"}),
+            # ★★本文に区切りそのものが出てくる場合★★
+            #   （2026-09-02・Codexのレビュー36の重箱2）
+            #   ★起きにくいが、起きたら本文が別のページに化ける★
+            ("本文に区切りそのものが出てくる",
+             {"https://a/": MARK + "\nhttps://b/\n" + MARK + "\nだまし"}),
             ("1ページだけ", {"https://a/": "ひとつ"}),
     ):
         t(f"★書いて読み直すと元に戻る★（{name}）",
