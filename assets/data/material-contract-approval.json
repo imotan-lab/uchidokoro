@@ -25,8 +25,9 @@
   "scripts/lineage_check.py": "2bbb9cfdad4cdf6edc22f1a3f4cec20f804ccceb66453a88d83d8572d86d6e98",
   "scripts/machine_sources.py": "41b3bdfdfdb4faa85c9fe0bae6630a50bcd5db6ac860699c3c5aa3ffb8c07003",
   "scripts/maker_identity_cache.py": "ad8b2621a3ea34d843977b34271568dd0d0d54ee12a21809a1adf03c934cc9e3",
-  "scripts/mode_ask.py": "346f2bc6b9c3f4bedc63bdcc14e761cde13c204d92b391d17bb76a9f067949b3",
-  "scripts/mode_verdict.py": "05d16b780dafb9aa6d159d00d229d1d82d784920d0e735754e2d3e62ac1ef3aa",
+  "scripts/mode_apply.py": "a89045b8746061859ac37dfce1d6d805431e9476cf8d12aea1d361c5d7094fdb",
+  "scripts/mode_ask.py": "154dc48964f0ca54e6f8dbab3e1074bf6cd3fa2053035be7aadda8b7a339db46",
+  "scripts/mode_verdict.py": "3a48c7541c9a342faa02fd3871bdb2c819f83407e44c94bd4d347dee65dede60",
   "scripts/model_code_lookup.py": "64b4eb6d4a86af271b1af0978512b2ab36a5cc50569a2928121fe8d974b84abe",
   "scripts/new_machine_watch.py": "b354fe5344243db9a6f14afa5920025b0fd93a52768062caaad4e8643967d0b4",
   "scripts/page_corpus.py": "7fada297f9c552f337ef4736481f46fbb019865c0f59416914f363cf61607072",
@@ -185,6 +186,15 @@
    "source_lineage",
    "user_area"
   ],
+  "scripts/mode_apply.py": [
+   "build_new_article",
+   "fetched_page",
+   "html_check",
+   "mode_ask",
+   "mode_verdict",
+   "new_machine_watch",
+   "page_corpus"
+  ],
   "scripts/mode_ask.py": [
    "directory_index",
    "fetched_page",
@@ -246,5 +256,5 @@
    "new_machine_watch"
   ]
  },
- "_deps_changed_why": "html_check も材料の採否の集合へ入れます（2026-09-02・監査50が検知）。\n\n■ なぜ\n  `mode_ask` は `html_check.visible_text()` で\n  ★2AIが実際に読む本文★を取り出しています。\n\n  ここが変われば、\n    ・2AIが読む文章そのもの\n    ・証拠の集合の指紋\n    ・「引用が本文に在るか」の照合\n  が全部変わります。\n\n  ＝★材料の採否そのもの★です。\n\n■ 監査50が言っていること\n  「契約に入っている側が取り込んでいるのに、どちらの契約にも入っていません」\n\n  ★この検査がある理由★（台帳#420）＝\n  呼ばれる側を書き換えれば、承認をやり直さずに中身を変えられるため。\n  ★関門だけを守っても、その関門が信用している側が野放しなら意味がない★\n\n■ 併せて\n  これで「取り出す → 集める → 読ませる → 控える」の4つが\n  そろって契約の中に入ります。"
+ "_deps_changed_why": "mode_apply.py を材料の採否の集合へ入れます（2026-09-02）。\n\n■ なぜ\n  この道具は\n    ・いまの証拠の集合を作り直すか（本体1ページだけの軽い確認）\n    ・★控えを使ってよいか★\n    ・★記事に節を入れるか・差し替えるか・消すか★\n  を決めています。\n\n  ＝★控えた判断が読者に届くかどうかの最後の関門★です。\n\n  Codexのレビュー35の線引き\n  （「対象URL・完全性・AIに渡す本文を決めるなら材料契約の対象」）の\n  すぐ隣にあり、しかも★こちらは記事に書く側★なので、\n  野放しにすると承認をやり直さずに「何が公開されるか」を変えられます。\n\n■ 併せて mode_ask も直しました\n  ★1サイトでも読めなければ、その機種は読めていない★\n  （Codexのレビュー36の重大①）＝\n  直す前は読めないサイトを外して続行していたので、\n  ★読めなかったサイトにモードがあっても「ありません」と書けた★。\n\n  manifest に slug と機種名も残すようにしました\n  （機種Aの証拠束で機種Bの結論を控えられたため）。\n\n■ 取り込む顔ぶれ\n  mode_apply は build_new_article / mode_verdict / page_corpus /\n  mode_ask / fetched_page / html_check / new_machine_watch を使います。\n  ★build_new_article は公開物の契約（template-approval）側★なので、\n  材料の契約には入れません（二重管理になる）。"
 }

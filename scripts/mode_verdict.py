@@ -59,7 +59,24 @@ REQUIRED_JUDGES = ("claude", "codex")
 MIN_SOURCES_FOR_NONE = 2
 MIN_WHY = 15
 MIN_QUOTE = 6
-SCHEMA = "mode-verdict/v2"
+SCHEMA = "mode-verdict/v3"
+
+
+def record_fp(v: dict) -> str:
+    """★控えの中身そのものの指紋★（2026-09-02・Codexのレビュー36の重大③）
+
+    ★直す前は「判断者が消えた」「引用が空」しか捕まえられなかった★＝
+    ★控えの有効な形を保った改変★（引用を別の文字列に／表のセルを別の内容に）は
+    素通りし、★正しい形の誤った表★が公開候補になった。
+    """
+    import hashlib as _h
+    body = json.dumps({
+        "slug": v.get("slug"), "kind": v.get("kind"), "state": v.get("state"),
+        "machine_url": v.get("machine_url"), "corpus_fp": v.get("corpus_fp"),
+        "decisions": v.get("decisions"), "quotes": v.get("quotes"),
+        "table": v.get("table"),
+    }, ensure_ascii=False, sort_keys=True)
+    return "sha256:" + _h.sha256(body.encode("utf-8")).hexdigest()
 
 
 def _read() -> dict:
@@ -204,6 +221,8 @@ def record(slug: str, kind: str, machine_url: str, decisions,
         "quotes": list(quotes or []),
         "table": table or None,
     }
+    # ★控え自身の指紋★（保存後の書き換えを見つける）
+    got[_key(slug, kind)]["fp"] = record_fp(got[_key(slug, kind)])
     os.makedirs(os.path.dirname(STORE), exist_ok=True)
     tmp = STORE + ".tmp"
     with open(tmp, "w", encoding="utf-8", newline="\n") as f:
@@ -233,6 +252,11 @@ def verdict(slug: str, kind: str, corpus: dict):
         return "UNKNOWN", f"控えの版が違います（{v.get('schema')}）"
     if v.get("slug") != slug or v.get("kind") != kind:
         return "UNKNOWN", "控えの機種・種類が合いません"
+    # ★★控えの中身そのものが書き換えられていないか★★
+    #   （2026-09-02・Codexのレビュー36の重大③）
+    #   ★形を保った改変（引用や表のすり替え）は、これでしか捕まらない★
+    if v.get("fp") != record_fp(v):
+        return "UNKNOWN", "控えの中身が書き換えられています"
     # ★控えた答えから、いまもう一度一致を導く★（保存後の書き換えを見つける）
     state, bad = agreed_state(v.get("decisions"))
     if bad:
@@ -419,6 +443,26 @@ def selftest() -> int:
         t("　控えが無ければ UNKNOWN",
           verdict("nothing", "mode", C)[0] == "UNKNOWN")
 
+        # ★★控えの中身をすり替えても気づく★★
+        #   （2026-09-02・Codexのレビュー36の重大③）
+        #   ★形を保った改変は、控え自身の指紋でしか捕まらない★
+        record("swap", "mode", U, dec("HAS"), C, PAGES, Q,
+               table={"headers": ["モード"], "rows": [["天国"]]})
+        t("　控えたものはそのまま読める", verdict("swap", "mode", C)[0] == "HAS")
+        raw = json.load(open(STORE, encoding="utf-8"))
+        raw["swap::mode"]["table"] = {"headers": ["モード"],
+                                      "rows": [["★すり替えた★"]]}
+        json.dump(raw, open(STORE, "w", encoding="utf-8"), ensure_ascii=False)
+        t("★★控えの中身をすり替えたら使わない★★"
+          "／★これが無いと、正しい形の誤った表が公開候補になる★",
+          verdict("swap", "mode", C)[0] == "UNKNOWN")
+
+        raw["swap::mode"]["table"] = {"headers": ["モード"], "rows": [["天国"]]}
+        raw["swap::mode"]["quotes"] = [{"url": U, "quote": "別の引用に差し替え"}]
+        json.dump(raw, open(STORE, "w", encoding="utf-8"), ensure_ascii=False)
+        t("★引用をすり替えても使わない★",
+          verdict("swap", "mode", C)[0] == "UNKNOWN")
+
         # ── 箱の状態 ──
         t("★どちらかが「ある」なら表を出す★",
           box_state("HAS", "UNKNOWN") == "HAS"
@@ -469,6 +513,20 @@ def apply_file(path: str, read_pages=None) -> int:
     corpus = man.get("manifest") if isinstance(man, dict) else None
     if not isinstance(corpus, dict):
         print("★証拠の記録の形が違います★")
+        return 1
+    # ★★どの機種の証拠束かを照合する★★（Codexのレビュー36の重大②）
+    #   ★直す前は、機種Aの証拠束で slug だけ機種Bにして控えられた★
+    if man.get("slug") != d["slug"]:
+        print(f"★証拠束は別の機種のものです★"
+              f"（証拠束: {man.get('slug')} ／ 決定: {d['slug']}）")
+        return 1
+    roots = [str(x) for x in (man.get("roots") or [])]
+    if not roots:
+        print("★証拠束に本体URLの記録がありません★")
+        return 1
+    if _pc._norm(str(d["machine_url"])) not in {_pc._norm(x) for x in roots}:
+        # ★下位URLを本体として渡させない★
+        print(f"★本体URLが証拠束の本体一覧にありません★（{d['machine_url']}）")
         return 1
 
     # ★本文は写しから読み直す★（決定ファイルの言い分を信じない）

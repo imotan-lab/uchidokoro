@@ -129,22 +129,28 @@ def gather(slug: str, fetch, text_of, find_urls) -> dict:
         return {"pages": {}, "manifest": _pc.manifest({}, False),
                 "roots": [], "why": "名鑑の機種ページが見つかりません"}
 
-    pages, gone, roots, bad = {}, [], [], []
+    pages, gone, roots = {}, [], []
     for u in urls:
         got = _pc.collect(catalog_of(u), u, fetch, text_of)
         if got["why"]:
-            # ★このサイトは読めていない★＝根拠に数えない（外すだけ）
-            bad.append(f"{u} … {got['why']}")
-            continue
+            # ★★1サイトでも読めなければ、その機種は読めていない★★
+            #   （2026-09-02・Codexのレビュー36の重大①）
+            #   ★直す前は、読めないサイトを外して続行していた★＝
+            #   A・Bが読めれば、★Cにモードがあっても「ありません」と
+            #   書けた★（説明と実装が逆だった）。
+            #   ★「無い」は引用できない★ので、読み落としを防ぐ唯一の手が
+            #   「全部読んだ」であり、そこが崩れると根拠が無くなる。
+            return {"pages": {}, "manifest": _pc.manifest({}, False),
+                    "roots": [],
+                    "why": f"読めないサイトがあります（{u} … {got['why']}）"}
         pages.update(got["pages"])
         gone += list(got["manifest"].get("gone") or [])
         roots.append(u)
     if not roots:
         return {"pages": {}, "manifest": _pc.manifest({}, False),
-                "roots": [], "why": "どのサイトも読めませんでした: "
-                                    + " / ".join(bad)[:200]}
+                "roots": [], "why": "読めたサイトがありません"}
     return {"pages": pages, "manifest": _pc.manifest(pages, True, gone),
-            "roots": roots, "why": "", "skipped": bad}
+            "roots": roots, "why": ""}
 
 
 QUESTION = """★この機種に「モード」や「ゾーン」があるかを判断してください★
@@ -210,11 +216,13 @@ def run(slug: str) -> int:
         f.write(body)
     mp = os.path.join(WORK, f"{slug}_manifest.json")
     with open(mp, "w", encoding="utf-8", newline="\n") as f:
-        json.dump({"manifest": got["manifest"], "roots": got["roots"]},
+        # ★★どの機種の証拠束かを残す★★（Codexのレビュー36の重大②）
+        #   ★直す前は slug を残していなかった★ので、
+        #   機種Aの証拠束を、決定ファイルの slug だけ機種Bにして控えられた。
+        json.dump({"manifest": got["manifest"], "roots": got["roots"],
+                   "slug": slug, "name": machine_name(slug)},
                   f, ensure_ascii=False, indent=2)
 
-    for x in (got.get("skipped") or []):
-        print("（読めないので外しました）" + x[:160])
     print(QUESTION.format(
         path=p, n=len(got["pages"]), chars=len(body),
         sources=_sl.independent(_pc.publishers(got["manifest"]["urls"])),
@@ -262,6 +270,41 @@ def selftest() -> int:
 
     t("★機種一覧に無ければ集めない★",
       gather("zzz_no_such_machine", _fetch, _text, lambda n: [])["why"] != "")
+
+    # ★★1サイトでも読めなければ、その機種は読めていない★★
+    #   （2026-09-02・Codexのレビュー36の重大①）
+    #   ★直す前は読めないサイトを外して続行していた★＝
+    #   A・Bが読めれば、Cにモードがあっても「ありません」と書けた。
+    _NANA = "https://nana-press.com/kaiseki/machine/644/"
+    _CHON = "https://chonborista.com/slot/sammy-slot/12345/"
+
+    def _both(name):
+        return [_NANA, _CHON]
+
+    def _ok(u):
+        return _P("")
+
+    def _one_dead(u):
+        if u == _CHON:
+            raise RuntimeError("HTTP 503")
+        return _P("")
+
+    _real = machine_name
+
+    def _fake_name(slug):
+        return "スマスロモンキーターンV" if slug == "zzz_two" else _real(slug)
+
+    globals()["machine_name"] = _fake_name
+    try:
+        t("　2サイトとも読めれば集まる",
+          gather("zzz_two", _ok, _text, _both)["manifest"]["complete"] is True)
+        _bad = gather("zzz_two", _one_dead, _text, _both)
+        t("★★読めないサイトが1つでもあれば、その機種は読めていない★★"
+          "／★これが無いと、読めなかったサイトにモードがあっても"
+          "「ありません」と書ける★",
+          _bad["manifest"]["complete"] is False and "読めない" in _bad["why"])
+    finally:
+        globals()["machine_name"] = _real
 
     # ★名鑑の決まりが引けることを、本物の設定で確かめる★
     t("　なな徹の機種ページを名鑑と結び付けられる",
