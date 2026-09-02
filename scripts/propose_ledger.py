@@ -81,7 +81,54 @@ _SPEC_BODY_KAIWARI = re.compile(
 
 
 # 統一セクション見出し（CLAUDE.md の IDEAL_ORDER）。見出しそのものは事実主張ではない。
+def selftest() -> int:
+    """★統一見出しの名簿が、記事の並びとそろっているか★（2026-09-02新設）
+
+    ★それまで自己試験が無かった★＝
+      名簿に手を入れても、機械が確かめられなかった。
+    ★2か所に同じ名簿を持たない★＝並びの正本は normalize_sections。
+    """
+    import sys as _s
+    import os as _o
+    _s.path.insert(0, _o.path.dirname(_o.path.abspath(__file__)))
+    import normalize_sections as _ns
+    import build_new_article as _ba
+
+    ok, cases = 0, []
+
+    def t(name, cond):
+        nonlocal ok
+        cases.append(name)
+        if cond:
+            ok += 1
+        print(("OK   " if cond else "★NG ") + name)
+
+    miss = [x for x in _ns.IDEAL_ORDER if x not in _FIXED_TITLES]
+    t("★★並びにある見出しは、すべて統一見出しの名簿にある★★"
+      "／★片方だけ足すと、その見出しが「事実の主張」に見えて"
+      "台帳へ余計な案件が積まれる★" + (f"（欠け: {miss}）" if miss else ""),
+      not miss)
+
+    t("　必須の箱も、すべて名簿にある",
+      not [x for x in _ba.SECTION_ORDER if x not in _FIXED_TITLES])
+    t("　任意の箱も、すべて名簿にある",
+      not [x for x, _p in _ba.OPTIONAL_SECTIONS if x not in _FIXED_TITLES])
+    t("　名簿に重複が無い", len(_FIXED_TITLES) == len(set(_FIXED_TITLES)))
+    t("　モード・ゾーンが名簿にある（2026-09-02・台帳#523の②）",
+      _ba.MODE_TITLE in _FIXED_TITLES)
+
+    print(f"{ok}/{len(cases)} 合格")
+    return 0 if ok == len(cases) else 1
+
+
 _FIXED_TITLES = {
+    # ★モード・ゾーン★（2026-09-02・台帳#523の②）＝統一見出しなので、
+    #   ここに無いと「事実の主張」に見えて台帳へ余計な案件が積まれる。
+    "モード・ゾーン",
+    # ★確認できたCZ★（2026-09-02・新しく足した試験が見つけた）＝
+    #   ★新台経路の必須の箱なのに、名簿から抜けていた★。
+    #   抜けていると「事実の主張」に見えて、台帳へ余計な案件が積まれる。
+    "確認できたCZ",
     "天井・恩恵", "基本スペック", "当サイトの狙い目", "朝一・リセット情報", "設定示唆まとめ",
     "狙い目の根拠", "ヤメ時の判断", "立ち回りのコツ", "噂・未確定情報",
     "設定判別のポイント", "設定狙いのポイント", "ゲーム性", "このページの役割",
@@ -202,10 +249,13 @@ def propose(item: dict) -> tuple[str | None, str]:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--todo", default=os.path.join(BASE, "_design", "ledger_todo.json"))
     ap.add_argument("--out")
     ap.add_argument("--list", type=int, default=0)
     args = ap.parse_args()
+    if args.selftest:
+        raise SystemExit(selftest())
 
     items = json.load(open(args.todo, encoding="utf-8"))
     proposed, held = [], []
