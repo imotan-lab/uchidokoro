@@ -46,6 +46,68 @@ TITLE_RENAME = {
 }
 
 
+def selftest() -> int:
+    """★この道具が守っていることを、機械が確かめ直す★（2026-09-02新設）
+
+    ★それまで自己試験が1つも無かった★＝
+      今日入れた「表を捨てない」守りを、誰も確かめられなかった。
+    """
+    import json as _js
+    ok, cases = 0, []
+
+    def t(name, cond):
+        nonlocal ok
+        cases.append(name)
+        if cond:
+            ok += 1
+        print(("OK   " if cond else "★NG ") + name)
+
+    T = [{"headers": ["項目", "内容"], "rows": [["機種名", "x"]]}]
+
+    # ★★同じ題の節をまとめるとき、表を捨てない★★
+    #   （Codexが2026-08-31に指摘・③で60機種が表を持つのでいま実害）
+    got = merge_body({"title": "基本スペック", "body": ["あ"]},
+                     {"title": "基本スペック", "type": "table", "tables": T})
+    t("★★表を捨てない★★（直す前は黙って消えた・本文は残るので気づけない）",
+      got.get("tables") == T)
+    t("　表を持つ節は種別も引き継ぐ（引き継がないと描かれない）",
+      got.get("type") == "table")
+    t("　本文もまとめる", got.get("body") == ["あ"])
+
+    got2 = merge_body({"title": "x", "type": "table",
+                       "tables": _js.loads(_js.dumps(T))},
+                      {"title": "x", "type": "table",
+                       "tables": _js.loads(_js.dumps(T))})
+    t("　同じ表を2つ並べない", len(got2["tables"]) == 1)
+
+    got3 = merge_body({"title": "x", "type": "table",
+                       "tables": _js.loads(_js.dumps(T))},
+                      {"title": "x", "type": "table",
+                       "tables": [{"headers": ["a"], "rows": [["b"]]}]})
+    t("　違う表は2つとも残す", len(got3["tables"]) == 2)
+
+    t("　本文だけの節はいままでどおり",
+      merge_body({"title": "x", "body": ["あ"]},
+                 {"title": "x", "body": ["い"]})["body"] == ["あ", "い"])
+    t("　同じ本文は2度書かない",
+      merge_body({"title": "x", "body": ["あ"]},
+                 {"title": "x", "body": ["あ"]})["body"] == ["あ"])
+    t("　表だけの節に、空の本文を作らない",
+      "body" not in merge_body({"title": "x", "type": "table",
+                                "tables": _js.loads(_js.dumps(T))},
+                               {"title": "x", "type": "table",
+                                "tables": _js.loads(_js.dumps(T))}))
+
+    # ★並び順の名簿が壊れていないか★
+    t("　並び順に重複が無い", len(IDEAL_ORDER) == len(set(IDEAL_ORDER)))
+    t("　言い換えの行き先は、すべて並び順にある",
+      all(v in IDEAL_ORDER for v in TITLE_RENAME.values()))
+
+    print(f"{len(cases) - (len(cases) - ok)}/{len(cases)} 合格"
+          if False else f"{ok}/{len(cases)} 合格")
+    return 0 if ok == len(cases) else 1
+
+
 def merge_body(existing, incoming):
     """既存sectionのbodyに incoming(別section) を結合する"""
     e = existing.get("body")
@@ -165,8 +227,11 @@ def normalize(detail: dict) -> tuple[dict, list[str]]:
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--selftest", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
+    if args.selftest:
+        raise SystemExit(selftest())
 
     detail_dir = BASE / "assets" / "data" / "machine-details"
     files = sorted(detail_dir.glob("*.json"))
