@@ -23,7 +23,8 @@
 
 使い方:
     python scripts/mode_ask.py --slug hokuto            # 集めて質問を出す
-    python scripts/mode_ask.py --slug hokuto --clean    # 本文の写しを消す
+    python scripts/mode_ask.py --slug hokuto --clean    # ★本文の写しだけ★消す
+    python scripts/mode_ask.py --slug hokuto --purge    # 記録ごと消す（普段は使わない）
     python scripts/mode_ask.py --selftest
 """
 from __future__ import annotations
@@ -247,13 +248,39 @@ def run(slug: str) -> int:
 
 
 def clean(slug: str) -> int:
+    """★本文の写しだけを消す★（2026-09-02・Codexのレビュー38）
+
+    ★記録（URLと指紋）は残す★＝
+      ★直す前は記録まで消していた★ので、そのあと記事へ反映しようとすると
+      「確認できない」で止まり、★記事に永久に届かなくなった★
+      （節を入れる・更新する・消す、が全部できない）。
+
+    ★残しても心配ない★＝記録に本文は入っていない（URLと指紋だけ）。
+      台帳#378（複製の条項）で問題になるのは★本文の写し★のほう。
+    """
+    p = os.path.join(WORK, f"{slug}_corpus.txt")
+    if os.path.isfile(p):
+        os.remove(p)
+        print("本文の写しを消しました（★記録は残します★）")
+    else:
+        print("本文の写しはありません")
+    return 0
+
+
+def purge(slug: str) -> int:
+    """★記録ごと全部消す★（★普段は使わない★）
+
+    ★これを使うと、その機種は記事へ反映できなくなる★
+      （次に `mode_ask` を流し直すまで）。
+    """
     n = 0
     for suffix in ("_corpus.txt", "_manifest.json"):
         p = os.path.join(WORK, slug + suffix)
         if os.path.isfile(p):
             os.remove(p)
             n += 1
-    print(f"消しました: {n} 件")
+    print(f"★記録ごと消しました★: {n} 件"
+          "（次に mode_ask を流すまで、記事へ反映できません）")
     return 0
 
 
@@ -362,7 +389,11 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="モード・ゾーンを2AIに聞く材料を用意する")
     ap.add_argument("--slug")
     ap.add_argument("--clean", action="store_true",
-                    help="本文の写しを消す（★使い終わったら必ず★）")
+                    help="★本文の写しだけ★を消す（使い終わったら必ず）"
+                         "／記録は残すので、あとから記事へ反映できる")
+    ap.add_argument("--purge", action="store_true",
+                    help="★記録ごと全部消す★（普段は使わない）"
+                         "／次に mode_ask を流すまで記事へ反映できません")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
@@ -370,4 +401,6 @@ if __name__ == "__main__":
     if not a.slug:
         print("★--slug が要ります★")
         raise SystemExit(1)
+    if a.purge:
+        raise SystemExit(purge(a.slug))
     raise SystemExit(clean(a.slug) if a.clean else run(a.slug))

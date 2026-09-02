@@ -332,6 +332,29 @@ def selftest() -> int:
         t("　証拠が変わったときは STALE（節を消す）",
           corpus_now("zzz", quick=_changed, fetch=lambda u: None,
                      text_of=lambda p2: "")[0] == "STALE")
+
+        # ★★後片づけ（--clean）のあとでも記事へ反映できる★★
+        #   （2026-09-02・Codexのレビュー38）
+        #   ★直す前は記録まで消していた★ので、
+        #   「誤って節を消す」は直った代わりに
+        #   ★記事へ永久に届かなくなった★（節を入れる・更新する・消すが全部不可）。
+        #   ★私の試験はそこを見ていなかった★＝
+        #   「記録が無ければ止まる」までしか試していなかった。
+        _write(_good)
+        with open(os.path.join(_ma.WORK, "zzz_corpus.txt"), "w",
+                  encoding="utf-8") as _f:
+            _f.write("本文の写し")
+        _ma.clean("zzz")
+        t("★後片づけで本文の写しは消える★",
+          not os.path.isfile(os.path.join(_ma.WORK, "zzz_corpus.txt")))
+        t("★★後片づけのあとでも記事へ反映できる★★"
+          "／★記録まで消すと、節を入れる・更新する・消すが全部できなくなる★",
+          corpus_now("zzz", quick=_quick, fetch=lambda u: None,
+                     text_of=lambda p2: "")[0] == "VALID")
+        _ma.purge("zzz")
+        t("　記録ごと消す操作は別にある（普段は使わない）",
+          corpus_now("zzz", quick=_quick, fetch=lambda u: None,
+                     text_of=lambda p2: "")[0] == "UNREADABLE")
     finally:
         import shutil as _sh
         _sh.rmtree(_ma.WORK, ignore_errors=True)
