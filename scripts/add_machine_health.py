@@ -61,6 +61,47 @@ BLOCKER_STREAK = 2
 FIRST_RUN_DATE = "2026-07-31"
 
 
+START_MARK = "★新台追加タスク 開始★"
+END_MARK = "★新台追加タスク 終了★"
+
+
+def spillover_ends(next_text: str) -> int:
+    """★翌日のログの頭にある「終了」の数★（2026-09-03）
+
+    新台タスクは 23:30 に始まり、明け方まで走る。
+    ★その日のログだけで開始と終了を対にすると、
+      23:55以降に始まった回は必ず「終了が無い」ように見える★
+    （番兵が自分で気づいて報告してきた死角）。
+
+    ★数えるのは「最初の開始より前にある終了」だけ★＝
+    翌日ぶんの終了まで数えると、本物の途中死を見逃す。
+    """
+    t = str(next_text or "")
+    head = t.split(START_MARK, 1)[0] if START_MARK in t else t
+    return head.count(END_MARK)
+
+
+def pair_problem(day: str, text: str, next_text) -> str:
+    """★開始と終了が対になっているか★（対でなければ理由を返す）
+
+    ★`next_text` が None ＝翌日のログが無い★
+      → 今までどおり「止まっています」と言う（fail-closed）。
+      ★見えないものを「大丈夫」にしない★
+    """
+    starts = str(text or "").count(START_MARK)
+    ends = str(text or "").count(END_MARK)
+    if starts == 0:
+        return f"{day}: 開始の記録がありません"
+    if starts == ends:
+        return ""
+    if starts > ends and next_text is not None:
+        # ★日をまたいだぶんだけを足す★（翌日ぶんの終了は数えない）
+        if ends + spillover_ends(next_text) >= starts:
+            return ""
+    return (f"{day}: 開始 {starts} 回に対して終了 {ends} 回"
+            "（途中で止まっています）")
+
+
 def log_path(day: str) -> str:
     return os.path.join(LOG_DIR, f"add_machine_{day}.log")
 
@@ -75,14 +116,22 @@ def check_log(day: str) -> list:
     with open(path, encoding="utf-8", errors="replace") as f:
         text = f.read()
     ng = []
-    starts = text.count("★新台追加タスク 開始★")
-    ends = text.count("★新台追加タスク 終了★")
-    if starts == 0:
-        ng.append(f"{day}: 開始の記録がありません")
-    elif starts != ends:
-        # ★片方だけ＝途中で黙って死んだ★（いちばん見つけにくい壊れ方）
-        ng.append(f"{day}: 開始 {starts} 回に対して終了 {ends} 回"
-                  "（途中で止まっています）")
+    # ★★翌日のログも見る★★（2026-09-03）＝タスクは 23:30 に始まるので、
+    #   最後の回の「終了」は日をまたいで翌日のログに入る。
+    #   ★その日だけで対にすると、必ず「途中で止まっています」になる★
+    #   （番兵が自分で気づいて報告してきた死角）。
+    _nx = None
+    try:
+        _d = date.fromisoformat(day) + timedelta(days=1)
+        _np = log_path(_d.isoformat())
+        if os.path.isfile(_np):
+            with open(_np, encoding="utf-8", errors="replace") as f:
+                _nx = f.read()
+    except Exception:                      # noqa: BLE001
+        _nx = None                         # ★読めなければ今までどおり報告★
+    _pp = pair_problem(day, text, _nx)
+    if _pp:
+        ng.append(_pp)
     for m in re.finditer(r"見張り (\S+): 状態=(\S+)", text):
         if m.group(2) not in ("OK", "FIRST_TIME"):
             ng.append(f"{day}: {m.group(1)} が {m.group(2)}（一覧を読めていません）")
@@ -298,6 +347,30 @@ def selftest() -> int:
         t("★ふつうに終わっていれば何も言わない★", check_log("2026-08-01") == [])
 
         write("2026-08-02", "★新台追加タスク 開始★" + nl + "見張り bellco: 状態=OK")
+        # ── ★日をまたいだ回を「途中死」と誤らない★（2026-09-03）
+        #   ★番兵が自分で気づいて報告してきた死角★＝タスクは 23:30 に
+        #   始まるので、23:55以降に始まった回の「終了」は翌日のログに入る。
+        #   ★誤警報が続くと本物の警告が埋もれる★ので直した。
+        _S, _E = START_MARK, END_MARK
+        t("★★日をまたいだ回は「途中で止まった」と言わない★★（2026-09-03）",
+          pair_problem("d", _S + nl + _E + nl + _S,
+                       _E + nl + "つづき" + nl + _S + nl + _E) == "")
+        t("　（対照）翌日に終了が無ければ、今までどおり気づく"
+          "＝緩めたのは「日またぎ」だけ",
+          "途中で止まっています" in pair_problem(
+              "d", _S + nl + _E + nl + _S, _S + nl + _E))
+        t("　翌日のログが無いときは「大丈夫」にしない（fail-closed）",
+          "途中で止まっています" in pair_problem(
+              "d", _S + nl + _E + nl + _S, None))
+        t("★翌日ぶんの終了までは数えない★"
+          "（数えると本物の途中死を見逃す）",
+          "途中で止まっています" in pair_problem(
+              "d", _S + nl + _S + nl + _S,
+              _E + nl + _S + nl + _E + nl + _E))
+        t("　2回とも終わっていれば何も言わない",
+          pair_problem("d", _S + nl + _E + nl + _S + nl + _E, "") == "")
+        t("　開始が無ければ、今までどおり言う",
+          pair_problem("d", "なにもなし", "") == "d: 開始の記録がありません")
         t("★★開始だけで終了が無ければ気づく★★（いちばん見つけにくい壊れ方）",
           any("途中で止まって" in x for x in check_log("2026-08-02")))
 

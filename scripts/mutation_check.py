@@ -66,6 +66,24 @@ MUTATIONS = [
         "run": ["scripts/audit_site.py"],
     },
     {
+        "why": "★日をまたいだ回まで「大丈夫」にする"
+               "（本物の途中死を見逃す＝いちばん見つけにくい壊れ方）★",
+        "file": "scripts/add_machine_health.py",
+        "before": ("    head = t.split(START_MARK, 1)[0]"
+                   " if START_MARK in t else t\n"
+                   "    return head.count(END_MARK)"),
+        "after": "    return t.count(END_MARK)",
+        "run": ["scripts/add_machine_health.py"],
+    },
+    {
+        "why": "★翌日のログが読めなくても「大丈夫」にする"
+               "（見えないものを大丈夫にしない、を壊す）★",
+        "file": "scripts/add_machine_health.py",
+        "before": "    if starts > ends and next_text is not None:",
+        "after": "    if starts > ends:",
+        "run": ["scripts/add_machine_health.py"],
+    },
+    {
         "why": "★ひな型のずれを見つけられなくする"
                "（ひな型を直した日に、既存の記事が永久に古いまま残る）★",
         "file": "scripts/grow_machine.py",
