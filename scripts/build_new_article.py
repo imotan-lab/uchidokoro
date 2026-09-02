@@ -317,7 +317,74 @@ RUMOR_SECTION = {
 
 
 # 表で中身を出す箱（本文が空でも表があればよい）
+# ★モード・ゾーンはここに入れない★（2026-09-02・通し確認が捕まえた）
+#   この名簿は「★必ず表が要る箱★」。モード・ゾーンは
+#     HAS            … 表を出す
+#     NONE_CONFIRMED … ★本文だけ★（「…はありません」）
+#   の2つの形を取るので、入れると「無い」の形が必ず断られる。
+#   ★入れなくても守りは働く★＝中身が空なら「箱の中身がありません」で断る。
 TABLE_SECTIONS = ("確認できたCZ", "設定示唆まとめ", "基本スペック")
+
+# ★★モード・ゾーンの箱★★（2026-09-02・台帳#523の②・運営者の要望）
+#   ★打ち手が読む順★＝天井 → いまどこ → 何Gから → どこでやめる。
+#   2番目（いまどの状態か）が丸ごと無かったので、
+#   「650Gから狙い目」の**なぜ**が読めなかった。
+MODE_TITLE = "モード・ゾーン"
+# ★「無い」ときははっきり書く★（運営者の指示）＝
+#   設定狙い専用機に「未確認」と出すと、
+#   ★読者が「調べれば何かある」と誤解する★。
+NO_MODE_TEXT = "この機種には、狙い方が変わるモード・ゾーンはありません。"
+# ★表に添える一文★（Codexのレビュー34）＝
+#   片方だけ確認できている状態（モードはある／ゾーンは未確認）で、
+#   ★表だけ見ると「ゾーンは無い」と誤解される★。
+MODE_NOTE = "確認できたモード・ゾーンのみ掲載しています。"
+
+# ★★任意の箱と、その入る位置★★（2026-09-02）
+#   ★必須（SECTION_ORDER）にしない★＝
+#   未確認のときは欄ごと出さない（運営者の判断）。
+#   必須にすると、既存の記事すべてに空の箱を足すまで公開が止まる。
+#   位置＝「基本スペック」の次（打ち手が読む順に合わせる）。
+OPTIONAL_SECTIONS = ((MODE_TITLE, 2),)
+
+
+def mode_section(box_state: str, tables=None):
+    """★控えた判断から、記事の節を作る★（2026-09-02）
+
+    box_state … HAS / NONE_CONFIRMED / UNKNOWN
+                （★決めるのは mode_verdict.box_state★＝ここでは決めない）
+
+    返り: 節の辞書 ／ ★UNKNOWN のときは None（欄ごと出さない）★
+    """
+    st = str(box_state or "")
+    if st == "UNKNOWN":
+        return None                      # ★欄ごと出さない★（運営者の判断）
+    if st == "NONE_CONFIRMED":
+        return {"title": MODE_TITLE, "body": [NO_MODE_TEXT]}
+    if st != "HAS":
+        raise ValueError(f"知らない状態です: {box_state!r}")
+    rows = []
+    for tb in (tables or []):
+        if not isinstance(tb, dict):
+            raise ValueError("表の1件が辞書ではありません")
+        rows.append(tb)
+    if not rows:
+        # ★「ある」のに中身が無いなら出さない★（空の表を出さない）
+        return None
+    out = []
+    for tb in rows:
+        one = {"headers": [str(x) for x in (tb.get("headers") or [])],
+               "rows": [[str(c) for c in r] for r in (tb.get("rows") or [])]}
+        if not one["headers"] or not one["rows"]:
+            raise ValueError("表に見出しか行がありません")
+        for r in one["rows"]:
+            if len(r) != len(one["headers"]):
+                raise ValueError("行の列数が見出しと違います")
+        if tb.get("label"):
+            one["label"] = str(tb["label"])
+        # ★添える一文は必ず付ける★（部分確認の誤解を防ぐ）
+        one["note"] = MODE_NOTE
+        out.append(one)
+    return {"title": MODE_TITLE, "type": "table", "tables": out}
 
 
 def expected_titles(detail) -> list:
@@ -334,6 +401,13 @@ def expected_titles(detail) -> list:
         return want
     titles = [x.get("title") for x in (detail.get("sections") or [])
               if isinstance(x, dict)]
+    # ★★任意の箱は「在るときだけ」数える★★（2026-09-02・台帳#523の②）
+    #   ★未確認なら欄ごと出さない★（運営者の判断）ので、
+    #   必須にはできない。噂の箱と同じ扱いだが、
+    #   ★入る位置が途中★（基本スペックの次）なので差し込む。
+    for _title, _pos in OPTIONAL_SECTIONS:
+        if _title in titles:
+            want = want[:_pos] + [_title] + want[_pos:]
     if titles and titles[-1] == RUMOR_SECTION["title"]:
         want = want + [RUMOR_SECTION["title"]]
     return want
@@ -2039,6 +2113,65 @@ def selftest() -> int:
       _tbl and _tbl[0]["headers"] == ["設定", "BIG", "REG", "合算"])
     t("　値がそのまま出る（作り直さない）",
       _tbl and _tbl[0]["rows"][0] == ["設定1", "1/273.1", "1/439.8", "1/168.5"])
+    # ★★モード・ゾーンの箱★★（2026-09-02・台帳#523の②）
+    _MT = [{"headers": ["モード", "見分け方", "次に期待できるところ"],
+            "rows": [["天国", "赤背景", "次回天井が短縮"]]}]
+    t("★★モード：未確認なら欄ごと出さない★★（運営者の判断）",
+      mode_section("UNKNOWN", _MT) is None)
+    _none = mode_section("NONE_CONFIRMED")
+    t("★モード：「無い」ときははっきり書く★"
+      "／★「未確認」と出すと、読者が『調べれば何かある』と誤解する★",
+      _none["title"] == MODE_TITLE and _none["body"] == [NO_MODE_TEXT])
+    t("　「無い」ときは表を出さない", "tables" not in _none)
+    _has = mode_section("HAS", _MT)
+    t("　「ある」ときは表を出す",
+      _has["type"] == "table" and len(_has["tables"]) == 1)
+    t("★★表には「確認できたものだけ」と添える★★（Codexのレビュー34）"
+      "／★これが無いと、片方だけ確認できた状態で『無い』と誤解される★",
+      _has["tables"][0]["note"] == MODE_NOTE)
+    t("★「ある」のに中身が無ければ出さない★（空の表を出さない）",
+      mode_section("HAS", []) is None)
+    t("　行の列数が見出しと違えば断る",
+      _raises(lambda: mode_section(
+          "HAS", [{"headers": ["a", "b"], "rows": [["x"]]}])))
+    t("　見出しが無ければ断る",
+      _raises(lambda: mode_section("HAS", [{"rows": [["x"]]}])))
+    t("　知らない状態は断る", _raises(lambda: mode_section("なにか", _MT)))
+
+    # ★★任意の箱は「在るときだけ」数える★★
+    _base = {"sections": [{"title": x} for x in SECTION_ORDER]}
+    t("　箱が無ければ、並びも増えない",
+      expected_titles(_base) == list(SECTION_ORDER))
+    _with = {"sections": [{"title": SECTION_ORDER[0]},
+                          {"title": SECTION_ORDER[1]},
+                          {"title": MODE_TITLE}]
+             + [{"title": x} for x in SECTION_ORDER[2:]]}
+    t("★モード：在れば「基本スペック」の次に数える★",
+      expected_titles(_with)[:3]
+      == [SECTION_ORDER[0], SECTION_ORDER[1], MODE_TITLE])
+    t("　噂の箱と一緒でも並びが崩れない",
+      expected_titles({"sections": _with["sections"]
+                       + [{"title": RUMOR_SECTION["title"]}]})[-1]
+      == RUMOR_SECTION["title"])
+
+    # ★★両方の形が契約を通ること★★（2026-09-02・通し確認が捕まえた）
+    #   ★TABLE_SECTIONS に入れると「無い」の形が必ず断られる★
+    _mk = {"sections": [{"title": x, "body": ["本文です。"]}
+                        for x in SECTION_ORDER]}
+
+    def _with_mode(sec):
+        d = {"sections": list(_mk["sections"])}
+        d["sections"] = d["sections"][:2] + [sec] + d["sections"][2:]
+        return article_contract_problems(d)
+
+    t("★モード：表の形が契約を通る★",
+      not [x for x in _with_mode(mode_section("HAS", _MT))
+           if MODE_TITLE in x])
+    t("★★モード：「ありません」の本文だけの形も契約を通る★★"
+      "／★表が必須の名簿に入れると、この形が必ず断られる★",
+      not [x for x in _with_mode(mode_section("NONE_CONFIRMED"))
+           if MODE_TITLE in x])
+
     t("　7つの箱の構成は変わらない",
       [s["title"] for s in _art_e2e["sections"]] == list(SECTION_ORDER))
 

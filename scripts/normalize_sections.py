@@ -66,7 +66,27 @@ def merge_body(existing, incoming):
         if line not in seen:
             seen.add(line)
             deduped.append(line)
-    existing["body"] = deduped
+    if deduped or "body" in existing:
+        existing["body"] = deduped
+
+    # ★★表も一緒にまとめる★★（2026-09-02・Codexが2026-08-31に指摘）
+    #   ★直す前は body しか見ていなかった★ので、
+    #   同じ題の節が2つあると★あとの節の表が黙って消えた★。
+    #   ③で60機種が表を持つようになったので、いま実害がある。
+    #   ★消えても気づきにくい★＝本文は残るため記事は空にならない。
+    et = existing.get("tables")
+    it = incoming.get("tables")
+    if isinstance(it, list) and it:
+        base = et if isinstance(et, list) else []
+        merged_t = list(base)
+        for tb in it:
+            if tb not in merged_t:      # ★同じ表を2つ並べない★
+                merged_t.append(tb)
+        existing["tables"] = merged_t
+    # ★種別も引き継ぐ★＝表を持つ節は type:"table" でないと描かれない
+    if existing.get("tables") and not existing.get("type"):
+        if incoming.get("type"):
+            existing["type"] = incoming["type"]
     return existing
 
 
