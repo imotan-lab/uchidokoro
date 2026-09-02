@@ -101,6 +101,16 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★型を書かない表も「中身あり」に数える"
+               "（描画側は描かないので、見出しだけのページが読者に届く）★",
+        "file": "scripts/build_new_article.py",
+        "before": ('    if not isinstance(sec, dict)'
+                   ' or sec.get("type") not in TABLE_TYPES:\n'
+                   "        return 0"),
+        "after": "    if not isinstance(sec, dict):\n        return 0",
+        "run": ["scripts/audit_site.py"],
+    },
+    {
         "why": "★表の入れ物だけで「中身あり」にする"
                "（見出しだけで本文のないページが読者に届く）★",
         "file": "scripts/build_new_article.py",

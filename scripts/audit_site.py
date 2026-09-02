@@ -1525,6 +1525,37 @@ def _check_56_selftest() -> list[str]:
         if not _ba56b.article_contract_problems(_hdr):
             ng.append("★56の対照実験が落ちています★: "
                       "見出しだけで行の無い表を見逃します")
+        # ★★型を書かない表は「中身なし」と数えるか★★
+        #   （2026-09-03・Codexの3回目の指摘。★自分で再現した★＝
+        #     描画側は type が table / settei のときしか表を描かないので、
+        #     型を書かずに本物の行を入れると読者には見出ししか出ない）
+        _tbl = {"label": "表", "headers": ["項目", "内容"],
+                "rows": [["天井", "1200G"]]}
+        _notype = {"slug": "zzz_test",
+                   "sections": [{"title": t, "tables": [dict(_tbl)]}
+                                for t in _want56]}
+        if not _ba56b.article_contract_problems(_notype):
+            ng.append("★56の対照実験が落ちています★: "
+                      "型を書かない表を「中身あり」と数えます")
+        # ★★名簿ではなく描画側と突き合わせる★★＝
+        #   `TABLE_TYPES` が実際に表を描く型と一致しているか、
+        #   本物の描画器に聞いて確かめる（描画側が変わったら落ちる）。
+        try:
+            import build_machine_pages as _bmp56
+            for _ty in ("table", "settei", None, "rumor"):
+                _sec = {"title": "天井・恩恵", "tables": [dict(_tbl)]}
+                if _ty:
+                    _sec["type"] = _ty
+                _drawn = "1200G" in _bmp56.render_section(_sec)
+                _counted = _ba56b.renderable_tables(_sec) > 0
+                if _drawn != _counted:
+                    ng.append(
+                        f"★56の対照実験が落ちています★: 型 {_ty!r} で"
+                        f"「描かれる={_drawn}」と「中身あり={_counted}」が"
+                        "食い違います（TABLE_TYPES を描画側に合わせてください）")
+        except Exception as e:                # noqa: BLE001
+            ng.append(f"★56の対照実験ができません★: "
+                      f"描画器を読めません（{type(e).__name__}: {e}）")
         # ★対照＝正しい「未確認」は止めない★（名指ししすぎない）
         _pend = {"slug": "zzz_test",
                  "sections": [{"title": t, "body": [_ba56b.PENDING_TEXT]}

@@ -447,6 +447,13 @@ def expected_titles(detail) -> list:
     return want
 
 
+# ★表を描く型★（2026-09-03）＝描画側の分岐と一致していること。
+#   `build_machine_pages.render_section` と machine.html のどちらも、
+#   この2つ以外では `tables` / `rows` を一切描かない。
+#   ★一致は対照実験が毎回確かめる★（描画側が変わったら落ちる）。
+TABLE_TYPES = ("table", "settei")
+
+
 def renderable_tables(sec) -> int:
     """★その節の表に、実際に文字が出る行がいくつあるか★（2026-09-03）
 
@@ -459,7 +466,17 @@ def renderable_tables(sec) -> int:
     （描画側と同じ順で見る／空セルだけの行は0行と数える）。
 
     ★読めないときは0★＝形が想定外なら「中身なし」に倒す（fail-closed）。
+
+    ★★型を書かない表は数えない★★（2026-09-03・Codexの3回目の指摘）＝
+      描画側（`build_machine_pages.render_section` と machine.html）は
+      **`type` が `table` か `settei` のときしか表を描かない**。
+      型を書かずに本物の行を入れると、契約は「中身あり」と数えるのに
+      ★読者には見出ししか出ない★（自分で再現した）。
+      ★これは名簿ではなく描画側の分岐そのもの★なので、
+      `TABLE_TYPES` が実際の描画と一致することを対照実験で確かめる。
     """
+    if not isinstance(sec, dict) or sec.get("type") not in TABLE_TYPES:
+        return 0
     try:
         import recheck as _rc
     except Exception:                     # noqa: BLE001
