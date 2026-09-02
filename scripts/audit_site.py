@@ -1436,6 +1436,163 @@ def check_35_risky_atoms(machines: list) -> list[str]:
     return []
 
 
+def check_56_auto_article_contract(machines: list) -> list[str]:
+    """★新台経路の記事が「空っぽ」になっていないか★（2026-09-03）
+
+    ★入れた理由★＝文体の監査55を「止めない」側へ移したとき、
+    ★55が偶然の見張りになっていた★ことがCodexの指摘で分かった。
+    55は「基準の集合から文が消えた」ことも止めるので、
+    **本文が丸ごと消えたこと**をたまたま捕まえていた。
+
+    ★写しの上で再現した★（`sections: []` にして監査を回す）
+      55が止める側: 終了コード1（止めたのは55だけ）
+      55を外した後: 終了コード0（止める項目なし）
+
+    ★他の項目が拾わない理由★
+      6  … ファイルは在るので合格
+      26 … lead の鍵ごと無いと既定値を使うので空と判定しない
+      21 … 空本文の検査は LEGACY_COMPLETE だけ
+      25/28/36 … `sections: []` は違反にならない
+      crosscheck_gates … 新台経路を記事検査の前に外す
+
+    ★同じ規則を2か所に書かない★＝正規の経路（grow_machine・新台公開）が
+    既に使っている `build_new_article.article_contract_problems()` を呼ぶ。
+
+    ★対象は新台経路だけ★＝旧形式の記事は箱の顔ぶれが違う（契約が別）。
+    そちらは監査21（プリレンダの空本文）が見ている。
+    """
+    sys.path.insert(0, str(BASE / "scripts"))
+    try:
+        import build_new_article as _ba56
+    except Exception as e:                # noqa: BLE001
+        return [f"記事の契約を読めません: {type(e).__name__}: {e}"]
+    detail_dir = BASE / "assets" / "data" / "machine-details"
+    ngs = []
+    for m in machines:
+        # ★「新台経路か」は鍵の有無だけで見る★（2026-08-26・Codex31回目）
+        if "publication_policy" not in m:
+            continue
+        slug = m["slug"]
+        p = detail_dir / f"{slug}.json"
+        if not p.is_file():
+            continue                      # ★項目6が担当★
+        try:
+            d = load_json(p)
+        except Exception:                 # noqa: BLE001
+            continue                      # ★項目36が担当★
+        for ng in _ba56.article_contract_problems(d):
+            ngs.append(f"{slug}: {ng}")
+    return ngs + _check_56_selftest()
+
+
+def _check_56_selftest() -> list[str]:
+    """★この見張り自身が働いているかを、毎回いっしょに確かめる★
+
+    ★入口と本体の両方から呼ぶ★（2026-09-01・罠㉞＝
+      監査本体の中だけに置くと `--selftest` から一度も動かず、
+      壊し方の道具が「守られていません」と言う）。
+    """
+    sys.path.insert(0, str(BASE / "scripts"))
+    try:
+        import build_new_article as _ba56b
+    except Exception as e:                # noqa: BLE001
+        return [f"56の対照実験ができません: {type(e).__name__}: {e}"]
+    ng = []
+    # ★偽の「空っぽの記事」を名指しするか★
+    empty = {"slug": "zzz_test", "sections": []}
+    if not _ba56b.article_contract_problems(empty):
+        ng.append("★56の対照実験が落ちています★: "
+                  "中身の無い記事を見逃します")
+    # ★本物の記事を止めないか★（名指ししすぎない）
+    good = None
+    detail_dir = BASE / "assets" / "data" / "machine-details"
+    try:
+        _ms = load_json(BASE / "assets" / "data" / "machines.json")
+    except Exception as e:                # noqa: BLE001
+        return [f"56の対照実験ができません: {type(e).__name__}: {e}"]
+    for m in (_ms if isinstance(_ms, list) else []):
+        if "publication_policy" not in m:
+            continue
+        p = detail_dir / f"{m['slug']}.json"
+        if p.is_file():
+            try:
+                good = load_json(p)
+            except Exception:             # noqa: BLE001
+                continue
+            break
+    if good is not None and _ba56b.article_contract_problems(good):
+        ng.append("★56の対照実験が落ちています★: "
+                  "本物の記事まで止めます")
+    return ng
+
+
+def _check_56_wiring() -> list:
+    """★見張り56が本当に繋がっているかを実経路で試す★（2026-09-03）
+
+    ★単体試験だけでは足りない★（罠③）＝
+      `check_56_auto_article_contract()` の中の**呼び出し行**を消しても、
+      `article_contract_problems` を直接試す試験は緑のまま。
+
+    ★本番のファイルは1文字も触らない★＝
+      機種の一覧と記事データを**関数に渡す**形で試す。
+    """
+    bad = []
+    names = [n for n, _f in CHECKS]
+    if "56_新台記事が空っぽ" not in names:
+        bad.append("CHECKS に登録されていません")
+        return bad
+    # ★本体へ偽の新台を渡して、名指しするか見る★
+    #   ★記事データは本物の置き場に無いので、一時の置き場へ向ける★
+    import shutil as _sh56
+    import tempfile as _tf56
+    import json as _js56
+    root = _tf56.mkdtemp(prefix="audit56_")
+    try:
+        d = os.path.join(root, "assets", "data", "machine-details")
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "zzz_wire56.json"), "w",
+                  encoding="utf-8") as f:
+            _js56.dump({"slug": "zzz_wire56", "sections": []}, f)
+        global BASE
+        keep = BASE
+        try:
+            BASE = Path(root)
+            got = check_56_auto_article_contract(
+                [{"slug": "zzz_wire56", "publication_policy": "x"}])
+        finally:
+            BASE = keep
+        if not any("zzz_wire56" in str(x) for x in got):
+            bad.append("空っぽの新台記事を名指ししません")
+        # ★対照＝新台経路でない機種は見ない★
+        keep = BASE
+        try:
+            BASE = Path(root)
+            got2 = check_56_auto_article_contract([{"slug": "zzz_wire56"}])
+        finally:
+            BASE = keep
+        if any("zzz_wire56" in str(x) for x in got2):
+            bad.append("新台経路でない機種まで見ています")
+
+        # ★★本体が対照実験を通しているか★★（罠③）
+        #   ★配信の経路は `--selftest` を流さない★ので、
+        #   本体からの呼び出しが消えると、配信のときに一度も動かない。
+        #   ★狙った1件だけが効く形★＝土台の関数を「何も言わない」ものへ
+        #   差し替えて本体を呼ぶ。通していれば「見逃します」が返る。
+        import build_new_article as _ba56w
+        _keep_fn = _ba56w.article_contract_problems
+        try:
+            _ba56w.article_contract_problems = lambda d: []
+            got3 = check_56_auto_article_contract([])
+        finally:
+            _ba56w.article_contract_problems = _keep_fn
+        if not any("見逃します" in str(x) for x in got3):
+            bad.append("本体が対照実験を通していません"
+                       "（配信のときに一度も動きません）")
+    finally:
+        _sh56.rmtree(root, ignore_errors=True)
+    return bad
+
+
 def check_55_plain_style(machines: list) -> list[str]:
     """★記事の文体（です・ます）から外れた文が増えていないか★
     （2026-08-31・運営者の指示）
@@ -3670,6 +3827,7 @@ CHECKS = [
     ("53_出典の投稿欄", check_53_source_user_area),
     ("54_どこから採ったかの言い回し", check_54_source_wording),
     ("55_文体（です・ます）の残り", check_55_plain_style),
+    ("56_新台記事が空っぽ", check_56_auto_article_contract),
 ]
 
 
@@ -3841,6 +3999,14 @@ def selftest() -> int:
     for x in _w37:
         t("★見張り37の配線★ " + x, False)
     t("★★見張り37が、live とスキルの両方に本当に繋がっている★★", not _w37)
+    _w56 = _check_56_wiring()
+    for x in _w56:
+        t("★見張り56の配線★ " + x, False)
+    t("★★見張り56（新台記事が空っぽ）が本当に繋がっている★★", not _w56)
+    _s56 = _check_56_selftest()
+    for x in _s56:
+        t("★見張り56★ " + x, False)
+    t("★★見張り56の対照実験が働いている★★", not _s56)
     _s37 = _check_37_selftest()
     for x in _s37:
         t("★見張り37★ " + x, False)

@@ -551,6 +551,74 @@ def confirmed_count(detail: dict) -> int:
     return sum(_n(u) for u in _units(detail))
 
 
+_NAME_MARK = "\uE001"        # ★機種名の入る場所の目印★（本文に出ない字）
+
+
+def template_drift(machine: dict, old_detail: dict) -> list:
+    """★いまのひな型なら別の文になる箇所★（2026-09-03・Codexの指摘3）
+
+    ★見るのは導入文だけ★＝機種名と登場時期をはめ込んだ定型文で、
+    **新しい事実を持たない**（だから `_units` の比較からも外してある）。
+    ここがずれているのは「ひな型を変えたのに記事が追いついていない」状態。
+
+    ★これを書く理由として数える★＝数えないと、
+    ひな型を直した日に既存の記事が**永久に古いまま**残る
+    （育成は材料が増えたときしか書かないため）。
+    実測（2026-09-03）＝書き出しを直した日、10機種が取り残された。
+
+    ★★機種名では比べない★★＝育成が使う機種名は2AIの確定値で
+    上書きされることがあり（`vo["identity_name"]`）、
+    こちらで組み立てると**別物と誤判定**する。
+    ★ひな型の「名前より後ろ」だけを見る★＝
+    ひな型そのものから切り出すので、次にひな型を変えても自動で追随する。
+
+    ★登場時期は機種の一覧から取る★＝`release_date` と
+    `identity.market_release_date` は同じ値（実測13機種すべて一致）。
+    食い違うときは `identity_same` が別に止める。
+    """
+    if not isinstance(old_detail, dict) or not old_detail:
+        return []
+    got = str(old_detail.get("lead") or "")
+    if not got:
+        return []
+    m = machine or {}
+    rel = str(m.get("release_date")
+              or (m.get("identity") or {}).get("market_release_date") or "")
+    if rel:
+        whole = _ba.LEAD_TEMPLATE.format(name=_NAME_MARK,
+                                         release=_ba._fmt_release(rel))
+    else:
+        whole = _ba.LEAD_NO_DATE.format(name=_NAME_MARK)
+    tail = whole.split(_NAME_MARK, 1)[-1]
+    if tail and not got.endswith(tail):
+        return ["書き出しの言い回しが、いまのひな型と違います"]
+    return []
+
+
+def growth_reasons(nn: list, machine: dict, old_detail: dict) -> list:
+    """★今日この機種でやることがあるか★（2026-09-03・切り出した理由は下記）
+
+    引数の `nn` は `nothing_new()` の答え
+    （空＝材料が増えた／中身があれば「育てるものがありません」）。
+
+    ★ひな型のずれも「やること」に数える★＝
+    数えないと、ひな型を直した日に既存の記事が**永久に古いまま**残る
+    （育成は材料が増えたときしか書かないため）。
+    実測（2026-09-03）＝書き出しを直した日、13機種が取り残された。
+
+    ★中身の守りは何も緩めない★＝
+    「前に載っていた内容が消えていないか」（`text_kept`）は
+    呼び出し側で既に通っている。ここは**書く理由**を決めるだけ。
+
+    ★★関数に切り出した理由★★＝`plan_one` の中に埋めていたら、
+    壊し方の道具が「この守りは試験で守られていません」と言った
+    （そこへ届くには通信して記事を作るところまで行く必要がある）。
+    """
+    if nn and template_drift(machine, old_detail):
+        return []
+    return list(nn or [])
+
+
 def nothing_new(old_dec: dict, new_dec: dict,
                 old_detail: dict, new_detail: dict) -> list:
     """育てるものがあるか（★事実の数だけで見ない★）。
@@ -1126,7 +1194,15 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
             if _now and _now == _known:
                 _pr = (probe or _pp.check_all)(_known)
                 out["probe_rows"] = _pr.get("rows") or []
-                if _pr.get("skip"):
+                # ★★ひな型がずれていたら見送らない★★
+                #   （2026-09-03・Codexの指摘3）＝出典が変わらなくても、
+                #   こちらのひな型を変えた日は記事を追いつかせる必要がある。
+                #   ★③と同じ関数・同じ材料で見る★＝食い違うと
+                #   「毎日調べ直すが毎日書かない」を繰り返す。
+                _dp0 = _detail_path(slug)
+                _od0 = (_sj.read_json(_dp0, expect=dict)
+                        if os.path.isfile(_dp0) else {})
+                if _pr.get("skip") and not template_drift(cur, _od0):
                     out["problems"].append(
                         "出典の顔ぶれも中身も前回から変わっていません"
                         "（今日は見送ります）")
@@ -1277,6 +1353,10 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     _clean = not out["problems"]
     _nn = nothing_new(cur.get("page_decision"), machine.get("page_decision"),
                       old_detail, detail)
+    # ★★やることがあるかの判断は `growth_reasons` の1か所★★
+    #   （2026-09-03。★ここに埋めていたら、壊し方の道具が
+    #     「この守りは試験で守られていません」と言った★）
+    _nn = growth_reasons(_nn, cur, old_detail)
     out["problems"] += _nn
     out["nothing_new_only"] = bool(_clean and _nn)
     # ★「前に載っていた内容が再現できない」は人へ回す★（黙って止め続けない）
@@ -2132,14 +2212,23 @@ def selftest() -> int:
         return (_T - _dtm.timedelta(days=off)).isoformat()
 
     # ★★2026-08-13・台帳#346（軽い様子見）★★
-    def _probe_run(skip, known, now=None):
+    def _probe_run(skip, known, now=None, drift=False):
         # ★出典を探す工程も差し替える★（試験で実サイトへ出ない）
+        # ★★「ひな型のずれ」も渡せるようにする★★（2026-09-03・罠㉙）
+        #   ★直す前は本物の記事の書き出しを読んでいた★ので、
+        #   ひな型を変えた日に**この試験だけが赤くなった**
+        #   （見ている守りが2つ混ざっていた＝罠㉚）。
+        #   既定は「ずれ無し」＝出典の見送りだけを見る。
         _bk = globals()["_probe_state"]
         _bf = globals()["find_sources"]
+        _bd = globals()["template_drift"]
         globals()["_probe_state"] = (
             lambda: ({"pw_10523": {"urls": known}} if known else {}))
         globals()["find_sources"] = (
             lambda m: list(known if now is None else now))
+        globals()["template_drift"] = (
+            lambda m, d: (["書き出しの言い回しが、いまのひな型と違います"]
+                          if drift else []))
         try:
             return plan_one("pw_10523",
                             probe=lambda u: {"skip": skip, "rows": []},
@@ -2150,6 +2239,7 @@ def selftest() -> int:
         finally:
             globals()["_probe_state"] = _bk
             globals()["find_sources"] = _bf
+            globals()["template_drift"] = _bd
 
     t("★★出典の顔ぶれが変わったら見送らない★★（2026-08-14・依頼185のP1）"
       "／別の名鑑に新しく記事が出ても永久に気づかない状態だった",
@@ -2187,6 +2277,82 @@ def selftest() -> int:
     t("★★1つでも変わった・確かめられないなら、いつもどおり調べる★★"
       "（★確かめられなかったページを『変化なし』に数えない★）",
       _probe_run(False, ["https://x.test/a"]).get("unchanged") is False)
+    # ── ★「やることがあるか」の判断を直接たたく★（2026-09-03）
+    #   ★`plan_one` の中に埋めていたときは、どの試験も通らなかった★
+    #   （そこへ届くには通信して記事を作るところまで行く必要がある）。
+    _old_lead = {"lead": "試験機の機種情報ページです。"
+                         "登場時期は2026年8月17日 導入。"}
+    _m_g = {"slug": "zzz", "name": "試験機", "release_date": "2026-08-17"}
+    _now_lead = {"lead": _ba.LEAD_TEMPLATE.format(
+        name="試験機", release=_ba._fmt_release("2026-08-17"))}
+    t("★★ひな型がずれていれば「育てるものがありません」で止めない★★"
+      "（2026-09-03・Codexの指摘3）",
+      growth_reasons(["育てるものがありません（確定した中身が増えていません）"],
+                     _m_g, _old_lead) == [])
+    t("　（対照）ずれが無ければ、いつもどおり止まる"
+      "＝止めなくするのは『ずれ』のときだけ",
+      growth_reasons(["育てるものがありません（確定した中身が増えていません）"],
+                     _m_g, _now_lead)
+      == ["育てるものがありません（確定した中身が増えていません）"])
+    t("　材料が増えていれば、ずれの有無に関わらず通す",
+      growth_reasons([], _m_g, _old_lead) == []
+      and growth_reasons([], _m_g, _now_lead) == [])
+    t("★ずれを理由に、別の問題まで消さない★"
+      "（消してよいのは『育てるものがありません』の判断だけ）",
+      growth_reasons(["育てるものがありません（確定した中身が増えていません）"],
+                     _m_g, _old_lead) == []
+      and "growth_reasons(_nn, cur, old_detail)" in io.open(
+          os.path.abspath(__file__), encoding="utf-8").read())
+    # ── ★ひな型のずれを見つける関数そのものを試す★（2026-09-03・罠⑤）
+    #   ★上の様子見の試験は、この関数を丸ごと差し替える★ので、
+    #   中の判定を空にしても緑のままだった（壊し方の道具が見つけた）。
+    #   ★材料はその場で作る★＝生きているデータに貼り付けない（罠㉙）。
+    _m_day = {"slug": "zzz", "name": "試験機", "release_date": "2026-08-17"}
+    _m_mon = {"slug": "zzz", "name": "試験機", "release_date": "2026-08"}
+    _m_non = {"slug": "zzz", "name": "試験機"}
+    _now_day = _ba.LEAD_TEMPLATE.format(name="試験機",
+                                        release=_ba._fmt_release("2026-08-17"))
+    _now_non = _ba.LEAD_NO_DATE.format(name="試験機")
+    t("★★古い書き方の書き出しは「ずれ」と分かる★★（体言止め）",
+      bool(template_drift(_m_day,
+                          {"lead": "試験機の機種情報ページです。"
+                                   "登場時期は2026年8月17日 導入。"})))
+    t("　（対照）いまのひな型で作った書き出しは、ずれない"
+      "＝2回目に何も動かない（罠㉘）",
+      not template_drift(_m_day, {"lead": _now_day}))
+    t("　月までしか分からない機種でも見る",
+      bool(template_drift(_m_mon,
+                          {"lead": "試験機の機種情報ページです。"
+                                   "登場時期は2026年8月頃。"}))
+      and not template_drift(
+          _m_mon,
+          {"lead": _ba.LEAD_TEMPLATE.format(
+              name="試験機", release=_ba._fmt_release("2026-08"))}))
+    t("　登場時期が無い機種は、日付の無いひな型で見る",
+      bool(template_drift(_m_non, {"lead": "試験機のページです。"}))
+      and not template_drift(_m_non, {"lead": _now_non}))
+    t("★機種名が違っても「ずれ」にしない★"
+      "（2AIが機種名を確定すると別名になるため・名前より後ろだけを見る）",
+      not template_drift(
+          _m_day,
+          {"lead": _ba.LEAD_TEMPLATE.format(
+              name="ぜんぜん違う名前", release=_ba._fmt_release("2026-08-17"))}))
+    t("　記事が無い・書き出しが空のときは、ずれと言わない",
+      not template_drift(_m_day, {}) and not template_drift(_m_day, None)
+      and not template_drift(_m_day, {"lead": ""}))
+    t("　登場時期が食い違えば、ずれと分かる"
+      "（ひな型の日付が本文に入るため）",
+      bool(template_drift({"slug": "zzz", "name": "試験機",
+                           "release_date": "2026-09-01"},
+                          {"lead": _now_day})))
+    t("★★ひな型がずれていたら見送らない★★（2026-09-03・Codexの指摘3）"
+      "／ずれを数えないと、ひな型を直した日に既存の記事が永久に古いまま残る",
+      _probe_run(True, ["https://x.test/a"], drift=True)
+      .get("unchanged") is not True)
+    t("　（対照）同じ材料でも、ずれが無ければ見送る"
+      "＝止めているのは『ずれ』であって、他の検査ではない",
+      _probe_run(True, ["https://x.test/a"], drift=False)
+      .get("unchanged") is True)
     t("　前回の出典を控えていなければ、様子見せずに調べる",
       _probe_run(True, []).get("unchanged") is False)
     t("★★見送るときは材料を作らない★★"

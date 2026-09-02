@@ -66,6 +66,61 @@ MUTATIONS = [
         "run": ["scripts/audit_site.py"],
     },
     {
+        "why": "★ひな型のずれを見つけられなくする"
+               "（ひな型を直した日に、既存の記事が永久に古いまま残る）★",
+        "file": "scripts/grow_machine.py",
+        "before": '        return ["書き出しの言い回しが、いまのひな型と違います"]',
+        "after": "        return []",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★ずれていても様子見で飛ばす"
+               "（出典が変わらない機種は二度と追いつかない）★",
+        "file": "scripts/grow_machine.py",
+        "before": '                if _pr.get("skip") and not template_drift(cur, _od0):',
+        "after": '                if _pr.get("skip"):',
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★ずれていても「育てるものがありません」で止める★"
+               "（記事を作るところまで来ても書かない）",
+        "file": "scripts/grow_machine.py",
+        "before": "    if nn and template_drift(machine, old_detail):\n"
+                  "        return []",
+        "after": "    if False:\n        return []",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★新台の記事が空っぽでも通す"
+               "（読者の画面が真っ白になる＝2026-09-03にCodexが見つけた穴）★",
+        "file": "scripts/audit_site.py",
+        "before": "        for ng in _ba56.article_contract_problems(d):\n"
+                  "            ngs.append(f\"{slug}: {ng}\")",
+        "after": "        for ng in []:\n"
+                 "            ngs.append(f\"{slug}: {ng}\")",
+        "run": ["scripts/audit_site.py"],
+    },
+    {
+        "why": "★新台経路の機種を1つも見ない★"
+               "（見張りが空振りする）",
+        "file": "scripts/audit_site.py",
+        "before": '        if "publication_policy" not in m:\n'
+                  "            continue\n"
+                  "        slug = m[\"slug\"]",
+        "after": '        if "publication_policy" in m:\n'
+                 "            continue\n"
+                 "        slug = m[\"slug\"]",
+        "run": ["scripts/audit_site.py"],
+    },
+    {
+        "why": "★56の対照実験そのものを黙らせる★"
+               "（見張りが働いているかを誰も確かめなくなる）",
+        "file": "scripts/audit_site.py",
+        "before": "    return ngs + _check_56_selftest()",
+        "after": "    return ngs",
+        "run": ["scripts/audit_site.py"],
+    },
+    {
         "why": "★タスクの契約が消えても黙って通す"
                "（見張りが静かに消え、止めたタスクの手順が生き返る）★",
         "file": "scripts/audit_site.py",
