@@ -447,6 +447,34 @@ def expected_titles(detail) -> list:
     return want
 
 
+def renderable_tables(sec) -> int:
+    """★その節の表に、実際に文字が出る行がいくつあるか★（2026-09-03）
+
+    ★「表があるか」では足りない★（Codexの指摘）＝
+      `tables: [{}]` は真なので「中身あり」と判定され、
+      ★見出しだけで本文のないページ★が公開を通った（自分で再現済み）。
+
+    ★同じ規則を2か所に書かない★＝数え方は
+    `recheck._settei_renderable_rows()` が持っている
+    （描画側と同じ順で見る／空セルだけの行は0行と数える）。
+
+    ★読めないときは0★＝形が想定外なら「中身なし」に倒す（fail-closed）。
+    """
+    try:
+        import recheck as _rc
+    except Exception:                     # noqa: BLE001
+        # ★読めないときは表の有無で判断しない★＝
+        #   ここで「中身あり」に倒すと、この守りが黙って消える。
+        return 0
+    try:
+        n, why = _rc._settei_renderable_rows(sec if isinstance(sec, dict) else {})
+    except Exception:                     # noqa: BLE001
+        return 0
+    if why:
+        return 0
+    return int(n or 0)
+
+
 def article_contract_problems(detail) -> list:
     """★記事データが「箱だけの骨組み」になっていないか★
 
@@ -472,7 +500,11 @@ def article_contract_problems(detail) -> list:
     for sec in secs:
         title = sec.get("title")
         body = [x for x in (sec.get("body") or []) if isinstance(x, str) and x.strip()]
-        tables = sec.get("tables") or []
+        # ★★「表がある」ではなく「文字が出る行がある」で見る★★
+        #   （2026-09-03・Codexの指摘。★自分で再現した★＝
+        #     `tables: [{}]` は真なので中身ありと判定され、
+        #     見出しだけで本文のないページが公開を通った）
+        tables = renderable_tables(sec)
         if title == RUMOR_SECTION["title"]:
             # ★出すなら中身が要る★（決まり文句だけの箱は作らない）
             if sec.get("type") != "rumor" or not body:

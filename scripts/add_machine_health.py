@@ -87,6 +87,10 @@ def pair_problem(day: str, text: str, next_text) -> str:
     ★`next_text` が None ＝翌日のログが無い★
       → 今までどおり「止まっています」と言う（fail-closed）。
       ★見えないものを「大丈夫」にしない★
+      ★それを守っているのは `spillover_ends` が 0 を返すこと★
+      （2026-09-03。ここに `next_text is not None` を書いていたが、
+        壊し方の道具が「消しても何も赤くならない」と教えてくれた
+        ＝**効いていない条件**だった。残すと守っていると読み違える）。
     """
     starts = str(text or "").count(START_MARK)
     ends = str(text or "").count(END_MARK)
@@ -94,8 +98,9 @@ def pair_problem(day: str, text: str, next_text) -> str:
         return f"{day}: 開始の記録がありません"
     if starts == ends:
         return ""
-    if starts > ends and next_text is not None:
+    if starts > ends:
         # ★日をまたいだぶんだけを足す★（翌日ぶんの終了は数えない）
+        #   ★翌日のログが無いときは 0 が返るので、そのまま報告になる★
         if ends + spillover_ends(next_text) >= starts:
             return ""
     return (f"{day}: 開始 {starts} 回に対して終了 {ends} 回"

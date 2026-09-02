@@ -1503,6 +1503,35 @@ def _check_56_selftest() -> list[str]:
     if not _ba56b.article_contract_problems(empty):
         ng.append("★56の対照実験が落ちています★: "
                   "中身の無い記事を見逃します")
+    # ★★「表の入れ物だけ」も名指しするか★★（2026-09-03・Codexの2回目の指摘）
+    #   ★自分で再現した★＝`tables: [{}]` は**真**なので「中身あり」と
+    #   判定され、★見出しだけで本文のないページ★が公開を通っていた。
+    #   `type` が無ければ描画側は表を出さないので、読者には見出しだけが届く。
+    try:
+        _want56 = _ba56b.expected_titles({"sections": []})
+    except Exception:                     # noqa: BLE001
+        _want56 = []
+    if _want56:
+        _shell = {"slug": "zzz_test",
+                  "sections": [{"title": t, "tables": [{}]} for t in _want56]}
+        if not _ba56b.article_contract_problems(_shell):
+            ng.append("★56の対照実験が落ちています★: "
+                      "表の入れ物だけの記事を見逃します")
+        _hdr = {"slug": "zzz_test",
+                "sections": [{"title": t, "type": "table",
+                              "tables": [{"headers": ["項目", "内容"],
+                                          "rows": []}]}
+                             for t in _want56]}
+        if not _ba56b.article_contract_problems(_hdr):
+            ng.append("★56の対照実験が落ちています★: "
+                      "見出しだけで行の無い表を見逃します")
+        # ★対照＝正しい「未確認」は止めない★（名指ししすぎない）
+        _pend = {"slug": "zzz_test",
+                 "sections": [{"title": t, "body": [_ba56b.PENDING_TEXT]}
+                              for t in _want56]}
+        if _ba56b.article_contract_problems(_pend):
+            ng.append("★56の対照実験が落ちています★: "
+                      "正しい「未確認」まで止めます")
     # ★本物の記事を止めないか★（名指ししすぎない）
     good = None
     detail_dir = BASE / "assets" / "data" / "machine-details"

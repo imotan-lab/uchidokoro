@@ -76,14 +76,6 @@ MUTATIONS = [
         "run": ["scripts/add_machine_health.py"],
     },
     {
-        "why": "★翌日のログが読めなくても「大丈夫」にする"
-               "（見えないものを大丈夫にしない、を壊す）★",
-        "file": "scripts/add_machine_health.py",
-        "before": "    if starts > ends and next_text is not None:",
-        "after": "    if starts > ends:",
-        "run": ["scripts/add_machine_health.py"],
-    },
-    {
         "why": "★ひな型のずれを見つけられなくする"
                "（ひな型を直した日に、既存の記事が永久に古いまま残る）★",
         "file": "scripts/grow_machine.py",
@@ -107,6 +99,22 @@ MUTATIONS = [
                   "        return []",
         "after": "    if False:\n        return []",
         "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★表の入れ物だけで「中身あり」にする"
+               "（見出しだけで本文のないページが読者に届く）★",
+        "file": "scripts/build_new_article.py",
+        "before": "        tables = renderable_tables(sec)",
+        "after": '        tables = sec.get("tables") or []',
+        "run": ["scripts/audit_site.py"],
+    },
+    {
+        "why": "★行の数え方が読めないとき「中身あり」に倒す"
+               "（守りが黙って消える）★",
+        "file": "scripts/build_new_article.py",
+        "before": "    if why:\n        return 0\n    return int(n or 0)",
+        "after": "    return 1",
+        "run": ["scripts/audit_site.py"],
     },
     {
         "why": "★新台の記事が空っぽでも通す"
