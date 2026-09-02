@@ -347,6 +347,34 @@ MODE_NOTE = "確認できたモード・ゾーンのみ掲載しています。"
 OPTIONAL_SECTIONS = ((MODE_TITLE, 2),)
 
 
+def mode_box_for(slug: str, corpus=None):
+    """★控えがあれば、その機種のモード・ゾーンの節を作る★（2026-09-02）
+
+    ★控えが無ければ None★＝欄ごと出さない（運営者の判断）。
+    ★証拠の集合が変わっていれば、控えは使わない★
+      （下位ページが1本増えただけで「無い」は覆るため）。
+
+    corpus … いまの証拠の集合。★渡されなければ控えを使わない★
+      （fail-closed＝古い判断で書かない）。
+    """
+    if not slug or not isinstance(corpus, dict):
+        return None
+    try:
+        import mode_verdict as _mv
+    except Exception:                                        # noqa: BLE001
+        return None                      # ★道具が無い環境では何も出さない★
+    m, mv = _mv.verdict(slug, "mode", corpus)
+    z, zv = _mv.verdict(slug, "zone", corpus)
+    st = _mv.box_state(m, z)
+    if st != "HAS":
+        return mode_section(st)
+    tbls = []
+    for v in (mv, zv):
+        if isinstance(v, dict) and isinstance(v.get("table"), dict):
+            tbls.append(v["table"])
+    return mode_section("HAS", tbls)
+
+
 def mode_section(box_state: str, tables=None):
     """★控えた判断から、記事の節を作る★（2026-09-02）
 
@@ -1175,6 +1203,13 @@ def build_detail(slug, name, release, material) -> dict:
     for title in SECTION_ORDER:
         sections.append(boxes.get(title)
                         or {"title": title, "body": [PENDING_TEXT]})
+    # ★★モード・ゾーンは、控えがあるときだけ差し込む★★（2026-09-02）
+    #   ★未確認なら欄ごと出さない★（運営者の判断）ので、
+    #   控えが無ければ何も足さない＝いまの記事は1文字も変わらない。
+    _mz = mode_box_for(slug, (material or {}).get("mode_corpus"))
+    if _mz:
+        _pos = next((p for ti, p in OPTIONAL_SECTIONS if ti == MODE_TITLE), 2)
+        sections = sections[:_pos] + [_mz] + sections[_pos:]
     # ★噂の箱は中身ができてから★（2026-08-12・運営者決定）
     #   新台の時点では噂も小ネタも無いので、箱ごと出さない。
     return {
@@ -2171,6 +2206,11 @@ def selftest() -> int:
       "／★表が必須の名簿に入れると、この形が必ず断られる★",
       not [x for x in _with_mode(mode_section("NONE_CONFIRMED"))
            if MODE_TITLE in x])
+
+    t("★控えが無ければ、モードの箱は作らない★（いまの記事は変わらない）",
+      mode_box_for("zzz_none", {"complete": True, "fp": "sha256:x"}) is None)
+    t("★証拠の集合が渡されなければ、控えを使わない★（古い判断で書かない）",
+      mode_box_for("zzz_none", None) is None)
 
     t("　7つの箱の構成は変わらない",
       [s["title"] for s in _art_e2e["sections"]] == list(SECTION_ORDER))
