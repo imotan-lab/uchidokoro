@@ -438,7 +438,84 @@ def selftest() -> int:
     return 0 if ok == len(cases) else 1
 
 
+def apply_file(path: str, read_pages=None) -> int:
+    """★2AIが書いた決定ファイルのとおりに控える★（1つでも通らなければ書かない）
+
+    決定ファイル（JSON）:
+      slug / kind / machine_url / manifest（mode_ask が出したパス）/
+      decisions / quotes / table
+
+    ★本文は決定ファイルに書かせない★＝
+      `mode_ask` が出した写しから読み直す。
+      ★2AIが「本文にこう書いてある」と言い張れないようにする★。
+    """
+    with open(path, encoding="utf-8") as f:
+        d = json.load(f)
+    if not isinstance(d, dict):
+        print("★決定ファイルの形が違います★")
+        return 1
+    need = ("slug", "kind", "machine_url", "manifest", "decisions")
+    miss = [k for k in need if not d.get(k)]
+    if miss:
+        print(f"★決定ファイルに足りないものがあります★（{miss}）")
+        return 1
+
+    mp = str(d["manifest"])
+    if not os.path.isfile(mp):
+        print(f"★証拠の記録が見つかりません★（{mp}）")
+        return 1
+    with open(mp, encoding="utf-8") as f:
+        man = json.load(f)
+    corpus = man.get("manifest") if isinstance(man, dict) else None
+    if not isinstance(corpus, dict):
+        print("★証拠の記録の形が違います★")
+        return 1
+
+    # ★本文は写しから読み直す★（決定ファイルの言い分を信じない）
+    reader = read_pages or _read_corpus_file
+    pages, why = reader(mp)
+    if why:
+        print(f"★本文を読めません★（{why}）")
+        return 1
+
+    try:
+        got = record(d["slug"], d["kind"], d["machine_url"], d["decisions"],
+                     corpus, pages, d.get("quotes"), d.get("table"))
+    except ValueError as e:                                  # noqa: BLE001
+        print(f"★控えませんでした★ {e}")
+        return 1
+    print(f"控えました: {d['slug']} / {d['kind']} → {got['state']}")
+    return 0
+
+
+def _read_corpus_file(manifest_path: str):
+    """★mode_ask が書いた本文の写しを読み直す★（{URL: 本文} に戻す）。
+
+    ★分け方は書いた側の関数を使う★（2026-09-02）＝
+      同じ規則を2か所に書くと必ずずれる（実際にずれて、
+      「指紋が合いません」で何も控えられなかった）。
+    """
+    import mode_ask as _ma
+    p = manifest_path.replace("_manifest.json", "_corpus.txt")
+    if not os.path.isfile(p):
+        return {}, f"本文の写しがありません（{p}）"
+    with open(p, encoding="utf-8") as f:
+        pages = _ma.load_pages(f.read())
+    if not pages:
+        return {}, "本文の写しが空です"
+    return pages, ""
+
+
 if __name__ == "__main__":
-    if "--selftest" in sys.argv:
+    import argparse
+    ap = argparse.ArgumentParser(description="モード・ゾーンの判断を控える")
+    ap.add_argument("--apply", metavar="決定ファイル",
+                    help="2AIが書いた決定ファイルのとおりに控える")
+    ap.add_argument("--selftest", action="store_true")
+    a = ap.parse_args()
+    if a.selftest:
         raise SystemExit(selftest())
-    print("使い方: python scripts/mode_verdict.py --selftest")
+    if a.apply:
+        raise SystemExit(apply_file(a.apply))
+    print("使い方: python scripts/mode_verdict.py --apply <決定ファイル>"
+          " ／ --selftest")
