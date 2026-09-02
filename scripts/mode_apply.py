@@ -81,37 +81,75 @@ def plan(detail: dict, box) -> dict:
             "why": "控えができました"}
 
 
-def corpus_now(slug: str):
-    """★いまの証拠の集合★（本体1ページだけで軽く確かめる）。
+def corpus_now(slug: str, quick=None, fetch=None, text_of=None):
+    """★いまの証拠の集合★（★サイトごとに、本体1ページだけで確かめる★）
 
-    返り: (集合, 理由)  … 使えなければ集合は None
+    返り: (状態, 集合, 理由)
+      "VALID"      … 控えを反映してよい
+      "STALE"      … 証拠が変わった＝★節を消す★
+      "UNREADABLE" … ★いま確認できないだけ＝何も書かない★
+
+    ★★「確認できない」と「控えが無効」を分ける★★
+      （2026-09-02・Codexのレビュー37の重大②）
+      ★直す前は両方 None にして節を消していた★＝
+      `--clean` は記録も消すので、★普段の手順で必ず節が消えた★。
+      一時的な503でも同じだった。
     """
     import page_corpus as _pc
-    import fetched_page as _fp
-    import html_check as _hc
-    import new_machine_watch as _nmw
     import mode_ask as _ma
 
     mp = os.path.join(_ma.WORK, f"{slug}_manifest.json")
     if not os.path.isfile(mp):
-        return None, "証拠の記録がありません（先に mode_ask を流してください）"
-    with open(mp, encoding="utf-8") as f:
-        man = json.load(f)
+        # ★記録が無いのは「確認できない」★（控えが無効になったのではない）
+        return "UNREADABLE", None, "証拠の記録がありません（先に mode_ask を）"
+    try:
+        with open(mp, encoding="utf-8") as f:
+            man = json.load(f)
+    except Exception as e:                                   # noqa: BLE001
+        return "UNREADABLE", None, f"証拠の記録を読めません（{type(e).__name__}）"
+    if not isinstance(man, dict):
+        return "UNREADABLE", None, "証拠の記録の形が違います"
     saved = man.get("manifest")
     if not isinstance(saved, dict):
-        return None, "証拠の記録の形が違います"
+        return "UNREADABLE", None, "証拠の記録の形が違います"
     if man.get("slug") != slug:
-        return None, f"証拠の記録は別の機種のものです（{man.get('slug')}）"
+        return "UNREADABLE", None, \
+            f"証拠の記録は別の機種のものです（{man.get('slug')}）"
 
-    with _nmw.fetching("claim_material"):
-        for root in (man.get("roots") or []):
-            cat = _ma.catalog_of(root)
-            got, why = _pc.quick_check(
-                cat, root, lambda u: _fp.fetch(u, "claim_material"),
-                lambda pg: _hc.visible_text(pg.cleaned_html), saved)
+    roots = man.get("roots")
+    per = man.get("per_root")
+    # ★★本体URLが無ければ断る★★（Codexのレビュー37の重大③）
+    #   ★直す前は0回のループを抜けて、1ページも確認せず古い控えを採用した★
+    if not isinstance(roots, list) or not roots:
+        return "UNREADABLE", None, "証拠の記録に本体URLがありません"
+    if not isinstance(per, dict) or set(per) != {str(x) for x in roots}:
+        return "UNREADABLE", None, \
+            "証拠の記録に、サイトごとの記録がそろっていません"
+
+    if quick is None:
+        import fetched_page as _fp
+        import html_check as _hc
+        import new_machine_watch as _nmw
+        fetch = fetch or (lambda u: _fp.fetch(u, "claim_material"))
+        text_of = text_of or (lambda pg: _hc.visible_text(pg.cleaned_html))
+        quick = _pc.quick_check
+        ctx = _nmw.fetching("claim_material")
+    else:
+        import contextlib as _cl
+        ctx = _cl.nullcontext()
+
+    with ctx:
+        for root in roots:
+            # ★★サイトごとの記録と比べる★★（重大①）
+            #   ★合体した記録と比べると必ず「変わった」になる★
+            got, why = quick(_ma.catalog_of(root), root, fetch, text_of,
+                             per[str(root)])
+            if got == "CHANGED":
+                return "STALE", None, f"{root} … {why}"
             if got != "SAME":
-                return None, f"{root} … {why or got}"
-    return saved, ""
+                # ★いま読めないだけ★＝何も書かない
+                return "UNREADABLE", None, f"{root} … {why or got}"
+    return "VALID", saved, ""
 
 
 def run(slug: str, apply: bool) -> int:
@@ -119,12 +157,16 @@ def run(slug: str, apply: bool) -> int:
     if not os.path.isfile(p):
         print(f"★記事データがありません★（{p}）")
         return 1
-    corpus, why = corpus_now(slug)
-    if corpus is None:
-        print(f"★控えを使えません★ {why}")
-        box = None
-    else:
-        box = _ba.mode_box_for(slug, corpus)
+    state, corpus, why = corpus_now(slug)
+    if state == "UNREADABLE":
+        # ★★いま確認できないだけ★★＝★記事を1文字も触らない★
+        #   （2026-09-02・Codexのレビュー37の重大②）
+        print(f"★いま確認できません★ {why}")
+        print("★記事は触っていません★")
+        return 1
+    box = None if state == "STALE" else _ba.mode_box_for(slug, corpus)
+    if state == "STALE":
+        print(f"★証拠が変わりました★ {why}")
     with open(p, encoding="utf-8") as f:
         detail = json.load(f)
     got = plan(detail, box)
@@ -199,6 +241,101 @@ def selftest() -> int:
       and [s["title"] for s in g4["sections"]][2] == _ba.MODE_TITLE)
 
     t("　記事の形が違えば断る", plan({"sections": "x"}, BOX)["action"] == "")
+
+    # ★★ここから corpus_now★★（2026-09-02・Codexのレビュー37）
+    #   ★直す前は plan() しか試しておらず、直した3件を1つも見ていなかった★
+    import json as _js
+    import tempfile as _tf
+    import mode_ask as _ma
+    import page_corpus as _pc
+
+    _keep_work = _ma.WORK
+    _ma.WORK = _tf.mkdtemp(prefix="mapply_")
+    NANA = "https://nana-press.com/kaiseki/machine/644/"
+    CHON = "https://chonborista.com/slot/sammy-slot/12345/"
+
+    def _write(man):
+        with open(os.path.join(_ma.WORK, "zzz_manifest.json"), "w",
+                  encoding="utf-8", newline="\n") as f:
+            _js.dump(man, f, ensure_ascii=False)
+
+    _pn = _pc.manifest({NANA: "あ"}, True)
+    _pc2 = _pc.manifest({CHON: "い"}, True)
+    _all = _pc.manifest({NANA: "あ", CHON: "い"}, True)
+    _good = {"manifest": _all, "roots": [NANA, CHON], "slug": "zzz",
+             "per_root": {NANA: _pn, CHON: _pc2}}
+
+    def _quick(cat, root, fetch, text_of, saved):
+        # ★渡された記録が、そのサイトのものかを見る★
+        urls = set(saved.get("urls") or [])
+        return ("SAME", "") if urls == {_pc._norm(root)} else \
+            ("CHANGED", f"顔ぶれが違います（{sorted(urls)}）")
+
+    try:
+        _write(_good)
+        st, _c, _w = corpus_now("zzz", quick=_quick, fetch=lambda u: None,
+                                text_of=lambda p2: "")
+        t("★★サイトごとの記録と比べる（合体した記録では必ず"
+          "「変わった」になる）★★", st == "VALID")
+
+        # ★合体した記録を渡していた頃の姿★（対照実験）
+        _bad = dict(_good)
+        _bad["per_root"] = {NANA: _all, CHON: _all}
+        _write(_bad)
+        t("　合体した記録だと「変わった」になる（直す前の姿）",
+          corpus_now("zzz", quick=_quick, fetch=lambda u: None,
+                     text_of=lambda p2: "")[0] == "STALE")
+
+        # ★★記録が無いのは「確認できない」★★（節を消さない）
+        _write(_good)
+        os.remove(os.path.join(_ma.WORK, "zzz_manifest.json"))
+        t("★★記録が無いのは「確認できない」★★"
+          "／★直す前は節が消えた（--clean は記録も消すので普段の手順で起きた）★",
+          corpus_now("zzz", quick=_quick, fetch=lambda u: None,
+                     text_of=lambda p2: "")[0] == "UNREADABLE")
+
+        # ★★一時的に読めないのも「確認できない」★★
+        _write(_good)
+
+        def _busy(cat, root, fetch, text_of, saved):
+            return "UNREADABLE", "HTTP 503"
+
+        t("★一時的に読めないのも「確認できない」★（節を消さない）",
+          corpus_now("zzz", quick=_busy, fetch=lambda u: None,
+                     text_of=lambda p2: "")[0] == "UNREADABLE")
+
+        # ★★本体URLが空★★（1ページも確認せず古い控えを採るのを防ぐ）
+        _write({"manifest": _all, "roots": [], "slug": "zzz", "per_root": {}})
+        t("★★本体URLが空なら断る★★"
+          "／★直す前は1ページも確認せず、古い控えを記事へ反映できた★",
+          corpus_now("zzz", quick=_quick, fetch=lambda u: None,
+                     text_of=lambda p2: "")[0] == "UNREADABLE")
+
+        _write({"manifest": _all, "roots": [NANA, CHON], "slug": "zzz",
+                "per_root": {NANA: _pn}})
+        t("　サイトごとの記録がそろっていなければ断る",
+          corpus_now("zzz", quick=_quick, fetch=lambda u: None,
+                     text_of=lambda p2: "")[0] == "UNREADABLE")
+
+        _write({"manifest": _all, "roots": [NANA], "slug": "別の機種",
+                "per_root": {NANA: _pn}})
+        t("　記録が別の機種のものなら断る",
+          corpus_now("zzz", quick=_quick, fetch=lambda u: None,
+                     text_of=lambda p2: "")[0] == "UNREADABLE")
+
+        # ★証拠が変わったときだけ STALE★
+        _write(_good)
+
+        def _changed(cat, root, fetch, text_of, saved):
+            return "CHANGED", "下位ページが増えました"
+
+        t("　証拠が変わったときは STALE（節を消す）",
+          corpus_now("zzz", quick=_changed, fetch=lambda u: None,
+                     text_of=lambda p2: "")[0] == "STALE")
+    finally:
+        import shutil as _sh
+        _sh.rmtree(_ma.WORK, ignore_errors=True)
+        _ma.WORK = _keep_work
 
     print(f"\n{ok}/{len(cases)} 合格")
     return 0 if ok == len(cases) else 1

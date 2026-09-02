@@ -138,7 +138,7 @@ def gather(slug: str, fetch, text_of, find_urls) -> dict:
         return {"pages": {}, "manifest": _pc.manifest({}, False),
                 "roots": [], "why": "名鑑の機種ページが見つかりません"}
 
-    pages, gone, roots = {}, [], []
+    pages, gone, roots, per_root = {}, [], [], {}
     for u in urls:
         got = _pc.collect(catalog_of(u), u, fetch, text_of)
         if got["why"]:
@@ -155,11 +155,15 @@ def gather(slug: str, fetch, text_of, find_urls) -> dict:
         pages.update(got["pages"])
         gone += list(got["manifest"].get("gone") or [])
         roots.append(u)
+        # ★★サイトごとの記録も残す★★（2026-09-02・Codexのレビュー37の重大①）
+        #   ★合体した記録には全サイトのURLが入っている★ので、
+        #   1サイトぶんの軽い確認に渡すと★必ず「変わった」になる★。
+        per_root[u] = got["manifest"]
     if not roots:
         return {"pages": {}, "manifest": _pc.manifest({}, False),
                 "roots": [], "why": "読めたサイトがありません"}
     return {"pages": pages, "manifest": _pc.manifest(pages, True, gone),
-            "roots": roots, "why": ""}
+            "roots": roots, "per_root": per_root, "why": ""}
 
 
 QUESTION = """★この機種に「モード」や「ゾーン」があるかを判断してください★
@@ -229,6 +233,7 @@ def run(slug: str) -> int:
         #   ★直す前は slug を残していなかった★ので、
         #   機種Aの証拠束を、決定ファイルの slug だけ機種Bにして控えられた。
         json.dump({"manifest": got["manifest"], "roots": got["roots"],
+                   "per_root": got.get("per_root") or {},
                    "slug": slug, "name": machine_name(slug)},
                   f, ensure_ascii=False, indent=2)
 
