@@ -85,6 +85,12 @@ CONTRACT_INPUTS = frozenset({
     #   ここが書き換わると、2AIが読む本文の範囲そのものが変わる。
     #   ＝「モードはありません」の結論が、静かに別のものになる。
     "scripts/page_corpus.py",
+    # ★★モード・ゾーンの判断を控える側★★（2026-09-02・Codexのレビュー35）
+    #   ★これは日誌ではなく「材料の採否」そのもの★＝
+    #     材料が全部読めたか／判断者がそろったか／
+    #     「ある・無い」を採用するか／指紋が変わっても使い回すか、を決める。
+    #   ★特に「無い」は引用できない★ので、ここの守りが唯一の関門になる。
+    "scripts/mode_verdict.py",
     # 独立した票の数え方
     "scripts/source_lineage.py",
     "assets/data/source-registry.json",

@@ -24,9 +24,10 @@
   "scripts/lineage_check.py": "2bbb9cfdad4cdf6edc22f1a3f4cec20f804ccceb66453a88d83d8572d86d6e98",
   "scripts/machine_sources.py": "41b3bdfdfdb4faa85c9fe0bae6630a50bcd5db6ac860699c3c5aa3ffb8c07003",
   "scripts/maker_identity_cache.py": "ad8b2621a3ea34d843977b34271568dd0d0d54ee12a21809a1adf03c934cc9e3",
+  "scripts/mode_verdict.py": "00732005dd0c870c1880d8a86b0fe227e8d78febaffec7bffe272f2293e54a7c",
   "scripts/model_code_lookup.py": "64b4eb6d4a86af271b1af0978512b2ab36a5cc50569a2928121fe8d974b84abe",
   "scripts/new_machine_watch.py": "b354fe5344243db9a6f14afa5920025b0fd93a52768062caaad4e8643967d0b4",
-  "scripts/page_corpus.py": "9e791c04b3b7add1584b7efcdf705d478bed7a761c38b466a1cdda3d6d845e58",
+  "scripts/page_corpus.py": "7fada297f9c552f337ef4736481f46fbb019865c0f59416914f363cf61607072",
   "scripts/page_probe.py": "25d0411b1552d018ab1e528a58be1ce1d53a4e47de68f84fc2f951ccaa1f182d",
   "scripts/pending_machines.py": "00b3371b6372c6efd9a3e8e431eb6565c98e8cb3f1f64f1ee9855b24876d18ff",
   "scripts/slug_binding.py": "17c235c10cd7fed94d4c774bbe7b88c87349eff214bedaa22182d3fe79f26af6",
@@ -181,6 +182,10 @@
    "source_lineage",
    "user_area"
   ],
+  "scripts/mode_verdict.py": [
+   "page_corpus",
+   "source_lineage"
+  ],
   "scripts/model_code_lookup.py": [
    "claim_identity",
    "dmm_discover",
@@ -195,7 +200,9 @@
    "blocked_hosts",
    "page_probe"
   ],
-  "scripts/page_corpus.py": [],
+  "scripts/page_corpus.py": [
+   "source_lineage"
+  ],
   "scripts/page_probe.py": [
    "blocked_hosts",
    "new_machine_watch"
@@ -226,5 +233,6 @@
    "ceiling_lookup",
    "new_machine_watch"
   ]
- }
+ },
+ "_deps_changed_why": "page_corpus が source_lineage を取り込むようになりました（2026-09-02）。\n\n■ なぜ増えたか\n  運営者の判断で、「モード・ゾーンがありません」と書くには\n  ★独立した2つの出典★を要求することにしました（2026-09-02「2サイトだね」）。\n\n  ★なぜ「無い」だけ2件か★\n    「ある」…その記述を**引用できる**ので、1サイトでも根拠になる\n    「無い」…★引用できない★ので、根拠は「全部読んだ」だけになる。\n            1サイトが書き落としていたら、それを「無い」と読んでしまう。\n\n  そのため page_corpus に「そのURLたちが、どの発行者のものか」を\n  返す入口（publishers）を足しました。\n\n■ ★数えるのは source_lineage.independent() だけ★（監査39）\n  page_corpus は「かたまりの名前」を作るところまでで、\n  ★何票あるかは決めません★。\n  共同制作の組をまとめる処理も source_lineage の担当です。\n\n■ source_lineage を材料の採否の集合に入れるか\n  ★入れません★。理由:\n    ・source_lineage は既に「票の数え方の唯一の場所」として\n      監査39が見張っており、自前に数える場所が増えると必ず検知されます\n    ・材料の採否を決めているのは page_corpus / mode_verdict の側で、\n      source_lineage は**数え方の道具**です\n    ・入れると、票の数え方を直すたびに材料契約の承認が要ることになり、\n      監査39との二重管理になります\n\n■ 同じ変更で mode_verdict.py も集合へ入れました\n  Codexのレビュー35の指摘＝\n  「材料が完全か／判断者が揃ったか／HAS・NONE_CONFIRMED を採用するか／\n    指紋変更後も再利用できるか を決めている。つまり材料の採否そのもの」"
 }

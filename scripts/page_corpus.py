@@ -215,6 +215,21 @@ def quick_check(catalog: dict, machine_url: str, fetch, text_of,
     return "SAME", ""
 
 
+def publishers(urls) -> set:
+    """★そのURLたちが、どの発行者のものか★（2026-09-02）
+
+    ★数えない★＝票の数は `source_lineage.independent()` だけが決める（監査39）。
+    ここは「かたまりの名前」を作るところまで。
+    """
+    import source_lineage as _sl
+    out = set()
+    for u in (urls or []):
+        k = _sl.vote_key_of_url(str(u))
+        if k:
+            out.add(k)
+    return out
+
+
 def manifest(pages: dict, complete: bool, gone=None) -> dict:
     """★読んだページの集合★を、あとで突き合わせられる形にする。
 
