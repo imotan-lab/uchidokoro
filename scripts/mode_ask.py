@@ -401,6 +401,11 @@ if __name__ == "__main__":
     if not a.slug:
         print("★--slug が要ります★")
         raise SystemExit(1)
+    if a.clean and a.purge:
+        # ★同時には書けない★（2026-09-02・Codexのレビュー39の重箱3）
+        #   ★どちらのつもりか分からないまま記録を消さない★
+        print("★--clean と --purge は同時に使えません★")
+        raise SystemExit(1)
     if a.purge:
         raise SystemExit(purge(a.slug))
     raise SystemExit(clean(a.slug) if a.clean else run(a.slug))

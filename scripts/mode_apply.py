@@ -92,7 +92,7 @@ def corpus_now(slug: str, quick=None, fetch=None, text_of=None):
     ★★「確認できない」と「控えが無効」を分ける★★
       （2026-09-02・Codexのレビュー37の重大②）
       ★直す前は両方 None にして節を消していた★＝
-      `--clean` は記録も消すので、★普段の手順で必ず節が消えた★。
+      ★当時の★後片づけは記録も消していたので、★普段の手順で必ず節が消えた★。
       一時的な503でも同じだった。
     """
     import page_corpus as _pc
@@ -290,7 +290,7 @@ def selftest() -> int:
         _write(_good)
         os.remove(os.path.join(_ma.WORK, "zzz_manifest.json"))
         t("★★記録が無いのは「確認できない」★★"
-          "／★直す前は節が消えた（--clean は記録も消すので普段の手順で起きた）★",
+          "／★直す前は節が消えた（★当時の★後片づけは記録も消していた）★",
           corpus_now("zzz", quick=_quick, fetch=lambda u: None,
                      text_of=lambda p2: "")[0] == "UNREADABLE")
 
@@ -351,6 +351,38 @@ def selftest() -> int:
           "／★記録まで消すと、節を入れる・更新する・消すが全部できなくなる★",
           corpus_now("zzz", quick=_quick, fetch=lambda u: None,
                      text_of=lambda p2: "")[0] == "VALID")
+        # ★★記事への書き込みまで通す★★（2026-09-02・Codexのレビュー39の重箱2）
+        #   ★「通し」と言うなら、記事が実際に変わるところまで見る★
+        _keep_details = globals()["DETAILS"]
+        _dtmp = _tf.mkdtemp(prefix="mdet_")
+        globals()["DETAILS"] = _dtmp
+        _keep_box = _ba.mode_box_for
+        try:
+            with open(os.path.join(_dtmp, "zzz.json"), "w",
+                      encoding="utf-8", newline="\n") as _f:
+                _js.dump({"sections": [{"title": "天井・恩恵"},
+                                       {"title": "基本スペック"},
+                                       {"title": "当サイトの狙い目"}]},
+                         _f, ensure_ascii=False)
+            _ba.mode_box_for = lambda s2, c2: BOX
+            _keep_now = globals()["corpus_now"]
+            globals()["corpus_now"] = lambda s2, **k: ("VALID", {"fp": "x"}, "")
+            try:
+                code = run("zzz", True)
+            finally:
+                globals()["corpus_now"] = _keep_now
+            with open(os.path.join(_dtmp, "zzz.json"), encoding="utf-8") as _f:
+                _after = _js.load(_f)
+            t("★★後片づけのあと、記事に実際に節が入る★★"
+              "／★ここまで見ないと「通し」とは言えない★",
+              code == 0
+              and [x["title"] for x in _after["sections"]][2] == _ba.MODE_TITLE)
+        finally:
+            _ba.mode_box_for = _keep_box
+            globals()["DETAILS"] = _keep_details
+            _sh0 = __import__("shutil")
+            _sh0.rmtree(_dtmp, ignore_errors=True)
+
         _ma.purge("zzz")
         t("　記録ごと消す操作は別にある（普段は使わない）",
           corpus_now("zzz", quick=_quick, fetch=lambda u: None,
