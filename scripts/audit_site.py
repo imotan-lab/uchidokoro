@@ -1556,6 +1556,66 @@ def _check_56_selftest() -> list[str]:
         except Exception as e:                # noqa: BLE001
             ng.append(f"★56の対照実験ができません★: "
                       f"描画器を読めません（{type(e).__name__}: {e}）")
+        # ★★Markdownだけの中身は「中身なし」と数えるか★★
+        #   （2026-09-03・Codexの4回目の指摘2。★自分で再現した★＝
+        #     `"** **"` は非空だが `<strong> </strong>` になり、
+        #     読者には何も見えない。PythonもJSも同じ空表示を作るので、
+        #     両者を突き合わせるR15でも見つからない）
+        #   ★狙った1件だけが効く形にする★（罠④）＝表が要る箱には
+        #   ちゃんと表を入れる（入れないと別の検査が先に止めてしまう）。
+        def _md_only(t):
+            if t in _ba56b.TABLE_SECTIONS:
+                return {"title": t, "type": "table",
+                        "tables": [{"label": "x", "headers": ["項目", "内容"],
+                                    "rows": [["** **", "** **"]]}]}
+            return {"title": t, "body": ["** **"]}
+        _mdonly = {"slug": "zzz_test",
+                   "sections": [_md_only(t) for t in _want56]}
+        if not _ba56b.article_contract_problems(_mdonly):
+            ng.append("★56の対照実験が落ちています★: "
+                      "Markdownだけで読者に文字が出ない記事を見逃します")
+        # ★★`type:"table"` は直下の `rows` を読まない★★
+        #   （2026-09-03・Codexの4回目の指摘1。描画器はPythonもJSも
+        #     `table` では `section.tables` しか読まない）
+        if _ba56b.renderable_tables({"type": "table",
+                                     "rows": [["天井", "1200G"]]}) != 0:
+            ng.append("★56の対照実験が落ちています★: "
+                      "type=table で直下の rows を「中身あり」と数えます")
+        # ★対照＝`settei` は直下の `rows` を読む★（止めすぎない）
+        if _ba56b.renderable_tables({"type": "settei",
+                                     "rows": [["天井", "1200G"]]}) == 0:
+            ng.append("★56の対照実験が落ちています★: "
+                      "type=settei の直下 rows まで「中身なし」にしています")
+        # ★★PythonとJSで描く条件が食い違っていないか★★
+        #   （2026-09-03・Codexの4回目の指摘3。★自分で再現した★＝
+        #     `type:"settei"` で `tables: []` のとき、
+        #     Python は直下の rows を描き、JS は描かない）
+        #   ★JSの本文を読んで条件を確かめる★＝
+        #   片方だけ直したときに気づけるようにする。
+        try:
+            _mh = (BASE / "machine.html").read_text(encoding="utf-8")
+        except Exception as e:                # noqa: BLE001
+            ng.append(f"★56の対照実験ができません★: "
+                      f"ひな型を読めません（{type(e).__name__}: {e}）")
+        else:
+            # ★JSは「tables が無いときだけ」直下の rows を描く★
+            #   （空配列でも `!section.tables` は偽なので描かない）
+            if "!section.tables && section.rows" not in _mh:
+                ng.append("★56の対照実験が落ちています★: "
+                          "ひな型のJSで、直下 rows を描く条件が変わりました"
+                          "（Python側と食い違っていないか確かめてください）")
+            # ★Python側は空配列で「無い」と見る★（ここが食い違いの本体）
+            _sec_sr = {"title": "設定示唆まとめ", "type": "settei",
+                       "tables": [], "rows": [["終了画面", "高設定示唆"]]}
+            _py_draws = "終了画面" in _bmp56.render_section(_sec_sr)
+            if not _py_draws:
+                ng.append("★56の対照実験が落ちています★: "
+                          "Python側が直下 rows を描かなくなりました"
+                          "（食い違いが解消したなら、この検査を消してください）")
+            # ★契約はどちらでもない「0（中身なし）」に倒れること★
+            if _ba56b.renderable_tables(_sec_sr) != 0:
+                ng.append("★56の対照実験が落ちています★: "
+                          "PythonとJSが食い違う形を「中身あり」と数えます")
         # ★対照＝正しい「未確認」は止めない★（名指ししすぎない）
         _pend = {"slug": "zzz_test",
                  "sections": [{"title": t, "body": [_ba56b.PENDING_TEXT]}

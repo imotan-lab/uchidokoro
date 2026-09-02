@@ -101,6 +101,24 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★Markdownだけの中身を「文字あり」に数える"
+               "（読者には何も見えない箱が公開される）★",
+        "file": "scripts/build_new_article.py",
+        "before": 'return re.sub(r"<[^>]+>", "", h)',
+        "after": 'return re.sub(r"", "", str(t))',
+        "run": ["scripts/audit_site.py"],
+    },
+    {
+        "why": "★type=table でも直下の rows を数える"
+               "（描画器は tables しか読まないので見出しだけになる）★",
+        "file": "scripts/build_new_article.py",
+        "before": ('    if sec.get("type") == "table"'
+                   ' and sec.get("tables") is None:\n'
+                   "        return 0"),
+        "after": "    if False:\n        return 0",
+        "run": ["scripts/audit_site.py"],
+    },
+    {
         "why": "★型を書かない表も「中身あり」に数える"
                "（描画側は描かないので、見出しだけのページが読者に届く）★",
         "file": "scripts/build_new_article.py",

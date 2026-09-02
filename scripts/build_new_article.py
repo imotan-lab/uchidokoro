@@ -447,10 +447,42 @@ def expected_titles(detail) -> list:
     return want
 
 
+def visible_text(t) -> str:
+    """★読者に見える文字だけを取り出す★（2026-09-03・Codexの4回目の指摘2）
+
+    ★「元データが非空」では足りない★＝`"** **"` は非空だが、
+    描画すると `<strong> </strong>` になり**読者には何も見えない**。
+    ★PythonもJSも同じ空表示を作る★ので、両者の突き合わせでも見つからない。
+
+    ★本物の描画器に通してから、タグを外して数える★
+    （同じ規則を2か所に書かない／描画側が変わったら一緒に変わる）。
+    """
+    if not isinstance(t, str):
+        return ""
+    try:
+        import build_machine_pages as _bmp
+        h = _bmp.md(t)
+    except Exception:                     # noqa: BLE001
+        # ★読めないときは元の文字で見る★＝ここで空に倒すと
+        #   本物の記事まで止まる（守りではなく事故になる）
+        h = t
+    return re.sub(r"<[^>]+>", "", h).replace("\u3000", " ").strip()
+
+
 # ★表を描く型★（2026-09-03）＝描画側の分岐と一致していること。
 #   `build_machine_pages.render_section` と machine.html のどちらも、
 #   この2つ以外では `tables` / `rows` を一切描かない。
 #   ★一致は対照実験が毎回確かめる★（描画側が変わったら落ちる）。
+#
+#   ★★型の中では、2つは完全には同じでない★★
+#   （2026-09-03・Codexの4回目の指摘3。★自分で再現した★）
+#     `type:"settei"` で `tables: []`（空配列）のとき
+#       Python … `if tables:` は偽 → **直下の rows を描く**
+#       JS     … `!section.tables` は偽 → **描かない**
+#   ★実データには0件★だが、★書いてあることが事実と違うのは残さない★。
+#   ★契約は0に倒れる★（`_settei_renderable_rows` は `tables is not None`
+#   を優先する）ので、この形は「中身なし」として止まる＝安全側。
+#   ★食い違いそのものは監査56の対照実験が毎回見張る★。
 TABLE_TYPES = ("table", "settei")
 
 
@@ -476,6 +508,13 @@ def renderable_tables(sec) -> int:
       `TABLE_TYPES` が実際の描画と一致することを対照実験で確かめる。
     """
     if not isinstance(sec, dict) or sec.get("type") not in TABLE_TYPES:
+        return 0
+    # ★★`table` は `tables` しか読まない★★（2026-09-03・Codexの4回目の指摘1）
+    #   ★直す前は型を区別せず `_settei_renderable_rows` に渡していた★ので、
+    #   `type:"table"` + 直下 `rows` が「1行ある」と数えられた。
+    #   描画器（PythonもJSも）は `table` では `section.tables` しか読まないので、
+    #   ★読者には見出ししか出ない★（自分で再現した）。
+    if sec.get("type") == "table" and sec.get("tables") is None:
         return 0
     try:
         import recheck as _rc
@@ -516,7 +555,12 @@ def article_contract_problems(detail) -> list:
     ng = []
     for sec in secs:
         title = sec.get("title")
-        body = [x for x in (sec.get("body") or []) if isinstance(x, str) and x.strip()]
+        # ★★「元データが非空」ではなく「読者に文字が出るか」★★
+        #   （2026-09-03・Codexの4回目の指摘2。★自分で再現した★＝
+        #     `body: ["** **"]` は非空だが `<strong> </strong>` になり、
+        #     読者には何も見えない。PythonもJSも同じ空表示を作る）
+        body = [x for x in (sec.get("body") or [])
+                if isinstance(x, str) and visible_text(x)]
         # ★★「表がある」ではなく「文字が出る行がある」で見る★★
         #   （2026-09-03・Codexの指摘。★自分で再現した★＝
         #     `tables: [{}]` は真なので中身ありと判定され、

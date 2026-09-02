@@ -198,7 +198,15 @@ def _cell_text(cell) -> str:
     if isinstance(cell, (int, float)):
         return str(cell)
     if isinstance(cell, str):
-        return cell.strip()
+        # ★★読者に文字が出るかで見る★★（2026-09-03・Codexの4回目の指摘2）
+        #   ★直す前は元の文字列を strip するだけ★だったので、
+        #   `"** **"` が「文字あり」と数えられた
+        #   （描画すると `<strong> </strong>` ＝読者には何も見えない）。
+        try:
+            import build_new_article as _ba_vt
+            return _ba_vt.visible_text(cell)
+        except Exception:                 # noqa: BLE001
+            return cell.strip()
     return ""
 
 
