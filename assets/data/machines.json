@@ -1173,7 +1173,7 @@
     "payout_range"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-08-30",
+   "decided_at": "2026-09-04",
    "input_digest": "sha256:3f4f5892224c6459782bc4577352c6167fe65c9f515005ad23e7edca6d768c85"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -2415,7 +2415,7 @@
     "payout_range"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-08-30",
+   "decided_at": "2026-09-04",
    "input_digest": "sha256:30e99f7519a9860faa804dc25ca4b98423ee110c814c4e9a42851407927bbd8e"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -11463,7 +11463,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-08-27",
+   "decided_at": "2026-09-04",
    "input_digest": "sha256:12e66452b1188cbd27065af889db8acdc9707c417026d0f86339812606d6465d"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -11476,13 +11476,13 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5033 型式=L スマスロ リコリス・リコイル KX メーカー=サミー 導入=2026-09-07 確認日=2026-08-16",
    "market_release_date": "2026-09-07",
-   "_legacy_evidence_ref": "pworld:10503 型式=L スマスロ リコリス・リコイル KX 検定=6S0400 確認日=2026-08-13",
-   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10503",
-   "regulatory_model_code": "L スマスロ リコリス・リコイル KX",
    "_model_code_sources": [
     "p-town.dmm.com",
     "p-world.co.jp"
-   ]
+   ],
+   "_legacy_evidence_ref": "pworld:10503 型式=L スマスロ リコリス・リコイル KX 検定=6S0400 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10503",
+   "regulatory_model_code": "L スマスロ リコリス・リコイル KX"
   },
   "checker": {
    "coinRate": 31.8,
@@ -11575,17 +11575,18 @@
   "info": "",
   "strategy": "",
   "aliases": [],
-  "publication_policy": "page-decision/v1",
+  "publication_policy": "page-decision/v2",
   "page_decision": {
-   "schema_version": "page-decision/v1",
+   "schema_version": "page-decision/v2",
    "indexable": false,
-   "confirmed_topics": [
-    "spec"
-   ],
+   "machine_profile": "UNKNOWN",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [],
    "pending_topics": [
     "gameplay",
     "cz",
     "ceiling",
+    "spec",
     "setting",
     "strategy",
     "reset"
@@ -11593,14 +11594,12 @@
    "reason_codes": [
     "CLAIMS_LT_3",
     "CATEGORIES_LT_2",
-    "NO_UNIQUE_GAMEPLAY"
+    "MACHINE_PROFILE_UNKNOWN"
    ],
-   "claims": [
-    "model_code"
-   ],
+   "claims": [],
    "policy_mode": "normal",
-   "decided_at": "2026-08-13",
-   "input_digest": "sha256:0fcf939da4ba90aed483c6b49d327279a439ef1250cf90076f456d8bbd65741d"
+   "decided_at": "2026-09-04",
+   "input_digest": "sha256:93c92ce279f840fe520ba7bf25c6bf48fa0a39bca7a6de676acb87c4455ffde0"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-09-07",
@@ -11612,13 +11611,13 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5059 型式=Lモグモグ風林火山 大海戦の巻ZB メーカー=ネット 導入=2026-09-07 確認日=2026-08-16",
    "market_release_date": "2026-09-07",
+   "_legacy_evidence_ref": "pworld:10523 型式=Lモグモグ風林火山 大海戦の巻ZB 検定=531225 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10523",
    "regulatory_model_code": "Lモグモグ風林火山 大海戦の巻ZB",
    "_model_code_sources": [
     "p-town.dmm.com",
     "p-world.co.jp"
-   ],
-   "_legacy_evidence_ref": "pworld:10523 型式=Lモグモグ風林火山 大海戦の巻ZB 検定=531225 確認日=2026-08-13",
-   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10523"
+   ]
   }
  },
  {
@@ -11833,7 +11832,7 @@
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-08-27",
+   "decided_at": "2026-09-04",
    "input_digest": "sha256:12e66452b1188cbd27065af889db8acdc9707c417026d0f86339812606d6465d"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
@@ -11880,25 +11879,27 @@
    "indexable": false,
    "machine_profile": "AT_CZ",
    "ceiling_state": "UNKNOWN",
-   "confirmed_topics": [],
+   "confirmed_topics": [
+    "cz",
+    "setting"
+   ],
    "pending_topics": [
     "gameplay",
-    "cz",
     "ceiling",
     "spec",
-    "setting",
     "strategy",
     "reset"
    ],
    "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
-    "NO_UNIQUE_GAMEPLAY"
+    "CLAIMS_LT_3"
    ],
-   "claims": [],
+   "claims": [
+    "at_prob",
+    "cz:輪廻転天チャレンジ"
+   ],
    "policy_mode": "normal",
-   "decided_at": "2026-08-28",
-   "input_digest": "sha256:97d326dfd018051e47b7021ff20604d76ab9cf261d6a4ed26c108b9844bf9b6b"
+   "decided_at": "2026-09-04",
+   "input_digest": "sha256:fe455c4462371b557cef8dd2a497e1e61b3b05ebdf026af7433661ee6dca5060"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-10-05",
@@ -11921,29 +11922,35 @@
   "info": "",
   "strategy": "",
   "aliases": [],
-  "publication_policy": "page-decision/v1",
+  "publication_policy": "page-decision/v2",
   "page_decision": {
-   "schema_version": "page-decision/v1",
+   "schema_version": "page-decision/v2",
    "indexable": false,
-   "confirmed_topics": [],
-   "pending_topics": [
-    "gameplay",
+   "machine_profile": "UNKNOWN",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [
     "cz",
-    "ceiling",
-    "spec",
+    "gameplay",
     "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "ceiling",
     "strategy",
     "reset"
    ],
    "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
-    "NO_UNIQUE_GAMEPLAY"
+    "MACHINE_PROFILE_UNKNOWN"
    ],
-   "claims": [],
+   "claims": [
+    "at:MAIN_AT",
+    "at:UPPER_AT",
+    "cz:石兵八陣",
+    "payout_rate"
+   ],
    "policy_mode": "normal",
-   "decided_at": "2026-08-10",
-   "input_digest": "sha256:bc6afcc73e2d1ee3c2ad7aff9d94202e38b0941e0611da7976e64ac835bd1e62"
+   "decided_at": "2026-09-04",
+   "input_digest": "sha256:f9a26d215f088c1fb1f3706f3b20d8d05bc46496a9277d6a2f0919a2241e176c"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-10-05",
@@ -11953,13 +11960,13 @@
    "announced_name": "スマスロパリピ孔明",
    "identity_tier": "CATALOG_BOUND",
    "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5057 型式=未掲載 メーカー=山佐 導入=2026-10-05 確認日=2026-08-16",
    "market_release_date": "2026-10-05",
+   "_legacy_official_product_url": "https://yamasa-next.co.jp/slot/prskkm/",
    "observed_model_code": "Lパチスロパリピ孔明YE05H",
    "_observed_model_code_sources": [
     "p-world.co.jp"
-   ],
-   "_legacy_official_product_url": "https://yamasa-next.co.jp/slot/prskkm/",
-   "identity_evidence_ref": "dmm:5057 型式=未掲載 メーカー=山佐 導入=2026-10-05 確認日=2026-08-16"
+   ]
   }
  },
  {
@@ -11994,7 +12001,7 @@
    ],
    "claims": [],
    "policy_mode": "normal",
-   "decided_at": "2026-08-28",
+   "decided_at": "2026-09-04",
    "input_digest": "sha256:97d326dfd018051e47b7021ff20604d76ab9cf261d6a4ed26c108b9844bf9b6b"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
