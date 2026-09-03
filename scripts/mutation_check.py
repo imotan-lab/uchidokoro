@@ -104,7 +104,7 @@ MUTATIONS = [
         "why": "★記事データの危険なHTMLを素通りさせる"
                "（JS側は innerHTML に入れるので読者のブラウザで動く）★",
         "file": "scripts/publish_new_machine.py",
-        "before": "    ng += _html_unsafe_places(detail)",
+        "before": "    ng += _unsafe_places(detail)",
         "after": "    ng += []",
         "run": ["scripts/publish_new_machine.py"],
     },
@@ -118,11 +118,42 @@ MUTATIONS = [
         "run": ["scripts/publish_new_machine.py"],
     },
     {
-        "why": "★見えない字（ゼロ幅・制御・方向）を「文字あり」に数える"
-               "（読者には何も見えない箱が公開される）★",
+        "why": "★混ざった方向制御文字を素通りさせる"
+               "（画面上の語順が入れ替わる・普通の文字に混ぜると"
+               "可視の判定もHTMLの判定も通る）★",
+        "file": "scripts/publish_new_machine.py",
+        "before": "            why = _g.invisible_unsafe(o) or _g.html_unsafe(o)",
+        "after": "            why = _g.html_unsafe(o)",
+        "run": ["scripts/publish_new_machine.py"],
+    },
+    {
+        "why": "★見出しの無い表を素通りさせる"
+               "（JSでは見えるのに契約は0行と数える）★",
+        "file": "scripts/publish_new_machine.py",
+        "before": ('            elif (sec.get("type") == "table"\n'
+                   '                  and not (tb.get("headers") or [])\n'
+                   '                  and (tb.get("rows") or [])):'),
+        "after": "            elif False:",
+        "run": ["scripts/publish_new_machine.py"],
+    },
+    {
+        "why": "★描き方が違う型を同じ物差しで測る"
+               "（settei の「** **」は画面に出るのに空と数える）★",
+        "file": "scripts/recheck.py",
+        "before": '    _md = section.get("type") != "settei"',
+        "after": "    _md = True",
+        "run": ["scripts/audit_site.py"],
+    },
+    {
+        "why": "★ハングル埋め字を「文字あり」に数える"
+               "（読者には何も見えない箱が公開される）★"
+               "／★直す前の壊し方は何も壊していなかった★"
+               "＝Cf は手前で落ち、Cc は最後の字形判定で落ちるので"
+               "結果が変わらず、別の失敗を「捕まえた」と読んでいた"
+               "（2026-09-03・Codexの6回目の指摘2）",
         "file": "scripts/build_new_article.py",
-        "before": '        if cat in ("Cf", "Cc"):',
-        "after": '        if cat in ("Zl", "Zp"):',
+        "before": '    (0x3164, 0x3164), (0xFE00, 0xFE0F), (0xFEFF, 0xFEFF),',
+        "after": '    (0xFE00, 0xFE0F), (0xFEFF, 0xFEFF),',
         "run": ["scripts/audit_site.py"],
     },
     {

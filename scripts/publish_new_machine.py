@@ -842,12 +842,23 @@ def _rows_ok(rows) -> bool:
                     for r in rows))
 
 
-def _html_unsafe_places(detail) -> list:
-    """★記事データの中の、危険なHTMLの場所★（2026-09-03）
+def _unsafe_places(detail) -> list:
+    """★記事データの中の、公開してはいけない文字の場所★（2026-09-03）
 
-    ★同じ規則を2か所に書かない★＝判定は `gates.html_unsafe` が持つ。
+    ★同じ規則を2か所に書かない★＝判定は `gates` が持つ。
     ここは「どこにあるか」を辿るだけ。
     ★原文は返さない★（公開されるログに出るため・場所と理由だけ）。
+
+    ★★2つとも見る★★（2026-09-03・Codexの6回目の指摘1）
+      `html_unsafe`      … タグ・属性・生の「<」
+      `invisible_unsafe` … 不可視・方向制御文字
+    ★直す前は HTML だけだった★ので、
+    「普通の文字＋U+202E＋数字」が素通りした＝
+      ・見える文字がある → 可視の判定を通る
+      ・`<` が無い → HTMLの判定も通る
+      ・JS描画では**元の文字列**が innerHTML に入る
+    ＝★画面上の語順が入れ替わる★（`visible_text` は判定用の写しから
+      消すだけで、元データは変えない）。
     """
     try:
         import gates as _g
@@ -858,9 +869,10 @@ def _html_unsafe_places(detail) -> list:
 
     def walk(o, path):
         if isinstance(o, str):
-            why = _g.html_unsafe(o)
+            why = _g.invisible_unsafe(o) or _g.html_unsafe(o)
             if why:
-                out.append(f"記事データに危険なHTMLがあります（{path}）: {why}")
+                out.append(f"記事データに公開できない文字があります"
+                           f"（{path}）: {why}")
         elif isinstance(o, dict):
             for k, v in o.items():
                 walk(v, f"{path}.{k}")
@@ -893,7 +905,8 @@ def check_detail(slug: str, detail: dict) -> list:
     #   Phase 1 の射影側にしか繋がっておらず、
     #   いまの配信（リポジトリをそのまま出す）では一度も通らなかった。
     #   ★実測：実データ133機種で危険は0件★（`<br>` は許可タグなので通る）。
-    ng += _html_unsafe_places(detail)
+    #   ★不可視・方向制御文字も同じ場所で拒否する★（Codexの6回目の指摘1）
+    ng += _unsafe_places(detail)
     if detail.get("slug") != slug:
         ng.append(f"記事データの slug が {detail.get('slug')!r} です（{slug!r} のはず）")
     stray = sorted(set(detail) - _DETAIL_KEYS)
@@ -949,6 +962,16 @@ def check_detail(slug: str, detail: dict) -> list:
             if "headers" in tb and not (isinstance(tb["headers"], list)
                                         and all(_is_text(x) for x in tb["headers"])):
                 ng.append("表の headers が文字の配列ではありません")
+            # ★★見出しの無い表は拒否する★★（2026-09-03・Codexの6回目の指摘4）
+            #   ★JSは `(tbl.headers || [])` なので見出しが無くても行を描く★が、
+            #   こちらの数え方は「見出しが無ければ0行」。
+            #   ＝JSでは見えるのに契約は0行と数え、ここも素通りしていた。
+            #   ★見出しは `type:"table"` の契約なので、素通りではなく拒否する★。
+            elif (sec.get("type") == "table"
+                  and not (tb.get("headers") or [])
+                  and (tb.get("rows") or [])):
+                ng.append("表に見出し（headers）がありません"
+                          "（行があるのに見出しが無い表は出せません）")
             if not _rows_ok(tb.get("rows")):
                 ng.append("表の中身が文字の並びではありません")
             # ★見出しの数と行の列数をそろえる★（2026-07-31・Codex指摘3）
@@ -3025,17 +3048,46 @@ def selftest() -> int:
         _bad_html = {"slug": "zzz_test",
                      "sections": [{"title": "x", "body": [_txt]}]}
         t(f"★記事データの{_why}は止める★",
-          any("危険なHTML" in x for x in check_detail("zzz_test", _bad_html)))
+          any("公開できない文字" in x for x in check_detail("zzz_test", _bad_html)))
+    # ★★普通の文字に混ざった方向制御文字も止める★★
+    #   （2026-09-03・Codexの6回目の指摘1。★これが本命★＝
+    #     不可視文字**だけ**なら可視の判定が空にするが、
+    #     普通の文字に**混ぜる**と
+    #       ・見える文字がある → 可視の判定を通る
+    #       ・`<` が無い → HTMLの判定も通る
+    #       ・JS描画では元の文字列が innerHTML に入る
+    #     ＝★画面上の語順が入れ替わる★）
+    for _why, _txt in (("方向制御を混ぜる", "天井\u202e0012G"),
+                       ("ゼロ幅を混ぜる", "天井\u200b1200G"),
+                       ("表のセルに混ぜる", None)):
+        if _txt is None:
+            _bad_inv = {"slug": "zzz_test",
+                        "sections": [{"title": "x", "type": "table",
+                                      "tables": [{"label": "L",
+                                                  "headers": ["項目"],
+                                                  "rows": [["天井\u202e0012G"]]}]}]}
+        else:
+            _bad_inv = {"slug": "zzz_test",
+                        "sections": [{"title": "x", "body": [_txt]}]}
+        t(f"★{_why}のは止める★",
+          any("公開できない文字" in x
+              for x in check_detail("zzz_test", _bad_inv)))
+    # ★対照＝普通の文は止めない★
+    t("　普通の文は止めない（混在の検査が広すぎないか）",
+      not any("公開できない文字" in x for x in check_detail(
+          "zzz_test",
+          {"slug": "zzz_test",
+           "sections": [{"title": "x", "body": ["天井は1200Gです。"]}]})))
     # ★対照＝許可タグは止めない★（本物の記事に112件ある）
     t("　改行タグ（許可）は止めない"
       "／実データに112件あるので、止めると全機種が公開できなくなる",
-      not any("危険なHTML" in x for x in check_detail(
+      not any("公開できない文字" in x for x in check_detail(
           "zzz_test",
           {"slug": "zzz_test",
            "sections": [{"title": "x",
                          "body": ["250Gから様子見<br>340Gから狙い目"]}]})))
     # ★どこにあるかを名指しするか★（原文は出さない）
-    _places = _html_unsafe_places(
+    _places = _unsafe_places(
         {"sections": [{"title": "x", "body": ["ok"]},
                       {"title": "y", "body": ["<img src=x onerror=1>"]}]})
     t("　場所を名指しする（原文は出さない）",

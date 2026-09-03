@@ -450,8 +450,13 @@ def expected_titles(detail) -> list:
 
 
 # ★Unicodeが「既定で無視してよい」と定めた文字★（Default_Ignorable_Code_Point）
-#   ★こちらが決めた名簿ではない★＝Unicodeの定義そのもの。
+#   ★こちらが決めた名簿ではない★＝Unicodeの定義を**写したもの**。
 #   `unicodedata` はこの性質を持たないので、範囲で書く。
+#   ★★写した時点の版＝Unicode 17.0★★（2026-09-03・Codexの6回目）
+#     ★「Unicodeの定義そのものだから増やす必要がない」は誤りだった★＝
+#     Unicode自身がこの性質に安定性の保証を置いていない。
+#     版が上がったら公式の DerivedCoreProperties.txt と照合し直す。
+_IGNORABLE_UCD = "17.0"
 _IGNORABLE = (
     (0x00AD, 0x00AD), (0x034F, 0x034F), (0x061C, 0x061C),
     (0x115F, 0x1160), (0x17B4, 0x17B5), (0x180B, 0x180F),
@@ -471,7 +476,7 @@ def _ignorable(ch: str) -> bool:
     return any(a <= o <= b for a, b in _IGNORABLE)
 
 
-def visible_text(t) -> str:
+def visible_text(t, markdown: bool = True) -> str:
     """★読者に見える文字だけを取り出す★（2026-09-03・Codexの4〜5回目）
 
     ★「元データが非空」では足りない★＝`"** **"` は非空だが、
@@ -492,8 +497,13 @@ def visible_text(t) -> str:
     """
     if not isinstance(t, str):
         return ""
-    # ①強調（PythonもJSも同じ変換）
-    h = re.sub(r"\*\*([^*]+?)\*\*", r"<strong>\1</strong>", t)
+    # ①強調（★型によって変換するかが違う★・2026-09-03・Codexの6回目の指摘4）
+    #   body と `type:"table"` … `md()` を通す → `** **` は空になる
+    #   `type:"settei"`        … 通さない     → `** **` はそのまま見える
+    #   ★JSはどちらも生のHTMLとして innerHTML に入れる★ので、
+    #   違いは**強調の変換をするかどうかだけ**。
+    h = (re.sub(r"\*\*([^*]+?)\*\*", r"<strong>\1</strong>", t)
+         if markdown else t)
     # ②コメントを落とす（JSはコメントとして解釈するので何も出ない）
     h = re.sub(r"<!--.*?-->", "", h, flags=re.S)
     # ③タグを落とす

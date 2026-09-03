@@ -1650,6 +1650,32 @@ def _check_56_selftest() -> list[str]:
             if not _ba56b.visible_text(_t):
                 ng.append(f"★56の対照実験が落ちています★: "
                           f"{_label}まで「見えない」と数えます")
+        # ★★描き方が違うものは、道を分けて測る★★
+        #   （2026-09-03・Codexの6回目の指摘4。★自分で確かめた★＝
+        #     `settei` は `md()` を通さないので `** **` はそのまま見える。
+        #     `body` と `type:"table"` は通すので `<strong> </strong>` になり空）
+        if _ba56b.visible_text("** **", markdown=False) != "** **":
+            ng.append("★56の対照実験が落ちています★: "
+                      "settei の「** **」を空と数えます（画面には出ます）")
+        if _ba56b.visible_text("** **"):
+            ng.append("★56の対照実験が落ちています★: "
+                      "本文の「** **」を文字ありと数えます")
+        try:
+            import recheck as _rc56
+            _t56 = {"label": "L", "headers": ["a", "b"],
+                    "rows": [["** **", "** **"]]}
+            _n_settei = _rc56._settei_renderable_rows(
+                {"type": "settei", "tables": [dict(_t56)]})[0]
+            _n_table = _rc56._settei_renderable_rows(
+                {"type": "table", "tables": [dict(_t56)]})[0]
+            if _n_settei != 1:
+                ng.append("★56の対照実験が落ちています★: "
+                          "settei の表を0行と数えます（画面には出ます）")
+            if _n_table != 0:
+                ng.append("★56の対照実験が落ちています★: "
+                          "普通の表の「** **」を1行と数えます（画面には出ません）")
+        except Exception as e:                # noqa: BLE001
+            ng.append(f"★56の対照実験ができません★: {type(e).__name__}: {e}")
         # ★対照＝正しい「未確認」は止めない★（名指ししすぎない）
         _pend = {"slug": "zzz_test",
                  "sections": [{"title": t, "body": [_ba56b.PENDING_TEXT]}

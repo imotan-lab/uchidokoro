@@ -185,7 +185,7 @@ def _is_int(v) -> bool:
 #     見出しとバッジ凡例（弱/中/強/確）を必ず描いてから表を並べる。
 #     中身が無いと「見出しと凡例だけ」が残る（台帳#150 の型）。
 
-def _cell_text(cell) -> str:
+def _cell_text(cell, md: bool = True) -> str:
     """★そのセルが読者の画面に出す文字★（machine.html と同じ取り出し方）
 
     描画側は `typeof c === "object" && c !== null` なら `c.text` を、
@@ -204,13 +204,16 @@ def _cell_text(cell) -> str:
         #   （描画すると `<strong> </strong>` ＝読者には何も見えない）。
         try:
             import build_new_article as _ba_vt
-            return _ba_vt.visible_text(cell)
+            # ★★強調の変換をするかは型で違う★★
+            #   （2026-09-03・Codexの6回目の指摘4）＝
+            #   `settei` は `md()` を通さないので `** **` はそのまま見える。
+            return _ba_vt.visible_text(cell, markdown=md)
         except Exception:                 # noqa: BLE001
             return cell.strip()
     return ""
 
 
-def _row_has_text(row, two_cells: bool) -> bool:
+def _row_has_text(row, two_cells: bool, md: bool = True) -> bool:
     """その行に、実際に文字が出るセルが1つ以上あるか。
 
     （依頼245の指摘1: 行が1つあることと、中身が描けることは別。
@@ -227,7 +230,7 @@ def _row_has_text(row, two_cells: bool) -> bool:
             cells = [row]
     else:
         cells = row if isinstance(row, list) else [row]
-    return any(_cell_text(c) != "" for c in cells)
+    return any(_cell_text(c, md) != "" for c in cells)
 
 
 def _settei_renderable_rows(section: dict):
@@ -241,6 +244,9 @@ def _settei_renderable_rows(section: dict):
 
     戻り値: (描ける行数, 想定外があれば理由)
     """
+    # ★★強調の変換をするかは型で違う★★（2026-09-03・Codexの6回目の指摘4）
+    #   `settei` は `md()` を通さないので `** **` はそのまま読者に見える。
+    _md = section.get("type") != "settei"
     tables = section.get("tables")
     if tables is not None:
         if not isinstance(tables, list):
@@ -259,7 +265,7 @@ def _settei_renderable_rows(section: dict):
                 if not isinstance(row, (list, str, dict)):
                     return 0, "表の行の形が想定外です"
                 # ★行の数ではなく「文字が出る行」を数える★（依頼245の指摘1）
-                if _row_has_text(row, two_cells=False):
+                if _row_has_text(row, two_cells=False, md=_md):
                     n += 1
         return n, ""
     rows = section.get("rows")
@@ -267,7 +273,8 @@ def _settei_renderable_rows(section: dict):
         return 0, ""
     if not isinstance(rows, list):
         return 0, "行が配列ではありません"
-    return sum(1 for row in rows if _row_has_text(row, two_cells=True)), ""
+    return sum(1 for row in rows
+               if _row_has_text(row, two_cells=True, md=_md)), ""
 
 
 def check_settei_filled(args: dict) -> dict:
