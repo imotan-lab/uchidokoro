@@ -25,6 +25,7 @@
 from __future__ import annotations
 
 import argparse
+import html as _html
 import json
 import os
 import re
@@ -448,39 +449,71 @@ def expected_titles(detail) -> list:
     return want
 
 
+# ★Unicodeが「既定で無視してよい」と定めた文字★（Default_Ignorable_Code_Point）
+#   ★こちらが決めた名簿ではない★＝Unicodeの定義そのもの。
+#   `unicodedata` はこの性質を持たないので、範囲で書く。
+_IGNORABLE = (
+    (0x00AD, 0x00AD), (0x034F, 0x034F), (0x061C, 0x061C),
+    (0x115F, 0x1160), (0x17B4, 0x17B5), (0x180B, 0x180F),
+    (0x200B, 0x200F), (0x202A, 0x202E), (0x2060, 0x206F),
+    (0x3164, 0x3164), (0xFE00, 0xFE0F), (0xFEFF, 0xFEFF),
+    (0xFFA0, 0xFFA0), (0xFFF0, 0xFFF8),
+    (0x1BCA0, 0x1BCA3), (0x1D173, 0x1D17A),
+    (0xE0000, 0xE0FFF),
+)
+# ★字形を持つ分類★＝これが1つも無ければ、読者には何も見えない。
+#   L=文字 / N=数字 / P=約物 / S=記号
+_GLYPH = ("L", "N", "P", "S")
+
+
+def _ignorable(ch: str) -> bool:
+    o = ord(ch)
+    return any(a <= o <= b for a, b in _IGNORABLE)
+
+
 def visible_text(t) -> str:
-    """★読者に見える文字だけを取り出す★（2026-09-03・Codexの4回目の指摘2）
+    """★読者に見える文字だけを取り出す★（2026-09-03・Codexの4〜5回目）
 
     ★「元データが非空」では足りない★＝`"** **"` は非空だが、
     描画すると `<strong> </strong>` になり**読者には何も見えない**。
-    ★PythonもJSも同じ空表示を作る★ので、両者の突き合わせでも見つからない。
 
-    ★本物の描画器に通してから、タグを外して数える★
-    （同じ規則を2か所に書かない／描画側が変わったら一緒に変わる）。
+    ★★読者が見るのはJS側の描画★★（2026-09-03・Codexの5回目の指摘1）＝
+      Python の `md()` は先にHTMLをエスケープするが、JS はしない。
+      そのため `&nbsp;` `<br>` `<!--x-->` は
+      **Pythonでは文字・JSでは空**になる。
+      ★JS側のほうが厳しい★（JSで文字が出るものは Python でも必ず出る）
+      ので、こちらを基準にする。
+
+    ★見えない字は数えない★（Codexの5回目の指摘2）＝
+      ①Unicodeが「既定で無視してよい」と定めた文字を落とす
+      ②残りに**字形を持つ分類**（L・N・P・S）が1つも無ければ空とみなす
+      ＝異体字セレクタ・結合文字・ハングル埋め字も落ちる。
+      ★名簿ではなくUnicodeの定義★なので、こちらで増やす必要がない。
     """
     if not isinstance(t, str):
         return ""
-    try:
-        import build_machine_pages as _bmp
-        h = _bmp.md(t)
-    except Exception:                     # noqa: BLE001
-        # ★読めないときは元の文字で見る★＝ここで空に倒すと
-        #   本物の記事まで止まる（守りではなく事故になる）
-        h = t
-    plain = re.sub(r"<[^>]+>", "", h)
-    # ★★見えない字は数えない★★（2026-09-03。★自分で確かめた★＝
-    #   ゼロ幅スペース・制御文字・方向制御は「文字あり」と数えられていたが、
-    #   PythonでもJSでも読者には見えない）
-    #   ★名簿は作らない★＝Unicode自身の分類で決める。
-    #     Cf(書式)・Cc(制御) … 表示されない → 落とす
-    #     Zs(空白)           … 空白にしてから strip（全角スペースもここ）
+    # ①強調（PythonもJSも同じ変換）
+    h = re.sub(r"\*\*([^*]+?)\*\*", r"<strong>\1</strong>", t)
+    # ②コメントを落とす（JSはコメントとして解釈するので何も出ない）
+    h = re.sub(r"<!--.*?-->", "", h, flags=re.S)
+    # ③タグを落とす
+    h = re.sub(r"<[^>]*>", "", h)
+    # ④実体参照を戻す（JSはHTMLとして解釈する）
+    h = _html.unescape(h)
+    # ⑤見えない字を落とし、空白は空白にそろえる
     out = []
-    for ch in plain:
+    for ch in h:
+        if _ignorable(ch):
+            continue
         cat = unicodedata.category(ch)
         if cat in ("Cf", "Cc"):
             continue
-        out.append(" " if cat == "Zs" else ch)
-    return "".join(out).strip()
+        out.append(" " if cat.startswith("Z") else ch)
+    plain = "".join(out).strip()
+    # ⑥字形を持つものが1つも無ければ、読者には何も見えない
+    if not any(unicodedata.category(ch)[0] in _GLYPH for ch in plain):
+        return ""
+    return plain
 
 
 # ★表を描く型★（2026-09-03）＝描画側の分岐と一致していること。
@@ -528,8 +561,16 @@ def renderable_tables(sec) -> int:
     #   `type:"table"` + 直下 `rows` が「1行ある」と数えられた。
     #   描画器（PythonもJSも）は `table` では `section.tables` しか読まないので、
     #   ★読者には見出ししか出ない★（自分で再現した）。
-    if sec.get("type") == "table" and sec.get("tables") is None:
-        return 0
+    #
+    #   ★★規則は「渡す形」で表す★★（2026-09-03・Codexの5回目の問い③）＝
+    #   ★直す前は `tables is None` をここで見ていた★が、
+    #   渡した先も `tables is not None` を見ており、
+    #   **同じことを2か所で別々に判断していた**（いまは同じ結果だが将来ずれる）。
+    #   いまは `rows` を外した写しを渡すだけ＝
+    #   「table は直下の rows を読まない」はここにしかなく、
+    #   数え方は今までどおり `_settei_renderable_rows` だけが持つ。
+    if sec.get("type") == "table":
+        sec = {k: v for k, v in sec.items() if k != "rows"}
     try:
         import recheck as _rc
     except Exception:                     # noqa: BLE001

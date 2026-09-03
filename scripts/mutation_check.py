@@ -112,18 +112,18 @@ MUTATIONS = [
         "why": "★Markdownだけの中身を「文字あり」に数える"
                "（読者には何も見えない箱が公開される）★",
         "file": "scripts/build_new_article.py",
-        "before": 'return re.sub(r"<[^>]+>", "", h)',
-        "after": 'return re.sub(r"", "", str(t))',
+        "before": '    h = re.sub(r"<[^>]*>", "", h)',
+        "after": '    h = h',
         "run": ["scripts/audit_site.py"],
     },
     {
         "why": "★type=table でも直下の rows を数える"
                "（描画器は tables しか読まないので見出しだけになる）★",
         "file": "scripts/build_new_article.py",
-        "before": ('    if sec.get("type") == "table"'
-                   ' and sec.get("tables") is None:\n'
-                   "        return 0"),
-        "after": "    if False:\n        return 0",
+        "before": ('    if sec.get("type") == "table":\n'
+                   '        sec = {k: v for k, v in sec.items()'
+                   ' if k != "rows"}'),
+        "after": "    if False:\n        sec = dict(sec)",
         "run": ["scripts/audit_site.py"],
     },
     {
