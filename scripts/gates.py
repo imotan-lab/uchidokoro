@@ -372,7 +372,15 @@ def invisible_unsafe(text: str) -> str | None:
     import unicodedata as _u
     for ch in text:
         cat = _u.category(ch)
-        if cat in _INVISIBLE_CATS and ch not in ("\n", "\t"):
+        # ★★空白かどうかで決める★★（2026-09-03・Codexの7回目の指摘5）
+        #   ★直す前は名簿（"\n", "\t"）★だったので、CRLF由来の `\r` が
+        #   混ざるだけで**その機種が公開できなくなる**（自動タスクが止まる型）。
+        #   ★`isspace()` できれいに分かれることを確かめた★＝
+        #     CR/LF/TAB/垂直タブ/改ページ … True  → 通す
+        #     ゼロ幅/ZWJ/方向制御/制御文字   … False → 止める
+        #   ★ZWJ・ZWNJ は止めたまま★＝日本語のパチスロ情報に使い道が無く、
+        #   文字を隠すのに使えるため（使う必要が出たら2AIで決める）。
+        if cat in _INVISIBLE_CATS and not ch.isspace():
             return (f"不可視・方向制御文字を含む（U+{ord(ch):04X} 分類{cat}）"
                     f"＝画面上の語順が入れ替わり得る")
     return None

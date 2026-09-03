@@ -118,22 +118,66 @@ MUTATIONS = [
         "run": ["scripts/publish_new_machine.py"],
     },
     {
+        "why": "★CIと本番でPythonの版がずれても素通りさせる"
+               "（Unicodeの表が違い、事前CIが緑でも本番だけ落ちる）★",
+        "file": "scripts/pre_push_check.py",
+        "before": '    if len(set(vals)) != 1:',
+        "after": "    if False:",
+        "run": ["scripts/pre_push_check.py"],
+    },
+    {
+        "why": "★文字参照で書いた方向制御を素通りさせる"
+               "（ブラウザは &#x202e; を解釈するので、書き方を変えるだけで"
+               "前回塞いだ穴が残る）★",
+        "file": "scripts/publish_new_machine.py",
+        "before": "                   or _g.invisible_unsafe(_html.unescape(o))",
+        "after": "                   or None",
+        "run": ["scripts/publish_new_machine.py"],
+    },
+    {
+        "why": "★見出しが「あるだけ」で通す"
+               "（[\"\", \"\"] は列数もそろうので通り、"
+               "読者には見出しの無い値だけが出る）★",
+        "file": "scripts/publish_new_machine.py",
+        "before": ("    return all(isinstance(h, str)"
+                   " and _ba_h.visible_text(h, markdown=False)\n"
+                   "               for h in headers)"),
+        "after": "    return True",
+        "run": ["scripts/publish_new_machine.py"],
+    },
+    {
+        "why": "★settei を見出し検査の対象から外す"
+               "（settei のJSは headers.map を直接呼ぶので"
+               "見出しが無いとページごと描かれない）★",
+        "file": "scripts/publish_new_machine.py",
+        "before": '            elif (sec.get("type") in ("table", "settei")',
+        "after": '            elif (sec.get("type") in ("table",)',
+        "run": ["scripts/publish_new_machine.py"],
+    },
+    {
+        "why": "★settei に本文を置けるようにする"
+               "（描画器は描かないので、読者には出ない）★",
+        "file": "scripts/publish_new_machine.py",
+        "before": ('        if sec.get("type") == "settei"'
+                   ' and "body" in sec:'),
+        "after": "        if False:",
+        "run": ["scripts/publish_new_machine.py"],
+    },
+    {
+        "why": "★改行まで止める"
+               "（CRLF由来の \\r が混ざるだけで、その機種が公開できなくなる）★",
+        "file": "scripts/gates.py",
+        "before": "        if cat in _INVISIBLE_CATS and not ch.isspace():",
+        "after": "        if cat in _INVISIBLE_CATS:",
+        "run": ["scripts/publish_new_machine.py"],
+    },
+    {
         "why": "★混ざった方向制御文字を素通りさせる"
                "（画面上の語順が入れ替わる・普通の文字に混ぜると"
                "可視の判定もHTMLの判定も通る）★",
         "file": "scripts/publish_new_machine.py",
-        "before": "            why = _g.invisible_unsafe(o) or _g.html_unsafe(o)",
-        "after": "            why = _g.html_unsafe(o)",
-        "run": ["scripts/publish_new_machine.py"],
-    },
-    {
-        "why": "★見出しの無い表を素通りさせる"
-               "（JSでは見えるのに契約は0行と数える）★",
-        "file": "scripts/publish_new_machine.py",
-        "before": ('            elif (sec.get("type") == "table"\n'
-                   '                  and not (tb.get("headers") or [])\n'
-                   '                  and (tb.get("rows") or [])):'),
-        "after": "            elif False:",
+        "before": "            why = (_g.invisible_unsafe(o)",
+        "after": "            why = (None or None",
         "run": ["scripts/publish_new_machine.py"],
     },
     {

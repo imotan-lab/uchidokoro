@@ -46,7 +46,11 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
-          python-version: "3.12"
+          # ★事前CI（pages-rehearsal）と同じ版にそろえる★（2026-09-03）
+          #   ★違うとUnicodeの表が違い、事前CIが緑でも本番だけ落ちる★
+          #   （`audit_site.py` の字形判定に効く）。
+          #   ★ずれは push 前の関所が見張る★
+          python-version: "3.13.5"
 
       - name: 出してよい中身か確かめる（★空・欠けを配信しない★）
         shell: bash

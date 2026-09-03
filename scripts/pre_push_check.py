@@ -26,6 +26,7 @@ from datetime import datetime
 import json
 import glob
 import os
+import re
 import subprocess
 import sys
 
@@ -229,6 +230,47 @@ def touches_hub(paths) -> bool:
             if p == w or p.startswith(w):
                 return True
     return False
+
+
+def workflow_python_versions(read=None) -> dict:
+    """★2つのワークフローが宣言しているPythonの版★（2026-09-03）
+
+    ★違うとUnicodeの表が違う★＝事前CIが緑でも本番だけ落ちる入力があり得る
+    （`audit_site.py` の字形判定に効く。Codexの6回目の指摘3）。
+    ★このプロジェクトが3回やられている型★（手元とCIで条件が違う）。
+    """
+    if read is None:
+        def read(rel):
+            with open(os.path.join(BASE, rel), encoding="utf-8") as f:
+                return f.read()
+    out = {}
+    for rel in (".github/workflows/pages-rehearsal.yml",
+                ".github/workflows/publish-pages.yml"):
+        try:
+            txt = read(rel)
+        except Exception:                     # noqa: BLE001
+            out[rel] = None                   # ★読めないときは「分からない」★
+            continue
+        m = re.search(r'python-version:\s*"([^"]+)"', txt)
+        out[rel] = m.group(1) if m else None
+    return out
+
+
+def python_version_problem(vers: dict) -> str:
+    """★版がそろっているか★（そろっていなければ理由を返す）。
+
+    ★読めない・書いていないときも止める★（fail-closed）＝
+    「分からない」を「大丈夫」にしない。
+    """
+    vals = list(vers.values())
+    if any(v is None for v in vals):
+        miss = [k for k, v in vers.items() if v is None]
+        return f"ワークフローのPythonの版を読めません: {miss}"
+    if len(set(vals)) != 1:
+        return ("★CIと本番でPythonの版が違います★: "
+                + " / ".join(f"{k.split('/')[-1]}={v}" for k, v in vers.items())
+                + "（Unicodeの表が違うと、事前CIが緑でも本番だけ落ちます）")
+    return ""
 
 
 def hub_check_problem(changed, run) -> str:
@@ -780,6 +822,24 @@ def _selftest() -> int:
                    "tasks": {"u": {"run_date": _TODAY,
                                    "guard_slug": "x"}}}, _TODAY)[0] is True)
 
+    # ★★CIと本番でPythonの版がそろっているか★★
+    #   （2026-09-03・Codexの6回目の指摘3。★違うとUnicodeの表が違い、
+    #     事前CIが緑でも本番だけ落ちる★＝このプロジェクトが3回やられた型）
+    t("★★CIと本番でPythonの版がそろっている★★"
+      "（違うとUnicodeの表が違い、事前CIが緑でも本番だけ落ちる）",
+      python_version_problem(workflow_python_versions()) == "")
+    t("　（対照）ずれていたら止める",
+      "版が違います" in python_version_problem({"a": "3.12", "b": "3.13.5"}))
+    t("　読めないときも「大丈夫」にしない（fail-closed）",
+      python_version_problem({"a": None, "b": "3.13.5"}) != "")
+    t("　同じならそろっていると言う",
+      python_version_problem({"a": "3.13.5", "b": "3.13.5"}) == "")
+    with open(os.path.abspath(__file__), encoding="utf-8") as _f_pv:
+        _src_pv = _f_pv.read()
+    t("★本体が、この見張りを本当に呼んでいる★"
+      "（呼び出しを外しても関数の試験は緑のまま＝罠③）",
+      _src_pv.count("python_version_problem(workflow_python_versions())") >= 2)
+
     ng = ok.count(False)
     print(f"{len(ok) - ng}/{len(ok)} 合格")
     return 1 if ng else 0
@@ -951,6 +1011,13 @@ def main() -> int:
         print(tail)
         if r.returncode != 0:
             ng.append(name)
+    # ★★CIと本番でPythonの版がそろっているか★★（2026-09-03・Codexの6回目）
+    #   ★違うとUnicodeの表が違い、事前CIが緑でも本番だけ落ちる★
+    _pv = python_version_problem(workflow_python_versions())
+    if _pv:
+        print()
+        print(_pv)
+        ng.append("Pythonの版")
     # ★★壊し方の目印が消えていないか★★（2026-08-27・実際に2回やった）
     #   ★試験は走らせない★＝目印の文字が実在するか数えるだけ（一瞬で終わる）。
     #   `ci_repro` の赤を読まずに push して、CIを落としたのがこの型。

@@ -35,6 +35,7 @@ import uuid
 import argparse
 import functools
 import hashlib
+import html as _html
 import json
 import re
 import subprocess
@@ -842,6 +843,25 @@ def _rows_ok(rows) -> bool:
                     for r in rows))
 
 
+def _headers_visible(headers) -> bool:
+    """★表の見出しに、読者に出る文字があるか★（2026-09-03・Codexの7回目）
+
+    ★「配列が空でない」では足りない★＝`["", ""]` `[" ", " "]` `["<br>"]`
+    はどれも通ってしまい、★読者には見出しの無い値だけが出る★。
+    ★見出しは `md()` を通さない★（PythonもJSもそのまま出す）ので
+    `markdown=False` で見る。
+    """
+    if not isinstance(headers, list) or not headers:
+        return False
+    try:
+        import build_new_article as _ba_h
+    except Exception:                         # noqa: BLE001
+        # ★読めないときは「見えない」に倒す★（守りが黙って消えないように）
+        return False
+    return all(isinstance(h, str) and _ba_h.visible_text(h, markdown=False)
+               for h in headers)
+
+
 def _unsafe_places(detail) -> list:
     """★記事データの中の、公開してはいけない文字の場所★（2026-09-03）
 
@@ -869,7 +889,15 @@ def _unsafe_places(detail) -> list:
 
     def walk(o, path):
         if isinstance(o, str):
-            why = _g.invisible_unsafe(o) or _g.html_unsafe(o)
+            # ★★ブラウザが見るのと同じ形でも見る★★
+            #   （2026-09-03・Codexの7回目の指摘1。★自分で再現した★＝
+            #     `天井&#x202e;0012G` は入力がASCIIだけなので
+            #     不可視の判定を通り、`<` が無いのでHTMLの判定も通るが、
+            #     `innerHTML` は `&#x202e;` を U+202E として解釈する）
+            #   ★1回だけ戻す★＝ブラウザも1回しか解釈しない。
+            why = (_g.invisible_unsafe(o)
+                   or _g.invisible_unsafe(_html.unescape(o))
+                   or _g.html_unsafe(o))
             if why:
                 out.append(f"記事データに公開できない文字があります"
                            f"（{path}）: {why}")
@@ -936,6 +964,16 @@ def check_detail(slug: str, detail: dict) -> list:
         # ★★表の節の契約★★（2026-08-31・Codexの10回目）
         #   本文と表が同居すると**表のあとに本文が出る**が、
         #   その順番はどこにも書かれていない。表に添える文は note を使う。
+        # ★★`settei` も本文を置けない★★（2026-09-03・Codexの7回目の指摘3）
+        #   ★描画器は `settei` の `body` を描かない★のに、
+        #   契約は `body` を「中身あり」と数えていた
+        #   ＝「未確認で通すが、画面には未確認の文が出ない」不整合。
+        #   ★自分で確かめた★＝読者に見えるのは凡例のバッジだけ。
+        #   ★いまの生成器は `type` を付けないので実データは0件★だが、
+        #   ここは任意の記事データを受け取る境界なので塞ぐ。
+        if sec.get("type") == "settei" and "body" in sec:
+            ng.append(f"節『{sec.get('title')}』は設定示唆の表なので"
+                      "本文は置けません（描かれないため読者に出ません）")
         if sec.get("type") == "table":
             # ★存在で見る★（[] / "" / null も置かせない・Codexの11回目）
             if "body" in sec:
@@ -962,16 +1000,19 @@ def check_detail(slug: str, detail: dict) -> list:
             if "headers" in tb and not (isinstance(tb["headers"], list)
                                         and all(_is_text(x) for x in tb["headers"])):
                 ng.append("表の headers が文字の配列ではありません")
-            # ★★見出しの無い表は拒否する★★（2026-09-03・Codexの6回目の指摘4）
-            #   ★JSは `(tbl.headers || [])` なので見出しが無くても行を描く★が、
-            #   こちらの数え方は「見出しが無ければ0行」。
-            #   ＝JSでは見えるのに契約は0行と数え、ここも素通りしていた。
-            #   ★見出しは `type:"table"` の契約なので、素通りではなく拒否する★。
-            elif (sec.get("type") == "table"
-                  and not (tb.get("headers") or [])
-                  and (tb.get("rows") or [])):
-                ng.append("表に見出し（headers）がありません"
-                          "（行があるのに見出しが無い表は出せません）")
+            # ★★見出しは「読者に文字が出る」ことまで求める★★
+            #   （2026-09-03・Codexの6回目の指摘4／7回目の指摘2・3）
+            #   ★JSは `type:"table"` では `(tbl.headers || [])` なので
+            #     見出しが無くても行を描く★＝読者には見出しの無い値だけが出る。
+            #   ★`settei` のJSは `tbl.headers.map(...)` を直接呼ぶ★ので、
+            #     見出しが無いと**実行時に落ちてページが描かれない**。
+            #   ★★「配列が空でない」では足りない★★（7回目の指摘2）＝
+            #     `["", ""]` は列数もそろうので通り、読者には見出しが出ない。
+            elif (sec.get("type") in ("table", "settei")
+                  and (tb.get("rows") or [])
+                  and not _headers_visible(tb.get("headers"))):
+                ng.append("表の見出し（headers）に、読者に出る文字がありません"
+                          "（行があるのに見出しが読めない表は出せません）")
             if not _rows_ok(tb.get("rows")):
                 ng.append("表の中身が文字の並びではありません")
             # ★見出しの数と行の列数をそろえる★（2026-07-31・Codex指摘3）
@@ -3072,6 +3113,96 @@ def selftest() -> int:
         t(f"★{_why}のは止める★",
           any("公開できない文字" in x
               for x in check_detail("zzz_test", _bad_inv)))
+    # ★★安全判定を読めないときは素通りさせない★★（2026-09-03）
+    #   ★壊し方の道具が「守られていません」と言った★＝
+    #   守り自体は正しいのに、**その状況を作る試験が無かった**（罠⑤の変種）。
+    #   ★読み込みを一時的に失敗させて、実際にその道を通す★
+    import builtins as _bi
+    _real_imp = _bi.__import__
+
+    def _no_gates(_n, *_a, **_k):
+        if _n == "gates":
+            raise ImportError("ためし")
+        return _real_imp(_n, *_a, **_k)
+
+    _keep_gates = sys.modules.pop("gates", None)
+    _bi.__import__ = _no_gates
+    try:
+        _r_unread = _unsafe_places(
+            {"sections": [{"body": ["<img src=x onerror=1>"]}]})
+    finally:
+        _bi.__import__ = _real_imp
+        if _keep_gates is not None:
+            sys.modules["gates"] = _keep_gates
+    t("★安全判定を読めないときは素通りさせない★"
+      "（守りが黙って消えるのを防ぐ）",
+      any("読めません" in x for x in _r_unread))
+
+    # ★★文字参照で書いても止める★★（2026-09-03・Codexの7回目の指摘1）
+    #   ★前回塞いだはずの穴が、書き方を変えるだけで残っていた★＝
+    #   入力はASCIIだけなので不可視の判定を通り、`<` が無いので
+    #   HTMLの判定も通るが、`innerHTML` は文字参照を解釈する。
+    for _why, _txt in (("16進の文字参照", "天井&#x202e;0012G"),
+                       ("10進の文字参照", "天井&#8238;0012G"),
+                       ("名前つきの文字参照", "天井&rlm;0012G"),
+                       ("ゼロ幅の文字参照", "天井&#x200b;1200G")):
+        t(f"★{_why}で書いた方向制御も止める★",
+          any("公開できない文字" in x for x in check_detail(
+              "zzz_test",
+              {"slug": "zzz_test",
+               "sections": [{"title": "x", "body": [_txt]}]})))
+    # ★★見出しは「読者に文字が出る」ことまで求める★★
+    #   （2026-09-03・Codexの7回目の指摘2・3。★自分で再現した★＝
+    #     `["", ""]` は列数もそろうので通り、読者には見出しが出ない。
+    #     `settei` のJSは `tbl.headers.map(...)` を直接呼ぶので、
+    #     見出しが無いと**実行時に落ちてページが描かれない**）
+    for _why, _h in (("空文字の見出し", ["", ""]),
+                     ("空白だけの見出し", [" ", " "]),
+                     ("改行タグだけの見出し", ["<br>", "<br>"])):
+        for _ty in ("table", "settei"):
+            t(f"★{_ty} の{_why}は止める★",
+              any("見出し" in x for x in check_detail(
+                  "zzz_test",
+                  {"slug": "zzz_test",
+                   "sections": [{"title": "基本スペック", "type": _ty,
+                                 "tables": [{"label": "L", "headers": _h,
+                                             "rows": [["天井", "1200G"]]}]}]})))
+    for _ty in ("table", "settei"):
+        t(f"★{_ty} の見出し欠落は止める★",
+          any("見出し" in x for x in check_detail(
+              "zzz_test",
+              {"slug": "zzz_test",
+               "sections": [{"title": "基本スペック", "type": _ty,
+                             "tables": [{"label": "L",
+                                         "rows": [["天井", "1200G"]]}]}]})))
+        t(f"　（対照）{_ty} の正しい見出しは止めない",
+          not any("見出し" in x for x in check_detail(
+              "zzz_test",
+              {"slug": "zzz_test",
+               "sections": [{"title": "基本スペック", "type": _ty,
+                             "tables": [{"label": "L",
+                                         "headers": ["項目", "内容"],
+                                         "rows": [["天井", "1200G"]]}]}]})))
+    # ★★settei には本文を置けない★★（2026-09-03・Codexの7回目の指摘3）
+    #   ★描画器は settei の body を描かない★のに、契約は中身として数えていた。
+    t("★settei に本文を置いたら止める★"
+      "（描かれないので読者に出ない）",
+      any("本文は置けません" in x for x in check_detail(
+          "zzz_test",
+          {"slug": "zzz_test",
+           "sections": [{"title": "設定示唆まとめ", "type": "settei",
+                         "body": ["未確認（確認でき次第掲載します）"],
+                         "tables": [{"label": "L", "headers": ["要素", "示唆"],
+                                     "rows": [["a", "b"]]}]}]})))
+    # ★★改行は止めない★★（2026-09-03・Codexの7回目の指摘5）
+    #   ★名簿（"\n","\t"）だったので CRLF由来の `\r` で機種が公開できなかった★
+    for _why, _txt in (("CR改行", "行1\r\n行2"),
+                       ("タブ", "天井\t1200G")):
+        t(f"　{_why}は止めない（外部から取った値に混ざるため）",
+          not any("公開できない文字" in x for x in check_detail(
+              "zzz_test",
+              {"slug": "zzz_test",
+               "sections": [{"title": "x", "body": [_txt]}]})))
     # ★対照＝普通の文は止めない★
     t("　普通の文は止めない（混在の検査が広すぎないか）",
       not any("公開できない文字" in x for x in check_detail(
