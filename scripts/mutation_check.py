@@ -101,6 +101,14 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★見えない字（ゼロ幅・制御・方向）を「文字あり」に数える"
+               "（読者には何も見えない箱が公開される）★",
+        "file": "scripts/build_new_article.py",
+        "before": '        if cat in ("Cf", "Cc"):',
+        "after": '        if cat in ("Zl", "Zp"):',
+        "run": ["scripts/audit_site.py"],
+    },
+    {
         "why": "★Markdownだけの中身を「文字あり」に数える"
                "（読者には何も見えない箱が公開される）★",
         "file": "scripts/build_new_article.py",

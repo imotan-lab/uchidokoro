@@ -29,6 +29,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from datetime import date
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -466,7 +467,20 @@ def visible_text(t) -> str:
         # ★読めないときは元の文字で見る★＝ここで空に倒すと
         #   本物の記事まで止まる（守りではなく事故になる）
         h = t
-    return re.sub(r"<[^>]+>", "", h).replace("\u3000", " ").strip()
+    plain = re.sub(r"<[^>]+>", "", h)
+    # ★★見えない字は数えない★★（2026-09-03。★自分で確かめた★＝
+    #   ゼロ幅スペース・制御文字・方向制御は「文字あり」と数えられていたが、
+    #   PythonでもJSでも読者には見えない）
+    #   ★名簿は作らない★＝Unicode自身の分類で決める。
+    #     Cf(書式)・Cc(制御) … 表示されない → 落とす
+    #     Zs(空白)           … 空白にしてから strip（全角スペースもここ）
+    out = []
+    for ch in plain:
+        cat = unicodedata.category(ch)
+        if cat in ("Cf", "Cc"):
+            continue
+        out.append(" " if cat == "Zs" else ch)
+    return "".join(out).strip()
 
 
 # ★表を描く型★（2026-09-03）＝描画側の分岐と一致していること。
