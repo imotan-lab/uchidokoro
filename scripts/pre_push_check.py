@@ -251,8 +251,19 @@ def workflow_python_versions(read=None) -> dict:
         except Exception:                     # noqa: BLE001
             out[rel] = None                   # ★読めないときは「分からない」★
             continue
-        m = re.search(r'python-version:\s*"([^"]+)"', txt)
-        out[rel] = m.group(1) if m else None
+        # ★★コメントを読み違えない★★（2026-09-03・Codexの8回目の指摘4）
+        #   ★最初の一致しか見ていなかった★ので、
+        #   `# 旧確認用 python-version: "3.13.5"` のような行があると
+        #   **実際の設定ではなくコメントを読む**＝防ぎたいずれが緑になる。
+        #   ★コメントを落としてから探し、ちょうど1件でなければ「分からない」★
+        _lines = []
+        for _ln in txt.split("\n"):
+            _i = _ln.find("#")
+            _lines.append(_ln if _i < 0 else _ln[:_i])
+        hits = re.findall(r'python-version:\s*"([^"]+)"', "\n".join(_lines))
+        # ★1件でなければ「分からない」に倒す★（fail-closed）＝
+        #   ジョブが増えて設定が2つになったら、人が見て決める。
+        out[rel] = hits[0] if len(hits) == 1 else None
     return out
 
 

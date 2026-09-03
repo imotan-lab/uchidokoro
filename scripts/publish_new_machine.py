@@ -843,6 +843,21 @@ def _rows_ok(rows) -> bool:
                     for r in rows))
 
 
+def _visible(text, sec=None) -> bool:
+    """★読者に文字が出るか★（2026-09-03・Codexの8回目）
+
+    ★型によって強調の変換をするかが違う★＝
+    `settei` は `md()` を通さないので `** **` はそのまま見える。
+    """
+    try:
+        import build_new_article as _ba_v
+    except Exception:                         # noqa: BLE001
+        # ★読めないときは「見えない」に倒す★（守りが黙って消えないように）
+        return False
+    md = not (isinstance(sec, dict) and sec.get("type") == "settei")
+    return bool(_ba_v.visible_text(text, markdown=md))
+
+
 def _headers_visible(headers) -> bool:
     """★表の見出しに、読者に出る文字があるか★（2026-09-03・Codexの7回目）
 
@@ -997,6 +1012,20 @@ def check_detail(slug: str, detail: dict) -> list:
             for k in ("label", "note"):
                 if k in tb and not _is_text(tb[k]):
                     ng.append(f"表の {k} が文字ではありません")
+                # ★★読者に文字が出るか★★（2026-09-03・Codexの8回目の指摘3）
+                #   ★直す前は型しか見ていなかった★ので、`"<br>"` が通り
+                #   **小見出しが空のまま出る**（`<br>` は許可タグなので
+                #   安全の検査も通ってしまう）。
+                elif k in tb and tb[k] != "" and not _visible(tb[k], sec):
+                    ng.append(f"表の {k} に読者に出る文字がありません")
+            # ★セルも同じ★＝行の中に「見える文字が1つも無いセル」があると、
+            #   その欄だけ空のまま出る（値の欄が空だと意味が変わる）。
+            for _row in (tb.get("rows") or []):
+                for _c in (_row if isinstance(_row, list) else [_row]):
+                    _txt = _c.get("text") if isinstance(_c, dict) else _c
+                    if _is_text(_txt) and _txt != "" and not _visible(_txt, sec):
+                        ng.append("表のセルに読者に出る文字がありません"
+                                  f"（{str(_txt)[:20]!r} は画面では空になります）")
             if "headers" in tb and not (isinstance(tb["headers"], list)
                                         and all(_is_text(x) for x in tb["headers"])):
                 ng.append("表の headers が文字の配列ではありません")
@@ -1008,8 +1037,12 @@ def check_detail(slug: str, detail: dict) -> list:
             #     見出しが無いと**実行時に落ちてページが描かれない**。
             #   ★★「配列が空でない」では足りない★★（7回目の指摘2）＝
             #     `["", ""]` は列数もそろうので通り、読者には見出しが出ない。
+            #   ★★`settei` は行が空でも見出しを求める★★
+            #     （2026-09-03・Codexの8回目の指摘2。★JSは行が空でも
+            #       先に `tbl.headers.map(...)` を呼ぶ★ので、
+            #       見出しが無いと**実行時に落ちてページごと描かれない**）
             elif (sec.get("type") in ("table", "settei")
-                  and (tb.get("rows") or [])
+                  and (sec.get("type") == "settei" or (tb.get("rows") or []))
                   and not _headers_visible(tb.get("headers"))):
                 ng.append("表の見出し（headers）に、読者に出る文字がありません"
                           "（行があるのに見出しが読めない表は出せません）")
@@ -1036,9 +1069,21 @@ def check_detail(slug: str, detail: dict) -> list:
             ng.append("summaryBoxes が配列ではありません")
         else:
             for b in boxes:
-                if not isinstance(b, dict) or set(b) - {"title", "body", "type"}:
+                # ★★描画側が読む形にそろえる★★
+                #   （2026-09-03・Codexの8回目の指摘1。★自分で確かめた★＝
+                #     PythonもJSも `label` と `value` を読む。
+                #     ★直す前の契約は `title/body/type` を許していた★ので、
+                #     **描画側が読む正しい形のほうが拒否され、
+                #       読まない形が通っていた**）
+                if not isinstance(b, dict) or set(b) - {"label", "value"}:
                     ng.append(f"summaryBoxes に知らない形があります: {b!r}"[:120])
                     continue
+                # ★読者に文字が出るか★（型だけでは足りない）
+                for _k in ("label", "value"):
+                    _v = b.get(_k)
+                    if _is_text(_v) and not _visible(_v):
+                        ng.append(f"summaryBoxes の {_k} に"
+                                  "読者に出る文字がありません")
                 # ★配列なら中身まで見る★（2026-07-31・Codex指摘3を再現）
                 #   「文字か配列か」で止めていたので、配列の中に辞書を入れられた。
                 for k, v in b.items():
@@ -3203,6 +3248,61 @@ def selftest() -> int:
               "zzz_test",
               {"slug": "zzz_test",
                "sections": [{"title": "x", "body": [_txt]}]})))
+    # ★★summaryBoxes は描画側が読む形にそろえる★★
+    #   （2026-09-03・Codexの8回目の指摘1。★自分で確かめた★＝
+    #     PythonもJSも `label`/`value` を読むのに、契約は
+    #     `title/body/type` を許していた
+    #     ＝**描画側が読む正しい形のほうが拒否されていた**）
+    t("★summaryBoxes の描画側が読まない形は止める★",
+      check_detail("zzz_test",
+                   {"slug": "zzz_test", "sections": [],
+                    "summaryBoxes": [{"title": "天井", "body": ["1200G"]}]}))
+    t("★（対照）描画側が読む形は通る★"
+      "（直す前はこちらが拒否されていた）",
+      check_detail("zzz_test",
+                   {"slug": "zzz_test", "sections": [],
+                    "summaryBoxes": [{"label": "天井",
+                                      "value": "1200G"}]}) == [])
+    t("　summaryBoxes の中身が読者に見えなければ止める",
+      any("読者に出る文字" in x for x in check_detail(
+          "zzz_test",
+          {"slug": "zzz_test", "sections": [],
+           "summaryBoxes": [{"label": "天井", "value": "<br>"}]})))
+    # ★★`settei` は行が空でも見出しを求める★★
+    #   （2026-09-03・Codexの8回目の指摘2。★JSは行が空でも先に
+    #     `tbl.headers.map(...)` を呼ぶ★ので、見出しが無いと
+    #     **実行時に落ちてページごと描かれない**）
+    t("★settei の空の補助表に見出しが無ければ止める★",
+      any("見出し" in x for x in check_detail(
+          "zzz_test",
+          {"slug": "zzz_test",
+           "sections": [{"title": "設定示唆まとめ", "type": "settei",
+                         "tables": [{"label": "正常",
+                                     "headers": ["要素", "示唆"],
+                                     "rows": [["a", "b"]]},
+                                    {"label": "空の補助表",
+                                     "rows": []}]}]})))
+    # ★★見出し以外の「見える内容」も見る★★
+    #   （2026-09-03・Codexの8回目の指摘3。★直す前は型しか見ていなかった★ので、
+    #     `"<br>"` が通り**小見出しと値の欄が空のまま出る**）
+    _bad_lbl = {"slug": "zzz_test",
+                "sections": [{"title": "設定示唆まとめ", "type": "settei",
+                              "tables": [{"label": "<br>",
+                                          "headers": ["設定", "確率"],
+                                          "rows": [["設定6", "<br>"]]}]}]}
+    _r_lbl = check_detail("zzz_test", _bad_lbl)
+    t("★表の小見出しが読者に見えなければ止める★",
+      any("label に読者に出る文字" in x for x in _r_lbl))
+    t("★表のセルが読者に見えなければ止める★",
+      any("セルに読者に出る文字" in x for x in _r_lbl))
+    t("　（対照）読者に見える小見出しとセルは止めない",
+      not any("読者に出る文字" in x for x in check_detail(
+          "zzz_test",
+          {"slug": "zzz_test",
+           "sections": [{"title": "設定示唆まとめ", "type": "settei",
+                         "tables": [{"label": "設定示唆",
+                                     "headers": ["設定", "確率"],
+                                     "rows": [["設定6", "1/100"]]}]}]})))
     # ★対照＝普通の文は止めない★
     t("　普通の文は止めない（混在の検査が広すぎないか）",
       not any("公開できない文字" in x for x in check_detail(
@@ -3246,14 +3346,18 @@ def selftest() -> int:
       check_detail("zzz_test", {"slug": "zzz_test",
                                 "sections": [{"title": "x", "候補": []}]}))
 
-    t("★★summaryBoxes の配列の中に辞書を入れられない★★（Codex指摘・再現した）",
+    # ★★この試験は「描画側が読まない形」を正解にしていた★★
+    #   （2026-09-03・Codexの8回目の指摘1で判明。
+    #     PythonもJSも `label`/`value` を読む。
+    #     ★対照実験が誤りを正解に固定していた★＝今日2度目）
+    t("★★summaryBoxes に辞書を入れられない★★（Codex指摘・再現した）",
       check_detail("zzz_test", {"slug": "zzz_test", "sections": [],
-                                "summaryBoxes": [{"title": "題",
-                                                  "body": [{"任意": "天井99999G"}]}]}))
-    t("　まともな summaryBoxes は通る",
+                                "summaryBoxes": [{"label": "題",
+                                                  "value": {"任意": "9999G"}}]}))
+    t("　まともな summaryBoxes は通る（★描画側が読む形★）",
       check_detail("zzz_test", {"slug": "zzz_test", "sections": [],
-                                "summaryBoxes": [{"title": "題",
-                                                  "body": ["ふつうの文"]}]}) == [])
+                                "summaryBoxes": [{"label": "題",
+                                                  "value": "ふつうの文"}]}) == [])
     t("★★表の見出し数と行の列数がそろわなければ止める★★"
       "（正しい値が別の見出しの下に出る）",
       any("列数" in x for x in check_detail(

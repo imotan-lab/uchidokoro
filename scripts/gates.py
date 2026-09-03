@@ -365,6 +365,13 @@ _DANGEROUS_ATTR = re.compile(r"(?:\bon[a-z]+\s*=|javascript:|data:text/html|<\s*
 _INVISIBLE_CATS = ("Cf", "Cc", "Co", "Cs", "Zl", "Zp")
 
 
+# ★通してよい空白★（2026-09-03・Codexの8回目）
+#   ★改行とタブだけ★＝取ってきた値に CRLF が混ざるのを通すため。
+#   これ以外の「空白のように見える制御文字」（U+001C〜U+001F・U+0085・
+#   U+2028・U+2029 など）は読者に見えないので通さない。
+_ALLOWED_WS = ("\n", "\t", "\r")
+
+
 def invisible_unsafe(text: str) -> str | None:
     """不可視・方向制御文字が含まれていれば理由を返す（原文は返さない）。"""
     if not _is_str(text):
@@ -372,15 +379,17 @@ def invisible_unsafe(text: str) -> str | None:
     import unicodedata as _u
     for ch in text:
         cat = _u.category(ch)
-        # ★★空白かどうかで決める★★（2026-09-03・Codexの7回目の指摘5）
+        # ★★許すものを明示する★★（2026-09-03・Codexの8回目）
         #   ★直す前は名簿（"\n", "\t"）★だったので、CRLF由来の `\r` が
         #   混ざるだけで**その機種が公開できなくなる**（自動タスクが止まる型）。
-        #   ★`isspace()` できれいに分かれることを確かめた★＝
-        #     CR/LF/TAB/垂直タブ/改ページ … True  → 通す
-        #     ゼロ幅/ZWJ/方向制御/制御文字   … False → 止める
-        #   ★ZWJ・ZWNJ は止めたまま★＝日本語のパチスロ情報に使い道が無く、
-        #   文字を隠すのに使えるため（使う必要が出たら2AIで決める）。
-        if cat in _INVISIBLE_CATS and not ch.isspace():
+        #   ★いったん `isspace()` にしたが、それは広すぎた★＝
+        #     U+001C〜U+001F・U+0085 は Cc なのに isspace()=True／
+        #     U+2028・U+2029 は Zl/Zp で True
+        #     ＝★名簿に Zl/Zp を入れても全部通っていた★（私の説明が誤りだった）。
+        #   ★要るのは CRLF 対策だけ★なので、改行とタブだけを明示して許す。
+        #   ★ZWJ・ZWNJ は止めたまま★＝このサイトの記事は日本語のパチスロ情報で、
+        #   絵文字の合字を入力要件に含めない（編集方針）。文字を隠すのに使えるため。
+        if cat in _INVISIBLE_CATS and ch not in _ALLOWED_WS:
             return (f"不可視・方向制御文字を含む（U+{ord(ch):04X} 分類{cat}）"
                     f"＝画面上の語順が入れ替わり得る")
     return None

@@ -126,6 +126,43 @@ MUTATIONS = [
         "run": ["scripts/pre_push_check.py"],
     },
     {
+        "why": "★summaryBoxes の契約を描画側と食い違わせる"
+               "（描画側が読む label/value を拒否し、"
+               "読まない title/body を通していた）★",
+        "file": "scripts/publish_new_machine.py",
+        "before": ('                if not isinstance(b, dict)'
+                   ' or set(b) - {"label", "value"}:'),
+        "after": ('                if not isinstance(b, dict)'
+                  ' or set(b) - {"title", "body", "type"}:'),
+        "run": ["scripts/publish_new_machine.py"],
+    },
+    {
+        "why": "★settei の空の表で見出し検査を飛ばす"
+               "（JSは行が空でも headers.map を呼ぶのでページごと落ちる）★",
+        "file": "scripts/publish_new_machine.py",
+        "before": ('                  and (sec.get("type") == "settei"'
+                   ' or (tb.get("rows") or []))'),
+        "after": '                  and (tb.get("rows") or [])',
+        "run": ["scripts/publish_new_machine.py"],
+    },
+    {
+        "why": "★表の小見出し・セルが読者に見えなくても通す"
+               "（<br> だけの小見出しや値の欄が空のまま出る）★",
+        "file": "scripts/publish_new_machine.py",
+        "before": ('                elif k in tb and tb[k] != ""'
+                   ' and not _visible(tb[k], sec):'),
+        "after": "                elif False:",
+        "run": ["scripts/publish_new_machine.py"],
+    },
+    {
+        "why": "★Pythonの版をコメントから読む"
+               "（実際の設定ではなくコメントを読み、ずれが緑になる）★",
+        "file": "scripts/pre_push_check.py",
+        "before": '        out[rel] = hits[0] if len(hits) == 1 else None',
+        "after": "        out[rel] = hits[0] if hits else None",
+        "run": ["scripts/pre_push_check.py"],
+    },
+    {
         "why": "★文字参照で書いた方向制御を素通りさせる"
                "（ブラウザは &#x202e; を解釈するので、書き方を変えるだけで"
                "前回塞いだ穴が残る）★",
@@ -167,7 +204,7 @@ MUTATIONS = [
         "why": "★改行まで止める"
                "（CRLF由来の \\r が混ざるだけで、その機種が公開できなくなる）★",
         "file": "scripts/gates.py",
-        "before": "        if cat in _INVISIBLE_CATS and not ch.isspace():",
+        "before": "        if cat in _INVISIBLE_CATS and ch not in _ALLOWED_WS:",
         "after": "        if cat in _INVISIBLE_CATS:",
         "run": ["scripts/publish_new_machine.py"],
     },
