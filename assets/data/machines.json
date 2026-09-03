@@ -12008,5 +12008,67 @@
    "identity_evidence_ref": "dmm:5090 型式=未掲載 メーカー=パイオニア 導入=2026-11 確認日=2026-08-28",
    "market_release_date": "2026-11"
   }
+ },
+ {
+  "slug": "dmm_5079",
+  "name": "スマスロ ラグナドール",
+  "seo": {
+   "title": "スマスロ ラグナドール スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": false,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [
+    "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CATEGORIES_LT_2",
+    "NO_UNIQUE_GAMEPLAY"
+   ],
+   "claims": [
+    "at_prob",
+    "games_per_50",
+    "payout_rate"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-09-03",
+   "input_digest": "sha256:bcd36e9cc778e121d375cef032f9320d30b11ea17874b3fd2969a179c1d4050f"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-11",
+  "identity": {
+   "manufacturer_id": "universal",
+   "official_product_url": "https://p-town.dmm.com/machines/5079",
+   "announced_name": "スマスロ ラグナドール",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5079 型式=未掲載 メーカー=ミズホ 導入=2026-11 確認日=2026-09-03",
+   "market_release_date": "2026-11"
+  },
+  "checker": {
+   "coinRate": 31.0,
+   "unit": "G",
+   "modes": [
+    {
+     "key": "normal",
+     "label": "通常"
+    }
+   ],
+   "normal": {}
+  }
  }
 ]
