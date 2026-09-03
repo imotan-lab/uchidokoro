@@ -851,6 +851,57 @@ def _selftest() -> int:
       "（呼び出しを外しても関数の試験は緑のまま＝罠③）",
       _src_pv.count("python_version_problem(workflow_python_versions())") >= 2)
 
+    # ★★読む側（workflow_python_versions）も試す★★（2026-09-04）
+    #   ★ここまでの試験は python_version_problem に辞書を直に渡していた★ので、
+    #   **読む側を壊しても全部緑のまま**だった（壊し方12がそれを見つけた）。
+    #   罠④の形＝狙った守り（ちょうど1件でなければ「分からない」に倒す）を
+    #   一度も通らない試験しか無かった。
+    #   ★偽の読み手を渡して、読む側だけを単独で試す★
+    _PV_A = ".github/workflows/pages-rehearsal.yml"
+    _PV_B = ".github/workflows/publish-pages.yml"
+
+    def _pv_read(body):
+        def _r(rel):
+            return body.get(rel, "")
+        return _r
+
+    t("★設定がちょうど1件なら、その版を返す★",
+      workflow_python_versions(_pv_read({
+          _PV_A: 'jobs:\n  build:\n    python-version: "3.13.5"\n',
+          _PV_B: 'jobs:\n  deploy:\n    python-version: "3.13.5"\n',
+      })) == {_PV_A: "3.13.5", _PV_B: "3.13.5"})
+
+    t("★★設定が2件あるときは「分からない」に倒す★★"
+      "（先頭を採ると、増えたジョブのずれが黙って緑になる）",
+      workflow_python_versions(_pv_read({
+          _PV_A: ('jobs:\n  build:\n    python-version: "3.13.5"\n'
+                  '  extra:\n    python-version: "3.12"\n'),
+          _PV_B: 'jobs:\n  deploy:\n    python-version: "3.13.5"\n',
+      }))[_PV_A] is None)
+
+    t("★コメントに書いてある版は読まない★"
+      "（実際の設定ではなくコメントを読むと、ずれが緑になる）",
+      workflow_python_versions(_pv_read({
+          _PV_A: ('jobs:\n  build:\n'
+                  '    # 旧確認用 python-version: "3.12"\n'
+                  '    python-version: "3.13.5"\n'),
+          _PV_B: 'jobs:\n  deploy:\n    python-version: "3.13.5"\n',
+      }))[_PV_A] == "3.13.5")
+
+    t("★設定が1件も無ければ「分からない」に倒す★（fail-closed）",
+      workflow_python_versions(_pv_read({
+          _PV_A: 'jobs:\n  build:\n    # python-version: "3.13.5"\n',
+          _PV_B: 'jobs:\n  deploy:\n    python-version: "3.13.5"\n',
+      }))[_PV_A] is None)
+
+    def _pv_bad(rel):
+        if rel == _PV_A:
+            raise OSError("読めません")
+        return 'jobs:\n  deploy:\n    python-version: "3.13.5"\n'
+
+    t("★読めないときも「分からない」に倒す★",
+      workflow_python_versions(_pv_bad)[_PV_A] is None)
+
     ng = ok.count(False)
     print(f"{len(ok) - ng}/{len(ok)} 合格")
     return 1 if ng else 0
