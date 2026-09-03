@@ -842,6 +842,36 @@ def _rows_ok(rows) -> bool:
                     for r in rows))
 
 
+def _html_unsafe_places(detail) -> list:
+    """★記事データの中の、危険なHTMLの場所★（2026-09-03）
+
+    ★同じ規則を2か所に書かない★＝判定は `gates.html_unsafe` が持つ。
+    ここは「どこにあるか」を辿るだけ。
+    ★原文は返さない★（公開されるログに出るため・場所と理由だけ）。
+    """
+    try:
+        import gates as _g
+    except Exception as e:                    # noqa: BLE001
+        # ★読めないときは止める★（守りが黙って消えないように）
+        return [f"HTMLの安全判定を読めません: {type(e).__name__}: {e}"]
+    out = []
+
+    def walk(o, path):
+        if isinstance(o, str):
+            why = _g.html_unsafe(o)
+            if why:
+                out.append(f"記事データに危険なHTMLがあります（{path}）: {why}")
+        elif isinstance(o, dict):
+            for k, v in o.items():
+                walk(v, f"{path}.{k}")
+        elif isinstance(o, list):
+            for i, v in enumerate(o):
+                walk(v, f"{path}[{i}]")
+
+    walk(detail, "detail")
+    return out
+
+
 def check_detail(slug: str, detail: dict) -> list:
     """★受け取った記事データそのものを確かめる★（2026-07-31・Codex指摘）
 
@@ -856,6 +886,14 @@ def check_detail(slug: str, detail: dict) -> list:
     ng = []
     if not isinstance(detail, dict):
         return ["記事データが辞書ではありません"]
+    # ★★危険なHTMLは無害化せず拒否★★（2026-09-03・Codexの5回目の指摘5）
+    #   ★JS側は本文を innerHTML に入れる★ので、記事データに書いたタグは
+    #   **読者のブラウザでそのまま動く**（自分で確かめた）。
+    #   ★判定は `gates.html_unsafe` が既に持っていた★が、
+    #   Phase 1 の射影側にしか繋がっておらず、
+    #   いまの配信（リポジトリをそのまま出す）では一度も通らなかった。
+    #   ★実測：実データ133機種で危険は0件★（`<br>` は許可タグなので通る）。
+    ng += _html_unsafe_places(detail)
     if detail.get("slug") != slug:
         ng.append(f"記事データの slug が {detail.get('slug')!r} です（{slug!r} のはず）")
     stray = sorted(set(detail) - _DETAIL_KEYS)
@@ -2972,6 +3010,37 @@ def selftest() -> int:
                     {**_m2, "identity": {"manufacturer_id": "bellco",
                                          "_model_code_sources": ["a", "b"]}}) == [])
     t("　本物の機種データは通る", check_machine("zzz_test", _m2) == [])
+
+    # ★★危険なHTMLは無害化せず拒否する★★（2026-09-03・Codexの5回目の指摘5）
+    #   ★自分で確かめた★＝JS側は本文を innerHTML に入れるので、
+    #   記事データに書いたタグは**読者のブラウザでそのまま動く**。
+    #   ★判定は gates.html_unsafe が持っていたが、Phase 1 の射影側に
+    #   しか繋がっておらず、いまの配信では一度も通らなかった★。
+    for _why, _txt in (
+            ("イベント属性", '<img src=x onerror=alert(1)>'),
+            ("スクリプトタグ", "<script>alert(1)</script>"),
+            ("許可していないタグ", "<iframe src=x></iframe>"),
+            ("タグの属性", '<span class="x">本文</span>'),
+            ("生の「<」", "天井 < 1200G")):
+        _bad_html = {"slug": "zzz_test",
+                     "sections": [{"title": "x", "body": [_txt]}]}
+        t(f"★記事データの{_why}は止める★",
+          any("危険なHTML" in x for x in check_detail("zzz_test", _bad_html)))
+    # ★対照＝許可タグは止めない★（本物の記事に112件ある）
+    t("　改行タグ（許可）は止めない"
+      "／実データに112件あるので、止めると全機種が公開できなくなる",
+      not any("危険なHTML" in x for x in check_detail(
+          "zzz_test",
+          {"slug": "zzz_test",
+           "sections": [{"title": "x",
+                         "body": ["250Gから様子見<br>340Gから狙い目"]}]})))
+    # ★どこにあるかを名指しするか★（原文は出さない）
+    _places = _html_unsafe_places(
+        {"sections": [{"title": "x", "body": ["ok"]},
+                      {"title": "y", "body": ["<img src=x onerror=1>"]}]})
+    t("　場所を名指しする（原文は出さない）",
+      len(_places) == 1 and "sections[1].body[0]" in _places[0]
+      and "onerror" not in _places[0])
 
     # ★受け取った記事データそのものを確かめる★
     t("★まともな記事データなら通る★",

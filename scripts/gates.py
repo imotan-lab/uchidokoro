@@ -403,14 +403,6 @@ def html_unsafe(text: str) -> str | None:
             return f"許可されていないタグ <{name}>"
         return "タグ以外のHTML構文（コメント・生の「<」等）は許可しない"
     return None
-    if _DANGEROUS_ATTR.search(text):
-        return "イベント属性・スクリプト等の危険なHTML"
-    for m in _TAG_ANY.finditer(text):
-        if m.group(1).lower() not in _ALLOWED_TAGS:
-            return f"許可されていないタグ <{m.group(1)}>"
-        if "=" in (m.group(2) or ""):
-            return f"タグ属性は許可しない <{m.group(1)}>"
-    return None
 
 
 def normalize_atom(parts) -> str:

@@ -101,6 +101,23 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★記事データの危険なHTMLを素通りさせる"
+               "（JS側は innerHTML に入れるので読者のブラウザで動く）★",
+        "file": "scripts/publish_new_machine.py",
+        "before": "    ng += _html_unsafe_places(detail)",
+        "after": "    ng += []",
+        "run": ["scripts/publish_new_machine.py"],
+    },
+    {
+        "why": "★HTMLの安全判定を読めないときに素通りさせる"
+               "（守りが黙って消える）★",
+        "file": "scripts/publish_new_machine.py",
+        "before": ('        return [f"HTMLの安全判定を読めません:'
+                   ' {type(e).__name__}: {e}"]'),
+        "after": "        return []",
+        "run": ["scripts/publish_new_machine.py"],
+    },
+    {
         "why": "★見えない字（ゼロ幅・制御・方向）を「文字あり」に数える"
                "（読者には何も見えない箱が公開される）★",
         "file": "scripts/build_new_article.py",
