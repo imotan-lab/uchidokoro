@@ -764,7 +764,7 @@ def cmd_scan(root: str) -> int:
     # ★同じ場所でも、検知の中身が増えていたら新しい扱い★
     #   （承知したのは「そのとき見えていたもの」であって、
     #     あとから足された秘密まで承知したことにはならない）
-    known, fresh = [], []
+    known, fresh, unread = [], [], []
     for rel, findings, sha in hits:
         want = base.get(rel.replace(os.sep, "/"))
         # ★★中身が変わっていたら、検知の種類が同じでも新しい扱い★★
@@ -785,7 +785,29 @@ def cmd_scan(root: str) -> int:
               and set(findings) <= set(want.get("findings") or [])
               and (unverifiable
                    or str(want.get("sha256") or "") == sha))
-        (known if ok else fresh).append((rel, findings))
+        if ok:
+            known.append((rel, findings))
+        elif unverifiable:
+            # ★★「中身を確かめられなかった」だけのものは知らせるが止めない★★
+            #   （2026-09-04）
+            #   ★理由＝ファイルが増えるたびに永久に鳴るため★。
+            #   FAXの控えには毎日PDFが増える。PDFは中身を読めないので
+            #   必ずこの検知になり、基準値に無いから毎回「新しい検知」になる
+            #   ＝★消そうとしたノイズを自分で作り直していた★
+            #   （書き足されるログで一度直したのと同じ型が、
+            #     「新しいファイル」の側に残っていた）。
+            #   ★隠さない★＝名前を挙げて必ず出す。変えるのは終了コードだけ。
+            #   ★本物の秘密が1つでも混ざっていれば、こちらへは来ない★
+            #   （unverifiable は「検知が全部『確かめられません』」のとき）。
+            unread.append((rel, findings))
+        else:
+            fresh.append((rel, findings))
+    if unread:
+        print(f"ℹ️ 中身を確かめられないファイル: {len(unread)}件"
+              f"（PDF・画像・圧縮ファイルなど。★止めません★）")
+        for rel, findings in unread:
+            print(f"  - {rel} → {', '.join(findings)}")
+            _log(f"scan: ℹ️ 確かめられない {rel} → {', '.join(findings)}")
     if fresh:
         print(f"⚠ 秘密パターン検知: {len(fresh)}件"
               f"（走査 {total}ファイル／承知済み {len(known)}件は除く）")
@@ -829,6 +851,9 @@ def cmd_accept(root: str) -> int:
         return 1
     got = {"schema": "backup-scan-baseline/v2",
            "root": _root_key(root),
+           # ★いつ承知したか★＝理由の文に日付を焼き込むと、
+           #   やり直しても古い日付のまま残って確かめられない。
+           "accepted_at": datetime.date.today().isoformat(),
            "why": "運営者の判断（2026-08-22）＝Dropboxは安全とみなす。"
                   "うちどころ以外のプロジェクトの控えに元からあったもので、"
                   "新しい漏れではない。★消さずに記録して黙らせる★",
@@ -884,6 +909,31 @@ def _baseline_tests(t) -> None:
         with open(p2, "w", encoding="utf-8") as f:
             f.write("github_token = ghp_DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD")
         t("★新しいファイルが増えたら知らせる★", cmd_scan(root) == 1)
+
+        # ★★読めないファイルが増えても止めない★★（2026-09-04）
+        cmd_accept(root)
+        p3 = os.path.join(root, "scan.pdf")
+        with open(p3, "wb") as f:
+            f.write(b"%PDF-1.4\n\xff\xfe binary")
+        t("★★中身を読めないファイルが増えても止めない★★"
+          "（毎日増えるPDFで永久に鳴っていた）", cmd_scan(root) == 0)
+        import io as _io2, contextlib as _cl2
+        _out = _io2.StringIO()
+        with _cl2.redirect_stdout(_out):
+            cmd_scan(root)
+        t("　ただし名前は必ず出す（黙って隠さない）",
+          "scan.pdf" in _out.getvalue())
+
+        # ★★読めないファイルに紛れて本物が増えたら、止める★★
+        #   （読めない側へ落として見逃す作りになっていないか）
+        p4 = os.path.join(root, "c.txt")
+        with open(p4, "w", encoding="utf-8") as f:
+            f.write("github_token = ghp_EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE")
+        t("★★読めないものに紛れても、本物の秘密なら止める★★",
+          cmd_scan(root) == 1)
+        os.remove(p4)
+        os.remove(p3)
+        cmd_accept(root)
 
         # ★★存在しない場所★★
         t("★★走査先が無いときは緑にしない★★"

@@ -1601,6 +1601,23 @@ MUTATIONS = [
         "run": ["scripts/publish_new_machine.py"],
     },
     {
+        "why": "★本物の秘密まで「読めないもの」の側へ落として止めない★"
+               "（読めない扱いは終了コードを変えるので、"
+               "ここが緩むと秘密が黙って通る）",
+        "file": "scripts/backup_guard.py",
+        "before": "        elif unverifiable:",
+        "after": "        elif True:",
+        "run": ["scripts/backup_guard.py"],
+    },
+    {
+        "why": "★読めなかったファイルの名前を出さない★"
+               "（止めない代わりに必ず名前を出す約束を破る）",
+        "file": "scripts/backup_guard.py",
+        "before": "    if unread:",
+        "after": "    if False:",
+        "run": ["scripts/backup_guard.py"],
+    },
+    {
         "why": "保存名の案内を出さない（台帳#464の再発）",
         "file": "scripts/backup_guard.py",
         "before": '        findings.append("allowlist:リスト外" + hint)',
