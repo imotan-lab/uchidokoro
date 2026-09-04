@@ -336,6 +336,20 @@ def _is_archive(name: str, data: bytes) -> bool:
         return False
 
 
+def _zip_base(name: str) -> str:
+    """★ZIP項目名から、検査する名前を取り出す★
+
+    ★区切りは「/」と「\\」の両方★（2026-09-04・Codexの5回目の指摘1）
+      ★壊し方の検査には載せていない★＝Pythonの zipfile は保存のときに
+      「\\」を「/」へ直すので、**標準の道具ではこの入力を作れない**。
+      手で組んだZIPなら作れるので、備えとして残す。
+      ZIPの決まりでは「/」だが、Windowsでは「\\」も区切りとして扱われるので、
+      `gmail_config.json\\` のような名前を作ると basename が空になり、
+      ★名前の検査を素通りしていた★。
+    """
+    return os.path.basename(str(name or "").rstrip("/\\").replace("\\", "/"))
+
+
 def _zip_findings(path: str, raw: bytes, depth: int = 0):
     """ZIPなら中の文字ファイルを1件ずつ同じ検査に掛ける（ZIPでなければ None）。
 
@@ -345,8 +359,14 @@ def _zip_findings(path: str, raw: bytes, depth: int = 0):
     """
     import tempfile
     import zipfile
+    # ★見分けは「先頭の印」または「ZIPとして開けること」★
+    #   （前に別のデータを付けたZIPも成立するため）
     if not raw.startswith(b"PK" + bytes([3, 4])):
-        return None
+        try:
+            if not zipfile.is_zipfile(path):
+                return None
+        except OSError:
+            return None
     if depth > 0:
         return ["content:ZIPの中にZIPがあるので確かめられません"]
     # ★見つけた秘密を、あとから来た「確かめられません」で捨てない★
@@ -360,13 +380,17 @@ def _zip_findings(path: str, raw: bytes, depth: int = 0):
             # ★名前ではなく実体で回す★（2026-08-06・Codex122回目の指摘1）
             #   ZIPには同じ名前の中身を複数入れられる。名前で読むと
             #   **同名の1件しか読めず、残りを検査しないまま通していた**。
-            # ★★名前が「/」で終わるだけでは、外さない★★
-            #   （2026-09-04・Codexの4回目）
-            #   ★直す前★＝名前の末尾だけで「フォルダ」と決めて一覧から外していた。
-            #   ZIPは `gmail_config.json/` という名前にも中身を書けるので、
-            #   ★名前検査にも中身検査にも届かず、終了コード0★で通った
-            #   （自分で再現した）。
-            #   → ★中身が空の本物のフォルダだけを外す★
+            # ★★まず全部の名前を見る★★（2026-09-04・Codexの5回目・1/2/6）
+            #   ★直す前★＝件数の上限・累計サイズ・読み取りが名前検査より先に
+            #   あったので、①項目が501件ある ②20MBを超えた ③読めない
+            #   のどれかに当たると、`gmail_config` という名前が報告されなかった。
+            #   さらに `zi.is_dir()` は**名前の末尾で決まる**ので、
+            #   「本物のフォルダだけ外す」つもりが外せていなかった。
+            #   → ★名前だけの一巡を最初にやる★（外した項目の名前も見る）
+            for _zi in z.infolist():
+                _b = _zip_base(_zi.filename)
+                if _b and not is_allowlisted(_b):
+                    out += [f"{_zi.filename} → {x}" for x in name_findings(_b)]
             infos = [zi for zi in z.infolist()
                      if not (zi.is_dir() and zi.file_size == 0)]
             if len(infos) > 500:
@@ -380,17 +404,6 @@ def _zip_findings(path: str, raw: bytes, depth: int = 0):
                     out.append("content:ZIPの中身が大きすぎて確かめられません")
                     return out
                 data = z.read(zi)
-                # ★★中のファイル名を、いちばん先に検査する★★
-                #   （2026-09-04・Codexの4回目・同型2）
-                #   ★直す前★＝圧縮判定の後ろにあったので、
-                #   `gmail_config.zip` という要素は名前で止まらず、
-                #   「ZIPの中にZIP」という**読めなかった扱い**だけになり、
-                #   番人の分類では②（メールしない）へ落ちていた。
-                #   ★末尾の「/」を落としてから見る★＝
-                #   `gmail_config.json/` の basename は空文字になる。
-                _base = os.path.basename(nm.rstrip("/"))
-                if _base and not is_allowlisted(_base):
-                    out += [f"{nm} → {x}" for x in name_findings(_base)]
                 # ★中の圧縮ファイルは確かめられない★（見た目で飛ばさない）
                 #   拡張子で「binaryだから無視」にすると、
                 #   **ZIPの中にZIPを置けば中身を隠せた**（自分の試験で発覚）。
@@ -453,6 +466,20 @@ def content_findings(path: str) -> list[str]:
                     f"（{size // (1024 * 1024)}MB）"]
         with open(path, "rb") as f:
             raw = f.read()
+        # ★★ZIPかどうかを、文字として読めるかより先に見る★★
+        #   （2026-09-04・Codexの5回目の②を確かめている途中で見つけた）
+        #   ★直す前★＝「UTF-8で読めない」ときだけZIPを疑っていたので、
+        #   ★小さなZIPはたまたまUTF-8として読めてしまい★、
+        #   ZIPとして一度も開かれず、中の名前も中身も検査されなかった。
+        _zf0 = _zip_findings(path, raw)
+        if _zf0 is not None:
+            # ★中身を見たうえで、皮をかぶっていることも残す★
+            #   （ZIPとして開けたからといって、.md の中身がZIPなのは異常）
+            if not path.lower().endswith(
+                    (".zip", ".7z", ".rar", ".gz", ".xlsx", ".xlsm", ".docx",
+                     ".pptx", ".jar", ".whl", ".epub", ".odt", ".ods")):
+                _zf0 = ["content:圧縮ファイルの中身です（zip）"] + _zf0
+            return _zf0
         # ★読めない文字コードのまま素通りさせない★（2026-08-04・Codex87回目）
         #   errors="ignore" だと、UTF-16 で保存した .md/.py/.log は
         #   文字の間にNULが入って正規表現に当たらず、秘密が通っていた。
@@ -488,7 +515,12 @@ def content_findings(path: str) -> list[str]:
                         (b"Rar!", "rar"))):
         if raw.startswith(magic):
             return [f"content:圧縮ファイルの中身です（{name}）"]
-    _txt = text.strip()
+    # ★★UTF-8の印（BOM）を落としてから見る★★
+    #   （2026-09-04・Codexの5回目の指摘4）
+    #   ★直す前★＝先頭にBOMが残るので `{` で始まると判定されず、
+    #   BOM付きのJSONに書いた鍵が**JSONとして読まれないまま**通っていた。
+    #   Windowsの道具はBOMを付けて保存することが多く、事故で起きうる。
+    _txt = text.lstrip("\ufeff").strip()
     _parsed = None
     try:
         _parsed = json.loads(_txt) if _txt[:1] in ("{", "[") else None
@@ -549,11 +581,23 @@ def _in_claims_dir(src: str | None) -> bool:
 
 
 def is_allowlisted(basename: str, src: str | None = None) -> bool:
-    if (basename in ALLOW_BASENAMES
-            or bool(ALLOW_LOG_RE.match(basename))
+    """★名前の検査を免除してよいか★
+
+    ★★形（正規表現）で許すものは、拒否名を上書きしない★★
+    （2026-09-04・Codexの5回目の指摘3）
+      ★直す前★＝`{taskId}_SKILL.md` や `{名前}_{日付}.log` の形に当てはまれば
+      名前の検査を丸ごと飛ばしていたので、`gmail_config_SKILL.md` や
+      `secret_2026-09-04.log` が**名前で止まらなくなっていた**。
+      ★一件ずつ確かめた名簿（ALLOW_BASENAMES）はそのまま★＝
+      あれは実在のファイルを個別に見て決めたもの。
+      ★形で許すものは「拒否名に当たらないときだけ」★。
+    """
+    if basename in ALLOW_BASENAMES:
+        return True
+    if (bool(ALLOW_LOG_RE.match(basename))
             or bool(ALLOW_CLAUDE_SNAPSHOT_RE.match(basename))
             or bool(ALLOW_TASK_SKILL_RE.match(basename))):
-        return True
+        return not name_findings(basename)
     # claims は「名前の形」と「claims置き場にあること」の両方が要る
     if ALLOW_CLAIMS_RE.match(basename) and _in_claims_dir(src):
         return True
@@ -808,10 +852,32 @@ def _sha_file(path: str) -> str:
 
 
 def _walk(root: str, bad: list):
-    """★入れなかったフォルダを黙って飛ばさない★（2026-08-22・Codexの指摘）"""
+    """★入れなかったフォルダを黙って飛ばさない★（2026-08-22・Codexの指摘）
+
+    ★★フォルダのつなぎ（シンボリックリンク）も黙って飛ばさない★★
+    （2026-09-04・Codexの5回目の指摘7）
+      `os.walk` は既定でリンクの中へ入らない。一覧には出るが走査されず、
+      ★読めなかった記録にも残らない★ので、
+      「つなぎしか無い場所」を調べると **何も見ずに「検知なし」**になり得た。
+      ★中へは入らない★（同じ場所を何度も見る・輪になる恐れ）。
+      ★入らないことを記録して非0にする★（安全側）。
+    """
     def _oops(e):
         bad.append(f"読めないフォルダがあります: {getattr(e, 'filename', '?')}")
-    return os.walk(root, onerror=_oops)
+
+    def _gen():
+        for dirpath, dirs, files in os.walk(root, onerror=_oops):
+            for d in list(dirs):
+                full = os.path.join(dirpath, d)
+                try:
+                    if os.path.islink(full):
+                        bad.append(f"フォルダのつなぎは中を見ていません: {full}")
+                        dirs.remove(d)
+                except OSError:
+                    bad.append(f"読めないフォルダがあります: {full}")
+                    dirs.remove(d)
+            yield dirpath, dirs, files
+    return _gen()
 
 
 def _root_key(root: str) -> str:
@@ -1229,6 +1295,105 @@ def _baseline_tests(t) -> None:
         t("★★ZIP内の圧縮要素も、名前で止める★★",
           any("name:gmail_config" in x for x in content_findings(p16)))
         os.remove(p16)
+        cmd_accept(root)
+
+        # ⑮b★「/」で終わっても、中身があれば中身を読む★
+        #   （名前の一巡だけでは、中身の秘密は見つからない）
+        p16b = os.path.join(root, "slash2.zip")
+        with _zf.ZipFile(p16b, "w") as z:
+            z.writestr("data/", f"github_token = {_tok}")
+        t("★★名前が「/」で終わっても、中身があれば中身を読む★★",
+          any("github_token" in x for x in content_findings(p16b)))
+        os.remove(p16b)
+        cmd_accept(root)
+
+        # ⑯★ZIPかどうかを、文字として読めるかより先に見る★
+        #   （2026-09-04・Codexの②を確かめている途中で自分で見つけた）
+        #   ★小さなZIPはたまたまUTF-8として読めることがある★ので、
+        #   「読めなければZIPを疑う」順だとZIPとして一度も開かれなかった。
+        p17 = os.path.join(root, "tiny.zip")
+        _zi17 = _zf.ZipInfo("gmail_config.json/")
+        _zi17.external_attr = 0x10 << 16
+        with _zf.ZipFile(p17, "w") as z:
+            z.writestr(_zi17, b"")
+        t("★★UTF-8として読めるZIPも、ZIPとして開いて検査する★★",
+          any("name:gmail_config" in x for x in content_findings(p17)))
+        os.remove(p17)
+        cmd_accept(root)
+
+        # ⑰★前に別のデータが付いたZIPも検査する★
+        _in17 = os.path.join(root, "_i.zip")
+        with _zf.ZipFile(_in17, "w") as z:
+            z.writestr("gmail_config.json", "{}")
+        with open(_in17, "rb") as _f:
+            _d17 = _f.read()
+        os.remove(_in17)
+        p18 = os.path.join(root, "pre.zip")
+        with open(p18, "wb") as f:
+            f.write(b"JUNKJUNK" + _d17)
+        t("　前に別のデータが付いたZIPも中を見る",
+          any("name:gmail_config" in x for x in content_findings(p18)))
+        os.remove(p18)
+        cmd_accept(root)
+
+        # ⑱★ZIP項目名の末尾は「/」も「\\」も落として見る★
+        p19 = os.path.join(root, "bs.zip")
+        with _zf.ZipFile(p19, "w") as z:
+            z.writestr("gmail_config.json\\", "hello")
+        t("★★項目名が区切り文字で終わっても、名前で止める★★",
+          any("name:gmail_config" in x for x in content_findings(p19)))
+        os.remove(p19)
+        cmd_accept(root)
+
+        # ⑲★項目が多すぎても、名前だけは先に見る★
+        p20 = os.path.join(root, "many.zip")
+        with _zf.ZipFile(p20, "w") as z:
+            z.writestr("gmail_config.json", "{}")
+            for _i in range(505):
+                z.writestr(f"f{_i}.txt", "x")
+        t("★★項目が多すぎても、名前は報告する★★"
+          "（件数の上限が名前検査より先だった）",
+          any("name:gmail_config" in x for x in content_findings(p20)))
+        os.remove(p20)
+        cmd_accept(root)
+
+        # ⑳★形で許す名簿が、拒否名を上書きしない★
+        t("★★形で許す名簿は、拒否名を上書きしない★★"
+          "（gmail_config_SKILL.md が名前検査を飛ばしていた）",
+          not is_allowlisted("gmail_config_SKILL.md")
+          and not is_allowlisted("secret_2026-09-04.log"))
+        t("　ふつうの手順書・ログは今までどおり許す（止めすぎない）",
+          is_allowlisted("uchidokoro-add-machine_SKILL.md")
+          and is_allowlisted("update_machine_2026-09-04.log"))
+
+        # ㉑★UTF-8の印（BOM）が付いていても、JSONとして読む★
+        p21 = os.path.join(root, "note.md")
+        with open(p21, "wb") as f:
+            f.write("\ufeff".encode("utf-8")
+                    + b'{"app_password":"hello-world-value"}')
+        t("★★BOM付きのJSONに書いた鍵も見つける★★"
+          "（先頭がカッコでないと見なされ、鍵の検査に届かなかった）",
+          any(x.startswith("json_key:") for x in content_findings(p21)))
+        os.remove(p21)
+        cmd_accept(root)
+
+        # ㉒★フォルダのつなぎ（リンク）を黙って飛ばさない★
+        #   ★本物のリンクは権限が要る★ので、見分ける手だてを差し替えて試す。
+        _sub = os.path.join(root, "linkdir")
+        os.makedirs(_sub, exist_ok=True)
+        _real_islink = os.path.islink
+
+        def _fake_islink(p, _r=_real_islink, _t=_sub):
+            return os.path.abspath(p) == os.path.abspath(_t) or _r(p)
+
+        os.path.islink = _fake_islink
+        try:
+            t("★★フォルダのつなぎは中を見ていないと記録して止める★★"
+              "（一覧に出るが走査されず、記録にも残っていなかった）",
+              cmd_scan(root) == 1)
+        finally:
+            os.path.islink = _real_islink
+        os.rmdir(_sub)
         cmd_accept(root)
 
         # ④★読めないフォルダがあったら緑にしない★

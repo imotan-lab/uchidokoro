@@ -1657,16 +1657,6 @@ MUTATIONS = [
         "run": ["scripts/backup_guard.py"],
     },
     {
-        "why": "★ZIPの中のファイル名を検査しない★"
-               "（gmail_config.json を中身 {} で入れるだけで通っていた）",
-        "file": "scripts/backup_guard.py",
-        "before": ("                if _base and not is_allowlisted(_base):\n"
-                   '                    out += [f"{nm} → {x}"'
-                   " for x in name_findings(_base)]"),
-        "after": "                if False:\n                    pass",
-        "run": ["scripts/backup_guard.py"],
-    },
-    {
         "why": "★入れ子ZIPが先だと、その後ろを検査しない★",
         "file": "scripts/backup_guard.py",
         "before": ('                    out.append("content:ZIPの中にZIPが'
@@ -1707,11 +1697,46 @@ MUTATIONS = [
         "run": ["scripts/backup_guard.py"],
     },
     {
-        "why": "★ZIP内の名前検査を、圧縮判定より後ろへ戻す★"
-               "（圧縮要素が名前で止まらなくなる）",
+        "why": "★ZIPかどうかを、文字として読めるかより後に見る★"
+               "（UTF-8として読める小さなZIPが一度も開かれなかった）",
         "file": "scripts/backup_guard.py",
-        "before": ('                _base = os.path.basename(nm.rstrip("/"))'),
-        "after": ('                _base = ""  # noqa'),
+        "before": "        _zf0 = _zip_findings(path, raw)",
+        "after": "        _zf0 = None",
+        "run": ["scripts/backup_guard.py"],
+    },
+    {
+        "why": "★ZIPの名前の一巡をやめる★"
+               "（件数・サイズ・読み取りの手前で名前を見なくなる）",
+        "file": "scripts/backup_guard.py",
+        "before": ("            for _zi in z.infolist():\n"
+                   "                _b = _zip_base(_zi.filename)"),
+        "after": ("            for _zi in []:\n"
+                  "                _b = _zip_base(_zi.filename)"),
+        "run": ["scripts/backup_guard.py"],
+    },
+    {
+        "why": "★形で許す名簿に、拒否名を上書きさせる★"
+               "（gmail_config_SKILL.md が名前検査を飛ばす）",
+        "file": "scripts/backup_guard.py",
+        "before": "        return not name_findings(basename)",
+        "after": "        return True",
+        "run": ["scripts/backup_guard.py"],
+    },
+    {
+        "why": "★UTF-8の印（BOM）を落とさずに中身を見る★"
+               "（BOM付きJSONが「JSONでない」と判定される）",
+        "file": "scripts/backup_guard.py",
+        "before": '    _txt = text.lstrip("\\ufeff").strip()',
+        "after": "    _txt = text.strip()",
+        "run": ["scripts/backup_guard.py"],
+    },
+    {
+        "why": "★フォルダのつなぎを黙って飛ばす★"
+               "（つなぎしか無い場所を「検知なし」で通す）",
+        "file": "scripts/backup_guard.py",
+        "before": ('                        bad.append('
+                   'f"フォルダのつなぎは中を見ていません: {full}")'),
+        "after": "                        pass",
         "run": ["scripts/backup_guard.py"],
     },
     {
