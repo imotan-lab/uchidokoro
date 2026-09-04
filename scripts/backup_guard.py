@@ -358,9 +358,18 @@ def _zip_findings(path: str, raw: bytes, depth: int = 0):
                 except UnicodeDecodeError:
                     txt = _decode_utf16(data)
                 if txt is None:
-                    if _looks_binary(nm):
-                        continue
-                    return [f"content:ZIP内 {nm} を読めないので確かめられません"]
+                    # ★★名前で飛ばさない★★（2026-09-04・Codexの2回目・重大1）
+                    #   ★直す前★＝`.pdf` `.png` 等は `continue` で素通りし、
+                    #   ZIP全体の検知が空になって**終了コード0**だった。
+                    #   外側ZIPに「不正UTF-8で始まり鍵を含む report.pdf」を
+                    #   1つ入れるだけで通る（自分で再現した）。
+                    # ★★見つけた秘密を捨てない★★（重大3）
+                    #   ★直す前★＝ここで return していたので、
+                    #   先に見つけた `secret.txt → value:github_token` が消えた。
+                    #   append して**先へ進む**＝残りの要素も全部見る。
+                    out.append(
+                        f"content:ZIP内 {nm} を読めないので確かめられません")
+                    continue
                 fd, tp = tempfile.mkstemp(suffix="_" + os.path.basename(nm))
                 try:
                     with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -818,10 +827,16 @@ def cmd_scan(root: str) -> int:
         #   ★そもそも中身を見られていない★ので、指紋を比べる意味がない。
         #   （本当に秘密を見つけた検知だけ、中身が変わったら知らせる）
         unverifiable = all(_is_unverifiable(x) for x in findings)
+        # ★★中身を見られなかったものでも、指紋は必ず比べる★★
+        #   （2026-09-04・Codexの2回目・重大2）
+        #   ★直す前★＝`unverifiable` なら指紋を飛ばしていたので、
+        #   ①無害な読めないファイルを承知させる ②中身を鍵入りに差し替える
+        #   で**終了コード0のまま**通った（自分で再現した）。
+        #   ★元の意図＝書き足されるログが毎回鳴る★は、番人の側で受ける
+        #   （「読めなかった」型は件数だけログでメールにしない決まりがある）。
         ok = (want is not None
               and set(findings) <= set(want.get("findings") or [])
-              and (unverifiable
-                   or str(want.get("sha256") or "") == sha))
+              and str(want.get("sha256") or "") == sha)
         # ★★「確かめられなかった」ものを通さない★★（2026-09-04に戻した）
         #   ★一度「止めない」にして、自分で5通りの穴を作った★＝
         #   `report.pdf` の中身が不正UTF-8で始まり本物の鍵を含む／
@@ -831,6 +846,11 @@ def cmd_scan(root: str) -> int:
         #   ★騒がしさは番人の側で分類済み★＝「名前つき検知」と
         #   「読めない件数」を分けて報告している。こちらを緩める必要は無い。
         (known if ok else fresh).append((rel, findings))
+    # ★分類した件数は毎回出す★（承知済みに入っても番人が数えられるように）
+    _nv = _unverifiable_count(hits)
+    print(f"内訳: 中身を確かめられないファイル {_nv}件"
+          f"（走査 {total}ファイル中）")
+    _log(f"scan: 内訳 確かめられない {_nv}件 / 走査 {total}")
     if fresh:
         print(f"⚠ 秘密パターン検知: {len(fresh)}件"
               f"（走査 {total}ファイル／承知済み {len(known)}件は除く）")
@@ -842,6 +862,16 @@ def cmd_scan(root: str) -> int:
     print(f"✅ 新しい検知なし（走査 {total}ファイル／承知済み {len(known)}件）")
     _log(f"scan: ✅ 新しい検知なし（{root}・{total}ファイル・承知済み{len(known)}件）")
     return 0
+
+
+def _unverifiable_count(hits) -> int:
+    """★中身を見られなかったファイルの数★（番人が日ごとの差を見るため）。
+
+    ★承知済みかどうかに関係なく数える★＝承知済みへ入ると出力から消えるので、
+    「昨日より増えたか」を番人が計算できなくなっていた（Codexの指摘）。
+    """
+    return sum(1 for _rel, f, _sha in hits
+               if f and all(_is_unverifiable(x) for x in f))
 
 
 def cmd_accept(root: str) -> int:
@@ -971,6 +1001,46 @@ def _baseline_tests(t) -> None:
           and any("ZIPの中にZIP" in x for x in _f))
         t("　その場合も止める", cmd_scan(root) == 1)
         os.remove(p5)
+        cmd_accept(root)
+
+        # ⑤★ZIPの中の .pdf .png は名前だけで飛ばさない★
+        #   （2026-09-04・Codexの2回目・重大1。基準値すら要らない素通りだった）
+        p6 = os.path.join(root, "outer.zip")
+        with _zf.ZipFile(p6, "w") as z:
+            z.writestr("report.pdf",
+                       b"\xff" + f"github_token = {_tok}".encode("utf-8"))
+        t("★★ZIPの中の読めない要素を、名前だけで飛ばさない★★"
+          "（外側ZIPに鍵入りPDFを1つ入れるだけで通っていた）",
+          cmd_scan(root) == 1)
+        os.remove(p6)
+        cmd_accept(root)
+
+        # ⑥★ZIP内に読めない要素があっても、見つけた秘密を捨てない★
+        #   （★`inner.zip` ではない兄弟の分岐★＝壊し方の検査が見ていなかった）
+        p7 = os.path.join(root, "b.zip")
+        with _zf.ZipFile(p7, "w") as z:
+            z.writestr("secret.txt", f"github_token = {_tok}")
+            z.writestr("weird.dat", b"\xff\x00\xfe")
+        _f7 = content_findings(p7)
+        t("★★ZIP内の読めない要素で、先に見つけた秘密を捨てない★★",
+          any("github_token" in x for x in _f7)
+          and any("weird.dat" in x for x in _f7))
+        os.remove(p7)
+        cmd_accept(root)
+
+        # ⑦★承知済みの「読めないファイル」でも、中身が変わったら知らせる★
+        #   （2026-09-04・Codexの2回目・重大2）
+        p8 = os.path.join(root, "swap.pdf")
+        with open(p8, "wb") as f:
+            f.write(b"\xff harmless")
+        cmd_accept(root)
+        t("　承知したあとは黙る", cmd_scan(root) == 0)
+        with open(p8, "wb") as f:
+            f.write(b"\xff" + f"github_token = {_tok}".encode("utf-8"))
+        t("★★読めないファイルでも、中身を差し替えたら知らせる★★"
+          "（指紋を飛ばしていたので、鍵入りに替えても緑だった）",
+          cmd_scan(root) == 1)
+        os.remove(p8)
         cmd_accept(root)
 
         # ④★読めないフォルダがあったら緑にしない★

@@ -1635,6 +1635,32 @@ MUTATIONS = [
         "run": ["scripts/backup_guard.py"],
     },
     {
+        "why": "★ZIPの中の読めない要素を、名前だけで飛ばす★"
+               "（外側ZIPに鍵入りPDFを1つ入れるだけで通っていた）",
+        "file": "scripts/backup_guard.py",
+        "before": ('                    out.append(\n'
+                   '                        f"content:ZIP内 {nm} を'
+                   '読めないので確かめられません")\n'
+                   "                    continue"),
+        "after": ("                    if _looks_binary(nm):\n"
+                  "                        continue\n"
+                  '                    out.append(\n'
+                  '                        f"content:ZIP内 {nm} を'
+                  '読めないので確かめられません")\n'
+                  "                    continue"),
+        "run": ["scripts/backup_guard.py"],
+    },
+    {
+        "why": "★承知済みの「読めないファイル」の指紋を比べない★"
+               "（無害な状態で承知させ、中身を鍵入りに差し替えると通った）",
+        "file": "scripts/backup_guard.py",
+        "before": ('              and str(want.get("sha256") or "")'
+                   " == sha)"),
+        "after": ('              and (unverifiable or'
+                  ' str(want.get("sha256") or "") == sha))'),
+        "run": ["scripts/backup_guard.py"],
+    },
+    {
         "why": "保存名の案内を出さない（台帳#464の再発）",
         "file": "scripts/backup_guard.py",
         "before": '        findings.append("allowlist:リスト外" + hint)',
