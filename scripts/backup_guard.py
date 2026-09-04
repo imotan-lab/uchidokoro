@@ -271,6 +271,26 @@ def _json_key_findings(obj, path="$") -> list[str]:
     return out
 
 
+# ★★UTF-32 の印は UTF-16 の印を含む★★（2026-09-04・Codexの3回目・重大1）
+#   UTF-32 LE の印は FF FE 00 00 で、頭2バイトが UTF-16 LE の印と同じ。
+#   UTF-16 として読むと文字の間にNULが入るが、
+#   「UTF-16で読めた」扱いになるのでNULの検査も免除され、
+#   ★鍵を入れても検知0件・終了コード0★になっていた（自分で再現した）。
+_UTF32_BOMS = (b"\xff\xfe\x00\x00", b"\x00\x00\xfe\xff")
+
+
+def _decode_utf32(raw: bytes):
+    """★UTF-32 の印があるときだけ、UTF-32 として読む★（無ければ None）。"""
+    for bom, enc in ((_UTF32_BOMS[0], "utf-32-le"),
+                     (_UTF32_BOMS[1], "utf-32-be")):
+        if raw.startswith(bom):
+            try:
+                return raw[len(bom):].decode(enc)
+            except UnicodeDecodeError:
+                return None
+    return None
+
+
 def _decode_utf16(raw: bytes):
     """BOM付きUTF-16なら文字列にする（そうでなければ None）。"""
     for bom, enc in ((bytes([0xff, 0xfe]), "utf-16-le"),
@@ -343,14 +363,27 @@ def _zip_findings(path: str, raw: bytes, depth: int = 0):
                 #     ZIPは前に別のデータを付けても成立する。
                 #     先頭一致だけだと「前置き＋ZIP」が素通りしていた。
                 if _is_archive(nm, data):
+                    # ★★理由を足して先へ進む★★
+                    #   （2026-09-04・Codexの3回目・重大4）
+                    #   ★直す前★＝ここで return していたので、
+                    #   入れ子ZIPが**先に**あると、その後ろの `secret.txt` を
+                    #   一度も検査しなかった（自分で再現した）。
                     out.append("content:ZIPの中にZIPがあるので確かめられません"
                                f"（{nm}）")
-                    return out
+                    continue
                 txt = None
                 try:
                     txt = data.decode("utf-8")
                 except UnicodeDecodeError:
                     txt = _decode_utf16(data)
+                # ★★中のファイル名も検査する★★
+                #   （2026-09-04・Codexの3回目・重大3）
+                #   ★直す前★＝名前の検査は外側のファイルにしか掛からず、
+                #   `gmail_config.json`（中身 {}）をZIPに入れるだけで
+                #   **終了コード0**で通った（自分で再現した）。
+                _base = os.path.basename(nm)
+                if _base and not is_allowlisted(_base):
+                    out += [f"{nm} → {x}" for x in name_findings(_base)]
                 if txt is None:
                     # ★★名前で飛ばさない★★（2026-09-04・Codexの2回目・重大1）
                     #   ★直す前★＝`.pdf` `.png` 等は `continue` で素通りし、
@@ -402,7 +435,10 @@ def content_findings(path: str) -> list[str]:
             #   Windowsのタスク定義は UTF-16、レビューの控えは ZIP。
             #   「読めないから拒否」だと毎朝の警告が積み上がるだけで、
             #   中身は一度も確かめられない。読めるようにするほうが安全。
-            text = _decode_utf16(raw)
+            # ★UTF-32 の印を先に見る★（頭2バイトが UTF-16 と同じため）
+            text = _decode_utf32(raw)
+            if text is None and not raw.startswith(_UTF32_BOMS):
+                text = _decode_utf16(raw)
             _from_utf16 = text is not None
             if text is None:
                 zf = _zip_findings(path, raw)
@@ -828,8 +864,15 @@ def cmd_scan(root: str) -> int:
         #   で**終了コード0のまま**通った（自分で再現した）。
         #   ★元の意図＝書き足されるログが毎回鳴る★は、番人の側で受ける
         #   （「読めなかった」型は件数だけログでメールにしない決まりがある）。
+        # ★★指紋が取れていないものは、承知済みにしない★★
+        #   （2026-09-04・Codexの3回目・重大2）
+        #   ★直す前★＝読めないと `_sha_file` が空文字を返し、
+        #   次回も空文字なら `"" == ""` で「変わっていない」と判定していた。
+        #   ＝ロック中などで読めないファイルを承知させ、中身を入れ替えて
+        #   再び読めない状態にすると通った。
         ok = (want is not None
               and set(findings) <= set(want.get("findings") or [])
+              and sha != ""
               and str(want.get("sha256") or "") == sha)
         # ★★「確かめられなかった」ものを通さない★★（2026-09-04に戻した）
         #   ★一度「止めない」にして、自分で5通りの穴を作った★＝
@@ -842,8 +885,8 @@ def cmd_scan(root: str) -> int:
         (known if ok else fresh).append((rel, findings))
     # ★分類した件数は毎回出す★（承知済みに入っても番人が数えられるように）
     _nv = _unverifiable_count(hits)
-    print(f"内訳: 中身を確かめられないファイル {_nv}件"
-          f"（走査 {total}ファイル中）")
+    print(f"内訳: 中身をまったく確かめられなかったファイル {_nv}件"
+          f"（走査 {total}ファイル中／秘密が見つかったものは含みません）")
     _log(f"scan: 内訳 確かめられない {_nv}件 / 走査 {total}")
     if fresh:
         print(f"⚠ 秘密パターン検知: {len(fresh)}件"
@@ -888,8 +931,15 @@ def cmd_accept(root: str) -> int:
             findings = ([] if is_allowlisted(fn) else name_findings(fn)) + content_findings(p)
             if findings:
                 rel = os.path.relpath(p, root).replace(os.sep, "/")
+                _sha = _sha_file(p)
+                if not _sha:
+                    # ★★指紋が取れないものは承知済みにできない★★
+                    #   （承知しても次回「同じかどうか」を確かめられない）
+                    print(f"  ★指紋が取れません: {rel}★")
+                    walk_ng.append(f"指紋が取れないファイル: {rel}")
+                    continue
                 acc[rel] = {"findings": sorted(set(findings)),
-                            "sha256": _sha_file(p)}
+                            "sha256": _sha}
     if walk_ng:
         # ★読めないフォルダがあるまま基準値を作らない★（見えていない分を承知できない）
         for w in walk_ng:
@@ -1035,6 +1085,75 @@ def _baseline_tests(t) -> None:
           "（指紋を飛ばしていたので、鍵入りに替えても緑だった）",
           cmd_scan(root) == 1)
         os.remove(p8)
+        cmd_accept(root)
+
+        # ⑧★UTF-32 の印を UTF-16 と取り違えない★
+        #   （2026-09-04・Codexの3回目・重大1。文字の間のNUL検査まで
+        #     免除されるので、鍵を入れても検知0件だった）
+        p9 = os.path.join(root, "u32.txt")
+        with open(p9, "wb") as f:
+            f.write(b"\xff\xfe\x00\x00"
+                    + f"github_token = {_tok}".encode("utf-32-le"))
+        t("★★UTF-32で書いた秘密を見逃さない★★"
+          "（印の頭2バイトが UTF-16 と同じ）",
+          any("github_token" in x for x in content_findings(p9)))
+        t("　その場合も止める", cmd_scan(root) == 1)
+        os.remove(p9)
+        cmd_accept(root)
+
+        # ⑨★ZIPの中のファイル名も検査する★
+        #   （2026-09-04・Codexの3回目・重大3。中身が空でも名前で止まるはず）
+        p10 = os.path.join(root, "names.zip")
+        with _zf.ZipFile(p10, "w") as z:
+            z.writestr("gmail_config.json", "{}")
+        t("★★ZIPに入れるだけで名前の検査を逃げられない★★"
+          "（gmail_config.json を中身 {} で入れると通っていた）",
+          cmd_scan(root) == 1)
+        os.remove(p10)
+        cmd_accept(root)
+
+        # ⑩★入れ子ZIPが先にあっても、その後ろを検査する★
+        #   （2026-09-04・Codexの3回目・重大4。順番を逆にすると通っていた）
+        p11 = os.path.join(root, "order.zip")
+        with _zf.ZipFile(p11, "w") as z:
+            z.writestr("inner.zip", b"PK\x03\x04broken")
+            z.writestr("secret.txt", f"github_token = {_tok}")
+        t("★★入れ子ZIPが先でも、後ろの秘密を報告する★★",
+          any("github_token" in x for x in content_findings(p11)))
+        os.remove(p11)
+        cmd_accept(root)
+
+        # ⑪★指紋が取れないものを「同じ」と見なさない★
+        #   （2026-09-04・Codexの3回目・重大2）
+        p12 = os.path.join(root, "nosha.pdf")
+        with open(p12, "wb") as f:
+            f.write(b"\xff harmless")
+        _real_sha = globals()["_sha_file"]
+        globals()["_sha_file"] = lambda _p: ""
+        try:
+            t("★★指紋が取れないなら基準値を作らない★★",
+              cmd_accept(root) == 1)
+        finally:
+            globals()["_sha_file"] = _real_sha
+        # ★★古い基準値（この守りが無かった頃のもの）を信用しない★★
+        #   ★ここを分けた理由★＝`cmd_accept` が断るので、
+        #   そのままでは `sha != ""` の行を一度も通らない（罠④＝
+        #   別の守りに助けられて、狙った1件を試していない）。
+        cmd_accept(root)
+        import json as _j2
+        with open(globals()["BASELINE"], encoding="utf-8") as _bf:
+            _bl = _j2.load(_bf)
+        for _k in _bl["accepted"]:
+            _bl["accepted"][_k]["sha256"] = ""
+        with open(globals()["BASELINE"], "w", encoding="utf-8") as _bf:
+            _j2.dump(_bl, _bf, ensure_ascii=False)
+        globals()["_sha_file"] = lambda _p: ""
+        try:
+            t("★★指紋の無い古い記録を「変わっていない」と読まない★★"
+              "（空文字どうしを一致と見なしていた）", cmd_scan(root) == 1)
+        finally:
+            globals()["_sha_file"] = _real_sha
+        os.remove(p12)
         cmd_accept(root)
 
         # ④★読めないフォルダがあったら緑にしない★

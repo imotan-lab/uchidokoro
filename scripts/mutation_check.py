@@ -1622,19 +1622,6 @@ MUTATIONS = [
         "run": ["scripts/backup_guard.py"],
     },
     {
-        "why": "★ZIPで見つけた秘密を、あとから来た理由で捨てる★"
-               "（何が見つかったかが運営者に届かなくなる）",
-        "file": "scripts/backup_guard.py",
-        "before": ('                    out.append("content:ZIPの中にZIPが'
-                   'あるので確かめられません"\n'
-                   '                               f"（{nm}）")\n'
-                   "                    return out"),
-        "after": ('                    return ["content:ZIPの中にZIPが'
-                  'あるので確かめられません"\n'
-                  '                            f"（{nm}）"]'),
-        "run": ["scripts/backup_guard.py"],
-    },
-    {
         "why": "★ZIPの中の読めない要素を、名前だけで飛ばす★"
                "（外側ZIPに鍵入りPDFを1つ入れるだけで通っていた）",
         "file": "scripts/backup_guard.py",
@@ -1659,6 +1646,48 @@ MUTATIONS = [
                    " == sha)"),
         "after": ('              and (unverifiable or'
                   ' str(want.get("sha256") or "") == sha))'),
+        "run": ["scripts/backup_guard.py"],
+    },
+    {
+        "why": "★UTF-32 の印を UTF-16 と取り違える★"
+               "（文字の間のNUL検査まで免除され、鍵が検知0件になっていた）",
+        "file": "scripts/backup_guard.py",
+        "before": ("            text = _decode_utf32(raw)\n"
+                   "            if text is None and not"
+                   " raw.startswith(_UTF32_BOMS):\n"
+                   "                text = _decode_utf16(raw)"),
+        "after": "            text = _decode_utf16(raw)",
+        "run": ["scripts/backup_guard.py"],
+    },
+    {
+        "why": "★ZIPの中のファイル名を検査しない★"
+               "（gmail_config.json を中身 {} で入れるだけで通っていた）",
+        "file": "scripts/backup_guard.py",
+        "before": ("                if _base and not is_allowlisted(_base):\n"
+                   '                    out += [f"{nm} → {x}"'
+                   " for x in name_findings(_base)]"),
+        "after": "                if False:\n                    pass",
+        "run": ["scripts/backup_guard.py"],
+    },
+    {
+        "why": "★入れ子ZIPが先だと、その後ろを検査しない★",
+        "file": "scripts/backup_guard.py",
+        "before": ('                    out.append("content:ZIPの中にZIPが'
+                   'あるので確かめられません"\n'
+                   '                               f"（{nm}）")\n'
+                   "                    continue"),
+        "after": ('                    out.append("content:ZIPの中にZIPが'
+                  'あるので確かめられません"\n'
+                  '                               f"（{nm}）")\n'
+                  "                    return out"),
+        "run": ["scripts/backup_guard.py"],
+    },
+    {
+        "why": "★指紋が取れないものを「同じ」と見なす★"
+               "（空文字どうしを「変わっていない」と読む）",
+        "file": "scripts/backup_guard.py",
+        "before": '              and sha != ""',
+        "after": '              and True',
         "run": ["scripts/backup_guard.py"],
     },
     {
