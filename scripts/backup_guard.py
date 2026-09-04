@@ -291,6 +291,22 @@ def _decode_utf32(raw: bytes):
     return None
 
 
+def _decode_wide(raw: bytes):
+    """★UTF-32 → UTF-16 の順で読む★（読めなければ None）。
+
+    ★1か所にまとめた理由★（2026-09-04・Codexの4回目）＝
+    外側では UTF-32 を先に見るよう直したのに、ZIPの中では
+    `_decode_utf16` を直に呼んでいて**同じ取り違えが残っていた**。
+    ★同じ判断を2か所に書かない★。
+    """
+    got = _decode_utf32(raw)
+    if got is not None:
+        return got
+    if raw.startswith(_UTF32_BOMS):
+        return None
+    return _decode_utf16(raw)
+
+
 def _decode_utf16(raw: bytes):
     """BOM付きUTF-16なら文字列にする（そうでなければ None）。"""
     for bom, enc in ((bytes([0xff, 0xfe]), "utf-16-le"),
@@ -344,7 +360,15 @@ def _zip_findings(path: str, raw: bytes, depth: int = 0):
             # ★名前ではなく実体で回す★（2026-08-06・Codex122回目の指摘1）
             #   ZIPには同じ名前の中身を複数入れられる。名前で読むと
             #   **同名の1件しか読めず、残りを検査しないまま通していた**。
-            infos = [zi for zi in z.infolist() if not zi.filename.endswith("/")]
+            # ★★名前が「/」で終わるだけでは、外さない★★
+            #   （2026-09-04・Codexの4回目）
+            #   ★直す前★＝名前の末尾だけで「フォルダ」と決めて一覧から外していた。
+            #   ZIPは `gmail_config.json/` という名前にも中身を書けるので、
+            #   ★名前検査にも中身検査にも届かず、終了コード0★で通った
+            #   （自分で再現した）。
+            #   → ★中身が空の本物のフォルダだけを外す★
+            infos = [zi for zi in z.infolist()
+                     if not (zi.is_dir() and zi.file_size == 0)]
             if len(infos) > 500:
                 out.append(f"content:ZIPの中身が多すぎます（{len(infos)}件）")
                 return out
@@ -356,6 +380,17 @@ def _zip_findings(path: str, raw: bytes, depth: int = 0):
                     out.append("content:ZIPの中身が大きすぎて確かめられません")
                     return out
                 data = z.read(zi)
+                # ★★中のファイル名を、いちばん先に検査する★★
+                #   （2026-09-04・Codexの4回目・同型2）
+                #   ★直す前★＝圧縮判定の後ろにあったので、
+                #   `gmail_config.zip` という要素は名前で止まらず、
+                #   「ZIPの中にZIP」という**読めなかった扱い**だけになり、
+                #   番人の分類では②（メールしない）へ落ちていた。
+                #   ★末尾の「/」を落としてから見る★＝
+                #   `gmail_config.json/` の basename は空文字になる。
+                _base = os.path.basename(nm.rstrip("/"))
+                if _base and not is_allowlisted(_base):
+                    out += [f"{nm} → {x}" for x in name_findings(_base)]
                 # ★中の圧縮ファイルは確かめられない★（見た目で飛ばさない）
                 #   拡張子で「binaryだから無視」にすると、
                 #   **ZIPの中にZIPを置けば中身を隠せた**（自分の試験で発覚）。
@@ -375,15 +410,8 @@ def _zip_findings(path: str, raw: bytes, depth: int = 0):
                 try:
                     txt = data.decode("utf-8")
                 except UnicodeDecodeError:
-                    txt = _decode_utf16(data)
-                # ★★中のファイル名も検査する★★
-                #   （2026-09-04・Codexの3回目・重大3）
-                #   ★直す前★＝名前の検査は外側のファイルにしか掛からず、
-                #   `gmail_config.json`（中身 {}）をZIPに入れるだけで
-                #   **終了コード0**で通った（自分で再現した）。
-                _base = os.path.basename(nm)
-                if _base and not is_allowlisted(_base):
-                    out += [f"{nm} → {x}" for x in name_findings(_base)]
+                    # ★外側と同じ手順で読む★（UTF-32 → UTF-16）
+                    txt = _decode_wide(data)
                 if txt is None:
                     # ★★名前で飛ばさない★★（2026-09-04・Codexの2回目・重大1）
                     #   ★直す前★＝`.pdf` `.png` 等は `continue` で素通りし、
@@ -436,9 +464,7 @@ def content_findings(path: str) -> list[str]:
             #   「読めないから拒否」だと毎朝の警告が積み上がるだけで、
             #   中身は一度も確かめられない。読めるようにするほうが安全。
             # ★UTF-32 の印を先に見る★（頭2バイトが UTF-16 と同じため）
-            text = _decode_utf32(raw)
-            if text is None and not raw.startswith(_UTF32_BOMS):
-                text = _decode_utf16(raw)
+            text = _decode_wide(raw)
             _from_utf16 = text is not None
             if text is None:
                 zf = _zip_findings(path, raw)
@@ -1154,6 +1180,55 @@ def _baseline_tests(t) -> None:
         finally:
             globals()["_sha_file"] = _real_sha
         os.remove(p12)
+        cmd_accept(root)
+
+        # ⑫★名前が「/」で終わるだけの要素を、検査から外さない★
+        #   （2026-09-04・Codexの4回目。ZIPは `名前/` にも中身を書けるので、
+        #     名前検査にも中身検査にも届かず終了コード0で通った）
+        p13 = os.path.join(root, "slash.zip")
+        with _zf.ZipFile(p13, "w") as z:
+            z.writestr("gmail_config.json/",
+                       b"\xff" + f"github_token = {_tok}".encode("utf-8"))
+        t("★★名前が「/」で終わるだけの要素も検査する★★",
+          cmd_scan(root) == 1)
+        os.remove(p13)
+        cmd_accept(root)
+
+        # ⑬★中身の無い本物のフォルダは、今までどおり無視する★（止めすぎない）
+        p14 = os.path.join(root, "dir.zip")
+        with _zf.ZipFile(p14, "w") as z:
+            z.writestr("sub/", b"")
+            z.writestr("sub/ok.txt", "hello")
+        t("　空のフォルダは今までどおり無視する（止めすぎない）",
+          content_findings(p14) == [])
+        os.remove(p14)
+        cmd_accept(root)
+
+        # ⑭★ZIPの中でも UTF-32 を取り違えない★（外側と同じ手順を使う）
+        p15 = os.path.join(root, "u32.zip")
+        with _zf.ZipFile(p15, "w") as z:
+            z.writestr("a.txt", b"\xff\xfe\x00\x00"
+                       + f"github_token = {_tok}".encode("utf-32-le"))
+        t("★★ZIPの中のUTF-32でも、鍵そのものを報告する★★"
+          "（外側だけ直してZIPの中に同じ取り違えが残っていた）",
+          any("github_token" in x for x in content_findings(p15)))
+        os.remove(p15)
+        cmd_accept(root)
+
+        # ⑮★ZIP内の圧縮要素も、名前で止める★
+        #   （名前検査が圧縮判定より後ろだと「読めなかった」扱いだけになる）
+        _in = os.path.join(root, "_tmp_inner.zip")
+        with _zf.ZipFile(_in, "w") as z:
+            z.writestr("x.txt", "hello")
+        with open(_in, "rb") as _f:
+            _idata = _f.read()
+        os.remove(_in)
+        p16 = os.path.join(root, "outer2.zip")
+        with _zf.ZipFile(p16, "w") as z:
+            z.writestr("gmail_config.zip", _idata)
+        t("★★ZIP内の圧縮要素も、名前で止める★★",
+          any("name:gmail_config" in x for x in content_findings(p16)))
+        os.remove(p16)
         cmd_accept(root)
 
         # ④★読めないフォルダがあったら緑にしない★

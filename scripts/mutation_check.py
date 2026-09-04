@@ -1652,10 +1652,7 @@ MUTATIONS = [
         "why": "★UTF-32 の印を UTF-16 と取り違える★"
                "（文字の間のNUL検査まで免除され、鍵が検知0件になっていた）",
         "file": "scripts/backup_guard.py",
-        "before": ("            text = _decode_utf32(raw)\n"
-                   "            if text is None and not"
-                   " raw.startswith(_UTF32_BOMS):\n"
-                   "                text = _decode_utf16(raw)"),
+        "before": "            text = _decode_wide(raw)",
         "after": "            text = _decode_utf16(raw)",
         "run": ["scripts/backup_guard.py"],
     },
@@ -1688,6 +1685,33 @@ MUTATIONS = [
         "file": "scripts/backup_guard.py",
         "before": '              and sha != ""',
         "after": '              and True',
+        "run": ["scripts/backup_guard.py"],
+    },
+    {
+        "why": "★名前が「/」で終わる要素を、中身を見ずに外す★"
+               "（ZIPは `名前/` にも中身を書けるので完全に素通りした）",
+        "file": "scripts/backup_guard.py",
+        "before": ("            infos = [zi for zi in z.infolist()\n"
+                   "                     if not (zi.is_dir() and"
+                   " zi.file_size == 0)]"),
+        "after": ("            infos = [zi for zi in z.infolist()\n"
+                  '                     if not zi.filename.endswith("/")]'),
+        "run": ["scripts/backup_guard.py"],
+    },
+    {
+        "why": "★ZIPの中で UTF-32 を UTF-16 と取り違える★"
+               "（外側だけ直して中に同じ穴が残る）",
+        "file": "scripts/backup_guard.py",
+        "before": "                    txt = _decode_wide(data)",
+        "after": "                    txt = _decode_utf16(data)",
+        "run": ["scripts/backup_guard.py"],
+    },
+    {
+        "why": "★ZIP内の名前検査を、圧縮判定より後ろへ戻す★"
+               "（圧縮要素が名前で止まらなくなる）",
+        "file": "scripts/backup_guard.py",
+        "before": ('                _base = os.path.basename(nm.rstrip("/"))'),
+        "after": ('                _base = ""  # noqa'),
         "run": ["scripts/backup_guard.py"],
     },
     {
