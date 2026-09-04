@@ -300,12 +300,6 @@ def _is_archive(name: str, data: bytes) -> bool:
         return False
 
 
-def _looks_binary(name: str) -> bool:
-    return name.lower().endswith(
-        (".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".pdf",
-         ".zip", ".gz", ".7z", ".woff", ".woff2", ".ttf", ".mp4"))
-
-
 def _zip_findings(path: str, raw: bytes, depth: int = 0):
     """ZIPなら中の文字ファイルを1件ずつ同じ検査に掛ける（ZIPでなければ None）。
 

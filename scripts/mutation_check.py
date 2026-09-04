@@ -1642,7 +1642,8 @@ MUTATIONS = [
                    '                        f"content:ZIP内 {nm} を'
                    '読めないので確かめられません")\n'
                    "                    continue"),
-        "after": ("                    if _looks_binary(nm):\n"
+        "after": ("                    if nm.lower().endswith"
+                  "(('.pdf', '.png')):\n"
                   "                        continue\n"
                   '                    out.append(\n'
                   '                        f"content:ZIP内 {nm} を'
