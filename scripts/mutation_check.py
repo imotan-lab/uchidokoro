@@ -1601,20 +1601,37 @@ MUTATIONS = [
         "run": ["scripts/publish_new_machine.py"],
     },
     {
-        "why": "★本物の秘密まで「読めないもの」の側へ落として止めない★"
-               "（読めない扱いは終了コードを変えるので、"
-               "ここが緩むと秘密が黙って通る）",
+        "why": "★確かめられなかったものを緑にする★"
+               "（2026-09-04に実際にこれをやり、"
+               "読めない中身に入れた本物の鍵が終了コード0で通った）",
         "file": "scripts/backup_guard.py",
-        "before": "        elif unverifiable:",
-        "after": "        elif True:",
+        "before": "        (known if ok else fresh).append((rel, findings))",
+        "after": ("        (known if ok else"
+                  " (known if unverifiable else fresh))"
+                  ".append((rel, findings))"),
         "run": ["scripts/backup_guard.py"],
     },
     {
-        "why": "★読めなかったファイルの名前を出さない★"
-               "（止めない代わりに必ず名前を出す約束を破る）",
+        "why": "★調べられなかったフォルダがあっても緑にする★"
+               "（cmd_accept は断るのに cmd_scan だけ素通りしていた）",
         "file": "scripts/backup_guard.py",
-        "before": "    if unread:",
-        "after": "    if False:",
+        "before": ('        _log(f"scan: ★読めないフォルダ'
+                   ' {len(walk_ng)} 件のため非0★")\n        return 1'),
+        "after": ('        _log(f"scan: ★読めないフォルダ'
+                  ' {len(walk_ng)} 件のため非0★")'),
+        "run": ["scripts/backup_guard.py"],
+    },
+    {
+        "why": "★ZIPで見つけた秘密を、あとから来た理由で捨てる★"
+               "（何が見つかったかが運営者に届かなくなる）",
+        "file": "scripts/backup_guard.py",
+        "before": ('                    out.append("content:ZIPの中にZIPが'
+                   'あるので確かめられません"\n'
+                   '                               f"（{nm}）")\n'
+                   "                    return out"),
+        "after": ('                    return ["content:ZIPの中にZIPが'
+                  'あるので確かめられません"\n'
+                  '                            f"（{nm}）"]'),
         "run": ["scripts/backup_guard.py"],
     },
     {

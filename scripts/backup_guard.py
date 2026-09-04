@@ -319,6 +319,11 @@ def _zip_findings(path: str, raw: bytes, depth: int = 0):
         return None
     if depth > 0:
         return ["content:ZIPの中にZIPがあるので確かめられません"]
+    # ★見つけた秘密を、あとから来た「確かめられません」で捨てない★
+    #   （2026-09-04・Codexの指摘）＝先に鍵を見つけていても、
+    #   後続の入れ子ZIPや読めない要素で単独の理由を return していたので、
+    #   ★何が見つかったかが運営者に届かなかった★。
+    #   （どちらにせよ非0で止まるが、理由が消えると原因を追えない）
     out = []
     try:
         with zipfile.ZipFile(path) as z:
@@ -327,13 +332,15 @@ def _zip_findings(path: str, raw: bytes, depth: int = 0):
             #   **同名の1件しか読めず、残りを検査しないまま通していた**。
             infos = [zi for zi in z.infolist() if not zi.filename.endswith("/")]
             if len(infos) > 500:
-                return [f"content:ZIPの中身が多すぎます（{len(infos)}件）"]
+                out.append(f"content:ZIPの中身が多すぎます（{len(infos)}件）")
+                return out
             total = 0
             for zi in infos:
                 nm = zi.filename
                 total += zi.file_size
                 if total > 20 * 1024 * 1024:
-                    return ["content:ZIPの中身が大きすぎて確かめられません"]
+                    out.append("content:ZIPの中身が大きすぎて確かめられません")
+                    return out
                 data = z.read(zi)
                 # ★中の圧縮ファイルは確かめられない★（見た目で飛ばさない）
                 #   拡張子で「binaryだから無視」にすると、
@@ -342,8 +349,9 @@ def _zip_findings(path: str, raw: bytes, depth: int = 0):
                 #     ZIPは前に別のデータを付けても成立する。
                 #     先頭一致だけだと「前置き＋ZIP」が素通りしていた。
                 if _is_archive(nm, data):
-                    return ["content:ZIPの中にZIPがあるので確かめられません"
-                            f"（{nm}）"]
+                    out.append("content:ZIPの中にZIPがあるので確かめられません"
+                               f"（{nm}）")
+                    return out
                 txt = None
                 try:
                     txt = data.decode("utf-8")
@@ -361,7 +369,8 @@ def _zip_findings(path: str, raw: bytes, depth: int = 0):
                 finally:
                     os.remove(tp)
     except zipfile.BadZipFile:
-        return ["content:壊れたZIPなので確かめられません"]
+        out.append("content:壊れたZIPなので確かめられません")
+        return out
     return out
 
 
@@ -692,11 +701,32 @@ def _load_baseline() -> dict:
 # ★「秘密を見つけた」ではなく「確かめられなかった」印★（2026-08-22）
 #   中身を読めていないので、指紋が変わっても「秘密が変わった」とは言えない。
 #   ★書き足されるログは毎回指紋が変わる★ので、ここを分けないと永久に鳴る。
-_UNVERIFIABLE = ("確かめられません",)
+# ★★「中身を見られなかった」検知の一覧★★（2026-09-04・Codexの指摘3）
+#   ★直す前★＝「確かめられません」という**語**の部分一致で判定していた。
+#   将来この語を含む**本物の検知**を足すと、静かにこちら側へ落ちる。
+#   → 文言ではなく、決まった書き出し（符丁）で判定する。
+#   ★新しい「読めない」検知を足すときは、ここにも足すこと★
+#     （足し忘れると指紋を比べる側に回るだけで、止まらなくはならない＝安全側）。
+_UNVERIFIABLE_STEMS = (
+    "content:UTF-8として読めないので",
+    "content:読めないので確かめられません",
+    "content:大きすぎて中身を確かめられません",
+    "content:ZIP内 ",
+    "content:ZIPの中にZIPがあるので",
+    "content:ZIPの中身が大きすぎて",
+    "content:ZIPの中身が多すぎます",
+    "content:壊れたZIPなので",
+)
 
 
 def _is_unverifiable(finding: str) -> bool:
-    return any(w in str(finding or "") for w in _UNVERIFIABLE)
+    """★中身を見られなかった、という報告か★（秘密を見つけた報告ではない）。
+
+    ★これは終了コードを変えない★＝どちらでも `fresh` に入って止まる。
+    効くのは「指紋を比べるかどうか」だけ（中身を見られていないものは
+    指紋が毎回変わるので、比べると永久に鳴り続ける）。
+    """
+    return str(finding or "").startswith(_UNVERIFIABLE_STEMS)
 
 
 def _sha_file(path: str) -> str:
@@ -746,9 +776,16 @@ def cmd_scan(root: str) -> int:
                 rel = os.path.relpath(p, root)
                 hits.append((rel, findings, _sha_file(p)))
     if walk_ng:
+        # ★★調べられなかったフォルダがあるなら緑にしない★★（2026-09-04）
+        #   ★直す前★＝印刷とログだけで先へ進み、他に検知が無ければ0を返した。
+        #   「調べていない場所に秘密がある」経路をそのまま通していた。
+        #   `cmd_accept` は同じ状況で基準値を作らないのに、こちらだけ素通り。
         for w in walk_ng:
             print("  ★" + w)
             _log("scan: ★" + w)
+        print(f"★調べられなかったフォルダが {len(walk_ng)} 件あるので緑にしません★")
+        _log(f"scan: ★読めないフォルダ {len(walk_ng)} 件のため非0★")
+        return 1
     got = _load_baseline()
     # ★★別の場所の基準値を流用させない★★（2026-08-22・Codexの指摘）
     want_root = str(got.get("root") or "")
@@ -764,7 +801,7 @@ def cmd_scan(root: str) -> int:
     # ★同じ場所でも、検知の中身が増えていたら新しい扱い★
     #   （承知したのは「そのとき見えていたもの」であって、
     #     あとから足された秘密まで承知したことにはならない）
-    known, fresh, unread = [], [], []
+    known, fresh = [], []
     for rel, findings, sha in hits:
         want = base.get(rel.replace(os.sep, "/"))
         # ★★中身が変わっていたら、検知の種類が同じでも新しい扱い★★
@@ -785,29 +822,15 @@ def cmd_scan(root: str) -> int:
               and set(findings) <= set(want.get("findings") or [])
               and (unverifiable
                    or str(want.get("sha256") or "") == sha))
-        if ok:
-            known.append((rel, findings))
-        elif unverifiable:
-            # ★★「中身を確かめられなかった」だけのものは知らせるが止めない★★
-            #   （2026-09-04）
-            #   ★理由＝ファイルが増えるたびに永久に鳴るため★。
-            #   FAXの控えには毎日PDFが増える。PDFは中身を読めないので
-            #   必ずこの検知になり、基準値に無いから毎回「新しい検知」になる
-            #   ＝★消そうとしたノイズを自分で作り直していた★
-            #   （書き足されるログで一度直したのと同じ型が、
-            #     「新しいファイル」の側に残っていた）。
-            #   ★隠さない★＝名前を挙げて必ず出す。変えるのは終了コードだけ。
-            #   ★本物の秘密が1つでも混ざっていれば、こちらへは来ない★
-            #   （unverifiable は「検知が全部『確かめられません』」のとき）。
-            unread.append((rel, findings))
-        else:
-            fresh.append((rel, findings))
-    if unread:
-        print(f"ℹ️ 中身を確かめられないファイル: {len(unread)}件"
-              f"（PDF・画像・圧縮ファイルなど。★止めません★）")
-        for rel, findings in unread:
-            print(f"  - {rel} → {', '.join(findings)}")
-            _log(f"scan: ℹ️ 確かめられない {rel} → {', '.join(findings)}")
+        # ★★「確かめられなかった」ものを通さない★★（2026-09-04に戻した）
+        #   ★一度「止めない」にして、自分で5通りの穴を作った★＝
+        #   `report.pdf` の中身が不正UTF-8で始まり本物の鍵を含む／
+        #   20MB超のテキストに鍵／ZIPで鍵を見つけた後に読めない要素／
+        #   読めないフォルダ／未検査があっても緑表示。
+        #   ★検査できない＝安全とは言えない★（fail-closed）を守る。
+        #   ★騒がしさは番人の側で分類済み★＝「名前つき検知」と
+        #   「読めない件数」を分けて報告している。こちらを緩める必要は無い。
+        (known if ok else fresh).append((rel, findings))
     if fresh:
         print(f"⚠ 秘密パターン検知: {len(fresh)}件"
               f"（走査 {total}ファイル／承知済み {len(known)}件は除く）")
@@ -910,30 +933,62 @@ def _baseline_tests(t) -> None:
             f.write("github_token = ghp_DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD")
         t("★新しいファイルが増えたら知らせる★", cmd_scan(root) == 1)
 
-        # ★★読めないファイルが増えても止めない★★（2026-09-04）
+        # ★★確かめられなかったものは緑にしない★★（2026-09-04・Codexの指摘）
+        #   ★試験は終了コードで見る★＝`content_findings()` が空でないことだけを
+        #   見ていたので、**`cmd_scan()` が0を返しても合格していた**。
+        #   （2026-09-04に一度「止めない」にして、下の①③④を全部通した）
+        import zipfile as _zf
+        _tok = "ghp_" + "E" * 36
         cmd_accept(root)
-        p3 = os.path.join(root, "scan.pdf")
-        with open(p3, "wb") as f:
-            f.write(b"%PDF-1.4\n\xff\xfe binary")
-        t("★★中身を読めないファイルが増えても止めない★★"
-          "（毎日増えるPDFで永久に鳴っていた）", cmd_scan(root) == 0)
-        import io as _io2, contextlib as _cl2
-        _out = _io2.StringIO()
-        with _cl2.redirect_stdout(_out):
-            cmd_scan(root)
-        t("　ただし名前は必ず出す（黙って隠さない）",
-          "scan.pdf" in _out.getvalue())
 
-        # ★★読めないファイルに紛れて本物が増えたら、止める★★
-        #   （読めない側へ落として見逃す作りになっていないか）
-        p4 = os.path.join(root, "c.txt")
-        with open(p4, "w", encoding="utf-8") as f:
-            f.write("github_token = ghp_EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE")
-        t("★★読めないものに紛れても、本物の秘密なら止める★★",
-          cmd_scan(root) == 1)
-        os.remove(p4)
+        # ①★読めない中身に本物の秘密が入っている★
+        #   （不正UTF-8で始まるので本文検査が打ち切られる）
+        p3 = os.path.join(root, "report.pdf")
+        with open(p3, "wb") as f:
+            f.write(b"\xff" + f"github_token = {_tok}".encode("utf-8"))
+        t("★★読めない中身に秘密があっても緑にしない★★"
+          "（本文検査が打ち切られる形）", cmd_scan(root) == 1)
         os.remove(p3)
         cmd_accept(root)
+
+        # ②★ただの読めないファイルでも緑にしない★（fail-closed）
+        p3b = os.path.join(root, "scan.pdf")
+        with open(p3b, "wb") as f:
+            f.write(b"%PDF-1.4\n\xff\xfe binary")
+        t("　確かめられないファイルは、それだけでも止める",
+          cmd_scan(root) == 1)
+        os.remove(p3b)
+        cmd_accept(root)
+
+        # ③★ZIPで秘密を見つけた後に読めない要素があっても、秘密を捨てない★
+        p5 = os.path.join(root, "a.zip")
+        with _zf.ZipFile(p5, "w") as z:
+            z.writestr("secret.txt", f"github_token = {_tok}")
+            z.writestr("inner.zip", b"PK\x03\x04broken")
+        _f = content_findings(p5)
+        t("★★ZIPで見つけた秘密を、あとの理由で捨てない★★",
+          any("github_token" in x for x in _f)
+          and any("ZIPの中にZIP" in x for x in _f))
+        t("　その場合も止める", cmd_scan(root) == 1)
+        os.remove(p5)
+        cmd_accept(root)
+
+        # ④★読めないフォルダがあったら緑にしない★
+        _orig_walk = globals()["_walk"]
+
+        def _walk_ng(r, out_ng, _o=_orig_walk):
+            out_ng.append("読めないフォルダ: test")
+            return _o(r, [])
+
+        globals()["_walk"] = _walk_ng
+        try:
+            t("★★調べられなかったフォルダがあれば緑にしない★★"
+              "（cmd_accept は断るのに cmd_scan は素通りしていた）",
+              cmd_scan(root) == 1)
+        finally:
+            globals()["_walk"] = _orig_walk
+        t("　読めないフォルダが無ければ、いつもどおり緑",
+          cmd_scan(root) == 0)
 
         # ★★存在しない場所★★
         t("★★走査先が無いときは緑にしない★★"
