@@ -948,14 +948,25 @@ def _check_23_wiring() -> list[str]:
     _bk_base = globals()["BASE"]
     _tmp23 = _tf23.mkdtemp(prefix="audit23_")
     globals()["_check_23_selftest"] = lambda: ["zzz_haisen_kakunin"]
+    # ★★合図だけでなく「判定そのもの」が入口から返ることまで見る★★
+    #   （2026-09-05・Codexの2回目の指摘＝自分で再現した。
+    #     入口から `_claude_md_problems(...)` だけを外すと、
+    #     合図・対照実験・登録の3つが全部合格するので緑のまま通り、
+    #     ★255KB の CLAUDE.md を渡しても0件★だった＝罠④）。
+    _cases = (
+        # (名前, 中身, 期待する知らせ)
+        ("CLAUDE.mdが無いとき", None, None),
+        ("CLAUDE.mdが大きすぎるとき",
+         "…CLAUDE_history.md…" + "x" * (CLAUDE_MD_LIMIT + 1), "閾値"),
+        ("CLAUDE.mdから履歴への参照が消えたとき",
+         "参照のない小さな写し", "参照が消えている"),
+    )
     try:
-        for _label, _make in (("CLAUDE.mdが無いとき", False),
-                              ("CLAUDE.mdが在るとき", True)):
-            _d = _pl23.Path(_tmp23) / ("有" if _make else "無")
+        for _i, (_label, _body, _want) in enumerate(_cases):
+            _d = _pl23.Path(_tmp23) / str(_i)
             _d.mkdir(exist_ok=True)
-            if _make:
-                (_d / "CLAUDE.md").write_text(
-                    "…CLAUDE_history.md…", encoding="utf-8")
+            if _body is not None:
+                (_d / "CLAUDE.md").write_text(_body, encoding="utf-8")
             globals()["BASE"] = _d
             try:
                 _got = _fn([])
@@ -965,6 +976,9 @@ def _check_23_wiring() -> list[str]:
                 bad.append(f"{_label}、入口から呼んでも対照実験が動きません"
                            "（check_23_claude_md_size の呼び出しが"
                            "消えています）")
+            if _want and not any(_want in str(x) for x in _got):
+                bad.append(f"{_label}、入口から呼んでも知らせが返りません"
+                           f"（判定が入口に繋がっていません: {_want}）")
     finally:
         globals()["_check_23_selftest"] = _bk_st
         globals()["BASE"] = _bk_base

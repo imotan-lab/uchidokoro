@@ -315,6 +315,16 @@ MUTATIONS = [
         "run": ["scripts/audit_site.py"],
     },
     {
+        "why": "★判定だけを入口から外す（対照実験は残す）"
+               "＝合図・登録の検査に助けられて緑のまま通り、"
+               "★255KBのCLAUDE.mdでも0件★になる（罠④）★",
+        "file": "scripts/audit_site.py",
+        "before": ("    return (_claude_md_problems(path.stat().st_size, text)\n"
+                   "            + _check_23_selftest())"),
+        "after": "    return _check_23_selftest()",
+        "run": ["scripts/audit_site.py"],
+    },
+    {
         "why": "★履歴への参照が消えても黙る"
                "（退避の決まりごと消えたことに気づけない）★",
         "file": "scripts/audit_site.py",
