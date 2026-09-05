@@ -325,6 +325,23 @@ MUTATIONS = [
         "run": ["scripts/audit_site.py"],
     },
     {
+        "why": "★大きさを1バイト小さく渡す"
+               "（ちょうど閾値+1のファイルを見逃す＝境界がずれる）★",
+        "file": "scripts/audit_site.py",
+        "before": "    return (_claude_md_problems(path.stat().st_size, text)",
+        "after": "    return (_claude_md_problems(path.stat().st_size - 1, text)",
+        "run": ["scripts/audit_site.py"],
+    },
+    {
+        "why": "★バイト数ではなく文字数で判定する"
+               "（日本語ばかりのCLAUDE.mdは実際の3分の1に見え、"
+               "肥大しても永久に鳴らない）★",
+        "file": "scripts/audit_site.py",
+        "before": "    return (_claude_md_problems(path.stat().st_size, text)",
+        "after": "    return (_claude_md_problems(len(text), text)",
+        "run": ["scripts/audit_site.py"],
+    },
+    {
         "why": "★履歴への参照が消えても黙る"
                "（退避の決まりごと消えたことに気づけない）★",
         "file": "scripts/audit_site.py",

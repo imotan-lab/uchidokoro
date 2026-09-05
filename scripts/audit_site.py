@@ -953,20 +953,52 @@ def _check_23_wiring() -> list[str]:
     #     入口から `_claude_md_problems(...)` だけを外すと、
     #     合図・対照実験・登録の3つが全部合格するので緑のまま通り、
     #     ★255KB の CLAUDE.md を渡しても0件★だった＝罠④）。
+    # ★★境界は「ちょうどのバイト数」で見る★★
+    #   （2026-09-05・Codexの3回目の指摘。★直す前★＝目印を足したぶん
+    #     23バイト大きく、入口を `st_size - 1` や `len(text)` に壊しても
+    #     まだ閾値を超えていたので★試験は緑のまま★だった）。
+    #   ★目印はASCIIだけにする★＝文字数とバイト数がずれない。
+    _mark = "CLAUDE_history.md"
+
+    def _mk23(n_bytes):
+        """★ちょうど n_bytes の、日本語ばかりの写しを作る★
+
+        ★なぜ日本語で埋めるか★＝ASCIIだけで埋めると
+        ★文字数とバイト数が同じ★になり、「バイト数ではなく文字数で
+        判定する」壊し方を一度も試さないまま緑になる（罠⑨＝写しが本物と違う）。
+        本物のCLAUDE.mdは日本語ばかりで、文字数はバイト数の約3分の1。
+        """
+        rest = n_bytes - len(_mark)
+        ja = rest // 3                    # 「あ」は1文字3バイト
+        return _mark + "あ" * ja + "x" * (rest - ja * 3)
+
     _cases = (
-        # (名前, 中身, 期待する知らせ)
-        ("CLAUDE.mdが無いとき", None, None),
-        ("CLAUDE.mdが大きすぎるとき",
-         "…CLAUDE_history.md…" + "x" * (CLAUDE_MD_LIMIT + 1), "閾値"),
+        # (名前, 中身, 探す知らせ, 出てほしいか)
+        ("CLAUDE.mdが無いとき", None, None, True),
+        ("CLAUDE.mdがちょうど閾値のとき",
+         _mk23(CLAUDE_MD_LIMIT), "閾値", False),
+        ("CLAUDE.mdが閾値を1バイト超えたとき",
+         _mk23(CLAUDE_MD_LIMIT + 1), "閾値", True),
         ("CLAUDE.mdから履歴への参照が消えたとき",
-         "参照のない小さな写し", "参照が消えている"),
+         "参照のない小さな写し", "参照が消えている", True),
     )
     try:
-        for _i, (_label, _body, _want) in enumerate(_cases):
+        for _i, (_label, _body, _want, _yes) in enumerate(_cases):
             _d = _pl23.Path(_tmp23) / str(_i)
             _d.mkdir(exist_ok=True)
             if _body is not None:
-                (_d / "CLAUDE.md").write_text(_body, encoding="utf-8")
+                _p23 = _d / "CLAUDE.md"
+                _p23.write_text(_body, encoding="utf-8")
+                # ★狙ったバイト数になっているか、その場で確かめる★
+                #   （★ここがずれると境界の試験そのものが嘘になる★）
+                _want_size = (CLAUDE_MD_LIMIT if _i == 1
+                              else (CLAUDE_MD_LIMIT + 1 if _i == 2 else None))
+                if _want_size is not None:
+                    _real = _p23.stat().st_size
+                    if _real != _want_size:
+                        bad.append(f"{_label}、試験用のファイルが"
+                                   f"{_real}バイトです"
+                                   f"（{_want_size}バイトのはず）")
             globals()["BASE"] = _d
             try:
                 _got = _fn([])
@@ -976,9 +1008,15 @@ def _check_23_wiring() -> list[str]:
                 bad.append(f"{_label}、入口から呼んでも対照実験が動きません"
                            "（check_23_claude_md_size の呼び出しが"
                            "消えています）")
-            if _want and not any(_want in str(x) for x in _got):
+            if _want is None:
+                continue
+            _hit = any(_want in str(x) for x in _got)
+            if _yes and not _hit:
                 bad.append(f"{_label}、入口から呼んでも知らせが返りません"
                            f"（判定が入口に繋がっていません: {_want}）")
+            if not _yes and _hit:
+                bad.append(f"{_label}、入口から呼ぶと知らせが返ります"
+                           f"（★止めすぎです★: {_want}）")
     finally:
         globals()["_check_23_selftest"] = _bk_st
         globals()["BASE"] = _bk_base
