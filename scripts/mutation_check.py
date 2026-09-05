@@ -1933,6 +1933,23 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★どの決まりで書いたかを控えない★"
+               "（決まりを変えても控えが無効にならず、"
+               "古い判定書のまま永久に見送られる）",
+        "file": "scripts/grow_machine.py",
+        "before": '        _row["rules"] = GROW_RULES_VERSION',
+        "after": "        pass",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★出典を控え直すと、版だけ落ちる★"
+               "（決まりを変えていないのに毎日やり直しになる）",
+        "file": "scripts/grow_machine.py",
+        "before": '            got[slug]["rules"] = _was.get("rules") or ""',
+        "after": "            pass",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
         "why": "★出典を控え直すと、前の指紋が消える★"
                "（毎日やり直しになり、いつまでも終わらない）",
         "file": "scripts/grow_machine.py",

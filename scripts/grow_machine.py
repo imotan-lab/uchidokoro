@@ -3253,10 +3253,18 @@ def selftest() -> int:
               (_s1.get("zzz_rs") or {}).get("urls") == ["https://x.test/a"])
             t("★★書けたときは指紋を控える★★",
               _ok_cf and (_s2.get("zzz_rs") or {}).get("cv") == "FP_KIROKU")
+            # ★★版も一緒に控える★★（2026-09-06・Codexの指摘）
+            #   ★これを見ていないと、版の保存だけ壊れても緑のまま★
+            t("★★どの決まりで書いたかも一緒に控える★★"
+              "（決まりを変えた日に調べ直すため）",
+              (_s2.get("zzz_rs") or {}).get("rules") == GROW_RULES_VERSION)
             t("★★あとで出典を控え直しても、指紋は消えない★★"
               "（消すと毎日やり直しになる）",
               (_s3.get("zzz_rs") or {}).get("cv") == "FP_KIROKU"
               and len((_s3.get("zzz_rs") or {}).get("urls") or []) == 2)
+            t("★★出典を控え直しても、版も残る★★"
+              "（版だけ落ちると、決まりを変えていないのに毎日やり直しになる）",
+              (_s3.get("zzz_rs") or {}).get("rules") == GROW_RULES_VERSION)
             # ★★渡されなければ控えない（取り直さない）★★
             #   （2026-09-06・Codexの指摘2）＝呼ばれた時点の最新を
             #   取り直すと、書き込み検査のあとに確定値が更新されたとき
