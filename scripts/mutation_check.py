@@ -1776,6 +1776,23 @@ MUTATIONS = [
         "run": ["scripts/backup_guard.py"],
     },
     {
+        "why": "★育成レーンが「決められないこと」を聞かない★"
+               "（型が UNKNOWN のまま作られた機種が二度と聞かれず、"
+               "永久に検索へ載らなかった＝実測14機種のうち7機種）",
+        "file": "scripts/grow_machine.py",
+        "before": '    out["questions"] += pending_questions(cur, mat, slug)',
+        "after": "    pass",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★もう載っている機種にも聞いてしまう★"
+               "（答える意味のない質問で2AIの時間を使う）",
+        "file": "scripts/grow_machine.py",
+        "before": '    if pd.get("indexable"):\n        return []',
+        "after": "    if False:\n        return []",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
         "why": "保存名の案内を出さない（台帳#464の再発）",
         "file": "scripts/backup_guard.py",
         "before": '        findings.append("allowlist:リスト外" + hint)',

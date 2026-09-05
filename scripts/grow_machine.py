@@ -1034,6 +1034,27 @@ def _stuck_clear(slug: str) -> None:
         _stuck_save(got)
 
 
+def pending_questions(cur: dict, mat: dict, slug: str = "") -> list:
+    """★まだ検索に載っていない機種について、機械が決められないことを聞く★
+
+    ★なぜ要るか★（2026-09-05）＝型を聞く質問は `add_machine_run`
+    （新台を**作る**とき）からしか出ていなかった。
+    育成レーンは一度も呼んでいないので、
+    ★型が UNKNOWN のまま作られた機種は二度と聞かれず★、
+    永久に検索へ載らなかった（実測＝14機種のうち7機種がこれ）。
+
+    ★決めるのは2AI／ここは聞くだけ★。
+    ★もう載っている機種には聞かない★（答える意味がないので）。
+    """
+    pd = (cur or {}).get("page_decision") or {}
+    if pd.get("indexable"):
+        return []
+    out = []
+    for q in _ba.checker_questions(mat or {}):
+        out.append({"text": str(q), "kind": "grow_pending", "slug": slug})
+    return out
+
+
 def grow_result(slug: str, ok: bool, why: str = "",
                 today: str = "") -> dict:
     """★育てた結果を受けて、次にどうするかを決める★（2026-08-27）
@@ -1302,6 +1323,11 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     # ★ここまで来たら「実際に見に行けた」★（依頼181のP1）
     #   本人性の確認や材料集めに失敗した機種を「確認済み」にしない。
     out["checked"] = True
+    # ★★まだ検索に載っていないなら、決められないことを必ず聞く★★
+    #   （2026-09-05）★ここに置く理由★＝後段（記事の組み立て・
+    #   消失の判定）がどう転んでも、載っていない機種には聞くべきだから。
+    #   材料が増えなかった回ほど、この質問が要る。
+    out["questions"] += pending_questions(cur, mat, slug)
     # ★2AIで確定した値も材料に足す★（2026-08-11・台帳#316）
     #   足す場所が add_machine_run の中の1か所にしか無かったので、
     #   **確定値を載せた機種はここで「前に載っていた内容が再現できない」**
@@ -2679,6 +2705,47 @@ def selftest() -> int:
         _dir_s = _tf_s.mkdtemp()
         try:
             globals()["STATE_PATH"] = os.path.join(_dir_s, "s.json")
+            # ★★まだ載っていない機種には、決められないことを必ず聞く★★
+            #   （2026-09-05。★これが無かったので、型が UNKNOWN のまま
+            #     作られた機種は二度と聞かれず、永久に検索へ載らなかった★
+            #     ＝実測14機種のうち7機種がこれ）
+            _q_no = pending_questions({"page_decision": {"indexable": False}},
+                                      {"adopted": {}}, "zzz_q")
+            t("★★検索に載っていない機種には、決められないことを聞く★★"
+              "（型が決まらないと永久に載らない）",
+              len(_q_no) >= 1
+              and any("型" in x["text"] for x in _q_no)
+              and all(x.get("kind") == "grow_pending" for x in _q_no))
+            t("　もう載っている機種には聞かない（答える意味がないので）",
+              pending_questions({"page_decision": {"indexable": True}},
+                                {"adopted": {}}, "zzz_q") == [])
+            t("　判定書がまだ無い機種にも聞く（載っていないので）",
+              len(pending_questions({}, {"adopted": {}}, "zzz_q")) >= 1)
+
+            # ★★本番の入口（plan_one）でも、質問が出ることを確かめる★★
+            #   （2026-09-05。★関数だけ試験しても「呼ばれているか」は
+            #     分からない★＝壊し方の検査がそれを教えてくれた・罠③）
+            _bk_ps = globals()["_probe_state"]
+            _bk_fs = globals()["find_sources"]
+            globals()["_probe_state"] = lambda: {}
+            globals()["find_sources"] = lambda m: []
+            try:
+                _got_q = plan_one(
+                    "pw_10523",
+                    probe=lambda u: {"skip": True, "rows": []},
+                    gather=lambda *a, **k: {"urls": [], "problems": [],
+                                            "material": {"adopted": {}}},
+                    verify=lambda *a, **k: {"problems": [],
+                                            "release": "2026-09-07",
+                                            "identity_name": "テスト機"})
+            finally:
+                globals()["_probe_state"] = _bk_ps
+                globals()["find_sources"] = _bk_fs
+            t("★★本番の入口でも、載っていない機種には質問が出る★★"
+              "（関数を作っただけで繋がっていない、を防ぐ）",
+              any(str(q.get("text", "")).find("型") >= 0
+                  for q in (_got_q.get("questions") or [])))
+
             # ★本番と同じ入口（grow_result）を通す★
             # ★日をまたいで数える★（同じ日に何度動いても1回）
             _a1 = grow_result("zzz_s", False, "理由", today="2026-08-01")
