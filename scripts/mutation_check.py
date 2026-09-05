@@ -1768,6 +1768,14 @@ MUTATIONS = [
         "run": ["scripts/backup_guard.py"],
     },
     {
+        "why": "★見分けられないのに走査を始めてしまう★"
+               "（親を指すつなぎで入り続け、止まる場所へ届かない）",
+        "file": "scripts/backup_guard.py",
+        "before": "        return iter(())\n    try:",
+        "after": "    try:",
+        "run": ["scripts/backup_guard.py"],
+    },
+    {
         "why": "保存名の案内を出さない（台帳#464の再発）",
         "file": "scripts/backup_guard.py",
         "before": '        findings.append("allowlist:リスト外" + hint)',

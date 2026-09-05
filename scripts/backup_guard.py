@@ -908,6 +908,12 @@ def _walk(root: str, bad: list):
     if _junction_check_missing():
         bad.append("このPythonではフォルダのつなぎ（ジャンクション）を"
                    "見分けられません（3.12以降が要ります）")
+        # ★★走査そのものを始めない★★（2026-09-05・Codexの8回目）
+        #   ★直す前★＝警告を足すだけで `os.walk` を回していた。
+        #   判別できないジャンクションが**親の方向を指している**と入り続け、
+        #   非0を返す場所まで到達できない恐れがある
+        #   （`os.walk` は訪問済みのフォルダを覚えない）。
+        return iter(())
     try:
         if _is_link_dir(root):
             bad.append(f"走査先そのものがフォルダのつなぎです: {root}")
@@ -1065,10 +1071,8 @@ def cmd_accept(root: str) -> int:
     total = 0
     acc = {}
     walk_ng = []
-    if _junction_check_missing():
-        # ★見分けられないまま基準値を作らない★（cmd_scan と同じ扱い）
-        walk_ng.append("このPythonではフォルダのつなぎ（ジャンクション）を"
-                       "見分けられません（3.12以降が要ります）")
+    # ★見分けられないまま基準値を作らない★は `_walk` が見る
+    #   （2026-09-05・重複していたので落とした）
     for dirpath, _dirs, files in _walk(root, walk_ng):
         for fn in files:
             total += 1
@@ -1537,13 +1541,29 @@ def _baseline_tests(t) -> None:
         if _real_isj2 is not None:
             del os.path.isjunction
         os.name = "nt"
+        # ★★走査そのものを始めないことまで見る★★（2026-09-05・Codexの8回目）
+        #   ★直す前★＝警告を足すだけで `os.walk` を回していたので、
+        #   判別できないジャンクションが親の方向を指していると入り続け、
+        #   非0を返す場所まで到達できない恐れがあった。
+        _real_walk2 = os.walk
+        _called2 = []
+
+        def _count_walk(*a, _w=_real_walk2, **k):
+            _called2.append(1)
+            return _w(*a, **k)
+
+        os.walk = _count_walk
         try:
             t("★★ジャンクションを見分けられないPythonでは緑にしない★★"
               "（見分けられないことを『つなぎではない』と答えていた）",
               cmd_scan(root) == 1)
             t("　その版では承知済みも作らない（調べられていないので）",
               cmd_accept(root) == 1)
+            t("★★その版では走査そのものを始めない★★"
+              "（親を指すつなぎで入り続け、止まる場所へ届かない恐れ）",
+              _called2 == [])
         finally:
+            os.walk = _real_walk2
             os.name = _real_nt2
             if _real_isj2 is not None:
                 os.path.isjunction = _real_isj2
