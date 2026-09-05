@@ -727,7 +727,43 @@ def template_drift(machine: dict, old_detail: dict) -> list:
     return []
 
 
-def growth_reasons(nn: list, machine: dict, old_detail: dict) -> list:
+# ★毎回変わるので、差として数えない欄★（数えると毎日書き直しになる）
+_VOLATILE_DECISION_KEYS = ("decided_at",)
+
+
+def machine_row_drift(old_row: dict, new_machine: dict) -> list:
+    """★機種の一覧の側に、書くべき変化があるか★（2026-09-06・Codexの指摘）
+
+    ★なぜ要るか★＝`nothing_new()` は claim の件数と記事本文しか見ない。
+    ★本文に出ない確定値★（`machine_profile` など）はどちらも増やさないので、
+    「育てるものがありません」と判断され、書かずに指紋だけ控えて
+    ★判定書が古いまま永久に検索へ載らない★。
+    実例＝prskkm は claim 4件を持ち、止まっている理由は
+    `MACHINE_PROFILE_UNKNOWN` だけ。型が確定してもここに落ちる。
+
+    ★毎回変わる欄は外す★＝数えると毎日書き直しになる。
+    ★新しい行が作れていないときは何も言わない★（判断材料が無い）。
+    """
+    if not isinstance(new_machine, dict) or not new_machine:
+        return []
+    out = []
+
+    def _pd(d):
+        pd = dict((d or {}).get("page_decision") or {})
+        for k in _VOLATILE_DECISION_KEYS:
+            pd.pop(k, None)
+        return pd
+
+    if _pd(old_row) != _pd(new_machine):
+        out.append("判定書が変わります（検索に載せるかの判断が変わりました）")
+    for _k, _why in (("checker", "早見表の材料"), ("identity", "機種の身元")):
+        if (old_row or {}).get(_k) != new_machine.get(_k):
+            out.append(f"{_why}が変わります")
+    return out
+
+
+def growth_reasons(nn: list, machine: dict, old_detail: dict,
+                   new_machine: dict = None) -> list:
     """★今日この機種でやることがあるか★（2026-09-03・切り出した理由は下記）
 
     引数の `nn` は `nothing_new()` の答え
@@ -747,6 +783,11 @@ def growth_reasons(nn: list, machine: dict, old_detail: dict) -> list:
     （そこへ届くには通信して記事を作るところまで行く必要がある）。
     """
     if nn and template_drift(machine, old_detail):
+        return []
+    # ★★機種の一覧の側の変化も「書く理由」に数える★★
+    #   （2026-09-06・Codexの指摘）★数えないと、本文に出ない確定値
+    #   （型など）は永久に反映されない★＝書かずに指紋だけ控えるため。
+    if nn and machine_row_drift(machine, new_machine):
         return []
     return list(nn or [])
 
@@ -1623,7 +1664,7 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     # ★★やることがあるかの判断は `growth_reasons` の1か所★★
     #   （2026-09-03。★ここに埋めていたら、壊し方の道具が
     #     「この守りは試験で守られていません」と言った★）
-    _nn = growth_reasons(_nn, cur, old_detail)
+    _nn = growth_reasons(_nn, cur, old_detail, machine)
     out["problems"] += _nn
     out["nothing_new_only"] = bool(_clean and _nn)
     # ★「前に載っていた内容が再現できない」は人へ回す★（黙って止め続けない）
@@ -3302,6 +3343,62 @@ def selftest() -> int:
             t("　答えが無い日でも、決まっていないことは聞く",
               any(x.get("kind") == "grow_read_sources"
                   for x in (_nm_no.get("questions") or [])))
+
+            # ★★本文に出ない確定値も「書く理由」に数える★★
+            #   （2026-09-06・Codexの指摘）★直す前★＝
+            #   `nothing_new()` は claim の件数と記事本文しか見ないので、
+            #   `machine_profile` のように本文に出ない値は
+            #   「育てるものがありません」→ 書かずに指紋だけ控える
+            #   → ★判定書が古いまま永久に検索へ載らない★。
+            #   実例＝prskkm（claim 4件・止まる理由は型だけ）。
+            _row_old = {"slug": "zzz_r",
+                        "page_decision": {"indexable": False,
+                                          "machine_profile": "UNKNOWN",
+                                          "reason_codes":
+                                              ["MACHINE_PROFILE_UNKNOWN"],
+                                          "input_digest": "aaa",
+                                          "decided_at": "2026-09-05"},
+                        "checker": {"unit": "G"},
+                        "identity": {"a": 1}}
+            _row_same = json.loads(json.dumps(_row_old))
+            _row_same["page_decision"]["decided_at"] = "2026-09-06"
+            _row_type = json.loads(json.dumps(_row_same))
+            _row_type["page_decision"]["machine_profile"] = "AT_CZ"
+            _row_type["page_decision"]["indexable"] = True
+            _row_type["page_decision"]["reason_codes"] = []
+            _row_ck = json.loads(json.dumps(_row_same))
+            _row_ck["checker"] = {"unit": "pt"}
+            _row_id = json.loads(json.dumps(_row_same))
+            _row_id["identity"] = {"a": 2}
+            t("★★日付しか違わないときは、書く理由にしない★★"
+              "（数えると毎日ぜんぶ書き直しになる）",
+              machine_row_drift(_row_old, _row_same) == [])
+            t("★★型が決まったら書く理由になる★★"
+              "（★本文にもclaimにも出ないので、ここで数えないと"
+              "永久に検索へ載らない★）",
+              any("判定書" in x
+                  for x in machine_row_drift(_row_old, _row_type)))
+            t("　早見表の材料が変わっても書く理由になる",
+              any("早見表" in x for x in machine_row_drift(_row_old, _row_ck)))
+            t("　機種の身元が変わっても書く理由になる",
+              any("身元" in x for x in machine_row_drift(_row_old, _row_id)))
+            t("　新しい行が作れていないときは何も言わない",
+              machine_row_drift(_row_old, None) == []
+              and machine_row_drift(_row_old, {}) == [])
+            # ★入口（growth_reasons）でも効いているか★（罠③）
+            _nnx = ["育てるものがありません（確定した中身が増えていません）"]
+            _bk_td = globals()["template_drift"]
+            try:
+                globals()["template_drift"] = lambda m, d: []
+                _gr_same = growth_reasons(_nnx, _row_old, {}, _row_same)
+                _gr_type = growth_reasons(_nnx, _row_old, {}, _row_type)
+            finally:
+                globals()["template_drift"] = _bk_td
+            t("★★入口でも、型が決まったら止めない★★"
+              "（関数を作っただけで繋がっていない、を防ぐ）", _gr_type == [])
+            t("　（対照）何も変わっていなければ、今までどおり止まる"
+              "＝止めているのは『一覧側の変化』であって、他の検査ではない",
+              _gr_same == _nnx)
 
             # ★本番と同じ入口（grow_result）を通す★
             # ★日をまたいで数える★（同じ日に何度動いても1回）

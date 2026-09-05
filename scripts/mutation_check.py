@@ -1903,6 +1903,24 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★機種の一覧側の変化を『書く理由』に数えない★"
+               "（★本文にもclaimにも出ない確定値（型など）は"
+               "書かずに指紋だけ控えられ、永久に検索へ載らない★）",
+        "file": "scripts/grow_machine.py",
+        "before": "    if nn and machine_row_drift(machine, new_machine):\n"
+                  "        return []",
+        "after": "    if False:\n        return []",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★毎回変わる日付も差として数える★"
+               "（毎日ぜんぶ書き直しになる）",
+        "file": "scripts/grow_machine.py",
+        "before": '_VOLATILE_DECISION_KEYS = ("decided_at",)',
+        "after": "_VOLATILE_DECISION_KEYS = ()",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
         "why": "★書けたあとに指紋を控える呼び出しを消す★"
                "（毎日同じ機種をぜんぶやり直す）",
         "file": "scripts/grow_machine.py",
