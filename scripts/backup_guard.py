@@ -47,6 +47,14 @@ LOG_PATH = _lp.doc("logs/backup_guard.log")
 
 # ── 前段copy用: バックアップを許可するファイル名（完全一覧・basename照合）──
 ALLOW_BASENAMES = {
+    # ★別プロジェクト（今電のFAX仕分け）の状態ファイル★（2026-09-05）
+    #   ★名前に auth が入っているだけの誤検知★（name_seg:auth）。
+    #   中身は3つだけ＝連続失敗の回数・通知したか・最後に動いた日。
+    #   ★毎朝03:00に書き換わる★ので基準値では止まらない
+    #   （指紋が毎日変わり、承知済みにしても翌日また出る）。
+    #   ★免除するのは名前の検査だけ★＝中身の検査は今までどおり掛かるので、
+    #   あとから秘密が入れば止まる。
+    ".auth_error_state.json",
     # ★プロジェクトのルール（2026-07-31 追加）★
     #   中身はルール・現在の状態・パスだけで、認証情報を含まない。
     #   ★ここが失われると「毎回忘れる」ルールごと消える★ので必ず控えを取る。
@@ -1394,6 +1402,26 @@ def _baseline_tests(t) -> None:
         finally:
             os.path.islink = _real_islink
         os.rmdir(_sub)
+        cmd_accept(root)
+
+        # ㉓★一件ずつ確かめた名簿は、名前の検査だけを免除する★（2026-09-05）
+        #   ★なぜ要るか★＝`.auth_error_state.json` は名前に auth が入るだけの
+        #   誤検知で、★毎朝03:00に中身が書き換わる★ため基準値では止まらない
+        #   （指紋が毎日変わり、承知済みにしても翌日また🟠が出ていた）。
+        #   ★免除してよいのは名前だけ★＝中身に秘密が入れば必ず止まること。
+        p22 = os.path.join(root, ".auth_error_state.json")
+        with open(p22, "w", encoding="utf-8") as f:
+            f.write('{"consecutive": 0, "notified": false,'
+                    ' "last_ping_date": "2026-09-05"}')
+        t("　名前だけの誤検知は止めない（一件ずつ確かめた名簿）",
+          content_findings(p22) == [] and is_allowlisted(
+              os.path.basename(p22)))
+        with open(p22, "w", encoding="utf-8") as f:
+            f.write('{"app_password": "himitsu-no-kagi-desu"}')
+        t("★★名前を免除しても、中身の秘密は必ず止める★★",
+          any("app_password" in x for x in content_findings(p22))
+          and cmd_scan(root) == 1)
+        os.remove(p22)
         cmd_accept(root)
 
         # ④★読めないフォルダがあったら緑にしない★
