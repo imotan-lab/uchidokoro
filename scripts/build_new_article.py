@@ -849,13 +849,31 @@ def build_machine(slug, name, maker, official_url, release, material,
 #   `confirmed_values.record()` は項目を問わず、公式URL・判断者2人・
 #   独立2系列の出典を要求する。
 def _record_howto(field: str, example: str) -> str:
+    # ★★要る出典の数は項目ごとに違う★★（2026-09-05・Codexの指摘2）
+    #   ★直す前は一律「2つ」と書いていた★＝`machine_profile` だけは
+    #   1つでよい（運営者の決定・読者に数値として出ないため）のに、
+    #   案内どおりに2つ目を探して詰まる形になっていた。
+    #   ★数は名簿に書かず、本物の契約に聞く★（食い違わないように）
+    try:
+        _n = _cv_mod().min_sources(field)
+    except Exception:                     # noqa: BLE001
+        _n = 2                            # ★分からなければ厳しい側★
+    _srcs = " ".join(f'--source "<URL{i + 1}>|<逐語>"' for i in range(_n))
+    _need = ("**発行元の違う2つの出典**" if _n >= 2
+             else "**出典1つ**（この項目は1つでよい）")
     return ("決めたら confirmed_values.py --record "
             f"--field {field} --value-file <{example} を書いたファイル> "
             "--official-url <公式URL> "
-            '--source "<URL1>|<逐語>" --source "<URL2>|<逐語>" '
+            f"{_srcs} "
             "--why <どう突き合わせたか・8文字以上> --by claude,codex "
             "で記録してください"
-            "（★公式URL・判断者2人・**発行元の違う2つの出典**が要ります★）")
+            f"（★公式URL・判断者2人・{_need}が要ります★）")
+
+
+def _cv_mod():
+    """★契約を持っている本物のモジュール★（読み込みは使うときだけ）"""
+    import confirmed_values as _cv
+    return _cv
 
 
 # ★機械が読めなかったことを表す言い回し★（2026-08-29）

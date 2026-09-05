@@ -279,7 +279,10 @@ def remember_sources(slug: str, urls: list) -> bool:
             except Exception as e:        # noqa: BLE001
                 print(f"  出典の控えを読めません（書きません）: {e}")
                 return False
-        got[slug] = {"urls": sorted(set(str(u) for u in urls))}
+        # ★★2AIの確定値の指紋も一緒に控える★★（2026-09-05）
+        #   ★これが無いと「答えたのに見送られる」が永久に続く★
+        got[slug] = {"urls": sorted(set(str(u) for u in urls)),
+                     "cv": confirmed_fingerprint(slug)}
         tmp = f"{PROBE_STATE}.{os.getpid()}.tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(got, f, ensure_ascii=False, indent=1)
@@ -552,6 +555,49 @@ def confirmed_count(detail: dict) -> int:
 
 
 _NAME_MARK = "\uE001"        # ★機種名の入る場所の目印★（本文に出ない字）
+
+
+def confirmed_fingerprint(slug: str) -> str:
+    """★2AIが確定させた値の「いまの姿」の指紋★（2026-09-05）
+
+    ★何に使うか★＝出典が変わっていない日でも、
+    **2AIが答えて記録した**なら、それは「変わった」。
+    ★読めないときは空を返す★＝呼ぶ側は「変わった扱い」にする
+    （fail-closed＝答えを取りこぼすより、余計に働くほうが安全）。
+    """
+    try:
+        got = _cv.for_slug(slug)
+    except Exception:                     # noqa: BLE001
+        return ""
+    if not isinstance(got, dict) or not got:
+        return "empty"
+    import hashlib as _hl
+    parts = []
+    for _f in sorted(got):
+        _r = got[_f] or {}
+        parts.append(_f + "\x1f" + str(_r.get("decided_at") or "")
+                     + "\x1f" + json.dumps(_r.get("value"),
+                                            ensure_ascii=False,
+                                            sort_keys=True))
+    return _hl.sha256("\x1e".join(parts).encode("utf-8")).hexdigest()
+
+
+def confirmed_drift(slug: str) -> bool:
+    """★前に書いたときから、2AIの確定値が変わったか★（2026-09-05）
+
+    ★なぜ要るか（Codexの指摘1・自分で確かめた）★＝
+    見送りの分岐は質問を出した直後に return するが、
+    確定値を材料へ足す `merge_into` は**その約120行後**にある。
+    ＝2AIが答えて記録しても、翌日も同じ分岐で戻るので★永久に届かない★。
+    「質問する→答える→反映する」の輪が閉じていなかった。
+
+    ★控えが無い／読めないときは True★（fail-closed＝働くほうへ倒す）。
+    """
+    now = confirmed_fingerprint(slug)
+    if not now:
+        return True
+    was = (_probe_state().get(slug) or {}).get("cv")
+    return str(was or "") != now
 
 
 def template_drift(machine: dict, old_detail: dict) -> list:
@@ -1035,13 +1081,38 @@ def _stuck_clear(slug: str) -> None:
 
 
 # ★足りない理由を、読者に分かる言葉へ★（★機械が決めた符丁のまま渡さない★）
+#   ★これは表示の言い換えであって、採否も可否も決めていない★
+#   ★知らない符丁はそのまま出す★（黙って捨てない）
 _LACK_WORDS = {
     "MACHINE_PROFILE_UNKNOWN": "機種の型（AT機かボーナス機か）",
-    "CEILING_STATE_UNKNOWN": "天井があるかどうか",
     "CLAIMS_LT_3": "確認できた事実が3件に足りない",
     "CATEGORIES_LT_2": "確認できた話題が2種類に足りない",
     "NO_UNIQUE_GAMEPLAY": "その機種ならではのゲーム性（AT・CZ）",
+    "NO_BONUS_PROB": "設定ごとのボーナス確率",
 }
+
+# ★★判定書に直に載っている「まだ決まっていない欄」★★
+#   （2026-09-05・Codexの指摘3＝自分で確かめた）
+#   ★なぜ理由コードで見ないか★＝`CEILING_STATE_UNKNOWN` は
+#   page_decision が**一度も出さない**（実測0か所）。
+#   理由コードだけを見ていると★天井の有無は永久に聞けない★。
+#   実測（prskkm）＝`ceiling_state: UNKNOWN` なのに
+#   理由コードは `MACHINE_PROFILE_UNKNOWN` だけだった。
+#   ここは「未回答の欄を2AIへ渡す」だけで、意味は判定していない。
+_UNKNOWN_FIELDS = (
+    # (判定書の欄, 記録する項目名, 聞く文, 書き方の例)
+    ("machine_profile", "machine_profile",
+     "★この機種の型を判断してください★"
+     "（AT_CZ＝ATまたはCZを持つ／BONUS＝完全告知などのボーナスタイプ）"
+     "／★決まらないと検索に載せられません★。",
+     '{"profile": "BONUS"}'),
+    ("ceiling_state", "ceiling_state",
+     "★この機種に天井があるかを判断してください★"
+     "（PRESENT＝ある／NONE＝ない）"
+     "／★「ボーナスタイプだから天井なし」と決めないでください★"
+     "＝別々に確かめること。",
+     '{"state": "PRESENT"}'),
+)
 
 
 def pending_questions(cur: dict, mat: dict = None, slug: str = "",
@@ -1066,6 +1137,20 @@ def pending_questions(cur: dict, mat: dict = None, slug: str = "",
     if mat is not None:
         for q in _ba.checker_questions(mat):
             out.append({"text": str(q), "kind": "grow_pending", "slug": slug})
+    # ★★判定書に「まだ決まっていない」と書いてある欄は、必ず聞く★★
+    #   （2026-09-05）★材料が無い日（見送り）でも聞ける★のがここの値打ち。
+    #   ★★同じ項目を二重に聞かない★★（実機で型・天井が2つずつ出た）＝
+    #   記録するコマンドは必ず `--field <項目名>` を含むので、
+    #   ★すでにその項目を聞いている質問があるなら足さない★
+    #   （文字の意味は読まない。コマンドの形を見るだけ）。
+    for _key, _field, _ask, _example in _UNKNOWN_FIELDS:
+        if str(pd.get(_key) or "UNKNOWN") != "UNKNOWN":
+            continue
+        if any(f"--field {_field} " in str(q.get("text") or "") for q in out):
+            continue
+        out.append({
+            "kind": "grow_pending", "slug": slug, "field": _field,
+            "text": _ask + _ba._record_howto(_field, _example)})
     # ★★足りないものを名指しして、出典を読んでもらう★★
     lack = [_LACK_WORDS.get(r, r) for r in (pd.get("reason_codes") or [])]
     if lack:
@@ -1079,7 +1164,15 @@ def pending_questions(cur: dict, mat: dict = None, slug: str = "",
                      + ("／読む先: " + " ".join(_u[:4]) if _u else "")
                      + "／決めたら confirmed_values.py --record で記録"
                        "（逐語引用が要ります）")})
-    return out
+    # ★同じ文の質問はまとめる★（材料からの質問と、判定書からの質問が重なる）
+    seen, uniq = set(), []
+    for q in out:
+        _t = str(q.get("text") or "")
+        if _t in seen:
+            continue
+        seen.add(_t)
+        uniq.append(q)
+    return uniq
 
 
 def grow_result(slug: str, ok: bool, why: str = "",
@@ -1250,10 +1343,11 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
                 _dp0 = _detail_path(slug)
                 _od0 = (_sj.read_json(_dp0, expect=dict)
                         if os.path.isfile(_dp0) else {})
-                if _pr.get("skip") and not template_drift(cur, _od0):
+                if (_pr.get("skip") and not template_drift(cur, _od0)
+                        and not confirmed_drift(slug)):
                     out["problems"].append(
                         "出典の顔ぶれも中身も前回から変わっていません"
-                        "（今日は見送ります）")
+                        "／2AIの確定値も増えていません（今日は見送ります）")
                     out["unchanged"] = True
                     # ★★見送る日でも、載っていないなら聞く★★（2026-09-05）
                     #   ★直す前★＝ここで戻っていたので、質問に到達しなかった
@@ -1353,6 +1447,11 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     if not mat:
         out["problems"].append("材料を集められません: "
                                + " / ".join(got.get("problems") or [])[:200])
+        # ★★材料が集まらない日でも、決まっていないことは聞く★★
+        #   （2026-09-05・Codexの指摘3）★ここで戻ると、
+        #   出典が1つしか無い機種などは**永久に沈黙する**。
+        out["questions"] += pending_questions(cur, None, slug,
+                                              urls=got.get("urls"))
         return out
     # ★ここまで来たら「実際に見に行けた」★（依頼181のP1）
     #   本人性の確認や材料集めに失敗した機種を「確認済み」にしない。
@@ -2273,7 +2372,7 @@ def selftest() -> int:
         return (_T - _dtm.timedelta(days=off)).isoformat()
 
     # ★★2026-08-13・台帳#346（軽い様子見）★★
-    def _probe_run(skip, known, now=None, drift=False):
+    def _probe_run(skip, known, now=None, drift=False, cv_drift=False):
         # ★出典を探す工程も差し替える★（試験で実サイトへ出ない）
         # ★★「ひな型のずれ」も渡せるようにする★★（2026-09-03・罠㉙）
         #   ★直す前は本物の記事の書き出しを読んでいた★ので、
@@ -2283,8 +2382,14 @@ def selftest() -> int:
         _bk = globals()["_probe_state"]
         _bf = globals()["find_sources"]
         _bd = globals()["template_drift"]
+        # ★★2AIの確定値が増えたかも渡せるようにする★★（2026-09-05）
+        #   ★本物の控えを読ませない★（試験が機械の書類フォルダに依存しない）
+        _bc = globals()["confirmed_fingerprint"]
+        globals()["confirmed_fingerprint"] = lambda sl: "FP_IMA"
+        _cvv = "FP_MUKASHI" if cv_drift else "FP_IMA"
         globals()["_probe_state"] = (
-            lambda: ({"pw_10523": {"urls": known}} if known else {}))
+            lambda: ({"pw_10523": {"urls": known, "cv": _cvv}}
+                     if known else {}))
         globals()["find_sources"] = (
             lambda m: list(known if now is None else now))
         globals()["template_drift"] = (
@@ -2301,6 +2406,7 @@ def selftest() -> int:
             globals()["_probe_state"] = _bk
             globals()["find_sources"] = _bf
             globals()["template_drift"] = _bd
+            globals()["confirmed_fingerprint"] = _bc
 
     t("★★出典の顔ぶれが変わったら見送らない★★（2026-08-14・依頼185のP1）"
       "／別の名鑑に新しく記事が出ても永久に気づかない状態だった",
@@ -2780,24 +2886,147 @@ def selftest() -> int:
             #   （実測：パリピ孔明は材料が足りているのに永久に沈黙）。
             _bk_ps2 = globals()["_probe_state"]
             _bk_fs2 = globals()["find_sources"]
-            globals()["_probe_state"] = (
-                lambda: {"pw_10523": {"urls": ["https://x.test/a"]}})
+            _bk_cv2 = globals()["confirmed_fingerprint"]
+            globals()["confirmed_fingerprint"] = lambda sl: "FP_IMA"
             globals()["find_sources"] = lambda m: ["https://x.test/a"]
-            try:
-                _got_skip = plan_one(
+
+            def _skip_run(cv_now):
+                globals()["_probe_state"] = (
+                    lambda: {"pw_10523": {"urls": ["https://x.test/a"],
+                                          "cv": cv_now}})
+                return plan_one(
                     "pw_10523", probe=lambda u: {"skip": True, "rows": []},
                     gather=lambda *a, **k: {"urls": [], "problems": [],
                                             "material": None},
                     verify=lambda *a, **k: {"problems": [],
                                             "release": "2026-09-07"})
+
+            try:
+                _got_skip = _skip_run("FP_IMA")
+                _got_ans = _skip_run("FP_MUKASHI")
             finally:
                 globals()["_probe_state"] = _bk_ps2
                 globals()["find_sources"] = _bk_fs2
+                globals()["confirmed_fingerprint"] = _bk_cv2
             t("★★見送る日でも、まだ載っていないなら2AIに聞く★★"
               "（ここで黙ると永久に載らない）",
               _got_skip.get("unchanged") is True
               and any(x.get("kind") == "grow_read_sources"
                       for x in (_got_skip.get("questions") or [])))
+            # ★★答えを記録した日は見送らない★★（2026-09-05・Codexの指摘1）
+            #   ★直す前★＝見送りの分岐は質問を出した直後に戻るが、
+            #   確定値を材料へ足す処理は**その約120行後**にあった。
+            #   ＝2AIが答えて記録しても、翌日も同じ分岐で戻るので
+            #   ★答えが永久に届かない★（輪が閉じていなかった）。
+            t("★★2AIが答えて記録した日は、出典が同じでも見送らない★★"
+              "（ここで見送ると、答えが永久に反映されない）",
+              _got_ans.get("unchanged") is not True)
+            t("　（対照）確定値も同じなら、ちゃんと見送る"
+              "＝止めているのは『確定値の変化』であって、他の検査ではない",
+              _got_skip.get("unchanged") is True)
+            # ★指紋そのものの試験★＝値が変われば指紋も変わる
+            _bk_fs3 = globals()["_cv"].for_slug
+            try:
+                globals()["_cv"].for_slug = lambda sl: {
+                    "machine_profile": {"value": {"profile": "AT_CZ"},
+                                        "decided_at": "2026-09-05"}}
+                _fp1 = confirmed_fingerprint("zzz_fp")
+                globals()["_cv"].for_slug = lambda sl: {
+                    "machine_profile": {"value": {"profile": "BONUS"},
+                                        "decided_at": "2026-09-05"}}
+                _fp2 = confirmed_fingerprint("zzz_fp")
+                globals()["_cv"].for_slug = lambda sl: {}
+                _fp3 = confirmed_fingerprint("zzz_fp")
+
+                def _boom(sl):
+                    raise RuntimeError("読めません")
+
+                globals()["_cv"].for_slug = _boom
+                _fp4 = confirmed_fingerprint("zzz_fp")
+            finally:
+                globals()["_cv"].for_slug = _bk_fs3
+            t("　確定値が変われば指紋も変わる", _fp1 and _fp2 and _fp1 != _fp2)
+            t("　1件も無いときは決まった印になる（毎回変わらない）",
+              _fp3 == "empty")
+            t("★★控えを読めないときは空を返す★★"
+              "（呼ぶ側が『変わった扱い』にして働く＝答えを取りこぼさない）",
+              _fp4 == "")
+            # ★★「空を返す」だけでは足りない★★（2026-09-05・壊し方の検査が
+            #   教えてくれた）＝呼ぶ側が**それを「変わった」と読む**ことまで
+            #   見ないと、fail-open に書き換えても緑のまま通る（罠④）。
+            _bk_cfp = globals()["confirmed_fingerprint"]
+            _bk_pss = globals()["_probe_state"]
+            try:
+                globals()["_probe_state"] = (
+                    lambda: {"zzz_d": {"urls": [], "cv": "FP_A"}})
+                globals()["confirmed_fingerprint"] = lambda sl: ""
+                _d_unread = confirmed_drift("zzz_d")
+                globals()["confirmed_fingerprint"] = lambda sl: "FP_A"
+                _d_same = confirmed_drift("zzz_d")
+                globals()["confirmed_fingerprint"] = lambda sl: "FP_B"
+                _d_new = confirmed_drift("zzz_d")
+                globals()["_probe_state"] = lambda: {}
+                _d_none = confirmed_drift("zzz_d")
+            finally:
+                globals()["confirmed_fingerprint"] = _bk_cfp
+                globals()["_probe_state"] = _bk_pss
+            t("★★控えを読めない日は『変わった』とみなす★★"
+              "（ここを『変わっていない』にすると2AIの答えを取りこぼす）",
+              _d_unread is True)
+            t("　同じ指紋なら『変わっていない』", _d_same is False)
+            t("　指紋が変われば『変わった』", _d_new is True)
+            t("　控えが1件も無いときも『変わった』（初回は必ず働く）",
+              _d_none is True)
+
+            # ★★控えに指紋が実際に書かれるか★★（2026-09-05）
+            #   ★直す前は誰も控えの中身を見ていなかった★＝
+            #   `remember_sources` から指紋を外しても緑のままだった。
+            import tempfile as _tf_rs
+            _bk_probe_path = globals()["PROBE_STATE"]
+            _bk_cfp2 = globals()["confirmed_fingerprint"]
+            _tmp_rs = _tf_rs.mkdtemp(prefix="grow_rs_")
+            try:
+                globals()["PROBE_STATE"] = os.path.join(_tmp_rs, "s.json")
+                globals()["confirmed_fingerprint"] = lambda sl: "FP_KIROKU"
+                _ok_rs = remember_sources("zzz_rs", ["https://x.test/a"])
+                with io.open(globals()["PROBE_STATE"],
+                             encoding="utf-8") as _f_rs:
+                    _saved = json.load(_f_rs)
+            finally:
+                globals()["PROBE_STATE"] = _bk_probe_path
+                globals()["confirmed_fingerprint"] = _bk_cfp2
+                import shutil as _sh_rs
+                _sh_rs.rmtree(_tmp_rs, ignore_errors=True)
+            t("★★出典を控えるとき、確定値の指紋も一緒に控える★★"
+              "（これが無いと『答えたのに見送られる』が永久に続く）",
+              _ok_rs and (_saved.get("zzz_rs") or {}).get("cv") == "FP_KIROKU")
+            t("　出典URLも今までどおり控える",
+              (_saved.get("zzz_rs") or {}).get("urls")
+              == ["https://x.test/a"])
+
+            # ★★材料が無い日でも、判定書の欄から聞ける★★（2026-09-05）
+            #   ★ここが、この守りの効く唯一の場所★＝材料があるときは
+            #   `checker_questions` が同じ項目を聞くので、
+            #   この繰り返しを消しても気づかない（罠④）。
+            _q_nomat = pending_questions(
+                {"page_decision": {"indexable": False, "reason_codes": [],
+                                   "machine_profile": "UNKNOWN",
+                                   "ceiling_state": "UNKNOWN"}},
+                None, "zzz_nm")
+            _t_nomat = " ".join(x["text"] for x in _q_nomat)
+            t("★★材料が無い日でも、型を聞ける★★（見送りの日はここだけ）",
+              "--field machine_profile " in _t_nomat)
+            t("★★材料が無い日でも、天井の有無を聞ける★★"
+              "（★理由コードには出ないので、ここを消すと永久に聞けない★）",
+              "--field ceiling_state " in _t_nomat)
+            t("　決まっている欄は聞かない（答える意味がないので）",
+              "--field ceiling_state " not in " ".join(
+                  x["text"] for x in pending_questions(
+                      {"page_decision": {"indexable": False,
+                                         "reason_codes": [],
+                                         "machine_profile": "AT_CZ",
+                                         "ceiling_state": "PRESENT"}},
+                      None, "zzz_nm2")))
 
             # ★★本番の入口（plan_one）でも、質問が出ることを確かめる★★
             #   （2026-09-05。★関数だけ試験しても「呼ばれているか」は
@@ -2997,7 +3226,14 @@ def _main() -> int:
     #   ★止まる理由そのものが質問になっている★ので、
     #   材料が集まらなかった回ほど大事。出さないと誰も答えられない。
     for _q in got.get("questions") or []:
-        print("  ★2AIに聞くこと: " + str(_q.get("text") or _q)[:200])
+        # ★★切らない★★（2026-09-05・Codexの指摘4）＝
+        #   200字で切っていたので、★記録の書き方が丸ごと消えていた★
+        #   （型の質問は335字あり `--official-url <公式URL` で切れる）。
+        #   読む相手は2AIなので、長さより**欠けないこと**が大事。
+        print("  ★2AIに聞くこと: " + str(_q.get("text") or _q))
+        # ★読む先は行を分ける★（1行に並べると端が切れて見落とす）
+        for _u in (_q.get("urls") or []):
+            print("      読む先: " + str(_u))
     for _n in got.get("notes") or []:
         print("  （お知らせ）" + _n)
     # ★★導入日が「月だけ」→「日まで」分かったら、登録も直す★★

@@ -87,8 +87,11 @@ MUTATIONS = [
         "why": "★ずれていても様子見で飛ばす"
                "（出典が変わらない機種は二度と追いつかない）★",
         "file": "scripts/grow_machine.py",
-        "before": '                if _pr.get("skip") and not template_drift(cur, _od0):',
-        "after": '                if _pr.get("skip"):',
+        "before": ("                if (_pr.get(\"skip\") "
+                   "and not template_drift(cur, _od0)\n"
+                   "                        and not confirmed_drift(slug)):"),
+        "after": ("                if (_pr.get(\"skip\")\n"
+                  "                        and not confirmed_drift(slug)):"),
         "run": ["scripts/grow_machine.py"],
     },
     {
@@ -1869,6 +1872,49 @@ MUTATIONS = [
                    "pending_questions(\n"
                    "                        cur, None, slug, urls=_known)"),
         "after": "                    pass",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★2AIが答えて記録した日も見送る★"
+               "（★答えが永久に反映されない★＝見送りの分岐が"
+               "確定値を読む処理より手前で戻っていた・Codexの指摘1）",
+        "file": "scripts/grow_machine.py",
+        "before": ("                if (_pr.get(\"skip\") "
+                   "and not template_drift(cur, _od0)\n"
+                   "                        and not confirmed_drift(slug)):"),
+        "after": ("                if (_pr.get(\"skip\") "
+                  "and not template_drift(cur, _od0)):"),
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★確定値の指紋を控えない★"
+               "（毎日「変わった」と誤って判断し続けるか、"
+               "控えの形が変わって輪が閉じなくなる）",
+        "file": "scripts/grow_machine.py",
+        "before": ('        got[slug] = {"urls": '
+                   "sorted(set(str(u) for u in urls)),\n"
+                   '                     "cv": confirmed_fingerprint(slug)}'),
+        "after": ('        got[slug] = {"urls": '
+                  "sorted(set(str(u) for u in urls))}"),
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★控えを読めないときに「変わっていない」と答える★"
+               "（2AIの答えを取りこぼす＝fail-open）",
+        "file": "scripts/grow_machine.py",
+        "before": "    now = confirmed_fingerprint(slug)\n    if not now:\n"
+                  "        return True",
+        "after": "    now = confirmed_fingerprint(slug)\n    if not now:\n"
+                 "        return False",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★判定書に「まだ決まっていない」と書いてある欄を聞かない★"
+               "（★天井の有無は理由コードに出ないので、"
+               "ここを止めると永久に聞けない★・Codexの指摘3）",
+        "file": "scripts/grow_machine.py",
+        "before": "    for _key, _field, _ask, _example in _UNKNOWN_FIELDS:",
+        "after": "    for _key, _field, _ask, _example in []:",
         "run": ["scripts/grow_machine.py"],
     },
     {
