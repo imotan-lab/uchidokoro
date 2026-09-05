@@ -1887,15 +1887,48 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
-        "why": "★確定値の指紋を控えない★"
-               "（毎日「変わった」と誤って判断し続けるか、"
-               "控えの形が変わって輪が閉じなくなる）",
+        "why": "★下見や失敗のあとでも指紋を控える★"
+               "（★記事は古いままなのに「反映済み」になり、"
+               "次から見送られる★＝実害を確認した・Codexの指摘1）",
         "file": "scripts/grow_machine.py",
-        "before": ('        got[slug] = {"urls": '
-                   "sorted(set(str(u) for u in urls)),\n"
-                   '                     "cv": confirmed_fingerprint(slug)}'),
-        "after": ('        got[slug] = {"urls": '
-                  "sorted(set(str(u) for u in urls))}"),
+        "before": ('        _was = got.get(slug) '
+                   "if isinstance(got.get(slug), dict) else {}\n"
+                   '        got[slug] = {"urls": '
+                   "sorted(set(str(u) for u in urls))}"),
+        "after": ('        _was = got.get(slug) '
+                  "if isinstance(got.get(slug), dict) else {}\n"
+                  '        got[slug] = {"urls": '
+                  "sorted(set(str(u) for u in urls)),\n"
+                  '                     "cv": confirmed_fingerprint(slug)}'),
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★出典を控え直すと、前の指紋が消える★"
+               "（毎日やり直しになり、いつまでも終わらない）",
+        "file": "scripts/grow_machine.py",
+        "before": '        if _was.get("cv"):\n'
+                  '            got[slug]["cv"] = _was["cv"]',
+        "after": "        pass",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★書けたときに指紋を控えない★"
+               "（答えを反映しても『まだ変わっている』ままで、"
+               "毎日同じ機種をやり直す）",
+        "file": "scripts/grow_machine.py",
+        "before": "    ok = _pp.confirm(rows)\n    if ok:\n"
+                  "        remember_confirmed(slug)",
+        "after": "    ok = _pp.confirm(rows)\n    if False:\n"
+                 "        remember_confirmed(slug)",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★指紋が分からないときでも控える★"
+               "（決まった印を『反映済み』として記録し、答えを取りこぼす）",
+        "file": "scripts/grow_machine.py",
+        "before": "    fp = confirmed_fingerprint(slug)\n    if not fp:",
+        "after": "    fp = confirmed_fingerprint(slug) or \"zzz\"\n"
+                 "    if not fp:",
         "run": ["scripts/grow_machine.py"],
     },
     {

@@ -279,10 +279,16 @@ def remember_sources(slug: str, urls: list) -> bool:
             except Exception as e:        # noqa: BLE001
                 print(f"  出典の控えを読めません（書きません）: {e}")
                 return False
-        # ★★2AIの確定値の指紋も一緒に控える★★（2026-09-05）
-        #   ★これが無いと「答えたのに見送られる」が永久に続く★
-        got[slug] = {"urls": sorted(set(str(u) for u in urls)),
-                     "cv": confirmed_fingerprint(slug)}
+        # ★★指紋はここでは触らない★★（2026-09-06・Codexの指摘1）
+        #   ★ここは下見でも、あとで失敗しても通る場所★なので、
+        #   ここで指紋を控えると★記事は古いままなのに「反映済み」★になる
+        #   （実害＝下見しただけの prskkm に指紋が入っていた）。
+        #   指紋を控えるのは `remember_confirmed()`＝書けたときだけ。
+        #   ★前に控えた指紋は消さない★（消すと毎日やり直しになる）
+        _was = got.get(slug) if isinstance(got.get(slug), dict) else {}
+        got[slug] = {"urls": sorted(set(str(u) for u in urls))}
+        if _was.get("cv"):
+            got[slug]["cv"] = _was["cv"]
         tmp = f"{PROBE_STATE}.{os.getpid()}.tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(got, f, ensure_ascii=False, indent=1)
@@ -291,6 +297,54 @@ def remember_sources(slug: str, urls: list) -> bool:
     except Exception as e:                # noqa: BLE001
         print(f"  出典を控えられません（続けます）: {e}")
         return False
+
+
+def remember_confirmed(slug: str) -> bool:
+    """★2AIの確定値を「記事に反映できた」と控える★（2026-09-06）
+
+    ★呼んでよいのは、実際に書けた／読み比べて足すものが無いと
+      分かったときだけ★（`_absorbed()` と同じ場所）。
+    ★下見や失敗のあとに呼ぶと、記事が古いまま「反映済み」になる★。
+    """
+    fp = confirmed_fingerprint(slug)
+    if not fp:
+        # ★分からないときは控えない★＝次回も「変わった」として働く
+        return False
+    try:
+        got = {}
+        if os.path.exists(PROBE_STATE):
+            with open(PROBE_STATE, encoding="utf-8") as f:
+                got = json.load(f)
+            if not isinstance(got, dict):
+                got = {}
+        _row = got.get(slug) if isinstance(got.get(slug), dict) else {}
+        _row = dict(_row)
+        _row["cv"] = fp
+        got[slug] = _row
+        tmp = f"{PROBE_STATE}.{os.getpid()}.tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(got, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, PROBE_STATE)
+        return True
+    except Exception as e:                # noqa: BLE001
+        print(f"  確定値の控えを書けません（続けます）: {e}")
+        return False
+
+
+def confirm_and_remember(rows: list, slug: str) -> bool:
+    """★読み比べが成立したら、確定値も「反映済み」にする★（2026-09-06）
+
+    ★なぜ関数にするか★＝`main()` の中の入れ子だと外から試せず、
+    ★「呼ばれているか」を誰も確かめられない★（罠③＝実際に
+    壊し方の検査が「守られていません」と教えてくれた）。
+
+    ★ここが唯一、指紋を控えてよい場所★＝
+    実際に書けた／読み比べて足すものが無いと分かった時にだけ通る。
+    """
+    ok = _pp.confirm(rows)
+    if ok:
+        remember_confirmed(slug)
+    return ok
 
 
 def last_checked() -> dict:
@@ -572,14 +626,18 @@ def confirmed_fingerprint(slug: str) -> str:
     if not isinstance(got, dict) or not got:
         return "empty"
     import hashlib as _hl
-    parts = []
-    for _f in sorted(got):
-        _r = got[_f] or {}
-        parts.append(_f + "\x1f" + str(_r.get("decided_at") or "")
-                     + "\x1f" + json.dumps(_r.get("value"),
-                                            ensure_ascii=False,
-                                            sort_keys=True))
-    return _hl.sha256("\x1e".join(parts).encode("utf-8")).hexdigest()
+    # ★★控えの中身を丸ごと見る★★（2026-09-06・Codexの指摘3）
+    #   ★直す前は 項目名・decided_at・value だけ★を見ていた。
+    #   `merge_into()` は出典URLなども材料へ反映するのに、
+    #   `decided_at` は日付までなので、★同じ日に値はそのままで
+    #   出典URLだけ直すと指紋が変わらず、古い出典のまま見送られた★。
+    #   ★並べ替えて書き出す★＝鍵の順番が違うだけで別物にしない。
+    try:
+        blob = json.dumps(got, ensure_ascii=False, sort_keys=True,
+                          default=str)
+    except Exception:                     # noqa: BLE001
+        return ""                         # ★書き出せないなら「分からない」★
+    return _hl.sha256(blob.encode("utf-8")).hexdigest()
 
 
 def confirmed_drift(slug: str) -> bool:
@@ -1452,6 +1510,18 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
         #   出典が1つしか無い機種などは**永久に沈黙する**。
         out["questions"] += pending_questions(cur, None, slug,
                                               urls=got.get("urls"))
+        # ★★答えが止まっていることを、黙って見過ごさない★★
+        #   （2026-09-06・Codexの指摘2）＝ここは確定値を読む処理より
+        #   手前なので、2AIが答えて記録しても反映できない。
+        #   ★答えは失われない★（指紋を控えるのは書けたときだけなので、
+        #   毎日やり直される）が、★静かに失敗し続けるのは別問題★。
+        #   ★材料が作れないと記事の骨組みが作れない★ので、
+        #   ここで足せるのは「見えるようにすること」まで。
+        if confirmed_drift(slug):
+            out["problems"].append(
+                "★2AIの答えが記事に反映できていません★"
+                "（材料を集められないため）。"
+                "出典が増えるまで、この機種は記事を作れません")
         return out
     # ★ここまで来たら「実際に見に行けた」★（依頼181のP1）
     #   本人性の確認や材料集めに失敗した機種を「確認済み」にしない。
@@ -2428,11 +2498,23 @@ def selftest() -> int:
     _gsrc = io.open(os.path.abspath(__file__), encoding="utf-8").read()
     _c1, _c2 = "_pp.con", "firm("
     _d1, _d2 = "def _absor", "bed()"
+    _e1, _e2 = "def confirm_and_", "remember("
+    _f1, _f2 = "return confirm_and_", 'remember(got[\"probe_rows\"]'
+    # ★★基準を進める場所は、いまも1か所だけ★★
+    #   ★2026-09-06に置き場所を変えた★＝`main()` の中の入れ子だと
+    #   外から試せず「呼ばれているか」を誰も確かめられなかった（罠③）。
+    #   いちばん外の高さへ出したので、その関数を直接試せる。
     t("★★見たページの基準を進めるのは「書けた」「足すものが無い」だけ★★"
       "（2026-08-14・依頼190のP1）／以前は下見でも失敗でも進んでいた",
       _gsrc.count(_c1 + _c2) == 1
       and (_d1 + _d2) in _gsrc
-      and _gsrc.index(_c1 + _c2) > _gsrc.index(_d1 + _d2)
+      # ★唯一の呼び出しは、切り出した関数の中にある★
+      and _gsrc.index(_c1 + _c2) > _gsrc.index(_e1 + _e2)
+      and _gsrc.index(_c1 + _c2) < _gsrc.index("def last_checked(")
+      # ★そこへ行けるのは `_absorbed()` を通ったときだけ★
+      #   （★文字列は割って書く★＝そのまま書くと**この試験の文自身**が
+      #     数に入って、呼び出しを消しても緑のままになる）
+      and (_f1 + _f2) in _gsrc
       and _gsrc.index(_d1 + _d2) > _gsrc.index("remember_sources(a.slug"))
     t("　（対照）checked だけを条件にすると、下見でも基準が進む"
       "＝いまは a.apply を必ず見ている",
@@ -2985,24 +3067,80 @@ def selftest() -> int:
             _bk_probe_path = globals()["PROBE_STATE"]
             _bk_cfp2 = globals()["confirmed_fingerprint"]
             _tmp_rs = _tf_rs.mkdtemp(prefix="grow_rs_")
+
+            def _read_rs():
+                with io.open(globals()["PROBE_STATE"],
+                             encoding="utf-8") as _f_rs:
+                    return json.load(_f_rs)
+
             try:
                 globals()["PROBE_STATE"] = os.path.join(_tmp_rs, "s.json")
                 globals()["confirmed_fingerprint"] = lambda sl: "FP_KIROKU"
+                # ①下見（出典だけ控える）
                 _ok_rs = remember_sources("zzz_rs", ["https://x.test/a"])
-                with io.open(globals()["PROBE_STATE"],
-                             encoding="utf-8") as _f_rs:
-                    _saved = json.load(_f_rs)
+                _s1 = _read_rs()
+                # ②書けたときだけ指紋を控える
+                _ok_cf = remember_confirmed("zzz_rs")
+                _s2 = _read_rs()
+                # ③そのあと出典を控え直しても、指紋は消えない
+                remember_sources("zzz_rs", ["https://x.test/a",
+                                            "https://x.test/b"])
+                _s3 = _read_rs()
+                # ④指紋が分からないときは控えない
+                globals()["confirmed_fingerprint"] = lambda sl: ""
+                _ok_ng = remember_confirmed("zzz_rs2")
+                _s4 = _read_rs()
             finally:
                 globals()["PROBE_STATE"] = _bk_probe_path
                 globals()["confirmed_fingerprint"] = _bk_cfp2
                 import shutil as _sh_rs
                 _sh_rs.rmtree(_tmp_rs, ignore_errors=True)
-            t("★★出典を控えるとき、確定値の指紋も一緒に控える★★"
-              "（これが無いと『答えたのに見送られる』が永久に続く）",
-              _ok_rs and (_saved.get("zzz_rs") or {}).get("cv") == "FP_KIROKU")
-            t("　出典URLも今までどおり控える",
-              (_saved.get("zzz_rs") or {}).get("urls")
-              == ["https://x.test/a"])
+            # ★★下見では指紋を控えない★★（2026-09-06・Codexの指摘1）
+            #   ★直す前★＝出典と一緒に控えていたので、
+            #   **下見しただけ・あとで失敗した**ときも「反映済み」になり、
+            #   ★記事は古いままなのに次から見送られた★
+            #   （実害＝下見しただけの機種に指紋が入っていた）。
+            t("★★出典を控えるだけでは、指紋を控えない★★"
+              "（下見や失敗のあとに『反映済み』にしない）",
+              _ok_rs and "cv" not in (_s1.get("zzz_rs") or {}))
+            t("　出典URLは今までどおり控える",
+              (_s1.get("zzz_rs") or {}).get("urls") == ["https://x.test/a"])
+            t("★★書けたときは指紋を控える★★",
+              _ok_cf and (_s2.get("zzz_rs") or {}).get("cv") == "FP_KIROKU")
+            t("★★あとで出典を控え直しても、指紋は消えない★★"
+              "（消すと毎日やり直しになる）",
+              (_s3.get("zzz_rs") or {}).get("cv") == "FP_KIROKU"
+              and len((_s3.get("zzz_rs") or {}).get("urls") or []) == 2)
+            t("★★指紋が分からないときは控えない★★"
+              "（次回も『変わった』として働く）",
+              _ok_ng is False and "zzz_rs2" not in _s4)
+
+            # ★★「読み比べ成立 → 指紋を控える」が繋がっているか★★
+            #   （2026-09-06・罠③＝関数だけ試しても
+            #     「呼ばれているか」は分からない。実際に
+            #     壊し方の検査が「守られていません」と教えてくれた）
+            _seen_cr = []
+            _bk_rc = globals()["remember_confirmed"]
+            _bk_pp = _pp.confirm
+            try:
+                globals()["remember_confirmed"] = (
+                    lambda sl: _seen_cr.append(sl) or True)
+                _pp.confirm = lambda rows: True
+                _r_ok = confirm_and_remember([{"url": "https://x.test/a"}],
+                                             "zzz_cr")
+                _pp.confirm = lambda rows: False
+                _r_ng = confirm_and_remember([{"url": "https://x.test/a"}],
+                                             "zzz_cr_ng")
+            finally:
+                globals()["remember_confirmed"] = _bk_rc
+                _pp.confirm = _bk_pp
+            t("★★読み比べが成立したら、指紋を控える★★"
+              "（ここが繋がっていないと、答えを反映しても"
+              "毎日同じ機種をやり直す）",
+              _r_ok is True and _seen_cr == ["zzz_cr"])
+            t("★★成立しなかったら控えない★★"
+              "（★止めているのは『成立したか』であって、他の検査ではない★）",
+              _r_ng is False and _seen_cr == ["zzz_cr"])
 
             # ★★材料が無い日でも、判定書の欄から聞ける★★（2026-09-05）
             #   ★ここが、この守りの効く唯一の場所★＝材料があるときは
@@ -3273,7 +3411,10 @@ def _main() -> int:
         """
         if not (a.apply and got.get("checked") and got.get("probe_rows")):
             return False
-        return _pp.confirm(got["probe_rows"])
+        # ★★指紋を控えるのはここだけ★★（2026-09-06・Codexの指摘1）
+        #   ＝「実際に書けた」「読み比べて足すものが無い」と
+        #   分かった時にしか通らない場所。
+        return confirm_and_remember(got["probe_rows"], a.slug)
     # ★控えるのは「書き込む実行」で「最後まで成立した」時だけ★
     #   （2026-08-13・依頼181のP1／依頼182のP1で条件を狭めた）
     #   ・下見で控えると、書いていないのに次の予定日まで候補から外れる
