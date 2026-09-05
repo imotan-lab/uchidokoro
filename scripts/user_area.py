@@ -1105,27 +1105,92 @@ def selftest() -> int:
               "／★これを止めていたので、新台とマイナー機種が"
               "この名鑑を使えなかった★", _ok3)
 
-        # ★置き換えで作る形も残す★（★効いたことを必ず確かめる★）
+        # ★置き換えで作る形は「箱が無い」ではなく「名前が変わった」★
+        #   （2026-09-06に読み替えた）＝idを変えても中身はページに残るので、
+        #   これは**相手が作りを変えた**形。★止まるのが正しい★。
+        #   ★「そもそも箱が無いページ」は上の実試料（no_review）が見ている★。
         _h_no = _h2.replace('id="hyouka"', 'id="hyouka-none"')
         t("　（前提）置き換えが実際に効いている"
           "／★効いていなくても通る試験を書いていた★",
           _h_no != _h2 and 'id="hyouka"' not in _h_no)
-        _ok3b = True
+        _ok3b, _why3b = True, ""
         try:
             clean_html(_h_no, _u2)
-        except Exception:                      # noqa: BLE001
-            _ok3b = False
-        t("　評価の箱だけ消した形でも使える", _ok3b)
+        except Exception as _e3b:              # noqa: BLE001
+            _ok3b, _why3b = False, str(_e3b)
+        t("　（対照）評価の箱の名前が変わったら、そのページは使わない",
+          _ok3b is False and "みんなの評価" in _why3b)
 
         # ★対照★＝枠の名前が変わったら気づく
+        #   ★2026-09-06★ rating-btn は必須（require_before）から外したので、
+        #   ここで止めているのは**印（markers）の「みんなの評価」**のほう。
+        #   ＝落とし損ねた読者の平均点が本文に残るので止まる。
         _h_bad = _h2.replace('class="rating-btn"', 'class="rating-btn-x"')
-        _ok4 = True
+        t("　（前提）置き換えが実際に効いている（評価の枠の名前）",
+          _h_bad != _h2 and 'class="rating-btn"' not in _h_bad)
+        _ok4, _why4 = True, ""
         try:
             clean_html(_h_bad, _u2)
-        except Exception:                      # noqa: BLE001
-            _ok4 = False
+        except Exception as _e4:               # noqa: BLE001
+            _ok4, _why4 = False, str(_e4)
         t("　（対照）評価の枠の名前が変わったら、そのページは使わない",
           _ok4 is False)
+        t("　（対照）その理由は『落としきれません』＝印で止めている"
+          "／★必須の箱が減ったぶんを印が肩代わりしていることを見る★",
+          _ok4 is False and "落としきれません" in _why4)
+
+        # ★★2026-09-06（台帳#573）★★
+        #   ちょんぼりすたの実ページで class="rating-btn" の**要素が1つも無い**
+        #   ものが出た（リコリス・リコイル 261631）。必須にしていたため
+        #   ページごと出典から外れ、★公開済みの事実が消える方向に働いていた★。
+        #   ★決めたのは2AI（Claude／Codex）★＝必須は commentlist だけにする。
+        _f4 = os.path.join(_fx2, "chonborista_no_rating_btn.html")
+        if os.path.isfile(_f4):
+            _u4 = "https://chonborista.com/slot/sammy-slot/261631/"
+            _h4 = open(_f4, encoding="utf-8").read()
+            t("　（前提）その試料には評価の枠の"
+              "**要素**が無い（文字はCSSの中だけ）",
+              'class="rating-btn"' not in _h4
+              and ".rating-btn{" in _h4
+              and 'class="commentlist"' in _h4
+              and 'id="entry"' in _h4)
+            _ok5, _c5 = True, ""
+            try:
+                _c5 = clean_html(_h4, _u4)
+            except Exception:                  # noqa: BLE001
+                _ok5 = False
+            t("★★評価の枠が無い実ページも出典に使える★★"
+              "／★止めていたので、公開済みの事実が消える方向に働いていた★",
+              _ok5)
+            t("　それでも読者の書き込みは材料に残らない",
+              _ok5 and "共感した" not in visible_text(_c5)
+              and "COMMENTS & REVIEW" not in visible_text(_c5))
+
+            # ★対照①★＝直す前の決まり（rating-btn が必須）だと、この試料は落ちる
+            #   ＝「新しい試験が通るだけ」の偽試験ではないことを示す。
+            _old = {**_chon,
+                    "require_before": [{"class": "rating-btn"},
+                                       {"class": "commentlist"}]}
+            _ok6 = True
+            try:
+                clean_html(_h4, _u4, conf=_old)
+            except Exception:                  # noqa: BLE001
+                _ok6 = False
+            t("　（対照）直す前の決まりなら、この試料は出典に使えない",
+              _ok6 is False)
+
+            # ★対照②★＝残した見張り（commentlist）を壊したら必ず止まる
+            #   ★「どれか1つあればよい」に変えていたら、ここは通ってしまう★
+            _h4bad = _h4.replace('class="commentlist"', 'class="commentlist-x"')
+            t("　（前提）置き換えが実際に効いている（コメント一覧）",
+              _h4bad != _h4 and 'class="commentlist"' not in _h4bad)
+            _ok7 = True
+            try:
+                clean_html(_h4bad, _u4)
+            except Exception:                  # noqa: BLE001
+                _ok7 = False
+            t("★★コメント一覧の名前が変わったら、そのページは使わない★★",
+              _ok7 is False)
 
     ng = sum(1 for _, o in results if not o)
     print()
