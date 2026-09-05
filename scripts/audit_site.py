@@ -39,7 +39,7 @@ AdSense審査向け（コンテンツ品質）:
     22. 機種重複検知（名前正規化での衝突＝同一機種の別名義二重登録）
 
 SEO・運用:
-    23. CLAUDE.md肥大検知（50KB超＋履歴退避ルールの生存確認）
+    23. CLAUDE.md肥大検知（250KB超＋履歴退避ルールの生存確認）
     24. 機種ページ noindex 整合（preview=noindex / complete=index の恒久ポリシー）
 """
 
@@ -883,25 +883,69 @@ def check_22_duplicate_machines(machines: list) -> list[str]:
     return ngs
 
 
+# ★CLAUDE.md の肥大とみなす大きさ★（2026-09-05・運営者の判断で 50KB→250KB）
+#   ★数字はここ1か所★＝説明文と判定で別々の値を持たない
+CLAUDE_MD_LIMIT = 250 * 1024
+
+
 def check_23_claude_md_size(machines: list) -> list[str]:
     """CLAUDE.md（毎セッション読み込まれるルールファイル）の肥大化検知。
-    50KB超でNG＝対話セッションで圧縮する合図（履歴・完了施策の詳細をCLAUDE_history.mdへ退避。
-    手順は2026-07-09の実施例＝退避→別エージェントで欠損検証。★無人タスクはCLAUDE.mdを書き換えない★）。
+    250KB超でNG＝対話セッションで圧縮する合図（履歴・完了施策の詳細をCLAUDE_history.mdへ退避。
+    手順は `~/.claude/skills/claudemd-compact/`＝退避→別エージェントで欠損検証。
+    ★無人タスクはCLAUDE.mdを書き換えない★）。
     2026-07-09に76KB→42KBへ圧縮した際の再発防止（日次履歴行の本体追記が肥大の主因だった）。
+
+    ★★閾値は50KB→250KB（2026-09-05・運営者の判断）★★
+    ＞ 「とうち上げていいよ 250とかどう？」
+    ★理由★＝履歴はもう全部 CLAUDE_history.md（513KB）へ出し切っており、
+    残る約160KBは**ほぼ全部が「いま効いている決まり」**＝退避先が無い。
+    50KBは「退避すれば戻せる量」を前提にした値で、その前提が消えた。
+    ★この検査の値打ちは「急に膨らんだことに気づく」ことなので、
+      余裕（当時160.9KB／閾値250KB）を持たせたうえで残す★。
     あわせて履歴退避ルールの生存確認（CLAUDE_history.mdへの参照が消えていないか）も行う。"""
-    ngs = []
     path = BASE / "CLAUDE.md"
     if not path.is_file():
-        return ngs  # 家PC等でファイルが無い環境では検査しない
-    size = path.stat().st_size
-    if size > 50 * 1024:
-        ngs.append(
-            f"CLAUDE.mdが{size/1024:.1f}KB（閾値50KB超）→対話セッションで圧縮する"
-            "（履歴をCLAUDE_history.mdへ退避→欠損検証。無人タスクは書き換え禁止）")
+        # 家PC等でファイルが無い環境では中身は見ない（★対照実験は続ける★）
+        return _check_23_selftest()
     text = path.read_text(encoding="utf-8", errors="replace")
+    return (_claude_md_problems(path.stat().st_size, text)
+            + _check_23_selftest())
+
+
+def _claude_md_problems(size: int, text: str) -> list[str]:
+    """★判定そのもの★（★同じ規則を2か所に書かない★＝対照実験もここを通す）"""
+    ngs = []
+    if size > CLAUDE_MD_LIMIT:
+        ngs.append(
+            f"CLAUDE.mdが{size/1024:.1f}KB"
+            f"（閾値{CLAUDE_MD_LIMIT/1024:.0f}KB超）→対話セッションで圧縮する"
+            "（履歴をCLAUDE_history.mdへ退避→欠損検証。無人タスクは書き換え禁止）")
     if "CLAUDE_history.md" not in text:
         ngs.append("CLAUDE.mdからCLAUDE_history.mdへの参照が消えている（履歴退避ルールの喪失疑い）→「修正履歴について」セクションを復元する")
     return ngs
+
+
+def _check_23_selftest() -> list[str]:
+    """★この見張り自身が働いているかを、毎回いっしょに確かめる★
+
+    ★なぜ要るか★（2026-09-05）＝閾値を 50KB→250KB へ上げた。
+    ★閾値を上げるのは「守りを弱める」ことなので、
+      上げたあとも本当に鳴ることを、その場かぎりでなく毎回確かめる★
+    （罠㉞＝対照実験を道具の側に書くと、道具を捨てた時に守りが黙る）。
+    ★本番のCLAUDE.mdは読まない★＝判定の関数を直に呼ぶ（罠㉗）。
+    """
+    ng = []
+    _ok = "…CLAUDE_history.md…"
+    if _claude_md_problems(CLAUDE_MD_LIMIT, _ok):
+        ng.append("★23の対照実験が落ちています★: 閾値ちょうどで鳴ってしまいます")
+    _big = _claude_md_problems(CLAUDE_MD_LIMIT + 1, _ok)
+    if not any("閾値" in x for x in _big):
+        ng.append("★23の対照実験が落ちています★: "
+                  "閾値を超えても鳴りません（肥大に気づけません）")
+    if not any("参照が消えている" in x for x in _claude_md_problems(10, "")):
+        ng.append("★23の対照実験が落ちています★: "
+                  "履歴への参照が消えても鳴りません")
+    return ng
 
 
 def check_24_robots_noindex(machines: list) -> list[str]:
