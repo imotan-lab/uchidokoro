@@ -289,6 +289,7 @@ def remember_sources(slug: str, urls: list) -> bool:
         got[slug] = {"urls": sorted(set(str(u) for u in urls))}
         if _was.get("cv"):
             got[slug]["cv"] = _was["cv"]
+            got[slug]["rules"] = _was.get("rules") or ""
         tmp = f"{PROBE_STATE}.{os.getpid()}.tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(got, f, ensure_ascii=False, indent=1)
@@ -327,6 +328,8 @@ def remember_confirmed(slug: str, fp: str = "") -> bool:
         _row = got.get(slug) if isinstance(got.get(slug), dict) else {}
         _row = dict(_row)
         _row["cv"] = fp
+        # ★どの決まりで書いたかも残す★（決まりを変えたら調べ直すため）
+        _row["rules"] = GROW_RULES_VERSION
         got[slug] = _row
         tmp = f"{PROBE_STATE}.{os.getpid()}.tmp"
         with open(tmp, "w", encoding="utf-8") as f:
@@ -653,6 +656,16 @@ def confirmed_fingerprint(slug: str) -> str:
     return _hl.sha256(blob.encode("utf-8")).hexdigest()
 
 
+# ★★育て方の決まりの版★★（2026-09-06・Codexの指摘）
+#   ★決まりを変えたら、この日付を上げる★＝控えが一度無効になり、
+#   すべての機種が次の回に調べ直される。
+#   ★なぜ要るか★＝古い決まりで「書かずに指紋だけ控えた」機種は、
+#   見送りの分岐で早期に戻るので `machine_row_drift()` まで届かず、
+#   ★判定書が古いまま永久に見送られる★。
+#   人が控えを消して回るのではなく、機械が気づくようにする。
+GROW_RULES_VERSION = "2026-09-06"
+
+
 def has_confirmed(slug: str) -> bool:
     """★その機種に2AIの確定値が1件でもあるか★（2026-09-06・Codexの指摘3）
 
@@ -682,8 +695,12 @@ def confirmed_drift(slug: str) -> bool:
     now = confirmed_fingerprint(slug)
     if not now:
         return True
-    was = (_probe_state().get(slug) or {}).get("cv")
-    return str(was or "") != now
+    _row = _probe_state().get(slug) or {}
+    # ★★育て方の決まりが変わっていたら、必ず調べ直す★★（2026-09-06）
+    #   ★これが無いと、古い決まりで控えた機種を人が消して回るしかない★
+    if str(_row.get("rules") or "") != GROW_RULES_VERSION:
+        return True
+    return str(_row.get("cv") or "") != now
 
 
 def template_drift(machine: dict, old_detail: dict) -> list:
@@ -2536,7 +2553,8 @@ def selftest() -> int:
         globals()["confirmed_fingerprint"] = lambda sl: "FP_IMA"
         _cvv = "FP_MUKASHI" if cv_drift else "FP_IMA"
         globals()["_probe_state"] = (
-            lambda: ({"pw_10523": {"urls": known, "cv": _cvv}}
+            lambda: ({"pw_10523": {"urls": known, "cv": _cvv,
+                                   "rules": GROW_RULES_VERSION}}
                      if known else {}))
         globals()["find_sources"] = (
             lambda m: list(known if now is None else now))
@@ -2628,8 +2646,14 @@ def selftest() -> int:
       "（消してよいのは『育てるものがありません』の判断だけ）",
       growth_reasons(["育てるものがありません（確定した中身が増えていません）"],
                      _m_g, _old_lead) == []
-      and "growth_reasons(_nn, cur, old_detail)" in io.open(
-          os.path.abspath(__file__), encoding="utf-8").read())
+      # ★★探す文字列は割って書く★★（2026-09-06・Codexの指摘）
+      #   ★直す前★＝そのまま書いていたので**この試験の文自身**が
+      #   見つかり、本番の呼び出しを消しても緑のままだった。
+      #   しかも本番はもう4つ目の引数（新しい機種の行）を渡しているのに、
+      #   ★探していた文字列は3つ引数の古い形★で、どこにも無かった。
+      and (lambda a, b: (a + b) in io.open(
+          os.path.abspath(__file__), encoding="utf-8").read())(
+              "growth_reasons(_nn, cur, ", "old_detail, machine)"))
     # ── ★ひな型のずれを見つける関数そのものを試す★（2026-09-03・罠⑤）
     #   ★上の様子見の試験は、この関数を丸ごと差し替える★ので、
     #   中の判定を空にしても緑のままだった（壊し方の道具が見つけた）。
@@ -3053,7 +3077,8 @@ def selftest() -> int:
             def _skip_run(cv_now):
                 globals()["_probe_state"] = (
                     lambda: {"pw_10523": {"urls": ["https://x.test/a"],
-                                          "cv": cv_now}})
+                                          "cv": cv_now,
+                                          "rules": GROW_RULES_VERSION}})
                 return plan_one(
                     "pw_10523", probe=lambda u: {"skip": True, "rows": []},
                     gather=lambda *a, **k: {"urls": [], "problems": [],
@@ -3118,7 +3143,8 @@ def selftest() -> int:
             _bk_pss = globals()["_probe_state"]
             try:
                 globals()["_probe_state"] = (
-                    lambda: {"zzz_d": {"urls": [], "cv": "FP_A"}})
+                    lambda: {"zzz_d": {"urls": [], "cv": "FP_A",
+                                       "rules": GROW_RULES_VERSION}})
                 globals()["confirmed_fingerprint"] = lambda sl: ""
                 _d_unread = confirmed_drift("zzz_d")
                 globals()["confirmed_fingerprint"] = lambda sl: "FP_A"
@@ -3127,6 +3153,19 @@ def selftest() -> int:
                 _d_new = confirmed_drift("zzz_d")
                 globals()["_probe_state"] = lambda: {}
                 _d_none = confirmed_drift("zzz_d")
+                # ★★育て方の決まりが変わったら、必ず調べ直す★★
+                #   （2026-09-06・Codexの指摘）＝古い決まりで
+                #   「書かずに指紋だけ控えた」機種は、見送りの分岐で
+                #   早期に戻るので★判定書が古いまま永久に見送られる★。
+                #   人が控えを消して回るのではなく、機械が気づくようにする。
+                globals()["_probe_state"] = (
+                    lambda: {"zzz_d": {"urls": [], "cv": "FP_A",
+                                       "rules": "2000-01-01"}})
+                globals()["confirmed_fingerprint"] = lambda sl: "FP_A"
+                _d_oldrule = confirmed_drift("zzz_d")
+                globals()["_probe_state"] = (
+                    lambda: {"zzz_d": {"urls": [], "cv": "FP_A"}})
+                _d_norule = confirmed_drift("zzz_d")
             finally:
                 globals()["confirmed_fingerprint"] = _bk_cfp
                 globals()["_probe_state"] = _bk_pss
@@ -3137,6 +3176,11 @@ def selftest() -> int:
             t("　指紋が変われば『変わった』", _d_new is True)
             t("　控えが1件も無いときも『変わった』（初回は必ず働く）",
               _d_none is True)
+            t("★★育て方の決まりが変わったら『変わった』★★"
+              "（★これが無いと、古い決まりで控えた機種を"
+              "人が消して回るしかない★）", _d_oldrule is True)
+            t("　版の記録が無い古い控えも『変わった』（fail-closed）",
+              _d_norule is True)
             # ★★「答えがあるか」は別の問い★★（2026-09-06・Codexの指摘3）
             #   ★直す前★＝`confirmed_drift()` で「答えがあるか」を見ていた。
             #   控えがまだ一度も無い機種は**変わった扱い**になるので、

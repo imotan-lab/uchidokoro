@@ -1937,7 +1937,8 @@ MUTATIONS = [
                "（毎日やり直しになり、いつまでも終わらない）",
         "file": "scripts/grow_machine.py",
         "before": '        if _was.get("cv"):\n'
-                  '            got[slug]["cv"] = _was["cv"]',
+                  '            got[slug]["cv"] = _was["cv"]\n'
+                  '            got[slug]["rules"] = _was.get("rules") or ""',
         "after": "        pass",
         "run": ["scripts/grow_machine.py"],
     },
