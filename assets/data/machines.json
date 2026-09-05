@@ -1147,8 +1147,8 @@
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
-   "indexable": false,
-   "machine_profile": "UNKNOWN",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
    "ceiling_state": "PRESENT",
    "confirmed_topics": [
     "ceiling",
@@ -1161,9 +1161,7 @@
     "strategy",
     "reset"
    ],
-   "reason_codes": [
-    "MACHINE_PROFILE_UNKNOWN"
-   ],
+   "reason_codes": [],
    "claims": [
     "at:MAIN_AT",
     "ceiling:GAME:",
@@ -1173,8 +1171,8 @@
     "payout_range"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-04",
-   "input_digest": "sha256:3f4f5892224c6459782bc4577352c6167fe65c9f515005ad23e7edca6d768c85"
+   "decided_at": "2026-09-06",
+   "input_digest": "sha256:d16ef68bb3e9db289fd0c1e0aa2efec82d33353ebb592960f67672db14dd4e1e"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-08-17",
