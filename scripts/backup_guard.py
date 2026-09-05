@@ -859,6 +859,23 @@ def _sha_file(path: str) -> str:
     return h.hexdigest()
 
 
+def _is_link_dir(path: str) -> bool:
+    """★フォルダの「つなぎ」か★（シンボリックリンク／Windowsのジャンクション）。
+
+    ★`islink()` だけでは足りない★（2026-09-05・Codexの6回目）＝
+    Windowsのディレクトリ・ジャンクションは別物で `islink()` が偽になり、
+    しかも `os.walk` は**入ってしまう**のでシンボリックリンクと扱いが食い違う。
+    ★同じ判定がこのリポジトリに既にある★（build_pages_artifact.py）。
+    """
+    if os.path.islink(path):
+        return True
+    if os.name == "nt":
+        _ij = getattr(os.path, "isjunction", None)
+        if _ij is not None and _ij(path):
+            return True
+    return False
+
+
 def _walk(root: str, bad: list):
     """★入れなかったフォルダを黙って飛ばさない★（2026-08-22・Codexの指摘）
 
@@ -873,12 +890,21 @@ def _walk(root: str, bad: list):
     def _oops(e):
         bad.append(f"読めないフォルダがあります: {getattr(e, 'filename', '?')}")
 
+    # ★★入口そのものが「つなぎ」のときも記録する★★（2026-09-05）
+    #   ★直す前★＝走査先がリンク／ジャンクションでも黙って中を見ていた。
+    #   （中は見るが、★どこを見ているのか記録に残らない★のが危ない）
+    try:
+        if _is_link_dir(root):
+            bad.append(f"走査先そのものがフォルダのつなぎです: {root}")
+    except OSError:
+        bad.append(f"走査先を調べられません: {root}")
+
     def _gen():
         for dirpath, dirs, files in os.walk(root, onerror=_oops):
             for d in list(dirs):
                 full = os.path.join(dirpath, d)
                 try:
-                    if os.path.islink(full):
+                    if _is_link_dir(full):
                         bad.append(f"フォルダのつなぎは中を見ていません: {full}")
                         dirs.remove(d)
                 except OSError:
@@ -1423,6 +1449,64 @@ def _baseline_tests(t) -> None:
           and cmd_scan(root) == 1)
         os.remove(p22)
         cmd_accept(root)
+
+        # ㉔★Windowsのジャンクションも「つなぎ」として扱う★（2026-09-05）
+        #   ★`islink()` だけでは足りない★＝ジャンクションは偽になり、
+        #   しかも `os.walk` は**入ってしまう**ので扱いが食い違っていた。
+        _sub2 = os.path.join(root, "junc")
+        os.makedirs(_sub2, exist_ok=True)
+        _real_isj = getattr(os.path, "isjunction", None)
+        _real_nt = os.name
+
+        def _fake_isj(p, _t=_sub2):
+            return os.path.abspath(p) == os.path.abspath(_t)
+
+        os.path.isjunction = _fake_isj
+        try:
+            os.name = "nt"
+            t("★★ジャンクションも「つなぎ」として止める★★"
+              "（islink では偽になるが os.walk は入ってしまう）",
+              _is_link_dir(_sub2) and cmd_scan(root) == 1)
+        finally:
+            os.name = _real_nt
+            if _real_isj is None:
+                del os.path.isjunction
+            else:
+                os.path.isjunction = _real_isj
+        os.rmdir(_sub2)
+        cmd_accept(root)
+
+        # ㉕★入口そのものが「つなぎ」でも記録する★
+        _real_islink2 = os.path.islink
+
+        def _fake_islink2(p, _r=_real_islink2, _t=root):
+            return os.path.abspath(p) == os.path.abspath(_t) or _r(p)
+
+        os.path.islink = _fake_islink2
+        try:
+            t("★★走査先そのものがつなぎでも、記録して止める★★"
+              "（中は見るが、どこを見ているのか残らないのが危ない）",
+              cmd_scan(root) == 1)
+        finally:
+            os.path.islink = _real_islink2
+        t("　つなぎが無ければ、いつもどおり緑", cmd_scan(root) == 0)
+
+        # ㉖★実物のジャンクションでも試す（Windowsのみ）★
+        #   ★差し替えだけで済ませない★＝本物で一度も動かない試験にしないため。
+        if os.name == "nt":
+            import subprocess as _sp
+            _tgt = os.path.join(d, "junc_target")
+            os.makedirs(_tgt, exist_ok=True)
+            _jl = os.path.join(root, "realjunc")
+            _r = _sp.run(["cmd", "/c", "mklink", "/J", _jl, _tgt],
+                         capture_output=True)
+            if _r.returncode == 0:
+                t("★★実物のジャンクションでも止める★★", cmd_scan(root) == 1)
+                _sp.run(["cmd", "/c", "rmdir", _jl], capture_output=True)
+                cmd_accept(root)
+            else:
+                t("　★実物のジャンクションを作れなかった★"
+                  "（権限。差し替えの試験だけになった）", False)
 
         # ④★読めないフォルダがあったら緑にしない★
         _orig_walk = globals()["_walk"]

@@ -1740,6 +1740,25 @@ MUTATIONS = [
         "run": ["scripts/backup_guard.py"],
     },
     {
+        "why": "★Windowsのジャンクションを「つなぎ」と見なさない★"
+               "（islink では偽になるが os.walk は入ってしまう）",
+        "file": "scripts/backup_guard.py",
+        "before": ('        _ij = getattr(os.path, "isjunction", None)\n'
+                   "        if _ij is not None and _ij(path):\n"
+                   "            return True"),
+        "after": "        pass",
+        "run": ["scripts/backup_guard.py"],
+    },
+    {
+        "why": "★走査先そのものがつなぎでも記録しない★"
+               "（どこを見ているのか残らない）",
+        "file": "scripts/backup_guard.py",
+        "before": ('            bad.append('
+                   'f"走査先そのものがフォルダのつなぎです: {root}")'),
+        "after": "            pass",
+        "run": ["scripts/backup_guard.py"],
+    },
+    {
         "why": "保存名の案内を出さない（台帳#464の再発）",
         "file": "scripts/backup_guard.py",
         "before": '        findings.append("allowlist:リスト外" + hint)',
