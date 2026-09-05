@@ -1034,24 +1034,51 @@ def _stuck_clear(slug: str) -> None:
         _stuck_save(got)
 
 
-def pending_questions(cur: dict, mat: dict, slug: str = "") -> list:
-    """★まだ検索に載っていない機種について、機械が決められないことを聞く★
+# ★足りない理由を、読者に分かる言葉へ★（★機械が決めた符丁のまま渡さない★）
+_LACK_WORDS = {
+    "MACHINE_PROFILE_UNKNOWN": "機種の型（AT機かボーナス機か）",
+    "CEILING_STATE_UNKNOWN": "天井があるかどうか",
+    "CLAIMS_LT_3": "確認できた事実が3件に足りない",
+    "CATEGORIES_LT_2": "確認できた話題が2種類に足りない",
+    "NO_UNIQUE_GAMEPLAY": "その機種ならではのゲーム性（AT・CZ）",
+}
 
-    ★なぜ要るか★（2026-09-05）＝型を聞く質問は `add_machine_run`
-    （新台を**作る**とき）からしか出ていなかった。
-    育成レーンは一度も呼んでいないので、
-    ★型が UNKNOWN のまま作られた機種は二度と聞かれず★、
-    永久に検索へ載らなかった（実測＝14機種のうち7機種がこれ）。
 
-    ★決めるのは2AI／ここは聞くだけ★。
+def pending_questions(cur: dict, mat: dict = None, slug: str = "",
+                      urls=None) -> list:
+    """★まだ検索に載っていない機種は、2AIが原文を読んで埋める★
+
+    ★運営者の指示（2026-09-05）★＝
+    「機械的なのやめれば？ 2AIが天井の情報を取りに行けばいいじゃん」
+
+    ★なぜ要るか★＝機械（抽出器）が「天井の記述はあるが採れませんでした」で
+    止まると、そのまま「材料が増えていません」で終わり★誰にも回らなかった★。
+    実測＝新台14機種のうち0件しか検索に載っておらず、
+    12機種で天井=0件、7機種は型が UNKNOWN のままだった。
+
+    ★決めるのは2AI／ここは「どこを読めばよいか」を渡すだけ★。
     ★もう載っている機種には聞かない★（答える意味がないので）。
     """
     pd = (cur or {}).get("page_decision") or {}
     if pd.get("indexable"):
         return []
     out = []
-    for q in _ba.checker_questions(mat or {}):
-        out.append({"text": str(q), "kind": "grow_pending", "slug": slug})
+    if mat is not None:
+        for q in _ba.checker_questions(mat):
+            out.append({"text": str(q), "kind": "grow_pending", "slug": slug})
+    # ★★足りないものを名指しして、出典を読んでもらう★★
+    lack = [_LACK_WORDS.get(r, r) for r in (pd.get("reason_codes") or [])]
+    if lack:
+        _u = [str(u) for u in (urls or []) if u]
+        out.append({
+            "kind": "grow_read_sources", "slug": slug, "urls": _u,
+            "text": ("★この機種はまだ検索に載っていません★ " + str(slug)
+                     + "／足りないもの: " + " ／ ".join(lack)
+                     + "／★機械では取り出せなかったので、出典の原文を"
+                       "自分で読んで決めてください★"
+                     + ("／読む先: " + " ".join(_u[:4]) if _u else "")
+                     + "／決めたら confirmed_values.py --record で記録"
+                       "（逐語引用が要ります）")})
     return out
 
 
@@ -1228,6 +1255,13 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
                         "出典の顔ぶれも中身も前回から変わっていません"
                         "（今日は見送ります）")
                     out["unchanged"] = True
+                    # ★★見送る日でも、載っていないなら聞く★★（2026-09-05）
+                    #   ★直す前★＝ここで戻っていたので、質問に到達しなかった
+                    #   （実測：パリピ孔明は材料が足りているのに永久に沈黙）。
+                    #   ★出典が変わっていなくても、機械が読めていないだけで
+                    #   原文には書いてある★のだから、2AIが読めば決まる。
+                    out["questions"] += pending_questions(
+                        cur, None, slug, urls=_known)
                     return out
             elif _now and _now != _known:
                 # ★これは「調べる理由」であって「できない理由」ではない★
@@ -1327,7 +1361,8 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     #   （2026-09-05）★ここに置く理由★＝後段（記事の組み立て・
     #   消失の判定）がどう転んでも、載っていない機種には聞くべきだから。
     #   材料が増えなかった回ほど、この質問が要る。
-    out["questions"] += pending_questions(cur, mat, slug)
+    out["questions"] += pending_questions(cur, mat, slug,
+                                          urls=got.get("urls"))
     # ★2AIで確定した値も材料に足す★（2026-08-11・台帳#316）
     #   足す場所が add_machine_run の中の1か所にしか無かったので、
     #   **確定値を載せた機種はここで「前に載っていた内容が再現できない」**
@@ -2721,6 +2756,48 @@ def selftest() -> int:
                                 {"adopted": {}}, "zzz_q") == [])
             t("　判定書がまだ無い機種にも聞く（載っていないので）",
               len(pending_questions({}, {"adopted": {}}, "zzz_q")) >= 1)
+
+            # ★★足りないものを名指しして、出典を読んでもらう★★
+            #   （2026-09-05・運営者の指示「2AIが天井の情報を取りに行けばいい」）
+            _q_lack = pending_questions(
+                {"page_decision": {"indexable": False,
+                                   "reason_codes": ["CLAIMS_LT_3",
+                                                    "NO_UNIQUE_GAMEPLAY"]}},
+                None, "zzz_l", urls=["https://x.test/a"])
+            _t_lack = " ".join(x["text"] for x in _q_lack)
+            t("★★足りないものを、読める言葉で名指しする★★"
+              "（機械の符丁のまま渡さない）",
+              "確認できた事実が3件に足りない" in _t_lack
+              and "ゲーム性" in _t_lack)
+            t("　★読む先（出典URL）も渡す★（2AIが取りに行けるように）",
+              "https://x.test/a" in _t_lack
+              and any(x.get("urls") for x in _q_lack))
+            t("　記録の仕方も伝える（逐語引用が要ること）",
+              "confirmed_values" in _t_lack)
+
+            # ★★見送る日でも、載っていないなら聞く★★（2026-09-05）
+            #   ★直す前は、見送りの分岐が質問より手前で戻っていた★
+            #   （実測：パリピ孔明は材料が足りているのに永久に沈黙）。
+            _bk_ps2 = globals()["_probe_state"]
+            _bk_fs2 = globals()["find_sources"]
+            globals()["_probe_state"] = (
+                lambda: {"pw_10523": {"urls": ["https://x.test/a"]}})
+            globals()["find_sources"] = lambda m: ["https://x.test/a"]
+            try:
+                _got_skip = plan_one(
+                    "pw_10523", probe=lambda u: {"skip": True, "rows": []},
+                    gather=lambda *a, **k: {"urls": [], "problems": [],
+                                            "material": None},
+                    verify=lambda *a, **k: {"problems": [],
+                                            "release": "2026-09-07"})
+            finally:
+                globals()["_probe_state"] = _bk_ps2
+                globals()["find_sources"] = _bk_fs2
+            t("★★見送る日でも、まだ載っていないなら2AIに聞く★★"
+              "（ここで黙ると永久に載らない）",
+              _got_skip.get("unchanged") is True
+              and any(x.get("kind") == "grow_read_sources"
+                      for x in (_got_skip.get("questions") or [])))
 
             # ★★本番の入口（plan_one）でも、質問が出ることを確かめる★★
             #   （2026-09-05。★関数だけ試験しても「呼ばれているか」は

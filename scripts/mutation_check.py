@@ -1780,7 +1780,8 @@ MUTATIONS = [
                "（型が UNKNOWN のまま作られた機種が二度と聞かれず、"
                "永久に検索へ載らなかった＝実測14機種のうち7機種）",
         "file": "scripts/grow_machine.py",
-        "before": '    out["questions"] += pending_questions(cur, mat, slug)',
+        "before": ('    out["questions"] += pending_questions(cur, mat, slug,\n'
+                   '                                          urls=got.get("urls"))'),
         "after": "    pass",
         "run": ["scripts/grow_machine.py"],
     },
@@ -1790,6 +1791,25 @@ MUTATIONS = [
         "file": "scripts/grow_machine.py",
         "before": '    if pd.get("indexable"):\n        return []',
         "after": "    if False:\n        return []",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★見送る日に、まだ載っていない機種へ聞かない★"
+               "（見送りの分岐が質問より手前で戻り、永久に沈黙していた）",
+        "file": "scripts/grow_machine.py",
+        "before": ("                    out[\"questions\"] += "
+                   "pending_questions(\n"
+                   "                        cur, None, slug, urls=_known)"),
+        "after": "                    pass",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★足りないものを名指ししない★"
+               "（2AIが何を読めばよいか分からなくなる）",
+        "file": "scripts/grow_machine.py",
+        "before": ('    lack = [_LACK_WORDS.get(r, r) '
+                   'for r in (pd.get("reason_codes") or [])]'),
+        "after": "    lack = []",
         "run": ["scripts/grow_machine.py"],
     },
     {
