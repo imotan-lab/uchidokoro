@@ -1903,6 +1903,18 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★書けたあとに指紋を控える呼び出しを消す★"
+               "（毎日同じ機種をぜんぶやり直す）",
+        "file": "scripts/grow_machine.py",
+        "before": ("        _absorbed()\n"
+                   "        # ★★指紋は probe_rows の有無に関係なく控える★★"
+                   "（Codexの指摘4）\n"
+                   "        remember_after_write(a.slug, "
+                   'got.get("cv_used") or "")'),
+        "after": "        _absorbed()",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
         "why": "★出典を控え直すと、前の指紋が消える★"
                "（毎日やり直しになり、いつまでも終わらない）",
         "file": "scripts/grow_machine.py",
@@ -1916,19 +1928,16 @@ MUTATIONS = [
                "（答えを反映しても『まだ変わっている』ままで、"
                "毎日同じ機種をやり直す）",
         "file": "scripts/grow_machine.py",
-        "before": "    ok = _pp.confirm(rows)\n    if ok:\n"
-                  "        remember_confirmed(slug)",
-        "after": "    ok = _pp.confirm(rows)\n    if False:\n"
-                 "        remember_confirmed(slug)",
+        "before": "    return remember_confirmed(slug, cv_used)",
+        "after": "    return False",
         "run": ["scripts/grow_machine.py"],
     },
     {
         "why": "★指紋が分からないときでも控える★"
                "（決まった印を『反映済み』として記録し、答えを取りこぼす）",
         "file": "scripts/grow_machine.py",
-        "before": "    fp = confirmed_fingerprint(slug)\n    if not fp:",
-        "after": "    fp = confirmed_fingerprint(slug) or \"zzz\"\n"
-                 "    if not fp:",
+        "before": '    fp = str(fp or "")\n    if not fp:',
+        "after": '    fp = str(fp or "zzz")\n    if not fp:',
         "run": ["scripts/grow_machine.py"],
     },
     {

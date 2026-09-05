@@ -299,14 +299,21 @@ def remember_sources(slug: str, urls: list) -> bool:
         return False
 
 
-def remember_confirmed(slug: str) -> bool:
+def remember_confirmed(slug: str, fp: str = "") -> bool:
     """★2AIの確定値を「記事に反映できた」と控える★（2026-09-06）
 
     ★呼んでよいのは、実際に書けた／読み比べて足すものが無いと
-      分かったときだけ★（`_absorbed()` と同じ場所）。
+      分かったときだけ★。
     ★下見や失敗のあとに呼ぶと、記事が古いまま「反映済み」になる★。
+
+    ★★`fp` は「記事に使った指紋」を渡す★★（2026-09-06・Codexの指摘2）
+      ★直す前はここで最新を取り直していた★ので、
+      書き込み検査のあとに確定値が更新されると
+      ★記事には古い値・控えには新しい指紋★になり、
+      その分が二度と反映されなかった。
+      ★渡されなければ控えない★（取り直さない＝fail-closed）。
     """
-    fp = confirmed_fingerprint(slug)
+    fp = str(fp or "")
     if not fp:
         # ★分からないときは控えない★＝次回も「変わった」として働く
         return False
@@ -332,19 +339,25 @@ def remember_confirmed(slug: str) -> bool:
 
 
 def confirm_and_remember(rows: list, slug: str) -> bool:
-    """★読み比べが成立したら、確定値も「反映済み」にする★（2026-09-06）
+    """★読み比べたページの基準を進める★（2026-09-06）
 
-    ★なぜ関数にするか★＝`main()` の中の入れ子だと外から試せず、
-    ★「呼ばれているか」を誰も確かめられない★（罠③＝実際に
-    壊し方の検査が「守られていません」と教えてくれた）。
-
-    ★ここが唯一、指紋を控えてよい場所★＝
-    実際に書けた／読み比べて足すものが無いと分かった時にだけ通る。
+    ★★確定値の指紋とは分けた★★（2026-09-06・Codexの指摘4）＝
+    以前はここで指紋も控えていたが、この関数は `probe_rows` が要る。
+    ★軽い様子見をしていない日は、記事を正しく書いても控えられず★、
+    次回もう一度ぜんぶやり直していた（説明と実装が食い違っていた）。
+    指紋は `remember_after_write()` が担当する。
     """
-    ok = _pp.confirm(rows)
-    if ok:
-        remember_confirmed(slug)
-    return ok
+    return _pp.confirm(rows)
+
+
+def remember_after_write(slug: str, cv_used: str) -> bool:
+    """★書けたときに、確定値の指紋を控える★（2026-09-06）
+
+    ★`probe_rows` の有無に関係なく控える★＝
+    「実際に書けた」「読み比べて足すものが無い」と分かった時に呼ぶ。
+    ★渡す指紋は、記事を組み立てるときに実際に読んだもの★（競合よけ）。
+    """
+    return remember_confirmed(slug, cv_used)
 
 
 def last_checked() -> dict:
@@ -638,6 +651,21 @@ def confirmed_fingerprint(slug: str) -> str:
     except Exception:                     # noqa: BLE001
         return ""                         # ★書き出せないなら「分からない」★
     return _hl.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def has_confirmed(slug: str) -> bool:
+    """★その機種に2AIの確定値が1件でもあるか★（2026-09-06・Codexの指摘3）
+
+    ★`confirmed_drift()` と混ぜない★＝あちらは「前に書いたときから
+    変わったか」。控えがまだ一度も無い機種は**変わった扱い**になるので、
+    ★答えが1件も無い機種にも「答えが反映できていません」と出ていた★。
+    ★読めないときは False★＝無い方に倒す（余計な警告を出さない）。
+    """
+    try:
+        got = _cv.for_slug(slug)
+    except Exception:                     # noqa: BLE001
+        return False
+    return bool(isinstance(got, dict) and got)
 
 
 def confirmed_drift(slug: str) -> bool:
@@ -1335,7 +1363,7 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
            # ★お知らせは「問題」に入れない★（2026-08-14・依頼190のP1）
            #   「出典の顔ぶれが変わりました／いつもどおり調べます」を
            #   problems に入れていたため、**その文自身が更新を止めていた**。
-           "notes": [], "nothing_new_only": False,
+           "notes": [], "nothing_new_only": False, "cv_used": "",
            # ★2AIへ聞くこと★（2026-08-26）＝材料集めが出した質問を
            #   ここまで持ってくる。★読まないと誰も答えられない★
            "questions": [],
@@ -1503,26 +1531,30 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
         return out
     mat = got.get("material")
     if not mat:
-        out["problems"].append("材料を集められません: "
-                               + " / ".join(got.get("problems") or [])[:200])
-        # ★★材料が集まらない日でも、決まっていないことは聞く★★
-        #   （2026-09-05・Codexの指摘3）★ここで戻ると、
-        #   出典が1つしか無い機種などは**永久に沈黙する**。
-        out["questions"] += pending_questions(cur, None, slug,
-                                              urls=got.get("urls"))
-        # ★★答えが止まっていることを、黙って見過ごさない★★
-        #   （2026-09-06・Codexの指摘2）＝ここは確定値を読む処理より
-        #   手前なので、2AIが答えて記録しても反映できない。
-        #   ★答えは失われない★（指紋を控えるのは書けたときだけなので、
-        #   毎日やり直される）が、★静かに失敗し続けるのは別問題★。
-        #   ★材料が作れないと記事の骨組みが作れない★ので、
-        #   ここで足せるのは「見えるようにすること」まで。
-        if confirmed_drift(slug):
-            out["problems"].append(
-                "★2AIの答えが記事に反映できていません★"
-                "（材料を集められないため）。"
-                "出典が増えるまで、この機種は記事を作れません")
-        return out
+        # ★★材料が集まらなくても、2AIの確定値だけで進む★★
+        #   （2026-09-06・Codexの指摘1。★私は「直せない」と判断したが
+        #     間違いだった★＝`merge_into({})` は空の辞書を受け取り
+        #     `setdefault()` で箱を作る（実測＝prskkm で3項目・
+        #     at_specs / czs の箱ができた）。記事の骨組み
+        #     （機種名・メーカー・公式URL・導入日）は `mat` ではなく
+        #     既存行と本人性確認から渡している）。
+        #   ★安全網はそのまま★＝あとの `claims_grew()` / `text_kept()` が
+        #   「前に載っていた内容を再現できない」なら止める。
+        if not has_confirmed(slug):
+            out["problems"].append("材料を集められません: "
+                                   + " / ".join(got.get("problems")
+                                                or [])[:200])
+            # ★★材料が集まらない日でも、決まっていないことは聞く★★
+            #   （2026-09-05・Codexの指摘3）★ここで戻ると、
+            #   出典が1つしか無い機種などは**永久に沈黙する**。
+            out["questions"] += pending_questions(cur, None, slug,
+                                                  urls=got.get("urls"))
+            return out
+        out["notes"].append(
+            "材料を集められませんでしたが、2AIの確定値だけで進みます"
+            "（" + " / ".join(got.get("problems") or [])[:160] + "）")
+        mat = {}
+        got["material"] = mat
     # ★ここまで来たら「実際に見に行けた」★（依頼181のP1）
     #   本人性の確認や材料集めに失敗した機種を「確認済み」にしない。
     out["checked"] = True
@@ -1538,6 +1570,11 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     #   と判定され、育てる処理が毎日止まっていた（パリピ孔明・ガレイゼロ）。
     #   ＝「読む側を1か所しか繋いでいなかった」型の穴。
     #   ★読めないことを黙って「無い」にしない★（例外は理由として残す）
+    # ★★記事に使う指紋は、この時点のものを持ち回る★★
+    #   （2026-09-06・Codexの指摘2）＝あとで取り直すと、
+    #   書き込み検査のあとに確定値が更新されたとき
+    #   ★記事には古い値・控えには新しい指紋★になり、その分が消える。
+    out["cv_used"] = confirmed_fingerprint(slug)
     try:
         _added = _cv.merge_into(mat, slug)
         if _added:
@@ -3059,6 +3096,30 @@ def selftest() -> int:
             t("　指紋が変われば『変わった』", _d_new is True)
             t("　控えが1件も無いときも『変わった』（初回は必ず働く）",
               _d_none is True)
+            # ★★「答えがあるか」は別の問い★★（2026-09-06・Codexの指摘3）
+            #   ★直す前★＝`confirmed_drift()` で「答えがあるか」を見ていた。
+            #   控えがまだ一度も無い機種は**変わった扱い**になるので、
+            #   ★答えが1件も無い機種にも「答えが反映できていません」★
+            #   と出ていた。
+            _bk_fsx = globals()["_cv"].for_slug
+            try:
+                globals()["_cv"].for_slug = lambda sl: {}
+                _h_none = has_confirmed("zzz_h")
+                globals()["_cv"].for_slug = lambda sl: {"machine_profile": {}}
+                _h_some = has_confirmed("zzz_h")
+
+                def _boom_h(sl):
+                    raise RuntimeError("読めません")
+
+                globals()["_cv"].for_slug = _boom_h
+                _h_bad = has_confirmed("zzz_h")
+            finally:
+                globals()["_cv"].for_slug = _bk_fsx
+            t("★★答えが1件も無ければ『無い』と答える★★"
+              "（★変わったか、とは別の問い★）", _h_none is False)
+            t("　1件でもあれば『ある』", _h_some is True)
+            t("　読めないときは『無い』に倒す（余計な警告を出さない）",
+              _h_bad is False)
 
             # ★★控えに指紋が実際に書かれるか★★（2026-09-05）
             #   ★直す前は誰も控えの中身を見ていなかった★＝
@@ -3079,16 +3140,16 @@ def selftest() -> int:
                 # ①下見（出典だけ控える）
                 _ok_rs = remember_sources("zzz_rs", ["https://x.test/a"])
                 _s1 = _read_rs()
-                # ②書けたときだけ指紋を控える
-                _ok_cf = remember_confirmed("zzz_rs")
+                # ②書けたときだけ指紋を控える（★指紋は渡す★）
+                _ok_cf = remember_after_write("zzz_rs", "FP_KIROKU")
                 _s2 = _read_rs()
                 # ③そのあと出典を控え直しても、指紋は消えない
                 remember_sources("zzz_rs", ["https://x.test/a",
                                             "https://x.test/b"])
                 _s3 = _read_rs()
-                # ④指紋が分からないときは控えない
-                globals()["confirmed_fingerprint"] = lambda sl: ""
-                _ok_ng = remember_confirmed("zzz_rs2")
+                # ④指紋を渡されなければ控えない（★取り直さない★）
+                globals()["confirmed_fingerprint"] = lambda sl: "FP_ATARASHII"
+                _ok_ng = remember_after_write("zzz_rs2", "")
                 _s4 = _read_rs()
             finally:
                 globals()["PROBE_STATE"] = _bk_probe_path
@@ -3111,8 +3172,13 @@ def selftest() -> int:
               "（消すと毎日やり直しになる）",
               (_s3.get("zzz_rs") or {}).get("cv") == "FP_KIROKU"
               and len((_s3.get("zzz_rs") or {}).get("urls") or []) == 2)
-            t("★★指紋が分からないときは控えない★★"
-              "（次回も『変わった』として働く）",
+            # ★★渡されなければ控えない（取り直さない）★★
+            #   （2026-09-06・Codexの指摘2）＝呼ばれた時点の最新を
+            #   取り直すと、書き込み検査のあとに確定値が更新されたとき
+            #   ★記事には古い値・控えには新しい指紋★になり、
+            #   その分が二度と反映されない。
+            t("★★指紋を渡されなければ控えない★★"
+              "（★その場で取り直さない★＝競合で答えを飛ばさない）",
               _ok_ng is False and "zzz_rs2" not in _s4)
 
             # ★★「読み比べ成立 → 指紋を控える」が繋がっているか★★
@@ -3121,26 +3187,27 @@ def selftest() -> int:
             #     壊し方の検査が「守られていません」と教えてくれた）
             _seen_cr = []
             _bk_rc = globals()["remember_confirmed"]
-            _bk_pp = _pp.confirm
             try:
                 globals()["remember_confirmed"] = (
-                    lambda sl: _seen_cr.append(sl) or True)
-                _pp.confirm = lambda rows: True
-                _r_ok = confirm_and_remember([{"url": "https://x.test/a"}],
-                                             "zzz_cr")
-                _pp.confirm = lambda rows: False
-                _r_ng = confirm_and_remember([{"url": "https://x.test/a"}],
-                                             "zzz_cr_ng")
+                    lambda sl, fp="": _seen_cr.append((sl, fp)) or True)
+                _r_w = remember_after_write("zzz_cr", "FP_TSUKATTA")
             finally:
                 globals()["remember_confirmed"] = _bk_rc
-                _pp.confirm = _bk_pp
-            t("★★読み比べが成立したら、指紋を控える★★"
-              "（ここが繋がっていないと、答えを反映しても"
-              "毎日同じ機種をやり直す）",
-              _r_ok is True and _seen_cr == ["zzz_cr"])
-            t("★★成立しなかったら控えない★★"
-              "（★止めているのは『成立したか』であって、他の検査ではない★）",
-              _r_ng is False and _seen_cr == ["zzz_cr"])
+            # ★★書けたときの控えは `probe_rows` に依らない★★
+            #   （2026-09-06・Codexの指摘4）＝以前は読み比べの成立を
+            #   条件にしていたので、★軽い様子見をしていない日は
+            #   正しく書いても控えられず、次回ぜんぶやり直していた★。
+            t("★★書けたら、記事に使った指紋をそのまま控える★★"
+              "（★取り直さない★＝競合で答えを飛ばさない）",
+              _r_w is True and _seen_cr == [("zzz_cr", "FP_TSUKATTA")])
+            # ★★呼び出しが実在するか★★（関数の中身だけ試しても、
+            #   呼び出しを消されたら気づかない＝罠③）
+            #   ★文字列は割って書く★＝そのまま書くとこの試験の文自身が
+            #   数に入って、呼び出しを消しても緑のままになる。
+            _g1, _g2 = "remember_after_", 'write(a.slug, got.get("cv_used")'
+            t("★★書けたあとに、指紋を控える呼び出しが2か所ある★★"
+              "（『足すものが無かった』日と『書けた』日）",
+              _gsrc.count(_g1 + _g2) == 2)
 
             # ★★材料が無い日でも、判定書の欄から聞ける★★（2026-09-05）
             #   ★ここが、この守りの効く唯一の場所★＝材料があるときは
@@ -3189,6 +3256,52 @@ def selftest() -> int:
               "（関数を作っただけで繋がっていない、を防ぐ）",
               any(str(q.get("text", "")).find("型") >= 0
                   for q in (_got_q.get("questions") or [])))
+
+            # ★★材料が無くても、2AIの確定値だけで進む★★
+            #   （2026-09-06・Codexの指摘1。★私は「直せない」と判断したが
+            #     間違いだった★＝`merge_into({})` は空の辞書に箱を作る。
+            #     記事の骨組みは `mat` ではなく既存行から来ている）
+            _bk_ps4 = globals()["_probe_state"]
+            _bk_fs4 = globals()["find_sources"]
+            _bk_hc4 = globals()["has_confirmed"]
+            globals()["_probe_state"] = lambda: {}
+            globals()["find_sources"] = lambda m: []
+
+            def _nomat_run(has):
+                globals()["has_confirmed"] = lambda sl: has
+                return plan_one(
+                    "pw_10523",
+                    probe=lambda u: {"skip": True, "rows": []},
+                    gather=lambda *a, **k: {"urls": [], "material": None,
+                                            "problems": ["名鑑が1件だけです"]},
+                    verify=lambda *a, **k: {"problems": [],
+                                            "release": "2026-09-07",
+                                            "identity_name": "テスト機"})
+
+            try:
+                _nm_yes = _nomat_run(True)
+                _nm_no = _nomat_run(False)
+            finally:
+                globals()["_probe_state"] = _bk_ps4
+                globals()["find_sources"] = _bk_fs4
+                globals()["has_confirmed"] = _bk_hc4
+            t("★★材料が無くても、答えがあるなら先へ進む★★"
+              "（★ここで止めると、答えが永久に反映されない★）",
+              not any("材料を集められません" in p
+                      for p in (_nm_yes.get("problems") or []))
+              and any("確定値だけで進みます" in n
+                      for n in (_nm_yes.get("notes") or [])))
+            t("　（対照）答えが1件も無ければ、今までどおり止まる"
+              "＝止めているのは『答えの有無』であって、他の検査ではない",
+              any("材料を集められません" in p
+                  for p in (_nm_no.get("problems") or [])))
+            t("★★答えが無い機種に「答えが反映できていません」と言わない★★"
+              "（2026-09-06・Codexの指摘3）",
+              not any("答えが記事に反映できていません" in p
+                      for p in (_nm_no.get("problems") or [])))
+            t("　答えが無い日でも、決まっていないことは聞く",
+              any(x.get("kind") == "grow_read_sources"
+                  for x in (_nm_no.get("questions") or [])))
 
             # ★本番と同じ入口（grow_result）を通す★
             # ★日をまたいで数える★（同じ日に何度動いても1回）
@@ -3429,6 +3542,11 @@ def _main() -> int:
             #     now が None のままなので**一度も成立しなかった**）
             mark_checked(a.slug, _dt.date.today())
             _absorbed()
+            # ★★指紋は probe_rows の有無に関係なく控える★★
+            #   （2026-09-06・Codexの指摘4）＝軽い様子見をしていない日は
+            #   `_absorbed()` が False で、正しく終わっても控えられず
+            #   次回もう一度ぜんぶやり直していた。
+            remember_after_write(a.slug, got.get("cv_used") or "")
         print("できません:")
         for p in got["problems"]:
             print("  -", p)
@@ -3443,6 +3561,8 @@ def _main() -> int:
     if not r["problems"]:
         mark_checked(a.slug, _dt.date.today())
         _absorbed()
+        # ★★指紋は probe_rows の有無に関係なく控える★★（Codexの指摘4）
+        remember_after_write(a.slug, got.get("cv_used") or "")
     for p in r["problems"]:
         print("  -", p)
     if r["wrote"]:
