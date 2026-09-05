@@ -925,6 +925,54 @@ def _claude_md_problems(size: int, text: str) -> list[str]:
     return ngs
 
 
+def _check_23_wiring() -> list[str]:
+    """★見張り23が本当に繋がっているかを見る★（2026-09-05・Codexの指摘）
+
+    ★なぜ要るか★＝項目23が `CHECKS` から外れると、
+    判定の本体と対照実験が**一緒に黙る**（外したことに誰も気づかない）。
+    """
+    bad = []
+    if "23_CLAUDE_md肥大検知" not in [n for n, _f in CHECKS]:
+        bad.append("CHECKS に登録されていません")
+        return bad
+    # ★★入口から呼んでも対照実験が動くか（★在る道・無い道の両方★）★★
+    #   ★なぜ両方要るか★＝BASE をそのまま使うと、その機械が
+    #   たまたま通る道しか試さない（この会社PC＝CLAUDE.md が在る／
+    #   CI＝gitignore なので無い）。片方の呼び出し行を消しても、
+    #   消した側の環境でしか赤くならない。
+    #   ★本番の CLAUDE.md は読まない★＝一時の置き場へ向ける。
+    import pathlib as _pl23
+    import tempfile as _tf23
+    _fn = dict(CHECKS)["23_CLAUDE_md肥大検知"]
+    _bk_st = globals()["_check_23_selftest"]
+    _bk_base = globals()["BASE"]
+    _tmp23 = _tf23.mkdtemp(prefix="audit23_")
+    globals()["_check_23_selftest"] = lambda: ["zzz_haisen_kakunin"]
+    try:
+        for _label, _make in (("CLAUDE.mdが無いとき", False),
+                              ("CLAUDE.mdが在るとき", True)):
+            _d = _pl23.Path(_tmp23) / ("有" if _make else "無")
+            _d.mkdir(exist_ok=True)
+            if _make:
+                (_d / "CLAUDE.md").write_text(
+                    "…CLAUDE_history.md…", encoding="utf-8")
+            globals()["BASE"] = _d
+            try:
+                _got = _fn([])
+            except Exception as e:        # noqa: BLE001
+                _got = [f"例外: {type(e).__name__}: {e}"]
+            if "zzz_haisen_kakunin" not in _got:
+                bad.append(f"{_label}、入口から呼んでも対照実験が動きません"
+                           "（check_23_claude_md_size の呼び出しが"
+                           "消えています）")
+    finally:
+        globals()["_check_23_selftest"] = _bk_st
+        globals()["BASE"] = _bk_base
+        import shutil as _sh23
+        _sh23.rmtree(_tmp23, ignore_errors=True)
+    return bad
+
+
 def _check_23_selftest() -> list[str]:
     """★この見張り自身が働いているかを、毎回いっしょに確かめる★
 
@@ -4223,6 +4271,18 @@ def selftest() -> int:
     for x in _w37:
         t("★見張り37の配線★ " + x, False)
     t("★★見張り37が、live とスキルの両方に本当に繋がっている★★", not _w37)
+    # ★★項目23は INFO_ONLY なので、監査の終了コードでは守れない★★
+    #   （2026-09-05・Codexの指摘＝自分で再現した。判定を完全に殺しても
+    #     監査も --selftest も終了コード0のままだった＝罠㉞）。
+    #   ★検出結果は INFO_ONLY のまま／対照実験と配線だけをここで赤くする★
+    _w23 = _check_23_wiring()
+    for x in _w23:
+        t("★見張り23の配線★ " + x, False)
+    t("★★見張り23（CLAUDE.mdの肥大）が本当に繋がっている★★", not _w23)
+    _s23 = _check_23_selftest()
+    for x in _s23:
+        t("★見張り23★ " + x, False)
+    t("★★見張り23の対照実験が働いている★★", not _s23)
     _w56 = _check_56_wiring()
     for x in _w56:
         t("★見張り56の配線★ " + x, False)

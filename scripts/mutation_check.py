@@ -281,6 +281,47 @@ MUTATIONS = [
         "after": "    return 1",
         "run": ["scripts/audit_site.py"],
     },
+    # ─── 2026-09-05・項目23（CLAUDE.mdの肥大）の守り ────────────
+    {
+        "why": "★大きさを一切見なくする"
+               "（閾値を250KBへ上げた意味が無くなり、"
+               "どこまで膨らんでも黙る）★",
+        "file": "scripts/audit_site.py",
+        "before": "    if size > CLAUDE_MD_LIMIT:",
+        "after": "    if False:",
+        "run": ["scripts/audit_site.py"],
+    },
+    {
+        "why": "★CLAUDE.mdが在るときに、対照実験を呼ばない"
+               "（守りが死んでも誰も気づかない＝罠㉞）★",
+        "file": "scripts/audit_site.py",
+        "before": ("    return (_claude_md_problems(path.stat().st_size, text)\n"
+                   "            + _check_23_selftest())"),
+        "after": "    return _claude_md_problems(path.stat().st_size, text)",
+        "run": ["scripts/audit_site.py"],
+    },
+    {
+        "why": "★CLAUDE.mdが無いとき（CI・clone）に、対照実験を呼ばない"
+               "（★CIでは必ずこちらの道を通る★）★",
+        "file": "scripts/audit_site.py",
+        "before": ("    if not path.is_file():\n"
+                   "        # 家PC等でファイルが無い環境では中身は見ない"
+                   "（★対照実験は続ける★）\n"
+                   "        return _check_23_selftest()"),
+        "after": ("    if not path.is_file():\n"
+                  "        # 家PC等でファイルが無い環境では中身は見ない"
+                  "（★対照実験は続ける★）\n"
+                  "        return []"),
+        "run": ["scripts/audit_site.py"],
+    },
+    {
+        "why": "★履歴への参照が消えても黙る"
+               "（退避の決まりごと消えたことに気づけない）★",
+        "file": "scripts/audit_site.py",
+        "before": '    if "CLAUDE_history.md" not in text:',
+        "after": "    if False:",
+        "run": ["scripts/audit_site.py"],
+    },
     {
         "why": "★新台の記事が空っぽでも通す"
                "（読者の画面が真っ白になる＝2026-09-03にCodexが見つけた穴）★",
