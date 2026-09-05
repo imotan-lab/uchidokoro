@@ -2389,21 +2389,104 @@ def selftest() -> int:
               adopted={"model_code": {"value": "L機/1", "sources": ["a", "b"]},
                        "at_prob": {"value": {"1": "1/999", "2": "1/290"},
                                    "sources": ["a", "b"]}})))))
+    # ────────────────────────────────────────────────────────────
+    # ★★自己試験の材料を、実データの機種に貼り付けない★★
+    #   （2026-09-06・2AIで判断／罠㉙）
+    #
+    #   ★何が起きたか★＝2026-09-06の朝、2AIで型と天井の有無を確定して
+    #   garei_zero_re を AUTO_PENDING → AUTO_INDEXABLE に上げた
+    #   （＝狙いどおりの成果）。★そのデータだけのコミットで、この
+    #   自己試験が赤くなった★（a97d894d は緑・990998db で赤）。
+    #   原因は `plan_one()` の先頭:
+    #       if out["was"] != "AUTO_PENDING": ... return out
+    #   自己試験が実名で `plan_one("garei_zero_re")` を呼んでいたので、
+    #   その機種が卒業した瞬間、★全部が最初の1行で返る★ようになった。
+    #
+    #   ★もっと悪いこと★＝同じ早期returnで**緑になる試験もあった**
+    #   （「記事を1文字も作らない」は、何も試さなくても
+    #     `_built` が空・machine も detail も None で合格する＝罠⑤・㉚）。
+    #
+    #   ★だから架空の行を作る★＝実データが正常に育っても影響されない。
+    #   ★判定そのものは迂回しない★＝架空の行を**本物の**
+    #   `_pdz.decide_v2` と `_pdz.machine_class` に通す
+    #   （試験用の引数で区分の検査を素通りさせると、
+    #     今回壊れた入口そのものを試さなくなる）。
+    _ST_SLUG = "zzz_grow_selftest"
+    _ST_NAME = "育成自己試験機"
+    _ST_URL = "https://example.test/machines/grow-selftest"
+
+    def _st_row(release="2026-01-01"):
+        _pd = _pdz.decide_v2({"adopted": {}}, policy={"mode": "normal"},
+                             decided_at="2026-01-01")
+        return {"slug": _ST_SLUG, "name": _ST_NAME,
+                "publication_policy": _pd["schema_version"],
+                "page_decision": _pd, "release_date": release,
+                "identity": {"manufacturer_id": "selftest",
+                             "announced_name": _ST_NAME,
+                             "official_product_url": _ST_URL,
+                             "market_release_date": release}}
+
+    import contextlib as _ctx
+
+    @_ctx.contextmanager
+    def _st_env(row=None):
+        """架空の1機種だけが一覧にいる世界にする（本番の行を読まない）。"""
+        _br, _bu = globals()["_read_rows"], _pub.unfinished
+        globals()["_read_rows"] = lambda: [row or _st_row()]
+        _pub.unfinished = lambda: None
+        try:
+            yield
+        finally:
+            globals()["_read_rows"] = _br
+            _pub.unfinished = _bu
+
+    # ★前提が崩れたら必ず赤くする★（試料が AUTO_PENDING でなくなったら）
+    t("★★育成の自己試験の材料は、実データではなく架空の行★★"
+      "／★実機種に貼り付けると、その機種が卒業した日に全部が"
+      "『早期return』になり、何も試さず緑になる試験まで出る★",
+      _pdz.machine_class(_st_row()) == "AUTO_PENDING")
+    # ★卒業した形は「判定書の indexable を True に書き換える」では作れない★
+    #   ＝`machine_class` は claims から計算し直して突き合わせるので、
+    #   手書きの True は必ず弾かれる（＝そういう守りがある）。
+    #   区分が AUTO_PENDING でない形なら早期returnの再現になるので、
+    #   ここでは旧形式の行（publication_policy を持たない）を使う。
+    _st_grad = {k: v for k, v in _st_row().items()
+                if k not in ("publication_policy", "page_decision")}
+    t("　（対照）育てる対象でない区分なら『育てる対象ではありません』で止まる"
+      "＝早期returnの形を、試験の中で1件として持っておく",
+      _pdz.machine_class(_st_grad) == "LEGACY_COMPLETE")
+    with _st_env(_st_grad):
+        _st_out = plan_one(_ST_SLUG,
+                           gather=lambda *a, **k: {"material": None,
+                                                   "problems": []},
+                           verify=lambda *a, **k: {"problems": [],
+                                                   "release": ""},
+                           find=lambda *a, **k: [])
+    t("　（対照）そのとき plan_one は材料集めまで到達しない",
+      any("育てる対象ではありません" in p
+          for p in (_st_out.get("problems") or []))
+      and _st_out.get("checked") is False)
+
     # ── ★指紋は一覧を読む前に取っているか★（順番そのものを見る）
     order = []
-    real_sha, real_rows = _file_sha, _read_rows
-    try:
-        globals()["_file_sha"] = lambda p: (order.append("sha"), real_sha(p))[1]
-        globals()["_read_rows"] = lambda: (order.append("rows"), real_rows())[1]
-        # ★★試験はネットへ出ない★★（2026-08-20）
-        #   出典探しだけ本物のままだったので、rate limit で待たされ
-        #   **自己試験そのものがハングして誰も回せなかった**。
-        plan_one("garei_zero_re",
-                 gather=lambda *a, **k: {"material": None, "problems": []},
-                 verify=lambda *a, **k: {"problems": [], "release": ""},
-                 find=lambda *a, **k: [])
-    finally:
-        globals()["_file_sha"], globals()["_read_rows"] = real_sha, real_rows
+    real_sha = _file_sha
+    with _st_env():
+        real_rows = _read_rows      # ★架空の一覧を掴む（本番の行は読まない）★
+        try:
+            globals()["_file_sha"] = lambda p: (order.append("sha"),
+                                                real_sha(p))[1]
+            globals()["_read_rows"] = lambda: (order.append("rows"),
+                                               real_rows())[1]
+            # ★★試験はネットへ出ない★★（2026-08-20）
+            #   出典探しだけ本物のままだったので、rate limit で待たされ
+            #   **自己試験そのものがハングして誰も回せなかった**。
+            plan_one(_ST_SLUG,
+                     gather=lambda *a, **k: {"material": None, "problems": []},
+                     verify=lambda *a, **k: {"problems": [], "release": ""},
+                     find=lambda *a, **k: [])
+        finally:
+            globals()["_file_sha"] = real_sha
+            globals()["_read_rows"] = real_rows
     t("★★指紋を取り終えてから一覧を読んでいる★★（順番が戻ったら落ちる）",
       "rows" in order and "sha" in order
       and order.index("rows") > max(i for i, x in enumerate(order) if x == "sha"))
@@ -2422,14 +2505,23 @@ def selftest() -> int:
             seen.append((slug, mat is the_mat))
             return []
         _cv.merge_into = _spy
-        plan_one("garei_zero_re",
-                 gather=lambda *a, **k: {"material": the_mat, "problems": []},
-                 verify=lambda *a, **k: {"problems": [], "release": ""})
+        with _st_env():
+            _seen_out = plan_one(
+                _ST_SLUG,
+                gather=lambda *a, **k: {"material": the_mat, "problems": []},
+                verify=lambda *a, **k: {"problems": [], "release": ""})
     finally:
         _cv.merge_into = real_merge
+    # ★★「到達したこと」を合否の条件に必ず入れる★★
+    #   （2026-09-06・Codexの指摘）＝早期returnだと `seen` が空なので
+    #   ここは赤くなるが、下の「記事を作らない」のような
+    #   **不在を見る試験は緑になってしまう**。だから全部に付ける。
+    _reached = _seen_out.get("checked") is True and bool(seen)
+    t("　（前提）材料集めの先まで到達している"
+      "／★ここが偽なら、下の試験は何も試していない★", _reached)
     t("★★育てる処理も2AIの確定値を読む★★"
       "（読まないと、確定値を載せた機種は毎日『再現できません』で止まる）",
-      seen and seen[0] == ("garei_zero_re", True))
+      _reached and seen[0] == (_ST_SLUG, True))
     # ★★出典の取り直しも、呼んだかどうかで見る★★（2026-08-24・Codexの18回目）
     #   ★直す前はソースに文字列があるかを見ていた★＝
     #   綴り違いでも、呼ばれない場所に書いてあっても通ってしまう。
@@ -2442,63 +2534,80 @@ def selftest() -> int:
             return []
         _cv.reverify = _rvspy
         _cv.merge_into = lambda mat, slug_: ["ceiling"]
-        plan_one("garei_zero_re",
-                 gather=lambda *a, **k: {"material": the_mat, "problems": []},
-                 verify=lambda *a, **k: {"problems": [], "release": ""})
+        with _st_env():
+            _rv_out = plan_one(
+                _ST_SLUG,
+                gather=lambda *a, **k: {"material": the_mat, "problems": []},
+                verify=lambda *a, **k: {"problems": [], "release": ""})
         # ★★「空でない」ではなく「その機種の正しい名前か」を見る★★
         #   （2026-08-24・Codexの19回目）
         #   ★直す前は name が真かどうかしか見ていなかった★ので、
         #   別の機種名を渡しても通った（＝別機種の控えで照合できてしまう）。
-        _want_nm = ([r for r in _read_rows()
-                     if r.get("slug") == "garei_zero_re"]
-                    or [{}])[0].get("name") or ""
+        _want_nm = _ST_NAME
+        _rv_reached = _rv_out.get("checked") is True and len(_rvseen) == 1
+        t("　（前提）出典の取り直しまで到達している"
+          "／★ここが偽なら、下の試験は何も試していない★", _rv_reached)
         t("★★育てる側も、出典を取り直して確かめる★★"
           "／★ここが抜けると、控えの手書きが記事に出る★",
-          _rvseen and _rvseen[0][0] == "garei_zero_re")
+          _rv_reached and _rvseen[0][0] == _ST_SLUG)
         t("　その機種の名前を渡している（別機種の控えで照合させない）",
-          bool(_want_nm) and _rvseen and _rvseen[0][1] == _want_nm)
+          _rv_reached and _rvseen[0][1] == _want_nm)
         t("　公式URLも渡している（機種を引き直せるように）",
-          _rvseen and _rvseen[0][2])
+          _rv_reached and _rvseen[0][2] == _ST_URL)
         # ★★問題を返したら「記事そのものが作られない」ことまで見る★★
         #   ★直す前は問題文があるかしか見ていなかった★ので、
         #   記事を作ったうえで問題も返す、という形でも通った。
         _built = []
         _real_bm, _real_bd = _ba.build_machine, _ba.build_detail
         try:
-            _ba.build_machine = lambda *a, **k: _built.append("machine")
-            _ba.build_detail = lambda *a, **k: _built.append("detail")
+            # ★★呼ばれたら本物を通す★★（2026-09-06・壊し方の検査で判明）
+            #   ★直す前は None を返していた★ので、守りを壊すと
+            #   `machine.get(...)` で AttributeError になり、
+            #   ★「試験が❌を出した」ではなく「ただ落ちた」★になっていた
+            #   （＝守りを見ている証拠にならない・罠⑤）。
+            _ba.build_machine = lambda *a, **k: (_built.append("machine"),
+                                                 _real_bm(*a, **k))[1]
+            _ba.build_detail = lambda *a, **k: (_built.append("detail"),
+                                                _real_bd(*a, **k))[1]
             _cv.reverify = lambda slug_, **kw: ["出典を確かめ直せません"]
-            _stop = plan_one(
-                "garei_zero_re",
-                gather=lambda *a, **k: {"material": the_mat, "problems": []},
-                verify=lambda *a, **k: {"problems": [], "release": ""})
+            with _st_env():
+                _stop = plan_one(
+                    _ST_SLUG,
+                    gather=lambda *a, **k: {"material": the_mat,
+                                            "problems": []},
+                    verify=lambda *a, **k: {"problems": [], "release": ""})
         finally:
             _ba.build_machine, _ba.build_detail = _real_bm, _real_bd
+        _stop_reached = _stop.get("checked") is True
+        t("　（前提）止まった場所は材料集めより後"
+          "／★早期returnでは、下の『作らない』が何も試さず緑になる★",
+          _stop_reached)
         t("　確かめ直せなければ、その理由を返す",
-          any("確かめ直せません" in str(x)
-              for x in (_stop.get("problems") or [])))
+          _stop_reached and any("確かめ直せません" in str(x)
+                                for x in (_stop.get("problems") or [])))
         t("★★確かめ直せなければ、記事を1文字も作らない★★"
           "／★作ってから止めると、次の工程が拾える形で残る★",
-          not _built and _stop.get("machine") is None
+          _stop_reached and not _built and _stop.get("machine") is None
           and _stop.get("detail") is None)
     finally:
         _cv.reverify = _real_rv
         _cv.merge_into = real_merge
 
+    with _st_env():
+        _fp_out = plan_one(
+            _ST_SLUG,
+            gather=lambda *a, **k: {"material": None, "problems": []},
+            verify=lambda *a, **k: {"problems": [], "release": ""})
     t("　2AIの確定値も計画の指紋に入っている"
       "（計画のあとに取り消されたら食い違って止まる）",
-      _cv.STORE in (plan_one(
-          "garei_zero_re",
-          gather=lambda *a, **k: {"material": None, "problems": []},
-          verify=lambda *a, **k: {"problems": [], "release": ""}
-      ).get("fingerprint") or {}))
+      _cv.STORE in (_fp_out.get("fingerprint") or {}))
 
     # ── ★計画後に中身が変われば、1文字も書かずに止まる★
     wrote = []
     real_write = _pub.write_atomic
     try:
         _pub.write_atomic = lambda *a, **k: wrote.append(a[0])
-        bad = apply_one({"slug": "garei_zero_re", "machine": {"slug": "x"},
+        bad = apply_one({"slug": _ST_SLUG, "machine": {"slug": "x"},
                          "detail": {}, "was": "AUTO_PENDING",
                          "now": "AUTO_PENDING",
                          "fingerprint": {MACHINES: "ちがう指紋"}})
@@ -2508,9 +2617,11 @@ def selftest() -> int:
       not wrote and any("変わっています" in p or "計画" in p
                         for p in bad["problems"]))
     # 指紋は「計画で読む前」に取る
-    got = plan_one("garei_zero_re", gather=lambda *a, **k: {"material": None,
-                                                            "problems": []},
-                   verify=lambda *a, **k: {"problems": [], "release": ""})
+    with _st_env():
+        got = plan_one(_ST_SLUG,
+                       gather=lambda *a, **k: {"material": None,
+                                               "problems": []},
+                       verify=lambda *a, **k: {"problems": [], "release": ""})
     t("★★計画結果に、読む前の指紋が入っている★★（同時更新を古い計画で消さない）",
       isinstance(got.get("fingerprint"), dict) and got["fingerprint"])
     t("★★指紋が無い計画では書かない★★",
@@ -2528,7 +2639,9 @@ def selftest() -> int:
       not identity_same({"manufacturer_id": "a", "announced_name": "L機"},
                         {"manufacturer_id": "a", "announced_name": "L機"}))
     # 区分が AUTO_PENDING でなければ育てない
-    got = plan_one("hokuto")
+    #   ★2026-09-06★＝ここは実在の旧形式機種（hokuto）を呼んでいたが、
+    #   ★戻り値をどの合否にも使っていなかった★（呼ぶだけの行）。
+    #   区分で止まることは、上の架空の行（_st_grad）で1件として見ている。
     # ★★2026-08-13・台帳#346（見に行く間隔）★★
     import datetime as _dtm          # ★既存の試験が _dt を別用途で使っている★
     _T = _dtm.date(2026, 8, 13)
@@ -2553,8 +2666,8 @@ def selftest() -> int:
         globals()["confirmed_fingerprint"] = lambda sl: "FP_IMA"
         _cvv = "FP_MUKASHI" if cv_drift else "FP_IMA"
         globals()["_probe_state"] = (
-            lambda: ({"pw_10523": {"urls": known, "cv": _cvv,
-                                   "rules": GROW_RULES_VERSION}}
+            lambda: ({_ST_SLUG: {"urls": known, "cv": _cvv,
+                                 "rules": GROW_RULES_VERSION}}
                      if known else {}))
         globals()["find_sources"] = (
             lambda m: list(known if now is None else now))
@@ -2562,12 +2675,17 @@ def selftest() -> int:
             lambda m, d: (["書き出しの言い回しが、いまのひな型と違います"]
                           if drift else []))
         try:
-            return plan_one("pw_10523",
-                            probe=lambda u: {"skip": skip, "rows": []},
-                            gather=lambda *a, **k: {"urls": [], "problems": [],
-                                                    "material": None},
-                            verify=lambda *a, **k: {"problems": [],
-                                                    "release": "2026-09-07"})
+            # ★架空の行で見る★（2026-09-06）＝実データの pw_10523 に
+            #   貼り付いていたので、その機種が卒業した日に
+            #   ★何も試さず緑になる試験★（unchanged is False 等）が出た。
+            with _st_env():
+                return plan_one(
+                    _ST_SLUG,
+                    probe=lambda u: {"skip": skip, "rows": []},
+                    gather=lambda *a, **k: {"urls": [], "problems": [],
+                                            "material": None},
+                    verify=lambda *a, **k: {"problems": [],
+                                            "release": "2026-01-01"})
         finally:
             globals()["_probe_state"] = _bk
             globals()["find_sources"] = _bf
@@ -2794,8 +2912,10 @@ def selftest() -> int:
            "month_interval_days": 3,
            "ranges": [{"from_days": -36500, "to_days": 36500,
                        "interval_days": 99}]})))
+    # ★2026-09-06★＝ここは実在の旧形式機種（hokuto）の結果を見ていたが、
+    #   実データに貼り付かないよう、架空の旧形式の行（_st_grad）に替えた。
     t("★★既存機種（判定書なし）は育てる対象にしない★★",
-      any("育てる対象ではありません" in p for p in got["problems"]))
+      any("育てる対象ではありません" in p for p in _st_out["problems"]))
     t("　知らないslugは対象にしない",
       any("一覧にありません" in p for p in plan_one("no_such_slug")["problems"]))
     # 台帳で止まっている機種は触らない
@@ -3076,15 +3196,16 @@ def selftest() -> int:
 
             def _skip_run(cv_now):
                 globals()["_probe_state"] = (
-                    lambda: {"pw_10523": {"urls": ["https://x.test/a"],
-                                          "cv": cv_now,
-                                          "rules": GROW_RULES_VERSION}})
-                return plan_one(
-                    "pw_10523", probe=lambda u: {"skip": True, "rows": []},
-                    gather=lambda *a, **k: {"urls": [], "problems": [],
-                                            "material": None},
-                    verify=lambda *a, **k: {"problems": [],
-                                            "release": "2026-09-07"})
+                    lambda: {_ST_SLUG: {"urls": ["https://x.test/a"],
+                                        "cv": cv_now,
+                                        "rules": GROW_RULES_VERSION}})
+                with _st_env():
+                    return plan_one(
+                        _ST_SLUG, probe=lambda u: {"skip": True, "rows": []},
+                        gather=lambda *a, **k: {"urls": [], "problems": [],
+                                                "material": None},
+                        verify=lambda *a, **k: {"problems": [],
+                                                "release": "2026-01-01"})
 
             try:
                 _got_skip = _skip_run("FP_IMA")
@@ -3334,14 +3455,15 @@ def selftest() -> int:
             globals()["_probe_state"] = lambda: {}
             globals()["find_sources"] = lambda m: []
             try:
-                _got_q = plan_one(
-                    "pw_10523",
-                    probe=lambda u: {"skip": True, "rows": []},
-                    gather=lambda *a, **k: {"urls": [], "problems": [],
-                                            "material": {"adopted": {}}},
-                    verify=lambda *a, **k: {"problems": [],
-                                            "release": "2026-09-07",
-                                            "identity_name": "テスト機"})
+                with _st_env():
+                    _got_q = plan_one(
+                        _ST_SLUG,
+                        probe=lambda u: {"skip": True, "rows": []},
+                        gather=lambda *a, **k: {"urls": [], "problems": [],
+                                                "material": {"adopted": {}}},
+                        verify=lambda *a, **k: {"problems": [],
+                                               "release": "2026-01-01",
+                                               "identity_name": "テスト機"})
             finally:
                 globals()["_probe_state"] = _bk_ps
                 globals()["find_sources"] = _bk_fs
@@ -3362,14 +3484,16 @@ def selftest() -> int:
 
             def _nomat_run(has):
                 globals()["has_confirmed"] = lambda sl: has
-                return plan_one(
-                    "pw_10523",
-                    probe=lambda u: {"skip": True, "rows": []},
-                    gather=lambda *a, **k: {"urls": [], "material": None,
-                                            "problems": ["名鑑が1件だけです"]},
-                    verify=lambda *a, **k: {"problems": [],
-                                            "release": "2026-09-07",
-                                            "identity_name": "テスト機"})
+                with _st_env():
+                    return plan_one(
+                        _ST_SLUG,
+                        probe=lambda u: {"skip": True, "rows": []},
+                        gather=lambda *a, **k: {"urls": [], "material": None,
+                                                "problems":
+                                                    ["名鑑が1件だけです"]},
+                        verify=lambda *a, **k: {"problems": [],
+                                               "release": "2026-01-01",
+                                               "identity_name": "テスト機"})
 
             try:
                 _nm_yes = _nomat_run(True)

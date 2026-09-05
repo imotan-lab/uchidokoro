@@ -76,6 +76,57 @@ MUTATIONS = [
         "run": ["scripts/add_machine_health.py"],
     },
     {
+        "why": "★区分を見たすぐ後で無条件に返す"
+               "（＝2026-09-06に実際に起きた形。試験が実データの1機種に"
+               "貼り付いていたので、その機種が卒業した日に"
+               "『何も試さず緑になる試験』が出た）★",
+        "file": "scripts/grow_machine.py",
+        "before": '    mode = (_pdz.load_policy() or {}).get("mode")',
+        "after": ('    if out["was"] == "AUTO_PENDING":\n'
+                  '        return out\n'
+                  '    mode = (_pdz.load_policy() or {}).get("mode")'),
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★2AIの確定値を材料へ足すのをやめる"
+               "（確定値を載せた機種が毎日『再現できません』で止まる）★",
+        "file": "scripts/grow_machine.py",
+        "before": "        _added = _cv.merge_into(mat, slug)",
+        "after": "        _added = []",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★育てる側で出典を取り直すのをやめる"
+               "（控えを手で書き換えても、育てる経路だけは公開できた型）★",
+        "file": "scripts/grow_machine.py",
+        "before": ('            _rv = _cv.reverify(slug, '
+                   'name=vo.get("identity_name") or name,\n'
+                   '                               official_url=url)'),
+        "after": "            _rv = []",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★取り直しに、その機種の名前ではなく空を渡す"
+               "（別機種の控えで照合できてしまう）★",
+        "file": "scripts/grow_machine.py",
+        "before": '            _rv = _cv.reverify(slug, name=vo.get("identity_name") or name,',
+        "after": '            _rv = _cv.reverify(slug, name="",',
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★取り直しに失敗しても止めずに記事を作る"
+               "（作ってから止めると、次の工程が拾える形で残る）★",
+        "file": "scripts/grow_machine.py",
+        "before": ('            if _rv:\n'
+                   '                out["problems"] += [\n'
+                   '                    f"控えを確かめ直せません: {x}" for x in _rv]\n'
+                   '                return out'),
+        "after": ('            if _rv:\n'
+                  '                out["problems"] += [\n'
+                  '                    f"控えを確かめ直せません: {x}" for x in _rv]'),
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
         "why": "★ひな型のずれを見つけられなくする"
                "（ひな型を直した日に、既存の記事が永久に古いまま残る）★",
         "file": "scripts/grow_machine.py",
