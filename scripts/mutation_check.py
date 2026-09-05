@@ -1759,6 +1759,15 @@ MUTATIONS = [
         "run": ["scripts/backup_guard.py"],
     },
     {
+        "why": "★ジャンクションを見分けられないPythonでも緑にする★"
+               "（見分けられないことを『つなぎではない』と答える）",
+        "file": "scripts/backup_guard.py",
+        "before": ('    return os.name == "nt" and not '
+                   'hasattr(os.path, "isjunction")'),
+        "after": "    return False",
+        "run": ["scripts/backup_guard.py"],
+    },
+    {
         "why": "保存名の案内を出さない（台帳#464の再発）",
         "file": "scripts/backup_guard.py",
         "before": '        findings.append("allowlist:リスト外" + hint)',

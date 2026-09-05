@@ -859,6 +859,17 @@ def _sha_file(path: str) -> str:
     return h.hexdigest()
 
 
+def _junction_check_missing() -> bool:
+    """★このPythonではジャンクションを見分けられない★か（Windowsのみ）。
+
+    ★見分けられないことを「つなぎではない」と答えない★
+    （2026-09-05・Codexの7回目）＝`os.path.isjunction` は Python 3.12 で
+    入ったAPI。無い版では実物のジャンクションでも `islink` が偽なので、
+    ★調べられないまま中へ入り、終了コード0になっていた★。
+    """
+    return os.name == "nt" and not hasattr(os.path, "isjunction")
+
+
 def _is_link_dir(path: str) -> bool:
     """★フォルダの「つなぎ」か★（シンボリックリンク／Windowsのジャンクション）。
 
@@ -893,6 +904,10 @@ def _walk(root: str, bad: list):
     # ★★入口そのものが「つなぎ」のときも記録する★★（2026-09-05）
     #   ★直す前★＝走査先がリンク／ジャンクションでも黙って中を見ていた。
     #   （中は見るが、★どこを見ているのか記録に残らない★のが危ない）
+    # ★★見分ける手だてが無いなら、緑にしない★★（2026-09-05・Codexの7回目）
+    if _junction_check_missing():
+        bad.append("このPythonではフォルダのつなぎ（ジャンクション）を"
+                   "見分けられません（3.12以降が要ります）")
     try:
         if _is_link_dir(root):
             bad.append(f"走査先そのものがフォルダのつなぎです: {root}")
@@ -1050,6 +1065,10 @@ def cmd_accept(root: str) -> int:
     total = 0
     acc = {}
     walk_ng = []
+    if _junction_check_missing():
+        # ★見分けられないまま基準値を作らない★（cmd_scan と同じ扱い）
+        walk_ng.append("このPythonではフォルダのつなぎ（ジャンクション）を"
+                       "見分けられません（3.12以降が要ります）")
     for dirpath, _dirs, files in _walk(root, walk_ng):
         for fn in files:
             total += 1
@@ -1507,6 +1526,28 @@ def _baseline_tests(t) -> None:
             else:
                 t("　★実物のジャンクションを作れなかった★"
                   "（権限。差し替えの試験だけになった）", False)
+
+        # ㉗★ジャンクションを見分けられないPythonでは緑にしない★
+        #   （2026-09-05・Codexの7回目。`os.path.isjunction` は 3.12 で入った）
+        #   ★見分けられないことを「つなぎではない」と答えていた★＝
+        #   Windows＋3.10/3.11 では実物のジャンクションでも islink が偽なので、
+        #   調べられないまま中へ入り、終了コード0になっていた。
+        _real_isj2 = getattr(os.path, "isjunction", None)
+        _real_nt2 = os.name
+        if _real_isj2 is not None:
+            del os.path.isjunction
+        os.name = "nt"
+        try:
+            t("★★ジャンクションを見分けられないPythonでは緑にしない★★"
+              "（見分けられないことを『つなぎではない』と答えていた）",
+              cmd_scan(root) == 1)
+            t("　その版では承知済みも作らない（調べられていないので）",
+              cmd_accept(root) == 1)
+        finally:
+            os.name = _real_nt2
+            if _real_isj2 is not None:
+                os.path.isjunction = _real_isj2
+        t("　見分けられる版では、いつもどおり緑", cmd_scan(root) == 0)
 
         # ④★読めないフォルダがあったら緑にしない★
         _orig_walk = globals()["_walk"]
