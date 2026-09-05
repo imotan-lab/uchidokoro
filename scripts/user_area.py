@@ -1068,8 +1068,12 @@ def selftest() -> int:
     # ─── ★実ページの固定試料★（2026-08-28・台帳#492）───────────
     #   ★評価の箱（hyouka）を必須にしていたので、評価が付いていない機種の
     #     ページを丸ごと出典から外していた★（本番で実際に止まった）。
-    #   ★試料は書き換えない★／評価なしの形は、試料の評価の箱の名前を
-    #     変えて作る（実物から作るので、想像で書いた材料にならない）。
+    #   ★試料は書き換えない★
+    #   ★2026-09-06に読み替えた★＝箱の名前を書き換えて作る形は
+    #     「評価なし」ではなく**「相手が作りを変えた」**（idを変えても
+    #     中身はページに残るため）。★止まるのが正しい★。
+    #     本当に「箱が無いページ」「枠が無いページ」は、実試料
+    #     chonborista_no_review.html / chonborista_no_rating_btn.html で見る。
     _fx2 = os.path.join(os.path.dirname(os.path.dirname(
         os.path.abspath(__file__))), "tests", "fixtures")
     _f2 = os.path.join(_fx2, "chonborista_funky2.html")
