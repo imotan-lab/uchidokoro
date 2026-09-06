@@ -1235,6 +1235,18 @@ _LACK_WORDS = {
     "NO_BONUS_PROB": "設定ごとのボーナス確率",
 }
 
+# ★その理由に対応する控えの項目★（2026-09-07・Codexの指摘1）
+#   ★なぜ要るか★＝機種一覧の行は**実際に記事を書けた時にしか書き換わらない**。
+#   そのため答え済みでも古い理由が残り、
+#   ★「型を答えたのに、型が足りない」と言い続けていた★（実機のログで確認）。
+#   ★対応する項目が無い理由（事実が3件に足りない等）はそのまま残す★
+#   （そちらは本当にまだ足りない）。
+_LACK_FIELD = {
+    "MACHINE_PROFILE_UNKNOWN": "machine_profile",
+    "CEILING_STATE_UNKNOWN": "ceiling_state",
+    "NO_BONUS_PROB": "bonus_prob",
+}
+
 # ★★判定書に直に載っている「まだ決まっていない欄」★★
 #   （2026-09-05・Codexの指摘3＝自分で確かめた）
 #   ★なぜ理由コードで見ないか★＝`CEILING_STATE_UNKNOWN` は
@@ -1360,7 +1372,10 @@ def pending_questions(cur: dict, mat: dict = None, slug: str = "",
             "kind": "grow_pending", "slug": slug, "field": _field,
             "text": _ask + _ba._record_howto(_field, _example)})
     # ★★足りないものを名指しして、出典を読んでもらう★★
-    lack = [_LACK_WORDS.get(r, r) for r in (pd.get("reason_codes") or [])]
+    # ★★答え済みの理由は並べない★★（2026-09-07・Codexの指摘1）
+    lack = [_LACK_WORDS.get(r, r) for r in (pd.get("reason_codes") or [])
+            if not (_LACK_FIELD.get(r)
+                    and already_answered(mat2, slug, _LACK_FIELD[r]))]
     if lack:
         _u = [str(u) for u in (urls or []) if u]
         out.append({
@@ -3658,6 +3673,114 @@ def selftest() -> int:
               "（★浅い写しだと入れ子を共有し、後段の合流が"
               "『追加なし』になって出典の取り直しまで通らない★）",
               _mat_deep == _before_deep)
+            # ★★入れ子（ceilings）まで独立か★★（2026-09-07・Codexの指摘5）
+            #   ★直す前の試料は `adopted` の共有しか壊していなかった★＝
+            #   `adopted` だけ複製する浅い写しでも通ってしまう。
+            #   ★`ceilings` へ書く控え（ceiling）を使う★
+            _mat_nest = {"adopted": {}, "ceilings": {"adopted": []}}
+            _before_nest = _cp_t.deepcopy(_mat_nest)
+            _bk_fs_n2 = globals()["_cv"].for_slug
+            try:
+                globals()["_cv"].for_slug = lambda sl: {
+                    "ceiling": {"value": {"kind": "GAME", "amount": "1200",
+                                          "unit": "G", "benefit": "AT"}}}
+                pending_questions(_pd_old, _mat_nest, "zzz_nest")
+            finally:
+                globals()["_cv"].for_slug = _bk_fs_n2
+            t("★★入れ子（天井の一覧）も、本物とは別のものになっている★★"
+              "（`adopted` だけ複製する浅い写しを捕まえる）",
+              _mat_nest == _before_nest)
+
+            # ★★片方だけ答え済みの形を試す★★（2026-09-07・Codexの指摘2）
+            #   ★直す前は型と天井を常に同時に答え済み／未回答にしていた★ので、
+            #   ★項目名を取り違えて両方とも型で見ても合格した★。
+            _bk_fs_a = globals()["_cv"].for_slug
+            try:
+                globals()["_cv"].for_slug = lambda sl: {
+                    "machine_profile": {"value": {"profile": "AT_CZ"}}}
+                _t_only_p = " ".join(x["text"] for x in pending_questions(
+                    _pd_old, None, "zzz_only_p"))
+                globals()["_cv"].for_slug = lambda sl: {
+                    "ceiling_state": {"value": {"state": "NONE"}}}
+                _t_only_c = " ".join(x["text"] for x in pending_questions(
+                    _pd_old, None, "zzz_only_c"))
+            finally:
+                globals()["_cv"].for_slug = _bk_fs_a
+            t("★★型だけ答え済みなら、天井だけを聞く★★"
+              "（★項目を取り違えていないか★＝両方まとめて試すと分からない）",
+              "--field machine_profile " not in _t_only_p
+              and "--field ceiling_state " in _t_only_p)
+            t("★★天井だけ答え済みなら、型だけを聞く★★",
+              "--field ceiling_state " not in _t_only_c
+              and "--field machine_profile " in _t_only_c)
+
+            # ★★控えへ渡す slug が正しいか★★（2026-09-07・Codexの指摘3）
+            #   ★直す前は差し替えが `sl` を無視していた★ので、
+            #   別の機種の控えを読んでいても通ってしまった。
+            _slugs_seen = []
+            _bk_fs_s = globals()["_cv"].for_slug
+            try:
+                globals()["_cv"].for_slug = (
+                    lambda sl: _slugs_seen.append(sl) or {})
+                pending_questions(_pd_old, None, "zzz_slug_ok")
+            finally:
+                globals()["_cv"].for_slug = _bk_fs_s
+            t("★★控えは、その機種の分を読む★★"
+              "（別の機種の控えを読んでいても分からなかった）",
+              bool(_slugs_seen) and set(_slugs_seen) == {"zzz_slug_ok"})
+
+            # ★★ボーナス確率も通しで消えるか★★（2026-09-07・Codexの指摘4）
+            #   ★控え → 本物の合流 → 写し → 質問作り★を通す。
+            _mat_bp = {"adopted": {"machine_profile": {
+                "value": {"profile": "BONUS"}}}}
+            _bk_fs_b = globals()["_cv"].for_slug
+            try:
+                globals()["_cv"].for_slug = lambda sl: {}
+                _t_bp_no = " ".join(x["text"] for x in pending_questions(
+                    _pd_old, _cp_t.deepcopy(_mat_bp), "zzz_bp0"))
+                globals()["_cv"].for_slug = lambda sl: {
+                    "bonus_prob": {"value": {
+                        "1": {"big": "1/273.1", "reg": "1/439.8",
+                              "total": "1/168.5"}}}}
+                _t_bp_yes = " ".join(x["text"] for x in pending_questions(
+                    _pd_old, _cp_t.deepcopy(_mat_bp), "zzz_bp1"))
+            finally:
+                globals()["_cv"].for_slug = _bk_fs_b
+            t("　（前提）ボーナス機で確率が無ければ、第2の出典を探すよう聞く",
+              "ボーナス確率" in _t_bp_no)
+            t("★★控えにボーナス確率があれば、もう聞かない★★"
+              "（控え→本物の合流→質問作り、を通しで確かめる）",
+              "ボーナス確率" not in _t_bp_yes)
+
+            # ★★答え済みのものを「足りないもの」に並べない★★
+            #   （2026-09-07・Codexの指摘1＝★実機のログに出ていた★）
+            #   ★機種一覧の行は、実際に記事を書けた時にしか書き換わらない★
+            #   ので、答え済みでも古い理由が残り、
+            #   「型を答えたのに『型が足りない』」と毎日言い続けていた。
+            _pd_lack = {"page_decision": {
+                "indexable": False,
+                "machine_profile": "UNKNOWN", "ceiling_state": "UNKNOWN",
+                "reason_codes": ["MACHINE_PROFILE_UNKNOWN", "CLAIMS_LT_3"]}}
+            _bk_fs_l = globals()["_cv"].for_slug
+            try:
+                globals()["_cv"].for_slug = lambda sl: {
+                    "machine_profile": {"value": {"profile": "AT_CZ"}}}
+                _t_lack_ans = " ".join(x["text"] for x in pending_questions(
+                    _pd_lack, None, "zzz_lack"))
+                globals()["_cv"].for_slug = lambda sl: {}
+                _t_lack_no = " ".join(x["text"] for x in pending_questions(
+                    _pd_lack, None, "zzz_lack2"))
+            finally:
+                globals()["_cv"].for_slug = _bk_fs_l
+            t("★★答え済みの項目は「足りないもの」に並べない★★"
+              "（★型を答えたのに『型が足りない』と毎日言い続けていた★）",
+              "機種の型" not in _t_lack_ans)
+            t("★★項目に対応しない理由は、そのまま残す★★"
+              "（そちらは本当にまだ足りない）",
+              "事実が3件に足りない" in _t_lack_ans)
+            t("　（対照）答えが無ければ、今までどおり並べる"
+              "＝止めているのは『答え済みか』であって、他の検査ではない",
+              "機種の型" in _t_lack_no)
             t("　決まっている欄は聞かない（答える意味がないので）",
               "--field ceiling_state " not in " ".join(
                   x["text"] for x in pending_questions(

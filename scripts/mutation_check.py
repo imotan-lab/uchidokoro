@@ -2047,6 +2047,17 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★答え済みの項目を「足りないもの」に並べ続ける★"
+               "（★型を答えたのに『型が足りない』と毎日言い続ける★"
+               "＝機種一覧の行は記事を書けた時しか変わらないため）",
+        "file": "scripts/grow_machine.py",
+        "before": "            if not (_LACK_FIELD.get(r)\n"
+                  "                    and already_answered("
+                  "mat2, slug, _LACK_FIELD[r]))]",
+        "after": "            ]",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
         "why": "★写しを浅くする（deepcopy → copy）★"
                "（入れ子を共有して★本物の材料が先に書き換わり★、"
                "後段の合流が『追加なし』になって出典の取り直しまで通らない）",
@@ -2092,8 +2103,8 @@ MUTATIONS = [
                "（2AIが何を読めばよいか分からなくなる）",
         "file": "scripts/grow_machine.py",
         "before": ('    lack = [_LACK_WORDS.get(r, r) '
-                   'for r in (pd.get("reason_codes") or [])]'),
-        "after": "    lack = []",
+                   'for r in (pd.get("reason_codes") or [])'),
+        "after": "    lack = [] or [_LACK_WORDS.get(r, r) for r in []",
         "run": ["scripts/grow_machine.py"],
     },
     {
