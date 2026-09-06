@@ -1318,8 +1318,22 @@ def pending_questions(cur: dict, mat: dict = None, slug: str = "",
     if pd.get("indexable"):
         return []
     out = []
+    # ★★控えを重ねた「写し」で質問を作らせる★★（2026-09-07・Codexの指摘）
+    #   ★「答えがあるから聞かない」では駄目★＝早見表の天井は、
+    #   保存済みの答えが**いまの候補に無い**とき、わざと聞き直す作り。
+    #   一律に落とすと★その聞き直しまで消え、早見表が永久に空になる★。
+    #   写しを渡せば、答え済みは向こうが聞かなくなり、
+    #   「答えはあるが今は合わない」ものは向こうが聞き直す。
+    #   ★本物の材料は変えない★（このあとの処理が使うため）。
+    mat2 = mat
     if mat is not None:
-        for q in _ba.checker_questions(mat):
+        try:
+            import copy as _cp_q
+            mat2 = _cp_q.deepcopy(mat)
+            _cv.merge_into(mat2, slug)
+        except Exception:                 # noqa: BLE001
+            mat2 = mat                    # ★重ねられないなら元のまま（聞く側へ）★
+        for q in _ba.checker_questions(mat2):
             out.append({"text": str(q), "kind": "grow_pending", "slug": slug})
     # ★★判定書に「まだ決まっていない」と書いてある欄は、必ず聞く★★
     #   （2026-09-05）★材料が無い日（見送り）でも聞ける★のがここの値打ち。
@@ -1333,10 +1347,11 @@ def pending_questions(cur: dict, mat: dict = None, slug: str = "",
         #   品質ラインに届かない機種は古い「UNKNOWN」のまま残る。
         #   そこだけ見ていたため、★答えた直後に同じことをまた聞いていた★。
         #   ★判定に使うのと同じ関数で読む★＝判定書と食い違わない。
-        # ★答え済みかどうかは、ここでは見ない★（2026-09-07）
-        #   ＝最後の絞り込みが1か所で落とす。
-        #   ★同じ規則を2か所に書かない★＝2か所あると、片方を壊しても
-        #   もう片方が拾うので、★その守りを試験できなくなる★（罠③）。
+        # ★★もう答えてもらっているなら聞かない★★（2026-09-07）
+        #   ★見るのは「控えを重ねた写し」と控えそのもの★＝
+        #   この処理は確定値を材料に足すより前に走るため。
+        if already_answered(mat2, slug, _key):
+            continue
         if str(pd.get(_key) or "UNKNOWN") != "UNKNOWN":
             continue
         if any(f"--field {_field} " in str(q.get("text") or "") for q in out):
@@ -1357,25 +1372,14 @@ def pending_questions(cur: dict, mat: dict = None, slug: str = "",
                      + ("／読む先: " + " ".join(_u[:4]) if _u else "")
                      + "／決めたら confirmed_values.py --record で記録"
                        "（逐語引用が要ります）")})
-    # ★★もう答えてもらっている項目の質問は、出どころを問わず落とす★★
-    #   （2026-09-06・★本番のログで見つけ、2回直しを外した★）
-    #   1回目＝「材料を見る」→ 質問は材料に答えを足す**前**に走る
-    #   2回目＝「控えを見る」→ 直したのは自分が足した箇所だけで、
-    #          本当の出どころ（材料から作る `checker_questions`）は素通り
-    #   ＝★最後に一覧を見て落とす★（出どころが増えても効く）。
-    #   ★項目名は `--field X` から読む★＝記録のコマンドに必ず入っている
-    #   （文の意味は読まない）。
-    import re as _re_q
-    kept = []
-    for q in out:
-        _t = str(q.get("text") or "")
-        _m = _re_q.search(r"--field ([A-Za-z0-9_]+)", _t)
-        if _m and already_answered(mat, slug, _m.group(1)):
-            continue
-        kept.append(q)
+    # ★★項目名だけで一律に落とす形はやめた★★（2026-09-07・Codexの指摘）
+    #   ★「答えがある」と「いまも有効」は別★＝早見表の天井は、
+    #   保存済みの答えがいまの候補に無いとき、わざと聞き直す。
+    #   一律に落とすとその聞き直しまで消え、早見表が永久に空になる。
+    #   いまは「控えを重ねた写し」を渡して、向こうに判断させている。
     # ★同じ文の質問はまとめる★（材料からの質問と、判定書からの質問が重なる）
     seen, uniq = set(), []
-    for q in kept:
+    for q in out:
         _t = str(q.get("text") or "")
         if _t in seen:
             continue
@@ -2584,9 +2588,15 @@ def selftest() -> int:
     _reached = _seen_out.get("checked") is True and bool(seen)
     t("　（前提）材料集めの先まで到達している"
       "／★ここが偽なら、下の試験は何も試していない★", _reached)
+    # ★★呼び出しは2回ある★★（2026-09-07）＝
+    #   1回目＝質問を作るための**写し**（本物は変えない）
+    #   2回目＝**集めた材料そのもの**（記事に載せるため）
+    #   ★見るのは「本物にも足していること」★（1回目が写しでも構わない）
     t("★★育てる処理も2AIの確定値を読む★★"
       "（読まないと、確定値を載せた機種は毎日『再現できません』で止まる）",
-      _reached and seen[0] == (_ST_SLUG, True))
+      _reached and (_ST_SLUG, True) in seen)
+    t("　★質問を作るときは写しを使う★（本物の材料を先に書き換えない）",
+      _reached and any(x == (_ST_SLUG, False) for x in seen))
     # ★★出典の取り直しも、呼んだかどうかで見る★★（2026-08-24・Codexの18回目）
     #   ★直す前はソースに文字列があるかを見ていた★＝
     #   綴り違いでも、呼ばれない場所に書いてあっても通ってしまう。
@@ -3564,6 +3574,67 @@ def selftest() -> int:
               and "--field ceiling_state " in _t_norec)
             t("　控えが読めないときは聞く（聞き逃すより聞きすぎ）",
               "--field machine_profile " in _t_bad)
+            # ★★材料が無い日（見送り）は、控えの道しか通らない★★
+            #   （2026-09-07・★壊し方の検査が教えてくれた★＝
+            #     `_cv.for_slug` を差し替えると**本物の merge_into も
+            #     それを読む**ので、写しに答えが入り、
+            #     ★材料の道だけで合格していた★＝罠④）
+            _bk_fs_n = globals()["_cv"].for_slug
+            try:
+                globals()["_cv"].for_slug = lambda sl: {
+                    "machine_profile": {"value": {"profile": "AT_CZ"}},
+                    "ceiling_state": {"value": {"state": "NONE"}}}
+                _t_skip = " ".join(x["text"] for x in pending_questions(
+                    _pd_old, None, "zzz_skip"))
+                globals()["_cv"].for_slug = lambda sl: {}
+                _t_skip0 = " ".join(x["text"] for x in pending_questions(
+                    _pd_old, None, "zzz_skip2"))
+            finally:
+                globals()["_cv"].for_slug = _bk_fs_n
+            t("★★材料が無い日でも、控えに答えがあれば聞かない★★"
+              "（★ここは控えの道しか通らない★＝材料に助けられない）",
+              "--field machine_profile " not in _t_skip
+              and "--field ceiling_state " not in _t_skip)
+            t("　（対照）控えにも答えが無ければ、材料が無い日も聞く",
+              "--field machine_profile " in _t_skip0
+              and "--field ceiling_state " in _t_skip0)
+            # ★★「答えがある」と「いまも有効」は別★★
+            #   （2026-09-07・Codexの指摘）＝早見表の天井は、
+            #   保存済みの答えが**いまの候補に無い**とき、わざと聞き直す。
+            #   ★項目名だけで一律に落とすと、その聞き直しまで消え、
+            #     早見表の天井が永久に空になる★。
+            _mat_ceil = {"adopted": {}, "ceilings": {"adopted": [
+                {"kind": "GAME", "amount": "1200", "unit": "G",
+                 "benefit": "AT"},
+                {"kind": "GAME", "amount": "1500", "unit": "G",
+                 "benefit": "AT"}]}}
+            _bk_fs_c = globals()["_cv"].for_slug
+            _bk_mi_c = globals()["_cv"].merge_into
+
+            def _mi_c(m, sl):
+                m.setdefault("adopted", {})["checker_ceiling"] = {
+                    "value": {"games": _ceil_ans}}
+                return ["checker_ceiling"]
+
+            try:
+                globals()["_cv"].for_slug = lambda sl: {
+                    "checker_ceiling": {"value": {"games": _ceil_ans}}}
+                globals()["_cv"].merge_into = _mi_c
+                _ceil_ans = "1000"        # ★いまの候補（1200/1500）に無い★
+                _t_out = " ".join(x["text"] for x in pending_questions(
+                    _pd_old, _mat_ceil, "zzz_ceil"))
+                _ceil_ans = "1200"        # ★候補にある★
+                _t_in = " ".join(x["text"] for x in pending_questions(
+                    _pd_old, _mat_ceil, "zzz_ceil2"))
+            finally:
+                globals()["_cv"].for_slug = _bk_fs_c
+                globals()["_cv"].merge_into = _bk_mi_c
+            t("★★控えの答えがいまの候補に無ければ、聞き直す★★"
+              "（★消すと早見表の天井が永久に空になる★・Codexの指摘）",
+              "--field checker_ceiling " in _t_out)
+            t("　（対照）候補にある答えなら、もう聞かない"
+              "＝止めているのは『いま有効か』であって、答えの有無ではない",
+              "--field checker_ceiling " not in _t_in)
             t("　決まっている欄は聞かない（答える意味がないので）",
               "--field ceiling_state " not in " ".join(
                   x["text"] for x in pending_questions(

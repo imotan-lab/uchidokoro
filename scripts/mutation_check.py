@@ -2047,12 +2047,21 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★質問を作るとき、控えを重ねた写しを渡さない★"
+               "（答え済みのことを毎朝また聞き、"
+               "2AIが同じ調べ物をやり直す＝本番のログで見つけた）",
+        "file": "scripts/grow_machine.py",
+        "before": "            _cv.merge_into(mat2, slug)",
+        "after": "            pass",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
         "why": "★控えに答えがあっても、また聞く★"
                "（★本番はこの形★＝質問は確定値を材料に足すより前に走るので、"
                "毎朝、答え済みの質問を出し続ける）",
         "file": "scripts/grow_machine.py",
-        "before": "        if _m and already_answered(mat, slug, "
-                  "_m.group(1)):\n            continue",
+        "before": "        if already_answered(mat2, slug, _key):\n"
+                  "            continue",
         "after": "        if False:\n            continue",
         "run": ["scripts/grow_machine.py"],
     },
