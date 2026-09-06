@@ -1259,6 +1259,46 @@ _UNKNOWN_FIELDS = (
 )
 
 
+def _material_state(mat: dict, key: str) -> str:
+    """★材料から、いまの型／天井の有無を読む★（2026-09-06）
+
+    ★判定書を作るのと同じ関数を使う★＝同じ規則を2か所に書かない。
+    ★読めないときは空★＝呼ぶ側は機種一覧の値に戻る（聞く方へ倒す）。
+    """
+    if not isinstance(mat, dict):
+        return ""
+    try:
+        if key == "machine_profile":
+            return str(_pdz.profile_from_material(mat) or "")
+        if key == "ceiling_state":
+            return str(_pdz.ceiling_state_from_material(mat) or "")
+    except Exception:                     # noqa: BLE001
+        return ""
+    return ""
+
+
+def already_answered(mat: dict, slug: str, key: str) -> bool:
+    """★その項目は、もう答えてもらっているか★（2026-09-06）
+
+    ★★実機で分かったこと★★＝質問を出す処理は、
+    **確定値を材料に足すより前**に走っている。
+    そのため「材料を見る」だけでは、答えた直後にまた聞いてしまう
+    （2026-09-06朝の本番ログで実際に起きていた）。
+    ★控えを直接見る★＝処理の順番に関係なく正しく答えられる。
+
+    ★材料も見る★＝機械が自力で採れたときは、そちらで答え済み。
+    ★読めないときは False★＝聞く方へ倒す（聞き逃すより聞きすぎ）。
+    """
+    _st = _material_state(mat, key) if mat is not None else ""
+    if _st and _st != "UNKNOWN":
+        return True
+    try:
+        rec = (_cv.for_slug(slug) or {}).get(key) or {}
+    except Exception:                     # noqa: BLE001
+        return False
+    return bool(rec.get("value"))
+
+
 def pending_questions(cur: dict, mat: dict = None, slug: str = "",
                       urls=None) -> list:
     """★まだ検索に載っていない機種は、2AIが原文を読んで埋める★
@@ -1288,6 +1328,15 @@ def pending_questions(cur: dict, mat: dict = None, slug: str = "",
     #   ★すでにその項目を聞いている質問があるなら足さない★
     #   （文字の意味は読まない。コマンドの形を見るだけ）。
     for _key, _field, _ask, _example in _UNKNOWN_FIELDS:
+        # ★★まず材料を見る★★（2026-09-06・本番ログで見つけた）
+        #   ★機種一覧の行は、実際に記事を書けた時にしか書き換わらない★ので、
+        #   品質ラインに届かない機種は古い「UNKNOWN」のまま残る。
+        #   そこだけ見ていたため、★答えた直後に同じことをまた聞いていた★。
+        #   ★判定に使うのと同じ関数で読む★＝判定書と食い違わない。
+        # ★答え済みかどうかは、ここでは見ない★（2026-09-07）
+        #   ＝最後の絞り込みが1か所で落とす。
+        #   ★同じ規則を2か所に書かない★＝2か所あると、片方を壊しても
+        #   もう片方が拾うので、★その守りを試験できなくなる★（罠③）。
         if str(pd.get(_key) or "UNKNOWN") != "UNKNOWN":
             continue
         if any(f"--field {_field} " in str(q.get("text") or "") for q in out):
@@ -1308,9 +1357,25 @@ def pending_questions(cur: dict, mat: dict = None, slug: str = "",
                      + ("／読む先: " + " ".join(_u[:4]) if _u else "")
                      + "／決めたら confirmed_values.py --record で記録"
                        "（逐語引用が要ります）")})
+    # ★★もう答えてもらっている項目の質問は、出どころを問わず落とす★★
+    #   （2026-09-06・★本番のログで見つけ、2回直しを外した★）
+    #   1回目＝「材料を見る」→ 質問は材料に答えを足す**前**に走る
+    #   2回目＝「控えを見る」→ 直したのは自分が足した箇所だけで、
+    #          本当の出どころ（材料から作る `checker_questions`）は素通り
+    #   ＝★最後に一覧を見て落とす★（出どころが増えても効く）。
+    #   ★項目名は `--field X` から読む★＝記録のコマンドに必ず入っている
+    #   （文の意味は読まない）。
+    import re as _re_q
+    kept = []
+    for q in out:
+        _t = str(q.get("text") or "")
+        _m = _re_q.search(r"--field ([A-Za-z0-9_]+)", _t)
+        if _m and already_answered(mat, slug, _m.group(1)):
+            continue
+        kept.append(q)
     # ★同じ文の質問はまとめる★（材料からの質問と、判定書からの質問が重なる）
     seen, uniq = set(), []
-    for q in out:
+    for q in kept:
         _t = str(q.get("text") or "")
         if _t in seen:
             continue
@@ -3438,6 +3503,67 @@ def selftest() -> int:
             t("★★材料が無い日でも、天井の有無を聞ける★★"
               "（★理由コードには出ないので、ここを消すと永久に聞けない★）",
               "--field ceiling_state " in _t_nomat)
+            # ★★材料で答え済みなら、もう聞かない★★
+            #   （2026-09-06・★本番のログで見つけた★＝
+            #     「確定した値を材料に足しました: machine_profile」の
+            #     直後に「型を判断してください」と聞いていた）
+            #   ★機種一覧の行は、実際に記事を書けた時にしか書き換わらない★
+            #   ので、品質ラインに届かない機種は古い UNKNOWN のまま残る。
+            #   ★放っておくと毎朝、答え済みの質問を出し続ける★
+            _pd_old = {"page_decision": {"indexable": False,
+                                         "reason_codes": [],
+                                         "machine_profile": "UNKNOWN",
+                                         "ceiling_state": "UNKNOWN"}}
+            _mat_ans = {"adopted": {
+                "machine_profile": {"value": {"profile": "AT_CZ"}},
+                "ceiling_state": {"value": {"state": "NONE"}}}}
+            _t_ans = " ".join(x["text"] for x in
+                              pending_questions(_pd_old, _mat_ans, "zzz_ans"))
+            t("★★材料で型が答え済みなら、もう聞かない★★"
+              "（一覧の行は書けた時しか変わらないので、古いまま残る）",
+              "--field machine_profile " not in _t_ans)
+            t("★★材料で天井が答え済みなら、もう聞かない★★",
+              "--field ceiling_state " not in _t_ans)
+            _t_none = " ".join(x["text"] for x in
+                               pending_questions(_pd_old, {"adopted": {}},
+                                                 "zzz_ans2"))
+            t("　（対照）材料にも答えが無ければ、今までどおり聞く"
+              "＝止めているのは『材料の答え』であって、他の検査ではない",
+              "--field machine_profile " in _t_none
+              and "--field ceiling_state " in _t_none)
+            # ★★本番と同じ形で試す★★（2026-09-06・★私の試験が甘かった★）
+            #   ★本番では、質問を出す時点の材料にはまだ答えが入っていない★
+            #   （確定値を材料に足すのは、そのあと）。
+            #   材料に答えを入れて試していたので、
+            #   ★狙った守りを一度も試していなかった★＝罠④。
+            _bk_fs_q = globals()["_cv"].for_slug
+            try:
+                globals()["_cv"].for_slug = lambda sl: {
+                    "machine_profile": {"value": {"profile": "AT_CZ"}},
+                    "ceiling_state": {"value": {"state": "NONE"}}}
+                _t_rec = " ".join(x["text"] for x in pending_questions(
+                    _pd_old, {"adopted": {}}, "zzz_rec"))
+                globals()["_cv"].for_slug = lambda sl: {}
+                _t_norec = " ".join(x["text"] for x in pending_questions(
+                    _pd_old, {"adopted": {}}, "zzz_rec2"))
+
+                def _boom_q(sl):
+                    raise RuntimeError("読めません")
+
+                globals()["_cv"].for_slug = _boom_q
+                _t_bad = " ".join(x["text"] for x in pending_questions(
+                    _pd_old, {"adopted": {}}, "zzz_rec3"))
+            finally:
+                globals()["_cv"].for_slug = _bk_fs_q
+            t("★★材料がまだ空でも、控えに答えがあれば聞かない★★"
+              "（★本番はこの形★＝答えた直後に聞き直していた）",
+              "--field machine_profile " not in _t_rec
+              and "--field ceiling_state " not in _t_rec)
+            t("　（対照）控えにも答えが無ければ聞く",
+              "--field machine_profile " in _t_norec
+              and "--field ceiling_state " in _t_norec)
+            t("　控えが読めないときは聞く（聞き逃すより聞きすぎ）",
+              "--field machine_profile " in _t_bad)
             t("　決まっている欄は聞かない（答える意味がないので）",
               "--field ceiling_state " not in " ".join(
                   x["text"] for x in pending_questions(

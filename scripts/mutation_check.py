@@ -2047,6 +2047,29 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★控えに答えがあっても、また聞く★"
+               "（★本番はこの形★＝質問は確定値を材料に足すより前に走るので、"
+               "毎朝、答え済みの質問を出し続ける）",
+        "file": "scripts/grow_machine.py",
+        "before": "        if _m and already_answered(mat, slug, "
+                  "_m.group(1)):\n            continue",
+        "after": "        if False:\n            continue",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★控えを見ずに材料だけで判断する★"
+               "（★質問は確定値を材料に足すより前に走る★ので、"
+               "答えた直後にまた聞く）",
+        "file": "scripts/grow_machine.py",
+        "before": "    try:\n        rec = (_cv.for_slug(slug) or {})"
+                  ".get(key) or {}\n"
+                  "    except Exception:                     # noqa: BLE001\n"
+                  "        return False\n"
+                  "    return bool(rec.get(\"value\"))",
+        "after": "    return False",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
         "why": "★足りないものを名指ししない★"
                "（2AIが何を読めばよいか分からなくなる）",
         "file": "scripts/grow_machine.py",
