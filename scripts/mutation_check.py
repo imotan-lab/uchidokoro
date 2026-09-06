@@ -2047,6 +2047,15 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★写しを浅くする（deepcopy → copy）★"
+               "（入れ子を共有して★本物の材料が先に書き換わり★、"
+               "後段の合流が『追加なし』になって出典の取り直しまで通らない）",
+        "file": "scripts/grow_machine.py",
+        "before": "            mat2 = _cp_q.deepcopy(mat)",
+        "after": "            mat2 = dict(mat)",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
         "why": "★質問を作るとき、控えを重ねた写しを渡さない★"
                "（答え済みのことを毎朝また聞き、"
                "2AIが同じ調べ物をやり直す＝本番のログで見つけた）",

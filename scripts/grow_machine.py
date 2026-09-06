@@ -3608,33 +3608,56 @@ def selftest() -> int:
                  "benefit": "AT"},
                 {"kind": "GAME", "amount": "1500", "unit": "G",
                  "benefit": "AT"}]}}
+            # ★★本物の合流処理を通す★★（2026-09-07・Codexの指摘）
+            #   ★直す前は合流も差し替えていた★ので、
+            #   本物が `checker_ceiling` を取り込まなくなっても合格した。
+            #   ＝「控え → 本物の合流 → 写し → 質問作り」という
+            #   今回いちばん大事な接続を一度も通していなかった（罠④）。
             _bk_fs_c = globals()["_cv"].for_slug
-            _bk_mi_c = globals()["_cv"].merge_into
+            _ceil_ans = ["1000"]
 
-            def _mi_c(m, sl):
-                m.setdefault("adopted", {})["checker_ceiling"] = {
-                    "value": {"games": _ceil_ans}}
-                return ["checker_ceiling"]
+            def _fs_c(sl):
+                return {"checker_ceiling": {"value": {"games": _ceil_ans[0]}}}
 
             try:
-                globals()["_cv"].for_slug = lambda sl: {
-                    "checker_ceiling": {"value": {"games": _ceil_ans}}}
-                globals()["_cv"].merge_into = _mi_c
-                _ceil_ans = "1000"        # ★いまの候補（1200/1500）に無い★
+                globals()["_cv"].for_slug = _fs_c
+                _ceil_ans[0] = "1000"     # ★いまの候補（1200/1500）に無い★
                 _t_out = " ".join(x["text"] for x in pending_questions(
                     _pd_old, _mat_ceil, "zzz_ceil"))
-                _ceil_ans = "1200"        # ★候補にある★
+                _ceil_ans[0] = "1200"     # ★候補にある★
                 _t_in = " ".join(x["text"] for x in pending_questions(
                     _pd_old, _mat_ceil, "zzz_ceil2"))
             finally:
                 globals()["_cv"].for_slug = _bk_fs_c
-                globals()["_cv"].merge_into = _bk_mi_c
             t("★★控えの答えがいまの候補に無ければ、聞き直す★★"
               "（★消すと早見表の天井が永久に空になる★・Codexの指摘）",
               "--field checker_ceiling " in _t_out)
             t("　（対照）候補にある答えなら、もう聞かない"
               "＝止めているのは『いま有効か』であって、答えの有無ではない",
               "--field checker_ceiling " not in _t_in)
+            # ★★写しは「深い」ものでなければいけない★★
+            #   （2026-09-07・Codexの指摘）＝浅い写しでは `adopted` や
+            #   `ceilings` を**共有する**ので、★本物の材料が先に書き換わる★。
+            #   すると後段の本物への合流が「追加なし」になり、
+            #   ★出典の取り直しまで通らなくなる★。
+            #   ★入れ子を書き換える試料で、本物が1文字も変わらないことを見る★
+            import copy as _cp_t
+            _mat_deep = {"adopted": {}, "ceilings": {"adopted": [
+                {"kind": "GAME", "amount": "1200", "unit": "G",
+                 "benefit": "AT"}]}}
+            _before_deep = _cp_t.deepcopy(_mat_deep)
+            _bk_fs_d = globals()["_cv"].for_slug
+            try:
+                globals()["_cv"].for_slug = lambda sl: {
+                    "checker_ceiling": {"value": {"games": "1200"}},
+                    "machine_profile": {"value": {"profile": "AT_CZ"}}}
+                pending_questions(_pd_old, _mat_deep, "zzz_deep")
+            finally:
+                globals()["_cv"].for_slug = _bk_fs_d
+            t("★★質問を作っても、本物の材料は1文字も変わらない★★"
+              "（★浅い写しだと入れ子を共有し、後段の合流が"
+              "『追加なし』になって出典の取り直しまで通らない★）",
+              _mat_deep == _before_deep)
             t("　決まっている欄は聞かない（答える意味がないので）",
               "--field ceiling_state " not in " ".join(
                   x["text"] for x in pending_questions(
