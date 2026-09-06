@@ -2047,6 +2047,28 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★材料に入っている答えを数えない★"
+               "（★材料にボーナス確率があっても『足りないもの』に残り、"
+               "質問は出ないのに毎日そう言い続ける★）",
+        "file": "scripts/grow_machine.py",
+        "before": "    if isinstance(mat, dict):\n"
+                  '        if ((mat.get("adopted") or {}).get(key) '
+                  'or {}).get("value"):\n'
+                  "            return True",
+        "after": "    if False:\n        pass",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★写しで `adopted` だけ複製し、入れ子は共有する★"
+               "（★本物の天井の一覧が先に書き換わる★"
+               "＝`adopted` を見る試験だけでは捕まらない）",
+        "file": "scripts/grow_machine.py",
+        "before": "            mat2 = _cp_q.deepcopy(mat)",
+        "after": "            mat2 = dict(mat)\n"
+                 '            mat2["adopted"] = dict(mat.get("adopted") or {})',
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
         "why": "★答え済みの項目を「足りないもの」に並べ続ける★"
                "（★型を答えたのに『型が足りない』と毎日言い続ける★"
                "＝機種一覧の行は記事を書けた時しか変わらないため）",

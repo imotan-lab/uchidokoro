@@ -1304,6 +1304,15 @@ def already_answered(mat: dict, slug: str, key: str) -> bool:
     _st = _material_state(mat, key) if mat is not None else ""
     if _st and _st != "UNKNOWN":
         return True
+    # ★★材料に入っている答えも数える★★（2026-09-07・Codexの指摘1）
+    #   ★直す前は型と天井の有無しか材料から読まなかった★ので、
+    #   材料にボーナス確率があっても控えに無ければ「未回答」となり、
+    #   ★質問は出ないのに「足りないもの」にだけ残る★という
+    #   今日直した型と同じ矛盾が起きた。
+    #   ★行き先は `adopted`★（`merge_into` が入れる場所と同じ）。
+    if isinstance(mat, dict):
+        if ((mat.get("adopted") or {}).get(key) or {}).get("value"):
+            return True
     try:
         rec = (_cv.for_slug(slug) or {}).get(key) or {}
     except Exception:                     # noqa: BLE001
@@ -3781,6 +3790,51 @@ def selftest() -> int:
             t("　（対照）答えが無ければ、今までどおり並べる"
               "＝止めているのは『答え済みか』であって、他の検査ではない",
               "機種の型" in _t_lack_no)
+
+            # ★★材料に入っている答えも「足りないもの」から外す★★
+            #   （2026-09-07・Codexの指摘1）＝控えに無くても、
+            #   材料に入っていれば質問は出ない。それなのに
+            #   ★「足りないもの」にだけ残る★という矛盾が起きていた。
+            _pd_bp = {"page_decision": {
+                "indexable": False,
+                "machine_profile": "BONUS", "ceiling_state": "UNKNOWN",
+                "reason_codes": ["NO_BONUS_PROB", "CLAIMS_LT_3"]}}
+            _mat_bp2 = {"adopted": {
+                "machine_profile": {"value": {"profile": "BONUS"}},
+                "bonus_prob": {"value": {"1": {"big": "1/273.1",
+                                               "reg": "1/439.8",
+                                               "total": "1/168.5"}}}}}
+            _bk_fs_m = globals()["_cv"].for_slug
+            try:
+                globals()["_cv"].for_slug = lambda sl: {}   # ★控えは空★
+                _t_bp_mat = " ".join(x["text"] for x in pending_questions(
+                    _pd_bp, _cp_t.deepcopy(_mat_bp2), "zzz_bpm"))
+                _mat_bp3 = _cp_t.deepcopy(_mat_bp2)
+                _mat_bp3["adopted"].pop("bonus_prob")
+                _t_bp_mat0 = " ".join(x["text"] for x in pending_questions(
+                    _pd_bp, _mat_bp3, "zzz_bpm2"))
+            finally:
+                globals()["_cv"].for_slug = _bk_fs_m
+            t("★★材料に答えがあれば、控えに無くても並べない★★"
+              "（★質問は出ないのに『足りないもの』にだけ残っていた★）",
+              "ボーナス確率" not in _t_bp_mat)
+            t("　（対照）材料からも消せば、今までどおり並べる",
+              "ボーナス確率" in _t_bp_mat0)
+
+            # ★★合流に渡す機種名も確かめる★★（2026-09-07・Codexの指摘2）
+            #   ★`mat=None` の試験は合流を通らない★ので、
+            #   合流だけ別の機種名に壊しても分からなかった。
+            _mg_slugs = []
+            _bk_mi_s = globals()["_cv"].merge_into
+            try:
+                globals()["_cv"].merge_into = (
+                    lambda m, sl: _mg_slugs.append(sl) or [])
+                pending_questions(_pd_old, {"adopted": {}}, "zzz_merge_slug")
+            finally:
+                globals()["_cv"].merge_into = _bk_mi_s
+            t("★★写しへの合流も、その機種の分を読む★★"
+              "（★別の機種の控えを重ねていても分からなかった★）",
+              _mg_slugs == ["zzz_merge_slug"])
             t("　決まっている欄は聞かない（答える意味がないので）",
               "--field ceiling_state " not in " ".join(
                   x["text"] for x in pending_questions(
