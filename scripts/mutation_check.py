@@ -2047,6 +2047,17 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★読み取りに失敗したものを、育成レーンで聞かない★"
+               "（★実測145回・誰にも聞かれず捨てられ、"
+               "出典に書いてあるのに永久に検索へ載らない★）",
+        "file": "scripts/grow_machine.py",
+        "before": "        for _q in _ba.unresolved_questions("
+                  'got.get("problems") or [],',
+        "after": "        for _q in [] and _ba.unresolved_questions("
+                 'got.get("problems") or [],',
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
         "why": "★材料に入っている答えを数えない★"
                "（★材料にボーナス確率があっても『足りないもの』に残り、"
                "質問は出ないのに毎日そう言い続ける★）",

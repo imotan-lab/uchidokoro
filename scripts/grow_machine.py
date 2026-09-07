@@ -1715,6 +1715,20 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     #   材料が増えなかった回ほど、この質問が要る。
     out["questions"] += pending_questions(cur, mat, slug,
                                           urls=got.get("urls"))
+    # ★★読み取りに失敗したものも、ここで聞く★★（2026-09-07）
+    #   ★直す前★＝`unresolved_questions` は新台を**作るとき**からしか
+    #   呼ばれず、★育てるときは一度も聞いていなかった★。
+    #   実測（過去7日）＝「天井の記述はあるが採れませんでした」が145回、
+    #   誰にも聞かれずに捨てられ、事実が3件に届かないまま
+    #   ★永久に検索へ載らなかった★（X-300 は35日前に導入済み）。
+    #   ＝今週直した「型」の穴とまったく同じ形。
+    #   ★もう載っている機種には聞かない★（答える意味がないので）
+    if not ((cur.get("page_decision") or {}).get("indexable")):
+        for _q in _ba.unresolved_questions(got.get("problems") or [],
+                                           got.get("urls")):
+            out["questions"].append({"text": str(_q),
+                                     "kind": "grow_unresolved",
+                                     "slug": slug})
     # ★2AIで確定した値も材料に足す★（2026-08-11・台帳#316）
     #   足す場所が add_machine_run の中の1か所にしか無かったので、
     #   **確定値を載せた機種はここで「前に載っていた内容が再現できない」**
@@ -3868,6 +3882,48 @@ def selftest() -> int:
               "（関数を作っただけで繋がっていない、を防ぐ）",
               any(str(q.get("text", "")).find("型") >= 0
                   for q in (_got_q.get("questions") or [])))
+
+            # ★★読み取りに失敗したものも、育成レーンで聞く★★
+            #   （2026-09-07・★実測で145回、誰にも聞かれず捨てられていた★）
+            #   `unresolved_questions` は新台を**作るとき**からしか
+            #   呼ばれておらず、育てるときは一度も聞いていなかった。
+            #   ＝事実が3件に届かないまま★永久に検索へ載らない★
+            #   （X-300 は35日前に導入済みなのに載っていない）。
+            _bk_ps5 = globals()["_probe_state"]
+            _bk_fs5 = globals()["find_sources"]
+            globals()["_probe_state"] = lambda: {}
+            globals()["find_sources"] = lambda m: []
+
+            def _unres_run(probs):
+                return plan_one(
+                    "pw_10523",
+                    probe=lambda u: {"skip": True, "rows": []},
+                    gather=lambda *a, **k: {
+                        "urls": ["https://x.test/a"], "problems": probs,
+                        "material": {"adopted": {}}},
+                    verify=lambda *a, **k: {"problems": [],
+                                            "release": "2026-09-07",
+                                            "identity_name": "テスト機"})
+
+            try:
+                _got_u = _unres_run(
+                    ["天井: x.test を使えませんでした"
+                     "（天井の記述はあるが採れませんでした（要確認））"])
+                _got_u0 = _unres_run(["型式名: 型式名がまだ載っていません"])
+            finally:
+                globals()["_probe_state"] = _bk_ps5
+                globals()["find_sources"] = _bk_fs5
+            _tu = " ".join(str(q.get("text") or "")
+                           for q in (_got_u.get("questions") or []))
+            _tu0 = " ".join(str(q.get("text") or "")
+                            for q in (_got_u0.get("questions") or []))
+            t("★★読み取りに失敗したものを、育成レーンでも2AIに聞く★★"
+              "（★これが繋がっていないと、出典に書いてあるのに"
+              "永久に検索へ載らない★）",
+              "機械が値を取り出せませんでした" in _tu)
+            t("　（対照）読み取りの失敗が無ければ、その質問は出ない"
+              "＝止めているのは『読めなかったこと』であって、他ではない",
+              "機械が値を取り出せませんでした" not in _tu0)
 
             # ★★材料が無くても、2AIの確定値だけで進む★★
             #   （2026-09-06・Codexの指摘1。★私は「直せない」と判断したが

@@ -52,7 +52,7 @@
   "scripts/fix_plain_style.py": "b8af9b83920fa38aea0210f9bcaa5ddadbc742dca902b39eb0762746743c6d56",
   "scripts/gates.py": "7bc1daa8bf10e51080936dddd73c3f0779c6eaa2da8c63adb2c5263306f9b264",
   "scripts/grow_legacy.py": "e08a7ebfc8959646d670a608e2380e3c0a2fc15d71a531db8cc7f8d28e8890e4",
-  "scripts/grow_machine.py": "2d1d458a3e6852b1b2d6692ebac399333c63eee76f69d7d7da553b7c475edecb",
+  "scripts/grow_machine.py": "03d87ca89e2b4283fc721c8fb79277b94daa472e7146be959f53c5a6411817d3",
   "scripts/hub_prose.json": "64a009136a554be1c7d9b13638f02c29928c383e9021e3e9449e464d2e2cce27",
   "scripts/page_decision.py": "7213caf87bc967a69209b1025df014fa2532bd9efe1cb8a822b34c7e91ab6150",
   "scripts/pending_machines.py": "00b3371b6372c6efd9a3e8e431eb6565c98e8cb3f1f64f1ee9855b24876d18ff",
@@ -62,7 +62,7 @@
   "scripts/safe_json.py": "43f61703cbe7e1ea93ee2602fe9be45662957c8929aef62d649b6fc0493e0006",
   "scripts/strip_model_code.py": "d33516022a49198a846df628298328a326b5c04a8f20d4ccc6e416daf6340c68",
   "scripts/tableize_spec.py": "199138ea598a073dc7b8b00da1615d3fd0c4a51b0e8f5d32b5725c66156c36d0",
-  "service-worker.js": "fd04c433f392dae30c6d6836b4ff217cb4badcca145329b4d0b202a143e17262",
+  "service-worker.js": "ee2cb016d55c3ebe70d0354bed711863d4f82c76b4955690479127747b070432",
   "setting.html": "6660837bd3c31f6755c4ba8e5728c5ac846d43267534b72680c1a07717601dc3"
  }
 }
