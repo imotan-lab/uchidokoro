@@ -1142,10 +1142,28 @@ def build_detail(slug, name, release, material) -> dict:
             "body": ["**この機種に天井はありません。**" + _t(_cs)]}
     elif ceil:
         body = []
+        # ★★見出しが同じになる行があるときは、区別を見出しへ入れる★★
+        #   （2026-09-07・台帳#581。★実際に公開が止まった★＝
+        #     天井が2つある機種（AT間850G／CZ間600G）で、
+        #     監査36が「同じ見出しの行が2つ＝重複」と判定して
+        #     書き込みが取り消された。スマスロ リコリス・リコイルが
+        #     本日導入・人気12位なのに検索へ載せられなかった）。
+        #   ★監査36は正しい★＝同じ事実の言い換えが二重に入るのを止める検査。
+        #   想定外だったのが「同じ見出し・違う値・違う数え方」。
+        #   ★守りは一切弱めない★＝数え方が書かれていない同名の行は、
+        #   今までどおり重複として止まる（本物の食い違いを見逃さない）。
+        def _jp_of(x):
+            return {"GAME": "ゲーム数天井", "CYCLE": "周期天井",
+                    "POINT": "ポイント天井"}.get(x["kind"], "天井")
+
+        _same = [_jp_of(x) for x in ceil]
         for c in ceil:
-            jp = {"GAME": "ゲーム数天井", "CYCLE": "周期天井",
-                  "POINT": "ポイント天井"}.get(c["kind"], "天井")
+            jp = _jp_of(c)
             counted = f"（{c['counted']}を数えます）" if c.get("counted") else ""
+            if _same.count(jp) > 1 and c.get("counted"):
+                # ★区別を見出しへ移す★（本文からは外す＝同じことを2度書かない）
+                jp = f"{jp}（{c['counted']}）"
+                counted = ""
             # ★値ごとに根拠を名乗る★（2026-08-23・Codexの指摘4）
             #   ★CZの表だけ直して本文を忘れていた★＝単独確認の天井が
             #   断りなしで出る状態だった。
@@ -2273,6 +2291,53 @@ def selftest() -> int:
            "CZ「石兵八陣」: 独立した出典が2票に届きません（出典1件・1票）",
            "CZかもしれないが採れなかった語: 7連はチャンス・のチャンス",
            "型式名: 型式名がまだどの名鑑にも載っていません"]
+    # ★★天井が2つある機種は、見出しで区別する★★（2026-09-07・台帳#581）
+    #   ★実際に公開が止まった★＝スマスロ リコリス・リコイル（本日導入・
+    #   人気12位）が、AT間850G／CZ間600G の2行を
+    #   ★監査36に「同じ見出しの行が2つ＝重複」と判定され★書けなかった。
+    #   ★守りは弱めない★＝数え方が書かれていない同名の行は今までどおり止まる。
+    import grow_legacy as _gl36
+
+    def _ceil_labels(rows):
+        _m = {"ceilings": {"adopted": rows}, "adopted": {}}
+        _d = build_detail("zzz_c", "テスト機", "2026-09-07", _m)
+        _b = next((x.get("body") or [] for x in _d["sections"]
+                   if x.get("title") == "天井・恩恵"), [])
+        out = []
+        for x in _b:
+            mt = _gl36._LABELED.match(str(x).strip())
+            if mt:
+                out.append(_gl36._canon_label(mt.group("label")))
+        return out
+
+    _bs = "INDEPENDENT_MULTI"
+    _two = _ceil_labels([
+        {"kind": "GAME", "amount": "850", "unit": "G", "counted": "AT間",
+         "benefit": "AT突入", "basis": _bs},
+        {"kind": "GAME", "amount": "600", "unit": "G", "counted": "CZ間",
+         "benefit": "CZ突入", "basis": _bs}])
+    t("★★天井が2つある機種は、見出しが重ならない★★"
+      "（★重なると監査36に止められて永久に検索へ載らない★・台帳#581）",
+      len(_two) == 2 and len(set(_two)) == 2)
+    t("　★数え方を見出しへ移す★（同じことを本文と2度書かない）",
+      any("AT間" in x for x in _two) and any("CZ間" in x for x in _two))
+    _one = _ceil_labels([
+        {"kind": "GAME", "amount": "850", "unit": "G", "counted": "AT間",
+         "benefit": "AT突入", "basis": _bs}])
+    t("　★天井が1つなら書き方は変えない★（無用な書き換えを起こさない）",
+      _one == ["ゲーム数天井"])
+    # ★★守りを弱めていないこと★★＝数え方が無い同名の行は重なったまま
+    #   （「**天井**：1000G」と「**天井**：1200G」のような本物の食い違いを
+    #     見逃さない）
+    _bad = _ceil_labels([
+        {"kind": "GAME", "amount": "1000", "unit": "G", "benefit": "AT突入",
+         "basis": _bs},
+        {"kind": "GAME", "amount": "1200", "unit": "G", "benefit": "AT突入",
+         "basis": _bs}])
+    t("★★数え方が書かれていない同名の行は、今までどおり重なる★★"
+      "（★守りを弱めていない＝本物の食い違いは止まる★）",
+      len(_bad) == 2 and len(set(_bad)) == 1)
+
     _uq = unresolved_questions(_pr, ["https://example.invalid/a"])
     t("★★読めなかったものが質問になる★★"
       "／★これが無くて、出典はあるのに毎晩0項目で終わっていた★",

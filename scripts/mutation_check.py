@@ -2047,6 +2047,15 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★天井が2つある機種で、見出しを区別しない★"
+               "（★監査36に重複と判定されて永久に検索へ載らない★"
+               "＝本日導入・人気12位の機種で実際に止まった・台帳#581）",
+        "file": "scripts/build_new_article.py",
+        "before": "            if _same.count(jp) > 1 and c.get(\"counted\"):",
+        "after": "            if False:",
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
         "why": "★読み取りに失敗したものを、育成レーンで聞かない★"
                "（★実測145回・誰にも聞かれず捨てられ、"
                "出典に書いてあるのに永久に検索へ載らない★）",
