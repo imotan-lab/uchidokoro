@@ -11939,8 +11939,8 @@
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
-   "indexable": false,
-   "machine_profile": "UNKNOWN",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
    "ceiling_state": "UNKNOWN",
    "confirmed_topics": [
     "cz",
@@ -11953,18 +11953,17 @@
     "strategy",
     "reset"
    ],
-   "reason_codes": [
-    "MACHINE_PROFILE_UNKNOWN"
-   ],
+   "reason_codes": [],
    "claims": [
     "at:MAIN_AT",
     "at:UPPER_AT",
     "cz:石兵八陣",
+    "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-04",
-   "input_digest": "sha256:f9a26d215f088c1fb1f3706f3b20d8d05bc46496a9277d6a2f0919a2241e176c"
+   "decided_at": "2026-09-08",
+   "input_digest": "sha256:985f687afb13b02b6a14d5e5db5e713d0502cd916cecf6a8345cf027c7dde641"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-10-05",
