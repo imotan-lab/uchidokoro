@@ -704,6 +704,40 @@ MUTATIONS = [
         "after": '        "publication_policy": _pd.SCHEMA,',
         "run": ["scripts/build_new_article.py"],
     },
+    # ─── 2026-09-08・天井が2つある機種の見出し（Codexの指摘1） ───
+    {
+        "why": "★基本情報表だけ区別を落とす"
+               "（本文は『ゲーム数天井（AT間）』なのに、ページ上部の表は"
+               "『ゲーム数天井 850G』『ゲーム数天井 600G』になり、"
+               "読者がどちらの区間か判断できない。"
+               "★監査36は本文しか見ないので気づけない★）★",
+        "file": "scripts/build_new_article.py",
+        "before": "        for c, jp in zip(ceil, _labels):\n"
+                  "            facts.append([jp, f\"{c['amount']}{c['unit']}\"",
+        "after": "        for c, jp in zip(ceil, [_ceiling_base(x) for x in ceil]):\n"
+                 "            facts.append([jp, f\"{c['amount']}{c['unit']}\"",
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "★片方にしか数え方が無くても区別してしまう"
+               "（『ゲーム数天井（AT間）』と『ゲーム数天井』に分かれて"
+               "監査36を素通りするのに、読者にはどちらか分からない）★",
+        "file": "scripts/build_new_article.py",
+        "before": "            if all(counts) and len(set(counts)) == len(counts):",
+        "after": "            if any(counts) and c.get('counted'):",
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "★数え方の空白をそろえない"
+               "（『AT間』と空白だけの値が両方『値あり・別物』になり、"
+               "『ゲーム数天井（　）』が監査36を素通りする。"
+               "確定値の counted は任意項目で空白を拒否していない）★",
+        "file": "scripts/build_new_article.py",
+        "before": '    s = unicodedata.normalize("NFKC", str(c.get("counted") or ""))\n'
+                  '    return " ".join(s.split())',
+        "after": '    return str(c.get("counted") or "")',
+        "run": ["scripts/build_new_article.py"],
+    },
     {
         "why": "★発行する版が『置いてよい版か』を確かめない"
                "（作れるのに置けない機種を毎晩作る）★",
@@ -2051,8 +2085,10 @@ MUTATIONS = [
                "（★監査36に重複と判定されて永久に検索へ載らない★"
                "＝本日導入・人気12位の機種で実際に止まった・台帳#581）",
         "file": "scripts/build_new_article.py",
-        "before": "            if _same.count(jp) > 1 and c.get(\"counted\"):",
-        "after": "            if False:",
+        # ★2026-09-08に置き換えた★＝見出しを決める場所を
+        #   `ceiling_labels()` の1か所にまとめたので、そこを壊す。
+        "before": "        if len(group) > 1:",
+        "after": "        if False:",
         "run": ["scripts/build_new_article.py"],
     },
     {

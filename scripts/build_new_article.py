@@ -1102,6 +1102,61 @@ def payout_range_view(adopted: dict):
     return _pd.derived_payout_range(adopted)
 
 
+def _ceiling_base(c) -> str:
+    """天井の素の見出し（数え方を入れない形）。"""
+    return {"GAME": "ゲーム数天井", "CYCLE": "周期天井",
+            "POINT": "ポイント天井"}.get(c.get("kind"), "天井")
+
+
+def _counted_norm(c) -> str:
+    """★数え方を1つの形にそろえる★（2026-09-08・Codexの再提出レビュー）
+
+    ★なぜ要るか★＝直す前は生の文字列をそのまま見ていたので、
+      「AT間」と「   」（空白だけ）が
+      ★どちらも「値あり」かつ「互いに違う」と判定され★、
+        ゲーム数天井（AT間）
+        ゲーム数天井（   ）
+      という見出しになった。この2行は監査36から見ると別見出しなので、
+      ★「数え方が分からないなら区別せず止める」という決まりを破る★。
+      「AT間」と「 AT間 」が別物に見える問題も同じ根。
+    ★確定値の `counted` は任意項目で、空白だけの値を拒否していない★ので
+      この入力は実際に届きうる。
+    """
+    s = unicodedata.normalize("NFKC", str(c.get("counted") or ""))
+    return " ".join(s.split())
+
+
+def ceiling_labels(ceil) -> list:
+    """★天井の見出しを決める唯一の場所★（本文と基本情報表が同じものを使う）
+
+    ★なぜ1か所にするか★（2026-09-08・Codexの指摘1）＝
+      直す前は本文と基本情報表が別々に見出しを作っており、
+      本文だけ区別が入って、基本情報表は
+      「ゲーム数天井 850G」「ゲーム数天井 600G」のまま公開されていた。
+      ★監査36は本文（sections[].body）しか見ない★ので検知もできない。
+
+    ★区別を入れるのは「同じ見出しの行が全部、互いに違う数え方を持つ」ときだけ★
+      （2026-09-08・Codexの「防御の厚み」）＝
+      片方だけ数え方を持つ場合に区別を入れると、
+      「ゲーム数天井（AT間）」と「ゲーム数天井」に分かれて
+      ★監査36を通ってしまう★のに、読者にはどちらがどちらか分からない。
+      そういうときは区別を入れず、今までどおり監査36に止めさせる。
+    """
+    base = [_ceiling_base(c) for c in ceil]
+    out = []
+    for c, b in zip(ceil, base):
+        group = [x for x, y in zip(ceil, base) if y == b]
+        if len(group) > 1:
+            # ★判定も出力も同じ正規化を通す★（片方だけだと抜ける）
+            counts = [_counted_norm(x) for x in group]
+            # ★全員が数え方を持ち、しかも互いに違うときだけ区別する★
+            if all(counts) and len(set(counts)) == len(counts):
+                out.append(f"{b}（{_counted_norm(c)}）")
+                continue
+        out.append(b)
+    return out
+
+
 def build_detail(slug, name, release, material) -> dict:
     """記事データを作る。★集まった材料だけを表に入れる★"""
     require_basis(material, slug)    # ★根拠の無い値は記事にしない★
@@ -1152,18 +1207,19 @@ def build_detail(slug, name, release, material) -> dict:
         #   想定外だったのが「同じ見出し・違う値・違う数え方」。
         #   ★守りは一切弱めない★＝数え方が書かれていない同名の行は、
         #   今までどおり重複として止まる（本物の食い違いを見逃さない）。
-        def _jp_of(x):
-            return {"GAME": "ゲーム数天井", "CYCLE": "周期天井",
-                    "POINT": "ポイント天井"}.get(x["kind"], "天井")
-
-        _same = [_jp_of(x) for x in ceil]
-        for c in ceil:
-            jp = _jp_of(c)
-            counted = f"（{c['counted']}を数えます）" if c.get("counted") else ""
-            if _same.count(jp) > 1 and c.get("counted"):
-                # ★区別を見出しへ移す★（本文からは外す＝同じことを2度書かない）
-                jp = f"{jp}（{c['counted']}）"
-                counted = ""
+        # ★★見出しは1か所で決める★★（2026-09-08・Codexの指摘1）
+        #   ★直す前は本文と基本情報表で別々に作っていた★＝
+        #   本文だけ「ゲーム数天井（AT間）」と区別され、
+        #   基本情報表は「ゲーム数天井 850G」「ゲーム数天井 600G」のまま
+        #   ページ上部に出ていた。★監査36は本文しか見ない★ので気づけない。
+        #   ＝読者が850Gと600Gのどちらがどの区間か判断できない表示が
+        #   公開される経路だった。
+        _labels = ceiling_labels(ceil)
+        for c, jp in zip(ceil, _labels):
+            # ★区別が見出しへ入ったら、本文からは外す★（同じことを2度書かない）
+            counted = ("" if jp != _ceiling_base(c)
+                       else (f"（{c['counted']}を数えます）"
+                             if c.get("counted") else ""))
             # ★値ごとに根拠を名乗る★（2026-08-23・Codexの指摘4）
             #   ★CZの表だけ直して本文を忘れていた★＝単独確認の天井が
             #   断りなしで出る状態だった。
@@ -1197,9 +1253,8 @@ def build_detail(slug, name, release, material) -> dict:
         if not _complete:
             body.append(CEILING_PARTIAL_NOTE)
         boxes["天井・恩恵"] = {"title": "天井・恩恵", "body": body}
-        for c in ceil:
-            jp = {"GAME": "ゲーム数天井", "CYCLE": "周期天井",
-                  "POINT": "ポイント天井"}.get(c["kind"], "天井")
+        # ★本文と同じ見出しを使う★（2026-09-08・Codexの指摘1）
+        for c, jp in zip(ceil, _labels):
             facts.append([jp, f"{c['amount']}{c['unit']}"
                               f"{_t(c)}"])
 
@@ -2337,6 +2392,64 @@ def selftest() -> int:
     t("★★数え方が書かれていない同名の行は、今までどおり重なる★★"
       "（★守りを弱めていない＝本物の食い違いは止まる★）",
       len(_bad) == 2 and len(set(_bad)) == 1)
+
+    # ★★基本情報表にも同じ区別が入っているか★★（2026-09-08・Codexの指摘1）
+    #   ★直す前は本文だけ区別され、基本情報表は
+    #     「ゲーム数天井 850G」「ゲーム数天井 600G」のままページ上部に出ていた★。
+    #   ★監査36は本文（sections[].body）しか見ない★ので、
+    #   この抜けは監査でも試験でも見つからなかった。
+    #   ＝読者がどちらがAT間でどちらがCZ間か判断できない表示が公開される経路。
+    def _ceil_facts(rows):
+        _m = {"ceilings": {"adopted": rows}, "adopted": {}}
+        _d = build_detail("zzz_c", "テスト機", "2026-09-07", _m)
+        return [r for r in (_d.get("factTable") or []) if "天井" in str(r[0])]
+
+    _f2 = _ceil_facts([
+        {"kind": "GAME", "amount": "850", "unit": "G", "counted": "AT間",
+         "benefit": "AT突入", "basis": _bs},
+        {"kind": "GAME", "amount": "600", "unit": "G", "counted": "CZ間",
+         "benefit": "CZ突入", "basis": _bs}])
+    t("★★基本情報表の見出しも重ならない★★"
+      "（★本文だけ直しても、ページ上部の表で読者が取り違える★）",
+      len(_f2) == 2 and len({r[0] for r in _f2}) == 2
+      and any("AT間" in r[0] for r in _f2)
+      and any("CZ間" in r[0] for r in _f2))
+    t("　★本文と基本情報表がまったく同じ見出しを使う★"
+      "（別々に作ると、片方だけ直した状態に戻る）",
+      [r[0] for r in _f2] == _two)
+    # ★★片方だけ数え方があるときは区別しない★★（2026-09-08・Codexの「防御の厚み」）
+    #   区別すると「ゲーム数天井（AT間）」と「ゲーム数天井」に分かれ、
+    #   ★監査36を通ってしまう★のに読者にはどちらか分からない。
+    _mix = _ceil_labels([
+        {"kind": "GAME", "amount": "1000", "unit": "G", "counted": "AT間",
+         "benefit": "AT突入", "basis": _bs},
+        {"kind": "GAME", "amount": "1200", "unit": "G", "benefit": "AT突入",
+         "basis": _bs}])
+    t("★★片方にしか数え方が無いときは区別しない★★"
+      "（★中途半端に分けると監査36を素通りして、読者が取り違える★）",
+      len(_mix) == 2 and len(set(_mix)) == 1)
+    # ★★空白だけの数え方を「値あり」と数えない★★
+    #   （2026-09-08・Codexの再提出レビュー）
+    #   ★直す前は「AT間」と「   」が両方とも値ありかつ互いに違うと判定され★、
+    #   「ゲーム数天井（AT間）」と「ゲーム数天井（   ）」に分かれて
+    #   監査36を素通りしていた。確定値の counted は任意項目で、
+    #   空白だけの値を拒否していないので実際に届きうる。
+    def _mk2(a, b_):
+        return [{"kind": "GAME", "amount": "850", "unit": "G", "counted": a,
+                 "benefit": "AT突入", "basis": _bs},
+                {"kind": "GAME", "amount": "600", "unit": "G", "counted": b_,
+                 "benefit": "CZ突入", "basis": _bs}]
+
+    for _blank in ("   ", "　", "\t"):
+        t("★★空白だけの数え方では区別しない★★"
+          "（★区別すると『ゲーム数天井（　）』が監査36を素通りする★）",
+          len(set(_ceil_labels(_mk2("AT間", _blank)))) == 1)
+    t("★★前後の空白が違うだけなら、同じ数え方として扱う★★"
+      "（『AT間』と『 AT間 』を別物にすると、意味の無い区別が公開される）",
+      len(set(_ceil_labels(_mk2("AT間", " AT間 ")))) == 1)
+    t("　★空白をそろえても、本当に違う数え方はいままでどおり区別する★",
+      _ceil_labels(_mk2(" AT間 ", "CZ間"))
+      == ["ゲーム数天井（AT間）", "ゲーム数天井（CZ間）"])
 
     _uq = unresolved_questions(_pr, ["https://example.invalid/a"])
     t("★★読めなかったものが質問になる★★"

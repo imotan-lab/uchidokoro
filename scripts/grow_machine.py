@@ -3894,16 +3894,29 @@ def selftest() -> int:
             globals()["_probe_state"] = lambda: {}
             globals()["find_sources"] = lambda m: []
 
+            # ★★試料は架空の行を使う★★（2026-09-08・Codexの指摘2）
+            #   ★直す前は実在の pw_10523 を直に渡していた★。
+            #   いまは AUTO_PENDING なので通るが、その機種が
+            #   検索に載る／消える／判定書が変わると plan_one が
+            #   材料集めの前に返り、★肯定側の試験が落ちる★。
+            #   この自己試験はCIから直接動くので、
+            #   ★ふつうにデータが更新されただけで自動処理が止まる★経路だった。
+            #   （同じファイルの少し上に「実機種に貼り付けるな」と
+            #     書いてあるのに、ここだけ守れていなかった）
+            #   ★架空の行と食い違わせない★＝登場時期と機種名を
+            #   `_st_row()` に合わせる（食い違うとそちらの問題で
+            #   早期に止まり、聞きたいことが試せない）。
             def _unres_run(probs):
-                return plan_one(
-                    "pw_10523",
-                    probe=lambda u: {"skip": True, "rows": []},
-                    gather=lambda *a, **k: {
-                        "urls": ["https://x.test/a"], "problems": probs,
-                        "material": {"adopted": {}}},
-                    verify=lambda *a, **k: {"problems": [],
-                                            "release": "2026-09-07",
-                                            "identity_name": "テスト機"})
+                with _st_env():
+                    return plan_one(
+                        _ST_SLUG,
+                        probe=lambda u: {"skip": True, "rows": []},
+                        gather=lambda *a, **k: {
+                            "urls": ["https://x.test/a"], "problems": probs,
+                            "material": {"adopted": {}}},
+                        verify=lambda *a, **k: {"problems": [],
+                                                "release": "2026-01-01",
+                                                "identity_name": _ST_NAME})
 
             try:
                 _got_u = _unres_run(
