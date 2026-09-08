@@ -2,7 +2,7 @@
  "schema_version": "style-baseline/v3",
  "_why": "記事の文章で「です・ます」から外れている文の**集合**。★増やさない★（audit項目55）。件数ではなく集合で持つのは、古いのを直して別に入れる**入れ替え**を許さないため。",
  "_how": "python scripts/style_check.py --all で見る／直したら --update-baseline で書き直す（減った時だけ通る）。",
- "count": 1047,
+ "count": 1046,
  "machines": 114,
  "measured_at": "2026-09-09",
  "items": [
@@ -476,7 +476,6 @@
   "77d53b1ddf4e7a94",
   "7800c674cbd560f3",
   "7817d2998f7cf284",
-  "789a6556ca3c880c",
   "78c0f58ffb9e6732",
   "78f2ee7498fd7d5c",
   "791324a91023ba3b",
