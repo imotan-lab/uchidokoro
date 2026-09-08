@@ -2247,33 +2247,32 @@
   "info": "",
   "strategy": "",
   "aliases": [],
-  "publication_policy": "page-decision/v1",
+  "publication_policy": "page-decision/v2",
   "page_decision": {
-   "schema_version": "page-decision/v1",
-   "indexable": false,
+   "schema_version": "page-decision/v2",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "UNKNOWN",
    "confirmed_topics": [
+    "cz",
+    "gameplay",
     "spec"
    ],
    "pending_topics": [
-    "gameplay",
-    "cz",
     "ceiling",
     "setting",
     "strategy",
     "reset"
    ],
-   "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
-    "NO_UNIQUE_GAMEPLAY"
-   ],
+   "reason_codes": [],
    "claims": [
-    "model_code",
+    "at:MAIN_AT",
+    "cz:恐怖トノ遭遇",
     "payout_range"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-08-13",
-   "input_digest": "sha256:5da370da9cc7fef9614e23168f29a7294a460d9a9d535c1e9418a0efb1c76f99"
+   "decided_at": "2026-09-08",
+   "input_digest": "sha256:571b831776a1278733e8691d8eb1405f3e462d9594423b1b7b7b51dc31efe0bd"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-09-07",
@@ -2285,13 +2284,13 @@
    "identity_binding": "DMM_MACHINE_PAGE",
    "identity_evidence_ref": "dmm:5042 型式=L見える子ちゃんSC メーカー=パイオニア 導入=2026-09-07 確認日=2026-08-16",
    "market_release_date": "2026-09-07",
+   "_legacy_evidence_ref": "pworld:10501 型式=L見える子ちゃんSC 検定=6S0265 確認日=2026-08-13",
+   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10501",
    "regulatory_model_code": "L見える子ちゃんSC",
    "_model_code_sources": [
     "p-town.dmm.com",
     "p-world.co.jp"
-   ],
-   "_legacy_evidence_ref": "pworld:10501 型式=L見える子ちゃんSC 検定=6S0265 確認日=2026-08-13",
-   "_legacy_official_product_url": "https://www.p-world.co.jp/machine/database/10501"
+   ]
   }
  },
  {
