@@ -2374,31 +2374,29 @@
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
-   "indexable": false,
+   "indexable": true,
    "machine_profile": "AT_CZ",
    "ceiling_state": "PRESENT",
    "confirmed_topics": [
-    "ceiling"
+    "ceiling",
+    "cz",
+    "gameplay"
    ],
    "pending_topics": [
-    "gameplay",
-    "cz",
     "spec",
     "setting",
     "strategy",
     "reset"
    ],
-   "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
-    "NO_UNIQUE_GAMEPLAY"
-   ],
+   "reason_codes": [],
    "claims": [
-    "ceiling:GAME:"
+    "at:MAIN_AT",
+    "ceiling:GAME:",
+    "cz:モグモグ大戦"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-07",
-   "input_digest": "sha256:c4cc370f8d163e941ee3f3fda3d6f64673605576f599114c76a277831f97dd7a"
+   "decided_at": "2026-09-08",
+   "input_digest": "sha256:a2bd2d1804cea4caeaceee48606097c20665fb6a94a2c8d9e8278912fd1b63a0"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-09-07",
