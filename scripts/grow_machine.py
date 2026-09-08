@@ -1461,12 +1461,18 @@ def ledger_once(slug: str, title: str, detail: str,
       ＝指示が守られるかどうかが「書いた人の注意力しだい」だった。
       ★いまは機械が断る★＝3回に届いていなければ積まない。
     """
-    if round_ is None or int(round_) < STUCK_ASK_LIMIT:
+    # ★★控えを読み直して数える★★（2026-09-08・Codexの指摘3）
+    #   ★直す前は呼ぶ側が渡した回数をそのまま信じていた★＝
+    #   `round_=3` と書くだけで積めたので、
+    #   ★「3回の判断を通した」の証明になっていなかった★。
+    #   数えるのは `grow_result()` が実際に積み上げた控え。
+    _n = _stuck_count(slug)
+    if _n < STUCK_ASK_LIMIT:
         # ★積まない★＝2AIがまだ決められる段階なので、人へ回さない。
         #   ★黙って捨てない★＝呼んだ側の間違いなので記録に残す。
         try:
-            _log(f"  ★台帳へは積みません★（{slug}／"
-                 f"{round_}回目・{STUCK_ASK_LIMIT}回で報告します）")
+            _log(f"  ★台帳へは積みません★（{slug}／控えでは{_n}回目・"
+                 f"{STUCK_ASK_LIMIT}回で報告します）")
         except Exception:                                    # noqa: BLE001
             pass
         return
@@ -4126,24 +4132,38 @@ def selftest() -> int:
             #     ＞ 本当にどうしてもの場合だけメールで報告
             #   ★台帳へ積む関数は誰からでも呼べた★ので、あとから足した道が
             #   3回の判断を飛ばせた＝指示が「書いた人の注意力しだい」だった。
+            # ★★本番と同じ順で積んでから呼ぶ★★（2026-09-08・罠5e）
+            #   ★`ledger_once` は呼ぶ側の申告を信じない★＝控えを読み直す。
+            #   （Codexの指摘＝`round_=3` と書くだけで積めては、
+            #     「3回の判断を通した」の証明にならない）
             _wrote = []
             _keep_add = _oi.add_issue
             try:
                 _oi.add_issue = lambda *a, **k: _wrote.append(k.get("slug"))
+                grow_result("zzz_g", True)          # ★まず0に戻す★
                 ledger_once("zzz_g", "題", "中身")
-                t("★★何回目かを渡さなければ台帳へ積まない★★"
-                  "（★渡し忘れた道が黙って人へ回すのを防ぐ★）", _wrote == [])
-                ledger_once("zzz_g", "題", "中身", round_=1)
-                ledger_once("zzz_g", "題", "中身",
-                            round_=STUCK_ASK_LIMIT - 1)
+                t("★★行き詰まっていないうちは台帳へ積まない★★"
+                  "（★呼ぶ側が積みたがっても、控えが許さない★）",
+                  _wrote == [])
+                for _d in range(1, STUCK_ASK_LIMIT):
+                    grow_result("zzz_g", False, "理由",
+                                today=f"2026-08-{_d:02d}")
+                ledger_once("zzz_g", "題", "中身")
                 t("★★3回に届かないうちは台帳へ積まない★★"
                   "（★1〜2回目は2AIが決める段階★）", _wrote == [])
-                ledger_once("zzz_g", "題", "中身", round_=STUCK_ASK_LIMIT)
-                t("★★3回目になったら積む★★"
+                grow_result("zzz_g", False, "理由",
+                            today=f"2026-08-{STUCK_ASK_LIMIT:02d}")
+                ledger_once("zzz_g", "題", "中身")
+                t("★★3回目まで行ったら積む★★"
                   "（★積まないと、古い内容が黙って公開され続ける★）",
                   _wrote == ["zzz_g"])
+                t("　★申告では通らない★＝控えが0でも積めてしまわない",
+                  (grow_result("zzz_g", True) or True)
+                  and (ledger_once("zzz_g", "題", "中身") or True)
+                  and _wrote == ["zzz_g"])
             finally:
                 _oi.add_issue = _keep_add
+                grow_result("zzz_g", True)
             _a3 = grow_result("zzz_s", False, "理由", today="2026-08-03")
             t("★★3回目でだけ人へ報告する★★",
               _a3["do"] == "ledger" and _a3["round"] == STUCK_ASK_LIMIT)

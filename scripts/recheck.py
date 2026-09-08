@@ -1498,24 +1498,33 @@ def check_guard_proven(args: dict) -> dict:
         import mutation_check as _mc
     except Exception as e:                                   # noqa: BLE001
         return _result(ERROR, f"壊し方の検査を読めません: {e}", args)
-    hits = [i for i, m in enumerate(_mc.MUTATIONS)
+    hits = [m for m in _mc.MUTATIONS
             if str(m.get("why") or "") == why_text]
     if len(hits) != 1:
         return _result(
             NOT_APPLICABLE,
             f"その名前の壊し方が1件に決まりません（{len(hits)}件）", args)
-    i = hits[0]
     try:
-        code = _mc.check("", fast=False, only_index={i})
+        # ★★番号を渡さない★★（2026-09-08・実際に1つずれて別のものを動かした）
+        #   `mutation_check` の中は1から数えるのに、ここは0から数えていた。
+        #   ＝頼んだのとは違う壊し方の結果で「合格」と答え、
+        #   台帳を1件、誤った証拠で閉じた。
+        #   ★名前で決めさせ、動かした名前を返させて突き合わせる★。
+        ok, ran = _mc.check_one(why_text)
     except Exception as e:                                   # noqa: BLE001
         return _result(ERROR, f"壊し方を動かせません: {type(e).__name__}: {e}",
                        args)
-    if code != 0:
+    if ran != why_text:
+        # ★頼んだものと違うものが動いたら通さない★（fail-closed）
+        return _result(FAIL,
+                       "頼んだ壊し方と、実際に動かしたものが違います"
+                       f"（動いた: {ran[:40]!r}）", args)
+    if not ok:
         return _result(FAIL,
                        "壊しても試験が赤くなりません＝その直しは試験で"
-                       "守られていません", args, {"index": i})
+                       "守られていません", args, {"ran": ran})
     return _result(PASS, "壊すと試験が赤くなります＝その直しは試験で"
-                   "守られています", args, {"index": i})
+                   "守られています", args, {"ran": ran})
 
 
 # --- 検査の名簿 -----------------------------------------------------------
@@ -2599,6 +2608,33 @@ def _selftest():
     t("★見たものが違えば指紋も違う★",
       a["observation_digest"] != b["observation_digest"])
     t("同じ食い違いなら名前は同じ", a["finding_key"] == b["finding_key"])
+    # ★★頼んだ壊し方と違うものが動いたら通さない★★（2026-09-08）
+    #   ★実際に1つずれて別のものを動かし、台帳を誤った証拠で閉じた★。
+    #   ★ここでは実際には壊さない★（偽物に差し替えて、突き合わせだけ見る）。
+    try:
+        import mutation_check as _mcT
+        _keep_one = _mcT.check_one
+        _want_t = str(_mcT.MUTATIONS[0]["why"])
+        try:
+            _mcT.check_one = lambda w: (True, "まったく別の壊し方")
+            _r_mis = check_guard_proven({"mutation_why": _want_t})
+            _mcT.check_one = lambda w: (True, w)
+            _r_ok = check_guard_proven({"mutation_why": _want_t})
+            _mcT.check_one = lambda w: (False, w)
+            _r_ng = check_guard_proven({"mutation_why": _want_t})
+        finally:
+            _mcT.check_one = _keep_one
+        t("★★頼んだ壊し方と違うものが動いたら通さない★★"
+          "（★1つずれて別のものを動かし、台帳を誤った証拠で閉じた★）",
+          _r_mis["result"] == FAIL and "違います" in str(_r_mis["detail"]))
+        t("　同じものが動いて赤くなれば通る", _r_ok["result"] == PASS)
+        t("　赤くならなければ通さない", _r_ng["result"] == FAIL)
+        t("　名前で1件に決まらなければ動かさない",
+          check_guard_proven({"mutation_why": "そんな名前はありませんXYZ"})
+          ["result"] == NOT_APPLICABLE)
+    except ImportError:
+        t("　（壊し方の道具が読めないので飛ばしました）", False)
+
     t("★指紋は切り詰めない（64桁）★", len(a["observation_digest"]) == 64)
     t("コミットが分かる", re.fullmatch(r"[0-9a-f]{40}", a["commit_sha"] or "") is not None)
 

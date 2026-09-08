@@ -378,8 +378,15 @@ def selftest() -> int:
             _oi_mod.DEFAULT_FILE = real
             import grow_legacy as _gl
             import grow_machine as _gm
+            # ★★本番と同じ順で積んでから呼ぶ★★（2026-09-08）
+            #   `ledger_once` は控えを読み直すので、
+            #   行き詰まりを実際に積まないと積まれない
+            #   （＝「3回の判断を通した」の証明になる作りに変わった）。
+            for _d in range(1, _gm.STUCK_ASK_LIMIT + 1):
+                _gm.grow_result("s9", False, "理由", today=f"2026-08-{_d:02d}")
             _gm.ledger_once("s9", "s9: 値が再現できません", "詳細です",
                             "MATERIAL")
+            _gm.grow_result("s9", True)          # ★後片付け★
             _gl._to_ledger("s8", ["材料が集まりません"], transient=True)
             _gl._to_ledger("s7", ["形が違います"], transient=False)
             # ★先に「行の数」で見る★（依頼143の指摘2）

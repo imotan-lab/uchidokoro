@@ -2141,9 +2141,65 @@ MUTATIONS = [
                "（★運営者の指示「人に頼らないで・どうしてもの場合だけ報告」が、"
                "書いた人の注意力しだいになる★・2026-09-08）",
         "file": "scripts/grow_machine.py",
-        "before": ("    if round_ is None or int(round_) < STUCK_ASK_LIMIT:"),
+        "before": "    if _n < STUCK_ASK_LIMIT:",
         "after": "    if False:",
         "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★壊し方の名前を、案件の本文と突き合わせない★"
+               "（★合格する壊し方の名前を1つ渡すだけで、機械の中身と"
+               "無関係な案件まで閉じられる・Codexの指摘★）",
+        "file": "scripts/ledger_sweep.py",
+        "before": "    bad = [g for g in guards if g not in body]",
+        "after": "    bad = []",
+        "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★裏取り待ちの案件を、機械の中身の壊し方だけで閉じられる★"
+               "（★機械が直ったことは、その値の裏取りが済んだ証明にならない★）",
+        "file": "scripts/ledger_sweep.py",
+        "before": ("    if kind in TEXT_GONE_NOT_ENOUGH and guards "
+                   "and not checks:"),
+        "after": "    if False and guards:",
+        "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★ラベルの括弧を、末尾のものしか落とさない★"
+               "（★実データで本物のラベル7件が違反になり、"
+               "基準値が書き直せなくなる＝台帳#586そのものに戻る★）",
+        "file": "scripts/style_check.py",
+        "before": '_PAREN_RUN = re.compile(r"[（(][^）)]*[）)]")',
+        "after": '_PAREN_RUN = re.compile(r"[（(][^）)]*[）)]\\s*$")',
+        "run": ["scripts/style_check.py"],
+    },
+    {
+        "why": "★台帳へ積むとき、控えではなく呼ぶ側の申告を信じる★"
+               "（★3回目ですと書くだけで積める＝3回の判断の証明にならない★"
+               "・Codexの指摘）",
+        "file": "scripts/grow_machine.py",
+        "before": "    _n = _stuck_count(slug)",
+        "after": "    _n = STUCK_ASK_LIMIT",
+        "run": ["scripts/grow_machine.py", "scripts/open_issues.py"],
+    },
+    {
+        "why": "★名前から壊し方を探すときの数え方を1つずらす★"
+               "（★頼んだのとは違う壊し方を動かして「合格」と答え、"
+               "台帳を誤った証拠で閉じた・2026-09-08に実際にやった★）",
+        "file": "scripts/mutation_check.py",
+        # ★文字列を分ける★＝そのまま書くと、この行自身が目印に当たって
+        #   「目印が2件」になり、壊し方が動かせなくなる（罠⑦＝自己参照）。
+        "before": ("    hits = [(i, m) for i, m in enum" + "erate(MUTATIONS, 1)"),
+        "after": "    hits = [(i, m) for i, m in enum" + "erate(MUTATIONS)",
+        "run": ["scripts/mutation_check.py"],
+    },
+    {
+        "why": "★頼んだ壊し方と違うものが動いても通す★"
+               "（★guard_proven の存在意義そのものが崩れる＝"
+               "『機械が実際に壊して確かめる』が嘘になる★）",
+        "file": "scripts/recheck.py",
+        "before": "    if ran != why_text:",
+        "after": "    if False:",
+        "run": ["scripts/recheck.py"],
     },
     {
         "why": "★gitが答えなかったときに聞き直さない★"
@@ -3819,6 +3875,29 @@ def check(only: str = "", fast: bool = False, only_index=None) -> int:
     return 0
 
 
+def check_one(why_text: str) -> tuple:
+    """★名前で1件だけ壊して試す★ → (合格したか, 実際に動かした名前)
+
+    （2026-09-08）
+    ★番号を渡す形をやめた理由★＝この中の数え方は1から
+    （`enumerate(MUTATIONS, 1)`）だが、名前から番号を探す側は0から
+    数えていた。★1つずれた別の壊し方を動かして「合格」と答えていた★
+    （台帳#581を、頼んだのとは違う壊し方の結果で閉じた）。
+    ＝番号の受け渡しそのものをやめる。
+
+    ★名前で1件に決まらなければ動かさない★（あいまいなまま通さない）。
+    ★動かした名前を返す★＝呼ぶ側が「頼んだものと同じか」を確かめられる。
+    """
+    want = str(why_text or "")
+    hits = [(i, m) for i, m in enumerate(MUTATIONS, 1)
+            if str(m.get("why") or "") == want]
+    if len(hits) != 1:
+        return False, ""
+    i, m = hits[0]
+    code = check("", fast=False, only_index={i})
+    return code == 0, str(m.get("why") or "")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="守りを壊して試験が赤くなるか見る")
     ap.add_argument("--list", action="store_true")
@@ -3835,6 +3914,44 @@ def main() -> int:
             print(f"{i:2}. {m['why']}  → {m['file']}")
         return 0
     if a.selftest:
+        # ★★名前で選んだ番号が、本当にその名前を指しているか★★
+        #   （2026-09-08・実際に1つずれて別の壊し方を動かした）
+        #   ★ここは実際には壊さない★＝どれを選んだかだけ見る（速い）。
+        _picked = {}
+
+        def _spy(_only, fast=False, only_index=None):
+            _picked["idx"] = sorted(only_index or [])
+            return 0
+
+        _keep_check = globals()["check"]
+        try:
+            globals()["check"] = _spy
+            _want0 = str(MUTATIONS[0]["why"])
+            _ok0, _ran0 = check_one(_want0)
+            _last = str(MUTATIONS[-1]["why"])
+            check_one(_last)
+            _idx_last = list(_picked.get("idx") or [])
+        finally:
+            globals()["check"] = _keep_check
+        _bad_idx = []
+        if _ran0 != _want0:
+            _bad_idx.append("先頭の壊し方で、動かした名前が違う")
+        if _idx_last != [len(MUTATIONS)]:
+            _bad_idx.append(
+                f"末尾の壊し方の番号がずれている（{_idx_last} / "
+                f"正しくは {[len(MUTATIONS)]}）")
+        if check_one("そんな名前の壊し方はありませんXYZ")[0] is not False:
+            _bad_idx.append("知らない名前でも動かしてしまう")
+        if _bad_idx:
+            # ★この道具が読み取れる形で出す★（2026-09-08）
+            #   ★直す前は普通の文で出していた★ので、壊し方の検査が
+            #   「試験が❌を出した」ではなく「ただ落ちただけ」に分類し、
+            #   ＝守りを見ている証拠にならなかった（罠⑤）。
+            for _b in _bad_idx:
+                print("❌ ★番号の選び方が壊れています★: " + _b)
+            return 1
+        print("★名前から選んだ番号は、その名前を指しています★")
+
         # ★この道具自身の試験★＝壊し方の目印が実在するか
         bad = []
         for m in MUTATIONS:

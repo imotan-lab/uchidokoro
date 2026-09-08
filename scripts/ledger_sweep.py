@@ -382,12 +382,47 @@ def kind_allows(row, checks, texts, guards=None) -> tuple:
       数えないと「逐語だけで閉じようとしている」と誤って断られる。
     """
     kind = str((row or {}).get("kind") or "")
-    if kind in TEXT_GONE_NOT_ENOUGH and texts and not (checks or guards):
+    # ★★裏取り待ちの型は、壊し方では通さない★★（2026-09-08・Codexの指摘2）
+    #   ★直す前は `guards` を「検査のうち」に数えていた★ので、
+    #   `external_value`（載せるのをやめただけかもしれない型）を
+    #   ★機械の中身の壊し方1つで通せた★。
+    #   機械の中身が直っていることは、その値の裏取りが済んだ証明にならない。
+    if kind in TEXT_GONE_NOT_ENOUGH and guards and not checks:
+        return False, (f"{kind} は裏取り待ちの型です。"
+                       "機械の中身を直したこと（guard_proven）は、"
+                       "その値の裏取りが済んだ証明になりません"
+                       "（ほかの検査と組にしてください）")
+    if kind in TEXT_GONE_NOT_ENOUGH and texts and not checks:
         return False, (f"{kind} は裏取り待ちの型です。"
                        "文が消えたのは「直った」ではなく"
                        "「載せるのをやめた」かもしれません"
                        "（ほかの検査と組にしてください）")
     return True, f"型 {kind or '(なし)'} でこの組み合わせは使えます"
+
+
+def guards_from_issue(row, guards) -> tuple:
+    """★壊し方の名前は、その案件の本文に書いてあること★ → (ok, 理由)
+
+    （2026-09-08・Codexの指摘2）
+    ★何が起きるか★＝直す前は `guards` が案件と何も結び付いていなかった。
+    ＝★合格することが分かっている壊し方の名前を1つ渡すだけで、
+    機械の中身と何の関係もない案件まで閉じられた★。
+    しかも `external_value`（裏取り待ち＝逐語だけでは閉じない型）の
+    関所まで、guard を1つ足すだけで通れた。
+    ★見るのは案件の題と詳細だけ★（意味は判定しない＝そこに書いてあるか）。
+    """
+    guards = list(guards or [])
+    if not guards:
+        return True, "壊し方の指定はありません"
+    body = (str((row or {}).get("title") or "") + "\n"
+            + str((row or {}).get("detail") or ""))
+    bad = [g for g in guards if g not in body]
+    if bad:
+        return False, ("案件に書かれていない壊し方です: "
+                       + " / ".join(g[:40] for g in bad)
+                       + "／★その案件の本文に、動かす壊し方の名前を"
+                         "逐語で書いてください★")
+    return True, f"壊し方 {len(guards)} 件はすべて案件の本文にあります"
 
 
 def close_issue(issue_id: int, slug: str, checks, texts, why_extra="",
@@ -409,6 +444,11 @@ def close_issue(issue_id: int, slug: str, checks, texts, why_extra="",
     row = find_issue(issue_id)
     guards = list(guards or [])
     ok, why = texts_from_issue(row, texts)
+    print("  " + why)
+    if not ok:
+        print("★閉じません★")
+        return 1
+    ok, why = guards_from_issue(row, guards)
     print("  " + why)
     if not ok:
         print("★閉じません★")
@@ -546,6 +586,31 @@ def main() -> int:
     return 0
 
 
+def _guard_tests(t) -> None:
+    """★壊し方の名前が案件と結び付いているか★（2026-09-08・Codexの指摘2）
+
+    ★直す前★＝`guards` は案件と何も結び付いていなかったので、
+    ★合格することが分かっている壊し方の名前を1つ渡すだけで、
+    機械の中身と何の関係もない案件まで閉じられた★。
+    """
+    _row = {"title": "天井が2つある機種を公開できない",
+            "detail": "壊し方の名前: ★見出しを区別しない★",
+            "kind": "structural"}
+    t("★★案件に書かれていない壊し方では閉じない★★"
+      "（★合格する壊し方を1つ渡すだけで、無関係な案件を閉じられた★）",
+      guards_from_issue(_row, ["★まったく別の壊し方★"])[0] is False)
+    t("　案件の本文にある壊し方なら通る",
+      guards_from_issue(_row, ["★見出しを区別しない★"])[0] is True)
+    t("　指定が無ければ何も言わない", guards_from_issue(_row, [])[0] is True)
+    # ★裏取り待ちの型を、壊し方で通せないこと★
+    _ev = {"title": "恩恵が確かめられない", "detail": "本文", "kind": "external_value"}
+    t("★★裏取り待ちの案件を、機械の中身の壊し方だけで閉じない★★"
+      "（★機械が直ったことは、その値の裏取りが済んだ証明にならない★）",
+      kind_allows(_ev, [], [], ["★何かの壊し方★"])[0] is False)
+    t("　ほかの検査と組なら、型の判定では止めない",
+      kind_allows(_ev, ["text_gone"], [], ["★何かの壊し方★"])[0] is True)
+
+
 def selftest() -> int:
     ng = []
     ran = [0]
@@ -556,6 +621,7 @@ def selftest() -> int:
         if not cond:
             ng.append(name)
 
+    _guard_tests(t)
     t("★★題の言葉から検査を挙げる（参考）★★",
       "competitor_names_gone"
       in suggest_checks({"title": "C評価: 他サイト名が本文に出ている"}))
