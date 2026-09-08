@@ -1321,6 +1321,7 @@ def already_answered(mat: dict, slug: str, key: str) -> bool:
 
 
 def pending_questions(cur: dict, mat: dict = None, slug: str = "",
+                     complete: bool = False,
                       urls=None) -> list:
     """★まだ検索に載っていない機種は、2AIが原文を読んで埋める★
 
@@ -1393,7 +1394,17 @@ def pending_questions(cur: dict, mat: dict = None, slug: str = "",
                      + "／足りないもの: " + " ／ ".join(lack)
                      + "／★機械では取り出せなかったので、出典の原文を"
                        "自分で読んで決めてください★"
-                     + ("／読む先: " + " ".join(_u[:4]) if _u else "")
+                     # ★切らない★（2026-09-08・Codexの指摘2/4）
+                     #   ★直す前は先頭4本だけ★＝下位ページが一度も出なかった。
+                     # ★★「全部」と書けないときは書かない★★
+                     #   （2026-09-08・Codexの指摘1）
+                     #   ★下位ページを集める前の経路から呼ばれることがある★。
+                     #   そこで「全部」と書くと**嘘になる**。
+                     + (("／読む先"
+                         + ("（全部）" if complete else
+                            "（★全部ではありません★下位ページを含めて"
+                            "その機種のページを一通り見てください）")
+                         + ": " + " ".join(_u)) if _u else "")
                      + "／決めたら confirmed_values.py --record で記録"
                        "（逐語引用が要ります）")})
     # ★★項目名だけで一律に落とす形はやめた★★（2026-09-07・Codexの指摘）
@@ -1617,6 +1628,8 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
                     #   （実測：パリピ孔明は材料が足りているのに永久に沈黙）。
                     #   ★出典が変わっていなくても、機械が読めていないだけで
                     #   原文には書いてある★のだから、2AIが読めば決まる。
+                    # ★ここは下位ページを集める前★（2026-09-08・Codexの指摘1）
+                    #   ＝「全部」とは書けない。嘘をつかない。
                     out["questions"] += pending_questions(
                         cur, None, slug, urls=_known)
                     return out
@@ -1705,6 +1718,24 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     blk = _amr.blocking_problems(got.get("problems") or [])
     if blk:
         out["problems"] += [f"止めました: {p}" for p in blk]
+        # ★★止めるときこそ、2AIに聞く★★（2026-09-08・Codexの指摘）
+        #   ★直す前はここで返していた★ので、名鑑の一覧が読めない等で
+        #   止まった機種は、★いちばん読めていないのに問いが1つも出ない★。
+        #   ＝新台側（run_one）は直したのに、育成側だけ残っていた。
+        out["questions"] += pending_questions(
+            cur, got.get("material"), slug,
+            complete=bool(got.get("all_urls_complete")),
+            urls=got.get("all_urls") or got.get("urls"))
+        # ★★問いは必ず辞書で持ち回る★★（2026-09-08・Codexの指摘）
+        #   ★直す前は文字列のまま足していた★ので、表示のところが
+        #   `_q.get(...)` を呼んで**実際に走らせると落ちた**。
+        for _q in _ba.unresolved_questions(
+                got.get("problems") or [],
+                got.get("all_urls") or got.get("urls"),
+                complete=bool(got.get("all_urls_complete"))):
+            out["questions"].append({"text": str(_q),
+                                     "kind": "grow_unresolved",
+                                     "slug": slug})
         return out
     mat = got.get("material")
     if not mat:
@@ -1724,8 +1755,10 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
             # ★★材料が集まらない日でも、決まっていないことは聞く★★
             #   （2026-09-05・Codexの指摘3）★ここで戻ると、
             #   出典が1つしか無い機種などは**永久に沈黙する**。
-            out["questions"] += pending_questions(cur, None, slug,
-                                                  urls=got.get("urls"))
+            out["questions"] += pending_questions(
+                cur, None, slug,
+                complete=bool(got.get("all_urls_complete")),
+                urls=got.get("all_urls") or got.get("urls"))
             return out
         out["notes"].append(
             "材料を集められませんでしたが、2AIの確定値だけで進みます"
@@ -1739,8 +1772,10 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     #   （2026-09-05）★ここに置く理由★＝後段（記事の組み立て・
     #   消失の判定）がどう転んでも、載っていない機種には聞くべきだから。
     #   材料が増えなかった回ほど、この質問が要る。
-    out["questions"] += pending_questions(cur, mat, slug,
-                                          urls=got.get("urls"))
+    out["questions"] += pending_questions(
+        cur, mat, slug,
+        complete=bool(got.get("all_urls_complete")),
+        urls=got.get("all_urls") or got.get("urls"))
     # ★★読み取りに失敗したものも、ここで聞く★★（2026-09-07）
     #   ★直す前★＝`unresolved_questions` は新台を**作るとき**からしか
     #   呼ばれず、★育てるときは一度も聞いていなかった★。
@@ -1750,8 +1785,11 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     #   ＝今週直した「型」の穴とまったく同じ形。
     #   ★もう載っている機種には聞かない★（答える意味がないので）
     if not ((cur.get("page_decision") or {}).get("indexable")):
-        for _q in _ba.unresolved_questions(got.get("problems") or [],
-                                           got.get("urls")):
+        # ★読む先はその機種のページ全部★（2026-09-08・本体だけ渡すのをやめた）
+        for _q in _ba.unresolved_questions(
+                got.get("problems") or [],
+                got.get("all_urls") or got.get("urls"),
+                complete=bool(got.get("all_urls_complete"))):
             out["questions"].append({"text": str(_q),
                                      "kind": "grow_unresolved",
                                      "slug": slug})
@@ -2617,6 +2655,31 @@ def selftest() -> int:
                            verify=lambda *a, **k: {"problems": [],
                                                    "release": ""},
                            find=lambda *a, **k: [])
+    # ★★止める判断のほうが先にあると、問いが1つも作られない★★
+    #   （2026-09-08・Codexの指摘）★新台側は直したが育成側が残っていた★
+    #   ＝いちばん読めていない機種で、2AIに何も聞かないまま終わっていた。
+    with _st_env():
+        _blkq = plan_one(
+            _ST_SLUG,
+            gather=lambda *a, **k: {
+                "material": None,
+                "problems": [
+                    "chonborista: CATALOG_UNHEALTHY 一覧を読めません",
+                    "読めなかった出典があります"
+                    "（一覧を読めない・候補を決められない）: chonborista"],
+                "urls": ["https://chonborista.com/slot/l-test/1/"],
+                "all_urls_complete": False},
+            verify=lambda *a, **k: {"problems": [], "release": ""},
+            find=lambda *a, **k: [])
+    t("★★名鑑の一覧が読めなくて止めるときも、2AIに聞く★★"
+      "（★止める判断が先にあり、問いが1つも作られなかった★）",
+      _blkq.get("questions")
+      # ★★全部が辞書であること★★（2026-09-08・Codexの指摘）
+      #   ★直す前は「辞書でなければそのまま」と試験の側をゆるめた★ので、
+      #   ★本番が落ちる形をそのまま通していた★。
+      and all(isinstance(q, dict) for q in _blkq["questions"])
+      and any("取れなかった出典があります" in str(q.get("text") or "")
+              for q in _blkq["questions"]))
     t("　（対照）そのとき plan_one は材料集めまで到達しない",
       any("育てる対象ではありません" in p
           for p in (_st_out.get("problems") or []))
@@ -4132,6 +4195,26 @@ def selftest() -> int:
               grow_result("zzz_s", False, "理由",
                           today="2026-08-01")["round"] == 1)
             _a2 = grow_result("zzz_s", False, "理由", today="2026-08-02")
+            # ★★「読む先（全部）」は、全部のときだけ書く★★
+            #   （2026-09-08・Codexの指摘1）
+            #   ★下位ページを集める前の経路からも呼ばれる★ので、
+            #   そこで「全部」と書くと嘘になる。
+            _cur_q = {"slug": "zzz_q", "name": "試験機",
+                      "page_decision": {"indexable": False,
+                                        "reason_codes": ["CLAIMS_LT_3"]}}
+            _q_all = pending_questions(
+                _cur_q, None, "zzz_q", complete=True,
+                urls=["https://x/1", "https://x/2"])
+            _q_part = pending_questions(
+                _cur_q, None, "zzz_q", complete=False, urls=["https://x/1"])
+            t("★★全部そろっているときだけ『全部』と書く★★",
+              any("読む先（全部）" in str(q.get("text")) for q in _q_all))
+            t("★★そろっていないのに『全部』と書かない★★"
+              "（★嘘をつくと、2AIが探すのをやめてしまう★）",
+              not any("読む先（全部）" in str(q.get("text"))
+                      for q in _q_part)
+              and any("全部ではありません" in str(q.get("text"))
+                      for q in _q_part))
             t("★★1〜2回目は2AIに聞く（人へ回さない）★★"
               "／★直す前は、その場で人へ回して止まったままだった★",
               _a1["do"] == "ask" and _a2["do"] == "ask"
@@ -4342,9 +4425,13 @@ def _main() -> int:
         #   （型の質問は335字あり `--official-url <公式URL` で切れる）。
         #   読む相手は2AIなので、長さより**欠けないこと**が大事。
         print("  ★2AIに聞くこと: " + str(_q.get("text") or _q))
-        # ★読む先は行を分ける★（1行に並べると端が切れて見落とす）
+        # ★読む先が本文に入っていないときだけ、別に並べる★
+        #   （2026-09-08・Codexの補足）★直す前は必ず二重に出していた★＝
+        #   下位ページを入れた今は80本が2回並び、長さが倍になる。
+        _txt_q = str(_q.get("text") or "")
         for _u in (_q.get("urls") or []):
-            print("      読む先: " + str(_u))
+            if str(_u) not in _txt_q:
+                print("      読む先: " + str(_u))
     for _n in got.get("notes") or []:
         print("  （お知らせ）" + _n)
     # ★★導入日が「月だけ」→「日まで」分かったら、登録も直す★★

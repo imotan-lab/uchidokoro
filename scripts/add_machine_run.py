@@ -495,6 +495,9 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
         return {"accepted": set(),
                 "rejected_by_cache": {r["url"] for r in looks or []},
                 "bad": {r["url"] for r in looks or []},
+                # ★控えを読めない＝「別の機種だから外す」ではない★
+                #   （2026-09-08・Codexの指摘）読めていないので未確認に数える。
+                "unconfirmed": {r["url"] for r in looks or []},
                 "questions": [], "relation_checks": [],
                 "cache_unreadable": True}
     for r in looks or []:
@@ -641,7 +644,14 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
                           "eligible_at_collection_end": None,
                           "article_created": None,
                           "model_code_vote_used": False})
-        elif v != "REJECT_MATERIAL":
+        elif v == "REJECT_MATERIAL":
+            # ★★「使わない」と決めてあるなら、確定した除外★★
+            #   （2026-09-08・Codexの指摘）
+            #   ★直す前は何も記録していなかった★ので、同定に落ちた側から
+            #   「まだ確かめられていない」に入り、★2AIが決着させた機種が
+            #   いつまでも「読む先は全部ではありません」と言われ続けた★。
+            rejected.add(r["url"])
+        else:
             questions.append({
                 "key": f"title:{slug}:{r['url']}",
                 "text": (
@@ -684,7 +694,7 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
     #     ★ただし、メーカーを期待していない呼び方のときは、この関門自体が無い★
     #     （`maker` が空＝照合する相手がいない。lookup も maker_check を作らない）
     _USE_STATES = ("MATCH",)          # そのまま材料に使ってよい状態
-    bad = set()
+    bad, unconfirmed = set(), set()
     for r in looks or []:
         if r["url"] in accepted:
             continue
@@ -693,9 +703,140 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
             bad.add(r["url"])
         elif maker and st not in _USE_STATES:
             bad.add(r["url"])
+        else:
+            continue
+        # ★★「別の社と確定した」ものだけが正しい除外★★
+        #   （2026-09-08・Codexの指摘）
+        #   ★直す前は、外した理由を全部ひとまとめにしていた★ので、
+        #   UNKNOWN（どの社か分からない）・同定できなかったページ・
+        #   控えを読めなかった場合まで「正しく除外した」ことになり、
+        #   ★読めていないのに「読む先（全部）」と言っていた★。
+        #   ★控えで「使わない」と決めたものは確定★（人と2AIが判断済み）。
+        if r["url"] in rejected or (r.get("identity_ok") and st == "MISMATCH"):
+            continue
+        unconfirmed.add(r["url"])
     return {"accepted": accepted, "rejected_by_cache": rejected,
-            "bad": bad, "questions": questions, "relation_checks": notes,
+            "bad": bad, "unconfirmed": unconfirmed,
+            "questions": questions, "relation_checks": notes,
             "cache_unreadable": False}
+
+
+def _mark_unread(got, keys, why, log=None) -> None:
+    """★読めなかったものを、判定と問いの両方へ届かせる★（2026-09-08）
+
+    ★なぜ関数にするか★＝読めなかったページは、判定へ来る前に
+    一覧から外れる場所が**4か所**ある（取得失敗・転送／メーカーの照合／
+    転載照合／名鑑の一覧そのもの）。★どこか1か所でも書き忘れると、
+    「読む先（全部）」という嘘が出る★ので、入口を1つにする。
+
+    ★URLではなく出どころの名前を渡す★＝転送されたURLをそのまま
+    2AIへ渡すと、別の機種のページを読ませかねない。
+    「どのサイトが読めなかったか」だけ伝えれば、2AIは自分で探せる。
+    """
+    names = set()
+    for k in keys or []:
+        s = str(k or "").strip()
+        if not s:
+            continue
+        if "//" in s:
+            try:
+                from urllib.parse import urlsplit as _us
+                s = _us(s).netloc or s
+            except Exception:                                # noqa: BLE001
+                pass
+        names.add(s)
+    if not names:
+        return
+    got.setdefault("unread", set()).update(names)
+    msg = f"読めなかった出典があります（{why}）: " + " ".join(sorted(names))
+    got.setdefault("problems", []).append(msg[:300])
+    if log:
+        log("  ★" + msg[:200] + "★")
+
+
+def _collect_all_urls(urls, pages, log=None) -> tuple:
+    """★その機種のページを全部並べる★（本体＋下位）→ (URLの並び, 問題)
+
+    （2026-09-08・運営者の指示「当たり前に全部見ろよって話」）
+    ★取りに行かない★＝下位の一覧は、もう取ってある本体のHTMLから読む。
+    ★読めなくても止めない★＝本体だけでも渡す（材料が減るより良い）。
+    ★ただし黙って進まない★（2026-09-08・Codexの指摘5）＝
+      読めなかった理由は必ず返し、2AIへの問いにも出す。
+      そうしないと「全部読んだ前提」で判断させてしまう。
+      ★下位ページが上限を超えたときも同じ★＝`page_corpus` は
+      「途中まで読ませない」ために空を返す。呼ぶ側が黙って本体だけで
+      進めると、その安全策を無効にしてしまう。
+    """
+    out = list(urls or [])
+    bad = []
+
+    def _note(msg):
+        bad.append(msg)
+        if log:
+            log("  ★" + msg + "★")
+
+    try:
+        import os as _o
+        import page_corpus as _pc
+        import safe_json as _sj0
+        _cats = _sj0.read_json(
+            _o.path.join(BASE, "assets", "data", "directory-catalogs.json"),
+            expect=dict)
+        _dirs = _cats.get("directories") or {}
+    except Exception as e:                                   # noqa: BLE001
+        _note("下位ページを全部は並べられませんでした"
+              f"（名鑑の設定を読めません: {type(e).__name__}）")
+        return out, bad
+    for u in list(urls or []):
+        pg = (pages or {}).get(u)
+        html = getattr(pg, "cleaned_html", None) or getattr(pg, "html", None)
+        if not html:
+            _note("下位ページを全部は並べられませんでした"
+                  f"（本文が手元にありません: {u}）")
+            continue
+        _done = False
+        import re as _re_u
+        for _k, _c in _dirs.items():
+            # ★★その名鑑のURLかは「機種ページの形」で見る★★
+            #   （2026-09-08・自分で誤検知を出して直した）
+            #   ★機種IDの決まりで見てはいけない★＝
+            #   その決まりは**下位ページを持つ名鑑にしか無い**ので、
+            #   下位ページを持たない名鑑（ちょんぼりすた）が
+            #   「どの名鑑にも当てはまらない」になり、毎回警告が出ていた。
+            _mp = str(_c.get("machine_page_pattern") or "")
+            try:
+                if not _mp or not _re_u.match(_mp, u):
+                    continue
+            except _re_u.error:
+                continue
+            try:
+                subs, why = _pc.sub_urls(_c, u, html)
+            except Exception as e:                           # noqa: BLE001
+                _note("下位ページを全部は並べられませんでした"
+                      f"（{u}／{type(e).__name__}: {str(e)[:60]}）")
+                _done = True
+                break
+            if why:
+                _note("下位ページを全部は並べられませんでした"
+                      f"（{u}／{why}）")
+                _done = True
+                break
+            _done = True
+            add = [s for s in subs if s not in out]
+            if add:
+                out += add
+                if log:
+                    log(f"  読む先に下位ページを足しました: {len(add)}件"
+                        f"（{_c.get('name') or _k}）")
+            elif subs:
+                pass                       # ★もう入っている＝正常★
+            break
+        if not _done:
+            # ★どの名鑑の形にも当てはまらないURL★
+            #   （名鑑を増やしたのに設定を足し忘れた、などで起きる）
+            _note("下位ページを全部は並べられませんでした"
+                  f"（どの名鑑の決まりにも当てはまりません: {u}）")
+    return out, bad
 
 
 def gather(*a, **k):
@@ -721,9 +862,25 @@ def _gather(name: str, maker: str = "", slug: str = "",
       渡されなければ控えは効かない（fail-closed）。
     """
     got = {"name": name, "urls": [], "model_code": None, "material": None,
-           "problems": []}
+           "problems": [],
+           # ★★既定は「そろっていない」★★（2026-09-08・Codexの指摘）
+           #   早く終わる道が何本もあるので、★書き忘れたら安全側★になる形にする。
+           "unread": set(), "all_urls_complete": False}
     fr = _di.find(name)
     got["urls"] = _di.found_urls(fr)
+    # ★★一覧そのものを読めなかった名鑑は「読めていない」★★
+    #   （2026-09-08・Codexの指摘）
+    #   ★直す前★＝この2つは `unused_msgs` に入るだけで、
+    #   型式の票がそろうと**記録からも消えて**いた。
+    #   ＝「2件は読めた、3件目は一覧が壊れていた」でも「全部読んだ」と
+    #   2AIに言っていた。
+    #   ★HEALTHY_NO_MATCH は別★＝一覧は正常に読めていて、その時点で
+    #   載っていないことを確かめられた＝「読めていない」ではない。
+    _mark_unread(
+        got,
+        [d for d, v in fr["results"].items()
+         if v.get("state") in ("CATALOG_UNHEALTHY", "AMBIGUOUS_CANDIDATES")],
+        "一覧を読めない・候補を決められない", _log)
     # ★使わない名鑑の問題は「票が成立した」と分かってから抑制する★
     #   （2026-08-02・Codex27〜28回目。URLが2件あるだけでは2票ではない＝
     #     型式の独立2票が成立して初めて、3件目の曖昧さを記録だけにしてよい）
@@ -898,6 +1055,10 @@ def _gather(name: str, maker: str = "", slug: str = "",
     # ★★外すときは、材料の一覧と票の両方から外す★★
     #   （取れなかったURLを残すと、読取器が自分で取り直してしまう）
     if _drop:
+        # ★★2件を下回って早く終わる道より前に記録する★★
+        #   （2026-09-08・Codexの指摘）★直す前は最後にまとめて数えていた★ので、
+        #   残りが2件未満になった機種は、判定も2AIへの問いも作られなかった。
+        _mark_unread(got, _drop, "取れない・転送される", _log)
         got["urls"] = [u for u in got["urls"] if u not in _drop]
         looks = [r for r in looks if r.get("url") not in _drop]
         if len(got["urls"]) < 2:
@@ -937,6 +1098,8 @@ def _gather(name: str, maker: str = "", slug: str = "",
         _log(f"  （メーカー欄はDMMと違うが、控えでこのページを材料に使うと"
              f"決めてある）{_n['url']} → {_n['seen']} ⇔ {_n['expected']}")
         got.setdefault("maker_relation_checks", []).append(_n)
+    _mark_unread(got, _dec.get("unconfirmed") or set(),
+                 "メーカー欄を確かめられない", _log)
     if _bad_maker:
         _bad_msgs = []
         for r in looks:
@@ -970,6 +1133,7 @@ def _gather(name: str, maker: str = "", slug: str = "",
     #     という31回目の目的は「外す」ことでそのまま守られる）
     _lin_failed = set(lin.get("failed") or [])
     if _lin_failed:
+        _mark_unread(got, _lin_failed, "転載照合で取れない", _log)
         for u in sorted(_lin_failed):
             _log(f"  （転載照合で取得できず・票と材料から除外）{u}")
         got["urls"] = [u for u in got["urls"] if u not in _lin_failed]
@@ -1129,6 +1293,37 @@ def _gather(name: str, maker: str = "", slug: str = "",
     for nt in got["material"]["at_specs"]["need_third"]:
         jp = "メインAT" if nt["mode"] == "MAIN_AT" else "上位AT"
         got["problems"].append(f"{jp}の仕様: {nt['why']}")
+    # ★★2AIへ渡す「読む先」は、その機種のページ全部★★
+    #   （2026-09-08・運営者の指示「当たり前に全部見ろよって話」）
+    #   ★直す前は本体のURLしか渡していなかった★ので、
+    #   狙い目・期待値・ヤメ時（＝名鑑によっては下位ページにしかない）が
+    #   読まれず、「当サイトの狙い目」が全機種で空欄のままだった。
+    #   ★取りに行く回数は増えない★＝下位の一覧は、
+    #   もう取ってある本体のHTMLから読む。
+    #   ★材料の読み取りには使わない★＝抽出器は今までどおり本体だけを見る
+    #   （下位には設定判別など別の話題の数字があり、混ぜると取り違える）。
+    #   ここで増やすのは「2AIが読む先」だけ。
+    got["all_urls"], _url_bad = _collect_all_urls(
+        got.get("urls") or [], _pages, _log)
+    # ★読めなかったことは材料の問題として残す★（2026-09-08・Codexの指摘5）
+    #   ここに入れると2AIへの問いにも出る＝「全部読んだ前提」にさせない。
+    got["problems"] += _url_bad
+    # ★★「全部そろった」は、失敗が1件も無いときだけ★★
+    #   （2026-09-08・Codexの指摘1）
+    #   ★直す前は「URLが1本でもあれば全部」と数えていた★＝
+    #   `_collect_all_urls` は失敗しても本体URLは返すので、
+    #   本文なし・上限超過・設定読取失敗でも「全部」になっていた。
+    #   ＝直したはずの「嘘の『読む先（全部）』」がそのまま出ていた。
+    # ★★取れなかったページも「読めていない」に数える★★
+    #   （2026-09-08・Codexの指摘）
+    #   ★直す前★＝取得失敗・転送のページは、ここへ来る前に
+    #   `got["urls"]` から外れているので、この判定に**届かなかった**。
+    #   ＝名鑑3件のうち1件が取れなくても「読む先（全部）」と書いていた。
+    #   ★メーカー欄の不一致で外したページは数えない★＝
+    #   あちらは「別の機種のページだから読ませない」という正しい除外で、
+    #   読めていないわけではない（混ぜると、正しく除外した機種まで
+    #   ずっと「全部ではありません」と言い続ける）。
+    got["all_urls_complete"] = not _url_bad and not got.get("unread")
     mat = got["material"]
     _log(f"材料集め終了: {name} / 型式={got.get('model_code')} "
          f"採用={len(mat.get('adopted') or {})}項目 "
@@ -3014,6 +3209,15 @@ def run_one(name, official_url, maker, release, apply_it=False,
                 f"（型式名が同じ: {got['observed_model_code']} / {why}）"
                 f"／新しいslugで作らず、更新タスクで直すこと")
     if not got["material"]:
+        # ★★材料が足りずに終わるときこそ、2AIに聞く★★
+        #   （2026-09-08・Codexの指摘）★直す前はここで返していた★ので、
+        #   ★いちばん読めていない機種で、問いが1つも作られなかった★。
+        out["ask_2ai"] = list(out.get("ask_2ai") or []) + (
+            _ba.unresolved_questions(
+                out["problems"], got.get("all_urls") or got.get("urls") or [],
+                complete=bool(got.get("all_urls_complete"))))
+        for q in out["ask_2ai"]:
+            _log(f"  ★2AIに聞くこと: {q}")
         out["blocked"] = _blocking(out["problems"])
         # ★材料が足りずに早く終わるときも記録を残す★
         #   （2026-08-17・Codex依頼231。ここだけ書き忘れていた）
@@ -3104,10 +3308,16 @@ def run_one(name, official_url, maker, release, apply_it=False,
     #     終わっていた★（実測：16日間・25回試して2機種とも記事にならず）。
     #   ★足す順に意味がある★＝`checker_questions` は配列を丸ごと返すので、
     #   先に足すと消える（2026-08-14・依頼190のP1と同じ穴）。
+    # ★読む先はその機種のページ全部★（2026-09-08・本体だけ渡すのをやめた）
     out["ask_2ai"] += _ba.unresolved_questions(
-        out["problems"], got.get("urls") or [])
+        out["problems"], got.get("all_urls") or got.get("urls") or [],
+        complete=bool(got.get("all_urls_complete")))
     for q in out["ask_2ai"]:
-        _log(f"  ★2AIに聞くこと: {q[:160]}")
+        # ★★切らない★★（2026-09-08・Codexの指摘3）
+        #   ★直す前は160字で切っていた★＝読む先は問いの末尾にあるので、
+        #   ★いちばん質問が要る機種でURLが1本も残らなかった★。
+        #   読む相手は2AIなので、長さより欠けないことが大事。
+        _log(f"  ★2AIに聞くこと: {q}")
     usable_mat = usable_material(mat)
     if not usable_mat:
         out["problems"].append("採用できた材料がありません（記事を作りません）")
@@ -3323,6 +3533,149 @@ def selftest() -> int:
         t("　2件そろえば型式名と材料を集める",
           g2["model_code"] == "L1" and g2["material"] is not None)
 
+        # ★★3件見つかって1件取れないとき、通しで確かめる★★
+        #   （2026-09-08・Codexの指摘）
+        #   ★取れなかったページは、数える前に一覧から外れている★ので、
+        #   「残った2件」だけを見て「読む先（全部）」と書いていた。
+        #   ★名鑑は実際に3件ある★（ちょんぼりすた・なな徹・DMM）ので、
+        #   1件落ちても2件残り、件数の関門も通る＝本番で起きうる形。
+        #   ★試験が自分で数えない★＝本番の gather が返した値だけを見る。
+        _u3 = {"a": "https://chonborista.com/slot/l-test/1/",
+               "b": "https://nana-press.com/kaiseki/machine/9999/",
+               "c": "https://p-town.dmm.com/machines/9999/"}
+        _di.find = lambda n, c=None: {"results": {
+            k: {"state": "FOUND", "url": v, "why": "", "candidates": [],
+                "surfaces": "1/1", "index_size": 9, "problems": []}
+            for k, v in _u3.items()}}
+        _keep_fetch3 = _fp.fetch
+
+        def _fetch_but_one(u, purpose="claim_material", get=None):
+            if u == _u3["c"]:
+                raise _fp.PageError("試験：このページは取れません")
+            return _keep_fetch3(u, purpose, get)
+
+        _fp.fetch = _fetch_but_one
+        try:
+            g3 = gather("L試験機")
+        finally:
+            _fp.fetch = _keep_fetch3
+        t("★★出典が1件取れなかったら『全部そろった』とは言わない★★"
+          "（★取れなかったページは数える前に一覧から外れていた★）",
+          g3.get("all_urls_complete") is False and len(g3["urls"]) == 2)
+        # ★問いの側にも出る★（本番と同じ渡し方をする。
+        #   ★complete は gather が返した値をそのまま使う★＝試験は計算しない）
+        _q3 = _ba.unresolved_questions(
+            g3["problems"], g3.get("all_urls") or g3["urls"],
+            complete=bool(g3.get("all_urls_complete")))
+        t("　そのときの問いは「読む先（全部）」とは書かない",
+          _q3 and "読む先（全部）" not in _q3[0]
+          # ★汎用の文言だけでは足りない★（2026-09-08・Codexの指摘）
+          #   「全部ではありません」は complete=False なら必ず出るので、
+          #   ★合図を壊しても通ってしまう★。理由まで見る。
+          and "取れなかった出典があります" in _q3[0])
+        # ★（対照）3件とも取れたら「全部」と言う★
+        g3b = gather("L試験機")
+        t("　（対照）3件とも取れたら「全部そろった」と言う",
+          g3b.get("all_urls_complete") is True and len(g3b["urls"]) == 3)
+        # ★★メーカー欄の不一致で外したページは「読めていない」に数えない★★
+        #   （2026-09-08・Codexの指摘3）
+        #   ★正しい除外まで「全部ではありません」にすると、
+        #     そういう機種は永久に読み終わらないことになる★
+        _keep_lookup3 = _mc.lookup
+        _mc.lookup = lambda u, n, **k: {
+            "url": u, "identity_ok": True, "model_code": "L1", "reason": "OK",
+            "maker_check": ({"state": "MISMATCH", "seen": "別の会社",
+                             "expected": "heiwa", "owners": ["x"]}
+                            if u == _u3["c"] else
+                            {"state": "MATCH", "seen": "平和",
+                             "expected": "heiwa", "owners": ["heiwa"]})}
+        try:
+            g3c = gather("L試験機", "heiwa", slug="dmm_9999",
+                         machine_name="L試験機", release_date="2026-10-05")
+        finally:
+            _mc.lookup = _keep_lookup3
+        t("★★メーカー欄が違うので外したページは、読めなかった扱いにしない★★"
+          "（★別の機種のページを読ませないための正しい除外★）",
+          g3c.get("all_urls_complete") is True and len(g3c["urls"]) == 2)
+        # ★★一覧そのものを読めなかった名鑑も「読めていない」★★
+        #   （2026-09-08・Codexの指摘）
+        #   ★票がそろうと記録から消えていた★ので、
+        #   「2件は読めた、3件目は一覧が壊れていた」でも「全部」と言っていた。
+        def _find_with(state):
+            return lambda n, c=None: {"results": dict(
+                {k: {"state": "FOUND", "url": _u3[k], "why": "",
+                     "candidates": [], "surfaces": "1/1", "index_size": 9,
+                     "problems": []} for k in ("a", "b")},
+                c9={"state": state, "url": None, "why": "試験", "candidates": [],
+                    "surfaces": "0/1", "index_size": 0, "problems": []})}
+
+        _di.find = _find_with("CATALOG_UNHEALTHY")
+        g4 = gather("L試験機")
+        t("★★名鑑の一覧を読めなかったら『全部そろった』とは言わない★★"
+          "（★票がそろうと、この記録は消えていた★）",
+          g4.get("all_urls_complete") is False)
+        _di.find = _find_with("AMBIGUOUS_CANDIDATES")
+        t("　候補を決められなかった名鑑も同じ",
+          gather("L試験機").get("all_urls_complete") is False)
+        _di.find = _find_with("HEALTHY_NO_MATCH")
+        t("　（対照）一覧は読めて『載っていない』と確かめられたなら「全部」",
+          gather("L試験機").get("all_urls_complete") is True)
+
+        # ★★メーカー欄を確かめられない除外は「読めていない」★★
+        #   （2026-09-08・Codexの指摘）★MISMATCH だけが確定した除外★
+        _di.find = lambda n, c=None: {"results": {
+            k: {"state": "FOUND", "url": v, "why": "", "candidates": [],
+                "surfaces": "1/1", "index_size": 9, "problems": []}
+            for k, v in _u3.items()}}
+        _keep_lookup4 = _mc.lookup
+
+        def _with_state(st):
+            _mc.lookup = lambda u, n, **k: {
+                "url": u, "identity_ok": True, "model_code": "L1",
+                "reason": "OK",
+                "maker_check": ({"state": st, "seen": "別の会社",
+                                 "expected": "heiwa", "owners": ["x"]}
+                                if u == _u3["c"] else
+                                {"state": "MATCH", "seen": "平和",
+                                 "expected": "heiwa", "owners": ["heiwa"]})}
+            return gather("L試験機", "heiwa", slug="dmm_9999",
+                          machine_name="L試験機", release_date="2026-10-05")
+
+        try:
+            t("★★どの社か分からないので外したページは「読めていない」★★"
+              "（★別の社と確定したのではない★）",
+              _with_state("UNKNOWN").get("all_urls_complete") is False)
+        finally:
+            _mc.lookup = _keep_lookup4
+
+        # ★★2件を下回って早く終わるときも、読めなかったことを残す★★
+        #   （2026-09-08・Codexの指摘）★直す前は判定も問いも作られなかった★
+        _keep_fetch5 = _fp.fetch
+
+        def _fetch_two_fail(u, purpose="claim_material", get=None):
+            if u in (_u3["b"], _u3["c"]):
+                raise _fp.PageError("試験：このページは取れません")
+            return _keep_fetch5(u, purpose, get)
+
+        _fp.fetch = _fetch_two_fail
+        try:
+            g5 = gather("L試験機")
+        finally:
+            _fp.fetch = _keep_fetch5
+        t("★★2件を下回って早く終わるときも、読めなかったことを残す★★"
+          "（★いちばん読めていない機種で、問いが1つも作られなかった★）",
+          g5.get("all_urls_complete") is False
+          and any("読めなかった出典があります" in p for p in g5["problems"])
+          and _ba.unresolved_questions(
+              g5["problems"], g5.get("urls") or [],
+              complete=bool(g5.get("all_urls_complete"))))
+
+        _di.find = lambda n, c=None: {"results": {
+            k: {"state": "FOUND", "url": f"https://{h}/1", "why": "",
+                "candidates": [], "surfaces": "1/1", "index_size": 9,
+                "problems": []}
+            for k, h in (("a", "chonborista.com"), ("b", "nana-press.com"))}}
+
         # ★★★gather() を通して採否を確かめる★★★
         #   （2026-08-17・Codex依頼229。判定関数だけの試験では、
         #     「状態ではなく理由の文で決めている」という隣の契約の壊れ方を
@@ -3366,6 +3719,30 @@ def selftest() -> int:
         t("★★★控えで『使わない』と決めたページは、名簿で一致に変わっても"
           "戻らない★★★（前は MATCH になった瞬間に材料へ復活できた）",
           _g_urls("MATCH", cached="REJECT_MATERIAL") == 0)
+        # ★★題名の不一致を救う経路でも「使わない」は確定した除外★★
+        #   （2026-09-08・Codexの指摘）
+        #   ★直す前★＝この道では控えの「使わない」を記録していなかったので、
+        #   同定に落ちた側から「まだ確かめられていない」に入り、
+        #   ★2AIが決着させた機種が、いつまでも
+        #     「読む先は全部ではありません」と言われ続けた★。
+        _rescue = [{"url": "https://chonborista.com/slot/l-test/1/",
+                    "identity_ok": False, "reason": "NAME_CORE_MISMATCH",
+                    "name_in_body": True, "observed_maker": "平和"}]
+        _dec_rej = maker_material_decision(
+            _rescue, "dmm_9999", "heiwa",
+            verdict_of=lambda *a, **k: "REJECT_MATERIAL",
+            machine_name="L試験機", release_date="2026-10-05")
+        t("★★題名で救う道でも「使わない」は確定した除外にする★★"
+          "（★確かめられていない扱いだと、決着した機種が永久に解けない★）",
+          _rescue[0]["url"] in _dec_rej["bad"]
+          and _rescue[0]["url"] in _dec_rej["rejected_by_cache"]
+          and _rescue[0]["url"] not in (_dec_rej.get("unconfirmed") or set()))
+        _dec_ask = maker_material_decision(
+            _rescue, "dmm_9999", "heiwa", verdict_of=lambda *a, **k: None,
+            machine_name="L試験機", release_date="2026-10-05")
+        t("　（対照）まだ決めていなければ、確かめられていない側に入る",
+          _rescue[0]["url"] in (_dec_ask.get("unconfirmed") or set())
+          and _dec_ask["questions"])
         t("　どの社か分からない側でも、控えの『使わない』は効く",
           _g_urls("UNKNOWN", cached="REJECT_MATERIAL") == 0)
 
@@ -4937,6 +5314,95 @@ def selftest() -> int:
     # ★★2AIへ回すぶんを受け取っているか★★（2026-09-08・台帳#585）
     #   ★`detail=True` で呼ばないと review が黙って消える★（罠③＝
     #     関所を作っても、通り道に繋がなければ一度も働かない）
+    # ★★2AIへ渡す読む先は、その機種のページ全部★★（2026-09-08）
+    #   ★直す前は本体のURLを1本渡すだけだった★ので、
+    #   狙い目・期待値・ヤメ時（＝名鑑によっては下位ページにしかない）が
+    #   読まれず、「当サイトの狙い目」が全機種で空欄のままだった。
+    class _PgU:
+        def __init__(self, html):
+            self.cleaned_html = html
+
+    _u_nana = "https://nana-press.com/kaiseki/machine/9999/"
+    _html_u = ('<a href="https://nana-press.com/kaiseki/machine/9999/11/">a</a>'
+               '<a href="https://nana-press.com/kaiseki/machine/9999/12/">b</a>')
+    _logs_u = []
+    _all_u, _bad_u0 = _collect_all_urls([_u_nana], {_u_nana: _PgU(_html_u)},
+                                        log=_logs_u.append)
+    t("★★読む先に、その機種の下位ページが入る★★"
+      "（★本体だけだと狙い目・期待値・ヤメ時を読み落とす★）",
+      len(_all_u) == 3 and _u_nana in _all_u
+      and "https://nana-press.com/kaiseki/machine/9999/11/" in _all_u)
+    t("　本体のURLは必ず残る（下位に置き換えない）", _all_u[0] == _u_nana)
+    # ★下位ページを持たない名鑑では何も足さない★
+    _u_ch = "https://chonborista.com/slot/sammy-slot/1/"
+    t("　下位ページを持たない名鑑では、何も足さない（誤検知しない）",
+      _collect_all_urls([_u_ch], {_u_ch: _PgU(_html_u)}, log=None)[0] == [_u_ch])
+    # ★本文が無ければ何もしない（落ちない）★
+    t("　本文が取れていないURLでも落ちない",
+      _collect_all_urls([_u_nana], {}, log=None)[0] == [_u_nana])
+    # ★★読めなかったら黙って進まない★★（対照実験）
+    import page_corpus as _pcU
+    _keep_su = _pcU.sub_urls
+    try:
+        _pcU.sub_urls = lambda c, u, h, **k: (
+            ([], "決まりが読めません（試験）") if _pcU.machine_id(c, u)
+            else ([], ""))
+        _logs_bad = []
+        _bad_u, _bad_why = _collect_all_urls(
+            [_u_nana], {_u_nana: _PgU(_html_u)}, log=_logs_bad.append)
+    finally:
+        _pcU.sub_urls = _keep_su
+    t("★★下位ページの一覧が読めなかったら、必ず残す★★"
+      "（★黙って進むと、狙い目の載ったページを丸ごと落とす★）",
+      _bad_u == [_u_nana]
+      and [x for x in _bad_why if "全部は並べられませんでした" in x])
+    # ★★読めていないことが2AIへの問いに出るか★★（Codexの指摘5）
+    #   ★出ないと「全部読んだ前提」で判断させてしまう★
+    # ★★上限を超えたときを、通しで確かめる★★（2026-09-08・Codexの提案）
+    #   ★`page_corpus` は上限を超えると「途中まで読ませない」ために空を返す★。
+    #   そのとき呼ぶ側が黙って本体だけで進めると、安全策が無効になる。
+    #   ★通しで見る★＝81本を渡し、最終的な問いまで確かめる。
+    _many_html = "".join(
+        '<a href="https://nana-press.com/kaiseki/machine/9999/%d/">x</a>' % i
+        for i in range(81))
+    _over_u, _over_bad = _collect_all_urls(
+        [_u_nana], {_u_nana: _PgU(_many_html)}, log=None)
+    t("★★下位ページが上限を超えたら、本体だけで進めて良しとしない★★"
+      "（★『途中まで読ませない』という安全策を、呼ぶ側が無効にしていた★）",
+      _over_u == [_u_nana] and _over_bad)
+    _over_q = _ba.unresolved_questions(
+        list(_over_bad) + ["天井: 記述はあるが採れませんでした"],
+        _over_u, complete=not _over_bad)
+    t("★★上限超過のときの問いは『全部ではない』と言う★★",
+      _over_q and "読む先が全部ではありません" in _over_q[0])
+    t("★★そのとき『読む先（全部）』とは絶対に書かない★★"
+      "（★同じ問いの中で矛盾すると、2AIが探すのをやめる★）",
+      _over_q and "読む先（全部）" not in _over_q[0])
+    # ★そろっているときは「全部」と書く（対照）★
+    _ok_q = _ba.unresolved_questions(
+        ["天井: 記述はあるが採れませんでした"], [_u_nana], complete=True)
+    t("　（対照）そろっているときは「読む先（全部）」と書く",
+      _ok_q and "読む先（全部）" in _ok_q[0]
+      and "全部ではありません" not in _ok_q[0])
+    # ★★「全部そろった」の判定が、本番の配線で正しいか★★
+    #   （2026-09-08・Codexの指摘1）
+    #   ★`_collect_all_urls` は失敗しても本体URLは返す★ので、
+    #   「URLが1本でもあれば全部」と数えると、
+    #   本文なし・上限超過・設定読取失敗でも「読む先（全部）」という嘘が出る。
+    #   ★試験が自分で計算すると、この配線を一度も通らない★（罠③）ので、
+    #   本番のソースが「失敗が無いこと」で決めているかを見る。
+    t("★★『全部そろった』は、失敗が1件も無いときだけ★★"
+      "（★URLの本数で決めると、上限超過でも『全部』という嘘が出る★）",
+      # ★包みではなく中身を見る★（2026-09-08・Codexの指摘）
+      #   `gather` は用途を名乗るための包みで、判定は `_gather` にある。
+      'got["all_urls_complete"] = not _url_bad and not got.get("unread")'
+      in inspect.getsource(_gather))
+    t("★読めていないことが、2AIへの問いに出る★",
+      [q for q in _ba.unresolved_questions(_bad_why, [_u_nana])
+       if "読む先が全部ではありません" in q])
+    t("　（対照）ふつうの時はその知らせを出さない"
+      "＝名鑑を順に当てる都合の失敗まで報告しない",
+      not [x for x in _logs_u if "読めません" in x])
     t("★出典の再確認を `detail=True` で呼んでいる★"
       "（★これが無いと review が黙って消える★）",
       "detail=True" in inspect.getsource(run_one))

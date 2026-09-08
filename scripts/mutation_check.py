@@ -1936,9 +1936,10 @@ MUTATIONS = [
                "（型が UNKNOWN のまま作られた機種が二度と聞かれず、"
                "永久に検索へ載らなかった＝実測14機種のうち7機種）",
         "file": "scripts/grow_machine.py",
-        "before": ('    out["questions"] += pending_questions(cur, mat, slug,\n'
-                   '                                          urls=got.get("urls"))'),
-        "after": "    pass",
+        "before": ('    out["questions"] += pending_questions(\n'
+                   '        cur, mat, slug,'),
+        "after": '    out["questions"] += [] and pending_questions(\n'
+                 '        cur, mat, slug,',
         "run": ["scripts/grow_machine.py"],
     },
     {
@@ -2117,6 +2118,141 @@ MUTATIONS = [
         "before": "    return 1 <= len(head) <= _LABEL_MAX",
         "after": "    return True",
         "run": ["scripts/style_check.py"],
+    },
+    {
+        "why": "★題名で救う道の「使わない」を記録しない★"
+               "（★2AIが決着させた除外が『まだ確かめられていない』に落ち、"
+               "その機種が永久に「読む先は全部ではありません」になる★）",
+        "file": "scripts/add_machine_run.py",
+        "before": ('        elif v == "REJECT_MATERIAL":\n'
+                   '            # ★★「使わない」と決めてあるなら、確定した除外★★'),
+        "after": ('        elif v == "REJECT_MATERIAL_XX":\n'
+                  '            # ★★「使わない」と決めてあるなら、確定した除外★★'),
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★育成で止めるときに、2AIへの問いを作らない★"
+               "（★いちばん読めていない機種で、何も聞かないまま終わる★）",
+        "file": "scripts/grow_machine.py",
+        "before": '        for _q in _ba.unresolved_questions(\n                got.get("problems") or [],\n                got.get("all_urls") or got.get("urls"),\n                complete=bool(got.get("all_urls_complete"))):\n            out["questions"].append({"text": str(_q),\n                                     "kind": "grow_unresolved",\n                                     "slug": slug})\n        return out',
+        "after": '        return out',
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★育成の問いを、辞書ではなく文字列のまま足す★"
+               "（★表示のところが辞書として読むので、実際に走らせると落ちる★）",
+        "file": "scripts/grow_machine.py",
+        "before": '            out["questions"].append({"text": str(_q),\n                                     "kind": "grow_unresolved",\n                                     "slug": slug})\n        return out',
+        "after": '            out["questions"].append(str(_q))\n        return out',
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★名鑑の一覧を読めなかったことを数えない★"
+               "（★票がそろうと記録から消えるので、"
+               "『2件は読めた・3件目は一覧が壊れていた』でも『全部』になる★）",
+        "file": "scripts/add_machine_run.py",
+        "before": '         if v.get("state") in ("CATALOG_UNHEALTHY", "AMBIGUOUS_CANDIDATES")],',
+        "after": '         if v.get("state") in ()],',
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★メーカーの除外を全部「正しい除外」とみなす★"
+               "（★どの社か分からない・同定できない・控えを読めない、も"
+               "混ざっているので、読めていないのに『全部』になる★）",
+        "file": "scripts/add_machine_run.py",
+        "before": '        if r["url"] in rejected or (r.get("identity_ok") and st == "MISMATCH"):',
+        "after": '        if True:',
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★取れなかったページの記録を、早く終わる道より後ろに置く★"
+               "（★2件を下回った機種では、判定も2AIへの問いも作られない★）",
+        "file": "scripts/add_machine_run.py",
+        "before": '        _mark_unread(got, _drop, "取れない・転送される", _log)',
+        "after": '        _mark_unread(got, set(), "取れない・転送される", _log)',
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★読めなかった出典の知らせを、12件の上限で落とす★"
+               "（★いちばん材料が足りない機種でだけ消える★）",
+        "file": "scripts/build_new_article.py",
+        "before": """    _INCOMPLETE = ("下位ページを全部は並べられませんでした",
+                   "読めなかった出典があります")""",
+        "after": """    _INCOMPLETE = ("下位ページを全部は並べられませんでした",)""",
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "★取れなかった出典を「全部そろった」の判定から落とす★"
+               "（★外したあとの残りだけを数えると、3件のうち1件が"
+               "取れなくても『読む先（全部）』と書く・Codexの指摘★）",
+        "file": "scripts/add_machine_run.py",
+        "before": '    got["all_urls_complete"] = not _url_bad and not got.get("unread")',
+        "after": '    got["all_urls_complete"] = not _url_bad',
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★出典が取れなかったことを、2AIへの問いに出さない★"
+               "（★残った出典だけで『全部読んだ』ことにされる★）",
+        "file": "scripts/build_new_article.py",
+        "before": '    ("読めなかった出典があります",',
+        "after": '    ("読めなかった出典がありますXX",',
+        "run": ["scripts/add_machine_run.py", "scripts/build_new_article.py"],
+    },
+    {
+        "why": "★URLが1本でもあれば「全部そろった」と数える★"
+               "（★失敗しても本体URLは返るので、本文なし・上限超過でも"
+               "『読む先（全部）』という嘘が出る・Codexの指摘★）",
+        "file": "scripts/add_machine_run.py",
+        "before": '    got["all_urls_complete"] = not _url_bad',
+        "after": '    got["all_urls_complete"] = bool(got["all_urls"])',
+        "run": ["scripts/add_machine_run.py", "scripts/grow_machine.py"],
+    },
+    {
+        "why": "★問いの中で無条件に『読む先（全部）』と書く★"
+               "（★『全部ではありません』と同居して矛盾する・Codexの指摘★）",
+        "file": "scripts/build_new_article.py",
+        "before": '        lines.append(("読む先（全部）: " if complete else',
+        "after": '        lines.append(("読む先（全部）: " if True else',
+        # ★試験の置き場所と、走らせる先をそろえる★（2026-09-08）
+        #   ★81本の通し試験は add_machine_run の自己試験にある★ので、
+        #   そちらも走らせないと、この壊し方は捕まらない。
+        "run": ["scripts/build_new_article.py",
+                "scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★『読む先が全部ではない』を、ほかの問題と同じ列に置く★"
+               "（★12件の上限で落ちて、いちばん材料が足りない機種で"
+               "『全部読んだ前提』にさせる・Codexの指摘★）",
+        "file": "scripts/build_new_article.py",
+        "before": "    for p in (_first + _rest):",
+        "after": "    for p in (_rest + _first):",
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
+        "why": "★そろっていなくても『読む先（全部）』と書く★"
+               "（★嘘をつくと、2AIが探すのをやめる・Codexの指摘★）",
+        "file": "scripts/grow_machine.py",
+        "before": '                         + ("（全部）" if complete else',
+        "after": '                         + ("（全部）" if True else',
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★2AIへ渡す読む先を、本体ページだけに戻す★"
+               "（★狙い目・期待値・ヤメ時は下位ページにしかない＝"
+               "全機種で狙い目が空欄のままになる・2026-09-08★）",
+        "file": "scripts/add_machine_run.py",
+        "before": "                out += add",
+        "after": "                pass",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★下位ページの一覧が読めなくても黙って進む★"
+               "（★狙い目の載ったページを丸ごと落としたことに誰も気づかない★）",
+        "file": "scripts/add_machine_run.py",
+        "before": ('                _note("下位ページを全部は並べられませんでした"\n'
+                   '                      f"（{u}／{why}）")'),
+        "after": '                pass',
+        "run": ["scripts/add_machine_run.py"],
     },
     {
         "why": "★2AIへ回すぶんを受け取らずに捨てる（代入の段）★"
@@ -2319,10 +2455,14 @@ MUTATIONS = [
                "（★実測145回・誰にも聞かれず捨てられ、"
                "出典に書いてあるのに永久に検索へ載らない★）",
         "file": "scripts/grow_machine.py",
-        "before": "        for _q in _ba.unresolved_questions("
-                  'got.get("problems") or [],',
-        "after": "        for _q in [] and _ba.unresolved_questions("
-                 'got.get("problems") or [],',
+        "before": ('    if not ((cur.get("page_decision") or {}).get("indexable")):\n'
+                   "        # ★読む先はその機種のページ全部★（2026-09-08・本体だけ渡すのをやめた）\n"
+                   "        for _q in _ba.unresolved_questions(\n"
+                   '                got.get("problems") or [],'),
+        "after": ('    if not ((cur.get("page_decision") or {}).get("indexable")):\n'
+                  "        # ★読む先はその機種のページ全部★（2026-09-08・本体だけ渡すのをやめた）\n"
+                  "        for _q in [] and _ba.unresolved_questions(\n"
+                  '                got.get("problems") or [],'),
         "run": ["scripts/grow_machine.py"],
     },
     {
