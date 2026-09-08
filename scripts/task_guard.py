@@ -923,6 +923,21 @@ def claim(task: str, slug: str, path: str = STATE_PATH,
                 raise GuardError(
                     f"#{finding} は人へ回した後です（{_rj.MAX_ATTEMPTS}回で決まらなかった）")
             _entry(data, task)["decision_finding"] = str(finding)
+        else:
+            # ★★担当が変わったら「見つけたもの」を持ち越さない★★
+            #   （2026-09-08・育成レーンが1日じゅうコミットできなかった）
+            #   ★何が起きていたか★＝朝の実行が --decision 付きで
+            #   sengoku_collection6 を担当すると decision_finding が残り、
+            #   そのあと別の機種を --decision 無しで担当しても
+            #   **前の番号が残ったまま**だった。
+            #   before_write は `finding or e["decision_finding"]` を見るので、
+            #   ★その番号は別機種のものです★で必ず断られる
+            #   ＝**その日はもう誰も書けない**（育成レーンが丸ごと死ぬ）。
+            #   ★守りは弱めていない★＝--decision を付けた担当では
+            #   いままでどおり「AGREEDか・機種が一致するか・記事が
+            #   変わっていないか」を全部見る。ここで消すのは
+            #   **その担当のために取った札**だけ。
+            _entry(data, task)["decision_finding"] = None
 
         if repairing:
             # ★休み中の機種は担当させない★（2026-08-21・依頼246の防御4）
