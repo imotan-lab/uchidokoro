@@ -1124,32 +1124,33 @@
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
-   "indexable": false,
-   "machine_profile": "UNKNOWN",
-   "ceiling_state": "UNKNOWN",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "PRESENT",
    "confirmed_topics": [
+    "ceiling",
+    "cz",
     "setting",
     "spec"
    ],
    "pending_topics": [
     "gameplay",
-    "cz",
-    "ceiling",
     "strategy",
     "reset"
    ],
-   "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
-    "MACHINE_PROFILE_UNKNOWN"
-   ],
+   "reason_codes": [],
    "claims": [
+    "ceiling:GAME:AT間",
+    "ceiling:GAME:CZ間",
+    "cz:オポジットバトル",
+    "cz:ファーストリコリス",
     "games_per_50",
+    "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-04",
-   "input_digest": "sha256:12e66452b1188cbd27065af889db8acdc9707c417026d0f86339812606d6465d"
+   "decided_at": "2026-09-08",
+   "input_digest": "sha256:d8cd2e204a418dacd4e9ec4801856ac1bb855da9eadd7c57dd728c63a75a7cd2"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-09-07",

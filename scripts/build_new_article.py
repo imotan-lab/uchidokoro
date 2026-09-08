@@ -1331,12 +1331,22 @@ def build_detail(slug, name, release, material) -> dict:
     resets = (material.get("resets") or {}).get("adopted") or []
     if resets:
         body = []
+        # ★★見出しが同じになる行があるときは、区別を見出しへ入れる★★
+        #   （2026-09-08・罠㊺）★今朝、天井の欄で直した形が、ここに残っていた★。
+        #   実際にスマスロ リコリス・リコイル（本日導入・人気12位）の
+        #   書き込みが監査36に止められた
+        #   （**設定変更後の天井**：250G ／ **設定変更後の天井**：600G）。
+        #   ★守りは弱めない★＝区別が書かれていない同名の行は今までどおり重なる。
+        _rs_same = [str(x.get("kind") or "") for x in resets]
         for c in resets:
             kind = c.get("kind")
             # ★根拠の名乗り★（2026-08-24・Codexの5回目＝ここも抜けていた）
             _m = _t(c)
             if kind == "CEILING_SHORTENED":
-                body.append(f"**設定変更後の天井**：{c['games']}G{_m}")
+                _lab = "設定変更後の天井"
+                if _rs_same.count(kind) > 1 and c.get("counted"):
+                    _lab = f"{_lab}（{c['counted']}）"
+                body.append(f"**{_lab}**：{c['games']}G{_m}")
             elif kind == "MORNING_STATE":
                 body.append(f"**朝一の状態**：{c['state']}{_m}")
             elif kind == "ADVANTAGE_RESET":
@@ -2392,6 +2402,44 @@ def selftest() -> int:
     t("★★数え方が書かれていない同名の行は、今までどおり重なる★★"
       "（★守りを弱めていない＝本物の食い違いは止まる★）",
       len(_bad) == 2 and len(set(_bad)) == 1)
+
+    # ★★リセットの欄でも、見出しが重ならない★★（2026-09-08・罠㊺）
+    #   ★今朝、天井の欄で直した形が、ここにそのまま残っていた★＝
+    #   スマスロ リコリス・リコイル（本日導入・人気12位）の書き込みが
+    #   実際に監査36で取り消された
+    #   （**設定変更後の天井**：250G ／ **設定変更後の天井**：600G）。
+    #   ★直したら、その場所にある項目を全部数え上げること★。
+    def _reset_labels(rows):
+        _m = {"resets": {"adopted": rows}, "adopted": {}}
+        _d = build_detail("zzz_r", "テスト機", "2026-09-08", _m)
+        _b = next((x.get("body") or [] for x in _d["sections"]
+                   if x.get("title") == "朝一・リセット情報"), [])
+        out = []
+        for x in _b:
+            mt = _gl36._LABELED.match(str(x).strip())
+            if mt:
+                out.append(_gl36._canon_label(mt.group("label")))
+        return out
+
+    _rs2 = _reset_labels([
+        {"kind": "CEILING_SHORTENED", "games": "250", "counted": "CZ間",
+         "basis": _bs},
+        {"kind": "CEILING_SHORTENED", "games": "600", "counted": "AT間",
+         "basis": _bs}])
+    t("★★リセットの天井が2つある機種は、見出しが重ならない★★"
+      "（★重なると監査36に止められて永久に検索へ載らない★・罠㊺）",
+      len(_rs2) == 2 and len(set(_rs2)) == 2)
+    _rs1 = _reset_labels([
+        {"kind": "CEILING_SHORTENED", "games": "250", "counted": "CZ間",
+         "basis": _bs}])
+    t("　★1つなら書き方は変えない★（無用な書き換えを起こさない）",
+      _rs1 == ["設定変更後の天井"])
+    _rsbad = _reset_labels([
+        {"kind": "CEILING_SHORTENED", "games": "250", "basis": _bs},
+        {"kind": "CEILING_SHORTENED", "games": "600", "basis": _bs}])
+    t("　★区別が書かれていない同名の行は、今までどおり重なる★"
+      "（守りを弱めていない）",
+      len(_rsbad) == 2 and len(set(_rsbad)) == 1)
 
     # ★★基本情報表にも同じ区別が入っているか★★（2026-09-08・Codexの指摘1）
     #   ★直す前は本文だけ区別され、基本情報表は

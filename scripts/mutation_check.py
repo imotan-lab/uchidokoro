@@ -2146,6 +2146,16 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★リセットの天井が2つある機種で、見出しを区別しない★"
+               "（★監査36に重複と判定されて永久に検索へ載らない＝"
+               "本日導入・人気12位の機種で実際に書き込みが取り消された・罠㊺★）",
+        "file": "scripts/build_new_article.py",
+        "before": ('                if _rs_same.count(kind) > 1 '
+                   'and c.get("counted"):'),
+        "after": "                if False:",
+        "run": ["scripts/build_new_article.py"],
+    },
+    {
         "why": "★壊し方の名前を、案件の本文と突き合わせない★"
                "（★合格する壊し方の名前を1つ渡すだけで、機械の中身と"
                "無関係な案件まで閉じられる・Codexの指摘★）",
