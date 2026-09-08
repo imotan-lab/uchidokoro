@@ -846,6 +846,48 @@ def page_text(html: str, url: str) -> str:
         return " ".join(raw.split())       # 箱で落とし済み（行では切らない）
     return " ".join(_cl.cut_user_area(raw).split())
 
+# ★引用の前後を何文字みるか★（2026-09-08・台帳#585）
+#   ★狭すぎると節の移動を見逃し、広すぎると全文の指紋と同じことになる★。
+#   120字＝出典ページの1〜2文ぶん。実測で「設置店の宣伝文」までは届かない。
+CTX_WINDOW = 120
+
+
+def context_fingerprint(text: str, needle: str,
+                        window: int = CTX_WINDOW) -> str:
+    """★逐語の「すぐ周り」の指紋★（2026-09-08・台帳#585・運営者の承認）
+
+    ★なぜ全文の指紋をやめたか★
+      出典ページには設置店の一覧があり、店舗の宣伝文には日付が入る
+      （実物に「7日!気合い入ります!」という文があった）。
+      ＝記事と関係のない場所が毎日変わるので、全文の指紋は毎日食い違う。
+      実測で11件中6件が、引用も同定の根拠も今もそのままなのに弾かれ、
+      ★確かめた値が1日で使えなくなっていた★（新台が検索に載らない原因）。
+
+    ★なぜ引用そのものだけでは足りないか★
+      引用が残っていても、その前後が変われば意味が変わる
+      （「AT間」の節にあった行が「CZ間」の節へ移る／
+        「※旧スペック」の断りが足される）。＝**引用の周りを見る**。
+
+    ★出現ごとに全部見る★＝同じ文が2か所にあるとき、
+      片方だけ消えても・増えても指紋が変わる。
+    ★見つからないときは空文字★（呼ぶ側が「引用が消えた」として扱う）。
+    """
+    import hashlib as _hl
+    if not text or not needle:
+        return ""
+    out = []
+    i = text.find(needle)
+    while i >= 0:
+        a = max(0, i - int(window))
+        b = min(len(text), i + len(needle) + int(window))
+        out.append(text[a:b])
+        i = text.find(needle, i + 1)
+    if not out:
+        return ""
+    # ★区切り文字は本文に出ない字★（連結の境目を偽装できないように）
+    return _hl.sha256("\x1f".join(out).encode("utf-8")).hexdigest()
+
+
 def verify_source(src: dict, name: str, fetch=None) -> dict:
     """★出典のページを実際に取ってきて確かめる★（2026-08-09・依頼130 P0-2）
 
@@ -875,6 +917,11 @@ def verify_source(src: dict, name: str, fetch=None) -> dict:
         """★共通の本文づくりを呼ぶだけ★（作る場所は `page_text` 1か所）"""
         return page_text(h, src.get("url") or "")
     ok, why = _mc.page_is_machine(html, name)
+    # ★いま作ったものにだけ周りの指紋を足す★（2026-09-08・台帳#585）
+    #   ★持ち越された控えに、今のページの指紋を書き足さない★＝
+    #   それをやると「昔の判断」が「今のページ」で上書きされ、
+    #   見張りが自己一致して永久に通る（罠㉕）。
+    _built_override = False
     if not ok:
         # ★機械が弾いたら、それはAIの出番の合図★（2026-08-11・運営者の指摘）
         #   大手には記事の題に**通称しか入れない**ところがある。
@@ -933,12 +980,22 @@ def verify_source(src: dict, name: str, fetch=None) -> dict:
                 text_of(html).encode("utf-8")).hexdigest(),
             "at": datetime.date.today().isoformat(),
         }
+        _built_override = True
     # ★同じ本文を使う★（2026-08-24・Codexの12回目＝ここが直っていなかった）
     text = text_of(html)
     quote = " ".join(str(src["quote"]).split())
     if quote not in text:
         raise ConfirmedError(
             f"引用がそのページに見当たりません（{src['url']}）: {quote[:40]}")
+    if _built_override:
+        # ★★引用と根拠の「周り」の指紋を控える★★（2026-09-08・台帳#585）
+        #   ここが後の再確認の物差しになる。全文ではなくこちらを比べる。
+        _ovp = " ".join(str(src["identity_override"].get("proof") or "").split())
+        src["identity_override"]["context"] = {
+            "window": CTX_WINDOW,
+            "quote": context_fingerprint(text, quote),
+            "proof": context_fingerprint(text, _ovp),
+        }
     src["verified_at"] = datetime.date.today().isoformat()
     return src
 
@@ -1137,7 +1194,7 @@ def _default_fetch(url: str) -> str:
 
 
 def reverify(slug: str, fetch=None, name: str = "",
-             official_url: str = "") -> list:
+             official_url: str = "", detail: bool = False):
     """★公開しようとしている機種の控えだけ、取り直して確かめる★
 
     ★★なぜ要るか★★（2026-08-24・Codexの8回目）
@@ -1149,11 +1206,23 @@ def reverify(slug: str, fetch=None, name: str = "",
       出典は各1回だけ取りに行く（同じURLは1回）。
 
     ★戻り値は問題の一覧★（空なら合格）。
+    ★`detail=True` なら `{"invalid": [...], "review": [...]}`★
+      （2026-09-08・台帳#585）
+      invalid … 引用や根拠がページから消えた＝**止める**
+      review  … 引用も根拠もあるが、その周りが変わった＝**2AIが判断し直す**
+      ★既定（detail=False）が返すのは invalid だけ★＝
+      review で公開を止めない。止めると、出典ページの無関係な場所が
+      動いただけで確定値が使えなくなる（それが台帳#585の中身）。
     """
     ng = []
+    rv = []                                # ★2AIへ回すもの★
+
+    def _done():
+        return {"invalid": ng, "review": rv} if detail else ng
+
     rows = for_slug(slug)
     if not rows:
-        return ng                          # 確定値が無い機種は何もしない
+        return _done()                     # 確定値が無い機種は何もしない
     # ★機種の正本を引き直す★（slugと正式名称が今も同じか）
     #   ★呼ぶ側が確かめ済みの名前・URLを持っていればそれを使う★
     #   （2026-08-24・Codexの9回目＝まだ一覧に無い新台は自力で引けない）
@@ -1188,7 +1257,7 @@ def reverify(slug: str, fetch=None, name: str = "",
             pass
     if not name:
         ng.append(f"{slug}: 正式名称を引けないので出典を確かめ直せません")
-        return ng
+        return _done()
     # ★★取ってくるのは1回・照合は全部★★（2026-08-24・Codexの9回目）
     #   ★直す前は「確かめた結果」をURLごとに使い回していた★ので、
     #   同じURLを2つの項目で使うと、**2件目の引用は一度も照合されなかった**
@@ -1230,19 +1299,56 @@ def reverify(slug: str, fetch=None, name: str = "",
             old = (src or {}).get("identity_override") or {}
             if old:
                 import hashlib as _hl
-                import new_machine_watch as _w9
                 # ★保存したときと同じ作り方で本文を出す★
                 #   （2026-08-24・Codexの13回目＝別々に作っていた）
-                now_sha = _hl.sha256(
-                    page_text(html, url).encode("utf-8")).hexdigest()
+                now_text = page_text(html, url)
+                now_sha = _hl.sha256(now_text.encode("utf-8")).hexdigest()
                 if not old.get("text_sha256"):
+                    # ★指紋の箱ごと無いものは今までどおり断る★（fail-closed）
                     ng.append(f"{slug} / {field}: 2AIで通した出典に"
                               f"本文の指紋がありません（{url}）"
                               "／判断し直してください")
-                elif old["text_sha256"] != now_sha:
-                    ng.append(f"{slug} / {field}: 出典の本文が変わっています"
-                              f"（{url}）／2AIで判断し直してください")
-    return ng
+                else:
+                    # ★★全文ではなく「引用と根拠の周り」を比べる★★
+                    #   （2026-09-08・台帳#585・運営者の承認）
+                    ctx = old.get("context") or {}
+                    _q = " ".join(str((src or {}).get("quote") or "").split())
+                    _p = " ".join(str(old.get("proof") or "").split())
+                    _w = int(ctx.get("window") or CTX_WINDOW)
+                    # ★★根拠が今もページに在るかを、ここでも必ず見る★★
+                    #   （2026-09-08・Codexの指摘1・自分で再現して確かめた）
+                    #   ★`verify_source` の根拠の検査は「機械が同定できな
+                    #     かったとき」の枝の中にある★ので、相手のサイトが
+                    #     題やh1に正式名を入れると（よくある改装）
+                    #     ★その枝を通らず、根拠が消えていても気づかない★。
+                    #   引用は残っているので、そこも通ってしまう。
+                    #   ＝2AIが「この機種のページだ」と判断した前提が
+                    #     消えているのに、公開が続く。
+                    #   ★これは止める（2AIへ回すではない）★＝
+                    #     判断の土台そのものが無くなっているため。
+                    if not _p or _p not in now_text:
+                        ng.append(
+                            f"{slug} / {field}: 2AIが同じ機種だと判断した"
+                            f"根拠が、そのページから消えています（{url}）"
+                            "／判断し直してください")
+                        continue
+                    if ctx.get("quote") or ctx.get("proof"):
+                        if (context_fingerprint(now_text, _q, _w)
+                                != str(ctx.get("quote") or "")
+                                or context_fingerprint(now_text, _p, _w)
+                                != str(ctx.get("proof") or "")):
+                            rv.append(
+                                f"{slug} / {field}: 引用の周りが変わっています"
+                                f"（{url}）／2AIで判断し直してください")
+                    elif old["text_sha256"] != now_sha:
+                        # ★周りの指紋を持たない古い記録★（移行の道）
+                        #   ★全文が同じなら周りも同じ★なので通してよい。
+                        #   違えば、どこが変わったか機械には分からない＝2AIへ。
+                        rv.append(
+                            f"{slug} / {field}: 出典の本文が変わっています"
+                            f"（{url}・引用の周りの控えがまだありません）"
+                            "／2AIで判断し直してください")
+    return _done()
 
 def forget(slug: str, field: str) -> dict:
     data = load()
@@ -1401,6 +1507,97 @@ def merge_into(material: dict, slug: str) -> list:
 
 
 # ---------------------------------------------------------------- selftest
+
+def _proof_gone_stops(slug, name, quote, src_ov) -> bool:
+    """★同定の根拠が消えたら止まるか★（2026-09-08・Codexの指摘1）
+
+    ★筋書き（実際に起こりうる）★
+      記録時 … 出典ページの題が機種名でないので機械同定に失敗し、
+               2AIが根拠の逐語と理由を付けて通した。
+      再確認 … 相手のサイトが題とh1に正式名を入れた。
+               機械同定が成功するので `verify_source` の根拠の検査を
+               ★丸ごと通らない★。同時に根拠の文だけ消えている。
+               引用は残っているので、そこも通る。
+    ★期待★ invalid（止める）／review には出さない
+    """
+    far = "あ" * 400
+    old_html = ("<html><head><title>解析まとめ</title></head><body>"
+                f"<p>{name} の解析です。</p><p>{far}</p>"
+                f"<p>{quote}</p></body></html>")
+    # ★題とh1に正式名が入り、根拠の文だけ消えたページ★
+    new_html = (f"<html><head><title>{name}</title></head><body><h1>{name}</h1>"
+                f"<p>{far}</p><p>{quote}</p></body></html>")
+    other = (f"<html><head><title>{name}</title></head><body><h1>{name}</h1>"
+             f"<p>{quote}</p></body></html>")
+    ov = verify_source(dict(src_ov), name, lambda u: old_html)
+    json.dump({"schema_version": SCHEMA, "machines": {slug: {
+        "ceiling": {
+            "value": {"kind": "GAME", "amount": "999", "unit": "G",
+                      "benefit": "AT当選"},
+            "sources": [ov, {"url": "https://nana-press.com/kaiseki/x",
+                             "quote": quote}],
+            "lineages": ["vote:chonborista", "vote:nana-press"],
+            "agreed_by": ["claude", "codex"],
+            "why": "2AIで突き合わせました",
+            "decided_at": "2026-08-24",
+            "official_url": ""}}}},
+        open(STORE, "w", encoding="utf-8"), ensure_ascii=False)
+    got = reverify(slug, name=name, detail=True,
+                   fetch=lambda u: (new_html if "chonbo" in u else other))
+    return (got["review"] == []
+            and [x for x in got["invalid"] if "根拠が、そのページから消えて" in x]
+            != [])
+
+
+def _fp_missing_review(slug, name, quote, src_ov) -> bool:
+    """★周りの指紋を持たない古い記録は、全文で見て2AIへ回す★（台帳#585）
+
+    ★なぜ関数に分けたか★＝控えを書き換えるので、本体の流れの中に置くと
+      あとの試験がその書き換えを引き継ぐ（罠⑱＝共有の材料を置き換える）。
+    ★これが移行の道★＝この直しより前に作られた控えには
+      「引用の周りの指紋」が無い。全文が同じなら通し、違えば2AIへ回す。
+      ★黙って通さない★（fail-open にしない）。
+    """
+    far = "あ" * 400
+
+    def page(body, tail=""):
+        return ("<html><head><title>解析まとめ</title></head><body>"
+                f"<p>{name} の解析です。</p>"
+                f"<p>{far}</p><p>{body}</p><p>{far}</p>"
+                f"<p>{tail}</p></body></html>")
+
+    ov = verify_source(dict(src_ov), name, lambda u: page(quote))
+    # ★周りの指紋だけ落とす★（＝この直しより前に作られた控えの姿）
+    ov["identity_override"].pop("context", None)
+    json.dump({"schema_version": SCHEMA, "machines": {slug: {
+        "ceiling": {
+            "value": {"kind": "GAME", "amount": "999", "unit": "G",
+                      "benefit": "AT当選"},
+            "sources": [ov, {"url": "https://nana-press.com/kaiseki/x",
+                             "quote": quote}],
+            "lineages": ["vote:chonborista", "vote:nana-press"],
+            "agreed_by": ["claude", "codex"],
+            "why": "2AIで突き合わせました",
+            "decided_at": "2026-08-24",
+            "official_url": ""}}}},
+        open(STORE, "w", encoding="utf-8"), ensure_ascii=False)
+
+    def other(q):
+        # ★もう1つの出典は、機械が同定できる普通のページ★
+        #   （ここが同定に落ちると、狙った検査ではなく隣が先に断る＝罠④）
+        return ("<html><head><title>" + name + "</title></head><body><h1>"
+                + name + f"</h1><p>{q}</p></body></html>")
+
+    def rv(tail=""):
+        return reverify(slug, detail=True,
+                        fetch=lambda u: (page(quote, tail) if "chonbo" in u
+                                         else other(quote)))
+    same = rv()
+    moved = rv("新着情報を更新しました。")
+    return (same["invalid"] == [] and same["review"] == []
+            and moved["invalid"] == []
+            and [x for x in moved["review"] if "本文が変わって" in x] != [])
+
 
 def selftest() -> int:
     import tempfile
@@ -1814,13 +2011,134 @@ def selftest() -> int:
                        fetch=lambda u: (_page2(_quote)
                                         if "chonbo" in u else _page(_quote)))
               == [])
-            t("★★2AIで通した出典の本文が変わったら、公開前に知らせる★★"
+            t("★★2AIで通した出典は、引用のすぐ横が変わったら知らせる★★"
               "／★引用は残っていても、判断の前提は崩れている★",
               [x for x in reverify(
-                  _rv_slug,
+                  _rv_slug, detail=True,
                   fetch=lambda u: (_page2(_quote + " なお内容を更新しました。")
-                                   if "chonbo" in u else _page(_quote)))
-               if "本文が変わって" in x])
+                                   if "chonbo" in u else _page(_quote))
+              )["review"] if "引用の周りが変わって" in x])
+
+            # ★★2026-09-08・台帳#585・運営者の承認★★
+            #   ★全文の指紋をやめ、引用と根拠の「周り」で見る★
+            #   出典ページには設置店の一覧があり、店舗の宣伝文には日付が入る
+            #   （実物に「7日!気合い入ります!」）。全文で見ていたので
+            #   ★引用も根拠も今もそのままなのに、毎日弾かれていた★
+            #   （実測11件中6件）＝確かめた値が1日で使えなくなり、
+            #   新台が検索に載らない原因になっていた。
+            _far = "あ" * 400            # ★引用から400字離す★
+
+            def _page4(_body, _tail=""):
+                return ("<html><head><title>解析まとめ</title></head><body>"
+                        f"<p>{_rv_name} の解析です。</p>"
+                        f"<p>{_far}</p><p>{_body}</p><p>{_far}</p>"
+                        f"<p>{_tail}</p></body></html>")
+
+            _ov4 = verify_source(dict(_src_ov), _rv_name,
+                                 lambda u: _page4(_quote))
+            t("　（前提）控えに「引用の周りの指紋」が入っている"
+              "／★これが無いと全文で見る古い道に落ちる★",
+              bool((_ov4.get("identity_override") or {})
+                   .get("context", {}).get("quote"))
+              and bool((_ov4.get("identity_override") or {})
+                       .get("context", {}).get("proof")))
+            json.dump({"schema_version": SCHEMA, "machines": {_rv_slug: {
+                "ceiling": {
+                    "value": {"kind": "GAME", "amount": "999", "unit": "G",
+                              "benefit": "AT当選"},
+                    "sources": [
+                        _ov4,
+                        {"url": "https://nana-press.com/kaiseki/x",
+                         "quote": _quote}],
+                    "lineages": ["vote:chonborista", "vote:nana-press"],
+                    "agreed_by": ["claude", "codex"],
+                    "why": "2AIで突き合わせました",
+                    "decided_at": "2026-08-24",
+                    "official_url": ""}}}},
+                open(STORE, "w", encoding="utf-8"), ensure_ascii=False)
+
+            def _rv4(tail=""):
+                return reverify(
+                    _rv_slug, detail=True,
+                    fetch=lambda u: (_page4(_quote, tail)
+                                     if "chonbo" in u else _page(_quote)))
+
+            t("　（前提）本文が同じままなら通る",
+              _rv4()["invalid"] == [] and _rv4()["review"] == [])
+            # ★これが直した本体★
+            _far_changed = _rv4("新着情報を更新しました。")
+            t("★★引用から離れた場所が変わっても止まらない★★"
+              "（★設置店の宣伝文の日付で、確かめた値が1日で消えていた★"
+              "・台帳#585）",
+              _far_changed["invalid"] == [] and _far_changed["review"] == [])
+            # ★守りを弱めていないこと★＝全文はちゃんと変わっている
+            import hashlib as _hl585
+            t("　★対照：全文の指紋なら、この変更でも食い違う★"
+              "（＝止まらなくなったのは、見る場所を変えたからで、"
+              "検査を外したからではない）",
+              _hl585.sha256(page_text(
+                  _page4(_quote), "https://chonborista.com/slot/y")
+                  .encode("utf-8")).hexdigest()
+              != _hl585.sha256(page_text(
+                  _page4(_quote, "新着情報を更新しました。"),
+                  "https://chonborista.com/slot/y")
+                  .encode("utf-8")).hexdigest())
+            _near = _rv4.__call__("")      # 近くの変更は本文側を差し替える
+            _near = reverify(
+                _rv_slug, detail=True,
+                fetch=lambda u: (_page4(_quote + " なお内容を更新しました。")
+                                 if "chonbo" in u else _page(_quote)))
+            t("★★引用のすぐ横が変わったら2AIへ回す★★"
+              "（★止めるのではなく、判断し直させる★）",
+              _near["invalid"] == []
+              and [x for x in _near["review"] if "引用の周りが変わって" in x])
+            t("★★引用そのものが消えたら止める★★"
+              "（★2AIへ回すのではなく、公開させない★）",
+              reverify(
+                  _rv_slug, detail=True,
+                  fetch=lambda u: (_page4("いまは別のことが書いてあります。")
+                                   if "chonbo" in u else _page(_quote))
+              )["invalid"] != [])
+            t("　★既定（detail=False）が返すのは止める理由だけ★"
+              "＝引用の周りが変わっただけでは公開を止めない",
+              reverify(
+                  _rv_slug,
+                  fetch=lambda u: (_page4(_quote + " なお内容を更新しました。")
+                                   if "chonbo" in u else _page(_quote))) == [])
+            t("　★周りの指紋を持たない古い記録は、全文で見て2AIへ回す★"
+              "（★移行の道＝黙って通さない★）",
+              _fp_missing_review(_rv_slug, _rv_name, _quote, _src_ov))
+            # ★★同定の根拠が消えたら止める★★（2026-09-08・Codexの指摘1）
+            #   ★相手のサイトが題とh1に正式名を入れると（よくある改装）、
+            #     機械同定が成功して `verify_source` の根拠の検査を
+            #     丸ごと通らない★。引用は残っているので、そこも通る。
+            #   ＝2AIの判断の土台が消えているのに公開が続いていた。
+            t("★★同定の根拠がページから消えたら止める★★"
+              "（★2AIへ回すのではなく公開させない＝判断の土台が無い★）",
+              _proof_gone_stops(_rv_slug, _rv_name, _quote, _src_ov))
+            # ★★控えは、あとから今のページで上書きされない★★
+            #   （2026-09-08・Codexの「不変性の試験が無い」）
+            #   ★上書きされると、見張りが毎回自己一致して永久に通る★（罠㉕）
+            _keep_ctx = dict((_ov4.get("identity_override") or {})
+                             .get("context") or {})
+            # ★★機械が同定できるページで試す★★（2026-09-08）
+            #   ★題が機種名でないページで試すと、壊す前も後も
+            #     控えを作り直す枝を通ってしまい、差が出ない★（罠④）。
+            #   ここでは題とh1に正式名を入れ、根拠も引用も残したうえで、
+            #   ★周りの文字だけを変える★。
+            _page5 = (f"<html><head><title>{_rv_name}</title></head><body>"
+                      f"<h1>{_rv_name}</h1><p>{_rv_name} の解析です。</p>"
+                      f"<p>ここは記録時と違う文です。</p><p>{_quote}</p>"
+                      "</body></html>")
+            _again = verify_source(dict(_ov4), _rv_name, lambda u: _page5)
+            t("　★持ち越した控えに、今のページの指紋を書き足さない★"
+              "（★書き足すと見張りが自己一致して永久に通る・罠㉕★）",
+              (_again.get("identity_override") or {}).get("context")
+              == _keep_ctx)
+            t("　（前提）この筋書きでは機械が同定に成功している"
+              "／★失敗する題だと、壊す前も後も控えを作り直して差が出ない★",
+              __import__("model_code_lookup").page_is_machine(
+                  _page5, _rv_name)[0])
         finally:
             STORE = _keep3
 

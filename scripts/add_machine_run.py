@@ -2886,6 +2886,23 @@ def field_label(k: str) -> str:
     return f"{k}（名前が未登録）"          # ★消さずに、分かる形で出す★
 
 
+def review_questions(reviews) -> list:
+    """★出典の引用の周りが変わったものを、2AIへの質問にする★
+
+    （2026-09-08・台帳#585）
+    ★関数にした理由★＝run_one の中に埋めていたら、
+      配線の試験が「文字がソースにあるか」しか見られず、
+      **中身を空に壊しても緑**だった（壊し方の検査が見つけた）。
+    ★止めるのではなく聞く★＝引用も同定の根拠も今もページに在る。
+      変わったのはその周りなので、まだ根拠として成り立つかは2AIが決める。
+    """
+    out = []
+    for r in (reviews or []):
+        out.append("出典の引用の周りが変わっています。いまのページを読んで、"
+                   f"この値の根拠としてまだ成り立つか判断してください: {r}")
+    return out
+
+
 def run_one(name, official_url, maker, release, apply_it=False,
             release_is_cache=False,
             before_write=None, expect_maker: str = "",
@@ -3013,6 +3030,10 @@ def run_one(name, official_url, maker, release, apply_it=False,
     #   手順書には2AI突き合わせ（STEP 3-B）があるのに、**確定した値を
     #   受け取る場所が無かった**ので、読めない機種は永久に空のままだった。
     #   ★機械が採れている項目は上書きしない★／記録できるのは対話セッションだけ。
+    # ★★先に空で用意する★★（2026-09-08）＝下の `try` や `if _added:` を
+    #   通らない機種（確定値がまだ1件も無い＝ほとんどの新台）でも、
+    #   後段で読むので、ここに無いと NameError でタスクごと落ちる。
+    _rv_review = []
     try:
         _added = _cv.merge_into(mat, out["slug"])
         if _added:
@@ -3024,13 +3045,22 @@ def run_one(name, official_url, maker, release, apply_it=False,
             #   ★全件はやらない★＝いま書こうとしている機種だけ・出典は各1回。
             # ★確かめ済みの名前とURLを渡す★（2026-08-24・Codexの9回目）
             #   まだ一覧に無い新台は、控えだけでは機種名を引けない。
-            _rv = _cv.reverify(out["slug"], name=name,
-                               official_url=official_url)
+            #   ★★止めるものと、2AIへ回すものを分ける★★
+            #     （2026-09-08・台帳#585・運営者の承認）
+            _rvd = _cv.reverify(out["slug"], name=name,
+                                official_url=official_url, detail=True)
+            _rv = _rvd.get("invalid") or []
+            # ★2AIへ回すものは、あとで ask_2ai へ足す★
+            #   （`out["ask_2ai"]` はここより後で作られるので溜めておく）
+            _rv_review = list(_rvd.get("review") or [])   # ★上で空に用意済み★
             if _rv:
                 out["problems"] += [
                     f"CONFIRMED_VALUES_UNREADABLE: 控えを確かめ直せません: {x}"
                     for x in _rv]
                 _log("  ★控えの再確認で問題★: " + " / ".join(_rv[:3]))
+            if _rv_review:
+                _log("  出典の引用の周りが変わっています（2AIへ回します）: "
+                     + " / ".join(_rv_review[:3]))
     except Exception as e:                # noqa: BLE001
         # ★読めないことを黙って「無い」にしない★
         # ★★読めないときは止める★★（2026-08-24・Codexの6回目）
@@ -3065,6 +3095,10 @@ def run_one(name, official_url, maker, release, apply_it=False,
     #   ①ここで質問を出す ②2AIが答えて confirmed_values へ記録する
     #   ③公開まで答えが出なければ台帳へ＝翌朝のまとめメールで知らせる
     out["ask_2ai"] = _ba.checker_questions(mat)
+    # ★★出典の引用の周りが変わったものを2AIへ回す★★
+    #   （2026-09-08・台帳#585）★溜めておいたものをここで足す★＝
+    #   `ask_2ai` は上の行で丸ごと作り直されるので、先に足すと消える。
+    out["ask_2ai"] += review_questions(_rv_review)
     # ★★機械が読めなかったものも、必ず質問にする★★（2026-08-29・本筋）
     #   ★これが無かったので、出典は取れているのに毎晩「採用=0項目」で
     #     終わっていた★（実測：16日間・25回試して2機種とも記事にならず）。
@@ -3142,6 +3176,49 @@ def run_one(name, official_url, maker, release, apply_it=False,
 
 
 # ---------------------------------------------------------------- selftest
+
+def _review_reaches_ask():
+    """★2AIへ回すぶんが `ask_2ai` に届くか、通しで確かめる★
+
+    （2026-09-08・Codexの指摘）
+    戻り値: True=届いた / False=届かない / None=通しの経路まで行けなかった
+    ★None を「合格」にしない★＝経路に届かないまま緑になるのを防ぐ。
+    """
+    import confirmed_values as _cv2
+    _keep = (globals().get("verify_official"), globals().get("gather"),
+             _cv2.merge_into, _cv2.reverify)
+    try:
+        globals()["verify_official"] = lambda *a, **k: {
+            "problems": [], "release": "2026-09-30",
+            "identity_name": "", "identity": {}}
+        globals()["gather"] = lambda *a, **k: {
+            "problems": [], "urls": [], "model_code": None,
+            "material": {"adopted": {}, "ceilings": {"adopted": []},
+                         "need_third": [], "setting_labels_seen": [],
+                         "thin": []},
+            "maker_questions": [], "maker_relation_checks": [],
+            "observed_model_code": None}
+        _cv2.merge_into = lambda mat, slug_: ["ceiling"]
+        _cv2.reverify = lambda slug_, **kw: {
+            "invalid": [],
+            "review": ["a / ceiling: 引用の周りが変わっています",
+                       "b / at: 引用の周りが変わっています",
+                       "c / cz: 引用の周りが変わっています"]}
+        got = run_one("L試験機", "https://m.example/products/slot/zzz/",
+                      "m", "2026-09")
+    except Exception:                                        # noqa: BLE001
+        return None
+    finally:
+        globals()["verify_official"] = _keep[0]
+        globals()["gather"] = _keep[1]
+        _cv2.merge_into, _cv2.reverify = _keep[2], _keep[3]
+    asks = [str(x) for x in (got.get("ask_2ai") or [])]
+    hit = [x for x in asks if "引用の周りが変わっています" in x]
+    if not hit:
+        return False
+    # ★3件とも届いているか★（先頭1件だけ残す壊し方を落とす）
+    return len(hit) == 3
+
 
 def selftest() -> int:
     import inspect
@@ -4857,6 +4934,40 @@ def selftest() -> int:
     t("★★公開直前の再検証を、本番の経路から呼んでいる★★"
       "／★作っただけで繋がっていない、をやらない★",
       "_cv.reverify(" in inspect.getsource(run_one))
+    # ★★2AIへ回すぶんを受け取っているか★★（2026-09-08・台帳#585）
+    #   ★`detail=True` で呼ばないと review が黙って消える★（罠③＝
+    #     関所を作っても、通り道に繋がなければ一度も働かない）
+    t("★出典の再確認を `detail=True` で呼んでいる★"
+      "（★これが無いと review が黙って消える★）",
+      "detail=True" in inspect.getsource(run_one))
+    t("★2AIへ回すぶんを、質問として `ask_2ai` へ足している★"
+      "（★呼ぶ引数まで見る＝空に差し替えても気づく★）",
+      'out["ask_2ai"] += review_questions(_rv_review)'
+      in inspect.getsource(run_one))
+    # ★関数そのものを直接呼んで確かめる★（罠③＝表示の道と別に置く）
+    t("★引用の周りが変わったものは、そのまま質問になる★",
+      len(review_questions(["a / ceiling: 引用の周りが変わっています"])) == 1
+      and "引用の周りが変わっています"
+      in review_questions(["a / ceiling: 引用の周りが変わっています"])[0]
+      and "判断してください"
+      in review_questions(["a / ceiling: 引用の周りが変わっています"])[0])
+    t("　★件数ぶん作る★（1件だけ作って残りを捨てない）",
+      len(review_questions(["x", "y", "z"])) == 3)
+    t("　無ければ何も作らない", review_questions([]) == []
+      and review_questions(None) == [])
+    # ★★通しで確かめる★★（2026-09-08・Codexの指摘）
+    #   ★関数を直接呼ぶ試験とソースの逐語だけでは、
+    #     「受け取っている」ことを一度も動かして確かめていない★（罠③）。
+    #   `reverify` を「reviewを3件返す」偽物にして `run_one` を通し、
+    #   `ask_2ai` に3件とも届くかを見る。
+    #   ★3件にする★＝先頭1件だけ残す壊し方も落とせる。
+    _e2e = _review_reaches_ask()
+    t("★★出典の再確認が2AIへ回したものが、その晩の問いに届く★★"
+      "（★届かないと、確定値が使えないまま毎晩黙って繰り返す★・台帳#585）",
+      _e2e is True)
+    t("　（前提）通しの試験が本当に走っている"
+      "／★走っていなければ、上は何も試していない★",
+      _e2e is not None)
 
     # ★★控えが読めないときは新台を作らない★★（2026-08-24・Codexの6回目）
     #   ★直す前は「問題」に足すだけで停止条件に入っていなかった★ので、

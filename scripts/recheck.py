@@ -1474,10 +1474,61 @@ def check_text_gone(args: dict) -> dict:
                     "html_checked": os.path.exists(hp)})
 
 
+def check_guard_proven(args: dict) -> dict:
+    """★機械の中身を直したことを、壊し方の検査で確かめる★
+
+    （2026-09-08・台帳#581・運営者の承認）
+
+    ★なぜ要るか★＝ほかの検査は全部「記事の文章」を見ている。
+      機械の中身を直したときに当てはまるものが1つも無かったので、
+      ★記事に問題が無いのに機種が永久に止まった★
+      （スマスロ リコリス・リコイル＝導入日・人気12位）。
+
+    ★何を見るか★＝`mutation_check` に登録した壊し方を1つだけ動かし、
+      「壊すと試験が赤くなる」ことを確かめる。
+      ＝直したうえで、その直しが試験で守られている証拠。
+
+    ★宣言では通らない★＝実際にコードを1行壊して試している。
+    ★名前で1件に決まらなければ通さない★（あいまいなまま閉じない）。
+    """
+    why_text = args.get("mutation_why")
+    if not isinstance(why_text, str) or len(why_text.strip()) < 10:
+        return _result(NOT_APPLICABLE, "壊し方の名前がありません（10字以上）", args)
+    try:
+        import mutation_check as _mc
+    except Exception as e:                                   # noqa: BLE001
+        return _result(ERROR, f"壊し方の検査を読めません: {e}", args)
+    hits = [i for i, m in enumerate(_mc.MUTATIONS)
+            if str(m.get("why") or "") == why_text]
+    if len(hits) != 1:
+        return _result(
+            NOT_APPLICABLE,
+            f"その名前の壊し方が1件に決まりません（{len(hits)}件）", args)
+    i = hits[0]
+    try:
+        code = _mc.check("", fast=False, only_index={i})
+    except Exception as e:                                   # noqa: BLE001
+        return _result(ERROR, f"壊し方を動かせません: {type(e).__name__}: {e}",
+                       args)
+    if code != 0:
+        return _result(FAIL,
+                       "壊しても試験が赤くなりません＝その直しは試験で"
+                       "守られていません", args, {"index": i})
+    return _result(PASS, "壊すと試験が赤くなります＝その直しは試験で"
+                   "守られています", args, {"index": i})
+
+
 # --- 検査の名簿 -----------------------------------------------------------
 # ★ここに無い名前は動かない★（台帳から来た文字列でコマンドを組み立てない）
 
 CHECKS = {
+    "guard_proven": {
+        "version": 1,
+        "closeable": True,          # ★機械が実際にコードを壊して確かめる★
+        "title": "機械の中身の直しが、壊し方の検査で守られているか",
+        "fn": check_guard_proven,
+        "args_spec": {"mutation_why": (str, True, None)},
+    },
     "text_gone": {
         "version": 1,
         "closeable": True,          # ★型を問わず使える★ あるか無いかだけ

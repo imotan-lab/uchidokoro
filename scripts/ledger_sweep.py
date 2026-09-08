@@ -265,7 +265,8 @@ def _html_ready(slug: str) -> bool:
     return os.path.exists(os.path.join(BASE, "machines", slug, "index.html"))
 
 
-def run_checks(slug: str, checks, texts, head: str = "") -> tuple:
+def run_checks(slug: str, checks, texts, head: str = "",
+               guards=None) -> tuple:
     """2AIが名指しした検査を**全部**やり直す → (ok, 一件ずつの記録)
 
     ★★1件でも通らなければ閉じない★★（罠⑮＝免除の条件をゆるくしない）
@@ -276,7 +277,8 @@ def run_checks(slug: str, checks, texts, head: str = "") -> tuple:
     """
     checks = list(checks or [])
     texts = list(texts or [])
-    if not checks and not texts:
+    guards = list(guards or [])
+    if not checks and not texts and not guards:
         return False, ["確かめる検査が1件もありません"]
 
     # ★これだけでは閉じられない検査★は、逐語の確認と組でなければ通さない
@@ -308,6 +310,17 @@ def run_checks(slug: str, checks, texts, head: str = "") -> tuple:
             {"check": "text_gone", "version": meta["version"],
              "args": {"slug": slug, "text": t}, "expected_commit": head})
         whys.append(f"{'○' if ok else '×'} text_gone[{t[:30]}] ／ {why}")
+        if not ok:
+            return False, whys
+    # ★★機械の中身を直したときの道★★（2026-09-08・台帳#581）
+    #   ★記事の文章を見る検査は当てはまらない★ので、
+    #   「その直しを1行壊すと試験が赤くなるか」で確かめる。
+    _gmeta = _rc.CHECKS["guard_proven"]
+    for g in guards:
+        ok, why, _got = _rc.closeable(
+            {"check": "guard_proven", "version": _gmeta["version"],
+             "args": {"mutation_why": g}, "expected_commit": head})
+        whys.append(f"{'○' if ok else '×'} guard_proven[{g[:40]}] ／ {why}")
         if not ok:
             return False, whys
     return True, whys
@@ -362,10 +375,14 @@ def texts_from_issue(row, texts) -> tuple:
 TEXT_GONE_NOT_ENOUGH = ("external_value",)
 
 
-def kind_allows(row, checks, texts) -> tuple:
-    """★その案件の型で、この検査の組み合わせで閉じてよいか★ → (ok, 理由)"""
+def kind_allows(row, checks, texts, guards=None) -> tuple:
+    """★その案件の型で、この検査の組み合わせで閉じてよいか★ → (ok, 理由)
+
+    ★機械の中身の直し（guards）も検査のうち★（2026-09-08・台帳#581）＝
+      数えないと「逐語だけで閉じようとしている」と誤って断られる。
+    """
     kind = str((row or {}).get("kind") or "")
-    if kind in TEXT_GONE_NOT_ENOUGH and texts and not checks:
+    if kind in TEXT_GONE_NOT_ENOUGH and texts and not (checks or guards):
         return False, (f"{kind} は裏取り待ちの型です。"
                        "文が消えたのは「直った」ではなく"
                        "「載せるのをやめた」かもしれません"
@@ -373,7 +390,8 @@ def kind_allows(row, checks, texts) -> tuple:
     return True, f"型 {kind or '(なし)'} でこの組み合わせは使えます"
 
 
-def close_issue(issue_id: int, slug: str, checks, texts, why_extra="") -> int:
+def close_issue(issue_id: int, slug: str, checks, texts, why_extra="",
+                guards=None) -> int:
     """★案件を閉じる唯一の入口★ 0=閉じた / それ以外=閉じなかった
 
     ★★番号・機種・検査を結び付ける★★（2026-08-30・Codexの指摘2）
@@ -389,12 +407,13 @@ def close_issue(issue_id: int, slug: str, checks, texts, why_extra="") -> int:
         print("★閉じません★")
         return 1
     row = find_issue(issue_id)
+    guards = list(guards or [])
     ok, why = texts_from_issue(row, texts)
     print("  " + why)
     if not ok:
         print("★閉じません★")
         return 1
-    ok, why = kind_allows(row, checks, texts)
+    ok, why = kind_allows(row, checks, texts, guards)
     print("  " + why)
     if not ok:
         print("★閉じません★")
@@ -405,7 +424,7 @@ def close_issue(issue_id: int, slug: str, checks, texts, why_extra="") -> int:
         return 1
 
     head0 = _head()
-    ok, whys = run_checks(slug, checks, texts, head0)
+    ok, whys = run_checks(slug, checks, texts, head0, guards=guards)
     for w in whys:
         print("  " + w[:130])
     if not ok:
@@ -456,6 +475,13 @@ def main() -> int:
                     help="やり直す検査の名前（2AIが決める・複数可）")
     ap.add_argument("--text", action="append", default=[],
                     help="消えているはずの逐語（1件につき text_gone を1回・複数可）")
+    ap.add_argument("--guard-mutation", action="append", default=[],
+                    help="機械の中身を直したときに使う。"
+                         "mutation_check に登録した壊し方の名前（逐語・複数可）。"
+                         "★実際にコードを1行壊して、試験が赤くなるかを見る★")
+    ap.add_argument("--guard-mutation-file", action="append", default=[],
+                    help="同上。★名前に記号が入るときはこちら★"
+                         "（自由文をシェルに書かない・鉄則1c）")
     ap.add_argument("--why", default="",
                     help="2AIがそう決めた理由（記録に残す）")
     ap.add_argument("--site", action="store_true",
@@ -490,7 +516,16 @@ def main() -> int:
         return 1
 
     if a.close is not None:
-        return close_issue(a.close, a.slug, a.check, a.text, a.why)
+        # ★機械の中身の直しは、名前をファイルでも渡せる★（鉄則1c）
+        _guards = list(a.guard_mutation or [])
+        for _p in (a.guard_mutation_file or []):
+            try:
+                _guards.append(io.open(_p, encoding="utf-8").read().strip())
+            except Exception as e:                           # noqa: BLE001
+                print(f"★閉じません★ 壊し方の名前を読めません: {_p}（{e}）")
+                return 1
+        return close_issue(a.close, a.slug, a.check, a.text, a.why,
+                           guards=_guards)
 
     got = for_slug(a.slug)
     print(f"{a.slug}: 開いている案件 {got['checked']} 件")

@@ -1282,11 +1282,40 @@ def _git(*args) -> tuple[int, str]:
     return p.returncode, out
 
 
-def _changed_files() -> tuple[list, str]:
-    """いま変わっているファイルの一覧。読めなければ理由を返す。"""
+# ★gitに聞き直す回数と待ち時間★（2026-09-08・運営者の指摘「再トライは無理なの？」）
+#   ★回数で決める★＝このプロジェクトは「時間で判定しない」決まり
+#   （混んでいる日に誤って打ち切る）。合計でも5秒たらず。
+GIT_RETRY_WAITS = (0.5, 1.5, 3.0)
+
+
+def _changed_files(sleep=None) -> tuple[list, str]:
+    """いま変わっているファイルの一覧。読めなければ理由を返す。
+
+    ★まず聞き直す★（2026-09-08・運営者の指摘）＝
+      gitが答えられない理由はほとんどが一時的なもの
+      （別の処理がファイルを掴んでいる・索引が書き換え中）。
+      ★少し待って聞き直せば、たいてい答えが返る★。
+      それでも駄目だったときだけ「読めなかった」として返す。
+    ★聞き直したことは残す★＝理由の文に何回目で返ったかを書く
+      （呼ぶ側が記録する）。静かに直っていると、増えても気づけない。
+    """
+    import time as _t
+    _sleep = sleep if sleep is not None else _t.sleep
     rc, out = _git("status", "--porcelain")
+    _tries = 1
+    for _w in GIT_RETRY_WAITS:
+        if rc == 0:
+            break
+        _sleep(_w)
+        rc, out = _git("status", "--porcelain")
+        _tries += 1
     if rc != 0:
-        return [], "git status が失敗しました"
+        return [], f"git status が失敗しました（{_tries}回聞き直しました）"
+    if _tries > 1:
+        # ★答えは返っているので止めない★。ただし記録は残す。
+        _log_git_unreadable(
+            "_changed_files",
+            f"★{_tries}回目で答えが返りました★（1回目は失敗）")
     names = []
     for line in out.splitlines():
         nm = line[3:].strip().strip('"')
@@ -2459,6 +2488,41 @@ def selftest() -> int:
               "（＝直す前は何も残らず、誰も気づけなかった）",
               _g.get("task") == "update-machine"
               and "git が動きません" in str(_g.get("why")))
+
+            # ★★gitが答えなかったら、まず聞き直す★★
+            #   （2026-09-08・運営者の指摘「再トライは無理なの？」）
+            #   ★止める／進む の前に、聞き直す道があった★＝
+            #   答えられない理由はほとんどが一時的なもの
+            #   （別の処理がファイルを掴んでいる・索引が書き換え中）。
+            _keep_git = globals()["_git"]
+            try:
+                _n = [0]
+
+                def _flaky(*_a):
+                    _n[0] += 1
+                    return (128, "") if _n[0] == 1 else (0, "")
+
+                globals()["_git"] = _flaky
+                _names, _why = _keep_changed(sleep=lambda _s: None)
+                t("★★1回失敗しても、聞き直して答えが返れば止めない★★"
+                  "（★これが無いと、一時的な失敗のたびに記録だけ増える★）",
+                  _why == "" and _n[0] == 2)
+                _n[0] = 0
+
+                def _always_bad(*_a):
+                    # ★数える偽物にする★（数えない偽物だと回数の試験が意味を失う）
+                    _n[0] += 1
+                    return (128, "")
+
+                globals()["_git"] = _always_bad
+                _names2, _why2 = _keep_changed(sleep=lambda _s: None)
+                t("★★何回聞いても駄目なときは、そのことを返す★★"
+                  "（★黙って「変更なし」にしない＝fail-open にしない★）",
+                  "失敗しました" in _why2 and "聞き直しました" in _why2)
+                t("　★聞き直す回数は決まっている★（無限に待たない）",
+                  _n[0] == 1 + len(GIT_RETRY_WAITS))
+            finally:
+                globals()["_git"] = _keep_git
 
             globals()["_changed_files"] = lambda: ([], "")
             fpg2 = os.path.join(tmpdir, "gitok.json")

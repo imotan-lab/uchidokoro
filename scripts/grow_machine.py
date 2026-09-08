@@ -1442,14 +1442,34 @@ def grow_result(slug: str, ok: bool, why: str = "",
 
 
 def ledger_once(slug: str, title: str, detail: str,
-                severity: str = "MATERIAL") -> None:
+                severity: str = "MATERIAL", round_=None) -> None:
     """★黙って止まり続けない★（2026-08-05・Codex102回目）
 
     確認済みだった内容が再現できなくなった時、毎日同じ理由で止まるだけだと
     **誰も気づかないまま古い内容が公開され続ける**。
     台帳へ1件だけ上げる（同じ題なら重複せず last_seen が更新される）。
     ★無人タスクは close しない★＝人が判断する。
+
+    ★★何回目かを必ず渡す★★（2026-09-08・運営者の承認）
+      運営者の指示（2026-08-27）＝
+        ＞ 2AIで結論出して。人に頼らないで。
+        ＞ 本当にどうしてもの場合だけメールで報告
+      判断は `grow_result()` が持っていて、1〜2回目は2AIへの質問、
+      3回目でだけ台帳（＝メール）。
+      ★ところがこの関数は誰からでも呼べた★ので、
+      あとから足した道が3回の判断を飛ばせた。
+      ＝指示が守られるかどうかが「書いた人の注意力しだい」だった。
+      ★いまは機械が断る★＝3回に届いていなければ積まない。
     """
+    if round_ is None or int(round_) < STUCK_ASK_LIMIT:
+        # ★積まない★＝2AIがまだ決められる段階なので、人へ回さない。
+        #   ★黙って捨てない★＝呼んだ側の間違いなので記録に残す。
+        try:
+            _log(f"  ★台帳へは積みません★（{slug}／"
+                 f"{round_}回目・{STUCK_ASK_LIMIT}回で報告します）")
+        except Exception:                                    # noqa: BLE001
+            pass
+        return
     try:
         # ★CLIの引数の形に依存しない入口を使う★（2026-08-10・台帳#300）
         #   Namespace を手で組んでいたので、CLIに引数が増えるたびに
@@ -1750,11 +1770,23 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
             #   出典が変わっても、控えを手で書き換えられても、
             #   **育てる経路だけは値を公開できた**。
             #   ＝「record も load も grow も緑。繋ぐと再確認が抜ける」型。
+            #   ★★止めるものと、2AIへ回すものを分ける★★
+            #     （2026-09-08・台帳#585・運営者の承認）
+            #     引用も根拠もページに在るのに、無関係な場所が変わっただけで
+            #     止めていた＝確かめた値が1日で使えなくなっていた。
             _rv = _cv.reverify(slug, name=vo.get("identity_name") or name,
-                               official_url=url)
-            if _rv:
+                               official_url=url, detail=True)
+            for _q in (_rv.get("review") or []):
+                # ★消さずに2AIへ★（判断は人でも機械でもなく2AI）
+                out["questions"].append(
+                    {"text": ("出典の引用の周りが変わっています。"
+                              "いまのページを読んで、この値の根拠として"
+                              f"まだ成り立つか判断してください: {_q}"),
+                     "kind": "source_context_changed", "slug": slug})
+            if _rv.get("invalid"):
                 out["problems"] += [
-                    f"控えを確かめ直せません: {x}" for x in _rv]
+                    f"控えを確かめ直せません: {x}"
+                    for x in (_rv.get("invalid") or [])]
                 return out
     except Exception as e:                    # noqa: BLE001
         out["problems"].append(
@@ -1839,7 +1871,7 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
                 ledger_once(
                     slug,
                     "確認済みだった内容を再現できません（育てる処理を止めています）",
-                    _act["detail"])
+                    _act["detail"], round_=_act["round"])
     if out["problems"]:
         return out
     try:
@@ -2643,8 +2675,10 @@ def selftest() -> int:
     _real_rv = _cv.reverify
     try:
         def _rvspy(slug_, **kw):
-            _rvseen.append((slug_, kw.get("name"), kw.get("official_url")))
-            return []
+            _rvseen.append((slug_, kw.get("name"), kw.get("official_url"),
+                            kw.get("detail")))
+            # ★本物と同じ形で返す★（2026-09-08・台帳#585）
+            return {"invalid": [], "review": []}
         _cv.reverify = _rvspy
         _cv.merge_into = lambda mat, slug_: ["ceiling"]
         with _st_env():
@@ -2667,6 +2701,13 @@ def selftest() -> int:
           _rv_reached and _rvseen[0][1] == _want_nm)
         t("　公式URLも渡している（機種を引き直せるように）",
           _rv_reached and _rvseen[0][2] == _ST_URL)
+        # ★★2AIへ回すぶんを受け取っているか★★（2026-09-08・台帳#585）
+        #   ★`detail=True` で呼ばないと review が黙って消える★（罠③）＝
+        #   出典ページの無関係な場所が変わっただけで確定値が使えなくなる、
+        #   という状態に戻る。
+        t("★出典の取り直しを `detail=True` で呼んでいる★"
+          "（★2AIへ回すぶんを受け取るため★）",
+          _rv_reached and _rvseen[0][3] is True)
         # ★★問題を返したら「記事そのものが作られない」ことまで見る★★
         #   ★直す前は問題文があるかしか見ていなかった★ので、
         #   記事を作ったうえで問題も返す、という形でも通った。
@@ -2682,7 +2723,8 @@ def selftest() -> int:
                                                  _real_bm(*a, **k))[1]
             _ba.build_detail = lambda *a, **k: (_built.append("detail"),
                                                 _real_bd(*a, **k))[1]
-            _cv.reverify = lambda slug_, **kw: ["出典を確かめ直せません"]
+            _cv.reverify = lambda slug_, **kw: {
+                "invalid": ["出典を確かめ直せません"], "review": []}
             with _st_env():
                 _stop = plan_one(
                     _ST_SLUG,
@@ -2698,6 +2740,30 @@ def selftest() -> int:
         t("　確かめ直せなければ、その理由を返す",
           _stop_reached and any("確かめ直せません" in str(x)
                                 for x in (_stop.get("problems") or [])))
+        # ★★引用の周りが変わっただけなら、止めずに2AIへ回す★★
+        #   （2026-09-08・台帳#585・運営者の承認）
+        #   ★止めていたのが問題そのもの★＝出典ページの設置店の宣伝文に
+        #   日付が入るので、確かめた値が翌日には使えなくなっていた
+        #   （実測11件中6件）。
+        try:
+            _cv.reverify = lambda slug_, **kw: {
+                "invalid": [],
+                "review": ["x / ceiling: 引用の周りが変わっています"]}
+            with _st_env():
+                _ask = plan_one(
+                    _ST_SLUG,
+                    gather=lambda *a, **k: {"material": the_mat,
+                                            "problems": []},
+                    verify=lambda *a, **k: {"problems": [], "release": ""})
+        finally:
+            _cv.reverify = _rvspy
+        t("★★引用の周りが変わったら、止めずに2AIへ回す★★"
+          "（★止めると、無関係な場所が動くだけで確定値が使えなくなる"
+          "・台帳#585★）",
+          not [x for x in (_ask.get("problems") or [])
+               if "確かめ直せません" in str(x)]
+          and [q for q in (_ask.get("questions") or [])
+               if str(q.get("kind")) == "source_context_changed"])
         t("★★確かめ直せなければ、記事を1文字も作らない★★"
           "／★作ってから止めると、次の工程が拾える形で残る★",
           _stop_reached and not _built and _stop.get("machine") is None
@@ -4053,6 +4119,31 @@ def selftest() -> int:
               "／★直す前は、その場で人へ回して止まったままだった★",
               _a1["do"] == "ask" and _a2["do"] == "ask"
               and "2AIで決めてください" in _a1["text"])
+            # ★★3回に届かないうちは台帳へ積ませない★★
+            #   （2026-09-08・運営者の承認）
+            #   運営者の指示（2026-08-27）＝
+            #     ＞ 2AIで結論出して。人に頼らないで。
+            #     ＞ 本当にどうしてもの場合だけメールで報告
+            #   ★台帳へ積む関数は誰からでも呼べた★ので、あとから足した道が
+            #   3回の判断を飛ばせた＝指示が「書いた人の注意力しだい」だった。
+            _wrote = []
+            _keep_add = _oi.add_issue
+            try:
+                _oi.add_issue = lambda *a, **k: _wrote.append(k.get("slug"))
+                ledger_once("zzz_g", "題", "中身")
+                t("★★何回目かを渡さなければ台帳へ積まない★★"
+                  "（★渡し忘れた道が黙って人へ回すのを防ぐ★）", _wrote == [])
+                ledger_once("zzz_g", "題", "中身", round_=1)
+                ledger_once("zzz_g", "題", "中身",
+                            round_=STUCK_ASK_LIMIT - 1)
+                t("★★3回に届かないうちは台帳へ積まない★★"
+                  "（★1〜2回目は2AIが決める段階★）", _wrote == [])
+                ledger_once("zzz_g", "題", "中身", round_=STUCK_ASK_LIMIT)
+                t("★★3回目になったら積む★★"
+                  "（★積まないと、古い内容が黙って公開され続ける★）",
+                  _wrote == ["zzz_g"])
+            finally:
+                _oi.add_issue = _keep_add
             _a3 = grow_result("zzz_s", False, "理由", today="2026-08-03")
             t("★★3回目でだけ人へ報告する★★",
               _a3["do"] == "ledger" and _a3["round"] == STUCK_ASK_LIMIT)

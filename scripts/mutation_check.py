@@ -101,8 +101,9 @@ MUTATIONS = [
         "file": "scripts/grow_machine.py",
         "before": ('            _rv = _cv.reverify(slug, '
                    'name=vo.get("identity_name") or name,\n'
-                   '                               official_url=url)'),
-        "after": "            _rv = []",
+                   '                               official_url=url, '
+                   'detail=True)'),
+        "after": '            _rv = {"invalid": [], "review": []}',
         "run": ["scripts/grow_machine.py"],
     },
     {
@@ -117,13 +118,15 @@ MUTATIONS = [
         "why": "★取り直しに失敗しても止めずに記事を作る"
                "（作ってから止めると、次の工程が拾える形で残る）★",
         "file": "scripts/grow_machine.py",
-        "before": ('            if _rv:\n'
+        "before": ('            if _rv.get("invalid"):\n'
                    '                out["problems"] += [\n'
-                   '                    f"控えを確かめ直せません: {x}" for x in _rv]\n'
+                   '                    f"控えを確かめ直せません: {x}"\n'
+                   '                    for x in (_rv.get("invalid") or [])]\n'
                    '                return out'),
-        "after": ('            if _rv:\n'
+        "after": ('            if _rv.get("invalid"):\n'
                   '                out["problems"] += [\n'
-                  '                    f"控えを確かめ直せません: {x}" for x in _rv]'),
+                  '                    f"控えを確かめ直せません: {x}"\n'
+                  '                    for x in (_rv.get("invalid") or [])]'),
         "run": ["scripts/grow_machine.py"],
     },
     {
@@ -1192,9 +1195,10 @@ MUTATIONS = [
     {
         "why": "公開直前の再検証を呼ばない（控えの手書きを見破れない・Codex8回目）",
         "file": "scripts/add_machine_run.py",
-        "before": "            _rv = _cv.reverify(out[\"slug\"], name=name,\n"
-                  "                               official_url=official_url)",
-        "after": "            _rv = []",
+        "before": "            _rvd = _cv.reverify(out[\"slug\"], name=name,\n"
+                  "                                official_url=official_url,"
+                  " detail=True)",
+        "after": '            _rvd = {"invalid": [], "review": []}',
         "run": ["scripts/add_machine_run.py"],
     },
     {
@@ -1292,12 +1296,8 @@ MUTATIONS = [
     {
         "why": "再確認の指紋を別の作り方で出す（本文が同じでも止まる・Codex13回目）",
         "file": "scripts/confirmed_values.py",
-        "before": "                now_sha = _hl.sha256(\n"
-                  "                    page_text(html, url).encode(\"utf-8\")"
-                  ").hexdigest()",
-        "after": "                now_sha = _hl.sha256(\n"
-                 "                    \" \".join(_w9._visible_text(html)"
-                 ".split()).encode(\"utf-8\")).hexdigest()",
+        "before": "                now_text = page_text(html, url)",
+        "after": "                now_text = html",
         "run": ["scripts/confirmed_values.py"],
     },
     {
@@ -1389,8 +1389,8 @@ MUTATIONS = [
         "why": "育てる側で出典を確かめ直さない（控えの手書きが通る・Codex17回目）",
         "file": "scripts/grow_machine.py",
         "before": "            _rv = _cv.reverify(slug, name=vo.get(\"identity_name\") or name,\n"
-                  "                               official_url=url)",
-        "after": "            _rv = []",
+                  "                               official_url=url, detail=True)",
+        "after": '            _rv = {"invalid": [], "review": []}',
         "run": ["scripts/grow_machine.py"],
     },
     {
@@ -2092,6 +2092,163 @@ MUTATIONS = [
         "run": ["scripts/build_new_article.py"],
     },
     {
+        "why": "★文体の検査で、飾りの記号を外さない★"
+               "（★行ぜんたいが太字の文・★で囲まれた文が誤って違反になり、"
+               "48件直しても基準値を書き直せなくなる・台帳#586★）",
+        "file": "scripts/style_check.py",
+        "before": "    return _DECOR.sub(\"\", str(text or \"\"))",
+        "after": "    return str(text or \"\")",
+        "run": ["scripts/style_check.py"],
+    },
+    {
+        "why": "★ラベルの長さに、括弧の補足まで数える★"
+               "（★「規定ゲーム数（前兆発生ポイント）：88G」がラベルと"
+               "認識されず、値の行が文体の違反になる★）",
+        "file": "scripts/style_check.py",
+        "before": '    head = _PAREN_RUN.sub("", m.group(1)).strip()',
+        "after": "    head = m.group(1).strip()",
+        "run": ["scripts/style_check.py"],
+    },
+    {
+        "why": "★ラベルの長さの上限を外す★"
+               "（★長い文の途中に「：」があるだけでラベル扱いになり、"
+               "本物の違反を見逃す＝守りを弱めていないことの確認★）",
+        "file": "scripts/style_check.py",
+        "before": "    return 1 <= len(head) <= _LABEL_MAX",
+        "after": "    return True",
+        "run": ["scripts/style_check.py"],
+    },
+    {
+        "why": "★2AIへ回すぶんを受け取らずに捨てる（代入の段）★"
+               "（★`detail=True` も質問を作る関数もソースに残るので、"
+               "ソースを見る試験では気づけない・Codexの指摘★）",
+        "file": "scripts/add_machine_run.py",
+        "before": ('            _rv_review = list(_rvd.get("review") or [])'
+                   '   # ★上で空に用意済み★'),
+        "after": "            _rv_review = []",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★2AIへ回すぶんを、先頭1件だけにする★"
+               "（★1件でも届けば緑、にしていると残りが黙って消える★）",
+        "file": "scripts/add_machine_run.py",
+        "before": "    out[\"ask_2ai\"] += review_questions(_rv_review)",
+        "after": "    out[\"ask_2ai\"] += review_questions(_rv_review[:1])",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★育成が3回の判断を通さずに台帳へ積める★"
+               "（★運営者の指示「人に頼らないで・どうしてもの場合だけ報告」が、"
+               "書いた人の注意力しだいになる★・2026-09-08）",
+        "file": "scripts/grow_machine.py",
+        "before": ("    if round_ is None or int(round_) < STUCK_ASK_LIMIT:"),
+        "after": "    if False:",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★gitが答えなかったときに聞き直さない★"
+               "（★一時的な失敗のたびに「読めなかった」が積み上がる・"
+               "運営者の指摘 2026-09-08★）",
+        "file": "scripts/task_guard.py",
+        "before": "    for _w in GIT_RETRY_WAITS:",
+        "after": "    for _w in []:",
+        "run": ["scripts/task_guard.py"],
+    },
+    {
+        "why": "★聞き直しても駄目だったことを黙って「変更なし」にする★"
+               "（★fail-open＝未コミットのコードで公開処理が走る★）",
+        "file": "scripts/task_guard.py",
+        "before": ('    if rc != 0:\n'
+                   '        return [], f"git status が失敗しました'
+                   '（{_tries}回聞き直しました）"'),
+        "after": '    if rc != 0:\n        return [], ""',
+        "run": ["scripts/task_guard.py"],
+    },
+    {
+        "why": "★同定の根拠が消えても止めない★"
+               "（★相手のサイトが題に正式名を入れると根拠の検査を通らない＝"
+               "2AIの判断の土台が消えたまま公開が続く・Codexの指摘1★）",
+        "file": "scripts/confirmed_values.py",
+        "before": "                    if not _p or _p not in now_text:",
+        "after": "                    if False:",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★持ち越した控えに、今のページの指紋を書き足す★"
+               "（★見張りが毎回自己一致して永久に通る・罠㉕★）",
+        "file": "scripts/confirmed_values.py",
+        "before": "    if _built_override:",
+        "after": '    if src.get("identity_override"):',
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★引用の周りではなく、また全文の指紋で合否を決める★"
+               "（★出典ページの設置店の宣伝文に日付が入るので、確かめた値が"
+               "1日で使えなくなる・実測11件中6件・台帳#585★）",
+        "file": "scripts/confirmed_values.py",
+        "before": '                    if ctx.get("quote") or ctx.get("proof"):',
+        "after": "                    if False:",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★引用の周りが変わっても何も言わない★"
+               "（★引用は残っているのに節が『AT間』から『CZ間』へ移った、を"
+               "見逃す＝見る場所を狭めた代わりの守りが消える★）",
+        "file": "scripts/confirmed_values.py",
+        "before": ("                        if (context_fingerprint("
+                   "now_text, _q, _w)\n"
+                   "                                != str(ctx.get(\"quote\")"
+                   " or \"\")\n"
+                   "                                or context_fingerprint("
+                   "now_text, _p, _w)\n"
+                   "                                != str(ctx.get(\"proof\")"
+                   " or \"\")):"),
+        "after": "                        if False:",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★周りの指紋を持たない古い記録を、黙って通す★"
+               "（★移行の道が fail-open になる＝確かめていないものが公開される★）",
+        "file": "scripts/confirmed_values.py",
+        "before": '                    elif old["text_sha256"] != now_sha:',
+        "after": "                    elif False:",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★引用の周りを見るとき、前後の文脈を捨てて引用そのものだけ見る★"
+               "（★節の移動・断り書きの追加を見逃す★）",
+        "file": "scripts/confirmed_values.py",
+        "before": "        a = max(0, i - int(window))\n"
+                  "        b = min(len(text), i + len(needle) + int(window))",
+        "after": "        a = i\n        b = i + len(needle)",
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★育てる側が2AIへ回すぶんを捨てる★"
+               "（★review が黙って消え、出典の無関係な場所が動くだけで"
+               "確定値が使えなくなる状態に戻る★）",
+        "file": "scripts/grow_machine.py",
+        "before": '            for _q in (_rv.get("review") or []):',
+        "after": "            for _q in []:",
+        "run": ["scripts/grow_machine.py"],
+    },
+    {
+        "why": "★新台側が2AIへ回すぶんを捨てる★"
+               "（★`ask_2ai` へ足さないと、その晩の2AIが判断し直す機会を失う★）",
+        "file": "scripts/add_machine_run.py",
+        "before": ('    out["ask_2ai"] += review_questions(_rv_review)'),
+        "after": '    out["ask_2ai"] += review_questions([])',
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★2AIへ回すぶんを、質問にせず捨てる★"
+               "（★関数の中身を空にする＝配線は繋がったまま中身が消える★）",
+        "file": "scripts/add_machine_run.py",
+        "before": "    out = []\n    for r in (reviews or []):",
+        "after": "    out = []\n    for r in []:",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
         "why": "★読み取りに失敗したものを、育成レーンで聞かない★"
                "（★実測145回・誰にも聞かれず捨てられ、"
                "出典に書いてあるのに永久に検索へ載らない★）",
@@ -2774,9 +2931,10 @@ MUTATIONS = [
     {
         "why": "★検査を1つも渡されなくても通す（空で閉じられる）★",
         "file": "scripts/ledger_sweep.py",
-        "before": "    if not checks and not texts:\n"
-                  "        return False, [\"確かめる検査が1件もありません\"]",
-        "after": "    if not checks and not texts:\n        return True, []",
+        "before": ('    if not checks and not texts and not guards:\n'
+                   '        return False, ["確かめる検査が1件もありません"]'),
+        "after": ('    if not checks and not texts and not guards:\n'
+                  '        return True, []'),
         "run": ["scripts/ledger_sweep.py"],
     },
     {
@@ -3424,7 +3582,7 @@ MUTATIONS = [
         "why": "★ラベルと値の行まで文体を求める"
                "（表へ移すべき行が毎日「直せ」と出続ける）★",
         "file": "scripts/style_check.py",
-        "before": "    return bool(_LABEL.match(t))",
+        "before": "    return 1 <= len(head) <= _LABEL_MAX",
         "after": "    return False",
         "run": ["scripts/style_check.py"],
     },
