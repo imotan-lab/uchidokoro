@@ -2147,6 +2147,14 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★台帳と守りの結び付けを、場所も見ずに通す★"
+               "（★合格する壊し方を1つ渡すだけで、無関係な案件を閉じられる★）",
+        "file": "scripts/ledger_sweep.py",
+        "before": "    if base not in body and base.rsplit(\".\", 1)[0] not in body:",
+        "after": "    if False:",
+        "run": ["scripts/ledger_sweep.py"],
+    },
+    {
         "why": "★名鑑の一覧を読めなかったことを数えない★"
                "（★票がそろうと記録から消えるので、"
                "『2件は読めた・3件目は一覧が壊れていた』でも『全部』になる★）",
@@ -2296,7 +2304,7 @@ MUTATIONS = [
                "（★合格する壊し方の名前を1つ渡すだけで、機械の中身と"
                "無関係な案件まで閉じられる・Codexの指摘★）",
         "file": "scripts/ledger_sweep.py",
-        "before": "    bad = [g for g in guards if g not in body]",
+        "before": "    bad = [g for g in guards if not (g in body or _guard_place_in(g, body))]",
         "after": "    bad = []",
         "run": ["scripts/ledger_sweep.py"],
     },
