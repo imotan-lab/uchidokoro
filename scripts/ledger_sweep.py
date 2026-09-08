@@ -417,9 +417,14 @@ def _guard_declares_issue(name: str, issue_id) -> bool:
 
     ★守りの側の書き方★＝`MUTATIONS` の項目に `"issues": [497]` を書く。
     """
-    try:
-        n = int(issue_id)
-    except Exception:                                        # noqa: BLE001
+    # ★番号は正の整数だけ★（2026-09-08・Codexの指摘）
+    #   `int()` に通すと 497.9 も True も番号として通ってしまう。
+    if not isinstance(issue_id, int) or isinstance(issue_id, bool):
+        if not (isinstance(issue_id, str) and issue_id.strip().isdigit()):
+            return False
+        issue_id = int(issue_id)
+    n = int(issue_id)
+    if n <= 0:
         return False
     try:
         import mutation_check as _mc0
@@ -430,10 +435,13 @@ def _guard_declares_issue(name: str, issue_id) -> bool:
     if len(hit) != 1:
         return False                       # 名前で1つに決まらないなら通さない
     ids = hit[0].get("issues") or []
-    try:
-        return n in [int(x) for x in ids]
-    except Exception:                                        # noqa: BLE001
+    # ★名乗る側も正の整数だけ★（書き間違いを機械で減らす）
+    if not isinstance(ids, (list, tuple)) or not ids:
         return False
+    for x in ids:
+        if not isinstance(x, int) or isinstance(x, bool) or x <= 0:
+            return False
+    return n in list(ids)
 
 
 def guards_from_issue(row, guards) -> tuple:
@@ -671,6 +679,19 @@ def _guard_tests(t) -> None:
           [_nm])[0] is False)
     t("　（対照）登録されていない名前は通さない",
       guards_from_issue(_mine, ["★存在しない壊し方★"])[0] is False)
+    t("　（対照）番号が小数や真偽値では通らない",
+      bool(_g0) and all(
+          guards_from_issue({"id": v, "title": "x", "detail": "本文",
+                             "kind": "structural"}, [_nm])[0] is False
+          for v in (float(_id), True, -1, 0)))
+    # ★★#497 は動かない試験にする★★（2026-09-08・Codexの指摘）
+    #   ★上の試験は「issues を持つ最初の守り」を拾うので、
+    #     いつか別の守りに入れ替わって、この結び付けが消えても気づけない★
+    _497 = [m for m in _mc_t.MUTATIONS if 497 in (m.get("issues") or [])]
+    t("★読者に出ない項目まで数える守りは、#497を証明すると名乗っている★"
+      "（★入れ替わっても気づけるように、番号を固定して見る★）",
+      len(_497) == 1
+      and "材料あり" in str(_497[0].get("why") or ""))
     t("　（対照）本文にその守りのファイル名と行を引用しても通らない",
       bool(_g0) and guards_from_issue(
           {"id": _id + 100000, "kind": "structural",
