@@ -1117,6 +1117,27 @@ def record(slug: str, field: str, value, sources: list, by: list,
         #   確かめ直せない★（記録だけ残って、由来が追えない）。
         "official_url": str(official_url or ""),
     }
+    # ★★読む側が断る記録は、書く側でも断る★★（2026-09-08）
+    #   ★何が起きたか★＝同定の上書きが要らないページに --source-identity を
+    #   渡すと、identity_why / identity_proof だけが出典に残り、
+    #   identity_override が作られない。この形は validate_record が
+    #   「本文の指紋がありません」で断る**契約違反**なのに、
+    #   書き込みは素通りしていた。
+    #   ★被害★＝契約の検査は load() の中で**控え全体**に対して走るので、
+    #   1機種の1項目が壊れただけで★全機種の確定値が読めなくなる★。
+    #   しかも --forget も load() を通るので**CLIから直せない**。
+    #   夜の新台タスクは「控えが読めないなら作らない」（fail-closed）ので、
+    #   ★その晩の新台追加が丸ごと静かに止まる★。
+    #   2026-09-08に実際に2回踏んだ（pw_10523・pw_10521）。
+    #   ★直し方は「保存しない」★＝読めない物を書かなければ、
+    #   復旧の道が要らない。守りは1つも緩めていない。
+    _bad = validate_record(field, rec)
+    if _bad:
+        raise ConfirmedError(
+            "この記録は控えの契約を満たしません（保存しませんでした）: "
+            + " ／ ".join(_bad[:5])
+            + "／★同定の上書きが要らないページに --source-identity を"
+              "渡すと、この形になります★")
     data["machines"].setdefault(slug, {})[field] = rec
     _save(data)
     return {"state": "RECORDED", "slug": slug, "field": field,
