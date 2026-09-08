@@ -2445,27 +2445,26 @@
    "machine_profile": "BONUS",
    "ceiling_state": "NONE",
    "confirmed_topics": [
+    "setting",
     "spec"
    ],
    "pending_topics": [
     "gameplay",
     "cz",
     "ceiling",
-    "setting",
     "strategy",
     "reset"
    ],
    "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
-    "NO_BONUS_PROB"
+    "CLAIMS_LT_3"
    ],
    "claims": [
+    "bonus_prob",
     "games_per_50"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-07",
-   "input_digest": "sha256:d8b3a15420a8d1e1ca2cad279015ed986de7441b7d0fb097428b763427d70872"
+   "decided_at": "2026-09-09",
+   "input_digest": "sha256:fd55b9fec42109cf52d91b1b4c90b2f97a038e59dba535685086e03869ce7c51"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-09-07",
@@ -2506,32 +2505,34 @@
   "info": "",
   "strategy": "",
   "aliases": [],
-  "publication_policy": "page-decision/v1",
+  "publication_policy": "page-decision/v2",
   "page_decision": {
-   "schema_version": "page-decision/v1",
-   "indexable": false,
+   "schema_version": "page-decision/v2",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
+   "ceiling_state": "PRESENT",
    "confirmed_topics": [
-    "spec"
+    "ceiling",
+    "cz",
+    "gameplay"
    ],
    "pending_topics": [
-    "gameplay",
-    "cz",
-    "ceiling",
+    "spec",
     "setting",
     "strategy",
     "reset"
    ],
-   "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
-    "NO_UNIQUE_GAMEPLAY"
-   ],
+   "reason_codes": [],
    "claims": [
-    "model_code"
+    "at:MAIN_AT",
+    "ceiling:GAME:CZ間",
+    "ceiling:GAME:ボーナス間",
+    "ceiling:POINT:思春期ポイント",
+    "cz:エピソードチャンス"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-08-11",
-   "input_digest": "sha256:0fcf939da4ba90aed483c6b49d327279a439ef1250cf90076f456d8bbd65741d"
+   "decided_at": "2026-09-09",
+   "input_digest": "sha256:ac49a5778c930e9982e96b2f53c8531ce704da3e16ff82836c12c92215b5ca2d"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-09-07",
@@ -2541,14 +2542,14 @@
    "announced_name": "L青春ブタ野郎はバニーガール先輩の夢を見ない",
    "identity_tier": "CATALOG_CODE_MATCHED",
    "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5064 型式=L青春ブタ野郎L1 メーカー=オリンピア 導入=2026-09-07 確認日=2026-08-16",
    "market_release_date": "2026-09-07",
+   "_legacy_official_product_url": "https://www.heiwanet.co.jp/products/pachislot/ssb1/",
    "regulatory_model_code": "L青春ブタ野郎L1",
    "_model_code_sources": [
     "p-town.dmm.com",
     "p-world.co.jp"
-   ],
-   "_legacy_official_product_url": "https://www.heiwanet.co.jp/products/pachislot/ssb1/",
-   "identity_evidence_ref": "dmm:5064 型式=L青春ブタ野郎L1 メーカー=オリンピア 導入=2026-09-07 確認日=2026-08-16"
+   ]
   }
  },
  {
