@@ -382,11 +382,21 @@ def selftest() -> int:
             #   `ledger_once` は控えを読み直すので、
             #   行き詰まりを実際に積まないと積まれない
             #   （＝「3回の判断を通した」の証明になる作りに変わった）。
-            for _d in range(1, _gm.STUCK_ASK_LIMIT + 1):
-                _gm.grow_result("s9", False, "理由", today=f"2026-08-{_d:02d}")
-            _gm.ledger_once("s9", "s9: 値が再現できません", "詳細です",
-                            "MATERIAL")
-            _gm.grow_result("s9", True)          # ★後片付け★
+            # ★★行き詰まりの控えも一時ファイルへ向ける★★
+            #   （2026-09-08・Codexの指摘3）
+            #   ★直す前は本番の grow_check.json を書き換えていた★＝
+            #   無人タスクと同時に走ると、丸ごと読んで書き戻す作りなので
+            #   本番の更新が消える。★試験は本番の状態を触らない★。
+            _keep_state = _gm.STATE_PATH
+            try:
+                _gm.STATE_PATH = str(tmp / "grow_check.json")
+                for _d in range(1, _gm.STUCK_ASK_LIMIT + 1):
+                    _gm.grow_result("s9", False, "理由",
+                                    today=f"2026-08-{_d:02d}")
+                _gm.ledger_once("s9", "s9: 値が再現できません", "詳細です",
+                                "MATERIAL")
+            finally:
+                _gm.STATE_PATH = _keep_state
             _gl._to_ledger("s8", ["材料が集まりません"], transient=True)
             _gl._to_ledger("s7", ["形が違います"], transient=False)
             # ★先に「行の数」で見る★（依頼143の指摘2）

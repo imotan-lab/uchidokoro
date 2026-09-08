@@ -2119,6 +2119,16 @@ def selftest() -> int:
     import open_issues as _oi_mod
     _keep_ledger, _tmp_dir = _oi_mod.DEFAULT_FILE, tempfile.mkdtemp()
     _oi_mod.DEFAULT_FILE = _oi_mod.Path(_tmp_dir) / "issues.json"
+    # ★★行き詰まりの控えも一時の置き場へ向ける★★
+    #   （2026-09-08・Codexの指摘3）
+    #   ★直す前は本番の grow_check.json を書き換えていた★＝
+    #   無人タスクと同時に走ると、丸ごと読んで書き戻す作りなので
+    #   本番の更新が消える。★試験は本番の状態を触らない★。
+    #   ★向け直しは、一時の置き場を作るところと片づけるところの対にする★
+    #   （途中で戻すと、そのあとの試験が本番を読んで順番が崩れる）。
+    _keep_state_path = globals()["STATE_PATH"]
+    # ★名前は本番と同じにする★（別の試験が「名前が grow_check.json か」を見る）
+    globals()["STATE_PATH"] = os.path.join(_tmp_dir, "grow_check.json")
 
     # ★★自己試験は外へ出ない★★（2026-08-21・台帳#419／CIが2回落ちた原因）
     #   `plan_one` は `find` を渡さないと `find_sources()` を呼び、
@@ -3137,6 +3147,7 @@ def selftest() -> int:
     # ★差し替えた出典探しを必ず戻す★（試験のあとに本番が空を返さないように）
     globals()["find_sources"] = _keep_find
     import shutil
+    globals()["STATE_PATH"] = _keep_state_path
     shutil.rmtree(_tmp_dir, ignore_errors=True)
     # ★断り書きだけ消す更新は止める★（2026-08-12・依頼161）
     #   無条件に比較の対象外にすると、材料が増えていないのに
@@ -4163,7 +4174,6 @@ def selftest() -> int:
                   and _wrote == ["zzz_g"])
             finally:
                 _oi.add_issue = _keep_add
-                grow_result("zzz_g", True)
             _a3 = grow_result("zzz_s", False, "理由", today="2026-08-03")
             t("★★3回目でだけ人へ報告する★★",
               _a3["do"] == "ledger" and _a3["round"] == STUCK_ASK_LIMIT)
