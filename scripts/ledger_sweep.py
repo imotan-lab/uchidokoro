@@ -400,19 +400,27 @@ def kind_allows(row, checks, texts, guards=None) -> tuple:
     return True, f"型 {kind or '(なし)'} でこの組み合わせは使えます"
 
 
-def _guard_place_in(name: str, body: str) -> bool:
-    """★案件が「その守りの場所」を指しているか★（2026-09-08）
+def _guard_declares_issue(name: str, issue_id) -> bool:
+    """★その守りが「この案件を証明する」と自分で名乗っているか★
 
+    （2026-09-08・Codexの指摘で、場所での推測をやめた）
     ★なぜ要るか★＝守りは、案件を書いたあとで作られることがある。
     名前だけを求めると★守りより前の案件は永久に閉じられない★
     （実例＝#497。直し方まで合意して、その通りに直っているのに閉じられず、
       その機種だけが止まり続けていた）。
 
-    ★見るのは2つとも「そこに書いてあるか」だけ★（意味は判定しない）:
-      ①壊すファイルの名前  ②壊す行そのもの（前後の空白は問わない）
-    ★関係のない守りは、どちらも満たさない★ので、ゆるめたことにはならない。
+    ★なぜ「場所」ではなく「番号」か★＝場所（ファイル名＋壊す行）で
+    推し量ると、**同じ行を壊す別の守り**でも通ってしまう（実在した）。
+    ＝「その守りが効く」ことは示せても
+      「その守りがこの案件の直しを証明する」ことにはならない。
+    番号なら偶然当たることがない。
+
+    ★守りの側の書き方★＝`MUTATIONS` の項目に `"issues": [497]` を書く。
     """
-    import os as _o
+    try:
+        n = int(issue_id)
+    except Exception:                                        # noqa: BLE001
+        return False
     try:
         import mutation_check as _mc0
     except Exception:                                        # noqa: BLE001
@@ -421,21 +429,11 @@ def _guard_place_in(name: str, body: str) -> bool:
            if str(m.get("why") or "") == str(name)]
     if len(hit) != 1:
         return False                       # 名前で1つに決まらないなら通さない
-    m = hit[0]
-    f = str(m.get("file") or "")
-    if not f:
+    ids = hit[0].get("issues") or []
+    try:
+        return n in [int(x) for x in ids]
+    except Exception:                                        # noqa: BLE001
         return False
-    base = _o.path.basename(f)
-    if base not in body and base.rsplit(".", 1)[0] not in body:
-        return False
-    # ★壊す場所が複数行のこともある★＝1行ずつ、全部が本文にあること
-    want = [x.strip() for x in str(m.get("before") or "").splitlines()
-            if x.strip()]
-    if not want:
-        return False
-    # ★行の比較は前後の空白を落としてから★（本文の引用は字下げが変わる）
-    have = {ln.strip() for ln in body.splitlines()}
-    return all(w in have for w in want)
 
 
 def guards_from_issue(row, guards) -> tuple:
@@ -454,12 +452,14 @@ def guards_from_issue(row, guards) -> tuple:
         return True, "壊し方の指定はありません"
     body = (str((row or {}).get("title") or "") + "\n"
             + str((row or {}).get("detail") or ""))
-    bad = [g for g in guards if not (g in body or _guard_place_in(g, body))]
+    bad = [g for g in guards
+           if not (g in body
+                   or _guard_declares_issue(g, (row or {}).get("id")))]
     if bad:
         return False, ("案件に書かれていない壊し方です: "
                        + " / ".join(g[:40] for g in bad)
-                       + "／★その案件の本文に、動かす壊し方の名前か、"
-                         "その守りが守っている場所（ファイル名と行）を"
+                       + "／★その案件の本文に壊し方の名前を書くか、"
+                         "mutation_check の項目に issues: [番号] を"
                          "書いてください★")
     return True, f"壊し方 {len(guards)} 件はすべて案件の本文にあります"
 
@@ -645,33 +645,37 @@ def _guard_tests(t) -> None:
     #   ★名前だけを求めると、守りができる前の案件は永久に閉じられない★
     #   （実例＝#497。直し方まで合意してその通りに直っているのに、
     #     案件に守りの名前が無いので、その機種だけ止まり続けていた）。
-    #   ★見るのは場所★＝壊すファイルの名前と、壊す行そのもの。
+    #   ★場所（ファイル名と行）での推測はやめた★（Codexの指摘）＝
+    #   同じ行を壊す別の守りでも通ってしまい、
+    #   「その守りがこの案件を証明する」ことにならなかった。
+    #   ★守りの側に、案件番号を名乗らせる★
     import mutation_check as _mc_t
     _g0 = next((m for m in _mc_t.MUTATIONS
-                if m.get("file") and str(m.get("before") or "").strip()
+                if m.get("issues")
                 and sum(1 for x in _mc_t.MUTATIONS
                         if x.get("why") == m.get("why")) == 1), None)
     _nm = str((_g0 or {}).get("why") or "")
-    _fl = str((_g0 or {}).get("file") or "").split("/")[-1]
-    _ln = "\n".join(x.strip() for x in
-                    str((_g0 or {}).get("before") or "").splitlines()
-                    if x.strip())
-    _place = {"title": "どこかが壊れています",
-              "detail": f"{_fl} の中の\n{_ln}\nを直しました",
-              "kind": "structural"}
-    t("★★守りより前に書かれた案件でも、場所が書いてあれば閉じられる★★"
-      "（★名前だけを求めると、その機種が永久に止まる★）",
-      bool(_g0) and guards_from_issue(_place, [_nm])[0] is True)
-    t("　（対照）ファイル名だけで行が無ければ通さない",
+    _id = int(((_g0 or {}).get("issues") or [0])[0])
+    _mine = {"id": _id, "title": "その案件", "detail": "本文",
+             "kind": "structural"}
+    t("★★守りが案件番号を名乗っていれば閉じられる★★"
+      "（★名前だけを求めると、守りより前の案件は永久に閉じられない★）",
+      bool(_g0) and guards_from_issue(_mine, [_nm])[0] is True)
+    t("　（対照）別の案件番号では通さない",
       bool(_g0) and guards_from_issue(
-          {"title": "x", "detail": _fl, "kind": "structural"},
-          [_nm])[0] is False)
-    t("　（対照）行だけでファイル名が無ければ通さない",
+          {"id": _id + 100000, "title": "x", "detail": "本文",
+           "kind": "structural"}, [_nm])[0] is False)
+    t("　（対照）番号が無い案件では通さない",
       bool(_g0) and guards_from_issue(
-          {"title": "x", "detail": _ln, "kind": "structural"},
+          {"title": "x", "detail": "本文", "kind": "structural"},
           [_nm])[0] is False)
     t("　（対照）登録されていない名前は通さない",
-      guards_from_issue(_place, ["★存在しない壊し方★"])[0] is False)
+      guards_from_issue(_mine, ["★存在しない壊し方★"])[0] is False)
+    t("　（対照）本文にその守りのファイル名と行を引用しても通らない",
+      bool(_g0) and guards_from_issue(
+          {"id": _id + 100000, "kind": "structural",
+           "title": str(_g0.get("file") or ""),
+           "detail": str(_g0.get("before") or "")}, [_nm])[0] is False)
     # ★裏取り待ちの型を、壊し方で通せないこと★
     _ev = {"title": "恩恵が確かめられない", "detail": "本文", "kind": "external_value"}
     t("★★裏取り待ちの案件を、機械の中身の壊し方だけで閉じない★★"

@@ -2147,11 +2147,11 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
-        "why": "★台帳と守りの結び付けを、場所も見ずに通す★"
-               "（★合格する壊し方を1つ渡すだけで、無関係な案件を閉じられる★）",
+        "why": "★台帳と守りの結び付けで、案件番号を見ない★"
+               "（★どの案件でも、合格する壊し方1つで閉じられる★）",
         "file": "scripts/ledger_sweep.py",
-        "before": "    if base not in body and base.rsplit(\".\", 1)[0] not in body:",
-        "after": "    if False:",
+        "before": "    ids = hit[0].get(\"issues\") or []",
+        "after": "    ids = [n]",
         "run": ["scripts/ledger_sweep.py"],
     },
     {
@@ -2304,7 +2304,9 @@ MUTATIONS = [
                "（★合格する壊し方の名前を1つ渡すだけで、機械の中身と"
                "無関係な案件まで閉じられる・Codexの指摘★）",
         "file": "scripts/ledger_sweep.py",
-        "before": "    bad = [g for g in guards if not (g in body or _guard_place_in(g, body))]",
+        "before": ("    bad = [g for g in guards\n"
+                   "           if not (g in body\n"
+                   "                   or _guard_declares_issue(g, (row or {}).get(\"id\")))]"),
         "after": "    bad = []",
         "run": ["scripts/ledger_sweep.py"],
     },
@@ -2981,6 +2983,8 @@ MUTATIONS = [
     {
         "why": "★読者に出ない項目まで「材料あり」と数える"
                "（中身ゼロのページが黙って公開される）★",
+        # ★この守りが直したことを証明する案件★（2026-09-08）
+        "issues": [497],
         "file": "scripts/add_machine_run.py",
         "before": "           if _cv.topic_of(k)}",
         "after": "           if k != \"model_code\"}",
