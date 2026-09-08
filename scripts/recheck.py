@@ -2097,11 +2097,24 @@ def _selftest():
     sys.path.insert(0, os.path.join(BASE, "scripts"))
     import confirmed_values as _cv17
     _keep17 = _cv17.STORE
+    # ★★本物の記事を読まない★★（2026-09-08・罠㉙／㊺）
+    #   ★直す前は実在機種 pw_10523（モグモグ風林火山）の記事を読んでいた★。
+    #   今日の午後、育成タスクがその記事を書き直した瞬間に試験が落ち、
+    #   ★CIが赤くなった★。今朝Codexから同じ指摘を受けて一部だけ直し、
+    #   ★ここが残っていた★（同じ型が別の項目に残る）。
+    _keepm17, _keepd17 = _machine, _load_detail
     try:
         _cv17.STORE = os.path.join(_tf17.mkdtemp(prefix="rc17_"),
                                    "confirmed_values.json")
         _cv17.init_store()
-        _no = _dv({"slug": "pw_10523"})["result"]
+        globals()["_machine"] = lambda sl: {
+            "slug": sl, "name": "試験機",
+            "page_decision": {"pending_topics": ["gameplay"]}}
+        globals()["_load_detail"] = lambda sl: ({"sections": [
+            {"title": "ゲーム性",
+             "body": ["通常時は周期抽選からCZへ進みます",
+                      "全国制覇で上位CZへ進みます"]}]}, "", "")
+        _no = _dv({"slug": "zzz_t17"})["result"]
         # ★★記事にある行の数だけ材料を置く★★（2026-08-24・Codexの19回目）
         #   ★1件しか置いていなかった★ので、行ごとに見る形へ直した途端に
         #   2行目が「根拠なし」になり、**正しい記事を止めた**。
@@ -2121,25 +2134,35 @@ def _selftest():
                     "why": "2AIで突き合わせました",
                     "decided_at": "2026-08-24", "official_url": ""}
         json.dump({"schema_version": _cv17.SCHEMA, "machines": {
-            "pw_10523": {
+            "zzz_t17": {
                 "gameplay": _rec17({"when": "通常時", "trigger": "周期抽選",
                                     "leads_to": "CZ"}),
                 "gameplay#上位": _rec17({"when": "全国制覇",
                                         "trigger": "全国制覇",
                                         "leads_to": "上位CZ"})}}},
             open(_cv17.STORE, "w", encoding="utf-8"), ensure_ascii=False)
-        _yes = _dv({"slug": "pw_10523"})["result"]
+        _yes = _dv({"slug": "zzz_t17"})["result"]
         t("★★確定値があれば、その話題は不整合と呼ばない★★"
-          "／★呼ぶと、正しい記事を毎回『直せ』と言い続ける★",
+          "／★呼ぶと、正しい記事を毎回『直せ』と言い続ける★"
+          "／★本物の記事は読まない＝記事が変わってもこの試験は落ちない★",
           _yes in (PASS, NOT_APPLICABLE) and _no == FAIL)
     finally:
         _cv17.STORE = _keep17
+        globals()["_machine"], globals()["_load_detail"] = _keepm17, _keepd17
     # ★★行ごとに見ているか★★（2026-08-24・Codexの18回目）
     #   ★話題まるごと免除だと、根拠のない断定が同じ箱に紛れても素通りする★
     #   ＝ここは「読者に誤情報が出る経路」なので、必ず行で見る。
     import build_new_article as _ba18
     _mark18 = _ba18.BASIS_SUFFIX["DMM_SINGLE_NEAR_RELEASE"]
     _keepm, _keepd = _machine, _load_detail
+    # ★★控えが空の機械でも同じ結果にする★★（2026-09-08）
+    #   ★控えが無いと読み込みが止まる（fail-closed）★ので、
+    #   控えを1つも持たない機械（＝CI）では ERROR になり、
+    #   ★環境で結果が変わる試験★になっていた。一時の控えを用意する。
+    _keep18s = _cv17.STORE
+    _cv17.STORE = os.path.join(_tf17.mkdtemp(prefix="rc18_"),
+                               "confirmed_values.json")
+    _cv17.init_store()
     try:
         globals()["_machine"] = lambda sl: {
             "slug": sl, "name": "試験機",
@@ -2522,6 +2545,7 @@ def _selftest():
         finally:
             _cv19.STORE = _keep19
     finally:
+        _cv17.STORE = _keep18s
         globals()["_machine"], globals()["_load_detail"] = _keepm, _keepd
 
     t("　判定書が無い機種（旧方式）は判定しない",
