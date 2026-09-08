@@ -197,9 +197,17 @@ function isUpcoming(machine){
 }
 
 // 「新台バッジ対象」判定：release_date が過去30日〜未来30日
+// ★新台とみなす日数★（2026-09-08・運営者の指示で 30→14）
+//   ★ここ1か所を変えれば、一覧のバッジの期間が変わる★
+//   実測（2026-09-08）＝14日なら6機種・30日なら7機種・45日なら15機種。
+//   45日だとバッジだらけで「新台」の意味がなくなる。
+const NEW_AFTER_DAYS = 14;
+
 function isNewMachine(machine){
   const d = daysUntilRelease(machine);
-  return d !== null && d >= -30 && d <= 30;
+  // d は「導入まであと何日」。マイナスは導入済み。
+  // ★導入前はいつでも新台★／★導入後は NEW_AFTER_DAYS まで★
+  return d !== null && d >= -NEW_AFTER_DAYS;
 }
 
 // release_date を "M/D（曜日）" 形式に整形
@@ -269,12 +277,12 @@ function formatReleaseDate(dateStr){
       upcoming.forEach(machine => {
         const row = document.createElement("article");
         row.className = "list-row";
-        const isPreview = machine.status === "preview"
-          || (machine.publication_policy !== undefined);
+        // ★★一覧では「解析待ち」を出さない★★（2026-09-08・運営者の指示）
+        //   ★出ていた理由★＝新台経路の機種は必ずこちらが優先され、
+        //   ★新台バッジに一度もならなかった★。
+        //   記事ページ（machine.html）の断り書きは今までどおり。
         const relLabel = formatReleaseDate(machine.release_date);
-        const statusBadge = isPreview
-          ? '<span class="badge badge--preview">⚠ 解析待ち</span>'
-          : '<span class="badge badge--new">🆕 新台</span>';
+        const statusBadge = '<span class="badge badge--new">🆕 新台</span>';
         row.innerHTML = `
           <a class="list-row-main" href="${["", "machines", machine.slug, ""].join("/")}">
             <span class="machine-name">${machine.name} ${statusBadge}</span>
@@ -310,15 +318,14 @@ function formatReleaseDate(dateStr){
       filtered.forEach((machine, i) => {
         const row = document.createElement("article");
         row.className = "list-row";
-        const isPreview = machine.status === "preview"
-          || (machine.publication_policy !== undefined);
+        // ★★一覧では「解析待ち」を出さない★★（2026-09-08・運営者の指示）
+        //   新台かどうかだけを見せる。狙い目が無い機種は空欄にする
+        //   （「解析待ち」と書いても読者にできることは無いため）。
         const isNew = isNewMachine(machine);
-        const nameBadge = isPreview
-          ? ' <span class="badge badge--preview">⚠ 解析待ち</span>'
-          : (isNew ? ' <span class="badge badge--new">🆕 新台</span>' : '');
-        const stretegyCell = isPreview
-          ? '<span class="machine-strategy machine-strategy--preview">⚠ 解析待ち（判明次第更新）</span>'
-          : `<span class="machine-strategy">${machine.strategy || ''}</span>`;
+        const nameBadge = isNew
+          ? ' <span class="badge badge--new">🆕 新台</span>' : '';
+        const stretegyCell =
+          `<span class="machine-strategy">${machine.strategy || ''}</span>`;
         row.innerHTML = `
           <a class="list-row-main" href="${["", "machines", machine.slug, ""].join("/")}">
             <span class="machine-name">${machine.name}${nameBadge}</span>
