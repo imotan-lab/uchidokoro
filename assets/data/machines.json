@@ -2305,32 +2305,31 @@
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
-   "indexable": false,
+   "indexable": true,
    "machine_profile": "AT_CZ",
    "ceiling_state": "UNKNOWN",
    "confirmed_topics": [
+    "cz",
+    "gameplay",
     "setting",
     "spec"
    ],
    "pending_topics": [
-    "gameplay",
-    "cz",
     "ceiling",
     "strategy",
     "reset"
    ],
-   "reason_codes": [
-    "CATEGORIES_LT_2",
-    "NO_UNIQUE_GAMEPLAY"
-   ],
+   "reason_codes": [],
    "claims": [
+    "at:MAIN_AT",
+    "cz:レンカノチャレンジ",
     "games_per_50",
     "payout_range",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-07",
-   "input_digest": "sha256:23c9004db6a200022ce83a4ae44d5f02d944ef4d2c68f75eaa411a3a91dff7a1"
+   "decided_at": "2026-09-08",
+   "input_digest": "sha256:f047a5e4dc55710dbd62e1df185837f766da9262ce864821b860b39b8737b1f2"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-09-07",
