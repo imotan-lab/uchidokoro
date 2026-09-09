@@ -12036,32 +12036,31 @@
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
-   "indexable": false,
+   "indexable": true,
    "machine_profile": "AT_CZ",
    "ceiling_state": "UNKNOWN",
    "confirmed_topics": [
+    "cz",
+    "gameplay",
     "setting",
     "spec"
    ],
    "pending_topics": [
-    "gameplay",
-    "cz",
     "ceiling",
     "strategy",
     "reset"
    ],
-   "reason_codes": [
-    "CATEGORIES_LT_2",
-    "NO_UNIQUE_GAMEPLAY"
-   ],
+   "reason_codes": [],
    "claims": [
+    "at:MAIN_AT",
     "at_prob",
+    "cz:ラグナドールバトル",
     "games_per_50",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-03",
-   "input_digest": "sha256:bcd36e9cc778e121d375cef032f9320d30b11ea17874b3fd2969a179c1d4050f"
+   "decided_at": "2026-09-09",
+   "input_digest": "sha256:8ce5a1c75899864306733ecf4e51b4baca3d0e1413defacb5268aa5e833ff82a"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-11",
