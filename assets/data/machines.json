@@ -2441,7 +2441,7 @@
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
-   "indexable": false,
+   "indexable": true,
    "machine_profile": "BONUS",
    "ceiling_state": "NONE",
    "confirmed_topics": [
@@ -2455,16 +2455,15 @@
     "strategy",
     "reset"
    ],
-   "reason_codes": [
-    "CLAIMS_LT_3"
-   ],
+   "reason_codes": [],
    "claims": [
     "bonus_prob",
-    "games_per_50"
+    "games_per_50",
+    "payout_range"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-09",
-   "input_digest": "sha256:fd55b9fec42109cf52d91b1b4c90b2f97a038e59dba535685086e03869ce7c51"
+   "decided_at": "2026-09-10",
+   "input_digest": "sha256:45abfffa62972fc46dfbbfd52b630daa25351b82b5a23315a7f5e11f8c3b29f4"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-09-07",
