@@ -2213,6 +2213,14 @@ MUTATIONS = [
         "run": ["scripts/task_guard.py"],
     },
     {
+        "why": "★壊れている記録を、そのまま表示しようとする★"
+               "（★壊れたときに使う道具が、壊れていると落ちて使えない★）",
+        "file": "scripts/confirmed_values.py",
+        "before": '                    if not isinstance(rec, dict) or "value" not in rec:',
+        "after": '                    if False:',
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
         "why": "★名鑑の一覧を読めなかったことを数えない★"
                "（★票がそろうと記録から消えるので、"
                "『2件は読めた・3件目は一覧が壊れていた』でも『全部』になる★）",

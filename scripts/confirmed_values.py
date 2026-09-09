@@ -1872,6 +1872,40 @@ def selftest() -> int:
                 _now = {"machines": {"まだ壊れています": {}}}
             t("　取り除いたあとは、機械が読めるようになる",
               (_now.get("machines") or {}) == {})
+            # ★★どんな壊れ方でも、一覧は最後まで動く★★
+            #   （2026-09-09・Codexの指摘）
+            #   ★直す前★＝契約違反として名指しはするのに、そのあと
+            #   通常表示で中身を読んでいたので、記録が文字列なら
+            #   TypeError、value が無ければ KeyError で**落ちた**。
+            #   ＝壊れたときに使う道具が、壊れていると使えない。
+            #   ★本物の入口（main）を通す★＝表示の道を実際に歩かせる。
+            import contextlib as _cl596
+            import io as _io596
+            _save({"schema_version": SCHEMA, "machines": {
+                "zzz_a": "これは辞書ではありません",
+                "zzz_b": {"ceiling_state": "文字列の記録"},
+                "zzz_c": {"ceiling_state": {"why": "value がありません"}},
+                "zzz_d": {"ceiling_state": {"value": {"state": "NONE"},
+                                            "sources": ["壊れた出典"],
+                                            "agreed_by": "配列ではない"}}}})
+            _buf596 = _io596.StringIO()
+            _rc596 = 1
+            _argv596 = sys.argv
+            sys.argv = ["confirmed_values.py", "--list"]
+            try:
+                with _cl596.redirect_stdout(_buf596):
+                    _rc596 = main()
+            except Exception as _e596b:                      # noqa: BLE001
+                _rc596 = "落ちました: " + type(_e596b).__name__
+            finally:
+                sys.argv = _argv596
+            _out596 = _buf596.getvalue()
+            t("★★どんな壊れ方でも、一覧は最後まで動く★★"
+              "（★壊れたときに使う道具が、壊れていると使えなかった★）",
+              _rc596 == 0)
+            t("　壊れている行は名指しで出す（どれを取り除けばよいか分かる）",
+              "zzz_b" in _out596 and "zzz_c" in _out596
+              and "壊れています" in _out596)
         finally:
             globals()["STORE"] = _keep596
         # ★★数は「別の数の一部」では通さない★★（2026-08-24・Codexの8回目）
@@ -2956,13 +2990,34 @@ def main() -> int:
                     continue
                 print("■ " + slug)
                 for f, rec in sorted(fields.items()):
+                    # ★★壊れている行は、安全な要約だけ出して先へ進む★★
+                    #   （2026-09-09・Codexの指摘）
+                    #   ★直す前は名指ししたあとで中身を読んでいた★ので、
+                    #   記録が文字列なら TypeError、`value` が無ければ
+                    #   KeyError で**一覧そのものが落ちた**。
+                    #   ＝壊れたときに使う道具が、壊れていると使えない。
+                    if not isinstance(rec, dict) or "value" not in rec:
+                        print("   %-14s ✗ 壊れています（%s）"
+                              % (f, type(rec).__name__))
+                        continue
                     print("   %-14s %s" % (f, json.dumps(rec["value"],
-                                                         ensure_ascii=False)[:70]))
+                                                         ensure_ascii=False,
+                                                         default=str)[:70]))
                     print("      %s ／ %s（%s）"
-                          % (rec.get("why"), ",".join(rec.get("agreed_by") or []),
+                          % (rec.get("why"),
+                             ",".join(str(x) for x in
+                                      (rec.get("agreed_by") or [])
+                                      if isinstance(rec.get("agreed_by"), list)),
                              rec.get("decided_at")))
-                    for s in rec.get("sources") or []:
-                        print("      - %s %s" % (s["publisher"], s["url"][:70]))
+                    _srcs = rec.get("sources")
+                    for s in (_srcs if isinstance(_srcs, list) else []):
+                        if not isinstance(s, dict):
+                            print("      - ✗ 出典が壊れています（%s）"
+                                  % type(s).__name__)
+                            continue
+                        print("      - %s %s"
+                              % (s.get("publisher") or "（発行者なし）",
+                                 str(s.get("url") or "")[:70]))
             return 0
     except ConfirmedError as e:
         print("★" + str(e) + "★")
