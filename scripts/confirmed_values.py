@@ -552,6 +552,22 @@ RECORD_OPTIONAL = ("verified_at", "identity_override", "official_url")
 
 
 def validate_record(field: str, rec) -> list:
+    """★どんな中身でも問題の一覧を返す★（2026-09-09・Codexの指摘）
+
+    ★直す前★＝必須の鍵がそろっていれば先へ進むので、
+    出典が文字列・同定の上書きが文字列・URLが壊れている形で
+    ★検査そのものが例外で落ちた★。
+    ＝読む側も、直す道具も、そこで止まる。
+    ★安全側に倒れる★＝落ちたことを問題として返すので、
+    `load()` は今までどおり fail-closed で止まる。
+    """
+    try:
+        return _validate_record(field, rec)
+    except Exception as e:                                   # noqa: BLE001
+        return [f"{field}: 検査できない形です（{type(e).__name__}）"]
+
+
+def _validate_record(field: str, rec) -> list:
     """★1件の記録が、書き込みと同じ契約を満たしているか★
 
     ★★なぜ読み込み側でも見るか★★（2026-08-24・Codexの6回目）
@@ -1906,6 +1922,70 @@ def selftest() -> int:
             t("　壊れている行は名指しで出す（どれを取り除けばよいか分かる）",
               "zzz_b" in _out596 and "zzz_c" in _out596
               and "壊れています" in _out596)
+
+            # ★★必須の鍵がそろった「中身だけ壊れている」記録★★
+            #   （2026-09-09・Codexの指摘）
+            #   ★直す前★＝鍵がそろっていると検査が先へ進み、
+            #   出典が文字列・同定の上書きが文字列・URLが壊れている形で
+            #   ★検査そのものが例外で落ちた★。
+            def _full596(**over):
+                r = {"value": {"state": "NONE"},
+                     "sources": [{"url": "https://chonborista.com/slot/x",
+                                  "quote": "引用"}],
+                     "lineages": ["vote:chonborista"],
+                     "agreed_by": ["claude", "codex"],
+                     "why": "2AIで突き合わせました",
+                     "decided_at": "2026-09-09",
+                     "official_url": "https://p-town.dmm.com/machines/1"}
+                r.update(over)
+                return r
+
+            for _nm596, _rec596 in (
+                    ("出典が文字列", _full596(sources=["これは文字列"])),
+                    ("同定の上書きが文字列",
+                     _full596(sources=[{"url": "https://chonborista.com/slot/x",
+                                        "quote": "引用",
+                                        "identity_override": "文字列"}])),
+                    ("URLが壊れている",
+                     _full596(sources=[{"url": "http://[", "quote": "引用"}])),
+            ):
+                # ★例外で落ちるのを「止まった」と数えない★（罠⑤）
+                try:
+                    _vr596 = validate_record("ceiling_state", _rec596)
+                except Exception as _ev596:                  # noqa: BLE001
+                    _vr596 = "落ちました: " + type(_ev596).__name__
+                t(f"　検査は落ちずに問題を返す: {_nm596}",
+                  isinstance(_vr596, list))
+                _save({"schema_version": SCHEMA,
+                       "machines": {"zzz_e": {"ceiling_state": _rec596}}})
+                _b2 = _io596.StringIO()
+                _argv2 = sys.argv
+                sys.argv = ["confirmed_values.py", "--list"]
+                try:
+                    with _cl596.redirect_stdout(_b2):
+                        _rc2 = main()
+                except Exception as _e2:                     # noqa: BLE001
+                    _rc2 = "落ちました: " + type(_e2).__name__
+                finally:
+                    sys.argv = _argv2
+                t(f"　一覧も最後まで動く: {_nm596}", _rc2 == 0)
+
+            # ★★控えのファイルそのものが壊れている★★
+            #   ★直す前は traceback で落ちた★＝何が起きたか伝わらない。
+            open(STORE, "w", encoding="utf-8").write("{壊れたJSON")
+            _b3 = _io596.StringIO()
+            _argv3 = sys.argv
+            sys.argv = ["confirmed_values.py", "--list"]
+            try:
+                with _cl596.redirect_stdout(_b3):
+                    _rc3 = main()
+            except Exception as _e3:                         # noqa: BLE001
+                _rc3 = "落ちました: " + type(_e3).__name__
+            finally:
+                sys.argv = _argv3
+            t("★★控えのファイルが壊れていても、理由を出して終わる★★"
+              "（★直す前は traceback で落ち、何が起きたか伝わらなかった★）",
+              _rc3 == 1 and "壊れています" in _b3.getvalue())
         finally:
             globals()["STORE"] = _keep596
         # ★★数は「別の数の一部」では通さない★★（2026-08-24・Codexの8回目）
@@ -3021,6 +3101,13 @@ def main() -> int:
             return 0
     except ConfirmedError as e:
         print("★" + str(e) + "★")
+        return 1
+    except _sj.SafeJsonError as e:
+        # ★控えのJSONそのものが壊れている★（2026-09-09・Codexの指摘）
+        #   ★直す前は traceback で落ちた★＝何が起きたか伝わらない。
+        print("★確定値の控えのファイルが壊れています★: " + str(e)[:200])
+        print("   ★直し方★ バックアップから戻すか、"
+              "その1件を取り除いてください（--forget）")
         return 1
     ap.print_help()
     return 2

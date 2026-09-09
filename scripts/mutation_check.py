@@ -2221,6 +2221,24 @@ MUTATIONS = [
         "run": ["scripts/confirmed_values.py"],
     },
     {
+        "why": "★契約の検査そのものが、想定外の中身で落ちる★"
+               "（★読む側も、直す道具も、そこで止まる★）",
+        "file": "scripts/confirmed_values.py",
+        "before": '    except Exception as e:                                   # noqa: BLE001\n'
+                  '        return [f"{field}: 検査できない形です（{type(e).__name__}）"]',
+        "after": '    except ZeroDivisionError as e:\n'
+                 '        return [f"{field}: 検査できない形です（{type(e).__name__}）"]',
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★控えのファイルが壊れているとき、理由を出さずに落ちる★"
+               "（★何が起きたか伝わらないので、直しようがない★）",
+        "file": "scripts/confirmed_values.py",
+        "before": '    except _sj.SafeJsonError as e:',
+        "after": '    except ZeroDivisionError as e:',
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
         "why": "★名鑑の一覧を読めなかったことを数えない★"
                "（★票がそろうと記録から消えるので、"
                "『2件は読めた・3件目は一覧が壊れていた』でも『全部』になる★）",
