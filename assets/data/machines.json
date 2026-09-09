@@ -11820,32 +11820,29 @@
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
-   "indexable": false,
-   "machine_profile": "UNKNOWN",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
    "ceiling_state": "UNKNOWN",
    "confirmed_topics": [
+    "gameplay",
     "setting",
     "spec"
    ],
    "pending_topics": [
-    "gameplay",
     "cz",
     "ceiling",
     "strategy",
     "reset"
    ],
-   "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
-    "MACHINE_PROFILE_UNKNOWN"
-   ],
+   "reason_codes": [],
    "claims": [
+    "at:MAIN_AT",
     "games_per_50",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-04",
-   "input_digest": "sha256:12e66452b1188cbd27065af889db8acdc9707c417026d0f86339812606d6465d"
+   "decided_at": "2026-09-09",
+   "input_digest": "sha256:12d4f88dc47c17b1edd7eba91621953de43a7d63cb5e40b5ff3384a8fd557256"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-10-05",
