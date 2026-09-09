@@ -2257,6 +2257,22 @@ MUTATIONS = [
         "run": ["scripts/confirmed_values.py"],
     },
     {
+        "why": "★控えの外側が壊れたとき、直し方を伝えない★"
+               "（★短い文で終わり、取り除く道具も動かないので手詰まりになる★）",
+        "file": "scripts/confirmed_values.py",
+        "before": '    except StoreBrokenError as e:',
+        "after": '    except ZeroDivisionError as e:',
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★渡された値のファイルの壊れを、控えの壊れと言う★"
+               "（★正常な控えを「壊れています」と案内し、人を混乱させる★）",
+        "file": "scripts/confirmed_values.py",
+        "before": '                except _sj.SafeJsonError as _ev:',
+        "after": '                except ZeroDivisionError as _ev:',
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
         "why": "★名鑑の一覧を読めなかったことを数えない★"
                "（★票がそろうと記録から消えるので、"
                "『2件は読めた・3件目は一覧が壊れていた』でも『全部』になる★）",

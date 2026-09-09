@@ -688,6 +688,14 @@ def _validate_record(field: str, rec) -> list:
     return ng
 
 
+class StoreBrokenError(ConfirmedError):
+    """★控えの「外側」が壊れている★（2026-09-09・Codexの指摘）
+
+    版番号・最上位の入れ物が壊れている形。1件ずつの記録の話ではないので、
+    ★取り除く道具では直せない★＝JSONそのものが壊れているときと同じ案内が要る。
+    """
+
+
 def load(strict: bool = True, require_exists: bool = False) -> dict:
     """控えを読む。★1件ずつ契約を確かめる★（2026-08-24・Codexの6回目）
 
@@ -703,10 +711,11 @@ def load(strict: bool = True, require_exists: bool = False) -> dict:
         return _empty()
     got = _sj.read_json(STORE, expect=dict)
     if got.get("schema_version") != SCHEMA:
-        raise ConfirmedError(f"確定値の形が違います: {got.get('schema_version')}")
+        raise StoreBrokenError(
+            f"確定値の形が違います: {got.get('schema_version')}")
     if require_exists and not isinstance(got.get("machines"), dict):
         # ★中身の入れ物ごと無い／空でないものが入っている★
-        raise ConfirmedError("確定値の控えに機種の並びがありません")
+        raise StoreBrokenError("確定値の控えに機種の並びがありません")
     got.setdefault("machines", {})
     if strict:
         bad = []
@@ -1913,10 +1922,14 @@ def selftest() -> int:
                     _fw = forget("zzz_x", "")
                 except Exception as _efw:                    # noqa: BLE001
                     _fw = {"state": "落ちました: " + type(_efw).__name__}
+                _after596 = (load(strict=False).get("machines") or {})
                 t(f"　機種ごと取り除ける（{type(_shape596).__name__}）",
                   _fw.get("state") == "FORGOTTEN"
-                  and "zzz_x" not in (load(strict=False)
-                                      .get("machines") or {}))
+                  and "zzz_x" not in _after596
+                  # ★★巻き添えにしない★★（2026-09-09・Codexの指摘）
+                  #   ★全部消しても「消えた」だけなら合格していた★
+                  and _after596.get("zzz_y") == {"ceiling_state":
+                                                 {"value": 1}})
 
             # ★★どんな壊れ方でも、一覧は最後まで動く★★
             #   （2026-09-09・Codexの指摘）
@@ -2017,6 +2030,57 @@ def selftest() -> int:
                 _rc3 = "落ちました: " + type(_e3).__name__
             finally:
                 sys.argv = _argv3
+            # ★★案内は「できること」だけ★★（2026-09-09・Codexの指摘）
+            #   ★直す前は --forget を勧めていた★が、それも同じところで
+            #   止まるので実行できない。★文言まで見ないと元に戻せる★。
+            def _run_list596():
+                _b = _io596.StringIO()
+                _av = sys.argv
+                sys.argv = ["confirmed_values.py", "--list"]
+                try:
+                    with _cl596.redirect_stdout(_b):
+                        _rc = main()
+                except Exception as _e:                      # noqa: BLE001
+                    _rc = "落ちました: " + type(_e).__name__
+                finally:
+                    sys.argv = _av
+                return _rc, _b.getvalue()
+
+            # ★外側が壊れている形（JSONとしては読める）★
+            for _nm2, _obj2 in (
+                    ("機種の並びが null", '{"schema_version": "%s", '
+                     '"machines": null}' % SCHEMA),
+                    ("版番号が違う", '{"schema_version": "別物", '
+                     '"machines": {}}'),
+            ):
+                open(STORE, "w", encoding="utf-8").write(_obj2)
+                _rc4, _out4 = _run_list596()
+                t(f"　外側が壊れていても、直し方まで伝える: {_nm2}",
+                  _rc4 == 1 and "バックアップから戻す" in _out4
+                  and "--forget も動きません" in _out4)
+
+            # ★渡された値のファイルの壊れは、控えの壊れと区別する★
+            _save({"schema_version": SCHEMA, "machines": {}})
+            _vf596 = os.path.join(os.path.dirname(STORE), "壊れた値.json")
+            open(_vf596, "w", encoding="utf-8").write("{これは壊れています")
+            _b5 = _io596.StringIO()
+            _av5 = sys.argv
+            sys.argv = ["confirmed_values.py", "--record", "--slug", "zzz",
+                        "--field", "ceiling_state", "--value-file", _vf596,
+                        "--official-url", "https://p-town.dmm.com/machines/1",
+                        "--by", "claude,codex", "--why", "試験のためです"]
+            try:
+                with _cl596.redirect_stdout(_b5):
+                    _rc5 = main()
+            except Exception as _e5:                         # noqa: BLE001
+                _rc5 = "落ちました: " + type(_e5).__name__
+            finally:
+                sys.argv = _av5
+            t("★★渡された値のファイルの壊れを、控えの壊れと言わない★★"
+              "（★正常な控えを『壊れています』と案内していた★）",
+              _rc5 == 2 and "渡された値のファイル" in _b5.getvalue()
+              and "控えのファイルが壊れています" not in _b5.getvalue())
+
             t("★★控えのファイルが壊れていても、理由を出して終わる★★"
               "（★直す前は traceback で落ち、何が起きたか伝わらなかった★）",
               _rc3 == 1 and "壊れています" in _b3.getvalue())
@@ -3143,6 +3207,13 @@ def main() -> int:
                               % (s.get("publisher") or "（発行者なし）",
                                  str(s.get("url") or "")[:70]))
             return 0
+    except StoreBrokenError as e:
+        # ★外側が壊れている＝取り除く道具では直せない★（同じ案内を出す）
+        print("★確定値の控えが壊れています★: " + str(e)[:200])
+        print("   ★直し方★ バックアップから戻すか、"
+              "ファイルを手で直してください（★この状態では"
+              "--forget も動きません★）")
+        return 1
     except ConfirmedError as e:
         print("★" + str(e) + "★")
         return 1
