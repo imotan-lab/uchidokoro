@@ -688,6 +688,15 @@ def _validate_record(field: str, rec) -> list:
     return ng
 
 
+class StoreMissingError(ConfirmedError):
+    """★控えのファイルそのものが無い★（2026-09-09・Codexの指摘）
+
+    ★取り除く道具では直せない★＝バックアップから戻すしかない。
+    `--init` は初回に作るためのもので、復旧には使わない（消失と初回を
+    区別するための決まり）。
+    """
+
+
 class StoreBrokenError(ConfirmedError):
     """★控えの「外側」が壊れている★（2026-09-09・Codexの指摘）
 
@@ -707,7 +716,7 @@ def load(strict: bool = True, require_exists: bool = False) -> dict:
             #   ★直す前は不存在を正常な0件として返していた★ので、
             #   控えが消えた日に**2AIの確定値が全部抜けた記事**を
             #   何事もなかったように作れた。
-            raise ConfirmedError(f"確定値の控えがありません: {STORE}")
+            raise StoreMissingError(f"確定値の控えがありません: {STORE}")
         return _empty()
     got = _sj.read_json(STORE, expect=dict)
     if got.get("schema_version") != SCHEMA:
@@ -2030,6 +2039,57 @@ def selftest() -> int:
                 _rc3 = "落ちました: " + type(_e3).__name__
             finally:
                 sys.argv = _argv3
+            # ★★案内どおりに実行したら直る★★（2026-09-09・Codexの指摘）
+            #   ★直す前は一律に項目つきの命令を出していた★ので、
+            #   機種の入れ物ごと壊れている形では★その命令が効かなかった★。
+            #   ★表示された命令をそのまま動かして確かめる★
+            def _run_argv596(argv):
+                _b = _io596.StringIO()
+                _av = sys.argv
+                sys.argv = ["confirmed_values.py"] + list(argv)
+                try:
+                    with _cl596.redirect_stdout(_b):
+                        _rc = main()
+                except Exception as _e:                      # noqa: BLE001
+                    _rc = "落ちました: " + type(_e).__name__
+                finally:
+                    sys.argv = _av
+                return _rc, _b.getvalue()
+
+            for _nm3, _shape3 in (("機種ごと壊れている", "文字列です"),
+                                  ("1件だけ壊れている",
+                                   {"ceiling_state": {"value": None}})):
+                _save({"schema_version": SCHEMA,
+                       "machines": {"zzz_p": _shape3,
+                                    "zzz_q": {"ceiling_state": {"value": 1}}}})
+                _rc6, _out6 = _run_argv596(["--list"])
+                # ★壊した機種ぶんの案内だけを見る★
+                #   （同居させた機種も契約を満たしていないので、案内は複数出る）
+                _cmds = [ln.strip() for ln in _out6.splitlines()
+                         if ln.strip().startswith("python scripts/")
+                         and "zzz_p" in ln]
+                # ★壊れ方に合った形か★＝機種ごとなら --field を付けない
+                _want_field = isinstance(_shape3, dict)
+                t(f"　壊れ方に合った直し方が出る: {_nm3}",
+                  _rc6 == 0 and len(_cmds) == 1
+                  and (("--field" in _cmds[0]) is _want_field))
+                # ★出た命令を、そのまま動かす★
+                _argv6 = _cmds[0].split()[2:] if _cmds else []
+                _rc7, _ = _run_argv596(_argv6)
+                _left = (load(strict=False).get("machines") or {})
+                t(f"★★案内どおりに実行したら直る: {_nm3}★★"
+                  "（★効かない命令を案内していたら、人は手詰まりになる★）",
+                  _rc7 == 0 and "zzz_p" not in _left
+                  and _left.get("zzz_q") == {"ceiling_state": {"value": 1}})
+
+            # ★★控えが消えているときも、直し方を伝える★★
+            os.remove(STORE)
+            _rc8, _out8 = _run_argv596(["--list"])
+            t("★★控えが消えていても、直し方を伝える★★"
+              "（★案内が無いと、そこで手詰まりになる★）",
+              _rc8 == 1 and "バックアップから戻して" in _out8
+              and "--init は初回" in _out8)
+
             # ★★案内は「できること」だけ★★（2026-09-09・Codexの指摘）
             #   ★直す前は --forget を勧めていた★が、それも同じところで
             #   止まるので実行できない。★文言まで見ないと元に戻せる★。
@@ -3156,21 +3216,33 @@ def main() -> int:
             #   ★直す前は厳しい読みだったので、1件壊れると
             #   「何が壊れているか」すら見られなかった★。
             data = load(strict=False, require_exists=True)
-            _ng = []
+            # ★★案内は、そのまま実行して直せる形にする★★
+            #   （2026-09-09・Codexの指摘）
+            #   ★直す前は一律に項目つきの命令を出していた★が、
+            #   機種の入れ物ごと壊れている形には項目が存在しないので、
+            #   ★その命令では直せなかった★。壊れ方ごとに分ける。
+            _ng, _fix = [], []
             for _s, _rows in sorted((data.get("machines") or {}).items()):
                 if not isinstance(_rows, dict):
                     _ng.append(f"{_s}: 記録の並びが辞書ではありません")
+                    _fix.append("python scripts/confirmed_values.py "
+                                f"--forget --slug {_s}")
                     continue
                 for _f, _r in sorted(_rows.items()):
-                    for _x in validate_record(_f, _r):
+                    _bad_r = validate_record(_f, _r)
+                    for _x in _bad_r:
                         _ng.append(f"{_s} / {_f}: {_x}")
+                    if _bad_r:
+                        _fix.append("python scripts/confirmed_values.py "
+                                    f"--forget --slug {_s} --field {_f}")
             if _ng:
                 print("★契約を満たしていない記録があります★"
                       "（この控えは機械からは読めません）")
                 for _x in _ng:
                     print("   ✗ " + _x)
-                print("   ★直し方★ python scripts/confirmed_values.py "
-                      "--forget --slug <機種> --field <項目>")
+                print("   ★直し方★（そのまま実行できます）")
+                for _c in dict.fromkeys(_fix):
+                    print("     " + _c)
             for slug, fields in sorted((data.get("machines") or {}).items()):
                 if not isinstance(fields, dict):
                     continue
@@ -3207,6 +3279,11 @@ def main() -> int:
                               % (s.get("publisher") or "（発行者なし）",
                                  str(s.get("url") or "")[:70]))
             return 0
+    except StoreMissingError as e:
+        print("★" + str(e) + "★")
+        print("   ★直し方★ バックアップから戻してください"
+              "（★--init は初回に作るためのもので、復旧には使いません★）")
+        return 1
     except StoreBrokenError as e:
         # ★外側が壊れている＝取り除く道具では直せない★（同じ案内を出す）
         print("★確定値の控えが壊れています★: " + str(e)[:200])

@@ -2273,6 +2273,25 @@ MUTATIONS = [
         "run": ["scripts/confirmed_values.py"],
     },
     {
+        "why": "★壊れ方に関係なく、項目つきの直し方を案内する★"
+               "（★機種の入れ物ごと壊れている形では効かないので、"
+               "そのとおりにやっても直らない★）",
+        "file": "scripts/confirmed_values.py",
+        "before": '                    _fix.append("python scripts/confirmed_values.py "\n'
+                  '                                f"--forget --slug {_s}")',
+        "after": '                    _fix.append("python scripts/confirmed_values.py "\n'
+                 '                                f"--forget --slug {_s} --field x")',
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★控えが消えているとき、直し方を伝えない★"
+               "（★取り除く道具も動かないので、そこで手詰まりになる★）",
+        "file": "scripts/confirmed_values.py",
+        "before": '    except StoreMissingError as e:',
+        "after": '    except ZeroDivisionError as e:',
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
         "why": "★名鑑の一覧を読めなかったことを数えない★"
                "（★票がそろうと記録から消えるので、"
                "『2件は読めた・3件目は一覧が壊れていた』でも『全部』になる★）",
