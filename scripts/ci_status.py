@@ -65,6 +65,11 @@ def latest_per_workflow(runs: list) -> list:
 
     ★動いている途中は入れない★＝まだ結果が出ていないだけなので、
       赤扱いにすると毎回まちがって知らせることになる。
+    ★取り消されたものも入れない★（2026-09-09）＝
+      続けてpushすると、古いコミットの検査は「新しい方に追い越された」と
+      して取り消される。これは★結果が出ていない★のであって失敗ではない。
+      赤扱いにすると番人が翌朝🟠で知らせ、★本物の赤がその中に埋もれる★。
+      飛ばして、その1つ前の結果を見る（何も無ければ「分からない」）。
     """
     out, seen = [], set()
     for r in runs:
@@ -75,6 +80,8 @@ def latest_per_workflow(runs: list) -> list:
             continue
         if str(r.get("status") or "") != "completed":
             continue          # ★途中のものは飛ばす（次の回で見る）★
+        if str(r.get("conclusion") or "") == "cancelled":
+            continue          # ★追い越されただけ＝結果が出ていない★
         seen.add(name)
         out.append(r)
     return out
@@ -105,6 +112,34 @@ def check(fetch=None) -> dict:
             row["weight"] = WEIGHT.get(row["name"], "🟠 検査が赤い")
             red.append(row)
     return {"red": red, "ok": ok, "why": ""}
+
+
+def _cancel_tests(t) -> None:
+    """★追い越されて取り消された検査は、赤にしない★（2026-09-09）
+
+    ★続けてpushすると必ず起きる★ので、赤扱いにすると番人が毎朝🟠を出し、
+    ★本物の赤がその中に埋もれる★。
+    """
+    def _run(name, sha, status, concl):
+        return {"name": name, "head_sha": sha, "status": status,
+                "conclusion": concl, "updated_at": "2026-09-09T00:00:00Z",
+                "html_url": "https://example.invalid/x", "head_commit": {}}
+
+    _runs = [_run("pages-rehearsal", "bbbbbbbbb", "completed", "cancelled"),
+             _run("pages-rehearsal", "aaaaaaaaa", "completed", "success")]
+    _got = latest_per_workflow(_runs)
+    t("★★追い越されて取り消された検査は、結果として数えない★★"
+      "（★赤にすると毎回知らせることになり、本物の赤が埋もれる★）",
+      len(_got) == 1 and _got[0]["head_sha"] == "aaaaaaaaa")
+    t("　（対照）本当に失敗したものは、いちばん新しいものを見る",
+      latest_per_workflow(
+          [_run("pages-rehearsal", "bbbbbbbbb", "completed", "failure"),
+           _run("pages-rehearsal", "aaaaaaaaa", "completed", "success")]
+      )[0]["head_sha"] == "bbbbbbbbb")
+    t("　取り消しか途中しか無ければ、何も返さない（分からない）",
+      latest_per_workflow(
+          [_run("pages-rehearsal", "bbbbbbbbb", "completed", "cancelled"),
+           _run("pages-rehearsal", "aaaaaaaaa", "in_progress", None)]) == [])
 
 
 def main() -> int:
@@ -151,6 +186,8 @@ def selftest() -> int:
         print(("✅ " if cond else "❌ ") + name)
         if not cond:
             ng.append(name)
+
+    _cancel_tests(t)
 
     def fake(runs):
         return lambda _u: {"workflow_runs": runs}

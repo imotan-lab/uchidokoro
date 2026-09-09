@@ -2239,6 +2239,16 @@ MUTATIONS = [
         "run": ["scripts/confirmed_values.py"],
     },
     {
+        "why": "★追い越されて取り消された検査を、赤として知らせる★"
+               "（★続けてpushすると必ず起きるので、本物の赤が埋もれる★）",
+        "file": "scripts/ci_status.py",
+        "before": '        if str(r.get("conclusion") or "") == "cancelled":\n'
+                  '            continue          # ★追い越されただけ＝結果が出ていない★',
+        "after": '        if False:\n'
+                 '            continue          # ★追い越されただけ＝結果が出ていない★',
+        "run": ["scripts/ci_status.py"],
+    },
+    {
         "why": "★名鑑の一覧を読めなかったことを数えない★"
                "（★票がそろうと記録から消えるので、"
                "『2件は読めた・3件目は一覧が壊れていた』でも『全部』になる★）",
