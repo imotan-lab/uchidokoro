@@ -2252,7 +2252,7 @@ MUTATIONS = [
         "why": "★機種の入れ物ごと壊れていると、取り除けない★"
                "（★控えが読めないまま、直す手が無くなる★）",
         "file": "scripts/confirmed_values.py",
-        "before": '    if not isinstance(machines[slug], dict) or not field:',
+        "before": '    if not isinstance(machines[slug], dict):',
         "after": '    if False:',
         "run": ["scripts/confirmed_values.py"],
     },
@@ -2289,6 +2289,16 @@ MUTATIONS = [
         "file": "scripts/confirmed_values.py",
         "before": '    except StoreMissingError as e:',
         "after": '    except ZeroDivisionError as e:',
+        "run": ["scripts/confirmed_values.py"],
+    },
+    {
+        "why": "★項目名が空のときに、機種ごと消す★"
+               "（★--field \"\" で、その機種の正常な記録まで失われる★）",
+        "file": "scripts/confirmed_values.py",
+        "before": '    if not str(field).strip():\n'
+                  '        return {"state": "NEED_FIELD",',
+        "after": '    if False:\n'
+                 '        return {"state": "NEED_FIELD",',
         "run": ["scripts/confirmed_values.py"],
     },
     {

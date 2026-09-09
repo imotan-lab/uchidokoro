@@ -1405,7 +1405,7 @@ def reverify(slug: str, fetch=None, name: str = "",
                             "／2AIで判断し直してください")
     return _done()
 
-def forget(slug: str, field: str) -> dict:
+def forget(slug: str, field=None) -> dict:
     """★1件だけ取り除く★（2026-09-09・台帳#596）
 
     ★厳しい読みを通さない★＝壊れた記録があると、それを取り除く道具まで
@@ -1423,10 +1423,22 @@ def forget(slug: str, field: str) -> dict:
     #   文字列・空配列・null で壊れた機種は**取り除けなかった**
     #   （項目名が文字列の中にあると `str.pop()` で落ちさえした）。
     #   ＝控えが読めないまま、直す手が無い。
-    if not isinstance(machines[slug], dict) or not field:
+    # ★★機種ごと消すのは2つの場合だけ★★（2026-09-09・Codexの指摘）
+    #   ①入れ物が壊れていて、項目を指せない
+    #   ②項目を**書かなかった**（--field を渡していない）
+    #   ★空文字を「書かなかった」と同じにしない★＝
+    #   `--field ""` で、その機種の**正常な記録まで全部消えた**。
+    if not isinstance(machines[slug], dict):
         machines.pop(slug, None)
         _save(data)
         return {"state": "FORGOTTEN", "whole": True}
+    if field is None:
+        machines.pop(slug, None)
+        _save(data)
+        return {"state": "FORGOTTEN", "whole": True}
+    if not str(field).strip():
+        return {"state": "NEED_FIELD",
+                "why": "項目名が空です（機種ごと消すなら --field を書かない）"}
     fields = machines[slug]
     if field not in fields:
         return {"state": "NOT_FOUND"}
@@ -2056,12 +2068,28 @@ def selftest() -> int:
                     sys.argv = _av
                 return _rc, _b.getvalue()
 
+            # ★同居させる記録は「契約を満たしたもの」にする★
+            #   （2026-09-09・Codexの指摘）★直す前はこれも壊れていた★ので、
+            #   命令を実行しても機械は控えを読めないままで、
+            #   ★「直った」を確かめずに合格していた（偽の合格）★。
+            _ok596 = {"value": {"state": "NONE"},
+                      "sources": [{"url": "https://chonborista.com/slot/x",
+                                   "publisher": "chonborista",
+                                   "quote": "天井なし"},
+                                  {"url": "https://nana-press.com/kaiseki/x",
+                                   "publisher": "nana-press",
+                                   "quote": "天井なし"}],
+                      "lineages": ["vote:chonborista", "vote:nana-press"],
+                      "agreed_by": ["claude", "codex"],
+                      "why": "2AIで突き合わせました",
+                      "decided_at": "2026-09-09",
+                      "official_url": "https://p-town.dmm.com/machines/1"}
             for _nm3, _shape3 in (("機種ごと壊れている", "文字列です"),
                                   ("1件だけ壊れている",
                                    {"ceiling_state": {"value": None}})):
                 _save({"schema_version": SCHEMA,
                        "machines": {"zzz_p": _shape3,
-                                    "zzz_q": {"ceiling_state": {"value": 1}}}})
+                                    "zzz_q": {"ceiling_state": _ok596}}})
                 _rc6, _out6 = _run_argv596(["--list"])
                 # ★壊した機種ぶんの案内だけを見る★
                 #   （同居させた機種も契約を満たしていないので、案内は複数出る）
@@ -2076,11 +2104,32 @@ def selftest() -> int:
                 # ★出た命令を、そのまま動かす★
                 _argv6 = _cmds[0].split()[2:] if _cmds else []
                 _rc7, _ = _run_argv596(_argv6)
-                _left = (load(strict=False).get("machines") or {})
+                # ★★「直った」＝機械が厳しい読みで読めること★★
+                #   （2026-09-09・Codexの指摘）★消えたことだけ見ると、
+                #   読めないままでも合格する（偽の合格）★。
+                try:
+                    _strict596 = load()
+                except ConfirmedError as _es596:
+                    _strict596 = {"読めません": str(_es596)[:60]}
+                _left = (_strict596.get("machines") or {})
                 t(f"★★案内どおりに実行したら直る: {_nm3}★★"
-                  "（★効かない命令を案内していたら、人は手詰まりになる★）",
-                  _rc7 == 0 and "zzz_p" not in _left
-                  and _left.get("zzz_q") == {"ceiling_state": {"value": 1}})
+                  "（★機械が控えを読めるようになるところまで見る★）",
+                  _rc7 == 0 and "読めません" not in _strict596
+                  and "zzz_p" not in _left
+                  and _left.get("zzz_q") == {"ceiling_state": _ok596})
+
+            # ★★空の項目名で、正常な記録まで消さない★★
+            #   （2026-09-09・Codexの指摘）★人のデータを壊しうる★
+            _save({"schema_version": SCHEMA,
+                   "machines": {"zzz_q": {"ceiling_state": _ok596}}})
+            _rc9 = forget("zzz_q", "")
+            t("★★項目名が空のときは、機種ごと消さずに断る★★"
+              "（★正常な記録まで失われる★）",
+              _rc9.get("state") == "NEED_FIELD"
+              and (load(strict=False).get("machines") or {}).get("zzz_q"))
+            t("　（対照）項目名を書かなければ、機種ごと消せる",
+              forget("zzz_q").get("state") == "FORGOTTEN"
+              and "zzz_q" not in (load(strict=False).get("machines") or {}))
 
             # ★★控えが消えているときも、直し方を伝える★★
             os.remove(STORE)
@@ -3136,7 +3185,10 @@ def main() -> int:
                     help="★推奨★ 公式URL（slugと正式名称を正本から引く）")
     ap.add_argument("--name", default="",
                     help="正式名称（--official-url が使えないときだけ）")
-    ap.add_argument("--field", default="")
+    # ★書かなかったことと、空文字を区別する★（2026-09-09・Codexの指摘）
+    #   --forget は「書かなければ機種ごと」なので、既定を空文字にすると
+    #   ★--field "" でも機種ごと消えて、正常な記録まで失われる★。
+    ap.add_argument("--field", default=None)
     ap.add_argument("--value", default="", help="値（文字列）")
     ap.add_argument("--value-file", dest="value_file", default="",
                     help="値を書いたJSONファイル（構造のある値はこちら）")
