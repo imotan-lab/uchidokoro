@@ -1396,12 +1396,25 @@ def forget(slug: str, field: str) -> dict:
     どこにも渡さない。機械が material として使う側は今までどおり厳しい。
     """
     data = load(strict=False, require_exists=True)
-    fields = (data.get("machines") or {}).get(slug) or {}
+    machines = data.get("machines")
+    if not isinstance(machines, dict) or slug not in machines:
+        return {"state": "NOT_FOUND"}
+    # ★★機種の入れ物ごと壊れているときは、機種ごと取り除く★★
+    #   （2026-09-09・Codexの指摘）
+    #   ★直す前★＝辞書である前提だったので、
+    #   文字列・空配列・null で壊れた機種は**取り除けなかった**
+    #   （項目名が文字列の中にあると `str.pop()` で落ちさえした）。
+    #   ＝控えが読めないまま、直す手が無い。
+    if not isinstance(machines[slug], dict) or not field:
+        machines.pop(slug, None)
+        _save(data)
+        return {"state": "FORGOTTEN", "whole": True}
+    fields = machines[slug]
     if field not in fields:
         return {"state": "NOT_FOUND"}
     fields.pop(field)
     if not fields:
-        data["machines"].pop(slug, None)
+        machines.pop(slug, None)
     _save(data)
     return {"state": "FORGOTTEN"}
 
@@ -1888,6 +1901,23 @@ def selftest() -> int:
                 _now = {"machines": {"まだ壊れています": {}}}
             t("　取り除いたあとは、機械が読めるようになる",
               (_now.get("machines") or {}) == {})
+            # ★★機種の入れ物ごと壊れていても取り除ける★★
+            #   （2026-09-09・Codexの指摘。★重大★）
+            #   ★直す前★＝辞書である前提だったので、文字列・空配列・null で
+            #   壊れた機種は取り除けず、控えが読めないまま直す手が無かった。
+            for _shape596 in ("これは辞書ではありません", [], None, ""):
+                _save({"schema_version": SCHEMA,
+                       "machines": {"zzz_x": _shape596,
+                                    "zzz_y": {"ceiling_state": {"value": 1}}}})
+                try:
+                    _fw = forget("zzz_x", "")
+                except Exception as _efw:                    # noqa: BLE001
+                    _fw = {"state": "落ちました: " + type(_efw).__name__}
+                t(f"　機種ごと取り除ける（{type(_shape596).__name__}）",
+                  _fw.get("state") == "FORGOTTEN"
+                  and "zzz_x" not in (load(strict=False)
+                                      .get("machines") or {}))
+
             # ★★どんな壊れ方でも、一覧は最後まで動く★★
             #   （2026-09-09・Codexの指摘）
             #   ★直す前★＝契約違反として名指しはするのに、そのあと
@@ -1954,8 +1984,10 @@ def selftest() -> int:
                     _vr596 = validate_record("ceiling_state", _rec596)
                 except Exception as _ev596:                  # noqa: BLE001
                     _vr596 = "落ちました: " + type(_ev596).__name__
-                t(f"　検査は落ちずに問題を返す: {_nm596}",
-                  isinstance(_vr596, list))
+                # ★空の一覧でも合格していた★（2026-09-09・Codexの指摘）
+                #   ＝壊れた記録を正常扱いする退行を捕まえられない。
+                t(f"　検査は落ちずに『問題あり』と答える: {_nm596}",
+                  isinstance(_vr596, list) and bool(_vr596))
                 _save({"schema_version": SCHEMA,
                        "machines": {"zzz_e": {"ceiling_state": _rec596}}})
                 _b2 = _io596.StringIO()
@@ -1969,6 +2001,8 @@ def selftest() -> int:
                 finally:
                     sys.argv = _argv2
                 t(f"　一覧も最後まで動く: {_nm596}", _rc2 == 0)
+                t(f"　一覧に異常として出る: {_nm596}",
+                  "契約を満たしていない記録があります" in _b2.getvalue())
 
             # ★★控えのファイルそのものが壊れている★★
             #   ★直す前は traceback で落ちた★＝何が起きたか伝わらない。
@@ -2966,7 +3000,8 @@ def selftest() -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description="2AIで確定した値の受け取り口")
     ap.add_argument("--record", action="store_true")
-    ap.add_argument("--forget", action="store_true")
+    ap.add_argument("--forget", action="store_true",
+                    help="1件を取り除く（--field を省くと機種ごと）")
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--init", action="store_true",
                     help="★初回だけ★空の控えを作る（復旧には使わない）")
@@ -3006,7 +3041,16 @@ def main() -> int:
     try:
         if a.record:
             if a.value_file:
-                value = _sj.read_json(a.value_file, expect=(dict, list, str, int, float))
+                # ★渡されたファイルの壊れは、控えの壊れと分けて言う★
+                #   （2026-09-09・Codexの指摘）★直す前は同じ受け口に
+                #   入り、正常な控えを「壊れています」と案内していた★。
+                try:
+                    value = _sj.read_json(
+                        a.value_file, expect=(dict, list, str, int, float))
+                except _sj.SafeJsonError as _ev:
+                    print("★渡された値のファイルが壊れています★: "
+                          + str(_ev)[:200])
+                    return 2
             elif a.value:
                 value = a.value
             else:
@@ -3106,8 +3150,12 @@ def main() -> int:
         # ★控えのJSONそのものが壊れている★（2026-09-09・Codexの指摘）
         #   ★直す前は traceback で落ちた★＝何が起きたか伝わらない。
         print("★確定値の控えのファイルが壊れています★: " + str(e)[:200])
+        # ★できないことを案内しない★（2026-09-09・Codexの指摘）
+        #   ★直す前は --forget を案内していた★が、それも最初に
+        #   ファイル全体を読むので同じところで止まる＝実行できない。
         print("   ★直し方★ バックアップから戻すか、"
-              "その1件を取り除いてください（--forget）")
+              "ファイルを手で直してください（★この状態では"
+              "--forget も動きません★）")
         return 1
     ap.print_help()
     return 2

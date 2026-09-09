@@ -2164,9 +2164,9 @@ MUTATIONS = [
         "issues": [596],
         "file": "scripts/confirmed_values.py",
         "before": '    data = load(strict=False, require_exists=True)\n'
-                  '    fields = (data.get("machines") or {}).get(slug) or {}',
+                  '    machines = data.get("machines")',
         "after": '    data = load()\n'
-                 '    fields = (data.get("machines") or {}).get(slug) or {}',
+                 '    machines = data.get("machines")',
         "run": ["scripts/confirmed_values.py"],
     },
     {
@@ -2247,6 +2247,14 @@ MUTATIONS = [
         "after": '        if False:\n'
                  '            continue          # ★追い越されただけ＝結果が出ていない★',
         "run": ["scripts/ci_status.py"],
+    },
+    {
+        "why": "★機種の入れ物ごと壊れていると、取り除けない★"
+               "（★控えが読めないまま、直す手が無くなる★）",
+        "file": "scripts/confirmed_values.py",
+        "before": '    if not isinstance(machines[slug], dict) or not field:',
+        "after": '    if False:',
+        "run": ["scripts/confirmed_values.py"],
     },
     {
         "why": "★名鑑の一覧を読めなかったことを数えない★"
