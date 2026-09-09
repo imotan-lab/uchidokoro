@@ -2185,6 +2185,17 @@ MUTATIONS = [
         "run": ["scripts/page_decision.py"],
     },
     {
+        "why": "★日まで分かっていると、月までしか書かない名鑑を通さない★"
+               "（★同じ問いが毎晩出続け、そのページが恒久的に材料から外れ、"
+               "その機種は検索に載らないままになる★）",
+        # ★この守りが直したことを証明する案件★
+        "issues": [600],
+        "file": "scripts/maker_identity_cache.py",
+        "before": '        out += date_forms(f"{y}-{mo:02d}")',
+        "after": '        pass',
+        "run": ["scripts/maker_identity_cache.py"],
+    },
+    {
         "why": "★名鑑の一覧を読めなかったことを数えない★"
                "（★票がそろうと記録から消えるので、"
                "『2件は読めた・3件目は一覧が壊れていた』でも『全部』になる★）",
