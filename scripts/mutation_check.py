@@ -2196,6 +2196,23 @@ MUTATIONS = [
         "run": ["scripts/maker_identity_cache.py"],
     },
     {
+        "why": "★試験が本番の記録に書き込む★"
+               "（★守りを壊して確かめる道具が何百回も動かすので、"
+               "本物のgit失敗がその山に埋もれて気づけなくなる★）",
+        "file": "scripts/task_guard.py",
+        "before": "    if _IN_SELFTEST:\n        return",
+        "after": "    if False:\n        return",
+        "run": ["scripts/task_guard.py"],
+    },
+    {
+        "why": "★本物のgit失敗を、どこにも記録しない★"
+               "（★止めない設計なので、記録が無いと誰にも届かない★）",
+        "file": "scripts/task_guard.py",
+        "before": '        _log_git_unreadable(task, str(why))',
+        "after": '        pass',
+        "run": ["scripts/task_guard.py"],
+    },
+    {
         "why": "★名鑑の一覧を読めなかったことを数えない★"
                "（★票がそろうと記録から消えるので、"
                "『2件は読めた・3件目は一覧が壊れていた』でも『全部』になる★）",

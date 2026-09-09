@@ -1302,6 +1302,9 @@ def _git(*args) -> tuple[int, str]:
 #   （混んでいる日に誤って打ち切る）。合計でも5秒たらず。
 GIT_RETRY_WAITS = (0.5, 1.5, 3.0)
 
+# ★試験の最中は、本番の記録に書かない★（2026-09-09）
+_IN_SELFTEST = False
+
 
 def _changed_files(sleep=None) -> tuple[list, str]:
     """いま変わっているファイルの一覧。読めなければ理由を返す。
@@ -1406,7 +1409,18 @@ def unattended_code_state(task: str) -> tuple:
 
 
 def _log_git_unreadable(task: str, why: str) -> None:
-    """★記録に残す★（メールは呼ぶ側＝手順書の担当）"""
+    """★記録に残す★（メールは呼ぶ側＝手順書の担当）
+
+    ★試験は本番のログに書かない★（2026-09-09）＝
+    ★直す前に起きていたこと★＝この試験を1回動かすたびに3行書かれ、
+    守りを1行ずつ壊して確かめる道具が何百回も動かすので、
+    ★4600行のうちほとんどが試験の書き込み★になっていた。
+    番兵は毎朝「gitへの問い合わせ失敗が約210回」と知らせるが、
+    ★本物の失敗は1件も無い★。
+    ＝本物のgit失敗が起きても、この山に埋もれて気づけない。
+    """
+    if _IN_SELFTEST:
+        return
     try:
         d = _lp.doc("logs")
         os.makedirs(d, exist_ok=True)
@@ -2368,6 +2382,56 @@ def _raises(fn, word: str = "") -> bool:
 def selftest() -> int:
     import shutil
     results = []
+    # ★試験は本番のログに書かない★（2026-09-09）
+    #   ★直す前は1回につき3行★書かれ、守りを1行ずつ壊して確かめる道具が
+    #   何百回も動かすので、本番の記録が試験の書き込みで埋まっていた。
+    #   ＝番兵が毎朝「gitへの問い合わせ失敗が約210回」と知らせるのに、
+    #   ★本物の失敗は1件も無かった★（本物が起きても埋もれて気づけない）。
+    globals()["_IN_SELFTEST"] = True
+
+    def _git_log_tests(t):
+        """★試験では書かない／本番では書く★を両方見る（2026-09-09）"""
+        import tempfile as _tfg
+        _keep_doc = _lp.DOCS
+        _tmp = _tfg.mkdtemp(prefix="uchi_gitlog_")
+        _lp.DOCS = _tmp
+        _path = os.path.join(_tmp, "logs", "task_guard_git.log")
+        try:
+            _log_git_unreadable("試験", "作り話の理由")
+            t("★★試験の最中は、本番の記録に書かない★★"
+              "（★守りを壊して確かめる道具が何百回も動かすので、"
+              "本物のgit失敗がこの山に埋もれて気づけなくなる★）",
+              not os.path.exists(_path))
+            # ★（対照）本番では必ず書く★＝書かないと本物が届かない
+            globals()["_IN_SELFTEST"] = False
+            try:
+                _log_git_unreadable("試験", "作り話の理由")
+            finally:
+                globals()["_IN_SELFTEST"] = True
+            t("　（対照）本番では必ず記録する"
+              "（★書かないと、本物のgit失敗が誰にも届かない★）",
+              os.path.exists(_path)
+              and "作り話の理由" in open(_path, encoding="utf-8").read())
+            # ★★本番の呼び出し口から通す★★（罠③）
+            #   ★直接呼ぶ試験だけだと、呼び出し行を消しても緑のまま★
+            os.remove(_path)
+            _keep_chg = globals()["_changed_files"]
+            globals()["_changed_files"] = lambda *a, **k: ([], "作り話の理由2")
+            globals()["_IN_SELFTEST"] = False
+            try:
+                unattended_code_state(sorted(UNATTENDED_TASKS)[0])
+            finally:
+                globals()["_IN_SELFTEST"] = True
+                globals()["_changed_files"] = _keep_chg
+            t("　（対照）本番の呼び出し口を通しても記録される"
+              "（★呼び出し行を消しても、直接呼ぶ試験だけなら緑のままだった★）",
+              os.path.exists(_path)
+              and "作り話の理由2" in open(_path, encoding="utf-8").read())
+        finally:
+            _lp.DOCS = _keep_doc
+
+    _git_log_tests(lambda name, cond: results.append((name, bool(cond)))
+                   or print(("✅" if cond else "❌") + " " + name))
     # ★★試験中は「未コミットの歯止め」を通す★★（2026-08-26）
     #   ★この歯止めは本番のためのもの★＝試験は必ず作業ツリーが汚れた状態で
     #   走る（いま直しているコード自体が未コミット）ので、
