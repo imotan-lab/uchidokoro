@@ -270,7 +270,7 @@ def _skip_for_index(v, count_confirmed: bool) -> bool:
 _RATE_PCT = re.compile(r"\s*([0-9]+(?:\.[0-9]+)?)\s*%\s*")
 
 
-def derived_payout_range(adopted: dict):
+def derived_payout_range(adopted: dict, countable_only: bool = True):
     """★確認済みの設定別の値から「機械割の範囲」を作る★（2026-08-27）
 
     ★運営者の判断★＝確認済みの設定別の値から、その最小と最大を
@@ -287,13 +287,24 @@ def derived_payout_range(adopted: dict):
     got = (adopted or {}).get("payout_rate")
     if not isinstance(got, dict) or not isinstance(got.get("value"), dict):
         return None
-    # ★★2AIの確定値からは作らない★★（2026-08-27）
-    #   確定値は「どの話題の裏付けか」を項目ごとに控えてある。
-    #   設定別の出玉率は **設定示唆まとめ** の裏付けなので、そこから
-    #   **基本スペック** の要約行を作ると裏付けが話題をまたぐ。
-    #   ★またぐのを許すと「別の話題の値で免除される」穴が開く★
-    #   （Codex19回目で塞いだ線）。読者はその値を設定別の表で見られる。
-    if got.get("_from") == "confirmed_values":
+    # ★★数えられる裏付けがある値からだけ作る★★（2026-09-09・台帳#601）
+    #   ★直す前は「2AIの確定値からは作らない」だった★＝
+    #   2026-08-27に「裏付けが話題をまたぐ」ことを心配して塞いだ線。
+    #   ★実害★＝2AIで正しく確定させた瞬間に「機械割◯〜◯%」の行が消え、
+    #   「前に載っていた内容が消える」の見張りが書き込みを止める。
+    #   ＝★正しく確定させるほど、その機種が公開できなくなる★（実測6機種。
+    #     獣王とラグナドールは、事実の数では条件を満たしていた）。
+    #
+    #   ★通しの試験が教えてくれた本当の線★＝
+    #   食い違い（判定書は「基本スペックは未確認」・記事は機械割を書く）は
+    #   ★裏付けの弱い値から要約行を作ったとき★に起きる。
+    #   どこから来た値かは関係がない。
+    #   ＝**検索の濃さに数えられる裏付けがある値からだけ作る**。
+    #   こうすると判定書と記事が必ずそろう（2AIの確定値も、独立2出典が
+    #   あれば `basis` が刻まれるので通る）。
+    #   ★消えたかの判定だけは、裏付けの強さを問わない★
+    #   （問うと、2AIで確定させるほど「事実が消えた」と言われる）。
+    if countable_only and _skip_for_index(got, count_confirmed=False):
         return None
     nums = []
     for raw_v in got["value"].values():
@@ -351,7 +362,8 @@ def _claims(material: dict, *, count_confirmed: bool) -> list:
     #   ★知っているかの側には入れる★＝設定別の値から機械割を書けるので、
     #     その事実は失われていない。入れないと育成が永久に止まる。
     if count_confirmed and "payout_range" not in got:
-        if derived_payout_range(adopted):
+        # ★ここは「知っているか」を見る側★＝裏付けの強さは問わない
+        if derived_payout_range(adopted, countable_only=False):
             got.add("payout_range")
     for c in ((material or {}).get("ceilings") or {}).get("adopted") or []:
         # ★★壊れていないかを先に見る★★（2026-08-23）
@@ -1301,10 +1313,23 @@ def selftest() -> int:
       "spec" not in topics_from_claims(["payout_rate"])[1])
     t("　設定別の出玉率が無ければ、基本スペックは未確認のまま",
       "spec" in topics_from_claims(["bonus_prob"])[1])
-    t("　2AIの確定値からは範囲を作らない（裏付けが話題をまたぐ）",
-      derived_payout_range({"payout_rate":
-                            {"_from": "confirmed_values",
-                             "value": {"1": "97.0%", "6": "109.4%"}}})
+    # ★★2AIの確定値からも範囲を作る★★（2026-09-09・台帳#601）
+    #   ★直す前は作らなかった★＝2AIで正しく確定させた瞬間に
+    #   「機械割◯〜◯%」の行が消え、「前に載っていた内容が消える」の
+    #   見張りが書き込みを止めた＝★確定させるほど公開できなくなる★。
+    _CONF = {"payout_rate": {**IM, "_from": "confirmed_values",
+                             "value": {"1": "97.0%", "6": "109.4%"}}}
+    t("★★2AIの確定値からも機械割の範囲を作る★★"
+      "（★作らないと、正しく確定させた機種ほど公開できなくなる★）",
+      derived_payout_range(_CONF) == (97.0, 109.4, _CONF["payout_rate"]))
+    t("　（対照）それでも検索の濃さは増えない（範囲は数に入れない）",
+      index_claims_from_material({"adopted": dict(_CONF)}) == ["payout_rate"]
+      and "payout_range" in regression_claims_from_material(
+          {"adopted": dict(_CONF)}))
+    t("　読めない値が混ざれば、確定値でも作らない",
+      derived_payout_range({"payout_rate": {"_from": "confirmed_values",
+                                            "value": {"1": "調査中",
+                                                      "6": "109.4%"}}})
       is None)
 
     print(f"{ran[0]}/{ran[0]} 合格" if ok_all else "不合格あり")

@@ -2170,6 +2170,21 @@ MUTATIONS = [
         "run": ["scripts/confirmed_values.py"],
     },
     {
+        "why": "★2AIの確定値からは機械割の範囲を作らない★"
+               "（★正しく確定させた瞬間に記事の行が消え、"
+               "その機種が二度と公開できなくなる★）",
+        # ★この守りが直したことを証明する案件★
+        "issues": [601],
+        "file": "scripts/page_decision.py",
+        "before": '    nums = []\n'
+                  '    for raw_v in got["value"].values():',
+        "after": '    nums = []\n'
+                 '    if got.get("_from") == "confirmed_values":\n'
+                 '        return None\n'
+                 '    for raw_v in got["value"].values():',
+        "run": ["scripts/page_decision.py"],
+    },
+    {
         "why": "★名鑑の一覧を読めなかったことを数えない★"
                "（★票がそろうと記録から消えるので、"
                "『2件は読めた・3件目は一覧が壊れていた』でも『全部』になる★）",
@@ -2595,15 +2610,6 @@ MUTATIONS = [
         "before": "    if len(nums) < 2:",
         "after": "    if len(nums) < 1:",
         "run": ["scripts/build_new_article.py"],
-    },
-    {
-        "why": "★2AIの確定値からも範囲を作る"
-               "（裏付けが話題をまたぎ、判定書と記事が食い違う）★",
-        "file": "scripts/page_decision.py",
-        "before": '    if got.get("_from") == "confirmed_values":',
-        "after": "    if False:",
-        # ★通しの試験だけが捕まえる★＝判定書・記事・検査を繋いだ時だけ矛盾する
-        "run": ["scripts/recheck.py"],
     },
     {
         "why": "★範囲を検索の濃さにも数える（同じ表から2件＝水増し）★",
