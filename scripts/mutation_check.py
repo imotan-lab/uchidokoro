@@ -1245,8 +1245,10 @@ MUTATIONS = [
     {
         "why": "控えが無ければ黙って作る（消失と初回を区別しない・Codex9回目）",
         "file": "scripts/confirmed_values.py",
-        "before": "    data = load(strict=False, require_exists=True)",
-        "after": "    data = load(strict=False)",
+        "before": ("    data = load(strict=False, require_exists=True)\n"
+                   "    rec = {"),
+        "after": ("    data = load(strict=False)\n"
+                  "    rec = {"),
         "run": ["scripts/confirmed_values.py"],
     },
     {
@@ -2153,6 +2155,19 @@ MUTATIONS = [
         "before": "    ids = hit[0].get(\"issues\") or []",
         "after": "    ids = [n]",
         "run": ["scripts/ledger_sweep.py"],
+    },
+    {
+        "why": "★壊れた控えを、取り除く道具でも直せなくする★"
+               "（★1件の壊れで控え全体が読めなくなり、"
+               "人が手で直すまで夜の新台追加が丸ごと止まる★）",
+        # ★この守りが直したことを証明する案件★
+        "issues": [596],
+        "file": "scripts/confirmed_values.py",
+        "before": '    data = load(strict=False, require_exists=True)\n'
+                  '    fields = (data.get("machines") or {}).get(slug) or {}',
+        "after": '    data = load()\n'
+                 '    fields = (data.get("machines") or {}).get(slug) or {}',
+        "run": ["scripts/confirmed_values.py"],
     },
     {
         "why": "★名鑑の一覧を読めなかったことを数えない★"

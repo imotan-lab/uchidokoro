@@ -1372,7 +1372,14 @@ def reverify(slug: str, fetch=None, name: str = "",
     return _done()
 
 def forget(slug: str, field: str) -> dict:
-    data = load()
+    """★1件だけ取り除く★（2026-09-09・台帳#596）
+
+    ★厳しい読みを通さない★＝壊れた記録があると、それを取り除く道具まで
+    同じ例外で落ちて**直す手が無くなる**（実際に踏んだ）。
+    ★危なくない理由★＝この関数は取り除くだけで、読んだ中身を
+    どこにも渡さない。機械が material として使う側は今までどおり厳しい。
+    """
+    data = load(strict=False, require_exists=True)
     fields = (data.get("machines") or {}).get(slug) or {}
     if field not in fields:
         return {"state": "NOT_FOUND"}
@@ -1831,6 +1838,42 @@ def selftest() -> int:
         finally:
             STORE = _keep_store
 
+        # ★★壊れた控えを、道具で直せること★★（2026-09-09・台帳#596）
+        #   ★実際に踏んだ★＝1機種の1項目が契約違反で保存されると、
+        #   控え全体が読めなくなり、★取り除く道具まで同じ例外で落ちた★。
+        #   ＝人が手で直すまで、夜の新台追加が丸ごと止まる。
+        #   ★偽物で確かめない★＝本物の `forget()` を、本物の置き場に対して動かす。
+        import tempfile as _tf596
+        _keep596 = STORE
+        globals()["STORE"] = os.path.join(
+            _tf596.mkdtemp(prefix="uchi_cv596_"), "confirmed_values.json")
+        try:
+            _save({"schema_version": SCHEMA,
+                   "machines": {"zzz_ng": {"ceiling_state": {"value": None}}}})
+            _blew = False
+            try:
+                load()
+            except ConfirmedError:
+                _blew = True
+            t("　（前提）契約を満たさない記録があると、機械は控えを読まない", _blew)
+            # ★例外で落ちるのを「止まった」と数えない★（罠⑤）
+            #   守りを壊すと forget() が例外を投げるので、
+            #   ここで受けて**試験の❌として出す**。
+            try:
+                _r596 = forget("zzz_ng", "ceiling_state")
+            except ConfirmedError as _e596:
+                _r596 = {"state": "直せません: " + str(_e596)[:40]}
+            t("★★壊れた記録は、取り除く道具で直せる★★"
+              "（★直せないと、人が手で直すまで新台追加が丸ごと止まる★）",
+              _r596.get("state") == "FORGOTTEN")
+            try:
+                _now = load()      # ★取り除いたあとは、機械が読める★
+            except ConfirmedError:
+                _now = {"machines": {"まだ壊れています": {}}}
+            t("　取り除いたあとは、機械が読めるようになる",
+              (_now.get("machines") or {}) == {})
+        finally:
+            globals()["STORE"] = _keep596
         # ★★数は「別の数の一部」では通さない★★（2026-08-24・Codexの8回目）
         #   ★直す前はただの部分一致だった★ので、
         #   出典に書かれていない数を「書かれている」ことにできた。
@@ -2887,8 +2930,28 @@ def main() -> int:
             print(json.dumps(forget(a.slug, a.field), ensure_ascii=False))
             return 0
         if a.list:
-            data = load()
+            # ★壊れていても見られる★（2026-09-09・台帳#596）
+            #   ★直す前は厳しい読みだったので、1件壊れると
+            #   「何が壊れているか」すら見られなかった★。
+            data = load(strict=False, require_exists=True)
+            _ng = []
+            for _s, _rows in sorted((data.get("machines") or {}).items()):
+                if not isinstance(_rows, dict):
+                    _ng.append(f"{_s}: 記録の並びが辞書ではありません")
+                    continue
+                for _f, _r in sorted(_rows.items()):
+                    for _x in validate_record(_f, _r):
+                        _ng.append(f"{_s} / {_f}: {_x}")
+            if _ng:
+                print("★契約を満たしていない記録があります★"
+                      "（この控えは機械からは読めません）")
+                for _x in _ng:
+                    print("   ✗ " + _x)
+                print("   ★直し方★ python scripts/confirmed_values.py "
+                      "--forget --slug <機種> --field <項目>")
             for slug, fields in sorted((data.get("machines") or {}).items()):
+                if not isinstance(fields, dict):
+                    continue
                 if a.slug and slug != a.slug:
                     continue
                 print("■ " + slug)
