@@ -2329,8 +2329,8 @@ MUTATIONS = [
         "why": "★ラベルと値の対応を見ない★"
                "（★メーカーの欄に導入日が入っていても気づけない★）",
         "file": "scripts/page_reading.py",
-        "before": '                    elif cap.find(lab) > cap.find(sv):',
-        "after": '                    elif False:',
+        "before": '                if (lab, sv) not in pairs:',
+        "after": '                if False:',
         "run": ["scripts/page_reading.py"],
     },
     {
@@ -2342,6 +2342,33 @@ MUTATIONS = [
                    '        return False, "2AIが「このページは使わない」と決めています"'),
         'after': '        return False, "2AIが「このページは使わない」と決めています"',
         "run": ["scripts/page_reading.py"],
+    },
+    {
+        "why": "★本人性の失敗の問いを、機種の出口へ移さない★"
+               "（★`vo` の中に置き去りになり、どこにも届かない★）",
+        "file": "scripts/add_machine_run.py",
+        "before": """    out.setdefault("read_questions", []).extend(
+        vo.get("read_questions") or [])""",
+        "after": """    pass""",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★材料が作れなかったとき、型のついた問いを合流させない★"
+               "（★いちばん読めていない機種で、問いが消える★）",
+        "file": "scripts/add_machine_run.py",
+        "before": """        _deliver_read_questions(out, got)
+        for q in out["ask_2ai"]:""",
+        "after": """        for q in out["ask_2ai"]:""",
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★育成で、本人性の失敗を問いにしない★"
+               "（★毎朝止まる機種の問いが、どこにも出ない★）",
+        "file": "scripts/grow_machine.py",
+        "before": """        _deliver_read(out, vo)
+        return out""",
+        "after": """        return out""",
+        "run": ["scripts/grow_machine.py"],
     },
     {
         "why": "★別の段の答えでも免除する★"

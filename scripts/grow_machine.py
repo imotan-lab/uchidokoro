@@ -1537,6 +1537,23 @@ def find_sources(machine: dict) -> list:
         return []
 
 
+def _deliver_read(out: dict, src: dict | None) -> None:
+    """★型のついた読み取り失敗を、問いの列へ移す★（2026-09-10・CodexのP0）
+
+    ★問いは必ず辞書で足す★（表示側が辞書として読む）。
+    ★二重に足さない★
+    """
+    have = {str((q or {}).get("text") if isinstance(q, dict) else q)
+            for q in (out.get("questions") or [])}
+    for q in ((src or {}).get("read_questions") or []):
+        s = str(q)
+        if s and s not in have:
+            out.setdefault("questions", []).append(
+                {"text": s, "kind": "read_failure",
+                 "slug": str(out.get("slug") or "")})
+            have.add(s)
+
+
 def plan_one(slug: str, gather=None, verify=None, probe=None,
              find=None) -> dict:
     """育てられるか調べて、新しい機種データ・記事を作る（★書き込まない★）。
@@ -1664,6 +1681,10 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     vo = verify(name, url, maker, old_release)
     if vo.get("problems"):
         out["problems"] += [f"本人性を確かめ直せません: {p}" for p in vo["problems"]]
+        # ★★型のついた失敗は、必ず問いにして返す★★（2026-09-10・CodexのP0）
+        #   ★直す前はここで戻っていた★ので、
+        #   ★育成レーンで毎朝止まる機種の問いが、どこにも出なかった★。
+        _deliver_read(out, vo)
         return out
     if old_release and vo.get("release") and vo["release"] != old_release:
         # ★★「月だけ」→「日まで」は食い違いではない★★（2026-08-21・台帳#383）
@@ -1712,6 +1733,8 @@ def plan_one(slug: str, gather=None, verify=None, probe=None,
     #   （同定で外れたページを使ってよいか、等）。
     #   材料が無いときに捨てると、**止まった機種が永久に解けない**。
     out["questions"] += [q for q in (got.get("maker_questions") or [])]
+    # ★★型のついた読み取り失敗も受け取る★★（2026-09-10・CodexのP0）
+    _deliver_read(out, got)
     # ★材料が返っても「書いてはいけない理由」があれば止める★
     #   （2026-08-05・Codex102回目の指摘1。転載の疑いなどは
     #     material が作られても新台側では公開を止めている）
@@ -2655,6 +2678,33 @@ def selftest() -> int:
                            verify=lambda *a, **k: {"problems": [],
                                                    "release": ""},
                            find=lambda *a, **k: [])
+    # ★★本人性を確かめ直せないときも、型のついた問いが出る★★
+    #   （2026-09-10・CodexのP0）★直す前はここで即座に戻っていた★ので、
+    #   ★育成レーンで毎朝止まる機種の問いが、どこにも出なかった★。
+    import read_failure as _rf_t
+    _typed_q = _rf_t.question(_rf_t.ReadFailure(
+        _rf_t.STAGE_IDENTITY_FACTS, "メーカー名と導入開始日が同じ表にある",
+        requested_url="https://p-town.dmm.com/machines/5054",
+        final_url="https://p-town.dmm.com/machines/5054",
+        observations={"style_open": 3, "style_close": 2, "tables_found": 0},
+        raw="<html>x</html>"))
+    with _st_env():
+        _idq = plan_one(
+            _ST_SLUG,
+            gather=lambda *a, **k: {"material": None, "problems": []},
+            verify=lambda *a, **k: {
+                "problems": ["基本情報の表（メーカー名・導入開始日）が"
+                             "見つかりません"],
+                "release": "", "read_questions": [_typed_q]},
+            find=lambda *a, **k: [])
+    _iqs = _idq.get("questions") or []
+    t("★★本人性を確かめ直せないときも、型のついた問いが出る★★"
+      "（★直す前はここで戻っていたので、どこにも出なかった★）",
+      bool(_iqs)
+      and any("IDENTITY_FACTS" in str(q.get("text") or "") for q in _iqs))
+    t("　問いは辞書で足す（表示側が辞書として読む）",
+      all(isinstance(q, dict) for q in _iqs))
+
     # ★★止める判断のほうが先にあると、問いが1つも作られない★★
     #   （2026-09-08・Codexの指摘）★新台側は直したが育成側が残っていた★
     #   ＝いちばん読めていない機種で、2AIに何も聞かないまま終わっていた。

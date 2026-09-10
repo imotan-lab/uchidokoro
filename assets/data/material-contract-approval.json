@@ -6,7 +6,7 @@
   "assets/data/directory-catalogs.json": "c730d480e69bb4cbbfe65edad07471fa3607045b60d7e305ea616b8273067aa7",
   "assets/data/maker-catalogs.json": "2c60a4440317ad29017265e9a5b5649c9e0f78a10a221df4e8153431f29dcbc7",
   "assets/data/source-registry.json": "2449477484e8def3fae001065de72ce208943a44487cb5dcd109a7af101f3687",
-  "scripts/add_machine_run.py": "5104bd43e7bdc9a138270f7e7cf025909f8ceb64fee5b46df7f547d0c9d0780f",
+  "scripts/add_machine_run.py": "97af3f19039c97f6b188092ccb46915fc044b40c2eb48b8d34458268fca2aa38",
   "scripts/adoption_basis.py": "905b5698f580ebe69980349fa57167b505b4c4f337af6a4f112c1a995644a0e9",
   "scripts/at_spec_lookup.py": "74f11d27f804891ec42eba1568d500405469457ed95502396fff9f3627e084f2",
   "scripts/automation_policy.py": "dfa52b049b32797962d6e7ee4757c81d31c0494284b219ff6df2081926f0e725",
@@ -32,7 +32,7 @@
   "scripts/new_machine_watch.py": "b354fe5344243db9a6f14afa5920025b0fd93a52768062caaad4e8643967d0b4",
   "scripts/page_corpus.py": "7fada297f9c552f337ef4736481f46fbb019865c0f59416914f363cf61607072",
   "scripts/page_probe.py": "25d0411b1552d018ab1e528a58be1ce1d53a4e47de68f84fc2f951ccaa1f182d",
-  "scripts/page_reading.py": "cf44537b5b7b78a606fa233b2feae150d05e63bbe880fc0b1748f9f577729233",
+  "scripts/page_reading.py": "7bf4e576cbbd7f15d9e0eb282cee8cafeb8f570e2c466cd53e7f5366a60ec983",
   "scripts/pending_machines.py": "00b3371b6372c6efd9a3e8e431eb6565c98e8cb3f1f64f1ee9855b24876d18ff",
   "scripts/read_failure.py": "be1280280387ea03708afdd281a97289c311a9aa70ef53a62dffd438de9b96fe",
   "scripts/slug_binding.py": "17c235c10cd7fed94d4c774bbe7b88c87349eff214bedaa22182d3fe79f26af6",
@@ -236,6 +236,7 @@
    "new_machine_watch"
   ],
   "scripts/page_reading.py": [
+   "html_tables",
    "read_failure"
   ],
   "scripts/pending_machines.py": [
@@ -268,5 +269,5 @@
    "read_failure"
   ]
  },
- "_deps_changed_why": "# 取り込む相手が増えた理由（2026-09-10・2回目）\n\nadd_machine_run が read_failure を取り込みます。\n\n★型のついた失敗を、そのまま2AIへの問いにするため★（CodexのP0）。\n直す前は上位で文字列に戻していたので、問いは「文言の名簿」からしか作られず、\n★新しい失敗の言い回しは名簿に載るまで問いにならなかった★。\n＝2機種が毎朝、エラーも出さずに止まっていた。\n\nread_failure はすでに材料の契約に入っています（2026-09-10・1回目）。\nここは取り込む側が増えただけで、集合そのものは変わりません。"
+ "_deps_changed_why": "# 取り込む相手が増えた理由（2026-09-10・3回目）\n\npage_reading が html_tables を取り込みます。\n\n★ラベルと値の対応を、表として読み直して確かめるため★（CodexのP1④）。\n\n★順序だけでは足りなかった★＝横持ちの表では\n  ラベル行: メーカー名 / 導入開始日\n  値の行  : 北電子   / 2026年10月5日\nとなるので、値を入れ替えても「ラベルが値より前」は両方成り立つ。\n＝メーカーの欄に導入日が入っていても気づけなかった。\n\nhtml_tables はすでに材料の契約に入っています\n（値の表を区画として読む役・2026-08-21・台帳#420）。\nここは取り込む側が増えただけで、集合そのものは変わりません。"
 }

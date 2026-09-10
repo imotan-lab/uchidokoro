@@ -142,6 +142,40 @@ def key_of(url: str, stage: str, contract: str = "") -> str:
     return f"{stage} {contract_id(contract)} {url}"
 
 
+def _label_pairs(cap: str):
+    """★根拠の範囲を表として読み直し、（ラベル, 値）の組を返す★
+
+    （2026-09-10・CodexのP1④）
+    ★縦持ちも横持ちも見る★＝
+      縦持ち … 同じ行の左が見出し・右が値
+      横持ち … 1行目が見出し・以降の行が値（同じ列で対応）
+    ★読めなければ None★（呼ぶ側が「使わない」に倒す）。
+    """
+    try:
+        import html_tables as _ht0
+        tbs = _ht0.tables(str(cap or ""))
+    except Exception:                                        # noqa: BLE001
+        return None
+    if not tbs:
+        return None
+    out = set()
+    for tb in tbs:
+        rows = [[str(c).strip() for c in r] for r in (tb.get("rows") or [])]
+        if not rows:
+            continue
+        # 縦持ち（1行が「見出し・値」）
+        for r in rows:
+            if len(r) >= 2:
+                out.add((r[0], r[1]))
+        # 横持ち（1行目が見出し・以降が値）
+        head = rows[0]
+        for r in rows[1:]:
+            for i, cell in enumerate(r):
+                if i < len(head):
+                    out.add((head[i], cell))
+    return out
+
+
 def validate(rec) -> list:
     """★どんな中身でも問題の一覧を返す★（落ちない）"""
     try:
@@ -186,20 +220,28 @@ def _validate(rec) -> list:
         if not isinstance(fields, dict) or not fields:
             ng.append("読んだ値がありません")
         elif isinstance(cap, str):
-            # ★★ラベルと値の対応まで見る★★（2026-09-10・CodexのP1）
-            #   ★直す前は「値が範囲のどこかにあれば通る」だった★ので、
-            #   メーカーの欄に導入日を入れても気づけなかった。
+            # ★★ラベルと値の対応を、表として読み直して確かめる★★
+            #   （2026-09-10・CodexのP1④）
+            #   ★順序だけでは足りない★＝横持ちの表では
+            #     ラベル行: メーカー名 / 導入開始日
+            #     値の行  : 北電子   / 2026年10月5日
+            #   となり、★値を入れ替えても「ラベルが値より前」は成り立つ★。
+            #   ★知らない項目は受け取らない★＝自由な辞書にしない。
+            pairs = _label_pairs(cap)
             for k, v in fields.items():
                 lab = FIELD_LABEL.get(k)
                 sv = str(v)
+                if not lab:
+                    ng.append(f"知らない項目です（{k}）")
+                    continue
                 if sv not in cap:
                     ng.append(f"値が根拠の範囲の中にありません（{k}）")
                     continue
-                if lab:
-                    if lab not in cap:
-                        ng.append(f"ラベルが根拠の範囲にありません（{lab}）")
-                    elif cap.find(lab) > cap.find(sv):
-                        ng.append(f"「{lab}」より前に値があります（{k}）")
+                if pairs is None:
+                    ng.append("根拠の範囲を表として読めません（使いません）")
+                    break
+                if (lab, sv) not in pairs:
+                    ng.append(f"「{lab}」の値として書かれていません（{k}）")
     if kind == WAIVE_MISSING_USER_BOX:
         miss = rec.get("waived_boxes")
         if not isinstance(miss, list) or not miss:
@@ -424,10 +466,34 @@ def selftest() -> int:                                       # noqa: C901
         _swapped = dict(rec)
         _swapped["fields"] = {"maker": "2026年10月5日",
                               "release_date": "北電子"}
-        t("★★ラベルと値が入れ替わっていたら通さない★★"
+        t("★★ラベルと値が入れ替わっていたら通さない（縦持ち）★★"
           "（★値が範囲のどこかにあれば通る、では取り違えを見つけられない★）",
-          any("より前に値があります" in x or "ラベルが" in x
-              for x in validate(_swapped)))
+          any("の値として書かれていません" in x for x in validate(_swapped)))
+        # ★★横持ちの表でも見る★★（2026-09-10・CodexのP1④）
+        #   ★順序だけの検査は、ここで破れる★＝
+        #   ラベル行が先に並ぶので、値を入れ替えても「ラベルが前」は成り立つ。
+        _WIDE = ("<table><tr><th>メーカー名</th><th>導入開始日</th></tr>"
+                 "<tr><td>北電子</td><td>2026年10月5日</td></tr></table>")
+        _w_ok = dict(rec)
+        _w_ok["evidence"] = _WIDE
+        _w_ok["fields"] = {"maker": "北電子",
+                           "release_date": "2026年10月5日"}
+        t("　横持ちの表で、正しい対応なら通る", validate(_w_ok) == [])
+        _w_ng = dict(_w_ok)
+        _w_ng["fields"] = {"maker": "2026年10月5日",
+                           "release_date": "北電子"}
+        t("★★横持ちの表で入れ替わっていたら通さない★★"
+          "（★ここが順序だけの検査では破れる★）",
+          any("の値として書かれていません" in x for x in validate(_w_ng)))
+        _unknown = dict(rec)
+        _unknown["fields"] = dict(rec.get("fields") or {})
+        _unknown["fields"]["なにかの値"] = "北電子"
+        t("　知らない項目は受け取らない（自由な辞書にしない）",
+          any("知らない項目です" in x for x in validate(_unknown)))
+        _notable = dict(rec)
+        _notable["evidence"] = "メーカー名は北電子で、導入開始日は2026年10月5日です。"
+        t("　表として読めない根拠は通さない（迷ったら使わない）",
+          any("表として読めません" in x for x in validate(_notable)))
 
         # ── 投稿欄の免除 ──────────────────────────
         _w = record("dmm_5090", "https://example.invalid/5090",

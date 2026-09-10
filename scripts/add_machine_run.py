@@ -3110,6 +3110,33 @@ def review_questions(reviews) -> list:
     return out
 
 
+def _ledger_questions(out: dict, name: str) -> None:
+    """★2AIへの問いを台帳へ載せる★（2026-09-10・CodexのP0で道具にした）
+
+    ★早期終了の側からも呼ぶ★＝直す前は公開まで進んだ機種にしか効かず、
+    ★読めなくて止まった機種ほど台帳に届かなかった★。
+    """
+    for q in out.get("ask_2ai") or []:
+        if not _ask_ledger(out.get("slug"), name, q):
+            # ★載せられなくても公開は止めない★が、黙って消さない
+            out["problems"].append(f"2AIへの質問を台帳に載せられません: {q[:80]}")
+
+
+def _deliver_read_questions(out: dict, got: dict | None = None) -> None:
+    """★型のついた失敗を、2AIへ出す列へ必ず合流させる★（2026-09-10）
+
+    ★出口を1か所にする★＝早期終了が何本あっても、ここを通れば届く。
+    ★二重に足さない★（同じ問いが並ぶと読む側が疲れる）。
+    """
+    seen = {str(q) for q in (out.get("ask_2ai") or [])}
+    for src in (got or {}, out):
+        for q in (src.get("read_questions") or []):
+            s = str(q)
+            if s and s not in seen:
+                out.setdefault("ask_2ai", []).append(s)
+                seen.add(s)
+
+
 def run_one(name, official_url, maker, release, apply_it=False,
             release_is_cache=False,
             before_write=None, expect_maker: str = "",
@@ -3123,6 +3150,11 @@ def run_one(name, official_url, maker, release, apply_it=False,
                          release_is_cache=release_is_cache,
                          expect_maker=expect_maker)
     out["problems"] += vo["problems"]
+    # ★★本人性の失敗も、問いとして持ち回る★★（2026-09-10・CodexのP0）
+    #   ★直す前は `vo` の中に置き去りだった★ので、
+    #   後段の合流に一度も届かなかった。
+    out.setdefault("read_questions", []).extend(
+        vo.get("read_questions") or [])
     # ★記事に載せるのは公式に書いてある年月★（渡された値ではない）
     release = vo["release"] or release
     # ★名前も公式（一覧カード）に書いてあるものを正とする★（Codex93回目の指摘2）
@@ -3228,8 +3260,15 @@ def run_one(name, official_url, maker, release, apply_it=False,
             _ba.unresolved_questions(
                 out["problems"], got.get("all_urls") or got.get("urls") or [],
                 complete=bool(got.get("all_urls_complete"))))
+        # ★★型のついた失敗も、ここで必ず合流させる★★
+        #   （2026-09-10・CodexのP0）★直す前は後段でしか合流していなかった★ので、
+        #   ★材料が作れなかった機種＝いちばん読めていない機種で消えていた★。
+        _deliver_read_questions(out, got)
         for q in out["ask_2ai"]:
             _log(f"  ★2AIに聞くこと: {q}")
+        # ★★止まった機種の問いも台帳へ★★（2026-09-10・CodexのP0）
+        if apply_it:
+            _ledger_questions(out, name)
         out["blocked"] = _blocking(out["problems"])
         # ★材料が足りずに早く終わるときも記録を残す★
         #   （2026-08-17・Codex依頼231。ここだけ書き忘れていた）
@@ -3318,8 +3357,7 @@ def run_one(name, official_url, maker, release, apply_it=False,
     # ★★型のついた読み取り失敗を、そのまま問いにする★★
     #   （2026-09-10・CodexのP0）★文言の名簿を通さない★＝
     #   新しい失敗の言い回しでも、必ず2AIに届く。
-    out["ask_2ai"] += [str(q) for q in (got.get("read_questions") or [])]
-    out["ask_2ai"] += [str(q) for q in (out.get("read_questions") or [])]
+    _deliver_read_questions(out, got)
     # ★★機械が読めなかったものも、必ず質問にする★★（2026-08-29・本筋）
     #   ★これが無かったので、出典は取れているのに毎晩「採用=0項目」で
     #     終わっていた★（実測：16日間・25回試して2機種とも記事にならず）。
@@ -3342,6 +3380,9 @@ def run_one(name, official_url, maker, release, apply_it=False,
     out["blocked"] = _blocking(out["problems"])
     if out["blocked"] or not usable_mat:
         _write_relation_record(created=False)
+        # ★★止めるときこそ、問いを台帳へ★★（2026-09-10・CodexのP0）
+        if apply_it:
+            _ledger_questions(out, name)
         for b in out["blocked"]:
             _log(f"  ★止めました: {b[:140]}")
         if apply_it:
@@ -3355,10 +3396,7 @@ def run_one(name, official_url, maker, release, apply_it=False,
     #   ★公開より先に載せる★（2026-08-12・依頼163の2）＝公開の途中で落ちても
     #   質問が残る。台帳は同じ題を重ねないので、毎晩鳴ることはない。
     if apply_it:
-        for q in out.get("ask_2ai") or []:
-            if not _ask_ledger(out["slug"], name, q):
-                # ★載せられなくても公開は止めない★が、黙って消さない
-                out["problems"].append(f"2AIへの質問を台帳に載せられません: {q[:80]}")
+        _ledger_questions(out, name)
     machine = _ba.build_machine(out["slug"], name, maker, official_url, release, mat)
     detail = _ba.build_detail(out["slug"], name, release, mat)
     out["preview"] = {"machine": machine, "detail": detail,
@@ -4205,6 +4243,39 @@ def selftest() -> int:
         t("★★名簿に無いメーカーでは記事そのものを作らない★★（通しで確かめる）",
           "preview" not in _bad and _bad["wrote"] == []
           and any("名簿" in x for x in _bad["blocked"]))
+        # ★★材料が作れなくても、型のついた問いは機種の出口まで届く★★
+        #   （2026-09-10・CodexのP0）★直す前は2か所で消えていた★＝
+        #   ①本人性の失敗の問いが `vo` に置き去り
+        #   ②材料なしの早期終了で合流していない
+        #   ＝★いちばん読めていない機種ほど、問いが届かなかった★。
+        _typed = _rf.question(_rf.ReadFailure(
+            _rf.STAGE_IDENTITY_FACTS, "メーカー名と導入開始日が同じ表にある",
+            requested_url="https://p-town.dmm.com/machines/5054",
+            final_url="https://p-town.dmm.com/machines/5054",
+            observations={"style_open": 3, "style_close": 2},
+            raw="<html>x</html>"))
+        _keep_vo = globals()["verify_official"]
+        _keep_ga = globals()["gather"]
+        globals()["verify_official"] = lambda *a, **k: {
+            "problems": [], "release": "2026-09",
+            "read_questions": [_typed]}
+        globals()["gather"] = lambda *a, **k: {
+            "name": "L試験機", "urls": [], "model_code": None,
+            "material": None, "problems": ["材料がありません"],
+            "read_questions": [], "unread": set(),
+            "all_urls_complete": False}
+        try:
+            _rq_out = run_one("L試験機",
+                              "https://m.example/products/slot/zzz/",
+                              "m", "2026-09")
+        finally:
+            globals()["verify_official"] = _keep_vo
+            globals()["gather"] = _keep_ga
+        t("★★材料が作れなくても、型のついた問いが機種の出口まで届く★★"
+          "（★いちばん読めていない機種ほど消えていた★）",
+          any("IDENTITY_FACTS" in str(q)
+              for q in (_rq_out.get("ask_2ai") or [])))
+
         _real_cats2 = _nw.CATALOGS
         _nw.CATALOGS = os.path.join(_tmpdir, "こわれている.json")
         with open(_nw.CATALOGS, "w", encoding="utf-8") as _f:
@@ -4572,10 +4643,17 @@ def selftest() -> int:
             #   公開の途中で落ちると、質問がどこにも残らなくなる。
             _src = inspect.getsource(run_one)
             t("★★2AIへの質問は公開より先に台帳へ載せる★★",
-              _src.index("_ask_ledger(out[\"slug\"], name, q)")
+              _src.index("_ledger_questions(out, name)")
               < _src.index("machine = _ba.build_machine("))
             t("　台帳に載せられなかったら問題として残す（黙って消さない）",
-              "2AIへの質問を台帳に載せられません" in _src)
+              "2AIへの質問を台帳に載せられません"
+              in inspect.getsource(_ledger_questions))
+            # ★★止まった機種でも台帳へ載せる★★（2026-09-10・CodexのP0）
+            #   ★直す前は公開まで進んだ機種にしか効かなかった★＝
+            #   読めなくて止まった機種ほど、翌朝のまとめに残らなかった。
+            t("★★止まった機種の問いも台帳へ載せる★★"
+              "（★いちばん読めていない機種ほど届かなかった★）",
+              _src.count("_ledger_questions(out, name)") >= 3)
             t("　質問は run_one が持ち回る（黙って捨てない）",
               'out["ask_2ai"] = _ba.checker_questions(mat)'
               in inspect.getsource(run_one))
