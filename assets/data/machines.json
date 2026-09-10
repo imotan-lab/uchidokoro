@@ -12096,31 +12096,29 @@
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
-   "indexable": false,
-   "machine_profile": "UNKNOWN",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
    "ceiling_state": "UNKNOWN",
    "confirmed_topics": [
+    "cz",
+    "gameplay",
     "setting",
     "spec"
    ],
    "pending_topics": [
-    "gameplay",
-    "cz",
     "ceiling",
     "strategy",
     "reset"
    ],
-   "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
-    "MACHINE_PROFILE_UNKNOWN"
-   ],
+   "reason_codes": [],
    "claims": [
+    "at:MAIN_AT",
+    "cz:シズノ覚醒ゾーン",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-10",
-   "input_digest": "sha256:58c1167bb17f6aa0c7200f3ce3a0ded2ba020a68164d67b50679e034d5e68d0e"
+   "decided_at": "2026-09-11",
+   "input_digest": "sha256:7807fe8477a17ea8227feb91589688c5301d70d363f59a7945a04802fe97fb4a"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-12",
