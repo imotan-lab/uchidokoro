@@ -876,6 +876,48 @@ def selftest() -> int:
       "＝コメントを閉じたページには無いため",
       {"id": "commentform"} in (_chon.get("drop") or [])
       and {"id": "commentform"} not in (_chon.get("require_before") or []))
+    # ★★隣の記事の題に見張りの語が入っていても、そのページは使える★★
+    #   （2026-09-10・実データ／Codexの指摘で回帰試験にした）
+    #   ★何が起きていたか★＝ちょんぼりすたの記事の題には
+    #   「｜みんなの評価・コメント」が付くものがあり、前後の記事は公開順で
+    #   決まるので、★隣の記事の題のせいで、その機種のページが丸ごと
+    #   出典から外れていた★（実害＝チバリヨ2は出典が1社になり、
+    #   記事のメーカー欄が「確認中」のまま直せなかった）。
+    _prnx_html = (
+        "<html><body>"
+        "<div id=\"entry\"><p>天井 999G+α 恩恵 ボーナス当選</p></div>"
+        "<ul class=\"commentlist\"><li>読者の書き込みです</li></ul>"
+        "<a href=\"/x/\" class=\"prnx pr\"><p>前の記事</p>"
+        "<div class=\"prnx_tb\"><span class=\"prev-next__text\">"
+        "スマスロ シンフォギア 正義の歌｜みんなの評価・コメント"
+        "</span></div></a>"
+        "</body></html>")
+    _prnx_url = "https://chonborista.com/slot/net-slot/205860/"
+    try:
+        _prnx_got = clean_text(_prnx_html, _prnx_url)
+        _prnx_ok = ("天井 999G" in _prnx_got
+                    and "みんなの評価" not in _prnx_got
+                    and "読者の書き込み" not in _prnx_got)
+    except Exception:                                        # noqa: BLE001
+        _prnx_got, _prnx_ok = "", False
+    t("★★隣の記事の題に「みんなの評価」があっても、そのページは使える★★"
+      "（★読者の書き込みではないのに、ページが丸ごと出典から外れていた★）",
+      _prnx_ok)
+    t("　同時に、本文は残り、読者の書き込みは落ちている",
+      "天井 999G" in _prnx_got and "読者の書き込み" not in _prnx_got)
+    # ★（対照）前後の記事ナビを落とさない決まりなら、このページは使えない★
+    _prnx_old = {**_chon,
+                 "drop": [r for r in (_chon.get("drop") or [])
+                          if r != {"class": "prnx"}]}
+    try:
+        clean_text(_prnx_html, _prnx_url, _prnx_old)
+        _prnx_ctl = False
+    except UserAreaError:
+        _prnx_ctl = True
+    t("　（対照）前後の記事ナビを落とさない決まりでは、このページは使えない"
+      "（＝この決まりが唯一の効き目であることの証拠）",
+      _prnx_ctl)
+
     t("　なな徹はまだ登録しない（構造を確かめていないため）",
       _conf("nana-press.com") == {})
     # ★★必須アンカーは機種ページにだけ求める（2026-08-15）★★
