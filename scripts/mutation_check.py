@@ -2391,6 +2391,17 @@ MUTATIONS = [
         "run": ["scripts/user_area.py"],
     },
     {
+        "why": "★合意の名簿を、記事を直す道具とずらす★"
+               "（★2AIが決めた直しが記事に届かないのに、"
+               "誰も気づかない・実際に9日間そうだった★）",
+        # ★この守りが直したことを証明する案件★
+        "issues": [614],
+        "file": "scripts/repair_journal.py",
+        "before": 'ALLOWED_OPS = ("drop", "replace", "drop_line", "drop_sentence", "split_row")',
+        "after": 'ALLOWED_OPS = ("drop", "replace", "drop_line")',
+        "run": ["scripts/repair_journal.py"],
+    },
+    {
         "why": "★別の段の答えでも免除する★"
                "（★投稿欄の失敗を、値を読む免除で迂回できてしまう★）",
         "file": "scripts/page_reading.py",

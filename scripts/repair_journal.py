@@ -91,7 +91,16 @@ MAX_ATTEMPTS = 3          # ★その晩のうちに3回まで★（CLAUDE.md �
 #     言い換えでは直せない誤り（別機能の説明・条件を落とした数値）のために足した。
 #     消す条件は decide_now 側が見る（理由・数値の名指し・節が空にならない・
 #     場所が一つに定まる・消した中身を控えに残す）。
-ALLOWED_OPS = ("drop", "replace", "drop_line")
+# ★記事を直す道具が扱える操作と、必ずそろえる★（2026-09-10・台帳#614）
+#   ★ずれていた★＝道具は5つ扱えるのに、ここが3つしか受け取らず、
+#   `drop_sentence` と `split_row` は★合意に進めないので一度も使えなかった★。
+#   （2026-09-01に道具へ足したとき、こちらへ足し忘れた）
+#   ＝2AIが「消すべき」と一致した文が、記事に届かないまま残っていた。
+#   ★守りは decide_now 側にある★＝
+#     drop_sentence … 落とす場所がちょうど1か所／落とす文の数値を全部名指し
+#     split_row     … 文字を1つも増やさない（元のセル＝分けたセルの連結）
+#   なので、ここに足しても守りは緩まない。
+ALLOWED_OPS = ("drop", "replace", "drop_line", "drop_sentence", "split_row")
 
 
 class JournalError(Exception):
@@ -800,6 +809,32 @@ def listing(state: str | None = None) -> list:
     return out
 
 
+def _ops_in_sync() -> tuple:
+    """★記事を直す道具と、合意の名簿がそろっているか★（2026-09-10・台帳#614）
+
+    ★足すだけでは同じことが起きる★＝次に操作を1つ足したとき、
+    また片方だけになる。だから機械に見張らせる。
+    ★見るのは道具の側の判定★＝`decide_now` が「知らない操作です」と断る、
+    その名簿と突き合わせる。
+    返すもの: (こちらに足りないもの, こちらにだけ余分なもの)
+    """
+    try:
+        import decide_now as _dn
+        import inspect as _in
+        src = _in.getsource(_dn.load_decision) if hasattr(
+            _dn, "load_decision") else _in.getsource(_dn)
+    except Exception:                                        # noqa: BLE001
+        return ["決められません（道具を読めません）"], []
+    import re as _re
+    m = _re.search(r'op"\)\s+not\s+in\s+\(([^)]*)\)', src, _re.S)
+    if not m:
+        return ["決められません（道具の名簿が見つかりません）"], []
+    known = set(_re.findall(r'"([a-z_]+)"', m.group(1)))
+    if not known:
+        return ["決められません（道具の名簿が空です）"], []
+    return sorted(known - set(ALLOWED_OPS)), sorted(set(ALLOWED_OPS) - known)
+
+
 def _selftest() -> int:
     import shutil
     import tempfile
@@ -812,6 +847,13 @@ def _selftest() -> int:
         print(("OK   " if cond else "NG   ") + name)
         if not cond:
             ng.append(name)
+
+    _missing, _extra = _ops_in_sync()
+    t("★★記事を直す道具と、合意の名簿がそろっている★★"
+      "（★ずれると、2AIが決めた直しが記事に届かない★）",
+      not _missing and not _extra)
+    if _missing or _extra:
+        print("   足りない:", _missing, "／ 余分:", _extra)
 
     td = tempfile.mkdtemp()
     keep = globals()["STORE"]
