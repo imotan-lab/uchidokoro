@@ -12083,5 +12083,55 @@
    ],
    "normal": {}
   }
+ },
+ {
+  "slug": "dmm_5109",
+  "name": "スマスロゼーガペインETR",
+  "seo": {
+   "title": "スマスロゼーガペインETR スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": false,
+   "machine_profile": "UNKNOWN",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [
+    "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3",
+    "CATEGORIES_LT_2",
+    "MACHINE_PROFILE_UNKNOWN"
+   ],
+   "claims": [
+    "payout_rate"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-09-10",
+   "input_digest": "sha256:58c1167bb17f6aa0c7200f3ce3a0ded2ba020a68164d67b50679e034d5e68d0e"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-12",
+  "identity": {
+   "manufacturer_id": "yamasa_next",
+   "official_product_url": "https://p-town.dmm.com/machines/5109",
+   "announced_name": "スマスロゼーガペインETR",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5109 型式=未掲載 メーカー=山佐ネクスト 導入=2026-12 確認日=2026-09-10",
+   "market_release_date": "2026-12"
+  }
  }
 ]
