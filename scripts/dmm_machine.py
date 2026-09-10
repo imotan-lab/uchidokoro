@@ -392,6 +392,72 @@ def _fixture(name: str) -> str:
     return io.open(p, encoding="utf-8").read()
 
 
+def _read_failure_tests(t) -> None:
+    """★閉じ忘れのページで、2AIの答えを使えるか★（2026-09-10・台帳#609）
+
+    ★実際に踏んだ形★＝出典ページの `<style>` が1つ閉じておらず、
+    後ろが全部CSSの中身とみなされて表が1つも読めない。
+    ★直す前は例外で終わり★＝その機種は毎朝止まり、問いも出なかった。
+    """
+    import os as _o
+    import tempfile as _tf
+    import page_reading as _pr
+    import read_failure as _rf
+
+    _keep = _pr.STORE
+    _pr.STORE = _o.path.join(_tf.mkdtemp(prefix="uchi_dm609_"),
+                             "page_reading.json")
+    try:
+        _mid = "5054"
+        _url = f"https://p-town.dmm.com/machines/{_mid}"
+        _spec = ("<table><tr><th>メーカー名</th><td>北電子</td></tr>"
+                 "<tr><th>導入開始日</th><td>2026年10月5日</td></tr></table>")
+        _html = ("<html><head>"
+                 f'<link rel="canonical" href="{_url}">'
+                 "<style>a{color:red}</style>"
+                 '<style type="text/css">.x{color:blue}'      # ★閉じ忘れ★
+                 "</head><body><h1>パチスロ マイジャグラーVI</h1>"
+                 + _spec + "</body></html>")
+        t("　（前提）閉じ忘れで表が1つも読めない", len(_ht.tables(_html)) == 0)
+        _typed = None
+        try:
+            parse(_html, _mid)
+        except MachineError as e:
+            _typed = e
+        t("★★閉じ忘れで読めないとき、型のついた失敗として投げる★★"
+          "（★直す前は文章だけで、2AIへの問いにならなかった★）",
+          _typed is not None
+          and getattr(_typed, "stage", "") == _rf.STAGE_IDENTITY_FACTS
+          and getattr(_typed, "observations", {}).get("style_close") == 1)
+        _pr.record("dmm_5054", _url, _rf.STAGE_IDENTITY_FACTS, _pr.READ_FACTS,
+                   raw=_html,
+                   failed_contract="メーカー名と導入開始日が同じ表にある",
+                   agreed_by=["claude", "codex"],
+                   why="閉じていない飾りの後ろにある表を生HTMLから読みました",
+                   decided_at="2026-09-10", evidence=_spec,
+                   evidence_scope=_pr.RAW_RESPONSE,
+                   fields={"maker": "北電子",
+                           "release_date": "2026年10月5日"})
+        # ★例外で落ちるのを「止まった」と数えない★（罠⑤）
+        try:
+            _got = parse(_html, _mid)
+        except MachineError as _e2:
+            _got = {"落ちました": type(_e2).__name__}
+        t("★★2AIが根拠の範囲つきで答えたら、そのまま進める★★"
+          "（★相手が直すまで永久に止まる、をやめる★）",
+          _got.get("maker") == "北電子"
+          and _got.get("release_date") == "2026-10-05")
+        _dup = _html.replace("</body>", _spec + "</body>")
+        _blocked = False
+        try:
+            parse(_dup, _mid)
+        except MachineError:
+            _blocked = True
+        t("　（対照）同じ範囲が2か所あるページでは通さない", _blocked)
+    finally:
+        _pr.STORE = _keep
+
+
 def selftest() -> int:
     results = []
 
@@ -399,6 +465,8 @@ def selftest() -> int:
         results.append((name, bool(cond)))
         print(("✅ " if cond else "❌ ") + name)
 
+
+    _read_failure_tests(t)
     def raises(fn, word=""):
         try:
             fn()

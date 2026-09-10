@@ -2371,6 +2371,26 @@ MUTATIONS = [
         "run": ["scripts/grow_machine.py"],
     },
     {
+        "why": "★閉じ忘れのページで、2AIが読んだ値を使わない★"
+               "（★相手が書き間違いを直すまで、その機種は永久に止まる★）",
+        # ★この守りが直したことを証明する案件★
+        "issues": [609],
+        "file": "scripts/dmm_machine.py",
+        "before": '        _f = _facts_from_2ai(html, want_id)',
+        "after": '        _f = {}',
+        "run": ["scripts/dmm_machine.py"],
+    },
+    {
+        "why": "★必須の箱が無いページを、2AIが決めても使わない★"
+               "（★件数はあるのに一覧が無い作りの機種が、静かに止まり続ける★）",
+        # ★この守りが直したことを証明する案件★
+        "issues": [610],
+        "file": "scripts/user_area.py",
+        "before": '        _waived = _waiver_for(url, html, _names)',
+        "after": '        _waived = False',
+        "run": ["scripts/user_area.py"],
+    },
+    {
         "why": "★別の段の答えでも免除する★"
                "（★投稿欄の失敗を、値を読む免除で迂回できてしまう★）",
         "file": "scripts/page_reading.py",

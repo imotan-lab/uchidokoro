@@ -713,6 +713,64 @@ def _all_required_checked() -> bool:
         return True
 
 
+def _waiver_tests(t) -> None:
+    """★必須の箱が無いページを、2AIの判断で続けられるか★（台帳#610）
+
+    ★実際に踏んだ形★＝「口コミ2件」と書いてあるのに一覧の箱がHTMLに無い。
+    ★直す前はページを丸ごと出典から外していた★（問いも出ない）。
+    """
+    import os as _o
+    import tempfile as _tf
+    import page_reading as _pr
+    import read_failure as _rf
+
+    _keep = _pr.STORE
+    _pr.STORE = _o.path.join(_tf.mkdtemp(prefix="uchi_ua610_"),
+                             "page_reading.json")
+    try:
+        _url = "https://p-town.dmm.com/machines/5090"
+        _html = ("<html><body>"
+                 "<div class='machine-userreview'>"
+                 "<p class='label'>ユーザー評価"
+                 "<span class='count'>（2件）</span></p>"
+                 "<a href='/machines/5090/review'>口コミをもっと見る</a>"
+                 "</div>"
+                 "<div class='list-machineinformation'>"
+                 "<table><tr><th>メーカー名</th><td>ユニバーサル</td></tr>"
+                 "</table></div>"
+                 "<div class='wysiwyg-box'>本文です。</div>"
+                 "</body></html>")
+        _typed = None
+        try:
+            clean_html(_html, _url)
+        except UserAreaError as e:
+            _typed = e
+        t("★★必須の箱が無いとき、型のついた失敗として投げる★★"
+          "（★直す前は文章だけで、2AIへの問いにならなかった★）",
+          _typed is not None
+          and getattr(_typed, "stage", "") == _rf.STAGE_USER_AREA
+          and "list-machinesreviews"
+          in str(getattr(_typed, "observations", {}).get("missing_boxes", "")))
+        _pr.record("dmm_5090", _url, _rf.STAGE_USER_AREA,
+                   _pr.WAIVE_MISSING_USER_BOX, raw=_html,
+                   failed_contract="件数が1件以上なら投稿欄の一覧の箱がある",
+                   agreed_by=["claude", "codex"],
+                   why="件数の表示はあるが、書き込みの本文はこのHTMLに無い",
+                   decided_at="2026-09-10",
+                   waived_boxes=["list-machinesreviews"],
+                   quotes=["ユーザー評価", "/machines/5090/review"])
+        # ★例外で落ちるのを「止まった」と数えない★（罠⑤）
+        try:
+            _out = clean_html(_html, _url)
+        except UserAreaError as _e3:
+            _out = "落ちました: " + type(_e3).__name__
+        t("★★2AIが決めたら、その箱の不足だけ免除して続ける★★"
+          "（★ページを丸ごと外す、をやめる★）",
+          "machine-userreview" not in _out and "メーカー名" in _out)
+    finally:
+        _pr.STORE = _keep
+
+
 def selftest() -> int:
     results = []
 
@@ -720,6 +778,8 @@ def selftest() -> int:
         results.append((name, bool(cond)))
         print(("✅ " if cond else "❌ ") + name)
 
+
+    _waiver_tests(t)
     ua = {"hosts": ["p-world.co.jp"],
           "drop": [{"id": "bbs"}],
           "markers": ["AIがまとめた内容", "AI投稿まとめ"]}

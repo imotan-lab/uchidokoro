@@ -18,7 +18,7 @@
   "scripts/directory_index.py": "a758913881d5b7b6105069e5f3dfcb3e5a64aa2054578094d517166240ad2e21",
   "scripts/dmm_calendar.py": "ad0ae2ffb3977307cf361e4a137288e9bccdd1f15fb43e560aa629c5942a6930",
   "scripts/dmm_discover.py": "894d76b027c1508020d71640a74f3f0a02fbd8d6a1d42e3a15a2e8764d008592",
-  "scripts/dmm_machine.py": "7cb062f4cad514dd587f1c1babc470292f7c3354e609c4409bbd757e00bbdaff",
+  "scripts/dmm_machine.py": "68bfad5ca2550185329bf175daee73d6718846be444cea83407a838e8f05304f",
   "scripts/fetched_page.py": "f0eaf1040f4fed5d473efab065396c1b84820bf5a93b62ef20777baf342dcfbd",
   "scripts/html_check.py": "2d58882be96adbeb8710638ccb47d3f784ab3d1b091f5eff74894ca7bba1d112",
   "scripts/html_tables.py": "5d0f32d7e988ce0696e07b4ac118d119ea4c4e2280b57acee89e0c6ebaa78c3e",
@@ -38,7 +38,7 @@
   "scripts/slug_binding.py": "17c235c10cd7fed94d4c774bbe7b88c87349eff214bedaa22182d3fe79f26af6",
   "scripts/source_lineage.py": "706cbbd437ba491995e233e9758a73f7672e27a47021cfc1274f0c2e9d9f79ed",
   "scripts/spec_lookup.py": "8c165305e7fb540dc7c517b5d40101b0b2cf8a216255ca3099b607c3b9d58bfe",
-  "scripts/user_area.py": "a617bdbacc91ecebaf031959ceb31050d1744428385ba971495a34b2a0cb9c1b"
+  "scripts/user_area.py": "272ef68504335c7265a298158b49ff69b1ef69c5058a4058cd51f69c9a33a41b"
  },
  "imports": {
   "scripts/add_machine_run.py": [
@@ -268,6 +268,5 @@
    "page_reading",
    "read_failure"
   ]
- },
- "_deps_changed_why": "# 取り込む相手が増えた理由（2026-09-10・3回目）\n\npage_reading が html_tables を取り込みます。\n\n★ラベルと値の対応を、表として読み直して確かめるため★（CodexのP1④）。\n\n★順序だけでは足りなかった★＝横持ちの表では\n  ラベル行: メーカー名 / 導入開始日\n  値の行  : 北電子   / 2026年10月5日\nとなるので、値を入れ替えても「ラベルが値より前」は両方成り立つ。\n＝メーカーの欄に導入日が入っていても気づけなかった。\n\nhtml_tables はすでに材料の契約に入っています\n（値の表を区画として読む役・2026-08-21・台帳#420）。\nここは取り込む側が増えただけで、集合そのものは変わりません。"
+ }
 }
