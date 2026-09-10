@@ -48,6 +48,7 @@ import build_new_article as _ba       # noqa: E402
 import check_duplicate as _cd        # noqa: E402
 import at_spec_lookup as _at        # noqa: E402
 import fetched_page as _fp           # noqa: E402
+import read_failure as _rf           # noqa: E402
 import os as _os_lp                 # noqa: E402
 import sys as _sys_lp               # noqa: E402
 _sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
@@ -1036,6 +1037,13 @@ def _gather(name: str, maker: str = "", slug: str = "",
         except _fp.PageError as e:        # noqa: BLE001
             _log(f"  （取れないので材料から外します）{_u} → {str(e)[:90]}")
             got["problems"].append(f"材料のページを取れません: {str(e)[:100]}")
+            # ★★型のついた失敗は、そのまま2AIへの問いにする★★
+            #   （2026-09-10・CodexのP0）★直す前はここで文字列にして捨てていた★ので、
+            #   問いは「文言の名簿」に載っている言い回しでしか作られなかった。
+            #   ＝新しい失敗が増えるたびに名簿を足す羽目になっていた。
+            _q2 = _rf.question_for(e)
+            if _q2:
+                got.setdefault("read_questions", []).append(_q2)
             _drop.add(_u)
             continue
         # ★★取りに行った先と着いた先が違うページは使わない★★
@@ -1737,6 +1745,10 @@ def _verify_dmm(name: str, official_url: str, maker: str,
     try:
         got = _dm.fetch(mid)
     except _dm.MachineError as e:
+        # ★型のついた失敗なら、問いも一緒に返す★（2026-09-10・CodexのP0）
+        _q3 = _rf.question_for(e)
+        if _q3:
+            out.setdefault("read_questions", []).append(_q3)
         return _ng(str(e)[:220])
     ok, why = _dm.name_matches(got["heading"], name)
     if not ok:
@@ -3303,6 +3315,11 @@ def run_one(name, official_url, maker, release, apply_it=False,
     #   （2026-09-08・台帳#585）★溜めておいたものをここで足す★＝
     #   `ask_2ai` は上の行で丸ごと作り直されるので、先に足すと消える。
     out["ask_2ai"] += review_questions(_rv_review)
+    # ★★型のついた読み取り失敗を、そのまま問いにする★★
+    #   （2026-09-10・CodexのP0）★文言の名簿を通さない★＝
+    #   新しい失敗の言い回しでも、必ず2AIに届く。
+    out["ask_2ai"] += [str(q) for q in (got.get("read_questions") or [])]
+    out["ask_2ai"] += [str(q) for q in (out.get("read_questions") or [])]
     # ★★機械が読めなかったものも、必ず質問にする★★（2026-08-29・本筋）
     #   ★これが無かったので、出典は取れているのに毎晩「採用=0項目」で
     #     終わっていた★（実測：16日間・25回試して2機種とも記事にならず）。
@@ -3532,6 +3549,43 @@ def selftest() -> int:
         g2 = gather("L試験機")
         t("　2件そろえば型式名と材料を集める",
           g2["model_code"] == "L1" and g2["material"] is not None)
+
+        # ★★名簿に無い言い回しの失敗でも、2AIへの問いになる★★
+        #   （2026-09-10・CodexのP0）★直す前は「文言の名簿」頼りだった★ので、
+        #   新しい失敗の言い回しは名簿に載るまで問いにならず、
+        #   2機種が毎朝エラーも出さずに止まっていた。
+        #   ★本番の `gather` を通す★＝作るだけで捨てていないことも見る。
+        _di.find = lambda n, c=None: {"results": {
+            k: {"state": "FOUND", "url": f"https://{h}/1", "why": "",
+                "candidates": [], "surfaces": "1/1", "index_size": 9,
+                "problems": []}
+            for k, h in (("a", "chonborista.com"), ("b", "nana-press.com"))}}
+        _keep_f_rq = _fp.fetch
+
+        def _fetch_typed(u, purpose="claim_material", get=None):
+            if "nana-press" in u:
+                _e = _fp.PageError("ぜんぜん違う言い方の失敗です")
+                _e.stage = _rf.STAGE_USER_AREA
+                _e.failed_contract = "件数が1件以上なら投稿欄の一覧の箱がある"
+                _e.observations = {"missing_boxes": "list-machinesreviews"}
+                _e.url = u
+                _e.raw = "<html>x</html>"
+                raise _e
+            return _keep_f_rq(u, purpose, get)
+
+        _fp.fetch = _fetch_typed
+        try:
+            _grq = gather("L試験機")
+        finally:
+            _fp.fetch = _keep_f_rq
+        _rqs = _grq.get("read_questions") or []
+        t("★★名簿に無い言い回しの失敗でも、2AIへの問いになる★★"
+          "（★繋がっていないと、新しい失敗のたびに名簿を足す羽目になる★）",
+          bool(_rqs) and "USER_AREA" in _rqs[0]
+          and "件数が1件以上なら投稿欄の一覧の箱がある" in _rqs[0]
+          and "missing_boxes=list-machinesreviews" in _rqs[0])
+        t("　（対照）型のついていない失敗は問いにしない",
+          _rf.question_for(ValueError("ただの失敗")) == "")
 
         # ★★3件見つかって1件取れないとき、通しで確かめる★★
         #   （2026-09-08・Codexの指摘）

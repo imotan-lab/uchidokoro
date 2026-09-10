@@ -66,7 +66,22 @@ _MAKER_TAIL = "の掲載機種一覧"
 
 
 class MachineError(Exception):
-    """機種ページを同定に使えない（★迷ったら使わない★）。"""
+    """機種ページを同定に使えない（★迷ったら使わない★）。
+
+    ★型のついた情報を持ち回る★（2026-09-10）＝
+    直す前は文章だけだったので、問いを作る側が文中の語句を探していた。
+    新しい失敗の言い回しは名簿に載るまで問いにならなかった。
+    """
+
+    def __init__(self, msg: str, *, stage: str = "", failed_contract: str = "",
+                 observations: dict | None = None, url: str = "",
+                 raw: str = ""):
+        super().__init__(msg)
+        self.stage = stage
+        self.failed_contract = failed_contract
+        self.observations = dict(observations or {})
+        self.url = url
+        self.raw = raw
 
 
 def _one(pairs: list, label: str) -> str:
@@ -140,6 +155,49 @@ def _maker_of(raw: str) -> str:
     return head
 
 
+def _rf0():
+    """★型のついた出来事★（読み込みの輪を作らないよう、使うときに取り込む）"""
+    import read_failure as _m
+    return _m
+
+
+def _canon_url(want_id: str) -> str:
+    return f"https://p-town.dmm.com/machines/{want_id}" if want_id else ""
+
+
+def _html_observations(html: str) -> dict:
+    """★機械が数えたことだけ★を返す（解釈はしない）"""
+    import re as _re
+    t = str(html or "")
+    return {
+        "style_open": len(_re.findall(r"<style\b", t, _re.I)),
+        "style_close": len(_re.findall(r"</style\s*>", t, _re.I)),
+        "script_open": len(_re.findall(r"<script\b", t, _re.I)),
+        "script_close": len(_re.findall(r"</script\s*>", t, _re.I)),
+        "tables_found": len(_ht.tables(t)),
+        "html_length": len(t),
+    }
+
+
+def _facts_from_2ai(html: str, want_id: str) -> dict:
+    """★2AIが読んだ基本情報★（無ければ空・確かめられなければ空）"""
+    try:
+        import page_reading as _pr
+        url = _canon_url(want_id)
+        if not url:
+            return {}
+        rec = _pr.find(url, _rf0().STAGE_IDENTITY_FACTS,
+                       "メーカー名と導入開始日が同じ表にある")
+        if not rec:
+            return {}
+        ok, _why = _pr.verify(rec, html,
+                              stage=_rf0().STAGE_IDENTITY_FACTS,
+                              labels=["メーカー名", "導入開始日"])
+        return dict(rec.get("fields") or {}) if ok else {}
+    except Exception:                                        # noqa: BLE001
+        return {}
+
+
 def parse(html: str, want_id: str = "") -> dict:
     """機種ページを読む。★足りなければ例外★"""
     if not html:
@@ -179,11 +237,28 @@ def parse(html: str, want_id: str = "") -> dict:
             spec = tb
             break
     if spec is None:
-        raise MachineError("基本情報の表（メーカー名・導入開始日）が"
-                           "見つかりません")
-    code = _one(spec["pairs"], "型式名")
-    maker = _maker_of(_one(spec["pairs"], "メーカー名"))
-    rel_raw = _one(spec["pairs"], "導入開始日")
+        # ★★2AIが読んだ値があれば、それを使って続ける★★
+        #   （2026-09-10・運営者の基本方針「機械的にやってだめな場合は2AI」）
+        #   ★実際に起きたこと★＝出典ページの `<style>` が1つ閉じておらず、
+        #   後ろが全部CSSの中身とみなされて、表が1つも読めなかった。
+        #   ★確かめること★＝根拠の範囲がいまのページに1か所だけ在り、
+        #   その中に両方のラベルと両方の値が入っていること。
+        _f = _facts_from_2ai(html, want_id)
+        if not _f:
+            raise MachineError(
+                "基本情報の表（メーカー名・導入開始日）が見つかりません"
+                "／★2AIにこのページを読んでもらってください★",
+                stage=_rf0().STAGE_IDENTITY_FACTS,
+                failed_contract="メーカー名と導入開始日が同じ表にある",
+                observations=_html_observations(html),
+                url=_canon_url(want_id), raw=html)
+        code = str(_f.get("model_code") or "")
+        maker = _maker_of(str(_f.get("maker") or ""))
+        rel_raw = str(_f.get("release_date") or "")
+    else:
+        code = _one(spec["pairs"], "型式名")
+        maker = _maker_of(_one(spec["pairs"], "メーカー名"))
+        rel_raw = _one(spec["pairs"], "導入開始日")
     d = _DATE.search(rel_raw)
     # ② 足りなければ同定できない（★型式名は任意★）
     miss = [n for n, v in (("メーカー", maker),

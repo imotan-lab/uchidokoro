@@ -2302,6 +2302,89 @@ MUTATIONS = [
         "run": ["scripts/confirmed_values.py"],
     },
     {
+        "why": "★型のついた失敗を、問いにせず捨てる★"
+               "（★問いは文言の名簿頼りに戻り、新しい失敗は静かに止まる★）",
+        "file": "scripts/add_machine_run.py",
+        "before": '            _q2 = _rf.question_for(e)',
+        "after": '            _q2 = ""',
+        "run": ["scripts/add_machine_run.py"],
+    },
+    {
+        "why": "★鍵に「満たせなかった契約」を入れない★"
+               "（★同じ段の別の失敗に、前の答えが流用・上書きされる★）",
+        "file": "scripts/page_reading.py",
+        "before": '    return f"{stage} {contract_id(contract)} {url}"',
+        "after": '    return f"{stage} {url}"',
+        "run": ["scripts/page_reading.py"],
+    },
+    {
+        "why": "★問いの書き方が変わっても、古い答えを通す★"
+               "（★聞き方の意味を変えても、前の判断がそのまま効く★）",
+        "file": "scripts/page_reading.py",
+        "before": '    if str(rec.get("asked_schema") or "") != _rf.ASK_SCHEMA:',
+        "after": '    if False:',
+        "run": ["scripts/page_reading.py"],
+    },
+    {
+        "why": "★ラベルと値の対応を見ない★"
+               "（★メーカーの欄に導入日が入っていても気づけない★）",
+        "file": "scripts/page_reading.py",
+        "before": '                    elif cap.find(lab) > cap.find(sv):',
+        "after": '                    elif False:',
+        "run": ["scripts/page_reading.py"],
+    },
+    {
+        "why": "★「使わない」を、ページが直っても効かせ続ける★"
+               "（★相手が直して読める状態になっても、その機種は止まったまま★）",
+        "file": "scripts/page_reading.py",
+        'before': ('        if _rf.sha256(raw) != str(rec.get("raw_sha256")):\n'
+                   '            return False, "ページが変わっているので、「使わない」は効かせません"\n'
+                   '        return False, "2AIが「このページは使わない」と決めています"'),
+        'after': '        return False, "2AIが「このページは使わない」と決めています"',
+        "run": ["scripts/page_reading.py"],
+    },
+    {
+        "why": "★別の段の答えでも免除する★"
+               "（★投稿欄の失敗を、値を読む免除で迂回できてしまう★）",
+        "file": "scripts/page_reading.py",
+        "before": '    if rec.get("stage") != stage:',
+        "after": '    if False:',
+        "run": ["scripts/page_reading.py"],
+    },
+    {
+        "why": "★根拠の範囲が何か所あっても通す★"
+               "（★2AIが似た別の表から拾ってきても分からなくなる★）",
+        "file": "scripts/page_reading.py",
+        "before": '        if n > 1:',
+        "after": '        if False:',
+        "run": ["scripts/page_reading.py"],
+    },
+    {
+        "why": "★控えに無い箱まで免除する★"
+               "（★1つ免除したら、あとから足された投稿欄も通ってしまう★）",
+        "file": "scripts/page_reading.py",
+        "before": '        if not now <= want:',
+        "after": '        if False:',
+        "run": ["scripts/page_reading.py"],
+    },
+    {
+        "why": "★投稿欄の免除で、ページが変わっても効かせ続ける★"
+               "（★未知の名前の箱で書き込みが足されても気づけない★）",
+        "file": "scripts/page_reading.py",
+        "before": '        if str(rec.get("raw_sha256")) != _rf.sha256(raw):',
+        "after": '        if False:',
+        "run": ["scripts/page_reading.py"],
+    },
+    {
+        "why": "★読めなかったことを、型ではなく文章だけで投げる★"
+               "（★問いを作る側が文中の語句を探すので、"
+               "新しい失敗は名簿に載るまで問いにならない★）",
+        "file": "scripts/read_failure.py",
+        "before": '        if stage not in STAGES:',
+        "after": '        if False:',
+        "run": ["scripts/read_failure.py"],
+    },
+    {
         "why": "★名鑑の一覧を読めなかったことを数えない★"
                "（★票がそろうと記録から消えるので、"
                "『2件は読めた・3件目は一覧が壊れていた』でも『全部』になる★）",

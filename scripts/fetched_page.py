@@ -102,7 +102,15 @@ def fetch(url: str, purpose: str = "claim_material", get=None) -> FetchedPage:
     try:
         cleaned = _ua.clean_html(raw or "", url)
     except Exception as e:                 # noqa: BLE001
-        raise PageError(f"投稿欄を落としきれません（{url}）: {str(e)[:120]}")
+        # ★★包み直しても、型のついた情報を落とさない★★
+        #   （2026-09-10・CodexのP0）★直す前はここで文字列になっていた★ので、
+        #   上位は「どの段で何が満たせなかったか」を知りようがなく、
+        #   問いは文言の名簿頼りのままだった。
+        _pe = PageError(f"投稿欄を落としきれません（{url}）: {str(e)[:120]}")
+        for _k in ("stage", "failed_contract", "observations", "url", "raw"):
+            if hasattr(e, _k):
+                setattr(_pe, _k, getattr(e, _k))
+        raise _pe
     # ★★掃除のあとに投稿欄が残っていないか★★（2026-08-24・Codexの14回目）
     #   ★行切りは文章にしか効かない★＝天井・スペック・AT・CZは
     #   **HTMLの表を直接読む**ので、投稿欄の中に表があれば材料に入る。

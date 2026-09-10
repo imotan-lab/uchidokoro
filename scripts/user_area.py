@@ -55,7 +55,23 @@ CATALOGS = os.path.join(BASE, "assets", "data", "directory-catalogs.json")
 
 
 class UserAreaError(Exception):
-    """投稿欄を落としきれない（★そのページは使わない★）。"""
+    """投稿欄を落としきれない（★そのページは使わない★）。
+
+    ★型のついた情報を持ち回る★（2026-09-10）＝
+    直す前は文章だけだったので、★問いを作る側が文中の語句を探していた★。
+    新しい失敗の言い回しは名簿に載るまで問いにならず、
+    実際に1機種が毎朝静かに止まっていた。
+    """
+
+    def __init__(self, msg: str, *, stage: str = "", failed_contract: str = "",
+                 observations: dict | None = None, url: str = "",
+                 raw: str = ""):
+        super().__init__(msg)
+        self.stage = stage
+        self.failed_contract = failed_contract
+        self.observations = dict(observations or {})
+        self.url = url
+        self.raw = raw
 
 
 def _conf(host: str) -> dict:
@@ -260,10 +276,21 @@ def visible_text(html: str, url: str = "", conf: dict | None = None) -> str:
     miss_b = [r for r in need_b
               if _required_now(r) and not _find(root, [r])]
     if miss_b:
-        raise UserAreaError(
-            f"落とすはずの箱が見つかりません（{miss_b}）"
-            "／★このページは出典に使いません★"
-            "（相手のHTMLの作りが変わった可能性があります）")
+        # ★★2AIが「この箱は無くてよい」と決めていれば、それだけ免除する★★
+        #   （2026-09-10・運営者の基本方針「機械的にやってだめな場合は2AI」）
+        #   ★免除できるのは控えに書かれた箱だけ★＝
+        #   落とし損ねの見張りも、落としたあとの本文の検査も今までどおり通す。
+        _names = [_box_name(r) for r in miss_b]
+        _waived = _waiver_for(url, html, _names)
+        if not _waived:
+            # ★型のついた出来事で投げる★＝文言の名簿に頼らず問いになる
+            raise UserAreaError(
+                f"落とすはずの箱が見つかりません（{miss_b}）"
+                "／★2AIにこのページを読んでもらってください★",
+                stage=_rf0().STAGE_USER_AREA,
+                failed_contract="件数が1件以上なら投稿欄の一覧の箱がある",
+                observations={"missing_boxes": ",".join(_names)},
+                url=url, raw=html)
     dropped = strip_tree(root, rules)
     # ★落とした後に「本文の箱」が残っているか確かめる★
     #   落としすぎ（機種データごと消える）にも気づけるようにする。
@@ -586,6 +613,39 @@ def looks_like_user_area(html: str) -> list:
     except Exception:                                        # noqa: BLE001
         return ["組み立てられないHTML"]                      # ★使わない側に倒す★
     return sorted(set(found))
+
+
+def _rf0():
+    """★型のついた出来事★（読み込みの輪を作らないよう、使うときに取り込む）"""
+    import read_failure as _m
+    return _m
+
+
+def _box_name(r: dict) -> str:
+    """★決まりごとの箱を、人が読める短い名前にする★（class か id か tag）"""
+    for k in ("class", "id", "tag", "selector"):
+        v = (r or {}).get(k)
+        if v:
+            return str(v)
+    return str(r)
+
+
+def _waiver_for(url: str, html: str, names: list) -> bool:
+    """★2AIが「この箱は無くてよい」と決めているか★
+
+    ★控えが無い・読めない・確かめられないときは False★（fail-closed）。
+    """
+    try:
+        import page_reading as _pr
+        rec = _pr.find(url, _rf0().STAGE_USER_AREA,
+                       "件数が1件以上なら投稿欄の一覧の箱がある")
+        if not rec:
+            return False
+        ok, _why = _pr.verify(rec, html, stage=_rf0().STAGE_USER_AREA,
+                              missing_boxes=names)
+        return bool(ok)
+    except Exception:                                        # noqa: BLE001
+        return False
 
 
 def clean_html(html: str, url: str = "", conf: dict | None = None) -> str:
