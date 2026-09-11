@@ -830,8 +830,16 @@ function resolveMachineSlug() {
       // ★交換率別の狙い目文が無いときは、選択中のチェッカーから組み立てる★
       //   自由文を機種ごとに増やすとチェッカーと再び分岐するので、
       //   「同じ構造化データから描く」方針にする（Codex 25巡目 #3）。
-      const normalText = (machine.strategyByRate && machine.strategyByRate[rateKey])
-        || buildTargetFromChecker(rateKey);
+      // ★★「鍵が無い」と「中身が空」を分ける★★（2026-09-11・Codexの指摘2）
+      //   直す前は `||` だったので、生成した文が空文字のとき
+      //   ★古い予備生成器へ落ちて★いた。予備は回数系の先頭行しか使わず、
+      //   設定狙いの番兵（99999）も除かないので、
+      //   ★今日直した守りをブラウザ側で破る★。
+      //   鍵が在れば、中身が空でもそのまま使う（＝作れなかったという事実）。
+      const _sbr = machine.strategyByRate;
+      const _hasRate = _sbr && Object.prototype.hasOwnProperty.call(_sbr, rateKey);
+      const normalText = _hasRate ? _sbr[rateKey]
+        : buildTargetFromChecker(rateKey);
       // リセットの交換率別設定は mode直下に重ねて使う（部分上書きでも欠けないように）
       const resetBase = checker.reset || null;
       const resetOverride = resetBase && resetBase.byRate ? resetBase.byRate[rateKey] : null;
@@ -853,7 +861,11 @@ function resolveMachineSlug() {
       // ★「狙い目」の箱だけを差し替える★
       //   「天井」を含むラベル（天井 / リセット天井）は狙い目ではないので触らない。
       //   ラベルの部分一致で意味を決めると、天井欄が狙い目で潰れる（bandori で実発生）。
-      const targetIndex = boxes.findIndex(box => {
+      // ★★所有権の印を、画面まで一貫させる★★（2026-09-11・Codexの指摘）
+      //   印（role）が在ればそれで決める。無い機種だけ見出しの文字で拾う。
+      //   ★見出しだけで決めると、見出しを変えた瞬間に別の箱を書き換える★。
+      const roleIndex = boxes.findIndex(box => box && box.role === "target");
+      const targetIndex = roleIndex >= 0 ? roleIndex : boxes.findIndex(box => {
         const lb = String(box.label || "");
         return /狙い目/.test(lb) && !/天井/.test(lb);
       });

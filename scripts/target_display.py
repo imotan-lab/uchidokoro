@@ -453,6 +453,26 @@ def _rebuild_boxes(slug, sb, new_label, new_value):
     plan = BOX_PLAN.get(slug)
     if not idx and plan is None:
         return None, "狙い目の箱が無く、対応表にも載っていない（2AIへ）"
+    # ★★印が在るときに、印の無い狙い目の箱が足されていたら止める★★
+    #   （2026-09-11・Codexの指摘3）＝`_target_boxes` は印が1つでも在れば
+    #   ★印だけを見て、それ以外を一切見ない★。
+    #   ＝生成した箱の隣に「通常時: 手書き600G〜」を足しても点検が緑になる。
+    roled = [i for i, b in enumerate(sb) if b.get("role") == BOX_ROLE]
+    if roled:
+        if len(roled) != 1:
+            return None, "狙い目の箱の印が %d 個あります" % len(roled)
+        left = [str(b.get("label") or "") for b in sb
+                if b.get("role") != BOX_ROLE
+                and str(b.get("label") or "") in (plan or [])]
+        if left:
+            return None, "手書きの狙い目の箱が残っています: " + " / ".join(left)
+        # ★見出しで拾う箱も残っていないこと★
+        strays = [str(b.get("label") or "") for b in sb
+                  if b.get("role") != BOX_ROLE
+                  and "狙い目" in str(b.get("label") or "")
+                  and "天井" not in str(b.get("label") or "")]
+        if strays:
+            return None, "印の無い狙い目の箱が残っています: " + " / ".join(strays)
     # ── 先に「失われる言葉」を移す ──
     moves = [mv for mv in BOX_MOVES if mv[0] == slug]
     out = [dict(b) for b in sb]
@@ -541,6 +561,17 @@ def check() -> int:
 
 def apply_all() -> int:
     machines, details, skipped = plan_all()
+    # ★★決められない機種が1つでも在れば、1文字も書かない★★
+    #   （2026-09-11・Codexの指摘1）＝直す前は点検だけ fail-closed で、
+    #   ★書く側は素通り★だった。しかも同じ機種が
+    #   「一覧は直せる／箱は決められない」になり得るので、
+    #   ★一覧だけ書き換える部分適用★が起きる。
+    if skipped:
+        print("★機械では決められない機種があるので、何も書きません: %d★"
+              % len(skipped))
+        for slug, why in skipped:
+            print("   %-22s %s" % (slug, why))
+        return 1
     if not machines and not details:
         print("変えるものはありません")
         return 0
@@ -759,6 +790,9 @@ def _real_file_tests(t):
         keep_plan = dict(BOX_PLAN)
         p_tensura = os.path.join(g["DETAILS"], "tensura.json")
         o2 = _sj.read_json(p_tensura, expect=dict)
+        # ★壊す前の姿を控える★＝戻せないと、後ろの試験が全部
+        #   「対応表の箱が見つからない」で落ちる（実際に落ちた）。
+        _tensura_orig = io.open(p_tensura, encoding="utf-8").read()
         o2.pop("summaryBoxes", None)
         io.open(p_tensura, "w", encoding="utf-8", newline="\n").write(
             json.dumps(o2, ensure_ascii=False, indent=2) + "\n")
@@ -770,9 +804,34 @@ def _real_file_tests(t):
             t("★★決められない機種が1つでも在れば止める★★"
               "／★止めないと、作れない機種が増えても関所が静かに通す★",
               check() != 0)
+            # ★★書く側も止まる★★（2026-09-11・Codexの指摘1）
+            #   ★点検だけ止めても、書く側が素通りなら部分適用が起きる★
+            t("★★決められない機種が在るときは、書く側も1文字も書かない★★",
+              apply_all() != 0)
         finally:
             BOX_PLAN.clear()
             BOX_PLAN.update(keep_plan)
+        # ⑦ ★★印の隣に手書きの箱を足したら止まる★★（Codexの指摘3）
+        io.open(p_tensura, "w", encoding="utf-8", newline="\n").write(
+            _tensura_orig)
+        apply_all()
+        t("　いったん全部そろえた（2）", check() == 0)
+        p_goblin = os.path.join(g["DETAILS"], "goblin.json")
+        o3 = _sj.read_json(p_goblin, expect=dict)
+        o3["summaryBoxes"].append({"label": "通常時",
+                                   "value": "手書き600G〜"})
+        io.open(p_goblin, "w", encoding="utf-8", newline="\n").write(
+            json.dumps(o3, ensure_ascii=False, indent=1) + "\n")
+        t("★★印の在る機種に、印の無い手書きの箱を足したら止める★★"
+          "／★印だけを見ていると、隣に足された手書きを見逃す★",
+          check() != 0)
+        # ★対照★＝狙い目と関係ない箱を足しても止めない
+        o3["summaryBoxes"] = [b for b in o3["summaryBoxes"]
+                              if b.get("label") != "通常時"]
+        o3["summaryBoxes"].append({"label": "純増", "value": "約2.8枚/G"})
+        io.open(p_goblin, "w", encoding="utf-8", newline="\n").write(
+            json.dumps(o3, ensure_ascii=False, indent=1) + "\n")
+        t("　（対照）狙い目と関係ない箱は止めない", check() == 0)
     finally:
         for k in based:
             g[k] = keep[k]

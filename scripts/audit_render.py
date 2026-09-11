@@ -293,6 +293,37 @@ def judge_render(boxes: list, detail, expected: list | None = None) -> list[str]
     return ngs
 
 
+def judge_rates(shown: dict, want: dict,
+                ceil_before: list, ceil_after: list) -> list[str]:
+    """★R16の判定★＝交換率を切り替えたあとの画面を、作った文と突き合わせる
+
+    ★純関数にする理由★＝ブラウザの中に判定を書くと、
+    この検査そのものを試験できない（この file の他の判定と同じ方針）。
+
+    shown … {交換率の鍵: 画面に出ていた狙い目の文（出ていなければ None）}
+    want  … {交換率の鍵: target_display が作った文}
+    ceil_* … 天井の箱（切り替えの前後）
+    """
+    ngs = []
+    for k in sorted(want):
+        w = want[k]
+        if w is None:
+            continue                      # 作った文が無い機種は照合しない
+        if k not in shown:
+            ngs.append(f"R16: 交換率 {k} のボタンがありません")
+            continue
+        got = shown[k]
+        if got is None:
+            ngs.append(f"R16: 交換率 {k} で狙い目の箱が出ていません")
+        elif str(got).strip() != str(w).strip():
+            ngs.append(f"R16: 交換率 {k} の狙い目が作った文と違います"
+                       f"（画面『{got}』／作った文『{w}』）")
+    if ceil_before != ceil_after:
+        ngs.append("R16: 交換率を切り替えると天井の箱が書き換わります"
+                   f"（{ceil_before} → {ceil_after}）")
+    return ngs
+
+
 def judge_boxes(boxes: list, detail) -> list[str]:
     """最終DOMの箱が契約どおりか（★ブラウザ無しで試験できる★）。
 
@@ -616,6 +647,60 @@ def check_one(page, machine: dict) -> list[str]:
     else:
         ngs += judge_toc(page.evaluate(TOC_JS), _want14)
 
+
+    # ★★R16: 交換率を実際に切り替えて、狙い目の箱を照合する★★
+    #   （2026-09-11・Codexの指摘）＝
+    #   ★直す前は、切り替えたあとの画面を誰も見ていなかった★。
+    #   狙い目の文は `target_display.py` が作って `strategyByRate` に入れる。
+    #   画面がそれをそのまま出しているか（古い予備生成器へ落ちていないか）を
+    #   ★本物のブラウザで、全部の交換率について確かめる★。
+    #   ★天井の箱に触っていないことも見る★＝
+    #   「リセット天井」が狙い目で上書きされて消えていた（実測5機種）。
+    _rates = ((machine.get("checker") or {}).get("exchangeRates")
+              if isinstance(machine.get("checker"), dict) else None)
+    _sbr = machine.get("strategyByRate")
+    if isinstance(_rates, list) and _rates:
+        _ceil_before = page.evaluate(
+            """() => Array.from(document.querySelectorAll('.s-label'))
+                 .filter(e => /天井/.test(e.textContent))
+                 .map(e => e.textContent + '=' +
+                      (e.nextElementSibling ? e.nextElementSibling.textContent : ''))""")
+        _shown = {}
+        for _r in _rates:
+            if not isinstance(_r, dict) or not _r.get("key"):
+                continue
+            _k = str(_r["key"])
+            # ★見た目を隠したラジオなので、クリックでは待ち続ける★
+            #   （実測＝2件目以降が必ず時間切れになった）。
+            #   ★本番と同じ道で切り替える★＝change の合図を起こす
+            #   （ページ側は change を待っている）。
+            _ok = page.evaluate(
+                """(k) => {
+                  const el = document.getElementById('rate_' + k);
+                  if (!el) return false;
+                  el.checked = true;
+                  el.dispatchEvent(new Event('change', {bubbles: true}));
+                  return true;
+                }""", _k)
+            if not _ok:
+                continue                  # 鍵を入れない＝「ボタンが無い」
+            _shown[_k] = page.evaluate(
+                """() => {
+                  const l = Array.from(document.querySelectorAll('.s-label'))
+                    .find(e => /狙い目/.test(e.textContent)
+                               && !/天井/.test(e.textContent));
+                  return l && l.nextElementSibling
+                    ? l.nextElementSibling.textContent : null;
+                }""")
+        _ceil_after = page.evaluate(
+            """() => Array.from(document.querySelectorAll('.s-label'))
+                 .filter(e => /天井/.test(e.textContent))
+                 .map(e => e.textContent + '=' +
+                      (e.nextElementSibling ? e.nextElementSibling.textContent : ''))""")
+        _want_rates = {str(r["key"]): (_sbr or {}).get(str(r["key"]))
+                       for r in _rates
+                       if isinstance(r, dict) and r.get("key")}
+        ngs += judge_rates(_shown, _want_rates, _ceil_before, _ceil_after)
 
     # R12: チェッカーと早見表のmode選択が同期しているか
     #   （2026-07-27 Codex閉鎖確認 #2: 別々に持っていたため
@@ -958,6 +1043,36 @@ def selftest() -> int:
       "（<base href=\"/\"> があると `#id` だけのリンクはトップへ飛ぶ）",
       any("別のページへ行きます" in x for x in
           judge_toc(_toc_of(_want_legacy, doc="https://x/"), _want_legacy)))
+
+    # ---- R16: 交換率を切り替えたあとの狙い目（2026-09-11・Codexの指摘）----
+    #   ★ここが無いと、画面が古い予備生成器へ落ちても誰も気づかない★
+    #   （実際に control 実験で再現＝画面『通常720G〜…』／作った文『』）
+    t("★交換率ごとに一致していれば通る★",
+      judge_rates({"eq56": "通常570G〜", "rate45": "通常720G〜"},
+                  {"eq56": "通常570G〜", "rate45": "通常720G〜"},
+                  [], []) == [])
+    t("★★画面が作った文と違えば止める★★"
+      "／★止めないと、画面側だけ古い作り方へ落ちても緑になる★",
+      any("作った文と違います" in x for x in
+          judge_rates({"eq56": "通常999G〜"}, {"eq56": "通常570G〜"}, [], [])))
+    t("★★作った文が空のときに、画面へ何か出ていたら止める★★"
+      "／★これが「鍵が無い」と「中身が空」を取り違えた時の姿★",
+      any("作った文と違います" in x for x in
+          judge_rates({"rate45": "通常720G〜"}, {"rate45": ""}, [], [])))
+    t("　作った文が空で、画面も空なら通る",
+      judge_rates({"rate45": ""}, {"rate45": ""}, [], []) == [])
+    t("★交換率のボタンが無ければ止める★",
+      any("ボタンがありません" in x for x in
+          judge_rates({}, {"eq56": "通常570G〜"}, [], [])))
+    t("★狙い目の箱が出ていなければ止める★",
+      any("出ていません" in x for x in
+          judge_rates({"eq56": None}, {"eq56": "通常570G〜"}, [], [])))
+    t("★★天井の箱が書き換わったら止める★★"
+      "／★リセット天井が狙い目で潰されて読者に届いていなかった（実測5機種）★",
+      any("天井の箱が書き換わります" in x for x in
+          judge_rates({}, {}, ["リセット天井=600pt"], ["リセット狙い=150G"])))
+    t("　作った文が無い交換率は照合しない（移行の途中を止めない）",
+      judge_rates({"eq56": "なんでも"}, {"eq56": None}, [], []) == [])
     t("★★飛び先が無ければ止める★★",
       any("飛び先がありません" in x for x in
           judge_toc(_toc_of(_want_legacy, exists=False), _want_legacy)))

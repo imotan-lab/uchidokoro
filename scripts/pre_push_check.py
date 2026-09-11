@@ -251,8 +251,10 @@ def touches_hub(paths) -> bool:
 #   machine-details/         … 狙い目の箱の置き場
 #   target_display.py        … 作る側そのもの
 #   safe_json.py             … 材料の読み取り
+#   machine.html … ★描く側★（予備生成器・所有権の印の読み方がここにある）
 _TD_SRC = ("assets/data/machines.json", "assets/data/machine-details",
-           "scripts/target_display.py", "scripts/safe_json.py")
+           "scripts/target_display.py", "scripts/safe_json.py",
+           "machine.html")
 
 
 def touches_target(paths) -> bool:
@@ -836,6 +838,9 @@ def _selftest() -> int:
       touches_target(["scripts/target_display.py"]) is True)
     t("★狙い目：記事データを変えたら流す★",
       touches_target(["assets/data/machine-details/hokuto.json"]) is True)
+    t("★狙い目：描く側（ひな型）を変えたら流す★"
+      "／★入れないと、予備生成器や所有権の印を壊しても点検が呼ばれない★",
+      touches_target(["machine.html"]) is True)
     t("　関係ない変更では流さない",
       touches_target(["README.md"]) is False)
     t("★狙い目：関所の本体が点検を呼んでいる★",

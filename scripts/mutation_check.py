@@ -56,6 +56,45 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #   ★同じ壊し方を戻さないこと★＝いまの取り決めでは必ず「捕まえられない」
 #   と出て、本物の見落としが埋もれる。
 MUTATIONS = [
+    # ─── 2026-09-11・review107 で塞いだ穴 ────────────────────────
+    {
+        "why": "★決められない機種が在っても書いてしまう"
+               "（一覧だけ直して箱は古いまま＝部分適用）★",
+        "file": "scripts/target_display.py",
+        "before": ('    if skipped:\n'
+                   '        print("★機械では決められない機種があるので、'
+                   '何も書きません: %d★"'),
+        "after": ('    if False:\n'
+                  '        print("★機械では決められない機種があるので、'
+                  '何も書きません: %d★"'),
+        "run": ["scripts/target_display.py"],
+    },
+    {
+        "why": "★印の隣に足された手書きの狙い目の箱を見逃す"
+               "（印だけを見ていると、手書きが復活しても点検が緑）★",
+        "file": "scripts/target_display.py",
+        "before": "        if left:\n            return None, "
+                  '"手書きの狙い目の箱が残っています: " + " / ".join(left)',
+        "after": "        if False:\n            return None, "
+                 '"手書きの狙い目の箱が残っています: " + " / ".join(left)',
+        "run": ["scripts/target_display.py"],
+    },
+    {
+        "why": "★交換率を切り替えたあとの画面を照合しない"
+               "（画面だけ古い作り方へ落ちても誰も気づかない）★",
+        "file": "scripts/audit_render.py",
+        "before": '        elif str(got).strip() != str(w).strip():',
+        "after": '        elif False:',
+        "run": ["scripts/audit_render.py"],
+    },
+    {
+        "why": "★交換率を切り替えると天井の箱が書き換わるのを見逃す"
+               "（リセット天井が狙い目で潰れて読者に届かない）★",
+        "file": "scripts/audit_render.py",
+        "before": "    if ceil_before != ceil_after:",
+        "after": "    if False:",
+        "run": ["scripts/audit_render.py"],
+    },
     # ─── 2026-09-11・狙い目の文を1か所から作るようにした ───────────
     #   ★どれも「この試験だけが捕まえる」壊し方★（罠㊻）＝
     #   既にある試験でも捕まるなら、新しい試験が働いている証拠にならない。

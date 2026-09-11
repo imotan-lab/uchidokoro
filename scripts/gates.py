@@ -2137,7 +2137,13 @@ def _project_detail(detail, gates: dict, ctx: _Ctx) -> dict:
                 continue
             # ★label+value を結合して判定（「期待値」＋「580G〜」を見逃さない）★
             if ctx.atom([lb, vl], f"summaryBoxes[{i}]"):
-                kept.append({"label": lb, "value": vl})
+                # ★印は射影にも残す★（2026-09-11・Codexの指摘）＝
+                #   落とすと、画面側が印で箱を探せなくなり、
+                #   所有権の印が「生成したときだけ」のものになる。
+                _box = {"label": lb, "value": vl}
+                if isinstance(b.get("role"), str) and b["role"]:
+                    _box["role"] = b["role"]
+                kept.append(_box)
         if kept:
             out["summaryBoxes"] = kept
 
