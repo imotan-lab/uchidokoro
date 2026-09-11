@@ -37,6 +37,7 @@ import argparse
 import io
 import json
 import os
+import re
 import sys
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -308,34 +309,28 @@ BOX_MOVES = (
     ("valvrave2", "リセット", "周期天井3周期に短縮", "周期天井"),
 )
 
-# ★★印の無い箱に残っていた狙い目★★（2026-09-11・Codexの指摘）
-#   ★読者に矛盾が見えていた★＝ヴァルヴレイヴ2は、機械が作った箱が
-#   「CZ間550G〜 / ボーナス間950G〜」なのに、天井の箱に
-#   「600Gから狙い目」「1000Gから狙い目」が残っていた。
-#   ★天井の箱は消せない★（天井そのものが要る）ので、
-#   ★その中の「狙い目を言っている節」だけを落とす★。
-#   （slug → [(箱の見出し, 落とす節 ／ None なら箱ごと)]）
-#   ★2AIが1件ずつ見て決めた★＝機械に節の意味を推測させない。
-STRAY_PLAN = {
-    "kabaneri": [("ST間天井", "ST間590Gから狙い目")],
-    "valvrave2": [("CZ間天井", "600Gから狙い目"),
-                  ("ボーナス間天井", "1000Gから狙い目"),
-                  ("周期天井", "5周期目〜狙い目")],
-    "hokuto_tensei2": [("あべし間天井", "780あべしから狙い目")],
-    "sao": [("スルー天井", "4スルー〜から強め")],
-    "hanma_baki": [("スルー天井", "5スルー〜から強め")],
-    # ★箱ごと落とす★＝中身が全部、作った箱と重なっている。
-    #   「天国移行率約50%」は記事本文にもあるので失われない（確認済み）。
-    "okidoki_gold": [("スルー狙い", None)],
-    "okidoki_black": [("スルー狙い", None)],
-}
+# ★★一回限りの移行は終わった（2026-09-12）★★
+#   印の無い箱に残っていた狙い目を落とす表（STRAY_PLAN）は**外した**。
+#   ★なぜ外すか★（Codexの指摘）＝表を残すと、同じ文がもう一度入ったときに
+#   ★黙って消してしまう★。「当てはまったら止めて2AIへ回す」と食い違う。
+#   ★何を落としたかはコミット 1253c792 と、その次のコミットに残っている★
+#   （かばねり／ヴァルヴレイヴ2／北斗転生2／SAO／範馬刃牙／沖ドキGOLD・BLACK／
+#     プリズムナナ の計9箇所）。
 
 # ★★印の無い箱は、狙い目を言ってはいけない★★
 #   ★なぜ言葉で見るのか★＝「どの箱が狙い目を言っているか」は
 #   サイト自身が使う言い方なので、外の世界の意味ではない。
 #   機械が作る箱はこの言い方を値に使わない（見出しにだけ「狙い目」が入る）。
 #   ★当てはまったら止めて2AIへ回す★（勝手に消さない）。
-CLAIM_WORDS = ("狙い目", "強め", "候補", "様子見", "着席")
+#   ★言葉を広げた★（2026-09-12・Codexの指摘）＝
+#   「狙い目」だけを見ていたので、★サイトで実際に使っている言い換えが素通り★した
+#   （「0Gから狙える」「即打ち」「打ち始め」。machines.json で狙え=22回・即打ち=18回）。
+#   ★裸の開始値も見る★＝「50G〜」のように語を一つも使わない形が2箱あった。
+CLAIM_WORDS = ("狙", "強め", "候補", "様子見", "着席",
+               "即打ち", "打ち始め", "打ち出し", "から打", "打てる")
+# ★数値＋単位＋「〜」＝それだけで狙い目の宣言★
+START_VALUE = re.compile(r"\d+\s*(?:G|pt|枚|あべし|周期|スルー|回|個)\s*[〜~]")
+_HAS_NUM = re.compile(r"\d").search
 
 
 def stray_claims(sb) -> list:
@@ -349,10 +344,17 @@ def stray_claims(sb) -> list:
         if "狙い" in lab:
             bad.append("印の無い箱の見出しが狙い目を名乗っています: %s" % lab)
             continue
-        hit = [w for w in CLAIM_WORDS if w in val]
+        # ★★言葉だけでは広すぎる★★（2026-09-12・実測10機種）＝
+        #   「基本方針：天井狙い＋リセット狙い」は**やり方の説明**で、
+        #   狙い目の宣言ではない。★数値を伴うときだけ宣言とみなす★。
+        hit = [w for w in CLAIM_WORDS if w in val] if _HAS_NUM(val) else []
         if hit:
             bad.append("印の無い箱が狙い目を言っています: %s（%s）"
                        % (lab, "・".join(hit)))
+            continue
+        if START_VALUE.search(val):
+            bad.append("印の無い箱に裸の開始値があります: %s（%s）"
+                       % (lab, START_VALUE.search(val).group(0)))
     return bad
 
 
@@ -540,22 +542,6 @@ def _rebuild_boxes(slug, sb, new_label, new_value):
             return None, "移す一文が見つからない: %s" % text
         out[di] = dict(out[di])
         out[di]["value"] = (dv + "<br>" + text) if dv else text
-    # ── 印の無い箱に残った狙い目を落とす ──
-    for lab, seg in STRAY_PLAN.get(slug, []):
-        i = _find_label(out, lab)
-        if i < 0:
-            continue                      # もう落としてある（2回目）
-        if seg is None:
-            out = [b for n, b in enumerate(out) if n != i]
-            continue
-        val = str(out[i].get("value") or "")
-        parts = [x.strip() for x in val.replace("\n", "<br>").split("<br>")
-                 if x.strip()]
-        if seg not in parts:
-            continue                      # もう落としてある（2回目）
-        out[i] = dict(out[i])
-        out[i]["value"] = "<br>".join(x for x in parts if x != seg)
-
     # ── まとめる箱を決める ──
     if idx:
         drop = list(idx)
@@ -943,8 +929,12 @@ def _real_file_tests(t):
         t("　いったん全部そろえた（2）", check() == 0)
         p_goblin = os.path.join(g["DETAILS"], "goblin.json")
         o3 = _sj.read_json(p_goblin, expect=dict)
+        # ★狙った守りだけが効く材料にする★（罠④）＝
+        #   値に数値や狙い目の語を入れると、あとから足した
+        #   stray_claims が先に止めてしまい、
+        #   ★この守り（対応表の箱が残っている）を一度も通らない★。
         o3["summaryBoxes"].append({"label": "通常時",
-                                   "value": "手書き600G〜"})
+                                   "value": "前兆に注意"})
         io.open(p_goblin, "w", encoding="utf-8", newline="\n").write(
             json.dumps(o3, ensure_ascii=False, indent=1) + "\n")
         t("★★印の在る機種に、印の無い手書きの箱を足したら止める★★"
@@ -970,6 +960,13 @@ def _real_file_tests(t):
         t("★★天井の箱に狙い目を残したら止める★★"
           "／★これが実際に公開されていた姿（ヴァルヴレイヴ2）★",
           check() != 0)
+        # ★★書く側も止まり、1文字も書かない★★（2026-09-12・Codexの指摘）＝
+        #   ★移行の表を残していたときは、同じ文が戻っても黙って消していた★。
+        #   いまは表を外したので、止まるのが正しい。
+        _before = io.open(p_goblin, "rb").read()
+        t("★★書く側も止まる★★", apply_all() != 0)
+        t("★★止まったとき、記事は1バイトも変わらない★★",
+          io.open(p_goblin, "rb").read() == _before)
     finally:
         for k in based:
             g[k] = keep[k]
@@ -1102,6 +1099,29 @@ def selftest() -> int:
     t("　狙い目を言っていない箱は通す", stray_claims(
         [{"label": "天井", "value": "999G+α"},
          {"label": "ヤメ時", "value": "前兆を確認して区切る"}]) == [])
+    # ★★言い換えでも止める★★（2026-09-12・Codexの指摘）＝
+    #   「狙い目」だけを見ていたので、サイトで実際に使っている言い換えが素通りした
+    #   （machines.json で 狙え=22回・即打ち=18回）。
+    for _lab, _val, _w in (
+            ("リセット", "0Gから狙える", "狙"),
+            ("スルー", "4スルー以降は即打ち推奨", "即打ち"),
+            ("通常", "45Gから打ち始め", "打ち始め"),
+            ("通常", "600Gから打てる", "打てる")):
+        t("★言い換え「%s」でも止める★" % _w,
+          any("狙い目を言っています" in x
+              for x in stray_claims([{"label": _lab, "value": _val}])))
+    t("★★裸の開始値だけでも止める★★"
+      "／★語を一つも使わない形が実際に2箱あった★",
+      any("裸の開始値" in x for x in stray_claims(
+          [{"label": "リセット", "value": "50G〜"}])))
+    # ★★言葉だけでは広すぎる★★＝数値を伴うときだけ宣言とみなす
+    t("★★やり方の説明は止めない★★"
+      "／★『天井狙い＋リセット狙い』で止めると10機種が公開できなくなる★",
+      stray_claims([{"label": "基本方針",
+                     "value": "天井狙い＋リセット狙い"}]) == [])
+    t("　天井の値そのものは止めない",
+      stray_claims([{"label": "天井",
+                     "value": "通常999G ／ チャンス・引き戻し200G"}]) == [])
 
     # ★ひな型の契約★（2026-09-11・Codexの指摘2）
     _tpl_ok = io.open(TEMPLATE, encoding="utf-8").read()

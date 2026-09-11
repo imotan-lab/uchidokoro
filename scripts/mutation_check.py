@@ -57,6 +57,22 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #   と出て、本物の見落としが埋もれる。
 MUTATIONS = [
     {
+        "why": "★言い換え（狙える・即打ち・打ち始め）を見逃す"
+               "（サイトで実際に使っている言い方なので、素通りしていた）★",
+        "file": "scripts/target_display.py",
+        "before": 'CLAIM_WORDS = ("狙", "強め", "候補", "様子見", "着席",',
+        "after": 'CLAIM_WORDS = ("狙い目", "強め", "候補", "様子見", "着席",',
+        "run": ["scripts/target_display.py"],
+    },
+    {
+        "why": "★裸の開始値（50G〜）を見逃す"
+               "（語を一つも使わない形が実際に2箱あった）★",
+        "file": "scripts/target_display.py",
+        "before": "        if START_VALUE.search(val):",
+        "after": "        if False:",
+        "run": ["scripts/target_display.py"],
+    },
+    {
         "why": "★印の無い箱に狙い目が残っていても通す"
                "（天井の箱に古い狙い目が残り、読者に矛盾が見える）★",
         "file": "scripts/target_display.py",
