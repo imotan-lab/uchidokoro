@@ -123,5 +123,12 @@
    ]
   }
  ],
- "updated": "2026-04-23"
+ "updated": "2026-04-23",
+ "summaryBoxes": [
+  {
+   "label": "5.6枚狙い目",
+   "value": "AT&ボーナス間780G〜 / CZ間（液晶）400G〜 / 4スルー〜",
+   "role": "target"
+  }
+ ]
 }

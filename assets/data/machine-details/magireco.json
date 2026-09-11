@@ -16,8 +16,9 @@
    "value": "600〜699pt+α"
   },
   {
-   "label": "狙い目",
-   "value": "等価360G〜 / リセット150G〜"
+   "label": "5.6枚狙い目",
+   "value": "通常360G〜 / リセット150G〜",
+   "role": "target"
   }
  ],
  "factTable": [

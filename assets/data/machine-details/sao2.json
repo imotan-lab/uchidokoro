@@ -34,8 +34,9 @@
    "value": "CZ間499G+α / AT間1200G"
   },
   {
-   "label": "狙い目",
-   "value": "5.6枚持ちメダル：CZ間330G〜"
+   "label": "5.6枚狙い目",
+   "value": "通常（CZ間）330G〜 / リセット120G〜",
+   "role": "target"
   }
  ],
  "sections": [

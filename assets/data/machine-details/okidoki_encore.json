@@ -16,8 +16,9 @@
       "value": "最大10回"
     },
     {
-      "label": "狙い目",
-      "value": "等価520G〜 / スルー5回〜"
+      "label": "5.6枚狙い目",
+      "value": "通常520G〜 / 5スルー〜",
+      "role": "target"
     }
   ],
   "factTable": [

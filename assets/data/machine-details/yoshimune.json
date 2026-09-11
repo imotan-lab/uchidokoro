@@ -8,8 +8,9 @@
       "value": "999G+α"
     },
     {
-      "label": "狙い目",
-      "value": "等価580G〜"
+      "label": "5.6枚狙い目",
+      "value": "通常590G〜",
+      "role": "target"
     },
     {
       "label": "ヤメ時",

@@ -16,8 +16,9 @@
    "value": "649G+α"
   },
   {
-   "label": "狙い目",
-   "value": "等価BIG後480G〜 / REG後330G〜"
+   "label": "5.6枚狙い目",
+   "value": "通常(BIG後)480G〜 / REG後330G〜 / リセット180G〜",
+   "role": "target"
   }
  ],
  "factTable": [

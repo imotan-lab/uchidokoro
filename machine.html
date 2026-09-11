@@ -831,7 +831,17 @@ function resolveMachineSlug() {
       const resetBase = checker.reset || null;
       const resetOverride = resetBase && resetBase.byRate ? resetBase.byRate[rateKey] : null;
       const resetConfig = resetBase ? Object.assign({}, resetBase, resetOverride || {}) : null;
-      const resetIndex = boxes.findIndex(box => String(box.label || "").includes("リセット"));
+      // ★「リセット天井」の箱を狙い目で潰さない★（2026-09-11・Codexの指摘）
+      //   ★実際に起きていたこと★＝マギアレコードのデータには
+      //   「リセット天井 600〜699pt+α」が在るのに、ページには出ていなかった。
+      //   ここが「リセット」を含む最初の箱を拾うので、
+      //   ★リセット天井の箱が狙い目で上書きされ、天井が読者に届いていなかった★
+      //   （実測5機種）。すぐ上の狙い目の箱はもともと「天井」を外している。
+      //   ★同じ除き方をこちらにも当てる★。
+      const resetIndex = boxes.findIndex(box => {
+        const lb = String(box.label || "");
+        return lb.includes("リセット") && !lb.includes("天井");
+      });
 
       // 狙い目の箱は「狙い目/天井」を指す箱だけを差し替える。
       // 位置(boxes[1])で決め打ちすると、無関係な箱（注意書き等）を上書きしてしまう。

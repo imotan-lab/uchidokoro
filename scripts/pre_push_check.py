@@ -217,6 +217,21 @@ _HUB_SRC = ("assets/data/machines.json", "scripts/hub_prose.json",
             "scripts/safe_json.py", "guide-")
 
 
+def _touches(paths, srcs) -> bool:
+    """★引き金を引く変更か★（判定はここ1か所）
+
+    ★2か所に書かない★（2026-09-11）＝早見表用と狙い目用に同じ
+    書き方を並べたら、★壊し方の目印が2件になって機械が断った★。
+    同じ規則が2つあると、片方だけ直して食い違う。
+    """
+    for p in paths:
+        p = str(p or "").replace("\\", "/")
+        for w in srcs:
+            if p == w or p.startswith(w):
+                return True
+    return False
+
+
 def touches_hub(paths) -> bool:
     """★早見表が古くなり得る変更か★（2026-09-01）
 
@@ -224,12 +239,38 @@ def touches_hub(paths) -> bool:
     早見表が古いまま残り、CIが3回続けて赤くなった。
     ★手元では何も止まらなかった★ので、ここで見る。
     """
-    for p in paths:
-        p = str(p or "").replace("\\", "/")
-        for w in _HUB_SRC:
-            if p == w or p.startswith(w):
-                return True
-    return False
+    return _touches(paths, _HUB_SRC)
+
+
+# ★★狙い目の文が手書きへ戻っていないか★★（2026-09-11）
+#   狙い目は、チェッカーの値から `target_display.py` が作る。
+#   ★手書きに戻されると、また一覧・機種ページ・カウンターが分かれる★
+#   （2026-09-11の実測＝交換率を持つ51機種すべてで食い違っていた）。
+#
+#   machines.json            … 材料（checker）と生成物（strategy）の置き場
+#   machine-details/         … 狙い目の箱の置き場
+#   target_display.py        … 作る側そのもの
+#   safe_json.py             … 材料の読み取り
+_TD_SRC = ("assets/data/machines.json", "assets/data/machine-details",
+           "scripts/target_display.py", "scripts/safe_json.py")
+
+
+def touches_target(paths) -> bool:
+    """★狙い目の文が手書きへ戻り得る変更か★（2026-09-11）"""
+    return _touches(paths, _TD_SRC)
+
+
+def target_check_problem(changed, run) -> str:
+    """★狙い目の文の点検が要るなら流して、駄目なら理由を返す★
+
+    run(引数の並び) -> (終了コード, 出力)  … 試験では差し替える
+    """
+    if not touches_target(changed):
+        return ""
+    code, out = run(["target_display.py", "--check"])
+    for line in str(out or "").strip().splitlines():
+        print("   " + line)
+    return "狙い目の文が手書きと食い違っている" if code != 0 else ""
 
 
 def workflow_python_versions(read=None) -> dict:
@@ -303,6 +344,16 @@ def hub_check_problem(changed, run) -> str:
 
 
 def _check_hub_wiring() -> list:
+    """★早見表の配線★（中身は共通の関数に寄せてある）"""
+    return _check_gate_wiring("build_hub_pages.py", "早見表")
+
+
+def _check_target_wiring() -> list:
+    """★狙い目の文の配線★"""
+    return _check_gate_wiring("target_display.py", "狙い目の文")
+
+
+def _check_gate_wiring(fail_script: str, name: str) -> list:
     """★早見表の点検が「本当に呼ばれ、失敗が関所へ伝わる」か★
 
     （2026-09-01・Codexのレビュー31の指摘1）
@@ -326,8 +377,11 @@ def _check_hub_wiring() -> list:
     def fake_run(cmd, *a, **k):
         joined = " ".join(str(x) for x in list(cmd))
         calls.append(joined)
-        if "build_hub_pages.py" in joined and "--check" in joined:
-            return _R(1, "★早見表が古いままです★（試験の偽物）")
+        # ★★落とすのは「調べている1つ」だけ★★（罠④）＝
+        #   両方を落とすと、片方の配線を外しても、もう片方が赤くして
+        #   「通っている」ように見える。
+        if fail_script in joined and "--check" in joined:
+            return _R(1, "★古いままです★（試験の偽物）")
         return _R(0, "")
 
     g = globals()
@@ -335,7 +389,9 @@ def _check_hub_wiring() -> list:
         "_warn_unreported": lambda: None,
         "_verified_range": lambda: [],
         # ★作る側だけを変えた push★＝記事データは1件も変わっていない
-        "_changed_paths": lambda: ["scripts/build_hub_pages.py"],
+        #   ★2つの関所の引き金を両方立てる★＝どちらも呼ばれることを見る。
+        "_changed_paths": lambda: ["scripts/build_hub_pages.py",
+                                   "scripts/target_display.py"],
         "git_unknown": lambda: [],
         "push_ranges": lambda *_a, **_k: [],
     }
@@ -369,11 +425,11 @@ def _check_hub_wiring() -> list:
         sys.stdin = _keep_stdin
 
     bad = []
-    if not any("build_hub_pages.py" in c and "--check" in c for c in calls):
-        bad.append("早見表の点検が呼ばれていません"
+    if not any(fail_script in c and "--check" in c for c in calls):
+        bad.append(f"{name}の点検が呼ばれていません"
                    "（作る側だけを変えた push で届いていない）")
     if code != 1:
-        bad.append(f"早見表の点検が赤なのに push を止めません（返り {code}）")
+        bad.append(f"{name}の点検が赤なのに push を止めません（返り {code}）")
     if not any("audit_site.py" in c and "--skill-audit" in c for c in calls):
         bad.append("手順書の監査が呼ばれていません")
     return bad
@@ -775,6 +831,27 @@ def _selftest() -> int:
       hub_check_problem(["assets/data/machines.json"],
                         lambda a: (0, "一致")) == "")
 
+    # ★★狙い目の文の点検★★（2026-09-11）
+    t("★狙い目：作る側を変えたら流す★",
+      touches_target(["scripts/target_display.py"]) is True)
+    t("★狙い目：記事データを変えたら流す★",
+      touches_target(["assets/data/machine-details/hokuto.json"]) is True)
+    t("　関係ない変更では流さない",
+      touches_target(["README.md"]) is False)
+    t("★狙い目：関所の本体が点検を呼んでいる★",
+      "target_check_problem(" in _msrc)
+    _tw = _check_target_wiring()
+    for _x in _tw:
+        t("★関所の配線★ " + _x, False)
+    t("★★関所の本体を1回通すと、狙い目の点検が呼ばれ、失敗が伝わる★★",
+      not _tw)
+    t("★狙い目：点検が赤なら push を止める★",
+      target_check_problem(["assets/data/machines.json"],
+                           lambda a: (1, "食い違い")) != "")
+    t("　点検が緑なら止めない",
+      target_check_problem(["assets/data/machines.json"],
+                           lambda a: (0, "一致")) == "")
+
     # ★★照合を求める範囲★★（2026-08-28・実際に push が止まった）
     t("★★記事を書き換えたコミットには照合を求める★★",
       touches_articles(["assets/data/machine-details/dmm_5086.json"]) is True)
@@ -1024,6 +1101,12 @@ def main() -> int:
     _hub_ng = hub_check_problem(changed, _hub_run)
     if _hub_ng:
         ng.append(_hub_ng)
+
+    # ★★狙い目の文も、早見表と同じ場所で見る★★（2026-09-11）
+    #   ★記事の早期returnより前★＝`target_display.py` だけを変えた push でも流す。
+    _td_ng = target_check_problem(changed, _hub_run)
+    if _td_ng:
+        ng.append(_td_ng)
 
     # ★★手順書（スキル・無人タスク）の監査は毎回流す★★
     #   （2026-09-01・Codexのレビュー30の指摘3）

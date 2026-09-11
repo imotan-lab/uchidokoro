@@ -1066,7 +1066,12 @@ def audit_detail(slug: str, detail: dict, has_disclaimer: bool,
         if not (isinstance(r, list) and len(r) == 2 and all(isinstance(x, str) for x in r)):
             problems.append(f"{slug}: factTable[{i}] が2要素の文字列配列でない")
     for i, b in enumerate(detail.get("summaryBoxes") or []):
-        if not (isinstance(b, dict) and set(b.keys()) == {"label", "value"}
+        # ★role は狙い目の箱の印★（2026-09-11）＝読者には出さない。
+        #   ★射影側（gates）と同じ顔ぶれにする★＝片方だけ許すと、
+        #   一方が通して一方が止める状態になり、原因が分からなくなる。
+        if not (isinstance(b, dict)
+                and set(b.keys()) <= {"label", "value", "role"}
+                and {"label", "value"} <= set(b.keys())
                 and all(isinstance(v, str) for v in b.values())):
             problems.append(f"{slug}: summaryBoxes[{i}] の形が不正")
 

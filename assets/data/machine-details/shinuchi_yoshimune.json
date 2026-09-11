@@ -16,8 +16,9 @@
    "value": "1500G+α"
   },
   {
-   "label": "狙い目",
-   "value": "CZ間等価400G〜 / AT間等価460G〜"
+   "label": "5.6枚狙い目",
+   "value": "CZ間400G〜 / AT間460G〜",
+   "role": "target"
   }
  ],
  "factTable": [

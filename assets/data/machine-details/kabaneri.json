@@ -8,16 +8,9 @@
    "value": "996G+α<br>ST間590Gから狙い目"
   },
   {
-   "label": "通常時",
-   "value": "ST間440Gから候補<br>ST間590Gから狙い目"
-  },
-  {
-   "label": "通常時 強め",
-   "value": "700G以上"
-  },
-  {
-   "label": "リセット",
-   "value": "0G〜候補<br>100Gから狙い目"
+   "label": "5.6枚狙い目",
+   "value": "ST間590G〜 / リセット100G〜",
+   "role": "target"
   },
   {
    "label": "天井",

@@ -12,12 +12,9 @@
    "value": "CZ6スルー後7回目でマジBIG確定"
   },
   {
-   "label": "等価狙い目",
-   "value": "CZ間230G〜 / 4スルー〜"
-  },
-  {
    "label": "5.6枚狙い目",
-   "value": "CZ間250G〜 / 5スルー〜"
+   "value": "CZ間250G〜 / 4スルー〜",
+   "role": "target"
   },
   {
    "label": "ヤメ時",

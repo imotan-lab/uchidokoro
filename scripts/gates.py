@@ -2119,10 +2119,17 @@ def _project_detail(detail, gates: dict, ctx: _Ctx) -> dict:
             if not isinstance(b, dict):
                 ctx.reject(f"summaryBoxes[{i}]", "要約欄の要素が辞書でない")
                 continue
-            if not _only_keys(b, {"label", "value"}):
+            # ★role は「この箱は狙い目の表示だ」という印★（2026-09-11）
+            #   ★読者には出さない★＝射影には label と value だけを入れる。
+            #   ★なぜ要るか★＝印が無いと、箱の持ち主を見出しの文字で
+            #   決めるしかなく、見出しを変えて手書きの値を入れると
+            #   点検が素通りする（罠㉑＝「無いこと」は負の検査で守れない）。
+            #   記事直下の slug / updated と同じ扱い（authoring 用の既知の鍵）。
+            if not _only_keys(b, {"label", "value", "role"}):
                 ctx.reject(f"summaryBoxes[{i}]", "未知フィールドを含むため箱ごと拒否")
                 continue
-            if not _types_ok(ctx, b, f"summaryBoxes[{i}]", {"label": str, "value": str}):
+            if not _types_ok(ctx, b, f"summaryBoxes[{i}]",
+                             {"label": str, "value": str, "role": str}):
                 continue
             lb, vl = b.get("label"), b.get("value")
             if not (_is_str(lb) and _is_str(vl)):

@@ -16,8 +16,9 @@
    "value": "600G+α"
   },
   {
-   "label": "狙い目",
-   "value": "等価640G〜 / リセット250G〜"
+   "label": "5.6枚狙い目",
+   "value": "通常640G〜 / リセット250G〜",
+   "role": "target"
   }
  ],
  "factTable": [

@@ -16,8 +16,9 @@
    "value": "設定1でも機械割103%"
   },
   {
-   "label": "狙い目",
-   "value": "等価CZ間100G〜"
+   "label": "5.6枚狙い目",
+   "value": "通常100G〜",
+   "role": "target"
   }
  ],
  "factTable": [

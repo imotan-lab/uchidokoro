@@ -16,8 +16,9 @@
    "value": "CZ4スルー（5回目）"
   },
   {
-   "label": "狙い目",
-   "value": "等価CZ間590G〜 / 3スルー〜"
+   "label": "5.6枚狙い目",
+   "value": "通常590G〜 / 3スルー〜",
+   "role": "target"
   }
  ],
  "factTable": [

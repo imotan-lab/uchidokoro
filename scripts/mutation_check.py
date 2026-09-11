@@ -56,6 +56,72 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #   ★同じ壊し方を戻さないこと★＝いまの取り決めでは必ず「捕まえられない」
 #   と出て、本物の見落としが埋もれる。
 MUTATIONS = [
+    # ─── 2026-09-11・狙い目の文を1か所から作るようにした ───────────
+    #   ★どれも「この試験だけが捕まえる」壊し方★（罠㊻）＝
+    #   既にある試験でも捕まるなら、新しい試験が働いている証拠にならない。
+    {
+        "why": "★交換率ごとの値が null で消されていても、土台の値を出す"
+               "（JSは何も出さないので、一覧だけに値が現れる）★",
+        "file": "scripts/target_display.py",
+        "before": ('    if isinstance(br, dict) and isinstance(br.get(rk), dict) \\\n'
+                   '            and "good" in br[rk]:\n'
+                   '        return _int(br[rk]["good"])'),
+        "after": ('    if isinstance(br, dict) and isinstance(br.get(rk), dict) \\\n'
+                  '            and _int(br[rk].get("good")) is not None:\n'
+                  '        return _int(br[rk]["good"])'),
+        "run": ["scripts/target_display.py"],
+    },
+    {
+        "why": "★回数系を「いちばん浅い1行」だけにする"
+               "（0Gの行ばかりが選ばれ、要約が痩せる）★",
+        "file": "scripts/target_display.py",
+        "before": "    return [first] if first == deep else [first, deep]",
+        "after": "    return [deep]",
+        "run": ["scripts/target_display.py"],
+    },
+    {
+        "why": "★回数系で番兵（設定狙いの99999）を除かない"
+               "（「設定狙い99999G〜」が読者に出る）★",
+        "file": "scripts/target_display.py",
+        "before": "        if g is None or c is None or g >= NO_TARGET:",
+        "after": "        if g is None or c is None:",
+        "run": ["scripts/target_display.py"],
+    },
+    {
+        "why": "★狙い目の箱の持ち主を、印ではなく見出しの文字で決める"
+               "（見出しを変えて手書きを入れると、点検が素通りする）★",
+        "file": "scripts/target_display.py",
+        "before": ('    roled = [i for i, b in enumerate(sb or [])\n'
+                   '             if isinstance(b, dict) and b.get("role") == BOX_ROLE]\n'
+                   '    if roled:\n'
+                   '        return roled'),
+        "after": "    pass",
+        "run": ["scripts/target_display.py"],
+    },
+    {
+        "why": "★決められない機種が在っても点検を緑にする"
+               "（生成できない機種が増えても、関所が静かに通す）★",
+        "file": "scripts/target_display.py",
+        "before": "    if not machines and not details and not skipped:",
+        "after": "    if not machines and not details:",
+        "run": ["scripts/target_display.py"],
+    },
+    {
+        "why": "★もう移してある一文を、2回目に「見つからない」と断る"
+               "（1回書いたら二度と点検が通らない＝冪等でない）★",
+        "file": "scripts/target_display.py",
+        "before": "        if text in dv:\n            continue",
+        "after": "        if False:\n            continue",
+        "run": ["scripts/target_display.py"],
+    },
+    {
+        "why": "★push前の関所から、狙い目の文の点検の呼び出しを外す"
+               "（手書きへ戻しても止まらない）★",
+        "file": "scripts/pre_push_check.py",
+        "before": "    _td_ng = target_check_problem(changed, _hub_run)",
+        "after": "    _td_ng = \"\"",
+        "run": ["scripts/pre_push_check.py"],
+    },
     # ─── 2026-09-01・Codexのレビュー29で塞いだ穴 ─────────────
     {
         "why": "★票の数え方の見張りを黙らせる"
