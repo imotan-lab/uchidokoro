@@ -308,6 +308,54 @@ BOX_MOVES = (
     ("valvrave2", "リセット", "周期天井3周期に短縮", "周期天井"),
 )
 
+# ★★印の無い箱に残っていた狙い目★★（2026-09-11・Codexの指摘）
+#   ★読者に矛盾が見えていた★＝ヴァルヴレイヴ2は、機械が作った箱が
+#   「CZ間550G〜 / ボーナス間950G〜」なのに、天井の箱に
+#   「600Gから狙い目」「1000Gから狙い目」が残っていた。
+#   ★天井の箱は消せない★（天井そのものが要る）ので、
+#   ★その中の「狙い目を言っている節」だけを落とす★。
+#   （slug → [(箱の見出し, 落とす節 ／ None なら箱ごと)]）
+#   ★2AIが1件ずつ見て決めた★＝機械に節の意味を推測させない。
+STRAY_PLAN = {
+    "kabaneri": [("ST間天井", "ST間590Gから狙い目")],
+    "valvrave2": [("CZ間天井", "600Gから狙い目"),
+                  ("ボーナス間天井", "1000Gから狙い目"),
+                  ("周期天井", "5周期目〜狙い目")],
+    "hokuto_tensei2": [("あべし間天井", "780あべしから狙い目")],
+    "sao": [("スルー天井", "4スルー〜から強め")],
+    "hanma_baki": [("スルー天井", "5スルー〜から強め")],
+    # ★箱ごと落とす★＝中身が全部、作った箱と重なっている。
+    #   「天国移行率約50%」は記事本文にもあるので失われない（確認済み）。
+    "okidoki_gold": [("スルー狙い", None)],
+    "okidoki_black": [("スルー狙い", None)],
+}
+
+# ★★印の無い箱は、狙い目を言ってはいけない★★
+#   ★なぜ言葉で見るのか★＝「どの箱が狙い目を言っているか」は
+#   サイト自身が使う言い方なので、外の世界の意味ではない。
+#   機械が作る箱はこの言い方を値に使わない（見出しにだけ「狙い目」が入る）。
+#   ★当てはまったら止めて2AIへ回す★（勝手に消さない）。
+CLAIM_WORDS = ("狙い目", "強め", "候補", "様子見", "着席")
+
+
+def stray_claims(sb) -> list:
+    """印の無い箱が狙い目を言っていないか"""
+    bad = []
+    for b in sb or []:
+        if not isinstance(b, dict) or b.get("role") == BOX_ROLE:
+            continue
+        lab = str(b.get("label") or "")
+        val = str(b.get("value") or "")
+        if "狙い" in lab:
+            bad.append("印の無い箱の見出しが狙い目を名乗っています: %s" % lab)
+            continue
+        hit = [w for w in CLAIM_WORDS if w in val]
+        if hit:
+            bad.append("印の無い箱が狙い目を言っています: %s（%s）"
+                       % (lab, "・".join(hit)))
+    return bad
+
+
 # ★狙い目の箱を置く場所★＝まとめる箱のうち、いちばん先頭にあったところ。
 #   もともと無い機種は、天井の箱の次（無ければ先頭）。
 
@@ -492,6 +540,22 @@ def _rebuild_boxes(slug, sb, new_label, new_value):
             return None, "移す一文が見つからない: %s" % text
         out[di] = dict(out[di])
         out[di]["value"] = (dv + "<br>" + text) if dv else text
+    # ── 印の無い箱に残った狙い目を落とす ──
+    for lab, seg in STRAY_PLAN.get(slug, []):
+        i = _find_label(out, lab)
+        if i < 0:
+            continue                      # もう落としてある（2回目）
+        if seg is None:
+            out = [b for n, b in enumerate(out) if n != i]
+            continue
+        val = str(out[i].get("value") or "")
+        parts = [x.strip() for x in val.replace("\n", "<br>").split("<br>")
+                 if x.strip()]
+        if seg not in parts:
+            continue                      # もう落としてある（2回目）
+        out[i] = dict(out[i])
+        out[i]["value"] = "<br>".join(x for x in parts if x != seg)
+
     # ── まとめる箱を決める ──
     if idx:
         drop = list(idx)
@@ -529,6 +593,10 @@ def _rebuild_boxes(slug, sb, new_label, new_value):
             if "天井" in str(b.get("label") or ""):
                 at = i + 1
         new.insert(at, nb)
+    # ★★印の無い箱が狙い目を言っていたら止める★★（fail-closed）
+    stray = stray_claims(new)
+    if stray:
+        return None, " ／ ".join(stray)
     return new, ""
 
 
@@ -889,6 +957,19 @@ def _real_file_tests(t):
         io.open(p_goblin, "w", encoding="utf-8", newline="\n").write(
             json.dumps(o3, ensure_ascii=False, indent=1) + "\n")
         t("　（対照）狙い目と関係ない箱は止めない", check() == 0)
+        # ⑧ ★★印の無い箱に狙い目を残したら止まる★★（Codexの指摘）
+        #   ★関数だけの試験では、関門に配線されている証拠にならない★（罠③）
+        #   ＝実データが綺麗なので、関門を殺しても何も変わらなかった。
+        o4 = _sj.read_json(p_goblin, expect=dict)
+        for _b in o4["summaryBoxes"]:
+            if str(_b.get("label") or "") == "天井":
+                _b["value"] = str(_b.get("value") or "") + "<br>600Gから狙い目"
+        io.open(p_goblin, "w", encoding="utf-8",
+                newline=chr(10)).write(
+            json.dumps(o4, ensure_ascii=False, indent=1) + chr(10))
+        t("★★天井の箱に狙い目を残したら止める★★"
+          "／★これが実際に公開されていた姿（ヴァルヴレイヴ2）★",
+          check() != 0)
     finally:
         for k in based:
             g[k] = keep[k]
@@ -1004,6 +1085,23 @@ def selftest() -> int:
 
     # ★交換率を持たない機種は何も作らない★
     t("交換率が無ければ作らない", for_machine({"checker": {"unit": "G"}}) == {})
+
+    # ★印の無い箱が狙い目を言っていないか★（2026-09-11・Codexの指摘）
+    #   ★読者に矛盾が見えていた★＝ヴァルヴレイヴ2の天井の箱に
+    #   「600Gから狙い目」が残り、作った箱の550Gと食い違っていた。
+    t("★印の無い箱が狙い目を言っていたら止める★",
+      any("狙い目を言っています" in x for x in stray_claims(
+          [{"label": "CZ間天井", "value": "999G+α<br>600Gから狙い目"}])))
+    t("★見出しで狙い目を名乗っていても止める★"
+      "／★『スルー狙い』は「狙い目」という語を含まない★",
+      any("見出しが狙い目を名乗っています" in x for x in stray_claims(
+          [{"label": "スルー狙い", "value": "4スルー〜"}])))
+    t("　作った箱（印つき）は見ない", stray_claims(
+        [{"label": "5.6枚狙い目", "value": "通常570G〜", "role": BOX_ROLE}])
+        == [])
+    t("　狙い目を言っていない箱は通す", stray_claims(
+        [{"label": "天井", "value": "999G+α"},
+         {"label": "ヤメ時", "value": "前兆を確認して区切る"}]) == [])
 
     # ★ひな型の契約★（2026-09-11・Codexの指摘2）
     _tpl_ok = io.open(TEMPLATE, encoding="utf-8").read()

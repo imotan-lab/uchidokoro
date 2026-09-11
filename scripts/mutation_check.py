@@ -57,6 +57,22 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #   と出て、本物の見落としが埋もれる。
 MUTATIONS = [
     {
+        "why": "★印の無い箱に狙い目が残っていても通す"
+               "（天井の箱に古い狙い目が残り、読者に矛盾が見える）★",
+        "file": "scripts/target_display.py",
+        "before": "    stray = stray_claims(new)",
+        "after": "    stray = []",
+        "run": ["scripts/target_display.py"],
+    },
+    {
+        "why": "★見出しで狙い目を名乗る箱を見逃す"
+               "（『スルー狙い』は「狙い目」という語を含まない）★",
+        "file": "scripts/target_display.py",
+        "before": '        if "狙い" in lab:',
+        "after": "        if False:",
+        "run": ["scripts/target_display.py"],
+    },
+    {
         "why": "★R16の配線の検査をやめる"
                "（採取する行を外しても、誰も気づかなくなる）★",
         "file": "scripts/audit_render.py",
