@@ -1688,14 +1688,24 @@ def holder_of(slug: str, path: str = STATE_PATH):
 
     ★2つ以上のタスクが同じ機種を担当していたら None を返す★
     （どちらの権限で書いているのか決められないので、安全側に倒す）。
+
+    ★★今日の記録だけを見る★★（2026-09-11・Codexの指摘）＝
+    `tasks` の各項目は、そのタスクが次に `_entry()` を通るまで
+    **前日の guard_slug と target_slug が残る**。日付を見ないと、
+    前日に別のタスクが同じ機種を担当していただけで「2つ一致」になり、
+    ★今日の正常な書き込みが止まる★（守りが逆に朝のタスクを殺す）。
     """
     data = _load(path)
     got = []
     for name, e in (data.get("tasks") or {}).items():
         if not isinstance(e, dict):
             continue
+        if e.get("run_date") != _today():
+            continue                      # ★前日までの記録は担当ではない★
         if e.get("guard_slug") == slug and e.get("target_slug") == slug:
-            got.append({"task": name, "repairing": bool(e.get("repairing"))})
+            got.append({"task": name,
+                        "repairing": bool(e.get("repairing")),
+                        "decision_finding": e.get("decision_finding") or ""})
     return got[0] if len(got) == 1 else None
 
 

@@ -2929,6 +2929,24 @@ MUTATIONS = [
         "issues": [514, 640],
     },
     {
+        "why": ("★前日の担当記録を今日の担当と見なす"
+                "（古い記録が残っているだけで、毎朝のタスクが止まる）★"),
+        "file": "scripts/task_guard.py",
+        "before": '        if e.get("run_date") != _today():',
+        "after": "        if False:",
+        "run": ["scripts/decide_now.py"],
+        "issues": [514, 640],
+    },
+    {
+        "why": ("★合意（AGREED）を通らずに記事を書けるようにする"
+                "（--decision なしで担当を取れば素通りできた）★"),
+        "file": "scripts/decide_now.py",
+        "before": "    if not _fid:",
+        "after": "    if False:",
+        "run": ["scripts/decide_now.py"],
+        "issues": [514, 640],
+    },
+    {
         "why": ("★関門がいつでも断る"
                 "（読者に誤りは出ないが、毎朝のタスクが1機種も直せなくなる）★"),
         "file": "scripts/decide_now.py",

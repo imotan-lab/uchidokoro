@@ -1153,9 +1153,20 @@ def _guard_problem(slug: str) -> str:
     if not who:
         return (f"{slug} の担当を取っていません"
                 "（task_guard.py claim で担当を取ってから書いてください）")
+    # ★★合意（AGREED）を通らずには書けない★★（2026-09-11・Codexの指摘P1）
+    #   ★直す前★＝`before_write` は担当記録に decision_finding があるときだけ
+    #   合意を見るので、`--decision` なしで担当を取れば
+    #   ★合意していなくても書けた★（CLAUDE.mdの記述と食い違っていた）。
+    #   ★本番は --decision 付きで担当を取る★（更新タスクの手順書1184行）ので、
+    #   必須にしても毎朝のタスクは止まらない。
+    _fid = str(who.get("decision_finding") or "")
+    if not _fid:
+        return (f"{slug} は「見つけたもの」を指さずに担当しています"
+                "（claim --decision <finding_id> で担当を取り直してください。"
+                "2AIの合意（AGREED）を通らずには書けません）")
     try:
         _tg.before_write(who["task"], slug, _sp,
-                         repairing=who["repairing"])
+                         repairing=who["repairing"], finding=_fid)
     except Exception as e:                                   # noqa: BLE001
         return f"まだ書いてよい状態ではありません: {e}"
     return ""
@@ -3291,9 +3302,13 @@ def _selftest() -> int:
         #   置き換えるのは**記録の置き場所だけ**（本番の記録は触らない）。
         import task_guard as _tg9
         import claim_pipeline as _cp9
+        import repair_journal as _rj9
         _keep_sp = _tg9.STATE_PATH
+        _keep_store = _rj9.STORE
         _ok_slug = ""
-        for _cand in sorted(os.listdir(_keep))[:40]:
+        # ★先頭40件に貼り付けない★（2026-09-11・Codexの指摘）＝
+        #   41件目以降に書ける機種があっても落ちる／先頭が全部READYでも落ちる。
+        for _cand in sorted(os.listdir(_keep)):
             if not _cand.endswith(".json"):
                 continue
             _cs = _cand[:-5]
@@ -3306,6 +3321,23 @@ def _selftest() -> int:
         t("　（前提）書いてよい段階の機種が実在する"
           "（★無いとこの対照は何も試していない★）", bool(_ok_slug))
         if _ok_slug:
+            # ★★合意（AGREED）まで通す★★（2026-09-11・Codexの指摘P2⑤）
+            #   ★直す前は decision_finding が無いまま「通った」★ので、
+            #   ★合意なしでも書ける状態を“成功例”として固定していた★。
+            import hashlib as _hl9
+            _store9 = os.path.join(td, "repairs")
+            os.makedirs(_store9, exist_ok=True)
+            _rj9.STORE = _store9
+            _fid9 = "0" * 16
+            _dp9 = os.path.join(_keep, _ok_slug + ".json")
+            _sha9 = _hl9.sha256(
+                io.open(_dp9, "rb").read().replace(b"\r\n", b"\n")).hexdigest()
+            io.open(os.path.join(_store9, _fid9 + ".json"), "w",
+                    encoding="utf-8").write(json.dumps(
+                        {"schema_version": _rj9.SCHEMA, "finding_id": _fid9,
+                         "slug": _ok_slug, "state": "AGREED",
+                         "source_sha256": _sha9, "history": []},
+                        ensure_ascii=False))
             _sp9 = os.path.join(td, "guard_state.json")
             io.open(_sp9, "w", encoding="utf-8").write(json.dumps(
                 {"schema": 1,
@@ -3313,14 +3345,43 @@ def _selftest() -> int:
                      "run_date": _tg9._today(),
                      "target_slug": _ok_slug, "guard_slug": _ok_slug,
                      "repairing": False, "mutation_started": False,
+                     "decision_finding": _fid9,
                      "codex_rounds": 0, "final_stage": None}},
                  "day": {}, "reservations": {}, "repair": {},
                  "night": {}, "manual_commits": []}, ensure_ascii=False))
             _tg9.STATE_PATH = _sp9
             try:
                 _gp9 = _guard_problem(_ok_slug)
+                # ★（対照）合意の印が無ければ通さない★
+                io.open(_sp9, "w", encoding="utf-8").write(json.dumps(
+                    {"schema": 1,
+                     "tasks": {"update-machine": {
+                         "run_date": _tg9._today(),
+                         "target_slug": _ok_slug, "guard_slug": _ok_slug,
+                         "repairing": False, "mutation_started": False,
+                         "codex_rounds": 0, "final_stage": None}},
+                     "day": {}, "reservations": {}, "repair": {},
+                     "night": {}, "manual_commits": []}, ensure_ascii=False))
+                _gp9b = _guard_problem(_ok_slug)
+                # ★（対照）前日の記録は担当と見なさない★
+                io.open(_sp9, "w", encoding="utf-8").write(json.dumps(
+                    {"schema": 1,
+                     "tasks": {"update-machine": {
+                         "run_date": "2000-01-01",
+                         "target_slug": _ok_slug, "guard_slug": _ok_slug,
+                         "repairing": False, "decision_finding": _fid9}},
+                     "day": {}, "reservations": {}, "repair": {},
+                     "night": {}, "manual_commits": []}, ensure_ascii=False))
+                _gp9c = _guard_problem(_ok_slug)
             finally:
                 _tg9.STATE_PATH = _keep_sp
+                _rj9.STORE = _keep_store
+            t("　（対照）合意（AGREED）の印が無ければ通さない"
+              "（★--decision なしで担当を取れば合意なしで書けた★）",
+              "見つけたもの" in _gp9b)
+            t("　（対照）前日の担当記録は、今日の担当と見なさない"
+              "（★日付を見ないと、古い記録で毎朝のタスクが止まる★）",
+              "担当を取っていません" in _gp9c)
             t("　（対照）担当を取っていれば、関門は通す"
               "（★断るだけの壊れ方なら毎朝のタスクが黙って止まる★）",
               _gp9 == "")
