@@ -56,6 +56,40 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #   ★同じ壊し方を戻さないこと★＝いまの取り決めでは必ず「捕まえられない」
 #   と出て、本物の見落としが埋もれる。
 MUTATIONS = [
+    {
+        "why": "★R16の配線の検査をやめる"
+               "（採取する行を外しても、誰も気づかなくなる）★",
+        "file": "scripts/audit_render.py",
+        "before": "    return [why for needle, why in R16_WIRING"
+                  " if needle not in src]",
+        "after": "    return []",
+        "run": ["scripts/audit_render.py"],
+    },
+    # ─── 2026-09-11・review109 で塞いだ穴 ────────────────────────
+    {
+        "why": "★狙い目の箱の印を採取しない"
+               "（採取を外すだけで、印の検査ごと消えていた＝罠③のR16版）★",
+        "file": "scripts/audit_render.py",
+        "before": '            _roles[_k] = _got["roles"]',
+        "after": "            pass",
+        "run": ["scripts/audit_render.py"],
+    },
+    {
+        "why": "★交換率ごとの天井を採取しない"
+               "（採取を外すだけで、天井の検査ごと消える）★",
+        "file": "scripts/audit_render.py",
+        "before": '            _ceils[_k] = _got["ceil"]',
+        "after": "            pass",
+        "run": ["scripts/audit_render.py"],
+    },
+    {
+        "why": "★見出しを部分一致で見る"
+               "（別の見出しでも通ってしまう）★",
+        "file": "scripts/audit_render.py",
+        "before": '            if str(labels[k] or "").strip() != want_lab:',
+        "after": '            if want_lab not in str(labels[k] or ""):',
+        "run": ["scripts/audit_render.py"],
+    },
     # ─── 2026-09-11・review108 で塞いだ穴 ────────────────────────
     {
         "why": "★ひな型を古い予備生成器の形へ戻す"
@@ -104,16 +138,16 @@ MUTATIONS = [
         "why": "★交換率ごとに天井を見ない"
                "（途中の交換率で壊れて最後に戻れば気づかない）★",
         "file": "scripts/audit_render.py",
-        "before": "        if k in ceils and ceils[k] != ceil_before:",
-        "after": "        if False:",
+        "before": "        elif ceils[k] != ceil_before:",
+        "after": "        elif False:",
         "run": ["scripts/audit_render.py"],
     },
     {
         "why": "★狙い目の箱の印の数を見ない"
                "（手書きの箱を先頭に置かれて、本物の壊れを見逃す）★",
         "file": "scripts/audit_render.py",
-        "before": "        if k in roles and roles[k] != 1:",
-        "after": "        if False:",
+        "before": "        elif roles[k] != 1:",
+        "after": "        elif False:",
         "run": ["scripts/audit_render.py"],
     },
     {

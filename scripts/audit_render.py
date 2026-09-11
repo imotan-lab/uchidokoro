@@ -293,11 +293,37 @@ def judge_render(boxes: list, detail, expected: list | None = None) -> list[str]
     return ngs
 
 
+# ★★R16が「採取して渡している」か★★（2026-09-11・Codexの指摘1）
+#   ★純関数の試験だけでは、採取する行を外したことに気づけない★（罠③）。
+#   ブラウザの道は試験から動かせないので、★書いてある形を見る★。
+#   ここは「気づかずに外す」を止めるための綱であって、
+#   動く証拠は R16 を実際に走らせた結果のほう。
+R16_WIRING = (
+    ('_roles[_k] = _got["roles"]', "狙い目の箱の印を採取していません"),
+    ('_ceils[_k] = _got["ceil"]', "交換率ごとの天井を採取していません"),
+    ('_labels[_k] = _got["label"]', "狙い目の箱の見出しを採取していません"),
+    ("_ratelab[_k] = str(_r.get(\"label\") or \"\")",
+     "交換率の呼び名を採取していません"),
+    ("judge_rates(_shown, _want_rates, _ceil_before, _ceils,",
+     "採取したものを判定へ渡していません"),
+    ("_roles, _labels, _ratelab)", "印・見出し・呼び名を渡していません"),
+)
+
+
+def r16_wiring_problems(src: str | None = None) -> list:
+    """採取して渡す形が残っているか（読むだけ）"""
+    if src is None:
+        import inspect as _i
+        try:
+            src = _i.getsource(check_one)
+        except Exception as e:                        # noqa: BLE001
+            return ["R16の配線を読めません: %s" % type(e).__name__]
+    return [why for needle, why in R16_WIRING if needle not in src]
+
+
 def judge_rates(shown: dict, want: dict,
                 ceil_before: list, ceils: dict,
-                roles: dict | None = None,
-                labels: dict | None = None,
-                rate_labels: dict | None = None) -> list[str]:
+                roles: dict, labels: dict, rate_labels: dict) -> list[str]:
     """★R16の判定★＝交換率を切り替えたあとの画面を、作った文と突き合わせる
 
     ★純関数にする理由★＝ブラウザの中に判定を書くと、
@@ -307,10 +333,12 @@ def judge_rates(shown: dict, want: dict,
     want  … {交換率の鍵: target_display が作った文}
     ceil_* … 天井の箱（切り替えの前後）
     """
+    # ★★観測が欠けていることを「通す理由」にしない★★
+    #   （2026-09-11・Codexの指摘1）＝直す前は
+    #   　`roles`/`labels`/`ceils` を省略でき、`k in roles` の時だけ見ていた。
+    #   ＝★採取する行を1つ外すと、その検査ごと消える★（罠③のR16版）。
+    #   いまは「採れていない」こと自体を赤くする。
     ngs = []
-    roles = roles or {}
-    labels = labels or {}
-    rate_labels = rate_labels or {}
     for k in sorted(want):
         w = want[k]
         if k not in shown:
@@ -331,16 +359,27 @@ def judge_rates(shown: dict, want: dict,
         # ★★所有権の印がちょうど1つ★★（2026-09-11・Codexの指摘5）＝
         #   値だけを見ていると、手書きの箱を先頭に置かれたときに
         #   そちらを読んで、本物が壊れていても気づかない。
-        if k in roles and roles[k] != 1:
+        if k not in roles:
+            ngs.append(f"R16: 交換率 {k} で狙い目の箱の印を数えていません")
+        elif roles[k] != 1:
             ngs.append(f"R16: 交換率 {k} で狙い目の箱の印が {roles[k]} 個です")
         # ★見出しも交換率に合わせて変わること★
-        want_lab = rate_labels.get(k)
-        if want_lab and k in labels and want_lab not in str(labels[k] or ""):
-            ngs.append(f"R16: 交換率 {k} の見出しが追いついていません"
-                       f"（画面『{labels[k]}』／『{want_lab}』のはず）")
+        #   ★完全一致で見る★（2026-09-11・Codexの指摘）＝
+        #   部分一致だと「5.6枚狙い目ではない別の見出し」も通る。
+        if k not in rate_labels:
+            ngs.append(f"R16: 交換率 {k} の見出しの期待値がありません")
+        elif k not in labels:
+            ngs.append(f"R16: 交換率 {k} の見出しを読んでいません")
+        else:
+            want_lab = "%s狙い目" % rate_labels[k]
+            if str(labels[k] or "").strip() != want_lab:
+                ngs.append(f"R16: 交換率 {k} の見出しが追いついていません"
+                           f"（画面『{labels[k]}』／『{want_lab}』のはず）")
         # ★★天井は「切り替えた直後ごと」に見る★★（同・指摘3）＝
         #   前後だけだと、途中の交換率で壊れて最後に戻れば気づかない。
-        if k in ceils and ceils[k] != ceil_before:
+        if k not in ceils:
+            ngs.append(f"R16: 交換率 {k} で天井の箱を読んでいません")
+        elif ceils[k] != ceil_before:
             ngs.append(f"R16: 交換率 {k} へ切り替えると天井の箱が変わります"
                        f"（{ceil_before} → {ceils[k]}）")
     return ngs
@@ -1137,6 +1176,33 @@ def selftest() -> int:
       any("印が 0 個です" in x for x in
           _jr({"eq56": "通常570G〜"}, {"eq56": "通常570G〜"},
               roles={"eq56": 0})))
+    # ★★観測が欠けていることを「通す理由」にしない★★（Codexの指摘1）
+    #   ★採取する行を1つ外すと、その検査ごと消えていた（罠③のR16版）★
+    t("★★印を数えていなければ止める★★"
+      "／★採取を外しただけで印の検査が消えるのが、直す前の姿★",
+      any("印を数えていません" in x for x in
+          judge_rates({"eq56": "x"}, {"eq56": "x"}, [], {"eq56": []},
+                      {}, {"eq56": "5.6枚狙い目"}, {"eq56": "5.6枚"})))
+    t("★★見出しを読んでいなければ止める★★",
+      any("見出しを読んでいません" in x for x in
+          judge_rates({"eq56": "x"}, {"eq56": "x"}, [], {"eq56": []},
+                      {"eq56": 1}, {}, {"eq56": "5.6枚"})))
+    t("★★天井を読んでいなければ止める★★",
+      any("天井の箱を読んでいません" in x for x in
+          judge_rates({"eq56": "x"}, {"eq56": "x"}, [], {},
+                      {"eq56": 1}, {"eq56": "5.6枚狙い目"}, {"eq56": "5.6枚"})))
+    t("★★採取して渡す配線が残っている★★"
+      "／★採取を1行外すだけで、その検査ごと消える（罠③）★",
+      r16_wiring_problems() == [])
+    t("　（対照）採取を1行外したら言う",
+      any("印を採取していません" in x for x in
+          r16_wiring_problems("（採取の行が無い写し）")))
+    t("★★見出しは完全一致で見る★★"
+      "／★部分一致だと、別の見出しでも通る★",
+      any("見出しが追いついていません" in x for x in
+          judge_rates({"eq56": "x"}, {"eq56": "x"}, [], {"eq56": []},
+                      {"eq56": 1}, {"eq56": "5.6枚狙い目（暫定）"},
+                      {"eq56": "5.6枚"})))
     t("★★飛び先が無ければ止める★★",
       any("飛び先がありません" in x for x in
           judge_toc(_toc_of(_want_legacy, exists=False), _want_legacy)))
