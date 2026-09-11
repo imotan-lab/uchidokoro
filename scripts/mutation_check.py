@@ -2918,6 +2918,34 @@ MUTATIONS = [
         "after": "    s, t = (i, j)",
         "run": ["scripts/decide_now.py"],
     },
+    # ─── 2026-09-11・台帳#514／#640 書く直前の関門 ───
+    {
+        "why": ("★担当も合意も確かめずに記事を書き換えられる"
+                "（関門は在るのに、書く側が呼んでいない）★"),
+        "file": "scripts/decide_now.py",
+        "before": "    if apply_it and guard:",
+        "after": "    if False:",
+        "run": ["scripts/decide_now.py"],
+        "issues": [514, 640],
+    },
+    {
+        "why": ("★関門がいつでも断る"
+                "（読者に誤りは出ないが、毎朝のタスクが1機種も直せなくなる）★"),
+        "file": "scripts/decide_now.py",
+        "before": '        return f"まだ書いてよい状態ではありません: {e}"\n    return ""',
+        "after": '        return f"まだ書いてよい状態ではありません: {e}"\n    return "いつでも断ります"',
+        "run": ["scripts/decide_now.py"],
+        "issues": [514, 640],
+    },
+    {
+        "why": ("★担当が無くても書けるようにする"
+                "（holder_of が None でも通す）★"),
+        "file": "scripts/task_guard.py",
+        "before": "    return got[0] if len(got) == 1 else None",
+        "after": '    return got[0] if got else {"task": "update-machine", "repairing": False}',
+        "run": ["scripts/decide_now.py"],
+        "issues": [514, 640],
+    },
     {
         "why": "★部分置換で、同じ文字が2か所にあっても直す★",
         "file": "scripts/decide_now.py",

@@ -1673,6 +1673,32 @@ def manual_commit(commit: str, why: str, path: str = STATE_PATH) -> dict:
     return {"commit": full, "files": len(files), "ok": True}
 
 
+def holder_of(slug: str, path: str = STATE_PATH):
+    """★この機種の担当を取っているタスクを返す★（2026-09-11・台帳#514/#640）
+
+    返すもの: {"task": タスク名, "repairing": bool} ／ 取っていなければ None
+
+    ★呼ぶ側にタスク名を名乗らせない★＝名乗らせる形にすると、
+    間違った名前（あるいは担当を取っている別のタスクの名前）を書くだけで
+    関門を素通りできる。★記録のほうから引く★。
+
+    ★見るのは guard_slug★＝`target_slug`（その日の予定）ではなく、
+    実際に担当を確保したときに書かれる印。
+    両方そろっていないと担当とは見なさない。
+
+    ★2つ以上のタスクが同じ機種を担当していたら None を返す★
+    （どちらの権限で書いているのか決められないので、安全側に倒す）。
+    """
+    data = _load(path)
+    got = []
+    for name, e in (data.get("tasks") or {}).items():
+        if not isinstance(e, dict):
+            continue
+        if e.get("guard_slug") == slug and e.get("target_slug") == slug:
+            got.append({"task": name, "repairing": bool(e.get("repairing"))})
+    return got[0] if len(got) == 1 else None
+
+
 def before_write(task: str, slug: str, path: str = STATE_PATH,
                  repairing: bool = False, finding=None) -> dict:
     """記事を書き換える前の確認。★触ってよい段階か毎回聞き直す★

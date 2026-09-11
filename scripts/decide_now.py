@@ -1130,7 +1130,39 @@ def _agreement_problem(slug: str, dec: dict):
     return None
 
 
-def apply_decision(path: str, apply_it: bool = False) -> dict:
+def _guard_problem(slug: str) -> str:
+    """★書く直前に担当と合意を確かめる★（通らなければ理由を返す＝何も書かない）
+
+    （2026-09-11・台帳#514／#640）
+    ★呼ぶ側にタスク名を名乗らせない★＝記録のほうから引く（`holder_of`）。
+    名乗らせると、担当を取っている別のタスクの名前を書くだけで素通りできる。
+
+    ★fail-closed★＝関門を読み込めない・記録が読めないときも書かない。
+    """
+    try:
+        import task_guard as _tg
+    except Exception as e:                                   # noqa: BLE001
+        return f"関門を読み込めないので書きません: {type(e).__name__}: {e}"
+    # ★記録の場所は「呼ぶとき」に読む★＝既定引数は関数を作った時に固まるので、
+    #   そのままでは試験が置き換えられず、★通る側を一度も試せない★。
+    _sp = getattr(_tg, "STATE_PATH", None)
+    try:
+        who = _tg.holder_of(slug, _sp)
+    except Exception as e:                                   # noqa: BLE001
+        return f"担当の記録を読めないので書きません: {type(e).__name__}: {e}"
+    if not who:
+        return (f"{slug} の担当を取っていません"
+                "（task_guard.py claim で担当を取ってから書いてください）")
+    try:
+        _tg.before_write(who["task"], slug, _sp,
+                         repairing=who["repairing"])
+    except Exception as e:                                   # noqa: BLE001
+        return f"まだ書いてよい状態ではありません: {e}"
+    return ""
+
+
+def apply_decision(path: str, apply_it: bool = False, *,
+                   guard: bool = True) -> dict:
     """2AIが決めたとおりに直す（★消す・言い換えるだけ★）。"""
     dec = _load_decision(path)
     try:
@@ -1799,6 +1831,17 @@ def apply_decision(path: str, apply_it: bool = False) -> dict:
     #   （実際にファイルへ書くのは apply_it のときだけ）
     tmp = p + ".tmp"
 
+    # ★★書く直前に、担当と合意の関門を必ず通す★★（2026-09-11・台帳#514/#640）
+    #   ★ここが抜けていた★＝関門は task_guard にちゃんと在ったのに、
+    #   書く側が一度も呼んでいなかった。3回踏んだ（8/30に2回・9/11に1回）。
+    #   ★見るだけのとき（apply_it=False）は通さない★＝
+    #   担当を取る前に下読みできるほうが実務に合う。書くときだけ止める。
+    if apply_it and guard:
+        _gw = _guard_problem(slug)
+        if _gw:
+            result["problems"].append(_gw)
+            return result
+
     if apply_it:
         for kind, si, bi, a in plan:
             if kind in OUTSIDE_KINDS:
@@ -1995,7 +2038,7 @@ def _selftest() -> int:
         r6 = apply_decision(dec([{"op": "drop", "text": "B の行です。",
                                   "why": "…", "meaning_why": "2AIで読み比べ、同じ内容だと判断しました"},
                                  {"op": "drop", "text": "無い行", "why": "…", "meaning_why": "2AIで読み比べ、同じ内容だと判断しました"}]),
-                            apply_it=True)
+                            apply_it=True, guard=False)
         t("★★1件でも外れたら何も書かない★★", bool(r6["problems"]))
         with io.open(p, encoding="utf-8") as f:
             t("　記事はそのまま",
@@ -2244,7 +2287,7 @@ def _selftest() -> int:
             {"op": "replace", "before": "スルーカウントリセット",
              "after": "周期カウントリセット",
              "why": "この機種にスルー天井は無い（本文と揃える）", "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました"}]),
-            apply_it=True)
+            apply_it=True, guard=False)
         with io.open(os.path.join(td, "m.json"), encoding="utf-8") as f:
             _m1 = json.load(f)
         t("★★★基本情報表の食い違いを直せる★★★"
@@ -2257,7 +2300,7 @@ def _selftest() -> int:
         rm2 = apply_decision(dec_m([
             {"op": "replace", "before": "等価400G〜",
              "after": "等価400G〜（CZ間）",
-             "why": "本文と同じ言い方にそろえる", "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました"}]), apply_it=True)
+             "why": "本文と同じ言い方にそろえる", "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました"}]), apply_it=True, guard=False)
         with io.open(os.path.join(td, "m.json"), encoding="utf-8") as f:
             _m2 = json.load(f)
         t("★要約ボックスも直せる★",
@@ -2273,7 +2316,7 @@ def _selftest() -> int:
              "before": "この機種は2026年4月6日導入。解析は順次更新予定。",
              "after": "この機種は2026年4月6日導入。",
              "why": "時間で嘘になる文（順次更新予定）を落とす", "meaning_why": "2AIで読み比べ、意味は変わらないと判断しました"}]),
-            apply_it=True)
+            apply_it=True, guard=False)
         with io.open(os.path.join(td, "m.json"), encoding="utf-8") as f:
             _m3 = json.load(f)
         t("★リード文も直せる★（時間で嘘になる文を落とせる）",
@@ -3013,7 +3056,7 @@ def _selftest() -> int:
             ensure_ascii=False))
         # ★例外で落ちるのを「守りの証拠」にしない★＝自分で受けて❌にする
         try:
-            _g11 = apply_decision(_r11, apply_it=True)
+            _g11 = apply_decision(_r11, apply_it=True, guard=False)
             _a11 = json.load(io.open(os.path.join(td, "s11.json"),
                                      encoding="utf-8"))
         except Exception:                  # noqa: BLE001
@@ -3133,7 +3176,7 @@ def _selftest() -> int:
             {"op": "drop", "text": "天井は500Gです。", "why": "重複を1つにする"},
             {"op": "drop", "text": "天井は500Gです。",
              "why": "重複をもう1つ消す"}], nm="ds9b")
-        _got92 = apply_decision(_r92, apply_it=True)
+        _got92 = apply_decision(_r92, apply_it=True, guard=False)
         _after92 = json.load(io.open(os.path.join(td, "s9.json"),
                                      encoding="utf-8"))
         _left92 = [x for x in _after92["sections"][1]["body"]
@@ -3241,8 +3284,70 @@ def _selftest() -> int:
             _rj6.STORE = _keep6
             _sh6.rmtree(_dir6, ignore_errors=True)
 
+        # ★★（対照）担当を取っていれば、関門は通す★★（2026-09-11）
+        #   ★これが無いと★＝関門が「いつでも断る」壊れ方をしたとき、
+        #   断る側の試験は緑のままで、毎朝のタスクだけが黙って止まる。
+        #   ★偽物で固めない★＝本物の task_guard に、本物の機種で聞く。
+        #   置き換えるのは**記録の置き場所だけ**（本番の記録は触らない）。
+        import task_guard as _tg9
+        import claim_pipeline as _cp9
+        _keep_sp = _tg9.STATE_PATH
+        _ok_slug = ""
+        for _cand in sorted(os.listdir(_keep))[:40]:
+            if not _cand.endswith(".json"):
+                continue
+            _cs = _cand[:-5]
+            try:
+                if _cp9.assess(_cs)["stage"] in _tg9.WRITABLE_STAGES:
+                    _ok_slug = _cs
+                    break
+            except Exception:                                # noqa: BLE001
+                continue
+        t("　（前提）書いてよい段階の機種が実在する"
+          "（★無いとこの対照は何も試していない★）", bool(_ok_slug))
+        if _ok_slug:
+            _sp9 = os.path.join(td, "guard_state.json")
+            io.open(_sp9, "w", encoding="utf-8").write(json.dumps(
+                {"schema": 1,
+                 "tasks": {"update-machine": {
+                     "run_date": _tg9._today(),
+                     "target_slug": _ok_slug, "guard_slug": _ok_slug,
+                     "repairing": False, "mutation_started": False,
+                     "codex_rounds": 0, "final_stage": None}},
+                 "day": {}, "reservations": {}, "repair": {},
+                 "night": {}, "manual_commits": []}, ensure_ascii=False))
+            _tg9.STATE_PATH = _sp9
+            try:
+                _gp9 = _guard_problem(_ok_slug)
+            finally:
+                _tg9.STATE_PATH = _keep_sp
+            t("　（対照）担当を取っていれば、関門は通す"
+              "（★断るだけの壊れ方なら毎朝のタスクが黙って止まる★）",
+              _gp9 == "")
+            if _gp9:
+                print("   通らなかった理由:", _gp9[:120])
+
+        # ★★担当を取っていなければ、記事を1文字も書き換えられない★★
+        #   （2026-09-11・台帳#514／#640）
+        #   ★12日間あいていた穴★＝関門は task_guard に在ったのに、
+        #   ★書く側が一度も呼んでいなかった★。実際に3回踏んでいる
+        #   （2026-08-30に2回・2026-09-11に1回）。
+        #   ★すぐ下の r7 が対照★＝同じ決定を関門なしで通すと書ける。
+        _keep_g = io.open(p, encoding="utf-8").read()
+        _rg = apply_decision(
+            dec([{"op": "drop", "text": "B の行です。", "why": "…",
+                  "meaning_why": "2AIで読み比べ、同じ内容だと判断しました"}]),
+            apply_it=True)                      # ★関門は既定のまま★
+        t("★★担当を取っていなければ、記事を1文字も書き換えられない★★"
+          "（★関門は在ったのに、書く側が呼んでいなかった＝3回踏んだ★）",
+          _rg.get("wrote") is not True
+          and any("担当を取っていません" in str(x)
+                  for x in (_rg.get("problems") or [])))
+        t("　同時に、記事は1文字も変わっていない",
+          io.open(p, encoding="utf-8").read() == _keep_g)
+
         r7 = apply_decision(dec([{"op": "drop", "text": "B の行です。",
-                                  "why": "…", "meaning_why": "2AIで読み比べ、同じ内容だと判断しました"}]), apply_it=True)
+                                  "why": "…", "meaning_why": "2AIで読み比べ、同じ内容だと判断しました"}]), apply_it=True, guard=False)
         t("　通れば書ける", r7.get("wrote") is True)
         with io.open(p, encoding="utf-8") as f:
             t("　消したい行だけが消えている",
