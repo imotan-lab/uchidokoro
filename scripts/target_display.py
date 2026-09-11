@@ -532,6 +532,51 @@ def _rebuild_boxes(slug, sb, new_label, new_value):
     return new, ""
 
 
+TEMPLATE = os.path.join(BASE, "machine.html")
+
+# ★★ひな型が守るべきこと★★（2026-09-11・Codexの指摘2）
+#   ★なぜ要るか★＝push前の点検は「作った文とデータが一致するか」しか見ない。
+#   ＝ひな型（画面を描く側）を古い形へ戻しても、データが一致していれば緑だった。
+#   ★限界を正直に書く★＝これは**文字が在るか**の検査で、
+#   「本当に動くか」を示すものではない。動く証拠は R16（画面の検査）。
+#   ここは「気づかずに戻す」を止めるための綱。
+TEMPLATE_MUST = (
+    # 「鍵が無い」と「中身が空」を分ける（||に戻すと古い予備生成器へ落ちる）
+    ("hasOwnProperty.call(_sbr, rateKey)",
+     "交換率ごとの文の有無を hasOwnProperty で見ていません"),
+    # 狙い目の箱は所有権の印で探す
+    ('box && box.role === "target"',
+     "狙い目の箱を所有権の印で探していません"),
+    # 画面にも印を出す（検査が数えられるように）
+    ('x && x.role ? ` data-role="${x.role}"` : ""',
+     "画面に所有権の印を出していません"),
+    # リセットの箱は天井を巻き込まない
+    ('lb.includes("リセット") && !lb.includes("天井")',
+     "リセットの箱が天井の箱を巻き込みます"),
+)
+TEMPLATE_MUST_NOT = (
+    ("(_sbr && _sbr[rateKey]) || buildTargetFromChecker",
+     "交換率ごとの文が空のとき、古い予備生成器へ落ちます"),
+)
+
+
+def template_problems(src: str | None = None) -> list:
+    """ひな型が契約どおりかを見る（読むだけ）"""
+    if src is None:
+        try:
+            src = io.open(TEMPLATE, encoding="utf-8").read()
+        except OSError as e:
+            return ["ひな型を読めません: %s" % type(e).__name__]
+    bad = []
+    for needle, why in TEMPLATE_MUST:
+        if needle not in src:
+            bad.append(why)
+    for needle, why in TEMPLATE_MUST_NOT:
+        if needle in src:
+            bad.append(why)
+    return bad
+
+
 def check() -> int:
     """★作り直したら中身が変わるかだけ見る（書かない）★
 
@@ -539,15 +584,23 @@ def check() -> int:
       直す前は `skipped` を報せるだけで終了コードは0だった。
       ＝★生成できない機種が増えても、関所は静かに通す★（fail-open）。
     """
+    tpl = template_problems()
+    if tpl:
+        print("★ひな型（機種ページを描く側）が契約から外れています★")
+        for x in tpl:
+            print("   " + x)
+        print()
     machines, details, skipped = plan_all()
     if skipped:
         print("★機械では決められない機種があります: %d★" % len(skipped))
         for slug, why in skipped:
             print("   %-22s %s" % (slug, why))
         print()
-    if not machines and not details and not skipped:
+    if not machines and not details and not skipped and not tpl:
         print("★一致しています（狙い目の文は作ったものと同じ）★")
         return 0
+    if tpl and not machines and not details and not skipped:
+        return 1
     if machines or details:
         print("★食い違っています★")
     for r in machines:
@@ -700,6 +753,10 @@ def _real_file_tests(t):
     try:
         shutil.copytree(os.path.join(root, "assets"),
                         os.path.join(tmp, "assets"))
+        # ★ひな型も写す★＝点検がひな型の契約も見るようになったので、
+        #   写しに無いと「読めません」で全部赤くなる。
+        shutil.copy2(os.path.join(root, "machine.html"),
+                     os.path.join(tmp, "machine.html"))
         for k in based:
             g[k] = keep[k].replace(root, tmp)
         left = [k for k in based if g[k].startswith(root)]
@@ -947,6 +1004,46 @@ def selftest() -> int:
 
     # ★交換率を持たない機種は何も作らない★
     t("交換率が無ければ作らない", for_machine({"checker": {"unit": "G"}}) == {})
+
+    # ★ひな型の契約★（2026-09-11・Codexの指摘2）
+    _tpl_ok = io.open(TEMPLATE, encoding="utf-8").read()
+    t("★いまのひな型は契約どおり★", template_problems(_tpl_ok) == [])
+    t("★★古い予備生成器の形へ戻したら止める★★"
+      "／★戻しても、データが一致していれば点検は緑だった★",
+      any("古い予備生成器" in x for x in template_problems(
+          _tpl_ok.replace("const normalText = _hasRate ? _sbr[rateKey]",
+                          "const normalText = (_sbr && _sbr[rateKey]) "
+                          "|| buildTargetFromChecker(rateKey); //")
+          .replace("hasOwnProperty.call(_sbr, rateKey)", "false"))))
+    t("★所有権の印で探すのをやめたら止める★",
+      any("所有権の印で探していません" in x for x in template_problems(
+          _tpl_ok.replace('box && box.role === "target"', "false"))))
+    t("★画面に印を出すのをやめたら止める★",
+      any("印を出していません" in x for x in template_problems(
+          _tpl_ok.replace('data-role="${x.role}"', ""))))
+    t("★★条件だけを殺しても止める★★"
+      "／★文字だけを見ていると、手前の条件を false にされて素通りする★",
+      any("印を出していません" in x for x in template_problems(
+          _tpl_ok.replace("x && x.role ? ` data-role=",
+                          "false ? ` data-role="))))
+    t("★リセットの箱が天井を巻き込む形に戻したら止める★",
+      any("天井の箱を巻き込みます" in x for x in template_problems(
+          _tpl_ok.replace('lb.includes("リセット") && !lb.includes("天井")',
+                          'lb.includes("リセット")'))))
+    t("★ひな型を読めないときも止める（fail-closed）★",
+      template_problems("") != [])
+
+    # ★★点検が本当にひな型の契約を見に行くか★★（罠③）
+    #   ★関数の試験だけでは、呼び出しを外したことに気づけない★
+    _keep_tp = globals()["template_problems"]
+    globals()["template_problems"] = lambda src=None: ["わざとの不合格"]
+    try:
+        _called = check() != 0
+    finally:
+        globals()["template_problems"] = _keep_tp
+    t("★★点検の本体がひな型の契約を呼んでいる★★"
+      "／★呼び出しを外しても、関数だけの試験は緑のまま★", _called)
+    t("　戻せば点検は緑", check() == 0)
 
     # ★実データで落ちないこと★
     real = _load()

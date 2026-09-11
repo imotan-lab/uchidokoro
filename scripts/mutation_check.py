@@ -56,6 +56,75 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #   ★同じ壊し方を戻さないこと★＝いまの取り決めでは必ず「捕まえられない」
 #   と出て、本物の見落としが埋もれる。
 MUTATIONS = [
+    # ─── 2026-09-11・review108 で塞いだ穴 ────────────────────────
+    {
+        "why": "★ひな型を古い予備生成器の形へ戻す"
+               "（データが一致していれば点検は緑のままだった）★",
+        "file": "machine.html",
+        "before": "      const normalText = _hasRate ? _sbr[rateKey]",
+        "after": "      const normalText = (_sbr && _sbr[rateKey])"
+                 " || buildTargetFromChecker(rateKey); //",
+        "run": ["scripts/target_display.py"],
+    },
+    {
+        "why": "★画面が所有権の印で箱を探すのをやめる"
+               "（見出しを変えた瞬間に別の箱を書き換える）★",
+        "file": "machine.html",
+        "before": '      const roleIndex = boxes.findIndex('
+                  'box => box && box.role === "target");',
+        "after": "      const roleIndex = -1;",
+        "run": ["scripts/target_display.py"],
+    },
+    {
+        "why": "★画面に所有権の印を出さない"
+               "（検査が印を数えられず、手書きの箱を先頭に置かれても気づかない）★",
+        "file": "machine.html",
+        "before": '      x && x.role ? ` data-role="${x.role}"` : ""}',
+        "after": '      "" || ""}',
+        "run": ["scripts/target_display.py"],
+    },
+    {
+        "why": "★リセットの箱がまた天井を巻き込む"
+               "（リセット天井が狙い目で潰れて読者に届かない）★",
+        "file": "machine.html",
+        "before": '        return lb.includes("リセット") '
+                  '&& !lb.includes("天井");',
+        "after": '        return lb.includes("リセット");',
+        "run": ["scripts/target_display.py"],
+    },
+    {
+        "why": "★ひな型の契約を点検が見ない"
+               "（画面を描く側を古い形へ戻しても push できる）★",
+        "file": "scripts/target_display.py",
+        "before": "    tpl = template_problems()",
+        "after": "    tpl = []",
+        "run": ["scripts/target_display.py"],
+    },
+    {
+        "why": "★交換率ごとに天井を見ない"
+               "（途中の交換率で壊れて最後に戻れば気づかない）★",
+        "file": "scripts/audit_render.py",
+        "before": "        if k in ceils and ceils[k] != ceil_before:",
+        "after": "        if False:",
+        "run": ["scripts/audit_render.py"],
+    },
+    {
+        "why": "★狙い目の箱の印の数を見ない"
+               "（手書きの箱を先頭に置かれて、本物の壊れを見逃す）★",
+        "file": "scripts/audit_render.py",
+        "before": "        if k in roles and roles[k] != 1:",
+        "after": "        if False:",
+        "run": ["scripts/audit_render.py"],
+    },
+    {
+        "why": "★作った文が無いのを「通す理由」にする"
+               "（移行済みの機種で文が作れていなくても緑）★",
+        "file": "scripts/audit_render.py",
+        "before": '            ngs.append(f"R16: 交換率 {k} の狙い目の文が'
+                  '作られていません")\n            continue',
+        "after": "            continue",
+        "run": ["scripts/audit_render.py"],
+    },
     # ─── 2026-09-11・review107 で塞いだ穴 ────────────────────────
     {
         "why": "★決められない機種が在っても書いてしまう"
@@ -85,14 +154,6 @@ MUTATIONS = [
         "file": "scripts/audit_render.py",
         "before": '        elif str(got).strip() != str(w).strip():',
         "after": '        elif False:',
-        "run": ["scripts/audit_render.py"],
-    },
-    {
-        "why": "★交換率を切り替えると天井の箱が書き換わるのを見逃す"
-               "（リセット天井が狙い目で潰れて読者に届かない）★",
-        "file": "scripts/audit_render.py",
-        "before": "    if ceil_before != ceil_after:",
-        "after": "    if False:",
         "run": ["scripts/audit_render.py"],
     },
     # ─── 2026-09-11・狙い目の文を1か所から作るようにした ───────────
@@ -141,7 +202,8 @@ MUTATIONS = [
         "why": "★決められない機種が在っても点検を緑にする"
                "（生成できない機種が増えても、関所が静かに通す）★",
         "file": "scripts/target_display.py",
-        "before": "    if not machines and not details and not skipped:",
+        "before": "    if not machines and not details and not skipped"
+                  " and not tpl:",
         "after": "    if not machines and not details:",
         "run": ["scripts/target_display.py"],
     },

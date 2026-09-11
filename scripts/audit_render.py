@@ -294,7 +294,10 @@ def judge_render(boxes: list, detail, expected: list | None = None) -> list[str]
 
 
 def judge_rates(shown: dict, want: dict,
-                ceil_before: list, ceil_after: list) -> list[str]:
+                ceil_before: list, ceils: dict,
+                roles: dict | None = None,
+                labels: dict | None = None,
+                rate_labels: dict | None = None) -> list[str]:
     """★R16の判定★＝交換率を切り替えたあとの画面を、作った文と突き合わせる
 
     ★純関数にする理由★＝ブラウザの中に判定を書くと、
@@ -305,12 +308,19 @@ def judge_rates(shown: dict, want: dict,
     ceil_* … 天井の箱（切り替えの前後）
     """
     ngs = []
+    roles = roles or {}
+    labels = labels or {}
+    rate_labels = rate_labels or {}
     for k in sorted(want):
         w = want[k]
-        if w is None:
-            continue                      # 作った文が無い機種は照合しない
         if k not in shown:
             ngs.append(f"R16: 交換率 {k} のボタンがありません")
+            continue
+        # ★★期待文が無いことを「通す理由」にしない★★
+        #   （2026-09-11・Codexの指摘4）＝交換率を持つ機種はもう移行済みなので、
+        #   鍵が無い＝作れていない＝止める。★空文字は別扱い★（作った結果が空）。
+        if w is None:
+            ngs.append(f"R16: 交換率 {k} の狙い目の文が作られていません")
             continue
         got = shown[k]
         if got is None:
@@ -318,9 +328,21 @@ def judge_rates(shown: dict, want: dict,
         elif str(got).strip() != str(w).strip():
             ngs.append(f"R16: 交換率 {k} の狙い目が作った文と違います"
                        f"（画面『{got}』／作った文『{w}』）")
-    if ceil_before != ceil_after:
-        ngs.append("R16: 交換率を切り替えると天井の箱が書き換わります"
-                   f"（{ceil_before} → {ceil_after}）")
+        # ★★所有権の印がちょうど1つ★★（2026-09-11・Codexの指摘5）＝
+        #   値だけを見ていると、手書きの箱を先頭に置かれたときに
+        #   そちらを読んで、本物が壊れていても気づかない。
+        if k in roles and roles[k] != 1:
+            ngs.append(f"R16: 交換率 {k} で狙い目の箱の印が {roles[k]} 個です")
+        # ★見出しも交換率に合わせて変わること★
+        want_lab = rate_labels.get(k)
+        if want_lab and k in labels and want_lab not in str(labels[k] or ""):
+            ngs.append(f"R16: 交換率 {k} の見出しが追いついていません"
+                       f"（画面『{labels[k]}』／『{want_lab}』のはず）")
+        # ★★天井は「切り替えた直後ごと」に見る★★（同・指摘3）＝
+        #   前後だけだと、途中の交換率で壊れて最後に戻れば気づかない。
+        if k in ceils and ceils[k] != ceil_before:
+            ngs.append(f"R16: 交換率 {k} へ切り替えると天井の箱が変わります"
+                       f"（{ceil_before} → {ceils[k]}）")
     return ngs
 
 
@@ -665,7 +687,7 @@ def check_one(page, machine: dict) -> list[str]:
                  .filter(e => /天井/.test(e.textContent))
                  .map(e => e.textContent + '=' +
                       (e.nextElementSibling ? e.nextElementSibling.textContent : ''))""")
-        _shown = {}
+        _shown, _ceils, _roles, _labels, _ratelab = {}, {}, {}, {}, {}
         for _r in _rates:
             if not isinstance(_r, dict) or not _r.get("key"):
                 continue
@@ -684,23 +706,35 @@ def check_one(page, machine: dict) -> list[str]:
                 }""", _k)
             if not _ok:
                 continue                  # 鍵を入れない＝「ボタンが無い」
-            _shown[_k] = page.evaluate(
+            _got = page.evaluate(
                 """() => {
-                  const l = Array.from(document.querySelectorAll('.s-label'))
-                    .find(e => /狙い目/.test(e.textContent)
-                               && !/天井/.test(e.textContent));
-                  return l && l.nextElementSibling
-                    ? l.nextElementSibling.textContent : null;
+                  const all = Array.from(
+                    document.querySelectorAll('.s-label'));
+                  const roled = all.filter(e => e.dataset.role === 'target');
+                  const l = roled.length ? roled[0]
+                    : all.find(e => /狙い目/.test(e.textContent)
+                                    && !/天井/.test(e.textContent));
+                  return {
+                    value: l && l.nextElementSibling
+                      ? l.nextElementSibling.textContent : null,
+                    label: l ? l.textContent : null,
+                    roles: roled.length,
+                    ceil: all.filter(e => /天井/.test(e.textContent))
+                      .map(e => e.textContent + '=' +
+                           (e.nextElementSibling
+                             ? e.nextElementSibling.textContent : ''))
+                  };
                 }""")
-        _ceil_after = page.evaluate(
-            """() => Array.from(document.querySelectorAll('.s-label'))
-                 .filter(e => /天井/.test(e.textContent))
-                 .map(e => e.textContent + '=' +
-                      (e.nextElementSibling ? e.nextElementSibling.textContent : ''))""")
+            _shown[_k] = _got["value"]
+            _labels[_k] = _got["label"]
+            _roles[_k] = _got["roles"]
+            _ceils[_k] = _got["ceil"]
+            _ratelab[_k] = str(_r.get("label") or "")
         _want_rates = {str(r["key"]): (_sbr or {}).get(str(r["key"]))
                        for r in _rates
                        if isinstance(r, dict) and r.get("key")}
-        ngs += judge_rates(_shown, _want_rates, _ceil_before, _ceil_after)
+        ngs += judge_rates(_shown, _want_rates, _ceil_before, _ceils,
+                           _roles, _labels, _ratelab)
 
     # R12: チェッカーと早見表のmode選択が同期しているか
     #   （2026-07-27 Codex閉鎖確認 #2: 別々に持っていたため
@@ -1047,32 +1081,62 @@ def selftest() -> int:
     # ---- R16: 交換率を切り替えたあとの狙い目（2026-09-11・Codexの指摘）----
     #   ★ここが無いと、画面が古い予備生成器へ落ちても誰も気づかない★
     #   （実際に control 実験で再現＝画面『通常720G〜…』／作った文『』）
+    def _jr(shown, want, ceil_before=None, ceils=None,
+            roles=None, labels=None, rlab=None):
+        ks = list(want) or list(shown)
+        return judge_rates(
+            shown, want, ceil_before if ceil_before is not None else [],
+            ceils if ceils is not None else {k: [] for k in ks},
+            roles if roles is not None else {k: 1 for k in ks},
+            labels if labels is not None else {k: "5.6枚狙い目" for k in ks},
+            rlab if rlab is not None else {k: "5.6枚" for k in ks})
+
     t("★交換率ごとに一致していれば通る★",
-      judge_rates({"eq56": "通常570G〜", "rate45": "通常720G〜"},
-                  {"eq56": "通常570G〜", "rate45": "通常720G〜"},
-                  [], []) == [])
+      _jr({"eq56": "通常570G〜", "rate45": "通常720G〜"},
+          {"eq56": "通常570G〜", "rate45": "通常720G〜"},
+          labels={"eq56": "5.6枚狙い目", "rate45": "7.0枚狙い目"},
+          rlab={"eq56": "5.6枚", "rate45": "7.0枚"}) == [])
     t("★★画面が作った文と違えば止める★★"
       "／★止めないと、画面側だけ古い作り方へ落ちても緑になる★",
       any("作った文と違います" in x for x in
-          judge_rates({"eq56": "通常999G〜"}, {"eq56": "通常570G〜"}, [], [])))
+          _jr({"eq56": "通常999G〜"}, {"eq56": "通常570G〜"})))
     t("★★作った文が空のときに、画面へ何か出ていたら止める★★"
       "／★これが「鍵が無い」と「中身が空」を取り違えた時の姿★",
       any("作った文と違います" in x for x in
-          judge_rates({"rate45": "通常720G〜"}, {"rate45": ""}, [], [])))
+          _jr({"rate45": "通常720G〜"}, {"rate45": ""},
+              labels={"rate45": "7.0枚狙い目"}, rlab={"rate45": "7.0枚"})))
     t("　作った文が空で、画面も空なら通る",
-      judge_rates({"rate45": ""}, {"rate45": ""}, [], []) == [])
+      _jr({"rate45": ""}, {"rate45": ""},
+          labels={"rate45": "7.0枚狙い目"}, rlab={"rate45": "7.0枚"}) == [])
     t("★交換率のボタンが無ければ止める★",
-      any("ボタンがありません" in x for x in
-          judge_rates({}, {"eq56": "通常570G〜"}, [], [])))
+      any("ボタンがありません" in x for x in _jr({}, {"eq56": "通常570G〜"})))
     t("★狙い目の箱が出ていなければ止める★",
       any("出ていません" in x for x in
-          judge_rates({"eq56": None}, {"eq56": "通常570G〜"}, [], [])))
-    t("★★天井の箱が書き換わったら止める★★"
-      "／★リセット天井が狙い目で潰されて読者に届いていなかった（実測5機種）★",
-      any("天井の箱が書き換わります" in x for x in
-          judge_rates({}, {}, ["リセット天井=600pt"], ["リセット狙い=150G"])))
-    t("　作った文が無い交換率は照合しない（移行の途中を止めない）",
-      judge_rates({"eq56": "なんでも"}, {"eq56": None}, [], []) == [])
+          _jr({"eq56": None}, {"eq56": "通常570G〜"})))
+    # ★★ここから review108 の指摘★★
+    t("★★作った文が無いことを「通す理由」にしない★★"
+      "／★交換率を持つ機種はもう移行済みなので、作れていない＝止める★",
+      any("作られていません" in x for x in
+          _jr({"eq56": "なんでも"}, {"eq56": None})))
+    t("★★途中の交換率で天井が壊れたら止める★★"
+      "／★前後だけ見ると、最後に戻れば気づかない★",
+      any("天井の箱が変わります" in x for x in
+          _jr({"eq56": "通常570G〜"}, {"eq56": "通常570G〜"},
+              ceil_before=["リセット天井=600pt"],
+              ceils={"eq56": ["リセット狙い=150G"]})))
+    t("★★狙い目の箱の印がちょうど1つでなければ止める★★"
+      "／★値だけ見ていると、手書きの箱を先頭に置かれて本物の壊れを見逃す★",
+      any("印が 2 個です" in x for x in
+          _jr({"eq56": "通常570G〜"}, {"eq56": "通常570G〜"},
+              roles={"eq56": 2})))
+    t("★★見出しが交換率に追いついていなければ止める★★",
+      any("見出しが追いついていません" in x for x in
+          _jr({"eq56": "通常570G〜"}, {"eq56": "通常570G〜"},
+              labels={"eq56": "等価狙い目"})))
+    t("　印が0個のときも止める（印を出していない＝所有権が分からない）",
+      any("印が 0 個です" in x for x in
+          _jr({"eq56": "通常570G〜"}, {"eq56": "通常570G〜"},
+              roles={"eq56": 0})))
     t("★★飛び先が無ければ止める★★",
       any("飛び先がありません" in x for x in
           judge_toc(_toc_of(_want_legacy, exists=False), _want_legacy)))

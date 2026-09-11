@@ -883,14 +883,20 @@ function resolveMachineSlug() {
       }
     }
 
+    // ★所有権の印を画面にも出す★（2026-09-11・Codexの指摘）＝
+    //   出さないと、検査は「狙い目」という文字を含む**最初の箱**しか見られず、
+    //   手書きの箱を先頭に置かれると本物が壊れていても気づかない。
+    const _cell = (x) => `<span class="s-label"${
+      x && x.role ? ` data-role="${x.role}"` : ""}>${x.label}</span>`
+      + `<span class="s-value">${x.value}</span>`;
     let rows = "";
     for (let i = 0; i < boxes.length; i += 2) {
       const a = boxes[i];
       const b = boxes[i + 1];
       if (b) {
-        rows += `<tr><td><span class="s-label">${a.label}</span><span class="s-value">${a.value}</span></td><td><span class="s-label">${b.label}</span><span class="s-value">${b.value}</span></td></tr>`;
+        rows += `<tr><td>${_cell(a)}</td><td>${_cell(b)}</td></tr>`;
       } else {
-        rows += `<tr><td><span class="s-label">${a.label}</span><span class="s-value">${a.value}</span></td><td></td></tr>`;
+        rows += `<tr><td>${_cell(a)}</td><td></td></tr>`;
       }
     }
     summaryGrid.innerHTML = rows;
