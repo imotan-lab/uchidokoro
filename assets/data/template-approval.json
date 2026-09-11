@@ -63,7 +63,7 @@
   "scripts/strip_model_code.py": "d33516022a49198a846df628298328a326b5c04a8f20d4ccc6e416daf6340c68",
   "scripts/tableize_spec.py": "199138ea598a073dc7b8b00da1615d3fd0c4a51b0e8f5d32b5725c66156c36d0",
   "scripts/target_display.py": "d1ea226c34a311f1b43417ae212b633fffdc1e08ab7bb240b481b9fd58974322",
-  "service-worker.js": "5a300d48e7ef9989aa69d5c87413e69d39c6b74eb0a4760bf055cf5fb9940af7",
+  "service-worker.js": "b4d827006f6e823f72c6a03ec40f7c23f1053e83ed101e328cf20e7b4e5e9ef5",
   "setting.html": "6660837bd3c31f6755c4ba8e5728c5ac846d43267534b72680c1a07717601dc3"
  }
 }
