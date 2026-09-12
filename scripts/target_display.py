@@ -123,7 +123,10 @@ def is_off(conf) -> bool:
     ＝★一覧で「5スルー〜」と書いても、読者はその軸を使えない★。
     ★値そのものも #96 の二軸化で作り直す予定★なので、狙い目として出さない。
     """
-    return isinstance(conf, dict) and bool(conf.get("_disabled"))
+    #   ★鍵が在るかで見る★（2026-09-12・Codexの指摘）＝
+    #   公開側は鍵の有無で止めている。真偽で見ると、
+    #   `"_disabled": ""` や `0` を書かれたときに食い違う。
+    return isinstance(conf, dict) and "_disabled" in conf
 
 
 def _rows(conf: dict):
@@ -231,17 +234,59 @@ def parts(ck: dict, rk: str) -> list:
 NORATE_PREFIX = "チェッカー基準"
 
 
+# ★★直したあとも検査を続ける機種★★（2026-09-12・Codexの重大指摘）
+#   ★何が危なかったか★＝対象を「いまの一覧に交換率の呼び名があるか」で
+#   決めていたので、★直した瞬間に呼び名が消えて対象から外れ★、
+#   以後どれだけ数値が食い違っても専用の検査が動かなかった。
+#   ＝**直しが成功した瞬間に、守りが消える**形だった。
+#   ★だから名簿をコードに固定する★（いまの一覧の中身と無関係に毎回見る）。
+NORATE_TARGETS = (
+    "sengoku_collection6", "milliongod_kiseki", "ultraman_final",
+    "nangoku_special", "yabachiba", "rotis", "biohazard_re3",
+    "bigdream_pusher", "super_rio_ace2", "gundam_uc2", "kyokousuiri",
+    "animal_dotch", "yorumungando", "akudama", "gineiden_dnt",
+    "tolove_darkness", "revue_starlight", "zenigata5", "enen", "railgun2",
+    "gundam_seed", "youjitsu", "midoridon_viva", "code_geass",
+    "kengan_ashura", "goji_eva", "basilisk_tenzen", "madomagi_forte",
+    "burning_express", "lupin_daikokaisha", "zombieland_saga",
+    "zettai_shougeki4", "babel", "takt_opus",
+)
+
 # ★★基準を名乗っているので触らない★★（2026-09-12・2AIで決めた）
 #   ★この2機種は誤りではない★＝どの交換率の値かを**自分で名乗り**、
 #   ほかの交換率は「未確定」と正直に書いている。
 #   ＝今回の目的（読者に、サイトが持っていない区別を見せない）に反しない。
 #   ★「チェッカー基準」へ書き換えると、かえって名乗っている基準が消える★。
+#   ★名簿に載せるだけでは足りない★（Codexの指摘）＝
+#   slug が表にあるだけで無条件に外れると、
+#   ★あとから「未確定」の断り書きを消しても誰も気づかない★。
+#   だから★一覧に残っていなければならない文言★も一緒に持つ。
 NORATE_KEEP = {
-    "karakuri2": "一覧が「等価 液晶800G〜（当サイト目安）」と基準を名乗り、"
-                 "5.6枚・現金は「個別ライン未確定」と書いてある",
-    "enen2": "一覧が「5.6枚交換 630G〜」と基準を名乗り、"
-             "他交換率は「算定条件を確認中」と書いてある",
+    "karakuri2": {
+        "why": "一覧が「等価 液晶800G〜（当サイト目安）」と基準を名乗り、"
+               "5.6枚・現金は「個別ライン未確定」と書いてある",
+        "must": ("当サイト目安", "個別ライン未確定"),
+    },
+    "enen2": {
+        "why": "一覧が「5.6枚交換 630G〜」と基準を名乗り、"
+               "他交換率は「算定条件を確認中」と書いてある",
+        "must": ("5.6枚交換", "算定条件を確認中"),
+    },
 }
+
+
+def keep_problems(m: dict) -> list:
+    """★外してある機種が、外してよい姿のままか★"""
+    slug = str(m.get("slug") or "")
+    spec = NORATE_KEEP.get(slug)
+    if not spec:
+        return []
+    strat = str(m.get("strategy") or "")
+    miss = [w for w in spec["must"] if w not in strat]
+    if miss:
+        return ["%s: 外してある前提の文言が消えています（%s）"
+                % (slug, "・".join(miss))]
+    return []
 
 
 def _norate_target(m: dict) -> bool:
@@ -253,10 +298,31 @@ def _norate_target(m: dict) -> bool:
     ck = m.get("checker")
     if not isinstance(ck, dict) or ck.get("exchangeRates"):
         return False
-    if str(m.get("slug") or "") in NORATE_KEEP:
+    slug = str(m.get("slug") or "")
+    if slug in NORATE_KEEP:
         return False                      # ★理由つきで外してある★
-    strat = str(m.get("strategy") or "")
-    return any(w in strat for w in RATE_WORDS)
+    # ★名簿に載っていれば、いまの一覧の中身に関係なく対象★
+    #   （直したあとも毎回照合し続けるため）
+    return slug in NORATE_TARGETS
+
+
+def norate_unclassified(ms) -> list:
+    """★名簿に載っていない新しい候補を見つける★（対象の決定とは分ける）
+
+    ★分ける理由★＝対象を「いまの一覧の中身」で決めると、直した瞬間に
+    外れて検査が止まる。名簿は固定し、こちらは「増えていないか」だけ見る。
+    """
+    out = []
+    for m in ms:
+        ck = m.get("checker")
+        if not isinstance(ck, dict) or ck.get("exchangeRates"):
+            continue
+        slug = str(m.get("slug") or "")
+        if slug in NORATE_TARGETS or slug in NORATE_KEEP:
+            continue
+        if any(w in str(m.get("strategy") or "") for w in RATE_WORDS):
+            out.append(slug)
+    return out
 
 
 def norate_text(m: dict) -> tuple:
@@ -306,6 +372,15 @@ def expected_axes(ck: dict) -> list:
             continue                      # 停止中は数えない
         kind, rows = _rows(conf)
         if rows:
+            # ★★行が1つでも読めなければ、その機種は触らない★★
+            #   （2026-09-12・Codexの指摘）＝有効な行が1件でもあれば
+            #   軸を1つと数えていたので、★別の行が読めなくても件数が一致★し、
+            #   部分的にしか出ていない一覧を「直した」ことにできた。
+            bad = [r for r in rows
+                   if _int(r.get("count")) is None
+                   or effective_good(r, "") is None]
+            if bad:
+                out.append(("★読めない行★", md.get("key")))
             if row_ends(rows, ""):
                 out.append(("rows", md.get("key")))
             continue
@@ -797,14 +872,44 @@ def check() -> int:
             print("   " + x)
         print()
     machines, details, skipped = plan_all()
-    # ★★直したあと、一覧に交換率の呼び名が残っていないこと★★
-    #   （2026-09-12・Codexの指摘4）＝作った文と一致していても、
-    #   ★別の場所に呼び名が残っていたら意味が無い★。
-    left = [str(m.get("slug")) for m in _load()
-            if _norate_target(m) and norate_text(m)[0]]
-    if left:
-        print("★交換率の呼び名が残っている機種: %d★" % len(left))
-        for x in left[:8]:
+    # ★★切替なし機種の継続検査★★（2026-09-12・Codexの重大指摘）
+    #   ★直した瞬間に対象から外れて検査が止まる形だった★ので、
+    #   固定名簿（NORATE_TARGETS）を毎回見る。
+    _ms = _load()
+    _by = {str(m.get("slug")): m for m in _ms}
+    nr = []
+    for _slug in NORATE_TARGETS:
+        _m = _by.get(_slug)
+        if _m is None:
+            nr.append("%s: 機種が見つかりません（名簿と食い違い）" % _slug)
+            continue
+        # ①作った文と一致しているか（数値が動いたら気づく）
+        _t, _why = norate_text(_m)
+        if not _t:
+            nr.append("%s: 狙い目の文を作れません（%s）" % (_slug, _why))
+        elif str(_m.get("strategy") or "") != _t:
+            nr.append("%s: 一覧が作った文と違います" % _slug)
+        # ②呼び名が戻っていないか
+        if any(w in str(_m.get("strategy") or "") for w in RATE_WORDS):
+            nr.append("%s: 一覧に交換率の呼び名が戻っています" % _slug)
+        # ③記事データが在るか（無いと機種ページの天井欄が一覧で埋まる）
+        if not os.path.isfile(os.path.join(DETAILS, _slug + ".json")):
+            nr.append("%s: 記事データがありません"
+                      "（機種ページの天井欄が一覧で埋まります）" % _slug)
+    # ④外してある機種が、外してよい姿のままか
+    for _slug in NORATE_KEEP:
+        _m = _by.get(_slug)
+        if _m is None:
+            nr.append("%s: 機種が見つかりません（外す表と食い違い）" % _slug)
+            continue
+        nr += keep_problems(_m)
+    # ⑤名簿に載っていない新しい候補
+    _new = norate_unclassified(_ms)
+    if _new:
+        nr.append("名簿に無い候補があります: " + " / ".join(_new[:6]))
+    if nr:
+        print("★切替なし機種の検査: %d件★" % len(nr))
+        for x in nr[:10]:
             print("   " + x)
         print()
     if skipped:
@@ -812,10 +917,10 @@ def check() -> int:
         for slug, why in skipped:
             print("   %-22s %s" % (slug, why))
         print()
-    if not machines and not details and not skipped and not tpl:
+    if not machines and not details and not skipped and not tpl and not nr:
         print("★一致しています（狙い目の文は作ったものと同じ）★")
         return 0
-    if tpl and not machines and not details and not skipped:
+    if (tpl or nr) and not machines and not details and not skipped:
         return 1
     if machines or details:
         print("★食い違っています★")
@@ -1112,6 +1217,61 @@ def _real_file_tests(t):
         io.open(p_goblin, "w", encoding="utf-8", newline="\n").write(
             json.dumps(o3, ensure_ascii=False, indent=1) + "\n")
         t("　（対照）狙い目と関係ない箱は止めない", check() == 0)
+        # ⑨★★切替なし機種は、直したあとも検査され続けるか★★
+        #   （2026-09-12・Codexの重大指摘）＝直す前は、直した瞬間に
+        #   一覧から交換率の呼び名が消えて対象から外れ、
+        #   ★以後どれだけ数値が食い違っても検査が動かなかった★。
+        _d = _sj.read_json(g["MACHINES"], expect=(dict, list))
+        _rows = _d if isinstance(_d, list) else (_d.get("machines") or [])
+        _by2 = {str(x.get("slug")): x for x in _rows}
+
+        def _write_machines():
+            io.open(g["MACHINES"], "w", encoding="utf-8",
+                    newline=chr(10)).write(
+                json.dumps(_d, ensure_ascii=False, indent=1) + chr(10))
+
+        _b = _by2.get("babel")
+        _keep_strategy = str(_b.get("strategy") or "")
+        _keep_good = _b["checker"]["normal"]["good"]
+        # (1) チェッカーの値だけ動かす
+        _b["checker"]["normal"]["good"] = 999
+        _write_machines()
+        t("★★書き換え済みの機種でチェッカーの値が動いたら止める★★"
+          "／★直したあと対象から外れる形だと、ここが素通りした★",
+          check() != 0)
+        _b["checker"]["normal"]["good"] = _keep_good
+        # (2) 一覧だけ動かす
+        _b["strategy"] = _keep_strategy.replace("900G", "800G")
+        _write_machines()
+        t("★★書き換え済みの機種で一覧だけ動いたら止める★★", check() != 0)
+        # (3) 呼び名が戻る
+        _b["strategy"] = "等価730G〜 / 5.6枚740G〜 / 現金820G〜"
+        _write_machines()
+        t("★★一覧に交換率の呼び名が戻ったら止める★★", check() != 0)
+        _b["strategy"] = _keep_strategy
+        _write_machines()
+        t("　戻せば緑", check() == 0)
+        # (4) 外してある機種から、未確定の断り書きを消す
+        _k = _by2.get("karakuri2")
+        _keep_k = str(_k.get("strategy") or "")
+        _k["strategy"] = _keep_k.replace("（個別ライン未確定）", "")
+        _write_machines()
+        t("★★外してある機種から「未確定」の断り書きが消えたら止める★★"
+          "／★名簿に載せるだけだと、断り書きを消しても誰も気づかない★",
+          check() != 0)
+        _k["strategy"] = _keep_k
+        _write_machines()
+        # (5) 記事データを1件欠かす
+        _p_babel = os.path.join(g["DETAILS"], "babel.json")
+        _keep_babel = io.open(_p_babel, encoding="utf-8").read()
+        os.remove(_p_babel)
+        t("★★名簿の機種の記事データが無くなったら止める★★"
+          "／★無いと機種ページの天井欄が一覧の文で埋まる★",
+          check() != 0)
+        io.open(_p_babel, "w", encoding="utf-8",
+                newline=chr(10)).write(_keep_babel)
+        t("　全部戻せば緑", check() == 0)
+
         # ⑧ ★★印の無い箱に狙い目を残したら止まる★★（Codexの指摘）
         #   ★関数だけの試験では、関門に配線されている証拠にならない★（罠③）
         #   ＝実データが綺麗なので、関門を殺しても何も変わらなかった。
@@ -1292,16 +1452,61 @@ def selftest() -> int:
     t("★★軸が1つでも作れなければ、その機種は触らない★★"
       "／★残った分だけで作ると、一部しか出ていない一覧を「直した」ことにする★",
       norate_text(_bad)[0] == "")
-    # ★対象の決め方★
-    t("★一覧が交換率を名乗っている機種だけが対象★",
-      _norate_target(_m_nr) is True)
-    t("　名乗っていない機種は対象にしない（別の情報が落ちる）",
-      _norate_target({"slug": "z", "strategy": "0スルー170G〜 / 6スルー〜即",
+    # ★★回数の行が1つでも読めなければ作らない★★（Codexの指摘）
+    #   ★有効な行が1つでもあれば軸を1つと数えていた★ので、
+    #   別の行が読めなくても件数が一致し、部分的な一覧を作れた。
+    _rows_bad = {"unit": "G",
+                 "modes": [{"key": "suru", "label": "スルー天井"}],
+                 "suru": {"suru": [{"count": 0, "good": 450},
+                                   {"count": 1, "good": "よめない"}]}}
+    t("★★回数の行が1つ読めなければ、その機種は触らない★★"
+      "／★読める行だけで作ると、一部しか出ていない一覧になる★",
+      norate_text({"slug": "babel", "strategy": "等価450G〜",
+                   "checker": _rows_bad})[0] == "")
+    t("　（対照）全部読めれば作る",
+      norate_text({"slug": "babel", "strategy": "等価450G〜",
+                   "checker": {"unit": "G",
+                               "modes": [{"key": "suru",
+                                          "label": "スルー天井"}],
+                               "suru": {"suru": [{"count": 0, "good": 450},
+                                                 {"count": 1, "good": 0}]}}
+                   })[0] != "")
+    # ★★停止中の判定は「鍵が在るか」★★（Codexの指摘）
+    #   ★公開側は鍵の有無で止めている★＝真偽で見ると、
+    #   空文字や0を書かれたときに食い違う。
+    t("★★_disabled が空文字でも停止中とみなす★★"
+      "／★真偽で見ると、空文字を書かれた瞬間に画面と食い違う★",
+      is_off({"_disabled": "", "good": 5}) is True)
+    t("　鍵が無ければ停止中ではない", is_off({"good": 5}) is False)
+
+    # ★対象の決め方は「固定の名簿」★（2026-09-12・Codexの重大指摘）
+    #   ★いまの一覧の中身で決めない★＝直した瞬間に対象から外れ、
+    #   以後どれだけ数値が食い違っても検査が動かなくなる。
+    t("★★名簿に載っていれば、一覧の中身に関係なく対象★★"
+      "／★中身で決めると、直した瞬間に守りが消える★",
+      _norate_target({"slug": "babel",
+                      "strategy": "チェッカー基準 通常900G〜",
+                      "checker": {"unit": "G", "modes": []}}) is True)
+    t("　名簿に無い機種は対象にしない",
+      _norate_target({"slug": "z", "strategy": "等価170G〜",
                       "checker": {"unit": "G", "modes": []}}) is False)
     t("★基準を名乗っている機種は、理由つきで外してある★",
       _norate_target({"slug": "karakuri2", "strategy": "等価 液晶800G〜",
                       "checker": {"unit": "G", "modes": []}}) is False
-      and len(NORATE_KEEP.get("karakuri2", "")) > 10)
+      and len(NORATE_KEEP["karakuri2"]["why"]) > 10)
+    # ★外してある前提が崩れたら言う★
+    t("★★外してある機種から断り書きが消えたら言う★★",
+      keep_problems({"slug": "karakuri2",
+                     "strategy": "等価 液晶800G〜"}) != [])
+    t("　断り書きが在れば言わない",
+      keep_problems({"slug": "karakuri2",
+                     "strategy": "等価 液晶800G〜（当サイト目安）"
+                                 "/ 個別ライン未確定"}) == [])
+    # ★名簿に無い新しい候補を見つける（対象の決定とは別）★
+    t("★名簿に無い候補は別に数える★",
+      norate_unclassified([{"slug": "zzz", "strategy": "等価500G〜",
+                            "checker": {"unit": "G", "modes": []}}])
+      == ["zzz"])
 
     # ★印の無い箱が狙い目を言っていないか★（2026-09-11・Codexの指摘）
     #   ★読者に矛盾が見えていた★＝ヴァルヴレイヴ2の天井の箱に

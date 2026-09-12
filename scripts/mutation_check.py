@@ -56,12 +56,57 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #   ★同じ壊し方を戻さないこと★＝いまの取り決めでは必ず「捕まえられない」
 #   と出て、本物の見落としが埋もれる。
 MUTATIONS = [
+    # ─── 2026-09-12・直したあとも検査を続ける（Codexの重大指摘）──────
+    {
+        "why": "★対象を「いまの一覧の中身」で決める"
+               "（直した瞬間に対象から外れ、以後の食い違いを誰も見ない）★",
+        "file": "scripts/target_display.py",
+        "before": "    return slug in NORATE_TARGETS",
+        "after": '    return any(w in str(m.get("strategy") or "")'
+                 " for w in RATE_WORDS)",
+        "run": ["scripts/target_display.py"],
+    },
+    {
+        "why": "★外してある機種の「未確定」の断り書きを見ない"
+               "（名簿に載せるだけだと、消されても気づかない）★",
+        "file": "scripts/target_display.py",
+        "before": '    miss = [w for w in spec["must"] if w not in strat]',
+        "after": "    miss = []",
+        "run": ["scripts/target_display.py"],
+    },
+    {
+        "why": "★回数の行が1つ読めなくても作ってしまう"
+               "（一部しか出ていない一覧を「直した」ことにする）★",
+        "file": "scripts/target_display.py",
+        "before": "            if bad:\n"
+                  '                out.append(("★読めない行★", md.get("key")))',
+        "after": "            if False:\n"
+                 '                out.append(("★読めない行★", md.get("key")))',
+        "run": ["scripts/target_display.py"],
+    },
+    {
+        "why": "★停止中の判定を「鍵の有無」から「真偽」へ戻す"
+               "（公開側は鍵の有無で止めているので食い違う）★",
+        "file": "scripts/target_display.py",
+        "before": '    return isinstance(conf, dict) and "_disabled" in conf',
+        "after": '    return isinstance(conf, dict) and bool(conf.get("_disabled"))',
+        "run": ["scripts/target_display.py"],
+    },
+    {
+        "why": "★名簿の機種に記事データが在るかを見ない"
+               "（無いと機種ページの天井欄が一覧の文で埋まる）★",
+        "file": "scripts/target_display.py",
+        "before": "        if not os.path.isfile(os.path.join(DETAILS,"
+                  ' _slug + ".json")):',
+        "after": "        if False:",
+        "run": ["scripts/target_display.py"],
+    },
     # ─── 2026-09-12・交換率の切替を持たない機種 ─────────────────
     {
         "why": "★画面に出ていない軸（停止中）を狙い目に出す"
                "（押しても使えないものを一覧が約束する）★",
         "file": "scripts/target_display.py",
-        "before": '    return isinstance(conf, dict) and bool(conf.get("_disabled"))',
+        "before": '    return isinstance(conf, dict) and "_disabled" in conf',
         "after": "    return False",
         "run": ["scripts/target_display.py"],
     },
@@ -302,7 +347,7 @@ MUTATIONS = [
                "（生成できない機種が増えても、関所が静かに通す）★",
         "file": "scripts/target_display.py",
         "before": "    if not machines and not details and not skipped"
-                  " and not tpl:",
+                  " and not tpl and not nr:",
         "after": "    if not machines and not details:",
         "run": ["scripts/target_display.py"],
     },
