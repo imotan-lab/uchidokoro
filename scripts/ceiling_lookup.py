@@ -599,14 +599,49 @@ def read_page(url: str, official_name: str, *,
     _title_line = _w.page_title(html).strip()
     _body = [ln for ln in text.splitlines()
              if ln.strip() and ln.strip() != _title_line]
-    looks = any(w in ln for ln in _body
-                for w in ("天井", "ゲーム数天井", "周期天井"))
-    if looks and not got:
-        out["ok"], out["reason"] = False, "天井の記述はあるが採れませんでした（要確認）"
+    _why = ceiling_gap_reason(_body)
+    if _why and not got:
+        out["ok"], out["reason"] = False, _why
         return out
     out["ok"] = True
     out["reason"] = "OK" if got else "天井の記述がありません"
     return out
+
+
+NOT_PUBLISHED = "天井の欄はありますが、値がまだ載っていません"
+NEEDS_LOOK = "天井の記述はあるが採れませんでした（要確認）"
+
+
+def ceiling_gap_reason(body_lines) -> str:
+    """★天井が1つも採れなかったとき、それが何なのかを分ける★
+    （2026-09-12・台帳#649）
+
+    ★何が起きていたか★＝DMMの機種ページの「天井突入条件」の中身が
+    文字どおり「調査中」なのに、機械は「記述はあるが採れませんでした」と言い、
+    手順書はその文言を見て2AIに原文を読ませていた。
+    ＝★値が存在しない機種の原文を、毎晩2AIが読み直していた★
+    （2026-09-12の実測＝候補4機種すべてで発生。読んだ結果も全部「調査中」）。
+
+    ★分け方は語の名簿ではなく、数字の有無で見る★＝
+    「調査中」「準備中」「未定」…を名簿にすると際限が無いうえ、
+    出典が言い回しを変えるたびに壊れる。
+    ★天井の欄に数字が1つも無いなら、そもそも採る値が無い★。
+
+    ★次の行まで見る★＝表では見出しと値が別の行になるので、
+    「天井」の行だけを見ると、値が在るのに「無い」と言ってしまう。
+
+    返すもの: "" ＝天井の話が無い ／ NEEDS_LOOK ／ NOT_PUBLISHED
+    """
+    lines = [str(ln or "").strip() for ln in (body_lines or [])]
+    hit = [i for i, ln in enumerate(lines)
+           if any(w in ln for w in ("天井", "ゲーム数天井", "周期天井"))]
+    if not hit:
+        return ""
+    near = []
+    for i in hit:
+        near += lines[i:i + 2]
+    return NEEDS_LOOK if any(ch.isdigit() for ln in near for ch in ln) \
+        else NOT_PUBLISHED
 
 
 def _atom(kind, amount, unit, **kw) -> dict:
@@ -1287,6 +1322,21 @@ def selftest() -> int:
     t("　「最大」が付く値も読める",
       _COND_VALUE.match("最大1000G+α") is not None
       and _COND_VALUE.match("通常時999G+α消化") is not None)
+
+    # --- ★「読めなかった」と「まだ世に出ていない」を分ける★（台帳#649） ---
+    t("★天井の話が無ければ何も言わない★",
+      ceiling_gap_reason(["機械割97.8%"]) == "")
+    t("★★出典が「調査中」なら、2AIに読ませない★★"
+      "（値の無い原文を、毎晩4機種ぶん読み直していた）",
+      ceiling_gap_reason(["天井突入条件", "調査中"]) == NOT_PUBLISHED)
+    t("★★見出しの次の行に値があれば「要確認」のまま★★"
+      "（表は見出しと値が別の行なので、ここを見ないと"
+      "値が在るのに「無い」と言ってしまう）",
+      ceiling_gap_reason(["天井突入条件", "1200G"]) == NEEDS_LOOK)
+    t("　同じ行に値があるときも「要確認」",
+      ceiling_gap_reason(["天井は1200G+αです。"]) == NEEDS_LOOK)
+    t("　語の名簿ではなく数字で見る（「準備中」でも同じ）",
+      ceiling_gap_reason(["ゲーム数天井", "準備中"]) == NOT_PUBLISHED)
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")

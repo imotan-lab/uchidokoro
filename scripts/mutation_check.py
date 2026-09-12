@@ -849,6 +849,24 @@ MUTATIONS = [
                  "if s[\"mode\"] == \"通常\"]",
         "run": ["scripts/recheck.py"],
     },
+    # ─── 2026-09-12・出典が「調査中」のとき（台帳#649） ─────────────
+    {
+        "why": "★出典が値を出していない天井も「読めなかった」と言う"
+               "（値の無い原文を、毎晩2AIが読み直す作業に送り込まれる）★",
+        "file": "scripts/ceiling_lookup.py",
+        "before": "        else NOT_PUBLISHED",
+        "after": "        else NEEDS_LOOK",
+        "run": ["scripts/ceiling_lookup.py"],
+    },
+    {
+        "why": "★見出しの次の行を見ない"
+               "（表は見出しと値が別の行なので、値が在るのに"
+               "「まだ載っていない」と言い、天井を採り損ねる）★",
+        "file": "scripts/ceiling_lookup.py",
+        "before": "        near += lines[i:i + 2]",
+        "after": "        near += lines[i:i + 1]",
+        "run": ["scripts/ceiling_lookup.py"],
+    },
     # ─── 2026-09-12・カウンターの注記 ────────────────────────────
     {
         "why": "★注記の書き換えで、文字を足せるようにする"
