@@ -2045,10 +2045,46 @@ def _selftest():
 
     # --- ★記事の交換率ごとの狙い目とチェッカー★（2026-08-21・台帳#234を確かめて）
     _bv = check_body_vs_checker
+
+    # ★★本物の記事を材料にしない★★（2026-09-12・罠㉙を実際に踏んだ）
+    #   ★直す前は darlifra が食い違っている前提で書いていた★ので、
+    #   ★その食い違いを直した日にこの試験が落ちた★
+    #   （＝直すほど赤くなる。しかも守りは何も壊れていない）。
+    #   さらに悪いことに、この試験を通したいだけなら
+    #   ★記事を元の誤った値へ戻せばよい★ことになる。
+    #   → 材料はここで組み立て、本物のデータは1行も読まない。
+    def _bv_fake(body, checker=None):
+        keep_m = globals()["_machine"]
+        keep_v = globals()["valid_slug"]
+        keep_d = globals()["_load_detail"]
+        globals()["_machine"] = lambda s: {
+            "slug": "zzz_fake",
+            "checker": checker if checker is not None else {
+                "exchangeRates": [{"key": "eq56", "label": "5.6枚"},
+                                  {"key": "rate55", "label": "6.0枚"}],
+                "defaultRate": "eq56",
+                "modes": [{"key": "normal", "label": "通常時"}],
+                "normal": {"byRate": {"eq56": {"good": 500},
+                                      "rate55": {"good": 510}}}}}
+        globals()["valid_slug"] = lambda s: True
+        globals()["_load_detail"] = lambda s: (
+            {"sections": [{"title": "当サイトの狙い目", "body": list(body)}]},
+            "", "")
+        try:
+            return _bv({"slug": "zzz_fake"})["result"]
+        finally:
+            globals()["_machine"] = keep_m
+            globals()["valid_slug"] = keep_v
+            globals()["_load_detail"] = keep_d
+
     t("★記事とチェッカーが違えば不合格★",
-      _bv({"slug": "darlifra"})["result"] == FAIL)
-    t("　合っていれば合格（または対象外）",
-      _bv({"slug": "hokuto"})["result"] in (PASS, NOT_APPLICABLE))
+      _bv_fake(["【6.0枚】420G〜が基準です。"]) == FAIL)
+    t("　合っていれば合格",
+      _bv_fake(["【6.0枚】510G〜が基準です。"]) == PASS)
+    t("　交換率ごとの記載が無ければ対象外",
+      _bv_fake(["天井は666G+αです。"]) == NOT_APPLICABLE)
+    t("　★1つでも食い違えば不合格★（合っている行に隠れない）",
+      _bv_fake(["【5.6枚】500G〜 / 【6.0枚】420G〜が基準です。"]) == FAIL)
     t("★★これも観測どまり（どちらを直すかは出典が要る）★★",
       CHECKS["body_vs_checker"]["closeable"] is False)
 

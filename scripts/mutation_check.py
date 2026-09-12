@@ -849,6 +849,25 @@ MUTATIONS = [
                  "if s[\"mode\"] == \"通常\"]",
         "run": ["scripts/recheck.py"],
     },
+    # ─── 2026-09-12・記事とチェッカーの食い違い（罠㉙を踏んだので作った） ──
+    {
+        "why": "★記事とチェッカーの差を見ない"
+               "（読者が記事どおり座ると、同じページのカウンターが"
+               "「まだ手前」と言う食い違いを1件も報告しなくなる）★",
+        "file": "scripts/recheck.py",
+        "before": "                if got != int(num):",
+        "after": "                if False:",
+        "run": ["scripts/recheck.py"],
+    },
+    {
+        "why": "★1行のうち最初の交換率しか見ない"
+               "（合っている交換率を先に書けば、後ろの食い違いが隠れる）★"
+               "／★この壊し方を捕まえるのは「1つでも食い違えば不合格」だけ★",
+        "file": "scripts/recheck.py",
+        "before": "            for label, num in _BODY_RATE.findall(line):",
+        "after": "            for label, num in _BODY_RATE.findall(line)[:1]:",
+        "run": ["scripts/recheck.py"],
+    },
     {
         "why": "★交換率を選べない機種を飛ばす（39件が対象外に戻る）★",
         "file": "scripts/recheck.py",
