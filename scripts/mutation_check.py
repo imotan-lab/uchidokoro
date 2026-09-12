@@ -56,6 +56,39 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #   ★同じ壊し方を戻さないこと★＝いまの取り決めでは必ず「捕まえられない」
 #   と出て、本物の見落としが埋もれる。
 MUTATIONS = [
+    # ─── 2026-09-12・交換率の切替を持たない機種 ─────────────────
+    {
+        "why": "★画面に出ていない軸（停止中）を狙い目に出す"
+               "（押しても使えないものを一覧が約束する）★",
+        "file": "scripts/target_display.py",
+        "before": '    return isinstance(conf, dict) and bool(conf.get("_disabled"))',
+        "after": "    return False",
+        "run": ["scripts/target_display.py"],
+    },
+    {
+        "why": "★切替なし機種に「チェッカー基準」を付けない"
+               "（全交換率に当てはまる値だと読める）★",
+        "file": "scripts/target_display.py",
+        "before": 'NORATE_PREFIX = "チェッカー基準"',
+        "after": 'NORATE_PREFIX = ""',
+        "run": ["scripts/target_display.py"],
+    },
+    {
+        "why": "★軸が一部しか作れなくても一覧を書き換える"
+               "（一部しか出ていない一覧を「直した」ことにする）★",
+        "file": "scripts/target_display.py",
+        "before": "    if len(got) != len(want):",
+        "after": "    if False:",
+        "run": ["scripts/target_display.py"],
+    },
+    {
+        "why": "★一覧が交換率を名乗っていない機種まで書き換える"
+               "（別の情報が落ちる）★",
+        "file": "scripts/target_display.py",
+        "before": "            if not _norate_target(m):\n                continue",
+        "after": "            pass",
+        "run": ["scripts/target_display.py"],
+    },
     {
         "why": "★言い換え（狙える・即打ち・打ち始め）を見逃す"
                "（サイトで実際に使っている言い方なので、素通りしていた）★",

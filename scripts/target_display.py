@@ -113,6 +113,19 @@ def effective_good(conf: dict, rk: str):
     return _int(conf.get("good"))
 
 
+def is_off(conf) -> bool:
+    """★読者の画面に出ていない軸か★（2026-09-12・Codexの指摘6）
+
+    ★なぜ外すか★＝`_disabled` が付いた軸は、Phase 0（2026-07-24）で
+    「回数入力なのにG数判定だった」ため**画面から消してある**。
+    ★実機で確かめた★＝モンハンライズ（停止中）はモードが normal だけで
+    スルーを選べない／鉄拳6（停止していない）は normal・suru・reset が出る。
+    ＝★一覧で「5スルー〜」と書いても、読者はその軸を使えない★。
+    ★値そのものも #96 の二軸化で作り直す予定★なので、狙い目として出さない。
+    """
+    return isinstance(conf, dict) and bool(conf.get("_disabled"))
+
+
 def _rows(conf: dict):
     """回数系の行（スルー／周期）。無ければ (None, [])"""
     if not isinstance(conf, dict):
@@ -163,8 +176,8 @@ def parts(ck: dict, rk: str) -> list:
         if not isinstance(md, dict):
             continue
         conf = mode_conf(ck, md.get("key"))
-        if not isinstance(conf, dict):
-            continue
+        if not isinstance(conf, dict) or is_off(conf):
+            continue                      # ★停止中の軸は出さない★
         label = str(md.get("label") or md.get("key") or "")
         kind, rows = _rows(conf)
         if rows:
@@ -191,8 +204,8 @@ def parts(ck: dict, rk: str) -> list:
     for key, word in (("suru", "スルー"), ("through", "スルー"),
                       ("cycle", "周期目")):
         ts = ck.get(key)
-        if not isinstance(ts, dict):
-            continue
+        if not isinstance(ts, dict) or is_off(ts):
+            continue                      # ★停止中の軸は出さない★
         if any(isinstance(ts.get(k), list) for k in ("suru", "cycle")):
             continue
         g = effective_good(ts, rk)
@@ -201,6 +214,126 @@ def parts(ck: dict, rk: str) -> list:
         txt = "%d%s〜" % (g, word)
         if txt not in [o["text"] for o in out]:
             out.append({"kind": "count", "text": txt})
+    return out
+
+
+# ★★交換率の切替を持たない機種★★（2026-09-12・Codexと詰めた）
+#   ★何が起きていたか★＝一覧が「等価730G〜 / 5.6枚740G〜 / 現金820G〜」と
+#   書いているのに、チェッカーには交換率の区別が無く、値は1本だけ。
+#   ★その1本が何の交換率なのかは復元できない★（実測20機種＝
+#   現金7・等価7・5.6枚2・5.6枚と等価1・どれとも一致しない3）。
+#   ＝「現金」とも「等価」とも名乗れない。
+#   ★読者に起きていたこと★＝記事のほうが浅い機種では、
+#   記事どおりに座るとチェッカーが「まだ手前」と言う
+#   （バベル 730G / チェッカー900G ＝170G早い、など）。
+#   ★呼び名★＝`チェッカー基準`（Codexの助言）。
+#     「狙い目900G〜」とは書かない（全交換率に当てはまる値だと読める）。
+NORATE_PREFIX = "チェッカー基準"
+
+
+# ★★基準を名乗っているので触らない★★（2026-09-12・2AIで決めた）
+#   ★この2機種は誤りではない★＝どの交換率の値かを**自分で名乗り**、
+#   ほかの交換率は「未確定」と正直に書いている。
+#   ＝今回の目的（読者に、サイトが持っていない区別を見せない）に反しない。
+#   ★「チェッカー基準」へ書き換えると、かえって名乗っている基準が消える★。
+NORATE_KEEP = {
+    "karakuri2": "一覧が「等価 液晶800G〜（当サイト目安）」と基準を名乗り、"
+                 "5.6枚・現金は「個別ライン未確定」と書いてある",
+    "enen2": "一覧が「5.6枚交換 630G〜」と基準を名乗り、"
+             "他交換率は「算定条件を確認中」と書いてある",
+}
+
+
+def _norate_target(m: dict) -> bool:
+    """★直す対象か★＝一覧が交換率を名乗っているのに、チェッカーに区別が無い機種
+
+    ★名乗っていない機種は放っておく★＝食い違いが見えていないので、
+    今回の目的（読者に嘘の区別を見せない）から外れる。
+    """
+    ck = m.get("checker")
+    if not isinstance(ck, dict) or ck.get("exchangeRates"):
+        return False
+    if str(m.get("slug") or "") in NORATE_KEEP:
+        return False                      # ★理由つきで外してある★
+    strat = str(m.get("strategy") or "")
+    return any(w in strat for w in RATE_WORDS)
+
+
+def norate_text(m: dict) -> tuple:
+    """切替を持たない機種の一覧の文を作る → (文, 駄目な理由)
+
+    ★作れるかどうかは「全部そろったか」で決める★（Codexの指摘3）＝
+    読めない値や番兵を飛ばして残りだけで作ると、
+    ★一部しか出ていない一覧を「直した」ことにしてしまう★。
+    """
+    ck = m.get("checker")
+    if not isinstance(ck, dict) or ck.get("exchangeRates"):
+        return "", "交換率の切替を持つ機種です"
+    # ★モードの呼び名に交換率が入っていたら作らない★＝
+    #   「チェッカー基準 通常（等価基準）800G〜」という自己矛盾になる（実測2機種）
+    bad = problems(m)
+    if bad:
+        return "", " / ".join(bad)
+    want, got = expected_axes(ck), parts(ck, "")
+    if not want:
+        return "", "チェッカーに狙い目の軸がありません"
+    if len(got) != len(want):
+        return "", ("作れた軸が足りません（%d / %d）" % (len(got), len(want)))
+    return "%s %s" % (NORATE_PREFIX,
+                      " / ".join(p["text"] for p in got)), ""
+
+
+def expected_axes(ck: dict) -> list:
+    """★出るはずの軸を数える★（あとで「全部出たか」を見るため）
+
+    ★直す前は、出す側とまったく同じ絞り込みをしていた★ので、
+    ★読めない値があっても「期待も出力も1つ」で必ず一致し、
+      条件（全部そろったか）が一度も効いていなかった★
+    （2026-09-12・Codexの指摘3を実装したつもりで、していなかった）。
+
+    ★いまの数え方★＝軸を3つに分ける。
+      出す     … 読める値があり、番兵でない
+      数えない … 番兵（設定狙いの99999）／停止中（画面に出ていない）
+      ★読めない★ … 値が在るのに整数として読めない → ここが1つでもあれば
+                    その機種は触らない（呼ぶ側が len で判定する）
+    """
+    out = []
+    for md in (ck.get("modes") or []):
+        if not isinstance(md, dict):
+            continue
+        conf = mode_conf(ck, md.get("key"))
+        if not isinstance(conf, dict) or is_off(conf):
+            continue                      # 停止中は数えない
+        kind, rows = _rows(conf)
+        if rows:
+            if row_ends(rows, ""):
+                out.append(("rows", md.get("key")))
+            continue
+        raw = conf.get("good")
+        if raw is None:
+            continue                      # そもそも狙い目を持たない軸
+        g = effective_good(conf, "")
+        if g is not None and g >= NO_TARGET:
+            continue                      # 番兵（設定狙い）
+        out.append(("mode", md.get("key")))   # ★読めなくても数える★
+    seen = set()
+    for key, word in (("suru", "スルー"), ("through", "スルー"),
+                      ("cycle", "周期目")):
+        ts = ck.get(key)
+        if not isinstance(ts, dict) or is_off(ts):
+            continue
+        if any(isinstance(ts.get(k), list) for k in ("suru", "cycle")):
+            continue
+        if ts.get("good") is None:
+            continue
+        g = effective_good(ts, "")
+        if g is not None and g >= NO_TARGET:
+            continue
+        txt = "%d%s〜" % (g, word) if g is not None else ("?" + key)
+        if txt in seen:
+            continue                      # suru と through は同じ意味
+        seen.add(txt)
+        out.append(("count", key))
     return out
 
 
@@ -442,6 +575,25 @@ def plan_all():
     for m in ms:
         got = for_machine(m)
         if not got:
+            # ★★交換率の切替を持たない機種★★（2026-09-12）
+            #   ★書くのは一覧（strategy）だけ★（Codexの指摘2）＝
+            #   交換率ごとの文も、記事データの箱も作らない・触らない。
+            # ★★対象は「一覧が交換率を名乗っている機種」だけ★★
+            #   （2026-09-12・Codexの指摘1＝対象を先に固定する）
+            #   ★名乗っていない機種まで書き換えない★＝
+            #   実測3機種（アズールレーン・ゴジラ・リゼロ2）は
+            #   嘘の区別を出しておらず、書き換えると
+            #   「単発後210G〜」のような別の情報が落ちる。
+            if not _norate_target(m):
+                continue
+            _t, _why = norate_text(m)
+            if _t:
+                if str(m.get("strategy") or "") != _t:
+                    machines.append({"slug": str(m.get("slug") or ""),
+                                     "strategy": _t,
+                                     "strategyByRate": None})   # ★作らない★
+            elif _norate_target(m):
+                skipped.append((str(m.get("slug") or ""), _why))
             continue
         slug = str(m.get("slug") or "")
         dr = got["defaultRate"]
@@ -645,6 +797,16 @@ def check() -> int:
             print("   " + x)
         print()
     machines, details, skipped = plan_all()
+    # ★★直したあと、一覧に交換率の呼び名が残っていないこと★★
+    #   （2026-09-12・Codexの指摘4）＝作った文と一致していても、
+    #   ★別の場所に呼び名が残っていたら意味が無い★。
+    left = [str(m.get("slug")) for m in _load()
+            if _norate_target(m) and norate_text(m)[0]]
+    if left:
+        print("★交換率の呼び名が残っている機種: %d★" % len(left))
+        for x in left[:8]:
+            print("   " + x)
+        print()
     if skipped:
         print("★機械では決められない機種があります: %d★" % len(skipped))
         for slug, why in skipped:
@@ -693,7 +855,10 @@ def apply_all() -> int:
             print("★機種が見つかりません:", r["slug"])
             return 1
         m["strategy"] = r["strategy"]
-        m["strategyByRate"] = r["strategyByRate"]
+        # ★★None は「触らない」の意味★★（切替なし機種）＝
+        #   交換率ごとの文は作らないし、あれば残す（消しもしない）。
+        if r["strategyByRate"] is not None:
+            m["strategyByRate"] = r["strategyByRate"]
     # ★全部そろってから書く★（途中で止まっても部分適用にしない）
     outs = [(MACHINES, _dump(data, MACHINES), d0)]
     for r in details:
@@ -1034,6 +1199,27 @@ def selftest() -> int:
             "modes": [{"key": "suru", "label": "スルー天井"}],
             "suru": {"suru": [{"count": 0, "good": NO_TARGET}]}}
     t("★回数系でも番兵（設定狙い）は出さない★", parts(ck4c, "eq56") == [])
+    # ★停止中の軸は出さない★（2026-09-12・Codexの指摘6）
+    ck_off = {"unit": "G", "exchangeRates": [{"key": "eq56", "label": "5.6枚"}],
+              "modes": [{"key": "normal", "label": "通常"}],
+              "normal": {"good": 500},
+              "suru": {"good": 4, "_disabled": "2026-07-24 Phase0"}}
+    t("★★画面に出ていない軸は狙い目に出さない★★"
+      "／★出すと、押しても使えないものを一覧が約束する★",
+      [p["text"] for p in parts(ck_off, "eq56")] == ["通常500G〜"])
+    ck_off2 = {"unit": "G", "exchangeRates": [{"key": "eq56", "label": "5.6枚"}],
+               "modes": [{"key": "normal", "label": "通常"},
+                         {"key": "suru", "label": "スルー天井"}],
+               "normal": {"good": 500},
+               "suru": {"_disabled": "止めた",
+                        "suru": [{"count": 0, "good": 450}]}}
+    t("　モードそのものが停止中でも出さない",
+      [p["text"] for p in parts(ck_off2, "eq56")] == ["通常500G〜"])
+    t("　（対照）停止していなければ出す",
+      any("4スルー〜" in p["text"] for p in parts(
+          {"unit": "G", "exchangeRates": [{"key": "eq56", "label": "5.6枚"}],
+           "modes": [], "suru": {"good": 4}}, "eq56")))
+
     # ★byRate に good が null で在るときは「無い」と読む★（JSと同じ）
     ck4d = {"unit": "G", "exchangeRates": [{"key": "eq56", "label": "5.6枚"}],
             "modes": [{"key": "normal", "label": "通常"}],
@@ -1082,6 +1268,40 @@ def selftest() -> int:
 
     # ★交換率を持たない機種は何も作らない★
     t("交換率が無ければ作らない", for_machine({"checker": {"unit": "G"}}) == {})
+
+    # ★★交換率の切替を持たない機種★★（2026-09-12）
+    _nr = {"unit": "G",
+           "modes": [{"key": "normal", "label": "通常"}],
+           "normal": {"good": 900},
+           "reset": {"good": 500}}
+    _m_nr = {"slug": "x", "checker": dict(_nr, modes=[
+        {"key": "normal", "label": "通常"}, {"key": "reset", "label": "リセット"}]),
+        "strategy": "等価730G〜 / 5.6枚740G〜 / 現金820G〜"}
+    t("★★切替なしは「チェッカー基準」を付けて1本だけ作る★★"
+      "／★呼び名なしだと、全交換率に当てはまる値だと読める★",
+      norate_text(_m_nr)[0] == "チェッカー基準 通常900G〜 / リセット500G〜")
+    t("★交換率の切替を持つ機種はここで作らない★",
+      norate_text({"checker": {"exchangeRates": [{"key": "eq56"}]}})[1] != "")
+    # ★一部しか作れないときは作らない★（Codexの指摘3）
+    _bad = {"slug": "y", "strategy": "等価500G〜",
+            "checker": {"unit": "G",
+                        "modes": [{"key": "normal", "label": "通常"},
+                                  {"key": "cz", "label": "CZ間"}],
+                        "normal": {"good": 900},
+                        "cz": {"good": "よめない"}}}
+    t("★★軸が1つでも作れなければ、その機種は触らない★★"
+      "／★残った分だけで作ると、一部しか出ていない一覧を「直した」ことにする★",
+      norate_text(_bad)[0] == "")
+    # ★対象の決め方★
+    t("★一覧が交換率を名乗っている機種だけが対象★",
+      _norate_target(_m_nr) is True)
+    t("　名乗っていない機種は対象にしない（別の情報が落ちる）",
+      _norate_target({"slug": "z", "strategy": "0スルー170G〜 / 6スルー〜即",
+                      "checker": {"unit": "G", "modes": []}}) is False)
+    t("★基準を名乗っている機種は、理由つきで外してある★",
+      _norate_target({"slug": "karakuri2", "strategy": "等価 液晶800G〜",
+                      "checker": {"unit": "G", "modes": []}}) is False
+      and len(NORATE_KEEP.get("karakuri2", "")) > 10)
 
     # ★印の無い箱が狙い目を言っていないか★（2026-09-11・Codexの指摘）
     #   ★読者に矛盾が見えていた★＝ヴァルヴレイヴ2の天井の箱に
