@@ -275,6 +275,36 @@ def target_check_problem(changed, run) -> str:
     return "狙い目の文が手書きと食い違っている" if code != 0 else ""
 
 
+# ★★カウンターの注記が、判定と噛み合わなくなっていないか★★（2026-09-12）
+#   注記は読者の画面（カウンターのすぐ下）に出る。
+#   ★直す前に実測したこと★＝画面に出る注記703本のうち、
+#   ・選べない交換率（等価・現金）で着席の基準を書いていたもの
+#   ・カウンター自身が「候補」と判定する値を「狙い目・基準」と書いていたもの
+#   が合わせて76本あった（バベルは判定900Gに対し注記が730G＝160G早い）。
+#
+#   machines.json  … 注記そのものと、判定の境目（候補・狙い目・強め）の置き場
+#   note_text.py   … 直す側・見る側
+#   machine.html   … ★どの注記が画面に出るかを決める側★
+#                    （行→交換率の重ね方がここにある。変わると件数が狂う）
+_NOTE_SRC = ("assets/data/machines.json", "scripts/note_text.py",
+             "scripts/target_display.py", "machine.html")
+
+
+def touches_note(paths) -> bool:
+    """★注記が判定と食い違い得る変更か★（2026-09-12）"""
+    return _touches(paths, _NOTE_SRC)
+
+
+def note_check_problem(changed, run) -> str:
+    """★注記の点検が要るなら流して、駄目なら理由を返す★"""
+    if not touches_note(changed):
+        return ""
+    code, out = run(["note_text.py", "--check"])
+    for line in str(out or "").strip().splitlines():
+        print("   " + line)
+    return "カウンターの注記が判定と噛み合っていない" if code != 0 else ""
+
+
 def workflow_python_versions(read=None) -> dict:
     """★2つのワークフローが宣言しているPythonの版★（2026-09-03）
 
@@ -353,6 +383,11 @@ def _check_hub_wiring() -> list:
 def _check_target_wiring() -> list:
     """★狙い目の文の配線★"""
     return _check_gate_wiring("target_display.py", "狙い目の文")
+
+
+def _check_note_wiring() -> list:
+    """★注記の点検の配線★"""
+    return _check_gate_wiring("note_text.py", "カウンターの注記")
 
 
 def _check_gate_wiring(fail_script: str, name: str) -> list:
@@ -857,6 +892,28 @@ def _selftest() -> int:
       target_check_problem(["assets/data/machines.json"],
                            lambda a: (0, "一致")) == "")
 
+    # ★★カウンターの注記★★（2026-09-12）
+    t("★注記：機種データを変えたら流す★",
+      touches_note(["assets/data/machines.json"]) is True)
+    t("★注記：どの注記が画面に出るかを決める側を変えたら流す★"
+      "／★入れないと、重ね方を変えて件数を狂わせても点検が呼ばれない★",
+      touches_note(["machine.html"]) is True)
+    t("　関係ない変更では流さない",
+      touches_note(["README.md"]) is False)
+    t("★注記：関所の本体が点検を呼んでいる★",
+      "note_check_problem(" in _msrc)
+    _nw = _check_note_wiring()
+    for _x in _nw:
+        t("★関所の配線★ " + _x, False)
+    t("★★関所の本体を1回通すと、注記の点検が呼ばれ、失敗が伝わる★★",
+      not _nw)
+    t("★注記：点検が赤なら push を止める★",
+      note_check_problem(["assets/data/machines.json"],
+                         lambda a: (1, "食い違い")) != "")
+    t("　点検が緑なら止めない",
+      note_check_problem(["assets/data/machines.json"],
+                         lambda a: (0, "一致")) == "")
+
     # ★★照合を求める範囲★★（2026-08-28・実際に push が止まった）
     t("★★記事を書き換えたコミットには照合を求める★★",
       touches_articles(["assets/data/machine-details/dmm_5086.json"]) is True)
@@ -1112,6 +1169,11 @@ def main() -> int:
     _td_ng = target_check_problem(changed, _hub_run)
     if _td_ng:
         ng.append(_td_ng)
+
+    # ★★カウンターの注記も同じ場所で見る★★（2026-09-12）
+    _nt_ng = note_check_problem(changed, _hub_run)
+    if _nt_ng:
+        ng.append(_nt_ng)
 
     # ★★手順書（スキル・無人タスク）の監査は毎回流す★★
     #   （2026-09-01・Codexのレビュー30の指摘3）

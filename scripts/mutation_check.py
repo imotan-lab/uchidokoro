@@ -849,6 +849,39 @@ MUTATIONS = [
                  "if s[\"mode\"] == \"通常\"]",
         "run": ["scripts/recheck.py"],
     },
+    # ─── 2026-09-12・カウンターの注記 ────────────────────────────
+    {
+        "why": "★注記の書き換えで、文字を足せるようにする"
+               "（消すだけの約束が外れ、注記がまた手書きへ戻る）★",
+        "file": "scripts/note_text.py",
+        "before": "    it = iter(big)\n    return all(ch in it for ch in small)",
+        "after": "    return True",
+        "run": ["scripts/note_text.py"],
+    },
+    {
+        "why": "★候補（手前帯）の値を「狙い目」と書いていても通す"
+               "（バベルは判定900Gに対し注記730G＝160G早く座らせていた）★",
+        "file": "scripts/note_text.py",
+        "before": "        if caution in nums and good not in nums:",
+        "after": "        if False:",
+        "run": ["scripts/note_text.py"],
+    },
+    {
+        "why": "★スルー・周期の行の注記を数えない"
+               "（画面に出る注記15機種90行が、丸ごと検査の外に戻る）★",
+        "file": "scripts/note_text.py",
+        "before": "        for axis in (\"suru\", \"cycle\"):",
+        "after": "        for axis in ():",
+        "run": ["scripts/note_text.py"],
+    },
+    {
+        "why": "★注記を出す枝を1つしか見ない"
+               "（土台の注記が、別の交換率では食い違ったまま残る）★",
+        "file": "scripts/note_text.py",
+        "before": "    return [st for st in states(m) if st[\"holder\"] is holder]",
+        "after": "    return [st for st in states(m) if st[\"holder\"] is holder][:1]",
+        "run": ["scripts/note_text.py"],
+    },
     # ─── 2026-09-12・記事とチェッカーの食い違い（罠㉙を踏んだので作った） ──
     {
         "why": "★記事とチェッカーの差を見ない"
