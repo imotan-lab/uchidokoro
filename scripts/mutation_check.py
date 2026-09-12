@@ -857,6 +857,7 @@ MUTATIONS = [
         "before": "        else NOT_PUBLISHED",
         "after": "        else NEEDS_LOOK",
         "run": ["scripts/ceiling_lookup.py"],
+        "issues": [649],
     },
     {
         "why": "★見出しの次の行を見ない"
@@ -866,6 +867,7 @@ MUTATIONS = [
         "before": "        near += lines[i:i + 2]",
         "after": "        near += lines[i:i + 1]",
         "run": ["scripts/ceiling_lookup.py"],
+        "issues": [649],
     },
     # ─── 2026-09-12・カウンターの注記 ────────────────────────────
     {
