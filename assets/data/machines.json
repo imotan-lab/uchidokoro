@@ -12194,5 +12194,56 @@
    "identity_evidence_ref": "dmm:5109 型式=未掲載 メーカー=山佐ネクスト 導入=2026-12 確認日=2026-09-10",
    "market_release_date": "2026-12"
   }
+ },
+ {
+  "slug": "dmm_5100",
+  "name": "スマスロ バジリスク～甲賀忍法帖～Ⅳ",
+  "seo": {
+   "title": "スマスロ バジリスク～甲賀忍法帖～Ⅳ スペック・基本情報"
+  },
+  "info": "",
+  "strategy": "",
+  "aliases": [],
+  "publication_policy": "page-decision/v2",
+  "page_decision": {
+   "schema_version": "page-decision/v2",
+   "indexable": false,
+   "machine_profile": "UNKNOWN",
+   "ceiling_state": "UNKNOWN",
+   "confirmed_topics": [
+    "setting",
+    "spec"
+   ],
+   "pending_topics": [
+    "gameplay",
+    "cz",
+    "ceiling",
+    "strategy",
+    "reset"
+   ],
+   "reason_codes": [
+    "CLAIMS_LT_3",
+    "CATEGORIES_LT_2",
+    "MACHINE_PROFILE_UNKNOWN"
+   ],
+   "claims": [
+    "at_prob",
+    "payout_rate"
+   ],
+   "policy_mode": "normal",
+   "decided_at": "2026-09-13",
+   "input_digest": "sha256:b3d460d57303e563e5da4644370583af822c0514e3b3202f97098ac7ed51618b"
+  },
+  "publish_state": "PREVIEW_VERIFIED_SUBSET",
+  "release_date": "2026-12",
+  "identity": {
+   "manufacturer_id": "universal",
+   "official_product_url": "https://p-town.dmm.com/machines/5100",
+   "announced_name": "スマスロ バジリスク～甲賀忍法帖～Ⅳ",
+   "identity_tier": "CATALOG_BOUND",
+   "identity_binding": "DMM_MACHINE_PAGE",
+   "identity_evidence_ref": "dmm:5100 型式=未掲載 メーカー=アクロス 導入=2026-12 確認日=2026-09-13",
+   "market_release_date": "2026-12"
+  }
  }
 ]
