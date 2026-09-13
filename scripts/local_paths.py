@@ -37,7 +37,16 @@ DOCS = os.environ.get("UCHIDOKORO_DOCS") or os.path.join(
 CLAUDE = os.environ.get("UCHIDOKORO_CLAUDE") or os.path.join(HOME, ".claude")
 
 # よく使うもの
-LOGS = os.path.join(DOCS, "logs")
+# ★記録の行き先だけを差し替えられるようにする★（2026-09-13・台帳#655）
+#   ★なぜ要るか★＝守りを1行ずつ壊して確かめる道具は、子の処理を
+#   **本番の環境のまま**動かす。そこでログの守りを壊すと、
+#   ★本番のログに実際に書かれてしまう★（Codexの指摘・実測で確認）。
+#   ★控え（DOCS）ごと差し替えない★＝試験は本番の控えを読む前提のものが多く、
+#   まとめて向け直すと「壊す前から赤い」になる。
+LOGS = os.environ.get("UCHIDOKORO_LOGS") or os.path.join(DOCS, "logs")
+# ★下見の作業置き場★（完走の印もここ）＝同じ理由で差し替えられるようにする
+RESEARCH = os.environ.get("UCHIDOKORO_RESEARCH") or os.path.join(
+    DOCS, "gpt_research")
 OPS = os.path.join(DOCS, "ops")
 SECRETS = os.path.join(CLAUDE, "secrets")
 TASKS = os.path.join(CLAUDE, "scheduled-tasks")
@@ -149,6 +158,45 @@ def selftest() -> int:
     t("　下のファイルを組み立てられる",
       doc("open_issues.json").endswith("open_issues.json")
       and claude("send_notify.py").endswith("send_notify.py"))
+
+    # ★★記録の行き先も環境変数で移せる★★（2026-09-13・台帳#655）
+    #   ★これが効かないと★＝守りを1行ずつ壊して確かめる道具が
+    #   子へ渡す一時の行き先が無視され、★本番の記録に書かれる★
+    #   （実測で、秘密の見張りの記録が1回で119行増え、
+    #     停止済みタスクの完走の印が試験の CRASHED で潰れた）。
+    #   ★読み込み直して確かめる★＝この値は取り込んだときに決まるので、
+    #   環境変数を置いただけでは変わらない。
+    def _reload_with(env: dict):
+        """環境変数をこの値にして読み込み直す（None を渡すと外す）。"""
+        import importlib
+        keep = {k: os.environ.get(k) for k in env}
+        for k, v in env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        try:
+            m = importlib.reload(__import__("local_paths"))
+            return m.LOGS, m.RESEARCH
+        finally:
+            for k, v in keep.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+            importlib.reload(__import__("local_paths"))
+
+    _l, _r = _reload_with({"UCHIDOKORO_LOGS": "X:/logs",
+                           "UCHIDOKORO_RESEARCH": "X:/research"})
+    t("★★記録の行き先は環境変数で移せる★★", _l == "X:/logs")
+    t("★★下見の作業置き場も環境変数で移せる★★", _r == "X:/research")
+    #   ★「いまの値」で見ない★＝守りを壊して確かめる道具は
+    #   この試験に一時の行き先を渡して動かすので、いまの値は本番ではない。
+    _l0, _r0 = _reload_with({"UCHIDOKORO_LOGS": None,
+                             "UCHIDOKORO_RESEARCH": None})
+    t("　環境変数が無ければ、書類フォルダの下になる",
+      _l0 == os.path.join(DOCS, "logs")
+      and _r0 == os.path.join(DOCS, "gpt_research"))
 
     ng = sum(1 for _, o in results if not o)
     print()

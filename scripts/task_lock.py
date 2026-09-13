@@ -64,7 +64,8 @@ import sys as _sys_lp               # noqa: E402
 _sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
 import local_paths as _lp           # noqa: E402
 LOCK_PATH = _lp.doc("task.lock")
-LOG_PATH = _lp.doc("logs/task_lock.log")
+# ★記録の行き先は local_paths の1か所★（2026-09-13・台帳#655）
+LOG_PATH = _os_lp.path.join(_lp.LOGS, "task_lock.log")
 CTX_DIR = _lp.DOCS
 STALE_MINUTES = 30  # 最終heartbeatからこの分数を超えたら異常終了の残骸とみなす
 
@@ -123,13 +124,30 @@ def _now_iso() -> str:
     return _now().strftime("%Y-%m-%dT%H:%M:%S")
 
 
-def _log(msg: str) -> None:
+# ★試験の最中は、本番の記録に書かない★（2026-09-13・台帳#655）
+#   ★実測★＝この試験を1回動かすと本番の task_lock.log が29行増える。
+#   守りを1行ずつ壊して確かめる道具が何百回も動かすので、
+#   本物のロック事故がこの山に埋もれる。
+_IN_SELFTEST = False
+# ★試験を始める前の既定値が「書く」側だったか★（2026-09-13・Codexの指摘）
+_SELFTEST_DEFAULT_WAS_OFF = False
+
+
+def _log_write(line: str) -> None:
+    """★本番の書き込み口★（ここだけがファイルへ残す）"""
     try:
         os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
         with open(LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(f"[{_now().strftime('%Y/%m/%d %H:%M:%S')}] {msg}\n")
+            f.write(line + "\n")
     except Exception:
         pass  # ログ失敗でロック操作自体は止めない
+
+
+def _log(msg: str) -> None:
+    line = f"[{_now().strftime('%Y/%m/%d %H:%M:%S')}] {msg}"
+    if _IN_SELFTEST:
+        return                            # ★試験では書かない★（台帳#655）
+    _log_write(line)
 
 
 def _read_lock(path: str) -> dict | None:
@@ -365,6 +383,15 @@ def cmd_status(lock_path: str) -> int:
 
 
 def selftest() -> int:
+    """★試験の間だけ本番のログを止め、★必ず戻す★★（2026-09-13・台帳#655）
+
+    ★決まりは1か所★＝`selftest_log_guard`。
+    """
+    import selftest_log_guard as _slg
+    return _slg.run_selftest(globals(), _selftest_body)
+
+
+def _selftest_body() -> int:
     import tempfile
     d = tempfile.mkdtemp()
     p = os.path.join(d, "t.lock")
@@ -373,6 +400,37 @@ def selftest() -> int:
     def t(name, cond):
         results.append((name, cond))
         print(("✅" if cond else "❌") + " " + name)
+
+    # 0. ★★試験では書かない／本番では必ず書く★★（2026-09-13・台帳#655）
+    #   ★片方だけ確かめると、記録そのものを殺しても緑になる★（罠㊿）。
+    def _log_sink_tests():
+        import shutil as _sh
+        import tempfile as _tf
+        global LOG_PATH
+        _keep, _tmp = LOG_PATH, _tf.mkdtemp(prefix="uchi_tllog_")
+        LOG_PATH = os.path.join(_tmp, "logs", "task_lock.log")
+        try:
+            _log("試験の書き込み")
+            t("★試験の最中は、本番のログに書かない★"
+              "（1回の試験で29行増えていた・実測）", not os.path.exists(LOG_PATH))
+            globals()["_IN_SELFTEST"] = False
+            try:
+                _log("本番の書き込み")
+            finally:
+                globals()["_IN_SELFTEST"] = True
+            t("　（対照）本番では必ずログに書く",
+              os.path.exists(LOG_PATH)
+              and "本番の書き込み" in open(LOG_PATH, encoding="utf-8").read())
+            t("★通常の起動では、既定で本番のログに書く側★",
+              _SELFTEST_DEFAULT_WAS_OFF)
+            import selftest_log_guard as _slg2
+            t("★試験が終わったら、記録を止めた印を必ず戻す★",
+              _slg2.probe(globals()) == (True, True, True))
+        finally:
+            LOG_PATH = _keep
+            _sh.rmtree(_tmp, ignore_errors=True)
+
+    _log_sink_tests()
 
     # 1. 取得成功
     import io, contextlib

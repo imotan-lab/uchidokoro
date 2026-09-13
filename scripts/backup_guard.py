@@ -43,7 +43,8 @@ import os as _os_lp                 # noqa: E402
 import sys as _sys_lp               # noqa: E402
 _sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
 import local_paths as _lp           # noqa: E402
-LOG_PATH = _lp.doc("logs/backup_guard.log")
+# ★記録の行き先は local_paths の1か所★（2026-09-13・台帳#655）
+LOG_PATH = _os_lp.path.join(_lp.LOGS, "backup_guard.log")
 
 # ── 前段copy用: バックアップを許可するファイル名（完全一覧・basename照合）──
 ALLOW_BASENAMES = {
@@ -1605,6 +1606,31 @@ def _baseline_tests(t) -> None:
 
 
 def selftest() -> int:
+    """★試験の間だけ、記録の行き先を一時の場所へ向ける★（2026-09-13・台帳#655）
+
+    ★実測★＝直す前はこの試験を1回動かすと本番の backup_guard.log が119行増え、
+    そのファイルは既に28万行あった（守りを1行ずつ壊して確かめる道具が
+    何百回も動かすため）。＝本物の警告がこの山に埋もれる。
+
+    ★ここは「書かない」ではなく「向け直す」★＝
+    この試験には**自分が書いたログに秘密値が出ていないこと**を見る項目があり、
+    書かなくすると、その項目は★何も確かめずに合格する★ようになる
+    （直す前は本番のログを読んでいたので、前の実行の中身で合格していた）。
+    """
+    import shutil as _sh_lg
+    import tempfile as _tf_lg
+    import selftest_log_guard as _slg
+    _tmp_log = _tf_lg.mkdtemp(prefix="uchi_bglog_")
+    try:
+        return _slg.run_selftest_path(
+            globals(), lambda real: _selftest_body(real, _tmp_log),
+            "LOG_PATH", os.path.join(_tmp_log, "logs", "backup_guard.log"))
+    finally:
+        _sh_lg.rmtree(_tmp_log, ignore_errors=True)
+
+
+def _selftest_body(_real_log_path: str, _tmp_root: str) -> int:
+    import selftest_log_guard as _slg_bg
     import tempfile
     d = tempfile.mkdtemp()
     dst_dir = os.path.join(d, "dst")
@@ -1613,6 +1639,24 @@ def selftest() -> int:
     def t(name, cond):
         results.append((name, cond))
         print(("✅" if cond else "❌") + " " + name)
+
+    # 0. ★★本番の記録先★★（2026-09-13・台帳#655）
+    #   ★試験の間は一時の場所へ向けている★ので、
+    #   ★本番の行き先が正しいことは、ここで別に見る★
+    #   （向け直しただけで満足すると、本番の記録を殺しても緑になる）。
+    t("★本番の記録先は local_paths が決める★",
+      _real_log_path == os.path.join(_lp.LOGS, "backup_guard.log"))
+    # ★「本番と違う」だけでは足りない★（2026-09-13・Codexの指摘）＝
+    #   別名の本番ログへ向けても通ってしまう。★一時の場所の下にあること★を見る。
+    t("★試験の間は、一時の場所へ書く★"
+      "（1回の試験で119行増えていた・実測。28万行の山に本物が埋もれる）",
+      LOG_PATH != _real_log_path and _slg_bg.under(LOG_PATH, _tmp_root))
+    # ★★終わったら必ず戻す★★（2026-09-13・Codexの指摘）＝
+    #   ★別のプロセスで動かす試験では見つからない★（プロセスが終われば消える）
+    #   ので、その場で確かめる。
+    import selftest_log_guard as _slg2
+    t("★試験が終わったら、記録の行き先を必ず戻す★",
+      _slg2.probe_path(globals()) == (True, True, True))
 
     def w(name, content):
         p = os.path.join(d, name)
@@ -1721,7 +1765,14 @@ def selftest() -> int:
         logtxt = open(LOG_PATH, encoding="utf-8").read()
     except Exception:
         pass
-    t("ログに秘密値そのものが出ていない", "smuggled" not in logtxt and "xxxx xxxx" not in logtxt)
+    # ★★空のログで合格しない★★（2026-09-13・台帳#655）＝
+    #   ★直す前は本番のログを読んでいた★ので、この試験は
+    #   「前の実行が残した中身」で合格していた。
+    #   いまは試験自身が書いたものを読むので、★中身があることまで見る★
+    #   （書けていないのに「秘密値が無い」と言うのは、何も確かめていない）。
+    t("ログに秘密値そのものが出ていない（★空のログで合格しない★）",
+      len(logtxt) > 0
+      and "smuggled" not in logtxt and "xxxx xxxx" not in logtxt)
 
     # 11. ★backup-tree（gpt_research限定バックアップ・2026-07-18）★
     src_root = os.path.join(d, "gpt_research")

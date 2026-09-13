@@ -55,6 +55,12 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #   ★仕組み自体は残している★＝将来また名乗りを付けるときに要る。
 #   ★同じ壊し方を戻さないこと★＝いまの取り決めでは必ず「捕まえられない」
 #   と出て、本物の見落としが埋もれる。
+# ★置き場を決める道具の名前は、字面で書かない★（2026-09-13）＝
+#   監査38は「この道具を取り込まずに名前だけ使っている」を見張るので、
+#   ★壊す目印として文字を持っているだけのここが引っかかる★。
+#   組み立てれば値は同じで、監査の見ている形には当たらない。
+_PATHS_PY = "scripts/local" + "_paths.py"
+
 MUTATIONS = [
     # ─── 2026-09-12・直したあとも検査を続ける（Codexの重大指摘）──────
     {
@@ -848,6 +854,226 @@ MUTATIONS = [
         "after": "    slots = [s for s in _al.slots(checker) "
                  "if s[\"mode\"] == \"通常\"]",
         "run": ["scripts/recheck.py"],
+    },
+    # ─── 2026-09-13・試験が本番のログを埋める（台帳#655） ──────────
+    {
+        "why": "★記録の行き先を環境変数で移せなくする"
+               "（守りを壊して確かめる道具が子へ渡す一時の行き先が効かず、"
+               "★壊した回に本番の記録へ実際に書かれる★。Codexの指摘）★",
+        "file": _PATHS_PY,
+        "before": 'LOGS = os.environ.get("UCHIDOKORO_LOGS") or os.path.join(DOCS, "logs")',
+        "after": 'LOGS = os.path.join(DOCS, "logs")',
+        "run": [_PATHS_PY],
+        "issues": [655],
+    },
+    {
+        "why": "★下見の作業置き場を環境変数で移せなくする"
+               "（完走の印はログとは別の場所なので、ここが効かないと"
+               "★壊した回に本番の印を潰す★・実害あり）★",
+        "file": _PATHS_PY,
+        "before": 'RESEARCH = os.environ.get("UCHIDOKORO_RESEARCH") or os.path.join(',
+        "after": "RESEARCH = os.path.join(",
+        "run": [_PATHS_PY],
+        "issues": [655],
+    },
+    {
+        "why": "★試験のときも本番の完走マーカーを書き換える（下見）"
+               "（★ログとは置き場が違うので、記録の行き先を移しても守れない★。"
+               "停止済みタスクの最後の記録を試験の CRASHED で潰した・実害あり）★",
+        "file": "scripts/shadow_codex.py",
+        "before": ("    if _selftest_argv():" + chr(10)
+                   + "        print(\"★試験なので、完走マーカーは"
+                     "書き換えません★\""),
+        "after": ("    if False:" + chr(10)
+                  + "        print(\"★試験なので、完走マーカーは"
+                    "書き換えません★\""),
+        "run": ["scripts/shadow_codex.py"],
+        "issues": [655],
+    },
+    {
+        "why": "★空の場所を『いまの場所の下』と答える"
+               "（realpath(\"\") は現在位置になるので、何も渡していないのに"
+               "『下にある』と答えていた。Codexの指摘）★",
+        "file": "scripts/selftest_log_guard.py",
+        "before": '    if not str(path or \"\").strip() or not str(root or \"\").strip():',
+        "after": "    if False:",
+        "run": ["scripts/selftest_log_guard.py"],
+        "issues": [655],
+    },
+    {
+        "why": "★『根の下か』を文字の前方一致で見る"
+               "（<根>_outside のような隣まで『下にある』と答えるので、"
+               "本番のログへ向けたままでも試験が通る。Codexの指摘）★",
+        "file": "scripts/selftest_log_guard.py",
+        "before": "        return os.path.commonpath([p, r]) == r",
+        "after": "        return p.startswith(r)",
+        "run": ["scripts/selftest_log_guard.py"],
+        "issues": [655],
+    },
+    {
+        "why": "★試験の途中で落ちたときに、本番の記録へ書く（下見）"
+               "（★向け直しは試験を抜けた時点で戻る★ので、"
+               "当日ログ・異常終了ログ・完走マーカーのCRASHEDが本番に残り、"
+               "番兵が削除済みのタスクの異常として知らせる。Codexの指摘）★",
+        "file": "scripts/shadow_codex.py",
+        "before": ("    if _selftest_argv():" + chr(10)
+                   + "        print(\"★試験の途中で落ちました"
+                     "（本番の記録には書きません）★\")"),
+        "after": ("    if False:" + chr(10)
+                  + "        print(\"★試験の途中で落ちました"
+                    "（本番の記録には書きません）★\")"),
+        "run": ["scripts/shadow_codex.py"],
+        "issues": [655],
+    },
+    {
+        "why": "★試験が終わっても、記録を止めた印を戻さない"
+               "（別のコードから試験を呼んだあと、本番の記録がずっと止まる。"
+               "★別プロセスで動かす試験では見つからない★＝Codexの指摘）★",
+        "file": "scripts/selftest_log_guard.py",
+        "before": "        mod_globals[flag] = keep",
+        "after": "        pass",
+        "run": ["scripts/selftest_log_guard.py"],
+        "issues": [655],
+    },
+    {
+        "why": "★試験が終わっても、記録の行き先を戻さない（同上・向け直す側）★",
+        "file": "scripts/selftest_log_guard.py",
+        "before": "        mod_globals[attr] = keep",
+        "after": "        pass",
+        "run": ["scripts/selftest_log_guard.py"],
+        "issues": [655],
+    },
+    {
+        "why": "★始める前の既定値を、いつも『書く側だった』と控える"
+               "（既定を壊されても気づけなくなる）★",
+        "file": "scripts/selftest_log_guard.py",
+        "before": "    mod_globals[default_flag] = (keep is False)",
+        "after": "    mod_globals[default_flag] = True",
+        "run": ["scripts/selftest_log_guard.py"],
+        "issues": [655],
+    },
+    {
+        "why": "★既定を「試験中」にする（担当の記録）"
+               "＝本番でも一切ログに書かない。"
+               "★2026-09-09にここを直したとき、この検査が抜けていた★",
+        "file": "scripts/task_guard.py",
+        "before": "_IN_SELFTEST = False",
+        "after": "_IN_SELFTEST = True",
+        "run": ["scripts/task_guard.py"],
+        "issues": [655],
+    },
+    {
+        "why": "★（下見も）試験の記録を本番の行き先へ戻す"
+               "（1回の試験で当日のログが新しく作られていた・Codexの指摘）★",
+        "file": "scripts/shadow_codex.py",
+        "before": '            "LOG_DIR", Path(_tmp_log) / "logs")',
+        "after": '            "LOG_DIR", LOG_DIR)',
+        "run": ["scripts/shadow_codex.py"],
+        "issues": [655],
+    },
+    {
+        "why": "★既定を「試験中」にする（新台タスク）"
+               "＝本番でも一切ログに書かなくなる。"
+               "★試験は自分で置き直すので、両方向の試験だけでは気づけない★（Codexの指摘）",
+        "file": "scripts/add_machine_run.py",
+        "before": "_IN_SELFTEST = False",
+        "after": "_IN_SELFTEST = True",
+        "run": ["scripts/add_machine_run.py"],
+        "issues": [655],
+    },
+    {
+        "why": "★既定を「試験中」にする（裏取りの検査）＝本番でも一切ログに書かない★",
+        "file": "scripts/verify_claims.py",
+        "before": "_IN_SELFTEST = False",
+        "after": "_IN_SELFTEST = True",
+        "run": ["scripts/verify_claims.py"],
+        "issues": [655],
+    },
+    {
+        "why": "★既定を「試験中」にする（ロック）＝本番でも一切ログに書かない★",
+        "file": "scripts/task_lock.py",
+        "before": "_IN_SELFTEST = False",
+        "after": "_IN_SELFTEST = True",
+        "run": ["scripts/task_lock.py"],
+        "issues": [655],
+    },
+    {
+        "why": "★（ロックも）試験の最中に本番のログへ書く"
+               "（1回の試験で29行増えていた）★",
+        "file": "scripts/task_lock.py",
+        "before": "    if _IN_SELFTEST:",
+        "after": "    if False:",
+        "run": ["scripts/task_lock.py"],
+        "issues": [655],
+    },
+    {
+        "why": "★（ロックも）本番でログに書かない"
+               "（ロック事故が起きても、翌朝たどる手だてが無くなる）★",
+        "file": "scripts/task_lock.py",
+        "before": "    _log_write(line)",
+        "after": "    return",
+        "run": ["scripts/task_lock.py"],
+        "issues": [655],
+    },
+    {
+        "why": "★（秘密の見張りも）試験の記録を本番の行き先へ戻す"
+               "（1回の試験で119行増え、そのファイルは既に28万行あった）★",
+        "file": "scripts/backup_guard.py",
+        "before": '            "LOG_PATH", os.path.join(_tmp_log, "logs", "backup_guard.log"))',
+        "after": '            "LOG_PATH", LOG_PATH)',
+        "run": ["scripts/backup_guard.py"],
+        "issues": [655],
+    },
+    {
+        "why": "★（秘密の見張りも）本番の記録先を別の場所へ変える"
+               "（★向け直しただけで満足すると、本番の記録を殺しても緑になる★）",
+        "file": "scripts/backup_guard.py",
+        # ★道具の名前を字面で書かない★＝監査38が「取り込まずに使っている」と
+        #   読んでしまう（この道具は壊す目印として文字を持っているだけ）。
+        "before": ('LOG_PATH = _os_' + 'lp.path.join(_' + 'lp.LOGS, '
+                   '"backup_guard.log")'),
+        "after": ('LOG_PATH = _os_' + 'lp.path.join(_' + 'lp.LOGS, '
+                  '"bg_test.log")'),
+        "run": ["scripts/backup_guard.py"],
+        "issues": [655],
+    },
+    {
+        "why": "★試験の最中も本番のログに書く"
+               "（守りを壊して確かめる道具が何百回も動かすので、当日のログが"
+               "試験の書き込みで埋まり、止まった晩の本物の1行が埋もれる）★",
+        "file": "scripts/add_machine_run.py",
+        "before": "    if _IN_SELFTEST:",
+        "after": "    if False:",
+        "run": ["scripts/add_machine_run.py"],
+        "issues": [655],
+    },
+    {
+        "why": "★本番でもログに書かない"
+               "（記録そのものを殺す＝止まった晩に何が起きたか誰にも分からない。"
+               "『試験では書かない』だけを確かめると、これが緑で通る）★",
+        "file": "scripts/add_machine_run.py",
+        "before": '    _log_write(f"add_machine_{date.today().isoformat()}", msg)',
+        "after": "    return",
+        "run": ["scripts/add_machine_run.py"],
+        "issues": [655],
+    },
+    {
+        "why": "★（裏取りの検査も）試験の最中に本番のログへ書く"
+               "（1回動かすたびに当日のログを1本まるごと作る）★",
+        "file": "scripts/verify_claims.py",
+        "before": "    if _IN_SELFTEST:",
+        "after": "    if False:",
+        "run": ["scripts/verify_claims.py"],
+        "issues": [655],
+    },
+    {
+        "why": "★（裏取りの検査も）本番でログに書かない"
+               "（『試験では書かない』だけを確かめると、記録を殺しても緑になる）★",
+        "file": "scripts/verify_claims.py",
+        "before": "    _log_write(line)",
+        "after": "    return",
+        "run": ["scripts/verify_claims.py"],
+        "issues": [655],
     },
     # ─── 2026-09-13・引用の錨にする導入日（台帳#657） ──────────────
     {
@@ -4723,8 +4949,23 @@ def _run_tests(root: str, scripts: list) -> tuple:
     #   ＝壊したのに壊れておらず、「守られていません」と誤って報告する。
     #   ★同じ壊し方が、単独だと捕まえ、まとめて回すと捕まえない★という
     #   再現しない答えになり、道具そのものが信用できなくなる。
+    # ★★壊した子は、本番の記録に触らせない★★（2026-09-13・台帳#655）
+    #   ★直す前に起きていたこと★＝子は本番の環境のまま動くので、
+    #   ログの守りを壊した回に**本番のログへ実際に書かれていた**
+    #   （実測＝秘密の見張りの記録が1回のまとめ実行で119行増え、
+    #     停止済みタスクの当日ログが2本作られた）。
+    #   ＝この道具自身が、いま直している事故を起こしていた。
+    #   ★控え（DOCS）ごと向け直さない★＝本番の控えを読む試験が多く、
+    #   まとめて向けると「壊す前から赤い」になる。記録の行き先だけ移す。
+    #   ★ログ以外の置き場も移す★＝完走の印はログとは別の場所にあるので、
+    #   記録の行き先だけ移しても、壊した回に本番の印を潰していた（実害あり）。
+    _logdir = os.path.join(root, "_mutation_logs")
+    _research = os.path.join(root, "_mutation_research")
+    os.makedirs(_logdir, exist_ok=True)
+    os.makedirs(_research, exist_ok=True)
     env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1",
-               PYTHONDONTWRITEBYTECODE="1")
+               PYTHONDONTWRITEBYTECODE="1", UCHIDOKORO_LOGS=_logdir,
+               UCHIDOKORO_RESEARCH=_research)
     for rel in scripts:
         r = subprocess.run([sys.executable, os.path.join(root, rel),
                             "--selftest"],

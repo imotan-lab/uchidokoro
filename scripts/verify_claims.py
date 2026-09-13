@@ -88,7 +88,8 @@ import os as _os_lp                 # noqa: E402
 import sys as _sys_lp               # noqa: E402
 _sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
 import local_paths as _lp           # noqa: E402
-LOG_DIR = _lp.doc("logs")
+# ★記録の行き先は local_paths の1か所★（2026-09-13・台帳#655）
+LOG_DIR = _lp.LOGS
 Page = namedtuple("Page", "text title final_url")
 # ★D-1a構造保持取得用: 生HTML＋title＋最終URL＋本文hash（fetch_html が返す・fetch_pageは不変）
 HtmlSnapshot = namedtuple("HtmlSnapshot", "html title final_url html_sha256")
@@ -111,16 +112,32 @@ def _now():
     return datetime.now().strftime("%H:%M:%S")
 
 
-def log(msg):
-    """コンソールとファイルの両方に出力（鉄則: 全スクリプトにファイルログ）。"""
-    line = f"[{_now()}] {msg}"
-    print(line)
+# ★試験の最中は、本番の記録に書かない★（2026-09-13・台帳#655）
+#   ★同じ型を3か所で見つけた★＝担当の記録（2026-09-09）／新台タスク／ここ。
+#   ★直した場所の隣を数え上げていなかった★（罠㊺）。
+#   ここは1回の試験で当日のログを1本まるごと作っていた（実測）。
+_IN_SELFTEST = False
+# ★試験を始める前の既定値が「書く」側だったか★（2026-09-13・Codexの指摘）
+_SELFTEST_DEFAULT_WAS_OFF = False
+
+
+def _log_write(line):
+    """★本番の書き込み口★（ここだけがファイルへ残す）"""
     try:
         path = os.path.join(LOG_DIR, f"verify_claims_{datetime.now().strftime('%Y-%m-%d')}.log")
         with open(path, "a", encoding="utf-8") as f:
             f.write(line + "\n")
     except Exception:
         pass  # ログ失敗で検証自体は止めない
+
+
+def log(msg):
+    """コンソールとファイルの両方に出力（鉄則: 全スクリプトにファイルログ）。"""
+    line = f"[{_now()}] {msg}"
+    print(line)
+    if _IN_SELFTEST:
+        return                            # ★試験では書かない★（台帳#655）
+    _log_write(line)
 
 
 def _decode(raw, header_charset):
@@ -658,6 +675,15 @@ def run(path, min_domains, allowed_domains=None):
 # 内蔵セルフテスト（ネット不要・_page_cacheに合成ページを注入して検証）
 # ------------------------------------------------------------------
 def selftest():
+    """★試験の間だけ本番のログを止め、★必ず戻す★★（2026-09-13・台帳#655）
+
+    ★決まりは1か所★＝`selftest_log_guard`。
+    """
+    import selftest_log_guard as _slg
+    return _slg.run_selftest(globals(), _selftest_body)
+
+
+def _selftest_body():
     new_body = ("Lからくりサーカス2の解析ページです。天井は999G+αでAT直撃の恩恵。"
                 "狙い目(等価) 700G~ が目安。機械割は97.7%～114.9%。設定6は114.9%。"
                 "参考: 中古価格 15800円")
@@ -841,6 +867,40 @@ def selftest():
     def ucase(name, cond):
         results.append(cond)
         log(f"{'✅' if cond else '❌'} selftest[{name}]: {cond}")
+
+    # ★★試験では書かない／本番では必ず書く★★（2026-09-13・台帳#655）
+    #   ★片方だけ確かめると、記録そのものを殺しても緑になる★（罠㊿）。
+    def _log_sink_tests():
+        import shutil as _sh
+        import tempfile as _tf
+        global LOG_DIR
+        _keep, _tmp = LOG_DIR, _tf.mkdtemp(prefix="uchi_vclog_")
+        LOG_DIR = _tmp
+        _path = os.path.join(_tmp, f"verify_claims_"
+                                   f"{datetime.now().strftime('%Y-%m-%d')}.log")
+        try:
+            log("試験の書き込み")
+            ucase("★試験の最中は、本番のログに書かない★", not os.path.exists(_path))
+            globals()["_IN_SELFTEST"] = False
+            try:
+                log("本番の書き込み")
+            finally:
+                globals()["_IN_SELFTEST"] = True
+            ucase("（対照）本番では必ずログに書く",
+                  os.path.exists(_path)
+                  and "本番の書き込み" in open(_path, encoding="utf-8").read())
+            # ★既定値そのものも見る★（試験は自分で置き直すので、
+            #   既定を True にされても上の2本は両方とも合格する）
+            ucase("★通常の起動では、既定で本番のログに書く側★",
+                  _SELFTEST_DEFAULT_WAS_OFF)
+            import selftest_log_guard as _slg2
+            ucase("★試験が終わったら、記録を止めた印を必ず戻す★",
+                  _slg2.probe(globals()) == (True, True, True))
+        finally:
+            LOG_DIR = _keep
+            _sh.rmtree(_tmp, ignore_errors=True)
+
+    _log_sink_tests()
 
     ucase("https以外を拒否", is_public_fetchable_url("http://1geki.jp/a", _resolve=False)[0] is False)
     ucase("userinfo付きを拒否",

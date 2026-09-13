@@ -81,6 +81,41 @@ def _hide(text: str) -> str:
     return re.sub(r"//[^@/\s]*@", "//***@", text or "")
 
 
+# ★試験の最中は、本番の記録に書かない★（2026-09-13・台帳#655）
+#   ★直す前に起きていたこと★＝当日のログ5309行のうち、
+#   本物の実行は**1行も無かった**（1096行が試験の偽の機種「L試験機」）。
+#   守りを1行ずつ壊して確かめる道具が `run_one` を何百回も動かすため。
+#   ＝タスクが止まった晩に、本物の1行が試験の山に埋もれて原因を追えない。
+#   ★同じ型を2026-09-09に担当の記録（task_guard）で直したのに、
+#     隣にいるこちらを見ていなかった★（罠㊺＝直した場所の隣に同じ形が残る）。
+_IN_SELFTEST = False
+# ★試験を始める前の既定値が「書く」側だったか★（2026-09-13・Codexの指摘）
+#   ★なぜ要るか★＝試験は自分で True／False を置き直すので、
+#   ★既定を True にされても両方向とも合格する★（本番で一切書かれなくなる）。
+_SELFTEST_DEFAULT_WAS_OFF = False
+
+
+def _log_write(name: str, msg: str) -> None:
+    """★本番の書き込み口★（ここだけがファイルへ残す）
+
+    ★行き先は `local_paths.LOGS` の1か所★（2026-09-13・台帳#655）＝
+    直す前は外の道具（log.py）を別プロセスで起動していたが、
+    そちらは置き場を**コードに直書き**しているので、
+    守りを1行ずつ壊して確かめる道具から★本番のログを守れなかった★。
+    ★書く形は今までどおり★＝`[時:分:秒] 本文`（番兵が完了の印を探すので変えない）。
+    """
+    try:
+        import datetime as _dt
+        os.makedirs(_lp.LOGS, exist_ok=True)
+        stamp = _dt.datetime.now().strftime("%H:%M:%S")
+        with open(os.path.join(_lp.LOGS, f"{name}.log"), "a",
+                  encoding="utf-8") as fh:
+            for ln in str(msg).replace("\r\n", "\n").split("\n"):
+                fh.write(f"[{stamp}] {ln}\n")
+    except Exception:                     # noqa: BLE001
+        pass                              # ★ログが書けなくても処理は止めない★
+
+
 def _log(msg: str) -> None:
     """★1行ずつファイルに残す★（プロジェクトの最優先ルール）
 
@@ -90,14 +125,9 @@ def _log(msg: str) -> None:
     from datetime import date
     line = f"[{_now()}] {msg}"
     print(line)
-    try:
-        subprocess.run(
-            [sys.executable, _lp.LOG_PY,
-             f"add_machine_{date.today().isoformat()}", msg],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            timeout=30)
-    except Exception:                     # noqa: BLE001
-        pass                              # ★ログが書けなくても処理は止めない★
+    if _IN_SELFTEST:
+        return                            # ★試験では書かない★（台帳#655）
+    _log_write(f"add_machine_{date.today().isoformat()}", msg)
 
 
 def _now() -> str:
@@ -3553,6 +3583,16 @@ def _review_reaches_ask():
 
 
 def selftest() -> int:
+    """★試験の間だけ本番のログを止め、★必ず戻す★★（2026-09-13・台帳#655）
+
+    ★決まりは1か所★＝`selftest_log_guard`（5本が同じ形なので、
+    1本ずつ書くと必ずどれかが食い違う）。
+    """
+    import selftest_log_guard as _slg
+    return _slg.run_selftest(globals(), _selftest_body)
+
+
+def _selftest_body() -> int:
     import inspect
     results = []
     nl = chr(10)
@@ -3576,6 +3616,53 @@ def selftest() -> int:
     def t(name, cond):
         results.append((name, bool(cond)))
         print(("✅" if cond else "❌") + " " + name)
+
+    # ★★試験では書かない／本番では必ず書く★★（2026-09-13・台帳#655）
+    #   ★片方だけ確かめると、記録そのものを殺しても緑になる★（罠㊿）。
+    #   ★本物の書き込み口を通す★＝書き込み先（log.py）だけを一時の場所へ
+    #   向けて、本番と同じ道（別プロセスの起動まで）を通す。
+    def _log_tests():
+        import shutil as _sh
+        import tempfile as _tf
+        _tmp = _tf.mkdtemp(prefix="uchi_addlog_")
+        _sink = os.path.join(_tmp, "logs", "add_machine_"
+                             + __import__("datetime").date.today().isoformat()
+                             + ".log")
+        _keep = _lp.LOGS
+        _lp.LOGS = os.path.join(_tmp, "logs")
+        try:
+            _log("試験の書き込み")
+            t("★★試験の最中は、本番のログに書かない★★"
+              "（★守りを壊して確かめる道具が何百回も動かすので、"
+              "本物の1行が試験の山に埋もれて原因を追えなくなる★）",
+              not os.path.exists(_sink))
+            globals()["_IN_SELFTEST"] = False
+            try:
+                _log("本番の書き込み")
+            finally:
+                globals()["_IN_SELFTEST"] = True
+            t("　（対照）本番では必ずログに書く"
+              "（★書かないと、止まった晩に何が起きたか誰にも分からない★）",
+              os.path.exists(_sink)
+              and "本番の書き込み" in open(_sink, encoding="utf-8").read())
+            # ★★既定値そのものも見る★★（2026-09-13・Codexの指摘）＝
+            #   試験は自分で True／False を置き直すので、
+            #   ★既定を True にされても上の2本は両方とも合格する★
+            #   （本番では一切書かれなくなる）。
+            t("★★通常の起動では、既定で本番のログに書く側★★",
+              _SELFTEST_DEFAULT_WAS_OFF)
+            # ★★試験が終わったら必ず戻す★★（2026-09-13・Codexの指摘）
+            #   ★別のプロセスで動かす試験では見つからない★＝
+            #   戻し忘れてもプロセスが終われば消えるので緑のまま。
+            import selftest_log_guard as _slg2
+            t("★★試験が終わったら、記録を止めた印を必ず戻す★★"
+              "（戻さないと、別のコードから呼んだあと本番の記録が止まる）",
+              _slg2.probe(globals()) == (True, True, True))
+        finally:
+            _lp.LOGS = _keep
+            _sh.rmtree(_tmp, ignore_errors=True)
+
+    _log_tests()
 
     real_find, real_read, real_lookup = _di.find, _sl.read_page, _mc.lookup
     # ★★試験でも材料のページは「器」で取る★★（2026-08-17・台帳#393）

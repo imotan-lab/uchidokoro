@@ -69,13 +69,16 @@ import sys as _sys_lp               # noqa: E402
 _sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
 import local_paths as _lp           # noqa: E402
 DOC = Path(_lp.DOCS)
-RESEARCH = DOC / "gpt_research"
+# ★作業置き場も local_paths の1か所★（2026-09-13・台帳#655）＝
+#   完走の印はログとは別の場所にあるので、記録の行き先だけ移しても守れない。
+RESEARCH = Path(_lp.RESEARCH)
 WORKDIR = RESEARCH / "workdir"            # Codexの作業室（リポジトリ外・read-only実行）
 SNAPDIR = RESEARCH / "input_snapshot"
 RESULTDIR = RESEARCH / "results"          # 追記専用（上書きしない）
 EVIDENCE_DIR = RESEARCH / "claims_check"  # verify_claims用の一時claimsファイル
 STATE_PATH = RESEARCH / "shadow_state.json"
-LOG_DIR = DOC / "logs"
+# ★記録の行き先は local_paths の1か所★（2026-09-13・台帳#655）
+LOG_DIR = Path(_lp.LOGS)
 import os as _os_lp                 # noqa: E402
 import sys as _sys_lp               # noqa: E402
 _sys_lp.path.insert(0, _os_lp.path.dirname(_os_lp.path.abspath(__file__)))
@@ -854,6 +857,14 @@ def write_completion_marker(status: str, run_id: str, started, ended,
     """★完走マーカーを原子的に保存（2026-07-18再指摘5・watchdogが参照）★
     STATUS/run_id/開始終了/対象数/成功数/エラー数/未実施数を残す。
     毎朝 対象＝成功＋エラー＋未実施 を機械照合できる（再指摘2）。"""
+    # ★試験として起動している間は、本番の完走マーカーを書き換えない★
+    #   （2026-09-13・台帳#655。★実際に上書きしてしまった★＝
+    #     停止済みタスクの最後の記録を、試験の CRASHED で潰した）
+    #   ★ログとは置き場が違う★ので、記録の行き先を移すだけでは守れない。
+    if _selftest_argv():
+        print("★試験なので、完走マーカーは書き換えません★"
+              f"（status={status}）")
+        return
     tally_ok = (len(selected) == success + errors + skipped)
     atomic_write_json(COMPLETION_MARKER, {
         "status": status, "run_id": run_id, "epoch": EPOCH["epoch_id"],
@@ -1693,12 +1704,91 @@ def gold_rescore(src_eval_id: str | None = None) -> int:
 # ─────────────────────────────────────────────
 
 def selftest() -> int:
+    """★試験の間だけ記録の行き先を一時の場所へ向け、必ず戻す★（2026-09-13・台帳#655）
+
+    ★実測★＝直す前は、この試験を1回動かすと本番の
+    `shadow_codex_<当日>.log` が新しく作られていた（Codexの指摘）。
+    ★このタスク自体は2026-08-22に削除済み★だが、コードとその試験は残っており、
+    守りを1行ずつ壊して確かめる道具が何度も動かすので同じことが起きる。
+    """
+    import shutil as _sh_lg
+    import tempfile as _tf_lg
+    import selftest_log_guard as _slg
+    _tmp_log = _tf_lg.mkdtemp(prefix="uchi_sclog_")
+    try:
+        # ★★完走の印も一緒に向け直す★★（2026-09-13・Codexの指摘）＝
+        #   直す前は「起動の仕方（--selftest）」だけで守っていたので、
+        #   ★別のコードから selftest() を関数として呼ぶと本番の印を書き換えた★。
+        #   置き場を移せば、どう呼ばれても本番に届かない。
+        return _slg.run_selftest_path(
+            globals(),
+            lambda _mk: _slg.run_selftest_path(
+                globals(), lambda real: _selftest_body(real, _tmp_log),
+                "LOG_DIR", Path(_tmp_log) / "logs"),
+            "COMPLETION_MARKER",
+            Path(_tmp_log) / "gpt_research" / "shadow_codex_last_run.json")
+    finally:
+        _sh_lg.rmtree(_tmp_log, ignore_errors=True)
+
+
+def _selftest_body(_real_log_dir, _tmp_root) -> int:
     import time
     results = []
 
     def t(name, cond):
         results.append((name, cond))
         print(("✅" if cond else "❌") + " " + name)
+
+    # 0. ★★試験は本番の記録先に書かない★★（2026-09-13・台帳#655）
+    #   ★本番の行き先は別に見る★＝向け直しただけで満足すると、
+    #   本番の記録を殺しても緑になる。
+    import selftest_log_guard as _slg2
+    t("★本番の記録先は local_paths が決める★", _real_log_dir == Path(_lp.LOGS))
+    t("★試験の間は、一時の場所へ書く★"
+      "（★本番と違うだけでは足りない＝別名の本番ログでも通る★）",
+      LOG_DIR != _real_log_dir and _slg2.under(LOG_DIR, _tmp_root))
+    t("★試験が終わったら、記録の行き先を必ず戻す★",
+      _slg2.probe_path(globals()) == (True, True, True))
+    # ★★試験の途中で落ちても、本番へは書かない★★（2026-09-13・Codexの指摘）
+    #   ★向け直しは selftest() を抜けた時点で戻る★ので、そのあとの
+    #   未処理例外の記録は本番の当日ログ・異常終了ログ・完走マーカーへ書く。
+    t("★試験として起動している間は、異常終了の記録も本番へ書かない★",
+      _selftest_argv(["--selftest"]) and not _selftest_argv(["--run"]))
+    #   ★本番の行き先に向けたまま呼ぶ★＝向け直しが効いている間に呼んでも、
+    #   守りを外したことに気づけない（一時の場所へ書くだけなので）。
+    #   ★名前だけでなく大きさも見る★＝同じ日に一度でも書かれていると、
+    #   ファイルは既にあるので「増えていない」と読めてしまう（実際に起きた）。
+    def _crash_state():
+        # ★★完走マーカーも見る★★（2026-09-13・Codexの指摘）＝
+        #   ログとは置き場が違うので、記録の行き先を移しただけでは守れない。
+        _mk = ""
+        try:
+            _mk = COMPLETION_MARKER.read_text(encoding="utf-8")
+        except Exception:                              # noqa: BLE001
+            _mk = "（無い）"
+        return (sorted((p.name, p.stat().st_size)
+                       for p in Path(_lp.LOGS).glob("shadow_codex_*")), _mk)
+
+    _crash_before = _crash_state()
+    _slg2.run_selftest_path(
+        globals(), lambda _r: _crash_log(RuntimeError("試験の中でわざと落とした")),
+        "LOG_DIR", _real_log_dir)
+    t("★★わざと落としても、本番の記録は1文字も増えない★★"
+      "（★本番の行き先に向けたまま呼んで確かめる★）",
+      _crash_state() == _crash_before)
+    # ★★完走マーカーの守りは、直接呼んで確かめる★★（罠③）＝
+    #   異常終了の記録の側で先に断っているので、
+    #   ★そちら経由だけだと、マーカーの守りを外しても気づけない★
+    #   （実際に、登録した壊し方が一度も捕まらなかった）。
+    #   ★毎回ちがう値で書く★＝固定の値だと、前に一度書かれていると
+    #   「同じ内容」になり、★2回目以降は差が出ず素通りする★（実際に起きた）。
+    _mk_before = _crash_state()
+    write_completion_marker("CRASHED", f"試験{time.time()}",
+                            "2026-01-01T00:00:00",
+                            "2026-01-01T00:00:00", [], 0, 1, note="試験")
+    t("★★試験のときは、本番の完走マーカーを書き換えない★★"
+      "（停止済みタスクの最後の記録を、試験の CRASHED で潰した・実害あり）",
+      _crash_state() == _mk_before)
 
     # 1. エラー分類
     t("ERR_QUOTA分類", classify_error(1, "429 Too Many Requests: rate limit", "") == "ERR_QUOTA")
@@ -2143,10 +2233,30 @@ def main() -> int:
     return 2
 
 
+def _selftest_argv(argv=None) -> bool:
+    """★いま自己試験として起動されているか★（2026-09-13・Codexの指摘）
+
+    ★向け直しの外側で使う★＝`selftest()` を抜けたあとの後始末
+    （未処理例外の記録）は、向け直しがもう戻っているので本番へ書いてしまう。
+    ★起動の仕方で判断する★（そこは試験中かどうかの印より外側にある）。
+    """
+    return "--selftest" in list(sys.argv[1:] if argv is None else argv)
+
+
 def _crash_log(exc: BaseException) -> None:
     """★pythonw起動では例外が画面にもstderrにも出ないため、未処理例外を必ずファイルへ残す
-    （2026-07-18チャッピー指摘）。log()やatomic_write_jsonに依存しない最小実装で二重に保全★"""
+    （2026-07-18チャッピー指摘）。log()やatomic_write_jsonに依存しない最小実装で二重に保全★
+
+    ★試験の途中で落ちたときは、本番へ書かない★（2026-09-13・Codexの指摘）＝
+    試験の向け直しは `selftest()` を抜けた時点で戻るので、そのあとここへ来ると
+    ★本番の当日ログ・異常終了ログ・完走マーカーに CRASHED が書かれる★。
+    ＝番兵が「下見が異常終了した」と誤って知らせる（そのタスクは既に削除済み）。
+    """
     import traceback
+    if _selftest_argv():
+        print("★試験の途中で落ちました（本番の記録には書きません）★")
+        traceback.print_exc()
+        return
     ts = datetime.datetime.now()
     try:
         LOG_DIR.mkdir(parents=True, exist_ok=True)

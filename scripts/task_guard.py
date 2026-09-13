@@ -1304,6 +1304,8 @@ GIT_RETRY_WAITS = (0.5, 1.5, 3.0)
 
 # ★試験の最中は、本番の記録に書かない★（2026-09-09）
 _IN_SELFTEST = False
+# ★試験を始める前の既定値が「書く」側だったか★（2026-09-13・Codexの指摘）
+_SELFTEST_DEFAULT_WAS_OFF = False
 
 
 def _changed_files(sleep=None) -> tuple[list, str]:
@@ -1422,7 +1424,10 @@ def _log_git_unreadable(task: str, why: str) -> None:
     if _IN_SELFTEST:
         return
     try:
-        d = _lp.doc("logs")
+        # ★記録の行き先は local_paths の1か所★（2026-09-13・台帳#655）＝
+        #   ここだけ `doc("logs")` のままだったので、守りを壊して確かめる
+        #   道具が子へ渡す一時の行き先が効かず、★本番の記録に書いていた★。
+        d = _lp.LOGS
         os.makedirs(d, exist_ok=True)
         stamp = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
         with open(os.path.join(d, "task_guard_git.log"), "a",
@@ -2416,21 +2421,28 @@ def _raises(fn, word: str = "") -> bool:
 
 
 def selftest() -> int:
+    """★試験の間だけ本番のログを止め、★必ず戻す★★（2026-09-13・台帳#655）
+
+    ★決まりは1か所★＝`selftest_log_guard`。
+    ★2026-09-09にここを直したとき、既定値の検査と戻す処理が抜けていた★
+    （Codexの指摘）＝
+      ・既定を「試験中」に壊されても、試験は自分で置き直すので気づけない
+      ・別のコードから selftest() を呼ぶと、その後ずっと本番の記録が止まる
+    """
+    import selftest_log_guard as _slg
+    return _slg.run_selftest(globals(), _selftest_body)
+
+
+def _selftest_body() -> int:
     import shutil
     results = []
-    # ★試験は本番のログに書かない★（2026-09-09）
-    #   ★直す前は1回につき3行★書かれ、守りを1行ずつ壊して確かめる道具が
-    #   何百回も動かすので、本番の記録が試験の書き込みで埋まっていた。
-    #   ＝番兵が毎朝「gitへの問い合わせ失敗が約210回」と知らせるのに、
-    #   ★本物の失敗は1件も無かった★（本物が起きても埋もれて気づけない）。
-    globals()["_IN_SELFTEST"] = True
 
     def _git_log_tests(t):
         """★試験では書かない／本番では書く★を両方見る（2026-09-09）"""
         import tempfile as _tfg
-        _keep_doc = _lp.DOCS
+        _keep_doc = _lp.LOGS
         _tmp = _tfg.mkdtemp(prefix="uchi_gitlog_")
-        _lp.DOCS = _tmp
+        _lp.LOGS = os.path.join(_tmp, "logs")
         _path = os.path.join(_tmp, "logs", "task_guard_git.log")
         try:
             _log_git_unreadable("試験", "作り話の理由")
@@ -2463,8 +2475,16 @@ def selftest() -> int:
               "（★呼び出し行を消しても、直接呼ぶ試験だけなら緑のままだった★）",
               os.path.exists(_path)
               and "作り話の理由2" in open(_path, encoding="utf-8").read())
+            # ★★2026-09-13・Codexの指摘（ここを直した日に抜けていた2つ）★★
+            t("★★通常の起動では、既定で本番のログに書く側★★"
+              "（試験は自分で置き直すので、既定を壊されても気づけない）",
+              _SELFTEST_DEFAULT_WAS_OFF)
+            import selftest_log_guard as _slg2
+            t("★★試験が終わったら、記録を止めた印を必ず戻す★★"
+              "（別のプロセスで動かす試験では、戻し忘れても緑のまま）",
+              _slg2.probe(globals()) == (True, True, True))
         finally:
-            _lp.DOCS = _keep_doc
+            _lp.LOGS = _keep_doc
 
     _git_log_tests(lambda name, cond: results.append((name, bool(cond)))
                    or print(("✅" if cond else "❌") + " " + name))
