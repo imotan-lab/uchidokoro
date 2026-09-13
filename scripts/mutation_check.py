@@ -849,6 +849,17 @@ MUTATIONS = [
                  "if s[\"mode\"] == \"通常\"]",
         "run": ["scripts/recheck.py"],
     },
+    # ─── 2026-09-12・名鑑のローマ字表記（台帳#608） ────────────────
+    {
+        "why": "★名鑑がローマ字で書くメーカー名を名簿から外す"
+               "（どの社にも当たらず UNKNOWN になり、2AIが合意しても"
+               "控えに登録できず、その機種が永久に止まる）★",
+        "file": "assets/data/maker-catalogs.json",
+        "before": '    "SANYO"\n',
+        "after": '    "NOT_SANYO"\n',
+        "run": ["scripts/model_code_lookup.py"],
+        "issues": [608],
+    },
     # ─── 2026-09-12・出典が「調査中」のとき（台帳#649） ─────────────
     {
         "why": "★出典が値を出していない天井も「読めなかった」と言う"

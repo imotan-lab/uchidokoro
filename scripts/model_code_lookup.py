@@ -1521,6 +1521,19 @@ def selftest() -> int:
                      expected_maker="sanslay"),
               setattr(_w, "_get", _w._get_bak189))[2])()
           ["maker_check"]["state"]))
+    t("★★名鑑がローマ字で書く「SANYO」が、三洋グループに解決される★★"
+      "（2026-09-12・台帳#608）＝どの社にも当たらず UNKNOWN だったので、"
+      "★2AIが別々に読んで同じ結論に達しても控えに登録できず、"
+      "L聖闘士星矢 黄金十二宮が止まり続けていた★",
+      _maker_core_owners(_ci.normalize_core("SANYO").replace("株式会社", ""))
+      == {"sanyo_bussan"}
+      and _related("sanslay", {"sanyo_bussan"}) is True)
+    t("　（対照）関係の無い社は関係ありにならない",
+      _related("kitadenshi", {"sanyo_bussan"}) is False)
+    t("★★SANYO は MATCH ではなく RELATED★★"
+      "（MATCH にすると機種ごとの2AIの判断を通さずに材料へ入る）",
+      "sanslay" not in _maker_core_owners(
+          _ci.normalize_core("SANYO").replace("株式会社", "")))
     # ★この位置にあった試験は消した★（2026-08-21・台帳#379の【4】）
     #   scan_maker（メーカー公式の巡回）そのものを消したため。
     #   ★止めた仕組みの試験だけを残さない★＝残すと「まだ生きている」と読める。
