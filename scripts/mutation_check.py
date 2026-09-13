@@ -849,6 +849,122 @@ MUTATIONS = [
                  "if s[\"mode\"] == \"通常\"]",
         "run": ["scripts/recheck.py"],
     },
+    # ─── 2026-09-13・引用の錨にする導入日（台帳#657） ──────────────
+    {
+        "why": "★引用の錨をDMMの導入日へ戻す"
+               "（名鑑が導入日を書き直さないだけで、2AIが正しく判断しても"
+               "その機種は永久に控えられず、毎晩止まり続ける）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": "        return (v, True) if v else (_dmm_rel, False)",
+        "after": "        return (_dmm_rel, False)",
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [657],
+    },
+    {
+        "why": "★名鑑の導入日がDMMと食い違っているのに、理由なしで控えられる"
+               "（別の機種の欄から採った引用でも、日付をずらして名乗るだけで通る）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": "        if len(\" \".join(str(rec.get(\"release_why\") or \"\").split())) < 15:",
+        "after": "        if False:",
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [657],
+    },
+    {
+        "why": "★名鑑の導入日を控えに書き込まない（配線を外す）"
+               "＝登録はできるが、読むときには無かったことになり、"
+               "次に使うときDMMの値で照合して落ちる★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": "        if str(seen_release or \"\").strip():",
+        "after": "        if False:",
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [657],
+    },
+    {
+        "why": "★錨を根拠ごとではなく控えに1つだけ持つ"
+               "（名鑑ごとに書いている導入日が違う形は普通にあるので、"
+               "どちらかの名鑑が必ず外れ、独立2出典がそろわない。Codexの指摘）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": '        v = (str((e or {}).get("seen_release") or "").strip()',
+        "after": '        v = (""',
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [657],
+    },
+    {
+        "why": "★名乗った精度を無視して、月の形でも当たるようにする"
+               "（『2026-10-31』と名乗って引用が『2026年10月』でも通る＝"
+               "名乗った値そのものを確かめていない。Codexの指摘）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": "        _days = date_forms_exact(_anchor) if _named else date_forms(_anchor)",
+        "after": "        _days = date_forms(_anchor)",
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [657],
+    },
+    {
+        "why": "★機種名のすぐ後ろの数字を見ない"
+               "（同じ名鑑ページに並ぶ続編の欄『L対象機2』を、"
+               "対象機の欄として引用できる。Codexの指摘）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": "        if j < len(h) and h[j].isdigit():",
+        "after": "        if False:",
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [657],
+    },
+    {
+        "why": "★続編の欄を、最初に出てくる機種名の後ろでしか見ない"
+               "（『対象機の紹介 … 機種名 対象機2 …』で素通りする。Codexの指摘）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": "        i = h.find(n, i + 1)",
+        "after": "        i = -1",
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [657],
+    },
+    {
+        "why": "★名乗った日付を、数字の境目を見ずに照合する"
+               "（『2026/9/3』は『2026/9/30』の中にそのまま現れるので、"
+               "名乗った日そのものを確かめたことにならない。Codexの指摘）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": "        if not strict:",
+        "after": "        if True:",
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [657],
+    },
+    {
+        "why": "★CLIから --seen-release / --release-why を渡す配線を外す"
+               "（2AIが名乗っても控えに届かず、その機種は止まったまま）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": '                       seen_release=a.seen_release or "",',
+        "after": '                       seen_release="",',
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [657],
+    },
+    {
+        "why": "★--evidence の4つ目（その名鑑が書いている導入日）を捨てる"
+               "（名鑑ごとに違う日付を書いていると、片方が必ず外れる）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": "            if len(parts) == 4 and parts[3]:",
+        "after": "            if False:",
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [657],
+    },
+    {
+        "why": "★メーカー欄の問いから、名鑑の導入日の控え方を落とす"
+               "（2AIは正しい逐語を出しているのに登録で断られ続け、"
+               "その機種が毎晩止まる。★問いは2か所ある★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": "                    + _SEEN_RELEASE_HINT),",
+        "after": "                    ),",
+        "run": ["scripts/add_machine_run.py"],
+        "issues": [657],
+    },
+    {
+        "why": "★題で救う問いから、名鑑の導入日の控え方を落とす（同上・もう片方）★",
+        "file": "scripts/add_machine_run.py",
+        "before": ('                    "で控えてください。"\n'
+                   "                    + _SEEN_RELEASE_HINT"),
+        "after": '                    "で控えてください。"',
+        "run": ["scripts/add_machine_run.py"],
+        "issues": [657],
+    },
     # ─── 2026-09-12・題の不一致の救い（台帳#607） ──────────────────
     {
         "why": "★検査する本文と、許可証にする本文を結ばない"

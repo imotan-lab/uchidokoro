@@ -442,6 +442,25 @@ def mc_expected(r: dict, maker: str) -> str:
     return (r.get("maker_check") or {}).get("expected") or maker
 
 
+# ★★名鑑の導入日がDMMと違うときの控え方★★（2026-09-13・台帳#657）
+#   ★なぜ問いに書くか★＝名鑑は導入日が延びても書き直さないことがある
+#   （実例＝L聖闘士星矢 黄金十二宮。名鑑「導入日 2026年10月」／DMM 2026-11-02）。
+#   逐語引用の錨は★名鑑がそのページに書いている導入日★で打つので、
+#   これを知らせないと、2AIは正しい引用を出しているのに
+#   登録のところで断られ続ける（実際に13回空振りした）。
+_SEEN_RELEASE_HINT = (
+    "★名鑑が書いている導入日がDMMと違うときは、"
+    "--release-why-file <なぜ同じ機種のページだと言えるのかを書いたファイル> "
+    "を付けて、その名鑑の値を --evidence の4つ目に書いてください★"
+    "（『URL|逐語引用|directory_observation|2026-10』の形。"
+    "★名鑑ごとに違う日付を書いていてよい★／"
+    "名鑑がそろって同じ値なら --seen-release にまとめて書けます）。"
+    "★逐語引用の錨は名鑑が書いている導入日で打ちます★＝"
+    "名乗った精度のまま引用に在ることを機械が確かめるので、"
+    "日を名乗って月しか書いていない引用は通りません。"
+    "読者に出る導入日はDMMの値だけなので、古い月が記事に出ることはありません。")
+
+
 def grant_for(decision, pages) -> frozenset:
     """★控えで「使う」と決めたページの許可証★（2026-09-12・Codexの指摘）
 
@@ -596,12 +615,13 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
                     f"--seen {mc.get('seen')} "
                     "--verdict ACCEPT_MATERIAL/REJECT_MATERIAL "
                     "--why-file <理由を書いたファイル> --by claude,codex "
-                    "--evidence \"<名鑑①の機種ページURL>|<機種名とメーカー欄を"
-                    "含む逐語引用>|directory_observation\" "
+                    "--evidence \"<名鑑①の機種ページURL>|<機種名とメーカー欄と"
+                    "導入日を含む逐語引用>|directory_observation\" "
                     "--evidence \"<名鑑②の機種ページURL>|<同上>"
                     "|directory_observation\" "
                     "で控えてください（★この機種にだけ効きます／"
-                    "使うと決めるには独立した名鑑が2つ要ります★）"),
+                    "使うと決めるには独立した名鑑が2つ要ります★）"
+                    + _SEEN_RELEASE_HINT),
             })
     # ★★題が略称で同定に落ちたページを、2AIへ回す★★
     #   （2026-08-17・台帳#390／Codex依頼233）
@@ -709,6 +729,7 @@ def maker_material_decision(looks, slug, maker, cache=None, cache_ok=True,
                     "--evidence \"<そのページのURL>|<機種名とメーカー欄と導入日を"
                     "含む逐語引用>|directory_observation\" "
                     "で控えてください。"
+                    + _SEEN_RELEASE_HINT
                     # ★★問いと許可条件をそろえる★★（2026-09-12・Codexの指摘）
                     #   ★直す前★＝控えは「関係のある社（RELATED）でも通す」に
                     #   変わったのに、問いは「一致が必要」と言い続けていた。
@@ -3946,6 +3967,23 @@ def selftest() -> int:
           and _dec_ng["accepted"] == set()
           and _dec_ng.get("cache_unreadable") is True)
 
+        # ★★メーカー欄の食い違いで出す問いにも、名鑑の導入日の控え方を書く★★
+        #   （2026-09-13・台帳#657）＝★問いは2か所ある★ので、
+        #   片方だけ直すともう片方から静かに落ちる（罠㊺）。
+        _dec_mq = maker_material_decision(
+            [{"url": "https://chonborista.com/2", "identity_ok": True,
+              "reason": "OK",
+              "maker_check": {"state": "RELATED", "seen": "SANYO",
+                              "expected": "sanslay",
+                              "owners": ["sanyo_bussan"]}}],
+            "dmm_5086", "sanslay", cache=None, cache_ok=True,
+            verdict_of=lambda *a, **k: None,
+            machine_name="L試験機", release_date="2026-10-05")
+        t("★メーカー欄の問いにも、名鑑の導入日の控え方が書いてある★",
+          bool(_dec_mq["questions"])
+          and all("--seen-release" in str(q.get("text") or "")
+                  for q in _dec_mq["questions"]))
+
         # ★★★題が略称のときの経路★★★（2026-08-17・台帳#390）
         _TU = "https://chonborista.com/slot/orinpia-slot/264134/"
 
@@ -4083,6 +4121,19 @@ def selftest() -> int:
         t("★★本番の許可証生成が、採否の結果から許可証を作る★★"
           "（手作りの許可証で試すと、ここを空に壊しても気づけない）",
           _grant3 == frozenset({_pg3.sha256}))
+        # ★★問いに「名鑑の導入日がDMMと違うときの控え方」を必ず書く★★
+        #   （2026-09-13・台帳#657）＝これが落ちると、2AIは正しい逐語を
+        #   出しているのに登録のところで断られ続ける（実際に13回空振りした）。
+        _qs3 = maker_material_decision(
+            [{"url": _TU3, "identity_ok": False,
+              "reason": "NAME_CORE_MISMATCH", "name_in_body": True,
+              "observed_maker": "SANYO"}],
+            "dmm_rel_q", "sanslay", cache=None, cache_ok=True,
+            machine_name=_MN3, release_date="2026-10-05",
+            pages=_pages3)["questions"]
+        t("★題で救う問いに、名鑑の導入日の控え方が書いてある★",
+          bool(_qs3) and all("--seen-release" in str(q.get("text") or "")
+                             for q in _qs3))
         _fake_sl_read3 = _sl.read_page
         _sl.read_page = real_read
         try:

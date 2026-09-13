@@ -244,6 +244,56 @@ def _has_core(haystack: str, needle: str) -> bool:
     return n in _ci.normalize_core(str(haystack or ""))
 
 
+def _name_tail_digit(quote: str, name: str) -> bool:
+    """★引用の中で、機種名のすぐ後ろに数字が続いているか★（2026-09-13）
+
+    ★何を見ているか★＝「L対象機」を探すと「L対象機2」にも当たる
+    （照合は前からの部分一致）。同じ名鑑ページには続編の欄が並ぶので、
+    ★別の機種の欄を引用していないか★の手がかりにする。
+    ★名簿は作らない★＝数字が続くかどうかという構造だけを見る。
+    ★これで全部は止まらない★（漢数字・ローマ数字の続編は素通りする）。
+    ★出てくる場所を全部見る★（2026-09-13・Codexの指摘）＝
+    最初の1件だけを見ていたので、「L対象機の紹介 … 機種名 L対象機2 …」の形で
+    素通りした（先頭の名前の後ろは数字ではない）。
+    """
+    n = _ci.normalize_core(str(name or ""))
+    h = _ci.normalize_core(str(quote or ""))
+    if not n:
+        return False
+    i = h.find(n)
+    while i >= 0:
+        j = i + len(n)
+        if j < len(h) and h[j].isdigit():
+            return True
+        i = h.find(n, i + 1)
+    return False
+
+
+def _quote_has_date(quote: str, days: list, strict: bool) -> bool:
+    """★引用に、その日付の書き方が在るか★
+
+    ★strict のときは数字の境目まで見る★（2026-09-13・Codexの指摘）＝
+    「2026/9/3」は「2026/9/30」の中にそのまま現れるので、
+    ★名乗った日そのもの★を確かめるには前後に数字が続いていないことまで要る。
+    ★名乗っていないとき（DMMの値へ落ちる）は今までどおり★＝
+    古い控えの読み方を変えない。
+    """
+    q = str(quote or "")
+    for d in days:
+        if not strict:
+            if d in q:
+                return True
+            continue
+        i = q.find(d)
+        while i >= 0:
+            j = i + len(d)
+            if (i == 0 or not q[i - 1].isdigit()) \
+                    and (j >= len(q) or not q[j].isdigit()):
+                return True
+            i = q.find(d, i + 1)
+    return False
+
+
 def _check_record(slug: str, rec, reg=None, require_final: bool = True) -> None:
     """1件ぶんの控えを確かめる（★読むときも書くときも同じ物差し★）。"""
     if not isinstance(rec, dict):
@@ -378,6 +428,42 @@ def _check_record(slug: str, rec, reg=None, require_final: bool = True) -> None:
     if not _release_key_ok(str(rec.get("release_date"))):
         raise CacheError(f"控えの導入日は YYYY-MM-DD か YYYY-MM で書きます（{slug}）: "
                          f"{rec.get('release_date')!r}")
+    # ★★引用の錨にする導入日は「名鑑が書いている値」★★（2026-09-13）
+    #   ★なぜ分けたか★＝下の検査は「この引用がこの機種の欄から採られた」ことを
+    #   示す**錨**であって、**DMMと名鑑の日付が合っているか**を言うものではない。
+    #   名鑑は導入日が延びても書き直さないことがある
+    #   （実例＝L聖闘士星矢 黄金十二宮。名鑑「導入日 2026年10月」／DMM 2026-11-02）。
+    #   ★DMMの値を引用に求めると、2AIが「同じ機種のページだ」と判断していても
+    #     永久に控えられない★＝その機種が毎晩止まり続ける（実際に起きた）。
+    #   機種名・メーカー欄・★名鑑が書いている導入日★の3つが同じ引用にあれば、
+    #   「同じ欄から採った」ことは今までどおり示せる。
+    #   ★DMMとの結び付きは別のところで守っている★＝`release_date` は
+    #   使うたびに `verdict_for` が `_release_same` でDMMと突き合わせる
+    #   （そちらは1文字も変えていない）。
+    #   ★読者に出る導入日はDMMの値だけ★（ここは材料に使うかどうかの話）。
+    #   ★形の検査をここに足さない★＝`date_forms` は形が違えば空を返し、
+    #   下の `if not _days:` が理由の分かる形で断る。
+    #   ★守りを二重にすると、どちらを壊しても試験が赤くならない★（罠③）。
+    #   ★★根拠ごとに持つ★★（2026-09-13・Codexの指摘2）＝
+    #   名鑑Aが「2026年10月」、名鑑Bが「2026/11/2」と書いている形は普通にある。
+    #   控えに1つしか置けないと、どちらかの名鑑が必ず外れ、
+    #   ★今回直したのと同じ「相手が直さない限り通らない」が再発する★。
+    _dmm_rel = str(rec.get("release_date") or "")
+
+    def _anchor_of(e):
+        """（その根拠の錨にする導入日, 2AIが名乗ったものか）"""
+        v = (str((e or {}).get("seen_release") or "").strip()
+             or str(rec.get("seen_release") or "").strip())
+        return (v, True) if v else (_dmm_rel, False)
+
+    # ★食い違っているなら、なぜ同じ機種だと言えるのかを2AIが書く★
+    #   ★機械は理由の中身を判定しない★（それは意味の判断）＝有無と長さだけ見る。
+    if any(not _release_same(_anchor_of(e)[0], _dmm_rel) for e in ev):
+        if len(" ".join(str(rec.get("release_why") or "").split())) < 15:
+            raise CacheError(
+                f"名鑑の導入日がDMM（{_dmm_rel}）と違います（{slug}）"
+                "／★なぜ同じ機種のページだと言えるのかを"
+                "release_why に15字以上で書きます★")
     # ★②逐語引用そのものに、機種名とメーカー欄が入っていること★
     #   ページのどこかにあるだけでは足りない（別機種の欄でも通ってしまう）。
     for e in ev:
@@ -397,7 +483,16 @@ def _check_record(slug: str, rec, reg=None, require_final: bool = True) -> None:
         #   機種名・メーカー欄・導入日が同じ場所にあると確かめられる。
         #   ★実データで収まることを確かめてから入れた★（2026-08-17）＝
         #   ちょんぼりすた52字・なな徹48字（上限120字）。
-        _days = date_forms(str(rec.get("release_date")))
+        _anchor, _named = _anchor_of(e)
+        # ★★名乗ったときは、その精度のままで見る★★（2026-09-13・Codexの指摘3）
+        #   `date_forms` は「こちらの1つの日付と相手の書き方を、どちらの向きでも
+        #   突き合わせる」ためのもので、日の鍵に月の形も足す（台帳#600）。
+        #   ★ここは用途が違う★＝2AIが「名鑑はこう書いている」と名乗った値
+        #   そのものが引用に在るかを見る。日を名乗ったのに月しか無い引用
+        #   （seen_release=2026-10-31／引用「2026年10月」）は通さない。
+        #   ★名乗っていないとき（DMMの値へ落ちる）は今までどおり★
+        #   ＝古い控えの読み方を変えない。
+        _days = date_forms_exact(_anchor) if _named else date_forms(_anchor)
         if not _days:
             # ★説明文で落ちない★（2026-08-22・台帳#454）
             #   ここへ来るのは鍵の形が想定外のときだけ。
@@ -405,11 +500,27 @@ def _check_record(slug: str, rec, reg=None, require_final: bool = True) -> None:
             #   理由の分かる断り方にする。
             raise CacheError(
                 f"控えの導入日の形が分かりません（{slug}）: "
-                f"{rec.get('release_date')!r}／★YYYY-MM-DD か YYYY-MM で書きます★")
-        if not any(d in q for d in _days):
+                f"{_anchor!r}／★YYYY-MM-DD か YYYY-MM で書きます★")
+        if not _quote_has_date(q, _days, strict=_named):
             raise CacheError(
                 f"根拠の逐語引用に導入日が入っていません（{slug}）: "
-                f"{q[:40]}／★{_days[0]} などを含む引用にします★")
+                f"{q[:40]}／★{_days[0]} などを含む引用にします★"
+                "（★名鑑が書いている導入日を seen_release に入れます★）")
+        # ★★続編の欄を拾っていないか★★（2026-09-13・Codexの指摘1）
+        #   ★機種名の照合は前から部分一致★なので、対象が「L対象機」のとき
+        #   同じページに並ぶ「L対象機2」の欄でも通る。
+        #   ★直す前は、その欄の日付がDMMの値と一致する必要があった★ので
+        #   実質止まっていたが、名鑑の値を名乗れるようにして道が広がった。
+        #   ★見るのは広げたぶんだけ★（名乗っていて、かつDMMと違うとき）＝
+        #   いままでの控えの読み方は1文字も変わらない。
+        #   ★限界は正直に書く★＝止められるのは数字で続く続編まで。
+        #   漢数字・ローマ数字は止まらないので、そこは2AIの判断（理由つき）。
+        if _named and not _release_same(_anchor, _dmm_rel) \
+                and _name_tail_digit(q, str(rec.get("machine_name"))):
+            raise CacheError(
+                f"逐語引用の機種名のすぐ後ろに数字が続いています（{slug}）: "
+                f"{q[:40]}／★同じページに並ぶ続編の欄かもしれません。"
+                "その機種の欄だけを引用してください★")
     # ★③独立した名鑑が2つ以上★（2026-08-17・依頼228）
     #   ★票の数は source_lineage.independent() だけで決める★
     #   （自前で len() すると共同制作の組をまとめ忘れる＝監査39が見張る）
@@ -784,6 +895,25 @@ def date_forms(iso: str) -> list:
     return []
 
 
+def date_forms_exact(iso: str) -> list:
+    """★名乗った精度のままの書き方だけを並べる★（2026-09-13・Codexの指摘3）
+
+    ★`date_forms` との違い★＝あちらは「こちらが持っている1つの日付と、
+    相手の書き方を**どちらの向きでも**突き合わせる」ためのもので、
+    日の鍵に月の形も足す（台帳#600）。
+    ★ここは用途が違う★＝2AIが「名鑑はこう書いている」と**名乗った値そのもの**が
+    引用に現れているかを見る。日を名乗ったのに月しか無い引用
+    （名乗り 2026-10-31 ／ 引用「2026年10月」）では通さない。
+    ★規則は1か所★＝`date_forms` を呼んで、月の形だけを落とす
+    （同じ書き方の規則を2度書かない）。
+    """
+    v = str(iso or "")
+    if not _DATE.match(v):
+        return date_forms(v)          # 月を名乗ったとき＝もともと月の形だけ
+    drop = set(date_forms(v[:7]))
+    return [f for f in date_forms(v) if f not in drop]
+
+
 def verify_evidence(evidence: list, fetch=None, expected: str = "",
                     rec=None, runtime_target: str = "",
                     runtime_page=None) -> dict:
@@ -964,7 +1094,8 @@ def remember(slug: str, expected: str, seen: str, verdict: str,
              why: str, by: list, evidence: list, decided_at: str,
              machine_name: str = "", release_date: str = "",
              target_url: str = "", proof_profile: str = "maker_field",
-             store=None, fetch=None) -> dict:
+             store=None, fetch=None,
+             seen_release: str = "", release_why: str = "") -> dict:
     """結論を控える。★根拠が無ければ受け取らない★
 
     ★逐語引用は実際にそのページから取ってきて照合する★（依頼190のP1）
@@ -1005,6 +1136,12 @@ def remember(slug: str, expected: str, seen: str, verdict: str,
                     "release_date": release_date,
                     "basis_scope": BASIS_SCOPE,
                     "relationship_verified": False})
+        # ★名鑑が書いている導入日★（2026-09-13）＝引用の錨に使う値。
+        #   ★書かなければ今までどおり★（DMMの値が錨になる）＝古い控えはそのまま動く。
+        if str(seen_release or "").strip():
+            rec["seen_release"] = str(seen_release).strip()
+        if str(release_why or "").strip():
+            rec["release_why"] = " ".join(str(release_why).split())
     # ★書く前に、読むときと同じ物差しを通す★（順番を変えない）
     #   先に形を確かめてから通信する＝形が違う控えのために外へ出ない。
     # ★①形だけ先に見る★（形が違う控えのために外へ出ない）
@@ -1632,6 +1769,183 @@ def selftest() -> int:
       _ok(verdict="REJECT_MATERIAL", evidence=[ev[0]], slug="dmm_rej"))
     t("★★読むときも同じ物差しで確かめる★★（手で書き足しても信用しない）",
       _bad_load())
+
+    # --- ★★引用の錨は「名鑑が書いている導入日」★★（2026-09-13・台帳#657）
+    #   ★なぜ要るか★＝名鑑は導入日が延びても書き直さないことがある
+    #   （実例＝L聖闘士星矢 黄金十二宮。名鑑「導入日 2026年10月」／DMM 2026-11-02）。
+    #   DMMの値を引用に求めていたので、★2AIが「同じ機種のページだ」と
+    #   判断していても永久に控えられず★、その機種が毎晩止まり続けていた。
+    #   ★★断った理由の文まで見る★★（罠㉚）＝隣の守りが先に断っていると、
+    #   「通らなかった」だけでは狙った検査を一度も試していないことになる。
+    def _why_not(**kw) -> str:
+        import copy
+        import source_lineage as _sl0
+        g = copy.deepcopy(_rec(**kw))
+        g.setdefault("observed_final_url", _C)
+        try:
+            _check_record("dmm_5086", g, _sl0.load_registry())
+            return ""
+        except CacheError as e:
+            return str(e)
+
+    def _ev9(day="2026年9月"):
+        """名鑑が「2026年9月」としか書いていないページの根拠2件。"""
+        return [{"url": _C, "quote": f"機種名 {_MN} メーカー {_SEEN} 導入日 {day}",
+                 "kind": "directory_observation"},
+                {"url": _N, "quote": f"機種名 {_MN} メーカー {_SEEN} 導入日 {day}",
+                 "kind": "directory_observation"}]
+
+    _RW = "名鑑は導入が延びる前の月のまま直していません"
+    t("　（対照）いままでどおりの控えは、そのまま通る", _why_not() == "")
+    t("★★名鑑の導入日がDMMと違っても、理由を書けば控えられる★★"
+      "（直す前は、2AIが決めてもここで永久に止まっていた）",
+      _why_not(seen_release="2026-09", release_why=_RW,
+               evidence=_ev9()) == "")
+    t("★★錨が本当に名鑑の値を見ている★★"
+      "（同じ引用でも、名鑑の値を名乗らなければ通らない）",
+      "導入日が入っていません" in _why_not(evidence=_ev9()))
+    t("★食い違っているのに理由が無ければ通さない★",
+      "release_why" in _why_not(seen_release="2026-09", evidence=_ev9()))
+    t("　理由が短すぎるのも通さない",
+      "release_why" in _why_not(seen_release="2026-09", release_why="短い",
+                                evidence=_ev9()))
+    t("★名鑑の値の書き方が違えば通さない★",
+      "形が分かりません" in _why_not(seen_release="2026/09", release_why=_RW,
+                                     evidence=_ev9()))
+    t("★理由があっても、引用にその日付が無ければ通さない★"
+      "（名乗るだけでは通らない）",
+      "導入日が入っていません" in _why_not(seen_release="2026-09",
+                                           release_why=_RW))
+
+    # ★★本番の口（remember）も通す★★（罠③＝控えへ入れる配線を外しても、
+    #   `_check_record` を直接呼ぶ試験だけなら緑のまま）
+    _st9 = _empty()
+    _p9 = {_C: _page(day="2026年9月"), _N: _page(day="2026年9月")}
+
+    def _f9(u):
+        if u not in _p9:
+            raise RuntimeError("404")
+        _w_last(u)
+        return _p9[u]
+
+    def _rem9(**kw) -> str:
+        base = dict(slug="dmm_5086", target_url=_C,
+                    proof_profile="maker_field",
+                    expected=_EXPECTED, seen=_SEEN,
+                    verdict="ACCEPT_MATERIAL", why="理由",
+                    by=["claude", "codex"], evidence=_ev9(),
+                    decided_at="2026-09-13", machine_name=_MN,
+                    release_date=_REL, store=_st9, fetch=_f9)
+        base.update(kw)
+        try:
+            return str(remember(**base).get("seen_release") or "（入っていない）")
+        except CacheError as e:
+            return "NG: " + str(e)
+
+    t("★★本番の口でも、名鑑が書いている導入日が控えに入る★★",
+      _rem9(seen_release="2026-09", release_why=_RW) == "2026-09")
+    t("　（対照）名乗らなければ、いままでどおり引用が合わずに断られる",
+      "導入日が入っていません" in _rem9())
+
+    # --- ★★Codexの指摘（2026-09-13・5回目）を直したぶん★★
+    # ① 名鑑ごとに違う日付を書いていても控えられる
+    _EV_MIX = [{"url": _C, "quote": f"機種名 {_MN} メーカー {_SEEN} 導入日 2026年9月",
+                "kind": "directory_observation", "seen_release": "2026-09"},
+               {"url": _N, "quote": f"機種名 {_MN} メーカー {_SEEN} 導入日 2026/11/2",
+                "kind": "directory_observation", "seen_release": "2026-11-02"}]
+    t("★★名鑑ごとに書いている導入日が違っても控えられる★★"
+      "（控えに1つしか置けないと、どちらかの名鑑が必ず外れる）",
+      _why_not(evidence=_EV_MIX, release_why=_RW) == "")
+    t("　（対照）根拠ごとの名乗りが無ければ、片方が必ず外れる",
+      "導入日が入っていません" in _why_not(
+          evidence=[{k: v for k, v in x.items() if k != "seen_release"}
+                    for x in _EV_MIX],
+          seen_release="2026-09", release_why=_RW))
+
+    # ② 名乗った精度のまま見る
+    t("★★日を名乗ったのに、月しか書いていない引用は通さない★★"
+      "（名乗った値そのものが引用に在ることを見る）",
+      "導入日が入っていません" in _why_not(
+          seen_release="2026-09-30", release_why=_RW, evidence=_ev9()))
+    t("　日を名乗って、日まで書いてある引用なら通る",
+      _why_not(seen_release="2026-09-30", release_why=_RW,
+               evidence=_ev9(day="2026年9月30日")) == "")
+    # ★★数字の境目まで見る★★（2026-09-13・Codexの指摘）＝
+    #   「2026/9/3」は「2026/9/30」の中にそのまま現れる。
+    t("★★名乗った日が、別の日の中に埋もれていても通さない★★"
+      "（3日を名乗って、引用は30日）",
+      "導入日が入っていません" in _why_not(
+          seen_release="2026-09-03", release_why=_RW,
+          evidence=_ev9(day="2026/9/30")))
+    t("　同じ日を同じ書き方で書いてあれば通る",
+      _why_not(seen_release="2026-09-03", release_why=_RW,
+               evidence=_ev9(day="2026/9/3")) == "")
+    t("　（対照）名乗っていないときは今までどおり（月の書き方でも当たる）",
+      "2026年10月" in date_forms(_REL)
+      and "2026年10月" not in date_forms_exact(_REL))
+
+    # ③ 同じページに並ぶ続編の欄を引用していないか
+    _EV_SEQ = [{"url": _C, "quote": f"機種名 {_MN}2 メーカー {_SEEN} 導入日 2026年9月",
+                "kind": "directory_observation"},
+               {"url": _N, "quote": f"機種名 {_MN} メーカー {_SEEN} 導入日 2026年9月",
+                "kind": "directory_observation"}]
+    t("★★機種名のすぐ後ろに数字が続く引用は通さない★★"
+      "（同じ名鑑ページに並ぶ続編の欄を拾っていないか）",
+      "数字が続いています" in _why_not(seen_release="2026-09",
+                                       release_why=_RW, evidence=_EV_SEQ))
+    t("　（対照）広げていない道（名乗らない・DMMと同じ）は今までどおり通る",
+      _why_not() == ""
+      and _name_tail_digit(f"機種名 {_MN}2 メーカー {_SEEN}", _MN)
+      and not _name_tail_digit(f"機種名 {_MN} メーカー {_SEEN}", _MN))
+    # ★★出てくる場所を全部見る★★（2026-09-13・Codexの指摘）＝
+    #   最初の1件だけだと「対象機の紹介 … 機種名 対象機2 …」で素通りした。
+    _EV_SEQ2 = [{"url": _C,
+                 "quote": f"{_MN}の紹介 機種名 {_MN}2 メーカー {_SEEN} 導入日 2026年9月",
+                 "kind": "directory_observation"},
+                {"url": _N,
+                 "quote": f"機種名 {_MN} メーカー {_SEEN} 導入日 2026年9月",
+                 "kind": "directory_observation"}]
+    t("★★先に正しい名前が出ていても、後ろの続編の欄は見つける★★",
+      "数字が続いています" in _why_not(seen_release="2026-09",
+                                       release_why=_RW, evidence=_EV_SEQ2))
+
+    # ④ CLIからの配線（引数 → _read_text_arg → remember）
+    def _cli(argv) -> dict:
+        """★本番の入口（main）を通す★＝控えを書く手前で受け取った値を見る。
+        ★通信もファイル書き込みもしない★（remember を差し替える）。"""
+        import sys as _sys
+        got = {}
+        keep_rem, keep_argv = globals()["remember"], _sys.argv
+
+        def _spy(*a, **k):
+            got.update(k)
+            got["evidence"] = k.get("evidence") or (a[6] if len(a) > 6 else None)
+            raise CacheError("（試験）ここまで来れば配線は通っている")
+
+        globals()["remember"] = _spy
+        _sys.argv = ["maker_identity_cache.py"] + argv
+        try:
+            main()
+        except SystemExit:
+            pass
+        finally:
+            globals()["remember"] = keep_rem
+            _sys.argv = keep_argv
+        return got
+
+    _got_cli = _cli([
+        "--record", "--machine-url", "https://p-town.dmm.com/machines/5104",
+        "--target-url", _C, "--expected", _EXPECTED, "--seen", _SEEN,
+        "--verdict", "REJECT_MATERIAL", "--why", "理由", "--by", "claude,codex",
+        "--seen-release", "2026-09", "--release-why", _RW,
+        "--evidence", f"{_C}|{_QC}|directory_observation|2026-10"])
+    t("★★CLIの --seen-release と --release-why が控えを書く所まで届く★★"
+      "（配線が外れても、直接呼ぶ試験だけなら緑のまま＝罠③）",
+      _got_cli.get("seen_release") == "2026-09"
+      and _got_cli.get("release_why") == _RW)
+    t("★★--evidence の4つ目（その名鑑が書いている導入日）も届く★★",
+      (_got_cli.get("evidence") or [{}])[0].get("seen_release") == "2026-10")
+
     t("　取り消せる",
       forget("dmm_5086", _C, st)
       and verdict_for("dmm_5086", _EXPECTED, _SEEN, st) is None)
@@ -1803,6 +2117,15 @@ def main() -> int:
     #   （2026-08-08に実際に発生）。台帳・メールと同じ受け取り方にそろえる。
     ap.add_argument("--why-file", dest="why_file", default="",
                     help="理由を書いたファイル（--why と同時には使えません）")
+    ap.add_argument("--seen-release", dest="seen_release", default="",
+                    help="★名鑑がそのページに書いている導入日★"
+                         "（YYYY-MM-DD か YYYY-MM。逐語引用の錨に使います。"
+                         "省略するとDMMの導入日を錨にします）")
+    ap.add_argument("--release-why", dest="release_why", default="",
+                    help="名鑑の導入日がDMMと違うとき、"
+                         "なぜ同じ機種のページだと言えるのか（15字以上）")
+    ap.add_argument("--release-why-file", dest="release_why_file", default="",
+                    help="同上。★文章はファイルで渡す★（鉄則1c）")
     ap.add_argument("--by", help="判断した者（カンマ区切り・2つ以上）")
     ap.add_argument("--evidence", action="append", default=[],
                     help="URL|逐語引用|種類（種類: "
@@ -1816,6 +2139,8 @@ def main() -> int:
     try:
         import open_issues as _oi
         a.why = _oi._read_text_arg(a.why or "", a.why_file, "why")
+        a.release_why = _oi._read_text_arg(
+            a.release_why or "", a.release_why_file, "release_why")
     except SystemExit as e:
         print(str(e))
         return 2
@@ -1863,10 +2188,18 @@ def main() -> int:
         ev = []
         for spec in a.evidence:
             parts = [x.strip() for x in str(spec).split("|")]
-            if len(parts) != 3:
-                print("★--evidence は『URL|逐語引用|種類』の形で書きます★")
+            # ★4つ目は「その名鑑が書いている導入日」★（2026-09-13・Codexの指摘2）
+            #   名鑑ごとに書いている日付が違う形は普通にあるので、
+            #   ★錨は根拠ごとに持たせる★（控えに1つだと片方が必ず外れる）。
+            if len(parts) not in (3, 4):
+                print("★--evidence は『URL|逐語引用|種類』"
+                      "または『URL|逐語引用|種類|その名鑑が書いている導入日』"
+                      "の形で書きます★")
                 return 1
-            ev.append({"url": parts[0], "quote": parts[1], "kind": parts[2]})
+            one = {"url": parts[0], "quote": parts[1], "kind": parts[2]}
+            if len(parts) == 4 and parts[3]:
+                one["seen_release"] = parts[3]
+            ev.append(one)
         import datetime
         # ★機種名と導入日はDMMの機種ページから取る★（2026-08-17・依頼228）
         #   ★呼ぶ側の自己申告で決めない★＝控えは手で書けるファイルなので、
@@ -1902,7 +2235,9 @@ def main() -> int:
                        ev, a.at or datetime.date.today().isoformat(),
                        machine_name, release_date,
                        target_url=a.target_url,
-                       proof_profile=a.proof_profile)
+                       proof_profile=a.proof_profile,
+                       seen_release=a.seen_release or "",
+                       release_why=a.release_why or "")
         print(json.dumps({"state": "RECORDED", "slug": slug, **rec},
                          ensure_ascii=False)[:300])
         return 0
