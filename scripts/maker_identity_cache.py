@@ -27,9 +27,20 @@
   `_group_why` に書いてある。★機械はそこへも取りに行かない★＝
   名簿を読むだけ。だから新しい通信先が増えない。
 
-★使ってよいのは RELATED のときだけ★（2026-08-17・Codex依頼228の指摘1）
-  ①名簿で一致（MATCH）              … そのまま使う（この器は要らない）
-  ②関係のありそうな社（RELATED）    … **この器を見る**
+★この器を見るのは2つの場合★（2026-09-12に書き直した・Codexの指摘）
+  ★直す前の説明は「RELATEDのときだけ／MATCHはこの器が要らない」だった★が、
+  ★題で救う型（title_name_core_mismatch / title_tail_conflict）では
+  MATCH でも控えが要る★（題が読めないので、本人かどうかを2AIが決める）。
+  ＝説明が実装と食い違っていた。
+
+  ①メーカー欄の話（maker_field）
+    名簿で一致（MATCH）           … そのまま使う（この器は要らない）
+    関係のある社（RELATED）       … **この器を見る**
+  ②題が読めない話（title_name_core_mismatch / title_tail_conflict）
+    ★MATCH でも RELATED でも、この器を見る★
+    （題で同定できていないので、本人かどうかは2AIが決める）
+
+  ★どちらの場合も通さないもの★
   ③どの社か分からない（UNKNOWN）    … ★救わない★＝常に除く
   ④明らかに別の社（MISMATCH）        … 常に除く
   ★UNKNOWN を控えで救ってはいけない★＝名簿に無いだけの**任意の別会社**まで
@@ -84,15 +95,23 @@ PROOF_PROFILES = {
     "maker_field": {"min_directories": 2, "needs_maker": True},
     # 名鑑の題・見出しが略称で、機種の同定に落ちる
     #   → ★対象ページ自身＋DMM★でよい（2件目の名鑑は別途正規の同定を通る）
-    #   → ただし★メーカー欄が読めてDMMと一致していること★が必須
+    #   → ただし★メーカー欄が読めて、名簿で解決できること★が必須
     #     （題もメーカーも食い違うページを、弱い側で通さないため）
+    #     ★通すのは一致（MATCH）と、同じグループと確認されている社（RELATED）★
+    #     ★どの社か分からない（UNKNOWN）・別の社（MISMATCH）は通さない★
+    #     （2026-09-12・台帳#607／#608。RELATED はもともと
+    #       「控えで決めてあるときだけ材料に使う」印なので、控えで通す）
     "title_name_core_mismatch": {"min_directories": 1, "needs_maker": True},
     # ★題の後ろの飾りを分解できない★（2026-08-26・実測で25%が該当）
     #   例＝「機種名 スロット 新台 設定判別 打ち方 プレミアム 解析」の
     #   「プレミアム」。★飾りの辞書に足す直し方は採らない★ので、
     #   機械では決められない＝2AIが決めて控える。
     #   → ★対象ページ自身＋DMM★でよい（上と同じ扱い）
-    #   → ただし★メーカー欄が読めてDMMと一致していること★が必須
+    #   → ただし★メーカー欄が読めて、名簿で解決できること★が必須
+    #     ★通すのは一致（MATCH）と、同じグループと確認されている社（RELATED）★
+    #     ★どの社か分からない（UNKNOWN）・別の社（MISMATCH）は通さない★
+    #     （2026-09-12。★直す前はこの型に検査が当たっておらず、
+    #       契約に「一致が必須」と書いてあるのに別の社でも通っていた★）
     #   ★救えるのはちょうど TAIL_CONFLICT のときだけ★＝
     #   別機種（NAME_CORE_MISMATCH）・規格違い（GEN_MARK_CONFLICT）・
     #   派生機（DERIV_MARK_CONFLICT）は今までどおり拒否する。
@@ -300,20 +319,48 @@ def _check_record(slug: str, rec, reg=None, require_final: bool = True) -> None:
                          f"／★{'/'.join(sorted(PROOF_PROFILES))} のどれか★")
     if rec["verdict"] != "ACCEPT_MATERIAL":
         return
-    # ★★弱い型で救えるのは、メーカー欄が本当に一致している時だけ★★
+    # ★★弱い型で救えるのは、メーカー欄が名簿で解決できる時だけ★★
     #   （2026-08-17・Codex依頼233の指摘2）
     #   題の不一致は「弱い証明」なので、メーカー欄まで食い違うページを
     #   ここで通すと**メーカーの関門を丸ごと迂回**できてしまう。
-    #   ★RELATED（関係のある社）も救わない★＝それは maker_field の話。
-    if prof == "title_name_core_mismatch":
+    #   ★通すのは一致（MATCH）と、同じグループと確認されている社（RELATED）だけ★
+    #   ★UNKNOWN（どの社か分からない）と MISMATCH（別の社）は断る★
+    #
+    #   ★★RELATED を通すようにした理由★★（2026-09-12・台帳#607／#608）
+    #   ちょんぼりすたのメーカー欄はローマ字で「SANYO」。名簿では三洋物産に
+    #   当たり、DMMが言う製造元（サンスリー）とは**同じ三洋物産グループ**
+    #   （根拠＝日本遊技機工業組合のグループ会社一覧・人が読んで名簿に記録）。
+    #   ＝「別の社」ではなく「関係のある社」。
+    #   ★RELATED の意味はもともと「控えで決めてあるときだけ材料に使う」★なので、
+    #   控え（これがまさに控え）で通すのは、その決まりのとおり。
+    #   ★直す前は、2AIが別々に読んで同じ結論を出しても永久に登録できず★、
+    #   L聖闘士星矢 黄金十二宮が止まり続けていた（初出2026-09-10）。
+    #   ★弱いもの同士を重ねてはいない★＝ここへ来る前に夜のタスクが
+    #   ①本文にDMMの正式名が完全一致 ②名鑑の機種ページの形に一致
+    #   ③メーカー欄が読める の3つを確かめており、
+    #   この控え自身も④逐語引用を取り直して照合 ⑤機種名・メーカー欄・導入日が
+    #   同じ引用の中にある ⑥判断者が2つ以上 を求める。
+    #   ★`page_is_machine` を緩める道は採らなかった★＝そちらは2AIへ回さずに
+    #   **自動で通る**方向で、実際に別機種の題が11通り通った（Codexと2往復で確認）。
+    #   ★★題の救いは2つとも同じ物差しで見る★★（2026-09-12・Codexの指摘）
+    #   ★実測で分かった元からの穴★＝この検査は
+    #   `title_name_core_mismatch` にしか当たっていなかったので、
+    #   `title_tail_conflict` は契約に「一致が必須」と書いてあるのに
+    #   ★別の社（北電子）でも、どの社か分からない表記でも控えを作れた★。
+    #   どちらも「題が読めないページを2AIで救う」同じ弱い型なので、
+    #   許す条件も同じにする。
+    if prof in ("title_name_core_mismatch", "title_tail_conflict"):
         import model_code_lookup as _mcl1
+        _exp = str(rec.get("expected") or "")
         _owners = _mcl1._maker_core_owners(key_of(rec.get("seen")))
-        if str(rec.get("expected") or "") not in _owners:
+        _ok_maker = bool(_owners) and (
+            _exp in _owners or _mcl1._related(_exp, _owners))
+        if not _ok_maker:
             raise CacheError(
-                f"題の不一致で救えるのは、メーカー欄が名簿で一致する時だけです"
+                f"題で救えるのは、メーカー欄が名簿で解決できる時だけです"
                 f"（{slug}）: 期待 {rec.get('expected')!r}／"
                 f"名鑑「{rec.get('seen')}」→ {sorted(_owners) or '（不明）'}"
-                "／★関係のある社・不明・別の社は、この弱い型では救いません★")
+                "／★どの社か分からない・別の社は、この弱い型では救いません★")
     # ---------------- ここから下は「材料に使う」と決めた控えだけの検査 ----------
     # ★対象ページ自身が根拠に入っていること★（対象と根拠の取り違えを防ぐ）
     if url_key(tgt) not in {url_key(e.get("url")) for e in ev}:
@@ -858,7 +905,9 @@ def verify_evidence(evidence: list, fetch=None, expected: str = "",
             #     ①落ち方が厳密に NAME_CORE_MISMATCH であること
             #       （別機種・規格違い・題が無い等は今までどおり拒否）
             #     ②投稿欄を落とした本文に、DMMの正式名が**完全一致**であること
-            #     ③メーカー欄がDMMと一致すること（すぐ下の共通処理で見る）
+            #     ③メーカー欄が名簿で解決できること（すぐ下の共通処理で見る）
+            #       ★一致（MATCH）と、同じグループと確認されている社（RELATED）★
+            #       ★どの社か分からない・別の社は通さない★（2026-09-12）
             #   ★「本人だ」と決めるのは2AI★＝機械は上の3つを確かめるだけ。
             _prof = str((rec or {}).get("proof_profile") or "")
             _is_target = (url_key(url)
@@ -1221,14 +1270,19 @@ def selftest() -> int:
     # ★★★題が略称のときの証明（2026-08-17・台帳#390）★★★
     st2 = _empty()
 
-    # ★弱い型はメーカー欄が名簿で一致する組でしか使えない★（依頼233の指摘2）
-    #   ＝平和⇔オリンピアエステートは RELATED なのでここでは使えない。
-    #   実例に合わせて 京楽（kyoraku）で試す。
+    # ★弱い型で使えるのは、メーカー欄が名簿で解決できる組★
+    #   （2026-09-12に書き直した・Codexの指摘）
+    #   ★直す前の説明★＝「名簿で一致する組でしか使えない／
+    #   平和⇔オリンピアエステートは RELATED なのでここでは使えない」。
+    #   ★いまは RELATED も使える★（控えで決めてあるときだけ材料に使う印なので）。
+    #   ここは一致（MATCH）の例として 京楽（kyoraku）で試す。
+    #   RELATED の例は上の「メーカー欄の4つの状態」と、
+    #   add_machine_run の一続きの試験で見ている。
     _KY, _KYS = "kyoraku", "京楽"
     _QKY = f"機種名 {_MN} メーカー {_KYS} 導入日 2026年10月5日"
 
     def _page_ky(title=None):
-        """★京楽の名鑑ページ★（弱い型はメーカー欄が名簿で一致する組だけ）"""
+        """★京楽の名鑑ページ★（一致（MATCH）の例として使う）"""
         t0 = (title if title is not None
               else f"{_MN} スロット 新台 天井 解析 | ちょんぼりすた")
         return (f"<title>{t0}</title>"
@@ -1282,6 +1336,82 @@ def selftest() -> int:
                   material_url=_C, machine_name=_MN, release_date=_REL,
                   want_profile="title_name_core_mismatch")
       == "ACCEPT_MATERIAL")
+    # --- ★メーカー欄の4つの状態★（2026-09-12・台帳#607／#608） ---------
+    #   ★MATCH と RELATED は通す／UNKNOWN と MISMATCH は断る★
+    #   ★RELATED を通す理由★＝RELATED はもともと
+    #   「控えで決めてあるときだけ材料に使う」印なので、
+    #   控え（これがまさに控え）で通すのは決まりのとおり。
+    #   ★直す前は RELATED も断っていた★ので、2AIが別々に読んで同じ結論を
+    #   出しても永久に登録できず、L聖闘士星矢 黄金十二宮が止まり続けていた。
+    def _maker_state_why(expected, seen):
+        """その組み合わせで断られた理由を返す（通れば空文字）。
+
+        ★逐語引用にはメーカー欄の表記が入っていなければならない★ので、
+        引用も seen に合わせて作る（そこで先に断られると、見たい検査に届かない）。
+        """
+        try:
+            _check_record("dmm_state", {
+                "target_url": _C,
+                "proof_profile": "title_name_core_mismatch",
+                "expected": expected, "seen": seen,
+                "verdict": "ACCEPT_MATERIAL", "why": "理由",
+                "agreed_by": ["claude", "codex"],
+                "evidence": [{"url": _C,
+                              "quote": f"機種名 {_MN} メーカー {seen} "
+                                       f"導入日 2026年10月5日",
+                              "kind": "directory_observation"}],
+                "decided_at": "2026-08-17", "machine_name": _MN,
+                "release_date": _REL, "basis_scope": BASIS_SCOPE,
+                "relationship_verified": False,
+                "observed_final_url": _C})
+            return ""
+        except CacheError as e:
+            return str(e)
+
+    t("★一致（MATCH）は通す★", _maker_state_why(_KY, _KYS) == "")
+    t("★★同じグループと確認されている社（RELATED）も通す★★"
+      "（名鑑がローマ字で「SANYO」と書き、DMMの製造元はサンスリー）",
+      _maker_state_why("sanslay", "SANYO") == "")
+    t("★★どの社か分からない（UNKNOWN）は断る★★"
+      "／★名簿に無いだけの任意の別会社まで同じ扱いになる"
+      "（同名で別メーカーの機種は実在する）★",
+      "名簿で解決できる時だけ" in _maker_state_why("sanslay", "架空の会社XYZ"))
+    t("★★明らかに別の社（MISMATCH）は断る★★",
+      "名簿で解決できる時だけ" in _maker_state_why("sanslay", "北電子"))
+
+    # ★★題の救い2つで、同じ物差しになっていること★★
+    #   （2026-09-12・Codexの指摘。★元からの穴を実測で確認した★＝
+    #     この検査は title_name_core_mismatch にしか当たっていなかったので、
+    #     title_tail_conflict は契約に「一致が必須」と書いてあるのに
+    #     ★別の社でも、どの社か分からない表記でも控えを作れた★）
+    def _tail_why(expected, seen):
+        try:
+            _check_record("dmm_tail", {
+                "target_url": _C, "proof_profile": "title_tail_conflict",
+                "expected": expected, "seen": seen,
+                "verdict": "ACCEPT_MATERIAL", "why": "理由",
+                "agreed_by": ["claude", "codex"],
+                "evidence": [{"url": _C,
+                              "quote": f"機種名 {_MN} メーカー {seen} "
+                                       f"導入日 2026年10月5日",
+                              "kind": "directory_observation"}],
+                "decided_at": "2026-08-17", "machine_name": _MN,
+                "release_date": _REL, "basis_scope": BASIS_SCOPE,
+                "relationship_verified": False,
+                "observed_final_url": _C})
+            return ""
+        except CacheError as e:
+            return str(e)
+
+    t("★★飾りが分解できない型でも、別の社は断る★★"
+      "（★直す前は通っていた★）",
+      "名簿で解決できる時だけ" in _tail_why("sanslay", "北電子"))
+    t("★★飾りが分解できない型でも、どの社か分からない表記は断る★★"
+      "（★直す前は通っていた★）",
+      "名簿で解決できる時だけ" in _tail_why("sanslay", "架空の会社XYZ"))
+    t("　飾りが分解できない型でも、一致と関係のある社は通す",
+      _tail_why(_KY, _KYS) == "" and _tail_why("sanslay", "SANYO") == "")
+
     # ★★★使うときにも到達先を見る★★★（2026-08-17・Codex依頼234の指摘1）
     #   ★穴だったところ★＝記録時は転送を拒否し到達先も残していたのに、
     #   使うときは一度も比べていなかった。同じ名鑑の**別の機種ページ**へ

@@ -709,7 +709,15 @@ def material_page_identity_ok(page, official_name: str, *,
     if expected_maker:
         owners = _maker_core_owners(
             _ci.normalize_core(mk).replace("株式会社", ""))
-        if expected_maker not in owners:
+        # ★★控えと同じ物差しにする★★（2026-09-12・Codexの指摘）
+        #   ★直す前★＝控えは「関係のある社（RELATED）でも使う」と決められるのに、
+        #   ここは直接一致しか許していなかった。
+        #   ＝控えを作れて、採否で材料に戻り、許可証も出るのに、
+        #   ★4つの読取器が全部この関門で拒否する★（何も読めない）。
+        #   ★CLAUDE.md の前例と同じ型★＝片方だけ直すと、材料を読む側で
+        #   同じ理由でもう一度落ちる。
+        #   ★UNKNOWN（owners が空）と MISMATCH は今までどおり拒否★。
+        if expected_maker not in owners                 and not (owners and _related(expected_maker, owners)):
             return False, "GRANT_MAKER_MISMATCH"
     return True, "OK_BY_GRANT"
 

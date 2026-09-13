@@ -849,6 +849,62 @@ MUTATIONS = [
                  "if s[\"mode\"] == \"通常\"]",
         "run": ["scripts/recheck.py"],
     },
+    # ─── 2026-09-12・題の不一致の救い（台帳#607） ──────────────────
+    {
+        "why": "★検査する本文と、許可証にする本文を結ばない"
+               "（控えの照合が別の本文を見るので、読取器が読む本文は確かめられていないものになる。★2つの本文が分かれる★）★",
+        "file": "scripts/add_machine_run.py",
+        "before": "                                    runtime_page=(pages or {}).get(url))",
+        "after": "                                    runtime_page=None)",
+        "run": ["scripts/add_machine_run.py"],
+        "issues": [607],
+    },
+    {
+        "why": "★許可証を空にする（採否で「使う」と決めたのに、読取器へ何も渡らず、その機種は材料を1つも読めない）★"
+               "／★手作りの許可証で試験していると気づけない接続部分★",
+        "file": "scripts/add_machine_run.py",
+        "before": "    return frozenset(pages[u].sha256",
+        "after": "    return frozenset() if True else frozenset(pages[u].sha256",
+        "run": ["scripts/add_machine_run.py"],
+        "issues": [607],
+    },
+    {
+        "why": "★最後の関門（許可証の照合）を直接一致だけに戻す"
+               "（控えで「使う」と決めても、4つの読取器が全部GRANT_MAKER_MISMATCH で拒否し、その機種は何も読めない）★",
+        "file": "scripts/model_code_lookup.py",
+        "before": "        if expected_maker not in owners \
+                and not (owners and _related(expected_maker, owners)):",
+        "after": "        if expected_maker not in owners:",
+        "run": ["scripts/add_machine_run.py"],
+        "issues": [607],
+    },
+    {
+        "why": "★飾りが分解できない型には、メーカー欄の検査を当てない"
+               "（契約は「一致が必須」と書いてあるのに、別の社でもどの社か分からない表記でも控えを作れた。★元からの穴★）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": "    if prof in (\"title_name_core_mismatch\", \"title_tail_conflict\"):",
+        "after": "    if prof == \"title_name_core_mismatch\":",
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [607],
+    },
+    {
+        "why": "★同じグループと確認されている社（RELATED）を救わない"
+               "（2AIが別々に読んで同じ結論を出しても控えに登録できず、その機種が永久に止まる。直す前の姿）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": "            _exp in _owners or _mcl1._related(_exp, _owners))",
+        "after": "            _exp in _owners)",
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [607],
+    },
+    {
+        "why": "★メーカー欄がどの社か分からない・別の社でも救う"
+               "（名簿に無いだけの任意の別会社まで同じ扱いになり、同名で別メーカーの機種を本人にできる）★",
+        "file": "scripts/maker_identity_cache.py",
+        "before": "        if not _ok_maker:",
+        "after": "        if False:",
+        "run": ["scripts/maker_identity_cache.py"],
+        "issues": [607],
+    },
     # ─── 2026-09-12・名鑑のローマ字表記（台帳#608） ────────────────
     {
         "why": "★名鑑がローマ字で書くメーカー名を名簿から外す"
