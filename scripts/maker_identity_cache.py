@@ -1916,6 +1916,13 @@ def selftest() -> int:
         import sys as _sys
         got = {}
         keep_rem, keep_argv = globals()["remember"], _sys.argv
+        # ★シェルを通らない呼び方だと名乗る★（2026-09-14）＝
+        #   ★直す前★＝無人タスクの担当の印が残っていると、
+        #   自由文の直接指定が断られて★この試験だけが落ちた★
+        #   （CIには印が無いので通り、手元でだけ赤くなる＝環境に依存する試験）。
+        #   ここは argv の配列で main() を呼んでいるので、シェルは通っていない。
+        _keep_argv_call = os.environ.get("UCHIDOKORO_ARGV_CALL")
+        os.environ["UCHIDOKORO_ARGV_CALL"] = "1"
 
         def _spy(*a, **k):
             got.update(k)
@@ -1931,6 +1938,10 @@ def selftest() -> int:
         finally:
             globals()["remember"] = keep_rem
             _sys.argv = keep_argv
+            if _keep_argv_call is None:
+                os.environ.pop("UCHIDOKORO_ARGV_CALL", None)
+            else:
+                os.environ["UCHIDOKORO_ARGV_CALL"] = _keep_argv_call
         return got
 
     _got_cli = _cli([

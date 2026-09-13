@@ -192,7 +192,41 @@ def atomic_write_json(path: Path, obj) -> None:
 
 
 def kill_tree(pid: int) -> bool:
-    """Windowsでプロセスツリーごと終了し、消滅を確認する（ERR_TIMEOUT時）"""
+    """プロセスツリーごと終了し、消滅を確認する（ERR_TIMEOUT時）
+
+    ★★Windows以外でも動かせるようにした★★（2026-09-14）
+      ★何が起きたか★＝この関数は `taskkill` / `tasklist`（Windows専用）しか
+      使っておらず、Linuxでは最初の1行で落ちていた。
+      2026-09-13にこのファイルへ守りを足して壊し方を登録したことで、
+      ★GitHubの検査（Linux）が下見の自己試験を初めて動かし★、
+      そこで丸ごと落ちて**検査が赤くなった**（新台タスクのコミットも巻き添え）。
+      ★手元（Windows）では再現できない型★（手引きの「OSで変わるもの」）。
+      ★本番はWindowsのまま★＝ここを分けたのは、
+      ★試験がその場所で一度も動かないと守りを確かめられない★ため。
+      ★Windows以外での限界は正直に書く★＝
+      同じ集まりごと終わらせる手だては危ない（自分の集まりまで巻き込む）ので、
+      ★渡されたプロセスだけを終わらせて、消えたことを確かめる★。
+    """
+    if os.name != "nt":
+        import signal
+        import time as _t
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            return True                    # すでに居ない
+        except OSError:
+            return False
+        for _ in range(10):
+            try:
+                os.waitpid(pid, os.WNOHANG)   # ★残骸を回収する★
+            except (ChildProcessError, OSError):
+                pass                          # 自分の子でなければ回収は要らない
+            try:
+                os.kill(pid, 0)               # 0は「居るか」の問い合わせ
+            except (ProcessLookupError, PermissionError):
+                return True
+            _t.sleep(1)
+        return False
     subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
                    capture_output=True, timeout=30, creationflags=_NO_WINDOW)
     for _ in range(10):
@@ -1815,10 +1849,13 @@ def _selftest_body(_real_log_dir, _tmp_root) -> int:
         t("原子的保存: 書き込み失敗でも正本無傷＋tmp掃除", failed and ok2 and not tmps2)
 
     # 3. タイムアウト時の子プロセスツリー終了（実プロセスで確認）
-    child = subprocess.Popen([sys.executable, "-c",
-                              "import subprocess,sys,time;"
-                              "subprocess.Popen([sys.executable,'-c','import time;time.sleep(120)']);"
-                              "time.sleep(120)"],
+    #   ★Windows以外では孫を作らない★（2026-09-14）＝
+    #   あちらは「渡されたプロセスだけ」を終わらせる作りなので、
+    #   孫を作ると★終わらないものを置き去りにする★。
+    _kid = ("import subprocess,sys,time;"
+            "subprocess.Popen([sys.executable,'-c','import time;time.sleep(120)']);"
+            "time.sleep(120)") if os.name == "nt" else "import time;time.sleep(120)"
+    child = subprocess.Popen([sys.executable, "-c", _kid],
                              stdin=subprocess.DEVNULL)
     time.sleep(2)
     killed = kill_tree(child.pid)
