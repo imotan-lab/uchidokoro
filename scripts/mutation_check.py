@@ -1278,6 +1278,16 @@ MUTATIONS = [
         "run": ["scripts/ceiling_lookup.py"],
         "issues": [649],
     },
+    # ─── 2026-09-13・見出しの次の行が「最終更新日」だったとき ──────────
+    {
+        "why": "★日付の数字を天井の値と数える"
+               "（DMMの機種ページは見出しの次が必ず更新日なので、"
+               "天井が「調査中」の機種まで毎晩2AIへ送られる）★",
+        "file": "scripts/ceiling_lookup.py",
+        "before": "    near = [ln for ln in near if not _is_update_date_line(ln)]",
+        "after": "    near = [ln for ln in near]",
+        "run": ["scripts/ceiling_lookup.py"],
+    },
     # ─── 2026-09-12・カウンターの注記 ────────────────────────────
     {
         "why": "★注記の書き換えで、文字を足せるようにする"

@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime as _dt
 import json
 import os
 import re
@@ -611,6 +612,34 @@ def read_page(url: str, official_name: str, *,
 NOT_PUBLISHED = "天井の欄はありますが、値がまだ載っていません"
 NEEDS_LOOK = "天井の記述はあるが採れませんでした（要確認）"
 
+# ★★「更新日だけの行」を外す★★（2026-09-13／Codexの指摘で狭めた）
+#   ★はじめ「日付らしい数字」を場所を問わず消していた★＝
+#   それだと `9999.99G` `1500.5枚` `2400-50枚` が日付に見えて丸ごと消え、
+#   ★本物の値を「まだ載っていない」に倒す★（実際に4例とも再現した）。
+#   ＝安全な向きは逆で、**行まるごとが更新日だと言い切れるときだけ**外す。
+#   読めない書き方の更新日は NEEDS_LOOK のまま＝2AIの確認が1回増えるだけで、
+#   ★値を見落とす方向には倒れない★。
+#   ★同じ行に値が混ざっていたら外さない★（`最終更新日:2026/09/12 天井1200G`）。
+_YMD = r"(\d{4})\s*[年/.\-]\s*(\d{1,2})\s*[月/.\-]\s*(\d{1,2})\s*日?"
+_UPDATE_DATE_LINES = (
+    re.compile(r"^\s*(?:最終)?更新日?\s*[:：]?\s*" + _YMD + r"\s*$"),
+    re.compile(r"^\s*" + _YMD + r"\s*(?:に)?更新\s*$"),
+)
+
+
+def _is_update_date_line(line: str) -> bool:
+    """★その行が「更新日」だけでできているか★（実在する日付であることも見る）"""
+    for rx in _UPDATE_DATE_LINES:
+        m = rx.match(str(line or ""))
+        if not m:
+            continue
+        try:
+            _dt.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            return False          # ★日付に見えて日付でない＝外さない★
+        return True
+    return False
+
 
 def ceiling_gap_reason(body_lines) -> str:
     """★天井が1つも採れなかったとき、それが何なのかを分ける★
@@ -640,6 +669,16 @@ def ceiling_gap_reason(body_lines) -> str:
     near = []
     for i in hit:
         near += lines[i:i + 2]
+    # ★★更新日の行は、天井の値として数えない★★（2026-09-13）
+    #   ★何が起きていたか★＝DMMの機種ページは、節の見出し
+    #   「天井・ゾーン・ヤメ時」のすぐ次の行が必ず「最終更新日:2026/09/12」で、
+    #   ★その日付の数字だけで「値が在る」と読んでいた★。
+    #   ＝天井の欄が「調査中」の機種まで NEEDS_LOOK になり、
+    #   手順書はその文言を見て**毎晩2AIに原文を読ませていた**
+    #   （実測＝2026-09-13の候補4機種すべて／このページの形は全機種共通）。
+    #   直前の直し（台帳#649）は「天井突入条件→調査中」だけを見ていたので、
+    #   ★同じページの別の見出しが日付を連れてくる形を素通りさせていた★。
+    near = [ln for ln in near if not _is_update_date_line(ln)]
     return NEEDS_LOOK if any(ch.isdigit() for ln in near for ch in ln) \
         else NOT_PUBLISHED
 
@@ -1337,6 +1376,29 @@ def selftest() -> int:
       ceiling_gap_reason(["天井は1200G+αです。"]) == NEEDS_LOOK)
     t("　語の名簿ではなく数字で見る（「準備中」でも同じ）",
       ceiling_gap_reason(["ゲーム数天井", "準備中"]) == NOT_PUBLISHED)
+    t("★★見出しの次の行が更新日でも「読めなかった」と言わない★★"
+      "（DMMの機種ページは必ずこの形をしていて、"
+      "値が「調査中」の機種まで毎晩2AIへ送られていた）",
+      ceiling_gap_reason(["天井・ゾーン・ヤメ時", "最終更新日:2026/09/12",
+                          "天井突入条件", "調査中"]) == NOT_PUBLISHED)
+    t("　漢字区切りの西暦でも同じ",
+      ceiling_gap_reason(["天井・ゾーン・ヤメ時", "2026年11月2日 更新",
+                          "天井突入条件", "調査中"]) == NOT_PUBLISHED)
+    t("★更新日を外しても、本物の値は残る★",
+      ceiling_gap_reason(["天井・ゾーン・ヤメ時", "最終更新日:2026/09/12",
+                          "天井突入条件", "1200G"]) == NEEDS_LOOK)
+    # --- ★（対照）値を「更新日」と間違えて捨てないこと★（Codexの指摘） ---
+    #   ★はじめの書き方（日付らしい数字を場所を問わず消す）だと、
+    #     下の4件は全部「まだ載っていません」に倒れていた★＝実際に再現した。
+    t("★（対照）4桁＋区切り＋数字を、日付と決めつけない★",
+      all(ceiling_gap_reason(["天井期待値", v]) == NEEDS_LOOK
+          for v in ("2026.09円", "1500.5枚", "2400-50枚", "9999.99G")))
+    t("★（対照）更新日と本物の値が同じ行なら、その行ごと捨てない★",
+      ceiling_gap_reason(["天井・ゾーン・ヤメ時",
+                          "最終更新日:2026/09/12 天井1200G"]) == NEEDS_LOOK)
+    t("　日付に見えて実在しない日は外さない（2026/13/45）",
+      ceiling_gap_reason(["天井・ゾーン・ヤメ時", "最終更新日:2026/13/45",
+                          "天井突入条件", "調査中"]) == NEEDS_LOOK)
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
