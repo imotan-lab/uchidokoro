@@ -12207,32 +12207,29 @@
   "publication_policy": "page-decision/v2",
   "page_decision": {
    "schema_version": "page-decision/v2",
-   "indexable": false,
-   "machine_profile": "UNKNOWN",
+   "indexable": true,
+   "machine_profile": "AT_CZ",
    "ceiling_state": "UNKNOWN",
    "confirmed_topics": [
+    "gameplay",
     "setting",
     "spec"
    ],
    "pending_topics": [
-    "gameplay",
     "cz",
     "ceiling",
     "strategy",
     "reset"
    ],
-   "reason_codes": [
-    "CLAIMS_LT_3",
-    "CATEGORIES_LT_2",
-    "MACHINE_PROFILE_UNKNOWN"
-   ],
+   "reason_codes": [],
    "claims": [
+    "at:UPPER_AT",
     "at_prob",
     "payout_rate"
    ],
    "policy_mode": "normal",
-   "decided_at": "2026-09-13",
-   "input_digest": "sha256:b3d460d57303e563e5da4644370583af822c0514e3b3202f97098ac7ed51618b"
+   "decided_at": "2026-09-15",
+   "input_digest": "sha256:9798729c4bb7ab5bcd3047baac83b783e2d2d9331e32559d764bd710d4db6463"
   },
   "publish_state": "PREVIEW_VERIFIED_SUBSET",
   "release_date": "2026-12",
