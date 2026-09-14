@@ -855,6 +855,29 @@ MUTATIONS = [
                  "if s[\"mode\"] == \"通常\"]",
         "run": ["scripts/recheck.py"],
     },
+    # ─── 2026-09-14・2AIの答えの鍵（台帳#662） ─────────────────────
+    {
+        "why": "★2AIの答えを、ページ全体の指紋で鍵にする"
+               "（DMMは取るたびに csrf-token が変わるので、"
+               "★2AIが正しく判断しても二度と使えない★＝"
+               "クチコミが1〜2件付いた新台が出典ごと止まる）★",
+        "file": "scripts/page_reading.py",
+        "before": '        for q in (rec.get("quotes") or []):',
+        "after": ('        if str(rec.get("raw_sha256")) != _rf.sha256(raw):' + chr(10)
+                  + '            return False, "ページが変わっています"' + chr(10)
+                  + '        for q in (rec.get("quotes") or []):'),
+        "run": ["scripts/page_reading.py"],
+        "issues": [662],
+    },
+    {
+        "why": "★そう判断した手がかりの逐語を、いまのページで確かめない"
+               "（★全体の指紋を外したあと、ここが唯一の『ページが変わった』の検査★）★",
+        "file": "scripts/page_reading.py",
+        "before": '            if str(q) not in str(raw or ""):',
+        "after": "            if False:",
+        "run": ["scripts/page_reading.py"],
+        "issues": [662],
+    },
     # ─── 2026-09-13・試験が本番のログを埋める（台帳#655） ──────────
     {
         "why": "★記録の行き先を環境変数で移せなくする"
@@ -3228,10 +3251,15 @@ MUTATIONS = [
         "run": ["scripts/page_reading.py"],
     },
     {
-        "why": "★投稿欄の免除で、ページが変わっても効かせ続ける★"
-               "（★未知の名前の箱で書き込みが足されても気づけない★）",
+        # ★★2026-09-14に、この守り自体をやめた（台帳#662）★★
+        #   「ページ全体の指紋」は、取るたびに csrf-token が変わる相手では
+        #   ★2AIが正しく判断しても二度と使えない鍵★だった（自分で測って確認）。
+        #   ★この壊し方は「使わないと決めた答え」のほうへ付け替えた★＝
+        #   あちらは指紋が合うときだけ効かせる作りのままで、そこは正しい。
+        "why": "★「このページは使わない」という答えを、ページが変わっても"
+               "そのまま効かせる（★別の中身になったページにも効き続ける★）",
         "file": "scripts/page_reading.py",
-        "before": '        if str(rec.get("raw_sha256")) != _rf.sha256(raw):',
+        "before": '        if _rf.sha256(raw) != str(rec.get("raw_sha256")):',
         "after": '        if False:',
         "run": ["scripts/page_reading.py"],
     },

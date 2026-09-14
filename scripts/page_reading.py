@@ -290,9 +290,19 @@ def verify(rec: dict, raw: str, *, stage: str, missing_boxes=None,
             return False, "いまは箱が見つかっているので、免除は要りません"
         if not now <= want:
             return False, f"控えに無い箱まで免除しようとしています（{sorted(now - want)}）"
-        if str(rec.get("raw_sha256")) != _rf.sha256(raw):
-            # ★全体の指紋★＝未知の箱が足されたら効かなくする
-            return False, "ページが変わっています（読み直してください）"
+        # ★★全体の指紋では鍵にならない★★（2026-09-14・自分で測って確かめた）
+        #   ★測ったこと★＝DMMの機種ページを、取得の控えを消して2回取ると
+        #   大きさは同じ（136700字）なのに指紋は一致しない。
+        #   違うのは `<meta name="csrf-token" content="...">` で、毎回変わる。
+        #   ＝★2AIがどれだけ正しく判断しても、その答えは二度と使えない★
+        #   （クチコミが1〜2件付いた新台が、出典ごと使えなくなっていた）。
+        #   ★2026-09-08に出典の確かめ直しで同じ形を直したのに、ここに残っていた★（罠㊺）。
+        #   ★外しても弱くならない理由★＝この指紋が止めていたのは
+        #   「知らない箱が足された／別の箱が消えた」場合だが、それは
+        #   ・箱が戻れば `now` が空になって免除しない
+        #   ・別の箱が消えれば `now <= want` に外れて免除しない
+        #   の2つで既に止まる。さらに下で、そう判断した手がかりの逐語が
+        #   いまのページに在ることまで確かめる（控えには1件以上必須）。
         for q in (rec.get("quotes") or []):
             if str(q) not in str(raw or ""):
                 return False, f"手がかりの逐語が、いまのページにありません（{str(q)[:30]}）"
@@ -515,12 +525,25 @@ def selftest() -> int:                                       # noqa: C901
         t("★★控えに無い箱まで免除しない★★"
           "（★1つ免除したら全部通る、にしない★）",
           not okw2 and "控えに無い箱" in ww2)
-        okw3, ww3 = verify(wrec, RAW + "<div>あとから足された投稿欄</div>",
-                           stage=_rf.STAGE_USER_AREA,
-                           missing_boxes=["list-machinesreviews"])
-        t("★★ページが変わったら免除しない★★"
-          "（★未知の箱で投稿欄が足されても気づけるように全体の指紋で見る★）",
-          not okw3 and "変わっています" in ww3)
+        # ★★ページの他の場所が変わっても、答えは効く★★（2026-09-14）
+        #   ★測ったこと★＝DMMの機種ページは取るたびに `csrf-token` が変わり、
+        #   全体の指紋は二度と一致しない（控えを消して2回取って確認）。
+        #   ＝全体の指紋を鍵にすると、★2AIが正しく判断しても永久に使えない★。
+        okw3, _ww3 = verify(
+            wrec, RAW.replace("y41mw51OQARB", "ISiuxLab9lxK")
+            if "y41mw51OQARB" in RAW
+            else RAW + "<meta name='csrf-token' content='毎回変わる値'>",
+            stage=_rf.STAGE_USER_AREA,
+            missing_boxes=["list-machinesreviews"])
+        t("★★関係のない所が変わっても、2AIの答えは効く★★"
+          "（★全体の指紋を鍵にすると、毎回変わるページでは永久に使えない★）",
+          okw3)
+        okw3b, ww3b = verify(wrec, RAW.replace("ユーザー評価（2件）", "評価はまだありません"),
+                             stage=_rf.STAGE_USER_AREA,
+                             missing_boxes=["list-machinesreviews"])
+        t("★★そう判断した手がかりが消えたら効かせない★★"
+          "（★ここが唯一「ページが変わった」を見る所★）",
+          not okw3b and "手がかりの逐語" in ww3b)
         okw4, ww4 = verify(wrec, RAW, stage=_rf.STAGE_USER_AREA,
                            missing_boxes=[])
         t("　箱が見つかっているなら免除しない", not okw4)
