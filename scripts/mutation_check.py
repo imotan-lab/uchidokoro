@@ -855,6 +855,70 @@ MUTATIONS = [
                  "if s[\"mode\"] == \"通常\"]",
         "run": ["scripts/recheck.py"],
     },
+    # ─── 2026-09-15・材料なしで即終了をやめた（台帳#669） ──────────
+    {
+        "why": "★材料の入れ物を「無い」に戻す"
+               "（読み取り器に到達しなかっただけで打ち切られ、"
+               "★2AIが確定させた値を合流させる前に終わる★＝"
+               "いちばん読めていない機種で2AIの答えが使われない）★",
+        "file": "scripts/add_machine_run.py",
+        "before": ('    got = {"name": name, "urls": [], "model_code": None,'
+                   + chr(10) + '           "material": empty_material(),'),
+        "after": ('    got = {"name": name, "urls": [], "model_code": None,'
+                  + chr(10) + '           "material": None,'),
+        "run": ["scripts/add_machine_run.py"],
+        "issues": [669],
+    },
+    {
+        "why": "★使う側での形の保証を外す"
+               "（呼ぶ側が形を欠いたまま渡すと、処理の途中で落ちる）★",
+        "file": "scripts/add_machine_run.py",
+        "before": "    mat = normalize_material(got.get(\"material\"))",
+        "after": '    mat = got["material"]',
+        "run": ["scripts/add_machine_run.py"],
+        "issues": [669],
+    },
+    {
+        "why": "★形の保証を『無いときだけ』に戻す"
+               "（★部分的な辞書は truthy なので素通りし、あとで落ちる★"
+               "＝Codexの指摘）★",
+        "file": "scripts/add_machine_run.py",
+        "before": "    base = empty_material()\n    if isinstance(mat, dict):",
+        "after": "    base = empty_material()\n    if False:",
+        "run": ["scripts/add_machine_run.py"],
+        "issues": [669],
+    },
+    {
+        "why": "★箱の中まで直さない（浅く見るだけに戻す）"
+               "（★{\"resets\": {\"adopted\": {}}} が素通りし、"
+               "合流でその項目だけ落ちて値が入らない★＝CodexのP2）★",
+        "file": "scripts/add_machine_run.py",
+        "before": '                if not isinstance(base[_key].get(_inner), list):',
+        "after": "                if False:",
+        "run": ["scripts/add_machine_run.py"],
+        "issues": [669],
+    },
+    {
+        "why": "★モジュールの箱を、比較器と違う形（辞書）で用意する"
+               "（★確定値の合流は並びに足す作りなので、"
+               "リセット・ゲーム性の確定値がある機種でそこだけ落ち、"
+               "その値が永久に入らない★＝Codexの指摘）★",
+        "file": "scripts/add_machine_run.py",
+        "before": '        mat.setdefault(_key, {"adopted": [], "need_third": []})',
+        "after": '        mat.setdefault(_key, {"adopted": {}, "need_third": {}})',
+        "run": ["scripts/add_machine_run.py"],
+        "issues": [669],
+    },
+    {
+        "why": "★2AIの確定値を合流させる所へ行かせない"
+               "（★材料が1件も読めない機種＝いちばん助けが要る機種で、"
+               "2AIの答えが使われない★＝この直しの目的そのもの）★",
+        "file": "scripts/add_machine_run.py",
+        "before": '        _added = _cv.merge_into(mat, out["slug"])',
+        "after": "        _added = []",
+        "run": ["scripts/add_machine_run.py"],
+        "issues": [669],
+    },
     # ─── 2026-09-14・2AIの答えの鍵（台帳#662） ─────────────────────
     {
         "why": "★2AIの答えを、ページ全体の指紋で鍵にする"
@@ -3181,9 +3245,10 @@ MUTATIONS = [
         "why": "★材料が作れなかったとき、型のついた問いを合流させない★"
                "（★いちばん読めていない機種で、問いが消える★）",
         "file": "scripts/add_machine_run.py",
-        "before": """        _deliver_read_questions(out, got)
-        for q in out["ask_2ai"]:""",
-        "after": """        for q in out["ask_2ai"]:""",
+        # ★2026-09-15に道が1本になった（台帳#669）★＝
+        #   材料なしで即終了する枝を外したので、合流はここ1か所だけ。
+        "before": "    _deliver_read_questions(out, got)",
+        "after": "    pass",
         "run": ["scripts/add_machine_run.py"],
     },
     {

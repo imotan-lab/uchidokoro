@@ -960,7 +960,9 @@ def _gather(name: str, maker: str = "", slug: str = "",
       控えが名乗る機種がこの機種と同じかを突き合わせるために使う。
       渡されなければ控えは効かない（fail-closed）。
     """
-    got = {"name": name, "urls": [], "model_code": None, "material": None,
+    # ★材料は最初から同じ形★（2026-09-15・台帳#669）＝None だと「読み取り器に到達しなかった」だけで打ち切られていた
+    got = {"name": name, "urls": [], "model_code": None,
+           "material": empty_material(),
            "problems": [],
            # ★★既定は「そろっていない」★★（2026-09-08・Codexの指摘）
            #   早く終わる道が何本もあるので、★書き忘れたら安全側★になる形にする。
@@ -3092,6 +3094,51 @@ def push_after_publish(slug: str, already_committed: bool = False) -> list:
 MODULE_FIELDS = ("ceilings", "at_specs", "czs", "resets", "gameplays")
 
 
+def empty_material() -> dict:
+    """★材料は常にこの形で持つ★（2026-09-15・台帳#669）
+
+    ★手で形を書かない★＝本物の比較器に空の一覧を渡して作る。
+    書き写すと、比較器が項目を増やした日に静かにずれる。
+    ★MODULE_FIELDS の残り（resets / gameplays）も同じ形で持つ★
+    （2026-09-15・Codexの指摘）＝「常に同じ形」と言いながら
+    2つ足りず、下流が `.get()` で拾っているだけの状態だった。
+    """
+    mat = _sl.compare([])
+    for _key, _mod in (("ceilings", _cl), ("at_specs", _at), ("czs", _cz)):
+        mat[_key] = _mod.compare([])
+    for _key in MODULE_FIELDS:
+        # ★形は比較器に合わせる★（2026-09-15・Codexの指摘）＝
+        #   ★推測で辞書を書いていた★が、比較器はリストを返し、
+        #   確定値の合流側も rows.append(row) とリストとして扱う。
+        #   辞書のままだと、リセット・ゲーム性の確定値がある機種で
+        #   落ちて、★その値が合流しない★。
+        mat.setdefault(_key, {"adopted": [], "need_third": []})
+    return mat
+
+
+def normalize_material(mat) -> dict:
+    """★呼ぶ側がどう作っても、ここから先は同じ形★（2026-09-15・Codexの指摘）
+
+    ★`or empty_material()` では直らない★＝`{"adopted": {}}` のような
+    **部分的な辞書は truthy** なので、そのまま先へ進み、
+    あとで `mat["need_third"]` などで落ちる。
+    ★足りない項目だけ埋める★（在るものは1つも書き換えない）。
+    """
+    base = empty_material()
+    if isinstance(mat, dict):
+        base.update(mat)
+        for _key in MODULE_FIELDS:
+            if not isinstance(base.get(_key), dict):
+                base[_key] = {"adopted": [], "need_third": []}
+            # ★中まで直す★（2026-09-15・Codexの指摘P2）＝
+            #   浅く見るだけだと `{"resets": {"adopted": {}}}` が素通りし、
+            #   合流の `rows.append(row)` でその項目だけ落ちる。
+            for _inner in ("adopted", "need_third"):
+                if not isinstance(base[_key].get(_inner), list):
+                    base[_key][_inner] = []
+    return base
+
+
 def usable_material(mat: dict) -> dict:
     """材料のうち、記事の中身になるものだけを返す。
 
@@ -3349,33 +3396,22 @@ def run_one(name, official_url, maker, release, apply_it=False,
                 f"既に登録されている疑い: slug={slug} name={ename}"
                 f"（型式名が同じ: {got['observed_model_code']} / {why}）"
                 f"／新しいslugで作らず、更新タスクで直すこと")
-    if not got["material"]:
-        # ★★材料が足りずに終わるときこそ、2AIに聞く★★
-        #   （2026-09-08・Codexの指摘）★直す前はここで返していた★ので、
-        #   ★いちばん読めていない機種で、問いが1つも作られなかった★。
-        out["ask_2ai"] = list(out.get("ask_2ai") or []) + (
-            _ba.unresolved_questions(
-                out["problems"], got.get("all_urls") or got.get("urls") or [],
-                complete=bool(got.get("all_urls_complete"))))
-        # ★★型のついた失敗も、ここで必ず合流させる★★
-        #   （2026-09-10・CodexのP0）★直す前は後段でしか合流していなかった★ので、
-        #   ★材料が作れなかった機種＝いちばん読めていない機種で消えていた★。
-        _deliver_read_questions(out, got)
-        for q in out["ask_2ai"]:
-            _log(f"  ★2AIに聞くこと: {q}")
-        # ★★止まった機種の問いも台帳へ★★（2026-09-10・CodexのP0）
-        if apply_it:
-            _ledger_questions(out, name)
-        out["blocked"] = _blocking(out["problems"])
-        # ★材料が足りずに早く終わるときも記録を残す★
-        #   （2026-08-17・Codex依頼231。ここだけ書き忘れていた）
-        _write_relation_record(created=False)
-        if apply_it:
-            _remember(name, official_url, maker, release, out["problems"])
-        else:
-            _log("（下見）待ち行列には触りません")
-        return out
-    mat = got["material"]
+    # ★★「材料なしで即終了」をやめた★★（2026-09-15・台帳#669）
+    #   ★運営者の指示★＝機械的なところで止まっているものは、
+    #   止まらずに2AIに回す。
+    #   ★直す前★＝ここで返していたので、★2AIが確定させた値を合流させる
+    #   （merge_into）より前★で終わっていた。
+    #   ＝いちばん読めていない機種（＝2AIの助けがいちばん要る機種）で、
+    #   2AIの答えが使われないまま毎晩同じ所で止まっていた。
+    #   ★いまは最後に1回だけ判定する★（usable_material）。
+    #   ★「下流と同値」ではない★（2026-09-15・Codexの指摘）＝
+    #   下流は旧枝の終了処理（問いの配布・台帳・止めた理由・記録）を
+    #   **含んだうえで**、2AIの確定値の合流・出典の確かめ直し・
+    #   設定段数の数え直し・チェッカーの問いを**足して**通る。
+    #   ★順番も変わる★（旧: 台帳→止めた理由／新: 止めた理由→台帳）。
+    # ★材料の形は、使う側でも保証する★（2026-09-15・台帳#669）
+    #   ★足りない項目を埋める★＝部分的な辞書（truthy）でも落ちない。
+    mat = normalize_material(got.get("material"))
     # ★2AIで突き合わせて確定した値を材料に足す★（2026-08-09・台帳#273）
     #   機械の抽出は「載っているのに読めない」が普通に起きる（実測: パリピ孔明は
     #   名鑑4件すべてに天井の記述があるのに4件とも採れなかった）。
@@ -3724,9 +3760,38 @@ def _selftest_body() -> int:
         g = gather("L試験機")
         t("★見つからない名鑑があっても、理由を残して進む★",
           len(g["urls"]) == 1 and any("HEALTHY_NO_MATCH" in p for p in g["problems"]))
+        # ★見るのは「中身」★（2026-09-15・台帳#669）＝
+        #   ★直す前は `material is None` で見ていた★が、None は
+        #   「読み取り器に到達しなかった」という**入れ物の都合**であって、
+        #   ★材料が無いことそのものではない★。
+        #   いまは材料を常に同じ形で持つので、★採用が1件も無いこと★で見る。
+        _m1 = g["material"]
+        t("★★材料は、読み取り器に届かなくても同じ形で返る★★"
+          "（★「無い」にすると、2AIの確定値を合流させる前に打ち切られる★）",
+          isinstance(_m1, dict) and "adopted" in _m1)
+        # ★★「集めに行かない」は、実際に呼ばれた回数で見る★★
+        #   （2026-09-15・Codexの指摘）＝採用が0件かどうかで見ると、
+        #   ★全部読みに行ったうえで独立2票に届かなかった場合★も通ってしまい、
+        #   「集めに行かない」を1つも証明しない。
+        _calls = {"n": 0}
+
+        def _count_read(*a, **k):
+            _calls["n"] += 1
+            return {"ok": False, "reason": "呼ばれてはいけません", "host": "x"}
+
+        _keep_reads = (_sl.read_page, _cl.read_page,
+                       _at.read_page, _cz.read_page)
+        _sl.read_page = _cl.read_page = _count_read
+        _at.read_page = _cz.read_page = _count_read
+        try:
+            g2 = gather("L試験機")
+        finally:
+            (_sl.read_page, _cl.read_page,
+             _at.read_page, _cz.read_page) = _keep_reads
         t("★★名鑑が1件だけなら材料を集めに行かない★★（2件以上が要る）",
-          g["material"] is None
-          and any("2件以上" in p for p in g["problems"]))
+          _calls["n"] == 0
+          and not usable_material(g2["material"])
+          and any("2件以上" in p for p in g2["problems"]))
 
         # ★架空ホストは票に数えられない★（2026-08-09・登録されていない発行者は
         #   default deny にしたため、実在の発行者で試す）
@@ -4594,13 +4659,140 @@ def _selftest_body() -> int:
             "material": None, "problems": ["材料がありません"],
             "read_questions": [], "unread": set(),
             "all_urls_complete": False}
+        # ★呼ぶ側が材料の形を欠いていても落ちない★（2026-09-15・台帳#669）
+        #   ★落ちると「試験が❌」ではなく「ただ落ちただけ」になり、
+        #     守りが効いている証拠にならない★ので、ここで受け止める。
+        _rq_crashed = ""
         try:
-            _rq_out = run_one("L試験機",
-                              "https://m.example/products/slot/zzz/",
-                              "m", "2026-09")
+            try:
+                _rq_out = run_one("L試験機",
+                                  "https://m.example/products/slot/zzz/",
+                                  "m", "2026-09")
+            except Exception as _e_rq:                        # noqa: BLE001
+                _rq_out, _rq_crashed = {}, f"{type(_e_rq).__name__}: {_e_rq}"
         finally:
             globals()["verify_official"] = _keep_vo
             globals()["gather"] = _keep_ga
+        t("★★呼ぶ側が材料の形を欠いていても落ちない★★"
+          "（2026-09-15・台帳#669。落ちると処理がその機種で丸ごと終わる）",
+          not _rq_crashed)
+        # ★★機械が1件も読めなくても、2AIの確定値がそこから使われる★★
+        #   （2026-09-15・台帳#669／Codexの指摘で追加）
+        #   ★これがこの直しの目的そのもの★＝直す前は、材料が作れない機種で
+        #   `merge_into` に届く前に返っていたので、2AIがどれだけ正しく
+        #   確定させても使われなかった。
+        #   ★通しで見る★＝空の材料から始めて、確定値の合流が呼ばれ、
+        #   その値が出口（out["adopted"]）まで出ることを確かめる。
+        _keep_ga2 = globals()["gather"]
+        _keep_mrg = _cv.merge_into
+        _merge_called = {"n": 0}
+
+        def _fake_merge(mat_, slug_):
+            _merge_called["n"] += 1
+            mat_["adopted"]["games_per_50"] = {
+                "value": "50", "sources": ["https://a.example/1"],
+                "_from": "confirmed_values"}
+            return ["games_per_50"]
+
+        globals()["gather"] = lambda *a, **k: {
+            "name": "L試験機", "urls": [], "model_code": None,
+            "material": empty_material(),
+            "problems": ["名鑑の個別ページが 1 件しか見つかりません（2件以上が要る）"],
+            "read_questions": [], "unread": set(),
+            "all_urls_complete": False}
+        _cv.merge_into = _fake_merge
+        try:
+            _mg_out = run_one("L試験機",
+                              "https://p-town.dmm.com/machines/1",
+                              "m", "2026-09")
+        except Exception as _e_mg:                        # noqa: BLE001
+            _mg_out = {"_crash": f"{type(_e_mg).__name__}: {_e_mg}"}
+        finally:
+            globals()["gather"] = _keep_ga2
+            _cv.merge_into = _keep_mrg
+        t("★★材料が1件も読めなくても、2AIの確定値を合流させる所まで進む★★"
+          "（★直す前はここへ届かず、いちばん助けが要る機種で使われなかった★）",
+          _merge_called["n"] == 1 and "_crash" not in _mg_out)
+        t("　合流した確定値は、その機種の出口まで出る",
+          any("50" in str(x) or "ゲーム" in str(x)
+              for x in (_mg_out.get("adopted") or [])))
+        # ★★部分的な辞書を渡されても落ちない★★（2026-09-15・Codexの指摘）
+        #   ★`or empty_material()` では直らない★＝{"adopted": {}} は truthy。
+        _keep_ga3 = globals()["gather"]
+        globals()["gather"] = lambda *a, **k: {
+            "name": "L試験機", "urls": [], "model_code": None,
+            "material": {"adopted": {}},
+            "problems": [], "read_questions": [], "unread": set(),
+            "all_urls_complete": False}
+        _pd_crash = ""
+        try:
+            run_one("L試験機", "https://p-town.dmm.com/machines/1",
+                    "m", "2026-09")
+        except Exception as _e_pd:                        # noqa: BLE001
+            _pd_crash = f"{type(_e_pd).__name__}: {_e_pd}"
+        finally:
+            globals()["gather"] = _keep_ga3
+        t("★★足りない項目のある材料を渡されても落ちない★★"
+          "（★部分的な辞書は truthy なので、『無いときだけ』では直らない★）",
+          not _pd_crash)
+        # ★埋めるだけ・在るものは書き換えない★（これを外すと材料が丸ごと消える）
+        _nm = normalize_material({"adopted": {"x": 1}, "czs": {"adopted": []}})
+        t("★★足りない項目を埋めるだけで、渡されたものは書き換えない★★"
+          "（★埋めるのをやめると、材料が丸ごと空に化ける★）",
+          _nm["adopted"] == {"x": 1} and "resets" in _nm
+          and isinstance(_nm.get("thin"), dict))
+        # ★★空の材料を、本物の合流に通す★★（2026-09-15・Codexの指摘）
+        #   ★偽物の合流では捕まらない★＝あちらは基本スペック直下しか触らない。
+        #   本物は箱ごとに `rows.append(row)` するので、
+        #   ★箱の形が比較器と違う（辞書）と、そこで落ちて値が合流しない★。
+        _mf_bad = []
+        for _k in MODULE_FIELDS:
+            _box = empty_material()[_k]
+            for _kk in ("adopted", "need_third"):
+                if not isinstance(_box.get(_kk), list):
+                    _mf_bad.append(f"{_k}.{_kk}")
+        t("★★モジュールの箱は、比較器と同じ形（並び）で持つ★★"
+          "（★辞書にすると、確定値の合流でその項目だけ落ちる★）",
+          not _mf_bad)
+        _cv_probe = {"n": 0}
+        _keep_stamp = getattr(_cv, "for_slug_checked", None)
+        if _keep_stamp is not None:
+            def _one_reset(slug_):
+                _cv_probe["n"] += 1
+                return {"reset": {
+                    "value": {"kind": "reset", "value": "有利区間引継ぎ"},
+                    "sources": [{"url": "https://a.example/1", "quote": "リセットは"},
+                                {"url": "https://b.example/1", "quote": "リセットは"}],
+                    "why": "試験", "agreed_by": ["claude", "codex"]}}
+
+            _cv.for_slug_checked = _one_reset
+            _mat_real = empty_material()
+            _real_crash = ""
+            try:
+                _cv.merge_into(_mat_real, "zzz_fake")
+            except Exception as _e_cv:                    # noqa: BLE001
+                _real_crash = f"{type(_e_cv).__name__}: {_e_cv}"
+            finally:
+                _cv.for_slug_checked = _keep_stamp
+            t("★★空の材料に、本物の合流でリセットの確定値を足せる★★"
+              "（★箱の形が違うと、ここで落ちてその値が永久に入らない★）",
+              not _real_crash)
+            # ★★中まで壊れた材料でも、本物の合流が通る★★
+            #   （2026-09-15・CodexのP2）＝浅く見るだけだと
+            #   `{"resets": {"adopted": {}}}` が素通りして、合流で落ちる。
+            _cv.for_slug_checked = _one_reset
+            _mat_deep = normalize_material({"resets": {"adopted": {}}})
+            _deep_crash, _deep_added = "", []
+            try:
+                _deep_added = _cv.merge_into(_mat_deep, "zzz_fake")
+            except Exception as _e_dp:                    # noqa: BLE001
+                _deep_crash = f"{type(_e_dp).__name__}: {_e_dp}"
+            finally:
+                _cv.for_slug_checked = _keep_stamp
+            t("★★中まで壊れた材料でも、直したうえで確定値が入る★★"
+              "（★行が実際に足されたことまで見る★）",
+              not _deep_crash and _deep_added
+              and len(_mat_deep["resets"]["adopted"]) == 1)
         t("★★材料が作れなくても、型のついた問いが機種の出口まで届く★★"
           "（★いちばん読めていない機種ほど消えていた★）",
           any("IDENTITY_FACTS" in str(q)
@@ -4981,9 +5173,16 @@ def _selftest_body() -> int:
             # ★★止まった機種でも台帳へ載せる★★（2026-09-10・CodexのP0）
             #   ★直す前は公開まで進んだ機種にしか効かなかった★＝
             #   読めなくて止まった機種ほど、翌朝のまとめに残らなかった。
+            # ★数ではなく「止まる道に載っているか」で見る★（2026-09-15・台帳#669）
+            #   ★直す前は呼び出しの個数を数えていた★ので、
+            #   ★同じことをする道を1本に整理しただけで赤くなった★
+            #   （＝守りは同じなのに、字面が減っただけで落ちる試験）。
+            _stop_path = _src[_src.index(
+                'if out["blocked"] or not usable_mat:'):]
+            _stop_path = _stop_path[:_stop_path.index("return out")]
             t("★★止まった機種の問いも台帳へ載せる★★"
               "（★いちばん読めていない機種ほど届かなかった★）",
-              _src.count("_ledger_questions(out, name)") >= 3)
+              "_ledger_questions(out, name)" in _stop_path)
             t("　質問は run_one が持ち回る（黙って捨てない）",
               'out["ask_2ai"] = _ba.checker_questions(mat)'
               in inspect.getsource(run_one))
