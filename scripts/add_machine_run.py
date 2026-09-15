@@ -1016,12 +1016,20 @@ def _gather(name: str, maker: str = "", slug: str = "",
                 # ★なぜ例外を使わなかったかを残す★（黙って落とさない）
                 got["problems"].append(
                     "DMM単独の例外は使いませんでした: " + _other_why_here[:120])
-            return got
-        # ★1件で進む理由は必ず残す★（黙って例外を通さない）
-        got["problems"] += unused_msgs
-        got["single_source_exception"] = True
-        _log("  ★DMM単独の例外で材料集めを続けます★"
-             f"（導入{release_date}・7日前以降／運営者決定 2026-08-23）")
+            # ★★ここで返さない★★（2026-09-15・運営者の指示）
+            #   ＞ 機械的なところで止まっているものは止まらずに2AIに回すように。
+            #   ★直す前★＝読める1件も読まず、2AIへの問いも作らず、
+            #     2AIが確定させた値の合流にも届かないまま終わっていた。
+            #   ★数の決まりは消していない★＝独立2票を数えるのは
+            #     source_lineage.independent() で、値ごとの採否は
+            #     adoption_basis が決める。1件しか無い値は need_third に落ちて
+            #     記事には出ない。＝ここで消したのは**近道だけ**。
+        else:
+            # ★1件で進む理由は必ず残す★（黙って例外を通さない）
+            got["problems"] += unused_msgs
+            got["single_source_exception"] = True
+            _log("  ★DMM単独の例外で材料集めを続けます★"
+                 f"（導入{release_date}・7日前以降／運営者決定 2026-08-23）")
     # ★★DMMの機種ページは、DMM自身の決まりで確かめる★★（2026-08-22・台帳#453）
     #   ★なぜ分けるか（Codexの設計レビュー）★
     #     DMMの機種ページには**専用の同定経路がすでにある**
@@ -1173,15 +1181,23 @@ def _gather(name: str, maker: str = "", slug: str = "",
             got["problems"].append(
                 f"名鑑の個別ページが {len(got['urls'])} 件しか残りません"
                 "（取れない・転送されるページを除いた結果）")
-            return got
+            # ★止めない★（2026-09-15・上と同じ理由）
     _cache_ok, _cache = True, None
     try:
         _cache = _mic.load()
     except Exception as e:                # noqa: BLE001
         _cache_ok = False
         _log(f"  ★メーカーの控えを読めません（この機種は今夜は止めます）★: {e}")
+        # ★★型のついた符丁で止める★★（2026-09-15・CodexのP0）
+        #   ★直す前★＝この文は止める理由の名簿に入っておらず、
+        #   「全部のURLが外れて2件を下回る」の**ついで**で止まっていただけだった。
+        #   名鑑の件数で止めるのをやめた瞬間、★控えを読めないまま
+        #   2AIの確定値だけで記事を作れる★状態になっていた（罠㊳）。
+        #   ★これは機械的な件数不足ではない★＝過去に「使わない」と決めた
+        #   判断を確かめられない状態なので、止めてよい関門。
         got["problems"].append(
-            f"メーカー照合の控えを読めません（{str(e)[:100]}）"
+            f"{MAKER_CACHE_UNREADABLE}メーカー照合の控えを読めません"
+            f"（{str(e)[:100]}）"
             "／★読めない＝「使わないと決めたページ」があるかも分からない"
             "ので、材料を使いません★")
     # ★判定は maker_material_decision に集めてある★（試験もそこを通す）
@@ -1228,7 +1244,7 @@ def _gather(name: str, maker: str = "", slug: str = "",
             got["problems"].append(
                 f"名鑑の個別ページが {len(got['urls'])} 件しか見つかりません"
                 "（2件以上が要る・メーカー欄の照合で除いた結果）")
-            return got
+            # ★止めない★（2026-09-15・上と同じ理由）
     # ★出典どうしが転載でないか確かめる★（2026-07-31・実際に見つけた）
     #   やんちゃプレスはちょんぼりすたと本文が17行そのまま同じだった。
     #   登録簿に無い転載を2票に数えると、独立2出典の意味が無くなる。
@@ -1250,7 +1266,7 @@ def _gather(name: str, maker: str = "", slug: str = "",
             got["problems"].append(
                 f"名鑑の個別ページが {len(got['urls'])} 件しか見つかりません"
                 "（2件以上が要る・転載照合で取得できないページを除いた結果）")
-            return got
+            # ★止めない★（2026-09-15・上と同じ理由）
     # 取得失敗以外の照合不能（想定外）は従来どおり全体を止める
     for p_ in lin.get("problems") or []:
         if not any(p_.startswith(u) for u in _lin_failed):
@@ -1517,6 +1533,11 @@ def _is_outage(reasons: list) -> bool:
 # ★書き込みを止める理由★（Codex指摘3・自分で再現を確認）
 #   以前は problems を文字列で並べるだけで、**中身を見ずに書き込めた**。
 #   機種の同定に関わる問題が1つでもあれば、材料が採れていても書かない。
+# ★メーカー照合の控えを読めないことの符丁★（2026-09-15・CodexのP0）
+#   ★文言ではなく符丁で止める★＝説明の言い回しを直しただけで
+#   関門が静かに外れるのを防ぐ。
+MAKER_CACHE_UNREADABLE = "MAKER_CACHE_UNREADABLE: "
+
 BLOCKING = ("CONFIRMED_VALUES_UNREADABLE",
             "AMBIGUOUS_CANDIDATES", "CATALOG_UNHEALTHY",
             # ★型式名は「別機種と取り違えない」ためだけに使う★（2026-08-09・運営者決定）
@@ -1537,7 +1558,22 @@ BLOCKING = ("CONFIRMED_VALUES_UNREADABLE",
             "登場年月が公式と違います", "公式ページに登場年月が書かれていません",
             # ★公式ページを開けないなら、その機種だと確かめられていない★
             #   slug も公式URLから作るので、開けないURLのまま記事を作らない。
-            "公式ページを取得できません", "既に登録されている疑い", "2件以上",
+            "公式ページを取得できません", "既に登録されている疑い",
+            # ★メーカー照合の控えを読めないなら、その晩は止める★
+            #   （2026-09-15・CodexのP0。それまでは件数の関門の
+            #     ★ついで★で止まっていただけだった）
+            MAKER_CACHE_UNREADABLE,
+            # ★★「名鑑が2件以上そろっていない」は、ここに入れない★★
+            #   （2026-09-15・運営者の指示「機械的なところで止まっているものは
+            #     止まらずに2AIに回すように」）
+            #   ★直す前★＝この語が入っていたので、名鑑が1件の機種は
+            #     **同定に問題が無くても**公開を止める理由が立ち、
+            #     2AIが値を確定させても記事にならなかった。
+            #   ★独立2出典の決まりは、ここではなく値ごとに効く★＝
+            #     source_lineage.independent() が票を数え、
+            #     adoption_basis が採否を決め、1票の値は need_third に落ちる。
+            #     読者に出る材料が1つも無ければ usable_material が空になり、
+            #     run_one はそれで記事を作らない（その道は残してある）。
             # ★独立性を確かめられないまま2票にしない★（Codex31回目）
             "転載照合を実施できません",
             # ★別のページへ転送された中身で記事を作らない★（Codex34回目）
@@ -3751,6 +3787,12 @@ def _selftest_body() -> int:
     real_log = globals()["_log"]
     globals()["_log"] = lambda m: print(f"[selftest-log] {m}")
     try:
+        # ★★lookup は先に偽物へ★★（2026-09-15）＝名鑑が1件でも止まらなく
+        #   なったので、ここから先は同定まで進む。本物のままだと架空のURLを
+        #   本当に取りに行ってしまう（試験が外の世界に触れる）。
+        _mc.lookup = lambda u, n, **k: {"url": u, "identity_ok": True,
+                                        "model_code": "L1", "reason": "OK",
+                                        **_MKC(k)}
         _di.find = lambda n, c=None: {"results": {
             "a": {"state": "FOUND", "url": "https://chonborista.com/1", "why": "",
                   "candidates": [], "surfaces": "1/1", "index_size": 9, "problems": []},
@@ -3769,29 +3811,134 @@ def _selftest_body() -> int:
         t("★★材料は、読み取り器に届かなくても同じ形で返る★★"
           "（★「無い」にすると、2AIの確定値を合流させる前に打ち切られる★）",
           isinstance(_m1, dict) and "adopted" in _m1)
-        # ★★「集めに行かない」は、実際に呼ばれた回数で見る★★
-        #   （2026-09-15・Codexの指摘）＝採用が0件かどうかで見ると、
-        #   ★全部読みに行ったうえで独立2票に届かなかった場合★も通ってしまい、
-        #   「集めに行かない」を1つも証明しない。
+        # ★★名鑑が1件しか無くても、止まらずに読みに行く★★
+        #   （2026-09-15・運営者の指示）
+        #   ＞ 機械的なところで止まっているものは止まらずに2AIに回すように。
+        #   ★直す前は「集めに行かない」ことを試験していた★＝
+        #     その近道のせいで、読める1件も読まず、2AIへの問いも作られず、
+        #     ★2AIが確定させた値の合流（merge_into）にも届かなかった★。
+        #   ★呼ばれた回数で見る★＝採用が0件かどうかで見ると、
+        #     全部読みに行って独立2票に届かなかった場合と見分けられない。
         _calls = {"n": 0}
 
-        def _count_read(*a, **k):
+        def _count_read(u, n, **k):
             _calls["n"] += 1
-            return {"ok": False, "reason": "呼ばれてはいけません", "host": "x"}
+            return {"url": u, "host": u.split("/")[2], "ok": True,
+                    "reason": "OK",
+                    "fields": {"payout_rate": {"1": "97.3%"}}}
+
+        def _count_read_off(u, n, **k):
+            _calls["n"] += 1
+            return {"url": u, "host": u.split("/")[2], "ok": False,
+                    "reason": "この試験では読みません"}
 
         _keep_reads = (_sl.read_page, _cl.read_page,
                        _at.read_page, _cz.read_page)
-        _sl.read_page = _cl.read_page = _count_read
-        _at.read_page = _cz.read_page = _count_read
+        _sl.read_page = _count_read
+        _cl.read_page = _at.read_page = _cz.read_page = _count_read_off
         try:
             g2 = gather("L試験機")
         finally:
             (_sl.read_page, _cl.read_page,
              _at.read_page, _cz.read_page) = _keep_reads
-        t("★★名鑑が1件だけなら材料を集めに行かない★★（2件以上が要る）",
-          _calls["n"] == 0
-          and not usable_material(g2["material"])
-          and any("2件以上" in p for p in g2["problems"]))
+        t("★★名鑑が1件だけでも、止まらずに読みに行く★★"
+          "（★止まると、2AIが確定させた値を合流させる所まで届かない★）",
+          _calls["n"] > 0 and any("2件以上" in p for p in g2["problems"]))
+        t("　★それでも1票しかない値は採用しない★"
+          "（独立2出典の決まりは、この近道ではなく票の数え方が守っている）",
+          not usable_material(g2["material"]))
+
+        # ★★減って1件になる道も、全部そのまま進む★★
+        #   （2026-09-15・Codexの指摘。台帳#674）
+        #   ★入口だけ直しても意味がない★＝2件見つかったあとに
+        #   「取れない」「メーカー欄が違う」「転載照合が失敗」で1件へ減る道が
+        #   3本あり、そこにも同じ打ち切りがあった。
+        #   ★3本とも、読み取り器が呼ばれるところまで進むことを見る★
+        def _two_found(n, c=None):
+            return {"results": {
+                k: {"state": "FOUND", "url": f"https://{h}/1", "why": "",
+                    "candidates": [], "surfaces": "1/1", "index_size": 9,
+                    "problems": []}
+                for k, h in (("a", "chonborista.com"), ("b", "nana-press.com"))}}
+
+        def _gather_counting():
+            _calls["n"] = 0
+            _keep = (_sl.read_page, _cl.read_page, _at.read_page, _cz.read_page)
+            _sl.read_page = _count_read
+            _cl.read_page = _at.read_page = _cz.read_page = _count_read_off
+            try:
+                return gather("L試験機"), _calls["n"]
+            finally:
+                (_sl.read_page, _cl.read_page,
+                 _at.read_page, _cz.read_page) = _keep
+
+        _di.find = _two_found
+        # ①取れないページがあって1件に減る道
+        _keep_f674 = _fp.fetch
+
+        def _fetch_one_bad(u, purpose="claim_material", get=None):
+            if "nana-press" in u:
+                raise _fp.PageError("この試験では取れません")
+            return _keep_f674(u, purpose)
+
+        _fp.fetch = _fetch_one_bad
+        try:
+            _g674a, _n674a = _gather_counting()
+        finally:
+            _fp.fetch = _keep_f674
+        t("★★取れないページで1件に減っても、止まらずに読みに行く★★"
+          "（★止まると、2AIへの問いも確定値の合流も届かない★）",
+          _n674a > 0 and len(_g674a["urls"]) == 1)
+
+        # ②メーカー欄の照合で1件に減る道
+        _keep_lk674 = _mc.lookup
+
+        def _lookup_one_bad(u, n, **k):
+            if "nana-press" in u:
+                return {"url": u, "identity_ok": False,
+                        "reason": "NAME_CORE_MISMATCH"}
+            return {"url": u, "identity_ok": True, "model_code": "L1",
+                    "reason": "OK", **_MKC(k)}
+
+        _mc.lookup = _lookup_one_bad
+        try:
+            _g674b, _n674b = _gather_counting()
+        finally:
+            _mc.lookup = _keep_lk674
+        t("★★メーカー欄の照合で1件に減っても、止まらずに読みに行く★★",
+          _n674b > 0 and len(_g674b["urls"]) == 1)
+
+        # ③転載照合で取得できず1件に減る道
+        _keep_lc674 = _lc.check
+        _lc.check = lambda urls: {
+            "suspects": [], "checked": [], "problems": [],
+            "failed": [u for u in urls if "nana-press" in u]}
+        try:
+            _g674c, _n674c = _gather_counting()
+        finally:
+            _lc.check = _keep_lc674
+        t("★★転載照合で取れずに1件へ減っても、止まらずに読みに行く★★",
+          _n674c > 0 and len(_g674c["urls"]) == 1)
+
+        # ★★符丁を「付ける側」も本物で通す★★（2026-09-15・CodexのP1）
+        #   ★直す前★＝止まることの試験は `gather` ごと偽物にして、
+        #   ★試験が自分で符丁を付けて★いた。＝本番から符丁を外しても緑。
+        #   ＝いま塞いだのと同じ fail-open をもう一度作っていた（罠③）。
+        #   ここでは★控えの読み込みを本当に例外にして、本物の gather を通す★。
+        _keep_load674 = _mic.load
+
+        def _load_broken():
+            raise _mic.CacheError("この試験では控えを読めません")
+
+        _mic.load = _load_broken
+        try:
+            _g674d, _ = _gather_counting()
+        finally:
+            _mic.load = _keep_load674
+        t("★★メーカー照合の控えを読めないことは、符丁つきで返る★★"
+          "（★符丁を付けないと、止める側が見つけられない★）",
+          any(MAKER_CACHE_UNREADABLE in str(p)
+              for p in _g674d["problems"]))
 
         # ★架空ホストは票に数えられない★（2026-08-09・登録されていない発行者は
         #   default deny にしたため、実在の発行者で試す）
@@ -4716,6 +4863,59 @@ def _selftest_body() -> int:
         t("　合流した確定値は、その機種の出口まで出る",
           any("50" in str(x) or "ゲーム" in str(x)
               for x in (_mg_out.get("adopted") or [])))
+        # ★★メーカー照合の控えを読めないなら、確定値があっても作らない★★
+        #   （2026-09-15・CodexのP0）
+        #   ★直す前★＝この関門は名簿に無く、「名鑑が2件に届かない」の
+        #   **ついで**で止まっていただけだった（罠㊳）。
+        #   件数で止めるのをやめた瞬間、★控えを読めないまま
+        #   2AIの確定値だけで公開できる★状態になっていた。
+        #   ★通しで見る★＝合流は実際に起き、それでも記事は作られないこと。
+        #   ★隣の守りに助けられない形にする★（罠④・罠㉚）＝
+        #   本人性の確認を通しておかないと「メーカーが名簿にありません」で
+        #   先に止まり、★関門を消しても同じ結果になる★（実際そうなっていた）。
+        #   ★止めた理由の文まで見る★＝件数ではなく、この関門で止まったこと。
+        _keep_ga4 = globals()["gather"]
+        _keep_vo4 = globals()["verify_official"]
+        _keep_mrg2 = _cv.merge_into
+        _merge2 = {"n": 0}
+
+        def _fake_merge2(mat_, slug_):
+            _merge2["n"] += 1
+            mat_["adopted"]["games_per_50"] = {
+                "value": "50", "sources": ["https://a.example/1"],
+                "_from": "confirmed_values"}
+            return ["games_per_50"]
+
+        globals()["verify_official"] = lambda *a, **k: {
+            "problems": [], "release": "2026-09", "read_questions": []}
+        globals()["gather"] = lambda *a, **k: {
+            "name": "L試験機", "urls": [], "model_code": None,
+            "material": empty_material(),
+            "problems": [MAKER_CACHE_UNREADABLE
+                         + "メーカー照合の控えを読めません（壊れています）"],
+            "read_questions": [], "unread": set(),
+            "all_urls_complete": False}
+        _cv.merge_into = _fake_merge2
+        try:
+            _uc_out = run_one("L試験機",
+                              "https://p-town.dmm.com/machines/1",
+                              "sammy", "2026-09")
+        except Exception as _e_uc:                        # noqa: BLE001
+            _uc_out = {"_crash": f"{type(_e_uc).__name__}: {_e_uc}"}
+        finally:
+            globals()["gather"] = _keep_ga4
+            globals()["verify_official"] = _keep_vo4
+            _cv.merge_into = _keep_mrg2
+        _uc_blocked = [str(x) for x in (_uc_out.get("blocked") or [])]
+        t("★★メーカー照合の控えを読めないときは、"
+          "2AIの確定値が合流しても記事を作らない★★"
+          "（★過去に「使わない」と決めたページがあるかも分からないため★）",
+          _merge2["n"] == 1 and "_crash" not in _uc_out
+          and not _uc_out.get("preview")
+          and any(MAKER_CACHE_UNREADABLE in x for x in _uc_blocked))
+        t("　（対照）止まった理由は、ほかの守りではなくこの関門",
+          _uc_blocked == [x for x in _uc_blocked
+                          if MAKER_CACHE_UNREADABLE in x])
         # ★★部分的な辞書を渡されても落ちない★★（2026-09-15・Codexの指摘）
         #   ★`or empty_material()` では直らない★＝{"adopted": {}} は truthy。
         _keep_ga3 = globals()["gather"]
@@ -5413,6 +5613,21 @@ def _selftest_body() -> int:
             _nw._get = lambda u, timeout=20: "<title>Lすーぱぁびん娘|EXAMPLE</title>"
             t("★★既に登録されている機種は作らない★★（実際に二重登録できた・2026-07-31）",
               _blocking(["既に登録されている疑い: slug=super_binmusume"]))
+            # ★★「名鑑が足りない」は公開を止める理由にしない★★
+            #   （2026-09-15・運営者の指示）
+            #   ＞ 機械的なところで止まっているものは止まらずに2AIに回すように。
+            #   ★直す前★＝この文が止める理由に数えられていたので、
+            #     2AIが値を確定させても、その機種は永久に記事にならなかった。
+            #   ★独立2出典の決まりは票の数え方が守っている★（ここではない）。
+            t("★★名鑑が2件そろわないことは、公開を止める理由にしない★★"
+              "（★止めると、2AIが確定させても記事にならない★）",
+              not _blocking([
+                  "名鑑の個別ページが 1 件しか見つかりません（2件以上が要る）",
+                  "名鑑の個別ページが 0 件しか残りません"
+                  "（取れない・転送されるページを除いた結果）"]))
+            t("　（対照）同定に関わる理由は今までどおり止める",
+              _blocking(["公式ページと名前が一致しません"])
+              and _blocking(["転載の疑い: a と b の本文が 99% 一致"]))
             t("　実データでも既存機種を見つけられる",
               _cd.find_duplicates("Lすーぱぁびん娘"))
             # ★名前が違っても、公式URL・型式名で捕まえる★（Codex指摘・2026-07-31）
