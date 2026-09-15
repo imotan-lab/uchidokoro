@@ -300,7 +300,18 @@ def _check_record(slug: str, rec, reg=None, require_final: bool = True) -> None:
         raise CacheError(f"控えが壊れています（{slug}）")
     if rec.get("verdict") not in VERDICTS:
         raise CacheError(f"控えの結論が不正です（{slug}）: {rec.get('verdict')!r}")
+    # ★★メーカー欄が読めないページは、seen を空のまま控える★★
+    #   （2026-09-15・台帳#675／Codexの指摘）
+    #   ★直す前★＝seen は型に関係なく必須だったので、
+    #   ★欄そのものが読めないページは、そもそも控えを作れなかった★。
+    #   ＝2AIが読んで決めても記録できず、その機種が毎晩止まる。
+    #   ★「読取不能」という架空のメーカー名を入れる形は採らない★（Codexの指摘）。
+    _needs0 = proof_needs(rec.get("reason_codes")) \
+        if is_codes_profile(rec.get("proof_profile")) else None
+    _seen_needed = not (_needs0 and "maker" not in _needs0["target_quote"])
     for k in ("expected", "seen", "why", "decided_at"):
+        if k == "seen" and not _seen_needed:
+            continue
         if not str(rec.get(k) or "").strip():
             raise CacheError(f"控えに「{k}」がありません（{slug}）")
     by = rec.get("agreed_by")
@@ -364,9 +375,69 @@ def _check_record(slug: str, rec, reg=None, require_final: bool = True) -> None:
         raise CacheError(f"控えに target_url がありません（{slug}）"
                          "／★どのページの採否かを名乗らせます★")
     prof = rec.get("proof_profile")
-    if prof not in PROOF_PROFILES:
+    if is_codes_profile(prof):
+        # ★★新しい型＝落ち方の並びそのもの★★（2026-09-15・台帳#675）
+        #   ★正本は reason_codes★（Codexの指摘2）＝名前は索引・表示用。
+        #   名前だけを信じると、呼ぶ側が固定の文字列を渡すだけで通る。
+        _codes = rec.get("reason_codes")
+        if not isinstance(_codes, list) or not _codes:
+            raise CacheError(f"控えに reason_codes がありません（{slug}）"
+                             "／★どの落ち方に対する控えかを名乗らせます★")
+        if profile_name(_codes) != prof:
+            raise CacheError(
+                f"控えの型が落ち方と合いません（{slug}）: {prof!r} ≠ "
+                f"{profile_name(_codes)!r}")
+        if proof_needs(_codes) is None:
+            raise CacheError(
+                f"この落ち方はこの控えでは証明できません（{slug}）: {_codes}"
+                "／★硬い落ち方・知らない符丁・導入日が読めない類は、"
+                "2AIへの問いには出しますが控えには残しません★")
+    elif prof not in PROOF_PROFILES:
         raise CacheError(f"控えの proof_profile が不正です（{slug}）: {prof!r}"
                          f"／★{'/'.join(sorted(PROOF_PROFILES))} のどれか★")
+    # ★★証拠の形は、結論によらず先に確かめる★★（2026-09-15・Codexの指摘）
+    #   ★直す前★＝この検査は「使う」と決めた控えの中にあったので、
+    #   ★「使わない」の控えは役割も対象URLも確かめずに保存できた★。
+    #   「使わない」は落ち方が変わっても効き続ける永続の判断なので、
+    #   そこに形の検査が無いのは筋が通らない。
+    if is_codes_profile(prof):
+        # ★★証拠には役割を持たせる★★（2026-09-15・Codexの指摘3）
+        #   ★対象ページはちょうど1件★／★補強は対象とは別のページ★
+        #   ＝2AIが任意の証拠を「対象」と名乗れると、対象の必須欄の緩さを
+        #   補強側へ流用できてしまう。
+        _roles = [str(e.get("role") or "") for e in ev]
+        if any(r not in EVIDENCE_ROLES for r in _roles):
+            raise CacheError(
+                f"控えの根拠に役割がありません（{slug}）: {_roles}"
+                f"／★{'/'.join(EVIDENCE_ROLES)} のどちらかを名乗らせます★")
+        if _roles.count("target") != 1:
+            raise CacheError(
+                f"控えの対象ページの根拠がちょうど1件ではありません（{slug}）: "
+                f"{_roles.count('target')}件")
+        for e in ev:
+            if str(e.get("role")) == "target" \
+                    and url_key(e.get("url")) != url_key(tgt):
+                raise CacheError(
+                    f"対象と名乗る根拠が target_url と違います（{slug}）: "
+                    f"{e.get('url')}")
+            if str(e.get("role")) == "support" \
+                    and url_key(e.get("url")) == url_key(tgt):
+                raise CacheError(
+                    f"補強の根拠が対象ページと同じです（{slug}）: {e.get('url')}"
+                    "／★別の名鑑のページで補強します★")
+        _needs3 = proof_needs(rec.get("reason_codes"))
+        for e in ev:
+            _want = (_needs3["target_quote"] if str(e.get("role")) == "target"
+                     else _needs3["support_quote"])
+            if "maker" in _want and not str(e.get("seen_maker") or "").strip():
+                raise CacheError(
+                    f"根拠にメーカー欄の表記（seen_maker）がありません（{slug}）: "
+                    f"{e.get('url')}")
+            if "maker" not in _want and str(e.get("seen_maker") or "").strip():
+                raise CacheError(
+                    f"メーカー欄が読めない対象に表記が書かれています（{slug}）: "
+                    f"{e.get('seen_maker')!r}"
+                    "／★読めないものを名乗らせません★")
     if rec["verdict"] != "ACCEPT_MATERIAL":
         return
     # ★★弱い型で救えるのは、メーカー欄が名簿で解決できる時だけ★★
@@ -466,16 +537,30 @@ def _check_record(slug: str, rec, reg=None, require_final: bool = True) -> None:
                 "release_why に15字以上で書きます★")
     # ★②逐語引用そのものに、機種名とメーカー欄が入っていること★
     #   ページのどこかにあるだけでは足りない（別機種の欄でも通ってしまう）。
+    # ★★必須の欄は役割ごとに決まる★★（2026-09-15・台帳#675／Codexの指摘3）
+    #   ★メーカー欄が読めない対象ページに、その欄の引用は求められない★
+    #   （求めると、そのページは永久に控えられない＝毎晩止まる）。
+    #   ★補強するページには今までどおり求める★＝弱い側だけを緩める。
+    _needs_v = proof_needs(rec.get("reason_codes")) \
+        if is_codes_profile(rec.get("proof_profile")) else None
     for e in ev:
         q = str(e.get("quote") or "")
         if not _has_core(q, str(rec.get("machine_name"))):
             raise CacheError(
                 f"根拠の逐語引用に機種名が入っていません（{slug}）: "
                 f"{q[:40]}／★その機種のページだと示す引用にします★")
-        if not _has_core(q, str(rec.get("seen"))):
+        if _needs_v is None:
+            _maker_want = str(rec.get("seen") or "")
+        else:
+            _want_e = (_needs_v["target_quote"]
+                       if str(e.get("role")) == "target"
+                       else _needs_v["support_quote"])
+            _maker_want = (str(e.get("seen_maker") or "")
+                           if "maker" in _want_e else "")
+        if _maker_want and not _has_core(q, _maker_want):
             raise CacheError(
                 f"根拠の逐語引用にメーカー欄の表記が入っていません（{slug}）: "
-                f"{q[:40]}／★「{rec.get('seen')}」を含む引用にします★")
+                f"{q[:40]}／★「{_maker_want}」を含む引用にします★")
         # ★導入日も同じ引用の中に入れる★（2026-08-17・Codex依頼231の判断）
         #   ★なぜ「ページのどこかにある」ではだめか★＝更新日・関連記事・
         #   別の説明の中の日付でも通ってしまい、その日付が
@@ -529,7 +614,9 @@ def _check_record(slug: str, rec, reg=None, require_final: bool = True) -> None:
     #   maker_field              … 名鑑どうしの一致が要るので2つ
     #   title_name_core_mismatch … そのページ自身＋DMMで足りるので1つ
     #     （★2件目の名鑑は別途、正規の同定を通っている★）
-    _need = PROOF_PROFILES[prof]["min_directories"]
+    _need = (proof_needs(rec.get("reason_codes"))["min_directories"]
+             if is_codes_profile(prof) else
+             PROOF_PROFILES[prof]["min_directories"])
     if _sl.independent(keys, reg) < _need:
         raise CacheError(
             f"「{prof}」で材料に使うと決めるには独立した名鑑が{_need}つ要ります"
@@ -611,11 +698,101 @@ def url_key(url: str) -> str:
 #   1つの表に寄せ、逆引きも★手書きせず機械的に作る★。
 #   ★型ごとに落ち方を厳密に決める★＝「どの型でも何でも救える」にしない
 #   （メーカーの食い違いで作った控えを、題の不一致に流用させないため）。
+# ★★控えの型は「落ち方の並び」そのもの★★（2026-09-15・台帳#675／Codexの設計）
+#   ★なぜ名前の表をやめたか★＝救える落ち方を名前で並べる形だったので、
+#   **表に無い落ち方は黙って外れて**いた（実測＝モンハンライズの2件）。
+#   運営者から5回言われている「例外リスト・場合分けを増やすな」にも反する。
+#   ★落ち方が変われば型の名前も変わる★ので、
+#   ★控えは「同じ落ち方のときだけ」効く★（別の守りを書かなくてよい）。
+CODES_PREFIX = "codes:"
+# ★控えに記録してよい落ち方★（2026-09-15・Codexの指摘3）
+#   ★知らない符丁は「2AIに聞く」までは許すが、恒久的な採用は受け付けない★＝
+#   意味が分からないものを、いちばん軽い証明で通してしまわないため。
+#   ★DMM側の符丁は入れない★＝この控えはDMMの導入日を必須にしているので、
+#   導入日が読めない類の落ち方はこの契約では証明できない。
+RECORDABLE_REASON_CODES = (
+    "NAME_CORE_MISMATCH",
+    "TAIL_CONFLICT",
+    "PAGE_TITLE_MISSING",
+    "OFFICIAL_NAME_HAS_NO_CORE",
+    "DIRECTORY_MAKER_UNREADABLE",
+    "DIRECTORY_MAKER_UNRESOLVED",
+    "DIRECTORY_MAKER_RELATED",
+    "DIRECTORY_MAKER_MISMATCH",
+)
+# ★題（同定）の落ち方★（メーカー欄の落ち方と分けて比べる）
+_TITLE_CODES = ("NAME_CORE_MISMATCH", "TAIL_CONFLICT",
+                "PAGE_TITLE_MISSING", "OFFICIAL_NAME_HAS_NO_CORE")
+_MAKER_CODES = ("DIRECTORY_MAKER_UNREADABLE", "DIRECTORY_MAKER_UNRESOLVED",
+                "DIRECTORY_MAKER_RELATED", "DIRECTORY_MAKER_MISMATCH")
+EVIDENCE_ROLES = ("target", "support")
+
+
+def canonical_reason_codes(codes) -> list:
+    """★落ち方の並びを、いつも同じ形にそろえる★（順番・重複・注記を落とす）"""
+    out = set()
+    for c in (codes or []):
+        head = str(c or "").split(":")[0].split("（")[0].strip()
+        if head:
+            out.add(head)
+    return sorted(out)
+
+
+def profile_name(codes) -> str:
+    """★控えに書く型の名前＝落ち方の並びそのもの★"""
+    return CODES_PREFIX + "+".join(canonical_reason_codes(codes))
+
+
+def is_codes_profile(prof) -> bool:
+    return str(prof or "").startswith(CODES_PREFIX)
+
+
+def proof_needs(codes):
+    """★何を証明すれば「使ってよい」と言えるか★（無理なものは None）
+
+    ★None を返すもの★＝空／硬い落ち方／知らない符丁／この契約では
+    証明できない符丁。★2AIへの問いには出すが、控えは受け付けない★。
+    """
+    cs = set(canonical_reason_codes(codes))
+    if not cs or not cs <= set(RECORDABLE_REASON_CODES):
+        return None
+    unreadable = "DIRECTORY_MAKER_UNREADABLE" in cs
+    maker_involved = bool(cs & set(_MAKER_CODES))
+    return {
+        # ★メーカー欄が読めないページに、その欄の引用は求められない★
+        "target_quote": (("machine_name", "release") if unreadable
+                         else ("machine_name", "maker", "release")),
+        "support_quote": ("machine_name", "maker", "release"),
+        # ★題だけの食い違い（メーカー欄は一致）なら、そのページ＋DMMで足りる★
+        #   メーカー欄が絡むなら、独立した名鑑2つが要る。
+        "min_directories": 2 if maker_involved else 1,
+        # ★「読めない」を根拠にした控えは、読めない間だけ有効★
+        "recheck_maker_unreadable": unreadable,
+    }
+
+
 RESCUE_PROFILE_BY_REASON = {
     "NAME_CORE_MISMATCH": "title_name_core_mismatch",
     "TAIL_CONFLICT": "title_tail_conflict",
 }
 RESCUE_REASON_BY_PROFILE = {v: k for k, v in RESCUE_PROFILE_BY_REASON.items()}
+
+
+def needs_for_profile(prof):
+    """★型の名前から、必要な証明を返す★（古い名前の表にも答える）
+
+    ★2AIへの問いを作るときに使う★＝新しい型（落ち方の並び）でも
+    古い型（名前の表）でも、同じ形で「何を引用すればよいか」を言えるように。
+    """
+    if is_codes_profile(prof):
+        return proof_needs([])            # 並び型は reason_codes から作る
+    conf = PROOF_PROFILES.get(str(prof or ""))
+    if not conf:
+        return None
+    return {"target_quote": ("machine_name", "maker", "release"),
+            "support_quote": ("machine_name", "maker", "release"),
+            "min_directories": conf["min_directories"],
+            "recheck_maker_unreadable": False}
 
 
 def rescue_profile_for(reason):
@@ -631,7 +808,7 @@ def rescuable_reason(reason) -> bool:
 def verdict_for(slug: str, expected: str = "", seen: str = "", store=None,
                 fetch=None, material_url: str = "",
                 machine_name: str = "", release_date: str = "",
-                want_profile: str = "", runtime_page=None):
+                want_profile: str = "", runtime_page=None, look=None):
     """この機種について、★このページを★使うと決めてあるか（無ければ None）。
 
     ★★鍵は (機種・対象ページ) の2つ★★（2026-08-17・台帳#390／Codex依頼233）
@@ -672,13 +849,39 @@ def verdict_for(slug: str, expected: str = "", seen: str = "", store=None,
         # ★①求めている証明の型と一致するか★
         if not want_profile or rec.get("proof_profile") != want_profile:
             return None
-        # ★②メーカーの食い違いで決めた控えなら、その組も一致すること★
-        if PROOF_PROFILES[want_profile].get("needs_maker") \
-                and rec.get("expected") is not None \
-                and str(rec.get("expected") or ""):
-            if rec.get("expected") != expected \
-                    or key_of(rec.get("seen")) != key_of(seen):
+        if is_codes_profile(rec.get("proof_profile")):
+            # ★★正本は型の名前ではなく「いまの落ち方」★★
+            #   （2026-09-15・台帳#675／Codexの指摘2）
+            #   ★名前だけを信じると★、呼ぶ側が固定の文字列を渡すだけで
+            #   控えが効く＝配線を間違えた日に、落ち方が変わっていても通る。
+            #   ★同じ本文から得た、いまの lookup の結果を渡させる★
+            #   ＝観測と控えが同じページを見ていることまで機械が確かめる。
+            if not isinstance(look, dict):
+                return None                # ★渡さなければ効かない（fail-closed）★
+            if canonical_reason_codes(look.get("reason_codes")) != \
+                    canonical_reason_codes(rec.get("reason_codes")):
+                return None                # ★落ち方が変わったら控えは効かない★
+            if runtime_page is not None and str(
+                    look.get("body_sha256") or "") != str(
+                        getattr(runtime_page, "sha256", "") or ""):
+                return None                # ★別の写しを見ていたら効かせない★
+            _needs_w = proof_needs(rec.get("reason_codes"))
+            if _needs_w is None:
                 return None
+            if _needs_w["recheck_maker_unreadable"] and str(
+                    look.get("observed_maker") or "").strip():
+                # ★「読めない」を根拠にした控えは、読めない間だけ有効★
+                #   読めるようになったら、いまの観測で分類し直す
+                #   （MATCH なら機械がそのまま通す）。
+                return None
+        else:
+            # ★②メーカーの食い違いで決めた控えなら、その組も一致すること★
+            if PROOF_PROFILES[want_profile].get("needs_maker") \
+                    and rec.get("expected") is not None \
+                    and str(rec.get("expected") or ""):
+                if rec.get("expected") != expected \
+                        or key_of(rec.get("seen")) != key_of(seen):
+                    return None
         # ★③控えが名乗る機種が、DMMで確かめた機種と同じか★
         if not machine_name or not release_date:
             return None
@@ -941,6 +1144,8 @@ def verify_evidence(evidence: list, fetch=None, expected: str = "",
                 return _w._get(u)
     import new_machine_watch as _w
     finals = {}          # ★URLごとの到達先★（対象ページの転送を見るため）
+    # ★錨が弱い（芯の一致だけ）で救ったページ★（2026-09-15・台帳#675）
+    _weak_anchor = set()
     _tgt_key = url_key((rec or {}).get("target_url"))
     for e in evidence:
         url = str(e.get("url") or "")
@@ -1048,7 +1253,45 @@ def verify_evidence(evidence: list, fetch=None, expected: str = "",
             #   「どれかの型なら何でも救える」にしない。
             # ★逆引きは表から機械的に作る★（2026-08-29・台帳#498）
             _RESCUE = RESCUE_REASON_BY_PROFILE
-            if not _ok_id and _prof in _RESCUE and _is_target:
+            if not _ok_id and is_codes_profile(_prof) and _is_target:
+                # ★★新しい型（落ち方の並び）でも対象ページを救う★★
+                #   （2026-09-15・台帳#675／Codexの重大1）
+                #   ★直す前★＝救えるのは古い名前の表だけだったので、
+                #   新しい型で控えようとすると、同じ落ち方でここが拒否し、
+                #   ★2AIが決めても登録できず、翌晩また同じ問いが出た★。
+                #   ★救う条件は「控えが名乗った落ち方と、いまの落ち方が同じ」★
+                _now_codes = canonical_reason_codes([_why_id])
+                _rec_codes = canonical_reason_codes(
+                    (rec or {}).get("reason_codes"))
+                # ★★題の落ち方は「ちょうど同じ」であること★★
+                #   （2026-09-15・Codexの指摘）
+                #   ★含まれていればよい、にすると★＝実際は
+                #   NAME_CORE_MISMATCH なのに、控えが
+                #   NAME_CORE_MISMATCH＋TAIL_CONFLICT を名乗っていても保存できる。
+                #   使うときは完全一致で断られるので誤採用にはならないが、
+                #   ★控えたのに効かず、翌晩また2AIへ聞く★＝直したい形そのもの。
+                #   ★メーカー系との複合は許す★ので、題の符丁だけを取り出して比べる。
+                if set(_now_codes) != (set(_rec_codes) & set(_TITLE_CODES)):
+                    raise CacheError(
+                        f"この控えが名乗っている題の落ち方と違います（{url}）: "
+                        f"いま {sorted(_now_codes)}／控え "
+                        f"{sorted(set(_rec_codes) & set(_TITLE_CODES))}")
+                # ★★錨（そのページとDMMの正式名を機械的に結ぶもの）★★
+                #   ①本文にDMMの正式名が**完全一致**であれば、今までどおり強い。
+                #   ②完全一致が無くても**芯が一致**していれば救うが、
+                #     ★そのときは独立した名鑑2件を要求する★（Codexの指摘）。
+                #   ★なぜ②が要るか★＝実測で、DMMが「ライズ：サンブレイク」
+                #   名鑑が「ライズ:サンブレイク」（コロンの全角・半角）という
+                #   だけで完全一致が外れ、★その機種が黙って消えていた★。
+                #   ＝このプロジェクトで3件目の「一字一句合うことを求める形」。
+                if str(mn).strip() not in body:
+                    # ★芯が本文にあることは、ここより手前で保証されている★
+                    #   （引用がページに実在すること＋引用に機種名の芯が
+                    #     入っていること、の2つで必ず言える）。
+                    #   ★同じ検査を2か所に書かない★（罠③）ので、
+                    #   ここは「錨が弱い」と記録するだけにする。
+                    _weak_anchor.add(url_key(url))
+            elif not _ok_id and _prof in _RESCUE and _is_target:
                 _want_why = _RESCUE[_prof]
                 if _why_id != _want_why:
                     raise CacheError(
@@ -1070,7 +1313,19 @@ def verify_evidence(evidence: list, fetch=None, expected: str = "",
         #   書いてあるページでも「平和表記の2件目」に数えられた。
         #   ★新しい読み取りを書かない★＝名鑑のメーカー欄を読む役は
         #   model_code_lookup.extract_maker_name にあるので、そこを通す。
-        seen = str((rec or {}).get("seen") or "")
+        # ★★表記は証拠ごとに持つ★★（2026-09-15・台帳#675／Codexの指摘3）
+        #   ★直す前★＝控え全体の `seen` を全部の証拠に当てていた。
+        #     ・対象のメーカー欄が読めない控え（seen が空）では、
+        #       ★補強のページのメーカー欄を一度も確かめていなかった★。
+        #     ・対象と補強で表記が違うと（アデリオン／エンターライズ）、
+        #       補強側が正しくても「控えと違う」で断っていた。
+        #   ★形の検査（_check_record）とここを同じ契約にそろえる★
+        _e_now = next((e for e in (evidence or [])
+                       if url_key(e.get("url")) == url_key(url)), {})
+        if is_codes_profile((rec or {}).get("proof_profile")):
+            seen = str(_e_now.get("seen_maker") or "")
+        else:
+            seen = str((rec or {}).get("seen") or "")
         if seen:
             import model_code_lookup as _mcl
             mk = _mcl.extract_maker_name(html or "")
@@ -1087,6 +1342,24 @@ def verify_evidence(evidence: list, fetch=None, expected: str = "",
         #   引用そのものに機種名・メーカー欄・導入日が入っていることは
         #   `_check_record` が確かめ、その引用がページに実在することは
         #   すぐ上で確かめている。だからここに別の日付検査は要らない。
+    # ★★錨が弱いときは、独立した名鑑2件を要求する★★
+    #   （2026-09-15・台帳#675／Codexの指摘）
+    #   ★完全一致という錨を単純に外さない★＝外すと、対象ページとDMMを
+    #   機械的に結ぶものが無くなる。芯の一致だけで救うときは、
+    #   ★別の名鑑がもう1件そろっていること★を代わりの錨にする。
+    if _weak_anchor:
+        import source_lineage as _sl9
+        try:
+            _keys9 = {_sl9.vote_key_of_url(str(e.get("url")))
+                      for e in (evidence or [])}
+            _n9 = _sl9.independent(_keys9, _sl9.load_registry())
+        except Exception as e9:                          # noqa: BLE001
+            raise CacheError(f"根拠の出どころを数えられません: {e9}")
+        if _n9 < 2:
+            raise CacheError(
+                "本文にDMMの正式名が完全一致では無いので、"
+                "独立した名鑑が2件要ります"
+                f"（いまは {_n9} 件）／★芯の一致だけで救うときの錨です★")
     return finals
 
 
@@ -1095,7 +1368,8 @@ def remember(slug: str, expected: str, seen: str, verdict: str,
              machine_name: str = "", release_date: str = "",
              target_url: str = "", proof_profile: str = "maker_field",
              store=None, fetch=None,
-             seen_release: str = "", release_why: str = "") -> dict:
+             seen_release: str = "", release_why: str = "",
+             reason_codes=None) -> dict:
     """結論を控える。★根拠が無ければ受け取らない★
 
     ★逐語引用は実際にそのページから取ってきて照合する★（依頼190のP1）
@@ -1104,12 +1378,27 @@ def remember(slug: str, expected: str, seen: str, verdict: str,
     """
     if verdict not in VERDICTS:
         raise CacheError(f"結論は {'/'.join(VERDICTS)} のどちらかです: {verdict!r}")
-    if proof_profile not in PROOF_PROFILES:
+    # ★★落ち方の並びを渡されたら、型はそこから作る★★（2026-09-15・台帳#675）
+    #   ★呼ぶ側に型の名前を作らせない★＝名前と落ち方がずれる道を残さない。
+    _codes = canonical_reason_codes(reason_codes) if reason_codes else []
+    if _codes:
+        if proof_needs(_codes) is None:
+            raise CacheError(
+                f"この落ち方は控えられません: {_codes}"
+                "／★硬い落ち方・知らない符丁は、2AIへの問いには出しますが"
+                "控えには残しません★")
+        proof_profile = profile_name(_codes)
+    elif proof_profile not in PROOF_PROFILES:
         raise CacheError(f"証明の型が不正です: {proof_profile!r}"
                          f"／★{'/'.join(sorted(PROOF_PROFILES))} のどれか★")
+    _needs_r = proof_needs(_codes) if _codes else None
+    _seen_needed_r = not (_needs_r and "maker" not in _needs_r["target_quote"])
     for k, v in (("slug", slug), ("target_url", target_url),
                  ("expected", expected), ("seen", seen),
                  ("why", why), ("decided_at", decided_at)):
+        # ★メーカー欄が読めない対象では seen は空のまま★（架空の名前を作らない）
+        if k == "seen" and not _seen_needed_r:
+            continue
         if not str(v or "").strip():
             raise CacheError(f"「{k}」が要ります")
     if not isinstance(by, list) or len(by) < 2:
@@ -1131,6 +1420,10 @@ def remember(slug: str, expected: str, seen: str, verdict: str,
            "expected": expected, "seen": seen, "verdict": verdict,
            "why": why, "evidence": evidence, "agreed_by": by,
            "decided_at": decided_at}
+    # ★★正本は落ち方の並び★★（2026-09-15・台帳#675／Codexの指摘2）
+    #   型の名前は索引・表示のためのもので、使うかどうかはこちらで決まる。
+    if _codes:
+        rec["reason_codes"] = _codes
     if verdict == "ACCEPT_MATERIAL":
         rec.update({"machine_name": machine_name,
                     "release_date": release_date,
@@ -2097,6 +2390,214 @@ def selftest() -> int:
     t("★（対照）寄せないと控えが見えない★",
       (_st_t["machines"].get("pw_10513") or []) == [])
 
+    # ─── ★★落ち方の並びを型にする（台帳#675）★★ ────────────────────
+    t("★★必要な証明は落ち方から決まる★★"
+      "（★名前の表をやめた＝表に無い落ち方が黙って外れるのを防ぐ★）",
+      proof_needs(["NAME_CORE_MISMATCH"])["min_directories"] == 1
+      and proof_needs(["DIRECTORY_MAKER_RELATED"])["min_directories"] == 2)
+    t("★★メーカー欄が読めない対象に、その欄の引用は求めない★★"
+      "（★求めると、そのページは永久に控えられない＝毎晩止まる★）",
+      "maker" not in proof_needs(["DIRECTORY_MAKER_UNREADABLE"])["target_quote"]
+      and "maker" in
+      proof_needs(["DIRECTORY_MAKER_UNREADABLE"])["support_quote"])
+    t("★★知らない落ち方・硬い落ち方は控えられない★★"
+      "（★意味が分からないものを、いちばん軽い証明で通さない★＝Codexの指摘）",
+      proof_needs(["まだ名前のない落ち方"]) is None
+      and proof_needs(["GEN_MARK_CONFLICT"]) is None
+      and proof_needs([]) is None)
+    t("　複合の落ち方は、そのまま型の名前になる",
+      profile_name(["NAME_CORE_MISMATCH", "DIRECTORY_MAKER_UNREADABLE"])
+      == "codes:DIRECTORY_MAKER_UNREADABLE+NAME_CORE_MISMATCH")
+
+    # ★★メーカー欄が読めないページでも控えられる★★（これが目的）
+    _QC4 = _QC          # 対象の引用（機種名と導入日を含む）
+    _st4 = _empty()
+
+    def _ok4(**kw):
+        base = dict(slug="dmm_5086", target_url=_C,
+                    reason_codes=["DIRECTORY_MAKER_UNREADABLE"],
+                    expected=_EXPECTED, seen="",
+                    verdict="ACCEPT_MATERIAL", why="2AIで読んで決めた",
+                    by=["claude", "codex"],
+                    evidence=[{"url": _C, "quote": _QC4,
+                               "kind": "directory_observation",
+                               "role": "target"},
+                              {"url": _N, "quote": _QN,
+                               "kind": "directory_observation",
+                               "role": "support", "seen_maker": _SEEN}],
+                    decided_at="2026-09-15", machine_name=_MN,
+                    release_date=_REL, store=_st4, fetch=_fetch)
+        base.update(kw)
+        try:
+            remember(**base)
+            return ""
+        except CacheError as e:
+            return str(e)
+
+    _why4 = _ok4()
+    t("★★メーカー欄が読めないページを、空のまま控えられる★★"
+      "（★直す前は seen が必須で、そもそも保存できなかった★）",
+      _why4 == "")
+    t("★★対象の根拠はちょうど1件★★"
+      "（★2件名乗れると、対象のゆるい必須欄を補強側へ流用できる★）",
+      _ok4(store=_empty(), evidence=[
+          {"url": _C, "quote": _QC4, "kind": "directory_observation",
+           "role": "target"},
+          {"url": _N, "quote": _QN, "kind": "directory_observation",
+           "role": "target"}]) != "")
+    t("★★役割を名乗らない根拠は受け取らない★★",
+      _ok4(store=_empty(), evidence=[
+          {"url": _C, "quote": _QC4, "kind": "directory_observation"},
+          {"url": _N, "quote": _QN, "kind": "directory_observation",
+           "role": "support", "seen_maker": _SEEN}]) != "")
+    t("★★読めないはずの欄に表記を書いたら受け取らない★★"
+      "（★読めないものを名乗らせない★）",
+      _ok4(store=_empty(), evidence=[
+          {"url": _C, "quote": _QC4, "kind": "directory_observation",
+           "role": "target", "seen_maker": "でっちあげ"},
+          {"url": _N, "quote": _QN, "kind": "directory_observation",
+           "role": "support", "seen_maker": _SEEN}]) != "")
+    t("★★控えられない落ち方は、書く側でも断る★★",
+      _ok4(store=_empty(), reason_codes=["GEN_MARK_CONFLICT"]) != "")
+
+    def _ask4(look, store=None, page=None):
+        return verdict_for("dmm_5086", _EXPECTED, "",
+                           store if store is not None else _st4, _fetch,
+                           material_url=_C, machine_name=_MN,
+                           release_date=_REL,
+                           want_profile=profile_name(
+                               ["DIRECTORY_MAKER_UNREADABLE"]),
+                           runtime_page=page, look=look)
+
+    _look_same = {"reason_codes": ["DIRECTORY_MAKER_UNREADABLE"],
+                  "observed_maker": "", "body_sha256": "abc"}
+    t("★★同じ落ち方なら控えが効く★★", _ask4(_look_same) == "ACCEPT_MATERIAL")
+    t("★★いまの観測を渡さなければ効かない★★（fail-closed・Codexの指摘2）"
+      "（★型の名前だけを信じると、配線を間違えた日に古い控えが効く★）",
+      _ask4(None) is None)
+    t("★★落ち方が変わったら控えは効かない★★"
+      "（★メーカー欄が読めるようになったら、いまの観測で分類し直す★）",
+      _ask4({"reason_codes": ["NAME_CORE_MISMATCH"],
+             "observed_maker": "", "body_sha256": "abc"}) is None)
+    t("★★「読めない」を根拠にした控えは、読めるようになったら効かない★★",
+      _ask4({"reason_codes": ["DIRECTORY_MAKER_UNREADABLE"],
+             "observed_maker": "どこかの社", "body_sha256": "abc"}) is None)
+
+    import fetched_page as _fp4
+
+    def _pg4(sha):
+        """★本物の器で作る★（偽物だと、器を使う側の契約を試験できない）"""
+        p = _fp4.FetchedPage(_C, _C, _pages[_C])
+        p.sha256 = sha
+        return p
+
+    t("　同じ本文を見ていれば効く", _ask4(_look_same, page=_pg4("abc")) == "ACCEPT_MATERIAL")
+    t("★★別の写しを見ていたら効かせない★★"
+      "（★分類した本文と、材料にする本文が違っていたら意味がない★）",
+      _ask4(_look_same, page=_pg4("zzz")) is None)
+
+    # ─── ★題の落ち方も、新しい型で控えられる★（Codexの重大1） ──────────
+    #   ★直す前★＝救えるのは古い名前の表だけだったので、
+    #   2AIが決めても登録で断られ、★翌晩また同じ問いが出た★。
+    _TITLE = "【略称だけの題】解析まとめ 天井・設定判別"
+    _pages[_C] = _page(title=_TITLE)                 # 題は落ちるが本文に正式名
+    _st5 = _empty()
+
+    def _ok5(**kw):
+        base = dict(slug="dmm_5086", target_url=_C,
+                    reason_codes=["NAME_CORE_MISMATCH"],
+                    expected=_EXPECTED, seen=_SEEN,
+                    verdict="ACCEPT_MATERIAL", why="2AIで読んで決めた",
+                    by=["claude", "codex"],
+                    evidence=[{"url": _C, "quote": _QC,
+                               "kind": "directory_observation",
+                               "role": "target", "seen_maker": _SEEN},
+                              {"url": _N, "quote": _QN,
+                               "kind": "directory_observation",
+                               "role": "support", "seen_maker": _SEEN}],
+                    decided_at="2026-09-15", machine_name=_MN,
+                    release_date=_REL, store=_st5, fetch=_fetch)
+        base.update(kw)
+        try:
+            remember(**base)
+            return ""
+        except CacheError as e:
+            return str(e)
+
+    t("★★題が略称で落ちたページも、新しい型で控えられる★★"
+      "（★これが無いと、2AIが決めても登録できず毎晩同じ問いが出る★）",
+      _ok5() == "")
+    t("★★控えが名乗っていない落ち方では救わない★★",
+      "題の落ち方と違います" in _ok5(store=_empty(),
+                                     reason_codes=["TAIL_CONFLICT"]))
+    # ★★余計な題の符丁を名乗った控えも受け取らない★★（2026-09-15・Codexの指摘）
+    #   ★含まれていればよい、にすると★＝保存はできるが使うときに
+    #   完全一致で断られ、★控えたのに効かず翌晩また聞く★になる。
+    t("★★実際より多い題の落ち方を名乗った控えは受け取らない★★"
+      "（★保存できても使えない控えを作らせない★）",
+      "題の落ち方と違います" in _ok5(
+          store=_empty(),
+          reason_codes=["NAME_CORE_MISMATCH", "TAIL_CONFLICT"]))
+    t("　メーカー欄の落ち方との複合は、今までどおり許す",
+      _ok5(store=_empty(),
+           reason_codes=["NAME_CORE_MISMATCH",
+                         "DIRECTORY_MAKER_RELATED"]) == "")
+    # ★★錨＝本文にDMMの正式名が完全一致であること★★
+    #   ★完全一致が無いときは、独立した名鑑2件を代わりの錨にする★
+    #   （2026-09-15・Codexの指摘）。★実測の形で試す★＝
+    #   DMM「…ライズ：サンブレイク」／名鑑「…ライズ:サンブレイク」。
+    t("　完全一致が本文にあれば、そのページ自身で足りる（名鑑1件）",
+      _ok5(store=_empty(), evidence=[{"url": _C, "quote": _QC,
+                                      "kind": "directory_observation",
+                                      "role": "target",
+                                      "seen_maker": _SEEN}]) == "")
+    _MN_C = "L試験機：第二章"
+    _Q_C = f"機種名 {_MN_C.replace('：', ':')} メーカー {_SEEN} 導入日 2026年10月"
+    _pages[_C] = _page(title="【略称だけの題】解析", name=_MN_C.replace("：", ":"))
+    t("★★完全一致が無いときは、名鑑1件では救わない★★"
+      "（★コロンの全角・半角だけで消えないようにしつつ、錨は保つ★）",
+      "独立した名鑑が2件要ります" in _ok5(
+          store=_empty(), machine_name=_MN_C,
+          evidence=[{"url": _C, "quote": _Q_C,
+                     "kind": "directory_observation",
+                     "role": "target", "seen_maker": _SEEN}]))
+    _pages[_C] = _page()                              # 片づける
+
+    # ─── ★メーカー欄の表記は証拠ごと★（Codexの重大3） ────────────────
+    #   ★直す前★＝控え全体の表記を全部の証拠に当てていたので、
+    #   対象と補強で表記が違うと、補強が正しくても断っていた。
+    _pages[_N] = _page(day="2026/10/5", maker="オリンピア")
+    _st6 = _empty()
+    _why6 = ""
+    try:
+        remember(slug="dmm_5086", target_url=_C,
+                 reason_codes=["DIRECTORY_MAKER_RELATED"],
+                 expected=_EXPECTED, seen=_SEEN,
+                 verdict="ACCEPT_MATERIAL", why="2AIで読んで決めた",
+                 by=["claude", "codex"],
+                 evidence=[{"url": _C, "quote": _QC,
+                            "kind": "directory_observation",
+                            "role": "target", "seen_maker": _SEEN},
+                           {"url": _N, "quote": _QN.replace("平和", "オリンピア"),
+                            "kind": "directory_observation",
+                            "role": "support", "seen_maker": "オリンピア"}],
+                 decided_at="2026-09-15", machine_name=_MN,
+                 release_date=_REL, store=_st6, fetch=_fetch)
+    except CacheError as e6:
+        _why6 = str(e6)
+    t("★★対象と補強でメーカー表記が違っても控えられる★★"
+      "（★直す前は控え全体の表記を全部に当てていた★＝実例＝"
+      "アデリオン／エンターライズ）",
+      _why6 == "")
+    _pages[_N] = _page(day="2026/10/5")                # 片づける
+
+    # ─── ★形の検査は結論によらず先に★（Codexの中指摘） ──────────────
+    t("★★「使わない」の控えでも、証拠の役割を確かめる★★"
+      "（★永続する判断なのに、形を確かめずに保存できていた★）",
+      _ok5(store=_empty(), verdict="REJECT_MATERIAL",
+           evidence=[{"url": _C, "quote": _QC,
+                      "kind": "directory_observation"}]) != "")
+
     ng = sum(1 for _, o in results if not o)
     print("%d/%d 合格" % (len(results) - ng, len(results)))
     return 1 if ng else 0
@@ -2141,6 +2642,10 @@ def main() -> int:
     ap.add_argument("--evidence", action="append", default=[],
                     help="URL|逐語引用|種類（種類: "
                          + "/".join(KINDS) + "）")
+    ap.add_argument("--reason-code", action="append", default=[],
+                    dest="reason_code",
+                    help="★その控えが対象にする落ち方★（複数可）。"
+                         "指定すると証明の型は落ち方の並びから作られる")
     ap.add_argument("--at", help="決めた日（省略時は今日）")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
@@ -2202,14 +2707,22 @@ def main() -> int:
             # ★4つ目は「その名鑑が書いている導入日」★（2026-09-13・Codexの指摘2）
             #   名鑑ごとに書いている日付が違う形は普通にあるので、
             #   ★錨は根拠ごとに持たせる★（控えに1つだと片方が必ず外れる）。
-            if len(parts) not in (3, 4):
+            # ★5つ目＝役割（target / support）★（2026-09-15・台帳#675）
+            #   ★6つ目＝その名鑑のメーカー欄の表記★＝名鑑ごとに違う値を
+            #   持てるようにする（対象が読めない欄でも、補強側は名乗れる）。
+            if len(parts) not in (3, 4, 5, 6):
                 print("★--evidence は『URL|逐語引用|種類』"
-                      "または『URL|逐語引用|種類|その名鑑が書いている導入日』"
-                      "の形で書きます★")
+                      "／『…|その名鑑が書いている導入日』"
+                      "／『…|役割(target/support)』"
+                      "／『…|その名鑑のメーカー欄』まで書けます★")
                 return 1
             one = {"url": parts[0], "quote": parts[1], "kind": parts[2]}
-            if len(parts) == 4 and parts[3]:
+            if len(parts) >= 4 and parts[3]:
                 one["seen_release"] = parts[3]
+            if len(parts) >= 5 and parts[4]:
+                one["role"] = parts[4]
+            if len(parts) >= 6 and parts[5]:
+                one["seen_maker"] = parts[5]
             ev.append(one)
         import datetime
         # ★機種名と導入日はDMMの機種ページから取る★（2026-08-17・依頼228）
@@ -2248,7 +2761,8 @@ def main() -> int:
                        target_url=a.target_url,
                        proof_profile=a.proof_profile,
                        seen_release=a.seen_release or "",
-                       release_why=a.release_why or "")
+                       release_why=a.release_why or "",
+                       reason_codes=list(a.reason_code or []))
         print(json.dumps({"state": "RECORDED", "slug": slug, **rec},
                          ensure_ascii=False)[:300])
         return 0

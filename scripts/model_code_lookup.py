@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import hashlib as _hashlib
 import re
 import sys
 import unicodedata
@@ -897,30 +898,239 @@ def dmm_identity_ok(html: str, ident: dict) -> tuple:
     return True, "OK_DMM_IDENTITY"
 
 
+# ★★名鑑ページの落ち方を3つに分ける★★（2026-09-15・台帳#675／Codexの設計）
+#   ACCEPT      … 機械で同定できた（そのまま材料に使う）
+#   REVIEW      … 本文は読めたが、意味の判断が残る（★2AIへ回す★）
+#   HARD_REJECT … 機械で決まる別物・そもそも本文が読めない
+#
+#   ★運営者の指示★＝「名簿にないからとかどうでもいいわ 2AIで判断して記事作ってくれ」
+#   ★直す前★＝救える落ち方の名簿が2つだけで、それ以外は**黙って外れて**いた。
+#   実測（モンハンライズ）＝ちょんぼりすたは「メーカー欄を読めません」、
+#   なな徹は「題が略称」で、どちらも2AIに何も聞かれずに消えていた。
+#
+#   ★配列で持つ★（Codexの指摘）＝題の不一致とメーカー欄の読み取り不能は
+#   同時に起きうる。1つの符丁では表せない。
+HARD_REASON_CODES = (
+    "FETCH_FAILED",              # 本文が取れない・掃除しきれない
+    "GEN_MARK_CONFLICT",         # 規格印（L/S）が違う＝別規格の機種
+    "DERIV_MARK_CONFLICT",       # 派生機の印が違う
+    "DIRECTORY_PAGE_SHAPE_MISMATCH",   # その名鑑の機種ページの形ではない
+    "DMM_IDENTITY_NOT_GIVEN",    # こちらが束を渡していない（fail-closed）
+    # ★★DMM側の明白な食い違いは、2AIへ回さない★★（2026-09-15・Codexの指摘2）
+    #   ★直す前★＝この4つはどちらの分類にも載っておらず、
+    #   「知らない符丁は REVIEW」の規則で**2AIへ流れて**いた。
+    #   ＝DMMの機種名・メーカー・導入月が**明白に違う**ページまで問いになる。
+    #   しかもDMM側の符丁は控えに残せないので、答えが出ても保存できない
+    #   ＝毎晩同じ問いが出続ける。
+    #   ★ここはDMM自身の決まりで機械が決められる★ので硬く外す。
+    "DMM_PAGE_UNREADABLE",       # 本文の構造を読めない
+    "DMM_NAME_MISMATCH",         # 機種名が違う
+    "DMM_MAKER_MISMATCH",        # メーカーが違う
+    "DMM_RELEASE_MISMATCH",      # 導入月が違う
+)
+REVIEW_REASON_CODES = (
+    "PAGE_TITLE_MISSING",
+    "OFFICIAL_NAME_HAS_NO_CORE",
+    "TAIL_CONFLICT",
+    "NAME_CORE_MISMATCH",
+    "DIRECTORY_MAKER_UNREADABLE",     # 欄そのものが読めない
+    "DIRECTORY_MAKER_UNRESOLVED",     # 欄は読めたが名簿で解決できない
+    "DIRECTORY_MAKER_RELATED",
+    "DIRECTORY_MAKER_MISMATCH",       # ★別の既知の社と解決できても結論にしない★
+    "DMM_MAKER_UNREADABLE",
+    "DMM_RELEASE_UNREADABLE",
+)
+
+
+def decision_for(codes) -> str:
+    """★符丁の並びから分類を決める唯一の場所★
+
+    ★硬いものが1つでもあれば HARD_REJECT★／★無ければ REVIEW が1つでもあれば
+    REVIEW★／★どちらも無ければ ACCEPT★。
+    ★知らない符丁は REVIEW★（2026-09-15）＝黙って外すのを防ぐ。
+    ★知らない符丁が在ること自体は自己試験が赤くする★ので、
+    ここで安全側に倒しても見逃しにはならない。
+    """
+    cs = [str(c or "").split(":")[0] for c in (codes or []) if str(c or "")]
+    if not cs:
+        return "ACCEPT"
+    if any(c in HARD_REASON_CODES for c in cs):
+        return "HARD_REJECT"
+    return "REVIEW"
+
+
+def maker_state(seen: str, expected_maker: str) -> dict:
+    """★名鑑のメーカー欄が、期待する社とどういう関係か★（2026-09-15・台帳#675）
+
+    ★見えた事実を返すだけ★＝使ってよいかは呼ぶ側が決める。
+    ★ここを関数にした理由★＝同定に落ちたページでも同じ判定が要る
+    （題が略称で、しかもメーカー欄も読めない、という複合の落ち方が実在する）。
+    ★判定の中身は1文字も変えていない★（切り出しただけ）。
+      MATCH    … 名簿で一致
+      RELATED  … 関係のありそうな社（2AIへ回す）
+      UNKNOWN  … どの社か分からない
+      MISMATCH … 明らかに別の社
+    """
+    mk = str(seen or "")
+    if not mk:
+        return {"state": "UNKNOWN", "seen": "",
+                "expected": expected_maker, "owners": [], "unreadable": True}
+    owners = _maker_core_owners(_ci.normalize_core(mk).replace("株式会社", ""))
+    if expected_maker in owners:
+        st = "MATCH"
+    elif owners and _related(expected_maker, owners):
+        st = "RELATED"
+    elif not owners:
+        st = "UNKNOWN"
+    else:
+        st = "MISMATCH"
+    return {"state": st, "seen": mk, "expected": expected_maker,
+            "owners": sorted(owners), "unreadable": False}
+
+
+def maker_code(check: dict) -> str:
+    """★メーカー欄の判定を符丁にする★（MATCH は符丁なし）"""
+    c = check or {}
+    if c.get("unreadable"):
+        return "DIRECTORY_MAKER_UNREADABLE"
+    return _STATE_TO_CODE.get(str(c.get("state") or ""), "")
+
+
+_STATE_TO_CODE = {
+    "MATCH": "",
+    "RELATED": "DIRECTORY_MAKER_RELATED",
+    "UNKNOWN": "DIRECTORY_MAKER_UNRESOLVED",
+    "MISMATCH": "DIRECTORY_MAKER_MISMATCH",
+}
+
+
+def decision_of(look, expected_maker: str = "") -> str:
+    """★1つの名鑑ページの分類を返す唯一の場所★（2026-09-15・台帳#675）
+
+    ★本番の lookup は自分で `decision` を入れる★ので、そこはそのまま返す。
+    ★入っていないとき（古い形・試験の作り物）だけ、同じ表で導く★＝
+      分類の決まりを2か所に書かない（罠㊺）。
+    """
+    r = look or {}
+    d = str(r.get("decision") or "")
+    if d:
+        return d
+    codes = list(r.get("reason_codes") or [])
+    if not codes:
+        if not r.get("identity_ok"):
+            # ★理由の文の頭は符丁そのもの★（「NAME_CORE_MISMATCH（…）」の形）
+            head = str(r.get("reason") or "").split("（")[0].split(":")[0]
+            codes = [head.strip()] if head.strip() else ["FETCH_FAILED"]
+        else:
+            st = str((r.get("maker_check") or {}).get("state") or "")
+            if expected_maker and not st:
+                codes = ["DIRECTORY_MAKER_UNREADABLE"]
+            else:
+                c = _STATE_TO_CODE.get(st, "")
+                codes = [c] if c else []
+    return decision_for(codes)
+
+
+def _page_shape_ok(url: str) -> bool | None:
+    """★そのURLが、その名鑑の機種ページの形か★（分からなければ None）
+
+    ★形は機械で決まる★＝一覧・特集ページを2AIへ回しても答えようがない。
+    ★決まりを持たない名鑑では判定しない★（None＝この検査を当てない）。
+    """
+    try:
+        import maker_identity_cache as _mic0
+        host = str(url or "").split("/")[2].lower()
+        pat = str((_mic0.directory_of(host) or {}).get(
+            "machine_page_pattern") or "")
+    except Exception:                                      # noqa: BLE001
+        return None
+    if not pat:
+        return None
+    return bool(re.match(pat, str(url or "")))
+
+
+def observe_page(html: str, official_name: str, url: str) -> dict:
+    """★落ち方によらず、いつも同じ観測を返す★（2026-09-15・台帳#675）
+
+    ★これは「本人だ」という判断ではない★＝2AIが読むための材料。
+    """
+    body = " ".join(_w._visible_text(html).split())
+    name = str(official_name or "").strip()
+    return {
+        "observed_title": _w.page_title(html) or "",
+        "observed_maker": extract_maker_name(html) or "",
+        "observed_release": release_near_identity(body) or "",
+        "name_in_body": bool(name) and name in body,
+        "name_in_body_core": bool(
+            _ci.normalize_core(name)) and _ci.normalize_core(name) in
+        _ci.normalize_core(body or ""),
+        "gen_mark": _gen_mark(name) or "",
+        "body_sha256": _hashlib.sha256(html.encode("utf-8")).hexdigest(),
+    }
+
+
 def lookup(url: str, official_name: str, expected_maker: str = "",
-           dmm_identity: dict | None = None) -> dict:
+           dmm_identity: dict | None = None, page=None) -> dict:
     """1つの名鑑ページから型式名を引く。★機種が違えば採らない★
 
     ★dmm_identity を渡すと、DMMの機種ページは DMM自身の決まりで確かめる★
       （2026-08-22・台帳#453）。渡さなければ今までどおり汎用の題検査。
+
+    ★page を渡すと、その本文をそのまま使う★（2026-09-15・台帳#675／Codexの指摘）
+      ★なぜ要るか★＝直す前は、ここで1回取り、材料を読むときにもう1回取っていた。
+      ★分類・2AIへの問い・実際に読む本文が別の写しになる★ので、
+      観測した題やメーカー欄が、記事の材料になった本文と食い違いうる。
     """
     # ★identity_ok＝このページが本人だと確かめられたか★（2026-08-02・Codex56回目）
     #   型式照合で不合格（他社名の題等）になったページが、理由の文字列が
     #   DIRECTORY_MAKER_* でないため材料収集に復活していた。
     #   呼び出し元は identity_ok が偽のページを材料からも外す。
     out = {"url": url, "official_name": official_name,
-           "model_code": None, "reason": "", "identity_ok": False}
-    try:
-        # ★用途を名乗ってから取りに行く★（2026-08-16・依頼218）
-        with _w.fetching("claim_material"):
-            html = _w._get(url)
-        # ★取ってきた直後に、投稿欄・AI欄を箱ごと落とす★（2026-08-14・台帳#345）
-        #   ここを通さないと、**表を生のHTMLから読む処理**に読者の書き込みが入る。
-        #   落としきれないときは例外＝そのページは使わない（fail-closed）。
-        html = _ua.clean_html(html, url)
-    except Exception as e:
-        out["reason"] = f"取得できません: {e}"
+           "model_code": None, "reason": "", "identity_ok": False,
+           # ★★落ち方は並びで持つ★★（2026-09-15・Codexの指摘）＝
+           #   題の不一致とメーカー欄の読み取り不能は同時に起きる。
+           "reason_codes": [], "decision": "HARD_REJECT"}
+
+    def _done(code: str = "") -> dict:
+        """★符丁を足して、分類を決めて返す唯一の出口★
+
+        ★機種ページの形の検査は、2AIへ回す側にだけ当てる★
+          （2026-09-15・台帳#675）＝一覧・特集ページを2AIへ回しても
+          答えようがないので硬く外す。
+        ★通っているページ（ACCEPT）の扱いは1文字も変えない★＝
+          この検査をそこへ当てると、いままで材料に使えていたページが
+          形の決まりしだいで落ちる。★今回の目的は「黙って外れる」をなくすこと★
+          であって、通っているものを止めることではない。
+        """
+        if code and code not in out["reason_codes"]:
+            out["reason_codes"].append(code)
+        out["decision"] = decision_for(out["reason_codes"])
+        if out["decision"] == "REVIEW" and out.get(
+                "machine_page_shape_ok") is False:
+            out["reason_codes"].append("DIRECTORY_PAGE_SHAPE_MISMATCH")
+            out["decision"] = decision_for(out["reason_codes"])
         return out
+
+    if page is not None:
+        html = page.cleaned_html
+    else:
+        try:
+            # ★用途を名乗ってから取りに行く★（2026-08-16・依頼218）
+            with _w.fetching("claim_material"):
+                html = _w._get(url)
+            # ★取ってきた直後に、投稿欄・AI欄を箱ごと落とす★（2026-08-14・台帳#345）
+            #   ここを通さないと、**表を生のHTMLから読む処理**に読者の書き込みが入る。
+            #   落としきれないときは例外＝そのページは使わない（fail-closed）。
+            html = _ua.clean_html(html, url)
+        except Exception as e:
+            out["reason"] = f"取得できません: {e}"
+            return _done("FETCH_FAILED")
+    # ★★落ち方によらず、いつも同じ観測を返す★★（2026-09-15・台帳#675）
+    #   ★直す前は2つの落ち方のときだけ観測していた★ので、
+    #   それ以外は2AIに渡す材料が何も無く、問いを作りようがなかった。
+    out.update(observe_page(html, official_name, url))
+    # ★機種ページの形かどうかは機械で決まる★（観測として必ず残す）
+    out["machine_page_shape_ok"] = _page_shape_ok(url)
     if dmm_identity:
         # ★発行元ごとの同定方式★（機種別の例外でも「2段目」でもない）
         ok, why = dmm_identity_ok(html, dmm_identity)
@@ -940,17 +1150,27 @@ def lookup(url: str, official_name: str, expected_maker: str = "",
         #     ・TAIL_CONFLICT     … 題の後ろの飾りを分解できない
         #   ★別機種・規格違い・派生機は今までどおり回さない★
         #   （GEN_MARK_CONFLICT / DERIV_MARK_CONFLICT は候補にしない）
-        if why in ("NAME_CORE_MISMATCH", "TAIL_CONFLICT") and official_name:
-            body = " ".join(_w._visible_text(html).split())
-            out["name_in_body"] = str(official_name).strip() in body
-            # ★メーカー欄は「見えた事実」として返す★
-            #   （2026-08-17・Codex依頼234の指摘2）
-            #   題の不一致で先に戻っていたので、メーカー欄を一度も読まず、
-            #   救う側（title_name_core_mismatch）が**必ず空の表記で控えを引き**、
-            #   永久に一致しなかった。★状態（maker_check）は作らない★＝
-            #   4つの判定を増やさない。ここは事実の観測だけ。
-            out["observed_maker"] = extract_maker_name(html)
-        return out
+        # ★メーカー欄は「見えた事実」として返す★（2026-08-17・Codex依頼234）
+        #   題の不一致で先に戻っていたので、メーカー欄を一度も読まず、
+        #   救う側が**必ず空の表記で控えを引き**、永久に一致しなかった。
+        #   ★いまは observe_page が落ち方によらず観測している★
+        # ★★同定に落ちても、メーカー欄の符丁を必ず足す★★
+        #   （2026-09-15・Codexの指摘）
+        #   ★直す前★＝ここで返していたので、
+        #   「題が略称で、しかもメーカー欄が読めない」という複合の落ち方が
+        #   **生成側から一度も出てこなかった**（実例＝ちょんぼりすたの
+        #   モンハンライズ）。控えの型は複合を表せても、器だけで中身が無い。
+        if expected_maker:
+            _mc_fail = maker_state(out.get("observed_maker") or "",
+                                   expected_maker)
+            out["maker_check"] = _mc_fail
+            _code_fail = maker_code(_mc_fail)
+            if _code_fail:
+                out["reason_codes"].append(_code_fail)
+        # ★★落ち方をそのまま符丁にする★★（2026-09-15・台帳#675）
+        #   ★救える落ち方の名簿は作らない★＝硬い落ち方（規格印・派生機）以外は
+        #   全部2AIへ回す。名簿で決めると、新しい落ち方が出るたびに黙って外れる。
+        return _done(str(why or "").split("（")[0].split(":")[0])
     out["identity_ok"] = True
     # ★同定に通ったページの導入年月を控えとして返す★（2026-08-02・Codex47回目）
     #   公式が年月を画像でしか出さない機種のため。使ってよいのは
@@ -969,74 +1189,55 @@ def lookup(url: str, official_name: str, expected_maker: str = "",
     #     素直な一致要求だと実在のとんスキ（メーカー欄=コナミアミューズメント・
     #     名簿=KPE）をまた弾いてしまう（実ページで確認済み）。
     if expected_maker:
-        mk = extract_maker_name(html)
-        if not mk:
+        # ★★判定は maker_state の1か所★★（2026-09-15・台帳#675）
+        #   ★同じ規則を2か所に書かない★＝同定に落ちた側でも同じ判定が要る
+        #   （題が略称で、しかもメーカー欄が読めない、という複合が実在する）。
+        #   ★中身は1文字も変えていない★（切り出しただけ）。
+        #   MATCH … 名簿で一致／RELATED … 関係のありそうな社（2AIへ）／
+        #   UNKNOWN … どの社か分からない／MISMATCH … 明らかに別の社
+        #   ★同名で別メーカーの機種は実在する★
+        #   （パチスロ犬夜叉＝2016年ロデオ／2022年クロスアルファ）。
+        mk = out.get("observed_maker") or ""
+        out["maker_check"] = maker_state(mk, expected_maker)
+        _state = out["maker_check"]["state"]
+        if out["maker_check"].get("unreadable"):
             # ★メーカー欄が読めないのも「どの社か分からない」★
             #   （2026-08-17・依頼226のCodex指摘3）
-            #   前は4つの判定を一度も通らず、そのまま材料にも型式の票にも
-            #   使えていた（隠れた5つ目の状態になっていた）。
-            out["maker_check"] = {"state": "UNKNOWN", "seen": "",
-                                  "expected": expected_maker, "owners": []}
             out["reason"] = ("DIRECTORY_MAKER_UNRESOLVED（名鑑のメーカー欄を"
                              "読めません）")
-            return out
-        if mk:
-            owners = _maker_core_owners(
-                _ci.normalize_core(mk).replace("株式会社", ""))
-            # ★★見えた事実を返す・使ってよいかは呼ぶ側が決める★★
-            #   （2026-08-14・依頼189。Codexの設計）
-            #   MATCH    … 名簿で一致（そのまま使える）
-            #   UNKNOWN  … 解決できない／関係のありそうな社（★2AIへ回す★）
-            #   MISMATCH … 明らかに別の社（使わない）
-            # ★「関係のある社」と「まったく分からない社」を分ける★
-            #   （2026-08-17・依頼225のCodex指摘2）
-            #   前はどちらも UNKNOWN にまとめていたので、
-            #   「名簿に無いだけの任意の別会社」まで同じ扱いになっていた。
-            #   ★同名で別メーカーの機種は実在する★
-            #   （パチスロ犬夜叉＝2016年ロデオ／2022年クロスアルファ）ので、
-            #   まったく分からない社は通してはいけない。
-            if expected_maker in owners:
-                _state = "MATCH"
-            elif owners and _related(expected_maker, owners):
-                _state = "RELATED"      # 関係のありそうな社（2AIへ回す）
-            elif not owners:
-                _state = "UNKNOWN"      # どの社か分からない（使わない）
-            else:
-                _state = "MISMATCH"     # 明らかに別の社（使わない）
-            out["maker_check"] = {"state": _state, "seen": mk,
-                                  "expected": expected_maker,
-                                  "owners": sorted(owners)}
-            if _state == "MISMATCH":
-                out["reason"] = (f"DIRECTORY_MAKER_MISMATCH（名鑑のメーカー欄が"
-                                 f"別の社を指しています: {mk[:30]}）")
-                return out
-            if _state == "RELATED":
-                # ★関係のありそうな社★＝2AIへ回す印。
-                #   ★材料に使えるのは、機種ごとの控えで ACCEPT_MATERIAL と
-                #     決めてある時だけ★（2026-08-17・依頼226と228）。
-                #   以前ここには「材料には使ってよい」と書いてあったが、
-                #   採否の実装（add_machine_run.maker_material_decision）とは
-                #   逆で、次に読む人が古い説明を正本だと思う元になっていた。
-                #   ★型式名の票には入れない★（同定の芯なので厳しいまま）。
-                out["reason"] = (f"DIRECTORY_MAKER_RELATED（名鑑のメーカー欄は"
-                                 f"関係のある社です: {mk[:30]}。同一かは2AIで"
-                                 f"決めてください）")
-                return out
-            if _state == "UNKNOWN":
-                # ★解決できない表記の票は採用しない★（2026-08-02・Codex51回目）
-                #   44回目は「ログだけ残して育てる」段階案だったが、
-                #   同名別会社機を異なる2名鑑が載せると誤った型式を
-                #   2票一致として公開できてしまう（誤情報側の穴）。
-                #   実在の別名（レオスター等）は directory_names に足せば通る
-                #   ＝不採用は「名簿を直せば直る」待ち行列側の失敗にとどまる。
-                out["reason"] = (f"DIRECTORY_MAKER_UNRESOLVED（名鑑のメーカー欄を"
-                                 f"名簿で解決できません: {mk[:30]}。実在の別名なら"
-                                 f" directory_names へ追加）")
-                return out
+            # ★読めないと、解決できないは別の符丁★（必要な根拠が違う）
+            return _done("DIRECTORY_MAKER_UNREADABLE")
+        if _state == "MISMATCH":
+            out["reason"] = (f"DIRECTORY_MAKER_MISMATCH（名鑑のメーカー欄が"
+                             f"別の社を指しています: {mk[:30]}）")
+            # ★★別の既知の社に解決できても、結論にしない★★
+            #   （2026-09-15・Codexの指摘）＝製造元・ブランド・掲載元法人の
+            #   違いがありうる（実例＝アデリオン／エンターライズ）。
+            #   ★強い否定材料として問いに載せ、判断は2AIがする★
+            return _done("DIRECTORY_MAKER_MISMATCH")
+        if _state == "RELATED":
+            # ★関係のありそうな社★＝2AIへ回す印。
+            #   ★材料に使えるのは、機種ごとの控えで ACCEPT_MATERIAL と
+            #     決めてある時だけ★（2026-08-17・依頼226と228）。
+            #   ★型式名の票には入れない★（同定の芯なので厳しいまま）。
+            out["reason"] = (f"DIRECTORY_MAKER_RELATED（名鑑のメーカー欄は"
+                             f"関係のある社です: {mk[:30]}。同一かは2AIで"
+                             f"決めてください）")
+            return _done("DIRECTORY_MAKER_RELATED")
+        if _state == "UNKNOWN":
+            # ★解決できない表記の票は採用しない★（2026-08-02・Codex51回目）
+            #   同名別会社機を異なる2名鑑が載せると誤った型式を
+            #   2票一致として公開できてしまう（誤情報側の穴）。
+            #   実在の別名（レオスター等）は directory_names に足せば通る。
+            out["reason"] = (f"DIRECTORY_MAKER_UNRESOLVED（名鑑のメーカー欄を"
+                             f"名簿で解決できません: {mk[:30]}。実在の別名なら"
+                             f" directory_names へ追加）")
+            return _done("DIRECTORY_MAKER_UNRESOLVED")
     code, why = extract_model_code(html)
     out["model_code"] = code
     out["reason"] = why
-    return out
+    # ★ここまで来たら機械で同定できている★（型式名が採れたかは別の話）
+    return _done()
 
 
 def agree(results: list) -> dict:
@@ -1738,6 +1939,109 @@ def selftest() -> int:
       not _mc_ok("L!") and not _mc_ok("!!"))
     t("★★純増などの共用ルールは広げていない★★（型式名専用に切り分けた）",
       not _CODE_OK.match("Lやじきた道中記参る!BG"))
+
+    # ─── ★★落ち方の3分類★★（2026-09-15・台帳#675） ───────────────
+    t("★★何も落ちていなければ ACCEPT★★",
+      decision_for([]) == "ACCEPT")
+    t("★★判断が要る落ち方は REVIEW★★",
+      decision_for(["NAME_CORE_MISMATCH"]) == "REVIEW"
+      and decision_for(["DIRECTORY_MAKER_UNREADABLE"]) == "REVIEW")
+    t("★★硬い落ち方が1つでもあれば HARD_REJECT★★"
+      "（★並びで持たないと、複合落ちで弱いほうに倒れる★）",
+      decision_for(["NAME_CORE_MISMATCH", "GEN_MARK_CONFLICT"])
+      == "HARD_REJECT")
+    t("★★知らない符丁は REVIEW（黙って外さない）★★"
+      "（★HARDに倒すと、新しい落ち方が増えるたびに静かに機種が消える★）",
+      decision_for(["まだ名前のない落ち方"]) == "REVIEW")
+    t("★★名簿で別の社と解決できても、結論にしない★★"
+      "（2026-09-15・Codexの指摘。製造元・ブランド・掲載元法人は別でありうる）",
+      decision_for(["DIRECTORY_MAKER_MISMATCH"]) == "REVIEW")
+    # ★★符丁の取りこぼしを、機械が数える★★（Codexの指摘）
+    #   ★同定の関数が返す符丁が、どれかの分類に入っていること★を要求する。
+    #   ★入っていない符丁があると、decision_for は REVIEW に倒すので
+    #     「黙って外れる」ことは無いが、硬い落ち方を見逃す★ので赤くする。
+    with open(os.path.abspath(__file__), encoding="utf-8") as _fh675:
+        _src = _fh675.read()
+    # ★f"..." の形も拾う★（2026-09-15・Codexの指摘）＝
+    #   ★直す前は素の "..." だけ見ていた★ので、DMM側の4つを数え落としていた。
+    _ret = set(re.findall(r'return False, f?"([A-Z_]+)[^"]*"', _src))
+    # ★ここで見るのは lookup が使う2つの同定★（許可証・材料側は別の呼び出し）
+    _not_lookup = {"REDIRECTED", "GRANT_NO_PAGE_FINGERPRINT",
+                   "GRANT_CONTENT_MISMATCH", "GRANT_MAKER_UNREADABLE",
+                   "GRANT_MAKER_MISMATCH"}
+    _unclassified = sorted(
+        c for c in _ret
+        if c not in _not_lookup
+        and c not in HARD_REASON_CODES and c not in REVIEW_REASON_CODES)
+    t("★★同定が返す符丁は、全部どれかの分類に入っている★★"
+      f"（入っていないもの: {_unclassified}）",
+      not _unclassified)
+    t("　（対照）この数え方が本当に符丁を拾っている"
+      "（★f\"...\" の形も拾えていること＝DMM側の4つを数え落としていた★）",
+      "NAME_CORE_MISMATCH" in _ret and "GEN_MARK_CONFLICT" in _ret
+      and "DMM_NAME_MISMATCH" in _ret and "DMM_RELEASE_MISMATCH" in _ret)
+    # ★★取ってきた本文を渡せば、もう一度取りに行かない★★
+    #   （2026-09-15・Codexの指摘。分類・問い・材料読取を同じ写しに束ねる）
+    import fetched_page as _fp0
+    _keep_get675 = _w._get
+
+    def _never_get(u, timeout=20):
+        raise AssertionError("渡した本文があるのに取りに行きました")
+
+    _w._get = _never_get
+    try:
+        _pg675 = _fp0.FetchedPage(
+            "https://nana-press.com/kaiseki/machine/1216/",
+            "https://nana-press.com/kaiseki/machine/1216/",
+            "<title>【別の機種】解析</title><p>メーカー名：エンターライズ</p>")
+        _r675 = lookup("https://nana-press.com/kaiseki/machine/1216/",
+                       "L試験機", expected_maker="sammy", page=_pg675)
+    finally:
+        _w._get = _keep_get675
+    t("★★本文を渡したら取りに行かない★★"
+      "（★別々に取ると、観測した題と実際に読む本文が食い違う★）",
+      _r675.get("decision") == "REVIEW"
+      and "NAME_CORE_MISMATCH" in (_r675.get("reason_codes") or []))
+    t("　観測は落ち方によらず返る（題・メーカー欄・芯の一致）",
+      _r675.get("observed_title") == "【別の機種】解析"
+      and _r675.get("observed_maker") == "エンターライズ"
+      and _r675.get("name_in_body") is False)
+    # ★★題も落ち、メーカー欄も読めない、が同時に出る★★
+    #   （2026-09-15・Codexの指摘）★直す前★＝題の同定に落ちるとその場で返り、
+    #   メーカー欄の符丁は**生成側から一度も出なかった**。
+    #   ＝控えの型が複合を表せても、中身が無い（実例＝モンハンライズ）。
+    _w._get = _never_get
+    try:
+        _pg675c = _fp0.FetchedPage(
+            "https://nana-press.com/kaiseki/machine/1216/",
+            "https://nana-press.com/kaiseki/machine/1216/",
+            "<title>【別の機種】解析</title><p>本文だけでメーカー欄なし</p>")
+        _r675c = lookup("https://nana-press.com/kaiseki/machine/1216/",
+                        "L試験機", expected_maker="sammy", page=_pg675c)
+    finally:
+        _w._get = _keep_get675
+    t("★★題の落ち方とメーカー欄の落ち方が、同時に符丁になる★★"
+      "（★片方で返すと、複合の落ち方を控えに記録できない★）",
+      set(_r675c.get("reason_codes") or [])
+      == {"NAME_CORE_MISMATCH", "DIRECTORY_MAKER_UNREADABLE"})
+    t("　（対照）メーカーを期待していない呼び方では、メーカーの符丁は付かない",
+      (lambda r: (r.get("reason_codes") or []) == ["NAME_CORE_MISMATCH"])(
+          lookup("https://nana-press.com/kaiseki/machine/1216/",
+                 "L試験機", page=_pg675c)))
+    # ★★機種ページの形は、2AIへ回す側にだけ当てる★★
+    _keep_shape675 = globals()["_page_shape_ok"]
+    globals()["_page_shape_ok"] = lambda u: False
+    _w._get = _never_get
+    try:
+        _r675b = lookup("https://nana-press.com/kaiseki/machine/1216/",
+                        "L試験機", expected_maker="sammy", page=_pg675)
+    finally:
+        globals()["_page_shape_ok"] = _keep_shape675
+        _w._get = _keep_get675
+    t("★★機種ページの形でなければ、2AIへ回さず硬く外す★★"
+      "（★一覧・特集を2AIへ回しても答えようがない★）",
+      _r675b.get("decision") == "HARD_REJECT"
+      and "DIRECTORY_PAGE_SHAPE_MISMATCH" in (_r675b.get("reason_codes") or []))
 
     ng = [n for n, ok in results if not ok]
     print(f"{nl}{len(results) - len(ng)}/{len(results)} 合格")
